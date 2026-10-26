@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.albums.testing.InMemoryAlbums
 import dev.pampa.mycloudgallery.core.albums.testing.InMemoryShareDiary
 import dev.pampa.mycloudgallery.core.albums.testing.InMemoryShareRunner
 import dev.pampa.mycloudgallery.core.albums.testing.InMemoryTrips
+import dev.pampa.mycloudgallery.core.albums.testing.KeptCopy
 import dev.pampa.mycloudgallery.core.albums.testing.ReferenceSharePlanner
 import dev.pampa.mycloudgallery.core.albums.testing.ShareRunnerPorts
 import dev.pampa.mycloudgallery.core.albums.testing.SmartMembership
@@ -114,6 +115,40 @@ class FakeSharedAlbumsContractTest : SharedAlbumsContract() {
     val common = FakeSharedWorld()
     val alice = ReferenceWorld(AccountId("test"), common)
     val bruno = ReferenceWorld(AccountId("test2"), common)
-    return SharedWorld(common, alice, bruno)
+    return SharedWorld(FakeCommonArea(common), FakeSide(alice), FakeSide(bruno))
   }
+}
+
+/** Un dispositivo finto per [SharedAlbumsContract]: gli album condivisi finti sopra il mondo comune finto. */
+class FakeSide(private val ref: ReferenceWorld) : SharedSide {
+  override val me: AccountId get() = ref.me
+  override val library: FakeAlbumLibrary get() = ref.library
+  override val sharedAlbums: SharedAlbums get() = ref.sharedAlbums
+
+  override suspend fun keptCopies(): List<KeptCopy> = ref.sharedAlbums.keptCopies()
+
+  override suspend fun createAlbum(title: String, level: ShareLevel): AlbumId = ref.albumBy(ref.me, title, level)
+}
+
+/** L'area comune finta per [SharedAlbumsContract]: le voci si applicano subito con le regole di chi legge del mondo finto. */
+class FakeCommonArea(private val world: FakeSharedWorld) : CommonArea {
+  override suspend fun apply(album: AlbumId, author: AccountId, changes: List<SharedAlbumChange>): Int = world.apply(album, author, changes)
+
+  override fun folder(album: AlbumId): SharePath = world.album(album)!!.folder
+
+  override fun nonceHex(album: AlbumId): String = world.album(album)!!.nonceHex
+
+  override val forgeriesCounted: Int get() = world.rejectedContributions
+
+  override suspend fun makeAdmin(account: AccountId) {
+    world.admins += account
+    world.touch()
+  }
+
+  override suspend fun removeFromFamily(account: AccountId) {
+    world.gone += account
+    world.touch()
+  }
+
+  override suspend fun settle() = Unit
 }

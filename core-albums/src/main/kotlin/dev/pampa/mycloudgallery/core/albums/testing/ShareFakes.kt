@@ -65,7 +65,7 @@ class FakeAlbumPublisher(
 
   private fun keyOf(change: SharedAlbumChange): String = when (change) {
     is SharedAlbumChange.Definition -> "definition"
-    is SharedAlbumChange.Level -> "level"
+    is SharedAlbumChange.Level, is SharedAlbumChange.LevelHistory -> "level"
     is SharedAlbumChange.Cover -> "cover"
     is SharedAlbumChange.Sort -> "sort"
     is SharedAlbumChange.Item -> "item:${change.media.value}"

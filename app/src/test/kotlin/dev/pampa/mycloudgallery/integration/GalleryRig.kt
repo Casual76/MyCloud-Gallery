@@ -118,7 +118,7 @@ internal class GalleryRig(
     /** 12/10/2026 12:00 UTC. */
     const val NOW: Long = 1_791_806_400_000L
     const val MINUTE: Long = 60_000L
-    const val TIMEOUT_MS: Long = 20_000L
+    val TIMEOUT_MS: Long = Attese.TETTO_MS
     private const val MAX_ID = 50L
 
     fun newStore(): FakeMediaStore = FakeMediaStore().apply { addVolume(PRIMARY) }

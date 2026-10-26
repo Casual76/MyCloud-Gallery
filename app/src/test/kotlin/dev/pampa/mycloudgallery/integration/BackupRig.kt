@@ -201,7 +201,7 @@ internal class BackupRig(
 
     fun newStore(): FakeMediaStore = FakeMediaStore().apply { addVolume(PRIMARY) }
 
-    const val TIMEOUT_MS: Long = 60_000L
+    val TIMEOUT_MS: Long = Attese.TETTO_MS
 
     /** Una foto con i suoi byte: la riga del MediaStore coerente col file (dimensione, data). */
     fun photo(store: FakeMediaStore, id: Long, bytes: ByteArray, takenAt: Long, folder: String = "DCIM/Camera/", name: String = "IMG_$id.jpg"): MediaStoreRow =

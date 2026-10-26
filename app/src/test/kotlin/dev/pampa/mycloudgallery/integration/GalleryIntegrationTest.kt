@@ -348,7 +348,7 @@ class GalleryIntegrationTest {
     /** 12/10/2026 12:00 UTC: lontano dalla mezzanotte, il giorno e' lo stesso in ogni fuso europeo. */
     const val NOW: Long = 1_791_806_400_000L
     const val MINUTE: Long = 60_000L
-    const val TIMEOUT_MS: Long = 20_000L
+    val TIMEOUT_MS: Long = Attese.TETTO_MS
     const val MAX_ID: Long = 50L
     val ITALIAN_MONTHS = listOf(
       "gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre",

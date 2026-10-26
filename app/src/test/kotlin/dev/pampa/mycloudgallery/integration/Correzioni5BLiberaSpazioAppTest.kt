@@ -138,7 +138,7 @@ class Correzioni5BLiberaSpazioAppTest {
 
   private suspend fun mediaOfRow(rig: BackupRig, rowId: Long): MediaId {
     val catalog = checkNotNull(rig.gallery.coreIfReady()).catalog
-    val view = withTimeout(60_000) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.size >= 1 } }
+    val view = withTimeout(Attese.TETTO_MS) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.size >= 1 } }
     return (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }.first { id ->
       catalog.media(id)?.locations?.any { (it.location as? Location.Phone)?.mediaStoreId == rowId } == true
     }
@@ -163,11 +163,11 @@ class Correzioni5BLiberaSpazioAppTest {
     assertThat(assessment.freeFilter).isNull()
     // Il viewer apre il foglio: dice che puo' offrire il cestino.
     ui.mediaActions.perform(BackupMenuAction.PHONE_ONLY_DELETE, id)
-    val sheet = withTimeout(30_000) { ui.sheet.first { it != null } } as FiveBSheet.PhoneOnly
+    val sheet = withTimeout(Attese.TETTO_MS) { ui.sheet.first { it != null } } as FiveBSheet.PhoneOnly
     assertThat(sheet.fromViewer).isTrue()
     // Il tocco su "Elimina dal telefono": il dialogo del sistema per il cestino (30 giorni), con la riga del telefono.
     ui.trashFromPhone(setOf(id))
-    withTimeout(30_000) { while (intents.trashRequests.isEmpty()) kotlinx.coroutines.delay(20) }
+    withTimeout(Attese.TETTO_MS) { while (intents.trashRequests.isEmpty()) kotlinx.coroutines.delay(20) }
     val (refs, trash) = intents.trashRequests.single()
     assertThat(trash).isTrue()
     assertThat(refs.map { it.mediaStoreId }).containsExactly(1L)
@@ -192,7 +192,7 @@ class Correzioni5BLiberaSpazioAppTest {
     val half = free.verify(plan, TestConfirmations.confirm(plan, rig.backup.clock.monotonicMs()), Duration.ZERO)
     assertThat(half.state).isEqualTo(FreeSpaceRunState.VERIFYING)
     val progress = ArrayList<FreeSpaceRunState>()
-    val end = withTimeout(60_000) { fiveB.freeRuns.host { progress += it.state } }
+    val end = withTimeout(Attese.TETTO_MS) { fiveB.freeRuns.host { progress += it.state } }
     assertThat(checkNotNull(end).state).isEqualTo(FreeSpaceRunState.READY)
     assertThat(progress).contains(FreeSpaceRunState.VERIFYING)
     assertThat(fiveB.freeRuns.openRequest.value).isEqualTo(end.id)

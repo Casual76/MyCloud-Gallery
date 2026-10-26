@@ -122,14 +122,14 @@ class RevisioneCSearchAppTest {
     val seen = java.util.concurrent.CopyOnWriteArrayList<List<SearchHistoryRecord>>()
     val collector = launch(Dispatchers.Default) { store.changes(10).collect { seen += it } }
     try {
-      withTimeout(10_000) { while (seen.isEmpty()) delay(10) }
+      withTimeout(Attese.TETTO_MS) { while (seen.isEmpty()) delay(10) }
       assertThat(seen.last()).isEmpty()
 
       // Il catalogo arriva (la famiglia e' pronta) e la ricerca si apre: da qui in poi le ricerche fatte compaiono, senza riavviare.
       available = true
       gate.complete(Unit)
       store.record("spiaggia", listOf("2024"))
-      withTimeout(10_000) { while (seen.last().isEmpty()) delay(10) }
+      withTimeout(Attese.TETTO_MS) { while (seen.last().isEmpty()) delay(10) }
       assertThat(seen.last().single().text).isEqualTo("spiaggia")
       assertThat(seen.last().single().chipLabels).containsExactly("2024")
     } finally {
@@ -157,7 +157,7 @@ class RevisioneCSearchAppTest {
 
       data.hiddenIds += lib.snapshot.idAt(2)
       data.snapshot.value = lib.snapshot.withFlags(0, lib.snapshot.flagsAt(0))
-      withTimeout(10_000) { while (seen.last().size == all.size) delay(10) }
+      withTimeout(Attese.TETTO_MS) { while (seen.last().size == all.size) delay(10) }
       assertThat(seen.last()).containsExactly(all[0], all[2], all[3]).inOrder()
     } finally {
       collector.cancel()
@@ -198,7 +198,7 @@ class RevisioneCSearchAppTest {
     assertThat(search.open()).isTrue()
 
     // Nessuna ricerca: le chiavi arrivano da sole.
-    withTimeout(15_000) { while (search.keys[id] == null) delay(20) }
+    withTimeout(Attese.TETTO_MS) { while (search.keys[id] == null) delay(20) }
     assertThat(search.keys[id]!!.own).isNotEmpty()
 
     // E una foto che arriva dopo ci arriva senza una ricerca.
@@ -206,6 +206,6 @@ class RevisioneCSearchAppTest {
     checkNotNull(checkNotNull(phone.gallery.nas).scan(ScanMode.Full, 5.minutes))
     val ids = phone.gallery.core().catalog.cellContentKeys().cells.map { it.mediaId }
     assertThat(ids).hasSize(2)
-    withTimeout(15_000) { while (ids.any { search.keys[it] == null }) delay(20) }
+    withTimeout(Attese.TETTO_MS) { while (ids.any { search.keys[it] == null }) delay(20) }
   }
 }

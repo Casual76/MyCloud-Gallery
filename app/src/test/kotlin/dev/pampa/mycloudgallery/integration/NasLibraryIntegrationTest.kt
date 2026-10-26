@@ -229,6 +229,6 @@ class NasLibraryIntegrationTest {
   private companion object {
     const val PRIMARY = "external_primary"
     const val DAY = 24L * 60 * 60 * 1000
-    val TIMEOUT = 2.minutes
+    val TIMEOUT = Attese.TETTO
   }
 }

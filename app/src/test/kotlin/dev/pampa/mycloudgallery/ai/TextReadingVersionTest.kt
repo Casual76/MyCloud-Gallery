@@ -4,6 +4,7 @@ import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingConsent
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.personal.contract.TextReadingChoice
+import dev.pampa.mycloudgallery.integration.Attese
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,7 +75,7 @@ class TextReadingVersionTest {
     assertThat(switch.state.value.activeHere).isFalse()
 
     switch.enableForAccount(TextReadingConsent(textVersion = 2, shownAtMonotonicNanos = 0L))
-    withTimeout(5_000) { switch.state.first { it.activeHere } }
+    withTimeout(Attese.TETTO_MS) { switch.state.first { it.activeHere } }
     assertThat(choice.value).isEqualTo(TextReadingChoice.OnForAccount(2))
   }
 }

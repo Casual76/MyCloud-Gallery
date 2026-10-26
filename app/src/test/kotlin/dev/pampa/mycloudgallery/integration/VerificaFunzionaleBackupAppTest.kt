@@ -34,7 +34,6 @@ import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
-import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -116,14 +115,36 @@ class VerificaFunzionaleBackupAppTest {
     return rig
   }
 
-  private suspend fun BackupGraph.await(predicate: (BackupStatus) -> Boolean): BackupStatus = withTimeout(20.seconds) { status.first(predicate) }
+  /** Aspetta, sul flusso dello stato, quello che soddisfa [predicate] (l'evento, non un tempo: vedi [Attese]). */
+  private suspend fun BackupGraph.await(predicate: (BackupStatus) -> Boolean): BackupStatus = withTimeout(Attese.TETTO) { status.first(predicate) }
 
-  /** Aspetta che il problema ricordato (l'ultimo che ha fermato un giro) sia stato tolto: lo stato in cache puo' essere ancora quello di prima. */
+  /**
+   * Aspetta che il problema ricordato (l'ultimo che ha fermato un giro) sia stato tolto **dal ricalcolo dello stato**: serve quando lo stato di prima
+   * non era un problema e quindi nessun evento del flusso dice che il ricalcolo e' passato. Rilegge il file ogni 50 ms e **rilancia il ricalcolo a
+   * ogni giro**, e questo non e' un vezzo: su Windows `File.delete()` fallisce in silenzio se in quel momento il test stesso ha il file aperto per
+   * leggerlo (vedi [Attese]); il ricalcolo successivo ci riprova, e l'attesa converge. Per un'azione che cancella **una volta sola** (un tocco su
+   * "Riprova", un ritorno alla pagina) questo ciclo non va bene, perche' nessuno ci riprova: li si aspetta dal flusso dello stato.
+   */
   private suspend fun BackupGraph.awaitNoRememberedProblem() {
-    withTimeout(20.seconds) {
+    withTimeout(Attese.TETTO) {
       while (memory.lastProblem() != null) {
         kick()
         delay(50)
+      }
+    }
+  }
+
+  /**
+   * Ricorda [code] come ultimo problema di un giro, **e controlla che sia stato scritto**: la memoria scrive su un file temporaneo e lo rinomina, e su
+   * Windows la rinomina fallisce, in silenzio, se un ricalcolo dello stato sta leggendo proprio quel file (vedi [Attese]). Il problema ricordato e'
+   * la premessa dei test, non quello che provano: se la scrittura e' caduta si rifa'.
+   */
+  private suspend fun BackupGraph.remember(code: BackupProblemCode) {
+    withTimeout(Attese.TETTO) {
+      while (true) {
+        memory.setProblem(code)
+        if (memory.lastProblem() == code) break
+        delay(Attese.SONDA_MS)
       }
     }
   }
@@ -161,7 +182,7 @@ class VerificaFunzionaleBackupAppTest {
   fun bk3_laPosizioneDeiMediaConcessaTogliIlProblemaEUnAccessoParzialeRestaFinoAlTuttoConsentito() = runBlocking<Unit> {
     val rig = openRig()
     val backup = rig.backup
-    backup.memory.setProblem(BackupProblemCode.MEDIA_LOCATION)
+    backup.remember(BackupProblemCode.MEDIA_LOCATION)
     backup.kick()
     // L'accesso adesso c'e' per intero (posizione compresa): il problema ricordato non vale piu'.
     backup.awaitNoRememberedProblem()
@@ -169,7 +190,7 @@ class VerificaFunzionaleBackupAppTest {
 
     // Un accesso parziale e' vero finche' e' parziale: il problema resta, e passa solo con "tutto".
     rig.access.set(PhoneAccess(MediaAccess.PARTIAL, mediaLocation = true, volumes = setOf(BackupRig.PRIMARY)))
-    backup.memory.setProblem(BackupProblemCode.PARTIAL_ACCESS)
+    backup.remember(BackupProblemCode.PARTIAL_ACCESS)
     backup.kick()
     backup.await { it == BackupStatus.Problem(BackupProblemCode.PARTIAL_ACCESS, 0) }
     rig.access.set(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(BackupRig.PRIMARY)))
@@ -188,7 +209,7 @@ class VerificaFunzionaleBackupAppTest {
     val actions = rig.actions()
     val host = RecordingHost()
     actions.host = host
-    backup.memory.setProblem(BackupProblemCode.AUTH)
+    backup.remember(BackupProblemCode.AUTH)
     backup.kick()
     backup.await { it == BackupStatus.Problem(BackupProblemCode.AUTH, 0) }
 
@@ -196,14 +217,15 @@ class VerificaFunzionaleBackupAppTest {
     actions.onPageResumed()
     assertThat(backup.memory.lastProblem()).isEqualTo(BackupProblemCode.AUTH)
 
-    // L'utente tocca "Inserisci la password", la cambia e torna.
+    // L'utente tocca "Inserisci la password", la cambia e torna. Il ritorno cancella il file una volta sola, nessuno ci riprova: il test non lo
+    // legge in ciclo (terrebbe il file aperto proprio mentre si cancella) e aspetta lo stato, che cambia quando il ricalcolo non trova piu' il problema.
     actions.perform(BackupAction.ENTER_PASSWORD)
     assertThat(host.opened).containsExactly("password")
     actions.onPageResumed()
-    withTimeout(20.seconds) { while (backup.memory.lastProblem() != null) delay(50) }
     backup.await { it !is BackupStatus.Problem }
+    assertThat(backup.memory.lastProblem()).isNull()
     // Un secondo ritorno non toglie piu' niente: il tocco e' stato consumato.
-    backup.memory.setProblem(BackupProblemCode.NAS_FULL)
+    backup.remember(BackupProblemCode.NAS_FULL)
     actions.onPageResumed()
     delay(300)
     assertThat(backup.memory.lastProblem()).isEqualTo(BackupProblemCode.NAS_FULL)
@@ -216,14 +238,15 @@ class VerificaFunzionaleBackupAppTest {
     }
     val rig = openRig(photos = 1)
     val backup = rig.backup
-    backup.memory.setProblem(BackupProblemCode.QUOTA)
+    backup.remember(BackupProblemCode.QUOTA)
     backup.kick()
     backup.await { it == BackupStatus.Problem(BackupProblemCode.QUOTA, 0) }
 
     rig.actions().perform(BackupAction.RETRY)
 
-    withTimeout(20.seconds) { while (backup.memory.lastProblem() != null) delay(50) }
+    // "Riprova" cancella il file una volta sola (vedi sopra): si aspetta lo stato, non si legge il file in ciclo.
     backup.await { it !is BackupStatus.Problem }
+    assertThat(backup.memory.lastProblem()).isNull()
   }
 
   // --- BK-7: un'area in sola lettura si rimette alla prova -------------------------------------------------------------------------
@@ -267,7 +290,7 @@ class VerificaFunzionaleBackupAppTest {
 
     // "Riprendi" sui dati mobili: il foglio chiede la conferma. "Annulla".
     actions.backupNow()
-    withTimeout(20.seconds) { actions.prompt.first { it != null } }
+    withTimeout(Attese.TETTO) { actions.prompt.first { it != null } }
     actions.dismissPrompt()
     delay(300)
     assertWithMessage("la pausa resta").that(backup.isPaused()).isTrue()
@@ -276,9 +299,9 @@ class VerificaFunzionaleBackupAppTest {
 
     // Lo stesso tocco, questa volta confermato: il lavoro parte e la pausa finisce.
     actions.backupNow()
-    withTimeout(20.seconds) { actions.prompt.first { it != null } }
+    withTimeout(Attese.TETTO) { actions.prompt.first { it != null } }
     actions.confirm()
-    withTimeout(20.seconds) { while (jobs.started.get() == 0) delay(50) }
+    until("parte il lavoro dell'utente") { jobs.started.get() > 0 }
     assertThat(backup.isPaused()).isFalse()
   }
 
@@ -294,13 +317,13 @@ class VerificaFunzionaleBackupAppTest {
 
     actions.backupNow()
 
-    withTimeout(20.seconds) { while (jobs.started.get() == 0) delay(50) }
+    until("parte il lavoro dell'utente") { jobs.started.get() > 0 }
     assertThat(backup.isPaused()).isFalse()
     // "Stanotte" del primo backup: niente lavoro dell'utente, ma la pausa e' finita.
     backup.requestStop(StopBy.USER)
     assertThat(backup.isPaused()).isTrue()
     actions.startFirstBackup(tonight = true)
-    withTimeout(20.seconds) { while (backup.isPaused()) delay(50) }
+    until("finisce la pausa") { !backup.isPaused() }
     assertThat(jobs.started.get()).isEqualTo(1)
   }
 
@@ -349,7 +372,7 @@ class VerificaFunzionaleBackupAppTest {
     val backup = rig.backup
     val release = CompletableDeferred<Unit>()
     val holder = launch(Dispatchers.Default) { backup.exclusive { release.await() } }
-    withTimeout(10.seconds) { while (!isLocked(backup)) delay(20) }
+    withTimeout(Attese.TETTO) { while (!isLocked(backup)) delay(Attese.SONDA_MS) }
     fast.set(true)
 
     val end = rig.userJob()
@@ -368,12 +391,12 @@ class VerificaFunzionaleBackupAppTest {
     val backup = rig.backup
     val release = CompletableDeferred<Unit>()
     val holder = launch(Dispatchers.Default) { backup.exclusive { release.await() } }
-    withTimeout(10.seconds) { while (!isLocked(backup)) delay(20) }
+    withTimeout(Attese.TETTO) { while (!isLocked(backup)) delay(Attese.SONDA_MS) }
     assertThat(backup.userIsWaiting).isFalse()
 
     val job = launch(Dispatchers.Default) { rig.userJob() }
     // Mentre aspetta, lo dice agli altri lavori: cedano il passo.
-    withTimeout(10.seconds) { while (!backup.userIsWaiting) delay(20) }
+    until("il tocco aspetta il turno") { backup.userIsWaiting }
     release.complete(Unit)
     holder.join()
     job.join()
@@ -506,20 +529,35 @@ class VerificaFunzionaleBackupAppTest {
   /**
    * "Riattiva le scritture" si fa in Diagnostica e non ha un evento che il backup ascolti: la pagina, ogni volta che torna davanti all'utente,
    * ricalcola lo stato.
+   *
+   * **La premessa e' "nessun evento in volo", e puo' cadere.** Finche' la pagina non torna lo stato deve restare quello di prima; ma il backup
+   * ascolta molte sorgenti (impostazioni, cartella, NAS, regole, catalogo, copie simili, accesso ai media) e un evento partito dall'apertura del
+   * telefono puo' arrivare tardi, con il PC carico anche di secondi, e rinfrescare lo stato da solo, in modo legittimo. Prima la prova lo prendeva per
+   * un difetto (`Waiting` al posto di `Problem`) e falliva solo sotto carico. Adesso la premessa si **verifica**, e se e' caduta la si rifa' da capo
+   * (l'emergenza si riaccende, si aspetta lo stato, si rispegne): quello che il test prova, il ritorno alla pagina, gira solo con lo stato davvero
+   * fermo, e senza il ricalcolo al ritorno resta rosso.
    */
   @Test
   fun bk13_riattivareLeScrittureSiVedeAlRitornoSullaPagina() = runBlocking<Unit> {
     val rig = openRig(photos = 1)
     val backup = rig.backup
     val actions = rig.actions()
-    rig.nas.emergency.set(true)
-    backup.kick()
-    backup.await { it == BackupStatus.Problem(BackupProblemCode.WRITES_STOPPED, 0) }
+    val stopped = BackupStatus.Problem(BackupProblemCode.WRITES_STOPPED, 0)
 
-    // Dalla Diagnostica: "Riattiva le scritture". Nessun evento arriva al backup.
-    rig.nas.emergency.set(false)
-    delay(1_500)
-    assertThat(backup.status.value).isEqualTo(BackupStatus.Problem(BackupProblemCode.WRITES_STOPPED, 0))
+    var frozen = false
+    var attempts = 0
+    while (!frozen && attempts < PREMISE_ATTEMPTS) {
+      attempts++
+      rig.nas.emergency.set(true)
+      backup.kick()
+      backup.await { it == stopped }
+
+      // Dalla Diagnostica: "Riattiva le scritture". Nessun evento arriva al backup.
+      rig.nas.emergency.set(false)
+      delay(1_500)
+      frozen = backup.status.value == stopped
+    }
+    assertWithMessage("dopo $attempts tentativi lo stato non sta fermo: ${backup.status.value}").that(frozen).isTrue()
 
     actions.onPageResumed()
 
@@ -571,5 +609,8 @@ class VerificaFunzionaleBackupAppTest {
 
   private companion object {
     const val HOUR = 3_600_000L
+
+    /** Quante volte si rifa la premessa di BK-13 (nessun evento in volo) prima di dire che lo stato non sta fermo. */
+    const val PREMISE_ATTEMPTS = 5
   }
 }

@@ -242,6 +242,6 @@ class ProveCampoBloccoAAppTest {
     const val FOLDER = "DCIM/mcg-prova/"
     const val HOUR = 60L * 60 * 1000
     const val DAY = 24L * 60 * 60 * 1000
-    const val TIMEOUT_MS = 60_000L
+    val TIMEOUT_MS = Attese.TETTO_MS
   }
 }

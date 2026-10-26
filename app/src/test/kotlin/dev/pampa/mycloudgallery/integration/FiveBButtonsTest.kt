@@ -180,7 +180,7 @@ class FiveBButtonsTest {
       ui.dismissSheet()
       actions.dismissNotice()
       actions.perform(action, id)
-      withTimeout(30_000) {
+      withTimeout(Attese.TETTO_MS) {
         when (action) {
           BackupMenuAction.VERSIONS, BackupMenuAction.RESTORE_ORIGINAL -> assertThat(ui.sheet.first { it != null }).isInstanceOf(FiveBSheet.Versions::class.java)
           BackupMenuAction.CORRECT, BackupMenuAction.ROTATE -> assertThat(ui.sheet.first { it != null }).isInstanceOf(FiveBSheet.Correction::class.java)
@@ -196,7 +196,7 @@ class FiveBButtonsTest {
     }
     // "Condividi": parte la preparazione e finisce con un esito (pronta o ferma con il motivo), mai niente.
     actions.share(listOf(id))
-    val shared = withTimeout(60_000) { actions.shareState.first { it is BackupShareUi.Ready || it is BackupShareUi.Refused } }
+    val shared = withTimeout(Attese.TETTO_MS) { actions.shareState.first { it is BackupShareUi.Ready || it is BackupShareUi.Refused } }
     assertThat(shared).isNotEqualTo(BackupShareUi.Idle)
     actions.dismissShare()
     // "Ovunque" risponde per il media (l'elenco del backup, non "non so").

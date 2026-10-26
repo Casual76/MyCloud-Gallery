@@ -95,6 +95,21 @@ internal class SmbNasFileOps(
   override suspend fun publishTemp(share: String, temp: SharePath, final: SharePath, purpose: Purpose): NasResult<PublishOutcome> {
     require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "Un temporaneo di questo dispositivo." }
     require(NasOpsPaths.isMediaPath(final)) { "La destinazione e' un percorso di media." }
+    return publishRenamed(share, temp, final, purpose)
+  }
+
+  /**
+   * Fase 6, revisione B (MO-4, I5; solo per `SmbNasModelShelfOps`): come [publishTemp] ma la destinazione sta **dentro** `.mycloudgallery/`
+   * (`devices/<io>/models/<impronta>`, la copia di un modello sul NAS, D18). Stesse garanzie: rinomina senza sostituire, creando le
+   * cartelle che mancano. Il percorso lo ha gia' costruito e controllato il chiamante; qui si ricontrolla che sia nell'area dell'app.
+   */
+  internal suspend fun publishAppTemp(share: String, temp: SharePath, final: SharePath, purpose: Purpose): NasResult<PublishOutcome> {
+    require(NasOpsPaths.isTempOf(temp, ownerDeviceId)) { "Un temporaneo di questo dispositivo." }
+    require(NasOpsPaths.isAppArea(final)) { "La destinazione e' nell'area dell'app." }
+    return publishRenamed(share, temp, final, purpose)
+  }
+
+  private suspend fun publishRenamed(share: String, temp: SharePath, final: SharePath, purpose: Purpose): NasResult<PublishOutcome> {
     return manager.runOp(share, purpose, idempotent = false, touchesDisk = true) { ctx ->
       when (val outcome = renameOnce(ctx, temp, final, expect = null, createParents = true)) {
         is RenameOutcome.Renamed -> PublishOutcome.Published(outcome.stamp)

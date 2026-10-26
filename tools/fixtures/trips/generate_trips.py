@@ -8,6 +8,11 @@ codice Kotlin, mai questo file) e scrive, per ogni foto, un JPEG con l'EXIF e il
 (OffsetTimeOriginal), la posizione (GPS con riferimenti N/S ed E/W) e la marca. Fusi orari, giorni senza GPS, screenshot, tablet e familiari ci sono
 tutti, come nelle storie. Tutti i luoghi sono citta' pubbliche; nessun dato personale. Solo la libreria standard di Python (nessun Pillow).
 
+spec-media.tsv: una riga per foto, colonne separate da tabulazione (la prima riga comincia con `#`): storia, n (il numero della foto nella storia), giorno
+locale (aaaa-mm-gg), minuto del giorno locale, fuso in minuti dall'UTC, latitudine e longitudine (sei decimali, `-` se non c'e' il GPS), luogo (solo per la
+JVM), dispositivo (`telefono`, `tablet`, `-`), sorgente (`my_phone`, `my_private`, `family`), schermo (0/1), video (0/1), album (indici separati da virgola o `-`).
+spec-album.tsv: storia, indice, titolo, genere, viaggi, foto. attesi.tsv: i numeri della JVM per album e per storia, in due varianti (telefono, completo).
+
 Le immagini sono piccole (96x72, o 56x120 per gli screenshot) e fatte di blocchi 8x8 di tinta piatta: il colore dice il giorno, il disegno di ogni
 foto e' diverso (sono tutti file con un'impronta diversa). Un video della storia e' disegnato come foto: la classificazione degli album non guarda il
 tipo, e la JVM lo prova (TripFixtureExportTest). L'uscita e' deterministica: lo stesso input da' gli stessi byte, la data di modifica dei file e'

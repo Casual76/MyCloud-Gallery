@@ -44,9 +44,9 @@ class OriginDeviceTest {
   fun laChiaveDiUnaPosizioneDiBackupNominaLaCartellaDelDispositivo() {
     assertThat(OriginDevice.ofNasKey(keyOf("Backup/S25/2026/10/IMG_1.jpg"))).isEqualTo("backup:s25")
     assertThat(OriginDevice.ofNasKey(keyOf("Backup/S25/IMG_1.jpg"))).isEqualTo("backup:s25")
-    // La radice di prova di D13 e' la sola che puo' stare davanti a `Backup`.
-    assertThat(OriginDevice.ofNasKey(keyOf("mcg-campo/Backup/Prova/2026/IMG_1.jpg"))).isEqualTo("backup:prova")
+    // Solo la radice vera: una `Backup` piu' in basso (anche sotto la radice di prova del debug) non nomina un dispositivo.
     assertThat(OriginDevice.ofNasKey(keyOf("altro/Backup/Prova/IMG_1.jpg"))).isNull()
+    assertThat(OriginDevice.ofNasKey(keyOf("prova/Backup/Prova/2026/IMG_1.jpg"))).isNull()
     // Maiuscole e forma Unicode non contano (la chiave e' gia' in forma di confronto).
     assertThat(OriginDevice.ofNasKey(keyOf("BACKUP/Ta\u0301b/IMG_1.jpg"))).isEqualTo(OriginDevice.ofNasKey(keyOf("backup/T\u00e1b/IMG_1.jpg")))
   }

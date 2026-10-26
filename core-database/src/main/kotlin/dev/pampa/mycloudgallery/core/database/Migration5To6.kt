@@ -99,7 +99,7 @@ internal object Migration5To6 : Migration(5, 6) {
       "CROSS JOIN `nas_share` s ON s.`account_id` = l.`account_id` AND s.`share_key` = l.`share_key` " +
       "CROSS JOIN `media` m ON m.`media_id` = v.`media_id` " +
       "WHERE l.`location_type` = 'nas' AND l.`state` != 'absent' AND s.`area` = 'private' AND m.`origin_device` IS NULL " +
-      "AND (instr(l.`location_key`, ':backup/') > 0 OR instr(l.`location_key`, ':mcg-campo/backup/') > 0)"
+      "AND instr(l.`location_key`, ':backup/') > 0"
 
   private val ADD_COLUMNS = listOf(
     "ALTER TABLE `album` ADD COLUMN `kind` TEXT NOT NULL DEFAULT 'manual'",

@@ -12,7 +12,9 @@ import dev.pampa.mycloudgallery.core.model.NasAreaLookup
  *
  * - [PHONE]: il media ha una copia **non assente** sul telefono di questo dispositivo;
  * - `backup:<cartella>`: altrimenti, una copia non assente in una cartella `Backup/<cartella>/` di un'**area privata** (la cartella che
- *   il backup di un dispositivo sceglie una volta, F5-D6; con la recinzione di prova `mcg-campo/Backup/...`). `<cartella>` e' la forma di
+ *   il backup di un dispositivo sceglie una volta, F5-D6). Solo la radice vera `Backup/`: la recinzione di prova del debug (D13) scrive sotto
+ *   un'altra radice che la release non ha e che questo modulo (nel dex della release, `check.ps1`) non nomina: in debug quei media non hanno un
+ *   dispositivo, e quelli del telefono si. `<cartella>` e' la forma di
  *   confronto (NFC, minuscolo) come nelle chiavi delle posizioni. La cartella `Area comune` (le copie del guardiano) non e' un
  *   dispositivo. Con piu' cartelle vince quella che viene prima in ordine alfabetico (una sola risposta, uguale ovunque);
  * - NULL: nessuna delle due. In particolare **marca e modello della fotocamera** (EXIF, ultimo ripiego di §2.2 del progetto) non stanno
@@ -36,34 +38,26 @@ object OriginDevice {
 
   private const val BACKUP_ROOT = "backup"
 
-  /** La radice di prova di D13 (`mcg-campo/Backup/...`): la sola che puo' stare davanti a `Backup`. */
-  private const val FENCE_ROOT = "mcg-campo"
-
   /** `BackupPaths.COMMON_AREA_FOLDER` in forma di confronto: le copie del guardiano non sono di nessun dispositivo. */
   private const val COMMON_AREA_FOLDER = "area comune"
 
   /** Quante parti ha una chiave di posizione del NAS: `nas`, account, share, percorso. */
   private const val KEY_PARTS = 4
 
-  /** L'etichetta di una cartella di backup già in forma di confronto. */
+  /** L'etichetta di una cartella di backup gia' in forma di confronto. */
   fun backup(folderKey: String): String = BACKUP_PREFIX + folderKey
 
   /**
    * L'etichetta di una **chiave di posizione** del NAS (`Location.Nas.key`: `nas:<account>:<share>:<percorso in forma di confronto>`),
-   * o null se il file non sta in `Backup/<cartella>/...` (o in `mcg-campo/Backup/<cartella>/...`) o la cartella non e' un dispositivo.
+   * o null se il file non sta in `Backup/<cartella>/...` o la cartella non e' un dispositivo.
    * Il file sta almeno dentro la cartella del dispositivo (`Backup/<cartella>/<nome>`).
    */
   fun ofNasKey(locationKey: String): String? {
     val parts = locationKey.split(':', limit = KEY_PARTS)
     if (parts.size != KEY_PARTS || parts[0] != "nas") return null
     val segments = parts[3].split('/')
-    val root = when {
-      segments.firstOrNull() == BACKUP_ROOT -> 0
-      segments.size > 1 && segments[0] == FENCE_ROOT && segments[1] == BACKUP_ROOT -> 1
-      else -> return null
-    }
-    if (segments.size < root + 3) return null
-    val folder = segments[root + 1]
+    if (segments.firstOrNull() != BACKUP_ROOT || segments.size < 3) return null
+    val folder = segments[1]
     if (folder.isEmpty() || folder == COMMON_AREA_FOLDER) return null
     return backup(folder)
   }

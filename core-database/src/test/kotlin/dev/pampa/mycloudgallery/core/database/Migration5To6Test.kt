@@ -46,7 +46,7 @@ class Migration5To6Test {
     Situation(1, OriginDevice.PHONE, CopyAreas.PRIVATE, listOf(Place.Phone("a.jpg"), Place.Nas("alessio", "Backup/S25/2026/10/a.jpg"))),
     Situation(2, null, 0, listOf(Place.Phone("b.jpg", state = "absent"))),
     Situation(3, "backup:tab", CopyAreas.PRIVATE, listOf(Place.Nas("alessio", "Backup/Tab/2026/10/c.jpg"))),
-    Situation(4, "backup:prova", CopyAreas.PRIVATE, listOf(Place.Nas("alessio", "mcg-campo/Backup/Prova/d.jpg"))),
+    Situation(4, null, CopyAreas.PRIVATE, listOf(Place.Nas("alessio", "prova/Backup/Prova/d.jpg"))),
     Situation(5, null, CopyAreas.PRIVATE, listOf(Place.Nas("alessio", "Backup/Area comune/2026/10/e.jpg"))),
     Situation(6, null, CopyAreas.COMMON, listOf(Place.Nas("NAS", "Backup/Marco/f.jpg"))),
     Situation(7, "backup:altro", CopyAreas.PRIVATE, listOf(Place.Nas("alessio", "Backup/S25/g.jpg"), Place.Nas("alessio", "Backup/Altro/g.jpg"))),
@@ -55,8 +55,8 @@ class Migration5To6Test {
     Situation(10, null, CopyAreas.PRIVATE or CopyAreas.COMMON, listOf(Place.Nas("alessio", "Famiglia/l.jpg"), Place.Nas("NAS", "Album condivisi/Oslo/l.jpg"))),
     Situation(11, null, 0, listOf(Place.Nas("alessio", "Backup/S25/gone.jpg", state = "absent"))),
     Situation(12, "backup:s25", 0, listOf(Place.Nas("alessio", "Backup/S25/u.jpg", state = "unavailable"))),
-    // Una radice `mcg-campo` che non e' seguita da `Backup` e `Backup` come file (nessuna cartella del dispositivo): nessun dispositivo.
-    Situation(13, null, CopyAreas.PRIVATE, listOf(Place.Nas("alessio", "mcg-campo/Altro/Backup/m.jpg"))),
+    // Una radice che non e' `Backup` e `Backup` come file (nessuna cartella del dispositivo): nessun dispositivo.
+    Situation(13, null, CopyAreas.PRIVATE, listOf(Place.Nas("alessio", "prova/Altro/Backup/m.jpg"))),
     Situation(14, null, CopyAreas.PRIVATE, listOf(Place.Nas("alessio", "Backup/solo.jpg"))),
   )
 

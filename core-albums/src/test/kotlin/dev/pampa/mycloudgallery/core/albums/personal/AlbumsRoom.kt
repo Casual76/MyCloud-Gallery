@@ -93,6 +93,42 @@ class AlbumsRoom : AutoCloseable {
     }
   }
 
+  /** Come [insertRaw] per [count] media in una transazione sola (le Librerie grandi): [id], [size] e [quick] dicono il media numero n. */
+  fun insertRawMany(count: Int, id: (Int) -> MediaId, size: (Int) -> Long, quick: (Int) -> String) {
+    val sql = db.openHelper.writableDatabase
+    sql.beginTransaction()
+    try {
+      val media = sql.compileStatement(
+        "INSERT INTO media (media_id, kind, source, owner_account, group_id, current_version_id, created_at, updated_at, sort_time, " +
+          "presence, safety, local_day, aspect_milli, duration_ms, place_id, cell_flags, thumb_hash, backup_todo, origin_device, copy_areas) " +
+          "VALUES (?, 'photo', 'camera', 'alessio', NULL, ?, 0, 0, ?, 'phone_only', 'no_nas_copy', ?, 1333, NULL, NULL, 0, NULL, 0, NULL, 0)",
+      )
+      val version = sql.compileStatement(
+        "INSERT INTO media_version (version_id, media_id, kind, parent_version_id, size, quick_hash, full_hash, corrections, created_at) " +
+          "VALUES (?, ?, 'original', NULL, ?, ?, NULL, '', 0)",
+      )
+      for (n in 0 until count) {
+        val mediaId = id(n).value
+        val versionId = UUID.nameUUIDFromBytes(("v" + mediaId).toByteArray()).toString()
+        media.clearBindings()
+        media.bindString(1, mediaId)
+        media.bindString(2, versionId)
+        media.bindLong(3, T0 + n)
+        media.bindLong(4, (20_260_101 + n % 28).toLong())
+        media.executeInsert()
+        version.clearBindings()
+        version.bindString(1, versionId)
+        version.bindString(2, mediaId)
+        version.bindLong(3, size(n))
+        version.bindString(4, quick(n))
+        version.executeInsert()
+      }
+      sql.setTransactionSuccessful()
+    } finally {
+      sql.endTransaction()
+    }
+  }
+
   fun setHidden(id: MediaId, hidden: Boolean) {
     db.openHelper.writableDatabase.execSQL(
       "INSERT OR REPLACE INTO media_personal (media_id, favorite, hidden, updated_at) VALUES (?, 0, ?, 0)",

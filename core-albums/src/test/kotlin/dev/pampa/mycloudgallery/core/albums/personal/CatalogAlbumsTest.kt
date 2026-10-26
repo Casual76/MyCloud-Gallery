@@ -75,8 +75,10 @@ class CatalogAlbumsTest {
     assertThat(tablet.rows(album)).hasSize(1_000)
 
     exchange(phone, tablet)
+    val started = System.nanoTime()
     phone.albums.reconcileAll()
     tablet.albums.reconcileAll()
+    println("P3 misura: 2.000 elementi arrivati dall'altro dispositivo, ricostruzione su due dispositivi in ${(System.nanoTime() - started) / 1_000_000} ms")
 
     for (device in listOf(phone, tablet)) {
       assertThat(device.rows(album)).hasSize(2_000)

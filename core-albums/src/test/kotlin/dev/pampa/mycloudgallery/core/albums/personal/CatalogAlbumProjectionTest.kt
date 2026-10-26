@@ -355,7 +355,44 @@ class CatalogAlbumProjectionTest {
     assertThat(report.pending).isEqualTo(0)
     assertThat(room.db.albumDao().items(id)).hasSize(total)
     assertThat(room.db.albumDao().summaries().single().visibleCount).isEqualTo(total)
+    println("P3 misura: 2.000 elementi (meta' per id, meta' per impronta) proiettati in $millis ms")
     assertThat(millis).isLessThan(30_000)
+    // Un secondo giro identico (nessuna riga da scrivere) costa di meno.
+    val again = System.nanoTime()
+    project(setOf(id))
+    println("P3 misura: secondo giro senza novita' sullo stesso album in ${(System.nanoTime() - again) / 1_000_000} ms")
+  }
+
+  /** Il tetto degli elementi di un album condiviso (20.000) vale come ordine di grandezza anche qui: nessuna proiezione quadratica. */
+  @Test
+  fun ventimilaElementiSiProiettanoENelloStessoTempoUnSecondoGiroNonScriveNiente() = runBlocking<Unit> {
+    val total = 20_000
+    room.insertRawMany(total, { unknown(200_000 + it) }, { 9_000L + it }, { "%064x".format(it + 1) })
+    val id = newAlbumId()
+    val entries = ArrayList<PersonalEntry>(total + 1)
+    entries += remote(id, PersonalFields.ALBUM_DEFINITION, 10, PersonalValue.Text("Ventimila"))
+    for (i in 0 until total) {
+      val fp = PersonalFingerprint(9_000L + i, QuickHash("%064x".format(i + 1)))
+      // Meta' con l'id che qui c'e', meta' con quello di un altro dispositivo (si ritrovano per impronta).
+      val subject = if (i % 2 == 0) unknown(200_000 + i) else unknown(700_000 + i)
+      entries += remote(id, PersonalFields.albumItem(subject.value), 11L + i, PersonalValue.Number((i + 1) * 1_000L), fp)
+    }
+    store.applyRemote(entries)
+
+    val started = System.nanoTime()
+    val report = project()
+    val millis = (System.nanoTime() - started) / 1_000_000
+    assertThat(report.items).isEqualTo(total)
+    assertThat(report.pending).isEqualTo(0)
+    println("P3 misura: 20.000 elementi (meta' per id, meta' per impronta) proiettati in $millis ms")
+    assertThat(millis).isLessThan(120_000)
+
+    val again = System.nanoTime()
+    project(setOf(id))
+    val againMillis = (System.nanoTime() - again) / 1_000_000
+    println("P3 misura: secondo giro senza novita' su 20.000 elementi in $againMillis ms")
+    assertThat(room.db.albumDao().items(id)).hasSize(total)
+    assertThat(room.db.albumDao().summaries().single().visibleCount).isEqualTo(total)
   }
 
   private companion object {

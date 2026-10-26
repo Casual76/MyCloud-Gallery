@@ -890,6 +890,7 @@ In più, a ogni controllo: il **catalogo dice la stessa cosa del diario** (nessu
 |---|---|---|
 | `core-albums/src/test/.../chaos/ShareChaosBenchTest` | il vero `ShareOrchestrator` e il vero `NasOpsEngine` sul **NAS finto** in memoria di `core-nasops` (`NasOpsTestKit`), con colpi alle porte (spostamento, caricamento dal telefono, biglietti dei trasferimenti, pubblicatore degli album, copia privata del guardiano, cartelle d'origine, fatti del catalogo, porta di completamento) e alla scrittura dei diari (morte a **ogni** salvataggio del diario della condivisione) | **2.000** |
 | `ShareChaosSmbBenchTest` | lo stesso sul **simulatore SMB** di `core-nas`: sessione di produzione (`SmbNasSessionManager`) e primitive vere (`SmbNasFileOps`, `SmbNasFileSystem`); in più un colpo a **ogni chiamata SMB** del motore e la morte a **ogni salvataggio del diario di `core-nasops`** | **600** |
+| `ShareChaosSweepTest` | **un colpo a ogni chiamata** di un passo (condividere un album nuovo, con un caricamento dal telefono): per ogni punto e ogni chiamata, la morte del processo prima e dopo, la rete caduta prima e dopo, la sessione scaduta, il socket fermo, lo spazio finito dove ha senso; sul NAS finto e sul simulatore SMB (dove ogni chiamata SMB e ogni salvataggio del diario di `core-nasops` sono un punto) | **541** + **1.683** giri |
 | `ShareChaosMutationTest` | i quattro errori introdotti apposta (§E7) | 200 giri per errore |
 | `ShareChaosKnownDefectsTest` | la riproduzione dei difetti noti (§E6) | 5 test (2 `@Ignore` fino alla correzione) |
 | `ShareChaosVerifierTest`, `ShareChaosDeterminismTest` | il verificatore ha i denti (16 casi, ognuno costruito rompendo il mondo) e un giro si rifà identico dal seme | 16 + 3 |
@@ -913,12 +914,15 @@ Il motore che sposta i file è sempre il vero `NasOpsEngine` di `core-nasops` (s
 
 Il rapporto di un banco ha anche la **tabella di copertura**: per ogni superficie, quante chiamate ci sono state, quanti colpi programmati, quanti scattati e di quelli quanti morti. Un banco che non colpisce un punto lo dice (il rapporto dei 2.000 giri colpisce tutti e nove i punti del NAS finto, quello dei 600 tutti e undici del simulatore, compresi il diario di `core-nasops` e le chiamate SMB).
 
+**Un colpo a ogni chiamata** (`ShareChaosSweepTest`). I giri casuali campionano le chiamate; questo banco le prova *tutte*. Sceglie dal seme due mondi (uno con un caricamento dal telefono, uno con il più lavoro sul NAS), fa **un solo passo** (condividere un album nuovo) e lo misura con un giro senza colpi: quante chiamate fa a ogni punto (sul simulatore SMB, per esempio, 75 chiamate SMB, 27 salvataggi del diario di `core-nasops` e 24 del diario della condivisione). Poi, per ogni punto e ogni chiamata *n*, un giro con **un solo colpo**: la morte del processo prima e dopo, la connessione caduta prima e dopo, la sessione scaduta, il socket fermo, lo spazio finito dove ha senso (le porte che scrivono), e per ciascuno tutti gli invarianti come negli altri banchi. Sul NAS finto 541 giri (20 s), sul simulatore 1.683 (69 s, di cui 1.014 con un colpo a una chiamata SMB e 126 con la morte a un salvataggio del diario di `core-nasops`); in 12 e 58 giri il colpo non scatta (lo spazio finito su una chiamata che non occupa spazio: non è un colpo).
+
 ## E3. Come si lancia
 
 ```powershell
 # Tutto sulla JVM, --max-workers=2, DOPO aver aspettato 2 GB di RAM libera (il PC e' condiviso; chi lavora in piu' agenti prende prima un posto con gradle-slot.ps1):
 powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\share-pc.ps1 -Mode jvm        # 2.000 giri sul NAS finto
 powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\share-pc.ps1 -Mode smb        # 600 giri sul simulatore SMB
+powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\share-pc.ps1 -Mode sweep       # un colpo a OGNI chiamata di un passo (-Rounds 3: tre mondi invece di due)
 powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\share-pc.ps1 -Mode mutants    # i quattro errori introdotti apposta
 powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\share-pc.ps1 -Mode known      # i difetti noti (rossi quando si correggono)
 powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\share-pc.ps1 -Mode area       # il codice del NAS vero sopra il simulatore: nessuna rete
@@ -934,7 +938,7 @@ powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode share -SelfTe
 powershell -ExecutionPolicy Bypass -File tools\chaos\share-pc\s25-share-finto.ps1
 ```
 
-Variabili che i test leggono: `MCG_SHARE_CHAOS_ROUNDS` (2.000), `MCG_SHARE_CHAOS_SMB_ROUNDS` (600), `MCG_SHARE_CHAOS_SEED` (20261026 sulla JVM, 20261027 sull'SMB), `MCG_SHARE_CHAOS_FIRST_ROUND`; per il NAS vero `MCG_NAS_INTEGRATION=true` (l'interruttore), `MCG_SHARE_MODE` (`run`, `clean`, `verify`), `MCG_SHARE_INTERRUPTIONS`, `MCG_SHARE_SEED`, `MCG_SHARE_FIRST_ROUND`, `MCG_SHARE_RUN`, `MCG_SHARE_MANIFEST`, `MCG_SHARE_SETTLED`. I rapporti vanno in `core-albums/build/chaos/`: `share-jvm-report-fake.txt`, `share-jvm-report-smb.txt`, `share-area-report-<giro>.txt` (con `share-area-progress-<giro>.txt` che cresce a ogni giro e `share-area-log-<giro>.txt` con gli avvisi). Con `gradlew :core-albums:testDebugUnitTest` (e quindi `check.ps1`) i giri sono quelli di default; il NAS vero **non** gira mai da solo (si salta con il motivo se manca l'interruttore o il file).
+Variabili che i test leggono: `MCG_SHARE_CHAOS_ROUNDS` (2.000), `MCG_SHARE_CHAOS_SMB_ROUNDS` (600), `MCG_SHARE_CHAOS_SEED` (20261026 sulla JVM, 20261027 sull'SMB), `MCG_SHARE_CHAOS_FIRST_ROUND`, `MCG_SHARE_SWEEP_WORLDS` (2); per il NAS vero `MCG_NAS_INTEGRATION=true` (l'interruttore), `MCG_SHARE_MODE` (`run`, `clean`, `verify`), `MCG_SHARE_INTERRUPTIONS`, `MCG_SHARE_SEED`, `MCG_SHARE_FIRST_ROUND`, `MCG_SHARE_RUN`, `MCG_SHARE_MANIFEST`, `MCG_SHARE_SETTLED`. I rapporti vanno in `core-albums/build/chaos/`: `share-jvm-report-fake.txt`, `share-jvm-report-smb.txt`, `share-sweep-report-{fake,smb}.txt`, `share-area-report-<giro>.txt` (con `share-area-progress-<giro>.txt` che cresce a ogni giro e `share-area-log-<giro>.txt` con gli avvisi). Con `gradlew :core-albums:testDebugUnitTest` (e quindi `check.ps1`) i giri sono quelli di default; il NAS vero **non** gira mai da solo (si salta con il motivo se manca l'interruttore o il file).
 
 Un giro rosso si rifà dal suo seme: il seme del giro è `base × 1.000.003 + indice × 7.919 + 17` e il rapporto lo stampa insieme alla cronaca del giro (passi, colpi scattati, morti, stato del diario e delle operazioni).
 
@@ -1018,17 +1022,19 @@ Lo stack sano con gli stessi semi resta verde (200 giri), così il rosso viene d
 - **Il tempo vero del NAS e le ore.** Sulla JVM l'ora è finta (le conferme di 10 minuti, i 31 giorni del cestino, i timeout del motore avanzano a comando); sul NAS vero i tempi sono quelli veri ma una prova dura minuti, non ore.
 - **Il telefono.** `s25.ps1 -Mode share` non è eseguito (§E5). Non c'è modo di leggere dal PC il diario della condivisione né le voci degli album: il verificatore dal PC controlla gli invarianti 1, 2, 3 e i temporanei (e i fixture che non sono media), non 5-9. Per questo la prova F80 chiede anche uno sguardo all'app dopo la verifica: nessun elemento fermo e nessun media mancante nelle schermate della condivisione.
 - **L'architettura.** Il banco non nomina `SmbNasFileOps`, i tipi della conferma né `smbj` direttamente (vietato nei test di architettura): quello che viene colpito è il motore e il trasporto, non le primitive una per una. Le primitive vere una per una sono del banco di `core-nasops` (Parte A, 600 giri).
+- **Sul NAS finto in memoria** le chiamate del motore al NAS e il diario di `core-nasops` non si colpiscono: il NAS finto di `NasOpsTestKit` è `internal` a `core-nasops` (fuori da lì si usano solo i suoi metodi pubblici) e il kit costruisce da sé il motore sul proprio diario, senza un gancio. Quei colpi stanno **solo sul simulatore SMB** (600 giri casuali e il banco «un colpo a ogni chiamata»). Il banco sul NAS finto colpisce le porte dell'orchestratore, la porta di completamento e **ogni salvataggio del diario della condivisione** (la morte, prima o dopo la scrittura).
 - **I difetti noti** del §E6 sono evitati dal banco di serie: finché non si correggono, nel banco grande non c'è una condivisione con file cambiati dal PC dentro uno stesso trasferimento di più file e nessun guasto passeggero su `TicketStatus.find`.
 
 ## E9. Che cosa conta come superata
 
 1. **JVM**: 2.000 giri sul NAS finto e 600 sul simulatore SMB, **zero violazioni** (i difetti noti del §E6 non contano: sono riprodotti a parte).
-2. **Mutazioni**: i quattro errori sono rossi con l'invariante giusto (§E7), lo stack sano sugli stessi semi è verde.
-3. **Difetti noti**: ognuno ha la sua riproduzione e il suo seme.
-4. **NAS vero** (F80, dal PC): 500 interruzioni cadute su `test` → `test-comune`, zero giri rossi, l'area di prova pulita a fine prova (il rapporto dice cosa è rimasto), nessun errore di autenticazione.
-5. **Telefono** (F80, a mano dall'orchestratore): `s25.ps1 -Mode share` con ≥ 100 interruzioni durante una condivisione di 20-200 media, il verificatore verde (impronte del telefono e area di prova), poi in app nessun elemento fermo e nessuno mancante.
-6. Un giro rosso **si rifà** dal suo seme (§E3).
-7. I banchi esistenti (Parti A-D) e i test di `core-albums`, `core-nasops` e `core-backup` restano verdi; `tools\check.ps1 -NoDaemon` verde.
+2. **Un colpo a ogni chiamata**: 541 giri sul NAS finto e 1.683 sul simulatore SMB, zero violazioni, almeno nove colpi su dieci scattati.
+3. **Mutazioni**: i quattro errori sono rossi con l'invariante giusto (§E7), lo stack sano sugli stessi semi è verde.
+4. **Difetti noti**: ognuno ha la sua riproduzione e il suo seme.
+5. **NAS vero** (F80, dal PC): 500 interruzioni cadute su `test` → `test-comune`, zero giri rossi, l'area di prova pulita a fine prova (il rapporto dice cosa è rimasto), nessun errore di autenticazione.
+6. **Telefono** (F80, a mano dall'orchestratore): `s25.ps1 -Mode share` con ≥ 100 interruzioni durante una condivisione di 20-200 media, il verificatore verde (impronte del telefono e area di prova), poi in app nessun elemento fermo e nessuno mancante.
+7. Un giro rosso **si rifà** dal suo seme (§E3).
+8. I banchi esistenti (Parti A-D) e i test di `core-albums`, `core-nasops` e `core-backup` restano verdi; `tools\check.ps1 -NoDaemon` verde.
 
 ## E10. Risultati e tempi
 
@@ -1038,6 +1044,7 @@ Sul PC di sviluppo (condiviso con altre build, `--max-workers=2`), 26/10/2026:
 |---|---|---|---|
 | NAS finto, 2.000 giri (seme di base 20261026) | 2.000 giri, 3.930 interruzioni cadute (2.581 morti del processo), 3.998 passi, 52.724 file riletti con SHA-256 (1,1 GiB), 20.029 eventi guardati dagli osservatori | **0** | 110 s |
 | simulatore SMB, 600 giri (seme di base 20261027) | 600 giri, 1.273 interruzioni cadute (800 morti del processo), 1.176 passi, 15.497 file riletti (306 MiB), 5.830 eventi guardati | **0** | 29 s |
+| un colpo a ogni chiamata (NAS finto: 541 giri; simulatore SMB: 1.683 giri) | 2.224 giri, 2.154 colpi scattati (937 morti del processo) | **0** | 20 s + 69 s |
 | mutazioni (200 giri per errore, seme 4242) | quattro rossi con l'invariante giusto, sano verde | — | 49 s |
 | NAS vero, dal PC (`test` → `test-comune`) | 243 giri, **500 interruzioni cadute** (326 morti del processo, 94 connessioni cadute, 35 sessioni scadute, 33 socket fermi, 12 «spazio finito»; 267 prima della chiamata, 233 dopo) | **0** (nessun giro rosso, nessun login rifiutato) | 18 min 42 s |
 | telefono (S25) | **non eseguito** | — | — |

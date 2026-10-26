@@ -50,6 +50,40 @@ class StorageAndEventsContributorsTest {
     )
   }
 
+  /** DG-5: i modelli (con i programmi compilati), l'indice di ricerca e il buffer dell'analisi sono i tre pesi grossi dell'app, e Spazio non li diceva. */
+  @Test
+  fun lAreeDellaRicercaSiEsportanoComeNumeriESiVedonoNelDettaglio() = runTest {
+    val aiSnapshot = StorageSnapshot(
+      databaseBytes = 3_200_000,
+      cacheBytes = 12_000_000,
+      noBackupBytes = 1_900_000_000,
+      filesBytes = 700_000,
+      freeBytes = 20_000_000_000L,
+      totalBytes = 128_000_000_000L,
+      modelsBytes = 1_100_000_000,
+      searchBytes = 60_000_000,
+      aiBufferBytes = 480_000_000,
+    )
+    val items = StorageContributor { aiSnapshot }.collect()
+    assertExportKeysAllowed(items)
+
+    val usage = items.single { it.code == DiagCodes.STORAGE_USAGE }
+    assertThat(usage.export).containsAtLeast(
+      "modelsBytes", ExportValue.Num(1_100_000_000),
+      "searchBytes", ExportValue.Num(60_000_000),
+      "aiBufferBytes", ExportValue.Num(480_000_000),
+    )
+    // Il dettaglio dice le tre aree (6 argomenti), non solo i tre pesi di sempre.
+    assertThat(usage.detail!!.args).hasSize(6)
+  }
+
+  @Test
+  fun senzaLeAreeDellaRicercaIlDettaglioEQuelloDiSempre() = runTest {
+    val usage = StorageContributor { snapshot() }.collect().single { it.code == DiagCodes.STORAGE_USAGE }
+    assertThat(usage.export.keys).containsNoneOf("modelsBytes", "searchBytes", "aiBufferBytes")
+    assertThat(usage.detail!!.args).hasSize(3)
+  }
+
   @Test
   fun conLaMemoriaQuasiPienaCEUnAvviso() = runTest {
     val items = StorageContributor { snapshot(free = 300_000_000L) }.collect()

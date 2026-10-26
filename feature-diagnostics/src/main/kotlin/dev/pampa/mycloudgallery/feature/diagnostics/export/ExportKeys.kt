@@ -32,6 +32,10 @@ object ExportKeys {
     // Spazio (StorageContributor) e consumi (TrafficContributor)
     "databaseBytes", "cacheBytes", "noBackupBytes", "filesBytes", "freeBytes", "totalBytes", "source", "mobileBytes",
     "wifiBytes", "roamingBytes",
+    // La ricerca (Fase 6, AiDiagnostics di :app) e lo spazio che occupa (DG-5 della verifica funzionale): solo numeri, flag ed enumerati; mai query, testo
+    // letto, luoghi, vettori, chiavi o share. Prima queste chiavi non erano nell'elenco e l'esportazione le lasciava fuori in silenzio.
+    "queryModel", "indexModel", "indexer", "textReadingHere", "vectors", "texts", "bufferBytes", "models", "outbox", "held",
+    "modelsBytes", "searchBytes", "aiBufferBytes",
     // Eventi (RecentEventsContributor)
     "ageMs",
     // Libreria del telefono (core-mediastore, PhoneLibraryDiagnostics): solo numeri, flag ed enumerati (mai nomi di

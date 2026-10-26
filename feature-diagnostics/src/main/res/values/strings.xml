@@ -68,6 +68,7 @@
   <string name="diagnostics_heartbeat_hours">Ore dall\'ultimo lavoro: %1$d</string>
   <string name="diagnostics_exit_count">Uscite registrate di recente: %1$d</string>
   <string name="diagnostics_storage_detail">Database %1$s · cache %2$s · dati dell\'app %3$s</string>
+  <string name="diagnostics_storage_detail_ai">Database %1$s · cache %2$s · dati dell\'app %3$s (modelli %4$s, indice di ricerca %5$s, buffer dell\'analisi %6$s)</string>
   <string name="diagnostics_storage_free">Liberi %1$s su %2$s</string>
   <string name="diagnostics_traffic_month_detail">Totale %1$s · Wi-Fi %2$s · dati mobili %3$s</string>
   <string name="diagnostics_traffic_activity_detail">Wi-Fi %1$s · dati mobili %2$s</string>

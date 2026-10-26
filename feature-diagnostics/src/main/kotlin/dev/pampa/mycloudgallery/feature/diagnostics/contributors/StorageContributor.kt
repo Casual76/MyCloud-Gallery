@@ -34,8 +34,14 @@ class StorageSnapshot(
   val filesBytes: Long,
   val freeBytes: Long?,
   val totalBytes: Long?,
+  /** DG-5: quanto pesano i modelli (con i programmi compilati), l'indice di ricerca e il buffer dell'analisi, dentro `noBackupFilesDir`. */
+  val modelsBytes: Long = 0,
+  val searchBytes: Long = 0,
+  val aiBufferBytes: Long = 0,
 ) {
   val appBytes: Long get() = databaseBytes + cacheBytes + noBackupBytes + filesBytes
+
+  val hasAiAreas: Boolean get() = modelsBytes > 0 || searchBytes > 0 || aiBufferBytes > 0
 }
 
 /** Da dove si legge lo spazio ([AppStorageSource] su Android; un fake nei test). */
@@ -61,20 +67,40 @@ class StorageContributor(private val source: StorageSource) : DiagnosticsContrib
       section = DiagSection.STORAGE,
       severity = DiagSeverity.INFO,
       titleRes = DiagCatalog.titleOf(DiagCodes.STORAGE_USAGE),
-      detail = DiagText(
-        R.string.diagnostics_storage_detail,
-        listOf(
-          ByteFormat.size(storage.databaseBytes),
-          ByteFormat.size(storage.cacheBytes),
-          ByteFormat.size(storage.noBackupBytes + storage.filesBytes),
-        ),
-      ),
-      export = mapOf(
-        "databaseBytes" to ExportValue.Num(storage.databaseBytes),
-        "cacheBytes" to ExportValue.Num(storage.cacheBytes),
-        "noBackupBytes" to ExportValue.Num(storage.noBackupBytes),
-        "filesBytes" to ExportValue.Num(storage.filesBytes),
-      ),
+      detail = if (storage.hasAiAreas) {
+        DiagText(
+          R.string.diagnostics_storage_detail_ai,
+          listOf(
+            ByteFormat.size(storage.databaseBytes),
+            ByteFormat.size(storage.cacheBytes),
+            ByteFormat.size(storage.noBackupBytes + storage.filesBytes),
+            ByteFormat.size(storage.modelsBytes),
+            ByteFormat.size(storage.searchBytes),
+            ByteFormat.size(storage.aiBufferBytes),
+          ),
+        )
+      } else {
+        DiagText(
+          R.string.diagnostics_storage_detail,
+          listOf(
+            ByteFormat.size(storage.databaseBytes),
+            ByteFormat.size(storage.cacheBytes),
+            ByteFormat.size(storage.noBackupBytes + storage.filesBytes),
+          ),
+        )
+      },
+      export = buildMap {
+        put("databaseBytes", ExportValue.Num(storage.databaseBytes))
+        put("cacheBytes", ExportValue.Num(storage.cacheBytes))
+        put("noBackupBytes", ExportValue.Num(storage.noBackupBytes))
+        put("filesBytes", ExportValue.Num(storage.filesBytes))
+        // DG-5: le tre aree della ricerca (solo numeri).
+        if (storage.hasAiAreas) {
+          put("modelsBytes", ExportValue.Num(storage.modelsBytes))
+          put("searchBytes", ExportValue.Num(storage.searchBytes))
+          put("aiBufferBytes", ExportValue.Num(storage.aiBufferBytes))
+        }
+      },
     )
     val free = storage.freeBytes
     val total = storage.totalBytes
@@ -131,6 +157,9 @@ class AppStorageSource(
       filesBytes = sizeOf(app.filesDir),
       freeBytes = stat?.first,
       totalBytes = stat?.second,
+      modelsBytes = sizeOf(File(app.noBackupFilesDir, "models")),
+      searchBytes = sizeOf(File(app.noBackupFilesDir, "search")),
+      aiBufferBytes = sizeOf(File(app.noBackupFilesDir, "ai-buffer")),
     )
   }
 

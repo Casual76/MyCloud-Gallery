@@ -195,6 +195,42 @@ object PersonalFields {
   /** L'id del media di un elemento di album, o null se [field] non e' un elemento. */
   fun albumItemMedia(field: String): String? = field.takeIf { isAlbumItem(it) }?.substring("item:".length)?.takeIf { it.isNotEmpty() }
 
+  // --- Fase 7, P3: i lettori dei campi D4. L'inverso dei costruttori qui sopra: dal nome del campo a cio' che nomina. Nessun tipo
+  // nuovo e nessuna regola nuova sul formato; chi legge il valore (testo, numero, flag) e l'impronta e' PersonalAlbums.
+
+  /** Il testo dopo [prefix] nel campo, o null se [field] non comincia cosi' o dopo non c'e' niente. */
+  private fun after(field: String, prefix: String): String? = field.takeIf { it.startsWith(prefix) }?.substring(prefix.length)?.takeIf { it.isNotEmpty() }
+
+  /** Vero se [field] e' una foto d'esempio di un album smart ([smartExample]). */
+  fun isSmartExample(field: String): Boolean = field.startsWith("$SMART_EXAMPLE:")
+
+  /** L'id del media di una foto d'esempio (`smart:example:<media>`), o null. */
+  fun smartExampleMedia(field: String): String? = after(field, "$SMART_EXAMPLE:")
+
+  /** Vero se [field] e' un'esclusione per sempre ([albumExclude]). */
+  fun isAlbumExclude(field: String): Boolean = field.startsWith("$ALBUM_EXCLUDE:")
+
+  /** L'id del media di un'esclusione (`exclude:<media>`), o null. */
+  fun albumExcludeMedia(field: String): String? = after(field, "$ALBUM_EXCLUDE:")
+
+  /** Vero se [field] e' un suggerito accettato ([albumAccept]). */
+  fun isAlbumAccept(field: String): Boolean = field.startsWith("$ALBUM_ACCEPT:")
+
+  /** L'id del media di un suggerito accettato (`accept:<media>`), o null. */
+  fun albumAcceptMedia(field: String): String? = after(field, "$ALBUM_ACCEPT:")
+
+  /** I campi `smart:*` che portano una regola intera (un testo); le foto d'esempio sono voci a parte ([smartExample]). */
+  val SMART_RULE_FIELDS: List<String> = listOf(SMART_PERIOD, SMART_PLACE, SMART_TEXT, SMART_SOURCES, SMART_TYPES)
+
+  /** Il codice della sezione delle Raccolte di una visibilita' (`collections_hidden:<sezione>`), o null. */
+  fun collectionsHiddenSection(field: String): String? = after(field, "$SETTING_COLLECTIONS_HIDDEN:")
+
+  /** L'id di una proposta di viaggio scartata (`trip_dismissed:<id>`), o null. */
+  fun tripDismissedId(field: String): String? = after(field, "$SETTING_TRIP_DISMISSED:")
+
+  /** L'id dell'album condiviso lasciato (`shared_album_left:<id>`), o null. */
+  fun sharedAlbumLeftId(field: String): String? = after(field, "$SETTING_SHARED_ALBUM_LEFT:")
+
   // --- Fase 5, D36 (docs/fase5-progetto.md §2.12): le scelte dell'utente sulle copie simili. Voci `MEDIA_FLAG` (un flag di un
   // media, come preferito e nascosto) con campi nuovi: il formato della classe `personal` NON cambia (il tipo si riconosce dalla
   // chiave, e `MEDIA_FLAG` c'e' gia'; una versione precedente dell'app le legge e le lascia stare, la proiezione sul catalogo

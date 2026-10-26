@@ -492,7 +492,7 @@ falsa. Il costo e' accettabile perche' quasi tutto cio' che firma un dispositivo
 | Dati personali | ignorati i suoi contributi; restano quelli degli altri dispositivi dello stesso account (Fase 4.7 decide se ognuno ripubblica lo stato gia' unito). |
 | Prenotazioni | ignorate: la risorsa e' libera. |
 | Record del cestino | ignorati: i file restano nel cestino e **non vengono mai eliminati in automatico** (la pulizia la fa solo chi ha cestinato, §9); in "Eliminati di recente" compaiono come "senza record valido" e decide l'utente. |
-| Album condivisi (Fase 7, A7) | **dismesso**: valgono solo i contributi delle sue teste congelate (le voci gia' viste restano, nessuna nuova). **Revocato o perso**: il suo contributo e' ignorato del tutto, anche le aggiunte fatte da li' (un elemento che solo lui aveva pubblicato esce dall'album per tutti); i file restano dove sono. Un altro dispositivo dello stesso account puo' ripubblicare gli elementi i cui file sono ancora nell'area comune ("Ripristina gli elementi di un dispositivo revocato", azione locale, E-SH20). L'account del creatore resta creatore finche' ha un dispositivo approvato o dismesso (D11). |
+| Album condivisi (Fase 7, A7) | **dismesso**: valgono solo i contributi delle sue teste congelate (le voci gia' viste restano, nessuna nuova). **Revocato o perso**: il suo contributo e' ignorato del tutto, anche le aggiunte fatte da li' (un elemento che solo lui aveva pubblicato esce dall'album per tutti); i file restano dove sono. Un altro dispositivo dello stesso account puo' ripubblicare gli elementi i cui file sono ancora nell'area comune ("Ripristina gli elementi di un dispositivo revocato", azione locale, E-SH20). L'account del creatore resta creatore finche' ha un dispositivo approvato o dismesso (D11). P2: i contributi esclusi restano solo come memoria locale (mai nella fusione ne' in una schermata) per quei ripristini e per l'erede, che ricostituisce l'album di un creatore uscito dalla famiglia con lo stesso id (§5.8). |
 
 **Dismissione** (telefono sostituito, funzionava): l'admin la sceglie quando il dispositivo non e'
 sospetto; congela le teste che il suo dispositivo ha gia' accettato, cosi' l'indice gia' fatto non si
@@ -1000,51 +1000,112 @@ proprio diario locale (§9, punto 3). Un dispositivo dismesso o azzerato lascia 
 
 ### 5.8 Testa di un album condiviso (tipo 6, Fase 7)
 
-**Fase 7 (A2; `docs/fase7-progetto.md` D6-D11, §2.4; codec `AlbumDocs` di `core-trust`, P2).** Un file per album e per dispositivo
-(`albums/<id album>/<id dispositivo>/head/<versione>`), firmato da un dispositivo approvato, con anti-rollback ed equivocazione come le
-teste (§5.5, `HeadMark`): ogni dispositivo scrive solo il **suo contributo**, cosi' due familiari che modificano lo stesso album non si
-sovrascrivono (E-SH6). Versione **3** del formato (§10), tetto 256 KiB (`MAX_ALBUM_HEAD_PAYLOAD`).
+**Fase 7 (A2; `docs/fase7-progetto.md` D6-D11, §2.4; codec `AlbumDocs` di `core-trust`, replica, fusione, permessi e pubblicatore in
+`core-albums/.../shared/`, P2).** Un file per album e per dispositivo (`albums/<id album>/<id dispositivo>/head/<versione>`), firmato da un
+dispositivo approvato, con anti-rollback ed equivocazione come le teste (§5.5, `HeadMark`): ogni dispositivo scrive solo il **suo
+contributo**, cosi' due familiari che modificano lo stesso album non si sovrascrivono (E-SH6). Versione **3** del formato (§10), tetto
+256 KiB (`MAX_ALBUM_HEAD_PAYLOAD`). I tetti degli album sono `AlbumLimits` di `core-trust` (uguali a `SharedAlbumLimits` di `core-albums`,
+test).
 
-**La testa**: `family`, `album` (id in base32), `device` (= firmatario), `version`, `registryVersion`, `createdAt` (ora del NAS),
-`segments[]` (come al §5.5: nome = impronta, classe `album`). Al piu' una testa ogni 5 minuti per album e dispositivo, modifiche
-accorpate in 30 s; pulizia dei propri file come `OwnFilesPolicy` (ultime 3 teste, 7 giorni di grazia).
+**La testa** (`AlbumDocs.encodeHead`/`decodeHead`): `{album, createdAt, device, family, registryVersion, segments, version}`; `album` e'
+l'id in base32 (26 caratteri, §2.4), `device` = firmatario, `createdAt` = ora del NAS, `segments` da 0 a 64 elementi `{class, hash, size}` con
+`class` = `album`, in ordine crescente di impronta, ognuno al piu' 4 MiB e la somma al piu' 32 MiB (una testa che dichiara di piu' si rifiuta
+**prima** di scaricare). Ordine della lettura: busta (tipo 6; versione oltre la 3 = `NEWER_FORMAT`) → firmatario nel registro accettato
+(approvato; dismesso **solo** se l'impronta dei byte firmati della testa e' fra le sue `frozenHeads`, altrimenti `SIGNER_RETIRED`; revocato o
+perso `SIGNER_REVOKED`; sconosciuto o in attesa `SIGNER_NOT_APPROVED`) → versione della busta uguale alla 3 (una testa d'album alla 1 o alla 2
+e' `INVALID_FIELD`) → JSON e campi (famiglia, `device` = firmatario, tetti) → posto (album, cartella del dispositivo e numero del nome
+uguali a `album`, `device`, `version`: `WRONG_LOCATION`) → anti-rollback (`ROLLBACK`, `EQUIVOCATION`) rispetto all'ultima testa accettata
+dello stesso album e dispositivo. Al piu' una testa ogni 5 minuti per album e dispositivo (ora del NAS), modifiche accorpate in 30 s.
 
-**I segmenti**: contenitore `MCGB` (§5.5-bis) con la classe nuova **`album` (codice 17)**, solo nelle teste di tipo 6 (una testa `index`,
-`personal` o `ai` che la elenca e' rifiutata, e una testa d'album non elenca altre classi). Una **voce** per chiave, con l'ultima
-scrittura che vince (`at`, poi l'autore minore, come i dati personali): chiave = `SHA-256("mcg-album\0" ‖ id album ‖ campo)`; corpo JSON
-canonico al piu' 4 KiB con `at` (ora del NAS), `author` (dispositivo), `account` (l'account di chi scrive), `field`, `value` (assente =
-lapide). I campi:
+**I segmenti** (`AlbumDocs.encodeSegment`/`decodeSegment`): contenitore `MCGB` con la stessa tabella del §5.5-bis e la classe nuova **`album`
+(codice 17)**, solo nelle teste di tipo 6 (una testa `index`, `personal` o `ai` che la elenca e' rifiutata; il codec dell'indice e quello dei
+dati AI non la leggono):
 
-| Campo | Valore | Chi puo' scriverlo (§2.4 del progetto) |
+```
+"MCGB" | 3 | 17 | 0 0 0 | N (1..8.192, BE) | N x (chiave 32 + lunghezza 4, BE) | corpi (JSON canonico, 1..4.096 byte ciascuno)
+```
+
+Chiavi strettamente crescenti, somma delle lunghezze = resto del file; versione oltre la 3 = `NEWER_FORMAT`, la 1 o la 2 = `MALFORMED` (un
+segmento d'altro tipo spacciato per album), classe diversa da 17 = `WRONG_TYPE`. Chiave di una voce = `SHA-256("mcg-album\0" ‖ 16 byte
+dell'id album ‖ campo in UTF-8)`: chi legge la ricalcola e una chiave diversa rifiuta il segmento. Ogni errore rifiuta il segmento, e con lui
+il contributo intero.
+
+**La voce**: `{account, at, author, field, value}`, con `value` assente = **lapide**.
+- `account` = il `nasUser` del firmatario nel registro, **in minuscolo** (una sola scrittura dell'account: `Test` e `test` sono lo stesso
+  account per Samba), altrimenti `NOT_OWNER`; `author` = id del firmatario, altrimenti `WRONG_LOCATION`; `at` = ora del NAS della modifica,
+  dal 2020 al 2100.
+- `field`: `definition`, `level`, `cover`, `sort`, `heir` oppure `item:<id del media in base32>`; un campo sconosciuto rifiuta il segmento.
+- La lapide vale solo per `cover` (copertina automatica), `sort` (ordine predefinito) e `item:` (elemento tolto); per gli altri campi rifiuta.
+
+| Campo | Valore | Regole del codec |
 |---|---|---|
-| `definition` | `title` (al piu' 64 caratteri, §8.4), `folder` (cartella dell'album, relativa all'area comune), `state` (`active`, `closed`, `deleted`), `creator` (account), `nonce` (16 byte), e con `closed`/`deleted` **`afterClose`** (`remove` o `keep_copy`, risposta Q5 del 22/10) | titolo e cartella: secondo il livello; lo stato e `afterClose`: solo il creatore o l'erede |
-| `level` | la **storia** dei livelli (`all`, `add`, `view`), al piu' 32 cambi, ognuno con la sua ora | solo il creatore o l'erede |
-| `cover` | id del media e chiave di contenuto, o assente (automatica) | secondo il livello |
-| `sort` | `oldest`, `newest`, `custom` | secondo il livello |
-| `item:<media>` | posizione, chiave di contenuto **intera**, versione, percorso nella share comune (al piu' 1.024 byte, relativo, mai dentro `.mycloudgallery`, confronto NFKC), `addedBy` (account); lapide = tolto | aggiungere e togliere secondo il livello e `addedBy` |
-| `heir` | account dell'erede e versione del registro che lo giustifica | un admin, solo se il registro non ha piu' dispositivi del creatore (D11) |
+| `definition` | `{afterClose?, creator, folder, nonce, state, title}` | `title`: da 1 a 64 caratteri (punti di codice), senza spazi ai bordi, nessun carattere vietato del §8.1 (controlli, direzione del testo, invisibili); `folder`: percorso di media relativo all'area comune (§8.1, mai dentro `.mycloudgallery`, confronto NFKC), al piu' 1.024 byte; `creator`: account minuscolo; `nonce`: 16 byte in base32; `state`: `active`, `closed`, `deleted`; `afterClose` **obbligatorio** con `closed`/`deleted` e vietato con `active`, un codice `[a-z][a-z0-9_]{0,15}` (`remove`, `keep_copy`; uno sconosciuto vale `remove`, risposta Q5) |
+| `level` | `{history: [{at, level}]}` | da 1 a 32 cambi, ore strettamente crescenti e mai dopo l'`at` della voce, livelli `all`, `add`, `view` |
+| `cover` | `{key, media}` | chiave di contenuto (52 caratteri base32) e id del media |
+| `sort` | `{sort}` | `oldest`, `newest`, `custom` |
+| `item:<media>` | `{addedBy, fh?, key, path, position, version?}` | chiave di contenuto **intera**, `fh` (SHA-256 del file, se chi aggiunge lo conosce: chi legge lo confronta con il suo, D9), `path` percorso di media relativo all'area comune al piu' 1.024 byte (§8.1, NFKC), `position` da 0 a 2^53, `version` id facoltativo, `addedBy` account minuscolo |
+| `heir` | `{account, registryVersion}` | account minuscolo, versione del registro da 1 a 10^9 |
+
+**Il contributo intero** (`AlbumDocs.checkContribution`, dopo tutti i segmenti): al piu' 20.000 voci, **una per chiave**, e ogni `definition`
+con l'account e il nonce da cui si ricalcola **questo** id (E-SH14). Una violazione rifiuta il contributo intero; gli altri contributi valgono.
+
+**Regole di chi legge** (`NasSharedAlbumSync`, D8): solo nell'area comune (`commonShare` del registro) e solo con la recinzione D30 aperta per
+quella share (`AlbumReadGate`); `albums/` elencata al piu' per 1.024 nomi (i nomi che non sono id si ignorano; con l'elenco inondato si leggono
+comunque gli album gia' noti e i propri), le cartelle dei dispositivi approvati o dismessi del registro, le teste **per nome** come al §5.5 (al
+piu' 4.096 letture per giro, a rotazione fra gli album); i segmenti gia' scaricati si riusano. Una testa o una voce con l'ora oltre 2 minuti
+nel futuro fa **aspettare** il contributo; una voce **nuova** (assente o diversa nella testa precedente dello stesso dispositivo letta da
+questo telefono) con `at` anteriore alla `createdAt` di quella testa meno 2 minuti e' **retrodatata**: si scarta, e resta scartata nelle teste
+dopo (un dispositivo mai letto prima puo' retrodatare: L59). Tetti per dispositivo (100.000 voci e 512 album nella replica) e per giro (64 MiB
+di segmenti, il resto al giro dopo). Il contributo di un dispositivo revocato, perso, sconosciuto, o dismesso con una testa non congelata esce
+dalla fusione (A7, E-SH20; resta solo come memoria locale per il ripristino, sotto). Un errore qualunque resta nell'album che l'ha prodotto: la
+sincronizzazione dell'indice e gli altri album vanno avanti.
+
+**Fusione e permessi** (`AlbumFusion`, `AlbumPermissions.check`, la stessa tabella di chi scrive, C25). Per ogni dispositivo vale l'ultima
+testa accettata (unione commutativa, associativa e idempotente); le voci di una chiave si ordinano per `at` e, a pari ora, vince l'autore
+minore. Poi:
+1. il **creatore** e' l'account dell'id (D7); gli **eredi** (D11) sono una linea del tempo: una voce `heir` vale se la firma un dispositivo
+   admin approvato, per il proprio account, con l'account del creatore senza dispositivi approvati ne' dismessi e `registryVersion` non oltre
+   il registro di chi legge, e da quell'ora l'erede ha i diritti del creatore;
+2. la **base** dell'album e' la prima `definition` del creatore o dell'erede in vigore (anche `closed`/`deleted`: ogni dispositivo tiene solo
+   l'ultima voce per chiave e la creazione puo' essere gia' stata sostituita dalla chiusura); senza base l'album non c'e'. La **chiusura** e'
+   la prima loro `definition` `closed`/`deleted`: e' definitiva, dopo non vale piu' nessuna voce;
+3. i **livelli** sono la storia dell'ultima voce `level` del creatore o dell'erede (mai dopo la chiusura); **prima del primo cambio vale
+   `view`** (solo il creatore);
+4. ogni altra voce si giudica con il livello in vigore alla **sua** ora e con la voce gia' ammessa per la stessa chiave subito prima: un
+   elemento nuovo e' "Aggiungi" (e `addedBy` = chi scrive); sopra un elemento vivo `addedBy` non cambia mai (il proprio = come aggiungere,
+   quello di un altro = come toglierlo); una lapide e' "Togli" confrontata con `addedBy` di prima, oppure "Riporta" del proprio elemento (a
+   `view` vale per chi l'aveva aggiunto quando il livello lo permetteva); una lapide su niente non ha effetto; una `definition` che cambia
+   titolo o cartella e' "Rinomina", una che cambia lo stato e' "Smetti di condividere"/"Elimina l'album".
+Una voce non permessa si **scarta da sola** (`ALBUM_ENTRY_DENIED`); le altre valgono.
+
+**Pubblicazione** (`NasAlbumPublisher`): le voci del proprio contributo (pubblicate e in coda) si dividono in segmenti **stabili** per secchi
+della chiave (da 1 a 32 secchi dai primi bit, circa 512 voci a secchio): una modifica di solito riscrive un segmento solo. Prima i segmenti
+(nome = impronta; un nome gia' presente deve avere gli stessi byte), poi la testa al primo numero libero (§2.3); **solo `publishExclusive`,
+solo sotto `albums/<album>/<proprio dispositivo>/`**. Nessuna voce in coda e' datata prima della propria ultima testa (con un salto indietro
+dell'ora del NAS chi legge la scarterebbe come retrodatata). Chi scrive non pubblica mai una voce che chi legge rifiuterebbe
+(`AlbumDocs.entryBytesOrNull`). Con lo store locale perso, la propria ultima testa sul NAS dice numero, ora e voci gia' pubblicate.
 
 **Id dell'album legato al creatore (D7)**: i primi 128 bit di `SHA-256("mcg-album-id\0" ‖ account del creatore ‖ nonce)`; chi legge li
-ricalcola da `definition` e rifiuta il contributo se non tornano (`AlbumId.derived` di `core-model`, E-SH14). In app lo stesso id ha
-la forma di un UUID; nei percorsi la sua forma base32.
+ricalcola da `definition` e rifiuta il contributo se non tornano (`AlbumId.derived` di `core-model`, `AlbumIds.matches`, E-SH14). In app lo
+stesso id ha la forma di un UUID; nei percorsi la sua forma base32 (`AlbumIds.text`, la stessa conversione dei 128 bit per album, media e
+versioni).
 
-**Regole di chi legge** (D8-D10): busta valida; firmatario approvato nel registro corrente (un dismesso vale solo per le teste
-congelate, un revocato o perso si ignora del tutto, §4.6); `family`, `device` e cartella coerenti; anti-rollback ed equivocazione per
-dispositivo; `account` di ogni voce = `nasUser` del dispositivo nel registro; `at` al piu' 2 minuti nel futuro, e una voce **nuova**
-(assente nella testa precedente dello stesso dispositivo) con `at` anteriore alla `createdAt` di quella testa meno 2 minuti si scarta
-(L59); i tetti del §7; un campo sconosciuto rifiuta il segmento. Ogni violazione della busta, dell'id o dei tetti rifiuta il
-**contributo intero**; gli altri contributi valgono (E-SH14). Una voce non permessa dal livello in vigore alla sua ora `at` si **scarta
-da sola** (`AlbumPermissions`, la stessa tabella di chi scrive, C25). Uno stato `closed` o `deleted` e' **definitivo** per quell'id: un
-`active` successivo non riapre l'album (condividere di nuovo crea un album nuovo, con un id suo).
+**Ricostituzione dell'erede (D11, E-SH11).** Quando l'account del creatore non ha piu' dispositivi approvati ne' dismessi, i suoi contributi
+non valgono piu' (A7) e l'album resta senza base. L'admin che eredita pubblica nel **suo** contributo la voce `heir`, la `definition` con lo
+stesso creatore e nonce (stesso id, stessa cartella), la storia dei livelli com'era (`level` con le ore di allora: le voci degli altri si
+giudicano come prima) e gli elementi del creatore i cui file il suo catalogo vede ancora nell'area comune, a suo nome. Li prende dalla
+memoria locale della replica (i contributi esclusi non si cancellano subito: non entrano mai nella fusione ne' in una schermata). Se il
+creatore torna in famiglia, l'eredita' non vale piu'.
 
 **Q5 (22/10): cosa vedono gli altri alla chiusura lo decide chi chiude.** `afterClose` = `remove`: l'album sparisce dalle Raccolte degli
 altri, con l'avviso. `keep_copy`: ogni familiare che non l'aveva lasciato tiene una **copia personale** (un album dei suoi dati personali,
 area privata, con id `SharedAlbumCopies.copyIdFor(album, account)` e la voce `copy_of`) con gli elementi che il suo catalogo attesta,
-finche' i file restano nell'area comune. Un `afterClose` sconosciuto vale `remove`.
+finche' i file restano nell'area comune. Un `afterClose` sconosciuto vale `remove`. La scelta e' dentro la `definition` firmata (l'impronta del
+segmento sta nella testa firmata): chi non e' il creatore non la cambia, e un segmento cambiato dal PC rifiuta il contributo.
 
 **Attestazione (D9)**: un elemento si mostra solo se il catalogo di chi legge vede, **nell'area comune**, un file presente con la stessa
-chiave di contenuto intera (e lo stesso hash completo se entrambi lo hanno). Una definizione d'album, vera o falsa, **non sposta, non
-copia, non cancella e non scarica nulla** (§9 punto 4, E-S11).
+chiave di contenuto intera (e lo stesso hash completo se entrambi lo hanno), e non e' nascosto (D22). Una definizione d'album, vera o falsa,
+**non sposta, non copia, non cancella e non scarica nulla** (§9 punto 4, E-S11).
 
 ### 5.9 Segnalazione "perso" (tipo 7)
 
@@ -1165,6 +1226,11 @@ insieme, il risultato resta coerente.
 | Album condiviso: titolo | 64 caratteri (§8.4) |
 | Album condiviso: percorso di un elemento | 1.024 byte, relativo alla share comune, mai dentro `.mycloudgallery` (confronto NFKC) |
 | Album condiviso: storia dei livelli | 32 cambi |
+| Album condiviso (P2): segmento / segmenti per testa / contributo (somma dichiarata dalla testa) | 4 MiB / 64 / 32 MiB (oltre: la testa si rifiuta prima di scaricare) |
+| Album condiviso (P2): posizione di un elemento | da 0 a 2^53 |
+| Album condiviso (P2): ora di una voce o di una testa | al piu' 2 minuti nel futuro (oltre: il contributo aspetta); una voce nuova al piu' 2 minuti prima della testa precedente dello stesso dispositivo (oltre: retrodatata, scartata, §5.8) |
+| Replica degli album (P2), per giro: cartelle in `albums/` / letture per nome delle teste / byte di segmenti | 1.024 / 4.096 / 64 MiB (il resto al giro dopo, a rotazione) |
+| Replica degli album (P2), per dispositivo: voci / album nella replica | 100.000 / 512 |
 | Componente di percorso | 255 byte UTF-8 |
 | Nome di share | 80 caratteri |
 | Configurazione: prefissi ULA / esclusioni | 4 / 256 (ogni esclusione 512 byte UTF-8) |
@@ -1582,6 +1648,7 @@ e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla 
 | §6.1 (M8) | `TrustLimits.NAS_CLOCK_JUMP_MILLIS`; `SessionNasClock` in `core-nas` | `IndexSegmentTypesTest` (§7); in `core-nas` i test dell'orologio |
 | §9 (M10) | `core-nasops` (4B), `core-nas/ops` (`NasFileOps`, 4B) | `Phase4ArchitectureTest` (`core-common`, P0); P12: test "dato remoto ostile" |
 | §2.2, §5.5 (testa `ai`), §5.5-bis (`vec`, `ocr`, attestazione e fusione), §5.6 (unita' `ai`), §7, §10 (Fase 6, **da scrivere**) | `data/AiSegments.kt` (P2, da scrivere; piu' le righe minime in `data/IndexSegment.kt`, `data/DeviceHead.kt`, `nas/NasLayout.kt`, `TrustFormat.kt`); fusione e pubblicazione in `core-index/.../ai/` | P2: test ostili per ogni campo dei corpi, un lettore della versione 1 che ignora `ai/`, attestazione, fusione, proprieta' M3; `IndexSegmentTypesTest` per i tetti nominati |
+| §2.2, §4.6 (A7), §5.8, §7, §10 (Fase 7, P2: album condivisi) | `data/AlbumDocs.kt` (`AlbumLimits`, `AlbumIds`, `AlbumField`, `AlbumKey`, `AlbumValue`, `AlbumEntry`, `AlbumHead`, codec `AlbumDocs`), righe minime in `TrustFormat.kt` (`ALBUM_VERSION`), `envelope/Envelope.kt`, `nas/NasLayout.kt` (`albumHead`, `albumSegment`), `data/IndexSegment.kt` (classe 17); serie, replica, fusione, permessi e pubblicatore in `core-albums/.../shared/` | `AlbumHeadTest`, `AlbumHostileTest`, `AlbumSegmentHostileTest`, `IndexSegmentTypesTest`; in `core-albums`: `AlbumPermissionsLogicTest`, `AlbumFusionPropertyTest`, `SharedAlbumSyncTest`, `SharedAlbumIsolationTest`, `NasAlbumPublisherTest`, `SharedAlbumBenchTest`, `Real*ContractTest` |
 
 I test JVM usano un NAS finto volutamente scomodo: elenchi in ordine casuale e nomi senza distinzione di
 maiuscole (I3).

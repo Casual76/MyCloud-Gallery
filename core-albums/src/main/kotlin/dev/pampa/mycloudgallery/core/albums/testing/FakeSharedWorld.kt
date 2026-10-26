@@ -125,12 +125,21 @@ class FakeSharedWorld(val commonShare: String = "test-comune") {
         }
       }
       is SharedAlbumChange.ItemRemoved -> {
+        // La lapide di chi l'ha aggiunto vale anche come "Riporta" (§2.4: a "Gli altri guardano" solo cosi'), come per chi legge (P2).
         val existing = state.items[change.media]
-        existing != null && allowed(state, author, AlbumOp.REMOVE_ITEM, existing.addedBy) && state.items.remove(change.media) != null
+        existing != null &&
+          (allowed(state, author, AlbumOp.REMOVE_ITEM, existing.addedBy) || (author == existing.addedBy && allowed(state, author, AlbumOp.BRING_BACK, existing.addedBy))) &&
+          state.items.remove(change.media) != null
       }
       is SharedAlbumChange.Cover -> allowed(state, author, AlbumOp.SET_COVER, null).also { if (it) state.cover = change.media }
       is SharedAlbumChange.Sort -> allowed(state, author, AlbumOp.SET_SORT, null).also { if (it) state.sort = change.sort }
       is SharedAlbumChange.Heir -> (change.account == author && allowed(state, author, AlbumOp.INHERIT, null)).also { if (it) state.heir = author }
+      is SharedAlbumChange.LevelHistory -> allowed(state, author, AlbumOp.CHANGE_LEVEL, null).also { ok ->
+        if (ok) {
+          state.levels.clear()
+          state.levels.addAll(change.steps.map { it.level })
+        }
+      }
       is SharedAlbumChange.Definition -> false
     }
     if (ok) state.updatedAt = clock

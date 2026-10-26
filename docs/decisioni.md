@@ -5223,3 +5223,165 @@ Le prove che un agente puo' fare con `adb` sono segnate (adb); le altre vogliono
 - **F66 (adb dove si puo')**: ritaglio dai Nascosti: compare il foglio, "Salva" fa una foto "Ritaglio.png" (nome generico) e sul tablet non compare in Libreria (VR-1, I6); "Copia" e dopo 10 minuti gli appunti si svuotano, "Condividi" e il file sparisce al ritorno nell'app (R18); `am force-stop` con un ritaglio negli appunti: al riavvio gli appunti sono vuoti (VR-3); con meno di 300 MB liberi il ritaglio funziona (VR-2); una foto da 12 megapixel con molte app aperte dice "Memoria insufficiente" e non chiude l'app (R20).
 - **F70 / F71 (adb + utente)**: pizzicare o toccare una foto in movimento subito dopo averla aperta: nessuna animazione, nessun video a pagina intera (VM-1); su un solo-NAS il badge mostra l'indicatore mentre legge e un secondo tocco non ricomincia (VM-3); passare dal Wi-Fi ai dati mobili con la VPN accesa a meta' lettura la ferma (I9).
 - **Campo A (adb)**: B-S7 cinque volte (`am force-stop`, modifica in Galleria, apertura a freddo): la versione parte subito, senza aspettare il giro periodico (CA-1); `am start` di una seconda condivisione sopra la schermata "Salva sul NAS" di una prima: la schermata mostra la seconda, la prima non salvata sparisce dopo, e un'eventuale blocco di avvio non fa perdere niente (CA-2).
+
+## Fase 7 P2: formato firmato degli album condivisi e permessi (26/10)
+
+Il pacchetto P2 della Fase 7 (`docs/fase7-progetto.md` §4.4, riga P2; D6-D11, D29-D31, §2.4, §2.5 "Ricevere", §2.6, §0.3 A4, §5.2, §6, §11
+Q5). Branch `fase7/p2` da `main` (`6346ec8`). Commit: `a3e44852` (codec in core-trust), `0013111d` (replica, fusione, permessi, pubblicatore,
+SharedAlbums veri; contratti di P0 adeguati), `280df480` (prove e banco; correzioni trovate dal banco), `fb74876d` (isolamento della
+proiezione) e quello dei documenti. Nessuna dipendenza nuova, nessun permesso o componente Android, `:app` non toccato.
+
+**Cosa c'e'**
+- `core-trust`: `data/AlbumDocs.kt` (`AlbumLimits`, `AlbumIds`, `AlbumField`, `AlbumKey`, `AlbumTexts`, `AlbumValue`, `AlbumEntry`, `AlbumHead`,
+  `AcceptedAlbumHead`, codec `AlbumDocs`: `encodeHead`/`decodeHead`, `encodeEntry`/`entryBytesOrNull`/`decodeEntry`,
+  `encodeSegment`/`decodeSegment`, `checkContribution`); righe minime in `TrustFormat.kt` (`ALBUM_VERSION` = 3), `envelope/Envelope.kt`
+  (versione 3 solo per il tipo 6), `nas/NasLayout.kt` (`ALBUMS_DIR`, `albumDir`, `albumContributionDir`, `albumHead`, `albumSegment`),
+  `data/IndexSegment.kt` (`SegmentClass.ALBUM` = 17, fuori dall'indice, dai dati personali e dai dati AI; il codec dell'indice la rifiuta).
+- `core-albums/.../shared/`: `AlbumRules.kt` (`LevelHistory`, `PermissionVerdict`, `DenyReason`, `CheckContext`, l'estensione
+  `AlbumPermissions.check` per chi legge, `SharedAlbumRules.allows` per chi scrive), `AlbumFusion.kt` (`VerifiedContribution`,
+  `AlbumRegistryView`/`RegistryAlbumView`, `MergedAlbum`, `AlbumFusion.join/merge/resolve`), `AlbumHeadSeries.kt` (teste d'album per nome,
+  come `HeadSeries`), `AlbumReplicaStore.kt`, `AlbumPublishStore.kt` (con `AlbumSegmentPlan`), `NasSharedAlbumSync.kt` (`SharedAlbumSync`),
+  `SharedAlbumReplica.kt` (proiezione e attestazione D9), `NasAlbumPublisher.kt` (`AlbumPublisher`), `ReplicaSharedAlbums.kt` (`SharedAlbums`
+  e `SharedAlbumFacts`), `SharedPorts.kt` (`AlbumIdentity`, `AlbumReadGate`, `SharedAlbumChoices`, `AlbumSyncLimits`).
+- **Adattatori Room: no.** P1 (schema v6) non e' su `main`: replica, pubblicatore e scelte stanno dietro tre porte (`AlbumReplicaStore`,
+  `AlbumPublishStore`, `SharedAlbumChoices`) con le implementazioni in memoria di questo pacchetto (`Memory*`). Cosa serve dalle tabelle di
+  P1 e' sotto, "Cosa trova pronto P13".
+
+**Decisioni**
+1. **Id.** In app un `AlbumId` e' un UUID canonico, sul NAS i suoi 16 byte in base32 (26 caratteri): `AlbumIds.text`/`parseAlbum`, la stessa
+   conversione per album, media (`item:<id del media in base32>`) e versioni. L'id e' `AlbumId.derived(account, nonce)` di core-model (D7);
+   il nonce viaggia in base32 nella `definition` (esadecimale nel contratto `SharedAlbumChange.Definition`). Chi legge ricalcola l'id da
+   ogni `definition` (`AlbumIds.matches`): un id che non torna rifiuta il contributo intero (E-SH14).
+2. **Condividere un album personale crea un album condiviso con un id suo** (nonce nuovo): confermato. La voce personale non conserva il nonce,
+   e senza nonce chi legge non ricalcolerebbe l'id; il collegamento e' la voce personale `shared` (D4).
+3. **Versione 3, solo per `albums/`.** Teste di tipo 6 e segmenti `album` alla 3; una testa d'album alla 1 o alla 2 e' `INVALID_FIELD`, un
+   segmento d'album alla 1 o alla 2 `MALFORMED`, la 4 `NEWER_FORMAT`; una testa di dispositivo alla 3 resta `NEWER_FORMAT`.
+   `NEWEST_READABLE_VERSION` resta 2 (vale per i file fuori da `albums/`): un segmento `ai` alla 3 resta "piu' nuovo" come prima.
+4. **Tetti** (`AlbumLimits`, A4 piu' quelli che A4 non fissava): voce 4 KiB, 8.192 voci per segmento e 20.000 per contributo (lapidi
+   comprese), titolo 64 caratteri (punti di codice), percorso e cartella 1.024 byte, storia dei livelli 32 cambi; **in piu'**: segmento 4 MiB,
+   64 segmenti per testa, 32 MiB di segmenti dichiarati da una testa (rifiutata prima di scaricare), posizione da 0 a 2^53, nome del campo 32
+   caratteri, codici 16. Replica (`AlbumSyncLimits`): 1.024 cartelle in `albums/`, 4.096 letture per nome e 64 MiB di segmenti per giro,
+   100.000 voci e 512 album per dispositivo. Un contributo onesto al tetto delle voci con i percorsi piu' lunghi sta sotto i 30 MiB.
+5. **La voce.** `{account, at, author, field, value}`: account = `nasUser` del firmatario in minuscolo (una sola scrittura), autore = il
+   firmatario, una voce per chiave per contributo, lapide solo per `cover`, `sort` e `item:`. L'elemento porta la chiave di contenuto intera e,
+   se chi aggiunge lo conosce, l'hash completo (`fh`, D9). `afterClose` obbligatorio con `closed`/`deleted`, vietato con `active`, codice
+   `[a-z][a-z0-9_]{0,15}` (uno sconosciuto si legge e vale `remove`).
+6. **Permessi, le regole di chi legge** (`AlbumPermissions.check`, la tabella di P0 senza modifiche):
+   - ogni voce col livello in vigore alla **sua** ora; **prima del primo cambio vale "Gli altri guardano"** (un album senza `level` valida non
+     da' niente agli altri; una voce retrodatata a prima della creazione non passa);
+   - la **base** dell'album e' la prima `definition` del creatore o dell'erede in vigore, **anche chiusa**: ogni dispositivo tiene solo l'ultima
+     voce per chiave e la sua creazione puo' essere gia' stata sostituita dalla chiusura. La chiusura e' la prima loro `definition`
+     `closed`/`deleted`: definitiva, dopo non vale piu' nessuna voce (D31);
+   - sopra un elemento vivo `addedBy` **non cambia mai**: il proprio si aggiorna come un'aggiunta, quello di un altro come una rimozione
+     (nessuno si appropria dell'elemento di un altro per poi toglierlo da "proprietario"); E-SH12 ne e' un caso: due aggiunte insieme, vince
+     la prima e la seconda si scarta (`OWNERSHIP`);
+   - la lapide del proprio elemento e' "Togli" **o "Riporta"**: a "Gli altri guardano" la accetta il ramo "Riporta" (condizione "aggiunto
+     quando il livello lo permetteva", valutata con l'ora in cui l'elemento era entrato). Il test generato dalla tabella confronta quindi la
+     lapide con "Rimuovi" o "Riporta" offerti a chi scrive;
+   - l'eredita' e' una **linea del tempo** (non l'ultima scrittura: un'eredita' successiva non cancella quella di prima) e vale dall'ora della
+     voce `heir`; la firma un dispositivo admin **approvato**, per il proprio account, con il creatore senza dispositivi approvati ne' dismessi
+     nel registro di chi legge e `registryVersion` non oltre quella di chi legge. Se il creatore torna in famiglia, l'eredita' non vale piu'.
+   Chi scrive usa `SharedAlbumRules.allows` sullo stesso stato fuso (livello all'ora del NAS di adesso, erede di adesso).
+7. **Ricostituzione dell'erede** (D11 + A7). Un creatore "uscito" non ha dispositivi approvati ne' dismessi, quindi i suoi contributi non
+   valgono piu' e l'album perde la base proprio quando l'eredita' diventa possibile. Percio': (a) i contributi esclusi (revocati, persi,
+   dismessi non congelati) restano nella replica come **memoria** (`barred`), mai nella fusione ne' in una schermata; (b) l'erede in vigore puo'
+   scrivere la base; (c) `SharedAlbums.inherit` ricostituisce dalla memoria (`SharedAlbumReplica.orphans`): `heir`, `definition` con lo stesso
+   creatore e nonce, la storia dei livelli con le ore di allora (`SharedAlbumChange.LevelHistory`), l'ordine e gli elementi del creatore che il
+   catalogo dell'admin attesta nell'area comune, a nome dell'admin. Nessun file si muove. Limite dichiarato L71.
+8. **Voci retrodatate (§2.4, L59).** Una voce **nuova** (assente o diversa nella testa precedente dello stesso dispositivo letta da questo
+   telefono) con `at` anteriore alla `createdAt` di quella testa meno 2 minuti si scarta; la voce identica nelle teste dopo eredita il segno
+   (resta scartata). Una testa o una voce oltre 2 minuti nel futuro fa aspettare il contributo (non si scarta: si riprova quando l'ora del NAS
+   ci arriva). Una testa rifiutata non si riscarica finche' non ne arriva una diversa (`rejectedHead`).
+9. **Replica.** Per album: i dispositivi approvati o dismessi con una cartella (con l'elenco troncato tutti quelli del registro), la testa per
+   nome dall'ultima accettata, i segmenti nuovi (gli altri si riusano), il contributo intero, i tetti, poi la proiezione degli album toccati.
+   Lettura solo con `AlbumReadGate` aperto (D30: :app lo lega a `sharedAlbumsMayUse`; sulle share vere nessun album, vero o falso, prima del
+   consenso). Gli album si leggono a rotazione; un errore resta nell'album (`syncErrors`), un errore del NAS ferma il giro senza contare come
+   errore dei dati. La proiezione si ricostruisce tutta al primo ricalcolo di un processo.
+10. **Pubblicatore.** Coda durevole per album con il numero d'ordine; idempotente per (chiave, valore); accorpamento 30 s (orologio
+    monotono) e una testa ogni 5 minuti (ora del NAS, sopravvive alla morte del processo); segmenti **stabili per secchi** della chiave (da 1 a
+    32 secchi, ~512 voci a secchio: di solito una modifica riscrive un segmento); prima i segmenti (un nome gia' presente deve avere gli stessi
+    byte), poi la testa (`ExistingOwn` con gli stessi segmenti = adottata). Nessuna voce in coda e' datata prima della propria ultima testa; la
+    voce `level` mai prima del suo ultimo cambio. Una modifica che chi legge rifiuterebbe e' un'`IllegalArgumentException` in `stage` (niente
+    accodato); oltre 20.000 voci, idem. Con lo store perso, la propria ultima testa sul NAS ridice numero, ora e voci gia' pubblicate. **Non
+    controlla i permessi**: li applica chi offre l'azione (`ReplicaSharedAlbums`, P4).
+11. **Vista locale.** Le mie modifiche accodate si vedono subito sui miei dispositivi (`LocalContributions`): la proiezione usa il mio contributo
+    "pubblicato + in coda" al posto di quello letto, con le stesse regole di chi legge.
+12. **Q5 sui lettori** (`ReplicaSharedAlbums`): album chiuso o eliminato da un altro: avviso `Closed` con la copia (`copyIdFor`) solo con
+    `keep_copy` e solo per chi non l'aveva lasciato; un codice sconosciuto vale `remove`. Le copie da scrivere nei dati personali le dice
+    `keptCopies()` (per il creatore dopo "Smetti" l'album resta suo; dopo "Elimina" no): la scrittura e' di P3/P4.
+13. **Titoli.** `AlbumTitles.problem` (P0) ora rifiuta anche ogni carattere che il codec vieta (`TextRules`): un titolo che la UI accetta non fa
+    mai rifiutare la definizione (test su 20.000 titoli casuali).
+
+**Modifiche ai contratti di P0**
+- `SharedAlbumChange.Item.sha256: Sha256? = null` (l'hash completo per l'attestazione D9).
+- `SharedAlbumChange.LevelHistory(steps: List<LevelStep>)` e `LevelStep(atNas, level)` (la storia con le ore, per la ricostituzione: P0 lo
+  prevedeva come "la storia dei livelli con l'ora nel pubblicatore"). `FakeSharedWorld` e `FakeAlbumPublisher` la gestiscono.
+- `AlbumPermissions.check(entry, levels, creator, heir, previous, context = CheckContext())`: in piu' il contesto (admin, creatore uscito,
+  versione del registro, chiusura, ora dell'aggiunta); `heir` e' l'erede in vigore all'ora della voce. `AlbumFusion.merge(contributions,
+  registry: AlbumRegistryView)`.
+- `SharedAlbumsContract` indipendente dall'implementazione: `SharedWorld(common: CommonArea, alice: SharedSide, bruno: SharedSide)` con
+  `settle()`, `forgeriesCounted`, `makeAdmin`, `removeFromFamily`; la prova generata confronta la lapide del proprio elemento con "Rimuovi" o
+  "Riporta"; `unaDefinizioneFalsaSiRifiuta` chiede "contata" (`>= 1`) invece del numero esatto dei contributi rifiutati (per chi legge vero una
+  definizione scritta da un altro account e' una voce scartata, non un contributo malformato). `FakeSharedWorld` accetta la lapide del proprio
+  elemento anche come "Riporta".
+- `AlbumTitles.problem` piu' stretto (sopra).
+
+**Prove, per ID** (core-trust 261 test, core-albums 92)
+- Codec (core-trust): `AlbumHeadTest` (firmatario approvato, dismesso solo congelato, revocato, perso, sconosciuto; versioni 1, 2, 4 e una
+  testa di dispositivo alla 3; classe 17 solo nelle teste d'album; famiglia, dispositivo, posto; anti-rollback ed equivocazione; campi e tetti
+  della testa), `AlbumHostileTest` (lunghezze e tetti di ogni campo, UTF-8 non valido, controlli, direzione e invisibili, percorsi con `..`,
+  assoluti, UNC, `:`, nomi riservati, dentro `.mycloudgallery` anche con `．`, campi e valori sconosciuti, Q5), `AlbumSegmentHostileTest`
+  (versioni 1, 2, 4, classe, tabella ostile, chiavi, account e autore del firmatario, JSON non canonico, lapidi, ore e storia dei livelli, id
+  che non torna, tetti del contributo, chi scrive = chi legge), `IndexSegmentTypesTest` (classe 17).
+- Permessi: `AlbumPermissionsLogicTest` — tabella generata (ogni riga con voce, livello, 4 ruoli, creatore in famiglia o uscito: 264 casi),
+  storia dei livelli ed E-SH13, E-SH12, E-SH11 (eredita' e ricostituzione), chiusura definitiva e Q5, E-SH14; `RealSharedAlbumsContractTest`.
+- Fusione: `AlbumFusionPropertyTest` — 10.000 storie casuali di 3 account e 5 dispositivi: commutativa, associativa, idempotente, voci
+  rimescolate, ogni vincitrice permessa.
+- Replica: `SharedAlbumSyncTest` (E-SH6, E-SH12, E-SH13 con l'avviso, E-SH14 con spazzatura, firmatario sconosciuto, account falso, id che non
+  torna, segmento cambiato dal PC; dismesso/revocato ed E-SH20; anti-rollback; retrodatate), `SharedAlbumIsolationTest` (un album ostile o un
+  NAS che lancia `IllegalStateException`, `OutOfMemoryError` o `IOException` su un album non ferma gli altri e `sync` non lancia; tetti per
+  dispositivo e per giro; voci dal futuro; D9 e D22; **nessuna chiamata** ad `AlbumMover`, `AlbumUploader`, `SafeCopyRequester`, `TicketStatus`
+  con definizioni vere e false, elementi privati, chiusure ed eredita'; Q5 sui lettori).
+- Pubblicatore: `NasAlbumPublisherTest` (proprieta' su 60 semi con guasti prima e dopo e morti del processo: **solo** `head/<20 cifre>` e
+  `seg/<impronta>` sotto `albums/<album>/<se stesso>/`, tutto pubblicato e riletto; store perso; un segmento riscritto per una modifica su 3.000
+  voci; modifiche non ammesse; ora del NAS indietro; cancello), `RealPublisherContractTest`.
+- Banco: `SharedAlbumBenchTest` — **200 giri** con `AlbumFaultPlan` (guasto prima o dopo il 20% delle chiamate) e morti del processo: niente in
+  coda, stesso stato su tutti i dispositivi e da zero, scritture solo nella propria cartella, nessun contributo onesto rifiutato, elementi
+  tutti attestati (19 s).
+- `SharedFormatConsistencyTest` (tetti e codici di P0 = formato; titoli UI = codec; il contributo onesto piu' grande, 20.000 elementi con i
+  campi al massimo, sta in una testa: entro 64 segmenti e sotto i 30 MiB).
+
+**Cosa trovano pronto P4, P10 e P13**
+- **P4**: il pubblicatore vero (`stage` → `publishedUpTo` per ENTRY_STAGED → PUBLISHED; `flush` con i motivi; `Item` con `sha256`);
+  `ReplicaSharedAlbums` come `SharedAlbumFacts` (`folder`, `members` con l'id pubblicato e quello attestato, `state`) e come `allowed`;
+  `closePreview` (candidati di "Riporta" = miei elementi attestati: va ristretto a chi ha `shared_origin`); `keptCopies()` per le copie di Q5;
+  `SharedAlbumReplica.orphans` per "Ripristina gli elementi di un dispositivo revocato" (E-SH20). Da sapere: `stage` lancia
+  `IllegalArgumentException` per una modifica non ammessa (percorso oltre 1.024 byte: il piano lo deve escludere prima) e
+  `IllegalStateException` per un cambio di livello senza l'ora del NAS.
+- **P10**: `SharedAlbums` vero con `visible`, `left`, `notices` (`Closed` con la copia, `NotAddedLevelChanged`, `Inherited`), `allowed` (con
+  l'id del mio catalogo o quello pubblicato), esiti `Blocked` dal cancello, `AlbumTitles` allineato al codec. Da sapere: la semantica vera
+  (prima del primo cambio "Gli altri guardano"; il finto di P0 parte da "Gli altri aggiungono").
+- **P13**: da legare `AlbumIdentity` (dispositivo, chiave, registro), `fileSystem(commonShare)`, `AlbumReadGate` = `sharedAlbumsMayUse`,
+  `AlbumWriteGate`, `SharedAlbumChoices` (dati personali: `shared_album_left:<id>` e avvisi visti), `replica.local = publisher`, il provider dei
+  livelli del pubblicatore (`replica.view(id)?.merged?.levels ?: replica.orphans.value[id]?.levels`), `sync.sync(budget)` nel giro di
+  `IndexSyncWorker` dopo indice e dati personali, `flush` per album (DEBOUNCE 30 s dopo una modifica, SYNC_ROUND nel giro, RESUME alla
+  ripresa), `replica.recompute()` dopo le scansioni con novita' nell'area comune; Diagnostica: `contributionsRejected` + `replica.unresolved`
+  → `ALBUM_CONTRIB_REJECTED`, `entriesDenied` → `ALBUM_ENTRY_DENIED`, `itemsUnattested` → `ALBUM_ITEM_UNATTESTED`, piu' `syncErrors`,
+  `listingTruncated`, `registryBehind`; azzeramento: i tre store. **Tabelle v6 (P1)**: `shared_album_entry` (album, dispositivo, chiave, campo,
+  `at`, autore, account, valore JSON, segmento, retrodatata), `shared_album_head_mark` (album, dispositivo, versione, impronta, ora di creazione,
+  segmenti, escluso, testa rifiutata) e lo stato del mio contributo (le mie voci pubblicate e la coda con il numero d'ordine, numero, segno e
+  ora dell'ultima testa, segmenti).
+
+**Punti aperti**
+- Adattatori Room (sopra) con P1/P13; finche' non ci sono, replica e coda del pubblicatore non sopravvivono alla morte del processo in app.
+- **Ritiro di un dispositivo (core-family)**: le `frozenHeads` devono comprendere anche le teste d'album che l'admin ha accettato, altrimenti
+  un dispositivo dismesso perde i suoi contributi agli album come un revocato. Va detto a chi scrive il ritiro (P13).
+- Le lapidi restano per sempre nel contributo (contano nelle 20.000 voci): una compattazione sicura (togliere una propria lapide quando nessun
+  contributo ha una voce piu' vecchia per quella chiave) e' rimandata.
+- L69 (inondazione di `albums/`), L70 (equivocazione vista solo rileggendo), L71 (ricostituzione dell'erede): dichiarati.
+- "Album di familiari usciti" e "Ripristina gli elementi" hanno i dati (`SharedAlbumReplica.orphans`) ma non un contratto per la UI: P10/P13.
+- Gli avvisi `FolderChanged` (E-SH16) e `FilesAddedFromPc` (D39) chiedono una scansione della cartella dell'album: P4/P13. `Album.Shared.newestDay`
+  e' null (servono le date del catalogo: P3/P13).
+- Un salto indietro dell'ora del NAS oltre 2 minuti fa aspettare le mie teste agli altri finche' l'ora non torna: lo evita il cancello
+  `CLOCK_JUMP` (D38), che P13 deve legare.
+- Da provare sul campo (F79, F84, F86): album sulle share di prova, finti album dal PC, i tre livelli fra telefono e tablet.

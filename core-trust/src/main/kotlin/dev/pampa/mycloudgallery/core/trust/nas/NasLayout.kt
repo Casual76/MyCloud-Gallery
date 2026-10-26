@@ -89,9 +89,23 @@ object NasLayout {
   fun trashItemFile(deviceId: String, trashId: String): SharePath =
     ROOT.child("trash").child(deviceId).child("files").child(trashId)
 
-  // --- Album condivisi (Fase 7: qui solo la posizione) ---------------------------------------------------
-  fun albumHeadDir(albumId: String, deviceId: String): SharePath =
-    ROOT.child("albums").child(albumId).child(deviceId).child("head")
+  // --- Album condivisi (Fase 7, D6, A1: solo nell'area comune; [albumId] e' l'id in base32, 26 caratteri) -------------------
+  /** `albums/`: una cartella per album. */
+  val ALBUMS_DIR: SharePath = ROOT.child("albums")
+
+  /** `albums/<album>/`: una cartella per dispositivo che contribuisce. */
+  fun albumDir(albumId: String): SharePath = ALBUMS_DIR.child(albumId)
+
+  /** `albums/<album>/<dispositivo>/`: il contributo di un dispositivo (l'unica cartella in cui quel dispositivo scrive per l'album). */
+  fun albumContributionDir(albumId: String, deviceId: String): SharePath = albumDir(albumId).child(deviceId)
+
+  fun albumHeadDir(albumId: String, deviceId: String): SharePath = albumContributionDir(albumId, deviceId).child("head")
+
+  /** Una testa d'album: `albums/<album>/<dispositivo>/head/<versione>` (tipo 6, versione 3 del formato). */
+  fun albumHead(albumId: String, deviceId: String, version: Long): SharePath = albumHeadDir(albumId, deviceId).child(versionName(version))
+
+  /** Un segmento d'album: `albums/<album>/<dispositivo>/seg/<impronta>` (classe `album`, 17). */
+  fun albumSegment(albumId: String, deviceId: String, hash: String): SharePath = albumContributionDir(albumId, deviceId).child("seg").child(hash)
 
   // --- Kit di recupero (area privata dell'admin) ------------------------------------------------------
   /**

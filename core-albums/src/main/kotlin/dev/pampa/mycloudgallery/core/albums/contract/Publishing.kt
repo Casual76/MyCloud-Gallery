@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumSort
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.ShareLevel
 import dev.pampa.mycloudgallery.core.model.StableCode
 import dev.pampa.mycloudgallery.core.model.VersionId
@@ -50,6 +51,18 @@ sealed interface SharedAlbumChange {
   /** Voce `level`: il livello nuovo (il pubblicatore lo accoda alla storia, al piu' [SharedAlbumLimits.MAX_LEVEL_CHANGES]). */
   data class Level(val level: ShareLevel) : SharedAlbumChange
 
+  /**
+   * Voce `level` con la **storia intera** cosi' com'e' (P2): solo per ricostituire un album il cui creatore e' uscito dalla famiglia (D11:
+   * l'erede ripubblica la storia con le ore di allora, cosi' le voci degli altri si giudicano come prima). Da 1 a
+   * [SharedAlbumLimits.MAX_LEVEL_CHANGES] passi, con l'ora strettamente crescente.
+   */
+  data class LevelHistory(val steps: List<LevelStep>) : SharedAlbumChange {
+    init {
+      require(steps.size in 1..SharedAlbumLimits.MAX_LEVEL_CHANGES) { "Da 1 a ${SharedAlbumLimits.MAX_LEVEL_CHANGES} passi." }
+      require(steps.zipWithNext().all { (a, b) -> a.atNas < b.atNas }) { "Passi fuori ordine." }
+    }
+  }
+
   /** Voce `cover`: la copertina scelta, null = automatica. */
   data class Cover(val media: MediaId?, val contentKey: ContentKey?) : SharedAlbumChange {
     override fun toString(): String = "Change.Cover(${media != null})"
@@ -59,7 +72,8 @@ sealed interface SharedAlbumChange {
 
   /**
    * Voce `item:<media>` (§2.5 passo 6): solo per un file **gia' nell'area comune** (invariante 6 del §5.5). [path] relativo all'area
-   * comune, mai dentro `.mycloudgallery`; [addedBy] = l'account che lo aggiunge (Q6: si mostra).
+   * comune, mai dentro `.mycloudgallery`; [addedBy] = l'account che lo aggiunge (Q6: si mostra). [sha256] (P2): l'hash completo del file, se
+   * chi aggiunge lo conosce (la verifica dello spostamento lo calcola sempre): chi legge lo confronta con il suo, se ce l'ha (D9).
    */
   data class Item(
     val media: MediaId,
@@ -68,6 +82,7 @@ sealed interface SharedAlbumChange {
     val path: SharePath,
     val position: Long,
     val addedBy: AccountId,
+    val sha256: Sha256? = null,
   ) : SharedAlbumChange {
     override fun toString(): String = "Change.Item"
   }
@@ -82,6 +97,9 @@ sealed interface SharedAlbumChange {
     override fun toString(): String = "Change.Heir"
   }
 }
+
+/** Un passo della storia dei livelli: da [atNas] (ora del NAS) vale [level]. */
+data class LevelStep(val atNas: Long, val level: ShareLevel)
 
 /** Il numero d'ordine di una modifica accodata: cresce per album. Il diario della condivisione lo salva (ENTRY_STAGED → PUBLISHED). */
 @JvmInline

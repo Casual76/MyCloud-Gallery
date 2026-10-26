@@ -105,12 +105,21 @@ internal object Envelope {
 
   /**
    * La versione piu' nuova ammessa per [type]: la [TrustFormat.AI_VERSION] solo per le teste (tipo 3, perche' una testa `ai` e'
-   * una testa), la [TrustFormat.CURRENT_VERSION] per tutti gli altri tipi (Fase 6, A7: la versione 2 esiste solo per i file `ai`).
+   * una testa), la [TrustFormat.ALBUM_VERSION] solo per le teste d'album (tipo 6, Fase 7, A6), la [TrustFormat.CURRENT_VERSION] per
+   * tutti gli altri tipi (Fase 6, A7: la versione 2 esiste solo per i file `ai`).
    */
-  fun newestVersion(type: DocType): Int = if (type == DocType.DEVICE_HEAD) TrustFormat.AI_VERSION else TrustFormat.CURRENT_VERSION
+  fun newestVersion(type: DocType): Int = when (type) {
+    DocType.DEVICE_HEAD -> TrustFormat.AI_VERSION
+    DocType.SHARED_ALBUM_HEAD -> TrustFormat.ALBUM_VERSION
+    else -> TrustFormat.CURRENT_VERSION
+  }
 
   fun seal(type: DocType, payload: JsonObject, signer: Signer, version: Int = TrustFormat.CURRENT_VERSION): ByteArray {
-    require(version == TrustFormat.CURRENT_VERSION || (version == TrustFormat.AI_VERSION && type == DocType.DEVICE_HEAD)) {
+    require(
+      version == TrustFormat.CURRENT_VERSION ||
+        (version == TrustFormat.AI_VERSION && type == DocType.DEVICE_HEAD) ||
+        (version == TrustFormat.ALBUM_VERSION && type == DocType.SHARED_ALBUM_HEAD),
+    ) {
       "Versione del formato non ammessa per questo tipo."
     }
     val body = CanonicalJson.encode(payload)

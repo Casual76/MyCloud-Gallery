@@ -1,0 +1,139 @@
+package dev.pampa.mycloudgallery.feature.library.utility
+
+import androidx.annotation.StringRes
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Chat
+import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Edit
+import androidx.compose.material.icons.rounded.Screenshot
+import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.stringResource
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
+import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
+import dev.pampa.mycloudgallery.feature.library.R
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
+import dev.pampa.mycloudgallery.feature.library.countText
+
+// Fase 7, P8 (D24, docs/fase7-progetto.md §2.1 "Utility"): le PAGINE DELL'UTILITY come dati. Screenshot, Video, Modificate, WhatsApp, Doppioni ed
+// Eliminati di recente. `CollectionsTab.kt` e' di P11: non lo tocco, gli consegno una voce per pagina (`CollectionEntry`) e la rotta; "Libera spazio"
+// (Fase 5) resta la voce di `:app`.
+
+/**
+ * Una pagina dell'Utility.
+ *
+ * @property code il nome stabile nella rotta e nello stato salvato del pannello del tablet: non cambia mai.
+ * @property filter il filtro della Libreria che la pagina mostra con lo stesso `MediaGrid` e lo stesso viewer; null per Doppioni ed Eliminati di recente.
+ */
+enum class UtilityPage(val code: String, val filter: LibraryFilter?) {
+  SCREENSHOTS("screenshots", LibraryFilter.SCREENSHOTS),
+  VIDEOS("videos", LibraryFilter.VIDEOS),
+  EDITED("edited", LibraryFilter.EDITED),
+  WHATSAPP("whatsapp", LibraryFilter.WHATSAPP),
+  DUPLICATES("duplicates", null),
+  RECENTLY_DELETED("recently_deleted", null),
+  ;
+
+  /** Il codice della voce nelle Raccolte: sta accanto a quelli delle altre voci di `:app`, quindi ha il suo prefisso. */
+  val entryCode: String get() = ENTRY_PREFIX + code
+
+  val isFilter: Boolean get() = filter != null
+
+  companion object {
+    private const val ENTRY_PREFIX = "utility/"
+
+    /** Le pagine-filtro, nell'ordine dell'elenco. */
+    val filters: List<UtilityPage> = entries.filter { it.isFilter }
+
+    fun fromCode(code: String?): UtilityPage? = entries.firstOrNull { it.code == code }
+
+    /** La pagina di una voce delle Raccolte (`CollectionEntry.code`); null se la voce non e' dell'Utility. */
+    fun fromEntryCode(code: String?): UtilityPage? =
+      code?.takeIf { it.startsWith(ENTRY_PREFIX) }?.let { fromCode(it.removePrefix(ENTRY_PREFIX)) }
+  }
+}
+
+@get:StringRes
+internal val UtilityPage.titleRes: Int
+  get() = when (this) {
+    UtilityPage.SCREENSHOTS -> R.string.collection_screenshots
+    UtilityPage.VIDEOS -> R.string.collection_videos
+    UtilityPage.EDITED -> R.string.utility_edited
+    UtilityPage.WHATSAPP -> R.string.collection_whatsapp
+    UtilityPage.DUPLICATES -> R.string.utility_duplicates
+    UtilityPage.RECENTLY_DELETED -> R.string.utility_recently_deleted
+  }
+
+internal val UtilityPage.icon: ImageVector
+  get() = when (this) {
+    UtilityPage.SCREENSHOTS -> Icons.Rounded.Screenshot
+    UtilityPage.VIDEOS -> Icons.Rounded.Videocam
+    UtilityPage.EDITED -> Icons.Rounded.Edit
+    UtilityPage.WHATSAPP -> Icons.Rounded.Chat
+    UtilityPage.DUPLICATES -> Icons.Rounded.ContentCopy
+    UtilityPage.RECENTLY_DELETED -> Icons.Rounded.Delete
+  }
+
+/** Il tono della piastrella dell'icona (mai quello della riga: regola 2 del design system). */
+internal val UtilityPage.tone: FluidTone
+  get() = when (this) {
+    UtilityPage.SCREENSHOTS -> FluidTone.Primary
+    UtilityPage.VIDEOS -> FluidTone.Info
+    UtilityPage.EDITED -> FluidTone.Warning
+    UtilityPage.WHATSAPP -> FluidTone.Success
+    UtilityPage.DUPLICATES -> FluidTone.Neutral
+    UtilityPage.RECENTLY_DELETED -> FluidTone.Warning
+  }
+
+@get:StringRes
+internal val UtilityPage.emptyTitleRes: Int
+  get() = when (this) {
+    UtilityPage.SCREENSHOTS -> R.string.collection_empty_screenshots_title
+    UtilityPage.VIDEOS -> R.string.collection_empty_videos_title
+    UtilityPage.EDITED -> R.string.utility_edited_empty_title
+    UtilityPage.WHATSAPP -> R.string.collection_empty_whatsapp_title
+    UtilityPage.DUPLICATES -> R.string.duplicates_identical_empty_title
+    UtilityPage.RECENTLY_DELETED -> R.string.trash_empty_title
+  }
+
+@get:StringRes
+internal val UtilityPage.emptyDetailRes: Int
+  get() = when (this) {
+    UtilityPage.SCREENSHOTS -> R.string.collection_empty_screenshots_detail
+    UtilityPage.VIDEOS -> R.string.collection_empty_videos_detail
+    UtilityPage.EDITED -> R.string.utility_edited_empty_detail
+    UtilityPage.WHATSAPP -> R.string.collection_empty_whatsapp_detail
+    UtilityPage.DUPLICATES -> R.string.duplicates_identical_empty_detail
+    UtilityPage.RECENTLY_DELETED -> R.string.trash_empty_detail
+  }
+
+/**
+ * Le voci dell'Utility come **dati** per le Raccolte (`CollectionEntryGroup`, il meccanismo che le Raccolte gia' usano per le voci di `:app`): una per
+ * pagina, con il titolo, la frase, il conteggio per le pagine-filtro e nessun conteggio su Doppioni ed Eliminati di recente (non si contano senza
+ * leggere: dal di fuori non si deve capire quanti sono, E-H1). [counts] sono i conteggi vivi delle pagine-filtro; [canTrash] e' falso dove non c'e'
+ * ne' il cestino di sistema ne' quello del NAS (la voce non c'e').
+ *
+ * "Libera spazio" non e' qui: e' la voce di `:app` (Fase 5) e chi compone le Raccolte la mette nello stesso gruppo.
+ */
+@Composable
+fun utilityEntries(counts: Map<UtilityPage, Int>, canTrash: Boolean = true): List<CollectionEntry> = buildList {
+  for (page in UtilityPage.entries) {
+    if (page == UtilityPage.RECENTLY_DELETED && !canTrash) continue
+    val subtitle = when (page) {
+      UtilityPage.DUPLICATES -> stringResource(R.string.utility_duplicates_subtitle)
+      UtilityPage.RECENTLY_DELETED ->
+        stringResource(phoneTrashText(R.string.utility_recently_deleted_subtitle, R.string.utility_recently_deleted_subtitle_gallery))
+      else -> counts[page]?.let { countText(R.plurals.collection_count, it) } ?: stringResource(R.string.collection_count_none)
+    }
+    add(CollectionEntry(code = page.entryCode, title = stringResource(page.titleRes), subtitle = subtitle, icon = page.icon, tone = page.tone))
+  }
+}
+
+/** Il gruppo "Utility" delle Raccolte: titolo e voci. */
+@Composable
+fun utilityEntryGroup(counts: Map<UtilityPage, Int>, canTrash: Boolean = true): CollectionEntryGroup =
+  CollectionEntryGroup(stringResource(R.string.utility_group_title), utilityEntries(counts, canTrash))

@@ -38,6 +38,7 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
  * - "Riporta" (D31): solo media **miei**, nell'area comune, con la cartella d'origine (`shared_origin`), e, se sono elementi vivi di un album
  *   attivo, aggiunti da me e con la tabella che lo permette (§2.4, anche "Gli altri guardano" per cio' che ho aggiunto quando si poteva).
  * - Adozione (D39): solo file che il mio catalogo vede nell'area comune (e, se lo so, nella cartella dell'album): nessuno spostamento.
+ * - Un media che una mia operazione aperta sta ancora portando (un elemento non finito) resta fuori da ogni altro piano finche' non ha finito.
  *
  * Cancelli (D30, D38, E-SH19): la recinzione degli album condivisi e i cancelli delle scritture valgono per l'area comune **e** per quella
  * privata (le sorgenti vanno nel suo cestino, "Riporta" ci scrive): con uno chiuso non si offre la conferma.
@@ -101,6 +102,19 @@ class SharePlanner(private val ports: ShareOrchestratorPorts) {
     return build(request, kind, album, folder.path.name, folder.path.value, null, null, media, hidden, ports.shared.members(album).keys, inFolder, now)
   }
 
+  /**
+   * I media che una mia operazione aperta sta ancora portando da qualche parte (un elemento non finito), con l'album: non entrano in un altro piano
+   * finche' non hanno finito (un "Riporta" mentre la voce non e' ancora pubblicata la lascerebbe senza file; due spostamenti dello stesso file si
+   * contenderebbero la sorgente).
+   */
+  private suspend fun inFlight(): Map<MediaId, AlbumId> {
+    val out = HashMap<MediaId, AlbumId>()
+    for (op in ports.diary.openOps()) {
+      for (item in ports.diary.items(op.id)) if (!item.state.terminal) out[item.media] = op.album
+    }
+    return out
+  }
+
   private suspend fun build(
     request: ShareRequest,
     kind: SharePlanKind,
@@ -116,11 +130,13 @@ class SharePlanner(private val ports: ShareOrchestratorPorts) {
     now: Long,
   ): SharePlanOutcome {
     val known = ports.facts.facts(media.distinct())
+    val busy = inFlight()
     val excluded = LinkedHashMap<ShareExclusion, Int>()
     val items = ArrayList<SharePlanItem>()
     for (id in media.distinct()) {
       val f = known[id]
-      val reason = exclusionOf(id, f, kind, hidden, members, inFolder)
+      val reason = busy[id]?.let { if (it == album) ShareExclusion.ALREADY_IN_ALBUM else ShareExclusion.UNAVAILABLE }
+        ?: exclusionOf(id, f, kind, hidden, members, inFolder)
       if (reason != null) {
         excluded.merge(reason, 1, Int::plus)
         continue
@@ -157,6 +173,7 @@ class SharePlanner(private val ports: ShareOrchestratorPorts) {
     val state = ports.shared.state(request.album) ?: return SharePlanOutcome.Blocked(ShareBlock.ALBUM_NOT_ACTIVE)
     val members = ports.shared.members(request.album)
     val known = ports.facts.facts(request.media.distinct())
+    val busy = inFlight()
     val excluded = LinkedHashMap<ShareExclusion, Int>()
     val items = ArrayList<SharePlanItem>()
     for (id in request.media.distinct()) {
@@ -164,7 +181,7 @@ class SharePlanner(private val ports: ShareOrchestratorPorts) {
       val origin = if (f != null && f.mine) ports.origins.originOf(id) else null
       val member = members[id]
       val reason = when {
-        f == null -> ShareExclusion.UNAVAILABLE
+        f == null || id in busy -> ShareExclusion.UNAVAILABLE
         !f.mine -> ShareExclusion.NOT_MINE
         f.place != MediaPlace.COMMON || f.nas == null -> ShareExclusion.NOT_IN_COMMON
         // D31: "Riporta" solo per i media di cui ho la cartella d'origine (nei miei dati personali, mai nella definizione comune).

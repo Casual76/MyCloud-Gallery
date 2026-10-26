@@ -77,8 +77,8 @@ class ShareOrchestratorPorts(
 /**
  * La cartella di un album condiviso nell'area comune (risposta Q1 (a): "Album condivisi/<nome>"; E-SH22): il titolo resta quello scelto,
  * la cartella ha un nome che il NAS e Windows accettano. Caratteri vietati da Windows e di controllo diventano `_`, punti e spazi finali si
- * tolgono, al piu' [AlbumTitles.MAX_CHARS] caratteri e [MAX_NAME_BYTES] byte, un nome riservato (`CON`, `LPT1`...) prende un `_` in fondo; un
- * nome che resta non valido diventa "Album". Una cartella gia' usata da un altro album che conosco prende " (2)", " (3)"...
+ * tolgono, al piu' [AlbumTitles.MAX_CHARS] caratteri e [MAX_NAME_BYTES] byte, un nome riservato (`CON`, `LPT1.foto`...) prende un `_` prima del
+ * primo punto; un nome che resta non valido diventa "Album". Una cartella gia' usata da un altro album che conosco prende " (2)", " (3)"...
  */
 object AlbumFolderNames {
   private val FORBIDDEN = Regex("""[\\/:*?"<>|\p{Cntrl}]""")
@@ -100,8 +100,12 @@ object AlbumFolderNames {
     s = takeCodePoints(s, AlbumTitles.MAX_CHARS)
     while (s.toByteArray(Charsets.UTF_8).size > MAX_NAME_BYTES) s = s.substring(0, s.offsetByCodePoints(s.length, -1))
     s = s.trimEnd('.', ' ')
+    // Windows guarda il nome prima del primo punto ("LPT1.foto" e' riservato come "LPT1"): il `_` va li'.
     val base = s.substringBefore('.').trimEnd(' ').uppercase(Locale.ROOT)
-    if (base in RESERVED) s += "_"
+    if (base in RESERVED) {
+      val dot = s.indexOf('.')
+      s = if (dot < 0) s + "_" else s.substring(0, dot) + "_" + s.substring(dot)
+    }
     return s
   }
 

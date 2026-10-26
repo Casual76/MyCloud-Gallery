@@ -194,6 +194,65 @@ class LibraryActionNoticeTest {
     composeRule.onAllNodesWithText("Non è stato possibile nascondere").assertCountEquals(0)
   }
 
+  /** Fase 7 (P9, D23, E-H2): "Nascondi" riesce, ma i familiari vedono ancora [family] elementi (area comune, album condivisi). */
+  private class FamilyAware(private val family: Int) : LocalMediaActions {
+    val hidden = mutableListOf<Set<MediaId>>()
+
+    override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) = Unit
+
+    override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
+      if (on) hidden += ids
+    }
+
+    override suspend fun familyStillSees(ids: Set<MediaId>): Int = family
+  }
+
+  @Test
+  fun nascondereCioCheIFamiliariVedonoAncoraDiceChePartecipaSoloDentroLApp() {
+    val actions = FamilyAware(family = 2)
+    val state = state(actions = actions)
+    show(state)
+    select(state, 3)
+
+    composeRule.onNodeWithContentDescription("Nascondi").performClick()
+    composeRule.waitForIdle()
+
+    assertThat(actions.hidden).hasSize(1)
+    // E' un "Nascondi" riuscito: la selezione si chiude. In piu' si dice che i familiari continuano a vedere due di loro.
+    assertThat(state.grid.selecting).isFalse()
+    composeRule.onNodeWithText("I familiari continuano a vedere 2 di questi elementi").assertExists()
+    composeRule.onNodeWithText("Nascosti protegge solo dentro l'app", substring = true).assertExists()
+    composeRule.onAllNodesWithText("Non è stato possibile nascondere").assertCountEquals(0)
+    composeRule.onNodeWithText("OK").performClick()
+    composeRule.waitForIdle()
+    composeRule.onAllNodesWithText("I familiari continuano a vedere", substring = true).assertCountEquals(0)
+  }
+
+  @Test
+  fun conUnSoloElementoIlTestoESingolare() {
+    val state = state(actions = FamilyAware(family = 1))
+    show(state)
+    select(state, 1)
+
+    composeRule.onNodeWithContentDescription("Nascondi").performClick()
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithText("I familiari continuano a vederlo").assertExists()
+  }
+
+  @Test
+  fun nascondereCioCheNessunoVedeNonAvvisaDeiFamiliari() {
+    val state = state(actions = FamilyAware(family = 0))
+    show(state)
+    select(state, 2)
+
+    composeRule.onNodeWithContentDescription("Nascondi").performClick()
+    composeRule.waitForIdle()
+
+    composeRule.onAllNodesWithText("I familiari continuano a vedere", substring = true).assertCountEquals(0)
+    composeRule.onAllNodesWithText("I familiari continuano a vederlo").assertCountEquals(0)
+  }
+
   @Test
   fun unPreferitoNonSalvatoLoDice() {
     val failing = FailingActions()

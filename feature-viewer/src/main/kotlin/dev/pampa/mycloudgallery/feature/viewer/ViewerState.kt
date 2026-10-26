@@ -67,6 +67,12 @@ internal enum class ViewerMessage(@StringRes val title: Int, @StringRes val deta
   /** L'utente l'ha nascosto dal viewer: sparisce dalla Libreria. */
   Hidden(R.string.viewer_msg_hidden_title, R.string.viewer_msg_hidden_detail),
 
+  /**
+   * Fase 7 (P9, D23, E-H2): nascosto, ma l'elemento sta nell'area comune o in un album condiviso e i familiari lo vedono ancora. Prende il
+   * posto di [Hidden] solo quando e' vero: Nascosti protegge solo dentro l'app.
+   */
+  HiddenFamilySees(R.string.viewer_msg_hidden_family_title, R.string.viewer_msg_hidden_family_detail),
+
   /** L'utente l'ha riportato nella Libreria (dai Nascosti). */
   Unhidden(R.string.viewer_msg_unhidden_title, R.string.viewer_msg_unhidden_detail),
 

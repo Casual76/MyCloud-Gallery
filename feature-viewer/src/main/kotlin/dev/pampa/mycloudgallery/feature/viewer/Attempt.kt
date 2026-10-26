@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.viewer
 
+import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
+import dev.pampa.mycloudgallery.core.model.MediaId
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -15,4 +17,17 @@ internal suspend fun attempt(action: suspend () -> Unit): Boolean =
     throw e
   } catch (_: Exception) {
     false
+  }
+
+/**
+ * Fase 7 (P9, D23, E-H2): dopo un "Nascondi" riuscito, se i familiari vedono ancora [id] (area comune, album condiviso). Se non si riesce a
+ * saperlo si dice di si: un avviso in piu' non toglie niente, uno in meno lascerebbe credere che nessuno lo veda.
+ */
+internal suspend fun familyStillSees(actions: LocalMediaActions, id: MediaId): Boolean =
+  try {
+    actions.familyStillSees(setOf(id)) > 0
+  } catch (e: CancellationException) {
+    throw e
+  } catch (_: Exception) {
+    true
   }

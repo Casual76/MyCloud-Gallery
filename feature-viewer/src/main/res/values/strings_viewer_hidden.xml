@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7 (P9, D23, E-H2): nascosto dal viewer, ma l'elemento sta nell'area comune o in un album condiviso. -->
+  <string name="viewer_msg_hidden_family_title">Nascosto: i familiari continuano a vederlo</string>
+  <string name="viewer_msg_hidden_family_detail">Nascosti protegge solo dentro l\'app: quello che sta nell\'area comune o in un album condiviso lo vedono tutti.</string>
+</resources>

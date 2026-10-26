@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.library.ActionNotice
 import dev.pampa.mycloudgallery.feature.library.attempt
+import dev.pampa.mycloudgallery.feature.library.familyNoticeAfterHide
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -58,10 +59,15 @@ class CollectionsViewModel @Inject constructor(
     viewModelScope.launch { if (!attempt { actions.setFavorite(ids, on) }) noticeFlow.value = ActionNotice.FavoriteFailed }
   }
 
-  /** Nasconde [ids]: spariscono da ogni superficie (E-H1) e si ritrovano nei Nascosti. Se non riesce la pagina lo dice (R8). */
+  /**
+   * Nasconde [ids]: spariscono da ogni superficie (E-H1) e si ritrovano nei Nascosti. Se non riesce la pagina lo dice (R8). Se riesce ma i
+   * familiari vedono ancora qualcuno di loro (area comune, album condivisi) lo dice lo stesso (E-H2).
+   */
   fun hide(ids: Set<MediaId>) {
     if (ids.isEmpty()) return
-    viewModelScope.launch { if (!attempt { actions.setHidden(ids, true) }) noticeFlow.value = ActionNotice.HideFailed }
+    viewModelScope.launch {
+      if (attempt { actions.setHidden(ids, true) }) familyNoticeAfterHide(actions, ids)?.let { noticeFlow.value = it } else noticeFlow.value = ActionNotice.HideFailed
+    }
   }
 
   private companion object {

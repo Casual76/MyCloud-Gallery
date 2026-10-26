@@ -229,6 +229,14 @@ interface LocalMediaActions {
   suspend fun setFavorite(ids: Set<MediaId>, on: Boolean)
 
   suspend fun setHidden(ids: Set<MediaId>, on: Boolean)
+
+  /**
+   * Fase 7 (P9, D23, E-H2): quanti di [ids] i **familiari continuano a vedere** anche se qui sono nascosti (hanno una copia nell'area comune
+   * del NAS o sono in un album condiviso: "Nascosti" protegge solo dentro l'app). Lo chiede la schermata **dopo** che "Nascondi" e' riuscito,
+   * per dirlo all'utente; 0 = niente da dire. Di serie 0: i fake e le Librerie senza NAS non hanno nessuno da avvisare. Chi avvolge un'altra
+   * implementazione deve **inoltrarlo** (`GuardedMediaActionsTest` lo tiene d'occhio), altrimenti l'avviso sparisce in silenzio.
+   */
+  suspend fun familyStillSees(ids: Set<MediaId>): Int = 0
 }
 
 /** Un valore che la UI riceve e confronta: l'insieme dei media selezionati, immutabile. */

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7 (P9, D23, E-H2): nascondere un elemento dell'area comune o di un album condiviso non lo toglie ai familiari. -->
+  <plurals name="notice_family_sees_title">
+    <item quantity="one">I familiari continuano a vederlo</item>
+    <item quantity="other">I familiari continuano a vedere %1$s di questi elementi</item>
+  </plurals>
+  <string name="notice_family_sees_message">Nascosti protegge solo dentro l\'app: quello che sta nell\'area comune o in un album condiviso lo vedono tutti.</string>
+</resources>

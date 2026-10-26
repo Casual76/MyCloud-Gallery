@@ -11,7 +11,7 @@
               la sessione scaduta, il socket fermo, prima e dopo; sul NAS finto in memoria e sul simulatore SMB (nessuna rete). Gira anche in check.ps1.
     mutants   i quattro errori introdotti apposta (sorgente nel cestino prima della verifica, voce pubblicata prima del completamento, completamento dopo il
               cestino, conferma riusata): ognuno deve far diventare rosso il banco con l'invariante giusto.
-    known     le riproduzioni dei difetti noti del codice di produzione trovati dal banco (SD-1, SD-2; rosse quando si correggono) e il banco che li trova.
+    known     le regressioni dei difetti del codice di produzione trovati dal banco e corretti il 27/10 (SD-1, SD-2, SD-3: rosse se tornano).
     area      lo stesso codice del NAS vero (guardia, trasporto recintato, oracolo, pulizia, autotest) sopra il simulatore SMB: nessuna rete.
     run       la prova contro il NAS VERO di prova, dal PC. Serve il file %USERPROFILE%\.mycloudgallery\nas-it.properties (lo legge solo il codice del
               banco, in memoria: questo script non lo apre ne' lo stampa) e -Interruptions interruzioni (500 di norma). Lavora SOLO sotto mcg-it/<giro>/

@@ -6340,3 +6340,38 @@ buttato): senza quel commit `HiddenSurfacesRegistryTest` ha due prove rosse che 
 - **`HiddenWorld`/`HiddenWorldBuilder`** (P9): aggiunti `WorldSpec.sameSideCopies` e le costanti degli `_ID`, senza cambiare i mondi esistenti. Il registro di main ha anche la riga `albums-shared` di P9: nel mio ramo
   `HiddenSurfacesRegistryTest` ha due prove rosse (`albums-shared` ancora `REFERENCE` con `core-albums/.../shared` presente) che nascono dalla base `a51b131a` e passano con il commit `e54ce26e` di P9.
 - Il testo della pagina Doppioni e' in italiano di oggi: il filone grafico puo' rifinire senza toccare la logica (gli stati sono dati puri: `DuplicatesState`).
+
+## Fase 7 P4: correzione di SD-1 e SD-2, e i due difetti della stessa famiglia (27/10)
+
+Il banco delle interruzioni di P5 (`docs/prova-500.md` Parte E, §E6) aveva trovato due difetti veri nell'orchestratore della condivisione di P4 e li
+evitava. Corretti alla radice su `integra/27-10b`; il banco non evita piu' niente (`KnownDefect` e `ShareChaosConfig.avoid` tolti) e cosi' ne ha
+trovati altri due della stessa famiglia, corretti anche loro. La famiglia e' una sola: **un elemento chiuso come fallito, annullato o "mai partito"
+mentre il suo file e' arrivato** (nessuna perdita, ma nessuna voce nell'album e un motivo sbagliato per l'utente). Nessuna garanzia del §2.5 cambia:
+la sorgente nel cestino resta di core-nasops dopo la verifica e la porta di completamento, e una voce si accoda solo per un file che il catalogo
+vede nell'area comune.
+
+**Cause e correzioni**
+1. **SD-1** (`ShareSteps.pollTransfers`, riga 265 prima della correzione): gli esiti di un biglietto finito, uno per file nell'ordine della
+   richiesta, si applicavano per posizione ai soli elementi ancora `TRANSFERRING`. Ora per la posizione di ogni elemento fra **tutti** quelli con
+   quel biglietto, in qualunque stato (`settleEnded`); con una parte della richiesta ancora `PLANNED` si aspetta; una lista che non torna con la
+   richiesta non si applica per posizione (decide il catalogo).
+2. **SD-2** (`ShareSteps.startTransfers`, riga 115): `transient { find(key) }` riduceva un errore a "nessun trasferimento", e dopo la morte del
+   processo l'elemento diventava `NOT_STARTED` (riga 126). Ora `lookUp` distingue un biglietto, "nessuno" (solo questo porta a `NOT_STARTED`) e
+   "non so" (il gruppo resta `PLANNED`, si richiede al giro dopo, niente E-SH12 ne' avvio).
+3. **SD-3** (`ShareOrchestrator.cancel`, riga 184; la radice di SD-2): "Annulla" chiudeva `CANCELLED` un elemento `PLANNED` il cui trasferimento era
+   gia' partito (la morte fra l'avvio e il salvataggio), senza fermare la porta. Ora chiede `find`: ritrovato, l'elemento diventa `TRANSFERRING`
+   e si ferma con la porta; senza risposta resta com'e' e la conferma dell'operazione si toglie (niente di nuovo parte).
+4. **SD-4** (`ShareSteps.settle`, righe 297-300): il motore ferma un elemento anche **dopo** averlo pubblicato e collegato (il cestino della sorgente
+   non riesce: spazio finito, sorgente cambiata dopo la verifica, E-D13), e l'elemento diventava `FAILED`. Ora per un esito di fallimento o di
+   annullamento decide il catalogo (D29): se lo stesso media e' gia' dall'altra parte, il file e' arrivato e l'elemento prosegue (voce, guardiano).
+5. Il riferimento di P0 (`InMemoryShareRunner`, `ReferenceShareSteps`) ha le stesse regole per SD-1, SD-2 e SD-4 (i fake per P10/P13 non devono
+   insegnare il comportamento sbagliato).
+6. **Il verificatore del banco** (`ShareChaosVerifier.engineErrorOf`) leggeva il motivo del motore dalla prima operazione con quella sorgente, non da
+   quella del biglietto dell'elemento: un falso allarme (giro 467 del simulatore SMB). Ora guarda l'operazione del biglietto.
+
+**Prove**: `ShareChaosKnownDefectsTest` e' una regressione (4 test: gli scenari di SD-1, SD-2 e SD-3 con la morte a ogni salvataggio, rossi con il
+codice di prima, e i giri 73, 221 e 739 del seme 20261026 che avevano trovato SD-1 e SD-2). Senza evitamenti: 2.000 giri sul NAS finto, 600 sul
+simulatore SMB, un colpo a ogni chiamata 541 + 1.695 giri, **0 violazioni**; le quattro mutazioni rosse con l'invariante giusto, lo stack sano
+verde; `core-albums` intero verde (274 test, 3 saltati: il NAS vero). La prova sul NAS vero non e' stata rifatta (si rifa' a parte).
+`tools\check.ps1 -NoDaemon` (`GRADLE_OPTS=-Dorg.gradle.workers.max=2`): verde ("tutto a posto"); il primo giro si era fermato su un tempo
+scaduto di `VerificaFunzionaleBackupAppTest` sotto carico (PC condiviso), verde da sola e al secondo giro.

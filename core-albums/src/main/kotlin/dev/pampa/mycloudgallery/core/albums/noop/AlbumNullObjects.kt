@@ -73,6 +73,8 @@ object NoAlbums : Albums {
 
   override suspend fun reorder(id: AlbumId, moved: MediaId, after: MediaId?): EditOutcome = EditOutcome.NotFound
 
+  override suspend fun setRules(id: AlbumId, rules: SmartRules): EditOutcome = EditOutcome.NotFound
+
   override suspend fun setListSort(sort: AlbumListSort) = Unit
 
   override suspend fun moveInList(id: AlbumId, after: AlbumId?): EditOutcome = EditOutcome.NotFound

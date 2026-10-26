@@ -58,6 +58,13 @@ interface Albums {
   /** Ordine personalizzato: [moved] subito dopo [after] (null = in testa). Posizioni a intervalli (D21). Vale con [AlbumSort.CUSTOM]. */
   suspend fun reorder(id: AlbumId, moved: MediaId, after: MediaId?): EditOutcome
 
+  /**
+   * Cambia le regole di un album **smart** (D13, E-AL13; richiesta di P3, fatta da P10): una voce per regola, le esclusioni e le accettazioni
+   * restano. Un album che non e' smart da' [EditOutcome.NotAllowed]; una regola che non sta in una voce [EditOutcome.Invalid] (l'editor lo
+   * dice prima, con `SmartRulesText.encode(rules).ok`: la stessa forma che usa [CreateOutcome.RulesTooLong]).
+   */
+  suspend fun setRules(id: AlbumId, rules: SmartRules): EditOutcome
+
   /** L'ordine dell'elenco (impostazione sincronizzata `albums_sort`). */
   suspend fun setListSort(sort: AlbumListSort)
 
@@ -70,6 +77,12 @@ sealed interface CreateOutcome {
   data class Created(val id: AlbumId) : CreateOutcome
 
   data class Invalid(val problem: TitleProblem) : CreateOutcome
+
+  /**
+   * Le regole dell'album smart non stanno in una voce dei dati personali (oltre 1.024 caratteri): non si scrive niente a meta' e l'editor
+   * chiede di restringerle (richiesta di P3, fatta da P10; prima il caso usava [TitleProblem.TOO_LONG], che parlava del titolo).
+   */
+  data object RulesTooLong : CreateOutcome
 
   /** Senza account non si deriva l'id (nessuna famiglia pronta). */
   data object Unavailable : CreateOutcome

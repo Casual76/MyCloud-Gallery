@@ -54,7 +54,7 @@ internal class AlbumEditor(
     require((kind == AlbumKind.SMART) == (rules != null)) { "Le regole sono di un album smart, e solo sue." }
     val encoded = rules?.let { SmartRulesText.encode(it) }
     // Una regola che non sta in una voce non si scrive a meta': l'editor la deve restringere (SmartRulesText.encode lo dice prima).
-    if (encoded != null && !encoded.ok) return CreateOutcome.Invalid(TitleProblem.TOO_LONG)
+    if (encoded != null && !encoded.ok) return CreateOutcome.RulesTooLong
     val id = AlbumId.derived(account, nonce).value
     // La definizione per ultima: un altro dispositivo vede l'album quando ha gia' tutte le sue regole.
     if (kind == AlbumKind.SMART) albums.setKind(id, kind)

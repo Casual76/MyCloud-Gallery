@@ -206,6 +206,13 @@ interface SharedAlbums {
    */
   fun allowed(id: AlbumId, op: AlbumOp, item: MediaId? = null): Boolean
 
+  /**
+   * Tutte le operazioni della tabella del §2.4 che [allowed] da' per vere a me su [id] adesso (la scorciatoia che P0 prevedeva per P10: le
+   * schermate costruiscono `PermissionInfo` senza chiamare `allowed` a mano per ogni operazione). Con [item] valgono per quell'elemento
+   * (chi l'ha aggiunto decide "Togli dall'album", "Riporta"...). Ha un corpo: nessuna implementazione deve cambiare.
+   */
+  fun allowedOps(id: AlbumId, item: MediaId? = null): Set<AlbumOp> = AlbumOp.entries.filterTo(LinkedHashSet()) { allowed(id, it, item) }
+
   suspend fun dismissNotice(notice: SharedAlbumNotice)
 }
 

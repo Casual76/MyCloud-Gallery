@@ -284,7 +284,7 @@ class CatalogAlbums(
    * Cambia le regole di uno smart (D13, E-AL13). **Non e' nel contratto `Albums`** (P0 non lo aveva): P6 e P10 ne hanno bisogno per l'editor
    * delle regole di un album che c'e' gia'; vedi "Modifiche ai contratti" in `docs/decisioni.md` (Fase 7 P3).
    */
-  suspend fun setRules(id: AlbumId, rules: SmartRules): EditOutcome = editLock.withLock { editor.setRules(id, rules).also { settle(id.value) } }
+  override suspend fun setRules(id: AlbumId, rules: SmartRules): EditOutcome = editLock.withLock { editor.setRules(id, rules).also { settle(id.value) } }
 
   // --- SmartChoices -----------------------------------------------------------------------------------------------------------
 

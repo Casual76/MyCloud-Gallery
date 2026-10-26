@@ -19,6 +19,8 @@ import dev.pampa.mycloudgallery.core.albums.contract.ShareRequest
 import dev.pampa.mycloudgallery.core.albums.contract.ShareRunner
 import dev.pampa.mycloudgallery.core.albums.contract.SmartChoices
 import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
+import dev.pampa.mycloudgallery.core.albums.contract.TitleProblem
+import dev.pampa.mycloudgallery.core.albums.personal.SmartRulesText
 import dev.pampa.mycloudgallery.core.albums.noop.NoShareRunner
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumKind
@@ -196,6 +198,8 @@ class InMemoryAlbums(
   override suspend fun create(title: String, kind: AlbumKind, rules: SmartRules?): CreateOutcome {
     AlbumTitles.problem(title)?.let { return CreateOutcome.Invalid(it) }
     require((kind == AlbumKind.SMART) == (rules != null)) { "Le regole sono di un album smart, e solo sue." }
+    // Come il vero (P3): una regola che non sta in una voce dei dati personali non si scrive a meta'.
+    if (rules != null && !SmartRulesText.encode(rules).ok) return CreateOutcome.RulesTooLong
     val me = family.me() ?: return CreateOutcome.Unavailable
     val id = AlbumId.derived(me, newNonce())
     albums[id] = State(id, kind, AlbumTitles.normalized(title), AlbumSort.defaultFor(kind), rules, stamp())
@@ -291,6 +295,17 @@ class InMemoryAlbums(
       order.add(if (after == null) 0 else order.indexOf(after) + 1, moved)
       // Ricompattazione a intervalli (D21): nel riferimento a ogni spostamento, il vero solo quando non c'e' spazio.
       order.forEachIndexed { i, m -> s.items.getValue(m).position = (i + 1) * POSITION_STEP }
+      EditOutcome.Done
+    }
+  }
+
+  override suspend fun setRules(id: AlbumId, rules: SmartRules): EditOutcome {
+    if (isShared(id)) return EditOutcome.NotAllowed(null)
+    return personal(id) { s ->
+      if (s.kind != AlbumKind.SMART) return@personal EditOutcome.NotAllowed(null)
+      if (!SmartRulesText.encode(rules).ok) return@personal EditOutcome.Invalid(TitleProblem.TOO_LONG)
+      // Le esclusioni e le accettazioni restano (E-AL13): non si toccano.
+      s.rules = rules
       EditOutcome.Done
     }
   }

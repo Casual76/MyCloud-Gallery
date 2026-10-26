@@ -6375,3 +6375,129 @@ simulatore SMB, un colpo a ogni chiamata 541 + 1.695 giri, **0 violazioni**; le 
 verde; `core-albums` intero verde (274 test, 3 saltati: il NAS vero). La prova sul NAS vero non e' stata rifatta (si rifa' a parte).
 `tools\check.ps1 -NoDaemon` (`GRADLE_OPTS=-Dorg.gradle.workers.max=2`): verde ("tutto a posto"); il primo giro si era fermato su un tempo
 scaduto di `VerificaFunzionaleBackupAppTest` sotto carico (PC condiviso), verde da sola e al secondo giro.
+
+## Fase 7 P7: viaggi ed eventi rilevati (26/10)
+
+Il pacchetto P7 della Fase 7 (`docs/fase7-progetto.md` §4.4, riga P7; D18-D20, §2.3, §1.1, §1.5, E-AL10, E-AL15, E-AL16, E-H7, §4.3, §5.2, §5.3, §6, §11). Consegna `core-albums/.../trips/`: la
+"casa" dedotta **solo in locale**, i viaggi e gli eventi rilevati, le proposte con "Crea album" e "Non mi interessa" sincronizzato, e la riga `trips` del registro dei Nascosti con il codice vero.
+Tocca solo `core-albums/.../trips/**` (con i suoi test), `app/src/test/.../hidden/` (la sonda e la riga del registro; tolta la sonda di riferimento dei viaggi) e i documenti
+(`docs/decisioni.md`, `docs/sicurezza.md`: L85-L87, C31-C32). Nessuna dipendenza, permesso, colonna, contratto o file di `core-database` nuovo. Branch `fase7/p7`, da `main` (`d6488e8`).
+Commit: `1e5232dc` (il codice di `trips/`), `8eac3f97` (le prove), `98112727` (il registro dei Nascosti) e quello dei documenti.
+
+**Cosa c'e'** (`core-albums/src/main/kotlin/.../albums/trips/`; tutto `internal` tranne le prime due righe)
+| File | Cosa |
+|---|---|
+| `CatalogTrips.kt` | `CatalogTrips` (il `Trips` vero: `detect`, `accept`, `dismiss`, `proposals`, in piu' `load`, `refresh`) e `AwayFromHome` ("questo giorno e' lontano da casa si'/no", distanza a 10 km): **le sole API pubbliche** |
+| `TripDetector.kt` | le regole di D19, pure: serie di giorni lontani, eventi (finestre di 4 ore), luoghi, copertina, cerchio di un viaggio |
+| `HomeEstimator.kt` | la casa e i luoghi abituali (celle di 1 km, giorni con foto serali), `GeoIndex` e la casa **nel tempo** (`HomeTimeline`) |
+| `TripGeometry.kt` | haversine, celle, mediana, percentile, cerchio minimo, arrotondamento a 10 km |
+| `TripStore.kt` | `home_estimate` e `trip_proposal` su Room (`TripDao`): **l'unico file che nomina la tabella della casa** |
+| `TripVisibility.kt` | `VisibleMedia` e `HiddenMask` (l'unico punto da cui passano i nascosti) e la lettura a pagine dei candidati propri |
+| `DismissedTrips.kt` | `trip_dismissed:<impronta>` come impostazione dei dati personali (`PersonalStore.effectiveEntries`) |
+| `TripTitles.kt` | "Oslo, marzo 2026", "Sabato 12 aprile 2026": `PlaceNames.summary` e il periodo in italiano, sempre un titolo valido (`AlbumTitles`) |
+| `TripLog.kt` | l'unico file che scrive un log: numeri e codici |
+
+**Decisioni** (D18-D20 valgono come scritte; qui cio' che il progetto non fissava o che e' stato precisato)
+| # | Decisione | Perche' |
+|---|---|---|
+| P7-1 | **Una sola superficie pubblica**: `CatalogTrips` (due costruttori: quello pubblico lega `GalleryDatabase`, `AlbumCandidates`, `VisibleMedia`, `HiddenMask`, `PersonalStore`, `Albums`, `PlaceNames`, `Today`, `AlbumClocks` e uno scope; quello `internal` prende le porte, per le prove) e `AwayFromHome`. L'elenco dei membri pubblici e' chiuso e provato per riflessione | "Nessuna API pubblica restituisce coordinate della casa" (§1.1): quello che non e' pubblico non si puo' chiamare da fuori |
+| P7-2 | **Candidati**: i media propri (`MY_PHONE`, `MY_PRIVATE`), mai screenshot e registrazioni dello schermo (E-AL4), solo se `VisibleMedia.visible`. Le query di P1 tolgono i nascosti ma non il contagio del gruppo (la decisione di P9 per P3): qui il filtro e' **all'ingresso** (un nascosto non crea un viaggio, non sposta la casa, non fa un evento) e **prima di mostrare** (`HiddenMask` su conteggio e copertina) | D22, E-H7 |
+| P7-3 | **La casa nel tempo** (E-AL15): per ogni mese una stima sui 12 mesi attorno (6+6, mai oltre oggi; ai bordi della Libreria la finestra scorre invece di accorciarsi), un mese senza stima prende quella del piu' vicino entro 6 mesi. La stima di **oggi** (gli ultimi 12 mesi, D18) e' quella che si conserva e che usa `AwayFromHome`. Almeno 5 giorni sul luogo; **ripiego** su tutte le ore se con le sole foto serali nessuna cella arriva al 15% | Con una finestra sola, i giorni di una casa lasciata da piu' di un anno diventano viaggi e un trasloco cambia i viaggi gia' proposti (provato: `HomeEstimatorTest`, storie "Trasloco" e "Tutto insieme"). Il ripiego e' per chi non fotografa a casa la sera: altrimenti niente casa e niente viaggi |
+| P7-4 | **Luogo abituale**: oltre il 10% dei giorni con foto serali **e** almeno due visite separate (piu' di 10 giorni senza foto serali li' in mezzo) **oppure** 45 giorni di fila (un'altra casa). Un solo soggiorno piu' breve, anche di un mese, e' un viaggio | **Scostamento dal §2.3** (li' basta il 10%). Senza, la vacanza piu' lunga dell'anno (un mese e' il 12% dei giorni con GPS) diventava "abituale" e spariva: l'obiettivo F89 e' proprio che i viaggi principali ci siano. Casa al mare e suoceri hanno piu' visite: restano abituali |
+| P7-5 | **Giorni lontani e serie**: la mediana delle distanze dal luogo piu' vicino (casa o abituale) supera max(50 km, 3 x raggio di casa); il raggio e' il 90° percentile delle foto serali entro 30 km dal centro (almeno 2 km). Fra due giorni lontani al piu' 2 giorni di calendario (come il riferimento) e nessun giorno geolocalizzato non lontano; almeno 2 giorni, oppure 1 giorno con 20 foto oltre 100 km. Il GPS (0, 0) e le foto con la data nel futuro non contano | D19 |
+| P7-6 | **Eventi**: finestre di al piu' 4 ore con almeno max(30, 5 x la media dei media per giorno con foto) media propri visibili, **fuori dai giorni dei viaggi** e senza screenshot (l'interpretazione di P0 del "ritmo" e' confermata dalle storie); finestre che si sovrappongono sono una festa sola (una festa di sei ore); una festa che attraversa la mezzanotte ha due giorni e il titolo del primo; due feste con la stessa impronta si fondono | D19, `TripRules` |
+| P7-7 | **Conteggio e copertina**: i media propri visibili e non screenshot **nei giorni** della proposta (viaggio ed evento allo stesso modo: e' cio' che l'album smart nato dalla proposta conterra', e si ricava dal solo periodo, quindi si ricontrolla ad ogni avvio senza tenere i membri). Copertina: la foto con piu' pixel fra quelle lontane da casa (viaggio) o della festa (evento), meglio una foto di un video | D21, E-H7 |
+| P7-8 | **Mai la casa in un titolo o in un album**: i luoghi di una proposta sono solo quelli delle foto a piu' di 20 km (o oltre il raggio) da casa e dai luoghi abituali; senza una casa stimata un evento non ha luoghi; "Crea album" di un **evento** non scrive nessun luogo (potrebbe essere a casa: le coordinate finirebbero nei dati personali), di un **viaggio** scrive il cerchio minimo che copre le foto lontane (da 5 a 300 km) con i luoghi della proposta | C19, D18 |
+| P7-9 | **Titoli**: i mesi e i giorni sono scritti nel codice (nessuna lingua della JVM); "Oslo, marzo 2026", "Oslo, marzo-aprile 2026" (con il trattino lungo), "Oslo, dicembre 2025-gennaio 2026", "Oslo, 15 novembre 2025"; senza luogo "Viaggio, ..."; un evento "Sabato 12 aprile 2026, luogo". Mai oltre 64 caratteri (si accorcia il luogo) e sempre validi: se un nome di luogo non passa `AlbumTitles` si ripiega sul titolo senza luogo, cosi' una proposta non diventa mai inaccettabile | D19, `AlbumTitles` |
+| P7-10 | **Memoria locale**: `home_estimate` (slot 0 la casa, poi gli abituali; tolta se non c'e' piu' una casa) e `trip_proposal` (sostituite in una transazione a ogni rilevazione; si conserva quella diventata album, ritrovata per tipo e giorni, cosi' non si ripropone anche se i luoghi cambiano). L'azzeramento cancella il database e quindi anche queste tabelle | D34, §1.4 |
+| P7-11 | **Ricontrollo**: `load()` (alla nascita) e `refresh()` (a ogni cambio dell'istantanea della Libreria, con un secondo di calma, e dopo ogni rilevazione) rileggono i candidati dei giorni di ogni proposta, li passano da `VisibleMedia` e da `HiddenMask` e ricalcolano conteggio e copertina; una proposta senza piu' media sparisce | D22: un media nascosto un attimo fa non deve comparire |
+| P7-12 | **"Non mi interessa"** = una voce `SETTING` `trip_dismissed:<impronta>` con un flag acceso, scritta con `PersonalStore.set` e letta da `effectiveEntries` (vale subito anche fuori casa, poi viaggia con la sincronizzazione). Una voce che non e' un flag acceso su un'impronta valida non scarta niente. Una proposta scartata non si accetta | D4, D20 |
+| P7-13 | **Tempo**: la lettura dei candidati guarda l'orologio monotono fra una pagina e l'altra; se il tempo finisce non produce niente di parziale (una casa stimata su mezza Libreria sarebbe sbagliata): `incomplete = true` e le proposte restano quelle di prima. Il conto (CPU) gira su `Dispatchers.Default` | D36, §2.3 |
+| P7-14 | **Log**: un solo file (`TripLog`), righe di formato fisso con numeri e codici (`TRIP_NO_GPS`); di un guasto solo il nome della classe | D37 |
+| P7-15 | **`AwayFromHome`**: l'unica cosa di "casa" che esce, con la casa di oggi. Per un giorno: lontano si'/no (mediana oltre la soglia) e la distanza mediana arrotondata a 10 km; null se non c'e' una casa o non ci sono foto geolocalizzate | §1.1 |
+
+**Scostamenti dal riferimento `InMemoryTrips`** (che resta com'e': P12 li confrontera' sulle storie)
+casa nel tempo invece di una finestra sola (P7-3); luoghi abituali con le visite (P7-4); conteggio degli eventi per giorni, non per finestra (P7-7); luoghi solo lontani da casa e nessun luogo
+per un evento (P7-8); ritmo e viaggi senza screenshot, GPS (0, 0) e foto future ignorati (P7-2, P7-5); cerchio minimo del viaggio al posto del centro medio con il raggio massimo.
+
+**Test** (88 in `core-albums/src/test/.../trips/` + 2 in `:app`; edge case per ID)
+| Edge case / richiesta | Dove |
+|---|---|
+| **Casa e luoghi abituali su storie sintetiche**: casa dove si fotografa la sera, una festa da 300 foto non la sposta, minimo di 5 giorni, 15% e 10%, ripiego su tutte le ore, raggio di almeno 2 km | `HomeEstimatorTest` (12) |
+| **E-AL15 trasloco**: la casa cambia quando la nuova supera la vecchia (22/10/2025, 22/1/2026, oggi); i viaggi gia' proposti non cambiano; nessun viaggio inventato a casa vecchia o nuova | `HomeEstimatorTest.dopoUnTraslocoLaCasaCambia...`, `...iViaggiGiaPropostiNonCambiano...`, storie "Trasloco da Firenze a Milano" e "Tutto insieme" |
+| **Casa al mare** (luogo abituale, non un viaggio), i suoceri; un soggiorno di un mese e' un viaggio, due soggiorni no | `HomeEstimatorTest`, `TripDetectorTest.unaVacanzaDiUnMeseEUnViaggio`, storie "Roma con la casa al mare", "Il paese dei suoceri", "Viaggi a cavallo d'anno" |
+| **E-AL16 nessun GPS**: niente casa, niente viaggi, solo eventi; `homeKnown` falso; `AwayFromHome` non sa | `HomeEstimatorTest.senzaGpsNonCeCasa`, `TripDetectorTest.senzaCasa...`, storia "Nessun GPS", `TripsContract.senzaGpsSoloEventi` |
+| **E-AL10 fusi orari**: i giorni sono quelli locali (New York -4, Tokyo +9, Los Angeles -7, Sydney +10, con uno scatto a mezzanotte e venti del primo giorno e uno a mezzanotte meno dieci dell'ultimo) | `HomeEstimatorTest.neiFusiLontaniIGiorniSonoQuelliLocali`, storie "Viaggi in altri fusi" e "Tutto insieme" |
+| **Venti storie di due anni: tutti i viaggi, nessun falso viaggio a casa** (88 viaggi e 15 eventi attesi in 35.929 scatti) | `TripStoriesTest` |
+| 200 vite casuali (1.194 viaggi e 313 eventi attesi, tutti trovati, nessun altro) | `TripFuzzTest` |
+| E-AL1 (a cavallo d'anno), E-AL4 (screenshot e video), E-AL11 (giorni senza GPS), E-AL17 (foto dei familiari), eventi di ogni misura (29 no, 30 si', 35 in 6 ore no, a cavallo di mezzanotte, 90 in 6 ore una sola), ritmo (45 foto in un fotografo prolifico no), GPS (0, 0), foto del futuro, buchi di 2 e di 3 giorni | `TripDetectorTest` (23) e le storie |
+| **`trip_dismissed` sincronizzato fra i dispositivi tramite i dati personali**: due `LedgerPersonalStore` veri, lo stato di uno passa per un segmento `personal` vero (`PersonalSegments.encode/decode`) e l'altro lo applica; non torna piu' (nemmeno con una rilevazione nuova); scarti diversi su due dispositivi si sommano; nei dati personali solo l'impronta; voci strane non scartano niente | `TripDismissalSyncTest` (4) |
+| **Nessuna coordinata fuori da `trips/`**: architettura (pubblico solo `CatalogTrips` e `AwayFromHome`, membri a elenco chiuso e senza `GeoPoint`/decimali/tipi della casa, per riflessione e sui sorgenti; la casa in un solo file; un solo file scrive log); **log** (cinque storie complete, "Crea album", scarto, ricarico e un guasto: ogni riga ha il formato di `TripLog`, nessuna coordinata a due decimali, luogo, titolo, data, id); `toString()`; distanza a 10 km | `TripPrivacyTest` (10), `Phase7ArchitectureTest` (esistente: `home_estimate` fuori da `trips/` e `core-database`) |
+| **Prestazioni**: meno di 5 secondi su 100 mila elementi sulla JVM | `TripPerformanceTest` (2): vedi le misure |
+| **Nessun nascosto, con la proprieta'**: 60 storie casuali con 20% di nascosti e 6% di contagiati: le proposte sono **identiche** a quelle di una Libreria senza quei media; 40% nascosto dopo la rilevazione: nessuna copertina ne' conteggio li ha, una proposta senza media sparisce | `TripHiddenPropertyTest` (2), `CatalogTripsTest` |
+| **Registro `HiddenSurfaces`, riga `trips` in `PRODUCTION`**: la sonda `RealTripsProbes` gira sul catalogo vero di 40 mondi casuali (gruppi, nascosti dell'ultimo momento, tre aree) con un oracolo ricavato dalla descrizione del mondo, poi nasconde la copertina e ricontrolla; `RealTripsProbeTest` prova che la sonda trova davvero dei viaggi (almeno 8 mondi su 12) | `app/src/test/.../hidden/` (`HiddenSurfacesPropertyTest`, `HiddenSurfacesRegistryTest`, `RealTripsProbeTest` 2) |
+| **`InMemoryTrips` e il vero passano la suite di contratto di P0** | `ReferenceTripsContractTest` (esistente) e `CatalogTripsContractTest` (5) |
+| Il vero sul catalogo vero: `home_estimate` e `trip_proposal` di P1, le query dei candidati, "Crea album", riavvio, nascosto dopo, senza GPS la casa si toglie, righe che non si capiscono | `RoomTripsTest` (6) |
+| Titoli (mesi, giorni, piu' luoghi, 64 caratteri, nomi di luogo che il codec rifiuta) | `TripTitlesTest` (10) |
+| "Crea album" (periodo, cerchio, mai la casa, una volta sola, anche dopo il riavvio), "Non mi interessa", tempo finito, ricarico | `CatalogTripsTest` (11) |
+
+**Misure** (JVM, Robolectric non serve: sono prove pure; il telefono si misura con F91)
+| Misura | Esito |
+|---|---|
+| Rilevazione intera di `CatalogTrips` su **102.223 elementi** (10 anni, 26 viaggi e 8 feste: lettura a pagine, visibilita', casa di ogni mese, viaggi, eventi, titoli, memoria locale e ricontrollo di ogni proposta) | **0,32-0,40 s a freddo** (prima rilevazione della JVM) e 0,31-0,34 s a caldo; obiettivo < 5 s |
+| Il solo rilevatore puro su 98.406 elementi / su 49.769 | 262-272 ms / 120-123 ms (lineare) |
+
+**Cosa trovano pronto P10, P12 e P13, e cosa devono collegare**
+| Pacchetto | Trova pronto | Deve collegare o scrivere |
+|---|---|---|
+| P10 schermate | `Trips` vero (`CatalogTrips`): `proposals` dal piu' recente, con titolo gia' in italiano, conteggio e copertina **senza nascosti** e gia' ricontrollati; `homeKnown = false` e nessun viaggio = `TripsState.NoGps` (con gli eventi, se ci sono); "Crea album" (`accept`: `Created`/`AlreadyAlbum`/`NotFound`) e "Non mi interessa" (`dismiss`) | i ViewModel e le composable; "Mostra piu' vecchi": le proposte sono **tutte**, la prima schermata filtra con `TripRules.firstScreenSince(today)`; prima del primo `load()` lo stato e' `TripProposals.EMPTY` (`homeKnown = false`): non mostrare "niente GPS" prima di averlo ricevuto una volta |
+| P12 valutazione | `TripStories` e `TripStoryBuilder` (20 storie con la verita'), `TripFuzzTest` (200 vite), `StoryLibrary` (candidati in un array, 100.000 elementi in meno di un secondo), `TripDetector` (`internal`: le prove di core-albums lo vedono); il confronto con `InMemoryTrips` (scostamenti qui sopra) | il generatore di `tools/fixtures/trips/` con EXIF e GPS, le metriche, la corsa sui dati veri (F89); tarare le storie sui numeri di qui (10%, 15%, 5 giorni, 45 giorni di fila, 2 visite) |
+| P13 integrazione | `CatalogTrips(database, candidates, visible, mask, personal, albums, places, today, clocks, scope)`: tutto cio' che serve e' gia' nei contratti; `load()` parte da solo nel costruttore e `refresh()` segue l'istantanea di `VisibleMedia`; `detect(budget)` e' un lavoro da una volta per notte (`LibraryMaintenanceWorker`) e dopo una prima scansione o un primo backup, con un budget di qualche secondo (la lettura si ferma, mai a meta'); la traduzione `CatalogCandidate` -> `AlbumCandidate` e' una riga per campo (in `app/src/test/.../hidden/RealTripsStack.kt` e `core-albums/src/test/.../trips/RoomTripsTest.kt` c'e' quella che le prove usano: `placeId` null -> 0, `source.code`) | l'adattatore di `AlbumCandidates` sopra `MediaCatalog.albums.candidates`, `VisibleMedia`/`HiddenMask` (P9), `PersonalStore`, `PlaceNames` (core-places), `Today`, `AlbumClocks`; **il file di `:app` che nomina `VisibleMedia`/`HiddenMask` va nell'elenco `wiring` di `HiddenSurfaces`**; l'azzeramento cancella gia' il database; `AwayFromHome` (Diagnostica o F89) |
+
+**Modifiche ai contratti che servirebbero** (nessuna e' bloccante; non ho toccato `contract/`)
+- `AlbumCandidate.ownedByMe` (P1 lo ha gia' in `CatalogCandidate`, e `placeId: Int?`): senza, le foto che l'utente sposta nell'area comune (un album condiviso) smettono di contare come proprie e un viaggio fatto solo di foto condivise sparisce alla rilevazione dopo (la proposta accettata resta). Con il campo basta chiedere anche `SmartSource.COMMON` e tenere `ownedByMe`.
+- `AlbumCandidate.mediaSource` (o un flag "ricevuta"): le immagini di WhatsApp e Quick Share oggi contano come proprie, con la data della ricezione; 30 immagini in una chat in 4 ore sono una "festa". Il flag `screen` esclude gli screenshot, non queste.
+- Nessuna per `Trips` (la paginazione di "Mostra piu' vecchi" sta nella UI: la prima schermata filtra con `TripRules.firstScreenSince`) ne' per `TripReport`.
+
+**Da provare sul telefono (F89, S25 e Tab S9; niente e' stato provato su dispositivo)**
+1. Una build debug con la Libreria vera e il GPS acceso nelle foto: dopo la prima rilevazione, **Raccolte -> Viaggi** deve elencare i viaggi principali degli ultimi 2 anni: l'utente li scrive **prima** di guardare (§5.3) e si segna quali mancano e quali sono di troppo.
+2. Se **nessun viaggio** compare e c'e' il messaggio "nessun GPS": guardare se la casa e' stata stimata (`AwayFromHome.distanceKm` di un giorno di vacanza); dipende da quante foto serali a casa ci sono (servono 5 giorni e il 15% dei giorni con GPS, anche di giorno con il ripiego).
+3. Weekend a casa dei parenti, casa al mare: non devono essere proposti; se lo sono (luogo sotto il 10% dei giorni, o una sola visita) e' la regola P7-4 da regolare sui numeri, mai guardando le foto dal PC (§5.3).
+4. Dopo un trasloco recente (meno di 5 settimane) la nuova casa puo' comparire come viaggio: dovrebbe sparire da sola.
+5. "Crea album" su un viaggio e su una festa; "Non mi interessa" sul telefono e vedere la proposta sparire sul tablet dopo la sincronizzazione dei dati personali; nascondere la copertina di un viaggio e vedere cambiare copertina e conteggio senza rilevare di nuovo.
+6. Il tempo della rilevazione sulla Libreria vera (la JVM fa 0,4 s su 100.000 elementi; il telefono e' piu' lento, il budget e' di P13) e il peso di `refresh()` mentre si scorre la Libreria.
+
+**Punti aperti**
+- **P7-4 e' uno scostamento dal progetto** (le visite): da confermare con F89. Il 10% resta quello del progetto e, per chi fotografa tutti i giorni, un posto visitato 36 giorni all'anno ne pesa il 9%: i fine settimana lì tornano a essere proposte (si scartano con "Non mi interessa").
+- Le foto proprie spostate nell'area comune e quelle ricevute (sopra, due richieste ai contratti).
+- Nelle **prime 5 settimane dopo un trasloco** la nuova casa non ha ancora il 10% dei giorni: una settimana intera di foto nella nuova citta' e' un "viaggio" (E-AL15 lo accetta: "cambia quando la nuova casa supera la vecchia"). Un nuovo luogo con 45 giorni di fila diventa abituale; fino ad allora e' un viaggio.
+- Una "Crea album" interrotta fra la creazione dell'album e il segno sulla proposta (morte del processo) puo' fare un secondo album alla prossima volta: nessun dato si perde, l'utente ne elimina uno.
+- Il ritmo degli eventi usa la **media**, come il progetto: un fotografo con un solo giorno enorme nell'anno la alza; se in F89 mancano feste, la mediana e' la prima cosa da provare.
+- `AwayFromHome` risponde con la casa di oggi; per giorni di una casa lasciata da tempo la risposta puo' differire da quella che usa la rilevazione.
+- Un evento a cavallo di mezzanotte ha due giorni: il conteggio e' dei due giorni interi, come l'album che ne nasce.
+- Non c'e' una notifica (D20) e nemmeno un modo di far rilevare "adesso" dalla UI: `detect` lo chiama il lavoro; P13 decide se offrirlo in Diagnostica.
+
+**Cosa hanno trovato le prove, e corretto**
+- Storia "Il paese dei suoceri": il primo fine settimana della Libreria era un falso viaggio. Ai bordi della Libreria la finestra di 12 mesi si accorciava a 6 e il luogo abituale scendeva sotto il 10% per caso: ora la finestra **scorre** (12 mesi interi di foto anche per i primi mesi).
+- Le 200 vite: le prime esecuzioni mostravano falsi viaggi sui fine settimana in un luogo abituale con una quota di giorni attorno al 9-11% (un fotografo che scatta ogni giorno ne vede il 9% in 36 giorni all'anno). E' la soglia del 10% del progetto, non un errore del codice: le vite del test hanno ora quote ben sopra la soglia (i casi al limite sono nel P7-4 e fra i punti aperti).
+- Il viaggio di un mese, con le sole foto serali, superava il 10% e spariva fra i "luoghi abituali": da qui la condizione sulle visite (P7-4), con le storie "Viaggi a cavallo d'anno" (31 giorni a Roma), `TripDetectorTest.unaVacanzaDiUnMeseEUnViaggio` e le vite con una vacanza di un mese.
+- `TripPrivacyTest` ha trovato le costanti del `companion` di `CatalogTrips` come campi pubblici del bytecode: spostate fuori dalla classe.
+- I titoli: un nome di luogo con un carattere che il codec rifiuta avrebbe reso la proposta inaccettabile (`albums.create` rifiuta il titolo): ora si ripiega sul titolo senza luogo.
+
+**Rosso senza la regola** (mutazioni una alla volta sul codice di `trips/`, rilette dai test e ripristinate con `git checkout`; `core-albums` e `:app` `hidden.*`)
+| Mutazione | Rosso |
+|---|---|
+| M1 un membro pubblico in piu' in `CatalogTrips` (`homeCenter`) | `TripPrivacyTest.iMembriPubbliciSonoUnElencoChiuso...` |
+| M2 il messaggio dell'eccezione nel log di un guasto | `TripPrivacyTest.unGuastoNonScriveIlMessaggioDellEccezione` |
+| M3 `HomeEstimateEntity` nominato in `CatalogTrips.kt` | `TripPrivacyTest.laCasaSiLeggeESiScriveInUnSoloFile` |
+| M4 l'ingresso della rilevazione senza `VisibleMedia` | `TripHiddenPropertyTest.unNascostoEIndistinguibile...` e, sul catalogo vero, la riga `trips` del registro (`HiddenSurfacesPropertyTest`: "una proposta conta 13 media, ne attendeva 11") e `RealTripsProbeTest` |
+| M5 il filtro finale `HiddenMask` tolto | `TripHiddenPropertyTest` (il filtro non viene chiamato; nascosti dopo la rilevazione) e `CatalogTripsTest.unNascostoDopo...`. **Sul catalogo vero la sonda resta verde**: li' `VisibleMedia` legge a ogni chiamata la stessa fonte del filtro (`media_personal` e il gruppo), quindi il filtro finale e' una cintura sopra le bretelle; lo prova una Libreria dove le due strade possono divergere (`StoryLibrary`) |
+| M6 la distanza non arrotondata a 10 km | `TripPrivacyTest.laDistanzaEsceArrotondataA10Km`, `HomeEstimatorTest.neiFusiLontaniIGiorniSonoQuelliLocali` |
+| M7 un buco di 3 giorni invece di 2 | `TripDetectorTest.inBuchiDiAlPiuDueGiorni...` |
+| M8 una casa sola per tutti i mesi (niente casa nel tempo) | `HomeEstimatorTest.iViaggiGiaProposti...`, `senzaGpsNonCeCasa`, `TripStoriesTest` (Trasloco e Tutto insieme) |
+| M9 gli eventi anche nei giorni dei viaggi | `TripDetectorTest.unaFestaDuranteUnViaggioNonEUnEvento` |
+| M10 un flag spento che scarta | `TripDismissalSyncTest.leVociStraneNonScartanoNiente` |
+| M11 gli screenshot contano | `TripStoriesTest` (Screenshot e video) |
+| M12 `isNear` sempre falso (la citta' di casa nei titoli e nei luoghi) | `CatalogTripsTest.laCasaNonFiniscemaiInUnAlbum`, `iTitoliDelleProposte`, `TripDetectorTest.unaFestaACasa...`, `iLuoghiDiUnViaggio...` |
+
+**Verifica**: `tools\check.ps1 -NoDaemon` **verde** (26/10, ramo `fase7/p7`, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, struttura di build normale, `app\build\outputs\apk\release` cancellata prima): assembleDebug, assembleRelease, galleryTest e galleryLint in 538 s; test eseguiti in ogni modulo (core-albums 309, di cui 88 di `trips/`; app 773; core-common 94 con `Phase7ArchitectureTest`); "D30 nella release" OK; nessuna classe `testing` nel dex di release; benchmark su dispositivo saltato (senza `-Bench`). Il registro dei Nascosti ha ora la riga `trips` in `PRODUCTION` (sonda sul catalogo vero, `live`).

@@ -198,9 +198,11 @@ internal object HiddenSurfaces {
       id = "album-viewer", title = "Viewer aperto da un album: la vista dell'album (`AlbumContent.items` di P3, che il viewer di P10 scorre)", row = SpecRow.ALBUM_VIEWER,
       owner = "P3/P10", backing = Backing.PRODUCTION, probe = RealPersonalProbes.albumViewer, live = true,
     ),
+    // --- Il codice vero di P7 (viaggi ed eventi): 26/10 ---------------------------------------------------------------------------------------------------------
     SurfaceEntry(
-      id = "trips", title = "Viaggi ed eventi: rilevazione, conteggi, copertine (E-H7)", row = SpecRow.TRIPS, owner = "P7", backing = Backing.REFERENCE,
-      landedWhen = listOf("$ALBUMS/trips"), probe = ReferenceProbes.trips, alsoProvedBy = listOf("ReferenceTripsContractTest"),
+      id = "trips", title = "Viaggi ed eventi veri: rilevazione, conteggi, copertine (E-H7), anche i nascosti dopo la rilevazione", row = SpecRow.TRIPS, owner = "P7",
+      backing = Backing.PRODUCTION, sources = listOf("$ALBUMS/trips/TripVisibility.kt", "$ALBUMS/trips/CatalogTrips.kt"), probe = RealTripsProbes.trips, live = true,
+      alsoProvedBy = listOf("CatalogTripsContractTest", "ReferenceTripsContractTest", "TripHiddenPropertyTest", "RoomTripsTest"),
     ),
     SurfaceEntry(
       id = "duplicates", title = "Doppioni: identici e simili, pulizia guidata (piani compresi)", row = SpecRow.UTILITY, owner = "P8",

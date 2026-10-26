@@ -5064,3 +5064,106 @@ Le prove che un agente puo' fare con `adb` sono segnate (adb); le altre vogliono
 - **F66 (adb dove si puo')**: ritaglio dai Nascosti: compare il foglio, "Salva" fa una foto "Ritaglio.png" (nome generico) e sul tablet non compare in Libreria (VR-1, I6); "Copia" e dopo 10 minuti gli appunti si svuotano, "Condividi" e il file sparisce al ritorno nell'app (R18); `am force-stop` con un ritaglio negli appunti: al riavvio gli appunti sono vuoti (VR-3); con meno di 300 MB liberi il ritaglio funziona (VR-2); una foto da 12 megapixel con molte app aperte dice "Memoria insufficiente" e non chiude l'app (R20).
 - **F70 / F71 (adb + utente)**: pizzicare o toccare una foto in movimento subito dopo averla aperta: nessuna animazione, nessun video a pagina intera (VM-1); su un solo-NAS il badge mostra l'indicatore mentre legge e un secondo tocco non ricomincia (VM-3); passare dal Wi-Fi ai dati mobili con la VPN accesa a meta' lettura la ferma (I9).
 - **Campo A (adb)**: B-S7 cinque volte (`am force-stop`, modifica in Galleria, apertura a freddo): la versione parte subito, senza aspettare il giro periodico (CA-1); `am start` di una seconda condivisione sopra la schermata "Salva sul NAS" di una prima: la schermata mostra la seconda, la prima non salvata sparisce dopo, e un'eventuale blocco di avvio non fa perdere niente (CA-2).
+
+## Fase 7 P1: database v6 e query del catalogo (26/10)
+
+Il pacchetto P1 della Fase 7 (`docs/fase7-progetto.md` §4.4, riga P1; D34 e le decisioni che citano tabelle, colonne o query: D4, D5, D9, D12, D14, D18, D19,
+D25, D28, D29, D31; §1.2-§1.4, §2.1-§2.3, §2.5, §4.3, §5.2, §11). Consegna lo schema **v6** (una sola migrazione sul campo per la fase, 5 -> 6, mai
+distruttiva), le colonne derivate `origin_device` e `copy_areas`, le letture del catalogo per gli album (`MediaCatalog.albums`: candidati, fatti,
+attestazione, doppioni) e la porta di completamento `MediaCatalog.attachMoved`. Tocca **solo** `core-database` e i documenti (`docs/modello-dati.md` §14 e
+questa sezione). Nessuna dipendenza esterna nuova, nessun permesso, `:app` non toccato (le porte le lega P13). Branch `fase7/p1`, da `main` (`6346ec8`).
+Lo schema in dettaglio, colonna per colonna, e' in **`docs/modello-dati.md` §14**: qui le decisioni, le misure e cosa trovano pronto gli altri pacchetti.
+
+**Decisioni** (D34 nomina le tabelle, non tutte le colonne; dove non bastava ho scelto la soluzione piu' semplice coerente con D34)
+
+| # | Decisione | Perche' |
+|---|---|---|
+| P1-1 | **Gli album condivisi stanno nella tabella `album`** con `state` non NULL (`active`, `closed`, `deleted`); `shared_album` porta il resto (livello, creatore, erede, cartella, `afterClose`, ora del NAS). Un album personale ha `state` NULL e, se e' stato condiviso, `shared_id` | D5: "proietta in `album`/`album_item` (tipo condiviso)": una tabella sola per le Raccolte, gli elementi e le copertine; la replica fusa sta altrove, senza chiavi esterne |
+| P1-2 | **`album_item.fp` e' `<qh1 esadecimale>:<dimensione>`** (testo). Lo riempie la migrazione dalla versione corrente del media; la proiezione (P3) lo scrive dalla voce personale (`PersonalFingerprint`, in esadecimale) | D4 chiede l'impronta su ogni elemento; in esadecimale si confronta con `media_version.quick_hash` e `size` senza convertire, e da' la stessa risposta di `fingerprintOfMedia` |
+| P1-3 | **`album_item.added_by`** (account di chi ha aggiunto l'elemento) e **`album_item.origin`** (`auto`, `manual`, `accepted`) | Q6: "Aggiunta da ..." nelle informazioni e i permessi ("ognuno toglie le sue") non devono passare da una rivalutazione della replica per ogni cella; `origin` e' in D34 |
+| P1-4 | **`album_rule`: una riga per regola**, il valore e' un testo che il database non interpreta; le foto d'esempio sono righe `example` con `media_id` (chiave esterna: l'unione le sposta). `album_exclusion` e `album_suggestion` hanno `media_id` con chiave esterna | Il formato del valore e' di P3 (che lo scrive dalle voci `smart:*`) e di P6 (che lo legge): cambiarlo non chiede un'altra migrazione. Le esclusioni e i suggeriti puntano ai media come gli elementi |
+| P1-5 | **`origin_device` e `copy_areas` sono colonne derivate di `media`**, calcolate dal catalogo (`derive`) e dalla migrazione con le stesse funzioni (`OriginDevice`, `CopyAreas`). `copy_areas` non e' in D34: serve a dare la **sorgente** di ogni candidato (`SmartSource`) e a filtrarla senza unire le posizioni a ogni candidato (una query sola, 1-3 ms per pagina) | La regola B di D14 vuole `origin_device` derivato (nel brief); la sorgente e' un filtro di §1.2 (`CandidateFilter.sources`). Come `backup_todo`, non stanno nell'indice della timeline: cambiarle da sole non annuncia niente |
+| P1-6 | **`origin_device`**: `phone` se c'e' una copia non assente sul telefono, `backup:<cartella>` se c'e' in una `Backup/<cartella>/` di un'area privata (la radice vera: la recinzione di prova del debug scrive sotto un'altra radice che la release non ha, e `check.ps1` vieta di nominarla nel dex della release, quindi in debug quei media non hanno un dispositivo), altrimenti NULL; `Area comune` (guardiano) non e' un dispositivo; con piu' cartelle vince la prima in ordine alfabetico. **Marca e modello EXIF non stanno nel catalogo** e il progetto li nomina come ultimo ripiego: restano NULL (il prefisso `cam:` e' riservato) | `version_metadata` non conserva marca e modello e `MediaMetadata` (core-model) non li ha: salvarli e' una modifica ai modelli e alla lettura, che altri pacchetti stanno toccando. Con NULL le foto di altri dispositivi senza GPS sono "suggerite" (S1), mai "sicure": si sbaglia dal lato della prudenza |
+| P1-7 | **Il telefono ha due etichette**: un media che perde la copia sul telefono passa da `phone` a `backup:<cartella di questo dispositivo>`. Chi confronta "stesso dispositivo" (P6) tratta `backup:<propria cartella>` come `phone` (la sa da `AlbumFamily.backupFolderName`) | Il catalogo non conosce la propria cartella di backup (e' una scelta del backup, salvata nelle impostazioni); aggiungerla al costruttore di `MediaCatalog` rompe i chiamanti e non serve: la normalizzazione e' una riga a destra |
+| P1-8 | **La sorgente e' una partizione**: `MY_PHONE` (copia presente sul telefono) > `MY_PRIVATE` (bit area privata) > `FAMILY` (`owner_account` di un altro account) > `COMMON` (area comune o area sconosciuta). Un mio media passato nell'area comune e' `COMMON`, e `CatalogCandidate.ownedByMe` lo dice | Una query con piu' sorgenti prende l'unione delle classi, senza media contati due volte e senza che "tutti tranne i familiari" lasci passare i loro scatti dall'area comune |
+| P1-9 | **Nessuna colonna della chiave di contenuto in `media_version`**: `attestInCommon` scorre a cursore le versioni dell'area comune e calcola la chiave con `FastContentKey` (la stessa di `cellContentKeys`) | La chiave e' lo SHA-256 di `qh1` e dimensione: una colonna in piu' su ogni versione, da riempire in migrazione e a ogni inserimento, per una lettura che costa 30 ms su 10.000 file dell'area comune |
+| P1-10 | **Tre indici su `media`** (`local_day`, `sort_time`, `media_id`), (`place_id`, ...) e (`origin_device`, ...), **uno su `media_location`** (`version_id`, `location_type`) | I candidati escono nell'ordine (giorno, istante, id) senza ordinare in memoria; i doppioni si trovano dall'indice da solo. Costo misurato: +27 MB in tutto per 100.000 media (151 -> 178 MB, colonne e indici) |
+| P1-11 | **I candidati per luogo sono un luogo alla volta** (id crescente), per giorno e istante dentro il luogo; il cursore `CandidateKey` ha il luogo davanti | `place_id IN (...)` con un ordine per giorno chiede un ordinamento in memoria (`USE TEMP B-TREE`); con l'uguaglianza davanti l'indice basta. P6 e P7 raccolgono insiemi, non hanno bisogno di un ordine globale dei luoghi |
+| P1-12 | **Doppioni identici**: la "parte" e' `PHONE` oppure `NAS` (area privata e comune insieme): "due file uguali nell'area privata, o nell'area privata e nell'area comune, o due sul telefono" (D25). Una copia nell'area di un altro account compare nel gruppo con `CopyPlace.OTHERS` (E-U1: la pulizia di P8 non la propone) | D25 elenca i tre casi; l'area di ogni copia la decide P8 con l'ordine di D25 |
+| P1-13 | **`attachMoved`**: con `from` la riga della partenza **cambia posto** (stessa `location_id`, stessa versione); se la scansione aveva gia' visto il file nuovo, la partenza diventa assente; l'hash verificato dal motore non coincide con quello della versione -> niente; non insegna l'hash alla versione; un file gia' di un altro media -> `DestinationOfOtherMedia` | D29: "stesso `MediaId`" prima che la sorgente vada nel cestino. Spostare la riga (e non crearne una nuova e perdere la vecchia) conserva `location_id` e cio' che lo cita; il rifiuto per un altro media evita di spostare una riga che appartiene a un altro media (le fonde la scansione, con le regole d'identita') |
+| P1-14 | **Il diario ha il media con chiave esterna senza cascata** (come `backup_item`): l'unione sposta `album_share_item.media_id`; un'operazione tolta porta via i suoi elementi | Un'operazione a meta' non deve perdere un elemento perche' due media si sono uniti (invariante 3 e 5 del §5.5) |
+| P1-15 | **I `toString()` delle entita' nuove non stampano titoli, cartelle, luoghi, percorsi o coordinate** (`AlbumEntity`, `SharedAlbumEntity`, `AlbumShareOpEntity`, `AlbumShareItemEntity`, `TripProposalEntity`, `HomeEstimateEntity`, `SharedAlbumEntryEntity`) e nemmeno quelli dei tipi di `AlbumCatalogTypes.kt` | D37; un `toString()` automatico di una `data class` metterebbe in un log un luogo |
+| P1-16 | **`home_estimate`**: una riga per luogo (`slot` 0 = casa, 1.. = abituali) con centro, raggio in km, giorni che pesano e giorni con GPS della finestra | D18 e §2.3; le colonne bastano a ricalcolare la quota (>= 15%, >= 10%) senza rileggere le foto |
+| P1-17 | **La migrazione non usa sottoquery correlate fra `media` e le posizioni**: `UPDATE ... WHERE media_id IN (sottoquery indipendente)` con `CROSS JOIN` che fissa l'ordine (dalle posizioni, giu' per chiave primaria) | Con `UPDATE ... WHERE EXISTS (correlata)` e senza statistiche (sul telefono nessuno esegue `ANALYZE`) SQLite scorreva le posizioni per ogni media: **10.000 media = 90 s**, quadratico, e un database da 100.000 non si apriva. Lo ha scoperto la prova su una Libreria grande (`Migration5To6ScaleTest`); con la forma indipendente 10.000 media = 0,3 s e 100.000 = 7 s (apertura, migrazione e validazione di Room). I test sui seed da una riga non lo avrebbero mai visto |
+
+**Misure** (JVM, Robolectric: il dispositivo si misura a M2; mediana di cinque giri dopo due di riscaldamento; Libreria sintetica da 100.000 media con 3 anni di
+giorni, 200 luoghi, 3 dispositivi, le tre aree, nascosti, membri di gruppo e 3.016 doppioni: `BigLibrary`)
+
+| Misura | Esito |
+|---|---|
+| Candidati per **giorno** (7 giorni: 649 celle; 1 giorno: 87; tutta la Libreria: 98.167), una pagina da 500 | 3 ms, 1 ms, 2 ms; la seconda pagina 4-5 ms |
+| Candidati per **luogo** (un luogo: 500 celle; un luogo in sei mesi: 89) | 1 ms, 0 ms |
+| Candidati per **dispositivo** (il telefono in 30 giorni: 1.369; il tablet in tutta la Libreria: 10.000) | 2 ms, 1 ms; la seconda pagina 4 ms |
+| Candidati con filtri (3 mesi, area privata, con GPS: 1.618 celle) | 4 ms; la seconda pagina 9 ms |
+| Piano di ogni query, prima pagina e pagina con cursore, **senza statistiche e dopo `ANALYZE`** | `SEARCH m USING INDEX index_media_local_day_sort_time_media_id (local_day>? AND local_day<?)` / `index_media_place_id_...` / `index_media_origin_device_...`; join con `media_personal` e `version_metadata` per chiave primaria; **nessun `USE TEMP B-TREE`** |
+| Il risultato paginato (500 alla volta) e' **uguale** a un calcolo a mano sui dati per ogni scenario | provato su tutti gli otto scenari, fino a 98.167 celle |
+| `visibleCount` (denominatore di E-AL6) | 20 ms |
+| **Doppioni identici** (3.016 gruppi su 100.000 media, ognuno con le sue copie, aree e verifiche) in una chiamata | **72-87 ms** (prima dell'indice per versione e tipo erano 271 ms: ogni media su telefono e NAS faceva leggere le sue righe) |
+| Piano dei doppioni | `SEARCH media_location USING COVERING INDEX index_media_location_version_id_location_type (version_id>?)`: dall'indice da solo |
+| `facts` di 500 media / `candidatesOf` di 500 | 8 ms / 4 ms |
+| `attestInCommon` di 1.000 elementi sull'area comune di 10.000 file | 30-47 ms |
+| Migrazione 5 -> 6 di 100.000 media (apertura, migrazione, indici e validazione di Room; database da 152 MB) | **6,7 s**; il database passa da 151 a 178 MB (+27 MB: due colonne e quattro indici). Una volta sola, all'avvio dopo l'aggiornamento |
+
+**Cosa trovano pronto gli altri pacchetti** (e cosa devono collegare)
+
+| Pacchetto | Trova pronto | Deve collegare o scrivere |
+|---|---|---|
+| P2 formato e permessi | `shared_album`, `shared_album_entry`, `shared_album_head_mark` con `SharedAlbumDao` (voci per dispositivo, per chiave di contenuto, anti-rollback, dimenticare un dispositivo o un album); `attestInCommon` per D9; la riga `album` con `state` per l'album proiettato | gli adattatori Room di `SharedAlbumSync`/`AlbumPublisher` sopra questi DAO (una transazione per passo: `GalleryDatabase.transaction`); la fusione e i permessi restano in `shared/` |
+| P3 album personali | `album`/`album_item` estesi e `AlbumDao` (`upsert`, `upsertItems`, `clearItems`, `clearItemsByOrigin`, `summaries` con elementi mostrabili e giorno piu' recente, `linkedTo`); `album_rule`, `album_exclusion`, `album_suggestion` con `AlbumRuleDao` e `AlbumChoiceDao`; `fp` (`<qh1 esadecimale>:<dimensione>`) e la sua risoluzione (`VersionDao.byQuickFingerprint`); l'unione sposta tutte le righe; `albums.visibleAmong` | `CatalogAlbumProjection` (riscrivere un album in una transazione, ricostruire da zero), la forma di `album_rule.value`, le copie personali di Q5 |
+| P4 condivisione | `ShareDiaryDao` (`insertOp`+`insertItems` atomici, `opByPlan`, `openOps`, `updateItem`, `finish`, `itemsWithTransferKey`, `countsByState`); `albums.facts` per il piano; `MediaCatalog.attachMoved` per `MoveCompletionSink` e per la fine dell'`INCOMING` | l'implementazione Room di `ShareDiary` (corrispondenza campo per campo qui sotto), la chiamata di `attachMoved` dal sink e la scelta fra `MoveCompletions` e il sink |
+| P6 album smart | `albums.candidates` per giorno/luogo/dispositivo con sorgenti, GPS e cursore; `candidatesOf`, `daysOf` (giorni toccati da un cambiamento), `visibleCount` (E-AL6); `album_rule` (`ofRule("period")` per sapere quali smart coprono i giorni toccati), `album_suggestion` con `suggestionCounts(since)` ("Nuove: 12"); `origin_device` | la classificazione A/B/C/S1-S5 sopra i candidati, la normalizzazione `backup:<propria cartella>` = `phone` (P1-7), il ricalcolo incrementale, `ownedByMe` dove serve |
+| P7 viaggi | `albums.candidates` con `gps`, `localTime`, `placeId`, `ownedByMe` e sorgenti (i miei media: `MY_PHONE`, `MY_PRIVATE`, e `ownedByMe` per quelli passati nell'area comune); `TripDao` (`upsertProposals`, `proposals`, `setAlbum`, `clearProposals`) e `home_estimate` (`home`, `upsertHome`, `clearHome`: **solo** `core-albums/.../trips/`) | casa, viaggi, eventi, titoli (`PlaceNames.summary`), `trip_dismissed` |
+| P8 Utility | `albums.duplicates` (gruppi per parte con area, percorso, dimensione, data, verifica e hash completo di ogni copia); `albums.visibleAmong` | l'ordine di D25 sulle copie (`CopyPlace`, `verifiedAt`, cartella `Backup/<dispositivo>/` con `OriginDevice.ofNasKey`), i simili, la pulizia dal cestino |
+| P9 Nascosti | `albums.visibleAmong` (stessa fonte, `media_personal`); `MediaCatalog.hiddenAmong` per `HiddenMask` (esisteva); ogni lettura di `albums` filtra i nascosti da sola | `VisibleMedia`, `HiddenMask`, `WidgetFeed` sul catalogo e il registro delle superfici |
+| P13 integrazione | tutto il resto: le porte qui sotto | gli adattatori sottili; `AlbumsGraph` |
+
+**Le porte di P0 che toccano `core-database`: query pronte e adattatori da scrivere in P13** (core-database non vede core-albums: i tipi restituiti hanno la
+forma dei contratti, campo per campo, e l'adattatore e' una traduzione senza logica)
+
+| Porta (core-albums, core-nasops, core-library) | Query o DAO pronti (`core-database`) | L'adattatore |
+|---|---|---|
+| `AlbumCandidates.page(filter, after, limit)` | `MediaCatalog.albums.candidates(CandidateQuery, CandidateKey?, limit)` | `days: LocalDayRange` -> `IntRange` `aaaammgg`; `sources` -> `Set<CandidateSource>` (stessi codici di `SmartSource`); `withGpsOnly`; `media` (un insieme) -> `candidatesOf(ids)` senza pagine; `CandidateCursor.value` = i quattro campi di `CandidateKey` come testo; `CatalogCandidate` -> `AlbumCandidate` campo per campo (`placeId` `null` -> 0) |
+| `AlbumCandidates.visibleTotal()` | `albums.visibleCount()` | diretto |
+| `CatalogFacts.facts(media)` | `albums.facts(ids)` | `CatalogMediaFacts` -> `MediaFacts` (`CatalogPlace.code` = `MediaPlace.code`; `CatalogNasFile(share, path)` -> `NasItemRef(share, SharePath.of(path))`) |
+| `CatalogFacts.attest(items)` | `albums.attestInCommon(requests)` | `AttestRequest` -> `CommonAttestRequest` (stessi campi) |
+| `ShareDiary` | `ShareDiaryDao` + `AlbumShareOpEntity`/`AlbumShareItemEntity` | `ShareOpRecord` <-> `album_share_op` (`planHash`->`plan_hash`, `folder`->`folder_share`+`folder_path`, `nonceHex`->`nonce_hex`, codici di `kind`, `level`, `hidden`); `ShareItemRecord` <-> `album_share_item` (`source`/`dest` -> `*_share`+`*_path`, `transferKey`, `ticket`, `stageSeq`, `safeCopyRequested`, `failure`, `wait`, `contentKey` in esadecimale); le transizioni le controlla `ShareStateMachine` |
+| `MoveCompletionSink.published(op, index, source, dest, stamp, sha256)` | `MediaCatalog.attachMoved(media, to, stamp, from, sha256)` | la sorgente `NasFileRef` -> `nasLocationAt` e `mediaIdOfLocation` danno il media; `dest` -> `Location.Nas(account, share, NasPath.of(path), stamp.fileId)`; `Attached`/`AlreadyAttached` = fatto; gli altri esiti = errore (il motore ritenta), vedi i punti aperti |
+| `VisibleMedia.visible(ids)` | `albums.visibleAmong(ids)` | diretto |
+| `HiddenMask.hiddenAmong(ids)` | `MediaCatalog.hiddenAmong(ids)` (esisteva) | diretto |
+| `SharedAlbumFacts` (cartella, membri, stato) | `SharedAlbumDao` (`shared_album`, `shared_album_entry`) e la riga `album` | P2 |
+| `Trips` | `TripDao` | P7 |
+| `SafeCopyRequester`, `SharedOrigins` | niente nel database (il guardiano e' di core-backup; `shared_origin` sta nei dati personali) | niente da scrivere |
+
+**Modifiche ai contratti di P0 che servirebbero** (nessuna e' bloccante: l'adattatore le assorbe)
+- `CandidateFilter`: aggiungere `places: Set<Int>?` e `originDevice: String?` (le query li hanno: sono i criteri guida di §2.2 e §2.3) e `AlbumCandidate.ownedByMe`
+  (serve alla "casa", D18, per i miei media passati nell'area comune); `AlbumCandidate.placeId` e' `Int` ma i media senza luogo sono molti: `Int?`.
+- `AlbumCandidates`: `candidatesOf(ids)` e `daysOf(ids)` (P6 chiede "i giorni toccati" per il ricalcolo incrementale, e P0 lo segnala tra i suoi punti).
+- `CandidateCursor`: scrivere nel contratto che e' opaco (oggi quattro campi: luogo, giorno, istante, id).
+
+**Punti aperti**
+- **Marca e modello EXIF** (ultimo ripiego dell'origine, §2.2): non stanno nel catalogo (P1-6). Per riempirli serve una colonna in `version_metadata`, il campo in
+  `MediaMetadata` e la lettura di META: una modifica ai modelli e alla lettura, non a P1. Il prefisso `cam:` di `origin_device` e' riservato.
+- **`DestinationOfOtherMedia`** (la scansione ha visto il file nuovo prima e non l'ha riconosciuto come lo stesso media: caso raro, di norma stesso `qh1` e
+  dimensione sono la stessa identita'): `attachMoved` non scrive e lo dice. P4 decide: ritentare (la scansione lo fonde con le regole d'identita') o fermare
+  l'elemento in `PUBLISHED` con un motivo. La sorgente non va nel cestino finche' il sink non risponde senza errori.
+- **`MoveCompletions` e `MoveCompletionSink`** convivono in core-nasops (punto aperto di P0): `attachMoved` e' idempotente, quindi i due possono chiamarlo tutti e
+  due; resta a P4 scegliere. `CatalogMoveCompletions` (campo A) usa `relocate`, che non verifica l'hash e non guarda l'altro media.
+- **Costo dell'indice sul telefono**: le misure sono su JVM. Il tempo della migrazione e il peso del database su una Libreria vera si misurano a M2 sull'S25.
+- `attestInCommon` costa quanto l'area comune (si scorrono le sue versioni): 30-47 ms per 10.000 file; per un'area comune da 100.000 file diventa circa 10 volte.
+  Se serve si salva la chiave di contenuto in `media_version` (P1-9).
+- Una chiave esterna rimandata che fallisce alla chiusura di una transazione lascia aperta la transazione sulla connessione di Android (`SQLiteSession`): vale per
+  tutte le tabelle con chiavi `DEFERRABLE`, non e' nuovo; il diario della condivisione lo sa solo se un `insertItems` cita un media che non c'e' (errore di programmazione).
+- `visibleAmong` conta come mostrabile un membro di un gruppo non nascosto (un media e' una cosa, la cella del gruppo un'altra): i candidati escludono i membri,
+  `visibleAmong` no.
+
+**`tools\check.ps1 -NoDaemon`**: @@CHECK@@

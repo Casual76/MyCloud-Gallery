@@ -123,6 +123,44 @@ class NasPiecesTest {
     }
   }
 
+  @Test
+  fun unInterruttoreCheNonSiSpegnePerDavveroNonDiceDiEssereSpento() {
+    val dir = Files.createTempDirectory("covers-bloccate").toFile()
+    try {
+      // Un nome occupato da una cartella non vuota: il "file" non si toglie, uguale su Windows e su Linux.
+      val file = File(dir, NasGraph.COVERS_FILE).also { it.mkdirs() }
+      File(file, "dentro").writeText("1")
+      val switch = FileSwitch(file)
+      assertThat(switch.on).isTrue()
+
+      switch.set(false)
+
+      // Al riavvio sarebbe acceso: lo stato dice la verita', non cio' che ci si aspettava.
+      assertThat(switch.on).isTrue()
+      assertThat(FileSwitch(file).on).isTrue()
+    } finally {
+      dir.deleteRecursively()
+    }
+  }
+
+  @Test
+  fun lEmergenzaCheNonSiTogliePerDavveroRestaAccesa() {
+    val dir = Files.createTempDirectory("emergency-bloccata").toFile()
+    try {
+      val file = File(dir, NasGraph.EMERGENCY_FILE).also { it.mkdirs() }
+      File(file, "dentro").writeText("1")
+      val stop = EmergencyStop(file)
+      assertThat(stop.stopped).isTrue()
+
+      stop.set(false)
+
+      // Puo' solo restringere: finche' il segno c'e' sul disco, l'emergenza e' accesa anche in questo processo.
+      assertThat(stop.stopped).isTrue()
+    } finally {
+      dir.deleteRecursively()
+    }
+  }
+
   private companion object {
     const val HOUR = 60L * 60 * 1000
     const val DAY = 24 * HOUR

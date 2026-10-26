@@ -6759,3 +6759,79 @@ un composable), corretti; un test di P3 (`CatalogAlbumsTest`) aspettava ancora `
 - **Le sezioni delle Raccolte sono dati** (P10-7): P11/P13 le legano con `toGroup()`; se il filone grafico vuole un fornitore dentro il modulo, il grafo dei moduli deve cambiare.
 - **La tastiera nei fogli** (nuovo album, nome, "Aggiungi ad album" con un nome nuovo): il guscio dei fogli dell'engine ha `imePadding`, quindi il foglio dovrebbe salire con la tastiera; non si e' potuto vedere su un dispositivo (Robolectric non ha la tastiera), va guardato a 1,3x.
 - **Nomi dei familiari**: `AlbumPeople` e' una porta; senza, si legge l'id dell'account (`AccountNamesAsIs`).
+
+## File di stato locali: scritture atomiche e cancellazioni verificate (27/10)
+
+Ramo `fix/file-locali-nio` (da `main` e457ee2). Un agente che stabilizzava i test ha trovato punti di produzione che ignorano l'esito di `File.delete()` e `File.renameTo()` (`BackupRunMemory`, `HeartbeatStore`). Il difetto e'
+di tutta la famiglia dei file di stato in `noBackupFilesDir` (memorie dei giri, battiti, preferenze, marche): uno stesso blocco copiato in una ventina di posti. Questo pacchetto lo toglie alla radice.
+
+**Cosa succede davvero (misurato su Windows 11, JDK 17; Android e Linux hanno un'altra semantica).** `java.io` apre i file senza `FILE_SHARE_DELETE`:
+
+| situazione | `File.delete()` / `File.renameTo()` | `Files.deleteIfExists` | `Files.move` (`ATOMIC_MOVE` + `REPLACE_EXISTING`) |
+|---|---|---|---|
+| un altro handle `java.io` (`FileInputStream`, cioe' ogni `readText()` in corso) | `false`, in silenzio | `FileSystemException` | `AccessDeniedException` |
+| un altro handle NIO | non misurato | `true` (il file sparisce subito; chi lo ha aperto finisce di leggere) | `AccessDeniedException` |
+| nessun handle, destinazione che esiste | `renameTo`: `false` | | riesce |
+
+Tre conseguenze del codice di prima: (1) un `delete` fallito lasciava uno stato vecchio (un "problema" del backup che non si cancella mai, una pausa, una marca di GPU "in prova" che a due cadute false spegne la GPU) senza
+che nessuno lo sapesse; (2) `renameTo` non sostituisce su Windows, quindi ogni scrittura passava dal ripiego "cancella e riprova", e **in quell'istante il file non esisteva** (un lettore vedeva "nessun battito"); (3) se in
+quel momento un lettore teneva il file, il ripiego falliva anch'esso e la scrittura si perdeva in silenzio. Su Android la (1) e la (3) quasi non esistono (POSIX), la (2) e' ininfluente: ma il codice non ne sapeva niente, e i
+test sulla JVM di Windows hanno retto solo perche' `integration/Attese.kt` vieta ai test di leggere in ciclo i file che la produzione cancella.
+
+**L'utilita' comune: `core-common/.../files/StateFiles.kt`.** Nessuna utilita' comune esisteva (c'erano varianti locali: `writeAtomically` in `core-family`, copie in `core-places`, `SnapshotStore`, `PackDirectory`, `EvalStore`...); `StateFiles`
+le sostituisce dove si tratta di file di stato. Regole:
+- **scrittura atomica** (`writeBytes`, `writeText`, `write { stream }`, `replace(da, a)`): `<nome>.tmp` nella stessa cartella, `force` su disco, `Files.move` con `ATOMIC_MOVE` + `REPLACE_EXISTING` (senza `ATOMIC_MOVE` solo se il file system
+  non lo sa fare). Un lettore vede il file di prima intero o quello nuovo intero, mai uno a meta' e mai uno che manca. Due scritture dello stesso file si accodano (un lucchetto per striscia di percorsi: il temporaneo e' uno solo).
+  Se non riesce, il temporaneo non resta e il file di prima e' intatto;
+- **cancellazione verificata** (`delete`): `Files.deleteIfExists`; `true` **solo** se il file non c'e' piu'. Se non si riesce si riprova e poi si risponde `false`: chi riceve `false` sa che il file c'e' ancora;
+- **lettura breve** (`readBytes`, `readText`, `readLines`): `Files.readAllBytes` apre, legge e chiude, e non impedisce a un altro thread di cancellare il file;
+- **pazienza** (`Patience`): sei tentativi in circa 310 ms (10, 20, 40, 80, 160) per la rinomina, la cancellazione, la lettura e la marca. Su Android non si riprova mai (l'errore non e' quello); su Windows basta quasi sempre il primo
+  riprovo. Non si riprova quando e' inutile (il file non c'e', la cartella non e' vuota). L'attesa e' una funzione (`pause`): le prove ci mettono dentro "chiudo l'handle", e non dipendono dall'orologio;
+- **errori**: ogni errore definitivo va nel log (`GalleryLog`, livello warn) con il **nome del file di stato** (o una `label` fissa quando il nome contiene un id) e il tipo dell'errore, mai un percorso ne' un contenuto; le
+  scritture lanciano `IOException` (senza il testo del sistema, che ha il percorso). Nessun errore sparisce.
+
+**Cosa e' cambiato, punto per punto** (le righe sono quelle di `main`):
+- `app/.../backup/BackupRunMemory.kt:46,72,89,109,125-129` e `graph/LocalData.kt:49-53,60` (`HeartbeatStore`): scrivono e tolgono con `StateFiles`. Le funzioni di `BackupRunMemory` che cambiano un segno rispondono ora `Boolean`
+  (vero solo se il file dice cio' che si e' chiesto); `HeartbeatStore.clear()` **lancia** se il battito resta, e cosi' `AppLocalDataEraser` registra il passo "battito" come non riuscito (prima lo dava per fatto). Il costruttore ha
+  un parametro `patience` (di serie quello normale) per le prove;
+- `app/.../ai/`: `AiStageMark.kt:23,31,41`; `AiStatusMemory.kt:42-46,55` (il valore "gia' salvato" si ricorda **dopo** la scrittura riuscita, non prima: prima un salvataggio fallito non veniva mai riprovato); `PersonalLocalSettings.kt:65,80,85-89`
+  e `TextReading.kt:92-93,109,115-119` (se il file non si scrive o non si toglie, la memoria ricorda di **riprovare alla chiamata dopo**: una lettura del testo spenta dall'utente non deve riaccendersi al riavvio per un file rimasto);
+  `AiCatalogPorts.kt:133,166-170`; `AiIndexAdapters.kt:188-192`; `SearchScreenPorts.kt:164`;
+- `app/.../nas/`: `FileFreezeAcceptances.kt:71,75-83` (una franchigia che non si toglie e' un errore, non un fatto); `NasClockStore.kt:66-80`; `PrepPorts.kt:272-276`; `NasPreviewQuality.kt:79-81` (`FileSwitch`) e `NasGraph.kt:1059-1061`
+  (`EmergencyStop`): un interruttore che non si riesce a spegnere **resta acceso** nello stato (`on || !saved`), cosi' l'emergenza "Ferma le scritture sul NAS", che puo' solo restringere, non dice "spenta" con il file ancora li';
+- `app/.../notify/AppNotifications.kt:240`, `work/TrustSyncScheduling.kt:36,43`;
+- `core-common/.../diagnostics/DiagnosticsLog.kt:161,168-172` (registro della Diagnostica); `core-nasmedia/.../scan/NotMediaMemory.kt:112,122-126` (se la memoria e' vuota e il file non si toglie, `dirty` resta e si riprova al salvataggio dopo);
+- `core-family`: `FileTrustStateStore`, `FileApprovalSightings`, `FileWipeJournal` (`clear()` **lancia** se il file resta: l'azzeramento registra la fase come non riuscita e la riprende al prossimo avvio, la riconfigurazione risponde
+  "passo non disponibile"; prima restavano sul dispositivo azzerato). `DeviceSelfWipe.forgetCompletedWipe()` risponde `false` e lascia il diario com'e' se non riesce a toglierlo. Sparisce `writeAtomically` (era `internal` in `FileTrustStateStore.kt:111-119`);
+- `core-nasops/.../TrashManifestFiles.kt:30-33,48` (l'id della voce non va nel log: `label` fissa); `core-personal/.../PersonalLedger.kt:79-83`; `core-library/.../SnapshotStore.kt:92-102` (`delete()` e' vero solo se sono spariti sia l'istantanea sia il suo temporaneo: un
+  nascosto non deve restare in un file dato per tolto); `core-trust/.../AndroidKeystore.kt:150-153,194` (la cassaforte della chiave di famiglia: fsync e rinomina atomica); `feature-integrations/.../DocumentIdKey.kt:77-80` (spariva il ripiego che
+  riscriveva il file sopra se la rinomina falliva, non atomico);
+- `core-ai`: `GpuTrial.kt:34,47,55-61,75` (la marca "in prova" che non si toglie farebbe contare una caduta che non c'e' stata) e `LiteRtLmSessions.kt:266`; `core-models`: `HttpsConnections.kt:48,62-64`, `HttpsModelFetcher.kt:181`, `SourceStrikes.kt:125-127`
+  (usava `Files.move` senza `ATOMIC_MOVE`), `ModelStore.kt:87-89,100,116,135-136,143-144,161,197` (solo i segni e le note accanto ai modelli, mai i modelli);
+- `core-search`: `CoarseCodes.kt:59-80`, `OriginLedger.kt:257,278-280` (la compattazione del registro usa `replace`; l'errore resta `IllegalStateException`), `LocalAiIndex.kt:487,794`.
+
+**Cosa non e' stato toccato.** I file dei media e il NAS (hanno i loro diari, le loro verifiche e i banchi di caos): `MediaStorePhoneMediaRewriter`, `DirectoryStagedFiles`, `DefaultVersionKeeper`, `DefaultCorrections`, `IncomingStager`/`IncomingQueue`, `PreparedCopies`,
+`ShareCache`, `LocationFreeShare`, `DefaultEditSessions`, `NasOriginalStore`, `MotionCache`, `TempSpill`, `ExifMetadataWriter`, `DefaultLocationStripper`, il PNG del ritaglio (`CutoutWiring`), la copia in cache di `AppEditNasCopies`, `PackDirectory` e
+`FileOutboxBlobStore` (replica e outbox del NAS), `DiskAiBuffer` (buffer di analisi con il suo banco di caos), i modelli e i parziali di `ModelStore`/`PartialFile`, `PlacesStore` (gia' atomico, estrae un asset). Inoltre `engine/` (condiviso, deve restare identico),
+gli strumenti di debug e di benchmark (`app/src/debug`, `app/src/benchmarkRelease`: `FieldProbeStore`, `EvalStore`, `BenchReplica`, `BenchDataset`), `spike/`, la Libreria sintetica e il segno di debug di `LibraryParts`.
+
+**Prove.**
+- `core-common` `StateFilesTest`: scrive (cartelle che mancano, nessun temporaneo, contenuto sostituito per intero, byte e charset), **con un altro handle che tiene il file** (aspetta e sostituisce), errore definitivo (lancia, il file di prima intero, nessun temporaneo, il log ha il
+  nome e non il percorso, `label`, interruzione dell'attesa), scrittura a pezzi (chiudere lo stream non rompe il `force`; un corpo che fallisce non lascia niente), `replace`, **un lettore concorrente non vede mai un file a meta' o assente** (200 scritture di 64 KiB, e quattro
+  scrittori sullo stesso file), cancellazione (anche con un altro handle; `false` se il file resta, con il log), marca, aggiunta, letture;
+- `app` `BackupMemoryFilesTest` (il problema, la pausa, il segno del NAS occupato, l'avanzamento e un segno scritto con un altro handle sul file; risposta falsa quando non si riesce), `HeartbeatStoreTest` (battito non perso con un altro handle, `clear` con un altro handle, `clear` che
+  lancia, **un lettore non vede mai "nessun battito"** mentre si aggiorna), `NasPiecesTest` (interruttore ed emergenza che non si spengono); `core-family` `FileStateClearTest` (`clear()` che lancia, l'azzeramento che non va avanti, il diario che non si dimentica); `core-library`
+  `SnapshotStoreTest.deleteDiceFalsoSeIlFileNonSiTogliePerDavvero`.
+- **Rosse senza la correzione**: togliendo temporaneamente la correzione da `StateFiles` (`delete` = `File.delete()`, rinomina = `renameTo` + cancella e riprova, nessun nuovo tentativo, letture con `java.io`) falliscono 11 prove su 24 di `StateFilesTest`, 6 su 7 di
+  `BackupMemoryFilesTest` e 3 su 5 di `HeartbeatStoreTest`: con un altro handle il file non si toglie e non si sostituisce ("expected to be true"), un battito si perde (`2000` atteso, `1000` trovato), il lettore vede "nessun battito" e "file assente". Con la correzione sono verdi.
+  Le prove con "un file tenuto aperto" usano `FileInputStream` (e' cio' che apre `File.readText()`) e chiudono l'handle dentro l'attesa del codice: nessun tempo scritto a mano (`NoFixedWaitsTest`), nessun test che cade sotto carico. Su Linux le stesse prove passano senza attese.
+  I lettori delle prove di concorrenza respirano un millisecondo fra una lettura e l'altra: su Windows qualunque handle aperto fa fallire la sostituzione, e un lettore che riapre il file senza mai fermarsi lo terrebbe aperto di continuo (nessuna attesa basta, e non e' il caso che si prova).
+
+**Punti aperti**
+- `GalleryLog` in release non ha un sink: l'errore definitivo e' nel log solo in debug. Il segnale che c'e' sempre e' quello che chi chiama riceve (`false`, `IOException`). Se serve un segno anche in release, un contatore o un evento della Diagnostica sono un passo successivo (non c'e' un posto
+  comune dove scriverlo da `core-common`).
+- Un lettore che tiene il file aperto di continuo (un ciclo senza pause) fa fallire anche i sei tentativi su Windows: la scrittura lancia e lo dice. Non e' il caso dei lettori veri; lo sarebbe solo un test che legge in ciclo, e `Attese.kt` lo vieta gia'.
+- Su Android non si e' potuto provare niente su dispositivo: `Files.move`/`deleteIfExists`/`FileChannel` sono gli stessi che il progetto usa gia' in `SnapshotStore`, `PersonalLedger`, `FileTrustStateStore`; l'`fsync` in piu' (`force`) costa pochi millisecondi per scrittura e nessun file di stato
+  si riscrive in ciclo stretto.
+- Restano fuori i file elencati sopra come "non toccati": hanno i loro diari, ma `PackDirectory`, `DiskAiBuffer` e `FileOutboxBlobStore` hanno ancora il `renameTo`/`delete` con esito ignorato in qualche ramo; se si vuole, si portano su `StateFiles.replace`/`delete` con il loro banco di caos davanti.
+- `engine/engine-net/.../EngineHttp.kt:58,84-91` (scarica l'aggiornamento dell'app) ha lo stesso schema: e' dell'engine condiviso, si cambia la' e si riprende con un aggiornamento dell'engine.

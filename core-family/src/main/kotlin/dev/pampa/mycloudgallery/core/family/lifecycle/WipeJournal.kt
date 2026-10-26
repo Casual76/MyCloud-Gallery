@@ -1,8 +1,8 @@
 package dev.pampa.mycloudgallery.core.family.lifecycle
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.family.contract.WipePhase
 import dev.pampa.mycloudgallery.core.family.contract.WipeReason
-import dev.pampa.mycloudgallery.core.family.trust.writeAtomically
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -56,9 +56,8 @@ class FileWipeJournal(private val file: File, private val io: CoroutineDispatche
 
   override suspend fun read(): WipeRecord? = withContext(io) {
     mutex.withLock {
-      if (!file.exists()) return@withLock null
       val text = try {
-        file.readText(Charsets.US_ASCII)
+        StateFiles.readText(file, Charsets.US_ASCII) ?: return@withLock null
       } catch (e: IOException) {
         return@withLock UNREADABLE
       }
@@ -69,14 +68,14 @@ class FileWipeJournal(private val file: File, private val io: CoroutineDispatche
   override suspend fun write(record: WipeRecord) = withContext(io) {
     mutex.withLock {
       val line = listOf(VERSION, record.reason.name, record.phase.name, record.startedAt, record.finishedAt ?: -1).joinToString(";")
-      writeAtomically(file, line.toByteArray(Charsets.US_ASCII))
+      StateFiles.writeText(file, line, Charsets.US_ASCII)
     }
   }
 
   override suspend fun clear() = withContext(io) {
     mutex.withLock {
-      file.delete()
-      Unit
+      // Se il file resta lancia `IOException`: il diario di un azzeramento finito che non si toglie farebbe rimostrare "dispositivo azzerato".
+      if (!StateFiles.delete(file)) throw IOException("diario dell'azzeramento non tolto")
     }
   }
 

@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.nas
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.index.contract.QualityLevel
 import dev.pampa.mycloudgallery.core.index.contract.ReplicaQualityState
@@ -73,16 +74,18 @@ class FileSwitch(private val file: File) {
   val on: Boolean get() = state.value
 
   fun set(on: Boolean) {
-    try {
+    val saved = try {
       if (on) {
-        file.parentFile?.mkdirs()
-        file.createNewFile()
+        StateFiles.mark(file)
+        true
       } else {
-        file.delete()
+        StateFiles.delete(file)
       }
     } catch (e: IOException) {
-      GalleryLog.w("FileSwitch") { "interruttore non salvato" }
+      false
     }
-    state.value = on
+    if (!saved) GalleryLog.w("FileSwitch") { "interruttore non salvato" }
+    // Spento a parole ma il file c'e' ancora: allo stato diciamo la verita' (acceso), non quello che ci aspettavamo.
+    state.value = on || !saved
   }
 }

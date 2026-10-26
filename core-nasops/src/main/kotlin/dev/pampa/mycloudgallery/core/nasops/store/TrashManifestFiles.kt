@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.nasops.store
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashManifest
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import java.io.ByteArrayInputStream
@@ -13,8 +14,8 @@ import java.util.zip.CRC32
 /**
  * Gli inventari delle cartelle cestinate (R3 della revisione 4B) su file, accanto al diario Room: uno per voce in una cartella di
  * `noBackupFilesDir` scelta da `:app` (fuori dal backup, tolta dall'azzeramento). Solo numeri (identita', dimensioni, date): nessun nome
- * ne' percorso. Scritti su un temporaneo e poi rinominati, con un CRC: un file rovinato vale "nessun inventario", cioe' la cartella non si
- * svuota da sola (mai il contrario).
+ * ne' percorso. Scritti su un temporaneo e poi rinominati (`StateFiles`), con un CRC: un file rovinato vale "nessun inventario", cioe' la
+ * cartella non si svuota da sola (mai il contrario). Il nome del file e' l'id della voce: nel log c'e' solo [LABEL].
  */
 internal class TrashManifestFiles(private val dir: File) {
 
@@ -23,32 +24,24 @@ internal class TrashManifestFiles(private val dir: File) {
     return File(dir, "$trashId$SUFFIX")
   }
 
+  /** @throws IOException se l'inventario non si salva (il file di prima, se c'era, e' intatto). */
   fun write(trashId: String, manifest: TrashManifest) {
-    val target = fileOf(trashId)
-    dir.mkdirs()
-    val temp = File(dir, target.name + ".tmp")
-    temp.writeBytes(encode(manifest))
-    if (!temp.renameTo(target)) {
-      target.delete()
-      if (!temp.renameTo(target)) throw IOException("inventario del cestino non salvato")
-    }
+    StateFiles.writeBytes(fileOf(trashId), encode(manifest), label = LABEL)
   }
 
-  fun read(trashId: String): TrashManifest? {
-    val file = fileOf(trashId)
-    if (!file.isFile) return null
-    return try {
-      decode(file.readBytes())
-    } catch (e: IOException) {
-      null
-    }
+  fun read(trashId: String): TrashManifest? = try {
+    StateFiles.readBytes(fileOf(trashId), label = LABEL)?.let { decode(it) }
+  } catch (e: IOException) {
+    null
   }
 
+  /** @throws IOException se l'inventario resta (chi chiama decide: un inventario di una voce chiusa non fa danni, ma non si dice "tolto"). */
   fun remove(trashId: String) {
-    fileOf(trashId).delete()
+    if (!StateFiles.delete(fileOf(trashId), label = LABEL)) throw IOException("inventario del cestino non tolto")
   }
 
   companion object {
+    private const val LABEL = "inventario del cestino"
     private const val SUFFIX = ".mcgtm"
     private const val MAGIC = "MCGTM1"
     private const val NO_ID = Long.MIN_VALUE

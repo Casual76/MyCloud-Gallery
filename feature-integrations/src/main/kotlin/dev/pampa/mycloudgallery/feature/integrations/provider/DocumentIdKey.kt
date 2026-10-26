@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.integrations.provider
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import java.io.File
 import java.io.IOException
 import java.security.SecureRandom
@@ -63,7 +64,7 @@ class FileDocumentIdKey(private val file: File, private val random: Random = Sec
   }
 
   private fun read(): ByteArray? = try {
-    if (file.isFile && file.length() == InMemoryDocumentIdKey.KEY_BYTES.toLong()) file.readBytes() else null
+    if (file.isFile && file.length() == InMemoryDocumentIdKey.KEY_BYTES.toLong()) StateFiles.readBytes(file) else null
   } catch (_: IOException) {
     null
   } catch (_: SecurityException) {
@@ -72,13 +73,7 @@ class FileDocumentIdKey(private val file: File, private val random: Random = Sec
 
   private fun write(bytes: ByteArray) {
     try {
-      file.parentFile?.mkdirs()
-      val temp = File(file.parentFile, file.name + ".tmp")
-      temp.writeBytes(bytes)
-      if (!temp.renameTo(file)) {
-        file.writeBytes(bytes)
-        temp.delete()
-      }
+      StateFiles.writeBytes(file, bytes)
     } catch (_: IOException) {
       // Resta in memoria: gli id valgono per questo processo.
     } catch (_: SecurityException) {

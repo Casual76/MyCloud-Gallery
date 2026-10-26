@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.ai
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.rules.platform.health.ExitReasonKind
 import dev.pampa.mycloudgallery.core.rules.platform.health.ExitRecord
 import java.io.File
@@ -19,26 +20,28 @@ class AiStageMark(private val file: File) {
   /** Scrive il segno con l'istante [atMillis]. Un errore del disco non ferma la tappa. */
   fun begin(atMillis: Long) {
     try {
-      file.parentFile?.mkdirs()
-      file.writeText(atMillis.toString(), Charsets.US_ASCII)
+      StateFiles.writeText(file, atMillis.toString(), Charsets.US_ASCII)
     } catch (e: IOException) {
-      // Senza il segno una morte della tappa non si attribuisce: niente altro.
+      // Senza il segno una morte della tappa non si attribuisce: niente altro (l'errore e' nel log di `StateFiles`).
     }
   }
 
-  /** La tappa e' finita (bene, fermata o annullata): il segno si toglie. */
+  /**
+   * La tappa e' finita (bene, fermata o annullata): il segno si toglie. Se non si riesce (il log di `StateFiles` lo dice) il segno resta, e la
+   * tappa dopo lo prenderebbe per una morte: per questo si riprova prima di arrendersi.
+   */
   fun end() {
-    file.delete()
+    StateFiles.delete(file)
   }
 
   /** L'istante del segno lasciato da una tappa morta, o null se non ce n'e'. Lo toglie: si dice una volta sola. */
   fun interruptedAt(): Long? {
     val at = try {
-      if (file.isFile && file.length() < 32) file.readText(Charsets.US_ASCII).trim().toLongOrNull() else null
+      if (file.isFile && file.length() < 32) StateFiles.readText(file, Charsets.US_ASCII)?.trim()?.toLongOrNull() else null
     } catch (e: IOException) {
       null
     }
-    file.delete()
+    StateFiles.delete(file)
     return at
   }
 

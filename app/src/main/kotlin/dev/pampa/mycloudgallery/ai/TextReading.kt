@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
 import dev.pampa.mycloudgallery.core.ai.ocr.GatedTextReader
 import dev.pampa.mycloudgallery.core.ai.ocr.TextReadingShutdown
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.personal.contract.TextReadingChoice
 import java.io.File
 import java.io.IOException
@@ -54,6 +55,9 @@ class TextReadingMemory(
   @Volatile var unsynced: Boolean = false
     private set
 
+  /** Il file non dice cio' che la memoria sa (l'ultima scrittura o cancellazione non e' riuscita): si riprova alla prossima chiamata. */
+  private var pending = false
+
   init {
     read()
   }
@@ -89,8 +93,9 @@ class TextReadingMemory(
       excluded = false
       noticeVersion = 0
       unsynced = false
-      file.delete()
-      File(file.parentFile, file.name + ".tmp").delete()
+      pending = false
+      StateFiles.delete(file)
+      StateFiles.delete(File(file.parentFile, file.name + ".tmp"), label = file.name + ".tmp")
     }
   }
 
@@ -98,7 +103,7 @@ class TextReadingMemory(
     val before = listOf(choice, excluded, noticeVersion, unsynced)
     block()
     // Si scrive solo se qualcosa e' cambiato: una chiamata che non cambia niente non fa rinascere un file che l'azzeramento ha tolto (I13).
-    if (listOf(choice, excluded, noticeVersion, unsynced) != before) write()
+    if (listOf(choice, excluded, noticeVersion, unsynced) != before || pending) write()
   }
 
   /** Tutto com'e' se il file non ci fosse: non c'e' niente da ricordare, e un file di soli default non si scrive (non rinasce dopo l'azzeramento). */
@@ -106,26 +111,23 @@ class TextReadingMemory(
 
   private fun write() {
     if (isDefault()) {
-      file.delete()
+      // Un file che non si riesce a togliere direbbe ancora "accesa" al prossimo avvio: si ricorda di riprovare (e il log di `StateFiles` lo dice).
+      pending = !StateFiles.delete(file)
       return
     }
     val version = (choice as? TextReadingChoice.OnForAccount)?.acceptedTextVersion ?: 0
     try {
-      file.parentFile?.mkdirs()
-      val tmp = File(file.parentFile, file.name + ".tmp")
-      tmp.writeText("$VERSION\n$version\n${if (excluded) 1 else 0}\n$noticeVersion\n${if (unsynced) 1 else 0}\n")
-      if (!tmp.renameTo(file)) {
-        file.delete()
-        tmp.renameTo(file)
-      }
+      StateFiles.writeText(file, "$VERSION\n$version\n${if (excluded) 1 else 0}\n$noticeVersion\n${if (unsynced) 1 else 0}\n")
+      pending = false
     } catch (e: IOException) {
-      // Resta in memoria: al prossimo avvio vale "spenta" (nel dubbio ML Kit non parte).
+      // Resta in memoria: al prossimo avvio vale "spenta" (nel dubbio ML Kit non parte); si riprova alla prossima chiamata.
+      pending = true
     }
   }
 
   private fun read() {
     val lines = try {
-      if (file.isFile) file.readLines() else return
+      StateFiles.readLines(file) ?: return
     } catch (e: IOException) {
       return
     }

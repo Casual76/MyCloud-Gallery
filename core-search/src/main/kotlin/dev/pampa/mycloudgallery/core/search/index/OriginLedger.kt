@@ -1,11 +1,13 @@
 package dev.pampa.mycloudgallery.core.search.index
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.trust.data.AiClass
 import java.io.ByteArrayOutputStream
 import java.io.Closeable
 import java.io.DataOutputStream
 import java.io.File
+import java.io.IOException
 import java.io.RandomAccessFile
 import java.nio.ByteBuffer
 import java.util.Locale
@@ -254,7 +256,8 @@ internal class OriginLedger(private val file: File, private val frameTarget: Int
       ops += LedgerOp.PutText(origin, key, h.recipe, t.engine, t.source, t.lines, t.chars, text, readBody(t))
     }
     val tmp = File(file.parentFile, file.name + ".tmp")
-    tmp.delete()
+    // Un temporaneo di una compattazione morta a meta': si scrive da capo (`rw` non tronca, e un resto in coda sarebbe una cornice storta).
+    check(StateFiles.delete(tmp)) { "Compattazione del registro non riuscita." }
     RandomAccessFile(tmp, "rw").use { out ->
       var chunk = ArrayList<ByteArray>()
       var size = 0
@@ -275,9 +278,10 @@ internal class OriginLedger(private val file: File, private val frameTarget: Int
       out.channel.force(true)
     }
     close()
-    if (!tmp.renameTo(file)) {
-      file.delete()
-      check(tmp.renameTo(file)) { "Compattazione del registro non riuscita." }
+    try {
+      StateFiles.replace(tmp, file)
+    } catch (e: IOException) {
+      throw IllegalStateException("Compattazione del registro non riuscita.", e)
     }
     open()
   }

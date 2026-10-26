@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.ai
 import dev.pampa.mycloudgallery.core.ai.contract.AiBackend
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.ProbeResult
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.family.contract.RolesChange
 import dev.pampa.mycloudgallery.core.personal.contract.SearchOrderSetting
 import dev.pampa.mycloudgallery.core.personal.contract.TextReadingChoice
@@ -148,7 +149,8 @@ class AppIndexerControl(
   override fun savedProbe(): ProbeResult? {
     val file = probeFile ?: return null
     return try {
-      val parts = if (file.isFile && file.length() < 128) file.readText(Charsets.US_ASCII).trim().split(' ') else return null
+      val text = if (file.isFile && file.length() < 128) StateFiles.readText(file, Charsets.US_ASCII) else null
+      val parts = text?.trim()?.split(' ') ?: return null
       val rate = parts.getOrNull(0)?.toDoubleOrNull()?.takeIf { it > 0.0 && it.isFinite() } ?: return null
       val backend = AiBackend.entries.firstOrNull { it.name == parts.getOrNull(1) } ?: return null
       ProbeResult(rate, backend, parts.getOrNull(2)?.toLongOrNull()?.coerceAtLeast(0) ?: 0L)
@@ -160,10 +162,9 @@ class AppIndexerControl(
   override fun saveProbe(result: ProbeResult) {
     val file = probeFile ?: return
     try {
-      file.parentFile?.mkdirs()
-      file.writeText("${result.imagesPerSecond} ${result.backend.name} ${result.coldStartMs}", Charsets.US_ASCII)
+      StateFiles.writeText(file, "${result.imagesPerSecond} ${result.backend.name} ${result.coldStartMs}", Charsets.US_ASCII)
     } catch (e: IOException) {
-      // Solo una comodita': la stima si rifa' alla prossima misura.
+      // Solo una comodita': la stima si rifa' alla prossima misura (l'errore e' nel log di `StateFiles`).
     }
   }
 

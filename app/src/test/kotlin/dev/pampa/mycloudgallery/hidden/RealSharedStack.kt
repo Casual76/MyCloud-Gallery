@@ -1,11 +1,8 @@
 package dev.pampa.mycloudgallery.hidden
 
-import dev.pampa.mycloudgallery.core.albums.contract.AttestRequest
+import dev.pampa.mycloudgallery.albums.AlbumCatalogFacts
 import dev.pampa.mycloudgallery.core.albums.contract.CatalogFacts
 import dev.pampa.mycloudgallery.core.albums.contract.ShareFolder
-import dev.pampa.mycloudgallery.core.albums.contract.MediaFacts
-import dev.pampa.mycloudgallery.core.albums.contract.MediaPlace
-import dev.pampa.mycloudgallery.core.albums.contract.NasItemRef
 import dev.pampa.mycloudgallery.core.albums.share.KeptCopyState
 import dev.pampa.mycloudgallery.core.albums.share.KeptCopyStore
 import dev.pampa.mycloudgallery.core.albums.share.ShareOrchestratorPorts
@@ -24,14 +21,11 @@ import dev.pampa.mycloudgallery.core.albums.testing.FakeSharedOrigins
 import dev.pampa.mycloudgallery.core.albums.testing.FailingAlbumPorts
 import dev.pampa.mycloudgallery.core.albums.testing.InMemoryShareDiary
 import dev.pampa.mycloudgallery.core.database.AlbumCatalog
-import dev.pampa.mycloudgallery.core.database.CatalogPlace
-import dev.pampa.mycloudgallery.core.database.CommonAttestRequest
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogVisibleMedia
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.AlbumId
-import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.ShareLevel
 import dev.pampa.mycloudgallery.core.trust.crypto.Signer
@@ -52,26 +46,6 @@ import kotlinx.coroutines.flow.StateFlow
 // le `StoredContribution` che la replica terrebbe dopo un giro (la lettura del NAS e le firme delle teste sono provate in `core-albums`: qui conta
 // cio' che le schermate mostrano di un album che il catalogo di chi legge attesta). L'attestazione e i fatti sono le **letture vere di P1**
 // (`AlbumCatalog`), con lo stesso adattatore senza logica che scrivera' `:app` (P13); la visibilita' e' `CatalogVisibleMedia` (D22).
-
-/** `CatalogFacts` sopra le letture di P1 (`AlbumCatalog`): traduce i tipi campo per campo, senza logica. */
-internal class AlbumCatalogFacts(private val albums: AlbumCatalog) : CatalogFacts {
-  override suspend fun facts(media: Collection<MediaId>): Map<MediaId, MediaFacts> = albums.facts(media).mapValues { (_, f) ->
-    MediaFacts(
-      media = f.media,
-      place = when (f.place) {
-        CatalogPlace.PHONE_ONLY -> MediaPlace.PHONE_ONLY
-        CatalogPlace.MY_PRIVATE -> MediaPlace.MY_PRIVATE
-        CatalogPlace.COMMON -> MediaPlace.COMMON
-        CatalogPlace.OTHERS_PRIVATE -> MediaPlace.OTHERS_PRIVATE
-      },
-      mine = f.mine, hidden = f.hidden, isVideo = f.isVideo, size = f.size, contentKey = f.contentKey, version = f.version,
-      nas = f.nas?.let { NasItemRef(it.share, SharePath.parse(it.path)) }, onPhone = f.onPhone,
-    )
-  }
-
-  override suspend fun attest(items: Collection<AttestRequest>): Map<ContentKey, MediaId> =
-    albums.attestInCommon(items.map { CommonAttestRequest(it.contentKey, it.sha256) })
-}
 
 /** Chi non ha nascosto niente (un altro familiare, E-H5: "per gli altri si'"). */
 internal object AllVisible : VisibleMedia {
@@ -107,7 +81,8 @@ internal class RealSharedStack private constructor(val w: BuiltWorld, val family
   val clocks = FakeAlbumClocks()
   val albumFamily = FakeAlbumFamily(account = AccountId.of("test"))
   val gate = FakeAlbumWriteGate()
-  val facts: CatalogFacts = AlbumCatalogFacts(w.catalog.albums)
+  // P13: l'adattatore senza logica sta ora nel codice di :app (`AlbumCatalogFacts`), lo stesso che lega l'app.
+  val facts: CatalogFacts = AlbumCatalogFacts { w.catalog.albums }
   val visibility: VisibleMedia = CatalogVisibleMedia(w.db, MutableStateFlow(w.snapshot))
   val store = MemoryAlbumReplicaStore()
   val choices = MemorySharedAlbumChoices()

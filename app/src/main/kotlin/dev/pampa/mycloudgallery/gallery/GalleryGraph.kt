@@ -499,12 +499,18 @@ class GalleryGraph(
         nas?.organizer?.personalChanged()
         // Fase 7 (P9, D22): il widget di prova (solo debug) si ridisegna subito; in release non fa niente.
         DeveloperTools.hiddenChanged(context)
+        // Fase 7 (P13): copertine e conteggi degli album condivisi senza aspettare il giro dopo.
+        onHiddenChanged()
       }
 
       // Fase 7 (P9, E-H2): quanti degli elementi nascosti i familiari vedono ancora (area comune, album condivisi).
       override suspend fun familyStillSees(ids: Set<MediaId>): Int = core().actions.familyStillSees(ids)
     },
   )
+
+  /** Fase 7 (P13): dopo un "Nascondi" o "Mostra" fatto qui (lo lega `AlbumsModule`: gli album condivisi ricalcolano copertine e conteggi). */
+  @Volatile
+  var onHiddenChanged: () -> Unit = {}
 
   /** Una scrittura che tocca catalogo e istantanea: mai insieme a [shutdown], e mai dopo. */
   private suspend fun <T> writing(block: suspend () -> T): T = lifecycle.withLock {

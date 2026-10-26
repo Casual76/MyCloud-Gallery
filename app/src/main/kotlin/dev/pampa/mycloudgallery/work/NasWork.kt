@@ -271,6 +271,20 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
     })
   }
 
+  /**
+   * Fase 7 (P13, §1.4): il giro degli album condivisi nel giro dell'indice, dopo indice e dati personali (`INDEX_SYNC`, D30: solo le share che la
+   * recinzione permette). [round] e' `AlbumsGraph.syncRound`: replica, pubblicazione del mio contributo, copie degli album chiusi, un passo della
+   * condivisione; vero se e' finito. Non e' `writesToNas`: la replica legge anche con una share congelata, il pubblicatore ha il suo cancello.
+   */
+  suspend fun albums(round: suspend (Duration) -> Boolean): StageOutcome {
+    nas.start()
+    return stage(WorkRequest.Background(BackgroundActivity.INDEX_SYNC)).run({ scope, _ ->
+      val done = round(SLICE)
+      scope.record(0)
+      BatchResult(hasMore = !done)
+    })
+  }
+
   /** Una tappa di scaricamento dell'HQ (`HQ_PREVIEWS`), solo con la qualita' "Alta" (D16). */
   suspend fun hqPreviews(): StageOutcome? {
     nas.start()
@@ -388,13 +402,26 @@ class IndexSyncWorker @AssistedInject constructor(
   @Assisted params: WorkerParameters,
   gallery: GalleryGraph,
   graph: AppGraph,
+  /** Fase 7 (P13): gli album condivisi girano qui, dopo l'indice (i dati personali li porta `PersonalSyncWorker`, e gli album li seguono da soli). */
+  private val albums: dev.pampa.mycloudgallery.albums.AlbumsGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "IndexSyncWorker"
   override val diagJob: DiagJob = DiagJob.INDEX_SYNC
 
   override val triggersSimilarCopies: Boolean = true
 
-  override suspend fun stage(stages: NasStages): StageOutcome = stages.sync()
+  override suspend fun stage(stages: NasStages): StageOutcome = stages.sync().also { outcome ->
+    // L'esito del lavoro resta quello dell'indice: un giro degli album fermo dalle regole o incompleto riprende al giro dopo.
+    if (outcome is StageOutcome.Finished) {
+      try {
+        stages.albums { budget -> albums.syncRound(budget) }
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        dev.pampa.mycloudgallery.core.common.log.GalleryLog.w(tag) { "giro degli album non fatto: ${e.javaClass.simpleName}" }
+      }
+    }
+  }
 
   override fun continuation() = NasWorkScheduling.SYNC_NOW_WORK to OneTimeWorkRequestBuilder<IndexSyncWorker>().addTag(NasWorkScheduling.TAG).build()
 }

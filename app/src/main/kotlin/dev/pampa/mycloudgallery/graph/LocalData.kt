@@ -152,7 +152,12 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
   }
 
   private suspend fun eraseGalleryData(steps: Steps, stopGallery: Boolean, allDatabases: Boolean) {
-    // Fase 6 (P11, §1.4): `AiGraph.stop()` e `SearchGraph.stop()` PER PRIMI (motori rilasciati, indice di ricerca chiuso), poi la galleria.
+    // Fase 7 (P13, §1.4): gli album PER PRIMI. Diario della condivisione, replica, proposte e casa si tolgono solo a operazioni ferme: i giri
+    // della condivisione si fermano e si aspettano qui, le operazioni sui file (4B) le ferma la galleria (sono sue figlie) prima dei file.
+    // Gli album si montano solo con la galleria partita: se non si ferma la galleria (mai partita in questo processo) non c'e' niente da fermare.
+    val albumsStopped = if (stopGallery) steps.run("album") { graph.albumsStopper?.stop() } else true
+    if (!albumsStopped) return
+    // Fase 6 (P11, §1.4): `AiGraph.stop()` e `SearchGraph.stop()` (motori rilasciati, indice di ricerca chiuso), poi la galleria.
     val aiStopped = if (stopGallery) steps.run("ai") { graph.aiStopper?.stop() } else true
     if (!aiStopped) return
     // Revisione B (AZ-2): cio' che l'AI ricorda in memoria di questo account (scelta della lettura del testo, esclusione, avvisi, scelte
@@ -224,6 +229,8 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       NasStages.HEARTBEAT_SCAN,
       NasStages.HEARTBEAT_SYNC,
       NasStages.HEARTBEAT_PREP,
+      // Fase 7 (P13): i registri degli album (caricamenti, piani dei trasferimenti, richieste del guardiano, avvisi visti, segni "visto").
+      dev.pampa.mycloudgallery.albums.AlbumsWiring.DIR,
     ) + BackupRunMemory.FILES
 
     /**

@@ -47,6 +47,13 @@ interface BackupJobs {
   fun quickWork() = Unit
 
   /**
+   * Fase 7 (D28, P13): il guardiano e' stato chiesto **subito** dopo una condivisione (i miei media spostati nell'area comune che il telefono non
+   * ha piu'): il lavoro della tappa `safety` (unico, `KEEP`), con le sue regole. Di norma niente (test, varianti senza NAS): il guardiano gira al
+   * giro dopo.
+   */
+  fun safety() = Unit
+
+  /**
    * Correzioni 5B (LS-2): la verifica di "Libera spazio" come lavoro avviato dall'utente (UIDT su Android 14+, con la sua notifica), chiesto dal
    * tocco di conferma o dalla pagina che ritrova un giro a meta' (l'app e' davanti all'utente, come vuole Android). Ospita il giro del processo e,
    * dopo la morte del processo, lo riprende dal diario. Vero se e' in coda (o lo era gia'); di norma falso (test, varianti senza NAS): il giro va
@@ -111,6 +118,10 @@ class JobSchedulerBackupJobs(context: Context) : BackupJobs {
 
   override fun quickWork() {
     BackupWorkScheduling.quickWork(app)
+  }
+
+  override fun safety() {
+    BackupWorkScheduling.safety(app)
   }
 
   /** LS-2: il lavoro che ospita la verifica di "Libera spazio". Se c'e' gia' (in coda o in corso) non si riprogramma: lo sostituirebbe. */

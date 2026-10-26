@@ -713,9 +713,26 @@ class BackupGraph(
     nas.flushOutbox()
   }
 
-  /** Ci sono copie del guardiano da fare (media propri con la sola copia nell'area comune)? */
+  /**
+   * Fase 7 (D28, P13): le richieste del guardiano **subito** dopo una condivisione (`SafeCopyRequests` di core-backup, P4), su un registro su disco
+   * (L76). Il giro chiesto e' quello di sempre ([GuardScope.All]) con le regole di sempre: la tappa `safety` lo fa girare e le toglie solo a giro
+   * finito. Senza il backup partito non c'e' un guardiano: le richieste aspettano.
+   */
+  val safeCopyRequests: dev.pampa.mycloudgallery.core.backup.safety.GuardianSafeCopyRequests =
+    dev.pampa.mycloudgallery.core.backup.safety.GuardianSafeCopyRequests(
+      log = dev.pampa.mycloudgallery.albums.FileSafeCopyRequestLog(java.io.File(context.noBackupFilesDir, SAFE_COPY_REQUESTS_FILE)),
+      guardian = object : PrivateCopyGuardian {
+        override suspend fun ensure(scope: dev.pampa.mycloudgallery.core.backup.contract.GuardScope, budget: kotlin.time.Duration) =
+          parts?.guardian?.ensure(scope, budget)
+            ?: dev.pampa.mycloudgallery.core.backup.contract.GuardReport(0, 0, 0, 0, 0, dev.pampa.mycloudgallery.core.backup.contract.RunStop.STOPPED)
+      },
+      wake = { inputs.jobs.safety() },
+    )
+
+  /** Ci sono copie del guardiano da fare (media propri con la sola copia nell'area comune, o richieste dopo una condivisione, D28)? */
   suspend fun guardianHasWork(): Boolean {
     val p = parts ?: return false
+    if (runCatching { safeCopyRequests.hasPending() }.getOrDefault(false)) return true
     return p.backupCatalog.onlyCommonCopies(dev.pampa.mycloudgallery.core.backup.contract.GuardScope.All, 1).isNotEmpty()
   }
 
@@ -1219,6 +1236,9 @@ class BackupGraph(
 
   companion object {
     private const val TAG = "BackupGraph"
+
+    /** Fase 7 (D28): il registro delle richieste del guardiano dopo una condivisione (in `noBackupFilesDir/albums/`, tolto dall'azzeramento). */
+    const val SAFE_COPY_REQUESTS_FILE: String = "albums/safe-copy-requests"
 
     /**
      * Lo stato di un backup che ha media in coda e non sta lavorando (BK-12): pura, provata su JVM. I codici che esistevano solo in Diagnostica

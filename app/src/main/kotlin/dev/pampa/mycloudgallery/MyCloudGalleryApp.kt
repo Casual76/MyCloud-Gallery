@@ -68,6 +68,10 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   @Inject
   lateinit var ai: AiStack
 
+  /** Fase 7 (P13): gli album (`AlbumsModule`): nascono con il processo e si montano da soli quando la famiglia e' pronta. */
+  @Inject
+  lateinit var albums: dev.pampa.mycloudgallery.albums.AlbumsGraph
+
   override val workManagerConfiguration: Configuration
     get() = Configuration.Builder()
       .setWorkerFactory(workerFactory)

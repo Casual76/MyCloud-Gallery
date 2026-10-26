@@ -13,6 +13,7 @@ import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.VpnKey
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.runtime.Composable
@@ -76,6 +77,12 @@ class SettingsLinks(
    * scrive `:app`). Null = la voce non c'e'.
    */
   val openSearch: (() -> Unit)? = null,
+  /**
+   * Fase 7 (P9, D33): la voce "Nascosti" porta alla pagina dei Nascosti di feature-library (dietro la stessa credenziale di sempre), che le
+   * Impostazioni non conoscono (la callback la scrive `:app`). Serve a ritrovarli anche quando la sezione Nascosti delle Raccolte e' nascosta
+   * (P11). Null = la voce non c'e'.
+   */
+  val openHidden: (() -> Unit)? = null,
 ) {
   companion object {
     val None = SettingsLinks()
@@ -243,6 +250,17 @@ fun SettingsScreen(
           onClick = links.openSecurity,
         )
         FluidListDivider()
+        // Fase 7 (P9, D33): "Nascosti", sempre raggiungibili da qui anche se la sezione delle Raccolte e' nascosta. Solo se `:app` ha scritto dove porta.
+        links.openHidden?.let { openHidden ->
+          FluidListRow(
+            title = stringResource(R.string.settings_hidden),
+            subtitle = stringResource(R.string.settings_hidden_detail),
+            tone = FluidTone.Success,
+            leading = { RowGlyph(Icons.Rounded.VisibilityOff) },
+            onClick = openHidden,
+          )
+          FluidListDivider()
+        }
         // Fase 5B (P12): "Condivisioni", con l'indicatore se la posizione si toglie.
         links.openSharing?.let { openSharing ->
           SharingEntryRow(removeLocation = removeLocation, onClick = openSharing)

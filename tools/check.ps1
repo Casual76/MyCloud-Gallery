@@ -50,6 +50,9 @@
     7d-bis. D30 nella release   (Fase 7, P0) la recinzione "album condivisi solo sulle share di prova" C'E' nell'APK di release:
                                 `FeatureFlags.sharedAlbumsTestSharesOnly` e la decisione `sharedAlbumsMayUse` nel dex e in mapping.txt
                                 (consumer-rules.pro di core-common); il cancello degli album che le usa lo aggiunge P13
+    7d-ter. D34 nella release   (Fase 8, P0) la recinzione "dati dei volti sul NAS solo sulle share di prova" (risposta Q5 (a))
+                                C'E' nell'APK di release: `FeatureFlags.facesSyncTestSharesOnly` e la decisione `facesSyncMayUse`
+                                nel dex e in mapping.txt (consumer-rules.pro di core-common); il cancello dei volti lo aggiunge P13
     7e. motori on-device        (Fase 6, P0; docs/fase6-progetto.md D3, D33, D38, D41) sull'APK di release vero: librerie
                                 native solo arm64-v8a (P11: x86_64 solo nella debug, per gli emulatori), non compresse,
                                 allineate a 16 KB nel file e nei segmenti LOAD;
@@ -64,6 +67,10 @@
                                 entra nella release (nessun meta-data `com.google.mlkit.*DEPENDENCIES`, i tre registri di ML Kit noti, i due
                                 descrittori `dynamite` del testo, il modello OCR integrato nell'APK, soli artefatti noti nei metadati di
                                 verifica). FALLISCE se non legge l'APK
+    7f. LiteRT solo in core-ai  (Fase 8, P0; docs/fase8-progetto.md D2, §6.4) nel bytecode della release (dexdump) le chiamate di
+                                codice nostro a LiteRT (`org.tensorflow.lite`, `com.google.ai.edge.litert`) partono solo da
+                                `core/ai/` e, fra le classi dei volti, solo da `core/ai/faces/FaceLiteRtSessions`; controllo
+                                positivo: almeno una chiamata da `core/ai/` (il ritaglio). FALLISCE se non legge l'APK
     7c. niente servizi        l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
@@ -887,6 +894,30 @@ Step "D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsM
   Write-Host "        D30 presente nella release (dex e mapping.txt)" -ForegroundColor DarkGray
 }
 
+# Fase 8 (P0, D34; risposta Q5 (a) del 27/10): "dati dei volti sul NAS solo sulle share di prova" e' una protezione che deve esserci NELLA
+# RELEASE (come D12 e D30), accesa e non spegnibile (FeatureFlagsTest) fino alla fine della Fase 8. Qui si controlla che R8 non l'abbia
+# tolta: il campo e la decisione per share di `FeatureFlags`, tenuti da core-common/consumer-rules.pro anche prima che P13 leghi il
+# cancello dei volti (`FacesWriteGate`), devono stare nel dex dell'APK di release e in mapping.txt. Il cancello che li usa lo aggiunge P13
+# a questo passo. Senza i file il passo FALLISCE (non salta).
+$d34Members = @("getFacesSyncTestSharesOnly", "facesSyncMayUse")
+Step "D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $mapping = Join-Path $root "app\build\outputs\mapping\release\mapping.txt"
+  if (-not (Test-Path $mapping)) { return "manca mapping.txt in app\build\outputs\mapping\release" }
+  $problems = @()
+  $found = @(Get-DexClassesMatching $apk.FullName (($d34Members | ForEach-Object { [regex]::Escape($_) }) -join "|"))
+  foreach ($member in $d34Members) {
+    if ($found -notcontains $member) { $problems += "$member non e' nel dex di release: la protezione D34 e' stata tolta" }
+  }
+  foreach ($member in @("boolean facesSyncMayUse(java.lang.String)", "boolean getFacesSyncTestSharesOnly()")) {
+    if (-not (Select-String -Path $mapping -SimpleMatch -Pattern $member -Quiet)) { $problems += "$member non e' in mapping.txt" }
+  }
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+  Write-Host "        D34 presente nella release (dex e mapping.txt)" -ForegroundColor DarkGray
+}
+
 # --- Fase 6 (P0): i motori on-device nell'APK di release (docs/fase6-progetto.md D3, D33, D38, D41, L47, L49) -------------------------
 # Tre letture dell'APK vero: (1) le librerie native (ABI, compressione, allineamento a 16 KB nel file e nei segmenti LOAD dell'ELF:
 # Android 15+ su pagine da 16 KB); (2) il manifest (aapt2): niente MlKitInitProvider, i componenti delle librerie di Google
@@ -1224,6 +1255,59 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
   }
   $ourCalls = @($facts.Calls | Where-Object { $caller = ($_ -split '\|', 2)[1]; @($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -gt 0 })
   Write-Host ("        bytecode: {0} chiamate nostre a MlKit.initialize o ai client HTTPS, tutte al loro posto ({1} righe di dexdump)" -f $ourCalls.Count, $facts.Lines) -ForegroundColor DarkGray
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+}
+
+# Fase 8 (P0; docs/fase8-progetto.md D2, §1.1, §6.4): LiteRT resta in core-ai anche nel bytecode della release. I sorgenti li controllano
+# Phase6ArchitectureTest e Phase8ArchitectureTest; qui si guarda cio' che si installa: ogni chiamata di codice nostro (`Ldev/pampa/`, e
+# dell'engine) a una classe di LiteRT (`org.tensorflow.lite`, `com.google.ai.edge.litert`, non LiteRT-LM) parte da `core/ai/`, e fra le classi
+# dei volti (`core/ai/faces/`) solo da `FaceLiteRtSessions`. Controllo positivo: almeno una chiamata da `core/ai/` (le sessioni del ritaglio,
+# montate da :app): un passo che non vede niente non prova niente. Senza dexdump o senza vedere la MainActivity il passo FALLISCE.
+Step "LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/faces/FaceLiteRtSessions)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  Initialize-ApkInspect
+  $dexdump = Get-DexDump
+  if (-not $dexdump) { return "dexdump.exe non trovato accanto ad aapt2 (build-tools)" }
+  $targets = [string[]]@("Lorg/tensorflow/lite/", "Lcom/google/ai/edge/litert/")
+  $ownPrefixes = @("Ldev/pampa/", "Ldev/antigravity/fluidengine/")
+  $aiPrefix = "Ldev/pampa/mycloudgallery/core/ai/"
+  $facesPrefix = "Ldev/pampa/mycloudgallery/core/ai/faces/"
+  $facesSessions = "Ldev/pampa/mycloudgallery/core/ai/faces/FaceLiteRtSessions"
+  $facts = New-Object DexCallFacts
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("mcg-dex8-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $temp | Out-Null
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk.FullName)
+  try {
+    foreach ($entry in @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })) {
+      $target = Join-Path $temp $entry.FullName
+      [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+      [DexCallScanner]::Scan($dexdump, $target, $targets, $facts)
+    }
+  } finally {
+    $zip.Dispose()
+    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  if ($facts.Lines -lt 1000 -or -not $facts.SawMainActivity) { return "lettura del bytecode non affidabile ($($facts.Lines) righe, MainActivity vista: $($facts.SawMainActivity))" }
+  $problems = @()
+  $ours = @()
+  foreach ($call in $facts.Calls) {
+    $parts = $call -split '\|', 2
+    $caller = $parts[1]
+    if (@($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { continue }
+    $ours += $call
+    if (-not $caller.StartsWith($aiPrefix)) {
+      $problems += "LiteRT chiamato fuori da core-ai: $caller ($($parts[0]))"
+    } elseif ($caller.StartsWith($facesPrefix) -and -not ($caller.StartsWith("$facesSessions;") -or $caller.StartsWith("$facesSessions`$"))) {
+      $problems += "LiteRT chiamato da una classe dei volti diversa da FaceLiteRtSessions: $caller"
+    }
+  }
+  if (@($ours | Where-Object { ($_ -split '\|', 2)[1].StartsWith($aiPrefix) }).Count -eq 0) {
+    $problems += "nessuna chiamata a LiteRT da core-ai nel dex: le sessioni del ritaglio non sono montate (o la lettura non e' affidabile)"
+  }
+  Write-Host ("        bytecode: {0} chiamate nostre a LiteRT, tutte da core-ai ({1} righe di dexdump)" -f $ours.Count, $facts.Lines) -ForegroundColor DarkGray
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
 }
 

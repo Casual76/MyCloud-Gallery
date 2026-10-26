@@ -14,7 +14,7 @@ import org.junit.Test
  * Cosa vietano:
  * 1. `litertlm`, `litert` (anche l'API `org.tensorflow.lite`) o ML Kit fuori da `core-ai`, nel `build.gradle` o nei sorgenti;
  * 2. `com.google.mlkit` nei sorgenti di produzione fuori da `core-ai/.../ocr/` (D41: con la lettura spenta ML Kit non si tocca);
- *    LiteRT fuori da `core-ai/.../cutout/`;
+ *    LiteRT fuori da `core-ai/.../cutout/` (e, dalla Fase 8, da `core-ai/.../faces/FaceLiteRtSessions.kt`: Phase8ArchitectureTest);
  * 3. `MlKit.initialize` fuori dal cancello `core-ai/.../ocr/MlKitBootstrap.kt`;
  * 4. un `TextReadingConsent` costruito fuori dalla pagina di attivazione di `feature-search` (`TextReadingActivation*.kt`);
  * 5. codice HTTP/TLS (`javax.net.ssl`, `java.net.URL`, `URLConnection`, `SSLSocket`, `android.net.http`, librerie; I3 della revisione:
@@ -131,13 +131,15 @@ class Phase6ArchitectureTest {
     assertWithMessage("sorgenti fuori da core-ai che nominano litertlm, litert o ML Kit").that(outside).isEmpty()
   }
 
-  /** 2. D41: ML Kit solo in core-ai/.../ocr/ (produzione); LiteRT solo in core-ai/.../cutout/ (§6.4). */
+  /** 2. D41: ML Kit solo in core-ai/.../ocr/ (produzione); LiteRT solo in core-ai/.../cutout/ (§6.4) e nelle sessioni dei volti (Fase 8, D2). */
   @Test
   fun mlKitSoloNelPacchettoOcrELiteRtSoloNelPacchettoCutout() {
     val mlkit = productionMentions(MLKIT_PACKAGE).filter { !it.startsWith("$AI/src/main/kotlin/$AI_PATH/ocr/") }
     assertWithMessage("ML Kit fuori da core-ai/.../ocr/").that(mlkit).isEmpty()
-    val litert = productionMentions(LITERT_PACKAGE).filter { !it.startsWith("$AI/src/main/kotlin/$AI_PATH/cutout/") }
-    assertWithMessage("LiteRT fuori da core-ai/.../cutout/").that(litert).isEmpty()
+    val litert = productionMentions(LITERT_PACKAGE).filter {
+      !it.startsWith("$AI/src/main/kotlin/$AI_PATH/cutout/") && it != "$AI/src/main/kotlin/$AI_PATH/faces/FaceLiteRtSessions.kt"
+    }
+    assertWithMessage("LiteRT fuori da core-ai/.../cutout/ e da core-ai/.../faces/FaceLiteRtSessions.kt").that(litert).isEmpty()
   }
 
   /** 3. D41: `MlKit.initialize` solo nel cancello. */
@@ -431,8 +433,9 @@ class Phase6ArchitectureTest {
 
     /** Chi puo' dipendere dai moduli nuovi (elenco chiuso). */
     val ALLOWED_DEPENDENTS: Map<String, Set<String>> = mapOf(
-      MODELS to setOf(AI, FEATURE_SEARCH, "app"),
-      AI to setOf(SEARCH, FEATURE_SEARCH, "app"),
+      // Fase 8 (P0): core-faces usa i soli contratti di core-ai e core-models (motori e catalogo dei volti); Phase8ArchitectureTest.
+      MODELS to setOf(AI, FEATURE_SEARCH, "app", "core-faces"),
+      AI to setOf(SEARCH, FEATURE_SEARCH, "app", "core-faces"),
       // Fase 7 (P0): core-albums usa i soli contratti di core-search (QueryParser, SearchEngine, Today); Phase7ArchitectureTest.
       SEARCH to setOf(FEATURE_SEARCH, "app", "core-albums"),
       FEATURE_SEARCH to setOf("app"),

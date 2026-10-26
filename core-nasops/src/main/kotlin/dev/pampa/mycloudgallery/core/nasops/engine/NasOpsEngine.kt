@@ -25,6 +25,8 @@ import dev.pampa.mycloudgallery.core.nasops.contract.GateStatus
 import dev.pampa.mycloudgallery.core.nasops.contract.ItemFlow
 import dev.pampa.mycloudgallery.core.nasops.contract.LocalTrashRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.LockedBackoff
+import dev.pampa.mycloudgallery.core.nasops.contract.MoveCompletionSink
+import dev.pampa.mycloudgallery.core.nasops.contract.NasFileRef
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
 import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
@@ -53,6 +55,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashReason
 import dev.pampa.mycloudgallery.core.nasops.contract.UserConfirmation
+import dev.pampa.mycloudgallery.core.nasops.noop.NoMoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.trash.OwnTrashPurger
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
@@ -80,6 +83,8 @@ import kotlinx.coroutines.sync.withLock
  *  - **niente si perde**: un media esce dal suo posto solo per una rinomina atomica (stessa share) o per il cestino **dopo** che la
  *    copia e' verificata byte per byte e pubblicata (tra share, Q3); un file cambiato (E-D13) o di qualcun altro non va mai nel
  *    cestino; l'eliminazione definitiva tocca solo il proprio cestino, dal diario locale, con un handle;
+ *  - **la sorgente va nel cestino solo dopo che il catalogo conosce la destinazione** (Fase 7, D29): la porta di completamento
+ *    ([MoveCompletionSink]) si chiama dopo `PUBLISHED` e prima di `SOURCE_RECORDED`; finche' non risponde l'elemento resta li';
  *  - **nessun percorso letto dal NAS diventa un'azione** senza la conferma dell'utente: i soli percorsi usati sono quelli del piano
  *    confermato e quelli derivati dall'app (temporanei, cestino proprio, nomi alternativi);
  *  - mai nei log: percorsi, nomi, share, account (solo codici).
@@ -113,8 +118,11 @@ class NasOpsEngine internal constructor(
   private val presence: CatalogPresence = CatalogPresence.NONE,
   /** L'attesa breve di [OwnFolderBackoff] (millisecondi): di norma un `delay`; i test la fanno passare sull'orologio finto. */
   private val waitShortly: suspend (Long) -> Unit = { delay(it) },
-  /** Campo, gruppo A (D7): il catalogo collega la posizione nuova di uno spostamento tra share prima che la sorgente vada nel cestino. */
-  private val moves: MoveCompletions = MoveCompletions.NONE,
+  /**
+   * Fase 7 (D29, P4): la porta di completamento, l'unica (anche `MoveCompletions` del campo A passa da qui, [completionPortOf]): il catalogo
+   * collega la posizione nuova di uno spostamento tra share **prima** che la sorgente vada nel cestino. Vincolante: vedi [completePublished].
+   */
+  private val completions: MoveCompletionSink = NoMoveCompletionSink,
 ) : NasOperations {
 
   init {
@@ -427,6 +435,12 @@ class NasOpsEngine internal constructor(
   private class RunCtx(val purpose: Purpose, val current: MutableMap<Int, OpItemRecord>, val deadline: Long, var heldForClock: Boolean = false) {
     /** Quanto, in questo giro, si e' gia' aspettato per cartelle in uso dall'app ([OwnFolderBackoff]): il tetto vale per tutto il giro, non per elemento. */
     var shortWaitedMs: Long = 0
+
+    /**
+     * Fase 7 (D29): la porta di completamento non ha risposto per un elemento `PUBLISHED`: l'elemento resta li' (sorgente al suo posto), l'operazione
+     * si ferma (nessun altro file si copia per niente) e aspetta, senza fermare le altre (come l'ora del NAS sospetta, R1).
+     */
+    var heldForCatalog: Boolean = false
   }
 
   private suspend fun runOp(id: OpId, deadlineMonotonic: Long, purpose: Purpose, honourCancel: Boolean = true): OpRun {
@@ -460,6 +474,7 @@ class NasOpsEngine internal constructor(
         if (snapshot.nextAttemptAtNas != null && snapshot.nextAttemptAtNas > nasNow) continue
         val after = runItem(snapshot, ctx)
         ctx.current[after.index] = after
+        if (ctx.heldForCatalog) break
       }
     } catch (p: PauseSignal) {
       stop = if (p.reason == PauseReason.NAS_UNREACHABLE) RunStop.NAS_UNREACHABLE else RunStop.BLOCKED
@@ -478,6 +493,11 @@ class NasOpsEngine internal constructor(
       val code = if (finalState == OpState.FAILED) finalItems.firstOrNull { it.errorCode != null }?.errorCode else null
       setOpState(id, finalState, code)
       GalleryLog.i(TAG) { "operazione chiusa: ${finalState.code}, fatti $doneCount, fermi $failedCount" }
+    } else if (stop == RunStop.COMPLETE && ctx.heldForCatalog) {
+      // Fase 7 (D29): il catalogo non conosce ancora la destinazione di un file pubblicato. La sorgente resta al suo posto, l'operazione aspetta
+      // ("condizioni": riprende da sola alla prossima ripresa) e non ferma le altre operazioni.
+      pause(id, PauseReason.CONDITIONS)
+      return OpRun(doneCount, failedCount, waitingCount, RunStop.BLOCKED, held = true)
     } else if (stop == RunStop.COMPLETE && ctx.heldForClock) {
       // R1: file gia' nel cestino, voce non ancora datata: l'operazione resta aperta (la voce e' sua, la pulizia la salta) finche' l'ora
       // del NAS torna fidata; la ripresa la data e la chiude.
@@ -758,8 +778,8 @@ class NasOpsEngine internal constructor(
     if (cur.state == OpItemState.COPIED) cur = verifyPhase(cur, temp, ctx)
     if (cur.state == OpItemState.VERIFIED) cur = publishPhase(cur, temp, ctx)
     if (cur.state == OpItemState.PUBLISHED) {
-      // Campo, gruppo A (D7): la copia verificata e' al suo posto; il catalogo la collega allo stesso media prima che la sorgente esca.
-      announceMoved(cur, ctx)
+      // Fase 7 (D29): la copia verificata e' al suo posto; il catalogo la collega allo stesso media **prima** che la sorgente esca.
+      if (!completePublished(cur, ctx)) return cur
       cur = recordSourcePhase(cur)
     }
     if (cur.state == OpItemState.SOURCE_RECORDED) cur = trashSourcePhase(cur, ctx)
@@ -768,19 +788,35 @@ class NasOpsEngine internal constructor(
   }
 
   /**
-   * Campo, gruppo A (D7): [MoveCompletions] con il timbro della destinazione letto adesso. Una lettura che non riesce o un errore del catalogo non
-   * fermano lo spostamento: la sorgente va nel cestino come sempre e la scansione dopo rimette a posto il catalogo (com'era prima).
+   * Fase 7 (D29, E-SH2, E-SH3; unifica `MoveCompletions` del campo A, D7): la **porta di completamento**, chiamata dopo `PUBLISHED` e **prima** di
+   * `SOURCE_RECORDED`, a ogni ripresa del passo (chi la lega e' idempotente), con il timbro della destinazione letto adesso e l'impronta verificata.
+   *
+   * - Destinazione presente: si chiama la porta. Se risponde, si va avanti (true). Se lancia, il catalogo non conosce ancora la destinazione:
+   *   l'elemento **resta** in `PUBLISHED` con la sorgente al suo posto, l'operazione aspetta ([RunCtx.heldForCatalog]) e si riprova alla ripresa
+   *   (false). Mai la sorgente nel cestino prima del ritorno senza errori della porta.
+   * - Destinazione sparita (tolta dal PC fra la pubblicazione e adesso) o illeggibile per un motivo che non e' la rete: niente da collegare, e la
+   *   sorgente non andra' nel cestino (la stessa occhiata la rifa' [copyStillThere], che ferma l'elemento con le due copie dove sono). Un errore di
+   *   rete mette in pausa, come ogni passo.
+   * Mai un'azione sul NAS nella porta: solo il catalogo locale. Nei log solo il tipo dell'errore.
    */
-  private suspend fun announceMoved(cur: OpItemRecord, ctx: RunCtx) {
-    val dstShare = cur.dstShare ?: return
-    val dst = cur.dstPath ?: return
-    try {
-      val stamp = (reader.stat(dstShare, dst, ctx.purpose) as? NasResult.Ok)?.value?.stamp ?: return
-      moves.moved(cur.srcShare, cur.srcPath, dstShare, dst, stamp)
+  private suspend fun completePublished(cur: OpItemRecord, ctx: RunCtx): Boolean {
+    val dstShare = cur.dstShare ?: return true
+    val dst = cur.dstPath ?: return true
+    val sha = cur.sha256 ?: return true
+    val entry = when (val r = probe(dstShare, dst, ctx.purpose)) {
+      is NasResult.Err -> if (isNetwork(r.error)) throw PauseSignal(PauseReason.NAS_UNREACHABLE) else return true
+      is NasResult.Ok -> (r.value as? Probe.Found)?.entry ?: return true
+    }
+    if (entry.isDirectory) return true
+    return try {
+      completions.published(cur.opId, cur.index, NasFileRef(cur.srcShare, cur.srcPath), NasFileRef(dstShare, dst), entry.stamp, sha)
+      true
     } catch (e: kotlinx.coroutines.CancellationException) {
       throw e
     } catch (e: Exception) {
-      GalleryLog.w(TAG) { "catalogo non aggiornato dopo uno spostamento (${e.javaClass.simpleName}): lo fara' la scansione" }
+      GalleryLog.w(TAG) { "catalogo non aggiornato dopo la pubblicazione (${e.javaClass.simpleName}): l'elemento aspetta, la sorgente resta" }
+      ctx.heldForCatalog = true
+      false
     }
   }
 

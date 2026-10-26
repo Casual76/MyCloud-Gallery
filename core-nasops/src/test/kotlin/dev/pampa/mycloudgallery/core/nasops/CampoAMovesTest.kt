@@ -1,8 +1,10 @@
 package dev.pampa.mycloudgallery.core.nasops
 
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.nasops.contract.OpItemState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
 import dev.pampa.mycloudgallery.core.nasops.contract.OpState
+import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.engine.MoveCompletions
@@ -10,13 +12,15 @@ import dev.pampa.mycloudgallery.core.nasops.testing.KitEngine
 import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.time.Duration.Companion.hours
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
 /**
  * Campo, gruppo A, difetto 7 (Fase 7 §0 punto 11): dopo uno spostamento tra share il catalogo non si aggiornava fino alla scansione dopo e intanto
  * puntava alla sorgente, gia' nel cestino. L'esecutore vero dice a [MoveCompletions] dove e' finita la copia verificata, **dopo** la pubblicazione e
- * **prima** che la sorgente vada nel cestino; un errore del catalogo non ferma lo spostamento.
+ * **prima** che la sorgente vada nel cestino. Fase 7 P4 (D29): la porta e' diventata vincolante, un errore del catalogo ferma l'elemento finche'
+ * il catalogo non risponde.
  */
 class CampoAMovesTest {
 
@@ -58,15 +62,28 @@ class CampoAMovesTest {
     assertThat(kit.store.ops(setOf(OpState.DONE))).hasSize(1)
   }
 
-  /** Il catalogo che non risponde non ferma lo spostamento: la sorgente va nel cestino e la scansione rimettera' a posto il catalogo. */
+  /**
+   * Fase 7 P4 (D29): `MoveCompletions` e' diventata la porta di completamento, vincolante. Il catalogo che non risponde **ferma** l'elemento in
+   * `PUBLISHED` con la sorgente al suo posto (prima del campo A la sorgente andava nel cestino comunque); quando il catalogo risponde, la ripresa
+   * finisce lo spostamento. Niente si perde in nessuno dei due momenti: la copia pubblicata e la sorgente ci sono entrambe finche' si aspetta.
+   */
   @Test
-  fun d7_unErroreDelCatalogoNonFermaLoSpostamento() = runTest {
-    val kit = NasOpsTestKit(engine = KitEngine.PRODUCTION, moves = MoveCompletions { _, _, _, _, _ -> error("catalogo chiuso") })
+  fun d7_unErroreDelCatalogoFermaLElementoFinoAllaRisposta() = runTest {
+    var closed = true
+    val kit = NasOpsTestKit(engine = KitEngine.PRODUCTION, moves = MoveCompletions { _, _, _, _, _ -> if (closed) error("catalogo chiuso") })
     kit.putFile("test", "Viaggi/a.jpg", a)
     val plan = (kit.operations.plan(OpRequest.Move(listOf(kit.itemOf("test", "Viaggi/a.jpg")), "test-comune", SharePath.parse("Famiglia"))) as PlanOutcome.Ready).plan
     assertThat(kit.operations.start(plan, kit.confirm(plan))).isInstanceOf(StartOutcome.Started::class.java)
 
     assertThat(kit.bytes("test-comune", "Famiglia/a.jpg")).isEqualTo(a)
+    assertThat(kit.exists("test", "Viaggi/a.jpg")).isTrue()
+    assertThat(kit.store.ops(setOf(OpState.PAUSED))).hasSize(1)
+    val op = kit.store.ops(setOf(OpState.PAUSED)).single()
+    assertThat(kit.store.items(op.id).single().state).isEqualTo(OpItemState.PUBLISHED)
+    assertThat(op.pauseReason).isEqualTo(PauseReason.CONDITIONS)
+
+    closed = false
+    kit.operations.resumeAll(1.hours)
     assertThat(kit.exists("test", "Viaggi/a.jpg")).isFalse()
     assertThat(kit.store.ops(setOf(OpState.DONE))).hasSize(1)
   }

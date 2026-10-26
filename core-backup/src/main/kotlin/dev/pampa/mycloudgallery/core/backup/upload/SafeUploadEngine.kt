@@ -508,12 +508,17 @@ class SafeUploadEngine(
     item.kind == UploadKind.INCOMING && gateState != BackupGateState.PAUSED && gateState != BackupGateState.WRITES_STOPPED && gateState != BackupGateState.NOT_READY
 
   /** Dove si puo' pubblicare un elemento: le radici del backup, o (D24) la cartella scelta per un file in arrivo. */
-  private fun allows(item: BackupItem, path: SharePath): Boolean =
-    if (item.kind == UploadKind.INCOMING) incoming?.allows(path) == true else config.allows(path)
+  private fun allows(item: BackupItem, path: SharePath): Boolean = when {
+    item.kind != UploadKind.INCOMING -> config.allows(path)
+    // Fase 7 (E-SH1): la cartella di un album condiviso, con le sue regole ([IncomingUploadPorts.allowsAlbum]).
+    item.phone != null -> incoming?.allowsAlbum(path) == true
+    else -> incoming?.allows(path) == true
+  }
 
   /** Un file in arrivo finito: la copia locale si toglie solo se e' sul NAS e collegata (lo decide [IncomingLocalFiles.finished]). */
   private suspend fun afterTerminal(item: BackupItem) {
-    if (item.kind != UploadKind.INCOMING) return
+    // Fase 7 (E-SH1): un caricamento dal telefono verso un album non ha una copia locale da sistemare.
+    if (item.kind != UploadKind.INCOMING || item.phone != null) return
     try {
       incoming?.files?.finished(item.id, item.state)
     } catch (e: CancellationException) {
@@ -551,9 +556,10 @@ class SafeUploadEngine(
       Step.Wait()
     } else {
       when (item.state) {
-        UploadState.PLANNED -> readIncoming(round, item)
+        // Fase 7 (E-SH1): un media del telefono verso la cartella di un album condiviso si legge dal telefono, come una copia nuova.
+        UploadState.PLANNED -> if (item.phone != null) readAlbumPhone(round, item) else readIncoming(round, item)
         UploadState.HASHED -> beforeUpload(round, item)
-        UploadState.UPLOADING -> uploadIncoming(round, item)
+        UploadState.UPLOADING -> if (item.phone != null) upload(round, item) else uploadIncoming(round, item)
         UploadState.UPLOADED -> verify(round, item, back = UploadState.UPLOADING)
         UploadState.VERIFIED -> toPublishing(round, item)
         UploadState.PUBLISHING -> publish(round, item, back = UploadState.UPLOADING)
@@ -594,7 +600,18 @@ class SafeUploadEngine(
 
   private class PhoneRead(val sha256: Sha256, val quickHash: QuickHash, val prepared: PreparedUpload?, val memory: ByteArray?, val endsAtSize: Boolean)
 
-  private suspend fun readPhone(round: Round, item: BackupItem): Step {
+  /**
+   * Fase 7 (E-SH1): `PLANNED` di un media del telefono verso la cartella di un album condiviso (`INCOMING` con la riga del telefono): la
+   * destinazione si controlla prima di leggere (mai un temporaneo fuori posto), poi la lettura completa dal telefono come per una copia nuova
+   * (impronta, timbro uguale prima e dopo, E-B15), senza preparazione dell'indice (la copia non e' nell'area privata). Nessuna deduplica: il file
+   * va nella cartella dell'album (un file uguale gia' li', allo stesso nome, si collega: `LINKED_EXISTING`).
+   */
+  private suspend fun readAlbumPhone(round: Round, item: BackupItem): Step {
+    if (!allows(item, item.planned)) return refuse(round, item)
+    return readPhone(round, item, prepare = false)
+  }
+
+  private suspend fun readPhone(round: Round, item: BackupItem, prepare: Boolean = true): Step {
     val ref = item.phone ?: return Step.Wait()
     val expected = item.expected ?: return Step.Wait()
     // E-M12: un file vuoto non e' un media da salvare (la lettura del telefono non lo mette nemmeno nel catalogo).
@@ -609,7 +626,7 @@ class SafeUploadEngine(
     file.use {
       // La versione e' cambiata prima della lettura (Samsung "Salva", E-B15): non e' piu' sul telefono, la nuova ha il suo elemento.
       if (file.stamp != expected) return gone(round, item, lost = false)
-      val read = round.readLane.withPermit { withContext(readContext()) { readAndPrepare(item, file, description) } }
+      val read = round.readLane.withPermit { withContext(readContext()) { readAndPrepare(item, file, if (prepare) description else null) } }
         ?: return afterPhoneFailure(round, item)
       // R6: il file continua oltre la dimensione del MediaStore (rimasto indietro): i byte letti sono un prefisso, non la versione. Come un
       // file riscritto (E-B15): la versione non si salva da qui, quella nuova avra' il suo elemento quando il MediaStore l'avra' vista.

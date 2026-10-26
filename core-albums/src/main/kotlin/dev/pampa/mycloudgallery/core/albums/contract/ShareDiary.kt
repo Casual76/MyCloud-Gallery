@@ -61,13 +61,19 @@ object ShareStateMachine {
 
   /**
    * Se da [from] si puo' passare a [to]: il passo dopo lungo il cammino; `FAILED` da ogni passo non terminale; `CANCELLED` solo prima che
-   * il file sia arrivato (`PLANNED`, `TRANSFERRING`); per "Riporta" con l'album non piu' attivo `IN_PRIVATE` → `DONE` (nessuna lapide).
+   * il file sia arrivato (`PLANNED`, `TRANSFERRING`); per "Riporta" con l'album non piu' attivo (o un media che non era un elemento vivo)
+   * `IN_PRIVATE` → `DONE` (nessuna lapide). P4 (E-SH12): per uno spostamento o un caricamento anche `PLANNED` → `IN_COMMON`, quando prima di
+   * chiamare la porta il catalogo vede gia' lo stesso contenuto nell'area comune (lo ha aggiunto un altro familiare): niente si copia, un file
+   * solo.
    */
   fun allowed(action: ShareItemAction, from: ShareItemState, to: ShareItemState): Boolean {
     if (from.terminal) return false
     if (to == ShareItemState.FAILED) return true
     if (to == ShareItemState.CANCELLED) return from == ShareItemState.PLANNED || from == ShareItemState.TRANSFERRING
     if (action == ShareItemAction.MOVE_OUT && from == ShareItemState.IN_PRIVATE && to == ShareItemState.DONE) return true
+    if ((action == ShareItemAction.MOVE_IN || action == ShareItemAction.UPLOAD) && from == ShareItemState.PLANNED && to == ShareItemState.IN_COMMON) {
+      return true
+    }
     val steps = steps(action)
     val at = steps.indexOf(from)
     return at >= 0 && at + 1 < steps.size && steps[at + 1] == to

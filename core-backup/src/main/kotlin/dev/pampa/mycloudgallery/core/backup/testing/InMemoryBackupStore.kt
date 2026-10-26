@@ -66,7 +66,11 @@ class InMemoryBackupStore(private val nasNow: () -> Long? = { null }) : BackupSt
   }
 
   override suspend fun createIncoming(item: NewBackupItem): BackupItem = synchronized(lock) {
-    require(item.kind == UploadKind.INCOMING && item.phone == null && item.sha256 != null) { "Un file in arrivo, con il suo SHA-256." }
+    // Un file in arrivo da un'altra app (la copia locale, con il suo SHA-256) o, Fase 7 (E-SH1), un media del telefono verso la cartella di un album
+    // condiviso (la riga del telefono e il suo timbro: l'impronta la legge il motore, come per una copia nuova).
+    require(item.kind == UploadKind.INCOMING && ((item.phone == null && item.sha256 != null) || (item.phone != null && item.expected != null))) {
+      "Un file in arrivo con il suo SHA-256, o un media del telefono con la sua riga."
+    }
     // R14: lo stesso arrivo e' quello della stessa versione nella stessa share e nella stessa cartella (come `RoomBackupStore`).
     items.values.firstOrNull { it.versionId == item.versionId && !it.state.terminal && it.kind == UploadKind.INCOMING && it.sameDestinationAs(item) } ?: run {
       val created = BackupItem(
@@ -76,8 +80,8 @@ class InMemoryBackupStore(private val nasNow: () -> Long? = { null }) : BackupSt
         mediaId = item.mediaId,
         versionId = item.versionId,
         size = item.size,
-        phone = null,
-        expected = null,
+        phone = item.phone,
+        expected = item.expected,
         share = item.share,
         planned = item.planned,
         sha256 = item.sha256,

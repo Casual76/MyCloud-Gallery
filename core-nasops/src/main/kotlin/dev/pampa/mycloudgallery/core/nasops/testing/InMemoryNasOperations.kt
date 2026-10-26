@@ -22,7 +22,9 @@ import dev.pampa.mycloudgallery.core.nasops.contract.GateStatus
 import dev.pampa.mycloudgallery.core.nasops.contract.ItemFlow
 import dev.pampa.mycloudgallery.core.nasops.contract.LocalTrashRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.LockedBackoff
+import dev.pampa.mycloudgallery.core.nasops.contract.MoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.contract.NameRules
+import dev.pampa.mycloudgallery.core.nasops.contract.NasFileRef
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
 import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
@@ -55,6 +57,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashReason
 import dev.pampa.mycloudgallery.core.nasops.contract.UserConfirmation
+import dev.pampa.mycloudgallery.core.nasops.noop.NoMoveCompletionSink
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
@@ -99,6 +102,11 @@ class InMemoryNasOperations(
   /** Le share in sola lettura per questo account (E-N9). */
   private val readOnly: (String) -> Boolean = { false },
   private val newId: () -> String = { TrustIds.random() },
+  /**
+   * Fase 7 (D29, P4; §5.2 "stessa macchina a stati, anche `PUBLISHED` → completamento → `SOURCE_RECORDED`"): la porta di completamento, come
+   * nell'esecutore vero. Un errore lascia l'elemento in `PUBLISHED` con la sorgente al suo posto e l'operazione in attesa, senza fermare le altre.
+   */
+  private val completions: MoveCompletionSink = NoMoveCompletionSink,
 ) : NasOperations {
 
   private val states = MutableStateFlow<List<NasOperationState>>(emptyList())
@@ -448,6 +456,11 @@ class InMemoryNasOperations(
       done += run.done
       failed += run.failed
       waiting += run.waiting
+      // Fase 7 (D29): un'operazione che aspetta il catalogo non ferma le altre (come nell'esecutore vero).
+      if (run.held) {
+        stop = RunStop.BLOCKED
+        continue
+      }
       if (run.stop == RunStop.NAS_UNREACHABLE || run.stop == RunStop.BLOCKED || run.stop == RunStop.BUDGET) {
         stop = run.stop
         break
@@ -457,7 +470,10 @@ class InMemoryNasOperations(
     return RunResult(resumed, done, failed, waiting, stop)
   }
 
-  private class OpRun(val done: Int, val failed: Int, val waiting: Int, val stop: RunStop)
+  private class OpRun(val done: Int, val failed: Int, val waiting: Int, val stop: RunStop, val held: Boolean = false)
+
+  /** Fase 7 (D29): la porta di completamento non ha risposto nel giro di questa operazione (l'elemento resta in `PUBLISHED`). */
+  private var heldForCatalog = false
 
   /** Esegue gli elementi pronti di [id] in ordine, fino alla fine, a una pausa o alla scadenza di [deadlineMonotonic]. */
   private suspend fun runOp(id: OpId, deadlineMonotonic: Long): OpRun {
@@ -467,8 +483,10 @@ class InMemoryNasOperations(
     pauseReasons.remove(id)
     refreshStates()
     var stop = RunStop.COMPLETE
+    heldForCatalog = false
     try {
       for (snapshot in store.items(id)) {
+        if (heldForCatalog) break
         if (snapshot.state.terminal) continue
         if (clocks.monotonicMs() >= deadlineMonotonic) {
           stop = RunStop.BUDGET
@@ -501,6 +519,9 @@ class InMemoryNasOperations(
       }
       val code = if (finalState == OpState.FAILED) items.firstOrNull { it.errorCode != null }?.errorCode else null
       store.setOpState(id, finalState, code, clocks.nasNowMs() ?: op.updatedAtNas)
+    } else if (stop == RunStop.COMPLETE && heldForCatalog) {
+      pause(id, PauseReason.CONDITIONS)
+      return OpRun(doneCount, failedCount, waitingCount, RunStop.BLOCKED, held = true)
     } else if (stop == RunStop.COMPLETE && waitingCount > 0) {
       stop = RunStop.WAITING_LOCKED
       store.setOpState(id, OpState.PAUSED, OpErrorCode.LOCKED, clocks.nasNowMs() ?: op.updatedAtNas)
@@ -690,6 +711,8 @@ class InMemoryNasOperations(
       }
     }
     if (!reached(OpItemState.SOURCE_RECORDED)) {
+      // Fase 7 (D29): il catalogo collega la destinazione allo stesso media prima che la sorgente esca.
+      completePublished(cur)?.let { return it }
       when (val s = recordSourcePhase(cur)) {
         is Step.Next -> cur = s.item
         is Step.Stop -> return s.item
@@ -867,6 +890,32 @@ class InMemoryNasOperations(
       Hashed.Missing -> false
       // D4 (P15): un errore passeggero mentre si guarda la destinazione non dice "non pubblicato": si riprova.
       is Hashed.Error -> if (transient(hashed.error)) throw PauseSignal(PauseReason.NAS_UNREACHABLE) else false
+    }
+  }
+
+  /**
+   * Fase 7 (D29): la porta di completamento dopo `PUBLISHED`, con il timbro della destinazione letto adesso e l'impronta verificata. null = si va
+   * avanti; un elemento = ci si ferma qui (la destinazione e' sparita: l'elemento si ferma con le copie dove sono; o la porta non ha risposto:
+   * l'elemento resta in `PUBLISHED` e l'operazione aspetta).
+   */
+  private suspend fun completePublished(cur: OpItemRecord): OpItemRecord? {
+    val dstShare = cur.dstShare ?: return null
+    val dst = cur.dstPath ?: return null
+    val sha = cur.sha256 ?: return null
+    val entry = when (val found = probeOrPause(dstShare, dst)) {
+      is Probe.Found -> found.entry
+      // La copia pubblicata non c'e' piu' (tolta dal PC) o non si legge: nessun collegamento e nessun cestino; la sorgente resta.
+      Probe.Absent, Probe.Unreachable -> return fail(cur, OpErrorCode.UNEXPECTED)
+    }
+    if (entry.isDirectory) return fail(cur, OpErrorCode.UNEXPECTED)
+    return try {
+      completions.published(cur.opId, cur.index, NasFileRef(cur.srcShare, cur.srcPath), NasFileRef(dstShare, dst), entry.stamp, sha)
+      null
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      heldForCatalog = true
+      cur
     }
   }
 

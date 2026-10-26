@@ -306,4 +306,9 @@ dependencies {
   androidTestImplementation appDeps.androidxTestExtJunit
   androidTestImplementation appDeps.androidxTestRunner
   androidTestImplementation appDeps.junit
+
+  // Fase 7 (P12): lo strumento di valutazione degli album e dei viaggi (F88, F89) sta in src/debug e usa il motore degli album smart e `CatalogTrips` di
+  // core-albums. Solo la build di debug: il modulo entra nell'app vera con P13 (`implementation`), non adesso; la release non lo vede e `check.ps1` cerca
+  // lo strumento nel dex di release.
+  debugImplementation project(':core-albums')
 }

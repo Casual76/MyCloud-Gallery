@@ -58,7 +58,7 @@ segnaposto e almeno un test.
 | `:core-database` | Room + KSP: replica locale dell'indice | model, common |
 | `:core-designsystem` | tema Ametista, componenti della galleria, catalogo componenti | `engine-ui` |
 | `:core-trust` | formato e firme dei dati sul NAS | model, common |
-| `:core-security` | credenziali (Keystore), blocco app, protezioni dello schermo | common |
+| `:core-security` | credenziali (Keystore), blocco app, protezioni dello schermo | common, model (dalla Fase 8: `FaceGeneration` per la chiave dei volti `mcg-faces-<G>`) |
 | `:core-rules` | motore delle regole delle attivita'; contratto della salute del background (`platform/health`) | model, common |
 | `:core-network` | stato della rete, casa (impronta ULA), VPN di casa, cancello del percorso verso il NAS, WoL | common, rules |
 | `:core-nas` | sessione SMB (smbj, unico modulo che la vede), errori, interruttore di sicurezza, test di connessione | common, model, trust, security, network, rules |
@@ -90,6 +90,8 @@ segnaposto e almeno un test.
 | `:feature-search` | Fase 6: schermata Cerca e pagina Ricerca e modelli. Stati e contratti, composable con i soli componenti G2. **Cieca a `core-nas`, `core-index`, `core-nasops`, `core-backup`** | search, library, imaging, designsystem; ai e models solo nei contratti di stato |
 | `:core-albums` | Fase 7: album personali (manuali e smart, nei dati personali), regole degli album smart, viaggi ed eventi con la "casa" solo locale, replica, fusione e permessi degli album condivisi, orchestratore della condivisione e del "Riporta" (diario proprio). **Non sposta, non carica, non cancella da se'**: porte sue (`AlbumMover`, `AlbumUploader`, `SafeCopyRequester`, `AlbumPublisher`) legate da `:app`, solo con una `ShareConfirmation` emessa dal foglio | common, model, library (viste e visibilita'), trust (`NasFileSystem` solo in `shared/`), database, personal, places, search (solo contratti). **Non vede** nasops, backup, nas, nasmedia, index, ai, models, rete |
 | `:feature-albums` | Fase 7: elenco e pagina degli album, editor delle regole, "Suggerite" e "Da condividere", fogli di condivisione, permessi e chiusura (con la scelta di Q5), proposte di viaggio. Stati e contratti, composable con i soli componenti G2. **Cieca a `core-nas`, `core-nasops`, `core-backup`, `core-index`, `core-trust`** | albums (contratti), library, imaging, designsystem |
+| `:core-faces` | Fase 8: Persone (da attivare per account). Attivazione, avviso ed esclusione, calcolo dei volti, raggruppamento incrementale con un custode, nomi e correzioni, sincronizzazione dei dati dei volti nell'area privata, "Disattiva e cancella", archivio cifrato. **Non cancella, non cerca e non tocca gli album da se'**: porte sue (`FacesEraseOps`, `PeopleIndex`, `SmartAlbumsPeople`) legate da `:app` | common, model, library (viste e visibilita'), trust (`NasFileSystem` solo in `sync/`), index (contratti), personal (contratti), ai e models (solo contratti), database (solo il database dei volti, da `store/`), security (solo la chiave dei volti). **Non vede** nasops, backup, nas, nasmedia, search, albums, rete |
+| `:feature-people` | Fase 8: sezione Persone e "Altri volti", pagina persona, revisione dei volti, fogli di unione, attivazione e avviso, Impostazioni → Persone, "Disattiva e cancella". Stati e contratti, composable con i soli componenti G2. **Cieca a `core-nas`, `core-nasops`, `core-trust`, `core-ai`, `core-models`, `core-search`, `core-albums`, `core-backup`, `core-index`** | faces (contratti), library, imaging, designsystem |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
@@ -164,6 +166,29 @@ release e in debug e `tools/check.ps1` la cerca nel dex di release. Le aggiunte 
 campi D4 in `core-personal`, `LibraryFilter.EDITED`, `VisibleMedia`, `HiddenMask` e `WidgetFeed` in `core-library`, `MoveCompletionSink`
 in `core-nasops`, `IncomingDestination.AlbumFolder` e `SafeCopyRequests` in `core-backup`, `DiagSection.ALBUMS`) sono nel §1.3 del
 progetto e in `docs/decisioni.md` ("Fase 7 P0").
+
+**Fase 8: chi vede chi** (`docs/fase8-progetto.md` §1.1). Nascono `core-faces` e `feature-people` (P0 ne scrive i contratti, i
+null-object, i fake e gli esecutori di riferimento `ReferenceGrouping`, `InMemoryPeople`, `InMemoryFacesRemote`, `InMemoryFacesArchive`, con
+le suite di contratto che le implementazioni vere dei pacchetti dopo devono passare; in `core-ai` i motori finti `FakeFaceEngines`, in
+`core-security` `FakeFacesKeys`, in `core-nasops` `InMemoryFacesNasEraser`). Le regole:
+- `core-faces` **non vede** `core-nasops`, `core-backup`, `core-nas`, `core-nasmedia`, `core-search`, `core-albums` ne' la rete, nemmeno
+  per nome nel codice di produzione: cancella sul NAS, alimenta la ricerca e gli album solo da porte sue, che `:app` lega;
+- `NasFileSystem` solo in `core-faces/.../sync/` (i file `faces/<G>/<io>/` dell'area privata, con la sola `publishExclusive`); il database
+  dei volti solo da `store/`, la chiave dei volti solo da `store/` ed `erase/`; di `core-ai` e `core-models` solo i contratti; LiteRT solo in
+  `core-ai` (fra le classi dei volti solo `faces/FaceLiteRtSessions.kt`), anche nel bytecode della release (`tools/check.ps1`);
+- `FacesActivationConsent` la costruisce solo la pagina di attivazione e `FacesEraseConfirmation` solo il foglio "Disattiva e cancella",
+  entrambi in `feature-people`; `PersonalKind.PERSON` non compare mai nel codice di produzione (i nomi stanno nella classe `people` sotto
+  `faces/`);
+- `feature-people` vede di `core-faces` solo contratti, null-object e fake; nessun altro modulo, tranne `:app`, arriva a `core-faces`
+  (`core-search` e `core-albums` ne usano i soli contratti loro: `PeopleLookup`, `PeopleMembership`).
+
+`Phase8ArchitectureTest` (`core-common`, P0) tiene queste regole; ogni violazione reintrodotta lo fa fallire. La recinzione D34
+(`FeatureFlags.facesSyncTestSharesOnly`, dati dei volti solo sulle share di prova finche' l'utente non dice di si' a fine fase, Q5) e' accesa
+in release e in debug e `tools/check.ps1` la cerca nel dex di release. Le aggiunte ai moduli esistenti (codici e tipi dei volti in
+`core-model`, testa di tipo 9 e classi 18-20 in `core-trust`, `contract/Faces.kt` e `BufferKeepers` in `core-ai`, ruoli dei modelli dei
+volti in `core-models`, voce `faces` e gancio `PrePublishHook` in `core-personal`, `FacesKeys` in `core-security`, `FacesNasEraser` in
+`core-nasops`, `SearchChip.Person` e `PeopleLookup` in `core-search`, `PeopleRule` e `PeopleMembership` in `core-albums`, `ViewerPeople` in
+`feature-viewer`, `DiagSection.PEOPLE`) sono nel §1.3 del progetto e in `docs/decisioni.md` ("Fase 8 P0").
 
 **Fase 6 in `:app` (P11).** `AiModule` monta tutto una volta per processo (`AiWiring.build`): `LocalModels` (cartella
 `noBackupFilesDir/models`, sorgenti di `ModelFetchers`, cancello di rete per l'HTTPS; la copia sul NAS resta spenta finche' `core-nas` non

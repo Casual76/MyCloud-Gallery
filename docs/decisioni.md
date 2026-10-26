@@ -6643,3 +6643,262 @@ Fuori dal perimetro: **una riga di test in `core-albums/build.gradle`** (`testIm
 6. Per i media di una condivisione (area comune) "mio" dipende da `ownedByMe` di P1 (P6-3): se P1 lo calcola male, i propri media spostati restano suggeriti; la sonda del registro non lo vede.
 
 **Verifica**: `tools\check.ps1 -NoDaemon` verde al primo giro (26/10, ramo `fase7/p6` col codice di `501079c2`, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, struttura di build normale, `app\build\outputs\apk\release` cancellata prima, slot `f7-p6` preso e rilasciato): assemble di debug e release, test di tutti i moduli (`core-albums` 512, `:app` 771, nessuno a zero, nessuno fallito), lint, controlli sul dex e sul manifest di release (nessun fake di test nel dex, permessi dell'APK tutti elencati in `docs/sicurezza.md`).
+
+## Fase 8 (Persone): decisioni del progetto (27/10)
+Fonte: `docs/fase8-progetto.md` (§0.1 decisioni D1–D40, §0.2 edge case nuovi, §9 domande, §11 risposte del 27/10). Le decisioni valgono come
+scritte lì; qui il riassunto in una riga ciascuna, con il rimando. Le modifiche agli altri documenti (§0.3 del progetto) le ha fatte P0 il
+27/10: `docs/formato-nas.md` (A1–A8: albero, §2.3, §4.6, §5.5-bis con le classi 18–20 e il campo `faces`, §5.6, §5.11 nuovo, §7, §9 punto
+6-bis, §10, §14), `docs/sicurezza.md` (§1, §2, S1, S11, C20 riscritta, C21, C27, C37–C41, §4-bis, L94–L103, checklist della Fase 8, §8),
+`docs/modello-dati.md` (§5, §9), `docs/fase4-progetto.md` (D26, E-F5), `docs/fase6-progetto.md` (§2.9, D10, D41),
+`docs/fase7-progetto.md` (§2.9, D33), `docs/famiglia-dispositivi.md` (§3, fasi (3) e (5)), `docs/regole-attivita.md` (§2, §6),
+`docs/grafica-progetto.md` (§12.14), `docs/research/ocr-volti.md` (nota in fondo) e `README.md` (moduli e grafo). Il **piano** non è nel
+repository: gli edge case del §0.2, 8.1 precisata (generazione, avviso, esclusione), la proposta 13 precisata, il glossario "Dati personali",
+il §7 "Limiti" con L94–L103 e il punto aperto "Modello dei volti e licenza" li riporta l'orchestratore. Il §15 di `docs/modello-dati.md`
+("Database dei volti, v1") lo scrive P6.
+
+**Numerazione.** Il progetto proponeva L88–L97 e C33–C37; P10 della Fase 7 ha preso L90–L92 e C33–C35 e in `main` il massimo è L93 e C36.
+P0 ha usato i primi numeri liberi, **L94–L103** e **C37–C41**, e ha rinumerato `docs/fase8-progetto.md` in un passo solo (L88→L94 … L97→L103,
+C33→C37 … C37→C41; nessun altro riferimento toccato).
+
+Una fase sola con tre tappe (M1 sul telefono, M2 fra dispositivi, M3 ricerca, album e qualità), **quattordici pacchetti** (P0–P13; opus per
+P0, P3, P5, P8). Prove sul campo F94–F110. Chiusura: revisione di sicurezza e verifica funzionale in parallelo; con il sì dell'utente (Q5) i
+dati dei volti sulle share vere (F110).
+
+**Risposte dell'utente alle domande del §9 (27/10)**
+| # | Domanda | Risposta | Effetto |
+|---|---|---|---|
+| Q1 | Dove stanno i modelli dei volti | (a) **dentro l'app** | YuNet e SFace convertiti come asset di `core-ai` (come MagicTouch); nessuna sorgente HTTPS per i volti; P1 scrive il catalogo con le impronte e la conversione riproducibile |
+| Q2 | Chi compare in Persone | (b) **solo chi ha un nome** | in primo piano le persone con un nome; gli altri gruppi in "Altri volti", a un tocco, dove si danno nomi o si dimenticano; nessun gruppo sparisce |
+| Q3 | Una traccia dell'attivazione per la famiglia | (a) **no** | nessuna traccia nella pagina Famiglia né in altri dati visibili ai familiari |
+| Q4 | La misura della qualità sui dati veri | **sì, ma più avanti**, quando l'utente avrà tempo | F105 non blocca la chiusura del codice: P11 consegna strumento e passi; fino ad allora valgono le soglie provvisorie del set pubblico, dichiarate (L97) |
+| Q5 | Quando i dati dei volti sulle share vere | (a) **a fine Fase 8**, dopo le prove e con il sì, insieme all'indice | D34: `facesSyncTestSharesOnly` acceso fino ad allora, anche in release |
+| Download | Cosa si può scaricare | **tutto**: YuNet (2023mar, 2026may) e SFace 2021dec da opencv/opencv_zoo, strumenti Python da PyPI, ~30 ritratti di pubblico dominio da Wikimedia Commons; AuraFace solo se serve, avvisando prima | P1 scarica fuori dal repository, verifica le impronte, converte e misura in un ambiente isolato |
+
+**Decisioni D1–D40** (rimando: `docs/fase8-progetto.md` §0.1)
+| # | In breve | Stato |
+|---|---|---|
+| D1 | Una fase, tre tappe; nulla tocca i media; sul NAS solo file nuovi sotto `faces/<G>/` dell'area privata (con `publishExclusive`) e la voce `faces`; le sole cancellazioni sono di dati dei volti, da `core-nasops` | Deciso |
+| D2 | Moduli `core-faces` (non vede nasops, backup, nas, nasmedia, search, albums, rete) e `feature-people`; motori in `core-ai/.../faces/`; porte legate da `:app` | Deciso (P0: moduli e `Phase8ArchitectureTest`) |
+| D3 | Attivazione per account: voce `SETTING` `faces` (`1\|on\|G\|v`, `1\|off\|G`), generazione nuova a ogni attivazione; forma sconosciuta = niente calcolo, niente pubblicazione, nessuna cancellazione; consenso solo dalla pagina | Deciso (P0: `FacesSettingCodec`, `FacesSetting`, `FacesActivationConsent`; P7) |
+| D4 | Gli altri dispositivi lo dicono una volta (`AwaitingNotice`) e prima non trattano niente; "Non su questo dispositivo" è un'esclusione locale | Deciso (P0: `FacesState`; P7) |
+| D5 | Requisiti: area privata dichiarata e almeno un indicizzatore dell'account | Deciso (P0: `FacesRequirements`, `ActivateOutcome`; P7) |
+| D6 | YuNet ed SFace, convertiti una volta sul PC in `.tflite`, su `litert` 2.3.0 a CPU; niente GPU, NNAPI, NPU | Deciso (P1, P2) |
+| D7 | Versioni e impronte d'ingresso fissate; regola di scelta di YuNet scritta prima di misurare; SFace float16, int8 solo a condizioni | Deciso (P1) |
+| D8 | Modelli dentro l'APK come asset di `core-ai` (Q1 (a)), estratti solo dove Persone è attiva, mai sullo scaffale del NAS | Deciso (Q1 (a); P0: ruoli `FACE_DETECT`, `FACE_EMBED`; P1) |
+| D9 | Qualità attesa dalle fonti pubbliche; la misura che decide è sui dati veri (F105, più avanti: Q4); piano B solo con licenze compatibili | Deciso (Q4) |
+| D10 | Prestazioni attese [stima]: ~30–50 ms a foto sull'S25; P2 misura `facesPerSecond` | Da misurare (P2, F104) |
+| D11 | Dati dei volti solo nell'area privata dell'account, letti solo dai suoi dispositivi; ogni account rifà il calcolo per sé | Deciso (P0: percorsi, `FacesRemote`, suite) |
+| D12 | Testa tipo 9, versione 4 solo per `faces/`, classi `faces` (18), `cluster` (19), `people` (20); regole di chi legge come le altre teste | Deciso (P0: firme in `core-trust`; P3: codec) |
+| D13 | Nomi e correzioni nella classe `people`; `PERSON` resta riservato e rifiutato nelle teste `personal` | Deciso (P0: test end-to-end in `core-personal`) |
+| D14 | Cifratura sul dispositivo (chiave del Keystore per generazione, distrutta per prima); sul NAS in chiaro, firmati (L94) | Deciso (P0: `FacesKeys`; P6) |
+| D15 | Database a parte `faces-<G>.db`, schema proprio v1; la galleria resta v6 | Deciso (P6) |
+| D16 | Calcolano gli indicizzatori dell'account con Persone attiva; unità `faces/<G>/work/<area>/<mese>/<parte>` prenotate sotto la generazione | Deciso (P0: risorse in `NasLayout`, `FacesResource`; P4) |
+| D17 | Ingressi: anteprima di analisi (buffer, indice, telefono, ri-preparazione), HQ a tasselli; il buffer non butta ciò che serve ai volti (`BufferKeepers`) | Deciso (P0: `FaceInputs`, `BufferKeepers`; P4) |
+| D18 | Si analizzano foto, RAW, panorami, video (fotogrammi, volti deboli); mai screenshot, documenti, ritagli; i nascosti si calcolano e non si mostrano | Deciso (P0: `FacesItem.excluded`; P4) |
+| D19 | Livelli CORE, WEAK, NONE; nessun attributo | Deciso (P0: `FaceTier`, `FaceReasons`; P2) |
+| D20 | Raggruppamento: esemplari con margine, nascite a legame medio (≥ 3 volti CORE di ≥ 2 foto), manutenzione notturna, "mai insieme in una foto" | Deciso (P0: `GroupingParams`, `ReferenceGrouping`; P5; soglie provvisorie fino a P11) |
+| D21 | Un solo custode per account (`faces/<G>/cluster`), istantanee numerate, assegnazioni provvisorie locali | Deciso (P0: `FaceGrouping`, `HolderState`; P5) |
+| D22 | `PersonId` stabile; unire = alias; ricalcolo con abbinamento per volti (IoU ≥ 0,5, assegnazione ottima) | Deciso (P0: `GroupingEngine.recluster` di riferimento; P5) |
+| D23 | Correzioni come vincoli permanenti per posto (`FaceLocator`) | Deciso (P0: `PeopleEdit`, `PeopleState`; P5, P9) |
+| D24 | Rinomina, Unisci, Dividi, "È …", "Non è …", Ignora, Nascondi, Dimentica, Copertina, sincronizzati | Deciso (P0: `People`, `InMemoryPeople`; P9) |
+| D25 | Sezione Persone, pagina persona, "Altri volti" (Q2 (b)), riga "Persone" nelle info; copertine ritagliate al momento, mai salvate | Deciso (Q2 (b); P0: stati, `ViewerPeople`; P9) |
+| D26 | Ricerca per persona: chip `SearchChip.Person` dal dizionario dei nomi, candidati da `PeopleLookup`; `core-search` non vede `core-faces` | Deciso (P0: firme in `core-search`; P10) |
+| D27 | Album smart con persone: `smart:people`, `PeopleRule`, candidati da `PeopleMembership` | Deciso (P0: firme in `core-albums`; P10) |
+| D28 | Nascosti mai nelle superfici delle persone (riga `PEOPLE` del registro) | Deciso (P9, P10) |
+| D29 | "Disattiva e cancella": azione locale confermata, diario prima, chiave per prima, l'intera `faces/<G>/` sul NAS | Deciso (P0: `FacesEraser`, `FacesEraseConfirmation`; P8) |
+| D30 | Un dispositivo pubblica `off` solo dopo aver cancellato (`PrePublishHook`); niente dati dei volti senza uno stato fresco | Deciso (P0: `PrePublishHook`, `PersonalHeadsView`, `FacesSwitch.fresh`; P7, P8) |
+| D31 | Cancellazioni guidate da dati remoti: solo dati dei volti dell'account, solo sotto `faces/`, solo da `core-nasops` | Deciso (P0: `FacesNasEraser`, formato §9 punto 6-bis; P8) |
+| D32 | Nessuna stima dell'età; stessi strumenti per tutti; Q2 (b) su chi compare | Deciso (Q2 (b)) |
+| D33 | GDPR in pratica: misure da dati biometrici anche in uso domestico | Deciso |
+| D34 | Recinzione `facesSyncTestSharesOnly` accesa anche in release fino al sì (Q5 (a)) | Deciso (P0: flag, R8, `tools/check.ps1`, `Phase8ArchitectureTest`) |
+| D35 | Scritture e cancellazioni dietro `IndexWriteRules` più D34; col congelamento la cancellazione sul NAS aspetta | Deciso (P0: `FacesWriteGate`, `FacesWriteBlock`, `FacesEraseStop`) |
+| D36 | Ora del NAS per voci, teste e prenotazioni; monotono per durate e freschezza | Deciso (P0: `FacesClock`, `NoWallClockSourcesTest`) |
+| D37 | Log e Diagnostica solo numeri e codici; `DiagSection.PEOPLE`; `toString()` sicuri | Deciso (P0: `FacesDiag`, `DiagSection.PEOPLE`, test dei `toString`) |
+| D38 | UI come stati e contratti; composable solo con i componenti G2 | Deciso (P0: `feature-people/contract/`) |
+| D39 | Nessun permesso, componente, dipendenza o host nuovi; due asset con le loro licenze | Deciso (P0: manifest e `Phase8ArchitectureTest`; P1: asset) |
+| D40 | Per le Fasi 9 e 10: ricordi con le persone con nome, "mostra meno", notifiche senza nomi | Deciso (contratti `People` e `PeopleLookup` pronti) |
+
+**Dubbi grafici** (per il filone grafico): sezione Persone e "Altri volti", pagina persona, revisione dei volti, fogli di unione e divisione,
+riga "Persone" nelle info con "Chi è?", pagina di attivazione e avviso, foglio "Disattiva e cancella" con lo stato per dispositivo, chip
+"Persona" in Cerca, regola "Persone" nell'editor degli album smart: in `docs/grafica-progetto.md` §12.14.
+
+## Fase 8 P0: fondamenta, contratti, recinti e documenti (27/10)
+
+Il pacchetto P0 della Fase 8 (`docs/fase8-progetto.md` §4.4, riga P0; §1.1–§1.5, §4.3, §5.2, §6, §11). Consegna i due moduli nuovi, i
+contratti del §1.2 con null-object, fake fedeli ed esecutori di riferimento, le suite di contratto, le firme nei moduli esistenti, i recinti
+(`Phase8ArchitectureTest`, R8 e `tools/check.ps1` per D34, LiteRT nel bytecode) e i documenti del §0.3. **Nessuna dipendenza esterna
+nuova**, nessun permesso o componente Android nuovo, `:app` non toccato (lo lega P13). Branch `fase8/p0`. Commit: `c09c2379` (firme nei
+moduli esistenti), `26f57ad4` (moduli, contratti, esecutori, suite), `58c65906` (recinti) e quello dei documenti.
+
+**Moduli nuovi**
+- `core-faces` (`api` common, model, library; `implementation` trust, index, personal, ai, models, database, security): `contract/`
+  (`FacesState` e `FacesSwitch`, `Compute`, `Grouping` e `GroupingEngine`, `People`, `PeopleEdits`, `PeopleState`, `Sync`, `Erase`,
+  `Archive`, `Ports`, `LocalPorts`, `FacesDiag`), `noop/` (ogni contratto e ogni porta, chiusi), `testing/` (esecutori di riferimento e fake),
+  `NoNetworkSourcesTest`, `NoWallClockSourcesTest`. Nessun Hilt; i pacchetti interni (`switch/`, `compute/`, `grouping/`, `people/`,
+  `sync/`, `erase/`, `store/`) li creano P3–P9.
+- `feature-people` (`api` core-faces, core-designsystem; `implementation` library, imaging, common, model; Compose, Hilt, Roborazzi come
+  `feature-albums`): `contract/PeopleScreens.kt` e `contract/SwitchScreens.kt` (gli stati del §1.5 suoi: `PeopleSectionState`,
+  `PeopleListState`, `PersonPageState`, `FaceReviewState`, `MergeSheetState`, `FacesActivationState`, `FacesNoticeState`,
+  `PeopleSettingsState`, `EraseSheetState`; porte `PeopleActions` e `PeopleCrops`), `noop/`, `testing/PeopleSamples` (un esempio per
+  caso), test di guardia. `ViewerFaceChip` è di `feature-viewer`, il chip "Persona" di `feature-search` (P10), la regola dell'editor di
+  `feature-albums` (P10). `activation/` ed `erase/` li creano P7 e P8: sono gli unici posti dove si costruiscono le due conferme.
+- `settings.gradle` e `galleryModules`; `tools/check.ps1` li conta da solo ("test eseguiti in ogni modulo" legge `settings.gradle`).
+
+**Firme nei moduli esistenti** (riga P0)
+- `core-model`: `PersonId` (UUID canonico, 16 byte, base32 da 26), `FaceGeneration` (128 bit casuali, base32 Crockford da 26 caratteri),
+  `FaceSpaceCode`, `FaceTier`, `FaceReasons`, `FaceSource`, `FaceDetectorCode`, `PeopleMode`, `FaceBox` (IoU), `FaceLocator` (forma testo
+  stretta, ≤ 128 caratteri, corrispondenza con IoU ≥ 0,5), `FaceRef`, `FacesSetting` (`On`, `Off`, `Unknown`); `toString()` senza valori.
+- `core-trust`: `FACES_VERSION` (4), `DocType.FACES_HEAD` (9, sigillata solo alla 4), `SegmentClass.FACES/CLUSTER/PEOPLE` (18–20, rifiutate
+  nelle altre teste e in `IndexSegments`; `RESERVED_WIRE` resta `faces`), tetti dei volti in `TrustLimits` (gli stessi numeri del formato
+  §7, confrontati da `IndexSegmentTypesTest`), percorsi `NasLayout.faces*` (generazione, dispositivo, testa, segmenti, prenotazioni sotto la
+  generazione, risorse di lavoro e del custode).
+- `core-ai`: `contract/Faces.kt` (`FaceImage`, `DetectedFace`, `AlignedFace`, `FaceDetector`, `FaceEmbedder`, `FaceAlignment`,
+  `FaceQualityRule`, `FaceEngines`, `FaceEngineLimits`, `BufferKeepers` con `AiComputeParts.keepers = NONE`), `noop/FaceNullObjects.kt`,
+  `testing/SyntheticFaces.kt` (identità sintetiche con gemelli e deriva), `testing/FakeFaceEngines.kt`, `testing/FaceEnginesContract.kt`.
+- `core-models`: `ModelRole.FACE_DETECT`, `FACE_EMBED`, `ModelFeature.FACES` (le voci del catalogo e `needed` sono di P1); `feature-search`:
+  i due rami minimi che gli `when` esaustivi chiedono (riga dei modelli dei volti, chip "Persona") e le stringhe in file propri.
+- `core-personal`: `PersonalFields.SETTING_FACES`, `FacesSettingCodec` (`1|on|G|v`, `1|off|G`, forma sconosciuta = `Unknown`),
+  `PrePublishHook` e `PrePublish`, `PersonalHeadsView` (`HeadValue`), null-object e fake; prova end-to-end che `PERSON` non si pubblica mai.
+- `core-security`: `faces/FacesKeys.kt` (`FacesKeys`, `FacesDataKey`, `FacesKeyAliases` `mcg-faces-<G>`), `NoFacesKeys`, `FakeFacesKeys`
+  (AES-GCM vero, perdita e guasti), `FacesKeysContract`.
+- `core-nasops`: `contract/FacesErase.kt` (`FacesNasEraser`, `FacesEraseFacts`, motivi e arresti, `FacesEraseLimits`), `NoFacesNasEraser`,
+  `InMemoryFacesNasEraser` con la suite `FacesNasEraserContract`.
+- `core-search`: `SearchChip.Person`, `PeopleDictionary`, `PeopleLookup`, `PersonOption`, `ChipAlternative`; `core-albums`:
+  `SmartRules.people` (`PeopleRule`, `PeopleClass`), `PeopleMembership`; `feature-viewer`: `ViewerPeople` (porta, `ViewerFaceChip`,
+  azioni), `ViewerServices.people = null`; tutti con null-object e fake.
+- `core-common`: `FeatureFlags.facesSyncTestSharesOnly` (costante accesa in release e in debug) e `facesSyncMayUse(share)`, regole R8 in
+  `consumer-rules.pro`, `DiagSection.PEOPLE`; `feature-diagnostics`: la riga della sezione e `PEOPLE_STATE`.
+
+**Adeguamento alle risposte del §11**
+- **Q1 (a), modelli dentro l'APK**: solo ruoli e funzione nel catalogo (nessuna sorgente HTTPS per i volti); asset, impronte e controllo
+  nell'APK (D39) sono di P1. LiteRT resta in `core-ai` (fra le classi dei volti solo `FaceLiteRtSessions.kt`) e `tools/check.ps1` lo
+  controlla anche nel bytecode.
+- **Q2 (b), solo chi ha un nome**: `PeopleList` ha `named`, `unnamed` e `othersCount`; `People.others()` dà "Altri volti";
+  `InMemoryPeople(namedOnly = true)` di default (con `false` la (a), dietro un'opzione come chiede P9); `PeopleSectionState.Ready` mostra solo
+  le persone con un nome e conta gli altri; `ReviewPurpose.OTHERS`; la suite lo prova in tutti e due i modi.
+- **Q3 (a), nessuna traccia per la famiglia**: nessun campo nuovo nel registro, nello stato del dispositivo o nell'area comune; la voce
+  `faces` sta nei dati personali (area privata); `PeopleSettingsState` elenca solo i dispositivi dell'account; nessuna stringa nella pagina
+  Famiglia.
+- **Q4, misura più avanti**: le soglie di `GroupingParams` sono quelle provvisorie del progetto (dichiarate, L97); P11 consegna lo strumento;
+  niente nella chiusura del codice dipende dalla misura.
+- **Q5 (a), recinzione fino a fine fase**: D34 accesa anche in release (flag, R8, passo di `check.ps1`, test d'architettura); i contratti la
+  portano dentro (`FacesWriteBlock.TEST_SHARES_ONLY`, `FacesLease.Blocked`, `FacesEraseStop.TEST_SHARES_ONLY`,
+  `PeopleSectionState.LocalOnly`, `ActivationRequirements.localOnly`).
+
+**Contratti: scostamenti dalle firme indicative del §1.2** (i pacchetti dopo partono da quelle vere)
+- I tipi puri condivisi (`PersonId`, `FaceGeneration`, `FaceLocator`, `FaceRef`, `FacesSetting`, `PeopleMode`, `FaceTier`...) stanno in
+  **`core-model`**, non in `core-trust`: cosi' `core-search`, `core-albums`, `core-personal` e `feature-people` li usano senza vedere
+  `core-trust` o `core-faces`. Per la stessa ragione `core-security` dipende da `core-model` (`api`).
+- `FacesRemote` è una porta **a byte**, ristretta alla cartella del proprio dispositivo (si scrive solo con `publishSegment` e
+  `publishHead`, la firma non permette altro): `contract/` non vede `NasFileSystem`; la porta vera sta in `sync/` (P3) e passa
+  `FacesRemoteContract`.
+- **`FacesArchive`** (non nel §1.2): l'archivio di una generazione come contratto, con `InMemoryFacesArchive` e la suite, cosi' P3, P4, P5,
+  P8 e P9 lavorano in parallelo a P6. L'impronta del corpo (`FaceBody.digest`, le prime 8 byte dello SHA-256 del corpo codificato) la porta
+  chi produce il corpo (il codec di P3); i fake ne usano una deterministica qualunque.
+- **`GroupingEngine`** puro (`incremental`, `provisional`, `nightly`, `recluster` sopra `GroupingInput` e `PersonIdSource`) accanto a
+  `FaceGrouping` (il servizio con il custode); l'ordine dei passi del riferimento è scritto in `ReferenceGrouping`.
+- `People.answer` risponde `EditOutcome`; `ActivateOutcome` ha anche `StaleConsent`, `NeedsUpdate`, `Unavailable`; `PersonalHeadsView`
+  risponde `HeadValue` (voce e ora della testa); `FacesNasEraser` ha anche `verify` e la porta `FacesEraseFacts` (generazione corrente,
+  dispositivi revocati o persi dal registro accettato).
+- `PeopleRecord.winner` non sa ordinare due voci **da datare**: sono entrambe di questo dispositivo e la nuova **sostituisce** la vecchia
+  (`InMemoryPeople` lo fa, scritto nel contratto; P9 deve fare lo stesso).
+- `QueryParser.parse` ha un quarto parametro con il dizionario delle persone (predefinito vuoto); `ChipMatching` per `Person` risponde
+  `false` finché P10 non lega `PeopleLookup`.
+- `feature-people` aggiunge `PersonPageState.Loading`, `FacesActivationState.Failed`, `EraseSheetState.Expired`, `PeopleSwitchShown` (un
+  riassunto per Impostazioni al posto di `FacesState`, che porta la generazione) e la porta `PeopleCrops` (ritagli solo in memoria).
+
+**Esecutori di riferimento e fake fedeli** (in `testing/`, src/main: mai nella release, lo controlla `tools/check.ps1`)
+- `ReferenceGrouping` (con `GroupingSteps` e `GroupingMath`: esemplari, somiglianza come media dei 3 migliori, legame medio, assegnazione
+  ottima di Hungarian per il ricalcolo) e `GroupingStories` (storie sintetiche con gemelli, volti deboli, fotogrammi, purezza e copertura).
+- `InMemoryPeople` (persone e indice sopra un'istantanea, i volti e le voci `people`, con la visibilità finta della Libreria), `PeopleOverlay`.
+- `InMemoryFacesRemote` sopra `InMemoryFacesArea` (nomi senza maiuscole come Samba, spazzatura, guasti, registro delle scritture),
+  `InMemoryFacesArchive`, `FakeFacesSwitch`, `FakeFacesEraser`, `FakeFacesClock`, `InMemoryFacesLocalStore`, `FakeFacesRequirements`,
+  `FakeFacesCatalog`, `FakeSmartAlbumsPeople`, `FakeSearchHistoryPurge`, `FailingFacesPorts` (falliscono se chiamati, §4.3).
+- Negli altri moduli: `FakeFaceEngines` (scene codificate nei pixel, guasti, concorrenza), `FakeFacesKeys`, `InMemoryFacesNasEraser`,
+  `FakePeopleLookup`, `FakePeopleMembership`, `FakeViewerPeople`, `FakePersonalHeadsView`, `RecordingPrePublishHook`.
+
+**Suite di contratto** (le implementazioni vere le estendono): `GroupingContract` (9 prove: purezza ≥ 99% e copertura ≥ 60% su quattro
+storie, determinismo, mai due volti della stessa foto nella stessa persona, nascite solo con 3 volti CORE di 2 foto, id stabili aggiungendo
+volti, correzioni rispettate a ogni passo, fusioni prudenti e proposte, assegnazione provvisoria, ricalcolo che eredita ≥ 95% dei volti),
+`PeopleContract` (9 prove: Q2 (a) e (b), unione con due nomi, divisione, "È", "Non è", Ignora, Nascondi e Dimentica, nascosti mai, proposte,
+indice e volti di un media), `FacesRemoteContract` (5: solo sotto `faces/<G>/<io>/` e senza sovrascrivere, niente nell'area comune, elenchi
+e letture con i tetti, guasti come esiti, proprietà su 300 operazioni a caso), `FacesArchiveContract` (7), `FaceEnginesContract`,
+`FacesKeysContract`, `FacesNasEraserContract`. Tutti gli esecutori di riferimento le passano (`core-faces`: 42 prove in 8 classi;
+`feature-people`: 7).
+
+**Cosa trovano pronto i pacchetti P1–P13, e cosa devono collegare**
+- **P1**: ruoli `FACE_DETECT`, `FACE_EMBED` e `ModelFeature.FACES`; la riga dei modelli in Cerca. Da fare: voci del catalogo con impronte,
+  `needed`, asset con licenze, il controllo degli asset nell'APK in `tools/check.ps1` (D39).
+- **P2**: `contract/Faces.kt`, `NoFaceEnginesFactory`, `FakeFaceEngines` e `FaceEnginesContract` (da estendere con i motori veri),
+  identità sintetiche; LiteRT ammesso solo in `core-ai/.../faces/FaceLiteRtSessions.kt` (sorgenti e bytecode). Da fare: motori,
+  `ModelInputs.forFaces`.
+- **P3**: tipi, versione, classi, tetti e percorsi in `core-trust`; `FacesRemote` con la suite; `FacesPublisher`, `FacesSync`,
+  `FacesWriteGate`, `FacesPublishRules`; `FaceBody.winner`, `PeopleRecord.winner`/`merge`; `FacesArchive`. Da fare: il codec `FacesDocs`
+  (testa, corpi, voci), la porta vera in `sync/` sopra `NasFileSystem` (deve passare `FacesRemoteContract`), pubblicatore, replica,
+  `FacesOwnFiles`, la radice delle prenotazioni in `Leases.kt`.
+- **P4**: `FacesComputeRun`, `FacesScope`, `FacesRunResult`, `FacesStop`, `FacesStatus`; porte `FaceInputs`, `FacesCatalog`,
+  `FacesLeases`, `FacesRunControl`, `FacesClock`; `BufferKeepers` in `AiComputeParts` (default `NONE`). Da fare: `compute/` e la chiamata
+  a `BufferKeepers` dentro `ComputeSession.pruneFinished`.
+- **P5**: `GroupingEngine`, `ReferenceGrouping`, `GroupingContract`, `GroupingParams`, `FaceGrouping`, `HolderState`. Da fare: il motore vero
+  in `grouping/` che passa la suite, custode, istantanee e riallineamento.
+- **P6**: `FacesArchive` con la suite, `FacesLocalStore`, `FacesKeys` con la suite. Da fare: `FacesDatabase` v1, `store/` cifrato che passa
+  `FacesArchiveContract`, `FacesKeyStore` che passa `FacesKeysContract`, il §15 di `docs/modello-dati.md`.
+- **P7**: `FacesState`, `FacesSwitch`, `FacesActivationConsent`, `ActivateOutcome`, `FacesSettingCodec`, `FakeFacesSwitch`, gli stati
+  dell'attivazione, dell'avviso e di Impostazioni con gli esempi. Da fare: `switch/`, la pagina in `feature-people/.../activation/`
+  (l'unico posto che costruisce il consenso), la voce in `feature-settings`.
+- **P8**: `FacesEraser`, `FacesEraseConfirmation` (valida 10 minuti di orologio monotono), passi e stato, `FacesEraseOps`,
+  `SmartAlbumsPeople`, `SearchHistoryPurge`; in `core-nasops` `FacesNasEraser` con la suite; in `core-personal` `PrePublishHook` e
+  `PersonalHeadsView`; `EraseSheetState`. Da fare: `erase/`, l'eraser vero in `core-nasops/.../faces/` che passa la suite, il gancio in
+  `NasPersonalSync`, il foglio in `feature-people/.../erase/` (l'unico posto che costruisce la conferma).
+- **P9**: `People`, `PeopleIndex`, `InMemoryPeople`, `PeopleContract` con `PeopleWorld`, `PeopleEdit`, `PeopleState`; gli stati delle
+  schermate con gli esempi; `ViewerPeople`. Da fare: `people/`, le schermate, la riga "Persone" nel viewer, le righe `PEOPLE` del registro dei
+  Nascosti.
+- **P10**: `SearchChip.Person`, `PeopleDictionary`, `PeopleLookup`; `SmartRules.people`, `PeopleRule`, `PeopleMembership`; tutti con
+  null-object e fake. Da fare: regole dell'analizzatore, candidati, chip, regola nel motore smart, `smart:people`.
+- **P11**: soglie provvisorie in `GroupingParams`, storie sintetiche con purezza e copertura. **P12**: esecutori di riferimento, suite e
+  `FailingFacesPorts` per i banchi. **P13**: null-object di ogni porta (i default finché non lega i pezzi veri), `DiagSection.PEOPLE`, i
+  codici di `FacesDiag`, `FeatureFlags.facesSyncMayUse` per `FacesWriteGate` (il passo D34 di `check.ps1` da estendere col cancello),
+  `FacesKeys.destroyAll` per l'azzeramento, `ViewerServices.people`.
+
+**Test d'architettura** (`Phase8ArchitectureTest`, 11 prove) **e la prova che falliscono**, reintroducendo le violazioni nel repository e
+togliendole subito dopo (cinque giri, `:core-common:testDebugUnitTest --tests "*ArchitectureTest"`; il quinto sui moduli):
+1. *Giro A*: un file in `core-faces/.../compute/` che nomina `core.nasops`, `NasFileSystem` e `PersonalKind.PERSON` →
+   `coreFacesNonVedeNasopsBackupNasRicercaAlbumNeLaRete`, `nasFileSystemSoloInSync`, `ilTipoRiservatoDellePersoneNonSiScriveMai`; un file
+   in `core-ai/.../faces/` che importa LiteRT → `liteRtFraIVoltiSoloNelleSessioni` (e `mlKitSoloNelPacchettoOcrELiteRtSoloNelPacchettoCutout`
+   di Phase6); `feature-people` che dipende da `core-ai` → `featurePeopleECiecaAlNasAiMotoriEAlCodiceInternoDeiVolti`,
+   `iModuliDellaFase8RispettanoIlGrafoELeRegole` (e la regola dei dipendenti di core-ai di Phase6); un `FacesActivationConsent` costruito
+   in `feature-people/.../contract/` → `leDueConfermeSiCostruisconoSoloNelLoroFile`. Rosse 9 prove, nessun'altra.
+2. *Giro B*: `core.search` nominato → regola 1; LiteRT importato in `core-faces` → `liteRtFraIVoltiSoloNelleSessioni` (e due prove di
+   Phase6); `feature-people` che dipende da `core-trust` → regole 6 e 9; un `FacesEraseConfirmation` costruito in `core-faces/.../noop/` →
+   regola 7; `core.database.faces` nominato in `core-faces/.../people/` → `databaseEChiaveSoloDaStoreEdErase`.
+3. *Giro C*: `core.albums` nominato → regola 1; `core.ai.runtime` nominato in produzione → `diCoreAiECoreModelsSoloIContratti`;
+   `core.faces.sync` nominato da `feature-people` → regola 6 (per nome); `core-search` che dipende da `core-faces` → regola 9 (e Phase6);
+   il passo D34 tolto da `tools/check.ps1` → `laRecinzioneDeiVoltiStaNellaReleaseELiteRtNelBytecode`.
+4. *Giro D*: `java.net` nominato → regola 1; `core.security.faces` nominato in `core-faces/.../grouping/` → regola 3; il passo LiteRT tolto da
+   `tools/check.ps1` → regola 10.
+5. *Giro E* (moduli): la guardia `require(!key.kind.reserved)` tolta da `LedgerPersonalStore.set` → rosso
+   `Phase8FacesContractTest.unaVoceRiservataNonSiPubblicaMai` di `core-personal`; il controllo dell'area comune tolto da
+   `InMemoryFacesRemote` → rosso `InMemoryFacesRemoteContractTest.nellAreaComuneNiente` ("Ok(CREATED)" al posto di `NOT_ALLOWED`).
+Dopo ogni giro le modifiche sono state tolte e i test sono tornati verdi. La parte "nessun altro modulo raggiunge `core-faces`" della regola
+9 oggi non può fallire da sola (chi la raggiunge dipende per forza da `core-faces` o da `feature-people`, elenchi chiusi): resta come guardia
+se gli elenchi si allargano. Il passo LiteRT nel bytecode è provato dal controllo positivo del check (le chiamate del ritaglio); una
+violazione nel bytecode richiederebbe una release costruita apposta.
+
+**`tools/check.ps1 -NoDaemon`**: **verde** (27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, dopo i cinque giri e con i documenti): assembleDebug, assembleRelease, galleryTest e galleryLint in 40 minuti; test eseguiti in ogni modulo, `core-faces` e `feature-people` compresi; nessuna classe `testing` nel dex di release; **D34 nel dex e in mapping.txt**; **LiteRT nel bytecode: 24 chiamate nostre, tutte da `core/ai/`** (le sessioni del ritaglio, il controllo positivo); gli altri passi come prima. Solo SKIP il banco su dispositivo (-Bench).
+
+**Modifiche ai contratti che i pacchetti dopo potrebbero chiedere** (le scoperte scrivendo fake ed esecutori di riferimento)
+- P3/P4: `FacesItem` non porta timbro e `qh1` per la regola "M3 dei volti" (voci solo per media con timbro fresco): se serve, un campo in
+  più o una domanda a `FacesCatalog`.
+- P3: la forma esatta dell'impronta del corpo nei riferimenti (`FaceRef.bodyDigest` = prime 8 byte big endian dello SHA-256 del corpo
+  codificato) va confermata dal codec.
+- P5: `GroupingInput` potrebbe dover portare l'istantanea letta dal NAS separata da quella locale (riallineamento di due custodi).
+- P8: `NasEraseCheck` dice solo "c'è ancora la generazione / la cartella": se la pagina vuole il dettaglio per dispositivo, va allargato.
+- P9: `PeopleIndex.contentWith` risponde per chiave di contenuto; se la ricerca vuole le celle direttamente, lo fa la porta `PeopleLookup`
+  legata da :app (non `core-faces`).
+
+**Punti aperti**
+- **Unione con `main`**: qui L94–L103 seguono L87 e C37–C41 seguono C32 in `docs/sicurezza.md`; in `main` ci sono anche L88–L93 e C33–C36:
+  all'integrazione si tengono tutte, in ordine di numero.
+- Soglie del raggruppamento provvisorie fino alla misura sui dati veri (Q4, L97).
+- Il controllo dei modelli nell'APK (D39) lo aggiunge P1 a `tools/check.ps1`; P0 ha aggiunto D34 e LiteRT nel bytecode.
+- `feature-search` toccata al minimo (due rami di `when` e le stringhe) perché le enum nuove compilassero: il chip vero è di P10.

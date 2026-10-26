@@ -96,9 +96,9 @@ qualcosa di non verificato) o `LostReports.find` valido nell'area privata dell'a
 | (0) `MARKED` | segno nel diario (`FileWipeJournal`, `noBackupFilesDir`) | si va avanti lo stesso |
 | (1) `DEVICE_KEY_DESTROYED` | `KeyProvider.destroyDeviceKey` (poi si verifica che non ci sia piu') | ci si ferma: **nessun dato toccato** |
 | (2) `FAMILY_KEY_DESTROYED` | `FamilyKeyVault.destroy` (no-op se non admin) | ci si ferma |
-| (3) `CREDENTIALS_WIPED` | `CredentialWiper` | ci si ferma |
+| (3) `CREDENTIALS_WIPED` | `CredentialWiper`; dalla Fase 8 (`docs/fase8-progetto.md` D14) anche le chiavi dei volti `mcg-faces-*` del Keystore (`FacesKeys.destroyAll`, legato da P13): distrutte prima dei dati, rendono illeggibili i resti del database dei volti | ci si ferma |
 | (4) `SESSIONS_CLOSED` | `NasSessionManager.invalidate(WIPE)` | ci si ferma |
-| (5) `LOCAL_DATA_ERASED` | stato fidato, richieste viste, poi `LocalDataEraser` | ci si ferma |
+| (5) `LOCAL_DATA_ERASED` | stato fidato, richieste viste, poi `LocalDataEraser`; dalla Fase 8 anche i database dei volti `faces-<G>.db`, i modelli dei volti estratti e il file dell'esclusione `faces-local` (D14, D15) | ci si ferma |
 | (6) `WORK_CANCELLED` | `WorkCanceller` | ci si ferma |
 | (7) `DONE` | ora di fine nel diario → `SetupState.Wiped(at)` | — |
 

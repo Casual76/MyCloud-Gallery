@@ -91,6 +91,14 @@ testo (OCR) in background e lo scaricamento dei modelli girano tutti dentro `AI_
 * **Senza regole**: la ricerca, il testo dal vivo, il ritaglio e la lettura del testo al volo (in primo piano, su un tocco, tutto
   locale); le teste `ai` si sincronizzano dentro `INDEX_SYNC` (leggera).
 
+**Calcolo dei volti (Fase 8, `docs/fase8-progetto.md` D16, D17; regole di P4).** Nessuna attivita' nuova: il calcolo dei volti gira
+**dentro `AI_COMPUTE`** (`FacesComputeWorker`, tappe da 8 minuti con `StagedRun`, dopo il calcolo AI della stessa notte), solo sugli
+indicizzatori dell'account con Persone attiva su quel dispositivo (dopo l'avviso, mai su un dispositivo escluso). Gli ingressi sono le
+anteprime di analisi del buffer, dell'indice o del telefono; se un'anteprima non c'e' da nessuna parte, un indicizzatore che e' anche
+Preparatore la **rifa' dall'originale del NAS** come una preparazione (solo `analysis`): e' un'attivita' **pesante** (Wi-Fi di casa,
+regole di `PREPARATION`) e il suo traffico si conta come quello della preparazione. "Analizza ora" e' `UserInitiated(AI_COMPUTE)`. Il
+raggruppamento notturno del custode e la sincronizzazione dei dati dei volti (leggera, dentro `INDEX_SYNC`) non sono attivita' nuove.
+
 ---
 
 ## 3. Preset × attività
@@ -345,6 +353,20 @@ Costanti nuove (ipotesi di partenza, da misurare in F91):
 * `tripDetectionNightly`: la rilevazione di casa, viaggi ed eventi una volta per notte (e dopo un primo backup o una prima scansione),
   obiettivo < 5 s sulla Libreria intera.
 * `similarDuplicatesWindow`: i doppioni "simili" si cercano a gruppi di 10 minuti nello stesso giorno, solo media con vettore o firma.
+
+### Persone (Fase 8, `docs/fase8-progetto.md` D10, D16, D17, §2.12)
+
+Costanti nuove (ipotesi di partenza [stima], da misurare: P2 scrive `facesPerSecond`, F104 conferma):
+* `facesPerSecond`: foto analizzate al secondo dal rilevatore e dall'embedding dei volti sulla CPU (YuNet a 1024 px, SFace per volto):
+  partenza 20-30 sull'S25 (~30-50 ms a foto), 12-20 sul Tab S9. Tempo del calcolo dei volti di `N` foto: `T = N / facesPerSecond`, piu'
+  la seconda passata HQ.
+* `facesHqShare`: la parte di foto che vuole la seconda passata sull'HQ (volto sotto 40 px o almeno 5 volti), ~0,2, a ~100-200 ms l'una.
+* `faceFramesPerVideo`: fotogrammi di un video analizzati per i volti (copertina e fino a 3 del blob `frames`), 3 (`FacesComputeLimits.FRAMES_PER_VIDEO`).
+* `facesGroupingNightly`: il raggruppamento notturno del custode (assegnazione, nascite, manutenzione), obiettivo < 1 minuto per ~20.000
+  volti; il raggruppamento incrementale gira dopo ogni unita' (o ogni 50 volti non assegnati, `GroupingParams.BIRTHS_EVERY`).
+
+**Prima analisi** dell'archivio dell'utente (~15.000 foto e ~2.600 video, un indicizzatore, S25): ~25-35 minuti di calcolo, di notte in
+carica; PSS +80-150 MB col calcolo in corso. Le anteprime che mancano e vanno rifatte dall'originale costano come una preparazione.
 
 **Attivita' pesanti** (Wi-Fi di casa, come il backup, F5-D9): gli **spostamenti in condivisione** (`ShareWorker`: copia lato server e
 verifica completa nell'area comune, anche come lavoro avviato dall'utente, UIDT come le operazioni della 4B) e il **guardiano dopo una

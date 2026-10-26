@@ -231,3 +231,21 @@ Su Galaxy S25 e Galaxy Tab S9, con un set in italiano di circa 100+ immagini di 
 8. **Runtime**: ONNX Runtime contro LiteRT dopo conversione; dimensione dell'APK aggiunta (ORT, ML Kit); allineamento a 16 KB delle librerie native incluse (ML Kit bundled è dichiarato compatibile; per ONNX Runtime, LiteRT e MediaPipe non verificato).
 9. **Integrità e versioni**: download dei modelli con hash SHA-256 (E-A1, E-A2) e salvataggio dell'ID/hash del modello con ogni vettore per la reindicizzazione graduale (E-A10).
 10. **Licenza dei dati di addestramento**: prima di una pubblicazione, far leggere a chi può decidere i termini di CASIA-WebFace, VGGFace2 e MS-Celeb-1M e decidere se tenere SFace, passare ad AuraFace o addestrare/distillare un proprio modello.
+
+## Nota della Fase 8 (27/10)
+
+Le scelte di questa ricerca sono diventate decisioni in `docs/fase8-progetto.md` (P0 del 27/10):
+- **Conversione a LiteRT** (D6): i file ufficiali di YuNet e SFace sono ONNX; si convertono **una volta, sul PC**, in `.tflite` con uno
+  strumento riproducibile (`tools/models/faces/`: versioni fissate degli strumenti, impronte d'ingresso e d'uscita, test di parita' con
+  l'ONNX) e girano con `org.tensorflow.lite.Interpreter` di `litert` 2.3.0, gia' nell'app, su CPU. ONNX Runtime non entra (punto 8 qui
+  sopra: una libreria nativa piu' grande dei modelli). I modelli stanno **dentro l'APK** (risposta Q1 (a)), come MagicTouch.
+- **YuNet e SFace** (D7): YuNet `2023mar` e `2026may` si convertono entrambi e si sceglie con una regola scritta prima di misurare
+  (richiamo dei volti sotto 48 px a parita' di falsi positivi, poi latenza; a pari merito `2023mar`), ingresso fisso 1024x1024; SFace
+  `2021dec` da fp32 a `.tflite` con pesi float16, int8 solo se il coseno con fp32 e' almeno 0,995 su 300 volti di prova e la purezza non
+  cala. Spazio `sface-2021dec-v1` (128 dimensioni, salvate in float16).
+- **Piano B** (D9), solo licenze compatibili: AuraFace-v1 (Apache-2.0, solo se serve e avvisando prima di scaricarlo), poi dlib ResNet
+  (CC0), MobileFaceNet (Apache-2.0); mai InsightFace, EdgeFace, GhostFaceNets. Il raggruppamento non e' DBSCAN puro: esemplari con
+  margine, nascite a legame medio, passata notturna (D20).
+- **Prove senza persone vere** (§5.2 del progetto): identita' sintetiche nei test JVM (`SyntheticIdentities` di `core-ai`) e, per i
+  modelli veri, circa 30 ritratti di pubblico dominio da Wikimedia Commons, scaricati da P1 fuori dal repository; la qualita' sui dati
+  veri (punti 4-7 qui sopra) si misura sul telefono dell'utente, piu' avanti e senza bloccare la fase (risposta Q4).

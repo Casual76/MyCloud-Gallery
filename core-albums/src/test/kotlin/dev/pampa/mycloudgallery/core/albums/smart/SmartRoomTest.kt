@@ -222,7 +222,8 @@ class SmartRoomTest {
       // Un viaggio, un luogo senza date: gli album veri. E due album "enormi" (un anno intero: decine di migliaia di righe da scrivere) per vedere il peggio.
       val shapes = listOf(
         Triple("un viaggio (luogo e 10 giorni)", SmartRules(trip, around(Spots.OSLO, 25), null), 2_000L),
-        Triple("un luogo senza periodo", SmartRules(null, around(Spots.OSLO, 25), null), 2_000L),
+        // Legge tutta la Libreria (anche le foto senza GPS: la regola B): 1,3-1,6 s misurati sulla JVM; la guardia e' piu' larga perche' il PC e' condiviso.
+        Triple("un luogo senza periodo", SmartRules(null, around(Spots.OSLO, 25), null), 3_000L),
         Triple("luogo e un anno intero (enorme)", SmartRules(year, around(Spots.OSLO, 25), null), 3_000L),
         Triple("solo un anno intero (enorme)", SmartRules(year, null, null), 3_000L),
       )

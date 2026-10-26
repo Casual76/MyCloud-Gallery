@@ -5166,4 +5166,4 @@ forma dei contratti, campo per campo, e l'adattatore e' una traduzione senza log
 - `visibleAmong` conta come mostrabile un membro di un gruppo non nascosto (un media e' una cosa, la cella del gruppo un'altra): i candidati escludono i membri,
   `visibleAmong` no.
 
-**`tools\check.ps1 -NoDaemon`**: @@CHECK@@
+**`tools\check.ps1 -NoDaemon`**: **verde** (26/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`): assembleDebug, assembleRelease, galleryTest e galleryLint in 27 minuti; test eseguiti in ogni modulo (core-database 249, core-albums 52, core-common 92); "D30 nella release" OK; nessuna classe `testing` nel dex di release; benchmark su dispositivo saltato (senza `-Bench`). Una prima corsa ha trovato un solo rosso, "nessun resto degli strumenti di debug nel dex di release": la radice di scrittura di prova di D13 era finita nel codice di `OriginDevice` e della migrazione; tolta (P1-6), la seconda corsa e' verde.

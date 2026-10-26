@@ -86,6 +86,11 @@ internal object HiddenWorldBuilder {
   private const val STORE = "store-v1"
   private const val T0 = 1_780_000_000_000L
 
+  /** Gli `_ID` del MediaStore e gli identificativi di file delle seconde copie (P8): lontani da quelli delle prime, per ricavare l'indice. */
+  const val PHONE_ORIGINAL_BASE = 10_000L
+  const val PHONE_COPY_BASE = 30_000L
+  const val NAS_COPY_BASE = 5_000L
+
   suspend fun build(context: Context, spec: WorldSpec): BuiltWorld {
     val me = AccountId.of(ME)
     val db = GalleryDatabase.build(context, name = null)
@@ -104,8 +109,13 @@ internal object HiddenWorldBuilder {
       val fingerprint = Fingerprint.ofContent(bytes)
       var id: MediaId? = null
       if (m.onPhone) {
-        val where = Location.Phone(VOLUME, "DCIM/Camera/", "IMG_${spec.seed}_${m.index}.jpg", 10_000L + m.index, STORE)
+        val where = Location.Phone(VOLUME, "DCIM/Camera/", "IMG_${spec.seed}_${m.index}.jpg", PHONE_ORIGINAL_BASE + m.index, STORE)
         id = catalog.record(Observation(where, FileStamp(fingerprint.size, T0 + m.index, 7), fingerprint, m.kind, m.source, takenAt), MediaCatalog.WhenUndecided.KEEP_SEPARATE).mediaId
+        // Una seconda copia dalla stessa parte (P8): gli stessi byte in `Download/`, con un'altra riga del MediaStore.
+        if (m.index in spec.sameSideCopies) {
+          val copy = Location.Phone(VOLUME, "Download/", "IMG_${spec.seed}_${m.index} (1).jpg", PHONE_COPY_BASE + m.index, STORE)
+          catalog.record(Observation(copy, FileStamp(fingerprint.size, T0 + 5_000 + m.index, 7), fingerprint, m.kind, m.source, takenAt), MediaCatalog.WhenUndecided.KEEP_SEPARATE)
+        }
       }
       if (m.onNas) {
         val share = if (m.where == Where.NAS_COMMON) COMMON_SHARE else PRIVATE_SHARE
@@ -114,6 +124,11 @@ internal object HiddenWorldBuilder {
         val recorded = catalog.record(Observation(where, FileStamp(fingerprint.size, T0 + m.index), fingerprint, m.kind, m.source, takenAt), MediaCatalog.WhenUndecided.KEEP_SEPARATE)
         id = checkNotNull(recorded.mediaId) { "il media ${m.index} non e' entrato nel catalogo" }
         nas[m.index] = NasPlace(share, path)
+        // Una seconda copia dalla stessa parte (P8): gli stessi byte nella cartella di backup di un dispositivo della stessa share.
+        if (m.index in spec.sameSideCopies) {
+          val copy = Location.Nas(me, share, NasPath.of("Backup/Pixel 9/${m.day.year}/IMG_${spec.seed}_${m.index}.jpg"), fileId = NAS_COPY_BASE + m.index)
+          catalog.record(Observation(copy, FileStamp(fingerprint.size, T0 + 5_000 + m.index), fingerprint, m.kind, m.source, takenAt), MediaCatalog.WhenUndecided.KEEP_SEPARATE)
+        }
       }
       val media = checkNotNull(id) { "il media ${m.index} non ha nessun posto" }
       catalog.updateMetadata(

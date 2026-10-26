@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
 import java.util.concurrent.CopyOnWriteArrayList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -85,6 +86,10 @@ class SharedAlbumReplica(
   /** La proiezione e' in memoria: dopo la morte del processo il primo ricalcolo la ricostruisce tutta dallo store. */
   private var loaded = false
 
+  /** Album che non si sono potuti ricalcolare (errori isolati, per la Diagnostica). */
+  @Volatile var failures: Int = 0
+    private set
+
   /**
    * Ricalcola [albums] (null = tutti: replica, viste attuali e album con voci mie in coda). Da chiamare dopo un giro della replica, dopo una
    * modifica accodata e dopo un cambiamento del catalogo che tocca l'area comune (una scansione con novita': l'attestazione cambia). Il primo
@@ -100,11 +105,18 @@ class SharedAlbumReplica(
       val nextOrphans = orphanState.value.toMutableMap()
       val nextUnresolved = unresolvedState.value.toMutableSet()
       for (id in ids) {
-        val view = compute(id, registry)
-        if (view == null) next.remove(id) else next[id] = view
-        val orphan = if (view == null) orphan(id, registry) else null
-        if (orphan == null) nextOrphans.remove(id) else nextOrphans[id] = orphan
-        if (view == null && orphan == null && store.contributions(id).any { !it.barred }) nextUnresolved += id else nextUnresolved -= id
+        // Un album che non si riesce a ricalcolare tiene la vista di prima e non ferma gli altri (isolamento, come la replica).
+        try {
+          val view = compute(id, registry)
+          val orphan = if (view == null) orphan(id, registry) else null
+          if (view == null) next.remove(id) else next[id] = view
+          if (orphan == null) nextOrphans.remove(id) else nextOrphans[id] = orphan
+          if (view == null && orphan == null && store.contributions(id).any { !it.barred }) nextUnresolved += id else nextUnresolved -= id
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          failures++
+        }
       }
       state.value = next
       orphanState.value = nextOrphans

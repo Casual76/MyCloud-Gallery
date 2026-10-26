@@ -11,12 +11,14 @@ import dev.pampa.mycloudgallery.core.albums.contract.OthersAfterClose
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceAlternative
 import dev.pampa.mycloudgallery.core.albums.contract.ProposalNote
 import dev.pampa.mycloudgallery.core.albums.contract.ShareBlock
+import dev.pampa.mycloudgallery.core.albums.contract.ShareExclusion
 import dev.pampa.mycloudgallery.core.albums.contract.ShareOpId
 import dev.pampa.mycloudgallery.core.albums.contract.ShareOpState
 import dev.pampa.mycloudgallery.core.albums.contract.SharePlan
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
 import dev.pampa.mycloudgallery.core.albums.contract.SmartPreview
 import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
+import dev.pampa.mycloudgallery.core.albums.contract.TitleProblem
 import dev.pampa.mycloudgallery.core.albums.contract.TripProposal
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.model.AccountId
@@ -71,6 +73,9 @@ sealed interface AlbumBanner {
 
   /** Una condivisione in corso o ferma (§1.5 `ShareProgress`). */
   data class Sharing(val progress: ShareOpState) : AlbumBanner
+
+  /** D11: "Sei il nuovo responsabile di questo album" (una volta). */
+  data object Inherited : AlbumBanner
 }
 
 /**
@@ -141,7 +146,13 @@ sealed interface SuggestionsState {
  * dichiarazione dei permessi. Si mostra con `GalleryShareSheetContent`. Il tocco di conferma passa da `ShareConfirmationSheet`.
  */
 sealed interface ShareSheetState {
-  data class Plan(val plan: SharePlan, val hiddenChoice: HiddenChoice, val level: ShareLevel?) : ShareSheetState {
+  data class Plan(
+    val plan: SharePlan,
+    val hiddenChoice: HiddenChoice,
+    val level: ShareLevel?,
+    /** Perche' il foglio e' stato rifatto sotto gli occhi dell'utente (P10): il catalogo e' cambiato, o il foglio era scaduto. */
+    val notice: ShareSheetNotice? = null,
+  ) : ShareSheetState {
     /** E-SH9: con «Condividi anche i nascosti» l'avviso "diventeranno visibili ai familiari". */
     val warnHiddenBecomeVisible: Boolean get() = plan.hiddenIncluded > 0
   }
@@ -149,9 +160,27 @@ sealed interface ShareSheetState {
   /** Non si puo' condividere adesso; con [ShareBlock.TEST_SHARES_ONLY] il foglio dice "Arriva dopo le prove" (D30). */
   data class Blocked(val reason: ShareBlock) : ShareSheetState
 
+  /** Nessun media si puo' condividere: [excluded] dice perche' (le aree di altri, nascosti lasciati fuori, gia' nell'album...). */
+  data class NothingToShare(val excluded: Map<ShareExclusion, Int>) : ShareSheetState
+
+  /** La tabella dei permessi non lo permette a me (il livello e' cambiato mentre il foglio era aperto, E-SH13). */
+  data class Refused(val op: AlbumOp) : ShareSheetState
+
+  /** Il titolo di un album nuovo non va bene. */
+  data class InvalidTitle(val problem: TitleProblem) : ShareSheetState
+
   data object Confirming : ShareSheetState
 
   data class Started(val op: ShareOpId) : ShareSheetState
+}
+
+/** Perche' il piano che l'utente vede non e' quello di prima: il foglio lo dice una volta, sopra i conteggi. */
+enum class ShareSheetNotice {
+  /** Il catalogo e' cambiato dopo il piano (media spostati, nascosti, spariti): il foglio e' nuovo, rileggi i conteggi. */
+  CHANGED,
+
+  /** Il foglio era aperto da piu' di 10 minuti: la conferma non vale piu', ecco quello nuovo. */
+  EXPIRED,
 }
 
 /**
@@ -193,8 +222,12 @@ interface AlbumActions {
 
   fun openAlbum(id: AlbumId)
 
-  /** Il selettore dei media per "Aggiungi foto" o le foto d'esempio (mai i nascosti, D22). */
-  fun pickMedia(forAlbum: AlbumId)
+  /**
+   * Il selettore dei media per "Aggiungi foto" (a un album che c'e': [forAlbum]) o per le foto d'esempio di un album smart (anche di uno
+   * ancora da creare: [forAlbum] null). Al piu' [max] media; mai i nascosti (D22). Chiama [onPicked] con i media scelti, solo se l'utente ne
+   * ha scelto (P10: prima la firma era `pickMedia(forAlbum)` senza risposta, e le schermate non avrebbero saputo cosa e' stato scelto).
+   */
+  fun pickMedia(forAlbum: AlbumId?, max: Int, onPicked: (List<MediaId>) -> Unit)
 
   fun openDiagnostics()
 }

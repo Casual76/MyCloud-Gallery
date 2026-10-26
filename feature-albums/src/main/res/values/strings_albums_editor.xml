@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7, P10: l'editor delle regole degli album smart (D13-D16) e la pagina "Suggerite" / "Da condividere". -->
+
+  <string name="editor_title_create">Regole del nuovo album</string>
+  <string name="editor_title_edit">Regole dell’album</string>
+  <string name="editor_interpreting">Leggo il nome «%1$s» e preparo le regole…</string>
+  <string name="editor_intro">Il nome è diventato regole. Guardale e cambiale: l’album si riempie da solo con le foto che le rispettano.</string>
+  <string name="editor_save_create">Crea l’album</string>
+  <string name="editor_save_edit">Salva le regole</string>
+  <string name="editor_saving">Salvo…</string>
+
+  <!-- Periodo -->
+  <string name="editor_period">Periodo</string>
+  <string name="editor_period_none">Qualunque data</string>
+  <string name="editor_period_none_detail">Nessun periodo: conta solo il resto.</string>
+  <string name="editor_period_range">%1$s – %2$s</string>
+  <string name="editor_period_day">%1$s</string>
+  <plurals name="editor_period_days">
+    <item quantity="one">%1$d giorno</item>
+    <item quantity="other">%1$d giorni</item>
+  </plurals>
+  <string name="editor_period_every_year">Ogni anno, dal %1$s al %2$s</string>
+  <string name="editor_period_days_set">Alcuni giorni scelti dal nome</string>
+  <string name="editor_period_series_header">Più viaggi nel luogo: tieni quelli che vuoi</string>
+  <string name="editor_period_series_note">Le serie di giorni sono quelle in cui hai foto del luogo, con un giorno di margine.</string>
+  <string name="editor_period_edit">Cambia le date</string>
+  <string name="editor_period_remove">Togli il periodo</string>
+  <string name="editor_period_from">Dal</string>
+  <string name="editor_period_to">Al</string>
+  <string name="editor_period_format">gg/mm/aaaa</string>
+  <string name="editor_period_invalid">Scrivi le date come gg/mm/aaaa, e la prima non dopo la seconda.</string>
+  <string name="editor_period_apply">Usa queste date</string>
+  <string name="editor_period_cancel">Annulla</string>
+
+  <!-- Luogo -->
+  <string name="editor_place">Luogo</string>
+  <string name="editor_place_none">Qualunque luogo</string>
+  <string name="editor_place_none_detail">Nessun luogo: conta solo il resto.</string>
+  <string name="editor_place_around">%1$s, entro %2$d km</string>
+  <string name="editor_place_region">%1$s, tutta la regione</string>
+  <string name="editor_place_country">%1$s, tutto il paese</string>
+  <string name="editor_place_radius">Raggio</string>
+  <string name="editor_place_radius_value">%1$d chilometri</string>
+  <string name="editor_place_alternatives">Più luoghi con questo nome</string>
+  <plurals name="editor_place_alt_count">
+    <item quantity="one">%1$d foto nel luogo</item>
+    <item quantity="other">%1$d foto nel luogo</item>
+  </plurals>
+  <string name="editor_place_remove">Togli il luogo</string>
+
+  <!-- Descrizione e foto d'esempio -->
+  <string name="editor_text">Descrizione</string>
+  <string name="editor_text_hint">Per esempio «neve» o «tramonto»</string>
+  <string name="editor_text_no_search">La descrizione si userà quando la ricerca per contenuto sarà pronta. Le altre regole funzionano già.</string>
+  <string name="editor_examples">Foto d’esempio</string>
+  <plurals name="editor_examples_detail">
+    <item quantity="one">%1$d foto d’esempio. Cerco foto simili.</item>
+    <item quantity="other">%1$d foto d’esempio. Cerco foto simili.</item>
+  </plurals>
+  <string name="editor_examples_none">Scegli fino a 6 foto: cerco quelle che gli somigliano.</string>
+  <string name="editor_examples_add">Aggiungi foto d’esempio</string>
+  <string name="editor_example_remove">Togli la foto d’esempio</string>
+  <string name="editor_example_photo">Foto d’esempio %1$d di %2$d</string>
+
+  <!-- Sorgenti e tipi -->
+  <string name="editor_sources">Da dove prendo le foto</string>
+  <string name="editor_source_phone">Il mio telefono</string>
+  <string name="editor_source_private">La mia area privata</string>
+  <string name="editor_source_common">L’area comune</string>
+  <string name="editor_source_family">I familiari</string>
+  <string name="editor_types">Che cosa</string>
+  <string name="editor_type_photo">Foto</string>
+  <string name="editor_type_video">Video</string>
+  <string name="editor_screenshots_note">Gli screenshot e le registrazioni dello schermo restano fra le suggerite.</string>
+
+  <!-- Anteprima -->
+  <string name="editor_preview">Anteprima</string>
+  <string name="editor_preview_working">Conto le foto…</string>
+  <plurals name="editor_preview_confident">
+    <item quantity="one">%1$d foto entra da sola</item>
+    <item quantity="other">%1$d foto entrano da sole</item>
+  </plurals>
+  <plurals name="editor_preview_suggested">
+    <item quantity="one">%1$d suggerita</item>
+    <item quantity="other">%1$d suggerite</item>
+  </plurals>
+  <string name="editor_preview_none">Con queste regole non trovo foto.</string>
+  <string name="editor_preview_sample">Alcune delle foto trovate</string>
+
+  <!-- Troppo larghe -->
+  <string name="editor_broad_title">Le regole sono troppo larghe</string>
+  <string name="editor_broad_detail">L’album prenderebbe oltre 3.000 elementi o più di un quinto della Libreria. Restringi:</string>
+  <string name="editor_broad_hint_period">Accorcia il periodo</string>
+  <string name="editor_broad_hint_radius">Riduci il raggio</string>
+  <string name="editor_broad_hint_place">Aggiungi un luogo</string>
+
+  <!-- Problemi -->
+  <string name="editor_problem_title">Il nome non va bene.</string>
+  <string name="editor_problem_too_long">Le regole sono troppo lunghe per essere salvate. Accorcia la descrizione o togli qualche regola.</string>
+  <string name="editor_problem_not_allowed">Questo album non ha regole da cambiare.</string>
+  <string name="editor_problem_not_found">L’album non c’è più.</string>
+  <string name="editor_problem_blocked">Adesso non si può salvare. Riprova fra poco.</string>
+  <string name="editor_problem_unavailable">Adesso non posso creare album: l’app non è ancora pronta.</string>
+  <string name="editor_no_rules">Aggiungi almeno una regola: un periodo, un luogo o una descrizione.</string>
+  <string name="editor_back">Indietro</string>
+
+  <!-- Suggerite e Da condividere -->
+  <string name="suggestions_title">Suggerite</string>
+  <string name="suggestions_to_share_title">Da condividere</string>
+  <plurals name="suggestions_intro">
+    <item quantity="one">%1$d foto potrebbe stare in «%2$s». Non la metto io: decidi tu.</item>
+    <item quantity="other">%1$d foto potrebbero stare in «%2$s». Non le metto io: decidi tu.</item>
+  </plurals>
+  <plurals name="suggestions_to_share_intro">
+    <item quantity="one">%1$d foto nuova entrerebbe in «%2$s». Non si sposta da sola: la condividi con un tocco.</item>
+    <item quantity="other">%1$d foto nuove entrerebbero in «%2$s». Non si spostano da sole: le condividi con un tocco.</item>
+  </plurals>
+  <string name="suggestions_empty_title">Niente da decidere</string>
+  <string name="suggestions_empty_detail">Quando arrivano foto che forse ci stanno, le trovi qui.</string>
+  <string name="suggestions_to_share_empty_detail">Quando arrivano foto nuove che entrerebbero nell’album, le trovi qui.</string>
+  <string name="suggestions_select">Seleziona</string>
+  <string name="suggestions_done">Fine</string>
+  <string name="suggestions_select_all">Seleziona tutte</string>
+  <string name="suggestions_accept_all">Accetta tutte (%1$d)</string>
+  <string name="suggestions_accept_selected">Accetta (%1$d)</string>
+  <string name="suggestions_exclude_all">Escludi tutte (%1$d)</string>
+  <string name="suggestions_exclude_selected">Escludi (%1$d)</string>
+  <string name="suggestions_share_all">Condividi tutte (%1$d)</string>
+  <string name="suggestions_share_selected">Condividi (%1$d)</string>
+  <string name="suggestions_accept_note">Accettate restano nell’album per sempre.</string>
+  <string name="suggestions_exclude_note">Escluse non tornano più, nemmeno se cambi le regole.</string>
+  <string name="suggestions_selected_state">Selezionata</string>
+  <string name="suggestions_not_selected_state">Non selezionata</string>
+  <string name="suggestions_open">Apri la foto</string>
+  <string name="suggestions_toggle">Seleziona o deseleziona</string>
+</resources>

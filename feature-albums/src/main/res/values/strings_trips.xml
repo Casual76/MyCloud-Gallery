@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7, P10: Raccolte, Viaggi (D18-D20, E-AL16). -->
+
+  <string name="trips_section">Viaggi</string>
+  <string name="trips_title">Viaggi</string>
+  <string name="trips_subtitle">Viaggi ed eventi che ho trovato nelle tue foto</string>
+  <string name="trips_all">Tutte le proposte</string>
+  <string name="trips_kind_trip">Viaggio</string>
+  <string name="trips_kind_event">Evento</string>
+  <plurals name="trips_count">
+    <item quantity="one">%1$s foto e video</item>
+    <item quantity="other">%1$s foto e video</item>
+  </plurals>
+  <string name="trips_days">%1$s – %2$s</string>
+  <string name="trips_create">Crea album</string>
+  <string name="trips_dismiss">Non mi interessa</string>
+  <string name="trips_creating">Creo l’album…</string>
+  <string name="trips_show_older">Mostra più vecchi</string>
+  <string name="trips_cover">Copertina della proposta</string>
+  <string name="trips_empty_title">Nessuna proposta</string>
+  <string name="trips_empty_detail">Quando trovo giorni lontani da casa, o tante foto in poche ore, te li propongo qui. Un tocco e diventano un album.</string>
+  <string name="trips_no_gps_title">Non riesco a capire dov’è casa</string>
+  <string name="trips_no_gps_detail">Servono foto con la posizione. Senza, non posso riconoscere i viaggi: ti propongo solo gli eventi, cioè tante foto in poche ore.</string>
+  <string name="trips_no_gps_row">Viaggi ed eventi</string>
+  <string name="trips_no_gps_row_detail">Servono foto con la posizione per riconoscere i viaggi</string>
+  <string name="trips_events_header">Eventi</string>
+  <string name="trips_events_empty">Per ora nessun evento.</string>
+  <string name="trips_header_recent">Dal più recente</string>
+  <string name="trips_open_album">Apri l’album</string>
+  <string name="trips_already_album">Era già un album.</string>
+  <string name="trips_not_found">La proposta non c’è più.</string>
+  <string name="trips_back">Indietro</string>
+</resources>

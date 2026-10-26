@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7, P10: l'elenco degli album (Raccolte, Album e "Tutti gli album") e le sezioni delle Raccolte. -->
+
+  <string name="albums_section">Album</string>
+  <string name="albums_smart_section">Album smart</string>
+  <string name="albums_title">Album</string>
+  <string name="albums_all">Tutti gli album</string>
+  <string name="albums_new">Nuovo album</string>
+  <string name="albums_new_detail">Un album a mano o uno smart</string>
+  <string name="albums_badge_shared">Condiviso</string>
+  <string name="albums_row_by">%1$s · di %2$s</string>
+  <string name="albums_row_suggested">%1$s · %2$s</string>
+
+  <plurals name="albums_items">
+    <item quantity="one">%1$s elemento</item>
+    <item quantity="other">%1$s elementi</item>
+  </plurals>
+  <plurals name="albums_count">
+    <item quantity="one">%1$d album</item>
+    <item quantity="other">%1$d album</item>
+  </plurals>
+  <plurals name="albums_suggested">
+    <item quantity="one">%1$d suggerita</item>
+    <item quantity="other">%1$d suggerite</item>
+  </plurals>
+
+  <string name="albums_header_mine">I miei album e quelli condivisi</string>
+  <string name="albums_header_smart">Album smart</string>
+  <string name="albums_header_left">Album che non mostri più</string>
+  <string name="albums_left_detail">Restano ai familiari. Mostrali di nuovo quando vuoi.</string>
+  <string name="albums_left_show_again">Mostra di nuovo</string>
+
+  <string name="albums_empty_title">Nessun album</string>
+  <string name="albums_empty_detail">Raccogli foto e video in un album. Un album smart si riempie da solo: scrivi «Oslo 2026» e trovo le foto.</string>
+  <string name="albums_loading">Leggo gli album…</string>
+
+  <string name="albums_sort">Ordina gli album</string>
+  <string name="albums_sort_custom">Personalizzato</string>
+  <string name="albums_sort_recent">Aggiornati di recente</string>
+  <string name="albums_sort_name">Nome</string>
+  <string name="albums_sort_media_date">Data dei media</string>
+  <string name="albums_sort_selected_state">Ordine scelto</string>
+
+  <string name="albums_move_up">Sposta su</string>
+  <string name="albums_move_down">Sposta giù</string>
+  <string name="albums_row_position">Posizione %1$d di %2$d</string>
+  <string name="albums_row_open">Apri l’album</string>
+  <string name="albums_row_actions">Azioni dell’album</string>
+
+  <string name="albums_notice_closed">«%1$s» non è più condiviso.</string>
+  <string name="albums_notice_closed_copy">«%1$s» non è più condiviso: ne hai una copia tua.</string>
+  <string name="albums_notice_ok">OK</string>
+  <string name="albums_notice_open_copy">Apri la copia</string>
+  <string name="albums_notice_title">Album condiviso</string>
+
+  <string name="albums_create_title">Nuovo album</string>
+  <string name="albums_create_name">Nome dell’album</string>
+  <string name="albums_create_kind">Che album vuoi?</string>
+  <string name="albums_create_kind_manual">Album</string>
+  <string name="albums_create_kind_manual_detail">Scegli tu le foto e i video.</string>
+  <string name="albums_create_kind_smart">Album smart</string>
+  <string name="albums_create_kind_smart_detail">Il nome diventa regole: periodo, luogo, descrizione. Le foto entrano da sole.</string>
+  <string name="albums_create_confirm">Crea</string>
+  <string name="albums_create_next">Avanti</string>
+  <string name="albums_create_cancel">Annulla</string>
+  <string name="albums_create_unavailable">Adesso non posso creare album: l’app non è ancora pronta.</string>
+
+  <string name="albums_title_empty">Scrivi un nome per l’album.</string>
+  <string name="albums_title_too_long">Il nome è troppo lungo: al massimo 64 caratteri.</string>
+  <string name="albums_title_forbidden">Il nome ha caratteri che non posso usare.</string>
+</resources>

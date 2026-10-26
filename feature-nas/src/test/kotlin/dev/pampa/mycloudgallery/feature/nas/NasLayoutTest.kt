@@ -25,6 +25,7 @@ import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.nas.folders.FolderWhere
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersActions
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersMode
+import dev.pampa.mycloudgallery.feature.nas.folders.HiddenFiles
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersUiState
 import dev.pampa.mycloudgallery.feature.nas.folders.NasFoldersScreen
 import dev.pampa.mycloudgallery.feature.nas.operations.NasOperationsScreen
@@ -125,6 +126,7 @@ class NasLayoutTest : NasComposeBase() {
     selecting = selecting,
     selection = selection,
     mode = mode,
+    hidden = HiddenFiles.Known(emptySet()),
   )
 
   // --- Cartelle NAS ------------------------------------------------------------------------------------------------------

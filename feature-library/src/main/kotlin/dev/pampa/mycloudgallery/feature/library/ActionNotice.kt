@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.library
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.ReportProblem
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -13,7 +14,9 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridNotice
+import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
+import dev.pampa.mycloudgallery.core.model.MediaId
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.delay
 
@@ -54,7 +57,26 @@ internal sealed interface ActionNotice {
 
   /** Tutta la selezione e' solo sul NAS: da qui non si elimina dal telefono (GA-8). */
   data object DeleteNasOnly : ActionNotice
+
+  /**
+   * Fase 7 (P9, D23, E-H2): "Nascondi" e' riuscito, ma [count] elementi stanno nell'area comune o in un album condiviso e i familiari li vedono
+   * ancora: Nascosti protegge solo dentro l'app. Non e' un errore, e' una cosa che l'utente deve sapere.
+   */
+  data class FamilyStillSees(val count: Int) : ActionNotice
 }
+
+/**
+ * Dopo un "Nascondi" **riuscito**: se i familiari vedono ancora qualcuno degli [ids] (E-H2) l'avviso da mostrare, altrimenti null. La domanda e' un
+ * dato in piu' per l'utente: se non riesce a rispondere (annullamento a parte) non cambia l'esito del "Nascondi", che e' gia' scritto.
+ */
+internal suspend fun familyNoticeAfterHide(actions: LocalMediaActions, ids: Set<MediaId>): ActionNotice? =
+  try {
+    actions.familyStillSees(ids).takeIf { it > 0 }?.let(ActionNotice::FamilyStillSees)
+  } catch (e: CancellationException) {
+    throw e
+  } catch (_: Exception) {
+    ActionNotice.FamilyStillSees(ids.size)
+  }
 
 /**
  * Esegue un'azione sul catalogo e dice se e' riuscita. L'azione puo' sollevare (disco pieno, database in errore, galleria
@@ -124,9 +146,14 @@ internal fun ActionNoticeCard(notice: ActionNotice, backdrop: GlassBackdropState
       title = stringResource(R.string.notice_delete_nas_only_title)
       message = stringResource(R.string.notice_delete_nas_only_message)
     }
+    is ActionNotice.FamilyStillSees -> {
+      title = pluralStringResource(R.plurals.notice_family_sees_title, notice.count, GalleryNumbers.format(notice.count))
+      message = stringResource(R.string.notice_family_sees_message)
+    }
   }
   GalleryGridNotice(
-    icon = Icons.Rounded.ReportProblem,
+    // E-H2 non e' un errore: nascondere e' riuscito. L'icona della famiglia, non il triangolo dei guasti.
+    icon = if (notice is ActionNotice.FamilyStillSees) Icons.Rounded.Groups else Icons.Rounded.ReportProblem,
     title = title,
     message = message,
     backdrop = backdrop,

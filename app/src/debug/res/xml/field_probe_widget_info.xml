@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SOLO build debug (Fase 7, P9, D22, L65): il widget di prova dei Nascosti. Si aggiorna al massimo ogni mezz'ora (il minimo di Android) e quando si nasconde qualcosa. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/probe_widget_description"
+    android:initialLayout="@layout/field_probe_widget"
+    android:minHeight="110dp"
+    android:minWidth="250dp"
+    android:resizeMode="none"
+    android:updatePeriodMillis="1800000"
+    android:widgetCategory="home_screen" />

@@ -65,6 +65,68 @@ class CollectionsViewModelNoticeTest {
     assertThat(vm.notice.value).isEqualTo(ActionNotice.FavoriteFailed)
   }
 
+  /** Fase 7 (P9, D23, E-H2): un catalogo che scrive e sa quanti di loro i familiari vedono ancora. */
+  private class FamilyAware(private val family: suspend (Set<MediaId>) -> Int) : LocalMediaActions {
+    val hidden = mutableSetOf<MediaId>()
+
+    override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) = Unit
+
+    override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
+      if (on) hidden += ids
+    }
+
+    override suspend fun familyStillSees(ids: Set<MediaId>): Int = family(ids)
+  }
+
+  @Test
+  fun nascondereCioCheIFamiliariVedonoAncoraDiceChePartecipaSoloDentroLApp() {
+    val actions = FamilyAware { it.size }
+    val vm = viewModel(actions)
+
+    vm.hide(some)
+
+    assertThat(actions.hidden).containsExactlyElementsIn(some)
+    assertThat(vm.notice.value).isEqualTo(ActionNotice.FamilyStillSees(some.size))
+    vm.dismissNotice()
+    assertThat(vm.notice.value).isNull()
+  }
+
+  @Test
+  fun nascondereCioCheNessunoVedeNonAvvisaDeiFamiliari() {
+    val vm = viewModel(FamilyAware { 0 })
+
+    vm.hide(some)
+
+    assertThat(vm.notice.value).isNull()
+  }
+
+  /** Fallire chiusi: se non si riesce a saperlo si avvisa lo stesso (un avviso in meno lascerebbe credere che nessuno li veda). */
+  @Test
+  fun seNonSiSaSeIFamiliariLiVedonoSiAvvisaLoStesso() {
+    val vm = viewModel(FamilyAware { error("catalogo non raggiungibile") })
+
+    vm.hide(some)
+
+    assertThat(vm.notice.value).isEqualTo(ActionNotice.FamilyStillSees(some.size))
+  }
+
+  /** L'avviso dei familiari non nasconde un "Nascondi" fallito: se non e' riuscito si dice solo quello. */
+  @Test
+  fun unNascondiFallitoNonDiceDeiFamiliari() {
+    val failing = object : LocalMediaActions {
+      override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) = Unit
+
+      override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) = error("disco pieno")
+
+      override suspend fun familyStillSees(ids: Set<MediaId>): Int = ids.size
+    }
+    val vm = viewModel(failing)
+
+    vm.hide(some)
+
+    assertThat(vm.notice.value).isEqualTo(ActionNotice.HideFailed)
+  }
+
   @Test
   fun quandoVaBeneNonCeNessunAvviso() {
     val vm = viewModel(world.actions)

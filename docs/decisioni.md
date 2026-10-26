@@ -5488,3 +5488,229 @@ forma dei contratti, campo per campo, e l'adattatore e' una traduzione senza log
   `visibleAmong` no.
 
 **`tools\check.ps1 -NoDaemon`**: **verde** (26/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`): assembleDebug, assembleRelease, galleryTest e galleryLint in 27 minuti; test eseguiti in ogni modulo (core-database 249, core-albums 52, core-common 92); "D30 nella release" OK; nessuna classe `testing` nel dex di release; benchmark su dispositivo saltato (senza `-Bench`). Una prima corsa ha trovato un solo rosso, "nessun resto degli strumenti di debug nel dex di release": la radice di scrittura di prova di D13 era finita nel codice di `OriginDevice` e della migrazione; tolta (P1-6), la seconda corsa e' verde.
+
+## Fase 7 P9: Nascosti su ogni superficie (26/10)
+
+Il pacchetto P9 della Fase 7 (`docs/fase7-progetto.md` §4.4, riga P9; D22, D23; §2.1 "Nascosti"; E-H1–E-H7; §1.2–§1.5, §4.3, §5.2, §6, §11).
+Promessa: **un elemento nascosto non compare in nessuna superficie**. Qui c'e' la fonte sola (`VisibleMedia`, `HiddenMask`, `WidgetFeed` sopra il
+catalogo), il registro delle superfici con il test di proprieta', il widget di prova (solo debug), la riga dei nascosti in Cartelle NAS senza nomi
+(I8), l'avviso E-H2, la prova di E-H3 e la voce Impostazioni -> Nascosti. **Nessuna dipendenza esterna nuova**, nessun permesso o componente Android
+nuovo in release, **nessuna colonna nuova** (`core-database` non si tocca). Branch `fase7/p9`, da `main` `9dc47f6`.
+Commit: `66be26eb` (la fonte sola sul catalogo, in `core-library`), `940a2935` (avviso E-H2), `db38b3ed` (Impostazioni -> Nascosti),
+`d64fec57` (Cartelle NAS, I8), `20c79424` (registro, test di proprieta', widget di prova), `24ae30d9` (prova di E-H3), `8d58707a` (screenshot) e quello
+dei documenti.
+
+**Una sola fonte (D22)** — `core-library/.../visibility/`
+- `VisibilityQueries` (interno): le letture del catalogo per un insieme di id, a blocchi da 500 (il limite delle variabili di SQLite su API 29 e'
+  999). Sola lettura su `media`, `media_alias` e `media_personal`: `MediaCatalog.kt` (P1) non si tocca. Il nascosto si legge **sempre** da
+  `media_personal`, mai da una cache: e' l'unico flag che non deve essere in ritardo.
+- `CatalogHiddenMask` (`HiddenMask`): `hiddenAmong(ids)` = i nascosti **adesso**. Fallisce chiuso: un id che il catalogo non conosce e' nascosto, un
+  errore di lettura rende nascosto tutto (e `isHidden` risponde "si"). Il nascosto e' **contagioso nel gruppo** (F5-D36, E-L11): un gruppo (raffica,
+  RAW+JPEG, copie simili) in cui anche un solo membro ha il segno nasconde tutti i suoi membri, anche se il dato e' arrivato a meta' (una sola copia
+  segnata, scritta senza passare da `setPersonalFlags`, che di norma lo propaga). Un id assorbito da un altro media (`media_alias`) segue il
+  sopravvissuto.
+- `CatalogVisibleMedia` (`VisibleMedia`): `snapshot` = l'istantanea della Libreria (che i nascosti non li ha, E-H1) e `visible(ids)` = quali di
+  questi si possono mostrare adesso: noto, **presente** in almeno un posto (`presence != 'none'`), non nascosto e non in un gruppo con un nascosto.
+  Un media sparito da ogni posto non e' visibile ma nemmeno "nascosto".
+- `RotatingWidgetFeed` (`WidgetFeed`): gira sulle celle dell'istantanea dalla piu' recente, `next(n)` da' le prossime n da dove era arrivato.
+  **Il filtro e' l'ultimo passo prima della risposta**: ogni blocco passa da `HiddenMask` (nascosto un attimo fa, dopo l'istantanea) e da
+  `VisibleMedia`; una cella scartata non occupa un posto (si guarda la successiva, al massimo un giro intero). Un errore da' la lista vuota. Una
+  chiamata alla volta (`Mutex`: il widget puo' avere piu' istanze), massimo `WidgetFeed.MAX_SIZE`.
+- `CatalogFamilyExposure` (`contract/FamilyExposure.kt`): quali media i familiari vedono ancora = una posizione NAS in `('present','unavailable')`
+  in una share la cui area non e' `private`. Serve all'avviso E-H2.
+- `GalleryGraph` (legatura, non superficie): `hiddenMask`, `visibleMedia`, `widgetFeed` e l'esposizione ai familiari per `CatalogLocalMediaActions`
+  (solo se c'e' il NAS). **Le superfici nuove (P3, P6, P7, P8, P10, P11) prendono i nascosti da qui e da nessun'altra parte.**
+
+**Il registro delle superfici e il test di proprieta'** — `app/src/test/.../hidden/` (C27)
+- `HiddenSurfaces.entries`: una `SurfaceEntry` per superficie (id, titolo, riga del §2.1, pacchetto, **come e' provata**, file di produzione, sonda).
+  `Backing.PRODUCTION` = col codice vero; `REFERENCE` = con l'esecutore di riferimento del contratto (`InMemoryAlbums`, `InMemoryTrips`,
+  `FakeSharedAlbums`) perche' il codice vero non c'e' ancora; `PENDING` = la superficie arriva con un pacchetto futuro, nessuna sonda.
+- Registrate **ora, con il codice vero**: `library` (Libreria, filtri, intestazioni, conteggi), `collections` (Raccolte e conteggi), `utility-pages`
+  (pagine-filtro Screenshot, Video, Modificate, WhatsApp), `search` (ricerca, suggerimenti, Trova simili: `InMemorySearchEngine` su
+  `CatalogSearchData`), `other-apps` (selettore per le altre app, `PickerItems`), `widget` (widget di prova), `visible-media`, `hidden-mask`,
+  `nas-folders` (Cartelle NAS).
+- Registrate **con l'esecutore di riferimento**: `albums-manual` (P3, copertine, E-H6), `albums-smart` (P6), `albums-shared` (P2/P4, E-H5),
+  `album-viewer` (P10), `trips` (P7, E-H7). **In attesa**: `duplicates` (P8) e `add-to-album` (P10).
+- Dietro il cancello, **apposta** (`HiddenSurfaces.gated`): la pagina dei Nascosti e gli Eliminati di recente (con il segno): leggono i nascosti
+  solo dopo lo sblocco; le loro prove sono i test di `feature-library` (`HiddenControllerTest`, `HiddenAccessGateTest`, `RecentlyDeletedControllerTest`, ...).
+- Il mondo casuale (`HiddenWorld`, `HiddenWorldBuilder`): `WorldSpec.random(seed, size)` genera media, gruppi disgiunti (raffiche e copie simili),
+  nascosti dell'utente (`hiddenByUser`), **nascosti a meta' in un gruppo di copie simili** (`hiddenPartial`, E-L11: scritti dall'API del catalogo,
+  che li propaga), preferiti e **nascosti dell'ultimo momento** (`lateHidden`: scritti nel catalogo **dopo** l'istantanea, E-H1). L'oracolo
+  (`HiddenOracle`) dice cosa non deve mai uscire; il mondo si costruisce sul catalogo Room vero (Robolectric).
+- `HiddenSurfacesPropertyTest`: 40 semi, una Libreria piu' grande, i casi estremi (tutto nascosto, niente nascosto) e una prova che la prova
+  funziona (una superficie che sbaglia apposta fa fallire il controllo). Le superfici con `live = true` (il filtro finale: widget, `visible-media`,
+  `hidden-mask`, `nas-folders`) devono escludere anche i `lateHidden` e i loro gruppi; le altre usano solo l'istantanea, che la Libreria rifa da sola.
+- `HiddenSurfacesRegistryTest` (le guardie, anche su un repository finto in una cartella temporanea):
+  1. ogni file di produzione che nomina `VisibleMedia`, `HiddenMask` o `WidgetFeed` (tolti `/contract/`, `/noop/`, `/testing/` e la legatura in
+     `HiddenSurfaces.wiring`) deve stare nelle `sources` di una superficie: **una superficie nuova non registrata fa fallire il test**;
+  2. i file elencati esistono; le classi di test citate (`alsoProvedBy`) esistono; id unici;
+  3. ogni riga del §2.1 (`SpecRow`) e' coperta da almeno una voce;
+  4. **una riga `REFERENCE` o `PENDING` non regge quando il codice vero arriva**: se compaiono i percorsi di `landedWhen` (per esempio
+     `core-albums/.../trips`) il test fallisce finche' chi li ha scritti non porta la riga a `PRODUCTION` con la sua sonda.
+- **Come si registra una superficie dei pacchetti futuri**: (1) leggere i media da `VisibleMedia` o filtrarli con `HiddenMask`, mai da altro;
+  (2) scrivere una sonda in `app/src/test/.../hidden/` (una funzione che dice cosa la superficie mostra sul mondo casuale: gli `MediaId`, piu'
+  eventuali frasi per conteggi e copertine); (3) cambiare la riga della superficie in `HiddenSurfaces.entries` (o aggiungerla) con
+  `Backing.PRODUCTION`, i `sources` e la sonda, togliendo `landedWhen`. Il registro gira con i test di `:app` dentro `check.ps1`.
+- `app/build.gradle`: `testImplementation project(':core-albums')` (solo prove: gli esecutori di riferimento). Il modulo entra nell'app con P13.
+
+**Il widget di prova (solo debug, L65, F73)** — `app/src/debug/.../debugtools/widget/`
+- `FieldProbeHiddenWidgetProvider` (RemoteViews della piattaforma, non Glance: e' una prova), `FieldProbeWidgetContent` (le 4 celle = `WidgetFeed.next(4)`
+  e niente altro: **non pesca mai da un'altra parte**, quindi non puo' mostrare un nascosto se la sorgente non lo fa; un id che l'istantanea non
+  conosce non si descrive e non si mostra) e `FieldProbeWidgetViews`. Ogni cella ha come descrizione "Foto, 12 marzo 2024" (mai un nome di file o
+  un id): e' cio' che leggono TalkBack e UI Automator in F73. Il ricevitore e' `exported="false"` (solo l'azione di aggiornamento del sistema dei
+  widget), prende il grafo da un `EntryPoint` di Hilt e lavora con `goAsync`.
+- `DeveloperTools.hiddenChanged(context)`: in debug ridisegna il widget (`refreshAll`), in release non fa niente. La chiama `GalleryGraph` dopo ogni
+  `setHidden`: un media nascosto un attimo fa non resta sulla Home fino al prossimo aggiornamento di Android.
+- **Non c'e' nel dex di release.** Il manifest, il layout, l'XML del provider e le stringhe stanno in `app/src/debug`; `tools/check.ps1` ha tre nomi
+  in piu' nel controllo dei resti degli strumenti di debug ("nessun resto degli strumenti di debug nel dex di release"): `debugtools/widget`,
+  `FieldProbeHiddenWidget`, `FieldProbeWidget`. E' l'unica modifica a `check.ps1`.
+- Prove: `FieldProbeWidgetTest` (`testDebug`, 8 test: mostra solo cio' che da' `WidgetFeed` e mai un nascosto, nemmeno uno nascosto dopo
+  l'istantanea; senza istantanea niente; ogni cella ha tipo e data e nessun id o nome di file; le celle si disegnano con la loro descrizione e quelle
+  senza elemento spariscono; al piu' quattro celle; il ricevitore e' dichiarato non esportato e solo nel manifest di debug) e `RotatingWidgetFeedTest`
+  (10). Il widget vero (Fase 10) usera' lo stesso `WidgetFeed` e lo stesso registro.
+
+**I8 chiusa: Cartelle NAS non mostra nessun nome di nascosto (D23)**
+- `NasAreas.hiddenFiles(share, files)` (porta di `feature-nas`): quali file di una cartella sono nascosti nella Libreria. L'implementazione di
+  default **lancia** (fallire chiuso: una porta che non sa rispondere non puo' far elencare tutto). Quella di `:app` e' `CatalogHidden.hiddenLocationKeys`
+  (`NasOrganizer.kt`): una sola interrogazione che legge `media_personal` **con il contagio del gruppo**, e `hiddenAmong` la usa gia' per il resto.
+- `FoldersUiState.hidden` e' un `HiddenFiles`: `Checking` (predefinito: finche' non si sa, **nessun file si elenca**; le cartelle si elencano sempre),
+  `Unknown` (la lettura e' fallita: nessun file si elenca e un avviso dice "Non riesco a controllare i nascosti") o `Known(percorsi)`.
+- La riga "N elementi nascosti" (singolare "1 elemento nascosto") con il testo "Sono nascosti nella Libreria: qui non se ne mostra il nome.": nessun
+  nome, nessuna anteprima, nessun tocco; TalkBack la legge intera. I file nascosti non si possono selezionare da soli, quindi non entrano in nessuna
+  operazione. Se tutti i file della cartella sono nascosti la pagina non dice "Cartella vuota".
+- Prove: `NasHiddenFilesTest` (8: nessun nome nello stato, fallire chiuso, "seleziona tutto" non prende i nascosti, una risposta vecchia non conta in
+  un'altra cartella, ...), `NasHiddenRowScreenTest` (8: nessun nome nell'albero, nemmeno non unito; fallire chiuso; testo a 1,3x), la superficie
+  `nas-folders` del registro, e due test R11 di `NasFoldersViewModelTest` adattati (i file nascosti non si selezionano).
+
+**E-H2: "i familiari continuano a vederlo" (D23, L2)**
+- `LocalMediaActions.familyStillSees(ids): Int` (metodo con default 0: un'implementazione che non sa dire non cambia). `CatalogLocalMediaActions` lo
+  risponde da `FamilyExposure` guardando i gruppi (la cella e' il gruppo: se a essere visto dai familiari e' un altro membro, la risposta e' almeno 1). Se la lettura non riesce
+  risponde "tutti": nel dubbio si avvisa, perche' un avviso in meno farebbe credere che nessuno li veda. I contenitori devono inoltrarlo
+  (`GuardedMediaActions` e l'oggetto di `GalleryGraph`: aggiunti, con la riga di commento che dice perche').
+- Libreria e Raccolte: `ActionNotice.FamilyStillSees(count)` dopo aver nascosto; nel viewer `ViewerMessage.HiddenFamilySees`, con la domanda dentro
+  la stessa finestra di `changingVisibility` (l'avviso e il gesto non si separano). Testo: titolo "I familiari continuano a vederlo" (plurale:
+  "... a vedere N di questi elementi") e "Nascosti protegge solo dentro l'app: quello che sta nell'area comune o in un album condiviso lo vedono
+  tutti."; nel viewer "Nascosto: i familiari continuano a vederlo". Non c'e' avviso per i media che stanno solo nel telefono o nell'area privata.
+- Prove: `CatalogVisibilityTest` (esposizione), `LibraryActionNoticeTest`, `CollectionsViewModelNoticeTest`, `ViewerActionsTest` (3 test nuovi).
+
+**E-H3: la credenziale del telefono quando la biometria cambia (D23, F74)**: gia' vera **per costruzione**, e adesso provata.
+`BiometricPromptAuthenticator.AUTHENTICATORS` = `BIOMETRIC_WEAK | DEVICE_CREDENTIAL` e lo sblocco **non e' legato a nessuna chiave** (nessun
+`CryptoObject`): una nuova impronta o un volto riaddestrato non lo rompono, e la credenziale di sistema (PIN, sequenza, password) la offre il sistema da
+solo. Il cancello dei Nascosti usa lo stesso autenticatore del blocco dell'app ma **non si apre con lo sblocco dell'app**: non ho collegato
+`gate.lock()` al blocco dell'app, perche' non serve a E-H3 e cambierebbe il tempo di tolleranza di 1 minuto. `HiddenCredentialTest` (7 test):
+composizione degli autenticatori, assenza di chiavi, cancello dopo un cambio di biometria (apre col tentativo dopo), tentativi falliti ripetuti
+senza chiudere fuori per sempre, senza blocco schermo non si apre, lo sblocco dell'app non apre i Nascosti, un nuovo cancello riparte chiuso.
+
+**E-H5, E-H6, E-H7 (e E-H4)** — `HiddenAlbumsReferenceTest` (3 test, sugli esecutori di riferimento: il codice vero arriva con P2, P3, P4, P7 e il
+registro costringe a rifare la stessa prova su di lui):
+- **E-H5**: un media che ho nascosto e un altro familiare ha messo in un album condiviso non c'e' per me (ne' negli elementi, ne' nei conteggi, ne'
+  come copertina) e c'e' per gli altri; il nascosto e' un dato personale, vale su tutti i miei dispositivi (E-H4) e mai su quelli di un altro account.
+- **E-H6**: se la copertina scelta da un altro dispositivo dello stesso account e' un mio nascosto, la copertina diventa quella automatica (D21).
+- **E-H7**: un viaggio fatto solo di nascosti non si propone; uno con qualche nascosto si propone senza di loro (nei conteggi e nelle copertine).
+
+**Impostazioni -> Nascosti (D33)** — `feature-settings`: `SettingsLinks.openHidden` e il parametro `openHidden` di `settingsGraph`; una riga
+"Nascosti" ("Foto e video nascosti, dietro lo sblocco del telefono") nella sezione "Protezione", che e' la "Privacy" di D33 (la sezione che c'era gia': non ne ho
+inventata un'altra). La riga c'e' **solo se `:app` ha scritto dove porta** (`null` = non c'e'), e apre la stessa pagina dei Nascosti dietro lo
+stesso cancello: serve a ritrovarli quando P11 permette di nascondere la sezione Nascosti delle Raccolte. Prova: `SettingsHiddenEntryTest`.
+**Il collegamento in `AppNavHost` e' di P13** (vedi sotto): finche' non c'e', la riga non compare.
+
+**Verifica**: `tools\check.ps1 -NoDaemon` verde (26/10: assemble di debug e release, test di tutti i moduli, lint, i controlli sul dex e sul manifest di
+release, compreso quello dei resti di debug con i tre nomi del widget di prova). La prima corsa ebbe rossi due test d'integrazione a tempo non toccati dal
+pacchetto (`Correzioni5BIntegrazioniAppTest.in2_...` con una `ConcurrentModificationException` e `Correzioni5BVersioniAppTest.ve10_...` con una richiesta di
+lavoro doppia) mentre il PC era carico; rilanciate da sole le due classi sono verdi (10 e 9 test) e la seconda corsa intera e' verde.
+
+**Rosso senza la regola (mutazioni)** — il test di proprieta' deve diventare rosso se si toglie una delle regole, altrimenti non prova niente. Una
+mutazione alla volta sul codice di produzione, il test lanciato, la mutazione tolta:
+- **M1 · contagio del gruppo tolto da `VisibilityQueries`** (un gruppo con un nascosto non nasconde piu' gli altri membri): rossi
+  `nessunaSuperficieMostraMaiUnNascosto_suMondiCasuali`, `neiCasiEstremiTuttoNascostoENienteNascosto` e `unaLibreriaPiuGrandeSiComportaAllaStessaManiera`;
+  violazioni su `visible-media` (50), `hidden-mask` (75) e `widget` (42), su nessun'altra.
+- **M2 · filtro finale tolto da `RotatingWidgetFeed`** (la cella si prende senza richiedere `HiddenMask` e `VisibleMedia`): rosso con 74 violazioni, tutte
+  sul `widget` (i nascosti dell'ultimo momento, `lateHidden`).
+- **M3 · clausola del gruppo tolta da `CatalogHidden.hiddenLocationKeys`** (Cartelle NAS): rosso con 42 violazioni, tutte su `nas-folders`.
+- **M4 · `CatalogLocalMediaActions.setHidden` senza `withGroupMates`** (il gesto non si estende al gruppo): rosso su `library` (95), `collections` (146),
+  `search` (44), `other-apps` (44) e `utility-pages` (20), e in `core-library` `CatalogIntegrationTest.dalCursorAllePatchConPreferitiNascostiEGruppi`.
+- Le quattro mutazioni sono rimesse a posto e controllate con `cmp` contro la copia salvata; ogni corsa ha avuto la sua cartella di build (vedi "Punti
+  aperti", ambiente). Le prove con tutti e tre i primi insieme davano gli stessi rossi.
+
+**Test e casi limite per ID**
+- **E-H1** (un nascosto non compare, fallire chiusi): `CatalogVisibilityTest` (9: id sconosciuto = nascosto, errore = tutto nascosto, id assorbito da
+  un altro, media sparito da ogni posto, blocchi da 500, il widget non da' un media nascosto dopo l'istantanea), `RotatingWidgetFeedTest` (10),
+  `HiddenSurfacesPropertyTest` (5: 40 semi, una Libreria piu' grande, tutto o niente nascosto, mondi interessanti, la prova che fallisce apposta) e
+  `HiddenSurfacesRegistryTest` (9).
+- **E-L11** (gruppo di copie simili con un solo nascosto): `CatalogVisibilityTest` (dato arrivato a meta'), la proprieta' (`hiddenPartial` su tutte le
+  superfici, anche `nas-folders`), la mutazione M3.
+- **E-H2**: `LibraryActionNoticeTest` (+3), `CollectionsViewModelNoticeTest` (+4), `ViewerActionsTest` (+3), `CatalogVisibilityTest` (2: i familiari vedono solo
+  l'area comune; un media sul telefono e nell'area comune), `GuardedMediaActionsTest` (+1: il guardiano inoltra la domanda).
+- **E-H3**: `HiddenCredentialTest` (7). **E-H4, E-H5, E-H6, E-H7**: `HiddenAlbumsReferenceTest` (3, sugli esecutori di riferimento).
+- **I8**: `NasHiddenFilesTest` (8), `NasHiddenRowScreenTest` (8), due test R11 di `NasFoldersViewModelTest` adattati, la superficie `nas-folders`.
+- **D33**: `SettingsHiddenEntryTest` (3: la riga c'e' e porta ai Nascosti, senza destinazione non c'e', 48 dp).
+- **D22, L65, F73 (widget)**: `FieldProbeWidgetTest` (8), `RotatingWidgetFeedTest`, il passo di `tools/check.ps1`.
+- **E-Q7 e E-X7** (ricerca e selettore delle altre app, gia' in produzione): le sonde `search` e `other-apps` del registro, in piu' dei test che c'erano
+  (`HiddenNeverTest`, `HiddenNeverLeavesTest`).
+- **Architettura**: `Phase5BArchitectureTest` (12) resta verde (nessun nome del widget di prova fuori da debug); per questo nei file di `app/src/test` i
+  nomi sono scritti in due pezzi.
+- **TalkBack e bersagli**: la riga dei nascosti si legge intera (`NasHiddenRowScreenTest`), la riga delle Impostazioni e' alta almeno 48 dp, l'avviso
+  E-H2 e' una regione "polite" con il pulsante OK del componente esistente, le celle del widget hanno una descrizione senza nomi.
+- **Screenshot** (`docs/screenshots/7-P9/`, 33 immagini): Cartelle NAS con la riga dei nascosti e con "non riesco a controllare", l'avviso E-H2 (piu'
+  elementi e uno solo), la riga "Nascosti" delle Impostazioni; chiaro e scuro, telefono e tablet, e il testo a 1,3x. Il vetro non si vede in Robolectric:
+  l'avviso E-H2 compare sopra la griglia senza sfocatura e la sua leggibilita' sul vetro si giudica sul telefono (F73); resta nella traccia grafica
+  parallela.
+
+**Tocchi fuori dal perimetro del brief (tutti minimi, da rivedere nell'integrazione)**
+- `core-library`: `LocalMediaActions.familyStillSees` (metodo con default 0, in `contract/Timeline.kt`) e il parametro `exposure` di
+  `CatalogLocalMediaActions` (predefinito `FamilyExposure.None`: nessun chiamante esistente cambia).
+- `feature-viewer` (`Attempt.kt`, `ViewerState.kt`, `ViewerController.kt`, una stringa): l'avviso E-H2 nel viewer. `feature-library` fuori da `hidden/**`:
+  `ActionNotice.kt`, `CollectionsViewModel.kt` (non `CollectionsTab.kt`), `LibraryParts.kt`.
+- `feature-nas`: `NasAreas.hiddenFiles` (metodo nuovo il cui default lancia), `NasFoldersViewModel`, `NasFoldersScreen`, la classe `HiddenFiles`; in
+  `NasScreenshotTest`, `NasAccessibilityTest`, `NasLayoutTest` e `VerificaFunzionaleNasTest` una riga (`hidden = Known(emptySet())`: senza non si
+  elencano file); due test R11 di `NasFoldersViewModelTest` adattati.
+- `feature-settings`: `SettingsScreen` e `SettingsNavigation` (parametri opzionali con default null).
+- `app`: `GalleryGraph.kt` (le tre fonti, l'esposizione ai familiari, `hiddenChanged`), `CatalogPorts.kt` (`GuardedMediaActions` inoltra
+  `familyStillSees`), `nas/NasOrganizer.kt` (`hiddenFiles` e `hiddenLocationKeys` con il contagio del gruppo: `hiddenAmong` ora usa la stessa
+  interrogazione), `DeveloperTools` di debug e di release (`hiddenChanged`), il manifest di debug, `build.gradle` (`testImplementation
+  project(':core-albums')`).
+- `tools/check.ps1`: tre nomi in piu' in `$debugRemnants` e il titolo del passo. Nient'altro.
+- **Non toccati**: `MediaCatalog.kt`, `CollectionsTab.kt`, `MainScaffold.kt`, `AppNavHost.kt`. Nessun file di `core-database`.
+
+**Agganci per P11 e P13**
+- **P13, `AppNavHost.kt`**, nella chiamata a `settingsGraph(...)` (accanto a `openSearch`): `openHidden = { nav.openCollection(CollectionKind.HIDDEN) }`
+  (`openCollection` e' in `feature-library` e per `HIDDEN` apre `HiddenDestination`, dietro il cancello). Finche' non c'e', la riga "Nascosti"
+  delle Impostazioni non compare. Poi: `implementation project(':core-albums')` in `app/build.gradle` (oggi solo `testImplementation`), e dare agli
+  album, ai viaggi e agli smart `gallery.visibleMedia` e `gallery.hiddenMask` (sono in `GalleryGraph`). Il widget vero (Fase 10) prende
+  `gallery.widgetFeed`.
+- **P11, `CollectionsTab.kt`**: la sezione Nascosti puo' essere nascosta dalle Raccolte (D33), ma `HiddenDestination` resta raggiungibile dalle
+  Impostazioni, quindi non serve toccare il cancello. I conteggi di ogni sezione devono venire da `CollectionItemsSource` (che esclude i nascosti) o da
+  `VisibleMedia`, mai da un'altra fonte; se P11 aggiunge una sezione che mostra media o conteggi, va in `HiddenSurfaces.entries` con la sua sonda
+  (il test fallisce se un file nuovo che nomina i contratti non e' registrato). L'avviso E-H2 c'e' gia' nelle Raccolte (`CollectionsViewModel`).
+- **Pacchetti che portano superfici** (P2/P4 album condivisi, P3 manuali, P6 smart, P7 viaggi, P8 Doppioni e Utility, P10 viewer dell'album e
+  "Aggiungi ad album"): vedi "Come si registra una superficie nuova". Le righe `REFERENCE` e `PENDING` falliscono da sole quando arriva il codice
+  vero (`landedWhen`): chi lo porta le trasforma in `PRODUCTION` con la sonda vera, sullo stesso mondo casuale.
+
+**Da provare sul telefono** (niente e' stato provato su dispositivo in questo pacchetto)
+- **F73 (autonoma, adb + UI Automator, build debug)**: nel telefono nascondere 3 media con GPS e testo e metterli in un album manuale, in uno smart, in un
+  viaggio sintetico, in un gruppo di doppioni e come copertina scelta; aggiungere alla Home il widget "MCG prova (Nascosti)" e controllare (descrizioni
+  accessibili di ogni schermata del registro, `uiautomator dump`) che nessuno compaia; nascondere una foto che il widget mostra: il widget si ridisegna
+  senza di lei; in Cartelle NAS aprire una cartella con file nascosti: "N elementi nascosti", nessun nome; i conteggi di Raccolte e album senza di loro;
+  nascondere un media dell'area comune: l'avviso "I familiari continuano a vederlo" (E-H2). Il widget non c'e' nell'APK di release (`check.ps1`).
+- **F74 (con il tablet, nel momento di F86)**: aprire i Nascosti con la biometria; cambiare/aggiungere un'impronta e riprovare: si apre con il PIN o la
+  sequenza (E-H3); con l'app sbloccata i Nascosti si aprono lo stesso solo con la credenziale; schermata nera nei recenti e nello screenshot.
+
+**Punti aperti**
+1. **`AppNavHost.kt` (P13)**: finche' non c'e' `openHidden`, la riga "Nascosti" delle Impostazioni non compare (vedi "Agganci").
+2. **Superfici ancora di riferimento o in attesa**: album manuali (P3), smart (P6), condivisi (P2/P4), viewer dell'album e "Aggiungi ad album" (P10), viaggi
+   (P7), Doppioni (P8). Quando arrivano, il registro le costringe a passare a `PRODUCTION`; il lavoro di ogni pacchetto e' prendere `visibleMedia` e
+   `hiddenMask` da `GalleryGraph` (P13).
+3. **Il widget di prova si ridisegna solo per un "Nascondi" fatto su questo telefono** (`GalleryGraph.setHidden`): un nascosto che arriva da un altro
+   dispositivo con i dati personali si vede tolto al ridisegno successivo (fino a 30 minuti, il minimo di Android). Il filtro e' applicato a ogni
+   disegno, quindi non si mostra mai un nascosto *gia' noto*; per il widget vero (Fase 10) conviene ridisegnare anche all'arrivo dei dati personali.
+4. **E-H2 guarda l'area comune, non l'album**: avvisa se una posizione del media sta in una share non privata, quindi vale anche per un media che sta
+   nell'area comune senza essere in un album condiviso; non c'e' avviso per i media solo del telefono o dell'area privata. L'avviso di E-SH9 (mettere un
+   nascosto in un album condiviso) e' di P4.
+5. **Il viewer ha l'avviso E-H2 provato solo in JVM** (`ViewerActionsTest`): nessuno screenshot dedicato (e' il componente dei messaggi del viewer).
+6. **`gate.lock()` non e' collegato al blocco dell'app**, di proposito: D23 chiede che lo sblocco dell'app non apra i Nascosti, e questo e' gia' vero
+   (`HiddenCredentialTest`); chiudere i Nascosti quando scatta il blocco dell'app sarebbe un'altra regola. F74 conferma il comportamento sul telefono.
+7. **Ambiente (non e' del prodotto)**: dopo la corsa delle mutazioni, con test rossi, un demone Gradle condiviso con gli altri agenti ha tenuto aperti
+   per circa quaranta minuti i jar di compilazione (`build/intermediates/compile_*_classes_jar`) di core-library, di app e di altri tredici moduli;
+   su Windows Gradle non li poteva riscrivere ("utilizzato da un altro processo"). Ho aspettato e riprovato, senza uccidere ne' fermare nessun
+   processo; si e' liberato dopo una corsa riuscita con la cartella di build di quei due moduli spostata in `build/bd-<nome>/` (uno script di
+   inizializzazione locale in `build/`, ignorato da git e non committato). Le mutazioni si fanno quindi una corsa per cartella.

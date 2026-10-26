@@ -70,6 +70,9 @@ internal class GuardedMediaActions(private val inner: LocalMediaActions) : Local
 
   override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) = guarded("nascosti") { inner.setHidden(ids, on) }
 
+  // Fase 7 (P9, E-H2): l'avviso "i familiari continuano a vederlo" attraversa il guardiano; senza questa riga tornerebbe sempre 0.
+  override suspend fun familyStillSees(ids: Set<MediaId>): Int = inner.familyStillSees(ids)
+
   private suspend fun guarded(what: String, block: suspend () -> Unit) {
     try {
       block()

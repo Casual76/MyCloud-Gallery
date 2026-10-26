@@ -84,14 +84,30 @@ internal data class FoldersUiState(
   val notice: UiNotice? = null,
   /** NA-10: le cartelle dell'area privata escluse dalla Libreria. */
   val exclusions: Set<SharePath> = emptySet(),
+  /**
+   * Fase 7 (P9, D23, I8): quali file di [listing] sono nascosti nella Libreria. Di partenza [HiddenFiles.Checking]: **fallire chiusi**, nessun
+   * file si elenca finche' `:app` non ha detto quali sono nascosti.
+   */
+  val hidden: HiddenFiles = HiddenFiles.Checking,
 ) {
-  /** Le voci da mostrare: l'elenco, o l'ultimo salvato se il NAS non risponde. Le cartelle prima, poi per nome. */
+  /** L'elenco com'e' arrivato (o l'ultimo salvato se il NAS non risponde), con **tutti** i nomi: non si mostra, serve a contare. */
+  private val listed: List<NasFolderEntry> get() = entriesOf(listing)
+
+  /**
+   * Le voci da mostrare: le cartelle e i file **non nascosti** (I8: il nome di un nascosto non si mostra mai; finche' non si sa quali sono,
+   * nessun file). Le cartelle prima, poi per nome.
+   */
   val entries: List<NasFolderEntry>
-    get() = when (listing) {
-      is NasFolderState.Listing -> listing.entries
-      is NasFolderState.Offline -> listing.cached.orEmpty()
-      else -> emptyList()
-    }.sortedWith(compareBy({ !it.isFolder }, { it.name.lowercase() }))
+    get() = shownEntries(listed, hidden).sortedWith(compareBy({ !it.isFolder }, { it.name.lowercase() }))
+
+  /** Quanti file della cartella sono nascosti: la riga "N elementi nascosti", senza nomi. */
+  val hiddenCount: Int get() = hiddenCountOf(listed, hidden)
+
+  /** La cartella ha file ma non si e' potuto sapere quali sono nascosti: nessun file si elenca e la pagina lo dice. */
+  val hiddenUnknown: Boolean get() = hidden == HiddenFiles.Unknown && listed.any { !it.isFolder }
+
+  /** La cartella ha file e `:app` sta ancora rispondendo: un attimo di attesa invece di "cartella vuota". */
+  val checkingHidden: Boolean get() = hidden == HiddenFiles.Checking && listed.any { !it.isFolder }
 
   /** Sola lettura per questo account (E-N9). */
   val readOnly: Boolean get() = (listing as? NasFolderState.Listing)?.readOnly == true
@@ -138,6 +154,7 @@ class NasFoldersViewModel @Inject constructor(
   internal val state: StateFlow<FoldersUiState> = mutable
 
   private var listingJob: Job? = null
+  private var hiddenJob: Job? = null
   private var nameJob: Job? = null
   private var previousActive = 0
 
@@ -196,6 +213,7 @@ class NasFoldersViewModel @Inject constructor(
 
   private fun observe() {
     listingJob?.cancel()
+    hiddenJob?.cancel()
     val where = mutable.value.where ?: return
     listingJob = viewModelScope.launch {
       folders.observe(where.share, where.dir).collect { listing ->
@@ -203,12 +221,41 @@ class NasFoldersViewModel @Inject constructor(
           if (current.where != where) {
             current
           } else {
-            // La selezione tiene solo cio' che c'e' ancora nell'elenco.
+            // La selezione tiene solo cio' che c'e' ancora nell'elenco. Ogni elenco nuovo riparte da "non so quali file sono nascosti":
+            // nessun nome di file prima della risposta di `:app` (I8, fallire chiusi).
             val present = (listing as? NasFolderState.Listing)?.entries?.map { it.path }?.toSet()
-            current.copy(listing = listing, selection = if (present == null) current.selection else current.selection.intersect(present))
+            current.copy(
+              listing = listing,
+              hidden = HiddenFiles.Checking,
+              selection = if (present == null) current.selection else current.selection.intersect(present),
+            )
           }
         }
+        checkHidden(where, listing)
       }
+    }
+  }
+
+  /**
+   * Fase 7 (P9, D23, I8): chiede a `:app` quali file dell'elenco sono nascosti nella Libreria. Mentre aspetta, e se non risponde, i file non si
+   * elencano (le cartelle si'). L'esito conta solo per l'elenco a cui si riferisce: se nel frattempo se ne e' aperto un altro, si butta.
+   */
+  private fun checkHidden(where: FolderWhere, listing: NasFolderState) {
+    hiddenJob?.cancel()
+    val files = entriesOf(listing).filter { !it.isFolder }.map { it.path }
+    if (files.isEmpty()) {
+      mutable.update { current -> if (current.where == where && current.listing === listing) current.copy(hidden = HiddenFiles.Known(emptySet())) else current }
+      return
+    }
+    hiddenJob = viewModelScope.launch {
+      val answer: HiddenFiles = try {
+        HiddenFiles.Known(areas.hiddenFiles(where.share, files).toSet())
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        HiddenFiles.Unknown
+      }
+      mutable.update { current -> if (current.where == where && current.listing === listing) current.copy(hidden = answer) else current }
     }
   }
 

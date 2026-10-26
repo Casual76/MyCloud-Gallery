@@ -283,7 +283,10 @@ private fun foldersLabel(state: FoldersUiState): NasLabel {
     else -> {
       val where = state.where
       val area = areaLabel(where.share, state.areas)
-      val count = (state.listing as? NasFolderState.Listing)?.entries?.size?.let { countText(R.plurals.nas_items_count, it) }
+      // I nascosti non sono nel conto (hanno la loro riga, I8) e finche' non si sa quali sono il conto non c'e'.
+      val count = (state.listing as? NasFolderState.Listing)
+        ?.takeIf { !state.checkingHidden && !state.hiddenUnknown }
+        ?.let { countText(R.plurals.nas_items_count, state.entries.size) }
       NasLabel(
         title = where.dir?.name ?: area,
         subtitle = when {
@@ -409,7 +412,11 @@ private fun EntryList(state: FoldersUiState, actions: FoldersActions, insets: Na
     contentPadding = listPadding(insets),
   ) {
     statusItems(state, actions)
-    if (entries.isEmpty()) {
+    val hiddenCount = state.hiddenCount
+    if (entries.isEmpty() && state.checkingHidden) {
+      // Ci sono file ma non si sa ancora quali sono nascosti (I8): un attimo di attesa, non "cartella vuota".
+      item(key = "checking") { NasLoadingBlock(stringResource(R.string.nas_loading)) }
+    } else if (entries.isEmpty() && hiddenCount == 0 && !state.hiddenUnknown) {
       item(key = "empty") {
         NasEmptyState(
           icon = Icons.Rounded.Folder,
@@ -423,7 +430,8 @@ private fun EntryList(state: FoldersUiState, actions: FoldersActions, insets: Na
           ),
         )
       }
-    } else {
+    }
+    if (entries.isNotEmpty()) {
       val moving = (state.mode as? FoldersMode.PickDestination)?.items.orEmpty()
       groupedRows(entries, "entries") { entry ->
         val blocked = state.picking && moving.any { it.share.equals(state.where?.share, ignoreCase = true) && it.path == entry.path }
@@ -447,6 +455,46 @@ private fun EntryList(state: FoldersUiState, actions: FoldersActions, insets: Na
         )
       }
     }
+    // Fase 7 (P9, D23, I8): i file nascosti nella Libreria sono una riga che dice quanti sono, senza nessun nome.
+    if (hiddenCount > 0) {
+      item(key = "hidden") { HiddenFilesRow(hiddenCount, modifier = Modifier.gapIf(entries.isNotEmpty())) }
+    }
+    if (state.hiddenUnknown) {
+      item(key = "hidden-unknown") {
+        NasNotice(
+          tone = NasTone.Attention,
+          glyph = Icons.Rounded.VisibilityOff,
+          title = stringResource(R.string.nas_hidden_unknown_title),
+          detail = stringResource(R.string.nas_hidden_unknown_detail),
+          modifier = Modifier.gapIf(entries.isNotEmpty()),
+          actionLabel = stringResource(R.string.nas_retry),
+          onAction = actions.onRetry,
+        )
+      }
+    }
+  }
+}
+
+/** Lo spazio sopra le righe in fondo alla lista, solo se sopra c'e' qualcosa. */
+private fun Modifier.gapIf(above: Boolean): Modifier = if (above) padding(top = NasDimens.BlockGap) else this
+
+/**
+ * La riga dei file nascosti (I8): "N elementi nascosti" e il perche', senza nomi, senza miniature e senza tocco. Non si seleziona e non e' un
+ * file: e' una frase. TalkBack la legge intera.
+ */
+@Composable
+private fun HiddenFilesRow(count: Int, modifier: Modifier = Modifier) {
+  val title = countText(R.plurals.nas_hidden_row_title, count)
+  val detail = stringResource(R.string.nas_hidden_row_detail)
+  FluidListGroup(modifier = modifier) {
+    FluidListRow(
+      title = title,
+      subtitle = detail,
+      tone = FluidTone.Neutral,
+      leading = { Icon(imageVector = Icons.Rounded.VisibilityOff, contentDescription = null) },
+      disclosure = false,
+      modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$title. $detail" },
+    )
   }
 }
 

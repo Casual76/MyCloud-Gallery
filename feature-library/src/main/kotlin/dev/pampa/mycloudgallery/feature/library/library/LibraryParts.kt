@@ -68,6 +68,7 @@ import dev.pampa.mycloudgallery.feature.library.ActionNoticeCard
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.attempt
 import dev.pampa.mycloudgallery.feature.library.countText
+import dev.pampa.mycloudgallery.feature.library.familyNoticeAfterHide
 import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
 import dev.pampa.mycloudgallery.feature.library.grid.SavedGridPosition
@@ -98,10 +99,16 @@ internal suspend fun LibraryTabState.chooseStyle(style: GridStyle) {
 /**
  * Nasconde [ids] e, **solo se la scrittura e' riuscita**, chiude la selezione (R8). Se non riesce (disco pieno, database in
  * errore) la Libreria lo dice e la selezione resta aperta: non si fa credere all'utente che le foto private siano
- * nascoste quando tornano in griglia.
+ * nascoste quando tornano in griglia. Se riesce ma i familiari vedono ancora qualcuno degli elementi (area comune, album condivisi)
+ * lo dice (E-H2, D23): Nascosti protegge solo dentro l'app.
  */
 internal suspend fun LibraryTabState.hide(ids: Set<MediaId>) {
-  if (attempt { actions.setHidden(ids, true) }) grid.stopSelecting() else notice = ActionNotice.HideFailed
+  if (attempt { actions.setHidden(ids, true) }) {
+    grid.stopSelecting()
+    familyNoticeAfterHide(actions, ids)?.let { notice = it }
+  } else {
+    notice = ActionNotice.HideFailed
+  }
 }
 
 /**

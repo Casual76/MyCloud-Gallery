@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.feature.nas.confirm.NasNameSheetContent
 import dev.pampa.mycloudgallery.feature.nas.folders.FolderWhere
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersActions
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersMode
+import dev.pampa.mycloudgallery.feature.nas.folders.HiddenFiles
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersUiState
 import dev.pampa.mycloudgallery.feature.nas.folders.NasFoldersScreen
 import dev.pampa.mycloudgallery.feature.nas.operations.NasOperationsScreen
@@ -72,9 +73,10 @@ abstract class NasScreenshotBase(private val dark: Boolean, private val device: 
     notice: UiNotice? = null,
     confirm: OpPlan? = null,
     name: NameDraft? = null,
+    hidden: HiddenFiles = HiddenFiles.Known(emptySet()),
   ) = FoldersUiState(
     areas = areas, where = where, listing = listing, selecting = selecting, selection = selection, mode = mode,
-    activeOperations = activeOperations, notice = notice, confirm = confirm, name = name,
+    activeOperations = activeOperations, notice = notice, confirm = confirm, name = name, hidden = hidden,
   )
 
   @Composable

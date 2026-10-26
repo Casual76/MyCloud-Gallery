@@ -158,6 +158,14 @@ internal object DeveloperTools {
    */
   fun fencedCutouts(): dev.pampa.mycloudgallery.backup.FencedCutouts? = DebugFencedCutouts
 
+  /**
+   * Fase 7 (P9, D22, F73): qualcosa e' stato nascosto o mostrato. Il widget di prova dei Nascosti (solo debug) si ridisegna subito: un media
+   * nascosto un attimo fa non deve restare sulla schermata Home fino al prossimo aggiornamento di Android. In release non esiste.
+   */
+  fun hiddenChanged(context: Context) {
+    dev.pampa.mycloudgallery.debugtools.widget.FieldProbeHiddenWidgetProvider.refreshAll(context)
+  }
+
   /** Il nome del marcatore della famiglia pronta (lo scrive solo `adb`). */
   const val FAMILY_READY_MARKER: String = "debug-family-ready.marker"
 

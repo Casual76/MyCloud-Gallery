@@ -133,6 +133,8 @@ fun NavGraphBuilder.settingsGraph(
   openBackup: (() -> Unit)? = null,
   /** Fase 6 (P11): la pagina Ricerca e modelli di feature-search (la scrive `:app`); null = la voce non c'e'. */
   openSearch: (() -> Unit)? = null,
+  /** Fase 7 (P9, D33): la pagina dei Nascosti di feature-library (la scrive `:app`); null = la voce "Nascosti" delle Impostazioni non c'e'. */
+  openHidden: (() -> Unit)? = null,
 ) {
   val back: () -> Unit = { nav.popBackStack() }
   navigation<SettingsGraphRoute>(startDestination = SettingsHomeRoute) {
@@ -153,6 +155,7 @@ fun NavGraphBuilder.settingsGraph(
             openBackup = openBackup,
             openSharing = { nav.navigate(SettingsSharingRoute) },
             openSearch = openSearch,
+            openHidden = openHidden,
           ),
           openDiagnostics = openDiagnostics,
           resumeStep = resumeStep,

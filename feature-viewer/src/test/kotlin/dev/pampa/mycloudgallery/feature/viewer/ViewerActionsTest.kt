@@ -108,6 +108,65 @@ class ViewerActionsTest : ViewerTestBase() {
     composeRule.onNodeWithText("Lo trovi in Raccolte, Nascosti.").assertExists()
   }
 
+  /** Fase 7 (P9, D23, E-H2): nascondere riesce, ma i familiari vedono ancora l'elemento (area comune, album condiviso). */
+  private class SharedWithFamilyActions(private val answer: suspend () -> Int) : LocalMediaActions {
+    val hidden = mutableListOf<Set<MediaId>>()
+
+    override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) = Unit
+
+    override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) {
+      hidden += ids
+    }
+
+    override suspend fun familyStillSees(ids: Set<MediaId>): Int = answer()
+  }
+
+  /** E-H2: l'avviso dice che i familiari continuano a vederlo e che Nascosti protegge solo dentro l'app. */
+  @Test
+  fun nascondereUnElementoDelleAreaComuneDiceCheIFamiliariLoVedonoAncora() {
+    val shared = SharedWithFamilyActions { 1 }
+    show(services = services(actions = shared))
+    openMenu()
+    composeRule.onNodeWithText("Nascondi").performClick()
+    composeRule.waitForIdle()
+    fixture.items.publish(fixture.without(setOf(currentId)))
+    composeRule.waitForIdle()
+
+    assertThat(shared.hidden).containsExactly(setOf(currentId))
+    composeRule.onNodeWithText("Nascosto: i familiari continuano a vederlo").assertExists()
+    composeRule.onNodeWithText("Nascosti protegge solo dentro l'app", substring = true).assertExists()
+    composeRule.onAllNodesWithText("Lo trovi in Raccolte, Nascosti.").assertCountEquals(0)
+  }
+
+  /** E-H2: se i familiari non lo vedono (niente area comune) l'avviso resta quello di sempre. */
+  @Test
+  fun nascondereUnElementoCheNessunoVedeNonAvvisaDeiFamiliari() {
+    val onlyMine = SharedWithFamilyActions { 0 }
+    show(services = services(actions = onlyMine))
+    openMenu()
+    composeRule.onNodeWithText("Nascondi").performClick()
+    composeRule.waitForIdle()
+    fixture.items.publish(fixture.without(setOf(currentId)))
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithText("Nascosto").assertExists()
+    composeRule.onAllNodesWithText("Nascosto: i familiari continuano a vederlo").assertCountEquals(0)
+  }
+
+  /** E-H2, fallire chiusi: se non si riesce a sapere se i familiari lo vedono, si avvisa lo stesso (un avviso in meno lascerebbe credere il contrario). */
+  @Test
+  fun seNonSiSaSeIFamiliariLoVedonoSiAvvisaLoStesso() {
+    val unknown = SharedWithFamilyActions { error("catalogo non raggiungibile") }
+    show(services = services(actions = unknown))
+    openMenu()
+    composeRule.onNodeWithText("Nascondi").performClick()
+    composeRule.waitForIdle()
+    fixture.items.publish(fixture.without(setOf(currentId)))
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithText("Nascosto: i familiari continuano a vederlo").assertExists()
+  }
+
   /** Un catalogo che non scrive (disco pieno, database in errore): ogni azione solleva. */
   private class FailingActions : LocalMediaActions {
     var calls = 0

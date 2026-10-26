@@ -439,12 +439,18 @@ internal class ViewerController(
     val hide = !request.secure
     changingVisibility++
     scope.launch {
+      var familySees = false
       val done = try {
-        attempt { actions.setHidden(setOf(id), hide) }
+        val written = attempt { actions.setHidden(setOf(id), hide) }
+        // E-H2: la domanda sta dentro la finestra "sto cambiando la visibilita'", altrimenti l'elemento che esce dalla vista si annuncerebbe
+        // come sparito (ItemGone) prima che il messaggio giusto sia pronto.
+        if (written && hide) familySees = familyStillSees(actions, id)
+        written
       } finally {
         changingVisibility--
       }
       val message = when {
+        done && hide && familySees -> ViewerMessage.HiddenFamilySees
         done && hide -> ViewerMessage.Hidden
         done -> ViewerMessage.Unhidden
         hide -> ViewerMessage.HideFailed

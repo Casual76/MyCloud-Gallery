@@ -74,4 +74,27 @@ class GuardedMediaActionsTest {
     assertThat(inner.hidden).containsExactly(selected to true, selected to false).inOrder()
     assertThat(inner.favorites).containsExactly(selected to true)
   }
+
+  /** Fase 7 (P9, E-H2): il guardiano inoltra "quanti li vedono ancora i familiari"; il default 0 dell'interfaccia farebbe sparire l'avviso. */
+  private class FamilyAware(private val answer: Int) : LocalMediaActions {
+    val asked = mutableListOf<Set<MediaId>>()
+
+    override suspend fun setFavorite(ids: Set<MediaId>, on: Boolean) = Unit
+
+    override suspend fun setHidden(ids: Set<MediaId>, on: Boolean) = Unit
+
+    override suspend fun familyStillSees(ids: Set<MediaId>): Int {
+      asked += ids
+      return answer
+    }
+  }
+
+  @Test
+  fun l_avvisoDeiFamiliariAttraversaIlGuardiano() = runBlocking<Unit> {
+    val inner = FamilyAware(answer = 3)
+    val actions = GuardedMediaActions(inner)
+
+    assertThat(actions.familyStillSees(selected)).isEqualTo(3)
+    assertThat(inner.asked).containsExactly(selected)
+  }
 }

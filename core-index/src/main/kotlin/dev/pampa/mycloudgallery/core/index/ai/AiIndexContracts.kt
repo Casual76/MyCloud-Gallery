@@ -112,6 +112,13 @@ interface AiReplicaSink {
  */
 fun interface AiBufferSink {
   suspend fun put(key: ContentKey, cls: SegmentClass, bytes: ByteArray): Boolean
+
+  /**
+   * Revisione A (R5): lo stesso blob con la sua **provenienza**, l'anteprima di [device] attestata in [share] ([device] null = non noto,
+   * per esempio l'HQ della replica locale). Il buffer lo ricorda: un calcolo su un'anteprima altrui vale solo per quella share e cade
+   * con la revoca di chi l'ha preparata. Di serie come [put] (un buffer che non distingue la provenienza).
+   */
+  suspend fun putFrom(key: ContentKey, cls: SegmentClass, bytes: ByteArray, share: String, device: String?): Boolean = put(key, cls, bytes)
 }
 
 /** Com'e' andato uno scaricamento di anteprime nel buffer. */

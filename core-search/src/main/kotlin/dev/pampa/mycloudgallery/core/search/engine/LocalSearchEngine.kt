@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchResults
 import dev.pampa.mycloudgallery.core.search.contract.SearchText
 import dev.pampa.mycloudgallery.core.search.contract.SearchThresholds
 import dev.pampa.mycloudgallery.core.search.contract.Today
+import dev.pampa.mycloudgallery.core.search.coverage.CoverageNotices
 import dev.pampa.mycloudgallery.core.search.coverage.CoverageTracker
 import dev.pampa.mycloudgallery.core.search.index.CellKeys
 import dev.pampa.mycloudgallery.core.search.index.LocalAiIndex
@@ -25,6 +26,7 @@ import dev.pampa.mycloudgallery.core.search.index.TextSearch
 import dev.pampa.mycloudgallery.core.search.index.TwoPassIndex
 import dev.pampa.mycloudgallery.core.search.parse.ItalianQueryParser
 import dev.pampa.mycloudgallery.core.search.similar.SimilarSearch
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -52,6 +54,8 @@ class LocalSearchEngine(
   params: RankParams = RankParams(),
   coverageTracker: CoverageTracker = CoverageTracker(),
   currentRecipe: Int = 1,
+  /** PR-1: le aree senza indicizzatori e la lettura del testo non attiva, dette sopra i risultati (E-I12, D31). */
+  private val coverageNotices: CoverageNotices = CoverageNotices.NONE,
 ) : SearchEngine {
 
   private val core = SearchCore(data, index, keys, today, params, coverageTracker, currentRecipe)
@@ -66,22 +70,34 @@ class LocalSearchEngine(
 
   override val readiness: StateFlow<SearchReadiness> get() = embedding.readiness
 
+  override fun warmUp() = embedding.preload()
+
   override suspend fun search(request: SearchRequest): SearchResults {
     val snapshot = core.data.snapshot.value ?: return core.empty(emptyList(), request.order)
     core.prepare()
     val parsed = parser.parse(request.text.take(QueryParser.MAX_QUERY_CHARS), today.date(), places.dictionary(snapshot))
     val chips = request.editedChips ?: parsed.chips
     val wordChips = chips.filterIsInstance<SearchChip.Word>()
-    val words = if (request.editedChips != null) wordChips.filter { !it.exact }.flatMap { SearchText.words(it.text) } else parsed.words
+    // CE-2: modificare un chip cambia solo quel filtro. Le parole libere della query non hanno un chip che le porti e restano; le frasi esatte e le
+    // parole "come parola" stanno nei chip `Word` (toglierne uno le toglie).
+    val words = if (request.editedChips != null) {
+      (parsed.words + wordChips.filter { !it.exact }.flatMap { SearchText.words(it.text) }).distinct()
+    } else {
+      parsed.words
+    }
     val exact = if (request.editedChips != null) wordChips.filter { it.exact }.map { it.text } else parsed.exact
     val filters = chips.filter { it.isFilter }
+    val freeText = parsed.semantic != null || parsed.words.isNotEmpty()
+    // Tolti tutti i chip e senza testo non resta niente da cercare: nessun risultato (non "tutta la Libreria").
+    if (request.editedChips != null && filters.isEmpty() && !freeText && wordChips.isEmpty()) return core.empty(chips, request.order, freeText = false)
     val candidates = candidates(snapshot, filters)
     val notices = ArrayList<SearchNotice>()
     parsed.corrections.forEach { (from, to) -> notices += SearchNotice.TypoCorrected(from, to) }
 
     var content: ContentScores? = null
     if (parsed.semantic != null) {
-      val query = embedding.vector(parsed.semantic)
+      // CE-9: il motore delle query non si aspetta: se si sta ancora caricando, filtri e testo rispondono subito e il contenuto arriva dopo.
+      val query = embedding.vectorIfLoaded(parsed.semantic)
       if (query == null) {
         notices += if (embedding.readiness.value is SearchReadiness.PreparingContent) SearchNotice.PreparingContentSearch else SearchNotice.OnlyFiltersAndText
       } else {
@@ -90,6 +106,7 @@ class LocalSearchEngine(
     }
     val hits = text.hits(words, exact)
     val onlyFilters = parsed.semantic == null && words.isEmpty() && exact.isEmpty()
+    if (!onlyFilters) notices += coverageNoticesFor(words.isNotEmpty() || exact.isNotEmpty())
     val corrections = ArrayList<Pair<SearchNotice, Set<Int>>>()
     val (map, scored) = core.withMap(snapshot) { map ->
       val t = FloatArray(snapshot.size)
@@ -113,7 +130,7 @@ class LocalSearchEngine(
     core.refreshCoverage(snapshot)
     val results = core.finish(
       snapshot, map, chips, scored, onlyFilters, Thresholds(SearchThresholds.ZC, SearchThresholds.ZL, SearchThresholds.S_MIN),
-      request.order, notices.distinct(),
+      request.order, notices.distinct(), freeText,
     )
     if (corrections.isEmpty()) return results
     val shown = HashSet<Int>()
@@ -123,6 +140,23 @@ class LocalSearchEngine(
   }
 
   override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults = similarSearch.similar(media, order)
+
+  /**
+   * PR-1 (E-I12, D31): una ricerca per contenuto o per parole dice le aree che nessun dispositivo analizza (prima l'area comune) e, se si
+   * cercano parole, che la lettura del testo non e' attiva (la schermata lo mostra una volta). Un errore qui non ferma la ricerca.
+   */
+  private suspend fun coverageNoticesFor(withWords: Boolean): List<SearchNotice> {
+    val out = ArrayList<SearchNotice>()
+    try {
+      coverageNotices.areasWithoutIndexer().distinct().sortedDescending().forEach { out += SearchNotice.NoIndexerForArea(it) }
+      if (withWords && coverageNotices.textReadingOff()) out += SearchNotice.TextReadingOff
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Gli avvisi sono solo un'informazione: senza, la ricerca risponde lo stesso.
+    }
+    return out
+  }
 
   /** Le posizioni (crescenti) delle celle che passano i filtri. */
   private fun candidates(snapshot: TimelineSnapshot, filters: List<SearchChip>): IntArray {

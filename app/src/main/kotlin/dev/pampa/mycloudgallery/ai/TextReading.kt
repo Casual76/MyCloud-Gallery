@@ -34,7 +34,11 @@ import kotlinx.coroutines.sync.withLock
  *
  * Nel dubbio (file assente o rovinato) la lettura e' spenta, il dispositivo non e' escluso e nessun avviso e' stato visto.
  */
-class TextReadingMemory(private val file: File) {
+class TextReadingMemory(
+  private val file: File,
+  /** La versione del testo della pagina di quest'app (LT-3): una accettata piu' vecchia non accende la lettura qui. */
+  private val current: Int = TextReadingSwitch.CURRENT_TEXT_VERSION,
+) {
   private val lock = Any()
 
   @Volatile var choice: TextReadingChoice = TextReadingChoice.Off
@@ -54,7 +58,12 @@ class TextReadingMemory(private val file: File) {
     read()
   }
 
-  fun state(): TextReadingState = stateOf(choice, excluded, noticeVersion)
+  fun state(): TextReadingState = stateFor(choice, excluded, noticeVersion)
+
+  /**
+   * Lo stato di [choice], [excluded] e dell'avviso visto qui ([seen]) con la versione del testo di quest'app ([current], LT-3): vedi [stateOf].
+   */
+  fun stateFor(choice: TextReadingChoice, excluded: Boolean, seen: Int): TextReadingState = stateOf(choice, excluded, seen, current)
 
   /** L'ultima scelta dell'account vista nel registro. Ignorata finche' una scelta fatta qui non e' arrivata al registro. */
   fun saveSeen(seen: TextReadingChoice) = update { if (!unsynced) choice = seen }
@@ -138,13 +147,29 @@ class TextReadingMemory(private val file: File) {
     private const val VERSION = "2"
 
     /**
-     * Lo stato visto da QUESTO dispositivo. L'esclusione vince su tutto (anche sull'avviso da vedere); con l'account acceso e l'avviso di
-     * quella versione non ancora visto qui, la lettura **non e' attiva** ([TextReadingState.AwaitingNotice]).
+     * Lo stato visto da QUESTO dispositivo. Nell'ordine:
+     *  1. **L'esclusione vince su tutto**: l'account e' acceso ma non qui.
+     *  2. **Il testo e' cambiato** (revisione A, LT-3, I7; D41): una versione accettata **piu' vecchia** di quella di quest'app ([current]) non basta:
+     *     la lettura resta "attiva per l'account" ma **non qui** (motore, lettura al volo e ML Kit fermi) finche' il testo nuovo non si riaccetta
+     *     sulla pagina, che lo dice ("Il testo e' cambiato").
+     *  3. **L'avviso non ancora visto qui** (revisione B, LT-2, R8): con l'account acceso (da un altro dispositivo, o da un'app piu' nuova) e
+     *     l'avviso di quella versione non ancora visto su questo dispositivo ([noticeVersion]) la lettura **non e' attiva**
+     *     ([TextReadingState.AwaitingNotice]).
+     *  4. Altrimenti e' attiva qui.
+     *
+     * La lettura e' attiva qui solo se `acceptedTextVersion >= current` **e** `noticeVersion >= acceptedTextVersion`. Il valore di
+     * [noticeVersion] di serie ("avviso gia' visto") serve a chi guarda solo la versione del testo.
      */
-    fun stateOf(choice: TextReadingChoice, excluded: Boolean, noticeVersion: Int): TextReadingState = when (choice) {
+    fun stateOf(
+      choice: TextReadingChoice,
+      excluded: Boolean,
+      noticeVersion: Int = Int.MAX_VALUE,
+      current: Int = TextReadingSwitch.CURRENT_TEXT_VERSION,
+    ): TextReadingState = when (choice) {
       TextReadingChoice.Off -> TextReadingState.Off
       is TextReadingChoice.OnForAccount -> when {
         excluded -> TextReadingState.OnForAccount(thisDevice = false)
+        choice.acceptedTextVersion < current -> TextReadingState.OnForAccount(thisDevice = false)
         noticeVersion < choice.acceptedTextVersion -> TextReadingState.AwaitingNotice(choice.acceptedTextVersion)
         else -> TextReadingState.OnForAccount(thisDevice = true)
       }
@@ -193,7 +218,7 @@ class AppTextReadingSwitch(
   private fun compute(registry: TextReadingChoice?, pending: TextReadingChoice?, excludedHere: Boolean, seen: Int, off: Boolean): TextReadingState {
     if (stopped) return TextReadingState.Off
     if (off) return TextReadingState.Disabling
-    return TextReadingMemory.stateOf(pending ?: registry ?: memory.choice, excludedHere, seen)
+    return memory.stateFor(pending ?: registry ?: memory.choice, excludedHere, seen)
   }
 
   override fun currentState(): TextReadingState = compute(choice.value, local.value, excluded.value, notice.value, disabling.value)

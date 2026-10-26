@@ -138,26 +138,25 @@ class ShareReceiverActivity : FragmentActivity() {
   private fun protectFromOverlays() = OverlayShield.protect(window)
 
   /**
-   * Campo, gruppo A (D1, `IMG_mcg_0106`): una condivisione nuova lanciata con `NEW_TASK` (Quick Share, `am start`) mentre questa schermata e' ancora in
-   * cima al suo task. Prima Android riportava davanti la schermata vecchia ("1 file in coda" della condivisione di prima) e quella nuova non arrivava
-   * mai all'app: niente copiato, nessuna riga, nessun avviso. Con `singleTop` arriva qui e si apre in una schermata sua, in un task suo, con il permesso
-   * di lettura che ha portato; questa si chiude come con "Annulla" (le copie non salvate si tolgono, quelle gia' in coda sono del diario e restano; un
-   * salvataggio in corso non si interrompe).
+   * Campo, gruppo A (D1, `IMG_mcg_0106`; CA-2): una condivisione nuova (Quick Share, `am start`) mentre questa schermata e' ancora in cima al suo task.
+   * Con `singleTop` arriva qui. Prima si rilanciava in una schermata nuova (`startActivity` con `NEW_TASK | MULTIPLE_TASK`) e questa si chiudeva: se Android
+   * bloccava l'avvio in silenzio (limiti di avvio da sfondo di Android 14 e 15, nessuna eccezione) la condivisione nuova non partiva e la vecchia spariva
+   * comunque. Adesso la nuova **prende il posto della vecchia in questa schermata** ([ReceiveViewModel.replaceRequest]): il permesso di lettura che
+   * porta `onNewIntent` vale per questa activity, quindi non servono ne' un task ne' un avvio nuovi, e la nuova si copia per prima. La vecchia, se non era
+   * in coda, si toglie solo dopo che la nuova e' al sicuro; una gia' in coda e' del diario e resta; un salvataggio in corso non si interrompe.
    */
   override fun onNewIntent(intent: Intent) {
     super.onNewIntent(intent)
-    if (ReceiveRequest.from(intent) == null) return
-    val forward = Intent(intent)
-      .setClass(this, ShareReceiverActivity::class.java)
-      .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_MULTIPLE_TASK)
-    try {
-      startActivity(forward)
-    } catch (_: RuntimeException) {
-      // Nessuna schermata nuova (permesso, activity non trovata): questa resta com'e', e la condivisione nuova non si copia.
-      return
-    }
-    viewModel?.cancel() ?: finish()
+    val request = ReceiveRequest.from(intent) ?: return
+    setIntent(intent)
+    val model = viewModel ?: return
+    val resolver = applicationContext.contentResolver
+    val ownPackage = packageName
+    model.replaceRequest({ IncomingStreams.of(resolver, ownPackage, request) }, request.overflow)
   }
+
+  /** Lo stato della schermata, per i test (null prima che l'activity sia partita). */
+  internal fun receiveStateForTest(): ReceiveUi? = viewModel?.ui?.value
 
   override fun onResume() {
     super.onResume()

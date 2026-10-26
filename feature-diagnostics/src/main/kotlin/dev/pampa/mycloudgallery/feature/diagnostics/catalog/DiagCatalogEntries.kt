@@ -292,6 +292,10 @@ internal object DiagCatalogEntries {
 
     // --- La ricerca (Fase 6, P0: la voce di stato; i codici del §2.6 li aggiunge P11) -----------------------------------
     DiagEntry(DiagCodes.SEARCH_STATE, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_search_state_title, R.string.diag_search_state_guide, null),
+
+    // --- Gli album (Fase 7, P0: la voce di stato; i codici del §2.8 li aggiunge P13) ------------------------------------
+    DiagEntry(DiagCodes.ALBUMS_STATE, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_albums_state_title, R.string.diag_albums_state_guide, null),
+
     // P11: i codici del §2.6 (modelli, motori, calcolo, dati AI dell'indice, indice di ricerca, ritaglio).
     DiagEntry(DiagCodes.AI_MODEL_MISSING, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_model_missing_title, R.string.diag_ai_model_missing_guide, null),
     DiagEntry(DiagCodes.AI_MODEL_FETCH_FAILED, DiagSection.SEARCH, DiagSeverity.WARNING, R.string.diag_ai_model_fetch_failed_title, R.string.diag_ai_model_fetch_failed_guide, null),

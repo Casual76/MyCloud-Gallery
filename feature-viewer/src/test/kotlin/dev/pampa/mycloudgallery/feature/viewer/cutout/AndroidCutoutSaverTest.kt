@@ -220,7 +220,8 @@ class AndroidCutoutSaverTest {
       sourceName = { "segreta.jpg" },
     )
     val result = real.saveAsNewPhoto(id, ref, subject, outline = false, fromHidden = true) as CutoutSaveResult.Saved
-    assertThat(writer.visible.keys).containsExactly("segreta-ritaglio.png")
+    // I6: dai Nascosti il nome e' generico, non quello del file d'origine.
+    assertThat(writer.visible.keys).containsExactly("Ritaglio.png")
     val media = result.newMedia!!
     assertThat(db.personalDao().get(media.value)!!.hidden).isTrue()
 
@@ -237,5 +238,50 @@ class AndroidCutoutSaverTest {
     assertThat(PhoneMediaFolders.FENCED_CUTOUTS).isEqualTo(dev.pampa.mycloudgallery.core.backup.contract.CutoutBackup.FENCED_RELATIVE_PATH)
     assertThat(PhoneMediaFolders.cutouts(fenced = false)).isEqualTo(dev.pampa.mycloudgallery.core.backup.contract.CutoutBackup.source().relativePath)
     assertThat(PhoneMediaFolders.cutouts(fenced = true)).isEqualTo(dev.pampa.mycloudgallery.core.backup.contract.CutoutBackup.source(fenced = true).relativePath)
+  }
+
+  // --- Il file del ritaglio non resta per sempre (R18, VR-3) ------------------------------------------------------------------------
+
+  private class Lifecycle : StagedLifecycle {
+    val events = mutableListOf<String>()
+
+    override fun shared() {
+      events += "shared"
+    }
+
+    override fun copied() {
+      events += "copied"
+    }
+
+    override fun discard() {
+      events += "discard"
+    }
+  }
+
+  /**
+   * R18: il PNG copiato o condiviso ha un ciclo di vita. Copia riuscita: "copied" (chi lo tiene lo toglie quando gli appunti cambiano o dopo poco);
+   * scelta dell'app partita: "shared" (passa al custode delle condivisioni); scelta non partita: "discard" (file e permesso subito via).
+   */
+  @Test
+  fun ilFileDelRitaglioPassaAChiLoTieneSecondoComeFinisce_R18() = runBlocking<Unit> {
+    val lifecycle = Lifecycle()
+    stageResult = StagedCutout(uri, lifecycle)
+    assertThat(saver().copy(id, ref, subject, outline = false)).isTrue()
+    assertThat(lifecycle.events).containsExactly("copied")
+    assertThat(saver().share(id, ref, subject, outline = false)).isTrue()
+    assertThat(lifecycle.events).containsExactly("copied", "shared").inOrder()
+    // Nessuna app che riceva: la scelta non parte e il file si toglie subito.
+    shadowOf(context as Application).checkActivities(true)
+    assertThat(saver().share(id, ref, subject, outline = false)).isFalse()
+    assertThat(lifecycle.events.last()).isEqualTo("discard")
+  }
+
+  /** VR-3: il `ClipData` degli appunti porta il segno del ritaglio nostro, leggibile dalla descrizione (da fuori primo piano il contenuto non si legge). */
+  @Test
+  fun gliAppuntiPortanoIlSegnoDelRitaglioNostro_VR3() = runBlocking<Unit> {
+    assertThat(saver().copy(id, ref, subject, outline = false)).isTrue()
+    val extras = clip()!!.description.extras!!
+    assertThat(extras.getBoolean(CutoutClipMarker.EXTRA)).isTrue()
+    assertThat(extras.getBoolean(SensitiveClipboard.EXTRA_IS_SENSITIVE)).isTrue()
   }
 }

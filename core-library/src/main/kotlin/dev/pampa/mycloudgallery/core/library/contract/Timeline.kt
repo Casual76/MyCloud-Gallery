@@ -124,6 +124,12 @@ enum class LibraryFilter(val code: String) {
    * Firma di P0; il chip nel filtro rapido della Libreria lo accende P8 (finche' P8 non lo fa la Libreria non lo propone).
    */
   DOCUMENTS("documents"),
+
+  /**
+   * Fase 7 (D24): le "Modificate" dell'Utility, dal bit `CellFlags.EDITED` (la versione corrente non e' l'originale). Firma di P0; la
+   * pagina dell'Utility e' di P8. Non e' un chip del filtro rapido della Libreria (`QuickFilters` lo lascia fuori): e' una pagina.
+   */
+  EDITED("edited"),
   ;
 
   /**
@@ -138,6 +144,7 @@ enum class LibraryFilter(val code: String) {
     VIDEOS -> kind == MediaKind.VIDEO
     FAVORITES -> CellFlags.has(flags, CellFlags.FAVORITE)
     DOCUMENTS -> CellFlags.has(flags, CellFlags.DOCUMENT)
+    EDITED -> CellFlags.has(flags, CellFlags.EDITED)
   }
 
   companion object {

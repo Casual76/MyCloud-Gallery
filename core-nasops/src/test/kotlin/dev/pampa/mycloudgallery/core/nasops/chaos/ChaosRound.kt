@@ -643,8 +643,13 @@ class ChaosRound(
         ItemFlow.PURGE -> item.trashId?.let { model.slots[it] }?.let(::removeSlot)
       }
     }
-    // Una cartella spostata tra share lascia la sorgente: il codice sotto prova puo' averla tolta (rmdirIfEmpty) o no.
-    (spec as? StepSpec.Move)?.takeIf { it.crossShare }?.sources?.filter { it.isFolder }?.forEach { model.unassertTree(it.place) }
+    // Una cartella spostata tra share lascia la sorgente: l'esecutore di riferimento la lascia, quello vero la toglie (rmdirIfEmpty) quando e' vuota.
+    // O-B18: se lo stack la toglie e l'operazione e' finita bene (nessun elemento annullato o fermo), a operazioni quiete non deve piu' esserci.
+    val completed = plan.items.all { finalItems[it.index]?.state == OpItemState.DONE }
+    (spec as? StepSpec.Move)?.takeIf { it.crossShare }?.sources?.filter { it.isFolder }?.forEach {
+      model.unassertTree(it.place)
+      if (factory.removesEmptySourceFolders && completed) model.expectGone(it.place)
+    }
   }
 
   private fun removeSlot(slot: TrashSlot) {
@@ -663,7 +668,7 @@ class ChaosRound(
     val gone = model.gone.map { ledger.byId(it).sha }.toSet()
     val dirs = model.asserted.mapNotNull { model.dirs[it] }.toSet()
     val slots = model.slots.mapValues { (_, slot) -> slot.members.entries.associate { (id, rel) -> ledger.byId(id).sha to rel } }
-    return Expectation(visible, copies, gone, dirs, slots)
+    return Expectation(visible, copies, gone, dirs, slots, goneDirs = model.goneDirs.values.toSet())
   }
 
   /** Gli originali devono essere tutti da qualche parte nel modello: se no, e' il banco che ha perso il filo. */

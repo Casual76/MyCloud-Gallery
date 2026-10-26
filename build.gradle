@@ -95,6 +95,9 @@ ext.galleryModules = [
   ':core-ai',
   ':core-search',
   ':feature-search',
+  // Fase 7 (docs/fase7-progetto.md §1.1, P0)
+  ':core-albums',
+  ':feature-albums',
 ]
 
 tasks.register('galleryTest') {

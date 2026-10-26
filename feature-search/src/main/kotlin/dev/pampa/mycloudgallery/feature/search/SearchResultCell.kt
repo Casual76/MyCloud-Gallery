@@ -24,6 +24,7 @@ import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.PresenceBadge
 import dev.pampa.mycloudgallery.core.search.contract.ChipMatching
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
@@ -46,6 +47,14 @@ internal fun thumbRequestOf(thumbnails: SearchThumbnails, snapshot: TimelineSnap
   val version = if (snapshot is ColumnarTimelineSnapshot) snapshot.versionKeyAt(index) else DEFAULT_VERSION_KEY
   return ThumbRequest(ThumbKey(snapshot.idAt(index), version, ThumbBucket.M), ref)
 }
+
+/**
+ * La finestra del caricatore per le richieste di Cerca (CE-5): quelle con una sorgente del telefono sono "visibili"; quelle di un media solo sul NAS "in
+ * arrivo", cosi' la sorgente del NAS non legge mai l'originale (lo fa solo per il contenuto visibile, D17) e risponde con la replica locale o la miniatura
+ * provvisoria. Cerca non apre mai il NAS (D33).
+ */
+internal fun windowOf(requests: List<ThumbRequest>): Pair<List<ThumbRequest>, List<ThumbRequest>> =
+  requests.partition { it.ref !is MediaRef.Nas }
 
 /** I segni sulla cella, come in Libreria: preferito, modificata, durata, illeggibile e dove sta. */
 internal fun badgesOf(snapshot: TimelineSnapshot, index: Int): GalleryGridCellBadges {

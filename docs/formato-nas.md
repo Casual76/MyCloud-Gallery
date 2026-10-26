@@ -106,7 +106,8 @@ sta solo nell'**area comune**, perche' tutti devono leggerlo.
 ├── trash/<id dispositivo>/
 │   ├── rec/<id elemento>                 [5] record firmato del cestino
 │   └── files/<id elemento>               il file cestinato, rinominato senza estensione
-├── albums/<id album>/<id dispositivo>/head/<versione>   [6] album condivisi (Fase 7), area comune
+├── albums/<id album>/<id dispositivo>/head/<versione>   [6] album condivisi (Fase 7, versione 3), SOLO area comune
+├── albums/<id album>/<id dispositivo>/seg/<impronta>    segmenti MCGB classe `album` (17), nome = impronta (Fase 7)
 └── tmp/                                  temporanei della pubblicazione atomica; dalla Fase 5 anche i
                                           temporanei del backup <id dispositivo>-bk-<id> (senza estensione)
 
@@ -116,6 +117,13 @@ sta solo nell'**area comune**, perche' tutti devono leggerlo.
 
 `[n]` e' il tipo del file firmato (§5.1). Ogni dispositivo scrive **solo sotto i propri id** (piu' le
 richieste e le prenotazioni); l'admin scrive il registro.
+
+**Album condivisi (Fase 7, A1; `docs/fase7-progetto.md` D6).** `albums/` esiste **solo nell'area comune** (`commonShare` del registro):
+un **contributo** per album e per dispositivo, la testa in `albums/<id album>/<id dispositivo>/head/<versione>` e i suoi segmenti in
+`albums/<id album>/<id dispositivo>/seg/<impronta>`. Ogni dispositivo scrive solo sotto la propria cartella, solo con `publishExclusive`
+(nessuna sovrascrittura, E-SH6); `<id album>` e' l'id dell'album in base32 (26 caratteri, i suoi 128 bit, §5.8). Fuori da
+`.mycloudgallery/` c'e' la cartella dei file dell'album scelta con la risposta Q1 (a), `Album condivisi/<nome>`: non fa parte del
+formato, sono file di media normali (un file aggiunto li' dal PC non entra nell'album, D39).
 
 **Dati AI e copie dei modelli (Fase 6, A1).**
 - `ai/head/` e `ai/seg/` stanno **in ogni share indicizzata**, accanto a `index/`: vettori e testo letto di un file stanno nella
@@ -484,7 +492,7 @@ falsa. Il costo e' accettabile perche' quasi tutto cio' che firma un dispositivo
 | Dati personali | ignorati i suoi contributi; restano quelli degli altri dispositivi dello stesso account (Fase 4.7 decide se ognuno ripubblica lo stato gia' unito). |
 | Prenotazioni | ignorate: la risorsa e' libera. |
 | Record del cestino | ignorati: i file restano nel cestino e **non vengono mai eliminati in automatico** (la pulizia la fa solo chi ha cestinato, §9); in "Eliminati di recente" compaiono come "senza record valido" e decide l'utente. |
-| Album condivisi (Fase 7) | i suoi contributi alla definizione sono ignorati; i file restano dove sono. |
+| Album condivisi (Fase 7, A7) | **dismesso**: valgono solo i contributi delle sue teste congelate (le voci gia' viste restano, nessuna nuova). **Revocato o perso**: il suo contributo e' ignorato del tutto, anche le aggiunte fatte da li' (un elemento che solo lui aveva pubblicato esce dall'album per tutti); i file restano dove sono. Un altro dispositivo dello stesso account puo' ripubblicare gli elementi i cui file sono ancora nell'area comune ("Ripristina gli elementi di un dispositivo revocato", azione locale, E-SH20). L'account del creatore resta creatore finche' ha un dispositivo approvato o dismesso (D11). |
 
 **Dismissione** (telefono sostituito, funzionava): l'admin la sceglie quando il dispositivo non e'
 sospetto; congela le teste che il suo dispositivo ha gia' accettato, cosi' l'indice gia' fatto non si
@@ -859,6 +867,21 @@ l'impronta di **entrambi** i media, quella del soggetto in `fp` e quella dell'al
   li' finche' non si aggiorna), senza scartare le altre voci. L'impronta sta nel corpo, quindi la copre l'impronta del segmento
   elencata nella testa firmata, come ogni altro byte della voce.
 
+**Campi della Fase 7 (A3; `docs/fase7-progetto.md` D4, risposta Q5).** Album, Raccolte e viaggi aggiungono **campi** (valori) dentro i
+tipi esistenti `album`, `setting` e `media_flag`, senza tipi nuovi e senza versione nuova: un tipo nuovo farebbe scartare il segmento
+intero a un'app vecchia, un campo nuovo no (un'app della Fase 6 lo legge, lo conserva e non lo usa). Le costanti sono
+`PersonalFields` di `core-personal`.
+- `album`: `kind` (`manual`/`smart`), `sort`, `smart:period`, `smart:place`, `smart:text`, `smart:example:<media>`, `smart:sources`,
+  `smart:types`, `exclude:<media>`, `accept:<media>`, `frozen`, `shared` (id dell'album condiviso nato da questo), `copy_of` (id
+  dell'album condiviso di cui e' la copia personale, Q5);
+- `setting`: `collections_order`, `collections_hidden:<sezione>`, `albums_sort`, `trip_dismissed:<impronta>`, `shared_album_left:<id>`,
+  `full_hash_nightly`;
+- `media_flag`: `shared_origin` (la cartella d'origine di un mio media spostato in un album condiviso: sta qui, nell'area privata, e
+  **mai** nella definizione comune).
+
+**Impronta obbligatoria** (`fp`) sulle voci `item:`, `exclude:`, `accept:`, `smart:example:`: chi legge ritrova il media per impronta se
+gli id divergono fra dispositivi (stessa regola delle separazioni: solo se indica un media solo).
+
 **Dati AI: i corpi `vec` e `ocr` (Fase 6, versione 2, A3, F6-D6).** Dopo `"MCGB" | versione 2` il contenuto ha la stessa tabella
 di sopra (classe 7 o 8, N voci, chiavi strettamente crescenti, lunghezze), con la **chiave di contenuto** come chiave. Il corpo e'
 binario, big endian come il resto del formato. Una voce `vec` o `ocr` descrive **un contenuto** (non un percorso).
@@ -977,12 +1000,51 @@ proprio diario locale (§9, punto 3). Un dispositivo dismesso o azzerato lascia 
 
 ### 5.8 Testa di un album condiviso (tipo 6, Fase 7)
 
-Qui e' definita solo la busta: un file per album e per dispositivo
-(`albums/<id album>/<id dispositivo>/head/<versione>`), firmato da un dispositivo approvato, con anti-rollback
-come le teste (§5.5). Ogni dispositivo scrive i propri contributi, cosi' due familiari che modificano lo
-stesso album non si sovrascrivono (E-SH6). Il contenuto (elementi, permesso scelto dal creatore) arriva in
-Fase 7 con una versione del formato che lo descrive. Una definizione d'album, vera o falsa, **non sposta e
-non cancella nulla**: si limita a mostrare cio' che c'e' gia' nell'area comune (E-S11).
+**Fase 7 (A2; `docs/fase7-progetto.md` D6-D11, §2.4; codec `AlbumDocs` di `core-trust`, P2).** Un file per album e per dispositivo
+(`albums/<id album>/<id dispositivo>/head/<versione>`), firmato da un dispositivo approvato, con anti-rollback ed equivocazione come le
+teste (§5.5, `HeadMark`): ogni dispositivo scrive solo il **suo contributo**, cosi' due familiari che modificano lo stesso album non si
+sovrascrivono (E-SH6). Versione **3** del formato (§10), tetto 256 KiB (`MAX_ALBUM_HEAD_PAYLOAD`).
+
+**La testa**: `family`, `album` (id in base32), `device` (= firmatario), `version`, `registryVersion`, `createdAt` (ora del NAS),
+`segments[]` (come al §5.5: nome = impronta, classe `album`). Al piu' una testa ogni 5 minuti per album e dispositivo, modifiche
+accorpate in 30 s; pulizia dei propri file come `OwnFilesPolicy` (ultime 3 teste, 7 giorni di grazia).
+
+**I segmenti**: contenitore `MCGB` (§5.5-bis) con la classe nuova **`album` (codice 17)**, solo nelle teste di tipo 6 (una testa `index`,
+`personal` o `ai` che la elenca e' rifiutata, e una testa d'album non elenca altre classi). Una **voce** per chiave, con l'ultima
+scrittura che vince (`at`, poi l'autore minore, come i dati personali): chiave = `SHA-256("mcg-album\0" ‖ id album ‖ campo)`; corpo JSON
+canonico al piu' 4 KiB con `at` (ora del NAS), `author` (dispositivo), `account` (l'account di chi scrive), `field`, `value` (assente =
+lapide). I campi:
+
+| Campo | Valore | Chi puo' scriverlo (§2.4 del progetto) |
+|---|---|---|
+| `definition` | `title` (al piu' 64 caratteri, §8.4), `folder` (cartella dell'album, relativa all'area comune), `state` (`active`, `closed`, `deleted`), `creator` (account), `nonce` (16 byte), e con `closed`/`deleted` **`afterClose`** (`remove` o `keep_copy`, risposta Q5 del 22/10) | titolo e cartella: secondo il livello; lo stato e `afterClose`: solo il creatore o l'erede |
+| `level` | la **storia** dei livelli (`all`, `add`, `view`), al piu' 32 cambi, ognuno con la sua ora | solo il creatore o l'erede |
+| `cover` | id del media e chiave di contenuto, o assente (automatica) | secondo il livello |
+| `sort` | `oldest`, `newest`, `custom` | secondo il livello |
+| `item:<media>` | posizione, chiave di contenuto **intera**, versione, percorso nella share comune (al piu' 1.024 byte, relativo, mai dentro `.mycloudgallery`, confronto NFKC), `addedBy` (account); lapide = tolto | aggiungere e togliere secondo il livello e `addedBy` |
+| `heir` | account dell'erede e versione del registro che lo giustifica | un admin, solo se il registro non ha piu' dispositivi del creatore (D11) |
+
+**Id dell'album legato al creatore (D7)**: i primi 128 bit di `SHA-256("mcg-album-id\0" ‖ account del creatore ‖ nonce)`; chi legge li
+ricalcola da `definition` e rifiuta il contributo se non tornano (`AlbumId.derived` di `core-model`, E-SH14). In app lo stesso id ha
+la forma di un UUID; nei percorsi la sua forma base32.
+
+**Regole di chi legge** (D8-D10): busta valida; firmatario approvato nel registro corrente (un dismesso vale solo per le teste
+congelate, un revocato o perso si ignora del tutto, §4.6); `family`, `device` e cartella coerenti; anti-rollback ed equivocazione per
+dispositivo; `account` di ogni voce = `nasUser` del dispositivo nel registro; `at` al piu' 2 minuti nel futuro, e una voce **nuova**
+(assente nella testa precedente dello stesso dispositivo) con `at` anteriore alla `createdAt` di quella testa meno 2 minuti si scarta
+(L59); i tetti del §7; un campo sconosciuto rifiuta il segmento. Ogni violazione della busta, dell'id o dei tetti rifiuta il
+**contributo intero**; gli altri contributi valgono (E-SH14). Una voce non permessa dal livello in vigore alla sua ora `at` si **scarta
+da sola** (`AlbumPermissions`, la stessa tabella di chi scrive, C25). Uno stato `closed` o `deleted` e' **definitivo** per quell'id: un
+`active` successivo non riapre l'album (condividere di nuovo crea un album nuovo, con un id suo).
+
+**Q5 (22/10): cosa vedono gli altri alla chiusura lo decide chi chiude.** `afterClose` = `remove`: l'album sparisce dalle Raccolte degli
+altri, con l'avviso. `keep_copy`: ogni familiare che non l'aveva lasciato tiene una **copia personale** (un album dei suoi dati personali,
+area privata, con id `SharedAlbumCopies.copyIdFor(album, account)` e la voce `copy_of`) con gli elementi che il suo catalogo attesta,
+finche' i file restano nell'area comune. Un `afterClose` sconosciuto vale `remove`.
+
+**Attestazione (D9)**: un elemento si mostra solo se il catalogo di chi legge vede, **nell'area comune**, un file presente con la stessa
+chiave di contenuto intera (e lo stesso hash completo se entrambi lo hanno). Una definizione d'album, vera o falsa, **non sposta, non
+copia, non cancella e non scarica nulla** (§9 punto 4, E-S11).
 
 ### 5.9 Segnalazione "perso" (tipo 7)
 
@@ -1098,6 +1160,11 @@ insieme, il risultato resta coerente.
 | Nome del NAS | 253 caratteri |
 | Chiave di una prenotazione | 256 caratteri |
 | Percorso | 4096 byte UTF-8, 64 livelli |
+| Album condiviso (Fase 7, A4): corpo di una voce | 4 KiB |
+| Album condiviso: voci per contributo / per segmento | 20.000 / 8.192 |
+| Album condiviso: titolo | 64 caratteri (§8.4) |
+| Album condiviso: percorso di un elemento | 1.024 byte, relativo alla share comune, mai dentro `.mycloudgallery` (confronto NFKC) |
+| Album condiviso: storia dei livelli | 32 cambi |
 | Componente di percorso | 255 byte UTF-8 |
 | Nome di share | 80 caratteri |
 | Configurazione: prefissi ULA / esclusioni | 4 / 256 (ogni esclusione 512 byte UTF-8) |
@@ -1255,7 +1322,11 @@ partono solo da azioni locali confermate**, con tetti per giro. Come la garantis
    agli altri "senza record valido". I record propri restano anche dopo la pulizia del file (innocui: un record
    senza file non si mostra).
 4. **Spostamenti verso l'area comune** (album condivisi, Fase 7): partono solo dalla conferma locale
-   "N foto verranno spostate…"; una definizione d'album letta dal NAS non sposta nulla.
+   "N foto verranno spostate…"; una definizione d'album letta dal NAS non sposta nulla. **Fase 7 (A5)**: una definizione d'album, vera
+   o falsa, non sposta, non copia, non cancella e non scarica nulla; gli elementi si mostrano solo se il catalogo di chi legge vede il
+   file nell'area comune (D9). Lo spostamento nasce solo da una `ShareConfirmation` (costruttore `internal`, emessa dal foglio) e dalla
+   `UserConfirmation` di `core-nasops` per lo stesso piano, con il diario della condivisione scritto prima (C26);
+   `Phase7ArchitectureTest` vieta a `core-albums` di vedere `core-nasops`, `core-backup` e `core-nas`.
 5. **Ripristino dal cestino**: azione locale confermata, percorso validato (§8.1), mai sovrascrivendo.
 6. **L'unica conseguenza distruttiva voluta di un dato remoto** e' l'auto-azzeramento di un dispositivo
    segnato `lost` in un registro firmato **e accettato**, oppure segnalato da un dispositivo approvato dello
@@ -1347,6 +1418,10 @@ il suo diario locale e i suoi test "dato remoto ostile → nessuna azione".
   Fase 6 li scrive e li legge come prima. Chi legge accetta **1..2**. Un'app senza la Fase 6 trova `ai/` come una cartella
   qualunque che non apre mai (non la elenca e non la legge: E-I3, E-I22), non rifiuta le altre teste e non perde niente; se per
   caso aprisse un file `ai`, una versione piu' nuova della sua e' `NEWER_FORMAT` ("aggiorna l'app"), mai un errore del dato.
+- **Fase 7 (A6, D6): la versione 3 esiste solo per i file `albums/`.** Teste di tipo 6 e segmenti `album` portano la **3**; teste
+  `index` e `personal` restano alla 1, i file `ai` alla 2. Chi legge accetta **1..3** con la versione legata al tipo (una testa
+  d'album alla 1 o alla 2, o un file d'altro tipo alla 3, e' rifiutato). Un'app della Fase 6 non apre `albums/` (non la elenca); se
+  per caso aprisse un file d'album, la 3 e' `NEWER_FORMAT`.
 - Un file con versione **piu' nuova** non si interpreta: `NEWER_FORMAT` → "aggiorna l'app". Non e' un
   errore del dato e non si cancella nulla.
 - **Un'app vecchia non rompe i dati di una nuova**: ogni dispositivo scrive solo i propri file; un admin con

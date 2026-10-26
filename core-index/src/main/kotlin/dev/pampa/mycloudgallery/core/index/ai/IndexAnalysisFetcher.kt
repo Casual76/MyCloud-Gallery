@@ -33,6 +33,10 @@ import kotlin.time.Duration
  *   la stessa chiave di contenuto **intera** ([ReplicaStore.presentContentKeys]); un blob di un'altra share non si guarda nemmeno.
  * - **Traffico**: i byte letti dal NAS vanno a [traffic] (D10, "traffico delle anteprime registrato").
  *
+ * - **Provenienza** (revisione A, R5): ogni blob arriva al buffer con la share e il dispositivo che l'ha preparato
+ *   ([AiBufferSink.putFrom]; l'HQ della replica locale con il dispositivo non noto); un blob preparato da questo stesso dispositivo
+ *   ([selfDevice]) e' proprio ([AiBufferSink.put]).
+ *
  * Mai byte remoti ai decodificatori nativi: chi usa il buffer passa da `ModelInputs` di core-ai (D5).
  */
 class IndexAnalysisFetcher(
@@ -43,6 +47,8 @@ class IndexAnalysisFetcher(
   private val ticker: () -> Long = System::nanoTime,
   /** Byte di segmenti letti dal NAS al massimo per chiamata: un lotto non scarica gigabyte. */
   private val maxBytesPerFetch: Long = DEFAULT_MAX_BYTES_PER_FETCH,
+  /** R5: l'id di questo dispositivo (le sue anteprime sono proprie); null = nessuna lo e'. */
+  private val selfDevice: String? = null,
 ) : AnalysisFetcher {
 
   /** Segmenti scaricati dal NAS (per i test). */
@@ -89,7 +95,7 @@ class IndexAnalysisFetcher(
           continue
         }
         val blob = ByteArray(buffer.remaining()).also { buffer.get(it) }
-        if (!into.put(key, cls, blob)) return FetchReport(fetched, 0, bytes, stoppedEarly = true)
+        if (!into.putFrom(key, cls, blob, share, null)) return FetchReport(fetched, 0, bytes, stoppedEarly = true)
         fetched++
         wanted -= pair
       }
@@ -150,7 +156,8 @@ class IndexAnalysisFetcher(
             val pair = entry.contentKey to cls
             if (pair !in wanted) continue
             val blob = content.bytes.copyOfRange(entry.offset, entry.offset + entry.length)
-            if (!into.put(entry.contentKey, cls, blob)) {
+            val stored = if (head.deviceId == selfDevice) into.put(entry.contentKey, cls, blob) else into.putFrom(entry.contentKey, cls, blob, share, head.deviceId)
+            if (!stored) {
               stopped = true
               break@classes
             }

@@ -4,6 +4,8 @@ import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.library.noop.EmptyTimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
+import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
+import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
 import dev.pampa.mycloudgallery.core.models.testing.FakeModelManager
 import dev.pampa.mycloudgallery.core.search.contract.IdleSuggestions
@@ -13,6 +15,7 @@ import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
 import dev.pampa.mycloudgallery.core.search.contract.SearchMediaType
 import dev.pampa.mycloudgallery.core.search.contract.SearchNotice
+import dev.pampa.mycloudgallery.core.search.contract.SearchReadiness
 import dev.pampa.mycloudgallery.core.search.contract.Suggestion
 import dev.pampa.mycloudgallery.core.search.testing.FakeSearchData
 import dev.pampa.mycloudgallery.core.search.testing.FixedToday
@@ -322,5 +325,100 @@ class SearchControllerTest {
     runCurrent()
     assertThat(engine.requests.single().text).isEqualTo("mare")
     assertThat(history.entries.value).hasSize(1)
+  }
+
+  // --- Correzioni dopo le revisioni, pacchetto C -----------------------------------------------------------------------------------
+
+  private val yesterday = SearchChip.DateRange(LocalDate.of(2026, 10, 20), LocalDate.of(2026, 10, 20), everyYear = false, label = "Ieri")
+
+  /**
+   * CE-2: "scontrino ieri": tolto l'unico chip la ricerca continua con le parole libere (il testo resta nel campo, il motore riceve la query con zero
+   * chip). Prima Cerca tornava a riposo e la query spariva.
+   */
+  @Test
+  fun togliereUnChipConParoleLibereContinuaLaRicerca_CE2() = runTest {
+    engine.script = { request -> lib.results(chips = request.editedChips ?: listOf(yesterday), freeText = true) }
+    val c = controller()
+    c.onQueryChange("scontrino ieri")
+    c.onSubmit()
+    runCurrent()
+    c.onRemoveChip(yesterday)
+    runCurrent()
+    assertThat(c.query.value).isEqualTo("scontrino ieri")
+    assertThat(c.state.value).isInstanceOf(SearchScreenState.Results::class.java)
+    assertThat(engine.requests.last().text).isEqualTo("scontrino ieri")
+    assertThat(engine.requests.last().editedChips).isEmpty()
+  }
+
+  /** CE-11: un'eccezione di cancellazione che viene dal motore (motore fermo, indice non aperto) non lascia "Sto cercando…" per sempre. */
+  @Test
+  fun unaCancellazioneDelMotoreDiventaUnErrore_CE11() = runTest {
+    engine.failure = kotlinx.coroutines.CancellationException("Ricerca ferma.")
+    val c = controller()
+    c.onQueryChange("mare")
+    c.onSubmit()
+    runCurrent()
+    assertThat(c.state.value).isEqualTo(SearchScreenState.Unavailable(SearchUnavailableReason.INTERNAL_ERROR))
+    // Una ricerca annullata davvero da una nuova (la scrittura continua) non e' un errore.
+    engine.failure = null
+    c.onQueryChange("mare")
+    c.onSubmit()
+    c.onQueryChange("mare e monti")
+    c.onSubmit()
+    runCurrent()
+    assertThat(c.state.value).isInstanceOf(SearchScreenState.Results::class.java)
+  }
+
+  /**
+   * CE-8: finito lo scaricamento del modello la ricerca che era uscita "solo filtri e testo" si rifa' da sola, senza passare da "Sto cercando…". Prima
+   * l'avviso "serve il modello" restava e la ricerca non ripartiva.
+   */
+  @Test
+  fun quandoIlModelloDiventaProntoLaRicercaRipartePerConto_CE8() = runTest {
+    val model = ModelCatalog.QUERY_270M.id
+    engine.script = {
+      val ready = models.states.value[model] is ModelState.Ready
+      lib.results(notices = if (ready) emptyList() else listOf(SearchNotice.OnlyFiltersAndText))
+    }
+    val c = controller()
+    c.onQueryChange("mare")
+    c.onSubmit()
+    runCurrent()
+    assertThat(c.results.notices).containsExactly(SearchNotice.OnlyFiltersAndText)
+
+    models.set(model, ModelState.Fetching(ModelSourceKind.HTTPS, 10, 100))
+    runCurrent()
+    assertThat(engine.requests).hasSize(1)
+
+    models.set(model, ModelState.Ready(100, ModelSourceKind.HTTPS, 1))
+    runCurrent()
+    assertThat(engine.requests).hasSize(2)
+    assertThat(c.results.notices).isEmpty()
+    // Senza avvisi di contenuto non c'e' niente da rifare.
+    models.set(model, ModelState.Absent)
+    models.set(model, ModelState.Ready(100, ModelSourceKind.HTTPS, 2))
+    runCurrent()
+    assertThat(engine.requests).hasSize(2)
+  }
+
+  /** CE-9: il motore delle query si scalda all'apertura di Cerca, e a motore pronto la ricerca uscita senza contenuto si rifa'. */
+  @Test
+  fun alleAperturaDiCercaIlMotoreSiScaldaEAMotoreProntoLaRicercaSiRifa_CE9() = runTest {
+    engine.readiness.value = SearchReadiness.PreparingContent
+    engine.script = {
+      lib.results(notices = if (engine.readiness.value == SearchReadiness.Ready) emptyList() else listOf(SearchNotice.PreparingContentSearch))
+    }
+    val c = controller()
+    c.onOpened()
+    assertThat(engine.warmUps).isEqualTo(1)
+    c.onQueryChange("mare")
+    c.onSubmit()
+    runCurrent()
+    assertThat(c.results.notices).containsExactly(SearchNotice.PreparingContentSearch)
+
+    engine.readiness.value = SearchReadiness.Ready
+    runCurrent()
+    assertThat(engine.requests).hasSize(2)
+    assertThat(c.results.notices).isEmpty()
   }
 }

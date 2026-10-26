@@ -72,7 +72,8 @@ internal object SearchNoticeItems {
     queryModel: ModelState?,
   ): List<NoticeItem> {
     val out = ArrayList<NoticeItem>()
-    var modelShown = false
+    // CE-8: con il modello delle query pronto "serve il modello" non e' piu' vero, anche se i risultati in vista sono di prima che arrivasse.
+    var modelShown = queryModel is ModelState.Ready
     fun model(size: Long) {
       if (modelShown) return
       modelShown = true

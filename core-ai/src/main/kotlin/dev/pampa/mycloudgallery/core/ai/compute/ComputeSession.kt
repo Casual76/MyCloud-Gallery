@@ -37,10 +37,12 @@ internal class ComputeSession(
   private val budget: Duration,
   private val control: AiRunControl,
   private val state: MutableStateFlow<AiStatus>,
+  /** IX-7: gli errori passeggeri del motore per chiave, per tutto il processo (li tiene il motore). */
+  strikes: MutableMap<ContentKey, Int> = HashMap(),
 ) {
   private val start = nanos()
   private val tally = Tally()
-  private val worker = ItemWorker(parts, computer, recipe, counters)
+  private val worker = ItemWorker(parts, computer, recipe, counters, strikes)
   private var pace: AiPace.Go = AiPace.Go()
 
   private fun elapsed(): Duration = (nanos() - start).nanoseconds
@@ -101,7 +103,7 @@ internal class ComputeSession(
     val done = try {
       val keys = buffer.keys().toList()
       val others = if (share == null || keys.isEmpty()) emptyMap() else othersOf(share, keys)
-      keys.filter { worker.finishedHere(it, others[it].orEmpty()) }
+      keys.filter { worker.finishedHere(it, share, others[it].orEmpty()) }
     } catch (e: IOException) {
       return
     }
@@ -208,15 +210,17 @@ internal class ComputeSession(
         }
       }
       val batch = queue.subList(index, minOf(queue.size, index + batchSize()))
+      // IX-6: le voci del lotto (ripubblicate senza ricalcolo o appena calcolate) vanno nell'outbox insieme: M3 una volta per lotto.
+      val staged = ArrayList<dev.pampa.mycloudgallery.core.index.ai.AiEntry>()
       val planned = batch.map { item ->
         val missing = item.missing.mapNotNullTo(LinkedHashSet()) { AiClass.of(it) }
-        worker.plan(share, item.contentKey, item.kind, sources[item.contentKey] ?: MediaSource.OTHER, missing, others[item.contentKey].orEmpty())
+        worker.plan(share, item.contentKey, item.kind, sources[item.contentKey] ?: MediaSource.OTHER, missing, others[item.contentKey].orEmpty(), staged)
       }
       worker.prefetch(share, planned, left(), config.fetchBatch)
       for (item in planned) {
         quickGate()?.let { stop = it }
         if (stop != null) break
-        val end = worker.process(share, item, localOnly = false)
+        val end = worker.process(share, item, localOnly = false, staged = staged)
         if (end == ItemEnd.MODEL_MISSING) {
           stop = AiStop.MODEL_MISSING
           break
@@ -226,6 +230,7 @@ internal class ComputeSession(
         running(queue.size)
       }
       index += batch.size
+      stageAll(share, staged)
       flush(share, FlushReason.PERIODIC)
       control.checkpoint(AiCheckpoint(share, claim.key.resource, lastDone?.hex))
       if (stop != null) break
@@ -246,6 +251,16 @@ internal class ComputeSession(
     }
   } catch (e: IOException) {
     emptyMap()
+  }
+
+  /** IX-6: le voci di un lotto nell'outbox in una chiamata (M3 una volta). Una morte prima lascia i risultati salvati: si ripubblicano. */
+  private suspend fun stageAll(share: String, staged: List<dev.pampa.mycloudgallery.core.index.ai.AiEntry>) {
+    if (staged.isEmpty()) return
+    try {
+      parts.publisher.stage(share, staged)
+    } catch (e: IOException) {
+      counters.flushFailures.incrementAndGet()
+    }
   }
 
   private suspend fun flush(share: String, reason: FlushReason) {
@@ -295,14 +310,22 @@ internal class ComputeSession(
     while (index < chosen.size) {
       if (index > 0) gate()?.let { return it }
       val batch = chosen.subList(index, minOf(chosen.size, index + batchSize()))
+      val staged = ArrayList<dev.pampa.mycloudgallery.core.index.ai.AiEntry>()
       for (candidate in batch) {
-        quickGate()?.let { return it }
-        val planned = worker.plan(share, candidate.contentKey, candidate.kind, candidate.source, candidate.missing, others[candidate.contentKey].orEmpty())
-        val end = worker.process(share, planned, localOnly = true)
-        if (end == ItemEnd.MODEL_MISSING) return AiStop.MODEL_MISSING
+        quickGate()?.let {
+          if (share != null) stageAll(share, staged)
+          return it
+        }
+        val planned = worker.plan(share, candidate.contentKey, candidate.kind, candidate.source, candidate.missing, others[candidate.contentKey].orEmpty(), staged)
+        val end = worker.process(share, planned, localOnly = true, staged = staged)
+        if (end == ItemEnd.MODEL_MISSING) {
+          if (share != null) stageAll(share, staged)
+          return AiStop.MODEL_MISSING
+        }
         tally.count(end, candidate.contentKey)
         running(chosen.size)
       }
+      if (share != null) stageAll(share, staged)
       index += batch.size
       control.checkpoint(AiCheckpoint(share ?: PHONE, null, batch.lastOrNull()?.contentKey?.hex))
       breath()

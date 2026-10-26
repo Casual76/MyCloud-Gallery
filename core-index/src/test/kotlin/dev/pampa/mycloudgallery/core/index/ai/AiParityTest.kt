@@ -261,15 +261,19 @@ abstract class AiDoneClassesContract {
 
   abstract fun env(dir: File): Env
 
+  /**
+   * Fatto per classe solo con la ricetta chiesta (revisione A, R16): una ricetta piu' nuova di quella corrente (anche la 255 di un
+   * dispositivo compromesso) non conta come fatta; prima contava, e il contenuto restava "fatto" anche dopo un cambio di ricetta.
+   */
   @Test
-  fun fattoPerClasse_conLaRicettaChiestaOUnaPiuNuova() = runTest {
+  fun fattoPerClasse_soloConLaRicettaChiesta() = runTest {
     val e = env(tmp.newFolder())
     e.given(1, 1, AiClass.VEC, AiClass.OCR)
     e.given(2, 2, AiClass.VEC)
     val keys = (1..3).map { e.key(it) }
     val atOne = e.done.done(e.share, keys, recipe = 1)
     assertThat(atOne[e.key(1)]).containsExactly(AiClass.VEC, AiClass.OCR)
-    assertThat(atOne[e.key(2)]).containsExactly(AiClass.VEC)
+    assertThat(atOne).doesNotContainKey(e.key(2))
     assertThat(atOne).doesNotContainKey(e.key(3))
     assertThat(e.done.done(e.share, keys, recipe = 2).keys).containsExactly(e.key(2))
     assertThat(e.done.done("test", keys, recipe = 1)).isEmpty()

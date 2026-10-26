@@ -77,24 +77,19 @@ interface IndexerControl {
 }
 
 /**
- * Da dove Cerca prende le miniature: **solo sorgenti locali** (D28, D33). Nessun accesso al NAS: [LocalOnlyRefs] scarta ogni `MediaRef.Nas`, e il
- * media senza sorgente locale mostra il segnaposto sfocato (ThumbHash). Il [loader] e' quello della Libreria (o un caricatore finto nei test).
+ * Da dove Cerca prende le miniature: **solo cio' che e' gia' sul dispositivo** (D28, D33). Il telefono da' la sua miniatura; un media che sta solo sul NAS
+ * (sul tablet, quasi tutti) ha la sua **nella replica locale** (preparata da chi l'ha caricato) e, se manca, quella provvisoria letta al rilevamento: mai una
+ * lettura del NAS. La regola e' di chi chiede: i riferimenti del NAS vanno al caricatore sempre e solo come richieste "in arrivo" ([windowOf]), mai come
+ * "visibili", e la sorgente del NAS legge l'originale solo per il contenuto visibile (D17): in Cerca non lo e' mai (CE-5). Senza miniatura, il segnaposto
+ * sfocato (ThumbHash). Il [loader] e' quello della Libreria (o un caricatore finto nei test).
  */
 class SearchThumbnails(
   val loader: ThumbnailLoader,
   val placeholders: PlaceholderCache,
-  refs: SearchRefs,
-) {
-  /** La sorgente della miniatura di una cella, **mai** del NAS. */
-  val refs: SearchRefs = LocalOnlyRefs(refs)
-}
+  val refs: SearchRefs,
+)
 
-/** La sorgente di una miniatura per la cella [index] dell'istantanea: dal catalogo locale (`ColumnarTimelineSnapshot.refAt`). */
+/** La sorgente di una miniatura per la cella [index] dell'istantanea: dal catalogo locale (`ColumnarTimelineSnapshot.thumbRefAt`, come la Libreria). */
 fun interface SearchRefs {
   fun refAt(snapshot: TimelineSnapshot, index: Int): MediaRef?
-}
-
-/** Un filtro che lascia passare solo le sorgenti locali (il telefono, o le sintetiche dei test): il NAS non si legge mai in Cerca. */
-class LocalOnlyRefs(private val inner: SearchRefs) : SearchRefs {
-  override fun refAt(snapshot: TimelineSnapshot, index: Int): MediaRef? = inner.refAt(snapshot, index)?.takeUnless { it is MediaRef.Nas }
 }

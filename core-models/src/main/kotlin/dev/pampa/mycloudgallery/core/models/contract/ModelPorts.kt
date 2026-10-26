@@ -24,6 +24,15 @@ object ModelLimits {
   /** E-A3: prima di scaricare servono la dimensione mancante piu' questo margine, altrimenti `NO_SPACE`. */
   const val SPACE_MARGIN_BYTES: Long = 300L * 1024 * 1024
 
+  /**
+   * VR-2: il margine per un modello che sta gia' nell'APK (il ritaglio, 6 MB): si copia da un asset locale, senza rete e senza il rischio di un disco che si
+   * riempie scaricando centinaia di MB. Con il margine dei modelli da scaricare il ritaglio non funzionava con meno di circa 306 MB liberi.
+   */
+  const val BUNDLED_SPACE_MARGIN_BYTES: Long = 16L * 1024 * 1024
+
+  /** Il margine che vale per [spec]: piccolo se il modello viaggia nell'APK (VR-2), quello di E-A3 se si scarica. */
+  fun spaceMargin(spec: ModelSpec): Long = if (spec.bundledAsset != null) BUNDLED_SPACE_MARGIN_BYTES else SPACE_MARGIN_BYTES
+
   /** Scadenze dello scaricamento HTTPS (§2.1): 15 s per la connessione, 30 s per ogni lettura. */
   const val CONNECT_TIMEOUT_MS: Int = 15_000
   const val READ_TIMEOUT_MS: Int = 30_000

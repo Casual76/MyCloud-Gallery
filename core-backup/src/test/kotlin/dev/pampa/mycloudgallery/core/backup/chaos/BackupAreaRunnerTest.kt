@@ -518,8 +518,10 @@ class BackupAreaRunnerTest {
     val m = manifestWithEdits(listOf(old, edited))
     val roots = BackupAreaVerifier.readRootsOf(m).map { it.value }
     assertThat(roots).containsExactly("mcg-campo/Backup", ".mycloudgallery/tmp", "mcg-campo/Versioni")
-    // Senza modifiche nel manifesto la Versioni/ non si legge; con la destinazione alla radice della share e' la Versioni/ della radice.
-    assertThat(BackupAreaVerifier.readRootsOf(manifest(Sha256.of(old) to 1L)).map { it.value }).containsExactly("mcg-campo/Backup", ".mycloudgallery/tmp")
+    // D-14 (seconda parte): la Versioni/ dentro l'area recintata si legge anche senza righe `edit=`; con la destinazione alla radice della share
+    // e' la Versioni/ della radice. Nessun'altra cartella entra nel recinto.
+    assertThat(BackupAreaVerifier.readRootsOf(manifest(Sha256.of(old) to 1L)).map { it.value })
+      .containsExactly("mcg-campo/Backup", ".mycloudgallery/tmp", "mcg-campo/Versioni")
     val atRoot = BackupAreaManifest(runId, null, listOf("test" to null), listOf("test" to null), emptyList(), emptyList(), edits = m.edits)
     assertThat(BackupAreaVerifier.readRootsOf(atRoot).map { it.value }).containsExactly("Backup", ".mycloudgallery/tmp", "Versioni")
 
@@ -538,6 +540,100 @@ class BackupAreaRunnerTest {
     // La guardia non si allarga: la `Versioni/` alla radice della share, fuori da `mcg-campo/`, resta vietata.
     assertThrows(AreaViolation::class.java) { runBlocking { reader.list("test", SharePath.of("Versioni"), Purpose.BACKGROUND) { } } }
     assertThrows(AreaViolation::class.java) { runBlocking { reader.list("test", SharePath.of("mcg-campo", "Altro"), Purpose.BACKGROUND) { } } }
+    world.close()
+  }
+
+  // --- D-14, seconda parte (B-S2): gli originali gia' in Versioni/ senza righe `edit=` nel manifesto ---------------------------------------------------
+
+  private val archivedMiddle = "mcg-campo/Versioni/Backup/S25/2026/10/foto0 (originale).jpg"
+
+  /**
+   * B-S2 (21/10): 606 file seminati, 1.164 `pre=` dei giri vecchi e **nessuna** riga `edit=`. 16 file del telefono (15 contenuti) sono fixture che
+   * F43-tel aveva modificato nei giri vecchi: al solito percorso c'e' la versione modificata (e' nelle righe `pre=`) e l'originale sta in
+   * `mcg-campo/Versioni/`. Il verificatore guardava `Backup/` e non `Versioni/`: "16 file del telefono non sono sul NAS", una perdita che non c'era.
+   */
+  @Test
+  fun d14_gliOriginaliGiaInVersioniSenzaRigheEditSonoPrevistiENonUnaPerdita(): Unit = runBlocking {
+    val original = Random(51).nextBytes(2_000)
+    val edited = Random(52).nextBytes(2_300)
+    // Il telefono ha ancora l'originale; al solito percorso c'e' la modifica dei giri vecchi (una riga `pre=`).
+    val m = manifest(Sha256.of(original) to original.size.toLong(), pre = listOf(BackupAreaManifest.Pre(Sha256.of(edited), "test", usualFoto)))
+    val world = FakeNasTarget().openWorld(0)
+    world.nas.pcPut("test", usualFoto, edited, 1_000L)
+    world.nas.pcPut("test", archivedMiddle, original, 1_000L)
+
+    val result = BackupAreaVerifier.verify(world.nas.reader, m, settled = true)
+
+    assertWithMessage(result.text()).that(result.violations).isEmpty()
+    // Previsto, e il rapporto lo dice: un contenuto che sul NAS sta solo in Versioni/.
+    assertThat(result.archivedOnly).isEqualTo(1)
+    assertThat(result.text()).contains("originali gia' in Versioni/ contati come previsti: 1")
+    assertThat(result.filesHashed).isEqualTo(2)
+    world.close()
+  }
+
+  @Test
+  fun d14_unaPerditaVeraSenzaRigheEditResta_unaPerdita(): Unit = runBlocking {
+    val original = Random(53).nextBytes(2_000)
+    val lost = Random(54).nextBytes(1_500)
+    val edited = Random(55).nextBytes(2_300)
+    val m = BackupAreaManifest(
+      runId, null, listOf("test" to SharePath.of("mcg-campo")), listOf("test" to null),
+      listOf(
+        BackupAreaManifest.PhoneFile(Sha256.of(original), original.size.toLong(), "con-originale-archiviato"),
+        BackupAreaManifest.PhoneFile(Sha256.of(lost), lost.size.toLong(), "persa"),
+      ),
+      listOf(BackupAreaManifest.Pre(Sha256.of(edited), "test", usualFoto)),
+    )
+    val world = FakeNasTarget().openWorld(0)
+    world.nas.pcPut("test", usualFoto, edited, 1_000L)
+    world.nas.pcPut("test", archivedMiddle, original, 1_000L)
+
+    val result = BackupAreaVerifier.verify(world.nas.reader, m, settled = true)
+
+    // Solo il file che non e' da nessuna parte (ne' in Backup/, ne' in Versioni/) e' perso.
+    assertThat(result.violations.map { it.invariant }).containsExactly(Invariant.LOSS)
+    assertThat(result.violations.single().detail).contains("1 file del telefono non sono sul NAS")
+    // A meta' prova (non ferma) la perdita non si giudica, come sempre.
+    assertThat(BackupAreaVerifier.verify(world.nas.reader, m, settled = false).violations).isEmpty()
+    world.close()
+  }
+
+  @Test
+  fun d14_senzaRigheEditIContenutiDiVersioniNonSiGiudicanoComeUnFileAMetaOUnDoppione(): Unit = runBlocking {
+    val original = Random(56).nextBytes(2_000)
+    val edited = Random(57).nextBytes(2_300)
+    val intermediate = Random(58).nextBytes(2_100)
+    val m = manifest(Sha256.of(original) to original.size.toLong(), pre = listOf(BackupAreaManifest.Pre(Sha256.of(edited), "test", usualFoto)))
+    val world = FakeNasTarget().openWorld(0)
+    world.nas.pcPut("test", usualFoto, edited, 1_000L)
+    world.nas.pcPut("test", archivedMiddle, original, 1_000L)
+    // Una versione intermedia dei giri vecchi, che il manifesto di adesso non conosce (non e' un file del telefono ne' un `pre=`).
+    world.nas.pcPut("test", "mcg-campo/Versioni/Backup/S25/2026/10/foto0 (versione del 2026-10-21 05.50).jpg", intermediate, 1_000L)
+
+    val result = BackupAreaVerifier.verify(world.nas.reader, m, settled = true)
+
+    assertWithMessage(result.text()).that(result.violations).isEmpty()
+    world.close()
+  }
+
+  @Test
+  fun d14_laGuardiaDellaLetturaLasciaLeggereLaVersioniDellAreaSenzaRigheEdit(): Unit = runBlocking {
+    val original = Random(59).nextBytes(2_000)
+    val edited = Random(60).nextBytes(2_300)
+    val m = manifest(Sha256.of(original) to original.size.toLong(), pre = listOf(BackupAreaManifest.Pre(Sha256.of(edited), "test", usualFoto)))
+    val guard = BackupAreaGuard.of(credentials(), runId)
+    val world = FakeNasTarget().openWorld(0)
+    world.nas.pcPut("test", usualFoto, edited, 1_000L)
+    world.nas.pcPut("test", archivedMiddle, original, 1_000L)
+
+    val reader = GuardedReader(world.nas.reader, guard, readRoots = BackupAreaVerifier.readRootsOf(m))
+    val fine = BackupAreaVerifier.verify(reader, m, settled = true)
+
+    assertWithMessage(fine.text()).that(fine.violations).isEmpty()
+    assertThat(fine.archivedOnly).isEqualTo(1)
+    // Il recinto non si e' allargato: la `Versioni/` alla radice della share resta vietata.
+    assertThrows(AreaViolation::class.java) { runBlocking { reader.list("test", SharePath.of("Versioni"), Purpose.BACKGROUND) { } } }
     world.close()
   }
 

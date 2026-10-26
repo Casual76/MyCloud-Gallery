@@ -156,9 +156,10 @@ class AiWorkTest {
     val published = AiPublishedClasses(me.shareSync(), me.aiStore) { 1 }
     val done = published.done(share, s.files.map { it.contentKey }, recipe = 1)
     assertThat(done[s.files[0].contentKey]).containsExactly(AiClass.VEC, AiClass.OCR)
-    assertThat(done[s.files[1].contentKey]).containsExactly(AiClass.VEC)
+    // R16: la ricetta 3 non e' quella chiesta (ne' una che l'app conosce): non conta come fatta.
+    assertThat(done).doesNotContainKey(s.files[1].contentKey)
     assertThat(done).doesNotContainKey(s.files[2].contentKey)
-    assertThat(published.done(share, s.files.map { it.contentKey }, recipe = 2).keys).containsExactly(s.files[1].contentKey)
+    assertThat(published.done(share, s.files.map { it.contentKey }, recipe = 3).keys).containsExactly(s.files[1].contentKey)
   }
 
   @Test

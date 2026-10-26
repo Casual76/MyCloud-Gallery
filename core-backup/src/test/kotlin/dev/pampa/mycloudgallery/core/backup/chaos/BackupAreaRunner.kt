@@ -518,12 +518,24 @@ class BackupAreaManifest(
 }
 
 /** L'esito di una verifica dell'area. */
-class AreaVerification(val violations: List<Violation>, val filesHashed: Int, val bytesHashed: Long, val settled: Boolean) {
+class AreaVerification(
+  val violations: List<Violation>,
+  val filesHashed: Int,
+  val bytesHashed: Long,
+  val settled: Boolean,
+  /**
+   * D-14 (seconda parte): quanti contenuti dei file del telefono stanno sul NAS **solo** in `Versioni/` (l'originale di una modifica fatta in un
+   * giro vecchio, che il manifesto di adesso non elenca come `edit=`). Sono previsti: l'app li considera al sicuro perche' hanno gia' un
+   * originale archiviato, e non sono una perdita.
+   */
+  val archivedOnly: Int = 0,
+) {
   val ok: Boolean get() = violations.isEmpty()
 
   fun text(): String = buildString {
     appendLine("=== Verifica dell'area di prova del backup (${if (settled) "a lavoro finito" else "a meta': solo gli invarianti che valgono sempre"}) ===")
     appendLine("file riletti con SHA-256: $filesHashed (${bytesHashed / 1024} KiB)")
+    if (archivedOnly > 0) appendLine("originali gia' in Versioni/ contati come previsti: $archivedOnly (nessuna perdita)")
     if (violations.isEmpty()) {
       appendLine("TUTTI GLI INVARIANTI RISPETTATI")
     } else {
@@ -563,16 +575,20 @@ object BackupAreaVerifier {
     // 5B: le versioni stanno dove le mette l'app (`VersionPaths.mirrorOf`): `Versioni/` alla radice della share (Q2 (a)) o, per una destinazione
     // sotto una cartella delle prove sul campo (D13, `mcg-campo`), nella `Versioni/` di quella cartella. Archiviate, mai tolte. Cartella che puo'
     // non esserci ancora. Prima si guardava sempre la radice della share: sul telefono l'invariante 13 era rosso senza un difetto.
+    // D-14 (seconda parte, gruppo B): la `Versioni/` dentro l'area recintata si legge **sempre**, anche senza righe `edit=`. Con un manifesto che non
+    // ha modifiche gli originali che i giri vecchi hanno gia' archiviato li` (B-S2: 15 contenuti dei fixture, modificati da F43-tel) non sono una
+    // perdita: l'app li considera al sicuro. Senza `edit=` servono solo a questo ([passive]): niente controllo dei byte ne' dei doppioni in
+    // `Versioni/`, che con un manifesto senza modifiche non si possono giudicare (ci stanno anche le versioni dei giri vecchi).
     val versions = ArrayList<NasFileFact>()
-    if (manifest.edits.isNotEmpty()) {
-      for ((share, root) in manifest.dest.map { (share, dir) -> share to versionsRootOf(dir) }.distinct()) {
-        val scan = BackupNasScanner(reader, listOf(ScanRoot(share, root))).scan(allowCache = false)
-        versions += scan.files
-        hashed += scan.filesHashed
-        bytes += scan.bytesHashed
-        scan.problems.forEach { add(Invariant.NAS_READS, it) }
-      }
+    val passive = manifest.edits.isEmpty()
+    for ((share, root) in manifest.dest.map { (share, dir) -> share to versionsRootOf(dir) }.distinct()) {
+      val scan = BackupNasScanner(reader, listOf(ScanRoot(share, root))).scan(allowCache = false)
+      versions += scan.files
+      hashed += scan.filesHashed
+      bytes += scan.bytesHashed
+      scan.problems.forEach { add(Invariant.NAS_READS, it) }
     }
+    val archivedShas = versions.mapTo(HashSet()) { it.sha }
     // I temporanei: .mycloudgallery/tmp sotto ogni cartella dell'app (e' una cartella che puo' non esserci ancora).
     val temps = ArrayList<NasFileFact>()
     for ((share, dir) in manifest.app) {
@@ -614,15 +630,15 @@ object BackupAreaVerifier {
     // 1. Nessun file a meta': ogni file nuovo ha i byte di un file del telefono.
     for (f in fresh) if (f.sha !in phoneShas && f.sha !in notMediaShas) add(Invariant.HALF_FILE, "un file in Backup/ con byte che non sono di nessun file del telefono")
     // Dalla 5B anche in `Versioni/` (archiviati: gli originali e le modifiche) ci sono solo byte che il telefono ha avuto.
-    for (f in versions) if (f.sha !in phoneShas && f.sha !in preShas && f.sha !in notMediaShas) add(Invariant.HALF_FILE, "un file in Versioni/ con byte che non sono di nessun file del telefono")
+    if (!passive) for (f in versions) if (f.sha !in phoneShas && f.sha !in preShas && f.sha !in notMediaShas) add(Invariant.HALF_FILE, "un file in Versioni/ con byte che non sono di nessun file del telefono")
     // 2. Nessun doppione: un file del telefono compare una volta sola (anche contando quelli che c'erano gia').
     val count = HashMap<Sha256, Int>()
     visible.forEach { count.merge(it.sha, 1, Int::plus) }
-    versions.forEach { count.merge(it.sha, 1, Int::plus) }
+    if (!passive) versions.forEach { count.merge(it.sha, 1, Int::plus) }
     for (sha in phoneShas) if ((count[sha] ?: 0) > 1) add(Invariant.DUPLICATE, "un file del telefono compare ${count[sha]} volte in Backup/")
     // 4. Nessuna perdita (a lavoro finito).
     if (settled) {
-      val missing = manifest.phone.count { (count[it.sha] ?: 0) == 0 && it.sha !in preShas }
+      val missing = manifest.phone.count { (count[it.sha] ?: 0) == 0 && it.sha !in preShas && it.sha !in archivedShas }
       if (missing > 0) add(Invariant.LOSS, "$missing file del telefono non sono sul NAS")
     }
     // 5B, 12 e 13: ogni file modificato sul telefono dopo il primo backup, **una volta per file** (D-14: un file modificato piu' volte e' una catena
@@ -656,7 +672,9 @@ object BackupAreaVerifier {
       if (manifest.deviceId != null) name.startsWith("${manifest.deviceId}-bk-") else BACKUP_TEMP.matches(name)
     }
     if (settled && ownTemps.isNotEmpty()) add(Invariant.TEMP, "${ownTemps.size} temporanei del backup rimasti a lavoro finito")
-    return AreaVerification(violations, hashed, bytes, settled)
+    val visibleShas = visible.mapTo(HashSet()) { it.sha }
+    val archivedOnly = manifest.phone.map { it.sha }.toSet().count { it !in visibleShas && it !in preShas && it in archivedShas }
+    return AreaVerification(violations, hashed, bytes, settled, archivedOnly)
   }
 
   private val BACKUP_TEMP = Regex("^[A-Za-z0-9]{26}-bk-[A-Za-z0-9-]+$")
@@ -691,14 +709,15 @@ object BackupAreaVerifier {
 
   /**
    * Le cartelle che la verifica legge, e le sole che la guardia le lascia leggere: `Backup/` sotto ogni destinazione, i temporanei di ogni cartella
-   * dell'app e, se il manifesto ha modifiche, la `Versioni/` di ogni destinazione (D-14: prima era sempre `Versioni/` alla radice della share, fuori
-   * da `mcg-campo/`, e con le modifiche nel manifesto la guardia fermava tutta la verifica). Sono le stesse cartelle che [verify] percorre.
+   * dell'app e la `Versioni/` di ogni destinazione, **sempre**: anche senza righe `edit=` ci possono essere originali gia' archiviati li' (le 15-16 gia' in
+   * `Versioni/` che sono un esito previsto, non una perdita). D-14: prima era `Versioni/` alla radice della share, fuori da `mcg-campo/`, e con le
+   * modifiche nel manifesto la guardia fermava tutta la verifica. Sono le stesse cartelle che [verify] percorre.
    */
   internal fun readRootsOf(manifest: BackupAreaManifest): List<SharePath> =
     (
       manifest.dest.map { (_, dir) -> dir?.child("Backup") ?: SharePath.of("Backup") } +
         manifest.app.map { (_, dir) -> dir?.child(NasLayout.ROOT.name)?.child("tmp") ?: NasLayout.ROOT.child("tmp") } +
-        (if (manifest.edits.isNotEmpty()) manifest.dest.map { (_, dir) -> versionsRootOf(dir) } else emptyList())
+        manifest.dest.map { (_, dir) -> versionsRootOf(dir) }
       ).distinct()
 
   /**

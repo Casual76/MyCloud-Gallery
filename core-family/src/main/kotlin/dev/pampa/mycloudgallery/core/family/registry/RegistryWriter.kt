@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.trust.registry.CommitResult
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.core.trust.registry.FamilyAuthority
 import dev.pampa.mycloudgallery.core.trust.registry.FamilyConfig
+import dev.pampa.mycloudgallery.core.trust.registry.LookAlike
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryDraft
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryFork
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
@@ -149,6 +150,29 @@ class RegistryWriter(
     // La dismissione congela le teste gia' verificate: quali siano lo sapra' l'indice (Fase 4.1); per ora nessuna.
     val draft = try {
       admin.authority.changeStatus(admin.state, deviceId, status)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return AdminActionResult.Failed(NasError.PermissionDenied)
+    }
+    return commit(admin, draft)
+  }
+
+  /**
+   * Il nome da mostrare di un dispositivo approvato (F27, E-B7), nella voce firmata del registro: una versione nuova firmata dall'admin, come ogni
+   * altra modifica, con la sua chiave e il suo account invariati (`FamilyAuthority.renameDevice`). Un nome che un altro dispositivo ha gia' (anche
+   * "sembra uguale": `LookAlike`) e' rifiutato con `NasError.Exists`, uno non valido con `NasError.PermissionDenied` (la pagina lo controlla prima e non
+   * lo manda); lo stesso nome di prima non firma niente.
+   */
+  suspend fun renameDevice(deviceId: String, name: String): AdminActionResult {
+    val admin = adminContext() ?: return AdminActionResult.NotAdmin
+    val entry = admin.state.registry.device(deviceId) ?: return AdminActionResult.Failed(NasError.NotFound)
+    if (entry.status != DeviceStatus.APPROVED) return AdminActionResult.Failed(NasError.PermissionDenied)
+    if (entry.name == name) return AdminActionResult.Done
+    val key = LookAlike.key(name)
+    if (admin.state.registry.devices.any { it.id != deviceId && LookAlike.key(it.name) == key }) return AdminActionResult.Failed(NasError.Exists)
+    val draft = try {
+      admin.authority.renameDevice(admin.state, deviceId, name)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {

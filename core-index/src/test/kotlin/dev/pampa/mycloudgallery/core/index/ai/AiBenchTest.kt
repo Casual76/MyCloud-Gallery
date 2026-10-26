@@ -42,6 +42,9 @@ import org.junit.rules.TemporaryFolder
  * vincitori, uguali a quelli che un oracolo calcola leggendo il NAS da zero (D7: ricetta piu' alta, poi id minore); nessuna voce persa
  * (ogni ultima voce messa in fila per un file ancora presente e' pubblicata); nell'indice `ai` di ogni share solo chiavi di file di
  * quella share (M3).
+ *
+ * Revisione A (I10, D14): un dispositivo legge solo le share del suo account e l'area comune (SMB chiude le altre aree private, e una
+ * testa `ai` di un'area privata vale solo se dell'account di chi legge): il dispositivo dell'altro account sincronizza solo l'area comune.
  */
 class AiBenchTest {
 
@@ -70,6 +73,8 @@ class AiBenchTest {
       Indexer(ai.device("Telefono familiare", account = "test2"), listOf(common)),
     )
     val everyone = listOf(preparer) + indexers.map { it.device }
+    /** Le share che [device] puo' leggere (D14): l'area privata solo con il suo account. */
+    fun readable(device: AiDevice): List<String> = if (device.base.account == "test") shares else listOf(common)
     val prepared = shares.associateWith { HashSet<ContentKey>() }
     val removed = shares.associateWith { HashSet<ContentKey>() }
     var deaths = 0
@@ -105,7 +110,7 @@ class AiBenchTest {
       val fs = { s: String -> FaultyFileSystem(ai.world.nas.share(s), plan) }
       val remote = device.remote(fs)
       try {
-        device.engine(remote, device.shareSync(remote, device.aiRemote(fs))).sync(SyncScope(shares.toSet(), setOf(SegmentClass.THUMB_S)), Duration.INFINITE)
+        device.engine(remote, device.shareSync(remote, device.aiRemote(fs))).sync(SyncScope(readable(device).toSet(), setOf(SegmentClass.THUMB_S)), Duration.INFINITE)
       } catch (death: ProcessDeath) {
         deaths++
       }
@@ -199,10 +204,13 @@ class AiBenchTest {
       assertWithMessage("seme $seed: voci in attesa").that(x.device.publishStore.pending()).isEqualTo(AiPendingCounts.EMPTY)
     }
     val readers = listOf(preparer) + alive.map { it.device }
-    repeat(2) { readers.forEach { it.sync(*shares.toTypedArray()) } }
+    repeat(2) { readers.forEach { it.sync(*readable(it).toTypedArray()) } }
 
     val oracle = oracle(ai, shares, readers.map { it.id } - indexers.filter { it.revoked }.map { it.device.id }.toSet(), files, removed, prepared)
-    for (device in readers) assertWithMessage("seme $seed: vincitori di un dispositivo").that(device.winners()).isEqualTo(oracle)
+    for (device in readers) {
+      val seen = readable(device)
+      assertWithMessage("seme $seed: vincitori di un dispositivo").that(device.winners()).isEqualTo(oracle.filterKeys { it.first in seen })
+    }
     for (x in alive) {
       for (share in x.shares) {
         val published = aiReaderState(ai, share, x.device.id)

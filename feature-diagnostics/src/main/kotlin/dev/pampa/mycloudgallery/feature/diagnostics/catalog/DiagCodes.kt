@@ -292,6 +292,12 @@ object DiagCodes {
   // aggiunge P11.
   @JvmField val SEARCH_STATE = DiagCode("SEARCH_STATE")
 
+  // --- Gli album (Fase 7) --------------------------------------------------------------------------------------------
+  // P0 aggiunge solo il codice di stato che tiene viva la sezione ALBUMS (un test vuole almeno una voce per sezione), come per SEARCH
+  // nella Fase 6. I codici del §2.8 di docs/fase7-progetto.md (ALBUM_*, SHARE_*, SMART_*, TRIP_*: `AlbumDiag` di core-albums) li
+  // aggiunge P13.
+  @JvmField val ALBUMS_STATE = DiagCode("ALBUMS_STATE")
+
   // P11: i codici del §2.6 (stessi id e stessi edge case di `ModelDiag`, `AiDiag`, `AiIndexDiag` e `SearchDiag`, scritti come letterali
   // perche' questo modulo non vede core-models, core-ai, core-index ne' core-search). `Phase6DiagCatalogTest` di :app verifica che ogni
   // codice dei contratti sia qui, con lo stesso id e gli stessi edge case.

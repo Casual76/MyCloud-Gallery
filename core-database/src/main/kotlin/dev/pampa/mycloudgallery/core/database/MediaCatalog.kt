@@ -207,9 +207,24 @@ class MediaCatalog(
 
   // --- Osservazioni delle scansioni ------------------------------------------------------------------
 
-  /** Registra cio' che una scansione ha visto in un posto (piano 3.1, 4.2). */
-  suspend fun record(observation: Observation, whenUndecided: WhenUndecided = WhenUndecided.WAIT): RecordOutcome =
-    write { tx -> recordOne(tx, observation, whenUndecided, seenAt = null) }
+  /**
+   * Registra cio' che una scansione ha visto in un posto (piano 3.1, 4.2).
+   *
+   * [hidden]: il media nasce **nascosto**, nella stessa transazione che lo registra (il ritaglio salvato dai Nascosti, E-V11, VR-1). Nessun istante in cui
+   * il media e' visibile e nessun cambiamento intermedio da annunciare: l'indice della Libreria non lo vede mai senza il suo "nascosto". Se il media
+   * c'era gia' (stessi byte) diventa nascosto, come `setPersonalFlags` (si sbaglia dal lato della riservatezza, E-H1).
+   */
+  suspend fun record(observation: Observation, whenUndecided: WhenUndecided = WhenUndecided.WAIT, hidden: Boolean = false): RecordOutcome =
+    write { tx ->
+      val outcome = recordOne(tx, observation, whenUndecided, seenAt = null)
+      if (hidden) {
+        outcome.mediaId?.let { id ->
+          val current = personalDao.get(id.value)?.toDomain() ?: PersonalFlags()
+          writePersonal(tx, id, current.copy(hidden = true))
+        }
+      }
+      outcome
+    }
 
   /**
    * Registra un lotto di osservazioni (un lotto di 500 righe del MediaStore) in **una** transazione, con un
@@ -1747,6 +1762,43 @@ class MediaCatalog(
     val groups = rows.mapNotNullTo(LinkedHashSet()) { it.groupId }
     val members = groups.chunked(TimelineIndexDao.MAX_IDS).flatMap { cellContentDao.memberVersions(it) }
     return CellContentAssembler.assemble(rows, members)
+  }
+
+  /**
+   * Revisione A (VT-1, D29): le chiavi di contenuto delle versioni dei media [ids] **anche se nascosti o membri di un gruppo** (senza i
+   * membri del gruppo), la corrente per prima. Solo per il viewer: il testo dal vivo e la lettura al volo funzionano anche nei Nascosti.
+   */
+  suspend fun mediaContentKeysOf(ids: Collection<MediaId>): List<CellContent> {
+    val rows = ids.map { it.value }.distinct().chunked(TimelineIndexDao.MAX_IDS).flatMap { cellContentDao.mediaVersionsOf(it) }.sortedBy { it.seq }
+    return CellContentAssembler.assemble(rows, emptyList())
+  }
+
+  /**
+   * Revisione A (PR-1, D31): per ogni media di [ids] le share (chiave piegata, come `Location.Nas.shareKey`) in cui ha una copia presente
+   * sul NAS; un media senza copie sul NAS non c'e'. A blocchi, una lettura per blocco.
+   */
+  suspend fun nasSharesOf(ids: Collection<MediaId>): Map<MediaId, Set<String>> {
+    val out = HashMap<MediaId, MutableSet<String>>()
+    for (chunk in ids.map { it.value }.distinct().chunked(TimelineIndexDao.MAX_IDS)) {
+      for (row in cellContentDao.nasSharesOf(chunk)) {
+        val share = row.shareKey ?: continue
+        out.getOrPut(MediaId(row.mediaId)) { LinkedHashSet() } += share
+      }
+    }
+    return out
+  }
+
+  /**
+   * Revisione A (CE-6, D29): dei media [ids], quelli nascosti adesso (o uniti a un media nascosto), con due letture per blocco di id invece
+   * di tre per media. Il filtro finale dei nascosti della ricerca.
+   */
+  suspend fun hiddenAmong(ids: Collection<MediaId>): Set<MediaId> {
+    val out = HashSet<MediaId>()
+    for (chunk in ids.map { it.value }.distinct().chunked(TimelineIndexDao.MAX_IDS)) {
+      cellContentDao.hiddenAmong(chunk).mapTo(out, ::MediaId)
+      cellContentDao.hiddenAliasesAmong(chunk).mapTo(out, ::MediaId)
+    }
+    return out
   }
 
   /**

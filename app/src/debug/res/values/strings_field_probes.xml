@@ -73,6 +73,23 @@
   <string name="probe_t16_edit_detail">ACTION_EDIT con una copia servita dal FileProvider in lettura e scrittura (Google Foto, OneDrive). Salva e torna qui.</string>
   <string name="probe_t16_no_gallery">Samsung Gallery non risponde: ACTION_VIEW non è partito.</string>
 
+  <string name="probe_section_jobs">Lavori periodici · Fai ora</string>
+  <string name="probe_job_trash">Pulizia del cestino del NAS</string>
+  <string name="probe_job_trash_detail">Toglie le voci scadute del cestino (con la ritenzione corta di F20, quella scelta dal marcatore).</string>
+  <string name="probe_job_hq">Anteprime HQ</string>
+  <string name="probe_job_hq_detail">Scarica l’HQ della replica: serve la qualità «Alta».</string>
+  <string name="probe_job_prep">Preparazione sul NAS</string>
+  <string name="probe_job_prep_detail">Prepara le anteprime dei file solo sul NAS (solo i Preparatori).</string>
+  <string name="probe_job_sync">Sincronizzazione dell’indice</string>
+  <string name="probe_job_sync_detail">Scarica e rilascia le anteprime secondo la qualità scelta (F12).</string>
+  <string name="probe_job_scan">Scansione del NAS</string>
+  <string name="probe_job_scan_detail">Verifica le aree, poi sincronizza indice e dati personali.</string>
+  <string name="probe_job_backup">Backup</string>
+  <string name="probe_job_backup_detail">I giri delle foto e dei video e la verifica «al sicuro».</string>
+  <string name="probe_jobs_all_title">Tutti i lavori periodici</string>
+  <string name="probe_jobs_all_detail">Li accoda uno dopo l’altro, nell’ordine di questa lista.</string>
+  <string name="probe_jobs_footnote">Sono gli stessi lavori del giro periodico: partono subito ma passano dalle regole delle attività, dal cancello del backup e dalle recinzioni delle share di prova come sempre. Da adb: am broadcast -a dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p dev.pampa.mycloudgallery.debug --es jobs all</string>
+  <string name="probe_jobs_queued">Accodato. Se le regole dicono di aspettare, il lavoro aspetta.</string>
   <string name="probe_section_report">Resoconto</string>
   <string name="probe_report_footnote">Solo numeri, una riga per misura. Copialo in docs/android.md, sezione «Resoconto delle prove guidate».</string>
   <string name="probe_report_empty">Nessuna misura ancora.</string>

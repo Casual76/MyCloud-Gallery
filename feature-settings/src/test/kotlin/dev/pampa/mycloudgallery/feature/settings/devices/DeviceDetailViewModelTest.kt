@@ -237,4 +237,108 @@ class DeviceDetailViewModelTest {
     vm.closeGuide()
     assertThat(vm.state.value.lostStage).isEqualTo(LostStage.NONE)
   }
+
+  // --- F27: "Rinomina questo dispositivo" -------------------------------------------------------------------------
+
+  @Test
+  fun f27_laRinominaCeSoloPerLAdminSulDispositivoInUso() = runTest {
+    val own = viewModel(Samples.ADMIN_PHONE, adminRegistry())
+    keepAlive(own.state)
+    assertThat(own.state.value.canRename).isTrue()
+
+    // Un altro dispositivo non si rinomina da qui (le azioni su di lui sono altre).
+    val other = viewModel(Samples.TABLET_MAMMA, adminRegistry())
+    keepAlive(other.state)
+    assertThat(other.state.value.canRename).isFalse()
+    other.startRename()
+    assertThat(other.state.value.rename).isNull()
+
+    // Un familiare non admin non firma il registro: niente voce, niente foglio.
+    val member = viewModel(Samples.PHONE_ANNA, FakeRegistryService(TrustStatus.Approved(admin = false), Samples.familyAsMember()))
+    keepAlive(member.state)
+    assertThat(member.state.value.canRename).isFalse()
+    member.startRename()
+    assertThat(member.state.value.rename).isNull()
+  }
+
+  @Test
+  fun f27_ilFoglioParteDalNomeDiAdessoEPerConfermareVuoleUnNomeDiverso() = runTest {
+    val registry = adminRegistry()
+    val vm = viewModel(Samples.ADMIN_PHONE, registry)
+    keepAlive(vm.state)
+
+    vm.startRename()
+    assertThat(vm.state.value.rename?.text).isEqualTo("Telefono di Alessio")
+    assertThat(vm.state.value.rename?.problem).isEqualTo(RenameProblem.SAME)
+    // Con il nome di adesso non si scrive niente.
+    vm.confirmRename()
+    assertThat(registry.renames).isEmpty()
+
+    vm.onRenameText("Telefono di Mario")
+    assertThat(vm.state.value.rename?.problem).isNull()
+    vm.confirmRename()
+
+    assertThat(registry.renames).containsExactly(Samples.ADMIN_PHONE to "Telefono di Mario")
+    assertThat(vm.state.value.rename).isNull()
+    assertThat(vm.state.value.feedback?.message).isEqualTo(dev.pampa.mycloudgallery.feature.settings.R.string.rename_done)
+  }
+
+  @Test
+  fun f27_ilNomeSiControllaMentreSiScriveEUnNomeNonValidoNonParte() = runTest {
+    val registry = adminRegistry()
+    val vm = viewModel(Samples.ADMIN_PHONE, registry)
+    keepAlive(vm.state)
+    vm.startRename()
+
+    fun problemOf(text: String): RenameProblem? {
+      vm.onRenameText(text)
+      return vm.state.value.rename?.problem
+    }
+
+    assertThat(problemOf("")).isEqualTo(RenameProblem.EMPTY)
+    assertThat(problemOf("   ")).isEqualTo(RenameProblem.EMPTY)
+    assertThat(problemOf("A".repeat(65))).isEqualTo(RenameProblem.TOO_LONG)
+    assertThat(problemOf("Telefono‮")).isEqualTo(RenameProblem.INVALID)
+    // Uguale (o "sembra uguale") al nome di un altro dispositivo: due nomi uguali farebbero sbagliare chi approva o revoca.
+    assertThat(problemOf("Tablet — profilo Mamma")).isEqualTo(RenameProblem.TAKEN)
+    assertThat(problemOf("TABLET — profilo   mamma")).isEqualTo(RenameProblem.TAKEN)
+    // Gli spazi ai bordi si tolgono, il resto va bene.
+    assertThat(problemOf("  Telefono di Mario  ")).isNull()
+
+    vm.onRenameText("Tablet — profilo Mamma")
+    vm.confirmRename()
+    assertThat(registry.renames).isEmpty()
+
+    vm.onRenameText("  Telefono di Mario  ")
+    vm.confirmRename()
+    assertThat(registry.renames).containsExactly(Samples.ADMIN_PHONE to "Telefono di Mario")
+  }
+
+  @Test
+  fun f27_annullareNonScriveNienteEUnaScritturaChePassaDicePerche() = runTest {
+    val registry = adminRegistry()
+    val vm = viewModel(Samples.ADMIN_PHONE, registry)
+    keepAlive(vm.state)
+
+    vm.startRename()
+    vm.onRenameText("Telefono di Mario")
+    vm.cancelRename()
+    assertThat(vm.state.value.rename).isNull()
+    vm.confirmRename()
+    assertThat(registry.renames).isEmpty()
+
+    // Il registro risponde che il nome c'e' gia' (un altro admin l'ha preso nel frattempo): la pagina lo dice, non dice "fatto".
+    registry.nextResult = AdminActionResult.Failed(NasError.Exists)
+    vm.startRename()
+    vm.onRenameText("Telefono di Mario")
+    vm.confirmRename()
+    assertThat(vm.state.value.feedback?.message).isEqualTo(dev.pampa.mycloudgallery.feature.settings.R.string.rename_err_taken)
+
+    // Il NAS non risponde: l'errore di sempre, mai un finto "fatto".
+    registry.nextResult = AdminActionResult.Failed(NasError.Timeout)
+    vm.startRename()
+    vm.onRenameText("Telefono di Luca")
+    vm.confirmRename()
+    assertThat(vm.state.value.feedback?.message).isNotEqualTo(dev.pampa.mycloudgallery.feature.settings.R.string.rename_done)
+  }
 }

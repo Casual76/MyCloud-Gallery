@@ -4623,11 +4623,603 @@ fatta senza l'ora del NAS (fuori casa, VPN spenta, nessun accesso SMB nel proces
 - Test cambiati senza indebolire una difesa: i test che alteravano il modello verificato lo rendono prima scrivibile (ora e' in sola lettura, I1); la morte del processo dei banchi e'
   un `Error` (il gestore prende ogni `Exception`); le attese del cancello sono "in coda con il motivo" (MO-8); la copia propria non e' piu' tra le sorgenti dello scaffale (I5).
 
-**Cosa resta (punti aperti).** (1) **LT-3 e I7** non sono assegnati a questo pacchetto: la versione del consenso e' trattata solo dove serve a LT-2 (`AwaitingNotice`). (2) **CE-8 / Cerca:** il
-`NeedsConfirmation` dei modelli nella scheda Cerca (il banner "Scarica") e' del pacchetto C; la pagina Ricerca e modelli lo mostra. (3) **IX-3** (il lavoro che resta, sotto F4-D31) dipende da
-**IX-6** di A: finche' `settled` non e' corretto, il conteggio puo' includere media gia' fatti. (4) I test strumentati (`androidTest`) non si sono eseguiti ne' aggiornati: `MlKitOffAtStartupDeviceTest`
+### Unione con `main` (revisioni A e C, Fase 7 P0; 26/10)
+- **Lettura del testo: LT-3/I7 (A) e LT-2 (B) insieme.** `TextReadingMemory.stateOf(choice, excluded, noticeVersion, current)`: la lettura e' attiva qui solo se
+  `acceptedTextVersion >= current` (A: una versione accettata piu' vecchia di quella dell'app va riaccettata, `OnForAccount(thisDevice = false)`) **e** `noticeVersion >= acceptedTextVersion`
+  (B: l'avviso di quella versione e' stato visto qui; altrimenti `AwaitingNotice`). L'esclusione locale vale prima di tutto. `TextReadingMemory(file, current)` porta la versione dell'app
+  (A) e `AppTextReadingSwitch` usa `memory.stateFor(...)` con la scelta in sospeso (B). Il test di A sull'I7 (`TextReadingVersionTest`) usava `TextReadingMemory.save(...)`, che non c'e'
+  piu': ora scrive con `saveSeen`/`acceptNotice`; le asserzioni sono le stesse.
+- **Copertura (PR-1, A) e `AwaitingNotice` (B).** `readingOff` non dice "lettura spenta" quando qui c'e' l'avviso da vedere: l'account ha la lettura accesa (altri dispositivi leggono).
+- **Altre composizioni.** `NasAiRuntime` ha `selfDevice` per `IndexAnalysisFetcher` (A) e `rules` per il cancello dello scaffale (B); `LocalModelManager` tiene il ciclo di ripartenze
+  (R13) e usa `ModelLimits.spaceMargin(spec)` (C, VR-2) nei due punti dello spazio, e la sorgente dell'APK non passa dal cancello di rete (R11); `AppIndexerControl.refresh` legge le aree
+  senza indicizzatori (A, PR-1) e lo spazio dalla cartella dell'indice, e `savedProbe`/`saveProbe` ricordano la misura (B); `AppLocalDataEraser.AI_FILES` toglie `FileCompactionMemory` (A) e i file di B;
+  `AiStack` ha insieme `requestingModels` (B) e `cutoutModels` (C).
+- **`docs/sicurezza.md`.** I due limiti nuovi di questo pacchetto erano L57 e L58, ma la Fase 7 ha preso L57-L66: sono **L67** (I1, modello letto per percorso) e **L68** (I8, spegnimento
+  sugli altri dispositivi).
+
+**Cosa resta (punti aperti).** (1) **LT-3 e I7** sono del pacchetto A: dopo l'unione con `main` si compongono con LT-2 (sezione qui sopra). (2) **CE-8 / Cerca:** il
+`NeedsConfirmation` dei modelli nella scheda Cerca (il banner "Scarica") e' del pacchetto C; la pagina Ricerca e modelli lo mostra. (3) **IX-3** (il lavoro che resta, sotto F4-D31) usa il `settled` corretto da
+**IX-6** di A, ora in `main`. (4) I test strumentati (`androidTest`) non si sono eseguiti ne' aggiornati: `MlKitOffAtStartupDeviceTest`
 resta valido e non e' stato toccato. (5) **Niente e' stato provato sul telefono:** F46-F71 sono da fare, in particolare F46 (scaricamento e conferma sui dati mobili), F48 (NAS senza Internet),
 F56 (ML Kit spenta, accesa, spenta, dopo un riavvio, **fuori casa senza l'ora del NAS**), F62 (`AI_KILLED_MEMORY`), F63 (la GPU che cade) e il primo giro dello scaffale sul NAS vero.
 (6) `TrustedShelfDevices` (registro -> id approvati) e' una riga non provata da un test dedicato: il `RegistryState` si costruisce solo con il verificatore; la provano i test dello scaffale con
 l'elenco fornito e le prove sul telefono.
 
+## Correzioni dal campo, gruppo B (22/10)
+Fonte: `docs/prove-campo-esiti.md`, "Riepilogo del blocco B" (21-22/10) e le sezioni B-S1, B-S4, B-S5, B-S7, B-S14, D-14;
+`docs/fase4-progetto.md` §2.7, D10 con la risposta Q6 (b), D24; `docs/review/4b-fase4b.md` R9; `docs/fase5-progetto.md` E-B7, E-D14;
+`docs/regole-attivita.md`. Branch `fix/campo-b`, un commit per punto. Niente telefono, niente NAS vero: tutto su JVM (Robolectric dove serve);
+i test dei punti 1-6, 8 e 10 sono stati provati **rossi** togliendo a mano la correzione (poi rimessa) e verdi con; per i punti 7 e 9, che sono funzioni
+nuove, il test non compila senza. Fuori elenco dei moduli del brief ma con il minimo: `core-nas` (una riga di
+log, punto 6), `core-designsystem` (il KDoc di `PhoneTrash`, punto 2). Nessuno schema nuovo, nessun formato firmato cambiato.
+
+**1. D-B1: il foglio "Elimina dal telefono" diceva sempre "Non c'e' ancora una copia sul NAS".** Causa: `LibraryDeleteSheet` usava una stringa fissa
+(`library_delete_location_phone_detail`) senza guardare lo stato dei media scelti (D14). Ora l'avviso guarda il segno `CellFlags.SAFE` della cella,
+lo stesso del badge "al sicuro sul NAS" (`MediaGridState.unsafeAmong`): tutti al sicuro = lo dice ("hanno una copia al sicuro sul NAS, che resta
+dov'e'"), nessuno al sicuro = l'avviso di prima con "prima mettili al sicuro" (E-D14), misti = con i numeri ("2 di 5 non hanno ancora una copia sul
+NAS"). Un media che non e' nell'indice conta come non al sicuro: nel dubbio l'avviso c'e'. L'azione "Prima mettilo al sicuro" vera (backup e
+verifica, poi il cestino) resta in "Libera spazio" e nel viewer; in Libreria il foglio non ne ha una sua e lo dice a parole ("lascia finire il
+backup"). Test: `LibraryDeleteSafetyTest` (tutta al sicuro, tutta non al sicuro, mista, singolare, conteggio dai segni della cella).
+
+**2. D-B2: il banner di "Eliminati di recente" su Samsung negava quello che la pagina fa.** Verificato nel codice e nelle prove (B-S1, O-B2):
+`createTrashRequest` lascia la riga nel MediaStore con `IS_TRASHED = 1` (fuori dalla sua cartella) e il file compare **anche** nel Cestino di
+Galleria; `AndroidRecentlyDeletedSource` la elenca (`MATCH_ONLY`) e "Ripristina" la riporta con il dialogo di sistema. Quello che l'utente cestina
+**da Galleria** esce invece dal MediaStore (`Android/.Trash/com.sec.android.gallery3d`): l'app non lo vede e non lo ripristina. Il banner, il titolo,
+il testo del cestino vuoto e il sottotitolo della raccolta dicono ora questo ("compare qui e anche nel Cestino di Galleria: lo ripristini da qui, con
+una conferma del telefono. Quello che elimini da Galleria invece l'app non lo vede: lo ripristini da Galleria → Cestino"). Le altre frasi `_gallery`
+("va nel Cestino di Galleria, la ripristini da Galleria → Cestino") sono vere e restano. Test: `RecentlyDeletedScreenTest.d_b2_*`, con
+`LocalPhoneTrash = GALLERY`.
+
+**3. "Ferma" nelle operazioni sul NAS annulla il resto, il copione diceva "Riprendi".** Cosa decide il progetto: **l'annullamento**. R9 della 4B
+(`decisioni.md`, "«Ferma» vale anche se l'app muore subito dopo: alla riapertura l'operazione si annulla, non riparte") e `fase4-progetto.md` §2.7
+("«Annulla» ferma prima dell'elemento successivo, toglie i propri temporanei e lascia fatti quelli fatti; «Riporta indietro» e' un'operazione
+nuova"). Il codice lo fa gia' (`NasOpsEngine.cancel` scrive subito `PAUSED/STOPPED_BY_USER` per la morte del processo, `resumeAll` annulla). **Scelta:**
+l'app ha ragione e il copione no. Il pulsante e la notifica si chiamano "Annulla il resto", il dettaglio dice "Annullata dopo N di M: il resto non e'
+stato fatto. Quello che era gia' fatto resta fatto", e il motivo transitorio "Hai chiesto di annullare il resto". "Ferma" e "Riprendi" restano del
+**backup** (R4 della 5A, una pausa che dura). Una pausa vera delle operazioni sul NAS esiste solo per cause che non sono dell'utente (NAS, regole,
+congelamento, file aperti) e riparte da sola. `prove-campo.md` (F16-tel) e' allineato. Test: `NasAccessibilityTest` (il pulsante dice cosa fa e non
+c'e' ne' "Ferma" ne' "Riprendi"); la morte dopo "Ferma" e' gia' coperta da `Review4bFixesTest.r9_*`.
+
+**4. O-B9: una cartella nuova dentro la scelta della destinazione di "Sposta" chiudeva la scelta.** Causa: `NasFoldersViewModel.confirmed` riportava sempre a
+`FoldersMode.Browse` e svuotava la selezione, anche per `CREATE_FOLDER`. Ora, con la scelta aperta, la creazione la lascia aperta con gli stessi
+elementi da spostare (`PickDestination`) e, se la cartella e' nata (operazione chiusa, nessun elemento fermo), ci si entra: "Sposta qui" porta li' gli
+elementi. Fuori dalla scelta non cambia niente. Test: `NasFoldersViewModelTest.o_b9_*`.
+
+**5. O-B18: la cartella vuota nell'area di partenza dopo lo spostamento di una cartella intera.** Cosa dice il progetto: la sorgente di ogni file va nel cestino della sua share (D24, Q3); sulla cartella d'origine vuota non c'e' una frase
+scritta, ma l'esecutore ha gia' un elemento per la cartella, dopo il suo contenuto, che la toglie con `rmdirIfEmpty` (una sola richiesta, che il NAS
+accetta solo se la cartella e' vuota in quel momento, mai ricorsiva), e la regola dei nascosti («lascia», sopra) dice che la cartella d'origine
+**resta** solo se qualcosa e' stato lasciato li': "una cartella davvero vuota si sposta come sempre". L'idea del brief (la cartella segue i suoi
+file) e' quella del progetto. **Decisione:** la cartella vuota non passa dal cestino come una voce a se' (non
+ha byte da proteggere, il ripristino dei suoi file la ricrea, E-D3, e sarebbe una voce da 0 byte in "Eliminati di recente"): si toglie con la stessa
+richiesta atomica, che e' anche l'unico modo di non togliere una cartella in cui e' arrivato un file nuovo. Cosa non andava: se il NAS rispondeva
+"in uso" (`Locked`: un handle nostro o di un altro client) o "non vuota", l'esito era ignorato e il passo si chiudeva, quindi la cartella restava li' per
+sempre senza dirlo. Ora un blocco si riprova con le attese brevi di `OwnFolderBackoff` (tetto per giro condiviso con le cartelle in uso dall'app); se
+alla fine e' ancora in uso o non e' vuota **resta com'e'** e lo spostamento si chiude lo stesso (una cartella lasciata non e' un errore) con una riga di
+log, solo numeri, che dice quante voci l'elenco vede ("0 voci viste" con "non vuota" = file che il server nasconde). Vale per la ripresa dopo una
+morte: l'elemento e' al passo `SOURCE_RECORDED` e la ripresa rifa' la richiesta (una cartella gia' tolta risponde `Missing`). Il banco (`-Mode jvm`)
+ha un invariante in piu': a fine spostamento tra share di una cartella, finito bene, la cartella d'origine e le sue sottocartelle non ci sono piu',
+salvo che qualcosa le abbia ricreate dopo (`goneDirs` nel modello); vale solo per lo stack vero (`removesEmptySourceFolders`), non per
+l'esecutore di riferimento, che non ha l'elemento della cartella. Un mutante (`rmdirIfEmpty` che mente) lo prova. **Non riprodotto in JVM:** sul NAS
+finto la cartella se ne andava gia'; la causa vera sul S25 (un handle aperto, o file nascosti dal server) va confermata con il log nuovo. Test:
+`CampoBFolderMoveTest`, `ChaosVerifierTest.o_b18_*`, `ChaosMutationTest`.
+
+**6. O-B11: `Failure(NotFound, FINAL)` due volte nel log di uno spostamento da 941 elementi.** Il log e' del livello sessione
+(`SmbNasSessionManager.attemptOnce`), che racconta come "operazione fallita" ogni eccezione, anche quelle che chi chiama si aspetta. Passi guardati,
+uno per uno: nell'esecutore di uno spostamento uninterrotto nessuno lancia `NotFound` (le letture di stato rispondono `null`, il temporaneo si toglie
+con `Missing`, la cartella con `Missing`); quelli che lo lanciano (`reader.open` di un file assente, l'elenco di una cartella assente, la rinomina verso
+una cartella che manca) sono tutti gestiti dal chiamante. Le due righe, a 125 secondi una dall'altra, sono quasi certamente aperture di file che l'app
+stessa aveva appena spostato (miniature della Libreria, preparazione): una risposta normale. Nessun difetto nascosto trovato: la correzione e' nel
+log, che le chiama "voce assente (risposta normale)" e lascia "operazione fallita" ai guasti veri. Test: `SessionNotFoundLogTest`.
+
+**7. F27: non c'era un modo di rinominare il dispositivo.** Dove vive il nome: nella voce **firmata** del registro (`DeviceEntry.name`, firmata
+dalla chiave di famiglia); il profilo locale (`LocalDeviceProfile.deviceName`) e' solo il nome di partenza del modello. La cartella del backup non lo
+guarda mai (`DeviceFolderPolicy`, scelta una volta, E-B7: lo prova `DefaultBackupSettingsTest`). **Decisione:** "Rinomina questo dispositivo" sta in
+Impostazioni → Dispositivi → questo dispositivo (il progetto non dice altro) ed e' una **modifica firmata del registro**, con le regole che ci sono
+(`FamilyAuthority.renameDevice` → `commit`, una versione nuova firmata dall'admin): cambia solo il campo `name`, chiave, id, account, ruolo e stato
+restano quelli di prima e la regola anti-regressione, che non guarda il nome, accetta la versione; nessun formato nuovo. Un nome uguale o che "sembra
+uguale" a quello di un altro dispositivo (`LookAlike`) e' rifiutato. La voce c'e' per l'admin sul dispositivo in uso. **Cosa manca:** un familiare non admin non puo' firmare il registro, quindi per lui la voce
+non c'e'; la strada (un documento nuovo firmato dal dispositivo e approvato dall'admin, come le richieste d'ingresso) cambia il formato firmato e va
+decisa a parte. Per ora anche l'admin non puo' rinominare gli altri dispositivi: la voce c'e' solo per il dispositivo in uso. Test: `RenameDeviceTest` (`core-trust`: versione firmata accettata, nomi non
+validi, solo la chiave di famiglia; `core-family`: admin, non admin, sosia, stesso nome, dispositivo revocato), `DeviceDetailViewModelTest.f27_*`.
+
+**8. F12, O-B16, O-B17: qualita' delle anteprime.**
+- *(a) La convergenza non partiva da sola (O-B16).* Causa: `setQuality` ricorda il livello e mostra "sta adattando lo spazio", ma scaricare le classi
+  nuove e rilasciare le vecchie lo fa `syncIndex`, che girava solo nel giro periodico di 6 ore. Ora il cambio accoda subito `IndexSyncWorker` (e,
+  salendo ad "Alta", `HqPreviewsWorker`): gli **stessi lavori** del giro periodico, quindi con le regole delle attivita' (`StagedRun`), che decidono se
+  partono adesso o aspettano; in coda dopo uno gia' in corso (`APPEND_OR_REPLACE`, un giro iniziato con le classi di prima non vale per il livello
+  nuovo). La preparazione sul NAS non converge niente della qualita' e non si accoda. Tutto in `ConvergingPreviewQuality` (decoratore, nuovo file) e
+  `NasWorkScheduling.convergeNow`; `GalleryModule` cambia di una riga.
+- *(b) "Risparmio" a +27,6% sulla stima.* Controllato con `ReplicaQualityEstimateTest`, in memoria **e su Room** (6 cambi di livello in su e in giu', a
+  convergenza finita, e con un pacco grande per giro): lo spazio occupato e' dentro il ±15% della stima a ogni livello e le anteprime fuori livello
+  sono tutte rilasciate, quindi le anteprime in piu' **si rilasciano** e la stima **non dimentica** costi fissi (i `meta` sono nella stima e
+  nello spazio occupato). Il +27,6% (e il -7,7% di "Standard di nuovo") erano misure prese **durante** la convergenza che nessuno faceva partire
+  (a): 750 kB di Alta meno 231 kB gia' rilasciati, e il resto da rilasciare. Nessuna correzione al conteggio; da rimisurare sul telefono con (a).
+- *(c) `ACT_DISABLED` per `HQ_PREVIEWS` con "Alta" (O-B17): era un errore.* Per `docs/regole-attivita.md` l'attivita' si spegne solo se la qualita'
+  non e' "Alta" (`disabledActivities`), ma la accendeva o spegneva solo l'onboarding (`DefaultOnboardingCoordinator.preset`): chi passava ad "Alta" dalle
+  Impostazioni la trovava spenta per sempre e `HqPreviewsWorker` non partiva mai. Ora `ConvergingPreviewQuality` accende `HQ_PREVIEWS` salendo ad
+  "Alta" e la spegne scendendo, senza toccare le altre impostazioni delle regole. Test: `ConvergingPreviewQualityTest`, `QualityConvergenceSchedulingTest`.
+
+**9. "Fai ora i lavori periodici" (solo build debug).** `FieldProbePeriodicJobs` (`app/src/debug/.../probes/`, nome e cartella dei resti di debug gia'
+cercati da `check.ps1`, nessun controllo nuovo da aggiungere): accoda subito, uno per uno, pulizia del cestino (`trash`), anteprime HQ (`hq`),
+preparazione (`prep`), sincronizzazione dell'indice (`sync`), scansione (`scan`) e backup (`backup`: foto, video e verifica "al sicuro"), con gli
+**stessi lavori** (stessa classe, stessi vincoli di rete, stesso tag) del giro periodico, un lavoro unico per tipo. Non scavalca niente: i lavori
+passano dalle regole delle attivita', dal cancello del backup e dalle recinzioni D33 e D13. Due strade: `adb shell am broadcast -a
+dev.pampa.mycloudgallery.debug.PERIODIC_NOW -p dev.pampa.mycloudgallery.debug --es jobs all` (ricevitore esportato nel manifest di debug **protetto da
+`android.permission.DUMP`**, che ha la shell di adb e nessuna app normale) e la sezione "Lavori periodici · Fai ora" di Impostazioni → Sviluppo → Prove
+guidate. Test: `FieldProbePeriodicJobsTest` (nomi, lavori accodati con i vincoli di sempre, ricevitore, permesso nel manifest),
+`Phase5BArchitectureTest`.
+
+**10. D-14, seconda parte: il verificatore del backup dal PC e gli originali gia' in `Versioni/`.** La prima parte (la guardia che si fermava con le
+righe `edit=`) era gia' corretta il 21/10: le versioni si leggono in `mcg-campo/Versioni/`, dentro l'area recintata. Restava il caso B-S2: manifesto
+**senza** righe `edit=` e 16 file del telefono (15 contenuti) le cui versioni modificate dei giri vecchi stanno al solito percorso (righe `pre=`) e gli
+originali in `Versioni/`: il verificatore guardava solo `Backup/` e diceva "16 file del telefono non sono sul NAS". Ora la `Versioni/` dell'area si
+legge **sempre** (`readRootsOf` la ammette sempre); senza `edit=` serve solo a contare gli originali come **previsti** (il rapporto dice "originali
+gia' in Versioni/ contati come previsti: N") e niente altro: i byte e i doppioni di `Versioni/` non si giudicano (ci stanno anche le versioni
+intermedie dei giri vecchi, che il manifesto non elenca). Con `edit=` valgono gli invarianti 1, 2, 12 e 13 come prima. Una perdita vera (un contenuto
+che non sta ne' in `Backup/` ne' in `Versioni/`) resta una perdita; il recinto non si allarga (la `Versioni/` alla radice della share resta vietata).
+Test: `BackupAreaRunnerTest.d14_*`.
+
+**11. Documenti.** `fase4-progetto.md` (riga 269) allineata a Q6 (b); `prove-campo.md`: «aspetta 3 minuti» della scansione del NAS diventa «riapri l'app
+(se l'ultima verifica ha piu' di 15 minuti) oppure aspetta la fascia notte» (E-R15, O-B4), il passo Ferma/Riprendi delle operazioni sul NAS e' quello del
+punto 3, F20 e F12 usano l'azione del punto 9 al posto delle modifiche al database di WorkManager, F27 ha la voce nuova.
+
+**Punti aperti.** (1) F27 per i familiari non admin: richiesta firmata dal dispositivo e approvata dall'admin (documento firmato nuovo). (2) O-B18 sul
+telefono: il log nuovo dice perche' una cartella resta; da riprovare con uno spostamento di cartelle (F16-tel) guardando `NasOpsEngine`. (3) F12 da
+rimisurare sul telefono ora che la convergenza parte da sola. (4) `check.ps1`: nessun controllo nuovo da aggiungere (i nomi del punto 9 sono gia' nei
+resti di debug); lo scorrimento di `scroll_days_square` (F13) e i nomi dei nascosti (I8, Fase 7 P9) restano fuori da questo gruppo.
+
+## Fase 7 (Album, condivisione, Raccolte): decisioni del progetto (21-22/10)
+Fonte: `docs/fase7-progetto.md` (§0.1 decisioni D1–D39, §0.2 edge case nuovi, §9 domande, §11 risposte del 22/10). Le decisioni valgono come
+scritte lì; qui il riassunto in una riga ciascuna (cosa e perché), con il rimando. Le modifiche agli altri documenti (§0.3 del progetto) le
+ha fatte P0 il 22/10: `docs/formato-nas.md` (A1–A7: albero, §4.6, §5.8, §5.5-bis, §7, §9, §10), `docs/sicurezza.md` (S5, S11, C10, C14,
+C19, C24–C27, L57–L66, checklist della Fase 7, §8), `docs/modello-dati.md` (§5, §9), `docs/fase4-progetto.md` (D24, Q10),
+`docs/fase5-progetto.md` (D9, §2.3, D24, D35), `docs/fase6-progetto.md` (§2.9 e le due aggiunte a P6), `docs/regole-attivita.md` (§6),
+`docs/grafica-progetto.md` (§12.13) e `README.md` (moduli e grafo). Il **piano** non e' nel repository: gli edge case del §0.2, le
+proposte 5, 6 e 7, il "7.4 al sicuro garantito" e E-SH11 precisato li riporta l'orchestratore. Lo schema v6 (`docs/modello-dati.md` §14)
+lo scrive P1.
+
+Una fase sola con tre tappe (M1 album personali, Nascosti e Utility; M2 album condivisi con il banco delle 500 interruzioni; M3 album
+smart, viaggi, Raccolte), **quattordici pacchetti** (P0–P13; opus per P0, P2, P4, sonnet per gli altri undici). Prove sul campo F72–F93.
+Chiusura: revisione di sicurezza e verifica funzionale in parallelo; con il consenso (Q7) gli album condivisi sulle share vere (F93).
+
+**Risposte dell'utente alle domande del §9 (22/10)**
+| # | Domanda | Risposta | Effetto |
+|---|---|---|---|
+| Q1 | Dove mettere la cartella di un album condiviso | (a) "Album condivisi/<nome>" nell'area comune | D12, §2.5; `SharedAlbumLimits.FOLDER_ROOT` |
+| Q2 | Il permesso proposto alla creazione | (a) "Gli altri aggiungono" | `ShareLevel.DEFAULT` |
+| Q3 | Le foto nascoste in un album che si condivide | (a) restano fuori con l'avviso; si possono condividere a scelta | `HiddenChoice.LEAVE_OUT` preselezionata, E-SH9 |
+| Q4 | Le foto nuove di uno smart condiviso | (a) in "Da condividere", condivise con un tocco | D17 |
+| Q5 | Cosa vedono gli altri quando si smette di condividere | **diversa dalle opzioni: lo decide chi lo fa** (smettere o eliminare): (a) l'album sparisce dalle loro Raccolte con un avviso, o (b) ognuno tiene una copia personale con le stesse foto, finche' le foto restano | **D31 adeguata in P0** (sotto, "Fase 7 P0") |
+| Q6 | Mostrare chi ha aggiunto ogni foto | (a) si', nelle informazioni | `addedBy` nella voce `item:` (serve comunque ai permessi) |
+| Q7 | Quando accendere gli album condivisi sulle cartelle vere | (a) a fine Fase 7, con l'app definitiva e il consenso | D30: `sharedAlbumsTestSharesOnly` acceso fino ad allora |
+
+Conferma collegata (22/10, correzioni dal campo A, D2): la copia privata automatica vale solo per i media che sono stati sul telefono; le foto
+spostate nell'area comune dalle Cartelle NAS, mai state sul telefono, restano protette dal cestino del NAS (L44, L62).
+
+**Decisioni D1–D39** (rimando: `docs/fase7-progetto.md` §0.1)
+| # | In breve | Stato |
+|---|---|---|
+| D1 | Una fase, tre tappe; tutto cio' che sposta o toglie file passa da `core-nasops` con una `UserConfirmation`; i file `albums/` solo con `publishExclusive` | Deciso |
+| D2 | Moduli `core-albums` (non vede nasops, backup, nas, index, ai, models, rete) e `feature-albums`; porte legate da `:app` | Deciso (P0) |
+| D3 | Album personali (manuali e smart) nei dati personali, voci `ALBUM`; mai un file spostato per un album personale | Deciso |
+| D4 | Campi nuovi dentro `ALBUM`, `SETTING`, `MEDIA_FLAG`; nessun `PersonalKind` nuovo; impronta su `item:`, `exclude:`, `accept:`, `smart:example:` | Deciso (P0: costanti e test d'architettura) |
+| D5 | Proiezione `CatalogAlbumProjection` sulle tabelle v6, derivate e ricostruibili; elementi non risolti in attesa | Deciso (P3) |
+| D6 | Album condiviso: un contributo per album e per dispositivo nell'area comune, classe `album` (17), versione 3 solo per `albums/` | Deciso (P2) |
+| D7 | Voci per chiave, ultima scrittura vince; id dell'album legato all'account del creatore (`AlbumId.derived`) | Deciso (P0: la derivazione; P2: codec) |
+| D8 | Regole di chi legge (firma, registro, anti-rollback, account = `nasUser`, tetti, campi sconosciuti): ogni violazione rifiuta il contributo | Deciso (P2) |
+| D9 | Gli elementi li attesta il catalogo di chi legge (file nell'area comune con la stessa chiave); mai un'azione da un elemento | Deciso |
+| D10 | Permessi a tre livelli imposti dall'app, doppio controllo con la stessa tabella; dichiarazione su ogni schermata | Deciso (P0: tabella; P2: lettura) |
+| D11 | Il creatore e' un account; eredita' dell'admin solo con il creatore uscito dal registro | Deciso |
+| D12 | Condividere = spostare nell'area comune, solo da un'azione locale confermata, piano unico con conteggi e impronta; nascosti fuori di default | Deciso (P0: contratti e conferma; P4) |
+| D13 | Il nome diventa regole con `ItalianQueryParser`; periodo raffinato sulle foto | Deciso (P6) |
+| D14 | Sicuri (A, B, C) e dubbi (S1–S5); mai nascosti, esclusi, membri di gruppo | Deciso (P6) |
+| D15 | Descrizione ed esempi dai contratti della Fase 6; senza motore le altre regole funzionano e l'editor lo dice | Deciso (P6) |
+| D16 | Esclusioni per sempre, ricalcolo incrementale, "Congela"; regole troppo larghe oltre 3.000 o il 20% | Deciso (P6) |
+| D17 | Smart condiviso: regole personali, foto nuove in "Da condividere" (Q4) | Deciso |
+| D18 | "Casa" dedotta solo in locale (`home_estimate`, solo `trips/`) | Deciso (P0: test d'architettura; P7) |
+| D19 | Viaggi e eventi con regole deterministiche; titoli dalla Fase 6 | Deciso (P7; P0 fissa l'interpretazione del "ritmo" in `TripRules`) |
+| D20 | Proposte nella sezione Viaggi; "Crea album" o "Non mi interessa" sincronizzato; nessuna notifica | Deciso |
+| D21 | Ordine dell'elenco e dentro l'album, copertina scelta o automatica; una copertina non mostrabile diventa automatica | Deciso |
+| D22 | Nascosti mai, da una sola fonte (`VisibleMedia`, `HiddenMask`), registro delle superfici, widget di prova sopra `WidgetFeed` | Deciso (P0: firme; P9) |
+| D23 | Nascosti dietro lo stesso cancello, avviso E-H2, riga senza nomi in Cartelle NAS | Deciso (P9) |
+| D24 | Utility: Screenshot, Video, Modificate (`LibraryFilter.EDITED`), WhatsApp, Doppioni, Eliminati di recente, Libera spazio | Deciso (P0: il filtro; P8) |
+| D25 | Doppioni identici dalla stessa parte e simili; pulizia guidata nei cestini | Deciso (P8) |
+| D26 | Eliminati di recente unificati (telefono e NAS), D-3 dichiarato | Deciso (P8) |
+| D27 | Hash completo dei video del NAS di notte, interruttore spento (`full_hash_nightly`) | Deciso (P8) |
+| D28 | "Al sicuro" garantito: guardiano subito per i media propri gia' assenti dal telefono (`SafeCopyRequests`) | Deciso (P0: firma; P4) |
+| D29 | Identita' stabile: diario della condivisione e porta di completamento `MoveCompletionSink` prima della sorgente nel cestino | Deciso (P0: firma; P4) |
+| D30 | Recinzione `sharedAlbumsTestSharesOnly`, accesa anche in release fino al consenso (Q7) | Deciso (P0) |
+| D31 | Smetti di condividere, Elimina, Riporta; **adeguata a Q5**: la scelta per gli altri (sparisce o copia personale) la fa chi chiude ed e' firmata nella definizione | Deciso (P0: contratti e documenti; P2, P4) |
+| D32 | UI come stati e contratti, composable solo G2 | Deciso (P0: stati di `feature-albums`) |
+| D33 | Raccolte ordinabili e nascondibili, scelte sincronizzate | Deciso (P11) |
+| D34 | Schema v6 con una sola migrazione non distruttiva | Deciso (P1) |
+| D35 | "Aggiungi ad album" ovunque; verso un condiviso sempre il foglio di conferma | Deciso (P10) |
+| D36 | Ora del NAS per le voci, giorni locali dello scatto per i periodi, monotono per le durate, `Today` per "oggi" | Deciso |
+| D37 | Log e Diagnostica solo con numeri e codici (`AlbumDiag`) | Deciso |
+| D38 | Gli album scrivono dietro gli stessi cancelli delle teste; gli spostamenti si fermano con `FROZEN` | Deciso |
+| D39 | Togliere da un album non e' eliminare; un file aggiunto dal PC non entra da solo | Deciso |
+
+**Dubbi grafici** (per il filone grafico): elenco e pagina degli album, editor delle regole, "Suggerite" e "Da condividere", foglio di
+condivisione, permessi e chiusura (con la scelta di Q5), proposte di viaggio, Doppioni e "Modifica Raccolte": in `docs/grafica-progetto.md`
+§12.13.
+
+## Fase 7 P0: fondamenta, contratti, recinti e documenti (22/10)
+
+Il pacchetto P0 della Fase 7 (`docs/fase7-progetto.md` §4.4, riga P0; §1.1–§1.5, §2.4, §4.3, §5.2, §6, §11). Consegna i due moduli nuovi, i
+contratti del §1.2 con null-object, fake fedeli ed esecutori di riferimento, le suite di contratto, le firme nei moduli esistenti, i recinti
+(`Phase7ArchitectureTest`, R8 e `tools/check.ps1` per D30) e i documenti del §0.3. **Nessuna dipendenza esterna nuova**, nessun permesso o
+componente Android nuovo, `:app` non toccato (lo lega P13). Branch `fase7/p0`.
+Commit: `c382e765` (firme nei moduli esistenti), `fa4fa463` (moduli, contratti, esecutori, suite), `a6cf6cd2` (recinti) e quello
+dei documenti.
+
+**Moduli nuovi**
+- `core-albums` (`api` common, model, library; `implementation` trust, database, personal, places, search): `contract/` (`AlbumModel`,
+  `Albums`, `Smart`, `SharedAlbums`, `AlbumPermissions`, `Publishing`, `Share`, `ShareDiary`, `ShareConfirmation`, `Ports`, `Catalog`,
+  `Trips`, `AlbumDiag`), `noop/` (tutti i contratti, chiusi), `testing/` (Libreria finta, mondo comune finto, fake di porte, pubblicatore e
+  album condivisi, esecutori di riferimento), `NoNetworkSourcesTest`, `NoWallClockSourcesTest`. Nessun Hilt.
+- `feature-albums` (`api` core-albums, core-designsystem; `implementation` library, imaging, common, model; Compose, Hilt, Roborazzi come
+  `feature-search`): `contract/AlbumScreens.kt` (gli stati del §1.5 suoi: `AlbumListState`, `AlbumPageState`, `AlbumBanner`,
+  `SmartEditorState`, `SuggestionsState`, `ShareSheetState`, `PermissionInfo`, `CloseSheetState`, `TripsState`, `AlbumActions`), `noop/`,
+  `testing/AlbumSamples` (un esempio per caso), test di guardia. `UtilityState`, `RecentlyDeletedState` e `CollectionsLayoutState` sono di
+  feature-library (P8, P11).
+- `settings.gradle` e `galleryModules`; `tools/check.ps1` li conta da solo ("test eseguiti in ogni modulo" legge `settings.gradle`).
+
+**Firme nei moduli esistenti** (solo quelle della riga P0, piu' `AlbumId.derived` del §1.3)
+- `core-model`: `ShareLevel` (`all`, `add`, `view`; predefinito `ADD` per Q2), `AlbumKind` (`manual`, `smart`), `AlbumSort` (`oldest`,
+  `newest`, `custom`, con il predefinito per tipo di D21), `TripKind` (`trip`, `event`); `AlbumId.derived(creator, nonce)` (D7: i primi
+  128 bit di `SHA-256("mcg-album-id\0" ‖ account ‖ nonce)` in forma di UUID). Il §1.3 lo dava a P0, la riga del §4.4 no: e' qui perche'
+  serve insieme a P2 (codec, core-trust) e P3 (album personali) che partono in parallelo; una sola derivazione per tutti.
+- `core-personal`: le costanti dei campi D4 in `PersonalFields` (`kind`, `sort`, `smart:*`, `exclude:`, `accept:`, `frozen`, `shared`,
+  `collections_order`, `collections_hidden:`, `albums_sort`, `trip_dismissed:`, `shared_album_left:`, `full_hash_nightly`, `shared_origin`)
+  e, per Q5, **`copy_of`**; nessun `PersonalKind` nuovo. Test: il codec di oggi rilegge identiche le voci con i campi nuovi.
+- `core-library`: `LibraryFilter.EDITED` (fuori dai filtri rapidi della Libreria: e' una pagina dell'Utility; due stringhe in
+  feature-library per i `when` esaustivi), `contract/Visibility.kt` (`VisibleMedia`, `HiddenMask`, `WidgetFeed`), null-object (niente
+  visibile, tutto nascosto) e fake (`FakeVisibility`, `FakeWidgetFeed`).
+- `core-nasops`: `contract/Completions.kt` (`MoveCompletionSink`, `NasFileRef`) e `NoMoveCompletionSink`. La chiamata nel motore e' di P4.
+- `core-backup`: `contract/AlbumSharing.kt` (`IncomingDestination.Chosen`/`AlbumFolder`, `SafeCopyRequests`) e `NoSafeCopyRequests` (lancia:
+  la richiesta non e' registrata).
+- `core-common`: `FeatureFlags.sharedAlbumsTestSharesOnly` (costante accesa in release **e in debug**, nessun parametro in `forBuild`, come
+  D12) e `sharedAlbumsMayUse(share)`; regola R8 in `consumer-rules.pro`; `DiagSection.ALBUMS` (con la voce di stato `ALBUMS_STATE` in
+  feature-diagnostics: un test vuole una voce per sezione, come `SEARCH_STATE` nella Fase 6); `Phase7ArchitectureTest`.
+  `Phase6ArchitectureTest`: core-albums fra chi puo' dipendere da core-search (solo contratti).
+- `tools/check.ps1`: passo nuovo "D30 nella release" (campo e decisione nel dex e in `mapping.txt`); il cancello che li usa lo aggiunge P13.
+
+**L'adeguamento di D31 alla risposta Q5** ("lo decide chi elimina l'album")
+- Il foglio "Smetti di condividere" e quello "Elimina l'album" chiedono a chi chiude (creatore o erede) **cosa succede agli altri**:
+  `OthersAfterClose.REMOVE` (l'album sparisce dalle loro Raccolte con l'avviso) o `KEEP_COPY` (ognuno tiene una copia personale con le
+  stesse foto finche' restano nell'area comune). Nessuna preselezione: `CloseSheetState.forOthers` e' null e la conferma e' spenta finche'
+  non si sceglie; `SharedAlbums.close(id, mode, forOthers)` non ha un valore di default.
+- La scelta **viaggia nella definizione firmata**: `SharedAlbumChange.Definition.afterClose` (codice `remove`/`keep_copy`; presente solo con
+  `closed`/`deleted`, il tipo lo impone; un codice sconosciuto vale `remove`), campo `afterClose` di `definition` in `docs/formato-nas.md`
+  §5.8 (P2 lo scrive nel codec).
+- La copia e' un **album personale** di chi la tiene (dati personali, area privata, voce `copy_of`), con id deterministico per account
+  (`SharedAlbumCopies.copyIdFor(album, account)`): i dispositivi dello stesso account che leggono la chiusura scrivono le stesse voci, nessun
+  doppione; l'id e' diverso da quello dell'album condiviso. La ricevono solo i familiari che non avevano lasciato l'album; contiene gli
+  elementi che il **loro** catalogo attesta (D9). Una copia eliminata non si ricrea (P3/P4: la lapide della definizione non si riscrive).
+- Per il creatore nulla cambia rispetto a D31: dopo "Smetti" l'album resta suo come personale, dopo "Elimina" sparisce.
+- Chiuso o eliminato e' **definitivo** per quell'id (chi legge ignora un `active` successivo): condividere di nuovo crea un album nuovo.
+- "Riporta nelle mie cartelle" resta a parte; con `KEEP_COPY` il foglio avvisa che i media riportati spariscono anche dalle copie degli altri
+  (`ClosePreview.bringBackHurtsCopies`, `CloseSheetState.warnCopiesLoseBroughtBack`).
+- Avvisi: `SharedAlbumNotice.Closed(album, title, mode, keptCopy)`. Scritto in `docs/fase7-progetto.md` (D31, §1.2, §1.5, §2.6, §11), in
+  `docs/formato-nas.md` §5.8, in `docs/sicurezza.md` (L60, L61, L66, §7, §8) e nella tabella delle risposte qui sopra.
+
+**Contratti: scostamenti dalle firme indicative del §1.2** (i pacchetti dopo partono da quelle vere)
+- `Albums.items(id)` diventa `content(id): Flow<AlbumContent?>` con `items`, `suggested`, `toShare`, `incoming` (viste `OrderedTimelineView` di
+  core-library: nessuna `AlbumTimelineView` nuova). Le modifiche restituiscono esiti (`CreateOutcome`, `EditOutcome`, `AddOutcome` con
+  `NeedsShareConfirmation(plan)`), mai eccezioni per i casi previsti; in piu' `setListSort` e `moveInList` (ordine dell'elenco, `AlbumListSort`
+  in core-albums, predefinito "Aggiornati di recente": D21 non lo fissava). Regole dei titoli in `AlbumTitles` (1-64 caratteri, niente
+  controllo ne' direzione del testo; i caratteri vietati nei file si', la cartella si corregge da se').
+- `SharedAlbums`: `create` restituisce il piano (`ShareRunner.plan`); `rename`, `remove`, `setCover`, `setSort` (le modifiche di un condiviso
+  passano da qui, con la tabella), `closePreview` e `close(id, mode, forOthers)` (Q5), `leave`/`rejoin`/`left`, `notices`/`dismissNotice`.
+- `AlbumPermissions` e' la **tabella come dati** (righe del §2.4 per `AlbumOp`, celle per livello con ruoli `CREATOR`/`ADDER`/`OTHER`/`ADMIN`,
+  condizioni `ADDED_WHILE_PERMITTED` e `CREATOR_LEFT_FAMILY`, chi controlla, campo letto) con `rolesOf` e `admits`. La logica sulle voci
+  lette (`check(entry, levels, creator, heir, previous)`) la scrive P2 in shared/ come **estensione** `AlbumPermissions.check`: `AlbumEntry`
+  e' un tipo di core-trust che P2 scrive.
+- Il pubblicatore lavora su **`SharedAlbumChange`** (le modifiche come le pensa chi le fa; ora del NAS, autore e account li mette lui):
+  core-albums non definisce il formato. `stage` restituisce `StageTicket`, `publishedUpTo` dice fin dove e' pubblicato (ENTRY_STAGED →
+  PUBLISHED nel diario), `PublishOutcome` (`Published`, `NothingToPublish`, `TooSoon`, `Blocked`, `Failed`), `PublishRules` (5 minuti, 30 s),
+  `AlbumWriteGate.blockFor(share)` con `AlbumWriteBlock` (D30, D38, ShareFence).
+- La condivisione: `ShareRequest` ha `NewAlbum`, `FromPersonal`, `AddToShared`, `BringBack`, `FolderAdoption`; `SharePlan` porta impronta,
+  conteggi, byte, spazio richiesto (+1 GiB), etichetta della cartella, nonce (album nuovo), esclusi per motivo; `SharePlanOutcome` (anche
+  `InvalidTitle`), `ShareStartOutcome` (anche `AlreadyStarted` e `PlanChanged`: lo `start` ricalcola il piano sul catalogo). **Nuovi**: il
+  diario come contratto (`ShareDiary`, `ShareOpRecord`, `ShareItemRecord`) e la macchina a stati (`ShareStateMachine`: `PLANNED`,
+  `TRANSFERRING`, `IN_COMMON`/`IN_PRIVATE`, `ENTRY_STAGED`, `PUBLISHED`, `DONE`, `FAILED`, `CANCELLED`), cosi' P1 (tabelle), P4
+  (orchestratore) e P5 (invarianti) parlano della stessa cosa.
+- Le porte: `AlbumMover.move(key, items, dest, leave, confirmation)` e `AlbumUploader.upload(key, media, dest, confirmation)` vogliono **la
+  conferma** (anche il caricamento: e' un passo del piano confermato) e una **chiave** scritta nel diario prima della chiamata (idempotenza;
+  `TicketStatus.find(key)` ritrova il trasferimento avviato da un processo morto); restituiscono `TransferStart`; `TicketState` con un esito
+  per file. Nuove: `SharedOrigins` (`shared_origin`, registrata prima dello spostamento), `SharedAlbumFacts` (cartella, membri, stato dalla
+  replica), `AlbumFamily` (account, aree, admin, uscita dal registro), `AlbumClocks` (monotono e ora del NAS). `CatalogFacts` ha `facts` e
+  `attest` (D9, con l'hash completo se c'e'); `AlbumCandidates` (nuova) e' la porta delle query di P1 per smart/ e trips/.
+- La conferma della condivisione dopo la morte del processo: vive solo in memoria (come la `UserConfirmation`); un trasferimento mai partito
+  diventa `FAILED(NOT_STARTED)` ("Riprova" fa un piano nuovo), uno partito si ritrova per chiave.
+- Smart: il periodo e' `SmartPeriod` (`Ranges` per le serie di giorni di E-AL12, `EveryYear` per "ogni estate", `Days` per le feste mobili),
+  il luogo `PlaceRule` con `PlaceScope` (attorno, regione, paese), gli esempi sono `MediaId` (l'impronta la mette P3 nella voce); `SmartLimits`.
+- Viaggi: `TripProposals(proposals, homeKnown)`, `TripAcceptOutcome`, `TripId.of(kind, giorni, luoghi)`, `TripProposal.placeIds`;
+  `TripRules` con l'**interpretazione del "ritmo" degli eventi** (D19 non la fissava): almeno max(30, 5 x media dei media per giorno con foto)
+  in al piu' 4 ore. P7 la conferma sui dati sintetici di P12.
+- `VisibleMedia.visible` e' `suspend` (una query sul catalogo non va fatta sul thread principale).
+- `MoveCompletionSink.published(op, index, source: NasFileRef, dest: NasFileRef, stamp, sha256)` (l'elemento e' `OpItemRecord.index`).
+- **Condividere un album personale crea un album condiviso con un id suo** (nonce nuovo), collegato dalla voce personale `shared` (D4): la
+  voce personale non conserva il nonce, quindi l'id legato al creatore non si potrebbe ricalcolare. Sostituisce l'inciso di §2.1 ("un album
+  nato personale si puo' condividere senza cambiare id"), aggiornato.
+
+**Esecutori di riferimento e fake fedeli** (in `testing/`, src/main: mai nella release)
+- `InMemoryAlbums` (album personali manuali e smart con le scelte, album condivisi del finto, copie personali di Q5; membri smart dati da chi
+  lo costruisce, il motore e' di P6), `InMemoryShareRunner` con `ReferenceSharePlanner` e `ReferenceShareSteps` (tutti i passi del §2.5 e del
+  §2.6, il diario prima di ogni azione, la chiave prima della porta, `shared_origin` prima dello spostamento, la voce solo per un file
+  nell'area comune, il guardiano solo per i miei spostati senza telefono), `InMemoryTrips` (D18/D19 a forza bruta su `AlbumCandidates`), piu'
+  `InMemoryShareDiary` (con la morte simulata a un salvataggio, `SimulatedDeath`).
+- Fake: `FakeAlbumLibrary` (una sola fonte per visibilita', fatti e candidati; la porta di completamento come `move` con lo stesso `MediaId`),
+  `FakeSharedWorld` (l'area comune fusa, con le regole di chi legge: id legato al creatore, permessi con la tabella, chiusura definitiva,
+  eredita'), `FakeSharedAlbums` (un dispositivo), `FakeAlbumPublisher` (coda durevole, idempotente, ritmi di D6, cancello), `FakeShareTransfers`
+  (porte idempotenti per chiave, attese, esiti per file, morte dopo l'avvio), `FailingAlbumPorts` (falliscono se chiamate: §4.3), orologi,
+  famiglia, cancello, guardiano, cartelle d'origine, motore e interprete smart finti, replica finta.
+
+**Suite di contratto** (`core-albums/src/test/.../contract/`; le implementazioni vere le estendono): `AlbumsContract` (10 prove, P3),
+`ShareRunnerContract` (12, P4: invarianti 1-9 del §5.5 che si possono vedere sul finto), `TripsContract` (5, P7), `AlbumPublisherContract`
+(3, P2), `SharedAlbumsContract` (7, P2/P4; la prima generata dalla tabella: `allowed` coincide con cio' che chi legge accetta, per ogni
+livello, riga con voce e ruolo). Le passano `InMemoryAlbums`, `InMemoryShareRunner`, `InMemoryTrips`, `FakeAlbumPublisher` e
+`FakeSharedAlbums` (`ReferenceContractTests.kt`, mondo condiviso `ReferenceWorld`).
+
+**Cosa trovano pronto i pacchetti P1–P13, e cosa devono collegare**
+| Pacchetto | Trova pronto | Deve collegare o scrivere |
+|---|---|---|
+| P1 database v6 | i codici `ShareLevel`, `AlbumKind`, `AlbumSort`, `TripKind`, `SharedState`, `ShareItemState`, `ShareItemAction`, `SharePlanKind`, `ShareFailure`, `ShareWait` (stabili); le forme delle righe in `ShareOpRecord`/`ShareItemRecord`, `AlbumCandidate`, `MediaFacts`, `AttestRequest` | le tabelle del D34 e le query che riempiono `AlbumCandidates` (giorno locale, ora locale, GPS, `place_id`, `origin_device`, sorgente, tipo, schermo, pixel; solo celle visibili), `CatalogFacts.facts`/`attest`, `attachMoved` per `MoveCompletionSink`; `home_estimate` solo per trips/ (`Phase7ArchitectureTest` lascia core-database e `core-albums/.../trips/`) |
+| P2 formato e permessi | `AlbumId.derived`, la tabella `AlbumPermissions`, `SharedAlbumChange` (anche `afterClose` di Q5), `AlbumPublisher`/`PublishRules`/`AlbumWriteGate`, `SharedAlbumSync`/`AlbumSyncReport`, `SharedAlbumFacts`, `SharedAlbumCopies`, le suite `AlbumPublisherContract` e `SharedAlbumsContract`, `FakeSharedWorld` come specifica eseguibile delle regole di chi legge | `AlbumDocs` in core-trust (classe 17, versione 3, `afterClose`), `AlbumPermissions.check` come estensione in shared/, replica, fusione, attestazione via `CatalogFacts.attest`, pubblicatore vero; far passare le due suite alle classi vere; `NasFileSystem` solo in shared/ |
+| P3 album personali | `Albums` e `AlbumsContract`, `InMemoryAlbums` come riferimento, i campi D4 (anche `copy_of`), `SharedAlbumCopies` | `CatalogAlbumProjection`, i lettori dei campi in `Personal.kt`, `PersonalAlbums.addItem` con l'impronta, le copie personali di Q5 (dal lato dei dati personali) e la regola "copia eliminata non si ricrea"; far passare `AlbumsContract` |
+| P4 condivisione | `ShareRunner`, `ShareDiary`, `ShareStateMachine`, porte e conferma, `ReferenceSharePlanner`/`ReferenceShareSteps` come riferimento, `ShareRunnerContract`, `MoveCompletionSink` e `SafeCopyRequests` come firme, `FakeAlbumPublisher` finche' P2 non consegna | l'orchestratore in share/ con il diario Room di P1, la chiamata di `MoveCompletionSink` in `NasOpsEngine` (e la scelta su `MoveCompletions`), `IncomingDestination.AlbumFolder` in `INCOMING`, `SafeCopyRequests` nel guardiano, la chiusura con `afterClose` e le copie (con P3); far passare `ShareRunnerContract` |
+| P5 banco | `InMemoryShareRunner` sopra `InMemoryShareDiary` (morte a ogni salvataggio, `SimulatedDeath`) e `FakeShareTransfers` (morte dopo l'avvio, attese, esiti per file, `started` con l'impronta del piano per l'invariante 7) | gli invarianti del §5.5 sul riferimento subito, poi sul vero di P4 |
+| P6 album smart | `SmartRules`, `SmartPeriod`, `PlaceRule`, `SmartNameInterpreter`, `SmartAlbumEngine`, `SmartChoices`, `SmartLimits`, `AlbumCandidates`, i fake | smart/ (interprete con `ItalianQueryParser`, classi D14, ricalcolo, congela); la richiesta a P6 della Fase 6 (`similarToAll`, `within`) e' nel §2.9 della Fase 6 |
+| P7 viaggi | `Trips`, `TripProposal`, `TripId`, `TripRules` (con l'interpretazione del ritmo), `InMemoryTrips`, `TripsContract`, `AlbumCandidates` | trips/ con `home_estimate` (solo li'), etichette con `PlaceNames.summary`, `trip_dismissed`; far passare `TripsContract` |
+| P8 Utility | `LibraryFilter.EDITED` (gia' con nome e stato vuoto, fuori dai filtri rapidi), `VisibleMedia`/`HiddenMask`, `full_hash_nightly` | le pagine dell'Utility, Doppioni, Eliminati di recente, `UtilityState` e `RecentlyDeletedState` in feature-library |
+| P9 Nascosti | `VisibleMedia`, `HiddenMask`, `WidgetFeed` con null-object e fake | le implementazioni sul catalogo, `HiddenSurfaces`, il widget di prova, l'avviso E-H2 |
+| P10 schermate | gli stati di `feature-albums` (con `CloseSheetState` di Q5), `AlbumSamples`, `ShareConfirmationSheet`, i fake e gli esecutori di riferimento per i ViewModel | ViewModel e composable G2, il foglio che emette la conferma, le voci del viewer e la ricezione |
+| P11 Raccolte | le costanti `collections_order`, `collections_hidden:` | `SyncedCollectionsSettings`, `CollectionsLayoutState`, le sezioni |
+| P12 valutazione | `AlbumCandidates`, `InMemoryTrips` come riferimento | generatore e metriche |
+| P13 integrazione | tutto il resto: null-object per ogni contratto, `DiagSection.ALBUMS` con `ALBUMS_STATE`, `AlbumDiag` (codici del §2.8), il passo D30 di `check.ps1` | `AlbumsGraph`, le porte verso `NasOperations` (con `ConfirmationIssuer` sullo stesso piano), `IncomingUploads`, guardiano e catalogo; `AlbumWriteGate` = `IndexWriteRules` + `sharedAlbumsMayUse` + `ShareFence`, e la prova del cancello nel passo D30; le dipendenze di `:app` dai due moduli nuovi; i codici nel catalogo della Diagnostica |
+
+**Test d'architettura** (`Phase7ArchitectureTest`, 10 prove) **e la prova che falliscono**, reintroducendo le violazioni nel repository e
+togliendole (quattro giri, `:core-common:testDebugUnitTest --tests "*ArchitectureTest"`):
+- giro 1, **11 rossi**: un file in `core-albums/src/main` che nomina `core.nasops` e `java.net`, un `NasFileSystem`, `"home_estimate"`, una
+  `ShareConfirmation(...)` e una `UserConfirmation(...)` costruite; `TRIP` in `PersonalKind`; `AlbumUploader.upload` senza la conferma;
+  feature-albums che dipende da core-trust; D30 tolta da `tools/check.ps1`. Rossi con il loro messaggio: core-albums che nomina i moduli
+  vietati, `NasFileSystem` fuori da `shared/`, `home_estimate` fuori da `trips/`, `ShareConfirmation` costruita fuori dal suo file, la firma
+  del caricamento senza conferma, il `PersonalKind` nuovo, feature-albums che vede core-trust, la dipendenza fuori dal §1.1, D30 non cercata
+  nella release; in piu' `Phase4ArchitectureTest` (`UserConfirmation` costruita fuori dal file della conferma) e `Phase6ArchitectureTest`
+  (codice HTTP fuori dal pacchetto ammesso);
+- giro 2, **8 rossi**: core-albums che dipende da core-nasops (e quindi feature-albums che lo raggiunge, e la regola della 4B "chi dipende da
+  core-nasops"), `ShareConfirmation` con il costruttore pubblico, `home_estimate` in core-library, `InMemoryNasFileSystem` in un test di
+  core-albums fuori da `shared/`, il codice di `MEDIA_FLAG` cambiato;
+- giro 3, **4 rossi**: `java.net` in un test di core-albums; feature-albums che nomina `core.albums.shared` e `UserConfirmation`; un permesso
+  nel manifest di feature-albums;
+- giro 4, **2 rossi**: il foglio della conferma usato in core-library (fuori dalla UI); Hilt in core-albums;
+- tolte le violazioni (`git checkout`, file temporanei cancellati): tutte verdi. La decima prova (`ilControlloVedeIModuliDellaFase7`) e' il
+  controllo positivo che il test veda i moduli.
+
+**`tools/check.ps1 -NoDaemon`**: **verde** (22/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, dopo i quattro giri): assembleDebug, assembleRelease, galleryTest e
+galleryLint in 32 minuti; test eseguiti in ogni modulo (core-albums 52, feature-albums 4, core-common 92 con `Phase7ArchitectureTest`);
+passo nuovo "D30 nella release" OK (campo e decisione nel dex e in `mapping.txt`); nessuna classe `testing` nel dex di release; benchmark su
+dispositivo saltato (senza `-Bench`).
+
+**Modifiche ai contratti che i pacchetti dopo potrebbero chiedere** (le scoperte scrivendo fake ed esecutori di riferimento)
+- Alla Fase 6 (P6): `similarToAll(examples, within)` e `SearchRequest.within` (gia' nel §2.9 della Fase 6).
+- P1: campi in piu' in `AlbumCandidate` o `MediaFacts` se le query li danno a costo zero (versione, gruppo).
+- P2: la chiave di contenuto in `SharedAlbumFacts.members` (oggi solo chi ha aggiunto) e la storia dei livelli con l'ora nel pubblicatore.
+- P4: l'esito per file con la destinazione in `TicketState.Ended`; una ripresa con una conferma nuova per gli elementi `NOT_STARTED` (oggi
+  "Riprova" fa un piano nuovo); la scelta fra `MoveCompletions` (campo A) e `MoveCompletionSink`.
+- P6: i giorni toccati come ingresso del ricalcolo incrementale (oggi `evaluate(id, budget)`).
+- P7: la paginazione di "Mostra piu' vecchi" in `TripProposals`.
+- P10: una scorciatoia "azioni permesse su questo elemento" per costruire `PermissionInfo` senza chiamare `allowed` per ogni operazione.
+
+**Punti aperti**
+- `MoveCompletions` ("al meglio", campo A) e `MoveCompletionSink` (vincolante) convivono in core-nasops: P4 decide come, senza due
+  aggiornamenti diversi del catalogo per lo stesso file.
+- `AlbumId` in app e' un UUID, nei percorsi `albums/<id>/` e' in base32: la conversione dei 128 bit la scrive P2.
+- Condividere un album personale crea un album condiviso con un id nuovo: cambia l'inciso del §2.1, aggiornato; da confermare.
+- L'interpretazione del "ritmo" degli eventi in `TripRules`: P7 la conferma sulle storie di P12.
+- Scelte di P0 che l'utente o il filone grafico possono rivedere: ordine predefinito dell'elenco ("Aggiornati di recente"), nessuna
+  preselezione nel foglio di chiusura (Q5), "Modificate" fuori dai filtri rapidi della Libreria.
+- Il piano non e' nel repository: gli edge case del §0.2, le proposte 5, 6 e 7, "7.4 al sicuro garantito" e E-SH11 li riporta l'orchestratore.
+- `:app` non dipende ancora dai due moduli; il passo D30 di `check.ps1` prova campo e decisione, il cancello degli album (P13) va aggiunto li'.
+- Un trasferimento rifiutato per spazio **prima** di partire aspetta solo finche' vale la conferma (10 minuti), poi e' `NOT_STARTED`: P4
+  avvii comunque l'operazione di core-nasops, che con lo spazio finito si mette in pausa da se' e riprende (F81).
+- `REPORT.md`: l'ambiente degli agenti non lascia scrivere file di resoconto; questa sezione ne fa le veci.
+
+## Fase 6, correzioni dopo le revisioni: pacchetto A (22/10)
+
+Il pacchetto A delle correzioni della Fase 6 (branch `fase6/rev-a`): la **fiducia fra dispositivi e l'indice `ai`**, dalla replica fino a cio' che
+l'utente vede o che questo dispositivo ripubblica. Voci di `docs/review/6-fase6.md` (R1-R5, R14-R16, R21, I10, I12, I13) e di
+`docs/review/funzionale-6.md` (PR-1, PR-2, PR-3, IX-6, IX-7, LT-3 con I7, VT-1, VT-2, CE-1, CE-6, DG-1). Lo stato di ogni voce, le prove e cosa
+provare sul telefono stanno nel resoconto del pacchetto; qui le decisioni.
+
+### L'indice locale (`core-search`)
+- **Origini.** Ogni dato dell'indice ha un'origine: `Local` (calcolato qui dai propri byte), `Derived(share, dispositivo)` (calcolato qui
+  sull'anteprima di un altro dispositivo, nuova) e `Replica(share, dispositivo)`. I nomi delle share si scrivono **in minuscolo** in tutte le
+  origini (I13: Samba non distingue le maiuscole). Per ogni chiave vince, nell'ordine: la ricetta piu' alta **ridotta a quella che quest'app
+  conosce** (R16: una ricetta 255 vale come la corrente), poi `Local`, poi `Derived`, poi `Replica` (R4), poi share e dispositivo. La stessa
+  scelta vale per la ricerca, per il testo dal vivo e per "Testo nella foto".
+- **Il corpo `ocr` sta nell'indice** (R4, R5, VT-2): il registro delle origini tiene, per ogni origine, il corpo `ocr` com'e' (le righe del testo
+  dal vivo) e la sorgente dei vettori (per ricostruire il corpo `vec` da ripubblicare). Le cartelle per chiave `ocr-layout/` e `local-bodies/`
+  (l'ultimo arrivato vinceva, e la revoca non le toglieva) si tolgono all'apertura. **Formato del registro:** due operazioni nuove
+  (`OP_VEC2` con la sorgente, `OP_TEXT2` con il corpo); le voci di prima si leggono ancora, ma senza corpo non contano come "calcolate qui"
+  (`savedFor`): il calcolo le rifa' una volta.
+- **Tetti per origine** (R1, R3; `IndexLimits`): 262.144 record di vettori (quanti un dispositivo ne puo' avere in una share, M9) e 128 MiB di
+  testo (testo normalizzato e corpi). Oltre, le voci d'altri si scartano (`overCap` in Diagnostica), **mai** quelle calcolate qui. Il
+  vocabolario dei refusi tiene al piu' 50.000 parole (le piu' frequenti; quelle nuove solo sotto il tetto, la coda d'attesa al piu' 4.096).
+  Sotto 256 MiB liberi la replica non si applica e si riprova al giro dopo.
+- **File dei vettori oltre 2 GiB** (R1): la mappatura e' **a finestre** (al piu' 1 GiB, 262.144 record l'una), le scritture a pezzi da 4 MiB;
+  nessun limite a 2 GiB. **Compattazione senza aspettare la notte:** dopo ogni cambio, se i record morti superano quelli vivi (e almeno 65.536)
+  il file si riscrive subito; il registro da solo quando i byte morti superano i vivi (e almeno 32 MiB). Un'apertura che fallisce
+  ricostruisce l'indice da capo e chiede alla replica di riconsegnare tutto (R15).
+- **R21** (corsa fra mappa e dimensione): verificata nel codice, non riprodotta in modo deterministico. Lo scrittore aggiornava la mappa e poi
+  la dimensione mappata, il lettore le leggeva separate: un lettore poteva usare la mappa vecchia con la dimensione nuova. Ora ogni finestra e'
+  un oggetto immutabile (copia alla scrittura) e il lettore controlla la capacita' della finestra che legge. La prova di stress
+  (`VectorFileFinestreTest`) passa anche sul codice di prima: e' una correzione strutturale, non riprodotta.
+- **Cornici del registro** (R2): una scrittura si divide in cornici da al piu' 4 MiB (un `force` solo); chi rilegge accetta cornici fino a
+  64 MiB. Prima un lotto di corpi `ocr` grandi superava il tetto della cornice e l'eccezione fermava il giro della replica.
+- **Revoca** (R5): `forgetDevice` toglie le voci `Replica(*, d)` e `Derived(*, d)` e quelle derivate da un'anteprima di dispositivo non noto
+  (l'HQ della replica). `forgetShare` toglie le une e le altre della share.
+
+### La replica e la pubblicazione `ai` (`core-index`, `core-trust`)
+- **R2: errori isolati.** Un errore locale nella replica di una share (indice pieno, disco, corpo che non si salva) chiude solo quella share per il
+  giro (`syncErrors`, `AI_INDEX_STATE` in avviso); le altre share, le miniature e il calcolo vanno avanti. I vincitori si consegnano
+  all'indice a lotti di al piu' 4 MiB di corpi.
+- **R16.** La fusione ordina per ricetta ridotta alla nota (`knownRecipe`) e poi per dispositivo; "fatto" vuol dire **la ricetta corrente**,
+  non una piu' alta: cambia il contratto di P2 (`AiDoneClasses`, `AiPublishedClasses`: prima "almeno", ora "uguale").
+- **I10.** Una testa `ai` di un'area che non e' quella comune vale solo se il firmatario e' dello **stesso account** di chi legge
+  (`HeadVerifier.accept`, `NOT_OWNER`). Difesa in profondita': SMB lo garantisce gia'. Il banco P10 (`AiBenchTest`) e' stato adattato: un
+  dispositivo di un altro account non sincronizza piu' l'area privata altrui (prima la leggeva perche' il banco non applica i permessi SMB).
+- **E-I17 per chi legge.** Le voci di un segmento che la testa nuova toglie restano finche' i segmenti nuovi non sono scaricati: una testa
+  compattata non svuota la ricerca per un giro.
+- **R15.** Chi ripara l'indice locale chiede alla replica di riconsegnare (`AiRedelivery`: tolti i segni "consegnato" di quelle chiavi in ogni
+  share; tutti, dopo una ricostruzione): la fusione del giro dopo le consegna anche se il vincitore e' lo stesso.
+- **R14: compattazione delle teste `ai` proprie** (`AiOwnCompaction`). Toglie le voci che non sono piu' di un file della share (M3) e, dopo
+  una revoca, quelle che questo dispositivo non sostiene piu' (il corpo calcolato qui per quella share non c'e' o e' cambiato: per esempio era
+  nato dall'anteprima del revocato); riscrive solo i segmenti non del tutto vivi. Quando: subito dopo una revoca, con 512 segmenti o piu', e
+  una volta al giorno (ora del NAS, file `ai-compaction` in `noBackupFilesDir`, tolto con l'azzeramento). La compattazione di ogni giorno
+  **non** guarda i corpi: un indice locale ricostruito da capo non deve svuotare la testa (il calcolo rifa' cio' che manca); se i corpi non si
+  sanno leggere (indice non aperto) non si toglie niente e si riprova. I **file** dei segmenti vecchi restano sul NAS finche' `core-nasops` non li
+  toglie (punto aperto, sotto).
+
+### Il calcolo (`core-ai/compute`) e le porte di `:app`
+- **R5: la provenienza degli ingressi.** Ogni blob del buffer degli indicizzatori comincia con un'intestazione (`MCGP`, versione, proprio o
+  anteprima con share e dispositivo); i file di prima, senza, si tolgono all'apertura (e' una cache). Un risultato calcolato sull'anteprima di
+  un altro dispositivo e' `Derived(share, dispositivo)`: vale solo per quella share (`savedFor`, i corpi da ripubblicare), si pubblica solo li'
+  e mai come "proprio" altrove. La lettura al volo del viewer usa dal buffer solo anteprime proprie; il testo letto sull'HQ della replica vale
+  solo nella share del media, se e' una sola. La revoca toglie dal buffer le anteprime del dispositivo.
+- **Segni "non supportato"** (R5, IX-7; `FileAiUnsupported`): ricordano la provenienza (propri = ovunque; da un'anteprima = solo in quella
+  share, tolti con la revoca), **scadono dopo 30 giorni** e le righe di prima non valgono piu'. Le share si scrivono come impronta, mai per nome.
+- **IX-7.** Un errore passeggero del motore (memoria, errore interno, lettura OCR non riuscita) non e' un rifiuto: il media si riprova
+  (`ItemEnd.RETRY`) e diventa "non supportato" solo dopo **3** errori nello stesso processo (memoria per chiave, al piu' 4.096). Modello
+  assente o motore che non parte restano "modello assente"; un vettore non finito resta un tentativo non valido (E-A12).
+- **IX-6.** Con F4-D31 le voci gia' in fila per la share (outbox o in attesa) contano come a posto; le righe della share si leggono una volta
+  per tappa (al piu' 10 secondi, finche' il catalogo non cambia) e le voci da rimettere in fila si mettono **a lotto** (una chiamata per lotto).
+- **PR-2.** Il giro periodico del NAS (`NasGraph.flushOutbox`) rilascia anche le voci in attesa di una share diventata pubblicabile: su un
+  dispositivo che non indicizza nessuna tappa del calcolo lo faceva.
+- **PR-3.** Le unita' del calcolo si rilasciano solo se niente di loro aspetta nell'outbox (`hasPending`, legato in `NasAiRuntime.build`).
+
+### Viewer, lettura del testo, Cerca, Diagnostica
+- **VT-1, I12.** Il testo dal vivo e la lettura al volo leggono le chiavi del media **anche se nascosto o membro di un gruppo**
+  (`MediaCatalog.mediaContentKeysOf`, solo per il viewer): nel viewer dei Nascosti funzionano, come dice D29. Le celle (Libreria, Cerca) restano
+  senza nascosti.
+- **VT-2.** `ViewerTextSource.changes` avvisa quando l'indice cambia: il viewer rilegge il media aperto, le righe ritirate escono (e cio' che era
+  aperto su di loro si chiude) e il pulsante "Testo" compare anche se il testo arriva a foto aperta. Un testo letto al volo qui resta finche'
+  l'indice non ne da' un altro.
+- **LT-3, I7.** Una versione del testo accettata **piu' vecchia** di quella dell'app non accende la lettura qui: lo stato e' "attiva per
+  l'account, non su questo dispositivo" (motore, lettura al volo e ML Kit fermi, anche all'avvio) e la pagina dice che il testo e' cambiato;
+  riaccettando la si riaccende. Il pulsante "Includi questo dispositivo" della pagina, in quello stato, non basta: serve riaccettare (la pagina
+  e' del pacchetto della scheda Cerca).
+- **CE-1: il bit `DOCUMENT`** (`DocumentRule`, `DocumentFlags`). Una cella e' un documento se e' una **foto che non e' uno screenshot** e il
+  testo letto ha almeno **9 righe o 250 caratteri**, oppure il vettore e' vicino alle frasi prototipo oltre una soglia. **Soglie provvisorie:**
+  sul set OCR sintetico di P9 (`tools/fixtures/generate-ocr.ps1`, 216 immagini: scontrini, chat, schermate, cartelli) i numeri di D34
+  (6 righe o 200 caratteri) prendono tutti i cartelli (precisione 0,50 sulle foto; chat e schermate sono screenshot ed escono per sorgente),
+  7 righe o 200 caratteri danno 0,90, 9 righe o 250 caratteri prendono tutti gli scontrini e nessun cartello. La soglia sul **vettore** non si
+  misura su quel set (testo senza modelli): finche' P9 non la calibra sul telefono e' "nessuna" (`Float.POSITIVE_INFINITY`) e i prototipi non
+  si calcolano nemmeno. **Ricalibrazione:** lo strumento di debug "Valutazione della ricerca, Documenti" etichetta un campione e
+  `EvalDocuments.calibrate` (precisione almeno 0,90) da' la soglia; le due copie di `EvalDocuments` ora prendono frasi e soglie del testo da
+  `DocumentRule`, e i valori nuovi vanno in `DocumentRule` e qui. Il bit si ricalcola al piu' ogni 15 secondi dopo i cambi dell'indice e
+  della Libreria e nella manutenzione notturna, accendendo e spegnendo (`MediaCatalog.setDerivedFlags`, lotti di 500), e resta locale.
+- **CE-6.** Il filtro finale dei nascosti legge a blocchi (`MediaCatalog.hiddenAmong`: due letture per blocco di id, nascosti e alias di un
+  media nascosto) invece di tre per risultato; stessa risposta di prima.
+- **PR-1: la copertura detta all'utente** (`AppCoverage`). Le aree senza indicizzatori vengono dagli stati firmati dei dispositivi approvati
+  (ruolo e ultima volta visto, entro 7 giorni) e dal registro; questo dispositivo vale con il ruolo di adesso; finche' gli stati non si sono
+  letti, o manca l'ora del NAS, nessuna area si dice scoperta. Arrivano in Cerca (`SearchNotice.NoIndexerForArea`, prima l'area comune), nella
+  pagina Ricerca e modelli e una volta in Diagnostica (`AI_NO_INDEXER_AREA`). I motivi di una cella senza vettore, nell'ordine: formato non
+  supportato; solo sul telefono di un dispositivo che non analizza; solo sul telefono di un indicizzatore senza il modello; tutte le sue share
+  senza indicizzatori; altrimenti in preparazione. **Lettura del testo non attiva** (D42): quando la lettura non e' attiva per questo account
+  e nell'indice non c'e' testo letto da nessuno; e' un motivo della copertura (con le celle senza testo) e un avviso in Cerca quando si cercano
+  parole (la schermata lo mostra una volta). Lo spazio del testo nella pagina e' ora il registro dell'indice.
+- **DG-1.** `AiIndexDiagnostics` e' nella Diagnostica (`AiModule`, `@IntoSet`): `AI_SEGMENT_REJECTED` per motivo, `AI_VECTOR_DISAGREE` (informazione,
+  come nel catalogo) e `AI_INDEX_STATE` con la pubblicazione, gli errori della replica, le compattazioni e i tetti dell'indice locale. Solo numeri.
+
+### File di `:app` toccati fuori dall'elenco del pacchetto (modifiche minime)
+`ai/AiGraph.kt` (montaggio dei nuovi adattatori, `keepReadText` con la provenienza), `ai/AiWiring.kt` (copertura, viewer, avvisi dell'indice),
+`ai/ViewerPorts.kt` (VT-1, VT-2, R5), `ai/TextReading.kt` (LT-3), `ai/SearchScreenPorts.kt` (aree e spazio della pagina), `di/AiModule.kt`
+(DG-1), `nas/NasGraph.kt` (replica `ai` da `NasAiHooks`, PR-2), `search/SearchGraph.kt` (righe del testo dall'indice, copertura, documenti),
+`search/SearchPorts.kt` (CE-6, ricostruzione del testo), `search/TextLayouts.kt` (R4, VT-1), `graph/LocalData.kt` (`ai-compaction`
+all'azzeramento), e le due copie di `EvalDocuments` (frasi e soglie da `DocumentRule`).
+
+### Punti aperti
+- **R14, i file sul NAS.** La compattazione toglie le voci dalle teste `ai` proprie, ma i file dei segmenti non piu' elencati restano nella
+  cartella del dispositivo: li toglie solo `core-nasops` (`OwnFilesCleaner`), che oggi non conosce i segmenti `ai` (va insegnato a considerare
+  "nel diario" i segmenti elencati dalle teste `ai` valide). Fuori dal perimetro del pacchetto.
+- **CE-1.** La soglia sul vettore e quella definitiva del testo aspettano la misura di P9 sul set privato.
+- **PR-1.** "Lettura del testo non attiva" per l'area comune e' una stima prudente (l'account di questo dispositivo e il testo che c'e'): gli
+  stati dei dispositivi non dicono se la lettura e' attiva. Per saperlo davvero servirebbe un campo nuovo nello stato firmato (formato).
+
+## Fase 6, correzioni dopo le revisioni: pacchetto C (22/10)
+
+Il pacchetto C del branch `fase6/rev-c` (partito da `main` @ `e4a2306`) corregge le voci delle due revisioni di fine Fase 6 (`docs/review/6-fase6.md`, `docs/review/funzionale-6.md`) che riguardano la scheda Cerca e "Trova simili", il ritaglio del soggetto, le foto in movimento, il testo dal vivo, gli strumenti di prova e due punti delle correzioni dal campo A. Ogni voce ha un test che prima della correzione falliva (o non compilava, se la correzione aggiunge un'API); le voci "plausibili" sono state verificate prima. Le voci dei pacchetti A e B (CE-1, CE-3, CE-6, VM-2 e le altre) non sono toccate.
+
+### Scheda Cerca (CE)
+
+- **CE-2 · togliere un chip non butta le parole libere.** *Causa:* con i chip modificati (`editedChips`) le parole libere venivano ricostruite solo dai chip `Word`; `parsed.words` si perdeva, e togliendo l'ultimo chip `SearchController.onRemoveChip` riportava Cerca a riposo anche se della query restava qualcosa. *Correzione:* le parole sono `parsed.words` piu' quelle dei chip `Word` non esatti (`distinct`); `SearchResults.freeText` dice se oltre ai chip resta qualcosa da cercare (contenuto o parole libere) e solo in quel caso togliere l'ultimo chip rifa' la ricerca; senza filtri, senza testo e senza chip `Word` il risultato e' vuoto (non "tutta la Libreria"). Stessa logica nel motore vero (`LocalSearchEngine`) e in quello di riferimento (`InMemorySearchEngine`: la suite di parita' li confronta). *Prova:* `RevisioneCTest` (core-search: motore vero e di riferimento), `SearchControllerTest.togliereUnChipConParoleLibereContinuaLaRicerca_CE2`.
+- **CE-4 · il viewer aperto da Cerca segue la vista viva (E-Q13).** *Causa:* `SearchHostViewModel.itemsOf` dava al viewer `MutableStateFlow(results)`, mai riemesso. *Correzione:* `LiveResults.followView` (una vista ordinata, rifatta a ogni istantanea nuova, senza i media usciti o nascosti adesso) e, in `:app`, `liveResultsView` (`SharingStarted.WhileSubscribed`: chiuso il viewer niente resta in ascolto). *Prova:* `RevisioneCTest.laVistaDelViewerSegueLaLibreriaViva`, `RevisioneCSearchAppTest.ilViewerApertoDaCercaSegueLaLibreriaViva_CE4`.
+- **CE-5 · i media solo-NAS hanno la miniatura della replica nei risultati.** *Causa:* le miniature di Cerca usavano `refAt` (solo telefono) e `LocalOnlyRefs` scartava ogni `MediaRef.Nas`. *Correzione:* `thumbRefAt` come la Libreria; `LocalOnlyRefs` non c'e' piu'. La regola "Cerca non legge mai il NAS" (D28, D33) passa a chi chiede: i riferimenti del NAS vanno al caricatore **solo come richieste "in arrivo"** (`windowOf`), e `NasThumbnailSource` legge l'originale del NAS solo per un contesto visibile (D17), quindi risponde con la replica locale o con la miniatura provvisoria. *Prova:* `SearchScreenUiTest.inCercaNonSiLeggeMaiIlNas_ISoloNasPassanoComeRichiesteInArrivo` (finestra "visibili" e "in arrivo"), `PipelineThumbnailLoaderNasTest.unaRichiestaInArrivoNonLeggeLOriginale_epoiDiventaVisibile` (esistente).
+- **CE-7 · la ricerca non gira sul thread principale.** *Correzione:* `SearchGraph.engine` e' un `OffMainSearchEngine` (`withContext(compute)`, `Dispatchers.Default` di serie; i test scelgono il loro). *Prova:* `RevisioneCSearchAppTest.ilLavoroDelleRicercheGiraSuUnDispatcherAParte_CE7`.
+- **CE-8 · finito lo scaricamento del modello, l'avviso "serve il modello" sparisce e la ricerca riparte.** *Causa:* l'avviso restava (era un fatto dei risultati in vista) e nessuno rifaceva la ricerca. *Correzione:* `SearchNoticeItems` considera mostrato l'avviso del modello se il modello e' `Ready`; `SearchController.refreshContent` rifa' la stessa ricerca **senza passare da "Sto cercando…"** (`launch(quiet = true)`) quando il modello o il motore diventano pronti e i risultati in vista erano senza contenuto. *Prova:* `SearchControllerTest.quandoIlModelloDiventaProntoLaRicercaRipartePerConto_CE8`, `SearchNoticeItemsTest.conIlModelloProntoLAvvisoServeIlModelloSiToglie_CE8`.
+- **CE-9 · la prima ricerca a freddo non aspetta il motore delle query.** *Causa:* `vector()` caricava il motore (secondi) prima di filtri e testo. *Correzione:* `QueryEmbedding.vectorIfLoaded` (a freddo risponde null subito, `readiness = PreparingContent`, e comincia a caricare) e `preload()`, chiamato all'apertura della scheda (`SearchEngine.warmUp`, `SearchRoute`); `LazyQueryEmbedding` ha un lavoro di caricamento a parte (`load`, con `warmUp`) e il motore e' "caldo" solo dopo la prima risposta. Filtri e testo escono subito; il contenuto si aggiunge quando `readiness` torna `Ready` (CE-8). *Prova:* `RevisioneCTest` (core-search), `SearchControllerTest.alleAperturaDiCercaIlMotoreSiScaldaEAMotoreProntoLaRicercaSiRifa_CE9`, `LazyQueryEmbeddingTest` (`:app`).
+- **CE-10 · se il catalogo non c'era alla nascita, la cronologia si riempie lo stesso.** *Causa:* `CatalogHistoryStore.changes` guardava il catalogo una volta sola. *Correzione:* emette subito un elenco vuoto, aspetta `ready()` (l'apertura della ricerca con il catalogo) e poi segue `searchHistoryChanges`. *Prova:* `RevisioneCSearchAppTest.laCronologiaAspettaIlCatalogoEPoiSiAggiorna_CE10`.
+- **CE-11 · con la ricerca ferma non si resta su "Sto cercando…".** *Causa:* `SearchGraph.ready()` lanciava `CancellationException`, che `SearchController` rilancia come "annullata". *Correzione:* `ready()` lancia `IllegalStateException`; e `SearchController.launch` distingue una cancellazione vera (`isActive` falso) da una che arriva dal motore mentre la schermata e' viva (stato `Unavailable`). *Prova:* `RevisioneCSearchAppTest.unaRicercaFermaLanciaUnErroreVeroNonUnaCancellazione_CE11`, `SearchControllerTest.unaCancellazioneDelMotoreDiventaUnErrore_CE11`.
+- **CE-12 · le foto senza data stanno in fondo.** *Causa:* uno scatto senza giorno valido valeva "oggi" (prima in "Recenti" e con la massima recenza). *Correzione:* `Ranked.day` e' nullo, `ResultRanking.period(null)` e' `UNDATED_PERIOD` (il piu' vecchio) e la recenza e' 0; `Ranking.ranked` non conosce piu' `today`; la griglia usa lo stesso `period`. *Prova:* `RevisioneCTest`.
+
+### "Trova simili" (TS)
+
+- **TS-1 · "Trova simili" c'e' dopo un avvio a freddo.** *Causa:* `CellKeys` si riempiva solo alla prima ricerca. *Correzione:* `SearchGraph.open()` avvia `followCatalog`: una sincronizzazione subito e una (accorpata, `SYNC_DEBOUNCE_MS` = 250 ms) a ogni cambiamento del catalogo. *Prova:* `RevisioneCSearchAppTest.leChiaviDelleCelleCiSonoDopoLAperturaSenzaUnaRicerca_TS1`.
+- **TS-2 · un rientro nella scheda non rilancia "Simili a".** *Correzione:* `SearchRoute` consegna la richiesta una volta (`onFindSimilarHandled`) e chi la tiene la azzera. *Prova:* `FindSimilarEffectTest` (consegna una volta, rientro nella scheda, seconda richiesta sullo stesso media, richiesta arrivata a scheda assente).
+- **TS-3 · da un viewer aperto fuori dalla schermata principale (Raccolte, Cartelle NAS) "Trova simili" funziona.** *Correzione:* la richiesta (`SimilarRequests`) si consuma alla radice (`SimilarRequestEffect` in `AppNavGraph`): chiude il viewer, torna alla schermata principale (`popBackStack<MainRoute>`) e consegna il media a Cerca. *Prova:* **solo sul telefono** (F-Cerca/TS-3: Raccolte -> Preferiti -> foto -> ⋮ -> Trova simili); il collegamento e' navigazione di Compose e non ha un test sulla JVM.
+- **TS-4 · "Trova simili" dalla selezione della Libreria: NON implementata.** E' una funzione nuova di `feature-library` (un'azione di selezione), fuori dal perimetro del pacchetto C, e la revisione stessa lascia l'alternativa "togliere la promessa dal progetto" (D30). Resta **aperta** e la scelta e' del prodotto: o un'azione per la selezione di un solo elemento sulla porta `SimilarRequests`, o D30 dice "dal viewer" e basta.
+- **TS-5 · il chip "Simili a" ha la miniatura.** *Causa:* la miniatura del chip non era mai nella finestra del caricatore (la cella e' esclusa dai risultati). *Correzione:* `similarChipRequests` entra nella stessa finestra della griglia (`followWindow`); un solo-NAS come richiesta "in arrivo" (CE-5). *Prova:* `SearchScreenUiTest.ilChipSimiliAChiedeLaSuaMiniatura_TS5`.
+
+### Ritaglio del soggetto (VR, R, I6)
+
+- **VR-1 / R19 · un ritaglio salvato dai Nascosti nasce nascosto e il segno si sincronizza.** *Causa:* `CutoutPhoneSaver` registrava il media e poi, in una seconda transazione, `setPersonalFlags(hidden)`; il segno aspettava il giro dei dati personali (fino a 6 ore) e il tablet poteva mostrare il ritaglio in Libreria. *Correzione:* `MediaCatalog.record(observation, whenUndecided, hidden)` scrive il media **e** il segno nella stessa transazione (`writePersonal`); `AppCutoutNewPhoto.onHiddenSaved` avvia `organizer.personalChanged()` come ogni "Nascondi". *Prova:* `CutoutPhoneSaverTest.dalNascostoIlMediaEIlSegnoSonoUnaScritturaSola` (core-mediastore), `CutoutIntegrationTest.unRitaglioDaiNascostiNasceNascostoEAvvisaLaSincronizzazioneDeiDatiPersonali_VR1` (`:app`). *Da provare sul telefono:* con due dispositivi, il tablet non vede il ritaglio salvato dai Nascosti.
+- **VR-2 / R20 · con poca memoria o poco spazio il ritaglio non fa cadere l'app e dice perche'.** *Causa:* un `OutOfMemoryError` del motore o della maschera (12,6 MB per una foto da 12 megapixel, copiata due volte) attraversava `AppViewerSubjectCutter`; con meno di circa 306 MB liberi il modello dell'APK non si copiava fra i verificati (`ModelLimits.SPACE_MARGIN_BYTES` valeva 300 MB anche per un modello che non si scarica) e il guasto era un generico "riprova". *Correzione:* `ViewerMask.adopting`/`readAlpha` (nessuna copia in piu'), `CutoutFailure` (`LOW_MEMORY`, `NO_SPACE`, `OTHER`) in `ViewerCutout.Failed`, `OutOfMemoryError` presa nel ritagliatore, in `DiagCutoutSaver` e nel `CutoutController` (messaggi "Memoria insufficiente"/"Spazio insufficiente", mai il generico), `EnsuringModelFiles.lastNoSpace`; un guasto `OUT_OF_MEMORY` del motore e' `LOW_MEMORY`. *Fuori perimetro, documentato:* `ModelLimits.BUNDLED_SPACE_MARGIN_BYTES` e `spaceMargin(spec)` (core-models, `LocalModelManager`): un modello **dentro l'APK** (`spec.bundledAsset`) chiede un margine di 16 MB (`BUNDLED_SPACE_MARGIN_BYTES`) invece dei 300 MB di uno da scaricare; il pacchetto B lavora nella stessa cartella, la modifica e' di tre righe e non cambia il comportamento dei modelli scaricati. *Prova:* `ModelManagerTest.ilRitaglioDellApkNonVuoleIlMargineDiUnModelloDaScaricare_VR2`, `ViewerMaskTest`, `CutoutControllerTest` (`laMemoriaEsauritaNelRitaglioNonFaCadereLApp_R20`, `copiaCondividiESalvaReggonoLaMemoriaEsauritaEDiconoDiChiudereQualcosa_R20`), `CutoutIntegrationTest` (`conPocaMemoriaIlRitaglioNonFaCadereLAppELoDice_R20`, `senzaSpazioPerIlModelloIlGuastoDiceSpazioInsufficiente_VR2`), `CutoutClipboardTest.ilModelloDelRitaglioRicordaSeUltimoTentativoERiuscitoPerMancanzaDiSpazio_VR2`.
+- **VR-3 / R18 · il PNG copiato o condiviso non resta leggibile, e gli appunti non puntano a un file sparito.** *Causa:* Copia e Condividi mettevano il PNG in `cacheDir/share/<token>/` e lo lasciavano fino alla pulizia dell'avvio dopo: per giorni qualunque app con il permesso (o una tastiera) poteva leggerlo, e dopo un riavvio gli appunti citavano un file tolto. *Correzione:* `StagedCutout` porta un `StagedLifecycle`: Condividi passa il `ShareLease` al custode delle condivisioni (`ShareHolder`: ritorno nell'app + un minuto, al piu' mezz'ora, come ogni condivisione dell'app); Copia lo passa a `CutoutClipboard` (uno solo alla volta, tolto subito se gli appunti cambiano, comunque dopo 10 minuti, quando gli appunti si **svuotano solo se hanno ancora un ritaglio nostro**); non partita o non riuscita: subito. Il ritaglio nostro si riconosce da un segno nella descrizione (`CutoutClipMarker`), senza leggere il contenuto. All'avvio `CutoutClipboard.clearIfOurs` svuota gli appunti con un ritaglio nostro (la pulizia di `share/` ha tolto il file); poiche' da Android 10 la descrizione degli appunti si legge solo da un'app in primo piano, e a processo appena nato non c'e' ancora una schermata, lo stesso controllo si rifa' a ogni schermata che torna davanti finche' non c'e' un ritaglio nostro in corso (`onForeground`). `IntegrationsGraph.shareHolder` e' uno solo per processo. *Prova:* `CutoutClipboardTest` (R18/VR-3, compresa `quandoUnaSchermataTornaDavantiGliAppuntiOrfaniSiSvuotano_VR3`), `AndroidCutoutSaverTest` (il segno e il ciclo di vita).
+- **I6 · dai Nascosti, un avviso nel foglio e il nome generico.** *Causa:* il ritaglio nel telefono e' una foto pubblica del MediaStore (la vedono Galleria di Samsung e le altre app) con il nome "<origine>-ritaglio.png", cioe' il nome di un file nascosto. *Correzione:* dai Nascosti "Salva come nuova foto" apre prima un foglio di conferma (`CutoutHiddenSaveSheet`, del design system) che dice che sara' una foto normale del telefono e che si chiamera' "Ritaglio.png"; il salvataggio parte dal tocco su "Salva"; il nome e' sempre generico. *Prova:* `CutoutPhoneSaverTest.dalNascostoIlNomeEGenerico_I6`, `CutoutControllerTest.dalNascostoIlFoglioAnnullaENonSalvaNiente_I6`, `ViewerCutoutTest` (conferma e annulla).
+
+### Foto in movimento e testo dal vivo
+
+- **VM-1 · l'animazione d'apertura non parte se l'utente ha gia' toccato o ingrandito.** *Causa:* `interruptOpening()` fermava solo un'animazione gia' partita; un tocco durante i 150 ms di assestamento o durante l'attesa (fino a 1,5 s) della coda video di un solo-NAS non lasciava traccia. *Correzione:* `MotionDirector` ricorda il tocco per la pagina ferma (`touchedPage`) e guarda anche `zoomed()`; controlla prima di `playMotion` e di nuovo dopo l'attesa della coda. *Prova:* `MotionDirectorTest`/`MotionNasDirectorTest` (`unToccoNellAttesaDiAssestamentoImpediscePerLaPaginaLAnimazione_VM1`, `unaPaginaIngrandita_NonAnima_VM1`, `unToccoDuranteLAttesaDellaCodaVideoImpedisceLAnimazione_VM1`).
+- **VM-3 · il badge "Movimento" di un solo-NAS dice che sta leggendo e un secondo tocco non ricomincia.** *Correzione:* `MotionState.markLoading`/`isLoading`, indicatore nel `MotionBadge` e stato "In caricamento"; il tocco e' ignorato mentre la lettura e' in corso. *Prova:* `MotionNasDirectorTest.ilBadgeDiceCheStaLeggendoEUnSecondoToccoNonRicomincia_VM3`, `cambiandoPaginaIlCaricamentoFinisce_VM3`.
+- **I9 · la rete si ricontrolla durante la lettura.** *Causa:* `NasMotionSource` controllava la rete una volta all'inizio; un passaggio Wi-Fi -> dati mobili con la VPN accesa a meta' lettura la lasciava finire (fino a 16 MB senza conferma). *Correzione:* il controllo si rifa' a ogni blocco da 1 MiB; se non permette piu' di leggere, il parziale si butta e l'esito e' `Blocked` come all'inizio. *Prova:* `NasMotionSourceTest` (`seLaReteDiventaAConsumoAMetaLetturaAutomaticaLaLetturaSiFerma_I9`, `unaLetturaConfermataNonSiFermaAlCambioDiRete_I9`, `seLaVpnSiSpegneAMetaLetturaNonRestaIlParziale_I9`).
+- **R17 · il "Copia" della selezione di sistema nel foglio "Testo nella foto" e' sensibile.** *Causa:* la selezione usava gli appunti di Compose, senza `EXTRA_IS_SENSITIVE`. *Correzione:* `SensitiveSelectionContainer` sostituisce `LocalClipboard` per la sola selezione del foglio con una copia che segna ogni testo copiato. *Prova:* `SensitiveSelectionTest` (gli appunti di Compose dentro il contenitore sono sensibili, fuori no; la selezione col mouse e Ctrl+C scrive negli appunti di sistema con il segno). **Rischio dichiarato:** vale per `LocalClipboard`, che e' quello che la `SelectionContainer` di questa versione di Compose usa per il "Copia"; il menu flottante di sistema passa dalla stessa funzione, ma l'anteprima degli appunti si guarda sul telefono (F-testo dal vivo: copiare una riga con la selezione e guardare l'anteprima: deve essere nascosta).
+
+### Strumenti di prova (DB)
+
+- **DB-1 · l'etichettatura di P9 mostra le foto.** *Causa:* `AppEvalEnvironment.thumbnail()` rispondeva sempre null. *Correzione:* `EvalThumbnails` (solo debug): per ogni cella chiede la miniatura al caricatore della Libreria (`thumbRefAt`), la mette nell'insieme delle richieste volute e pubblica la finestra **cumulativa** (una finestra da una richiesta sola annullerebbe le altre celle in vista), con attesa a tempo (6 s) e richiesta tolta a fine attesa; un solo-NAS e' "in arrivo" (mai il NAS, D33). *Prova:* `EvalThumbnailsTest`.
+- **DB-2 · `s25.ps1 -Mode ai` legge il file dei vettori vero.** Vedi `docs/prova-500.md` (D7): nome `vectors-<spazio>-<generazione>.bin`, little-endian, `search/index/`, un file non vuoto senza record e' un errore, il banco `s25-ai-finto.ps1` scrive il formato dell'app e prova la **morte del processo** (`pidof`, `kill -9`, rilancio, mezzo record in coda), ed e' rosso con lo script di prima. In piu': la tolleranza di `-Step verify` da solo e' `-Interruptions` (prima dipendeva da un calendario di seme casuale: il banco era instabile).
+- **DB-3 · la corsa di valutazione rilascia il motore del testo.** *Correzione:* `AppEvalEnvironment` ha **un'istanza sola** del motore (prima una nuova a ogni accesso, circa 330 MB l'una) e `EvalSession.documentChoice` la rilascia a fine lavoro, anche se una frase fallisce. *Prova:* `EvalSessionTest` (`ilMotoreDelTestoSiRilasciaAFineCorsa_DB3`, `ilMotoreDelTestoSiRilasciaAncheSeUnaFraseFallisce_DB3`).
+- **DB-4 · i passi scritti per portare dentro il set OCR e tirare fuori le etichette.** `s25.ps1 -Mode ai -Step eval-push` (`adb push` in `/data/local/tmp`, `run-as cp` in `no_backup/eval/ocr/`, copia temporanea tolta) ed `-Step eval-pull` (`exec-out run-as cat`, solo `labels.mcgeval`, `report-NN.txt`, `ocr/letto.tsv`, `ocr/ocr-resoconto.txt`, in `build\chaos\eval-<data>\`); rifiutati fuori dal modo `ai` e dalla build di debug. Procedura in `docs/prove-campo.md` (sezione 9). *Prova:* `s25-ai-finto.ps1` (sezione 8) e `s25.ps1 -Mode ai -SelfTest`.
+
+### Correzioni dal campo A (CA)
+
+- **CA-1 · a freddo una modifica fatta ad app chiusa non aspetta il giro periodico (D6).** *Verifica:* e' un difetto. `GalleryGraph.startWhenReady` avvia il NAS e poi il backup in una coroutine a parte; la lettura di primo piano del telefono puo' finire **prima** che il backup sia partito, e `BackupGraph.afterPhoneRead` usciva subito (`parts == null`): i lavori non si chiedevano piu' (sul campo la versione aspettava 70 minuti). *Correzione:* la chiamata persa si ricorda (`afterReadPending`) e si ripete appena `start()` ha finito. (Il lavoro di fondo non ha il problema: `BackupWorkScheduling.afterPhoneRead` avvia il backup prima.) *Prova:* `CampoAAppTest.d6_laLetturaFinitaPrimaCheIlBackupPartaChiedeComunqueIlLavoro_CA1` e `d6_senzaUnaLetturaFinitaPrimaIlBackupCheParteNonChiedeNiente_CA1` (il registratore dei lavori ora registra anche `quickWork`).
+- **CA-2 · la condivisione nuova non si perde e la vecchia non si chiude prima (D1).** *Verifica:* e' un difetto. `ShareReceiverActivity.onNewIntent` rilanciava la nuova con `startActivity(NEW_TASK | MULTIPLE_TASK)` e chiudeva la vecchia (che toglie le copie non salvate); se Android 14/15 blocca l'avvio da sfondo non arriva nessuna eccezione. *Correzione:* la nuova prende il posto della vecchia **nella stessa schermata** (`ReceiveViewModel.replaceRequest`, `onNewIntent` aggiorna l'intento): la nuova si copia per prima, la vecchia, se non era gia' in coda, si toglie solo dopo che la nuova e' al sicuro; una copia o un salvataggio in corso finiscono prima (un salvataggio non si interrompe a meta'); due nuove di fila valgono l'ultima; con il cancello non ancora aperto i flussi vecchi non si leggono mai; una vecchia gia' in coda resta del diario. *Prova:* `ReceiveViewModelTest` (sette test `_CA2`), `ShareReceiverActivityTest.d1_unaCondivisioneNuovaDavantiAUnaVecchiaPrendeIlPostoNellaStessaSchermata`.
+
+### Decisioni, tocchi fuori dal perimetro e punti aperti
+
+- **Nessuna garanzia e' stata indebolita.** I test di `feature-viewer`, `feature-search`, `feature-integrations` e del campo A restano verdi; i nascosti non entrano mai nei risultati (CE-4 li toglie anche dal viewer aperto, il ritaglio dai Nascosti nasce nascosto nella stessa transazione); la coda di "Salva sul NAS" resta tutto-o-niente (CA-2 non interrompe mai un salvataggio e non tocca le copie gia' in coda); nessuna rete durante le ricerche (CE-5: i riferimenti del NAS arrivano al caricatore solo come richieste "in arrivo", e la sorgente del NAS non legge l'originale per quelle).
+- **Perche' CE-5 non apre il NAS.** La regola "Cerca non legge mai il NAS" (D28, D33) prima stava in `LocalOnlyRefs`, che scartava ogni riferimento del NAS e lasciava ai media solo-NAS il segnaposto sfocato. Adesso sta dove nasce il rischio: nella finestra del caricatore. Una richiesta del NAS e' sempre "in arrivo" (mai "visibile"), e `NasThumbnailSource` risponde alle richieste non visibili solo con la replica locale o con la miniatura provvisoria (D17, esistente e provato da `PipelineThumbnailLoaderNasTest.unaRichiestaInArrivoNonLeggeLOriginale_epoiDiventaVisibile`). La stessa regola vale per le miniature dello strumento di valutazione (DB-1).
+- **TS-4 non e' implementata.** Vedi sopra: e' una funzione nuova di `feature-library`, fuori dal perimetro; la scelta fra l'azione di selezione e togliere la promessa da D30 e' del prodotto. Resta aperta.
+- **TS-3 non ha un test sulla JVM.** E' navigazione di Compose (`SimilarRequestEffect` alla radice, `popBackStack<MainRoute>`); si prova sul telefono.
+- **Rischio di R17.** La sostituzione riguarda `LocalClipboard` (l'API di appunti di Compose che la `SelectionContainer` usa); se una versione futura di Compose usasse un'altra via per il "Copia" della selezione, il test `SensitiveSelectionTest.ilCopiaDellaSelezioneDiSistemaEUnCopiaSensibile_R17` diventa rosso.
+- **Tocchi fuori dal perimetro del brief (tutti minimi).** `core-database`: `MediaCatalog.record(..., hidden)` (VR-1, una riga di scrittura nella transazione che c'e' gia'). `core-models`: `ModelLimits.BUNDLED_SPACE_MARGIN_BYTES`/`spaceMargin` e due usi in `LocalModelManager` (VR-2). `core-search`: i contratti `SearchResults.freeText`, `SearchEngine.warmUp`, `QueryEmbedding.vectorIfLoaded`/`preload`, `ResultRanking.UNDATED_PERIOD` e `period`/`recency` con giorno nullo (tutti con un valore di serie, quindi nessun'altra implementazione cambia). `:app`: `AiWiring` (`cutoutModels`, appunti e file del ritaglio, `onHiddenSaved`), `IntegrationsGraph.shareHolder` e `MyCloudGalleryApp` (il custode delle condivisioni condiviso con il ritaglio), `BackupGraph` (CA-1), `AppNavHost` (TS-2, TS-3).
+- **Cose che il pacchetto C non cambia di proposito.** Le soglie di ricerca, il formato di `ai`, i modelli, i valori di qualita'; il margine di spazio dei modelli da scaricare (300 MB).
+- **Strumenti.** La tolleranza di `s25.ps1 -Mode ai -Step verify` da solo e' `-Interruptions` morti (prima dipendeva da un calendario di seme casuale: il banco finto passava o no a caso). `fake-adb` ha i processi, il Wi-Fi, `push`, `run-as mkdir|cp` e la morte con scrittura a meta' (`FAKE_TEAR_ON_KILL`); `adb push` di una cartella si comporta come quello vero (in una destinazione che non c'e' la cartella diventa la destinazione, in una che c'e' va dentro) e cosi' anche `s25-finto.ps1` (modo backup) resta verde. I passi `eval-*` negli altri modi di `s25.ps1` sono rifiutati (prima, in modo `backup`, un passo sconosciuto lanciava la prova lunga).
+- **Rosso senza la correzione.** Rimettendo a mano le trenta modifiche mirate che avevano tolto i difetti (in un'unica prova, poi ripristinata con `git checkout`), i test che le riproducono diventano rossi: `RevisioneCTest` (CE-2, CE-9, CE-12), `SearchControllerTest` (CE-2, CE-8), `SearchNoticeItemsTest` (CE-8), `SearchScreenUiTest` (CE-5, TS-5), `FindSimilarEffectTest` (TS-2), `RevisioneCSearchAppTest` (CE-7, CE-10, CE-11, TS-1), `CutoutPhoneSaverTest` (VR-1, I6), `CutoutClipboardTest` (R18, VR-2), `CutoutIntegrationTest` (VR-1, R20), `SensitiveSelectionTest` (R17), `MotionDirectorTest` e `MotionNasDirectorTest` (VM-1, VM-3), `NasMotionSourceTest` (I9), `ReceiveViewModelTest` (CA-2), `CampoAAppTest` (CA-1), `EvalSessionTest` (DB-3), `EvalThumbnailsTest` (DB-1). Per DB-2 e DB-4 il banco `s25-ai-finto.ps1` e' rosso con lo script di prima (vedi `docs/prova-500.md`). Non provati rossi per mutazione: CE-4 (la vista viva e' una funzione nuova: senza non compila) e il ritorno in primo piano di VR-3.
+
+### Da provare sul telefono (S25 e Tab S9; niente e' stato provato su dispositivo in questo pacchetto)
+
+Le prove che un agente puo' fare con `adb` sono segnate (adb); le altre vogliono l'utente.
+
+- **F68 / F57 (adb)**: "scontrino ieri", togliere il chip "Ieri": restano i risultati con "scontrino" (CE-2); una foto senza data (screenshot con data cancellata) in fondo a "Recenti" e senza recenza in "Pertinenti" (CE-12). Cerca appena aperta, a freddo: i filtri rispondono subito e il contenuto arriva dopo senza ripetere la ricerca (CE-9, CE-8: dopo lo scaricamento del modello l'avviso sparisce da solo).
+- **F55 (adb, cattura di rete)**: sul tablet, risultati con tanti solo-NAS: le miniature ci sono (CE-5) e nessun pacchetto verso il NAS mentre si cerca.
+- **F58 (adb)**: nascondere una foto aperta da un risultato: esce dal viewer e dalla griglia (CE-4); "Trova simili" nel menu del viewer c'e' appena avviata l'app, senza cercare (TS-1); dalle Raccolte -> Preferiti -> foto -> ⋮ -> Trova simili si arriva a Cerca con il chip "Simili a" e la sua miniatura (TS-3, TS-5), e rientrando nella scheda non riparte (TS-2).
+- **F54 / DB (adb)**: `s25.ps1 -Mode ai -Step eval-push` poi lo strumento mostra le foto (DB-1) e "Lettura di prova" scrive `letto.tsv`; `-Step eval-pull` lo riporta (DB-4); piu' "Corsa" ripetute non fanno salire il PSS di 330 MB l'una (DB-3).
+- **F61 (adb)**: `s25.ps1 -Mode ai -Interruptions 100 -Verify`: nel racconto la riga `search/: un file di vettori, N record buoni…` (DB-2).
+- **F65 (utente)**: nel foglio "Testo nella foto" selezionare una riga col dito e toccare "Copia": l'anteprima degli appunti non mostra il testo (R17).
+- **F66 (adb dove si puo')**: ritaglio dai Nascosti: compare il foglio, "Salva" fa una foto "Ritaglio.png" (nome generico) e sul tablet non compare in Libreria (VR-1, I6); "Copia" e dopo 10 minuti gli appunti si svuotano, "Condividi" e il file sparisce al ritorno nell'app (R18); `am force-stop` con un ritaglio negli appunti: al riavvio gli appunti sono vuoti (VR-3); con meno di 300 MB liberi il ritaglio funziona (VR-2); una foto da 12 megapixel con molte app aperte dice "Memoria insufficiente" e non chiude l'app (R20).
+- **F70 / F71 (adb + utente)**: pizzicare o toccare una foto in movimento subito dopo averla aperta: nessuna animazione, nessun video a pagina intera (VM-1); su un solo-NAS il badge mostra l'indicatore mentre legge e un secondo tocco non ricomincia (VM-3); passare dal Wi-Fi ai dati mobili con la VPN accesa a meta' lettura la ferma (I9).
+- **Campo A (adb)**: B-S7 cinque volte (`am force-stop`, modifica in Galleria, apertura a freddo): la versione parte subito, senza aspettare il giro periodico (CA-1); `am start` di una seconda condivisione sopra la schermata "Salva sul NAS" di una prima: la schermata mostra la seconda, la prima non salvata sparisce dopo, e un'eventuale blocco di avvio non fa perdere niente (CA-2).

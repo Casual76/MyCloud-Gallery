@@ -56,6 +56,13 @@ class AiIndexCounters {
   /** Teste `ai` piu' vecchie di quella accettata o equivoche (E-I5). */
   val rollbacks = AtomicInteger()
 
+  /** Revisione A (R2): errori locali isolati nella replica `ai` (la share resta incompleta, il resto del giro va avanti). */
+  val syncErrors = AtomicInteger()
+
+  /** Revisione A (R14): compattazioni delle proprie teste `ai` e voci tolte (non piu' di un file della share, o non piu' sostenute). */
+  val compactions = AtomicInteger()
+  val entriesDropped = AtomicInteger()
+
   fun reject(reason: RejectReason) {
     rejected.getOrPut(reason) { AtomicInteger() }.incrementAndGet()
   }
@@ -69,9 +76,16 @@ class AiIndexCounters {
  */
 class AiIndexDiagnostics(
   private val counters: AiIndexCounters,
-  private val pending: StateFlow<AiPendingCounts>?,
+  /** Le voci in attesa del pubblicatore di adesso (il motore del NAS puo' ripartire): null = nessun pubblicatore. */
+  private val pending: suspend () -> AiPendingCounts?,
   private val titleOf: (DiagCode) -> Int,
+  /** Altri numeri dello stato dell'indice `ai` (per esempio i tetti dell'indice locale, R1 e R3): solo numeri. */
+  private val extra: () -> Map<String, Long> = { emptyMap() },
 ) : DiagnosticsContributor {
+
+  /** Come prima (P2): le voci in attesa da un flusso fisso. */
+  constructor(counters: AiIndexCounters, pending: StateFlow<AiPendingCounts>?, titleOf: (DiagCode) -> Int) :
+    this(counters, { pending?.value }, titleOf)
 
   override val section: DiagSection = DiagSection.SEARCH
 
@@ -84,16 +98,24 @@ class AiIndexDiagnostics(
       add(item(AiIndexDiag.AI_SEGMENT_REJECTED, DiagSeverity.WARNING, export))
     }
     val disagree = counters.disagree.get()
-    if (disagree > 0) add(item(AiIndexDiag.AI_VECTOR_DISAGREE, DiagSeverity.WARNING, mapOf("count" to ExportValue.Num(disagree.toLong()))))
-    val waiting = pending?.value ?: AiPendingCounts.EMPTY
-    val export = mapOf(
-      "published" to ExportValue.Num(counters.published.get().toLong()),
-      "staged" to ExportValue.Num(waiting.staged.toLong()),
-      "waitingForShare" to ExportValue.Num(waiting.waitingForShare.toLong()),
-      "foreign" to ExportValue.Num(counters.foreign.get().toLong()),
-      "unpublishable" to ExportValue.Num(counters.unpublishable.get().toLong()),
-    )
-    add(item(AiIndexDiag.AI_INDEX_STATE, DiagSeverity.INFO, export))
+    // Come nel catalogo: un'informazione (E-A14: vince comunque la regola deterministica).
+    if (disagree > 0) add(item(AiIndexDiag.AI_VECTOR_DISAGREE, DiagSeverity.INFO, mapOf("count" to ExportValue.Num(disagree.toLong()))))
+    val waiting = runCatching { pending() }.getOrNull() ?: AiPendingCounts.EMPTY
+    val export = LinkedHashMap<String, ExportValue>()
+    export["published"] = ExportValue.Num(counters.published.get().toLong())
+    export["staged"] = ExportValue.Num(waiting.staged.toLong())
+    export["waitingForShare"] = ExportValue.Num(waiting.waitingForShare.toLong())
+    export["foreign"] = ExportValue.Num(counters.foreign.get().toLong())
+    export["unpublishable"] = ExportValue.Num(counters.unpublishable.get().toLong())
+    export["devicesForgotten"] = ExportValue.Num(counters.devicesForgotten.get().toLong())
+    export["segmentsMissing"] = ExportValue.Num(counters.segmentsMissing.get().toLong())
+    export["rollbacks"] = ExportValue.Num(counters.rollbacks.get().toLong())
+    export["syncErrors"] = ExportValue.Num(counters.syncErrors.get().toLong())
+    export["compactions"] = ExportValue.Num(counters.compactions.get().toLong())
+    export["entriesDropped"] = ExportValue.Num(counters.entriesDropped.get().toLong())
+    runCatching { extra() }.getOrNull()?.forEach { (name, n) -> export[name] = ExportValue.Num(n) }
+    val severity = if (counters.syncErrors.get() > 0) DiagSeverity.WARNING else DiagSeverity.INFO
+    add(item(AiIndexDiag.AI_INDEX_STATE, severity, export))
   }
 
   private fun item(code: DiagCode, severity: DiagSeverity, export: Map<String, ExportValue>): DiagItem =

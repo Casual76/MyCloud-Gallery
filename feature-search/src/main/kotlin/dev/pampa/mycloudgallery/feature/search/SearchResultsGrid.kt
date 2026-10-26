@@ -94,15 +94,20 @@ internal fun SearchResultsGrid(
   }
 }
 
-/** Le miniature da caricare sono quelle delle celle in vista (la finestra del caricatore); solo sorgenti locali. */
+/**
+ * Le miniature da caricare sono quelle delle celle in vista (la finestra del caricatore), piu' quella del chip "Simili a" (TS-5: la cella del media e' esclusa
+ * dai risultati, quindi nessuna finestra la chiedeva e il chip restava sull'icona). Solo cio' che e' sul dispositivo: i media solo-NAS passano per [windowOf].
+ */
 private suspend fun followWindow(state: LazyGridState, entries: List<GridEntry>, results: SearchScreenState.Results, thumbnails: SearchThumbnails) {
   val cells = entries.filterIsInstance<GridEntry.Cell>().associateBy { it.key }
+  val chipRequests = similarChipRequests(results.chips, results.confident.snapshot, thumbnails)
   snapshotFlow { state.layoutInfo.visibleItemsInfo.map { it.key } }.distinctUntilChanged().collect { keys ->
     val visible = keys.mapNotNull { cells[it] }.mapNotNull { cell ->
       val view = if (cell.section == ResultSection.CONFIDENT) results.confident else results.likely
       thumbRequestOf(thumbnails, view.snapshot, view.snapshotIndex(cell.viewIndex))
     }
-    thumbnails.loader.window(visible, emptyList())
+    val (local, replicaOnly) = windowOf(chipRequests + visible)
+    thumbnails.loader.window(local, replicaOnly)
   }
 }
 

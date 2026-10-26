@@ -67,7 +67,7 @@ internal object SearchGridEntries {
       val index = view.snapshotIndex(i)
       if (grouped) {
         val day = ChipMatching.dayOf(view.snapshot.localDayAt(index))
-        val period = day?.let { ResultRanking.period(it, today) } ?: UNDATED
+        val period = ResultRanking.period(day, today)
         if (!started || period != current) {
           out += GridEntry.Period(section, if (day == null) null else LocalDate.ofEpochDay(period), levelOf(day, today))
           current = period
@@ -104,5 +104,4 @@ internal object SearchGridEntries {
 
   private const val DAY_WINDOW = 31L
   private const val MONTH_WINDOW = 730L
-  private const val UNDATED = Long.MIN_VALUE
 }

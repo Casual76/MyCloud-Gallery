@@ -252,6 +252,9 @@ class BackupGraph(
   val parts: Parts? get() = partsFlow.value
 
   private val stopped = AtomicBoolean(false)
+
+  /** Una lettura del telefono e' finita mentre il backup non era ancora partito (CA-1): i lavori si chiedono appena parte. */
+  private val afterReadPending = AtomicBoolean(false)
   private val startLock = Mutex()
   private val runLock = Mutex()
 
@@ -373,6 +376,8 @@ class BackupGraph(
     revertsWatcher?.cancel()
     revertsWatcher = scope.launch { catalog.reverts.collect { id -> fiveB.realign(listOf(id)) } }
     kick()
+    // CA-1: una lettura del telefono finita prima di questo momento chiedeva i lavori e non trovava il backup: adesso li chiede.
+    if (afterReadPending.compareAndSet(true, false)) scope.launch { runCatching { afterPhoneRead() } }
     true
   }
 
@@ -396,7 +401,13 @@ class BackupGraph(
    * WorkManager, unici (`KEEP`), con le regole di sempre: nessun polling, niente parte se le regole dicono di aspettare.
    */
   suspend fun afterPhoneRead() {
-    if (parts == null) return
+    if (parts == null) {
+      // CA-1: a freddo la lettura di primo piano puo' finire PRIMA che il backup sia partito (parte dopo il NAS). La chiamata non si perde: si ricorda e si
+      // ripete appena `start()` ha finito. Prima usciva e basta, e la versione aspettava il giro periodico (sul campo 70 minuti), proprio nel caso che D6 voleva coprire.
+      if (!stopped.get()) afterReadPending.set(true)
+      return
+    }
+    afterReadPending.set(false)
     fiveB.settle()
     for (next in nextAll()) {
       when (next) {

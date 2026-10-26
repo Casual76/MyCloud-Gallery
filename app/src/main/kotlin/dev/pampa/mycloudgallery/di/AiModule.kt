@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.ai.AiWiring
 import dev.pampa.mycloudgallery.ai.AppIndexerControl
 import dev.pampa.mycloudgallery.ai.PersonalSearchOrderStore
 import dev.pampa.mycloudgallery.ai.PersonalTextReadingAccepted
+import dev.pampa.mycloudgallery.ai.aiIndexContributor
 import dev.pampa.mycloudgallery.core.ai.contract.DeviceProbe
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
 import dev.pampa.mycloudgallery.core.ai.runtime.RealDeviceProbe
@@ -107,4 +108,10 @@ object AiModule {
   @Provides
   @IntoSet
   fun aiDiagnostics(stack: AiStack): DiagnosticsContributor = AiDiagnostics(stack)
+
+  /** DG-1 (revisione A): i dati AI dell'indice in Diagnostica (rifiuti, disaccordi, stato della pubblicazione e dei tetti). */
+  @Provides
+  @IntoSet
+  fun aiIndexDiagnostics(stack: AiStack): DiagnosticsContributor =
+    aiIndexContributor(stack.ai.indexCounters, { stack.ai.publishStore.pending() }, { stack.search.index.counters })
 }

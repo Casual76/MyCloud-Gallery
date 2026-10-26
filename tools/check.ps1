@@ -47,6 +47,9 @@
                                 E (LA-5 della verifica funzionale della 5B) il SECONDO cancello, quello dei file in arrivo ("Salva sul
                                 NAS", `IncomingGate.stateOf`, la share di destinazione): stessa prova, cioe' chiama `backupMayWriteTo` e
                                 `backupMayWriteAs`, risponde `TEST_ONLY` dopo ognuna ed e' istanziato da una classe del backup
+    7d-bis. D30 nella release   (Fase 7, P0) la recinzione "album condivisi solo sulle share di prova" C'E' nell'APK di release:
+                                `FeatureFlags.sharedAlbumsTestSharesOnly` e la decisione `sharedAlbumsMayUse` nel dex e in mapping.txt
+                                (consumer-rules.pro di core-common); il cancello degli album che le usa lo aggiunge P13
     7e. motori on-device        (Fase 6, P0; docs/fase6-progetto.md D3, D33, D38, D41) sull'APK di release vero: librerie
                                 native solo arm64-v8a (P11: x86_64 solo nella debug, per gli emulatori), non compresse,
                                 allineate a 16 KB nel file e nei segmenti LOAD;
@@ -857,6 +860,29 @@ Step "D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteT
     (($gate.Instantiators | Select-Object -Unique) -join ", "), @($gate.DecisionCallers | Select-Object -Unique).Count, @($gate.AccountDecisionCallers | Select-Object -Unique).Count, $gate.Lines) -ForegroundColor DarkGray
   Write-Host ("        cancello dei file in arrivo (LA-5) provato nel bytecode: IncomingGate.stateOf -> backupMayWriteTo/backupMayWriteAs -> TEST_ONLY, istanziato da {0}" -f
     (($gate.IncomingInstantiators | Select-Object -Unique) -join ", ")) -ForegroundColor DarkGray
+}
+
+# Fase 7 (P0, D30): "album condivisi solo sulle share di prova" e' una protezione che deve esserci NELLA RELEASE (come D12), accesa e non
+# spegnibile (FeatureFlagsTest). Qui si controlla che R8 non l'abbia tolta: il campo e la decisione per share di `FeatureFlags`, tenuti da
+# core-common/consumer-rules.pro anche prima che P13 leghi il cancello degli album (`AlbumWriteGate`), devono stare nel dex dell'APK di
+# release e in mapping.txt. Il cancello che li usa lo aggiunge P13 a questo passo. Senza i file il passo FALLISCE (non salta).
+$d30Members = @("getSharedAlbumsTestSharesOnly", "sharedAlbumsMayUse")
+Step "D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $mapping = Join-Path $root "app\build\outputs\mapping\release\mapping.txt"
+  if (-not (Test-Path $mapping)) { return "manca mapping.txt in app\build\outputs\mapping\release" }
+  $problems = @()
+  $found = @(Get-DexClassesMatching $apk.FullName (($d30Members | ForEach-Object { [regex]::Escape($_) }) -join "|"))
+  foreach ($member in $d30Members) {
+    if ($found -notcontains $member) { $problems += "$member non e' nel dex di release: la protezione D30 e' stata tolta" }
+  }
+  foreach ($member in @("boolean sharedAlbumsMayUse(java.lang.String)", "boolean getSharedAlbumsTestSharesOnly()")) {
+    if (-not (Select-String -Path $mapping -SimpleMatch -Pattern $member -Quiet)) { $problems += "$member non e' in mapping.txt" }
+  }
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+  Write-Host "        D30 presente nella release (dex e mapping.txt)" -ForegroundColor DarkGray
 }
 
 # --- Fase 6 (P0): i motori on-device nell'APK di release (docs/fase6-progetto.md D3, D33, D38, D41, L47, L49) -------------------------

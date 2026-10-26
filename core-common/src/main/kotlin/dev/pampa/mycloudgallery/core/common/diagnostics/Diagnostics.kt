@@ -78,6 +78,14 @@ enum class DiagSection {
    */
   SEARCH,
 
+  /**
+   * Gli album (Fase 7, `docs/fase7-progetto.md` §2.8, D37): album condivisi (contributi rifiutati, voci scartate per permesso, elementi
+   * non attestati), condivisioni in corso e in pausa, guardiano chiesto dopo una condivisione, ricalcolo degli album smart, viaggi
+   * senza GPS, elementi personali in attesa. Solo codici e numeri: **mai** titoli d'album, nomi di cartelle, luoghi, casa, coordinate,
+   * descrizioni, id di media o account.
+   */
+  ALBUMS,
+
   /** I consumi del mese (TrafficLedger). */
   MONTHLY_TRAFFIC,
 

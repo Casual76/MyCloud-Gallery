@@ -10,9 +10,11 @@
 
   Scrive in <Out>\MCG-ocr\: immagini\*.jpg, manifest.tsv (il testo atteso) e LEGGIMI.txt.
 
-  La MISURA VERA con ML Kit e' sul dispositivo: si copia la cartella con adb e la corsa di debug "Lettura di prova" (Diagnostica >
-  Sviluppo > Valutazione della ricerca) scrive letto.tsv. Con -Resoconto il PC ne ricava l'errore per carattere e la ricerca per
-  parola (resoconto-ocr.md e .tsv). Con -LettoreFinto il resoconto si prova su un lettore inventato: NON e' una misura.
+  La MISURA VERA con ML Kit e' sul dispositivo: la cartella MCG-ocr si porta dentro l'app di debug con
+  `tools\chaos\s25.ps1 -Mode ai -Step eval-push -EvalSource <Out>\MCG-ocr` (la shell di adb non scrive nella cartella dell'app: `adb push`
+  in /data/local/tmp e poi `run-as ... cp`; DB-4), poi la corsa di debug "Lettura di prova" (Diagnostica > Sviluppo > Valutazione
+  della ricerca) scrive letto.tsv, che si riporta sul PC con `-Step eval-pull`. Con -Resoconto il PC ne ricava l'errore per carattere
+  e la ricerca per parola (resoconto-ocr.md e .tsv). Con -LettoreFinto il resoconto si prova su un lettore inventato: NON e' una misura.
 
   NON COMMITTARE l'uscita: di default e' tools\fixtures\out\ (la regola "out/" del .gitignore la copre).
 

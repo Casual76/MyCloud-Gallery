@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.nas.ops.DeleteOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.NasFileOps
 import dev.pampa.mycloudgallery.core.nas.ops.RenameOutcome
+import dev.pampa.mycloudgallery.core.nas.ops.RmdirOutcome
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.nasops.contract.LocalTrashRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
@@ -116,6 +117,23 @@ class ChaosMutationTest {
       },
     )
     assertDetects(run(broken, 1_500), setOf(Invariant.TEMP, Invariant.CONVERGENCE))
+  }
+
+  @Test
+  fun laCartellaDOrigineCheNonSiTogliePiuDopoLoSpostamentoELaSciaDietro() {
+    // O-B18: sullo stack VERO (quello che toglie la cartella d'origine svuotata) `rmdirIfEmpty` risponde "tolta" senza togliere niente: dopo uno
+    // spostamento di cartella tra share la cartella resta, vuota, nell'area di partenza, e il banco deve dirlo.
+    val broken = Mutant(
+      ProductionChaosStackFactory,
+      "rmdirIfEmpty risponde 'tolta' senza togliere",
+      fileOps = { inner ->
+        object : NasFileOps by inner {
+          override suspend fun rmdirIfEmpty(share: String, dir: SharePath, purpose: Purpose): NasResult<RmdirOutcome> =
+            NasResult.Ok(RmdirOutcome.Removed)
+        }
+      },
+    )
+    assertDetects(run(broken, 600), setOf(Invariant.CATALOG))
   }
 
   @Test

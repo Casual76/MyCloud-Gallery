@@ -155,6 +155,10 @@ sopravvissuto **prima** che il perdente sia cancellato.
 - **Proprietario**: telefono -> l'account del dispositivo; NAS -> il proprietario dell'area privata; area comune
   -> nessuno (non si fanno copie private dei file altrui). Un proprietario si acquisisce (es. una share diventa
   privata nella configurazione), **non si perde mai da solo** (un media condiviso resta di chi l'ha condiviso).
+  **Fase 7 (`docs/fase7-progetto.md` D7, D29, D31):** per un media spostato in un album condiviso il proprietario e' l'account che
+  l'ha aggiunto, quello della voce `item:` (`addedBy`), e lo spostamento non cambia ne' il `MediaId` ne' il proprietario (porta di
+  completamento: la nuova posizione si collega allo stesso media prima che la sorgente vada nel cestino). La cartella d'origine sta nei
+  dati personali (`shared_origin`), non nella definizione comune; "Riporta nelle mie cartelle" vale solo per i media propri.
 - **Tolleranze** (`LocationRules`): telefono 60 giorni (massimo del cestino Samsung), NAS 30 giorni (cestino
   della share, spostamenti visti in due scansioni). Intanto il media non conta come presente li'.
 
@@ -236,7 +240,12 @@ entita' (il build esporta `N.json`), scrivere `Migration(N-1, N)` in `GalleryMig
     ha chiamanti) e `ai_vector` e `ai_text`, per chiave di contenuto, la sostituiscono. Non si toglie: la migrazione 4→5 non e'
     distruttiva.
   - I **volti** restano alla Fase 8.
-- **Album completi, album smart e condivisi**: Fase 7, con migrazione.
+- ~~**Album completi, album smart e condivisi**: Fase 7, con migrazione.~~ Progettati nella Fase 7 (`docs/fase7-progetto.md`, 21-22/10):
+  album personali e smart nei dati personali (D3, D4, campi dentro `ALBUM`, nessun tipo nuovo), proiettati sulle tabelle **derivate** della
+  v6 (D5, D34); album condivisi come contributi firmati nell'area comune (D6-D11), replicati senza chiavi esterne (`shared_album_entry`);
+  diario della condivisione (`album_share_op`, `album_share_item`); "casa" locale (`home_estimate`, mai sincronizzata, D18). Lo schema
+  **v6** (una sola migrazione, 5→6, mai distruttiva) e' di P1: §14, scritto da P1. I codici salvati (`ShareLevel`, `AlbumKind`,
+  `AlbumSort`, `TripKind`) sono in `core-model` da P0.
 - **Dimensione dei vettori** (MRL) e risoluzione delle anteprime: misure 0.3/6.1 ancora aperte.
 - **Dove vivono le versioni precedenti sul NAS** (punto aperto 5.4): il modello le tratta come posizioni
   qualsiasi della versione.

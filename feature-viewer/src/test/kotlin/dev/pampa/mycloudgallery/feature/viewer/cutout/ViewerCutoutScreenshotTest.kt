@@ -71,6 +71,16 @@ abstract class CutoutScreenshotBase(protected val dark: Boolean) : CutoutViewerB
     composeRule.waitForIdle()
     shot("nessun-soggetto", device)
   }
+
+  /** Un guasto con il suo motivo (R20, VR-2): il messaggio dice di chiudere qualche app o di liberare spazio, non il generico "riprova". */
+  protected fun failed(name: String, reason: CutoutFailure, device: String = "telefono") {
+    showCutout(cutoutServices(cutter = CutoutTestImage.cutter().apply { result = { _, _ -> ViewerCutout.Failed("CUTOUT_FAILED", reason) } }), dark = dark)
+    composeRule.onNodeWithContentDescription("Altre azioni").performClick()
+    composeRule.waitUntil(10_000) { composeRule.onAllNodesWithText(CUTOUT_ACTION).fetchSemanticsNodes().isNotEmpty() }
+    composeRule.onNodeWithText(CUTOUT_ACTION).performClick()
+    composeRule.waitForIdle()
+    shot(name, device)
+  }
 }
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -99,6 +109,20 @@ class ViewerCutoutScreenshotTest(dark: Boolean) : CutoutScreenshotBase(dark) {
 
   @Test
   fun nessunSoggettoChiaro() = none("telefono")
+
+  @Test
+  fun confermaDaiNascosti() {
+    showCutout(dark = dark, secure = true)
+    pressRobot()
+    tap(SAVE)
+    shot("conferma-nascosti")
+  }
+
+  @Test
+  fun memoriaInsufficiente() = failed("memoria", CutoutFailure.LOW_MEMORY)
+
+  @Test
+  fun spazioInsufficiente() = failed("spazio", CutoutFailure.NO_SPACE)
 
   @Test
   fun soggettoAFotoIngrandita() {

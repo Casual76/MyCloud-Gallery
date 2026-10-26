@@ -232,6 +232,35 @@ class ChaosVerifierTest {
     assertThat(Verifier.quiescent(snapshot, context(w), expectDir(Place("test", "Altra"))).invariants()).contains(Invariant.CATALOG)
   }
 
+  @Test
+  fun o_b18_unaCartellaDOrigineCheDovevaSparireEUnaViolazione_seNonCeNessuna(): Unit = runBlocking {
+    // V ha ancora un file (la cartella c'e'): se lo stack doveva averla tolta, e' una violazione; se non c'e' piu' no. Il file di V non fa rumore
+    // per questo controllo (lo dicono gli altri invarianti); qui conta solo la cartella.
+    val w = world(0 to ("test" to "V/a.jpg"))
+    fun expectGone(dir: Place) =
+      Expectation(mapOf(w.ledger.byId(0).sha to ExpectedVisible(null, true)), null, emptySet(), emptySet(), null, goneDirs = setOf(dir))
+    val snapshot = scan(w)
+    val still = Verifier.quiescent(snapshot, context(w), expectGone(Place("test", "V")))
+    assertThat(still.map { it.detail }.any { it.contains("e' rimasta, vuota") }).isTrue()
+    assertThat(Verifier.quiescent(snapshot, context(w), expectGone(Place("test", "Altra")))).isEmpty()
+    // Maiuscole e minuscole non cambiano la risposta: Samba non le distingue.
+    assertThat(Verifier.quiescent(snapshot, context(w), expectGone(Place("test", "v"))).invariants()).contains(Invariant.CATALOG)
+  }
+
+  @Test
+  fun o_b18_ilModelloRicordaLeCartelleDOrigineEleRivive() {
+    val model = FsModel()
+    model.addDir(Place("test", "V/Gita"))
+    model.expectGone(Place("test", "V"))
+    assertThat(model.goneDirs.keys).containsExactly(Place("test", "V").key, Place("test", "V/Gita").key)
+    // Un'altra cartella o un'altra share non c'entrano.
+    model.addDir(Place("test-comune", "V"))
+    assertThat(model.goneDirs).hasSize(2)
+    // Qualcosa che torna a vivere sotto V (un ripristino, un file spostato dentro) la riporta fra quelle che possono esserci, con le sue madri.
+    model.addDir(Place("test", "V/Gita"))
+    assertThat(model.goneDirs).isEmpty()
+  }
+
   // --- La lettura del NAS ------------------------------------------------------------------------------------------------------------
 
   @Test

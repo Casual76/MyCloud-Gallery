@@ -141,6 +141,8 @@ object NoRegistryService : RegistryService {
   override suspend fun updateNasAddress(ip: String): AdminActionResult = AdminActionResult.NotAdmin
 
   override suspend fun updateHomeUla(prefixes: Set<String>): AdminActionResult = AdminActionResult.NotAdmin
+
+  override suspend fun renameDevice(deviceId: String, name: String): AdminActionResult = AdminActionResult.NotAdmin
 }
 
 /** Nessun lavoro: non configurato. */

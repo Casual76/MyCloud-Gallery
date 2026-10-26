@@ -32,4 +32,15 @@
   <string name="cutout_msg_failed_detail">Riprova. Se capita ancora, guarda la Diagnostica.</string>
   <string name="cutout_msg_save_failed_title">Ritaglio non salvato</string>
   <string name="cutout_msg_save_failed_detail">Controlla lo spazio sul telefono e riprova.</string>
+  <!-- R20, VR-2: la memoria o lo spazio non bastano. -->
+  <string name="cutout_msg_memory_title">Memoria insufficiente</string>
+  <string name="cutout_msg_memory_detail">Chiudi qualche app e riprova.</string>
+  <string name="cutout_msg_space_title">Spazio insufficiente</string>
+  <string name="cutout_msg_space_detail">Libera spazio sul telefono e riprova.</string>
+
+  <!-- I6: dai Nascosti il ritaglio salvato è una foto normale del telefono. -->
+  <string name="cutout_hidden_sheet_title">Salvare il ritaglio nel telefono?</string>
+  <string name="cutout_hidden_sheet_message">La foto da cui viene è nascosta, ma il ritaglio sarà una foto normale del telefono: la vedranno anche la Galleria di Samsung e le altre app che leggono le foto. Si chiamerà «Ritaglio.png». Dentro MyCloud Gallery resta nascosto.</string>
+  <string name="cutout_hidden_sheet_save">Salva</string>
+  <string name="cutout_hidden_sheet_cancel">Annulla</string>
 </resources>

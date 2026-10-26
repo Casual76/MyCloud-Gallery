@@ -127,6 +127,12 @@ interface ChaosStackFactory {
   val writesTrashRecords: Boolean get() = false
 
   /**
+   * Vero se lo stack, a fine spostamento di una cartella tra share, toglie la cartella d'origine svuotata (O-B18: l'esecutore vero ha un
+   * elemento per la cartella stessa, `rmdirIfEmpty`; quello di riferimento di P0-B no e la lascia). Il verificatore allora la vuole sparita.
+   */
+  val removesEmptySourceFolders: Boolean get() = false
+
+  /**
    * Le primitive che il banco NON colpisce con questo stack, perche' ha un difetto noto che nasconderebbe il resto. Vuoto per uno stack
    * senza difetti noti: ogni voce e' una cosa da sistemare, non un permesso. Il rapporto le elenca sempre.
    */

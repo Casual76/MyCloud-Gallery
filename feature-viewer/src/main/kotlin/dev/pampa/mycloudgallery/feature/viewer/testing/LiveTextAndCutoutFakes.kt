@@ -14,13 +14,24 @@ import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextLine
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextReader
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextSource
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerWordSpan
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 
 // I fake del testo dal vivo e del ritaglio (Fase 6, P0): P12 e P13 partono da qui (testo letto finto con righe dritte, inclinate e
 // su piu' righe; ritagliatore finto). Mai nella release (tools/check.ps1). Nessun dato personale: testi di prova generici.
 
-/** Il testo letto finto, per media. */
+/** Il testo letto finto, per media; [changed] avvisa il viewer che il testo e' cambiato (VT-2). */
 class FakeViewerTextSource(val layouts: MutableMap<MediaId, ViewerTextLayout> = HashMap()) : ViewerTextSource {
+  private val signals = MutableSharedFlow<Unit>(extraBufferCapacity = 16)
+
   override suspend fun layout(id: MediaId): ViewerTextLayout? = layouts[id]
+
+  override val changes: Flow<Unit> get() = signals
+
+  /** Il testo dell'indice e' cambiato (arrivato, ritirato): il viewer rilegge il media aperto. */
+  fun changed() {
+    signals.tryEmit(Unit)
+  }
 }
 
 /**
@@ -116,11 +127,15 @@ class FakeCutoutSaver : CutoutSaver {
   var saveFails: Boolean = false
   var latencyMs: Long = 0
 
+  /** Se c'e', ogni azione lancia questo (anche un `OutOfMemoryError`, R20). */
+  var failWith: Throwable? = null
+
   /** Se c'e', il salvataggio aspetta che lo si apra: lo stato "Salvo la foto nuova..." si cattura finche' il PNG si scrive. */
   var gate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
 
   override suspend fun copy(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean): Boolean {
     if (latencyMs > 0) kotlinx.coroutines.delay(latencyMs)
+    failWith?.let { throw it }
     outlines += outline
     if (copyFails) return false
     copies += id
@@ -129,6 +144,7 @@ class FakeCutoutSaver : CutoutSaver {
 
   override suspend fun share(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean): Boolean {
     if (latencyMs > 0) kotlinx.coroutines.delay(latencyMs)
+    failWith?.let { throw it }
     outlines += outline
     if (shareFails) return false
     shares += id
@@ -138,6 +154,7 @@ class FakeCutoutSaver : CutoutSaver {
   override suspend fun saveAsNewPhoto(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean, fromHidden: Boolean): CutoutSaveResult {
     if (latencyMs > 0) kotlinx.coroutines.delay(latencyMs)
     gate?.await()
+    failWith?.let { throw it }
     outlines += outline
     if (saveFails) return CutoutSaveResult.Failed
     saved += id to fromHidden

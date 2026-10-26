@@ -8,12 +8,14 @@ import dev.pampa.mycloudgallery.core.personal.contract.SearchOrderSetting
 import dev.pampa.mycloudgallery.core.personal.contract.TextReadingChoice
 import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
+import dev.pampa.mycloudgallery.feature.search.contract.AreaKind
 import dev.pampa.mycloudgallery.feature.search.contract.IndexSpace
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerBacklog
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerChange
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
 import dev.pampa.mycloudgallery.feature.search.contract.SearchOrderStore
 import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
+import dev.pampa.mycloudgallery.search.SearchGraph
 import java.io.File
 import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
@@ -117,9 +119,14 @@ class AppIndexerControl(
   override fun refresh() {
     scope.launch {
       val work = runCatching { stack.ai.backlog() }.getOrNull()
-      backlogFlow.value = IndexerBacklog(((work?.photos ?: 0L) + (work?.videos ?: 0L)).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), emptyList())
-      val dir = stack.search.dir
-      spaceFlow.value = IndexSpace(vectorBytes = sizeOf(File(dir, "index")), textBytes = sizeOf(File(dir, "ocr-layout")))
+      // PR-1 (E-I12): le aree senza indicizzatori, prima l'area comune.
+      val areas = runCatching { stack.search.coverageNotices.areasWithoutIndexer() }.getOrDefault(emptyList())
+        .distinct().sortedDescending().map { common -> if (common) AreaKind.COMMON_AREA else AreaKind.MY_PRIVATE_AREA }
+      backlogFlow.value = IndexerBacklog(((work?.photos ?: 0L) + (work?.videos ?: 0L)).coerceAtMost(Int.MAX_VALUE.toLong()).toInt(), areas)
+      // Revisione A: il testo letto sta nel registro dell'indice (le righe per chiave di prima non ci sono piu').
+      val files = File(stack.search.dir, SearchGraph.INDEX_DIR).walkTopDown().filter { it.isFile }.toList()
+      val vectors = files.filter { it.name.startsWith("vectors-") || it.name.startsWith("coarse-") }.sumOf { it.length() }
+      spaceFlow.value = IndexSpace(vectorBytes = vectors, textBytes = files.sumOf { it.length() } - vectors)
     }
   }
 
@@ -159,8 +166,6 @@ class AppIndexerControl(
       // Solo una comodita': la stima si rifa' alla prossima misura.
     }
   }
-
-  private fun sizeOf(dir: File): Long = dir.walkTopDown().filter { it.isFile }.sumOf { it.length() }
 
   companion object {
     const val PROBE_FILE = "ai-probe"

@@ -447,7 +447,10 @@ class SmbNasSessionManager(
           }
           FailureKind.CREDITS, FailureKind.FINAL -> backToReady(session)
         }
-        GalleryLog.d(TAG) { "operazione fallita: $failure" }
+        // O-B11 (prove sul campo, gruppo B): "non c'e'" e' una risposta normale, non un guasto. Chi chiama l'aspetta e la tratta da solo (un media
+        // spostato dall'app mentre la Libreria o la preparazione lo stavano per aprire, un temporaneo o una cartella gia' tolti alla ripresa): il
+        // log non la chiama "fallita", cosi' in un log di uno spostamento da 941 elementi non compaiono falsi fallimenti.
+        GalleryLog.d(TAG) { if (failure.error == NasError.NotFound) "voce assente (risposta normale): $failure" else "operazione fallita: $failure" }
         Attempt.Failed(failure)
       } finally {
         monitor.end(ticket)

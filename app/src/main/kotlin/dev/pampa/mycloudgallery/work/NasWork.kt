@@ -74,6 +74,7 @@ object NasWorkScheduling {
   const val PREP_WORK = "nas-preparation"
   const val PREP_NOW_WORK = "nas-preparation-now"
   const val HQ_WORK = "nas-hq-previews"
+  const val HQ_NOW_WORK = "nas-hq-previews-now"
   const val SUMMARY_WORK = "nas-daily-summary"
 
   // Fase 4B (P16): cestino, manutenzione dell'indice, dati personali.
@@ -122,6 +123,22 @@ object NasWorkScheduling {
       .then(OneTimeWorkRequestBuilder<IndexSyncWorker>().setConstraints(connected()).addTag(TAG).build())
       .then(OneTimeWorkRequestBuilder<PersonalSyncWorker>().setConstraints(connected()).addTag(TAG).build())
       .enqueue()
+  }
+
+  /**
+   * F12, O-B16 (prove sul campo): dopo un cambio di qualita' delle anteprime la pagina dice "sto adattando lo spazio" ma la convergenza la fanno
+   * i giri di sincronizzazione dell'indice (scaricano le classi nuove e, scendendo, rilasciano le vecchie), che prima aspettavano le 6 ore del giro
+   * periodico. Ora il cambio ne accoda subito uno (e, salendo ad "Alta", anche lo scaricamento dell'HQ): lo stesso lavoro del periodico, quindi
+   * **con le stesse regole delle attivita'** (rete, carica, fascia, traffico, `StagedRun`), che decidono se parte adesso o aspetta. Non scavalca
+   * niente: se le regole dicono "aspetta", il lavoro aspetta. Accodato dopo uno gia' in corso (`APPEND_OR_REPLACE`): un giro iniziato con le
+   * classi di prima non vale per il livello nuovo.
+   */
+  fun convergeNow(context: Context, level: QualityLevel) {
+    val wm = WorkManager.getInstance(context.applicationContext)
+    wm.enqueueUniqueWork(SYNC_NOW_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, OneTimeWorkRequestBuilder<IndexSyncWorker>().setConstraints(connected()).addTag(TAG).build())
+    if (level == QualityLevel.HIGH) {
+      wm.enqueueUniqueWork(HQ_NOW_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, OneTimeWorkRequestBuilder<HqPreviewsWorker>().setConstraints(connected()).addTag(TAG).build())
+    }
   }
 
   /** La tappa dopo, per un lavoro che ha lasciato altro da fare ([StageOutcome.Yielded]). */

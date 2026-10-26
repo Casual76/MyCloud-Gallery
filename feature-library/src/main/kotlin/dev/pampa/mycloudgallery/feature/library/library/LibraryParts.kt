@@ -209,8 +209,11 @@ internal fun positionSaver(grid: MediaGridState): Saver<PositionKeeper, Any> = S
 // Stati (§2.4)
 // ---------------------------------------------------------------------------------------------
 
-/** I filtri rapidi del menu della vista, nell'ordine in cui compaiono: tutti, "Documenti" compreso (Fase 6, P8, D34). */
-internal val QuickFilters: List<LibraryFilter> = LibraryFilter.entries.toList()
+/**
+ * I filtri rapidi del menu della vista, nell'ordine in cui compaiono: tutti, "Documenti" compreso (Fase 6, P8, D34). Fase 7 (P0, D24):
+ * "Modificate" ([LibraryFilter.EDITED]) e' una pagina dell'Utility, non un chip della Libreria: resta fuori (lo decide P8).
+ */
+internal val QuickFilters: List<LibraryFilter> = LibraryFilter.entries.filter { it != LibraryFilter.EDITED }
 
 @Composable
 internal fun filterLabel(filter: LibraryFilter): String = stringResource(
@@ -222,6 +225,7 @@ internal fun filterLabel(filter: LibraryFilter): String = stringResource(
     LibraryFilter.VIDEOS -> R.string.library_filter_videos
     LibraryFilter.FAVORITES -> R.string.library_filter_favorites
     LibraryFilter.DOCUMENTS -> R.string.library_filter_documents
+    LibraryFilter.EDITED -> R.string.library_filter_edited
   },
 )
 
@@ -285,6 +289,7 @@ internal fun LibraryFilterEmptyState(filter: LibraryFilter, onShowAll: () -> Uni
       LibraryFilter.VIDEOS -> R.string.library_filter_empty_videos
       LibraryFilter.FAVORITES -> R.string.library_filter_empty_favorites
       LibraryFilter.DOCUMENTS -> R.string.library_filter_empty_documents
+      LibraryFilter.EDITED -> R.string.library_filter_empty_edited
       LibraryFilter.WITHOUT_SCREENSHOTS_AND_WHATSAPP, LibraryFilter.ALL -> R.string.library_filter_empty_no_screenshots_whatsapp
     },
   )
@@ -498,7 +503,10 @@ internal fun selectionActions(
   return actions
 }
 
-/** Il foglio "Elimina dal telefono" (D14): un posto solo, il telefono, e l'avviso che sul NAS non c'e' ancora una copia. */
+/**
+ * Il foglio "Elimina dal telefono" (D14): un posto solo, il telefono, e l'avviso che sul NAS non c'e' ancora una copia **solo per i media che
+ * non sono al sicuro** (D-B1: prima l'avviso era fisso e diceva il falso per foto gia' al sicuro). Con una selezione mista lo dice con i numeri.
+ */
 @Composable
 internal fun LibraryDeleteSheet(visible: Boolean, state: LibraryTabState, onDismiss: () -> Unit) {
   val grid = state.grid
@@ -507,7 +515,10 @@ internal fun LibraryDeleteSheet(visible: Boolean, state: LibraryTabState, onDism
   // GA-8: il foglio conta e tocca solo i media che hanno una copia sul telefono; gli altri, solo sul NAS, restano dove sono e lo dice.
   val onPhone = remember(selected) { state.commands.onPhone(selected.ids) }
   val nasLeft = selected.size - onPhone.size
-  val phoneDetail = stringResource(R.string.library_delete_location_phone_detail)
+  // D-B1: la vista e' una chiave, come per i preferiti: un media che diventa "al sicuro" a foglio aperto cambia l'avviso.
+  val view = grid.view
+  val unsafe = remember(onPhone, view) { grid.unsafeAmong(onPhone) }
+  val phoneDetail = deletePhoneDetail(total = onPhone.size, unsafe = unsafe)
   val nasLeftDetail = if (nasLeft > 0) pluralStringResource(R.plurals.library_delete_nas_left, nasLeft, GalleryNumbers.format(nasLeft)) else null
   GalleryDeleteSheet(
     visible = visible,
@@ -530,6 +541,30 @@ internal fun LibraryDeleteSheet(visible: Boolean, state: LibraryTabState, onDism
     onDismissRequest = onDismiss,
     scopes = listOf(GalleryDeleteScope.PhoneOnly),
   )
+}
+
+/**
+ * D-B1: quanti fra [ids] (media con una copia sul telefono) **non** sono al sicuro sul NAS, dai flag dell'indice (`CellFlags.SAFE`, lo stesso
+ * segno della cella: copia nell'area privata riletta e verificata qui, D8). Un id che non e' nell'indice corrente conta come non al sicuro: nel
+ * dubbio l'avviso c'e', mai il contrario.
+ */
+internal fun MediaGridState.unsafeAmong(ids: Set<MediaId>): Int {
+  val snapshot = view.snapshot
+  return ids.count { id ->
+    val index = indexOf(id).takeIf { it in 0 until snapshot.size } ?: snapshot.indexOf(id)
+    index < 0 || !CellFlags.has(snapshot.flagsAt(index), CellFlags.SAFE)
+  }
+}
+
+/**
+ * La frase del posto "Telefono" nel foglio "Elimina dal telefono" (D-B1, E-D14): [total] media sul telefono, [unsafe] senza una copia al sicuro.
+ * Tutti al sicuro: lo dice e basta. Nessuno al sicuro: l'avviso di sempre, con "prima mettilo al sicuro". Misti: con i numeri ("2 di 5").
+ */
+@Composable
+internal fun deletePhoneDetail(total: Int, unsafe: Int): String = when {
+  unsafe <= 0 -> pluralStringResource(R.plurals.library_delete_phone_safe, total)
+  unsafe >= total -> pluralStringResource(R.plurals.library_delete_phone_unsafe_all, total)
+  else -> pluralStringResource(R.plurals.library_delete_phone_unsafe_some, unsafe, GalleryNumbers.format(unsafe), GalleryNumbers.format(total))
 }
 
 /**

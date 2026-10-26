@@ -337,7 +337,13 @@ class CutoutControllerTest {
     press(rig)
     rig.controller.save()
     runCurrent()
-    assertThat(rig.saver!!.saved).containsExactly(a to true)
+    // I6: dai Nascosti prima si chiede conferma (il ritaglio nel telefono e' una foto pubblica); solo il "Salva" del foglio salva.
+    assertThat(rig.saver!!.saved).isEmpty()
+    assertThat(rig.controller.confirmingHiddenSave).isTrue()
+    rig.controller.confirmHiddenSave()
+    runCurrent()
+    assertThat(rig.controller.confirmingHiddenSave).isFalse()
+    assertThat(rig.saver.saved).containsExactly(a to true)
   }
 
   @Test
@@ -392,5 +398,78 @@ class CutoutControllerTest {
     assertThat(rig.controller.state).isEqualTo(CutoutState.Idle)
     assertThat(rig.controller.art).isNull()
     assertThat(rig.controller.canDismiss).isFalse()
+  }
+
+  // --- Correzioni dopo le revisioni, pacchetto C -----------------------------------------------------------------------------------
+
+  /** I6: "Annulla" nel foglio dei Nascosti non salva niente e il soggetto resta staccato; dalla Libreria il salvataggio parte subito, senza foglio. */
+  @Test
+  fun dalNascostoIlFoglioAnnullaENonSalvaNiente_I6() = runTest {
+    val hiddenRig = rig(hidden = true)
+    press(hiddenRig)
+    hiddenRig.controller.save()
+    assertThat(hiddenRig.controller.confirmingHiddenSave).isTrue()
+    hiddenRig.controller.cancelHiddenSave()
+    runCurrent()
+    assertThat(hiddenRig.controller.confirmingHiddenSave).isFalse()
+    assertThat(hiddenRig.saver!!.saved).isEmpty()
+    assertThat(hiddenRig.controller.state).isInstanceOf(CutoutState.Lifted::class.java)
+    // Chiudere il ritaglio (tocco fuori) chiude anche il foglio.
+    hiddenRig.controller.save()
+    hiddenRig.controller.dismiss()
+    assertThat(hiddenRig.controller.confirmingHiddenSave).isFalse()
+
+    val plainRig = rig(hidden = false)
+    press(plainRig)
+    plainRig.controller.save()
+    runCurrent()
+    assertThat(plainRig.controller.confirmingHiddenSave).isFalse()
+    assertThat(plainRig.saver!!.saved).containsExactly(a to false)
+  }
+
+  /** R20: la memoria esaurita nel ritaglio non fa cadere l'app (un `Error` non e' un'`Exception`): il ritaglio non riesce e lo dice. */
+  @Test
+  fun laMemoriaEsauritaNelRitaglioNonFaCadereLApp_R20() = runTest {
+    val rig = rig(cutter = FakeViewerSubjectCutter(failWith = OutOfMemoryError("test")))
+    press(rig)
+    assertThat(rig.messages).containsExactly(ViewerMessage.CutoutLowMemory)
+    assertThat(rig.controller.state).isEqualTo(CutoutState.Idle)
+
+    // Un guasto che dice di piu': poco spazio per il modello (VR-2) e poca memoria dichiarata dal ritagliatore.
+    val space = rig(cutter = FakeViewerSubjectCutter(result = { _, _ -> ViewerCutout.Failed("CUTOUT_FAILED", CutoutFailure.NO_SPACE) }))
+    press(space)
+    assertThat(space.messages).containsExactly(ViewerMessage.CutoutNoSpace)
+    val memory = rig(cutter = FakeViewerSubjectCutter(result = { _, _ -> ViewerCutout.Failed("CUTOUT_FAILED", CutoutFailure.LOW_MEMORY) }))
+    press(memory)
+    assertThat(memory.messages).containsExactly(ViewerMessage.CutoutLowMemory)
+    // Un guasto senza motivo resta il "riprova" di sempre.
+    val plain = rig(cutter = FakeViewerSubjectCutter(result = { _, _ -> ViewerCutout.Failed("CUTOUT_FAILED") }))
+    press(plain)
+    assertThat(plain.messages).containsExactly(ViewerMessage.CutoutFailed)
+  }
+
+  /** R20: anche Copia, Condividi e Salva (il PNG e le sue copie) reggono la memoria esaurita: lo dicono, il soggetto resta e si puo' riprovare. */
+  @Test
+  fun copiaCondividiESalvaReggonoLaMemoriaEsauritaEDiconoDiChiudereQualcosa_R20() = runTest {
+    val saver = FakeCutoutSaver().apply { failWith = OutOfMemoryError("test") }
+    val rig = rig(saver = saver)
+    press(rig)
+    rig.controller.copy()
+    runCurrent()
+    assertThat(rig.messages).containsExactly(ViewerMessage.CutoutLowMemory)
+    assertThat(rig.controller.working).isFalse()
+    rig.controller.share()
+    runCurrent()
+    assertThat(rig.messages).containsExactly(ViewerMessage.CutoutLowMemory, ViewerMessage.CutoutLowMemory)
+    rig.controller.save()
+    runCurrent()
+    assertThat(rig.messages.last()).isEqualTo(ViewerMessage.CutoutLowMemory)
+    assertThat(rig.controller.state).isInstanceOf(CutoutState.Lifted::class.java)
+    assertThat(rig.controller.working).isFalse()
+    // Con piu' memoria lo stesso soggetto si copia.
+    saver.failWith = null
+    rig.controller.copy()
+    runCurrent()
+    assertThat(saver.copies).containsExactly(a)
   }
 }

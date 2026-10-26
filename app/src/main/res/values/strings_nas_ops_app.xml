@@ -15,6 +15,6 @@
     <item quantity="other">In attesa: %1$s file sono aperti sul PC</item>
   </plurals>
   <string name="notify_nas_ops_paused">In pausa: il NAS non risponde o le scritture sono ferme</string>
-  <string name="notify_nas_ops_stopping">Mi fermo prima del prossimo elemento…</string>
-  <string name="notify_nas_ops_stop">Ferma</string>
+  <string name="notify_nas_ops_stopping">Annullo il resto: mi fermo prima del prossimo elemento…</string>
+  <string name="notify_nas_ops_stop">Annulla il resto</string>
 </resources>

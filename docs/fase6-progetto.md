@@ -960,6 +960,12 @@ pochi KB); i modelli una volta da Internet per famiglia (527 MB), poi dal NAS; n
 | Indice vettoriale locale e "Trova simili" | Fase 7: Utility → Doppioni (scatti simili ma diversi); Fase 9: ricordi |
 | Dizionario dei luoghi della Libreria | Fase 9: mappa e ricordi |
 | Filtro Documenti | Fase 7: Utility |
+
+**Fase 7 (22/10):** le righe della Fase 7 qui sopra le precisa `docs/fase7-progetto.md` §2.9 (cosa serve, l'uso, cosa succede senza). Due
+**aggiunte a P6** chieste dalla Fase 7 (P0 della Fase 7 le gira come "modifiche ai contratti degli altri"):
+`suspend fun similarToAll(examples: List<MediaId>, within: CandidateFilter?): SearchResults` (media normalizzata dei vettori degli
+esempi, stessa soglia di "Trova simili") e `SearchRequest.within: CandidateFilter?` (giorni o insieme di media) senza voce nella
+cronologia per le richieste degli album. Finche' non ci sono, `core-albums` usa un adattatore sopra `search` e filtra dopo.
 | Formato del manifest firmato (§2.1) | Fase 10: versione minima e kill switch |
 | Ritagliatore (MagicTouch su LiteRT) | Fase 9: copertine dei ricordi; Fase 10: widget con il soggetto ritagliato |
 

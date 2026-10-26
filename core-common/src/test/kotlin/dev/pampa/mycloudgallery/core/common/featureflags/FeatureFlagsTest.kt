@@ -118,4 +118,30 @@ class FeatureFlagsTest {
     // Anche le build di release di un valore diverso da RELEASE non esistono: il costruttore e' privato.
     assertWithMessage("RELEASE accende R2").that(source).contains("backupBlocksTestAccounts = true")
   }
+
+  /**
+   * Fase 7, D30: gli album condivisi solo fra le share di prova, acceso in release **e in debug** (risposta Q7 (a): si spegne a fine
+   * Fase 7, con il consenso, cambiando la costante). Come D12, `forBuild` non ha il parametro: lo controlla la lettura del sorgente.
+   */
+  @Test
+  fun d30_gliAlbumCondivisiSoloSulleShareDiProvaAncheInRelease() {
+    assertThat(FeatureFlags.RELEASE.sharedAlbumsTestSharesOnly).isTrue()
+    for (debug in listOf(false, true)) {
+      val flags = FeatureFlags.forBuild(debugBuild = debug, wol = true, nasLibrary = true, indexPublishTestSharesOnly = false)
+      assertThat(flags.sharedAlbumsTestSharesOnly).isTrue()
+      for (share in listOf("test", "test2", "TEST-comune")) assertWithMessage(share).that(flags.sharedAlbumsMayUse(share)).isTrue()
+      for (share in listOf("alessio", "pampa", "NAS", "Public", "ｔｅｓｔ-comune", "test-comune ", "test3", "")) {
+        assertWithMessage(share).that(flags.sharedAlbumsMayUse(share)).isFalse()
+      }
+    }
+    val root = generateSequence(File(".").absoluteFile) { it.parentFile }.first { File(it, "settings.gradle").isFile }
+    val source = File(root, "core-common/src/main/kotlin/dev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags.kt").readText()
+    val forBuild = Regex("""fun\s+forBuild\s*\(([^)]*)\)""").find(source)?.groupValues?.get(1) ?: error("forBuild non trovata")
+    assertWithMessage("forBuild non deve poter spegnere D30").that(forBuild).doesNotContain("haredAlbums")
+    assertWithMessage("D30 e' una costante accesa").that(source).contains("private const val SHARED_ALBUMS_TEST_SHARES_ONLY: Boolean = true")
+    // La release la tiene anche prima che il cancello degli album sia legato (P13): la regola R8 del modulo.
+    val rules = File(root, "core-common/consumer-rules.pro").readText()
+    assertThat(rules).contains("public boolean getSharedAlbumsTestSharesOnly();")
+    assertThat(rules).contains("public boolean sharedAlbumsMayUse(java.lang.String);")
+  }
 }

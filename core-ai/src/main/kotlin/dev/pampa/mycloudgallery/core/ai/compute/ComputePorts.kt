@@ -137,6 +137,79 @@ fun interface AiUnsupported {
   }
 }
 
+/**
+ * Revisione A (R5): da dove viene l'ingresso su cui si e' calcolato un risultato. Un calcolo sui propri byte vale per ogni share; uno
+ * sull'anteprima di un altro dispositivo vale solo per la share in cui era attestata e cade con la revoca di chi l'ha preparata.
+ */
+sealed interface AiInputOrigin {
+  /** Byte che questo dispositivo ha letto e preparato da se' (il telefono, un originale del NAS, le proprie anteprime). */
+  data object Own : AiInputOrigin
+
+  /** L'anteprima di [device] (null = non noto) attestata in [share]. */
+  data class Preview(val share: String, val device: String?) : AiInputOrigin {
+    override fun toString(): String = "Preview"
+  }
+
+  /** Vero se un risultato nato da qui vale per [share] (null = il telefono: solo i propri byte). */
+  fun validFor(share: String?): Boolean = this is Own || (share != null && this is Preview && this.share.equals(share, ignoreCase = true))
+
+  companion object {
+    /** La provenienza di un risultato fatto con due ingressi (anteprima e HQ): il meno fidato; due dispositivi diversi = non noto. */
+    fun of(a: AiInputOrigin, b: AiInputOrigin?): AiInputOrigin = when {
+      b == null || b == a -> a
+      a is Own -> b
+      b is Own -> a
+      a is Preview && b is Preview && a.share.equals(b.share, ignoreCase = true) -> Preview(a.share, if (a.device == b.device) a.device else null)
+      else -> Preview((a as Preview).share, null)
+    }
+  }
+}
+
+/** Un blob del buffer con la sua provenienza (R5). */
+class AiBlob(val bytes: ByteArray, val from: AiInputOrigin) {
+  override fun toString(): String = "AiBlob(${bytes.size} B, $from)"
+}
+
+/**
+ * R5: il buffer che ricorda la provenienza di ogni blob ([DiskAiBuffer]). Per una share si usano solo i blob propri o attestati in quella
+ * share; per il telefono solo i propri. Un buffer che non la ricorda (i fake) vale come "tutto proprio", come prima.
+ */
+interface AiOriginBuffer {
+  suspend fun putFrom(key: ContentKey, cls: dev.pampa.mycloudgallery.core.trust.data.SegmentClass, bytes: ByteArray, from: AiInputOrigin): Boolean
+
+  /** Il blob di [key] e [cls] che vale per [share] (null = solo un blob proprio), o null. */
+  suspend fun getFor(key: ContentKey, cls: dev.pampa.mycloudgallery.core.trust.data.SegmentClass, share: String?): AiBlob?
+
+  fun containsFor(key: ContentKey, cls: dev.pampa.mycloudgallery.core.trust.data.SegmentClass, share: String?): Boolean
+
+  /** Un dispositivo revocato: via le sue anteprime (e quelle di un dispositivo non noto). */
+  suspend fun forgetDevice(device: String)
+}
+
+/**
+ * R5: i risultati del calcolo con la provenienza (l'indice locale). [savedFor] dice cosa e' gia' salvato **per quella share** (null = il
+ * telefono): un risultato nato da un'anteprima di un'altra share non conta e il media si calcola per questa.
+ */
+interface AiOriginResults {
+  suspend fun saveVectors(key: ContentKey, body: VecBody, from: AiInputOrigin)
+
+  suspend fun saveText(key: ContentKey, body: OcrBody, from: AiInputOrigin)
+
+  suspend fun savedFor(key: ContentKey, recipe: Int, share: String?): Set<AiClass>
+}
+
+/** R5: i corpi calcolati qui che valgono per [share] (per ripubblicarli solo dove sono nati, o ovunque se dai propri byte). */
+interface AiLocalBodiesFor : AiLocalBodies {
+  suspend fun vectorsFor(key: ContentKey, share: String?): VecBody?
+
+  suspend fun textFor(key: ContentKey, share: String?): OcrBody?
+}
+
+/** R5, IX-7: il segno "non supportato" con la provenienza dell'ingresso (vale solo dove l'ingresso valeva, e scade). */
+interface AiUnsupportedFrom : AiUnsupported {
+  suspend fun mark(key: ContentKey, cls: AiClass, from: AiInputOrigin)
+}
+
 /** I contatori del calcolo per la Diagnostica (§2.6): solo numeri. */
 class AiComputeCounters {
   /** Il motore delle immagini e' passato alla CPU (E-A12, `AI_GPU_FALLBACK`). */
@@ -168,4 +241,7 @@ class AiComputeCounters {
 
   /** Ambiti rifiutati perche' non sono fra le aree di questo dispositivo (D14): devono restare a zero. */
   val foreignScopes = AtomicInteger()
+
+  /** IX-7: errori passeggeri del motore (memoria, un guasto della libreria): il media resta da fare, non "non supportato". */
+  val engineFailures = AtomicInteger()
 }

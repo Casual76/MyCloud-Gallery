@@ -478,6 +478,14 @@ class FakeRegistryService(
     homeUlaUpdates += prefixes
     return nextResult
   }
+
+  /** Le rinomine firmate (F27), in ordine: (id del dispositivo, nome nuovo). */
+  val renames: MutableList<Pair<String, String>> = mutableListOf()
+
+  override suspend fun renameDevice(deviceId: String, name: String): AdminActionResult {
+    renames += deviceId to name
+    return nextResult
+  }
 }
 
 class FakeTrustGuard(

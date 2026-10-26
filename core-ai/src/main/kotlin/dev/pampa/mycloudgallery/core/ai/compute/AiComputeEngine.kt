@@ -90,11 +90,17 @@ class AiComputeEngine(
 
   private val computer = MediaComputer(parts.images, parts.reader, parts.inputs, recipe, counters)
 
+  /** IX-7: gli errori passeggeri del motore per chiave in questo processo (un media che fallisce sempre non si riprova senza fine). */
+  private val strikes: MutableMap<dev.pampa.mycloudgallery.core.model.ContentKey, Int> =
+    java.util.Collections.synchronizedMap(object : LinkedHashMap<dev.pampa.mycloudgallery.core.model.ContentKey, Int>() {
+      override fun removeEldestEntry(eldest: MutableMap.MutableEntry<dev.pampa.mycloudgallery.core.model.ContentKey, Int>?): Boolean = size > 4_096
+    })
+
   override suspend fun run(scope: AiScope, budget: Duration): AiRunResult = run(scope, budget, AiRunControl.ALWAYS)
 
   /** Una tappa con le regole di [control] (in :app: `StageScope` di `StagedRun`, vedi [AiStageBatch]). */
   suspend fun run(scope: AiScope, budget: Duration, control: AiRunControl): AiRunResult {
-    val session = ComputeSession(parts, computer, recipe, config, counters, nanos, pause, budget, control, state)
+    val session = ComputeSession(parts, computer, recipe, config, counters, nanos, pause, budget, control, state, strikes)
     if (!parts.roles.indexer.value) {
       state.value = AiStatus.Off
       return session.result(AiStop.ROLE_OFF)

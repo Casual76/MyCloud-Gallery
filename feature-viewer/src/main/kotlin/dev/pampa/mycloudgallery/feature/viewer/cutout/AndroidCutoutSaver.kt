@@ -25,8 +25,39 @@ fun interface CutoutPngSource {
   suspend fun png(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean): ByteArray?
 }
 
-/** Un file del ritaglio nella cartella di condivisione e il suo indirizzo `content://` (il `FileProvider` esistente). */
-class StagedCutout(val uri: Uri)
+/**
+ * Cosa fare del file del ritaglio in `cacheDir/share/` secondo come finisce (R18, VR-3). Il file e il permesso di lettura **non restano per sempre**: prima
+ * restavano fino al prossimo avvio, e gli appunti potevano puntare a un file che nel frattempo l'avvio aveva tolto.
+ */
+interface StagedLifecycle {
+  /** La scelta dell'app e' partita: la copia passa a chi la tiene finche' l'altra app non ha finito (come ogni condivisione dell'app). */
+  fun shared()
+
+  /** Il PNG e' negli appunti: vale finche' gli appunti non cambiano, e comunque per poco; poi file e permesso si tolgono e gli appunti si svuotano. */
+  fun copied()
+
+  /** Non e' servito (la scelta dell'app non e' partita, gli appunti non c'erano): file e permesso si tolgono subito. */
+  fun discard()
+
+  companion object {
+    /** Nessuna gestione (i test del viewer, la variante senza condivisione). */
+    val None: StagedLifecycle = object : StagedLifecycle {
+      override fun shared() = Unit
+
+      override fun copied() = Unit
+
+      override fun discard() = Unit
+    }
+  }
+}
+
+/** Il segno nel `ClipData` che gli appunti hanno un ritaglio nostro: `:app` lo riconosce dalla descrizione, senza leggere il contenuto (R18, VR-3). */
+object CutoutClipMarker {
+  const val EXTRA: String = "dev.pampa.mycloudgallery.extra.CUTOUT_CLIP"
+}
+
+/** Un file del ritaglio nella cartella di condivisione e il suo indirizzo `content://` (il `FileProvider` esistente), con la sua [lifecycle]. */
+class StagedCutout(val uri: Uri, val lifecycle: StagedLifecycle = StagedLifecycle.None)
 
 /**
  * Dove si mette il PNG per le altre app: `cacheDir/share/<token>/ritaglio.png`, servito dal `FileProvider` esistente. Il file lo toglie la pulizia
@@ -70,14 +101,20 @@ class AndroidCutoutSaver(
 
   override suspend fun copy(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean): Boolean {
     val staged = stage(id, ref, cutout, outline) ?: return false
-    return CutoutSystem.copy(context, context.getString(R.string.cutout_clip_label), staged.uri)
+    val ok = try {
+      CutoutSystem.copy(context, context.getString(R.string.cutout_clip_label), staged.uri)
+    } catch (e: RuntimeException) {
+      false
+    }
+    if (ok) staged.lifecycle.copied() else staged.lifecycle.discard()
+    return ok
   }
 
   override suspend fun share(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean): Boolean {
     val staged = stage(id, ref, cutout, outline) ?: return false
     val chooser = CutoutSystem.shareIntent(staged.uri)
     if (context.findActivity() == null) chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-    return try {
+    val started = try {
       context.startActivity(chooser)
       true
     } catch (_: ActivityNotFoundException) {
@@ -85,6 +122,8 @@ class AndroidCutoutSaver(
     } catch (_: SecurityException) {
       false
     }
+    if (started) staged.lifecycle.shared() else staged.lifecycle.discard()
+    return started
   }
 
   override suspend fun saveAsNewPhoto(id: MediaId, ref: MediaRef, cutout: ViewerCutout.Subject, outline: Boolean, fromHidden: Boolean): CutoutSaveResult {
@@ -137,7 +176,11 @@ internal object CutoutSystem {
     } catch (_: RuntimeException) {
       ClipData.newRawUri(label, uri)
     }
-    clip.description.extras = PersistableBundle().apply { putBoolean(SensitiveClipboard.EXTRA_IS_SENSITIVE, true) }
+    clip.description.extras = PersistableBundle().apply {
+      putBoolean(SensitiveClipboard.EXTRA_IS_SENSITIVE, true)
+      // R18, VR-3: il segno che e' un ritaglio nostro, leggibile dalla descrizione (da fuori primo piano il contenuto degli appunti non si legge).
+      putBoolean(CutoutClipMarker.EXTRA, true)
+    }
     return clip
   }
 

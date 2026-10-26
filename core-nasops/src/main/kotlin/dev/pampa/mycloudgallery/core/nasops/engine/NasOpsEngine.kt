@@ -1137,17 +1137,78 @@ class NasOpsEngine internal constructor(
     if (cur.state == OpItemState.VERIFIED) cur = advance(cur, OpItemState.PUBLISHED)
     if (cur.state == OpItemState.PUBLISHED) cur = advance(cur, OpItemState.SOURCE_RECORDED)
     if (cur.state == OpItemState.SOURCE_RECORDED) {
-      when (val r = fileOps.rmdirIfEmpty(cur.srcShare, cur.srcPath, ctx.purpose)) {
-        is NasResult.Err -> if (r.error != NasError.NotFound) return failOrPause(cur, r.error)
-        // Rimasta piena (un file fermo, un collegamento, un file arrivato dal PC) o aperta: resta dov'e', con quello che ha.
-        is NasResult.Ok -> when (r.value) {
-          RmdirOutcome.Removed, RmdirOutcome.Missing, RmdirOutcome.NotEmpty, RmdirOutcome.Locked -> Unit
-        }
-      }
+      removeEmptySource(cur, ctx)?.let { return it }
       cur = advance(cur, OpItemState.SOURCE_TRASHED)
     }
     if (cur.state == OpItemState.SOURCE_TRASHED) cur = advance(cur, OpItemState.DONE)
     return cur
+  }
+
+  /**
+   * O-B18 (prove sul campo, gruppo B): a fine spostamento la cartella d'origine segue i suoi file e se ne va, ma **solo se e' davvero vuota in
+   * questo momento**: `rmdirIfEmpty` e' una sola richiesta al NAS che toglie la cartella se non ha niente dentro e rifiuta altrimenti (mai una
+   * cancellazione ricorsiva, mai un file arrivato dal PC nel frattempo). Una cartella vuota non ha niente da perdere e il ripristino dei suoi
+   * file la ricrea (E-D3), quindi non passa dal cestino come una voce a se' (sarebbe un elemento da 0 byte in "Eliminati di recente").
+   *
+   * Prima la richiesta era una sola e un [RmdirOutcome.Locked] (un handle aperto sotto o sopra la cartella, nostro o di un altro client) la lasciava
+   * li' per sempre, vuota, senza dirlo. Ora un blocco si riprova con le attese brevi di [OwnFolderBackoff] (stesso tetto per giro delle cartelle in
+   * uso dall'app); se alla fine e' ancora bloccata o non e' vuota, **resta com'e'** e l'operazione si chiude lo stesso: una cartella lasciata
+   * non e' un errore, e lo si dice nel log (solo numeri) per capire il perche' alla prossima prova.
+   *
+   * Vale anche per la ripresa dopo una morte del processo: l'elemento e' al passo [OpItemState.SOURCE_RECORDED] e la ripresa rifa' questa richiesta
+   * (una cartella gia' tolta risponde [RmdirOutcome.Missing]).
+   *
+   * @return l'elemento da restituire subito (pausa o fallimento del NAS), o null se si puo' passare al passo dopo.
+   */
+  private suspend fun removeEmptySource(cur: OpItemRecord, ctx: RunCtx): OpItemRecord? {
+    var waits = 0
+    while (true) {
+      when (val r = fileOps.rmdirIfEmpty(cur.srcShare, cur.srcPath, ctx.purpose)) {
+        // `NotFound` qui vuol dire "non e' una cartella": non c'e' niente da togliere.
+        is NasResult.Err -> return if (r.error == NasError.NotFound) null else failOrPause(cur, r.error)
+        is NasResult.Ok -> when (r.value) {
+          RmdirOutcome.Removed, RmdirOutcome.Missing -> return null
+          RmdirOutcome.NotEmpty -> {
+            logSourceLeft(cur, ctx, "non vuota")
+            return null
+          }
+          RmdirOutcome.Locked -> {
+            val delayMs = OwnFolderBackoff.DELAYS_MS.getOrNull(waits)
+            if (delayMs == null || !mayWaitShortly(cur, ctx, delayMs)) {
+              logSourceLeft(cur, ctx, "ancora in uso")
+              return null
+            }
+            GalleryLog.d(TAG) { "cartella d'origine in uso: riprovo a toglierla fra $delayMs ms" }
+            waits++
+            ctx.shortWaitedMs += delayMs
+            waitShortly(delayMs)
+          }
+        }
+      }
+    }
+  }
+
+  /** Si puo' fare una attesa breve di [delayMs]: non e' stato chiesto "Ferma", c'e' ancora tempo nel giro, resta budget per giro e le scritture sono aperte. */
+  private fun mayWaitShortly(item: OpItemRecord, ctx: RunCtx, delayMs: Long): Boolean =
+    item.opId !in cancelRequests &&
+      clocks.monotonicMs() + delayMs <= ctx.deadline &&
+      ctx.shortWaitedMs + delayMs <= OwnFolderBackoff.MAX_TOTAL_WAIT_MS &&
+      listOfNotNull(item.srcShare, item.dstShare).none { gate.statusOf(it).blocksUserOps }
+
+  /** Perche' una cartella d'origine e' rimasta (solo numeri: quante voci l'elenco le vede dentro; "0" con "non vuota" = file che il server nasconde). */
+  private suspend fun logSourceLeft(cur: OpItemRecord, ctx: RunCtx, why: String) {
+    // In release il log non scrive: nemmeno la richiesta al NAS che serve solo a lui.
+    if (!GalleryLog.isEnabled) return
+    var entries = 0
+    val listed = try {
+      reader.list(cur.srcShare, cur.srcPath, ctx.purpose) { page -> entries += page.size }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      null
+    }
+    val seen = if (listed is NasResult.Ok) "$entries voci viste" else "elenco non letto"
+    GalleryLog.i(TAG) { "cartella d'origine $why: resta dov'e' ($seen)" }
   }
 
   // --- Elimina: PLANNED -> RECORDED -> TRASHED -> DONE ---------------------------------------------------------------------------

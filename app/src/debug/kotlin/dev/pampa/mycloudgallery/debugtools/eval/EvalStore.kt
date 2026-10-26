@@ -10,9 +10,11 @@ import java.io.IOException
  * - `labels.mcgeval`: le etichette (query, attese per query, documenti), formato [LabelFormat]; scritto in modo atomico (file temporaneo e poi
  *   rinomina), cosi' una morte del processo a meta' scrittura non lascia un file mozzo;
  * - `report-NN.txt`: i resoconti, **solo numeri** (query, chiavi e nomi mai); sono quelli che si copiano in `docs/decisioni.md`;
- * - `ocr/`: il set OCR sintetico copiato con `adb push` (`manifest.tsv`, `immagini/`) e il `letto.tsv` che la lettura di prova scrive.
+ * - `ocr/`: il set OCR sintetico (`manifest.tsv`, `immagini/`), portato dentro con `tools\chaos\s25.ps1 -Mode ai -Step eval-push` (da shell la cartella
+ *   dell'app non si scrive senza `run-as`, DB-4), e il `letto.tsv` che la lettura di prova scrive.
  *
- * **Mai nel repository**: le etichette si esportano con `adb` in `%USERPROFILE%\.mycloudgallery\eval\` (vedi il resoconto di P9). Niente log: ne' un
+ * **Mai nel repository**: le etichette si portano sul PC con `s25.ps1 -Mode ai -Step eval-pull` (in `build\chaos\`, ignorata da git) e si tengono in
+ * `%USERPROFILE%\.mycloudgallery\eval\` (vedi il resoconto di P9 e `docs/prove-campo.md`, sezione 9). Niente log: ne' un
  * nome di query ne' una chiave passano da qui a `Log`.
  */
 class EvalStore(private val root: File) {

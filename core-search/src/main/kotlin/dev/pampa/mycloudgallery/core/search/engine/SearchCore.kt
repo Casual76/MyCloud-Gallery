@@ -97,6 +97,7 @@ internal class SearchCore(
     thresholds: Thresholds,
     order: ResultOrder,
     notices: List<SearchNotice>,
+    freeText: Boolean = false,
   ): SearchResults {
     val day = today.date()
     fun classify(c: Scored): Int {
@@ -125,7 +126,7 @@ internal class SearchCore(
     for (c0 in inResults) {
       if (c0.position in hiddenCells) continue
       val c = if (c0.position in hiddenContent) Scored(c0.position, null, null, c0.t, -1) else c0
-      val ranked = Ranking.ranked(snapshot, c.position, if (onlyFilters) 1f else ResultRanking.relevance(c.z, c.t), day)
+      val ranked = Ranking.ranked(snapshot, c.position, if (onlyFilters) 1f else ResultRanking.relevance(c.z, c.t))
       when (classify(c)) {
         SURE -> confident += ranked
         LIKELY -> likely += ranked
@@ -139,12 +140,13 @@ internal class SearchCore(
       coverage = coverage.state.value,
       notices = notices,
       order = order,
+      freeText = freeText,
     )
   }
 
-  fun empty(chips: List<SearchChip>, order: ResultOrder, notices: List<SearchNotice> = emptyList()): SearchResults {
+  fun empty(chips: List<SearchChip>, order: ResultOrder, notices: List<SearchNotice> = emptyList(), freeText: Boolean = false): SearchResults {
     val none = IndexOrderedTimelineView(EmptyTimelineSnapshot, IntArray(0))
-    return SearchResults(chips, none, none, coverage.state.value, notices, order)
+    return SearchResults(chips, none, none, coverage.state.value, notices, order, freeText)
   }
 
   private companion object {

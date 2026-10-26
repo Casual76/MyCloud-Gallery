@@ -162,6 +162,32 @@ class EvalSessionTest {
     assertThat(choice.toNumbersText()).doesNotContain(EvalTestRig.keyHex(3))
   }
 
+  /** DB-3: il motore del testo pesa circa 330 MB: dopo le frasi prototipo si rilascia, sia che la soglia venga calcolata sia che manchi il campione. */
+  @Test
+  fun ilMotoreDelTestoSiRilasciaAFineCorsa_DB3() = runTest {
+    val rig = EvalTestRig()
+    val s = session(rig)
+    rig.keysOf("documento").take(10).forEach { s.setDocument(it, true) }
+    rig.keysOf("cane").take(10).forEach { s.setDocument(it, false) }
+    assertThat(s.documentChoice()).isNotNull()
+    assertThat(rig.documentEmbedder.embeds).isEqualTo(DocumentPrototypes.PHRASES.size)
+    assertThat(rig.documentEmbedder.releases).isEqualTo(1)
+    // Una seconda corsa lo riapre e lo rilascia di nuovo: mai due istanze vive, mai una dimenticata.
+    assertThat(s.documentChoice()).isNotNull()
+    assertThat(rig.documentEmbedder.releases).isEqualTo(2)
+  }
+
+  @Test
+  fun ilMotoreDelTestoSiRilasciaAncheSeUnaFraseFallisce_DB3() = runTest {
+    val rig = EvalTestRig()
+    val s = session(rig)
+    rig.keysOf("documento").take(10).forEach { s.setDocument(it, true) }
+    rig.keysOf("cane").take(10).forEach { s.setDocument(it, false) }
+    rig.documentEmbedder.failing = true
+    assertThat(runCatching { s.documentChoice() }.isFailure).isTrue()
+    assertThat(rig.documentEmbedder.releases).isEqualTo(1)
+  }
+
   @Test
   fun senzaUnCampioneAbbastanzaGrandeNonSiCalcolaLaSogliaDeiDocumenti() = runTest {
     val rig = EvalTestRig()

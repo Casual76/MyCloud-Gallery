@@ -212,6 +212,12 @@ class IntegrationsGraph(
   )
 
   /**
+   * Il custode delle copie consegnate a un'altra app (MC-1): le condivisioni della Libreria e del viewer e, dalla Fase 6 (R18), il PNG di "Condividi" del
+   * ritaglio del soggetto, che prima restava leggibile fino all'avvio dopo.
+   */
+  val shareHolder: ShareHolder = ShareHolder(scope)
+
+  /**
    * Correzioni 5B (R4, MC-1, MC-2): ogni "Condividi" dell'app (viewer con e senza backup, selezione della Libreria) con l'impostazione, e il custode
    * che rilascia una copia consegnata solo quando l'altra app ha finito.
    */
@@ -219,7 +225,7 @@ class IntegrationsGraph(
     context = context.applicationContext,
     prepare = { ids, remove, progress -> share.prepare(ids, remove, progress) },
     removeLocation = removeLocation,
-    holder = ShareHolder(scope),
+    holder = shareHolder,
     scope = scope,
   )
 

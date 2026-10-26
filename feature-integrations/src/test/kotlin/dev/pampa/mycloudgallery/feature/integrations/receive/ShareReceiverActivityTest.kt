@@ -147,28 +147,45 @@ class ShareReceiverActivityTest {
   }
 
   /**
-   * Campo, gruppo A (D1, `IMG_mcg_0106`): una condivisione nuova che trova davanti la schermata di una vecchia (lanciata con `NEW_TASK`) arriva in
-   * `onNewIntent` e si apre in una schermata sua, in un task suo, con il suo flusso; la vecchia si chiude. Prima l'intento nuovo si perdeva: la
-   * schermata vecchia restava con "1 file in coda" e il file nuovo non veniva nemmeno copiato.
+   * Campo, gruppo A (D1, `IMG_mcg_0106`; CA-2): una condivisione nuova che trova davanti la schermata di una vecchia arriva in `onNewIntent` e **prende il
+   * posto della vecchia in quella stessa schermata**: nessuna activity nuova, nessun task, nessun `startActivity` (che Android 14 e 15 possono bloccare in
+   * silenzio, perdendo la nuova e chiudendo la vecchia). Il file nuovo si legge con il permesso che porta `onNewIntent`; il vecchio, non salvato, si toglie.
    */
   @Test
-  fun d1_unaCondivisioneNuovaDavantiAUnaVecchiaSiApreInUnaSchermataSua() {
+  fun d1_unaCondivisioneNuovaDavantiAUnaVecchiaPrendeIlPostoNellaStessaSchermata() {
     install()
     val first = shared("a.jpg", ReceiveSamples.jpeg(3_000, 1))
-    val second = shared("b.jpg", ReceiveSamples.jpeg(3_000, 2))
+    val second = shared("b.jpg", ReceiveSamples.jpeg(2_000, 2))
     val controller = Robolectric.buildActivity(ShareReceiverActivity::class.java, send(first)).setup()
-    val old = controller.get()
+    val activity = controller.get()
+    awaitState(activity) { it.screen == ReceiveScreenState.READY && it.bytes == 3_000L }
+    val opensBefore = SharingProvider.opens.get()
 
     controller.newIntent(send(second))
-    shadowOf(android.os.Looper.getMainLooper()).idle()
+    awaitState(activity) { it.screen == ReceiveScreenState.READY && it.bytes == 2_000L }
 
-    val started = checkNotNull(shadowOf(context as Application).nextStartedActivity) { "nessuna schermata nuova" }
-    assertThat(started.component?.className).isEqualTo(ShareReceiverActivity::class.java.name)
-    @Suppress("DEPRECATION")
-    assertThat(started.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)).isEqualTo(second)
-    assertThat(started.flags and Intent.FLAG_ACTIVITY_NEW_TASK).isNotEqualTo(0)
-    assertThat(started.flags and Intent.FLAG_ACTIVITY_MULTIPLE_TASK).isNotEqualTo(0)
-    assertThat(old.isFinishing).isTrue()
+    // Nessuna schermata nuova, nessun task: la schermata e' sempre la stessa e non si e' chiusa.
+    assertThat(shadowOf(context as Application).nextStartedActivity).isNull()
+    assertThat(activity.isFinishing).isFalse()
+    assertThat(activity.intent.getParcelableExtraCompat<Uri>(Intent.EXTRA_STREAM)).isEqualTo(second)
+    // Il flusso nuovo si e' letto, il vecchio (non salvato) e' stato tolto dopo.
+    assertThat(SharingProvider.opens.get()).isGreaterThan(opensBefore)
+    awaitState(activity) { incoming.listFiles().orEmpty().size == 1 }
+  }
+
+  @Suppress("DEPRECATION")
+  private fun <T : android.os.Parcelable> Intent.getParcelableExtraCompat(name: String): T? = getParcelableExtra(name)
+
+  /** Aspetta (con i thread di lavoro veri e il ciclo principale a mano) che lo stato della schermata soddisfi [condition]. */
+  private fun awaitState(activity: ShareReceiverActivity, condition: (ReceiveUi) -> Boolean) {
+    val deadline = System.nanoTime() + 15_000_000_000L
+    while (System.nanoTime() < deadline) {
+      shadowOf(android.os.Looper.getMainLooper()).idle()
+      val ui = activity.receiveStateForTest()
+      if (ui != null && condition(ui)) return
+      Thread.sleep(20)
+    }
+    throw AssertionError("Lo stato atteso non e' arrivato: ${activity.receiveStateForTest()}")
   }
 
   // --- Porte non installate e app bloccata -------------------------------------------------------------------------------------------------------

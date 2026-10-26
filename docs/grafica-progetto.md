@@ -655,3 +655,23 @@ rifinisce **senza toccare la logica** né i contratti. Le voci da rifinire, in o
 Per le stesse voci la Fase 6 non aggiunge componenti al catalogo né cambia la chrome, il vetro, la pillola o la cella (D36). Screenshot
 di riferimento in `docs/screenshots/6-P8/` (Cerca, Ricerca e modelli, pagina di attivazione), `6-P12/`, `6-P13/` e `6-P14/` (chiaro e
 scuro, telefono e tablet, testo a 1,3x).
+
+### 12.13 Dubbi grafici della Fase 7 (22/10): da rifinire più avanti
+
+La Fase 7 (`docs/fase7-progetto.md`, §1.5 e D32) consegna **stati e contratti** (`feature-albums/contract/AlbumScreens.kt`) e schermate
+funzionali fatte **solo** con i componenti G2 esistenti (`GalleryShareSheetContent` e `GalleryBadge.Shared` così come sono). Il filone
+grafico rifinisce **senza toccare la logica** né i contratti. Le voci da rifinire:
+
+| Voce | Cosa fa la Fase 7 | Da rifinire |
+|---|---|---|
+| **Elenco e pagina degli album** | Raccolte → Album (i miei e i condivisi insieme, badge "Condiviso" e creatore), "Tutti gli album", pagina con ordine, copertina, strisce "In arrivo", "Nuove", "N file nuovi nella cartella" | copertine, densità dell'elenco, intestazione della pagina |
+| **Editor delle regole** | regole proposte dal nome (periodo, luogo con raggio, descrizione, foto d'esempio, sorgenti, tipi), anteprima, omonimi, serie di giorni, "troppo larghe" | disposizione delle regole, controllo del raggio, anteprima |
+| **"Suggerite" e "Da condividere"** | dubbi da accettare o escludere; per uno smart condiviso le foto nuove da condividere con un tocco | come si distinguono dagli elementi |
+| **Foglio di condivisione** | conteggi, cartella, livello, nascosti («Lascia fuori» preselezionata), dichiarazione "I permessi li fa rispettare l'app", "Arriva dopo le prove" (D30) | gerarchia del testo, scelta del livello |
+| **Permessi e chiusura** | foglio "Permessi" con i tre livelli; foglio "Smetti di condividere"/"Elimina l'album" con la **scelta per gli altri** (sparisce o copia personale, Q5, nessuna preselezione) e "Riporta nelle mie cartelle" | come presentare la scelta di Q5 e l'avviso sulle copie |
+| **Proposte di viaggio** | Raccolte → Viaggi: viaggi ed eventi dal più recente, "Crea album", "Non mi interessa", spiegazione senza GPS | schede delle proposte |
+| **Doppioni e pulizia guidata** | due schede "Identici" e "Simili", preselezione, riepilogo con i cestini | confronto delle copie |
+| **"Modifica Raccolte"** | trascinamento delle sezioni e interruttori, azioni di TalkBack "Sposta su/giù" | maniglie e stato "nascosta" |
+
+Per le stesse voci la Fase 7 non aggiunge componenti al catalogo né cambia la chrome, il vetro, la pillola o la cella (D32). Screenshot di
+riferimento in `docs/screenshots/7-P8/`, `7-P10/`, `7-P11/` (chiaro e scuro, telefono e tablet, testo a 1,3x).

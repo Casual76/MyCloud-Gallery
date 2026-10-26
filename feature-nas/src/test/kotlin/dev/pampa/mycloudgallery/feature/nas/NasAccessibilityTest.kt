@@ -5,8 +5,11 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -152,8 +155,22 @@ class NasAccessibilityTest : ComposeNasTest() {
   fun operazioni_OgniFermaDiceQualeOperazioneFerma() {
     show { NasOperationsScreen(operationsUi(NasFixtures.operations()), onStop = {}, onBack = {}) }
     assertEveryTargetHasAName("Operazioni")
-    composeRule.onNodeWithContentDescription("Ferma: Sposto 312 elementi").assertExists()
-    composeRule.onNodeWithContentDescription("Ferma: Elimino 40 elementi").assertExists()
+    composeRule.onNodeWithContentDescription("Annulla il resto: Sposto 312 elementi").assertExists()
+    composeRule.onNodeWithContentDescription("Annulla il resto: Elimino 40 elementi").assertExists()
+  }
+
+  /**
+   * Punto 3 delle correzioni dal campo (gruppo B, "Ferma" contro "Riprendi"): il progetto (R9 della 4B) vuole che fermare un'operazione sul NAS la
+   * annulli (non c'e' una pausa dell'utente ne' un "Riprendi"), quindi il pulsante lo dice: "Annulla il resto". Niente "Ferma" che promette
+   * una ripresa.
+   */
+  @Test
+  fun operazioni_ilPulsanteDiceCheAnnullaIlRestoENonPromettelaRipresa() {
+    show { NasOperationsScreen(operationsUi(NasFixtures.operations()), onStop = {}, onBack = {}) }
+    composeRule.onAllNodesWithText("Annulla il resto").onFirst().assertExists()
+    composeRule.onAllNodesWithText("Quello che è già stato fatto resta fatto", substring = true).onFirst().assertExists()
+    composeRule.onAllNodesWithText("Ferma").assertCountEquals(0)
+    composeRule.onAllNodesWithText("Riprendi").assertCountEquals(0)
   }
 
 }

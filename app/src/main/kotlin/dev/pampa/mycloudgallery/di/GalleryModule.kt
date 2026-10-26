@@ -37,6 +37,7 @@ import dev.pampa.mycloudgallery.gallery.LibraryDiagnostics
 import dev.pampa.mycloudgallery.gallery.PhoneLibrary
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.GalleryStopper
+import dev.pampa.mycloudgallery.nas.ConvergingPreviewQuality
 import dev.pampa.mycloudgallery.nas.NasLibraryDiagnostics
 import dev.pampa.mycloudgallery.nas.NasOpsDiagnostics
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolders
@@ -192,7 +193,13 @@ object GalleryModule {
 
   // --- Impostazioni: "Anteprime del NAS" (Fase 4A, P11). Senza NAS la pagina dice che non sono attive. ---
   @Provides
-  fun previewQualitySettings(gallery: GalleryGraph): PreviewQualitySettings = gallery.nas?.previewQuality ?: NoPreviewQuality
+  fun previewQualitySettings(gallery: GalleryGraph, graph: AppGraph, @ApplicationContext context: Context): PreviewQualitySettings =
+    gallery.nas?.let { nas ->
+      // F12: un cambio di qualita' accende o spegne HQ_PREVIEWS e accoda subito la convergenza (con le regole delle attivita').
+      ConvergingPreviewQuality(nas.previewQuality, graph.ruleSettings, started = { nas.runtime != null }) { level ->
+        runCatching { NasWorkScheduling.convergeNow(context, level) }
+      }
+    } ?: NoPreviewQuality
 
   @Provides
   @IntoSet

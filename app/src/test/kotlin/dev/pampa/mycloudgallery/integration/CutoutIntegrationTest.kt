@@ -7,8 +7,16 @@ import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.ai.AppViewerSubjectCutter
+import dev.pampa.mycloudgallery.ai.CutoutSources
 import dev.pampa.mycloudgallery.ai.CutoutShareEnv
+import dev.pampa.mycloudgallery.ai.RememberedSourceName
+import dev.pampa.mycloudgallery.ai.ReplicaHq
 import dev.pampa.mycloudgallery.core.ai.contract.AiEngineError
+import dev.pampa.mycloudgallery.core.ai.contract.CutoutImage
+import dev.pampa.mycloudgallery.core.ai.contract.CutoutResult
+import dev.pampa.mycloudgallery.core.ai.contract.NormalizedPoint
+import dev.pampa.mycloudgallery.core.ai.contract.SubjectCutter
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.CutoutBackup
 import dev.pampa.mycloudgallery.core.backup.settings.BackupSourceCodec
@@ -25,6 +33,7 @@ import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
 import dev.pampa.mycloudgallery.debugtools.DebugBackupFence
 import dev.pampa.mycloudgallery.feature.integrations.share.CacheUris
 import dev.pampa.mycloudgallery.feature.integrations.share.ShareCache
+import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutFailure
 import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutSaveResult
 import dev.pampa.mycloudgallery.feature.viewer.cutout.ViewerCutout
 import dev.pampa.mycloudgallery.feature.viewer.cutout.ViewerMask
@@ -162,7 +171,42 @@ class CutoutIntegrationTest {
     val cells = phone.gallery.core().catalog.cellContentKeys().cells.map { it.mediaId }
     assertThat(cells).contains(visible.newMedia)
     assertThat(cells).doesNotContain(hidden.newMedia)
-    assertThat(phone.cutouts.single().visible.keys).containsExactly("IMG_0042-ritaglio.png", "IMG_0042-ritaglio (2).png")
+    // I6: dai Nascosti il nome e' generico (nel MediaStore il ritaglio e' una foto pubblica: "<origine>-ritaglio.png" direbbe da cosa viene).
+    assertThat(phone.cutouts.single().visible.keys).containsExactly("Ritaglio.png", "IMG_0042-ritaglio.png")
+  }
+
+  /**
+   * VR-1, R19: un ritaglio salvato dai Nascosti nasce nascosto **nella stessa transazione** del catalogo (la Libreria non lo vede mai senza il segno), e il
+   * segno viaggia agli altri dispositivi dello stesso account subito (`personalChanged`), non al giro periodico. Un ritaglio da una foto normale, o un
+   * salvataggio fallito, non avvia niente.
+   */
+  @Test
+  fun unRitaglioDaiNascostiNasceNascostoEAvvisaLaSincronizzazioneDeiDatiPersonali_VR1() = runBlocking<Unit> {
+    val phone = rig.founder()
+    val catalog = phone.gallery.core().catalog
+    var announced = 0
+    val writer = dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaWriter(PhoneMediaFolders.FENCED_CUTOUTS)
+    val photos = dev.pampa.mycloudgallery.ai.AppCutoutNewPhoto(
+      catalog = { catalog },
+      writerFor = { writer },
+      folder = { PhoneMediaFolders.FENCED_CUTOUTS },
+      nowMillis = { rig.time.now() },
+      onHiddenSaved = { announced++ },
+    )
+    val png = byteArrayOf(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3, 4)
+
+    val visible = photos.save(png, "IMG_0001.jpg", hidden = false) as CutoutSaveResult.Saved
+    assertThat(announced).isEqualTo(0)
+    assertThat(catalog.cellContentKeys().cells.map { it.mediaId }).contains(visible.newMedia)
+
+    val other = png + byteArrayOf(9)
+    val hidden = photos.save(other, "Passaporto.jpg", hidden = true) as CutoutSaveResult.Saved
+    assertThat(announced).isEqualTo(1)
+    // Nascosta fin dalla nascita: non e' una cella (E-V11, D29).
+    assertThat(catalog.cellContentKeys().cells.map { it.mediaId }).doesNotContain(hidden.newMedia)
+    // Il nome della foto nascosta non e' quello dell'origine (I6).
+    assertThat(writer.visible.keys).contains("Ritaglio.png")
+    assertThat(writer.visible.keys.none { it.contains("Passaporto") }).isTrue()
   }
 
   @Test
@@ -201,7 +245,8 @@ class CutoutIntegrationTest {
 
     phone.cutter.failNext = AiEngineError.OUT_OF_MEMORY
     val failed = cutter.cut(shown.id, shown.ref, 0.5f, 0.5f)
-    assertThat(failed).isEqualTo(ViewerCutout.Failed("CUTOUT_FAILED"))
+    // R20: il motore dice che la memoria e' finita: il viewer lo sa e lo dice ("chiudi qualche app"), non un generico "riprova".
+    assertThat(failed).isEqualTo(ViewerCutout.Failed("CUTOUT_FAILED", CutoutFailure.LOW_MEMORY))
 
     // Una maschera che non e' della foto aperta non si rende: il PNG non nasce e il salvataggio fallisce.
     val wrong = ViewerCutout.Subject(ViewerMask(10, 10, ByteArray(100) { -1 }), ViewerRect(0f, 0f, 1f, 1f))
@@ -211,6 +256,60 @@ class CutoutIntegrationTest {
     assertThat(codes).contains("CUTOUT_FAILED")
     assertThat(codes).contains("CUTOUT_SAVE_FAILED")
     assertThat(phone.cutouts.flatMap { it.visible.keys }).isEmpty()
+  }
+
+  /** Un ritagliatore che esaurisce la memoria (una foto grande, molte app aperte): un `Error`, non un'eccezione. */
+  private class OutOfMemoryCutter : SubjectCutter {
+    override suspend fun cut(image: CutoutImage, point: NormalizedPoint): CutoutResult = throw OutOfMemoryError("prova")
+
+    override suspend fun release() = Unit
+  }
+
+  /**
+   * R20: con poca memoria il ritaglio **non fa cadere l'app**: l'`OutOfMemoryError` del motore diventa un guasto con il suo motivo (il viewer dice di
+   * chiudere qualche app) e finisce nella Diagnostica come codice. Prima attraversava `AppViewerSubjectCutter` e il processo moriva.
+   */
+  @Test
+  fun conPocaMemoriaIlRitaglioNonFaCadereLAppELoDice_R20() = runBlocking<Unit> {
+    rig.cutterOverride = OutOfMemoryCutter()
+    val shown = shownPhoto()
+    val phone = shown.phone
+    hooksOf(phone)
+    val cutter = checkNotNull(phone.gallery.viewerServices.subjectCutter)
+
+    val result = cutter.cut(shown.id, shown.ref, 0.5f, 0.5f)
+
+    assertThat(result).isEqualTo(ViewerCutout.Failed("CUTOUT_FAILED", CutoutFailure.LOW_MEMORY))
+    assertThat(rig.ring.snapshot().map { it.code.id }).contains("CUTOUT_FAILED")
+  }
+
+  /**
+   * VR-2: se il modello del ritaglio (nell'APK) non si e' potuto mettere fra i verificati per **mancanza di spazio**, il guasto lo dice ("Spazio
+   * insufficiente"): prima era un generico "riprova" che con il telefono pieno non riesce mai.
+   */
+  @Test
+  fun senzaSpazioPerIlModelloIlGuastoDiceSpazioInsufficiente_VR2() = runBlocking<Unit> {
+    val shown = shownPhoto()
+    val phone = shown.phone
+    val nas = checkNotNull(phone.gallery.nas)
+    val sources = CutoutSources(app.contentResolver, phone.gallery.intents::uriOf, nas.imageOrigin, ReplicaHq(nas.blobs, nas.locations))
+    var noSpace = true
+    val cutter = AppViewerSubjectCutter(
+      phone.stack.cutout,
+      sources,
+      { phone.gallery.coreIfReady()?.catalog },
+      RememberedSourceName(),
+      {},
+      noSpace = { noSpace },
+    )
+
+    phone.cutter.failNext = AiEngineError.MODEL_UNAVAILABLE
+    assertThat(cutter.cut(shown.id, shown.ref, 0.5f, 0.5f)).isEqualTo(ViewerCutout.Failed("CUTOUT_FAILED", CutoutFailure.NO_SPACE))
+
+    // Con lo spazio c'e', lo stesso guasto e' un guasto qualunque.
+    noSpace = false
+    phone.cutter.failNext = AiEngineError.MODEL_UNAVAILABLE
+    assertThat(cutter.cut(shown.id, shown.ref, 0.5f, 0.5f)).isEqualTo(ViewerCutout.Failed("CUTOUT_FAILED", CutoutFailure.OTHER))
   }
 
   @Test

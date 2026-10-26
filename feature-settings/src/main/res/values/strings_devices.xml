@@ -72,6 +72,20 @@
   <string name="action_lost_detail">Si azzera appena si ricollega al NAS</string>
   <string name="action_lost_own">Segnala come perso…</string>
   <string name="action_lost_own_detail">Lo segnali tu; l’admin conferma e il dispositivo si azzera</string>
+  <!-- F27: "Rinomina questo dispositivo". Il nome sta nel registro firmato: lo cambia l'admin. La cartella del backup sul NAS non cambia (E-B7). -->
+  <string name="rename_row">Rinomina questo dispositivo</string>
+  <string name="rename_row_detail">Cambia il nome che vedono i familiari. La cartella dei backup sul NAS non cambia</string>
+  <string name="rename_title">Rinomina questo dispositivo</string>
+  <string name="rename_message">Il nome nuovo lo firmi tu come admin, nel registro della famiglia. La cartella con le copie di questo dispositivo sul NAS resta quella di prima: non si sposta e non si duplica.</string>
+  <string name="rename_field">Nome del dispositivo</string>
+  <string name="rename_help">Come lo vedono i familiari, al massimo 64 caratteri</string>
+  <string name="rename_confirm">Rinomina</string>
+  <string name="rename_err_empty">Scrivi un nome</string>
+  <string name="rename_err_long">È troppo lungo: al massimo 64 caratteri</string>
+  <string name="rename_err_invalid">Ci sono caratteri che non si possono usare in un nome</string>
+  <string name="rename_err_taken">C’è già un dispositivo con un nome uguale o troppo simile</string>
+  <string name="rename_err_same">È il nome di adesso: scrivine uno diverso</string>
+  <string name="rename_done">Il nome nuovo è nel registro firmato della famiglia. La cartella del backup sul NAS non è cambiata.</string>
   <string name="device_actions_footnote">Nessuna azione parte da dati letti dal NAS: ognuna richiede un tuo tocco confermato.</string>
   <string name="device_this_footnote">Questo è il dispositivo che stai usando. Per dismetterlo o revocarlo serve un altro admin.</string>
 

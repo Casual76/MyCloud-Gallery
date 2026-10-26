@@ -199,8 +199,24 @@ internal class ActionSearchHandlers(
 }
 
 /**
+ * Consegna **una volta** la richiesta di "Trova simili" (TS-2): [onFind] parte quando [request] non e' nulla e subito dopo [onHandled] la azzera in chi la
+ * tiene. Se la richiesta restasse al suo posto, ogni rientro nella scheda (che si compone solo da selezionata) la ripeterebbe: il campo si svuotava e
+ * tornavano i simili; e una seconda richiesta sullo stesso media non cambierebbe il valore, quindi non farebbe niente.
+ */
+@Composable
+internal fun FindSimilarEffect(request: MediaId?, onFind: (MediaId) -> Unit, onHandled: () -> Unit) {
+  LaunchedEffect(request) {
+    if (request != null) {
+      onFind(request)
+      onHandled()
+    }
+  }
+}
+
+/**
  * La rotta di Cerca per `:app` (P11): il ViewModel con il motore vero, le uscite in [actions] e le miniature locali in [thumbnails]. "Trova simili" dal
- * viewer arriva con [findSimilar] (un media): la schermata parte dai suoi simili, con il chip "Simili a".
+ * viewer arriva con [findSimilar] (un media): la schermata parte dai suoi simili, con il chip "Simili a". La richiesta si consegna **una volta**:
+ * [onFindSimilarHandled] la azzera in chi la tiene, cosi' un rientro nella scheda non la ripete (TS-2) e una seconda richiesta sullo stesso media riparte.
  */
 @Composable
 fun SearchRoute(
@@ -208,6 +224,7 @@ fun SearchRoute(
   thumbnails: SearchThumbnails,
   modifier: Modifier = Modifier,
   findSimilar: MediaId? = null,
+  onFindSimilarHandled: () -> Unit = {},
   viewModel: SearchViewModel = hiltViewModel(),
 ) {
   val controller = viewModel.controller
@@ -216,7 +233,9 @@ fun SearchRoute(
   val readiness by controller.readiness.collectAsStateWithLifecycle()
   val queryModel by controller.queryModel.collectAsStateWithLifecycle()
   val handlers = remember(controller, actions) { ActionSearchHandlers(controller, actions) }
-  LaunchedEffect(findSimilar) { if (findSimilar != null) controller.findSimilar(findSimilar) }
+  // CE-9: a ogni ingresso nella scheda il motore delle query comincia a caricarsi (D35): la prima ricerca non lo aspetta.
+  LaunchedEffect(controller) { controller.onOpened() }
+  FindSimilarEffect(findSimilar, onFind = controller::findSimilar, onHandled = onFindSimilarHandled)
   SearchHost {
     SearchScreen(
       state = state,

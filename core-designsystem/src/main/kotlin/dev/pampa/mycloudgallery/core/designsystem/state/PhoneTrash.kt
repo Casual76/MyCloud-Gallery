@@ -11,10 +11,11 @@ import androidx.compose.runtime.staticCompositionLocalOf
  *
  * - [ANDROID]: Android "puro". La riga resta nel MediaStore con lo stesso `_ID` e `IS_TRASHED = 1`: l'app la mostra in "Eliminati di recente"
  *   e la ripristina con il dialogo di sistema.
- * - [GALLERY]: One UI. Il sistema sposta il file nel Cestino di Galleria (`Android/.Trash/com.sec.android.gallery3d`, con `.nomedia`): la
- *   riga non e' piu' ne' nella sua cartella ne' fra le cestinate, l'app non la vede e non la puo' ripristinare. Si ripristina da Galleria →
- *   Cestino; tornata al suo posto (sull'S25 con lo stesso `_ID`), la lettura del telefono la ricollega al suo media dalle impronte (E-P11),
- *   senza ricaricarla.
+ * - [GALLERY]: One UI. Quello che l'app manda nel cestino (`createTrashRequest`) esce dalla sua cartella e compare anche nel Cestino di
+ *   Galleria, ma la riga resta nel MediaStore con `IS_TRASHED = 1` (D-B2, prove sul campo del 21/10): "Eliminati di recente" la elenca e la
+ *   ripristina con il dialogo di sistema. Quello che l'utente cestina **da Galleria** esce invece dal MediaStore (`Android/.Trash/
+ *   com.sec.android.gallery3d`, con `.nomedia`): l'app non lo vede e non lo puo' ripristinare, si ripristina da Galleria → Cestino; tornato al
+ *   suo posto (sull'S25 con lo stesso `_ID`), la lettura del telefono lo ricollega al suo media dalle impronte (E-P11), senza ricaricarlo.
  *
  * Le schermate scelgono le parole da qui: mai promettere "Eliminati di recente" o un "Ripristina" che su quel telefono non c'e'. Lo fornisce
  * `MainActivity` ([LocalPhoneTrash]); il valore di partenza e' quello di Android.

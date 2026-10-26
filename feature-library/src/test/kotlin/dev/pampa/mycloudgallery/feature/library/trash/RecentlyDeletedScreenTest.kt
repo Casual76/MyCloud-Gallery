@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.library.trash
 
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -10,6 +11,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.designsystem.state.LocalPhoneTrash
+import dev.pampa.mycloudgallery.core.designsystem.state.PhoneTrash
 import dev.pampa.mycloudgallery.core.mediastore.contract.RecentlyDeletedSource
 import dev.pampa.mycloudgallery.core.mediastore.contract.TrashedItem
 import dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaIntents
@@ -61,6 +64,13 @@ class RecentlyDeletedScreenTest : ComposeScreenTest() {
 
   private fun showTrash(c: RecentlyDeletedController, authenticator: SystemCredentialAuthenticator? = auth) = show {
     RecentlyDeletedHost(c, loader, keepRecentsHidden = { false }, authenticator = authenticator, onBack = {})
+  }
+
+  /** Come [showTrash] su un telefono con il cestino di [trash] (Samsung: [PhoneTrash.GALLERY]). */
+  private fun showTrashOn(trash: PhoneTrash, c: RecentlyDeletedController) = show {
+    CompositionLocalProvider(LocalPhoneTrash provides trash) {
+      RecentlyDeletedHost(c, loader, keepRecentsHidden = { false }, authenticator = auth, onBack = {})
+    }
   }
 
   // --- Dietro la credenziale -------------------------------------------------------------------------------------
@@ -166,6 +176,35 @@ class RecentlyDeletedScreenTest : ComposeScreenTest() {
     composeRule.onNodeWithText("Il cestino di Android").assertExists()
     composeRule.onNodeWithText("Non è il cestino della Galleria di Samsung", substring = true).assertExists()
     composeRule.onNodeWithText("30 giorni", substring = true).assertExists()
+  }
+
+  // --- D-B2: su Samsung il banner non nega cio' che la pagina fa -------------------------------------------------
+
+  @Test
+  fun d_b2_suSamsungIlBannerDiceCheQuelloEliminatoDaQuiSiVedeESiRipristina() {
+    showTrashOn(PhoneTrash.GALLERY, controller())
+
+    // La pagina elenca quello che l'app ha eliminato e lo ripristina con il dialogo di sistema: il banner non dice il contrario.
+    composeRule.onNodeWithText("Eliminati da qui e da Galleria").assertExists()
+    composeRule.onNodeWithText("lo ripristini da qui, con una conferma del telefono", substring = true).assertExists()
+    composeRule.onAllNodesWithText("l’app non lo vede e non lo può ripristinare", substring = true).assertCountEquals(0)
+    composeRule.onAllNodesWithText("non qui", substring = true).assertCountEquals(0)
+    // Il vero limite: quello che si elimina da Galleria l'app non lo vede, e si ripristina da Galleria → Cestino.
+    composeRule.onNodeWithText("Quello che elimini da Galleria invece l’app non lo vede", substring = true).assertExists()
+    composeRule.onNodeWithText("Galleria → Cestino", substring = true).assertExists()
+    // E le celle ci sono, con il pulsante di ripristino: il banner e la pagina dicono la stessa cosa.
+    composeRule.onNodeWithContentDescription("Foto eliminata, restano 29 giorni").performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Ripristina 1 elemento").assertExists()
+  }
+
+  @Test
+  fun d_b2_suSamsungAncheDaVuotoNonDiceCheIlRipristinoSiFaSoloDaGalleria() {
+    showTrashOn(PhoneTrash.GALLERY, controller(source = FakeRecentlyDeletedSource(emptyList())))
+
+    composeRule.onNodeWithText("Niente eliminato di recente").assertExists()
+    composeRule.onNodeWithText("resta qui 30 giorni", substring = true).assertExists()
+    composeRule.onAllNodesWithText("lo ripristini da lì entro 30 giorni", substring = true).assertCountEquals(0)
   }
 
   @Test

@@ -81,6 +81,8 @@ class ShareChaosConfig(
   val workRounds: Int = 8,
   /** Quanti giri al massimo, senza guasti, perche' il lavoro arrivi in fondo. */
   val settleRounds: Int = 40,
+  /** Fra un giro e l'altro dell'assestamento, quanto si aspetta davvero (0 sulla JVM, dove il tempo e' finto): sul NAS vero le attese del motore sono di orologio. */
+  val settlePauseMs: Long = 0,
   /** Su cento passi finiti, quante volte una morte senza colpo e una ripresa a vuoto (non deve cambiare niente). */
   val idleRestartPercent: Int = 25,
   /** Su cento passi, quante volte l'ambiente fa qualcosa (un file aperto, cambiato, area congelata, spazio finito). */
@@ -144,10 +146,22 @@ object ShareChaosBlows {
     return scaled.coerceAtLeast(1)
   }
 
-  private fun available(surface: Surface, caps: Capabilities): Boolean = when (surface) {
-    Surface.OPS_STORE -> caps.opsStore
-    Surface.NAS -> caps.nasCalls
-    else -> true
+  /**
+   * Dove ha senso colpire in questo passo: il NAS e il diario del motore solo se c'e' qualcosa da spostare ([movers] media dell'area privata, o un "Riporta");
+   * il caricamento solo se c'e' un media solo sul telefono ([uploads]); l'adozione dei file del PC non sposta niente (pubblica e basta).
+   */
+  private fun available(surface: Surface, caps: Capabilities, step: StepKind, movers: Int, uploads: Int): Boolean {
+    val moves = movers > 0 || step == StepKind.BRING_BACK
+    return when (surface) {
+      Surface.OPS_STORE -> caps.opsStore && moves
+      Surface.NAS -> caps.nasCalls && moves
+      Surface.MOVER, Surface.COMPLETION -> moves
+      Surface.UPLOADER -> uploads > 0
+      Surface.SAFE_COPIES -> movers > 0 && step != StepKind.ADOPT
+      Surface.ORIGINS -> moves
+      Surface.TICKETS -> moves || uploads > 0
+      else -> true
+    }
   }
 
   private fun <T> pick(rnd: Random, options: List<Pair<Int, T>>): T {
@@ -184,9 +198,9 @@ object ShareChaosBlows {
   }
 
   /** I colpi di un passo di tipo [step]: da 1 a [ShareChaosConfig.maxBlows], sorteggiati (stesso seme, stessi colpi). */
-  fun generate(rnd: Random, config: ShareChaosConfig, step: StepKind, movers: Int = 1): Blows {
+  fun generate(rnd: Random, config: ShareChaosConfig, step: StepKind, movers: Int = 1, uploads: Int = 0): Blows {
     val mixedOutcomes = KnownDefect.OUTCOMES_MISALIGNED in config.avoid && movers >= 2
-    val surfaces = config.weights.filter { (surface, weight) -> weight > 0 && available(surface, config.capabilities) }.map { it.value to it.key }
+    val surfaces = config.weights.filter { (surface, weight) -> weight > 0 && available(surface, config.capabilities, step, movers, uploads) }.map { it.value to it.key }
     val count = pick(rnd, listOf(30 to 1, 30 to 2, 20 to 3, 12 to 4, 8 to 5)).coerceAtMost(config.maxBlows)
     val early = ArrayList<Blow>()
     val late = ArrayList<Blow>()

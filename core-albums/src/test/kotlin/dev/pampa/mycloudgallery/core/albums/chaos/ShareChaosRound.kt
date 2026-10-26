@@ -164,7 +164,11 @@ class ShareChaosRound(
     }
     stepsDone += "${kind.label}: ${selected.size} media"
     val hazard = hazardFor(kind, selected)
-    val blows = ShareChaosBlows.generate(rnd, config, kind, movers = selected.count { bench.library[it]?.place == MediaPlace.MY_PRIVATE })
+    val blows = ShareChaosBlows.generate(
+      rnd, config, kind,
+      movers = selected.count { bench.library[it]?.place == MediaPlace.MY_PRIVATE },
+      uploads = selected.count { bench.library[it]?.place == MediaPlace.PHONE_ONLY },
+    )
     chronicle += "passo $stepNo: ${kind.label}; colpi: ${blows.all.joinToString { it.toString() }.ifEmpty { "nessuno" }}"
     savesAtArm = bench.diary.saves
     firedBefore = injector.fired.size
@@ -281,6 +285,7 @@ class ShareChaosRound(
     var i = 0
     while (i < config.settleRounds) {
       if (i > 0 && converged()) break
+      if (i > 0 && config.settlePauseMs > 0) kotlinx.coroutines.delay(config.settlePauseMs)
       guarded("ripresa $i") { bench.round() }
       i++
     }

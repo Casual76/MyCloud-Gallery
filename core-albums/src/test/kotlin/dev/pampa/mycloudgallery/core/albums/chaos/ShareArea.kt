@@ -69,10 +69,30 @@ class ShareArea(
         cleanupRetries = cleanupRetries,
         cleanupPauseMs = cleanupPauseMs,
         onCleaned = { synchronized(cleanups) { cleanups += it } },
-      ).open()
-      val faulting = FaultingTransport(AreaTransport(inner, guard, root, latch, counter), injector)
-      return ChaosSmbTarget(describe, completions, injector, faulting, admin, time(), connection(), backoff)
+      )
+      try {
+        admin.open()
+        val faulting = FaultingTransport(AreaTransport(inner, guard, root, latch, counter), injector)
+        return ChaosSmbTarget(describe, completions, injector, faulting, admin, time(), connection(), backoff).also { openFailures = 0 }
+      } catch (e: AreaAuthStop) {
+        runCatching { admin.close() }
+        throw e
+      } catch (e: Throwable) {
+        // Il NAS non risponde (rete, NAS spento): tre aperture di fila che non riescono fermano il banco, che non puo' provare niente.
+        openFailures++
+        runCatching { admin.close() }
+        throw e
+      }
     }
+  }
+
+  private var openFailures = 0
+
+  /** Perche' il banco deve fermarsi adesso: un login rifiutato (mai un nuovo tentativo) o un NAS che non si apre per tre giri di fila. */
+  fun stopReason(): String? = when {
+    latch.failed -> "login rifiutato dal NAS: nessun nuovo tentativo"
+    openFailures >= MAX_OPEN_FAILURES -> "il NAS di prova non si apre ($MAX_OPEN_FAILURES giri di fila): niente da provare"
+    else -> null
   }
 
   /** La pulizia finale: tutto cio' che sta sotto `mcg-it/<giro>` (anche cio' che un giro rosso ha lasciato) e poi la cartella del giro. */
@@ -92,6 +112,8 @@ class ShareArea(
     }
   }
 }
+
+private const val MAX_OPEN_FAILURES = 3
 
 /** L'autotest della guardia (come `ChaosAreaSelfTest`): tutto cio' che deve essere rifiutato lo e' davvero, con ZERO chiamate al vero. */
 object ShareAreaSelfTest {

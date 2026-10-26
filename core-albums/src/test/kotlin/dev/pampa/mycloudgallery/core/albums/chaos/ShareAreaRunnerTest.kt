@@ -56,7 +56,7 @@ class ShareAreaRunnerTest {
   @Test
   fun ilBancoSulSimulatoreDietroLaGuardiaTocca_soloIlSuoMondo_ePulisce() = runBlocking {
     val (area, backend) = ShareAreas.simulated()
-    val settings = ShareAreaRunner.Settings(interruptions = 60, baseSeed = 20261026L)
+    val settings = ShareAreaRunner.Settings(interruptions = 60, baseSeed = 20261026L, config = ShareAreaRunner.defaultConfig(real = false))
     val result = ShareAreaRunner.run(area, settings)
     println(result.summary())
     assertWithMessage(result.failureText()).that(result.failures).isEmpty()
@@ -77,7 +77,7 @@ class ShareAreaRunnerTest {
   @Test
   fun unLoginRifiutatoFermaIlBancoSubito_unSoloTentativo() = runBlocking {
     val (area, backend) = ShareAreas.simulated(password = "sbagliata")
-    val settings = ShareAreaRunner.Settings(interruptions = 50, baseSeed = 1L)
+    val settings = ShareAreaRunner.Settings(interruptions = 50, baseSeed = 1L, config = ShareAreaRunner.defaultConfig(real = false))
     val result = ShareAreaRunner.run(area, settings)
     println(result.summary())
     assertThat(result.stoppedBecause).contains("login rifiutato")

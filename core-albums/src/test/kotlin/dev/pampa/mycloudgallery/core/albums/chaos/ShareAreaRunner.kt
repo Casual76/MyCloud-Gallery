@@ -130,8 +130,12 @@ object ShareAreaRunner {
     val config: ShareChaosConfig = defaultConfig(),
   )
 
-  /** Il giro sul NAS vero: stessi passi del banco JVM, nessun file aperto dal PC e nessuno spazio da cambiare, meno lavoro armato per passo. */
-  fun defaultConfig(): ShareChaosConfig = ShareChaosConfig(Capabilities.REAL, workRounds = 6, settleRounds = 30, hazardPercent = 20)
+  /**
+   * Il giro sul NAS vero: stessi passi del banco JVM, nessun file aperto dal PC e nessuno spazio da cambiare, meno lavoro armato per passo. [real]: le attese
+   * del motore (un handle che il NAS non ha ancora chiuso, 1 minuto) sono di orologio vero, quindi l'assestamento aspetta davvero 2 s fra un giro e l'altro.
+   */
+  fun defaultConfig(real: Boolean = true): ShareChaosConfig =
+    ShareChaosConfig(Capabilities.REAL, workRounds = 6, settleRounds = if (real) 60 else 30, settlePauseMs = if (real) 2_000 else 0, hazardPercent = 20)
 
   /** Fa i giri necessari: si ferma appena le interruzioni cadute sono [Settings.interruptions] (al massimo `4 x + 5` giri), o a un login rifiutato. */
   suspend fun run(area: ShareArea, settings: Settings, progress: ((rounds: Int, red: Int, fired: Int) -> Unit)? = null): ShareChaosResult {
@@ -144,7 +148,7 @@ object ShareAreaRunner {
       stats = stats,
       firstRound = settings.firstRound,
       stopAfterInterruptions = settings.interruptions,
-      stopReason = { if (area.latch.failed) "login rifiutato dal NAS: nessun nuovo tentativo" else null },
+      stopReason = { area.stopReason() },
       onRound = { done, red -> progress?.invoke(done, red, stats.totalFired) },
     )
   }

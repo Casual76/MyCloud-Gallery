@@ -1529,3 +1529,14 @@ Da verificare in P1 sulle fonti, prima di usarli: il nome esatto del file int8 d
 `FaceRecognizerSF` (ordine dei colori, scala), la forma delle uscite di YuNet `2026may`, la licenza di ogni ritratto di pubblico dominio scelto.
 
 <!-- fine del documento -->
+
+## 11. Risposte del 27/10 e cosa cambiano
+
+| # | Risposta | Cosa cambia |
+|---|---|---|
+| Q1 | (a) **Dentro l'app.** | YuNet e SFace convertiti entrano nell'APK come asset, come MagicTouch; nessuna sorgente HTTPS per i volti; P1 scrive il catalogo con le impronte fissate e la conversione riproducibile sul PC. |
+| Q2 | (b) **Solo chi ha un nome.** | In primo piano le persone con un nome; gli altri gruppi in "Altri volti", a un tocco, dove si danno nomi o si fanno dimenticare. Nessun gruppo sparisce. |
+| Q3 | (a) **No.** | Nessuna traccia dell'attivazione nella pagina Famiglia né in altri dati visibili ai familiari. |
+| Q4 | **Sì, ma più avanti**, in un momento che l'utente sceglierà quando avrà tempo. | F105 (qualità sui dati veri) non blocca la chiusura del codice della fase: P11 consegna lo strumento e i passi; la misura resta aperta finché l'utente non la fa, e fino ad allora le soglie restano quelle provvisorie del set pubblico, dichiarate. |
+| Q5 | (a) **A fine Fase 8**, dopo le prove e con il sì dell'utente, insieme alla pubblicazione dell'indice sulle cartelle vere. | La recinzione delle cartelle vere vale anche per i dati dei volti, come F4-D31 e D30. |
+| Download | **Tutto**: YuNet (2023mar e 2026may) e SFace 2021dec da opencv/opencv_zoo; strumenti Python di conversione da PyPI; circa 30 ritratti di pubblico dominio da Wikimedia Commons. **AuraFace solo se serve**, avvisando l'utente prima di scaricarlo. | P1 scarica in una cartella dedicata fuori dal repository, verifica le impronte note, converte e misura; gli strumenti Python in un ambiente virtuale isolato. |

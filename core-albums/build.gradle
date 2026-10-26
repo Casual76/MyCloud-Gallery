@@ -46,4 +46,8 @@ dependencies {
 
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
+  // P3: la proiezione degli album sulle tabelle v6 si prova sul catalogo vero (Room in memoria, come core-personal e core-database).
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
 }

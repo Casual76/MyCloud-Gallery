@@ -6,6 +6,8 @@
             VERSIONI: foto di `mcg-prova` modificate dopo il primo backup (`-Step edit`, come Samsung "Salva") e salvate di nuovo.
     ai      durante lo scaricamento dei modelli e l'indicizzazione AI (Fase 6, docs/fase6-progetto.md par. 5.5, P10): almeno 100
             interruzioni (`kill -9` e Wi-Fi spento per 3-20 s), poi il verificatore dei dati sul telefono (`-Step verify`).
+    share   durante una CONDIVISIONE di 20-200 media (Fase 7, docs/fase7-progetto.md par. 5.5 e 5.6 F80, P5), anche con media solo sul telefono
+            (E-SH1, `INCOMING`): almeno 100 interruzioni (`kill -9` e Wi-Fi spento per 3-20 s), poi il verificatore dal PC. PRONTO MA NON ESEGUITO.
   Come si usa e come si legge il risultato: docs/prova-500.md.
 
 .DESCRIPTION
@@ -64,6 +66,23 @@
   Con -DryRun si vede il calendario senza telefono; con -SelfTest si provano, senza telefono, il controllo del file dei vettori (record
   buoni, rovinati nel mezzo, troncati in coda, nel formato e con il nome che scrive l'app), la lettura del catalogo dei modelli e le guardie;
   tools\chaos\s25-ai-finto.ps1 prova i passi contro l'adb finto, compresa la morte del processo (`pidof`, `kill -9`, rilancio).
+
+  --- Modo share (-Mode share, Fase 7, P5; -Step seed | interrupt | verify | clean) ---
+  Sull'S25 con la build DEBUG e l'account `test` (area comune `test-comune`). Pronto ma non eseguito: la prova vera (F80) la fa chi ha il telefono, dopo F79.
+    seed       come il modo backup: semina `mcg-prova` sul telefono (di norma 120 foto uniche, da 20 a 200; nessun video grande) e scrive il MANIFESTO della
+               condivisione (`# mcg-share-manifest 1`: giro, dispositivo, dove stanno le copie private e l'area comune, impronta e byte di ogni media).
+    (a mano)   nell'app: il primo backup di `mcg-prova` (parte dei media puo' restare solo sul telefono: E-SH1, caricamento `INCOMING` verso la cartella
+               dell'album) e "Condividi" tutto in un album nuovo (foglio di conferma, area comune).
+    interrupt  durante la condivisione lo script uccide il processo (`kill -9` dalla build debug) o spegne il Wi-Fi per 3-20 s a tempi casuali, rilancia
+               l'app dopo ogni morte, aspetta che la ripresa finisca e, con -Verify, passa a `verify`. Servono almeno 100 interruzioni.
+    verify     (1) le impronte del telefono tornano (la condivisione non cambia i media del telefono; con -AllowFreed i file che il guardiano o "Libera
+               spazio" hanno tolto non sono un cambiamento); (2) il verificatore dal PC sull'area di prova, in SOLA LETTURA:
+               tools\chaos\share-pc\share-pc.ps1 -Mode verify (nessun file a meta', nessun doppione nell'area comune, nessuna perdita, nessun temporaneo
+               rimasto). Le voci degli album sono firmate: le guarda il banco sulla JVM e la schermata dell'app, non questo verificatore.
+    clean      toglie `mcg-prova` dal telefono (solo quelle due cartelle, con -Yes).
+  Guardie del modo share (le stesse degli altri modi): un solo telefono, RFCY61FZDHW (con un adb finto, MCG_ADB, vale il numero che si vuole); solo
+  l'app di debug dev.pampa.mycloudgallery.debug; il Wi-Fi si spegne solo con `svc wifi disable` di questo script, al massimo 120 s, e si riaccende SEMPRE.
+  Provato senza telefono: `s25.ps1 -Mode share -SelfTest` (manifesto, guardie) e tools\chaos\share-pc\s25-share-finto.ps1 (contro l'adb finto).
 
   Il calendario delle interruzioni (quando e che cosa) dipende solo dal seme: lo stesso -Seed rifa' la stessa prova. Con -DryRun lo script
   stampa il calendario (o il piano della semina) e i comandi adb che userebbe e NON ESEGUE NIENTE (nemmeno adb): e' il modo di controllarlo
@@ -132,7 +151,7 @@
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet("move", "backup", "ai")][string]$Mode = "move",
+  [ValidateSet("move", "backup", "ai", "share")][string]$Mode = "move",
   [ValidateSet("seed", "edit", "interrupt", "verify", "clean", "eval-push", "eval-pull")][string]$Step = "interrupt",
   [string]$Serial = $env:ANDROID_SERIAL,
   [string]$Package = "dev.pampa.mycloudgallery.debug",
@@ -174,6 +193,7 @@ $ErrorActionPreference = "Stop"
 $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $isBackup = ($Mode -eq "backup")
 $isAi = ($Mode -eq "ai")
+$isShare = ($Mode -eq "share")
 
 function Fail([string]$message, [int]$code = 1) {
   Write-Host $message -ForegroundColor Red
@@ -449,6 +469,87 @@ function Invoke-AiSelfTest {
   return $script:aiSelfTestFailed
 }
 
+# =================================================================================================================================
+# Modo share (Fase 7, P5): guardie, manifesto, autotest
+# =================================================================================================================================
+
+# Le guardie sono quelle del modo ai (un solo telefono, solo l'app di debug, il Wi-Fi al massimo 120 s): stessi valori, stesso controllo.
+function Get-ShareGuardErrors([string]$serial, [string]$package, [int]$wifiMax, [bool]$fakeAdb, [bool]$dryRun) {
+  return @(Get-AiGuardErrors $serial $package $wifiMax $fakeAdb $dryRun | ForEach-Object { $_ -replace 'modo ai', 'modo share' })
+}
+
+# Il manifesto della condivisione: giro, dispositivo, dove stanno le copie private (la destinazione del backup, D13) e l'area comune (le cartelle degli
+# album, Q1 (a)), poi i media del telefono come nel manifesto del backup. Le cartelle sono scritte qui, mai da un parametro.
+$ShareCommonShare = "test-comune"
+$ShareAlbumRoot = "Album condivisi"
+
+function New-ShareManifestText([string]$runId, [string]$deviceId, [string]$privateShare, [string]$privateDir, $files) {
+  $lines = @("# mcg-share-manifest 1", "run=$runId", "device=$deviceId", "private=$privateShare|$privateDir", "common=$ShareCommonShare|$ShareAlbumRoot")
+  foreach ($file in $files) {
+    $key = if ($file.NotMedia) { "notmedia" } else { "phone" }
+    $lines += ("{0}={1}|{2}|{3}" -f $key, $file.Sha, $file.Size, $file.Label)
+  }
+  return ($lines -join "`n") + "`n"
+}
+
+# Il manifesto che legge il verificatore dal PC: quello della semina piu' una riga `freed=<impronta>|<etichetta>` per ogni media che il telefono non ha piu'
+# (tolto dal guardiano o da "Libera spazio"): sul NAS non puo' mancare. [freedKeys]: le chiavi `impronta|etichetta`.
+function Write-ShareVerifyManifest([string]$source, [string]$target, [string[]]$freedKeys) {
+  $dir = Split-Path -Parent $target
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir | Out-Null }
+  Copy-Item -LiteralPath $source -Destination $target -Force
+  $lines = @($freedKeys | ForEach-Object { "freed=" + ($_ -split '\|', 2)[0] + "|" + ($_ -split '\|', 2)[1] })
+  if ($lines.Count -gt 0) { [System.IO.File]::AppendAllText($target, (($lines -join "`n") + "`n")) }
+}
+
+function Invoke-ShareSelfTest {
+  $script:shareFailed = 0
+  function Expect([string]$what, [bool]$ok) {
+    if ($ok) { Write-Host ("  OK    {0}" -f $what) -ForegroundColor Green } else { Write-Host ("  FAIL  {0}" -f $what) -ForegroundColor Red; $script:shareFailed++ }
+  }
+  $hash = @(
+    "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae  /sdcard/DCIM/mcg-prova/IMG_0001.jpg",
+    "b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c  /sdcard/DCIM/mcg-prova/testo.jpg",
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /sdcard/DCIM/mcg-prova/vuoto.jpg"
+  )
+  $size = @("1234 /sdcard/DCIM/mcg-prova/IMG_0001.jpg", "22 /sdcard/DCIM/mcg-prova/testo.jpg", "0 /sdcard/DCIM/mcg-prova/vuoto.jpg")
+  $text = New-ShareManifestText "20261026-101500-1a2b3c4d" "" "test" "mcg-campo" @(ConvertTo-PhoneFileList $hash $size)
+  $expected = "# mcg-share-manifest 1`nrun=20261026-101500-1a2b3c4d`ndevice=`nprivate=test|mcg-campo`ncommon=test-comune|Album condivisi`n" +
+    "phone=2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae|1234|IMG_0001.jpg`n" +
+    "notmedia=b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c|22|testo.jpg`n"
+  Expect "il manifesto della condivisione ha le due cartelle e i media (un file a zero byte scartato, un fixture finto come notmedia)" ($text -eq $expected)
+  $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("mcg-share-selftest-" + [guid]::NewGuid().ToString("N").Substring(0, 8))
+  New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+  try {
+    $source = Join-Path $tmp "m.txt"
+    [System.IO.File]::WriteAllText($source, $text)
+    $target = Join-Path $tmp "sotto\v.txt"
+    Write-ShareVerifyManifest $source $target @("2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae|IMG_0001.jpg")
+    Expect "il manifesto per il verificatore ha la riga freed= (e il resto invariato)" ((Get-Content -LiteralPath $target -Raw) -eq ($text + "freed=2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae|IMG_0001.jpg`n"))
+    Write-ShareVerifyManifest $source $target @()
+    Expect "senza media tolti dal telefono il manifesto resta uguale" ((Get-Content -LiteralPath $target -Raw) -eq $text)
+  } finally {
+    Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  Expect "le guardie accettano il telefono, l'app di debug e il Wi-Fi a 120 s" ((Get-ShareGuardErrors $AiSerial $AiPackage 120 $false $false).Count -eq 0)
+  Expect "rifiutano un altro telefono" ((Get-ShareGuardErrors "ZZZ12345" $AiPackage 120 $false $false).Count -gt 0)
+  Expect "rifiutano l'app di release" ((Get-ShareGuardErrors $AiSerial "dev.pampa.mycloudgallery" 120 $false $false).Count -gt 0)
+  Expect "rifiutano un Wi-Fi spento oltre 120 s" ((Get-ShareGuardErrors $AiSerial $AiPackage 121 $false $false).Count -gt 0)
+  Expect "rifiutano la mancanza del telefono (tranne a secco)" (((Get-ShareGuardErrors "" $AiPackage 120 $false $false).Count -gt 0) -and ((Get-ShareGuardErrors "" $AiPackage 120 $false $true).Count -eq 0))
+  Expect "con un adb finto vale il numero che si vuole" ((Get-ShareGuardErrors "FAKE123" $AiPackage 120 $true $false).Count -eq 0)
+  Expect "i messaggi dicono 'modo share'" (((Get-ShareGuardErrors "ZZZ12345" $AiPackage 120 $false $false) -join " ") -match 'modo share')
+  Expect "le cartelle del telefono sono solo le due di mcg-prova" (($PhoneFolders -join ",") -eq "/sdcard/DCIM/mcg-prova,/sdcard/Pictures/mcg-prova")
+  return $script:shareFailed
+}
+
+if ($SelfTest -and $isShare) {
+  Write-Host "SelfTest del modo share (nessun telefono, nessun adb):"
+  $failedChecks = Invoke-ShareSelfTest
+  if ($failedChecks -gt 0) { Fail "SelfTest share: $failedChecks controlli non passano." 3 }
+  Write-Host "SelfTest share: il manifesto e le guardie funzionano." -ForegroundColor Green
+  exit 0
+}
+
 if ($SelfTest -and $isAi) {
   Write-Host "SelfTest del modo ai (nessun telefono, nessun adb):"
   $failedChecks = Invoke-AiSelfTest
@@ -486,6 +587,21 @@ if ($WifiOffMinSeconds -lt 1 -or $WifiOffMaxSeconds -lt $WifiOffMinSeconds -or $
 if ($Package -notmatch '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$') { Fail "Nome del pacchetto non valido." }
 if ($Verify -and -not $Manifest -and -not $isAi) { Fail "-Verify vuole -Manifest (il file scritto da area.ps1 -Mode seed, o da questo script con -Mode backup -Step seed)." }
 if ($Step -in @("eval-push", "eval-pull") -and -not $isAi) { Fail "I passi eval-push ed eval-pull sono solo del modo ai (-Mode ai)." 2 }
+if ($isShare) {
+  # Il modo share: semina, interruzioni, verifica e pulizia; le guardie sul telefono, sull'app e sul Wi-Fi sono quelle del modo ai.
+  if ($Step -notin @("seed", "interrupt", "verify", "clean")) { Fail "Il modo share ha solo i passi seed, interrupt, verify e clean." }
+  $shareErrors = @(Get-ShareGuardErrors $Serial $Package $WifiOffMaxSeconds ([bool]$env:MCG_ADB) ([bool]$DryRun))
+  if ($shareErrors.Count -gt 0) { Fail ($shareErrors -join " ") 2 }
+  if (-not $PSBoundParameters.ContainsKey("Photos")) { $Photos = 120 }
+  if (-not $PSBoundParameters.ContainsKey("BigVideos")) { $BigVideos = 0 }
+  if ($Photos -lt 20 -or $Photos -gt 200) { Fail "-Photos deve stare fra 20 e 200 (una condivisione di 20-200 media)." }
+  if ($BigVideos -lt 0 -or $BigVideos -gt 1) { Fail "Il modo share vuole al piu' un video grande." }
+  if ($BigVideoMb -lt 1 -or $BigVideoMb -gt 4096) { Fail "-BigVideoMb deve stare fra 1 e 4096." }
+  if ($DestShare -ne "test") { Fail "Il modo share vale per la share di prova `test` (-DestShare), l'area privata dell'account di prova." }
+  if ($DestDir -notmatch '^[A-Za-z0-9._-]+$' -or $DestDir -match '^\.+$') { Fail "-DestDir deve essere un solo nome di cartella semplice (default mcg-campo)." }
+  if ($Run -and $Run -notmatch '^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$') { Fail "-Run deve avere la forma aaaammgg-hhmmss-<8 esadecimali>." }
+  if ($Device -and $Device -notmatch '^[A-Za-z0-9]{26}$') { Fail "-Device e' l'id del dispositivo: 26 caratteri (Diagnostica)." }
+}
 if ($isAi) {
   # Il modo ai: solo interrupt e verify (la semina e' quella del modo backup), e le guardie sul telefono, l'app e il Wi-Fi.
   if ($Step -notin @("interrupt", "verify", "eval-push", "eval-pull")) { Fail "Il modo ai ha solo i passi interrupt, verify, eval-push ed eval-pull (la semina di mcg-prova e il primo backup sono del modo backup)." }
@@ -506,6 +622,7 @@ if ($isBackup) {
 if ($Seed -eq 0) { $Seed = Get-Random -Minimum 1 -Maximum 2147483647 }
 $runId = if ($Run) { $Run } else { "{0}-{1:x8}" -f (Get-Date -Format "yyyyMMdd-HHmmss"), (Get-Random -Minimum 0 -Maximum ([int]::MaxValue)) }
 if ($isBackup -and -not $Manifest) { $Manifest = Join-Path $root "build\chaos\backup-manifest-$runId.txt" }
+if ($isShare -and -not $Manifest) { $Manifest = Join-Path $root "build\chaos\share-manifest-$runId.txt" }
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 if (-not $Log) { $Log = Join-Path $root "build\chaos\s25-$stamp.log" }
@@ -658,7 +775,11 @@ function Write-SeedPlan {
   Write-Host ("  {0,-26} adb -s {1} shell {2}" -f "impronte (sha256sum)", $serialText, $hashCommand)
   Write-Host ("  {0,-26} adb -s {1} shell {2}" -f "dimensioni (stat)", $serialText, $sizeCommand)
   Write-Host ""
-  Write-Host ("Il manifesto va in {0}: poi l'utente avvia il primo backup nell'app e si lancia -Step interrupt." -f $Manifest) -ForegroundColor Green
+  if ($isShare) {
+    Write-Host ("Il manifesto della condivisione va in {0}: poi, nell'app, il primo backup e `"Condividi`", e si lancia -Step interrupt." -f $Manifest) -ForegroundColor Green
+  } else {
+    Write-Host ("Il manifesto va in {0}: poi l'utente avvia il primo backup nell'app e si lancia -Step interrupt." -f $Manifest) -ForegroundColor Green
+  }
 }
 
 # Aspetta che il MediaStore abbia indicizzato i file di mcg-prova (se no l'app non li vede e il verificatore direbbe "persi"): conta le righe
@@ -793,12 +914,16 @@ function Invoke-Seed {
   $files = Get-PhoneFiles
   if ($files.Count -eq 0) { Fail "Nessun file di mcg-prova sul telefono dopo la semina." }
   [void](Wait-MediaStore $files.Count)
-  $text = New-BackupManifestText $runId $Device $DestShare $DestDir $files
+  $text = if ($isShare) { New-ShareManifestText $runId $Device $DestShare $DestDir $files } else { New-BackupManifestText $runId $Device $DestShare $DestDir $files }
   $manifestDir = Split-Path -Parent $Manifest
   if ($manifestDir -and -not (Test-Path -LiteralPath $manifestDir)) { New-Item -ItemType Directory -Path $manifestDir | Out-Null }
   [System.IO.File]::WriteAllText($Manifest, $text)
   Write-Log ("Semina finita: {0} file in mcg-prova (somma {1:N0} byte). Manifesto: {2}" -f $files.Count, (($files | Measure-Object -Property Size -Sum).Sum), $Manifest)
-  Write-Host "Adesso, nell'app (build debug, account di prova), avvia il primo backup (Inizia ora) e lancia: s25.ps1 -Mode backup -Step interrupt -Manifest `"$Manifest`" -Verify" -ForegroundColor Green
+  if ($isShare) {
+    Write-Host "Adesso, nell'app (build debug, account di prova): il primo backup di mcg-prova (parte dei media puo' restare solo sul telefono: E-SH1), poi `"Condividi`" tutto in un album nuovo, e lancia: s25.ps1 -Mode share -Step interrupt -Manifest `"$Manifest`" -Verify" -ForegroundColor Green
+  } else {
+    Write-Host "Adesso, nell'app (build debug, account di prova), avvia il primo backup (Inizia ora) e lancia: s25.ps1 -Mode backup -Step interrupt -Manifest `"$Manifest`" -Verify" -ForegroundColor Green
+  }
 }
 
 function Invoke-VerifyBackup {
@@ -831,6 +956,35 @@ function Invoke-VerifyBackup {
   $verify = Join-Path $PSScriptRoot "area.ps1"
   Write-Log "Verifica degli invarianti sull'area di prova (in sola lettura)..."
   & $verify -Mode backup -Stage verify -Manifest $Manifest
+  return $LASTEXITCODE
+}
+
+# Il modo share: il telefono non deve essere cambiato (la condivisione non lo tocca; il guardiano e "Libera spazio" possono toglierne i file: -AllowFreed), poi
+# il verificatore dal PC sull'area di prova, in sola lettura (share-pc.ps1 -Mode verify): i media tolti dal telefono si scrivono in una copia del manifesto
+# (`freed=`), perche' sul NAS non possono mancare.
+function Invoke-VerifyShare {
+  if (-not (Test-Path -LiteralPath $Manifest)) { Fail "Manifesto non trovato: $Manifest" }
+  Initialize-Adb
+  $seeded = @{}
+  foreach ($line in (Get-Content -LiteralPath $Manifest)) {
+    if ($line -match '^(phone|notmedia)=([0-9a-f]{64})\|(\d+)\|(.+)$') { $seeded["$($Matches[2])|$($Matches[4])"] = $true }
+  }
+  $now = @{}
+  foreach ($file in (Get-PhoneFiles)) { $now["$($file.Sha)|$($file.Label)"] = $true }
+  $unknown = @($now.Keys | Where-Object { -not $seeded.ContainsKey($_) }).Count
+  $freedKeys = @($seeded.Keys | Where-Object { -not $now.ContainsKey($_) })
+  $changed = $unknown + $(if ($AllowFreed) { 0 } else { $freedKeys.Count })
+  if ($changed -gt 0) { Fail "Il telefono e' cambiato durante la prova ($changed file diversi dal manifesto): la condivisione non tocca i media del telefono (-AllowFreed se li ha tolti il guardiano o Libera spazio)." 4 }
+  Write-Log ("Il telefono non e' cambiato rispetto al manifesto: le impronte di mcg-prova tornano{0}." -f $(if ($freedKeys.Count -gt 0) { " ($($freedKeys.Count) file tolti dal guardiano o da Libera spazio)" } else { "" }))
+  if ($SkipNas) {
+    Write-Log "Verifica sul NAS saltata (-SkipNas): solo le impronte del telefono."
+    return 0
+  }
+  $verified = Join-Path $root ("build\chaos\share-verify-" + $runId + ".txt")
+  Write-ShareVerifyManifest $Manifest $verified $freedKeys
+  $verify = Join-Path $PSScriptRoot "share-pc\share-pc.ps1"
+  Write-Log "Verifica sull'area di prova (in sola lettura)..."
+  if ($NotSettled) { & $verify -Mode verify -Manifest $verified -NotSettled } else { & $verify -Mode verify -Manifest $verified }
   return $LASTEXITCODE
 }
 
@@ -1043,7 +1197,7 @@ if ($isAi -and $Step -eq "verify") {
   exit $code
 }
 
-if ($isBackup -and $Step -eq "seed") {
+if (($isBackup -or $isShare) -and $Step -eq "seed") {
   if ($DryRun) { Write-SeedPlan; exit 0 }
   try { Invoke-Seed } finally { Save-Log }
   exit 0
@@ -1063,7 +1217,17 @@ if ($isBackup -and $Step -eq "verify") {
   try { $code = Invoke-VerifyBackup } finally { Save-Log }
   exit $code
 }
-if ($isBackup -and $Step -eq "clean") {
+if ($isShare -and $Step -eq "verify") {
+  if ($DryRun) {
+    Write-Host "=== A SECCO: non lancio niente ===" -ForegroundColor Yellow
+    Write-Host ("adb -s {0} shell {1}     (le impronte di mcg-prova contro il manifesto)" -f $serialText, $hashCommand)
+    Write-Host ("tools\chaos\share-pc\share-pc.ps1 -Mode verify -Manifest {0}     (sola lettura dell'area di prova: nessun file a meta', nessun doppione, nessuna perdita)" -f $Manifest)
+    exit 0
+  }
+  try { $code = Invoke-VerifyShare } finally { Save-Log }
+  exit $code
+}
+if (($isBackup -or $isShare) -and $Step -eq "clean") {
   if ($DryRun) {
     Write-Host "=== A SECCO: non lancio niente ===" -ForegroundColor Yellow
     foreach ($folder in $PhoneFolders) { Write-Host ("adb -s {0} shell rm -rf {1}     (serve -Yes)" -f $serialText, $folder) }
@@ -1097,9 +1261,17 @@ if ($DryRun) {
   if ($isAi) {
     Write-Host "Prima: backup di mcg-prova gia' fatto, ruolo Indicizzatore acceso, scaricamento/indicizzazione partiti nell'app. Le interruzioni cadono durante l'uno e l'altra." -ForegroundColor Cyan
   }
+  if ($isShare -and $Interruptions -lt $AiRecommendedInterruptions) {
+    Write-Host ("ATTENZIONE: il par. 5.5 chiede almeno {0} interruzioni sul telefono; questa prova ne fa {1}." -f $AiRecommendedInterruptions, $Interruptions) -ForegroundColor Yellow
+  }
+  if ($isShare) {
+    Write-Host "Prima: s25.ps1 -Mode share -Step seed, il primo backup di mcg-prova nell'app e `"Condividi`" tutto in un album nuovo (build debug, account di prova). Le interruzioni cadono durante la condivisione." -ForegroundColor Cyan
+  }
   if ($Verify) {
     if ($isAi) {
       Write-Host "A fine prova: s25.ps1 -Mode ai -Step verify   (sola lettura, solo la cartella dell'app: models/, ai-buffer/, search/)"
+    } elseif ($isShare) {
+      Write-Host ("A fine prova: s25.ps1 -Mode share -Step verify -Manifest {0}   (impronte del telefono, poi share-pc.ps1 -Mode verify)" -f $Manifest)
     } elseif ($isBackup) {
       Write-Host ("A fine prova: s25.ps1 -Mode backup -Step verify -Manifest {0}   (impronte del telefono, poi area.ps1 -Mode backup -Stage verify)" -f $Manifest)
     } else {
@@ -1114,8 +1286,12 @@ if ($DryRun) {
 # --- La prova vera ---------------------------------------------------------------------------------------------------------------
 Initialize-Adb
 Assert-Debug-App
-if ($isAi -and $Interruptions -lt $AiRecommendedInterruptions) {
+if (($isAi -or $isShare) -and $Interruptions -lt $AiRecommendedInterruptions) {
   Write-Log ("ATTENZIONE: il par. 5.5 chiede almeno {0} interruzioni sul telefono; questa prova ne fa {1}." -f $AiRecommendedInterruptions, $Interruptions)
+}
+if ($isShare -and (Test-Path -LiteralPath $Manifest)) {
+  $count = @(Get-Content -LiteralPath $Manifest | Where-Object { $_ -like "phone=*" }).Count
+  Write-Log "Manifesto della condivisione: $count media. Il primo backup e la condivisione devono essere gia' partiti nell'app."
 }
 if ($isBackup -and (Test-Path -LiteralPath $Manifest)) {
   $count = @(Get-Content -LiteralPath $Manifest | Where-Object { $_ -like "phone=*" }).Count
@@ -1160,6 +1336,9 @@ if ($exitCode -eq 0 -and $Verify) {
   if ($isAi) {
     Write-Log "Verifica dei dati sul telefono (sola lettura)..."
     try { $exitCode = Invoke-VerifyAi } finally { Save-Log }
+  } elseif ($isShare) {
+    Write-Log "Verifica della condivisione: impronte del telefono e area di prova (sola lettura)..."
+    $exitCode = Invoke-VerifyShare
   } elseif ($isBackup) {
     Write-Log "Verifica del backup: impronte del telefono e invarianti sull'area di prova..."
     $exitCode = Invoke-VerifyBackup

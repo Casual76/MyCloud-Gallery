@@ -46,4 +46,9 @@ dependencies {
 
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
+  // P4 (riga del §4.4): le righe del §2.5 e del §2.6 anche con il motore vero delle operazioni (core-nasops) sul NAS finto e sul simulatore
+  // SMB di core-nas con la sessione e le primitive vere. Solo nei test: il codice di produzione non vede core-nasops ne' core-nas
+  // (Phase7ArchitectureTest), e nessun test nomina le conferme di core-nasops o le primitive di scrittura (Phase4/Phase7ArchitectureTest).
+  testImplementation project(':core-nasops')
+  testImplementation project(':core-nas')
 }

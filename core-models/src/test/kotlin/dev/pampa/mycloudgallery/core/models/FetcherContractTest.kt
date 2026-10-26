@@ -85,7 +85,8 @@ abstract class FetcherContractBase {
   fun unFileDiUnAltraLunghezzaNonEIlModello() {
     for (content in listOf(bytes + byteArrayOf(0), bytes.copyOf(bytes.size - 1))) {
       serve(content)
-      assertThat(fetchToTheEnd()).isEqualTo(FetchResult.Mismatch)
+      // Un file di un'altra lunghezza e' un altro file: lo si vede prima di leggere (SizeMismatch), il parziale di altri non si butta (R13).
+      assertThat(fetchToTheEnd()).isEqualTo(FetchResult.SizeMismatch)
     }
   }
 

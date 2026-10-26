@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.models
 
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
+import dev.pampa.mycloudgallery.core.models.contract.FileStatReader
 import dev.pampa.mycloudgallery.core.models.contract.ModelCounters
 import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
@@ -34,7 +35,10 @@ import kotlinx.coroutines.Dispatchers
  * @param shelfFor lo scaffale sul NAS, costruito con i file verificati (che pubblica); senza NAS: nessuno.
  * @param area l'area comune (copie dei dispositivi e cartella dal PC); null = niente NAS, restano gli indirizzi HTTPS.
  * @param freeSpace lo spazio libero del volume (E-A3).
- * @param clock l'ora del NAS, per "due errori in un giorno" (E-A2); senza, vale solo nel processo.
+ * @param clock l'ora del NAS, per "due errori in un giorno" (E-A2). Senza (o quando l'ora del NAS non c'e' ancora: fuori casa, senza VPN) gli
+ *   errori si ricordano solo nel processo, con l'orologio monotono (R10).
+ * @param statReader lo `stat` del file preso durante la verifica (I1): `PATH_CHECKED` lo confronta con quello del percorso. Solo `:app` lo da'
+ *   (`AndroidFileStatReader`); sulla JVM nessuno.
  * @param progressPoll ogni quanto lo stato legge l'avanzamento dal file parziale (zero = mai).
  */
 class LocalModels(
@@ -50,9 +54,10 @@ class LocalModels(
   nanos: () -> Long = System::nanoTime,
   progressPoll: Duration = 500.milliseconds,
   val counters: ModelCounters = ModelCounters(),
+  statReader: FileStatReader = FileStatReader.None,
 ) {
   private val store = ModelStore(root, catalog, nanos, counters)
-  private val verifier = ModelVerifier(store)
+  private val verifier = ModelVerifier(store, statReader)
 
   /** Il solo modo di caricare un modello: verifica dimensione e SHA-256 a OGNI apertura (E-A11). */
   val files: ModelFiles = LocalModelFiles(store, verifier, io)
@@ -68,7 +73,12 @@ class LocalModels(
     area = area,
     gate = networkGate,
     freeSpace = freeSpace,
-    strikes = SourceStrikes(store.strikesFile(), clock?.let { c -> { c.nowMillis() } } ?: { nanos() / 1_000_000 }),
+    strikes = SourceStrikes(
+      file = store.strikesFile(),
+      // R10: senza l'ora del NAS `nowMillis()` lancia; per le quarantene vuol dire "non so" (null), non un errore.
+      nowMillis = { clock?.let { c -> runCatching { c.nowMillis() }.getOrNull() } },
+      monotonicMillis = { nanos() / 1_000_000 },
+    ),
     io = io,
     progressPoll = progressPoll,
   )
@@ -81,4 +91,27 @@ class LocalModels(
    * `Verifying`, mai `Ready`).
    */
   suspend fun refresh() = local.refresh()
+
+  /**
+   * D18, MO-4: pubblica sul NAS le copie dei modelli verificati qui (se nessun'altra famiglia di dispositivi ce l'ha gia') e toglie le proprie che
+   * l'app non elenca piu'. Quante copie ha scritto. Lo chiama il lavoro dei modelli in background.
+   */
+  suspend fun shareOnNas(): Int = local.shareOnNas()
+
+  private val refreshed = java.util.concurrent.atomic.AtomicBoolean(false)
+
+  /**
+   * [refresh] una volta sola per questo oggetto (cioe' per processo): il lavoro periodico dei modelli lo chiamava a ogni giro e rileggeva
+   * per intero circa 1,1 GB (MO-7). Chi apre un modello lo verifica comunque, a ogni apertura.
+   */
+  suspend fun refreshOnce() {
+    if (refreshed.compareAndSet(false, true)) {
+      try {
+        local.refresh()
+      } catch (t: Throwable) {
+        refreshed.set(false)
+        throw t
+      }
+    }
+  }
 }

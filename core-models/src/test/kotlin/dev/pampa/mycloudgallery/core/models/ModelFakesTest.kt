@@ -48,7 +48,7 @@ class ModelFakesTest {
 
     val tooBig = ModelSource.Https(PinnedUrl.of("https://huggingface.co/x/z.litertlm")!!)
     fetcher.serve(tooBig, ByteArray(10_001))
-    assertThat(fetcher.fetch(spec, tooBig, dir.resolve("partial/z.part"), 1.seconds)).isEqualTo(FetchResult.Mismatch)
+    assertThat(fetcher.fetch(spec, tooBig, dir.resolve("partial/z.part"), 1.seconds)).isEqualTo(FetchResult.SizeMismatch)
     assertThat(fetcher.fetch(spec, ModelSource.PcFolder("comune"), dir.resolve("partial/w.part"), 1.seconds)).isEqualTo(FetchResult.NotFound)
   }
 

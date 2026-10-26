@@ -20,9 +20,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 // Lo SCARICAMENTO HTTPS dei modelli (docs/fase6-progetto.md §2.1 "HTTPS", D17, D33, E-A1, E-S16). L'UNICO codice HTTPS dell'app.
 //
@@ -38,7 +41,11 @@ import kotlinx.coroutines.launch
 //  - mai piu' byte della dimensione fissata: una lunghezza dichiarata diversa si rifiuta prima di leggere, un flusso piu' lungo si
 //    ferma e si scarta ([FetchResult.Mismatch]);
 //  - scadenze di 15 s per la connessione e 30 s per ogni lettura; il tempo del chiamante si rispetta ai confini di blocco;
-//  - traffico registrato a ogni blocco; annullamento = chiusura della connessione.
+//  - traffico registrato a ogni blocco; annullamento = chiusura della connessione, e `fetch` **aspetta** (non annullabile, con un tetto di un
+//    secondo, [ABORT_WAIT_MS]) che il lavoro staccato finisca: un secondo scaricamento che parte subito dopo trova il parziale fermo, non un lavoro
+//    vecchio che lo tronca (R13). Nessuna scrittura (ne' del parziale ne' del validatore) dopo un annullamento;
+//  - un `200` al posto di `206` in ripresa (il CDN cambia ETag a ogni richiesta, `If-Range` non torna) riparte da zero **una volta** e da
+//    quel momento il parziale riprende con il solo `Range`, senza `If-Range` (R13): l'integrita' la da' l'impronta finale.
 // Il gestore (non questa classe) decide la sorgente, il cancello di rete, lo spazio, l'impronta e la rinomina in `models/<sha256>`.
 
 internal class HttpsModelFetcher(
@@ -96,6 +103,9 @@ internal class HttpsModelFetcher(
       // Chi ha chiesto ha rinunciato: il lavoro si ferma al prossimo controllo (non scrive piu' niente) e la connessione si chiude.
       worker.cancel()
       attempt.abort()
+      // Il lavoro staccato si ferma entro la scadenza della lettura, ma qui non si aspetta cosi' a lungo: la connessione e' appena stata
+      // chiusa e di norma la lettura bloccata ritorna subito. Aspettiamo anche se siamo stati annullati (R13).
+      withContext(NonCancellable) { withTimeoutOrNull(ABORT_WAIT_MS) { worker.join() } }
       throw c
     }
   }
@@ -119,6 +129,9 @@ internal class HttpsModelFetcher(
       try {
         prepare(connection, offset, if (offset > 0) ETags.read(partial) else null)
         val status = connection.responseCode
+        // Annullati mentre si aspettava la risposta: niente di quello che segue (validatore, apertura e troncamento del parziale) deve avvenire,
+        // un altro scaricamento potrebbe gia' usare il parziale (R13).
+        coroutineContext.ensureActive()
         when {
           status in REDIRECTS -> {
             when (val decision = RedirectPolicy.decide(url, connection.getHeaderField("Location"))) {
@@ -132,9 +145,11 @@ internal class HttpsModelFetcher(
           status == 200 -> {
             if (connection.contentEncoding.isCompressed()) return FetchResult.Refused(FetchRefusal.ENCODING)
             val declared = connection.getHeaderFieldLong("Content-Length", -1)
-            // Una lunghezza dichiarata diversa da quella fissata e' un altro file: non si legge un byte (E-S16).
-            if (declared >= 0 && declared != total) return FetchResult.Mismatch
-            ETags.save(partial, connection.getHeaderField("ETag"))
+            // Una lunghezza dichiarata diversa da quella fissata e' un altro file: non si legge un byte (E-S16). Il parziale non c'entra.
+            if (declared >= 0 && declared != total) return FetchResult.SizeMismatch
+            // Un `200` in ripresa: il validatore non torna piu' (o il server non conosce `Range`). Si riparte da zero, e da qui in poi il
+            // parziale riprende col solo `Range` (R13); un `200` alla prima richiesta salva l'ETag come sempre.
+            if (offset > 0) ETags.markNoValidator(partial) else ETags.save(partial, connection.getHeaderField("ETag"))
             // Il server ha ignorato `Range` (o `If-Range` non tornava): si riparte da zero (§2.1).
             return receive(connection, spec, partial, startAt = 0, start, budgetNanos)
           }
@@ -143,7 +158,7 @@ internal class HttpsModelFetcher(
             if (connection.contentEncoding.isCompressed()) return FetchResult.Refused(FetchRefusal.ENCODING)
             val range = ContentRange.parse(connection.getHeaderField("Content-Range")) ?: return FetchResult.Refused(FetchRefusal.CONTENT_RANGE)
             if (range.start != offset || range.end != total - 1) return FetchResult.Refused(FetchRefusal.CONTENT_RANGE)
-            if (range.total != null && range.total != total) return FetchResult.Mismatch
+            if (range.total != null && range.total != total) return FetchResult.SizeMismatch
             val declared = connection.getHeaderFieldLong("Content-Length", -1)
             if (declared >= 0 && declared != range.end - range.start + 1) return FetchResult.Refused(FetchRefusal.CONTENT_RANGE)
             ETags.save(partial, connection.getHeaderField("ETag"))
@@ -203,6 +218,7 @@ internal class HttpsModelFetcher(
   ): FetchResult {
     val total = spec.sizeBytes
     val expected = total - startAt
+    coroutineContext.ensureActive()
     val input = try {
       connection.inputStream
     } catch (e: IOException) {
@@ -265,6 +281,13 @@ internal class HttpsModelFetcher(
 
   private companion object {
     val REDIRECTS = setOf(301, 302, 303, 307, 308)
+
+    /**
+     * Quanto aspetta, al massimo, la fine del lavoro staccato dopo un annullamento. Poco: serve a coprire il lavoro che sta *scrivendo* (pochi
+     * millisecondi), non una lettura bloccata sul socket, che prima di scrivere qualunque cosa controlla l'annullamento (`ensureActive`) e si ferma da
+     * sola. Chi annulla (`remove`, "Rimuovi") non deve aspettare la scadenza di lettura.
+     */
+    const val ABORT_WAIT_MS: Long = 1_000
   }
 }
 

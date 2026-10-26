@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.models.store
 
 import dev.pampa.mycloudgallery.core.models.contract.ModelCounters
 import dev.pampa.mycloudgallery.core.models.contract.ModelId
+import dev.pampa.mycloudgallery.core.models.contract.ModelSource
 import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
@@ -17,8 +18,10 @@ import kotlinx.coroutines.sync.Mutex
 // una per profilo Android. Qui sta la geografia dei file e lo stato che il resto dell'app vede.
 //
 //   models/<sha256>                 il modello VERIFICATO (nome = impronta del catalogo): in questa cartella non entra altro
-//   models/partial/<sha256>.part    lo scaricamento in corso (e, accanto, `.part.etag`: il validatore di una ripresa)
-//   models/meta/<sha256>            da dove e' arrivato il modello (una riga: il tipo di sorgente); `meta/strikes`: gli errori delle sorgenti
+//   models/partial/<sha256>.part    lo scaricamento in corso (e, accanto, `.part.etag`: il validatore di una ripresa; `.part.src`: ogni
+//                                   sorgente che ha scritto nel parziale, R13)
+//   models/meta/<sha256>            da dove e' arrivato il modello (una riga: il tipo di sorgente); `meta/<sha256>.removed`: l'utente l'ha
+//                                   tolto con "Rimuovi" e i lavori in background non lo riprendono (MO-3); `meta/strikes`: gli errori delle sorgenti
 //   models/cache/<sha256>-<backend> i programmi compilati dei motori (li scrive core-ai, li toglie questa classe quando il modello cambia)
 //
 // Invariante 2 del §5.5: in `models/` stanno solo file con dimensione e SHA-256 del catalogo. Un file arriva li' soltanto con una
@@ -69,6 +72,27 @@ internal class ModelStore(
       null
     } ?: ModelSourceKind.HTTPS
 
+  // --- "Rimuovi" dura (MO-3) -----------------------------------------------------------------------------------------------
+
+  private fun removedFile(spec: ModelSpec): File = File(File(root, META_DIR), spec.sha256.hex + REMOVED_SUFFIX)
+
+  /** L'utente ha tolto questo modello con "Rimuovi": i lavori automatici non lo riscaricano finche' non lo chiede lui (o accende il ruolo). */
+  fun removedByUser(spec: ModelSpec): Boolean = removedFile(spec).isFile
+
+  fun setRemovedByUser(spec: ModelSpec, removed: Boolean) {
+    try {
+      val file = removedFile(spec)
+      if (removed) {
+        file.parentFile?.mkdirs()
+        file.writeText("1", Charsets.US_ASCII)
+      } else {
+        file.delete()
+      }
+    } catch (e: IOException) {
+      // Solo una preferenza: senza il segno il giro periodico riprende il modello, come prima.
+    }
+  }
+
   fun writeSource(spec: ModelSpec, kind: ModelSourceKind) {
     try {
       val file = metaFile(spec)
@@ -79,17 +103,29 @@ internal class ModelStore(
     }
   }
 
-  /** I programmi compilati dei motori di un modello (`cache/<sha256>-<backend>/`). */
+  /**
+   * I programmi compilati dei motori di un modello (`cache/<sha256>-<backend>/`) e i piccoli file accanto che li riguardano (la memoria di
+   * una GPU che ha fatto cadere il processo, `cache/<sha256>-gpu.trial` e `.crashes`, R9): vanno via insieme al modello.
+   */
   private fun cacheDirs(spec: ModelSpec): List<File> =
-    File(root, CACHE_DIR).listFiles { f -> f.isDirectory && f.name.startsWith(spec.sha256.hex + "-") }?.toList().orEmpty()
+    File(root, CACHE_DIR).listFiles { f -> f.name.startsWith(spec.sha256.hex + "-") }?.toList().orEmpty()
 
   /** Toglie il file verificato, la nota e i programmi compilati. True se il file verificato non c'e' piu'. */
   fun deleteVerified(spec: ModelSpec): Boolean {
     cacheDirs(spec).forEach { it.deleteRecursively() }
     metaFile(spec).delete()
     val file = finalFile(spec)
-    file.delete()
+    deleteFile(file)
     return !file.exists()
+  }
+
+  /** Toglie un file anche se e' in sola lettura (il modello verificato lo e': su Windows, dove girano i test, non si toglie altrimenti). */
+  private fun deleteFile(file: File) {
+    if (!file.exists()) return
+    if (!file.delete()) {
+      file.setWritable(true)
+      file.delete()
+    }
   }
 
   /** Toglie il parziale, il suo validatore e la nota di provenienza. */
@@ -108,23 +144,37 @@ internal class ModelStore(
     File(partial.path + SOURCE_SUFFIX).delete()
   }
 
-  /** Chi ha scritto per ultimo il parziale (una riga con il tipo di sorgente): serve a dire da dove arriva un file finito dopo una ripartenza. */
-  fun writePartialSource(spec: ModelSpec, kind: ModelSourceKind) {
+  /**
+   * Chi ha scritto nel parziale (R13): una riga per sorgente, nell'ordine in cui hanno scritto, `<tipo> <identita'>` (l'identita' e' quella con
+   * cui si contano gli errori della sorgente, mai un indirizzo ne' un nome). Serve a dire da dove arriva un file finito dopo una ripartenza e,
+   * soprattutto, **a chi dare la colpa** se non torna: byte sbagliati letti a meta' dalla cartella dal PC e completati da HTTPS non sono
+   * colpa di Hugging Face. Una sorgente gia' in coda alla nota non si ripete.
+   */
+  fun writePartialSource(spec: ModelSpec, writer: PartialWriter) {
     try {
       val partial = partialFile(spec)
       partial.parentFile?.mkdirs()
-      File(partial.path + SOURCE_SUFFIX).writeText(kind.name, Charsets.US_ASCII)
+      val note = File(partial.path + SOURCE_SUFFIX)
+      val lines = readWriterLines(note)
+      val line = writer.line()
+      if (lines.lastOrNull() == line) return
+      note.writeText((lines + line).takeLast(MAX_WRITERS).joinToString("\n"), Charsets.US_ASCII)
     } catch (e: IOException) {
-      // Solo un'etichetta.
+      // Solo un'etichetta: senza la nota nessuno ha la colpa di niente (si riprova da zero senza segnare errori).
     }
   }
 
-  fun readPartialSource(spec: ModelSpec): ModelSourceKind? =
+  /** Tutte le sorgenti che hanno scritto nel parziale, dalla prima. Una nota vecchia (solo il tipo) vale una sorgente di identita' ignota. */
+  fun readPartialWriters(spec: ModelSpec): List<PartialWriter> =
+    readWriterLines(File(partialFile(spec).path + SOURCE_SUFFIX)).mapNotNull { PartialWriter.parse(it) }
+
+  fun readPartialSource(spec: ModelSpec): ModelSourceKind? = readPartialWriters(spec).lastOrNull()?.kind
+
+  private fun readWriterLines(note: File): List<String> =
     try {
-      File(partialFile(spec).path + SOURCE_SUFFIX).takeIf { it.isFile && it.length() < 64 }?.readText(Charsets.US_ASCII)?.trim()
-        ?.let { name -> ModelSourceKind.entries.firstOrNull { it.name == name } }
+      if (note.isFile && note.length() < 1024) note.readText(Charsets.US_ASCII).lines().filter { it.isNotBlank() } else emptyList()
     } catch (e: IOException) {
-      null
+      emptyList()
     }
 
   /** Quanti byte occupa il file verificato (0 se manca). */
@@ -134,14 +184,18 @@ internal class ModelStore(
   fun partialBytes(): Long =
     File(root, PARTIAL_DIR).listFiles()?.filter { it.isFile && it.name.endsWith(PART_SUFFIX) }?.sumOf { it.length() } ?: 0
 
-  /** Sposta il parziale verificato al suo posto: rinomina atomica, il file verificato non e' mai a meta'. */
+  /**
+   * Sposta il parziale verificato al suo posto: rinomina atomica, il file verificato non e' mai a meta'. Il file verificato e' **in sola
+   * lettura** (D16, I1): una scrittura per sbaglio dell'app sul modello verificato non passa inosservata.
+   */
   fun promote(spec: ModelSpec) {
     val partial = partialFile(spec)
     val target = finalFile(spec)
-    Files.deleteIfExists(target.toPath())
+    deleteFile(target)
     root.mkdirs()
     Files.move(partial.toPath(), target.toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE)
     File(partial.path + ETAG_SUFFIX).delete()
+    target.setReadOnly()
   }
 
   /**
@@ -149,15 +203,18 @@ internal class ModelStore(
    * nome e' un'impronta (e solo quelli) che non e' nel catalogo. Il resto della cartella non si tocca.
    */
   fun removeUnlisted() {
-    root.listFiles()?.forEach { f -> if (f.isFile && SHA.matches(f.name) && f.name !in shas) f.delete() }
+    root.listFiles()?.forEach { f -> if (f.isFile && SHA.matches(f.name) && f.name !in shas) deleteFile(f) }
     File(root, PARTIAL_DIR).listFiles()?.forEach { f ->
       val sha = PARTIAL_NAME.matchEntire(f.name)?.groupValues?.get(1)
       if (f.isFile && sha != null && sha !in shas) f.delete()
     }
-    File(root, META_DIR).listFiles()?.forEach { f -> if (f.isFile && SHA.matches(f.name) && f.name !in shas) f.delete() }
+    File(root, META_DIR).listFiles()?.forEach { f ->
+      val sha = META_NAME.matchEntire(f.name)?.groupValues?.get(1)
+      if (f.isFile && sha != null && sha !in shas) f.delete()
+    }
     File(root, CACHE_DIR).listFiles()?.forEach { f ->
       val sha = CACHE_NAME.matchEntire(f.name)?.groupValues?.get(1)
-      if (f.isDirectory && sha != null && sha !in shas) f.deleteRecursively()
+      if (sha != null && sha !in shas) f.deleteRecursively()
     }
   }
 
@@ -175,10 +232,45 @@ internal class ModelStore(
     const val PART_SUFFIX: String = ".part"
     const val ETAG_SUFFIX: String = ".etag"
     const val SOURCE_SUFFIX: String = ".src"
+    const val REMOVED_SUFFIX: String = ".removed"
     const val STRIKES: String = "strikes"
 
+    /** Quante sorgenti diverse ricorda la nota di un parziale (sono al piu' tre o quattro: NAS, HTTPS, cartella dal PC). */
+    private const val MAX_WRITERS = 8
+
     private val SHA = Regex("^[0-9a-f]{64}$")
+    private val META_NAME = Regex("^([0-9a-f]{64})(\\.removed)?$")
     private val PARTIAL_NAME = Regex("^([0-9a-f]{64})\\.part(\\.etag|\\.src)?$")
     private val CACHE_NAME = Regex("^([0-9a-f]{64})-.+$")
+  }
+}
+
+/**
+ * Una sorgente che ha scritto nel parziale (R13): il tipo (per dire "da dove arriva") e l'**identita'** con cui si contano gli errori
+ * (`nas:<dispositivo>`, `https:<host>`, `pc`, `bundled`): mai un indirizzo intero, un percorso o un nome di file. Identita' ignota = una nota
+ * scritta prima di questa regola: non si puo' dare la colpa a nessuno.
+ */
+internal data class PartialWriter(val kind: ModelSourceKind, val id: String) {
+  fun line(): String = "${kind.name} $id"
+
+  companion object {
+    private val ID = Regex("^[A-Za-z0-9._:-]{1,120}$")
+
+    const val UNKNOWN = "?"
+
+    fun of(source: ModelSource): PartialWriter =
+      when (source) {
+        is ModelSource.NasCopy -> PartialWriter(ModelSourceKind.NAS, "nas:${source.device}")
+        is ModelSource.Https -> PartialWriter(ModelSourceKind.HTTPS, "https:${source.url.host}")
+        is ModelSource.PcFolder -> PartialWriter(ModelSourceKind.PC_FOLDER, "pc")
+        is ModelSource.Bundled -> PartialWriter(ModelSourceKind.BUNDLED, "bundled")
+      }
+
+    fun parse(line: String): PartialWriter? {
+      val parts = line.trim().split(' ')
+      val kind = ModelSourceKind.entries.firstOrNull { it.name == parts[0] } ?: return null
+      val id = parts.getOrNull(1)?.takeIf { ID.matches(it) } ?: UNKNOWN
+      return PartialWriter(kind, id)
+    }
   }
 }

@@ -4,11 +4,13 @@ import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.models.contract.FetchRefusal
 import dev.pampa.mycloudgallery.core.models.contract.FetchResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelHosts
+import dev.pampa.mycloudgallery.core.models.contract.ModelHttpsRoute
 import dev.pampa.mycloudgallery.core.models.contract.ModelSource
 import dev.pampa.mycloudgallery.core.models.contract.ModelTraffic
 import dev.pampa.mycloudgallery.core.models.download.https.ETags
 import dev.pampa.mycloudgallery.core.models.download.https.HttpsConnections
 import dev.pampa.mycloudgallery.core.models.download.https.HttpsModelFetcher
+import dev.pampa.mycloudgallery.core.models.download.https.NetworkBoundConnections
 import dev.pampa.mycloudgallery.core.models.support.FileBehavior
 import dev.pampa.mycloudgallery.core.models.support.HttpsTestServer
 import dev.pampa.mycloudgallery.core.models.support.RecordedRequest
@@ -18,10 +20,16 @@ import dev.pampa.mycloudgallery.core.models.support.TestExchange
 import dev.pampa.mycloudgallery.core.models.support.TestModels
 import dev.pampa.mycloudgallery.core.models.support.TrafficCounter
 import dev.pampa.mycloudgallery.core.models.support.serve
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
 import java.net.CookieHandler
 import java.net.CookieManager
 import java.net.URL
+import java.security.cert.Certificate
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import javax.net.ssl.HttpsURLConnection
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -32,6 +40,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -227,7 +236,8 @@ class HttpsModelFetcherTest {
     assertThat(partial.readBytes()).isEqualTo(bytes)
     val resumed = server.requests.last()
     assertThat(resumed.header("If-Range")).isEqualTo("\"v1\"")
-    assertThat(ETags.read(partial)).isEqualTo("\"v2\"")
+    // R13: da quel `200` il parziale non ha piu' un validatore: il CDN lo cambia a ogni richiesta e `If-Range` non tornerebbe mai.
+    assertThat(ETags.read(partial)).isNull()
   }
 
   @Test
@@ -301,7 +311,7 @@ class HttpsModelFetcherTest {
   fun unaLunghezzaDichiarataOltreLaDimensioneFissataSiRifiutaPrimaDiLeggere() {
     val bigger = FileBehavior(bytes + ByteArray(100))
     server.handler = { exchange, _ -> exchange.serve(bigger) }
-    assertThat(fetch()).isEqualTo(FetchResult.Mismatch)
+    assertThat(fetch()).isEqualTo(FetchResult.SizeMismatch)
     assertThat(partial.exists()).isFalse()
     assertThat(traffic.total).isEqualTo(0)
   }
@@ -310,7 +320,7 @@ class HttpsModelFetcherTest {
   fun unaLunghezzaDichiarataPiuCortaDellaDimensioneFissataSiRifiuta() {
     val shorter = FileBehavior(bytes.copyOf(bytes.size - 100))
     server.handler = { exchange, _ -> exchange.serve(shorter) }
-    assertThat(fetch()).isEqualTo(FetchResult.Mismatch)
+    assertThat(fetch()).isEqualTo(FetchResult.SizeMismatch)
     assertThat(partial.exists()).isFalse()
   }
 
@@ -397,7 +407,7 @@ class HttpsModelFetcherTest {
     // Un totale diverso da quello fissato e' un altro file.
     behavior.contentRange = { from, end, total -> "bytes $from-$end/${total + 1}" }
     serveFile()
-    assertThat(fetch()).isEqualTo(FetchResult.Mismatch)
+    assertThat(fetch()).isEqualTo(FetchResult.SizeMismatch)
   }
 
   private fun assertWithName(name: String, actual: FetchResult, expected: FetchResult) {
@@ -631,6 +641,121 @@ class HttpsModelFetcherTest {
     }
     // Senza la chiusura della connessione la lettura bloccata durerebbe fino ai 25 s di scadenza.
     assertThat(seconds).isLessThan(5.0)
+  }
+
+  // --- R12: la rete approvata dal cancello ---------------------------------------------------------------------------------------------
+
+  /**
+   * R12: la connessione usciva sulla rete predefinita del sistema, non su quella che il cancello aveva giudicato (a casa, con i dati mobili resi
+   * predefiniti da One UI, fino a 370 MB senza conferma). Con una rotta la rete si chiede a ogni connessione; senza rete approvata la connessione
+   * non si apre e **non** si ripiega sulla rete predefinita.
+   */
+  @Test
+  fun r12_senzaUnaReteApprovataLaConnessioneNonSiApreEIlFetcherDiceNonAdesso() {
+    serveFile()
+    var asked = 0
+    val route = ModelHttpsRoute {
+      asked++
+      null
+    }
+    assertThrows(IOException::class.java) { NetworkBoundConnections(route).open("https://huggingface.co/x") }
+    assertThat(asked).isEqualTo(1)
+    asked = 0
+    val result = fetch(fetcher = fetcher(connections = NetworkBoundConnections(route)))
+    assertThat(result).isEqualTo(FetchResult.NetworkError)
+    assertThat(asked).isEqualTo(1)
+    // Il server di prova non ha visto niente: nessun ripiego su un'altra via.
+    assertThat(server.requests).isEmpty()
+    assertThat(traffic.total).isEqualTo(0)
+    assertThat(partial.exists()).isFalse()
+  }
+
+  @Test
+  fun r12_laRotaDelMontaggioPubblicoEOpzionaleEDiSerieNonCambiaNiente() {
+    // `ModelFetchers.create` senza rotta e con rotta producono un fetcher; la rotta e' un'aggiunta, non un obbligo.
+    val nas = dev.pampa.mycloudgallery.core.nas.testing.InMemoryNasMedia().reader
+    val assets = dev.pampa.mycloudgallery.core.models.contract.BundledAssets { null }
+    assertThat(dev.pampa.mycloudgallery.core.models.ModelFetchers.create(nas, assets, traffic)).isNotNull()
+    assertThat(dev.pampa.mycloudgallery.core.models.ModelFetchers.create(nas, assets, traffic, httpsRoute = ModelHttpsRoute { null })).isNotNull()
+  }
+
+  // --- R13: il validatore dopo un 200, e l'annullamento che non tronca il parziale ---------------------------------------------------
+
+  /** R13: un CDN che cambia ETag a ogni richiesta rispondeva `200` a ogni ripresa e si riscaricava sempre lo stesso prefisso. */
+  @Test
+  fun r13_dopoUn200InRipresaIlParzialeRiprendeConIlSoloRange() {
+    behavior.cutBodyAt = TestModels.BLOCK.toLong() + 100
+    serveFile()
+    assertThat(fetch()).isEqualTo(FetchResult.Partial(TestModels.BLOCK.toLong()))
+    // L'ETag cambia: `If-Range` non torna, `200` con tutto il file; la connessione cade dopo due blocchi.
+    behavior.etag = "\"v2\""
+    behavior.cutBodyAt = 2L * TestModels.BLOCK + 100
+    assertThat(fetch()).isEqualTo(FetchResult.Partial(2L * TestModels.BLOCK))
+    assertThat(ETags.read(partial)).isNull()
+    // E il CDN cambia ETag ancora: la ripresa ora non manda `If-Range`, quindi riprende dai due blocchi invece di ripartire da zero.
+    behavior.etag = "\"v3\""
+    behavior.cutBodyAt = null
+    assertThat(fetch()).isEqualTo(FetchResult.Done)
+    assertThat(partial.readBytes()).isEqualTo(bytes)
+    val last = server.requests.last()
+    assertThat(last.header("Range")).isEqualTo("bytes=${2L * TestModels.BLOCK}-")
+    assertThat(last.has("If-Range")).isFalse()
+  }
+
+  /** R13: una risposta arrivata dopo l'annullamento non deve aprire (e troncare) il parziale che un altro scaricamento puo' gia' usare. */
+  @Test
+  fun r13_annullatoInAttesaDellaRispostaNonTroncaIlParziale() {
+    partial.parentFile.mkdirs()
+    val two = TestModels.BLOCK * 2
+    partial.writeBytes(bytes.copyOf(two))
+    val entered = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val stuck = HttpsConnections { url -> StuckConnection(URL(url), entered, release, bytes) }
+    val slow = fetcher(connections = stuck)
+    runBlocking {
+      val job = launch(Dispatchers.Default) { slow.fetch(spec, source, partial, 120.seconds) }
+      assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue()
+      job.cancelAndJoin()
+      // Il server risponde adesso `200` con tutto il file (ignora `Range`): nessuno aspetta piu', il lavoro vecchio non deve scrivere.
+      release.countDown()
+      delay(700)
+    }
+    assertThat(partial.readBytes()).isEqualTo(bytes.copyOf(two))
+    assertThat(ETags.read(partial)).isNull()
+  }
+
+  /** Una connessione la cui risposta si sblocca solo quando lo decide il test (e che ignora `disconnect`, come una lettura bloccata sul socket). */
+  private class StuckConnection(
+    url: URL,
+    private val entered: CountDownLatch,
+    private val release: CountDownLatch,
+    private val body: ByteArray,
+  ) : HttpsURLConnection(url) {
+    override fun getResponseCode(): Int {
+      entered.countDown()
+      release.await()
+      return 200
+    }
+
+    override fun getHeaderField(name: String?): String? = null
+
+    override fun getHeaderFieldLong(name: String?, default: Long): Long = if (name.equals("Content-Length", ignoreCase = true)) body.size.toLong() else default
+
+    override fun getContentEncoding(): String? = null
+
+    override fun getInputStream(): InputStream = ByteArrayInputStream(body)
+
+    override fun disconnect() = Unit
+
+    override fun usingProxy(): Boolean = false
+
+    override fun connect() = Unit
+
+    override fun getCipherSuite(): String = ""
+
+    override fun getLocalCertificates(): Array<Certificate>? = null
+
+    override fun getServerCertificates(): Array<Certificate> = emptyArray()
   }
 
   private companion object {

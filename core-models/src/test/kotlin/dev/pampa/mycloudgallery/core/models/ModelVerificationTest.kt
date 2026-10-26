@@ -105,7 +105,7 @@ class ModelVerificationTest {
     val rig = rig()
     rig.files.open(rig.spec.id)!!.close()
     // Memoria rovinata, ripristino da un backup di sistema, un altro processo: alla verifica dopo non torna piu' (E-A11).
-    RandomAccessFile(rig.finalFile, "rw").use {
+    RandomAccessFile(rig.finalFile.also { it.setWritable(true) }, "rw").use {
       it.seek(2L * TestModels.BLOCK + 17)
       it.write(0x55)
     }
@@ -120,7 +120,7 @@ class ModelVerificationTest {
     val rig = rig()
     repeat(3) { rig.files.open(rig.spec.id)!!.close() }
     // Cambiare il file fra due aperture lo rende rifiutato: nessuna cache di "gia' verificato".
-    RandomAccessFile(rig.finalFile, "rw").use { it.write(byteArrayOf((rig.bytes[0].toInt() xor 1).toByte())) }
+    RandomAccessFile(rig.finalFile.also { it.setWritable(true) }, "rw").use { it.write(byteArrayOf((rig.bytes[0].toInt() xor 1).toByte())) }
     assertThat(rig.files.open(rig.spec.id)).isNull()
   }
 
@@ -130,6 +130,7 @@ class ModelVerificationTest {
     val cache = File(rig.dir, "cache/${rig.spec.sha256.hex}-gpu").apply { mkdirs() }
     File(cache, "prog.bin").writeBytes(ByteArray(10))
     val other = File(rig.dir, "cache/${"a".repeat(64)}-gpu").apply { mkdirs() }
+    rig.finalFile.setWritable(true)
     rig.finalFile.writeBytes(TestModels.flipped(rig.bytes, 3))
     assertThat(rig.files.open(rig.spec.id)).isNull()
     assertThat(cache.exists()).isFalse()
@@ -232,6 +233,7 @@ class ModelVerificationTest {
       rig = ModelRig(bytes)
       rig.installFinal()
       return rig.files to { replacement ->
+        rig.finalFile.setWritable(true)
         if (replacement == null) rig.finalFile.delete() else rig.finalFile.writeBytes(replacement)
       }
     }

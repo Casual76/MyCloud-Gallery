@@ -9,7 +9,9 @@ import dev.pampa.mycloudgallery.core.models.contract.FetchResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
 import dev.pampa.mycloudgallery.core.models.contract.ModelLimits
+import dev.pampa.mycloudgallery.core.models.contract.ModelNetworkGate
 import dev.pampa.mycloudgallery.core.models.contract.ModelNetworkVerdict
+import dev.pampa.mycloudgallery.core.models.contract.ModelShelfDevices
 import dev.pampa.mycloudgallery.core.models.contract.ModelShelfGate
 import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
 import dev.pampa.mycloudgallery.core.models.contract.ShelfResult
@@ -48,6 +50,11 @@ import org.junit.Test
  */
 class ModelWiringTest {
 
+  /** Il cancello di una LAN senza Internet (F48): HTTPS no, il NAS e la cartella dal PC si' (R11: il cancello vale per sorgente). */
+  private val lanOnly = ModelNetworkGate { _, _, source ->
+    if (source == ModelSourceKind.HTTPS) ModelNetworkVerdict.Refused("offline") else ModelNetworkVerdict.Allowed
+  }
+
   @Test
   fun ilTrafficoVaNelRegistroComeCalcoloAiSullaReteEffettiva() = runBlocking<Unit> {
     val ledger = InMemoryTrafficLedger()
@@ -78,8 +85,8 @@ class ModelWiringTest {
     val models = LocalModels(
       root = dir,
       fetcher = ModelFetchers.create(nas.reader, NoBundledAssets, LedgerModelTraffic(ledger) { TrafficNetwork.HOME_WIFI }),
-      networkGate = ClosedModelNetworkGate,
-      shelfFor = { files -> NasModelShelf(me, files, nas.reader, InMemoryShelfWriter(nas, me), ModelShelfGate { null }) },
+      networkGate = lanOnly,
+      shelfFor = { files -> NasModelShelf(me, files, nas.reader, InMemoryShelfWriter(nas, me), ModelShelfGate { null }, ModelShelfDevices { setOf(other) }) },
       area = { share },
       catalog = listOf(spec),
       freeSpace = { Long.MAX_VALUE },
@@ -93,7 +100,8 @@ class ModelWiringTest {
     // Ora il dispositivo ha il modello verificato: lo mette anche nella propria cartella sul NAS, e solo li'.
     assertThat(models.shelf.publish(spec, share)).isEqualTo(ShelfResult.Published)
     assertThat(nas.bytes(share, NasLayout.modelCopy(me, spec.sha256.hex).value)).isEqualTo(bytes)
-    assertThat(models.shelf.copies(share, spec.sha256).map { it.device }).containsExactlyElementsIn(listOf(me, other).sorted())
+    // Lo scaffale non propone mai la copia propria (il dispositivo ha gia' il file): solo quella dell'altro, che e' nel registro firmato.
+    assertThat(models.shelf.copies(share, spec.sha256).map { it.device }).containsExactly(other)
     // Un modello che l'app non elenca piu' si toglie dalla propria cartella, non da quella degli altri.
     assertThat(models.shelf.pruneOwn(share, setOf(Sha256.of(byteArrayOf(1))))).isEqualTo(1)
     assertThat(nas.exists(share, NasLayout.modelCopy(other, spec.sha256.hex).value)).isTrue()
@@ -114,7 +122,7 @@ class ModelWiringTest {
     val models = LocalModels(
       root = dir,
       fetcher = ModelFetchers.create(nas.reader, BundledAssets { name -> if (name == cutout.bundledAsset) ByteArrayInputStream(asset) else null }, traffic),
-      networkGate = ClosedModelNetworkGate,
+      networkGate = lanOnly,
       area = { share },
       catalog = listOf(pcSpec, cutout),
       freeSpace = { Long.MAX_VALUE },
@@ -146,7 +154,7 @@ class ModelWiringTest {
       progressPoll = kotlin.time.Duration.ZERO,
     )
     val result = models.manager.ensure(spec.id, ModelTrigger.USER_NOW, 30.seconds)
-    assertThat(result).isEqualTo(EnsureResult.Failed(dev.pampa.mycloudgallery.core.models.contract.ModelFailCode.NETWORK_REFUSED))
+    assertThat(result).isEqualTo(EnsureResult.Deferred(ModelState.Queued(ModelTrigger.USER_NOW, dev.pampa.mycloudgallery.core.models.contract.ModelWait.NETWORK)))
     assertThat(ledger.entries).isEmpty()
   }
 
@@ -180,7 +188,7 @@ class ModelWiringTest {
   fun inullObjectFallisconoChiusi() = runBlocking<Unit> {
     assertThat(NoModelFiles.open(ModelCatalog.QUERY_270M.id)).isNull()
     assertThat(NoModelManager.ensure(ModelCatalog.QUERY_270M.id, ModelTrigger.USER_NOW, 1.seconds)).isInstanceOf(EnsureResult.Failed::class.java)
-    assertThat(ClosedModelNetworkGate.verdict(ModelTrigger.USER_NOW, 10)).isInstanceOf(ModelNetworkVerdict.Refused::class.java)
+    assertThat(ClosedModelNetworkGate.verdict(ModelTrigger.USER_NOW, 10, ModelSourceKind.HTTPS)).isInstanceOf(ModelNetworkVerdict.Refused::class.java)
     assertThat(ClosedModelShelfGate.blockFor("x")).isNotNull()
     assertThat(NoModelNasArea.commonShare()).isNull()
     assertThat(NoBundledAssets.open("x")).isNull()

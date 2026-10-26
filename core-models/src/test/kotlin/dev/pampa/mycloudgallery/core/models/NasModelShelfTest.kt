@@ -3,7 +3,9 @@ package dev.pampa.mycloudgallery.core.models
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
+import dev.pampa.mycloudgallery.core.models.contract.ModelLimits
 import dev.pampa.mycloudgallery.core.models.contract.ModelShelf
+import dev.pampa.mycloudgallery.core.models.contract.ModelShelfDevices
 import dev.pampa.mycloudgallery.core.models.contract.ModelShelfGate
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
 import dev.pampa.mycloudgallery.core.models.contract.ShelfCopy
@@ -55,7 +57,11 @@ class NasModelShelfTest {
   private val writer = InMemoryShelfWriter(nas, me)
 
   @Volatile private var blocked: String? = null
-  private val shelf = NasModelShelf(me, rig.files, nas.reader, writer, ModelShelfGate { blocked })
+
+  /** I dispositivi del registro firmato (I5): di serie solo `other`; `null` = il registro non si e' potuto leggere. */
+  @Volatile private var trusted: Set<String>? = setOf(other)
+  private val devices = ModelShelfDevices { trusted }
+  private val shelf = NasModelShelf(me, rig.files, nas.reader, writer, ModelShelfGate { blocked }, devices)
 
   private fun pathOf(device: String, sha: Sha256 = spec.sha256): String = NasLayout.modelCopy(device, sha.hex).value
 
@@ -102,7 +108,7 @@ class NasModelShelfTest {
   @Test
   fun dueDispositiviCheSiPubblicanoInsiemeNonSiPestano() = runBlocking<Unit> {
     val otherWriter = InMemoryShelfWriter(nas, other)
-    val otherShelf = NasModelShelf(other, rig.files, nas.reader, otherWriter, ModelShelfGate { null })
+    val otherShelf = NasModelShelf(other, rig.files, nas.reader, otherWriter, ModelShelfGate { null }, devices)
     val results = listOf(
       async(Dispatchers.IO) { shelf.publish(spec, share) },
       async(Dispatchers.IO) { otherShelf.publish(spec, share) },
@@ -201,48 +207,88 @@ class NasModelShelfTest {
 
   @Test
   fun unaSpecificaDiUnaltroDispositivoNonSiCostruisce() {
-    assertThrows(IllegalArgumentException::class.java) { NasModelShelf("non-un-id", rig.files, nas.reader, writer, ModelShelfGate { null }) }
-    assertThrows(IllegalArgumentException::class.java) { NasModelShelf(other, rig.files, nas.reader, writer, ModelShelfGate { null }) }
+    assertThrows(IllegalArgumentException::class.java) { NasModelShelf("non-un-id", rig.files, nas.reader, writer, ModelShelfGate { null }, devices) }
+    assertThrows(IllegalArgumentException::class.java) { NasModelShelf(other, rig.files, nas.reader, writer, ModelShelfGate { null }, devices) }
   }
 
   // --- copies ----------------------------------------------------------------------------------------------------------------------
 
   @Test
-  fun leCopieDeiDispositiviSiLeggonoConLaLoroDimensione() = runBlocking<Unit> {
+  fun leCopieDeiDispositiviFidatiSiLeggonoConLaLoroDimensione() = runBlocking<Unit> {
     val third = TrustIds.random()
+    trusted = setOf(other, third)
     nas.putFile(share, pathOf(other), NasContent.of(bytes))
     nas.putFile(share, pathOf(third), NasContent.of(bytes.copyOf(10)))
     assertThat(publish()).isEqualTo(ShelfResult.Published)
     val copies = shelf.copies(share, spec.sha256)
-    assertThat(copies.map { it.device }).containsExactlyElementsIn(listOf(me, other, third).sorted()).inOrder()
-    assertThat(copies.associate { it.device to it.sizeBytes }).containsExactly(me, bytes.size.toLong(), other, bytes.size.toLong(), third, 10L)
+    // La copia propria non e' una sorgente (il dispositivo ha gia' il file); le altre si.
+    assertThat(copies.map { it.device }).containsExactlyElementsIn(listOf(other, third).sorted()).inOrder()
+    assertThat(copies.associate { it.device to it.sizeBytes }).containsExactly(other, bytes.size.toLong(), third, 10L)
     assertThat(copies.all { it.share == share && it.sha256 == spec.sha256 }).isTrue()
     // Un'altra impronta non ha copie.
     assertThat(shelf.copies(share, ModelCatalog.INDEX_440M.sha256)).isEmpty()
   }
 
+  /** I5 (verifica della Fase 6): chi scrive in `.mycloudgallery/devices/` non fa di una cartella con la forma di un id una sorgente. */
   @Test
-  fun iNomiCheNonSonoUnIdDiDispositivoSiIgnorano() = runBlocking<Unit> {
+  fun i5_unaCartellaConLaFormaDiUnIdNonEUnaSorgenteSeNonEnelRegistroFirmato() = runBlocking<Unit> {
+    val stranger = TrustIds.random()
+    nas.putFile(share, pathOf(stranger), NasContent.of(bytes))
+    nas.putFile(share, pathOf(other), NasContent.of(bytes))
+    assertThat(shelf.copies(share, spec.sha256).map { it.device }).containsExactly(other)
+    // Dopo l'approvazione sul registro firmato, e solo allora, e' una sorgente.
+    trusted = setOf(other, stranger)
+    assertThat(shelf.copies(share, spec.sha256).map { it.device }).containsExactlyElementsIn(listOf(other, stranger).sorted())
+    // Dismesso (fuori dal registro): di nuovo niente.
+    trusted = setOf(other)
+    assertThat(shelf.copies(share, spec.sha256).map { it.device }).containsExactly(other)
+  }
+
+  @Test
+  fun i5_senzaLoElencoFirmatoNonSiLeggeNienteSulNas() = runBlocking<Unit> {
+    nas.putFile(share, pathOf(other), NasContent.of(bytes))
+    trusted = null
+    val reads = nas.statCalls.get() + nas.listCalls.get()
+    assertThat(shelf.copies(share, spec.sha256)).isEmpty()
+    // Nemmeno una stat: senza registro lo scaffale non tocca il NAS.
+    assertThat(nas.statCalls.get() + nas.listCalls.get()).isEqualTo(reads)
+  }
+
+  @Test
+  fun i5_lElencoDelleCartelleDeiDispositiviNonSiLeggeMai() = runBlocking<Unit> {
+    // Una cartella con 300 finti dispositivi non costa 300 letture ne' un elenco: si guardano solo i dispositivi del registro.
+    repeat(300) { nas.putFile(share, pathOf(TrustIds.random()), NasContent.of(ByteArray(3))) }
+    nas.putFile(share, pathOf(other), NasContent.of(bytes))
+    val lists = nas.listCalls.get()
+    val stats = nas.statCalls.get()
+    assertThat(shelf.copies(share, spec.sha256).map { it.device }).containsExactly(other)
+    assertThat(nas.listCalls.get()).isEqualTo(lists)
+    assertThat(nas.statCalls.get() - stats).isEqualTo(1)
+  }
+
+  @Test
+  fun iNomiDelRegistroCheNonSonoUnIdSiIgnorano() = runBlocking<Unit> {
     val sha = spec.sha256.hex
-    for (name in listOf("x y", "ABCDEFGHJKMNPQRSTVWXYZ0123", "a".repeat(25), "0".repeat(27), me.uppercase(), "con")) {
-      nas.putFile(share, ".mycloudgallery/devices/$name/models/$sha", NasContent.of(bytes))
-    }
-    // Un file (non una cartella) con la forma di un id non e' un dispositivo.
-    nas.putFile(share, ".mycloudgallery/devices/${TrustIds.random()}", NasContent.of(bytes))
+    val bad = listOf("x y", "ABCDEFGHJKMNPQRSTVWXYZ0123", "a".repeat(25), "0".repeat(27), me.uppercase(), "con", "../" + other)
+    for (name in bad) nas.putFile(share, ".mycloudgallery/devices/$name/models/$sha", NasContent.of(bytes))
     // Un dispositivo vero, ma con una cartella al posto della copia, o con un collegamento.
     val withDir = TrustIds.random()
     nas.putDir(share, ".mycloudgallery/devices/$withDir/models/$sha")
     val withLink = TrustIds.random()
     nas.putFile(share, ".mycloudgallery/devices/$withLink/models/$sha", NasContent.of(bytes), attributes = NasAttributes.ARCHIVE or NasAttributes.REPARSE_POINT)
+    trusted = bad.toSet() + withDir + withLink
     assertThat(shelf.copies(share, spec.sha256)).isEmpty()
     nas.putFile(share, pathOf(other), NasContent.of(bytes))
+    trusted = (bad + withDir + withLink + other).toSet()
     assertThat(shelf.copies(share, spec.sha256).map { it.device }).containsExactly(other)
   }
 
   @Test
   fun inFamigliaCiSonoPocheCartelleDiDispositivo() = runBlocking<Unit> {
-    repeat(300) { nas.putFile(share, pathOf(TrustIds.random()), NasContent.of(ByteArray(3))) }
-    assertThat(shelf.copies(share, spec.sha256).size).isAtMost(256)
+    val many = List(300) { TrustIds.random() }
+    many.forEach { nas.putFile(share, pathOf(it), NasContent.of(ByteArray(3))) }
+    trusted = many.toSet()
+    assertThat(shelf.copies(share, spec.sha256).size).isAtMost(ModelLimits.MAX_NAS_DEVICES)
   }
 
   @Test
@@ -311,7 +357,7 @@ class NasModelShelfTest {
         return listed
       }
     }
-    val racingShelf = NasModelShelf(me, rig.files, racing, writer, ModelShelfGate { null })
+    val racingShelf = NasModelShelf(me, rig.files, racing, writer, ModelShelfGate { null }, devices)
     assertThat(racingShelf.pruneOwn(share, setOf(spec.sha256))).isEqualTo(0)
     assertThat(nas.exists(share, pathOf(me, old))).isTrue()
     assertThat(runBlocking { writer.deleteOwn(share, SharePath.parse(pathOf(me, old)), 7) }).isEqualTo(ShelfDelete.Changed)
@@ -327,7 +373,7 @@ class NasModelShelfTest {
         for (n in 1..7) {
           val localNas = InMemoryNasMedia().apply { addShare(share) }
           val localWriter = InMemoryShelfWriter(localNas, me)
-          val localShelf = NasModelShelf(me, rig.files, localNas.reader, localWriter, ModelShelfGate { null })
+          val localShelf = NasModelShelf(me, rig.files, localNas.reader, localWriter, ModelShelfGate { null }, devices)
           localNas.putFile(share, pathOf(other), NasContent.of(bytes))
           localNas.putFile(share, pathOf(me, Sha256.of(byteArrayOf(1))), NasContent.of(ByteArray(7)))
           localNas.readFaults = FaultPlan().at(n, phase, fault)
@@ -343,7 +389,7 @@ class NasModelShelfTest {
             localShelf.pruneOwn(share, setOf(spec.sha256))
             assertThat(localShelf.publish(spec, share)).isIn(listOf(ShelfResult.Published, ShelfResult.AlreadyThere))
             assertThat(localNas.bytes(share, pathOf(me))).isEqualTo(bytes)
-            assertThat(localShelf.copies(share, spec.sha256).map { it.device }).containsExactlyElementsIn(listOf(me, other).sorted())
+            assertThat(localShelf.copies(share, spec.sha256).map { it.device }).containsExactlyElementsIn(listOf(other))
           }
           assertThat(localNas.filePaths(share)).containsExactly(pathOf(me), pathOf(other))
         }
@@ -389,8 +435,9 @@ class NasModelShelfTest {
       addForeign(foreign, spec.sha256, 10)
       shelf.publish(spec, share)
       val copies = shelf.copies(share, spec.sha256)
-      assertThat(copies.map { it.device }).containsExactlyElementsIn(listOf(foreign, ownDevice).sorted())
-      assertThat(copies.first { it.device == ownDevice }.sizeBytes).isEqualTo(spec.sizeBytes)
+      // La copia propria non e' una sorgente: il dispositivo ha gia' il file (I5).
+      assertThat(copies.map { it.device }).containsExactly(foreign)
+      assertThat(copies.single().sizeBytes).isEqualTo(10)
     }
 
     @Test
@@ -402,7 +449,7 @@ class NasModelShelfTest {
       addForeign(foreign, stale, 4)
       assertThat(shelf.pruneOwn(share, setOf(spec.sha256))).isEqualTo(1)
       assertThat(shelf.copies(share, stale).map { it.device }).containsExactly(foreign)
-      assertThat(shelf.copies(share, spec.sha256).map { it.device }).containsExactly(ownDevice)
+      assertThat(shelf.copies(share, spec.sha256)).isEmpty()
     }
   }
 
@@ -431,9 +478,12 @@ class NasModelShelfTest {
     override val ownDevice: String = TrustIds.random()
     override val share: String = "test-comune"
     @Volatile private var reason: String? = null
-    override val shelf: ModelShelf = NasModelShelf(ownDevice, rig.files, nas.reader, InMemoryShelfWriter(nas, ownDevice), ModelShelfGate { reason })
+    private val known = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+    override val shelf: ModelShelf =
+      NasModelShelf(ownDevice, rig.files, nas.reader, InMemoryShelfWriter(nas, ownDevice), ModelShelfGate { reason }, ModelShelfDevices { known.toSet() })
 
     override fun addForeign(device: String, sha: Sha256, size: Long) {
+      known += device
       nas.putFile(share, NasLayout.modelCopy(device, sha.hex).value, NasContent.of(ByteArray(size.toInt())))
     }
 

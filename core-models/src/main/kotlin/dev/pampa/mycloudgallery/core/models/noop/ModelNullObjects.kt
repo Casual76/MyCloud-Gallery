@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelNetworkGate
 import dev.pampa.mycloudgallery.core.models.contract.ModelNetworkVerdict
 import dev.pampa.mycloudgallery.core.models.contract.ModelShelf
 import dev.pampa.mycloudgallery.core.models.contract.ModelShelfGate
+import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.models.contract.ModelTraffic
@@ -59,7 +60,7 @@ object NoModelShelf : ModelShelf {
 
 /** Nessuna rete per i modelli. */
 object ClosedModelNetworkGate : ModelNetworkGate {
-  override suspend fun verdict(trigger: ModelTrigger, bytes: Long): ModelNetworkVerdict = ModelNetworkVerdict.Refused("closed")
+  override suspend fun verdict(trigger: ModelTrigger, bytes: Long, source: ModelSourceKind): ModelNetworkVerdict = ModelNetworkVerdict.Refused("closed")
 }
 
 /** P3: nessun traffico registrato. */

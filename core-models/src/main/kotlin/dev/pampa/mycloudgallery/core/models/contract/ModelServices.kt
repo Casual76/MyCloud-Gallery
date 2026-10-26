@@ -50,6 +50,16 @@ enum class ModelTrigger {
 
   /** Il ruolo Indicizzatore e' appena stato acceso (D15). */
   ROLE_CHANGED,
+
+  /**
+   * "Scarica ora" dopo la **conferma** dell'utente sui dati mobili (con la dimensione): vale come [USER_NOW] e in piu' lascia passare i dati
+   * mobili (mai il roaming). La conferma e' parte della richiesta, non uno stato condiviso: nessuna pagina deve ricordarsi di spegnerla (MO-2).
+   */
+  USER_CONFIRMED,
+  ;
+
+  /** Una richiesta dell'utente: scavalca le regole del lavoro in background e la quarantena delle sorgenti (E-A2), e toglie "Rimuovi" (MO-3). */
+  val isUserRequest: Boolean get() = this == USER_NOW || this == USER_CONFIRMED
 }
 
 /** I motivi stabili di un problema (codici, mai messaggi; §2.6). */
@@ -66,15 +76,34 @@ enum class ModelFailCode {
   /** La verifica all'apertura e' fallita: file tolto e rimesso in coda (E-A11). */
   VERIFY_FAILED,
 
-  /** Il cancello di rete non lo permette adesso (roaming, dati mobili senza conferma, nessuna rete validata). */
+  /** Il cancello di rete non lo permette (restano solo i dati mobili senza conferma: il resto e' "in coda", [ModelWait]). */
   NETWORK_REFUSED,
+}
+
+/** Perche' un modello in coda aspetta la rete (MO-8): il motivo lo da' il cancello di rete, non e' un errore da riprovare. */
+enum class ModelWait {
+  /** Nessuna rete utilizzabile (nessuna connessione, non validata, portale). */
+  NETWORK,
+
+  /** In background servono i dati non a consumo (Wi-Fi): quelli mobili non si usano. */
+  WIFI,
+
+  /** Roaming: mai, nemmeno con "Scarica ora". */
+  ROAMING,
 }
 
 /** Lo stato di un modello su questo dispositivo (§1.5, `ModelsState`). */
 sealed interface ModelState {
   data object Absent : ModelState
 
-  data class Queued(val reason: ModelTrigger) : ModelState
+  /** In coda; [waiting] dice, quando c'e', che aspetta la rete (MO-8) e non l'esito di un tentativo. */
+  data class Queued(val reason: ModelTrigger, val waiting: ModelWait? = null) : ModelState
+
+  /**
+   * "Scarica ora" sui dati mobili: serve la conferma dell'utente con la dimensione ([bytes], quanto manca) (MO-2). La pagina chiede
+   * "Scaricare N MB con i dati mobili?"; il "Si'" ripete la richiesta con [ModelTrigger.USER_CONFIRMED].
+   */
+  data class NeedsConfirmation(val bytes: Long) : ModelState
 
   data class Fetching(val source: ModelSourceKind, val done: Long, val total: Long) : ModelState
 
@@ -136,6 +165,12 @@ class VerifiedModel internal constructor(
   val descriptor: FileDescriptor? = null,
   /** Lo stesso file come canale, per le letture per posizione dello scaffale (copia sul NAS dei byte verificati). */
   internal val channel: FileChannel? = null,
+  /**
+   * I1 (revisione di sicurezza della Fase 6): `stat` del file **preso durante la verifica** (dispositivo, inode, dimensione e `ctime`, che
+   * cambia a ogni scrittura anche sullo stesso inode). `PATH_CHECKED` lo confronta con quello del percorso prima e dopo l'inizializzazione
+   * del motore. Null dove non c'e' un lettore di `stat` (i test sulla JVM): allora il motore ripiega sul solo confronto del descrittore.
+   */
+  val stat: FileStat? = null,
 ) : Closeable {
   private val closed = AtomicBoolean(false)
 
@@ -144,6 +179,26 @@ class VerifiedModel internal constructor(
   }
 
   override fun toString(): String = "VerifiedModel(${spec.id})"
+}
+
+/**
+ * Lo `stat` di un file (I1): dispositivo, inode, dimensione e `ctime` in secondi. Il `ctime` cambia a ogni scrittura, anche sullo stesso
+ * inode, e a ogni cambio di permessi: confrontato prima e dopo l'apertura, scopre anche una modifica che non cambia ne' inode ne' dimensione.
+ */
+data class FileStat(val device: Long, val inode: Long, val size: Long, val ctimeSeconds: Long) {
+  /** Lo stesso file di prima: stesso dispositivo, stesso inode, stessa dimensione e stessa `ctime` (una scrittura sullo stesso inode cambia la `ctime`). */
+  fun isSameFileAs(other: FileStat): Boolean =
+    device == other.device && inode == other.inode && size == other.size && ctimeSeconds == other.ctimeSeconds
+}
+
+/** Chi legge lo `stat` del descrittore su cui si verifica (la versione Android e' [dev.pampa.mycloudgallery.core.models.verify.AndroidFileStatReader]). */
+fun interface FileStatReader {
+  fun stat(descriptor: java.io.FileDescriptor): FileStat?
+
+  companion object {
+    /** Nessuno `stat` (JVM): `VerifiedModel.stat` resta null. */
+    val None: FileStatReader = FileStatReader { null }
+  }
 }
 
 /** L'unico modo di avere un modello da caricare (D16, D33). Null = assente, in verifica o rifiutato (in quel caso tolto e rimesso in coda). */
@@ -156,10 +211,16 @@ sealed interface FetchResult {
   /** Il file parziale e' completo (dimensione esatta): resta da verificare l'impronta. */
   data object Done : FetchResult
 
+  /**
+   * La sorgente dice di avere un file di **un'altra dimensione** (la lunghezza dichiarata o la voce sul NAS) e non e' stato letto un solo
+   * byte: la sorgente e' sbagliata (E-A2, E-S16), ma il parziale, scritto da un'altra sorgente, non c'entra e **resta** (R13).
+   */
+  data object SizeMismatch : FetchResult
+
   /** Interrotto dopo [bytes] byte: si riprende da li' (E-A1). */
   data class Partial(val bytes: Long) : FetchResult
 
-  /** Byte diversi da quelli fissati (lunghezza o impronta): parziale tolto, sorgente dopo (E-A2, E-S16). */
+  /** Byte **letti** diversi da quelli fissati (un flusso piu' lungo, un file piu' corto): parziale tolto, sorgente dopo (E-A2, E-S16). */
   data object Mismatch : FetchResult
 
   data object NotFound : FetchResult
@@ -217,9 +278,22 @@ sealed interface ModelNetworkVerdict {
   data class Refused(val reason: String) : ModelNetworkVerdict
 }
 
-/** Il cancello di rete dello scaricamento HTTPS (D17): lo implementa :app (P11) sopra lo stato della rete. Non e' il cancello del NAS. */
+/** I motivi stabili di un [ModelNetworkVerdict.Refused] (codici, mai messaggi): la pagina ne ricava "aspetto il Wi-Fi" o "in roaming non scarico". */
+object ModelGateReason {
+  const val OFFLINE: String = "offline"
+  const val NOT_VALIDATED: String = "not_validated"
+  const val ROAMING: String = "roaming"
+  const val METERED: String = "metered"
+}
+
+/**
+ * Il cancello di rete dello scaricamento (D17, R11): lo implementa :app (P11) sopra lo stato della rete e vale per **ogni** sorgente che usa
+ * la rete, HTTPS, copie sul NAS e cartella dal PC ([source]): mai in roaming, in background mai i dati mobili, con "Scarica ora" i dati mobili
+ * solo dopo la conferma. Per le sorgenti del NAS non conta se Android ha validato l'accesso a Internet (il NAS e' in LAN: il tablet senza
+ * Internet scarica dal NAS, F48). Non e' il cancello del NAS (sessione, recinzione): quello sta dentro core-nas.
+ */
 fun interface ModelNetworkGate {
-  suspend fun verdict(trigger: ModelTrigger, bytes: Long): ModelNetworkVerdict
+  suspend fun verdict(trigger: ModelTrigger, bytes: Long, source: ModelSourceKind): ModelNetworkVerdict
 }
 
 /** I codici della Diagnostica dei modelli (§2.6): il catalogo li raccoglie in feature-diagnostics (P11). */

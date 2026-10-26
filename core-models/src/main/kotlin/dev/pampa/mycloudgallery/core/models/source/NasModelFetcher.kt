@@ -92,7 +92,8 @@ class NasModelFetcher(
     }
     if (entry == null || entry.isDirectory) return FetchResult.NotFound
     if (entry.isReparsePoint) return FetchResult.Refused(FetchRefusal.REPARSE_POINT)
-    if (entry.size != total) return FetchResult.Mismatch
+    // Un'altra dimensione e' un'altra sorgente sbagliata, ma niente e' stato letto: il parziale (di un'altra sorgente) resta (R13).
+    if (entry.size != total) return FetchResult.SizeMismatch
 
     val file = when (val opened = reader.open(where.share, where.path, purpose)) {
       is NasResult.Err -> return mapError(opened.error, partial, total)
@@ -118,7 +119,7 @@ class NasModelFetcher(
   private suspend fun transfer(spec: ModelSpec, file: NasRandomFile, partial: File, offset: Long, start: Long, budgetNanos: Long): FetchResult {
     val total = spec.sizeBytes
     // Il file aperto e' lungo quanto la voce vista un attimo fa? (cambiato in mezzo = un altro file)
-    if (file.size != total) return FetchResult.Mismatch
+    if (file.size != total) return FetchResult.SizeMismatch
     val out = try {
       PartialFile.open(partial, offset)
     } catch (e: IOException) {

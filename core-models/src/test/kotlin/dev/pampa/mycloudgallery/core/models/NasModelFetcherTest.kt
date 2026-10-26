@@ -103,12 +103,12 @@ class NasModelFetcherTest {
   fun unaDimensioneDiversaSiRifiutaPrimaDiLeggereUnByte() {
     for (size in listOf(bytes.size - 1, bytes.size + 1, 0, 10)) {
       putCopy(ByteArray(size) { 5 })
-      assertThat(fetch(fromNas)).isEqualTo(FetchResult.Mismatch)
+      assertThat(fetch(fromNas)).isEqualTo(FetchResult.SizeMismatch)
       assertThat(nas.bytesRead.get()).isEqualTo(0)
       assertThat(partial.exists()).isFalse()
     }
     nas.putFile(share, pcPath, NasContent.of(bytes.copyOf(bytes.size - 1)))
-    assertThat(fetch(fromPc)).isEqualTo(FetchResult.Mismatch)
+    assertThat(fetch(fromPc)).isEqualTo(FetchResult.SizeMismatch)
     assertThat(nas.bytesRead.get()).isEqualTo(0)
   }
 
@@ -194,7 +194,7 @@ class NasModelFetcherTest {
       }
       null
     }
-    assertThat(fetch(fromNas)).isEqualTo(FetchResult.Mismatch)
+    assertThat(fetch(fromNas)).isEqualTo(FetchResult.SizeMismatch)
   }
 
   @Test

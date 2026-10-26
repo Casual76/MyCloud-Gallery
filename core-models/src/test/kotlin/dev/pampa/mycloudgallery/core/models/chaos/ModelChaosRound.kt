@@ -104,6 +104,7 @@ object ModelChaosRound {
     val file = world.finalFile
     if (!file.isFile) return
     world.stats.tampered++
+    file.setWritable(true) // il file verificato e' in sola lettura (I1)
     RandomAccessFile(file, "rw").use {
       val at = (world.plan.seed % file.length().coerceAtLeast(1)).coerceAtLeast(0)
       it.seek(at)

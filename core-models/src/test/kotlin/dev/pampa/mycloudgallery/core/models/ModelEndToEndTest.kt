@@ -3,7 +3,9 @@ package dev.pampa.mycloudgallery.core.models
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.models.contract.EnsureResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelFailCode
+import dev.pampa.mycloudgallery.core.models.contract.ModelNetworkGate
 import dev.pampa.mycloudgallery.core.models.contract.ModelNetworkVerdict
+import dev.pampa.mycloudgallery.core.models.contract.ModelShelfDevices
 import dev.pampa.mycloudgallery.core.models.contract.ModelShelfGate
 import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
@@ -67,7 +69,15 @@ class ModelEndToEndTest {
     server.close()
   }
 
-  private fun models(dir: File = TestModels.tempDir(), me: String = TrustIds.random(), nasReader: InMemoryNasMedia = nas): LocalModels =
+  /** I dispositivi del registro firmato (I5): solo le loro cartelle sono sorgenti dello scaffale. */
+  private val trustedDevices: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+  private fun models(
+    dir: File = TestModels.tempDir(),
+    me: String = TrustIds.random(),
+    nasReader: InMemoryNasMedia = nas,
+    networkGate: ModelNetworkGate = gate,
+  ): LocalModels =
     LocalModels(
       root = dir,
       fetcher = RoutingModelFetcher(
@@ -75,8 +85,8 @@ class ModelEndToEndTest {
         https = HttpsModelFetcher(traffic, connections, Dispatchers.IO, connectTimeoutMs = 5_000, readTimeoutMs = 5_000),
         bundled = BundledModelFetcher(NoBundledAssets),
       ),
-      networkGate = gate,
-      shelfFor = { files -> NasModelShelf(me, files, nasReader.reader, InMemoryShelfWriter(nasReader, me), ModelShelfGate { null }) },
+      networkGate = networkGate,
+      shelfFor = { files -> NasModelShelf(me, files, nasReader.reader, InMemoryShelfWriter(nasReader, me), ModelShelfGate { null }, ModelShelfDevices { trustedDevices.toSet() }) },
       area = { share },
       catalog = listOf(spec),
       freeSpace = { Long.MAX_VALUE },
@@ -220,11 +230,21 @@ class ModelEndToEndTest {
   }
 
   @Test
-  fun ilCancelloDiReteChiusoLasciaIlServerInPace() {
+  fun ilCancelloDiReteChiusoLasciaIlServerInPaceEInRoamingNemmenoIlNasSiLegge() {
     nas.putFile(share, pcPath, NasContent.of(bytes))
     serveFile()
+    // R11: in roaming il cancello ferma ogni sorgente che usa la rete, anche la cartella dal PC: il modello aspetta, con il motivo.
     gate.verdict = ModelNetworkVerdict.Refused("roaming")
-    val models = models()
+    val blocked = models()
+    assertThat(blocked.ensure(ModelTrigger.RULES)).isEqualTo(EnsureResult.Deferred(ModelState.Queued(ModelTrigger.RULES, dev.pampa.mycloudgallery.core.models.contract.ModelWait.ROAMING)))
+    assertThat(server.requests).isEmpty()
+    assertThat(nas.bytesRead.get()).isEqualTo(0)
+    // Su una LAN senza Internet (o con i dati mobili che HTTPS non puo' usare) il cancello dice si' al NAS e no a HTTPS: il modello arriva dalla
+    // cartella dal PC e il server HTTPS resta in pace.
+    val lan = ModelNetworkGate { _, _, source ->
+      if (source == ModelSourceKind.HTTPS) ModelNetworkVerdict.Refused("metered") else ModelNetworkVerdict.Allowed
+    }
+    val models = models(networkGate = lan)
     assertThat(models.ensure(ModelTrigger.RULES)).isEqualTo(EnsureResult.Ready)
     assertThat(server.requests).isEmpty()
     assertThat((models.manager.states.value[spec.id] as ModelState.Ready).source).isEqualTo(ModelSourceKind.PC_FOLDER)
@@ -233,7 +253,9 @@ class ModelEndToEndTest {
   @Test
   fun unaVoltaSolaDaInternetPerLaFamigliaPoiDalNas() {
     serveFile()
-    val first = models(me = TrustIds.random())
+    val firstDevice = TrustIds.random()
+    trustedDevices += firstDevice
+    val first = models(me = firstDevice)
     assertThat(first.ensure()).isEqualTo(EnsureResult.Ready)
     assertThat(server.requests).hasSize(1)
     // Il primo dispositivo mette il modello verificato nella propria cartella sul NAS (D18)...
@@ -252,6 +274,7 @@ class ModelEndToEndTest {
   fun unaCopiaFalsaSulNasCostaSoloUnRipiego() {
     serveFile()
     val device = TrustIds.random()
+    trustedDevices += device
     // Un dispositivo compromesso mette sul NAS un file con il nome giusto, la lunghezza giusta e un byte diverso.
     nas.putFile(share, NasLayout.modelCopy(device, spec.sha256.hex).value, NasContent.of(TestModels.flipped(bytes, 777)))
     val dir = TestModels.tempDir()
@@ -272,6 +295,7 @@ class ModelEndToEndTest {
     File(dir, spec.sha256.hex).let { file ->
       val altered = file.readBytes()
       altered[altered.size - 1] = (altered.last().toInt() xor 1).toByte()
+      file.setWritable(true) // il modello verificato e' in sola lettura (I1)
       file.writeBytes(altered)
     }
     assertThat(runBlocking { models.files.open(spec.id) }).isNull()

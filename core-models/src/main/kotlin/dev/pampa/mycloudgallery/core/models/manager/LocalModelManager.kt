@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.models.contract.FetchResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelFailCode
 import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
 import dev.pampa.mycloudgallery.core.models.contract.ModelFreeSpace
+import dev.pampa.mycloudgallery.core.models.contract.ModelGateReason
 import dev.pampa.mycloudgallery.core.models.contract.ModelId
 import dev.pampa.mycloudgallery.core.models.contract.ModelLimits
 import dev.pampa.mycloudgallery.core.models.contract.ModelManager
@@ -16,10 +17,13 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelShelf
 import dev.pampa.mycloudgallery.core.models.contract.ModelSource
 import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
+import dev.pampa.mycloudgallery.core.models.contract.ShelfResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
+import dev.pampa.mycloudgallery.core.models.contract.ModelWait
 import dev.pampa.mycloudgallery.core.models.contract.ModelUsage
 import dev.pampa.mycloudgallery.core.models.store.ModelStore
+import dev.pampa.mycloudgallery.core.models.store.PartialWriter
 import dev.pampa.mycloudgallery.core.models.verify.ModelVerifier
 import java.io.File
 import java.io.IOException
@@ -74,6 +78,9 @@ internal class LocalModelManager(
 
   override suspend fun ensure(id: ModelId, trigger: ModelTrigger, budget: Duration): EnsureResult {
     val spec = store.spec(id) ?: return EnsureResult.Failed(ModelFailCode.FETCH_FAILED)
+    // MO-3: "Rimuovi" dura. I lavori in background (le regole) non riscaricano un modello che l'utente ha tolto; lo riprende solo lui con
+    // "Scarica ora", o l'accensione del ruolo Indicizzatore per il suo modello.
+    if (trigger == ModelTrigger.RULES && withContext(io) { store.removedByUser(spec) }) return EnsureResult.Deferred(store.stateOf(id))
     val guard = guards.getValue(id)
     // Una richiesta alla volta per modello: chi arriva mentre un'altra lavora non aspetta, vede lo stato.
     if (!guard.tryLock()) return EnsureResult.Deferred(store.stateOf(id))
@@ -81,12 +88,18 @@ internal class LocalModelManager(
     val job = SupervisorJob(currentCoroutineContext()[Job])
     running[id] = job
     try {
+      if (trigger != ModelTrigger.RULES) withContext(io) { store.setRemovedByUser(spec, false) }
       return withContext(job) { acquire(spec, trigger, budget) }
     } catch (e: CancellationException) {
       store.set(id, ModelState.Queued(trigger))
       // Annullata da `remove` (la nostra coroutine e' viva): non e' un'uscita dalla chiamata, e' "non adesso".
       if (currentCoroutineContext().isActive) return EnsureResult.Deferred(store.stateOf(id))
       throw e
+    } catch (e: Exception) {
+      // R10: un guasto imprevisto (un orologio che lancia, un disco che risponde male) e' un fallimento di questa richiesta, mai un'eccezione
+      // che cade sul lavoro e salta gli altri modelli. Il motivo e' un codice, non il testo dell'eccezione.
+      store.counters.fetchFailed()
+      return fail(spec, ModelFailCode.FETCH_FAILED, null)
     } finally {
       running.remove(id)
       job.complete()
@@ -110,56 +123,77 @@ internal class LocalModelManager(
     store.set(spec.id, ModelState.Queued(trigger))
     if (budget <= Duration.ZERO) return EnsureResult.Deferred(ModelState.Queued(trigger))
 
-    // 2. Un parziale gia' completo (il processo e' morto fra l'ultimo blocco e la rinomina) non si riscarica: si verifica. Se non torna
-    //    non e' colpa di nessuna sorgente di adesso (non si segna a nessuno), si butta e si riparte.
-    var have = withContext(io) { partialLength(partial, spec) }
-    if (have == spec.sizeBytes) {
-      val kind = withContext(io) { store.readPartialSource(spec) } ?: ModelSourceKind.HTTPS
-      if (finalize(spec, kind)) return EnsureResult.Ready
-      withContext(io) { store.deletePartial(spec) }
-      store.counters.mismatch()
-      have = 0
-    }
-
-    // 3. Spazio (E-A3): quanto manca piu' il margine.
-    val missing = spec.sizeBytes - have
-    if (missing > 0) {
-      val needed = missing + ModelLimits.SPACE_MARGIN_BYTES
-      val usable = withContext(io) {
-        store.root.mkdirs()
-        freeSpace.usableBytes(store.root)
+    var restarts = 0
+    while (true) {
+      // 2. Un parziale gia' completo (il processo e' morto fra l'ultimo blocco e la rinomina) non si riscarica: si verifica. Se non torna
+      //    non e' colpa di nessuna sorgente di adesso (non si segna a nessuno), si butta e si riparte.
+      var have = withContext(io) { partialLength(partial, spec) }
+      if (have == spec.sizeBytes) {
+        val kind = withContext(io) { store.readPartialSource(spec) } ?: ModelSourceKind.HTTPS
+        if (finalize(spec, kind)) return EnsureResult.Ready
+        withContext(io) { store.deletePartial(spec) }
+        store.counters.mismatch()
+        have = 0
       }
-      if (usable < needed) return fail(spec, ModelFailCode.NO_SPACE, needed)
-    }
 
-    // 4. Le sorgenti, in ordine.
-    val tally = Tally()
-    for (source in sourcesFor(spec)) {
-      val key = strikeKey(spec, source)
-      if (key != null && trigger != ModelTrigger.USER_NOW && strikes.isQuarantined(key)) {
-        store.counters.skippedSource()
-        continue
-      }
-      when (val outcome = runSource(spec, source, key, trigger, started, budget, partial)) {
-        is SourceOutcome.Ready -> {
-          key?.let(strikes::clear)
-          return EnsureResult.Ready
+      // 3. Spazio (E-A3): quanto manca piu' il margine.
+      val missing = spec.sizeBytes - have
+      if (missing > 0) {
+        val needed = missing + ModelLimits.SPACE_MARGIN_BYTES
+        val usable = withContext(io) {
+          store.root.mkdirs()
+          freeSpace.usableBytes(store.root)
         }
-        is SourceOutcome.OutOfTime -> return deferred(spec, trigger)
-        is SourceOutcome.NoSpace -> return fail(spec, ModelFailCode.NO_SPACE, outcome.needed)
-        is SourceOutcome.Next -> tally.add(outcome)
+        if (usable < needed) return fail(spec, ModelFailCode.NO_SPACE, needed)
       }
-    }
 
-    // 5. Nessuna sorgente ha dato il file.
-    return when {
-      tally.transient -> deferred(spec, trigger)
-      tally.confirmBytes != null -> fail(spec, ModelFailCode.NETWORK_REFUSED, tally.confirmBytes)
-      tally.gateRefused -> fail(spec, ModelFailCode.NETWORK_REFUSED, null)
-      tally.mismatched -> fail(spec, ModelFailCode.MISMATCH, null)
-      else -> {
-        store.counters.fetchFailed()
-        fail(spec, ModelFailCode.FETCH_FAILED, null)
+      // 4. Le sorgenti, in ordine.
+      val tally = Tally()
+      var restart = false
+      // I5: dopo il primo errore su una copia del NAS non se ne provano altre; si passa a HTTPS.
+      var nasFailed = false
+      for (source in sourcesFor(spec)) {
+        if (source is ModelSource.NasCopy && nasFailed) continue
+        val key = strikeKey(spec, source)
+        if (key != null && !trigger.isUserRequest && strikes.isQuarantined(key)) {
+          store.counters.skippedSource()
+          continue
+        }
+        when (val outcome = runSource(spec, source, key, trigger, started, budget, partial)) {
+          is SourceOutcome.Ready -> {
+            key?.let(strikes::clear)
+            return EnsureResult.Ready
+          }
+          is SourceOutcome.OutOfTime -> return deferred(spec, trigger)
+          is SourceOutcome.NoSpace -> return fail(spec, ModelFailCode.NO_SPACE, outcome.needed)
+          is SourceOutcome.Restart -> {
+            restart = true
+            tally.mismatched = true
+            if (source is ModelSource.NasCopy) nasFailed = true
+          }
+          is SourceOutcome.Next -> {
+            tally.add(outcome)
+            if (source is ModelSource.NasCopy) nasFailed = true
+          }
+        }
+        if (restart) break
+      }
+      // R13: byte sbagliati scritti da piu' sorgenti insieme: il parziale e' buttato senza dare la colpa a nessuna, e si riprova da zero una
+      // volta sola (se da sola una sorgente sbaglia, la colpa e' sua).
+      if (restart && restarts++ == 0) continue
+
+      // 5. Nessuna sorgente ha dato il file.
+      val confirmBytes = tally.confirmBytes
+      val wait = tally.waiting
+      return when {
+        tally.transient -> deferred(spec, trigger)
+        confirmBytes != null -> needsConfirmation(spec, confirmBytes)
+        wait != null -> waiting(spec, trigger, wait)
+        tally.mismatched -> fail(spec, ModelFailCode.MISMATCH, null)
+        else -> {
+          store.counters.fetchFailed()
+          fail(spec, ModelFailCode.FETCH_FAILED, null)
+        }
       }
     }
   }
@@ -171,22 +205,25 @@ internal class LocalModelManager(
 
     class NoSpace(val needed: Long) : SourceOutcome
 
+    /** Byte sbagliati che non si sa di chi sono (piu' sorgenti hanno scritto nel parziale): buttato, nessuna colpa, da capo (R13). */
+    data object Restart : SourceOutcome
+
     /** Questa sorgente non ha dato il file: perche', per decidere cosa dire se nessun'altra lo da'. */
-    class Next(val why: Why, val confirmBytes: Long? = null) : SourceOutcome
+    class Next(val why: Why, val confirmBytes: Long? = null, val waiting: ModelWait? = null) : SourceOutcome
   }
 
   private enum class Why { TRANSIENT, GATE_REFUSED, GATE_CONFIRM, MISMATCH, ABSENT }
 
   private class Tally {
     var transient = false
-    var gateRefused = false
+    var waiting: ModelWait? = null
     var confirmBytes: Long? = null
     var mismatched = false
 
     fun add(next: SourceOutcome.Next) {
       when (next.why) {
         Why.TRANSIENT -> transient = true
-        Why.GATE_REFUSED -> gateRefused = true
+        Why.GATE_REFUSED -> waiting = waiting ?: next.waiting ?: ModelWait.NETWORK
         Why.GATE_CONFIRM -> confirmBytes = next.confirmBytes
         Why.MISMATCH -> mismatched = true
         Why.ABSENT -> {}
@@ -211,39 +248,45 @@ internal class LocalModelManager(
       val left = remaining(budget, started)
       if (length < spec.sizeBytes && left <= Duration.ZERO) return SourceOutcome.OutOfTime
       if (length < spec.sizeBytes) {
-        // Il cancello di rete guarda solo HTTPS (il NAS ha il suo, dentro core-nas), e si rilegge a ogni fetta.
-        if (source is ModelSource.Https) {
-          when (val verdict = gate.verdict(trigger, spec.sizeBytes - length)) {
+        // R11: il cancello di rete vale per OGNI sorgente che usa la rete (HTTPS, copie sul NAS, cartella dal PC), non solo per HTTPS: fuori
+        // casa con la VPN accesa il NAS e' raggiungibile anche sui dati mobili, e 157-370 MB non si leggono senza conferma, mai in roaming.
+        // Il cancello si rilegge a ogni fetta (la fetta e' al massimo di 30 s). L'APK non passa dalla rete.
+        if (source !is ModelSource.Bundled) {
+          when (val verdict = gate.verdict(trigger, spec.sizeBytes - length, source.kind)) {
             ModelNetworkVerdict.Allowed -> {}
-            is ModelNetworkVerdict.NeedsConfirmation -> return SourceOutcome.Next(Why.GATE_CONFIRM, verdict.bytes)
-            is ModelNetworkVerdict.Refused -> return SourceOutcome.Next(Why.GATE_REFUSED)
+            is ModelNetworkVerdict.NeedsConfirmation -> return SourceOutcome.Next(Why.GATE_CONFIRM, confirmBytes = verdict.bytes)
+            is ModelNetworkVerdict.Refused -> return SourceOutcome.Next(Why.GATE_REFUSED, waiting = waitOf(verdict.reason))
           }
         }
-        withContext(io) { store.writePartialSource(spec, source.kind) }
+        withContext(io) { store.writePartialSource(spec, PartialWriter.of(source)) }
         store.set(spec.id, ModelState.Fetching(source.kind, length, spec.sizeBytes))
-        val slice = if (source is ModelSource.Https) minOf(left, ModelLimits.HTTPS_SLICE) else left
+        val slice = if (source !is ModelSource.Bundled) minOf(left, ModelLimits.HTTPS_SLICE) else left
         val result = withProgress(spec, source.kind, partial) { fetcher.fetch(spec, source, partial, slice) }
         withContext(io) { store.tidyPartialNotes(spec) }
         when (result) {
           FetchResult.Done -> {}
           is FetchResult.Partial -> {
             val now = withContext(io) { partialLength(partial, spec) }
-            // Progresso = il parziale e' cambiato (anche accorciato: un `200` al posto di `206` riparte da zero e puo' arrivare meno in la' di prima).
-            if (now != length) stalled = 0 else if (++stalled >= 2) return SourceOutcome.Next(Why.TRANSIENT)
+            // Progresso = il parziale e' cresciuto. Un `200` al posto di `206` riparte da zero e arriva meno in la' di prima: ripartire non e'
+            // avanzare, e due fette senza avanzare fermano la sorgente (R13: un CDN che cambia ETag a ogni richiesta non deve far scaricare
+            // gli stessi byte per sempre).
+            if (now > length) stalled = 0 else if (++stalled >= 2) return SourceOutcome.Next(Why.TRANSIENT)
             continue
           }
-          FetchResult.Mismatch -> return rejected(spec, key)
+          FetchResult.Mismatch -> return rejected(spec, source, key)
+          // Un'altra dimensione prima di leggere un byte: la sorgente sbaglia, ma il parziale (di un'altra sorgente) non c'entra (R13).
+          FetchResult.SizeMismatch -> return rejected(spec, source, key, discardPartial = false)
           FetchResult.NotFound -> return SourceOutcome.Next(Why.ABSENT)
           is FetchResult.Refused -> {
             if (!FetchRefusal.isHostile(result.reason)) return SourceOutcome.Next(Why.ABSENT)
-            return rejected(spec, key, discardPartial = false)
+            return rejected(spec, source, key, discardPartial = false)
           }
           FetchResult.NoSpace -> return SourceOutcome.NoSpace(spec.sizeBytes - length + ModelLimits.SPACE_MARGIN_BYTES)
           FetchResult.NetworkError -> return SourceOutcome.Next(Why.TRANSIENT)
         }
       }
       // Il file e' tutto qui: l'impronta dice se e' quello del catalogo (E-A2).
-      return if (finalize(spec, source.kind)) SourceOutcome.Ready else rejected(spec, key)
+      return if (finalize(spec, source.kind)) SourceOutcome.Ready else rejected(spec, source, key)
     }
   }
 
@@ -271,13 +314,29 @@ internal class LocalModelManager(
     return ok
   }
 
-  /** Un file sbagliato: parziale tolto, errore contato e (per i lavori automatici) segnato alla sorgente. */
-  private suspend fun rejected(spec: ModelSpec, key: String?, discardPartial: Boolean = true): SourceOutcome {
+  /**
+   * Un file sbagliato: errore contato e (per i lavori automatici) segnato alla sorgente **che l'ha scritto**. Con [discardPartial] il parziale
+   * si butta: se l'hanno scritto piu' sorgenti (byte sbagliati letti a meta' dalla cartella dal PC e completati da HTTPS) non si sa di chi sono, e
+   * la colpa non va all'ultima: si riparte da zero una volta, senza colpa ([SourceOutcome.Restart]). Senza [discardPartial] (la sorgente ha
+   * mentito prima di dare un byte) la colpa e' sua e basta.
+   */
+  private suspend fun rejected(spec: ModelSpec, source: ModelSource, key: String?, discardPartial: Boolean = true): SourceOutcome {
+    val writers = if (discardPartial) withContext(io) { store.readPartialWriters(spec) } else emptyList()
     if (discardPartial) withContext(io) { store.deletePartial(spec) }
     store.counters.mismatch()
+    val me = PartialWriter.of(source)
+    if (writers.any { it.id != me.id }) return SourceOutcome.Restart
     key?.let(strikes::strike)
     return SourceOutcome.Next(Why.MISMATCH)
   }
+
+  /** Il motivo del cancello di rete come attesa da mostrare (MO-8): in coda, non un errore da riprovare. */
+  private fun waitOf(reason: String): ModelWait =
+    when (reason) {
+      ModelGateReason.ROAMING -> ModelWait.ROAMING
+      ModelGateReason.METERED -> ModelWait.WIFI
+      else -> ModelWait.NETWORK
+    }
 
   // --- sorgenti -----------------------------------------------------------------------------------------------------------
 
@@ -300,9 +359,16 @@ internal class LocalModelManager(
       } catch (e: Exception) {
         emptyList()
       }
+      var tried = 0
       for (copy in copies.filter { it.sha256 == spec.sha256 }.sortedBy { it.device }) {
         // Una copia con un'altra dimensione e' un file diverso: scartata senza leggerla (E-A2).
-        if (copy.sizeBytes == spec.sizeBytes) sources += ModelSource.NasCopy(copy.share, copy.device) else store.counters.mismatch()
+        if (copy.sizeBytes != spec.sizeBytes) {
+          store.counters.mismatch()
+        } else if (tried < ModelLimits.MAX_SHELF_TRIES) {
+          // I5: al massimo 2-3 copie provate; una copia che non torna costa un tentativo, non tutti.
+          sources += ModelSource.NasCopy(copy.share, copy.device)
+          tried++
+        }
       }
     }
     spec.https.forEach { sources += ModelSource.Https(it) }
@@ -362,10 +428,64 @@ internal class LocalModelManager(
     return EnsureResult.Deferred(state)
   }
 
+  /** MO-2: sui dati mobili serve la conferma con la dimensione; la pagina la chiede e ripete la richiesta con [ModelTrigger.USER_CONFIRMED]. */
+  private fun needsConfirmation(spec: ModelSpec, bytes: Long): EnsureResult {
+    store.set(spec.id, ModelState.NeedsConfirmation(bytes))
+    return EnsureResult.Failed(ModelFailCode.NETWORK_REFUSED, bytes)
+  }
+
+  /** MO-8: il cancello di rete non lascia scaricare adesso (nessuna rete, solo Wi-Fi, roaming): in coda con il motivo. */
+  private fun waiting(spec: ModelSpec, trigger: ModelTrigger, wait: ModelWait): EnsureResult {
+    val state = ModelState.Queued(trigger, wait)
+    store.set(spec.id, state)
+    return EnsureResult.Deferred(state)
+  }
+
   private fun fail(spec: ModelSpec, code: ModelFailCode, neededBytes: Long?): EnsureResult {
     if (code == ModelFailCode.NO_SPACE) store.counters.noSpace()
     store.set(spec.id, ModelState.Failed(code))
     return EnsureResult.Failed(code, neededBytes)
+  }
+
+  // --- lo scaffale sul NAS (D18, MO-4) ------------------------------------------------------------------------------------------
+
+  /**
+   * D18: il primo dispositivo che ha un modello verificato lo pubblica sul NAS (nella propria cartella, scrittura esclusiva, nessuna
+   * sostituzione), cosi' gli altri non vanno su Internet; poi toglie le **proprie** copie che l'app non elenca piu'. Solo in background e solo
+   * se il cancello di rete lascia usare il NAS (mai in roaming, mai i dati mobili), e per ogni modello solo se **nessun dispositivo** della
+   * famiglia ha gia' una copia (altrimenti ogni dispositivo ne metterebbe una sua da 370 MiB). Il cancello di scrittura (F4-D31) lo applica lo
+   * scaffale. Mai un'eccezione. Restituisce quante copie ha scritto.
+   */
+  suspend fun shareOnNas(): Int {
+    val share = try {
+      area.commonShare()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      null
+    } ?: return 0
+    var written = 0
+    for (spec in store.catalog) {
+      if (spec.bundledAsset != null) continue
+      if (!withContext(io) { store.finalFile(spec).isFile }) continue
+      if (gate.verdict(ModelTrigger.RULES, spec.sizeBytes, ModelSourceKind.NAS) != ModelNetworkVerdict.Allowed) break
+      try {
+        if (shelf.copies(share, spec.sha256).any { it.sizeBytes == spec.sizeBytes }) continue
+        if (shelf.publish(spec, share) == ShelfResult.Published) written++
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        continue
+      }
+    }
+    try {
+      shelf.pruneOwn(share, store.catalog.filter { it.bundledAsset == null }.mapTo(HashSet()) { it.sha256 })
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Le copie vecchie si tolgono al giro dopo.
+    }
+    return written
   }
 
   // --- remove, usage, refresh -----------------------------------------------------------------------------------------------
@@ -382,6 +502,8 @@ internal class LocalModelManager(
         val existed = store.finalFile(spec).isFile
         store.deletePartial(spec)
         val gone = store.deleteVerified(spec)
+        // MO-3: la scelta dell'utente resta finche' non tocca "Scarica ora" (o accende il ruolo): il giro periodico non lo riprende.
+        store.setRemovedByUser(spec, true)
         if (gone) store.set(id, ModelState.Absent)
         existed && gone
       }

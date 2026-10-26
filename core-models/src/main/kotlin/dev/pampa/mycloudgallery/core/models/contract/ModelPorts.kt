@@ -10,7 +10,8 @@ import kotlin.time.Duration.Companion.seconds
 // Le PORTE e i TETTI di core-models (Fase 6, P3; docs/fase6-progetto.md §2.1, D16-D20, §6.1). P0 ha scritto il catalogo, il gestore, i
 // file verificati, la sorgente e lo scaffale; qui ci sono le porte che servono alla logica vera e che solo `:app` (P11) puo' legare:
 // il traffico, l'area comune del NAS, lo spazio, gli asset dell'APK, il cancello di scrittura e lo scrittore dello scaffale. Nessun
-// tipo di rete in queste firme: l'HTTPS sta tutto in `download/https/` (classi `internal`, D33).
+// tipo di client HTTP in queste firme: l'HTTPS sta tutto in `download/https/` (classi `internal`, D33); la sola eccezione e' la `Network` di
+// Android in [ModelHttpsRoute] (R12), un'identita' di rete, non un client.
 
 /**
  * I tetti, le scadenze e i nomi fissi dei modelli, in un posto solo (si rivedono qui, si provano nei test). Cambiarne uno e' una
@@ -36,8 +37,15 @@ object ModelLimits {
   /** Una redirezione piu' lunga di questo (caratteri) si rifiuta; i CDN firmano gli indirizzi con una query di qualche centinaio. */
   const val MAX_URL_CHARS: Int = 4096
 
-  /** Quante cartelle di dispositivo si leggono da `devices/` quando si cercano le copie sul NAS (una famiglia ne ha una manciata). */
+  /** Quante cartelle di dispositivo si guardano al massimo quando si cercano le copie sul NAS (una famiglia ne ha una manciata). */
   const val MAX_NAS_DEVICES: Int = 256
+
+  /**
+   * I5 (revisione di sicurezza della Fase 6): quante copie sul NAS si provano al massimo per uno scaricamento. Dopo il primo errore su una
+   * copia (byte sbagliati, NAS che non risponde) non se ne provano altre: si passa a HTTPS, cosi' un dispositivo che mette copie rotte nella
+   * sua cartella costa al piu' un tentativo, mai l'intero budget di "Scarica ora".
+   */
+  const val MAX_SHELF_TRIES: Int = 3
 
   /** E-A2: dopo questo numero di errori della stessa sorgente la sorgente si salta per [QUARANTINE] (non per l'utente che preme). */
   const val STRIKES_BEFORE_SKIP: Int = 2
@@ -116,6 +124,27 @@ fun interface ModelFreeSpace {
 /** Gli asset dell'APK (`AssetManager.open`): il ritaglio viaggia con l'app (Q11 (a)); `:app` o core-ai la legano. Null = asset assente. */
 fun interface BundledAssets {
   fun open(asset: String): InputStream?
+}
+
+/**
+ * La rete su cui escono le connessioni HTTPS dei modelli (R12 della revisione di sicurezza della Fase 6): quella che il cancello di rete ha
+ * giudicato (non a consumo, non in roaming, validata), **non** la rete predefinita del sistema. A casa, con il Wi-Fi riconosciuto, One UI puo'
+ * aver reso predefiniti i dati mobili ("Passa ai dati mobili" con un Wi-Fi lento): una connessione aperta sulla rete predefinita esce li', fino a
+ * 370 MB senza la conferma, e il registro del traffico li segna come Wi-Fi di casa. [network] si rilegge a **ogni connessione** (ogni fetta
+ * di 30 s); `null` vuol dire "nessuna rete approvata adesso": la connessione non si apre e **non** si ripiega sulla rete predefinita.
+ * Chi non la da' (i test, un telefono senza il registro di rete) lascia la rete predefinita, com'era.
+ */
+fun interface ModelHttpsRoute {
+  fun network(): android.net.Network?
+}
+
+/**
+ * I dispositivi della famiglia da cui si accettano copie dei modelli (I5): gli id dei dispositivi **approvati e non dismessi** del registro
+ * firmato (non i revocati, non i persi, non i dismessi, non una cartella con la forma di un id che qualcuno ha messo in `devices/`). Null =
+ * il registro non e' pronto: nessuna copia si prende dal NAS (restano HTTPS e la cartella dal PC).
+ */
+fun interface ModelShelfDevices {
+  suspend fun trusted(): Set<String>?
 }
 
 /**

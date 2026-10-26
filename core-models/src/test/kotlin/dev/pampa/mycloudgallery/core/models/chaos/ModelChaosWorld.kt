@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelNasArea
 import dev.pampa.mycloudgallery.core.models.contract.ModelNetworkGate
 import dev.pampa.mycloudgallery.core.models.contract.ModelNetworkVerdict
 import dev.pampa.mycloudgallery.core.models.contract.ModelShelf
+import dev.pampa.mycloudgallery.core.models.contract.ModelShelfDevices
 import dev.pampa.mycloudgallery.core.models.contract.ModelShelfGate
 import dev.pampa.mycloudgallery.core.models.contract.ModelSource
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
@@ -40,7 +41,8 @@ import kotlinx.coroutines.Dispatchers
 // processo sono `LocalModels` nuovi sulla stessa cartella; il mondo sopravvive alla loro morte, come il disco.
 
 /** La morte del processo: non un errore "normale", un'eccezione che nessuno prende (come in ModelManagerCrashTest). */
-class ChaosModelDied : RuntimeException("processo morto (prova delle interruzioni)")
+// Un `Error`: il gestore prende ogni `Exception` (R10), ma la morte del processo non e' un guasto da raccontare.
+class ChaosModelDied : Error("processo morto (prova delle interruzioni)")
 
 /** Il processo con cui il banco lavora: un gestore, i file verificati e lo scaffale (veri, o rotti da un difetto iniettato). */
 class ModelStack(val manager: ModelManager, val files: ModelFiles, val shelf: ModelShelf, val refresh: suspend () -> Unit)
@@ -146,8 +148,8 @@ class ModelChaosWorld(val plan: ModelRoundPlan, private val server: HttpsTestSer
     val models = LocalModels(
       root = dir,
       fetcher = fetcher(),
-      networkGate = ModelNetworkGate { _, _ -> if (gateOnce.getAndSet(false)) ModelNetworkVerdict.Refused("prova") else ModelNetworkVerdict.Allowed },
-      shelfFor = { files -> NasModelShelf(device, files, nas.reader, nas.shelfWriter(device), ModelShelfGate { null }) },
+      networkGate = ModelNetworkGate { _, _, _ -> if (gateOnce.getAndSet(false)) ModelNetworkVerdict.Refused("prova") else ModelNetworkVerdict.Allowed },
+      shelfFor = { files -> NasModelShelf(device, files, nas.reader, nas.shelfWriter(device), ModelShelfGate { null }, ModelShelfDevices { setOf(otherDevice) }) },
       area = ModelNasArea { share },
       catalog = listOf(spec),
       freeSpace = { if (noSpaceOnce.getAndSet(false)) 1L else Long.MAX_VALUE },

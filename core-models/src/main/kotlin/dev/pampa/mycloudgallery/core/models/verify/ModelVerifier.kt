@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.models.verify
 
+import dev.pampa.mycloudgallery.core.models.contract.FileStatReader
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.models.contract.ModelFailCode
@@ -20,7 +21,7 @@ import kotlinx.coroutines.CancellationException
 //
 // Chiamare solo con la cartella bloccata (`ModelStore.lock`) e fuori dal thread principale: per 370 MiB sono un paio di secondi.
 
-internal class ModelVerifier(private val store: ModelStore) {
+internal class ModelVerifier(private val store: ModelStore, private val statReader: FileStatReader = FileStatReader.None) {
 
   sealed interface Opened {
     /** Dimensione e impronta tornano: il modello e' pronto, con il suo descrittore. */
@@ -60,9 +61,17 @@ internal class ModelVerifier(private val store: ModelStore) {
       val hashOk = channel.size() == spec.sizeBytes && FileDigest.sha256(channel, spec.sizeBytes) == spec.sha256
       if (hashOk) {
         channel.position(0)
+        // D16, I1: il file verificato e' in sola lettura (anche quelli promossi da una versione precedente). Il cambio di permessi cambia la
+        // `ctime`, quindi si fa PRIMA di prendere lo `stat` con cui `PATH_CHECKED` confrontera' il percorso.
+        if (file.canWrite()) file.setReadOnly()
+        val stat = try {
+          statReader.stat(stream.fd)
+        } catch (e: RuntimeException) {
+          null
+        }
         val now = store.nanos()
         store.set(spec.id, ModelState.Ready(spec.sizeBytes, store.readSource(spec), now))
-        val model = VerifiedModel(spec, file, now, onClose = { stream.close() }, descriptor = stream.fd, channel = channel)
+        val model = VerifiedModel(spec, file, now, onClose = { stream.close() }, descriptor = stream.fd, channel = channel, stat = stat)
         handedOver = true
         verdict = Opened.Verified(model)
       }

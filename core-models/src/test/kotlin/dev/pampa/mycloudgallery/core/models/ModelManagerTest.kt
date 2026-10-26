@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.models.contract.FetchResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFailCode
 import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
+import dev.pampa.mycloudgallery.core.models.contract.ModelGateReason
 import dev.pampa.mycloudgallery.core.models.contract.ModelId
 import dev.pampa.mycloudgallery.core.models.contract.ModelLimits
 import dev.pampa.mycloudgallery.core.models.contract.ModelManager
@@ -19,6 +20,7 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
+import dev.pampa.mycloudgallery.core.models.contract.ModelWait
 import dev.pampa.mycloudgallery.core.models.support.FlakyFetcher
 import dev.pampa.mycloudgallery.core.models.support.ModelRig
 import dev.pampa.mycloudgallery.core.models.support.TestModels
@@ -49,7 +51,14 @@ class ModelManagerTest {
   private fun ModelRig.ensure(trigger: ModelTrigger = ModelTrigger.USER_NOW, budget: Duration = long): EnsureResult =
     runBlocking { manager.ensure(spec.id, trigger, budget) }
 
-  private fun ModelRig.removeIt() = runBlocking<Unit> { manager.remove(spec.id) }
+  /**
+   * Il modello sparisce da questo dispositivo senza che l'utente l'abbia tolto: i test che ripartono da zero con i lavori automatici (RULES)
+   * lo usano. "Rimuovi" dura (MO-3): qui si toglie il segno dell'utente che `remove` lascia, per provare le altre regole.
+   */
+  private fun ModelRig.removeIt() = runBlocking<Unit> {
+    manager.remove(spec.id)
+    File(dir, "meta/${spec.sha256.hex}.removed").delete()
+  }
 
   private fun ModelRig.noStrayFiles() = assertModelsDirInvariant(dir, listOf(spec))
 
@@ -129,12 +138,14 @@ class ModelManagerTest {
   }
 
   @Test
-  fun piuCopieSulNasSiProvanoInOrdineDiDispositivo() {
+  fun piuCopieSulNasSiProvanoInOrdineDiDispositivoEDopoIlPrimoErroreSiVaSuHttps() {
     val rig = ModelRig()
     for (id in listOf("zzz", "aaa", "mmm")) rig.nasCopy(content = ByteArray(0), deviceId = id)
     rig.fake.serve(ModelSource.NasCopy(rig.share, "mmm"), rig.bytes)
+    rig.fake.serve(rig.https, rig.bytes)
     assertThat(rig.ensure()).isEqualTo(EnsureResult.Ready)
-    assertThat(rig.fake.calls.map { (it as ModelSource.NasCopy).device }).containsExactly("aaa", "mmm").inOrder()
+    // I5: la prima copia (in ordine di dispositivo) sbaglia, e le altre non si provano: HTTPS dopo il primo errore sul NAS.
+    assertThat(rig.fake.calls).containsExactly(ModelSource.NasCopy(rig.share, "aaa"), rig.https).inOrder()
   }
 
   @Test
@@ -360,12 +371,13 @@ class ModelManagerTest {
   // --- Cancello di rete (HTTPS) -------------------------------------------------------------------------------------------------
 
   @Test
-  fun ilCancelloDiReteRifiutaOChiedeConfermaSoloPerHttps() {
+  fun ilCancelloDiReteRifiutaOChiedeConferma() {
     val rig = ModelRig()
     rig.area = null
     rig.fake.serve(rig.https, rig.bytes)
-    rig.gate.verdict = ModelNetworkVerdict.Refused("roaming")
-    assertThat(rig.ensure(ModelTrigger.RULES)).isEqualTo(EnsureResult.Failed(ModelFailCode.NETWORK_REFUSED))
+    rig.gate.verdict = ModelNetworkVerdict.Refused(ModelGateReason.ROAMING)
+    // MO-8: un rifiuto del cancello e' "in coda" con il motivo, non un errore da riprovare.
+    assertThat(rig.ensure(ModelTrigger.RULES)).isEqualTo(EnsureResult.Deferred(ModelState.Queued(ModelTrigger.RULES, ModelWait.ROAMING)))
     assertThat(rig.fake.calls).isEmpty()
     rig.gate.verdict = ModelNetworkVerdict.NeedsConfirmation(rig.bytes.size.toLong())
     assertThat(rig.ensure(ModelTrigger.USER_NOW)).isEqualTo(EnsureResult.Failed(ModelFailCode.NETWORK_REFUSED, rig.bytes.size.toLong()))
@@ -375,18 +387,21 @@ class ModelManagerTest {
   }
 
   @Test
-  fun ilNasEIlPcNonPassanoDalCancelloDiRete() {
+  fun ilCancelloDiReteVaChiestoPerOgniSorgenteEUnVerdettoPerSorgentePermetteIlNas() {
+    // R11: in roaming nemmeno il NAS (raggiungibile con la VPN) ne' la cartella dal PC si leggono.
     val nasRig = ModelRig()
-    nasRig.gate.verdict = ModelNetworkVerdict.Refused("roaming")
+    nasRig.gate.verdict = ModelNetworkVerdict.Refused(ModelGateReason.ROAMING)
     nasRig.nasCopy()
-    assertThat(nasRig.ensure()).isEqualTo(EnsureResult.Ready)
-    assertThat(nasRig.gate.asked).isEmpty()
-    // Un cancello che dice no all'HTTPS non toglie la cartella dal PC.
+    assertThat(nasRig.ensure()).isEqualTo(EnsureResult.Deferred(ModelState.Queued(ModelTrigger.USER_NOW, ModelWait.ROAMING)))
+    assertThat(nasRig.fake.calls).isEmpty()
+    assertThat(nasRig.gate.askedFor).contains(ModelSourceKind.NAS)
+    // Un cancello che dice no all'HTTPS (dati mobili) e si' al NAS (LAN) non toglie il NAS ne' la cartella dal PC.
+    val lan = ModelNetworkGate { _, _, source -> if (source == ModelSourceKind.HTTPS) ModelNetworkVerdict.Refused(ModelGateReason.METERED) else ModelNetworkVerdict.Allowed }
     val pcRig = ModelRig()
-    pcRig.gate.verdict = ModelNetworkVerdict.Refused("roaming")
     pcRig.fake.serve(pcRig.pc, pcRig.bytes)
-    assertThat(pcRig.ensure()).isEqualTo(EnsureResult.Ready)
-    assertThat(pcRig.fake.calls).containsExactly(pcRig.pc)
+    assertThat(runBlocking { managerOver(pcRig, gate = lan).ensure(pcRig.spec.id, ModelTrigger.USER_NOW, long) }).isEqualTo(EnsureResult.Ready)
+    assertThat(pcRig.fake.calls.last()).isEqualTo(pcRig.pc)
+    assertThat(pcRig.fake.calls.filterIsInstance<ModelSource.Https>()).isEmpty()
   }
 
   @Test
@@ -396,12 +411,13 @@ class ModelManagerTest {
     rig.fake.serve(rig.https, rig.bytes)
     // Cancello vero: dopo due fette dice no (si e' passati ai dati mobili).
     var asks = 0
-    val flipping = ModelNetworkGate { _, _ ->
+    val flipping = ModelNetworkGate { _, _, _ ->
       asks++
-      if (asks <= 2) ModelNetworkVerdict.Allowed else ModelNetworkVerdict.Refused("mobile")
+      if (asks <= 2) ModelNetworkVerdict.Allowed else ModelNetworkVerdict.Refused(ModelGateReason.METERED)
     }
     val manager = managerOver(rig, gate = flipping)
-    assertThat(runBlocking { manager.ensure(rig.spec.id, ModelTrigger.RULES, long) }).isEqualTo(EnsureResult.Failed(ModelFailCode.NETWORK_REFUSED))
+    assertThat(runBlocking { manager.ensure(rig.spec.id, ModelTrigger.RULES, long) })
+      .isEqualTo(EnsureResult.Deferred(ModelState.Queued(ModelTrigger.RULES, ModelWait.WIFI)))
     // Due fette scaricate (2 MiB), il parziale resta e la terza non parte.
     assertThat(rig.partial.length()).isEqualTo(2L * TestModels.BLOCK)
     assertThat(rig.fake.calls).hasSize(2)
@@ -463,15 +479,17 @@ class ModelManagerTest {
   }
 
   @Test
-  fun unParzialeCheSiAccorciaPerUn200ARipartireDaZeroEUnCambiamentoNonUnoStallo() {
+  fun unSoloRestartDaUn200NonEUnoStalloMaDueDiFilaFermanoLaSorgente() {
     lateinit var rig: ModelRig
     var calls = 0
+    // Una fetta in ripresa che riceve un `200` riparte da zero (accorcia il parziale): una volta e' tollerata, perche' la ripresa dopo (col solo
+    // `Range`) cresce; due di fila non avanzano e la sorgente si ferma (R13: un CDN che cambia ETag a ogni richiesta).
     val restarting = ModelFetcher { _, _, partial, _ ->
       partial.parentFile?.mkdirs()
       when (++calls) {
         1 -> partial.writeBytes(rig.bytes.copyOf(3 * TestModels.BLOCK)).let { FetchResult.Partial(3L * TestModels.BLOCK) }
-        2 -> partial.writeBytes(rig.bytes.copyOf(2 * TestModels.BLOCK)).let { FetchResult.Partial(2L * TestModels.BLOCK) }
-        3 -> partial.writeBytes(rig.bytes.copyOf(TestModels.BLOCK)).let { FetchResult.Partial(TestModels.BLOCK.toLong()) }
+        2 -> partial.writeBytes(rig.bytes.copyOf(TestModels.BLOCK)).let { FetchResult.Partial(TestModels.BLOCK.toLong()) }
+        3 -> partial.writeBytes(rig.bytes.copyOf(2 * TestModels.BLOCK)).let { FetchResult.Partial(2L * TestModels.BLOCK) }
         else -> partial.writeBytes(rig.bytes).let { FetchResult.Done }
       }
     }
@@ -480,6 +498,23 @@ class ModelManagerTest {
     rig.area = null
     assertThat(rig.ensure()).isEqualTo(EnsureResult.Ready)
     assertThat(calls).isEqualTo(4)
+  }
+
+  @Test
+  fun dueRestartDiFilaPerDei200FermanoLaSorgenteSenzaRiscaricareSempreGliStessiByte() {
+    lateinit var rig: ModelRig
+    var calls = 0
+    val shrinking = ModelFetcher { _, _, partial, _ ->
+      partial.parentFile?.mkdirs()
+      val blocks = when (++calls) { 1 -> 3; 2 -> 2; 3 -> 1; else -> 0 }
+      partial.writeBytes(rig.bytes.copyOf(blocks * TestModels.BLOCK))
+      FetchResult.Partial(blocks.toLong() * TestModels.BLOCK)
+    }
+    rig = ModelRig(fetcher = shrinking)
+    rig.area = null
+    assertThat(rig.ensure()).isEqualTo(EnsureResult.Deferred(ModelState.Queued(ModelTrigger.USER_NOW)))
+    // Terza chiamata (la seconda senza avanzare) e basta: nessun giro a vuoto fino alla fine del tempo.
+    assertThat(calls).isEqualTo(3)
   }
 
   @Test
@@ -598,7 +633,7 @@ class ModelManagerTest {
     val rig = ModelRig()
     rig.nasCopy()
     assertThat(rig.ensure()).isEqualTo(EnsureResult.Ready)
-    RandomAccessFile(rig.finalFile, "rw").use {
+    RandomAccessFile(rig.finalFile.also { it.setWritable(true) }, "rw").use {
       it.seek(1_000)
       it.write(0x7e)
     }
@@ -756,7 +791,7 @@ class ModelManagerTest {
     assertThat((rig.stateOfModel() as ModelState.Ready).source).isEqualTo(ModelSourceKind.BUNDLED)
     // Come gli altri: verificato a ogni apertura.
     assertThat(runBlocking { rig.files.open(spec.id) }).isNotNull()
-    RandomAccessFile(rig.finalFile, "rw").use { it.write(0x01) }
+    RandomAccessFile(rig.finalFile.also { it.setWritable(true) }, "rw").use { it.write(0x01) }
     assertThat(runBlocking { rig.files.open(spec.id) }).isNull()
   }
 

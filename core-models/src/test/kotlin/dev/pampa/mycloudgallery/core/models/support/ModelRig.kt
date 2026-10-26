@@ -43,6 +43,9 @@ class ModelRig(
   @Volatile var area: String? = share
   @Volatile var freeBytes: Long = Long.MAX_VALUE
 
+  /** Vero = l'ora del NAS non c'e' (fuori casa senza VPN, o prima del primo accesso SMB): `NasClock.nowMillis()` lancia (R10). */
+  @Volatile var clockFails: Boolean = false
+
   val https: ModelSource.Https get() = ModelSource.Https(spec.https.single())
   val pc = ModelSource.PcFolder(share)
   val nas = ModelSource.NasCopy(share, device)
@@ -56,7 +59,7 @@ class ModelRig(
     area = ModelNasArea { area },
     catalog = listOf(spec) + extra,
     freeSpace = { freeBytes },
-    clock = NasClock { nasMillis.get() },
+    clock = NasClock { if (clockFails) error("niente ora del NAS") else nasMillis.get() },
     io = Dispatchers.IO,
     nanos = { monotonic.get() },
     progressPoll = Duration.ZERO,

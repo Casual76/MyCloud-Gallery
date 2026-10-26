@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.models.shelf
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelShelf
+import dev.pampa.mycloudgallery.core.models.contract.ModelShelfDevices
 import dev.pampa.mycloudgallery.core.models.contract.ModelShelfGate
 import dev.pampa.mycloudgallery.core.models.contract.ModelLimits
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
@@ -35,7 +36,9 @@ import java.nio.ByteBuffer
 //  - solo se la share e' pubblicabile (cancello di scrittura, F4-D31): sotto un blocco non si scrive ne' si toglie niente;
 //  - `pruneOwn` toglie solo le PROPRIE copie, solo con nome da impronta, solo se non sono nell'elenco da tenere e hanno ancora la
 //    dimensione vista nell'elenco. Un elenco da tenere vuoto non toglie niente (non puo' essere "l'app non elenca piu' nulla").
-// Le copie degli altri dispositivi si leggono (`copies`) e basta.
+// Le copie degli altri dispositivi si leggono (`copies`) e basta, e **solo quelle dei dispositivi approvati e non dismessi** del registro
+// firmato (I5): niente elenco di `devices/` (una cartella con la forma di un id messa da chi scrive sul NAS non e' una sorgente), nessuna
+// copia propria (il dispositivo ha gia' il file). La scrittura vera, a flusso, e' di core-nas (`NasModelShelfOps`, MO-4).
 
 class NasModelShelf(
   private val ownDeviceId: String,
@@ -43,6 +46,7 @@ class NasModelShelf(
   private val reader: NasMediaReader,
   private val writer: ShelfWriter,
   private val gate: ModelShelfGate,
+  private val devices: ModelShelfDevices,
   private val purpose: Purpose = Purpose.BACKGROUND,
 ) : ModelShelf {
 
@@ -75,18 +79,10 @@ class NasModelShelf(
   }
 
   override suspend fun copies(share: String, sha256: Sha256): List<ShelfCopy> {
-    val devices = ArrayList<String>()
-    val listed = reader.list(share, NasLayout.ROOT.child("devices"), purpose) { page ->
-      for (entry in page) {
-        // Solo cartelle con la forma di un id di dispositivo: un nome del NAS non diventa mai un percorso (E-S11).
-        if (entry.isDirectory && !entry.isReparsePoint && devices.size < ModelLimits.MAX_NAS_DEVICES && TrustIds.isValid(entry.name)) {
-          devices += entry.name
-        }
-      }
-    }
-    if (listed is NasResult.Err) return emptyList()
+    // I5: solo i dispositivi del registro firmato, approvati e non dismessi; mai noi stessi.
+    val trusted = devices.trusted() ?: return emptyList()
     val out = ArrayList<ShelfCopy>()
-    for (device in devices.sorted()) {
+    for (device in trusted.filter { TrustIds.isValid(it) && it != ownDeviceId }.sorted().take(ModelLimits.MAX_NAS_DEVICES)) {
       val stat = reader.stat(share, NasLayout.modelCopy(device, sha256.hex), purpose)
       val entry = (stat as? NasResult.Ok)?.value ?: continue
       if (entry.isDirectory || entry.isReparsePoint) continue

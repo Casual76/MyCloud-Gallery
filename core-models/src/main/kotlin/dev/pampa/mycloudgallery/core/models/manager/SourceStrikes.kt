@@ -13,13 +13,28 @@ import java.nio.file.StandardCopyOption
 // Il "giorno" e' una scadenza: si misura con l'ora del NAS (`NasClock`), mai con quella del telefono (D39), e si ricorda anche dopo
 // la morte del processo (i lavori di WorkManager vivono pochi minuti). Un orologio che torna indietro o salta di piu' di un giorno
 // azzera la voce: il peggio che puo' succedere e' riprovare una sorgente.
+//
+// **Senza l'ora del NAS** (R10 della revisione di sicurezza della Fase 6: fuori casa senza VPN, o in un processo che non ha ancora fatto un
+// accesso SMB) `NasClock.nowMillis()` lancia. Prima lanciava anche qui, fuori da ogni `try`: la sorgente dopo non si provava, il lavoro cadeva e
+// il giro dopo si riscaricava tutto. Adesso [nowMillis] puo' dire "non so" (null):
+//  - [strike] ripiega sull'orologio **monotono** ([monotonicMillis]) e ricorda l'errore solo in memoria, per la vita del processo (un tempo
+//    monotono non vale dopo un riavvio, quindi non si scrive su disco);
+//  - [isQuarantined] risponde **prudente**: una sorgente con gli errori sul disco di cui non si puo' dire se e' scaduto resta saltata
+//    (costerebbe 157-370 MB), e la voce non si toglie. Si sblocca quando l'ora del NAS torna. "Scarica ora" non guarda mai la quarantena.
 
-internal class SourceStrikes(private val file: File?, private val nowMillis: () -> Long) {
+internal class SourceStrikes(
+  private val file: File?,
+  private val nowMillis: () -> Long?,
+  private val monotonicMillis: () -> Long = { System.nanoTime() / 1_000_000 },
+) {
 
   private class Strike(var count: Int, var firstAtMillis: Long)
 
   private val lock = Any()
   private val strikes = LinkedHashMap<String, Strike>()
+
+  /** Gli errori presi senza l'ora del NAS: solo in memoria, con l'orologio monotono. */
+  private val volatileStrikes = HashMap<String, Strike>()
 
   init {
     load()
@@ -28,8 +43,14 @@ internal class SourceStrikes(private val file: File?, private val nowMillis: () 
   /** True se [key] ha preso [ModelLimits.STRIKES_BEFORE_SKIP] errori nell'ultimo giorno. */
   fun isQuarantined(key: String): Boolean =
     synchronized(lock) {
+      if (volatileQuarantined(key)) return true
       val strike = strikes[key] ?: return false
-      if (expired(strike)) {
+      val now = nowMillis()
+      if (now == null) {
+        // Non si sa che ora e': non si toglie niente e si resta prudenti.
+        return strike.count >= ModelLimits.STRIKES_BEFORE_SKIP
+      }
+      if (expired(strike, now)) {
         strikes.remove(key)
         persist()
         return false
@@ -37,11 +58,17 @@ internal class SourceStrikes(private val file: File?, private val nowMillis: () 
       strike.count >= ModelLimits.STRIKES_BEFORE_SKIP
     }
 
-  /** Un errore di [key] (file sbagliato, redirezione fuori elenco). */
+  /** Un errore di [key] (file sbagliato, redirezione fuori elenco). Mai un'eccezione: senza l'ora del NAS si ricorda in memoria. */
   fun strike(key: String) {
     synchronized(lock) {
       val now = nowMillis()
-      val current = strikes[key]?.takeUnless { expired(it) }
+      if (now == null) {
+        val mono = monotonicMillis()
+        val current = volatileStrikes[key]?.takeUnless { monotonicExpired(it, mono) }
+        if (current == null) volatileStrikes[key] = Strike(1, mono) else current.count++
+        return
+      }
+      val current = strikes[key]?.takeUnless { expired(it, now) }
       if (current == null) strikes[key] = Strike(1, now) else current.count++
       persist()
     }
@@ -49,11 +76,28 @@ internal class SourceStrikes(private val file: File?, private val nowMillis: () 
 
   /** [key] ha dato un file buono: i suoi errori si dimenticano. */
   fun clear(key: String) {
-    synchronized(lock) { if (strikes.remove(key) != null) persist() }
+    synchronized(lock) {
+      volatileStrikes.remove(key)
+      if (strikes.remove(key) != null) persist()
+    }
   }
 
-  private fun expired(strike: Strike): Boolean {
-    val age = nowMillis() - strike.firstAtMillis
+  private fun volatileQuarantined(key: String): Boolean {
+    val strike = volatileStrikes[key] ?: return false
+    if (monotonicExpired(strike, monotonicMillis())) {
+      volatileStrikes.remove(key)
+      return false
+    }
+    return strike.count >= ModelLimits.STRIKES_BEFORE_SKIP
+  }
+
+  private fun monotonicExpired(strike: Strike, now: Long): Boolean {
+    val age = now - strike.firstAtMillis
+    return age < 0 || age >= ModelLimits.QUARANTINE.inWholeMilliseconds
+  }
+
+  private fun expired(strike: Strike, now: Long): Boolean {
+    val age = now - strike.firstAtMillis
     return age < 0 || age >= ModelLimits.QUARANTINE.inWholeMilliseconds
   }
 

@@ -29,7 +29,8 @@ class ModelManagerCrashTest {
 
   /** Un fetcher che fa morire il "processo" (un'eccezione che nessuno prende) alla chiamata [dieAt], prima o dopo il salvataggio. */
   private class Dying(private val inner: () -> ModelFetcher, private val dieAt: Int, private val afterSave: Boolean) : ModelFetcher {
-    class ProcessDied : RuntimeException("processo morto")
+    // Un `Error`, non un'eccezione: il gestore prende ogni `Exception` (R10: nessun guasto cade sul lavoro) ma la morte del processo non e' un guasto.
+    class ProcessDied : Error("processo morto")
 
     private val calls = AtomicInteger()
 

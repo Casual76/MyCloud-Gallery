@@ -104,7 +104,7 @@ class FakeModelManager(initial: Map<ModelId, ModelState> = emptyMap()) : ModelMa
     when (result) {
       EnsureResult.Ready -> set(id, ModelState.Ready(1, ModelSourceKind.HTTPS, 0))
       is EnsureResult.Deferred -> set(id, result.state)
-      is EnsureResult.Failed -> set(id, ModelState.Failed(result.code))
+      is EnsureResult.Failed -> set(id, if (result.code == ModelFailCode.NETWORK_REFUSED && result.neededBytes != null) ModelState.NeedsConfirmation(result.neededBytes) else ModelState.Failed(result.code))
     }
     return result
   }
@@ -136,8 +136,8 @@ class FakeModelFetcher(private val chunk: Int = Int.MAX_VALUE) : ModelFetcher {
   override suspend fun fetch(spec: ModelSpec, source: ModelSource, partial: File, budget: Duration): FetchResult {
     calls += source
     val bytes = served[source] ?: return FetchResult.NotFound
-    // Un file di un'altra lunghezza non e' il modello fissato (piu' lungo o piu' corto): come il fetcher vero.
-    if (bytes.size.toLong() != spec.sizeBytes) return FetchResult.Mismatch
+    // Un file di un'altra lunghezza non e' il modello fissato (piu' lungo o piu' corto): come il fetcher vero, prima di leggere un byte (R13).
+    if (bytes.size.toLong() != spec.sizeBytes) return FetchResult.SizeMismatch
     partial.parentFile?.mkdirs()
     val have = if (partial.isFile) partial.length().toInt() else 0
     if (have > bytes.size) return FetchResult.Mismatch
@@ -164,8 +164,14 @@ class InMemoryModelShelf(val ownDevice: String = "fakedevice00000000000000000") 
     return if (copies.add(copy)) ShelfResult.Published else ShelfResult.AlreadyThere
   }
 
+  /** I dispositivi del registro firmato (I5): se impostato, le copie di altri non elencati non sono sorgenti. Nullo = chiunque tranne noi. */
+  var trusted: Set<String>? = null
+
+  /** Come lo scaffale vero (I5): mai le copie proprie (il file l'ha gia' il dispositivo) e solo i dispositivi fidati. */
   override suspend fun copies(share: String, sha256: Sha256): List<ShelfCopy> =
-    copies.filter { it.share.equals(share, ignoreCase = true) && it.sha256 == sha256 }
+    copies.filter {
+      it.share.equals(share, ignoreCase = true) && it.sha256 == sha256 && it.device != ownDevice && (trusted?.contains(it.device) ?: true)
+    }
 
   override suspend fun pruneOwn(share: String, keep: Set<Sha256>): Int {
     val gone = copies.filter { it.device == ownDevice && it.share.equals(share, ignoreCase = true) && it.sha256 !in keep }
@@ -178,8 +184,12 @@ class InMemoryModelShelf(val ownDevice: String = "fakedevice00000000000000000") 
 class FakeModelNetworkGate(var verdict: ModelNetworkVerdict = ModelNetworkVerdict.Allowed) : ModelNetworkGate {
   val asked: MutableList<ModelTrigger> = mutableListOf()
 
-  override suspend fun verdict(trigger: ModelTrigger, bytes: Long): ModelNetworkVerdict {
+  /** Le sorgenti per cui si e' chiesto il verdetto (R11: vale per ogni sorgente che usa la rete, non solo HTTPS). */
+  val askedFor: MutableList<ModelSourceKind> = mutableListOf()
+
+  override suspend fun verdict(trigger: ModelTrigger, bytes: Long, source: ModelSourceKind): ModelNetworkVerdict {
     asked += trigger
+    askedFor += source
     return verdict
   }
 }

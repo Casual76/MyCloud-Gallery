@@ -890,9 +890,10 @@ In più, a ogni controllo: il **catalogo dice la stessa cosa del diario** (nessu
 |---|---|---|
 | `core-albums/src/test/.../chaos/ShareChaosBenchTest` | il vero `ShareOrchestrator` e il vero `NasOpsEngine` sul **NAS finto** in memoria di `core-nasops` (`NasOpsTestKit`), con colpi alle porte (spostamento, caricamento dal telefono, biglietti dei trasferimenti, pubblicatore degli album, copia privata del guardiano, cartelle d'origine, fatti del catalogo, porta di completamento) e alla scrittura dei diari (morte a **ogni** salvataggio del diario della condivisione) | **2.000** |
 | `ShareChaosSmbBenchTest` | lo stesso sul **simulatore SMB** di `core-nas`: sessione di produzione (`SmbNasSessionManager`) e primitive vere (`SmbNasFileOps`, `SmbNasFileSystem`); in più un colpo a **ogni chiamata SMB** del motore e la morte a **ogni salvataggio del diario di `core-nasops`** | **600** |
-| `ShareChaosSweepTest` | **un colpo a ogni chiamata** di un passo (condividere un album nuovo, con un caricamento dal telefono): per ogni punto e ogni chiamata, la morte del processo prima e dopo, la rete caduta prima e dopo, la sessione scaduta, il socket fermo, lo spazio finito dove ha senso; sul NAS finto e sul simulatore SMB (dove ogni chiamata SMB e ogni salvataggio del diario di `core-nasops` sono un punto) | **541** + **1.683** giri |
+| `ShareChaosSweepTest` | **un colpo a ogni chiamata** di un passo (condividere un album nuovo, con un caricamento dal telefono): per ogni punto e ogni chiamata, la morte del processo prima e dopo, la rete caduta prima e dopo, la sessione scaduta, il socket fermo, lo spazio finito dove ha senso; sul NAS finto e sul simulatore SMB (dove ogni chiamata SMB e ogni salvataggio del diario di `core-nasops` sono un punto) | **541** + **1.695** giri |
 | `ShareChaosMutationTest` | i quattro errori introdotti apposta (§E7) | 200 giri per errore |
 | `ShareChaosKnownDefectsTest` | la riproduzione dei difetti noti (§E6) | 5 test (2 `@Ignore` fino alla correzione) |
+| `DyingOpsStoreTest` | la morte al diario di `core-nasops` è un proxy sull'interfaccia: ogni metodo di `OpsStore` è classificato (scrittura o lettura) e la prima scrittura, `create`, è davvero un punto dove si muore (i metodi con un `OpId` hanno il nome storpiato dal compilatore: il primo proxy ne saltava un quarto) | 2 test |
 | `ShareChaosVerifierTest`, `ShareChaosDeterminismTest` | il verificatore ha i denti (16 casi, ognuno costruito rompendo il mondo) e un giro si rifà identico dal seme | 16 + 3 |
 | `ShareAreaRunnerTest` | il codice del NAS vero (guardia, trasporto recintato, oracolo, pulizia, autotest) sopra il simulatore SMB, senza rete (§E4) | 4 test |
 | `ShareManifestVerifierTest` | il verificatore in sola lettura dell'area di una condivisione fatta dal telefono (§E5) | 11 test |
@@ -914,7 +915,7 @@ Il motore che sposta i file è sempre il vero `NasOpsEngine` di `core-nasops` (s
 
 Il rapporto di un banco ha anche la **tabella di copertura**: per ogni superficie, quante chiamate ci sono state, quanti colpi programmati, quanti scattati e di quelli quanti morti. Un banco che non colpisce un punto lo dice (il rapporto dei 2.000 giri colpisce tutti e nove i punti del NAS finto, quello dei 600 tutti e undici del simulatore, compresi il diario di `core-nasops` e le chiamate SMB).
 
-**Un colpo a ogni chiamata** (`ShareChaosSweepTest`). I giri casuali campionano le chiamate; questo banco le prova *tutte*. Sceglie dal seme due mondi (uno con un caricamento dal telefono, uno con il più lavoro sul NAS), fa **un solo passo** (condividere un album nuovo) e lo misura con un giro senza colpi: quante chiamate fa a ogni punto (sul simulatore SMB, per esempio, 75 chiamate SMB, 27 salvataggi del diario di `core-nasops` e 24 del diario della condivisione). Poi, per ogni punto e ogni chiamata *n*, un giro con **un solo colpo**: la morte del processo prima e dopo, la connessione caduta prima e dopo, la sessione scaduta, il socket fermo, lo spazio finito dove ha senso (le porte che scrivono), e per ciascuno tutti gli invarianti come negli altri banchi. Sul NAS finto 541 giri (20 s), sul simulatore 1.683 (69 s, di cui 1.014 con un colpo a una chiamata SMB e 126 con la morte a un salvataggio del diario di `core-nasops`); in 12 e 58 giri il colpo non scatta (lo spazio finito su una chiamata che non occupa spazio: non è un colpo).
+**Un colpo a ogni chiamata** (`ShareChaosSweepTest`). I giri casuali campionano le chiamate; questo banco le prova *tutte*. Sceglie dal seme due mondi (uno con un caricamento dal telefono, uno con il più lavoro sul NAS), fa **un solo passo** (condividere un album nuovo) e lo misura con un giro senza colpi: quante chiamate fa a ogni punto (sul simulatore SMB, per esempio, 75 chiamate SMB, 30 salvataggi del diario di `core-nasops` e 24 del diario della condivisione). Poi, per ogni punto e ogni chiamata *n*, un giro con **un solo colpo**: la morte del processo prima e dopo, la connessione caduta prima e dopo, la sessione scaduta, il socket fermo, lo spazio finito dove ha senso (le porte che scrivono), e per ciascuno tutti gli invarianti come negli altri banchi. Sul NAS finto 541 giri (20 s), sul simulatore 1.695 (72 s, di cui 1.014 con un colpo a una chiamata SMB e 138 con la morte a un salvataggio del diario di `core-nasops`); in 12 e 58 giri il colpo non scatta (lo spazio finito su una chiamata che non occupa spazio: non è un colpo).
 
 ## E3. Come si lancia
 
@@ -1028,7 +1029,7 @@ Lo stack sano con gli stessi semi resta verde (200 giri), così il rosso viene d
 ## E9. Che cosa conta come superata
 
 1. **JVM**: 2.000 giri sul NAS finto e 600 sul simulatore SMB, **zero violazioni** (i difetti noti del §E6 non contano: sono riprodotti a parte).
-2. **Un colpo a ogni chiamata**: 541 giri sul NAS finto e 1.683 sul simulatore SMB, zero violazioni, almeno nove colpi su dieci scattati.
+2. **Un colpo a ogni chiamata**: 541 giri sul NAS finto e 1.695 sul simulatore SMB, zero violazioni, almeno nove colpi su dieci scattati.
 3. **Mutazioni**: i quattro errori sono rossi con l'invariante giusto (§E7), lo stack sano sugli stessi semi è verde.
 4. **Difetti noti**: ognuno ha la sua riproduzione e il suo seme.
 5. **NAS vero** (F80, dal PC): 500 interruzioni cadute su `test` → `test-comune`, zero giri rossi, l'area di prova pulita a fine prova (il rapporto dice cosa è rimasto), nessun errore di autenticazione.
@@ -1042,9 +1043,9 @@ Sul PC di sviluppo (condiviso con altre build, `--max-workers=2`), 26/10/2026:
 
 | Banco | Giri / interruzioni | Violazioni | Tempo |
 |---|---|---|---|
-| NAS finto, 2.000 giri (seme di base 20261026) | 2.000 giri, 3.930 interruzioni cadute (2.581 morti del processo), 3.998 passi, 52.724 file riletti con SHA-256 (1,1 GiB), 20.029 eventi guardati dagli osservatori | **0** | 110 s |
-| simulatore SMB, 600 giri (seme di base 20261027) | 600 giri, 1.273 interruzioni cadute (800 morti del processo), 1.176 passi, 15.497 file riletti (306 MiB), 5.830 eventi guardati | **0** | 29 s |
-| un colpo a ogni chiamata (NAS finto: 541 giri; simulatore SMB: 1.683 giri) | 2.224 giri, 2.154 colpi scattati (937 morti del processo) | **0** | 20 s + 69 s |
+| NAS finto, 2.000 giri (seme di base 20261026) | 2.000 giri, 3.930 interruzioni cadute (2.581 morti del processo), 3.998 passi, 52.724 file riletti con SHA-256 (1,1 GiB), 20.029 eventi guardati dagli osservatori | **0** | ~100 s |
+| simulatore SMB, 600 giri (seme di base 20261027) | 600 giri, 1.273 interruzioni cadute (800 morti del processo), 1.176 passi, 15.497 file riletti (306 MiB), 5.830 eventi guardati | **0** | 30 s |
+| un colpo a ogni chiamata (NAS finto: 541 giri; simulatore SMB: 1.695 giri) | 2.236 giri, 2.166 colpi scattati (949 morti del processo) | **0** | 21 s + 72 s |
 | mutazioni (200 giri per errore, seme 4242) | quattro rossi con l'invariante giusto, sano verde | — | 49 s |
 | NAS vero, dal PC (`test` → `test-comune`) | 243 giri, **500 interruzioni cadute** (326 morti del processo, 94 connessioni cadute, 35 sessioni scadute, 33 socket fermi, 12 «spazio finito»; 267 prima della chiamata, 233 dopo) | **0** (nessun giro rosso, nessun login rifiutato) | 18 min 42 s |
 | telefono (S25) | **non eseguito** | — | — |

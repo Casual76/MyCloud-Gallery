@@ -4485,3 +4485,149 @@ dal testo -> il soggetto si stacca; "Salva come nuova foto" -> la foto compare i
 nascosta; Copia e Condividi; foto da 12 MP e panorami; la cattura di rete di F67 non deve vedere traffico del ritaglio. **Media del solo telefono**: con una foto che non e' sul NAS, "Indicizza
 ora" (o la notte) la analizza, la Ricerca la trova dal contenuto e dal testo, e dal tablet NON la trova (e' solo del telefono); verificare il tempo per foto (preparazione + vettore + testo) e che
 con il telefono caldo il ritmo cali.
+
+## Fase 6, correzioni dopo le revisioni: pacchetto B (22/10)
+Fonte: `docs/review/6-fase6.md` (R6-R13, I1-I5, I8, I11, I13) e `docs/review/funzionale-6.md` (MO-1..MO-9, IX-1..IX-5, IX-8, LT-1, LT-2, CE-3, VM-2, DG-2..DG-5, AZ-1,
+AZ-2). Branch `fase6/rev-b`, da `main` a `e4a2306`, un commit per voce o gruppo. Niente telefono, niente NAS vero, niente rete: tutto su JVM e Robolectric; ogni difetto ha un
+test che sul codice di prima era rosso e che adesso e' verde. Le voci degli altri pacchetti (A: fiducia e indice `ai`; C: scheda Cerca, "Trova simili", ritaglio, foto in movimento)
+non si sono toccate; le poche modifiche fuori dal perimetro sono in fondo.
+
+### Lettura del testo senza l'ora del NAS (R6, R7, R8, I7 solo nella parte che serve, I8, LT-1, LT-2, CE-3, VM-2)
+**Causa unica.** Le impostazioni personali (`SyncedSearchSettings`, `SyncedMotionSettings`) leggevano `PersonalStore.entries`, cioe' solo le voci **datate** del registro. Una modifica
+fatta senza l'ora del NAS (fuori casa, VPN spenta, nessun accesso SMB nel processo) entra nello store come "da datare" (`undated()`) e `entries` non la contiene: "Spegni" tornava
+"Attiva", l'ordine dei risultati tornava a "Recenti", l'interruttore delle foto in movimento tornava com'era, e alla lettura dopo ML Kit ripartiva. **Correzione, una sola, alla radice:**
+- `PersonalStore.effectiveEntries` (registro + modifiche da datare, in cima): lo legge ogni impostazione, `LedgerPersonalStore.emitEffective()` lo aggiorna a ogni modifica, adozione
+  e apertura. Una voce da datare vince su quella datata finche' non arriva l'ora (poi si data e viaggia come sempre: nessuna regola di fiducia cambia, la voce non entra in `entries`
+  e non si pubblica senza data).
+- `AppTextReadingSwitch` (`app/.../ai/TextReading.kt`) non passa piu' dal solo registro: la scelta fatta qui vale **subito, in modo sincrono**, e `TextReadingMemory` la ricorda su
+  file (`unsynced`) finche' il registro non la raggiunge (`syncPending` lo dice alla pagina). Lo spegnimento ferma il motore prima di ogni altra cosa (`shutdown`) e **il cancello**
+  (`GatedTextReader`) rilegge lo stato di adesso (`currentState()`) due volte, prima di prendere il motore e sotto il blocco: una lettura che parte mentre si spegne non passa (R7).
+  `MlKitTextReader` rilasciato e' finito (`released`): un'altra lettura non lo riapre ma lancia `TEXT_READING_OFF`; il cancello ne costruisce uno nuovo solo se la lettura e' di nuovo
+  attiva.
+- **L'ordine dello spegnimento** (`TextReadingShutdown`, `DataTransportCleanup`): prima il `JobService` di DataTransport si **disabilita** (`PackageManager.setComponentEnabledSetting`),
+  poi si annullano i lavori e si toglie la coda, cosi' un lavoro appena riprogrammato non parte; allo spegnimento in avvio si ripete (anche se la memoria dice "spenta" e la pulizia e'
+  gia' fatta); `MlKitBootstrap.ensureInitialized` riabilita il servizio prima di inizializzare. Con la lettura accesa il servizio e' abilitato, com'era.
+- **L'esclusione locale** (Q13, R8) vale anche da spenta: se poi l'account accende altrove, qui non parte. **L'avviso una tantum** (LT-2, e I7 per la sola versione): con l'account acceso da
+  un altro dispositivo qui la lettura **non parte** finche' l'utente non ha visto l'avviso (`TextReadingState.AwaitingNotice`, `TextReadingMemory.noticeVersion`): si conferma dalla pagina
+  di attivazione o ci si esclude ("Non su questo dispositivo"). Una versione nuova del testo richiede di nuovo l'avviso. `enableForAccount` non scende mai a una versione piu' vecchia di
+  quella dell'account.
+- **Il testo dell'attivazione** dice ora la verita' sul momento dello spegnimento (I8, L49): "su questo dispositivo, subito; sugli altri si ferma appena ricevono la tua scelta (a casa
+  o con la VPN accesa)". Non e' un difetto di progetto (l'impostazione e' per account e viaggia sul NAS), e' una promessa che va detta; la pagina mostra "Sto per dirlo agli altri
+  dispositivi" mentre `syncPending`.
+- **L'ordine e le foto in movimento** (CE-3, VM-2): `PersonalSettingsHub` (`app/.../ai/PersonalLocalSettings.kt`) ha un file locale per `searchOrder` e `motionAnimation` (come la lettura:
+  vale subito, si ricorda, viaggia dopo, sparisce quando e' nel registro); `PersonalSearchOrderStore` e `PersonalMotionAnimationSettings` leggono da li'.
+- **L'azzeramento** (AZ-2, I13): `AppGraph.aiForgetter` dimentica la memoria dell'interruttore, dell'esclusione, degli avvisi e delle scelte personali in sospeso, **dopo** lo stop dell'AI
+  e **prima** dei file; vale anche per il cambio di account (`eraseAccountData(stopGallery = false)`). `AppTextReadingSwitch.stop()` ferma per primo l'interruttore (il suo `Job`, le
+  consegne al registro e le scritture del file) e `forget()` toglie il file: un'emissione tardiva del registro non lo fa rinascere. I file nuovi (`PersonalLocalSettings.FILE`,
+  `AiStatusMemory.FILE`, `AiStageMark.FILE`, la misura del dispositivo) sono in `LocalData.AI_FILES` (AZ-1).
+- **Prova:** `SettingsWithoutNasTimeTest` (core-personal), `TextReadingGateTest` (core-ai: doppio controllo del cancello, motore rilasciato, ordine dello spegnimento), `TextReadingWithoutNasTimeTest`
+  (app: spegni/accendi/escludi/avviso/azzeramento/ordine e animazione sul montaggio vero), `TextReadingActivationTest` e `SearchSettingsControllerTest` (pagina).
+
+### I modelli: rete, rimozione, ripresa, scaffale sul NAS (MO-1..MO-9, R9..R13, I1, I4, I5)
+- **"Scarica ora" e il cambio di ruolo sono lavori (MO-1, MO-2).** La pagina, Cerca e l'accensione del ruolo non scaricano piu' nel proprio scope (che muore con la pagina): chiedono un
+  lavoro di WorkManager (`RequestingModelManager` -> `AiWorkScheduling.fetchNow`, **uno per modello**, nome `ai-model-fetch-now-<modello>`, `KEEP` per modello, cosi' due richieste non si
+  buttano a vicenda) e tornano subito con lo stato "in coda". Il 440M ha il suo giro dal ruolo (`ROLE_CHANGED`, vincolo di rete non a consumo); "Scarica ora" lascia la rete al cancello
+  (dati mobili con la conferma, mai roaming). Il tempo del lavoro (8 minuti) e' **uno** per tutti i modelli del giro, non 8 minuti per ciascuno (I4): il resto riprende al giro dopo.
+- **La conferma sui dati mobili (MO-2) e' parte della richiesta.** Prima `mobileConfirmed` non diventava mai vero e il "Si'" non esisteva. Ora il cancello vede il trigger:
+  `USER_NOW` sui dati mobili -> `NeedsConfirmation(byte)` (la pagina mostra "Scaricare N MB con i dati mobili?" e un tasto), il "Si'" ripete la richiesta con `USER_CONFIRMED`
+  (che vale come `USER_NOW` e lascia passare i dati mobili, mai il roaming). Nessuna bandiera condivisa da ricordarsi di spegnere.
+- **Il cancello vale per ogni sorgente (R11).** `ModelNetworkGate.verdict(trigger, byte, sorgente)` e' chiesto per HTTPS, per le copie sul NAS e per la cartella dal PC: con la VPN
+  accesa sui dati mobili il NAS e' raggiungibile e 157-370 MB non si leggono senza conferma. Per le sorgenti del NAS non conta la validazione di Internet (un Wi-Fi di casa senza
+  WAN basta: F48); per HTTPS si. Un rifiuto non e' un errore: il modello resta **in coda con il motivo** (`ModelWait`: nessuna rete, aspetto il Wi-Fi, roaming; MO-8) e la pagina lo dice.
+- **HTTPS esce dalla rete giudicata (R12).** A casa il Wi-Fi riconosciuto vinceva sul cancello ma `URL.openConnection` usciva sulla rete **predefinita**, che con One UI puo' essere
+  quella dei dati mobili. `ModelFetchers.create(..., httpsRoute)` apre le connessioni con `Network.openConnection` sulla `Network` della rete sottostante dell'istantanea di adesso
+  (`AppModelHttpsRoute`, riletta a ogni connessione, cioe' a ogni fetta da 30 s); senza rete approvata la connessione non si apre e **non** si ripiega sulla predefinita. Il registro del
+  traffico segna la stessa rete. Il nome `Network.openConnection` e' ora vietato fuori da `core-models/.../download/https/` come ogni altro client (I3); la porta pubblica porta solo la
+  `Network`, non un client.
+- **"Rimuovi" dura (MO-3).** `meta/<sha>.removed`: il giro periodico (`RULES`) non riscarica un modello che l'utente ha tolto; lo riprende solo "Scarica ora" (e l'accensione del ruolo per il
+  suo modello), che toglie il segno. Il giro periodico non rilegge piu' per intero 1,1 GB (MO-7: `refreshOnce`) e la famiglia non ancora pronta in un processo nuovo non consuma il giro (MO-5).
+- **Errori e quarantene senza l'ora del NAS (R10).** `NasClock.nowMillis()` lancia fuori casa: `strike` e `isQuarantined` lanciavano fuori da ogni `try` e il lavoro cadeva senza provare la
+  sorgente dopo. Ora `SourceStrikes` ripiega sull'orologio **monotono** e ricorda l'errore solo in memoria (un tempo monotono non vale dopo un riavvio, quindi non si scrive); con gli
+  errori sul disco e senza ora la sorgente resta saltata (prudente: costerebbe 157-370 MB). `LocalModelManager.ensure` prende ogni `Exception` (mai la morte del processo, un `Error`): un guasto
+  imprevisto e' un fallimento di quella richiesta, non un'eccezione sul lavoro, e il modello dopo si prova lo stesso.
+- **Parziale e colpe (R13).** Una dimensione diversa dichiarata **prima di leggere** (`Content-Length`, voce del NAS) e' `FetchResult.SizeMismatch`: la sorgente sbaglia, ma il parziale
+  scritto da un'altra non si butta. `partial/<sha>.part.src` ricorda **ogni** sorgente che ha scritto: byte sbagliati scritti da piu' sorgenti (la cartella dal PC e poi HTTPS) buttano
+  il parziale **senza dare la colpa** a nessuna e si riparte da zero una volta; se da sola una sorgente sbaglia, la colpa e' sua. Una sorgente la cui fetta non fa crescere il parziale
+  due volte di fila si ferma (un CDN che cambia ETag a ogni richiesta non fa riscaricare per sempre lo stesso prefisso). Un `200` in ripresa riparte da zero **una volta** e da li'
+  il parziale riprende con il solo `Range`, senza `If-Range`. L'annullamento controlla `ensureActive` dopo il codice di risposta e prima di aprire il parziale, e `fetch` aspetta il lavoro
+  staccato per al piu' **1 secondo** (una lettura bloccata sul socket non si sblocca con la chiusura su alcune JVM, e `remove` non deve aspettare la scadenza di lettura).
+- **Il file verificato (I1, C22).** Si rende **in sola lettura** alla promozione e a ogni apertura; `VerifiedModel.stat` (dispositivo, inode, dimensione, `ctime`) e' preso **durante** la
+  verifica, sul descrittore su cui si calcola l'impronta; `PATH_CHECKED` lo confronta con quello del percorso prima e dopo l'inizializzazione del motore. **Limite che resta** (C22):
+  LiteRT-LM riceve il percorso, non il descrittore, quindi fra il controllo e la lettura del motore resta una finestra che il `ctime` stringe ma non chiude; la cache dei programmi
+  compilati (`models/cache/<sha>-<backend>/`) la scrive il motore e **non e' coperta dall'impronta**: si marca `.complete` solo dopo un'inizializzazione riuscita, una cache senza il marcatore
+  si toglie, e si toglie anche dopo un'inizializzazione fallita.
+- **La GPU che fa cadere il processo (R9).** `GpuTrial`: il segno "GPU in prova" sta su disco accanto alla cache (`<sha>-gpu.trial`, `.crashes`), si toglie al primo vettore valido o a una
+  chiusura pulita; due cadute di fila e il motore parte su CPU con `AI_GPU_FALLBACK`, senza riprovare la GPU. Il programma di misura (`RealDeviceProbe`) rilascia il motore alla fine.
+- **Lo scaffale sul NAS acceso (MO-4, I5, D18; chiude il punto aperto sullo scaffale spento di P3 e di P11b).** `core-nas` ha la scrittura a flusso (`NasModelShelfOps`, `ops/models/`): blocchi da 1 MiB in un temporaneo invisibile
+  (`.mycloudgallery/tmp/<dispositivo>-md-<32 cifre>`, riconosciuto dalla pulizia dei propri file), lunghezza verificata sullo stesso handle, rinomina **senza sostituire**, annullabile; due
+  soli metodi (`publishCopy`, `deleteOwnCopy`), solo nella propria cartella `models/`, nessun percorso scelto da fuori. `NasShelfWriter` la lega a `ShelfWriter`; `AppModelShelf` nasce con
+  il motore del NAS. **Le difese di I5, tutte insieme e prima di accenderlo:** (1) le copie si prendono **solo** dai dispositivi approvati del registro firmato (`TrustedShelfDevices`,
+  `ModelShelfDevices`), mai da una cartella con la forma di un id messa in `devices/`, e **senza elencare** `devices/`; (2) mai la copia propria; (3) al piu' 3 copie offerte, e **dopo il
+  primo errore sul NAS si va su HTTPS**; (4) ogni lettura passa dal cancello di rete (R11); (5) il primo dispositivo che ha il modello lo pubblica **solo se nessun altro ce l'ha gia'**
+  (`shareOnNas`, nel lavoro dei modelli), con il cancello di scrittura F4-D31 (`RulesModelShelfGate`) e solo con la rete che lo permette; (6) le copie proprie che l'app non elenca piu' si tolgono.
+- **Prova:** `ModelReviewBTest`, `ModelManagerTest`, `HttpsModelFetcherTest` (R12, R13, annullamento senza troncare il parziale), `SourceStrikesTest`, `NasModelShelfTest`,
+  `NasModelShelfOpsTest` (core-nas, sul simulatore: temporaneo invisibile, lunghezza, `Exists`, quota, annullamento, insieme chiuso dei metodi), `GpuTrialTest`, `ModelPortsTest`,
+  `AiWorkSchedulingTest` (WorkManager vero di test), banchi P10 di `core-models` e `core-ai` (chaos) con la morte del processo come `Error`.
+
+### Il calcolo e la pagina dell'Indicizzatore (IX-1..IX-5, IX-8)
+- **IX-1: le tappe si concatenano.** `AiWorkScheduling`: la tappa dopo di una tappa in corso si chiedeva con `KEEP` sullo **stesso nome** del lavoro ancora in corso (per WorkManager "non
+  finito"), e `KEEP` buttava la richiesta: "Indicizza ora" analizzava ~1.300 foto e si fermava, un'attesa delle regole non riprogrammava niente. Ora "Indicizza ora" (`ai-compute-now`),
+  il giro dopo le novita' (`ai-compute-news`) e la tappa seguente (`ai-compute-next`, `APPEND_OR_REPLACE`) hanno **nomi diversi** e la tappa dopo si accoda a quella in corso; un'attesa
+  delle regole riprogramma il lavoro con il vincolo giusto (`followUpOf`: fuori fascia -> alla fascia, senza carica -> con il vincolo di carica, caldo -> fra 5 minuti; NAS spento, profilo
+  inattivo, nessuna attivita' e rete assente non programmano niente: ci pensa il segnale che li cambia). **Prova con il WorkManager vero di test** (`WorkManagerTestInitHelper`, esecutore
+  sincrono, un lavoro di prova al posto di `AiComputeWorker`): i fake dei test d'integrazione non riproducevano `KEEP` e per questo il difetto non si era mai visto.
+  *Dipendenza dal pacchetto A:* `IX-6` (`settled`) cambia cosa vuol dire "tappa finita senza lavoro": qui `AiStages.compute` riporta com'e' finita la tappa al motore e al lavoro, senza
+  toccare `compute/` di A.
+- **IX-2, IX-3, IX-4: la pagina dice la verita' anche in un altro processo.** `AiStatusMemory` (file `ai-status`, solo codici) ricorda l'ultimo stato del calcolo; `AiGraph.noteStage` traduce
+  com'e' finita una tappa in parole della pagina (caldo, rete, NAS, "riprendo fra poco" = `AiWaitReason.NEXT_STAGE`) e il motore ora dice `Problem(AI_STORAGE_LOW)` per il poco spazio
+  (non piu' un'attesa che passa da sola) e `Problem(AI_ENGINE_INIT_FAILED)` se manca il modello a meta' tappa. La pagina rilegge il lavoro che resta, lo spazio e lo stato a **ogni
+  apertura** (`IndexerControl.refresh`); la misura del dispositivo si salva (`AppIndexerControl`, file di misura) e si rifa' quando il 440M diventa pronto (la prima falliva se mancava),
+  senza restare "in misura" per sempre. Lo stato iniziale dell'Indicizzatore non e' piu' `Off` ma l'ultimo ricordato.
+- **IX-5: il motore delle immagini si rilascia quando serve.** `onTrimMemory` rilascia anche a `RUNNING_LOW`, `RUNNING_CRITICAL` e `>= MODERATE` (prima il solo passaggio in secondo piano
+  rilasciava circa 800 MB mentre l'app era in primo piano); `AiGraph.runStage` rilascia a fine tappa; `stop()` ferma e rilascia (AZ-1, sotto).
+- **IX-8: spegnere il ruolo chiede del modello.** Con il 440M sul telefono (370 MiB) la pagina propone "Togli il modello?" (`offerRemoveIndexModel`): "Tienilo" lo lascia, "Togli" lo rimuove
+  (e "Rimuovi" dura, MO-3). Il ritaglio sta nell'APK e non si offre mai (MO-6: `Absent` fino alla prima apertura non e' "Da scaricare").
+
+### Diagnostica e azzeramento (DG-2..DG-5, AZ-1, AZ-2, I11, I13)
+- **DG-2:** `ModelFetchWorker` riporta il suo esito (`events.result(MODEL_FETCH, ...)`, `jobFailed`) e i codici `AI_MODEL_FETCH_FAILED`, `AI_MODEL_MISMATCH`, `AI_MODEL_NO_SPACE` (solo il
+  codice); `AiDiagnostics` li legge anche dai contatori del processo. **DG-3:** `AiStageMark` (un file con l'ora del telefono, scritto all'inizio della tappa e tolto alla fine): se alla tappa
+  dopo c'e' ancora, il processo e' morto durante la tappa, e `ApplicationExitInfo` dice se per memoria -> `AI_KILLED_MEMORY` (E-A16, F62). **DG-4:** `AI_STORAGE_LOW` e `AI_VECTOR_INVALID`
+  passano dagli eventi della tappa (prima restavano nel processo della notte). **DG-5:** `AI_MODEL_MISSING` conta solo i modelli voluti qui (il 270M sempre, il 440M agli
+  Indicizzatori; mai il ritaglio); "Spazio" dice modelli, indice di ricerca e buffer dell'analisi (`modelsBytes`, `searchBytes`, `aiBufferBytes`), e queste chiavi (con quelle della sezione
+  Ricerca, che mancavano) sono nell'elenco chiuso dell'esportazione (`ExportKeys`): prima l'esportazione le lasciava fuori in silenzio.
+- **AZ-1:** lo stop dell'AI viene **prima** della galleria; da quel momento il motore delle immagini non si riapre piu' (`StoppableImageEmbedder`: una tappa in corso si ferma al primo `embed`) e poi si rilascia, e `SearchGraph.open()` e' falso dopo `stop`. **AZ-2, I13:** vedi la lettura del testo.
+  **I11:** `DeveloperTools.erasableDirs()` (debug: `eval`; release: nessuna) e' nell'elenco dell'azzeramento: le etichette e le query del set privato non restano sul telefono.
+
+### Catena di fornitura: I2 e I3
+- **I2: `play-services-mlkit-text-recognition` non si toglie, e non e' la variante "Play services" in azione.** `gradlew dependencyInsight` sulla `releaseRuntimeClasspath` di `:core-ai` e
+  `:app`: `com.google.android.gms:play-services-mlkit-text-recognition:19.0.1` e `-common:19.1.0` arrivano **da `com.google.mlkit:text-recognition:16.0.1`** (la versione integrata che
+  usiamo), che le dichiara come dipendenze. Sull'APK di release vero (`aapt2 dump xmltree`, `dexdump`): **nessun** meta-data `com.google.mlkit.vision.DEPENDENCIES` (il segno che chiede a
+  Play services di scaricare il modello OCR all'installazione), nessuna stringa omonima nel dex; i registri del servizio di ML Kit sono i tre noti (testo, visione comune, comune);
+  i descrittori `dynamite` (i moduli che Play services consegna) sono i due del testo; `TextRecognizerOptions` e' quello integrato (porta il nome del modello dentro l'APK) e il modello e'
+  in `assets/mlkit-google-ocr-models/` con `libmlkit_google_ocr_pipeline.so`. Toglierle dal grafo (`exclude`) cambierebbe cio' che la libreria integrata carica e non si puo' provare
+  senza telefono: **si tengono, con il controllo**. `tools/check.ps1` (passo 7e) fa fallire la build se (a) compare un meta-data `com.google.mlkit.*DEPENDENCIES`, (b) i registri di ML Kit non sono
+  i tre noti, (c) i descrittori `dynamite` non sono i due noti, (d) il modello OCR integrato manca dall'APK, (e) `gradle/verification-metadata.xml` ha artefatti ML Kit o Play services di ML Kit
+  fuori dagli elenchi (due di Play services, cinque di ML Kit). Una libreria di ML Kit in piu' (codici a barre, volti...) e' una decisione, non un aggiornamento.
+- **I3: il controllo HTTPS vede i buchi.** Passo 7e di `check.ps1`: oltre a `HttpsURLConnection`, `URL.openConnection` e `HttpURLConnection`, ora anche `URL.openStream` e `getContent`, ogni
+  `URLConnection`, `Network.openConnection`, `HttpEngine`/`UrlRequest`, `DownloadManager`, `WebView`, i socket TLS, `java.net.http` e OkHttp; e i chiamanti non sono solo `Ldev/pampa/` ma
+  anche il codice dell'engine (`Ldev/antigravity/fluidengine/`). `Phase6ArchitectureTest` legge anche `engine-foundation` e `engine-ui` (che `settings.gradle` include con un ciclo e il test
+  non vedeva) e vieta gli stessi nomi (`openStream` da solo no: e' il nome di una nostra sorgente di byte; un URL lo apre comunque `java.net.URL`).
+
+### Fuori dal perimetro (modifiche minime) e dipendenze
+- `core-ai/compute/AiComputeEngine.kt`, `ComputeSession.kt` e `contract/Compute.kt` (`AiWaitReason.NEXT_STAGE`) (pacchetto A): lo stato `Problem(AI_STORAGE_LOW)`, `Waiting(NEXT_STAGE)` e `Problem(AI_ENGINE_INIT_FAILED)` (IX-2/IX-4); niente altro.
+  Il test `PaceAndBufferTest` e' aggiornato di conseguenza.
+- `app/graph/AppPlatform.kt`: `networkLookup` (R12); `app/graph/AppGraph.kt`: `aiForgetter` (AZ-2); `app/MyCloudGalleryApp.kt`: `refreshOnce()` (MO-7);
+  `app/nas/NasAi.kt`: `NasAiRuntime.rules` (cancello dello scaffale); `app/di/AiModule.kt`, `app/search/SearchGraph.kt`, `app/ai/ViewerPorts.kt` (`currentState()`); `DeveloperTools`
+  (debug e release): `erasableDirs()` (I11). `core-nas/ops/SmbNasFileOps.kt`: `publishAppTemp` per lo scaffale (la rinomina verso la cartella dell'app).
+- `core-personal`: `effectiveEntries` nel contratto `PersonalStore` (le impostazioni lo leggono).
+- Test cambiati senza indebolire una difesa: i test che alteravano il modello verificato lo rendono prima scrivibile (ora e' in sola lettura, I1); la morte del processo dei banchi e'
+  un `Error` (il gestore prende ogni `Exception`); le attese del cancello sono "in coda con il motivo" (MO-8); la copia propria non e' piu' tra le sorgenti dello scaffale (I5).
+
+**Cosa resta (punti aperti).** (1) **LT-3 e I7** non sono assegnati a questo pacchetto: la versione del consenso e' trattata solo dove serve a LT-2 (`AwaitingNotice`). (2) **CE-8 / Cerca:** il
+`NeedsConfirmation` dei modelli nella scheda Cerca (il banner "Scarica") e' del pacchetto C; la pagina Ricerca e modelli lo mostra. (3) **IX-3** (il lavoro che resta, sotto F4-D31) dipende da
+**IX-6** di A: finche' `settled` non e' corretto, il conteggio puo' includere media gia' fatti. (4) I test strumentati (`androidTest`) non si sono eseguiti ne' aggiornati: `MlKitOffAtStartupDeviceTest`
+resta valido e non e' stato toccato. (5) **Niente e' stato provato sul telefono:** F46-F71 sono da fare, in particolare F46 (scaricamento e conferma sui dati mobili), F48 (NAS senza Internet),
+F56 (ML Kit spenta, accesa, spenta, dopo un riavvio, **fuori casa senza l'ora del NAS**), F62 (`AI_KILLED_MEMORY`), F63 (la GPU che cade) e il primo giro dello scaffale sul NAS vero.
+(6) `TrustedShelfDevices` (registro -> id approvati) e' una riga non provata da un test dedicato: il `RegistryState` si costruisce solo con il verificatore; la provano i test dello scaffale con
+l'elenco fornito e le prove sul telefono.
+

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-faces: nessun permesso e nessun componente (Fase 8, P0; docs/fase8-progetto.md §6.4, D39). I lavori dei volti sono lavori di
+      WorkManager di :app come gli altri. Nessuna rete. Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in
+      docs/sicurezza.md 4-bis, poi quella in releaseManifestPolicy.
+  -->
+
+</manifest>

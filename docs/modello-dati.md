@@ -159,6 +159,9 @@ sopravvissuto **prima** che il perdente sia cancellato.
   l'ha aggiunto, quello della voce `item:` (`addedBy`), e lo spostamento non cambia ne' il `MediaId` ne' il proprietario (porta di
   completamento: la nuova posizione si collega allo stesso media prima che la sorgente vada nel cestino). La cartella d'origine sta nei
   dati personali (`shared_origin`), non nella definizione comune; "Riporta nelle mie cartelle" vale solo per i media propri.
+- **Stati di lavoro e volti (Fase 8, `docs/fase8-progetto.md` D15, D16):** `FACES` resta fuori dalle fasi iniziali di `work_state`:
+  lo stato dei volti (fatto con una ricetta, "non supportato", unita' fatte) sta nel database dei volti della generazione (§9), per chiave
+  di contenuto e per account, non per media. Si cancella con la generazione e non tocca mai lo stato del media.
 - **Tolleranze** (`LocationRules`): telefono 60 giorni (massimo del cestino Samsung), NAS 30 giorni (cestino
   della share, spostamenti visti in due scansioni). Intanto il media non conta come presente li'.
 
@@ -239,7 +242,12 @@ entita' (il build esporta `N.json`), scrivere `Migration(N-1, N)` in `GalleryMig
   - **La tabella `embedding` della v1 resta vuota e superata** (D23): nessuno la scrive o la legge (`MediaCatalog.putEmbedding` non
     ha chiamanti) e `ai_vector` e `ai_text`, per chiave di contenuto, la sostituiscono. Non si toglie: la migrazione 4→5 non e'
     distruttiva.
-  - I **volti** restano alla Fase 8.
+  - **Volti: progettati nella Fase 8** (`docs/fase8-progetto.md` D14, D15; P0 del 27/10): **non** stanno nel database della galleria,
+    che resta **v6**, ma in un database a parte per generazione, `faces-<G>.db` (`FacesDatabase` di `core-database`, schema proprio
+    **v1** esportato in `schemas/`): volti, persone, esemplari, assegnazioni, voci `people`, segni anti-rollback, outbox e unita' fatte,
+    con vettori, centroidi e nomi **cifrati** con la chiave della generazione (C39 di `docs/sicurezza.md`). Un file si cancella e si
+    verifica ("non c'e'"); nessuna migrazione sul campo per una funzione che molti non attivano. Lo descrive il §15 "Database dei volti,
+    v1", scritto da P6; i contratti (archivio `FacesArchive` di `core-faces`, chiave `FacesKeys` di `core-security`) sono di P0.
 - ~~**Album completi, album smart e condivisi**: Fase 7, con migrazione.~~ Progettati nella Fase 7 (`docs/fase7-progetto.md`, 21-22/10):
   album personali e smart nei dati personali (D3, D4, campi dentro `ALBUM`, nessun tipo nuovo), proiettati sulle tabelle **derivate** della
   v6 (D5, D34); album condivisi come contributi firmati nell'area comune (D6-D11), replicati senza chiavi esterne (`shared_album_entry`);

@@ -81,6 +81,20 @@ sealed interface SearchChip {
     override val label: String get() = if (exact) "“$text”" else text
   }
 
+  /**
+   * Fase 8 (D26, §2.7): una o piu' **persone con un nome** dal dizionario ([PeopleDictionary]), "una qualunque" o "tutte"
+   * ([PersonOption.mode]). E' un **filtro**: i candidati sono le celle con un volto assegnato alle persone, dalla porta [PeopleLookup]
+   * (P10), mai dai nascosti. [alternatives] sono le altre letture della stessa parola (una festa, un luogo, "Cerca come parola", E-F36,
+   * come E-Q10); [word] e' la parola della query. L'etichetta e' un **nome**: mai nei log; la cronologia la salva come testo e "Disattiva e
+   * cancella" la toglie (`SearchHistoryPurge`, D29).
+   */
+  data class Person(val option: PersonOption, val alternatives: List<ChipAlternative>, val word: String) : SearchChip {
+    override val label: String get() = option.label
+
+    /** Mai il nome ne' gli id (D37). */
+    override fun toString(): String = "SearchChip.Person(${option.ids.size}, ${option.mode.code})"
+  }
+
   /** I chip che restringono i candidati (filtri). Le parole e "simili a" no: decidono il punteggio. */
   val isFilter: Boolean get() = this !is Word && this !is Similar
 }
@@ -124,6 +138,13 @@ class PlaceDictionary(val entries: List<PlaceEntry>) {
  */
 fun interface QueryParser {
   fun parse(text: String, today: LocalDate, places: PlaceDictionary): ParsedQuery
+
+  /**
+   * Fase 8 (D26, §2.7): la stessa analisi con il dizionario delle **persone** ("Marco al mare", "Marco e Anna 2024"). Di serie ignora
+   * [people] (nessun chip "Persona": il nome resta testo per il contenuto, come quando Persone e' spenta); l'analizzatore italiano di P10
+   * la riscrive (dopo le virgolette e prima dei luoghi, la corrispondenza piu' lunga di un nome).
+   */
+  fun parse(text: String, today: LocalDate, places: PlaceDictionary, people: PeopleDictionary): ParsedQuery = parse(text, today, places)
 
   companion object {
     const val MAX_QUERY_CHARS: Int = 200

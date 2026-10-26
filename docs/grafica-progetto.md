@@ -675,3 +675,24 @@ grafico rifinisce **senza toccare la logica** né i contratti. Le voci da rifini
 
 Per le stesse voci la Fase 7 non aggiunge componenti al catalogo né cambia la chrome, il vetro, la pillola o la cella (D32). Screenshot di
 riferimento in `docs/screenshots/7-P8/`, `7-P10/`, `7-P11/` (chiaro e scuro, telefono e tablet, testo a 1,3x).
+
+### 12.14 Dubbi grafici della Fase 8 (27/10): da rifinire più avanti
+
+La Fase 8 (`docs/fase8-progetto.md`, §1.5 e D38) consegna **stati e contratti** (`feature-people/contract/PeopleScreens.kt` e
+`SwitchScreens.kt`, `ViewerFaceChip` di `feature-viewer`) e schermate funzionali fatte **solo** con i componenti G2 esistenti. Il filone
+grafico rifinisce **senza toccare la logica** né i contratti; la Fase 8 non modifica `core-designsystem`. Le voci da rifinire:
+
+| Voce | Cosa fa la Fase 8 | Da rifinire |
+|---|---|---|
+| **Sezione Persone e "Altri volti"** | Raccolte → Persone: fino a 8 persone **con un nome** e "Tutte le persone"; gli altri gruppi in "Altri volti", a un tocco (Q2 (b)); da spenta la riga "Attiva riconoscimento dei volti"; primo calcolo con la percentuale; nota della recinzione ("per ora restano su questo dispositivo") | forma e dimensione delle copertine dei volti (ritagliate al momento), densità della griglia, riga "Altri volti" |
+| **Pagina persona** | nome (o "Aggiungi un nome"), numero di foto, foto in ordine di tempo, azioni (Rinomina, Unisci, Dividi, Controlla le foto, Copertina, Nascondi, Dimentica), "Forse è anche…", "Crea album smart" | intestazione con la copertina, menu delle azioni |
+| **Revisione dei volti** | griglia di volti per "Controlla le foto", "Dividi" e "Altri volti", selezione multipla, "Applica" | ritagli dei volti in griglia, stato selezionato |
+| **Fogli di unione e divisione** | scelta delle persone da unire, scelta del nome da tenere con due nomi, conferma; proposte "È la stessa persona?" con Sì e No | confronto delle due persone, gerarchia del testo |
+| **Riga "Persone" nelle info del viewer** | chip per volto (con nome, senza nome, "1 volto non riconoscibile") con "Chi è?", "Non è …", "Ignora questo volto" (G3) | chip con il ritaglio, foglio "Chi è?" |
+| **Pagina di attivazione e avviso** | testo versionato (cosa fa, dove restano i dati, come si cancella, amici e bambini, niente attributi, modelli e licenze), requisiti, "Attiva"; avviso una tantum sugli altri dispositivi | leggibilità del testo lungo, requisiti non soddisfatti |
+| **Foglio "Disattiva e cancella"** | cosa si cancella (persone con nome, album smart con persone, cronologia), scelta per gli album (nessuna preselezione con album), conferma; poi lo stato per dispositivo (in locale, sul NAS, chi ha confermato, chi manca con l'ultimo contatto) | stato per dispositivo, attese lunghe |
+| **Chip "Persona" in Cerca** | chip con l'alternativa ("Natale" persona o festa), suggerimenti "Persone" a riposo (P10) | chip con la piccola copertina |
+| **Regola "Persone" nell'editor degli album smart** | persone scelte, "una qualunque" o "tutte", stato "non disponibile" se Persone è spenta o esclusa (P10) | scelta delle persone |
+
+Per le stesse voci la Fase 8 non aggiunge componenti al catalogo né cambia la chrome, il vetro, la pillola o la cella (D38). Screenshot di
+riferimento in `docs/screenshots/8-P7/`, `8-P8/`, `8-P9/`, `8-P10/` (chiaro e scuro, telefono e tablet, testo a 1,3x).

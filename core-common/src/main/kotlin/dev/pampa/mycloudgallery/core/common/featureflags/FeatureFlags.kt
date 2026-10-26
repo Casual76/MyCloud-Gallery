@@ -35,6 +35,12 @@ package dev.pampa.mycloudgallery.core.common.featureflags
  *   `test`/`test2` verso `test-comune`); sulle share vere il comando "Condividi" dice "Arriva dopo le prove". Come D12 vale in release
  *   **e in debug** e [forBuild] non ha un parametro per lui: lo spegne solo l'utente con il consenso di Q7 (a), a fine Fase 7, cambiando
  *   questo file. La decisione per share e' [sharedAlbumsMayUse]. Gli album personali, smart, i viaggi e l'Utility non hanno recinzione.
+ * @property facesSyncTestSharesOnly Fase 8, D34 (`docs/fase8-progetto.md` §0.1, risposta Q5 (a) del 27/10): i dati dei volti (file sotto
+ *   `.mycloudgallery/faces/`, prenotazioni dei volti, cancellazioni sul NAS) **solo** sulle share di prova ([TestShares]); sulle share vere
+ *   Persone lavora in solo locale (calcolo, raggruppamento, nomi e correzioni per dispositivo, "Disattiva e cancella" locale) e la pagina lo
+ *   dice. Come D30 vale in release **e in debug** e [forBuild] non ha un parametro per lui: lo spegne solo l'utente con il consenso di Q5,
+ *   a fine Fase 8, insieme alla pubblicazione dell'indice sulle cartelle vere, cambiando questo file. La decisione per share e'
+ *   [facesSyncMayUse]; in debug con gli account di prova vale in piu' `ShareFence` (F4-D33).
  */
 class FeatureFlags private constructor(
   val wol: Boolean,
@@ -43,6 +49,7 @@ class FeatureFlags private constructor(
   val backupTestSharesOnly: Boolean,
   val backupBlocksTestAccounts: Boolean,
   val sharedAlbumsTestSharesOnly: Boolean,
+  val facesSyncTestSharesOnly: Boolean,
 ) {
 
   /**
@@ -68,19 +75,28 @@ class FeatureFlags private constructor(
    */
   fun sharedAlbumsMayUse(share: String): Boolean = !sharedAlbumsTestSharesOnly || TestShares.isTestShare(share)
 
+  /**
+   * D34: i dati dei volti possono stare sul NAS nell'area privata [share] (pubblicazione, prenotazioni, cancellazione sul NAS)? Con
+   * [facesSyncTestSharesOnly] solo le share di prova scritte nel codice ([TestShares.isTestShare]: nome esatto, mai una share di famiglia).
+   * Lo legge il cancello dei volti (`FacesWriteGate`, P13) e la release lo tiene anche prima che il cancello sia legato (consumer-rules.pro;
+   * `tools/check.ps1` lo cerca nel dex di release).
+   */
+  fun facesSyncMayUse(share: String): Boolean = !facesSyncTestSharesOnly || TestShares.isTestShare(share)
+
   override fun equals(other: Any?): Boolean =
     other is FeatureFlags && other.wol == wol && other.nasLibrary == nasLibrary &&
       other.indexPublishTestSharesOnly == indexPublishTestSharesOnly && other.backupTestSharesOnly == backupTestSharesOnly &&
-      other.backupBlocksTestAccounts == backupBlocksTestAccounts && other.sharedAlbumsTestSharesOnly == sharedAlbumsTestSharesOnly
+      other.backupBlocksTestAccounts == backupBlocksTestAccounts && other.sharedAlbumsTestSharesOnly == sharedAlbumsTestSharesOnly &&
+      other.facesSyncTestSharesOnly == facesSyncTestSharesOnly
 
   override fun hashCode(): Int =
-    ((((wol.hashCode() * 31 + nasLibrary.hashCode()) * 31 + indexPublishTestSharesOnly.hashCode()) * 31 + backupTestSharesOnly.hashCode()) * 31 +
-      backupBlocksTestAccounts.hashCode()) * 31 + sharedAlbumsTestSharesOnly.hashCode()
+    (((((wol.hashCode() * 31 + nasLibrary.hashCode()) * 31 + indexPublishTestSharesOnly.hashCode()) * 31 + backupTestSharesOnly.hashCode()) * 31 +
+      backupBlocksTestAccounts.hashCode()) * 31 + sharedAlbumsTestSharesOnly.hashCode()) * 31 + facesSyncTestSharesOnly.hashCode()
 
   override fun toString(): String =
     "FeatureFlags(wol=$wol, nasLibrary=$nasLibrary, indexPublishTestSharesOnly=$indexPublishTestSharesOnly, " +
       "backupTestSharesOnly=$backupTestSharesOnly, backupBlocksTestAccounts=$backupBlocksTestAccounts, " +
-      "sharedAlbumsTestSharesOnly=$sharedAlbumsTestSharesOnly)"
+      "sharedAlbumsTestSharesOnly=$sharedAlbumsTestSharesOnly, facesSyncTestSharesOnly=$facesSyncTestSharesOnly)"
 
   companion object {
     /**
@@ -95,6 +111,12 @@ class FeatureFlags private constructor(
      */
     private const val SHARED_ALBUMS_TEST_SHARES_ONLY: Boolean = true
 
+    /**
+     * D34: i dati dei volti solo sulle share di prova. Una costante, non un parametro: nessuna build (nemmeno debug) la spegne da fuori.
+     * Si cambia qui, a mano, solo con il consenso dell'utente (Q5 (a): a fine Fase 8, dopo le prove, con la pubblicazione dell'indice).
+     */
+    private const val FACES_SYNC_TEST_SHARES_ONLY: Boolean = true
+
     /** I valori di ogni build di release: funzioni sperimentali spente, protezioni accese. */
     val RELEASE: FeatureFlags = FeatureFlags(
       wol = false,
@@ -103,6 +125,7 @@ class FeatureFlags private constructor(
       backupTestSharesOnly = BACKUP_TEST_SHARES_ONLY,
       backupBlocksTestAccounts = true,
       sharedAlbumsTestSharesOnly = SHARED_ALBUMS_TEST_SHARES_ONLY,
+      facesSyncTestSharesOnly = FACES_SYNC_TEST_SHARES_ONLY,
     )
 
     /**
@@ -130,6 +153,9 @@ class FeatureFlags private constructor(
           // D30: nessun parametro, di proposito. Anche la debug condivide gli album solo fra le share di prova (con gli account di
           // prova vale in piu' ShareFence, F4-D33).
           sharedAlbumsTestSharesOnly = SHARED_ALBUMS_TEST_SHARES_ONLY,
+          // D34: nessun parametro, di proposito. Anche la debug tiene i dati dei volti sul NAS solo nelle share di prova (con gli account
+          // di prova vale in piu' ShareFence, F4-D33).
+          facesSyncTestSharesOnly = FACES_SYNC_TEST_SHARES_ONLY,
         )
       }
   }

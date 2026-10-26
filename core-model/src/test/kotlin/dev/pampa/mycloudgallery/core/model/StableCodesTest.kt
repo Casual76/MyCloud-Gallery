@@ -36,6 +36,12 @@ class StableCodesTest {
     "AlbumKind" to AlbumKind.entries,
     "AlbumSort" to AlbumSort.entries,
     "TripKind" to TripKind.entries,
+    // Fase 8 (P0): i codici dei volti (salvati da P6, pubblicati da P3) e il modo delle persone (ricerca e album smart, P10).
+    "FaceSpaceCode" to FaceSpaceCode.entries,
+    "FaceTier" to FaceTier.entries,
+    "FaceSource" to FaceSource.entries,
+    "FaceDetectorCode" to FaceDetectorCode.entries,
+    "PeopleMode" to PeopleMode.entries,
   )
 
   @Test

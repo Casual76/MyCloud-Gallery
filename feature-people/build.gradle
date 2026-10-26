@@ -1,0 +1,78 @@
+// Le schermate delle persone della Fase 8 (docs/fase8-progetto.md §1.1, §1.5; D3-D5, D24-D31, D38, Q2 (b) del 27/10; righe P7, P8, P9
+// del §4.4): sezione Persone in Raccolte, "Tutte le persone" e "Altri volti", pagina persona, revisione dei volti ("Controlla le foto",
+// "Dividi"), fogli di unione e proposte "E' la stessa persona?", pagina di attivazione e avviso (activation/, P7), Impostazioni -> Persone,
+// foglio "Disattiva e cancella" (erase/, P8). Scheletro di P0: modulo, stati sigillati del §1.5 come contratto, azioni come porta, stati
+// di esempio per i test; schermate e ViewModel sono di P7, P8 e P9.
+//
+// **Aspetto: linguaggio grafico G2** (D38): le composable usano solo i componenti esistenti di `core-designsystem`, nessuno stile nuovo;
+// il filone grafico rifinisce senza toccare la logica.
+//
+// Vede di core-faces solo contratti di stato e di comando, null-object e fake; la Libreria (viste) e le miniature locali. **Cieca a
+// core-nas, core-nasops, core-trust, core-ai, core-search, core-albums, core-backup e core-index** (Phase8ArchitectureTest, anche per
+// inferenza: core-faces li tiene `implementation`). `FacesActivationConsent` la costruisce SOLO la pagina di attivazione
+// (`activation/FacesActivation*.kt`) e `FacesEraseConfirmation` SOLO il foglio (`erase/FacesErase*.kt`), dopo un tocco. I `feature-*` non
+// si conoscono fra loro.
+//
+// D7 della Fase 2: @HiltViewModel (KSP). Nessuna rete (NoNetworkSourcesTest), nessun orologio del telefono (NoWallClockSourcesTest): la
+// validita' delle conferme con l'orologio monotono. Stringhe in `values/strings_people_*.xml` e `values/strings_faces_*.xml`.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.people'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      maxHeapSize = '2g'
+    }
+  }
+}
+
+dependencies {
+  // api: i contratti delle persone (stato, persone, cancellazione) e i componenti (core-designsystem) compaiono negli stati.
+  api project(':core-faces')
+  api project(':core-designsystem')
+
+  // La Libreria (viste e celle) e le miniature locali (copertine ritagliate al momento, mai su disco: D25).
+  implementation project(':core-library')
+  implementation project(':core-imaging')
+
+  implementation project(':core-common')
+  implementation project(':core-model')
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid
+  implementation appDeps.serializationCore
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

@@ -27,6 +27,8 @@ android {
 
 dependencies {
   api project(':core-common')
+  // Fase 8 (P0, D14): `FacesKeys` nomina la generazione dei volti (`FaceGeneration`, tipo puro di core-model, una foglia).
+  api project(':core-model')
 
   // Compose (runtime, ui, foundation, lifecycle-runtime-compose) arriva da engine-ui: stessa versione di
   // tutta l'app e nessun artefatto in piu' da verificare. NON si usa il suo design system, solo Compose.

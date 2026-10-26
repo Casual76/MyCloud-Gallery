@@ -84,6 +84,14 @@ include ':feature-search'    // la schermata Cerca e la pagina Ricerca e modelli
 include ':core-albums'       // album personali e smart, viaggi, album condivisi (replica, permessi), orchestratore della condivisione
 include ':feature-albums'    // elenco e pagina degli album, editor delle regole, fogli di condivisione e chiusura, proposte di viaggio
 
+// Fase 8 (docs/fase8-progetto.md §1.1, P0): le persone, da attivare per account. I volti sono dati biometrici: core-faces li tiene
+// nell'area privata dell'account e sui suoi dispositivi, NON vede core-nasops, core-backup, core-nas, core-search, core-albums ne' la
+// rete (cancella, cerca e alimenta gli album da porte sue che :app lega); NasFileSystem solo in sync/. feature-people e' cieca a core-nas,
+// core-nasops, core-trust, core-ai, core-search e core-albums; le due conferme le costruiscono solo la sua pagina di attivazione e il suo
+// foglio "Disattiva e cancella" (Phase8ArchitectureTest).
+include ':core-faces'        // attivazione e consenso, calcolo dei volti, raggruppamento, persone, sincronizzazione, cancellazione, archivio
+include ':feature-people'    // sezione Persone, pagina persona, revisione dei volti, attivazione, avviso, impostazioni, "Disattiva e cancella"
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {

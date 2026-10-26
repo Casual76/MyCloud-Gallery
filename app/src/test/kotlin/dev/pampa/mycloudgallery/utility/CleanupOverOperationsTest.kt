@@ -3,19 +3,10 @@ package dev.pampa.mycloudgallery.utility
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.library.duplicates.CopyArea
 import dev.pampa.mycloudgallery.core.library.duplicates.NasTrashRef
-import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationIssuer
-import dev.pampa.mycloudgallery.core.nasops.contract.NasItem
-import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
 import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
-import dev.pampa.mycloudgallery.core.model.NasStamp
-import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
-import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
-import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
 import dev.pampa.mycloudgallery.core.nasops.contract.GateStatus
-import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
-import dev.pampa.mycloudgallery.feature.library.trash.UserTap
 import dev.pampa.mycloudgallery.feature.library.trash.testing.fakeSingleTap
 import dev.pampa.mycloudgallery.feature.library.utility.CleanupNasPort
 import kotlinx.coroutines.runBlocking
@@ -24,35 +15,15 @@ import org.junit.Test
 /**
  * Fase 7 (P8, D25, §2.1.1): **la pulizia dei doppioni passa da `NasOperations`**. `feature-library` non vede `core-nasops` (test d'architettura): la
  * pulizia esce dalla porta [CleanupNasPort] con le copie da togliere e la prova del tocco dell'utente, e chi la lega (`:app`, P13) costruisce il piano
- * `OpRequest.Trash`, lo fa verificare e lo avvia con la conferma. Qui sotto c'e' **l'adattatore di riferimento** ([OperationsCleanupNas]) sopra il NAS
- * finto del kit di `core-nasops` (le vere operazioni, il vero diario, lo stesso confronto dei timbri): P13 lo sposta in `:app` com'e'. La prova che il
- * piano dei Doppioni e' fatto nel modo che `NasOperations` si aspetta:
+ * `OpRequest.Trash`, lo fa verificare e lo avvia con la conferma. Qui si prova **l'adattatore di `:app`** ([OperationsCleanupNas], spostato da qui
+ * in `utility/UtilityPorts.kt` da P13 com'era) sopra il NAS finto del kit di `core-nasops` (le vere operazioni, il vero diario, lo stesso confronto
+ * dei timbri). La prova che il piano dei Doppioni e' fatto nel modo che `NasOperations` si aspetta:
  *  - un file con il timbro visto dal catalogo (dimensione, data, `fileId`) va nel cestino del NAS con **un** tocco (mai in modo definitivo);
  *  - se il file e' cambiato dopo che il catalogo l'ha visto (E-D13) non si tocca;
  *  - con le scritture ferme (congelamento, emergenza) non parte e lo dice (`BLOCKED`);
  *  - e' sempre e solo cio' che l'utente ha scelto: un elenco vuoto non pianifica niente.
  */
 class CleanupOverOperationsTest {
-
-  /** L'adattatore di riferimento di `CleanupNasPort`: piano di `Trash`, conferma dopo il tocco, avvio. Mai altro che il cestino. */
-  private class OperationsCleanupNas(private val operations: NasOperations, private val monotonicMs: () -> Long) : CleanupNasPort {
-    override suspend fun trash(copies: List<NasTrashRef>, tap: UserTap): NasTrashOutcome {
-      if (copies.isEmpty()) return NasTrashOutcome.REJECTED
-      val items = copies.map { copy ->
-        NasItem(copy.share, SharePath.parse(copy.path), isFolder = false, size = copy.size, stamp = NasStamp(copy.size, copy.modifiedAt, copy.fileId))
-      }
-      val plan = (operations.plan(OpRequest.Trash(items)) as? PlanOutcome.Ready)?.plan ?: return NasTrashOutcome.REJECTED
-      // Un piano senza elementi (tutti esclusi: share in sola lettura, file spariti) non avvia nessuna operazione.
-      if (plan.items.isEmpty()) return NasTrashOutcome.REJECTED
-      // Il tocco c'e' gia' stato (sul foglio): la conferma si emette adesso, con i tocchi che la prova dice, e il piano ne chiede uno.
-      if (tap.taps < plan.requiredConfirmations) return NasTrashOutcome.REJECTED
-      return when (operations.start(plan, ConfirmationIssuer.issue(plan, tap.taps, monotonicMs()))) {
-        is StartOutcome.Started, is StartOutcome.AlreadyStarted -> NasTrashOutcome.STARTED
-        StartOutcome.WritesBlocked -> NasTrashOutcome.BLOCKED
-        else -> NasTrashOutcome.REJECTED
-      }
-    }
-  }
 
   private val kit = NasOpsTestKit()
   private val port: CleanupNasPort get() = OperationsCleanupNas(kit.operations) { kit.clocks.monotonicMs() }

@@ -112,6 +112,7 @@ class SimilarCopiesGraph(
   private val buildLock = Mutex()
 
   @Volatile private var instance: CatalogSimilarCopies? = null
+  @Volatile private var signatureSourceBuilt: SignatureSource? = null
   private var relay: Job? = null
   private var running: Job? = null
 
@@ -128,6 +129,7 @@ class SimilarCopiesGraph(
         nas = NasThumbnailPixels(blobs, blobScopes),
         video = AppVideoFrames(catalog, context.applicationContext, uriOf, blobs, blobScopes),
       )
+      signatureSourceBuilt = source
       CatalogSimilarCopies(catalog, source, choices).also { built ->
         instance = built
         // Lo stato del rilevatore vero arriva a chi guarda la facciata (Diagnostica, riepilogo del primo backup).
@@ -147,6 +149,15 @@ class SimilarCopiesGraph(
   override suspend fun chooseCover(mediaId: MediaId): ChoiceOutcome = ensure()?.chooseCover(mediaId) ?: ChoiceOutcome.NOT_IN_GROUP
 
   override suspend fun separate(mediaId: MediaId): ChoiceOutcome = ensure()?.separate(mediaId) ?: ChoiceOutcome.NOT_IN_GROUP
+
+  /**
+   * Da dove vengono i pixel da firmare (Fase 7, P13): la stessa sorgente del confronto delle copie simili, per la firma visiva dei Doppioni simili
+   * (`CatalogSimilarShots.sign`, P8). Null finche' il rilevatore non si puo' costruire (catalogo o dati personali mancanti).
+   */
+  suspend fun signatureSource(): SignatureSource? {
+    ensure()
+    return signatureSourceBuilt
+  }
 
   /** Quanti candidati aspettano ancora il confronto, riletto dal catalogo (dopo META o una scansione del NAS). */
   suspend fun refreshProgress() {

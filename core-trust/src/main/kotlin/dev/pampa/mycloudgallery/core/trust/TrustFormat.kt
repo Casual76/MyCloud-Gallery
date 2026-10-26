@@ -23,8 +23,19 @@ object TrustFormat {
    */
   const val AI_VERSION: Int = 2
 
-  /** La versione piu' nuova che questa build sa leggere (1..2): la 2 vale solo per i file `ai`. */
+  /**
+   * La versione piu' nuova che i file **fuori da `albums/`** possono avere (1..2): la 2 vale solo per i file `ai`. I file `albums/` hanno la
+   * loro, [ALBUM_VERSION], e nessun altro tipo la accetta: per un file `ai` la 3 resta "piu' nuova" (`NEWER_FORMAT`).
+   */
   const val NEWEST_READABLE_VERSION: Int = AI_VERSION
+
+  /**
+   * Fase 7 (A6, D6): la versione dei **soli** file `albums/` (teste di tipo 6 e segmenti di classe `album`). Le teste `index` e `personal`
+   * restano alla [CURRENT_VERSION], i file `ai` alla [AI_VERSION]; chi legge accetta 1..3 con la versione legata al tipo (una testa d'album
+   * alla 1 o alla 2, o un file d'altro tipo alla 3, e' rifiutato). Un'app della Fase 6 non apre `albums/`; se per caso aprisse un file
+   * d'album, la 3 sarebbe `NEWER_FORMAT` ("aggiorna l'app"), mai un errore del dato (E-I3).
+   */
+  const val ALBUM_VERSION: Int = 3
 
   /** Le versioni dei file che non sono `ai` (registro, richieste, teste `index` e `personal`, segmenti, kit...). */
   fun isReadable(version: Int): Boolean = version in OLDEST_READABLE_VERSION..CURRENT_VERSION

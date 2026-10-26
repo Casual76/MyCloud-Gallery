@@ -20,8 +20,14 @@ class IndexSegmentTypesTest {
   @Test
   fun leClassiHannoCodiciENomiDelFormato() {
     assertThat(SegmentClass.entries.associate { it.wire to it.code }).containsExactly(
-      "meta", 1, "thumbS", 2, "thumbM", 3, "analysis", 4, "hq", 5, "frames", 6, "vec", 7, "ocr", 8, "personal", 16,
+      "meta", 1, "thumbS", 2, "thumbM", 3, "analysis", 4, "hq", 5, "frames", 6, "vec", 7, "ocr", 8, "personal", 16, "album", 17,
     )
+    // Fase 7 (D6): `album` solo nelle teste d'album, mai nell'indice, nei dati personali o nei dati AI; non e' un'immagine.
+    assertThat(SegmentClass.INDEX_CLASSES).doesNotContain(SegmentClass.ALBUM)
+    assertThat(HeadKind.entries.flatMap { it.classes }).doesNotContain(SegmentClass.ALBUM)
+    assertThat(SegmentClass.ALBUM.isContentBlob).isFalse()
+    assertThat(MetaRecords.PREP_MASK_ALLOWED and SegmentClass.ALBUM.mask).isEqualTo(0)
+    (18..31).forEach { assertThat(SegmentClass.fromCode(it)).isNull() }
     // Nessuna classe riservata e' definita (E-I4): i loro nomi non si decodificano. `vec` e `ocr` li definisce la versione 2.
     SegmentClass.RESERVED_WIRE.forEach { assertThat(SegmentClass.fromWire(it)).isNull() }
     assertThat(SegmentClass.RESERVED_WIRE).containsExactly("faces")

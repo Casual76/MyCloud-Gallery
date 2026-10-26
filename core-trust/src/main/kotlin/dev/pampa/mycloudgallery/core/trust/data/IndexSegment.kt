@@ -47,7 +47,7 @@ import java.util.Locale
 /**
  * La classe di un segmento (M1, §5.5-bis): ogni segmento contiene voci di **una** classe, e un dispositivo scarica solo
  * le classi che gli servono (D4, D16). [wire] e' il nome nella testa firmata, [code] il byte all'inizio del contenuto
- * del segmento. Codici 9–15 e 17–31 riservati: `faces` (Fase 8) e' **rifiutato** finche' una versione del formato non lo
+ * del segmento. Codici 9–15 e 18–31 riservati (17 e' `album`, Fase 7): `faces` (Fase 8) e' **rifiutato** finche' una versione del formato non lo
  * definisce (E-I4). `vec` (7) e `ocr` (8) li definisce la versione 2 (Fase 6, D6): valgono **solo** nelle teste `ai`
  * ([AI_CLASSES]), mai in una testa `index` ([INDEX_CLASSES]) o `personal`, e il loro codec e' `AiSegments`, non [IndexSegments].
  */
@@ -78,6 +78,12 @@ enum class SegmentClass(val wire: String, val code: Int) {
 
   /** Dati personali (4B, §2.9): solo nelle teste `personal`, solo nell'area privata dell'account. */
   PERSONAL("personal", 16),
+
+  /**
+   * Fase 7 (D6, A2): le voci di un album condiviso (JSON canonico, chiave = impronta di album e campo). Solo nelle teste d'album (tipo 6,
+   * versione 3), solo nell'area comune; mai in una testa `index`, `personal` o `ai`. Il codec e' `AlbumDocs`, non [IndexSegments].
+   */
+  ALBUM("album", 17),
   ;
 
   /** Il bit nella maschera `prep` di un record (le classi pubblicate per quella chiave di contenuto). */
@@ -87,7 +93,7 @@ enum class SegmentClass(val wire: String, val code: Int) {
   val isAi: Boolean get() = this == VEC || this == OCR
 
   /** Le voci sono immagini per chiave di contenuto (JPEG o WebP, dimensioni lette prima di decodificare). */
-  val isContentBlob: Boolean get() = this != META && this != PERSONAL && !isAi
+  val isContentBlob: Boolean get() = this != META && this != PERSONAL && this != ALBUM && !isAi
 
   companion object {
     /** Nomi riservati: una testa che li elenca e' rifiutata (nessuna classe "sconosciuta ma accettata"). */
@@ -97,7 +103,7 @@ enum class SegmentClass(val wire: String, val code: Int) {
      * Le classi che una testa `index` puo' elencare: mai [PERSONAL] (solo nelle teste `personal`) e mai `vec` e `ocr` (solo
      * nelle teste `ai`, [AI_CLASSES]): un'app senza la Fase 6 rifiuterebbe la testa intera, miniature comprese (D6).
      */
-    val INDEX_CLASSES: Set<SegmentClass> = entries.filter { it != PERSONAL && !it.isAi }.toSet()
+    val INDEX_CLASSES: Set<SegmentClass> = entries.filter { it != PERSONAL && it != ALBUM && !it.isAi }.toSet()
 
     /** Fase 6 (D6): le sole classi di una testa `ai`. */
     val AI_CLASSES: Set<SegmentClass> = setOf(VEC, OCR)
@@ -795,7 +801,7 @@ object IndexSegments {
 
   /** Il tetto del corpo di una voce di [cls]. */
   fun maxBodyBytes(cls: SegmentClass): Int = when (cls) {
-    SegmentClass.META, SegmentClass.PERSONAL -> TrustLimits.MAX_META_RECORD_BYTES
+    SegmentClass.META, SegmentClass.PERSONAL, SegmentClass.ALBUM -> TrustLimits.MAX_META_RECORD_BYTES
     SegmentClass.FRAMES -> TrustLimits.MAX_FRAMES_BODY_BYTES
     SegmentClass.VEC -> TrustLimits.MAX_VEC_BODY_BYTES
     SegmentClass.OCR -> TrustLimits.MAX_OCR_BODY_BYTES
@@ -818,6 +824,7 @@ object IndexSegments {
   fun encode(cls: SegmentClass, entries: List<SegmentEntry>): EncodedSegment {
     require(cls != SegmentClass.PERSONAL) { "La classe personal non e' ancora definita (4B)." }
     require(!cls.isAi) { "I segmenti vec e ocr li scrive AiSegments (versione 2)." }
+    require(cls != SegmentClass.ALBUM) { "I segmenti album li scrive AlbumDocs (versione 3)." }
     require(entries.size in 1..TrustLimits.MAX_SEGMENT_ENTRIES) { "Da 1 a ${TrustLimits.MAX_SEGMENT_ENTRIES} voci." }
     val sorted = entries.sortedWith { a, b -> IndexKeys.compare(a.key, b.key) }
     for (i in 1 until sorted.size) require(IndexKeys.compare(sorted[i - 1].key, sorted[i].key) < 0) { "Chiavi ripetute." }
@@ -872,6 +879,8 @@ object IndexSegments {
     ensure(expected != SegmentClass.PERSONAL, RejectReason.INVALID_FIELD, "segmento: classe non ancora definita in questa build")
     // Fase 6: `vec` e `ocr` si leggono solo con AiSegments (versione 2, corpi binari); qui sarebbero un segmento `index` falso.
     ensure(!expected.isAi, RejectReason.INVALID_FIELD, "segmento: classe dei dati AI fuori dalla testa ai")
+    // Fase 7: `album` si legge solo con AlbumDocs (versione 3), solo da una testa d'album.
+    ensure(expected != SegmentClass.ALBUM, RejectReason.INVALID_FIELD, "segmento: classe album fuori dalla testa d'album")
     ensure(
       own[base + 1].toInt() == 0 && own[base + 2].toInt() == 0 && own[base + 3].toInt() == 0,
       RejectReason.MALFORMED,
@@ -933,6 +942,7 @@ object IndexSegments {
       SegmentClass.FRAMES -> FramesBody.parse(b, off, len)
       SegmentClass.PERSONAL -> violation(RejectReason.INVALID_FIELD, "classe non ancora definita")
       SegmentClass.VEC, SegmentClass.OCR -> violation(RejectReason.INVALID_FIELD, "classe dei dati AI fuori dalla testa ai")
+      SegmentClass.ALBUM -> violation(RejectReason.INVALID_FIELD, "classe album fuori dalla testa d'album")
       else -> IndexImages.check(b, off, len, TrustLimits.MAX_BLOB_BYTES, IndexImages.ANY)
     }
   }

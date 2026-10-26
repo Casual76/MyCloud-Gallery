@@ -5385,3 +5385,121 @@ proiezione) e quello dei documenti. Nessuna dipendenza nuova, nessun permesso o 
 - Un salto indietro dell'ora del NAS oltre 2 minuti fa aspettare le mie teste agli altri finche' l'ora non torna: lo evita il cancello
   `CLOCK_JUMP` (D38), che P13 deve legare.
 - Da provare sul campo (F79, F84, F86): album sulle share di prova, finti album dal PC, i tre livelli fra telefono e tablet.
+
+## Fase 7 P11: Raccolte ordinabili e nascondibili (26/10)
+
+Il pacchetto P11 della Fase 7 (`docs/fase7-progetto.md` §4.4, riga P11; D33, §2.7, §1.5, §4.3, §5.2, §11; E-L14). Branch `fase7/p11` da `main`
+(`d699e70`). Perimetro rispettato: `feature-library/.../collections/**` e `core-personal/.../settings/SyncedCollectionsSettings.kt`; niente in
+`:app`, `MainScaffold`, `AppNavHost`, `core-albums`, `hidden/` e nessun file di build. Nessuna dipendenza nuova, nessun permesso o componente
+Android. Screenshot in `docs/screenshots/7-P11/` (chiaro e scuro, telefono e tablet, testo a 1,3x).
+
+**Cosa c'e'**
+- `core-personal`: `SyncedCollectionsSettings` (e `CollectionsSettingsCodec`): `order` e `hidden` come `StateFlow`, `setOrder`, `resetOrder`,
+  `setHidden`. Stesso modello di `SyncedSearchSettings`: legge `PersonalStore.effectiveEntries`, quindi **vale subito anche senza l'ora del NAS**
+  (la revisione B della Fase 6) e alla prima sincronizzazione la modifica prende l'ora e viaggia nell'ordine in cui e' stata fatta.
+- `feature-library/.../collections/`:
+  - **sezioni come dati**: `CollectionEntryGroup` (esteso con `code`, `hideable`, `hint`; alias `CollectionsGroup`, il nome del §2.7),
+    `CollectionEntry.trailing` ("Condiviso"), `CollectionSections` (codici e ordine predefinito), `CollectionsSectionProvider` con
+    `NoCollectionsSection` (null-object) e `FixedCollectionsSection` (fake), `CollectionsSectionSamples` in `testing/` (album, smart, viaggi,
+    Persone con la riga "Attiva riconoscimento dei volti", Cartelle NAS, Utility: dati inventati, per test e screenshot);
+  - **logica pura**: `CollectionsLayout` (ordine, visibilita', ordine da salvare, spostamenti), `CollectionsLayoutState` (il contratto del §1.5);
+  - **controllore e porte**: `CollectionsLayoutController`, `CollectionsLayoutViewModel`, `CollectionsLayoutStore` con `MemoryCollectionsLayoutStore`,
+    `CollectionsPortsModule` (Hilt: deposito opzionale e insieme dei fornitori che esiste anche vuoto);
+  - **schermate**: `CollectionsTab` riscritta sopra le sezioni, `CollectionsSectionGroup`, "Modifica Raccolte" (`CollectionsEditList`,
+    `CollectionsReorder`), stringhe in `strings_collections_edit.xml`, misure in `CollectionsDimens`.
+- `CollectionsTab` resta **compatibile**: i parametri di prima (`extraGroups`, `onOpenEntry`, `entryDetail`, ...) valgono ancora, quelli nuovi hanno un
+  default e il ViewModel e' Hilt con porte opzionali: `:app` compila e funziona senza toccarlo (con le sezioni di sempre, nell'ordine del §2.7).
+  `CollectionsViewModel` (le griglie filtrate) ha perso lo stato dell'elenco, che ora e' di `CollectionsLayoutViewModel`.
+
+**Decisioni**
+1. **Registrare una sezione.** Un pacchetto consegna un `CollectionsSectionProvider` (`code`, `group: StateFlow<CollectionEntryGroup?>`); `:app` lo lega con
+   `@Provides @IntoSet`. Il fornitore con il codice di una sezione che la scheda fa da sola (`phone`, `safe`, `hidden`) o di un gruppo di `:app`
+   **la sostituisce**; di due fornitori con lo stesso codice vale il primo; un codice che non si puo' scrivere nelle impostazioni (non `[a-z][a-z0-9_]{0,23}`)
+   e' ignorato; un gruppo senza voci non e' una sezione (niente intestazione, niente riga in "Modifica Raccolte") e toglie anche quella della scheda con lo
+   stesso codice, mentre un fornitore che non consegna niente (null) la lascia. Finche' un fornitore non c'e' la sezione non compare e le Raccolte funzionano
+   come prima.
+2. **Le sezioni del §2.7 e i loro codici**: `albums`, `smart`, `trips`, `people`, `memories`, `nas`, `phone`, `safe`, `utility`, `hidden`; ordine predefinito
+   questo. D33 elenca insieme "Da tenere al sicuro" e "Nascosti": la scheda li tiene **separati** per poter nascondere i Nascosti da soli (e' il senso di
+   "nascosti dalle Raccolte restano raggiungibili da Impostazioni"): `safe` ha gli Eliminati di recente di Android (dove il cestino di sistema esiste),
+   `hidden` la riga Nascosti (senza conteggio, E-H1). "Dal telefono" diventa **Telefono** (D33). Quando P8 sposta gli Eliminati di recente in Utility
+   basta un fornitore `safe` con un gruppo senza voci: la sezione sparisce.
+3. **Ordine salvato** (`collections_order`, testo con i codici separati da virgola, al piu' 40 da 24 caratteri: sta sempre nel tetto di una voce) e
+   **visibilita'** (`collections_hidden:<codice>`, un flag per sezione, falso o assente = mostrata). Mai salvato = ordine predefinito. **Una sezione nuova va in
+   coda** (E-L14): con un ordine salvato, cio' che non vi compare (Persone con la Fase 8) segue le altre nel suo ordine predefinito, senza spostarne nessuna;
+   il "posto riservato" di D33 vale per l'ordine mai scelto. Un codice salvato che oggi manca (il NAS non configurato) si salta e **riprende il suo posto
+   quando torna**: salvando un riordino le sezioni assenti restano dove erano (subito dopo quella che le precedeva), tranne Persone e Ricordi, che non si
+   tengono da parte (provato su 2.000 casi casuali: l'ordine scelto si rilegge identico e nessun codice salvato si perde).
+4. **Album non si nasconde mai**, in quattro punti: la schermata non ha l'interruttore, il controllore non scrive, `SyncedCollectionsSettings` non scrive e
+   ignora una voce `collections_hidden:albums` arrivata da fuori, `CollectionsLayout` non la applica. Un valore ostile o di una versione piu' nuova vale come
+   nessuna scelta (sezione mostrata, ordine predefinito): una sezione non sparisce per un valore che non si capisce.
+5. **Due colonne sul tablet** = `FluidListDetailScaffold` oltre 840 dp (la soglia del §2.7): a sinistra l'elenco delle sezioni nello stesso
+   ordine del telefono, a destra la raccolta scelta. "Modifica Raccolte" prende il posto dell'elenco e lascia il dettaglio. Senza nessuna raccolta-filtro che
+   si vede (Telefono nascosto) il pannello dice "Scegli una raccolta", non resta su un dettaglio che non c'e' piu'. **Da confermare** (punti aperti).
+6. **"Modifica Raccolte"**: il tasto con la matita sta in alto accanto alle Impostazioni (due tasti da 48 dp, niente sovrapposti); in modifica c'e' solo "Fine".
+   Ogni riga e' **un controllo** per TalkBack: interruttore "Mostra" con il nome della sezione e lo stato ("Mostrata, posizione 3 di 9"), e le azioni
+   **"Sposta su" e "Sposta giu'"** (solo quelle possibili, e a voce il risultato). La maniglia e' fuori dalla riga (un tocco non e' un interruttore), da 48 dp,
+   nascosta ai servizi di accessibilita'. Il trascinamento scambia le righe al passaggio del centro, tiene la riga sollevata e opaca (nessuna riga ne copre
+   un'altra), non esce dall'elenco, e le altre scivolano con il movimento dell'engine (non con "Rimuovi animazioni"). Sotto il nome compare solo cio' che serve:
+   "Sempre visibile" per Album, "Nascosta" (e dove si ritrova, per Nascosti) per una sezione spenta.
+7. **Salvare** si vede subito: una copia locale si aggiorna prima del deposito (due "Sposta su" di fila partono ognuno da quello prima); se il deposito
+   solleva si riporta la scelta com'era e la schermata lo dice in alto ("Non sono riuscito a salvare la tua scelta") finche' non riesce un'altra o si preme
+   "Fine". Una scelta di un altro dispositivo arriva dal deposito e si vede senza altro.
+8. **Gruppi di `:app` senza fornitore** (Cartelle NAS, Utility di oggi): sono sezioni anche loro; senza `code` lo si ricava dalla prima parte del codice delle
+   voci (`nas/...` -> `nas`, `backup/...` -> `utility`, altro `x_<parte>`), cosi' si possono gia' ordinare e nascondere. E' un ponte: P13 li sostituisce con
+   fornitori e il ponte si toglie (`CollectionSections.codeOf`).
+9. **Codici in due moduli che non si vedono** (`CollectionSections` in feature-library, `SyncedCollectionsSettings` in core-personal): `CollectionsCodesMatchTest`
+   legge il sorgente di feature-library e confronta codici, sezioni che non si nascondono e tetti.
+
+**Come registrano la loro sezione gli altri pacchetti** (il legame in `:app` e' di P13)
+```kotlin
+// P10 (album), P6 (smart), P7 (viaggi), P8 (Utility), P9 (Nascosti): un fornitore per sezione.
+@Provides @IntoSet fun albumsSection(...): CollectionsSectionProvider = object : CollectionsSectionProvider {
+  override val code = CollectionSections.ALBUMS               // "albums", "smart", "trips", "utility", "hidden", "people", "memories"
+  override val group: StateFlow<CollectionEntryGroup?> = ...  // titolo e voci (CollectionEntry: code stabile, titolo, sottotitolo, icona, tono, badge o trailing)
+}                                                             // hideable = false solo per Album; hint = dove si ritrova se la sezione e' nascosta
+```
+Le voci si aprono con `onOpenEntry(entry)` (telefono) e `entryDetail(entry)` (tablet) di `CollectionsTab`: `:app` riconosce il `code` della voce, come fa
+oggi per `nas/...` e `backup/free-space`. Persone (Fase 8): sezione `people`; con il riconoscimento dei volti spento la sua sola voce e' "Attiva riconoscimento
+dei volti" (`CollectionsSectionSamples.people()`), acceso le persone. Nessun codice speciale nella scheda.
+
+**Cosa trovano P9 e P13**
+- **P13**: (a) legare `CollectionsLayoutStore` a `SyncedCollectionsSettings(store, scope)` con un adattatore di sei righe (`order`, `hidden`, `setOrder`,
+  `setHidden`), dallo stesso punto dei dati personali di `search_order` e `motion_animation` (`PersonalSettingsHub`), cosi' vale anche prima che il registro
+  dei dati personali ci sia; (b) un `@Provides @IntoSet CollectionsSectionProvider` per sezione, e togliere `extraGroups` da `AppNavHost` (o passare
+  `CollectionEntryGroup(..., code = CollectionSections.NAS)`); (c) estendere `onOpenEntry` e `entryDetail` ai codici nuovi; (d) rinominare "Sul NAS" in
+  "Cartelle NAS" (stringa di feature-nas); (e) `MainScaffold` e `AppNavHost` non devono cambiare per compilare: `CollectionsTab` ha la firma di prima
+  piu' parametri opzionali, e `CollectionsPortsModule` rende opzionale il deposito e vuoto l'insieme dei fornitori (il grafo di Hilt si chiude senza niente
+  di tutto questo).
+- **P9 (Impostazioni → Privacy → Nascosti)**: la voce c'e' **sempre**, anche con la sezione nascosta, e apre la pagina dei Nascosti con la sua rotta
+  (`NavController.openCollection(CollectionKind.HIDDEN)`, dietro `HiddenAccessGate` come oggi): nascondere la sezione non cambia niente alla rotta. Lo stato che
+  si espone: `SyncedCollectionsSettings.hidden` contiene `"hidden"` quando l'utente ha nascosto la sezione, e `setHidden("hidden", false)` la rimostra; per scrivere
+  sotto la voce "Mostra i Nascosti nelle Raccolte" la porta la lega P13 come le altre (feature-settings non vede ne' core-personal ne' feature-library).
+
+**Prove** (`check.ps1` sotto)
+- `core-personal`: `SyncedCollectionsSettingsTest` (13: valori di partenza; due dispositivi in entrambi i versi; **E-L14** "nascosta su uno = nascosta su tutti";
+  ripresa dopo un riavvio; **senza l'ora del NAS** valgono subito e alla prima sincronizzazione prendono l'ora nell'ordine giusto; rimostrare prevale sulla voce
+  vecchia; Album mai nascosto, ne' scritto ne' letto; codici non scrivibili; valori ostili; tetto della voce e giro nel codec di oggi; nessuna interferenza con
+  `search_order` e `motion_animation`) e `CollectionsCodesMatchTest` (3).
+- `feature-library`: `CollectionsLayoutTest` (19: ordine predefinito, **E-L14** sezione nuova in coda e piu' sezioni nuove, sezione assente che torna al suo posto,
+  doppioni e codici stranieri, visibilita', Album, gruppi di `:app`, ordine da salvare con le sezioni assenti, proprieta' su 2.000 casi), `CollectionsReorderTest` (10:
+  il trascinamento, altezze diverse, limiti, azioni di TalkBack), `CollectionsLayoutControllerTest` (21: fornitori che appaiono, spariscono e cambiano, sostituzione,
+  codici ignorati, riordino e visibilita' che si salvano, E-L14 senza scrivere, scelta di un altro dispositivo, due spostamenti di fila, **salvataggio che fallisce**,
+  Nascosti senza conteggio), `CollectionsEditScreenTest` (17, telefono e tablet: ingresso e "Fine", interruttore, Album senza interruttore, **azioni di TalkBack**
+  "Sposta su/giu'" con posizione e stato letti, **trascinamento dalla maniglia**, tocco sulla maniglia, **bersagli da 48 dp**, due colonne nello stesso ordine,
+  modifica nel pannello dell'elenco, dettaglio vuoto, salvataggio che fallisce, tutto nascosto) e quelli di prima (`NoHiddenLeakTest`, E-H1, anche sulla scheda
+  nuova; `CollectionsStyleTest`; ...) portati allo stato nuovo.
+- Screenshot `7-P11`: la scheda (tutte le sezioni, in fondo, Persone spenta, ordine e sezioni scelti, senza fornitori, tutto nascosto) e "Modifica Raccolte"
+  (normale, con sezioni nascoste, durante il trascinamento), chiaro e scuro, telefono e tablet, testo a 1,3x.
+
+**Punti aperti**
+- **"Due colonne"**: l'ho letto come l'elenco+dettaglio che c'e' oltre 840 dp (le sezioni nell'elenco a sinistra); se si volevano le sezioni stesse affiancate in due
+  colonne dentro l'elenco, cambia solo `CollectionsTab` (le sezioni sono gia' dati).
+- Il trascinamento non fa scorrere la pagina vicino ai bordi: con tutte le sezioni e il testo a 1,3x l'elenco e' piu' alto dello schermo; chi non puo' scorrere e
+  trascinare ha "Sposta su/giu'". Se serve, lo scorrimento automatico e' una riga nel gesto.
+- Le righe consegnate come dato hanno icona e tono, non la miniatura di copertina: le copertine degli album sono del filone grafico (§12.13).
+- `announceForAccessibility` dice la nuova posizione dopo un'azione di TalkBack ed e' deprecato dall'API 36: da sostituire con un'area viva.
+- Persone e Ricordi: il contratto c'e' (un fornitore con `people` o `memories`), nessun dato finche' le Fasi 8 e 9.
+
+**Da provare sul telefono (F90)**: riordinare le sezioni col dito e con TalkBack ("Sposta su/giu'" dalle azioni della riga); spegnere Viaggi e Utility e ritrovare la
+scelta sul tablet (e viceversa, anche con il telefono fuori casa); nascondere Nascosti e aprirli da Impostazioni → Privacy; con tutte nascoste, ritrovare "Modifica
+Raccolte"; Album senza interruttore; testo grande; la scheda sul tablet in orizzontale (elenco a sinistra, dettaglio a destra) e in verticale (una colonna sola).

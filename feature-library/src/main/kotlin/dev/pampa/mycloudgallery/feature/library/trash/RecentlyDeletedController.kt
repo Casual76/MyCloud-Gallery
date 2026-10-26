@@ -72,26 +72,62 @@ sealed interface TrashUiState {
   /** Il cestino o il riconoscimento dei nascosti non hanno risposto: non si mostra niente. */
   data object Failed : TrashUiState
 
-  /** [entries] puo' essere vuoto: la pagina dice che non c'e' niente di eliminato di recente. */
-  data class Loaded(val entries: List<TrashEntry>) : TrashUiState
+  /**
+   * [entries] sono le foto del telefono; [nas] il cestino del NAS (Fase 7, D26). Tutti e due possono essere vuoti: la pagina dice che non c'e' niente
+   * di eliminato di recente.
+   */
+  data class Loaded(val entries: List<TrashEntry>, val nas: NasTrashSection = NasTrashSection.None) : TrashUiState {
+    /** Quanti elementi in tutto, nei due cestini. */
+    val total: Int get() = entries.size + ((nas as? NasTrashSection.Rows)?.entries?.size ?: 0)
+
+    /** Non c'e' niente da mostrare in nessuno dei due. */
+    val isEmpty: Boolean get() = total == 0
+  }
+}
+
+/** Una voce del cestino del NAS pronta per la pagina: un'identita' per la selezione e la riga. */
+@Immutable
+data class NasTrashEntry(
+  /** Un'identita' **solo per la selezione**: deriva dalla chiave della voce, mai uguale a quella di un media del catalogo. */
+  val id: MediaId,
+  val row: NasTrashRow,
+)
+
+/** La parte della pagina che viene dal NAS (D26). */
+sealed interface NasTrashSection {
+
+  /** Nessun NAS collegato: la sezione non c'e'. */
+  data object None : NasTrashSection
+
+  data object Loading : NasTrashSection
+
+  /** [offline]: il NAS non risponde, ci sono solo le voci proprie dell'ultima lettura. [writable] falso: ripristino ed "Elimina subito" spenti. */
+  data class Rows(val entries: List<NasTrashEntry>, val writable: Boolean, val offline: Boolean = false) : NasTrashSection
+
+  data object Denied : NasTrashSection
+
+  data object Failed : NasTrashSection
 }
 
 /**
- * La logica degli Eliminati di recente (D14, D17), senza Android a parte `IntentSender`.
+ * La logica degli Eliminati di recente (D14, D17, Fase 7 D26), senza Android a parte `IntentSender`: **i due cestini insieme**, quello di Android per
+ * le foto del telefono e quello del NAS ([NasTrashPort], 30 giorni), con i giorni rimasti di ogni voce.
  *
  * **Sta dietro lo stesso cancello dei Nascosti** ([HiddenAccessGate]: la credenziale di sistema a ogni ingresso, un minuto
- * di tolleranza condiviso fra le due schermate), perche' nel cestino ci sono anche i nascosti eliminati:
+ * di tolleranza condiviso fra le due schermate), perche' nel cestino ci sono anche i nascosti eliminati (e il NAS ne ha i nomi):
  *
- *  - **Mai prima dello sblocco.** Chiusa, non legge il cestino ne' chiede quali sono nascosti: niente da trovare.
+ *  - **Mai prima dello sblocco.** Chiusa, non legge il cestino ne' chiede quali sono nascosti, e non tocca il cestino del NAS: niente da trovare.
  *  - **Mai dopo l'uscita.** [hidden] dimentica elenco e selezione.
- *  - Sbloccata mostra tutto, i nascosti col segno. **"Ripristina" non cambia il nascosto**: e' un dato personale legato
+ *  - Sbloccata mostra tutto, i nascosti del telefono col segno. **"Ripristina" non cambia il nascosto**: e' un dato personale legato
  *    all'identita' del media (`media_personal`), il sistema restituisce il file e la Libreria non lo mostra.
  *
- * Legge il cestino di sistema, calcola i giorni rimasti, tiene la selezione e prepara la richiesta di **ripristino** (il
- * dialogo di sistema `createTrashRequest(..., false)`). **L'app non cancella mai niente da sola**: non c'e' "Elimina per
- * sempre", il sistema svuota il cestino dopo 30 giorni.
+ * Legge il cestino di sistema, calcola i giorni rimasti, tiene la selezione e prepara le azioni:
+ *  - **Ripristina** il telefono: il dialogo di sistema `createTrashRequest(..., false)` ([restoreRequest]);
+ *  - **Ripristina** il NAS: la porta, dopo il tocco ([restoreNas]);
+ *  - **Elimina subito** (solo le voci **proprie** del NAS, Q8): la porta, con la doppia conferma ([purgeNas]).
+ * **L'app non cancella mai niente da sola** e non c'e' un "Elimina per sempre" per il telefono: il sistema svuota il cestino dopo 30 giorni.
  *
- * Non e' il cestino della Galleria di Samsung (E-P11): quello toglie la riga dal MediaStore e qui non si vede.
+ * Non e' il cestino della Galleria di Samsung (E-P11, D-3): quello toglie la riga dal MediaStore e qui non si vede; la pagina lo dice.
  */
 class RecentlyDeletedController(
   private val gate: HiddenAccessGate,
@@ -99,33 +135,41 @@ class RecentlyDeletedController(
   private val mask: TrashHiddenMask,
   private val intents: PhoneMediaIntents,
   private val scope: CoroutineScope,
+  private val nasTrash: NasTrashPort = NoNasTrash,
   private val nowMs: () -> Long = System::currentTimeMillis,
 ) {
 
   private val canTrash: Boolean = intents.canTrash
 
-  // Loading / Failed / Loaded: cio' che si e' letto. Conta solo con il cancello aperto.
+  /** C'e' un cestino del NAS da mostrare (un adattatore e' legato). Senza NAS e senza cestino di sistema la pagina e' "non disponibile". */
+  private val hasNas: Boolean = nasTrash !== NoNasTrash
+
+  // Loading / Failed / Loaded: cio' che si e' letto del telefono. Conta solo con il cancello aperto.
   private val content = MutableStateFlow<TrashUiState>(TrashUiState.Loading)
 
-  /** Cosa mostrare. Senza il cancello aperto non c'e' mai un elenco; senza il cestino di sistema c'e' [TrashUiState.Unsupported]. */
-  val state: StateFlow<TrashUiState> = combine(gate.state, content) { access, read ->
+  // Il cestino del NAS: cio' che la porta dice, solo con il cancello aperto.
+  private val nasContent = MutableStateFlow<NasTrashSection>(if (hasNas) NasTrashSection.Loading else NasTrashSection.None)
+
+  /** Cosa mostrare. Senza il cancello aperto non c'e' mai un elenco; senza nessun cestino c'e' [TrashUiState.Unsupported]. */
+  val state: StateFlow<TrashUiState> = combine(gate.state, content, nasContent) { access, read, nas ->
     when {
-      !canTrash -> TrashUiState.Unsupported
+      !canTrash && !hasNas -> TrashUiState.Unsupported
       else -> when (access) {
         HiddenAccess.Locked -> TrashUiState.Locked
         HiddenAccess.Authenticating -> TrashUiState.Authenticating
         is HiddenAccess.Denied -> TrashUiState.Denied(access.reason)
-        HiddenAccess.Unlocked -> read
+        HiddenAccess.Unlocked -> if (read is TrashUiState.Loaded) read.copy(nas = nas) else read
       }
     }
-  }.stateIn(scope, SharingStarted.Eagerly, if (canTrash) TrashUiState.Locked else TrashUiState.Unsupported)
+  }.stateIn(scope, SharingStarted.Eagerly, if (canTrash || hasNas) TrashUiState.Locked else TrashUiState.Unsupported)
 
   private val _selection = MutableStateFlow<Set<MediaId>>(emptySet())
 
-  /** Gli elementi scelti per il ripristino. */
+  /** Gli elementi scelti (dei due cestini). */
   val selection: StateFlow<Set<MediaId>> = _selection.asStateFlow()
 
   private var loading: Job? = null
+  private var nasJob: Job? = null
 
   /** Cresce a ogni lettura e a ogni uscita: l'esito di una lettura di un'epoca vecchia si butta. */
   private var epoch = 0
@@ -147,7 +191,10 @@ class RecentlyDeletedController(
     epoch++
     loading?.cancel()
     loading = null
+    nasJob?.cancel()
+    nasJob = null
     content.value = TrashUiState.Loading
+    nasContent.value = if (hasNas) NasTrashSection.Loading else NasTrashSection.None
     _selection.value = emptySet()
     if (visible) {
       visible = false
@@ -168,18 +215,18 @@ class RecentlyDeletedController(
   }
 
   /**
-   * Rilegge il cestino, **solo con il cancello aperto**. Si chiama all'ingresso, al ritorno in primo piano e dopo un
+   * Rilegge i cestini, **solo con il cancello aperto**. Si chiama all'ingresso, al ritorno in primo piano e dopo un
    * ripristino: il contenuto cambia mentre si e' altrove.
    */
   fun refresh() {
-    if (!canTrash || !gate.isUnlocked) return
+    if ((!canTrash && !hasNas) || !gate.isUnlocked) return
     loading?.cancel()
     val mine = ++epoch
     loading = scope.launch {
       // La prima lettura mostra l'attesa; le successive lasciano la lista com'e' finche' non arriva quella nuova.
       if (content.value !is TrashUiState.Loaded) content.value = TrashUiState.Loading
       val entries = try {
-        val items = source.list()
+        val items = if (canTrash) source.list() else emptyList()
         val hiddenRefs = if (items.isEmpty()) emptySet() else mask.hiddenAmong(items.map { it.ref })
         val now = nowMs()
         items.asSequence()
@@ -195,23 +242,73 @@ class RecentlyDeletedController(
       // Mentre si leggeva ci si puo' essere richiusi o essere usciti: l'esito di una lettura vecchia non si mostra.
       if (mine != epoch || !gate.isUnlocked) return@launch
       content.value = TrashUiState.Loaded(entries)
-      // Quello che era scelto e non c'e' piu' (ripristinato, scaduto) esce dalla selezione.
-      val present = entries.mapTo(HashSet()) { it.id }
-      _selection.update { current -> current.filterTo(LinkedHashSet()) { it in present } }
+      pruneSelection()
+    }
+    if (hasNas) startNas(mine)
+  }
+
+  /**
+   * Segue il cestino del NAS finche' la pagina e' aperta e sbloccata: ogni aggiornamento della porta e, in parallelo, la sua lettura. Se la lettura
+   * non riesce la sezione dice "Failed" (e si smette di seguire un aggiornamento che potrebbe essere vecchio) finche' l'utente riprova.
+   */
+  private fun startNas(mine: Int) {
+    nasJob?.cancel()
+    nasJob = scope.launch {
+      val follower = launch {
+        nasTrash.feed.collect { feed ->
+          // Un aggiornamento arrivato dopo l'uscita o con il cancello chiuso non si mostra.
+          if (mine == epoch && gate.isUnlocked) {
+            nasContent.value = sectionOf(feed)
+            pruneSelection()
+          }
+        }
+      }
+      try {
+        nasTrash.refresh()
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        follower.cancel()
+        if (mine == epoch && gate.isUnlocked) nasContent.value = NasTrashSection.Failed
+      }
     }
   }
 
-  /** Tocca una cella: la sceglie o la toglie. */
+  private fun sectionOf(feed: NasTrashFeed): NasTrashSection = when (feed) {
+    NasTrashFeed.Unavailable -> NasTrashSection.None
+    NasTrashFeed.Loading -> NasTrashSection.Loading
+    NasTrashFeed.Denied -> NasTrashSection.Denied
+    NasTrashFeed.Failed -> NasTrashSection.Failed
+    is NasTrashFeed.Ready -> NasTrashSection.Rows(entriesOf(feed.rows), feed.writable)
+    is NasTrashFeed.Offline -> NasTrashSection.Rows(entriesOf(feed.cachedOwn), writable = false, offline = true)
+  }
+
+  private fun entriesOf(rows: List<NasTrashRow>): List<NasTrashEntry> =
+    rows.sortedWith(compareBy<NasTrashRow>({ it.daysLeft ?: Int.MAX_VALUE }, { it.key })).map { NasTrashEntry(nasEntryId(it.key), it) }
+
+  /** Quello che era scelto e non c'e' piu' (ripristinato, scaduto) esce dalla selezione. */
+  private fun pruneSelection() {
+    val loaded = content.value as? TrashUiState.Loaded ?: return
+    val present = HashSet<MediaId>()
+    loaded.entries.mapTo(present) { it.id }
+    (nasContent.value as? NasTrashSection.Rows)?.entries?.mapTo(present) { it.id }
+    _selection.update { current -> current.filterTo(LinkedHashSet()) { it in present } }
+  }
+
+  /** Tocca una cella o una riga: la sceglie o la toglie. */
   fun toggle(id: MediaId) {
     if (!gate.isUnlocked) return
     _selection.update { if (id in it) it - id else it + id }
   }
 
-  /** Sceglie tutto cio' che si vede. */
+  /** Sceglie tutto cio' che si vede, nei due cestini. */
   fun selectAll() {
     if (!gate.isUnlocked) return
     val loaded = content.value as? TrashUiState.Loaded ?: return
-    _selection.value = loaded.entries.mapTo(LinkedHashSet()) { it.id }
+    val all = LinkedHashSet<MediaId>()
+    loaded.entries.mapTo(all) { it.id }
+    (nasContent.value as? NasTrashSection.Rows)?.entries?.mapTo(all) { it.id }
+    _selection.value = all
   }
 
   fun clearSelection() {
@@ -219,8 +316,8 @@ class RecentlyDeletedController(
   }
 
   /**
-   * La richiesta di ripristino di [ids] (default: la selezione): il dialogo di sistema che chiede conferma. Null se
-   * non c'e' niente da ripristinare, il cestino non esiste o la pagina e' chiusa. La lancia la UI con
+   * La richiesta di ripristino delle foto del telefono di [ids] (default: la selezione): il dialogo di sistema che chiede conferma. Null se
+   * non c'e' niente da ripristinare sul telefono, il cestino non esiste o la pagina e' chiusa. La lancia la UI con
    * `startIntentSenderForResult`. I nascosti si ripristinano **nascosti**: qui non si tocca nessun dato personale.
    */
   fun restoreRequest(ids: Set<MediaId> = _selection.value): IntentSender? {
@@ -228,10 +325,79 @@ class RecentlyDeletedController(
     return intents.trashRequest(refsOf(ids), trash = false)
   }
 
-  /** I riferimenti che il ripristino di [ids] riguarda (per i test e per il riepilogo). */
+  /** I riferimenti del telefono che il ripristino di [ids] riguarda (per i test e per il riepilogo). */
   fun refsOf(ids: Set<MediaId>): List<MediaRef.Phone> {
     val loaded = content.value as? TrashUiState.Loaded ?: return emptyList()
     return loaded.entries.filter { it.id in ids }.map { it.item.ref }
+  }
+
+  /** Le voci del cestino del NAS di [ids] (default: la selezione), nell'ordine della pagina. */
+  fun nasEntriesOf(ids: Set<MediaId> = _selection.value): List<NasTrashEntry> =
+    (nasContent.value as? NasTrashSection.Rows)?.entries.orEmpty().filter { it.id in ids }
+
+  /**
+   * Ripristina le voci del NAS scelte che si possono ripristinare (record valido, share scrivibile). Il tocco sul pulsante "Ripristina" e' la
+   * conferma: ripristinare non toglie niente e non sovrascrive mai. Null se non c'e' niente da ripristinare nel NAS o la pagina e' chiusa.
+   */
+  suspend fun restoreNas(ids: Set<MediaId> = _selection.value): NasTrashOutcome? {
+    if (!gate.isUnlocked) return null
+    val section = nasContent.value as? NasTrashSection.Rows ?: return null
+    if (!section.writable) return null
+    val acted = nasEntriesOf(ids).filter { it.row.restorable }
+    val keys = acted.mapTo(LinkedHashSet()) { it.row.key }
+    if (keys.isEmpty()) return null
+    return afterNasGesture(acted.mapTo(HashSet()) { it.id }) { nasTrash.restore(keys, singleTap()) }
+  }
+
+  /**
+   * Se "Elimina subito" e' possibile per [ids] (default: la selezione): solo voci **del NAS**, **tutte proprie** (Q8, D25), con il NAS che risponde e
+   * almeno una share scrivibile. Una voce del telefono o di un altro dispositivo nella selezione lo spegne.
+   */
+  fun canPurge(ids: Set<MediaId> = _selection.value): Boolean {
+    if (!gate.isUnlocked || ids.isEmpty()) return false
+    val section = nasContent.value as? NasTrashSection.Rows ?: return false
+    if (!section.writable || section.offline) return false
+    val chosen = nasEntriesOf(ids)
+    return chosen.size == ids.size && chosen.all { it.row.deletableNow }
+  }
+
+  /** Quanti elementi e quanti byte toglierebbe "Elimina subito" per [ids]: per il riepilogo del foglio. */
+  fun purgeSummary(ids: Set<MediaId> = _selection.value): Pair<Int, Long> {
+    val chosen = nasEntriesOf(ids)
+    return chosen.size to chosen.sumOf { it.row.sizeBytes }
+  }
+
+  /**
+   * "Elimina subito": elimina per sempre le voci proprie scelte. Serve la prova dei due tocchi del foglio ([proof], Q8): senza non si fa niente. Null
+   * se non e' possibile ([canPurge]) o la pagina e' chiusa.
+   */
+  suspend fun purgeNas(proof: UserTap, ids: Set<MediaId> = _selection.value): NasTrashOutcome? {
+    if (proof.taps < DoubleTapConfirm.REQUIRED || !canPurge(ids)) return null
+    val acted = nasEntriesOf(ids)
+    val keys = acted.mapTo(LinkedHashSet()) { it.row.key }
+    return afterNasGesture(acted.mapTo(HashSet()) { it.id }) { nasTrash.purgeNow(keys, proof) }
+  }
+
+  /** Esegue un gesto sul NAS: se parte, quello su cui ha agito ([acted]) esce dalla selezione; poi si rilegge. */
+  private suspend fun afterNasGesture(acted: Set<MediaId>, gesture: suspend () -> NasTrashOutcome): NasTrashOutcome {
+    val outcome = try {
+      gesture()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      NasTrashOutcome.FAILED
+    }
+    if (outcome == NasTrashOutcome.STARTED) _selection.update { current -> current - acted }
+    if (gate.isUnlocked) {
+      try {
+        nasTrash.refresh()
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        // La prossima lettura lo dira'.
+      }
+    }
+    return outcome
   }
 
   fun close() {
@@ -254,5 +420,8 @@ class RecentlyDeletedController(
     /** L'identita' di una miniatura del cestino: stabile per riferimento, mai uguale a quella di un media del catalogo. */
     fun trashEntryId(ref: MediaRef.Phone): MediaId =
       MediaId(UUID.nameUUIDFromBytes("trash|${ref.volume}|${ref.mediaStoreId}".toByteArray(Charsets.UTF_8)).toString())
+
+    /** L'identita' di una voce del cestino del NAS nella selezione: stabile per chiave, diversa da quelle del telefono. */
+    fun nasEntryId(key: String): MediaId = MediaId(UUID.nameUUIDFromBytes("nastrash|$key".toByteArray(Charsets.UTF_8)).toString())
   }
 }

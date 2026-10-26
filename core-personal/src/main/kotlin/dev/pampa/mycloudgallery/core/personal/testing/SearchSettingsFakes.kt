@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.personal.testing
 
+import dev.pampa.mycloudgallery.core.personal.contract.FullHashPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.contract.MotionPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.contract.SearchOrderSetting
 import dev.pampa.mycloudgallery.core.personal.contract.SearchPersonalSettings
@@ -30,5 +31,12 @@ class FakeMotionPersonalSettings(on: Boolean = true) : MotionPersonalSettings {
 
   override suspend fun setMotionAnimation(on: Boolean) {
     motionAnimation.value = on
+  }
+}
+class FakeFullHashPersonalSettings(on: Boolean = false) : FullHashPersonalSettings {
+  override val fullHashNightly: MutableStateFlow<Boolean> = MutableStateFlow(on)
+
+  override suspend fun setFullHashNightly(on: Boolean) {
+    fullHashNightly.value = on
   }
 }

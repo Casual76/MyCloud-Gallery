@@ -203,8 +203,13 @@ internal object HiddenSurfaces {
       landedWhen = listOf("$ALBUMS/trips"), probe = ReferenceProbes.trips, alsoProvedBy = listOf("ReferenceTripsContractTest"),
     ),
     SurfaceEntry(
-      id = "duplicates", title = "Doppioni: identici e simili, pulizia guidata", row = SpecRow.UTILITY, owner = "P8", backing = Backing.PENDING,
-      landedWhen = listOf("$LIB/duplicates", "feature-library/src/main/kotlin/dev/pampa/mycloudgallery/feature/library/utility"),
+      id = "duplicates", title = "Doppioni: identici e simili, pulizia guidata (piani compresi)", row = SpecRow.UTILITY, owner = "P8",
+      backing = Backing.PRODUCTION,
+      sources = listOf(
+        "$LIB/duplicates/CatalogIdenticalDuplicates.kt", "$LIB/duplicates/CatalogSimilarShots.kt", "$LIB/duplicates/FullHashNightly.kt",
+      ),
+      probe = HiddenProbes.duplicates, live = true,
+      alsoProvedBy = listOf("CatalogIdenticalDuplicatesTest", "CatalogSimilarShotsTest", "FullHashNightlyTest"),
     ),
     SurfaceEntry(
       id = "add-to-album", title = "Aggiungi ad album: la scelta dell'album e dei media", row = SpecRow.ADD_TO_ALBUM, owner = "P10", backing = Backing.PENDING,

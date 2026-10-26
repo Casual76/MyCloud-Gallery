@@ -3,6 +3,13 @@ package dev.pampa.mycloudgallery.hidden
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.index.FilteredTimelineView
+import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
+import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
+import dev.pampa.mycloudgallery.core.library.duplicates.CatalogIdenticalDuplicates
+import dev.pampa.mycloudgallery.core.library.duplicates.CatalogSimilarShots
+import dev.pampa.mycloudgallery.core.library.duplicates.CleanupPlan
+import dev.pampa.mycloudgallery.core.library.duplicates.RemovalPlaces
+import dev.pampa.mycloudgallery.core.library.duplicates.ShotVectorSource
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogHiddenMask
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogVisibleMedia
 import dev.pampa.mycloudgallery.core.library.visibility.RotatingWidgetFeed
@@ -11,6 +18,7 @@ import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
+import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.MediaSource
 import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
@@ -26,6 +34,8 @@ import dev.pampa.mycloudgallery.nas.CatalogHidden
 import dev.pampa.mycloudgallery.search.CatalogSearchData
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlin.time.Duration.Companion.hours
 
 // Fase 7 (P9, D22): le SONDE delle superfici che hanno gia' il codice vero. Ognuna fa girare la superficie sul mondo casuale (catalogo vero,
 // istantanea vera) e dice cosa mostra: il test di proprieta' controlla che non mostri mai cio' che l'oracolo vieta e che mostri cio' che deve.
@@ -154,5 +164,69 @@ internal object HiddenProbes {
     val hiddenKeys = CatalogHidden.hiddenLocationKeys(w.db, keyOf.values)
     val listed = keyOf.filter { it.value !in hiddenKeys }.keys.mapTo(LinkedHashSet()) { w.ids[it] }
     Probed(shown = listed, expected = w.idsOf(w.nas.keys.filter { it in w.oracle.liveShowable }))
+  }
+
+  // --- Doppioni (Fase 7, P8, D25): il codice vero sul catalogo vero ---------------------------------------------------------------------
+
+  /** Il media di un file di prova: l'indice dello spec ricavato dal nome o dall'`_ID` (sul telefono) con cui la costruzione del mondo li ha scritti. */
+  private val NAME_INDEX = Regex("""IMG_\d+_(\d+)""")
+
+  private fun indexOfPhone(ref: MediaRef.Phone): Int =
+    (ref.mediaStoreId - if (ref.mediaStoreId >= HiddenWorldBuilder.PHONE_COPY_BASE) HiddenWorldBuilder.PHONE_COPY_BASE else HiddenWorldBuilder.PHONE_ORIGINAL_BASE).toInt()
+
+  private fun indexOfNas(path: String): Int = NAME_INDEX.find(path)!!.groupValues[1].toInt()
+
+  /** I media a cui un piano di pulizia (telefono e NAS) si riferisce, ricavati dai riferimenti: nessun id, solo i file che ha scritto il mondo. */
+  private fun mediaOf(w: BuiltWorld, plan: CleanupPlan): Set<MediaId> =
+    (plan.phone.map { indexOfPhone(it.ref) } + plan.nas.map { indexOfNas(it.path) }).mapTo(LinkedHashSet()) { w.ids[it] }
+
+  private fun mediaOf(w: BuiltWorld, places: RemovalPlaces): Set<MediaId> =
+    (places.phone.map { indexOfPhone(it.ref) } + (places.nasPrivate + places.nasCommon).map { indexOfNas(it.path) }).mapTo(LinkedHashSet()) { w.ids[it] }
+
+  /** Una `VisibleMedia` che non toglie niente: simula una pagina che ha letto i gruppi prima che un media venisse nascosto. */
+  internal fun everythingVisible(w: BuiltWorld): VisibleMedia = object : VisibleMedia {
+    override val snapshot: StateFlow<TimelineSnapshot?> = MutableStateFlow(w.snapshot)
+
+    override suspend fun visible(ids: Collection<MediaId>): Set<MediaId> = ids.toSet()
+  }
+
+  /** Lo stesso vettore per ogni foto: tutte quelle dello stesso giorno a meno di dieci minuti si somigliano, e il filtro dei nascosti decide cosa esce. */
+  internal val sameVector = ShotVectorSource { media -> media.associateWith { floatArrayOf(1f, 0f, 0f, 0f) } }
+
+  /**
+   * I Doppioni: i gruppi identici (con la loro proposta), il piano di pulizia, i gruppi di scatti simili e i luoghi di un'eliminazione. Un nascosto non
+   * compare in niente di tutto questo: ne' nei gruppi, ne' nei piani (i file da mandare nei cestini), nemmeno se i gruppi sono stati letti **prima**
+   * che venisse nascosto (il piano filtra di nuovo, D22). Una seconda copia dalla stessa parte e' un doppione identico (`WorldSpec.sameSideCopies`).
+   */
+  val duplicates = SurfaceProbe { w ->
+    val visible = CatalogVisibleMedia(w.db, MutableStateFlow(w.snapshot))
+    val shown = LinkedHashSet<MediaId>()
+    val problems = ArrayList<String>()
+
+    val identical = CatalogIdenticalDuplicates(w.catalog, visible)
+    val scan = identical.scan()
+    if (scan.failed) problems += "la lettura dei doppioni identici e' fallita"
+    scan.proposals.forEach { shown += it.group.media }
+    shown += mediaOf(w, identical.plan(scan.cleanable))
+
+    // Una pagina che aveva letto i gruppi senza sapere dei nascosti: il piano li lascia fuori lo stesso.
+    val stale = CatalogIdenticalDuplicates(w.catalog, everythingVisible(w)).scan()
+    val staleMedia = mediaOf(w, identical.plan(stale.proposals))
+    shown += staleMedia
+    if (w.liveMustNeverShow.isNotEmpty() && staleMedia.any { it in w.liveMustNeverShow }) problems += "il piano porta nei cestini un media nascosto"
+
+    val similar = CatalogSimilarShots(w.catalog, visible, CatalogHiddenMask(w.db), vectors = sameVector)
+    var before: Int? = null
+    do {
+      val batch = similar.scan(before, 1.hours)
+      if (batch.failed) problems += "la ricerca degli scatti simili e' fallita"
+      batch.clusters.forEach { cluster -> shown += cluster.media }
+      before = batch.nextBeforeDay
+    } while (before != null)
+    // I luoghi di un'eliminazione (il foglio): per qualunque media, anche nascosto, nessun file di un nascosto.
+    shown += mediaOf(w, similar.placesOf(w.ids))
+
+    // Tutto cio' che esce sta fra i media che si possono mostrare (dopo gli ultimi nascosti): la pagina chiede ancora al catalogo (`live`).
+    Probed(shown = shown, within = w.liveShowable, problems = problems)
   }
 }

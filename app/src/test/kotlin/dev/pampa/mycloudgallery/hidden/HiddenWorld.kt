@@ -68,6 +68,12 @@ internal class WorldSpec(
    * ancora al catalogo (il filtro finale: `VisibleMedia`, `HiddenMask`, il widget) non devono mostrarli, ne' mostrare chi sta nel loro gruppo.
    */
   val lateHidden: Set<Int> = emptySet(),
+  /**
+   * Media con una **seconda copia dalla stessa parte** (Fase 7, P8, D25): sul telefono un secondo file in `Download/`, sul NAS un secondo file in
+   * `Backup/<dispositivo>/`, con gli stessi byte. Sono i doppioni identici che la pagina Doppioni propone di pulire; non cambiano le celle della
+   * Libreria (una copia in piu' non e' un media in piu').
+   */
+  val sameSideCopies: Set<Int> = emptySet(),
 ) {
   override fun toString(): String = "WorldSpec(seed=$seed, media=${media.size}, groups=${groups.size})"
 
@@ -112,23 +118,29 @@ internal class WorldSpec(
       val late = HashSet<Int>()
       intactGroups.shuffled(random).take(random.nextInt(0, 3)).forEach { late += it.members[random.nextInt(it.members.size)] }
       media.indices.filter { it !in alreadyHidden }.shuffled(random).take(random.nextInt(0, 3)).forEach { late += it }
-      return WorldSpec(seed, media, groups, hiddenByUser, partial, favorites, late)
+      // Le seconde copie dalla stessa parte (P8): da un generatore a parte, cosi' i mondi di prima restano gli stessi di prima per ogni altra scelta.
+      val copyRandom = Random(seed * 7_919 + 13)
+      val copies = media.indices.filterTo(HashSet()) { copyRandom.nextInt(100) < 18 }
+      return WorldSpec(seed, media, groups, hiddenByUser, partial, favorites, late, copies)
     }
 
     /** Il caso peggiore: tutto nascosto. */
     fun everythingHidden(seed: Long = 9_001, size: Int = 40): WorldSpec = random(seed, size).let {
-      WorldSpec(it.seed, it.media, it.groups, it.media.indices.toSet(), emptySet(), it.favorites)
+      WorldSpec(it.seed, it.media, it.groups, it.media.indices.toSet(), emptySet(), it.favorites, sameSideCopies = it.sameSideCopies)
     }
 
     /** Solo "ultimi nascosti": niente era nascosto quando e' stata fatta l'istantanea. */
     fun onlyLateHidden(seed: Long = 9_003, size: Int = 60): WorldSpec = random(seed, size).let {
       val groupMember = it.groups.first().members.first()
-      WorldSpec(it.seed, it.media, it.groups, emptySet(), emptySet(), it.favorites, it.lateHidden + groupMember + it.media.indices.first { i -> it.groups.none { g -> i in g.members } })
+      WorldSpec(
+        it.seed, it.media, it.groups, emptySet(), emptySet(), it.favorites,
+        it.lateHidden + groupMember + it.media.indices.first { i -> it.groups.none { g -> i in g.members } }, it.sameSideCopies,
+      )
     }
 
     /** Il caso opposto: niente nascosto. */
     fun nothingHidden(seed: Long = 9_002, size: Int = 40): WorldSpec = random(seed, size).let {
-      WorldSpec(it.seed, it.media, it.groups, emptySet(), emptySet(), it.favorites)
+      WorldSpec(it.seed, it.media, it.groups, emptySet(), emptySet(), it.favorites, sameSideCopies = it.sameSideCopies)
     }
   }
 }

@@ -146,6 +146,9 @@ enum class AiWaitReason {
   STORAGE_LOW,
   HOT,
   PREPARATION,
+
+  /** La tappa e' finita per tempo e ce n'e' un'altra in coda: "riprendo fra poco" (IX-2: non e' un'attesa delle regole). */
+  NEXT_STAGE,
 }
 
 /** Lo stato del calcolo AI per la pagina Ricerca e modelli (§1.5). Solo numeri e codici. */

@@ -69,6 +69,38 @@ class TextReadingGateTest {
   }
 
   @Test
+  fun unaLetturaCheHaPassatoIlPrimoControlloMaTrovaLoSpegnimentoAlLucchettoNonCostruisceIlMotore() = runTest {
+    // R7: il cancello si guarda due volte, la seconda sotto il lucchetto del rilascio. Qui lo stato e' "attivo" alla prima lettura e
+    // "spento" alla seconda (lo spegnimento e' arrivato nel mezzo): il motore non si costruisce.
+    var calls = 0
+    var constructed = 0
+    val gated = GatedTextReader({ if (++calls == 1) on else TextReadingState.Disabling }) {
+      constructed++
+      WitnessReader()
+    }
+    val thrown = runCatching { gated.read(AiTestInputs.ocr("a")) }.exceptionOrNull()
+    assertThat((thrown as AiEngineException).error).isEqualTo(AiEngineError.TEXT_READING_OFF)
+    assertThat(constructed).isEqualTo(0)
+    assertThat(gated.isEngineCreated).isFalse()
+  }
+
+  @Test
+  fun unaLetturaInCorsoDopoIlRilascioNonRiapreIlMotoreVecchio_ELaProssimaNeCostruisceUnoNuovo() = runTest {
+    val readers = mutableListOf<WitnessReader>()
+    var state: TextReadingState = on
+    val gated = GatedTextReader({ state }) { WitnessReader().also { readers += it } }
+    gated.read(AiTestInputs.ocr("a"))
+    gated.release()
+    assertThat(readers.single().released).isEqualTo(1)
+    state = TextReadingState.Disabling
+    assertThat(runCatching { gated.read(AiTestInputs.ocr("b")) }.exceptionOrNull()).isInstanceOf(AiEngineException::class.java)
+    assertThat(readers).hasSize(1)
+    state = on
+    gated.read(AiTestInputs.ocr("c"))
+    assertThat(readers).hasSize(2)
+  }
+
+  @Test
   fun lostatoDiSpegnimentoInCorsoEComeSpento() = runTest {
     val gate = Gate(TextReadingState.Disabling)
     assertThat(runCatching { gate.gated.read(AiTestInputs.ocr("x")) }.exceptionOrNull()).isInstanceOf(AiEngineException::class.java)
@@ -141,6 +173,18 @@ class TextReadingGateTest {
       events += "prefs:$name"
       return existed
     }
+
+    /** Il JobService di DataTransport: acceso di serie (come nel manifest). */
+    var serviceOn = true
+    var failService = false
+
+    override fun serviceEnabled(className: String): Boolean = serviceOn
+
+    override fun setServiceEnabled(className: String, enabled: Boolean) {
+      if (failService) throw SecurityException("no")
+      serviceOn = enabled
+      events += "service:$className:$enabled"
+    }
   }
 
   private val dtJob = MlKitTraces.DATATRANSPORT_JOB_SERVICE
@@ -201,6 +245,43 @@ class TextReadingGateTest {
     assertThat(diags).containsExactly(AiDiag.TEXT_READING_OFF_CLEANUP)
     // Il motore si rilascia PRIMA di toccare i lavori.
     assertThat(system.events.first()).isEqualTo("release")
+  }
+
+  @Test
+  fun alloSpegnimentoIlServizioDiDataTransportSiSpegnePrimaDiAnnullareILavori() {
+    // R7: un evento scritto da una lettura gia' partita non puo' ripianificare un lavoro, perche' il servizio che lo eseguirebbe e' spento.
+    val system = FakeSystem()
+    system.jobs += 7 to dtJob
+    TextReadingShutdown(DataTransportCleanup(system), {}, { true }).onTurnedOff()
+    assertThat(system.serviceOn).isFalse()
+    val order = system.events.filter { it.startsWith("service:") || it.startsWith("cancel:") }
+    assertThat(order).containsExactly("service:$dtJob:false", "cancel:7").inOrder()
+    // Idempotente: spegnerlo di nuovo non lo tocca.
+    TextReadingShutdown(DataTransportCleanup(system), {}, { true }).onTurnedOff()
+    assertThat(system.events.count { it.startsWith("service:") }).isEqualTo(1)
+  }
+
+  @Test
+  fun alloStartConLaLetturaAttivaIlServizioSpentoDaUnProcessoPrimaSiRiaccende_ConLetturaSpentaRestaSpento() {
+    val system = FakeSystem()
+    system.serviceOn = false
+    TextReadingShutdown(DataTransportCleanup(system), {}, { false }).atStartup(TextReadingState.Off)
+    assertThat(system.serviceOn).isFalse()
+    TextReadingShutdown(DataTransportCleanup(system), {}, { false }).atStartup(TextReadingState.AwaitingNotice(1))
+    assertThat(system.serviceOn).isFalse() // in attesa dell'avviso non e' attiva: ML Kit non parte
+    TextReadingShutdown(DataTransportCleanup(system), {}, { false }).atStartup(on)
+    assertThat(system.serviceOn).isTrue()
+  }
+
+  @Test
+  fun unGuastoDelServizioNonFermaLaPulizia() {
+    val system = FakeSystem()
+    system.failService = true
+    system.jobs += 7 to dtJob
+    system.queue = true
+    val report = TextReadingShutdown(DataTransportCleanup(system), {}, { false }).onTurnedOff()
+    assertThat(report.jobsCancelled).isEqualTo(1)
+    assertThat(report.queueRemoved).isTrue()
   }
 
   @Test

@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.ai.compute
 
 import dev.pampa.mycloudgallery.core.ai.contract.AiBuffer
 import dev.pampa.mycloudgallery.core.ai.contract.AiCandidate
+import dev.pampa.mycloudgallery.core.ai.contract.AiDiag
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
 import dev.pampa.mycloudgallery.core.ai.contract.AiRunResult
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
@@ -55,7 +56,8 @@ internal class ComputeSession(
     val buffer = parts.buffer
     if (buffer is DiskAiBuffer) buffer.clear() else buffer.evict(tally.finished)
     counters.storageLow.incrementAndGet()
-    state.value = AiStatus.Waiting(AiWaitReason.STORAGE_LOW)
+    // IX-4: un problema con la sua azione ("Libera spazio"), non solo un'attesa.
+    state.value = AiStatus.Problem(AiDiag.AI_STORAGE_LOW)
     return true
   }
 

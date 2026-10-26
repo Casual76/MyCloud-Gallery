@@ -42,6 +42,9 @@ class MlKitBootstrap(
   fun ensureInitialized() {
     if (!state().activeHere) throw AiEngineException(AiEngineError.TEXT_READING_OFF)
     synchronized(MlKitProcess.LOCK) {
+      // Dopo uno spegnimento il JobService di DataTransport e' spento (R7): si riaccende prima di qualunque lettura, anche se la libreria era
+      // gia' avviata in questo processo (spenta e riaccesa senza riavvio).
+      if (!MlKitProcess.dataTransportEnabled) DataTransportCleanup(appContext).enableJobService()
       if (MlKitProcess.started) return
       try {
         MlKit.initialize(appContext)
@@ -63,4 +66,11 @@ internal object MlKitProcess {
 
   @Volatile
   var started = false
+
+  /**
+   * Il JobService di DataTransport e' acceso in questo processo? Falso di partenza (non lo sappiamo: il sistema ricorda lo stato di un
+   * processo precedente) e dopo uno spegnimento; il cancello lo riaccende prima di leggere (`DataTransportCleanup.enableJobService`).
+   */
+  @Volatile
+  var dataTransportEnabled = false
 }

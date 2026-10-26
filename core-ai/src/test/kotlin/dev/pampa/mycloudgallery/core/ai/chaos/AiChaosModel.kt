@@ -107,6 +107,7 @@ class AiChaosModel(private val plan: AiRoundPlan, private val stats: AiRoundStat
     if (tampered || !plan.modelTamper) return
     val file = File(dir, spec.sha256.hex).takeIf { it.isFile } ?: return
     tampered = true
+    file.setWritable(true) // il modello verificato e' in sola lettura (I1)
     RandomAccessFile(file, "rw").use {
       it.seek(10)
       val old = it.read()

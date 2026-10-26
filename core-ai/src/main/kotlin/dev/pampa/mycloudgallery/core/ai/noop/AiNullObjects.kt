@@ -79,6 +79,10 @@ object NoAiBuffer : AiBuffer {
 object OffTextReadingSwitch : TextReadingSwitch {
   override val state: StateFlow<TextReadingState> = MutableStateFlow(TextReadingState.Off)
 
+  override val excludedHere: StateFlow<Boolean> = MutableStateFlow(false)
+
+  override val syncPending: StateFlow<Boolean> = MutableStateFlow(false)
+
   override suspend fun enableForAccount(consent: TextReadingConsent) = Unit
 
   override suspend fun excludeThisDevice() = Unit

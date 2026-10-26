@@ -1,7 +1,9 @@
 package dev.pampa.mycloudgallery.core.ai.ocr
 
 import android.app.job.JobScheduler
+import android.content.ComponentName
 import android.content.Context
+import android.content.pm.PackageManager
 import dev.pampa.mycloudgallery.core.ai.contract.AiDiag
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
@@ -22,6 +24,11 @@ import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
 //    annullarli basta passare in rassegna `JobScheduler.getAllPendingJobs()` e cancellare quelli di quel servizio;
 //  - CODA (file): `SchemaManager.DB_NAME`, il database SQLite `com.google.android.datatransport.events` (tabelle events, event_metadata,
 //    event_payloads, transport_contexts) in `databases/`, con i suoi `-journal`, `-wal`, `-shm`: `Context.deleteDatabase` li toglie tutti;
+//  - IL JOBSERVICE SI SPEGNE (R7 della revisione di sicurezza della Fase 6, il "rinforzo" che P4 non aveva fatto): allo spegnimento, oltre ad
+//    annullare i lavori, il servizio `JobInfoSchedulerService` dell'app si disabilita con `PackageManager.setComponentEnabledSetting`
+//    (`DONT_KILL_APP`): nessun invio di statistiche puo' piu' essere pianificato finche' la lettura non si riaccende, anche per una lettura
+//    che era gia' partita e scrive un evento dopo l'annullamento. Si riabilita prima di `MlKit.initialize` e all'avvio con la lettura attiva.
+//    Il manifest non cambia (il componente resta nell'elenco chiuso, non esportato): cambia solo il suo stato a runtime;
 //  - IDENTIFICATIVO PER INSTALLAZIONE di ML Kit (`SharedPrefManager.PREF_FILE`): il file di preferenze `com.google.mlkit.internal`
 //    (`shared_prefs/com.google.mlkit.internal.xml`) con l'id casuale dell'SDK e i dati dei modelli remoti (che l'app non usa); si toglie
 //    anch'esso, cosi' una lettura riaccesa dopo uno spegnimento riparte da un id nuovo.
@@ -60,6 +67,11 @@ internal interface TraceSystem {
   fun preferencesExist(name: String): Boolean
 
   fun deletePreferences(name: String): Boolean
+
+  /** Il servizio [className] dell'app e' abilitato? (Sconosciuto = abilitato.) */
+  fun serviceEnabled(className: String): Boolean
+
+  fun setServiceEnabled(className: String, enabled: Boolean)
 }
 
 internal class AndroidTraceSystem(context: Context) : TraceSystem {
@@ -89,6 +101,27 @@ internal class AndroidTraceSystem(context: Context) : TraceSystem {
     val existed = preferencesExist(name)
     appContext.deleteSharedPreferences(name)
     return existed
+  }
+
+  override fun serviceEnabled(className: String): Boolean =
+    try {
+      when (appContext.packageManager.getComponentEnabledSetting(ComponentName(appContext.packageName, className))) {
+        PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+        PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER,
+        PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED,
+        -> false
+        else -> true
+      }
+    } catch (_: IllegalArgumentException) {
+      true // il componente non c'e' in questo manifest: niente da spegnere
+    }
+
+  override fun setServiceEnabled(className: String, enabled: Boolean) {
+    appContext.packageManager.setComponentEnabledSetting(
+      ComponentName(appContext.packageName, className),
+      if (enabled) PackageManager.COMPONENT_ENABLED_STATE_DEFAULT else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+      PackageManager.DONT_KILL_APP,
+    )
   }
 }
 
@@ -129,6 +162,27 @@ class DataTransportCleanup internal constructor(private val system: TraceSystem)
     }
     return cancelled
   }
+
+  /**
+   * Spegne il JobService di DataTransport (R7): da qui in poi nessun lavoro puo' essere pianificato. Vero se lo ha cambiato; un guasto del
+   * sistema non ferma il resto della pulizia. Va **prima** di [cancelScheduledJobs], cosi' fra l'annullamento e lo spegnimento non c'e'
+   * una finestra in cui un evento ne ripianifica uno.
+   */
+  fun disableJobService(): Boolean = setJobService(enabled = false)
+
+  /** Lo riaccende (prima di avviare ML Kit, e all'avvio con la lettura attiva). Vero se lo ha cambiato. */
+  fun enableJobService(): Boolean = setJobService(enabled = true)
+
+  private fun setJobService(enabled: Boolean): Boolean =
+    try {
+      val service = MlKitTraces.DATATRANSPORT_JOB_SERVICE
+      val changed = system.serviceEnabled(service) != enabled
+      if (changed) system.setServiceEnabled(service, enabled)
+      MlKitProcess.dataTransportEnabled = enabled
+      changed
+    } catch (_: RuntimeException) {
+      false
+    }
 
   /** Quanti lavori di DataTransport sono pianificati adesso (per le prove e per la Diagnostica). */
   fun scheduledJobs(): Int =
@@ -182,6 +236,8 @@ class TextReadingShutdown(
 
   fun onTurnedOff(): CleanupReport {
     release()
+    // Prima si spegne il servizio, poi si annullano i lavori: nessuna finestra in cui un evento di una lettura gia' partita ne ripianifica uno.
+    cleanup.disableJobService()
     val jobs = cleanup.cancelScheduledJobs()
     val ranHere = mlKitStarted()
     val queue = if (!ranHere) cleanup.removeQueue() else false
@@ -190,7 +246,12 @@ class TextReadingShutdown(
   }
 
   fun atStartup(state: TextReadingState): CleanupReport {
-    if (state.activeHere) return CleanupReport.NOTHING
+    if (state.activeHere) {
+      // Attiva qui: il servizio deve essere acceso (lo spegnimento di un processo precedente lo ha lasciato spento, lo stato e' del sistema).
+      cleanup.enableJobService()
+      return CleanupReport.NOTHING
+    }
+    cleanup.disableJobService()
     val jobs = cleanup.cancelScheduledJobs()
     val queue = cleanup.removeQueue()
     val install = cleanup.removeInstallId()

@@ -36,6 +36,8 @@ import kotlinx.coroutines.sync.withLock
  */
 class LiteRtLmImageEmbedder internal constructor(
   private val sessions: SessionFactory,
+  /** R9: la memoria su disco di una GPU che fa cadere il processo (vedi [GpuTrial]); di serie nessuna (i test sulla JVM). */
+  private val gpuTrial: GpuTrial = GpuTrial(null),
   private val diag: (DiagCode) -> Unit,
 ) : ImageEmbedder {
 
@@ -52,15 +54,19 @@ class LiteRtLmImageEmbedder internal constructor(
   ) : this(
     sessions = LiteRtLmSessions(files, ModelCatalog.INDEX_440M, cacheRoot, recipe, withVision = true, access = access),
     diag = diag,
+    gpuTrial = GpuTrial(File(cacheRoot, "${ModelCatalog.INDEX_440M.sha256.hex}-gpu")),
   )
 
   private val mutex = Mutex()
   private var session: VectorSession? = null
 
-  /** Falso dopo il primo ripiego: la GPU non si riprova piu' in questo processo. */
-  private var gpuAllowed = true
+  /**
+   * Falso dopo il primo ripiego: la GPU non si riprova piu' in questo processo. Falso fin dall'inizio se la GPU ha gia' fatto cadere il processo
+   * due volte di fila (R9): il motore parte su CPU e lo dice (`AI_GPU_FALLBACK`).
+   */
+  private var gpuAllowed = gpuTrial.allowed
 
-  private val mutableBackend = MutableStateFlow(AiBackend.GPU)
+  private val mutableBackend = MutableStateFlow(if (gpuAllowed) AiBackend.GPU else AiBackend.CPU)
   override val backend: StateFlow<AiBackend> = mutableBackend
 
   override suspend fun embed(images: List<ModelImage>): List<FloatArray> = mutex.withLock {
@@ -70,6 +76,7 @@ class LiteRtLmImageEmbedder internal constructor(
   }
 
   override suspend fun release() = mutex.withLock {
+    gpuTrial.handled()
     val old = session ?: return@withLock
     session = null
     old.close()
@@ -90,7 +97,11 @@ class LiteRtLmImageEmbedder internal constructor(
         }
         throw EngineErrors.map(t, whileInitializing = false)
       }
-      VectorChecks.normalizedOrNull(raw, dimension)?.let { return it }
+      VectorChecks.normalizedOrNull(raw, dimension)?.let {
+        // Un vettore valido dalla GPU: la prova e' riuscita (R9).
+        if (onGpu) gpuTrial.passed()
+        return it
+      }
       if (onGpu) {
         fallBackToCpu()
         continue
@@ -102,10 +113,17 @@ class LiteRtLmImageEmbedder internal constructor(
   /** Il motore pronto, GPU se ancora ammessa, altrimenti CPU. Un'apertura GPU che fallisce passa a CPU (E-A12). */
   private suspend fun ensureLocked(): VectorSession {
     session?.let { return it }
+    if (!gpuAllowed && !gpuFallbackReported) {
+      // La GPU ha gia' fatto cadere il processo: parte su CPU e lo dice una volta (R9).
+      gpuFallbackReported = true
+      diag(AiDiag.AI_GPU_FALLBACK)
+    }
     if (gpuAllowed) {
+      gpuTrial.begin()
       try {
         return adopt(sessions.open(AiBackend.GPU))
       } catch (t: Throwable) {
+        gpuTrial.handled()
         EngineErrors.rethrowCancellation(t)
         // Senza il modello e' inutile riprovare su CPU: e' lo stesso file.
         if (t is AiEngineException && t.error == AiEngineError.MODEL_UNAVAILABLE) throw t
@@ -124,6 +142,8 @@ class LiteRtLmImageEmbedder internal constructor(
     }
   }
 
+  private var gpuFallbackReported = gpuAllowed || gpuTrial.crashCount == 0
+
   private fun adopt(opened: VectorSession): VectorSession {
     session = opened
     mutableBackend.value = opened.backend
@@ -132,6 +152,7 @@ class LiteRtLmImageEmbedder internal constructor(
 
   /** Chiude il motore GPU e segna la CPU per il resto del processo; il chiamante ripete l'immagine. */
   private suspend fun fallBackToCpu() {
+    gpuTrial.handled()
     val old = session
     session = null
     gpuAllowed = false

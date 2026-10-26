@@ -23,7 +23,11 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 
 /** Un lettore che tiene risorse native e si puo' rilasciare (allo spegnimento della lettura, E-A18). */
 interface ReleasableTextReader : TextReader {
-  /** Chiude il riconoscitore. Idempotente; una `read` dopo lo riapre (se il cancello lo permette). */
+  /**
+   * Chiude il riconoscitore. Idempotente. **Un lettore rilasciato e' finito**: una `read` che lo teneva in mano (partita un istante prima del
+   * rilascio) lancia `TEXT_READING_OFF` invece di ricreare il riconoscitore (R7: un riconoscitore ricreato dopo lo spegnimento non lo
+   * chiude piu' nessuno, e ML Kit riscrive le sue statistiche). Per riaccendere si costruisce un lettore nuovo (lo fa il cancello).
+   */
   fun release()
 }
 
@@ -50,6 +54,7 @@ class MlKitTextReader(
 
   private val lock = Any()
   private var recognizer: TextRecognizer? = null
+  private var released = false
 
   override suspend fun read(image: OcrImage): OcrResult {
     bootstrap.ensureInitialized()
@@ -75,7 +80,10 @@ class MlKitTextReader(
   }
 
   override fun release() {
-    val old = synchronized(lock) { recognizer.also { recognizer = null } } ?: return
+    val old = synchronized(lock) {
+      released = true
+      recognizer.also { recognizer = null }
+    } ?: return
     try {
       old.close()
     } catch (_: RuntimeException) {
@@ -84,6 +92,8 @@ class MlKitTextReader(
   }
 
   private fun recognizerLocked(): TextRecognizer = synchronized(lock) {
+    // R7: dopo il rilascio non si ricrea niente.
+    if (released) throw AiEngineException(AiEngineError.TEXT_READING_OFF)
     recognizer ?: TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS).also { recognizer = it }
   }
 

@@ -129,6 +129,8 @@ class FakeAiRoles(
  */
 class FakeTextReadingSwitch(initial: TextReadingState = TextReadingState.Off) : TextReadingSwitch {
   override val state: MutableStateFlow<TextReadingState> = MutableStateFlow(initial)
+  override val excludedHere: MutableStateFlow<Boolean> = MutableStateFlow(initial is TextReadingState.OnForAccount && !initial.thisDevice)
+  override val syncPending: MutableStateFlow<Boolean> = MutableStateFlow(false)
   var cleanups: Int = 0
     private set
   val consents: MutableList<TextReadingConsent> = mutableListOf()
@@ -140,13 +142,16 @@ class FakeTextReadingSwitch(initial: TextReadingState = TextReadingState.Off) : 
   }
 
   override suspend fun excludeThisDevice() {
-    if (state.value is TextReadingState.OnForAccount) {
+    // L'esclusione vale anche da spenta (R8): si da' prima, e se poi la lettura si accende altrove qui non parte.
+    excludedHere.value = true
+    if (state.value is TextReadingState.OnForAccount || state.value is TextReadingState.AwaitingNotice) {
       state.value = TextReadingState.OnForAccount(thisDevice = false)
       cleanups++
     }
   }
 
   override suspend fun includeThisDevice() {
+    excludedHere.value = false
     if (state.value is TextReadingState.OnForAccount) state.value = TextReadingState.OnForAccount(thisDevice = true)
   }
 

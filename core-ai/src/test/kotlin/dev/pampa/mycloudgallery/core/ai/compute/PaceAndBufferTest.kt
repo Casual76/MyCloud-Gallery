@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.ai.compute
 
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.ai.contract.AiBuffer
+import dev.pampa.mycloudgallery.core.ai.contract.AiDiag
 import dev.pampa.mycloudgallery.core.ai.contract.AiScope
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiStop
@@ -137,7 +138,8 @@ class PaceAndBufferTest {
     assertThat(r.stoppedBy).isEqualTo(AiStop.STORAGE_LOW)
     assertThat(phone.embedded).isEqualTo(0)
     assertThat(disk.usedBytes.value).isEqualTo(0)
-    assertThat(phone.engine.status.value).isEqualTo(AiStatus.Waiting(AiWaitReason.STORAGE_LOW))
+    // IX-4: poco spazio non e' un'attesa che passa da sola: e' un problema con il suo codice, che la pagina e la Diagnostica dicono (E-A17).
+    assertThat(phone.engine.status.value).isEqualTo(AiStatus.Problem(AiDiag.AI_STORAGE_LOW))
     assertThat(phone.engine.counters.storageLow.get()).isEqualTo(1)
   }
 

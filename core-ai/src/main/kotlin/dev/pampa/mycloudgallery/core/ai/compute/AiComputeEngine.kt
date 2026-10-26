@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.ai.compute
 import dev.pampa.mycloudgallery.core.ai.contract.AiBuffer
 import dev.pampa.mycloudgallery.core.ai.contract.AiCandidates
 import dev.pampa.mycloudgallery.core.ai.contract.AiComputeRun
+import dev.pampa.mycloudgallery.core.ai.contract.AiDiag
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
 import dev.pampa.mycloudgallery.core.ai.contract.AiResults
 import dev.pampa.mycloudgallery.core.ai.contract.AiRoles
@@ -103,7 +104,7 @@ class AiComputeEngine(
       return session.result(AiStop.MODEL_MISSING)
     }
     if (session.storageLow()) return session.result(AiStop.STORAGE_LOW)
-    return when (scope) {
+    val result = when (scope) {
       is AiScope.Share -> {
         if (!isMine(scope.share)) {
           // D14: mai un'altra area privata. Non si chiama nessuna porta (ne' NAS, ne' catalogo, ne' pubblicatore).
@@ -114,6 +115,10 @@ class AiComputeEngine(
       }
       AiScope.PhoneOnly -> session.phoneOnly()
     }
+    // IX-4: il modello c'era ed era verificato (controllato sopra), ma il motore non e' partito ne' su GPU ne' su CPU: non e' "serve il modello",
+    // e' un problema del motore (con il tasto "Diagnostica"). Il codice lo conta il motore (`AI_ENGINE_INIT_FAILED`).
+    if (result.stoppedBy == AiStop.MODEL_MISSING) state.value = AiStatus.Problem(AiDiag.AI_ENGINE_INIT_FAILED)
+    return result
   }
 
   /**
@@ -144,9 +149,12 @@ class AiComputeEngine(
     fun waitingFor(stop: AiStop): AiStatus = when (stop) {
       AiStop.ROLE_OFF -> AiStatus.Off
       AiStop.MODEL_MISSING -> AiStatus.ModelMissing
-      AiStop.STORAGE_LOW -> AiStatus.Waiting(AiWaitReason.STORAGE_LOW)
+      // IX-4: poco spazio e' un problema con la sua azione ("Libera spazio"), non solo un'attesa.
+      AiStop.STORAGE_LOW -> AiStatus.Problem(AiDiag.AI_STORAGE_LOW)
       AiStop.NAS_UNREACHABLE -> AiStatus.Waiting(AiWaitReason.NAS_UNREACHABLE)
-      AiStop.RULES, AiStop.BUDGET -> AiStatus.Waiting(AiWaitReason.RULES)
+      AiStop.RULES -> AiStatus.Waiting(AiWaitReason.RULES)
+      // IX-2: la tappa e' finita per tempo, non per le regole: riprende fra poco.
+      AiStop.BUDGET -> AiStatus.Waiting(AiWaitReason.NEXT_STAGE)
       AiStop.BUFFER_ONLY -> AiStatus.Waiting(AiWaitReason.NO_NETWORK)
     }
   }

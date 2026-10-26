@@ -38,7 +38,9 @@ internal object ProbeImageSet {
  *   non era gia' caldo (se lo era, e' la latenza di un'immagine: il numero e' comunque quello che l'utente aspetta al primo uso).
  * - **Velocita'**: le 20 immagini in una chiamata, ripetute [rounds] volte; vale il giro piu' veloce (un giro isolato sotto il carico
  *   di un altro processo non dice com'e' il dispositivo).
- * - Il motore **resta com'e'** (caldo): chi lo possiede decide quando rilasciarlo. Nessuna rete, nessun dato personale.
+ * - Il motore **si rilascia a fine misura** ([releaseAfter], IX-5 della verifica funzionale della Fase 6): il 440M su GPU pesa circa 800 MB
+ *   di PSS e restava nel processo della galleria in primo piano fino all'azzeramento. Chi lo usa dopo lo riapre da solo (2 secondi a caldo).
+ *   Nessuna rete, nessun dato personale.
  * - Un guasto del motore (`AiEngineException`) esce com'e': la pagina dice "dispositivo lento" o "modello assente".
  *
  * @param nanos orologio monotono (D39).
@@ -49,6 +51,7 @@ class RealDeviceProbe(
   private val nanos: () -> Long = System::nanoTime,
   private val rounds: Int = 2,
   private val images: () -> List<ModelImage> = { ProbeImageSet.modelImages() },
+  private val releaseAfter: Boolean = true,
 ) : DeviceProbe {
 
   init {
@@ -58,17 +61,22 @@ class RealDeviceProbe(
   override suspend fun measure(): ProbeResult {
     val images = images()
     require(images.isNotEmpty()) { "Nessuna immagine da misurare." }
-    val coldStart = nanos()
-    embedder.embed(listOf(images.first()))
-    val coldStartMs = (nanos() - coldStart) / 1_000_000
+    try {
+      val coldStart = nanos()
+      embedder.embed(listOf(images.first()))
+      val coldStartMs = (nanos() - coldStart) / 1_000_000
 
-    var best = Long.MAX_VALUE
-    repeat(rounds) {
-      val start = nanos()
-      embedder.embed(images)
-      best = minOf(best, nanos() - start)
+      var best = Long.MAX_VALUE
+      repeat(rounds) {
+        val start = nanos()
+        embedder.embed(images)
+        best = minOf(best, nanos() - start)
+      }
+      val seconds = best.coerceAtLeast(1L) / 1e9
+      return ProbeResult(imagesPerSecond = images.size / seconds, backend = embedder.backend.value, coldStartMs = coldStartMs)
+    } finally {
+      // Anche se la misura e' fallita o annullata: il motore non resta in memoria per nessuno.
+      if (releaseAfter) kotlinx.coroutines.withContext(kotlinx.coroutines.NonCancellable) { embedder.release() }
     }
-    val seconds = best.coerceAtLeast(1L) / 1e9
-    return ProbeResult(imagesPerSecond = images.size / seconds, backend = embedder.backend.value, coldStartMs = coldStartMs)
   }
 }

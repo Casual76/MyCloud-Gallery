@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiBackend
 import dev.pampa.mycloudgallery.core.ai.contract.AiEngineError
 import dev.pampa.mycloudgallery.core.ai.contract.AiEngineException
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
+import dev.pampa.mycloudgallery.core.models.contract.FileStat
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
 import dev.pampa.mycloudgallery.core.models.contract.VerifiedModel
@@ -69,10 +70,16 @@ enum class ModelAccess {
   DESCRIPTOR,
 
   /**
-   * Il percorso del file dell'app (`noBackupFilesDir/models/<sha256>`, in sola lettura, privato dell'app) con la cache. Il file che il
-   * motore apre per nome si confronta (dispositivo, inode, dimensione) con il descrittore su cui sono stati calcolati dimensione e
-   * SHA-256, **prima e dopo** l'inizializzazione, e il descrittore resta aperto finche' il motore vive (cosi' l'inode non si puo'
-   * riusare): un file rinominato o sostituito fra la verifica e l'uso e' rifiutato (`MODEL_UNAVAILABLE`, E-A11).
+   * Il percorso del file dell'app (`noBackupFilesDir/models/<sha256>`, **in sola lettura** dopo la verifica, privato dell'app) con la cache.
+   * Il file che il motore apre per nome si confronta con lo `stat` **preso durante la verifica** sul descrittore su cui sono stati calcolati
+   * dimensione e SHA-256 (`VerifiedModel.stat`: dispositivo, inode, dimensione e `ctime`, I1), **prima e dopo** l'inizializzazione, e il
+   * descrittore resta aperto finche' il motore vive (cosi' l'inode non si puo' riusare): un file rinominato, sostituito o **scritto** (la
+   * `ctime` cambia a ogni scrittura, anche sullo stesso inode) fra la verifica e l'uso e' rifiutato (`MODEL_UNAVAILABLE`, E-A11).
+   *
+   * Cosa **non** copre (C22): la cache dei programmi compilati e dei pesi preparati che il motore legge dal percorso (`cache/<sha256>-<backend>/`)
+   * non e' sotto l'impronta del modello. Si ripara cosi' (R9): una cache e' valida solo se porta il segno `.complete`, scritto dopo
+   * un'inizializzazione riuscita; senza il segno (morte del processo a meta' scrittura) la cartella si toglie prima di riaprire, e si toglie
+   * anche a ogni inizializzazione fallita. Una GPU che fa cadere il processo lascia il segno "in prova" ([GpuTrial]) e non si riprova subito.
    */
   PATH_CHECKED,
 }
@@ -163,17 +170,22 @@ private class RealSession(
   companion object {
     private val NORMALIZED = EmbeddingOptions(normalize = true)
 
-    /** Il file `file` e' ancora quello verificato ([verified], da `fstat` del descrittore): stesso dispositivo, stesso inode, stessa dimensione. */
-    private fun checkSameFile(file: File, verified: android.system.StructStat) {
+    /**
+     * Il file `file` e' ancora quello verificato ([verified]): stesso dispositivo, stesso inode, stessa dimensione e stessa `ctime` (I1: una
+     * scrittura sullo stesso inode, che per dispositivo, inode e dimensione sarebbe invisibile, cambia la `ctime`).
+     */
+    private fun checkSameFile(file: File, verified: FileStat) {
       val now = try {
         Os.stat(file.path)
       } catch (e: ErrnoException) {
         throw AiEngineException(AiEngineError.MODEL_UNAVAILABLE, e)
       }
-      if (now.st_dev != verified.st_dev || now.st_ino != verified.st_ino || now.st_size != verified.st_size) {
-        throw AiEngineException(AiEngineError.MODEL_UNAVAILABLE)
-      }
+      if (!FileStat(now.st_dev, now.st_ino, now.st_size, now.st_ctime).isSameFileAs(verified)) throw AiEngineException(AiEngineError.MODEL_UNAVAILABLE)
     }
+
+    /** Lo `stat` preso alla verifica; se chi ha aperto il modello non lo ha dato, quello del descrittore adesso (meno forte: manca l'istante della verifica). */
+    private fun verifiedStat(model: VerifiedModel): FileStat? =
+      model.stat ?: model.descriptor?.let { fd -> Os.fstat(fd).let { FileStat(it.st_dev, it.st_ino, it.st_size, it.st_ctime) } }
 
     /** Bloccante: da chiamare sul thread del motore. In caso d'errore chiude cio' che ha aperto (non il modello, che e' del chiamante). */
     fun create(
@@ -189,7 +201,10 @@ private class RealSession(
     ): RealSession {
       val native = hooks.nativeBackend(backend)
       val litertBackend: Backend = if (native == AiBackend.GPU) Backend.GPU() else Backend.CPU()
-      val cache = File(cacheRoot, "${spec.sha256.hex}-${native.name.lowercase()}").apply { mkdirs() }
+      val cache = File(cacheRoot, "${spec.sha256.hex}-${native.name.lowercase()}")
+      // R9: una cache senza il segno di "completa" e' di un'inizializzazione interrotta (morte del processo a meta' scrittura): potrebbe
+      // essere troncata, il motore potrebbe non riconoscerla e cadere a ogni apertura. Si toglie e il motore la rifa'.
+      ProgramCache.prepare(cache)
 
       // D16, DESCRIPTOR: il motore legge dallo stesso descrittore su cui il verificatore ha calcolato dimensione e SHA-256 (riportato
       // all'inizio), duplicato perche' il motore lo tiene finche' vive e `VerifiedModel` ne e' il proprietario. I fake non hanno il
@@ -199,7 +214,7 @@ private class RealSession(
       val identity = dup?.let { d -> Os.fstat(d.fileDescriptor).let { it.st_dev to it.st_ino } }
 
       // PATH_CHECKED: il file per nome deve essere quello verificato, adesso e dopo l'inizializzazione.
-      val verified = if (!byDescriptor) model.descriptor?.let { Os.fstat(it) } else null
+      val verified = if (!byDescriptor) verifiedStat(model) else null
       if (verified != null) checkSameFile(model.file, verified)
 
       val config = EmbeddingEngineConfig(
@@ -217,13 +232,43 @@ private class RealSession(
         hooks.beforeInit(backend)
         engine.initialize()
         if (verified != null) checkSameFile(model.file, verified)
+        // Inizializzazione riuscita: la cache e' completa (R9).
+        ProgramCache.markComplete(cache)
       } catch (t: Throwable) {
         runCatching { engine.close() }
         FdOwnership.closeIfOurs(dup, identity)
+        // R9: a ogni inizializzazione fallita la cache si toglie: se era rovinata e' lei che faceva fallire il motore, se no si rifa'.
+        ProgramCache.discard(cache)
         throw t
       }
       return RealSession(engine, model, dup, identity, backend, thread, hooks)
     }
+  }
+}
+
+/**
+ * La cartella dei programmi compilati di un modello e di un backend (`models/cache/<sha256>-<backend>/`), che il motore scrive e legge per percorso e
+ * **non e' coperta dall'impronta del modello** (C22, R9). E' valida solo se porta il segno [COMPLETE], scritto dopo un'inizializzazione riuscita: senza
+ * (morte del processo a meta' scrittura) potrebbe essere troncata e far cadere il motore a ogni apertura, quindi si toglie prima di riaprire; si toglie
+ * anche a ogni inizializzazione fallita.
+ */
+internal object ProgramCache {
+  const val COMPLETE: String = ".complete"
+
+  /** Prepara [cache] per l'apertura: una cartella senza il segno si toglie, poi la cartella c'e'. */
+  fun prepare(cache: File) {
+    if (cache.exists() && !File(cache, COMPLETE).exists()) cache.deleteRecursively()
+    cache.mkdirs()
+  }
+
+  /** L'inizializzazione e' riuscita: la cache e' completa. */
+  fun markComplete(cache: File) {
+    runCatching { File(cache, COMPLETE).createNewFile() }
+  }
+
+  /** L'inizializzazione e' fallita: la cache si toglie (se era rovinata faceva fallire il motore, se no si rifa'). */
+  fun discard(cache: File) {
+    runCatching { cache.deleteRecursively() }
   }
 }
 

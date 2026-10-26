@@ -14,7 +14,7 @@ import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
  * riceve. Da spenti (lettura spenta per l'account, o questo dispositivo escluso) [read] lancia `TEXT_READING_OFF` e **non crea il
  * motore**: [engine] (di solito `{ MlKitTextReader(MlKitBootstrap(context, state)) }`) si chiama solo la prima volta che la lettura e'
  * attiva, cosi' nessuna classe di ML Kit si carica prima. Dopo lo spegnimento ([release]) il motore e' chiuso e la prossima lettura
- * attiva lo ricrea.
+ * attiva ne costruisce uno **nuovo**: un motore rilasciato non si riapre mai (una lettura che lo teneva in mano lancia `TEXT_READING_OFF`).
  *
  * @param state lo stato della lettura visto da questo dispositivo, letto a ogni [read].
  * @param engine il costruttore del motore vero; chiamato al piu' una volta per "accensione", mai da spenti.
@@ -41,7 +41,15 @@ class GatedTextReader(
     old.release()
   }
 
-  private fun engineLocked(): ReleasableTextReader = synchronized(lock) { created ?: engine().also { created = it } }
+  /**
+   * Il motore da usare, **ricontrollando il cancello sotto il lucchetto del rilascio** (R7 della revisione di sicurezza della Fase 6): una
+   * lettura che ha passato il primo controllo un istante prima dello spegnimento, e arriva qui dopo [release], non trova piu' un motore da
+   * ricreare e non ne costruisce uno nuovo. Lo spegnimento cambia lo stato (in modo sincrono) prima di rilasciare, quindi qui lo vede.
+   */
+  private fun engineLocked(): ReleasableTextReader = synchronized(lock) {
+    if (!state().activeHere) throw AiEngineException(AiEngineError.TEXT_READING_OFF)
+    created ?: engine().also { created = it }
+  }
 
   companion object {
     /**

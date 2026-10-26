@@ -18,6 +18,14 @@ sealed interface TextReadingState {
   /** Attiva per l'account; [thisDevice] falso = questo dispositivo si e' escluso ("Non su questo dispositivo", E-A19). */
   data class OnForAccount(val thisDevice: Boolean) : TextReadingState
 
+  /**
+   * Attiva per l'account (con la versione [textVersion] del testo), ma **questo dispositivo non ha ancora visto l'avviso** (D41: "ogni altro
+   * dispositivo dell'account lo dice una volta e si puo' escludere"; LT-2 e R8): la voce e' arrivata da un altro dispositivo, o il testo e'
+   * cambiato. Finche' l'utente non conferma qui (o non si esclude, "Non su questo dispositivo") ML Kit non parte: nessuna lettura, nessuna
+   * statistica. Non e' un'esclusione: l'utente non ha deciso niente.
+   */
+  data class AwaitingNotice(val textVersion: Int) : TextReadingState
+
   /** Spegnimento in corso: motore rilasciato, lavori di DataTransport annullati; la coda si toglie al riavvio (E-A18). */
   data object Disabling : TextReadingState
 
@@ -45,6 +53,22 @@ class TextReadingConsent(val textVersion: Int, val shownAtMonotonicNanos: Long) 
  */
 interface TextReadingSwitch {
   val state: StateFlow<TextReadingState>
+
+  /**
+   * Lo stato **adesso**, letto in modo sincrono, senza aspettare che [state] (un flusso che si aggiorna su un altro thread) si sia mosso:
+   * e' quello che il cancello di ML Kit guarda a ogni lettura. Lo spegnimento e l'esclusione lo cambiano prima di qualunque altra cosa, cosi'
+   * una lettura che parte un istante dopo non trova ancora "attiva" (R7). Di serie [state].
+   */
+  fun currentState(): TextReadingState = state.value
+
+  /** Questo dispositivo si e' escluso ("Non su questo dispositivo")? Vale anche da spenta: l'esclusione e' locale e si puo' dare prima (R8). */
+  val excludedHere: StateFlow<Boolean>
+
+  /**
+   * La scelta fatta qui non e' ancora arrivata agli altri dispositivi (il registro dei dati personali non c'e' o non ha l'ora del NAS): vale
+   * qui subito, e viaggia alla prima sincronizzazione. La pagina lo dice (R6, I8).
+   */
+  val syncPending: StateFlow<Boolean>
 
   suspend fun enableForAccount(consent: TextReadingConsent)
 

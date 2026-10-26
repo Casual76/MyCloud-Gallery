@@ -8,7 +8,10 @@ import androidx.room.withTransaction
 import dev.pampa.mycloudgallery.core.database.dao.AiIndexDao
 import dev.pampa.mycloudgallery.core.database.dao.AiPublishDao
 import dev.pampa.mycloudgallery.core.database.dao.AiReplicaDao
+import dev.pampa.mycloudgallery.core.database.dao.AlbumChoiceDao
 import dev.pampa.mycloudgallery.core.database.dao.AlbumDao
+import dev.pampa.mycloudgallery.core.database.dao.AlbumQueryDao
+import dev.pampa.mycloudgallery.core.database.dao.AlbumRuleDao
 import dev.pampa.mycloudgallery.core.database.dao.BackupDiaryDao
 import dev.pampa.mycloudgallery.core.database.dao.CellContentDao
 import dev.pampa.mycloudgallery.core.database.dao.BackupProblemDao
@@ -33,9 +36,12 @@ import dev.pampa.mycloudgallery.core.database.dao.PendingTaskDao
 import dev.pampa.mycloudgallery.core.database.dao.SearchHistoryDao
 import dev.pampa.mycloudgallery.core.database.dao.PersonalDao
 import dev.pampa.mycloudgallery.core.database.dao.ReplicaDao
+import dev.pampa.mycloudgallery.core.database.dao.ShareDiaryDao
+import dev.pampa.mycloudgallery.core.database.dao.SharedAlbumDao
 import dev.pampa.mycloudgallery.core.database.dao.SimilarDao
 import dev.pampa.mycloudgallery.core.database.dao.TimelineDao
 import dev.pampa.mycloudgallery.core.database.dao.TimelineIndexDao
+import dev.pampa.mycloudgallery.core.database.dao.TripDao
 import dev.pampa.mycloudgallery.core.database.dao.VersionDao
 import dev.pampa.mycloudgallery.core.database.dao.VisualSignatureDao
 import dev.pampa.mycloudgallery.core.database.dao.WorkStateDao
@@ -53,7 +59,12 @@ import dev.pampa.mycloudgallery.core.database.entity.AiTextFtsEntity
 import dev.pampa.mycloudgallery.core.database.entity.AiVectorEntity
 import dev.pampa.mycloudgallery.core.database.entity.AiVocabularyEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumEntity
+import dev.pampa.mycloudgallery.core.database.entity.AlbumExclusionEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.AlbumRuleEntity
+import dev.pampa.mycloudgallery.core.database.entity.AlbumShareItemEntity
+import dev.pampa.mycloudgallery.core.database.entity.AlbumShareOpEntity
+import dev.pampa.mycloudgallery.core.database.entity.AlbumSuggestionEntity
 import dev.pampa.mycloudgallery.core.database.entity.BackupItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.BackupProblemEntity
 import dev.pampa.mycloudgallery.core.database.entity.CatalogMetaEntity
@@ -61,6 +72,7 @@ import dev.pampa.mycloudgallery.core.database.entity.EditSessionEntity
 import dev.pampa.mycloudgallery.core.database.entity.EmbeddingEntity
 import dev.pampa.mycloudgallery.core.database.entity.FreeSpaceItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.FreeSpaceRunEntity
+import dev.pampa.mycloudgallery.core.database.entity.HomeEstimateEntity
 import dev.pampa.mycloudgallery.core.database.entity.IncomingItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.MetadataCorrectionEntity
 import dev.pampa.mycloudgallery.core.database.entity.IndexHeadEntity
@@ -94,6 +106,10 @@ import dev.pampa.mycloudgallery.core.database.entity.ReplicaPackEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaProvisionalEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaSettingEntity
 import dev.pampa.mycloudgallery.core.database.entity.ReplicaShareAccessEntity
+import dev.pampa.mycloudgallery.core.database.entity.SharedAlbumEntity
+import dev.pampa.mycloudgallery.core.database.entity.SharedAlbumEntryEntity
+import dev.pampa.mycloudgallery.core.database.entity.SharedAlbumHeadMarkEntity
+import dev.pampa.mycloudgallery.core.database.entity.TripProposalEntity
 import dev.pampa.mycloudgallery.core.database.entity.VersionMetadataEntity
 import dev.pampa.mycloudgallery.core.database.entity.VisualSignatureEntity
 import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
@@ -173,6 +189,18 @@ import dev.pampa.mycloudgallery.core.database.entity.WorkStateEntity
     AiReplicaEntryEntity::class,
     AiReplicaAppliedEntity::class,
     AiReplicaDirtyEntity::class,
+    // v6 (Fase 7, D34): le regole, le esclusioni e i suggeriti degli album smart; la replica degli album condivisi; il diario della
+    // condivisione; le proposte di viaggio e la "casa" locale. `album` e `album_item` (v1) e `media` hanno colonne in piu'.
+    AlbumRuleEntity::class,
+    AlbumExclusionEntity::class,
+    AlbumSuggestionEntity::class,
+    SharedAlbumEntity::class,
+    SharedAlbumEntryEntity::class,
+    SharedAlbumHeadMarkEntity::class,
+    AlbumShareOpEntity::class,
+    AlbumShareItemEntity::class,
+    TripProposalEntity::class,
+    HomeEstimateEntity::class,
   ],
   version = GalleryDatabase.VERSION,
   exportSchema = true,
@@ -253,12 +281,26 @@ abstract class GalleryDatabase : RoomDatabase() {
 
   abstract fun aiReplicaDao(): AiReplicaDao
 
+  // --- v6 (Fase 7) ---
+
+  abstract fun albumRuleDao(): AlbumRuleDao
+
+  abstract fun albumChoiceDao(): AlbumChoiceDao
+
+  abstract fun sharedAlbumDao(): SharedAlbumDao
+
+  abstract fun shareDiaryDao(): ShareDiaryDao
+
+  abstract fun tripDao(): TripDao
+
+  abstract fun albumQueryDao(): AlbumQueryDao
+
   companion object {
     /** Nome del file del database nella cartella privata dell'app. */
     const val NAME: String = "gallery.db"
 
     /** Versione dello schema. Alzarla richiede una migrazione in [GalleryMigrations] (mai distruttiva). */
-    const val VERSION: Int = 5
+    const val VERSION: Int = 6
 
     /**
      * Il database con tutte le migrazioni. **Mai** `fallbackToDestructiveMigration`: una migrazione

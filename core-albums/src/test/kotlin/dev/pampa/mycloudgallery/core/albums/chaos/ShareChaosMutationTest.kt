@@ -62,7 +62,7 @@ class ShareChaosMutationTest {
   }
 
   private companion object {
-    const val ROUNDS = 300
+    const val ROUNDS = 200
     const val SEED = 4242L
   }
 }

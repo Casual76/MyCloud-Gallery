@@ -2,20 +2,16 @@ package dev.pampa.mycloudgallery.core.albums.chaos
 
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.Sha256
-import dev.pampa.mycloudgallery.core.nasops.contract.AcceptedPlan
-import dev.pampa.mycloudgallery.core.nasops.contract.LocalTrashRecord
 import dev.pampa.mycloudgallery.core.nasops.contract.MoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFileRef
-import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
 import dev.pampa.mycloudgallery.core.nasops.contract.OpId
-import dev.pampa.mycloudgallery.core.nasops.contract.OpItemRecord
-import dev.pampa.mycloudgallery.core.nasops.contract.OpRecord
-import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
-import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
-import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
-import dev.pampa.mycloudgallery.core.nasops.contract.TrashManifest
+import java.lang.reflect.InvocationHandler
+import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Method
+import java.lang.reflect.Proxy
 import java.util.EnumMap
+import kotlin.coroutines.intrinsics.COROUTINE_SUSPENDED
 
 // I COLPI (docs/prova-500.md Parte E). Un colpo cade a un punto preciso ([Surface]) alla n-esima chiamata, PRIMA che la chiamata abbia effetto o
 // DOPO (l'effetto c'e', la risposta si perde). Le chiamate si contano solo a colpi armati: il mondo iniziale e le verifiche, che il banco fa per
@@ -178,26 +174,38 @@ class ShareChaosInjector(val stats: ShareChaosStats = ShareChaosStats()) {
 /**
  * Il diario di core-nasops con la morte del processo a ogni salvataggio, prima o dopo che la scrittura sia arrivata sul disco (come i decoratori
  * del banco di P15). Le letture non si colpiscono. Dopo la morte ogni scrittura si ferma con la stessa morte.
+ *
+ * E' un proxy dinamico sull'interfaccia, non una classe che la implementa: `OpsStore.create` prende il piano accettato di core-nasops, un tipo di conferma
+ * che core-albums non nomina mai (Phase7ArchitectureTest), nemmeno in un test. Il diario del banco e' `InMemoryOpsStore`, che non sospende mai: ogni
+ * scrittura torna con il suo risultato e il colpo "dopo" cade subito dopo.
  */
-class DyingOpsStore(private val inner: OpsStore, private val injector: ShareChaosInjector) : OpsStore by inner {
+object DyingOpsStore {
 
-  private suspend fun <T> write(block: suspend () -> T): T = injector.around(Surface.OPS_STORE, block = block)
+  /** Le scritture del diario: gli unici punti dove cade una morte. */
+  private val WRITES = setOf("create", "updateItem", "setOpState", "recordTrash", "markTrash", "trashEntered", "saveTrashManifest")
 
-  override suspend fun create(accepted: AcceptedPlan, id: OpId, accountId: String, nowNas: Long): OpRecord =
-    write { inner.create(accepted, id, accountId, nowNas) }
+  fun wrap(inner: OpsStore, injector: ShareChaosInjector): OpsStore {
+    val handler = InvocationHandler { _, method, args ->
+      val arguments: Array<Any?> = args ?: emptyArray()
+      if (method.name !in WRITES) return@InvocationHandler invoke(method, inner, arguments)
+      injector.checkAlive()
+      val n = injector.enter(Surface.OPS_STORE)
+      injector.due(Surface.OPS_STORE, n, Moment.BEFORE)?.let { injector.realize(it) }
+      val result = invoke(method, inner, arguments)
+      check(result !== COROUTINE_SUSPENDED) { "il diario del banco non sospende mai" }
+      injector.checkAlive()
+      injector.due(Surface.OPS_STORE, n, Moment.AFTER)?.let { injector.realize(it) }
+      result
+    }
+    return Proxy.newProxyInstance(OpsStore::class.java.classLoader, arrayOf(OpsStore::class.java), handler) as OpsStore
+  }
 
-  override suspend fun updateItem(item: OpItemRecord) = write { inner.updateItem(item) }
-
-  override suspend fun setOpState(id: OpId, state: OpState, errorCode: OpErrorCode?, nowNas: Long, pause: PauseReason?) =
-    write { inner.setOpState(id, state, errorCode, nowNas, pause) }
-
-  override suspend fun recordTrash(entry: LocalTrashRecord) = write { inner.recordTrash(entry) }
-
-  override suspend fun markTrash(trashId: String, state: TrashEntryState, nowNas: Long) = write { inner.markTrash(trashId, state, nowNas) }
-
-  override suspend fun trashEntered(trashId: String, atNas: Long) = write { inner.trashEntered(trashId, atNas) }
-
-  override suspend fun saveTrashManifest(trashId: String, manifest: TrashManifest) = write { inner.saveTrashManifest(trashId, manifest) }
+  private fun invoke(method: Method, target: Any, args: Array<Any?>): Any? =
+    try {
+      method.invoke(target, *args)
+    } catch (e: InvocationTargetException) {
+      throw e.targetException
+    }
 }
 
 /**

@@ -121,11 +121,11 @@ class ChaosSmbTarget(
 
   override val gates: MutableMap<String, GateStatus> = HashMap()
 
-  /** Il diario letto dal banco (senza colpi); il motore scrive attraverso [DyingOpsStore]. */
+  /** Il diario letto dal banco (senza colpi); il motore scrive attraverso [DyingOpsStore.wrap]. */
   override val store: OpsStore = InMemoryOpsStore()
 
   private fun build(): NasOperations = NasOpsWiring.build(
-    session, DyingOpsStore(store, injector),
+    session, DyingOpsStore.wrap(store, injector),
     NasOpsConfig(
       deviceId = ShareNasTarget.DEVICE,
       accountId = connection.user,

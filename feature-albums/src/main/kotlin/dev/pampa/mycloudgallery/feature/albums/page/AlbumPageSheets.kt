@@ -237,9 +237,12 @@ internal fun PermissionsSheet(
             FluidListRow(title = stringResource(row.ability.label), subtitle = "", disclosure = false, badge = { FluidRowValue(text = value) })
           }
         }
-        SectionNote(stringResource(R.string.album_declaration))
       },
-      actions = { FluidButton(text = stringResource(R.string.album_permissions_close), onClick = onDismiss, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true) },
+      actions = {
+        // La dichiarazione (D10, L57) sta fissa sopra il bottone: non sotto lo scorrimento della tabella.
+        Text(stringResource(R.string.album_declaration), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
+        FluidButton(text = stringResource(R.string.album_permissions_close), onClick = onDismiss, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
+      },
     )
   }
 }

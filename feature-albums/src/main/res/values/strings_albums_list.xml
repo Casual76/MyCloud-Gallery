@@ -44,6 +44,11 @@
 
   <string name="albums_move_up">Sposta su</string>
   <string name="albums_move_down">Sposta giù</string>
+  <string name="albums_move_title">Sposta l’album</string>
+  <string name="albums_move_up_detail">Un posto prima nell’elenco.</string>
+  <string name="albums_move_down_detail">Un posto dopo nell’elenco.</string>
+  <string name="albums_move_done">Fatto</string>
+  <string name="albums_reorder_hint">Tieni premuto un album per spostarlo.</string>
   <string name="albums_row_position">Posizione %1$d di %2$d</string>
   <string name="albums_row_open">Apri l’album</string>
   <string name="albums_row_actions">Azioni dell’album</string>

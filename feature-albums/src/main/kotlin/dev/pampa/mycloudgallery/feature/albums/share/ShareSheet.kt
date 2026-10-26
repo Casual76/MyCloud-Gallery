@@ -150,15 +150,30 @@ private fun PlanContent(state: ShareSheetState.Plan, busy: Boolean, handlers: Sh
           tone = FluidTone.Warning,
         )
       }
-      WhereGroup(plan)
-      // Il livello alla creazione (Q2): tre righe, "Gli altri aggiungono" di partenza. Su un album che c'e' gia' non si sceglie qui.
-      plan.level?.let { level -> LevelGroup(level, handlers) }
+      // Prima le scelte (il foglio scorre: quello che si decide non deve stare sotto i dettagli), poi i dettagli. I nascosti per primi: e' la scelta con la
+      // conseguenza piu' seria (E-SH9). Il livello alla creazione (Q2): tre righe, "Gli altri aggiungono" di partenza; su un album che c'e' gia' non si sceglie qui.
       HiddenGroup(plan, handlers)
+      plan.level?.let { level -> LevelGroup(level, handlers) }
       ExcludedGroup(plan.excluded.filterKeys { it != ShareExclusion.HIDDEN_LEFT_OUT })
-      // La dichiarazione sta sempre sul foglio di un album condiviso (D10, L57): non sparisce se non c'e' altro da dire.
-      if (sharedKind) SectionNote(stringResource(R.string.album_declaration))
+      WhereGroup(plan)
     },
     actions = {
+      // Cio' che chi conferma deve sempre vedere sta **fisso** sopra il bottone, mai sotto lo scorrimento: l'avviso dei nascosti che diventano visibili
+      // (E-SH9, solo se si condividono) e la dichiarazione dei permessi (D10, L57).
+      if (plan.kind == SharePlanKind.SHARE && plan.hiddenIncluded > 0) {
+        FluidInlineMessage(
+          message = LocalContext.current.resources.getQuantityString(R.plurals.share_hidden_warning, plan.hiddenIncluded, plan.hiddenIncluded),
+          title = stringResource(R.string.share_group_hidden),
+          tone = FluidTone.Warning,
+        )
+      }
+      if (sharedKind) {
+        Text(
+          text = stringResource(R.string.album_declaration),
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurface,
+        )
+      }
       FluidButton(
         text = stringResource(if (busy) R.string.share_confirming else confirmLabel(plan)),
         onClick = handlers::onConfirm,
@@ -238,13 +253,6 @@ private fun HiddenGroup(plan: SharePlan, handlers: ShareSheetHandlers) {
       detail = stringResource(R.string.share_hidden_include_detail),
       selected = plan.hidden == HiddenChoice.SHARE_TOO,
       onSelect = { handlers.onHiddenChoice(HiddenChoice.SHARE_TOO) },
-    )
-  }
-  if (plan.hiddenIncluded > 0) {
-    FluidInlineMessage(
-      message = resources.getQuantityString(R.plurals.share_hidden_warning, plan.hiddenIncluded, plan.hiddenIncluded),
-      title = stringResource(R.string.share_group_hidden),
-      tone = FluidTone.Warning,
     )
   }
 }

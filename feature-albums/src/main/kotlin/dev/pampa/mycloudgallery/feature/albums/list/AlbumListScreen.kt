@@ -63,6 +63,7 @@ import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumCoverThumb
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumDimens
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumText
+import dev.pampa.mycloudgallery.feature.albums.ui.SectionNote
 
 // L'ELENCO DEGLI ALBUM (Fase 7, P10; docs/fase7-progetto.md §1.5 `AlbumListState`, D21, D33). In stile Foto: una griglia di album, ognuno con la
 // sua copertina quadrata e **sotto** il nome e il conto (mai testo sopra la foto: si legge sempre). Prima i miei e i condivisi, poi gli smart.
@@ -85,6 +86,9 @@ interface AlbumListHandlers {
 
   /** "Apri la copia" dopo un avviso di chiusura con la copia (Q5 b). */
   fun onOpenCopy(id: AlbumId)
+
+  /** La pressione prolungata su un album con l'ordine personalizzato: il foglio "Sposta su / Sposta giu'" (per chi non usa TalkBack: l'ordine si cambia anche senza trascinare). */
+  fun onReorderMenu(album: Album)
 }
 
 /** Nessuna azione: per le anteprime e gli screenshot. */
@@ -102,6 +106,8 @@ object NoAlbumListHandlers : AlbumListHandlers {
   override fun onDismissNotice(notice: SharedAlbumNotice) = Unit
 
   override fun onOpenCopy(id: AlbumId) = Unit
+
+  override fun onReorderMenu(album: Album) = Unit
 }
 
 /** L'elenco per lo stato dato: nessun effetto, la usano la rotta, i test e gli screenshot. */
@@ -138,6 +144,7 @@ fun AlbumListScreen(
       AlbumListState.Empty -> emptyState(handlers)
       is AlbumListState.Ready -> {
         notices(state, handlers)
+        if (ui.reorderable) item(key = "hint-reorder") { SectionNote(stringResource(R.string.albums_reorder_hint)) }
         if (state.mineAndShared.isNotEmpty()) {
           item(key = "header-mine") { FluidSectionHeader(title = stringResource(R.string.albums_header_mine)) }
           albumCards("mine", state.mineAndShared, columns, thumbnails, people, ui.reorderable, handlers)
@@ -250,7 +257,11 @@ private fun AlbumCard(
   }
   Column(
     modifier = modifier
-      .fluidPressable(onClick = { handlers.onOpen(album) }, role = Role.Button)
+      .fluidPressable(
+        onClick = { handlers.onOpen(album) },
+        onLongClick = if (reorderable) ({ handlers.onReorderMenu(album) }) else null,
+        role = Role.Button,
+      )
       .semantics(mergeDescendants = true) {
         contentDescription = spoken
         customActions = actions

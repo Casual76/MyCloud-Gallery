@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
 import dev.pampa.mycloudgallery.core.albums.contract.TitleProblem
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumKind
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumListState
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPeople
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.nav.AlbumDependencies
@@ -49,6 +50,7 @@ fun AlbumListRoute(
   var creating by remember { mutableStateOf(false) }
   var problem by remember { mutableStateOf<TitleProblem?>(null) }
   var unavailable by remember { mutableStateOf(false) }
+  var moving by remember { mutableStateOf<AlbumId?>(null) }
   val scope = rememberCoroutineScope()
   val handlers = remember(controller) {
     object : AlbumListHandlers {
@@ -69,10 +71,23 @@ fun AlbumListRoute(
       override fun onDismissNotice(notice: SharedAlbumNotice) = controller.dismissNotice(notice)
 
       override fun onOpenCopy(id: AlbumId) = onOpenAlbum(id)
+
+      override fun onReorderMenu(album: Album) {
+        moving = album.id
+      }
     }
   }
   AlbumHost {
     AlbumListScreen(ui = ui, thumbnails = thumbnails, people = viewModel.people, handlers = handlers, modifier = modifier, onBack = onBack)
+    // Il foglio "Sposta": il titolo si rilegge dall'elenco ad ogni mossa; se l'album sparisce (lasciato altrove) il foglio si chiude da solo.
+    val movingAlbum = (ui.state as? AlbumListState.Ready)?.let { s -> (s.mineAndShared + s.smart).firstOrNull { it.id == moving } }
+    MoveAlbumSheet(
+      title = movingAlbum?.title,
+      canMoveUp = moving?.let { controller.canMove(it, ListMove.UP) } == true,
+      canMoveDown = moving?.let { controller.canMove(it, ListMove.DOWN) } == true,
+      onMove = { move -> moving?.let { controller.move(it, move) } },
+      onDismiss = { moving = null },
+    )
     CreateAlbumSheet(
       visible = creating, problem = problem, unavailable = unavailable,
       onCreate = { title, kind ->

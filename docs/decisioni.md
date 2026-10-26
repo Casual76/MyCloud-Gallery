@@ -6501,3 +6501,145 @@ per un evento (P7-8); ritmo e viaggi senza screenshot, GPS (0, 0) e foto future 
 | M12 `isNear` sempre falso (la citta' di casa nei titoli e nei luoghi) | `CatalogTripsTest.laCasaNonFiniscemaiInUnAlbum`, `iTitoliDelleProposte`, `TripDetectorTest.unaFestaACasa...`, `iLuoghiDiUnViaggio...` |
 
 **Verifica**: `tools\check.ps1 -NoDaemon` **verde** (26/10, ramo `fase7/p7`, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, struttura di build normale, `app\build\outputs\apk\release` cancellata prima): assembleDebug, assembleRelease, galleryTest e galleryLint in 538 s; test eseguiti in ogni modulo (core-albums 309, di cui 88 di `trips/`; app 773; core-common 94 con `Phase7ArchitectureTest`); "D30 nella release" OK; nessuna classe `testing` nel dex di release; benchmark su dispositivo saltato (senza `-Bench`). Il registro dei Nascosti ha ora la riga `trips` in `PRODUCTION` (sonda sul catalogo vero, `live`).
+
+
+## Fase 7 P6: album smart (26/10)
+
+Il pacchetto P6 della Fase 7 (`docs/fase7-progetto.md` §4.4, riga P6; D13-D17, D22, D36, D37; §2.2, §2.9, §1.5, §4.3, §5.2, §5.3, §11; E-AL1-E-AL17). Consegna il **motore degli album smart** in `core-albums/.../smart/`:
+l'interprete del nome (`RuleSmartNameInterpreter`: titolo -> periodo, luogo con raggio, descrizione, tipi, omonimi e **serie di giorni**), la **classificazione** pura dei candidati
+(`SmartClassifier`: A, B, C sicuri; S1-S5 suggeriti), il motore (`RulesSmartEngine`: valutazione intera a lotti con un budget, **incrementale**, anteprima, "Nuove"), il coordinatore
+del ricalcolo (`SmartRecompute`), l'adattatore dei candidati sul catalogo vero (`CatalogSmartCandidates`), le righe sulle tabelle v6 (`RoomSmartRows`) e la ricerca per contenuto
+(`EngineContentSearch` sopra i contratti della Fase 6). Branch `fase7/p6`, da `main` (`d6488e8`). Tocca `core-albums/.../smart/**` (e i suoi test), la sonda e le righe `albums-smart` e
+`albums-smart-editor` del registro `HiddenSurfaces` (`app/src/test/.../hidden/`), e **una riga** di `core-albums/build.gradle` (`testImplementation project(':core-ai')`, solo per la parita'
+del §5.2: fuori dal perimetro, vedi "Modifiche"). Non tocca `core-database`, `core-search`, `personal/`, `share/`, `shared/` ne' il resto di `:app`. Nessuna dipendenza esterna nuova, nessun
+permesso, nessuna rete. Commit: `3413d7c4` (motore), `8c726200` (tabella dei titoli), `50b13a53` (prove del motore), `dc4d3a31` (qualita', proprieta', prestazioni), `4774aa9e` (registro dei
+nascosti e parita'), `36d409ed` (lucchetto per album, ripresa), `21bfc2ec` (guardia di tempo), `501079c2` (due prove trovate dalle mutazioni) e quello di questo documento.
+
+**Decisioni** (dove D13-D17 e §2.2 non bastavano ho scelto la soluzione piu' semplice coerente con loro)
+
+| # | Decisione | Perche' |
+|---|---|---|
+| P6-1 | **Il verdetto di un candidato dipende solo dai candidati dei tre giorni locali attorno al suo** (il giorno prima, il suo, il giorno dopo): la regola B guarda i sicuri entro 6 ore (al piu' fino al giorno accanto), S5 i dispositivi dei sicuri di quei tre giorni, A, S1-S4 il candidato da solo | E' cio' che rende il ricalcolo incrementale **esattamente** uguale a quello da zero (D16): un cambiamento nei giorni T ricalcola T +- 1 e carica T +- 2. Provato come proprieta' (480 confronti) |
+| P6-2 | **Senza luogo e senza descrizione, la regola A e' la sola data**: un album "Natale 2025" ha come sicuri i media **miei** nel periodo, come S1 quelli dei familiari, come S2 gli screenshot. **Senza periodo, luogo e descrizione l'album e' vuoto** (E-AL9). **Con la descrizione e senza luogo** vale solo C (sicura e mio; se e' di un familiare S1, se e' uno screenshot S2) e S4 (meno probabile): nessun sicuro "per data". **Con luogo e descrizione** la descrizione aggiunge solo suggeriti S4 a chi non ha altro, mai a chi ha il GPS lontano | Il luogo "non richiesto" e' sempre soddisfatto (§2.2: A e' "data e GPS entro il raggio"); una descrizione che non si puo' valutare non deve far entrare tutto il periodo (E-AL9, D15) |
+| P6-3 | **Un media e' "mio"** se la sorgente e' `MY_PHONE` o `MY_PRIVATE`, oppure se e' dell'area comune ma il catalogo dice che e' del mio account (`ownedByMe` di P1). Un familiare non e' **mai** sicuro, nemmeno col GPS giusto (E-AL17: S1). Il contratto `AlbumCandidate` non ha `ownedByMe`: `SmartCandidates` (porta di smart/) restituisce `SmartCandidate(c, ownedByMe)` e `CatalogSmartCandidates` lo legge dal catalogo | Un mio media spostato in un album condiviso e' sorgente `COMMON` (P1-8) e resterebbe suggerito per sempre |
+| P6-4 | **Regola B**: serve il media **senza GPS, mio, di un dispositivo noto**, e **due** sicuri A **distinti** dello stesso dispositivo, uno non dopo e uno non prima, **a meno di 6 ore** (strettamente) da ciascuno. "Stesso dispositivo" confronta `origin_device` con `phone` e `backup:<propria cartella>` uguali (P1-7: `DeviceNormalizer(AlbumFamily.backupFolderName())`). Un'ancora e' un A della stessa regola: mai uno screenshot, mai un familiare, mai un escluso, mai un nascosto. B vale anche **senza periodo**. Un solo sicuro, anche scattato nello stesso istante, non e' "fra due sicuri" | D14 dice "fra due sicuri (A) dello stesso viaggio": due serie di giorni sono separate da almeno un giorno intero, quindi due ancore a meno di 12 ore sono sempre dello stesso viaggio |
+| P6-5 | **S1-S5**: GPS fra 1 e 2 volte il raggio = S3 (solo `AROUND`); senza GPS nel periodo: S2 se e' uno screenshot o una registrazione dello schermo (mai B, mai sicuro: E-AL4), **S5** se e' mio e il suo dispositivo e' fra quelli dei sicuri dei tre giorni (E-AL11), altrimenti **S1** (altro dispositivo, origine sconosciuta, familiare: E-AL3); col GPS giusto ma di un familiare S1 (E-AL17); un GPS che contraddice il luogo e' **fuori**, anche se la descrizione lo prende. Quando una foto entra per piu' strade vale la prima: con il GPS S2 (screenshot) poi S3 oppure A/S1; senza il GPS la regola B, poi S2, S5, S1 (e **senza periodo** una foto senza GPS e' solo B, altrimenti fuori); S4 (la descrizione) solo se nessuna regola di luogo e data l'ha presa. Il motivo sta in `album_suggestion.reason` (`s1`-`s5`) | Il motivo cambia solo l'etichetta (sicuro o suggerito non dipende da S1 contro S5): per questo S5 si decide sui dispositivi dei tre giorni e non su tutto l'album, e il verdetto resta locale (P6-1) |
+| P6-6 | **Descrizione ed esempi** passano da `SearchEngine` con i chip del periodo come vincoli espliciti (anche vuoti: la descrizione non si rilegge come una data) e una ricerca per ogni serie di giorni; le **foto d'esempio** si combinano per **unione** dei "Trova simili" di ognuna (`SearchEngine.similar`), senza aspettare `similarToAll` (§2.9). **Senza il motore pronto** (`SearchReadiness.Ready` e' l'unico stato che vale) C e S4 **tacciono**: un album di sola descrizione non cambia (non si svuota se il modello si ricarica), un album con luogo continua con le regole di data e GPS e **tiene i suoi suggeriti S4**; l'editor lo dice (`ProposalNote.NO_SEARCH`, `SmartPreview.searchUsed = false`) | D15; "tacere" non vuol dire "ritirare" |
+| P6-7 | **L'interprete**: `ItalianQueryParser` con il dizionario dei luoghi dell'istantanea (solo celle visibili, stessa costruzione di `LibraryPlaces`: un test li confronta). Un chip di data = il periodo; **"Natale <anno>" per un album e' il periodo delle feste, dal 24 dicembre al 6 gennaio** (14 giorni: l'analizzatore da' i soli 24-26 dicembre; §2.2 scrive "24/12/2025-6/1/2026"); piu' chip di date precise = la loro unione (anche a cavallo d'anno), altrimenti vale il primo; "ogni anno" e le feste mobili restano `EveryYear` e `Days`. Il primo chip di luogo e' il luogo; piu' luoghi di citta' = un cerchio che li contiene (centro in mezzo, raggio fino al piu' lontano piu' il suo) se sta nei 300 km, altrimenti il primo. Tipo: solo foto e video; screenshot, panorami, foto in movimento, documenti, sorgenti, preferiti e "sul telefono" non sono regole degli album e il titolo ne tiene il resto | D13; i titoli veri li scrive un familiare, non l'analizzatore |
+| P6-8 | **Omonimi (E-AL2)**: le alternative portano il **paese** (o la regione se il paese e' lo stesso, o "luogo"/"regione"/"paese" se i livelli differiscono): "Oslo (Norvegia)", "Oslo (Stati Uniti)", "San Marco (Veneto)"; una regione che ha gli stessi luoghi del luogo (la regione "Oslo" di Oslo) **non e' un'alternativa**. `PlaceAlternative.mediaCount` e' il conteggio delle celle visibili | §2.2: "Oslo (Norvegia)" o un'altra Oslo, con quanti media visibili ci sono |
+| P6-9 | **Raggio e centro**: il **centro** e' la mediana delle coordinate delle foto visibili del luogo (il dataset dei luoghi non ha coordinate); il **raggio** 25 km (citta'), 15 km se il dataset dice che le foto stanno fra 15 e 50 km dal punto del luogo (`PlacePrecision.NEAR`, `ReverseGeocoder` facoltativo), regione e paese usano il confine (raggio al massimo, non conta). Un luogo `REGION`/`COUNTRY` riconosce anche un luogo **nuovo** della stessa regione grazie a `PlaceLookup`. `AROUND` e' una distanza vera: abbassare il raggio nell'editor restringe davvero | §2.2 "Raggio" |
+| P6-10 | **Raffinamento (D13)**: con un luogo e un periodo **piu' lungo di 14 giorni** (un mese, una stagione, un anno, "ogni anno") il periodo diventa la serie di giorni con foto **proprie**, visibili, non screenshot, col GPS nel luogo: due giorni sono nella stessa serie se distano al piu' 3, ogni serie piu' o meno un giorno, le serie che si toccano si fondono (una che attraversa il 31/12 resta una: E-AL1). La soglia di 3 giorni e il margine di 1 si sovrappongono: con soglie da 1 a 3 le serie escono uguali (due giorni vuoti di fila non spezzano, tre si: "al piu' 2 giorni senza foto in mezzo" di D19), e la mutazione lo conferma. Piu' serie = `periodSeries` (E-AL12) e `SEVERAL_SERIES`; senza foto nel luogo resta il periodo del titolo con `NO_PHOTOS_IN_PLACE`. Un intervallo scelto dall'utente (14 giorni o meno) non si tocca | D13: "il periodo diventa quella serie di giorni +- 1" |
+| P6-11 | **Cosa si carica**: con un luogo o con il solo periodo, i candidati del periodo (una serie per volta, o tutta la Libreria per "ogni anno", per i giorni e senza periodo), **anche senza GPS** (la regola B); con la sola descrizione, solo le celle che la ricerca ha indicato (niente scansione); con luogo e descrizione, in piu' le celle indicate. La valutazione intera e l'incrementale caricano lo stesso insieme (la proprieta' ha trovato la differenza: prima un luogo senza periodo non vedeva le foto senza GPS) | Equivalenza dei due cammini |
+| P6-12 | **Cosa si scrive**: solo righe `album_item` con `origin = auto` (posizione = istante di scatto, cosi' "Personalizzato" li tiene in ordine di data; `added_at`) e `album_suggestion` (`reason`, `added_at`); mai un elemento `manual`/`accepted`, un escluso, le regole, un album congelato (`SmartOutcome.Frozen`: lo svuota la proiezione di P3), un album condiviso. Una riga che c'e' gia' e non cambia non si riscrive e conserva `added_at` ("Nuove: 12" conta da quando e' arrivata) | D5, D14, D16, E-AL5, E-AL13, E-AL14 |
+| P6-13 | **Nascosti (D22)**: ogni candidato passa da `VisibleMedia.visible` **prima** di contare qualcosa (anche come ancora della B, per il centro di un luogo o per le serie: le query dei candidati di P1 non hanno il contagio dei gruppi), e **cio' che si scrive** dal filtro finale `HiddenMask` subito prima della scrittura. Un errore di uno dei due risale e il motore non scrive niente. Le righe che ci sono gia' e non cambiano non si ricontrollano (chi legge l'album le filtra comunque, e il nascosto stesso fa ricalcolare quel giorno) | "Tutto cio' che mostri o inserisci passa da `VisibleMedia.visible` e dal filtro finale `HiddenMask`" (P9) |
+| P6-14 | **Budget e ripresa**: `evaluate(id, budget)` controlla il tempo fra una pagina di candidati e l'altra e, scaduto, risponde `Partial(letti, totale)` e **riprende dalla pagina a cui era** alla chiamata dopo (stesso album, stesse regole; una pagina si legge sempre, quindi si avanza). Un cambio di regole o un ricalcolo dei giorni toccati **butta** la valutazione ferma (ha letto il catalogo di prima). **Un lucchetto per album**: due valutazioni dello stesso album non si intrecciano | D16 "riprende dal punto a cui era arrivato" |
+| P6-15 | **Ricalcolo (D16)**: `SmartRecompute.onCatalogChanged(media, extraDays, budget)` trova i giorni (`SmartCandidates.daysOf`, anche dei nascosti), gli smart non congelati il cui periodo li copre (+-1) e per ognuno chiama `RulesSmartEngine.reevaluate(id, giorni)`. Un album con descrizione o esempi si rivaluta **intero** (la soglia della ricerca e' relativa all'insieme che cerca). Un cambio di regole, di esclusioni, di accettazioni, il congelamento e lo scongelamento sono `onRulesChanged` = valutazione intera. Un media che cambia **giorno** (data corretta): il catalogo da' il nuovo, chi chiama passa anche il vecchio (`extraDays`) | Locale per costruzione (P6-1) |
+| P6-16 | **"Nuove: 12" (E-AL7)**: `SmartSeenMarks` (locale al dispositivo, non si sincronizza) ricorda fino a quando l'utente ha visto l'album; `RulesSmartEngine.newSinceSeen(id)` conta gli elementi e i suggeriti con `added_at` dopo; `markSeen(id)` all'apertura. Senza un segno non ci sono novita' (la prima valutazione non deve dire "Nuove: 500") | Risponde al punto aperto di P3 (`Album.Smart.newSinceSeen` era 0) |
+| P6-17 | **Regole troppo larghe (E-AL6)**: `SmartPreview.tooBroad` se sicuri + suggeriti superano 3.000 o il 20% delle celle visibili | D16 |
+
+**Casi limite del §2.2 e dove si provano** (E-AL15 ed E-AL16 sono di P7; di E-AL16 qui c'e' solo il lato smart: il periodo funziona anche senza GPS)
+
+| ID | Caso | Prova |
+|---|---|---|
+| E-AL1 | Periodo a cavallo d'anno / serie che passa il 31/12 | `SmartInterpreterTest` (la serie resta una), tabella dei titoli (mesi e stagioni a cavallo, Natale), `SyntheticTrips` (viaggi a cavallo d'anno) |
+| E-AL2 | Luogo omonimo con le alternative | `SmartInterpreterTest` (paese e regione nell'etichetta, il conteggio, il tipo), `titoli-omonimi.txt` |
+| E-AL3 | Foto di un altro dispositivo nel periodo | `SmartClassifierTest` (S1, mai B), `SmartQualityTest` (tablet e familiare nelle storie) |
+| E-AL4 | Screenshot e registrazioni dello schermo | `SmartClassifierTest` (sempre e solo S2; non sono ancore), `SmartInterpreterTest` (non contano per le serie) |
+| E-AL5 | Un escluso non rientra, anche se le regole cambiano | `SmartEngineTest`, `SmartClassifierTest` (gli esclusi non hanno verdetto) |
+| E-AL6 | Regole troppo larghe | `SmartEngineTest` (oltre il 20% della Libreria o 3.000 elementi) |
+| E-AL7 | "Nuove: 12" | `SmartEngineTest` (un media arrivato dopo, senza segno nessuna novita') |
+| E-AL8 | Un nascosto non e' mai un elemento, un suggerito o un'ancora | `SmartEngineTest`, `SmartHiddenPropertyTest` (80 mondi, oltre 1.000 nascosti), `SmartInterpreterTest` (serie e centro), registro `albums-smart` |
+| E-AL9 | Senza periodo, luogo e descrizione l'album e' vuoto; senza motore C e S4 tacciono | `SmartClassifierTest`, `SmartEngineTest` (anche l'anteprima lo dice) |
+| E-AL10 | Viaggio in un altro fuso | `SmartClassifierTest` (i giorni locali di chi ha scattato) |
+| E-AL11 | Un giorno senza GPS del viaggio, dello stesso dispositivo ma fuori dalla B | `SmartClassifierTest` (S5) |
+| E-AL12 | Due viaggi nello stesso luogo e nello stesso anno | `SmartInterpreterTest` (due serie), `SyntheticTrips` (nel 30% delle storie), `SmartQualityTest` (categoria `due-viaggi`) |
+| E-AL13 | Regole cambiate, accettazioni a mano | `SmartEngineTest` (un elemento a mano non si riscrive mai e non si suggerisce), valutazione ferma che ricomincia |
+| E-AL14 | Album congelato o condiviso | `SmartEngineTest` (non si toccano), `SmartRoomTest` |
+| E-AL17 | Media di un familiare col GPS giusto | `SmartClassifierTest` (S1, mai sicuro), `SmartInterpreterTest` (un mio media dell'area comune conta) |
+
+**Test**: 291 nel pacchetto `smart` (512 in `core-albums`, 771 in `:app`), tutti verdi: `SmartClassifierTest` (30: ogni regola e i bordi, 6 ore stretto, 1 e 2 volte il raggio), `SmartEngineTest` (27), `SmartInterpreterTest` (18),
+`TitleTableTest` (la tabella pubblica: **194 titoli**, uno per riga, in 11 file `titoli-*.txt` con `LEGGIMI.txt`: anni, stagioni, feste, mesi a cavallo d'anno, luoghi di piu' parole, omonimi, nessuna data, nessun luogo, tipi,
+date relative, limiti), `SmartQualityTest`, `SmartIncrementalPropertyTest` (480 confronti), `SmartHiddenPropertyTest` (80 mondi), `SmartScaleTest`, `SmartRoomTest` (Robolectric, catalogo vero),
+`SmartSearchParityTest` (200 album con il motore di ricerca vero). `:app`: `hidden.*` (17 test) con le righe `albums-smart` e `albums-smart-editor` sul codice vero.
+
+**Qualita' sui viaggi sintetici** (§5.3 punto 1; 20 storie di due anni, 95 album, la verita' scritta dal generatore; nessun dato personale, luoghi pubblici). Soglie 99% e 95% (piu' alte di 98% e 90% del campo, che ha dati piu' sporchi):
+
+| Categoria | Precisione dei sicuri | Copertura (sicuri + suggeriti) |
+|---|---|---|
+| tutti | **99,96%** | **98,88%** |
+| viaggio | 99,98% | 98,46% |
+| due viaggi nello stesso luogo | 99,83% | 98,58% |
+| mare (fine settimana al mare, ripetuti) | 100% | 100% |
+| viaggio a cavallo d'anno (`cavallo-danno`: inverno a cavallo del 31/12) | 99,59% | 99,48% |
+
+Il rumore che la precisione regge: le foto di casa il giorno prima della partenza e dopo il ritorno (qualcuna col GPS sbagliato proprio sulla destinazione), i familiari, il tablet, gli screenshot, le soste per strada.
+
+**Misure** (JVM, 100.000 media; "luogo + periodo" = un album di viaggio; le soglie sono quelle di D16, meno di 2 s per album)
+
+| Cosa | Misura |
+|---|---|
+| Valutazione intera, righe in memoria | 112-221 ms |
+| Incrementale (un lotto di arrivi) contro l'intera, in memoria | 130 ms contro 225 ms |
+| Album di viaggio sul catalogo Room vero | 43-46 ms |
+| Un luogo senza periodo, catalogo Room vero | 1,3-1,56 s (guardia del test 3 s, per le macchine cariche) |
+| Album di un anno intero, catalogo Room vero | 1,4-1,6 s |
+| Incrementale di 300 arrivi, catalogo Room vero | circa 480 ms |
+| Un periodo breve non rilegge la Libreria | provato (`SmartScaleTest`) |
+
+Le letture sono pagine di 2.000 candidati. Il costo dei due casi piu' lenti (il luogo senza periodo e l'anno) e' leggere i candidati del luogo o dell'anno: sul telefono sara' piu' lento (vedi "Da provare").
+
+**Mutazioni** (si cambia una riga del codice di produzione e si lanciano le prove di `smart/`: ogni modifica che cambia il comportamento deve far diventare rosso almeno un test; da 280 a 285 test per giro, 26/10)
+
+| # | Mutazione | Rosso |
+|---|---|---|
+| M1 | finestra della regola B chiusa (6 ore comprese) | `SmartClassifierTest` (1) |
+| M2 | uno screenshot fa da ancora della regola B | `SmartClassifierTest` (1) |
+| M3 | un familiare conta come "mio" | `SmartClassifierTest` (4), `SmartEngineTest` (1), `SmartInterpreterTest` (1) |
+| M4 | senza il filtro finale `HiddenMask` | `SmartEngineTest` (1: il media nascosto un attimo dopo la lettura) |
+| M5 | senza `VisibleMedia.visible` | `SmartHiddenPropertyTest` (2), `SmartIncrementalPropertyTest` (1), `SmartInterpreterTest` (1); nel registro `HiddenSurfacesPropertyTest` (1 su 5) |
+| M6 | l'incrementale non guarda i giorni accanto | `SmartIncrementalPropertyTest` (1), `SmartRoomTest` (1) |
+| M7b | il coordinatore non cerca i giorni dei media cambiati | `SmartEngineTest` (1) |
+| M8b | il buco delle serie diventa 5 giorni | `SmartInterpreterTest` (2) |
+| M9 | "Natale" finisce il 26 dicembre | `TitleTableTest` (11 righe) |
+| M10 | `RoomSmartRows` sovrascrive una scelta dell'utente | `SmartRoomTest` (1) |
+| M10b | `RoomSmartRows` suggerisce un elemento scelto | `SmartRoomTest` (1) |
+| M11 | `backup:<propria cartella>` non vale `phone` | `SmartClassifierTest` (1) |
+| M12 | le esclusioni non contano | `SmartEngineTest` (1), `SmartRoomTest` (1) |
+| M13 | il motore di ricerca e' sempre "pronto" | `SmartSearchParityTest` (1) |
+| M14 | niente S5 | `SmartClassifierTest` (6), `SmartEngineTest` (2) |
+| M15 | S3 fino a 3 volte il raggio | `SmartClassifierTest` (1) |
+| M16 | una valutazione ferma sopravvive a un ricalcolo | `SmartEngineTest` (1) |
+
+Due mutazioni **non** erano rilevate al primo giro (M10 e M13): erano due lacune vere (la guardia di `RoomSmartRows` era una seconda difesa che nessuna prova attraversava, e nessuna prova mostrava un motore di ricerca che si sta ancora caricando). Ho aggiunto
+`SmartRoomTest.leRigheRoomRifiutanoDiSovrascrivereUnaSceltaDellUtenteAncheSeIlChiamanteSbaglia` e `SmartSearchParityTest.unMotoreNonProntoNonRispondeEGliAlbumTacciono`; adesso sono rosse. Tre mutazioni restano senza rosso, e sono **equivalenti** (nessuna differenza osservabile):
+(1) il coordinatore che guarda solo il giorno toccato e non i due accanto (il giro in piu' non cambia nessun verdetto: un'ancora deve stare nel periodo, quindi un media fuori periodo non puo' cambiare un elemento dentro); (2) la soglia del buco delle serie a 1 invece di 3 (il margine di un giorno ricongiunge comunque i giorni a distanza 2 e 3);
+(3) nel registro dei nascosti di `:app`, il filtro finale tolto: `VisibleMedia` legge gia' `media_personal` dal vivo, e la corsa fra la lettura e la scrittura la prova solo `SmartEngineTest` (M4).
+
+**Pronto per gli altri pacchetti**
+
+- **P10 (schermate)**: l'editor chiama `RuleSmartNameInterpreter.propose(titolo, oggi)` (contratto `SmartNameInterpreter`) e ottiene `RuleProposal`: le regole, le `alternatives` degli omonimi con paese o regione e quanti media visibili, le `periodSeries` del raffinamento e le `ProposalNote` da dire (`NO_DATE`, `NO_PLACE`, `NO_PHOTOS_IN_PLACE`, `SEVERAL_SERIES`, `NO_SEARCH`). `EXAMPLES_UNSUPPORTED` non viene
+  mai emessa: le foto d'esempio funzionano (unione dei "Trova simili", P6-6). L'anteprima prima di salvare e' `RulesSmartEngine.preview(regole)` (contratto `SmartAlbumEngine`) = `SmartPreview(confident, suggested, tooBroad, sample, searchUsed)`, senza scrivere niente e senza nascosti. La schermata dell'album legge "Nuove: N" da
+  `SmartOutcome.Done.newSinceSeen` o da `newSinceSeen(id)`, e chiama `markSeen(id)` quando l'utente l'apre. I testi (le etichette delle note, "Oslo (Norvegia)", "Nuove: 12") sono di P10; qui ci sono solo i codici.
+- **P12 (valutazione)**: il motore gira su qualunque Libreria con tre porte: `SmartCandidates` (`CatalogSmartCandidates` sul catalogo vero), `SmartRows` (per la corsa di valutazione P12 ne scrive una sua in memoria di una ventina di righe: `RoomSmartRows` scriverebbe nella Libreria vera, e lo strumento e' di sola lettura) e `SmartContentSearch`.
+  Per ogni album: `interpreter.propose(titolo)` e `engine.evaluate(id, Duration.INFINITE)`, poi si leggono le righe `auto` (sicuri) e i suggeriti con il motivo `s1`-`s5`. La tabella dei 194 titoli e i viaggi di `SyntheticTrips` (storie con la verita', 20 di due anni) sono il termine di confronto per i viaggi veri; le soglie del campo sono 98% e 90% (F88), quelle sintetiche 99% e 95%.
+- **P13 (collegamento in `:app`)**: `RulesSmartEngine(RoomSmartRows(database), CatalogSmartCandidates(catalogo), VisibleMedia, HiddenMask, EngineContentSearch(searchEngine) o NoSmartContentSearch, DeviceNormalizer(AlbumFamily.backupFolderName()), PlaceLookup, AlbumClocks, SmartSeenMarks)`;
+  `SmartRecompute(...)` si chiama dopo le scansioni, le sincronizzazioni e le modifiche del catalogo con `onCatalogChanged(media, extraDays, budget)` (per un media la cui data e' stata corretta, passare anche il giorno di prima in `extraDays`), e dopo ogni cambio di regole, esclusioni, accettazioni e congelamento con `onRulesChanged(id, budget)`.
+  Un album con descrizione si rivaluta intero a ogni giro: conviene chiamare `onCatalogChanged` una volta a fine scansione, non a ogni file. `SmartSeenMarks` vero = una preferenza locale del dispositivo (qui c'e' solo `InMemorySeenMarks`). `ReverseGeocoder` e' facoltativo (senza, il raggio resta 25 km).
+  La sonda di `albums-smart` sul registro dei nascosti e' gia' sul codice vero; quando P13 lega il motore in `:app` il test d'architettura delle superfici non cambia.
+
+**Modifiche ai contratti**: nessuna ai tipi di P0 (`contract/`), nessuna a `core-database`, `core-search`, `personal/`, `share/` o `shared/`. La porta `SmartCandidates` e' di P6 (dentro `smart/`) e si appoggia solo alle query che P1 ha gia' consegnato (`MediaCatalog.albums`: `candidates`, `candidatesOf`, `daysOf`, `visibleCount`; `ownedByMe` viene da `CatalogCandidate`).
+Fuori dal perimetro: **una riga di test in `core-albums/build.gradle`** (`testImplementation project(':core-ai')`, per la parita' del §5.2 con il motore di ricerca vero e con i motori finti di core-ai; `Phase7ArchitectureTest` conferma che il codice di produzione di `core-albums` non vede `core-ai`). Se si preferisce, la parita' si sposta in `:app`.
+
+**Da provare sul telefono (F87, F88)** (non ho potuto: nessun `adb`, telefono o emulatore; il motore e' provato sulla JVM con Room in memoria)
+- **F87** (autonoma, dopo P12 e P13): gli album dei 20 viaggi sintetici sul telefono, precisione >= 99% e copertura >= 95% come sulla JVM; il tempo per album sul catalogo vero del telefono (sulla JVM 43-46 ms per un viaggio, 1,3-1,6 s per un luogo senza periodo o per un anno con 100 mila media: sul telefono piu' lento, il budget spezza e riprende).
+- **F88** (l'utente, 3 viaggi veri con lo strumento di P12): precisione dei sicuri >= 98%, copertura >= 90%. Da guardare con gli occhi: gli omonimi proposti ("Oslo (Norvegia)"), "Natale 2025" (24/12-6/1), i luoghi con piu' parole, e la nota di serie se un viaggio si spezza in due.
+
+**Punti aperti**
+1. Un luogo senza periodo e un anno intero caricano tutta la Libreria (la regola B vuole anche le foto senza GPS): 1,3-1,6 s su 100 mila media sul catalogo vero, sotto i 2 s ma con la guardia del test a 3 s per le macchine cariche. **Query utile a P1 (non bloccante, l'adattatore oggi non la ha)**: i candidati con il GPS dentro un riquadro di coordinate, piu' quelli senza GPS dei giorni in cui ce n'e' uno dentro; renderebbe il costo proporzionale al luogo e non alla Libreria. Da fare solo se F87 misura piu' di 2 s sul telefono.
+2. Un album con descrizione si rivaluta intero a ogni cambiamento del catalogo (la soglia della ricerca e' relativa all'insieme): vedi sopra, P13 chiama il ricalcolo a fine scansione.
+3. `SmartSeenMarks` e `ReverseGeocoder` veri sono di P13; qui non c'e' codice Android.
+4. "Natale <anno>" per un album e' 24/12-6/1, mentre per la ricerca l'analizzatore da' 24-26/12: due significati voluti (D13), da non unificare per sbaglio.
+5. La parita' con il motore di ricerca vero sta in `core-albums` (vedi "Modifiche ai contratti"): se P13 preferisce, si sposta in `:app`.
+6. Per i media di una condivisione (area comune) "mio" dipende da `ownedByMe` di P1 (P6-3): se P1 lo calcola male, i propri media spostati restano suggeriti; la sonda del registro non lo vede.
+
+**Verifica**: `tools\check.ps1 -NoDaemon` verde al primo giro (26/10, ramo `fase7/p6` col codice di `501079c2`, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, struttura di build normale, `app\build\outputs\apk\release` cancellata prima, slot `f7-p6` preso e rilasciato): assemble di debug e release, test di tutti i moduli (`core-albums` 512, `:app` 771, nessuno a zero, nessuno fallito), lint, controlli sul dex e sul manifest di release (nessun fake di test nel dex, permessi dell'APK tutti elencati in `docs/sicurezza.md`).

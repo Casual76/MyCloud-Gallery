@@ -1,0 +1,17 @@
+# Tipi: foto e video sono un tipo delle regole; screenshot, panorami, foto in movimento, documenti, sorgenti, preferiti e "sul telefono" non
+# lo sono e il titolo ne tiene il resto. Oggi = 20 dicembre 2026.
+
+Video di Oslo 2026 => R 2026-03-13..2026-03-19 ; 2026-12-02..2026-12-06 => around Oslo (Norvegia) r25 #3143244 alt=Oslo (Stati Uniti)#5036001:3 => - => VIDEO => SEVERAL_SERIES,serie=2
+foto e video di Oslo 2026 => R 2026-03-13..2026-03-19 ; 2026-12-02..2026-12-06 => around Oslo (Norvegia) r25 #3143244 alt=Oslo (Stati Uniti)#5036001:3 => - => - => SEVERAL_SERIES,serie=2
+panorami Oslo 2026 => R 2026-03-13..2026-03-19 ; 2026-12-02..2026-12-06 => around Oslo (Norvegia) r25 #3143244 alt=Oslo (Stati Uniti)#5036001:3 => - => - => SEVERAL_SERIES,serie=2
+Foto di Natale 2025 => R 2025-12-24..2026-01-06 => - => - => PHOTO => NO_PLACE
+video estate 2025 => R 2025-06-01..2025-08-31 => - => - => VIDEO => NO_PLACE
+video di Lisbona 2025 => R 2025-08-02..2025-08-10 => around Lisbona r25 #2267057 => - => VIDEO => serie=1
+video => - => - => - => VIDEO => NO_DATE,NO_PLACE
+foto => - => - => - => PHOTO => NO_DATE,NO_PLACE
+screenshot 2025 => R 2025-01-01..2025-12-31 => - => - => - => NO_PLACE
+screenshot => - => - => - => - => NO_DATE,NO_PLACE
+whatsapp 2025 => R 2025-01-01..2025-12-31 => - => - => - => NO_PLACE
+preferiti 2025 => R 2025-01-01..2025-12-31 => - => - => - => NO_PLACE
+documenti => - => - => - => - => NO_DATE,NO_PLACE
+video di Natale 2025 gatto => R 2025-12-24..2026-01-06 => - => gatto => VIDEO => NO_PLACE,NO_SEARCH

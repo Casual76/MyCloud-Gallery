@@ -1,0 +1,15 @@
+# Omonimi (E-AL2): vince il luogo con piu' media visibili, gli altri sono le alternative, con il paese o la regione per distinguerli; la regione
+# che ha gli stessi luoghi del luogo ("Oslo" di Oslo) non e' un'alternativa. Oggi = 20 dicembre 2026.
+
+Oslo => - => around Oslo (Norvegia) r25 #3143244 alt=Oslo (Stati Uniti)#5036001:3 => - => - => NO_DATE
+Oslo marzo 2026 => R 2026-03-13..2026-03-19 => around Oslo (Norvegia) r25 #3143244 alt=Oslo (Stati Uniti)#5036001:3 => - => - => serie=1
+Oslo dicembre 2026 => R 2026-12-02..2026-12-06 => around Oslo (Norvegia) r25 #3143244 alt=Oslo (Stati Uniti)#5036001:3 => - => - => serie=1
+Oslo 2022 => R 2022-01-01..2022-12-31 => around Oslo (Norvegia) r25 #3143244 alt=Oslo (Stati Uniti)#5036001:3 => - => - => NO_PHOTOS_IN_PLACE
+San Marco => - => around San Marco (Veneto) r25 #6005 alt=San Marco (Toscana)#6004:6 => - => - => NO_DATE
+San Marco 2022 => R 2022-05-31..2022-06-02 => around San Marco (Veneto) r25 #6005 alt=San Marco (Toscana)#6004:6 => - => - => serie=1
+Santa Maria => - => around Santa Maria (Lazio) r25 #6002 alt=Santa Maria (Campania)#6001:3,Santa Maria (Puglia)#6003:1 => - => - => NO_DATE
+Santa Maria 2021 => R 2021-05-31..2021-06-02 => around Santa Maria (Lazio) r25 #6002 alt=Santa Maria (Campania)#6001:3,Santa Maria (Puglia)#6003:1 => - => - => serie=1
+Santa Maria estate => R 2021-05-31..2021-06-02 => around Santa Maria (Lazio) r25 #6002 alt=Santa Maria (Campania)#6001:3,Santa Maria (Puglia)#6003:1 => - => - => serie=1
+Santa Maria maggio 2021 => R 2021-05-01..2021-05-31 => around Santa Maria (Lazio) r25 #6002 alt=Santa Maria (Campania)#6001:3,Santa Maria (Puglia)#6003:1 => - => - => NO_PHOTOS_IN_PLACE
+Lisbona => - => around Lisbona r25 #2267057 => - => - => NO_DATE
+Stoccolma => - => around Stoccolma r25 #6014 => - => - => NO_DATE

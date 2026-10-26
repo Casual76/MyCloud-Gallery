@@ -1,0 +1,34 @@
+# Feste. "Natale <anno>" per un album e' il periodo delle feste, dal 24 dicembre al 6 gennaio (14 giorni: non si raffina). Le altre feste sono quelle
+# dell'analizzatore. Pasqua e Pasquetta senza anno sono l'insieme di tutte (dal 1900 a quella di quest'anno). Oggi = 20 dicembre 2026.
+
+Natale 2025 => R 2025-12-24..2026-01-06 => - => - => - => NO_PLACE
+Natale 2024 => R 2024-12-24..2025-01-06 => - => - => - => NO_PLACE
+Natale => Y 12-24..01-06 => - => - => - => NO_PLACE
+Natale scorso => R 2025-12-24..2026-01-06 => - => - => - => NO_PLACE
+Natale quest'anno => R 2026-12-24..2027-01-06 => - => - => - => NO_PLACE
+Natale 2025 Roma => R 2025-12-24..2026-01-06 => around Roma r25 #3169070 => - => - => -
+Natale a Roma => Y 12-24..01-06 => around Roma r25 #3169070 => - => - => -
+Natale a Stoccolma => Y 12-24..01-06 => around Stoccolma r25 #6014 => - => - => -
+Natale 2024 a Stoccolma => R 2024-12-24..2025-01-06 => around Stoccolma r25 #6014 => - => - => -
+Cena di Natale 2025 => R 2025-12-24..2026-01-06 => - => Cena => - => NO_PLACE,NO_SEARCH
+Natale 2025 neve => R 2025-12-24..2026-01-06 => - => neve => - => NO_PLACE,NO_SEARCH
+Vigilia di Natale 2024 => R 2024-12-24..2024-12-24 => - => - => - => NO_PLACE
+Vigilia di Natale => Y 12-24..12-24 => - => - => - => NO_PLACE
+Santo Stefano 2024 => R 2024-12-26..2024-12-26 => - => - => - => NO_PLACE
+Capodanno 2025 => R 2024-12-31..2025-01-01 => - => - => - => NO_PLACE
+Capodanno => Y 12-31..01-01 => - => - => - => NO_PLACE
+Capodanno a Stoccolma => Y 12-31..01-01 => around Stoccolma r25 #6014 => - => - => -
+Capodanno 2025 Stoccolma => R 2024-12-31..2025-01-01 => around Stoccolma r25 #6014 => - => - => -
+Epifania 2026 => R 2026-01-06..2026-01-06 => - => - => - => NO_PLACE
+Ferragosto 2025 => R 2025-08-15..2025-08-15 => - => - => - => NO_PLACE
+Ferragosto => Y 08-15..08-15 => - => - => - => NO_PLACE
+San Valentino => Y 02-14..02-14 => - => - => - => NO_PLACE
+San Valentino 2026 => R 2026-02-14..2026-02-14 => - => - => - => NO_PLACE
+Pasqua 2024 => R 2024-03-31..2024-03-31 => - => - => - => NO_PLACE
+Pasquetta 2025 => R 2025-04-21..2025-04-21 => - => - => - => NO_PLACE
+Pasqua scorsa => R 2026-04-05..2026-04-05 => - => - => - => NO_PLACE
+Pasqua => E #127 1900-04-15..2026-04-05 => - => - => - => NO_PLACE
+Pasqua a Firenze => E #127 1900-04-15..2026-04-05 => around Firenze r25 #3176959 => - => - => -
+@oggi 2025-01-10
+Natale scorso => R 2024-12-24..2025-01-06 => - => - => - => NO_PLACE
+Capodanno scorso => R 2024-12-31..2025-01-01 => - => - => - => NO_PLACE

@@ -190,9 +190,16 @@ internal object HiddenSurfaces {
       backing = Backing.PRODUCTION, sources = listOf("$ALBUMS/personal/CatalogAlbumProjection.kt", "$ALBUMS/personal/MediaResolver.kt"), probe = RealPersonalProbes.pendingItems,
       live = true, alsoProvedBy = listOf("CatalogAlbumProjectionTest"),
     ),
+    // --- Il codice vero di P6 (album smart): integrazione del 26/10 -----------------------------------------------------------------------------------------
     SurfaceEntry(
-      id = "albums-smart", title = "Album smart e Suggerite", row = SpecRow.ALBUMS, owner = "P6", backing = Backing.REFERENCE,
-      landedWhen = listOf("$ALBUMS/smart"), probe = ReferenceProbes.smartAlbums,
+      id = "albums-smart", title = "Album smart veri: il motore (sicuri, Suggerite, anteprima, incrementale) sui candidati del catalogo", row = SpecRow.ALBUMS, owner = "P6",
+      backing = Backing.PRODUCTION, sources = listOf("$ALBUMS/smart/RulesSmartEngine.kt", "$ALBUMS/smart/SmartVisible.kt"), probe = RealSmartProbes.engine, live = true,
+      alsoProvedBy = listOf("SmartHiddenPropertyTest", "SmartIncrementalPropertyTest", "SmartRoomTest", "SmartEngineTest"),
+    ),
+    SurfaceEntry(
+      id = "albums-smart-editor", title = "L'editor degli album smart: la proposta del nome (luogo, serie di giorni) e l'anteprima, solo dai media visibili", row = SpecRow.ALBUMS,
+      owner = "P6", backing = Backing.PRODUCTION, sources = listOf("$ALBUMS/smart/RuleSmartNameInterpreter.kt"), probe = RealSmartProbes.editor, live = true,
+      alsoProvedBy = listOf("SmartInterpreterTest", "TitleTableTest"),
     ),
     SurfaceEntry(
       id = "album-viewer", title = "Viewer aperto da un album: la vista dell'album (`AlbumContent.items` di P3, che il viewer di P10 scorre)", row = SpecRow.ALBUM_VIEWER,

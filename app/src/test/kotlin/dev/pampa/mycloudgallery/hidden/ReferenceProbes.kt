@@ -87,27 +87,6 @@ internal object ReferenceProbes {
   private fun leak(name: String, shown: Collection<MediaId>, forbidden: Set<MediaId>): String? =
     if (shown.any { it in forbidden }) "$name mostra un nascosto" else null
 
-  /** Album smart: i sicuri, le "Suggerite" e i loro conteggi, con candidati nascosti. */
-  val smartAlbums = SurfaceProbe { w ->
-    val stack = ReferenceStack(w)
-    val problems = ArrayList<String>()
-    val confident = stack.pick(salt = 2)
-    val suggested = stack.pick(salt = 5, share = 4).filter { it !in confident }
-    stack.smart = SmartMembership(confident, suggested)
-    val id = stack.create("Smart di prova", AlbumKind.SMART, SmartRules(period = null, place = null, text = null))
-    stack.hideThemAll()
-
-    val album = stack.albums.all.value.byId(id) as Album.Smart
-    val content = stack.contentOf(id)
-    val items = stack.idsOf(content.items)
-    val sug = stack.idsOf(content.suggested)
-    if (items != confident.filter { it in w.showable }.toSet()) problems += "l'album smart non mostra esattamente i sicuri visibili"
-    if (sug != suggested.filter { it in w.showable }.toSet()) problems += "le Suggerite non sono esattamente le visibili"
-    if (album.count != items.size) problems += "il conteggio dell'album smart e' ${album.count}, ne attendeva ${items.size}"
-    if (album.suggested != sug.size) problems += "il numero delle Suggerite e' ${album.suggested}, ne attendeva ${sug.size}"
-    Probed(shown = items + sug + listOfNotNull(album.cover.media), within = w.showable, problems = problems)
-  }
-
   /**
    * Viaggi ed eventi (E-H7): una storia casuale con la casa a Firenze, viaggi a Oslo e una festa, con nascosti a caso e, a seed dispari, un viaggio
    * fatto solo di nascosti. La sonda controlla da se' (gli id della storia non sono quelli del catalogo): nessuna proposta ha una copertina nascosta

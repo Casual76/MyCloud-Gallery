@@ -52,6 +52,10 @@ dependencies {
   testImplementation project(':core-nasops')
   testImplementation project(':core-nas')
 
+  // P6 (§5.2): la parita' dell'esecutore di riferimento della ricerca con il motore vero (regole C e S4 degli album smart) vuole i motori finti della Fase 6
+  // (`FakeTextEmbedder`, `FakeConcepts`). Solo nei test: il codice di produzione non vede core-ai (Phase7ArchitectureTest).
+  testImplementation project(':core-ai')
+
   // P3: la proiezione degli album sulle tabelle v6 si prova sul catalogo vero (Room in memoria, come core-personal e core-database).
   testImplementation appDeps.robolectric
   testImplementation appDeps.androidxTestCore

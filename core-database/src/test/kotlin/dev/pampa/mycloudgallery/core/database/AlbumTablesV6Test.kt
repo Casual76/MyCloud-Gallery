@@ -12,10 +12,12 @@ import dev.pampa.mycloudgallery.core.database.entity.AlbumShareItemEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumShareOpEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumSuggestionEntity
 import dev.pampa.mycloudgallery.core.database.entity.HomeEstimateEntity
+import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
 import dev.pampa.mycloudgallery.core.database.entity.SharedAlbumEntity
 import dev.pampa.mycloudgallery.core.database.entity.SharedAlbumEntryEntity
 import dev.pampa.mycloudgallery.core.database.entity.SharedAlbumHeadMarkEntity
 import dev.pampa.mycloudgallery.core.database.entity.TripProposalEntity
+import dev.pampa.mycloudgallery.core.model.MediaGroupKind
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PersonalFlags
 import kotlinx.coroutines.runBlocking
@@ -93,6 +95,31 @@ class AlbumTablesV6Test : CatalogTestBase() {
     assertThat(counts.newCount).isEqualTo(1)
     db.albumChoiceDao().removeSuggestion("smart", a.value)
     assertThat(db.albumChoiceDao().suggestions("smart").map { it.mediaId }).containsExactly(b.value, hidden.value)
+  }
+
+  /**
+   * D22, E-L11 (Fase 7, P9): un gruppo in cui **un** membro e' nascosto e' nascosto per intero, anche se il segno e' arrivato a meta' (scritto senza passare da
+   * `setPersonalFlags`, che lo propaga): la copertina visibile di quel gruppo non si conta ne' fra gli elementi ne' fra i suggeriti, e non da' il giorno piu' recente.
+   */
+  @Test
+  fun unGruppoConUnMembroNascostoNonSiConta() = runBlocking<Unit> {
+    val cover = media(1)
+    val mate = media(2)
+    val alone = media(3)
+    catalog.group(MediaGroupKind.BURST, listOf(cover, mate), cover)
+    album("uno")
+    album("smart", kind = "smart")
+    db.albumDao().upsertItems(listOf(AlbumItemEntity("uno", cover.value, 1000, T0), AlbumItemEntity("uno", alone.value, 2000, T0)))
+    db.albumChoiceDao().upsertSuggestions(listOf(AlbumSuggestionEntity("smart", cover.value, "s1", T0), AlbumSuggestionEntity("smart", alone.value, "s1", T0)))
+    assertThat(db.albumDao().summaries().single().visibleCount).isEqualTo(2)
+    assertThat(db.albumChoiceDao().suggestionCounts(since = 0).single().visibleCount).isEqualTo(2)
+
+    // Il dato arriva a meta': solo il membro non copertina e' segnato nascosto.
+    db.personalDao().upsert(MediaPersonalEntity(mate.value, favorite = false, hidden = true, updatedAt = T0))
+
+    assertThat(db.albumDao().summaries().single().visibleCount).isEqualTo(1)
+    assertThat(db.albumDao().summaries().single().newestDay).isEqualTo(db.mediaDao().get(alone.value)!!.localDay)
+    assertThat(db.albumChoiceDao().suggestionCounts(since = 0).single().visibleCount).isEqualTo(1)
   }
 
   // --- replica degli album condivisi -------------------------------------------------------------------------------------

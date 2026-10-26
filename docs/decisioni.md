@@ -2278,7 +2278,7 @@ dipendenza, nessun permesso e nessun componente nuovi; schema v4 cambiato (non r
 - Le decisioni di P8 ancora da confermare con l'utente (nomi in `Versioni/`, `SOURCE_CHANGED` che aspetta, percorso occupato da file altrui) restano com'erano.
 
 **Verifica** (20/10): `tools\check.ps1` verde (gradle, test di ogni modulo, APK di release, niente fake ne' strumenti di debug nel dex, D12 e R2
-nel bytecode, permessi documentati); i banchi delle interruzioni del backup `tools\chaosrea.ps1 -Mode backup -Stage jvm` (2.000 giri, motore
+nel bytecode, permessi documentati); i banchi delle interruzioni del backup `tools\chaos\area.ps1 -Mode backup -Stage jvm` (2.000 giri, motore
 vero ed esecutore di riferimento) e `-Stage smb` (600 giri sul simulatore SMB con le primitive vere): **0 giri con violazioni**, nessun caso
 schivato. Nota: i banchi provano i motori di core-backup (5A e 5B); il cammino `INCOMING` e i collegamenti di `:app` li provano
 `IncomingEveryCallTest` e i test d'integrazione qui sopra. I rossi delle prime due `check.ps1` erano test da aggiornare alla 5B (il messaggio del
@@ -5529,8 +5529,8 @@ dei documenti.
   (pagine-filtro Screenshot, Video, Modificate, WhatsApp), `search` (ricerca, suggerimenti, Trova simili: `InMemorySearchEngine` su
   `CatalogSearchData`), `other-apps` (selettore per le altre app, `PickerItems`), `widget` (widget di prova), `visible-media`, `hidden-mask`,
   `nas-folders` (Cartelle NAS).
-- Registrate **con l'esecutore di riferimento**: `albums-manual` (P3, copertine, E-H6), `albums-smart` (P6), `album-viewer` (P10), `trips` (P7, E-H7).
-  **In attesa**: `duplicates` (P8) e `add-to-album` (P10). *(Gli album condivisi, `albums-shared` (P2/P4, E-H5), erano qui; con l'integrazione del 26/10 sono
+- Registrate **con l'esecutore di riferimento**: `albums-smart` (P6), `trips` (P7, E-H7). **In attesa**: `duplicates` (P8) e `add-to-album` (P10).
+  *(Gli album condivisi, `albums-shared` (P2/P4, E-H5), e gli album personali, `albums-manual` (P3) e `album-viewer`, erano qui; con le integrazioni del 26/10 sono
   passati al codice vero, vedi "Fase 7 P9, integrazione" in fondo.)*
 - Dietro il cancello, **apposta** (`HiddenSurfaces.gated`): la pagina dei Nascosti e gli Eliminati di recente (con il segno): leggono i nascosti
   solo dopo lo sblocco; le loro prove sono i test di `feature-library` (`HiddenControllerTest`, `HiddenAccessGateTest`, `RecentlyDeletedControllerTest`, ...).
@@ -6151,3 +6151,56 @@ in una volta (quanto ci mette il registro, P3-14).
 - `REPORT.md`: l'ambiente non lascia scrivere file di resoconto; il resoconto e' nella risposta finale e questa sezione ne fa le veci.
 
 **`tools\check.ps1 -NoDaemon`**: **verde** (26/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`): assembleDebug, assembleRelease, galleryTest e galleryLint in 6 minuti (cache di Gradle calda); test eseguiti in ogni modulo (core-personal 186, core-albums 168, core-common 94, core-database 249, feature-albums 4); "D30 nella release" OK; nessuna classe `testing` nel dex di release; benchmark su dispositivo saltato (senza `-Bench`). Una prima corsa ha trovato un solo rosso, `Phase7ArchitectureTest.unaConfermaDellaCondivisioneLaCostruisceSoloIlFoglio`: core-albums non nomina le conferme di core-nasops nemmeno nei test, e un mio test dei sorgenti di `personal/` le nominava in un'espressione regolare; scritte in due pezzi, la seconda corsa e' verde.
+
+## Fase 7 P9, integrazione: le superfici vere di P3 nel registro dei Nascosti (26/10)
+
+Con P3 (album personali) nello stesso ramo di `main`, P9, P4 e P11 (`integra/26-10f`) il registro ha chiesto le sonde sul codice vero: `albums-manual` (P3) era ancora
+`REFERENCE` con `core-albums/.../personal` presente, e `personal/AlbumReader.kt` e `personal/CatalogAlbums.kt` nominano `VisibleMedia` e `HiddenMask` senza essere
+registrati. Nessuna dipendenza, permesso o colonna nuovi.
+
+**Le righe passate a `PRODUCTION`** (tutte nella riga "Album ..." del §2.1, `live = true`)
+- `albums-manual` (P3, prima `REFERENCE`): `CatalogAlbums` e `AlbumReader` veri: elenco, conteggi, copertina scelta altrove e nascosta qui (E-H6), contenuto.
+- `albums-smart-read` (P3, nuova): la lettura degli smart: conteggio, "Suggerite" e contenuto, con le righe automatiche del motore (P6) e i suggeriti che includono nascosti.
+  La riga `albums-smart` (il **motore**, P6) resta `REFERENCE`.
+- `albums-copies` (P3, nuova): le copie personali di Q5 (`PersonalAlbumCopies.keep`, anche con elementi nascosti qui) lette dagli album; un secondo giro non riscrive.
+- `albums-pending` (P3, nuova): gli elementi "in attesa" (id che questo catalogo non conosce): ritrovati per impronta (anche un nascosto), mai arrivati, arrivati dopo,
+  arrivati e subito nascosti.
+- `album-viewer` (P3/P10, prima `REFERENCE` con il marcatore di `personal/`): la vista che il viewer apre da un album e' `AlbumContent.items` di P3; la sonda controlla
+  che non ci si arrivi a un nascosto nemmeno cercandolo per id (`viewIndexOf`). La UI del viewer e' di P10, ma la superficie e' questa.
+Restano `REFERENCE` il motore degli smart (P6) e i viaggi (P7); in attesa Doppioni (P8) e "Aggiungi ad album" (P10). Le due sonde di riferimento tolte
+(`ReferenceProbes.manualAlbums`, `.albumViewer`) non servivano piu'.
+
+**Lo stack vero** (`app/src/test/.../hidden/RealPersonalStack.kt`, `RealPersonalProbes.kt`): `CatalogAlbums` vero, la proiezione vera sulle tabelle v6, lo store vero dei dati
+personali (`LedgerPersonalStore` con un registro in memoria e le impronte dei media del mondo), `CatalogVisibleMedia` e `CatalogHiddenMask` sopra il catalogo del mondo casuale. Gli album si
+scrivono come li scriverebbe un altro dispositivo dello stesso account (voci personali grezze, senza le verifiche dell'editor): un manuale con un terzo dei media a caso
+(nascosti compresi) e la copertina scelta altrove (il primo); uno smart con elementi accettati, righe automatiche del motore e suggeriti; la copia di un album chiuso con tutti i media
+dell'area comune; un album con id estranei (ritrovati per impronta, mai arrivati, arrivati dopo). L'oracolo e' quello del mondo: un album mostra **esattamente** i suoi elementi che
+sono celle della Libreria adesso (non nascosti, non membri di un gruppo con un nascosto, una cella per gruppo: D20, D22, E-L11), il conteggio e' quello, la copertina e' un elemento mostrabile.
+
+**Difetto trovato (uno, vero) e corretto nel modo minimo**
+- **I conteggi degli album non toglievano il gruppo con un membro nascosto a meta'** (`AlbumDao.summaries` e `AlbumChoiceDao.suggestionCounts`): la copertina visibile di un gruppo in cui
+  un altro membro aveva il segno di nascosto (dato arrivato a meta': scritto senza passare da `setPersonalFlags`, che lo propaga) si contava, mentre `VisibleMedia` e il contenuto
+  la toglievano: l'elenco diceva N+1 e l'album ne mostrava N (e il "giorno piu' recente" poteva essere quello di un media nascosto). Era rosso in oltre una decina di mondi su 44. *Correzione:*
+  `AlbumQueries.NOT_IN_HIDDEN_GROUP`, una clausola SQL (valuta il gruppo solo per chi ne ha uno) usata dalle due query; prova in `core-database`
+  (`AlbumTablesV6Test.unGruppoConUnMembroNascostoNonSiConta`). Produzione normale: il segno si propaga a tutto il gruppo, quindi la clausola non cambia i numeri di tutti i giorni.
+- **Da tenere presente per P6, P7, P8**: le altre query di P1 (`AlbumQueries.VISIBLE` dei candidati, `facts`, i Doppioni) non hanno il contagio del gruppo e contano su quella propagazione. Chi le usa per
+  mostrare (il motore degli smart, i viaggi, i Doppioni) deve passare i candidati da `VisibleMedia.visible` e dal filtro finale `HiddenMask`, come fa la lettura di P3: il registro lo
+  controllera' con la loro sonda quando arrivano.
+
+**Non sono difetti**: il contenuto, la copertina e le Suggerite passano da `AlbumReader.shown` (`VisibleMedia` e filtro finale `HiddenMask`); `PersonalAlbumCopies.keep` scrive gli elementi
+che riceve (quelli che P2/P4 gia' filtrano, e se arrivasse un nascosto la lettura lo toglie); `AlbumEditor.add` lavora sulla selezione dell'utente; gli elementi in attesa si contano solo come numeri
+(Diagnostica).
+
+**Rosso senza la regola (mutazioni su `core-albums` e `core-database`, una alla volta, ripristinate e confrontate con `cmp`)**
+- **N1 · `AlbumReader.shown` senza il filtro dei nascosti**: rosso su `albums-manual` (90), `albums-smart-read` (78), `albums-copies` (47), `albums-pending` (71) e `album-viewer` (146).
+- **N2 · la copertina scelta senza controllare che sia mostrabile** (E-H6): rosso su `albums-manual` (36).
+- **N3 · il contagio tolto dal conteggio** (la correzione tolta): rosso su `albums-smart-read` (9), `albums-manual` (6), `albums-copies` (5) e `albums-pending` (4): gli stessi numeri trovati prima della correzione.
+- **N4 · `CatalogAlbums.content` senza il filtro sul contenuto**: rosso su `albums-manual` (60), `albums-smart-read` (66), `albums-copies` (33), `album-viewer` (146) e `albums-pending` (27).
+
+**Test**: `HiddenSurfacesPropertyTest` (5) e `HiddenSurfacesRegistryTest` (9) sui 19 + 2 + 2 del registro; `core-database` +1 (250 test); `core-albums` 221; `:app` integrazione 233.
+Le corse di sviluppo hanno spostato la cartella di build di `core-albums`, `core-database` e `app` in `build/bd-<nome>/` (script locale ignorato da git); **il check gira sulla struttura normale**.
+
+**Agganci**: nessuno nuovo per P13 oltre a quelli di P3 (`CatalogAlbums.onCatalogChanged` dopo le scansioni): `CatalogAlbums` segue da se' l'istantanea della Libreria, quindi un nascosto nuovo
+ricalcola conteggi e copertine. Per P6: il motore scrive righe `auto` solo per media mostrabili (la lettura le toglie comunque), e la sua sonda sostituira' quella di riferimento di `albums-smart`.
+
+**Verifica**: `tools\check.ps1 -NoDaemon` verde (26/10, ramo `integra/26-10f`, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, struttura di build normale, `app\build\outputs\apk\release` cancellata prima): assemble di debug e release, test di tutti i moduli, lint, controlli sul dex e sul manifest di release.

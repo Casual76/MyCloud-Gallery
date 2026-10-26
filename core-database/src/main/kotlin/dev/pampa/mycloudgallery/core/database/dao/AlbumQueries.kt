@@ -39,6 +39,15 @@ object AlbumQueries {
   const val VISIBLE: String =
     "m.presence != 'none' AND COALESCE(p.hidden, 0) = 0 AND (m.cell_flags & ${CellFlags.GROUP_MEMBER}) = 0"
 
+  /**
+   * D22, E-L11 (Fase 7, P9): un gruppo in cui **un** membro e' nascosto e' nascosto per intero, anche se il segno non e' arrivato a tutti i
+   * membri (di norma lo scrive gia' ogni membro: `MediaCatalog.setPersonalFlags` lo propaga; un dato arrivato a meta' non deve far contare ne'
+   * mostrare le altre copie). Per chi conta le celle degli album (`AlbumDao.summaries`, `AlbumChoiceDao.suggestionCounts`): lo stesso
+   * contagio di `VisibleMedia`, scritto in SQL. Valuta il gruppo solo per i media che ne hanno uno.
+   */
+  const val NOT_IN_HIDDEN_GROUP: String =
+    "(m.group_id IS NULL OR NOT EXISTS (SELECT 1 FROM media gm JOIN media_personal gp ON gp.media_id = gm.media_id WHERE gm.group_id = m.group_id AND gp.hidden = 1))"
+
   /** Le colonne di [CandidateRow]. */
   const val CANDIDATE_COLUMNS: String =
     "m.media_id AS media_id, m.local_day AS local_day, m.sort_time AS sort_time, m.kind AS kind, m.source AS source, " +

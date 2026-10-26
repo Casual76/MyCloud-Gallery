@@ -170,17 +170,33 @@ internal object HiddenSurfaces {
       id = "revoked-restore", title = "Ripristina gli elementi di un dispositivo revocato: quanti (E-SH20)", row = SpecRow.ALBUMS, owner = "P4", backing = Backing.PRODUCTION,
       sources = listOf("$ALBUMS/share/RevokedItemsRestore.kt"), probe = RealSharedProbes.revokedRestore, live = true,
     ),
+    // --- Il codice vero di P3 (album personali): integrazione del 26/10 ---------------------------------------------------------------------------------------
     SurfaceEntry(
-      id = "albums-manual", title = "Album manuali: elenco, conteggi, copertine (E-H6)", row = SpecRow.ALBUMS, owner = "P3", backing = Backing.REFERENCE,
-      landedWhen = listOf("$ALBUMS/personal"), probe = ReferenceProbes.manualAlbums, alsoProvedBy = listOf("ReferenceAlbumsContractTest"),
+      id = "albums-manual", title = "Album manuali veri: elenco, conteggi, copertine (E-H6) e contenuto", row = SpecRow.ALBUMS, owner = "P3", backing = Backing.PRODUCTION,
+      sources = listOf("$ALBUMS/personal/CatalogAlbums.kt", "$ALBUMS/personal/AlbumReader.kt"), probe = RealPersonalProbes.manualAlbums, live = true,
+      alsoProvedBy = listOf("CatalogAlbumsContractTest", "CatalogAlbumsHiddenMaskTest", "CatalogAlbumsTest", "AlbumProjectionPropertyTest"),
+    ),
+    SurfaceEntry(
+      id = "albums-smart-read", title = "Album smart: la lettura di P3 (conteggi, elementi, Suggerite) con le righe del motore", row = SpecRow.ALBUMS, owner = "P3",
+      backing = Backing.PRODUCTION, sources = listOf("$ALBUMS/personal/AlbumReader.kt"), probe = RealPersonalProbes.smartAlbums, live = true,
+    ),
+    SurfaceEntry(
+      id = "albums-copies", title = "Copie personali degli album condivisi chiusi (Q5): quello che si scrive e si legge", row = SpecRow.ALBUMS, owner = "P3",
+      backing = Backing.PRODUCTION, sources = listOf("$ALBUMS/personal/PersonalAlbumCopies.kt"), probe = RealPersonalProbes.personalCopies, live = true,
+      alsoProvedBy = listOf("PersonalAlbumCopiesTest"),
+    ),
+    SurfaceEntry(
+      id = "albums-pending", title = "Elementi in attesa (id che questo catalogo non conosce): ritrovati per impronta, arrivati dopo", row = SpecRow.ALBUMS, owner = "P3",
+      backing = Backing.PRODUCTION, sources = listOf("$ALBUMS/personal/CatalogAlbumProjection.kt", "$ALBUMS/personal/MediaResolver.kt"), probe = RealPersonalProbes.pendingItems,
+      live = true, alsoProvedBy = listOf("CatalogAlbumProjectionTest"),
     ),
     SurfaceEntry(
       id = "albums-smart", title = "Album smart e Suggerite", row = SpecRow.ALBUMS, owner = "P6", backing = Backing.REFERENCE,
       landedWhen = listOf("$ALBUMS/smart"), probe = ReferenceProbes.smartAlbums,
     ),
     SurfaceEntry(
-      id = "album-viewer", title = "Viewer aperto da un album: la vista dell'album", row = SpecRow.ALBUM_VIEWER, owner = "P10", backing = Backing.REFERENCE,
-      landedWhen = listOf("$ALBUMS/personal"), probe = ReferenceProbes.albumViewer,
+      id = "album-viewer", title = "Viewer aperto da un album: la vista dell'album (`AlbumContent.items` di P3, che il viewer di P10 scorre)", row = SpecRow.ALBUM_VIEWER,
+      owner = "P3/P10", backing = Backing.PRODUCTION, probe = RealPersonalProbes.albumViewer, live = true,
     ),
     SurfaceEntry(
       id = "trips", title = "Viaggi ed eventi: rilevazione, conteggi, copertine (E-H7)", row = SpecRow.TRIPS, owner = "P7", backing = Backing.REFERENCE,

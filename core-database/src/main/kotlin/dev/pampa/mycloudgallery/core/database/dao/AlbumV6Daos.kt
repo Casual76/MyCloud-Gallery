@@ -83,7 +83,7 @@ interface AlbumChoiceDao {
     const val SUGGESTION_COUNTS_SQL: String =
       "SELECT s.album_id AS album_id, COUNT(*) AS visible_count, SUM(CASE WHEN s.added_at > :since THEN 1 ELSE 0 END) AS new_count " +
         "FROM album_suggestion s JOIN media m ON m.media_id = s.media_id LEFT JOIN media_personal p ON p.media_id = m.media_id " +
-        "WHERE m.presence != 'none' AND COALESCE(p.hidden, 0) = 0 AND (m.cell_flags & ${CellFlags.GROUP_MEMBER}) = 0 " +
+        "WHERE m.presence != 'none' AND COALESCE(p.hidden, 0) = 0 AND (m.cell_flags & ${CellFlags.GROUP_MEMBER}) = 0 AND ${AlbumQueries.NOT_IN_HIDDEN_GROUP} " +
         "GROUP BY s.album_id"
   }
 }

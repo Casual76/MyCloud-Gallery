@@ -87,33 +87,6 @@ internal object ReferenceProbes {
   private fun leak(name: String, shown: Collection<MediaId>, forbidden: Set<MediaId>): String? =
     if (shown.any { it in forbidden }) "$name mostra un nascosto" else null
 
-  /** Album manuale: gli elementi, il conteggio e la copertina (scelta, e poi nascosta da un altro dispositivo: E-H6). */
-  val manualAlbums = SurfaceProbe { w ->
-    val stack = ReferenceStack(w)
-    val problems = ArrayList<String>()
-    val shown = LinkedHashSet<MediaId>()
-    val candidates = stack.pick(salt = 1)
-    val id = stack.create("Album di prova", AlbumKind.MANUAL)
-    stack.albums.add(id, candidates)
-    val chosen = candidates.firstOrNull()
-    if (chosen != null) stack.albums.setCover(id, chosen)
-    stack.hideThemAll()
-
-    val album = stack.albums.all.value.byId(id) as Album.Manual
-    val content = stack.contentOf(id)
-    val expected = candidates.filter { it in w.showable }.toSet()
-    val items = stack.idsOf(content.items)
-    if (items != expected) problems += "l'album manuale non mostra esattamente i suoi elementi visibili"
-    if (album.count != expected.size) problems += "il conteggio dell'album manuale e' ${album.count}, ne attendeva ${expected.size}"
-    album.cover.media?.let { shown += it }
-    // E-H6: se la copertina scelta e' nascosta, la copertina e' automatica (e visibile), mai la scelta.
-    if (chosen != null && chosen !in w.showable && album.cover.media == chosen) problems += "la copertina nascosta resta la copertina"
-    if (expected.isNotEmpty() && album.cover.media == null) problems += "l'album ha elementi visibili ma nessuna copertina"
-    shown += items
-    problems += listOfNotNull(leak("la copertina", listOfNotNull(album.cover.media), w.mustNeverShow))
-    Probed(shown = shown, within = w.showable, problems = problems)
-  }
-
   /** Album smart: i sicuri, le "Suggerite" e i loro conteggi, con candidati nascosti. */
   val smartAlbums = SurfaceProbe { w ->
     val stack = ReferenceStack(w)
@@ -133,19 +106,6 @@ internal object ReferenceProbes {
     if (album.count != items.size) problems += "il conteggio dell'album smart e' ${album.count}, ne attendeva ${items.size}"
     if (album.suggested != sug.size) problems += "il numero delle Suggerite e' ${album.suggested}, ne attendeva ${sug.size}"
     Probed(shown = items + sug + listOfNotNull(album.cover.media), within = w.showable, problems = problems)
-  }
-
-  /** Il viewer aperto da un album scorre la vista dell'album: nessun nascosto, e non si arriva a un nascosto nemmeno cercandolo per id. */
-  val albumViewer = SurfaceProbe { w ->
-    val stack = ReferenceStack(w)
-    val problems = ArrayList<String>()
-    val id = stack.create("Per il viewer", AlbumKind.MANUAL)
-    stack.albums.add(id, stack.pick(salt = 3))
-    stack.hideThemAll()
-    val view = stack.contentOf(id).items
-    val shown = stack.idsOf(view)
-    for (hidden in w.mustNeverShow) if (view.viewIndexOf(hidden) >= 0) problems += "il viewer dell'album arriva a un nascosto"
-    Probed(shown = shown, within = w.showable, problems = problems)
   }
 
   /**

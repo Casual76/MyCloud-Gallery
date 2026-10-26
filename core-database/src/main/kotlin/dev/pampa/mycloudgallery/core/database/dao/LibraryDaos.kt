@@ -238,7 +238,7 @@ interface AlbumDao {
     const val SUMMARIES_SQL: String =
       "SELECT ai.album_id AS album_id, COUNT(*) AS visible_count, MAX(m.local_day) AS newest_day FROM album_item ai " +
         "JOIN media m ON m.media_id = ai.media_id LEFT JOIN media_personal p ON p.media_id = m.media_id " +
-        "WHERE m.presence != 'none' AND COALESCE(p.hidden, 0) = 0 AND (m.cell_flags & ${CellFlags.GROUP_MEMBER}) = 0 " +
+        "WHERE m.presence != 'none' AND COALESCE(p.hidden, 0) = 0 AND (m.cell_flags & ${CellFlags.GROUP_MEMBER}) = 0 AND ${AlbumQueries.NOT_IN_HIDDEN_GROUP} " +
         "GROUP BY ai.album_id"
   }
 }

@@ -193,11 +193,9 @@ class SmartEngineTest {
     val late = id(100)
     val rig = Rig(SmartRules(trip, oslo, null), maskOf = { w ->
       object : HiddenMask {
-        var calls = 0
         override suspend fun hiddenAmong(ids: Collection<MediaId>): Set<MediaId> {
-          calls++
-          // La prima chiamata e' il filtro dei candidati; la seconda, subito prima di scrivere, trova un media nascosto nel frattempo.
-          return w.hiddenAmong(ids) + if (calls > 1) ids.filter { it == late } else emptyList()
+          // Il filtro finale, subito prima di scrivere, trova un media nascosto nel frattempo.
+          return w.hiddenAmong(ids) + ids.filter { it == late }
         }
       }
     }).also { it.fill() }

@@ -122,21 +122,27 @@ class RulesSmartEngine(
     val index = DayIndex(loaded)
     val verdicts = classifier.classify(index, restricted?.affected)
     val target = Target.of(verdicts, loaded)
-    // Il filtro finale subito prima di scrivere: un media nascosto un attimo fa non diventa un elemento (D22).
-    val shown = library.shownIds(target.media())
-    val targetAuto = target.auto.filterKeys { it in shown }
-    val targetSuggested = target.suggested.filterKeys { it in shown }.toMutableMap()
+    val targetSuggested = target.suggested.toMutableMap()
     // Il motore di ricerca non c'e': i suggeriti S4 di prima restano (tacciono, non si ritirano).
     if (classifier.contentRequested && !content.used) {
       for ((media, row) in state.suggestions) {
-        if (row.reason == SmartReason.S4.code && media !in targetAuto && media !in targetSuggested && media !in state.exclusions && media !in state.owned) {
+        if (row.reason == SmartReason.S4.code && media !in target.auto && media !in targetSuggested && media !in state.exclusions && media !in state.owned) {
           targetSuggested[media] = SmartReason.S4
         }
       }
     }
     val now = stampFor(state)
     val removable: (MediaId) -> Boolean = { media -> restricted?.removable(media) ?: true }
-    val change = SmartDiff.change(state.auto, state.suggestions, targetAuto, targetSuggested, now, removable)
+    var change = SmartDiff.change(state.auto, state.suggestions, target.auto, targetSuggested, now, removable)
+    // Il filtro finale subito prima di scrivere, su cio' che si scrive: un media nascosto un attimo fa non diventa un elemento ne' un suggerito (D22).
+    // Le righe che ci sono gia' e non cambiano non si toccano: chi legge l'album le filtra comunque, e il nascosto stesso fa ricalcolare quel giorno.
+    val toPut = change.putAuto.keys + change.putSuggestions.keys
+    if (toPut.isNotEmpty()) {
+      val ok = library.shownFinal(toPut)
+      if (ok.size != toPut.size) {
+        change = SmartRowsChange(change.putAuto.filterKeys { it in ok }, change.removeAuto, change.putSuggestions.filterKeys { it in ok }, change.removeSuggestions)
+      }
+    }
     rows.apply(id, change)
     val (auto, suggested) = SmartDiff.after(state.auto, state.suggestions, change)
     return counts(id, auto, suggested)
@@ -164,7 +170,10 @@ class RulesSmartEngine(
     val suggested = target.suggested.size
     val total = library.visibleTotal()
     val broad = sure + suggested > SmartLimits.TOO_BROAD_ITEMS || (total > 0 && (sure + suggested).toDouble() / total > SmartLimits.TOO_BROAD_FRACTION)
-    return SmartPreview(sure, suggested, broad, target.sample(SmartLimits.PREVIEW_SAMPLE), searchUsed = content.used)
+    // Le miniature sono quelle che si mostrano: passano anche dal filtro finale.
+    val sample = target.sample(SmartLimits.PREVIEW_SAMPLE)
+    val shown = library.shownFinal(sample)
+    return SmartPreview(sure, suggested, broad, sample.filter { it in shown }, searchUsed = content.used)
   }
 
   // --- "Nuove: 12" -----------------------------------------------------------------------------------------------------------

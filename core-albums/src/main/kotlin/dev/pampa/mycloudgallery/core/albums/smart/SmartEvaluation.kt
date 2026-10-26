@@ -18,21 +18,20 @@ internal object SmartLoading {
 
   /**
    * Cosa serve a classificare un album (§2.2).
-   *  - **Con un luogo**: i candidati del periodo (le serie, una per volta; oppure tutta la Libreria, solo con GPS se non c'e' un periodo: senza un
-   *    periodo una foto senza GPS non si lega al luogo, se non dalla regola B che vuole i sicuri, che hanno il GPS);
-   *  - **solo il periodo**: i candidati del periodo;
+   *  - **Con un luogo** o **solo il periodo**: i candidati del periodo (le serie, una per volta; oppure tutta la Libreria se il periodo non e'
+   *    una serie di giorni o non c'e'). Anche quelli **senza GPS**, anche senza un periodo: la regola B li prende se stanno fra due sicuri;
    *  - **solo la descrizione** (o gli esempi): le celle che la ricerca ha indicato, niente scansione della Libreria.
    * In piu', con un luogo e la ricerca pronta, le celle indicate dalla descrizione (S4 per quelle senza GPS di un album senza periodo).
+   * La valutazione intera e quella incrementale caricano lo stesso insieme di candidati (una proprieta' provata: `SmartIncrementalPropertyTest`).
    */
   fun plan(rules: SmartRules, content: ContentMatches): LoadPlan {
     val contentRequested = !rules.text.isNullOrBlank() || rules.examples.isNotEmpty()
     val hasPlace = rules.place != null
     val indicated = if (content.used) content.sure + content.likely else emptySet()
     if (!hasPlace && contentRequested) return LoadPlan(emptyList(), indicated)
-    val gpsOnly = hasPlace && rules.period == null
     val filters = when (val period = rules.period) {
-      is SmartPeriod.Ranges -> period.ranges.map { CandidateFilter(days = it, withGpsOnly = gpsOnly) }
-      else -> listOf(CandidateFilter(withGpsOnly = gpsOnly))
+      is SmartPeriod.Ranges -> period.ranges.map { CandidateFilter(days = it) }
+      else -> listOf(CandidateFilter())
     }
     return LoadPlan(filters, if (hasPlace) indicated else emptySet())
   }

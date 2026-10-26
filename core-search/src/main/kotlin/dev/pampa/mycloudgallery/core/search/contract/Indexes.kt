@@ -71,6 +71,9 @@ object ChipMatching {
       SearchPresence.NAS_ONLY -> snapshot.hasFlag(i, CellFlags.ON_NAS) && !snapshot.hasFlag(i, CellFlags.ON_PHONE)
     }
     is SearchChip.Word, is SearchChip.Similar -> true
+    // Fase 8 (D26): la persona non si legge dalla cella; i candidati arrivano da `PeopleLookup.cells` (P10). Sulla sola istantanea un
+    // filtro che non si puo' valutare esclude, non allarga: niente risultati di altre persone finche' P10 non lo lega.
+    is SearchChip.Person -> false
   }
 
   /** `aaaammgg` -> data, o null per un giorno non valido (una cella senza data non entra in nessun periodo). */

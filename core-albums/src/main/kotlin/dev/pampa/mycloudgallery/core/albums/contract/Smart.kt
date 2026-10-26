@@ -118,6 +118,9 @@ enum class SmartMediaType(override val code: String) : StableCode {
 /**
  * Le regole di un album smart (D13, §1.2), tutte modificabili prima di creare. [period] e [place] possono mancare (E-AL9: solo
  * descrizione). [text] e [examples] valgono solo con il motore di ricerca (D15); al piu' [SmartLimits.MAX_EXAMPLES] esempi.
+ *
+ * Fase 8 (D27, firma di P0): [people] = "con Marco", "con Marco e Anna" ([PeopleRule]); si combina in "e" con le altre regole. Il campo
+ * personale `smart:people` e la regola nel motore smart sono di P10; dove i volti non ci sono la regola non inserisce niente (E-F37).
  */
 data class SmartRules(
   val period: SmartPeriod?,
@@ -126,14 +129,16 @@ data class SmartRules(
   val examples: List<MediaId> = emptyList(),
   val sources: Set<SmartSource> = SmartSource.ALL,
   val types: Set<SmartMediaType> = SmartMediaType.ALL,
+  val people: PeopleRule? = null,
 ) {
   init {
     require(examples.size <= SmartLimits.MAX_EXAMPLES) { "Troppe foto d'esempio." }
     require(sources.isNotEmpty() && types.isNotEmpty()) { "Nessuna sorgente o nessun tipo." }
   }
 
-  /** Mai la descrizione ne' il luogo nei log. */
-  override fun toString(): String = "SmartRules(period=${period != null}, place=${place != null}, text=${text != null}, examples=${examples.size})"
+  /** Mai la descrizione, il luogo ne' le persone nei log. */
+  override fun toString(): String =
+    "SmartRules(period=${period != null}, place=${place != null}, text=${text != null}, examples=${examples.size}, people=${people != null})"
 }
 
 /** I numeri del §2.2 e di D14, D16. P6 li usa, P12 li misura; un cambio passa dal progetto. */

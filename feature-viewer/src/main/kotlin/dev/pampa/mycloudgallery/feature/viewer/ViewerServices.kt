@@ -42,6 +42,7 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
 import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
+import dev.pampa.mycloudgallery.feature.viewer.people.ViewerPeople
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch
 import dev.pampa.mycloudgallery.feature.viewer.menu.ViewerSimilarSearch
@@ -148,6 +149,8 @@ class ViewerServices(
   val similarSearch: ViewerSimilarSearch = NoViewerSimilarSearch,
   val subjectCutter: ViewerSubjectCutter? = null,
   val cutoutSaver: CutoutSaver? = null,
+  /** Fase 8 (D25, firma di P0): le persone del media aperto (riga "Persone" e "Chi e'?", P9). Null = niente riga (Persone non legata). */
+  val people: ViewerPeople? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

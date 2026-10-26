@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sezione «Persone» (Fase 8, docs/fase8-progetto.md §2.10, D37). Titolo e spiegazione della sezione e voce di stato (P0); le voci e i
+       codici dei volti (FACES_*, PEOPLE_*) li aggiunge P13. Solo numeri e codici nelle esportazioni: mai nomi, id di persone o di volti,
+       chiavi di contenuto, riquadri, vettori, conteggi per persona o la generazione. -->
+  <string name="diagnostics_section_people">Persone</string>
+  <string name="diagnostics_hint_people">Riconoscimento dei volti su questo dispositivo: se è attivo, a che punto è il calcolo, la cancellazione dei dati dei volti e i problemi da risolvere.</string>
+  <string name="diag_people_state_title">Stato delle persone</string>
+  <string name="diag_people_state_guide">Se Persone è attiva qui, quanti volti e quante persone ci sono e se il calcolo o una cancellazione sono in corso. Nomi, volti e gruppi non escono mai dal telefono.</string>
+</resources>

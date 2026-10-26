@@ -298,6 +298,12 @@ object DiagCodes {
   // aggiunge P13.
   @JvmField val ALBUMS_STATE = DiagCode("ALBUMS_STATE")
 
+  // --- Le persone (Fase 8) -------------------------------------------------------------------------------------------
+  // P0 aggiunge solo il codice di stato che tiene viva la sezione PEOPLE (un test vuole almeno una voce per sezione), come per ALBUMS nella
+  // Fase 7. I codici del §2.10 di docs/fase8-progetto.md (FACES_*, PEOPLE_*: `FacesDiag` di core-faces) li aggiunge P13, con le chiavi
+  // nell'elenco chiuso dell'esportazione. Mai nomi, id, chiavi, riquadri, vettori, conteggi per persona o generazione (D37).
+  @JvmField val PEOPLE_STATE = DiagCode("PEOPLE_STATE")
+
   // P11: i codici del §2.6 (stessi id e stessi edge case di `ModelDiag`, `AiDiag`, `AiIndexDiag` e `SearchDiag`, scritti come letterali
   // perche' questo modulo non vede core-models, core-ai, core-index ne' core-search). `Phase6DiagCatalogTest` di :app verifica che ogni
   // codice dei contratti sia qui, con lo stesso id e gli stessi edge case.

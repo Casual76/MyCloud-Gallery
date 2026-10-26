@@ -86,6 +86,14 @@ enum class DiagSection {
    */
   ALBUMS,
 
+  /**
+   * Le persone (Fase 8, `docs/fase8-progetto.md` §2.10, D37): stato di Persone su questo dispositivo, calcolo dei volti (avanzamento,
+   * anteprime in attesa, motori), raggruppamento e custode, dati dei volti rifiutati, "Disattiva e cancella" (passi e dispositivi che
+   * mancano), cestino di rete. Solo codici e numeri: **mai** nomi, id di persone o di volti, chiavi di contenuto, riquadri, vettori,
+   * conteggi per persona ne' la generazione.
+   */
+  PEOPLE,
+
   /** I consumi del mese (TrafficLedger). */
   MONTHLY_TRAFFIC,
 

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8 (docs/fase8-progetto.md D26, §2.7): il chip «Persona» della barra di Cerca. P0 mette solo la frase di TalkBack, perche' il
+       chip esiste nel contratto (SearchChip.Person); il chip con l'alternativa, i suggerimenti «Persone» e la copertura sono di P10. -->
+  <string name="search_chip_person">Filtro persona: %1$s. Tocca per modificare</string>
+</resources>

@@ -47,9 +47,11 @@ import java.util.Locale
 /**
  * La classe di un segmento (M1, §5.5-bis): ogni segmento contiene voci di **una** classe, e un dispositivo scarica solo
  * le classi che gli servono (D4, D16). [wire] e' il nome nella testa firmata, [code] il byte all'inizio del contenuto
- * del segmento. Codici 9–15 e 18–31 riservati (17 e' `album`, Fase 7): `faces` (Fase 8) e' **rifiutato** finche' una versione del formato non lo
- * definisce (E-I4). `vec` (7) e `ocr` (8) li definisce la versione 2 (Fase 6, D6): valgono **solo** nelle teste `ai`
- * ([AI_CLASSES]), mai in una testa `index` ([INDEX_CLASSES]) o `personal`, e il loro codec e' `AiSegments`, non [IndexSegments].
+ * del segmento. Codici 9–15 e 21–31 riservati (17 e' `album`, Fase 7; 18–20 sono i volti, Fase 8). `vec` (7) e `ocr` (8) li definisce
+ * la versione 2 (Fase 6, D6): valgono **solo** nelle teste `ai` ([AI_CLASSES]), mai in una testa `index` ([INDEX_CLASSES]) o `personal`,
+ * e il loro codec e' `AiSegments`, non [IndexSegments]. `faces` (18), `cluster` (19) e `people` (20) li definisce la versione 4 (Fase 8,
+ * D12, A3): valgono **solo** nelle teste dei volti (tipo 9, [FACES_CLASSES]); in ogni altra testa (`index`, `personal`, `ai`, d'album)
+ * il nome `faces` resta rifiutato come prima ([RESERVED_WIRE]), e cosi' `cluster` e `people`.
  */
 enum class SegmentClass(val wire: String, val code: Int) {
   /** Record dei file (JSON canonico, chiave = impronta del percorso). */
@@ -84,6 +86,18 @@ enum class SegmentClass(val wire: String, val code: Int) {
    * versione 3), solo nell'area comune; mai in una testa `index`, `personal` o `ai`. Il codec e' `AlbumDocs`, non [IndexSegments].
    */
   ALBUM("album", 17),
+
+  /**
+   * Fase 8 (D12, A3): i rilevamenti e i vettori dei volti di un contenuto (corpo binario `faces`, §2.4 del progetto; chiave = chiave di
+   * contenuto). Solo nelle teste dei volti (tipo 9, versione 4), solo nell'area privata dell'account. Codec di P3 (`FacesDocs`).
+   */
+  FACES("faces", 18),
+
+  /** Fase 8 (D21): le voci dell'istantanea del raggruppamento (persone e assegnazioni), solo dal custode. Solo nelle teste dei volti. */
+  CLUSTER("cluster", 19),
+
+  /** Fase 8 (D13): nomi e correzioni (voci `people`, JSON canonico, l'ultima scrittura vince). Solo nelle teste dei volti. */
+  PEOPLE("people", 20),
   ;
 
   /** Il bit nella maschera `prep` di un record (le classi pubblicate per quella chiave di contenuto). */
@@ -92,21 +106,32 @@ enum class SegmentClass(val wire: String, val code: Int) {
   /** Una classe dei dati AI (Fase 6): `vec` o `ocr`, solo nelle teste `ai`. */
   val isAi: Boolean get() = this == VEC || this == OCR
 
+  /** Una classe dei dati dei volti (Fase 8): `faces`, `cluster` o `people`, solo nelle teste dei volti (tipo 9). */
+  val isFaces: Boolean get() = this == FACES || this == CLUSTER || this == PEOPLE
+
   /** Le voci sono immagini per chiave di contenuto (JPEG o WebP, dimensioni lette prima di decodificare). */
-  val isContentBlob: Boolean get() = this != META && this != PERSONAL && this != ALBUM && !isAi
+  val isContentBlob: Boolean get() = this != META && this != PERSONAL && this != ALBUM && !isAi && !isFaces
 
   companion object {
-    /** Nomi riservati: una testa che li elenca e' rifiutata (nessuna classe "sconosciuta ma accettata"). */
+    /**
+     * Nomi riservati alle **altre** teste: una testa `index`, `personal`, `ai` o d'album che li elenca e' rifiutata (nessuna classe
+     * "sconosciuta ma accettata"). Dalla Fase 8 `faces` e' una classe definita ([FACES]), ma solo per le teste dei volti: per tutte le
+     * altre resta rifiutata come prima, insieme a `cluster` e `people` ([FACES_CLASSES], che nessun [HeadKind] elenca).
+     */
     val RESERVED_WIRE: Set<String> = setOf("faces")
 
     /**
-     * Le classi che una testa `index` puo' elencare: mai [PERSONAL] (solo nelle teste `personal`) e mai `vec` e `ocr` (solo
-     * nelle teste `ai`, [AI_CLASSES]): un'app senza la Fase 6 rifiuterebbe la testa intera, miniature comprese (D6).
+     * Le classi che una testa `index` puo' elencare: mai [PERSONAL] (solo nelle teste `personal`), mai `vec` e `ocr` (solo
+     * nelle teste `ai`, [AI_CLASSES]) e mai le classi dei volti ([FACES_CLASSES]): un'app senza la Fase 6 o la Fase 8 rifiuterebbe la
+     * testa intera, miniature comprese (D6).
      */
-    val INDEX_CLASSES: Set<SegmentClass> = entries.filter { it != PERSONAL && it != ALBUM && !it.isAi }.toSet()
+    val INDEX_CLASSES: Set<SegmentClass> = entries.filter { it != PERSONAL && it != ALBUM && !it.isAi && !it.isFaces }.toSet()
 
     /** Fase 6 (D6): le sole classi di una testa `ai`. */
     val AI_CLASSES: Set<SegmentClass> = setOf(VEC, OCR)
+
+    /** Fase 8 (D12, A3): le sole classi di una testa dei volti (tipo 9, versione 4). */
+    val FACES_CLASSES: Set<SegmentClass> = setOf(FACES, CLUSTER, PEOPLE)
 
     fun fromWire(wire: String): SegmentClass? = entries.firstOrNull { it.wire == wire }
 
@@ -943,6 +968,8 @@ object IndexSegments {
       SegmentClass.PERSONAL -> violation(RejectReason.INVALID_FIELD, "classe non ancora definita")
       SegmentClass.VEC, SegmentClass.OCR -> violation(RejectReason.INVALID_FIELD, "classe dei dati AI fuori dalla testa ai")
       SegmentClass.ALBUM -> violation(RejectReason.INVALID_FIELD, "classe album fuori dalla testa d'album")
+      // Fase 8 (A3): le classi dei volti hanno il loro codec (`FacesDocs`, P3); il contenitore dell'indice non le legge mai come immagini.
+      SegmentClass.FACES, SegmentClass.CLUSTER, SegmentClass.PEOPLE -> violation(RejectReason.INVALID_FIELD, "classe dei volti fuori dalla testa dei volti")
       else -> IndexImages.check(b, off, len, TrustLimits.MAX_BLOB_BYTES, IndexImages.ANY)
     }
   }

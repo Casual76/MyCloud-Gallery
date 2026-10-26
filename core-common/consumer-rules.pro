@@ -19,3 +19,11 @@
     public boolean getSharedAlbumsTestSharesOnly();
     public boolean sharedAlbumsMayUse(java.lang.String);
 }
+
+# Fase 8, D34 (docs/fase8-progetto.md §0.1, risposta Q5 (a)): "dati dei volti sul NAS solo sulle share di prova" e' una protezione che deve
+# stare nell'APK di release anche prima che il cancello dei volti sia legato in :app (P13). Come D30: tools/check.ps1 la cerca nel dex e
+# in mapping.txt.
+-keepclassmembers class dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags {
+    public boolean getFacesSyncTestSharesOnly();
+    public boolean facesSyncMayUse(java.lang.String);
+}

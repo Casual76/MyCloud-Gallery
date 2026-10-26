@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.CloudQueue
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.ImageSearch
@@ -64,6 +65,8 @@ internal fun chipDescription(resources: android.content.res.Resources, chip: Sea
   is SearchChip.Flag -> resources.getString(R.string.search_chip_flag, chip.label)
   is SearchChip.Word -> resources.getString(R.string.search_chip_word, chip.label)
   is SearchChip.Similar -> resources.getString(R.string.search_chip_similar)
+  // Fase 8 (P0): il chip "Persona" (D26); l'alternativa e i suggerimenti sono di P10.
+  is SearchChip.Person -> resources.getString(R.string.search_chip_person, chip.label)
 }
 
 /** La lettura di TalkBack di un chip, come modificatore. */
@@ -79,6 +82,7 @@ private fun glyphOf(chip: SearchChip): ImageVector = when (chip) {
   is SearchChip.Flag -> if (chip.flag == SearchFlag.FAVORITE) Icons.Rounded.Favorite else Icons.Rounded.Tune
   is SearchChip.Word -> Icons.Rounded.Search
   is SearchChip.Similar -> Icons.Rounded.ImageSearch
+  is SearchChip.Person -> Icons.Rounded.Face
 }
 
 @Composable

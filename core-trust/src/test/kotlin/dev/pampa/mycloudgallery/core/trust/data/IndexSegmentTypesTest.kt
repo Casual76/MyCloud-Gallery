@@ -21,16 +21,23 @@ class IndexSegmentTypesTest {
   fun leClassiHannoCodiciENomiDelFormato() {
     assertThat(SegmentClass.entries.associate { it.wire to it.code }).containsExactly(
       "meta", 1, "thumbS", 2, "thumbM", 3, "analysis", 4, "hq", 5, "frames", 6, "vec", 7, "ocr", 8, "personal", 16, "album", 17,
+      "faces", 18, "cluster", 19, "people", 20,
     )
     // Fase 7 (D6): `album` solo nelle teste d'album, mai nell'indice, nei dati personali o nei dati AI; non e' un'immagine.
     assertThat(SegmentClass.INDEX_CLASSES).doesNotContain(SegmentClass.ALBUM)
     assertThat(HeadKind.entries.flatMap { it.classes }).doesNotContain(SegmentClass.ALBUM)
     assertThat(SegmentClass.ALBUM.isContentBlob).isFalse()
     assertThat(MetaRecords.PREP_MASK_ALLOWED and SegmentClass.ALBUM.mask).isEqualTo(0)
-    (18..31).forEach { assertThat(SegmentClass.fromCode(it)).isNull() }
-    // Nessuna classe riservata e' definita (E-I4): i loro nomi non si decodificano. `vec` e `ocr` li definisce la versione 2.
-    SegmentClass.RESERVED_WIRE.forEach { assertThat(SegmentClass.fromWire(it)).isNull() }
+    (21..31).forEach { assertThat(SegmentClass.fromCode(it)).isNull() }
+    // Fase 8 (A3): `faces` (18), `cluster` (19) e `people` (20) li definisce la versione 4, solo per le teste dei volti; per ogni altra
+    // testa il nome `faces` resta riservato (E-I4) e nessun tipo di testa elenca una classe dei volti. Non sono immagini ne' `prep`.
     assertThat(SegmentClass.RESERVED_WIRE).containsExactly("faces")
+    assertThat(SegmentClass.FACES_CLASSES.map { it.wire }).containsAtLeastElementsIn(SegmentClass.RESERVED_WIRE)
+    assertThat(SegmentClass.FACES_CLASSES).containsExactly(SegmentClass.FACES, SegmentClass.CLUSTER, SegmentClass.PEOPLE)
+    assertThat(HeadKind.entries.flatMap { it.classes }).containsNoneIn(SegmentClass.FACES_CLASSES)
+    assertThat(SegmentClass.INDEX_CLASSES).containsNoneIn(SegmentClass.FACES_CLASSES)
+    assertThat(SegmentClass.FACES_CLASSES.none { it.isContentBlob }).isTrue()
+    assertThat(MetaRecords.PREP_MASK_ALLOWED and SegmentClass.maskOf(SegmentClass.FACES_CLASSES)).isEqualTo(0)
     (9..15).forEach { assertThat(SegmentClass.fromCode(it)).isNull() }
     assertThat(SegmentClass.INDEX_CLASSES).doesNotContain(SegmentClass.PERSONAL)
     // Fase 6 (D6): `vec` e `ocr` solo nelle teste `ai`, mai nell'indice; non sono immagini e non stanno nella maschera `prep`.

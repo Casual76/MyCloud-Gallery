@@ -24,8 +24,9 @@ object TrustFormat {
   const val AI_VERSION: Int = 2
 
   /**
-   * La versione piu' nuova che i file **fuori da `albums/`** possono avere (1..2): la 2 vale solo per i file `ai`. I file `albums/` hanno la
-   * loro, [ALBUM_VERSION], e nessun altro tipo la accetta: per un file `ai` la 3 resta "piu' nuova" (`NEWER_FORMAT`).
+   * La versione piu' nuova che i file **fuori da `albums/` e da `faces/`** possono avere (1..2): la 2 vale solo per i file `ai`. I file
+   * `albums/` hanno la loro, [ALBUM_VERSION], e i file `faces/` la loro, [FACES_VERSION] (Fase 8): nessun altro tipo le accetta, e per un
+   * file `ai` la 3 e la 4 restano "piu' nuove" (`NEWER_FORMAT`).
    */
   const val NEWEST_READABLE_VERSION: Int = AI_VERSION
 
@@ -36,6 +37,14 @@ object TrustFormat {
    * d'album, la 3 sarebbe `NEWER_FORMAT` ("aggiorna l'app"), mai un errore del dato (E-I3).
    */
   const val ALBUM_VERSION: Int = 3
+
+  /**
+   * Fase 8 (A8, D12): la versione dei **soli** file `faces/` (teste dei volti, tipo 9, e i loro segmenti delle classi `faces`, `cluster` e
+   * `people`). Chi legge accetta 1..4 con la versione legata al tipo: una testa dei volti a una versione diversa dalla 4, o un file d'altro
+   * tipo alla 4, e' rifiutato. Un'app senza la Fase 8 non apre `faces/`; se per caso aprisse un file dei volti, la 4 sarebbe
+   * `NEWER_FORMAT` ("aggiorna l'app"), mai un errore del dato (E-I3, E-F11). Il codec e' di P3 (`FacesDocs`).
+   */
+  const val FACES_VERSION: Int = 4
 
   /** Le versioni dei file che non sono `ai` (registro, richieste, teste `index` e `personal`, segmenti, kit...). */
   fun isReadable(version: Int): Boolean = version in OLDEST_READABLE_VERSION..CURRENT_VERSION
@@ -242,6 +251,50 @@ object TrustLimits {
 
   /** Parole per riga (gli estremi servono al testo dal vivo, D43). */
   const val MAX_OCR_WORDS_PER_LINE: Int = 64
+
+  // --- Fase 8: dati dei volti (§5.11, §5.5-bis "Dati dei volti", §7, A6). Costanti fissate da P0; il codec e' di P3 (`FacesDocs`) ----------
+
+  /** Una testa dei volti (tipo 9, versione 4): come le altre teste, 1 MiB. */
+  const val MAX_FACES_HEAD_PAYLOAD: Int = 1024 * 1024
+
+  /** Un segmento dei volti (classi `faces`, `cluster`, `people`): al piu' 12 MiB, come quello che una testa elenca. */
+  const val MAX_FACES_SEGMENT_BYTES: Int = 12 * 1024 * 1024
+
+  /** Un corpo `faces` (classe 18): il piu' grande possibile e' di 18.630 byte (6 + 64 volti da 291 byte). */
+  const val MAX_FACES_BODY_BYTES: Int = 20 * 1024
+
+  /** Volti per corpo `faces` (0 = "analizzato, nessun volto"). */
+  const val MAX_FACES_PER_BODY: Int = 64
+
+  /** Una voce `cluster` (classe 19: una persona o un'assegnazione dell'istantanea). */
+  const val MAX_CLUSTER_ENTRY_BYTES: Int = 8 * 1024
+
+  /** Persone in un'istantanea del raggruppamento. */
+  const val MAX_SNAPSHOT_PERSONS: Int = 10_000
+
+  /** Assegnazioni in un'istantanea del raggruppamento. */
+  const val MAX_SNAPSHOT_ASSIGNMENTS: Int = 200_000
+
+  /** Una voce `people` (classe 20, JSON canonico come i dati personali). */
+  const val MAX_PEOPLE_ENTRY_BYTES: Int = 4 * 1024
+
+  /** Il nome di una persona: da 1 a 64 caratteri, regole di `TextRules`. */
+  const val MAX_PERSON_NAME_CHARS: Int = 64
+
+  /** Un localizzatore di un volto nelle voci `people` (D23). */
+  const val MAX_FACE_LOCATOR_CHARS: Int = 128
+
+  /** Voci per testa dei volti (tutte le classi insieme). */
+  const val MAX_FACES_HEAD_ENTRIES: Int = 100_000
+
+  /** Byte di segmenti dei volti letti per giro (il resto al giro dopo). */
+  const val MAX_FACES_BYTES_PER_ROUND: Int = 64 * 1024 * 1024
+
+  /** Cartelle di dispositivi lette per generazione e per giro (i nomi che non sono id si ignorano). */
+  const val MAX_FACES_DEVICES_PER_GENERATION: Int = 32
+
+  /** Generazioni elencate in `faces/` per giro (la corrente e quelle da togliere, D31). */
+  const val MAX_LIST_FACES_GENERATIONS: Int = 64
 }
 
 /**

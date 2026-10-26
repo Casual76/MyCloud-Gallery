@@ -39,6 +39,12 @@ enum class DocType(val code: Int, val maxPayload: Int) {
 
   /** Lo stato che un dispositivo approvato pubblica di se' (versione dell'app, ruoli, ultima attivita'). */
   DEVICE_STATUS(8, TrustLimits.MAX_DEVICE_STATUS_PAYLOAD),
+
+  /**
+   * Fase 8 (D12, §5.11): la testa dei dati dei volti di un dispositivo in una generazione, **solo** nell'area privata del suo account
+   * (`faces/<G>/<dispositivo>/head/<versione>`), versione 4 del formato ([TrustFormat.FACES_VERSION]). Il contenuto e il codec sono di P3.
+   */
+  FACES_HEAD(9, TrustLimits.MAX_FACES_HEAD_PAYLOAD),
   ;
 
   /**
@@ -105,12 +111,14 @@ internal object Envelope {
 
   /**
    * La versione piu' nuova ammessa per [type]: la [TrustFormat.AI_VERSION] solo per le teste (tipo 3, perche' una testa `ai` e'
-   * una testa), la [TrustFormat.ALBUM_VERSION] solo per le teste d'album (tipo 6, Fase 7, A6), la [TrustFormat.CURRENT_VERSION] per
-   * tutti gli altri tipi (Fase 6, A7: la versione 2 esiste solo per i file `ai`).
+   * una testa), la [TrustFormat.ALBUM_VERSION] solo per le teste d'album (tipo 6, Fase 7, A6), la [TrustFormat.FACES_VERSION] solo per
+   * le teste dei volti (tipo 9, Fase 8, A8), la [TrustFormat.CURRENT_VERSION] per tutti gli altri tipi (Fase 6, A7: la versione 2 esiste
+   * solo per i file `ai`). Che una testa dei volti abbia **esattamente** la 4 lo controlla il suo codec (P3), come per gli album.
    */
   fun newestVersion(type: DocType): Int = when (type) {
     DocType.DEVICE_HEAD -> TrustFormat.AI_VERSION
     DocType.SHARED_ALBUM_HEAD -> TrustFormat.ALBUM_VERSION
+    DocType.FACES_HEAD -> TrustFormat.FACES_VERSION
     else -> TrustFormat.CURRENT_VERSION
   }
 
@@ -118,7 +126,8 @@ internal object Envelope {
     require(
       version == TrustFormat.CURRENT_VERSION ||
         (version == TrustFormat.AI_VERSION && type == DocType.DEVICE_HEAD) ||
-        (version == TrustFormat.ALBUM_VERSION && type == DocType.SHARED_ALBUM_HEAD),
+        (version == TrustFormat.ALBUM_VERSION && type == DocType.SHARED_ALBUM_HEAD) ||
+        (version == TrustFormat.FACES_VERSION && type == DocType.FACES_HEAD),
     ) {
       "Versione del formato non ammessa per questo tipo."
     }

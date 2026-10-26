@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.personal.noop
 
+import dev.pampa.mycloudgallery.core.personal.contract.FullHashPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.contract.MotionPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.contract.SearchOrderSetting
 import dev.pampa.mycloudgallery.core.personal.contract.SearchPersonalSettings
@@ -25,4 +26,10 @@ object DefaultMotionPersonalSettings : MotionPersonalSettings {
   override val motionAnimation: StateFlow<Boolean> = MutableStateFlow(true)
 
   override suspend fun setMotionAnimation(on: Boolean) = Unit
+}
+/** Fase 7 (D27): l'hash completo notturno e' spento; nessuna scelta si salva. */
+object DefaultFullHashPersonalSettings : FullHashPersonalSettings {
+  override val fullHashNightly: StateFlow<Boolean> = MutableStateFlow(false)
+
+  override suspend fun setFullHashNightly(on: Boolean) = Unit
 }

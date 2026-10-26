@@ -69,6 +69,7 @@ class ShareReceiverActivity : FragmentActivity() {
     val ownPackage = packageName
     val uploads = ReceivePorts.uploads
     val destinations = ReceivePorts.destinations
+    val albums = ReceivePorts.albums
     val model = ViewModelProvider(
       this,
       viewModelFactory {
@@ -80,6 +81,7 @@ class ShareReceiverActivity : FragmentActivity() {
             uploads = uploads,
             destinations = destinations,
             monotonicMs = { SystemClock.elapsedRealtime() },
+            albums = albums,
           )
         }
       },
@@ -106,6 +108,10 @@ class ShareReceiverActivity : FragmentActivity() {
             onClose = model::finish,
             onRetry = model::retry,
             onUnlock = ::startUnlock,
+            onPickAlbum = model::openAlbumPicker,
+            onSelectAlbum = model::selectAlbum,
+            onSaveToAlbum = model::saveToAlbum,
+            onBackFromAlbums = model::closeAlbumPicker,
           )
         }
         ReceiveScreen(ui = ui, actions = actions)

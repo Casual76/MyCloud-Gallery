@@ -7475,3 +7475,148 @@ banco su dispositivo (-Bench).
 
 **Commit** (branch `fase8/p5`): `0480c26a` (nucleo vero e regole F1–F6 nel riferimento), `70ba9911` (famiglie sintetiche e prove del
 nucleo), `f838f8b1` (custode, istantanee, riallineamento, porte nuove) e quello di questi documenti.
+## Fase 7 P13: integrazione in `:app` (27/10)
+
+Il pacchetto lega in `:app` i pacchetti P0-P11 della Fase 7 (P12 escluso): album personali e smart, viaggi, album condivisi e condivisione, Utility,
+Nascosti e Raccolte. Lista di lavoro: l'unione dei "cosa trova pronto P13" e degli "agganci per P13" delle sezioni dei pacchetti. Nessun
+dispositivo, nessun NAS vero: tutto sulla JVM (Robolectric, grafo vero dell'app, simulatore SMB).
+
+**Cosa c'e' adesso**
+- **Il grafo degli album** (`albums/AlbumsGraph`, `AlbumsWiring`, `AlbumsLive`): uno per processo, monta gli album quando la famiglia e' pronta
+  (galleria partita e dati personali agganciati); lo ferma per primo l'azzeramento (`AppGraph.albumsStopper`). Tiene al passo proiezione, attestazione,
+  album smart (accorpati a fine scansione) e pubblicazione accorpata (30 s, una testa ogni 5 minuti).
+- **Porte di P1-P4 su Room e sul NAS**: replica e pubblicatore su `shared_album_entry` (`RoomAlbumReplicaStore`, `RoomAlbumPublishStore`), diario della
+  condivisione (`RoomShareDiary`), registri durevoli in `noBackupFilesDir/albums/` (caricamenti verso gli album, richieste al guardiano, piani dei
+  trasferimenti, avvisi visti, segni "Nuove", promesse della ricezione), `OpsAlbumMover` sulle `NasOperations` della 4B, `FolderAlbumUploader` sui
+  caricamenti `INCOMING` (cartella "Album condivisi"), `GuardianSafeCopyRequests` nel lavoro di sicurezza del backup, **una sola** porta di
+  completamento (`CatalogMoveCompletionSink` sopra `MediaCatalog.attachMoved`, al posto di `CatalogMoveCompletions`).
+- **Lavori**: il giro degli album nel lavoro dell'indice, `ShareWorker` per la condivisione (`KEEP`: un giro non cancella se stesso), la notte
+  (`LibraryMaintenanceWorker`: viaggi, ricalcolo di sicurezza degli smart, hash completo dei video del NAS, firme dei Doppioni simili).
+- **Schermate**: `albumsGraph` con `AppAlbumActions` (viewer sopra la pagina, vivo sull'indice visibile; selettore dei media; Diagnostica), `utilityGraph`,
+  Impostazioni → Privacy → Nascosti, "Nuovo album" dalle Raccolte, "Aggiungi ad album" come foglio sopra la schermata (selezione della Libreria,
+  viewer, Nascosti, ricezione), le voci ⋮ del viewer dalla tabella dei permessi.
+- **Raccolte**: un fornitore per sezione (`CollectionsModule`), deposito dell'ordine e della visibilita' sopra `SyncedCollectionsSettings`, "Sul NAS"
+  diventa "Cartelle NAS", il ponte `extraGroups` tolto, `onOpenEntry`/`entryDetail` per tutti i codici delle voci.
+- **Utility**: Doppioni identici e simili sul catalogo, cestino del NAS e pulizia sopra `NasOperations`, "Controlla di notte i video del NAS".
+- **E-SH16 ed E-SH20** con il loro contratto (`SharedAlbums.useNewFolder`, `restoreRevoked`; avvisi `FolderChanged(newFolder)` e `RevokedItems`).
+- **Diagnostica**: i 12 codici del §2.8 nel catalogo (sezione `ALBUMS`) e il contributo `AlbumsDiagnostics`.
+
+**Decisioni di P13**
+| # | Decisione | Perche' |
+|---|---|---|
+| P13-1 | **Lo schema v6 non cambia**: il pubblicatore e la replica di P2 tengono i loro metadati nelle righe di `shared_album_entry` (corpo = una riga d'intestazione ASCII + il JSON canonico della voce; righe di servizio con chiave che comincia con `~`: `~meta`, `~rejected`, `~s:<chiave>` per le voci in coda, dispositivo `~own` per il pubblicatore) | Nessuna migrazione a fine fase; le righe si ricostruiscono dalla replica, e una riga che non si legge vale "vuota" |
+| P13-2 | Registro dei caricamenti verso gli album, richieste al guardiano, piani dei trasferimenti, avvisi visti, segni "Nuove" e promesse della ricezione **su file** in `noBackupFilesDir/albums/` (scrittura atomica con `fsync` e `ATOMIC_MOVE`) | Sono pochi dati, scritti di rado e sempre interi; P1 non aveva tabelle per loro; l'azzeramento toglie la cartella |
+| P13-3 | `shared_origin` (la cartella d'origine di un media proprio) e' una voce personale `MEDIA_FLAG` con testo `share|percorso`; "album lasciato" e' `SETTING shared_album_left:<id>`; gli avvisi visti sono locali | Cosi' "Riporta" sa dove tornare su ogni dispositivo dell'account (area privata, D31); gli avvisi sono di questo dispositivo |
+| P13-4 | **Una sola porta di completamento** (`CatalogMoveCompletionSink`): lancia se la destinazione e' di un altro media o non torna con dimensione e contenuto; non fa niente se la sorgente non e' nel catalogo | Il vincolo di P4: la sorgente va nel cestino solo dopo che il catalogo conosce la destinazione; un errore qui ferma l'operazione invece di perdere il collegamento |
+| P13-5 | Le copie personali degli album chiusi (Q5 b) le scrive `PersonalAlbumCopies.keep` (impronta sugli elementi), con la regola di `ClosedAlbumCopies` (niente copia per il creatore che ritrova il suo personale) | Una sola strada per le copie, quella di P3 provata dalle sue sonde |
+| P13-6 | "Nuove: N" degli smart nella facciata (`AppAlbums`): `newSinceSeen` dal motore; aprire l'album segna visto | P3 lasciava 0; il motore ha i segni (P6) |
+| P13-7 | Le voci ⋮ del viewer: fuori da un album solo "Aggiungi ad album"; aperto dalla pagina di un album anche "Copertina" e "Rimuovi" ("Togli" in uno smart), decisi da `AlbumPolicy.itemActions` (la stessa tabella della pagina), calcolati alla prima richiesta | Il viewer non vede core-albums; il contesto e' la rotta in cima (`AlbumPageDestination`) |
+| P13-8 | `ViewerServices` non ha una copia: `withAlbums` la fa campo per campo e `ViewerServicesAlbumsTest` legge il costruttore di feature-viewer | Un campo nuovo dimenticato sparirebbe in silenzio dal viewer aperto da un album |
+| P13-9 | Sul tablet le voci degli album (pagina, elenco, viaggi, "Nuovo album") si aprono come rotte anche dal pannello di dettaglio (`CollectionsTab(entryHasDetail = ...)`, parametro nuovo e opzionale) | Le pagine degli album sono rotte con la loro barra e i loro fogli (P10): nel pannello avrebbero due barre |
+| P13-10 | "Nuovo album" dalle Raccolte e' il foglio di P10 (`CreateAlbumSheet`) ospitato da `:app`; uno smart passa dall'editor | Una voce che apre l'elenco e chiede un secondo tocco era un passo in piu' |
+| P13-11 | Il selettore dei media (`AlbumActions.pickMedia`) e' una rotta di `:app` sopra una pagina nuova di feature-library (`MediaPickerRoute`: la griglia di sempre su tutta la Libreria, gia' in selezione, al piu' N, ordine della Libreria) | Senza selettore "Aggiungi foto" e le foto d'esempio non facevano niente; la Libreria non ha nascosti (E-H1) |
+| P13-12 | "Aggiungi ad album" dalla ricezione: la promessa su disco; i file arrivati vanno in un album personale da soli, in uno condiviso **mai**: si apre il foglio con l'album gia' scelto (`AddToAlbumRequest.album`, nuovo e opzionale) e la promessa si chiude quando l'utente ha deciso | D12: un album condiviso riceve solo dopo la conferma col conteggio |
+| P13-13 | E-SH16: la cartella nuova la propone il catalogo del creatore (o dell'erede): nessun elemento piu' nella cartella dichiarata e la maggioranza in una stessa cartella fuori dall'area dell'app; adottarla e' una voce `definition` (nessun file si muove). E-SH20: gli elementi di un mio dispositivo revocato sono un avviso con "Ripristina gli elementi" | Il PC ha gia' spostato i file; l'app non decide da sola (azione locale del creatore) |
+| P13-14 | Ordine e visibilita' delle Raccolte prima del registro dei dati personali valgono in memoria e vi entrano appena c'e' (L104) | Come `search_order` (`PersonalSettingsHub`): la scelta vale subito |
+| P13-15 | `DuplicatesNames` resta senza legame (L108): il registro non dice di chi e' l'area privata di un altro account | La pagina dice "un altro familiare" (E-U1) |
+| P13-16 | La cartella del proprio backup (`Backup/<dispositivo>`) arriva alla regola B degli smart e allo strumento di P12 (`AlbumsWiring.ownBackupFolder`); senza backup e' null | Prima il motore riceveva "Backup" anche senza cartella |
+
+**Modifiche fuori da `:app` (minime, per il collegamento)**
+- `core-albums` (contratto, E-SH16 ed E-SH20 come previsto dal brief): `SharedAlbumNotice.FolderChanged(newFolder)` (campo con default),
+  `SharedAlbumNotice.RevokedItems`, `SharedAlbums.useNewFolder` e `restoreRevoked` (con corpo); `ReplicaSharedAlbums.dismissNotice` ha le chiavi dei due.
+- `feature-albums`: `AddToAlbumRequest.album` (opzionale) e l'aggiunta diretta in `AddToAlbumController.start`; banner `UseNewFolder` e `RevokedItems`
+  con le azioni `USE_NEW_FOLDER` e `RESTORE_REVOKED` (controllore, rotta, strisce, stringhe, `AlbumStripsTest`).
+- `feature-library`: `utilityEntryGroup(resources, ...)` e `utilityCountsFlow()` (le sezioni senza Compose), `CollectionsTab(entryHasDetail)`,
+  `LibraryCommands.canAddToAlbum/addToAlbum` e l'azione della selezione, `MediaPickerRoute` (con `CollectionGridPage(pickMode)`,
+  `ActionNotice.PickTooMany`, `CollectionsViewModel.allItems`), stringhe.
+- `feature-nas`: "Sul NAS" → "Cartelle NAS". `feature-diagnostics`: i 12 codici del §2.8, le voci e le stringhe.
+- `app/build.gradle`: `implementation` di core-albums e feature-albums (tolti i `testImplementation` e il `debugImplementation` di P12).
+
+**Prove** (tutte sulla JVM; niente dispositivo, niente NAS vero)
+| Cosa | Test |
+|---|---|
+| **Due famiglie di dispositivi sul grafo vero** (simulatore SMB): album creato sul telefono di `test`, spostato nell'area comune con la conferma, voce e testa pubblicate, il tablet di `test2` lo vede con i permessi del livello; un finto album ostile non mette **nessuna** operazione nel diario di core-nasops; l'azzeramento a operazioni ferme toglie album, database e registri | `AlbumsIntegrationTest` |
+| **Il banco di P5 sui legami veri di `:app`**: 8 giri (seme ripetibile) sull'app intera con guasti SMB (connessione caduta prima e dopo, sessione scaduta) e la morte del processo a un passo a caso (database su file, il processo nuovo riprende dal diario); invarianti: nessun file perso, diari chiusi, un file per elemento nella cartella dell'album con lo **stesso** media (D29), nessun doppione nell'area comune, il familiare vede tanti elementi quanti quelli fatti | `AlbumsShareBenchAppTest` (nel giro di `check.ps1`: 8 giri in 135 s, 5 morti del processo, 123 guasti SMB, 27 elementi fatti, 0 giri rossi; a 12 giri: 9 morti, 179 guasti, 41 elementi fatti, 0 rossi) |
+| Pubblicatore e replica su Room uguali a quelli in memoria (anche dopo la morte del processo); registri durevoli; porta di completamento | `RoomAlbumStoresTest`, `AlbumDurableStoresTest`, `CampoAMoveCompletionsTest` |
+| Pulizia dei Doppioni e cestino del NAS sulle vere `NasOperations` (un tocco, due per "Elimina subito", chiavi inventate, scritture ferme) | `CleanupOverOperationsTest` (5), `NasTrashOverOperationsTest` (6) |
+| "Aggiungi ad album" come richiesta, voci ⋮ dalla tabella, viewer da un album vivo sull'indice (un nascosto esce), miniature che falliscono chiuse; copia di `ViewerServices` campo per campo | `AlbumsOutsideScreensTest` (5), `ViewerServicesAlbumsTest` (2) |
+| La ricezione: promessa su disco, personale da solo, condiviso col foglio, file mancanti | `IncomingAlbumsTest` (4) |
+| E-SH16 (solo il creatore, maiuscole, file sparsi, area dell'app) ed E-SH20, avvisi chiusi | `AlbumFolderWatchTest` (5), `AlbumStripsTest` (una prova in piu') |
+| Raccolte: un fornitore per sezione, Cartelle NAS col NAS, Utility con "Libera spazio", "Da tenere al sicuro" vuota, voci per codice, scelte prima del registro | `CollectionsWiringTest` (5) |
+| Cancello delle scritture degli album (D30 prima di tutto, D31 no) | `AlbumWriteGateTest` (4) |
+| Diagnostica: ogni codice del §2.8 nel catalogo con gli stessi edge case; stato prima del montaggio | `Phase7DiagCatalogTest` (4) |
+| Selettore dei media: l'ordine della Libreria, mai un id che la vista non ha | `MediaPickerOrderTest` (feature-library) |
+| Registro dei Nascosti: tutte le superfici `PRODUCTION`, i file di `:app` che nominano `VisibleMedia`/`HiddenMask` nell'elenco `wiring` (`AlbumsLive`, `AlbumsModule`, `UtilityGraph`) | `HiddenSurfacesRegistryTest`, `HiddenSurfacesPropertyTest` |
+
+**Agganci fatti** (dalla lista del brief): P1 adattatori; P2 adattatori Room, pubblicatore, giro di `IndexSyncWorker`, ricalcolo, cancelli D30-D38 e salto dell'ora;
+P3 `CatalogAlbums`, `onCatalogChanged`, `reconcileAll`, copie con `PersonalAlbumCopies.keep`; P4 porte, cartella "Album condivisi", `GuardianSafeCopyRequests`,
+diario su Room, una sola porta di completamento, E-SH16 col suo comando; P6 `SmartRecompute`, segni "Nuove", `ReverseGeocoder`; P7 rilevazione notturna,
+`AlbumCandidates`; P8 `IdenticalDuplicates`, `SimilarShots` (firme della Fase 5), `NasTrashPort`, `CleanupNasPort` spostato in `:app`, `FullHashSwitch`,
+`FullHashNightly.apply` e `SimilarShots.sign` di notte, `utilityGraph`, Eliminati di recente una volta sola; P9 `openHidden`, ricalcolo dei condivisi a un
+nascosto; P10 `albumsGraph`, `AlbumScreensClock`, `AddToAlbumHost`, `toGroup`, `ViewerServices.albums`, `ReceivePorts.install(..., albums)` con l'aggiunta
+vera, E-SH20 col contratto di stato; P11 deposito, fornitori, voci, "Cartelle NAS", ponte tolto; azzeramento; Diagnostica §2.8; P12 `ownBackupFolder`.
+
+**Agganci rimasti (punti aperti)**
+1. **Niente e' stato provato su un dispositivo** (nessun `adb`, telefono, emulatore ne' NAS vero).
+2. `DuplicatesNames` senza legame (L108) e `AlbumPeople` senza legame (il nome di un familiare e' l'account, `AccountNamesAsIs`): il registro ha solo
+   l'account del NAS; un nome da mostrare per familiare non c'e' da nessuna parte.
+3. `ShotVectorSource` dei Doppioni simili: `core-search` non espone il vettore di una riga (punto aperto di P8): solo la firma visiva.
+4. `AwayFromHome` (P7) non e' legato in Diagnostica.
+5. Il passo D30 di `tools/check.ps1` prova campo e decisione nel dex ma non che il cancello degli album li chiami nel bytecode (come D12 per il
+   backup): `tools/` e' fuori dal perimetro di P13. Sulla JVM lo prova `AlbumWriteGateTest`.
+6. "Mostra i Nascosti nelle Raccolte" sotto Impostazioni → Privacy → Nascosti: feature-settings non ha la porta; la sezione si rimostra da "Modifica Raccolte".
+7. E-SH20 per un album **mio rimasto senza definizione** (non si vede, quindi non ha una pagina): `RevokedItemsRestore.candidates` lo conta, ma non c'e'
+   una riga dell'elenco che lo offra.
+8. La regola B degli smart prende la cartella del backup quando gli album si montano: se la cartella si sceglie dopo, vale dal prossimo avvio.
+9. "Aggiungi ad album" dalla ricezione verso un condiviso apre la scelta con l'album gia' scelto solo se l'elenco degli album e' gia' letto; altrimenti
+   mostra l'elenco (l'utente lo sceglie di nuovo).
+10. **Build su Windows**: il demone di Gradle tiene aperti i jar di compilazione dei moduli dopo un giro con Hilt/kapt (lo dice il Restart Manager di
+    Windows: il processo del demone), e un giro dopo una modifica a `core-albums` falliva con "file utilizzato da un altro processo". Non l'ho fermato
+    (regola): i giri di prova sono andati senza demone in `build/nd` (uno script di init in `build/`, ignorato da git); `check.ps1 -NoDaemon` ha la struttura
+    normale. Suggerimento per l'orchestratore: `--no-daemon` anche per i giri intermedi degli agenti.
+
+**Verifica**: `tools\check.ps1 -NoDaemon` **verde al primo giro** ("OK: tutto a posto", 27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, struttura di build
+normale, `appuild\outputspkelease` cancellata prima, posto `f7-p13` preso e rilasciato attorno a ogni comando Gradle; ramo con `main` a `4174b830`):
+assemble di debug e release, test di tutti i moduli (`app` 869, `core-albums` 707, `feature-albums` 486, `feature-library` 922, `feature-diagnostics` 325,
+nessuno a zero, nessuno fallito; il passo di Gradle 1.612 s), lint, controlli del dex e del manifest di release (D30 compreso). **APK di release** (non
+firmato): 68.857.473 byte prima del pacchetto, **70.023.705** dopo (+1.166.232 byte, con dentro anche P12 e la Fase 8 P0 arrivati da `main`).
+
+**Da provare sul telefono (F72-F93), scritte perche' un agente le faccia da solo con `adb`** (APK di debug di questo ramo: `adb install -r app\build\outputs\apk\debug\app-debug.apk`;
+account e share di prova `test`, `test2`, `test-comune`; le foto di prova in `DCIM/mcg-prova/` caricate con `adb push`; le schermate si leggono con
+`adb shell uiautomator dump` e `adb exec-out screencap -p`; i dialoghi dell'app li conferma l'agente, la Diagnostica si esporta da Impostazioni →
+Diagnostica → Esporta e si legge con `adb pull`). Nessuna e' stata fatta (niente `adb` in questo pacchetto).
+- **F72** Album personali: Raccolte → Album → "Nuovo album" (foglio sopra le Raccolte), 5 album, 1.000 foto in uno con "Aggiungi foto" (il selettore:
+  la Libreria gia' in selezione, "Scegli"), ordine personalizzato ("Sposta su/giu'"), copertina dal menu di una foto e dal viewer aperto dall'album
+  (⋮ "Imposta come copertina"), rinomina, eliminazione; poi l'emulatore con `test`: ordine e copertina ritrovati dopo la sincronizzazione; dal PC
+  nessun file toccato.
+- **F73** Nascosti ovunque: tre media nascosti (con GPS, con testo, in un album, in uno smart, in un viaggio sintetico, in un gruppo di Doppioni,
+  copertina scelta) e il widget di prova: `uiautomator dump` di ogni schermata del registro (Libreria, Raccolte, Utility, Doppioni, album, viewer aperto
+  da un album, selettore dei media, "Aggiungi ad album"): nessuno dei tre; nessun nome in Cartelle NAS.
+- **F74** Sblocco dei Nascosti (nel momento col tablet): Impostazioni → Privacy → Nascosti apre la pagina anche con la sezione nascosta dalle Raccolte.
+- **F75** Utility: Raccolte → Utility: Screenshot, Video, Modificate, WhatsApp, Doppioni, Eliminati di recente (una volta sola: "Da tenere al sicuro"
+  non c'e' piu'), "Libera spazio" nello stesso gruppo; i conteggi uguali alle pagine.
+- **F76** Doppioni identici: lo stesso file in due cartelle di `test` e in `test-comune`: proposta D25, "Rivedi", "Elimina ovunque" (un tocco): dal PC
+  una copia per parte, le altre nel cestino del NAS col record; ripristino dagli Eliminati di recente (un tocco). "Controlla di notte i video del NAS"
+  acceso e spento (Diagnostica: righe `FULL_HASH` in coda e ritirate).
+- **F77** Doppioni simili: raffiche a mano (scatti a 2 s), foto ritagliate, una preferita: gruppi giusti, la preferita da tenere. Riconfermare `Sdup`.
+- **F78** Eliminati di recente: media eliminati dal telefono con l'app e dal NAS: una pagina con entrambi; "Elimina subito" chiede due tocchi; su Samsung
+  l'avviso D-3.
+- **F79** "Prova Oslo": 20 foto di `test`, 3 solo sul telefono, 1 gia' in `test-comune`, 1 nascosta: foglio con i conteggi, un tocco; dal PC 23 file
+  nella cartella dell'album con l'hash giusto, 20 sorgenti nel cestino privato col record, la nascosta al suo posto; in app gli stessi media.
+- **F80** Banco sul telefono (`s25.ps1 -Mode share`, >= 100) e dal PC (`tools/chaos/share-pc`, 500).
+- **F81** Area comune "piena" (debug): pausa prima del primo file, Diagnostica `SHARE_PAUSED_SPACE`, ripresa togliendo il tetto.
+- **F82** Conflitti: nome gia' presente; lo stesso media in due album condivisi; **cartella del primo album rinominata dal PC**: dopo una scansione la
+  pagina dell'album sul telefono del creatore mostra "La cartella e' cambiata" con «nuovo nome» e un tocco la adotta (dal PC: nessun file mosso;
+  sul tablet l'album resta intero).
+- **F83** "Smetti di condividere" e "Riporta": foglio senza scelta di partenza; i propri media tornano nelle cartelle d'origine.
+- **F84** Finti album dal PC: tutto ignorato, Diagnostica `ALBUM_CONTRIB_REJECTED`; nessuna operazione nel diario di core-nasops (Diagnostica NAS).
+- **F85** Permessi aggirati dal PC (`test2`): un file aggiunto nella cartella (striscia "aggiungili"), uno cancellato (esce dall'album).
+- **F86** (utente, col tablet) i tre livelli, aggiunte contemporanee, "Smetti di condividere", F74; E-SH20: revocare l'emulatore di `test` dopo che ha
+  aggiunto foto: sul telefono la striscia "N elementi da ripristinare" e il tocco.
+- **F87-F89** Album smart e viaggi (strumento di P12): la cartella del backup ora arriva alla regola B.
+- **F90** Raccolte: ordine e visibilita' (ritrovati sull'altro dispositivo dell'account), Cartelle NAS, "Aggiungi ad album" dalla selezione della Libreria,
+  dal viewer (⋮) e dalla condivisione in arrivo (verso un album personale: le foto entrano da sole dopo la scansione; verso uno condiviso: si apre il
+  foglio con l'album scelto).
+- **F91** Prestazioni (`AlbumBenchmark`): ricalcolo e rilevazione sulla Libreria sintetica da 100 mila.
+- **F92** 24 ore di sincronizzazione con i finti album di F84: nessuna operazione non confermata.
+- **F93** (solo col consenso, Q7) release sulle share vere: la recinzione `sharedAlbumsTestSharesOnly` e' ancora accesa in release, quindi oggi non si puo'.

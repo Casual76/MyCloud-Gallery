@@ -7998,3 +7998,240 @@ Diagnostica → Esporta e si legge con `adb pull`). Nessuna e' stata fatta (nien
 - **F91** Prestazioni (`AlbumBenchmark`): ricalcolo e rilevazione sulla Libreria sintetica da 100 mila.
 - **F92** 24 ore di sincronizzazione con i finti album di F84: nessuna operazione non confermata.
 - **F93** (solo col consenso, Q7) release sulle share vere: la recinzione `sharedAlbumsTestSharesOnly` e' ancora accesa in release, quindi oggi non si puo'.
+
+## Fase 7, correzioni dopo le revisioni: pacchetto B (27/10)
+
+Il pacchetto B corregge il **flusso della condivisione** trovato dalle due revisioni di fine fase (`docs/review/7-fase7.md`, `docs/review/funzionale-7.md`):
+R3, R8, R15, I2, I3, I4 della revisione di sicurezza e SP-1, SP-2, SH-1...SH-5, SC-1, SC-2, SB-1, SN-1, SG-1, SG-2 della verifica funzionale. Ramo
+`fase7/rev-b` da `main` a `6b0bf793`. Perimetro: `core-albums/.../share/**` (piu' i contratti che servono), `core-nasops` solo per la porta di
+completamento e per i controlli di R3, i cancelli di SP-1 e SG-1 (legati in `:app`, `core-backup` non cambia), le strisce e i fogli di
+`feature-albums`, i controlli di R3 in `feature-viewer` e `feature-nas`, la parte della condivisione di `:app/albums`. Ogni voce ha una prova che
+riproduce il difetto (rossa senza la correzione, verde con); le prove sul grafo vero stanno in `RevisioneBCondivisioneAppTest` (`:app`, simulatore
+SMB con gli account di prova).
+
+### Le voci
+
+**R3 · "Eliminare il file" e "Nuova versione" (corretta).** Le due righe `WRITER_ONLY` della tabella (`AlbumPermissions.kt:120-121`) non le chiedeva
+nessuno: dal viewer, da Cartelle NAS, da "Ovunque" e dai Doppioni un familiare mandava nel cestino (o spostava, o rinominava) il file di un elemento
+altrui a ogni livello. Ora il controllo sta **nel punto per cui passa ogni scrittura sul NAS**: il piano di `core-nasops` (`OpPlanner`, e lo stesso
+nell'esecutore di riferimento `InMemoryNasOperations`) chiede alla porta nuova `ProtectedFiles` quali file dell'area comune sono protetti; un cestino
+o uno spostamento li lascia fuori (`SkipReason.SHARED_ALBUM_ITEM`, scritto nel foglio di conferma), una rinomina o un piano fatto solo di loro e'
+rifiutato (`PlanRejection.SHARED_ALBUM_ITEM`: "e' in un album condiviso e il livello dell'album non ti permette di eliminarlo, spostarlo o
+rinominarlo"). La porta la lega `:app`
+(`AlbumFileGuard`, con `AlbumsWiring` che la mette su `NasOrganizer.protectedFiles`): per ogni file (o per ogni file dentro una cartella) trova il
+media nel catalogo e chiede alla replica `allowed(album, DELETE_FILE, media)` per ogni album condiviso attivo che lo contiene, con il livello in
+vigore e il ruolo (creatore, chi l'ha aggiunto, altri). Fallisce chiusa: un account che non so, una lettura che lancia, un errore della porta = tutto
+protetto. Fuori dalla protezione solo i file di "Riporta" in corso (operazione aperta del diario della condivisione, che ha la sua riga `BRING_BACK`) e
+gli album chiusi (D31: non hanno elementi vivi). Le superfici lo dicono prima del tocco: il viewer toglie "Elimina", "Sposta" e "Rinomina" e scrive
+perche' (`NasActionCapabilities.albumLocked`), "Ovunque" non conta piu' la copia protetta, il foglio d'eliminazione dice che il file sul NAS
+"resta dov'e'"; Cartelle NAS offre le azioni come prima e il piano risponde con il motivo. Lo spostamento e la rinomina valgono come
+"Eliminare il file": tolgono il file dall'album per tutti allo stesso modo (E-SH17). **"Nuova versione"**: nessuna strada dell'app scrive una
+versione nell'area comune (P14 della 5B: `CorrectionReadiness.COMMON_AREA_NOTICE` e `NOT_MINE` in `DefaultCorrections.readiness`), quindi la riga
+e' rispettata per costruzione, piu' stretta della tabella (nemmeno il creatore la scrive li'): per quella riga non e' un difetto, e la prova la
+genera comunque dalla tabella. Le versioni (E-D16): l'eliminazione di una versione passa dallo stesso piano di `core-nasops`.
+Prove: `AlbumFileRulesTest` (generata dalla tabella: ogni riga, ogni livello, creatore, chi ha aggiunto, un altro familiare), `RevisioneBNasOpsTest`
+(i due esecutori: cestino, spostamento e rinomina lasciano fuori o rifiutano, una porta rotta protegge tutto),
+`RevisioneBCondivisioneAppTest.r3...` (due dispositivi, "Gli altri guardano": il tablet di `test2` non ha il piano ne' le voci del viewer, il creatore si').
+
+**R8 · la porta di completamento saltata (corretta).** `completePublished` (`NasOpsEngine.kt:806-810` prima) andava avanti **senza** chiamare la porta
+se la prima occhiata alla destinazione falliva per un errore che non e' di rete; poi `copyStillThere` vedeva il file e la sorgente andava nel cestino
+con il catalogo che non sapeva della destinazione (E-SH2). Ora: un errore che non e' di rete tiene l'elemento come un errore della porta
+(`heldForCatalog`, `CATALOG_PENDING`); una destinazione assente o una cartella fermano l'elemento con la sorgente al suo posto (`UNEXPECTED`,
+come gia' faceva l'esecutore di riferimento). Prova: `RevisioneBNasOpsTest.r8...` (un `FileBusy` alla prima `stat` della destinazione pubblicata,
+entrambi gli esecutori: la porta e' chiamata prima che la sorgente si registri).
+
+**I2 · un'operazione ferma per la porta, senza fine e con un motivo muto; condivisioni oltre 10.000 elementi (corretta).** Prima un errore della porta
+(`CatalogMoveCompletionSink` che aspetta la scansione) teneva l'operazione in pausa "condizioni" per sempre, mostrata come "in corso". Ora l'attesa
+ha il suo motivo e un tetto: `PauseReason.CATALOG` ("aspetto che l'app la riconosca come la stessa foto", in Cartelle NAS; nella
+striscia dell'album con `ShareWait.CATALOG`), il codice `OpErrorCode.CATALOG_PENDING` sull'elemento (`waitingCatalog`), riprese con `CatalogHoldBackoff` (5 riprove
+subito, poi le attese di `LockedBackoff`: da 1 minuto a 12 ore, 24 ore in tutto) e alla fine l'elemento si ferma con `CATALOG_MISMATCH` ("restano le due
+copie"), con **entrambe** le copie al loro posto (la sorgente mai nel cestino, L152). `NasOrganizer` riprende le
+operazioni in pausa `CATALOG` come quelle in attesa di un file aperto (all'avvio e all'ora della prossima riprova, mai in un giro stretto). Il codice
+della pausa arriva alla Diagnostica del NAS (il nome della pausa); il codice di Diagnostica degli album per `CATALOG` e' del pacchetto D. Gli
+elementi di un'operazione vanno ora in trasferimenti di al massimo `ShareRules.MAX_ITEMS_PER_TRANSFER` = 10.000 (`ShareTransferKeys.keyFor` con
+il gruppo, `ShareOrchestrator.transferKeys`): un album di 20.000 non si ferma piu' sul tetto di un piano di `core-nasops`.
+Prove: `RevisioneBNasOpsTest.i2...` (la porta non risponde mai: pausa `CATALOG`, poi `CATALOG_MISMATCH` con le due copie, chiamate contate; la porta
+risponde tardi: l'elemento finisce), `CompletionSinkEngineTest` e `CampoAMovesTest` aggiornati (la pausa e' `CATALOG`, non piu' "condizioni"),
+`RevisioneBShareTest.i2...` (10.005 spostamenti: due trasferimenti, nessuno oltre 10.000).
+
+**R15 · "Usa la nuova cartella" e "Ripristina" facevano cadere l'app (corretta).** La cartella proposta (E-SH16) veniva dai percorsi del catalogo
+(fino a 4.096 byte) senza le regole del formato degli album (1.024), e `NasAlbumPublisher.stage` lanciava dentro un `scope.launch` senza `catch`.
+Ora `AlbumFolderWatch.acceptedFolder` (tetto `MAX_PATH_BYTES` e `AlbumTexts.mediaPath`) scarta la cartella prima di proporla e la ricontrolla al tocco;
+le facciate di "Usa la nuova cartella" e "Ripristina" rispondono `EditOutcome.Invalid` a un errore, e la pagina lo dice ("Non ci sono riuscito...
+Non e' cambiato niente"; `AlbumMessage.NotDone`). Prove: `AlbumFolderWatchTest.r15...`, `RevisioneBAlbumPageTest.r15...` (una facciata che lancia:
+la pagina resta su e lo dice).
+
+**SP-1 · i media solo sul telefono non arrivavano mai nella cartella dell'album (corretta).** `AlbumsWiring` dava ad `AlbumFolderUploads` il cancello
+del backup (`AppBackupGate`, che per ogni share diversa dall'area privata risponde `NO_PRIVATE_AREA`): ogni caricamento verso l'area comune era
+"scritture ferme", poi "non partito". Ora gli passa il cancello degli arrivi della 5B (`fiveB.incomingGate`, area privata **e** area comune, lo stesso
+del motore che esegue gli elementi); `core-backup` non cambia. Prova: `RevisioneBCondivisioneAppTest.sp1...` (un media solo sul telefono: il file nella
+cartella dell'album con i byte del telefono, lo stesso media).
+
+**SG-1 e I4 · il piano prometteva caricamenti e copie del guardiano che i cancelli fermano (corrette).** Il piano chiede ora i cancelli del backup per la
+cartella dell'album (`ShareOrchestratorPorts.backupGates`, legata in `:app`): `uploads` = il cancello degli arrivi sull'area comune **e** la regola
+dei caricamenti "solo sotto Album condivisi" (`IncomingUploadPorts.allowsAlbum`, I4: una cartella adottata fuori con E-SH16), `safeCopies` = il
+cancello del guardiano sull'area privata. Un media solo sul telefono che non si puo' caricare esce dal piano con il motivo nuovo
+`ShareExclusion.UPLOAD_BLOCKED` ("solo sul telefono: adesso non si possono caricare in questa cartella"); i miei media solo sul NAS la cui copia del
+guardiano non partirebbe si contano in `SharePlan.safeCopyBlocked` e il foglio lo dice ("Copia privata ferma": restano nell'area comune, l'originale
+30 giorni nel cestino). Entrambi entrano nell'impronta del piano (un piano con i cancelli cambiati non e' lo stesso piano). Per I4: lo spostamento
+verso una cartella adottata fuori da "Album condivisi" resta permesso (e' la scelta di E-SH16), il caricamento dal telefono no e il foglio lo dice
+prima. Prove: `RevisioneBShareTest.sg1...` (cancelli chiusi: esclusione, conteggio, impronta diversa), `RevisioneBCondivisioneAppTest.sg1...`
+(`FeatureFlags.RELEASE` con un account di prova: nessun caricamento promesso, `safeCopyBlocked` = 1).
+
+**SP-2 · "In arrivo" non compariva mai (corretta).** Nessuno valorizzava `AlbumContent.incoming`. Ora la facciata della pagina (`AppAlbums.content`) lo
+calcola dal diario locale (`AlbumShareExtras`): gli elementi delle mie operazioni aperte di condivisione o adozione di quell'album ancora in `PLANNED`,
+`TRANSFERRING` o `IN_COMMON` (da `ENTRY_STAGED` sono gia' nella vista); si ricalcola a ogni cambio del diario. Solo il dispositivo che aggiunge lo
+vede (D9). Prova: `RevisioneBCondivisioneAppTest.sp2...`.
+
+**SH-1 · lo stesso piano dopo un'operazione finita rispondeva "gia' avviato" (corretta).** L'impronta di un piano su un album esistente non aveva ne'
+nonce ne' istante, e `plan_hash` e' unico nel diario anche fra le operazioni finite. Togliere l'indice unico vuol dire una migrazione del database
+(fuori dal perimetro); invece ogni `plan` dell'orchestratore porta un **tentativo** (`SharePlan.attempt`, 16 byte casuali) che entra
+nell'impronta: lo stesso piano (stesso tentativo, rifatto allo `start`) non parte due volte, un piano nuovo con gli stessi media si'. Prova:
+`RevisioneBShareTest.sh1...` (due piani con gli stessi media dopo un fallimento: il secondo parte; lo stesso piano due volte: `AlreadyStarted`).
+
+**SH-2 · niente "Riprova", nessun motivo, la striscia spariva al riavvio (corretta).** L'orchestratore legge dal diario anche le ultime 20 operazioni
+chiuse (`ShareDiary.closedOps`): una "fatta in parte" resta finche' ha elementi da riprovare (falliti per `NOT_STARTED`, `TRANSFER_FAILED`,
+`SOURCE_CHANGED`, non gia' membri e non in viaggio) e l'utente non ha chiuso la striscia (`ShareProblemMarks`, un file di stato con `StateFiles`,
+`share-problems-closed`). La striscia dice il motivo principale ("N elementi a posto, M non andati: il file e' cambiato. Tocca per riprovare"); il tocco
+chiede all'orchestratore la richiesta da rifare (`ShareRunner.retryRequest`: `AddToShared`, `FolderAdoption` o `BringBack` con quei media) e apre il
+foglio di sempre, con la conferma (D12); niente da riprovare = la striscia si chiude (`dismiss`). Le pause che aspettano prima di partire dicono
+che dopo 10 minuti l'elemento diventa "da riprovare" (`ShareOpState.Paused.notStarted`). Prove: `RevisioneBShareTest.sh2...` (la striscia sopravvive a
+un orchestratore nuovo, la richiesta giusta, la chiusura che resta), `RevisioneBAlbumPageTest.sh2...` (motivo, tocco, foglio; i 10 minuti).
+
+**SH-3 · "N file nuovi nella cartella: aggiungili" non compariva mai (corretta).** Nessuno emetteva `SharedAlbumNotice.FilesAddedFromPc`, e
+`FolderAdoptions.pending` contava anche i file tolti con "Rimuovi dall'album" (che restano nella cartella, D39). Ora `FolderAdoptions` riceve la
+**storia** dell'album (`AlbumHistory`: gli id e le chiavi di contenuto di ogni voce `item:` che la replica ricorda, vive o lapidi, e del mio
+contributo pubblicato e in coda) e la toglie; `AlbumsGraph.scanNotices` conta i file per ogni album che vedo (`pcFiles`) e `AlbumFolderWatch.notices`
+emette l'avviso (chiuso dall'utente, ritorna se il numero cresce); la voce ⋮ "Aggiungi i file della cartella" c'e' solo con l'avviso. Prove:
+`RevisioneBShareTest.sh3...` (la storia), `AlbumFolderWatchTest.sh3...`, `RevisioneBAlbumPageTest.sh3...` (la voce), `RevisioneBCondivisioneAppTest.sh3...`
+(un file dal PC e uno tolto dall'album: l'avviso conta 1).
+
+**SH-4 · "Da condividere" degli smart condivisi non si riempiva mai (corretta).** Per il creatore di un album condiviso nato da un suo album smart (voce
+`shared` dei dati personali), la facciata della pagina calcola `toShare` (`AlbumShareExtras`): i media che lo smart ha adesso e l'album condiviso no,
+tolti quelli in viaggio e quelli nell'area privata di un altro account; i nascosti non ci sono (la vista dello smart non li ha, D22). Le foto nuove non si
+spostano da sole: la pagina le mostra in "Da condividere" e il tocco apre il foglio (Q4 (a)). Prova: `RevisioneBCondivisioneAppTest.sh4...`.
+
+**SH-5 · dopo un riavvio definizione e livello iniziali si riaccodavano (corretta).** `ensureDefinition` ricordava in memoria cosa aveva accodato; dopo la
+morte del processo riaccodava `Definition` e `Level` del piano sopra una rinomina o un cambio di livello. Ora chiede alla porta nuova
+`definitionStaged` (in `:app`: il mio pubblicatore ha gia' la definizione dell'album, in coda o pubblicata) e non riaccoda; una lettura che non
+riesce rimanda il passo (non accoda alla cieca). Prova: `RevisioneBShareTest.sh5...` (rinomina e livello in coda, un orchestratore nuovo: la definizione
+pubblicata e' "Dopo" e il livello "Gli altri guardano").
+
+**SC-1 · "Smetti di condividere" dal creatore: "Album non trovato" e l'album personale al giro dopo (corretta).** La facciata di chiusura, dopo
+`Closed` con `STOP`, scrive subito le copie personali (`keepClosedCopies`, poi `reconcileAll`) e `SharedAlbums.keptAfterClose` dice qual e' l'album
+personale (quello da cui era nato, o la copia del creatore); il foglio di chiusura lo passa alla rotta, che apre l'album personale (o torna all'elenco);
+durante la chiusura la pagina non passa per "non trovato". Prove: `RevisioneBAlbumPageTest.sc1...`, `RevisioneBCondivisioneAppTest.sc1...` (l'album
+personale con i due elementi subito, senza giro dell'indice).
+
+**SC-2 · una modifica in coda si pubblicava solo col processo vivo (corretta).** Il contatore del pubblicatore riparte da zero e nessuno guardava la coda
+rimasta. Ora, quando gli album si montano, `AlbumsGraph.watch` guarda il deposito del pubblicatore: con modifiche in coda pubblica subito (`RESUME`),
+poi riprova finche' escono ("troppo presto": 5 minuti fra due teste) e accoda il lavoro della condivisione, che resta aperto finche' c'e' una modifica in
+coda (`shareRound`). Prova: `RevisioneBCondivisioneAppTest.sc2...` (rinomina in coda, morte del processo, processo nuovo sulle stesse cartelle che monta
+e basta: la coda si svuota).
+
+**SB-1 · la lapide di "Riporta" sull'id locale (plausibile, corretta).** `publishedId` non era legato: valeva `media.takeIf { it in members }`, e
+`members()` comprende l'id locale con cui il mio catalogo attesta un elemento pubblicato con un altro id (un altro dispositivo dello stesso account).
+Ora e' legato alla replica (`publishedIdIn`: l'id pubblicato che quell'id attesta). Prova: `AlbumFileRulesTest.laLapideDiRiportaVaSullIdPubblicato`
+(sulla funzione legata; lo scenario con due dispositivi dello stesso account e id diversi non l'ho costruito sul grafo vero).
+
+**SN-1 · falso "La cartella e' cambiata" per un album di soli riferimenti (corretta).** `AlbumFolderWatch.scan` conta ora solo gli elementi la cui voce
+dice che stavano nella cartella dichiarata (spostati o caricati li'), non i riferimenti a file rimasti altrove (E-SH11). Prova:
+`AlbumFolderWatchTest.sn1...`. Limite: L150.
+
+**SG-2 · il giro degli album ripeteva a vuoto (plausibile, corretta).** `syncRound` diceva "non finito" anche quando la replica non era potuta andare
+avanti (niente registro, niente ora del NAS, elenco di `albums/` non letto), e la tappa lo ripeteva fino al suo tetto. Ora `AlbumsGraph.roundDone`
+dice "finito" quando il giro e' incompleto senza aver letto ne' scartato nulla (si riprova al giro dell'indice dopo); un giro fermato dal budget dopo
+aver letto qualcosa resta "da continuare". La correzione sta in `:app` (`NasSharedAlbumSync`, che produce il resoconto, e' del pacchetto A). Prova:
+`RevisioneBCondivisioneAppTest.sg2...` (nessuna cartella dell'area comune si apre: il giro e' finito).
+
+**I3 · la seconda chiave di C26 era una conseguenza della prima (corretta).** `OpsAlbumMover` e `FolderAlbumUploader` emettevano la conferma di
+`core-nasops` per qualunque trasferimento arrivasse con una `ShareConfirmation` giovane. Ora la emettono solo se il diario della condivisione lo
+conosce (`ShareTransferBinding`): un'operazione aperta con la stessa impronta della conferma, elementi con quella chiave, i file (o i media) fra i
+suoi e la destinazione quella dell'operazione (o, per "Riporta", quella dell'elemento); altrimenti `CONFIRMATION_REJECTED`. `Phase7ArchitectureTest`
+ammette `ShareConfirmationIssuer` e `ShareConfirmationSheet` solo in `ShareSheetController.kt` (feature-albums) e nei test (prima tutto `:app` e
+tutto feature-albums). Prove: `RevisioneBCondivisioneAppTest.i3...` (una conferma valida di un piano mai partito, e quella di un'operazione avviata
+con una chiave che il diario non ha: rifiutate, il file estraneo resta dov'e'), `Phase7ArchitectureTest`.
+
+### Decisioni, e dove mi discosto dalle proposte delle revisioni
+
+1. **R3 nel piano del NAS, non nelle schermate.** Le revisioni proponevano di portare l'appartenenza agli album al viewer, a Cartelle NAS e ai
+   Doppioni. L'ho messa nel punto per cui passa **ogni** scrittura sul NAS (il piano di `core-nasops`, con la porta `ProtectedFiles`): una superficie
+   dimenticata o nuova non puo' aggirarla. Le schermate (viewer, "Ovunque") la mostrano prima del tocco; Cartelle NAS e i Doppioni ricevono il motivo
+   dal piano (L152). Spostamento e rinomina contano come "Eliminare il file" (stesso effetto per gli altri, E-SH17), non come righe a parte.
+2. **"Nuova versione" non e' un difetto.** Nessuna strada scrive una versione nell'area comune (P14 della 5B): la riga e' rispettata per costruzione e
+   piu' stretta della tabella (nemmeno il creatore). Il "salva come media nuovo nell'area privata" proposto (E-E9) non serve finche' resta cosi'.
+3. **SH-1 con un tentativo nell'impronta, non togliendo l'indice unico.** `plan_hash` unico vuol dire una migrazione di `core-database`, fuori dal
+   perimetro; il tentativo per piano da' lo stesso risultato (lo stesso piano non parte due volte, un piano nuovo si').
+4. **R8: destinazione assente = elemento fermo, non "avanti senza porta".** La proposta lasciava andare avanti senza porta con `Probe.Absent` (poi
+   `copyStillThere` fermava comunque). Fermo subito con `UNEXPECTED`, come gia' l'esecutore di riferimento: stesso esito (la sorgente resta), una
+   strada in meno senza porta.
+5. **I2: tetto di 24 ore, poi le due copie.** Le attese sono quelle dei file aperti (`LockedBackoff`) dopo 5 riprove subito; alla fine l'elemento si
+   ferma con le due copie, mai la sorgente nel cestino (D29). Il codice della Diagnostica degli album per la pausa `CATALOG` non l'ho aggiunto (la
+   sezione Album della Diagnostica e' del pacchetto D): la Diagnostica del NAS esporta gia' il nome della pausa.
+6. **SG-2 in `:app`.** Il resoconto lo produce `NasSharedAlbumSync` (pacchetto A): la regola "un giro che non ha letto ne' scartato niente e' finito"
+   sta in `AlbumsGraph.roundDone`, senza toccare la replica.
+7. **SB-1 era plausibile**: senza il legame, `members()` comprende l'id locale che attesta un elemento pubblicato con un altro id, quindi la lapide
+   poteva andare sull'id sbagliato. Corretto legando la porta; la prova e' sulla funzione legata (non ho costruito due dispositivi dello stesso account
+   con id diversi sul grafo vero).
+8. **SG-1 e I4 dentro il piano.** Il piano chiede i cancelli del backup per la cartella e dichiara cio' che non partirebbe (`UPLOAD_BLOCKED`,
+   `safeCopyBlocked`), invece di spegnere insieme D30 e D12: le recinzioni restano come sono.
+
+### Modifiche fuori dal perimetro stretto
+
+- `core-common/.../architecture/Phase7ArchitectureTest.kt` (solo il test): I3 chiedeva di stringerlo.
+- `app/.../nas/NasOrganizer.kt`: lega `ProtectedFiles` al piano della 4B e dice al viewer se un file e' protetto (R3); riprende le operazioni in pausa
+  `CATALOG` come quelle in attesa di un file aperto (I2).
+- `feature-nas`: oltre ai testi di R3, i testi della pausa `CATALOG` e di `CATALOG_MISMATCH` (I2): le `when` sui codici sono esaustive.
+- R3 protegge anche i Doppioni (pacchetto C): "Ovunque" e la pulizia degli identici passano dallo stesso piano, quindi un elemento di album che non
+  posso eliminare resta fuori anche li', qualunque sia la cartella (anche un riferimento E-SH11 o una cartella adottata).
+
+### Da provare sul telefono (con `adb`, nessuna fatta qui)
+
+- **R3 (F86)**: album "Gli altri guardano" del telefono di `test`; dal tablet (o dall'emulatore) di `test2`, una foto dell'album aperta dall'album e
+  dalla Libreria: ⋮ senza "Elimina", "Sposta", "Rinomina" e con la riga "In un album condiviso..."; "Elimina" → "Ovunque" non la conta; da Cartelle
+  NAS "Elimina" sulla foto e sulla cartella dell'album: il foglio dice che non si puo'. Al livello "Gli altri aggiungono" lo stesso, tranne per le
+  foto aggiunte da `test2`. Dal telefono del creatore tutto c'e'. Dal PC: i file intatti.
+- **R8**: durante F79 tenere aperto in esclusiva dal PC un file appena pubblicato nella cartella dell'album: il media resta lo stesso.
+- **I2**: Diagnostica del NAS dopo F79: nessuna operazione in pausa "condizioni"; un album di oltre 10.000 elementi (banco) parte in due trasferimenti.
+- **SP-1, SG-1, I4**: F79 con 3 foto solo sul telefono (arrivano nella cartella); release con un account di prova: il foglio le lascia fuori con il motivo
+  e dice "Copia privata ferma" per i media solo sul NAS.
+- **SP-2, SH-1, SH-2**: durante F79 la pagina dice "In arrivo"; F81 (area piena) con il tetto tolto dopo 10 minuti: la striscia "N non andati: ..."
+  resta dopo un riavvio dell'app, il tocco apre il foglio e la ripresa va.
+- **SH-3, SN-1 (F85, F82)**: un file dal PC nella cartella: "1 file nuovo nella cartella"; "Rimuovi dall'album" su un elemento: il conteggio non sale.
+  Un album di soli riferimenti: nessun "La cartella e' cambiata".
+- **SH-4**: uno smart condiviso, una foto nuova che rispetta le regole: in "Da condividere", il file non si sposta.
+- **SC-1, SC-2, SH-5 (F83)**: "Smetti di condividere" dal creatore: si apre l'album personale con gli stessi elementi; rinominare e uccidere l'app entro
+  5 minuti: alla riapertura il tablet vede il titolo nuovo senza aspettare il giro dell'indice; rinominare con l'operazione aperta e riavviare: il titolo
+  resta quello nuovo.
+- **R15**: dal PC spostare i file dell'album in una cartella con un percorso lunghissimo: nessuna proposta, nessuna caduta.
+- **SG-2 (F92)**: NAS spento durante il giro dell'indice: la tappa degli album non si ripete (Diagnostica dei lavori).
+
+### Verifica
+
+- **Rosso senza la correzione, verde con**: ho tolto le correzioni tutte insieme (una copia dei file, rimessa e confrontata con il `git diff` di prima:
+  identico) e girato le prove nuove: rosse 7 su 7 di `RevisioneBShareTest`, 3 su 4 di `RevisioneBNasOpsTest` (la quarta, "il catalogo risponde dopo un
+  po'", e' il caso buono e resta verde), 4 su 5 di `RevisioneBAlbumPageTest` (il testo dei 10 minuti e' nuovo), 11 su 11 di
+  `RevisioneBCondivisioneAppTest`, le tre nuove di `AlbumFolderWatchTest` (SN-1, R15, SH-3). `AlbumFileRulesTest` prova le funzioni nuove della
+  decisione (la tabella e il legame di SB-1): il rosso di R3 lo danno `RevisioneBNasOpsTest` e `RevisioneBCondivisioneAppTest`.
+- **Garanzie che restano verdi**: i banchi della condivisione (`ShareChaos*`, P5, sulla JVM e sul simulatore), `ChaosBenchTest`, `ChaosMutationTest`,
+  `CompletionChaosAreaTest`, `AlbumsShareBenchAppTest` (8 giri sui legami di `:app`), i test di fiducia e ostili, `HiddenSurfacesRegistryTest`,
+  `HiddenSurfacesPropertyTest`, `AlbumWriteGateTest` (D30), `Phase7ArchitectureTest` (piu' stretto), `NoFixedWaitsTest` (le prove nuove aspettano
+  con `Attese`).
+- **`tools\check.ps1 -NoDaemon` verde al primo giro** ("OK: tutto a posto", 27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, struttura di build normale,
+  `app\build\outputs\apk\release` cancellata prima, posto `f7-rb` preso e rilasciato attorno a ogni comando Gradle): assemble di debug e release, test
+  di tutti i moduli (`app` 885, `core-albums` 714, `core-nasops` 333, `feature-albums` 491, `feature-viewer` 841, `feature-nas` 356; nessuno a zero,
+  nessuno fallito; il passo di Gradle 1.083 s), lint, controlli del dex e del manifest di release (D12, D30, D34). APK di release non firmato:
+  89.618.773 byte. Un giro intermedio dei test di `:app` si era fermato per un crash della JVM di prova (`EXCEPTION_ACCESS_VIOLATION` in `jvm.dll`, con
+  la memoria del PC quasi piena per gli altri giri in parallelo): rifatto, verde; i file `hs_err` tolti.
+
+### Punti aperti
+
+1. "Nuova versione" non si applica a una correzione nell'area comune perche' nessuna c'e': se un giorno la 5B scrivesse versioni li', va chiesta
+   `allowed(NEW_VERSION)`.
+2. Il codice della Diagnostica degli album per la pausa `CATALOG` (sezione Album, pacchetto D) e la riga del catalogo dei codici della 4B: la pausa oggi
+   si vede in Cartelle NAS e nella pagina dell'album, e la Diagnostica del NAS esporta il nome della pausa.
+3. SB-1 provato sulla funzione legata, non con due dispositivi dello stesso account sul grafo vero.
+4. Cartelle NAS offre ancora le azioni sui file protetti e lascia rispondere il piano (L152); toglierle prima vorrebbe la porta degli album in
+   `feature-nas`.
+5. Le sigle in testa a `docs/sicurezza.md` (`C1`...`C48`, `L1`...`L114`) non le ho cambiate: con quattro pacchetti che aggiungono numeri in parallelo
+   le aggiorna chi unisce.

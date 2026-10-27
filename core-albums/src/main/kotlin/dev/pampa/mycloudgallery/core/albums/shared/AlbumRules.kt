@@ -104,7 +104,8 @@ data class CheckContext(
  *   cartella cambiati = "Rinomina", stato `closed`/`deleted` = "Smetti di condividere"/"Elimina l'album"; nessun cambio = nessun effetto;
  * - `level` = "Cambia il livello"; `cover` = "Copertina"; `sort` = "Ordine";
  * - `item:` nuovo (o dopo una lapide) = "Aggiungi" (e `addedBy` = chi scrive); sopra un elemento vivo `addedBy` non cambia mai: il proprio
- *   = come aggiungere, quello di un altro = come toglierlo (nessuno si appropria dell'elemento di un altro per poi toglierlo);
+ *   = come aggiungere, quello di un altro = come toglierlo (nessuno si appropria dell'elemento di un altro per poi toglierlo), e di quello di
+ *   un altro cambia al piu' la posizione: un contenuto diverso si scarta (R14, `OWNERSHIP`);
  * - lapide `item:` = "Togli" confrontato con `addedBy` di prima, oppure "Riporta" per il proprio (anche a "Gli altri guardano", se
  *   l'elemento fu aggiunto quando il livello lo permetteva); una lapide su niente non ha effetto;
  * - `heir` = "Eredita": un dispositivo admin, per il proprio account, con il creatore uscito dalla famiglia nel registro firmato.
@@ -161,6 +162,9 @@ fun AlbumPermissions.check(
         value != null && before != null -> when {
           value.addedBy != before.addedBy -> PermissionVerdict.Denied(AlbumOp.REMOVE_ITEM, DenyReason.OWNERSHIP)
           actor == before.addedBy -> admit(AlbumOp.ADD_MEDIA)
+          // R14: sull'elemento di un altro si puo' cambiare al piu' il posto nell'ordine (con il permesso di togliere quell'elemento). Un
+          // contenuto diverso (chiave, percorso, versione, hash) "aggiunto da" lui sarebbe una foto che lui non ha mai aggiunto.
+          value.copy(position = before.position) != before -> PermissionVerdict.Denied(AlbumOp.REMOVE_ITEM, DenyReason.OWNERSHIP)
           else -> admit(AlbumOp.REMOVE_ITEM, before.addedBy)
         }
         before == null -> PermissionVerdict.Allowed(null)

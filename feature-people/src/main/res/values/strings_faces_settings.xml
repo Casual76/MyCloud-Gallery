@@ -27,7 +27,7 @@
   <string name="faces_settings_device_here">Questo dispositivo</string>
   <string name="faces_settings_device_excluded">escluso</string>
   <string name="faces_settings_device_computing">analizza le foto</string>
-  <string name="faces_settings_progress_running">Analizzate %1$d foto su %2$d</string>
+  <string name="faces_settings_progress_running">Analizzate %1$,d foto su %2$,d</string>
   <string name="faces_settings_progress_idle">Tutto analizzato</string>
   <string name="faces_settings_progress_problem">Qualcosa non va: la Diagnostica dice cosa.</string>
   <string name="faces_settings_wait_notice">In attesa che tu veda l’avviso</string>

@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.personal.testing.FacesRegister
 import dev.pampa.mycloudgallery.core.personal.testing.InMemoryFacesPersonalSettings
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -80,6 +81,24 @@ class SyncedFacesSettingsTest : FacesPersonalSettingsContract() {
     assertThat(device.store.entries.value).isEmpty()
     assertThat(settings.syncPending.value).isTrue()
     assertThat(settings.current()).isEqualTo(FacesSetting.On(g1, 1))
+  }
+
+  /**
+   * Q3 (nessuna traccia per la famiglia): attivare scrive una sola voce, `SETTING` `faces`, nei dati personali (l'area privata dell'account); mai una voce
+   * `PERSON`, mai un campo nel registro o nell'area comune.
+   */
+  @Test
+  fun attivareScriveUnaSolaVoceNeiDatiPersonali() = runTest {
+    val world = PersonalWorld()
+    val device = world.device()
+    device.store.open()
+    SyncedFacesSettings(device.store, CoroutineScope(Dispatchers.Unconfined + Job())).set(FacesSetting.On(g1, 1))
+    assertThat(device.store.state().keys).containsExactly(FacesSettingCodec.KEY)
+    assertThat(FacesSettingCodec.KEY.kind).isEqualTo(PersonalKind.SETTING)
+    device.syncOnce()
+    // Sul NAS: solo la testa e i segmenti dei dati personali di questo dispositivo, nell'area privata (la share dell'account), niente nell'area comune.
+    assertThat(world.nas.share(world.trust.commonShare).list(NasLayout.headDir(device.id, "personal"), 10_000).names).isEmpty()
+    assertThat(device.headFiles()).isNotEmpty()
   }
 
   /** Un nuovo processo (stesso ledger, ancora senza ora del NAS): l'attivazione fatta fuori casa c'e' ancora. */

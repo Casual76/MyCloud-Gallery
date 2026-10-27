@@ -189,8 +189,8 @@ class PeopleSettingsTest {
 
   @Test
   fun attivaMostraChiAnalizzaEAPuntoCheE() {
-    show(state(PeopleSwitchShown.ON, devices = listOf(phone, tablet), progress = FacesStatus.Running(420, 1_000, FacesPhase.DETECT), canErase = true))
-    text("Persone è attiva", "ANALISI DELLE FOTO", "Questo dispositivo", "Tablet di casa", "Analizzate 420 foto su 1000")
+    show(state(PeopleSwitchShown.ON, devices = listOf(phone, tablet), progress = FacesStatus.Running(420, 900, FacesPhase.DETECT), canErase = true))
+    text("Persone è attiva", "ANALISI DELLE FOTO", "Questo dispositivo", "Tablet di casa", "Analizzate 420 foto su 900")
   }
 
   @Test

@@ -25,7 +25,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Gli screenshot della pagina di attivazione, dell'avviso e di Impostazioni -> Persone (Fase 8, P7, docs/screenshots/8-P7): ogni scena in chiaro e scuro,
- * telefono e tablet, piu' il testo a 1,3x sul telefono in chiaro. `gradlew :feature-people:recordRoborazziDebug --tests "*ActivationScreenshot*"` scrive i PNG;
+ * telefono e tablet, piu' il testo a 1,3x sul telefono in chiaro. `gradlew :feature-people:recordRoborazziDebug --tests "*Activation*ScreenshotTest"` scrive i PNG;
  * nei normali `testDebugUnitTest` verificano solo che le scene compongano e non scrivono niente. Stati finti, nessun nome ne' volto: solo le parole della pagina.
  */
 internal enum class Scene(val file: String, val tall: Boolean) {

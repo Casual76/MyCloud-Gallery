@@ -146,7 +146,9 @@ class FacesNoticeTest {
     val no = rule.onNodeWithText("Non su questo dispositivo").fetchSemanticsNode().boundsInRoot
     assertThat(ok.width).isWithin(1f).of(no.width)
     assertThat(ok.height).isWithin(1f).of(no.height)
-    assertThat(ok.top).isWithin(1f).of(no.top)
+    // Uno sotto l'altro, a tutta larghezza: l'etichetta lunga non si taglia nemmeno a testo grande.
+    assertThat(no.top).isGreaterThan(ok.top)
+    assertThat(ok.left).isWithin(1f).of(no.left)
     assertThat(ok.height / rule.density.density).isAtLeast(47.5f)
     rule.onNodeWithText("Va bene").performClick()
     rule.onNodeWithText("Non su questo dispositivo").performClick()

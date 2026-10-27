@@ -91,7 +91,8 @@ internal fun PeopleEntryRow(summary: PeopleEntrySummary?, onClick: () -> Unit) {
     subtitle = PeopleEntryTexts.subtitleOf(LocalContext.current, summary),
     tone = peopleEntryTone(summary),
     leading = { RowGlyph(Icons.Rounded.Face) },
-    badge = pill?.let { label -> { StatusPill(stringResource(label), FluidTone.Warning) } },
+    // Le pillole stanno in `labels` (vanno sotto il titolo se ruberebbero la riga), non in `badge`: a testo grande la frase restava in una colonna di sillabe.
+    labels = pill?.let { label -> { StatusPill(stringResource(label), FluidTone.Warning) } },
     onClick = onClick,
   )
 }

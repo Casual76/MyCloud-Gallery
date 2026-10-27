@@ -2,7 +2,6 @@ package dev.pampa.mycloudgallery.feature.people.activation
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -69,24 +68,27 @@ fun FacesNoticeScreen(
           val exclude = stringResource(R.string.faces_notice_exclude)
           val okDescription = stringResource(R.string.faces_notice_ok_description)
           val excludeDescription = stringResource(R.string.faces_notice_exclude_description)
-          // Lo stesso peso, la stessa forma, la stessa larghezza: l'avviso non spinge.
-          Row(
+          // Lo stesso peso, la stessa forma, la stessa larghezza: l'avviso non spinge. Uno sotto l'altro, a tutta larghezza: «Non su questo dispositivo» e'
+          // lungo e a testo grande (1,3x) in mezza riga verrebbe tagliato.
+          Column(
             modifier = Modifier.fillMaxWidth().padding(top = ActivationDimens.BlockGap),
-            horizontalArrangement = Arrangement.spacedBy(ActivationDimens.TightGap),
+            verticalArrangement = Arrangement.spacedBy(ActivationDimens.TightGap),
           ) {
-            FluidButton(
-              text = exclude,
-              onClick = onExclude,
-              style = FluidButtonStyle.Tinted,
-              size = FluidButtonSize.Large,
-              modifier = Modifier.weight(1f).semantics { contentDescription = excludeDescription },
-            )
             FluidButton(
               text = ok,
               onClick = onOk,
               style = FluidButtonStyle.Tinted,
               size = FluidButtonSize.Large,
-              modifier = Modifier.weight(1f).semantics { contentDescription = okDescription },
+              fillWidth = true,
+              modifier = Modifier.semantics { contentDescription = okDescription },
+            )
+            FluidButton(
+              text = exclude,
+              onClick = onExclude,
+              style = FluidButtonStyle.Tinted,
+              size = FluidButtonSize.Large,
+              fillWidth = true,
+              modifier = Modifier.semantics { contentDescription = excludeDescription },
             )
           }
         }

@@ -198,7 +198,12 @@ internal class RealSharedStack private constructor(val w: BuiltWorld, val family
     for (index in common.filterIndexed { i, _ -> i % 3 != 2 && i % 2 == 0 }) w.db.mediaDao().setOwner(w.ids[index].value, "test", T0)
     familyAlbum = seed(1, "Di famiglia", other, common, { other }, chosenCover = common.firstOrNull())
     mine = seed(2, "Mio", me, common.filterIndexed { i, _ -> i % 3 != 2 }, { index -> if (common.indexOf(index) % 2 == 0) me else other })
-    closed = seed(3, "Chiuso", other, common.filterIndexed { i, _ -> i % 2 == 0 }, { other }, state = AlbumDefinitionState.CLOSED, afterClose = "keep_copy")
+    // R1 (revisione di sicurezza della Fase 7): una copia personale nasce solo per un album che questo dispositivo ha visto attivo. "Chiuso"
+    // si vede prima attivo (un ricalcolo), poi arriva la chiusura con "ognuno tiene una copia".
+    val closedMembers = common.filterIndexed { i, _ -> i % 2 == 0 }
+    val seenActive = seed(3, "Chiuso", other, closedMembers, { other })
+    replica.recompute(listOf(seenActive.id))
+    closed = seed(3, "Chiuso", other, closedMembers, { other }, state = AlbumDefinitionState.CLOSED, afterClose = "keep_copy")
     left = seed(4, "Lasciato", other, common.take(3), { other })
     // Il mio vecchio telefono (revocato) aveva aggiunto a "Mio" gli elementi che adesso non ci sono: E-SH20, "Ripristina gli elementi di un dispositivo revocato".
     val old = family.myOldPhone

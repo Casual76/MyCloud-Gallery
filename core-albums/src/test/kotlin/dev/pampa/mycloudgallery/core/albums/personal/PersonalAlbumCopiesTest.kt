@@ -164,4 +164,28 @@ class PersonalAlbumCopiesTest {
     phone.albums.reconcileAll()
     assertThat((phone.albums.all.value.byId(own) as Album.Manual).formerShare).isNull()
   }
+
+  /**
+   * R1 (revisione di sicurezza della Fase 7): la copia nata da una chiusura firmata da un dispositivo poi revocato si ritira come "Elimina album"
+   * (lapide della definizione) e non si ricrea; una copia di un altro album condiviso, o un album personale qualunque, non si tocca.
+   */
+  @Test
+  fun r1LaCopiaSiRitiraSoloSeECopiaDiQuellAlbum() = runBlocking<Unit> {
+    val phone = device("telefono", 1)
+    phone.learnAll(0 until 3)
+    val copies = phone.copies()
+    copies.keep(copyId, shared, "Oslo 2026", phone.ids(0, 1))
+    val other = AlbumId("00000000-0000-4000-8000-0000000000cc")
+    assertThat(copies.withdraw(copyId, other)).isFalse()
+    assertThat(PersonalAlbums(phone.store).definition(copyId.value)!!.value).isInstanceOf(PersonalValue.Text::class.java)
+
+    assertThat(copies.withdraw(copyId, shared)).isTrue()
+    assertThat(PersonalAlbums(phone.store).definition(copyId.value)!!.value).isEqualTo(PersonalValue.Removed)
+    // Non si ricrea, e un secondo ritiro non fa niente.
+    assertThat(copies.keep(copyId, shared, "Oslo 2026", phone.ids(0, 1))).isEqualTo(PersonalAlbumCopies.Result.DELETED_BY_USER)
+    assertThat(copies.withdraw(copyId, shared)).isFalse()
+    // Un album personale qualunque (senza `copy_of`) non e' una copia.
+    val own = (phone.albums.create("Mio", dev.pampa.mycloudgallery.core.model.AlbumKind.MANUAL, null) as dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome.Created).id
+    assertThat(copies.withdraw(own, shared)).isFalse()
+  }
 }

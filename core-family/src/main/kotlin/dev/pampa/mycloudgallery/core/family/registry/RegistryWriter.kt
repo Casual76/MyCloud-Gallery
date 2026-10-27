@@ -28,6 +28,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+/**
+ * Le teste da congelare quando l'admin dismette un dispositivo (A7, D8: "dismesso: valgono i contributi delle sue teste congelate"). Le dicono i
+ * moduli che le hanno accettate su questo dispositivo (R6 della revisione di sicurezza della Fase 7: gli album condivisi, legati da :app); le
+ * impronte si ordinano dalla piu' importante e il registro ne tiene al piu' [TrustLimits.MAX_FROZEN_HEADS]. Senza legame nessuna.
+ */
+fun interface RetireHeads {
+  suspend fun headsOf(deviceId: String): List<String>
+
+  companion object {
+    val NONE: RetireHeads = RetireHeads { emptyList() }
+  }
+}
+
 /** Cio' che serve a un'azione dell'admin: il registro fidato, chi sono, la chiave di famiglia aperta. */
 class AdminContext(val state: RegistryState, val me: String, val authority: FamilyAuthority, val commonShare: String)
 
@@ -65,6 +78,9 @@ class RegistryWriter(
 
   val pendingForks: StateFlow<PendingForks?> = _pendingForks.asStateFlow()
   val blockedPaths: StateFlow<List<SharePath>> = _blockedPaths.asStateFlow()
+
+  /** R6: chi dice quali teste congelare alla dismissione (lo lega :app quando gli album ci sono). */
+  @Volatile var retireHeads: RetireHeads = RetireHeads.NONE
 
   /** L'ultima pubblicazione non ha potuto controllare tutto oltre il nome usato (N2): da dire all'admin. */
   val unverifiedBeyond: StateFlow<Boolean> = _unverifiedBeyond.asStateFlow()
@@ -147,9 +163,23 @@ class RegistryWriter(
     val admin = adminContext() ?: return AdminActionResult.NotAdmin
     val entry = admin.state.registry.device(deviceId) ?: return AdminActionResult.Failed(NasError.NotFound)
     if (deviceId == admin.me || !entry.status.canBecome(status)) return AdminActionResult.Failed(NasError.PermissionDenied)
-    // La dismissione congela le teste gia' verificate: quali siano lo sapra' l'indice (Fase 4.1); per ora nessuna.
+    // La dismissione congela le teste gia' verificate su questo dispositivo (A7): R6, quelle degli album condivisi (cosi' un telefono dismesso
+    // non fa sparire a tutti i suoi contributi, la definizione dell'album compresa). Le teste dell'indice e dei dati personali non le dice ancora
+    // nessuno. Se chi le cerca sbaglia, la dismissione non parte (si riprova): dismettere senza di loro farebbe sparire i contributi.
+    val frozen = if (status != DeviceStatus.RETIRED) {
+      emptyList()
+    } else {
+      try {
+        retireHeads.headsOf(deviceId).distinct().take(TrustLimits.MAX_FROZEN_HEADS)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "teste da congelare non lette: ${e.javaClass.simpleName}" }
+        return AdminActionResult.Failed(UNEXPECTED)
+      }
+    }
     val draft = try {
-      admin.authority.changeStatus(admin.state, deviceId, status)
+      admin.authority.changeStatus(admin.state, deviceId, status, frozen)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {

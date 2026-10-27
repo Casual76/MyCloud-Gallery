@@ -29,6 +29,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.TransferTicket
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumWriteBlock
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.model.ContentKey
+import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
 import kotlinx.coroutines.CancellationException
 
@@ -211,7 +212,10 @@ internal class ShareSteps(
   private suspend fun withoutAlreadyInCommon(op: ShareOpRecord, group: List<ShareItemRecord>): List<ShareItemRecord> {
     val keys = group.mapNotNull { it.contentKey }
     if (keys.isEmpty()) return group
-    val attested = transient { p.facts.attest(keys.distinct().map { AttestRequest(it, null) }) } ?: return group
+    // I1: con l'hash completo noto al mio catalogo, "gia' nell'area comune" vuol dire gli stessi byte, non solo la stessa chiave rapida.
+    val full = transient { p.facts.facts(group.map { it.media }) }?.mapValues { it.value.sha256 }.orEmpty()
+    val requests = group.mapNotNull { item -> item.contentKey?.let { AttestRequest(it, full[item.media]) } }.distinct()
+    val attested = transient { p.facts.attest(requests) } ?: return group
     if (attested.isEmpty()) return group
     val common = p.family.commonShare() ?: return group
     val there = transient { p.facts.facts(attested.values.toSet()) } ?: return group
@@ -271,7 +275,7 @@ internal class ShareSteps(
     }
   }
 
-  private class CommonFile(val ref: NasItemRef, val contentKey: ContentKey, val version: VersionId?)
+  private class CommonFile(val ref: NasItemRef, val contentKey: ContentKey, val version: VersionId?, val sha256: Sha256?)
 
   /**
    * Il file dell'area comune dell'elemento, come lo vede **adesso** il mio catalogo (D9, invariante 6): il media stesso se e' nell'area comune
@@ -282,14 +286,14 @@ internal class ShareSteps(
     val common = p.family.commonShare() ?: return null
     val f = p.facts.facts(listOf(item.media))[item.media]
     if (f != null && f.place == MediaPlace.COMMON && f.nas != null && f.contentKey != null && f.nas.share.equals(common, ignoreCase = true)) {
-      return CommonFile(f.nas, f.contentKey, f.version)
+      return CommonFile(f.nas, f.contentKey, f.version, f.sha256)
     }
     val key = item.contentKey ?: f?.contentKey ?: return null
-    val attested = p.facts.attest(listOf(AttestRequest(key, null)))[key] ?: return null
+    val attested = p.facts.attest(listOf(AttestRequest(key, f?.sha256)))[key] ?: return null
     val other = p.facts.facts(listOf(attested))[attested] ?: return null
     val nas = other.nas ?: return null
     if (other.place != MediaPlace.COMMON || !nas.share.equals(common, ignoreCase = true)) return null
-    return CommonFile(nas, key, f?.version ?: other.version)
+    return CommonFile(nas, key, f?.version ?: other.version, other.sha256 ?: f?.sha256)
   }
 
   private suspend fun pollTransfers(op: ShareOpRecord) {
@@ -422,7 +426,9 @@ internal class ShareSteps(
     }
     val me = p.family.me() ?: return
     val position = (transient { p.lastPosition(op.album) } ?: (item.index.toLong() * ShareRules.POSITION_STEP)) + ShareRules.POSITION_STEP
-    val change = SharedAlbumChange.Item(item.media, file.version, file.contentKey, file.ref.path, position, me)
+    // I1: la voce porta l'hash completo quando il mio catalogo lo conosce: chi legge lo confronta (D9) e un file diverso con la stessa chiave
+    // rapida non si mostra al posto di quello aggiunto.
+    val change = SharedAlbumChange.Item(item.media, file.version, file.contentKey, file.ref.path, position, me, file.sha256)
     val ticket = try {
       p.publisher.stage(op.album, listOf(change))
     } catch (e: CancellationException) {

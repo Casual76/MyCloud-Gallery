@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaSource
 import dev.pampa.mycloudgallery.core.model.QuickHash
+import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import java.time.Instant
@@ -52,6 +53,8 @@ data class FakeMedia(
   val pixels: Long = 12_000_000,
   val hidden: Boolean = false,
   val version: VersionId? = null,
+  /** L'hash completo, se il catalogo finto lo "conosce" (I1: la voce lo porta, l'attestazione lo confronta come il catalogo vero). */
+  val sha256: Sha256? = null,
 ) {
   init {
     require((place == MediaPlace.PHONE_ONLY) == (path == null)) { "Un media sul NAS ha un percorso, uno solo sul telefono no." }
@@ -166,10 +169,17 @@ class FakeAlbumLibrary(
 
   override suspend fun facts(media: Collection<MediaId>): Map<MediaId, MediaFacts> = media.mapNotNull { id ->
     val m = this.media[id] ?: return@mapNotNull null
-    id to MediaFacts(id, m.place, m.mine, m.hidden, m.kind == MediaKind.VIDEO, m.size, m.contentKey, m.version, nasRefOf(m), m.onPhone)
+    id to MediaFacts(id, m.place, m.mine, m.hidden, m.kind == MediaKind.VIDEO, m.size, m.contentKey, m.version, nasRefOf(m), m.onPhone, m.sha256)
   }.toMap()
 
-  override suspend fun attest(items: Collection<AttestRequest>): Map<ContentKey, MediaId> = attestedNow(items.map { it.contentKey })
+  /** Come il catalogo vero (`AlbumCatalog.attestInCommon`): con l'hash completo noto da entrambe le parti, deve essere lo stesso (I1). */
+  override suspend fun attest(items: Collection<AttestRequest>): Map<ContentKey, MediaId> {
+    val found = attestedNow(items.map { it.contentKey })
+    return found.filter { (key, id) ->
+      val full = media[id]?.sha256
+      items.filter { it.contentKey == key }.any { it.sha256 == null || full == null || it.sha256 == full }
+    }
+  }
 
   // --- AlbumCandidates ------------------------------------------------------------------------------------------------------
 

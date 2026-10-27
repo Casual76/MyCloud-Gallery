@@ -40,6 +40,7 @@ object AlbumsWiring {
     val identity = AppAlbumIdentity(inputs)
     val writeGate = AppAlbumWriteGate(graph.flags, DeveloperTools.shareGuard(), { inputs.account() }, { nas?.writeGate })
     val journal = FileAlbumUploadJournal(File(noBackup, "$DIR/upload-journal"))
+    val plans = TransferPlans(File(noBackup, "$DIR/transfer-plans"))
     val uploads: AlbumFolderUploads? by lazy {
       // Revisione B, SP-1: il cancello degli arrivi (`fiveB.incomingGate`: area privata **e** area comune, D12, R2), lo stesso del motore che li
       // carica. Prima era il cancello del backup (`backup.gate`), che per l'area comune risponde "nessuna area privata": ogni caricamento verso un
@@ -59,9 +60,7 @@ object AlbumsWiring {
       // Revisione B, I3: la conferma di core-nasops nasce solo per un trasferimento che il diario della condivisione conosce (stessa impronta, stessi
       // file, stessa destinazione): la seconda chiave di C26 non e' piu' una conseguenza della sola eta' della prima.
       val binding = ShareTransferBinding(RoomShareDiary(gallery.database) { graph.platform.deviceNow() })
-      val mover = OpsAlbumMover(
-        organizer.operations, organizer.opsStore, { catalog }, family::me, TransferPlans(File(noBackup, "$DIR/transfer-plans")), monotonic, binding,
-      )
+      val mover = OpsAlbumMover(organizer.operations, organizer.opsStore, { catalog }, family::me, plans, monotonic, binding)
       val uploader = FolderAlbumUploader({ uploads }, { catalog }, monotonic, binding) { BackupWorkScheduling.incoming(context) }
       buildAlbumsLive(
         scope,
@@ -96,12 +95,17 @@ object AlbumsWiring {
           ownBackupFolder = { ownBackupFolder(gallery) },
           backupGates = { folder -> backupGates(gallery, family, folder) },
           problemMarksFile = File(noBackup, "$DIR/share-problems-closed"),
+          transfers = TransferRegisters(plans, journal),
+          marksFile = File(noBackup, "$DIR/shared-marks"),
+          ioErrors = NasAlbumIoErrors,
         ),
       )
     }
     val albums = AlbumsGraph(graph.scope, build, ready, shareWork = { AlbumWorkScheduling.shareNow(context) })
     // Revisione B, R3: il piano di ogni operazione sui file del NAS chiede agli album quali file sono elementi che non posso togliere dal loro posto.
     nas?.organizer?.protectedFiles = AlbumFileGuard(albums)
+    // R6: la dismissione di un dispositivo congela le sue teste d'album che questa replica ha accettato (A7).
+    graph.writer.retireHeads = dev.pampa.mycloudgallery.core.family.registry.RetireHeads { device -> albums.frozenAlbumHeads(device) }
     return albums
   }
 

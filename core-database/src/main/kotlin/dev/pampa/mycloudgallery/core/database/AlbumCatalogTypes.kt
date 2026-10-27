@@ -128,6 +128,8 @@ data class CatalogMediaFacts(
   val version: VersionId,
   val nas: CatalogNasFile?,
   val onPhone: Boolean,
+  /** L'hash completo della versione corrente, se il catalogo lo conosce (I1: la voce dell'elemento lo porta, chi legge lo confronta). */
+  val sha256: Sha256? = null,
 ) {
   override fun toString(): String = "CatalogMediaFacts(${place.code}, mine=$mine, hidden=$hidden)"
 }

@@ -99,6 +99,8 @@ class SharedLive internal constructor(
   val folders: CatalogCommonFolders,
   /** Gli album lasciati e gli avvisi chiusi ("Non mostrare piu'"): anche per gli avvisi di :app (E-SH16, E-SH20). */
   val choices: PersonalSharedAlbumChoices,
+  /** R9: toglie dai registri dei trasferimenti le chiavi che nessuna operazione aperta cita piu' (nel giro dell'indice); quante. */
+  val pruneTransfers: suspend () -> Int = { 0 },
 )
 
 /** Cio' che serve per montare [AlbumsLive]: tutto gia' pronto nel resto dell'app (nessuna rete, nessun NAS qui). */
@@ -135,6 +137,12 @@ internal class AlbumsInputs(
   val backupGates: suspend (ShareFolder) -> ShareBackupGates = { ShareBackupGates.OPEN },
   /** Revisione B (SH-2): il file delle strisce dei problemi chiuse dall'utente; null = in memoria. */
   val problemMarksFile: File? = null,
+  /** I registri dei trasferimenti (R9: potati nel giro dell'indice); null nelle prove che non li hanno. */
+  val transfers: TransferRegisters? = null,
+  /** R1: il file dei segni locali degli album condivisi (visto attivo, chiusura vista, copia scritta); null nelle prove (in memoria). */
+  val marksFile: File? = null,
+  /** R2: quali errori del NAS sono di un file (quel contributo aspetta) e quali della sessione (il giro si ferma). */
+  val ioErrors: dev.pampa.mycloudgallery.core.albums.shared.AlbumIoErrors = dev.pampa.mycloudgallery.core.albums.shared.AlbumIoErrors.SESSION,
 )
 
 /** Il montaggio, nell'ordine delle dipendenze (condivisi, poi personali e smart, poi viaggi). Nessun I/O qui: lo fanno gli oggetti quando servono. */
@@ -143,14 +151,22 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
   val replicaStore = RoomAlbumReplicaStore(i.database)
   val publishStore = RoomAlbumPublishStore(i.database, i.publishAuthor)
   val facts = AlbumCatalogFacts { i.catalog.albums }
-  val replica = SharedAlbumReplica(i.identity, replicaStore, facts)
+  val marks = i.marksFile?.let(::FileSharedAlbumMarks) ?: dev.pampa.mycloudgallery.core.albums.shared.MemorySharedAlbumMarks()
+  val replica = SharedAlbumReplica(i.identity, replicaStore, facts, marks = marks)
   val publisher = NasAlbumPublisher(
     i.identity, i.family, i.fileSystem, publishStore, i.writeGate, i.clocks,
     // La storia dei livelli fusa: un cambio di livello si aggiunge a quella (P2), anche per un album di chi e' uscito (eredita').
     levels = { id -> replica.view(id)?.merged?.levels ?: replica.orphans.value[id]?.levels ?: LevelHistory.NONE },
+    // R12: dopo la perdita dello store del pubblicatore, la copia del mio contributo letta dalla replica vale piu' di cio' che c'e' sul NAS.
+    ownReplica = { id -> i.identity.deviceId.let { me -> replicaStore.contribution(id, me) } },
   )
   replica.local = publisher
-  val sync = NasSharedAlbumSync(i.identity, i.fileSystem, replicaStore, replica, i.clocks, i.readGate, ownAlbums = { publishStore.albums() })
+  val sync = NasSharedAlbumSync(
+    i.identity, i.fileSystem, replicaStore, replica, i.clocks, i.readGate, ownAlbums = { publishStore.albums() },
+    ioErrors = i.ioErrors,
+    // R2: un mio segmento tolto dal PC si rimette uguale (dietro gli stessi cancelli della pubblicazione).
+    ownSegmentMissing = { id -> publisher.repairSegments(id) },
+  )
   val choices = PersonalSharedAlbumChoices({ i.personal }, i.noticesFile)
   val sharedAlbums = ReplicaSharedAlbums(i.identity, i.family, replica, publisher, i.writeGate, i.clocks, i.visible, choices)
   val folders = CatalogCommonFolders(i.database)
@@ -200,6 +216,7 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
     bringBack = BringBackCandidates(ports),
     folders = folders,
     choices = choices,
+    pruneTransfers = { i.transfers?.prune { (ports.diary as RoomShareDiary).openTransferKeys() } ?: 0 },
   )
 
   // --- Album personali (P3) ----------------------------------------------------------------------------------------------------------

@@ -84,6 +84,18 @@ class AppAlbumIdentity(private val inputs: NasInputs) : AlbumIdentity {
   }
 }
 
+/**
+ * R2 (revisione di sicurezza della Fase 7): gli errori del NAS che riguardano **un file** (un permesso negato dal PC su una testa o un segmento,
+ * un file tenuto aperto in esclusiva) fanno aspettare solo quel contributo; tutti gli altri (rete, sessione, autenticazione) fermano il giro.
+ */
+object NasAlbumIoErrors : dev.pampa.mycloudgallery.core.albums.shared.AlbumIoErrors {
+  override fun isFileError(error: java.io.IOException): Boolean {
+    val nas = error as? dev.pampa.mycloudgallery.core.nas.contract.NasIoException ?: return false
+    return nas.error == dev.pampa.mycloudgallery.core.nas.contract.NasError.PermissionDenied ||
+      nas.error == dev.pampa.mycloudgallery.core.nas.contract.NasError.FileBusy
+  }
+}
+
 /** D30: si leggono gli album condivisi di una share solo se la recinzione lo permette (sulle share vere nessun album, vero o falso, prima del consenso). */
 class FlagsAlbumReadGate(private val flags: FeatureFlags) : AlbumReadGate {
   override fun mayRead(share: String): Boolean = flags.sharedAlbumsMayUse(share)
@@ -134,7 +146,7 @@ class PersonalSharedAlbumChoices(private val store: () -> PersonalStore?, seen: 
     override fun decode(input: DataInputStream): LinkedHashMap<String, Boolean> {
       if (input.readInt() != 1) throw IOException("versione")
       val out = LinkedHashMap<String, Boolean>()
-      repeat(input.readInt()) { out[input.readUTF()] = true }
+      repeat(input.count(2)) { out[input.readUTF()] = true }
       return out
     }
   }

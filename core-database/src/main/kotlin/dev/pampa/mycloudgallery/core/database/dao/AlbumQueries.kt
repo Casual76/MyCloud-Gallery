@@ -155,7 +155,7 @@ object AlbumQueries {
 
   const val FACTS_SQL: String =
     "SELECT m.media_id AS media_id, m.kind AS kind, m.owner_account AS owner_account, m.cell_flags AS cell_flags, " +
-      "COALESCE(p.hidden, 0) AS hidden, v.version_id AS version_id, v.size AS size, v.quick_hash AS quick_hash " +
+      "COALESCE(p.hidden, 0) AS hidden, v.version_id AS version_id, v.size AS size, v.quick_hash AS quick_hash, v.full_hash AS full_hash " +
       "FROM media m JOIN media_version v ON v.version_id = m.current_version_id " +
       "LEFT JOIN media_personal p ON p.media_id = m.media_id WHERE m.media_id IN (:ids)"
 

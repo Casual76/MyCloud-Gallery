@@ -37,11 +37,25 @@ import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.core.model.AlbumSort
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.ShareLevel
+import dev.pampa.mycloudgallery.core.trust.data.AlbumField
+import dev.pampa.mycloudgallery.core.trust.data.AlbumKey
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 
-/** La copia personale di un album chiuso (Q5 b; per il creatore l'album dopo "Smetti di condividere"): P3/P4 la scrivono nei dati personali. */
-data class SharedAlbumCopy(val copy: AlbumId, val shared: AlbumId, val title: String, val creator: AccountId, val mine: Boolean, val items: List<MediaId>) {
+/**
+ * La copia personale di un album chiuso (Q5 b; per il creatore l'album dopo "Smetti di condividere"): P3/P4 la scrivono nei dati personali.
+ * [cause] (R1): il dispositivo che ha firmato la chiusura; se viene revocato, la copia si ritira.
+ */
+data class SharedAlbumCopy(
+  val copy: AlbumId,
+  val shared: AlbumId,
+  val title: String,
+  val creator: AccountId,
+  val mine: Boolean,
+  val items: List<MediaId>,
+  val cause: String? = null,
+) {
   override fun toString(): String = "SharedAlbumCopy(${items.size}, mine=$mine)"
 }
 
@@ -62,7 +76,14 @@ class ReplicaSharedAlbums(
   private val visibility: VisibleMedia,
   private val choices: SharedAlbumChoices,
   @Volatile var runner: ShareRunner = NoShareRunner,
+  /** R1: i tetti delle copie personali di Q5 (b), per creatore. */
+  private val copyLimits: ClosedCopyLimits = ClosedCopyLimits(),
 ) : SharedAlbums, SharedAlbumFacts {
+
+  /** R1: gli album la cui copia personale non nasce perche' oltre i tetti per creatore (Diagnostica: [copiesCapped], solo il numero). */
+  private val cappedAlbums: MutableSet<AlbumId> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+  val copiesCapped: Int get() = cappedAlbums.size
 
   override val visible: MutableStateFlow<List<Album.Shared>> = MutableStateFlow(emptyList())
   override val notices: MutableStateFlow<List<SharedAlbumNotice>> = MutableStateFlow(emptyList())
@@ -84,11 +105,22 @@ class ReplicaSharedAlbums(
   private fun published(view: SharedAlbumView, media: MediaId): MediaId? =
     media.takeIf { it in view.merged.items } ?: view.attested.entries.firstOrNull { it.value == media }?.key
 
+  /** R1: i segni locali, o nessuno se non si leggono (allora niente avvisi di chiusura e niente copie: non so se l'album era stato visto). */
+  private suspend fun marks(): Map<AlbumId, AlbumMarks> = try {
+    replica.marks.all()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    emptyMap()
+  }
+
   /** Ricalcola elenchi e avvisi dalla proiezione (dopo ogni giro, modifica o cambiamento del catalogo). */
   suspend fun refresh() {
     val me = me()
     val leftIds = choices.left()
     val dismissed = choices.dismissed()
+    val known = marks()
+    val promised = if (me == null) emptySet() else copyPlan(me, leftIds, known).map { it.shared }.toSet()
     val shown = ArrayList<Album.Shared>()
     val leftList = ArrayList<Album.Shared>()
     val out = ArrayList<SharedAlbumNotice>()
@@ -103,9 +135,11 @@ class ReplicaSharedAlbums(
         val notAdded = m.denied.count { it.entry.account == me && it.entry.value != null && it.op == AlbumOp.ADD_MEDIA && it.reason == DenyReason.NOT_PERMITTED }
         if (notAdded > 0 && "notadded:${m.album.value}:$notAdded" !in dismissed) out += SharedAlbumNotice.NotAddedLevelChanged(m.album, m.title, notAdded)
         if (m.heir == me && m.creator != me && "inherited:${m.album.value}" !in dismissed) out += SharedAlbumNotice.Inherited(m.album, m.title)
-      } else if (!mine && me != null && m.album !in leftIds && "closed:${m.album.value}" !in dismissed) {
+      } else if (!mine && me != null && m.album !in leftIds && known[m.album]?.seenActive == true && "closed:${m.album.value}" !in dismissed) {
+        // R1: l'avviso solo per un album che questo dispositivo ha visto attivo; la copia solo se c'e' (o nascera': entro i tetti).
         val mode = if (m.state == SharedState.CLOSED) CloseMode.STOP else CloseMode.DELETE
-        val copy = if (m.afterClose == OthersAfterClose.KEEP_COPY) SharedAlbumCopies.copyIdFor(m.album, me) else null
+        val made = known[m.album]?.copy?.takeIf { !it.withdrawn }
+        val copy = if (m.afterClose == OthersAfterClose.KEEP_COPY && (made != null || m.album in promised)) SharedAlbumCopies.copyIdFor(m.album, me) else null
         out += SharedAlbumNotice.Closed(m.album, m.title, mode, copy)
       }
     }
@@ -137,19 +171,85 @@ class ReplicaSharedAlbums(
     )
   }
 
-  /** Le copie personali che questo account tiene (Q5 b; il creatore dopo "Smetti di condividere"), con gli elementi che il mio catalogo attesta. */
+  /**
+   * Le copie personali che questo account deve ancora scrivere (Q5 b; il creatore dopo "Smetti di condividere"), con gli elementi che il mio
+   * catalogo attesta. R1 della revisione di sicurezza della Fase 7: solo per un album che **questo dispositivo ha visto attivo** (un album nato
+   * chiuso, o mai visto, non fa nascere niente), una volta sola (gli elementi si fissano alla prima scrittura: [copyKept]), entro i tetti per
+   * creatore ([ClosedCopyLimits]). Chi le scrive chiama [copyKept] dopo ognuna.
+   */
   suspend fun keptCopies(): List<SharedAlbumCopy> {
     val me = me() ?: return emptyList()
-    val leftIds = choices.left()
-    return replica.views.value.values.sortedBy { it.merged.album.value }.mapNotNull { view ->
+    return copyPlan(me, choices.left(), marks())
+  }
+
+  /**
+   * R1: le copie da scrivere adesso, in un ordine fisso (prima le chiusure piu' vecchie), con i tetti per creatore che contano anche le copie gia'
+   * scritte e non ritirate. Una copia oltre i tetti non nasce (e l'avviso non la promette).
+   */
+  private suspend fun copyPlan(me: AccountId, leftIds: Set<AlbumId>, known: Map<AlbumId, AlbumMarks>): List<SharedAlbumCopy> {
+    val copies = HashMap<AccountId, Int>()
+    val items = HashMap<AccountId, Int>()
+    for (mark in known.values) {
+      val made = mark.copy?.takeIf { !it.withdrawn } ?: continue
+      copies[made.creator] = (copies[made.creator] ?: 0) + 1
+      items[made.creator] = (items[made.creator] ?: 0) + made.items
+    }
+    val out = ArrayList<SharedAlbumCopy>()
+    val closed = replica.views.value.values.filter { it.merged.state != SharedState.ACTIVE }
+      .sortedWith(compareBy<SharedAlbumView>({ it.merged.closedAt ?: Long.MAX_VALUE }, { it.merged.album.value }))
+    for (view in closed) {
       val m = view.merged
+      val mark = known[m.album] ?: continue
+      if (!mark.seenActive || mark.copy != null) continue
       val mine = m.creator == me || m.heir == me
       val keeps = when (m.state) {
         SharedState.ACTIVE -> false
         SharedState.CLOSED -> mine || (m.afterClose == OthersAfterClose.KEEP_COPY && m.album !in leftIds)
         SharedState.DELETED -> !mine && m.afterClose == OthersAfterClose.KEEP_COPY && m.album !in leftIds
       }
-      if (!keeps) null else SharedAlbumCopy(SharedAlbumCopies.copyIdFor(m.album, me), m.album, m.title, m.creator, mine, shownItems(view))
+      if (!keeps) continue
+      val shown = shownItems(view)
+      val usedCopies = copies[m.creator] ?: 0
+      val usedItems = items[m.creator] ?: 0
+      if (usedCopies + 1 > copyLimits.maxCopiesPerCreator || usedItems + shown.size > copyLimits.maxItemsPerCreator) {
+        cappedAlbums += m.album
+        continue
+      }
+      copies[m.creator] = usedCopies + 1
+      items[m.creator] = usedItems + shown.size
+      val cause = mark.closure?.author ?: m.winners[AlbumKey.of(m.album, AlbumField.Definition)]?.author
+      out += SharedAlbumCopy(SharedAlbumCopies.copyIdFor(m.album, me), m.album, m.title, m.creator, mine, shown, cause)
+    }
+    return out
+  }
+
+  /** R1: la copia [copy] e' scritta (o l'utente l'aveva gia' eliminata): non si riscrive piu', e i suoi elementi restano quelli di adesso. */
+  suspend fun copyKept(copy: SharedAlbumCopy) {
+    replica.marks.update { all ->
+      val mark = all[copy.shared] ?: AlbumMarks()
+      if (mark.copy == null) all[copy.shared] = mark.copy(copy = CopyMark(copy.copy, copy.creator, copy.items.size, copy.cause))
+    }
+  }
+
+  /**
+   * R1: le copie da ritirare, perche' il dispositivo che ha firmato la chiusura che le ha fatte nascere adesso e' revocato o perso ("la revoca
+   * toglie cio' che il dispositivo revocato ha causato"). Chi le ritira chiama [copyWithdrawn] dopo ognuna.
+   */
+  suspend fun copiesToWithdraw(): List<SharedAlbumCopy> {
+    val registry = identity.registry() ?: return emptyList()
+    return marks().mapNotNull { (album, mark) ->
+      val made = mark.copy?.takeIf { !it.withdrawn } ?: return@mapNotNull null
+      val cause = made.cause ?: return@mapNotNull null
+      if (SharedAlbumReplica.authorTrusted(registry, cause) || registry.registry.device(cause) == null) return@mapNotNull null
+      SharedAlbumCopy(made.copy, album, "", made.creator, mine = false, items = emptyList(), cause = cause)
+    }
+  }
+
+  /** R1: la copia dell'album [shared] e' ritirata. */
+  suspend fun copyWithdrawn(shared: AlbumId) {
+    replica.marks.update { all ->
+      val mark = all[shared] ?: return@update
+      mark.copy?.let { all[shared] = mark.copy(copy = it.copy(withdrawn = true)) }
     }
   }
 

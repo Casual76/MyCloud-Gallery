@@ -30,6 +30,12 @@ internal object AlbumRowCodec {
   /** La riga con l'ultima testa rifiutata di (album, dispositivo). */
   const val REJECTED = "~rejected"
 
+  /** R2: la riga con l'attesa di un contributo che adesso non si legge (testa, ora del NAS del prossimo tentativo, tentativi). */
+  const val HOLD = "~hold"
+
+  /** R7: la riga con l'ultima ora del NAS in cui la serie del dispositivo non aveva niente di nuovo per chi legge (colonna `at`). */
+  const val SEEN = "~seen"
+
   /** Il prefisso delle modifiche in coda del pubblicatore (la chiave che segue e' quella della voce). */
   const val STAGED = "~s:"
 
@@ -125,6 +131,61 @@ internal object AlbumRowCodec {
     }
     val args: Array<Any?> = if (key == null) arrayOf(device) else arrayOf(device, key)
     database.openHelper.readableDatabase.query(sql, args).use { c -> return if (c.moveToFirst()) c.getInt(0) else 0 }
+  }
+
+  /** I segmenti elencati da una riga di stato (`seg=<impronta>:<byte>`). */
+  fun segmentsOf(lines: Map<String, List<String>>): List<dev.pampa.mycloudgallery.core.trust.data.SegmentRef> = lines["seg"].orEmpty().mapNotNull { s ->
+    val colon = s.lastIndexOf(':')
+    if (colon <= 0) null else s.substring(colon + 1).toLongOrNull()?.let { dev.pampa.mycloudgallery.core.trust.data.SegmentRef(s.substring(0, colon), it) }
+  }
+
+  /**
+   * R13: voci, album e byte di ogni dispositivo nella replica, in due letture (un conto raggruppato e le righe di stato), da tenere poi al
+   * passo in memoria: i tetti per dispositivo non scorrono piu' la tabella a ogni contributo.
+   */
+  fun footprints(database: GalleryDatabase): HashMap<String, dev.pampa.mycloudgallery.core.albums.shared.DeviceFootprint> {
+    val entries = HashMap<String, Int>()
+    database.openHelper.readableDatabase.query(
+      "SELECT device_id, COUNT(*) FROM shared_album_entry WHERE device_id != ? AND substr(entry_key, 1, 1) != '~' GROUP BY device_id",
+      arrayOf<Any?>(OWN),
+    ).use { c -> while (c.moveToNext()) entries[c.getString(0)] = c.getInt(1) }
+    val albums = HashMap<String, Int>()
+    val bytes = HashMap<String, Long>()
+    database.openHelper.readableDatabase.query(
+      "SELECT device_id, body FROM shared_album_entry WHERE device_id != ? AND entry_key = ?",
+      arrayOf<Any?>(OWN, META),
+    ).use { c ->
+      while (c.moveToNext()) {
+        val device = c.getString(0)
+        albums[device] = (albums[device] ?: 0) + 1
+        bytes[device] = (bytes[device] ?: 0L) + segmentsOf(metaLines(c.getBlob(1))).sumOf { it.size }
+      }
+    }
+    val out = HashMap<String, dev.pampa.mycloudgallery.core.albums.shared.DeviceFootprint>()
+    for (device in entries.keys + albums.keys) {
+      out[device] = dev.pampa.mycloudgallery.core.albums.shared.DeviceFootprint(entries[device] ?: 0, albums[device] ?: 0, bytes[device] ?: 0L)
+    }
+    return out
+  }
+
+  /**
+   * Le righe di servizio [key] di tutti gli album e dispositivi (tranne [OWN]): (album, dispositivo) -> riga. Per le cache delle attese e dei
+   * "visto" della replica (un giro le chiede per ogni contributo).
+   */
+  fun serviceRows(database: GalleryDatabase, key: String): Map<Pair<AlbumId, String>, SharedAlbumEntryEntity> {
+    val out = HashMap<Pair<AlbumId, String>, SharedAlbumEntryEntity>()
+    val sql = "SELECT album_id, device_id, at, body FROM shared_album_entry WHERE entry_key = ? AND device_id != ?"
+    database.openHelper.readableDatabase.query(sql, arrayOf<Any?>(key, OWN)).use { c ->
+      while (c.moveToNext()) {
+        val album = runCatching { AlbumId(c.getString(0)) }.getOrNull() ?: continue
+        val device = c.getString(1)
+        out[album to device] = SharedAlbumEntryEntity(
+          albumId = album.value, deviceId = device, entryKey = key, field = key, at = c.getLong(2), account = "", contentKey = null, tombstone = false,
+          body = c.getBlob(3),
+        )
+      }
+    }
+    return out
   }
 
   /** Il corpo della riga di servizio [key] di (album, dispositivo), o null. */

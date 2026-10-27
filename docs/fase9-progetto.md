@@ -20,9 +20,9 @@
 >
 > Sigle: `Dn` = decisione di questo documento (§0.1); `F8-Dn`, `F7-Dn`, `F6-Dn`, `F4-Dn`, `F3-Dn` = decisioni delle fasi precedenti; `Fn` =
 > prova sul campo (la Fase 8 arriva a F110, qui **F111–F130**); `Qn` = domanda del §9; `Pn` = pacchetto del §4.4; `Ln` = limite di
-> `docs/sicurezza.md` (in `main` il massimo è L231: qui **L232–L245**); `Cn` = contromisura (in `main` il massimo è C127: qui
-> **C128–C135**). La Fase 8 è ancora aperta (P12, P13, revisioni): se nel frattempo prende altri numeri, **P0 di questa fase rinumera** in un
-> passo solo e lo scrive in `docs/decisioni.md`, come ha fatto P0 della Fase 8. "[stima]" = numero non misurato; "[da verificare]" = fatto
+> `docs/sicurezza.md` (qui **L260–L274**); `Cn` = contromisura (qui **C150–C157**). *P0 ha rinumerato il 27/10 in un passo solo (i numeri
+> C130+, C140+, L240+ e L250+ sono riservati ad altri lavori; la tabella vecchio → nuovo e' in `docs/decisioni.md`, "Fase 9 P0"); L274 e' nuovo
+> ("Mai" per persona vale dove Persone e' attiva).* "[stima]" = numero non misurato; "[da verificare]" = fatto
 > che questo documento non ha potuto controllare (niente rete per il brief) e che P1 o P2 controllano prima di usarlo.
 >
 > Contesto:
@@ -328,8 +328,8 @@ Tre categorie nuove: **E-MEM** (ricordi), **E-NT** (notifiche), **E-MAP** (mappa
 **`docs/sicurezza.md`**: §1 (una riga: ricordi e mappa restano sul dispositivo; la mappa online è una scelta di ognuno e dice cosa esce); §2
 (bene "Ricordi e scelte" e "Cache e regioni della mappa": dove stanno); **L13 riscritta** (§6.2: cosa vede il server, cosa no, come si evita);
 C17 (l'azione fissa `OPEN_MEMORIES`, D17), C21 (l'eccezione della mappa online, scelta per dispositivo), C27 (superfici `MEMORIES`,
-`NOTIFICATIONS`, `MAP`), C31 (la casa non entra nella mappa, D29); **C128–C135** nuove (§6.1); §4-bis (riga "Notifiche" con le due modalità;
-riga "Rete verso Internet: mappa"; nessun permesso nuovo); §6 **L232–L245** (§6.2); §7 checklist della Fase 9 riscritta (§6.3); §8 righe per
+`NOTIFICATIONS`, `MAP`), C31 (la casa non entra nella mappa, D29); **C150–C157** nuove (§6.1); §4-bis (riga "Notifiche" con le due modalità;
+riga "Rete verso Internet: mappa"; nessun permesso nuovo); §6 **L260–L274** (§6.2); §7 checklist della Fase 9 riscritta (§6.3); §8 righe per
 D8, D11, D16, D17, D21–D26, D29, D35.
 
 **`docs/modello-dati.md`**: nuovo §16 "Dati locali della Fase 9" (scaffale dei ricordi, misure dei pixel, registro delle notifiche, database di
@@ -366,7 +366,7 @@ OpenStreetMap/OpenMapTiles/OpenFreeMap (§2.7).
 
 **Piano** (lo riporta l'orchestratore): edge case del §0.2; 9.1 precisata con i tipi e il "Mai nei ricordi" (D3, D11); 9.2 con la modalità
 generica della schermata di blocco (D16); 9.3 con la carta di base offline e la mappa online spenta di default (D24, D25); proposta 12
-precisata (frequenza di Q4); §7 "Limiti" con L232–L245; §9 "Punti aperti": nessuno nuovo.
+precisata (frequenza di Q4); §7 "Limiti" con L260–L274; §9 "Punti aperti": nessuno nuovo.
 
 ## 1. Moduli
 
@@ -592,7 +592,7 @@ avrebbe dovuto togliere); se toglie più del 3% dei candidati di un ricordo medi
 
 **Senza capire il contenuto, che cosa protegge davvero** (D8): le scelte dell'utente valgono subito e ovunque; i periodi "Mai" bloccano
 anche i viaggi che li toccano; le persone nascoste, dimenticate o "Mai" non entrano; i ricordi scartati non tornano; i giorni pieni di
-documenti non diventano ricordi; nessuna notifica per una persona con "Mostra meno". Il resto è un limite dichiarato (L233).
+documenti non diventano ricordi; nessuna notifica per una persona con "Mostra meno". Il resto è un limite dichiarato (L261).
 
 | Edge case | Comportamento |
 |---|---|
@@ -1191,8 +1191,8 @@ Le voci confermate si correggono prima della chiusura.
 |---|---|---|
 | **Posizione e abitudini dedotte dai ricordi** (dove si va ogni anno, con chi, quando) che escono dal telefono | generazione solo sul dispositivo; scaffale locale in `noBackupFilesDir`; fuori dal telefono solo id di ricordi (hash) e scelte nell'area privata; mai titoli, luoghi o date nei dati personali, nei log, nella Diagnostica (D4, D9, D10, D33) | P0 (moduli puri), P6, F126 |
 | **Posizione e abitudini dedotte dalla mappa** (dove si vive, dove si guarda) | carta di base offline; mappa online spenta di default e per dispositivo; camera iniziale con lo zoom fino a 5; mai la casa; mini-mappa solo offline; regioni scaricate mai più chieste online; ultima camera solo locale (D24–D29) | P1, P4, P5, F119–F121 |
-| **Traffico verso il fornitore delle mappe** (zona guardata, IP, orari) | un solo host; cancello puro su ogni richiesta; header ripuliti; niente cookie, `Referer`, identificativi; precaricamento spento; tessere fino a z14; regioni a catalogo fisso; pagina che lo dice prima (D22–D24, L236–L238) | P1, F120, F121 |
-| **Una libreria che parla con Internet per conto suo** (telemetria, richieste all'avvio, altri host) | MapLibre solo in `feature-map`, client imposto prima di ogni mappa, `setConnected(false)` a mappa spenta, verifiche di P1 con cattura, dex controllato, manifest fuso controllato (D21, D23, L239) | P1, F119 |
+| **Traffico verso il fornitore delle mappe** (zona guardata, IP, orari) | un solo host; cancello puro su ogni richiesta; header ripuliti; niente cookie, `Referer`, identificativi; precaricamento spento; tessere fino a z14; regioni a catalogo fisso; pagina che lo dice prima (D22–D24, L264–L266) | P1, F120, F121 |
+| **Una libreria che parla con Internet per conto suo** (telemetria, richieste all'avvio, altri host) | MapLibre solo in `feature-map`, client imposto prima di ogni mappa, `setConnected(false)` a mappa spenta, verifiche di P1 con cattura, dex controllato, manifest fuso controllato (D21, D23, L267) | P1, F119 |
 | **Notifiche viste da chi ha il telefono in mano** (schermata di blocco, tendina) | modalità generica di default senza titolo, luogo, data né foto; con "Titolo e foto" mai nomi e versione pubblica generica; revoca su nascosto o scarto; nessun suono (D15, D16, D19) | P10, F116, F117 |
 | **Un'app esterna che apre l'app su un ricordo** (deep link) | una sola azione fissa senza dati; si apre al più la pagina Ricordi, dietro il blocco app (D17, C17) | P10, F117 |
 | **Nascosti che trapelano** da ricordi, presentazione, notifiche, mappa, Luoghi | una sola fonte, tre righe nuove del registro, proprietà, filtro finale (D31) | P4, P9, P10, F113, F116, F122 |
@@ -1205,51 +1205,53 @@ Le voci confermate si correggono prima della chiusura.
 | **Dispositivo perso o rubato** | scaffale, cache e regioni nello spazio privato dell'app, tolti dall'azzeramento alla riconnessione; notifica generica sulla schermata di blocco (D16, D37) | P13, F127 |
 
 **Contromisure nuove** (proposta per `sicurezza.md` §4)
-- **C128. Ricordi solo sul dispositivo**: generati dalla Libreria locale senza rete né NAS; scaffale locale; nei dati personali solo id hash,
+- **C150. Ricordi solo sul dispositivo**: generati dalla Libreria locale senza rete né NAS; scaffale locale; nei dati personali solo id hash,
   giorni di visione e scelte; mai titoli, luoghi, date o nomi fuori dall'app (D4, D9, D10).
-- **C129. Comandi contro i ricordi indesiderati**: "Non mostrare", "Mostra meno" e "Mai" per persone e periodi, immediati e sincronizzati,
+- **C153. Comandi contro i ricordi indesiderati**: "Non mostrare", "Mostra meno" e "Mai" per persone e periodi, immediati e sincronizzati,
   con le lapidi alla cancellazione delle persone; il filtro facoltativo non lascia tracce (D8, D11).
-- **C130. Notifiche discrete**: al più una al giorno, generiche di default, mai nomi, tolte se il ricordo diventa nascosto o scartato (D15, D16,
+- **C152. Notifiche discrete**: al più una al giorno, generiche di default, mai nomi, tolte se il ricordo diventa nascosto o scartato (D15, D16,
   D19).
-- **C131. Apertura dalla notifica senza dati**: un'azione fissa riconosciuta in `MainActivity`, nessun extra né dato accettato, apertura dopo il
+- **C151. Apertura dalla notifica senza dati**: un'azione fissa riconosciuta in `MainActivity`, nessun extra né dato accettato, apertura dopo il
   blocco app (D17).
-- **C132. Mappa online scelta per dispositivo**: spenta di default, pagina versionata prima di accenderla, "Solo sul Wi-Fi", mai in roaming;
+- **C154. Mappa online scelta per dispositivo**: spenta di default, pagina versionata prima di accenderla, "Solo sul Wi-Fi", mai in roaming;
   interruttore di build (D24).
-- **C133. Cancello di rete della mappa**: un pacchetto solo, una funzione pura che decide ogni richiesta (un host, `GET`, percorsi, livelli,
+- **C155. Cancello di rete della mappa**: un pacchetto solo, una funzione pura che decide ogni richiesta (un host, `GET`, percorsi, livelli,
   rete, regioni coperte), header ripuliti, zero richieste a mappa spenta, controlli su sorgenti, dex e cattura (D21–D23).
-- **C134. La casa non passa dalla mappa**: nessun segno né etichetta, camera iniziale lontana, mini-mappa solo offline, regioni da un catalogo
+- **C156. La casa non passa dalla mappa**: nessun segno né etichetta, camera iniziale lontana, mini-mappa solo offline, regioni da un catalogo
   fisso, nessuna lettura di `home_estimate` (D26, D29).
-- **C135. Nascosti anche nelle superfici della Fase 9**: righe `MEMORIES`, `NOTIFICATIONS`, `MAP` del registro, proprietà, filtro finale (D31).
+- **C157. Nascosti anche nelle superfici della Fase 9**: righe `MEMORIES`, `NOTIFICATIONS`, `MAP` del registro, proprietà, filtro finale (D31).
 
 ### 6.2 Limiti nuovi da dichiarare (proposta per `sicurezza.md` §6)
 - **L13 riscritta**: "**Mappa online** (Fase 9, D22–D24): se la accendi su un dispositivo, OpenFreeMap riceve l'indirizzo della connessione e
   le tessere della zona guardata (a z14 un quadrato di circa 1,7 km), con l'ora; il DNS della rete vede che usi la mappa. Non riceve foto,
   posizioni delle foto, la casa o identificativi. Le zone scaricate non si chiedono più; a mappa spenta non esce niente."
-- **L232. I dati locali della Fase 9 sono in chiaro** sul dispositivo (scaffale dei ricordi, cache e regioni della mappa, ultima camera): chi ha
+- **L260. I dati locali della Fase 9 sono in chiaro** sul dispositivo (scaffale dei ricordi, cache e regioni della mappa, ultima camera): chi ha
   il telefono sbloccato con gli strumenti di sviluppo li può leggere (come L63 per la casa).
-- **L233. I ricordi non capiscono il contenuto**: possono riproporre un giorno triste o una foto sbagliata; il filtro facoltativo sbaglia in
+- **L261. I ricordi non capiscono il contenuto**: possono riproporre un giorno triste o una foto sbagliata; il filtro facoltativo sbaglia in
   entrambi i sensi; la difesa vera sono i comandi dell'utente.
-- **L234. "Titolo e foto" sulla schermata di blocco** dipende anche dall'impostazione di Android: con "Mostra tutti i contenuti" titolo e foto si
+- **L262. "Titolo e foto" sulla schermata di blocco** dipende anche dall'impostazione di Android: con "Mostra tutti i contenuti" titolo e foto si
   vedono a telefono bloccato.
-- **L235. L'ora della notifica è indicativa**: WorkManager e il risparmio energetico la spostano fino a due ore; oltre tre ore quel giorno non
+- **L263. L'ora della notifica è indicativa**: WorkManager e il risparmio energetico la spostano fino a due ore; oltre tre ore quel giorno non
   arriva.
-- **L236. Chi gestisce OpenFreeMap e chi lo ospita** vedono la zona guardata e l'IP: non sappiamo cosa registrano (servizio gratuito, nessun
+- **L264. Chi gestisce OpenFreeMap e chi lo ospita** vedono la zona guardata e l'IP: non sappiamo cosa registrano (servizio gratuito, nessun
   contratto); P1 riporta ciò che dichiarano.
-- **L237. Scaricare una regione rivela quella regione** al server, una volta (per questo le regioni sono a catalogo fisso).
-- **L238. OpenFreeMap può cambiare o sparire**: la mappa resta con la carta di base, le regioni e la cache; un fornitore nuovo sarebbe un host
+- **L265. Scaricare una regione rivela quella regione** al server, una volta (per questo le regioni sono a catalogo fisso).
+- **L266. OpenFreeMap può cambiare o sparire**: la mappa resta con la carta di base, le regioni e la cache; un fornitore nuovo sarebbe un host
   nuovo, con una scelta nuova dell'utente.
-- **L239. MapLibre è codice nativo grande** che apre connessioni di rete: le facciamo passare tutte dal nostro cancello e lo verifichiamo con la
+- **L267. MapLibre è codice nativo grande** che apre connessioni di rete: le facciamo passare tutte dal nostro cancello e lo verifichiamo con la
   cattura, ma un difetto della libreria che aprisse un socket fuori dal client si vedrebbe solo da una cattura, non dai test sui sorgenti.
-- **L240. Sulla mappa si vede dove si scatta di più**, e quindi spesso dove si vive, a chi guarda lo schermo con l'app aperta (come la Libreria e
+- **L268. Sulla mappa si vede dove si scatta di più**, e quindi spesso dove si vive, a chi guarda lo schermo con l'app aperta (come la Libreria e
   le info delle foto).
-- **L241. I ricordi mostrano anche foto dell'area comune** che i familiari vedono già; non mostrano mai aree private altrui.
-- **L242. Dove i vettori non ci sono** (dispositivo non indicizzatore, ricerca non pronta) i doppioni si riconoscono peggio e il filtro di Q6 è
+- **L269. I ricordi mostrano anche foto dell'area comune** che i familiari vedono già; non mostrano mai aree private altrui.
+- **L270. Dove i vettori non ci sono** (dispositivo non indicizzatore, ricerca non pronta) i doppioni si riconoscono peggio e il filtro di Q6 è
   spento.
-- **L243. Media senza posizione** (o con la posizione solo in file di altri dispositivi senza il campo `geo` nell'indice) non sono sulla mappa.
-- **L244. I ricordi non sono uguali su tutti i dispositivi**: ognuno li genera dalla sua Libreria; viaggiano solo "visto", "non mostrare" e le
+- **L271. Media senza posizione** (o con la posizione solo in file di altri dispositivi senza il campo `geo` nell'indice) non sono sulla mappa.
+- **L272. I ricordi non sono uguali su tutti i dispositivi**: ognuno li genera dalla sua Libreria; viaggiano solo "visto", "non mostrare" e le
   scelte.
-- **L245. Qualunque app può aprire la pagina Ricordi** con l'azione della notifica (dietro il blocco app); non può aprire un ricordo preciso né
+- **L273. Qualunque app può aprire la pagina Ricordi** con l'azione della notifica (dietro il blocco app); non può aprire un ricordo preciso né
   passare dati.
+- **L274. "Mai nei ricordi" per una persona vale dove Persone è attiva** (aggiunto da P0): dove i volti sono spenti o esclusi la scelta viaggia
+  ma non si applica alle foto; valgono comunque i periodi "Mai" e "Non mostrare".
 
 ### 6.3 Checklist della Fase 9 (sostituisce le tre voci di `sicurezza.md` §7 "Fase 9")
 - [ ] Ricordi generati sul dispositivo, senza rete né NAS; nei dati personali solo id hash, giorni e scelte (P0, P6, F126).
@@ -1280,7 +1282,7 @@ Le voci confermate si correggono prima della chiusura.
 | Rischio | Effetto | Mitigazione | Piano B |
 |---|---|---|---|
 | MapLibre non passa le verifiche di P1 (16 KB, componenti, richieste fuori dal client, telemetria) | niente mappa con le strade | P1 è uno spike prima di tutto, con le dieci verifiche scritte | un'altra versione stabile; altrimenti mappa **solo offline** (carta di base e regioni) con MapLibre e rete spenta per costruzione, o le bolle sopra la sola carta di base disegnata da noi in Compose (Natural Earth), senza strade |
-| OpenFreeMap non ammette lo scaricamento di regioni, cambia gli URL o sparisce | regioni offline impossibili o mappa online spenta | URL stabile riscritto dall'intercettore; regioni a catalogo; L238 dichiarato | Q2 (b) (regioni dal PC, una volta, sul NAS); un altro fornitore senza account sarebbe un host nuovo con una nuova scelta dell'utente |
+| OpenFreeMap non ammette lo scaricamento di regioni, cambia gli URL o sparisce | regioni offline impossibili o mappa online spenta | URL stabile riscritto dall'intercettore; regioni a catalogo; L266 dichiarato | Q2 (b) (regioni dal PC, una volta, sul NAS); un altro fornitore senza account sarebbe un host nuovo con una nuova scelta dell'utente |
 | APK più pesante (+10–15 MB [stima]) | aggiornamenti più lunghi | solo l'ABI `arm64-v8a` dove già si fa così; carta di base semplificata | glifi ridotti agli intervalli usati; carta di base a 1:110m (~1 MB) |
 | MapLibre consuma memoria sul Tab S9 o va in crash nativo | app chiusa durante la mappa | rilascio con `onTrimMemory`, una mappa sola alla volta, `SurfaceView` | mini-mappa con `MapSnapshotter` disattivabile; la mappa in un processo separato (un attributo del manifest, da approvare) |
 | 100 mila punti non fluidi | soglie del §5.4 mancate | indice a prefissi, bolle al più 60, ricalcolo a camera ferma | livelli più radi (un livello intero invece di mezzo), al più 40 bolle |
@@ -1402,3 +1404,18 @@ Poche, solo quelle che decidono cosa vedi, cosa esce dal telefono e cosa entra n
 | Q7 | Non chiesta esplicitamente: vale la raccomandazione **(a)**, quando l'utente vorrà. | Come F105 della Fase 8, la misura sui dati veri non blocca la chiusura del codice della fase. |
 | Q8 | (a) **Approvo tutto l'elenco**, comprese le prove della mappa online sul telefono di prova. | I download del §8 sono approvati; la musica libera ha la sua approvazione a parte (Q3). |
 | Q9 | (a) **Sì**, ricordi con le persone. | Solo persone con un nome, mai nascoste, mai il nome nella notifica. |
+
+**Come le ha applicate P0 (27/10, `docs/decisioni.md` "Fase 9 P0").** Le righe di questo documento scritte prima delle risposte (D24 "spenta
+di default", il consenso versionato, la frequenza "al più una al giorno" come unico tetto, il filtro di Q6) valgono **come le corregge questa
+tabella**; i contratti seguono gia' le risposte:
+- **Q1 (c)**: `FeatureFlags.mapOnline` acceso in release e in debug (il flag puo' solo spegnere); `MapSettings.online` parte da
+  `MapOnline.On(byDefault = true)`; `MapOnlineChoice` non serve piu' alla prima accensione ma resta per **riaccendere** dopo averla spenta (un
+  tocco sull'interruttore di Impostazioni → Mappa, accanto alla nota breve `MapPrivacyNote`), costruita solo in `feature-map/.../privacy/`;
+  il cancello (`MapRequestGate`, un solo host, nessun cookie, zone scaricate mai online, mini-mappa delle info mai online, casa mai mostrata)
+  e `RegionDownloadConfirmation` restano interi. C154 riscritta.
+- **Q3**: `MusicChoice` (nessuna di base, brano proprio, brano del pacchetto libero), `MusicPackCatalog` con le impronte fissate e **nessun
+  brano** finche' l'utente non approva fonti e brani (`TRACKS` vuoto), `MusicLibrary` come lo scaffale dei modelli; P0 non scarica nulla.
+- **Q4**: `NotifyRules.WEEKLY_CAP` = 3 in 7 giorni con la frequenza di base (`FEW_PER_WEEK`); i giorni speciali (anniversari di viaggi ed
+  eventi) passano il tetto settimanale ma mai quello giornaliero; `DAILY` e `ANNIVERSARIES` restano scelte dell'utente.
+- **Q5 (a)**: `LockScreenMode.GENERIC` di base. **Q6 (a)**: nessun segnale "triste" nei contratti (regola 11 di `Phase9ArchitectureTest`),
+  C153. **Q9 (a)**: `peopleMemories` acceso di base, solo persone con un nome; L274 nuovo.

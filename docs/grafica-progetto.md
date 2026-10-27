@@ -696,3 +696,25 @@ grafico rifinisce **senza toccare la logica** né i contratti; la Fase 8 non mod
 
 Per le stesse voci la Fase 8 non aggiunge componenti al catalogo né cambia la chrome, il vetro, la pillola o la cella (D38). Screenshot di
 riferimento in `docs/screenshots/8-P7/`, `8-P8/`, `8-P9/`, `8-P10/` (chiaro e scuro, telefono e tablet, testo a 1,3x).
+
+### 12.15 Dubbi grafici della Fase 9 (27/10): da rifinire più avanti
+
+La Fase 9 (`docs/fase9-progetto.md`, D34) consegna **stati e contratti** (`feature-memories/contract/MemoriesScreens.kt` e `MemoriesActions.kt`,
+`feature-map/contract/MapScreens.kt` e `MapActions.kt`, `ViewerPlaceMap` di `feature-viewer`) e schermate funzionali fatte **solo** con i
+componenti G2 esistenti; la mappa la disegna MapLibre con uno stile nostro. Il filone grafico rifinisce **senza toccare la logica** né i
+contratti; la Fase 9 non modifica `core-designsystem`. Le voci da rifinire:
+
+| Voce | Cosa fa la Fase 9 | Da rifinire |
+|---|---|---|
+| **Sezioni Ricordi e Luoghi delle Raccolte** | Ricordi: fino a 6 copertine con il titolo, "Tutti i ricordi", stato vuoto con il motivo; Luoghi (subito dopo Ricordi): fino a 8 luoghi con il numero di foto e "Apri la mappa" (D14, D30) | forma e dimensione delle copertine, titolo sulla foto o sotto, densità |
+| **Pagina del ricordo** | titolo e sottotitolo (anni fa, giorni, luoghi), griglia degli elementi, "Riproduci", menu con "Mostra meno", "Nascondi questo ricordo", "Salva come album" | intestazione con la copertina, menu |
+| **Presentazione** | foto e video brevi in fila, movimento lento sulle foto, passaggi semplici, musica (nessuna, un brano proprio o un brano del pacchetto libero, Q3), carta finale con "Salva come album" e "Condividi" (D13) | movimento, passaggi, carta finale, comandi sopra la foto |
+| **Fogli "Mostra meno"** | "Mostra meno con questa persona", "Mai con questa persona", "Mai questi giorni" (un intervallo fino a 366 giorni); elenco delle scelte con "Annulla" in Impostazioni (D11, Q6 (a): nessun filtro automatico) | gerarchia delle scelte, elenco delle scelte |
+| **Impostazioni → Ricordi e notifiche** | ricordi con le persone (sì/no), notifiche (accese di base, ora a passi di 15 minuti, frequenza: poche a settimana, al più una al giorno, solo anniversari, Q4), schermata di blocco (generica o titolo e foto), musica e pacchetto dei brani liberi come lo scaffale dei modelli | densità delle righe, scelta dell'ora, scaffale dei brani |
+| **Notifica** | titolo e testo dal catalogo, immagine solo con "titolo e foto"; generica sulla schermata di blocco di base (D16, C152) | testo e immagine grande |
+| **Mappa** | bolle con il numero e la copertina, griglia della zona sotto una certa densità, pannello del luogo, "Solo sul Wi-Fi", carta di base offline sempre presente, mappa online accesa di base con l'interruttore in Impostazioni e la nota breve (Q1 (c)), attribuzioni (D22, D24, D25) | stile della carta (colori chiaro e scuro, etichette), bolle, griglia, nota sulla privacy |
+| **Regioni offline** | elenco delle regioni con lo stato, foglio di conferma con la stima, seconda conferma sui dati mobili (D26) | forma della stima e dello stato |
+| **Mini-mappa del viewer** | nel pannello info, solo offline (carta di base e regioni), "Mostra sulla mappa" (D29) | dimensione, angoli, segnaposto |
+
+Per le stesse voci la Fase 9 non aggiunge componenti al catalogo né cambia la chrome, il vetro, la pillola o la cella (D34). Screenshot di
+riferimento nelle cartelle `docs/screenshots/9-P*/` dei pacchetti (chiaro e scuro, telefono e tablet, testo a 1,3x).

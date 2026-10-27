@@ -348,6 +348,8 @@ GeoNames chiede l'attribuzione e che si dica che i dati sono stati modificati. I
 
 Licenza: <https://creativecommons.org/licenses/by/4.0/>, mostrata come **testo selezionabile, mai come collegamento** (la galleria non fa rete e nessun tocco apre un browser). Gli id sono quelli di GeoNames, il resto e' una trasformazione.
 
+**Fase 9 (27/10, `docs/fase9-progetto.md` D22, D25, §2.7).** L'attribuzione si estende: le **citta' della carta di base** della mappa (da 50.000 abitanti in su, dallo stesso GeoNames dei luoghi, CC BY 4.0) portano lo stesso testo GeoNames; si aggiungono **Natural Earth** (pubblico dominio: terre, coste, laghi e confini della carta di base) e, per la mappa online, "© OpenStreetMap contributors · OpenMapTiles · OpenFreeMap" (dati ODbL) sulla mappa; il testo completo in Impostazioni → Informazioni e licenze (`PlacesAttribution` esteso da P2). Glifi Noto Sans (SIL OFL 1.1) e stili con le loro licenze, verificati da P2.
+
 ## 11. Dove sta il codice
 
 | Pacchetto | Contenuto |

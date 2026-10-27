@@ -882,6 +882,9 @@ nell'area comune e' quindi `COMMON` (lo dice `CatalogCandidate.ownedByMe`, che s
 Le **chiavi di contenuto** si calcolano da `qh1` e dimensione con `FastContentKey` (stesso risultato di `ContentKey.of`, provato da `CellContentKeysTest`): non c'e'
 una colonna con la chiave nel catalogo, cosi' `media_version` non cambia; `attestInCommon` le calcola mentre scorre le versioni dell'area comune.
 
+**Fase 9 (P3):** una lettura nuova sullo stesso schema, i **punti della mappa** (`MapPointsQueries.page`, file a parte in `dao/`, nessuna tabella
+ne' indice nuovi): §16.
+
 ### 14.5 La porta di completamento degli spostamenti: `MediaCatalog.attachMoved`
 
 `attachMoved(media, to, stamp, from, sha256, verifiedAtMillis)` collega il file `to` (arrivato nell'area comune, o in un'altra cartella) allo **stesso** media
@@ -1183,3 +1186,31 @@ database contro ~2,5 s in memoria.
 | Le voci `cluster` come **segmenti del formato** sigillati | Una colonna per voce (decine di migliaia di righe con un vettore ciascuna, e un'altra tabella da tenere in pari con il codec); una forma binaria nostra (un secondo codec da provare contro il materiale ostile: quello di P3 rifiuta gia' tutto cio' che e' fuori dai tetti) |
 | Una sola tabella di blocchi (`faces_chunk`) per replica e pubblicatore | Una tabella per ambito (tre tabelle uguali, con chiavi esterne: la cascata non serve, i blocchi si tolgono per nome nella stessa transazione) |
 | `faces_head_mark`, `faces_outbox` e `faces_unit_done` di prima restano | Toglierli: `FacesHeadMarks` e `FacesOutbox` sono ridondanti con lo stato di P3 (`replica_device.mark_*`, `publish_*`) e nessun codice di produzione li usa oggi; restano finche' P4 non conferma che non li vuole, e si tolgono prima del rilascio della v1 |
+
+## 16. Dati locali della Fase 9 (ricordi, notifiche, mappa)
+
+**Nessuna tabella nuova nel database della galleria, che resta alla v6** (`docs/fase9-progetto.md` D10, D27; alternative al §3 del progetto: una
+migrazione sul campo per una vista e per 40 KB di ricordi non si giustifica). I dati della Fase 9 sono **file locali** in `noBackupFilesDir`
+(fuori dai backup, tolti dall'azzeramento, D37) e una query nuova sulle tabelle che ci sono. Niente di questo va sul NAS: sul NAS viaggiano solo
+le voci `memory` e i campi `memories_*` dei dati personali (formato §5.5-bis, A1, A2).
+
+| Dato | Dove | Formato | Chi | Note |
+|---|---|---|---|---|
+| **Scaffale dei ricordi** | `noBackupFilesDir/memories/shelf.bin` | versione del file e CRC in testa, scrittura atomica (temporaneo, `fsync`, rinomina, come `StateFiles`); il contenuto e' `ShelfFile` di `core-memories` (ricordi pubblicati con chiave, titolo come dati, al piu' 40 elementi in ordine, copertina, giorno di pubblicazione, origine; ultime pubblicazioni per tipo) | `FileShelfStore`, P6 | al piu' 60 ricordi e 30 giorni (~40 KB); un file rovinato vale "scaffale vuoto" e si rigenera (`MEMORY_SHELF_RESET`); suite `ShelfStoreContract` |
+| **Misure dei pixel** | `noBackupFilesDir/memories/pixels` | cache locale `MediaId` -> nitidezza e luminanza (D6) | P7 (funzione pura), P13 (decodifica e cache) | solo dalle miniature locali, mai il NAS ne' la rete |
+| **Registro delle notifiche** | `noBackupFilesDir/memories/notified` | gli ultimi 14 giorni con una notifica (`NotifyLedger`: giorno e "speciale"), scritto **prima** di pubblicare (E-NT5) | P10 | al piu' una notifica al giorno, Q4 |
+| **Preferenze delle notifiche e della musica** | DataStore in `noBackupFilesDir` | `NotifyPrefs` (accese, ora a passi di 15 minuti, frequenza, schermata di blocco), `MusicChoice` | P10, P9 | locali per dispositivo e profilo (E-NT10), mai sincronizzate |
+| **Impostazioni della mappa** | DataStore in `noBackupFilesDir` | mappa online (di serie accesa, Q1 (c); spenta se l'utente la spegne), "Solo sul Wi-Fi", ultima camera | P4 | locali, mai sincronizzate; l'ultima camera tolta dall'azzeramento (D29) |
+| **Database di MapLibre** | `noBackupFilesDir/map/` | il database offline di MapLibre (SQLite con le tessere vettoriali compresse cosi' come arrivano), cache delle tessere viste online e regioni scaricate | P1, P5 | tetti: 1 GB per regione, 3 GB in tutto, 1 GiB libero; non e' un database nostro: non ha migrazioni nostre |
+| **Giudizi della valutazione dei ricordi** | `noBackupFilesDir/eval/memories/` | `MediaId` e giudizi (solo build debug) | P11 | mai nel repository; esporta solo numeri (§5.3 del progetto) |
+
+**La query dei punti della mappa** (P3, `core-database/.../dao/MapPointsQueries.kt`, D27): `page(after: MediaId?, limit: Int)` sulle **sole celle
+visibili** (non nascoste, una per gruppo, come le letture degli album del §14.4), con le **coordinate effettive** (la correzione di luogo di
+`metadata_correction` se c'e', altrimenti `version_metadata.latitude/longitude`: la stessa regola del pannello info), anche per i media solo sul
+NAS (il campo `geo` adottato dall'indice), il giorno locale, i flag, la sorgente, il tipo e la durata (per `MapCoverScore`) e il luogo; ordinata
+per `media_id`, a pagine per chiave (2.000), **senza `USE TEMP B-TREE`** nel piano. Coordinate fuori dai limiti, (0, 0) esatto e latitudini
+oltre +-85 gradi si scartano e si contano (E-MAP7). Nessun indice nuovo: si legge all'apertura della mappa e dopo i cambi dell'istantanea
+(~100.000 righe in meno di 400 ms sulla JVM); l'indice in memoria (`GeoClusterIndex`, ~24 byte a punto) sta in `core-map`.
+
+**Azzeramento** (D37): `MemoriesGraph.stop()` e `MapGraph.stop()` per primi, poi `AppLocalDataEraser` toglie `memories/`, `map/`, `eval/memories/`
+e le preferenze; il lavoro `memories-notify` si annulla e la notifica si toglie (P13).

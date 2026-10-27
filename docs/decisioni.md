@@ -7852,6 +7852,73 @@ niente di P6: lo fa P13); D34 nel dex e in mapping.txt; LiteRT nel bytecode: 24 
 - **Eccezioni dell'archivio**: un database pieno o un errore di disco a meta' di `saveBody` esce come eccezione di SQLite (non e' un caso previsto dal contratto): P4 la deve prendere come un errore del media.
 - **Integrazione**: in `docs/sicurezza.md` qui L110-L114 seguono L103 e C45-C48 seguono C41; all'integrazione con gli altri pacchetti si tengono tutte in ordine di numero (come per P0).
 
+### Fase 8 P6, integrazione con P3: i tre metodi dell'archivio, la replica e il pubblicatore sul database (29/10)
+
+Branch `integra/29-10b` (`main` con P6, piu' P3). `check.ps1` era rosso: `:core-faces:compileDebugKotlin` non compilava, perche' P3 aveva aggiunto al contratto `FacesArchive` tre metodi
+(`bodiesOf`, `datePeople`, `dropAuthors`) realizzati nel fake e in `ClosedFacesArchive` ma non in `DatabaseFacesArchive`, e perche' aveva lasciato **in memoria** due porte
+(`FacesReplicaStore`, `FacesPublishStore`), cosi' replica e pubblicatore dei volti non sopravvivevano alla morte del processo. Commit: `3a76d318` (database e tre metodi), `5148f1a3`
+(replica e pubblicatore sul database, con le prove), `d1a80b92` (`modello-dati.md` §15 e `sicurezza.md`) e quello di questa sezione.
+
+**Cosa e' cambiato**
+- **I tre metodi** in `DatabaseFacesArchive`, cifrati come il resto. `bodiesOf(author, keys)`: i corpi di un autore, vincenti o no (stesse decifrature di `winners`). `datePeople(nasNow)`: una
+  `UPDATE` sola sulle voci con `at_nas` NULL, sotto il lucchetto delle voci `people`. `dropAuthors(authors)`: in una transazione toglie i corpi e le voci di un autore, **rifa' il vincitore**
+  delle sole chiavi che lo avevano di lui (le altre non cambiano) e azzera i volti per il raggruppamento tenuti in memoria (una revoca e' rara: si rileggono da capo). Le tre prove nuove di
+  `FacesArchiveContract` passano sull'archivio vero (`FacesStoreContractTest`: 10 prove).
+- **Schema v1** (ancora non rilasciato, quindi nessuna migrazione): nove tabelle nuove. `replica_device`, `replica_segment`, `replica_segment_state`, `replica_revoked` per la replica;
+  `publish_state`, `publish_key`, `publish_segment`, `publish_diary` per il pubblicatore; `faces_chunk` per le **voci `cluster` sigillate** (persone con il centroide, assegnazioni).
+  Esportazione (`1.json`) e `FacesSchemaTest` aggiornati: l'elenco delle tabelle, l'unica colonna BLOB in piu' (`faces_chunk.data`), una v1 creata dal JSON con una riga per tabella.
+- **`RoomFacesReplicaStore` e `RoomFacesPublishStore`** (`store/`): le due porte sul database. `FacesStore.replicaStore`/`publishStore` e, per `:app`, `FacesStores.archives()`,
+  `replicaStore()`, `publishStore()` (il negozio si apre da solo; un negozio che non si apre da' stato vuoto in lettura e `IllegalStateException` in scrittura) e il parametro `onRecovered`
+  (la Diagnostica conta `FACES_KEY_LOST`). Vedi `docs/modello-dati.md` §15.6.
+
+**Scelte**
+1. **Differenza e immagine in memoria.** Ogni `save` e' una transazione che scrive solo cio' che e' cambiato rispetto all'ultimo stato scritto, che si tiene in memoria; `load` decodifica solo
+   la prima volta. Il motivo e' d'uso: P4 mette una voce in coda per media (un `save` ciascuna) e P5 chiede le istantanee a ogni suo giro. Riscrivere lo stato intero a ogni salvataggio sarebbe
+   O(n) righe ciascuno, O(n^2) in tutto; un blob unico riscriverebbe anche un'istantanea da 12 MB per cambiare un numero.
+2. **Le voci `cluster` come segmenti del formato, sigillati e spezzati.** Ogni blocco di `faces_chunk` e' un segmento `cluster` di P3 (`FacesDocs.clusterSegment`) sigillato con la chiave dati:
+   un codec solo, gia' provato contro il materiale ostile, e a ogni lettura le stesse regole di chi legge dal NAS (un blocco rovinato e' un rifiuto, non un'eccezione). Un insieme grande
+   si spezza in righe da circa 200 KB: **Android non legge una riga oltre i 2 MB** (CursorWindow), e un'istantanea da 10.000 persone con il centroide ne pesa dieci.
+3. **Un blocco che non si apre non rompe lo stato**: un segmento `cluster` torna "da fare" (non piu' fatto, istantanea da rigiudicare), un'istantanea di un dispositivo si lascia (con la testa da
+   cui veniva), quella in coda del pubblicatore si lascia (il custode ne chiede un'altra). Tutto si ricostruisce dal NAS.
+4. **Un negozio, una generazione.** Le porte portano la generazione; un'altra generazione e' vuota in lettura e un errore in scrittura. Cancellare il negozio (`eraseLocal`) le fa lanciare.
+5. **La datazione.** `datePeople` data *tutte* le voci da datare con la stessa ora, come il fake di P3 (il pubblicatore la chiama prima di ripubblicare lo stato unito, D36); la regola di
+   `PeopleTables` di P6 (una voce datata che e' la stessa scelta di una da datare la data) resta per `addPeople`, quando il NAS rimanda la voce con la sua ora.
+
+**Prove** (JVM, Robolectric)
+- **Le suite di contratto degli stati**, nuove: `FacesReplicaStoreContract` (7 prove) e `FacesPublishStoreContract` (7), le stesse per gli stati in memoria di P3
+  (`InMemoryFacesReplicaStoreContractTest`, `InMemoryFacesPublishStoreContractTest`) e per quelli sul database (`RoomFacesReplicaStoreContractTest`, `RoomFacesPublishStoreContractTest`),
+  anche dopo la chiusura e la riapertura del database. Stati con tre dispositivi, segmenti delle tre classi, voci `cluster` vere, un'istantanea da 2.000 persone e 6.000 assegnazioni.
+- **Le prove di P3 intere sul database**: `FacesReplicaTest`, `FacesPublisherTest`, `FacesIsolationTest` e `FacesSyncBenchTest` (il banco da **200 giri con guasti al 15%**, morti del processo e stato
+  locale perso, su tre mondi) sono ora `open` con un `newWorld()`; `FacesSyncWorld` riceve uno `SyncStorage` (in memoria, di serie; `RoomSyncStorage` in `store/`) e ogni dispositivo ha il suo
+  database: ogni "morte del processo" del banco **chiude e riapre il file**, lo stato locale perso cancella il database come "Disattiva e cancella". `RoomFacesReplicaTest` (7),
+  `RoomFacesPublisherTest` (11), `RoomFacesIsolationTest` (3), `RoomFacesSyncBenchTest` (1): verdi, con le stesse asserzioni di P3. Il banco impiega ~10-16 s sul database contro ~2,5 s in memoria.
+- `RoomFacesSyncStoresTest` (7): nessun centroide e nessuna chiave di contenuto delle assegnazioni in chiaro nel file (`.db`, `-wal`, `-shm`; con il controllo positivo sul segmento non sigillato),
+  nessuna riga dei blocchi oltre il milione di byte (la piu' grande ~300 KB), una scrittura che fallisce lascia lo stato di prima, un blocco alterato fa rifare cio' che conteneva senza rompere il
+  resto, dopo la cancellazione gli stati lanciano, le porte di `FacesStores` e `onRecovered`, i tre metodi nuovi con la cache dei volti.
+- `FacesDaoTest` (+3) e `FacesSchemaTest` (aggiornato): il vincitore si rifa' togliendo un autore, la datazione, le due transazioni di sincronizzazione.
+- **Misure** (`RoomFacesSyncPerformanceTest`): pubblicatore con 3.000 chiavi in coda, una chiave in piu' ~0,5 ms; solo gli scalari ~0,3 ms. Replica con l'istantanea di un dispositivo da 3.000 persone e
+  30.000 assegnazioni: primo salvataggio ~300 ms, lettura a freddo ~650 ms, a caldo 0,1 ms, aggiornare un altro dispositivo ~0,8 ms.
+- Il test strumentato con la chiave vera (`FacesStoreInstrumentedTest`) ha una prova in piu' (le voci `cluster` sigillate sopravvivono alla riapertura e non sono in chiaro nel file): scritta, non
+  eseguita (nessun telefono); compila.
+
+**`tools\check.ps1 -NoDaemon`**: **verde** (uscita 0, "OK: tutto a posto."), con `GRADLE_OPTS=-Dorg.gradle.workers.max=2` e dopo aver cancellato `app\build\outputs\apk\release`. Il passo Gradle (`assembleDebug assembleRelease galleryTest galleryLint`) ha impiegato 1.890 s con due worker, sul PC condiviso con altri agenti. Test per modulo (nessuno a zero, nessuno fallito): `core-faces` 233, `core-database` 271, `core-albums` 707, `feature-people` 7, `app` 869. Prima di questo giro: il primo tentativo si era fermato in 50 s per "Spazio su disco insufficiente" (il disco era pieno) e il secondo su `core-albums:testDebugUnitTest`, nella sola prova `SmartScaleTest.ilRicalcoloIncrementaleDiUnLottoDiArriviEUnaFrazioneDiQuelloIntero`: un confronto di tempi (221 ms contro un tetto di 200 ms) che salta quando la macchina e' carica. Il ramo non tocca `core-albums` (nessuna differenza rispetto a `main`), la prova da sola passa e nel giro finale e' verde: e' una prova di tempo sensibile al carico, da tenere d'occhio (il tetto di 200 ms non scala con il PC occupato), non un difetto di questo lavoro.
+
+**Modifiche ai contratti e ai file di P3**
+- Nessun contratto cambia: `FacesArchive`, `FacesReplicaStore`, `FacesPublishStore` sono quelli di P3. Aggiunte di P6: `RoomFaces*Store` (interni), i metodi `FacesStore.replicaStore`/`publishStore`,
+  `FacesStores.archives()`/`replicaStore()`/`publishStore()` e `onRecovered`.
+- File di prova di P3 toccati, senza cambiarne le asserzioni: `FacesSyncWorld` (parametro `storage`; `archive`, `replicaStore`, `publishStore` di `SyncDevice` ora sono proprieta' dello storage del
+  dispositivo e `restart` lo riapre) e le quattro classi di prova rese `open` con `newWorld()`. Nuovi: `SyncStorage`, `SyncStateSamples`, `FacesSyncStoreContracts`.
+
+**Cosa trova pronto P13**: `NasFacesSync(..., archives = stores.archives(), store = stores.replicaStore(), ...)` e `NasFacesPublisher(..., stores.archives(), stores.publishStore(), ...)` con un solo
+`FacesStores` per processo (la memoria dei volti e quella degli stati sono per negozio).
+
+**Punti aperti**
+- `faces_head_mark`/`FacesHeadMarks` e `faces_outbox`/`FacesOutbox` (P6 originale) sono **ridondanti** con lo stato di P3 (`replica_device.mark_*`, le chiavi e il diario del pubblicatore) e nessun
+  codice di produzione li usa: restano per non rompere un pacchetto che li avesse presi, si tolgono prima del rilascio della v1 (basta confermare con P4 e P8).
+- Il pubblicatore confronta tutte le chiavi in coda a ogni `save` (O(n) con n = chiavi calcolate qui; con 3.000 chiavi costa ~0,5 ms, ma il costo cresce con il numero): da misurare con 20.000 media
+  sul telefono; se pesa, un `FacesChange.Faces` incrementale invece di un insieme da confrontare.
+- Gli stati in memoria (l'ultimo stato letto o scritto) contengono i centroidi decifrati: L112 lo dice; con un'istantanea da 10.000 persone e 200.000 assegnazioni sono decine di MB.
+
 ## Fase 7 P13: integrazione in `:app` (27/10)
 
 Il pacchetto lega in `:app` i pacchetti P0-P11 della Fase 7 (P12 escluso): album personali e smart, viaggi, album condivisi e condivisione, Utility,
@@ -8283,3 +8350,137 @@ Edge case per ID: E-F13 (volti piccoli, sfocati, di profilo: livelli), E-F14 (se
 **`tools\check.ps1 -NoDaemon`**: **verde** ("OK: tutto a posto", 28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`): assembleDebug, assembleRelease, galleryTest e galleryLint in 255 s (con la cache di Gradle); test eseguiti in ogni modulo (`core-faces` 200, prima 85; `core-ai` 259; nessuno a zero, nessuno fallito); nessuna classe `testing` nel dex di release; D34 nel dex e in mapping.txt; LiteRT nel bytecode: 24 chiamate nostre, tutte da `core-ai`; i due modelli dei volti nell'APK. Solo SKIP il banco su dispositivo (-Bench). Il primo giro era caduto per **disco pieno** (`Spazio su disco insufficiente` in `feature-integrations`, 0 byte liberi sul disco C: del PC condiviso): nessun difetto del codice; dopo aver tolto le cartelle `build` del solo worktree e liberato qualche GB il giro e' passato. **`FaultPlan`**: un giro pulito fa 21 chiamate al NAS finto (prenotazioni, letture dell'indice, HQ, anteprime in anticipo, messa in coda, pubblicazione): 42 giri con un guasto, tutti in fondo senza rifare niente.
 
 **Commit** (branch `fase8/p4`): `22290ca3` (`BufferKeepers` in `ComputeSession`), `9ded9a7e` (il calcolo, `compute/`), `75d3e28a` (le prove), `3603fbd7` (`docs/sicurezza.md`: L127-L132, C55-C60) e quello di questa sezione.
+
+## Fase 8 P3: formato firmato dei dati dei volti e sincronizzazione (27-28/10)
+
+Il pacchetto P3 della Fase 8 (`docs/fase8-progetto.md` §4.4, riga P3; §2.4, D11–D13, D21, D30, D31, D34–D36, Q5, E-F41, E-F42). Branch
+`fase8/p3`, partito da `integra/28-10b` (`c2ecc9e`) e unito con `integra/28-10d` (P5) a metà lavoro, come chiesto dall'orchestratore.
+Nessuna dipendenza nuova, nessun permesso o componente; `:app`, `grouping/`, `compute/`, `store/` ed `erase/` non toccati. Commit: vedi la
+fine della sezione.
+
+**Cosa c'è**
+- `core-trust/.../data/`: `FacesDocs.kt` (la testa `FacesHead` con `SnapshotMark`; `decodeHead` con le regole di chi legge nell'ordine del
+  §2.4; i segmenti MCGB versione 4 delle tre classi `faces`, `cluster`, `people`; `checkSnapshot` sull'istantanea intera),
+  `FacesBodies.kt` (`FacesBody`, `FaceRecord`, `FacesLimits`, le chiavi delle voci `cluster`), `FacesCluster.kt` (`ClusterEntry` e le forme
+  binarie), `FacesPeopleDocs.kt` (`PeopleDoc`, `PeopleForms`, JSON canonico), `FacesOwnFiles.kt` (la pulizia dei propri file dei volti,
+  solo nella generazione corrente); `Leases.kt` (`LeaseRoot`: `Shared` e `Faces(G)`, nuovo parametro di `LeaseManager`); `TrustFormat.kt`
+  (tre tetti nuovi). `Envelope.kt`, `IndexSegment.kt` e `NasLayout.kt` non sono cambiati: P0 aveva già messo il tipo `FACES_HEAD`, le
+  classi 18-20 e i percorsi.
+- `core-faces/.../sync/`: `NasFacesRemote` (la porta `FacesRemote` sopra `NasFileSystem`), `FacesHeadSeries` (le teste per nome, lettura e
+  pubblicazione), `NasFacesSync` (la replica: `FacesSync`, `ClusterSnapshots` per P5 e `FacesSnapshotSource`), `NasFacesPublisher`
+  (`FacesPublisher`), `NasFacesLeases` (`FacesLeases` sotto la generazione), `FacesFusion` (le tre regole di fusione e `PeopleRules`),
+  `FacesWire` (contratti ↔ formato; `FacesWire.build` per P4), `FacesSegmentPlan` (segmenti stabili per secchi), `FacesSyncGuard` (il
+  filtro della generazione e i cancelli), `FacesSyncPorts` (porte e archivi della replica e del pubblicatore, con le implementazioni in
+  memoria).
+- Documenti: `docs/formato-nas.md` (§5.5-bis regole dei codec, §5.6 radice delle prenotazioni, §5.11 replica e pubblicazione nel codice,
+  §7 tre limiti, §14 riga di P3), `docs/sicurezza.md` (C63, C64, L136–L139, lista di controllo, registro; numeri assegnati
+  dall'orchestratore).
+
+**Decisioni**
+1. **L'impronta di un corpo** è formata dai primi 8 byte (big-endian) dello SHA-256 del corpo codificato: chiude il punto aperto di P0 su
+   `FaceRef.bodyDigest`. Chi legge la ricalcola; un riferimento dell'istantanea che non torna con il corpo vincente di chi legge manca
+   (il volto è "nuovo" per il custode).
+2. **L'ordine di chi legge una testa** è quello del §2.4, senza scorciatoie: busta → versione (solo 4; 1-3 `INVALID_FIELD`, 5
+   `NEWER_FORMAT`) → firmatario (approvato; dismesso solo con le teste congelate; revocato mai) → stesso account (`NOT_OWNER`) → campi →
+   posto (`WRONG_LOCATION`: generazione e dispositivo del percorso) → ora ≤ ora del NAS + 2 minuti → anti-rollback ed equivocazione per
+   (generazione, dispositivo).
+3. **Tre tetti nuovi** in `TrustFormat` (formato §7): `MAX_FACES_SEGMENT_ENTRIES` = 65.536 voci per segmento, `MAX_FACES_HEAD_BYTES` =
+   512 MiB come somma dei segmenti dichiarati da una testa, `MAX_FACES_BYTES_PER_DEVICE_ROUND` = 32 MiB per dispositivo e per giro.
+4. **Le prenotazioni dei volti** passano da `LeaseManager` con `LeaseRoot.Faces(G)`: file sotto `faces/<G>/leases/`, solo risorse
+   `faces/...`. `LeaseRoot.Shared` è il comportamento di prima (nessun chiamante cambia).
+5. **La pulizia dei propri file** (`FacesOwnFilesPolicy`) vale solo nella generazione corrente; i file delle altre generazioni restano
+   (`NOT_MINE`): li toglie P8 con la cancellazione delle generazioni.
+6. **Il pubblicatore pubblica tutti i propri corpi attestati**, vincenti o no (`FacesArchive.bodiesOf`), non solo quelli che vincono qui.
+   Il banco l'ha mostrato: pubblicando solo i vincenti, un dispositivo che perde lo stato locale restringe il suo contributo e due
+   dispositivi che leggono teste diverse scelgono vincitori diversi per sempre. Il costo sono i corpi perdenti sul NAS (pochi: stesse
+   ricette su più dispositivi).
+7. **Il segno "incerto"**: dopo aver scritto i segmenti e prima della testa confermata, il pubblicatore salva `uncertain`; il flush dopo
+   ripubblica anche se il piano non è cambiato. Senza, un guasto "dopo la scrittura" della testa lasciava segmenti orfani e un contributo
+   mai pubblicato.
+8. **La serie delle teste scavalca le mie teste diverse**: un nome occupato da una mia testa valida che non elenca gli stessi segmenti e
+   la stessa istantanea si scavalca senza contarlo come spazzatura (`ExistingOwn` solo se coincide). Prima un pubblicatore interrotto più
+   volte poteva restare fermo per sempre sugli stessi tre nomi.
+9. **Adozione della propria testa** dopo la perdita dello stato locale: numero, ora, chiavi dei corpi, istantanea e diario tornano dalla
+   propria testa sul NAS, e i propri corpi che qui mancano tornano nell'archivio, così la testa nuova non fa sparire niente per gli altri.
+10. **La replica non sovrascrive un corpo mio** con quello della mia testa sul NAS: un ricalcolo non ancora pubblicato è più nuovo.
+11. **La revoca toglie e rilegge**: i dispositivi revocati o persi escono dall'archivio (`FacesArchive.dropAuthors`: corpi e voci di cui
+    sono autori) e i segmenti già fatti degli altri si azzerano, così le voci valide che le loro teste avevano tornano (L136).
+12. **Isolamento**: tetti per dispositivo e per giro con rotazione (un dispositivo enorme avanza a rate, gli altri arrivano); un segmento
+    rifiutato (impronta, forma, tetti) non si riscarica mai, uno che manca si riprova; le voci `people` "dal futuro" restano da parte e il
+    loro segmento non si riscarica prima dell'ora indicata.
+13. **Recinzione (D34, Q5)**: replica, pubblicatore e prenotazioni partono solo se `FeatureFlags.facesSyncMayUse(share)` e il cancello lo
+    permettono; sulle share vere la replica risponde `LOCAL_ONLY` senza nessuna richiesta al NAS, sulle share di prova lavora.
+14. **`ClusterSnapshots` (richiesta di P5)**: `NasFacesSync.latest(G)` dà per ogni dispositivo dell'account, anche questo, l'ultima
+    istantanea valida, risolta sui corpi vincenti di qui. Legge l'ultimo stato salvato della replica senza aspettare il giro in corso
+    (ogni salvataggio è atomico), esclude i revocati del registro di adesso e risponde vuoto, mai con un'eccezione, se l'archivio si
+    chiude. **L'istantanea in coda si pubblica anche dopo aver perso la prenotazione**: il pubblicatore la congela quando entra in coda e
+    non guarda la prenotazione (vince la `seq` più alta, il custode che ha perso la assorbe). Nessuna istantanea con `seq` 0 o senza
+    persone.
+15. **Gli archivi della replica e del pubblicatore** (`FacesReplicaStore`, `FacesPublishStore`) sono porte con implementazioni in memoria:
+    le tabelle Room sono di P6. Le porte dicono cosa deve durare (ogni `save` atomico e durevole).
+
+**Modifiche ai contratti di P0**
+- `FacesArchive` guadagna tre metodi: `bodiesOf(author, keys)` (i corpi di un autore, vincenti o no), `datePeople(nasNow)` (le voci da
+  datare prendono l'ora del NAS e sostituiscono la loro versione da datare, D36) e `dropAuthors(authors)` (la revoca, L99). Realizzati nel
+  fake in memoria e in `ClosedFacesArchive` (si legge vuoto, non si scrive); tre prove nuove nella suite `FacesArchiveContract` che P6
+  riuserà.
+- Nient'altro cambia: `FacesRemote`, `FacesSync`, `FacesPublisher`, `FacesLeases`, `FacesChange`, `FlushReason`, `FacesPublishRules`
+  sono quelli di P0. `ClusterSnapshots` è di P5 ed è realizzato qui.
+
+**Le prove** (27-28/10, sul PC condiviso; i tempi sono un ordine di grandezza)
+| Prova | "Fatto quando" | Cosa | Esito |
+|---|---|---|---|
+| `FacesHostileHeadTest` (core-trust) | campi ostili della testa, versioni 1-3 e 5, altro account, generazione e posto, campi sconosciuti | busta rovinata, numeri e ore, istantanea, famiglia/dispositivo/account, generazione contro posto, segmenti elencati, campi sconosciuti o mancanti, contenitore ostile, versioni 1-3 (`INVALID_FIELD`) e 5 (`NEWER_FORMAT`), la testa onesta passa | 10/10 |
+| `FacesHostileBodyTest` (core-trust) | corpi, norme, NaN, livelli, riquadri, punti, lunghezze | intestazione, vettori e norme (NaN, infiniti, fuori 0,99-1,01), livelli e motivi, fotogrammi, riquadri e punti, lato/imbardata/punteggio, lunghezze, persone, esemplari, assegnazioni, istantanea intera | 10/10 |
+| `FacesHostilePeopleTest` (core-trust) | caratteri vietati, campi sconosciuti | nomi con caratteri vietati, chiavi, tetti e JSON non canonico, campi sconosciuti e soggetti sbagliati, ora/autore/campi, valori d'altra forma, ogni forma onesta passa | 6/6 |
+| `FacesDocsTest` (core-trust) | anti-rollback ed equivocazione | le regole del livello sono quelle del formato, ogni corpo si rilegge con l'impronta SHA-256, firmatari ammessi e no, testa con e senza istantanea, altro account, segmenti delle tre classi, anti-rollback ed equivocazione | 8/8 |
+| `FacesOwnFilesAndLeasesTest` (core-trust) | lease root | il posto si riconosce solo nella forma esatta, regole di M6 solo nella generazione corrente, prenotazioni sotto la generazione | 3/3 |
+| `NasFacesRemoteContractTest` | il `FacesRemote` vero passa la suite di P0 | la suite `FacesRemoteContract` di P0 sopra `MemoryShare`: mai fuori dalla propria cartella (proprietà), nell'area comune niente, scritture solo esclusive e mai sovrascritte, elenchi e letture, un guasto è un esito e mai un'eccezione | 5/5 |
+| `FacesWireTest` | | istantanea andata e ritorno risolta sui vincenti, ogni voce `people` va e torna, la regola del nome è la stessa, un corpo che il formato rifiuterebbe non si costruisce, impronta dei byte | 5/5 |
+| `FacesFusionPropertyTest` | fusione commutativa, associativa, idempotente su 10.000 storie di 4 dispositivi | corpi, `people` e istantanea, in ogni ordine e raggruppamento, con ripetizioni; l'istantanea vincente | 2/2, ~5 s |
+| `FacesPublisherTest` | solo `faces/<G>/<io>/`, solo `publishExclusive`, mai l'area comune; niente senza stato fresco; recinzione | scrive solo sotto la propria cartella (proprietà su storie a caso), M3 (solo i corpi attestati, tutti i propri), area comune, recinzione sulle share vere e di prova, cancelli, stato fresco, contributo intero, ritmo, generazione che cambia a metà, voci da datare, **istantanea in coda dopo la prenotazione persa** | 11/11 |
+| `FacesReplicaTest` | teste dell'altro account mai lette; dismesso valido con le teste congelate, revocato ignorato; anti-rollback | tre dispositivi convergono, freschezza e generazioni non correnti, generazione che cambia a metà, altro account mai letto, dismesso/revocato, anti-rollback, **istantanee lette per il custode** (`ClusterSnapshots`) | 7/7 |
+| `FacesIsolationTest` | errori isolati con i tetti per dispositivo | un segmento ostile non ferma gli altri, tetti per dispositivo, un dispositivo enorme avanza a rate e gli altri arrivano | 3/3 |
+| `NasFacesLeasesTest` | | custode e unità sotto la generazione, cancelli | 2/2 |
+| `FacesSyncBenchTest` | 200 giri del banco con `FaultPlan` | tre mondi di 200 giri: tre dispositivi dell'account e uno di un altro, guasti prima e dopo ogni operazione al 15%, morti del processo, stato locale perso, stato fresco che va e viene, un attaccante con la password che copia file dell'altro account e spazzatura. Dopo ogni giro: scritture solo sotto `faces/<G>/<lui>/` e mai nell'area comune, nessuna lettura nella cartella dell'altro account, nessuna scrittura senza stato fresco, ogni testa onesta si rilegge con tutti i segmenti, anti-rollback mai indietro, nessuna eccezione. Alla fine convergono (`people`, corpi vincenti, istantanea) | 1/1, ~6 s; una volta anche con 12 mondi (~24 s), verde |
+| `InMemoryFacesArchiveContractTest` | | la suite di P0 con le tre prove nuove (corpi di un autore, voci da datare, autori revocati) | 10/10 |
+
+**`tools/check.ps1 -NoDaemon`**: **verde** (28/10, dopo l'unione di `integra/28-10d` e `ClusterSnapshots`, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`,
+senza `app/build/outputs/apk/release` da togliere): assembleDebug, assembleRelease, galleryTest e galleryLint in 2.814 s sul PC condiviso con
+gli altri pacchetti; test eseguiti in ogni modulo (`core-trust` 302, `core-faces` 128 con le prove di P5), nessuno fallito; nessuna classe
+`testing` nel dex di release; D34 (`facesSyncTestSharesOnly`, `facesSyncMayUse`) e LiteRT nel bytecode come prima. Solo SKIP il banco su
+dispositivo (-Bench).
+
+**Cosa trovano pronto gli altri pacchetti**
+- **P4** (calcolo): `FacesWire.build(contentKey, space, detector, recipe, source, author, faces)` dà un corpo che il formato accetta (o
+  null: non si salva); dopo `saveBody`, `publisher.stage(FacesChange.Faces(key))`; il calcolo non scrive mai sul NAS.
+- **P5** (raggruppamento): `ClusterSnapshots` = la stessa istanza di `NasFacesSync`; `publisher.stage(FacesChange.Snapshot(seq))` congela
+  `archive.grouping()` se ha quella `seq` (più alta di quella in coda) e la pubblica anche dopo la prenotazione persa.
+- **P6** (archivio cifrato): le tabelle Room di `FacesReplicaStore` (`FacesReplicaState`: per dispositivo segno, segmenti, fatti, conti,
+  istantanea con la sua testa; i revocati) e di `FacesPublishStore` (chiavi in coda, istantanea congelata, ultima pubblicazione, diario
+  fino a 50.000 impronte, segno "incerto"), ognuna con `save` atomico; i tre metodi nuovi di `FacesArchive` con la suite di contratto.
+- **P8** (cancellazione): `FacesOwnFiles`/`FacesOwnFilesPolicy` per i propri file della generazione corrente, il diario delle impronte nel
+  `FacesPublishState`, `LeaseRoot.Faces(G)`, `dropAuthors`; la replica conta le generazioni non correnti senza leggerle.
+- **P9** (persone): voci scritte con `atNas = null` quando l'ora del NAS non c'è; il pubblicatore le data (`datePeople`) prima di
+  pubblicarle; `publisher.stage(FacesChange.People(...))` dopo ogni modifica.
+- **P12** (banco): `FacesSyncKit` (`MemoryShare` con `FacesFaultPlan`, `RecordingShare`, `FacesTestFamily` con due account) e
+  `FacesSyncWorld` come base; il banco di P3 è il modello per la sincronizzazione.
+- **P13** (integrazione): legare `NasFacesRemote(fs dell'area privata, deviceId, area comune dal registro)`, `NasFacesSync`,
+  `NasFacesPublisher`, `NasFacesLeases`, `FacesAttestation` (M3 sopra il catalogo: media del NAS dell'account con timbro e `qh1` freschi),
+  `FacesArchives` (l'archivio della generazione corrente) e `ClusterSnapshots` (la stessa `NasFacesSync`); il giro della replica dopo
+  quello dei dati personali (stato fresco), in `IndexSyncWorker`; il resoconto (solo numeri e codici) nella Diagnostica.
+
+**Punti aperti**
+- Gli archivi della replica e del pubblicatore sono in memoria finché P6 non lega le tabelle: fino ad allora una morte del processo
+  rilegge tutto (corretto, solo più lento).
+- Il piano della pubblicazione si ricalcola intero a ogni flush (`bodiesOf` su tutte le chiavi attestate): da misurare con archivi grandi
+  sull'S25 (F104); se serve, un piano incrementale.
+- Chi legge tiene i corpi di media che l'autore non attesta più (innocuo: si mostrano solo per contenuti che il catalogo di chi legge vede).
+- Più di `MAX_JUNK_RUN` nomi di spazzatura di fila nella propria serie fermano il pubblicatore (`Blocked`) finché la pulizia di P8 non li
+  toglie.
+- Da provare sul campo: F95, F96, F106 (dati dei volti solo nell'area privata dell'account, letti solo dai suoi dispositivi).
+
+**Commit** (branch `fase8/p3`): `41344187` (codec firmato in core-trust), `d667eab9` (tre aggiunte al contratto dell'archivio),
+`265ac893` (sincronizzazione in core-faces), `a4c3a56e` (prove della sincronizzazione), `0aa342e7` (formato e sicurezza), `4e9b8ae4`
+(unione di `integra/28-10d`), `c49d0ad6` (`ClusterSnapshots`), `cfa61495` (numeri rinumerati in sicurezza.md), `20dee600` (refuso) e
+quello di questa sezione.

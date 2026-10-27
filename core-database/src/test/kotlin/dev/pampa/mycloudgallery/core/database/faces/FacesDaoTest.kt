@@ -8,7 +8,16 @@ import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.database.faces.dao.FaceBodyDao
 import dev.pampa.mycloudgallery.core.database.faces.entity.FaceBodyEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FaceEntity
+import dev.pampa.mycloudgallery.core.database.faces.dao.ChunkRef
+import dev.pampa.mycloudgallery.core.database.faces.dao.PublishWrite
+import dev.pampa.mycloudgallery.core.database.faces.dao.ReplicaWrite
+import dev.pampa.mycloudgallery.core.database.faces.entity.FacesChunkEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesOutboxEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.PublishDiaryEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.PublishStateEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.ReplicaDeviceEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.ReplicaSegmentEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.ReplicaSegmentStateEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.GroupAssignmentEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.GroupExemplarEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.GroupPersonEntity
@@ -112,6 +121,90 @@ class FacesDaoTest {
     assertThat(result.isFailure).isTrue()
     assertThat(db.bodyDao().bodiesOf(k).single().recipe).isEqualTo(1)
     assertThat(db.bodyDao().faceCount()).isEqualTo(2)
+  }
+
+  @Test
+  fun togliereGliAutoriRifaIlVincitoreEToglieLeLoroVoci() = runBlocking<Unit> {
+    val dao = db.bodyDao()
+    save(key(1), "m", 1)
+    save(key(1), "b", 2) // vince "b" (ricetta 2)
+    save(key(2), "b", 1)
+    save(key(3), "m", 1)
+    db.peopleDao().upsertAll(
+      listOf(
+        PeopleRecordEntity(person(1), "hidden", "true", null, 5, "b"),
+        PeopleRecordEntity(person(2), "hidden", "true", null, 5, "m"),
+      ),
+    )
+    assertThat(dao.dropBodiesOf(listOf("b"))).isEqualTo(2)
+    assertThat(winnersOf(key(1))).containsExactly("m") // il vincitore torna al corpo che resta
+    assertThat(winnersOf(key(2))).isEmpty()
+    assertThat(winnersOf(key(3))).containsExactly("m")
+    assertThat(dao.faceCount()).isEqualTo(2)
+    assertThat(db.peopleDao().deleteByAuthors(listOf("b"))).isEqualTo(1)
+    assertThat(dao.dropBodiesOf(listOf("b"))).isEqualTo(0) // idempotente
+    assertThat(dao.dropBodiesOf(emptyList())).isEqualTo(0)
+    assertThat(dao.bodiesOfAuthor("m", listOf(key(1), key(2), key(3))).map { it.contentKey }).containsExactly(key(1), key(3))
+    assertThat(dao.facesOfAuthor("m", listOf(key(1), key(3)))).hasSize(2)
+  }
+
+  @Test
+  fun leVociDaDatarePrendonoLOraUnaVoltaSola() = runBlocking<Unit> {
+    val dao = db.peopleDao()
+    dao.upsertAll(
+      listOf(
+        PeopleRecordEntity(person(1), "name", null, byteArrayOf(1), null, "m"),
+        PeopleRecordEntity(person(1), "hidden", "true", null, null, "m"),
+        PeopleRecordEntity(person(2), "hidden", "true", null, 40, "m"),
+      ),
+    )
+    assertThat(dao.date(100)).isEqualTo(2)
+    assertThat(dao.date(200)).isEqualTo(0)
+    assertThat(dao.all().map { it.atNas }).containsExactly(100L, 100L, 40L)
+  }
+
+  @Test
+  fun iPezziDellaSincronizzazioneSiScrivonoInUnaTransazione() = runBlocking<Unit> {
+    val dao = db.syncDao()
+    fun device(id: String, v: Long) = ReplicaDeviceEntity(id, v, "h$v", null, null, null, null, null, null, null, null)
+    fun chunk(owner: String, name: String, part: Int = 0) = FacesChunkEntity("replica.cluster", owner, name, part, "h", 1, byteArrayOf(part.toByte()))
+    dao.writeReplica(
+      ReplicaWrite(
+        devices = listOf(device("a", 1), device("b", 1)),
+        rewrittenDevices = listOf("a", "b"),
+        segments = listOf(ReplicaSegmentEntity("a", 0, 18, "x", 5), ReplicaSegmentEntity("b", 0, 18, "y", 5)),
+        states = listOf(ReplicaSegmentStateEntity("a", "x", true, 3)),
+        chunks = listOf(chunk("a", "s1", 0), chunk("a", "s1", 1), chunk("a", "s2"), chunk("b", "s1")),
+        addedRevoked = listOf("z"),
+      ),
+    )
+    assertThat(dao.replicaDevices()).hasSize(2)
+    assertThat(dao.chunks("replica.cluster").map { Triple(it.owner, it.name, it.part) })
+      .containsExactly(Triple("a", "s1", 0), Triple("a", "s1", 1), Triple("a", "s2", 0), Triple("b", "s1", 0)).inOrder()
+    // Un nome di blocco si toglie con tutti i suoi pezzi; un dispositivo che esce porta via righe e blocchi suoi e di nessun altro.
+    dao.writeReplica(ReplicaWrite(removedChunks = listOf(ChunkRef("replica.cluster", "a", "s1")), removedRevoked = listOf("z")))
+    assertThat(dao.chunks("replica.cluster").map { it.owner to it.name }).containsExactly("a" to "s2", "b" to "s1")
+    assertThat(dao.replicaRevoked()).isEmpty()
+    dao.writeReplica(ReplicaWrite(removedDevices = listOf("a")))
+    assertThat(dao.replicaDevices().map { it.deviceId }).containsExactly("b")
+    assertThat(dao.replicaSegments().map { it.deviceId }).containsExactly("b")
+    assertThat(dao.replicaStates()).isEmpty()
+    assertThat(dao.chunks("replica.cluster").map { it.owner }).containsExactly("b")
+    // Il pubblicatore: chiavi, segmenti dell'ultima testa e diario in ordine, tutto in una transazione.
+    dao.writePublish(
+      PublishWrite(
+        state = PublishStateEntity(1, null, null, null, null, null, null, null, null, null, 3, adopted = true, uncertain = false),
+        addedKeys = listOf("k1", "k2", "k3"),
+        rewriteSegments = true,
+        segments = listOf("s2", "s1"),
+        addedDiary = listOf(PublishDiaryEntity("d2", 2), PublishDiaryEntity("d1", 1)),
+      ),
+    )
+    dao.writePublish(PublishWrite(removedKeys = listOf("k2"), removedDiary = listOf("d1"), addedDiary = listOf(PublishDiaryEntity("d3", 3))))
+    assertThat(dao.publishKeys()).containsExactly("k1", "k3").inOrder()
+    assertThat(dao.publishSegments()).containsExactly("s1", "s2").inOrder()
+    assertThat(dao.publishDiary().map { it.hash }).containsExactly("d2", "d3").inOrder()
+    assertThat(dao.publishState()!!.pending).isEqualTo(3)
   }
 
   @Test

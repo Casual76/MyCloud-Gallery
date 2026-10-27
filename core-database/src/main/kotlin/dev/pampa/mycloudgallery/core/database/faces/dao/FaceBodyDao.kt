@@ -44,6 +44,14 @@ abstract class FaceBodyDao {
   @Query("SELECT * FROM face_body WHERE is_winner = 1 AND content_key IN (:keys) ORDER BY content_key")
   abstract suspend fun winners(keys: List<String>): List<FaceBodyEntity>
 
+  /** I corpi scritti da [author] per le chiavi chieste (al piu' [IN_LIMIT]), vincenti o no. */
+  @Query("SELECT * FROM face_body WHERE author = :author AND content_key IN (:keys) ORDER BY content_key")
+  abstract suspend fun bodiesOfAuthor(author: String, keys: List<String>): List<FaceBodyEntity>
+
+  /** I volti dei corpi scritti da [author] per le chiavi chieste. */
+  @Query("SELECT * FROM face WHERE author = :author AND content_key IN (:keys) ORDER BY content_key, idx")
+  abstract suspend fun facesOfAuthor(author: String, keys: List<String>): List<FaceEntity>
+
   /** I volti di tutti i corpi delle chiavi chieste, in ordine; chi chiama tiene quelli dell'autore vincente. */
   @Query("SELECT * FROM face WHERE content_key IN (:keys) ORDER BY content_key, author, idx")
   abstract suspend fun facesOf(keys: List<String>): List<FaceEntity>
@@ -96,6 +104,14 @@ abstract class FaceBodyDao {
   @Query("DELETE FROM face WHERE content_key = :key AND author = :author")
   abstract suspend fun deleteFaces(key: String, author: String)
 
+  /** Le chiavi il cui corpo vincente e' di uno di [authors]: togliendoli, il vincitore si rifa'. */
+  @Query("SELECT content_key FROM face_body WHERE is_winner = 1 AND author IN (:authors)")
+  abstract suspend fun winnerKeysOf(authors: List<String>): List<String>
+
+  /** Toglie i corpi scritti da [authors] (i loro volti vanno in cascata); quanti corpi. */
+  @Query("DELETE FROM face_body WHERE author IN (:authors)")
+  abstract suspend fun deleteBodiesOf(authors: List<String>): Int
+
   @Query("UPDATE face_body SET is_winner = (author = :winner) WHERE content_key = :key")
   abstract suspend fun markWinner(key: String, winner: String)
 
@@ -112,6 +128,23 @@ abstract class FaceBodyDao {
     if (faces.isNotEmpty()) insertFaces(faces)
     val winner = headersOf(body.contentKey).minWithOrNull(WINNER_ORDER)!!
     markWinner(body.contentKey, winner.author)
+  }
+
+  /**
+   * Toglie i corpi scritti da [authors] (dispositivi revocati o persi, L99) e rifa' il vincitore delle chiavi che lo avevano di uno di loro,
+   * **in una transazione**. Quanti corpi ha tolto. Idempotente. [authors] al piu' [IN_LIMIT].
+   */
+  @Transaction
+  open suspend fun dropBodiesOf(authors: List<String>): Int {
+    require(authors.size <= IN_LIMIT) { "Troppi autori per istruzione." }
+    if (authors.isEmpty()) return 0
+    val affected = winnerKeysOf(authors)
+    val dropped = deleteBodiesOf(authors)
+    for (key in affected) {
+      val winner = headersOf(key).minWithOrNull(WINNER_ORDER) ?: continue
+      markWinner(key, winner.author)
+    }
+    return dropped
   }
 
   /** "Non supportato" con la ricetta piu' alta vista: una ricetta piu' vecchia non abbassa quella che c'e'. */

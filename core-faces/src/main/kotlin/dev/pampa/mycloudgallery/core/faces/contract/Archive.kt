@@ -149,6 +149,13 @@ interface FacesArchive {
   /** I corpi vincenti ([FaceBody.winner]) per le chiavi chieste che ne hanno uno. */
   suspend fun winners(keys: Collection<ContentKey>): Map<ContentKey, FaceBody>
 
+  /**
+   * P3 (aggiunta al contratto di P0): i corpi scritti da [author] per le chiavi chieste che ne hanno uno, vincenti o no. Il pubblicatore
+   * pubblica **tutti** i corpi di questo dispositivo (non solo quelli che vincono qui): cosi' il contributo di un dispositivo non si
+   * restringe mai e ogni dispositivo che legge le stesse teste ha gli stessi corpi e sceglie lo stesso vincitore.
+   */
+  suspend fun bodiesOf(author: String, keys: Collection<ContentKey>): Map<ContentKey, FaceBody>
+
   /** Le chiavi gia' fatte con la ricetta [recipe] o piu' nuova, da un dispositivo qualunque dell'account, o "non supportate". */
   suspend fun analyzed(keys: Collection<ContentKey>, recipe: Int): Set<ContentKey>
 
@@ -170,4 +177,20 @@ interface FacesArchive {
 
   /** Unisce [records] con [PeopleRecord.merge]. */
   suspend fun addPeople(records: List<PeopleRecord>)
+
+  /**
+   * P3 (aggiunta al contratto di P0): le voci `people` **da datare** ([PeopleRecord.atNas] null, scelte fatte qui senza l'ora del NAS)
+   * prendono l'ora del NAS [nasNow] e **sostituiscono** la loro versione da datare, che [PeopleRecord.winner] farebbe vincere per sempre
+   * contro le modifiche successive degli altri dispositivi. Lo chiama il pubblicatore prima di ripubblicare lo stato unito (D36: "prende
+   * l'ora alla prima sincronizzazione"). Restituisce quante voci ha datato. Idempotente.
+   */
+  suspend fun datePeople(nasNow: Long): Int
+
+  /**
+   * P3 (aggiunta al contratto di P0): toglie i corpi e le voci `people` scritti da [authors], i dispositivi dell'account revocati o persi
+   * nel registro accettato ("la revoca lo toglie", L99, formato §4.6): i loro corpi non vincono piu' e i loro nomi non si mostrano piu'.
+   * La replica poi rilegge le teste degli altri dispositivi (le voci valide che le loro avevano tornano). Restituisce quante voci e quanti
+   * corpi ha tolto. Idempotente.
+   */
+  suspend fun dropAuthors(authors: Set<String>): Int
 }

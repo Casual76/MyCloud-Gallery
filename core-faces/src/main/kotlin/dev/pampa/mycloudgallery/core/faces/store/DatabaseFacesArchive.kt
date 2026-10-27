@@ -96,6 +96,21 @@ class DatabaseFacesArchive internal constructor(
     return out
   }
 
+  override suspend fun bodiesOf(author: String, keys: Collection<ContentKey>): Map<ContentKey, FaceBody> {
+    open()
+    val out = LinkedHashMap<ContentKey, FaceBody>()
+    for (chunk in keys.map { it.hex }.distinct().chunked(FaceBodyDao.IN_LIMIT)) {
+      val headers = bodies.bodiesOfAuthor(author, chunk)
+      if (headers.isEmpty()) continue
+      val facesOf = bodies.facesOfAuthor(author, headers.map { it.contentKey }).groupBy { it.contentKey to it.author }
+      for (header in headers) {
+        val body = toBody(header, facesOf[header.contentKey to header.author].orEmpty()) ?: continue
+        out[body.contentKey] = body
+      }
+    }
+    return out
+  }
+
   override suspend fun analyzed(keys: Collection<ContentKey>, recipe: Int): Set<ContentKey> {
     open()
     val out = LinkedHashSet<ContentKey>()
@@ -143,6 +158,21 @@ class DatabaseFacesArchive internal constructor(
   override suspend fun addPeople(records: List<PeopleRecord>) {
     open()
     people.add(records)
+  }
+
+  override suspend fun datePeople(nasNow: Long): Int {
+    open()
+    return people.date(nasNow)
+  }
+
+  override suspend fun dropAuthors(authors: Set<String>): Int {
+    open()
+    if (authors.isEmpty()) return 0
+    var dropped = 0
+    for (chunk in authors.toList().chunked(FaceBodyDao.IN_LIMIT)) dropped += bodies.dropBodiesOf(chunk)
+    // Il vincitore di alcune chiavi e' cambiato: i volti per il raggruppamento si rileggono da capo (una revoca e' rara).
+    groupCache.clear()
+    return dropped + people.dropAuthors(authors)
   }
 
   /** Quanti corpi e quanti volti ci sono (numeri per la Diagnostica e le prove). */

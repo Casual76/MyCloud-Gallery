@@ -28,6 +28,14 @@ interface PeopleRecordDao {
 
   @Query("SELECT COUNT(*) FROM people_record")
   suspend fun count(): Int
+
+  /** Le voci "da datare" prendono l'ora del NAS [nasNow] (D36); quante. Idempotente: dopo non ce ne sono piu'. */
+  @Query("UPDATE people_record SET at_nas = :nasNow WHERE at_nas IS NULL")
+  suspend fun date(nasNow: Long): Int
+
+  /** Toglie le voci scritte da [authors] (dispositivi revocati o persi, L99); quante. [authors] al piu' 500. */
+  @Query("DELETE FROM people_record WHERE author IN (:authors)")
+  suspend fun deleteByAuthors(authors: List<String>): Int
 }
 
 /** Gli anti-rollback delle teste dei dispositivi (`HeadMark`, §2.4): l'ultima testa accettata per dispositivo. */

@@ -12,11 +12,13 @@ import dev.pampa.mycloudgallery.core.database.faces.dao.FaceGroupingDao
 import dev.pampa.mycloudgallery.core.database.faces.dao.FacesHeadMarkDao
 import dev.pampa.mycloudgallery.core.database.faces.dao.FacesMetaDao
 import dev.pampa.mycloudgallery.core.database.faces.dao.FacesOutboxDao
+import dev.pampa.mycloudgallery.core.database.faces.dao.FacesSyncDao
 import dev.pampa.mycloudgallery.core.database.faces.dao.FacesUnitDao
 import dev.pampa.mycloudgallery.core.database.faces.dao.PeopleRecordDao
 import dev.pampa.mycloudgallery.core.database.faces.entity.FaceBodyEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FaceEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FaceUnsupportedEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.FacesChunkEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesHeadMarkEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesMetaEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesOutboxEntity
@@ -26,6 +28,14 @@ import dev.pampa.mycloudgallery.core.database.faces.entity.GroupExemplarEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.GroupPersonEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.GroupStateEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.PeopleRecordEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.PublishDiaryEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.PublishKeyEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.PublishSegmentEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.PublishStateEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.ReplicaDeviceEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.ReplicaRevokedEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.ReplicaSegmentEntity
+import dev.pampa.mycloudgallery.core.database.faces.entity.ReplicaSegmentStateEntity
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import java.io.File
 
@@ -55,6 +65,15 @@ import java.io.File
     FacesOutboxEntity::class,
     FacesUnitDoneEntity::class,
     FacesMetaEntity::class,
+    ReplicaDeviceEntity::class,
+    ReplicaSegmentEntity::class,
+    ReplicaSegmentStateEntity::class,
+    ReplicaRevokedEntity::class,
+    FacesChunkEntity::class,
+    PublishStateEntity::class,
+    PublishKeyEntity::class,
+    PublishSegmentEntity::class,
+    PublishDiaryEntity::class,
   ],
   version = FacesDatabase.VERSION,
   exportSchema = true,
@@ -74,6 +93,8 @@ abstract class FacesDatabase : RoomDatabase() {
   abstract fun unitDao(): FacesUnitDao
 
   abstract fun metaDao(): FacesMetaDao
+
+  abstract fun syncDao(): FacesSyncDao
 
   companion object {
     /** Versione dello schema. Alzarla richiede una migrazione vera (mai distruttiva) e il suo schema esportato. */

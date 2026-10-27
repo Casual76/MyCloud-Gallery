@@ -1002,10 +1002,19 @@ BLOB sigillate (§15.3).
 | `faces_outbox` | `entry_id` (AUTOINCREMENT), unico (`kind`, `ref`) | `kind` (`faces`, `snapshot`, `people`), `ref` | cosa c'e' da pubblicare: durevole, una voce sola per la stessa cosa |
 | `faces_unit_done` | `area`, `month`, `part` | `recipe`, `done_at_nas` | le unita' di lavoro finite (§2.3) |
 | `faces_meta` | `name` | `data` (BLOB) | valori di servizio; oggi `key_check` (§15.3) |
+| `replica_device` | `device_id` | `mark_version`, `mark_hash`, `snapshot_seq`, `snapshot_base`, `snapshot_head_version`, `snapshot_head_hash`, `snap_seq`, `snap_base`, `checked_version`, `checked_hash` | quello che la replica ricorda di un dispositivo dell'account (`DeviceReplica`, P3): l'ultima testa accettata (anti-rollback ed equivocazione), l'istantanea che dichiara, la testa da cui viene l'ultima istantanea valida (e la sua `seq`), la testa gia' giudicata. NULL = non c'e' |
+| `replica_segment` | `device_id`, `position` | `cls` (codice del formato), `hash`, `size` | i segmenti che la testa elenca, nell'ordine della testa |
+| `replica_segment_state` | `device_id`, `hash` | `done`, `entries` | un segmento letto (applicato o rifiutato per sempre) e quante voci ha portato (per i tetti) |
+| `replica_revoked` | `device_id` | | i dispositivi revocati o persi gia' tolti dall'archivio (L99) |
+| `faces_chunk` | `scope`, `owner`, `name`, `part` | `enc_hash`, `enc_size`, **`data`** (BLOB sigillato) | le voci `cluster` (persone **con il centroide**, assegnazioni) di un segmento letto dalla replica (`replica.cluster`, `owner` = dispositivo, `name` = impronta del segmento), di un'istantanea di un dispositivo (`replica.snapshot`) o dell'istantanea in coda (`publish.snapshot`). Un insieme grande e' spezzato in righe da circa 200 KB (`part`): Android non legge una riga oltre i 2 MB |
+| `publish_state` | `id` (= 1) | `snap_seq`, `snap_base`, `pub_version`, `pub_mark_*`, `pub_at_nas`, `pub_snap_*`, `pub_entries`, `pending`, `adopted`, `uncertain` | gli scalari del pubblicatore (`FacesPublishState`, P3): l'istantanea in coda, l'ultima testa pubblicata da qui, le modifiche in coda e i due segni |
+| `publish_key` | `content_key` | | le chiavi dei corpi calcolati qui (si pubblicano se passano "M3 dei volti") |
+| `publish_segment` | `hash` | | i segmenti elencati dall'ultima testa pubblicata |
+| `publish_diary` | `hash` | `ord` | il diario dei segmenti pubblicati da qui (la prova "e' mio" della pulizia dei propri file, M6), in ordine: i piu' vecchi escono per primi (al piu' 50.000) |
 
 La **galleria non e' toccata**: `GalleryDatabase` resta v6, il suo `6.json` ha la stessa impronta di prima della Fase 8 e i due database non hanno nessun nome di tabella in
-comune. Non ci sono i centroidi: `GroupingState` (contratto di P0) non li porta; quando P5 ne avra' bisogno saranno una colonna sigillata di `group_person`, e questo e' il
-motivo di una v2 (§15.10).
+comune. I centroidi stanno **solo** nei blocchi sigillati della sincronizzazione (`faces_chunk`); `GroupingState` (contratto di P0) non li porta, quindi le tabelle `group_*`
+non hanno la colonna (§15.10). La v1 e' ancora quella non rilasciata: P3 e P6 l'hanno completata con le tabelle di sincronizzazione prima del rilascio, senza migrazione.
 
 ### 15.3 Cosa e' cifrato, come, e cosa resta in chiaro
 
@@ -1019,6 +1028,9 @@ persone. Mai i riquadri, i livelli, gli id, le chiavi di contenuto e le assegnaz
 - **Formato del blocco sigillato** (`FacesDataKey.seal`): `versione (1) | nonce (12 byte casuali) | testo cifrato + tag (n + 16)`, AES-256-GCM con la chiave dati. Nonce nuovo a
   ogni cifratura. Il **`aad`** lega il blocco alla sua riga: per un corpo `contentKey|autore|impronta|ricetta|numero di volti`, per un nome `soggetto|campo`; un blocco spostato in
   un'altra riga, o una colonna di metadati alterata, non si apre piu' (la riga si salta: il contenuto si rifa' o si riscarica).
+- **Blocchi delle voci `cluster`** (`faces_chunk.data`): ogni blocco e' un segmento `cluster` del formato (`FacesDocs.clusterSegment`: lo stesso codec e le stesse regole di chi
+  legge dal NAS, quindi un blocco rovinato e' un rifiuto e non un'eccezione) sigillato con la chiave dati e un `aad` di ambito, proprietario, nome, pezzo e riferimento del segmento.
+  Dentro ci sono i centroidi e le assegnazioni dell'istantanea del custode: mai in chiaro nel file (`RoomFacesSyncStoresTest`, con il controllo positivo sul segmento non sigillato).
 - **Controllo della chiave** (`faces_meta.key_check`): un testo noto sigillato alla creazione del database. All'apertura, se con la chiave di oggi non si apre, il database e' di
   un'altra chiave (sparita e ricreata da altri) e **si rifa'** invece di fingere un archivio vuoto con righe che nessuno legge.
 - **Nessun vettore, landmark o nome in chiaro nel file**: `FacesStoreEncryptionTest` cerca nei byte di `faces-<G>.db`, `-wal` e `-shm` ogni valore seminato in ogni forma
@@ -1038,6 +1050,9 @@ la stessa storia di scritture (`FacesStoreParityTest`, storie a caso). Le regole
 | `groupFaces` | i volti CORE e WEAK dei corpi vincenti nello spazio corrente, in ordine di chiave e indice, con i vettori in chiaro **solo in memoria**. La prima volta legge e decifra tutto; poi `GroupFaceCache` tiene i volti e rilegge solo i contenuti salvati nel frattempo (tetto 120.000 volti, ~65 MB; oltre, ogni chiamata rilegge) |
 | `unrecognizable` | i volti NONE del corpo vincente per chiave: dalle colonne in chiaro |
 | `grouping` / `saveGrouping` | l'istantanea si legge e si scrive **intera**: la scrittura sostituisce tutto in una transazione (la vecchia intera o la nuova intera, mai una a meta'); un'assegnazione a una persona che non c'e' fa fallire la scrittura e lascia la vecchia |
+| `bodiesOf(author, keys)` (P3) | i corpi scritti da [author] per le chiavi chieste, **vincenti o no** (il pubblicatore pubblica tutti i propri): come `winners`, ma per autore |
+| `datePeople(nasNow)` (P3) | le voci "da datare" (`at_nas` NULL) prendono l'ora del NAS, una `UPDATE` sola; quante. Idempotente. Sotto lo stesso lucchetto di `addPeople` |
+| `dropAuthors(authors)` (P3) | la revoca (L99): toglie i corpi e le voci `people` scritti da [authors] in una transazione, **rifa' il vincitore** delle chiavi che lo avevano di loro (solo quelle) e lascia andare i volti per il raggruppamento in memoria; quanti corpi e quante voci |
 | `people` / `addPeople` | l'ultima scrittura per chiave con `PeopleRecord.winner`, piu' due regole per le voci "da datare" (`at_nas` NULL): due voci entrambe da datare si **sostituiscono** (la nuova vince, qualunque sia il valore), e una voce **datata** che e' la stessa scelta (stessa modifica, stesso autore) di una da datare **la data** (senza, la voce da datare, che vince su tutte, non verrebbe mai datata). Una riga che non si apre o non si capisce si salta e si riscrive alla voce dopo |
 
 Un archivio **chiuso** (chiave distrutta, generazione cambiata, `FacesStore.close`) lancia `IllegalStateException` a ogni chiamata (chi chiama riconcilia, §2.8).
@@ -1064,6 +1079,10 @@ chiave dati in memoria; 4. si tolgono `faces-<G>.db`, `-wal`, `-shm` e `-journal
 piu'; un file che non si toglie non ferma gli altri). `LocalErase(keyDestroyed, filesGone)`: finita solo se tutte e due sono vere, altrimenti si richiama (ogni passo e' idempotente).
 L'azzeramento distrugge **tutte** le chiavi prima di toccare un file.
 
+**Le porte per la sincronizzazione** (P3, legate da `:app`): `FacesStores.archives()` (l'archivio della generazione, o null se il negozio non si apre adesso), `replicaStore()` e
+`publishStore()` (gli stati di §15.6, con il negozio che si apre da solo; un negozio che non si apre da' uno stato vuoto in lettura e `IllegalStateException` in scrittura) e il
+parametro `onRecovered` del costruttore (chiamato quando un negozio e' stato rifatto da capo: la Diagnostica conta `FACES_KEY_LOST`).
+
 ### 15.6 Segni, outbox e unita' fatte
 
 Tre piccoli magazzini nello stesso database, per P3 (pubblicazione e replica) e P4 (calcolo); spariscono con la generazione (§2.8: "la sua outbox sparisce con il database").
@@ -1073,6 +1092,20 @@ Tre piccoli magazzini nello stesso database, per P3 (pubblicazione e replica) e 
 | Segni delle teste | `FacesHeadMarks.get/all/record/forget` | `record` non abbassa mai il numero (risponde falso); uguale o piu' nuovo si'. L'equivocazione (stesso numero, altra impronta) la decide chi sincronizza |
 | Outbox | `FacesOutbox.stage/pending/count/acknowledge`, `stage(FacesChange)` | una voce per (`kind`, `ref`); rimettere in coda da' un id nuovo; `acknowledge` toglie solo cio' che e' stato letto (per id), una voce rimessa in coda nel frattempo resta; un `kind` sconosciuto resta e non si legge |
 | Unita' fatte | `FacesUnitsDone.markDone/isDone/done` | per `FacesResource.WorkUnit` e ricetta; una ricetta piu' vecchia non abbassa quella che c'e'; una ricetta nuova le rifa' |
+
+**Lo stato della sincronizzazione** (P3 + P6). La replica (`NasFacesSync`) e il pubblicatore (`NasFacesPublisher`) tengono il loro stato dietro due porte, `FacesReplicaStore` e
+`FacesPublishStore` (`sync/FacesSyncPorts.kt`); P3 le ha consegnate con una versione in memoria, P6 le realizza sul database (`RoomFacesReplicaStore`, `RoomFacesPublishStore`, in
+`store/`; li da' `FacesStore.replicaStore`/`publishStore`). Cosa cambia: una morte del processo non fa rileggere tutte le teste e i segmenti dal NAS e non perde cio' che era in coda
+(le chiavi dei corpi, l'istantanea del custode, l'ultima testa pubblicata, il diario delle impronte, il segno "incerto"). Come:
+
+| Regola | Perche' |
+|---|---|
+| **Un solo stato per negozio**, per la sua generazione: un'altra generazione e' vuota in lettura e un errore in scrittura | il database di una generazione non ospita le altre; il negozio cancellato lancia `IllegalStateException` |
+| **Ogni `save` e' una transazione** (`FacesSyncDao.writeReplica`/`writePublish`) con la **sola differenza** rispetto all'ultimo stato scritto, che si tiene in memoria | un salvataggio costa quanto il suo cambiamento, non quanto lo stato: con 3.000 chiavi in coda una chiave in piu' costa ~0,5 ms e la scrittura dei soli scalari ~0,3 ms |
+| **`load` decodifica una volta sola** (la prima), poi risponde dall'ultimo stato | P5 chiede le istantanee a ogni suo giro (`ClusterSnapshots`): decodificare 30.000 assegnazioni a ogni richiesta costerebbe mezzo secondo |
+| Un segmento e' il suo contenuto: se l'impronta c'era gia', **non si riscrive**; l'istantanea di un dispositivo si riscrive solo se cambia (testa o `seq`) | lo stato di un giro cambia un dispositivo e pochi segmenti |
+| Le voci `cluster` sono **sigillate** (§15.3) e spezzate in righe da ~200 KB | i centroidi sono vettori (C39); una riga oltre i 2 MB non si legge su Android |
+| Un blocco che non si apre o non si decodifica **non rompe lo stato**: il segmento torna "da fare" (non piu' fatto, istantanea da rigiudicare) o l'istantanea in coda si lascia | il database e' tutto ricostruibile dal NAS |
 
 ### 15.7 La chiave (`FacesKeyStore`, core-security)
 
@@ -1100,6 +1133,10 @@ li'). `destroyAll` toglie ogni alias `mcg-faces-*` e ogni file avvolto, anche or
 | nessuna generazione, nome, chiave o percorso nei log | `FacesStoresTest`, `FacesKeyStoreTest` |
 | query su 20.000 volti in meno di 50 ms; piani senza `USE TEMP B-TREE` | `FacesDaoTest`, `FacesStorePerformanceTest` |
 | la chiave: contratto, avvolta, distruzione in ordine, sparita contro passeggero, nessun alias orfano | `FacesKeyStoreTest` (JVM), `FacesKeyStoreInstrumentedTest` (telefono) |
+| `bodiesOf`, `datePeople`, `dropAuthors` (P3): le tre prove di P3 nella suite di contratto dell'archivio passano sul database; il vincitore si rifa' togliendo un autore; i volti per il raggruppamento seguono | `FacesStoreContractTest`, `FacesDaoTest`, `RoomFacesSyncStoresTest` |
+| la replica e il pubblicatore sul database passano le **suite di contratto degli stati** (le stesse degli stati in memoria di P3), anche dopo la chiusura e la riapertura del database | `FacesReplicaStoreContract`, `FacesPublishStoreContract`: `InMemory*ContractTest` (P3) e `RoomFaces*StoreContractTest` (P6) |
+| le **prove di P3 intere** (replica, pubblicatore, isolamento, banco da 200 giri con guasti, morti del processo e stato locale perso) passano con ogni dispositivo sul suo database, e ogni "morte del processo" del banco chiude e riapre il file | `RoomFacesReplicaTest`, `RoomFacesPublisherTest`, `RoomFacesIsolationTest`, `RoomFacesSyncBenchTest` (sulle stesse classi di P3, con `RoomSyncStorage`) |
+| nessun centroide e nessuna chiave di contenuto delle assegnazioni in chiaro nel file; nessuna riga dei blocchi oltre il milione di byte; una scrittura che fallisce lascia lo stato di prima; un blocco alterato fa rifare cio' che conteneva | `RoomFacesSyncStoresTest` |
 
 ### 15.9 Misure (JVM, Robolectric; il dispositivo si misura sul campo)
 
@@ -1121,6 +1158,11 @@ Il requisito "query su 20.000 volti in meno di 50 ms" vale per tutte le query ch
 vettori in chiaro) costa la prima volta circa 450 ms: sono 6 MB da leggere e decifrare, e il contratto (`groupFaces`) li vuole tutti; per questo la si fa **una volta** per negozio
 aperto e poi si rileggono solo i contenuti salvati (`GroupFaceCache`). Sul telefono si rimisura (L112 dice cosa resta in memoria).
 
+Lo **stato della sincronizzazione** (`RoomFacesSyncPerformanceTest`, stesse condizioni): pubblicatore con 3.000 chiavi in coda, una chiave in piu' ~0,5 ms (i primi cento
+~2 ms, con il riscaldamento), i soli scalari ~0,3 ms; replica con l'istantanea di un dispositivo da 3.000 persone e 30.000 assegnazioni: primo salvataggio ~300 ms, lettura a freddo
+(dopo la riapertura, decodifica e controllo dell'istantanea) ~650 ms, a caldo 0,1 ms, aggiornare un altro dispositivo ~0,8 ms. Il banco di P3 da 200 giri su tre mondi: ~10-16 s sul
+database contro ~2,5 s in memoria.
+
 ### 15.10 Scelte e scarti
 
 | Scelta | Alternative scartate e perche' |
@@ -1135,3 +1177,7 @@ aperto e poi si rileggono solo i contenuti salvati (`GroupFaceCache`). Sul telef
 | Chiave dati avvolta in un file accanto al database | La chiave del Keystore che cifra direttamente ogni riga (un'operazione del Keystore per riga: ms l'una, StrongBox decine); la chiave dati dentro il database (non si aprirebbe senza averla) |
 | `FacesKeyProbe` (sparita contro non risponde) | Cancellare a ogni `open == null` (un guasto passeggero del Keystore farebbe perdere nomi che con la recinzione esistono solo qui); non cancellare mai (un database illeggibile per sempre) |
 | Nessuna colonna per i centroidi | Una colonna `centroid` inutilizzata: lo schema esportato la promette e nessuno la scrive. Quando P5 ne avra' bisogno e' una colonna sigillata di `group_person`, quindi una v2 con una migrazione vera (mai distruttiva) |
+| Lo stato della sincronizzazione sul database con una **differenza** e un'immagine in memoria | Riscrivere lo stato intero a ogni `save` (P4 ne fa uno per media: O(n) righe per salvataggio, O(n^2) in tutto); un blob unico per stato (un salvataggio riscrive anche l'istantanea da 12 MB per cambiare un numero); decodificare a ogni `load` (P5 lo chiede a ogni giro) |
+| Le voci `cluster` come **segmenti del formato** sigillati | Una colonna per voce (decine di migliaia di righe con un vettore ciascuna, e un'altra tabella da tenere in pari con il codec); una forma binaria nostra (un secondo codec da provare contro il materiale ostile: quello di P3 rifiuta gia' tutto cio' che e' fuori dai tetti) |
+| Una sola tabella di blocchi (`faces_chunk`) per replica e pubblicatore | Una tabella per ambito (tre tabelle uguali, con chiavi esterne: la cascata non serve, i blocchi si tolgono per nome nella stessa transazione) |
+| `faces_head_mark`, `faces_outbox` e `faces_unit_done` di prima restano | Toglierli: `FacesHeadMarks` e `FacesOutbox` sono ridondanti con lo stato di P3 (`replica_device.mark_*`, `publish_*`) e nessun codice di produzione li usa oggi; restano finche' P4 non conferma che non li vuole, e si tolgono prima del rilascio della v1 |

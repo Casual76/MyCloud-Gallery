@@ -359,7 +359,8 @@ Costanti nuove (ipotesi di partenza, da misurare in F91):
 Costanti nuove (ipotesi di partenza [stima], da misurare: P2 scrive `facesPerSecond`, F104 conferma):
 * `facesPerSecond`: foto analizzate al secondo dal rilevatore e dall'embedding dei volti sulla CPU (YuNet a 1024 px, SFace per volto):
   partenza 20-30 sull'S25 (~30-50 ms a foto), 12-20 sul Tab S9. Tempo del calcolo dei volti di `N` foto: `T = N / facesPerSecond`, piu'
-  la seconda passata HQ.
+  la seconda passata HQ. *P2 (28/10): c'e' in `DeviceMeasures.facesPerSecond` con il valore di partenza 25,0 [stima]; le parti di codice nostro misurate
+  sulla JVM e la tabella da riempire sul campo sono in `docs/decisioni.md`, "Fase 8 P2"; `FaceMeasurementsDeviceTest` (F104) scrive `facesPerSecond_suggerito`.*
 * `facesHqShare`: la parte di foto che vuole la seconda passata sull'HQ (volto sotto 40 px o almeno 5 volti), ~0,2, a ~100-200 ms l'una.
 * `faceFramesPerVideo`: fotogrammi di un video analizzati per i volti (copertina e fino a 3 del blob `frames`), 3 (`FacesComputeLimits.FRAMES_PER_VIDEO`).
 * `facesGroupingNightly`: il raggruppamento notturno del custode (assegnazione, nascite, manutenzione), obiettivo < 1 minuto per ~20.000

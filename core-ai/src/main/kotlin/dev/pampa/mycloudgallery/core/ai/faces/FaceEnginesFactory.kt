@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
 import dev.pampa.mycloudgallery.core.models.contract.VerifiedModel
+import java.nio.ByteBuffer
 
 // COME SI APRONO I MODELLI DEI VOLTI (docs/fase8-progetto.md D6, D16, §2.2 "Nel telefono"): `ModelFiles.open` verifica dimensione e SHA-256
 // del file in `models/<sha256>` **a ogni apertura**, il descrittore verificato si mappa in memoria (`ModelBytes.map`, come MagicTouch) e
@@ -38,20 +39,36 @@ object FaceEnginesFactory {
 
 internal object FaceModelOpeners {
 
-  fun detector(files: ModelFiles, spec: ModelSpec, threads: Int): DetectorOpener = DetectorOpener {
+  /**
+   * Apre YuNet: `ModelFiles.open` (verifica), [bytesOf] (la mappatura del descrittore verificato) e [sessionOf] (l'interprete). Gli ultimi due sono i punti
+   * dove le prove sulla JVM mettono i loro (senza Android e senza libreria nativa); sul dispositivo valgono sempre quelli veri.
+   */
+  fun detector(
+    files: ModelFiles,
+    spec: ModelSpec,
+    threads: Int,
+    bytesOf: (VerifiedModel) -> ByteBuffer = ModelBytes::map,
+    sessionOf: (ByteBuffer, Int) -> DetectorSession = FaceLiteRtSessions::detector,
+  ): DetectorOpener = DetectorOpener {
     val model = files.open(spec.id) ?: throw AiEngineException(AiEngineError.MODEL_UNAVAILABLE)
     try {
-      OwnedDetector(FaceLiteRtSessions.detector(ModelBytes.map(model), threads), model)
+      OwnedDetector(sessionOf(bytesOf(model), threads), model)
     } catch (t: Throwable) {
       runCatching { model.close() }
       throw t
     }
   }
 
-  fun embedder(files: ModelFiles, spec: ModelSpec, threads: Int): EmbedderOpener = EmbedderOpener {
+  fun embedder(
+    files: ModelFiles,
+    spec: ModelSpec,
+    threads: Int,
+    bytesOf: (VerifiedModel) -> ByteBuffer = ModelBytes::map,
+    sessionOf: (ByteBuffer, Int) -> EmbedderSession = FaceLiteRtSessions::embedder,
+  ): EmbedderOpener = EmbedderOpener {
     val model = files.open(spec.id) ?: throw AiEngineException(AiEngineError.MODEL_UNAVAILABLE)
     try {
-      OwnedEmbedder(FaceLiteRtSessions.embedder(ModelBytes.map(model), threads), model)
+      OwnedEmbedder(sessionOf(bytesOf(model), threads), model)
     } catch (t: Throwable) {
       runCatching { model.close() }
       throw t

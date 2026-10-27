@@ -41,6 +41,14 @@ internal class PeopleTables(private val dao: PeopleRecordDao, private val key: F
     }
   }
 
+  /** Le voci "da datare" prendono l'ora del NAS [nasNow] (D36, `FacesArchive.datePeople`); quante. Nello stesso giro di `add`, mai insieme. */
+  suspend fun date(nasNow: Long): Int = lock.withLock { dao.date(nasNow) }
+
+  /** Toglie le voci scritte da [authors] (dispositivi revocati o persi, L99, `FacesArchive.dropAuthors`); quante. */
+  suspend fun dropAuthors(authors: Set<String>): Int = lock.withLock {
+    authors.toList().chunked(PEOPLE_IN_LIMIT).sumOf { dao.deleteByAuthors(it) }
+  }
+
   /**
    * [PeopleRecord.winner], con due regole in piu' per le voci "da datare" (`atNas` null: una scelta appena fatta qui, che vale subito e si data
    * alla prima sincronizzazione):
@@ -83,5 +91,6 @@ internal class PeopleTables(private val dao: PeopleRecordDao, private val key: F
 
   private companion object {
     const val NAME = "name"
+    const val PEOPLE_IN_LIMIT = 500
   }
 }

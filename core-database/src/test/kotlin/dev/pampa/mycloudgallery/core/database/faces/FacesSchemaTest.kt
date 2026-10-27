@@ -68,6 +68,9 @@ class FacesSchemaTest {
     assertThat(tablesOf(File(schemaDir, "1.json"))).containsExactly(
       "face_body", "face", "face_unsupported", "group_state", "group_person", "group_exemplar", "group_assignment", "people_record",
       "faces_head_mark", "faces_outbox", "faces_unit_done", "faces_meta",
+      // La sincronizzazione (P3 e P6): lo stato della replica e quello del pubblicatore, e i blocchi sigillati delle voci `cluster`.
+      "replica_device", "replica_segment", "replica_segment_state", "replica_revoked", "faces_chunk", "publish_state", "publish_key",
+      "publish_segment", "publish_diary",
     )
   }
 
@@ -102,6 +105,15 @@ class FacesSchemaTest {
       db.execSQL("INSERT INTO faces_outbox (kind, ref) VALUES ('faces', '$k')")
       db.execSQL("INSERT INTO faces_unit_done VALUES ('priv', '2025-03', 0, 1, NULL)")
       db.execSQL("INSERT INTO faces_meta VALUES ('key_check', x'00')")
+      db.execSQL("INSERT INTO replica_device VALUES ('dev-a', 3, 'h3', 2, 1, 3, 'h3', 2, 1, 3, 'h3')")
+      db.execSQL("INSERT INTO replica_segment VALUES ('dev-a', 0, 19, '${"c".repeat(64)}', 1234)")
+      db.execSQL("INSERT INTO replica_segment_state VALUES ('dev-a', '${"c".repeat(64)}', 1, 77)")
+      db.execSQL("INSERT INTO replica_revoked VALUES ('dev-x')")
+      db.execSQL("INSERT INTO faces_chunk VALUES ('replica.cluster', 'dev-a', '${"c".repeat(64)}', 0, '${"d".repeat(64)}', 99, x'0a0b')")
+      db.execSQL("INSERT INTO publish_state VALUES (1, 4, 3, 5, 5, 'h5', 1000, 4, 3, 10, 2, 1, 0)")
+      db.execSQL("INSERT INTO publish_key VALUES ('$k')")
+      db.execSQL("INSERT INTO publish_segment VALUES ('${"e".repeat(64)}')")
+      db.execSQL("INSERT INTO publish_diary VALUES ('${"e".repeat(64)}', 7)")
     }
     val database = FacesDatabase.build(context, file)
     try {
@@ -118,6 +130,16 @@ class FacesSchemaTest {
       assertThat(database.outboxDao().count()).isEqualTo(1)
       assertThat(database.unitDao().get("priv", "2025-03", 0)!!.recipe).isEqualTo(1)
       assertThat(database.metaDao().get("key_check")).isNotNull()
+      val sync = database.syncDao()
+      assertThat(sync.replicaDevices().single().markVersion).isEqualTo(3)
+      assertThat(sync.replicaSegments().single().cls).isEqualTo(19)
+      assertThat(sync.replicaStates().single().entries).isEqualTo(77)
+      assertThat(sync.replicaRevoked()).containsExactly("dev-x")
+      assertThat(sync.chunks("replica.cluster").single().data).isEqualTo(byteArrayOf(10, 11))
+      assertThat(sync.publishState()!!.pending).isEqualTo(2)
+      assertThat(sync.publishKeys()).hasSize(1)
+      assertThat(sync.publishSegments()).hasSize(1)
+      assertThat(sync.publishDiary().single().ord).isEqualTo(7)
       database.openHelper.writableDatabase.query("PRAGMA integrity_check").use { assertThat(it.moveToFirst() && it.getString(0) == "ok").isTrue() }
     } finally {
       database.close()
@@ -234,9 +256,9 @@ class FacesSchemaTest {
         }
       }
       // Le uniche colonne che portano dati sensibili sono BLOB sigillati, con questi nomi e nessun altro.
-      assertThat(columns.filterValues { it == "BLOB" }.keys).containsExactly("face_body.secret", "people_record.sealed_value", "faces_meta.data")
+      assertThat(columns.filterValues { it == "BLOB" }.keys).containsExactly("face_body.secret", "people_record.sealed_value", "faces_meta.data", "faces_chunk.data")
       assertThat(columns.keys.filter { Regex("vector|embedding|centroid|name$|landmark", RegexOption.IGNORE_CASE).containsMatchIn(it) })
-        .containsExactly("faces_meta.name") // il nome del valore di servizio, non di una persona
+        .containsExactly("faces_meta.name", "faces_chunk.name") // il nome di un valore di servizio o di un insieme di voci, non di una persona
     } finally {
       database.close()
     }

@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "1fa7815b0a9e5d50765a2ecc0ecfda51",
+    "identityHash": "1393e46f2009a1e3d7b3cdca9808230a",
     "entities": [
       {
         "tableName": "face_body",
@@ -678,11 +678,385 @@
             "name"
           ]
         }
+      },
+      {
+        "tableName": "replica_device",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`device_id` TEXT NOT NULL, `mark_version` INTEGER, `mark_hash` TEXT, `snapshot_seq` INTEGER, `snapshot_base` INTEGER, `snapshot_head_version` INTEGER, `snapshot_head_hash` TEXT, `snap_seq` INTEGER, `snap_base` INTEGER, `checked_version` INTEGER, `checked_hash` TEXT, PRIMARY KEY(`device_id`))",
+        "fields": [
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "markVersion",
+            "columnName": "mark_version",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "markHash",
+            "columnName": "mark_hash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "snapshotSeq",
+            "columnName": "snapshot_seq",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "snapshotBase",
+            "columnName": "snapshot_base",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "snapshotHeadVersion",
+            "columnName": "snapshot_head_version",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "snapshotHeadHash",
+            "columnName": "snapshot_head_hash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "snapSeq",
+            "columnName": "snap_seq",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "snapBase",
+            "columnName": "snap_base",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "checkedVersion",
+            "columnName": "checked_version",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "checkedHash",
+            "columnName": "checked_hash",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "device_id"
+          ]
+        }
+      },
+      {
+        "tableName": "replica_segment",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`device_id` TEXT NOT NULL, `position` INTEGER NOT NULL, `cls` INTEGER NOT NULL, `hash` TEXT NOT NULL, `size` INTEGER NOT NULL, PRIMARY KEY(`device_id`, `position`))",
+        "fields": [
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "position",
+            "columnName": "position",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cls",
+            "columnName": "cls",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hash",
+            "columnName": "hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "size",
+            "columnName": "size",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "device_id",
+            "position"
+          ]
+        }
+      },
+      {
+        "tableName": "replica_segment_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`device_id` TEXT NOT NULL, `hash` TEXT NOT NULL, `done` INTEGER NOT NULL, `entries` INTEGER, PRIMARY KEY(`device_id`, `hash`))",
+        "fields": [
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hash",
+            "columnName": "hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "done",
+            "columnName": "done",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "entries",
+            "columnName": "entries",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "device_id",
+            "hash"
+          ]
+        }
+      },
+      {
+        "tableName": "replica_revoked",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`device_id` TEXT NOT NULL, PRIMARY KEY(`device_id`))",
+        "fields": [
+          {
+            "fieldPath": "deviceId",
+            "columnName": "device_id",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "device_id"
+          ]
+        }
+      },
+      {
+        "tableName": "faces_chunk",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`scope` TEXT NOT NULL, `owner` TEXT NOT NULL, `name` TEXT NOT NULL, `part` INTEGER NOT NULL, `enc_hash` TEXT NOT NULL, `enc_size` INTEGER NOT NULL, `data` BLOB NOT NULL, PRIMARY KEY(`scope`, `owner`, `name`, `part`))",
+        "fields": [
+          {
+            "fieldPath": "scope",
+            "columnName": "scope",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "owner",
+            "columnName": "owner",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "part",
+            "columnName": "part",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "encHash",
+            "columnName": "enc_hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "encSize",
+            "columnName": "enc_size",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "data",
+            "columnName": "data",
+            "affinity": "BLOB",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "scope",
+            "owner",
+            "name",
+            "part"
+          ]
+        }
+      },
+      {
+        "tableName": "publish_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER NOT NULL, `snap_seq` INTEGER, `snap_base` INTEGER, `pub_version` INTEGER, `pub_mark_version` INTEGER, `pub_mark_hash` TEXT, `pub_at_nas` INTEGER, `pub_snap_seq` INTEGER, `pub_snap_base` INTEGER, `pub_entries` INTEGER, `pending` INTEGER NOT NULL, `adopted` INTEGER NOT NULL, `uncertain` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "snapSeq",
+            "columnName": "snap_seq",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "snapBase",
+            "columnName": "snap_base",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pubVersion",
+            "columnName": "pub_version",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pubMarkVersion",
+            "columnName": "pub_mark_version",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pubMarkHash",
+            "columnName": "pub_mark_hash",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pubAtNas",
+            "columnName": "pub_at_nas",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pubSnapSeq",
+            "columnName": "pub_snap_seq",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pubSnapBase",
+            "columnName": "pub_snap_base",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pubEntries",
+            "columnName": "pub_entries",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pending",
+            "columnName": "pending",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "adopted",
+            "columnName": "adopted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uncertain",
+            "columnName": "uncertain",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "publish_key",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`content_key` TEXT NOT NULL, PRIMARY KEY(`content_key`))",
+        "fields": [
+          {
+            "fieldPath": "contentKey",
+            "columnName": "content_key",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "content_key"
+          ]
+        }
+      },
+      {
+        "tableName": "publish_segment",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`hash` TEXT NOT NULL, PRIMARY KEY(`hash`))",
+        "fields": [
+          {
+            "fieldPath": "hash",
+            "columnName": "hash",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "hash"
+          ]
+        }
+      },
+      {
+        "tableName": "publish_diary",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`hash` TEXT NOT NULL, `ord` INTEGER NOT NULL, PRIMARY KEY(`hash`))",
+        "fields": [
+          {
+            "fieldPath": "hash",
+            "columnName": "hash",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "ord",
+            "columnName": "ord",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "hash"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_publish_diary_ord",
+            "unique": false,
+            "columnNames": [
+              "ord"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_publish_diary_ord` ON `${TABLE_NAME}` (`ord`)"
+          }
+        ]
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1fa7815b0a9e5d50765a2ecc0ecfda51')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1393e46f2009a1e3d7b3cdca9808230a')"
     ]
   }
 }

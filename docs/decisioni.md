@@ -7852,6 +7852,73 @@ niente di P6: lo fa P13); D34 nel dex e in mapping.txt; LiteRT nel bytecode: 24 
 - **Eccezioni dell'archivio**: un database pieno o un errore di disco a meta' di `saveBody` esce come eccezione di SQLite (non e' un caso previsto dal contratto): P4 la deve prendere come un errore del media.
 - **Integrazione**: in `docs/sicurezza.md` qui L110-L114 seguono L103 e C45-C48 seguono C41; all'integrazione con gli altri pacchetti si tengono tutte in ordine di numero (come per P0).
 
+### Fase 8 P6, integrazione con P3: i tre metodi dell'archivio, la replica e il pubblicatore sul database (29/10)
+
+Branch `integra/29-10b` (`main` con P6, piu' P3). `check.ps1` era rosso: `:core-faces:compileDebugKotlin` non compilava, perche' P3 aveva aggiunto al contratto `FacesArchive` tre metodi
+(`bodiesOf`, `datePeople`, `dropAuthors`) realizzati nel fake e in `ClosedFacesArchive` ma non in `DatabaseFacesArchive`, e perche' aveva lasciato **in memoria** due porte
+(`FacesReplicaStore`, `FacesPublishStore`), cosi' replica e pubblicatore dei volti non sopravvivevano alla morte del processo. Commit: `3a76d318` (database e tre metodi), `5148f1a3`
+(replica e pubblicatore sul database, con le prove), `d1a80b92` (`modello-dati.md` §15 e `sicurezza.md`) e quello di questa sezione.
+
+**Cosa e' cambiato**
+- **I tre metodi** in `DatabaseFacesArchive`, cifrati come il resto. `bodiesOf(author, keys)`: i corpi di un autore, vincenti o no (stesse decifrature di `winners`). `datePeople(nasNow)`: una
+  `UPDATE` sola sulle voci con `at_nas` NULL, sotto il lucchetto delle voci `people`. `dropAuthors(authors)`: in una transazione toglie i corpi e le voci di un autore, **rifa' il vincitore**
+  delle sole chiavi che lo avevano di lui (le altre non cambiano) e azzera i volti per il raggruppamento tenuti in memoria (una revoca e' rara: si rileggono da capo). Le tre prove nuove di
+  `FacesArchiveContract` passano sull'archivio vero (`FacesStoreContractTest`: 10 prove).
+- **Schema v1** (ancora non rilasciato, quindi nessuna migrazione): nove tabelle nuove. `replica_device`, `replica_segment`, `replica_segment_state`, `replica_revoked` per la replica;
+  `publish_state`, `publish_key`, `publish_segment`, `publish_diary` per il pubblicatore; `faces_chunk` per le **voci `cluster` sigillate** (persone con il centroide, assegnazioni).
+  Esportazione (`1.json`) e `FacesSchemaTest` aggiornati: l'elenco delle tabelle, l'unica colonna BLOB in piu' (`faces_chunk.data`), una v1 creata dal JSON con una riga per tabella.
+- **`RoomFacesReplicaStore` e `RoomFacesPublishStore`** (`store/`): le due porte sul database. `FacesStore.replicaStore`/`publishStore` e, per `:app`, `FacesStores.archives()`,
+  `replicaStore()`, `publishStore()` (il negozio si apre da solo; un negozio che non si apre da' stato vuoto in lettura e `IllegalStateException` in scrittura) e il parametro `onRecovered`
+  (la Diagnostica conta `FACES_KEY_LOST`). Vedi `docs/modello-dati.md` §15.6.
+
+**Scelte**
+1. **Differenza e immagine in memoria.** Ogni `save` e' una transazione che scrive solo cio' che e' cambiato rispetto all'ultimo stato scritto, che si tiene in memoria; `load` decodifica solo
+   la prima volta. Il motivo e' d'uso: P4 mette una voce in coda per media (un `save` ciascuna) e P5 chiede le istantanee a ogni suo giro. Riscrivere lo stato intero a ogni salvataggio sarebbe
+   O(n) righe ciascuno, O(n^2) in tutto; un blob unico riscriverebbe anche un'istantanea da 12 MB per cambiare un numero.
+2. **Le voci `cluster` come segmenti del formato, sigillati e spezzati.** Ogni blocco di `faces_chunk` e' un segmento `cluster` di P3 (`FacesDocs.clusterSegment`) sigillato con la chiave dati:
+   un codec solo, gia' provato contro il materiale ostile, e a ogni lettura le stesse regole di chi legge dal NAS (un blocco rovinato e' un rifiuto, non un'eccezione). Un insieme grande
+   si spezza in righe da circa 200 KB: **Android non legge una riga oltre i 2 MB** (CursorWindow), e un'istantanea da 10.000 persone con il centroide ne pesa dieci.
+3. **Un blocco che non si apre non rompe lo stato**: un segmento `cluster` torna "da fare" (non piu' fatto, istantanea da rigiudicare), un'istantanea di un dispositivo si lascia (con la testa da
+   cui veniva), quella in coda del pubblicatore si lascia (il custode ne chiede un'altra). Tutto si ricostruisce dal NAS.
+4. **Un negozio, una generazione.** Le porte portano la generazione; un'altra generazione e' vuota in lettura e un errore in scrittura. Cancellare il negozio (`eraseLocal`) le fa lanciare.
+5. **La datazione.** `datePeople` data *tutte* le voci da datare con la stessa ora, come il fake di P3 (il pubblicatore la chiama prima di ripubblicare lo stato unito, D36); la regola di
+   `PeopleTables` di P6 (una voce datata che e' la stessa scelta di una da datare la data) resta per `addPeople`, quando il NAS rimanda la voce con la sua ora.
+
+**Prove** (JVM, Robolectric)
+- **Le suite di contratto degli stati**, nuove: `FacesReplicaStoreContract` (7 prove) e `FacesPublishStoreContract` (7), le stesse per gli stati in memoria di P3
+  (`InMemoryFacesReplicaStoreContractTest`, `InMemoryFacesPublishStoreContractTest`) e per quelli sul database (`RoomFacesReplicaStoreContractTest`, `RoomFacesPublishStoreContractTest`),
+  anche dopo la chiusura e la riapertura del database. Stati con tre dispositivi, segmenti delle tre classi, voci `cluster` vere, un'istantanea da 2.000 persone e 6.000 assegnazioni.
+- **Le prove di P3 intere sul database**: `FacesReplicaTest`, `FacesPublisherTest`, `FacesIsolationTest` e `FacesSyncBenchTest` (il banco da **200 giri con guasti al 15%**, morti del processo e stato
+  locale perso, su tre mondi) sono ora `open` con un `newWorld()`; `FacesSyncWorld` riceve uno `SyncStorage` (in memoria, di serie; `RoomSyncStorage` in `store/`) e ogni dispositivo ha il suo
+  database: ogni "morte del processo" del banco **chiude e riapre il file**, lo stato locale perso cancella il database come "Disattiva e cancella". `RoomFacesReplicaTest` (7),
+  `RoomFacesPublisherTest` (11), `RoomFacesIsolationTest` (3), `RoomFacesSyncBenchTest` (1): verdi, con le stesse asserzioni di P3. Il banco impiega ~10-16 s sul database contro ~2,5 s in memoria.
+- `RoomFacesSyncStoresTest` (7): nessun centroide e nessuna chiave di contenuto delle assegnazioni in chiaro nel file (`.db`, `-wal`, `-shm`; con il controllo positivo sul segmento non sigillato),
+  nessuna riga dei blocchi oltre il milione di byte (la piu' grande ~300 KB), una scrittura che fallisce lascia lo stato di prima, un blocco alterato fa rifare cio' che conteneva senza rompere il
+  resto, dopo la cancellazione gli stati lanciano, le porte di `FacesStores` e `onRecovered`, i tre metodi nuovi con la cache dei volti.
+- `FacesDaoTest` (+3) e `FacesSchemaTest` (aggiornato): il vincitore si rifa' togliendo un autore, la datazione, le due transazioni di sincronizzazione.
+- **Misure** (`RoomFacesSyncPerformanceTest`): pubblicatore con 3.000 chiavi in coda, una chiave in piu' ~0,5 ms; solo gli scalari ~0,3 ms. Replica con l'istantanea di un dispositivo da 3.000 persone e
+  30.000 assegnazioni: primo salvataggio ~300 ms, lettura a freddo ~650 ms, a caldo 0,1 ms, aggiornare un altro dispositivo ~0,8 ms.
+- Il test strumentato con la chiave vera (`FacesStoreInstrumentedTest`) ha una prova in piu' (le voci `cluster` sigillate sopravvivono alla riapertura e non sono in chiaro nel file): scritta, non
+  eseguita (nessun telefono); compila.
+
+**`tools\check.ps1 -NoDaemon`**: **verde** (uscita 0, "OK: tutto a posto."), con `GRADLE_OPTS=-Dorg.gradle.workers.max=2` e dopo aver cancellato `app\build\outputs\apk\release`. Il passo Gradle (`assembleDebug assembleRelease galleryTest galleryLint`) ha impiegato 1.890 s con due worker, sul PC condiviso con altri agenti. Test per modulo (nessuno a zero, nessuno fallito): `core-faces` 233, `core-database` 271, `core-albums` 707, `feature-people` 7, `app` 869. Prima di questo giro: il primo tentativo si era fermato in 50 s per "Spazio su disco insufficiente" (il disco era pieno) e il secondo su `core-albums:testDebugUnitTest`, nella sola prova `SmartScaleTest.ilRicalcoloIncrementaleDiUnLottoDiArriviEUnaFrazioneDiQuelloIntero`: un confronto di tempi (221 ms contro un tetto di 200 ms) che salta quando la macchina e' carica. Il ramo non tocca `core-albums` (nessuna differenza rispetto a `main`), la prova da sola passa e nel giro finale e' verde: e' una prova di tempo sensibile al carico, da tenere d'occhio (il tetto di 200 ms non scala con il PC occupato), non un difetto di questo lavoro.
+
+**Modifiche ai contratti e ai file di P3**
+- Nessun contratto cambia: `FacesArchive`, `FacesReplicaStore`, `FacesPublishStore` sono quelli di P3. Aggiunte di P6: `RoomFaces*Store` (interni), i metodi `FacesStore.replicaStore`/`publishStore`,
+  `FacesStores.archives()`/`replicaStore()`/`publishStore()` e `onRecovered`.
+- File di prova di P3 toccati, senza cambiarne le asserzioni: `FacesSyncWorld` (parametro `storage`; `archive`, `replicaStore`, `publishStore` di `SyncDevice` ora sono proprieta' dello storage del
+  dispositivo e `restart` lo riapre) e le quattro classi di prova rese `open` con `newWorld()`. Nuovi: `SyncStorage`, `SyncStateSamples`, `FacesSyncStoreContracts`.
+
+**Cosa trova pronto P13**: `NasFacesSync(..., archives = stores.archives(), store = stores.replicaStore(), ...)` e `NasFacesPublisher(..., stores.archives(), stores.publishStore(), ...)` con un solo
+`FacesStores` per processo (la memoria dei volti e quella degli stati sono per negozio).
+
+**Punti aperti**
+- `faces_head_mark`/`FacesHeadMarks` e `faces_outbox`/`FacesOutbox` (P6 originale) sono **ridondanti** con lo stato di P3 (`replica_device.mark_*`, le chiavi e il diario del pubblicatore) e nessun
+  codice di produzione li usa: restano per non rompere un pacchetto che li avesse presi, si tolgono prima del rilascio della v1 (basta confermare con P4 e P8).
+- Il pubblicatore confronta tutte le chiavi in coda a ogni `save` (O(n) con n = chiavi calcolate qui; con 3.000 chiavi costa ~0,5 ms, ma il costo cresce con il numero): da misurare con 20.000 media
+  sul telefono; se pesa, un `FacesChange.Faces` incrementale invece di un insieme da confrontare.
+- Gli stati in memoria (l'ultimo stato letto o scritto) contengono i centroidi decifrati: L112 lo dice; con un'istantanea da 10.000 persone e 200.000 assegnazioni sono decine di MB.
+
 ## Fase 7 P13: integrazione in `:app` (27/10)
 
 Il pacchetto lega in `:app` i pacchetti P0-P11 della Fase 7 (P12 escluso): album personali e smart, viaggi, album condivisi e condivisione, Utility,

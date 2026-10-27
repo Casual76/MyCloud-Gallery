@@ -203,6 +203,13 @@ interface ShareDiaryDao {
   @Query("SELECT * FROM album_share_op WHERE finished = 0 ORDER BY created_at, op_id")
   suspend fun openOps(): List<AlbumShareOpEntity>
 
+  /**
+   * Le ultime operazioni **chiuse**, le piu' recenti prima (revisione E, SH-2: la striscia "N da riprovare" e il tocco "Riprova" le leggono dal diario,
+   * cosi' sopravvivono alla morte del processo; [ShareDiary.closedOps]).
+   */
+  @Query("SELECT * FROM album_share_op WHERE finished = 1 ORDER BY updated_at DESC, op_id DESC LIMIT :limit")
+  suspend fun closedOps(limit: Int): List<AlbumShareOpEntity>
+
   @Query("SELECT * FROM album_share_item WHERE op_id = :opId ORDER BY item_index")
   suspend fun items(opId: String): List<AlbumShareItemEntity>
 

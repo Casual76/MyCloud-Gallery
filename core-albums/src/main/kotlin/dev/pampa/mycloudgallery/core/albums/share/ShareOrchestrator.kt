@@ -281,12 +281,14 @@ class ShareOrchestrator(
     for (op in seen.values + closed.filter { it.id !in seen }) {
       val items = ports.diary.items(op.id)
       val state = stateOf(op, items)
+      // Un'operazione chiusa che questo processo non ha avviato (letta dal diario) vale solo come "N da riprovare": mai come lavoro in corso. Con un
+      // elemento fermo dal diario (I5, pacchetto A: una riga che non si legge, in viaggio senza biglietto) `stateOf` direbbe "in corso" per sempre.
+      if (op.id !in seen && state !is ShareOpState.PartlyDone) continue
       if (state is ShareOpState.PartlyDone) {
         // Una lettura che non riesce non nasconde niente: la striscia resta (si ricalcola al giro dopo).
         val retry = guardedOrNull { toRetry(op, items, busy) }
         if (op.id in dismissed || (retry != null && retry.isEmpty())) continue
       }
-      if (state is ShareOpState.Done && op.id !in seen) continue
       out += state
     }
     states.value = out

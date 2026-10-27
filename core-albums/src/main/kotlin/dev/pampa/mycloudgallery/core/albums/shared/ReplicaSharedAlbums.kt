@@ -199,8 +199,13 @@ class ReplicaSharedAlbums(
       .sortedWith(compareBy<SharedAlbumView>({ it.merged.closedAt ?: Long.MAX_VALUE }, { it.merged.album.value }))
     for (view in closed) {
       val m = view.merged
-      val mark = known[m.album] ?: continue
-      if (!mark.seenActive || mark.copy != null) continue
+      // Revisione E (SC-1 e R1): la copia di un album chiuso nasce solo se questo dispositivo l'ha visto attivo (un album nato chiuso, o mai visto, non fa
+      // scrivere niente a nessuno), **tranne per il creatore**: l'id dell'album e' legato all'account che l'ha creato (nessun dispositivo di un altro account
+      // puo' spacciarlo per mio), quindi un album mio non e' mai "l'album di un dispositivo ostile", e "Smetti di condividere" fatto da me deve lasciarmi
+      // l'album personale anche se il segno "visto attivo" manca (un segno che non si e' potuto scrivere o leggere). I tetti per creatore valgono lo stesso.
+      val byMe = m.creator == me
+      val mark = known[m.album] ?: if (byMe) AlbumMarks() else continue
+      if ((!mark.seenActive && !byMe) || mark.copy != null) continue
       val mine = m.creator == me || m.heir == me
       val keeps = when (m.state) {
         SharedState.ACTIVE -> false
@@ -233,12 +238,16 @@ class ReplicaSharedAlbums(
 
   /**
    * R1: le copie da ritirare, perche' il dispositivo che ha firmato la chiusura che le ha fatte nascere adesso e' revocato o perso ("la revoca
-   * toglie cio' che il dispositivo revocato ha causato"). Chi le ritira chiama [copyWithdrawn] dopo ognuna.
+   * toglie cio' che il dispositivo revocato ha causato"), **tranne la copia di un mio album**. Chi le ritira chiama [copyWithdrawn] dopo ognuna.
    */
   suspend fun copiesToWithdraw(): List<SharedAlbumCopy> {
     val registry = identity.registry() ?: return emptyList()
+    val me = me()
     return marks().mapNotNull { (album, mark) ->
       val made = mark.copy?.takeIf { !it.withdrawn } ?: return@mapNotNull null
+      // Revisione E (SC-1): la copia di un album che ho creato io e' mia, non una copia nata dalla chiusura di un altro: dopo il mio "Smetti di condividere"
+      // il telefono che ha chiuso puo' essere dato per perso (si cambia telefono) e il mio album personale non deve sparire con lui.
+      if (made.creator == me) return@mapNotNull null
       val cause = made.cause ?: return@mapNotNull null
       if (SharedAlbumReplica.authorTrusted(registry, cause) || registry.registry.device(cause) == null) return@mapNotNull null
       SharedAlbumCopy(made.copy, album, "", made.creator, mine = false, items = emptyList(), cause = cause)

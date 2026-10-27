@@ -24,15 +24,6 @@ internal interface ChaosTargetFactory {
   fun create(world: ChaosWorld): ChaosNas
 }
 
-/**
- * I difetti del codice di produzione che il banco ha trovato e che non sono stati corretti (docs/prova-500.md Parte F, §F6): finche' non sono corretti il banco
- * non fa cio' che li scatena (come `KnownDefect` degli altri banchi), e `FacesChaosKnownDefectsTest` li riproduce con uno scenario fisso.
- */
-internal enum class KnownDefect(val label: String) {
-  /** O2: un media calcolato dai byte del telefono che poi arriva sul NAS dentro un'unita' gia' segnata finita non viene mai accodato per la pubblicazione. */
-  PHONE_BODY_NEVER_PUBLISHED("corpo del solo telefono mai pubblicato dopo l'arrivo del media sul NAS"),
-}
-
 internal class ChaosConfig(
   val capabilities: Capabilities = Capabilities.MEMORY,
   val minDevices: Int = 2,
@@ -49,12 +40,8 @@ internal class ChaosConfig(
    * arrivasse sul NAS si rimette in coda solo al riavvio dopo (O2 del §F6), e fino ad allora gli altri dispositivi lo ricalcolano.
    */
   val restartAtEnd: Boolean = true,
-  /** Anche i salvataggi del database che non riescono con un errore di SQLite fuori dai punti dove la produzione li gestisce (l'osservazione O1 del §F6: oggi escono dalla tappa come eccezione). */
-  val databaseErrors: Boolean = false,
   /** Piu' colpi per passo e piu' vicini (il NAS vero: ogni giro costa decine di secondi). */
   val dense: Boolean = false,
-  /** I difetti noti che il banco evita (di serie tutti, finche' non sono corretti). */
-  val avoid: Set<KnownDefect> = KnownDefect.entries.toSet(),
   /** Un errore introdotto apposta (solo `FacesChaosMutationTest`). */
   val mutant: Mutant? = null,
 )
@@ -165,7 +152,7 @@ internal class ChaosRound(
     val actor = actorFor(kind)
     world.note("--- passo $n: ${kind.label} su ${actor.name}")
     val actors = if (kind == StepKind.SYNC || kind == StepKind.COMPUTE || kind == StepKind.COMPUTE_FLIP) online().map { it.index } else listOf(actor.index)
-    val blows = ChaosPlan.blows(random, kind, if (kind == StepKind.COMPUTE_FLIP) listOf(actor.index) else actors, config.capabilities, config.databaseErrors, config.dense)
+    val blows = ChaosPlan.blows(random, kind, if (kind == StepKind.COMPUTE_FLIP) listOf(actor.index) else actors, config.capabilities, config.dense)
     story += "passo $n: ${kind.label} su ${actor.name}" + if (blows.isEmpty()) "" else ", colpi: " + blows.joinToString("; ")
     inj.arm(blows)
     try {
@@ -221,7 +208,7 @@ internal class ChaosRound(
           }
         }
         // Un media del telefono che arriva sul NAS (backup riuscito): passa dal telefono all'area privata.
-        actor.sim.phone.values.firstOrNull { random.nextInt(3) == 0 && KnownDefect.PHONE_BODY_NEVER_PUBLISHED !in config.avoid }?.let {
+        actor.sim.phone.values.firstOrNull { random.nextInt(3) == 0 }?.let {
           actor.sim.phone.remove(it.key)
           // Sul NAS l'anteprima c'e' (la prepara il backup e l'indice la attesta): da ora la vedono tutti i dispositivi dell'account.
           val onNas = SimMedia(it.key, it.kind, it.month, it.source, it.scene, it.hq, it.document, it.cutout, it.hidden, previewOnNas = true)

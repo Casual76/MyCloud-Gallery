@@ -13,8 +13,8 @@ import org.junit.Test
  * ogni salvataggio (database, outbox, istantanea, diario della cancellazione, registro dei dati personali), la generazione che cambia a meta' e un
  * dispositivo spento che torna. Dopo ogni morte, a fine passo e in una rilettura finale: gli otto invarianti del §5.5 (`ChaosVerifier`).
  *
- * Variabili: `MCG_FACES_CHAOS_ROUNDS` (2.000), `MCG_FACES_CHAOS_SEED` (20261029), `MCG_FACES_CHAOS_FIRST_ROUND`; per cercare i difetti noti (§F6) `MCG_FACES_CHAOS_NO_AVOID=1`
- * (il banco non evita O2) e `MCG_FACES_CHAOS_DB_ERRORS=1` (anche gli errori del database che la produzione non guarda: O1). Il rapporto va in `build/chaos/`.
+ * Variabili: `MCG_FACES_CHAOS_ROUNDS` (2.000), `MCG_FACES_CHAOS_SEED` (20261029), `MCG_FACES_CHAOS_FIRST_ROUND`. Il banco non evita piu' nessun difetto noto (O1, O2 e O3
+ * sono corretti: docs/prova-500.md §F6) e fa fallire anche i salvataggi del database con un errore di SQLite. Il rapporto va in `build/chaos/`.
  */
 class FacesChaosBenchTest {
 
@@ -23,12 +23,7 @@ class FacesChaosBenchTest {
     val rounds = ChaosEnv.number("MCG_FACES_CHAOS_ROUNDS") ?: DEFAULT_ROUNDS
     val seed = ChaosEnv.number("MCG_FACES_CHAOS_SEED") ?: DEFAULT_SEED
     val first = (ChaosEnv.number("MCG_FACES_CHAOS_FIRST_ROUND") ?: 0L).toInt()
-    val config = ChaosConfig(
-      MemoryTarget.capabilities,
-      avoid = if (System.getenv("MCG_FACES_CHAOS_NO_AVOID") == "1") emptySet() else KnownDefect.entries.toSet(),
-      databaseErrors = System.getenv("MCG_FACES_CHAOS_DB_ERRORS") == "1",
-    )
-    val result = ChaosBench.run(rounds.toInt(), seed, MemoryTarget, config, firstRound = first)
+    val result = ChaosBench.run(rounds.toInt(), seed, MemoryTarget, ChaosConfig(MemoryTarget.capabilities), firstRound = first)
     result.writeReport(File("build/chaos/faces-jvm-report-fake.txt"))
     println(result.summary())
     assertWithMessage("giri con violazioni:\n" + result.failureText()).that(result.failures).isEmpty()

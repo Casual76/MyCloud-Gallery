@@ -199,7 +199,14 @@ class DefaultFacesSwitch(
     }
   }
 
-  override suspend fun reconcile(setting: FacesSetting?): ReconcileOutcome = mutex.withLock { settleLocked(setting) }
+  override suspend fun reconcile(setting: FacesSetting?): ReconcileOutcome = try {
+    mutex.withLock { settleLocked(setting) }
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    // O3: un guasto dello stato locale non e' un'eccezione per chi chiama: fallisce chiuso, con il suo codice (quel giro non pubblica) e si riprova al giro dopo.
+    ReconcileOutcome.Failed(ERASE_PENDING)
+  }
 
   /** Un giro **completo** dei dati personali e' finito in questo processo (lo chiama chi lo esegue, dopo `PersonalSync.sync`): accende [fresh]. */
   fun onPersonalRoundCompleted() {
@@ -258,8 +265,19 @@ class DefaultFacesSwitch(
     }
   }
 
+  /**
+   * L'allineamento che segue ogni voce nuova dell'account, lanciato dentro lo scope dell'interruttore (in :app una coroutine che lancia senza gestore chiude l'app, e
+   * un `collect` che lancia smette di seguire le voci): un guasto dello stato locale o dell'account (O3) si ingoia qui. Niente si perde: i dati restano segnati e
+   * il giro dopo ([reconcile]) o la voce dopo li riprova, e intanto chi pubblica trova `ERASE_PENDING`.
+   */
   private suspend fun settle() {
-    mutex.withLock { settleLocked(account.current()) }
+    try {
+      mutex.withLock { settleLocked(account.current()) }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      refresh()
+    }
   }
 
   /**
@@ -301,9 +319,17 @@ class DefaultFacesSwitch(
     } catch (e: Exception) {
       false
     }
-    // La generazione si dimentica solo dopo che la cancellazione ha detto "non resta niente": altrimenti si riprova.
-    if (done) localStore.update { if (it.dataGeneration == generation) it.copy(dataGeneration = null) else it }
-    return done
+    // La generazione si dimentica solo dopo che la cancellazione ha detto "non resta niente": altrimenti si riprova. Il segno che non si scrive (O3) vale come
+    // "non finita": i dati sono gia' tolti, la volta dopo la cancellazione non trova niente e il segno si riprova.
+    if (!done) return false
+    return try {
+      localStore.update { if (it.dataGeneration == generation) it.copy(dataGeneration = null) else it }
+      true
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      false
+    }
   }
 
   /** L'avviso di [generation] e' visto qui per la versione di questa app; il dispositivo si include e ricorda i suoi dati. */

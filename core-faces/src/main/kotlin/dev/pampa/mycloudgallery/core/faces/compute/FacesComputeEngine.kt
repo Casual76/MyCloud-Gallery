@@ -132,7 +132,10 @@ class FacesComputeEngine(
     try {
       stop = ctx.gate() ?: runUnits(ctx, runner, area)
       // Cio' che aspetta in coda (un'altra tappa, un NAS che non rispondeva) ha un'altra occasione a fine tappa; mai dopo uno stop che toglie il diritto.
-      if (area != FacesArea.PHONE_ONLY && !ctx.untouchable(stop) && stateStop(parts, generation) == null) runner.flushPending()
+      // Un errore del database in questa pubblicazione (O1) ferma la tappa con il suo codice solo se non c'e' un altro motivo (tempo, regole...) che gia' la ferma.
+      if (area != FacesArea.PHONE_ONLY && !ctx.untouchable(stop) && stateStop(parts, generation) == null) {
+        runner.flushPending()?.let { if (stop == FacesStop.DONE) stop = it }
+      }
       // Il NAS che non ha risposto non e' "finito": fatto cio' che c'era in locale (E-A6).
       if (stop == FacesStop.DONE && ctx.nasDown) stop = FacesStop.NO_NAS
     } catch (e: ArchiveClosed) {

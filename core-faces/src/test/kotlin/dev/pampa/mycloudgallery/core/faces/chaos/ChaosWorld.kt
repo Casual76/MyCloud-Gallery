@@ -42,6 +42,18 @@ internal class ChaosWorld(val seed: Long, val inj: ChaosInjector, val mutant: Mu
   val trace = ArrayList<String>()
   val tracing: Boolean = System.getenv("MCG_FACES_CHAOS_TRACE") == "1"
 
+  private val escaped = java.util.concurrent.ConcurrentLinkedQueue<String>()
+
+  /** Un'eccezione e' uscita da una coroutine dell'interruttore di [device] (O3): si ricorda con il suo posto, e il verificatore la porta all'invariante 10. */
+  fun escapedFromScope(device: String, e: Throwable) {
+    escaped += "${e.javaClass.simpleName} esce da una coroutine dell'interruttore di $device: ${e.message}
+" + e.stackTrace.take(10).joinToString("
+") { "      $it" }
+  }
+
+  /** Le eccezioni uscite dalle coroutine dall'ultima volta che si sono chieste. */
+  fun takeEscaped(): List<String> = generateSequence { escaped.poll() }.toList()
+
   fun note(text: String) {
     if (tracing) trace += "t=${clock.monotonicMs - ChaosClock.START_MONOTONIC_MS} $text"
   }

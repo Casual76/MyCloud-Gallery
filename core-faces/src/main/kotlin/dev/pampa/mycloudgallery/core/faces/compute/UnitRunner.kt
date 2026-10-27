@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.FacesStop
 import dev.pampa.mycloudgallery.core.faces.contract.FlushReason
 import dev.pampa.mycloudgallery.core.faces.contract.FacesPublishOutcome
 import dev.pampa.mycloudgallery.core.faces.contract.InputWait
+import dev.pampa.mycloudgallery.core.model.ContentKey
 import java.io.IOException
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlinx.coroutines.CancellationException
@@ -70,6 +71,9 @@ private class UnitState {
   var done = 0
 }
 
+/** I passi sul database fuori dal salvataggio del corpo, ognuno con i suoi errori di fila ([UnitRunner.queueFailed]). */
+private enum class QueueStep { STAGE, MARK_DONE, PUBLISH, UNSUPPORTED }
+
 /** Come e' finita un'unita'. [stop] != null ferma la tappa; [lost] = la prenotazione e' persa: si cambia unita'. */
 internal class UnitEnd(val stop: FacesStop?, val lost: Boolean = false)
 
@@ -85,6 +89,12 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
   private val counters get() = ctx.counters
   private var engineStreak = 0
   private var storeStreak = 0
+
+  /**
+   * Errori del database di fila, per passo, fuori dal salvataggio del corpo (messa in coda, segno di finita, pubblicazione, "non supportato"): come per i corpi, due di
+   * fila nello stesso passo fermano la tappa (O1); un successo dello stesso passo azzera.
+   */
+  private val queueStreaks = IntArray(QueueStep.entries.size)
 
   /** Quanti media si sono messi in fila per lo scaricamento in anticipo, contando dall'inizio dell'unita'. */
   private var prefetchedUntil = 0
@@ -109,8 +119,8 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
     val state = UnitState()
     var stop: FacesStop? = null
     var lost = false
-    if (resource != null && unit.analyzedKeys.isNotEmpty() && (unit.id !in ctx.memory.restaged || unit.id in ctx.memory.dirty)) {
-      restage(unit, state)
+    if (resource != null && unit.analyzedKeys.isNotEmpty() && ctx.memory.restageDue(unit.id, unit.fingerprint)) {
+      stop = restage(unit, state)
     }
     var renewedAt = parts.clock.monotonicNanos()
     var index = 0
@@ -146,8 +156,8 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
       if (stop == null && index < unit.items.size) ctx.breath()
     }
     if (ctx.untouchable(stop)) return UnitEnd(stop)
-    finish(unit, state, stop, lost, lease)
-    return UnitEnd(stop, lost)
+    val failure = finish(unit, state, stop, lost, lease)
+    return UnitEnd(stop ?: failure, lost)
   }
 
   // ---- Prenotazioni -------------------------------------------------------------------------------------------------------------
@@ -206,12 +216,18 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
         counters.facesSaved.addAndGet(outcome.body.faces.size)
         state.computed++
         ctx.rates.record(item.kind, outcome.hqUsed, parts.clock.monotonicNanos() - started)
-        stage(unit, item, state)
+        stage(unit, item, state)?.let {
+          state.done++
+          return it
+        }
       }
       MediaOutcome.Refused -> {
-        archive { ctx.store.archive.markUnsupported(key, ctx.config.recipe) }
-        engineStreak = 0
-        ctx.tally.unsupported++
+        if (markUnsupported(key, state)) {
+          engineStreak = 0
+          ctx.tally.unsupported++
+        } else {
+          queueStop(QueueStep.UNSUPPORTED)?.let { return it }
+        }
       }
       is MediaOutcome.Waiting -> {
         ctx.tally.waiting++
@@ -238,14 +254,15 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
     state.complete = false
     val strikes = (ctx.memory.strikes[item.contentKey] ?: 0) + 1
     if (strikes >= ctx.config.maxTransient) {
-      ctx.memory.strikes.remove(item.contentKey)
-      archive { ctx.store.archive.markUnsupported(item.contentKey, ctx.config.recipe) }
-      ctx.tally.unsupported++
+      if (markUnsupported(item.contentKey, state)) {
+        ctx.memory.strikes.remove(item.contentKey)
+        ctx.tally.unsupported++
+      }
     } else {
       ctx.memory.strikes[item.contentKey] = strikes
     }
     engineStreak++
-    return if (engineStreak >= FacesComputeLimits.ENGINE_FAILURES_TO_STOP) engineStop() else null
+    return if (engineStreak >= FacesComputeLimits.ENGINE_FAILURES_TO_STOP) engineStop() else queueStop(QueueStep.UNSUPPORTED)
   }
 
   private fun engineStop(): FacesStop = halt(FacesStop.ENGINE_FAILED)
@@ -280,49 +297,132 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
     false
   }
 
-  /** Dopo il salvataggio, l'outbox (solo per media del NAS: quelli del solo telefono restano locali finche' non arrivano sul NAS). */
-  private suspend fun stage(unit: PlannedUnit, item: FacesItem, state: UnitState) {
-    if (item.area == FacesArea.PHONE_ONLY) return
+  /**
+   * "Non supportato" nel database (una scrittura come il corpo): falso = un errore del database, il media resta da fare (non si segna, si riprova alla tappa dopo) e
+   * l'errore si conta come quelli della messa in coda ([queueFailed]).
+   */
+  private suspend fun markUnsupported(key: ContentKey, state: UnitState): Boolean = try {
+    archive { ctx.store.archive.markUnsupported(key, ctx.config.recipe) }
+    queueOk(QueueStep.UNSUPPORTED)
+    true
+  } catch (e: ArchiveClosed) {
+    throw e
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    state.complete = false
+    queueFailed(QueueStep.UNSUPPORTED)
+    false
+  }
+
+  /**
+   * Un passo sul database fuori dal salvataggio del corpo (la messa in coda dell'outbox, il segno di unita' finita, la pubblicazione) che non riesce con un errore
+   * che non e' un `IOException` (SQLite pieno o bloccato: Room lo lancia come `SQLiteException`): O1. Si conta; come per i corpi, due di fila fermano la tappa
+   * ([queueStop]), uno solo no. Niente si perde: il corpo e' gia' salvato e l'unita' resta da accodare e da segnare, cosi' la tappa dopo riparte da li' senza rifare un media.
+   */
+  private fun queueFailed(step: QueueStep) {
+    counters.storeFailures.incrementAndGet()
+    queueStreaks[step.ordinal]++
+  }
+
+  private fun queueOk(step: QueueStep) {
+    queueStreaks[step.ordinal] = 0
+  }
+
+  /** Il codice con cui la tappa si ferma dopo due errori del database di fila nello stesso passo (come per i corpi: poco spazio o database bloccato). */
+  private fun queueStop(step: QueueStep): FacesStop? = if (queueStreaks[step.ordinal] >= STREAK_TO_STOP) FacesStop.STORAGE_LOW else null
+
+  /** L'unita' resta da rifare alla visita dopo: la messa in coda o il segno di finita non sono andati. */
+  private fun unitDirty(unit: PlannedUnit, state: UnitState) {
+    state.complete = false
+    ctx.memory.dirty += unit.id
+    ctx.memory.restaged -= unit.id
+  }
+
+  /** Dopo il salvataggio, l'outbox (solo per media del NAS: quelli del solo telefono restano locali finche' non arrivano sul NAS). Null = si continua. */
+  private suspend fun stage(unit: PlannedUnit, item: FacesItem, state: UnitState): FacesStop? {
+    if (item.area == FacesArea.PHONE_ONLY) return null
     try {
       parts.publisher.stage(FacesChange.Faces(item.contentKey))
       ctx.memory.staged += item.contentKey
+      queueOk(QueueStep.STAGE)
     } catch (e: CancellationException) {
       throw e
+    } catch (e: IllegalStateException) {
+      // L'outbox si e' chiusa (generazione cambiata, chiave distrutta): niente piu' accodato (§2.8).
+      throw ArchiveClosed()
     } catch (e: IOException) {
       // Il corpo e' salvato: l'unita' non si segna finita e la visita dopo lo rimette in coda.
       counters.publishFailures.incrementAndGet()
-      state.complete = false
-      ctx.memory.dirty += unit.id
-      ctx.memory.restaged -= unit.id
+      unitDirty(unit, state)
+    } catch (e: Exception) {
+      // O1: un errore del database (SQLite) nell'outbox, guardato come il salvataggio del corpo.
+      counters.publishFailures.incrementAndGet()
+      unitDirty(unit, state)
+      queueFailed(QueueStep.STAGE)
+      return queueStop(QueueStep.STAGE)
     }
+    return null
   }
 
-  /** Un corpo salvato da questo dispositivo e forse mai accodato (morte fra le due cose) si rimette in coda, senza ricalcolarlo. */
-  private suspend fun restage(unit: PlannedUnit, state: UnitState) {
-    val winners = archive { ctx.store.archive.winners(unit.analyzedKeys) }
+  /**
+   * I corpi propri di un'unita' che non risultano accodati in questo processo si rimettono in coda, senza ricalcolarli: dopo una morte fra il salvataggio e la messa
+   * in coda, e per un media calcolato dai byte del telefono che poi e' arrivato sul NAS anche dentro un'unita' gia' finita (riga 5 della tabella del 2.3, O2: il corpo
+   * proprio non era mai stato accodato e gli altri dispositivi lo ricalcolavano). Tutti i corpi propri, vincenti o no (come il pubblicatore: il contributo di un
+   * dispositivo non si restringe mai); solo con la generazione e lo stato di adesso; una volta (`staged`) e idempotente (il pubblicatore non rimette due volte la stessa
+   * chiave). Null = si continua; altrimenti perche' la tappa si ferma.
+   */
+  private suspend fun restage(unit: PlannedUnit, state: UnitState): FacesStop? {
+    val todo = unit.analyzedKeys.filter { it !in ctx.memory.staged }
     var failed = false
-    for ((key, body) in winners) {
-      if (body.author != parts.deviceId || key in ctx.memory.staged) continue
-      try {
-        parts.publisher.stage(FacesChange.Faces(key))
-        ctx.memory.staged += key
-        counters.restaged.incrementAndGet()
-        state.restaged++
+    var stop: FacesStop? = null
+    if (todo.isNotEmpty()) {
+      // La generazione cambiata o l'attivazione che non c'e' piu' fermano la tappa prima di mettere in coda qualunque cosa (§2.8, D30).
+      ctx.stateGate()?.let { return it }
+      val own = try {
+        archive { ctx.store.archive.bodiesOf(parts.deviceId, todo) }
+      } catch (e: ArchiveClosed) {
+        throw e
       } catch (e: CancellationException) {
         throw e
-      } catch (e: IOException) {
-        counters.publishFailures.incrementAndGet()
+      } catch (e: Exception) {
         failed = true
+        queueFailed(QueueStep.STAGE)
+        stop = queueStop(QueueStep.STAGE)
+        emptyMap()
+      }
+      for ((key, body) in own) {
+        if (body.author != parts.deviceId || key in ctx.memory.staged) continue
+        try {
+          parts.publisher.stage(FacesChange.Faces(key))
+          ctx.memory.staged += key
+          queueOk(QueueStep.STAGE)
+          counters.restaged.incrementAndGet()
+          state.restaged++
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: IllegalStateException) {
+          throw ArchiveClosed()
+        } catch (e: IOException) {
+          counters.publishFailures.incrementAndGet()
+          failed = true
+        } catch (e: Exception) {
+          // O1: un errore del database nell'outbox.
+          counters.publishFailures.incrementAndGet()
+          failed = true
+          queueFailed(QueueStep.STAGE)
+          stop = queueStop(QueueStep.STAGE)
+          if (stop != null) break
+        }
       }
     }
     if (failed) {
-      state.complete = false
-      ctx.memory.dirty += unit.id
-      ctx.memory.restaged -= unit.id
+      unitDirty(unit, state)
     } else {
-      ctx.memory.restaged += unit.id
+      ctx.memory.restaged[unit.id] = unit.fingerprint
       ctx.memory.dirty -= unit.id
     }
+    return stop
   }
 
   /** Ai media di [from] fino a [to] (esclusi) servono le anteprime: chi sa scaricarle insieme (lotti di 50, D17) le prende in anticipo. */
@@ -345,19 +445,14 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
 
   // ---- Fine unita' ---------------------------------------------------------------------------------------------------------------
 
-  private suspend fun finish(unit: PlannedUnit, state: UnitState, stop: FacesStop?, lost: Boolean, lease: FacesLease.Held?) {
+  /** Null = tutto a posto; altrimenti il codice con cui la tappa si ferma (due errori del database di fila nel segno di finita o nella pubblicazione, O1). */
+  private suspend fun finish(unit: PlannedUnit, state: UnitState, stop: FacesStop?, lost: Boolean, lease: FacesLease.Held?): FacesStop? {
+    var failure: FacesStop? = null
     if (state.computed > 0 && ctx.left().isPositive()) group()
     val resource = unit.resource
-    if (resource != null && !ctx.fenced() && (state.computed > 0 || state.restaged > 0)) flush()
-    if (resource != null && state.complete && stop == null && !lost) {
-      try {
-        ctx.store.units.markDone(resource, ctx.config.recipe, parts.clock.nasNowMillis())
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: IllegalStateException) {
-        throw ArchiveClosed()
-      }
-    }
+    if (resource != null && !ctx.fenced() && (state.computed > 0 || state.restaged > 0)) failure = flush()
+    // Una visita per la sola rimessa in coda di un'unita' gia' finita non la segna di nuovo (nessuna scrittura per niente).
+    if (resource != null && state.complete && stop == null && !lost && !unit.done) failure = markDone(unit, resource) ?: failure
     // Con la recinzione niente va sul NAS, nemmeno il rilascio: la prenotazione scade da sola (1 ora).
     if (lease != null && resource != null && !ctx.fenced()) {
       try {
@@ -368,12 +463,34 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
         counters.leaseTroubles.incrementAndGet()
       }
     }
+    return failure
+  }
+
+  /**
+   * Il segno di unita' finita. Un errore del database che non e' un `IOException` (O1) non fa cadere la tappa: l'unita' resta da segnare (la visita dopo, senza
+   * ricalcolare niente, lo rifa') e, come per i corpi, due errori di fila fermano la tappa. Null = segnata, o un errore solo.
+   */
+  private suspend fun markDone(unit: PlannedUnit, resource: FacesResource.WorkUnit): FacesStop? {
+    try {
+      ctx.store.units.markDone(resource, ctx.config.recipe, parts.clock.nasNowMillis())
+      queueOk(QueueStep.MARK_DONE)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: IllegalStateException) {
+      throw ArchiveClosed()
+    } catch (e: Exception) {
+      ctx.memory.dirty += unit.id
+      ctx.memory.restaged -= unit.id
+      queueFailed(QueueStep.MARK_DONE)
+      return queueStop(QueueStep.MARK_DONE)
+    }
+    return null
   }
 
   /** A fine tappa, se in coda c'e' ancora qualcosa (una pubblicazione che non e' andata, un'altra tappa) e la recinzione non c'e': un'altra occasione. */
-  suspend fun flushPending() {
-    if (ctx.fenced() || parts.publisher.pending.value <= 0) return
-    flush()
+  suspend fun flushPending(): FacesStop? {
+    if (ctx.fenced() || parts.publisher.pending.value <= 0) return null
+    return flush()
   }
 
   /** A fine unita' l'assegnazione ai gruppi: se questo e' il custode il passo vero, altrimenti la vista provvisoria (D21). Non ferma mai il calcolo. */
@@ -388,19 +505,28 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
     }
   }
 
-  private suspend fun flush() {
+  /** La pubblicazione a fine unita'. Null = si continua; un errore del database (O1) lo conta come la messa in coda: al secondo di fila la tappa si ferma. */
+  private suspend fun flush(): FacesStop? {
     ctx.status.value = FacesStatus.Running(ctx.tally.analyzed, ctx.tally.analyzed, FacesPhase.PUBLISH)
     try {
       if (parts.publisher.flush(FlushReason.UNIT_FINISHED) is FacesPublishOutcome.Failed) {
         counters.publishFailures.incrementAndGet()
         ctx.nasDown = true
+      } else {
+        queueOk(QueueStep.PUBLISH)
       }
     } catch (e: CancellationException) {
       throw e
     } catch (e: IOException) {
       counters.publishFailures.incrementAndGet()
       ctx.nasDown = true
+    } catch (e: Exception) {
+      // O1: un errore del database (outbox, stato della replica) a meta' della pubblicazione: il NAS non c'entra, e niente si perde (l'outbox ha ancora le chiavi).
+      counters.publishFailures.incrementAndGet()
+      queueFailed(QueueStep.PUBLISH)
+      return queueStop(QueueStep.PUBLISH)
     }
+    return null
   }
 
   /** Il lavoro con l'archivio: un archivio chiuso (generazione cambiata, chiave distrutta) lancia [ArchiveClosed] e ferma la tappa. */

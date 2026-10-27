@@ -43,12 +43,26 @@ class MemoryUnits : FacesUnitsDone {
   var marks = 0
     private set
 
+  /** Non segna per le prossime [failMarks] richieste (un errore del database: disco pieno o database bloccato, O1) lanciando [failure]. */
+  var failMarks: Int = 0
+  var failure: () -> Throwable = { RuntimeException("database pieno") }
+
+  /** Un'azione prima di rispondere a "e' finita?" (lo stato di Persone cambia a meta' tappa). */
+  var onIsDone: () -> Unit = {}
+
   override suspend fun markDone(unit: FacesResource.WorkUnit, recipe: Int, doneAtNas: Long?) {
+    if (failMarks > 0) {
+      failMarks--
+      throw failure()
+    }
     marks++
     done[unit] = maxOf(done[unit] ?: 0, recipe)
   }
 
-  override suspend fun isDone(unit: FacesResource.WorkUnit, recipe: Int): Boolean = (done[unit] ?: 0) >= recipe
+  override suspend fun isDone(unit: FacesResource.WorkUnit, recipe: Int): Boolean {
+    onIsDone()
+    return (done[unit] ?: 0) >= recipe
+  }
 
   override suspend fun done(recipe: Int): Set<FacesResource.WorkUnit> = done.filterValues { it >= recipe }.keys
 }
@@ -171,12 +185,21 @@ class SimPublisher(
     private set
   var block: FacesWriteBlock? = null
   var faultyStage = false
+
+  /** Non accoda per le prossime [failStage] richieste, e non pubblica per le prossime [failFlush]: un errore del database che non e' un `IOException` (O1). */
+  var failStage = 0
+  var failFlush = 0
+  var failure: () -> Throwable = { RuntimeException("database pieno") }
   val reasons = ArrayList<FlushReason>()
   private val count = MutableStateFlow(0)
   override val pending: StateFlow<Int> = count
 
   override suspend fun stage(change: FacesChange) {
     stageCalls++
+    if (failStage > 0) {
+      failStage--
+      throw failure()
+    }
     if (change is FacesChange.Faces) {
       if (faultyStage) nas.call { Unit }
       staged += change.contentKey
@@ -187,6 +210,10 @@ class SimPublisher(
   override suspend fun flush(reason: FlushReason): FacesPublishOutcome {
     flushCalls++
     reasons += reason
+    if (failFlush > 0) {
+      failFlush--
+      throw failure()
+    }
     if (staged.isEmpty()) return FacesPublishOutcome.NothingToPublish
     block?.let { return FacesPublishOutcome.Blocked(it) }
     val mine = archive().winners(staged.toList()).filterValues { it.author == device }

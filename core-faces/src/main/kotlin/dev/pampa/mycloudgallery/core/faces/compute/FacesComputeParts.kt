@@ -242,7 +242,7 @@ class FacesComputeCounters {
   val keyLost = AtomicInteger()
   val databaseRebuilt = AtomicInteger()
 
-  /** Un errore del database a meta' di un salvataggio: il media resta da fare. */
+  /** Un errore del database a meta' di un salvataggio (il corpo, la messa in coda, il segno di unita' finita, la pubblicazione, O1): il media o l'unita' resta da fare. */
   val storeFailures = AtomicInteger()
 
   /** Prenotazioni perse a meta' unita', e unita' tenute da un altro (E-I2). */

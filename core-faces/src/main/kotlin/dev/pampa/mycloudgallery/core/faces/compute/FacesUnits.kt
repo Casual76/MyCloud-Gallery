@@ -26,8 +26,9 @@ internal data class UnitId(val area: FacesArea, val month: String, val part: Int
 
 /**
  * Un'unita' scelta: i media da fare ([items], uno per chiave di contenuto, in ordine di chiave), quanti saltati perche' esclusi
- * ([excluded]) e, per un'unita' senza niente da fare ma non ancora segnata finita, le chiavi gia' fatte ([analyzedKeys]): servono a rimettere
- * in coda cio' che questo dispositivo ha salvato e non ha forse accodato (morte fra il salvataggio e la messa in coda).
+ * ([excluded]) e le chiavi gia' fatte ([analyzedKeys]): servono a rimettere in coda cio' che questo dispositivo ha salvato e non ha forse
+ * accodato (morte fra il salvataggio e la messa in coda; un media calcolato dai byte del telefono che poi e' arrivato sul NAS, O2). Un'unita'
+ * senza niente da fare si sceglie solo per questa rimessa in coda, anche se [done] (era gia' segnata finita: la visita non la segna di nuovo).
  */
 internal class PlannedUnit(
   val id: UnitId,
@@ -35,7 +36,11 @@ internal class PlannedUnit(
   val items: List<FacesItem>,
   val excluded: Int,
   val analyzedKeys: List<ContentKey>,
+  val done: Boolean = false,
 ) {
+  /** L'impronta delle chiavi fatte: se cambia (un media nuovo, uno arrivato dal telefono) l'unita' si guarda di nuovo ([FacesMemory.restaged]). */
+  val fingerprint: Int get() = analyzedKeys.toSet().hashCode()
+
   override fun toString(): String = "PlannedUnit(${id.area.code}, ${items.size} da fare)"
 }
 
@@ -48,9 +53,17 @@ internal class FacesMemory {
     },
   )
 
-  /** Le unita' di cui questo processo ha gia' rimesso in coda i corpi propri, e quelle in cui una messa in coda e' fallita (da rifare). */
-  val restaged: MutableSet<UnitId> = Collections.synchronizedSet(HashSet())
+  /**
+   * Le unita' di cui questo processo ha gia' rimesso in coda i corpi propri, con l'impronta ([PlannedUnit.fingerprint]) delle chiavi fatte di allora:
+   * se nell'unita' arriva un media gia' calcolato (dal telefono, O2) l'impronta cambia e l'unita' si guarda di nuovo, anche se era finita.
+   */
+  val restaged: MutableMap<UnitId, Int> = Collections.synchronizedMap(HashMap())
+
+  /** Le unita' in cui una messa in coda o il segno di finita e' fallito (da rifare alla visita dopo). */
   val dirty: MutableSet<UnitId> = Collections.synchronizedSet(HashSet())
+
+  /** La rimessa in coda dei corpi propri di [id] e' da fare: mai fatta in questo processo con queste chiavi ([fingerprint]) o fallita l'ultima volta. */
+  fun restageDue(id: UnitId, fingerprint: Int): Boolean = id in dirty || restaged[id] != fingerprint
 
   /** Le chiavi che questo processo ha gia' messo in coda per la pubblicazione (al piu' 50.000): non si rimettono in coda due volte. */
   val staged: MutableSet<ContentKey> = Collections.newSetFromMap(
@@ -74,6 +87,9 @@ internal class FacesUnits(private val catalog: FacesCatalog, private val unitSiz
   private val monthsOf = HashMap<FacesArea, List<String>>()
   private val itemsOf = HashMap<Pair<FacesArea, String>, Map<ContentKey, List<FacesItem>>>()
 
+  // Le unita' senza altro da fare in questa tappa (tutto fatto e gia' guardato): non si riesaminano a ogni "prossima unita'".
+  private val settled = HashSet<UnitId>()
+
   private suspend fun months(area: FacesArea): List<String> =
     monthsOf.getOrPut(area) { catalog.months(area).distinct().sortedDescending() }
 
@@ -86,28 +102,28 @@ internal class FacesUnits(private val catalog: FacesCatalog, private val unitSiz
       if (byKey.isEmpty()) continue
       for ((part, keys) in byKey.keys.toList().chunked(unitSize).withIndex()) {
         val id = UnitId(area, month, part)
-        if (id in seen) continue
+        if (id in seen || id in settled) continue
         val resource = resourceOf(area, month, part)
         val wanted = keys.filter { key -> byKey.getValue(key).any(FaceScopeRules::analyzable) }
-        if (wanted.isEmpty()) continue
+        if (wanted.isEmpty()) {
+          settled += id
+          continue
+        }
         val done = store.archive.analyzed(wanted, recipe)
         val pending = wanted.filter { it !in done }
         if (pending.isNotEmpty()) {
           val items = pending.map { key -> byKey.getValue(key).first(FaceScopeRules::analyzable) }
           return PlannedUnit(id, resource, items, excluded = keys.size - wanted.size, analyzedKeys = done.toList())
         }
-        // Niente da fare. Se non e' segnata finita (una morte puo' aver lasciato corpi salvati e non accodati), un giro di sola rimessa in coda.
-        if (resource != null && needsRestage(id, resource, store, memory)) {
-          return PlannedUnit(id, resource, emptyList(), excluded = 0, analyzedKeys = done.toList())
+        // Niente da fare. Un giro di sola rimessa in coda, una volta per processo e per insieme di chiavi fatte (una morte puo' aver lasciato corpi salvati e non
+        // accodati; un media del solo telefono arrivato sul NAS dentro un'unita' gia' finita ha il corpo proprio e mai accodato, O2), anche se l'unita' e' finita.
+        if (resource != null && memory.restageDue(id, done.hashCode())) {
+          return PlannedUnit(id, resource, emptyList(), excluded = 0, analyzedKeys = done.toList(), done = store.units.isDone(resource, recipe))
         }
+        settled += id
       }
     }
     return null
-  }
-
-  private suspend fun needsRestage(id: UnitId, resource: FacesResource.WorkUnit, store: ComputeStore, memory: FacesMemory): Boolean {
-    if (id in memory.restaged && id !in memory.dirty) return false
-    return !store.units.isDone(resource, recipe)
   }
 
   /** La risorsa prenotabile dell'unita'; un mese che non ha la forma del catalogo (`aaaa-mm`) non si prenota (si lavora senza, danno solo d'efficienza). */

@@ -56,12 +56,18 @@ internal class ChaosVerifier(private val world: ChaosWorld) {
    * I mondi del NAS finto, del simulatore e del NAS vero si guardano nello stesso modo (oracolo del NAS, nessun colpo).
    */
   fun check(phase: String) {
+    contract(phase)
     work(phase)
     place(phase)
     generation(phase)
     erased(phase)
     outside(phase)
     leases(phase)
+  }
+
+  // 10. Nessuna eccezione esce da una coroutine dell'interruttore (in :app chiuderebbe l'app): O3.
+  private fun contract(phase: String) {
+    world.takeEscaped().forEach { add(Invariant.CONTRACT, phase, it) }
   }
 
   // 1. Nessun lavoro rifatto: un corpo proprio salvato non si salva una seconda volta nella stessa generazione.

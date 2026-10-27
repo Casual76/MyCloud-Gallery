@@ -1,35 +1,31 @@
 package dev.pampa.mycloudgallery.core.faces.chaos
 
 import com.google.common.truth.Truth.assertThat
-import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.faces.compute.Faces
 import dev.pampa.mycloudgallery.core.faces.compute.SimMedia
 import dev.pampa.mycloudgallery.core.faces.contract.FacesComputeLimits
 import kotlinx.coroutines.runBlocking
-import org.junit.Ignore
 import org.junit.Test
 
 /**
- * I DIFETTI DEL CODICE DI PRODUZIONE CHE IL BANCO HA TROVATO e che P12 non corregge (docs/prova-500.md Parte F, §F6; il perimetro di P12 non e' il codice di
- * produzione). Per ognuno, come negli altri banchi: lo scenario senza giri casuali con il **comportamento di oggi** (verde: quando diventa rosso il difetto e' corretto),
- * lo stesso scenario con l'asserzione rovesciata, `@Ignore` con il motivo (**il comportamento giusto**: si riaccende quando il difetto si corregge), e il banco che
- * lo trova quando non lo evita (`ChaosConfig.avoid`, di serie tutti evitati).
+ * I DUE DIFETTI DEL CODICE DI PRODUZIONE CHE IL BANCO AVEVA TROVATO (P12) E CHE LA CORREZIONE O1/O2 HA TOLTO (docs/prova-500.md Parte F, §F6). Sono scenari senza giri
+ * casuali, con l'asserzione giusta (erano `@Ignore` finche' i difetti c'erano: il banco li evitava di serie); ora il banco non evita piu' niente e li copre anche a caso.
  *
- * - **O1**: un errore del database che non e' un `IOException` (SQLite pieno o bloccato, come Room lo lancia) in un salvataggio che la produzione non guarda
- *   (`FacesUnitsDone.markDone`, la messa in coda del pubblicatore, quella del raggruppamento) esce dalla tappa del calcolo come eccezione invece di fermarla con un codice.
- *   Nessun dato perso (il corpo e' gia' salvato, la ripresa lo rimette in coda); lo vede chi lancia la tappa (il lavoro di `:app`, P13).
- * - **O2**: un media calcolato dai byte del telefono (risultati solo locali) che poi arriva sul NAS dentro un'unita' gia' segnata finita non viene mai messo in coda per la
- *   pubblicazione: nemmeno dopo un riavvio la unita' viene piu' visitata. Gli altri dispositivi lo ricalcolano e non vedono mai il corpo di questo.
+ * - **O1**: un errore del database che non e' un `IOException` (SQLite pieno o bloccato, come Room lo lancia) nel segno di unita' finita, nella messa in coda del
+ *   pubblicatore o nella pubblicazione non fa cadere la tappa del calcolo con un'eccezione: si guarda come il salvataggio del corpo. Nessun dato perso, nessun media rifatto.
+ * - **O2**: un media calcolato dai byte del telefono (risultati solo locali) che poi arriva sul NAS dentro un'unita' gia' segnata finita ha il corpo messo in coda e
+ *   pubblicato, e gli altri dispositivi scelgono gli stessi corpi vincenti.
  */
 class FacesChaosKnownDefectsTest {
 
   // --- O1 ----------------------------------------------------------------------------------------------------------------------------------------
 
-  private suspend fun o1(surface: Surface): Throwable? {
+  /** Una tappa su tre media privati con un errore del database alla chiamata [nth] di [surface]: l'eccezione che esce dalla tappa, se esce. */
+  private suspend fun o1(surface: Surface, nth: Int): Throwable? {
     val world = ChaosTestKit.world(devices = 1, privateMedia = 3)
     try {
       val device = world.devices.first()
-      world.inj.arm(listOf(Blow(0, surface, 1, Moment.BEFORE, FaultKind.IO_FAIL)))
+      world.inj.arm(listOf(Blow(0, surface, nth, Moment.BEFORE, FaultKind.IO_FAIL)))
       device.prepareCompute()
       return runCatching { device.computeAll() }.exceptionOrNull()
     } finally {
@@ -39,20 +35,19 @@ class FacesChaosKnownDefectsTest {
   }
 
   @Test
-  fun o1_oggiUnErroreDelDatabaseNelSegnoDiUnitaFinitaEsceDallaTappa(): Unit = runBlocking {
-    assertThat(o1(Surface.DB_UNITS)).isInstanceOf(ChaosDbFault::class.java)
+  fun o1_unErroreDelDatabaseNelSegnoDiUnitaFinitaFermaLaTappaSenzaLanciare(): Unit = runBlocking {
+    assertThat(o1(Surface.DB_UNITS, 1)).isNull()
   }
 
   @Test
-  fun o1_oggiUnErroreDelDatabaseNellOutboxEsceDallaTappa(): Unit = runBlocking {
-    assertThat(o1(Surface.OUTBOX)).isInstanceOf(ChaosDbFault::class.java)
+  fun o1_unErroreDelDatabaseNellOutboxFermaLaTappaSenzaLanciare(): Unit = runBlocking {
+    // La prima scrittura dell'outbox e' la messa in coda del primo corpo, le seguenti sono le altre messe in coda e la pubblicazione di fine unita'.
+    for (nth in 1..4) assertThat(o1(Surface.OUTBOX, nth)).isNull()
   }
 
-  @Ignore("O1: la tappa dovrebbe fermarsi con un codice (come per il corpo dei volti), non lanciare: si riaccende quando e' corretto")
   @Test
-  fun o1_giusto_unErroreDelDatabaseFermaLaTappaSenzaLanciare(): Unit = runBlocking {
-    assertThat(o1(Surface.DB_UNITS)).isNull()
-    assertThat(o1(Surface.OUTBOX)).isNull()
+  fun o1_unErroreDelDatabaseNellIstantaneaDelRaggruppamentoNonFaCadereLaTappa(): Unit = runBlocking {
+    assertThat(o1(Surface.DB_GROUPING, 1)).isNull()
   }
 
   // --- O2 ----------------------------------------------------------------------------------------------------------------------------------------
@@ -60,7 +55,7 @@ class FacesChaosKnownDefectsTest {
   /**
    * D0 ha una foto solo sul suo telefono, nello stesso mese di una foto del NAS: la calcola in locale (D0 e' l'unico che la vede) e l'unita' del mese si
    * segna finita. La foto arriva sul NAS (backup riuscito). I dispositivi ripartono e lavorano finche' non c'e' piu' niente da fare. Restituisce
-   * (D0 ha il corpo della foto nell'outbox, la foto e il suo corpo che D0 e D1 scelgono sono gli stessi).
+   * (D0 ha il corpo della foto nell'outbox o gia' pubblicato, la foto e il suo corpo che D0 e D1 scelgono sono gli stessi).
    */
   private suspend fun o2(): Pair<Boolean, Boolean> {
     val world = ChaosTestKit.world(devices = 2, privateMedia = 0)
@@ -89,15 +84,7 @@ class FacesChaosKnownDefectsTest {
   }
 
   @Test
-  fun o2_oggiIlCorpoDelSoloTelefonoNonVieneMaiAccodatoEGliAltriScelgonoUnAltroCorpo(): Unit = runBlocking {
-    val (queued, sameWinners) = o2()
-    assertWithMessage("oggi il corpo non e' nell'outbox").that(queued).isFalse()
-    assertWithMessage("oggi i vincenti dei due dispositivi sono diversi").that(sameWinners).isFalse()
-  }
-
-  @Ignore("O2: dopo l'arrivo del media sul NAS il corpo calcolato dal telefono va messo in coda (riga 5 della tabella del 2.3): si riaccende quando e' corretto")
-  @Test
-  fun o2_giusto_ilCorpoDelSoloTelefonoSiPubblicaQuandoIlMediaArrivaSulNas(): Unit = runBlocking {
+  fun o2_ilCorpoDelSoloTelefonoSiPubblicaQuandoIlMediaArrivaSulNas(): Unit = runBlocking {
     val (queued, sameWinners) = o2()
     assertThat(queued).isTrue()
     assertThat(sameWinners).isTrue()

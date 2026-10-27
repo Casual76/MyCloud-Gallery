@@ -49,9 +49,6 @@ internal class Capabilities(val separateEraseOps: Boolean, val noSpace: Boolean,
 
 internal object ChaosPlan {
 
-  /** Le superfici dove un salvataggio che fallisce e' un caso previsto dalla produzione (`StateFiles`: un `IOException`). */
-  private val HANDLED_FAILURES = setOf(Surface.JOURNAL, Surface.LOCAL)
-
   private class Choice(val surface: Surface, val weight: Int)
 
   private fun table(kind: StepKind, caps: Capabilities): List<Choice> {
@@ -101,14 +98,14 @@ internal object ChaosPlan {
   }
 
   /** I colpi di un passo di tipo [kind], per i dispositivi [actors] (indici). */
-  fun blows(random: Random, kind: StepKind, actors: List<Int>, caps: Capabilities, databaseErrors: Boolean = false, dense: Boolean = false): List<Blow> {
+  fun blows(random: Random, kind: StepKind, actors: List<Int>, caps: Capabilities, dense: Boolean = false): List<Blow> {
     val choices = table(kind, caps)
     if (choices.isEmpty() || actors.isEmpty()) return emptyList()
     val out = ArrayList<Blow>()
     repeat(count(random, dense)) {
       val surface = pickSurface(random, choices)
       val device = actors[random.nextInt(actors.size)]
-      out += blow(random, device, surface, caps, databaseErrors, dense)
+      out += blow(random, device, surface, caps, dense)
     }
     if (kind == StepKind.COMPUTE_FLIP) {
       // Il cambio di generazione cade al salvataggio n-esimo di un corpo del dispositivo che calcola.
@@ -126,7 +123,7 @@ internal object ChaosPlan {
     return choices.last().surface
   }
 
-  private fun blow(random: Random, device: Int, surface: Surface, caps: Capabilities, databaseErrors: Boolean, dense: Boolean): Blow {
+  private fun blow(random: Random, device: Int, surface: Surface, caps: Capabilities, dense: Boolean): Blow {
     val moment = if (random.nextBoolean()) Moment.BEFORE else Moment.AFTER
     val nth = when (surface) {
       Surface.NAS -> 1 + geometric(random, if (dense) 7 else 14, 60)
@@ -134,8 +131,8 @@ internal object ChaosPlan {
       else -> 1 + geometric(random, 2, 12)
     }
     val kind = when {
-      // Un salvataggio che non riesce: dove la produzione lo gestisce (i file di stato) o, con `databaseErrors`, ovunque (§F6, O1).
-      surface.isStore -> if (random.nextInt(100) < 80 || !(databaseErrors || surface in HANDLED_FAILURES)) FaultKind.KILL else FaultKind.IO_FAIL
+      // Un salvataggio che non riesce (un `IOException` dei file di stato, un errore di SQLite del database): la produzione lo guarda dovunque (O1 corretto).
+      surface.isStore -> if (random.nextInt(100) < 80) FaultKind.KILL else FaultKind.IO_FAIL
       surface == Surface.PERSONAL || surface == Surface.NAS || surface == Surface.ERASE_OPS -> networkKind(random, caps, surface)
       else -> FaultKind.KILL
     }

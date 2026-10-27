@@ -81,7 +81,13 @@ class NasFacesPublisher(
     val generation = on.generation
     var state = store.load(generation)
     state = when (change) {
-      is FacesChange.Faces -> state.copy(keys = state.keys + change.contentKey)
+      // Idempotente (la stessa chiave due volte = una voce): una chiave gia' in coda, con qualcosa gia' da pubblicare, non copia l'insieme e non scrive niente. Serve alla
+      // rimessa in coda dei corpi propri di un'unita' (dopo una morte, o per un media del solo telefono arrivato sul NAS, O2), che dopo un riavvio li ripassa tutti.
+      is FacesChange.Faces -> when {
+        change.contentKey in state.keys && state.pending > 0 -> return@withLock
+        change.contentKey in state.keys -> state
+        else -> state.copy(keys = state.keys + change.contentKey)
+      }
       is FacesChange.Snapshot -> stageSnapshot(generation, state, change.seq)
       // Le voci stanno nell'archivio (P9 le scrive li'): si ripubblica lo stato unito, che le comprende.
       is FacesChange.People -> state

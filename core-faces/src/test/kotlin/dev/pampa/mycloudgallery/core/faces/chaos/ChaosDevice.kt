@@ -143,8 +143,10 @@ internal class ChaosDevice(val world: ChaosWorld, val index: Int, val name: Stri
     if (::scope.isInitialized) shutdown()
     inj.revive(index)
     stopping = false
-    // La morte del processo dentro una coroutine dell'interruttore non e' un crollo del banco: il dispositivo e' segnato morto e il banco lo riavvia.
-    scope = CoroutineScope(Dispatchers.Unconfined + Job() + CoroutineExceptionHandler { _, e -> if (e !is Death) throw e })
+    // La morte del processo dentro una coroutine dell'interruttore non e' un crollo del banco: il dispositivo e' segnato morto e il banco lo riavvia. Ogni altra eccezione
+    // uscita da una coroutine (in :app chiuderebbe l'app) non si rilancia, perche' il gestore globale la darebbe al test dopo e il banco non la vedrebbe: si raccoglie e la
+    // giudica il verificatore (invariante 10, O3).
+    scope = CoroutineScope(Dispatchers.Unconfined + Job() + CoroutineExceptionHandler { _, e -> if (e !is Death) world.escapedFromScope(name, e) })
     val store = ChaosLocalStore(localStore, inj, index)
     // L'interruttore cancella i dati locali con la stessa operazione di "Disattiva e cancella" (come la lega :app, P13).
     val eraserPort = FacesLocalDataEraser { g, why -> localErase.erase(g, why) }

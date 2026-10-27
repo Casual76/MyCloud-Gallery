@@ -49,6 +49,19 @@ internal object RepoFiles {
       .filter { path -> mentions(File(from, path), names) }
       .toList()
 
+  /**
+   * I file di produzione di `feature-*` e di `:app` (le schermate e chi le lega) che nominano uno dei [names]: i tipi che portano **nome e cartella**
+   * di un file del NAS. I `core-*` producono i dati e non li disegnano. Esclusi contratti, null-object e fake come per [consumers].
+   */
+  fun nameSurfaces(names: List<String>, from: File = root): List<String> =
+    consumers(names, from).filter { it.startsWith("feature-") || it.startsWith("app/") }
+
+  /** I file che nominano i tipi dei nomi e non sono ne' in una superficie, ne' in un lettore dietro il cancello, ne' nella pagina inattiva. */
+  fun unaccountedNames(entries: List<SurfaceEntry>, gated: List<GatedReader>, dormant: List<String>, names: List<String>, from: File = root): List<String> {
+    val known = entries.flatMap { it.sources }.toSet() + gated.flatMap { it.sources } + dormant
+    return nameSurfaces(names, from).filter { it !in known }
+  }
+
   /** I file che nominano i contratti dei nascosti e non sono ne' elencati da una superficie ne' fra quelli che li legano. */
   fun unaccounted(entries: List<SurfaceEntry>, wiring: List<String>, names: List<String>, from: File = root): List<String> {
     val known = entries.flatMap { it.sources }.toSet() + wiring

@@ -212,7 +212,7 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
             mediaPickerGraph(nav = nav, host = albumsHost)
           }
           // Fase 4B (P16): Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso (rotte a schermo intero).
-          nasGraph(nav = nav, onOpenFile = nasOpener::open)
+          nasGraph(nav = nav, onOpenFile = nasOpener::open, trashPage = GatedNasTrashPage)
           // Fase 5A (P7): la pagina Backup, le impostazioni, la cartella del dispositivo e il riepilogo del primo backup.
           if (gallery?.backupAvailable == true) {
             backupGraph(

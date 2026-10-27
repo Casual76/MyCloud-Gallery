@@ -26,7 +26,7 @@ class HiddenSurfacesRegistryTest {
   fun leSuperficiHannoIdUniciEOgniRigaDelProgettoHaUnaSuperficie() {
     val ids = HiddenSurfaces.entries.map { it.id }
     assertThat(ids).containsNoDuplicates()
-    val covered = HiddenSurfaces.entries.map { it.row }.toSet()
+    val covered = HiddenSurfaces.entries.map { it.row }.toSet() + HiddenSurfaces.gated.mapNotNull { it.row }
     assertWithMessage("righe del §2.1 senza superficie").that(SpecRow.entries.toSet() - covered).isEmpty()
     assertThat(HiddenSurfaces.entries.map { it.owner }.toSet()).containsAtLeast("P3", "P6", "P7", "P8", "P10")
   }
@@ -37,6 +37,43 @@ class HiddenSurfacesRegistryTest {
     assertWithMessage(
       "file che usano VisibleMedia, HiddenMask o WidgetFeed e non stanno in HiddenSurfaces (una superficie nuova va registrata, con la sua sonda): $unaccounted",
     ).that(unaccounted).isEmpty()
+  }
+
+  @Test
+  fun ognFileCheMostraNomiDiFileDelNasEUnaSuperficieUnLettoreDietroIlCancelloOLaPaginaInattiva() {
+    val unaccounted = RepoFiles.unaccountedNames(HiddenSurfaces.entries, HiddenSurfaces.gated, HiddenSurfaces.dormant, HiddenSurfaces.nameBearingTypes)
+    assertWithMessage(
+      "file che usano LargestFile, NasTrashItem, NasFolderEntry o NasTrashRow (nome e cartella di un file del NAS) e non stanno in HiddenSurfaces: una pagina che mostra nomi " +
+        "senza passare da VisibleMedia o HiddenMask va registrata, con la sua sonda o dietro il cancello (R4): $unaccounted",
+    ).that(unaccounted).isEmpty()
+  }
+
+  @Test
+  fun ilRegistroDeiNomiVedeLeSchermateVere() {
+    val seen = RepoFiles.nameSurfaces(HiddenSurfaces.nameBearingTypes)
+    // Controllo positivo: senza, il test di sopra passerebbe a vuoto.
+    assertThat(seen.any { it.endsWith("feature/nas/space/NasSpaceScreen.kt") }).isTrue()
+    assertThat(seen.any { it.endsWith("feature/nas/trash/NasTrashScreen.kt") }).isTrue()
+    assertThat(seen.any { it.endsWith("feature/library/trash/NasTrashRows.kt") }).isTrue()
+    assertThat(seen.any { it.endsWith("nas/NasOrganizer.kt") }).isTrue()
+    // I core-* producono i dati: non sono schermate.
+    assertThat(seen.none { it.startsWith("core-") }).isTrue()
+  }
+
+  @Test
+  fun unaSchermataCheMostraNomiSenzaEssereRegistrataFaFallireIlControllo() {
+    val root = fakeRepo { r ->
+      write(r, "feature-nas/src/main/kotlin/x/NuovaPagina.kt", "package x\nclass NuovaPagina(val files: List<LargestFile>)\n")
+      write(r, "feature-nas/src/main/kotlin/x/contract/Tipi.kt", "package x\nclass LargestFile\n")
+      write(r, "core-nasops/src/main/kotlin/x/Servizio.kt", "package x\nclass Servizio(val files: List<LargestFile>)\n")
+      write(r, "app/src/main/kotlin/x/Commento.kt", "package x\n// LargestFile in un commento\nclass Niente\n")
+    }
+    try {
+      val missing = RepoFiles.unaccountedNames(HiddenSurfaces.entries, HiddenSurfaces.gated, HiddenSurfaces.dormant, HiddenSurfaces.nameBearingTypes, root)
+      assertThat(missing).containsExactly("feature-nas/src/main/kotlin/x/NuovaPagina.kt")
+    } finally {
+      root.deleteRecursively()
+    }
   }
 
   @Test
@@ -54,6 +91,8 @@ class HiddenSurfacesRegistryTest {
   @Test
   fun iFileElencatiEsistono() {
     for (entry in HiddenSurfaces.entries) for (path in entry.sources) assertWithMessage("${entry.id}: $path").that(RepoFiles.exists(path)).isTrue()
+    for (reader in HiddenSurfaces.gated) for (path in reader.sources) assertWithMessage("${reader.id}: $path").that(RepoFiles.exists(path)).isTrue()
+    for (path in HiddenSurfaces.dormant) assertWithMessage(path).that(RepoFiles.exists(path)).isTrue()
     for (path in HiddenSurfaces.wiring) assertWithMessage(path).that(RepoFiles.exists(path)).isTrue()
   }
 
@@ -79,7 +118,7 @@ class HiddenSurfacesRegistryTest {
 
   private fun fakeRepo(block: (File) -> Unit): File {
     val root = Files.createTempDirectory("repo-finto").toFile()
-    File(root, "settings.gradle").writeText("include ':core-common'\ninclude ':feature-albums'\ninclude ':app'\n")
+    File(root, "settings.gradle").writeText("include ':core-common'\ninclude ':feature-albums'\ninclude ':feature-nas'\ninclude ':core-nasops'\ninclude ':app'\n")
     block(root)
     return root
   }

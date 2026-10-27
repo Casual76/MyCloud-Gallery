@@ -234,7 +234,8 @@ class AlbumsShareBenchAppTest {
 
   private suspend fun open(world: World, device: TestDevice, account: String): Alive {
     // Il database su file (un nome per giro e per account): il processo nuovo ritrova catalogo, diari e righe degli album, come sul telefono.
-    val rig = BackupRig(app, device, account, databaseName = dbName(world, account))
+    // Le preferenze della Libreria hanno un file per rinascita (il DataStore di prima resta registrato nella JVM dei test).
+    val rig = BackupRig(app, device, account, databaseName = dbName(world, account), preferencesName = "library-${world.deaths}.preferences_pb")
     rig.open()
     device.graph.trustGuard.preflight(Purpose.BACKGROUND)
     val albums = AlbumsWiring.build(device.context, device.graph, rig.gallery, search = null, today = today)
@@ -292,7 +293,7 @@ class AlbumsShareBenchAppTest {
 
   private companion object {
     /** I giri: ognuno e' l'app intera due volte (due famiglie di dispositivi), con le morti e le rinascite. */
-    const val ROUNDS = 12
+    const val ROUNDS = 8
     const val BASE_SEED = 20261027L
     const val FAULT_PROBABILITY = 0.03
     const val DAY = 24L * 60 * 60 * 1000

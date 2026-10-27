@@ -92,6 +92,11 @@ internal class BackupRig(
    * processo (il banco della condivisione); di norma null, in memoria.
    */
   databaseName: String? = null,
+  /**
+   * Fase 7 (P13): il file delle preferenze della Libreria. Il banco della condivisione fa rinascere il processo nella stessa JVM, dove il DataStore
+   * del processo di prima e' ancora registrato su quel file: ogni rinascita ne usa uno suo (le preferenze della Libreria non c'entrano col banco).
+   */
+  preferencesName: String = "library.preferences_pb",
 ) {
 
   val access = FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
@@ -102,7 +107,7 @@ internal class BackupRig(
     parts = GalleryParts(
       databaseName = databaseName,
       replicaDir = File(device.context.noBackupFilesDir, "replica"),
-      preferencesFile = File(device.context.noBackupFilesDir, "library.preferences_pb"),
+      preferencesFile = File(device.context.noBackupFilesDir, preferencesName),
       access = access,
       intents = FakePhoneMediaIntents(),
       recentlyDeleted = FakeRecentlyDeletedSource(),

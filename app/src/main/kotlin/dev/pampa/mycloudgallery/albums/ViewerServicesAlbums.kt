@@ -42,5 +42,6 @@ fun ViewerServices.withAlbums(albums: ViewerAlbumActions): ViewerServices = View
   similarSearch = similarSearch,
   subjectCutter = subjectCutter,
   cutoutSaver = cutoutSaver,
+  people = people,
   albums = albums,
 )

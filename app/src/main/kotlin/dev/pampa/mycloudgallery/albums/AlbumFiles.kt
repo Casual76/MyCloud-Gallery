@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.backup.safety.SafeCopyRequestLog
 import dev.pampa.mycloudgallery.core.backup.upload.AlbumUploadIntent
 import dev.pampa.mycloudgallery.core.backup.upload.AlbumUploadItem
 import dev.pampa.mycloudgallery.core.backup.upload.AlbumUploadJournal
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.FileStamp
@@ -19,10 +20,7 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -34,24 +32,18 @@ import kotlinx.coroutines.withContext
 // di prima o quella nuova, mai una a meta'. Un file illeggibile vale "vuoto" (si perde la memoria, mai si inventa).
 // Mai titoli, percorsi o id nei log (D37): solo numeri.
 
-/** Un file scritto per intero in modo atomico, letto per intero. */
+/**
+ * Un file scritto per intero in modo atomico, letto per intero: `StateFiles` di core-common (temporaneo nella stessa cartella forzato su disco,
+ * `ATOMIC_MOVE`; lettura breve; un errore non sparisce in silenzio). Il nome del file e' l'etichetta dei log: non contiene mai un id.
+ */
 internal class DurableFile(private val file: File) {
   fun read(maxBytes: Long = MAX_BYTES): ByteArray? = try {
-    if (!file.isFile || file.length() > maxBytes) null else file.readBytes()
+    if (file.isFile && file.length() > maxBytes) null else StateFiles.readBytes(file)
   } catch (e: IOException) {
     null
   }
 
-  fun write(bytes: ByteArray) {
-    val dir = file.absoluteFile.parentFile
-    if (dir != null && !dir.isDirectory) dir.mkdirs()
-    val temp = File(dir, file.name + ".tmp")
-    FileOutputStream(temp).use { out ->
-      out.write(bytes)
-      out.fd.sync()
-    }
-    Files.move(temp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-  }
+  fun write(bytes: ByteArray) = StateFiles.writeBytes(file, bytes)
 
   companion object {
     const val MAX_BYTES: Long = 16L * 1024 * 1024

@@ -6827,6 +6827,10 @@ gli strumenti di debug e di benchmark (`app/src/debug`, `app/src/benchmarkReleas
   Le prove con "un file tenuto aperto" usano `FileInputStream` (e' cio' che apre `File.readText()`) e chiudono l'handle dentro l'attesa del codice: nessun tempo scritto a mano (`NoFixedWaitsTest`), nessun test che cade sotto carico. Su Linux le stesse prove passano senza attese.
   I lettori delle prove di concorrenza respirano un millisecondo fra una lettura e l'altra: su Windows qualunque handle aperto fa fallire la sostituzione, e un lettore che riapre il file senza mai fermarsi lo terrebbe aperto di continuo (nessuna attesa basta, e non e' il caso che si prova).
 
+**`tools\check.ps1 -NoDaemon`** (`GRADLE_OPTS=-Dorg.gradle.workers.max=2`, 27/10): **verde** ("OK: tutto a posto"; `app` 796 prove, `core-common` 118, `core-family` 298). Un primo giro era caduto su una prova di questo pacchetto (quattro scrittori e un lettore sullo
+stesso file): sotto carico lo scheduler aveva fermato il lettore con il file aperto per piu' dei sei tentativi e uno scrittore aveva lanciato, giustamente. La prova non misura la pazienza (lo fanno quelle senza orologio): adesso lo scrittore si ripete fino a riuscire
+(un tetto largo di tentativi) e l'asserzione e' solo che nessun lettore veda niente di strano; stessa cosa per il battito finale di `HeartbeatStoreTest`.
+
 **Punti aperti**
 - `GalleryLog` in release non ha un sink: l'errore definitivo e' nel log solo in debug. Il segnale che c'e' sempre e' quello che chi chiama riceve (`false`, `IOException`). Se serve un segno anche in release, un contatore o un evento della Diagnostica sono un passo successivo (non c'e' un posto
   comune dove scriverlo da `core-common`).

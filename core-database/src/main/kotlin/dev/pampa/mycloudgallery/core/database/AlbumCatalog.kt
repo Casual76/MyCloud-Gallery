@@ -185,6 +185,7 @@ class AlbumCatalog internal constructor(private val database: GalleryDatabase, p
         version = VersionId(row.versionId),
         nas = chosen?.let { CatalogNasFile(it.shareName, it.nasPath) },
         onPhone = row.cellFlags and CellFlags.ON_PHONE != 0,
+        sha256 = row.fullHash?.let { runCatching { Sha256(it) }.getOrNull() },
       )
     }
     return out

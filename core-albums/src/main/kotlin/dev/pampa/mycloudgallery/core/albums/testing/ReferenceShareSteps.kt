@@ -221,7 +221,7 @@ internal class ReferenceShareSteps(private val p: ShareRunnerPorts, private val 
       return
     }
     val me = p.family.me() ?: return
-    val change = SharedAlbumChange.Item(item.media, f.version, f.contentKey, f.nas.path, (item.index + 1) * POSITION_STEP, me)
+    val change = SharedAlbumChange.Item(item.media, f.version, f.contentKey, f.nas.path, (item.index + 1) * POSITION_STEP, me, f.sha256)
     val ticket = p.publisher.stage(op.album, listOf(change))
     p.diary.update(item.copy(state = ShareItemState.ENTRY_STAGED, stageSeq = ticket.seq, dest = f.nas, contentKey = f.contentKey))
   }

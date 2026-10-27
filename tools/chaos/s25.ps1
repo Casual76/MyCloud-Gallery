@@ -8,6 +8,8 @@
             interruzioni (`kill -9` e Wi-Fi spento per 3-20 s), poi il verificatore dei dati sul telefono (`-Step verify`).
     share   durante una CONDIVISIONE di 20-200 media (Fase 7, docs/fase7-progetto.md par. 5.5 e 5.6 F80, P5), anche con media solo sul telefono
             (E-SH1, `INCOMING`): almeno 100 interruzioni (`kill -9` e Wi-Fi spento per 3-20 s), poi il verificatore dal PC. PRONTO MA NON ESEGUITO.
+    faces   durante il CALCOLO dei volti, il raggruppamento e "Disattiva e cancella" (Fase 8, docs/fase8-progetto.md par. 5.5 e 5.6 F103, P12): almeno 100
+            interruzioni (`kill -9` e Wi-Fi spento per 3-20 s) in tre finestre, poi il verificatore sul telefono e dal PC. PRONTO MA NON ESEGUITO.
   Come si usa e come si legge il risultato: docs/prova-500.md.
 
 .DESCRIPTION
@@ -84,6 +86,29 @@
   l'app di debug dev.pampa.mycloudgallery.debug; il Wi-Fi si spegne solo con `svc wifi disable` di questo script, al massimo 120 s, e si riaccende SEMPRE.
   Provato senza telefono: `s25.ps1 -Mode share -SelfTest` (manifesto, guardie) e tools\chaos\share-pc\s25-share-finto.ps1 (contro l'adb finto).
 
+  --- Modo faces (-Mode faces, Fase 8, P12; -Step seed | interrupt | verify | clean) ---
+  Sull'S25 con la build DEBUG e l'account `test`. PRONTO MA NON ESEGUITO (niente telefono, niente adb): la prova vera (F103) la fa chi ha il telefono. Gli scenari
+  dell'app (attivare Persone, "Analizza ora", "Disattiva e cancella" con la conferma) sono quelli del pannello di debug "Prove della Fase 8" (par. 5.6), che
+  P13 scrivera': lo script li avvia con `am broadcast -a dev.pampa.mycloudgallery.debug.action.FACES_SCENARIO -p <pacchetto> --es scenario <nome>` (nomi
+  f103-compute, f103-erase, f103-status) e legge l'esito dal file di stato dell'app (`run-as <pacchetto> cat files/prove/f8-status.txt`, righe chiave=valore:
+  phase, state, generation_present, local_done, keys, faces_db, erase_done). I nomi stanno in testa al modo (variabili $Faces*): si cambiano in un punto solo.
+    seed       porta sul telefono i ritratti e le composizioni di PUBBLICO DOMINIO di -PortraitsDir (default tools\fixtures\faces\portraits; da 10 a 200 file, mai
+               scaricati da questo script) in `mcg-prova`, con nomi neutri (ritratto-NN), e scrive il MANIFESTO dei volti (`# mcg-faces-manifest 1`: giro,
+               etichetta, id del dispositivo se si sa, share `test` e cartella del backup, impronta e byte di ogni ritratto, altri dispositivi dell'account).
+    (a mano)   nell'app: il backup di mcg-prova (i ritratti vanno sul NAS di prova).
+    interrupt  tre finestre in ordine, ognuna con le sue interruzioni (kill -9 e Wi-Fi spento 3-20 s a tempi casuali, dal seme), l'app rilanciata dopo ogni
+               morte: (a) calcolo e raggruppamento (lo scenario f103-compute), (b) "Disattiva e cancella" in corso (f103-erase), (c) la ripresa dopo la
+               cancellazione. -Window compute fa solo la prima, erase la seconda e la terza, all tutte e tre (pesi 5/3/2). A fine prova aspetta che il file di
+               stato dica phase=computed (o erased) e, con -Verify, passa a `verify`.
+    verify     (1) i media di mcg-prova non sono cambiati (con -AllowFreed i file tolti non contano); (2) la cartella dell'app di debug, in sola lettura (run-as ls e cat):
+               in fase computed nessun compagno -wal/-shm/-journal orfano senza il suo .db; in fase erased nessun file `faces-*` salvo faces-erase e faces-local, e il
+               file di stato dice local_done=1, keys=0, faces_db=0; (3) il verificatore dal PC, in SOLA LETTURA: tools\chaos\faces-pc\faces-pc.ps1 -Mode verify
+               -Phase computed|erased (niente dei volti nell'area comune, media non toccati, forma dei file sotto faces/, a cancellazione finita nessun file).
+    clean      toglie `mcg-prova` e il file di stato dal telefono (solo quelli, con -Yes).
+  Guardie del modo faces (le stesse degli altri modi): un solo telefono, RFCY61FZDHW (con un adb finto, MCG_ADB, vale il numero che si vuole); solo l'app di debug
+  dev.pampa.mycloudgallery.debug; il Wi-Fi si spegne solo con `svc wifi disable` di questo script, al massimo 120 s, e si riaccende SEMPRE; da 1 a 500 interruzioni.
+  Provato senza telefono: `s25.ps1 -Mode faces -SelfTest` (manifesto, stato, finestre, guardie) e tools\chaos\faces-pc\s25-faces-finto.ps1 (contro l'adb finto).
+
   Il calendario delle interruzioni (quando e che cosa) dipende solo dal seme: lo stesso -Seed rifa' la stessa prova. Con -DryRun lo script
   stampa il calendario (o il piano della semina) e i comandi adb che userebbe e NON ESEGUE NIENTE (nemmeno adb): e' il modo di controllarlo
   senza il telefono. Con -SelfTest prova solo la conversione dell'uscita di `sha256sum` nel manifesto, su un testo finto.
@@ -94,8 +119,9 @@
   (ANDROID_SERIAL=none vale "nessun dispositivo": solo -DryRun e -SelfTest); il Wi-Fi viene SEMPRE riacceso, anche se lo script e' interrotto.
   Funziona sulla build debug (run-as) con gli account di prova (par. 5.7); il modo backup rifiuta un pacchetto che non sia di debug.
 
-.PARAMETER Mode                move | backup | ai (default move).
-.PARAMETER Step                Per backup: seed | edit | interrupt | verify | clean (default interrupt). Per ai: interrupt | verify.
+.PARAMETER Mode                move | backup | ai | share | faces (default move).
+.PARAMETER Step                Per backup: seed | edit | interrupt | verify | clean (default interrupt). Per ai: interrupt | verify | eval-push | eval-pull.
+                               Per share e faces: seed | interrupt | verify | clean.
 .PARAMETER Serial              Numero di serie del telefono (`adb devices`). Default: ANDROID_SERIAL.
 .PARAMETER Package             Il pacchetto dell'app (default: la build debug, dev.pampa.mycloudgallery.debug).
 .PARAMETER Interruptions       Quante interruzioni (default 100, come chiede il par. 5.5 / 5.4 per il telefono).
@@ -132,6 +158,12 @@
 .PARAMETER NotSettled          Per ai/verify: la prova non e' ancora ferma, un parziale in models/partial/ non e' un errore.
 .PARAMETER EvalSource          Per ai/eval-push: la cartella del set OCR (manifest.tsv e immagini\), uscita di tools\fixtures\generate-ocr.ps1.
 .PARAMETER EvalDir             Per ai/eval-pull: dove mettere cio' che la valutazione ha scritto (default build\chaos\eval-<data>).
+.PARAMETER Window              Per faces/interrupt: compute (solo il calcolo e il raggruppamento), erase ("Disattiva e cancella" e la ripresa) o all (tutte e tre le
+                               finestre, default). Il calendario resta quello del seme: cambia solo a quale finestra cade ogni interruzione.
+.PARAMETER Phase               Per faces/verify (e interrupt -Verify): computed | erased. Senza: erased se la prova ha attraversato la cancellazione, computed altrimenti.
+.PARAMETER PortraitsDir        Per faces/seed: la cartella dei ritratti e delle composizioni di pubblico dominio (default tools\fixtures\faces\portraits; da 10 a 200 file).
+.PARAMETER DeviceId            Per faces/seed: l'id di questo telefono nel registro (26 caratteri); senza, il manifesto non ha la riga deviceid=.
+.PARAMETER OtherDeviceId       Per faces/seed: gli id di altri dispositivi dell'account che possono avere la loro cartella sul NAS (l'emulatore, nel momento del secondo dispositivo).
 .PARAMETER SelfTest            Prova la conversione dell'uscita di sha256sum nel manifesto, su un testo finto (nessun adb); con -Mode ai prova anche il
                                verificatore dei dati (file dei vettori, catalogo dei modelli) e le guardie.
 
@@ -148,10 +180,16 @@
   powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode backup -Step seed -DryRun
   powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode backup -Step seed -Serial R5CX1234567 -Run 20261016-101500-1a2b3c4d
   powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode backup -Step interrupt -Serial R5CX1234567 -Interruptions 100 -Manifest build\chaos\backup-manifest-20261016-101500-1a2b3c4d.txt -Verify
+
+.EXAMPLE
+  # I volti (pronto, non eseguito): il calendario a secco, semina, (backup nell'app), interruzioni nelle tre finestre e verifica.
+  powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode faces -Step interrupt -DryRun -Interruptions 100 -Seed 42
+  powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode faces -Step seed -Serial RFCY61FZDHW -Run 20261030-101500-1a2b3c4d -Seed 103
+  powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode faces -Step interrupt -Serial RFCY61FZDHW -Run 20261030-101500-1a2b3c4d -Seed 103 -Interruptions 100 -SettleSeconds 300 -Verify
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet("move", "backup", "ai", "share")][string]$Mode = "move",
+  [ValidateSet("move", "backup", "ai", "share", "faces")][string]$Mode = "move",
   [ValidateSet("seed", "edit", "interrupt", "verify", "clean", "eval-push", "eval-pull")][string]$Step = "interrupt",
   [string]$Serial = $env:ANDROID_SERIAL,
   [string]$Package = "dev.pampa.mycloudgallery.debug",
@@ -185,6 +223,11 @@ param(
   [string]$CatalogFile,
   [string]$EvalSource,
   [string]$EvalDir,
+  [ValidateSet("compute", "erase", "all")][string]$Window = "all",
+  [string]$Phase,
+  [string]$PortraitsDir,
+  [string]$DeviceId,
+  [string[]]$OtherDeviceId,
   [switch]$DryRun,
   [switch]$SelfTest
 )
@@ -194,6 +237,7 @@ $root = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 $isBackup = ($Mode -eq "backup")
 $isAi = ($Mode -eq "ai")
 $isShare = ($Mode -eq "share")
+$isFaces = ($Mode -eq "faces")
 
 function Fail([string]$message, [int]$code = 1) {
   Write-Host $message -ForegroundColor Red
@@ -550,6 +594,233 @@ if ($SelfTest -and $isShare) {
   exit 0
 }
 
+# =================================================================================================================================
+# Modo faces (Fase 8, P12): guardie, manifesto, stato dell'app, finestre, autotest
+# =================================================================================================================================
+
+# PRONTO, NON ESEGUITO (niente telefono, niente adb vero). Gli scenari dell'app (attivare Persone, "Analizza ora", "Disattiva e cancella" con la conferma
+# data da UI Automator) sono quelli del pannello di debug "Prove della Fase 8" (docs/fase8-progetto.md par. 5.6) che P13 scrivera': i NOMI che questo script
+# si aspetta sono le costanti qui sotto, e si cambiano in questo punto solo. L'app di debug li riceve con un broadcast mirato al suo pacchetto
+# (`am broadcast -a <azione> -p <pacchetto> --es scenario <nome>`) e scrive l'esito, a righe `chiave=valore`, nel file di stato della sua cartella
+# (`run-as <pacchetto> cat files/prove/f8-status.txt`): phase=, state=, generation_present=, local_done=, keys=, faces_db=, erase_done=.
+$FacesBroadcastAction = "dev.pampa.mycloudgallery.debug.action.FACES_SCENARIO"
+$FacesScenarioCompute = "f103-compute"     # attiva Persone (account di prova), "Analizza ora" sull'area di prova; phase=computed a calcolo e raggruppamento finiti
+$FacesScenarioErase = "f103-erase"         # "Disattiva e cancella" con la conferma; phase=erased a cancellazione locale e sul NAS finite
+$FacesScenarioStatus = "f103-status"       # riscrive solo il file di stato (nessun lavoro)
+$FacesStatusFile = "files/prove/f8-status.txt"
+# Le cartelle dell'app di debug da elencare (`run-as <pacchetto> ls -1 <cartella>`): i file dei volti stanno in `noBackupFilesDir` (faces-<G>.db con -wal, -shm,
+# -journal; faces-local; faces-erase). `databases` si guarda per prudenza (una cartella che non c'e' e' vuota).
+$FacesAppDirs = @("no_backup", "databases")
+# Dopo la cancellazione restano questi due (il diario si tiene 30 giorni per la pagina, par. 2.8 passo 11; lo stato locale), con il loro temporaneo.
+$FacesKeepPattern = '^(faces-erase|faces-local)(\.tmp)?$'
+$FacesPhases = @("computed", "erased")
+$FacesMaxInterruptions = 500
+$FacesMinPortraits = 10
+$FacesMaxPortraits = 200
+$FacesWarmupSeconds = 5
+$FacesBackupSubDir = "Backup"
+
+# Un id di dispositivo (TrustIds): 26 caratteri dell'alfabeto Crockford minuscolo, l'ultimo con i due bit bassi a zero (come TrustIds.isValid).
+function Test-TrustId([string]$text) {
+  return ($text -cmatch '^[0-9a-hjkmnp-tv-z]{25}[048cgmrw]$')
+}
+
+# Le guardie del modo faces: quelle del modo ai (un solo telefono, solo l'app di debug, il Wi-Fi al massimo 120 s), piu' da 1 a 500 interruzioni e una fase nota.
+function Get-FacesGuardErrors([string]$serial, [string]$package, [int]$wifiMax, [bool]$fakeAdb, [bool]$dryRun, [int]$interruptions, [string]$phase) {
+  $errors = @(Get-AiGuardErrors $serial $package $wifiMax $fakeAdb $dryRun | ForEach-Object { $_ -replace 'modo ai', 'modo faces' })
+  if ($interruptions -lt 1 -or $interruptions -gt $FacesMaxInterruptions) { $errors += "Il modo faces fa da 1 a $FacesMaxInterruptions interruzioni (-Interruptions)." }
+  if ($phase -and $FacesPhases -notcontains $phase) { $errors += "La fase (-Phase) del modo faces e' computed o erased." }
+  return $errors
+}
+
+# Le finestre delle interruzioni, in ordine: (a) calcolo e raggruppamento dopo "Analizza ora", (b) "Disattiva e cancella" in corso, (c) la ripresa dopo la
+# cancellazione. `compute`: solo la prima; `erase`: la seconda e la terza; `all`: tutte e tre.
+function Get-FacesWindowNames([string]$window) {
+  switch ($window) {
+    "compute" { return @("compute") }
+    "erase" { return @("erase", "resume") }
+    default { return @("compute", "erase", "resume") }
+  }
+}
+
+# Su [count] interruzioni, a quale finestra cade ognuna: pesi 5/3/2 (all) o 6/4 (erase); le restanti vanno a chi ha la parte frazionaria piu' alta. Dipende solo dal numero.
+function Get-FacesWindowPlan([int]$count, [string]$window) {
+  $names = @(Get-FacesWindowNames $window)
+  $weights = @(switch ($window) { "compute" { 1 } "erase" { 6, 4 } default { 5, 3, 2 } })
+  $total = ($weights | Measure-Object -Sum).Sum
+  $counts = @()
+  $fractions = @()
+  for ($i = 0; $i -lt $names.Count; $i++) {
+    $exact = $count * $weights[$i] / $total
+    $counts += [int][math]::Floor($exact)
+    $fractions += ($exact - [math]::Floor($exact))
+  }
+  $remaining = $count - ($counts | Measure-Object -Sum).Sum
+  $order = @(0..($names.Count - 1) | Sort-Object { -$fractions[$_] }, { $_ })
+  for ($k = 0; $k -lt $remaining; $k++) { $counts[$order[$k]]++ }
+  $plan = @()
+  for ($i = 0; $i -lt $names.Count; $i++) { for ($j = 0; $j -lt $counts[$i]; $j++) { $plan += $names[$i] } }
+  return $plan
+}
+
+# Il manifesto dei volti (`# mcg-faces-manifest 1`, letto da FacesManifest.parse in core-faces): giro, etichetta, id del dispositivo (se lo si sa: una riga
+# `deviceid=` vuota il lettore la rifiuta, quindi o c'e' o manca), la share privata (SEMPRE `test`) con la cartella del backup, i ritratti del telefono, gli altri
+# dispositivi dell'account. Mai un nome di persona: l'etichetta e' il nome del file, ritratto-NN.
+function New-FacesManifestText([string]$runId, [string]$label, [string]$deviceId, [string]$privateShare, [string]$privateDir, $files, [string[]]$others) {
+  $lines = @("# mcg-faces-manifest 1", "run=$runId", "device=$label")
+  if ($deviceId) { $lines += "deviceid=$deviceId" }
+  $lines += "private=$privateShare|$privateDir"
+  foreach ($file in $files) {
+    # I fixture finti (non sono ritratti) non entrano: il manifesto dei volti ha solo `phone=`.
+    if (-not $file.NotMedia) { $lines += ("phone={0}|{1}|{2}" -f $file.Sha, $file.Size, $file.Label) }
+  }
+  foreach ($other in @($others)) { if ($other) { $lines += "other=$other" } }
+  return ($lines -join "`n") + "`n"
+}
+
+# Le regole di FacesManifest.parse, qui, per non scrivere ne' lanciare un manifesto che il lettore rifiuterebbe. Restituisce i problemi (vuoto = va bene).
+function Test-FacesManifestText([string]$text) {
+  $problems = New-Object System.Collections.Generic.List[string]
+  $header = $false
+  $run = $false
+  $private = $false
+  $number = 0
+  foreach ($raw in @($text -split "`n")) {
+    $number++
+    $line = $raw.Trim()
+    if (-not $line) { continue }
+    if ($line.StartsWith("#")) { if ($line -eq "# mcg-faces-manifest 1") { $header = $true }; continue }
+    $key = ($line -split '=', 2)[0]
+    $value = if ($line.Contains("=")) { ($line -split '=', 2)[1] } else { "" }
+    $parts = @($value -split '\|')
+    switch ($key) {
+      "run" { if ($parts.Count -eq 1 -and $parts[0] -cmatch '^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$') { $run = $true } else { $problems.Add("riga ${number}: giro con la forma sbagliata") } }
+      "device" { }
+      "deviceid" { if (-not ($parts.Count -eq 1 -and (Test-TrustId $parts[0]))) { $problems.Add("riga ${number}: id del dispositivo non valido") } }
+      "private" {
+        if ($parts.Count -lt 2) { $problems.Add("riga ${number}: manca la cartella"); continue }
+        $private = $true
+        if ($parts[0].ToLowerInvariant() -ne "test") { $problems.Add("riga ${number}: la share non e' quella di prova (test)") }
+        $dirParts = @($parts[1] -split '/')
+        if ($parts[1] -notmatch '^[A-Za-z0-9._ -]+(/[A-Za-z0-9._ -]+)*$' -or $dirParts -contains ".." -or $dirParts -contains ".") { $problems.Add("riga ${number}: cartella non valida") }
+      }
+      "phone" { if ($parts.Count -lt 3 -or $parts[0] -cnotmatch '^[0-9a-f]{64}$' -or $parts[1] -notmatch '^[0-9]+$') { $problems.Add("riga ${number}: ritratto non valido") } }
+      "other" { if (-not ($parts.Count -eq 1 -and (Test-TrustId $parts[0]))) { $problems.Add("riga ${number}: id dell'altro dispositivo non valido") } }
+      default { $problems.Add("riga ${number}: chiave sconosciuta") }
+    }
+  }
+  if (-not $header) { $problems.Add("manca l'intestazione '# mcg-faces-manifest 1'") }
+  if (-not $run) { $problems.Add("manifesto senza 'run'") }
+  if (-not $private) { $problems.Add("manifesto senza 'private'") }
+  return $problems.ToArray()
+}
+
+# Il file di stato dell'app (`chiave=valore` per riga) come tabella.
+function ConvertFrom-FacesStatus([string[]]$lines) {
+  $map = @{}
+  foreach ($line in $lines) { if ($line -match '^\s*([a-z_]+)=(.*?)\s*$') { $map[$Matches[1]] = $Matches[2] } }
+  return $map
+}
+
+# I nomi dei file della cartella dell'app e il file di stato contro la fase: `computed` = nessun compagno (-wal, -shm, -journal) orfano senza il suo .db; `erased` =
+# nessun file `faces-*` salvo il diario e lo stato locale, e il file di stato dice local_done=1, keys=0, faces_db=0. In ogni fase faces_db deve tornare con i .db visti.
+function Get-FacesPhoneProblems([string[]]$names, [string]$phase, $status) {
+  $problems = New-Object System.Collections.Generic.List[string]
+  $faces = @($names | Where-Object { $_ -like "faces-*" })
+  $dbs = @($faces | Where-Object { $_ -match '^faces-.+\.db$' })
+  if ($phase -eq "erased") {
+    $left = @($faces | Where-Object { $_ -notmatch $FacesKeepPattern })
+    if ($left.Count -gt 0) { $problems.Add("$($left.Count) file dei volti rimasti sul telefono dopo 'Disattiva e cancella' (database e compagni)") }
+  } else {
+    foreach ($name in $faces) {
+      if ($name -match '^(faces-.+\.db)-(wal|shm|journal)$' -and $dbs -notcontains $Matches[1]) { $problems.Add("un compagno '-$($Matches[2])' del database senza il suo .db") }
+    }
+  }
+  if ($status) {
+    if ($status.ContainsKey("faces_db") -and $status["faces_db"] -match '^[0-9]+$' -and [int]$status["faces_db"] -ne $dbs.Count) {
+      $problems.Add("il file di stato dice faces_db=$($status['faces_db']) ma sul telefono i database sono $($dbs.Count)")
+    }
+    if ($phase -eq "erased") {
+      if ($status["local_done"] -ne "1") { $problems.Add("il file di stato non dice local_done=1 (la cancellazione locale non e' finita)") }
+      if ($status["keys"] -ne "0") { $problems.Add("il file di stato non dice keys=0 (una chiave dei volti c'e' ancora)") }
+      if ($status["faces_db"] -ne "0") { $problems.Add("il file di stato non dice faces_db=0") }
+    }
+  } elseif ($phase -eq "erased") {
+    $problems.Add("manca il file di stato dell'app ($FacesStatusFile): senza non si sa se la chiave e' stata distrutta")
+  }
+  return $problems.ToArray()
+}
+
+function Invoke-FacesSelfTest {
+  $script:facesFailed = 0
+  function Expect([string]$what, [bool]$ok) {
+    if ($ok) { Write-Host ("  OK    {0}" -f $what) -ForegroundColor Green } else { Write-Host ("  FAIL  {0}" -f $what) -ForegroundColor Red; $script:facesFailed++ }
+  }
+  $hash = @(
+    "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae  /sdcard/DCIM/mcg-prova/ritratto-01.jpg",
+    "fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9  /sdcard/Pictures/mcg-prova/ritratto-02.jpg",
+    "b5bb9d8014a0f9b1d61e21e796d78dccdf1352f23cd32812f4850b878ae4944c  /sdcard/DCIM/mcg-prova/testo.jpg",
+    "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  /sdcard/DCIM/mcg-prova/vuoto.jpg"
+  )
+  $size = @("1234 /sdcard/DCIM/mcg-prova/ritratto-01.jpg", "5678 /sdcard/Pictures/mcg-prova/ritratto-02.jpg", "22 /sdcard/DCIM/mcg-prova/testo.jpg", "0 /sdcard/DCIM/mcg-prova/vuoto.jpg")
+  $files = @(ConvertTo-PhoneFileList $hash $size)
+  $deviceId = "abcdefghjkmnpqrstvwxyz0124"
+  $other = "0123456789abcdefghjkmnpqrw"
+  $run = "20261029-101500-1a2b3c4d"
+  $text = New-FacesManifestText $run "s25" $deviceId "test" "mcg-campo/Backup" $files @($other)
+  $expected = "# mcg-faces-manifest 1`nrun=$run`ndevice=s25`ndeviceid=$deviceId`nprivate=test|mcg-campo/Backup`n" +
+    "phone=2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae|1234|ritratto-01.jpg`n" +
+    "phone=fcde2b2edba56bf408601fb721fe9b5c338d10ee429ea04fae5511b68fbf8fb9|5678|ritratto-02.jpg`n" +
+    "other=$other`n"
+  Expect "il manifesto dei volti ha giro, dispositivo, cartella del backup e ritratti (zero byte e fixture finto scartati, other= in coda)" ($text -eq $expected)
+  Expect "senza id del dispositivo la riga deviceid= non c'e' (il lettore rifiuterebbe una riga vuota)" ((New-FacesManifestText $run "" "" "test" "mcg-campo/Backup" $files @()) -notmatch 'deviceid=')
+  Expect "il manifesto buono passa i controlli del lettore" (@(Test-FacesManifestText $text).Count -eq 0)
+  $bad = [ordered]@{
+    "una share che non e' test"              = $text.Replace("private=test|", "private=test2|")
+    "una cartella con .."                    = $text.Replace("mcg-campo/Backup", "mcg-campo/../x")
+    "un giro con la forma sbagliata"         = $text.Replace("run=$run", "run=oggi")
+    "un id del dispositivo non valido"       = $text.Replace("deviceid=$deviceId", "deviceid=ABC")
+    "un deviceid vuoto"                      = $text.Replace("deviceid=$deviceId", "deviceid=")
+    "un'impronta in maiuscolo"               = $text.Replace("2c26b46b", "2C26B46B")
+    "una riga sconosciuta"                   = $text + "freed=2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae|x`n"
+    "l'intestazione mancante"                = $text.Replace("# mcg-faces-manifest 1`n", "")
+  }
+  foreach ($name in $bad.Keys) { Expect "il controllo rifiuta $name" (@(Test-FacesManifestText $bad[$name]).Count -gt 0) }
+  Expect "le guardie accettano il telefono, l'app di debug, il Wi-Fi a 120 s e 100 interruzioni" ((Get-FacesGuardErrors $AiSerial $AiPackage 120 $false $false 100 "").Count -eq 0)
+  Expect "rifiutano un altro telefono e l'app di release" (((Get-FacesGuardErrors "ZZZ12345" $AiPackage 120 $false $false 100 "").Count -gt 0) -and ((Get-FacesGuardErrors $AiSerial "dev.pampa.mycloudgallery" 120 $false $false 100 "").Count -gt 0))
+  Expect "rifiutano un Wi-Fi spento oltre 120 s" ((Get-FacesGuardErrors $AiSerial $AiPackage 121 $false $false 100 "").Count -gt 0)
+  Expect "rifiutano -Interruptions fuori da 1-500 (e accettano gli estremi)" (((Get-FacesGuardErrors $AiSerial $AiPackage 120 $false $false 0 "").Count -gt 0) -and ((Get-FacesGuardErrors $AiSerial $AiPackage 120 $false $false 501 "").Count -gt 0) -and ((Get-FacesGuardErrors $AiSerial $AiPackage 120 $false $false 1 "").Count -eq 0) -and ((Get-FacesGuardErrors $AiSerial $AiPackage 120 $false $false 500 "").Count -eq 0))
+  Expect "rifiutano una fase sconosciuta e accettano computed ed erased" (((Get-FacesGuardErrors $AiSerial $AiPackage 120 $false $false 100 "boh").Count -gt 0) -and ((Get-FacesGuardErrors $AiSerial $AiPackage 120 $false $false 100 "computed").Count -eq 0) -and ((Get-FacesGuardErrors $AiSerial $AiPackage 120 $false $false 100 "erased").Count -eq 0))
+  Expect "rifiutano la mancanza del telefono (tranne a secco); con un adb finto vale il numero che si vuole" (((Get-FacesGuardErrors "" $AiPackage 120 $false $false 100 "").Count -gt 0) -and ((Get-FacesGuardErrors "" $AiPackage 120 $false $true 100 "").Count -eq 0) -and ((Get-FacesGuardErrors "FAKE123" $AiPackage 120 $true $false 100 "").Count -eq 0))
+  Expect "i messaggi dicono 'modo faces'" (((Get-FacesGuardErrors "ZZZ12345" $AiPackage 120 $false $false 100 "") -join " ") -match 'modo faces')
+  $status = ConvertFrom-FacesStatus @("phase=erased", "state=off", "generation_present=0", "local_done=1", "keys=0", "faces_db=0", "erase_done=1", "una riga estranea")
+  Expect "il file di stato si legge (7 chiavi, la riga estranea scartata)" (($status.Count -eq 7) -and ($status["phase"] -eq "erased") -and ($status["keys"] -eq "0"))
+  $good = @("faces-erase", "faces-local", "faces-local.tmp", "personal-heads", "settings")
+  Expect "a cancellazione finita bastano il diario e lo stato locale (nessun problema)" (@(Get-FacesPhoneProblems $good "erased" $status).Count -eq 0)
+  Expect "dopo la cancellazione un faces-1.db rimasto e' un problema" (@(Get-FacesPhoneProblems ($good + "faces-1.db") "erased" $status).Count -gt 0)
+  Expect "dopo la cancellazione anche solo un -wal rimasto e' un problema" (@(Get-FacesPhoneProblems ($good + "faces-1.db-wal") "erased" $status).Count -gt 0)
+  $leaving = ConvertFrom-FacesStatus @("phase=erased", "local_done=0", "keys=1", "faces_db=0")
+  Expect "il file di stato con keys=1 o local_done=0 in fase erased e' un problema" (@(Get-FacesPhoneProblems $good "erased" $leaving).Count -ge 2)
+  Expect "in fase erased senza file di stato e' un problema" (@(Get-FacesPhoneProblems $good "erased" $null).Count -gt 0)
+  $computed = ConvertFrom-FacesStatus @("phase=computed", "state=on", "keys=1", "faces_db=1")
+  Expect "in fase computed un .db con i suoi compagni va bene" (@(Get-FacesPhoneProblems @("faces-1.db", "faces-1.db-wal", "faces-1.db-shm", "faces-local") "computed" $computed).Count -eq 0)
+  Expect "in fase computed un -wal senza il suo .db e' un problema" (@(Get-FacesPhoneProblems @("faces-2.db-wal", "faces-local") "computed" $null).Count -gt 0)
+  Expect "faces_db del file di stato deve tornare con i database visti" (@(Get-FacesPhoneProblems @("faces-1.db", "faces-2.db") "computed" $computed).Count -gt 0)
+  Expect "finestre: 6 interruzioni su all sono 3 + 2 + 1, tutte e tre coperte" ((($plan6 = @(Get-FacesWindowPlan 6 "all")) -and ($plan6.Count -eq 6) -and (@($plan6 | Where-Object { $_ -eq "compute" }).Count -eq 3) -and (@($plan6 | Where-Object { $_ -eq "erase" }).Count -eq 2) -and (@($plan6 | Where-Object { $_ -eq "resume" }).Count -eq 1)))
+  Expect "finestre: compute da solo, erase con la ripresa, e il totale torna sempre" ((@(Get-FacesWindowPlan 7 "compute") -join ",") -eq "compute,compute,compute,compute,compute,compute,compute" -and (@(Get-FacesWindowPlan 10 "erase") -join ",") -eq "erase,erase,erase,erase,erase,erase,resume,resume,resume,resume" -and (@(Get-FacesWindowPlan 101 "all")).Count -eq 101)
+  Expect "un id di dispositivo vale solo nella forma di TrustIds" ((Test-TrustId $deviceId) -and (Test-TrustId $other) -and -not (Test-TrustId "abcdefghjkmnpqrstvwxyz0123") -and -not (Test-TrustId "ABCDEFGHJKMNPQRSTVWXYZ0124") -and -not (Test-TrustId "corto"))
+  Expect "le cartelle del telefono sono solo le due di mcg-prova" (($PhoneFolders -join ",") -eq "/sdcard/DCIM/mcg-prova,/sdcard/Pictures/mcg-prova")
+  return $script:facesFailed
+}
+
+if ($SelfTest -and $isFaces) {
+  Write-Host "SelfTest del modo faces (nessun telefono, nessun adb):"
+  $failedChecks = Invoke-FacesSelfTest
+  if ($failedChecks -gt 0) { Fail "SelfTest faces: $failedChecks controlli non passano." 3 }
+  Write-Host "SelfTest faces: il manifesto, il file di stato, le finestre e le guardie funzionano." -ForegroundColor Green
+  exit 0
+}
+
 if ($SelfTest -and $isAi) {
   Write-Host "SelfTest del modo ai (nessun telefono, nessun adb):"
   $failedChecks = Invoke-AiSelfTest
@@ -602,6 +873,18 @@ if ($isShare) {
   if ($Run -and $Run -notmatch '^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$') { Fail "-Run deve avere la forma aaaammgg-hhmmss-<8 esadecimali>." }
   if ($Device -and $Device -notmatch '^[A-Za-z0-9]{26}$') { Fail "-Device e' l'id del dispositivo: 26 caratteri (Diagnostica)." }
 }
+if ($isFaces) {
+  # Il modo faces: semina dei ritratti, interruzioni in tre finestre, verifica e pulizia; le guardie sul telefono, sull'app e sul Wi-Fi sono quelle del modo ai.
+  if ($Step -notin @("seed", "interrupt", "verify", "clean")) { Fail "Il modo faces ha solo i passi seed, interrupt, verify e clean." }
+  $facesErrors = @(Get-FacesGuardErrors $Serial $Package $WifiOffMaxSeconds ([bool]$env:MCG_ADB) ([bool]$DryRun) $Interruptions $Phase)
+  if ($facesErrors.Count -gt 0) { Fail ($facesErrors -join " ") 2 }
+  if ($DestShare -ne "test") { Fail "Il modo faces vale per la share di prova test (-DestShare), l'area privata dell'account di prova." }
+  if ($DestDir -notmatch '^[A-Za-z0-9._-]+$' -or $DestDir -match '^\.+$') { Fail "-DestDir deve essere un solo nome di cartella semplice (default mcg-campo)." }
+  if ($Run -and $Run -notmatch '^[0-9]{8}-[0-9]{6}-[0-9a-f]{8}$') { Fail "-Run deve avere la forma aaaammgg-hhmmss-<8 esadecimali>." }
+  if ($Device -and $Device -notmatch '^[A-Za-z0-9._-]{1,32}$') { Fail "-Device e' un'etichetta semplice (lettere, cifre, . _ -, al piu' 32 caratteri)." }
+  if ($DeviceId -and -not (Test-TrustId $DeviceId)) { Fail "-DeviceId non e' un id di dispositivo valido (26 caratteri, alfabeto di TrustIds)." }
+  foreach ($other in @($OtherDeviceId)) { if ($other -and -not (Test-TrustId $other)) { Fail "-OtherDeviceId contiene un id di dispositivo non valido." } }
+}
 if ($isAi) {
   # Il modo ai: solo interrupt e verify (la semina e' quella del modo backup), e le guardie sul telefono, l'app e il Wi-Fi.
   if ($Step -notin @("interrupt", "verify", "eval-push", "eval-pull")) { Fail "Il modo ai ha solo i passi interrupt, verify, eval-push ed eval-pull (la semina di mcg-prova e il primo backup sono del modo backup)." }
@@ -623,6 +906,7 @@ if ($Seed -eq 0) { $Seed = Get-Random -Minimum 1 -Maximum 2147483647 }
 $runId = if ($Run) { $Run } else { "{0}-{1:x8}" -f (Get-Date -Format "yyyyMMdd-HHmmss"), (Get-Random -Minimum 0 -Maximum ([int]::MaxValue)) }
 if ($isBackup -and -not $Manifest) { $Manifest = Join-Path $root "build\chaos\backup-manifest-$runId.txt" }
 if ($isShare -and -not $Manifest) { $Manifest = Join-Path $root "build\chaos\share-manifest-$runId.txt" }
+if ($isFaces -and -not $Manifest) { $Manifest = Join-Path $root "build\chaos\faces-manifest-$runId.txt" }
 
 $stamp = Get-Date -Format "yyyyMMdd-HHmmss"
 if (-not $Log) { $Log = Join-Path $root "build\chaos\s25-$stamp.log" }
@@ -645,6 +929,11 @@ for ($i = 1; $i -le $Interruptions; $i++) {
     $plan += [pscustomobject]@{ N = $i; Gap = $gap; Action = "kill"; Duration = 0 }
   }
 }
+if ($isFaces) {
+  # Le finestre: a quale parte della prova cade ogni interruzione (calcolo, cancellazione, ripresa). Il calendario (quando e che cosa) resta quello del seme.
+  $windowPlan = @(Get-FacesWindowPlan $plan.Count $Window)
+  for ($i = 0; $i -lt $plan.Count; $i++) { $plan[$i] | Add-Member -NotePropertyName Window -NotePropertyValue $windowPlan[$i] -Force }
+}
 $wifiCount = @($plan | Where-Object { $_.Action -eq "wifi" }).Count
 $killCount = $plan.Count - $wifiCount
 $totalSeconds = ($plan | Measure-Object -Property Gap -Sum).Sum + ($plan | Measure-Object -Property Duration -Sum).Sum +
@@ -663,6 +952,11 @@ $commandPlan = [ordered]@{
   "Wi-Fi spento"               = "adb -s $serialText shell svc wifi disable"
   "Wi-Fi acceso"               = "adb -s $serialText shell svc wifi enable"
   "rilancio dell'app"          = "adb -s $serialText shell monkey -p $Package -c android.intent.category.LAUNCHER 1"
+}
+if ($isFaces) {
+  $commandPlan["scenario (calcolo)"] = "adb -s $serialText shell am broadcast -a $FacesBroadcastAction -p $Package --es scenario $FacesScenarioCompute"
+  $commandPlan["scenario (cancellazione)"] = "adb -s $serialText shell am broadcast -a $FacesBroadcastAction -p $Package --es scenario $FacesScenarioErase"
+  $commandPlan["file di stato dell'app"] = "adb -s $serialText shell run-as $Package cat $FacesStatusFile"
 }
 
 function Get-SdkDir {
@@ -1001,6 +1295,237 @@ function Invoke-Clean {
 }
 
 # =================================================================================================================================
+# Modo faces (Fase 8, P12): i passi sul telefono (scenari dell'app, semina, verifica, pulizia). PRONTO, NON ESEGUITO.
+# =================================================================================================================================
+
+# Avvia uno scenario del pannello di debug "Prove della Fase 8": un broadcast mirato al solo pacchetto dell'app di debug (-p), con il nome dello scenario.
+function Invoke-FacesScenario([string]$scenario) {
+  $result = Invoke-Adb @("shell", "am", "broadcast", "-a", $FacesBroadcastAction, "-p", $Package, "--es", "scenario", $scenario)
+  if ($result.Code -ne 0 -or $result.Text -match '(?i)exception|error:') {
+    Write-Log ("ATTENZIONE: lo scenario {0} non risulta avviato (adb dice: '{1}')." -f $scenario, $result.Text)
+    return $false
+  }
+  Write-Log "Scenario $scenario avviato."
+  return $true
+}
+
+# Il file di stato dell'app (sola lettura, `run-as`); null se non c'e'.
+function Read-FacesStatus {
+  $result = Invoke-Adb @("shell", "run-as $Package cat $FacesStatusFile")
+  if ($result.Code -ne 0 -or $result.Text -match '(?i)no such file|not debuggable|unknown package') { return $null }
+  return (ConvertFrom-FacesStatus $result.Lines)
+}
+
+# I nomi dei file nelle cartelle dell'app (`run-as <pacchetto> ls -1`, sola lettura). Una cartella che non c'e' e' vuota.
+function Get-FacesAppNames {
+  $names = @()
+  foreach ($dir in $FacesAppDirs) {
+    $result = Invoke-Adb @("shell", "run-as $Package ls -1 $dir")
+    if ($result.Code -ne 0) { continue }
+    foreach ($line in $result.Lines) {
+      $name = $line.Trim()
+      if ($name -and $name -notmatch '\s') { $names += $name }
+    }
+  }
+  return $names
+}
+
+# Aspetta (al piu' [seconds] s) che il file di stato dica phase=[phase]. Falso se non arriva.
+function Wait-FacesPhase([string]$phase, [int]$seconds) {
+  $deadline = (Get-Date).AddSeconds($seconds)
+  while ($true) {
+    $status = Read-FacesStatus
+    if ($status -and $status["phase"] -eq $phase) { return $true }
+    if ((Get-Date) -ge $deadline) { return $false }
+    Start-Sleep -Seconds 1
+  }
+}
+
+# La fase che la verifica si aspetta: quella chiesta, altrimenti `erased` se la prova ha attraversato la cancellazione, `computed` negli altri casi.
+function Resolve-FacesPhase {
+  if ($Phase) { return $Phase }
+  if ($Step -eq "interrupt" -and $Window -ne "compute") { return "erased" }
+  return "computed"
+}
+
+# L'inizio di una finestra delle interruzioni: lo scenario dell'app che la apre (la ripresa dopo la cancellazione non ha scenario: l'app riparte da sola dal diario).
+function Start-FacesWindow([string]$name) {
+  $warmup = [math]::Min($FacesWarmupSeconds, $MinGapSeconds)
+  switch ($name) {
+    "compute" {
+      Write-Log "Finestra: calcolo e raggruppamento (dopo 'Analizza ora')."
+      [void](Invoke-FacesScenario $FacesScenarioCompute)
+      Start-Sleep -Seconds $warmup
+    }
+    "erase" {
+      Write-Log "Finestra: 'Disattiva e cancella' in corso."
+      if ($Window -eq "all" -and -not (Wait-FacesPhase "computed" $SettleSeconds)) {
+        Write-Log "ATTENZIONE: il calcolo non risulta finito (phase=computed) entro $SettleSeconds s: la cancellazione parte lo stesso."
+      }
+      [void](Invoke-FacesScenario $FacesScenarioErase)
+      Start-Sleep -Seconds $warmup
+    }
+    "resume" {
+      Write-Log "Finestra: la ripresa dopo la cancellazione (il diario riprende dal passo dopo l'ultimo segnato)."
+      Start-App
+    }
+  }
+}
+
+# A fine prova: l'app riparte e si aspetta che il file di stato dica che e' arrivata in fondo (calcolo finito, o cancellazione finita).
+function Wait-FacesSettled {
+  $target = if ($Window -eq "compute") { "computed" } else { "erased" }
+  if (Wait-FacesPhase $target $SettleSeconds) {
+    Write-Log "Il file di stato dell'app dice phase=$target."
+  } else {
+    Write-Log "ATTENZIONE: il file di stato dell'app non dice phase=$target entro $SettleSeconds s (alzare -SettleSeconds; la verifica lo dira')."
+  }
+}
+
+# Il riassunto a secco delle finestre: quante interruzioni cadono in ognuna e che cosa succede all'inizio.
+function Write-FacesWindowSummary {
+  Write-Host "Finestre (in ordine):"
+  foreach ($name in (Get-FacesWindowNames $Window)) {
+    $count = @($plan | Where-Object { $_.Window -eq $name }).Count
+    $what = switch ($name) {
+      "compute" { "calcolo e raggruppamento: apre lo scenario $FacesScenarioCompute" }
+      "erase" { "'Disattiva e cancella' in corso: prima si aspetta phase=computed, poi lo scenario $FacesScenarioErase" }
+      default { "la ripresa dopo la cancellazione: l'app riparte dal diario (nessuno scenario)" }
+    }
+    Write-Host ("  {0,-8} {1,4} interruzioni  {2}" -f $name, $count, $what)
+  }
+  Write-Host "A fine prova: si aspetta che il file di stato dica phase=$(if ($Window -eq 'compute') { 'computed' } else { 'erased' }) ($SettleSeconds s al massimo)."
+}
+
+function Write-FacesSeedPlan {
+  Write-Host "=== PIANO DELLA SEMINA DEI RITRATTI (a secco): nessun comando adb viene eseguito ===" -ForegroundColor Yellow
+  Write-Host ("Telefono: {0}   Giro: {1}   Seme: {2}   Cartella del backup sul NAS: {3}/{4}/{5}/" -f $serialText, $runId, $Seed, $DestShare, $DestDir, $FacesBackupSubDir)
+  Write-Host ("Ritratti e composizioni di pubblico dominio da {0} (da {1} a {2} file; mai nomi di persone nei nomi sul telefono: ritratto-NN)" -f $(if ($PortraitsDir) { $PortraitsDir } else { "tools\fixtures\faces\portraits" }), $FacesMinPortraits, $FacesMaxPortraits)
+  Write-Host "Cartelle del telefono (le uniche toccate): $($PhoneFolders -join ', ')"
+  Write-Host ""
+  Write-Host "Comandi adb che userebbe:"
+  Write-Host ("  {0,-26} adb -s {1} get-state" -f "stato del telefono", $serialText)
+  Write-Host ("  {0,-26} adb -s {1} shell mkdir -p {2}" -f "cartelle", $serialText, ($PhoneFolders -join " "))
+  Write-Host ("  {0,-26} adb -s {1} push <staging>\DCIM\mcg-prova /sdcard/DCIM/   e   push <staging>\Pictures\mcg-prova /sdcard/Pictures/" -f "ritratti", $serialText)
+  Write-Host ("  {0,-26} adb -s {1} shell {2}" -f "scansione del MediaStore", $serialText, $scanCommand)
+  Write-Host ("  {0,-26} adb -s {1} shell {2}" -f "impronte (sha256sum)", $serialText, $hashCommand)
+  Write-Host ("  {0,-26} adb -s {1} shell {2}" -f "dimensioni (stat)", $serialText, $sizeCommand)
+  Write-Host ""
+  Write-Host ("Il manifesto dei volti (# mcg-faces-manifest 1) va in {0}: poi, nell'app, il backup di mcg-prova (i ritratti sul NAS) e si lancia -Step interrupt." -f $Manifest) -ForegroundColor Green
+}
+
+function Get-FacesPortraits {
+  $dir = if ($PortraitsDir) { $PortraitsDir } else { Join-Path $root "tools\fixtures\faces\portraits" }
+  if (-not (Test-Path -LiteralPath $dir -PathType Container)) { return @() }
+  return @(Get-ChildItem -LiteralPath $dir -File | Where-Object { $_.Extension -match '^\.(jpe?g|png|webp)$' -and $_.Length -gt 0 } | Sort-Object Name)
+}
+
+# La semina dei ritratti di pubblico dominio (mai scaricati da questo script: servono il consenso dell'utente e P1/P11) in `mcg-prova`, con nomi neutri.
+function Invoke-SeedFaces {
+  $portraits = @(Get-FacesPortraits)
+  if ($portraits.Count -lt $FacesMinPortraits) {
+    Fail ("Servono almeno {0} ritratti e composizioni di pubblico dominio in -PortraitsDir (default tools\fixtures\faces\portraits): ce ne sono {1}. Si scaricano con il consenso dell'utente (tools\models\faces, P1) e non fanno parte del repository: questo script non scarica niente." -f $FacesMinPortraits, $portraits.Count) 2
+  }
+  if ($portraits.Count -gt $FacesMaxPortraits) { Fail ("Troppi file in -PortraitsDir ({0}): al massimo {1}." -f $portraits.Count, $FacesMaxPortraits) 2 }
+  Initialize-Adb
+  Assert-Debug-App
+  $work = Join-Path $root "build\chaos\seed-$runId"
+  New-Item -ItemType Directory -Force -Path $work | Out-Null
+  # I due contenitori locali hanno il nome della cartella del telefono: `adb push <cartella> /sdcard/DCIM/` crea /sdcard/DCIM/mcg-prova.
+  $dcim = Join-Path $work "staging\DCIM\mcg-prova"
+  $pictures = Join-Path $work "staging\Pictures\mcg-prova"
+  New-Item -ItemType Directory -Force -Path $dcim, $pictures | Out-Null
+  # Il numero NN viene dal seme: lo stesso -Seed, lo stesso ordine. Meta' in DCIM e meta' in Pictures (le due sorgenti di D13). Nessun nome di chi e' ritratto.
+  $random = New-Object System.Random($Seed)
+  $ordered = @($portraits | Sort-Object { $random.Next() })
+  $i = 0
+  foreach ($file in $ordered) {
+    $i++
+    $target = if ($i % 2 -eq 0) { $pictures } else { $dcim }
+    Copy-Item -LiteralPath $file.FullName -Destination (Join-Path $target ("ritratto-{0:D2}{1}" -f $i, $file.Extension.ToLowerInvariant()))
+  }
+  Write-Log "Preparo le cartelle del telefono: $($PhoneFolders -join ', ')"
+  [void](Invoke-Adb (@("shell", "mkdir", "-p") + $PhoneFolders))
+  foreach ($pair in @(@($dcim, "/sdcard/DCIM/"), @($pictures, "/sdcard/Pictures/"))) {
+    if (@(Get-ChildItem -LiteralPath $pair[0] -File).Count -gt 0) {
+      Write-Log "Spingo $($pair[0]) su $($pair[1])..."
+      $result = Invoke-Adb @("push", $pair[0], $pair[1])
+      if ($result.Code -ne 0) { Fail "adb push non e' riuscito (adb dice: '$($result.Text)')." }
+    }
+  }
+  Write-Log "Chiedo la scansione del MediaStore..."
+  [void](Invoke-Adb @("shell", $scanCommand))
+  $files = @(Get-PhoneFiles | Where-Object { -not $_.NotMedia })
+  if ($files.Count -eq 0) { Fail "Nessun file di mcg-prova sul telefono dopo la semina." }
+  [void](Wait-MediaStore $files.Count)
+  $text = New-FacesManifestText $runId $Device $DeviceId $DestShare "$DestDir/$FacesBackupSubDir" $files $OtherDeviceId
+  $problems = @(Test-FacesManifestText $text)
+  if ($problems.Count -gt 0) { Fail ("Il manifesto che sto per scrivere non passa i controlli del lettore: " + ($problems -join "; ")) 3 }
+  $manifestDir = Split-Path -Parent $Manifest
+  if ($manifestDir -and -not (Test-Path -LiteralPath $manifestDir)) { New-Item -ItemType Directory -Path $manifestDir | Out-Null }
+  [System.IO.File]::WriteAllText($Manifest, $text)
+  Write-Log ("Semina finita: {0} ritratti in mcg-prova (somma {1:N0} byte). Manifesto: {2}" -f $files.Count, (($files | Measure-Object -Property Size -Sum).Sum), $Manifest)
+  Write-Host "Adesso, nell'app (build debug, account di prova): il backup di mcg-prova (i ritratti vanno sul NAS), poi lancia: s25.ps1 -Mode faces -Step interrupt -Manifest `"$Manifest`" -Verify" -ForegroundColor Green
+}
+
+# La verifica dei volti: (1) i media di mcg-prova sul telefono non sono cambiati; (2) la cartella dell'app di debug (sola lettura, run-as): nomi dei file e file di
+# stato contro la fase; (3) il verificatore dal PC sull'area di prova, in sola lettura (faces-pc.ps1 -Mode verify): niente dei volti nell'area comune, media non
+# toccati, forma dei file dei volti sul NAS, e a cancellazione finita nessun file sotto faces/.
+function Invoke-VerifyFaces {
+  if (-not (Test-Path -LiteralPath $Manifest)) { Fail "Manifesto non trovato: $Manifest" }
+  $manifestProblems = @(Test-FacesManifestText (Get-Content -LiteralPath $Manifest -Raw))
+  if ($manifestProblems.Count -gt 0) { Fail ("Il manifesto non e' valido: " + ($manifestProblems -join "; ")) 3 }
+  $phase = Resolve-FacesPhase
+  Initialize-Adb
+  Assert-Debug-App
+  $seeded = @{}
+  foreach ($line in (Get-Content -LiteralPath $Manifest)) {
+    if ($line -match '^phone=([0-9a-f]{64})\|(\d+)\|(.+)$') { $seeded["$($Matches[1])|$($Matches[3])"] = $true }
+  }
+  $now = @{}
+  foreach ($file in (Get-PhoneFiles)) { if (-not $file.NotMedia) { $now["$($file.Sha)|$($file.Label)"] = $true } }
+  $unknown = @($now.Keys | Where-Object { -not $seeded.ContainsKey($_) }).Count
+  $freedKeys = @($seeded.Keys | Where-Object { -not $now.ContainsKey($_) })
+  $changed = $unknown + $(if ($AllowFreed) { 0 } else { $freedKeys.Count })
+  if ($changed -gt 0) { Fail "Il telefono e' cambiato durante la prova ($changed file diversi dal manifesto): il calcolo e la cancellazione dei volti non toccano i media del telefono (-AllowFreed se li ha tolti il guardiano o Libera spazio)." 4 }
+  Write-Log ("Il telefono non e' cambiato rispetto al manifesto: le impronte di mcg-prova tornano{0}." -f $(if ($freedKeys.Count -gt 0) { " ($($freedKeys.Count) file tolti dal guardiano o da Libera spazio)" } else { "" }))
+  # La cartella dell'app: solo ls e cat, in sola lettura.
+  $names = @(Get-FacesAppNames)
+  $status = Read-FacesStatus
+  $facesNames = @($names | Where-Object { $_ -like "faces-*" })
+  Write-Log ("App: {0} file nelle cartelle dell'app, {1} dei volti ({2} database); fase attesa: {3}; file di stato: {4}." -f $names.Count, $facesNames.Count, @($facesNames | Where-Object { $_ -match '^faces-.+\.db$' }).Count, $phase, $(if ($status) { "phase=" + $status["phase"] + " state=" + $status["state"] } else { "assente" }))
+  $problems = @(Get-FacesPhoneProblems $names $phase $status)
+  foreach ($problem in $problems) { Write-Log ("ERRORE  " + $problem) }
+  if ($problems.Count -gt 0) {
+    Write-Host ("`n{0} problemi sul telefono: vedi il racconto." -f $problems.Count) -ForegroundColor Red
+    return 4
+  }
+  Write-Log "Verifica sul telefono: nessun problema ($phase)."
+  if ($SkipNas) {
+    Write-Log "Verifica sul NAS saltata (-SkipNas): solo il telefono."
+    return 0
+  }
+  $verify = Join-Path $PSScriptRoot "faces-pc\faces-pc.ps1"
+  Write-Log "Verifica sull'area di prova (in sola lettura): faces-pc.ps1 -Mode verify -Phase $phase..."
+  if ($NotSettled) { & $verify -Mode verify -Manifest $Manifest -Phase $phase -NotSettled } else { & $verify -Mode verify -Manifest $Manifest -Phase $phase }
+  return $LASTEXITCODE
+}
+
+# La pulizia: le due cartelle di prova e il file di stato (solo questo, per nome intero); non si tocca altro dell'app.
+function Invoke-CleanFaces {
+  if (-not $Yes) { Fail "Togliere mcg-prova e il file di stato dal telefono vuole -Yes." }
+  Initialize-Adb
+  Assert-Debug-App
+  foreach ($folder in $PhoneFolders) {
+    [void](Invoke-Adb @("shell", "rm", "-rf", $folder))
+    Write-Log "Tolta la cartella $folder dal telefono."
+  }
+  [void](Invoke-Adb @("shell", "run-as $Package rm -f $FacesStatusFile"))
+  Write-Log "Tolto il file di stato $FacesStatusFile dalla cartella dell'app."
+  [void](Invoke-Adb @("shell", $scanCommand))
+}
+
+# =================================================================================================================================
 # Modo ai: il verificatore dei dati sul telefono (sola lettura, solo la cartella dell'app di debug, via `run-as`)
 # =================================================================================================================================
 
@@ -1197,6 +1722,34 @@ if ($isAi -and $Step -eq "verify") {
   exit $code
 }
 
+if ($isFaces -and $Step -eq "seed") {
+  if ($DryRun) { Write-FacesSeedPlan; exit 0 }
+  try { Invoke-SeedFaces } finally { Save-Log }
+  exit 0
+}
+if ($isFaces -and $Step -eq "verify") {
+  if ($DryRun) {
+    Write-Host "=== A SECCO: non lancio niente ===" -ForegroundColor Yellow
+    Write-Host ("adb -s {0} shell {1}     (le impronte di mcg-prova contro il manifesto)" -f $serialText, $hashCommand)
+    foreach ($dir in $FacesAppDirs) { Write-Host ("adb -s {0} shell run-as {1} ls -1 {2}     (sola lettura: i file dei volti sul telefono)" -f $serialText, $Package, $dir) }
+    Write-Host ("adb -s {0} shell run-as {1} cat {2}     (il file di stato dell'app)" -f $serialText, $Package, $FacesStatusFile)
+    Write-Host ("tools\chaos\faces-pc\faces-pc.ps1 -Mode verify -Manifest {0} -Phase {1}     (sola lettura dell'area di prova: nessun dato dei volti nell'area comune, media non toccati)" -f $Manifest, (Resolve-FacesPhase))
+    exit 0
+  }
+  try { $code = Invoke-VerifyFaces } finally { Save-Log }
+  exit $code
+}
+if ($isFaces -and $Step -eq "clean") {
+  if ($DryRun) {
+    Write-Host "=== A SECCO: non lancio niente ===" -ForegroundColor Yellow
+    foreach ($folder in $PhoneFolders) { Write-Host ("adb -s {0} shell rm -rf {1}     (serve -Yes)" -f $serialText, $folder) }
+    Write-Host ("adb -s {0} shell run-as {1} rm -f {2}     (serve -Yes: solo il file di stato)" -f $serialText, $Package, $FacesStatusFile)
+    Write-Host ("adb -s {0} shell {1}" -f $serialText, $scanCommand)
+    exit 0
+  }
+  try { Invoke-CleanFaces } finally { Save-Log }
+  exit 0
+}
 if (($isBackup -or $isShare) -and $Step -eq "seed") {
   if ($DryRun) { Write-SeedPlan; exit 0 }
   try { Invoke-Seed } finally { Save-Log }
@@ -1250,7 +1803,8 @@ if ($DryRun) {
   Write-Host ("{0,4}  {1,8}  {2}" -f "n.", "attesa", "azione")
   foreach ($event in $plan) {
     $what = if ($event.Action -eq "wifi") { "Wi-Fi spento per $($event.Duration) s, poi acceso" } else { "morte del processo ($KillMode)" + $(if ($NoRelaunch) { "" } else { ", rilancio dopo $RelaunchDelaySeconds s" }) }
-    Write-Host ("{0,4}  {1,6} s  {2}" -f $event.N, $event.Gap, $what)
+    $windowTag = if ($isFaces) { "[" + $event.Window + "] " } else { "" }
+    Write-Host ("{0,4}  {1,6} s  {2}{3}" -f $event.N, $event.Gap, $windowTag, $what)
   }
   Write-Host ""
   Write-Host "Comandi adb che userebbe:"
@@ -1261,8 +1815,12 @@ if ($DryRun) {
   if ($isAi) {
     Write-Host "Prima: backup di mcg-prova gia' fatto, ruolo Indicizzatore acceso, scaricamento/indicizzazione partiti nell'app. Le interruzioni cadono durante l'uno e l'altra." -ForegroundColor Cyan
   }
-  if ($isShare -and $Interruptions -lt $AiRecommendedInterruptions) {
+  if (($isShare -or $isFaces) -and $Interruptions -lt $AiRecommendedInterruptions) {
     Write-Host ("ATTENZIONE: il par. 5.5 chiede almeno {0} interruzioni sul telefono; questa prova ne fa {1}." -f $AiRecommendedInterruptions, $Interruptions) -ForegroundColor Yellow
+  }
+  if ($isFaces) {
+    Write-Host "Prima: s25.ps1 -Mode faces -Step seed e il backup di mcg-prova nell'app (build debug, account di prova). PRONTO, NON ESEGUITO: gli scenari f103-* sono del pannello 'Prove della Fase 8' (P13)." -ForegroundColor Cyan
+    Write-FacesWindowSummary
   }
   if ($isShare) {
     Write-Host "Prima: s25.ps1 -Mode share -Step seed, il primo backup di mcg-prova nell'app e `"Condividi`" tutto in un album nuovo (build debug, account di prova). Le interruzioni cadono durante la condivisione." -ForegroundColor Cyan
@@ -1270,6 +1828,8 @@ if ($DryRun) {
   if ($Verify) {
     if ($isAi) {
       Write-Host "A fine prova: s25.ps1 -Mode ai -Step verify   (sola lettura, solo la cartella dell'app: models/, ai-buffer/, search/)"
+    } elseif ($isFaces) {
+      Write-Host ("A fine prova: s25.ps1 -Mode faces -Step verify -Manifest {0} -Phase {1}   (impronte del telefono, cartella dell'app, poi faces-pc.ps1 -Mode verify)" -f $Manifest, (Resolve-FacesPhase))
     } elseif ($isShare) {
       Write-Host ("A fine prova: s25.ps1 -Mode share -Step verify -Manifest {0}   (impronte del telefono, poi share-pc.ps1 -Mode verify)" -f $Manifest)
     } elseif ($isBackup) {
@@ -1286,8 +1846,12 @@ if ($DryRun) {
 # --- La prova vera ---------------------------------------------------------------------------------------------------------------
 Initialize-Adb
 Assert-Debug-App
-if (($isAi -or $isShare) -and $Interruptions -lt $AiRecommendedInterruptions) {
+if (($isAi -or $isShare -or $isFaces) -and $Interruptions -lt $AiRecommendedInterruptions) {
   Write-Log ("ATTENZIONE: il par. 5.5 chiede almeno {0} interruzioni sul telefono; questa prova ne fa {1}." -f $AiRecommendedInterruptions, $Interruptions)
+}
+if ($isFaces -and (Test-Path -LiteralPath $Manifest)) {
+  $count = @(Get-Content -LiteralPath $Manifest | Where-Object { $_ -like "phone=*" }).Count
+  Write-Log "Manifesto dei volti: $count ritratti. Il backup di mcg-prova deve essere gia' fatto nell'app; gli scenari f103-* li avvia questo script."
 }
 if ($isShare -and (Test-Path -LiteralPath $Manifest)) {
   $count = @(Get-Content -LiteralPath $Manifest | Where-Object { $_ -like "phone=*" }).Count
@@ -1301,27 +1865,32 @@ if ($isBackup -and (Test-Path -LiteralPath $Manifest)) {
 Write-Log ("INIZIO prova: telefono {0}, app {1}, modo {2}, seme {3}, {4} interruzioni ({5} morti, {6} Wi-Fi), durata prevista circa {7} minuti" -f $Serial, $Package, $Mode, $Seed, $plan.Count, $killCount, $wifiCount, [math]::Ceiling($totalSeconds / 60.0))
 $exitCode = 0
 try {
-  foreach ($event in $plan) {
-    Start-Sleep -Seconds $event.Gap
-    if ($event.Action -eq "kill") {
-      $how = Stop-AppProcess
-      Write-Log ("#{0}/{1}  morte del processo: {2}" -f $event.N, $plan.Count, $how)
-      if (-not $NoRelaunch) {
-        Start-Sleep -Seconds $RelaunchDelaySeconds
-        Start-App
-        Write-Log ("#{0}/{1}  app rilanciata" -f $event.N, $plan.Count)
+  # Modo faces: tre finestre in ordine (calcolo, cancellazione, ripresa), ognuna aperta dal suo scenario dell'app; negli altri modi una finestra sola.
+  $windowOrder = if ($isFaces) { @(Get-FacesWindowNames $Window) } else { @("") }
+  foreach ($windowName in $windowOrder) {
+    if ($isFaces) { Start-FacesWindow $windowName }
+    foreach ($event in @($plan | Where-Object { -not $isFaces -or $_.Window -eq $windowName })) {
+      Start-Sleep -Seconds $event.Gap
+      if ($event.Action -eq "kill") {
+        $how = Stop-AppProcess
+        Write-Log ("#{0}/{1}  morte del processo: {2}" -f $event.N, $plan.Count, $how)
+        if (-not $NoRelaunch) {
+          Start-Sleep -Seconds $RelaunchDelaySeconds
+          Start-App
+          Write-Log ("#{0}/{1}  app rilanciata" -f $event.N, $plan.Count)
+        }
+      } else {
+        [void](Invoke-Adb @("shell", "svc", "wifi", "disable"))
+        Write-Log ("#{0}/{1}  Wi-Fi spento per {2} s" -f $event.N, $plan.Count, $event.Duration)
+        Start-Sleep -Seconds $event.Duration
+        [void](Invoke-Adb @("shell", "svc", "wifi", "enable"))
+        Write-Log ("#{0}/{1}  Wi-Fi acceso" -f $event.N, $plan.Count)
       }
-    } else {
-      [void](Invoke-Adb @("shell", "svc", "wifi", "disable"))
-      Write-Log ("#{0}/{1}  Wi-Fi spento per {2} s" -f $event.N, $plan.Count, $event.Duration)
-      Start-Sleep -Seconds $event.Duration
-      [void](Invoke-Adb @("shell", "svc", "wifi", "enable"))
-      Write-Log ("#{0}/{1}  Wi-Fi acceso" -f $event.N, $plan.Count)
     }
   }
   Write-Log "Fine delle interruzioni: l'app riparte e si aspetta che la ripresa finisca ($SettleSeconds s)."
   Start-App
-  Start-Sleep -Seconds $SettleSeconds
+  if ($isFaces) { Wait-FacesSettled } else { Start-Sleep -Seconds $SettleSeconds }
 } catch {
   Write-Log ("INTERROTTA: " + $_.Exception.Message)
   $exitCode = 1
@@ -1336,6 +1905,9 @@ if ($exitCode -eq 0 -and $Verify) {
   if ($isAi) {
     Write-Log "Verifica dei dati sul telefono (sola lettura)..."
     try { $exitCode = Invoke-VerifyAi } finally { Save-Log }
+  } elseif ($isFaces) {
+    Write-Log "Verifica dei volti: impronte del telefono, cartella dell'app e area di prova (sola lettura)..."
+    $exitCode = Invoke-VerifyFaces
   } elseif ($isShare) {
     Write-Log "Verifica della condivisione: impronte del telefono e area di prova (sola lettura)..."
     $exitCode = Invoke-VerifyShare

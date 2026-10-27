@@ -86,17 +86,19 @@ class TextReadingMemory(
   /** L'avviso del testo [version] e' stato visto qui (la pagina di attivazione, o l'attivazione fatta da questo dispositivo). */
   fun acceptNotice(version: Int) = update { noticeVersion = maxOf(noticeVersion, version) }
 
-  /** Dimentica tutto e toglie il file (azzeramento dei dati dell'account, AZ-2): il prossimo account parte da spento. */
-  fun reset() {
-    synchronized(lock) {
-      choice = TextReadingChoice.Off
-      excluded = false
-      noticeVersion = 0
-      unsynced = false
-      pending = false
-      StateFiles.delete(file)
-      StateFiles.delete(File(file.parentFile, file.name + ".tmp"), label = file.name + ".tmp")
-    }
+  /**
+   * Dimentica tutto e toglie il file (azzeramento dei dati dell'account, AZ-2): il prossimo account parte da spento. Vero se il file non c'e' piu'
+   * (e nemmeno il suo temporaneo): un file che resta direbbe ancora "accesa" al prossimo avvio, quindi l'esito si guarda (R11) e, se e' no, si
+   * riprova alla prossima chiamata.
+   */
+  fun reset(): Boolean = synchronized(lock) {
+    choice = TextReadingChoice.Off
+    excluded = false
+    noticeVersion = 0
+    unsynced = false
+    val removed = StateFiles.delete(file)
+    pending = !removed
+    removed
   }
 
   private fun update(block: () -> Unit) = synchronized(lock) {
@@ -120,7 +122,10 @@ class TextReadingMemory(
       StateFiles.writeText(file, "$VERSION\n$version\n${if (excluded) 1 else 0}\n$noticeVersion\n${if (unsynced) 1 else 0}\n")
       pending = false
     } catch (e: IOException) {
-      // Resta in memoria: al prossimo avvio vale "spenta" (nel dubbio ML Kit non parte); si riprova alla prossima chiamata.
+      // Resta in memoria e si riprova alla prossima chiamata. Ma il file di prima potrebbe dire "accesa": se adesso e' spenta lo si toglie,
+      // cosi' al prossimo avvio vale davvero "spenta" (nel dubbio ML Kit non parte) come questo commento prometteva senza farlo (R11). Si perde
+      // l'avviso visto qui, e senza quello la lettura non parte comunque (LT-2).
+      if (choice == TextReadingChoice.Off) StateFiles.delete(file)
       pending = true
     }
   }
@@ -327,15 +332,20 @@ class AppTextReadingSwitch(
     mutableState.value = TextReadingState.Off
   }
 
-  /** L'azzeramento dei dati dell'account (AZ-2): scelta, esclusione e avvisi si dimenticano, qui e nel file; il prossimo account parte da spento. */
+  /**
+   * L'azzeramento dei dati dell'account (AZ-2): scelta, esclusione e avvisi si dimenticano, qui e nel file; il prossimo account parte da spento.
+   * Se il file non si toglie lancia `IOException` **dopo** aver dimenticato la memoria (R11): l'azzeramento dei dati locali lo segna non finito e si
+   * ripete, invece di lasciare un "accesa" sul disco di un profilo azzerato.
+   */
   fun forget() {
-    memory.reset()
+    val removed = memory.reset()
     local.value = null
     excluded.value = false
     notice.value = 0
     disabling.value = false
     pendingSync.value = false
     mutableState.value = if (stopped) TextReadingState.Off else currentState()
+    if (!removed) throw IOException("file della lettura del testo non tolto")
   }
 }
 

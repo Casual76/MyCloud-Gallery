@@ -8,8 +8,10 @@ import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
+import dev.pampa.mycloudgallery.feature.library.trash.RecentlyDeletedRoute
 import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
 import dev.pampa.mycloudgallery.feature.nas.hub.NasScreenContent
+import dev.pampa.mycloudgallery.feature.nas.hub.NasTrashPage
 import dev.pampa.mycloudgallery.feature.nas.hub.openNas
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.main.GalleryHostViewModel
@@ -24,12 +26,22 @@ import kotlinx.coroutines.launch
 /** La pagina della 4B con questo codice (la rotta di `NasScreen`), o null per una voce che questa versione non conosce. */
 internal fun nasScreenOf(code: String): NasScreen? = NasScreen.entries.firstOrNull { it.route == code }
 
+/**
+ * La pagina del **Cestino** di Cartelle NAS (ED-1, R4 della revisione di Fase 7): gli Eliminati di recente, telefono e NAS insieme, **dietro il cancello
+ * dei Nascosti** (la credenziale di sistema a ogni ingresso). Il cestino del NAS ha nome e cartella dei file eliminati, e fra loro quelli di media
+ * nascosti: la vecchia pagina di `feature-nas` li elencava senza cancello. Ogni ingresso di Cartelle NAS passa da qui: la rotta (`nasGraph`), il
+ * pannello di dettaglio del tablet ([NasEntryDetail]) e, di conseguenza, "Spazio NAS" e "Backup" che aprono `NasScreen.TRASH`.
+ */
+internal val GatedNasTrashPage: NasTrashPage = { modifier, onBack, hostPadding, backdropOut ->
+  RecentlyDeletedRoute(modifier = modifier, onBack = onBack, contentPadding = hostPadding, backdropOut = backdropOut)
+}
+
 /** La pagina di una voce di Cartelle NAS nel pannello di dettaglio del tablet: senza tasto indietro, sopra la pillola. (La sezione delle Raccolte la
  * fa `AppCollectionsSections.nas`, Fase 7 P13: prima era un gruppo passato come `extraGroups`.) */
 @Composable
 internal fun NasEntryDetail(entry: CollectionEntry, nav: NavController, hostPadding: PaddingValues, opener: NasFileOpener) {
   val screen = nasScreenOf(entry.code) ?: return
-  NasScreenContent(screen = screen, onNavigate = nav::openNas, hostPadding = hostPadding, onOpenFile = opener::open)
+  NasScreenContent(screen = screen, onNavigate = nav::openNas, hostPadding = hostPadding, onOpenFile = opener::open, trashPage = GatedNasTrashPage)
 }
 
 /**

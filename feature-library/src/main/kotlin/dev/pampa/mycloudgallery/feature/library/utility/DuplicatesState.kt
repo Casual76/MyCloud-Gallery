@@ -22,6 +22,10 @@ data class IdenticalView(
   val scanning: Boolean = true,
   val failed: Boolean = false,
   val groups: List<GroupProposal> = emptyList(),
+  /** DP-1: insiemi di file del NAS che sembrano uguali e aspettano l'hash completo: non sono ancora doppioni provati, e la pagina lo dice. */
+  val verifying: Int = 0,
+  /** UT-1: con l'accesso alle sole foto selezionate (o prima che la Libreria sia letta) i doppioni non si cercano: nessun gruppo, e la pagina dice perche'. */
+  val restricted: Boolean = false,
 ) {
   /** I gruppi con qualcosa da togliere. */
   val cleanable: List<GroupProposal> get() = groups.filter { it.status == IdenticalStatus.CLEANABLE }
@@ -39,7 +43,7 @@ data class IdenticalView(
   /** Quante copie stanno nell'area di un altro account in tutti i gruppi (E-U1): non si propongono, si dicono. */
   val inOthersArea: Int get() = groups.sumOf { it.inOthersArea }
 
-  val isEmpty: Boolean get() = !scanning && !failed && groups.isEmpty()
+  val isEmpty: Boolean get() = !scanning && !failed && !restricted && verifying == 0 && groups.isEmpty()
 }
 
 /** Un gruppo di scatti simili con la scelta di adesso: [remove] sono quelli da eliminare, gli altri restano. */
@@ -59,6 +63,8 @@ data class SimilarView(
   val clusters: List<ClusterView> = emptyList(),
   /** Scatti con compagni vicini che non si sono potuti giudicare (nessun vettore, nessuna firma): la pagina lo dice. */
   val undecided: Int = 0,
+  /** DP-4: alcune foto recenti non hanno ancora la firma visiva (la fa la manutenzione di notte, con il telefono in carica): la pagina lo dice invece di restare muta. */
+  val signingLater: Boolean = false,
 ) {
   /** Quanti scatti la pulizia di tutti i gruppi manderebbe nel cestino. */
   val toRemove: Int get() = clusters.sumOf { it.remove.size }
@@ -124,6 +130,12 @@ enum class DuplicatesNotice {
 
   /** Il telefono non ha il cestino di sistema (prima di Android 11): le copie del telefono non si possono togliere da qui. */
   NO_PHONE_TRASH,
+
+  /** R18: alcune copie del telefono non sono piu' quelle del piano (sovrascritte o spostate dopo la lettura): non sono state mandate nel cestino. */
+  PHONE_CHANGED,
+
+  /** DP-5: l'interruttore dell'hash completo di notte non si e' potuto salvare (i dati personali non sono ancora pronti): resta com'era. */
+  NIGHTLY_NOT_SAVED,
 }
 
 /** Lo stato di tutta la pagina Doppioni. */
@@ -137,4 +149,9 @@ data class DuplicatesState(
   val notice: DuplicatesNotice? = null,
   /** Una richiesta del dialogo di sistema o del NAS e' in corso: i comandi di pulizia stanno fermi. */
   val busy: Boolean = false,
+  /**
+   * DP-7: la richiesta del dialogo di sistema per le copie del telefono, pronta da lanciare. Sta nello stato e non nel valore di ritorno di `confirm()`:
+   * se l'attivita' si ricrea mentre il NAS lavora (una rotazione) la composizione che chiamava e' sparita, ma la richiesta aspetta quella nuova.
+   */
+  val phoneRequest: android.content.IntentSender? = null,
 )

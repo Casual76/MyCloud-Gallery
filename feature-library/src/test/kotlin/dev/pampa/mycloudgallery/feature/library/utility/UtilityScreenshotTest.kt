@@ -50,6 +50,7 @@ import dev.pampa.mycloudgallery.feature.library.trash.testing.sampleNasRows
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeCleanupNas
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeFullHashSwitch
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeIdenticalDuplicates
+import dev.pampa.mycloudgallery.feature.library.utility.testing.FakePhoneCopyCheck
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeSimilarShots
 import dev.pampa.mycloudgallery.feature.library.utility.testing.sampleRefOf
 import kotlinx.coroutines.CoroutineScope
@@ -114,7 +115,7 @@ abstract class UtilityScreenshotBase(private val dark: Boolean, private val devi
     similar: FakeSimilarShots = FakeSimilarShots(),
     fullHash: FakeFullHashSwitch = FakeFullHashSwitch(),
   ): @Composable () -> Unit {
-    val controller = DuplicatesController(identical, similar, FakeCleanupNas(), SenderIntents(system, testIntentSender()), fullHash, scope)
+    val controller = DuplicatesController(identical, similar, FakeCleanupNas(), SenderIntents(system, testIntentSender()), fullHash, scope, phoneCheck = FakePhoneCopyCheck())
     return {
       DuplicatesHost(controller, loader, ::sampleRefOf, familyName = { if (it == "marco") "Marco" else null }, onBack = {})
     }

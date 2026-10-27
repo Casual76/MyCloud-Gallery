@@ -944,33 +944,54 @@ internal object CatalogHidden {
         val marks = chunk.joinToString(",") { "?" }
         database.openHelper.readableDatabase.query(
           "SELECT l.location_key FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +
-            "WHERE l.location_key IN ($marks) AND (" +
-            "EXISTS (SELECT 1 FROM media_personal p WHERE p.media_id = v.media_id AND p.hidden = 1) " +
-            "OR EXISTS (SELECT 1 FROM media m JOIN media g ON g.group_id = m.group_id JOIN media_personal gp ON gp.media_id = g.media_id " +
-            "WHERE m.media_id = v.media_id AND m.group_id IS NOT NULL AND gp.hidden = 1))",
+            "WHERE l.location_key IN ($marks) AND $HIDDEN_VERSION_SQL",
           chunk.toTypedArray<Any?>(),
         ).use { c -> while (c.moveToNext()) hidden += c.getString(0) }
       }
       hidden
     }
   }
+
+  /**
+   * Il predicato SQL "questa versione `v` e' di un media nascosto, **oppure** di un gruppo in cui un altro membro lo e'" (il nascosto e' contagioso,
+   * F5-D36, E-L11). Una sola definizione per tutto cio' che elenca file di Cartelle NAS per nome: la riga dei nascosti ([hiddenLocationKeys]) e i
+   * file piu' grandi di Spazio NAS ([CatalogLargestFiles], R4/NA-1 della revisione di Fase 7).
+   */
+  const val HIDDEN_VERSION_SQL: String =
+    "(EXISTS (SELECT 1 FROM media_personal p WHERE p.media_id = v.media_id AND p.hidden = 1) " +
+      "OR EXISTS (SELECT 1 FROM media m JOIN media g ON g.group_id = m.group_id JOIN media_personal gp ON gp.media_id = g.media_id " +
+      "WHERE m.media_id = v.media_id AND m.group_id IS NOT NULL AND gp.hidden = 1))"
 }
 
-/** I file piu' grandi di una share dal catalogo (Spazio NAS, §2.7): nessuna chiamata al NAS. Solo file presenti. */
+/**
+ * I file piu' grandi di una share dal catalogo (Spazio NAS, §2.7): nessuna chiamata al NAS. Solo file presenti, **mai quelli di un media nascosto**
+ * (ne' di un gruppo con un nascosto dentro): la pagina li elenca per nome e cartella, e un video nascosto da 2 GB e' quasi sempre fra i piu' grandi
+ * (R4/NA-1, D22, D23). Il filtro e' nella query, cosi' i 50 posti si riempiono con file che si possono mostrare. Fallisce chiuso: se la lettura non
+ * riesce l'elenco e' vuoto, mai un elenco senza il filtro.
+ */
 object CatalogLargestFiles {
   suspend fun of(database: GalleryDatabase, account: AccountId, share: String): List<LargestFile> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
     val out = ArrayList<LargestFile>()
-    database.openHelper.readableDatabase.query(
-      "SELECT nas_path, size, modified_at, file_id FROM media_location WHERE location_type = 'nas' AND account_id = ? AND share_key = ? " +
-        "AND state = 'present' ORDER BY size DESC LIMIT ${dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceDetails.MAX_LARGEST}",
-      arrayOf<Any?>(account.value, Location.Nas.shareKeyOf(share)),
-    ).use { cursor ->
-      while (cursor.moveToNext()) {
-        val path = cursor.getString(0)?.let { runCatching { SharePath.parseMediaPath(it) }.getOrNull() } ?: continue
-        val size = cursor.getLong(1)
-        val fileId = if (cursor.isNull(3)) null else cursor.getLong(3)
-        out += LargestFile(share, path, size, NasStamp(size, cursor.getLong(2), fileId))
+    try {
+      database.openHelper.readableDatabase.query(
+        "SELECT l.nas_path, l.size, l.modified_at, l.file_id FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +
+          "WHERE l.location_type = 'nas' AND l.account_id = ? AND l.share_key = ? AND l.state = 'present' " +
+          "AND NOT ${CatalogHidden.HIDDEN_VERSION_SQL} " +
+          "ORDER BY l.size DESC LIMIT ${dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceDetails.MAX_LARGEST}",
+        arrayOf<Any?>(account.value, Location.Nas.shareKeyOf(share)),
+      ).use { cursor ->
+        while (cursor.moveToNext()) {
+          val path = cursor.getString(0)?.let { runCatching { SharePath.parseMediaPath(it) }.getOrNull() } ?: continue
+          val size = cursor.getLong(1)
+          val fileId = if (cursor.isNull(3)) null else cursor.getLong(3)
+          out += LargestFile(share, path, size, NasStamp(size, cursor.getLong(2), fileId))
+        }
       }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w("CatalogLargestFiles") { "file piu' grandi non letti: ${e.javaClass.simpleName}" }
+      out.clear()
     }
     out
   }

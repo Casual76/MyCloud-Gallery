@@ -7,7 +7,6 @@ import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
 import dev.pampa.mycloudgallery.core.nasops.contract.GateStatus
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
-import dev.pampa.mycloudgallery.feature.library.trash.testing.fakeSingleTap
 import dev.pampa.mycloudgallery.feature.library.utility.CleanupNasPort
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
@@ -39,7 +38,7 @@ class CleanupOverOperationsTest {
     val copy = copyAt("Backup/Pixel 9/2026/10/IMG_0002.jpg", ByteArray(2_000) { 3 })
     val keep = copyAt("Foto/Oslo/IMG_0002.jpg", ByteArray(2_000) { 3 })
 
-    val outcome = port.trash(listOf(copy), fakeSingleTap())
+    val outcome = port.trash(listOf(copy), TestTaps.single())
 
     assertThat(outcome).isEqualTo(NasTrashOutcome.STARTED)
     assertThat(kit.exists(NasOpsTestKit.PRIVATE_SHARE, copy.path)).isFalse()
@@ -58,7 +57,7 @@ class CleanupOverOperationsTest {
     kit.advance(60_000)
     kit.modify(NasOpsTestKit.PRIVATE_SHARE, copy.path, ByteArray(2_500) { 9 })
 
-    port.trash(listOf(copy), fakeSingleTap())
+    port.trash(listOf(copy), TestTaps.single())
 
     // Il piano porta il timbro che il catalogo ha visto: l'esecuzione si ferma sul file cambiato (E-D13). Il file nuovo resta dov'e', niente nel cestino.
     assertThat(kit.exists(NasOpsTestKit.PRIVATE_SHARE, copy.path)).isTrue()
@@ -72,7 +71,7 @@ class CleanupOverOperationsTest {
     val copy = copyAt("Backup/Pixel 9/2026/10/IMG_0004.jpg", ByteArray(1_000) { 5 })
     kit.gate.byShare[NasOpsTestKit.PRIVATE_SHARE] = GateStatus.FROZEN
 
-    val outcome = port.trash(listOf(copy), fakeSingleTap())
+    val outcome = port.trash(listOf(copy), TestTaps.single())
 
     assertThat(outcome).isIn(listOf(NasTrashOutcome.BLOCKED, NasTrashOutcome.REJECTED))
     assertThat(kit.exists(NasOpsTestKit.PRIVATE_SHARE, copy.path)).isTrue()
@@ -82,14 +81,14 @@ class CleanupOverOperationsTest {
   fun unaCopiaCheNonCePiuNonSiProponeNientePerQuelloCheNonCe() = runBlocking {
     val gone = NasTrashRef(NasOpsTestKit.PRIVATE_SHARE, "Backup/Pixel 9/2026/10/IMG_0005.jpg", 1_000, 1_000, 77, CopyArea.MY_PRIVATE)
 
-    val outcome = port.trash(listOf(gone), fakeSingleTap())
+    val outcome = port.trash(listOf(gone), TestTaps.single())
 
     assertThat(outcome).isNotEqualTo(NasTrashOutcome.STARTED)
   }
 
   @Test
   fun senzaCopieNonSiPianificaNiente() = runBlocking {
-    assertThat(port.trash(emptyList(), fakeSingleTap())).isEqualTo(NasTrashOutcome.REJECTED)
+    assertThat(port.trash(emptyList(), TestTaps.single())).isEqualTo(NasTrashOutcome.REJECTED)
     assertThat(kit.operations.operations.value).isEmpty()
   }
 }

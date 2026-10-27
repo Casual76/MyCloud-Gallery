@@ -5,8 +5,12 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.albums.AlbumsGraph
+import dev.pampa.mycloudgallery.backup.MediaStorePhoneBytes
+import dev.pampa.mycloudgallery.core.library.duplicates.AlbumMembership
 import dev.pampa.mycloudgallery.core.library.duplicates.IdenticalDuplicates
 import dev.pampa.mycloudgallery.core.library.duplicates.SimilarShots
+import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneAccess
+import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.personal.contract.FullHashPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.settings.SyncedFullHashSettings
@@ -16,9 +20,11 @@ import dev.pampa.mycloudgallery.feature.library.utility.CleanupNasPort
 import dev.pampa.mycloudgallery.feature.library.utility.FullHashSwitch
 import dev.pampa.mycloudgallery.feature.library.utility.NoCleanupNas
 import dev.pampa.mycloudgallery.feature.library.utility.NoFullHashSwitch
+import dev.pampa.mycloudgallery.feature.library.utility.PhoneCopyCheck
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.utility.AppAlbumMembership
+import dev.pampa.mycloudgallery.utility.MediaStorePhoneCopyCheck
 import dev.pampa.mycloudgallery.utility.OperationsCleanupNas
 import dev.pampa.mycloudgallery.utility.OperationsNasTrash
 import dev.pampa.mycloudgallery.utility.PersonalFullHashSwitch
@@ -62,7 +68,13 @@ object UtilityModule {
       hidden = gallery.hiddenMask,
       albums = AppAlbumMembership(gallery.database) { sharedMembers(albums) },
       signatures = { gallery.similarCopies?.signatureSource() },
-      fullHashOn = { source.settings.value?.fullHashNightly?.value == true },
+      // DP-5: null = i dati personali non sono pronti: la manutenzione non sa se l'interruttore e' acceso e non ritira niente dalla coda.
+      fullHashOn = { source.settings.value?.fullHashNightly?.value },
+      // DP-2: i media di un album condiviso (le loro copie dell'area comune non si propongono per l'eliminazione, anche fuori da `Album condivisi/`).
+      sharedAlbums = AlbumMembership { media -> sharedMembers(albums).let { shared -> media.filterTo(HashSet()) { it in shared } } },
+      // DP-1: i file uguali fra cartelle del NAS dell'account di questo dispositivo.
+      database = gallery.database,
+      account = { gallery.parts.nas?.account?.invoke()?.let(AccountId::of) },
     )
 
   /** I media del mio catalogo che attestano un elemento vivo di un album condiviso (E-U3). */
@@ -70,6 +82,19 @@ object UtilityModule {
     val views = albums.live.value?.shared?.replica?.views?.value ?: return emptySet()
     return views.values.flatMapTo(HashSet()) { it.attested.values }
   }
+
+  /**
+   * R18: la riga del MediaStore di ogni copia del telefono si rilegge prima del dialogo di sistema (stesso `_ID`, stesso timbro). La porta del telefono
+   * e' quella del backup (righe e permessi del MediaStore) senza la recinzione di debug, che riguarda solo cio' che il backup carica.
+   */
+  @Provides
+  @Singleton
+  fun phoneCopyCheck(gallery: GalleryGraph): PhoneCopyCheck = MediaStorePhoneCopyCheck(
+    MediaStorePhoneBytes(
+      rows = { gallery.coreOrNull?.phone?.rows },
+      access = { gallery.coreOrNull?.phone?.access?.state?.value ?: PhoneAccess.NONE },
+    ),
+  )
 
   @Provides fun identicalDuplicates(utility: UtilityGraph): IdenticalDuplicates = utility.identicalDuplicates
 

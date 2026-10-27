@@ -337,16 +337,31 @@ class RecentlyDeletedController(
 
   /**
    * Ripristina le voci del NAS scelte che si possono ripristinare (record valido, share scrivibile). Il tocco sul pulsante "Ripristina" e' la
-   * conferma: ripristinare non toglie niente e non sovrascrive mai. Null se non c'e' niente da ripristinare nel NAS o la pagina e' chiusa.
+   * conferma e la prova ([tap]) la porta il composable che lo disegna: ripristinare non toglie niente e non sovrascrive mai. Null se nella selezione non
+   * c'e' niente del NAS o la pagina e' chiusa.
+   *
+   * ED-2 (revisione di Fase 7): una selezione con voci del NAS che **non si possono ripristinare** (senza record valido, share in sola lettura, NAS che
+   * non risponde) non e' piu' un silenzio: risponde [NasTrashOutcome.REJECTED] e la pagina lo dice. Con una selezione mista le voci ripristinabili partono
+   * e quelle che non lo sono si contano con [unrestorableNas], per l'avviso.
    */
-  suspend fun restoreNas(ids: Set<MediaId> = _selection.value): NasTrashOutcome? {
+  suspend fun restoreNas(tap: UserTap, ids: Set<MediaId> = _selection.value): NasTrashOutcome? {
     if (!gate.isUnlocked) return null
-    val section = nasContent.value as? NasTrashSection.Rows ?: return null
-    if (!section.writable) return null
-    val acted = nasEntriesOf(ids).filter { it.row.restorable }
+    val chosen = nasEntriesOf(ids)
+    if (chosen.isEmpty()) return null
+    val section = nasContent.value as? NasTrashSection.Rows ?: return NasTrashOutcome.REJECTED
+    if (!section.writable) return NasTrashOutcome.REJECTED
+    val acted = chosen.filter { it.row.restorable }
     val keys = acted.mapTo(LinkedHashSet()) { it.row.key }
-    if (keys.isEmpty()) return null
-    return afterNasGesture(acted.mapTo(HashSet()) { it.id }) { nasTrash.restore(keys, singleTap()) }
+    if (keys.isEmpty()) return NasTrashOutcome.REJECTED
+    return afterNasGesture(acted.mapTo(HashSet()) { it.id }) { nasTrash.restore(keys, tap) }
+  }
+
+  /** Quante voci del NAS di [ids] (default: la selezione) "Ripristina" non puo' ripristinare adesso: senza record valido, o il NAS in sola lettura o spento. */
+  fun unrestorableNas(ids: Set<MediaId> = _selection.value): Int {
+    val chosen = nasEntriesOf(ids)
+    if (chosen.isEmpty()) return 0
+    val section = nasContent.value as? NasTrashSection.Rows
+    return if (section == null || !section.writable) chosen.size else chosen.count { !it.row.restorable }
   }
 
   /**

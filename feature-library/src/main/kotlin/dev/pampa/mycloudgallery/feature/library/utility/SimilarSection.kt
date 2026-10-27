@@ -81,6 +81,17 @@ internal fun LazyListScope.similarItems(
     }
   }
   if (view.clusters.isNotEmpty()) item(key = "similar-summary") { SimilarSummary(view, busy, actions.onClean) }
+  // DP-4: le firme degli scatti di oggi si fanno di notte, a telefono in carica: una scheda vuota o corta lo dice invece di restare muta.
+  if (view.signingLater && !view.scanning) {
+    item(key = "similar-later") {
+      Text(
+        text = stringResource(R.string.duplicates_similar_later),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = GalleryDimens.Gutter, vertical = UtilityDimens.RowGap),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
   if (view.undecided > 0 && !view.scanning) {
     item(key = "similar-undecided") {
       Text(

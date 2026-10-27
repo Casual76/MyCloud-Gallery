@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.library.utility
 
 import android.app.Activity
+import android.os.SystemClock
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -103,6 +104,7 @@ internal fun DuplicatesHost(
   onBack: (() -> Unit)? = null,
   contentPadding: PaddingValues = PaddingValues(),
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
+  monotonicMs: () -> Long = SystemClock::elapsedRealtime,
 ) {
   val state by controller.state.collectAsState()
   val scope = rememberCoroutineScope()
@@ -145,11 +147,18 @@ internal fun DuplicatesHost(
     sheet = state.sheet,
     familyName = familyName,
     onScope = controller::chooseScope,
-    onConfirm = {
-      scope.launch { controller.confirm()?.let { phoneDialog.launch(IntentSenderRequest.Builder(it).build()) } }
-    },
+    // La prova del tocco nasce nel foglio (R18); il lavoro gira nello scope del ViewModel e la richiesta del telefono arriva dallo stato (DP-7).
+    onConfirm = { tap -> scope.launch { controller.confirm(tap) } },
     onDismiss = controller::dismissSheet,
+    monotonicMs = monotonicMs,
   )
+  // DP-7: se l'attivita' si ricrea mentre il NAS lavora, la richiesta resta nello stato e la lancia la composizione nuova.
+  LaunchedEffect(state.phoneRequest) {
+    state.phoneRequest?.let {
+      phoneDialog.launch(IntentSenderRequest.Builder(it).build())
+      controller.phoneRequestLaunched()
+    }
+  }
 }
 
 /** La pagina per uno [state]: nessun effetto oltre alle richieste di miniature. La provano i test e gli screenshot. */

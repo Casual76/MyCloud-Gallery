@@ -14,6 +14,7 @@ import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
+import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -74,7 +75,19 @@ class FieldProbeHiddenWidgetProvider : AppWidgetProvider() {
 
     private suspend fun update(context: Context, manager: AppWidgetManager, ids: IntArray) {
       val views = try {
-        render(context)
+        val gallery = EntryPointAccessors.fromApplication(context, FieldProbeWidgetEntryPoint::class.java).gallery()
+        // NA-2: a processo freddo l'istantanea della Libreria non c'e' ancora. Si aspetta (con un tetto); se ancora non c'e', il widget resta senza celle
+        // (mai un elemento non filtrato) e si riprova appena arriva, fuori dal ricevitore, invece di restare vuoto fino al giro dopo (mezz'ora).
+        val snapshot = FieldProbeWidgetContent.awaitSnapshot(gallery.visibleMedia.snapshot)
+        if (snapshot == null) {
+          scope.launch {
+            val late = FieldProbeWidgetContent.awaitSnapshot(gallery.visibleMedia.snapshot, FieldProbeWidgetContent.SNAPSHOT_LATE_WAIT_MS)
+            if (late != null) update(context, manager, ids)
+          }
+          FieldProbeWidgetViews.build(context, emptyList())
+        } else {
+          render(context, gallery, snapshot)
+        }
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
@@ -84,10 +97,9 @@ class FieldProbeHiddenWidgetProvider : AppWidgetProvider() {
       manager.updateAppWidget(ids, views)
     }
 
-    private suspend fun render(context: Context): RemoteViews {
-      val gallery = EntryPointAccessors.fromApplication(context, FieldProbeWidgetEntryPoint::class.java).gallery()
+    private suspend fun render(context: Context, gallery: GalleryGraph, snapshot: TimelineSnapshot): RemoteViews {
       val items = gallery.viewerItems(LibraryFilter.ALL)
-      val cells = FieldProbeWidgetContent.cells(gallery.widgetFeed, gallery.visibleMedia.snapshot.value) { id -> items.refOrNull(id) }
+      val cells = FieldProbeWidgetContent.cells(gallery.widgetFeed, snapshot) { id -> items.refOrNull(id) }
       val photo = context.getString(R.string.probe_widget_photo)
       val video = context.getString(R.string.probe_widget_video)
       val rendered = cells.map { cell ->

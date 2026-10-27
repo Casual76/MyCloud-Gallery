@@ -8,6 +8,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.concurrent.thread
 import org.junit.After
@@ -123,7 +124,8 @@ class StateFilesTest {
     assertThat(error).isInstanceOf(IOException::class.java)
     assertThat(File(target, "dentro").readText()).isEqualTo("1")
     assertThat(temp.root.list().orEmpty().toList()).containsExactly("stato")
-    assertThat(waited).isEqualTo(listOf(1L, 2L))
+    // I10: si aspetta solo dove l'attesa serve (Windows); su Android e Linux un errore vero non costa 310 ms dentro il lucchetto.
+    assertThat(waited).isEqualTo(if (windows) listOf(1L, 2L) else emptyList())
   }
 
   @Test
@@ -411,6 +413,122 @@ class StateFilesTest {
     repeat(20) { assertThat(StateFiles.readText(target)).isEqualTo("1") }
 
     assertThat(StateFiles.delete(target, patience = Patience.NONE)).isTrue()
+  }
+
+  @Test
+  fun cancella_toglieAncheIlTemporaneo() {
+    // R11: un `<nome>.tmp` rimasto (processo morto a meta' scrittura) puo' avere il contenuto che si voleva togliere.
+    val target = file()
+    target.writeText("1")
+    val leftover = File(temp.root, "stato.tmp").also { it.writeText("nascosto") }
+
+    assertThat(StateFiles.delete(target)).isTrue()
+
+    assertThat(target.exists()).isFalse()
+    assertThat(leftover.exists()).isFalse()
+  }
+
+  @Test
+  fun cancella_senzaIlFileMaConIlTemporaneo_toglieIlTemporaneo() {
+    val leftover = File(temp.root, "stato.tmp").also { it.writeText("nascosto") }
+
+    assertThat(StateFiles.delete(file())).isTrue()
+
+    assertThat(leftover.exists()).isFalse()
+  }
+
+  @Test
+  fun cancella_aspettaUnaScritturaInCorsoENonLaFaRinascere() {
+    // R11: `delete` non prendeva il lucchetto di `write`: se passava mentre una scrittura era a meta', il file nasceva un istante dopo.
+    val target = file()
+    val started = CountDownLatch(1)
+    val release = CountDownLatch(1)
+    val writer = thread {
+      StateFiles.write(target) { out ->
+        out.write("nuovo".toByteArray())
+        started.countDown()
+        release.await()
+      }
+    }
+    started.await()
+    val deleted = AtomicBoolean(false)
+    val deleter = thread { deleted.set(StateFiles.delete(target)) }
+    // Senza orologio: il thread della cancellazione o si ferma sul lucchetto della scrittura, o (senza il lucchetto) finisce subito.
+    while (deleter.state != Thread.State.BLOCKED && deleter.state != Thread.State.TERMINATED) Thread.onSpinWait()
+    release.countDown()
+    writer.join()
+    deleter.join()
+
+    assertThat(deleted.get()).isTrue()
+    assertThat(target.exists()).isFalse()
+    assertThat(File(temp.root, "stato.tmp").exists()).isFalse()
+  }
+
+  // --- thread interrotto, tetto di lettura (I10) ------------------------------------------------------------------------------
+
+  @Test
+  fun scrive_conIlThreadInterrotto_riesceERimetteIlSegno() {
+    // Un canale di java.nio su un thread interrotto si chiude con ClosedByInterruptException: lo stato non si salvava mentre il lavoro veniva fermato.
+    val target = file()
+    Thread.currentThread().interrupt()
+
+    StateFiles.writeText(target, "salvato")
+
+    assertThat(Thread.currentThread().isInterrupted).isTrue()
+    Thread.interrupted()
+    assertThat(target.readText()).isEqualTo("salvato")
+  }
+
+  @Test
+  fun legge_conIlThreadInterrotto_riesceERimetteIlSegno() {
+    val target = file()
+    target.writeText("letto")
+    Thread.currentThread().interrupt()
+
+    val text = StateFiles.readText(target)
+
+    assertThat(Thread.currentThread().isInterrupted).isTrue()
+    Thread.interrupted()
+    assertThat(text).isEqualTo("letto")
+  }
+
+  @Test
+  fun marcaECancella_conIlThreadInterrotto_riescono() {
+    val target = file()
+    Thread.currentThread().interrupt()
+
+    StateFiles.mark(target)
+    val marked = target.exists()
+    val gone = StateFiles.delete(target)
+
+    assertThat(Thread.currentThread().isInterrupted).isTrue()
+    Thread.interrupted()
+    assertThat(marked).isTrue()
+    assertThat(gone).isTrue()
+    assertThat(target.exists()).isFalse()
+  }
+
+  @Test
+  fun legge_unFilePiuGrandeDelTettoLanciaSenzaLeggerlo() {
+    val target = file()
+    target.writeBytes(ByteArray(64))
+
+    val error = runCatching { StateFiles.readBytes(target, maxBytes = 63) }.exceptionOrNull()
+
+    assertThat(error).isInstanceOf(IOException::class.java)
+    // Esattamente al tetto si legge, e un file piccolo non e' toccato.
+    assertThat(StateFiles.readBytes(target, maxBytes = 64)!!.size).isEqualTo(64)
+  }
+
+  @Test
+  fun legge_unFileTroppoGrandeNonSiRiprova() {
+    val target = file()
+    target.writeBytes(ByteArray(64))
+    val waited = ArrayList<Long>()
+
+    runCatching { StateFiles.readBytes(target, patience = Patience(listOf(1L, 2L)) { waited += it }, maxBytes = 10) }
+
+    assertThat(waited).isEmpty()
   }
 
   // --- lettura, marche, aggiunte ----------------------------------------------------------------------------------------------

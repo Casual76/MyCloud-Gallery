@@ -20,6 +20,10 @@ import dev.pampa.mycloudgallery.core.model.LocationId
  *  - **mai una copia nell'area di un altro account** (E-U1): non c'e' il permesso; si conta e si dice;
  *  - **mai l'ultima copia privata**: se tutte le copie private fossero da togliere, la migliore resta;
  *  - **mai una copia in un album condiviso**: toglierla toglie l'elemento a tutti i familiari (D9, E-SH17); resta dov'e';
+ *  - **mai la copia dell'area comune che ha la copia di sicurezza del guardiano** (DP-2, D28): la gemella privata in `Backup/Area comune/` e' nata
+ *    per proteggere quel file, e proporlo come "doppione" toglierebbe a tutti i familiari proprio il file che la copia di sicurezza protegge;
+ *  - **mai l'ultima copia verificata** (R18): se "Rivedi" sceglie da tenere una copia mai riletta, l'unica copia riletta e uguale ai byte della versione
+ *    resta, e il media non perde "al sicuro";
  *  - **mai senza hash completo**: un gruppo senza non e' provato identico (D27), si mostra "da verificare" e non si pulisce.
  * La copia del telefono non passa da qui: va nel cestino di sistema, con il dialogo di sistema, e mai senza.
  */
@@ -69,6 +73,24 @@ object IdenticalCleanup {
       blocked += BlockedCopy(rescue, BlockReason.LAST_PRIVATE)
     }
 
+    // DP-2: la copia dell'area comune che ha la gemella del guardiano nel gruppo resta: e' il file che quella copia di sicurezza protegge.
+    if (permitted.any { it.guardian }) {
+      val guarded = remove.filter { it.area == CopyArea.COMMON }
+      if (guarded.isNotEmpty()) {
+        remove.removeAll(guarded)
+        blocked += guarded.map { BlockedCopy(it, BlockReason.GUARDIAN_TWIN) }
+      }
+    }
+
+    // R18, mai l'ultima copia verificata: se tutte le copie rilette (al sicuro) stanno fra quelle da togliere ("Rivedi" ha scelto da tenere una copia mai
+    // riletta), la migliore resta. Il media non perde "al sicuro" per una scelta.
+    val verified = permitted.filter { it.isSafeCopy }
+    if (verified.isNotEmpty() && verified.all { it in remove }) {
+      val rescue = verified.minWith(keepOrder)
+      remove.remove(rescue)
+      blocked += BlockedCopy(rescue, BlockReason.LAST_VERIFIED)
+    }
+
     val status = if (remove.isEmpty()) IdenticalStatus.NOTHING_TO_REMOVE else IdenticalStatus.CLEANABLE
     return GroupProposal(group, status, keep, remove, blocked)
   }
@@ -79,6 +101,15 @@ object IdenticalCleanup {
     if (segments.size < MIN_BACKUP_SEGMENTS || !segments[0].equals(BACKUP_ROOT, ignoreCase = true)) return null
     val folder = fold(segments[1])
     return folder.takeIf { it.isNotEmpty() && it != COMMON_AREA_FOLDER }
+  }
+
+  /**
+   * La copia di sicurezza del guardiano (D28): un file di `Backup/Area comune/...` dell'area privata. Nasce per proteggere un file dell'area comune
+   * e non e' di nessun dispositivo (vedi [backupFolderOf]).
+   */
+  fun isGuardianCopy(path: String): Boolean {
+    val segments = path.split('/').filter { it.isNotEmpty() }
+    return segments.size >= MIN_BACKUP_SEGMENTS && segments[0].equals(BACKUP_ROOT, ignoreCase = true) && fold(segments[1]) == COMMON_AREA_FOLDER
   }
 
   /** Il file sta dentro la cartella di un album condiviso dell'area comune: `Album condivisi/<album>/...` (Q1). */

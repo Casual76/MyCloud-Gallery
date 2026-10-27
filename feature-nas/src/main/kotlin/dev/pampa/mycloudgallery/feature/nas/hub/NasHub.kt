@@ -31,7 +31,7 @@ import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
 import dev.pampa.mycloudgallery.feature.nas.folders.NasFoldersRoute
 import dev.pampa.mycloudgallery.feature.nas.operations.NasOperationsRoute
 import dev.pampa.mycloudgallery.feature.nas.space.NasSpaceRoute
-import dev.pampa.mycloudgallery.feature.nas.trash.NasTrashRoute
+import dev.pampa.mycloudgallery.feature.nas.trash.NasTrashElsewhere
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -44,6 +44,21 @@ import kotlinx.coroutines.flow.stateIn
 //  - [nasHubEntries]: le quattro voci per Raccolte, come dati (titolo, frase, glifo, tono, numero di cose da guardare);
 //  - [NasScreenContent]: la pagina di una voce, da mostrare nel pannello di dettaglio del tablet o in una rotta;
 //  - [nasGraph] e [openNas]: le rotte (`NasScreen.route`, mai un percorso del NAS dentro).
+
+/**
+ * La pagina "Cestino" di Cartelle NAS (ED-1, R4 della revisione di Fase 7). **Non e' di questo modulo**: mostra nome e cartella dei file eliminati, fra
+ * cui ci possono essere quelli di media nascosti, quindi sta dietro il cancello dei Nascosti. La da' `:app`: gli Eliminati di recente (telefono e NAS
+ * insieme, dietro la credenziale di sistema). Senza, [NasScreenContent] mostra una pagina che manda li' e non elenca niente.
+ *
+ * Gli argomenti sono quelli di ogni pagina di questo modulo: il modificatore, il tasto indietro (null nel pannello di dettaglio del tablet),
+ * l'ingombro della pillola e il fondale per il vetro.
+ */
+typealias NasTrashPage = @Composable (
+  modifier: Modifier,
+  onBack: (() -> Unit)?,
+  hostPadding: PaddingValues,
+  backdropOut: ((GlassBackdropState) -> Unit)?,
+) -> Unit
 
 /** Una voce delle schermate della 4B in Raccolte. */
 @Immutable
@@ -103,6 +118,7 @@ fun nasHubEntries(activeOperations: Int): List<NasHubEntry> = listOf(
  * @param onBack il tasto indietro; null nel pannello di dettaglio.
  * @param hostPadding l'ingombro della pillola delle schede quando la pagina sta nel pannello di dettaglio.
  * @param onOpenFile cosa fare toccando un file in Cartelle NAS (aprire il viewer, che e' di `:app`).
+ * @param trashPage la pagina del Cestino, dietro il cancello dei Nascosti ([NasTrashPage]); senza, una pagina che non elenca niente.
  */
 @Composable
 fun NasScreenContent(
@@ -113,6 +129,7 @@ fun NasScreenContent(
   hostPadding: PaddingValues = PaddingValues(),
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
   onOpenFile: ((share: String, path: SharePath) -> Unit)? = null,
+  trashPage: NasTrashPage? = null,
 ) {
   when (screen) {
     NasScreen.FOLDERS -> NasFoldersRoute(
@@ -130,13 +147,11 @@ fun NasScreenContent(
       backdropOut = backdropOut,
       onOpenTrash = { onNavigate(NasScreen.TRASH) },
     )
-    NasScreen.TRASH -> NasTrashRoute(
-      modifier = modifier,
-      onBack = onBack,
-      hostPadding = hostPadding,
-      backdropOut = backdropOut,
-      onOpenOperations = { onNavigate(NasScreen.OPERATIONS) },
-    )
+    NasScreen.TRASH -> if (trashPage != null) {
+      trashPage(modifier, onBack, hostPadding, backdropOut)
+    } else {
+      NasTrashElsewhere(modifier = modifier, onBack = onBack, hostPadding = hostPadding, backdropOut = backdropOut)
+    }
     NasScreen.OPERATIONS -> NasOperationsRoute(modifier = modifier, onBack = onBack, hostPadding = hostPadding, backdropOut = backdropOut)
   }
 }
@@ -147,11 +162,15 @@ fun NavController.openNas(screen: NasScreen) {
 }
 
 /** Le quattro pagine nel grafo di navigazione di `:app`. */
-fun NavGraphBuilder.nasGraph(nav: NavController, onOpenFile: ((share: String, path: SharePath) -> Unit)? = null) {
+fun NavGraphBuilder.nasGraph(
+  nav: NavController,
+  onOpenFile: ((share: String, path: SharePath) -> Unit)? = null,
+  trashPage: NasTrashPage? = null,
+) {
   val back: () -> Unit = { nav.popBackStack() }
   for (screen in NasScreen.entries) {
     composable(screen.route) {
-      NasScreenContent(screen = screen, onNavigate = nav::openNas, onBack = back, onOpenFile = onOpenFile)
+      NasScreenContent(screen = screen, onNavigate = nav::openNas, onBack = back, onOpenFile = onOpenFile, trashPage = trashPage)
     }
   }
 }

@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import dev.pampa.mycloudgallery.BuildConfig
 import dev.pampa.mycloudgallery.core.common.featureflags.TestShares
+import dev.pampa.mycloudgallery.core.common.files.Patience
 import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
@@ -111,6 +112,7 @@ import java.io.IOException
 import java.nio.ByteBuffer
 import java.util.Locale
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlinx.coroutines.CancellationException
@@ -902,9 +904,10 @@ class NasGraph(
    * "Ferma le scritture sul NAS" / "Riattiva le scritture" (Diagnostica, §1.4). Riattivare libera le operazioni rimaste ferme (NA-2): il
    * testo promette che riprendono da sole.
    */
-  fun setWritesStopped(stopped: Boolean) {
-    emergency.set(stopped)
+  fun setWritesStopped(stopped: Boolean): Boolean {
+    val saved = emergency.set(stopped)
     if (!stopped) organizer.resumeSoon()
+    return saved
   }
 
   private fun prepBudget(): PrepBudget {
@@ -1050,10 +1053,20 @@ class CatalogCopyLinker(private val catalog: suspend () -> MediaCatalog?) : Copy
 class EmergencyStop(private val file: File) {
   @Volatile private var cached: Boolean? = null
 
-  val stopped: Boolean
-    get() = cached ?: file.exists().also { cached = it }
+  /** L'emergenza e' accesa in memoria ma il file non c'e': al riavvio sarebbe spenta (R11). Si riprova a salvarla. */
+  @Volatile private var unsaved = false
+  private val unsavedReads = AtomicInteger()
 
-  fun set(on: Boolean) {
+  val stopped: Boolean
+    get() {
+      val known = cached ?: file.exists().also { cached = it }
+      // Un'emergenza che il disco non ha voluto: ogni tanto si riprova, cosi' guarisce da sola appena il disco torna a rispondere.
+      if (unsaved && known && unsavedReads.getAndIncrement() % RETRY_EVERY_READS == 0) trySave()
+      return known
+    }
+
+  /** Accende o spegne l'emergenza. Vero se il file dice la stessa cosa (sopravvive al riavvio); falso se l'emergenza vale solo in questo processo. */
+  fun set(on: Boolean): Boolean {
     val saved = try {
       if (on) {
         StateFiles.mark(file)
@@ -1067,5 +1080,22 @@ class EmergencyStop(private val file: File) {
     if (!saved) GalleryLog.w("EmergencyStop") { "emergenza non salvata" }
     // Spenta a parole ma il file c'e' ancora (si ripresenterebbe al riavvio): finche' c'e', l'emergenza resta accesa (puo' solo restringere).
     cached = on || !saved
+    unsaved = on && !saved
+    unsavedReads.set(0)
+    return saved
+  }
+
+  private fun trySave() {
+    try {
+      StateFiles.mark(file, patience = Patience.NONE)
+      unsaved = false
+    } catch (e: IOException) {
+      // Si riprovera' piu' avanti.
+    }
+  }
+
+  private companion object {
+    /** Un tentativo ogni tante letture mentre l'emergenza non e' salvata: il cancello delle scritture la legge di continuo. */
+    const val RETRY_EVERY_READS = 512
   }
 }

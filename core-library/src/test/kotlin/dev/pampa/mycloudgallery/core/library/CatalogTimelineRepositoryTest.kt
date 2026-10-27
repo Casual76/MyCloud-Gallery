@@ -282,4 +282,40 @@ class CatalogTimelineRepositoryTest {
     assertSameIndex(next.snapshot.value!!, source.expected())
     assertThat(store.read()!!.provisional).isFalse()
   }
+
+  /** Un file di istantanea che non si riscrive e non si toglie (disco in sola lettura, un altro handle): ricorda cosa gli e' stato chiesto. */
+  private class StuckStore(dir: File, io: kotlinx.coroutines.CoroutineDispatcher) : SnapshotStore(dir, io) {
+    val writes = ArrayList<Pair<Int, Boolean>>()
+    var deletes = 0
+
+    override suspend fun write(snapshot: dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot, provisional: Boolean): Boolean {
+      writes += snapshot.size to provisional
+      // Solo un'istantanea vuota "entra": quella e' la sostituzione di ripiego.
+      return snapshot.size == 0
+    }
+
+    override suspend fun delete(): Boolean {
+      deletes++
+      return false
+    }
+  }
+
+  @Test
+  fun unNascostoCheNonSiRiesceAToglierDalFile_sostituisceIlFileConUnoVuotoEProvvisorio() = runTest {
+    // R11: prima l'esito di `delete()` era ignorato, e il file con il nascosto restava per il riavvio (la prima immagine viene dal file).
+    val source = model(300)
+    val dispatcher = StandardTestDispatcher(testScheduler)
+    val store = StuckStore(dir, dispatcher)
+    val repo = CatalogTimelineRepository(source, store, backgroundScope, worker = dispatcher, writeDelayMs = 5_000)
+    repo.start()
+    settle()
+    store.writes.clear()
+    store.deletes = 0
+
+    repo.forget(listOf(MediaId(source.media.keys.first())))
+
+    assertThat(store.deletes).isAtLeast(1)
+    // L'ultima cosa scritta e' un'istantanea vuota e provvisoria: il riavvio la ricostruisce.
+    assertThat(store.writes.last()).isEqualTo(0 to true)
+  }
 }

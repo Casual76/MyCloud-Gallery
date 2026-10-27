@@ -19,6 +19,8 @@ internal val DuplicatesNotice.message: Int
     DuplicatesNotice.LAST_SHOT_STAYS -> R.string.duplicates_notice_last_shot
     DuplicatesNotice.NOTHING_TO_CLEAN -> R.string.duplicates_notice_nothing
     DuplicatesNotice.NO_PHONE_TRASH -> R.string.duplicates_notice_no_phone_trash
+    DuplicatesNotice.PHONE_CHANGED -> R.string.duplicates_notice_phone_changed
+    DuplicatesNotice.NIGHTLY_NOT_SAVED -> R.string.duplicates_notice_nightly_not_saved
   }
 
 internal val DuplicatesNotice.tone: FluidTone
@@ -26,7 +28,7 @@ internal val DuplicatesNotice.tone: FluidTone
     DuplicatesNotice.CLEANUP_STARTED -> FluidTone.Success
     DuplicatesNotice.CLEANUP_FAILED -> FluidTone.Danger
     DuplicatesNotice.CLEANUP_REJECTED, DuplicatesNotice.CLEANUP_BLOCKED, DuplicatesNotice.LAST_SHOT_STAYS, DuplicatesNotice.NOTHING_TO_CLEAN,
-    DuplicatesNotice.NO_PHONE_TRASH -> FluidTone.Warning
+    DuplicatesNotice.NO_PHONE_TRASH, DuplicatesNotice.PHONE_CHANGED, DuplicatesNotice.NIGHTLY_NOT_SAVED -> FluidTone.Warning
   }
 
 /** La riga dell'avviso: si chiude con la X. */

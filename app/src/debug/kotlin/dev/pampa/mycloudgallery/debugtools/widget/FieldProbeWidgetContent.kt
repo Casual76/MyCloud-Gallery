@@ -7,6 +7,10 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import java.time.LocalDate
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.withTimeoutOrNull
 
 // SOLO build debug (Fase 7, P9, D22, L65): il contenuto del widget di prova dei Nascosti. Tutto cio' che il widget mostra viene da `WidgetFeed`,
 // il contratto che usera' il widget vero della Fase 10: qui non si pesca mai da nessun'altra parte, quindi il widget non puo' mostrare un nascosto
@@ -30,6 +34,21 @@ internal object FieldProbeWidgetContent {
 
   /** Le celle del widget. */
   const val CELLS: Int = 4
+
+  /** Quanto si aspetta l'istantanea della Libreria dentro il ricevitore (Android concede poche decine di secondi, e il widget non deve tenerlo in vita). */
+  const val SNAPSHOT_WAIT_MS: Long = 8_000L
+
+  /** Quanto si continua ad aspettarla fuori dal ricevitore, a processo freddo, prima di rinunciare fino al giro dopo. */
+  const val SNAPSHOT_LATE_WAIT_MS: Long = 120_000L
+
+  /**
+   * NA-2 (revisione di Fase 7): l'istantanea della Libreria, **aspettata** fino a [waitMs]. A processo freddo (il sistema dei widget sveglia l'app solo per
+   * ridisegnare) l'istantanea e' ancora null: prima [cells] rispondeva "niente" e `updateAppWidget` sovrascriveva il widget con celle vuote fino al giro dopo,
+   * trenta minuti, e la prova F73 passava "a vuoto". Null dopo l'attesa vuol dire che non c'e' (accesso alle sole foto selezionate, Libreria non letta): il
+   * widget resta senza celle, mai con un elemento che non si e' potuto filtrare.
+   */
+  suspend fun awaitSnapshot(snapshot: StateFlow<TimelineSnapshot?>, waitMs: Long = SNAPSHOT_WAIT_MS): TimelineSnapshot? =
+    snapshot.value ?: withTimeoutOrNull(waitMs) { snapshot.filterNotNull().first() }
 
   /**
    * Le prossime [CELLS] celle da [feed]. Un id che l'istantanea non conosce (cambiata nel frattempo) non si descrive e quindi non si mostra:

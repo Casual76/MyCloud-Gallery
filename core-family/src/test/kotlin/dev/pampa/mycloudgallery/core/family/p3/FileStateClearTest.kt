@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.family.trust.FileTrustStateStore
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
 import java.io.File
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
@@ -86,7 +87,13 @@ class FileStateClearTest {
   }
 
   /** Un azzeramento con i fake che registrano, sul diario [journal] e sullo stato fidato [trustState]. */
-  private fun wipe(log: OperationLog, journal: WipeJournal, trustState: TrustStateStore): DeviceSelfWipe {
+  private fun wipe(
+    log: OperationLog,
+    journal: WipeJournal,
+    trustState: TrustStateStore,
+    localState: List<suspend () -> Unit> = emptyList(),
+    afterWork: List<suspend () -> Unit> = emptyList(),
+  ): DeviceSelfWipe {
     val keys = SoftwareKeys().apply { deviceSigner() }
     return DeviceSelfWipe(
       journal = RecordingJournal(log, journal),
@@ -98,22 +105,88 @@ class FileStateClearTest {
       eraser = RecordingLocalDataEraser(log, true),
       work = WorkCanceller { log.record("work:cancelAll") },
       deviceClock = { 1234L },
+      localState = localState,
+      afterWork = afterWork,
     )
   }
 
   @Test
-  fun unAzzeramentoChe_nonRiescaAToglierelLoStatoFidato_restaDaFareNonVaAvanti() = runTest {
+  fun unAzzeramentoChe_nonRiescaAToglierelLoStatoFidato_cancellaComunqueIDatiLocaliERestaDaFare() = runTest {
     val log = OperationLog()
     val journal = InMemoryWipeJournal()
-    val process = wipe(log, journal, FileTrustStateStore(stuck("trust-state")))
+    val sightings = AtomicInteger()
+    val process = wipe(log, journal, FileTrustStateStore(stuck("trust-state")), localState = listOf({ sightings.incrementAndGet() }))
 
     val phase = process.run(WipeReason.MARKED_LOST)
 
-    // La fase dei dati non e' riuscita: il diario resta all'ultima completata, l'eraser dei dati non e' partito, i lavori non sono stati fermati.
+    // R10: lo stato fidato che non si toglie non salta piu' il resto dei dati (catalogo, miniature, dati personali): le chiavi sono gia' distrutte.
+    assertThat(log.all()).contains("eraser:eraseAll")
+    assertThat(sightings.get()).isEqualTo(1)
+    // La fase pero' non e' riuscita: il diario resta all'ultima completata e i lavori non sono stati fermati.
     assertThat(phase).isEqualTo(WipePhase.SESSIONS_CLOSED)
     assertThat(journal.record!!.phase).isEqualTo(WipePhase.SESSIONS_CLOSED)
-    assertThat(log.all()).doesNotContain("eraser:eraseAll")
     assertThat(log.all()).doesNotContain("work:cancelAll")
+  }
+
+  @Test
+  fun unPassoDeiDatiChePartaPerErrore_nonFermaGliAltriEFaRipetereLaFase() = runTest {
+    val log = OperationLog()
+    val journal = InMemoryWipeJournal()
+    val trust = File(folder.root, "trust-state").also { it.writeText("x") }
+    val process = wipe(
+      log, journal, FileTrustStateStore(trust),
+      localState = listOf({ throw IOException("richieste viste bloccate") }),
+    )
+
+    val phase = process.run(WipeReason.MARKED_LOST)
+
+    assertThat(log.all()).contains("eraser:eraseAll")
+    assertThat(trust.exists()).isFalse()
+    assertThat(phase).isEqualTo(WipePhase.SESSIONS_CLOSED)
+  }
+
+  @Test
+  fun alRiavvioLaFaseDeiDatiSiRipeteEFinisce() = runTest {
+    val log = OperationLog()
+    val journal = InMemoryWipeJournal()
+    val blocked = stuck("trust-state")
+    assertThat(wipe(log, journal, FileTrustStateStore(blocked)).run(WipeReason.MARKED_LOST)).isEqualTo(WipePhase.SESSIONS_CLOSED)
+
+    // Il blocco passa (la cartella che occupava il nome se ne va): il nuovo processo riprende dalla fase dei dati e arriva in fondo.
+    blocked.deleteRecursively()
+    val second = wipe(log, journal, FileTrustStateStore(blocked))
+    second.resumeIfInterrupted()
+
+    assertThat(journal.record!!.phase).isEqualTo(WipePhase.DONE)
+    assertThat(log.all().count { it == "eraser:eraseAll" }).isEqualTo(2)
+  }
+
+  @Test
+  fun iFileCheUnLavoroPoteva_ricreare_sitolgonoDopoCheILavoriSonoFermati() = runTest {
+    val log = OperationLog()
+    val journal = InMemoryWipeJournal()
+    val process = wipe(log, journal, FileTrustStateStore(File(folder.root, "trust-state")), afterWork = listOf({ log.record("battito:clear") }))
+
+    assertThat(process.run(WipeReason.MARKED_LOST)).isEqualTo(WipePhase.DONE)
+
+    val order = log.all()
+    assertThat(order.indexOf("battito:clear")).isGreaterThan(order.indexOf("work:cancelAll"))
+    assertThat(order.indexOf("battito:clear")).isLessThan(order.indexOf("journal:WORK_CANCELLED"))
+  }
+
+  @Test
+  fun unFileDopoILavoriCheNonSiTogliePerDavvero_lasciaLaFaseDaRipetere() = runTest {
+    val log = OperationLog()
+    val journal = InMemoryWipeJournal()
+    val process = wipe(
+      log, journal, FileTrustStateStore(File(folder.root, "trust-state")),
+      afterWork = listOf({ throw IOException("battito non tolto") }),
+    )
+
+    val phase = process.run(WipeReason.MARKED_LOST)
+
+    assertThat(phase).isEqualTo(WipePhase.LOCAL_DATA_ERASED)
+    assertThat(log.all()).doesNotContain("journal:WORK_CANCELLED")
   }
 
   @Test

@@ -72,7 +72,7 @@ class RecentlyDeletedNasTest {
     assertThat(nas.refreshes).isEqualTo(0)
     // Nessun gesto possibile da chiusa.
     assertThat(c.canPurge(emptySet())).isFalse()
-    assertThat(c.restoreNas(emptySet())).isNull()
+    assertThat(c.restoreNas(userTap(), emptySet())).isNull()
     assertThat(nas.restores).isEmpty()
     assertThat(nas.purges).isEmpty()
   }
@@ -165,10 +165,11 @@ class RecentlyDeletedNasTest {
     assertThat(section.offline).isTrue()
     assertThat(section.writable).isFalse()
     assertThat(section.entries.map { it.row.key }).containsExactly("mio/a1", "mio/a2")
-    // Offline: ne' ripristino ne' "Elimina subito".
+    // Offline: ne' ripristino ne' "Elimina subito". ED-2: e il ripristino non cade in silenzio, risponde che il NAS non ha accettato.
     c.toggle(section.entries.first().id)
     assertThat(c.canPurge()).isFalse()
-    assertThat(c.restoreNas()).isNull()
+    assertThat(c.restoreNas(userTap())).isEqualTo(NasTrashOutcome.REJECTED)
+    assertThat(c.unrestorableNas()).isEqualTo(1)
   }
 
   @Test
@@ -179,7 +180,8 @@ class RecentlyDeletedNasTest {
     c.toggle(idOf(c, "mio/a1"))
 
     assertThat(c.canPurge()).isFalse()
-    assertThat(c.restoreNas()).isNull()
+    // ED-2: share in sola lettura, voce selezionata: "Ripristina" lo dice (REJECTED) invece di non fare niente, e la porta non e' chiamata.
+    assertThat(c.restoreNas(userTap())).isEqualTo(NasTrashOutcome.REJECTED)
     assertThat(nas.restores).isEmpty()
   }
 
@@ -224,7 +226,9 @@ class RecentlyDeletedNasTest {
     c.toggle(valid)
     c.toggle(noRecord)
 
-    val outcome = c.restoreNas()
+    // ED-2: una selezione mista: la voce senza record valido non si ripristina, e la pagina puo' dirlo (una voce rimasta indietro).
+    assertThat(c.unrestorableNas()).isEqualTo(1)
+    val outcome = c.restoreNas(userTap())
 
     assertThat(outcome).isEqualTo(NasTrashOutcome.STARTED)
     // La porta riceve solo la voce con il record valido, con un tocco (il pulsante "Ripristina").
@@ -242,7 +246,7 @@ class RecentlyDeletedNasTest {
     val chosen = idOf(c, "tab/b1")
     c.toggle(chosen)
 
-    assertThat(c.restoreNas()).isEqualTo(NasTrashOutcome.BLOCKED)
+    assertThat(c.restoreNas(userTap())).isEqualTo(NasTrashOutcome.BLOCKED)
 
     assertThat(rows(c).map { it.row.key }).contains("tab/b1")
     assertThat(c.selection.value).containsExactly(chosen)
@@ -257,7 +261,7 @@ class RecentlyDeletedNasTest {
     c.toggle(idOf(c, "tab/b1"))
 
     c.restoreRequest()
-    val nasOutcome = c.restoreNas()
+    val nasOutcome = c.restoreNas(userTap())
 
     // Un solo dialogo di sistema, solo con la foto del telefono; il NAS e' un'altra strada.
     assertThat(intents.trashRequests).hasSize(1)
@@ -273,8 +277,34 @@ class RecentlyDeletedNasTest {
     c.open()
     c.toggle(loaded(c).entries.first().id)
 
-    assertThat(c.restoreNas()).isNull()
+    assertThat(c.restoreNas(userTap())).isNull()
     assertThat(nas.restores).isEmpty()
+  }
+
+  @Test
+  fun ed2_ripristinareSoloVociCheNonSiPossonoRipristinareDiceDiNo_NonTaceENonChiamaLaPorta() = runTest(UnconfinedTestDispatcher()) {
+    val nas = FakeNasTrash(sampleNasRows())
+    val c = controller(nas)
+    c.open()
+    // La voce senza record valido: si seleziona (si puo' sempre togliere o eliminare), ma non si ripristina.
+    c.toggle(idOf(c, "tab/b3"))
+
+    assertThat(c.unrestorableNas()).isEqualTo(1)
+    assertThat(c.restoreNas(userTap())).isEqualTo(NasTrashOutcome.REJECTED)
+
+    assertThat(nas.restores).isEmpty()
+    // La selezione resta com'era: nessun gesto e' partito.
+    assertThat(c.selection.value).containsExactly(idOf(c, "tab/b3"))
+  }
+
+  @Test
+  fun ed2_unaSelezioneSenzaNienteDelNas_nonHaNienteDaDire() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller(FakeNasTrash(sampleNasRows()))
+    c.open()
+    c.toggle(loaded(c).entries.first().id)
+
+    assertThat(c.unrestorableNas()).isEqualTo(0)
+    assertThat(c.restoreNas(userTap())).isNull()
   }
 
   // --- Elimina subito ----------------------------------------------------------------------------------------------------

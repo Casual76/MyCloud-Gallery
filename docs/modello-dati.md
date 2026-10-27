@@ -230,7 +230,9 @@ entita' (il build esporta `N.json`), scrivere `Migration(N-1, N)` in `GalleryMig
   `MediaId`; gli altri lo adottano.~~ Fatto nella v3 (`IdentityRules`, `MediaCatalog.adoptIdentities`, §11.5).
 - **Rilevatore di doppioni**: chi chiama `merge` quando un hash completo arriva dopo (oggi lo fa da solo solo una
   terza copia identica). Dalla v3 lo fa il catalogo per i gruppi `PROBABLE_DUPLICATE` telefono-NAS (§11.4); fra due copie
-  dello stesso lato resta aperto (Doppioni, Fase 7).
+  dello stesso lato lo fa `NasTwins` (`core-library/.../duplicates/`, revisione di Fase 7, pacchetto C, DP-1): mette in coda `FULL_HASH`
+  solo per i media del NAS che sembrano uguali (stessa dimensione e stesso hash rapido) e li unisce con `merge` quando gli hash completi
+  sono uguali; le regole d'identita' (`MergeRules`) non cambiano.
 - ~~**Cursori di sincronizzazione MediaStore** (generazione per volume, `getVersion()`): Fase 3.1.~~ Fatto nella v2
   (`media_store_cursor`, §10).
 - **OCR, FTS, volti**: tabelle nelle Fasi 6 e 8 (i volti nell'area privata, proposta 13). Il test delle

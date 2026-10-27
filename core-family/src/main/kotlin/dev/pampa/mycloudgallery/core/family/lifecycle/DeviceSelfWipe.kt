@@ -38,6 +38,11 @@ fun interface WorkCanceller {
  * passare alle successive**: il diario resta all'ultima fase completata e [resumeIfInterrupted] (all'avvio) o
  * un nuovo [run] riprendono da li'. Tutte le fasi sono idempotenti.
  *
+ * **Dentro la fase dei dati nessun passo ne ferma un altro** (R10 della revisione di Fase 7): ogni passo gira comunque, la fase riesce solo se sono
+ * riusciti tutti, e lo stato fidato va per ultimo. Prima il primo errore (lo stato fidato che non si toglie) saltava il catalogo, le miniature e i dati
+ * personali di un dispositivo gia' senza chiavi, finche' la fase non riusciva. Lo stato fidato per ultimo e' anche il segno dell'azzeramento
+ * interrotto: chiave sparita con lo stato ancora li' vuol dire "finisci" ([resumeIfInterrupted]).
+ *
  * Unica conseguenza distruttiva voluta di un dato remoto (`docs/formato-nas.md` §9.6): la chiamano solo
  * `TrustGuard` e il motore della fiducia, e solo con lo stato `lost` in un registro **firmato e accettato** o
  * con una segnalazione valida nell'area privata dell'account (decisione 3(a)).
@@ -54,6 +59,11 @@ class DeviceSelfWipe(
   private val deviceClock: () -> Long,
   /** Altri stati locali di `core-family` da cancellare nella fase (5), prima dell'eraser (es. le richieste viste). */
   private val localState: List<suspend () -> Unit> = emptyList(),
+  /**
+   * File che un lavoro in corso poteva ricreare mentre si cancellavano i dati (il battito di `TrustSyncWorker`): si tolgono nella fase (6), **dopo**
+   * [work], quando nessun lavoro puo' piu' scriverli (R11).
+   */
+  private val afterWork: List<suspend () -> Unit> = emptyList(),
 ) : SelfWipe {
 
   private val mutex = Mutex()
@@ -179,14 +189,13 @@ class DeviceSelfWipe(
         sessions.invalidate(InvalidateReason.WIPE)
         true
       }
-      WipePhase.LOCAL_DATA_ERASED -> {
-        trustState.clear()
-        localState.forEach { it() }
-        eraser.eraseAll()
-      }
+      WipePhase.LOCAL_DATA_ERASED -> eraseLocalData()
       WipePhase.WORK_CANCELLED -> {
         work.cancelAll()
-        true
+        // Fermati i lavori, niente puo' piu' ricreare cio' che segue. Come per i dati: ogni passo gira, la fase riesce se riescono tutti.
+        var removed = true
+        for ((index, step) in afterWork.withIndex()) removed = attempt("dopo i lavori $index") { step() } && removed
+        removed
       }
       WipePhase.DONE -> true
     }
@@ -194,6 +203,26 @@ class DeviceSelfWipe(
     throw e
   } catch (e: Exception) {
     GalleryLog.e(TAG, e) { "fase ${phase.name} non riuscita" }
+    false
+  }
+
+  /**
+   * La fase (5): i passi indipendenti, **tutti** tentati. Vera solo se sono riusciti tutti; lo stato fidato per ultimo (vedi sopra).
+   */
+  private suspend fun eraseLocalData(): Boolean {
+    var done = true
+    for ((index, step) in localState.withIndex()) done = attempt("stato locale $index") { step() } && done
+    done = attempt("dati locali") { eraser.eraseAll() } && done
+    return attempt("stato fidato") { trustState.clear() } && done
+  }
+
+  /** Un passo di una fase: vero se e' riuscito. Un errore lo dice nel log (solo il tipo) e non ferma gli altri passi. */
+  private suspend fun attempt(what: String, step: suspend () -> Any?): Boolean = try {
+    step() != false
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    GalleryLog.e(TAG, e) { "passo dell'azzeramento non riuscito: $what" }
     false
   }
 

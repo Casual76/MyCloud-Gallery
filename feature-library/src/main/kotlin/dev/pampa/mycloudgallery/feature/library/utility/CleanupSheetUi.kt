@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.feature.library.utility
 
+import android.os.SystemClock
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocation
@@ -11,6 +13,8 @@ import dev.pampa.mycloudgallery.core.library.duplicates.CopyArea
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.feature.library.R
+import dev.pampa.mycloudgallery.feature.library.trash.SheetTap
+import dev.pampa.mycloudgallery.feature.library.trash.UserTap
 
 // Fase 7, P8 (D25, §2.1.1): il FOGLIO DI ELIMINAZIONE ESISTENTE (`GalleryDeleteSheet`, quello di "Elimina dal telefono" e del viewer) usato dalla
 // pulizia dei doppioni. "Solo dal telefono" / "Ovunque" (una sola scelta per i doppioni identici), l'elenco dei posti con l'effetto di ogni scelta
@@ -26,25 +30,45 @@ private fun GalleryDeleteScope.cleanup(): CleanupScope = when (this) {
   GalleryDeleteScope.Everywhere -> CleanupScope.EVERYWHERE
 }
 
-/** Il foglio, aperto quando [sheet] c'e'. [familyName] dice di chi e' un'area (E-U1). */
+/**
+ * Il foglio, aperto quando [sheet] c'e'. [familyName] dice di chi e' un'area (E-U1).
+ *
+ * **Qui nasce la prova del tocco** (R18): una macchina nuova a ogni apertura ([SheetTap]), e un tocco su "Elimina" prima di 600 ms dalla comparsa non
+ * conta. Il controllore riceve la prova ([onConfirm]), non se la fabbrica.
+ */
 @Composable
 internal fun CleanupSheetUi(
   sheet: CleanupSheet?,
   familyName: (String) -> String?,
   onScope: (CleanupScope) -> Unit,
-  onConfirm: () -> Unit,
+  onConfirm: (UserTap) -> Unit,
   onDismiss: () -> Unit,
+  monotonicMs: () -> Long = SystemClock::elapsedRealtime,
 ) {
+  val shown = sheet != null
+  val tap = remember(shown) { SheetTap(monotonicMs()) }
   GalleryDeleteSheet(
-    visible = sheet != null,
+    visible = shown,
     count = sheet?.count ?: 1,
     scope = (sheet?.chosen ?: CleanupScope.PHONE_ONLY).design(),
     onScopeChange = { onScope(it.cleanup()) },
     locations = if (sheet != null) cleanupLocations(sheet, familyName) else emptyList(),
-    onConfirm = onConfirm,
+    onConfirm = { tap.confirm(monotonicMs())?.let(onConfirm) },
     onDismissRequest = onDismiss,
     scopes = sheet?.scopes?.map { it.design() } ?: listOf(GalleryDeleteScope.PhoneOnly),
+    // DP-6: "Eliminare 41 copie (3,2 GB)?", "Eliminare 4 scatti (12 MB)?": le copie non sono "foto" (4 scatti con 3 copie facevano "12 foto"), e ci sono i GB.
+    title = sheet?.let { sheetTitle(it) },
   )
+}
+
+@Composable
+private fun sheetTitle(sheet: CleanupSheet): String {
+  val plan = sheet.plan
+  val size = UtilityText.size(plan.bytes)
+  return when (sheet.source) {
+    CleanupSource.IDENTICAL -> pluralStringResource(R.plurals.duplicates_sheet_title_copies, plan.copies.coerceAtLeast(1), GalleryNumbers.format(plan.copies), size)
+    CleanupSource.SIMILAR -> pluralStringResource(R.plurals.duplicates_sheet_title_shots, plan.groups.coerceAtLeast(1), GalleryNumbers.format(plan.groups), size)
+  }
 }
 
 /**
@@ -70,9 +94,9 @@ private fun cleanupLocations(sheet: CleanupSheet, familyName: (String) -> String
   }
   val commonCopies = plan.nas.filter { it.area == CopyArea.COMMON }
   if (commonCopies.isNotEmpty()) {
-    out += GalleryDeleteLocation(
-      stringResource(R.string.duplicates_sheet_common), GalleryDeleteLocationKind.NasShared, copiesDetail(commonCopies.size, commonCopies.sumOf { it.size }),
-    )
+    // E-D8 (DP-2): un file dell'area comune lo vedono tutti i familiari; toglierlo lo toglie a tutti, e il foglio lo dice prima del tocco.
+    val detail = copiesDetail(commonCopies.size, commonCopies.sumOf { it.size }) + "\n" + stringResource(R.string.duplicates_sheet_common_gone)
+    out += GalleryDeleteLocation(stringResource(R.string.duplicates_sheet_common), GalleryDeleteLocationKind.NasShared, detail)
   }
   // E-U1: le copie nell'area di un altro account non si propongono (nessun permesso), e si dice di chi sono.
   sheet.othersAreas.groupBy { it }.forEach { (share, copies) ->

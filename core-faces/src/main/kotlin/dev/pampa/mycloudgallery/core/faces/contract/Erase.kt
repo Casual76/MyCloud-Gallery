@@ -77,8 +77,18 @@ enum class AckState(override val code: String) : StableCode {
 /**
  * Un dispositivo dell'account nella pagina della cancellazione: il nome da mostrare (gia' validato dal registro, `displayName`), lo stato e
  * l'ultimo contatto (ora del NAS della sua ultima testa personale letta, null se mai). Mai l'id nei log.
+ *
+ * [dismissed] (correzioni F, risposta dell'utente del 27/10 su L193): il dispositivo e' **dismesso** (non revocato). Si aspetta ancora (D30), ma le sue teste
+ * sono congelate e non puo' piu' dire `off`: la pagina resta in attesa finche' non lo si revoca. Il foglio lo dice sulla riga e porta a Impostazioni, Dispositivi.
  */
-data class DeviceAck(val label: String, val deviceId: String, val state: AckState, val lastContactAtNas: Long?, val thisDevice: Boolean) {
+data class DeviceAck(
+  val label: String,
+  val deviceId: String,
+  val state: AckState,
+  val lastContactAtNas: Long?,
+  val thisDevice: Boolean,
+  val dismissed: Boolean = false,
+) {
   override fun toString(): String = "DeviceAck(${state.code}, questo=$thisDevice)"
 }
 

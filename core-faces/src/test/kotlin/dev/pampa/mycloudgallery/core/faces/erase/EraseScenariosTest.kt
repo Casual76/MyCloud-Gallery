@@ -181,6 +181,32 @@ class EraseScenariosTest {
   }
 
   @Test
+  fun unDismessoSiAspettaEChiudeSoloQuandoLoSiRevoca_L193() = runTest {
+    val (a, _, c) = world.activeFamily("A", "B", "C", invariants = invariants)
+    // C ha Persone accesa ed e' stato dismesso (non revocato): le sue teste sono congelate, non puo' piu' dire `off`.
+    c.online = false
+    world.family.changeStatus(c.signer, dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus.RETIRED)
+    assertThat(a.confirmErase()).isEqualTo(EraseStart.Started)
+    world.settle(a, turns = 6, invariants = invariants)
+
+    // La pagina continua ad aspettare (risposta dell'utente del 27/10): il dismesso e' in attesa, e la riga lo sa dire come «dismesso».
+    val waiting = a.eraser.status.value!!
+    assertThat(waiting.waiting).isEqualTo(EraseWait.DEVICES)
+    val row = waiting.devices.single { it.deviceId == c.id }
+    assertThat(row.state).isEqualTo(AckState.WAITING)
+    assertThat(row.dismissed).isTrue()
+    assertThat(waiting.devices.filter { it.deviceId != c.id }.map { it.dismissed }).containsExactly(false, false)
+
+    // Revocato, non si aspetta piu' e la cancellazione si chiude: la riga non e' piu' «dismesso» (e' fuori dall'attesa).
+    world.family.changeStatus(c.signer, dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus.REVOKED)
+    assertThat(world.settle(a, invariants = invariants)).isTrue()
+    invariants.final("fine", a)
+    val closed = a.eraser.status.value!!.devices.single { it.deviceId == c.id }
+    assertThat(closed.state).isEqualTo(AckState.NOT_EXPECTED)
+    assertThat(closed.dismissed).isFalse()
+  }
+
+  @Test
   fun ilCestinoDiReteSiDiceFinoAQuandoNonSiSvuota() = runTest {
     val (a) = world.activeFamily("A", "B", invariants = invariants)
     world.recycleBin = true

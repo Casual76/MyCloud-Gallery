@@ -26,6 +26,9 @@
   <string name="faces_erase_device_this">%1$s (questo dispositivo)</string>
   <string name="faces_erase_device_waiting">Cancellerà appena si collega</string>
   <string name="faces_erase_device_waiting_since">Non si fa vivo dal %1$s: cancellerà appena si riaccende</string>
+  <string name="faces_erase_device_dismissed">Dismesso: se non lo userai più, revocalo per chiudere la cancellazione</string>
+  <string name="faces_erase_open_devices">Apri Dispositivi</string>
+  <string name="faces_erase_open_devices_description">Apre Impostazioni, Dispositivi, dove puoi revocare un dispositivo che non usi più</string>
   <string name="faces_erase_device_confirmed">Ha cancellato</string>
   <string name="faces_erase_device_not_expected">Revocato o perso: non si aspetta</string>
   <string name="faces_erase_local_only_title">Solo su questo dispositivo</string>

@@ -69,17 +69,22 @@ fun FacesEraseSheet(
   onClose: () -> Unit,
   onBack: () -> Unit,
   modifier: Modifier = Modifier,
+  /**
+   * Correzioni F (L193): porta a Impostazioni, Dispositivi, dove si revoca un dispositivo dismesso che tiene ferma la fine. `:app` lo lega alla rotta delle
+   * Impostazioni dei dispositivi; senza (null) la riga del dismesso dice lo stesso cosa fare, ma non c'e' il tasto.
+   */
+  onOpenDevices: (() -> Unit)? = null,
 ) {
   FluidScreen(title = stringResource(R.string.faces_erase_title), modifier = modifier, onBack = onBack) {
     when (state) {
       null -> loading(R.string.faces_erase_loading)
-      is EraseSheetState.Preview -> preview(state, token, onConfirm, onChoose, onCancel)
+      is EraseSheetState.Preview -> preview(state, token, onConfirm, onChoose, onCancel, onOpenDevices)
       EraseSheetState.Confirming -> loading(R.string.faces_erase_confirming)
       EraseSheetState.Started -> message(R.string.faces_erase_started_title, R.string.faces_erase_started_message, FluidTone.Success, onClose)
       EraseSheetState.Expired -> expired(onReload, onClose)
-      is EraseSheetState.Progress -> progress(state, onClose)
+      is EraseSheetState.Progress -> progress(state, onClose, onOpenDevices)
       EraseSheetState.Done -> message(R.string.faces_erase_done_title, R.string.faces_erase_done_message, FluidTone.Success, onClose)
-      is EraseSheetState.WaitingDevices -> waitingDevices(state, onClose)
+      is EraseSheetState.WaitingDevices -> waitingDevices(state, onClose, onOpenDevices)
     }
   }
 }
@@ -104,6 +109,7 @@ private fun LazyListScope.preview(
   onConfirm: (FacesEraseConfirmation) -> Unit,
   onChoose: (PeopleAlbumsChoice) -> Unit,
   onCancel: () -> Unit,
+  onOpenDevices: (() -> Unit)?,
 ) {
   if (state.localOnly) {
     item(key = "local-only") {
@@ -141,7 +147,7 @@ private fun LazyListScope.preview(
       }
     }
   }
-  if (!state.localOnly && state.devices.isNotEmpty()) devices(state.devices, footnote = true)
+  if (!state.localOnly && state.devices.isNotEmpty()) devices(state.devices, footnote = true, onOpenDevices = onOpenDevices)
   item(key = "buttons") {
     val cancelDescription = stringResource(R.string.faces_erase_cancel_description)
     val confirmDescription = stringResource(if (state.localOnly) R.string.faces_erase_confirm_description_local else R.string.faces_erase_confirm_description)
@@ -187,7 +193,7 @@ private fun ChoiceRow(choice: PeopleAlbumsChoice, selected: PeopleAlbumsChoice?,
   )
 }
 
-private fun LazyListScope.devices(devices: List<DeviceAck>, footnote: Boolean) {
+private fun LazyListScope.devices(devices: List<DeviceAck>, footnote: Boolean, onOpenDevices: (() -> Unit)?) {
   item(key = "devices-header") { FluidSectionHeader(title = stringResource(R.string.faces_erase_section_devices)) }
   item(key = "devices") {
     FluidListGroup {
@@ -197,7 +203,22 @@ private fun LazyListScope.devices(devices: List<DeviceAck>, footnote: Boolean) {
       }
     }
   }
+  // L193: un dismesso che tiene ferma la fine si revoca da Impostazioni, Dispositivi: il tasto sta subito sotto l'elenco, da 48 dp, con una frase per TalkBack.
+  if (onOpenDevices != null && devices.any(EraseText::holdsTheEnd)) item(key = "devices-open") { OpenDevicesButton(onOpenDevices) }
   if (footnote) item(key = "devices-note") { FluidSectionFootnote(text = stringResource(R.string.faces_erase_devices_footnote)) }
+}
+
+@Composable
+private fun OpenDevicesButton(onOpenDevices: () -> Unit) {
+  val description = stringResource(R.string.faces_erase_open_devices_description)
+  FluidButton(
+    text = stringResource(R.string.faces_erase_open_devices),
+    onClick = onOpenDevices,
+    style = FluidButtonStyle.Tinted,
+    size = FluidButtonSize.Large,
+    fillWidth = true,
+    modifier = Modifier.padding(top = PeopleDimens.TightGap).semantics { contentDescription = description },
+  )
 }
 
 @Composable
@@ -206,7 +227,10 @@ private fun DeviceRow(device: DeviceAck) {
   val (subtitle, tone) = when (device.state) {
     AckState.CONFIRMED -> stringResource(R.string.faces_erase_device_confirmed) to FluidTone.Success
     AckState.NOT_EXPECTED -> stringResource(R.string.faces_erase_device_not_expected) to FluidTone.Neutral
-    AckState.WAITING -> {
+    // L193: un dismesso si aspetta ancora (D30), ma le sue teste sono congelate e non puo' piu' dire `off`: la riga dice cosa fare, non "cancellera' appena si collega".
+    AckState.WAITING -> if (EraseText.holdsTheEnd(device)) {
+      stringResource(R.string.faces_erase_device_dismissed) to FluidTone.Warning
+    } else {
       val since = device.lastContactAtNas?.let { EraseText.day(it) }
       (if (since != null) stringResource(R.string.faces_erase_device_waiting_since, since) else stringResource(R.string.faces_erase_device_waiting)) to FluidTone.Warning
     }
@@ -242,7 +266,7 @@ private fun LazyListScope.expired(onReload: () -> Unit, onClose: () -> Unit) {
   closeButton(onClose)
 }
 
-private fun LazyListScope.progress(state: EraseSheetState.Progress, onClose: () -> Unit) {
+private fun LazyListScope.progress(state: EraseSheetState.Progress, onClose: () -> Unit, onOpenDevices: (() -> Unit)?) {
   item(key = "progress-header") { FluidSectionHeader(title = stringResource(R.string.faces_erase_section_progress)) }
   item(key = "progress") {
     FluidListGroup(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
@@ -261,7 +285,7 @@ private fun LazyListScope.progress(state: EraseSheetState.Progress, onClose: () 
       )
     }
   }
-  if (state.devices.isNotEmpty()) devices(state.devices, footnote = false)
+  if (state.devices.isNotEmpty()) devices(state.devices, footnote = false, onOpenDevices = onOpenDevices)
   closeButton(onClose)
 }
 
@@ -276,7 +300,7 @@ private fun StepRow(title: Int, step: StepState, icon: ImageVector) {
   )
 }
 
-private fun LazyListScope.waitingDevices(state: EraseSheetState.WaitingDevices, onClose: () -> Unit) {
+private fun LazyListScope.waitingDevices(state: EraseSheetState.WaitingDevices, onClose: () -> Unit, onOpenDevices: (() -> Unit)?) {
   item(key = "waiting-devices") {
     FluidInlineMessage(
       message = stringResource(R.string.faces_erase_waiting_message),
@@ -285,7 +309,7 @@ private fun LazyListScope.waitingDevices(state: EraseSheetState.WaitingDevices, 
       modifier = Modifier.padding(bottom = PeopleDimens.BlockGap).semantics { liveRegion = LiveRegionMode.Polite },
     )
   }
-  devices(state.devices, footnote = false)
+  devices(state.devices, footnote = false, onOpenDevices = onOpenDevices)
   closeButton(onClose)
 }
 

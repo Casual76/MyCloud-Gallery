@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.model.FacesSetting
 import dev.pampa.mycloudgallery.core.personal.contract.FacesSettingCodec
 import dev.pampa.mycloudgallery.core.personal.contract.HeadValue
 import dev.pampa.mycloudgallery.core.trust.codec.TextRules
+import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
 import java.security.MessageDigest
 
@@ -73,7 +74,7 @@ object EraseRules {
           confirms(head, erased, offAtNas) -> AckState.CONFIRMED
           else -> AckState.WAITING
         }
-        DeviceAck(device.name, device.id, state, head?.headAtNas, thisDevice = device.id == me)
+        DeviceAck(device.name, device.id, state, head?.headAtNas, thisDevice = device.id == me, dismissed = device.status == DeviceStatus.RETIRED)
       }
   }
 

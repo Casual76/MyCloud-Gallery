@@ -29,6 +29,9 @@ class FacesEraseSheetTest : PeopleScreenTest() {
   private val phone = DeviceAck("Telefono di casa", "a".repeat(26), AckState.CONFIRMED, null, thisDevice = true)
   private val tablet = DeviceAck("Tablet del soggiorno", "b".repeat(26), AckState.WAITING, NOON_3_NOV, thisDevice = false)
   private val lost = DeviceAck("Telefono vecchio", "c".repeat(26), AckState.NOT_EXPECTED, null, thisDevice = false)
+
+  /** Un dispositivo dismesso (non revocato) che non ha confermato: le sue teste sono congelate, tiene ferma la fine finche' non lo si revoca (L193). */
+  private val retired = DeviceAck("Telefono in cassetto", "d".repeat(26), AckState.WAITING, NOON_3_NOV, thisDevice = false, dismissed = true)
   private val preview = EraseSheetState.Preview(4, albumsWithPeople = 2, historyWithNames = true, devices = listOf(phone, tablet, lost), choice = PeopleAlbumsChoice.KEEP_PHOTOS, localOnly = false)
   private val fenced = EraseSheetState.Preview(1, albumsWithPeople = 0, historyWithNames = false, devices = emptyList(), choice = null, localOnly = true)
   private val token = EraseSheetToken(previewDigest = 42, shownAtMonotonicNanos = 9_000)
@@ -39,9 +42,10 @@ class FacesEraseSheetTest : PeopleScreenTest() {
     var cancel = 0
     var reload = 0
     var close = 0
+    var openDevices = 0
   }
 
-  private fun sheet(state: EraseSheetState?, token: EraseSheetToken?, calls: Calls) = @androidx.compose.runtime.Composable {
+  private fun sheet(state: EraseSheetState?, token: EraseSheetToken?, calls: Calls, withDevicesAction: Boolean = true) = @androidx.compose.runtime.Composable {
     FacesEraseSheet(
       state = state,
       token = token,
@@ -51,6 +55,7 @@ class FacesEraseSheetTest : PeopleScreenTest() {
       onReload = { calls.reload++ },
       onClose = { calls.close++ },
       onBack = { calls.close++ },
+      onOpenDevices = if (withDevicesAction) ({ calls.openDevices++ }) else null,
     )
   }
 
@@ -143,6 +148,58 @@ class FacesEraseSheetTest : PeopleScreenTest() {
     assertShows("in corso", "Inizio la cancellazione")
   }
 
+  // --- Correzioni F, L193: il dismesso che tiene ferma la fine --------------------------------------------------------------------------------
+
+  @Test
+  fun unDismessoCheTieneFermaLaFineDiceCosaFareESenzaCambiareLAttesa() {
+    val state = EraseSheetState.WaitingDevices(listOf(phone, retired))
+    showAll { sheet(state, null, Calls())() }
+    // La pagina continua ad aspettare (com'e'): lo stato e' lo stesso di sempre, la riga dice cosa fare.
+    assertShows("dismesso", "Manca qualche dispositivo", "Telefono in cassetto", "Dismesso: se non lo userai più, revocalo per chiudere la cancellazione")
+    assertDoesNotShow("dismesso", "cancellerà appena si riaccende", "Non si fa vivo dal 3 novembre")
+  }
+
+  @Test
+  fun ilTastoPortaAImpostazioniDispositivi() {
+    val calls = Calls()
+    showAll { sheet(EraseSheetState.WaitingDevices(listOf(phone, retired)), null, calls)() }
+    clickText("Apri Dispositivi", substring = false)
+    assertThat(calls.openDevices).isEqualTo(1)
+  }
+
+  @Test
+  fun unDispositivoNormaleOUnDismessoCheHaConfermatoNonHaNeFraseNeTasto() {
+    // Un dispositivo spento che non e' dismesso: cancellera' appena si riaccende, niente tasto e niente frase del dismesso.
+    val show = switching<EraseSheetState>(EraseSheetState.WaitingDevices(listOf(phone, tablet))) { state -> sheet(state, null, Calls())() }
+    assertShows("spento", "Non si fa vivo dal 3 novembre")
+    assertDoesNotShow("spento", "Dismesso:", "Apri Dispositivi")
+    // Un dismesso che ha gia' confermato non tiene ferma niente.
+    show(EraseSheetState.WaitingDevices(listOf(retired.copy(state = AckState.CONFIRMED), tablet)))
+    assertDoesNotShow("dismesso confermato", "Dismesso:", "Apri Dispositivi")
+  }
+
+  @Test
+  fun senzaLaRottaDelleImpostazioniLaFraseCeEIlTastoNo() {
+    showAll { sheet(EraseSheetState.WaitingDevices(listOf(phone, retired)), null, Calls(), withDevicesAction = false)() }
+    assertShows("senza rotta", "Dismesso: se non lo userai più, revocalo per chiudere la cancellazione")
+    assertDoesNotShow("senza rotta", "Apri Dispositivi")
+  }
+
+  @Test
+  fun ilDismessoSiVedeAncheNellAnteprimaENell_avanzamento() {
+    val show = switching<EraseSheetState>(preview.copy(devices = listOf(phone, retired))) { state -> sheet(state, token, Calls())() }
+    scroll("Dismesso:")
+    assertShows("anteprima", "Dismesso: se non lo userai più, revocalo per chiudere la cancellazione", "Apri Dispositivi")
+    show(EraseSheetState.Progress(StepState.DONE, StepState.WAITING, listOf(phone, retired), EraseWait.DEVICES))
+    assertShows("avanzamento", "Manca la conferma di qualche dispositivo", "Dismesso: se non lo userai più, revocalo per chiudere la cancellazione", "Apri Dispositivi")
+  }
+
+  @Test
+  fun talkBackDiceDoveAndareIlTastoDelDismesso() {
+    showAll { sheet(EraseSheetState.WaitingDevices(listOf(phone, retired)), null, Calls())() }
+    assertThat(spokenControls()).contains("Apre Impostazioni, Dispositivi, dove puoi revocare un dispositivo che non usi più")
+  }
+
   @Test
   fun talkBackDiceCosaFannoIPulsantiEQualeSceltaC() {
     showAll { sheet(preview, token, Calls())() }
@@ -178,6 +235,8 @@ class FacesEraseSheetTest : PeopleScreenTest() {
       "recinzione" to sheet(fenced, token, calls),
       "avanzamento" to sheet(EraseSheetState.Progress(StepState.DONE, StepState.WAITING, listOf(phone, tablet, lost), EraseWait.FROZEN), null, calls),
       "dispositivi mancanti" to sheet(EraseSheetState.WaitingDevices(listOf(tablet)), null, calls),
+      "dismesso che tiene ferma la fine" to sheet(EraseSheetState.WaitingDevices(listOf(phone, retired)), null, calls),
+      "dismesso nell'anteprima" to sheet(preview.copy(devices = listOf(phone, retired)), token, calls),
       "fine" to sheet(EraseSheetState.Done, null, calls),
       "scaduta" to sheet(EraseSheetState.Expired, null, calls),
     )

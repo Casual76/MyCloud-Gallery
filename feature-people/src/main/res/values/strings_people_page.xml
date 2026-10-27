@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8, P9: la pagina di una persona e la griglia dei volti ("Controlla le foto", "Dividi"). -->
+
+  <string name="persone_page_title_unknown">Persona</string>
+  <string name="persone_more">Altre azioni</string>
+  <string name="persone_review">Controlla le foto</string>
+  <string name="persone_merge_with">Unisci con…</string>
+  <string name="persone_split">Dividi…</string>
+  <string name="persone_set_cover">Scegli copertina</string>
+  <string name="persone_smart_album">Crea album smart</string>
+  <string name="persone_hide">Nascondi persona</string>
+  <string name="persone_forget">Dimentica persona</string>
+
+  <string name="persone_maybe_header">Forse è anche…</string>
+  <string name="persone_maybe_detail">Volti che somigliano a questa persona. Tocca per decidere.</string>
+  <string name="persone_maybe_row">%1$s · Forse è la stessa persona</string>
+
+  <string name="persone_page_empty_title">Nessuna foto da mostrare</string>
+  <string name="persone_page_empty_detail">I volti di questa persona non si ritrovano più nelle foto. Puoi ricontrollare dopo il prossimo calcolo.</string>
+  <string name="persone_forgotten_title">Persona dimenticata</string>
+  <string name="persone_forgotten_detail">Il gruppo e il nome non ci sono più. Se arrivano foto nuove, potrebbe ricomparire senza nome.</string>
+  <string name="persone_not_found_title">Questa persona non c\'è</string>
+  <string name="persone_not_found_detail">Può essere stata unita a un\'altra o dimenticata.</string>
+  <string name="persone_hidden_title">Persona nascosta</string>
+  <string name="persone_hidden_detail">Non compare in Persone, nei suggerimenti e nella ricerca. Le sue foto restano in Libreria.</string>
+
+  <string name="persone_cell_open">Apri la foto</string>
+  <string name="persone_cell_photo">Foto, %1$s</string>
+  <string name="persone_cell_video">Video, %1$s</string>
+  <string name="persone_cell_undated">Foto senza data</string>
+
+  <!-- Controlla le foto / Dividi -->
+  <string name="persone_review_title">Controlla le foto</string>
+  <string name="persone_review_subtitle">Tocca i volti che non sono di %1$s. Prima i meno sicuri.</string>
+  <string name="persone_review_not">Non è %1$s</string>
+  <string name="persone_review_not_icon">Non è %1$s: togli i volti scelti</string>
+  <string name="persone_review_ignore">Ignora questo volto</string>
+  <string name="persone_review_empty_title">Nessun volto da controllare</string>
+  <string name="persone_review_empty_detail">I volti di questa persona non si ritrovano in foto che si possono mostrare.</string>
+  <string name="persone_review_done_title">Fatto</string>
+  <plurals name="persone_review_done_detail">
+    <item quantity="one">Un volto cambiato. Vale subito, anche sugli altri tuoi dispositivi.</item>
+    <item quantity="other">%1$d volti cambiati. Valgono subito, anche sugli altri tuoi dispositivi.</item>
+  </plurals>
+  <string name="persone_review_done_none">Non è cambiato niente.</string>
+  <string name="persone_split_title">Dividi</string>
+  <string name="persone_split_subtitle">Scegli i volti che sono un\'altra persona. Non tutti: la prima resta con gli altri.</string>
+  <string name="persone_split_apply">Sposta in una persona nuova</string>
+  <string name="persone_face_spoken">Volto %1$d di %2$d</string>
+  <string name="persone_face_spoken_selected">Volto %1$d di %2$d, scelto</string>
+</resources>

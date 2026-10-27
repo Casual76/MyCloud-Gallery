@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8, P9: "Tutte le persone", "Altri volti" e le persone nascoste. -->
+
+  <string name="persone_title">Persone</string>
+  <plurals name="persone_selected">
+    <item quantity="one">%1$d selezionata</item>
+    <item quantity="other">%1$d selezionate</item>
+  </plurals>
+  <plurals name="persone_selected_groups">
+    <item quantity="one">%1$d selezionato</item>
+    <item quantity="other">%1$d selezionati</item>
+  </plurals>
+
+  <string name="persone_empty_title">Ancora nessuna persona</string>
+  <string name="persone_empty_detail">Quando le foto saranno analizzate, le persone che compaiono più spesso arriveranno qui.</string>
+  <string name="persone_none_named_title">Nessuna persona con un nome</string>
+  <string name="persone_none_named_detail">Dai un nome ai volti che riconosci da «Altri volti», o dalle informazioni di una foto.</string>
+  <string name="persone_header_unnamed">Senza nome</string>
+  <string name="persone_working_title">Sto riconoscendo i volti</string>
+  <string name="persone_working_percent">Fatto il %1$d%%. Va avanti da sola, di notte e in carica.</string>
+  <string name="persone_working_waiting">Aspetto il momento giusto: Wi-Fi di casa, carica o le regole del risparmio.</string>
+
+  <string name="persone_proposals_header">È la stessa persona?</string>
+  <string name="persone_proposals_detail">Volti che si somigliano. Decidi tu: non unisco mai niente da solo con due nomi.</string>
+  <string name="persone_proposal_title">È la stessa persona?</string>
+  <string name="persone_proposal_names">%1$s e %2$s</string>
+  <string name="persone_others_row">Altri volti (%1$d)</string>
+  <string name="persone_others_row_detail">Dai un nome a chi riconosci, o falli dimenticare</string>
+  <string name="persone_hidden_row">Persone nascoste (%1$d)</string>
+  <string name="persone_hidden_row_detail">Le foto restano in Libreria</string>
+
+  <string name="persone_others_title">Altri volti</string>
+  <string name="persone_others_subtitle">Gruppi senza nome, dal più fotografato. Tocca per aprirli.</string>
+  <string name="persone_others_empty_title">Nessun gruppo senza nome</string>
+  <string name="persone_others_empty_detail">I gruppi di volti senza nome compariranno qui quando avranno almeno tre foto.</string>
+
+  <string name="persone_hidden_page_title">Persone nascoste</string>
+  <string name="persone_hidden_empty_title">Nessuna persona nascosta</string>
+  <string name="persone_hidden_empty_detail">Una persona nascosta sparisce da Persone e dalla ricerca; le sue foto restano in Libreria. La ritrovi qui.</string>
+  <string name="persone_hidden_spoken">%1$s, nascosta</string>
+</resources>

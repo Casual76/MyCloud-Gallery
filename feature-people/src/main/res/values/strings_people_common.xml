@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8, P9: i testi che piu' schermate delle persone dicono allo stesso modo. -->
+
+  <plurals name="persone_photos">
+    <item quantity="one">%1$s foto</item>
+    <item quantity="other">%1$s foto</item>
+  </plurals>
+
+  <string name="persone_unnamed_spoken">Persona senza nome</string>
+  <string name="persone_unnamed_in_sentence">una persona senza nome</string>
+  <string name="persone_unnamed_short">Senza nome</string>
+  <string name="persone_add_name">Aggiungi un nome</string>
+  <string name="persone_rename">Rinomina</string>
+  <string name="persone_cancel">Annulla</string>
+  <string name="persone_back">Indietro</string>
+  <string name="persone_select">Seleziona</string>
+  <string name="persone_select_done">Fine</string>
+  <string name="persone_merge_action">Unisci</string>
+  <string name="persone_forget_action">Dimentica</string>
+  <string name="persone_action_select">Seleziona</string>
+  <string name="persone_action_deselect">Deseleziona</string>
+  <string name="persone_face_selected">Scelto</string>
+  <string name="persone_show_again">Mostra di nuovo</string>
+
+  <string name="persone_message_title">Persone</string>
+  <string name="persone_message_not_active">Persone non è attiva su questo dispositivo.</string>
+  <string name="persone_message_not_found">Questa persona non c\'è più.</string>
+  <string name="persone_message_invalid_name">Il nome deve avere da 1 a 64 caratteri, senza caratteri speciali.</string>
+  <string name="persone_message_too_many_names">Con più di due nomi unisci due persone alla volta: così scegli quale nome tenere.</string>
+  <string name="persone_message_invalid">Non posso farlo con queste persone.</string>
+</resources>

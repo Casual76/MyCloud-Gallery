@@ -95,6 +95,9 @@ enum class PersonAction(override val code: String) : StableCode {
   HIDE("hide"),
   UNHIDE("unhide"),
   FORGET("forget"),
+
+  /** "Crea album smart" (D27): un album con la regola "Persone" su questa persona. L'editor degli album e' di `feature-albums` (P10), lo apre `:app`. */
+  SMART_ALBUM("smart_album"),
 }
 
 /** La testa della pagina persona: nome (null = "Aggiungi un nome"), quante foto visibili, copertina (solo da un media mostrabile). */
@@ -175,8 +178,11 @@ sealed interface MergeSheetState {
     override fun toString(): String = "MergeSheetState.Choose(${selected.size}/${candidates.size})"
   }
 
-  /** Due nomi diversi: si sceglie quale tenere ([chosen] null = conferma spenta). */
-  data class PickName(val first: PersonCard, val second: PersonCard, val chosen: PersonId?) : MergeSheetState {
+  /**
+   * Due nomi diversi: si sceglie quale tenere ([chosen] null = conferma spenta). [proposal] (aggiunta di P9): viene da "E' la stessa persona?", e
+   * allora il foglio offre anche "No, sono diverse" (altrimenti la coppia con due nomi non si potrebbe rifiutare per sempre).
+   */
+  data class PickName(val first: PersonCard, val second: PersonCard, val chosen: PersonId?, val proposal: MergeProposal? = null) : MergeSheetState {
     val canConfirm: Boolean get() = chosen == first.id || chosen == second.id
 
     override fun toString(): String = "MergeSheetState.PickName(scelto=${chosen != null})"
@@ -214,4 +220,13 @@ interface PeopleActions {
   fun openPeopleSettings()
 
   fun openDiagnostics()
+
+  /** Impostazioni -> Persone -> "Persone nascoste" (E-F28): la pagina e' di feature-people, la raggiunge `:app` dalla pagina di P7. Aggiunta di P9. */
+  fun openHiddenPeople() = Unit
+
+  /**
+   * "Crea album smart" dalla pagina persona (D27, §2.7): `:app` apre l'editor degli album di `feature-albums` con la regola "Persone" su
+   * [person] e il titolo proposto [title] (il nome della persona, se ce l'ha). Aggiunta di P9; i `feature-*` non si conoscono.
+   */
+  fun createSmartAlbum(person: PersonId, title: String?) = Unit
 }

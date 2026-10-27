@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8, P9: i fogli (nome, unione, "Dimentica", copertina) e la sezione delle Raccolte. -->
+
+  <string name="persone_name_add_title">Aggiungi un nome</string>
+  <string name="persone_name_rename_title">Rinomina</string>
+  <string name="persone_name_message">Il nome è solo tuo e viaggia fra i tuoi dispositivi. Compare nelle foto, nelle informazioni e nella ricerca.</string>
+  <string name="persone_name_hint">Nome</string>
+  <string name="persone_name_invalid">Da 1 a 64 caratteri, senza caratteri speciali.</string>
+  <string name="persone_name_save">Salva</string>
+  <string name="persone_name_remove">Togli il nome</string>
+
+  <string name="persone_forget_title">Dimenticare questa persona?</string>
+  <string name="persone_forget_many_title">Dimenticare questi gruppi?</string>
+  <string name="persone_forget_message">I suoi volti non verranno più raggruppati; se arrivano foto nuove potrebbe ricomparire senza nome.</string>
+  <plurals name="persone_forget_many_message">
+    <item quantity="one">Il gruppo e il suo nome spariscono. I suoi volti non verranno più raggruppati.</item>
+    <item quantity="other">%1$d gruppi spariscono con i loro nomi. I loro volti non verranno più raggruppati.</item>
+  </plurals>
+  <string name="persone_forget_detail">Le foto restano in Libreria. Non tengo nessuna impronta per riconoscerla di nuovo.</string>
+  <string name="persone_forget_confirm">Dimentica</string>
+
+  <string name="persone_merge_choose_title">Unisci con…</string>
+  <string name="persone_merge_choose_message">Scegli le persone che sono la stessa. Si fa due nomi alla volta.</string>
+  <string name="persone_merge_pick_title">Quale nome tieni?</string>
+  <string name="persone_merge_pick_message">Hanno tutte e due un nome. Quello che scegli resta; l\'altro non si perde dalle foto.</string>
+  <string name="persone_merge_keep">Tieni «%1$s»</string>
+  <string name="persone_merge_confirm_title">Unire queste persone?</string>
+  <string name="persone_merge_proposal_title">È la stessa persona?</string>
+  <string name="persone_merge_proposal_message">Si somigliano. Se dici di sì diventano una persona sola; se dici di no non te lo richiedo.</string>
+  <string name="persone_merge_keeps_name">Resta il nome «%1$s».</string>
+  <string name="persone_merge_keeps_none">Restano senza nome: diventano una persona sola.</string>
+  <string name="persone_merge_continue">Continua</string>
+  <string name="persone_merge_confirm">Unisci</string>
+  <string name="persone_merge_yes">Sì, è la stessa persona</string>
+  <string name="persone_merge_no">No, sono diverse</string>
+  <string name="persone_merge_not_now">Non ora</string>
+  <plurals name="persone_merge_more">
+    <item quantity="one">e un\'altra persona</item>
+    <item quantity="other">e altre %1$d persone</item>
+  </plurals>
+
+  <string name="persone_cover_title">Scegli copertina</string>
+  <string name="persone_cover_message">Il volto che vedi nelle Raccolte e in cima alla pagina. Il ritaglio non si salva da nessuna parte.</string>
+  <string name="persone_cover_face">Volto %1$d di %2$d</string>
+  <string name="persone_cover_automatic">Usa quella automatica</string>
+
+  <!-- La sezione Persone delle Raccolte -->
+  <string name="persone_section">Persone</string>
+  <string name="persone_row_enable">Attiva riconoscimento dei volti</string>
+  <string name="persone_row_enable_detail">Raggruppa le foto per persona. I nomi viaggiano fra i tuoi dispositivi e restano tuoi.</string>
+  <string name="persone_row_notice">Persone è attiva sul tuo account</string>
+  <string name="persone_row_notice_detail">Scegli se usarla su questo dispositivo</string>
+  <string name="persone_row_excluded">Non attiva su questo dispositivo</string>
+  <string name="persone_row_excluded_detail">Tocca per includerlo di nuovo</string>
+  <string name="persone_row_progress">Sto riconoscendo i volti: %1$d%%</string>
+  <string name="persone_row_progress_waiting">Sto per riconoscere i volti</string>
+  <string name="persone_row_progress_detail">Va avanti da sola, di notte e in carica</string>
+  <string name="persone_row_local">Solo su questo dispositivo</string>
+  <string name="persone_row_local_detail">Finché la sincronizzazione delle persone non è accesa, ogni dispositivo ha le sue.</string>
+  <string name="persone_row_update">Aggiorna l\'app</string>
+  <string name="persone_row_update_detail">Persone è stata attivata da una versione più nuova dell\'app</string>
+  <string name="persone_row_erasing">Cancellazione in corso</string>
+  <string name="persone_row_erasing_detail">Sto togliendo i volti e i nomi dai tuoi dispositivi</string>
+  <string name="persone_row_models">Modelli non disponibili</string>
+  <string name="persone_row_models_detail">I modelli per riconoscere i volti non si caricano. Guarda la Diagnostica.</string>
+  <string name="persone_row_all">Tutte le persone</string>
+  <plurals name="persone_row_all_detail">
+    <item quantity="one">%1$s persona</item>
+    <item quantity="other">%1$s persone</item>
+  </plurals>
+  <string name="persone_row_hidden_only">Le persone che hai sono nascoste</string>
+</resources>

@@ -64,6 +64,9 @@ dependencies {
   implementation appDeps.coroutinesAndroid
   implementation appDeps.serializationCore
 
+  // Solo nei test: il legame della sezione Persone con le Raccolte (PeopleSectionBindingTest). In produzione i feature non si conoscono.
+  testImplementation project(':feature-library')
+
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
   testImplementation appDeps.robolectric

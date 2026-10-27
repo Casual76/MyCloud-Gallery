@@ -184,8 +184,12 @@ class RoomAlbumStoresTest {
     val third = RoomAlbumReplicaStore(database)
     assertThat(third.rejectedHead(album, family.other.id)).isEqualTo(HeadMark(9, "abc"))
     assertThat(third.contribution(album, family.other.id)!!.barred).isTrue()
+    // DG-3: il conto dei rifiuti sta nel database: lo ritrova un processo nuovo e non dipende dal giro che li ha visti.
+    assertThat(third.rejectedHeads()).isEqualTo(1)
+    assertThat(RoomAlbumReplicaStore(database).rejectedHeads()).isEqualTo(1)
     third.setRejectedHead(album, family.other.id, null)
     assertThat(RoomAlbumReplicaStore(database).rejectedHead(album, family.other.id)).isNull()
+    assertThat(RoomAlbumReplicaStore(database).rejectedHeads()).isEqualTo(0)
 
     // Dimenticare un contributo lo toglie (le righe del mio pubblicatore restano).
     third.forget(album, family.other.id)

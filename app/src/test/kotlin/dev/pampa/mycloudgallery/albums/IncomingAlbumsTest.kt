@@ -131,7 +131,9 @@ class IncomingAlbumsTest {
     val port = port()
     // L'app era chiusa e gli album si montano: lo stato dice «sto leggendo» e l'elenco e' ancora vuoto.
     albums.status.value = AlbumsStatus.Loading
-    val read = async { port.albums() }
+    // La lettura parte e resta ad aspettare (UNDISPATCHED: arriva fino alla prima sospensione prima che nasca l'album).
+    val read = async(start = CoroutineStart.UNDISPATCHED) { port.albums() }
+    assertThat(read.isCompleted).isFalse()
     manual("Compleanno")
     albums.status.value = AlbumsStatus.Ready
     assertThat(read.await().map { it.name }).containsExactly("Compleanno")

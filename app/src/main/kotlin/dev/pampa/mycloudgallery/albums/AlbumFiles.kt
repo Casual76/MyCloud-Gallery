@@ -279,6 +279,9 @@ internal class FileSafeCopyRequestLog(file: File) : SafeCopyRequestLog {
     }
   }
 
+  /** Quante volte il file non si e' potuto leggere (Diagnostica: solo il numero). */
+  val unreadable: Int get() = records.unreadable
+
   override suspend fun add(media: Set<MediaId>) {
     records.update { map -> media.forEach { map[it] = true } }
   }

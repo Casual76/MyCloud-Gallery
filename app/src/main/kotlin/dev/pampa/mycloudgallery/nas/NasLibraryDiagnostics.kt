@@ -24,7 +24,10 @@ object NasLibraryDiagCodes {
   val WRITES_STOPPED = DiagCode("NAS_WRITES_STOPPED")
   val AREA_UNREACHABLE = DiagCode("NAS_AREA_UNREACHABLE", setOf("E-L4"))
 
-  val ALL: List<DiagCode> = listOf(STATE, WRITES_STOPPED, AREA_UNREACHABLE)
+  /** R11 (revisione di fine Fase 7, L163): l'emergenza «Ferma le scritture» vale solo in questo processo, il disco non l'ha salvata. */
+  val WRITES_STOP_NOT_SAVED = DiagCode("NAS_WRITES_STOP_NOT_SAVED")
+
+  val ALL: List<DiagCode> = listOf(STATE, WRITES_STOPPED, AREA_UNREACHABLE, WRITES_STOP_NOT_SAVED)
 }
 
 /** Lo stato del piede della Libreria come enumerato per l'esportazione (mai i numeri di file che non servono). */
@@ -61,6 +64,8 @@ class NasLibraryDiagnostics(private val nas: NasGraph) : DiagnosticsContributor 
     if (runtime == null) return items
 
     if (nas.emergency.stopped) items += item(NasLibraryDiagCodes.WRITES_STOPPED, DiagSeverity.WARNING)
+    // R11, L163: l'emergenza accesa che il disco non ha salvato vale solo finche' l'app resta aperta: la pagina lo dice, l'utente puo' riprovare.
+    if (nas.emergency.notSaved) items += item(NasLibraryDiagCodes.WRITES_STOP_NOT_SAVED, DiagCatalog.entry(NasLibraryDiagCodes.WRITES_STOP_NOT_SAVED)?.severity ?: DiagSeverity.WARNING)
     val unreachable = runtime.areas.count { area -> runtime.scannerOf(area.share)?.status?.value is NasScanStatus.Unavailable }
     if (unreachable > 0 || status is LibraryNasStatus.AreasUnavailable) {
       items += item(NasLibraryDiagCodes.AREA_UNREACHABLE, DiagSeverity.WARNING, mapOf("unreachable" to ExportValue.Num(unreachable.toLong())))

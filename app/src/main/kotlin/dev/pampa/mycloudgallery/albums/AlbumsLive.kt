@@ -111,6 +111,11 @@ class SharedLive internal constructor(
   val choices: PersonalSharedAlbumChoices,
   /** R9: toglie dai registri dei trasferimenti le chiavi che nessuna operazione aperta cita piu' (nel giro dell'indice); quante. */
   val pruneTransfers: suspend () -> Int = { 0 },
+  /**
+   * R9, I5 (Diagnostica, `ALBUM_REGISTRY_UNREADABLE`): quante volte i registri durevoli della condivisione (piani dei trasferimenti, caricamenti, richieste
+   * al guardiano) non si sono potuti leggere, piu' le righe del diario che questa versione non sa leggere. Solo il numero.
+   */
+  val unreadableRegisters: () -> Int = { 0 },
 )
 
 /** Cio' che serve per montare [AlbumsLive]: tutto gia' pronto nel resto dell'app (nessuna rete, nessun NAS qui). */
@@ -149,6 +154,8 @@ internal class AlbumsInputs(
   val problemMarksFile: File? = null,
   /** I registri dei trasferimenti (R9: potati nel giro dell'indice); null nelle prove che non li hanno. */
   val transfers: TransferRegisters? = null,
+  /** R9: quante volte il registro delle richieste del guardiano (del backup) non si e' potuto leggere; 0 nelle prove senza il backup. */
+  val guardianLogUnreadable: () -> Int = { 0 },
   /** R1: il file dei segni locali degli album condivisi (visto attivo, chiusura vista, copia scritta); null nelle prove (in memoria). */
   val marksFile: File? = null,
   /** R2: quali errori del NAS sono di un file (quel contributo aspetta) e quali della sessione (il giro si ferma). */
@@ -231,6 +238,7 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
     folders = folders,
     choices = choices,
     pruneTransfers = { i.transfers?.prune { (ports.diary as RoomShareDiary).openTransferKeys() } ?: 0 },
+    unreadableRegisters = { (i.transfers?.unreadable ?: 0) + i.guardianLogUnreadable() + (ports.diary as RoomShareDiary).unreadableRows },
   )
 
   // --- Album personali (P3) ----------------------------------------------------------------------------------------------------------

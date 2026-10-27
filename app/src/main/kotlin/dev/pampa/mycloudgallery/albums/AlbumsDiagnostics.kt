@@ -50,6 +50,8 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
       // DG-3: i rifiuti non spariscono al giro dopo. Il segno della testa rifiutata sta nel database (resta finche' il dispositivo non ne pubblica una
       // buona); il resoconto dell'ultimo giro conta anche le teste in attesa dell'ora (senza un segno). Vale il maggiore.
       rejected = maxOf(sync?.contributionsRejected ?: 0, live?.let { safely { it.shared.replicaStore.rejectedHeads() } } ?: 0),
+      // DG-3: il motivo di ogni rifiuto. Il resoconto dell'ultimo giro e i segni durevoli nel database si uniscono per motivo (vale il maggiore dei due).
+      rejectedByReason = byReason(sync?.rejectedByReason.orEmpty(), live?.let { safely { it.shared.replicaStore.rejectedByReason() } }.orEmpty()),
       denied = sync?.entriesDenied ?: 0,
       unattested = live?.let { safely { it.shared.replica.views.value.values.sumOf { view -> view.unattested } } } ?: 0,
       pausedSpace = problems?.waits?.get(ShareWait.NO_SPACE),
@@ -61,6 +63,11 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
       // DG-1: conta che la ricerca per contenuto sia **pronta** (modello e indice), non che il motore ci sia (con Hilt c'e' sempre).
       described = smart.count { !it.rules.text.isNullOrBlank() || it.rules.examples.isNotEmpty() },
       projectionPending = live?.let { safely { it.albums.projection.pending.value } } ?: 0,
+      // R22 (pacchetti A e B), collegati dalla revisione E: i registri della condivisione che non si leggono (R9, I5), i contributi tenuti da parte (R2: le
+      // attese durevoli nel database, oltre a quelle del giro) e le condivisioni che aspettano il catalogo (la pausa `CATALOG` della porta di completamento).
+      unreadableRegisters = live?.let { safely { it.shared.unreadableRegisters() } } ?: 0,
+      heldContributions = maxOf(sync?.contributionsHeld ?: 0, live?.let { safely { it.shared.replicaStore.heldContributions() } } ?: 0),
+      pausedCatalog = problems?.waits?.get(ShareWait.CATALOG),
     )
   }
 
@@ -85,7 +92,7 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
         "tripsHomeKnown" to ExportValue.Flag(f.tripsHomeKnown),
       ),
     )
-    if (f.rejected > 0) items += count(DiagCodes.ALBUM_CONTRIB_REJECTED, f.rejected)
+    if (f.rejected > 0) items += count(DiagCodes.ALBUM_CONTRIB_REJECTED, f.rejected, f.rejectedByReason.mapKeys { (reason, _) -> "reason.$reason" })
     if (f.denied > 0) items += count(DiagCodes.ALBUM_ENTRY_DENIED, f.denied)
     if (f.unattested > 0) items += count(DiagCodes.ALBUM_ITEM_UNATTESTED, f.unattested)
     f.pausedSpace?.let { items += count(DiagCodes.SHARE_PAUSED_SPACE, it) }
@@ -116,7 +123,12 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
     null
   }
 
-  private fun count(code: DiagCode, n: Int) = item(code, DiagCatalog.entry(code)?.severity ?: DiagSeverity.INFO, mapOf("count" to ExportValue.Num(n.toLong())))
+  /** Il numero e, se ci sono, i suoi pezzi (DG-3: `reason.<MOTIVO>`, la famiglia di chiavi dei motivi di scarto): solo numeri. */
+  private fun count(code: DiagCode, n: Int, parts: Map<String, Int> = emptyMap()) = item(
+    code,
+    DiagCatalog.entry(code)?.severity ?: DiagSeverity.INFO,
+    mapOf("count" to ExportValue.Num(n.toLong())) + parts.filterValues { it > 0 }.mapValues { (_, value) -> ExportValue.Num(value.toLong()) },
+  )
 
   private fun item(code: DiagCode, severity: DiagSeverity, export: Map<String, ExportValue>) =
     DiagItem(code = code, section = section, severity = severity, titleRes = DiagCatalog.titleOf(code), export = export)
@@ -124,6 +136,10 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
   companion object {
     /** I codici del contratto (`AlbumDiag`, §2.8): `Phase7DiagCatalogTest` li cerca tutti nel catalogo, con lo stesso id e gli stessi edge case. */
     val CONTRACT_CODES: List<DiagCode> = AlbumDiag.ALL
+
+    /** DG-3: i rifiuti per motivo di due fonti (l'ultimo giro e i segni durevoli): per ogni motivo vale il maggiore, mai la somma (lo stesso rifiuto e' in tutte e due). */
+    internal fun byReason(round: Map<String, Int>, durable: Map<String, Int>): Map<String, Int> =
+      (round.keys + durable.keys).associateWith { maxOf(round[it] ?: 0, durable[it] ?: 0) }
 
     /** E-AL6: oltre 3.000 elementi o oltre il 20% della Libreria visibile. */
     fun tooBroad(count: Int, library: Int): Boolean =
@@ -156,12 +172,15 @@ internal data class AlbumsFacts(
   /** Gli smart con una descrizione o delle foto d'esempio (che contano solo con la ricerca per contenuto pronta). */
   val described: Int = 0,
   val projectionPending: Int = 0,
+  /** DG-3: i contributi rifiutati per motivo (nomi fissi di `AlbumRejections`); la somma non e' per forza [rejected] (due fonti, vale il maggiore). */
+  val rejectedByReason: Map<String, Int> = emptyMap(),
   /**
-   * Registri durevoli della condivisione (piani dei trasferimenti, caricamenti, richieste al guardiano) che non si sono potuti leggere. Il conto lo da' il codice del
-   * pacchetto A (`unreadable`): chi unisce i pacchetti lo collega in [AlbumsDiagnostics.facts]; finche' non e' collegato resta 0 e la riga non compare.
+   * Registri durevoli della condivisione (piani dei trasferimenti, caricamenti, richieste al guardiano) che non si sono potuti leggere, piu' le righe del
+   * diario che questa versione non sa leggere. Il conto lo danno i contatori del pacchetto A (`unreadable`, R9; `unreadableRows`, I5), collegati in
+   * [AlbumsDiagnostics.facts] dalla revisione E.
    */
   val unreadableRegisters: Int = 0,
-  /** Contributi che la replica tiene da parte (`ReplicaHold`, pacchetto A): stesso collegamento di [unreadableRegisters]. */
+  /** Contributi che la replica tiene da parte (`ReplicaHold`, pacchetto A, R2): stesso collegamento di [unreadableRegisters]. */
   val heldContributions: Int = 0,
   /** Condivisioni ferme perche' il catalogo non conosce ancora la destinazione (pausa «catalogo» della porta di completamento, pacchetto B); null = nessuna. */
   val pausedCatalog: Int? = null,

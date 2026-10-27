@@ -1065,6 +1065,12 @@ class EmergencyStop(private val file: File) {
       return known
     }
 
+  /**
+   * L'emergenza e' accesa solo in questo processo: il disco non l'ha salvata (R11, L163) e al riavvio sarebbe spenta. La Diagnostica del NAS lo dice
+   * (`NAS_WRITES_STOP_NOT_SAVED`); guarisce da sola quando un nuovo tentativo di salvarla riesce.
+   */
+  val notSaved: Boolean get() = unsaved
+
   /** Accende o spegne l'emergenza. Vero se il file dice la stessa cosa (sopravvive al riavvio); falso se l'emergenza vale solo in questo processo. */
   fun set(on: Boolean): Boolean {
     val saved = try {

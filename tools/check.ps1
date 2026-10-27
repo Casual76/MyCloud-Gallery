@@ -1122,11 +1122,123 @@ Step "D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsM
     ((@($gate.WriteGateInstantiators) + @($gate.ReadGateInstantiators) | Select-Object -Unique) -join ", "), @($gate.DecisionCallers | Select-Object -Unique).Count, $gate.Lines) -ForegroundColor DarkGray
 }
 
+# Il bytecode del cancello D34 (Fase 8, P13): come per D30, `dexdump -d` dei classes*.dex dell'APK letto in streaming da un piccolo lettore C#.
+# Cerca: il cancello delle scritture dei volti (`AppFacesWriteGate.blockFor`) che chiama la decisione `FeatureFlags.facesSyncMayUse` e poi risponde
+# `FacesWriteBlock.TEST_SHARES_ONLY`; chi lo istanzia (il montaggio delle persone di :app); chi lo chiama (replica, pubblicatore, prenotazioni e
+# cancellazione sul NAS, per interfaccia o sulla classe se R8 la rende diretta). Senza dexdump o senza vedere la MainActivity la lettura non e'
+# affidabile e il passo FALLISCE (non salta).
+$script:dexFacesGateReaderLoaded = $false
+function Initialize-DexFacesGateReader {
+  if ($script:dexFacesGateReaderLoaded) { return }
+  Add-Type -Language CSharp -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Text;
+using System.Text.RegularExpressions;
+
+public class DexFacesGateFacts {
+  public bool SawMainActivity;
+  public bool WriteGateFound;
+  public bool BlockForFound;
+  public bool BlockForCallsDecision;
+  public bool BlockForReturnsTestSharesOnly;
+  public List<string> Instantiators = new List<string>();
+  public List<string> DecisionCallers = new List<string>();
+  public List<string> Users = new List<string>();
+  public int Lines;
+}
+
+public static class DexFacesGateReader {
+  const string WriteGate = "Ldev/pampa/mycloudgallery/faces/AppFacesWriteGate;";
+  const string MainClass = "Ldev/pampa/mycloudgallery/MainActivity;";
+  const string Decision = "Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.facesSyncMayUse:(Ljava/lang/String;)Z";
+  const string TestSharesOnly = "Ldev/pampa/mycloudgallery/core/faces/contract/FacesWriteBlock;.TEST_SHARES_ONLY:";
+  const string Port = "Ldev/pampa/mycloudgallery/core/faces/contract/FacesWriteGate;.blockFor:";
+  const string Direct = "Ldev/pampa/mycloudgallery/faces/AppFacesWriteGate;.blockFor:";
+
+  static readonly Regex ClassLine = new Regex(@"^\s*Class descriptor\s*:\s*'([^']+)'", RegexOptions.Compiled);
+  static readonly Regex NameLine = new Regex(@"^\s*name\s*:\s*'([^']*)'", RegexOptions.Compiled);
+  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]{4}:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
+
+  public static void Scan(string dexdump, string dexPath, DexFacesGateFacts facts) {
+    var info = new ProcessStartInfo(dexdump, "-d \"" + dexPath + "\"") {
+      UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+      StandardOutputEncoding = Encoding.GetEncoding(28591),
+    };
+    using (var process = Process.Start(info)) {
+      string cls = "", method = "";
+      bool sawDecisionInBlockFor = false;
+      var errors = process.StandardError.ReadToEndAsync();
+      string line;
+      while ((line = process.StandardOutput.ReadLine()) != null) {
+        facts.Lines++;
+        var m = ClassLine.Match(line);
+        if (m.Success) {
+          cls = m.Groups[1].Value; method = ""; sawDecisionInBlockFor = false;
+          if (cls == MainClass) facts.SawMainActivity = true;
+          if (cls == WriteGate) facts.WriteGateFound = true;
+          continue;
+        }
+        m = NameLine.Match(line);
+        if (m.Success) {
+          method = m.Groups[1].Value; sawDecisionInBlockFor = false;
+          if (cls == WriteGate && method == "blockFor") facts.BlockForFound = true;
+          continue;
+        }
+        var insn = InsnLine.Match(line);
+        if (!insn.Success) continue;
+        string op = insn.Groups[1].Value, rest = insn.Groups[2].Value;
+        string here = cls + "." + method;
+        if (op.StartsWith("invoke") && rest.Contains(Decision)) {
+          facts.DecisionCallers.Add(here);
+          if (cls == WriteGate && method == "blockFor") { facts.BlockForCallsDecision = true; sawDecisionInBlockFor = true; }
+        } else if (op.StartsWith("invoke") && (rest.Contains(Port) || rest.Contains(Direct))) {
+          facts.Users.Add(here);
+        } else if (op == "new-instance" && rest.Contains(WriteGate)) {
+          facts.Instantiators.Add(here);
+        } else if (op.StartsWith("sget") && rest.Contains(TestSharesOnly) && cls == WriteGate && method == "blockFor") {
+          // D34: la risposta TEST_SHARES_ONLY dopo la decisione per share.
+          if (sawDecisionInBlockFor) facts.BlockForReturnsTestSharesOnly = true;
+        }
+      }
+      process.WaitForExit();
+      if (process.ExitCode != 0) throw new InvalidOperationException("dexdump ha fallito: " + errors.Result);
+    }
+  }
+}
+'@
+  $script:dexFacesGateReaderLoaded = $true
+}
+
+# Estrae i classes*.dex dell'APK in una cartella temporanea e li legge uno a uno con il lettore del cancello D34.
+function Get-D34GateFacts([string]$dexdump, [string]$apk) {
+  Initialize-DexFacesGateReader
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("mcg-dex34-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $temp | Out-Null
+  $facts = New-Object DexFacesGateFacts
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk)
+  try {
+    $dexes = @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })
+    if ($dexes.Count -eq 0) { throw "nessun classes*.dex nell'APK" }
+    foreach ($entry in $dexes) {
+      $target = Join-Path $temp $entry.FullName
+      [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+      [DexFacesGateReader]::Scan($dexdump, $target, $facts)
+    }
+  } finally {
+    $zip.Dispose()
+    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  return $facts
+}
+
 # Fase 8 (P0, D34; risposta Q5 (a) del 27/10): "dati dei volti sul NAS solo sulle share di prova" e' una protezione che deve esserci NELLA
 # RELEASE (come D12 e D30), accesa e non spegnibile (FeatureFlagsTest) fino alla fine della Fase 8. Qui si controlla che R8 non l'abbia
 # tolta: il campo e la decisione per share di `FeatureFlags`, tenuti da core-common/consumer-rules.pro anche prima che P13 leghi il
-# cancello dei volti (`FacesWriteGate`), devono stare nel dex dell'APK di release e in mapping.txt. Il cancello che li usa lo aggiunge P13
-# a questo passo. Senza i file il passo FALLISCE (non salta).
+# cancello dei volti (`FacesWriteGate`), devono stare nel dex dell'APK di release e in mapping.txt. E (P13) il CANCELLO che li usa, nel bytecode (`AppFacesWriteGate`,
+# vedi sotto). Senza i file il passo FALLISCE (non salta).
 $d34Members = @("getFacesSyncTestSharesOnly", "facesSyncMayUse")
 Step "D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
@@ -1144,6 +1256,34 @@ Step "D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse 
   }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
   Write-Host "        D34 presente nella release (dex e mapping.txt)" -ForegroundColor DarkGray
+
+  # P13: il campo e la decisione non bastano (la regola di consumer-rules.pro li tiene anche se nessuno li chiama), serve il CANCELLO che li usa.
+  # Nel bytecode della release: `AppFacesWriteGate.blockFor` chiama `FeatureFlags.facesSyncMayUse` e poi risponde `FacesWriteBlock.TEST_SHARES_ONLY`;
+  # lo istanzia il montaggio delle persone di :app (`faces/` o `di/`); lo chiamano la replica, il pubblicatore e le prenotazioni (`core/faces/sync/`)
+  # o la cancellazione sul NAS (la funzione `asEraseGate` di :app). La regola di app\proguard-rules.pro tiene il metodo (niente fusioni ne' inline).
+  $dexdump = Get-DexDump
+  if (-not $dexdump) { return "dexdump.exe non trovato accanto ad aapt2 (build-tools): non posso provare il cancello D34 nel dex di release" }
+  $gate = Get-D34GateFacts $dexdump $apk.FullName
+  if ($gate.Lines -lt 1000 -or -not $gate.SawMainActivity) { return "lettura del bytecode non affidabile ($($gate.Lines) righe, MainActivity vista: $($gate.SawMainActivity))" }
+  if (-not $gate.WriteGateFound) { $problems += "AppFacesWriteGate non e' nel dex di release: il cancello delle scritture dei volti e' stato tolto o fuso" }
+  elseif (-not $gate.BlockForFound) { $problems += "AppFacesWriteGate.blockFor non e' nel dex di release" }
+  elseif (-not $gate.BlockForCallsDecision) { $problems += "AppFacesWriteGate.blockFor non chiama FeatureFlags.facesSyncMayUse: la recinzione D34 non governa le scritture dei volti" }
+  elseif (-not $gate.BlockForReturnsTestSharesOnly) { $problems += "AppFacesWriteGate.blockFor non risponde FacesWriteBlock.TEST_SHARES_ONLY dopo la decisione D34" }
+  Initialize-DexAlbumGateReader
+  $origins = [DexAlbumGateReader]::ResidualMethods($mapping, [string[]]@(
+      "dev.pampa.mycloudgallery.faces.*", "dev.pampa.mycloudgallery.di.*", "dev.pampa.mycloudgallery.core.faces.sync.*"))
+  $wiring = @($gate.Instantiators | Where-Object {
+      $_ -like "Ldev/pampa/mycloudgallery/faces/*" -or $_ -like "Ldev/pampa/mycloudgallery/di/*" -or
+      $origins["dev.pampa.mycloudgallery.faces.*"].Contains($_) -or $origins["dev.pampa.mycloudgallery.di.*"].Contains($_) })
+  if ($gate.Instantiators.Count -eq 0) { $problems += "nessun codice istanzia AppFacesWriteGate: il cancello delle scritture dei volti non e' collegato" }
+  elseif ($wiring.Count -eq 0) {
+    $problems += ("AppFacesWriteGate e' istanziato solo da " + (($gate.Instantiators | Select-Object -Unique) -join ", ") + ", non dal montaggio delle persone")
+  }
+  $callers = @($gate.Users | Where-Object { $_ -like "Ldev/pampa/mycloudgallery/core/faces/sync/*" -or $origins["dev.pampa.mycloudgallery.core.faces.sync.*"].Contains($_) })
+  if ($callers.Count -eq 0) { $problems += "replica, pubblicatore e prenotazioni dei volti non chiedono il cancello delle scritture (nessuna chiamata da core/faces/sync/)" }
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+  Write-Host ("        cancello D34 provato nel bytecode: AppFacesWriteGate.blockFor -> facesSyncMayUse -> TEST_SHARES_ONLY, istanziato da {0}; chiamato da {1} metodi di core/faces/sync; decisione chiamata da {2} metodi ({3} righe di dexdump)" -f
+    (($gate.Instantiators | Select-Object -Unique) -join ", "), @($callers | Select-Object -Unique).Count, @($gate.DecisionCallers | Select-Object -Unique).Count, $gate.Lines) -ForegroundColor DarkGray
 }
 
 # --- Fase 6 (P0): i motori on-device nell'APK di release (docs/fase6-progetto.md D3, D33, D38, D41, L47, L49) -------------------------

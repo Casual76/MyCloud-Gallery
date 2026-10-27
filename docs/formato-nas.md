@@ -888,6 +888,9 @@ intero a un'app vecchia, un campo nuovo no (un'app della Fase 6 lo legge, lo con
 - `album`: `kind` (`manual`/`smart`), `sort`, `smart:period`, `smart:place`, `smart:text`, `smart:example:<media>`, `smart:sources`,
   `smart:types`, `exclude:<media>`, `accept:<media>`, `frozen`, `shared` (id dell'album condiviso nato da questo), `copy_of` (id
   dell'album condiviso di cui e' la copia personale, Q5);
+  **Fase 8 (P10, D27):** `smart:people` (la regola "Persone" di un album smart: `any:<id>,<id>` per "una qualunque" o `all:<id>,...` per
+  "tutte", gli id delle persone in base32 di 26 caratteri, al piu' 32 e senza ripetizioni, sotto i 1.024 caratteri della voce; un campo
+  che non si legge vale "regola assente" e non rovina le altre; il segmento resta leggibile da un'app della Fase 7, che ignora il campo);
 - `setting`: `collections_order`, `collections_hidden:<sezione>`, `albums_sort`, `trip_dismissed:<impronta>`, `shared_album_left:<id>`,
   `full_hash_nightly`;
 - `media_flag`: `shared_origin` (la cartella d'origine di un mio media spostato in un album condiviso: sta qui, nell'area privata, e

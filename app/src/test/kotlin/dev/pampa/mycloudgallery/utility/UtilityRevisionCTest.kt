@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PhoneOpen
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
 import dev.pampa.mycloudgallery.core.library.duplicates.AlbumMembership
 import dev.pampa.mycloudgallery.core.library.duplicates.PhoneTrashRef
+import dev.pampa.mycloudgallery.core.library.duplicates.ShotVectorSource
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogHiddenMask
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogVisibleMedia
 import dev.pampa.mycloudgallery.core.model.FileStamp
@@ -111,6 +112,7 @@ class UtilityRevisionCTest {
       visible = CatalogVisibleMedia(world.db, MutableStateFlow(world.snapshot)),
       hidden = CatalogHiddenMask(world.db),
       albums = AlbumMembership { emptySet() },
+      vectors = ShotVectorSource { emptyMap() },
       signatures = { null },
       fullHashOn = fullHashOn,
     )

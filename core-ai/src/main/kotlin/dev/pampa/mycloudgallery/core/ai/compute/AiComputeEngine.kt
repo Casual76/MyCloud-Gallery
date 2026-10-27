@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiScope
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiStop
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
+import dev.pampa.mycloudgallery.core.ai.contract.BufferKeepers
 import dev.pampa.mycloudgallery.core.ai.contract.ImageEmbedder
 import dev.pampa.mycloudgallery.core.ai.contract.TextReader
 import dev.pampa.mycloudgallery.core.index.ai.AiDoneClasses
@@ -55,6 +56,11 @@ data class AiComputeParts(
   val freeSpace: AiFreeSpace = AiFreeSpace.UNLIMITED,
   /** Il modello del calcolo (440M) c'e' ed e' verificato (`ModelFiles`, P3). */
   val modelReady: suspend () -> Boolean = { true },
+  /**
+   * Fase 8 (D17; firma di P0, la chiamata in `ComputeSession.pruneFinished` e' di P4): chi tiene ancora un'anteprima del buffer (il
+   * calcolo dei volti). Di serie nessuno: il buffer si svuota come nella Fase 6.
+   */
+  val keepers: BufferKeepers = BufferKeepers.NONE,
 )
 
 /**

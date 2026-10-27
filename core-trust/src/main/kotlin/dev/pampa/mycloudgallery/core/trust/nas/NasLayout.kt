@@ -1,9 +1,11 @@
 package dev.pampa.mycloudgallery.core.trust.nas
 
+import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.trust.TrustFormat
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.codec.Base32
 import dev.pampa.mycloudgallery.core.trust.crypto.Hashes
+import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import java.nio.ByteBuffer
 
 /**
@@ -106,6 +108,75 @@ object NasLayout {
 
   /** Un segmento d'album: `albums/<album>/<dispositivo>/seg/<impronta>` (classe `album`, 17). */
   fun albumSegment(albumId: String, deviceId: String, hash: String): SharePath = albumContributionDir(albumId, deviceId).child("seg").child(hash)
+
+  // --- Dati dei volti (Fase 8, D11, D12, D16, A1, A5) ------------------------------------------------------------------------------
+  // SOLO nell'area privata dell'account che ha attivato Persone, mai nell'area comune (chi chiama lo controlla: L23). `<G>` e' la
+  // generazione in base32 (26 caratteri, `FaceGeneration`). Ogni percorso e' costruito qui da valori gia' validati: un percorso dei
+  // volti non si legge mai da un dato (D31, formato §9 punto 6-bis). Il codec e la pubblicazione sono di P3, la cancellazione di P8.
+
+  /** `faces/`: una cartella per generazione. */
+  val FACES_DIR: SharePath = ROOT.child("faces")
+
+  /** `faces/<G>/`: tutto cio' che appartiene a una generazione (cartelle dei dispositivi e prenotazioni); "Disattiva e cancella" la toglie intera. */
+  fun facesGenerationDir(generation: FaceGeneration): SharePath = FACES_DIR.child(generation.base32)
+
+  /** `faces/<G>/<dispositivo>/`: l'unica cartella in cui quel dispositivo scrive per la generazione [generation]. */
+  fun facesDeviceDir(generation: FaceGeneration, deviceId: String): SharePath {
+    require(TrustIds.isValid(deviceId)) { "Id di dispositivo non valido." }
+    return facesGenerationDir(generation).child(deviceId)
+  }
+
+  fun facesHeadDir(generation: FaceGeneration, deviceId: String): SharePath = facesDeviceDir(generation, deviceId).child("head")
+
+  /** Una testa dei volti: `faces/<G>/<dispositivo>/head/<versione>` (tipo 9, versione 4 del formato). */
+  fun facesHead(generation: FaceGeneration, deviceId: String, version: Long): SharePath =
+    facesHeadDir(generation, deviceId).child(versionName(version))
+
+  fun facesSegmentDir(generation: FaceGeneration, deviceId: String): SharePath = facesDeviceDir(generation, deviceId).child("seg")
+
+  /** Un segmento dei volti: `faces/<G>/<dispositivo>/seg/<impronta>` (classi `faces`, `cluster`, `people`). */
+  fun facesSegment(generation: FaceGeneration, deviceId: String, hash: String): SharePath {
+    require(Hashes.isHashName(hash)) { "Impronta non valida." }
+    return facesSegmentDir(generation, deviceId).child(hash)
+  }
+
+  /**
+   * `faces/<G>/leases/`: la radice delle prenotazioni dei volti (D16, A5), **sotto la generazione**: "Disattiva e cancella" toglie anche
+   * loro. Stessa struttura di `leases/` (gruppi di 256 generazioni di prenotazione); `LeaseManager` prende la radice da P3.
+   */
+  fun facesLeaseRoot(generation: FaceGeneration): SharePath = facesGenerationDir(generation).child(FACES_LEASES)
+
+  fun facesLeaseDir(generation: FaceGeneration, resource: String): SharePath = facesLeaseRoot(generation).child(resourceName(resource))
+
+  fun facesLeaseShardDir(generation: FaceGeneration, resource: String, shard: Long): SharePath =
+    facesLeaseDir(generation, resource).child(versionName(shard))
+
+  /** Una prenotazione dei volti: `faces/<G>/leases/<impronta della risorsa>/<gruppo>/<numero>` (tipo 4). */
+  fun facesLeaseFile(generation: FaceGeneration, resource: String, number: Long): SharePath =
+    facesLeaseShardDir(generation, resource, leaseShardOf(number)).child(versionName(number))
+
+  /** Il nome della cartella delle prenotazioni sotto `faces/<G>/` (mai un id di dispositivo: un id ha 26 caratteri base32). */
+  const val FACES_LEASES: String = "leases"
+
+  /** Le due aree di un'unita' dei volti (D16): mai il nome della share. */
+  const val FACES_AREA_PRIVATE: String = "priv"
+  const val FACES_AREA_COMMON: String = "comm"
+
+  /**
+   * La risorsa di un'unita' di calcolo dei volti (D16, A5): `faces/<G>/work/<priv|comm>/<aaaa-mm>/<parte>`, 200 media per chiave di
+   * contenuto. **Mai nomi di share, cartelle o file**: la risorsa sta in chiaro nel record firmato.
+   */
+  fun facesWorkResource(generation: FaceGeneration, area: String, month: String, part: Int): String {
+    require(area == FACES_AREA_PRIVATE || area == FACES_AREA_COMMON) { "Area non valida." }
+    require(FACES_MONTH.matches(month)) { "Mese non valido: aaaa-mm." }
+    require(part >= 0) { "Parte negativa." }
+    return "faces/${generation.base32}/work/$area/$month/$part"
+  }
+
+  /** La risorsa del custode del raggruppamento (D21): `faces/<G>/cluster`. */
+  fun facesClusterResource(generation: FaceGeneration): String = "faces/${generation.base32}/cluster"
+
+  private val FACES_MONTH = Regex("^(0000-00|[0-9]{4}-(0[1-9]|1[0-2]))$")
 
   // --- Kit di recupero (area privata dell'admin) ------------------------------------------------------
   /**

@@ -8,6 +8,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.family.contract.SyncReason
 import dev.pampa.mycloudgallery.core.family.contract.TrustSyncScheduler
@@ -25,22 +26,22 @@ import kotlin.time.Duration.Companion.minutes
 class InviteWindowStore(private val file: File) {
 
   fun until(): Long? = try {
-    if (file.exists()) file.readText(Charsets.US_ASCII).trim().toLongOrNull() else null
+    StateFiles.readText(file, Charsets.US_ASCII)?.trim()?.toLongOrNull()
   } catch (e: IOException) {
     null
   }
 
   fun open(untilDevice: Long) {
     try {
-      file.parentFile?.mkdirs()
-      file.writeText(untilDevice.toString(), Charsets.US_ASCII)
+      StateFiles.writeText(file, untilDevice.toString(), Charsets.US_ASCII)
     } catch (e: IOException) {
       GalleryLog.w(TAG) { "finestra d'invito non salvata" }
     }
   }
 
+  /** Chiude la finestra. Se il file non si toglie (il log di `StateFiles` lo dice) la finestra resta aperta fino alla sua scadenza naturale. */
   fun clear() {
-    file.delete()
+    StateFiles.delete(file)
   }
 
   fun isOpen(nowDevice: Long): Boolean = until()?.let { nowDevice < it } == true

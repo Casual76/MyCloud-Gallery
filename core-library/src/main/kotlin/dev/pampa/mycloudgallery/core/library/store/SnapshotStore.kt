@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.library.store
 
 import android.content.Context
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
@@ -11,15 +12,11 @@ import java.io.BufferedInputStream
 import java.io.EOFException
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.file.AtomicMoveNotSupportedException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.zip.CRC32
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +33,7 @@ import kotlinx.coroutines.withContext
  * dall'app della Fase 3), troncato o corrotto si scarta ([read] da' null) e l'indice si ricostruisce dal catalogo: mai
  * un'eccezione verso la Libreria.
  *
- * **Scrittura atomica**: si scrive `timeline.idx.tmp`, si forza su disco, poi si rinomina sopra il vecchio. Un crash a
+ * **Scrittura atomica** (`StateFiles`): si scrive `timeline.idx.tmp`, si forza su disco, poi si rinomina sopra il vecchio. Un crash a
  * meta' lascia il file precedente intero. L'accorpamento (al piu' una scrittura ogni 5 s) e' di [SnapshotWriter].
  *
  * **Nascosti (E-H1)**: il file contiene solo cio' che l'indice contiene, e l'indice non contiene mai un nascosto.
@@ -79,35 +76,23 @@ class SnapshotStore(
     lock.withLock {
       val s = snapshot as? ColumnarTimelineSnapshot ?: columnarCopy(snapshot)
       try {
-        file.parentFile?.mkdirs()
-        FileOutputStream(tmp).use { out ->
-          encode(s, provisional, out)
-          out.flush()
-          out.fd.sync()
-        }
-        move(tmp, file)
+        StateFiles.write(file) { out -> encode(s, provisional, out) }
         true
       } catch (e: IOException) {
         GalleryLog.w(TAG, e) { "Istantanea della timeline non scritta." }
-        tmp.delete()
         false
       }
     }
   }
 
-  /** Cancella l'istantanea (E-H1: quando non si puo' riscriverla senza un elemento appena nascosto). */
+  /**
+   * Cancella l'istantanea (E-H1: quando non si puo' riscriverla senza un elemento appena nascosto). **Vero solo se il file non c'e' piu'**: un
+   * elemento nascosto che resta in un'istantanea non cancellata non deve passare per tolto (si riprova, e il log di `StateFiles` dice se no).
+   */
   suspend fun delete(): Boolean = withContext(io) {
     lock.withLock {
-      tmp.delete()
-      !file.exists() || file.delete()
-    }
-  }
-
-  private fun move(from: File, to: File) {
-    try {
-      Files.move(from.toPath(), to.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-    } catch (e: AtomicMoveNotSupportedException) {
-      Files.move(from.toPath(), to.toPath(), StandardCopyOption.REPLACE_EXISTING)
+      val temporaryGone = StateFiles.delete(tmp)
+      StateFiles.delete(file) && temporaryGone
     }
   }
 

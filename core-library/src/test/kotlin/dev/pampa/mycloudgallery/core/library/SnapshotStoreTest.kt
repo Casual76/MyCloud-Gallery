@@ -112,6 +112,17 @@ class SnapshotStoreTest {
   }
 
   @Test
+  fun deleteDiceFalsoSeIlFileNonSiTogliePerDavvero() = runTest {
+    val store = SnapshotStore(dir, io = StandardTestDispatcher(testScheduler))
+    // Un nome occupato da una cartella non vuota: nessuna attesa lo risolve. Un nascosto che resta in un file non tolto non passa per tolto.
+    store.file.mkdirs()
+    File(store.file, "dentro").writeText("1")
+
+    assertThat(store.delete()).isFalse()
+    assertThat(store.file.exists()).isTrue()
+  }
+
+  @Test
   fun unIndiceQualunqueSiCopiaPrimaDiScrivere() = runTest {
     val store = SnapshotStore(dir, io = StandardTestDispatcher(testScheduler))
     val library = SyntheticLibrary(seed = 9, count = 200)

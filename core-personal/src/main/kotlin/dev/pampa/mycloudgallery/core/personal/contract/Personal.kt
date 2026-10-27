@@ -18,8 +18,10 @@ import java.security.MessageDigest
 // stato di un account e' l'insieme delle voci con, per ogni chiave, quella piu' recente.
 
 /**
- * Che cosa descrive una voce. I codici non cambiano. [PERSON] e' riservato per la Fase 8 (nomi delle persone, E-F5): oggi una voce di
- * quel tipo si rifiuta ([PersonalVerdict.RESERVED_KIND]).
+ * Che cosa descrive una voce. I codici non cambiano. [PERSON] e' riservato (era pensato per i nomi delle persone della Fase 8, E-F5): una
+ * voce di quel tipo si rifiuta in lettura ([PersonalVerdict.RESERVED_KIND]) e lo store non la accetta ne' da qui ne' da fuori, quindi non
+ * si pubblica mai (`Phase8FacesContractTest`). Fase 8, D13: i nomi e le correzioni stanno nella classe `people` sotto `faces/<G>/`
+ * dell'area privata, cosi' "Disattiva e cancella" li toglie con la cartella della generazione, anche dalle teste dei dispositivi spenti.
  */
 enum class PersonalKind(override val code: String, val reserved: Boolean = false) : StableCode {
   /** Un flag di un media: preferito, nascosto. Soggetto = id del media, campo = [PersonalFields.FAVORITE] o [PersonalFields.HIDDEN]. */
@@ -172,6 +174,14 @@ object PersonalFields {
 
   /** `SETTING`: l'hash completo dei video del NAS "per tutti, di notte" (D27, Q10 della Fase 4), un [PersonalValue.Flag]; assente = spento. */
   const val SETTING_FULL_HASH_NIGHTLY: String = "full_hash_nightly"
+
+  /**
+   * Fase 8 (D3, formato §5.5-bis A4): `SETTING`, Persone **per l'account**, un [PersonalValue.Text] `1|on|<G>|<v>` o `1|off|<G>` (codec:
+   * [FacesSettingCodec]). Un campo nuovo dentro `SETTING`, nessun `PersonalKind` nuovo: un'app senza la Fase 8 la conserva senza capirla
+   * (E-F11). L'esclusione di un dispositivo ("Non su questo dispositivo", D4) e' **locale**, mai una voce. I nomi delle persone **non**
+   * sono dati personali (D13): `PERSON` resta riservato e non si pubblica mai.
+   */
+  const val SETTING_FACES: String = "faces"
 
   /** Una sezione delle Raccolte nascosta (valore [PersonalValue.Flag]): `collections_hidden:<codice della sezione>`. */
   fun collectionsHidden(section: String): String = "$SETTING_COLLECTIONS_HIDDEN:$section"

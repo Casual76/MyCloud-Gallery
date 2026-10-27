@@ -10,6 +10,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.ContentCut
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.runtime.Composable
@@ -71,6 +72,9 @@ private fun glyphOf(role: ModelRole?): ImageVector = when (role) {
   ModelRole.QUERY_TEXT -> Icons.Rounded.Search
   ModelRole.INDEX_MULTIMODAL -> Icons.Rounded.AutoAwesome
   ModelRole.CUTOUT -> Icons.Rounded.ContentCut
+  // Fase 8 (P0): i modelli dei volti stanno nell'APK e non compaiono in questa pagina (si gestiscono da Impostazioni -> Persone, P7);
+  // i rami ci sono perche' il `when` resti completo.
+  ModelRole.FACE_DETECT, ModelRole.FACE_EMBED -> Icons.Rounded.Face
   null -> Icons.Rounded.Warning
 }
 
@@ -80,6 +84,7 @@ private fun nameOf(role: ModelRole?): String = stringResource(
     ModelRole.QUERY_TEXT -> R.string.models_model_query
     ModelRole.INDEX_MULTIMODAL, null -> R.string.models_model_index
     ModelRole.CUTOUT -> R.string.models_model_cutout
+    ModelRole.FACE_DETECT, ModelRole.FACE_EMBED -> R.string.models_model_faces
   },
 )
 

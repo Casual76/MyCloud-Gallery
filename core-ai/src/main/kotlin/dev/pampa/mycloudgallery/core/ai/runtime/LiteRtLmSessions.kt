@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiBackend
 import dev.pampa.mycloudgallery.core.ai.contract.AiEngineError
 import dev.pampa.mycloudgallery.core.ai.contract.AiEngineException
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.models.contract.FileStat
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
@@ -263,7 +264,8 @@ internal object ProgramCache {
 
   /** L'inizializzazione e' riuscita: la cache e' completa. */
   fun markComplete(cache: File) {
-    runCatching { File(cache, COMPLETE).createNewFile() }
+    // Senza il segno la cartella si toglie alla prossima apertura e i programmi si ricompilano: lo dice il log di `StateFiles`, niente di piu'.
+    runCatching { StateFiles.mark(File(cache, COMPLETE)) }
   }
 
   /** L'inizializzazione e' fallita: la cache si toglie (se era rovinata faceva fallire il motore, se no si rifa'). */

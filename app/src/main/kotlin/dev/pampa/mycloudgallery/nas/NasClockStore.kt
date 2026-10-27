@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.nas
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.nas.session.ClockJumpGuard
 import java.io.File
@@ -33,9 +34,8 @@ class FileClockJumpStore(private val file: File) : ClockJumpGuard.Store {
 
   override fun load(): ClockJumpGuard.Saved? {
     endedLoaded = true
-    if (!file.isFile) return null
     return try {
-      val values = file.readLines().mapNotNull { line ->
+      val values = (StateFiles.readLines(file) ?: return null).mapNotNull { line ->
         val key = line.substringBefore('=', "")
         val value = line.substringAfter('=', "")
         if (key.isEmpty()) null else key to value
@@ -62,9 +62,8 @@ class FileClockJumpStore(private val file: File) : ClockJumpGuard.Store {
     if (last?.jumpMs != null && saved.jumpMs == null) ended = maxOf(ended ?: Long.MIN_VALUE, saved.nasMs)
     last = saved
     try {
-      file.parentFile?.mkdirs()
-      val temp = File(file.parentFile, file.name + ".tmp")
-      temp.writeText(
+      StateFiles.writeText(
+        file,
         listOf(
           "$NAS=${saved.nasMs}",
           "$ELAPSED=${saved.elapsedMs}",
@@ -75,10 +74,6 @@ class FileClockJumpStore(private val file: File) : ClockJumpGuard.Store {
           "$ENDED=${ended ?: ""}",
         ).joinToString("\n"),
       )
-      if (!temp.renameTo(file)) {
-        file.delete()
-        if (!temp.renameTo(file)) throw IOException("rinomina non riuscita")
-      }
     } catch (e: IOException) {
       GalleryLog.w(TAG) { "ora del NAS non salvata: ${e.javaClass.simpleName}" }
     }

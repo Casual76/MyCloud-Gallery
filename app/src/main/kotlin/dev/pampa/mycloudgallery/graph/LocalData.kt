@@ -12,6 +12,8 @@ import dev.pampa.mycloudgallery.ai.TextReadingMemory
 import dev.pampa.mycloudgallery.backup.BackupRunMemory
 import dev.pampa.mycloudgallery.search.SearchGraph
 import dev.pampa.mycloudgallery.work.AiStages
+import dev.pampa.mycloudgallery.core.common.files.Patience
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.family.contract.LocalDataEraser
@@ -33,11 +35,11 @@ import kotlinx.coroutines.withContext
  * Il "battito" del lavoro in background (§2.7, E-P19): l'ora del dispositivo dell'ultimo giro di `TrustSyncWorker`. La
  * Diagnostica ne ricava "ore dall'ultimo battito" e l'avviso "il profilo puo' restare fermo". Un file con un numero.
  */
-class HeartbeatStore(private val file: File) : HeartbeatSource {
+class HeartbeatStore(private val file: File, private val patience: Patience = Patience.STANDARD) : HeartbeatSource {
 
   override suspend fun lastBeatAt(): Long? = withContext(Dispatchers.IO) {
     try {
-      if (file.exists()) file.readText(Charsets.US_ASCII).trim().toLongOrNull()?.takeIf { it > 0 } else null
+      StateFiles.readText(file, Charsets.US_ASCII, patience = patience)?.trim()?.toLongOrNull()?.takeIf { it > 0 }
     } catch (e: IOException) {
       null
     }
@@ -45,19 +47,16 @@ class HeartbeatStore(private val file: File) : HeartbeatSource {
 
   suspend fun beat(at: Long) = withContext(Dispatchers.IO) {
     try {
-      file.parentFile?.mkdirs()
-      val tmp = File(file.parentFile, file.name + ".tmp")
-      tmp.writeText(at.toString(), Charsets.US_ASCII)
-      if (!tmp.renameTo(file)) {
-        file.delete()
-        tmp.renameTo(file)
-      }
+      StateFiles.writeText(file, at.toString(), Charsets.US_ASCII, patience = patience)
     } catch (e: IOException) {
       GalleryLog.w(TAG) { "battito non salvato" }
     }
   }
 
-  suspend fun clear() = withContext(Dispatchers.IO) { file.delete() }
+  /** Toglie il file del battito. Se non ci riesce lancia `IOException`: un battito vecchio che resta direbbe "ancora vivo" a un profilo azzerato. */
+  suspend fun clear() = withContext(Dispatchers.IO) {
+    if (!StateFiles.delete(file, patience = patience)) throw IOException("battito non tolto")
+  }
 
   private companion object {
     const val TAG = "Heartbeat"

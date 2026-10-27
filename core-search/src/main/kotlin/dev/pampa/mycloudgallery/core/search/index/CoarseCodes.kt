@@ -1,11 +1,12 @@
 package dev.pampa.mycloudgallery.core.search.index
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.io.BufferedInputStream
 import java.io.BufferedOutputStream
-import java.io.FileOutputStream
+import java.io.IOException
 import java.util.zip.CRC32
 import java.util.zip.CheckedInputStream
 import java.util.zip.CheckedOutputStream
@@ -57,27 +58,31 @@ internal object CoarseFile {
   private const val MAGIC = 0x4D434743 // "MCGC"
   private const val VERSION = 1
 
-  /** Scrive [entries] per la generazione [generation] del file dei vettori (temporaneo e rinomina: mai mezzo file). */
+  /**
+   * Scrive [entries] per la generazione [generation] del file dei vettori (temporaneo e rinomina atomica: mai mezzo file). E' solo una cache:
+   * se non si riesce a scriverla il file di prima (o nessuno) resta e si ricostruisce; l'errore e' nel log di [StateFiles].
+   */
   fun write(file: File, generation: Long, entries: CoarseEntries) {
-    val tmp = File(file.parentFile, file.name + ".tmp")
     val crc = CRC32()
-    DataOutputStream(CheckedOutputStream(BufferedOutputStream(FileOutputStream(tmp), 1 shl 16), crc)).use { out ->
-      out.writeInt(MAGIC)
-      out.writeInt(VERSION)
-      out.writeInt(CoarseCodes.DIMS)
-      out.writeLong(generation)
-      out.writeInt(entries.size)
-      for (i in 0 until entries.size) {
-        out.writeLong(entries.offsets[i])
-        out.writeFloat(entries.scales[i])
-        out.write(entries.codes, i * CoarseCodes.DIMS, CoarseCodes.DIMS)
+    try {
+      StateFiles.write(file) { raw ->
+        DataOutputStream(CheckedOutputStream(BufferedOutputStream(raw, 1 shl 16), crc)).use { out ->
+          out.writeInt(MAGIC)
+          out.writeInt(VERSION)
+          out.writeInt(CoarseCodes.DIMS)
+          out.writeLong(generation)
+          out.writeInt(entries.size)
+          for (i in 0 until entries.size) {
+            out.writeLong(entries.offsets[i])
+            out.writeFloat(entries.scales[i])
+            out.write(entries.codes, i * CoarseCodes.DIMS, CoarseCodes.DIMS)
+          }
+          out.flush()
+          out.writeInt(crc.value.toInt())
+        }
       }
-      out.flush()
-      out.writeInt(crc.value.toInt())
-    }
-    if (!tmp.renameTo(file)) {
-      file.delete()
-      if (!tmp.renameTo(file)) tmp.delete()
+    } catch (_: IOException) {
+      // Una cache: senza il file nuovo si ricostruisce (vale quella di prima solo se e' della stessa generazione).
     }
   }
 

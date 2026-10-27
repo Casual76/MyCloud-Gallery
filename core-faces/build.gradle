@@ -1,0 +1,54 @@
+// Le persone della Fase 8 (docs/fase8-progetto.md §1.1, §1.2 "core-faces", D1-D40): attivazione per account e consenso (switch/, P7),
+// calcolo dei volti (compute/, P4), raggruppamento incrementale con un custode (grouping/, P5), nomi, correzioni e viste (people/, P9),
+// sincronizzazione dei dati dei volti con il NAS (sync/, P3), "Disattiva e cancella" (erase/, P8) e archivio cifrato sopra il database dei
+// volti (store/, P6). Contratti, null-object, fake ed esecutori di riferimento (`InMemoryPeople`, `ReferenceGrouping`,
+// `InMemoryFacesRemote`) di P0.
+//
+// **I volti sono dati biometrici** (L14, C20): restano nell'area privata dell'account e sui suoi dispositivi, mai nell'indice condiviso,
+// nell'area comune, nei log, nella Diagnostica o nell'esportazione (D11, D37). **Nessuna strada nuova verso operazioni distruttive** (D2,
+// D31): non vede core-nasops, core-backup, core-nas, core-nasmedia, core-search, core-albums (implementazioni) ne' la rete
+// (Phase8ArchitectureTest: dipendenze, compilazione e nomi nei sorgenti). Cancella sul NAS, cerca e alimenta gli album attraverso porte sue
+// (`FacesEraseOps`, `PeopleIndex`), legate da :app. Di core-trust usa `NasFileSystem` SOLO in sync/ (i file `faces/<G>/<io>/`, con la sola
+// `publishExclusive`); il database dei volti e la chiave del Keystore SOLO da store/ (ed erase/ per distruggere la chiave per prima).
+//
+// D2: core-trust, core-index, core-personal, core-ai, core-models, core-database e core-security sono `implementation`: feature-people
+// (cieca a core-trust e core-ai, §1.1) vede di questo modulo solo i contratti di stato e di comando, la Libreria (`api`) e le fondamenta.
+// Di core-ai e core-models solo i contratti (e, nei test e in testing/, i motori finti).
+//
+// NoNetworkSourcesTest: nessuna rete. NoWallClockSourcesTest (D36): ora del NAS per voci, teste e prenotazioni, orologio monotono per
+// durate e freschezza.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.faces'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  // api: le viste delle persone (`OrderedTimelineView`) e la visibilita' (`VisibleMedia`, `HiddenMask`) compaiono nei contratti che
+  // feature-people usa.
+  api project(':core-library')
+
+  // implementation: nessun loro tipo nei contratti di stato che vede feature-people. core-trust: percorsi e codec dei volti (P3),
+  // `NasFileSystem` solo in sync/. core-index: cancello, esiti remoti. core-personal: la voce `faces` e il gancio (P7, P8). core-ai e
+  // core-models: contratti dei motori e dei modelli (P2, P4). core-database: il database dei volti (P6, solo store/). core-security: la
+  // chiave dei volti (P6, P8).
+  implementation project(':core-trust')
+  implementation project(':core-index')
+  implementation project(':core-personal')
+  implementation project(':core-ai')
+  implementation project(':core-models')
+  implementation project(':core-database')
+  implementation project(':core-security')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

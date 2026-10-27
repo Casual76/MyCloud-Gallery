@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.nasmedia.scan
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.model.LocationKey
 import dev.pampa.mycloudgallery.core.model.NasStamp
@@ -109,21 +110,18 @@ class FileNotMediaMemory(
       val map = entries ?: return
       try {
         if (map.isEmpty()) {
-          file.delete()
+          // Un file che resta direbbe "ricordo ancora" cio' che si e' dimenticato: non e' un fatto, si riprova al prossimo salvataggio.
+          if (!StateFiles.delete(file)) throw IOException("ricordo dei non media non tolto")
         } else {
-          file.parentFile?.mkdirs()
-          val temp = File(file.parentFile, file.name + ".tmp")
-          temp.bufferedWriter().use { out ->
-            out.write(HEADER_PREFIX + generation)
-            out.newLine()
-            for ((digest, stamp) in map) {
-              out.write("$digest ${stamp.size} ${stamp.modifiedAtMillis}")
+          StateFiles.write(file) { raw ->
+            raw.bufferedWriter().use { out ->
+              out.write(HEADER_PREFIX + generation)
               out.newLine()
+              for ((digest, stamp) in map) {
+                out.write("$digest ${stamp.size} ${stamp.modifiedAtMillis}")
+                out.newLine()
+              }
             }
-          }
-          if (!temp.renameTo(file)) {
-            file.delete()
-            if (!temp.renameTo(file)) throw IOException("rinomina non riuscita")
           }
         }
         dirty = false
@@ -139,8 +137,8 @@ class FileNotMediaMemory(
     entries?.let { return it }
     val map = LinkedHashMap<String, Stamp>()
     try {
-      if (file.isFile) {
-        val lines = file.readLines()
+      val lines = StateFiles.readLines(file)
+      if (lines != null) {
         if (lines.firstOrNull() == HEADER_PREFIX + generation) {
           for (line in lines.drop(1)) parse(line)?.let { (digest, stamp) -> map[digest] = stamp }
           while (map.size > limit) map.remove(map.keys.first())

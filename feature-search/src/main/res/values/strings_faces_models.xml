@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8 (docs/fase8-progetto.md D6-D8, risposta Q1 (a)): i due modelli dei volti viaggiano dentro l'app e si gestiscono da
+       Impostazioni → Persone (P7), non da questa pagina. Il nome serve solo perche' l'elenco dei ruoli resti completo. -->
+  <string name="models_model_faces">Riconoscimento dei volti</string>
+</resources>

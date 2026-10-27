@@ -31,9 +31,9 @@
 >
 > Sigle: `Dn` = decisione di questo documento (§0.1); `F7-Dn`, `F6-Dn`, `F5-Dn`, `F4-Dn` = decisioni delle Fasi 7, 6, 5 e 4; "R6 della
 > revisione B" = voce di revisione; `Fn` = prova sul campo (la Fase 7 arriva a F93, qui **F94–F110**); `Qn` = domanda del §9; `Pn` =
-> pacchetto del §4.4; `Ln` = limite di `docs/sicurezza.md` (in `main` si arriva a L87 con P7 della Fase 7: qui **L88–L97**); `Cn` =
-> contromisura (in `main` fino a C32: qui **C33–C37**). Se P10, P12 o P13 della Fase 7 prendono altri numeri prima, P0 rinumera e lo
-> scrive in `docs/decisioni.md`. `G` = la **generazione** dei dati dei volti di un account (D3). "[stima]" = numero non misurato.
+> pacchetto del §4.4; `Ln` = limite di `docs/sicurezza.md` (qui **L94–L103**); `Cn` = contromisura (qui **C37–C41**). Il progetto
+> proponeva L88–L97 e C33–C37, ma P10 della Fase 7 ha preso L90–L92 e C33–C35 e in `main` il massimo e' L93 e C36: P0 della Fase 8 ha
+> rinumerato tutto il documento in un passo solo (L88–L97 → L94–L103, C33–C37 → C37–C41) e lo scrive in `docs/decisioni.md`. `G` = la **generazione** dei dati dei volti di un account (D3). "[stima]" = numero non misurato.
 >
 > Contesto:
 > - **Le Fasi 5, 6 e 7 sono chiuse nel codice.** Della Fase 7 sono ancora in corso **P10** (schermate degli album), **P12**
@@ -161,7 +161,7 @@ fedeli con test di parità (§5.2).
    resta riservato e rifiutato nelle teste `personal` (D13).
 3. **C20 promette "dati dei volti cifrati a riposo con chiave nel Keystore"**: una chiave del Keystore è di un dispositivo, mentre i dati
    sul NAS servono a tutti i dispositivi dell'account. La Fase 8 la realizza sul dispositivo (con la cancellazione crittografica) e
-   dichiara perché non sul NAS (D14, L88).
+   dichiara perché non sul NAS (D14, L94).
 4. **Il testo della sezione Persone è sbagliato**: "Raggruppa le foto per persona, solo su questo telefono"
    (`CollectionsSectionSamples.kt:82`): i dati viaggiano fra i dispositivi dell'account (P9 lo corregge).
 5. **La riga "Persone" del pannello info** è promessa (`InfoBuilder.kt:49-50`, piano 3.x) e non c'è.
@@ -199,7 +199,7 @@ fedeli con test di parità (§5.2).
 | D11 | **Dati dei volti solo nell'area privata dell'account**: `<area privata>/.mycloudgallery/faces/<G>/<dispositivo>/head/<versione>` e `.../seg/<impronta>`; **mai** nell'indice condiviso, **mai** nell'area comune, anche per le foto dell'area comune (proposta 13); li leggono solo i dispositivi approvati (o dismessi, con le teste congelate) **dello stesso account**. Un account diverso non li legge (SMB) e un indicizzatore non calcola mai sull'area privata di un altro (F6-D14). **Ogni account che attiva rifà il calcolo per sé**, anche per le foto comuni | È la proposta 13 del piano; i volti sono la categoria più delicata (L14) |
 | D12 | **Formato firmato** (§2.4): testa **tipo 9** (`FACES_HEAD`, **versione 4** del formato solo per `faces/`), una serie per dispositivo e generazione; classi **`faces` (18)**: rilevamenti e vettori per chiave di contenuto, corpo binario; **`cluster` (19)**: istantanea del raggruppamento, solo dal custode (D21); **`people` (20)**: nomi e correzioni, voci con l'ultima scrittura che vince, **stato unito ripubblicato da ogni dispositivo** (come F4-D26). Regole di chi legge come le altre teste: firmatario approvato o dismesso **del proprio account** (`nasUser`), posto (generazione, cartella, numero), **generazione corrente**, anti-rollback ed equivocazione, tetti, ora non oltre 2 minuti nel futuro, campo sconosciuto = segmento rifiutato. Pubblicazione: solo `publishExclusive` sotto `faces/<G>/<io>/`, una testa ogni 5 minuti, voci `faces` solo per chiavi di contenuto di media del NAS di questo account ("M3 dei volti") | Le stesse difese dei dati personali e degli album, già provate; ogni dispositivo scrive solo nella sua cartella; un'app vecchia non apre `faces/` e, se aprisse un file, la versione 4 sarebbe "più nuova" (E-I3) |
 | D13 | **Nomi e correzioni nella classe `people`**, non nei dati personali: `PERSON` resta riservato e **rifiutato** nelle teste `personal` (test). Le voci nominano una persona (`PersonId`) o un volto per **posto** (D23) | Così "Disattiva e cancella" toglie anche i nomi con la cartella della generazione, compresi quelli dei dispositivi spenti; nei dati personali resterebbero nelle teste vecchie e in quelle degli altri dispositivi (§0, punto 2) |
-| D14 | **Cifratura.** **Sul dispositivo**: vettori, centroidi e nomi cifrati AES-256-GCM con una chiave dati casuale, avvolta da una chiave del Keystore **per generazione** (`mcg-faces-<G>`, StrongBox se c'è, senza sblocco né biometria come le credenziali: il calcolo gira di notte); la cancellazione distrugge **per prima** la chiave del Keystore, così ogni resto (pagine libere di SQLite, WAL, blocchi della flash) diventa illeggibile. **Sul NAS** i dati restano in chiaro, firmati, protetti dai permessi dell'area privata, come indice e dati personali (L26, L29, L46) | Realizza C20 dove ha senso. Sul NAS una chiave dovrebbe essere comune ai dispositivi dell'account (ricavata dalla password del NAS: cambiarla farebbe ricalcolare tutto) e non proteggerebbe da chi ha la password o i dischi, che hanno anche le foto da cui i vettori si ricalcolano con modelli pubblici (L88) |
+| D14 | **Cifratura.** **Sul dispositivo**: vettori, centroidi e nomi cifrati AES-256-GCM con una chiave dati casuale, avvolta da una chiave del Keystore **per generazione** (`mcg-faces-<G>`, StrongBox se c'è, senza sblocco né biometria come le credenziali: il calcolo gira di notte); la cancellazione distrugge **per prima** la chiave del Keystore, così ogni resto (pagine libere di SQLite, WAL, blocchi della flash) diventa illeggibile. **Sul NAS** i dati restano in chiaro, firmati, protetti dai permessi dell'area privata, come indice e dati personali (L26, L29, L46) | Realizza C20 dove ha senso. Sul NAS una chiave dovrebbe essere comune ai dispositivi dell'account (ricavata dalla password del NAS: cambiarla farebbe ricalcolare tutto) e non proteggerebbe da chi ha la password o i dischi, che hanno anche le foto da cui i vettori si ricalcolano con modelli pubblici (L94) |
 | D15 | **Database a parte** `faces-<G>.db` in `core-database` (`FacesDatabase`, schema proprio **v1** esportato in `schemas/`): volti, persone, esemplari, assegnazioni, voci `people`, segni anti-rollback, outbox, unità fatte. Il database della galleria **resta v6** | Un file si cancella e si verifica ("non c'è"); nessuna migrazione sul campo per una funzione che molti non attivano |
 | D16 | **Chi calcola e come ci si coordina**: gli **indicizzatori dell'account con Persone attiva qui**; lavoro `FacesComputeWorker` con le regole di `AI_COMPUTE` e `StagedRun` (tappe da 8 minuti), dopo il calcolo AI della stessa notte; **unità** `faces/<G>/work/<area>/<mese>/<parte>` (`area` = `priv` o `comm`, mai il nome della share; 200 media per chiave di contenuto) prenotate **nell'area privata**, sotto `faces/<G>/leases/`; "fatto" = una voce `faces` della ricetta corrente di **un** dispositivo dell'account, oppure "non supportato"; "Analizza ora" = `UserInitiated(AI_COMPUTE)` | Le unità della Fase 6 stanno nella share e sono comuni a tutti gli account: un'unità dell'area comune fatta da un altro familiare non direbbe niente dei volti di questo account; sotto la generazione la cancellazione toglie anche le prenotazioni |
 | D17 | **Ingressi** (§2.3): l'**anteprima di analisi** (1024 px) dal buffer, poi dall'indice della share (blob attestati, `AnalysisFetcher`), poi dai byte del telefono (`Preparer`); **seconda passata sull'HQ** (2048 px, quattro tasselli da 1024 con 128 px di sovrapposizione) per foto con un volto sotto 40 px o con almeno 5 volti; il ritaglio per SFace dalla sorgente più nitida già disponibile. Se l'anteprima non c'è da nessuna parte (share vere con F4-D31 e buffer già svuotato), un indicizzatore che è anche **Preparatore** la rifà dall'originale del NAS come una preparazione (solo `analysis`, attività pesante, Wi-Fi di casa) e la tiene nel buffer; altrimenti il media aspetta. **Il buffer non butta un'anteprima che serve ancora ai volti** (porta `BufferKeepers` chiesta da `ComputeSession.pruneFinished`) | "Sulle anteprime, mai sugli originali" (6.2); la regola dei 16 px per l'OCR ha il suo analogo nei ~48 px per un embedding affidabile (ricerca 0.4, §2.1) |
@@ -215,10 +215,10 @@ fedeli con test di parità (§5.2).
 | D27 | **Album smart con persone** (§2.7): regola `smart:people` (`any:` o `all:` seguito dagli id) nei dati personali (F7-D4) e riga `album_rule` `people`; **sicuro** = volto assegnato (automatico sopra `T_join`, o confermato); **suggerito** = volto fra 0,40 e `T_join` per quella persona; si combina in "e" con periodo, luogo, sorgenti e tipi; "Crea album smart" dalla pagina persona; su un dispositivo senza volti la regola non inserisce niente e l'album lo dice; persona dimenticata = avviso; album smart condiviso: regole personali, foto nuove in "Da condividere" (F7-D17) | Piano 7.2 ("le persone dalla Fase 8"); nessun dato dei volti nell'area comune: si condividono solo le foto, con la conferma |
 | D28 | **Nascosti** (§2.9): righe nuove del registro `HiddenSurfaces` con la riga del §2.1 **`PEOPLE`**: elenco delle persone e conteggi, copertine, pagina persona, "Altri volti", riga delle info e "Chi è?", proposte di unione, chip e suggerimenti della ricerca, regola degli album smart, revisione dei volti. I volti dei nascosti si calcolano e non si mostrano mai; una persona con soli media nascosti non compare; candidati da `VisibleMedia`, filtro finale `HiddenMask` | F7-D22 e C27: una superficie nuova senza test fa fallire il registro |
 | D29 | **"Disattiva e cancella"** (protocollo al §2.8): azione **locale confermata** (`FacesEraseConfirmation`, costruita solo dal foglio: test d'architettura); diario `faces-erase` scritto **prima** di tutto; calcolo e pubblicazione spenti subito; **cancellazione locale** con la chiave del Keystore **per prima**, poi database, cache in memoria, modelli estratti, ricerche recenti con i nomi (D26), segni dei lavori; voce `faces = off\|G`; **sul NAS**, appena raggiungibile, l'**intera** `faces/<G>/` (cartelle di **tutti** i dispositivi dell'account e prenotazioni) con un'operazione stretta di `core-nasops`; verifica ripetuta finché ogni dispositivo dell'account non ha confermato (D30). Album smart con persone: "Tieni le foto di adesso come album normali" (congela, preselezionato) o "Togli la regola" | Piano 8.1: "rimuove tutti i dati dei volti dell'utente, da NAS e da tutti i suoi dispositivi"; la chiave per prima chiude anche i resti che un file cancellato lascia sulla flash |
-| D30 | **Dispositivi spenti e ritorni** (E-F6, §2.8): un dispositivo **pubblica nei dati personali una voce `faces` diversa dalla sua generazione solo dopo aver cancellato i dati di quella generazione** (gancio `PrePublishHook` di `NasPersonalSync`, chiamato prima di ogni pubblicazione): la sua testa personale con `off\|G` (o con una generazione più nuova) è la **prova** che ha cancellato. Nessun dato dei volti si pubblica senza uno stato **fresco** (un giro completo dei dati personali in questo processo da meno di 15 minuti, orologio monotono) che dica "attiva, generazione G"; le generazioni non correnti non si leggono mai. La pagina mostra dispositivo per dispositivo chi ha cancellato e chi no (con l'ultimo contatto); i dispositivi revocati o persi non si aspettano (L89) | Un dispositivo spento non può essere raggiunto: lo si rende innocuo al ritorno (prima cancella, poi pubblica) e lo si dice; la conferma viaggia con un meccanismo che c'è già |
-| D31 | **Cancellazioni guidate da dati remoti: un'eccezione dichiarata** (formato §9, nuovo punto 6-bis): **solo dati dei volti** (mai media, mai fuori da `faces/`), solo nell'area privata dell'account, solo per (a) una **generazione** che la voce `faces` firmata dell'account dice non corrente, (b) la cartella di un dispositivo **dell'account** revocato o perso nel registro accettato. Le esegue solo `core-nasops` (`FacesNasEraser`, percorsi derivati dalla regola, mai letti da un dato), mai `core-faces` | Senza, i dati di un dispositivo che non torna resterebbero sul NAS per sempre; il danno peggiore di un dato falso è un ricalcolo dei volti (L93), mai una perdita di foto |
+| D30 | **Dispositivi spenti e ritorni** (E-F6, §2.8): un dispositivo **pubblica nei dati personali una voce `faces` diversa dalla sua generazione solo dopo aver cancellato i dati di quella generazione** (gancio `PrePublishHook` di `NasPersonalSync`, chiamato prima di ogni pubblicazione): la sua testa personale con `off\|G` (o con una generazione più nuova) è la **prova** che ha cancellato. Nessun dato dei volti si pubblica senza uno stato **fresco** (un giro completo dei dati personali in questo processo da meno di 15 minuti, orologio monotono) che dica "attiva, generazione G"; le generazioni non correnti non si leggono mai. La pagina mostra dispositivo per dispositivo chi ha cancellato e chi no (con l'ultimo contatto); i dispositivi revocati o persi non si aspettano (L95) | Un dispositivo spento non può essere raggiunto: lo si rende innocuo al ritorno (prima cancella, poi pubblica) e lo si dice; la conferma viaggia con un meccanismo che c'è già |
+| D31 | **Cancellazioni guidate da dati remoti: un'eccezione dichiarata** (formato §9, nuovo punto 6-bis): **solo dati dei volti** (mai media, mai fuori da `faces/`), solo nell'area privata dell'account, solo per (a) una **generazione** che la voce `faces` firmata dell'account dice non corrente, (b) la cartella di un dispositivo **dell'account** revocato o perso nel registro accettato. Le esegue solo `core-nasops` (`FacesNasEraser`, percorsi derivati dalla regola, mai letti da un dato), mai `core-faces` | Senza, i dati di un dispositivo che non torna resterebbero sul NAS per sempre; il danno peggiore di un dato falso è un ricalcolo dei volti (L99), mai una perdita di foto |
 | D32 | **Minori e terzi**: l'app **non stima l'età** né altro (D19), quindi non sa chi è un bambino; tutti i volti hanno le stesse regole e gli stessi strumenti (Nascondi, Dimentica, Ignora); cosa compare in Persone lo decide **Q2** (raccomandata: solo le persone con un nome; gli altri gruppi in "Altri volti", a un tocco); la pagina di attivazione dice che si raggruppano anche amici e bambini e che i dati restano dell'utente | La famiglia è di soli adulti, ma nelle foto ci sono nipoti e amici; stimare l'età per trattarli a parte sarebbe un'altra inferenza su dati delicati |
-| D33 | **GDPR in pratica**: uso esclusivamente domestico (art. 2 par. 2 lett. c, considerando 18: il regolamento non si applica), ma le misure sono quelle che servirebbero: attivazione esplicita per account con testo versionato (D3), dati solo dell'utente (area privata e suoi dispositivi), **nessuna condivisione** con la famiglia (Q3), cancellazione completa e verificata (D29), minimizzazione (nessun ritaglio salvato, nessun attributo, screenshot e documenti esclusi, D18, D19, D25), nessuna esportazione né telemetria (D37); prima di una pubblicazione dell'app serve una valutazione legale (L14, L92) | Gli embedding usati per raggruppare sono probabilmente dati biometrici (art. 4.14, art. 9); i terzi nelle foto non hanno scelto niente: il minimo è non portare i loro dati fuori dall'area dell'utente |
+| D33 | **GDPR in pratica**: uso esclusivamente domestico (art. 2 par. 2 lett. c, considerando 18: il regolamento non si applica), ma le misure sono quelle che servirebbero: attivazione esplicita per account con testo versionato (D3), dati solo dell'utente (area privata e suoi dispositivi), **nessuna condivisione** con la famiglia (Q3), cancellazione completa e verificata (D29), minimizzazione (nessun ritaglio salvato, nessun attributo, screenshot e documenti esclusi, D18, D19, D25), nessuna esportazione né telemetria (D37); prima di una pubblicazione dell'app serve una valutazione legale (L14, L98) | Gli embedding usati per raggruppare sono probabilmente dati biometrici (art. 4.14, art. 9); i terzi nelle foto non hanno scelto niente: il minimo è non portare i loro dati fuori dall'area dell'utente |
 | D34 | **Recinzione**: `FeatureFlags.facesSyncTestSharesOnly`, vera **anche in release** finché l'utente non dice di sì (Q5): sulle share vere **niente sul NAS** (nessun file sotto `faces/`, nessuna prenotazione), calcolo e raggruppamento **locali** sul dispositivo, nomi e correzioni per dispositivo, "Disattiva e cancella" locale; la pagina lo dice ("finché la sincronizzazione delle persone non è accesa, ogni dispositivo ha le sue"); in debug con gli account di prova vale `ShareFence` (F4-D33) | Come l'indice (F4-D31) e gli album condivisi (F7-D30): la prima scrittura di dati biometrici della famiglia sulle share vere viene dopo le prove e con un sì. Sulle share vere oggi anche i dati personali sono solo locali (F4-D31) |
 | D35 | **Cancelli**: scritture e cancellazioni sul NAS dietro `IndexWriteRules` (congelamento, emergenza, salto dell'ora, fiducia, sola lettura) più D34; con il congelamento la cancellazione sul NAS **aspetta** (quella locale no) e la pagina lo dice | Nessuna scrittura nuova sfugge ai cancelli esistenti (come F7-D38) |
 | D36 | **Ora**: voci `people`, teste e prenotazioni con l'**ora del NAS** (F4-D32: un salto oltre 5 minuti sospende le pubblicazioni); la scelta di attivare o cancellare senza ora del NAS vale subito e prende l'ora alla prima sincronizzazione; durate, freschezza (D30) e attese con l'orologio monotono; nessuna data del telefono | Come le fasi precedenti; l'ultima scelta dell'utente vince anche se fatta fuori casa |
@@ -290,10 +290,10 @@ fedeli con test di parità (§5.2).
 - **E-F33**: riattivazione dopo una cancellazione: generazione nuova, calcolo da capo; nessun dato della generazione vecchia torna,
   nemmeno da un dispositivo rimasto spento (D3, D30).
 - **E-F34**: cestino di rete acceso nell'area privata del NAS: i file cancellati vi restano; se la cartella del cestino è visibile l'app lo
-  dice ("il NAS ne tiene una copia nel suo cestino: svuotalo dal pannello"), altrimenti è un limite dichiarato (L90). Oggi le aree
+  dice ("il NAS ne tiene una copia nel suo cestino: svuotalo dal pannello"), altrimenti è un limite dichiarato (L96). Oggi le aree
   private hanno il cestino spento (`docs/inventario-nas.md` §1).
 - **E-F35**: dispositivo perso con i dati dei volti: l'azzeramento alla riconnessione distrugge per prima la chiave dei volti; se non si
-  ricollega, i dati restano cifrati sul dispositivo, dietro il blocco schermo (L89).
+  ricollega, i dati restano cifrati sul dispositivo, dietro il blocco schermo (L95).
 
 **Ricerca, album smart, nascosti**
 - **E-F36**: query "Marco" con una persona Marco e un luogo "San Marco" (o una persona "Natale"): chip della persona con l'alternativa,
@@ -337,8 +337,8 @@ fedeli con test di parità (§5.2).
 **`docs/sicurezza.md`**: §1 (una riga sui volti per la famiglia: da attivare, restano tuoi, si cancellano davvero); §2 (bene "Volti e
 persone": dove sta adesso); S1 e S11 (scenari: dispositivo perso con i volti, familiare compromesso che cancella o falsa i gruppi, terzi
 nelle foto); **C20 riscritta** (D14: cifratura sul dispositivo con distruzione della chiave; sul NAS no, con il motivo); C21 (nessuna
-esportazione dei dati dei volti, D37); C27 (superfici delle persone); **C33–C37** nuove (§6.1); §4-bis (asset dei modelli, nessun permesso
-né componente); §6 **L88–L97** (§6.2); §7 checklist della Fase 8 riscritta (§6.3); §8 righe per D3, D6–D8, D11–D14, D29–D34.
+esportazione dei dati dei volti, D37); C27 (superfici delle persone); **C37–C41** nuove (§6.1); §4-bis (asset dei modelli, nessun permesso
+né componente); §6 **L94–L103** (§6.2); §7 checklist della Fase 8 riscritta (§6.3); §8 righe per D3, D6–D8, D11–D14, D29–D34.
 
 **`docs/modello-dati.md`**: nuovo §15 "Database dei volti, v1" (lo scrive P6); §9 "volti" chiuso con il rimando; nota allo §5 sugli stati
 di lavoro (`FACES` resta fuori dalle fasi iniziali: lo stato dei volti sta nel database dei volti, non in `work_state`).
@@ -370,7 +370,7 @@ pubblico dominio per le prove (§5.2).
 
 **Piano** (lo riporta l'orchestratore): edge case del §0.2; 8.1 "Una volta attiva…" precisata con la generazione, l'avviso e
 l'esclusione per dispositivo (D3, D4); proposta 13 precisata (nomi e correzioni nella cartella dei volti, D13); glossario "Dati personali"
-(i volti stanno nella cartella dei volti dell'area privata, non nei dati personali); §7 "Limiti" con L88–L97; punto aperto "Modello dei volti
+(i volti stanno nella cartella dei volti dell'area privata, non nei dati personali); §7 "Limiti" con L94–L103; punto aperto "Modello dei volti
 e licenza" chiuso con D6–D9 dopo P1.
 
 ## 1. Moduli
@@ -605,7 +605,7 @@ La Fase 8 decide **cosa** si mostra e **quando**; il filone grafico decide **com
 - "**«Disattiva e cancella»** toglie tutto, dal NAS e da tutti i tuoi dispositivi; un dispositivo spento lo fa appena si riaccende."
 - "Su ogni tuo dispositivo puoi dire «Non su questo dispositivo»."
 - "Modelli usati: YuNet (licenza MIT) e SFace (licenza Apache 2.0), dentro l'app." (link a Impostazioni → Informazioni e licenze, con la
-  nota sui dataset di addestramento, L92)
+  nota sui dataset di addestramento, L98)
 - Con la recinzione: "Per ora le persone restano su questo dispositivo: la sincronizzazione con gli altri tuoi dispositivi arriva dopo le
   prove."
 
@@ -947,7 +947,7 @@ prima di ogni passo; ogni passo idempotente; una morte del processo riprende dal
 | 7. Annuncio | appena il NAS è raggiungibile (e il cancello è aperto): un giro dei dati personali che **pubblica** `off\|G` | gli altri dispositivi lo sanno al loro giro |
 | 8. NAS | `FacesEraseOps.eraseGeneration(area privata, G, USER_CONFIRMED)`: l'**intera** `faces/<G>/` (le cartelle di tutti i dispositivi dell'account e le prenotazioni), dal fondo, file per file, poi le cartelle vuote; poi le altre generazioni non correnti eventualmente presenti (`NOT_CURRENT`) | a lotti (al più 20.000 file per giro), ripresa al giro dopo; congelamento, sola lettura, salto dell'ora = attesa con il motivo (D35) |
 | 9. Verifica | elenco di `faces/`: nessuna cartella `G`; controllo del cestino di rete (E-F34): se nella radice dell'area privata c'è una cartella di cestino che contiene `.mycloudgallery/faces`, l'avviso "Il NAS ne tiene una copia nel suo cestino: svuotalo dal pannello del NAS" | ripetuta a ogni giro finché c'è un dispositivo che non ha confermato: se `faces/<G>/` ricompare (un dispositivo che pubblicava prima di saperlo) si toglie di nuovo |
-| 10. Conferme | per ogni dispositivo approvato o dismesso dell'account: la sua ultima testa personale ha `faces` diversa da `on\|G` (`PersonalHeadsView.latestValueOf`) = **ha cancellato** (D30) | i revocati e i persi non si aspettano (L89); la pagina mostra chi manca e l'ultimo contatto |
+| 10. Conferme | per ogni dispositivo approvato o dismesso dell'account: la sua ultima testa personale ha `faces` diversa da `on\|G` (`PersonalHeadsView.latestValueOf`) = **ha cancellato** (D30) | i revocati e i persi non si aspettano (L95); la pagina mostra chi manca e l'ultimo contatto |
 | 11. Fine | `DONE` con la data; il diario resta 30 giorni per la pagina, poi si toglie | — |
 
 **Gli altri dispositivi dell'account** (accesi, o al ritorno: E-F32)
@@ -969,9 +969,9 @@ prima di ogni passo; ogni passo idempotente; una morte del processo riprende dal
 | Esclusione di un dispositivo (D4) | solo il passo 6 su quel dispositivo; nessuna voce, niente sul NAS |
 | Cancellazione fuori casa (E-F30) | passi 1–6 subito, 7–11 quando il NAS è raggiungibile; gli altri dispositivi intanto continuano, poi cancellano quando ricevono la voce |
 | Riattivazione dopo (E-F33) | generazione nuova: le cartelle e i dati della vecchia, ovunque compaiano, sono "non correnti" e si tolgono |
-| Nessun altro dispositivo e quello che ha cancellato non torna più a casa | i file restano sul NAS finché non torna o finché non si tolgono dal PC (cartella `.mycloudgallery/faces/` dell'area privata): la pagina lo dice e L89 lo dichiara |
+| Nessun altro dispositivo e quello che ha cancellato non torna più a casa | i file restano sul NAS finché non torna o finché non si tolgono dal PC (cartella `.mycloudgallery/faces/` dell'area privata): la pagina lo dice e L95 lo dichiara |
 | Dispositivo perso (E-F35) | l'azzeramento alla riconnessione distrugge la chiave dei volti nella fase (3) con le credenziali; la sua cartella sul NAS la tolgono gli altri (`DEVICE_REVOKED`, D31) |
-| Voce falsa da un dispositivo compromesso dell'account | i dispositivi cancellano i dati dei volti (ricalcolabili) e i nomi; nessun media toccato (L93) |
+| Voce falsa da un dispositivo compromesso dell'account | i dispositivi cancellano i dati dei volti (ricalcolabili) e i nomi; nessun media toccato (L99) |
 
 **Invarianti** (provati dal banco del §5.5)
 1. Dopo `LOCAL_DONE` su un dispositivo, nessun file `faces-<G>.db*` e nessuna chiave `mcg-faces-<G>` su quel dispositivo; nessun nome dei
@@ -1342,8 +1342,8 @@ Le voci confermate si correggono prima della chiusura.
 | **Dati biometrici che escono dalla persona che li ha attivati** (verso la famiglia, l'indice comune, Internet) | dati solo nell'area privata dell'account e sui suoi dispositivi; mai nell'indice né nell'area comune, anche per le foto comuni; letti solo dai dispositivi dell'account; nessuna rete nei moduli dei volti; nessun host nuovo (D11, D12, D39) | P0 (test d'architettura), P3 (proprietà: mai nell'area comune), F94, F106 |
 | **Un altro familiare** (o un suo dispositivo) che vuole i miei gruppi e nomi | permessi SMB dell'area privata; le teste dei volti di un altro account non si leggono nemmeno se finissero nella mia area (firmatario di un altro `nasUser` = rifiutato) | P3, F106 |
 | **Un familiare che vuole sapere chi ho riconosciuto nelle foto comuni** | i dati dei volti delle foto comuni stanno nella mia area privata; nessuna traccia nell'area comune, nemmeno l'attivazione (Q3) | P3, F94, F106 |
-| **Un dispositivo dell'account compromesso** | firma e registro: un dispositivo revocato è ignorato e la sua cartella si toglie (D31); può scrivere gruppi o nomi falsi e far cancellare i dati dei volti dell'account, **mai media** (L93) | P3, P8 |
-| **Un dispositivo perso** con i dati dei volti | dati cifrati sul dispositivo con una chiave del Keystore (D14); l'azzeramento alla riconnessione distrugge la chiave nella fase (3); se non torna, restano cifrati dietro il blocco schermo (L89) | P6, P13, F100 |
+| **Un dispositivo dell'account compromesso** | firma e registro: un dispositivo revocato è ignorato e la sua cartella si toglie (D31); può scrivere gruppi o nomi falsi e far cancellare i dati dei volti dell'account, **mai media** (L99) | P3, P8 |
+| **Un dispositivo perso** con i dati dei volti | dati cifrati sul dispositivo con una chiave del Keystore (D14); l'azzeramento alla riconnessione distrugge la chiave nella fase (3); se non torna, restano cifrati dietro il blocco schermo (L95) | P6, P13, F100 |
 | **La cancellazione che lascia tracce** (file non tolti, pagine libere di SQLite, WAL, flash, teste vecchie, dispositivi spenti, nomi nelle ricerche recenti, cestino del NAS) | chiave distrutta **prima** dei file; database in un file a parte; cartella intera della generazione sul NAS per tutti i dispositivi dell'account; nomi nella cartella dei volti e non nei dati personali; un dispositivo dichiara la cancellazione solo dopo averla fatta; generazioni non correnti mai lette e tolte; cronologia ripulita; controllo del cestino di rete (D13, D14, D29–D31) | P8, P12, F100–F103 |
 | **L'esportazione della Diagnostica o i log** | solo numeri e codici; elenco chiuso delle chiavi dell'esportazione; test con nomi e vettori seminati (D37) | P13, F107 |
 | **Dati falsi o ostili nei file dei volti** (vettori non finiti, riquadri fuori, testi con caratteri di controllo, campi sconosciuti, generazioni che non tornano) | codec ostile con tetti, rifiuto del segmento o della testa, contatori (§2.4) | P3 |
@@ -1356,42 +1356,42 @@ Le voci confermate si correggono prima della chiusura.
 | **Prima scrittura di dati biometrici sulle share vere** | recinzione `facesSyncTestSharesOnly` fino al sì (D34, Q5) | P0, P13, F110 |
 
 **Contromisure nuove** (proposta per `sicurezza.md` §4)
-- **C33. Dati dei volti solo dell'account che li attiva**: cartella per generazione nell'area privata, firmata per dispositivo, letta solo
+- **C37. Dati dei volti solo dell'account che li attiva**: cartella per generazione nell'area privata, firmata per dispositivo, letta solo
   dai dispositivi dello stesso account; mai nell'indice condiviso né nell'area comune, anche per le foto comuni (D11–D13).
-- **C34. "Disattiva e cancella" completo e verificato**: chiave locale distrutta per prima, cartella intera sul NAS per tutti i dispositivi
+- **C38. "Disattiva e cancella" completo e verificato**: chiave locale distrutta per prima, cartella intera sul NAS per tutti i dispositivi
   dell'account, nomi dentro la cartella, dichiarazione solo dopo la cancellazione, generazioni non correnti mai lette e tolte, stato per
   dispositivo (D29, D30).
-- **C35. Cifratura locale con cancellazione crittografica**: vettori, centroidi e nomi cifrati con una chiave dati avvolta da una chiave del
+- **C39. Cifratura locale con cancellazione crittografica**: vettori, centroidi e nomi cifrati con una chiave dati avvolta da una chiave del
   Keystore per generazione (D14).
-- **C36. Minimizzazione dei dati biometrici**: nessuna stima di attributi, nessun ritaglio salvato, screenshot e documenti esclusi,
+- **C40. Minimizzazione dei dati biometrici**: nessuna stima di attributi, nessun ritaglio salvato, screenshot e documenti esclusi,
   "Dimentica" senza impronte, niente nei log, nella Diagnostica o nell'esportazione (D18, D19, D24, D25, D37).
-- **C37. Consenso per account con avviso per dispositivo**: pagina versionata, nessun dato trattato su un dispositivo prima dell'avviso,
+- **C41. Consenso per account con avviso per dispositivo**: pagina versionata, nessun dato trattato su un dispositivo prima dell'avviso,
   esclusione locale, recinzione delle share vere (D3, D4, D34).
-- **C20 riscritta**: "Volti: attivazione per account con avviso ed esclusione (C37), dati solo dell'account (C33), «Disattiva e cancella»
-  verificato (C34), cifratura sul dispositivo con distruzione della chiave (C35; sul NAS no: L88), nessuna inferenza di attributi e nessun
-  ritaglio salvato (C36), nessun dato esportato."
+- **C20 riscritta**: "Volti: attivazione per account con avviso ed esclusione (C41), dati solo dell'account (C37), «Disattiva e cancella»
+  verificato (C38), cifratura sul dispositivo con distruzione della chiave (C39; sul NAS no: L94), nessuna inferenza di attributi e nessun
+  ritaglio salvato (C40), nessun dato esportato."
 
 ### 6.2 Limiti nuovi da dichiarare (proposta per `sicurezza.md` §6)
-- **L88. I dati dei volti sul NAS non sono cifrati**: chi ha la password dell'account (o l'admin del NAS, o i dischi) legge gruppi e nomi,
+- **L94. I dati dei volti sul NAS non sono cifrati**: chi ha la password dell'account (o l'admin del NAS, o i dischi) legge gruppi e nomi,
   come legge le foto da cui si ricalcolerebbero con modelli pubblici (come L26, L29).
-- **L89. Un dispositivo che non si ricollega tiene i suoi dati dei volti**: cifrati con una chiave del Keystore, dietro il blocco schermo;
+- **L95. Un dispositivo che non si ricollega tiene i suoi dati dei volti**: cifrati con una chiave del Keystore, dietro il blocco schermo;
   si cancellano quando torna (o con l'azzeramento di un dispositivo perso). Se nessun dispositivo dell'account torna a casa dopo una
   cancellazione fatta fuori, i file restano sul NAS finché non si tolgono dal PC (`.mycloudgallery/faces/` dell'area privata).
-- **L90. Il cestino di rete del NAS**: se è acceso nell'area privata, i file cancellati ci restano; l'app lo segnala se vede la cartella
+- **L96. Il cestino di rete del NAS**: se è acceso nell'area privata, i file cancellati ci restano; l'app lo segnala se vede la cartella
   del cestino, lo svuota l'utente dal pannello. Oggi le aree private hanno il cestino spento.
-- **L91. I raggruppamenti sbagliano**: "almeno 97 gruppi su 100 senza persone sbagliate" sulle foto misurate, non certo; gemelli, bambini
+- **L97. I raggruppamenti sbagliano**: "almeno 97 gruppi su 100 senza persone sbagliate" sulle foto misurate, non certo; gemelli, bambini
   negli anni, profili, occhiali da sole e volti piccoli possono finire insieme o divisi; le correzioni restano.
-- **L92. I modelli sono addestrati su dataset di ricerca** (CASIA-WebFace, VGGFace2, MS-Celeb-1M, ritirato nel 2019): rischio trascurabile
+- **L98. I modelli sono addestrati su dataset di ricerca** (CASIA-WebFace, VGGFace2, MS-Celeb-1M, ritirato nel 2019): rischio trascurabile
   in famiglia, da rivalutare prima di pubblicare l'app (estende L14).
-- **L93. Un dispositivo compromesso dello stesso account** può scrivere gruppi e nomi falsi e far cancellare i dati dei volti dell'account
+- **L99. Un dispositivo compromesso dello stesso account** può scrivere gruppi e nomi falsi e far cancellare i dati dei volti dell'account
   (ricalcolabili); non può leggere quelli di altri account né toccare media; la revoca lo toglie.
-- **L94. Il riconoscimento lavora anche sui volti di amici e bambini** nelle foto dell'utente: i dati restano suoi e non escono, ma quelle
+- **L100. Il riconoscimento lavora anche sui volti di amici e bambini** nelle foto dell'utente: i dati restano suoi e non escono, ma quelle
   persone non hanno scelto; l'app non stima l'età e non sa chi è un minore.
-- **L95. Su un dispositivo escluso o con Persone spenta** non ci sono ricerca per persona né regole con le persone negli album smart.
-- **L96. Con la recinzione accesa** (share vere) le persone sono per dispositivo: nomi e correzioni non viaggiano e ogni indicizzatore
+- **L101. Su un dispositivo escluso o con Persone spenta** non ci sono ricerca per persona né regole con le persone negli album smart.
+- **L102. Con la recinzione accesa** (share vere) le persone sono per dispositivo: nomi e correzioni non viaggiano e ogni indicizzatore
   calcola per sé.
-- **L97. Resti fisici**: blocchi dei dischi del NAS e della flash del telefono non si sovrascrivono; sul telefono la chiave distrutta li rende
-  illeggibili, sul NAS no (L88).
+- **L103. Resti fisici**: blocchi dei dischi del NAS e della flash del telefono non si sovrascrivono; sul telefono la chiave distrutta li rende
+  illeggibili, sul NAS no (L94).
 
 ### 6.3 Checklist della Fase 8 (sostituisce le tre voci di `sicurezza.md` §7 "Fase 8")
 - [ ] Attivazione per account dopo la pagina versionata; nessun dato trattato su un dispositivo prima dell'avviso; "Non su questo
@@ -1402,10 +1402,10 @@ Le voci confermate si correggono prima della chiusura.
   prima dei file; cronologia ripulita.
 - [ ] Nessuna cancellazione guidata da un dato remoto fuori da `faces/`; mai un media (proprietà di P8).
 - [ ] Nessuna inferenza di età, genere, etnia, emozioni o accessori; nessun ritaglio di volti salvato; screenshot e documenti esclusi.
-- [ ] Vettori, centroidi e nomi cifrati sul dispositivo (test sui byte del database); sul NAS il limite L88 dichiarato.
+- [ ] Vettori, centroidi e nomi cifrati sul dispositivo (test sui byte del database); sul NAS il limite L94 dichiarato.
 - [ ] Nascosti mai nelle superfici delle persone (F99).
 - [ ] Log, Diagnostica ed esportazione senza nomi, id, chiavi, riquadri, vettori (F107).
-- [ ] Licenze e provenienza dei modelli documentate nell'APK; nota GDPR riletta e rivalutata se l'app sarà pubblicata (L14, L92).
+- [ ] Licenze e provenienza dei modelli documentate nell'APK; nota GDPR riletta e rivalutata se l'app sarà pubblicata (L14, L98).
 
 ### 6.4 Permessi, componenti, dipendenze e host (proposta per `sicurezza.md` §4-bis e §8)
 | Voce | Cosa cambia | Protezione | Perché |
@@ -1423,10 +1423,10 @@ Le voci confermate si correggono prima della chiusura.
 - **Perché qui il regolamento non si applica**: trattamento di una persona fisica per attività esclusivamente domestiche (art. 2 par. 2
   lett. c, considerando 18), sui dispositivi e sul NAS di casa, senza nessun dato allo sviluppatore.
 - **Cosa facciamo comunque**: consenso esplicito e informato per account (D3), nessuna condivisione con altri (nemmeno in famiglia, Q3),
-  minimizzazione (C36), cancellazione completa e verificata (C34), nessuna esportazione, nessuna telemetria, dati di terzi trattati come i
+  minimizzazione (C40), cancellazione completa e verificata (C38), nessuna esportazione, nessuna telemetria, dati di terzi trattati come i
   propri e con gli strumenti per escluderli (D32).
 - **Se l'app venisse pubblicata**: chi "fornisce i mezzi" resta soggetto al regolamento (considerando 18): servirebbero una valutazione
-  legale, una valutazione d'impatto e una nuova lettura dei termini dei dataset di addestramento (L14, L92).
+  legale, una valutazione d'impatto e una nuova lettura dei termini dei dataset di addestramento (L14, L98).
 
 ## 7. Rischi e piani B
 
@@ -1435,11 +1435,11 @@ Le voci confermate si correggono prima della chiusura.
 | La conversione ONNX → LiteRT cambia i numeri (operatori, trasposizioni, float16) | volti mancati, vettori diversi | parità sul PC prima di consegnare (P1) e sui dispositivi (P2) con soglie fissate prima | conversione con un altro strumento (`ai-edge-torch` partendo dai pesi, se disponibili) o pesi float32 (38,7 MB); ultima risorsa ONNX Runtime (dipendenza nuova, da approvare) |
 | SFace sotto il 97% sui dati veri | obiettivo 8.1 mancato | livelli di qualità, margine, vincoli, soglie severe, correzioni | AuraFace-v1 (Apache-2.0, 261 MB, da Hugging Face; più lento: [stima] 80–200 ms a volto, una notte), poi dlib (CC0); la scelta torna all'utente se cambiano peso o host (Q1) |
 | Soglie che reggono la purezza ma lasciano tanti volti non assegnati | persone frammentate, molte proposte | proposte "È la stessa persona?", "Altri volti", unione a mano | soglie per fasce di qualità; seconda passata più larga |
-| Bambini che crescono, gemelli | gruppi divisi o misti | "mai insieme in una foto", margine, proposte, "Dividi" con `apart` | — (dichiarato, L91) |
+| Bambini che crescono, gemelli | gruppi divisi o misti | "mai insieme in una foto", margine, proposte, "Dividi" con `apart` | — (dichiarato, L97) |
 | Volti piccoli nelle foto di gruppo | volti persi | seconda passata sull'HQ a tasselli | originale del telefono per i media che ci sono; tasselli più piccoli |
 | Prestazioni del Tab S9 | calcolo lento sul tablet | il tablet di solito non è indicizzatore (F6-Q3); misure in P2 | YuNet a 640 sulla prima passata con la seconda più frequente |
 | Due custodi o un custode che sparisce | id che divergono o raggruppamento fermo | prenotazione, istantanee numerate, riallineamento, passaggio dopo un'ora | ricalcolo completo con abbinamento (D22) |
-| Un dispositivo spento non torna mai | dati locali che restano | cifratura con la chiave del Keystore, azzeramento del dispositivo perso, pagina che lo dice | — (L89) |
+| Un dispositivo spento non torna mai | dati locali che restano | cifratura con la chiave del Keystore, azzeramento del dispositivo perso, pagina che lo dice | — (L95) |
 | Cestino di rete acceso nell'area privata | file cancellati che restano nel cestino del NAS | controllo e avviso; oggi è spento | guida "svuota il cestino" nella pagina |
 | La voce `faces` non viaggia sulle share vere (F4-D31 ancora acceso) | Persone per dispositivo sulle share vere | recinzione dichiarata (D34) | Q5: insieme alla pubblicazione dell'indice |
 | P6 e P13 della Fase 7 in ritardo | album smart con persone fermi | P10 lavora sull'esecutore di riferimento | consegnare la regola con la chiusura della Fase 7 |
@@ -1540,3 +1540,11 @@ Da verificare in P1 sulle fonti, prima di usarli: il nome esatto del file int8 d
 | Q4 | **Sì, ma più avanti**, in un momento che l'utente sceglierà quando avrà tempo. | F105 (qualità sui dati veri) non blocca la chiusura del codice della fase: P11 consegna lo strumento e i passi; la misura resta aperta finché l'utente non la fa, e fino ad allora le soglie restano quelle provvisorie del set pubblico, dichiarate. |
 | Q5 | (a) **A fine Fase 8**, dopo le prove e con il sì dell'utente, insieme alla pubblicazione dell'indice sulle cartelle vere. | La recinzione delle cartelle vere vale anche per i dati dei volti, come F4-D31 e D30. |
 | Download | **Tutto**: YuNet (2023mar e 2026may) e SFace 2021dec da opencv/opencv_zoo; strumenti Python di conversione da PyPI; circa 30 ritratti di pubblico dominio da Wikimedia Commons. **AuraFace solo se serve**, avvisando l'utente prima di scaricarlo. | P1 scarica in una cartella dedicata fuori dal repository, verifica le impronte note, converte e misura; gli strumenti Python in un ambiente virtuale isolato. |
+
+**Come P0 ha adeguato contratti e documenti alle risposte (27/10).** Q1: nel catalogo solo i ruoli `FACE_DETECT`, `FACE_EMBED` e
+`ModelFeature.FACES`, nessuna sorgente HTTPS; asset e impronte a P1. Q2: `PeopleList` con `named`, `unnamed` e `othersCount`,
+`People.others()` per "Altri volti", `InMemoryPeople(namedOnly = true)` di default, `PeopleSectionState.Ready` con le sole persone con
+un nome. Q3: nessun campo nuovo nel registro, nello stato dei dispositivi o nell'area comune. Q4: soglie di `GroupingParams` provvisorie e
+dichiarate (L97). Q5: D34 accesa anche in release, con R8, il passo di `tools/check.ps1` e `Phase8ArchitectureTest`, e portata dentro i
+contratti (`FacesWriteBlock.TEST_SHARES_ONLY`, `FacesLease.Blocked`, `PeopleSectionState.LocalOnly`). Dettagli e scostamenti dalle firme
+del §1.2 in `docs/decisioni.md`, "Fase 8 P0".

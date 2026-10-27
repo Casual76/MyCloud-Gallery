@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Build
 import dev.pampa.mycloudgallery.BuildConfig
 import dev.pampa.mycloudgallery.core.common.featureflags.TestShares
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
@@ -1053,16 +1054,18 @@ class EmergencyStop(private val file: File) {
     get() = cached ?: file.exists().also { cached = it }
 
   fun set(on: Boolean) {
-    try {
+    val saved = try {
       if (on) {
-        file.parentFile?.mkdirs()
-        file.createNewFile()
+        StateFiles.mark(file)
+        true
       } else {
-        file.delete()
+        StateFiles.delete(file)
       }
     } catch (e: IOException) {
-      GalleryLog.w("EmergencyStop") { "emergenza non salvata" }
+      false
     }
-    cached = on
+    if (!saved) GalleryLog.w("EmergencyStop") { "emergenza non salvata" }
+    // Spenta a parole ma il file c'e' ancora (si ripresenterebbe al riavvio): finche' c'e', l'emergenza resta accesa (puo' solo restringere).
+    cached = on || !saved
   }
 }

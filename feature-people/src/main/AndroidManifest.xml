@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :feature-people: nessun permesso e nessun componente (Fase 8, P0). Le pagine delle persone sono schermate di :app (navigazione, P13).
+      Nessuna rete, nessuna fotocamera. Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in docs/sicurezza.md
+      4-bis, poi quella in releaseManifestPolicy.
+  -->
+
+</manifest>

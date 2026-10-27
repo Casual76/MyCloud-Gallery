@@ -55,6 +55,8 @@ internal object QueryRenderer {
     is SearchChip.Presence -> "L ${chip.where} ${chip.label}"
     is SearchChip.Similar -> "M ${chip.media} ${chip.label}"
     is SearchChip.Word -> "W ${if (chip.exact) "exact" else "free"} ${chip.text}"
+    // Fase 8 (P0): il chip "Persona" (D26). Nessuna query della tabella lo produce ancora: la forma la fissa P10 nel LEGGIMI.txt.
+    is SearchChip.Person -> "N ${chip.option.label} #${chip.option.ids.size} ${chip.option.mode.code} word=${chip.word}"
   }
 
   private fun md(d: LocalDate): String = "%02d-%02d".format(d.monthValue, d.dayOfMonth)

@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.common.diagnostics
 
 import android.content.Context
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import java.io.File
 import java.io.IOException
 
@@ -140,11 +141,11 @@ class FileDiagnosticsLogStore(
 
   @Synchronized
   override fun load(): List<DiagEvent> {
-    if (!file.exists()) {
+    val text = StateFiles.readLines(file, Charsets.UTF_8)
+    if (text == null) {
       lines = 0
       return emptyList()
     }
-    val text = file.readLines(Charsets.UTF_8)
     lines = text.size
     return text.mapNotNull(DiagEventCodec::decode)
   }
@@ -157,20 +158,13 @@ class FileDiagnosticsLogStore(
       rewrite(current)
       return
     }
-    file.parentFile?.mkdirs()
-    file.appendText(DiagEventCodec.encode(event) + "\n", Charsets.UTF_8)
+    StateFiles.append(file, DiagEventCodec.encode(event) + "\n", Charsets.UTF_8)
     lines++
   }
 
   @Synchronized
   override fun rewrite(events: List<DiagEvent>) {
-    file.parentFile?.mkdirs()
-    val tmp = File(file.parentFile, file.name + ".tmp")
-    tmp.writeText(events.joinToString(separator = "") { DiagEventCodec.encode(it) + "\n" }, Charsets.UTF_8)
-    if (!tmp.renameTo(file)) {
-      file.delete()
-      if (!tmp.renameTo(file)) throw IOException("rinomina del registro della diagnostica non riuscita")
-    }
+    StateFiles.writeText(file, events.joinToString(separator = "") { DiagEventCodec.encode(it) + "\n" }, Charsets.UTF_8)
     lines = events.size
   }
 

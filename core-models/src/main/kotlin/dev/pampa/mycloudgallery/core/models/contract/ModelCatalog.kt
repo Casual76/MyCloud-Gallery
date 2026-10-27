@@ -35,6 +35,26 @@ enum class ModelRole {
 
   /** MagicTouch: il ritaglio del soggetto nel viewer, dentro l'APK (D44, risposta Q11 (a)). */
   CUTOUT,
+
+  /**
+   * Fase 8 (D6-D8, risposta Q1 (a) del 27/10): YuNet, il rilevatore dei volti, dentro l'APK come asset di core-ai (`faces/`). Serve **solo**
+   * dove Persone e' attiva su questo dispositivo ([ModelFeature.FACES]): si estrae dopo l'avviso e si toglie con l'esclusione e con
+   * "Disattiva e cancella". La voce del catalogo (dimensione, SHA-256 del file del repository, licenza MIT) e' di P1.
+   */
+  FACE_DETECT,
+
+  /** Fase 8 (D6-D8, Q1 (a)): SFace 2021dec, l'embedder dei volti (Apache-2.0), dentro l'APK; come [FACE_DETECT]. Voce di P1. */
+  FACE_EMBED,
+}
+
+/**
+ * Le funzioni da attivare che chiedono modelli in piu' (Fase 8, §1.2 "core-models"). `needed(ruoli, funzioni)` di P1 aggiunge i modelli
+ * dei volti **solo** con [FACES] attiva qui (stato `On` con `ACTIVE` o `LOCAL_ONLY`, mai in attesa dell'avviso ne' su un dispositivo
+ * escluso); la firma di oggi, `needed(ruoli)`, vale come "nessuna funzione".
+ */
+enum class ModelFeature {
+  /** Persone (riconoscimento dei volti) attiva su questo dispositivo. */
+  FACES,
 }
 
 /** La licenza di un modello, da mostrare in Impostazioni → Informazioni e licenze. Nessun testo lungo qui: i file stanno negli asset. */

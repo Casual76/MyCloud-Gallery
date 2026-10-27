@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.models.download.https
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.models.contract.FetchRefusal
 import dev.pampa.mycloudgallery.core.models.contract.FetchResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
@@ -178,7 +179,7 @@ internal class HttpsModelFetcher(
             if (offset == 0L || rangeRefused) return FetchResult.NetworkError
             rangeRefused = true
             partial.delete()
-            ETags.sidecar(partial).delete()
+            StateFiles.delete(ETags.sidecar(partial))
             offset = 0
             url = firstUrl
             hops = 0

@@ -9108,3 +9108,186 @@ C75-C80 e L160-L165 di `docs/sicurezza.md` sono riservati a questo pacchetto.
 - **F78 (ED-2)**: Eliminati di recente con una voce del NAS senza record, o col NAS spento, "Ripristina": un avviso, non il silenzio.
 - **NA-2**: riavviare il processo (kill dell'app), aspettare l'aggiornamento del widget di prova: ha celle, non e' vuoto.
 - **R10**: segnare perso un dispositivo di prova e riaccenderlo: i dati locali spariscono anche se lo stato fidato e' bloccato (non riproducibile a mano: copre il test).
+
+## Fase 8 P11: valutazione e calibrazione delle persone (29/10)
+
+Il pacchetto P11 della Fase 8 (`docs/fase8-progetto.md` §4.4, riga P11; §5.3, §2.5, §5.2, §7, §11 Q4). Branch `fase8/p11`, partito da `main` (`4eb7c20`, con P0–P7 e P9). Consegna le **metriche** della
+qualità delle persone, la **regola di scelta delle soglie** del §2.5 scritta in codice e provata, lo **strumento solo debug** "Valutazione delle persone" con le due sessioni del §5.3 (il legame col grafo
+vero lo fa P13), l'**elenco dei ritratti di pubblico dominio** con le licenze e il **generatore delle composizioni** per i casi E-F3, E-F15 e i volti piccoli. Nessuna dipendenza nuova, nessun file di
+build toccato. **Q4**: la misura sui dati veri la farà l'utente più avanti (F105) e non blocca la fase; le soglie di `GroupingParams` **restano quelle provvisorie** e qui sono dichiarate, con i numeri del set
+pubblico e di quello sintetico.
+
+### Cosa c'è
+
+| Dove | Cosa |
+|---|---|
+| `core-faces/src/test/.../eval/` | le etichette (`FacesEvalLabels`: formato `MCGFAC01`), la scelta dei gruppi e dei volti (`FacesEvalSampling`), le metriche (`FacesEvalMetrics`) e la regola delle soglie (`FacesEvalThresholds`): codice **puro** con le sue prove (`FacesEval*Test`, `NoPrivateFacesEvalInGitTest`), il banco `FacesEvalKit` (famiglie sintetiche, utente ideale, errori messi apposta) e `osservazioni-pubbliche.tsv` (risorsa: solo numeri) |
+| `app/src/debug/.../debugtools/eval/faces/` | la **copia identica** dei quattro file puri (cambia solo la riga `package`: `FacesEvalSourceParityTest` lo controlla, come per la ricerca e per gli album) e lo strumento: porta (`FacesEvalEnvironment`), sessione (`FacesEvalSession`), negozio dei file (`FacesEvalStore`, con `StateFiles`), schermate e testi |
+| `app/src/debug/.../DeveloperTools.kt` | **la sola voce d'ingresso** (la rotta e la riga di Impostazioni → Sviluppo, dopo quella degli album); `src/release` non cambia |
+| `app/src/testDebug/.../eval/faces/` | banco sintetico (`FacesEvalTestRig`), sessione, schermata (Robolectric), screenshot, azzeramento, parità dei sorgenti |
+| `tools/fixtures/faces/` | `ritratti.tsv` (35 ritratti: etichetta `ritratto-NN`, soggetto, fonte, licenza, impronta), `controlla_ritratti.py`, `compose_casi.py`, `misure_pubbliche.py`, `LEGGIMI.md` |
+| `tools/check.ps1` | una riga: lo strumento (classi, porta, `persone.mcgfac`, `MCGFAC01`) non deve comparire nel dex di release |
+| `.gitignore` | `*.mcgfac`, `persone-veri*`, `eval-volti-privato/`, le immagini sotto `tools/fixtures/faces/` |
+
+**Le prove** (122 test nuovi: 81 in `core-faces`, 41 in `app`; tutti verdi sulla JVM, Robolectric per le schermate)
+| Prova | Cosa |
+|---|---|
+| `FacesEvalLabelsTest` (10) | il file `MCGFAC01` va e torna; un file rovinato o ostile (riga sconosciuta, id non valido, gruppo o sessione doppi, un volto senza gruppo, un collegamento a se stesso) dà un errore con il **numero** della riga e mai il contenuto; nessun id o posto in un `toString()` |
+| `FacesEvalSamplingTest` (14) | 40 gruppi senza ripetizioni, tutti se sono meno; il seme dà sempre la stessa scelta; il peso alla dimensione (con 20 gruppi da 200 volti e 280 da 3, in 200 prove ne entrano in media più di 14 dei 20 grandi); sessione 2: tutti se sono ≤ 80, altrimenti tutti i nominati più un campione fino a 80; 60 volti più i 10 meno simili, i 10 sono davvero i più bassi |
+| `FacesEvalMetricsTest` (13) | purezza, errori per volto, gruppi misti, frammentazione (catene, legami a un gruppo non guardato), copertura e piano B, intervallo di Wilson (38/40: 83,5%–98,6%): numeri contati a mano |
+| `FacesEvalThresholdsTest` (22) | la regola a mano: la soglia più bassa che tiene la purezza, la scelta congiunta con il margine, i WEAK, mai sotto la partenza, "non raggiungibile", piano B, le nascite (anche con i gruppi misti), due volti della stessa foto mai nello stesso gruppo |
+| `FacesEvalSyntheticTest` (7) | le metriche contro la verità su famiglie sintetiche con errori messi apposta (volti di un'altra persona spostati in un gruppo, un gruppo diviso in due, un gruppo misto) e contro `GroupingMath.averageLinkage` su 360 casi (la copia del legame medio dello strumento dà gli stessi esiti) |
+| `FacesEvalCalibrationTest` (4) e `FacesEvalPublicSetTest` (5) | la regola provata sul set sintetico e sul set pubblico (sotto) |
+| `NoPrivateFacesEvalInGitTest` (6) | git: nessun file di etichette, nessuna immagine sotto i percorsi dello strumento, nessun nome di chi è ritratto nei nomi dei file o nei sorgenti; il `.gitignore`; il controllo vede le violazioni su file veri |
+| `FacesEvalSessionTest` (15) | la scelta si ritrova riaprendo lo strumento; un volto ricalcolato con il riquadro un po' spostato resta segnato (D23); "Gruppo misto"; i numeri dell'utente ideale = la verità; sessione chiusa; **un media nascosto non esce mai** dalla porta; resoconti numerati; file rovinato; le soglie proposte da gruppi formati con soglie larghe |
+| `FacesEvalScreenTest` (4) | Robolectric: senza porta "non collegate"; le due sessioni; un gruppo si apre, un tocco segna un volto (e si salva), un secondo lo rimette giusto; "Gruppo misto"; "È la stessa persona di …" |
+| `FacesEvalSourceParityTest` (7) | le copie dei quattro file puri sono uguali; nessun log, rete, `core.faces.` o contratto dei nascosti nello strumento; ogni scrittura passa da `StateFiles`; niente nella release; l'aggancio per P13 è dichiarato |
+| `FacesEvalErasableTest` (3) | le etichette stanno in `noBackupFilesDir/eval/faces/`, l'azzeramento le toglie, il tasto "Cancella" non tocca le altre valutazioni |
+| `FacesEvalScreenshotTest` (12) | gli screenshot (sotto) |
+
+### Le metriche (sessione → numeri; mai id, posti o nomi)
+
+Lo strumento mostra, per ogni gruppo scelto, i volti; l'utente tocca quelli che **non** sono di quella persona ("non è lui") oppure dice "Gruppo misto"; "Sono tutti giusti, ho finito" chiude un gruppo senza errori;
+"È la stessa persona di un altro gruppo" lega due gruppi. Un gruppo conta nei numeri solo se l'utente l'ha guardato (ha toccato un volto, o ha detto "giusto" o "misto").
+- **Purezza dei gruppi** = gruppi guardati senza nessun volto sbagliato e non misti / gruppi guardati (§5.3); con l'**intervallo di Wilson al 95%** (con 40 gruppi è largo: 38 su 40 = 95%, da 83,5% a 98,6%).
+- **Errori per volto** = volti toccati / volti guardati, sui gruppi non misti (un gruppo misto non dice quali volti sbagliano: conta fra i gruppi sbagliati e a parte).
+- **Frammentazione** = gruppi per persona vera: i gruppi legati da "è la stessa di …" (in un verso o nell'altro, anche a catena) sono una persona; è la media dei loro gruppi sulle persone che hanno almeno un gruppo guardato.
+  1,00 = nessuna persona divisa. Si dice anche quanti gruppi guardati sono divisi.
+- **Copertura** = volti CORE in un gruppo / volti CORE mostrabili, fotografata all'inizio della sessione (anche i WEAK, a parte). Sotto il 50% dei volti CORE: **piano B del modello** (§7).
+- Obiettivi (`EvalTargets`): purezza ≥ 97% per la misura, ≥ 98,5% per la calibrazione, copertura CORE ≥ 50%.
+
+### La regola di scelta delle soglie (§2.5, scritta prima di vedere i dati veri)
+
+`FacesEvalThresholds.choose` parte dalle osservazioni della sessione 1 (per ogni volto mostrato: la somiglianza al suo gruppo, quella alla seconda persona, "è lui" o "non è lui") e dai coseni a due a due dei
+volti CORE di ogni gruppo. Un volto **entra** in un gruppo se `s ≥ T_join` (`T_join_weak` per i WEAK) e `s − seconda ≥ M`; un gruppo è **puro** se nessun volto segnato avrebbe ancora potuto entrarci.
+1. **`T_join` e `M`, insieme**: fra le coppie che tengono la purezza dei volti CORE ≥ 98,5%, quella che trattiene più volti giusti; a parità la `T_join` più bassa, poi la `M` più bassa. (A `M` fissa è il
+   "valore più basso che tiene la purezza" del §2.5; la scelta congiunta evita di alzare `T_join` per un errore che un margine più largo toglie da solo: fratelli e gemelli, E-F1.)
+2. **`T_join_weak`**: il valore più basso, non sotto `T_join` né sotto quello di partenza, che tiene la purezza di tutti i volti ≥ 98,5%.
+3. **`T_birth`**: il valore più basso per cui **nessuna persona nasce mista**: i volti CORE di ogni gruppo guardato, raggruppati con il legame medio (archi fra foto diverse, mai due volti della stessa foto
+   insieme, nasce chi ha almeno 3 volti), non mettono mai insieme un volto giusto e uno sbagliato. Un gruppo dato per **misto** (è proprio una persona nata mista) vale così: a quella soglia i suoi volti CORE non
+   devono restare quasi tutti in un gruppo solo (il più grande ne tiene meno dell'80%). `T_edge` segue `T_birth` con lo scarto che avevano (0,03).
+4. **Mai sotto le soglie di partenza**: i volti che con quelle non sono entrati in nessun gruppo non si vedono nella sessione 1, quindi la regola può alzare le soglie (si perde copertura, non purezza) e non
+   abbassarle.
+5. Se nemmeno `T_join` 0,90 e `M` 0,20 (o `T_birth` 0,90) tengono il 98,5%, la proposta dice **non raggiungibile**; se la copertura stimata dei volti CORE (copertura di adesso × quota dei volti giusti che
+   restano dentro) scende sotto il 50%, dice **piano B**.
+`T_merge`, `T_suggest` e `T_eject` non si scelgono qui: servono le risposte alle proposte "È la stessa persona?" e agli espulsi, che la sessione 1 non raccoglie (restano come da §2.5, provvisori).
+
+### La regola sul set sintetico (famiglie di vettori inventati, `FamilyStories` di P5)
+
+Un utente ideale che conosce la verità compila la sessione 1 (mai più di 70 volti per gruppo, come lo strumento), la regola propone le soglie, il raggruppamento si rifà con quelle.
+Le soglie di partenza del banco sono volutamente **larghe** (`T_join` 0,30, `T_join_weak` 0,40, `M` 0, `T_edge` 0,30, `T_birth` 0,33): sotto quelle di progetto, perché la regola vede solo i volti entrati
+e con le soglie di progetto sul sintetico non ci sono errori da correggere (P5: purezza 100% sulle famiglie tipiche). Le famiglie hanno 2–3 coppie di fratelli (centri a coseno 0,6), bambini che crescono, volti
+deboli (20%), sconosciuti, video e specchi; i gemelli (E-F1, centri a 0,8) a parte.
+| Insieme | Purezza dei gruppi dalla verità, prima → dopo le soglie proposte | Sul set di calibrazione | Note |
+|---|---|---|---|
+| 24 famiglie con fratelli (14–23 identità, 260–379 foto) | **95,8%** (436/455) → **98,0%** (448/457) | 97,8% → 100% in media (100% in tutte con la proposta); persone nate miste 5 → 0 | la regola cambia le soglie in 9 famiglie su 24 (`T_join` fino a 0,61, `M` fino a 0,09, `T_birth` fino a 0,41); copertura dei volti CORE raggruppabili 0,997 → 0,996 (minimo 0,969); in media si tiene il 96% dei volti giusti |
+| 12 famiglie con una coppia di gemelli | 93,9% → 97,4% | 100% quando "raggiungibile" | piano B in 1 famiglia su 12: per togliere gli errori dei gemelli servirebbe una soglia che perde i due terzi dei volti (E-F1: i gemelli si dividono a mano) |
+| 12 famiglie tipiche, soglie di progetto | non cambia | — | la regola non cambia niente in 12 famiglie su 12 (purezza già ≥ 98,5%, nessuna persona nata mista) |
+La purezza dopo le soglie è sotto il 100% del set di calibrazione per tre ragioni dichiarate: i volti che la griglia non mostra (oltre 70 per gruppo), i gruppi dati per misti (non servono a scegliere le soglie
+di ingresso: contano per le nascite) e il ricalcolo, che cambia anche altro (unioni e nascite). Il banco scrive le cifre: `FacesEvalCalibrationTest` (`println`).
+
+### La regola sul set pubblico (ritratti di pubblico dominio, SFace vero)
+
+`tools/fixtures/faces/misure_pubbliche.py` passa da SFace (ONNX fp32 di P1: stesso vettore del `.tflite` float16, coseno ≥ 0,999995) i volti dei ritratti a piena risoluzione e quelli incollati nelle composizioni
+A e B di P1 (497 volti di 19 persone: 178 CORE, 319 WEAK) e scrive **solo numeri** in `core-faces/src/test/resources/.../eval/osservazioni-pubbliche.tsv` (2.608 righe: gruppo, livello, somiglianza al gruppo
+come la calcola il raggruppamento, somiglianza alla seconda persona, "è davvero lui"). Una persona è un gruppo; per i volti della stessa persona gli esemplari non includono il ritratto da cui il volto viene (una copia
+più piccola dello stesso dipinto non conta come "stessa persona").
+| Coppie di volti di ritratti diversi | n | media | mediana | 95° percentile | 99° | massimo |
+|---|---|---|---|---|---|---|
+| stessa persona, CORE (autoritratti a età diverse) | 893 | 0,413 | 0,425 | 0,576 | 0,603 | 0,622 |
+| stessa persona, WEAK | 2.083 | 0,382 | 0,416 | 0,539 | 0,579 | 0,623 |
+| persone diverse, CORE | 14.340 | 0,211 | 0,217 | 0,375 | 0,446 | 0,531 |
+| persone diverse, WEAK | 46.824 | 0,218 | 0,217 | 0,392 | 0,465 | 0,563 |
+Con la soglia 0,363 della demo di SFace (verifica, non raggruppamento, §2.5) **4.702 coppie di persone diverse su 61.164 (7,7%)** la superano e **965 coppie "stessa persona" su 2.976 (32%)** stanno sotto: sui dipinti
+SFace non separa bene (i ritratti dello stesso pittore a vent'anni di distanza sono molto diversi) e per raggruppare servono soglie più severe, come dice il §2.5.
+La regola (`FacesEvalPublicSetTest`, 19 gruppi, nessuna nascita: il file non ha coseni a due a due): con le soglie di partenza la purezza è **89,5%** (17 gruppi su 19); la regola propone **`T_join` 0,51**
+(`T_join_weak` 0,55, `M` 0,06 invariati) e con quella la purezza è 100% tenendo il **29,7%** dei volti giusti (il 62% dei 105 volti CORE giusti, il 10% dei 168 WEAK). Sotto 0,51 basta un volto sbagliato per rendere impuro un gruppo:
+la curva è 89,5% a 0,45, 94,7% a 0,50, 100% da 0,51 in su. Non è una soglia da adottare: su dipinti tutto sta più in basso, ed è il motivo per cui la misura che conta è quella sui volti veri (F105).
+
+### I ritratti e le composizioni (`tools/fixtures/faces/`)
+
+- **L'elenco** (`ritratti.tsv`): i 35 ritratti scaricati da P1 (Wikimedia Commons, «Public domain» e «Copyrighted: False» nei metadati: riproduzioni fedeli di dipinti antichi, PD-Art), con etichetta `ritratto-NN`, soggetto
+  (`sNN` = una persona, `mNN` = una scena; lo stesso `sNN` è la stessa persona in anni diversi, E-F2), pagina di Commons, licenza, dimensione e SHA-256. Chi è ritratto e chi ha dipinto sta **solo** nella colonna
+  `nomi` dell'elenco, che serve alla guardia di `NoPrivateFacesEvalInGitTest`: nessun nome nei nomi dei file né nei sorgenti dello strumento e dei suoi test. `controlla_ritratti.py --root <root>` ha controllato le 35
+  immagini di P1 contro l'elenco: tutto a posto.
+- **Il generatore** (`compose_casi.py`, 34 immagini da 1024 px in `<root>/out/p11/`, fuori dal repository; due esecuzioni danno gli stessi byte, SHA-256 uguali su tutti i 35 file; seme `20261029`). Riusa `compose.py`
+  di P1 (volti nitidi con il consenso dei due YuNet, sfondi senza volti, incollatura sfumata) e aggiunge i casi che quello non ha:
+  | Serie | Immagini | Volti di verità | YuNet (ONNX a 1024 px) trova | Cosa prova |
+  |---|---|---|---|---|
+  | `tv` | 8 | 12 (8 sulla TV, 4 persone accanto) | 11, 1 riquadro in più | E-F3: il volto dello schermo viene trovato e formerebbe una persona: "Ignora questo volto" |
+  | `doppia` | 8 | 16 (8 persone, 4 nello specchio, 4 nella foto incorniciata) | 16 su 16 | E-F15: la stessa persona due volte nella stessa foto, una sola entra |
+  | `collage` | 6 | 38 | 38 su 38 | E-F15, E-F2: 4, 6 o 9 riquadri con ritratti degli stessi soggetti |
+  | `piccoli` | 12 | 66 (da 3 a 8 per immagine, lato 24–60 px) | 63, 2 riquadri in più | E-F13, E-F14: volti piccoli su sfondi diversi (le serie A e B di P1 coprono 24–160 e 24–47 px) |
+  `verita.json` ha per ogni volto il ruolo (`persona`, `tv`, `specchio`, `foto-nella-foto`, `collage`), il ritratto di origine, il riquadro e i cinque punti. Le immagini non entrano nel repository (`.gitignore`, guardia su git).
+
+### Le soglie restano quelle provvisorie (Q4, L97, L210)
+
+**Nessuna costante di `GroupingParams` è stata cambiata.**
+| Parametro | Valore | Perché non si tocca | Come si ricalibra (F105) |
+|---|---|---|---|
+| `T_JOIN` / `T_JOIN_WEAK` | 0,45 / 0,55 | sul sintetico, con le soglie di partenza, la regola non cambia niente e la purezza resta ≥ 98,5% (P5: 100% sulle famiglie tipiche); sul set pubblico (dipinti) la regola chiederebbe `T_join` 0,51 tenendo il 30% dei volti giusti, ma è un risultato dei dipinti e non delle foto: cambiare la soglia di tutta l'app su quello costerebbe copertura vera senza una prova | sessione 1 → "Soglie proposte" |
+| `MARGIN` | 0,06 | come sopra | come sopra |
+| `T_EDGE`, `T_BIRTH` | 0,45, 0,48 | come sopra | "nessuna persona nata mista" sulla sessione 1 |
+| `T_MERGE`, `T_SUGGEST`, `T_EJECT` | 0,52, 0,40, 0,32 | la sessione 1 non raccoglie i dati per sceglierli | la misura vera (proposte giuste ≥ 1 su 2, nessuna unione sbagliata, ≤ 2% di volti giusti espulsi) |
+
+### Passi per l'utente (F105, circa 40 minuti in due momenti, sul telefono; Q4: quando ha tempo)
+
+0. **Prima**: build debug dell'S25 con P13 integrata (la porta legata) e Persone attiva (con la recinzione tutto resta sul telefono); il primo calcolo finito (la sezione Persone non mostra più la percentuale).
+   Se la schermata dice "le persone non sono ancora collegate allo strumento", manca il legame di P13.
+1. **Impostazioni → Sviluppo → "Valutazione delle persone"** (è la sezione che il progetto chiama "Diagnostica → Sviluppo": la voce sta nello stesso gruppo delle altre valutazioni, dopo quella degli album).
+2. **Sessione 1, calibrazione (~20 minuti)**: "Inizia" sceglie 40 gruppi (tutti se sono meno) e li elenca dal più grande. Per ogni gruppo: tocca i volti che non sono di quella persona (diventano rossi, si salva a ogni
+   tocco); i dieci in fondo sono i meno simili al gruppo; "Sono tutti giusti, ho finito" se non ce ne sono; "Gruppo misto" se è un pasticcio; "È la stessa persona di un altro gruppo" se la vedi in un altro gruppo.
+   Si può smettere e riprendere: la scelta dei gruppi e i tocchi restano.
+3. **"Soglie proposte dalla sessione 1"**: la regola del §2.5. Se propone valori diversi, si scrivono nelle cinque costanti di `GroupingParams` (`T_JOIN`, `T_JOIN_WEAK`, `MARGIN`, `T_EDGE`, `T_BIRTH`; riferimento e
+   nucleo le leggono da lì), si ricostruisce, si installa e si chiede un **ricalcolo completo** (`FaceGrouping.recluster`: gli id si ereditano per volti in comune, nomi e correzioni restano) aspettando che finisca.
+4. **Sessione 2, misura (~20 minuti)**: "Inizia" (tutti i gruppi se sono al più 80, altrimenti quelli con un nome più un campione fino a 80), stessa griglia. "Numeri della sessione 2" dà la purezza con il suo
+   intervallo; l'obiettivo è **≥ 97%**.
+5. Se manca: soglie più severe (si perde copertura, non purezza): "Ricomincia da capo" nella sessione 1 e di nuovo i passi 3 e 4. Se anche così la copertura dei volti CORE scende sotto il 50%: piano B del modello
+   (§7: AuraFace, 261 MB, **solo dopo aver avvisato l'utente**; la scelta torna all'utente se cambiano peso o host, Q1).
+6. **Cosa esportare: solo i numeri.** I resoconti `report-NN.txt` (nella schermata, o `adb exec-out run-as dev.pampa.mycloudgallery.debug cat no_backup/eval/faces/report-01.txt`) si copiano qui, in una
+   sezione "Misura sui dati veri (F105)". Mai le etichette (`persone.mcgfac`: posti di volti veri), mai schermate di volti.
+7. **A fine misura**: "Cancella etichette e resoconti" (o l'azzeramento dell'app: `eval/` lo toglie).
+
+### Gli agganci per P13
+
+- **La porta**: `FacesEvalEnvironmentHolder.current = <implementazione di FacesEvalEnvironment>` dove l'integrazione monta il grafo delle persone (di norma `DeveloperTools.installSearch(...)`, accanto a quelle della
+  ricerca e degli album), in `app/src/debug/.../eval/faces/` (serve `core-faces` fra le dipendenze di `:app`: `FacesEvalEnvironment` parla solo con tipi di `core-model` per questo). Senza, la schermata dice "non collegate".
+- **Come costruirla** sopra le porte che ci sono: `groups()` da `People.list.named` più `People.others()` (con Q2 (b) "Altri volti"), l'id risolto dagli alias, conti e foto dalle carte; `faces(group)` da
+  `PersonFaces.reviewFaces(group)` (P9: solo di celle mostrabili, D28) con `score` (`s(f, P)`: la media dei 3 coseni più alti con gli esemplari) e `second` (la stessa verso la seconda persona) calcolati con i vettori di
+  `FacesArchive.groupFaces()` e gli esemplari di `GroupingState`; `cosines(faces)` dagli stessi vettori (n × n, mai fuori dalla porta); `totals()` da `groupFaces()` (livelli CORE/WEAK) e `grouping().assignments`,
+  solo media mostrabili; `thresholds` da `GroupingParams.DEFAULT` (o da quello che l'app usa); `crop(face)` da `PeopleCrops.crop` (P9) in un `ImageBitmap`.
+- **Contratto da rispettare** (scritto nel file della porta): mai un volto di un media nascosto, nemmeno nei conteggi; i volti NONE assenti; nessun log; sola lettura.
+- `DeveloperTools` (debug) ha già la rotta e la riga; la release non ha niente (`FacesEvalSourceParityTest` e il passo del dex di `tools/check.ps1`).
+
+### Screenshot (`docs/screenshots/8-P11/`, telefono 412 dp, chiaro e scuro; solo dati sintetici)
+
+12 PNG di `FacesEvalScreenshotTest` (`gradlew :app:recordRoborazziDebug --tests "*FacesEvalScreenshot*"`): la pagina di partenza a metà lavoro (sessione 1 con 5 gruppi su 9 guardati, sessione 2 appena cominciata; anche
+col testo a 1,3×), l'elenco dei gruppi della sessione (da guardare, giusto, con volti sbagliati, misto, "stessa persona di un altro gruppo"), un gruppo con la griglia dei volti (due segnati, uno fra i dieci meno simili; anche
+col testo a 1,3×), "È la stessa persona di un altro gruppo" e il resoconto dei numeri. **Nessun volto**: la famiglia è fatta di vettori inventati e i ritagli sono sagome astratte colorate per identità.
+Scelte da far vedere all'utente: la griglia ha quattro colonne (i volti sono piccoli) con bersagli di circa 95 dp; un volto segnato ha un velo rosso e una croce nell'angolo (si vede anche con un ritaglio chiaro) e la
+descrizione per TalkBack dice "Volto 5 di 70, segnato come non suo"; i dieci meno simili stanno in un blocco a parte in fondo; i gruppi si chiamano "Gruppo 3", mai con un nome.
+
+### Punti aperti
+
+- **La misura vera non c'è (Q4, L210)**: purezza ≥ 97% e copertura CORE ≥ 50% sui volti veri sono obiettivi, non risultati; tocca all'utente, più avanti (i passi sopra). Fino ad allora le soglie sono quelle provvisorie.
+- **Lo strumento non è ancora collegato**: `FacesEvalEnvironmentHolder.current` lo mette P13; senza, la schermata dice "non collegate". La schermata, la sessione, i numeri e le soglie sono provati sul banco sintetico
+  (`FacesEvalTestRig`: la stessa porta sopra `FastGrouping`), non sul grafo vero: la prova sul telefono è F105.
+- **La regola non può abbassare le soglie** (L214): vede solo i volti entrati nei gruppi. Se l'utente volesse sapere se `T_join` 0,45 è troppo alto, dovrebbe prima abbassarlo, ricalcolare e rifare la sessione 1.
+- **La regola non sceglie `T_merge`, `T_suggest`, `T_eject`**: serve il giudizio dell'utente sulle proposte "È la stessa persona?" e sugli espulsi; la sessione 1 non lo raccoglie. Una sessione 3 si può aggiungere senza toccare il resto.
+- **Con 40 gruppi la purezza è un numero largo** (L212): 38 su 40 non dicono "≥ 97%"; il resoconto mostra l'intervallo al 95% e l'obiettivo si legge con quello. Se la sessione 2 dà un valore al limite, si ripete con altri gruppi
+  ("Ricomincia da capo" prende un seme nuovo).
+- **I gruppi dati per misti** non entrano negli errori per volto (non si sa quali volti sbagliano) ma sono gruppi sbagliati nella purezza e servono alla regola delle nascite (a 80% di dominanza, scelta nostra: è nel
+  sorgente e nei test).
+- **Il set pubblico sono dipinti** (L213): non dice quali soglie valgono per le foto; dice solo che la regola gira su vettori veri e dà numeri coerenti. La separazione delle coppie è comunque un risultato utile per P1/P2:
+  con SFace sui dipinti la soglia di verifica 0,363 sbaglia il 7,7% delle coppie diverse e il 32% di quelle uguali.
+
+### Esito di `tools/check.ps1 -NoDaemon`
+
+**Verde** ("OK: tutto a posto", 27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, dopo aver tolto `app/build/outputs/apk/release`, sul codice di questi commit): assembleDebug, assembleRelease, galleryTest e galleryLint in
+917 s; **14.787 test in 39 moduli** (`core-faces` 531, `app` 913; nessun modulo a zero, nessun test fallito). Il passo del dex di release cerca ora **51 nomi** (7 nuovi: `debugtools/eval/faces`,
+`FacesEvalEnvironmentHolder`, `FacesEvalSession`, `FacesEvalEntry`, `FacesEvalStore`, `persone.mcgfac`, `MCGFAC01`) e non ne trova nessuno; **provato al contrario**: la stessa lettura del dex sull'APK di debug li
+trova tutti e sette. Nessuna classe `testing` nel dex di release; D34 e LiteRT come prima. Solo SKIP il banco su dispositivo (`-Bench`). Due corse: la prima verde prima di tre ritocchi grafici (un velo rosso sul
+volto segnato, il resoconto che va a capo invece di tagliarsi, singolare e plurale dei conteggi), la seconda sul codice finale e con gli screenshot rifatti.
+
+**Commit** (branch `fase8/p11`): `23d1a4d3` (metriche, scelta dei gruppi, regola delle soglie e le loro prove), `db3ced09` (ritratti e generatore delle composizioni), `1dafb30b` (strumento solo debug, controllo del dex di release,
+`.gitignore`) e quello di questi documenti e degli screenshot.

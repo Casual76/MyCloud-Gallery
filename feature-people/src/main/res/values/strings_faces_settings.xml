@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8 (P7, docs/fase8-progetto.md §1.5 PeopleSettingsState, §2.1, D4, D34): Impostazioni -> Persone. Stato, chi analizza le foto, avanzamento,
+       "Non su questo dispositivo", persone nascoste, modelli e licenze, "Disattiva e cancella". Q3: solo dispositivi dello stesso account, nessuna parola
+       sulla famiglia. D37: mai nomi, id o conteggi per persona (le persone nascoste sono un numero solo). -->
+  <string name="faces_settings_title">Persone</string>
+
+  <string name="faces_settings_off_title">Persone è spenta</string>
+  <string name="faces_settings_off_message">Raggruppa le tue foto per volto, di notte, in carica. Si accende per tutto il tuo account, dopo una pagina che spiega cosa fa.</string>
+  <string name="faces_settings_off_action">Attiva riconoscimento dei volti</string>
+  <string name="faces_settings_on_title">Persone è attiva</string>
+  <string name="faces_settings_on_message">Su tutti i tuoi dispositivi, tranne quelli che escludi.</string>
+  <string name="faces_settings_local_title">Persone è attiva, ma ogni dispositivo ha le sue</string>
+  <string name="faces_settings_local_message">Finché la sincronizzazione delle persone non è accesa, i nomi e le correzioni restano su questo dispositivo.</string>
+  <string name="faces_settings_awaiting_title">Da confermare su questo dispositivo</string>
+  <string name="faces_settings_awaiting_message">Persone è attiva sul tuo account, ma qui non scarica, non calcola e non mostra niente finché non scegli.</string>
+  <string name="faces_settings_awaiting_action">Leggi e scegli</string>
+  <string name="faces_settings_excluded_title">Persone non è attiva su questo dispositivo</string>
+  <string name="faces_settings_excluded_message">L’hai escluso: qui non c’è niente di Persone. Sugli altri tuoi dispositivi lavora come prima.</string>
+  <string name="faces_settings_erasing_title">Cancellazione in corso</string>
+  <string name="faces_settings_erasing_message">Persone sta togliendo tutto. Non si può riattivare finché non ha finito.</string>
+  <string name="faces_settings_update_title">Aggiorna l’app</string>
+  <string name="faces_settings_update_message">Un altro tuo dispositivo ha attivato Persone con una versione più nuova dell’app. Qui non si calcola e non si cancella niente finché non aggiorni.</string>
+
+  <string name="faces_settings_section_work">Analisi delle foto</string>
+  <string name="faces_settings_devices_none">Nessun tuo dispositivo analizza le foto.</string>
+  <string name="faces_settings_device_here">Questo dispositivo</string>
+  <string name="faces_settings_device_excluded">escluso</string>
+  <string name="faces_settings_device_computing">analizza le foto</string>
+  <string name="faces_settings_progress_running">Analizzate %1$d foto su %2$d</string>
+  <string name="faces_settings_progress_idle">Tutto analizzato</string>
+  <string name="faces_settings_progress_problem">Qualcosa non va: la Diagnostica dice cosa.</string>
+  <string name="faces_settings_wait_notice">In attesa che tu veda l’avviso</string>
+  <string name="faces_settings_wait_excluded">In attesa: questo dispositivo è escluso</string>
+  <string name="faces_settings_wait_not_indexer">In attesa: questo dispositivo non analizza le foto</string>
+  <string name="faces_settings_wait_rules">In attesa della notte, della carica e del Wi-Fi di casa</string>
+  <string name="faces_settings_wait_nas">In attesa del NAS</string>
+  <string name="faces_settings_wait_previews">In attesa delle anteprime delle foto</string>
+  <string name="faces_settings_wait_models">Preparo i modelli</string>
+  <string name="faces_settings_wait_erasing">In attesa: cancellazione in corso</string>
+  <string name="faces_settings_wait_update">In attesa: serve aggiornare l’app</string>
+
+  <string name="faces_settings_section_device">Questo dispositivo</string>
+  <string name="faces_settings_exclude_title">Non su questo dispositivo</string>
+  <string name="faces_settings_exclude_message">Persone non lavora qui e toglie i dati di questo dispositivo. Il NAS e gli altri tuoi dispositivi non cambiano.</string>
+  <string name="faces_settings_exclude_confirm_title">Togliere Persone da questo dispositivo?</string>
+  <string name="faces_settings_exclude_confirm_synced">Su questo dispositivo si cancellano i dati di Persone. Restano sul NAS e sugli altri tuoi dispositivi: con «Attiva qui» tornano.</string>
+  <string name="faces_settings_exclude_confirm_local">Su questo dispositivo si cancellano i dati di Persone, compresi i nomi e le correzioni che hai dato: finché la sincronizzazione non è accesa sono solo qui e non tornano.</string>
+  <string name="faces_settings_exclude_cancel">Annulla</string>
+  <string name="faces_settings_exclude_confirm">Togli da qui</string>
+  <string name="faces_settings_include_title">Attiva qui</string>
+  <string name="faces_settings_include_message">Scarica dal NAS ciò che gli altri tuoi dispositivi hanno già calcolato.</string>
+  <string name="faces_settings_include_message_local">Ricalcola le persone su questo dispositivo, finché la sincronizzazione non è accesa.</string>
+  <string name="faces_settings_hidden_title">Persone nascoste</string>
+  <string name="faces_settings_hidden_message">Non compaiono in Persone né nella ricerca; le loro foto restano in Libreria.</string>
+  <string name="faces_settings_hidden_count">%1$d</string>
+
+  <string name="faces_settings_section_models">Modelli e licenze</string>
+  <string name="faces_settings_model_row">%1$s %2$s</string>
+  <string name="faces_settings_model_license">licenza %1$s</string>
+  <string name="faces_settings_models_footnote">I modelli sono dentro l’app: non si scarica niente. Il riconoscimento lavora solo su questo dispositivo.</string>
+  <string name="faces_settings_licenses">Informazioni e licenze</string>
+
+  <string name="faces_settings_section_erase">Cancellazione</string>
+  <string name="faces_settings_erase_title">Disattiva e cancella</string>
+  <string name="faces_settings_erase_message">Toglie tutto, dal NAS e da tutti i tuoi dispositivi; un dispositivo spento lo fa appena si riaccende.</string>
+  <string name="faces_settings_erase_progress">Su questo dispositivo: %1$s · sul NAS: %2$s · dispositivi che hanno confermato: %3$d su %4$d</string>
+  <string name="faces_settings_step_waiting">in attesa</string>
+  <string name="faces_settings_step_running">in corso</string>
+  <string name="faces_settings_step_done">fatto</string>
+  <string name="faces_settings_step_not_started">da fare</string>
+  <string name="faces_settings_step_not_needed">non serve</string>
+  <string name="faces_settings_diagnostics">Apri la Diagnostica</string>
+</resources>

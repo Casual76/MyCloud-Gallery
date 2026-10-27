@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8 (P7, docs/fase8-progetto.md §2.1, D3, D4, D5, D34): la pagina di attivazione di Persone. Il testo ha una VERSIONE
+       (FacesSwitch.CURRENT_TEXT_VERSION): se cambia, tutti i dispositivi tornano all'avviso. I sette paragrafi sono quelli del §2.1, in frasi brevi.
+       Nomi con il prefisso faces_activation_: le risorse dei moduli si fondono in :app e un nome uguale a quello di un altro modulo ne cambierebbe il testo. -->
+  <string name="faces_activation_title">Persone</string>
+  <string name="faces_activation_loading">Controllo che Persone si possa accendere…</string>
+
+  <string name="faces_activation_what">Persone raggruppa le tue foto per volto: dai un nome a chi conosci e lo ritrovi con un tocco, anche nella ricerca e negli album.</string>
+
+  <string name="faces_activation_work_pre">"Il lavoro lo fa un tuo dispositivo che analizza le foto, di notte, in carica. "</string>
+  <string name="faces_activation_work_bold">Nessuna foto e nessun volto escono da casa.</string>
+
+  <string name="faces_activation_yours_bold">I gruppi e i nomi sono solo tuoi</string>
+  <string name="faces_activation_yours_post">: stanno nella tua area privata del NAS e sui tuoi dispositivi. Nessun familiare li vede, nemmeno per le foto dell’area comune.</string>
+
+  <string name="faces_activation_others_pre">"Nelle foto ci sono anche amici e bambini: anche i loro volti vengono raggruppati. L’app "</string>
+  <string name="faces_activation_others_bold">non stima</string>
+  <string name="faces_activation_others_post">" età, sesso o altro. Puoi nascondere o far dimenticare chiunque."</string>
+
+  <string name="faces_activation_erase_bold">«Disattiva e cancella»</string>
+  <string name="faces_activation_erase_post">" toglie tutto, dal NAS e da tutti i tuoi dispositivi; un dispositivo spento lo fa appena si riaccende."</string>
+
+  <string name="faces_activation_device_pre">"Su ogni tuo dispositivo puoi dire "</string>
+  <string name="faces_activation_device_bold">«Non su questo dispositivo»</string>
+  <string name="faces_activation_device_post">.</string>
+
+  <string name="faces_activation_models">Modelli usati: YuNet (licenza MIT) e SFace (licenza Apache 2.0), dentro l’app.</string>
+  <string name="faces_activation_licenses">Informazioni e licenze</string>
+  <string name="faces_activation_licenses_description">Apri Informazioni e licenze, con la nota sui dati usati per addestrare i modelli</string>
+
+  <!-- D34 (Q5): sulle cartelle vere la sincronizzazione delle persone e' spenta. -->
+  <string name="faces_activation_fence_title">Per ora ogni dispositivo ha le sue persone</string>
+  <string name="faces_activation_fence">Finché la sincronizzazione delle persone non è accesa, ogni tuo dispositivo ha le sue: i nomi che dai qui non arrivano agli altri.</string>
+
+  <string name="faces_activation_enable">Attiva</string>
+  <string name="faces_activation_not_now">Non ora</string>
+  <string name="faces_activation_enable_description">Attiva il riconoscimento dei volti per il tuo account</string>
+  <string name="faces_activation_not_now_description">Non ora: Persone resta spenta</string>
+
+  <!-- Requisiti (D5, E-F10). -->
+  <string name="faces_activation_area_title">Serve un’area privata sul NAS</string>
+  <string name="faces_activation_area_message">I gruppi e i nomi stanno nella tua area privata, e al momento non ce n’è una diversa dall’area comune.</string>
+  <string name="faces_activation_indexer_title">Nessun tuo dispositivo analizza le foto</string>
+  <string name="faces_activation_indexer_message">Persone ha bisogno di un tuo dispositivo che analizzi le foto, di notte, in carica.</string>
+  <string name="faces_activation_indexer_make">Fallo su questo dispositivo</string>
+  <string name="faces_activation_indexer_make_description">Fai analizzare le foto a questo dispositivo, per poter attivare Persone</string>
+  <string name="faces_activation_indexer_other">Accendi «Analizza le foto» su uno dei tuoi dispositivi, in Impostazioni, Ricerca e modelli.</string>
+  <string name="faces_activation_close">Chiudi</string>
+
+  <!-- Dopo "Attiva". -->
+  <string name="faces_activation_activating">Attivo Persone…</string>
+  <string name="faces_activation_done_title">Persone è attiva</string>
+  <string name="faces_activation_done_message">Su questo dispositivo vale da subito. Le foto si analizzano di notte, in carica.</string>
+  <string name="faces_activation_done_pending">Sto per dirlo agli altri tuoi dispositivi: lo sapranno appena questo si sincronizza (a casa o con la VPN accesa).</string>
+  <string name="faces_activation_done_action">Fatto</string>
+
+  <!-- Quando non va. -->
+  <string name="faces_activation_stale_title">La pagina è cambiata</string>
+  <string name="faces_activation_stale_message">Il testo di questa pagina è cambiato mentre la leggevi. Rileggilo e scegli di nuovo.</string>
+  <string name="faces_activation_update_title">Aggiorna l’app</string>
+  <string name="faces_activation_update_message">Un altro tuo dispositivo ha attivato Persone con una versione più nuova dell’app. Aggiorna questa per continuare.</string>
+  <string name="faces_activation_unavailable_title">Persone non è disponibile adesso</string>
+  <string name="faces_activation_unavailable_message">Non sono riuscito ad attivarla. Non è cambiato niente: puoi riprovare tra poco.</string>
+  <string name="faces_activation_retry">Riprova</string>
+</resources>

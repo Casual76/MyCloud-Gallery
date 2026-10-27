@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.albums.AlbumRowCodec.HOLD
 import dev.pampa.mycloudgallery.albums.AlbumRowCodec.META
 import dev.pampa.mycloudgallery.albums.AlbumRowCodec.REJECTED
 import dev.pampa.mycloudgallery.albums.AlbumRowCodec.SEEN
+import dev.pampa.mycloudgallery.core.albums.shared.AlbumRejections
 import dev.pampa.mycloudgallery.core.albums.shared.AlbumReplicaStore
 import dev.pampa.mycloudgallery.core.albums.shared.DeviceFootprint
 import dev.pampa.mycloudgallery.core.albums.shared.ReplicaHold
@@ -125,16 +126,30 @@ class RoomAlbumReplicaStore(
    */
   suspend fun rejectedHeads(): Int = mutex.withLock { withContext(Dispatchers.IO) { AlbumRowCodec.countKey(database, REJECTED) } }
 
-  override suspend fun setRejectedHead(album: AlbumId, device: String, mark: HeadMark?) = mutex.withLock {
+  /**
+   * Le teste rifiutate **adesso** per motivo (DG-3): lo stesso segno durevole di [rejectedHeads], con il motivo scritto accanto alla testa. Un segno
+   * di prima, senza motivo (o con un motivo che non e' una costante ammessa), vale [AlbumRejections.UNKNOWN].
+   */
+  override suspend fun rejectedByReason(): Map<String, Int> = mutex.withLock {
+    withContext(Dispatchers.IO) {
+      AlbumRowCodec.serviceRows(database, REJECTED).values.groupingBy { row ->
+        AlbumRowCodec.metaLines(row)["reason"]?.firstOrNull()?.takeIf(AlbumRejections::isValid) ?: AlbumRejections.UNKNOWN
+      }.eachCount()
+    }
+  }
+
+  override suspend fun setRejectedHead(album: AlbumId, device: String, mark: HeadMark?, reason: String?) = mutex.withLock {
     require(!device.startsWith("~")) { "Dispositivo non valido." }
     if (mark == null) {
       dao.removeEntries(album.value, device, listOf(REJECTED))
     } else {
-      dao.upsertEntries(
-        listOf(AlbumRowCodec.metaRow(album, device, REJECTED, mark.version, "", false, listOf("x1", "version=${mark.version}", "hash=${mark.contentHash}"))),
-      )
+      val lines = listOfNotNull("x1", "version=${mark.version}", "hash=${mark.contentHash}", reason?.takeIf(AlbumRejections::isValid)?.let { "reason=$it" })
+      dao.upsertEntries(listOf(AlbumRowCodec.metaRow(album, device, REJECTED, mark.version, "", false, lines)))
     }
   }
+
+  /** Quanti contributi sono in attesa **adesso** (R2, `ReplicaHold`): le righe durevoli, che durano oltre il giro in cui sono nate (Diagnostica: `ALBUM_CONTRIB_HELD`). */
+  suspend fun heldContributions(): Int = mutex.withLock { holdRows().size }
 
   override suspend fun hold(album: AlbumId, device: String): ReplicaHold? = mutex.withLock { holdRows()[album to device] }
 

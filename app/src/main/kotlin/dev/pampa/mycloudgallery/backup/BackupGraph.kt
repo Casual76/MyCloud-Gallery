@@ -713,6 +713,12 @@ class BackupGraph(
     nas.flushOutbox()
   }
 
+  /** Il registro su disco delle richieste del guardiano (L76). */
+  private val safeCopyLog = dev.pampa.mycloudgallery.albums.FileSafeCopyRequestLog(java.io.File(context.noBackupFilesDir, SAFE_COPY_REQUESTS_FILE))
+
+  /** Quante volte il registro delle richieste del guardiano non si e' potuto leggere (Diagnostica degli album, `ALBUM_REGISTRY_UNREADABLE`: solo il numero). */
+  val safeCopyLogUnreadable: Int get() = safeCopyLog.unreadable
+
   /**
    * Fase 7 (D28, P13): le richieste del guardiano **subito** dopo una condivisione (`SafeCopyRequests` di core-backup, P4), su un registro su disco
    * (L76). Il giro chiesto e' quello di sempre ([GuardScope.All]) con le regole di sempre: la tappa `safety` lo fa girare e le toglie solo a giro
@@ -720,7 +726,7 @@ class BackupGraph(
    */
   val safeCopyRequests: dev.pampa.mycloudgallery.core.backup.safety.GuardianSafeCopyRequests =
     dev.pampa.mycloudgallery.core.backup.safety.GuardianSafeCopyRequests(
-      log = dev.pampa.mycloudgallery.albums.FileSafeCopyRequestLog(java.io.File(context.noBackupFilesDir, SAFE_COPY_REQUESTS_FILE)),
+      log = safeCopyLog,
       guardian = object : PrivateCopyGuardian {
         override suspend fun ensure(scope: dev.pampa.mycloudgallery.core.backup.contract.GuardScope, budget: kotlin.time.Duration) =
           parts?.guardian?.ensure(scope, budget)

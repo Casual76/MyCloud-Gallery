@@ -229,6 +229,8 @@ data class AlbumSyncReport(
   val bytesRead: Long = 0,
   /** R2: contributi in attesa (un segmento sparito, un file illeggibile, voci "dal futuro"): si riprovano a intervalli crescenti. */
   val contributionsHeld: Int = 0,
+  /** DG-3: i contributi rifiutati nel giro per motivo (nomi fissi di `AlbumRejections`, mai un dato letto dal NAS). La somma e' [contributionsRejected]. */
+  val rejectedByReason: Map<String, Int> = emptyMap(),
 )
 
 /**

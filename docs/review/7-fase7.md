@@ -8,7 +8,7 @@
 | **Tipo** | Revisione avversariale in sola lettura. Nessuna correzione al codice. Niente Gradle, nessun telefono, nessun `adb`, nessun NAS, nessuna rete. |
 | **Data** | 27/10/2026 |
 | **Metodo** | Lettura del codice nel worktree staccato a `870a723b`, seguendo ogni via che porta dati da un altro dispositivo o dal NAS fino a cio' che l'utente vede o a un'azione sui file, e ogni file che l'app scrive o toglie. Tre revisori di supporto, in sola lettura, hanno letto in parallelo: (1) formato firmato, replica, fusione e permessi degli album condivisi; (2) Nascosti, Doppioni, casa e viaggi, album smart; (3) `StateFiles`, registri durevoli, azzeramento, schema v6, recinzioni, `check.ps1`, test a tempo, Diagnostica. Il revisore principale ha letto lo spostamento in condivisione (orchestratore, passi, porte di `:app`, porta di completamento in `core-nasops`, `attachMoved`, guardiano, conferme) e le correzioni SD-1-SD-4. **Ogni voce riportata qui e' stata ricontrollata nel codice**; per ognuna si dice se e' confermata (dal codice) o plausibile (dipende da un comportamento del NAS, della piattaforma o da un attacco che qui non si prova). Nessun test eseguito. Nessun file del repository modificato a parte questo documento. |
-| **Stato** | Aperta: nessuna correzione ancora. |
+| **Stato** | **Chiusa nel codice il 27/10** con i pacchetti di correzione A (`fase7/rev-a`), B (`fase7/rev-b`), C (`fase7/rev-c`), D (`fase7/rev-d`) e E (`fase7/rev-e`: i collegamenti fra i pacchetti, i due confini A/B e questi documenti), uniti nei rami d'integrazione `integra/27-10a` e `integra/27-10b`: ogni voce ha una correzione con un test, oppure e' motivata come "non un difetto" (I9, I12), oppure resta **aperta** con il suo limite o la decisione che serve (R3 in parte, R19 in parte, I6, I8 in parte). Lo stato di ogni voce e' nella sezione "Stato di ogni voce" qui sotto; le sezioni "Fase 7, correzioni dopo le revisioni: pacchetto A/B/C/D/E" di `docs/decisioni.md` hanno le decisioni. Restano da provare sul telefono (F72-F93). |
 
 ## Riepilogo
 
@@ -29,6 +29,49 @@
 **La tabella dei permessi e' davvero una sola**, con un buco: le due righe che solo lo scrittore puo' applicare non le applica nessuno (R3). Il lettore e' un po' piu' largo dello scrittore in un caso (R14).
 
 **Nascosti: la fonte unica regge dove e' usata.** `VisibleMedia` e `HiddenMask` falliscono chiusi e passano su album, smart, viaggi, Doppioni, widget, selettore e "Aggiungi ad album". Escono dai nomi di una pagina che il registro non vede (R4) e dai titoli dei viaggi gia' calcolati (R16).
+
+## Stato di ogni voce (27/10, revisione E)
+
+**Corretta**: la correzione e i suoi test (pacchetto fra parentesi: A fiducia e replica, B flusso della condivisione, C Doppioni e file di stato, D smart, viaggi, Raccolte e Diagnostica, E collegamenti e confini). **Non un difetto**: il motivo. **Aperta**: il limite in `docs/sicurezza.md` o la decisione che serve. Le sigle dei limiti (L...) sono in `docs/sicurezza.md` §6.
+
+| Voce | Stato | Pacchetto, prove, limiti |
+|---|---|---|
+| R1 | Corretta (A, E) | Copie solo per album visti attivi, una volta, chiusura definitiva, tetti, ritiro alla revoca (`SharedAlbumClosedCopiesTest`, `PersonalAlbumCopiesTest.r1...`); E: il creatore tiene la copia del suo album anche senza il segno e la copia non si ritira con il telefono che ha chiuso (`SharedAlbumCreatorCopyTest`, `RevisioneEConfiniAppTest.sc1...`). L140 |
+| R2 | Corretta (A) | Contributi in attesa, errori di file e di sessione, cursore, byte contati, tetti prima di scaricare, segmenti rimessi dal proprietario (`SharedAlbumRobustnessTest`). L141 |
+| R3 | Corretta (B), **aperta in parte** | La tabella e' applicata nel piano di `core-nasops` (`ProtectedFiles`): cestino, spostamento e rinomina lasciano fuori i file protetti, anche da Cartelle NAS e dai Doppioni (`AlbumFileRulesTest`, `RevisioneBNasOpsTest`, `RevisioneBCondivisioneAppTest.r3...`). "Nuova versione": non un difetto (nessuna strada scrive versioni nell'area comune). Aperta: Cartelle NAS e le scelte "Ovunque" dei Doppioni simili offrono ancora l'azione e il piano risponde con il motivo, non prima del tocco (L152) |
+| R4 | Corretta (C) | Spazio senza i nascosti e fallendo chiuso; il Cestino di Cartelle NAS apre gli Eliminati di recente dietro il cancello; due righe nuove nel registro dei Nascosti (`NasTrashGateTest`, `HiddenSurfacesRegistryTest`) |
+| R5 | Corretta (C) | Il piano si rifa al foglio e di nuovo al tocco, con l'intersezione (`CatalogIdenticalRevisionCTest.r5...`) |
+| R6 | Corretta (A) | Le teste d'album si congelano alla dismissione e l'erede segue l'account admin (`RetireFrozenHeadsTest`, `SharedAlbumRetireTest`). L142 |
+| R7 | Corretta (A) | Le ore di chi legge: `seenAt`, teste e voci retrodatate rifiutate (`SharedAlbumRetrodatingTest`). L59 riscritto |
+| R8 | Corretta (B) | Un errore che non e' di rete tiene l'elemento (`CATALOG_PENDING`), mai "avanti senza porta" (`RevisioneBNasOpsTest.r8...`) |
+| R9 | Corretta (A, E) | "Non so" e non "vuoto", mai sovrascritti; potatura (`AlbumDurableStoresTest`). E: il conteggio arriva in Diagnostica (`RevisioneEDiagnosticaAppTest`). L143 |
+| R10 | Corretta (C) | Nessun passo dell'azzeramento ne ferma un altro, lo stato fidato per ultimo (`FileStateClearTest`) |
+| R11 | Corretta (C, E) | Franchigia, lettura del testo, emergenza, istantanea, battito e `StateFiles` (`StateOpenPointsTest`, `StateFilesTest`); E: l'emergenza non salvata e' una riga della Diagnostica del NAS (`RevisioneEDiagnosticaAppTest`). L163, L164 |
+| R12 | Corretta (A) | Il pubblicatore ricostruito preferisce la copia della replica e non adotta un contributo che non si rilegge tutto (`NasAlbumPublisherAdoptionTest`). L144 |
+| R13 | Corretta (A) | Tetti prima di scaricare, cache limitata, conti per dispositivo (`SharedAlbumRobustnessTest`, `RoomAlbumStoresTest`) |
+| R14 | Corretta (A) | Su un elemento altrui una voce nuova cambia solo la posizione (`AlbumPermissionsLogicTest.r14...`) |
+| R15 | Corretta (B) | La cartella proposta si valida con le regole del formato; un errore e' `Invalid` (`AlbumFolderWatchTest.r15...`, `RevisioneBAlbumPageTest.r15...`) |
+| R16 | Corretta (D) | Il centro dei luoghi su una griglia di 0,1 gradi e senza le foto di casa; titoli e luoghi dei viaggi ricalcolati (`TripsReviewTest`, `SmartReviewTest`). L171 |
+| R17 | Corretta (D) | `visibleOrThrow` e `hiddenAmongOrThrow`: un errore non svuota (`SmartFailClosedTest`) |
+| R18 | Corretta (C) | La prova del tocco nasce solo nel composable, timbro sulle copie del telefono, "mai l'ultima copia verificata" (`TrashTapGuardTest`, `UtilityRevisionCTest`). L162 |
+| R19 | Corretta in parte (A), **aperta in parte** | Tetti sui dati personali di un altro dispositivo: album, riferimenti, ricerca a blocchi (`AlbumProjectionWorkCapTest`, L146). Aperta: gli album smart con descrizione o foto d'esempio non hanno un tetto, serve una scelta dell'utente (proposta di D in `docs/decisioni.md`) |
+| R20 | Corretta (A) | Il passo D30 di `check.ps1` legge il bytecode del cancello nella release; provato con un cancello rotto apposta |
+| R21 | Corretta (A) | `repointMediaReferences` e' l'unica strada (`MergeV6Test`) |
+| R22 | Corretta (D, E) | D: l'esportazione ha tutte le chiavi (`AlbumsDiagnosticsExportTest`); E: i codici preparati sono collegati e i rifiuti si contano per motivo (`RevisioneEDiagnosticaAppTest`, `SharedAlbumRejectionReasonsTest`). L174 |
+| I1 | Corretta (A) | L'hash completo nella voce e nell'attestazione E-SH12 (`ShareFullHashTest`) |
+| I2 | Corretta (B, E) | Pausa `CATALOG` con il suo motivo e un tetto di 24 ore, trasferimenti da al piu' 10.000 elementi (`RevisioneBNasOpsTest.i2...`, `RevisioneBShareTest.i2...`); E: la pausa e' una riga della Diagnostica (`SHARE_PAUSED_CATALOG`) |
+| I3 | Corretta (B) | La seconda chiave legata al diario (`RevisioneBCondivisioneAppTest.i3...`, `Phase7ArchitectureTest`). C71 |
+| I4 | Corretta (B) | Il caricamento verso una cartella adottata fuori da "Album condivisi" e' escluso dal piano con il motivo (`RevisioneBShareTest.sg1...`). L153 |
+| I5 | Corretta (A, E) | Una riga del diario illeggibile resta un elemento fermo, in viaggio senza biglietto (`AlbumDurableStoresTest.i5...`); E: il confine con SH-2 e' provato sul diario vero (`RevisioneEConfiniAppTest.sh2...`) e su quello in memoria (`RevisioneEShareTest`) |
+| I6 | **Aperta** | La pulizia delle proprie teste e dei propri segmenti d'album toglie file sul NAS: per D1 e C10 la fa solo `core-nasops`, che non conosce `albums/`, e serve un lettore che ritrovi la serie oltre le teste tolte. Limite L145; decisione: se farla in una fase di manutenzione o accettare la crescita (una testa ogni 5 minuti per album e dispositivo) |
+| I7 | Corretta (D) | `toString()` senza dati sulle righe v6 (`AlbumRowsToStringTest`) |
+| I8 | **Aperta in parte** | Prima meta' (`trip_dismissed` e' uno SHA-256 senza segreto): non un difetto, e' il limite L87 (L170 aggiunge la seconda impronta). Seconda meta' (la query dei Doppioni non confronta l'account, `OTHERS` vuol dire "area sconosciuta"): aperta, oggi la garantiscono il catalogo (solo share dell'account) e `NasOperations` in sola lettura; il controllo esplicito vuole un parametro nuovo in `AlbumCatalog.duplicates` |
+| I9 | Non un difetto | Nessuna recinzione per Utility e Doppioni: mandano solo nei cestini (30 giorni) e non spostano nell'area comune; decisione di C. L161 |
+| I10 | Corretta (C) | `StateFiles`: segno di interruzione, ritentativo solo su Windows, tetto di lettura (`StateFilesTest`) |
+| I11 | Corretta (D) | `Mount`: lo stop aspetta il montaggio in corso (`MountTest`) |
+| I12 | Non un difetto | Informativa sui test a tempo (`e457ee28`): nessun codice di produzione cambiato; `NoFixedWaitsTest` continua a vietare le attese scritte a mano |
+
+**Conteggio.** Delle 34 voci (R1-R22, I1-I12): **28 corrette**, **2 non un difetto** (I9, I12), **4 aperte in tutto o in parte** (R3, R19, I6, I8). Nessuna delle quattro aperte e' un difetto di sicurezza ancora vivo: R3 e' protetta dal piano e manca solo di dirlo prima del tocco, R19 ha i tetti e manca solo quello degli smart con descrizione, I6 e' la crescita lenta di file del NAS, I8 e' un controllo in piu'. Le decisioni che servono all'utente sono in "Fase 7, correzioni dopo le revisioni: pacchetto E" di `docs/decisioni.md`.
 
 ---
 

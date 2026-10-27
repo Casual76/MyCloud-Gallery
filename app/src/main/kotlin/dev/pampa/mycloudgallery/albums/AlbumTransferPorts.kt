@@ -104,6 +104,9 @@ internal class TransferPlans(file: File) {
  * tocca, e una legata prima e' gia' nel diario (che la scrive sempre prima di chiamare la porta).
  */
 internal class TransferRegisters(val plans: TransferPlans, val uploads: FileAlbumUploadJournal) {
+  /** Quante volte uno dei due registri non si e' potuto leggere (Diagnostica, `ALBUM_REGISTRY_UNREADABLE`: solo il numero). */
+  val unreadable: Int get() = plans.unreadable + uploads.unreadable
+
   /** Toglie le chiavi che [openKeys] (il diario della condivisione) non cita piu'; quante. */
   suspend fun prune(openKeys: suspend () -> Set<String>): Int {
     val bound = plans.keys()

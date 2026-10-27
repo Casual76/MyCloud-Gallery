@@ -253,6 +253,11 @@ dependencies {
   // lavori. core-albums non vede core-nasops ne' core-backup (Phase7ArchitectureTest): le porte che spostano o caricano le lega solo `:app`.
   implementation project(':core-albums')
   implementation project(':feature-albums')
+  // Fase 8 (docs/fase8-progetto.md §1.1, §1.4, P13): le persone. `:app` cabla `FacesGraph` (interruttore, archivio cifrato, calcolo, raggruppamento,
+  // sincronizzazione, cancellazione), le porte verso il catalogo, il buffer di analisi, la share privata del NAS, core-nasops, la ricerca e gli album, le
+  // schermate e i lavori. core-faces non vede core-nasops, core-search, core-albums ne' la rete (Phase8ArchitectureTest): le porte le lega solo `:app`.
+  implementation project(':core-faces')
+  implementation project(':feature-people')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')
@@ -289,9 +294,6 @@ dependencies {
 
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
-  // Fase 8 (P9): il registro dei Nascosti prova le persone vere (core-faces) e le loro schermate (feature-people) sul catalogo vero. Solo test: in produzione le lega P13.
-  testImplementation project(':core-faces')
-  testImplementation project(':feature-people')
   testImplementation appDeps.workTesting
   // Screenshot dello scaffold (docs/screenshots/2-P0/) e test Compose su JVM.
   testImplementation appDeps.robolectric

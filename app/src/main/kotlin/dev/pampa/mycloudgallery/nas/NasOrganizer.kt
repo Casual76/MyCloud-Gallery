@@ -67,6 +67,10 @@ import dev.pampa.mycloudgallery.core.nasops.wiring.NasOpsServices
 import dev.pampa.mycloudgallery.core.nasops.wiring.NasOpsWiring
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKind
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalStop
+import dev.pampa.mycloudgallery.core.personal.contract.PrePublishHook
+import dev.pampa.mycloudgallery.core.personal.noop.NoPrePublishHook
+import dev.pampa.mycloudgallery.core.personal.sync.PersonalHeadsRecord
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalSyncReport
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalSyncStatus
 import dev.pampa.mycloudgallery.core.personal.remote.NasPersonalRemote
@@ -198,6 +202,28 @@ class NasOrganizer(
     val personalSync: NasPersonalSync?,
     val personalSettings: SyncedPersonalSettings,
   )
+
+  /**
+   * Fase 8 (P13, D30, §2.8 passo 10): **un solo** registro di cio' che l'ultima testa personale di ogni dispositivo dell'account dice della voce `faces`,
+   * durevole in `personal-heads`. Lo condividono la sincronizzazione dei dati personali (che lo aggiorna) e "Disattiva e cancella" (che lo legge per
+   * sapere chi ha cancellato). L'azzeramento toglie il file.
+   */
+  val personalHeads: PersonalHeadsRecord = PersonalHeadsRecord(File(noBackup, PersonalHeadsRecord.FILE))
+
+  /**
+   * Fase 8 (P13, D30): il gancio prima di ogni pubblicazione dei dati personali. Lo mette `FacesWiring` appena nasce l'interruttore di Persone
+   * (`FacesPrePublishHook`): una testa personale con `off|G` esiste solo dopo che i dati di `G` sono stati tolti da qui. Di serie si pubblica sempre
+   * (nessuna Persone legata: i montaggi senza i volti, i test).
+   */
+  @Volatile
+  var prePublish: PrePublishHook = NoPrePublishHook
+
+  /**
+   * Fase 8 (P13, D30): un giro completo dei dati personali e' finito in questo processo (`PersonalStop.COMPLETE`): la generazione dei volti torna
+   * "fresca" (`FacesSwitch.onPersonalRoundCompleted`). Lo mette `FacesWiring`.
+   */
+  @Volatile
+  var onPersonalRoundCompleted: () -> Unit = {}
 
   private val partsFlow = MutableStateFlow<Parts?>(null)
   val parts: Parts? get() = partsFlow.value
@@ -418,6 +444,9 @@ class NasOrganizer(
         clock = inputs.nasClock,
         gate = personalGate,
         monotonicMillis = monotonicMs,
+        // Fase 8 (P13, D30): il gancio dei volti (letto a ogni giro, lo legge `FacesWiring` dopo di noi) e il registro unico delle teste.
+        prePublish = PrePublishHook { state -> prePublish.beforePublish(state) },
+        heads = personalHeads,
       )
     }
     val settings = SyncedPersonalSettings(store, scope)
@@ -551,6 +580,8 @@ class NasOrganizer(
     return work.run {
       val report = sync.sync(budget)
       runCatching { p.personalStore.reproject() }
+      // Fase 8 (D30): un giro completo di questo processo rende fresca la generazione dei volti.
+      if (report.stoppedBy == PersonalStop.COMPLETE) runCatching { onPersonalRoundCompleted() }
       report
     }?.also { lastPersonal.value = it }
   }

@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.ai
 import android.content.Context
 import dev.pampa.mycloudgallery.core.ai.compute.AiComputeEngine
 import dev.pampa.mycloudgallery.core.ai.compute.AiComputeParts
+import dev.pampa.mycloudgallery.core.ai.contract.BufferKeepers
 import dev.pampa.mycloudgallery.core.ai.compute.AiFreeSpace
 import dev.pampa.mycloudgallery.core.ai.compute.AiInputOrigin
 import dev.pampa.mycloudgallery.core.ai.compute.AiInputs
@@ -293,6 +294,12 @@ class AiGraph(
     statusMemory.save(statusFlow.value)
   }
 
+  /**
+   * Fase 8 (P13, D17): chi dice quali anteprime del buffer servono ancora ai volti (il buffer non butta cio' che i volti non hanno ancora analizzato). Lo mette
+   * `FacesWiring` quando le persone si montano; di serie nessuno tiene niente (come prima). Letto a ogni tappa: un motore gia' creato lo vede.
+   */
+  @Volatile var keepers: BufferKeepers = BufferKeepers.NONE
+
   private val engineLock = Mutex()
   private var engine: Pair<NasAiRuntime, AiComputeEngine>? = null
 
@@ -323,6 +330,7 @@ class AiGraph(
       unsupported = unsupported,
       freeSpace = AiFreeSpace { noBackupDir.usableSpace },
       modelReady = { modelReady() },
+      keepers = BufferKeepers { keys -> keepers.stillWanted(keys) },
     )
     val created = AiComputeEngine(computeParts, recipe)
     engine = rt to created

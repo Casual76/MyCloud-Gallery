@@ -57,3 +57,12 @@
 -keep class dev.pampa.mycloudgallery.albums.FlagsAlbumReadGate {
     public boolean mayRead(java.lang.String);
 }
+
+# --- Fase 8 (P13, D34): il cancello delle scritture dei volti ---------------------------------------------------------------------------
+# "Dati dei volti sul NAS solo sulle share di prova" (D34, risposta Q5 (a)) vale nella release finche' l'utente non da' il consenso: il cancello
+# (`AppFacesWriteGate.blockFor`) chiama la decisione per share (`FeatureFlags.facesSyncMayUse`, tenuta da core-common/consumer-rules.pro) e risponde
+# `TEST_SHARES_ONLY` prima di tutto il resto. R8 non deve ne' toglierlo ne' fonderlo in un'altra classe ne' inlinearlo: tools/check.ps1 (passo
+# "D34 nella release") legge il bytecode della release e prova la chiamata, la risposta e chi lo istanzia (il montaggio delle persone).
+-keep class dev.pampa.mycloudgallery.faces.AppFacesWriteGate {
+    public *** blockFor(java.lang.String, kotlin.coroutines.Continuation);
+}

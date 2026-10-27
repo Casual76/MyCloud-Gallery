@@ -47,6 +47,8 @@ import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.albums.nav.albumsGraph
+import dev.pampa.mycloudgallery.feature.people.contract.PeopleActions
+import dev.pampa.mycloudgallery.feature.people.nav.openPeopleEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionKind
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsTab
 import dev.pampa.mycloudgallery.feature.library.collections.collectionsGraph
@@ -179,6 +181,15 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
     gallery?.let { host -> viewer?.open(request, albumsHost?.servicesForRequest(host.viewerServices, request) ?: host.viewerServices) }
   }
   if (albumsHost != null) AlbumRequestsHost(albumsHost, nav, viewer)
+  // Fase 8 (P13): le persone. Uno stato per l'activity (le rotte delle persone, le miniature, i ritagli), il tocco su una persona dal viewer e l'avviso una tantum.
+  val peopleHost: PeopleHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
+  val peopleActions = remember(nav, viewer, peopleHost, gallery) {
+    peopleHost?.let { host -> AppPeopleActions(nav, viewer, host) { gallery?.viewerServices } }
+  }
+  if (peopleHost != null) {
+    SideEffect { peopleHost.opener.bind(nav, viewer) }
+    PeopleNoticeEffect(nav, peopleHost)
+  }
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),
@@ -200,6 +211,7 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
               findSimilar = findSimilar,
               onFindSimilarHandled = { findSimilar = null },
               openViewer = openViewer,
+              peopleActions = peopleActions,
             )
           }
           // Fase 3 (P10): le pagine delle Raccolte sul telefono (griglie filtrate, Nascosti, Eliminati di recente).
@@ -211,6 +223,8 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
             albumsGraph(nav = nav, actions = albumActions, thumbnails = albumsHost.thumbnails)
             mediaPickerGraph(nav = nav, host = albumsHost)
           }
+          // Fase 8 (P13): "Tutte le persone", "Altri volti", la pagina di una persona, la revisione, le nascoste; attivazione, avviso, Impostazioni -> Persone, "Disattiva e cancella".
+          if (peopleHost != null && peopleActions != null) peopleScreens(nav = nav, actions = peopleActions, host = peopleHost)
           // Fase 4B (P16): Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso (rotte a schermo intero).
           nasGraph(nav = nav, onOpenFile = nasOpener::open, trashPage = GatedNasTrashPage)
           // Fase 5A (P7): la pagina Backup, le impostazioni, la cartella del dispositivo e il riepilogo del primo backup.
@@ -234,6 +248,8 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
             openSearch = { nav.navigate(SearchSettingsPageRoute) },
             // Fase 7 (P9, D33): Privacy → Nascosti, sempre (anche con la sezione nascosta dalle Raccolte), dietro il suo cancello.
             openHidden = { nav.openCollection(CollectionKind.HIDDEN) },
+            // Fase 8 (P7, P13): Impostazioni -> Persone.
+            openPeople = { nav.navigate(PeopleSettingsDestination) },
           )
           // Fase 6 (P11): la pagina Ricerca e modelli e quella di attivazione della lettura del testo.
           searchActions?.let { searchGraph(nav, it) }
@@ -378,6 +394,8 @@ private fun MainDestination(
   onFindSimilarHandled: () -> Unit,
   /** Il viewer della galleria per le Raccolte (con le voci degli album dei Nascosti, se la richiesta e' dei Nascosti). */
   openViewer: (ViewerRequest) -> Unit,
+  /** Fase 8 (P13): le uscite delle persone (la sezione delle Raccolte apre le loro pagine). */
+  peopleActions: PeopleActions?,
 ) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
   val library: LibraryViewModel = hiltViewModel()
@@ -432,7 +450,13 @@ private fun MainDestination(
         // Fase 7 (P11, P13): le sezioni arrivano dai fornitori (`CollectionsModule`); le voci date come dati si aprono qui. Sul telefono la rotta, sul
         // tablet la pagina nel pannello di dettaglio (le pagine degli album sono rotte anche li').
         onOpenEntry = { entry ->
-          openCollectionEntry(entry.code, nav, openFreeSpace = { gallery.fiveB?.openFreeSpace(null) }, onNewAlbum = { newAlbum = true })
+          openCollectionEntry(
+            entry.code,
+            nav,
+            openFreeSpace = { gallery.fiveB?.openFreeSpace(null) },
+            onNewAlbum = { newAlbum = true },
+            onPeople = { target -> peopleActions?.let { actions -> nav.openPeopleEntry(target, actions) } },
+          )
         },
         entryDetail = { entry -> CollectionEntryDetail(entry, nav, slot.contentPadding, nasOpener, openViewer) },
         entryHasDetail = { entry -> hasEntryDetail(entry.code) },

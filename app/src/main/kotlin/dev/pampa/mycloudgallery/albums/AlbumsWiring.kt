@@ -30,7 +30,15 @@ object AlbumsWiring {
   /** I file degli album in `noBackupFilesDir` (fuori dai backup; l'azzeramento toglie la cartella). */
   const val DIR: String = "albums"
 
-  fun build(context: Context, graph: AppGraph, gallery: GalleryGraph, search: SearchEngine?, today: Today): AlbumsGraph {
+  fun build(
+    context: Context,
+    graph: AppGraph,
+    gallery: GalleryGraph,
+    search: SearchEngine?,
+    today: Today,
+    /** Fase 8 (P13): il ponte verso le persone (la regola degli smart e i nomi che diventano regole); di serie nessuna. */
+    people: dev.pampa.mycloudgallery.faces.PeopleBridge? = null,
+  ): AlbumsGraph {
     val noBackup = context.noBackupFilesDir
     val inputs = graph.nasInputs
     val nas = gallery.nas
@@ -102,6 +110,8 @@ object AlbumsWiring {
           ioErrors = NasAlbumIoErrors,
           onError = { error -> graphRef[0]?.noteError(error) },
           onTripReport = { report -> graphRef[0]?.noteTrips(report) },
+          people = people ?: dev.pampa.mycloudgallery.core.albums.noop.NoPeopleMembership,
+          peopleLookup = people ?: dev.pampa.mycloudgallery.core.search.noop.NoPeopleLookup,
         ),
       )
     }

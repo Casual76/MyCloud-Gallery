@@ -72,6 +72,13 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   @Inject
   lateinit var albums: dev.pampa.mycloudgallery.albums.AlbumsGraph
 
+  /**
+   * Fase 8 (P13): le persone (`FacesModule`): nascono con il processo, **prima** di qualunque apertura dei dati dei volti, e si montano da sole quando la famiglia
+   * e' pronta. Nasce qui anche l'interruttore della cancellazione: un diario di "Disattiva e cancella" rimasto a meta' chiude il recinto appena le persone si montano.
+   */
+  @Inject
+  lateinit var faces: dev.pampa.mycloudgallery.faces.FacesGraph
+
   override val workManagerConfiguration: Configuration
     get() = Configuration.Builder()
       .setWorkerFactory(workerFactory)
@@ -112,6 +119,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     if (::gallery.isInitialized) gallery.onTrimMemory(level)
     // Fase 6 (D35, P13): il motore delle query e il ritagliatore del soggetto si rilasciano a memoria bassa (si ricaricano all'uso).
     if (::ai.isInitialized) ai.onTrimMemory(level)
+    // Fase 8 (P13, §2.2 "Rilascio"): rilevatore ed embedder si rilasciano a memoria bassa (si riaprono da soli), e le copertine in memoria si buttano.
+    if (::faces.isInitialized) faces.onTrimMemory(level)
   }
 
   private fun galleryLifecycle(): GalleryLifecycle = object : GalleryLifecycle {
@@ -129,6 +138,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
           if (gallery.backup != null) BackupWorkScheduling.ensure(this@MyCloudGalleryApp)
           // Fase 6 (P11): modelli e calcolo AI (le regole di AI_COMPUTE decidono quando; senza il ruolo il calcolo finisce subito).
           AiWorkScheduling.ensure(this@MyCloudGalleryApp)
+          // Fase 8 (P13): il calcolo dei volti (le regole di AI_COMPUTE decidono quando; senza Persone attiva qui la tappa finisce subito).
+          dev.pampa.mycloudgallery.work.FacesWorkScheduling.ensure(this@MyCloudGalleryApp)
         }
         // Fase 6 (P11): l'indice di ricerca si apre con il catalogo (vive anche senza NAS), i modelli presenti si verificano (P3).
         graph.scope.launch {

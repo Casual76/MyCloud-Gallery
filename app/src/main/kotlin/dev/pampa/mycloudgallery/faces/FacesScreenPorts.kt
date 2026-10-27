@@ -1,0 +1,190 @@
+package dev.pampa.mycloudgallery.faces
+
+import android.content.res.Resources
+import dev.pampa.mycloudgallery.core.ai.compute.IndexerAreas
+import dev.pampa.mycloudgallery.core.faces.contract.EraseStart
+import dev.pampa.mycloudgallery.core.faces.contract.EraseStatus
+import dev.pampa.mycloudgallery.core.faces.contract.ErasePreview
+import dev.pampa.mycloudgallery.core.faces.contract.EraseReport
+import dev.pampa.mycloudgallery.core.faces.contract.EraseStep
+import dev.pampa.mycloudgallery.core.faces.contract.FacesEraseConfirmation
+import dev.pampa.mycloudgallery.core.faces.contract.FacesEraser
+import dev.pampa.mycloudgallery.core.faces.contract.FacesRequirements
+import dev.pampa.mycloudgallery.core.faces.contract.FacesState
+import dev.pampa.mycloudgallery.core.faces.contract.FacesStatus
+import dev.pampa.mycloudgallery.core.faces.contract.FacesSwitch
+import dev.pampa.mycloudgallery.core.faces.contract.HereState
+import dev.pampa.mycloudgallery.core.faces.contract.PeopleAlbumsChoice
+import dev.pampa.mycloudgallery.core.faces.noop.NoFacesEraser
+import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
+import dev.pampa.mycloudgallery.core.personal.contract.FacesSettingCodec
+import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
+import dev.pampa.mycloudgallery.feature.people.activation.ActivationIndexerRole
+import dev.pampa.mycloudgallery.feature.people.activation.ActivationPorts
+import dev.pampa.mycloudgallery.feature.people.activation.FacesActivatedBy
+import dev.pampa.mycloudgallery.feature.people.activation.PeopleSettingsFacts
+import dev.pampa.mycloudgallery.feature.people.contract.ComputingDevice
+import dev.pampa.mycloudgallery.feature.people.contract.FaceModelRow
+import dev.pampa.mycloudgallery.feature.people.erase.EraseSheetStates
+import dev.pampa.mycloudgallery.feature.people.section.PeopleSectionSources
+import dev.pampa.mycloudgallery.feature.people.section.SectionData
+import dev.pampa.mycloudgallery.feature.search.contract.IndexerChange
+import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
+import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntryState
+import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntryStatus
+import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntrySummary
+import dev.pampa.mycloudgallery.gallery.GalleryGraph
+import dev.pampa.mycloudgallery.graph.AppGraph
+import dev.pampa.mycloudgallery.navigation.FlowSection
+import kotlin.time.Duration
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+
+// LE PORTE DELLE SCHERMATE DELLE PERSONE (Fase 8, P13; docs/fase8-progetto.md §1.4, §1.5): cio' che la pagina di attivazione, l'avviso, Impostazioni -> Persone,
+// il foglio "Disattiva e cancella", la voce delle Impostazioni e la sezione delle Raccolte chiedono a `:app`. Solo contratti e dati: mai un nome, un id di
+// persona o di volto, o un conteggio per persona nei log (D37); gli stessi dati che mostrano le schermate non escono dal telefono.
+
+/** "Disattiva e cancella" di adesso: quello vero dalle persone montate; prima, niente da cancellare. */
+@OptIn(ExperimentalCoroutinesApi::class)
+class FacesEraserFacade(private val graph: FacesGraph, scope: CoroutineScope) : FacesEraser {
+  override val status: StateFlow<EraseStatus?> = graph.live.flatMapLatest { it?.eraser?.status ?: flowOf(null) }.stateIn(scope, SharingStarted.Eagerly, null)
+
+  override suspend fun preview(): ErasePreview = graph.live.value?.eraser?.preview() ?: NoFacesEraser.preview()
+
+  override suspend fun erase(confirmation: FacesEraseConfirmation, albums: PeopleAlbumsChoice): EraseStart =
+    graph.live.value?.eraser?.erase(confirmation, albums) ?: EraseStart.NothingToErase
+
+  override suspend fun resume(budget: Duration): EraseReport = graph.live.value?.eraser?.resume(budget) ?: NoFacesEraser.resume(budget)
+
+  override fun toString(): String = "FacesEraserFacade"
+}
+
+/**
+ * La voce "Persone" delle Impostazioni (D3, D4): lo stato di QUESTO dispositivo in una frase. Mai un nome, un conteggio o una parola sulla famiglia (Q3,
+ * D37).
+ */
+class AppPeopleEntryStatus(switch: FacesSwitch, scope: CoroutineScope) : PeopleEntryStatus {
+  override val summary: StateFlow<PeopleEntrySummary> = switch.state.map { PeopleEntrySummary(entryOf(it)) }
+    .stateIn(scope, SharingStarted.Eagerly, PeopleEntrySummary(entryOf(switch.state.value)))
+
+  private fun entryOf(state: FacesState): PeopleEntryState = when (state) {
+    FacesState.Off -> PeopleEntryState.OFF
+    is FacesState.On -> when (state.here) {
+      HereState.ACTIVE -> PeopleEntryState.ON
+      HereState.LOCAL_ONLY -> PeopleEntryState.LOCAL_ONLY
+      HereState.EXCLUDED -> PeopleEntryState.EXCLUDED_HERE
+    }
+    is FacesState.AwaitingNotice -> PeopleEntryState.AWAITING_NOTICE
+    is FacesState.Erasing -> PeopleEntryState.ERASING
+    FacesState.NeedsUpdate -> PeopleEntryState.NEEDS_UPDATE
+  }
+}
+
+/**
+ * Le porte della pagina di attivazione, dell'avviso e di Impostazioni -> Persone (P7): l'interruttore, i requisiti, il ruolo di indicizzatore ("Fallo su
+ * questo dispositivo"), il nome del dispositivo **dell'account** che ha acceso Persone (mai un familiare: Q3) e i fatti di Impostazioni (chi calcola, a che
+ * punto e', le persone nascoste, i modelli, la cancellazione).
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class AppActivationPorts(
+  override val switch: FacesSwitch,
+  override val requirements: FacesRequirements,
+  private val faces: FacesGraph,
+  private val graph: AppGraph,
+  private val gallery: GalleryGraph,
+  private val indexerHere: () -> Boolean,
+  indexer: IndexerControl,
+  people: FacesPeopleFacade,
+  eraser: FacesEraserFacade,
+) : ActivationPorts {
+
+  override val indexerRole: ActivationIndexerRole = ActivationIndexerRole { indexer.setIndexer(true).let { it == IndexerChange.SAVED || it == IndexerChange.UNCHANGED } }
+
+  override val activatedBy: FacesActivatedBy = FacesActivatedBy { activatedByLabel() }
+
+  private val status: StateFlow<FacesStatus> =
+    faces.live.flatMapLatest { it?.status ?: flowOf(FacesStatus.Off) }.stateIn(graph.scope, SharingStarted.Eagerly, FacesStatus.Off)
+
+  override val facts: StateFlow<PeopleSettingsFacts> = combine(status, people.list, eraser.status, graph.statuses.latest, switch.state) { progress, list, erase, _, _ ->
+    PeopleSettingsFacts(
+      devices = computingDevices(),
+      progress = progress,
+      hiddenPeople = list.hiddenCount,
+      models = MODELS,
+      erase = erase?.takeIf { it.step != EraseStep.DONE }?.let(EraseSheetStates::progress),
+    )
+  }.stateIn(graph.scope, SharingStarted.Eagerly, PeopleSettingsFacts(models = MODELS))
+
+  /** Il nome (del registro) del dispositivo dell'account che ha scritto la voce `faces`; null se non si sa o se non e' dell'account. */
+  private fun activatedByLabel(): String? {
+    val author = gallery.nas?.organizer?.parts?.personalStore?.effectiveEntries?.value?.get(FacesSettingCodec.KEY)?.author ?: return null
+    val registry = graph.nasInputs.registry()?.registry ?: return null
+    val me = graph.nasInputs.deviceId()?.let { registry.device(it) } ?: return null
+    val device = registry.device(author) ?: return null
+    return device.name.takeIf { dev.pampa.mycloudgallery.core.trust.codec.TextRules.sameAccount(device.nasUser, me.nasUser) }
+  }
+
+  /** I dispositivi dell'account che analizzano le foto (ruolo Indicizzatore negli stati firmati degli ultimi 7 giorni, piu' questo col ruolo di adesso). */
+  private fun computingDevices(): List<ComputingDevice> {
+    val registry = graph.nasInputs.registry()?.registry ?: return emptyList()
+    val me = graph.nasInputs.deviceId()
+    val mine = me?.let { registry.device(it) }?.nasUser ?: return emptyList()
+    val statuses = graph.statuses.latest.value
+    val now = graph.nasInputs.nasClock.nowMillisOrNull()
+    return registry.devices.filter {
+      it.status == DeviceStatus.APPROVED && dev.pampa.mycloudgallery.core.trust.codec.TextRules.sameAccount(it.nasUser, mine)
+    }.mapNotNull { device ->
+      val isMe = device.id == me
+      val indexer = if (isMe) {
+        indexerHere()
+      } else {
+        statuses[device.id]?.let { report -> DeviceRole.INDEXER in report.roles && now != null && now - report.lastSeenAt in 0..IndexerAreas.FRESH_MILLIS } == true
+      }
+      if (indexer) ComputingDevice(device.name, thisDevice = isMe, excluded = false) else null
+    }
+  }
+
+  companion object {
+    /** I due modelli dei volti, dentro l'app (Q1 (a)): nome, versione, licenza. */
+    val MODELS: List<FaceModelRow> = listOf(
+      FaceModelRow("YuNet", "2023mar", "MIT"),
+      FaceModelRow("SFace", "2021dec", "Apache 2.0"),
+    )
+  }
+}
+
+/** La trasformazione campo per campo dei dati di feature-people nel gruppo delle Raccolte (i due moduli non si conoscono). */
+internal fun SectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
+  title = title,
+  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing) },
+  code = code,
+  hideable = hideable,
+  hint = hint,
+)
+
+/** La sezione Persone delle Raccolte come fornitore (codice `people`): sempre una riga almeno, anche da spenta con "Attiva riconoscimento dei volti". */
+@OptIn(ExperimentalCoroutinesApi::class)
+fun peopleSectionProvider(
+  resources: Resources,
+  people: FacesPeopleFacade,
+  state: StateFlow<FacesState>,
+  faces: FacesGraph,
+  scope: CoroutineScope,
+): CollectionsSectionProvider {
+  val status: StateFlow<FacesStatus> = faces.live.flatMapLatest { it?.status ?: flowOf(FacesStatus.Off) }.stateIn(scope, SharingStarted.Eagerly, FacesStatus.Off)
+  val sources = PeopleSectionSources(resources, people, state, status, scope)
+  return FlowSection(
+    PeopleSectionSources.CODE,
+    sources.section.map { it?.toGroup() }.stateIn(scope, SharingStarted.Eagerly, sources.section.value?.toGroup()),
+  )
+}

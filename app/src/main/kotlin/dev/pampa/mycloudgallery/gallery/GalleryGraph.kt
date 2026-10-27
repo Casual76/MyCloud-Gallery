@@ -524,6 +524,13 @@ class GalleryGraph(
   @Volatile
   var viewerAlbums: ViewerAlbumActions = NoViewerAlbumActions
 
+  /**
+   * Fase 8 (P13, D25): le persone del media aperto nel viewer (la riga "Persone" delle info, "Chi e'?"). Le lega `FacesModule` con il processo; di serie
+   * nessuna (il viewer non mostra la riga). Letta quando il viewer si costruisce, dopo l'avvio dell'app.
+   */
+  @Volatile
+  var viewerPeople: dev.pampa.mycloudgallery.feature.viewer.people.ViewerPeople? = null
+
   /** Una scrittura che tocca catalogo e istantanea: mai insieme a [shutdown], e mai dopo. */
   private suspend fun <T> writing(block: suspend () -> T): T = lifecycle.withLock {
     checkActive()
@@ -678,6 +685,8 @@ class GalleryGraph(
       similarSearch = searchViewer?.similarSearch ?: dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch,
       subjectCutter = searchViewer?.subjectCutter,
       cutoutSaver = searchViewer?.cutoutSaver,
+      // Fase 8 (P13): la riga "Persone" nelle info (solo con la porta legata).
+      people = viewerPeople,
       // Fase 7 (P13): "Aggiungi ad album" dal viewer; le voci si leggono a ogni richiesta da [viewerAlbums] (gli album si legano dopo la galleria).
       albums = object : ViewerAlbumActions {
         override fun menu(id: MediaId) = viewerAlbums.menu(id)

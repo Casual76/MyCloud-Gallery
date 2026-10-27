@@ -77,6 +77,8 @@ class SearchGraph(
   modelMissing: () -> Boolean = { false },
   /** PR-1 (revisione A): aree senza indicizzatori e lettura del testo non attiva, per Cerca e per la pagina. */
   val coverageNotices: CoverageNotices = CoverageNotices.NONE,
+  /** Fase 8 (P13, D26): la ricerca per persona; di serie nessuna (il nome resta testo, E-F37). Il ponte di `FacesModule` lo lega alle persone vere. */
+  val people: dev.pampa.mycloudgallery.core.search.contract.PeopleLookup = dev.pampa.mycloudgallery.core.search.noop.NoPeopleLookup,
   /** Dove gira il lavoro delle ricerche (CE-7): fuori dal thread principale. I test ne scelgono uno loro. */
   private val compute: CoroutineDispatcher = Dispatchers.Default,
 ) {
@@ -101,10 +103,10 @@ class SearchGraph(
   private val libraryPlaces = LibraryPlaces(places)
   // CE-10: la cronologia aspetta che l'indice si apra con il catalogo (dopo l'onboarding, nello stesso processo) invece di restare vuota per sempre.
   val history: SearchHistory = LocalSearchHistory(CatalogHistoryStore(catalog) { opened.await() }, graphScope)
-  val suggestions: Suggestions = LibrarySuggestions(base, libraryPlaces, history)
+  val suggestions: Suggestions = LibrarySuggestions(base, libraryPlaces, history, people)
 
   private val local =
-    LocalSearchEngine(base, index, keys, texts, embedding, today, libraryPlaces, coverageTracker = coverage, coverageNotices = coverageNotices)
+    LocalSearchEngine(base, index, keys, texts, embedding, today, libraryPlaces, coverageTracker = coverage, coverageNotices = coverageNotices, people = people)
   private val lifecycle = Mutex()
 
   @Volatile private var stopped = false

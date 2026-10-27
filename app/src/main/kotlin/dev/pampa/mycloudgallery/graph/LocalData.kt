@@ -151,6 +151,13 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
   }
 
   private suspend fun eraseGalleryData(steps: Steps, stopGallery: Boolean, allDatabases: Boolean) {
+    // Fase 8 (P13, §1.4, E-F35): le persone PER PRIME. Motori rilasciati, calcolo fermo, niente si apre piu' (il recinto), i database dei volti chiusi; poi le chiavi dei
+    // volti (una per generazione) prima di qualunque dato, e i file. Anche per i soli dati di un account: le chiavi e i database dei volti sono del vecchio account.
+    val facesStopped = if (stopGallery) steps.run("volti") { graph.facesStopper?.stop() } else true
+    if (!facesStopped) return
+    steps.run("chiavi dei volti") {
+      if (!graph.facesKeys.destroyAll()) throw java.io.IOException("Chiavi dei volti non distrutte.")
+    }
     // Fase 7 (P13, §1.4): gli album PER PRIMI. Diario della condivisione, replica, proposte e casa si tolgono solo a operazioni ferme: i giri
     // della condivisione si fermano e si aspettano qui, le operazioni sui file (4B) le ferma la galleria (sono sue figlie) prima dei file.
     // Gli album si montano solo con la galleria partita: se non si ferma la galleria (mai partita in questo processo) non c'e' niente da fermare.
@@ -187,7 +194,9 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
         // Fase 4B (P16): il registro locale dei dati personali (`personal/`). Il diario delle operazioni e del cestino sta nel
         // database (tolto qui sopra); le operazioni in corso e i loro lavori li ha gia' fermati la galleria (NasOrganizer.stop).
         // I11: in debug anche i dati dello strumento di valutazione della ricerca (`eval/`); in release non ce ne sono.
-        for (name in NAS_FILES + AI_FILES + DeveloperTools.erasableDirs()) {
+        // Fase 8 (P13): i database dei volti (`faces/faces-<G>.db` con `-wal`, `-shm`, `-journal`, anche con `allDatabases = false`), le chiavi avvolte, la memoria
+        // locale (`faces-local`), il diario della cancellazione, il registro delle teste personali e il battito del calcolo.
+        for (name in NAS_FILES + AI_FILES + FACES_FILES + DeveloperTools.erasableDirs()) {
           val target = File(context.noBackupFilesDir, name)
           if (target.exists() && !target.deleteRecursively()) steps.ok = false
         }
@@ -231,6 +240,9 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       // Fase 7 (P13): i registri degli album (caricamenti, piani dei trasferimenti, richieste del guardiano, avvisi visti, segni "visto").
       dev.pampa.mycloudgallery.albums.AlbumsWiring.DIR,
     ) + BackupRunMemory.FILES
+
+    /** Fase 8 (P13): i file locali delle persone (database, chiavi avvolte, memoria locale, diario della cancellazione, teste personali, battito). */
+    val FACES_FILES: List<String> = dev.pampa.mycloudgallery.faces.FacesWiring.FILES
 
     /**
      * Fase 6 (P11): il buffer di analisi, l'indice di ricerca (vettori, registro delle origini, righe del testo letto, corpi propri), i

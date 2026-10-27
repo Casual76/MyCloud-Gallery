@@ -185,6 +185,8 @@ object AiWiring {
     /** Solo i test d'integrazione: il ritagliatore (finto) e lo scrittore di `Ritagli/` (finto) al posto di MagicTouch e del MediaStore. */
     cutter: ((ModelFiles) -> SubjectCutter)? = null,
     cutoutWriter: ((relativePath: String) -> PhoneMediaWriter)? = null,
+    /** Fase 8 (P13, D26): la ricerca per persona (il ponte di `FacesModule`); di serie nessuna. */
+    people: dev.pampa.mycloudgallery.core.search.contract.PeopleLookup = dev.pampa.mycloudgallery.core.search.noop.NoPeopleLookup,
   ): AiStack {
     val scope = graph.scope
     val noBackup = context.noBackupFilesDir
@@ -268,6 +270,7 @@ object AiWiring {
       modelMissing = { modelReady == null && models.manager.states.value[ModelCatalog.QUERY_270M.id] !is ModelState.Ready },
       coverageReasons = coverage,
       coverageNotices = coverage,
+      people = people,
     )
     searchRef = search
 
@@ -376,7 +379,7 @@ object AiWiring {
    * PR-1 (D14, E-I12): i dispositivi approvati del registro con il ruolo e l'ultima volta visto dei loro stati firmati; questo dispositivo
    * con il ruolo di adesso ([indexerHere]). Null finche' gli stati non si sono letti: nessuna area si dice scoperta per ipotesi.
    */
-  private fun familyRoles(graph: AppGraph, indexerHere: Boolean): List<DeviceRoleView>? {
+  internal fun familyRoles(graph: AppGraph, indexerHere: Boolean): List<DeviceRoleView>? {
     val registry = graph.engine.state?.registry ?: return null
     val statuses = graph.statuses.latest.value
     if (statuses.isEmpty()) return null

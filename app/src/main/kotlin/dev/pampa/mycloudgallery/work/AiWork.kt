@@ -245,6 +245,17 @@ class AiStages(private val graph: AppGraph, private val ai: AiGraph, noBackup: F
   }
 }
 
+/**
+ * I modelli che il lavoro dei modelli prepara (Fase 6 P11, Fase 8 P13): il 270M e il ritaglio sempre, il 440M sugli indicizzatori e, **solo dove Persone e'
+ * attiva qui** ([facesActive]: accesa, non esclusa, avviso visto), YuNet e SFace (D8). `ModelCatalog.needed` e' l'unico elenco. Prima dell'attivazione i
+ * due modelli dei volti non si estraggono dall'APK; alla disattivazione o all'esclusione li toglie la cancellazione locale.
+ */
+internal fun modelsWanted(indexer: Boolean, facesActive: Boolean): List<ModelId> {
+  val roles = if (indexer) setOf(dev.pampa.mycloudgallery.core.trust.data.DeviceRole.INDEXER) else emptySet()
+  val features = if (facesActive) setOf(dev.pampa.mycloudgallery.core.models.contract.ModelFeature.FACES) else emptySet()
+  return ModelCatalog.needed(roles, features).map { it.id }
+}
+
 /** Il calcolo AI in background (§2.7, D22). */
 @HiltWorker
 class AiComputeWorker @AssistedInject constructor(
@@ -297,6 +308,8 @@ class ModelFetchWorker @AssistedInject constructor(
   private val gallery: GalleryGraph,
   private val graph: AppGraph,
   private val stack: AiStack,
+  /** Fase 8 (P13, D8): i modelli dei volti servono solo dove Persone e' attiva qui (`ModelCatalog.needed` con la funzione `FACES`). */
+  private val faces: dev.pampa.mycloudgallery.faces.FacesGraph,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
@@ -318,11 +331,12 @@ class ModelFetchWorker @AssistedInject constructor(
       // MO-7: una verifica per processo (ogni apertura verifica comunque), e nessun `ensure` per cio' che e' gia' pronto.
       runCatching { stack.localModels.refreshOnce() }
       val states = stack.localModels.manager.states.value
-      val wanted = if (asked != null) listOf(asked) else buildList {
-        add(ModelCatalog.QUERY_270M.id)
-        // Il ritaglio del soggetto (P13): il modello e' nell'APK, una copia locale fra i modelli verificati, senza rete.
-        add(ModelCatalog.CUTOUT_MAGICTOUCH.id)
-        if (stack.ai.indexer.value) add(ModelCatalog.INDEX_440M.id)
+      val wanted = if (asked != null) {
+        listOf(asked)
+      } else {
+        // Il 270M e il ritaglio del soggetto sempre (nell'APK, una copia locale fra i modelli verificati, senza rete), il 440M sugli indicizzatori e, solo dove
+        // Persone e' attiva qui, YuNet e SFace (anch'essi nell'APK): `ModelCatalog.needed` e' l'unico elenco.
+        modelsWanted(indexer = stack.ai.indexer.value, facesActive = faces.activeHere())
       }
       val out = ArrayList<Pair<ModelId, EnsureResult>>()
       // I4: gli 8 minuti sono del lavoro, non di ogni modello in fila (due modelli da 8 minuti superano i circa 10 di un lavoro e il secondo

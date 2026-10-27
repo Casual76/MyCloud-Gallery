@@ -12,6 +12,10 @@ import org.junit.Test
  * Fase 6, P3 (riga P3 del §4.4: "catalogo uguale al §2.1"): il catalogo del codice e la tabella del §2.1 di `docs/fase6-progetto.md`
  * dicono le stesse cose: file, repository, commit, dimensione, impronta, indirizzo HTTPS. Se uno dei due cambia senza l'altro, qui si vede
  * (e un valore del catalogo cambia solo con un aggiornamento dell'app, D16/D19).
+ *
+ * Fase 8 (P1, riga P1 del §4.4): lo stesso per i due modelli dei volti. Le loro dimensioni e impronte sono quelle del **file del repository**
+ * (il `.tflite` convertito, non l'ONNX d'origine) e stanno nella tabella «I modelli dei volti nel catalogo» di `docs/decisioni.md`, sezione
+ * «Fase 8 P1»; le impronte degli ONNX d'ingresso (`tools/models/faces/fingerprints.json`) sono quelle del §2.2 di `docs/fase8-progetto.md`.
  */
 class CatalogMatchesDesignTest {
   private val raw: String = generateSequence(File(".").absoluteFile) { it.parentFile }
@@ -33,6 +37,17 @@ class CatalogMatchesDesignTest {
   private fun row(spec: ModelSpec): String = rows.single { spec.fileName in it }
 
   private fun digits(text: String): Long = text.filter { it.isDigit() }.toLong()
+
+  private fun repositoryFile(path: String): File = generateSequence(File(".").absoluteFile) { it.parentFile }
+    .map { File(it, path) }
+    .first { it.isFile }
+
+  /** Le righe della tabella «I modelli dei volti nel catalogo» di `docs/decisioni.md` (intestazione compresa, senza il filetto). */
+  private val faceRows: List<String> = repositoryFile("docs/decisioni.md").readLines()
+    .dropWhile { !it.startsWith("**I modelli dei volti nel catalogo**") }
+    .dropWhile { !it.startsWith("|") }
+    .takeWhile { it.startsWith("|") }
+    .filter { "---" !in it }
 
   @Test
   fun laTabellaDelProgettoHaTreModelli() {
@@ -66,6 +81,42 @@ class CatalogMatchesDesignTest {
     assertThat(spec.https).isEmpty()
     assertThat(spec.bundledAsset).isEqualTo("cutout/magic_touch.tflite")
     assertThat(line).contains("dentro l'APK")
+  }
+
+  /** Fase 8, P1: YuNet e SFace nel catalogo hanno id, file, asset, dimensione, impronta e licenza della tabella del documento. */
+  @Test
+  fun iModelliDeiVoltiCorrispondonoRigaPerRiga() {
+    // Intestazione + due modelli.
+    assertThat(faceRows).hasSize(3)
+    for (spec in ModelCatalog.FACES) {
+      val line = faceRows.single { spec.fileName in it }
+      val cells = line.split("|").map { it.trim() }
+      // `| Modello | Id | File | Asset | Dimensione | SHA-256 | Licenza | Origine |`
+      assertThat(cells[2]).isEqualTo("`${spec.id.value}`")
+      assertThat(cells[3]).isEqualTo("`${spec.fileName}`")
+      assertThat(cells[4]).isEqualTo("`${spec.bundledAsset}`")
+      assertThat(digits(cells[5].substringBefore(" B"))).isEqualTo(spec.sizeBytes)
+      assertThat(cells[6]).isEqualTo("`${spec.sha256.hex}`")
+      assertThat(cells[7]).isEqualTo(spec.license.spdx)
+      assertThat(spec.https).isEmpty()
+    }
+  }
+
+  /** Le impronte degli ONNX d'ingresso degli strumenti sono quelle note del progetto (§2.2), e il commit di OpenCV Zoo e' quello delle licenze. */
+  @Test
+  fun leImpronteDegliOnnxDegliStrumentiSonoQuelleDelProgetto() {
+    val design = repositoryFile("docs/fase8-progetto.md").readText()
+    val fingerprints = repositoryFile("tools/models/faces/fingerprints.json").readText()
+    val onnx = Regex("""(face_[a-z0-9_]+\.onnx).\s*:\s*\{[^}]*?.sha256.\s*:\s*.([0-9a-f]{64})""").findAll(fingerprints).toList()
+    assertThat(onnx.map { it.groupValues[1] }).containsExactly(
+      "face_detection_yunet_2023mar.onnx",
+      "face_detection_yunet_2026may.onnx",
+      "face_recognition_sface_2021dec.onnx",
+      "face_recognition_sface_2021dec_int8.onnx",
+    )
+    for (match in onnx) assertThat(design).contains(match.groupValues[2])
+    val commit = Regex("""commit.\s*:\s*.([0-9a-f]{40})""").find(fingerprints)!!.groupValues[1]
+    for (spec in ModelCatalog.FACES) assertThat(spec.license.url).contains(commit)
   }
 
   @Test

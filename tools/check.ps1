@@ -72,6 +72,10 @@
                                 codice nostro a LiteRT (`org.tensorflow.lite`, `com.google.ai.edge.litert`) partono solo da
                                 `core/ai/` e, fra le classi dei volti, solo da `core/ai/faces/FaceLiteRtSessions`; controllo
                                 positivo: almeno una chiamata da `core/ai/` (il ritaglio). FALLISCE se non legge l'APK
+    7g. modelli dei volti       (Fase 8, P1; docs/fase8-progetto.md D39, §6.4) nell'APK di release `assets/faces/` ha YuNet e SFace con la
+                                dimensione e lo SHA-256 di `ModelCatalog.FACE_YUNET` e `FACE_SFACE` (letti dal sorgente), le due licenze
+                                (MIT, Apache-2.0) e il NOTICE che nomina le impronte, nessun altro modello nella cartella e nessun file
+                                ONNX in tutto l'APK. Controllo positivo: il ritaglio e' al suo posto. FALLISCE se non legge l'APK
     7c. niente servizi        l'APK di release non ha nessun `META-INF/services/dev.pampa.*` (ne' un file di servizio che
                                 nomini una classe `dev.pampa.*`): le varianti di misura legano le loro classi con Hilt, mai
                                 con `ServiceLoader` (R6)
@@ -1313,6 +1317,66 @@ Step "LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/f
   }
   Write-Host ("        bytecode: {0} chiamate nostre a LiteRT, tutte da core-ai ({1} righe di dexdump)" -f $ours.Count, $facts.Lines) -ForegroundColor DarkGray
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
+}
+
+# Fase 8 (P1; docs/fase8-progetto.md D39, §6.4): i due modelli dei volti viaggiano nell'APK di release (risposta Q1 (a)). Qui si guarda cio' che
+# si installa: `assets/faces/` ha YuNet e SFace con la dimensione e lo SHA-256 del catalogo (`ModelCatalog.FACE_YUNET` e `FACE_SFACE`, letti dal
+# sorgente: sono quelli del FILE del repository, fissati da P1), le due licenze (MIT, Apache-2.0) e l'avviso accanto, l'avviso nomina le due
+# impronte, nessun altro modello nella cartella e nessun file ONNX in tutto l'APK. Controllo positivo: il ritaglio e' al suo posto (se non si
+# legge nemmeno quello, l'elenco dell'APK non e' affidabile). Senza APK il passo FALLISCE.
+Step "Modelli dei volti nell'APK di release: YuNet e SFace con le impronte del catalogo, licenze e NOTICE accanto, nessun ONNX (D39)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $catalog = Read-TextFile (Join-Path $root "core-models\src\main\kotlin\dev\pampa\mycloudgallery\core\models\contract\ModelCatalog.kt")
+  $specs = @()
+  foreach ($name in @("FACE_YUNET", "FACE_SFACE")) {
+    $block = [regex]::Match($catalog, '(?s)val ' + $name + ': ModelSpec = ModelSpec\((.*?)\n  \)')
+    if (-not $block.Success) { return "ModelCatalog.$name non trovato in ModelCatalog.kt" }
+    $size = [regex]::Match($block.Groups[1].Value, 'sizeBytes = ([0-9_]+)L')
+    $sha = [regex]::Match($block.Groups[1].Value, 'Sha256\("([0-9a-f]{64})"\)')
+    $asset = [regex]::Match($block.Groups[1].Value, 'bundledAsset = "([^"]+)"')
+    if (-not ($size.Success -and $sha.Success -and $asset.Success)) { return "ModelCatalog.${name}: dimensione, SHA-256 o asset non leggibili" }
+    $specs += [pscustomobject]@{ Name = $name; Size = [int64]($size.Groups[1].Value -replace '_', ''); Sha = $sha.Groups[1].Value; Asset = $asset.Groups[1].Value }
+  }
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk.FullName)
+  try {
+    $problems = @()
+    $names = @($zip.Entries | ForEach-Object { $_.FullName })
+    if ($names -notcontains "assets/cutout/magic_touch.tflite") { return "lettura dell'APK non affidabile: manca assets/cutout/magic_touch.tflite" }
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    foreach ($spec in $specs) {
+      $entry = $zip.GetEntry("assets/" + $spec.Asset)
+      if (-not $entry) { $problems += "$($spec.Name): assets/$($spec.Asset) non e' nell'APK"; continue }
+      if ($entry.Length -ne $spec.Size) { $problems += "$($spec.Name): $($entry.Length) byte nell'APK, $($spec.Size) nel catalogo"; continue }
+      $stream = $entry.Open()
+      try { $hex = ([System.BitConverter]::ToString($sha256.ComputeHash($stream)) -replace '-', '').ToLowerInvariant() } finally { $stream.Dispose() }
+      if ($hex -ne $spec.Sha) { $problems += "$($spec.Name): SHA-256 $hex nell'APK, $($spec.Sha) nel catalogo" }
+    }
+    function Read-ZipText($entry) {
+      $reader = New-Object System.IO.StreamReader($entry.Open(), (New-Object System.Text.UTF8Encoding($false)))
+      try { return $reader.ReadToEnd() } finally { $reader.Dispose() }
+    }
+    $texts = @{ "assets/faces/LICENSE-YuNet.txt" = "MIT License"; "assets/faces/LICENSE-SFace.txt" = "Apache License"; "assets/faces/NOTICE.txt" = "OpenCV Zoo" }
+    foreach ($path in $texts.Keys) {
+      $entry = $zip.GetEntry($path)
+      if (-not $entry) { $problems += "$path non e' nell'APK (licenza o avviso dei modelli dei volti)"; continue }
+      $text = Read-ZipText $entry
+      if (-not $text.Contains($texts[$path])) { $problems += "$path non contiene `"$($texts[$path])`"" }
+      if ($path -like "*NOTICE.txt") {
+        foreach ($spec in $specs) { if (-not $text.Contains($spec.Sha)) { $problems += "NOTICE.txt non nomina l'impronta di $($spec.Name)" } }
+      }
+    }
+    $expected = @($specs | ForEach-Object { "assets/" + $_.Asset })
+    $models = @($names | Where-Object { $_ -like "assets/faces/*" -and $_ -match '\.(tflite|onnx|task|litertlm|bin|pt|pb|h5)$' })
+    foreach ($extra in @($models | Where-Object { $expected -notcontains $_ })) { $problems += "modello in piu' in assets/faces/: $extra" }
+    foreach ($onnx in @($names | Where-Object { $_ -match '\.onnx$' })) { $problems += "file ONNX nell'APK: $onnx (si consegnano solo i .tflite)" }
+    if ($problems.Count -gt 0) { return ($problems -join "; ") }
+    Write-Host ("        assets/faces/: {0} modelli verificati ({1}), licenze e NOTICE presenti" -f $specs.Count, (($specs | ForEach-Object { "{0} {1} B" -f $_.Name, $_.Size }) -join ", ")) -ForegroundColor DarkGray
+  } finally {
+    $zip.Dispose()
+  }
 }
 
 # R6: nessun file di servizio nostro nell'APK di release. `ServiceLoader` e' un canale dichiarativo e invisibile: un file in

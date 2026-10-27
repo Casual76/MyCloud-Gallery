@@ -202,7 +202,8 @@ class ModelWiringTest {
   fun lAssembleaSenzaNasNeFetcherNonRompeNiente() = runBlocking<Unit> {
     val dir = TestModels.tempDir()
     val models = LocalModels(root = dir, fetcher = ModelFetcher { _, _, _, _ -> FetchResult.NotFound }, networkGate = ClosedModelNetworkGate)
-    assertThat(models.manager.states.value.keys).containsExactlyElementsIn(ModelCatalog.ALL.map { it.id })
+    // Il catalogo di serie e' tutto: ricerca e ritaglio piu' i due modelli dei volti (Fase 8, P1), che il gestore deve conoscere.
+    assertThat(models.manager.states.value.keys).containsExactlyElementsIn(ModelCatalog.WITH_FACES.map { it.id })
     assertThat(models.manager.states.value.values.toSet()).containsExactly(ModelState.Absent)
     models.refresh()
     assertThat(models.manager.usage().totalBytes).isEqualTo(0)

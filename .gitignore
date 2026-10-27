@@ -67,3 +67,16 @@ eval-privato/
 *.mcgalb
 viaggi-veri*
 eval-album-privato/
+
+# Modelli dei volti (Fase 8, P1): ONNX, ambienti Python e ritratti di prova stanno FUORI dal repository, in una cartella a parte
+# (docs/fase8-progetto.md §8, tools/models/faces/LEGGIMI.md; NoFaceModelSourcesInGitTest). Nel repository solo gli script, requirements.txt
+# con le impronte e i due .tflite scelti in core-ai/src/main/assets/faces/.
+*.onnx
+venv/
+.venv/
+__pycache__/
+*.pyc
+ritratto-*
+ritratti/*.jpg
+ritratti/*.jpeg
+ritratti/*.png

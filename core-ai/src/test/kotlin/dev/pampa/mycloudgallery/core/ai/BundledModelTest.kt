@@ -35,10 +35,14 @@ class BundledModelTest {
     assertThat(notice).contains("Apache 2.0")
   }
 
-  /** Nella cartella del ritaglio solo modello, licenza e avvisi: nessun altro modello entra nell'APK di nascosto. */
+  /**
+   * Nessun altro modello entra nell'APK di nascosto: il ritaglio (Fase 6) e i due dei volti (Fase 8, `BundledFaceModelsTest`), tutti nel
+   * catalogo con il loro percorso.
+   */
   @Test
   fun nessunAltroModelloNegliAsset() {
     val models = assets.walkTopDown().filter { it.isFile && it.extension in setOf("tflite", "litertlm", "task", "onnx", "bin") }.toList()
-    assertThat(models.map { it.relativeTo(assets).invariantSeparatorsPath }).containsExactly("cutout/magic_touch.tflite")
+    val expected = (listOf(ModelCatalog.CUTOUT_MAGICTOUCH) + ModelCatalog.FACES).map { it.bundledAsset!! }
+    assertThat(models.map { it.relativeTo(assets).invariantSeparatorsPath }).containsExactlyElementsIn(expected)
   }
 }

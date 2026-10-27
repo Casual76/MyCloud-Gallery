@@ -287,6 +287,8 @@ class AppGraph(
     work = work,
     deviceClock = platform.deviceNow,
     localState = listOf({ sightings.clear() }),
+    // R11 (revisione di Fase 7): il battito lo ricrea il giro della fiducia in corso; si toglie quando i lavori sono fermi.
+    afterWork = listOf({ heartbeat.clear() }),
   )
   val engine: TrustEngine = TrustEngine(session, trustStore, platform.deviceKeys, profiles, nasClock, selfWipe)
   val writer = RegistryWriter(engine, session, platform.familyKeys, nasClock)

@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.albums.smart.LookupPeopleMembership
 import dev.pampa.mycloudgallery.core.faces.people.PeopleVisibility
 import dev.pampa.mycloudgallery.core.model.PeopleMode
+import dev.pampa.mycloudgallery.faces.AppPeopleLookup
 import kotlin.time.Duration
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
@@ -83,7 +84,7 @@ class HiddenAlbumsPeopleMutationTest {
     try {
       assertThat(violations(leaky = false, world)).isEmpty()
       RealPeopleStack.build(world).use { people ->
-        val lookup = IndexPeopleLookup(people.people, people.cells, PeopleVisibility(people.visible, people.mask))
+        val lookup = AppPeopleLookup(people.people, people.cells, PeopleVisibility(people.visible, people.mask))
         val stack = RealSmartStack(world, people = LookupPeopleMembership(lookup))
         stack.enrich()
         val ids = people.named.map { it.first }

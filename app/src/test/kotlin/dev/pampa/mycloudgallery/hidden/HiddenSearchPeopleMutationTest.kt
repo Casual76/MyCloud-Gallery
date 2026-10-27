@@ -7,6 +7,7 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
 import dev.pampa.mycloudgallery.core.search.contract.SearchRequest
+import dev.pampa.mycloudgallery.faces.AppPeopleLookup
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -74,7 +75,7 @@ class HiddenSearchPeopleMutationTest {
     try {
       assertThat(violations(leaky = false, world)).isEmpty()
       RealPeopleStack.build(world).use { stack ->
-        val lookup = IndexPeopleLookup(stack.people, stack.cells, dev.pampa.mycloudgallery.core.faces.people.PeopleVisibility(stack.visible, stack.mask))
+        val lookup = AppPeopleLookup(stack.people, stack.cells, dev.pampa.mycloudgallery.core.faces.people.PeopleVisibility(stack.visible, stack.mask))
         assertThat(lookup.dictionary().isEmpty).isTrue()
         val engine = dev.pampa.mycloudgallery.core.search.testing.InMemorySearchEngine(
           dev.pampa.mycloudgallery.search.CatalogSearchData(kotlinx.coroutines.flow.MutableStateFlow(world.snapshot), world.db) { world.catalog },

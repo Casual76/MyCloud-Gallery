@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.core.search.parse.ItalianQueryParser
 import dev.pampa.mycloudgallery.core.search.testing.FixedToday
 import dev.pampa.mycloudgallery.core.search.testing.InMemorySearchEngine
 import dev.pampa.mycloudgallery.core.search.testing.InMemorySearchHistory
+import dev.pampa.mycloudgallery.faces.AppPeopleLookup
 import dev.pampa.mycloudgallery.search.CatalogSearchData
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,45 +31,8 @@ import kotlinx.coroutines.flow.StateFlow
 // Fase 8 (P10, D26, D28, §2.9, E-F36, E-F38; riga PEOPLE del registro): la SONDA `search-people`. La ricerca con una persona -- il dizionario dei nomi, i chip
 // "Persona", i candidati, i suggerimenti e i risultati -- sul mondo casuale, con le persone vere (`ArchivePeople`) e la visibilita' vera.
 //
-// La porta `PeopleLookup` di core-search la lega :app (P13) sopra `PeopleIndex` e le celle; qui la scrive il banco ([IndexPeopleLookup]) con le stesse strade che
-// seguira' il prodotto: i candidati sono le celle dell'istantanea (`PeopleCells`) filtrate da `PeopleVisibility` (`VisibleMedia`, filtro finale `HiddenMask`), il
+// La porta `PeopleLookup` di core-search la lega :app (P13) sopra `PeopleIndex` e le celle (`AppPeopleLookup`, il codice VERO legato: la sonda lo usa cosi' com'e'): i candidati sono le celle dell'istantanea (`PeopleCells`) filtrate da `PeopleVisibility` (`VisibleMedia`, filtro finale `HiddenMask`), il
 // dizionario viene dalle persone con media mostrabili. Il motore e' quello di riferimento (come la sonda `search`) con il filtro finale vero del catalogo.
-
-/**
- * La porta della ricerca per persona sopra l'indice delle persone: **la forma che P13 dara' al legame in `:app`**. Per ogni persona della scelta si prendono le chiavi
- * di contenuto ([PeopleIndex.contentWith] al livello chiesto), si portano alle **celle** ([PeopleCells]: un membro di un gruppo e' la sua copertina) e si tengono solo
- * quelle che [visibility] dice mostrabili adesso; poi "una qualunque" unisce le celle e "tutte" le interseca **per cella** (due persone in due membri dello stesso gruppo
- * sono nella stessa cella). Il dizionario e' quello dell'indice: nomi di persone non nascoste ne' dimenticate, con almeno un media mostrabile.
- */
-internal class IndexPeopleLookup(
-  private val index: PeopleIndex,
-  private val cells: PeopleCells,
-  private val visibility: PeopleVisibility,
-  override val progressPercent: StateFlow<Int?> = PeopleLookup.NO_PROGRESS,
-) : PeopleLookup {
-  override val available: StateFlow<Boolean> get() = index.available
-
-  override suspend fun dictionary(): PeopleDictionary {
-    if (!index.available.value) return PeopleDictionary.EMPTY
-    return PeopleDictionary(index.dictionary().map { PersonEntry(PeopleDictionary.normalize(it.name), it.id, it.name, it.visibleMedia) })
-  }
-
-  override suspend fun cells(option: PersonOption, includeLikely: Boolean): Set<MediaId> {
-    if (!index.available.value) return emptySet()
-    val level = if (includeLikely) MatchLevel.LIKELY else MatchLevel.SURE
-    val perPerson = option.ids.map { id -> cellsOf(id, level) }
-    return when (option.mode) {
-      PeopleMode.ANY -> perPerson.flatten().toSet()
-      PeopleMode.ALL -> perPerson.reduce { acc, set -> acc intersect set }
-    }
-  }
-
-  private suspend fun cellsOf(id: PersonId, level: MatchLevel): Set<MediaId> {
-    val keys = index.contentWith(setOf(id), PeopleMode.ANY, level).keys
-    if (keys.isEmpty()) return emptySet()
-    return visibility.shown(cells.cellsWith(keys).values.flatten())
-  }
-}
 
 internal object RealSearchPeopleProbes {
 
@@ -86,7 +50,7 @@ internal object RealSearchPeopleProbes {
     RealPeopleStack.build(w, leaky).use { stack ->
       val problems = ArrayList<String>()
       val shown = LinkedHashSet<MediaId>()
-      val lookup = IndexPeopleLookup(stack.people, stack.cells, PeopleVisibility(stack.visible, stack.mask))
+      val lookup = AppPeopleLookup(stack.people, stack.cells, PeopleVisibility(stack.visible, stack.mask))
 
       // 1. Il dizionario dei nomi: solo persone con un nome, non nascoste, non dimenticate, con almeno un media mostrabile; con il conto giusto.
       val dictionary = lookup.dictionary()

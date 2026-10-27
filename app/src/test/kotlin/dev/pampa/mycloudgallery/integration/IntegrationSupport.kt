@@ -45,6 +45,8 @@ import dev.pampa.mycloudgallery.core.security.credentials.LoadResult
 import dev.pampa.mycloudgallery.core.security.credentials.NasCredentials
 import dev.pampa.mycloudgallery.core.security.credentials.SaveResult
 import dev.pampa.mycloudgallery.core.security.device.ScreenLockStatus
+import dev.pampa.mycloudgallery.core.security.faces.FacesKeys
+import dev.pampa.mycloudgallery.core.security.testing.FakeFacesKeys
 import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyVault
@@ -196,6 +198,9 @@ class TestPlatform(
   val keys = SoftwareKeys()
   val vault = MemoryFamilyVault()
   val memoryCredentials = MemoryCredentials()
+
+  /** Fase 8 (P13): le chiavi dei volti in memoria (AES-GCM vero della JVM, una per generazione): i test guardano gli alias e la distruzione. */
+  val faceKeys = FakeFacesKeys()
   val health = FakeBackgroundHealthReader()
   val power = FakeDeviceStateSource(
     DeviceReading(PowerState(pluggedIn = true, levelPercent = 80), NetworkState(transport = NetworkTransport.WIFI)),
@@ -210,6 +215,7 @@ class TestPlatform(
   override val deviceKeys: KeyProvider = keys
   override val familyKeys: FamilyKeyVault = vault
   override val credentials: AppCredentialStore = memoryCredentials
+  override val facesKeys: FacesKeys = faceKeys
   override val healthReader: BackgroundHealthReader = health
   override val deviceState: DeviceStateSource = power
   override val screenLock: ScreenLockSource = ScreenLockSource { ScreenLockStatus.SECURE }

@@ -11,6 +11,8 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaSource
 import dev.pampa.mycloudgallery.core.model.PeopleMode
 import dev.pampa.mycloudgallery.core.model.PersonId
+import dev.pampa.mycloudgallery.faces.AppPeopleLookup
+import dev.pampa.mycloudgallery.faces.PeopleBridge
 import java.time.LocalDate
 import kotlin.time.Duration
 
@@ -18,7 +20,7 @@ import kotlin.time.Duration
 // motore (`RulesSmartEngine` con `LookupPeopleMembership`) e sul catalogo VERO del mondo casuale, con le persone vere (`ArchivePeople`) e la visibilita' vera.
 //
 // La porta `PeopleMembership` la lega :app (P13); qui il banco la scrive con la stessa strada della ricerca: la scelta di persone della regola e' un `PersonOption`, le celle
-// le da' `IndexPeopleLookup` (indice delle persone, celle dell'istantanea, `PeopleVisibility`), e il motore le combina "in e" con le altre regole sui candidati VISIBILI
+// le da' `AppPeopleLookup` (indice delle persone, celle dell'istantanea, `PeopleVisibility`), e il motore le combina "in e" con le altre regole sui candidati VISIBILI
 // del catalogo. L'oracolo viene dal mondo (le celle di ogni persona e le celle visibili adesso), mai dall'indice o dal catalogo.
 
 internal object RealAlbumsPeopleProbes {
@@ -40,8 +42,8 @@ internal object RealAlbumsPeopleProbes {
   /** Gli album con le persone: sicuri e suggeriti, "e" con il periodo, alias e persone perdute, dispositivo senza volti, il nome che diventa regola. [leaky] toglie i filtri. */
   fun albumsPeople(leaky: Boolean = false) = SurfaceProbe { w ->
     RealPeopleStack.build(w, leaky).use { people ->
-      val lookup = IndexPeopleLookup(people.people, people.cells, PeopleVisibility(people.visible, people.mask))
-      val membership = LookupPeopleMembership(lookup) { id -> people.people.resolve(id) }
+      val lookup = AppPeopleLookup(people.people, people.cells, PeopleVisibility(people.visible, people.mask))
+      val membership = PeopleBridge.membershipOf(lookup, people.people)
       val stack = RealSmartStack(w, leaky, membership)
       stack.enrich()
       val problems = ArrayList<String>()

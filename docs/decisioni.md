@@ -8004,8 +8004,10 @@ Diagnostica → Esporta e si legge con `adb pull`). Nessuna e' stata fatta (nien
 Il pacchetto C corregge le voci di `docs/review/7-fase7.md` e `docs/review/funzionale-7.md` che riguardano Utility, Doppioni, cestini e i Nascosti
 in Cartelle NAS, sul branch `fase7/rev-c` (da `main` `6b0bf79`): **R4, ED-1, NA-1, ED-2, NA-2, R5, R18, DP-1, DP-2, DP-3, DP-4, DP-5, DP-6, DP-7, UT-1,
 R10, R11, I10** e la decisione su **I9**. Nessun dispositivo, nessun NAS vero, niente `adb`: tutto sulla JVM (Robolectric, mondo di prova dei Nascosti,
-catalogo Room vero). Ogni voce ha un test che prima della correzione non compilava o falliva (i test che usano API nuove sono rossi per compilazione;
-quelli che provano un comportamento sono stati visti rossi sul codice di prima: `StateFilesTest`, la proprieta' del registro dei Nascosti per NA-1).
+catalogo Room vero). Ogni voce ha un test che prima della correzione non compilava o falliva. Controllo di mutazione fatto a mano: togliendo una per una le correzioni
+(l'ordine dei passi di R10, il piano rifatto di R5, il timbro e i "mai" di R18, l'unione dei gemelli di DP-1, la gemella del guardiano di DP-2, la
+vista di DP-3, la firma di DP-4, il `null` di DP-5, il titolo di DP-6, lo scope di DP-7, la Libreria non leggibile di UT-1, l'esito di ED-2, l'attesa
+di NA-2, il filtro di NA-1 e `StateFiles` di R11/I10) i test della voce sono diventati rossi.
 
 **Decisioni**
 | # | Voce | Decisione | Perche' |

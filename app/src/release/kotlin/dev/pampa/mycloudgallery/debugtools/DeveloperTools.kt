@@ -59,7 +59,7 @@ internal object DeveloperTools {
   @Suppress("UNUSED_PARAMETER")
   fun installSearch(stack: dev.pampa.mycloudgallery.ai.AiStack, gallery: dev.pampa.mycloudgallery.gallery.GalleryGraph, context: Context) = Unit
 
-  /** Fase 8 (P13, P11): lo strumento di valutazione delle persone esiste solo in debug. */
+  /** Fase 8 (P13): lo strumento di valutazione delle persone esiste solo in debug. */
   @Suppress("UNUSED_PARAMETER")
-  fun installFaces(faces: dev.pampa.mycloudgallery.faces.FacesGraph, people: dev.pampa.mycloudgallery.faces.FacesPeopleFacade) = Unit
+  fun installPeople(graph: Any, people: Any) = Unit
 }

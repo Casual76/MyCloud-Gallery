@@ -110,12 +110,14 @@ internal object DeveloperTools {
   }
 
   /**
-   * Fase 8 (P13, P11): lo strumento di valutazione delle persone (F105), sopra le persone montate. Sola lettura: legge i gruppi, i volti mostrabili e i
-   * punteggi; non scrive mai nell'archivio dei volti, nelle correzioni, nel NAS o nei dati personali. Solo debug (in release la funzione e' vuota).
+   * Fase 8 (P13, P11): lo strumento di valutazione delle persone (F105), sopra le persone montate ([graph] e [people] sono quelli di `:app`; i tipi sono
+   * neutri perche' la release non nomina lo strumento: `FacesEvalSourceParityTest`). Sola lettura: legge i gruppi, i volti mostrabili e i punteggi; non
+   * scrive mai nell'archivio dei volti, nelle correzioni, nel NAS o nei dati personali. Solo debug (in release la funzione e' vuota).
    */
-  fun installFaces(faces: dev.pampa.mycloudgallery.faces.FacesGraph, people: dev.pampa.mycloudgallery.faces.FacesPeopleFacade) {
-    dev.pampa.mycloudgallery.debugtools.eval.faces.FacesEvalEnvironmentHolder.current =
-      dev.pampa.mycloudgallery.debugtools.eval.faces.AppFacesEvalEnvironment(faces, people)
+  fun installPeople(graph: Any, people: Any) {
+    val live = graph as? dev.pampa.mycloudgallery.faces.FacesGraph ?: return
+    val facade = people as? dev.pampa.mycloudgallery.faces.FacesPeopleFacade ?: return
+    dev.pampa.mycloudgallery.debugtools.eval.faces.FacesEvalEnvironmentHolder.current = AppFacesEvalEnvironment(live, facade)
   }
 
   fun settingsSection(nav: NavController): (@Composable () -> Unit)? = {

@@ -1,4 +1,4 @@
-package dev.pampa.mycloudgallery.debugtools.eval.faces
+package dev.pampa.mycloudgallery.debugtools
 
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -11,6 +11,11 @@ import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.core.model.FaceRef
 import dev.pampa.mycloudgallery.core.model.FaceTier
 import dev.pampa.mycloudgallery.core.model.PersonId
+import dev.pampa.mycloudgallery.debugtools.eval.faces.EvalFaceInfo
+import dev.pampa.mycloudgallery.debugtools.eval.faces.EvalGroupInfo
+import dev.pampa.mycloudgallery.debugtools.eval.faces.EvalTotals
+import dev.pampa.mycloudgallery.debugtools.eval.faces.FacesEvalEnvironment
+import dev.pampa.mycloudgallery.debugtools.eval.faces.ThresholdValues
 import dev.pampa.mycloudgallery.faces.FacesGraph
 import dev.pampa.mycloudgallery.faces.FacesPeopleFacade
 import kotlinx.coroutines.flow.first
@@ -21,6 +26,9 @@ import kotlinx.coroutines.flow.first
  * conteggi, D28: il cancello e' quello dei ritagli, `ArchivePeople.mayShow`); i punteggi sono quelli del raggruppamento (`s(f, P)`: la media dei 3 coseni piu'
  * alti con gli esemplari della persona, escluso il volto stesso) e la seconda persona e' la migliore fra le altre; i volti senza vettore non ci sono. I vettori
  * restano in questa classe: escono solo coseni. Niente nei log.
+ *
+ * Sta fuori da `debugtools/eval/faces/` di proposito: quella cartella e' lo strumento di P11 e non nomina mai `core.faces` (`FacesEvalSourceParityTest`); questo
+ * file e' il legame di P13 e vede le persone montate.
  */
 class AppFacesEvalEnvironment(private val faces: FacesGraph, private val people: FacesPeopleFacade) : FacesEvalEnvironment {
 

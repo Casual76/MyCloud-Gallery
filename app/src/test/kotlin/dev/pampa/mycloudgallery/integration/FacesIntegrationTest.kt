@@ -137,6 +137,13 @@ class FacesIntegrationTest {
     return node.live().switch.currentState()
   }
 
+  /** Le persone senza nome di "Altri volti" appena sono [count] (la vista si rifa' da sola dopo il calcolo o una replica: non si legge a un istante preciso). */
+  private suspend fun waitOthers(node: FacesNode, count: Int): List<dev.pampa.mycloudgallery.core.faces.contract.PersonCard> = try {
+    withTimeout(Attese.TETTO) { node.live().people.others().first { it.people.size == count } }.people
+  } catch (e: TimeoutCancellationException) {
+    throw AssertionError("Dopo ${Attese.TETTO} \"Altri volti\" non ha $count persone. ${node.name}: ${node.describe()}", e)
+  }
+
   private suspend fun namedCards(node: FacesNode) = node.live().people.list.value.named
 
   @Test
@@ -177,7 +184,7 @@ class FacesIntegrationTest {
     assertThat(s.phone.live().engines.isCreated).isFalse() // fine tappa: i motori sono rilasciati
     assertThat(s.phone.keys.aliases()).hasSize(1)
     assertThat(s.phone.databases()).isNotEmpty()
-    val others = s.phone.live().people.others().first().people
+    val others = waitOthers(s.phone, 2)
     assertThat(others.map { it.photos }.sortedDescending()).containsExactly(s.photos, s.photos - 1).inOrder()
     roundsUntil(rig, "il telefono e' il custode", s.phone) { s.phone.live().grouping.holder.value is HolderState.Holder }
     roundsUntil(rig, "i dati dei volti sono sul NAS", s.phone) { facesFiles(TestNas.ADMIN_USER).isNotEmpty() }
@@ -224,7 +231,7 @@ class FacesIntegrationTest {
     s.tablet.live().switch.acceptNotice(FacesSwitch.CURRENT_TEXT_VERSION)
     assertThat(s.tablet.live().switch.currentState()).isEqualTo(FacesState.On(state.generation, HereState.ACTIVE))
     roundsUntil(s.rig, "il tablet riceve le persone", s.phone, s.tablet) { s.tablet.live().people.others().first().people.size == 2 }
-    val first = s.phone.live().people.others().first().people.first().id
+    val first = waitOthers(s.phone, 2).first().id
     assertThat(s.phone.live().people.rename(first, NAME_ONE)).isEqualTo(dev.pampa.mycloudgallery.core.faces.contract.EditOutcome.Done)
     roundsUntil(s.rig, "il nome arriva sul tablet", s.phone, s.tablet) { namedCards(s.tablet).any { it.name == NAME_ONE } }
     return s

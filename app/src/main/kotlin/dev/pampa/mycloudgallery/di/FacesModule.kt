@@ -81,7 +81,7 @@ object FacesModule {
     val people = FacesPeopleFacade(faces, graph.scope)
     gallery.viewerPeople = AppViewerPeople(faces, people, FacesCropsFacade(faces), opener)
     // Lo strumento di valutazione delle persone (F105): solo debug, in sola lettura (in release la funzione e' vuota).
-    DeveloperTools.installFaces(faces, people)
+    DeveloperTools.installPeople(faces, people)
     faces.start()
   }
 

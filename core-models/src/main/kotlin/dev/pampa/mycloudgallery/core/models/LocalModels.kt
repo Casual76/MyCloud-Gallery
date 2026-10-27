@@ -47,7 +47,7 @@ class LocalModels(
   networkGate: ModelNetworkGate,
   shelfFor: (ModelFiles) -> ModelShelf = { NoModelShelf },
   area: ModelNasArea = ModelNasArea { null },
-  catalog: List<ModelSpec> = ModelCatalog.ALL,
+  catalog: List<ModelSpec> = ModelCatalog.WITH_FACES,
   freeSpace: ModelFreeSpace = ModelFreeSpace { it.usableSpace },
   clock: NasClock? = null,
   io: CoroutineDispatcher = Dispatchers.IO,

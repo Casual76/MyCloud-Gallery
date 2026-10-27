@@ -1,0 +1,39 @@
+Modelli dei volti di MyCloud Gallery (Fase 8, Persone): YuNet e SFace, da OpenCV Zoo
+
+Questa cartella contiene due modelli, convertiti una volta sul PC dai file ONNX di OpenCV Zoo in formato .tflite per il runtime LiteRT
+(com.google.ai.edge.litert, Apache 2.0), e le loro licenze:
+
+1) YuNet, rilevamento dei volti (riquadro e cinque punti)
+   file:        yunet_2023mar_1024.tflite
+   dimensione:  239700 byte
+   SHA-256:     10c3859c32d28a416aa9cb10f46c4a9fb53dff88016749381d225e18c5727a58
+   licenza:     MIT, Copyright (c) 2020 Shiqi Yu (testo completo in LICENSE-YuNet.txt, in questa cartella)
+   origine:     face_detection_yunet_2023mar.onnx, OpenCV Zoo (https://github.com/opencv/opencv_zoo, models/face_detection_yunet),
+                commit 48b10fa505aeb51fbd127fc60a5c660040e823b7, 232589 byte,
+                SHA-256 8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
+   conversione: ingresso fisso 1x1024x1024x3 (BGR 0-255), pesi float32, dodici uscite grezze (la decodifica e la soppressione dei doppi
+                sono codice dell'app). Nessun peso e' stato cambiato. La versione 2026may di OpenCV Zoo
+                (SHA-256 ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0) ha gli stessi pesi e lo stesso grafo, con
+                l'ingresso dichiarato dinamico: si usa la 2023mar.
+
+2) SFace, vettore del volto (128 numeri)
+   file:        sface_2021dec_f16.tflite
+   dimensione:  19296140 byte
+   SHA-256:     c4508e8e5e844ec65449a6c65f5cf3a2538918fe3731a7bf330522b4953ec47c
+   licenza:     Apache 2.0 (testo completo in LICENSE-SFace.txt, in questa cartella)
+   origine:     face_recognition_sface_2021dec.onnx, OpenCV Zoo (models/face_recognition_sface), stesso commit, 38696353 byte,
+                SHA-256 0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79
+   conversione: ingresso 1x112x112x3 (volto allineato, RGB 0-255), uscita 1x128; pesi in float16 (mezza precisione, il calcolo
+                resta in float32); nessun altro cambiamento
+   addestramento: il modello e' descritto nell'articolo arXiv 2205.12010 (SFace); secondo lo scritto e' addestrato su CASIA-WebFace,
+                VGGFace2 e MS-Celeb-1M. La licenza Apache 2.0 e' quella dei pesi; non
+                cancella le condizioni di quei dataset di ricerca: va riletta prima di una pubblicazione dell'app
+                (docs/research/ocr-volti.md, "Avvertenza dataset"; docs/sicurezza.md, L98).
+
+Strumenti della conversione (versioni fissate in tools/models/faces/requirements.txt): onnx2tf 1.29.24 (MIT), TensorFlow CPU 2.19.1
+(Apache 2.0), onnx 1.19.1, onnxruntime 1.23.0, numpy 1.26.4, Python 3.11. Il procedimento e' riproducibile con gli script di
+tools/models/faces/ (conversione, confronto con l'ONNX e regole di scelta).
+
+I file non escono mai dal dispositivo. MyCloud Gallery li estrae da qui solo dove Persone e' attiva e ne verifica dimensione e SHA-256 a
+ogni caricamento (ModelCatalog.FACE_YUNET e FACE_SFACE). L'app non stima eta', genere, etnia ne' emozioni: i modelli servono solo a
+trovare i volti e a dire se due volti sono della stessa persona, sul telefono di chi ha attivato la funzione.

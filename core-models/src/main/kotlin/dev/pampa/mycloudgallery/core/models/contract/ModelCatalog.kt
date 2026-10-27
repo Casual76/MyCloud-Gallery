@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.models.contract
 
 import dev.pampa.mycloudgallery.core.model.EmbeddingSpace
+import dev.pampa.mycloudgallery.core.model.FaceSpaceCode
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.model.SpaceCode
 import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
@@ -39,18 +40,18 @@ enum class ModelRole {
   /**
    * Fase 8 (D6-D8, risposta Q1 (a) del 27/10): YuNet, il rilevatore dei volti, dentro l'APK come asset di core-ai (`faces/`). Serve **solo**
    * dove Persone e' attiva su questo dispositivo ([ModelFeature.FACES]): si estrae dopo l'avviso e si toglie con l'esclusione e con
-   * "Disattiva e cancella". La voce del catalogo (dimensione, SHA-256 del file del repository, licenza MIT) e' di P1.
+   * "Disattiva e cancella". La voce del catalogo e' [ModelCatalog.FACE_YUNET] (P1: dimensione e SHA-256 del file del repository, licenza MIT).
    */
   FACE_DETECT,
 
-  /** Fase 8 (D6-D8, Q1 (a)): SFace 2021dec, l'embedder dei volti (Apache-2.0), dentro l'APK; come [FACE_DETECT]. Voce di P1. */
+  /** Fase 8 (D6-D8, Q1 (a)): SFace 2021dec, l'embedder dei volti (Apache-2.0), dentro l'APK; come [FACE_DETECT]. Voce: [ModelCatalog.FACE_SFACE]. */
   FACE_EMBED,
 }
 
 /**
- * Le funzioni da attivare che chiedono modelli in piu' (Fase 8, §1.2 "core-models"). `needed(ruoli, funzioni)` di P1 aggiunge i modelli
- * dei volti **solo** con [FACES] attiva qui (stato `On` con `ACTIVE` o `LOCAL_ONLY`, mai in attesa dell'avviso ne' su un dispositivo
- * escluso); la firma di oggi, `needed(ruoli)`, vale come "nessuna funzione".
+ * Le funzioni da attivare che chiedono modelli in piu' (Fase 8, §1.2 "core-models"). `ModelCatalog.needed(ruoli, funzioni)` aggiunge i
+ * modelli dei volti **solo** con [FACES] fra le funzioni (chi la passa e' chi sa che Persone e' attiva qui: stato `On` con `ACTIVE` o
+ * `LOCAL_ONLY`, mai in attesa dell'avviso ne' su un dispositivo escluso); `needed(ruoli)` vale come "nessuna funzione".
  */
 enum class ModelFeature {
   /** Persone (riconoscimento dei volti) attiva su questo dispositivo. */
@@ -198,14 +199,70 @@ object ModelCatalog {
     bundledAsset = "cutout/magic_touch.tflite",
   )
 
-  val ALL: List<ModelSpec> = listOf(QUERY_270M, INDEX_440M, CUTOUT_MAGICTOUCH)
-
-  fun byId(id: ModelId): ModelSpec? = ALL.firstOrNull { it.id == id }
+  /**
+   * Fase 8 (P1; D6-D8, risposta Q1 (a)): YuNet 2023mar (OpenCV Zoo, MIT), il rilevatore dei volti, convertito **una volta sul PC** da ONNX a
+   * `.tflite` (`tools/models/faces/`): ingresso fisso 1x1024x1024x3 float32 (BGR 0-255), pesi float32, dodici uscite grezze nell'ordine
+   * `cls_8, cls_16, cls_32, obj_8, obj_16, obj_32, bbox_8, bbox_16, bbox_32, kps_8, kps_16, kps_32` (la decodifica e' di P2). Dentro l'APK come
+   * asset di core-ai (`core-ai/src/main/assets/faces/`, con licenza e avviso accanto), come MagicTouch. Dimensione e SHA-256 sono quelli del
+   * **file del repository** (non dell'ONNX d'origine: `docs/decisioni.md`, "Fase 8 P1"); il test `CatalogMatchesDesignTest` li confronta con
+   * quella tabella e `tools/check.ps1` con l'APK di release (D39).
+   */
+  val FACE_YUNET: ModelSpec = ModelSpec(
+    id = ModelId("yunet-2023mar-1024-f32"),
+    role = ModelRole.FACE_DETECT,
+    space = null,
+    fileName = "yunet_2023mar_1024.tflite",
+    sizeBytes = 239_700L,
+    sha256 = Sha256("10c3859c32d28a416aa9cb10f46c4a9fb53dff88016749381d225e18c5727a58"),
+    license = LicenseNote(
+      "MIT",
+      "https://github.com/opencv/opencv_zoo/blob/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_detection_yunet/LICENSE",
+      "Copyright (c) 2020 Shiqi Yu; OpenCV Zoo, face_detection_yunet_2023mar.onnx",
+    ),
+    https = emptyList(),
+    bundledAsset = "faces/yunet_2023mar_1024.tflite",
+  )
 
   /**
-   * I modelli che servono a un dispositivo con questi [roles] (D3, D17): il 270M e il ritaglio sempre, il 440M solo agli
-   * indicizzatori. L'ordine e' quello in cui conviene averli.
+   * Fase 8 (P1; D6-D8, Q1 (a)): SFace 2021dec (OpenCV Zoo, Apache-2.0), l'embedding dei volti, convertito sul PC da ONNX a `.tflite` con
+   * pesi float16 (il calcolo resta in float32): ingresso 1x112x112x3 float32 (volto allineato, RGB 0-255: la media e la scala sono nel
+   * modello), uscita 1x128. Produce lo spazio [FaceSpaceCode.SFACE_2021DEC_V1] (128 dimensioni, calcolate in float32 e salvate in
+   * float16). Dentro l'APK come [FACE_YUNET].
    */
-  fun needed(roles: Set<DeviceRole>): List<ModelSpec> =
-    if (DeviceRole.INDEXER in roles) listOf(QUERY_270M, CUTOUT_MAGICTOUCH, INDEX_440M) else listOf(QUERY_270M, CUTOUT_MAGICTOUCH)
+  val FACE_SFACE: ModelSpec = ModelSpec(
+    id = ModelId("sface-2021dec-f16"),
+    role = ModelRole.FACE_EMBED,
+    space = FaceSpaceCode.SFACE_2021DEC_V1.space,
+    fileName = "sface_2021dec_f16.tflite",
+    sizeBytes = 19_296_140L,
+    sha256 = Sha256("c4508e8e5e844ec65449a6c65f5cf3a2538918fe3731a7bf330522b4953ec47c"),
+    license = LicenseNote(
+      "Apache-2.0",
+      "https://github.com/opencv/opencv_zoo/blob/48b10fa505aeb51fbd127fc60a5c660040e823b7/models/face_recognition_sface/LICENSE",
+      "OpenCV Zoo, face_recognition_sface_2021dec.onnx; addestrato su CASIA-WebFace, VGGFace2 e MS-Celeb-1M (docs/sicurezza.md, L98)",
+    ),
+    https = emptyList(),
+    bundledAsset = "faces/sface_2021dec_f16.tflite",
+  )
+
+  /** I modelli della ricerca e del ritaglio: quelli che la pagina "Ricerca e modelli" elenca sempre. */
+  val ALL: List<ModelSpec> = listOf(QUERY_270M, INDEX_440M, CUTOUT_MAGICTOUCH)
+
+  /** I modelli dei volti (Fase 8): dentro l'APK, si estraggono solo dove Persone e' attiva. */
+  val FACES: List<ModelSpec> = listOf(FACE_YUNET, FACE_SFACE)
+
+  /** Tutto il catalogo: quello che il gestore dei modelli conosce (un modello fuori da qui sarebbe tolto come "non elencato", D20). */
+  val WITH_FACES: List<ModelSpec> = ALL + FACES
+
+  fun byId(id: ModelId): ModelSpec? = WITH_FACES.firstOrNull { it.id == id }
+
+  /**
+   * I modelli che servono a un dispositivo con questi [roles] (D3, D17): il 270M e il ritaglio sempre, il 440M solo agli indicizzatori; con
+   * [ModelFeature.FACES] fra le [features] anche YuNet e SFace (Fase 8, D8: solo dove Persone e' attiva). L'ordine e' quello in cui
+   * conviene averli.
+   */
+  fun needed(roles: Set<DeviceRole>, features: Set<ModelFeature> = emptySet()): List<ModelSpec> {
+    val search = if (DeviceRole.INDEXER in roles) listOf(QUERY_270M, CUTOUT_MAGICTOUCH, INDEX_440M) else listOf(QUERY_270M, CUTOUT_MAGICTOUCH)
+    return if (ModelFeature.FACES in features) search + FACES else search
+  }
 }

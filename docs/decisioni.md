@@ -7225,3 +7225,225 @@ solo come riferimento di contesto (coseno con fp32), non decide.
 - *SFace* float16: coseno fra ONNX e `.tflite` **≥ 0,999 per ogni volto** (minimo), su almeno 300 volti delle composizioni più i volti
   dei ritratti, allineati con il nostro allineamento (similitudine ai cinque punti del modello a 112 px di ArcFace).
 - *Se la parità non passa*: SFace in float32 (38,7 MB, piano del §7); YuNet con un'altra conversione. Se nemmeno questo basta, ci si ferma.
+
+### Cosa è stato scaricato (27/10, approvato dall'utente: solo questi file e solo da questi siti)
+Tutto fuori dal repository, in `C:\VibeCoded Projects\mcg-models\faces\` (`onnx\`, `venv\`, `ritratti\`, `out\`, più `cache\` e `tmp\` per la cache
+di pip e i file temporanei, così che nulla finisca altrove). Le impronte dei quattro ONNX tornano con quelle note (§2.2 del progetto, ricerca 0.4):
+**nessuna differenza**.
+
+**OpenCV Zoo** (`github.com/opencv/opencv_zoo`, commit `48b10fa505aeb51fbd127fc60a5c660040e823b7`, testa di `main` del 20/10/2026; file
+Git LFS da `media.githubusercontent.com`)
+| File | Dimensione | SHA-256 |
+|---|---|---|
+| `face_detection_yunet_2023mar.onnx` | 232.589 B | `8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4` |
+| `face_detection_yunet_2026may.onnx` | 229.738 B | `ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0` |
+| `face_recognition_sface_2021dec.onnx` | 38.696.353 B | `0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79` |
+| `face_recognition_sface_2021dec_int8.onnx` (solo riferimento di contesto) | 9.896.933 B | `2b0e941e6f16cc048c20aee0c8e31f569118f65d702914540f7bfdc14048d78a` |
+| `LICENSE` di YuNet (MIT, «Copyright (c) 2020 Shiqi Yu») | 1.085 B | `c83b8120c50ccbd4c4f96edf53141bdd566ebb8f8e9227e415326aa1b1aba958` |
+| `LICENSE` di SFace (Apache-2.0) | 11.358 B | `cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30` |
+Il nome del file int8 di SFace («da confermare» nel §2.2) è `face_recognition_sface_2021dec_int8.onnx`. Per fissare il commit e i nomi ho letto anche il
+feed delle modifiche (`commits/main.atom`) e due pagine di elenco di cartella di `github.com/opencv/opencv_zoo`: non sono file della lista, non sono
+stati tenuti. Nessun README né sorgente Python di OpenCV Zoo è stato scaricato (il preprocessing è controllato con `verify_opencv.py`, sotto).
+
+**Strumenti Python** (da `pypi.org` e `files.pythonhosted.org`, in un ambiente virtuale isolato `venv\conv`, Python 3.11.9; 2,0 GB l'ambiente e
+0,9 GB la cache di pip): `onnx2tf` **1.29.24** (MIT), `tensorflow-cpu` **2.19.1**, `tf-keras` 2.19.0, `keras` 3.15.1, `onnx` 1.19.1, `onnxruntime` 1.23.0,
+`numpy` 1.26.4, `ai-edge-litert` 2.1.2 (l'interprete di LiteRT per Python, per la parità), `opencv-python` 4.11.0.86 (dipendenza di onnx2tf: serve anche a
+`verify_opencv.py`) e le altre dipendenze (58 pacchetti, tutti in `tools/models/faces/requirements.txt` con le impronte di ogni file). Scelte:
+- `onnx2tf` **2.x** richiede Python ≥ 3.12 (non installato qui; TensorFlow non gira sul 3.14 che c'è): l'ultima 1.29.x è l'ultima per il 3.11.
+  Dichiara `tensorflow==2.19.0`, `ai-edge-litert==2.1.0` (senza ruote per Windows e Python 3.11) e `simple-onnx-processing-tools`: si usano
+  `tensorflow-cpu` 2.19.1, `ai-edge-litert` 2.1.2 e i soli `sne4onnx`/`sng4onnx` che onnx2tf importa, con `--no-deps` (`pip check` lo segnala, ed è voluto).
+- **Una richiesta non prevista**: alla prima esecuzione `onnx2tf` ha provato a scaricare da solo, da GitHub (`PINTO0309/onnx2tf`) e da un sito di terzi
+  (Wasabi), un file di numeri di prova per i suoi controlli interni. Non è un sito dell'elenco: la risposta non era un file valido (la conversione si è fermata
+  con un errore, **nulla è stato salvato**). Da allora `convert.py` scrive prima in locale, nella cartella di lavoro, quel file con numeri fissi nostri
+  (`np.random.RandomState(20261027)`), e `onnx2tf` non apre più la rete (nessun'altra chiamata di rete nel suo codice: controllato con una ricerca nei sorgenti).
+
+**Ritratti di pubblico dominio** (Wikimedia Commons: l'API di `commons.wikimedia.org` per licenza e dimensioni, i file da `upload.wikimedia.org`): scelti
+43, **scartati 8 dopo averli guardati** (due doppioni dello stesso dipinto, uno senza volto, cinque per tornare vicino ai 30) e tenuti **35**, 20,0 MB in totale
+(più del «circa 10 MB» del progetto, perché sono miniature da 1280 o 1920 px di lato: i passi standard di Wikimedia, 2048 non c'è). Solo con «Public domain»
+e «Copyrighted: False» nei metadati di Commons (controllato dallo script a ogni file, che altrimenti lo scarta); l'API indica le miniature su
+`thumb.wikimedia.org`, che non è nell'elenco: lo stesso percorso sta su `upload.wikimedia.org` e da lì si è scaricato. Fuori dal repository,
+con `ELENCO.json` (fonte, licenza, SHA-256) accanto; nei nomi dei file e nei test niente nomi delle persone ritratte (`ritratto-NN`).
+
+### Gli strumenti (`tools/models/faces/`, solo script e testo; nessun ONNX, ambiente o ritratto nel repository)
+`LEGGIMI.md` ha l'ordine dei comandi. Si lancia tutto con `python -I` e il Python dell'ambiente; gli script trattano come dati non fidati ciò che sta
+sotto `<root>` (mai eseguito, solo letto come byte; i file ONNX si usano solo dopo il controllo di dimensione e SHA-256).
+- `setup-env.ps1` + `requirements.txt` (58 pacchetti, `--require-hashes --no-deps`; `make_requirements.py` lo rigenera da PyPI, solo per chi aggiorna);
+- `fetch_onnx.py` + `fingerprints.json` (impronte e commit; si ferma se un file non torna), `fetch_portraits.py`, `compose.py` (composizioni con seme fisso);
+- `convert.py`: ONNX → `.tflite` con onnx2tf; per YuNet fissa l'ingresso a 1×3×1024×1024 e salva un ONNX derivato (cambiano solo le forme dichiarate, nessun
+  peso: lo stesso file è il riferimento della parità); poi riscrive il `.tflite` con **le uscite nell'ordine e con i nomi dell'ONNX** (onnx2tf le lascia come
+  `PartitionedCall:N` in ordine sparso: chi le legge per posizione, cioè P2, ha bisogno di un ordine fisso) e un'intestazione di descrizione;
+- `parity.py` (regola 3), `choose.py` (regole 1 e 2), `verify_opencv.py` (preprocessing, decodifica e allineamento contro OpenCV), `selftest.py`;
+- `common.py`, `engines.py`, `dati.py`: impronte, decodifica di YuNet e allineamento (puri), esecutori ONNX Runtime e LiteRT, dati e abbinamenti.
+La conversione è **riproducibile**: due esecuzioni dànno gli stessi byte (stessi SHA-256 dei `.tflite`), e anche in un ambiente rifatto da zero con
+`setup-env.ps1` (verificato, sotto).
+
+**Cosa si è scoperto dei due YuNet.** Fissato l'ingresso a 1024×1024 e tolte le forme dichiarate di 640 px dalle uscite, i due ONNX (`2023mar` e `2026may`) sono
+**lo stesso file**: stesso SHA-256 del derivato (`3f59406d3941878a4ce747d55e8804c700ebf10a18f5ec5a797afc95cfbb5797`), stessi pesi, stesso grafo (106 nodi, 112 pesi). La
+`2026may` è la `2023mar` con l'ingresso dichiarato dinamico (`height`, `width`, `anchors`); i 2.851 byte di differenza sono solo quelle dichiarazioni. Il grafo ha già
+`Reshape` con `-1` e `Resize` a scala fissa 2: qualunque lato multiplo di 32 funziona, e `FaceDetectorYN` di OpenCV lo sfrutta.
+
+### Conversione: i file prodotti (`onnx2tf` 1.29.24, TensorFlow 2.19.1; `convert.py`)
+| File | Dimensione | SHA-256 | Note |
+|---|---|---|---|
+| YuNet 2023mar float32 | 239.700 B | `10c3859c…` | **consegnato** (`yunet_2023mar_1024.tflite`) |
+| YuNet 2026may float32 | 239.700 B | `4fb5d91b…` | stessi pesi: cambia solo la descrizione dentro il file |
+| YuNet float16 (2023mar, 2026may) | 145.552 B | `d2850d2c…`, `93df5068…` | solo per la parità: non serve (230 KB di pesi) |
+| SFace float16 | 19.296.140 B | `c4508e8e…` | **consegnato** (`sface_2021dec_f16.tflite`); 86 `DEQUANTIZE` dei pesi a mezza precisione, `reduced_precision_support: fp16accfp32` |
+| SFace float32 | 38.549.644 B | `a25920a9…` | piano B del §7 (coseno 1,000000 con l'ONNX), non consegnato |
+| SFace int8 dinamico | 9.864.352 B | `fa911dc4…` | candidato della regola 2: scartato (sotto) |
+Operatori (tutti alla versione 1 salvo `DEQUANTIZE` v3, runtime minimo 1.14/1.15): YuNet `CONV_2D` 33, `DEPTHWISE_CONV_2D` 20, `MAX_POOL_2D` 4, `RESIZE_NEAREST_NEIGHBOR` 2,
+`ADD` 2, `LOGISTIC` 6, `RESHAPE` 12, `PAD` 1; SFace `CONV_2D` 14, `DEPTHWISE_CONV_2D` 13, `PRELU` 27, `PAD` 4, `SUB`, `MUL`, `ADD`, `TRANSPOSE`, `RESHAPE`, `FULLY_CONNECTED`
+e le `DEQUANTIZE`. Nessun operatore personalizzato o del delegato: gira sull'interprete di serie di `litert` 2.3.0. Rifatti in un ambiente nuovo (`setup-env.ps1` da `requirements.txt`,
+pip 24.0 invece di 26.2.2): **tutti i sette `.tflite` sono byte per byte uguali** a quelli già prodotti.
+
+### Parità ONNX contro `.tflite` (`parity.py`, regola 3; 180 immagini: 35 ritratti, serie A 60, B 45, C 40; 757 volti per SFace)
+| Cosa | Esito | Soglia |
+|---|---|---|
+| YuNet float32 (`2023mar` e `2026may`, identici): riquadri dell'ONNX con punteggio ≥ 0,605 | 776 controllati, **0 senza gemello**; viceversa 0 su 776 | 0 |
+| ... IoU minimo del gemello | **0,999999** (1 − 1,2·10⁻⁶) | ≥ 0,95 |
+| ... scarto massimo dei cinque punti | **0,00014 px** | ≤ 1 px |
+| ... scarto massimo del punteggio; delle uscite grezze | 1,0·10⁻⁶; 3,6·10⁻⁵ | — |
+| ... immagini con un numero di riquadri diverso; riquadri in zona dubbia (0,595–0,605) senza gemello | 0 su 180; 0 | — |
+| YuNet float16 (non consegnato) | 0 senza gemello, IoU minimo 0,9972, punti 0,38 px, punteggio 0,0035 | — |
+| SFace float16: coseno con il vettore ONNX fp32, su 757 volti (684 incollati nelle serie A e B, 73 dei ritratti) | **minimo 0,999995**, medio 0,999999, 0 volti sotto 0,999 | ≥ 0,999 per ogni volto |
+| SFace float32 | minimo 1,000000 | — |
+| SFace int8 dinamico (contesto, non consegnato) | minimo 0,994159, medio 0,998329, 1 volto sotto 0,995, 727 sotto 0,999 | — |
+| SFace int8 statico dell'ONNX di OpenCV Zoo (contesto) | minimo 0,874, medio 0,9725 | — |
+La parità **passa** per YuNet float32 e SFace float16: niente ripiego (SFace float32, altra conversione).
+
+### Verifica con OpenCV (`verify_opencv.py`, OpenCV 4.11.0.86 installato come dipendenza di onnx2tf)
+La parità ONNX contro `.tflite` non prova che il preprocessing sia giusto (l'errore sarebbe uguale nei due): le righe «da confermare in P1» del §2.2 si sono chiuse
+con la libreria di riferimento, senza leggerne i sorgenti.
+- **YuNet** (`FaceDetectorYN`, stesso ONNX a 1024 px, soglie 0,6 e 0,3, sulle stesse 180 immagini): **777 riquadri di OpenCV e 777 nostri, nessuno senza gemello**, IoU minimo
+  0,999993, cinque punti entro 0,00012 px (e **nello stesso ordine**), punteggi entro 1,0·10⁻⁶. Quindi: ingresso **BGR 0–255 non normalizzato**, decodifica (centro, lato esponenziale, punti, √(cls·obj)), soglia e NMS
+  sono quelli di OpenCV. Lo stesso per l'ONNX `2026may` fissato a 1024.
+- **SFace** (`FaceRecognizerSF`, 73 volti dei ritratti rilevati da OpenCV stesso): il nostro allineamento contro `alignCrop` dà una differenza media di 0,0015 livelli su 255 (massima
+  0,005) e coseno dei vettori ≥ 0,999987; il vettore di `feature()` sullo stesso volto allineato contro l'ONNX nostro: coseno ≥ 0,99999999999. Quindi: **RGB 0–255**, nessuna media da sottrarre
+  fuori dal modello (dentro ci sono `Sub` 127,5 e `Mul` 1/128), modello a 112 px di ArcFace.
+
+### Scelte applicate (regole 1 e 2, scritte prima; `choose.py`)
+**Regola 1, YuNet**: 444 volti con lato corto fra 24 e 47 px (serie B: 360; ritratti ridotti a 28, 36 e 44 px: 84), 145 immagini per i falsi positivi (A, B, C).
+| | `2023mar` | `2026may` | condizione |
+|---|---|---|---|
+| volti trovati (IoU ≥ 0,3) | **437** su 444 (98,4%) | **437** su 444 (98,4%) | (a) 2026may ≥ 1,05 · 2023mar: **no** |
+| ... per fascia | 24-31 px: 152 su 159, 32-39 px: 149 su 149, 40-47 px: 136 su 136 | uguali | |
+| falsi positivi (un secondo riquadro sullo stesso volto conta come falso positivo) | 29 | 29 | (b) non di più: sì |
+| latenza mediana a 1024, PC, 4 thread (ms) | 181,1 | 184,7 | (c) ≤ 1,30 ·: sì (differenza = rumore: stesso modello) |
+**Scelta: `2023mar`** (a pari merito, per la regola; qui perché i due sono lo stesso modello e la condizione (a) non può essere vera). Il PC è condiviso con altri agenti: le latenze sono solo un confronto fra i due,
+non i tempi del telefono (li misura P2).
+
+**Regola 2, SFace**: coseno int8 dinamico contro ONNX fp32 su 757 volti: **minimo 0,994159**, medio 0,998329, 1° percentile 0,996311, 1 volto sotto 0,995.
+Condizione (a) (minimo ≥ 0,995): **no**. Coppie dei 29 ritratti con un solo volto di consenso (22 coppie vere, 384 false): AUC float16 **0,8917**,
+int8 0,8942; coppie sbagliate alla soglia 0,363: float16 30 (9 vere sotto, 21 false sopra), int8 31 (9 e 22);
+condizione (b) (AUC non peggiore di oltre 0,005 **e** errori non di più): **no**.
+**Scelta: `float16`** (di serie, perché int8 non soddisfa tutte e due le condizioni). Il risparmio dell'int8 era di 9,4 MB (9,86 contro 19,30 MB). Nota: con 22 coppie vere la separazione dei ritratti è un
+rappresentante grossolano, dichiarato in anticipo; la purezza vera dei gruppi si misura con P5/P11 (soglie provvisorie, L97) e, sui dati veri, con F105.
+Un primo giro di `choose.py`, in cui il lato minimo di 60 px del volto di consenso dei ritratti era misurato nel quadro da 1024 px e non sul ritratto a piena risoluzione (poi reso coerente con `compose.py`), dava
+gli stessi numeri sui volti di YuNet e la stessa scelta (coppie: AUC 0,8900 contro 0,8923, 29 contro 30 errori): le due decisioni non dipendono da quel dettaglio.
+
+### Cosa è nel repository e nell'APK
+**I modelli dei volti nel catalogo** (`ModelCatalog.FACE_YUNET`, `FACE_SFACE`; dimensione e SHA-256 del **file del repository**, cioè del `.tflite`, non dell'ONNX; `CatalogMatchesDesignTest` confronta questa tabella con il codice, `BundledFaceModelsTest` con i file e `tools/check.ps1` con l'APK di release)
+| Modello | Id | File | Asset (nell'APK) | Dimensione | SHA-256 | Licenza | Origine |
+|---|---|---|---|---|---|---|---|
+| YuNet 2023mar | `yunet-2023mar-1024-f32` | `yunet_2023mar_1024.tflite` | `faces/yunet_2023mar_1024.tflite` | 239.700 B | `10c3859c32d28a416aa9cb10f46c4a9fb53dff88016749381d225e18c5727a58` | MIT | `face_detection_yunet_2023mar.onnx` (`8f2383e4…`) |
+| SFace 2021dec (float16) | `sface-2021dec-f16` | `sface_2021dec_f16.tflite` | `faces/sface_2021dec_f16.tflite` | 19.296.140 B | `c4508e8e5e844ec65449a6c65f5cf3a2538918fe3731a7bf330522b4953ec47c` | Apache-2.0 | `face_recognition_sface_2021dec.onnx` (`0ba9fbfa…`) |
+Accanto, in `core-ai/src/main/assets/faces/`: `LICENSE-YuNet.txt` (MIT, testo di OpenCV Zoo), `LICENSE-SFace.txt` (Apache-2.0, testo di OpenCV Zoo) e `NOTICE.txt` (fonte,
+commit, impronte e dimensioni d'ingresso e d'uscita, strumenti, nota sui dataset di SFace). Le due voci hanno `bundledAsset` e nessun indirizzo HTTPS; `ModelCatalog.ALL`
+(i tre modelli che la pagina «Ricerca e modelli» elenca) **non cambia**: i volti stanno in `ModelCatalog.FACES`, e `ModelCatalog.WITH_FACES = ALL + FACES` è il catalogo che il gestore
+conosce (`LocalModels` lo usa di serie: altrimenti `removeUnlisted` toglierebbe la copia estratta). `ModelCatalog.needed(ruoli, funzioni)` aggiunge YuNet e SFace solo con
+`ModelFeature.FACES` fra le funzioni; `needed(ruoli)` è come prima.
+
+### Dimensione dell'APK di release e controllo D39
+`:app:assembleRelease` (non firmato: mancano le chiavi `pampa.*` in `local.properties`, com'è previsto), stessa struttura di build, stesso commit di partenza:
+| | Byte | MiB |
+|---|---|---|
+| **prima** (`c2ecc9e`, P0 della Fase 8, senza i modelli dei volti) | 68.858.261 | 65,67 |
+| **dopo** (con `assets/faces/`: due `.tflite`, due licenze, `NOTICE.txt`) | 88.401.029 | 84,31 |
+| differenza | **+19.542.768** | +18,64 (+28,4%) |
+I `.tflite` entrano nell'APK senza compressione (come `magic_touch.tflite`: AGP non comprime `.tflite`), quindi la crescita è la somma dei file (19.296.140 + 239.700 B, più i testi compressi).
+**Controllo D39** (`tools/check.ps1`, passo «Modelli dei volti nell'APK di release…», dopo quello di LiteRT): dall'APK di release vero legge `ModelCatalog.FACE_YUNET` e `FACE_SFACE` (dimensione, SHA-256, asset) e controlla che
+`assets/faces/` contenga i due modelli con quelle impronte, `LICENSE-YuNet.txt` («MIT License»), `LICENSE-SFace.txt` («Apache License») e `NOTICE.txt` («OpenCV Zoo», con le due impronte), nessun altro modello in quella
+cartella e nessun file `.onnx` in tutto l'APK; controllo positivo: `assets/cutout/magic_touch.tflite` c'è. Provato **da solo sull'APK vero** (esito verde) e **su tre mutazioni** del catalogo (SHA-256 di YuNet cambiato di una cifra, dimensione
+di SFace più uno, asset con un altro nome): rosso ogni volta, con il motivo giusto. Un APK senza i modelli, o con un file diverso, fa fallire `check.ps1`.
+
+### Cosa trova pronto P2 (`core-ai/.../faces/`, `FaceLiteRtSessions`, `ModelInputs.forFaces`)
+- **Apertura**: `ModelFiles.open(ModelCatalog.FACE_YUNET.id)` e `open(ModelCatalog.FACE_SFACE.id)` (dopo `ensure` con `ModelCatalog.needed(ruoli, setOf(ModelFeature.FACES))`: il
+  gestore estrae l'asset in `models/<sha256>` e ne verifica dimensione e SHA-256 a ogni apertura, come per MagicTouch). Due `Interpreter` di `litert` 2.3.0, CPU, 4 thread.
+- **YuNet**: ingresso `input` `[1, 1024, 1024, 3]` float32, **BGR 0–255 non normalizzato**, ridotto a lato lungo 1024 (in giù o in su) con i bordi a **0 in basso e a destra**
+  (la scala e il margine li gestisce chi chiama). Dodici uscite float32, **nell'ordine del file** (indice = posizione, e hanno il nome): `cls_8, cls_16, cls_32, obj_8, obj_16,
+  obj_32, bbox_8, bbox_16, bbox_32, kps_8, kps_16, kps_32`, forme `[1, N, C]` con N = 16384, 4096, 1024 per i passi 8, 16, 32 e C = 1, 1, 1, 1, 1, 1, 4, 4, 4, 10, 10, 10.
+  `cls`/`obj` sono già probabilità (sigmoide nel modello), `bbox` e `kps` sono grezzi. **Decodifica** (`tools/models/faces/common.py`, `decodifica_yunet`, provata contro
+  `FaceDetectorYN`): per ogni cella (riga r, colonna c) del passo s, punteggio = √(clamp(cls,0,1)·clamp(obj,0,1)); centro = ((c + bbox0)·s, (r + bbox1)·s); lato = (exp(bbox2)·s,
+  exp(bbox3)·s); riquadro = centro − lato/2; punto k (k = 0..4) = ((c + kps[2k])·s, (r + kps[2k+1])·s); soglia 0,6; NMS (si scarta un riquadro con IoU > 0,3 su uno già tenuto, di punteggio maggiore), al più 5.000 candidati. I cinque punti sono, nell'ordine
+  di OpenCV, occhio destro del soggetto (a sinistra nell'immagine), occhio sinistro, punta del naso, angolo destro e angolo sinistro della bocca: lo stesso ordine del modello
+  a 112 px di ArcFace.
+- **Allineamento** (`common.volto_allineato`): similitudine ai minimi quadrati (Umeyama) dai cinque punti a (38,2946 51,6963 · 73,5318 51,5014 · 56,0252 71,7366 ·
+  41,5493 92,3655 · 70,7299 92,2041), `warpAffine` bilineare a 112×112, bordi a 0. Provato contro `FaceRecognizerSF.alignCrop` (vedi «Verifica con OpenCV»).
+- **SFace**: ingresso `data` `[1, 112, 112, 3]` float32, **RGB 0–255** (BGR → RGB va fatto prima: la media 127,5 e la scala 1/128 sono dentro il modello, le prime due
+  operazioni del grafo); uscita `fc1` `[1, 128]` float32 **non normalizzata** (norma circa 11–12: normalizzare in float32 e poi salvare in float16, D7).
+- **Parità da ripetere sul dispositivo** (P2): coseno ≥ 0,999 contro il vettore dell'ONNX dello stesso volto allineato; i riferimenti si ricavano con `engines.py` e
+  `parity.py` (nessun vettore o immagine nel repository: i ritratti restano fuori, `ELENCO.json` ha le fonti). Se SFace float16 fosse lento sul telefono, la variante float32
+  è già convertita (38.549.644 B, SHA-256 `a25920a9d2ce5dda88d148f5f5798ab732a19f3d09d65780063079c3314efcde`, coseno 1,000000 con l'ONNX) e sta fuori dal repository.
+
+### Modifiche fuori dal perimetro stretto, e cosa chiedono ai contratti degli altri
+- `core-models/.../LocalModels.kt`: il catalogo di serie passa da `ModelCatalog.ALL` a `ModelCatalog.WITH_FACES` (una riga). Senza, `removeUnlisted()` avrebbe tolto la copia estratta dei volti e `ModelFiles.open`
+  non li avrebbe conosciuti. `ModelCatalog.ALL` resta di tre modelli: la pagina «Ricerca e modelli» (`SearchSettingsController`, P0 della Fase 8 ha già le etichette dei ruoli `FACE_*`) non mostra righe nuove e
+  `AiDiagnosticsTest` (`ALL.size == 3`) non cambia. Se P7 o P13 volessero le due righe in quella pagina, partono da `WITH_FACES`.
+- Test toccati per questo: `ModelWiringTest` (le chiavi dello stato sono `WITH_FACES`), `BundledModelTest` di `core-ai` (gli unici modelli negli asset sono il ritaglio e i due dei volti), `ModelCatalogTest` (prove nuove).
+- **P2**: il codice del rilevatore da scrivere nei dati è `FaceDetectorCode.YUNET_2023MAR` (la `2026may` è lo stesso modello: non esiste un modello diverso a cui assegnare `YUNET_2026MAY`, che resta
+  nell'enum per i file già scritti da altri); lo spazio è `FaceSpaceCode.SFACE_2021DEC_V1` (la voce del catalogo lo dichiara). Chi sa che Persone è attiva qui chiama `ModelCatalog.needed(ruoli, setOf(ModelFeature.FACES))`.
+- **P13**: `docs/sicurezza.md` §4-bis (asset nuovi) e la checklist; il passo `tools/check.ps1` D39 c'è già e legge le impronte da `ModelCatalog.kt`.
+
+### Punti aperti
+- **AuraFace: non serve.** SFace float16 ha parità con l'ONNX ≥ 0,999995 e le misure di P1 non toccano la qualità vera (che è di F105, sui dati dell'utente: Q4, più avanti). Se F105 dicesse che SFace non basta, l'utente va avvisato **prima** di scaricare
+  `glintr100.onnx` (260,7 MB, Hugging Face: host già ammesso, ma un consenso nuovo, §8).
+- **Le prove sul dispositivo sono di P2**: i `.tflite` si sono provati con l'interprete di LiteRT per Python (`ai-edge-litert` 2.1.2, XNNPACK), non con `litert` 2.3.0 su Android. Tutti gli operatori sono di serie e alla versione 1,
+  ma la parità sul telefono (coseno ≥ 0,999), la latenza di SFace float16 con le `DEQUANTIZE` e il PSS vanno misurati lì (D10); se float16 fosse più lento di float32 sul telefono, la variante float32 è pronta (sopra).
+- **Qualità dei ritratti**: sono dipinti, non foto: vanno bene per la parità e per il confronto fra le due versioni di YuNet (che comunque coincidono), non dicono nulla sul richiamo dei volti veri, i bambini, gli occhiali da sole. Le composizioni sono incollate con un bordo sfumato:
+  sfondi e illuminazione non sono quelli di una foto di gruppo. La serie B misura solo «un volto già trovato a piena risoluzione si trova ancora a 24–47 px» (richiamo 98,4%).
+- **Separazione delle coppie** (regola 2, punto b) calcolata su 22 coppie vere: troppo poche per fidarsi del terzo decimale dell'AUC; la decisione sull'int8 poggia comunque sul coseno minimo (0,9942 < 0,995).
+- **Dimensione**: l'APK di release cresce di 19.542.768 byte (+28,4%; i `.tflite` sono memorizzati senza compressione, come MagicTouch). Se un giorno si volesse un APK più leggero: SFace int8 dinamico (9,9 MB) con coseno minimo 0,9942 contro la soglia 0,995, o Q1 (b) (scaricare invece di includere).
+- I ritratti e l'ambiente restano in `C:\VibeCoded Projects\mcg-models\faces\` (fuori dal repository): P11 può ricavarne l'elenco delle fonti (`ritratti\ELENCO.json`) per `tools/fixtures/faces/`; la tabella sopra ha già le fonti.
+
+### I ritratti di prova (Wikimedia Commons, fuori dal repository: `ritratti\ELENCO.json` ha pagina, autore, indirizzo e SHA-256 interi)
+Tutti «Public domain» con «Copyrighted: False» nei metadati di Commons (riproduzioni fedeli di dipinti antichi o dell'Ottocento). `Sogg.` è un'etichetta neutra: stesso valore = stessa persona ritratta
+(autoritratti dello stesso pittore a età diverse: E-F2); `m..` sono scene con più volti.
+
+| Etichetta | Sogg. | File su Commons | Miniatura | Byte | SHA-256 |
+|---|---|---|---|---|---|
+| `ritratto-01` | s01 | Rembrandt van Rijn - Self-Portrait - Google Art Project.jpg | 1280×1658 | 358.465 | `e576afd759a0…` |
+| `ritratto-02` | s01 | Rembrandt - Self-Portrait with Velvet Beret - Google Art Project.jpg | 1280×1568 | 542.446 | `152af6e02699…` |
+| `ritratto-03` | s01 | Rembrandt Harmenszoon van Rijn - Large Self-Portrait - Google Art Project.jpg | 1280×1786 | 507.391 | `afaef7c12e5e…` |
+| `ritratto-04` | s01 | Rembrandt van Rijn - Portrait of the Artist as a Young Man - Google Art Project.jpg | 1280×1618 | 705.542 | `ea49d3dd9af6…` |
+| `ritratto-05` | s01 | Rembrandt Harmensz. van Rijn - Self-portrait wearing a Hat and two Chains - Google Art Project.jpg | 1280×1581 | 341.974 | `5ff40008dc42…` |
+| `ritratto-06` | s01 | Rembrandt Harmensz. van Rijn - Selfportrait - Google Art Project.jpg | 1280×1585 | 614.754 | `db813e0b788d…` |
+| `ritratto-07` | s02 | Vincent van Gogh - Self-Portrait - Google Art Project (454045).jpg | 1280×1618 | 817.315 | `d3eb4d3547e6…` |
+| `ritratto-08` | s02 | Vincent van Gogh - Self-portrait with straw hat - Google Art Project.jpg | 1280×1581 | 704.232 | `eefdf7ec2236…` |
+| `ritratto-09` | s03 | Albrecht Dürer - Self-Portrait at 26 - WGA6925.jpg | 801×1016 | 149.534 | `cf20cd52fba2…` |
+| `ritratto-10` | s03 | Albrecht Dürer - 1500 self-portrait (High resolution and detail).jpg | 1280×1770 | 563.461 | `f79e13925610…` |
+| `ritratto-11` | s03 | Durer-self-portrait-at-the-age-of-thirteen.jpg | 1280×1829 | 920.970 | `4bd14f5b57b9…` |
+| `ritratto-12` | s04 | Sofonisba Anguissola - Self-Portrait - c. 1556.jpg | 1280×1679 | 492.515 | `dc6c9de79617…` |
+| `ritratto-13` | s04 | Sofonisba Anguissola - Autoritratto (1554).jpg | 974×1368 | 414.234 | `6b5bb6aa4958…` |
+| `ritratto-14` | s05 | Elisabeth Louise Vigée Le Brun - Self-Portrait - Google Art Project.jpg | 1280×1553 | 390.342 | `35a92d0dcd9d…` |
+| `ritratto-15` | s05 | Elisabeth-Louise Vigée-Lebrun - Self Portrait in a Straw Hat.jpg | 1280×1677 | 1.001.630 | `8b4d8a25b04c…` |
+| `ritratto-16` | s06 | Peter Paul Rubens - Self-portrait (1623, NGA).jpg | 1280×1754 | 258.581 | `999834d33e12…` |
+| `ritratto-17` | s06 | Peter Paul Rubens - Selfportrait - Google Art Project.jpg | 1280×1651 | 356.520 | `fd1c1b884f2a…` |
+| `ritratto-18` | s07 | Anthony van Dyck - Self portrait.jpg | 1280×1745 | 433.853 | `68968a67e4ba…` |
+| `ritratto-19` | s07 | Sir Anthony van Dyck - Self-portrait.jpg | 1257×1593 | 1.199.973 | `4b164a3431b4…` |
+| `ritratto-20` | s08 | Girl with a Pearl Earring.jpg | 1280×1514 | 662.317 | `577f60277092…` |
+| `ritratto-21` | s09 | Mona Lisa.jpg | 1280×1936 | 763.014 | `a0ce0481d3f6…` |
+| `ritratto-22` | s10 | Leonardo da Vinci - Portrait of Cecilia Gallerani (Lady with an Ermine) - WGA12698.jpg | 1100×1490 | 165.405 | `bb3c59775d97…` |
+| `ritratto-23` | s11 | Frans Hals – The Laughing Cavalier.jpg | 1280×1563 | 494.548 | `fd5ddacc721e…` |
+| `ritratto-24` | s12 | Portrait of Erasmus of Rotterdam by Hans Holbein d. J. in Kunstmuseum Basel.jpg | 1280×1548 | 427.908 | `2b05e5ff1672…` |
+| `ritratto-25` | s14 | Portrait of Pope Innocent X (by Diego Velázquez) - Doria Pamphilj Gallery, Rome.jpg | 1280×1519 | 454.439 | `24b3ce2e8b70…` |
+| `ritratto-26` | s15 | Baldassare Castiglione, by Raffaello Sanzio, from C2RMF retouched.jpg | 1280×1592 | 675.064 | `aa6ec8c82ea2…` |
+| `ritratto-27` | s16 | Portrait of a Man in a red turban (by Jan van Eyck).jpg | 1280×1769 | 374.437 | `bc537a2c3f20…` |
+| `ritratto-28` | s17 | Dominique Ingres - Mme Moitessier.jpg | 1280×1678 | 533.846 | `4740d5c67fa0…` |
+| `ritratto-29` | s19 | Manet, Edouard - Portrait of Emile Zola.jpg | 1280×1684 | 573.910 | `14c5d80d8049…` |
+| `ritratto-30` | s24 | Whistlers Mother high res.jpg | 1280×1139 | 321.265 | `2e07e19b8fe1…` |
+| `ritratto-31` | s25 | Sargent MadameX.jpeg | 1280×2422 | 474.603 | `ae4c7000ed97…` |
+| `ritratto-32` | m01 | Rembrandt - The Anatomy Lesson of Dr. Nicolaes Tulp.jpg | 1920×1441 | 620.001 | `99636b1ee386…` |
+| `ritratto-33` | m02 | Renoir - Madame Georges Charpentier et ses enfants.jpg | 1280×1032 | 429.064 | `6238fce05b58…` |
+| `ritratto-34` | m03 | The Chess Game (Sofonisba Anguissola) 1555 (4096x3236px).jpg | 1920×1517 | 1.190.866 | `13bc561160ef…` |
+| `ritratto-35` | m04 | "The School of Athens" by Raffaello Sanzio da Urbino.jpg | 1920×1490 | 1.105.653 | `cf21c5c57264…` |
+| totale | | 35 ritratti | | 20.040.072 | |

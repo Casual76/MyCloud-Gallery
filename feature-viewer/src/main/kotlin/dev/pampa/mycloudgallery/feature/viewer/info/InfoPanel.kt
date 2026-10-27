@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
+import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryInfoHeader
@@ -43,8 +44,11 @@ import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryInfoRow
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryInfoSection
 import kotlin.math.abs
 
-/** Una sezione del pannello informazioni: un'intestazione e le sue righe. */
-internal class InfoSectionModel(val header: String?, val rows: List<GalleryInfoRow>)
+/**
+ * Una sezione del pannello informazioni: un'intestazione e le sue righe. Una sezione con un [content] proprio (la riga "Persone" dei volti, Fase
+ * 8, P9) disegna quello al posto delle righe, sotto la stessa intestazione.
+ */
+internal class InfoSectionModel(val header: String?, val rows: List<GalleryInfoRow>, val content: (@Composable () -> Unit)? = null)
 
 /**
  * La posizione del pannello informazioni: `progress` va da 0 (chiuso) a 1 (aperto). Sul telefono il dito lo guida
@@ -115,7 +119,17 @@ internal fun InfoSections(sections: List<InfoSectionModel>, modifier: Modifier =
     modifier = modifier,
     verticalArrangement = Arrangement.spacedBy(SectionSpacing),
   ) {
-    sections.forEach { GalleryInfoSection(rows = it.rows, header = it.header) }
+    sections.forEach { section ->
+      val custom = section.content
+      if (custom == null) {
+        GalleryInfoSection(rows = section.rows, header = section.header)
+      } else {
+        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(CustomSectionGap)) {
+          section.header?.let { FluidSectionHeader(title = it) }
+          custom()
+        }
+      }
+    }
   }
 }
 
@@ -221,6 +235,7 @@ internal fun BoxScope.InfoSidePanel(
 internal fun sheetHeight(stageHeight: Dp): Dp = (stageHeight * SheetFraction).coerceIn(SheetMin, SheetMax)
 
 private val SectionSpacing = 18.dp
+private val CustomSectionGap = 8.dp
 private val ContentTop = 4.dp
 private val ContentBottom = 24.dp
 private val PanelHeaderTop = 12.dp

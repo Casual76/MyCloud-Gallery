@@ -69,7 +69,7 @@ class FacesReplicaTest {
 
   /** D11, C37: le cartelle dei dispositivi di un altro account non si leggono, nemmeno copiate nella mia area; una sua testa messa nella cartella di un mio dispositivo e' rifiutata. */
   @Test
-  fun leTesteDiUnAltroAccountNonSiLegonoMai() = runTest {
+  fun leTesteDiUnAltroAccountNonSiLeggonoMai() = runTest {
     val world = FacesSyncWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")

@@ -324,6 +324,7 @@ con il DNG); gli altri hanno `GROUP_MEMBER` e stanno fuori.
 | `group(kind, members, cover)`, `ungroup(id)` | raffiche e RAW+JPEG; un gruppo rimasto con un membro solo si scioglie |
 | `setPersonalFlags(id, flags)` e per una selezione | istante del cambio per ogni flag; nascondere o mostrare e' un cambiamento strutturale |
 | `saveMediaStoreCursor`, `mediaStoreCursor(s)`, `setPlacesDataset`, `placesDataset` | stato della lettura e del dataset dei luoghi |
+| `placesToRecompute(dataset, limit)`, `savePlaces(dataset, places)` | il ricalcolo dei luoghi a un dataset nuovo (`PlacesRecompute`, core-mediastore; debito del 27/10): le versioni con GPS il cui `place_dataset` manca o e' un altro; la riscrittura (una transazione) porta il dataset nuovo anche a chi non ha piu' un luogo vicino e lo fa uscire dalla coda, quindi non serve un cursore. `media.place_id` cambia solo se cambia il luogo della versione corrente |
 | `phoneRefs(ids)` | `MediaRef.Phone` solo per copie presenti con l'`_ID` della versione attuale del MediaStore |
 | `changes: SharedFlow<CatalogChange>` | vedi sotto |
 

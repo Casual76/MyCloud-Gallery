@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.database.entity.MediaGroupEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaLocationEntity
 import dev.pampa.mycloudgallery.core.database.entity.MediaVersionEntity
 import dev.pampa.mycloudgallery.core.database.entity.NasShareEntity
+import dev.pampa.mycloudgallery.core.database.entity.PlaceCandidateRow
 import dev.pampa.mycloudgallery.core.database.entity.StatusCount
 import dev.pampa.mycloudgallery.core.database.entity.VersionMetadataEntity
 import kotlinx.coroutines.flow.Flow
@@ -154,6 +155,20 @@ interface VersionDao {
 
   @Query("SELECT * FROM version_metadata WHERE version_id = :versionId")
   suspend fun metadata(versionId: String): VersionMetadataEntity?
+
+  /**
+   * Le versioni con GPS il cui luogo non e' stato calcolato con il dataset [dataset] (`place_dataset` mancante o di un altro): il ricalcolo dei luoghi a un
+   * dataset nuovo. Una versione riscritta con [setPlace] esce da questo elenco, quindi la ripresa dopo la morte del processo non ha bisogno di un cursore.
+   */
+  @Query(
+    "SELECT version_id, latitude, longitude FROM version_metadata WHERE latitude IS NOT NULL AND longitude IS NOT NULL " +
+      "AND (place_dataset IS NULL OR place_dataset <> :dataset) LIMIT :limit",
+  )
+  suspend fun placesToRecompute(dataset: Int, limit: Int): List<PlaceCandidateRow>
+
+  /** Scrive il luogo calcolato con [dataset] (null = nessun luogo abbastanza vicino: il dataset resta scritto, cosi' la versione non torna in coda). */
+  @Query("UPDATE version_metadata SET place_id = :placeId, place_dataset = :dataset WHERE version_id = :versionId")
+  suspend fun setPlace(versionId: String, placeId: Int?, dataset: Int): Int
 }
 
 @Dao

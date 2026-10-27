@@ -52,6 +52,7 @@ import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasShare
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.model.PersonalFlags
+import dev.pampa.mycloudgallery.core.model.PlaceRef
 import dev.pampa.mycloudgallery.core.model.Presence
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
@@ -989,6 +990,38 @@ class MediaCatalog(
 
   /** La versione del dataset dei luoghi con cui sono stati calcolati i `place_id` (`catalog_meta`). */
   suspend fun setPlacesDataset(dataset: Int): Unit = write { metaDao.put(PLACES_DATASET, dataset.toLong()) }
+
+  /**
+   * Il ricalcolo dei luoghi a un dataset nuovo (debito del 27/10; `PlacesRecompute`, core-mediastore). Le versioni con GPS il cui luogo non e' stato
+   * calcolato con il dataset [dataset], al piu' [limit]: mai calcolato (`place_dataset` mancante: letta prima che il dataset si aprisse, o senza luogo vicino)
+   * o calcolato con un altro. Si scrivono con [savePlaces], che le toglie da qui: nessun cursore, e dopo la morte del processo si riparte da quelle che mancano.
+   */
+  suspend fun placesToRecompute(dataset: Int, limit: Int): List<PlaceToRecompute> =
+    versionDao.placesToRecompute(dataset, limit).map { PlaceToRecompute(VersionId(it.versionId), it.latitude, it.longitude) }
+
+  /**
+   * Scrive i luoghi ricalcolati con [dataset] ([places]: null = nessun luogo abbastanza vicino, e il dataset si scrive lo stesso: la versione non torna in coda),
+   * in **una transazione**. Il luogo di un media cambia (`media.place_id`) solo se e' la sua versione corrente a cambiarlo, e solo allora l'indice annuncia
+   * il cambiamento; un luogo uguale a prima aggiorna soltanto il dataset. Non scrive `places_dataset`: lo fa [setPlacesDataset] quando non resta niente.
+   */
+  suspend fun savePlaces(dataset: Int, places: Map<VersionId, PlaceRef?>): PlacesSaved = write { tx ->
+    require(dataset > 0) { "Versione del dataset dei luoghi non valida." }
+    var stamped = 0
+    val changedMedia = HashSet<MediaId>()
+    for ((version, place) in places) {
+      val before = versionDao.metadata(version.value) ?: continue
+      if (versionDao.setPlace(version.value, place?.geonameId, dataset) == 0) continue
+      stamped++
+      if (before.placeId != place?.geonameId) {
+        versionDao.get(version.value)?.let { row ->
+          val media = MediaId(row.mediaId)
+          tx.touch(media)
+          if (mediaDao.get(row.mediaId)?.currentVersionId == version.value) changedMedia += media
+        }
+      }
+    }
+    PlacesSaved(stamped, changedMedia.size)
+  }
 
   // --- Fase 5A (P1): il backup e le copie simili (schema v4; docs/modello-dati.md §12) ----------------------------------------
   //

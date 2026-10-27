@@ -25,6 +25,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.PersonIdSource
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import kotlin.time.Duration
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -106,12 +107,19 @@ class CustodianGrouping(
     val remote = if (role.readsNas) snapshots.latest(generation) else emptyList()
     val outcome = if (role.custodian) custodial(kind, role, local, remote, faces, corrections, goneKeys) else provisional(local, remote, faces, corrections, goneKeys)
     val state = outcome.first
-    if (!same(state, local)) closedSafe { archive.saveGrouping(state) } ?: return GroupingReport.EMPTY
+    if (!same(state, local) && !saved(archive, state)) return GroupingReport.EMPTY
     // Da custode si pubblica cio' che non c'e' ancora sul NAS: non la stessa istantanea di un altro (dopo averla adottata senza cambiarla).
     val alreadyThere = remote.any { sameContent(it.state, state) }
     if (role.publishes && state.seq > publishedSeq(remote) && !alreadyThere) {
-      publisher.stage(FacesChange.Snapshot(state.seq))
-      publisher.flush(if (kind == Kind.INCREMENTAL) FlushReason.UNIT_FINISHED else FlushReason.MAINTENANCE_FINISHED)
+      try {
+        publisher.stage(FacesChange.Snapshot(state.seq))
+        publisher.flush(if (kind == Kind.INCREMENTAL) FlushReason.UNIT_FINISHED else FlushReason.MAINTENANCE_FINISHED)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        // O1: la messa in coda o la pubblicazione non e' riuscita (un errore del database, l'outbox chiusa): l'istantanea e' salvata nell'archivio e la sua `seq` supera ancora
+        // quella pubblicata, quindi la prossima volta si riprova; il raggruppamento non cade.
+      }
     }
     holderState.value = when (role) {
       Role.HOLDER -> HolderState.Holder(state.seq)
@@ -198,6 +206,16 @@ class CustodianGrouping(
   }
 
   /** Un archivio chiuso (generazione cambiata, chiave distrutta) risponde `IllegalStateException`: il giro si ferma (null). */
+  /** Salva l'istantanea; falso se non e' riuscito (archivio chiuso, o un errore del database: O1) e il raggruppamento di questa volta si ferma, senza cadere. */
+  private suspend fun saved(archive: FacesArchive, state: GroupingState): Boolean = try {
+    archive.saveGrouping(state)
+    true
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    false
+  }
+
   private suspend fun <T> closedSafe(block: suspend () -> T): T? = try {
     block()
   } catch (e: IllegalStateException) {

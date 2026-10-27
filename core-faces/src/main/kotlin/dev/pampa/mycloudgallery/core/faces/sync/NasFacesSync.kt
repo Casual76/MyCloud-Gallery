@@ -35,6 +35,7 @@ import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
 import kotlin.time.Duration
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -89,9 +90,15 @@ class NasFacesSync(
     val tally = SyncTally()
     try {
       round(budget, tally)
+    } catch (e: CancellationException) {
+      throw e
     } catch (closed: IllegalStateException) {
       // L'archivio si e' chiuso a meta' (generazione cambiata, chiave distrutta): niente altro si scrive in questo giro.
       tally.report(FacesSyncStop.NOT_FRESH)
+    } catch (e: Exception) {
+      // O1: un errore del database (applicare i corpi letti, salvare lo stato della replica) non e' un'eccezione per chi chiama: il giro non e' finito. Niente si perde: lo stato
+      // della replica non e' avanzato e i segmenti si rileggono (applicarli e' idempotente) al giro dopo.
+      tally.report(FacesSyncStop.UNAVAILABLE)
     }
   }
 

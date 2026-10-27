@@ -30,6 +30,7 @@ import dev.pampa.mycloudgallery.core.trust.data.HeadMark
 import dev.pampa.mycloudgallery.core.trust.data.PeopleDoc
 import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
 import dev.pampa.mycloudgallery.core.trust.data.SnapshotMark
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -137,9 +138,15 @@ class NasFacesPublisher(
     val archive = archives.open(open.generation)?.takeIf { it.generation == open.generation } ?: return@withLock FacesPublishOutcome.Failed
     try {
       publish(open, archive, reason, nasNow)
+    } catch (e: CancellationException) {
+      throw e
     } catch (closed: IllegalStateException) {
       // L'archivio si e' chiuso a meta' (generazione cambiata, chiave distrutta): nessuna testa.
       FacesPublishOutcome.NotFresh
+    } catch (e: Exception) {
+      // O1: un errore del database (l'outbox, la lettura dei corpi) a meta' non e' un'eccezione per chi chiama: la pubblicazione non e' riuscita e si riprova. Niente si perde:
+      // l'outbox tiene le chiavi, e se una testa e' forse uscita senza che lo si sappia `uncertain` era gia' salvato prima di provarci.
+      FacesPublishOutcome.Failed
     }
   }
 

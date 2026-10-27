@@ -265,7 +265,11 @@ internal class ChaosDevice(val world: ChaosWorld, val index: Int, val name: Stri
       return false
     }
     history.entries += "$name al mare"
-    publisher.stage(dev.pampa.mycloudgallery.core.faces.contract.FacesChange.People(listOf(edit)))
+    try {
+      publisher.stage(dev.pampa.mycloudgallery.core.faces.contract.FacesChange.People(listOf(edit)))
+    } catch (e: ChaosDbFault) {
+      // Come `PeopleEditor`: la voce e' nell'archivio e vale gia', una ripresa ripubblica lo stato intero del proprio contributo.
+    }
     world.named(g, name, this)
     return true
   }

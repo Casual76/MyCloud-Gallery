@@ -46,9 +46,7 @@ internal class ChaosWorld(val seed: Long, val inj: ChaosInjector, val mutant: Mu
 
   /** Un'eccezione e' uscita da una coroutine dell'interruttore di [device] (O3): si ricorda con il suo posto, e il verificatore la porta all'invariante 10. */
   fun escapedFromScope(device: String, e: Throwable) {
-    escaped += "${e.javaClass.simpleName} esce da una coroutine dell'interruttore di $device: ${e.message}
-" + e.stackTrace.take(10).joinToString("
-") { "      $it" }
+    escaped += "${e.javaClass.simpleName} esce da una coroutine dell'interruttore di $device: ${e.message}\n" + e.stackTrace.take(10).joinToString("\n") { "      $it" }
   }
 
   /** Le eccezioni uscite dalle coroutine dall'ultima volta che si sono chieste. */

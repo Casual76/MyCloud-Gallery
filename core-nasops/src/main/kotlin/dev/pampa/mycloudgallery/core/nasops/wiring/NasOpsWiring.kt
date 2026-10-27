@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsGate
 import dev.pampa.mycloudgallery.core.nasops.contract.OpsStore
 import dev.pampa.mycloudgallery.core.nasops.contract.OwnFilesCleaning
+import dev.pampa.mycloudgallery.core.nasops.contract.ProtectedFiles
 import dev.pampa.mycloudgallery.core.nasops.engine.CatalogPresence
 import dev.pampa.mycloudgallery.core.nasops.engine.HeavyWorkPolicy
 import dev.pampa.mycloudgallery.core.nasops.engine.KnownHashes
@@ -78,6 +79,8 @@ class NasOpsConfig(
   val citedTemps: CitedTemps = CitedTemps.NONE,
   val moves: MoveCompletions = MoveCompletions.NONE,
   val completions: MoveCompletionSink = NoMoveCompletionSink,
+  /** Fase 7, revisione B (R3): i file degli album condivisi che la tabella dei permessi non lascia togliere dal loro posto (:app). */
+  val protectedFiles: ProtectedFiles = ProtectedFiles.NONE,
 ) {
   init {
     // Fase 7 P4 (D29): una sola porta di completamento (lo stesso controllo di `completionPortOf`, prima di aprire qualunque cosa).
@@ -125,6 +128,7 @@ object NasOpsWiring {
       lock = lock,
       presence = config.catalogPresence,
       completions = completionPortOf(config.completions, config.moves),
+      protectedFiles = config.protectedFiles,
     )
     val trash = NasTrashService(
       deviceId = config.deviceId,

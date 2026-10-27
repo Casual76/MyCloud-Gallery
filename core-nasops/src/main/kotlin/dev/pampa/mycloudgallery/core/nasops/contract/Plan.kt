@@ -136,6 +136,12 @@ enum class SkipReason(override val code: String) : StableCode {
 
   /** R11: un file che l'utente ha chiesto di lasciare dov'e' (un media nascosto, spostando nell'area comune). */
   LEFT_BEHIND("left_behind"),
+
+  /**
+   * Fase 7, revisione B (R3, E-D16): il file (o qualcosa dentro la cartella) e' un elemento di un album condiviso che il livello dell'album non mi
+   * permette di eliminare, spostare o rinominare ([ProtectedFiles]).
+   */
+  SHARED_ALBUM_ITEM("shared_album_item"),
 }
 
 /** Gli avvisi del foglio di conferma. */
@@ -226,4 +232,7 @@ enum class PlanRejection(override val code: String) : StableCode {
 
   /** Una voce del cestino da eliminare subito non e' nel diario locale: non e' mia, non si elimina. */
   NOT_MINE("not_mine"),
+
+  /** Fase 7, revisione B (R3, E-D16): tutto cio' che si voleva togliere e' un elemento di un album condiviso che il livello non mi permette di toccare. */
+  SHARED_ALBUM_ITEM("shared_album_item"),
 }

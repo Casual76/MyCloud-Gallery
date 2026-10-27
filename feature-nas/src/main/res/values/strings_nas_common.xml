@@ -67,6 +67,7 @@
   <string name="nas_error_locked_too_long">Il file è rimasto aperto per 24 ore: mi sono fermato.</string>
   <string name="nas_error_permission_denied">Non hai il permesso di farlo.</string>
   <string name="nas_error_unexpected">Qualcosa è andato storto.</string>
+  <string name="nas_error_catalog_mismatch">La copia è nella destinazione, ma l’app non è riuscita a riconoscerla come la stessa foto per un giorno: l’originale è rimasto al suo posto. Restano le due copie.</string>
 
   <!-- Perché un\'operazione non diventa un piano (PlanRejection) -->
   <string name="nas_reject_empty">Non c\'è niente da fare con questa scelta.</string>
@@ -82,6 +83,7 @@
   <string name="nas_reject_writes_blocked">Le scritture sul NAS sono ferme adesso. Riprova più tardi.</string>
   <string name="nas_reject_nas_unreachable">Il NAS non risponde: riprova quando è raggiungibile.</string>
   <string name="nas_reject_not_mine">Puoi eliminare subito solo ciò che hai eliminato da questo dispositivo.</string>
+  <string name="nas_reject_shared_album_item">È in un album condiviso e il livello dell’album non ti permette di eliminarlo, spostarlo o rinominarlo: può farlo chi l’ha creato (o chi l’ha aggiunto, a “Gli altri aggiungono”).</string>
 
   <!-- Dopo aver confermato (StartOutcome) -->
   <string name="nas_started">Operazione avviata. La trovi in Operazioni in corso.</string>

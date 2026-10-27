@@ -34,7 +34,17 @@ enum class NasAreaScope {
  * E-D15): la copia di una versione precedente (in `Versioni/`): va nel cestino con "Ovunque", e il foglio la conta nella riga delle versioni
  * precedenti invece di elencarla come un'altra area.
  */
-data class NasLocationInfo(val kind: Kind, val writable: Boolean = true, val item: NasItem? = null, val previousVersion: Boolean = false) {
+data class NasLocationInfo(
+  val kind: Kind,
+  val writable: Boolean = true,
+  val item: NasItem? = null,
+  val previousVersion: Boolean = false,
+  /**
+   * Fase 7, revisione B (R3, E-D16): la copia e' un elemento di un album condiviso che il livello dell'album non mi lascia eliminare. "Ovunque" la
+   * lascia dov'e' e il foglio lo dice.
+   */
+  val albumProtected: Boolean = false,
+) {
   enum class Kind { PHONE, NAS_PRIVATE, NAS_COMMON }
 
   override fun toString(): String = "NasLocationInfo(${kind.name})"
@@ -76,12 +86,18 @@ class NasActionTarget(
   val hidden: Boolean = false,
   /** Il viewer mostra la copia del **telefono** (E-D1): del NAS si offre solo "Elimina…" con la scelta del luogo. */
   val viaPhoneCopy: Boolean = false,
+  /**
+   * Fase 7, revisione B (R3, E-D16): il file e' un elemento di un album condiviso che il livello dell'album non mi lascia eliminare, spostare o
+   * rinominare (la riga "Eliminare il file" della tabella dei permessi). Le voci si spengono con la spiegazione, come in sola lettura.
+   */
+  val albumProtected: Boolean = false,
 ) {
   /**
-   * Le copie del NAS che "Ovunque" mette nel cestino: questa e le altre, solo dove si hanno i diritti (E-D11). Le altre si pianificano
-   * comunque: il piano salta le aree in sola lettura e il foglio le elenca.
+   * Le copie del NAS che "Ovunque" mette nel cestino: questa e le altre, solo dove si hanno i diritti (E-D11) e mai un elemento protetto di un
+   * album condiviso (R3). Le altre si pianificano comunque: il piano salta le aree in sola lettura e il foglio le elenca.
    */
-  val everywhereItems: List<NasItem> get() = listOf(item) + others.filter { it.writable }.mapNotNull { it.item }
+  val everywhereItems: List<NasItem> get() =
+    listOfNotNull(item.takeIf { !albumProtected }) + others.filter { it.writable && !it.albumProtected }.mapNotNull { it.item }
 
   override fun toString(): String = "NasActionTarget(${scope.name}, writable=$writable, onPhone=$onPhone)"
 }
@@ -117,17 +133,25 @@ internal data class NasActionCapabilities(
   val delete: Boolean,
   /** Area in sola lettura (E-N9): le azioni compaiono spente, con la spiegazione. */
   val readOnly: Boolean,
+  /** Fase 7, revisione B (R3): un elemento di un album condiviso che non posso toccare: le azioni compaiono spente, con la spiegazione. */
+  val albumLocked: Boolean = false,
 ) {
-  val any: Boolean get() = move || rename || delete || readOnly
+  val any: Boolean get() = move || rename || delete || readOnly || albumLocked
+
+  /** Le azioni compaiono spente (sola lettura, o un elemento protetto di un album condiviso). */
+  val locked: Boolean get() = readOnly || albumLocked
 
   companion object {
     val None = NasActionCapabilities(move = false, rename = false, delete = false, readOnly = false)
 
     fun of(target: NasActionTarget?): NasActionCapabilities = when {
       target == null -> None
-      // Il viewer mostra la copia del telefono: del NAS si offre solo "Elimina…" con la scelta del luogo (E-D1).
+      // Il viewer mostra la copia del telefono: del NAS si offre solo "Elimina…" con la scelta del luogo (E-D1); le copie protette di un album
+      // condiviso restano fuori da "Ovunque" (R3).
       target.viaPhoneCopy -> NasActionCapabilities(move = false, rename = false, delete = true, readOnly = false)
       !target.writable -> NasActionCapabilities(move = false, rename = false, delete = false, readOnly = true)
+      // Revisione B (R3, E-D16): la riga "Eliminare il file" della tabella vale anche per spostare e rinominare (il file uscirebbe dal suo posto).
+      target.albumProtected -> NasActionCapabilities(move = false, rename = false, delete = false, readOnly = false, albumLocked = true)
       else -> NasActionCapabilities(
         move = target.destinations.isNotEmpty(),
         rename = true,
@@ -162,21 +186,24 @@ internal class NasMenuEntries(
  */
 internal fun nasMenuEntries(resources: Resources, capabilities: NasActionCapabilities, handlers: NasActionHandlers): NasMenuEntries {
   if (!capabilities.any) return NasMenuEntries(emptyList(), emptyList())
-  val enabled = !capabilities.readOnly
+  val enabled = !capabilities.locked
   val actions = buildList {
     if (capabilities.readOnly) {
       // La spiegazione resta **leggibile** (una voce spenta si disegna al 38%, e non si leggerebbe): toccarla chiude solo il menu.
       add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_nas_action_read_only), onClick = {}, icon = Icons.Rounded.Lock))
+    } else if (capabilities.albumLocked) {
+      // Revisione B (R3): perche' le voci sono spente su un elemento di un album condiviso.
+      add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_nas_action_album_locked), onClick = {}, icon = Icons.Rounded.Lock))
     }
-    if (capabilities.move || capabilities.readOnly) {
+    if (capabilities.move || capabilities.locked) {
       add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_nas_action_move), handlers.onMove, Icons.AutoMirrored.Rounded.DriveFileMove, enabled = enabled))
     }
-    if (capabilities.rename || capabilities.readOnly) {
+    if (capabilities.rename || capabilities.locked) {
       add(GalleryMenuEntry.Item(resources.getString(R.string.viewer_nas_action_rename), handlers.onRename, Icons.Rounded.DriveFileRenameOutline, enabled = enabled))
     }
   }
   val delete = buildList {
-    if (capabilities.delete || capabilities.readOnly) {
+    if (capabilities.delete || capabilities.locked) {
       add(
         GalleryMenuEntry.Item(
           label = resources.getString(R.string.viewer_nas_action_delete),

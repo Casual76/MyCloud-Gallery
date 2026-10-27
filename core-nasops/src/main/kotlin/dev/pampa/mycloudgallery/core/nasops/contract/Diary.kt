@@ -112,6 +112,16 @@ enum class OpErrorCode(override val code: String) : StableCode {
    * puo' annullare) invece di continuare.
    */
   STOPPED_BY_USER("stopped_by_user"),
+
+  /**
+   * Fase 7, revisione B (I2, R8): un elemento `PUBLISHED` di uno spostamento tra share aspetta che il catalogo colleghi la copia allo stesso media
+   * (porta di completamento) o che la copia si lasci guardare; la sorgente resta al suo posto. Un'attesa, non un errore finale: si riprova a
+   * [OpItemRecord.nextAttemptAtNas] ([CatalogHoldBackoff]).
+   */
+  CATALOG_PENDING("catalog_pending"),
+
+  /** Fase 7, revisione B (I2): dopo 24 ore di attesa del catalogo l'elemento si ferma; la sorgente e la copia pubblicata restano tutte e due. */
+  CATALOG_MISMATCH("catalog_mismatch"),
 }
 
 /**
@@ -232,6 +242,9 @@ data class OpItemRecord(
 
   /** In attesa perche' il file e' aperto dal PC (E-N13): passo non terminale, riprova a [nextAttemptAtNas]. */
   val waitingLocked: Boolean get() = !state.terminal && errorCode == OpErrorCode.LOCKED && nextAttemptAtNas != null
+
+  /** Fase 7, revisione B (I2): in attesa del catalogo dopo la pubblicazione ([OpErrorCode.CATALOG_PENDING]): riprova a [nextAttemptAtNas]. */
+  val waitingCatalog: Boolean get() = !state.terminal && errorCode == OpErrorCode.CATALOG_PENDING && nextAttemptAtNas != null
 
   override fun toString(): String = "OpItemRecord(#$index, ${state.code})"
 }

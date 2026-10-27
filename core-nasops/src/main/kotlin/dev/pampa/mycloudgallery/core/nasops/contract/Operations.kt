@@ -86,6 +86,12 @@ enum class PauseReason(override val code: String) : StableCode {
 
   /** L'utente ha detto "Ferma" dalla notifica o dalla schermata. */
   USER("user"),
+
+  /**
+   * Fase 7, revisione B (I2): un file e' gia' copiato e verificato nella destinazione, ma il catalogo non lo collega ancora allo stesso media (porta
+   * di completamento, D29): la sorgente resta al suo posto e si riprova da soli, a intervalli crescenti, al piu' per 24 ore.
+   */
+  CATALOG("catalog"),
 }
 
 /**

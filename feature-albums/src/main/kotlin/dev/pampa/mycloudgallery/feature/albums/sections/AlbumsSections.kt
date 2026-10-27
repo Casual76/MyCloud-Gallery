@@ -88,12 +88,15 @@ sealed interface AlbumEntryTarget {
     const val SMART_PREFIX = "smart/"
     const val TRIP_PREFIX = "trip/"
     const val ALL_ALBUMS = "albums/all"
+
+    /** RC-1: la voce "Tutti gli album smart" della sezione degli smart (apre l'elenco intero, come [ALL_ALBUMS]). */
+    const val ALL_SMART = "smart/all"
     const val NEW_ALBUM = "albums/new"
     const val ALL_TRIPS = "trips/all"
 
     /** Il bersaglio di una voce, o null se il codice non e' di queste sezioni (o e' di una versione piu' nuova). */
     fun parse(code: String): AlbumEntryTarget? = when {
-      code == ALL_ALBUMS -> AllAlbums
+      code == ALL_ALBUMS || code == ALL_SMART -> AllAlbums
       code == NEW_ALBUM -> NewAlbum
       code == ALL_TRIPS -> Trip(null)
       code.startsWith(ALBUM_PREFIX) -> idOf(code.removePrefix(ALBUM_PREFIX))?.let(::Album)
@@ -151,16 +154,14 @@ class AlbumsSectionSources(
         trailing = if (shared != null) resources.getString(R.string.albums_badge_shared) else null,
       )
     }
-    val more = if (all.size > FIRST) {
-      listOf(
-        SectionEntry(
-          AlbumEntryTarget.ALL_ALBUMS, resources.getString(R.string.albums_all), resources.getQuantityString(R.plurals.albums_count, all.size, all.size),
-          Icons.Rounded.PhotoLibrary, FluidTone.Neutral,
-        ),
-      )
-    } else {
-      emptyList()
-    }
+    // RC-1: "Tutti gli album" c'e' sempre. E' l'unica porta dell'elenco intero (ordine "Personalizzato", "Sposta su/giu'", album lasciati, avvisi di chiusura,
+    // Q5): con sei album o meno la voce non c'era e niente di tutto questo si poteva raggiungere.
+    val more = listOf(
+      SectionEntry(
+        AlbumEntryTarget.ALL_ALBUMS, resources.getString(R.string.albums_all), resources.getQuantityString(R.plurals.albums_count, all.size, all.size),
+        Icons.Rounded.PhotoLibrary, FluidTone.Neutral,
+      ),
+    )
     val create = SectionEntry(
       AlbumEntryTarget.NEW_ALBUM, resources.getString(R.string.albums_new), resources.getString(R.string.albums_new_detail), Icons.Rounded.Add, FluidTone.Primary,
     )
@@ -176,13 +177,25 @@ class AlbumsSectionSources(
       }
       SectionEntry(AlbumEntryTarget.SMART_PREFIX + album.id.value, album.title, detail, Icons.Rounded.AutoAwesome, FluidTone.Primary, badge = album.newSinceSeen)
     }
-    return SectionData(AlbumsSectionCodes.SMART, resources.getString(R.string.albums_smart_section), entries)
+    // RC-1: gli smart oltre il sesto si aprono dall'elenco intero (che li ha tutti sotto "Album smart"): la sezione ne mostra sei e non aveva una voce "altri".
+    val more = if (smart.size > FIRST) {
+      listOf(
+        SectionEntry(
+          AlbumEntryTarget.ALL_SMART, resources.getString(R.string.albums_smart_all), resources.getQuantityString(R.plurals.albums_count, smart.size, smart.size),
+          Icons.Rounded.PhotoLibrary, FluidTone.Neutral,
+        ),
+      )
+    } else {
+      emptyList()
+    }
+    return SectionData(AlbumsSectionCodes.SMART, resources.getString(R.string.albums_smart_section), entries + more)
   }
 
   private fun tripsSection(state: TripsState): SectionData {
     val title = resources.getString(R.string.trips_section)
     val entries = when (state) {
-      TripsState.Empty -> emptyList()
+      // VG-1: finche' i viaggi non sono stati cercati la sezione non dice niente (ne' "servono foto con la posizione").
+      TripsState.Empty, TripsState.Searching -> emptyList()
       is TripsState.Proposals -> state.proposals.take(FIRST_TRIPS).map(::tripEntry) + moreTrips(state.proposals.size, state.hasOlder)
       is TripsState.NoGps -> listOf(
         SectionEntry(

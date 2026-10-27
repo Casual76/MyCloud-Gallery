@@ -80,7 +80,8 @@ class CampoAMovesTest {
     assertThat(kit.store.ops(setOf(OpState.PAUSED))).hasSize(1)
     val op = kit.store.ops(setOf(OpState.PAUSED)).single()
     assertThat(kit.store.items(op.id).single().state).isEqualTo(OpItemState.PUBLISHED)
-    assertThat(op.pauseReason).isEqualTo(PauseReason.CONDITIONS)
+    // Revisione B (I2): il motivo e' "catalogo" (prima "condizioni", che non diceva niente), con il prossimo tentativo nel diario.
+    assertThat(op.pauseReason).isEqualTo(PauseReason.CATALOG)
 
     closed = false
     kit.operations.resumeAll(1.hours)

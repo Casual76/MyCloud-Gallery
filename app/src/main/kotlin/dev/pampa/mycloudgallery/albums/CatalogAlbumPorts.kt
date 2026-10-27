@@ -56,7 +56,7 @@ class AlbumCatalogFacts(private val albums: suspend () -> AlbumCatalog?) : Catal
           CatalogPlace.OTHERS_PRIVATE -> MediaPlace.OTHERS_PRIVATE
         },
         mine = f.mine, hidden = f.hidden, isVideo = f.isVideo, size = f.size, contentKey = f.contentKey, version = f.version,
-        nas = f.nas?.let { NasItemRef(it.share, SharePath.parse(it.path)) }, onPhone = f.onPhone,
+        nas = f.nas?.let { NasItemRef(it.share, SharePath.parse(it.path)) }, onPhone = f.onPhone, sha256 = f.sha256,
       )
     }
   }

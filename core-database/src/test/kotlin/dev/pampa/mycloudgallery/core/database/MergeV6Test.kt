@@ -98,6 +98,41 @@ class MergeV6Test : CatalogTestBase() {
     db.openHelper.writableDatabase.query("PRAGMA foreign_key_check").use { assertThat(it.count).isEqualTo(0) }
   }
 
+  /**
+   * R21 (revisione di sicurezza della Fase 7): la copia di un editor che diventa una versione del media di partenza (`linkCopyAsVersion`) porta
+   * con se' le righe della v6 come un'unione. Prima la copia gia' nel diario della condivisione faceva fallire la transazione (chiave esterna
+   * differita di `album_share_item`) e la sua foto d'esempio, l'esclusione e il suggerito sparivano in cascata.
+   */
+  @Test
+  fun laCopiaDiUnEditorPortaConSeLeRigheDellaV6() = runBlocking<Unit> {
+    val original = catalog.record(phoneObservation("IMG_21.jpg", 121L, smallFull(21), T0 - 21)).mediaId!!
+    val copy = catalog.record(phoneObservation("IMG_22.jpg", 122L, smallFull(22), T0 - 22)).mediaId!!
+    val parent = catalog.versionOf(original)
+    album("smart", kind = "smart")
+    db.albumDao().upsertItem(AlbumItemEntity("smart", copy.value, 1000, T0, origin = "manual", fp = "qh:22", addedBy = "marco"))
+    db.albumRuleDao().upsertAll(listOf(AlbumRuleEntity("smart", "example", 0, mediaId = copy.value)))
+    db.albumChoiceDao().upsertExclusions(listOf(AlbumExclusionEntity("smart", copy.value, "qh:22")))
+    db.albumChoiceDao().upsertSuggestions(listOf(AlbumSuggestionEntity("smart", copy.value, "s9", T0)))
+    val diary = db.shareDiaryDao()
+    diary.insertOp(
+      AlbumShareOpEntity("op-9", "smart", "share", "piano-9", "Titolo", "add", null, "NAS", "Album condivisi/Titolo", "leave_out", false, T0, T0),
+    )
+    diary.insertItems(listOf(AlbumShareItemEntity("op-9", 0, copy.value, "move_in", "transferring", true, 2_000, updatedAt = T0)))
+    db.tripDao().upsertProposals(listOf(TripProposalEntity("c".repeat(64), "trip", 20260301, 20260307, "Oslo", 3, copy.value, "1,2", null, T0)))
+
+    val linked = catalog.linkCopyAsVersion(original, copy, parent)
+
+    assertThat(linked).isNotNull()
+    assertThat(catalog.resolve(copy)).isEqualTo(original)
+    assertThat(db.albumDao().items("smart").map { it.mediaId }).containsExactly(original.value)
+    assertThat(db.albumRuleDao().rules("smart").map { it.mediaId }).containsExactly(original.value)
+    assertThat(db.albumChoiceDao().exclusions("smart").map { it.mediaId }).containsExactly(original.value)
+    assertThat(db.albumChoiceDao().suggestions("smart").map { it.mediaId }).containsExactly(original.value)
+    assertThat(diary.items("op-9").single().mediaId).isEqualTo(original.value)
+    assertThat(db.tripDao().proposals().single().coverMediaId).isEqualTo(original.value)
+    db.openHelper.writableDatabase.query("PRAGMA foreign_key_check").use { assertThat(it.count).isEqualTo(0) }
+  }
+
   /** Un media che si rinomina o si cancella non lascia righe orfane: gli album e i loro derivati se ne vanno in cascata. */
   @Test
   fun unAlbumCancellatoPortaViaLeSueRegoleEsclusioniESuggeriti() = runBlocking<Unit> {

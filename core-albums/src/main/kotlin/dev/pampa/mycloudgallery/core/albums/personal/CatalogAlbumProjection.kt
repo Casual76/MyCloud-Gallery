@@ -33,17 +33,36 @@ import kotlinx.coroutines.withContext
 //
 // Le righe `auto` degli album smart sono del motore (P6): qui non si scrivono; si tolgono solo quelle di un'esclusione o di un album
 // congelato, perche' lo stato le vieta. Nessun titolo, id o luogo nei log (D37): questa classe non scrive log.
+//
+// R19 della revisione di sicurezza della Fase 7: il lavoro che i dati personali di un altro dispositivo dello stesso account impongono qui ha
+// dei tetti. Al piu' `MAX_ALBUMS` album personali e `MAX_REFS_PER_ALBUM` riferimenti per album si proiettano (gli altri si contano in
+// [overCap]); le impronte si cercano a blocchi ([MediaResolver]); un album con elementi "in attesa" si riproietta dopo una scansione solo se i
+// media cambiati possono risolvere uno dei suoi riferimenti (per id o per impronta), non a ogni cambiamento del catalogo.
 
 /** Cosa ha fatto un giro. [pending] sono gli elementi vivi senza media in questo catalogo (`ALBUM_PROJECTION_PENDING`), solo numeri. */
 data class AlbumProjectionReport(val albums: Int, val items: Int, val pending: Int, val removed: Int) {
   override fun toString(): String = "AlbumProjectionReport(albums=$albums, items=$items, pending=$pending, removed=$removed)"
 }
 
-class CatalogAlbumProjection(private val catalog: MediaCatalog, private val database: GalleryDatabase) {
+class CatalogAlbumProjection(
+  private val catalog: MediaCatalog,
+  private val database: GalleryDatabase,
+  /** R19: gli album personali proiettati al piu'. */
+  private val maxAlbums: Int = MAX_ALBUMS,
+  /** R19: i riferimenti di un album risolti al piu'. */
+  private val maxRefsPerAlbum: Int = MAX_REFS_PER_ALBUM,
+) {
 
   private val resolver = MediaResolver(catalog, database)
   private val lock = Mutex()
   private val pendingByAlbum = ConcurrentHashMap<String, Int>()
+
+  /** R19: i riferimenti non risolti di ogni album (id e impronte): quali media cambiati li possono risolvere. */
+  private val unresolvedByAlbum = ConcurrentHashMap<String, UnresolvedRefs>()
+
+  /** R19: album e riferimenti lasciati fuori dai tetti nell'ultimo giro (Diagnostica: solo numeri). */
+  @Volatile var overCap: Int = 0
+    private set
   private val expected = ConcurrentHashMap<String, Footprint>()
   private val pendingTotal = MutableStateFlow(0)
 
@@ -56,7 +75,10 @@ class CatalogAlbumProjection(private val catalog: MediaCatalog, private val data
    * un secondo giro con lo stesso stato non cambia nessuna riga.
    */
   suspend fun project(entries: Map<PersonalKey, PersonalEntry>, only: Set<String>? = null): AlbumProjectionReport = lock.withLock {
-    val states = PersonalAlbums.statesOf(entries, only)
+    val all = PersonalAlbums.statesOf(entries, only)
+    // R19: al piu' MAX_ALBUMS album personali (in ordine di id: sempre gli stessi); gli altri non si proiettano e si contano.
+    val states = if (all.size <= maxAlbums) all else all.sortedBy { it.id }.take(maxAlbums)
+    overCap = all.size - states.size
     var albums = 0
     var items = 0
     var removed = 0
@@ -75,6 +97,7 @@ class CatalogAlbumProjection(private val catalog: MediaCatalog, private val data
     for (id in orphans) if (dropPersonal(id)) removed++
     if (only == null) {
       pendingByAlbum.keys.retainAll(seen)
+      unresolvedByAlbum.keys.retainAll(seen)
       expected.keys.retainAll(seen)
     }
     pendingTotal.value = pendingByAlbum.values.sum()
@@ -91,7 +114,13 @@ class CatalogAlbumProjection(private val catalog: MediaCatalog, private val data
    * assorbito vale il sopravvissuto.
    */
   suspend fun affectedBy(media: Collection<MediaId>): Set<String> {
-    val out = pendingByAlbum.filterValues { it > 0 }.keys.toMutableSet()
+    val out = HashSet<String>()
+    // R19: un album in attesa torna solo se i media cambiati possono risolvere un suo riferimento (per id o per impronta).
+    if (unresolvedByAlbum.isNotEmpty() && media.isNotEmpty()) {
+      val ids = media.mapTo(HashSet()) { it.value }
+      val fingerprints = fingerprintsOf(media)
+      for ((album, refs) in unresolvedByAlbum) if (refs.ids.any { it in ids } || refs.fingerprints.any { it in fingerprints }) out += album
+    }
     out += drifted()
     val real = media.distinct().mapNotNull { catalog.resolve(it) }.distinct()
     if (real.isNotEmpty()) {
@@ -137,20 +166,45 @@ class CatalogAlbumProjection(private val catalog: MediaCatalog, private val data
   /** I conti per album degli elementi in attesa (solo numeri). */
   fun pendingOf(albumId: String): Int = pendingByAlbum[albumId] ?: 0
 
+  /** R19: le impronte (dimensione e `qh1`) delle versioni dei media [media], a blocchi. */
+  private suspend fun fingerprintsOf(media: Collection<MediaId>): Set<Pair<Long, String>> = withContext(Dispatchers.IO) {
+    val out = HashSet<Pair<Long, String>>()
+    for (chunk in media.map { it.value }.distinct().chunked(MAX_VARIABLES)) {
+      val sql = "SELECT size, quick_hash FROM media_version WHERE media_id IN (${chunk.joinToString(",") { "?" }})"
+      database.openHelper.readableDatabase.query(sql, chunk.toTypedArray<Any?>()).use { cursor ->
+        while (cursor.moveToNext()) out += cursor.getLong(0) to cursor.getString(1)
+      }
+    }
+    out
+  }
+
   /** Il numero di elementi scritti per l'album, o null se l'album non deve avere righe (e le ha perse). */
   private suspend fun projectOne(state: PersonalAlbumState): Int? = database.transaction {
     val existing = database.albumDao().get(state.id)
     // Un album condiviso con lo stesso id e' della replica (P2): non si tocca, ne' qui ne' sotto.
     if (existing?.state != null) return@transaction null
-    val resolution = resolver.resolve(AlbumDerivation.refsOf(state))
+    // R19: al piu' MAX_REFS_PER_ALBUM riferimenti si risolvono (in ordine: sempre gli stessi); gli altri restano senza media e si contano.
+    val refs = AlbumDerivation.refsOf(state)
+    val bounded = if (refs.size <= maxRefsPerAlbum) refs else refs.sortedBy { it.subject }.take(maxRefsPerAlbum).toSet()
+    if (bounded.size < refs.size) overCap += refs.size - bounded.size
+    val resolution = resolver.resolve(bounded)
     val derived = AlbumDerivation.derive(state, resolution)
     if (derived == null) {
       if (existing != null) database.albumDao().delete(state.id)
       pendingByAlbum.remove(state.id)
+      unresolvedByAlbum.remove(state.id)
       expected.remove(state.id)
       return@transaction null
     }
     write(derived, existing)
+    val unresolved = bounded.filter { resolution.of(it.subject, it.fingerprint) == null }
+    if (unresolved.isEmpty()) {
+      unresolvedByAlbum.remove(state.id)
+    } else {
+      unresolvedByAlbum[state.id] = UnresolvedRefs(
+        unresolved.mapTo(HashSet()) { it.subject }, unresolved.mapNotNullTo(HashSet()) { ref -> ref.fingerprint?.let { it.size to it.quickHash.hex } },
+      )
+    }
     pendingByAlbum[state.id] = derived.pending
     expected[state.id] = Footprint(derived.items.size, derived.album.coverMediaId, derived.exclusions.size, derived.rules.count { it.rule == AlbumDerivation.EXAMPLE_RULE })
     derived.items.size
@@ -160,11 +214,13 @@ class CatalogAlbumProjection(private val catalog: MediaCatalog, private val data
     val existing = database.albumDao().get(id)
     if (existing == null || existing.state != null) {
       pendingByAlbum.remove(id)
+      unresolvedByAlbum.remove(id)
       expected.remove(id)
       return@transaction false
     }
     database.albumDao().delete(id)
     pendingByAlbum.remove(id)
+    unresolvedByAlbum.remove(id)
     expected.remove(id)
     true
   }
@@ -209,13 +265,24 @@ class CatalogAlbumProjection(private val catalog: MediaCatalog, private val data
   /** Quante righe derivate ha un album, e quale copertina: cio' che la proiezione ha scritto e che il catalogo non deve cambiare da solo. */
   private data class Footprint(val items: Int, val cover: String?, val exclusions: Int, val examples: Int)
 
-  private companion object {
+  /** R19: i riferimenti non risolti di un album: gli id e le impronte (dimensione, `qh1` esadecimale) che un media nuovo puo' risolvere. */
+  private class UnresolvedRefs(val ids: Set<String>, val fingerprints: Set<Pair<Long, String>>)
+
+  internal companion object {
+    /** R19: gli album personali proiettati al piu' (molti piu' di quanti una persona ne faccia). */
+    const val MAX_ALBUMS: Int = 5_000
+
+    /** R19: i riferimenti di un album risolti al piu' (come le voci di un contributo d'album condiviso). */
+    const val MAX_REFS_PER_ALBUM: Int = 20_000
+
+    private const val MAX_VARIABLES = 500
+
     /** Gli album che hanno una riga su un media: elementi, foto d'esempio, esclusioni e copertina (la scelta dell'utente, non il calcolo). */
-    const val REFERENCING_SQL: String =
+    private const val REFERENCING_SQL: String =
       "SELECT album_id FROM album_item WHERE media_id = ? UNION SELECT album_id FROM album_rule WHERE media_id = ? " +
         "UNION SELECT album_id FROM album_exclusion WHERE media_id = ? UNION SELECT album_id FROM album WHERE cover_media_id = ?"
-    const val ORIGIN_MANUAL = "manual"
-    const val ORIGIN_ACCEPTED = "accepted"
-    const val ORIGIN_AUTO = "auto"
+    private const val ORIGIN_MANUAL = "manual"
+    private const val ORIGIN_ACCEPTED = "accepted"
+    private const val ORIGIN_AUTO = "auto"
   }
 }

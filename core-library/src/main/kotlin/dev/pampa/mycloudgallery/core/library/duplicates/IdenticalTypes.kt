@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.library.duplicates
 
 import androidx.compose.runtime.Immutable
+import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
@@ -37,8 +38,11 @@ enum class CopyPart(override val code: String) : StableCode {
  *   null = mai riletta. Una copia privata verificata e' "al sicuro" (D8).
  * @property backupFolder la cartella `Backup/<dispositivo>/` di un'area privata in cui sta (forma di confronto), o null: e' la copia fatta dal
  *   backup di un dispositivo.
- * @property inSharedAlbum sta dentro la cartella di un album condiviso (`Album condivisi/<album>/...` dell'area comune, Q1): eliminarla farebbe
+ * @property inSharedAlbum e' un elemento di un album condiviso: sta nella cartella degli album (`Album condivisi/<album>/...` dell'area comune, Q1) **oppure**
+ *   il media e' attestato da un album condiviso anche se il file sta altrove (un riferimento, E-SH11; una cartella adottata, E-SH16): eliminarla farebbe
  *   sparire l'elemento dall'album per tutti (D9, E-SH17).
+ * @property guardian e' la copia di sicurezza di un file dell'area comune (`Backup/Area comune/...` dell'area privata, D28): nasce proprio per proteggere
+ *   quel file, e non e' la sua "gemella" da pulire.
  */
 @Immutable
 class IdentCopy(
@@ -51,6 +55,7 @@ class IdentCopy(
   val verifiedAt: Long?,
   val backupFolder: String?,
   val inSharedAlbum: Boolean,
+  val guardian: Boolean = false,
 ) {
   /** La copia e' nell'area privata, riletta e verificata: quella che rende il media "al sicuro" (D8). */
   val isSafeCopy: Boolean get() = area == CopyArea.MY_PRIVATE && verifiedAt != null
@@ -102,6 +107,12 @@ enum class BlockReason(override val code: String) : StableCode {
 
   /** La copia e' un elemento di un album condiviso: toglierla lo toglie a tutti i familiari. */
   SHARED_ALBUM("shared_album"),
+
+  /** DP-2: la copia dell'area comune ha la copia di sicurezza del guardiano (D28): e' proprio il file che quella copia protegge, e toglierlo lo toglie a tutti. */
+  GUARDIAN_TWIN("guardian_twin"),
+
+  /** R18: la copia e' l'unica verificata ("al sicuro") del gruppo: "Rivedi" non la manda nel cestino per tenere una copia mai riletta. */
+  LAST_VERIFIED("last_verified"),
 }
 
 /** Una copia che la proposta lascia dov'e' e perche'. */
@@ -142,9 +153,22 @@ class GroupProposal(
   override fun toString(): String = "GroupProposal(${status.code}, remove=${remove.size}, blocked=${blocked.size})"
 }
 
-/** Un riferimento al telefono da mandare nel cestino di sistema (dialogo di sistema, mai senza). */
+/**
+ * Un riferimento al telefono da mandare nel cestino di sistema (dialogo di sistema, mai senza), **con il timbro visto dal catalogo** (R18): dimensione e
+ * data di modifica della riga del MediaStore al momento del piano, e la versione del MediaStore con cui l'`_ID` valeva. Prima di chiedere il dialogo la
+ * pagina rilegge la riga: se non e' piu' quella (stesso `_ID`, byte nuovi: un file sovrascritto dopo la scansione) la copia non va nel cestino. E'
+ * l'equivalente per il telefono del timbro delle copie del NAS ([NasTrashRef], E-D13).
+ */
 @Immutable
-class PhoneTrashRef(val ref: MediaRef.Phone, val size: Long) {
+class PhoneTrashRef(
+  val ref: MediaRef.Phone,
+  val stamp: FileStamp,
+  val mediaStoreVersion: String,
+  /** La posizione del catalogo di questa copia: la pagina la toglie dalla vista appena la pulizia e' accettata (DP-3), senza aspettare la scansione. */
+  val location: LocationId? = null,
+) {
+  val size: Long get() = stamp.size
+
   override fun toString(): String = "PhoneTrashRef(size=$size)"
 }
 
@@ -160,6 +184,8 @@ class NasTrashRef(
   val modifiedAt: Long,
   val fileId: Long?,
   val area: CopyArea,
+  /** La posizione del catalogo di questa copia (DP-3), se la sa chi ha fatto il piano. */
+  val location: LocationId? = null,
 ) {
   override fun toString(): String = "NasTrashRef(${area.code}, size=$size)"
 }
@@ -185,6 +211,9 @@ class CleanupPlan(
   val bytes: Long get() = phone.sumOf { it.size } + nas.sumOf { it.size }
 
   val isEmpty: Boolean get() = copies == 0
+
+  /** Le posizioni del catalogo delle copie del piano (quelle che le sanno). */
+  val locations: Set<LocationId> get() = (phone.mapNotNull { it.location } + nas.mapNotNull { it.location }).toSet()
 
   override fun toString(): String = "CleanupPlan(groups=$groups, phone=${phone.size}, nas=${nas.size}, unsafePhone=$unsafePhone)"
 

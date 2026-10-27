@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.ShareStateMachine
 import dev.pampa.mycloudgallery.core.albums.contract.ShareWait
 import dev.pampa.mycloudgallery.core.albums.contract.TransferKey
 import dev.pampa.mycloudgallery.core.albums.contract.TransferTicket
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.database.dao.ShareStateCountRow
 import dev.pampa.mycloudgallery.core.database.entity.AlbumShareItemEntity
@@ -52,11 +53,73 @@ class RoomShareDiary(private val database: GalleryDatabase, private val now: () 
     }
   }
 
-  override suspend fun opByPlan(planHash: SharePlanHash): ShareOpRecord? = dao.opByPlan(planHash.hex)?.toRecord()
+  override suspend fun opByPlan(planHash: SharePlanHash): ShareOpRecord? = dao.opByPlan(planHash.hex)?.let(::readOp)
 
-  override suspend fun openOps(): List<ShareOpRecord> = dao.openOps().mapNotNull { it.toRecord() }
+  override suspend fun openOps(): List<ShareOpRecord> = dao.openOps().mapNotNull(::readOp)
 
-  override suspend fun items(op: ShareOpId): List<ShareItemRecord> = dao.items(op.value).mapNotNull { it.toRecord() }
+  /**
+   * Gli elementi di [op], **tutti** (I5 della revisione di sicurezza della Fase 7): una riga che questa versione non sa leggere non sparisce
+   * dall'elenco (l'operazione si chiuderebbe con un elemento ancora in viaggio, o lo spostamento SD-1 assegnerebbe gli esiti alle posizioni
+   * sbagliate): diventa un elemento **fermo** ([frozen]), che nessun passo tocca e che tiene aperta l'operazione. Con la riga dell'operazione
+   * illeggibile sono fermi tutti i suoi elementi.
+   */
+  override suspend fun items(op: ShareOpId): List<ShareItemRecord> {
+    val opFrozen = op.value in frozenOps
+    return dao.items(op.value).mapNotNull { row ->
+      if (opFrozen) frozen(row) else row.toRecord() ?: frozen(row)
+    }
+  }
+
+  /** Righe del diario che questa versione non sa leggere (scritte da un'app piu' nuova, o rovinate): restano ferme e si contano (I5). */
+  @Volatile var unreadableRows: Int = 0
+    private set
+
+  private val unreadable: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+  private val frozenOps: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+  private fun noteUnreadable(key: String) {
+    if (unreadable.add(key)) {
+      unreadableRows = unreadable.size
+      GalleryLog.w(TAG) { "riga del diario della condivisione illeggibile: resta ferma (${unreadable.size} in tutto)" }
+    }
+  }
+
+  /**
+   * L'operazione di [row]; se una sua colonna non si legge, un'operazione **ferma** con lo stesso id, album e piano (cosi' lo stesso piano
+   * non riparte, `opByPlan`), senza definizione da accodare ne' cartella, e con tutti gli elementi fermi. Null solo se nemmeno id, album e
+   * piano si leggono (si conta).
+   */
+  private fun readOp(row: AlbumShareOpEntity): ShareOpRecord? {
+    if (row.opId !in frozenOps) row.toRecord()?.let { return it }
+    noteUnreadable("op:${row.opId}")
+    frozenOps += row.opId
+    return runCatching {
+      ShareOpRecord(
+        id = ShareOpId(row.opId), album = AlbumId(row.albumId), kind = SharePlanKind.SHARE, planHash = SharePlanHash(row.planHash), title = "",
+        level = null, nonceHex = null, folder = null, hidden = HiddenChoice.LEAVE_OUT, finished = row.finished,
+      )
+    }.getOrNull()
+  }
+
+  /**
+   * Un elemento **fermo**: in viaggio (`TRANSFERRING`) senza biglietto, quindi nessun passo dell'orchestratore lo tocca (non si chiede lo stato
+   * di un biglietto che non c'e', non si accoda niente, non si annulla), non e' mai terminale (l'operazione resta aperta) e il suo media resta
+   * "occupato" per il piano. [update] su di lui fallisce (lo stato di prima non si legge): la riga non si sovrascrive mai.
+   */
+  private fun frozen(row: AlbumShareItemEntity): ShareItemRecord? {
+    noteUnreadable("item:${row.opId}:${row.itemIndex}")
+    return runCatching {
+      ShareItemRecord(
+        op = ShareOpId(row.opId),
+        index = row.itemIndex,
+        media = runCatching { MediaId(row.mediaId) }.getOrElse { MediaId(java.util.UUID.nameUUIDFromBytes(row.mediaId.toByteArray()).toString()) },
+        action = enumByCodeOrNull<ShareItemAction>(row.action) ?: ShareItemAction.MOVE_IN,
+        state = ShareItemState.TRANSFERRING,
+        mine = row.mine,
+        size = row.size,
+      )
+    }.getOrNull()
+  }
 
   override suspend fun update(item: ShareItemRecord) {
     database.transaction {
@@ -71,6 +134,16 @@ class RoomShareDiary(private val database: GalleryDatabase, private val now: () 
 
   override suspend fun finish(op: ShareOpId) {
     dao.finish(op.value, now())
+  }
+
+  /**
+   * Le chiavi dei trasferimenti citate dagli elementi delle operazioni **aperte**, lette dalla colonna cosi' com'e' (anche da una riga che non
+   * si decodifica, I5): i registri dei trasferimenti tengono solo queste (R9, `TransferRegisters.prune`).
+   */
+  suspend fun openTransferKeys(): Set<String> = withContext(Dispatchers.IO) {
+    val sql = "SELECT DISTINCT i.transfer_key FROM album_share_item i JOIN album_share_op o ON o.op_id = i.op_id " +
+      "WHERE o.finished = 0 AND i.transfer_key IS NOT NULL"
+    database.openHelper.readableDatabase.query(sql).use { c -> buildSet { while (c.moveToNext()) add(c.getString(0)) } }
   }
 
   /** Quanti elementi per stato (Diagnostica: solo numeri). */
@@ -176,6 +249,10 @@ class RoomShareDiary(private val database: GalleryDatabase, private val now: () 
 
   private fun refOf(share: String?, path: String?): NasItemRef? =
     if (share != null && path != null) NasItemRef(share, SharePath.parse(path)) else null
+
+  private companion object {
+    const val TAG = "AlbumDiario"
+  }
 }
 
 /** I conteggi dei problemi della condivisione (Diagnostica): solo codici e numeri. */

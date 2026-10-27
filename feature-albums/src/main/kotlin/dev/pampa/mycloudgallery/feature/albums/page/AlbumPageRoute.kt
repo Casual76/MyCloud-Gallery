@@ -94,7 +94,18 @@ fun AlbumPageRoute(
   LaunchedEffect(shareState is ShareSheetState.Started) { if (shareState is ShareSheetState.Started) controller.share.dismiss() }
   // L'album eliminato (personale, o condiviso chiuso con "Elimina") non c'e' piu': si torna indietro.
   LaunchedEffect(deleted) { if (deleted) exits.onBack() }
-  LaunchedEffect(closed) { if (closed?.second == CloseMode.DELETE) exits.onBack() }
+  // Revisione B (SC-1, D31): dopo "Smetti di condividere" la pagina va all'album diventato personale (prima restava su "Album non trovato").
+  LaunchedEffect(closed) {
+    val done = closed ?: return@LaunchedEffect
+    when {
+      done.mode == CloseMode.DELETE -> exits.onBack()
+      done.personal != null -> {
+        exits.onBack()
+        exits.onOpenAlbum(done.personal)
+      }
+      else -> exits.onBackToList()
+    }
+  }
 
   val handlers = remember(controller, actions, exits) {
     object : AlbumPageHandlers {
@@ -141,6 +152,7 @@ fun AlbumPageRoute(
           StripAction.OPEN_PERMISSIONS -> dialog = PageDialog.PERMISSIONS
           StripAction.USE_NEW_FOLDER -> controller.useNewFolder()
           StripAction.RESTORE_REVOKED -> controller.restoreRevoked()
+          StripAction.RETRY_SHARE -> controller.retryShare()
         }
       }
 

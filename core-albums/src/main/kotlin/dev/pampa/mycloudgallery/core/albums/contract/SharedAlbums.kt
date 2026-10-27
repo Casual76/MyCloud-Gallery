@@ -238,6 +238,12 @@ interface SharedAlbums {
    * file il mio catalogo vede nell'area comune, dietro gli stessi cancelli delle scritture. Ha un corpo: nessuna implementazione deve cambiare.
    */
   suspend fun restoreRevoked(id: AlbumId): EditOutcome = EditOutcome.NotAllowed(null)
+
+  /**
+   * Revisione B, SC-1 (D31, §2.6): dopo "Smetti di condividere" fatto da me, l'album personale che ho adesso con gli stessi elementi (quello da cui
+   * l'avevo condiviso, o la copia nata subito), per portarci la pagina; null se non c'e' (ancora). Ha un corpo: nessuna implementazione deve cambiare.
+   */
+  suspend fun keptAfterClose(id: AlbumId): AlbumId? = null
 }
 
 /** I tetti degli album condivisi (A4 del §0.3 del progetto; formato §7). */

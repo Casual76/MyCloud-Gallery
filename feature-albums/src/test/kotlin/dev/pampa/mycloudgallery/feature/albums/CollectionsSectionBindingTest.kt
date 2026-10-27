@@ -5,6 +5,8 @@ import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.albums.contract.LocalDayRange
+import dev.pampa.mycloudgallery.core.albums.contract.SmartPeriod
+import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.albums.contract.TripAcceptOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.TripId
 import dev.pampa.mycloudgallery.core.albums.contract.TripProposal
@@ -109,6 +111,34 @@ class CollectionsSectionBindingTest {
     // I primi sei, poi «Tutti gli album» e «Nuovo album».
     assertThat(group.entries.count { it.code.startsWith(AlbumEntryTarget.ALBUM_PREFIX) }).isEqualTo(6)
     assertThat(group.entries.takeLast(2).map { it.code }).containsExactly(AlbumEntryTarget.ALL_ALBUMS, AlbumEntryTarget.NEW_ALBUM).inOrder()
+  }
+
+  @Test
+  fun tuttiGliAlbumCeSempreAncheConPocoAlbum() = runTest(UnconfinedTestDispatcher()) {
+    // RC-1: con sei album o meno la voce mancava e l'elenco intero (ordine, album lasciati, avvisi) non si raggiungeva da qui.
+    val scenes = Scenes()
+    // Sette album (tre miei e quattro condivisi): ne restano cinque. Prima la voce c'era solo oltre i sei.
+    runKotlinBlocking { scenes.world.albums.delete(scenes.lake) }
+    runKotlinBlocking { scenes.world.albums.delete(scenes.empty) }
+    val group = sources(scenes).albums.value!!.toGroup()
+    assertThat(scenes.world.albums.all.value.manualAndShared.size).isAtMost(6)
+    assertThat(group.entries.map { it.code }).contains(AlbumEntryTarget.ALL_ALBUMS)
+    assertThat(group.entries.takeLast(2).map { it.code }).containsExactly(AlbumEntryTarget.ALL_ALBUMS, AlbumEntryTarget.NEW_ALBUM).inOrder()
+  }
+
+  @Test
+  fun glISmartOltreIlSestoSiApronoDaTuttiGliSmart() = runTest(UnconfinedTestDispatcher()) {
+    // RC-1: la sezione mostra sei smart; gli altri non avevano una porta.
+    val scenes = Scenes()
+    val rules = SmartRules(SmartPeriod.Ranges(listOf(LocalDayRange(LocalDate.of(2026, 1, 8), LocalDate.of(2026, 1, 14)))), null, null)
+    for (n in 1..8) scenes.world.albums.create("Smart $n", dev.pampa.mycloudgallery.core.model.AlbumKind.SMART, rules)
+    val group = sources(scenes).smart.value!!.toGroup()
+    assertThat(group.entries.count { it.code.startsWith(AlbumEntryTarget.SMART_PREFIX) && it.code != AlbumEntryTarget.ALL_SMART }).isEqualTo(6)
+    assertThat(group.entries.map { it.code }).contains(AlbumEntryTarget.ALL_SMART)
+    assertThat(AlbumEntryTarget.parse(AlbumEntryTarget.ALL_SMART)).isEqualTo(AlbumEntryTarget.AllAlbums)
+    // Con meno di sette smart la voce non serve.
+    val few = sources(Scenes()).smart.value!!.toGroup()
+    assertThat(few.entries.map { it.code }).doesNotContain(AlbumEntryTarget.ALL_SMART)
   }
 
   @Test

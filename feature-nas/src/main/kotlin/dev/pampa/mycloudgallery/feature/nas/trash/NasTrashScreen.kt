@@ -80,7 +80,7 @@ import dev.pampa.mycloudgallery.feature.nas.ui.groupedRows
  * conferma** e l'avviso sul backup esterno (Q8). Le azioni passano dal foglio di conferma.
  */
 @Composable
-fun NasTrashRoute(
+internal fun NasTrashRoute(
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
   hostPadding: PaddingValues = PaddingValues(),

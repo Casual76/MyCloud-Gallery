@@ -335,7 +335,9 @@ class CatalogSimilarShots(
         when (val where = place.location) {
           is Location.Phone -> {
             val msId = where.mediaStoreId ?: continue
-            phone += PhoneTrashRef(MediaRef.Phone(where.volume, msId, mime), place.stamp.size)
+            // R18: con il timbro della riga e la versione del MediaStore con cui l'`_ID` valeva, per ricontrollarla prima del dialogo di sistema.
+            val msVersion = where.mediaStoreVersion ?: continue
+            phone += PhoneTrashRef(MediaRef.Phone(where.volume, msId, mime), place.stamp, msVersion, place.id)
             phoneHere = true
           }
           is Location.Nas -> {
@@ -344,7 +346,7 @@ class CatalogSimilarShots(
               NasArea.COMMON -> CopyArea.COMMON
               null -> continue
             }
-            val ref = NasTrashRef(where.share, where.path.value, place.stamp.size, place.stamp.modifiedAtMillis, where.fileId, area)
+            val ref = NasTrashRef(where.share, where.path.value, place.stamp.size, place.stamp.modifiedAtMillis, where.fileId, area, place.id)
             if (area == CopyArea.MY_PRIVATE) privateCopies += ref else commonCopies += ref
           }
         }

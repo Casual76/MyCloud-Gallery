@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -13,6 +14,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pampa.mycloudgallery.core.albums.contract.TripId
 import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.feature.albums.R
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.nav.AlbumDependencies
 import javax.inject.Inject
@@ -35,7 +37,9 @@ fun TripsRoute(
   val controller = viewModel.controller
   val state by controller.state.collectAsState()
   var creating by remember { mutableStateOf<TripId?>(null) }
-  val handlers = remember(controller) {
+  var notice by remember { mutableStateOf<String?>(null) }
+  val notFound = stringResource(R.string.trips_not_found)
+  val handlers = remember(controller, notFound) {
     object : TripsHandlers {
       override fun onBack() = onBack()
 
@@ -46,7 +50,8 @@ fun TripsRoute(
           when (result) {
             is TripAccepted.Created -> onOpenAlbum(result.album)
             is TripAccepted.AlreadyAlbum -> onOpenAlbum(result.album)
-            TripAccepted.NotFound -> Unit
+            // VG-2: prima il tocco non faceva e non diceva niente.
+            TripAccepted.NotFound -> notice = notFound
           }
         }
       }
@@ -56,5 +61,5 @@ fun TripsRoute(
       override fun onShowOlder() = controller.showOlder()
     }
   }
-  TripsScreen(state = state, thumbnails = thumbnails, handlers = handlers, modifier = modifier, creating = creating)
+  TripsScreen(state = state, thumbnails = thumbnails, handlers = handlers, modifier = modifier, creating = creating, notice = notice, onDismissNotice = { notice = null })
 }

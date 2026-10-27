@@ -8657,3 +8657,861 @@ rifatta quando lo spazio è tornato.
 (`core-faces` 182, `feature-people` 387, `feature-viewer` 874, `feature-library` 921, `app` 831, `core-common` 130; nessuno a zero, nessuno fallito); nessuna classe `testing` nel dex di release; D34 nel dex e in
 mapping.txt; LiteRT solo in `core-ai`. Solo SKIP il banco su dispositivo (-Bench). Le corse prima di questa: una fallita per disco pieno (sopra), una per il difetto di `ArchivePeople` trovato dal test di `:app` (sopra), una per
 il lint dei test delle rotte; l'ultima rifà solo i moduli cambiati, perché la precedente aveva già eseguito tutti i test con lo stesso codice di produzione.
+
+## Fase 7, correzioni dopo le revisioni: pacchetto B (27/10)
+
+Il pacchetto B corregge il **flusso della condivisione** trovato dalle due revisioni di fine fase (`docs/review/7-fase7.md`, `docs/review/funzionale-7.md`):
+R3, R8, R15, I2, I3, I4 della revisione di sicurezza e SP-1, SP-2, SH-1...SH-5, SC-1, SC-2, SB-1, SN-1, SG-1, SG-2 della verifica funzionale. Ramo
+`fase7/rev-b` da `main` a `6b0bf793`. Perimetro: `core-albums/.../share/**` (piu' i contratti che servono), `core-nasops` solo per la porta di
+completamento e per i controlli di R3, i cancelli di SP-1 e SG-1 (legati in `:app`, `core-backup` non cambia), le strisce e i fogli di
+`feature-albums`, i controlli di R3 in `feature-viewer` e `feature-nas`, la parte della condivisione di `:app/albums`. Ogni voce ha una prova che
+riproduce il difetto (rossa senza la correzione, verde con); le prove sul grafo vero stanno in `RevisioneBCondivisioneAppTest` (`:app`, simulatore
+SMB con gli account di prova).
+
+### Le voci
+
+**R3 · "Eliminare il file" e "Nuova versione" (corretta).** Le due righe `WRITER_ONLY` della tabella (`AlbumPermissions.kt:120-121`) non le chiedeva
+nessuno: dal viewer, da Cartelle NAS, da "Ovunque" e dai Doppioni un familiare mandava nel cestino (o spostava, o rinominava) il file di un elemento
+altrui a ogni livello. Ora il controllo sta **nel punto per cui passa ogni scrittura sul NAS**: il piano di `core-nasops` (`OpPlanner`, e lo stesso
+nell'esecutore di riferimento `InMemoryNasOperations`) chiede alla porta nuova `ProtectedFiles` quali file dell'area comune sono protetti; un cestino
+o uno spostamento li lascia fuori (`SkipReason.SHARED_ALBUM_ITEM`, scritto nel foglio di conferma), una rinomina o un piano fatto solo di loro e'
+rifiutato (`PlanRejection.SHARED_ALBUM_ITEM`: "e' in un album condiviso e il livello dell'album non ti permette di eliminarlo, spostarlo o
+rinominarlo"). La porta la lega `:app`
+(`AlbumFileGuard`, con `AlbumsWiring` che la mette su `NasOrganizer.protectedFiles`): per ogni file (o per ogni file dentro una cartella) trova il
+media nel catalogo e chiede alla replica `allowed(album, DELETE_FILE, media)` per ogni album condiviso attivo che lo contiene, con il livello in
+vigore e il ruolo (creatore, chi l'ha aggiunto, altri). Fallisce chiusa: un account che non so, una lettura che lancia, un errore della porta = tutto
+protetto. Fuori dalla protezione solo i file di "Riporta" in corso (operazione aperta del diario della condivisione, che ha la sua riga `BRING_BACK`) e
+gli album chiusi (D31: non hanno elementi vivi). Le superfici lo dicono prima del tocco: il viewer toglie "Elimina", "Sposta" e "Rinomina" e scrive
+perche' (`NasActionCapabilities.albumLocked`), "Ovunque" non conta piu' la copia protetta, il foglio d'eliminazione dice che il file sul NAS
+"resta dov'e'"; Cartelle NAS offre le azioni come prima e il piano risponde con il motivo. Lo spostamento e la rinomina valgono come
+"Eliminare il file": tolgono il file dall'album per tutti allo stesso modo (E-SH17). **"Nuova versione"**: nessuna strada dell'app scrive una
+versione nell'area comune (P14 della 5B: `CorrectionReadiness.COMMON_AREA_NOTICE` e `NOT_MINE` in `DefaultCorrections.readiness`), quindi la riga
+e' rispettata per costruzione, piu' stretta della tabella (nemmeno il creatore la scrive li'): per quella riga non e' un difetto, e la prova la
+genera comunque dalla tabella. Le versioni (E-D16): l'eliminazione di una versione passa dallo stesso piano di `core-nasops`.
+Prove: `AlbumFileRulesTest` (generata dalla tabella: ogni riga, ogni livello, creatore, chi ha aggiunto, un altro familiare), `RevisioneBNasOpsTest`
+(i due esecutori: cestino, spostamento e rinomina lasciano fuori o rifiutano, una porta rotta protegge tutto),
+`RevisioneBCondivisioneAppTest.r3...` (due dispositivi, "Gli altri guardano": il tablet di `test2` non ha il piano ne' le voci del viewer, il creatore si').
+
+**R8 · la porta di completamento saltata (corretta).** `completePublished` (`NasOpsEngine.kt:806-810` prima) andava avanti **senza** chiamare la porta
+se la prima occhiata alla destinazione falliva per un errore che non e' di rete; poi `copyStillThere` vedeva il file e la sorgente andava nel cestino
+con il catalogo che non sapeva della destinazione (E-SH2). Ora: un errore che non e' di rete tiene l'elemento come un errore della porta
+(`heldForCatalog`, `CATALOG_PENDING`); una destinazione assente o una cartella fermano l'elemento con la sorgente al suo posto (`UNEXPECTED`,
+come gia' faceva l'esecutore di riferimento). Prova: `RevisioneBNasOpsTest.r8...` (un `FileBusy` alla prima `stat` della destinazione pubblicata,
+entrambi gli esecutori: la porta e' chiamata prima che la sorgente si registri).
+
+**I2 · un'operazione ferma per la porta, senza fine e con un motivo muto; condivisioni oltre 10.000 elementi (corretta).** Prima un errore della porta
+(`CatalogMoveCompletionSink` che aspetta la scansione) teneva l'operazione in pausa "condizioni" per sempre, mostrata come "in corso". Ora l'attesa
+ha il suo motivo e un tetto: `PauseReason.CATALOG` ("aspetto che l'app la riconosca come la stessa foto", in Cartelle NAS; nella
+striscia dell'album con `ShareWait.CATALOG`), il codice `OpErrorCode.CATALOG_PENDING` sull'elemento (`waitingCatalog`), riprese con `CatalogHoldBackoff` (5 riprove
+subito, poi le attese di `LockedBackoff`: da 1 minuto a 12 ore, 24 ore in tutto) e alla fine l'elemento si ferma con `CATALOG_MISMATCH` ("restano le due
+copie"), con **entrambe** le copie al loro posto (la sorgente mai nel cestino, L152). `NasOrganizer` riprende le
+operazioni in pausa `CATALOG` come quelle in attesa di un file aperto (all'avvio e all'ora della prossima riprova, mai in un giro stretto). Il codice
+della pausa arriva alla Diagnostica del NAS (il nome della pausa); il codice di Diagnostica degli album per `CATALOG` e' del pacchetto D. Gli
+elementi di un'operazione vanno ora in trasferimenti di al massimo `ShareRules.MAX_ITEMS_PER_TRANSFER` = 10.000 (`ShareTransferKeys.keyFor` con
+il gruppo, `ShareOrchestrator.transferKeys`): un album di 20.000 non si ferma piu' sul tetto di un piano di `core-nasops`.
+Prove: `RevisioneBNasOpsTest.i2...` (la porta non risponde mai: pausa `CATALOG`, poi `CATALOG_MISMATCH` con le due copie, chiamate contate; la porta
+risponde tardi: l'elemento finisce), `CompletionSinkEngineTest` e `CampoAMovesTest` aggiornati (la pausa e' `CATALOG`, non piu' "condizioni"),
+`RevisioneBShareTest.i2...` (10.005 spostamenti: due trasferimenti, nessuno oltre 10.000).
+
+**R15 · "Usa la nuova cartella" e "Ripristina" facevano cadere l'app (corretta).** La cartella proposta (E-SH16) veniva dai percorsi del catalogo
+(fino a 4.096 byte) senza le regole del formato degli album (1.024), e `NasAlbumPublisher.stage` lanciava dentro un `scope.launch` senza `catch`.
+Ora `AlbumFolderWatch.acceptedFolder` (tetto `MAX_PATH_BYTES` e `AlbumTexts.mediaPath`) scarta la cartella prima di proporla e la ricontrolla al tocco;
+le facciate di "Usa la nuova cartella" e "Ripristina" rispondono `EditOutcome.Invalid` a un errore, e la pagina lo dice ("Non ci sono riuscito...
+Non e' cambiato niente"; `AlbumMessage.NotDone`). Prove: `AlbumFolderWatchTest.r15...`, `RevisioneBAlbumPageTest.r15...` (una facciata che lancia:
+la pagina resta su e lo dice).
+
+**SP-1 · i media solo sul telefono non arrivavano mai nella cartella dell'album (corretta).** `AlbumsWiring` dava ad `AlbumFolderUploads` il cancello
+del backup (`AppBackupGate`, che per ogni share diversa dall'area privata risponde `NO_PRIVATE_AREA`): ogni caricamento verso l'area comune era
+"scritture ferme", poi "non partito". Ora gli passa il cancello degli arrivi della 5B (`fiveB.incomingGate`, area privata **e** area comune, lo stesso
+del motore che esegue gli elementi); `core-backup` non cambia. Prova: `RevisioneBCondivisioneAppTest.sp1...` (un media solo sul telefono: il file nella
+cartella dell'album con i byte del telefono, lo stesso media).
+
+**SG-1 e I4 · il piano prometteva caricamenti e copie del guardiano che i cancelli fermano (corrette).** Il piano chiede ora i cancelli del backup per la
+cartella dell'album (`ShareOrchestratorPorts.backupGates`, legata in `:app`): `uploads` = il cancello degli arrivi sull'area comune **e** la regola
+dei caricamenti "solo sotto Album condivisi" (`IncomingUploadPorts.allowsAlbum`, I4: una cartella adottata fuori con E-SH16), `safeCopies` = il
+cancello del guardiano sull'area privata. Un media solo sul telefono che non si puo' caricare esce dal piano con il motivo nuovo
+`ShareExclusion.UPLOAD_BLOCKED` ("solo sul telefono: adesso non si possono caricare in questa cartella"); i miei media solo sul NAS la cui copia del
+guardiano non partirebbe si contano in `SharePlan.safeCopyBlocked` e il foglio lo dice ("Copia privata ferma": restano nell'area comune, l'originale
+30 giorni nel cestino). Entrambi entrano nell'impronta del piano (un piano con i cancelli cambiati non e' lo stesso piano). Per I4: lo spostamento
+verso una cartella adottata fuori da "Album condivisi" resta permesso (e' la scelta di E-SH16), il caricamento dal telefono no e il foglio lo dice
+prima. Prove: `RevisioneBShareTest.sg1...` (cancelli chiusi: esclusione, conteggio, impronta diversa), `RevisioneBCondivisioneAppTest.sg1...`
+(`FeatureFlags.RELEASE` con un account di prova: nessun caricamento promesso, `safeCopyBlocked` = 1).
+
+**SP-2 · "In arrivo" non compariva mai (corretta).** Nessuno valorizzava `AlbumContent.incoming`. Ora la facciata della pagina (`AppAlbums.content`) lo
+calcola dal diario locale (`AlbumShareExtras`): gli elementi delle mie operazioni aperte di condivisione o adozione di quell'album ancora in `PLANNED`,
+`TRANSFERRING` o `IN_COMMON` (da `ENTRY_STAGED` sono gia' nella vista); si ricalcola a ogni cambio del diario. Solo il dispositivo che aggiunge lo
+vede (D9). Prova: `RevisioneBCondivisioneAppTest.sp2...`.
+
+**SH-1 · lo stesso piano dopo un'operazione finita rispondeva "gia' avviato" (corretta).** L'impronta di un piano su un album esistente non aveva ne'
+nonce ne' istante, e `plan_hash` e' unico nel diario anche fra le operazioni finite. Togliere l'indice unico vuol dire una migrazione del database
+(fuori dal perimetro); invece ogni `plan` dell'orchestratore porta un **tentativo** (`SharePlan.attempt`, 16 byte casuali) che entra
+nell'impronta: lo stesso piano (stesso tentativo, rifatto allo `start`) non parte due volte, un piano nuovo con gli stessi media si'. Prova:
+`RevisioneBShareTest.sh1...` (due piani con gli stessi media dopo un fallimento: il secondo parte; lo stesso piano due volte: `AlreadyStarted`).
+
+**SH-2 · niente "Riprova", nessun motivo, la striscia spariva al riavvio (corretta).** L'orchestratore legge dal diario anche le ultime 20 operazioni
+chiuse (`ShareDiary.closedOps`): una "fatta in parte" resta finche' ha elementi da riprovare (falliti per `NOT_STARTED`, `TRANSFER_FAILED`,
+`SOURCE_CHANGED`, non gia' membri e non in viaggio) e l'utente non ha chiuso la striscia (`ShareProblemMarks`, un file di stato con `StateFiles`,
+`share-problems-closed`). La striscia dice il motivo principale ("N elementi a posto, M non andati: il file e' cambiato. Tocca per riprovare"); il tocco
+chiede all'orchestratore la richiesta da rifare (`ShareRunner.retryRequest`: `AddToShared`, `FolderAdoption` o `BringBack` con quei media) e apre il
+foglio di sempre, con la conferma (D12); niente da riprovare = la striscia si chiude (`dismiss`). Le pause che aspettano prima di partire dicono
+che dopo 10 minuti l'elemento diventa "da riprovare" (`ShareOpState.Paused.notStarted`). Prove: `RevisioneBShareTest.sh2...` (la striscia sopravvive a
+un orchestratore nuovo, la richiesta giusta, la chiusura che resta), `RevisioneBAlbumPageTest.sh2...` (motivo, tocco, foglio; i 10 minuti).
+
+**SH-3 · "N file nuovi nella cartella: aggiungili" non compariva mai (corretta).** Nessuno emetteva `SharedAlbumNotice.FilesAddedFromPc`, e
+`FolderAdoptions.pending` contava anche i file tolti con "Rimuovi dall'album" (che restano nella cartella, D39). Ora `FolderAdoptions` riceve la
+**storia** dell'album (`AlbumHistory`: gli id e le chiavi di contenuto di ogni voce `item:` che la replica ricorda, vive o lapidi, e del mio
+contributo pubblicato e in coda) e la toglie; `AlbumsGraph.scanNotices` conta i file per ogni album che vedo (`pcFiles`) e `AlbumFolderWatch.notices`
+emette l'avviso (chiuso dall'utente, ritorna se il numero cresce); la voce ⋮ "Aggiungi i file della cartella" c'e' solo con l'avviso. Prove:
+`RevisioneBShareTest.sh3...` (la storia), `AlbumFolderWatchTest.sh3...`, `RevisioneBAlbumPageTest.sh3...` (la voce), `RevisioneBCondivisioneAppTest.sh3...`
+(un file dal PC e uno tolto dall'album: l'avviso conta 1).
+
+**SH-4 · "Da condividere" degli smart condivisi non si riempiva mai (corretta).** Per il creatore di un album condiviso nato da un suo album smart (voce
+`shared` dei dati personali), la facciata della pagina calcola `toShare` (`AlbumShareExtras`): i media che lo smart ha adesso e l'album condiviso no,
+tolti quelli in viaggio e quelli nell'area privata di un altro account; i nascosti non ci sono (la vista dello smart non li ha, D22). Le foto nuove non si
+spostano da sole: la pagina le mostra in "Da condividere" e il tocco apre il foglio (Q4 (a)). Prova: `RevisioneBCondivisioneAppTest.sh4...`.
+
+**SH-5 · dopo un riavvio definizione e livello iniziali si riaccodavano (corretta).** `ensureDefinition` ricordava in memoria cosa aveva accodato; dopo la
+morte del processo riaccodava `Definition` e `Level` del piano sopra una rinomina o un cambio di livello. Ora chiede alla porta nuova
+`definitionStaged` (in `:app`: il mio pubblicatore ha gia' la definizione dell'album, in coda o pubblicata) e non riaccoda; una lettura che non
+riesce rimanda il passo (non accoda alla cieca). Prova: `RevisioneBShareTest.sh5...` (rinomina e livello in coda, un orchestratore nuovo: la definizione
+pubblicata e' "Dopo" e il livello "Gli altri guardano").
+
+**SC-1 · "Smetti di condividere" dal creatore: "Album non trovato" e l'album personale al giro dopo (corretta).** La facciata di chiusura, dopo
+`Closed` con `STOP`, scrive subito le copie personali (`keepClosedCopies`, poi `reconcileAll`) e `SharedAlbums.keptAfterClose` dice qual e' l'album
+personale (quello da cui era nato, o la copia del creatore); il foglio di chiusura lo passa alla rotta, che apre l'album personale (o torna all'elenco);
+durante la chiusura la pagina non passa per "non trovato". Prove: `RevisioneBAlbumPageTest.sc1...`, `RevisioneBCondivisioneAppTest.sc1...` (l'album
+personale con i due elementi subito, senza giro dell'indice).
+
+**SC-2 · una modifica in coda si pubblicava solo col processo vivo (corretta).** Il contatore del pubblicatore riparte da zero e nessuno guardava la coda
+rimasta. Ora, quando gli album si montano, `AlbumsGraph.watch` guarda il deposito del pubblicatore: con modifiche in coda pubblica subito (`RESUME`),
+poi riprova finche' escono ("troppo presto": 5 minuti fra due teste) e accoda il lavoro della condivisione, che resta aperto finche' c'e' una modifica in
+coda (`shareRound`). Prova: `RevisioneBCondivisioneAppTest.sc2...` (rinomina in coda, morte del processo, processo nuovo sulle stesse cartelle che monta
+e basta: la coda si svuota).
+
+**SB-1 · la lapide di "Riporta" sull'id locale (plausibile, corretta).** `publishedId` non era legato: valeva `media.takeIf { it in members }`, e
+`members()` comprende l'id locale con cui il mio catalogo attesta un elemento pubblicato con un altro id (un altro dispositivo dello stesso account).
+Ora e' legato alla replica (`publishedIdIn`: l'id pubblicato che quell'id attesta). Prova: `AlbumFileRulesTest.laLapideDiRiportaVaSullIdPubblicato`
+(sulla funzione legata; lo scenario con due dispositivi dello stesso account e id diversi non l'ho costruito sul grafo vero).
+
+**SN-1 · falso "La cartella e' cambiata" per un album di soli riferimenti (corretta).** `AlbumFolderWatch.scan` conta ora solo gli elementi la cui voce
+dice che stavano nella cartella dichiarata (spostati o caricati li'), non i riferimenti a file rimasti altrove (E-SH11). Prova:
+`AlbumFolderWatchTest.sn1...`. Limite: L150.
+
+**SG-2 · il giro degli album ripeteva a vuoto (plausibile, corretta).** `syncRound` diceva "non finito" anche quando la replica non era potuta andare
+avanti (niente registro, niente ora del NAS, elenco di `albums/` non letto), e la tappa lo ripeteva fino al suo tetto. Ora `AlbumsGraph.roundDone`
+dice "finito" quando il giro e' incompleto senza aver letto ne' scartato nulla (si riprova al giro dell'indice dopo); un giro fermato dal budget dopo
+aver letto qualcosa resta "da continuare". La correzione sta in `:app` (`NasSharedAlbumSync`, che produce il resoconto, e' del pacchetto A). Prova:
+`RevisioneBCondivisioneAppTest.sg2...` (nessuna cartella dell'area comune si apre: il giro e' finito).
+
+**I3 · la seconda chiave di C26 era una conseguenza della prima (corretta).** `OpsAlbumMover` e `FolderAlbumUploader` emettevano la conferma di
+`core-nasops` per qualunque trasferimento arrivasse con una `ShareConfirmation` giovane. Ora la emettono solo se il diario della condivisione lo
+conosce (`ShareTransferBinding`): un'operazione aperta con la stessa impronta della conferma, elementi con quella chiave, i file (o i media) fra i
+suoi e la destinazione quella dell'operazione (o, per "Riporta", quella dell'elemento); altrimenti `CONFIRMATION_REJECTED`. `Phase7ArchitectureTest`
+ammette `ShareConfirmationIssuer` e `ShareConfirmationSheet` solo in `ShareSheetController.kt` (feature-albums) e nei test (prima tutto `:app` e
+tutto feature-albums). Prove: `RevisioneBCondivisioneAppTest.i3...` (una conferma valida di un piano mai partito, e quella di un'operazione avviata
+con una chiave che il diario non ha: rifiutate, il file estraneo resta dov'e'), `Phase7ArchitectureTest`.
+
+### Decisioni, e dove mi discosto dalle proposte delle revisioni
+
+1. **R3 nel piano del NAS, non nelle schermate.** Le revisioni proponevano di portare l'appartenenza agli album al viewer, a Cartelle NAS e ai
+   Doppioni. L'ho messa nel punto per cui passa **ogni** scrittura sul NAS (il piano di `core-nasops`, con la porta `ProtectedFiles`): una superficie
+   dimenticata o nuova non puo' aggirarla. Le schermate (viewer, "Ovunque") la mostrano prima del tocco; Cartelle NAS e i Doppioni ricevono il motivo
+   dal piano (L152). Spostamento e rinomina contano come "Eliminare il file" (stesso effetto per gli altri, E-SH17), non come righe a parte.
+2. **"Nuova versione" non e' un difetto.** Nessuna strada scrive una versione nell'area comune (P14 della 5B): la riga e' rispettata per costruzione e
+   piu' stretta della tabella (nemmeno il creatore). Il "salva come media nuovo nell'area privata" proposto (E-E9) non serve finche' resta cosi'.
+3. **SH-1 con un tentativo nell'impronta, non togliendo l'indice unico.** `plan_hash` unico vuol dire una migrazione di `core-database`, fuori dal
+   perimetro; il tentativo per piano da' lo stesso risultato (lo stesso piano non parte due volte, un piano nuovo si').
+4. **R8: destinazione assente = elemento fermo, non "avanti senza porta".** La proposta lasciava andare avanti senza porta con `Probe.Absent` (poi
+   `copyStillThere` fermava comunque). Fermo subito con `UNEXPECTED`, come gia' l'esecutore di riferimento: stesso esito (la sorgente resta), una
+   strada in meno senza porta.
+5. **I2: tetto di 24 ore, poi le due copie.** Le attese sono quelle dei file aperti (`LockedBackoff`) dopo 5 riprove subito; alla fine l'elemento si
+   ferma con le due copie, mai la sorgente nel cestino (D29). Il codice della Diagnostica degli album per la pausa `CATALOG` non l'ho aggiunto (la
+   sezione Album della Diagnostica e' del pacchetto D): la Diagnostica del NAS esporta gia' il nome della pausa.
+6. **SG-2 in `:app`.** Il resoconto lo produce `NasSharedAlbumSync` (pacchetto A): la regola "un giro che non ha letto ne' scartato niente e' finito"
+   sta in `AlbumsGraph.roundDone`, senza toccare la replica.
+7. **SB-1 era plausibile**: senza il legame, `members()` comprende l'id locale che attesta un elemento pubblicato con un altro id, quindi la lapide
+   poteva andare sull'id sbagliato. Corretto legando la porta; la prova e' sulla funzione legata (non ho costruito due dispositivi dello stesso account
+   con id diversi sul grafo vero).
+8. **SG-1 e I4 dentro il piano.** Il piano chiede i cancelli del backup per la cartella e dichiara cio' che non partirebbe (`UPLOAD_BLOCKED`,
+   `safeCopyBlocked`), invece di spegnere insieme D30 e D12: le recinzioni restano come sono.
+
+### Modifiche fuori dal perimetro stretto
+
+- `core-common/.../architecture/Phase7ArchitectureTest.kt` (solo il test): I3 chiedeva di stringerlo.
+- `app/.../nas/NasOrganizer.kt`: lega `ProtectedFiles` al piano della 4B e dice al viewer se un file e' protetto (R3); riprende le operazioni in pausa
+  `CATALOG` come quelle in attesa di un file aperto (I2).
+- `feature-nas`: oltre ai testi di R3, i testi della pausa `CATALOG` e di `CATALOG_MISMATCH` (I2): le `when` sui codici sono esaustive.
+- R3 protegge anche i Doppioni (pacchetto C): "Ovunque" e la pulizia degli identici passano dallo stesso piano, quindi un elemento di album che non
+  posso eliminare resta fuori anche li', qualunque sia la cartella (anche un riferimento E-SH11 o una cartella adottata).
+
+### Da provare sul telefono (con `adb`, nessuna fatta qui)
+
+- **R3 (F86)**: album "Gli altri guardano" del telefono di `test`; dal tablet (o dall'emulatore) di `test2`, una foto dell'album aperta dall'album e
+  dalla Libreria: ⋮ senza "Elimina", "Sposta", "Rinomina" e con la riga "In un album condiviso..."; "Elimina" → "Ovunque" non la conta; da Cartelle
+  NAS "Elimina" sulla foto e sulla cartella dell'album: il foglio dice che non si puo'. Al livello "Gli altri aggiungono" lo stesso, tranne per le
+  foto aggiunte da `test2`. Dal telefono del creatore tutto c'e'. Dal PC: i file intatti.
+- **R8**: durante F79 tenere aperto in esclusiva dal PC un file appena pubblicato nella cartella dell'album: il media resta lo stesso.
+- **I2**: Diagnostica del NAS dopo F79: nessuna operazione in pausa "condizioni"; un album di oltre 10.000 elementi (banco) parte in due trasferimenti.
+- **SP-1, SG-1, I4**: F79 con 3 foto solo sul telefono (arrivano nella cartella); release con un account di prova: il foglio le lascia fuori con il motivo
+  e dice "Copia privata ferma" per i media solo sul NAS.
+- **SP-2, SH-1, SH-2**: durante F79 la pagina dice "In arrivo"; F81 (area piena) con il tetto tolto dopo 10 minuti: la striscia "N non andati: ..."
+  resta dopo un riavvio dell'app, il tocco apre il foglio e la ripresa va.
+- **SH-3, SN-1 (F85, F82)**: un file dal PC nella cartella: "1 file nuovo nella cartella"; "Rimuovi dall'album" su un elemento: il conteggio non sale.
+  Un album di soli riferimenti: nessun "La cartella e' cambiata".
+- **SH-4**: uno smart condiviso, una foto nuova che rispetta le regole: in "Da condividere", il file non si sposta.
+- **SC-1, SC-2, SH-5 (F83)**: "Smetti di condividere" dal creatore: si apre l'album personale con gli stessi elementi; rinominare e uccidere l'app entro
+  5 minuti: alla riapertura il tablet vede il titolo nuovo senza aspettare il giro dell'indice; rinominare con l'operazione aperta e riavviare: il titolo
+  resta quello nuovo.
+- **R15**: dal PC spostare i file dell'album in una cartella con un percorso lunghissimo: nessuna proposta, nessuna caduta.
+- **SG-2 (F92)**: NAS spento durante il giro dell'indice: la tappa degli album non si ripete (Diagnostica dei lavori).
+
+### Verifica
+
+- **Rosso senza la correzione, verde con**: ho tolto le correzioni tutte insieme (una copia dei file, rimessa e confrontata con il `git diff` di prima:
+  identico) e girato le prove nuove: rosse 7 su 7 di `RevisioneBShareTest`, 3 su 4 di `RevisioneBNasOpsTest` (la quarta, "il catalogo risponde dopo un
+  po'", e' il caso buono e resta verde), 4 su 5 di `RevisioneBAlbumPageTest` (il testo dei 10 minuti e' nuovo), 11 su 11 di
+  `RevisioneBCondivisioneAppTest`, le tre nuove di `AlbumFolderWatchTest` (SN-1, R15, SH-3). `AlbumFileRulesTest` prova le funzioni nuove della
+  decisione (la tabella e il legame di SB-1): il rosso di R3 lo danno `RevisioneBNasOpsTest` e `RevisioneBCondivisioneAppTest`.
+- **Garanzie che restano verdi**: i banchi della condivisione (`ShareChaos*`, P5, sulla JVM e sul simulatore), `ChaosBenchTest`, `ChaosMutationTest`,
+  `CompletionChaosAreaTest`, `AlbumsShareBenchAppTest` (8 giri sui legami di `:app`), i test di fiducia e ostili, `HiddenSurfacesRegistryTest`,
+  `HiddenSurfacesPropertyTest`, `AlbumWriteGateTest` (D30), `Phase7ArchitectureTest` (piu' stretto), `NoFixedWaitsTest` (le prove nuove aspettano
+  con `Attese`).
+- **`tools\check.ps1 -NoDaemon` verde al primo giro** ("OK: tutto a posto", 27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, struttura di build normale,
+  `app\build\outputs\apk\release` cancellata prima, posto `f7-rb` preso e rilasciato attorno a ogni comando Gradle): assemble di debug e release, test
+  di tutti i moduli (`app` 885, `core-albums` 714, `core-nasops` 333, `feature-albums` 491, `feature-viewer` 841, `feature-nas` 356; nessuno a zero,
+  nessuno fallito; il passo di Gradle 1.083 s), lint, controlli del dex e del manifest di release (D12, D30, D34). APK di release non firmato:
+  89.618.773 byte. Un giro intermedio dei test di `:app` si era fermato per un crash della JVM di prova (`EXCEPTION_ACCESS_VIOLATION` in `jvm.dll`, con
+  la memoria del PC quasi piena per gli altri giri in parallelo): rifatto, verde; i file `hs_err` tolti.
+
+### Punti aperti
+
+1. "Nuova versione" non si applica a una correzione nell'area comune perche' nessuna c'e': se un giorno la 5B scrivesse versioni li', va chiesta
+   `allowed(NEW_VERSION)`.
+2. Il codice della Diagnostica degli album per la pausa `CATALOG` (sezione Album, pacchetto D) e la riga del catalogo dei codici della 4B: la pausa oggi
+   si vede in Cartelle NAS e nella pagina dell'album, e la Diagnostica del NAS esporta il nome della pausa.
+3. SB-1 provato sulla funzione legata, non con due dispositivi dello stesso account sul grafo vero.
+4. Cartelle NAS offre ancora le azioni sui file protetti e lascia rispondere il piano (L152); toglierle prima vorrebbe la porta degli album in
+   `feature-nas`.
+5. Le sigle in testa a `docs/sicurezza.md` (`C1`...`C48`, `L1`...`L114`) non le ho cambiate: con quattro pacchetti che aggiungono numeri in parallelo
+   le aggiorna chi unisce.
+
+## Fase 7, correzioni dopo le revisioni: pacchetto A (27/10)
+
+Il pacchetto A delle correzioni della Fase 7 (branch `fase7/rev-a` da `main` a `6b0bf79`): **la fiducia e la replica degli album condivisi**.
+Voci di `docs/review/7-fase7.md`: R1, R2, R6, R7, R9, R12, R13, R14, R19, R20, R21, I1, I5, I6. Lo stato di ogni voce, le prove e cosa provare sul
+telefono stanno nel resoconto del pacchetto; qui le decisioni. Nessuna dipendenza nuova, nessun permesso o componente Android, **nessuna modifica
+al formato** (`AlbumDocs` e la versione 3 non cambiano), **nessuna migrazione** (le righe nuove della replica sono righe di servizio di
+`shared_album_entry`, come P13-1).
+
+### Copie di Q5 (b) e chiusura definitiva (R1)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-1 | **Segni locali** di questo dispositivo per ogni album condiviso (`SharedAlbumMarks`, su file in `noBackupFilesDir/albums/shared-marks` con `StateFiles`): visto attivo, prima chiusura vista (stato, `afterClose`, ora, dispositivo che l'ha firmata, titolo, cartella), copia gia' scritta o ritirata. Li scrive la proiezione (`SharedAlbumReplica.recompute`); mai sincronizzati ne' pubblicati | La revisione: "copia solo per un album che questo account ha visto attivo (un segno locale)", "la chiusura vista resta in locale per quell'id" |
+| A-2 | **Copia e avviso di chiusura solo per un album visto attivo** da questo dispositivo. Un altro dispositivo dello stesso account che non l'ha visto non scrive la copia: gli arriva con i dati personali da chi l'ha scritta | Un album nato chiuso (o mai visto) non e' "un album che si teneva": non fa scrivere niente nei dati personali di nessuno |
+| A-3 | **La copia si scrive una volta** (`ReplicaSharedAlbums.copyKept` dopo `PersonalAlbumCopies.keep`): gli elementi restano quelli della prima scrittura; una copia gia' eliminata dall'utente si segna come scritta | "Riapri, aggiungi, richiudi" non la allunga piu' |
+| A-4 | **La chiusura vista e' definitiva** (D31): con il segno, la fusione si fa con `closedBefore` (nessuna voce dopo la chiusura vale) e una definizione `active` letta dopo si scarta (lo stato, la scelta per gli altri, il titolo e la cartella restano quelli della chiusura). Vale finche' il dispositivo che l'ha firmata e' approvato o dismesso; revocato o perso, la chiusura non si impone piu' (la revoca toglie cio' che ha causato) | Di ogni dispositivo conta solo l'ultima testa: il creatore poteva riaprire ripubblicando `active` |
+| A-5 | **Tetti per creatore** (`ClosedCopyLimits`): 32 copie e 20.000 elementi in tutto, contando le copie gia' scritte e non ritirate; in ordine di chiusura. Una copia oltre i tetti non nasce, l'avviso non la promette, si conta (`copiesCapped`) | Un dispositivo compromesso non riempie i dati personali (262.144 record per dispositivo) di ogni familiare; un creatore onesto non ci arriva |
+| A-6 | **La revoca ritira le copie**: se il dispositivo che ha firmato la chiusura diventa revocato o perso, la copia si ritira come "Elimina album" (lapide della definizione, `PersonalAlbumCopies.withdraw`, solo se e' davvero la copia di quell'album) e non si ricrea. Un dismesso no | Il brief: "la revoca toglie cio' che il dispositivo revocato ha causato". Un telefono perso (non compromesso) fa perdere anche le copie automatiche nate da lui: e' la stessa regola dei contributi |
+| A-7 | `AlbumsGraph.keepClosedCopies` scrive, segna e ritira; resta nel giro dell'indice | Il cambio di quando nasce la copia per il creatore dopo "Smetti" (SC-1) e' del pacchetto B |
+
+### Isolamento, tetti, attese e traffico della replica (R2, R13)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-8 | Un contributo che adesso non si legge (un segmento elencato e sparito, un file che il NAS nega) **aspetta** (`ReplicaHold`, durevole in una riga `~hold`): 15 minuti, poi il doppio a ogni tentativo fino a 24 ore; una testa diversa si legge subito. Non rende il giro "incompleto" | Prima si riscaricava a ogni giro, e la tappa ripeteva subito il giro |
+| A-9 | **Errori di un file e della sessione** (`AlbumIoErrors`, legato da :app a `NasAlbumIoErrors`): permesso negato e file occupato fermano solo quel contributo (o quell'album, se e' la sua cartella); il resto ferma il giro come prima. Senza legame tutto vale "sessione" | Un'ACL o un file tenuto aperto dal PC non fermano piu' gli album di tutti |
+| A-10 | Il **cursore** va oltre gli album finiti e falliti; si ferma sul primo rimasto a meta' per il budget (che al giro dopo riparte primo, con il budget intero) | Un album rotto non resta il primo di ogni giro |
+| A-11 | **Tetti prima di scaricare** (le dimensioni le dichiara la testa firmata): album per dispositivo (512) e byte per dispositivo nella replica (128 MiB) prima di leggere un segmento; per giro 64 MiB e 32 MiB per dispositivo (il suo primo contributo del giro passa comunque). Le voci (100.000 per dispositivo) restano dopo la decodifica | R13; un contributo onesto al massimo (sotto i 30 MiB) si scarica sempre |
+| A-12 | **Traffico**: i byte letti dal NAS dal giro degli album (`AlbumSyncReport.bytesRead`) vanno nel conto della tappa (`NasWork.albums`) | Prima `scope.record(0)` |
+| A-13 | **Il proprietario rimette i suoi segmenti tolti dal PC**: a ogni pubblicazione si controlla (una lettura senza byte) che i segmenti riusati ci siano, e la replica, quando trova un buco nella **mia** testa, chiede al pubblicatore di rimetterli uguali (`repairSegments`, dietro gli stessi cancelli, solo se le voci pubblicate rifanno esattamente i segmenti) | Chi aspetta li ritrova senza una testa nuova |
+| A-14 | La cache della replica su Room tiene al piu' 50.000 voci (gli album usati meno di recente escono e si rileggono); i conti per dispositivo si fanno una volta e si tengono al passo; attese e ore "visto" in una cache | R13: memoria limitata; nessuna scansione di `shared_album_entry` a ogni contributo (non c'e' un indice su `device_id` e lo schema v6 non cambia) |
+
+### Voci retrodatate (R7, L59 riscritto)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-15 | Chi legge tiene, per (album, dispositivo), **l'ultima ora del NAS in cui ha visto la serie senza niente di nuovo** (`seenAt`, riga `~seen`): all'accettazione di una testa, e a un giro senza novita' al piu' una volta l'ora | Le ore dichiarate da chi scrive si confrontano con un'ora di chi legge, che chi scrive non sceglie |
+| A-16 | Una testa nuova che dichiara un'ora **prima della testa di prima**, o prima di `seenAt` meno 10 minuti, si **rifiuta** (retrodatata; `retrodatedHeads`) | Esisteva gia', l'avrei letta allora |
+| A-17 | Una voce **nuova** e' retrodatata se piu' vecchia della testa di prima meno 2 minuti (come prima) **o** di `seenAt` meno l'eta' massima di una modifica e 2 minuti. Vale anche per la **prima** testa di un dispositivo che chi legge ha visto senza contributo | Chiude l'aggiramento (ora della testa) e la prima testa non controllata |
+| A-18 | **Eta' massima di una modifica** (`PublishRules.MAX_ENTRY_AGE_MS`, un'ora): il pubblicatore data con l'ora della pubblicazione una modifica rimasta in coda piu' a lungo (il NAS irraggiungibile) | Senza, una modifica onesta fatta prima di un'assenza lunga risulterebbe retrodatata. Il costo: e' giudicata con il livello dell'ora della pubblicazione (se si e' stretto nel frattempo, l'avviso E-SH13) |
+
+### Registri durevoli (R9) e diario (I5)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-19 | Un registro che **c'e' ma non si legge** (errore di I/O, oltre i 16 MiB, formato rovinato) **non vale vuoto e non si sovrascrive**. Legami chiave -> piano dei trasferimenti e intenzioni dei caricamenti: **"non so"** (ogni lettura e modifica lancia `UnreadableRecords`; `find` lancia, SD-2 lascia il gruppo `PLANNED`). Gli altri (richieste al guardiano, segni "Nuove", avvisi visti, promesse della ricezione, segni degli album condivisi): il file va da parte come `<nome>.bad` e si riparte vuoti | Il brief: "illeggibile = non so, senza sovrascrittura". Per le richieste al guardiano "vuoto" non perde copie (il guardiano trova dal catalogo i media con la sola copia comune, `guardianHasWork`), mentre "non so" fermerebbe ogni condivisione all'ultimo passo |
+| A-20 | I contatori letti dal file hanno un tetto legato ai byte rimasti | Un file rovinato non fa allocare a ogni avvio |
+| A-21 | **Potatura** dei registri dei trasferimenti nel giro dell'indice (`TransferRegisters.prune`): si tolgono le chiavi che nessuna operazione aperta della condivisione cita (lette dalla colonna del diario, anche per le righe che non si decodificano), prima lette le chiavi legate e poi il diario | Senza, un registro cresciuto oltre il tetto varrebbe "non so" per sempre. Una chiave legata dopo la lettura non si tocca; il diario la scrive sempre prima di chiamare la porta |
+| A-22 | I5: una riga del diario che non si decodifica diventa un elemento **fermo** (in viaggio senza biglietto: nessun passo lo tocca, l'operazione non si chiude, il media resta occupato, `update` su di lui fallisce); con la riga dell'operazione illeggibile l'operazione resta fra le aperte, con lo stesso piano (che non riparte) e tutti gli elementi fermi. Si contano (`unreadableRows`) e si dicono nel log | "Resta ferma, non si inventa un passo" (era il commento del diario, ma la riga spariva) |
+
+### Pubblicatore ricostruito (R12)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-23 | Dopo la perdita dello store del pubblicatore vale prima **la copia del mio contributo nella replica** di questo dispositivo, se e' almeno della versione dell'ultima mia testa sul NAS: si pubblica dopo la versione piu' alta | Dal PC le mie teste piu' recenti si possono togliere: ripubblicare uno stato vecchio con un numero gia' visto e' un'equivocazione che chi legge rifiuta |
+| A-24 | Dal NAS si adotta solo se la mia ultima testa si rilegge **tutta**: un mio segmento che non si decodifica, o teste mie ma nessuna valida, e la testa nuova non si pubblica (`Failed`, `adoptionRefused`). Senza nessuna testa mia si riparte da zero | La testa nuova toglierebbe a tutti le voci gia' pubblicate (per il creatore, la definizione) |
+
+### Dismissione (R6), contenuto delle voci (R14, I1), tetti dei dati personali (R19), unioni (R21), recinzione (R20)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-25 | **R6**: `RegistryWriter.retireHeads` (porta di core-family, legata da :app) dice le teste da congelare alla dismissione: quelle d'album che la replica dell'admin ha accettato, dopo un giro breve della replica; prima quelle che governano l'album (definizione, livello, eredita'), poi per elementi; al piu' 64 (il tetto del registro). Se chi le cerca sbaglia la dismissione non parte | A7: "dismesso: valgono le teste congelate". Le teste dell'indice e dei dati personali non le dice ancora nessuno (prima di R6 nessuna) |
+| A-26 | **R6, l'eredita'**: una voce `heir` vale se il suo dispositivo e' admin **approvato o dismesso** (il dismesso vale solo con le teste congelate) | L'eredita' non cade quando l'erede cambia telefono |
+| A-27 | **R14**: sull'elemento vivo di un altro account una voce nuova puo' cambiare solo la posizione; un contenuto diverso si scarta (`OWNERSHIP`) | Nessuno scrittore produce quella voce; il lettore era piu' largo |
+| A-28 | **I1**: `MediaFacts.sha256` (dal catalogo, `full_hash` della versione corrente) va nella voce dell'elemento e nell'attestazione E-SH12; anche nel riferimento di P0. Il finto catalogo lo confronta come il vero | La voce porta l'hash quando chi aggiunge lo conosce (`Publishing.kt`); chi legge lo confronta (D9) |
+| A-29 | **R19**: la proiezione degli album personali cerca le impronte a blocchi (400 per domanda, sull'indice `(size, quick_hash)`); riproietta un album "in attesa" solo se i media cambiati possono risolvere un suo riferimento (per id o impronta); al piu' 5.000 album e 20.000 riferimenti per album (`overCap`) | Il lavoro che un altro dispositivo dell'account impone ha un tetto. Gli album smart con descrizione (il motore) sono del pacchetto D |
+| A-30 | **R21**: `repointMediaReferences` e' l'unica strada per l'unione e per `linkCopyAsVersion` | Una tabella nuova si aggiunge in un posto solo |
+| A-31 | **R20**: il passo D30 di `check.ps1` legge il bytecode della release come per D12 (lettore suo): `AppAlbumWriteGate.blockFor` chiama `sharedAlbumsMayUse` e poi risponde `TEST_SHARES_ONLY`, `FlagsAlbumReadGate.mayRead` chiama la stessa decisione, li istanzia il montaggio degli album, li chiamano pubblicatore, piano della condivisione e replica. `app/proguard-rules.pro` tiene i due metodi. Anche con `-dontobfuscate` R8 fonde classi di pacchetti diversi (nella release di oggi il pubblicatore sta in `NasPersonalSync`, la replica in `OpenGlRenderer` di CameraX, il montaggio in `AiModule_TodayFactory`): chi istanzia e chi chiama si riconosce dal nome nel dex o, se la classe e' fusa, da `mapping.txt` (i metodi del dex che contengono il suo codice). Provato: con i due cancelli rotti apposta (decisione non chiamata) il passo fallisce, con i cancelli veri passa. Il valore di `FeatureFlags.RELEASE` lo provava gia' `FeatureFlagsTest` | La regola di consumer-rules tiene campo e decisione anche se nessuno li chiama |
+
+### I6: non corretta (punto aperto)
+La pulizia delle proprie teste e dei propri segmenti d'album (`KEEP_HEADS`, `GRACE_DAYS`) **non si fa in questo pacchetto**. Toglie file sul NAS: per
+D1 e C10 lo fa solo `core-nasops` (`OwnFilesCleaner`, fuori dal perimetro), che non conosce `albums/`; servono anche (1) un diario dei segmenti d'album
+pubblicati (oggi il pubblicatore ricorda solo quelli della testa corrente: un segmento non suo nella sua cartella non si deve toccare, E-S11) e
+(2) un lettore che non resti fermo quando le teste fra la sua e l'ultima sono state tolte (oggi prova solo la versione successiva; con 3 teste
+tenute e una ogni 5 minuti, un tablet spento un'ora non ritroverebbe piu' la serie). Senza (2) la pulizia romperebbe la sincronizzazione. Lo stesso
+punto e' rimasto aperto per i segmenti `ai` (Fase 6, pacchetto A, R14). Il NAS cresce: al piu' una testa ogni 5 minuti per album e dispositivo, e
+un segmento (al piu' 4 MiB, di solito qualche centinaio di KB) per modifica. Limite dichiarato L145.
+
+### Prove
+| Voce | Test (rosso senza la correzione, verde con) |
+|---|---|
+| R1 | `SharedAlbumClosedCopiesTest` (album nati chiusi: nessuna copia ne' avviso; riapri-aggiungi-richiudi; tetti; revoca), `PersonalAlbumCopiesTest.r1LaCopiaSiRitiraSoloSeECopiaDiQuellAlbum` |
+| R2, R13 | `SharedAlbumRobustnessTest` (segmento tolto: attesa, secondo album aggiornato, niente riscaricato, segmento rimesso dal proprietario; file negato; tetti prima di scaricare), `RoomAlbumStoresTest.attese_visto_contiECacheLimitataSuRoom` |
+| R6 | `RetireFrozenHeadsTest` (core-family), `SharedAlbumRetireTest` (telefono del creatore dismesso, eredita' con il telefono dell'erede dismesso) |
+| R7 | `SharedAlbumRetrodatingTest` (testa con l'ora della creazione, voce datata quando l'album era aperto, prima testa; una modifica rimasta in coda tre ore non e' retrodatata) |
+| R9, I5 | `AlbumDurableStoresTest` (`r9UnRegistroIllegibileValeNonSoENonSiSovrascrive`, `r9IRegistriDeiTrasferimentiSiPotanoConIlDiario`, `i5UnaRigaIllegibileDelDiarioRestaFermaENonSparisce`) |
+| R12 | `NasAlbumPublisherAdoptionTest` |
+| R14 | `AlbumPermissionsLogicTest.r14LElementoDiUnAltroNonCambiaContenuto` |
+| R19 | `AlbumProjectionWorkCapTest` |
+| R20 | il passo D30 di `check.ps1`, provato anche su una release con il cancello rotto apposta (il passo fallisce) |
+| R21 | `MergeV6Test.laCopiaDiUnEditorPortaConSeLeRigheDellaV6` |
+| I1 | `ShareFullHashTest` |
+
+### File toccati fuori dal perimetro stretto (modifiche minime)
+- `core-albums/.../share/ShareSteps.kt` e `testing/ReferenceShareSteps.kt` (I1: l'hash nella voce e in E-SH12), `contract/Catalog.kt`
+  (`MediaFacts.sha256`), `contract/Publishing.kt` (`AlbumSyncReport.bytesRead`/`contributionsHeld`, `PublishRules.MAX_ENTRY_AGE_MS` e
+  `HEAD_TIME_TOLERANCE_MS`), `testing/FakeAlbumLibrary.kt` (hash completo e attestazione come il vero).
+- `core-albums/.../personal/PersonalAlbumCopies.kt` (`withdraw`, R1), `MediaResolver.kt` e `CatalogAlbumProjection.kt` (R19).
+- `core-database`: `AlbumQueries.FACTS_SQL`, `FactsRow`, `CatalogMediaFacts`, `AlbumCatalog.facts` (I1: `full_hash`); `MediaCatalog` (R21).
+- `core-family/.../registry/RegistryWriter.kt` (`RetireHeads`, R6).
+- `:app`: `albums/AlbumsGraph.kt` (copie, potatura, byte del giro, teste da congelare), `albums/AlbumsWiring.kt` e `AlbumsLive.kt` (legami),
+  `work/NasWork.kt` (byte del giro nel conto della tappa), `app/proguard-rules.pro` (R20).
+- Prove: `app/src/test/.../hidden/RealSharedStack.kt` (l'album "Chiuso" del registro dei Nascosti si vede prima attivo: la copia nasce solo
+  cosi'), `AlbumDurableStoresTest` (la prova che diceva "un file rovinato vale vuoto" dice ora il contrario).
+
+### Cosa chiede agli altri pacchetti
+- **B** (flusso della condivisione): con R1 la copia del creatore dopo "Smetti" (SC-1) passa da `copyKept`; la "Riprova" (SH-2) e ogni passo nuovo
+  dell'orchestratore non devono agire su un elemento in viaggio **senza biglietto** (I5: e' una riga del diario che non si legge).
+- **D** (Diagnostica, R22): i contatori nuovi (`contributionsHeld`, `bytesRead`, `retrodatedHeads`, `copiesCapped`, `reopeningsRefused`,
+  `adoptionRefused`, `segmentsRestored`, `unreadableRows` del diario e dei registri, `overCap`) sono numeri pronti da esportare; gli album smart
+  con descrizione (R19, `RulesSmartEngine`) restano senza tetto.
+
+### Punti aperti
+- I6 (sopra). Il congelamento delle teste dell'indice e dei dati personali alla dismissione (nessuno le dice ancora).
+- Un lettore che aveva gia' una testa d'album **piu' nuova** di quella congelata dall'admin perde il contributo del dismesso (anti-rollback): la
+  replica dell'admin fa un giro prima di congelare, ma non e' una garanzia (L142).
+- Con il registro dei trasferimenti o delle intenzioni illeggibile per sempre, l'operazione resta aperta finche' il file non si rilegge o
+  l'app si azzera: si conta, e il numero arriva nella Diagnostica con R22 (L143).
+- Niente e' stato provato su un dispositivo.
+
+### Da provare sul telefono (S25 e Tab S9, account e share di prova `test`, `test2`, `test-comune`; nessuna fatta)
+- **R1** (con un pubblicatore ostile di debug, mai sulle share vere): un album nato chiuso con `keep_copy` dal telefono di `test`: sul tablet di
+  `test2` nessun album personale nuovo e nessun avviso; un album visto attivo e poi chiuso con "ognuno tiene una copia": una copia sola, che non
+  cresce dopo "riapri, aggiungi, richiudi"; revocare il telefono che ha chiuso: la copia sparisce dal tablet (e dall'altro dispositivo di `test2`).
+- **R2** (F84, F92): dal PC togliere un segmento della testa piu' recente di un album di prova; sul tablet, per 30 minuti, il secondo album riceve una
+  modifica fatta dopo, la Diagnostica non dice `syncIncomplete` di continuo e il traffico dell'app resta piccolo; dopo una modifica dell'autore (o
+  dopo che il suo telefono rilegge l'album) il segmento torna. Variante: una testa resa illeggibile dal PC (permessi).
+- **R6**: dismettere l'emulatore di `test` dopo che ha creato un album condiviso e aggiunto foto: l'album resta sul tablet, con le foto; il telefono
+  nuovo di `test` cambia ancora il livello.
+- **R7**: con il pubblicatore ostile di debug, una testa con l'ora della creazione dell'album dopo un cambio di livello: sul tablet niente cambia.
+- **R9, I5**: rovinare a mano (debug, `run-as`) `noBackupFilesDir/albums/transfer-plans` durante una condivisione: l'operazione resta aperta e non
+  dice "non partito"; `notices-seen` rovinato: il file `.bad` accanto e gli avvisi di nuovo.
+- **R12**: azzerare l'app sul telefono di `test` dopo aver cambiato dal PC un suo segmento: una modifica all'album non toglie le foto agli altri.
+- **R20**: `tools\check.ps1` (passo "D30 nella release").
+
+## Fase 7, correzioni dopo le revisioni: pacchetto C (27/10)
+
+Il pacchetto C corregge le voci di `docs/review/7-fase7.md` e `docs/review/funzionale-7.md` che riguardano Utility, Doppioni, cestini e i Nascosti
+in Cartelle NAS, sul branch `fase7/rev-c` (da `main` `6b0bf79`): **R4, ED-1, NA-1, ED-2, NA-2, R5, R18, DP-1, DP-2, DP-3, DP-4, DP-5, DP-6, DP-7, UT-1,
+R10, R11, I10** e la decisione su **I9**. Nessun dispositivo, nessun NAS vero, niente `adb`: tutto sulla JVM (Robolectric, mondo di prova dei Nascosti,
+catalogo Room vero). Ogni voce ha un test che prima della correzione non compilava o falliva. Controllo di mutazione fatto a mano: togliendo una per una le correzioni
+(l'ordine dei passi di R10, il piano rifatto di R5, il timbro e i "mai" di R18, l'unione dei gemelli di DP-1, la gemella del guardiano di DP-2, la
+vista di DP-3, la firma di DP-4, il `null` di DP-5, il titolo di DP-6, lo scope di DP-7, la Libreria non leggibile di UT-1, l'esito di ED-2, l'attesa
+di NA-2, il filtro di NA-1 e `StateFiles` di R11/I10) i test della voce sono diventati rossi.
+
+**Decisioni**
+| # | Voce | Decisione | Perche' |
+|---|---|---|---|
+| PkC-1 | R4, ED-1, NA-1 | **Spazio NAS** legge i file piu' grandi dal catalogo **senza** i media nascosti e senza i gruppi con un nascosto dentro (stesso predicato SQL della riga "N elementi nascosti", `CatalogHidden.HIDDEN_VERSION_SQL`), con il filtro nella query e **fallendo chiusi** (se il predicato non si calcola, nessun file). Il **Cestino di Cartelle NAS** non e' piu' una pagina a se': ogni ingresso (rotta, pannello del tablet, Spazio, Backup) apre gli **Eliminati di recente** (`GatedNasTrashPage` → `RecentlyDeletedRoute`) **dietro `HiddenAccessGate`**; la vecchia `NasTrashRoute` e' `internal` e nessun file di produzione la richiama (`NasTrashGateTest`) | Delle due correzioni della revisione per ED-1 si e' scelta la prima ("le due voci aprono `RecentlyDeletedDestination`"): una sola pagina, un solo cancello (D26), nessun elenco di nomi da mascherare due volte. Per Spazio non c'e' il cancello: i nascosti si tolgono dall'elenco, come in ogni altra superficie (D22, D23) |
+| PkC-2 | R4 | Il registro `HiddenSurfaces` ha due righe nuove, `NAS_SPACE` e `NAS_TRASH`: la prima con la **sonda sul codice vero** (`HiddenProbes.nasSpace` → `CatalogLargestFiles` sul mondo di prova), la seconda come lettore **dietro il cancello**. `RepoFiles` riconosce ora anche i file che nominano `LargestFile`, `NasTrashItem`, `NasFolderEntry` e `NasTrashRow`; il test `ognFileCheMostraNomiDiFileDelNasEUnaSuperficieUnLettoreDietroIlCancelloOLaPaginaInattiva` rende una schermata nuova che mostra nomi del NAS senza registrarsi un errore | La revisione notava che il registro vedeva solo i file che nominano `VisibleMedia`/`HiddenMask`/`WidgetFeed`: una pagina che mostra nomi senza usarli non era mai segnalata |
+| PkC-3 | ED-2 | "Ripristina" su voci del NAS che non si possono ripristinare (senza record valido, share in sola lettura, NAS spento) ora **risponde `REJECTED` e la pagina lo dice**; in una selezione mista partono le voci ripristinabili e l'avviso `RESTORE_PARTIAL` dice che le altre no (`unrestorableNas`). Il gesto del NAS riceve la prova del tocco dal pulsante (`restoreNas(tap)`), come per R18 | Delle due correzioni proposte si e' scelta la seconda (l'avviso): una riga non ripristinabile e' comunque una riga che l'utente vuole vedere (e poter eliminare subito), non una riga da togliere dalla selezione |
+| PkC-4 | NA-2 | Il widget di prova (solo debug) **aspetta l'istantanea** della Libreria (`FieldProbeWidgetContent.awaitSnapshot`: 8 s nel ricevitore) e, se a processo freddo non c'e' ancora, **continua ad aspettare fuori dal ricevitore** (fino a 2 minuti) e ridisegna appena arriva. Senza istantanea (accesso alle sole foto selezionate) il widget resta senza celle: mai un elemento che non si e' potuto filtrare | A processo freddo `updateAppWidget` sovrascriveva il widget con celle vuote fino al giro dopo (30 minuti), e F73 passava "a vuoto" |
+| PkC-5 | R5 | `plan` si rifa **al foglio e di nuovo al tocco** (`DuplicatesController.confirm`): rilegge area, appartenenza agli album e verifica di **tutte** le copie del gruppo, rifa `IdenticalCleanup.propose` con la scelta dell'utente e tiene solo le copie che il foglio gia' proponeva (intersezione). Se la copia da tenere e' sparita o e' stata spostata il gruppo esce dal piano; se il piano non si rifa, non parte niente. "Mai l'ultima copia privata" vale cosi' al tocco, non solo all'apertura | Il piano del foglio poteva essere vecchio di minuti: `attachMoved` cambia l'area alla stessa riga (stesso `location_id`) e una condivisione in sottofondo la sposta senza che l'id cambi |
+| PkC-6 | R18 | **La prova del tocco non si fabbrica.** `UserTap` ha costruttore `internal`, `DoubleTapConfirm` non e' piu' pubblico, i falsi `fakeSingleTap()`/`fakeDoubleTap()` non stanno piu' nel set `main`; la prova nasce solo in un composable (`tapOnButton`; il foglio dei Doppioni, `SheetTap`, con **600 ms minimi** dalla comparsa) e il controllore la **riceve**. `TrashTapGuardTest` (quello promesso da `NasTrashPort.kt`) lo guarda. Le prove dei test stanno in `TestTaps` (per riflessione, solo `src/test`: `feature-library` e `:app`) | C34 diceva "un solo punto del codice emette la conferma"; per Doppioni e cestino non era vero |
+| PkC-7 | R18 | Le copie del telefono hanno il **timbro** (`PhoneTrashRef`: dimensione, data di modifica e generazione del MediaStore, piu' la versione del MediaStore con cui l'`_ID` valeva) e **prima del dialogo di sistema** la pagina rilegge ogni riga (`PhoneCopyCheck` → `MediaStorePhoneCopyCheck` sulla porta vera `MediaStorePhoneBytes.lookup`, `FileStamp.looksUnchangedFrom`). Una copia cambiata (stesso `_ID`, byte nuovi), sparita, "ricostruita" o non concessa non va nel cestino; se il MediaStore non risponde o il controllo non c'e', **nessuna** copia del telefono va nel cestino (`PHONE_CHANGED`) | E-D13 valeva solo per il NAS: il telefono si fidava del riferimento |
+| PkC-8 | R18 | Nuovo "mai": **mai l'ultima copia verificata** (`BlockReason.LAST_VERIFIED`). Se "Rivedi" sceglie da tenere una copia mai riletta e le copie rilette sono tutte fra quelle da togliere, la migliore resta | Il media non perde "al sicuro" per una scelta; i "mai" di prima proteggevano l'ultima copia privata, non l'ultima verificata |
+| PkC-9 | DP-1 (blocca) | Si e' scelta la **prima** correzione della revisione (unire i media dopo l'hash completo), senza cambiare le regole d'identita': `NasTwins.settle` (chiamato all'apertura dei Doppioni e dalla notte) **mette in coda `FULL_HASH` solo per i media con una copia sul NAS che hanno stessa dimensione e stesso `qh1` di un altro media sul NAS**, e **unisce con `MediaCatalog.merge`** quelli che hanno ormai lo stesso hash completo (decide `MergeRules`: gli originali con hash completi uguali; qui non c'e' logica d'identita'). Niente unione senza hash completo; i gruppi provvisori (raffiche, simili, "da verificare") non si toccano. La coda e' consumata dal lavoro di sicurezza del backup con le sue regole (Wi-Fi di casa, attivita' pesante per i video); la pagina dice "sto controllando N gruppi" finche' ne restano | Raggruppare per `full_hash` in `AlbumCatalog.duplicates` avrebbe dato un secondo significato a "doppione" accanto alle unioni del catalogo; con `merge` il media unito ha due posizioni sulla stessa versione e la query di P8 lo trova senza cambiare |
+| PkC-10 | DP-2 | `inSharedAlbum` vale ora per **ogni** copia dell'area comune di un media attestato da un album condiviso (`AlbumMembership`, anche se il file sta fuori da `Album condivisi/`: un riferimento, E-SH11; una cartella adottata, E-SH16); se l'appartenenza non risponde, ogni copia dell'area comune vale come elemento di un album (fallire chiusi). Nuovo "mai": **mai la copia dell'area comune che ha la gemella del guardiano** (`BlockReason.GUARDIAN_TWIN`, `IdenticalCleanup.isGuardianCopy`, D28). Il foglio avvisa E-D8 ("Sparira' per tutti i familiari") quando fra le copie da togliere ce n'e' una dell'area comune | La copia del guardiano nasce per proteggere proprio quel file; proporla come "doppione" toglieva ai familiari il file e dagli album l'elemento |
+| PkC-11 | DP-3 | Le copie che la pulizia ha accettato **escono subito dalla vista** (per posizione del catalogo: `CleanupPlan.locations`), e la pagina **si rilegge quando il catalogo cambia** (`IdenticalDuplicates.changes()`, accorpata: piu' cambiamenti ravvicinati fanno una sola rilettura). Il gruppo che non ha piu' niente da togliere esce dall'elenco "da pulire" | Il catalogo cambia solo a operazione chiusa (scansione dopo lo spostamento): il `rescan()` immediato rileggeva gli stessi gruppi e un secondo "Elimina" rispondeva `CLEANUP_REJECTED` |
+| PkC-12 | DP-4 | Aprendo la scheda dei **Simili** si **firmano** gli scatti recenti con un budget breve (`CatalogSimilarShots.sign`) **prima** della ricerca; se i pixel non sono ancora leggibili la scheda dice che le foto di oggi si confrontano stanotte (`signingLater`); la stringa che prometteva "la ricerca per contenuto" e' corretta | Le firme le faceva solo la notte in carica: una raffica di oggi compariva dopo una notte, e prima la scheda era vuota senza dire perche' |
+| PkC-13 | DP-5 | `fullHashOn` e' **nullabile** (`null` = dati personali non pronti): la notte salta il passo invece di leggerlo come "spento" e ritirare le righe `FULL_HASH` chieste dall'utente (`UtilityGraph.nightly`). Se `set` fallisce il tasto non e' piu' muto: `DuplicatesNotice.NIGHTLY_NOT_SAVED` e l'interruttore resta com'era | La revisione proponeva proprio questo; l'interruttore e' una scelta dell'utente, non va ritirata da uno stato transitorio |
+| PkC-14 | DP-6 | Il foglio dice cosa elimina: **"Eliminare 41 copie (3,2 GB)?"** per gli identici, **"Eliminare 4 scatti (12 MB)?"** per i simili (`plurals duplicates_sheet_title_copies` e `_shots`). `GalleryDeleteSheet` ha un parametro `title` opzionale (unico tocco a `core-designsystem`: il titolo "foto" era dentro il componente) | 4 scatti con 3 copie facevano "12 foto", e "foto" anche per i video; mancavano i GB (§2.1.1) |
+| PkC-15 | DP-7 | `confirm` gira nello **scope del ViewModel** e la richiesta del dialogo di sistema sta **nello stato** (`phoneRequest`) finche' la composizione nuova la lancia (`phoneRequestLaunched()`) | Una rotazione durante "Elimina" ricreava l'attivita': la richiesta si perdeva e il secondo tocco riceveva `REJECTED` dal NAS |
+| PkC-16 | UT-1 | Con la Libreria **non leggibile per intero** (accesso alle sole foto selezionate, o prima della prima lettura) i Doppioni identici **non si cercano e non si pianificano**: la scansione risponde `restricted` e la pagina lo dice (come i simili). Fallisce chiuso | `VisibleMedia.visible` legge solo il database; il limite dell'accesso parziale sta nell'istantanea |
+| PkC-17 | R10 | Nella fase `LOCAL_DATA_ERASED` di `DeviceSelfWipe` **nessun passo ne ferma un altro**: ogni passo di `localState`, poi `eraser.eraseAll()`, poi lo **stato fidato per ultimo**; la fase riesce solo se riescono tutti (altrimenti si ripete). Lo stato fidato per ultimo e' anche il segno dell'azzeramento interrotto (`resumeIfInterrupted`: chiave sparita con lo stato ancora li') | Era una regressione di `4174b830`: `trustState.clear()` per primo lanciava e saltava catalogo, miniature, dati personali e `home_estimate` di un dispositivo gia' senza chiavi |
+| PkC-18 | R11 | Punti chiusi: **(a)** franchigia consumata (`FileFreezeAcceptances`): se il file non si riscrive o non si toglie, la chiave resta "consumata" in memoria per tutto il processo, il file che non va via si **svuota**, e la scrittura successiva riprova; **(b)** lettura del testo (`TextReading`): la scrittura di "spenta" che fallisce **toglie** il file che diceva "accesa", `reset()` dice l'esito e `forget()` **lancia** `IOException` se il file resta (l'azzeramento lo segna non finito e si ripete); **(c)** emergenza "Ferma le scritture" (`EmergencyStop`): `set()` dice se e' salvata (`setWritesStopped` lo propaga) e, se no, **si riprova** a salvarla ogni 512 letture del cancello (guarisce da sola); **(d)** istantanea con un nascosto (`CatalogTimelineRepository.dropStored`): se il file non si toglie lo si **sostituisce** con una istantanea vuota e provvisoria; **(e)** battito della fiducia: si toglie **dopo** la fermata dei lavori (`DeviceSelfWipe.afterWork`) | Il battito ricreato da un giro in corso era "plausibile" per la revisione: la correzione non costa e si prova (`StateOpenPointsTest`, `FileStateClearTest`) |
+| PkC-19 | R11, I10 | `StateFiles`: **`delete` prende lo stesso lucchetto di `write`** e toglie anche `<nome>.tmp`; il **segno di interruzione** del thread non fa piu' fallire `FileChannel`/`readAllBytes` (si toglie per la durata del lavoro e si rimette); **si riprova solo su Windows** (su Android un errore vero non costa fino a 310 ms dentro il lucchetto della striscia, come diceva la nota di `StateFiles`); **tetto di lettura** di 128 MiB (`FileTooBigException`, mai riprovata) | Le tre cose sono le stesse dell'informativa I10 e del punto `StateFiles.kt:225-233` di R11 |
+| PkC-20 | I9 | **Nessuna recinzione per Utility e Doppioni: si conferma D30.** Cosa vale con gli account di prova: vedi sotto | Vedi sotto |
+
+**I9: cosa vale per Utility e Doppioni con gli account di prova.** D30 recinta gli album condivisi perche' il primo spostamento di file di famiglia
+**nell'area comune** (visibile a tutti, E-D8) deve venire dopo le prove. La pulizia dei Doppioni e il Cestino del NAS non spostano niente nell'area
+comune: mandano copie nei **cestini** (30 giorni, con il record, ripristinabili con un tocco da Eliminati di recente), con due garanzie nuove (R5: il
+piano si rifa al tocco; R18: il tocco nasce nel foglio e le copie del telefono hanno il timbro). Una recinzione in piu' non toglierebbe un rischio vero e
+renderebbe la pagina diversa fra debug e release. Percio':
+- **in debug con un account di prova** (`test`, `test2`) vale `ShareFence` (F4-D33): la sessione del NAS rifiuta ogni share fuori da `test`, `test2`,
+  `test-comune`, quindi i Doppioni e il Cestino toccano **solo** quelle tre; i file di prova sono i soli che una prova puo' mandare nel cestino;
+- **in release** non c'e' `ShareFence` (non e' referenziata e R8 la toglie): con un account vero, "Elimina ovunque" e il Cestino agiscono sulle share
+  vere, con la conferma sul foglio (600 ms minimi dalla comparsa), il cestino di 30 giorni e la nota E-D8 per l'area comune. E' una scelta di progetto
+  (D30, "Doppioni usa il cestino come oggi"), non una dimenticanza; resta come **limite L161** in `docs/sicurezza.md`;
+- **la regola per chi cambia questo** e': se un domani una pulizia dovesse spostare file verso l'area comune, o eliminare senza cestino, deve avere la
+  recinzione di D30 e il suo test; finche' manda solo nei cestini, no.
+
+**Dove non sono d'accordo con le revisioni, o ho scelto fra due correzioni**
+- **ED-1**: fra "le due voci aprono Eliminati di recente" e "la pagina del NAS dietro lo stesso cancello e con i nomi mascherati" ho scelto la prima (PkC-1).
+- **ED-2**: l'avviso, non la riga non selezionabile (PkC-3).
+- **DP-1**: l'unione dopo l'hash completo, non il raggruppamento per `full_hash` (PkC-9). La coda `FULL_HASH` e' consumata dal lavoro di sicurezza del
+  backup: dove quello non gira (fuori dal Wi-Fi di casa, in risparmio) i gemelli non compaiono. E' il limite L160.
+- **R11, emergenza**: la revisione chiede anche di **dirlo nella pagina**. `setWritesStopped` ora restituisce se l'emergenza e' salvata, ma la riga della
+  Diagnostica che lo mostra appartiene al catalogo di Diagnostica (pacchetto D). Resta aperto (limite L163); intanto l'emergenza vale in memoria, si
+  riprova a salvarla e il log lo dice.
+- **I9**: nessuna recinzione (sopra).
+
+**Test vecchi cambiati**
+- `FileStateClearTest` aveva un test che pretendeva che, con lo stato fidato che non si toglie, `eraser.eraseAll()` **non** partisse: era proprio la
+  regressione R10. Ora dice che parte e che la fase resta da fare.
+- `DuplicatesControllerTest`, `CleanupOverOperationsTest`, `NasTrashOverOperationsTest`, `RecentlyDeletedNasTest`: la prova del tocco non si costruisce
+  piu' con `fakeSingleTap()`/`fakeDoubleTap()` (tolti da `main`) ma con `TestTaps`; i controllori ricevono la prova.
+- `IdenticalCleanupTest`, `CatalogIdenticalDuplicatesTest`, `DuplicatesControllerTest`: le copie del telefono hanno il timbro e "Rivedi" puo' lasciare una
+  copia in piu' (mai l'ultima verificata).
+
+**Fuori dall'elenco del perimetro, toccati perche' la voce lo chiede:** `core-family/.../lifecycle/DeviceSelfWipe.kt` (R10), `app/.../ai/TextReading.kt`,
+`app/.../nas/FileFreezeAcceptances.kt`, `app/.../nas/NasGraph.kt` (`EmergencyStop`), `core-library/.../data/CatalogTimelineRepository.kt` e
+`.../store/SnapshotStore.kt` (R11), `core-designsystem/.../sheet/GalleryConfirmSheets.kt` (il parametro `title`, DP-6), `app/src/debug/.../widget/*` (NA-2),
+`app/.../navigation/NasNavigation.kt` e `AppNavHost.kt` (ED-1). **Per chi unisce i pacchetti:** `HiddenSurfaces.kt`, `HiddenProbes.kt` e `RepoFiles.kt`
+(righe nuove accanto a quelle di A e D), `UtilityGraph`/`UtilityModule` (parametri nuovi) e `AppNavHost` possono dare conflitti di testo; i numeri
+C75-C80 e L160-L165 di `docs/sicurezza.md` sono riservati a questo pacchetto.
+
+**Da provare sul telefono (sono le prove di F73, F76-F78 con i punti nuovi; nessuna e' stata fatta, niente `adb` in questo pacchetto)**
+- **F73 (R4, ED-1, NA-1)**: un video nascosto grande sul NAS di prova: Raccolte → Cartelle NAS → Spazio, e Cestino (con quel video nel cestino del NAS):
+  `uiautomator dump` senza nessun nome; il Cestino apre Eliminati di recente e chiede lo sblocco dei Nascosti.
+- **F76 (R5, R18, DP-1, DP-2, DP-3)**: lo stesso file in due cartelle di `test` (aspettare la notte o il lavoro di sicurezza del backup per l'hash completo,
+  la pagina dice "sto controllando"): gruppo proposto; poi dal PC togliere la copia "da tenere" e toccare "Elimina": nessun gruppo parte; un file dell'area
+  comune che e' un elemento di un album condiviso: non viene proposto; dopo "Elimina" la pagina non ripropone le stesse copie; copia del telefono
+  sovrascritta dopo la scansione (stesso nome, altri byte): non va nel cestino.
+- **F77 (DP-4, DP-6, DP-7)**: una raffica fatta oggi: i Simili compaiono all'apertura o dicono "stanotte"; titolo del foglio con copie e GB; ruotare lo schermo
+  durante "Elimina": il dialogo di sistema per il telefono arriva lo stesso.
+- **F78 (ED-2)**: Eliminati di recente con una voce del NAS senza record, o col NAS spento, "Ripristina": un avviso, non il silenzio.
+- **NA-2**: riavviare il processo (kill dell'app), aspettare l'aggiornamento del widget di prova: ha celle, non e' vuoto.
+- **R10**: segnare perso un dispositivo di prova e riaccenderlo: i dati locali spariscono anche se lo stato fidato e' bloccato (non riproducibile a mano: copre il test).
+
+## Fase 8 P11: valutazione e calibrazione delle persone (29/10)
+
+Il pacchetto P11 della Fase 8 (`docs/fase8-progetto.md` §4.4, riga P11; §5.3, §2.5, §5.2, §7, §11 Q4). Branch `fase8/p11`, partito da `main` (`4eb7c20`, con P0–P7 e P9). Consegna le **metriche** della
+qualità delle persone, la **regola di scelta delle soglie** del §2.5 scritta in codice e provata, lo **strumento solo debug** "Valutazione delle persone" con le due sessioni del §5.3 (il legame col grafo
+vero lo fa P13), l'**elenco dei ritratti di pubblico dominio** con le licenze e il **generatore delle composizioni** per i casi E-F3, E-F15 e i volti piccoli. Nessuna dipendenza nuova, nessun file di
+build toccato. **Q4**: la misura sui dati veri la farà l'utente più avanti (F105) e non blocca la fase; le soglie di `GroupingParams` **restano quelle provvisorie** e qui sono dichiarate, con i numeri del set
+pubblico e di quello sintetico.
+
+### Cosa c'è
+
+| Dove | Cosa |
+|---|---|
+| `core-faces/src/test/.../eval/` | le etichette (`FacesEvalLabels`: formato `MCGFAC01`), la scelta dei gruppi e dei volti (`FacesEvalSampling`), le metriche (`FacesEvalMetrics`) e la regola delle soglie (`FacesEvalThresholds`): codice **puro** con le sue prove (`FacesEval*Test`, `NoPrivateFacesEvalInGitTest`), il banco `FacesEvalKit` (famiglie sintetiche, utente ideale, errori messi apposta) e `osservazioni-pubbliche.tsv` (risorsa: solo numeri) |
+| `app/src/debug/.../debugtools/eval/faces/` | la **copia identica** dei quattro file puri (cambia solo la riga `package`: `FacesEvalSourceParityTest` lo controlla, come per la ricerca e per gli album) e lo strumento: porta (`FacesEvalEnvironment`), sessione (`FacesEvalSession`), negozio dei file (`FacesEvalStore`, con `StateFiles`), schermate e testi |
+| `app/src/debug/.../DeveloperTools.kt` | **la sola voce d'ingresso** (la rotta e la riga di Impostazioni → Sviluppo, dopo quella degli album); `src/release` non cambia |
+| `app/src/testDebug/.../eval/faces/` | banco sintetico (`FacesEvalTestRig`), sessione, schermata (Robolectric), screenshot, azzeramento, parità dei sorgenti |
+| `tools/fixtures/faces/` | `ritratti.tsv` (35 ritratti: etichetta `ritratto-NN`, soggetto, fonte, licenza, impronta), `controlla_ritratti.py`, `compose_casi.py`, `misure_pubbliche.py`, `LEGGIMI.md` |
+| `tools/check.ps1` | una riga: lo strumento (classi, porta, `persone.mcgfac`, `MCGFAC01`) non deve comparire nel dex di release |
+| `.gitignore` | `*.mcgfac`, `persone-veri*`, `eval-volti-privato/`, le immagini sotto `tools/fixtures/faces/` |
+
+**Le prove** (122 test nuovi: 81 in `core-faces`, 41 in `app`; tutti verdi sulla JVM, Robolectric per le schermate)
+| Prova | Cosa |
+|---|---|
+| `FacesEvalLabelsTest` (10) | il file `MCGFAC01` va e torna; un file rovinato o ostile (riga sconosciuta, id non valido, gruppo o sessione doppi, un volto senza gruppo, un collegamento a se stesso) dà un errore con il **numero** della riga e mai il contenuto; nessun id o posto in un `toString()` |
+| `FacesEvalSamplingTest` (14) | 40 gruppi senza ripetizioni, tutti se sono meno; il seme dà sempre la stessa scelta; il peso alla dimensione (con 20 gruppi da 200 volti e 280 da 3, in 200 prove ne entrano in media più di 14 dei 20 grandi); sessione 2: tutti se sono ≤ 80, altrimenti tutti i nominati più un campione fino a 80; 60 volti più i 10 meno simili, i 10 sono davvero i più bassi |
+| `FacesEvalMetricsTest` (13) | purezza, errori per volto, gruppi misti, frammentazione (catene, legami a un gruppo non guardato), copertura e piano B, intervallo di Wilson (38/40: 83,5%–98,6%): numeri contati a mano |
+| `FacesEvalThresholdsTest` (22) | la regola a mano: la soglia più bassa che tiene la purezza, la scelta congiunta con il margine, i WEAK, mai sotto la partenza, "non raggiungibile", piano B, le nascite (anche con i gruppi misti), due volti della stessa foto mai nello stesso gruppo |
+| `FacesEvalSyntheticTest` (7) | le metriche contro la verità su famiglie sintetiche con errori messi apposta (volti di un'altra persona spostati in un gruppo, un gruppo diviso in due, un gruppo misto) e contro `GroupingMath.averageLinkage` su 360 casi (la copia del legame medio dello strumento dà gli stessi esiti) |
+| `FacesEvalCalibrationTest` (4) e `FacesEvalPublicSetTest` (5) | la regola provata sul set sintetico e sul set pubblico (sotto) |
+| `NoPrivateFacesEvalInGitTest` (6) | git: nessun file di etichette, nessuna immagine sotto i percorsi dello strumento, nessun nome di chi è ritratto nei nomi dei file o nei sorgenti; il `.gitignore`; il controllo vede le violazioni su file veri |
+| `FacesEvalSessionTest` (15) | la scelta si ritrova riaprendo lo strumento; un volto ricalcolato con il riquadro un po' spostato resta segnato (D23); "Gruppo misto"; i numeri dell'utente ideale = la verità; sessione chiusa; **un media nascosto non esce mai** dalla porta; resoconti numerati; file rovinato; le soglie proposte da gruppi formati con soglie larghe |
+| `FacesEvalScreenTest` (4) | Robolectric: senza porta "non collegate"; le due sessioni; un gruppo si apre, un tocco segna un volto (e si salva), un secondo lo rimette giusto; "Gruppo misto"; "È la stessa persona di …" |
+| `FacesEvalSourceParityTest` (7) | le copie dei quattro file puri sono uguali; nessun log, rete, `core.faces.` o contratto dei nascosti nello strumento; ogni scrittura passa da `StateFiles`; niente nella release; l'aggancio per P13 è dichiarato |
+| `FacesEvalErasableTest` (3) | le etichette stanno in `noBackupFilesDir/eval/faces/`, l'azzeramento le toglie, il tasto "Cancella" non tocca le altre valutazioni |
+| `FacesEvalScreenshotTest` (12) | gli screenshot (sotto) |
+
+### Le metriche (sessione → numeri; mai id, posti o nomi)
+
+Lo strumento mostra, per ogni gruppo scelto, i volti; l'utente tocca quelli che **non** sono di quella persona ("non è lui") oppure dice "Gruppo misto"; "Sono tutti giusti, ho finito" chiude un gruppo senza errori;
+"È la stessa persona di un altro gruppo" lega due gruppi. Un gruppo conta nei numeri solo se l'utente l'ha guardato (ha toccato un volto, o ha detto "giusto" o "misto").
+- **Purezza dei gruppi** = gruppi guardati senza nessun volto sbagliato e non misti / gruppi guardati (§5.3); con l'**intervallo di Wilson al 95%** (con 40 gruppi è largo: 38 su 40 = 95%, da 83,5% a 98,6%).
+- **Errori per volto** = volti toccati / volti guardati, sui gruppi non misti (un gruppo misto non dice quali volti sbagliano: conta fra i gruppi sbagliati e a parte).
+- **Frammentazione** = gruppi per persona vera: i gruppi legati da "è la stessa di …" (in un verso o nell'altro, anche a catena) sono una persona; è la media dei loro gruppi sulle persone che hanno almeno un gruppo guardato.
+  1,00 = nessuna persona divisa. Si dice anche quanti gruppi guardati sono divisi.
+- **Copertura** = volti CORE in un gruppo / volti CORE mostrabili, fotografata all'inizio della sessione (anche i WEAK, a parte). Sotto il 50% dei volti CORE: **piano B del modello** (§7).
+- Obiettivi (`EvalTargets`): purezza ≥ 97% per la misura, ≥ 98,5% per la calibrazione, copertura CORE ≥ 50%.
+
+### La regola di scelta delle soglie (§2.5, scritta prima di vedere i dati veri)
+
+`FacesEvalThresholds.choose` parte dalle osservazioni della sessione 1 (per ogni volto mostrato: la somiglianza al suo gruppo, quella alla seconda persona, "è lui" o "non è lui") e dai coseni a due a due dei
+volti CORE di ogni gruppo. Un volto **entra** in un gruppo se `s ≥ T_join` (`T_join_weak` per i WEAK) e `s − seconda ≥ M`; un gruppo è **puro** se nessun volto segnato avrebbe ancora potuto entrarci.
+1. **`T_join` e `M`, insieme**: fra le coppie che tengono la purezza dei volti CORE ≥ 98,5%, quella che trattiene più volti giusti; a parità la `T_join` più bassa, poi la `M` più bassa. (A `M` fissa è il
+   "valore più basso che tiene la purezza" del §2.5; la scelta congiunta evita di alzare `T_join` per un errore che un margine più largo toglie da solo: fratelli e gemelli, E-F1.)
+2. **`T_join_weak`**: il valore più basso, non sotto `T_join` né sotto quello di partenza, che tiene la purezza di tutti i volti ≥ 98,5%.
+3. **`T_birth`**: il valore più basso per cui **nessuna persona nasce mista**: i volti CORE di ogni gruppo guardato, raggruppati con il legame medio (archi fra foto diverse, mai due volti della stessa foto
+   insieme, nasce chi ha almeno 3 volti), non mettono mai insieme un volto giusto e uno sbagliato. Un gruppo dato per **misto** (è proprio una persona nata mista) vale così: a quella soglia i suoi volti CORE non
+   devono restare quasi tutti in un gruppo solo (il più grande ne tiene meno dell'80%). `T_edge` segue `T_birth` con lo scarto che avevano (0,03).
+4. **Mai sotto le soglie di partenza**: i volti che con quelle non sono entrati in nessun gruppo non si vedono nella sessione 1, quindi la regola può alzare le soglie (si perde copertura, non purezza) e non
+   abbassarle.
+5. Se nemmeno `T_join` 0,90 e `M` 0,20 (o `T_birth` 0,90) tengono il 98,5%, la proposta dice **non raggiungibile**; se la copertura stimata dei volti CORE (copertura di adesso × quota dei volti giusti che
+   restano dentro) scende sotto il 50%, dice **piano B**.
+`T_merge`, `T_suggest` e `T_eject` non si scelgono qui: servono le risposte alle proposte "È la stessa persona?" e agli espulsi, che la sessione 1 non raccoglie (restano come da §2.5, provvisori).
+
+### La regola sul set sintetico (famiglie di vettori inventati, `FamilyStories` di P5)
+
+Un utente ideale che conosce la verità compila la sessione 1 (mai più di 70 volti per gruppo, come lo strumento), la regola propone le soglie, il raggruppamento si rifà con quelle.
+Le soglie di partenza del banco sono volutamente **larghe** (`T_join` 0,30, `T_join_weak` 0,40, `M` 0, `T_edge` 0,30, `T_birth` 0,33): sotto quelle di progetto, perché la regola vede solo i volti entrati
+e con le soglie di progetto sul sintetico non ci sono errori da correggere (P5: purezza 100% sulle famiglie tipiche). Le famiglie hanno 2–3 coppie di fratelli (centri a coseno 0,6), bambini che crescono, volti
+deboli (20%), sconosciuti, video e specchi; i gemelli (E-F1, centri a 0,8) a parte.
+| Insieme | Purezza dei gruppi dalla verità, prima → dopo le soglie proposte | Sul set di calibrazione | Note |
+|---|---|---|---|
+| 24 famiglie con fratelli (14–23 identità, 260–379 foto) | **95,8%** (436/455) → **98,0%** (448/457) | 97,8% → 100% in media (100% in tutte con la proposta); persone nate miste 5 → 0 | la regola cambia le soglie in 9 famiglie su 24 (`T_join` fino a 0,61, `M` fino a 0,09, `T_birth` fino a 0,41); copertura dei volti CORE raggruppabili 0,997 → 0,996 (minimo 0,969); in media si tiene il 96% dei volti giusti |
+| 12 famiglie con una coppia di gemelli | 93,9% → 97,4% | 100% quando "raggiungibile" | piano B in 1 famiglia su 12: per togliere gli errori dei gemelli servirebbe una soglia che perde i due terzi dei volti (E-F1: i gemelli si dividono a mano) |
+| 12 famiglie tipiche, soglie di progetto | non cambia | — | la regola non cambia niente in 12 famiglie su 12 (purezza già ≥ 98,5%, nessuna persona nata mista) |
+La purezza dopo le soglie è sotto il 100% del set di calibrazione per tre ragioni dichiarate: i volti che la griglia non mostra (oltre 70 per gruppo), i gruppi dati per misti (non servono a scegliere le soglie
+di ingresso: contano per le nascite) e il ricalcolo, che cambia anche altro (unioni e nascite). Il banco scrive le cifre: `FacesEvalCalibrationTest` (`println`).
+
+### La regola sul set pubblico (ritratti di pubblico dominio, SFace vero)
+
+`tools/fixtures/faces/misure_pubbliche.py` passa da SFace (ONNX fp32 di P1: stesso vettore del `.tflite` float16, coseno ≥ 0,999995) i volti dei ritratti a piena risoluzione e quelli incollati nelle composizioni
+A e B di P1 (497 volti di 19 persone: 178 CORE, 319 WEAK) e scrive **solo numeri** in `core-faces/src/test/resources/.../eval/osservazioni-pubbliche.tsv` (2.608 righe: gruppo, livello, somiglianza al gruppo
+come la calcola il raggruppamento, somiglianza alla seconda persona, "è davvero lui"). Una persona è un gruppo; per i volti della stessa persona gli esemplari non includono il ritratto da cui il volto viene (una copia
+più piccola dello stesso dipinto non conta come "stessa persona").
+| Coppie di volti di ritratti diversi | n | media | mediana | 95° percentile | 99° | massimo |
+|---|---|---|---|---|---|---|
+| stessa persona, CORE (autoritratti a età diverse) | 893 | 0,413 | 0,425 | 0,576 | 0,603 | 0,622 |
+| stessa persona, WEAK | 2.083 | 0,382 | 0,416 | 0,539 | 0,579 | 0,623 |
+| persone diverse, CORE | 14.340 | 0,211 | 0,217 | 0,375 | 0,446 | 0,531 |
+| persone diverse, WEAK | 46.824 | 0,218 | 0,217 | 0,392 | 0,465 | 0,563 |
+Con la soglia 0,363 della demo di SFace (verifica, non raggruppamento, §2.5) **4.702 coppie di persone diverse su 61.164 (7,7%)** la superano e **965 coppie "stessa persona" su 2.976 (32%)** stanno sotto: sui dipinti
+SFace non separa bene (i ritratti dello stesso pittore a vent'anni di distanza sono molto diversi) e per raggruppare servono soglie più severe, come dice il §2.5.
+La regola (`FacesEvalPublicSetTest`, 19 gruppi, nessuna nascita: il file non ha coseni a due a due): con le soglie di partenza la purezza è **89,5%** (17 gruppi su 19); la regola propone **`T_join` 0,51**
+(`T_join_weak` 0,55, `M` 0,06 invariati) e con quella la purezza è 100% tenendo il **29,7%** dei volti giusti (il 62% dei 105 volti CORE giusti, il 10% dei 168 WEAK). Sotto 0,51 basta un volto sbagliato per rendere impuro un gruppo:
+la curva è 89,5% a 0,45, 94,7% a 0,50, 100% da 0,51 in su. Non è una soglia da adottare: su dipinti tutto sta più in basso, ed è il motivo per cui la misura che conta è quella sui volti veri (F105).
+
+### I ritratti e le composizioni (`tools/fixtures/faces/`)
+
+- **L'elenco** (`ritratti.tsv`): i 35 ritratti scaricati da P1 (Wikimedia Commons, «Public domain» e «Copyrighted: False» nei metadati: riproduzioni fedeli di dipinti antichi, PD-Art), con etichetta `ritratto-NN`, soggetto
+  (`sNN` = una persona, `mNN` = una scena; lo stesso `sNN` è la stessa persona in anni diversi, E-F2), pagina di Commons, licenza, dimensione e SHA-256. Chi è ritratto e chi ha dipinto sta **solo** nella colonna
+  `nomi` dell'elenco, che serve alla guardia di `NoPrivateFacesEvalInGitTest`: nessun nome nei nomi dei file né nei sorgenti dello strumento e dei suoi test. `controlla_ritratti.py --root <root>` ha controllato le 35
+  immagini di P1 contro l'elenco: tutto a posto.
+- **Il generatore** (`compose_casi.py`, 34 immagini da 1024 px in `<root>/out/p11/`, fuori dal repository; due esecuzioni danno gli stessi byte, SHA-256 uguali su tutti i 35 file; seme `20261029`). Riusa `compose.py`
+  di P1 (volti nitidi con il consenso dei due YuNet, sfondi senza volti, incollatura sfumata) e aggiunge i casi che quello non ha:
+  | Serie | Immagini | Volti di verità | YuNet (ONNX a 1024 px) trova | Cosa prova |
+  |---|---|---|---|---|
+  | `tv` | 8 | 12 (8 sulla TV, 4 persone accanto) | 11, 1 riquadro in più | E-F3: il volto dello schermo viene trovato e formerebbe una persona: "Ignora questo volto" |
+  | `doppia` | 8 | 16 (8 persone, 4 nello specchio, 4 nella foto incorniciata) | 16 su 16 | E-F15: la stessa persona due volte nella stessa foto, una sola entra |
+  | `collage` | 6 | 38 | 38 su 38 | E-F15, E-F2: 4, 6 o 9 riquadri con ritratti degli stessi soggetti |
+  | `piccoli` | 12 | 66 (da 3 a 8 per immagine, lato 24–60 px) | 63, 2 riquadri in più | E-F13, E-F14: volti piccoli su sfondi diversi (le serie A e B di P1 coprono 24–160 e 24–47 px) |
+  `verita.json` ha per ogni volto il ruolo (`persona`, `tv`, `specchio`, `foto-nella-foto`, `collage`), il ritratto di origine, il riquadro e i cinque punti. Le immagini non entrano nel repository (`.gitignore`, guardia su git).
+
+### Le soglie restano quelle provvisorie (Q4, L97, L210)
+
+**Nessuna costante di `GroupingParams` è stata cambiata.**
+| Parametro | Valore | Perché non si tocca | Come si ricalibra (F105) |
+|---|---|---|---|
+| `T_JOIN` / `T_JOIN_WEAK` | 0,45 / 0,55 | sul sintetico, con le soglie di partenza, la regola non cambia niente e la purezza resta ≥ 98,5% (P5: 100% sulle famiglie tipiche); sul set pubblico (dipinti) la regola chiederebbe `T_join` 0,51 tenendo il 30% dei volti giusti, ma è un risultato dei dipinti e non delle foto: cambiare la soglia di tutta l'app su quello costerebbe copertura vera senza una prova | sessione 1 → "Soglie proposte" |
+| `MARGIN` | 0,06 | come sopra | come sopra |
+| `T_EDGE`, `T_BIRTH` | 0,45, 0,48 | come sopra | "nessuna persona nata mista" sulla sessione 1 |
+| `T_MERGE`, `T_SUGGEST`, `T_EJECT` | 0,52, 0,40, 0,32 | la sessione 1 non raccoglie i dati per sceglierli | la misura vera (proposte giuste ≥ 1 su 2, nessuna unione sbagliata, ≤ 2% di volti giusti espulsi) |
+
+### Passi per l'utente (F105, circa 40 minuti in due momenti, sul telefono; Q4: quando ha tempo)
+
+0. **Prima**: build debug dell'S25 con P13 integrata (la porta legata) e Persone attiva (con la recinzione tutto resta sul telefono); il primo calcolo finito (la sezione Persone non mostra più la percentuale).
+   Se la schermata dice "le persone non sono ancora collegate allo strumento", manca il legame di P13.
+1. **Impostazioni → Sviluppo → "Valutazione delle persone"** (è la sezione che il progetto chiama "Diagnostica → Sviluppo": la voce sta nello stesso gruppo delle altre valutazioni, dopo quella degli album).
+2. **Sessione 1, calibrazione (~20 minuti)**: "Inizia" sceglie 40 gruppi (tutti se sono meno) e li elenca dal più grande. Per ogni gruppo: tocca i volti che non sono di quella persona (diventano rossi, si salva a ogni
+   tocco); i dieci in fondo sono i meno simili al gruppo; "Sono tutti giusti, ho finito" se non ce ne sono; "Gruppo misto" se è un pasticcio; "È la stessa persona di un altro gruppo" se la vedi in un altro gruppo.
+   Si può smettere e riprendere: la scelta dei gruppi e i tocchi restano.
+3. **"Soglie proposte dalla sessione 1"**: la regola del §2.5. Se propone valori diversi, si scrivono nelle cinque costanti di `GroupingParams` (`T_JOIN`, `T_JOIN_WEAK`, `MARGIN`, `T_EDGE`, `T_BIRTH`; riferimento e
+   nucleo le leggono da lì), si ricostruisce, si installa e si chiede un **ricalcolo completo** (`FaceGrouping.recluster`: gli id si ereditano per volti in comune, nomi e correzioni restano) aspettando che finisca.
+4. **Sessione 2, misura (~20 minuti)**: "Inizia" (tutti i gruppi se sono al più 80, altrimenti quelli con un nome più un campione fino a 80), stessa griglia. "Numeri della sessione 2" dà la purezza con il suo
+   intervallo; l'obiettivo è **≥ 97%**.
+5. Se manca: soglie più severe (si perde copertura, non purezza): "Ricomincia da capo" nella sessione 1 e di nuovo i passi 3 e 4. Se anche così la copertura dei volti CORE scende sotto il 50%: piano B del modello
+   (§7: AuraFace, 261 MB, **solo dopo aver avvisato l'utente**; la scelta torna all'utente se cambiano peso o host, Q1).
+6. **Cosa esportare: solo i numeri.** I resoconti `report-NN.txt` (nella schermata, o `adb exec-out run-as dev.pampa.mycloudgallery.debug cat no_backup/eval/faces/report-01.txt`) si copiano qui, in una
+   sezione "Misura sui dati veri (F105)". Mai le etichette (`persone.mcgfac`: posti di volti veri), mai schermate di volti.
+7. **A fine misura**: "Cancella etichette e resoconti" (o l'azzeramento dell'app: `eval/` lo toglie).
+
+### Gli agganci per P13
+
+- **La porta**: `FacesEvalEnvironmentHolder.current = <implementazione di FacesEvalEnvironment>` dove l'integrazione monta il grafo delle persone (di norma `DeveloperTools.installSearch(...)`, accanto a quelle della
+  ricerca e degli album), in `app/src/debug/.../eval/faces/` (serve `core-faces` fra le dipendenze di `:app`: `FacesEvalEnvironment` parla solo con tipi di `core-model` per questo). Senza, la schermata dice "non collegate".
+- **Come costruirla** sopra le porte che ci sono: `groups()` da `People.list.named` più `People.others()` (con Q2 (b) "Altri volti"), l'id risolto dagli alias, conti e foto dalle carte; `faces(group)` da
+  `PersonFaces.reviewFaces(group)` (P9: solo di celle mostrabili, D28) con `score` (`s(f, P)`: la media dei 3 coseni più alti con gli esemplari) e `second` (la stessa verso la seconda persona) calcolati con i vettori di
+  `FacesArchive.groupFaces()` e gli esemplari di `GroupingState`; `cosines(faces)` dagli stessi vettori (n × n, mai fuori dalla porta); `totals()` da `groupFaces()` (livelli CORE/WEAK) e `grouping().assignments`,
+  solo media mostrabili; `thresholds` da `GroupingParams.DEFAULT` (o da quello che l'app usa); `crop(face)` da `PeopleCrops.crop` (P9) in un `ImageBitmap`.
+- **Contratto da rispettare** (scritto nel file della porta): mai un volto di un media nascosto, nemmeno nei conteggi; i volti NONE assenti; nessun log; sola lettura.
+- `DeveloperTools` (debug) ha già la rotta e la riga; la release non ha niente (`FacesEvalSourceParityTest` e il passo del dex di `tools/check.ps1`).
+
+### Screenshot (`docs/screenshots/8-P11/`, telefono 412 dp, chiaro e scuro; solo dati sintetici)
+
+12 PNG di `FacesEvalScreenshotTest` (`gradlew :app:recordRoborazziDebug --tests "*FacesEvalScreenshot*"`): la pagina di partenza a metà lavoro (sessione 1 con 5 gruppi su 9 guardati, sessione 2 appena cominciata; anche
+col testo a 1,3×), l'elenco dei gruppi della sessione (da guardare, giusto, con volti sbagliati, misto, "stessa persona di un altro gruppo"), un gruppo con la griglia dei volti (due segnati, uno fra i dieci meno simili; anche
+col testo a 1,3×), "È la stessa persona di un altro gruppo" e il resoconto dei numeri. **Nessun volto**: la famiglia è fatta di vettori inventati e i ritagli sono sagome astratte colorate per identità.
+Scelte da far vedere all'utente: la griglia ha quattro colonne (i volti sono piccoli) con bersagli di circa 95 dp; un volto segnato ha un velo rosso e una croce nell'angolo (si vede anche con un ritaglio chiaro) e la
+descrizione per TalkBack dice "Volto 5 di 70, segnato come non suo"; i dieci meno simili stanno in un blocco a parte in fondo; i gruppi si chiamano "Gruppo 3", mai con un nome.
+
+### Punti aperti
+
+- **La misura vera non c'è (Q4, L210)**: purezza ≥ 97% e copertura CORE ≥ 50% sui volti veri sono obiettivi, non risultati; tocca all'utente, più avanti (i passi sopra). Fino ad allora le soglie sono quelle provvisorie.
+- **Lo strumento non è ancora collegato**: `FacesEvalEnvironmentHolder.current` lo mette P13; senza, la schermata dice "non collegate". La schermata, la sessione, i numeri e le soglie sono provati sul banco sintetico
+  (`FacesEvalTestRig`: la stessa porta sopra `FastGrouping`), non sul grafo vero: la prova sul telefono è F105.
+- **La regola non può abbassare le soglie** (L214): vede solo i volti entrati nei gruppi. Se l'utente volesse sapere se `T_join` 0,45 è troppo alto, dovrebbe prima abbassarlo, ricalcolare e rifare la sessione 1.
+- **La regola non sceglie `T_merge`, `T_suggest`, `T_eject`**: serve il giudizio dell'utente sulle proposte "È la stessa persona?" e sugli espulsi; la sessione 1 non lo raccoglie. Una sessione 3 si può aggiungere senza toccare il resto.
+- **Con 40 gruppi la purezza è un numero largo** (L212): 38 su 40 non dicono "≥ 97%"; il resoconto mostra l'intervallo al 95% e l'obiettivo si legge con quello. Se la sessione 2 dà un valore al limite, si ripete con altri gruppi
+  ("Ricomincia da capo" prende un seme nuovo).
+- **I gruppi dati per misti** non entrano negli errori per volto (non si sa quali volti sbagliano) ma sono gruppi sbagliati nella purezza e servono alla regola delle nascite (a 80% di dominanza, scelta nostra: è nel
+  sorgente e nei test).
+- **Il set pubblico sono dipinti** (L213): non dice quali soglie valgono per le foto; dice solo che la regola gira su vettori veri e dà numeri coerenti. La separazione delle coppie è comunque un risultato utile per P1/P2:
+  con SFace sui dipinti la soglia di verifica 0,363 sbaglia il 7,7% delle coppie diverse e il 32% di quelle uguali.
+
+### Esito di `tools/check.ps1 -NoDaemon`
+
+**Verde** ("OK: tutto a posto", 27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, dopo aver tolto `app/build/outputs/apk/release`, sul codice di questi commit): assembleDebug, assembleRelease, galleryTest e galleryLint in
+917 s; **14.787 test in 39 moduli** (`core-faces` 531, `app` 913; nessun modulo a zero, nessun test fallito). Il passo del dex di release cerca ora **51 nomi** (7 nuovi: `debugtools/eval/faces`,
+`FacesEvalEnvironmentHolder`, `FacesEvalSession`, `FacesEvalEntry`, `FacesEvalStore`, `persone.mcgfac`, `MCGFAC01`) e non ne trova nessuno; **provato al contrario**: la stessa lettura del dex sull'APK di debug li
+trova tutti e sette. Nessuna classe `testing` nel dex di release; D34 e LiteRT come prima. Solo SKIP il banco su dispositivo (`-Bench`). Due corse: la prima verde prima di tre ritocchi grafici (un velo rosso sul
+volto segnato, il resoconto che va a capo invece di tagliarsi, singolare e plurale dei conteggi), la seconda sul codice finale e con gli screenshot rifatti.
+
+**Commit** (branch `fase8/p11`): `23d1a4d3` (metriche, scelta dei gruppi, regola delle soglie e le loro prove), `db3ced09` (ritratti e generatore delle composizioni), `1dafb30b` (strumento solo debug, controllo del dex di release,
+`.gitignore`) e quello di questi documenti e degli screenshot.
+
+## Fase 7, correzioni dopo le revisioni: pacchetto D (27/10)
+
+Le due revisioni di fine Fase 7 (`docs/review/7-fase7.md`, `docs/review/funzionale-7.md`) hanno assegnato al pacchetto D gli album smart, i viaggi, le
+Raccolte, "Aggiungi ad album" dalla ricezione e la Diagnostica. Qui sta cosa si e' deciso per ogni voce, dove non e' ovvio; il resoconto con le righe e i test
+e' nella risposta del pacchetto. Tutto sulla JVM (Robolectric, grafo vero dell'app, simulatore SMB): nessun telefono, nessun NAS vero.
+
+**Voci "plausibili" verificate prima di correggere.** AA-1, AP-1, AS-5, AS-6, AS-7, AS-9: tutte erano difetti veri (ognuna ha il suo test, rosso senza la
+correzione). Nessuna voce e' stata scartata. Due sono corrette solo in parte, per un confine di pacchetto o di dato (vedi "Aperto").
+
+**Una struttura sola per tenere al passo gli smart** (AS-1..AS-6, VG-1; `core-albums/.../upkeep/`). `SmartUpkeep` e `TripUpkeep` stanno in `core-albums`
+(non in `:app`) perche' cosi' si provano sulla JVM con Room vero e un orologio finto: in `:app` il legame con `AlbumsGraph` e' solo un collegamento. Il
+motore di P6 non cambia contratto.
+- **AS-1, AS-2.** `CatalogAlbums` e' ora il `SmartWorkSink` del motore: `smartWorkStarted` prima di un calcolo su uno smart senza righe,
+  `smartWorkFinished`/`smartRowsChanged` dopo; ogni fine rinfresca elenco e pagine. `AlbumsStatus` ha `Loading` (AP-1) e `Recomputing(0, 0)` vuol dire
+  "sto cercando, non so quante": la pagina non dice piu' "Nessuna foto corrisponde" e non scrive "0 di 0 guardate". Un `create` annuncia il lavoro
+  **prima** di `settle`, quindi la pagina non passa mai da "vuoto". Il segno "visto fino a" non si mette su uno smart che non ha ancora righe (`markSeen`),
+  altrimenti il primo riempimento diventava "Nuove: N".
+- **AS-3.** `ChangeBatcher`: un canale con accorpamento; cio' che arriva durante un giro non si perde e fa partire il giro dopo (prima: un indicatore
+  `pending` e un `touched` svuotato a meta').
+- **AS-4.** `SmartContentSearch.readyChanges` (da `readiness` del motore AI): al passaggio a "pronta" `searchReady()` rivaluta gli smart con descrizione o
+  esempi. Il primo valore (gia' pronta al montaggio) non rifa' niente: ci pensa `resumeAll`.
+- **AS-5.** Al montaggio `resumeAll()` valuta ogni smart una volta; un calcolo `Partial`, un errore o i giorni saltati dal budget restano in `unfinished`/
+  `skipped` e `drain()` li riprende a distanza (30 s fra un passo e l'altro, al piu' 40 passi), senza tenere fermo il giro del catalogo.
+- **AS-6.** Gli smart con descrizione e senza periodo (la ricerca per contenuto sull'intera Libreria) non si rifanno a ogni gruppo di novita': si rifanno
+  quando il catalogo sta fermo da 2 minuti (`Debouncer`).
+- **VG-1.** `TripUpkeep.poke()` dopo il montaggio e a ogni gruppo di novita' del catalogo: una ricerca dei viaggi dopo 1 minuto di calma, al piu' una ogni
+  10 minuti se non e' finita; la notte resta. `TripProposals` ha `searched` (falso finche' la ricerca non ha girato) e `TripsState.Searching`: la sezione non
+  dice "Servono foto con la posizione" prima di aver cercato. L'esito "cercato" sta nella memoria locale dei viaggi (`home_estimate`, riga `searched`, nessuna
+  coordinata) e sopravvive alla morte del processo. Una Libreria vuota non conta come "cercato".
+
+**R16: nessuna coordinata di casa nei dati personali.** Il centro di un luogo di uno smart e' la mediana delle foto proprie in quel luogo; per la citta' dove
+si abita e' la casa. Adesso (a) le foto a meno di max(5 km, raggio di casa) da una casa o da un luogo abituale non entrano nel calcolo del centro, (b) il
+centro scritto sta su una griglia di 0,1 gradi (~11 km: dice la citta', che il titolo gia' dice), (c) se tutte le foto sono a casa il centro si sposta sul
+punto della griglia piu' vicino e lontano da casa; il raggio non cambia. La casa non esce da `trips/`: l'interprete chiede a `HomeClearance`
+(coordinate in, "troppo vicino si'/no" fuori; `TripPrivacyTest` la ammette come unico nuovo tipo pubblico). Un album nato da un viaggio non scrive la
+regola del luogo se il suo cerchio conterrebbe la casa (resta il periodo). I titoli e i luoghi di una proposta si ricalcolano a **ogni controllo** delle
+proposte e a `accept`, sulle sole foto visibili: dopo un "nascondi" il titolo non porta piu' un luogo che solo le foto nascoste avevano, e `accept` rilegge
+prima di scrivere. La tabella pubblica dei titoli cambia di conseguenza in tre righe (il raggio dei titoli con piu' luoghi dipende dal centro: 141 -> 147,
+278 -> 283, 178 -> 181 km); nient'altro nella tabella cambia. La qualita' sui viaggi sintetici (§5.3) si sposta di quasi niente: le foto
+coperte sono 13.999 invece di 14.003 su 14.162 (copertura 98,88% -> 98,85%), sicuri e precisione (99,96%) uguali, soglie del 99% e del 95% rispettate (`SyntheticAlbumsEvalTest`,
+`TripFixtureExportTest`).
+
+**R17: fallire chiusi non e' "vuoto".** `VisibleMedia.visibleOrThrow` e `HiddenMask.hiddenAmongOrThrow` (di serie uguali alle versioni che non lanciano; il
+catalogo le implementa senza `try/catch`, quelle morbide le chiamano dentro un `try/catch`). Il motore degli smart e i viaggi usano quelle severe:
+un errore di lettura lancia (il motore non scrive niente, `SmartUpkeep` riprova) o da' "proposta non trovata" (casa e proposte restano), invece di scrivere
+zero righe o zero proposte. Il mondo finto (`FlakyWorld`, `StoryLibrary.failing`) fa lanciare la lettura in mezzo a un calcolo.
+
+**VG-2.** `TripId.startKey(kind, from)`: seconda impronta (SHA-256, nessun dato in chiaro) del solo giorno d'inizio di un **viaggio**; `dismiss` scrive
+anche questa e chi legge considera scartato un viaggio con la stessa impronta o lo stesso inizio. Un viaggio in corso, scartato e poi allungato, non torna.
+Per gli eventi non serve. `accept` crea l'album e fa `markAccepted` dentro `NonCancellable`: uscire dalla pagina a meta' non lascia un doppione.
+`NotFound` ora lo dice ("La proposta non c'e' piu'").
+
+**AS-7, AS-8, AS-9, AS-10.**
+- AS-7: `propose` e `preview` dell'editor dentro `try/catch` (la cancellazione si lascia passare): l'editor dice "anteprima non riuscita"
+  (`EditorProblem.PREVIEW_FAILED`) e lascia salvare le regole.
+- AS-8: il selettore delle foto d'esempio riceve `forAlbum = null` anche in modifica (il contratto lo dice); dopo "Salva le regole" `afterRulesSaved`
+  toglie l'editor dalla pila e apre la pagina solo se sotto non c'e' gia' quella dell'album: una pagina sola, un "indietro" solo.
+- AS-9: la cartella del backup per la regola B (`DeviceNormalizer`) e' una funzione letta a ogni uso (con una cache per valore); la proiezione dei dati
+  personali si chiede con `reconcileNow()` invece di aspettare 2 secondi.
+- AS-10: da congelato, "Aggiungi" scrive anche `accept:` oltre a `item:`; "Scongela" toglie solo gli elementi del congelamento (D16) e tiene le
+  aggiunte a mano. Provato su Room vero.
+
+**Raccolte (RC-1, RC-2).**
+- RC-1: la voce "Tutti gli album" c'e' sempre (con sei album o meno l'elenco intero, con l'ordine "Personalizzato", gli album lasciati e gli avvisi di chiusura,
+  non si raggiungeva); gli smart oltre il sesto hanno la voce "Tutti gli smart" (`smart/all`, stesso bersaglio dell'elenco intero). I codici delle voci
+  restano un elenco chiuso senza dati dell'utente.
+- RC-2: finche' una scelta (ordine, sezione nascosta) non e' nel registro dei dati personali **vale quella dell'utente**; la consegna fallita (disco pieno)
+  si ritenta ogni 15 secondi (al piu' 20 volte) invece di restare persa fino alla scelta dopo; la scelta cede il posto al registro solo quando il registro
+  l'ha riletta (se no per un attimo si vedeva il valore di prima). Le sezioni che non si nascondono mai (Album) e i codici sconosciuti non entrano da
+  nessuna parte, come nel registro.
+
+**"Aggiungi ad album" dalla ricezione (AA-1, AA-2, AA-3).**
+- AA-1: `IncomingAlbums.choices()` e' un flusso: la schermata di ricezione segue gli album **dopo** la prima lettura (con l'app chiusa si montano alcuni
+  secondi dopo l'arrivo dei file). `albums()` aspetta, al piu' 2 secondi, che gli album non siano piu' "in lettura" e poi risponde: la schermata non resta in
+  attesa. Una scelta che non c'e' piu' si lascia; una porta che lancia vale "nessun album in piu'", il salvataggio non ne dipende (D13).
+- AA-2: dalla scelta dell'album c'e' "Oppure un album nuovo" (nome, "Crea l'album"): `IncomingAlbums.create(title)` crea un album **a mano** (nessun file si
+  sposta, nessuna conferma da chiedere) e lo sceglie; il salvataggio resta quello di sempre ("Salva sul NAS" nella cartella scelta, con la sua conferma, piu' la
+  promessa). La voce "Aggiungi ad album" c'e' anche con zero album. Il nome e' un dato dell'utente: mai nei log.
+- AA-3: `PickRelay` (in memoria, per chi apre il selettore) distingue tre esiti. Richiamata viva: la scelta arriva. Richiamata persa ma selettore di "Aggiungi
+  foto" a un album (l'album e' nella rotta, che sopravvive): la scelta diventa la richiesta "Aggiungi ad album" con l'album gia' scelto (un personale riceve
+  subito, un condiviso apre la conferma col conteggio, D12). Richiamata persa e foto d'esempio di uno smart (stanno nello stato di una schermata che non c'e'
+  piu'): "La scelta non vale piu', riprova", invece del silenzio.
+
+**AP-1.** `AlbumsStatus.Loading` finche' gli album non sono montati o non e' chiaro che non lo saranno (15 secondi senza famiglia pronta: nessun NAS, nessuna
+famiglia); l'elenco vuoto con `Loading` mostra "in lettura", mai "Nessun album, creane uno". Con almeno un album l'elenco non torna in caricamento.
+
+**Diagnostica (DG-1, DG-2, DG-3, R22).**
+- DG-1: la ricerca per contenuto conta se e' **pronta** (`SmartContentSearch.ready`, modello e indice), non se il motore esiste (con Hilt c'e' sempre):
+  `SMART_NO_SEARCH` con il numero di smart che ne hanno bisogno, e solo con gli album montati.
+- DG-2: `DiagJob.ALBUM_SHARE` e `DiagJob.LIBRARY_MAINTENANCE`. `AlbumJobReports` (in `:app`, `work/`) registra l'esito di `ShareWorker` e di
+  `LibraryMaintenanceWorker` e, se lanciano, "lavoro fallito" (mai il messaggio); i due lavori registrano il motivo dello stop con `StopReports`, come gli
+  altri. L'Utility ha un contributo (`UtilityDiagnostics`, sezione Album) con `UTILITY_FULL_HASH` (acceso, guardati, in coda, ritirati, finito) e
+  `UTILITY_SIGNING` (firmati, in attesa, saltati, finito): la prova F76 ora ha dove guardare. Solo numeri e segni.
+- DG-3: il rifiuto di un contributo non sparisce al giro dopo: `rejected` e' il maggiore fra il resoconto dell'ultimo giro e il numero dei **segni di testa
+  rifiutata** nel database (`RoomAlbumReplicaStore.rejectedHeads()`, restano finche' il dispositivo non ne pubblica una buona: sopravvivono alla morte del
+  processo). `TRIP_NO_GPS` viene dalla memoria locale dei viaggi (`tripsSearched` e `tripsHomeKnown`), non dall'esito in memoria dell'ultima notte.
+- R22: la sezione Album esporta `manual`, `smart`, `shared`, `openShares`, `contributions`, `syncIncomplete`, `roundErrors`, `searchReady`, `tripsSearched`,
+  `tripsHomeKnown` e quelle dell'Utility (`enabled`, `scanned`, `withdrawn`, `signed`, `finished`) nell'elenco chiuso di `ExportKeys`. Sono numeri e segni; mai
+  titoli, cartelle, luoghi, casa, coordinate o id. Un test passa dall'esportatore vero e controlla che ogni valore arrivi nel file.
+- Codici **preparati per gli altri pacchetti** (note del coordinatore, A, B, C finiti): `ALBUM_REGISTRY_UNREADABLE` (registri della condivisione illeggibili,
+  `unreadable`, pacchetto A), `ALBUM_CONTRIB_HELD` (contributi tenuti da parte, `ReplicaHold`, A), `SHARE_PAUSED_CATALOG` (la pausa «catalogo» della porta di
+  completamento, B) nella sezione Album, e `NAS_WRITES_STOP_NOT_SAVED` (l'emergenza «Ferma le scritture» che non si e' potuta salvare su disco, C, R11) nella sezione
+  del NAS. Ci sono nel contratto (`AlbumDiag`), nel catalogo con titolo e guida e, per i tre degli album, come campi di `AlbumsFacts` con la loro riga (`count`,
+  chiavi gia' nell'elenco chiuso). **Non sono collegati**: il codice che li produce non e' in questo ramo, quindi restano a zero finche' chi unisce non li collega in
+  `AlbumsDiagnostics.facts()` (e `NasLibraryDiagnostics` per l'ultimo).
+
+**I7, I8, I11.**
+- I7: `toString()` esplicito, senza dati, su `AlbumRuleEntity`, `AlbumItemEntity`, `AlbumExclusionEntity`, `AlbumSuggestionEntity` e
+  `SharedAlbumHeadMarkEntity` (resta il tipo di regola o il codice del suggerito).
+- I8: l'impronta `trip_dismissed` resta uno SHA-256 senza segreto: e' il limite gia' dichiarato in L87 (e L170 aggiunge la seconda impronta del solo inizio). Il
+  controllo dell'account nella query dei doppioni (`AlbumQueries.kt`) e' del pacchetto C (Doppioni): non toccato qui.
+- I11: `Mount` (in `:app`, `albums/`) tiene il montaggio e lo stop sotto lo stesso lucchetto: `AlbumsGraph.stop()` aspetta un montaggio in corso, e un
+  montaggio che si accorge dello stop butta cio' che ha costruito e il suo ambito invece di pubblicarlo.
+
+**Aperto / confini di pacchetto.**
+- DG-3, "conteggio per motivo" (§2.8): il motivo di un rifiuto nasce in `NasSharedAlbumSync` (fiducia e replica: pacchetto A). Qui c'e' il conteggio durevole,
+  non la divisione per motivo.
+- I8, controllo dell'account nella query dei Doppioni: pacchetto C.
+- **Tetto agli album smart con descrizione** (richiesta del pacchetto A, R19): non fatto. Non e' una voce DG o R22 e serve una scelta di prodotto: quanti smart con
+  descrizione o foto d'esempio (ognuno costa una ricerca per contenuto sull'intera Libreria) e cosa succede agli altri, quelli creati qui e quelli arrivati da un altro
+  dispositivo. Proposta: un tetto in `SmartLimits` applicato da `CatalogAlbums.create`/`setRules` (esito nuovo dell'editor) e da `SmartUpkeep` (gli smart oltre il
+  tetto non si valutano e `SMART_NO_SEARCH`/`SMART_TOO_BROAD` lo dicono). Oggi `SmartUpkeep` li accorpa a catalogo fermo da 2 minuti (AS-6), che limita la frequenza,
+  non il numero.
+- Nessuna prova sul telefono: il percorso con l'app chiusa (AA-1), la morte del processo (AA-3) e la ricerca per contenuto vera (AS-4, AS-6, DG-1) si provano
+  solo li' (F88, F90, F92).
+
+## Fase 8 P8: "Disattiva e cancella" (29/10)
+
+Il pacchetto P8 della Fase 8 (`docs/fase8-progetto.md` §2.8 per intero, D29–D31, D35, E-F30–E-F35, riga P8 del §4.4). Ramo `fase8/p8`, da `integra/29-10c` (`c6768d8`, poi `4eb7c207` con la correzione dell'orchestratore). Consegna la cancellazione vera dei dati dei volti: il **diario** e i passi del §2.8 (`DefaultFacesEraser`), la **cancellazione locale** che P7 chiede con il recinto delle aperture (`FacesLocalErase`, `FacesEraseFence`), la **pulizia del NAS** che ogni dispositivo fa dopo il suo giro (`FacesNasJanitor`), la **cancellazione stretta sul NAS** e la pulizia dei propri file dei volti in `core-nasops` (`NasFacesEraser`, `FacesOwnFilesCleaner`), il **gancio prima di ogni pubblicazione personale** e il **ricordo delle teste** (`NasPersonalSync`, `PersonalHeadsRecord`), il **foglio e la pagina** in `feature-people`. Nessuna dipendenza nuova, nessun permesso, nessun componente Android, nessun host; `:app` non si tocca (i legami sono in "Cosa trova pronto P13").
+
+### Cosa c'è, dove
+- `core-faces/.../erase/`: `DefaultFacesEraser` (il `FacesEraser` di P0: `preview`, `erase`, `resume`, `status`) con `FacesEraseParts`; `EraseRemote` (passi 7–11); `EraseJournal`, `FileEraseJournalStore` e `EraseJournalCodec` (file `faces-erase`, con `StateFiles`); `FacesLocalErase` e `FacesEraseFence`; `FacesNasJanitor` e `FacesAccountFacts`; `EraseRules` (conferme, annuncio, E-F9, dispositivi, nomi, impronta dell'anteprima) e `FacesEraseCodes` (i codici di `core-nasops` letti in un posto solo); le porte in `ErasePorts.kt` (`FacesEraseIdentity`, `EraseAnnouncer`, `EraseStopWork`, `FacesLocalLeftovers`, `FacesLocalData` con `StoresLocalData` sopra `FacesStores` di P6).
+- `core-nasops/.../faces/`: `NasFacesEraser` (il `FacesNasEraser` di P0), `FacesNasTree` (il cammino stretto di `faces/<G>/`), `FacesOwnFilesCleaner` (`OwnFilesCleaning` per i file dei volti di questo dispositivo), `FacesNasWiring` (`FacesNasConfig` → `FacesNasServices`, l'unico punto dove una sessione del NAS diventa la cancellazione dei volti).
+- `core-personal/.../sync/`: in `NasPersonalSync` il gancio `prePublish`, il ricordo `heads` (con `headsView` e `lastHold`); `PersonalHeadsRecord` (la `PersonalHeadsView`, file `personal-heads` con `StateFiles`).
+- `feature-people/.../erase/`: `FacesEraseSheet` (foglio e pagina; **l'unico file che costruisce `FacesEraseConfirmation`**), `FacesEraseController` ed `EraseSheetStates` (la logica e lo stato `EraseSheetState` di P0), `EraseRoutes.kt` (`ErasePorts` opzionale, `FacesEraseViewModel`, `FacesEraseRoute`, `EraseText`); stringhe in `strings_faces_erase.xml`, tutte con il prefisso `faces_erase_`.
+
+### Decisioni: i passi sul dispositivo che cancella
+- **Il diario prima di tutto.** `erase` controlla la conferma (scaduta: `Expired`; impronta diversa dall'anteprima di adesso: `PreviewChanged`), poi scrive il diario (generazione, generazioni di una cancellazione precedente non finita, scelta sugli album, impronta, recinzione) **prima di qualunque effetto**. Se il diario non si scrive risponde `EraseStart.Unavailable` (nuovo nel contratto di P0) e niente è stato toccato. Ogni passo segna il suo campo; il passo corrente è il primo non segnato (`EraseJournal.step`, contiguo). Un salvataggio che risponde con un errore dopo aver scritto si riconosce rileggendo il file: il passo non si rifà a vuoto, e se si rifà è idempotente.
+- **Il codice del diario è stretto** (`mcg-faces-erase 1`, righe `chiave=valore`, ogni campo obbligatorio, nessun campo in più): un diario che non si capisce è "illeggibile", non si indovina. Illeggibile con il segno `erasing` acceso = si ricostruisce dal segno (la scelta sugli album torna "Tieni le foto"); illeggibile senza segno = si toglie (L196).
+- **Passo 2, stop.** Il segno `FacesLocal.erasing = G` in `faces-local` si scrive **prima** di toccare il negozio (come chiedono P6 e P7): l'interruttore dice `Erasing`, il calcolo (P4) e il pubblicatore (P3) si fermano da soli; `EraseStopWork` annulla i lavori al meglio. Dal momento in cui il diario esiste, `FacesEraseFence.block()` chiude le aperture degli archivi delle generazioni nominate.
+- **Passi 3 e 4, album e cronologia**, prima della cancellazione locale perché servono i dati dei volti. Tre tentativi, poi `SKIPPED` nel diario (L190): i dati biometrici non aspettano gli album. I nomi da togliere dalla cronologia sono quelli di **tutte** le voci `name` della generazione (anche i nomi vecchi, anche di persone unite o dimenticate), letti sotto il recinto.
+- **Passo 5, la voce** `off|G` con `FacesPersonalSettings.set`. Non sovrascrive una voce sconosciuta (E-F12: `erase` risponde `NothingToErase` e non tocca niente) né una `on` di una generazione nuova arrivata nel frattempo (E-F9, E-F33): in quel caso la voce di adesso dice già "non più G".
+- **Passo 6, locale**, sotto il recinto: `FacesLocalErase` toglie i nomi dalla cronologia, poi `FacesStores.eraseLocal` di P6 (**chiave per prima**, poi database e file), poi cache in memoria, modelli estratti e segni dei lavori (non quando la generazione cambia soltanto). Si cancellano **tutte** le generazioni sul disco tranne la corrente non cancellata. `LOCAL_DONE` solo se database e chiave non ci sono più; poi il segno `erasing` si toglie (`FacesLocal.EMPTY`, che toglie anche l'esclusione: §2.8 "a cancellazione finita").
+- **Passo 7, annuncio.** `EraseAnnouncer` chiede un giro dei dati personali; chi cancella **non si fida dell'esito**: la voce è uscita quando la propria testa ricordata (`PersonalHeadsView`) ha la voce di adesso ed è spenta, o accesa con una generazione non cancellata (`EraseRules.announcedAt`). Da lì l'ora del NAS `offAtNas`, che serve alle conferme.
+- **Passo 8, NAS.** `FacesEraseOps.eraseGeneration(G, USER_CONFIRMED)` a giri (al più 64 per ripresa, 20.000 file per giro); poi le generazioni non correnti che il NAS elenca (`NOT_CURRENT`), tranne quelle che una testa recente dice accese (E-F9, L194). Un giro con "altro da fare" e zero file tolti si ferma (nessun ciclo a vuoto); congelamento, sola lettura, salto dell'ora, emergenza e fiducia sono attese con il motivo (D35).
+- **Passo 9, verifica**, a ogni ripresa finché un dispositivo non ha confermato: se sotto `faces/<G>/` ricompaiono file (L139) la parte sul NAS torna da fare e si toglie di nuovo. Il cestino di rete (E-F34) dà `EraseWait.RECYCLE_BIN` finché la copia si vede, anche a lavoro finito (la pagina lo dice).
+- **Passo 10, conferme. Regola più stretta del progetto** (che dice "faces diversa da `on|G`"): un dispositivo ha cancellato solo se la sua ultima testa ha la voce `faces` **esplicita** (spenta, o accesa con una generazione non cancellata) **e non più vecchia** di `offAtNas`. Una testa senza la voce, con una forma sconosciuta, o scritta prima che la voce `off` uscisse non prova niente: un dispositivo che non ha ancora letto la voce potrebbe aver ricevuto i dati dopo. Revocati e persi non si aspettano (L95); i dismessi sì (L193). Mai dispositivi di un altro account (Q3).
+- **Passo 11, fine**: `DONE` con l'ora del NAS; il diario resta 30 giorni (contati sull'ora del NAS) per la pagina, poi si toglie.
+- **Recinzione (D34)**: passi 1–6 soltanto; la pagina dice "Non serve: niente sul NAS" e "cancellato da questo dispositivo". **Fuori casa (E-F30)**: passi 1–6 subito, il resto alla ripresa con il NAS. Un `erase` con una cancellazione precedente non finita la **assorbe** (le generazioni si sommano nel diario nuovo).
+
+### Decisioni: gli altri dispositivi (E-F32) e la pulizia guidata dai dati
+- **Il gancio di D30 in `NasPersonalSync`.** Dopo la lettura e subito prima di scrivere, `prePublish.beforePublish(statoUnito)` riceve lo stato che sta per uscire (non quello di prima). `Hold` = quel giro **non pubblica** (legge soltanto; esito interno `Held`, il prossimo giro riprova) e `lastHold` dice il codice per la Diagnostica; **un gancio che lancia vale `Hold("PRE_PUBLISH_FAILED")`**. Con il cancello chiuso (congelamento, sola lettura...) il gancio non si chiama: non si pubblica comunque. Lo stato del giro resta quello di prima (`UpToDate` se la lettura è finita): la pubblicazione rimandata non è un errore della sincronizzazione. `:app` lega il gancio a `FacesPrePublishHook(switch)` di P7, che esegue `reconcile`, cioè la cancellazione locale (chiave per prima): **la testa con `off|G` esiste solo quando i dati di `G` qui non ci sono più** (invariante 2).
+- **Il ricordo delle teste** (`PersonalHeadsRecord`, la `PersonalHeadsView` di P0). Si ricorda cosa dice la voce `faces` di una testa **solo se letta per intero** e senza voci dal futuro (le voci valide), e la propria **dopo** averla pubblicata; il ricordo si scrive **prima** del segno anti-rollback: se non si scrive, il segno non si salva e la testa si rilegge al giro dopo (mai un segno senza il ricordo). File `personal-heads` con `StateFiles` (formato `mcg-personal-heads 1`, voci in base64); un file rovinato vale "nessuna testa nota" (si aspetta di più, non si conferma di più: L197). Senza file (di serie) il ricordo vive solo nel processo.
+- **La pulizia di ogni dispositivo** (`FacesNasJanitor`, dopo ogni giro completo dei dati personali; §2.8 "Gli altri dispositivi", passo 3). Con lo stato **fresco** e una voce che capisce (`FacesAccountFacts`): `NOT_CURRENT` per ogni generazione sul NAS diversa da quella corrente (con l'account spento: tutte), **tranne** quelle che una testa recente dice accese (E-F9, un'ora d'ora del NAS, L194) e mai con il ricordo delle teste vuoto (dopo un'installazione nuova non si sa ancora chi ha detto cosa); `DEVICE_REVOKED` per le cartelle dei dispositivi revocati o persi **dell'account** nella generazione corrente (una volta per processo). Basta un dispositivo dell'account che torna a casa perché il NAS si pulisca (L95 resta per chi non torna mai).
+- **Il recinto delle aperture** (`FacesEraseFence`). `FacesStores.open()` di P6 crea chiave e database se mancano: un'apertura che arriva dopo la cancellazione li farebbe rinascere vuoti, e un dispositivo che pubblica dopo `off` violerebbe l'invariante 3. Il recinto apre un archivio solo se lo stato dice `activeHere` per **quella** generazione e nessun diario la nomina, e usa **lo stesso lucchetto** della cancellazione locale: un'apertura e una cancellazione non si intrecciano. `:app` passa ogni apertura degli archivi (calcolo, replica, pubblicatore, persone) da `fence.archives(...)`.
+- **Una voce falsa** (un dispositivo compromesso dell'account che scrive `off|G`, L99): fa cancellare i dati dei volti e i nomi (ricalcolabili, i nomi no: è il danno dichiarato) e niente altro; la cronologia perde solo i nomi della generazione; nessun media e nessun file fuori da `faces/` (provato).
+
+### Decisioni: il NAS (`core-nasops/.../faces/`)
+- **`NasFacesEraser`, prima di ogni giro**: la share deve essere l'area privata dichiarata e diversa dalla comune (altrimenti `NOT_PRIVATE_AREA`); il cancello di D35 composto da `:app` (un cancello che lancia vale `NOT_TRUSTED`); poi la regola di D31 con i fatti dell'account (`UNSURE` senza stato fresco o con la voce sconosciuta; `NOT_ALLOWED` per la generazione corrente, per un dispositivo non revocato, per un motivo sbagliato). Solo dopo si elenca.
+- **Il cammino è stretto** (`FacesNasTree`): si entra solo in `faces/<G>/`; le cartelle dei dispositivi devono avere un nome di dispositivo valido; si considerano solo i file che il formato dei volti riconosce (`FacesOwnFile.classify`: teste, segmenti, prenotazioni) **della generazione giusta**; tutto il resto si conta e non si tocca. Punti di rianalisi (collegamenti simbolici, giunzioni) mai seguiti né tolti; un'identità di file già vista (cicli, collegamenti fisici) si salta. Un file la cui identità il catalogo conosce come **media** non si toglie mai, anche sotto `faces/` (`CatalogPresence`). Si toglie con `deleteIfUnchanged` e il timbro letto: un file cambiato o aperto resta per il giro dopo. Se tutto ciò che resta è negato, `READ_ONLY`.
+- **Le cartelle vuote restano** (L191): le primitive di `core-nas` tolgono cartelle solo sotto i percorsi dei media e del cestino dell'app (`rmdirIfEmpty`, `parentIdentity`). Non contengono dati; la verifica conta i file. Richiesta a `core-nas` qui sotto.
+- **Verifica**: "presente" = un qualunque file dei volti (non media) sotto `faces/<G>/`; il cestino di rete si cerca nella radice dell'area privata con i nomi di `FacesEraseLimits.RECYCLE_BIN_DIRS` (`.recycle`, `.Recycle Bin`, `$RECYCLE.BIN`) e conta solo se contiene `.mycloudgallery/faces` (L195).
+- **`FacesOwnFilesCleaner`** (la pulizia dei propri file dei volti, P3 l'aspettava): solo nella generazione **corrente** e solo ciò che è di questo dispositivo (`FacesOwnFilesPolicy` di P3): teste superate verificate con la firma, segmenti che nessuna testa recente nomina e che il diario del pubblicatore non ha, generazioni di prenotazione superate e firmate da questo dispositivo. Le altre generazioni sono della cancellazione.
+
+### Decisioni: il foglio e la pagina (`feature-people/.../erase/`)
+- I testi del §2.8: «Cancella i volti e i nomi delle persone dal NAS e da tutti i tuoi dispositivi. Le foto non si toccano.», «Perderai i nomi di N persone», «N album smart usano le persone» con le due scelte (**«Tieni le foto di adesso come album normali» preselezionata**, «Togli solo la regola»), «Le ricerche recenti con i nomi si cancellano», i dispositivi dell'account con lo stato («Ha cancellato», «Non si fa vivo dal 3 novembre: cancellerà appena si riaccende», «Revocato o perso: non si aspetta»); con la recinzione «Le persone sono solo su questo dispositivo: si cancellano qui.» e una frase iniziale che non nomina il NAS («Cancella i volti e i nomi delle persone. Le foto non si toccano.»). Il giorno è in italiano come il resto della galleria e viene dall'ora del NAS della testa.
+- **La conferma nasce al tocco** di «Disattiva e cancella» (`FluidButtonStyle.Destructive`, l'unico pulsante di pericolo, a tutta larghezza sopra «Annulla»: affiancati, a 1,3x l'etichetta si spezzava e si tagliava) con l'impronta e l'istante del gettone dell'anteprima mostrata; senza anteprima o senza scelta il pulsante è spento. L'impronta non contiene l'ultimo contatto né lo stato dei dispositivi (un dispositivo che si fa vivo non fa scadere la conferma), ma contiene quali dispositivi si aspettano.
+- **Dopo**: l'avanzamento («Su questo dispositivo», «Sul NAS» con fatto/in corso/in attesa/non serve) con il motivo d'attesa (NAS, congelamento, ora saltata, sola lettura, scritture ferme, dispositivo non approvato, dispositivi, cestino di rete), i dispositivi, «Fatto ovunque», «Manca qualche dispositivo»; «Il riepilogo è cambiato» («… niente è stato cancellato») con «Rileggi il riepilogo» per `Expired`, `PreviewChanged`, `Unavailable` o un errore. Una cancellazione già in corso si mostra subito all'apertura.
+- **Accessibilità**: ogni pulsante dice cosa fa (`contentDescription`), le scelte sono `RadioButton` con lo stato «selezionato», avanzamento e messaggi sono regioni "live"; tutti i pulsanti sono Large; bersagli da 48 dp e nessuna sovrapposizione a 1x e a 1,3x in sei scene. Nessuna misura, colore, raggio o movimento scritto a mano, nessun log (`EraseStyleTest`).
+- Screenshot in `docs/screenshots/8-P8/`: otto scene (anteprima, anteprima con la recinzione, attesa del NAS, congelamento, cestino di rete, dispositivi mancanti, fatto ovunque, riepilogo cambiato) in chiaro e scuro, telefono e tablet, più il testo a 1,3x sul telefono (40 immagini; le quattro scene lunghe su uno schermo alto, per intero, come P7).
+
+### Prove (per edge case; i nomi sono quelli dei metodi)
+Tutte sulla JVM o Robolectric, nessun dispositivo. `core-faces` 35 nuove (`erase/`), `core-nasops` 19 nuove (più la suite di P0 sul vero), `core-personal` 9, `feature-people` 58 (di cui 40 scene degli screenshot).
+- **Il mondo delle prove** (`core-faces/src/test/.../erase/`): `EraseWorld` (un'area privata in memoria con media e file dell'app intoccabili, registro di famiglia, teste personali con l'ora del NAS, congelamento, cestino di rete) ed `EraseDevice` (un dispositivo con l'interruttore **vero** di P7, il recinto, `FacesLocalErase`, `DefaultFacesEraser`, `FacesNasJanitor` e il **pubblicatore vero** di P3; dati locali che registrano l'ordine chiave/file; diario che muore prima o dopo il salvataggio n). La cancellazione sul NAS del mondo applica la regola di D31.
+- **Ogni passo idempotente con la morte del processo** (E-F31): `EraseResumeTest.laMorteDelProcessoAOgniSalvataggioDelDiario` (per ogni salvataggio n, morte **prima** e **dopo** la scrittura, poi riavvio e ripresa: stesse conclusioni e invarianti, su due storie: tutto acceso, e un dispositivo spento che torna a cancellazione già fatta sul NAS); `unGuastoAOgniChiamataPrimaEDopo` (un guasto a ogni chiamata di ogni porta: diario, voce, stato locale, dati locali, cronologia, album, NAS, annuncio, teste, prima e dopo l'effetto). **`FaultPlan` a ogni richiesta SMB**: `NasFacesEraserSafetyTest.unGuastoAOgniRichiestaPrimaEDopo` (connessione caduta e errore del NAS, prima e dopo, sul simulatore con il gestore delle sessioni vero: si arriva sempre in fondo, mai un file in più).
+- **I sei invarianti come proprietà**: `EraseInvariantsPropertyTest.proprietaSuStorieACaso` (60 storie di 2–4 dispositivi, 120 passi ciascuna: attivazioni e riattivazioni, calcoli anche a metà di una cancellazione, nomi, pubblicazioni, giri, cancellazioni da un dispositivo qualunque, riprese, pulizie, dispositivi che vanno e tornano, morti del processo, congelamento, cestino, tempo; `EraseInvariants.check` dopo **ogni** passo, `final` alla fine; contatori di copertura obbligatori). Oltre ai sei: la cronologia di chi cancella dal gancio, e "un dispositivo che la pagina dice confermato non ha davvero più dati".
+- **Casi**: tutto acceso (`tuttoAccesoLaCancellazioneArrivaOvunque`); **dispositivo spento che torna, mai una pubblicazione di `G`** (E-F32: `unDispositivoSpentoCheTornaCancellaPrimaDiPubblicareENonRipopolaIlNas`, `FacesPrePublishSyncTest`, 5 prove con una proprietà: ogni testa uscita ha uno stato che il gancio ha approvato); dispositivo ancora fresco che ripubblica (L139: `unDispositivoAncoraFrescoCheRipubblicaVieneRipulito`); **calcolo in corso** (`unCalcoloInCorsoDuranteLaCancellazioneNonSalvaNienteDopo`); **fuori casa** (E-F30: `fuoriCasaLocaleSubitoIlNasAlRitorno`); **congelamento** (`colCongelamentoIlNasAspettaIlLocaleNo`); **generazioni non correnti e revocati** (E-F35, D31: `generazioniNonCorrentiERevocatiSiTolgono_iRevocatiNonSiAspettano`, `EraseGuardsTest.laPuliziaDiOgniDispositivo_generazioniNonCorrentiRevocatiEUnaTrattenutaPerE_F9`, `senzaStatoFrescoLaPuliziaNonParte`); **cestino di rete** (E-F34: `ilCestinoDiReteSiDiceFinoAQuandoNonSiSvuota`, `ilCestinoDiReteSiRiconosceConTuttiINomi`); recinzione (D34: `conLaRecinzioneSiCancellaSoloQui`); riattivazione (E-F33: `riattivareDopoDaUnaGenerazioneNuova_nienteDellaVecchiaTorna`); voce sconosciuta (E-F12); due attivazioni (E-F9: `EraseRulesTest.unaGenerazioneDettaAccesaDaUnaTestaRecenteNonSiTocca`).
+- **Mai fuori da `faces/`, mai un media**: `NasFacesEraserSafetyTest.proprietaMaiUnMediaMaiFuoriDallaRegola` (alberi a caso con media, file dell'app, file strani e file dei volti di più generazioni e dispositivi, sul simulatore SMB: ogni file tolto è sotto il bersaglio della regola e del formato, mai un media), `iFileStraniSottoLaGenerazioneNonSiToccano`, `unCollegamentoAUnaCartellaDiMediaNonPortaMaiLaCancellazioneSuiMedia` (punti di rianalisi a ogni livello), `unCollegamentoFisicoAUnMediaNonSiTocca`, `laGenerazioneCorrenteEUnDispositivoNonRevocatoNonSiToccanoMai`, `unFileApertoOCambiatoRestaPerIlGiroDopo`; la suite di P0 sul vero (`NasFacesEraserContractTest`, 7); l'invariante 5 nella proprietà di `core-faces`.
+- **Una voce falsa tocca solo dati dei volti**: `EraseGuardsTest.unaVoceFalsaToccaSoloDatiDeiVolti` (un dispositivo approvato e compromesso scrive `off|G`: si cancellano dati dei volti e nomi; media, file dell'app e ricerche senza nomi restano).
+- **Cronologia e album smart**: `cronologiaEAlbumSmart_soloINomiDiQuesteGenerazioni`, `RealStoreEraseTest` (Robolectric, il negozio vero di P6 con chiavi finte: chiave prima dei file, cronologia, nessun negozio che rinasce leggendo, il recinto sugli archivi veri, la recinzione), `EraseGuardsTest.laCancellazioneLocaleToglieLaChiavePerPrimaELaCronologia`.
+- **Conferma, anteprima, foglio**: `EraseGuardsTest.laConfermaScadeEPortaLAnteprimaMostrata`, `unaCancellazioneInCorsoNonRipartePrimaCheLaParteLocaleSiaFinita`, `ilRecintoNonRiapreUnaGenerazioneCancellataONonAttiva`; `FacesEraseControllerTest` (5), `FacesEraseSheetTest` (9: testi, conferma al tocco, pulsante spento, ogni motivo d'attesa, TalkBack, 48 dp a 1x e 1,3x, scuro), `EraseStyleTest` (4), `Phase8ArchitectureTest` (la conferma solo nel foglio).
+- **Diario, regole, teste**: `EraseJournalTest` (4), `EraseRulesTest` (5, compresa la conferma solo con una prova esplicita non più vecchia dell'`off`), `PersonalHeadsRecordTest` (4), `FacesOwnFilesCleanerTest` (2), `FacesEraseStopCodesTest` (i codici che `FacesEraseCodes` legge).
+
+### Cosa trova pronto P12 (banco delle interruzioni)
+- Il mondo JVM: `EraseWorld`, `EraseDevice`, `EraseKit`, `PortFaults` ed `EraseInvariants` (i sei invarianti del §2.8 più i due di P8) in `core-faces/src/test/.../erase/`, riusabili dal pacchetto `chaos/` dello stesso modulo per i 2.000 giri.
+- Il simulatore: `FacesSmbWorld` (`core-nasops/src/test/.../faces/FacesSmbKit.kt`): `InMemorySmbBackend` con il gestore delle sessioni **vero**, `FaultPlan`, registro delle operazioni che cambiano qualcosa, cestino di rete, media del catalogo; `FacesNasWiring.build` per lo strumento dal PC (`tools/chaos/faces-pc`) sul NAS di prova.
+- Le mutazioni di `ChaosMutationTest` hanno dove colpire: "dichiarare la cancellazione prima di farla" = il gancio ignorato in `NasPersonalSync.publish` (invariante 2); "togliere i file prima della chiave" = l'ordine in `FacesStores.eraseLocal` (invariante 1, che guarda l'ordine registrato); "cancellare fuori da `faces/`" = la regola in `NasFacesEraser`/`FacesNasTree` (invariante 5); "pubblicare senza stato fresco" = il pubblicatore di P3 (invariante 3).
+
+### Cosa trova pronto P13 (`:app`)
+- **File** (in `noBackupFilesDir`): `FileEraseJournalStore(File(dir, FileEraseJournalStore.FILE))` (`faces-erase`) e **un solo** `PersonalHeadsRecord(File(dir, PersonalHeadsRecord.FILE))` (`personal-heads`), da passare a `NasPersonalSync(heads = …)` e come `PersonalHeadsView` alla cancellazione e alla pulizia (oppure `sync.headsView`). Tutti e due (con i `.tmp`) fra i file che l'azzeramento toglie.
+- **Gancio**: `NasPersonalSync(prePublish = FacesPrePublishHook(switch))`; `lastHold` e i codici `FACES_ERASE_PENDING` e `PRE_PUBLISH_FAILED` nella Diagnostica.
+- **Cancellazione locale e recinto**: `FacesEraseFence(switch)`; `FacesLocalErase(StoresLocalData(stores), fence, leftovers, history)` è la `FacesLocalDataEraser` di `DefaultFacesSwitch` (legata con una lambda, come in `EraseDevice.restart`: interruttore e recinto si vedono a vicenda); **ogni** apertura degli archivi dei volti (calcolo, replica, pubblicatore, persone) passa da `fence.archives(...)`. `DefaultFacesEraser` va creato **all'avvio** (singleton): legge il diario e chiude il recinto prima di qualunque apertura.
+- **`FacesEraseParts`**: `EraseAnnouncer` sopra `PersonalSync.sync` e, se il giro finisce per intero, `switch.onPersonalRoundCompleted()`; `FacesEraseOps` sopra `FacesNasServices.eraser` (core-nasops) con l'area privata, traducendo gli esiti con `FacesEraseCodes.round(stop.code, removed, remaining)` e `FacesEraseCodes.check(...)`; `SmartAlbumsPeople` (core-albums), `SearchHistoryPurge` (core-search), `EraseStopWork` (WorkManager e grafo dei volti), `FacesLocalLeftovers` (cache dei ritagli `clear()`, modelli estratti, segni dei lavori), `FacesEraseIdentity` (id e registro accettato).
+- **NAS**: `FacesNasWiring.build(session, FacesNasConfig(...))` con `facts` = `FacesAccountFacts(switch, settings, identity)` (generazione corrente solo con lo stato fresco), il cancello di D35 composto come per le altre cancellazioni (più `TEST_SHARES_ONLY` con la recinzione), `catalogPresence` dal catalogo, `publishedSegments` dal diario del pubblicatore; `cleaning` va accanto alle altre `OwnFilesCleaning`.
+- **Lavori**: `FacesEraseWorker` (unico, con rete non richiesta: i passi locali non la chiedono) che chiama `eraser.resume(budget)` all'avvio, dopo ogni giro dei dati personali e finché `status` non è `DONE` senza attese; `FacesNasJanitor.run(budget)` dopo ogni giro completo dei dati personali.
+- **Interfaccia**: `ErasePorts` (eraser e orologio) per Hilt; `FacesEraseRoute(onClose)` dalla riga «Disattiva e cancella» di Impostazioni → Persone (P7); `EraseSheetStates.of(status)` per l'avanzamento nella pagina di P7 (`PeopleSettingsFacts.erase`).
+
+### Modifiche fuori dal perimetro stretto
+- `core-nasops/src/test/.../p12/NoRemoteDataToActionTest.kt` (Fase 4): l'elenco dei file che possono chiamare le primitive distruttive ora ammette, **solo per `deleteIfUnchanged`**, `faces/NasFacesEraser.kt` e `faces/FacesOwnFilesCleaner.kt` (D31: l'unica cancellazione guidata da un dato remoto dichiarata, quella dei dati dei volti dell'account); le altre primitive restano chiuse come prima. In cambio la prova sui dati è più forte: il NAS ostile ha anche file dei volti piantati (teste e segmenti "miei" e dell'altro, nomi strani, prenotazioni, una testa nell'area comune) e lo attraversano anche la pulizia dei propri file dei volti e la cancellazione stretta (stato che non si sa = `UNSURE`; generazione corrente mai, con ogni motivo, né intera né per dispositivo; area comune mai): resta identico byte per byte.
+- KDoc del contratto `FacesNasEraser` (sotto).
+
+### Modifiche ai contratti
+- `EraseStart.Unavailable` (core-faces, P0): il diario non si scrive, niente è toccato; il foglio lo tratta come "riepilogo cambiato" (si riprova).
+- `NasPersonalSync` (core-personal): due parametri con valore di serie (`prePublish`, `heads`) e due proprietà (`headsView`, `lastHold`); nessun comportamento cambia per chi non li passa. Nuova classe `PersonalHeadsRecord`.
+- KDoc di `FacesNasEraser` (core-nasops, P0): le cartelle vuote per ora restano (L191).
+- **Richiesta a `core-nas`**: una primitiva `rmdirIfEmpty` ammessa anche sotto `.mycloudgallery/faces/` dell'area privata (con `parentIdentity`), per togliere le cartelle vuote come chiede il §2.8 passo 8.
+- **Richiesta a P7**: nessuna; il segno `erasing`, `Off(G)`, `FacesLocal.EMPTY` e `FacesPrePublishHook` si usano come documentati.
+
+### Cosa provare sul telefono (F100–F102)
+- **F100** (S25 ed emulatore accesi, account `test`): dal PC, a cancellazione finita, nessun **file** sotto `test/.mycloudgallery/faces/` (le cartelle vuote restano, L191); sui due dispositivi nessun `faces-*.db*` e nessuna chiave `mcg-faces-*`; nessun nome nella cronologia della ricerca; gli album smart con persone sono diventati normali con le foto di prima («Tieni le foto»); la pagina dice «Fatto ovunque»; TalkBack legge foglio e pagina, testo a 1,3x.
+- **F101** (emulatore spento): la pagina dell'S25 dice «Non si fa vivo dal …: cancellerà appena si riaccende»; riacceso l'emulatore, la sua prima testa personale dopo il ritorno ha `faces` = `off` e intanto i suoi file e la chiave non ci sono più (prima la cancellazione, poi la testa); il NAS resta senza file; la pagina dell'S25 passa a «Fatto ovunque»; «Attiva» di nuovo = generazione nuova, nessun dato vecchio.
+- **F102** (fuori casa, poi `kill -9` a metà): Wi-Fi spento, «Disattiva e cancella»: locale subito («Su questo dispositivo: fatto», «Sul NAS: in attesa»); Wi-Fi acceso: il lavoro riprende e arriva in fondo; un `kill -9` durante la parte sul NAS riprende dal diario fino a `DONE`.
+
+### Punti aperti
+1. **Cartelle vuote sotto `faces/`** (L191): restano finché `core-nas` non ammette `rmdirIfEmpty` sotto `.mycloudgallery/faces/` dell'area privata. Non contengono dati; i nomi delle cartelle sono generazioni casuali e id di dispositivi (già nel registro).
+2. **I dispositivi dismessi si aspettano** come dice il §2.8 passo 10, ma le loro teste sono congelate e non possono più dire `off` (L193): con un dismesso che aveva Persone accesa la cancellazione resta in «Manca la conferma di qualche dispositivo» finché non lo si revoca. Il NAS e gli altri dispositivi sono comunque puliti. Da decidere con l'utente se un dismesso debba contare come "non si aspetta".
+3. **Album e cronologia saltati dopo tre tentativi** (L190): il diario lo ricorda (`SKIPPED`) ma `EraseStatus` di P0 non ha un campo per dirlo; la pagina non lo mostra. Se serve, un campo nel contratto e una riga nella pagina.
+4. **Il caso "nessun altro dispositivo e chi ha cancellato non torna più a casa"**: la pagina dice «Aspetto il NAS: la cancellazione continua appena questo dispositivo è a casa.»; i file restano sul NAS (L95).
+5. **F100–F102 sul telefono** (sopra) e il banco di P12 (F103).
+6. La riga «Sigle» in testa a `docs/sicurezza.md` (C1…Cn, L1…Ln) va aggiornata all'integrazione con quelle degli altri pacchetti (qui C95–C101, L190–L197).
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde** (27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, APK di release vecchio cancellato prima, dopo l'unione di `integra/29-10c`): assembleDebug, assembleRelease, galleryTest e galleryLint; test eseguiti in ogni modulo, fra cui `core-faces` 485, `core-nasops` 348, `core-personal` 248, `feature-people` 603, `core-common` 130, `app` 872; D34 nel dex e in mapping.txt e LiteRT solo in `core-ai` ancora ok; nessuna classe `testing` nel dex di release; manifest e permessi invariati. Solo SKIP il banco su dispositivo (-Bench). Il primo giro era rosso per `NoRemoteDataToActionTest` (le due classi nuove che tolgono file dei volti non erano nell'elenco): corretto come scritto sopra, poi verde.

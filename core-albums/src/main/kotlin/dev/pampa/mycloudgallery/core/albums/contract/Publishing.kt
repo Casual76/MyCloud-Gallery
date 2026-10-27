@@ -179,6 +179,19 @@ object PublishRules {
   /** Pulizia dei propri file come `OwnFilesPolicy`: le ultime 3 teste, 7 giorni di grazia. */
   const val KEEP_HEADS: Int = 3
   const val GRACE_DAYS: Int = 7
+
+  /**
+   * R7 (revisione di sicurezza della Fase 7): l'eta' massima di una modifica alla pubblicazione. Una modifica rimasta in coda piu' a lungo (il
+   * NAS irraggiungibile per ore) prende l'ora del NAS della pubblicazione. Cosi' chi legge sa che una voce **nuova** di un dispositivo non e'
+   * mai piu' vecchia di questo rispetto all'ultima volta che ha guardato i suoi contributi, e scarta come retrodatata quella che lo e' (L59).
+   */
+  const val MAX_ENTRY_AGE_MS: Long = 60L * 60 * 1000
+
+  /**
+   * R7: di quanto l'ora dichiarata da una testa nuova puo' stare prima dell'ultima volta che chi legge ha visto la serie senza di lei (gli
+   * orologi del NAS di due dispositivi non coincidono al millisecondo). Oltre, la testa e' retrodatata e si rifiuta.
+   */
+  const val HEAD_TIME_TOLERANCE_MS: Long = 10L * 60 * 1000
 }
 
 /**
@@ -212,6 +225,10 @@ data class AlbumSyncReport(
   val itemsUnattested: Int,
   /** Il budget e' finito prima della fine: il giro dopo riprende. */
   val incomplete: Boolean,
+  /** R2 (revisione di sicurezza della Fase 7): i byte letti dal NAS nel giro (teste e segmenti), per il conto del traffico del lavoro. */
+  val bytesRead: Long = 0,
+  /** R2: contributi in attesa (un segmento sparito, un file illeggibile, voci "dal futuro"): si riprovano a intervalli crescenti. */
+  val contributionsHeld: Int = 0,
 )
 
 /**

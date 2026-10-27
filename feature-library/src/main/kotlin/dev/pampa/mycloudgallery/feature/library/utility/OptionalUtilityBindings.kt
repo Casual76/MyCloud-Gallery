@@ -38,4 +38,7 @@ abstract class OptionalUtilityBindingsModule {
 
   @BindsOptionalOf
   abstract fun names(): DuplicatesNames
+
+  @BindsOptionalOf
+  abstract fun phoneCheck(): PhoneCopyCheck
 }

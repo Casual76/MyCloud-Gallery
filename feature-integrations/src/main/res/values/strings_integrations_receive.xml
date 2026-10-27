@@ -88,6 +88,11 @@
   <string name="integrations_receive_album_mine">Il tuo album</string>
   <string name="integrations_receive_album_shared">Album condiviso: ti chiedo conferma quando i file sono sul NAS</string>
   <string name="integrations_receive_album_hint">I file si salvano sul NAS nella cartella scelta, e appena arrivano li metto nell’album. Un album condiviso mi chiede una conferma col conteggio: non sposto niente da solo.</string>
+  <string name="integrations_receive_album_new">Oppure un album nuovo</string>
+  <string name="integrations_receive_album_new_name">Nome dell’album</string>
+  <string name="integrations_receive_album_new_create">Crea l’album</string>
+  <string name="integrations_receive_album_new_invalid">Il nome non va bene. Usa fino a 64 caratteri, senza simboli strani.</string>
+  <string name="integrations_receive_album_new_unavailable">Adesso non posso creare album: l’app non è ancora pronta. Riprova fra poco.</string>
   <string name="integrations_receive_album_save">Salva e aggiungi all’album</string>
   <string name="integrations_receive_done_album">Appena sono sul NAS li aggiungo all’album «%1$s».</string>
   <string name="integrations_receive_done_album_shared">Appena sono sul NAS ti chiedo se aggiungerli all’album condiviso «%1$s».</string>

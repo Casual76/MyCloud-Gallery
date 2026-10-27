@@ -240,6 +240,35 @@ class AlbumPermissionsLogicTest {
     assertThat(merged.title).isEqualTo("Gita")
   }
 
+  /**
+   * R14 (revisione di sicurezza della Fase 7): chi legge non accetta la riscrittura dell'elemento di un altro con un contenuto diverso, nemmeno
+   * dal creatore a "Tutti possono tutto" (prima passava come "togliere l'elemento di un altro": tutti vedevano un'altra foto "aggiunta da" bruno).
+   * Il posto nell'ordine, invece, cambia con lo stesso permesso di prima; il proprio elemento si riscrive come un'aggiunta.
+   */
+  @Test
+  fun r14LElementoDiUnAltroNonCambiaContenuto() {
+    val base = base(ShareLevel.ALL)
+    val original = Paper.merge(base)!!.items.getValue(Paper.media(1))
+    for (field in listOf("chiave", "percorso", "versione", "hash")) {
+      val forged = when (field) {
+        "chiave" -> Paper.item(1, bruno).copy(contentKey = Paper.key(7))
+        "percorso" -> Paper.item(1, bruno).copy(path = dev.pampa.mycloudgallery.core.trust.nas.SharePath.parseMediaPath("Album condivisi/Gita/altra.jpg"))
+        "versione" -> Paper.item(1, bruno).copy(version = dev.pampa.mycloudgallery.core.model.VersionId(Paper.media(7).value))
+        else -> Paper.item(1, bruno).copy(sha256 = dev.pampa.mycloudgallery.core.model.Sha256("ab".repeat(32)))
+      }
+      val rewrite = entry(item1, forged, alice, T0 + 20, device = 2)
+      val merged = Paper.merge(base + rewrite)!!
+      assertWithMessage(field).that(merged.items.getValue(Paper.media(1))).isEqualTo(original)
+      assertWithMessage(field).that(merged.denied.single { it.entry == rewrite }.reason).isEqualTo(DenyReason.OWNERSHIP)
+    }
+    // Solo il posto: passa (a "Tutti" il creatore puo' togliere l'elemento di bruno, quindi anche spostarlo).
+    val moved = entry(item1, Paper.item(1, bruno, position = 99_000L), alice, T0 + 20, device = 2)
+    assertThat(Paper.merge(base + moved)!!.items.getValue(Paper.media(1)).position).isEqualTo(99_000L)
+    // Il proprio elemento si riscrive (come un'aggiunta): bruno cambia il suo.
+    val own = entry(item1, Paper.item(1, bruno).copy(contentKey = Paper.key(8)), bruno, T0 + 20, device = 2)
+    assertThat(Paper.merge(base + own)!!.items.getValue(Paper.media(1)).contentKey).isEqualTo(Paper.key(8))
+  }
+
   private companion object {
     val ITEM_OPS = setOf(AlbumOp.REMOVE_ITEM, AlbumOp.BRING_BACK, AlbumOp.DELETE_FILE, AlbumOp.NEW_VERSION)
   }

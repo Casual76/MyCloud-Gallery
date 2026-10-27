@@ -35,6 +35,8 @@ class FactsRow(
   @ColumnInfo(name = "version_id") val versionId: String,
   @ColumnInfo(name = "size") val size: Long,
   @ColumnInfo(name = "quick_hash") val quickHash: String,
+  /** Lo SHA-256 della versione corrente, se noto (I1 della revisione di sicurezza della Fase 7: va nella voce dell'elemento). */
+  @ColumnInfo(name = "full_hash") val fullHash: String?,
 )
 
 /** Una copia presente sul NAS della versione corrente di un media, con l'area della sua share (NULL se la share non e' registrata). */

@@ -51,7 +51,10 @@ data class AlbumRuleEntity(
   @ColumnInfo(name = "value", defaultValue = "''") val value: String = "",
   /** Solo per `rule = 'example'`: la foto d'esempio (mai un nascosto fra i risultati, ma l'esempio puo' esserlo). */
   @ColumnInfo(name = "media_id") val mediaId: String? = null,
-)
+) {
+  /** I7: il valore e' il periodo, il luogo (centro e coordinate) o la descrizione di un album: dati dell'utente, mai in un log. */
+  override fun toString(): String = "AlbumRuleEntity($rule)"
+}
 
 /** Un elemento escluso da un album smart (voce `exclude:`, D16, E-AL5): per sempre, anche se le regole cambiano. */
 @Entity(
@@ -80,7 +83,10 @@ data class AlbumExclusionEntity(
   @ColumnInfo(name = "media_id") val mediaId: String,
   /** L'impronta `<qh1 esadecimale>:<dimensione>` della voce, come in `album_item.fp`. */
   @ColumnInfo(name = "fp") val fp: String? = null,
-)
+) {
+  /** I7: l'id di un media e la sua impronta non finiscono in un log. */
+  override fun toString(): String = "AlbumExclusionEntity"
+}
 
 /**
  * Un "suggerito" di un album smart (D14, "Suggerite"): un dubbio che il motore ha calcolato (non e' un dato personale, non si
@@ -112,7 +118,10 @@ data class AlbumSuggestionEntity(
   @ColumnInfo(name = "media_id") val mediaId: String,
   @ColumnInfo(name = "reason") val reason: String,
   @ColumnInfo(name = "added_at") val addedAt: Long,
-)
+) {
+  /** I7: l'id di un media non finisce in un log; resta la regola (S1-S5, un codice fisso). */
+  override fun toString(): String = "AlbumSuggestionEntity($reason)"
+}
 
 /**
  * La definizione fusa di un album condiviso (D6-D11): cio' che la replica sa del suo stato dopo la fusione dei contributi di tutti i
@@ -190,7 +199,10 @@ data class SharedAlbumHeadMarkEntity(
   @ColumnInfo(name = "content_hash") val contentHash: String,
   @ColumnInfo(name = "registry_version") val registryVersion: Long,
   @ColumnInfo(name = "created_at") val createdAt: Long,
-)
+) {
+  /** I7: l'id di un dispositivo, l'impronta del contenuto e le date non finiscono in un log. */
+  override fun toString(): String = "SharedAlbumHeadMarkEntity(v$version)"
+}
 
 /**
  * Un'operazione di condivisione nel diario (D29, §2.5; `ShareOpRecord` di core-albums). **Locale**: mai sincronizzato; si toglie
@@ -318,7 +330,7 @@ data class TripProposalEntity(
 @Entity(tableName = "home_estimate")
 data class HomeEstimateEntity(
   @PrimaryKey @ColumnInfo(name = "slot") val slot: Int,
-  /** `home` o `habitual`. */
+  /** `home`, `habitual`, oppure `searched` (VG-1: la ricerca c'e' stata e non ha trovato una casa; una riga senza coordinate). */
   @ColumnInfo(name = "kind") val kind: String,
   @ColumnInfo(name = "latitude") val latitude: Double,
   @ColumnInfo(name = "longitude") val longitude: Double,

@@ -105,6 +105,8 @@ sealed interface FacesCurrent {
  * La cancellazione stretta sotto `faces/` (D31). Ogni chiamata lavora solo sull'area privata [share] dell'account (mai l'area comune:
  * [FacesEraseStop.NOT_PRIVATE_AREA]), solo dietro il cancello (D35: congelamento, emergenza, salto dell'ora, fiducia, sola lettura,
  * recinzione D34), dal fondo, file per file, poi le cartelle vuote, al piu' [FacesEraseLimits.MAX_FILES_PER_ROUND] file per giro.
+ * (P8: le cartelle vuote per ora restano: le primitive di core-nas tolgono cartelle solo sotto i percorsi dei media e del cestino dell'app,
+ * L191. Non contengono dati; la verifica conta i file.)
  * **Idempotente**: un giro interrotto riprende dal giro dopo; togliere cio' che non c'e' e' [FacesEraseStop.DONE].
  * - [eraseGeneration]: l'**intera** `faces/<G>/` (le cartelle di tutti i dispositivi dell'account e le prenotazioni) per
  *   [FacesEraseReason.USER_CONFIRMED] o [FacesEraseReason.NOT_CURRENT]; mai la generazione corrente.

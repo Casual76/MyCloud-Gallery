@@ -139,10 +139,26 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
   private val albums: dev.pampa.mycloudgallery.albums.AlbumsGraph,
   /** Fase 7 (P13, P8): l'hash completo notturno dei video del NAS (D27) e la firma visiva dei Doppioni simili. */
   private val utility: dev.pampa.mycloudgallery.utility.UtilityGraph,
+  /** Fase 7 (DG-2): gli esiti e gli errori della manutenzione nella Diagnostica ("Ultimi esiti ed errori"). */
+  private val graph: dev.pampa.mycloudgallery.graph.AppGraph,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
+    // DG-2: la manutenzione notturna girava senza lasciare traccia (un errore o un budget finito non arrivavano mai a "Ultimi esiti ed errori").
+    // Un errore si registra (solo il nome del lavoro) e poi prosegue come prima: WorkManager lo vede.
+    try {
+      AlbumJobReports.maintenance(graph.events) { maintain() }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      // Android ha fermato la manutenzione (quota, vincoli, tempo): il motivo resta anche dopo la morte del processo.
+      StopReports.report(graph, dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJob.LIBRARY_MAINTENANCE, StopReports.reasonOf(this))
+      throw e
+    }
+    return Result.success()
+  }
+
+  /** Vero se ha fatto tutto: la galleria attiva fino in fondo, anche per l'Utility. */
+  private suspend fun maintain(): Boolean {
     gallery.runIfActive { search.maintain() }
     val done = gallery.runIfActive { core ->
       val phone = core.phone
@@ -161,8 +177,8 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
     gallery.runIfActive { albums.nightly(ALBUMS_BUDGET) }
     // Fase 7 (P8): "Controlla di notte i video del NAS" applicato (la coda `FULL_HASH` la prende il lavoro di sicurezza del backup) e le firme
     // visive che mancano ai Doppioni simili.
-    gallery.runIfActive { utility.nightly(UTILITY_BUDGET) }
-    return Result.success()
+    val utilityDone = gallery.runIfActive { utility.nightly(UTILITY_BUDGET) }
+    return done != null && utilityDone != null
   }
 
   companion object {

@@ -111,6 +111,23 @@ object LockedBackoff {
 }
 
 /**
+ * Fase 7, revisione B (I2, R8): le attese di un elemento `PUBLISHED` di uno spostamento tra share quando la porta di completamento non risponde
+ * (il catalogo non collega ancora la copia allo stesso media) o la copia non si lascia guardare per un motivo che non e' la rete. La sorgente
+ * resta al suo posto per tutta l'attesa (D29). Prima [QUICK_RETRIES] riprese senza aspettare (un catalogo appena partito, una scansione in
+ * corso), poi le attese crescenti di [LockedBackoff], fino a 24 ore: poi l'elemento si ferma con [OpErrorCode.CATALOG_MISMATCH] e le due copie
+ * restano. Mai un'attesa senza fine, mai un motivo muto ([PauseReason.CATALOG]).
+ */
+object CatalogHoldBackoff {
+  const val QUICK_RETRIES: Int = 5
+
+  /** Cosa fare dopo che la porta non ha risposto per la [attempts]-esima volta ([attempts] da 0). */
+  fun decide(attempts: Int): LockedBackoff.Decision {
+    require(attempts >= 0) { "Tentativi negativi." }
+    return if (attempts < QUICK_RETRIES) LockedBackoff.Decision.RetryAfter(0) else LockedBackoff.decide(attempts - QUICK_RETRIES)
+  }
+}
+
+/**
  * Le attese **brevi** per una cartella che il telefono stesso tiene aperta (decisione dell'utente, 15/10): la Libreria sta leggendo un file
  * dentro la cartella che si sposta o si elimina, e Samba non rinomina una cartella con un file aperto sotto dallo stesso client (`ACCESS_DENIED`).
  * Non e' un file aperto dal PC ([LockedBackoff]) e non e' un permesso negato: i nostri handle si rilasciano e si riprova dopo 1, 2, 4, 8, 16 e

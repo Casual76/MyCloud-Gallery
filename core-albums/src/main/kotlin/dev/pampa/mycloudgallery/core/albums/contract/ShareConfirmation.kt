@@ -26,7 +26,7 @@ value class SharePlanHash(val hex: String) {
   companion object {
     private val HEX_64 = Regex("^[0-9a-f]{64}$")
 
-    /** Deterministica: stesso piano (tipo, album, titolo, livello, nascosti, media e azioni nell'ordine), stessa impronta. */
+    /** Deterministica: stesso piano (tipo, album, titolo, livello, nascosti, media e azioni nell'ordine, tentativo), stessa impronta. */
     fun of(plan: SharePlan): SharePlanHash {
       val bytes = ByteArrayOutputStream()
       DataOutputStream(bytes).use { out ->
@@ -51,6 +51,16 @@ value class SharePlanHash(val hex: String) {
         for ((reason, count) in excluded) {
           out.writeUTF(reason.code)
           out.writeInt(count)
+        }
+        // Revisione B: il tentativo (SH-1) e le copie del guardiano che non partiranno (SG-1) entrano nell'impronta solo se ci sono, cosi'
+        // un piano senza resta con la codifica di prima. La conferma vale per QUEL tentativo e per cio' che il foglio ha detto.
+        if (plan.attempt.isNotEmpty()) {
+          out.writeUTF("attempt")
+          out.writeUTF(plan.attempt)
+        }
+        if (plan.safeCopyBlocked > 0) {
+          out.writeUTF("safe_copy_blocked")
+          out.writeInt(plan.safeCopyBlocked)
         }
       }
       val digest = MessageDigest.getInstance("SHA-256").digest(bytes.toByteArray())

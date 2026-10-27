@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 8, P8: il foglio e la pagina "Disattiva e cancella" (docs/fase8-progetto.md §2.8). Prefisso faces_erase_: le risorse dei moduli
+     si fondono in :app, un nome uguale a quello di un altro modulo ne cambierebbe il testo. -->
+<resources>
+  <string name="faces_erase_title">Disattiva e cancella</string>
+  <string name="faces_erase_loading">Preparo il riepilogo…</string>
+  <string name="faces_erase_intro">Cancella i volti e i nomi delle persone dal NAS e da tutti i tuoi dispositivi. Le foto non si toccano.</string>
+  <string name="faces_erase_intro_local">Cancella i volti e i nomi delle persone. Le foto non si toccano.</string>
+  <plurals name="faces_erase_named">
+    <item quantity="one">Perderai il nome di %d persona.</item>
+    <item quantity="other">Perderai i nomi di %d persone.</item>
+  </plurals>
+  <string name="faces_erase_named_none">Nessuna persona ha un nome su questo dispositivo.</string>
+  <plurals name="faces_erase_albums">
+    <item quantity="one">%d album smart usa le persone. Che cosa ne faccio?</item>
+    <item quantity="other">%d album smart usano le persone. Che cosa ne faccio?</item>
+  </plurals>
+  <string name="faces_erase_keep_photos_title">Tieni le foto di adesso come album normali</string>
+  <string name="faces_erase_keep_photos_message">Gli album restano con le foto che hanno oggi; la regola «Persone» si toglie.</string>
+  <string name="faces_erase_drop_rule_title">Togli solo la regola</string>
+  <string name="faces_erase_drop_rule_message">Gli album perdono la regola «Persone»; le altre regole restano.</string>
+  <string name="faces_erase_choice_selected">Scelta</string>
+  <string name="faces_erase_history">Le ricerche recenti con i nomi si cancellano.</string>
+  <string name="faces_erase_section_devices">I tuoi dispositivi</string>
+  <string name="faces_erase_devices_footnote">Un dispositivo spento cancella appena si riaccende, prima di pubblicare qualunque cosa.</string>
+  <string name="faces_erase_device_this">%1$s (questo dispositivo)</string>
+  <string name="faces_erase_device_waiting">Cancellerà appena si collega</string>
+  <string name="faces_erase_device_waiting_since">Non si fa vivo dal %1$s: cancellerà appena si riaccende</string>
+  <string name="faces_erase_device_confirmed">Ha cancellato</string>
+  <string name="faces_erase_device_not_expected">Revocato o perso: non si aspetta</string>
+  <string name="faces_erase_local_only_title">Solo su questo dispositivo</string>
+  <string name="faces_erase_local_only">Le persone sono solo su questo dispositivo: si cancellano qui.</string>
+  <string name="faces_erase_cancel">Annulla</string>
+  <string name="faces_erase_cancel_description">Chiude senza cancellare niente</string>
+  <string name="faces_erase_confirm">Disattiva e cancella</string>
+  <string name="faces_erase_confirm_description">Disattiva Persone e cancella i volti e i nomi dal NAS e da tutti i tuoi dispositivi</string>
+  <string name="faces_erase_confirm_description_local">Disattiva Persone e cancella i volti e i nomi da questo dispositivo</string>
+  <string name="faces_erase_confirming">Inizio la cancellazione…</string>
+  <string name="faces_erase_started_title">Cancellazione iniziata</string>
+  <string name="faces_erase_started_message">Su questo dispositivo i dati dei volti sono già tolti. Il resto continua da solo, anche con l’app chiusa.</string>
+  <string name="faces_erase_expired_title">Il riepilogo è cambiato</string>
+  <string name="faces_erase_expired_message">È passato troppo tempo, o qualcosa è cambiato. Rileggi il riepilogo prima di confermare: niente è stato cancellato.</string>
+  <string name="faces_erase_reload">Rileggi il riepilogo</string>
+  <string name="faces_erase_section_progress">Avanzamento</string>
+  <string name="faces_erase_row_local">Su questo dispositivo</string>
+  <string name="faces_erase_row_nas">Sul NAS</string>
+  <string name="faces_erase_step_not_started">Da fare</string>
+  <string name="faces_erase_step_running">In corso</string>
+  <string name="faces_erase_step_waiting">In attesa</string>
+  <string name="faces_erase_step_done">Fatto</string>
+  <string name="faces_erase_step_not_needed">Non serve: niente sul NAS</string>
+  <string name="faces_erase_step_not_needed_short">Non si aspetta</string>
+  <string name="faces_erase_wait_title">Perché aspetta</string>
+  <string name="faces_erase_wait_nas">Aspetto il NAS: la cancellazione continua appena questo dispositivo è a casa.</string>
+  <string name="faces_erase_wait_frozen">La tua area privata sul NAS è congelata: la cancellazione aspetta che venga sbloccata.</string>
+  <string name="faces_erase_wait_clock_jump">L’ora del NAS è saltata: aspetto che torni stabile.</string>
+  <string name="faces_erase_wait_read_only">La tua area privata sul NAS è in sola lettura: serve il permesso di scrittura.</string>
+  <string name="faces_erase_wait_emergency_stop">Le scritture sul NAS sono ferme (Diagnostica): la cancellazione riparte quando le riaccendi.</string>
+  <string name="faces_erase_wait_not_trusted">Questo dispositivo non è ancora approvato nella famiglia: il NAS aspetta.</string>
+  <string name="faces_erase_wait_devices">Manca la conferma di qualche dispositivo.</string>
+  <string name="faces_erase_wait_recycle_bin">Il NAS ne tiene una copia nel suo cestino: svuotalo dal pannello del NAS.</string>
+  <string name="faces_erase_recycle_title">Cestino del NAS</string>
+  <string name="faces_erase_done_title">Fatto ovunque</string>
+  <string name="faces_erase_done_message">I volti e i nomi delle persone sono stati cancellati dal NAS e da tutti i tuoi dispositivi.</string>
+  <string name="faces_erase_waiting_title">Manca qualche dispositivo</string>
+  <string name="faces_erase_waiting_message">Il NAS e questo dispositivo sono a posto. I dispositivi qui sotto cancelleranno appena si riaccendono, prima di pubblicare qualunque cosa.</string>
+  <string name="faces_erase_close">Chiudi</string>
+</resources>

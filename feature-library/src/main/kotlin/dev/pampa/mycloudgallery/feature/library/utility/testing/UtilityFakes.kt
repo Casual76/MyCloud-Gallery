@@ -19,6 +19,8 @@ import dev.pampa.mycloudgallery.core.library.duplicates.SigningReport
 import dev.pampa.mycloudgallery.core.library.duplicates.SimilarBatch
 import dev.pampa.mycloudgallery.core.library.duplicates.SimilarCluster
 import dev.pampa.mycloudgallery.core.library.duplicates.SimilarShots
+import dev.pampa.mycloudgallery.core.library.duplicates.TwinReport
+import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
@@ -28,7 +30,10 @@ import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
 import dev.pampa.mycloudgallery.feature.library.trash.UserTap
 import dev.pampa.mycloudgallery.feature.library.utility.CleanupNasPort
 import dev.pampa.mycloudgallery.feature.library.utility.FullHashSwitch
+import dev.pampa.mycloudgallery.feature.library.utility.PhoneCopyCheck
 import kotlin.time.Duration
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -43,6 +48,9 @@ fun sampleRefOf(media: MediaId): MediaRef? =
   media.value.takeLast(12).toLongOrNull()?.let { MediaRef.Phone("external_primary", it, "image/jpeg") }
 
 private val SAMPLE_HASH = Sha256("b".repeat(64))
+
+/** La versione del MediaStore delle copie del telefono di prova. */
+const val SAMPLE_STORE: String = "store-v1"
 
 private fun copy(
   id: Long,
@@ -114,10 +122,10 @@ fun samplePlanOf(proposals: Collection<GroupProposal>): CleanupPlan {
     groups++
     for (c in p.remove) {
       if (c.area == CopyArea.PHONE) {
-        phone += PhoneTrashRef(MediaRef.Phone("external_primary", c.location.value, "image/jpeg"), c.size)
+        phone += PhoneTrashRef(MediaRef.Phone("external_primary", c.location.value, "image/jpeg"), FileStamp(c.size, c.modifiedAt), SAMPLE_STORE, c.location)
         if (!p.group.safe) unsafe++
       } else {
-        nas += NasTrashRef(c.share ?: "alessio", c.path, c.size, c.modifiedAt, fileId = c.location.value, area = c.area)
+        nas += NasTrashRef(c.share ?: "alessio", c.path, c.size, c.modifiedAt, fileId = c.location.value, area = c.area, location = c.location)
       }
     }
   }
@@ -142,11 +150,28 @@ class FakeIdenticalDuplicates(
   /** Se non nullo, il piano risponde questo invece di quello calcolato dalle proposte. */
   var planOverride: CleanupPlan? = null
 
+  /** Quante volte e' stato chiesto il giro dei gemelli del NAS (DP-1), e con che tetto di tempo. */
+  val settles: MutableList<Duration> = mutableListOf()
+
+  /** I cambiamenti del catalogo (DP-3): un test li fa arrivare con `changed.tryEmit(Unit)`. */
+  val changed: MutableSharedFlow<Unit> = MutableSharedFlow(extraBufferCapacity = 8)
+
+  /** Insiemi di file del NAS in verifica (DP-1) e Libreria non leggibile (UT-1) che la prossima lettura riporta. */
+  var verifying: Int = 0
+  var restricted: Boolean = false
+
   override suspend fun scan(): IdenticalScan {
     scans++
     check(!throwOnScan) { "lettura fallita" }
-    return IdenticalScan(proposals, failed)
+    return IdenticalScan(proposals, failed, verifying, restricted)
   }
+
+  override suspend fun settle(budget: Duration): TwinReport {
+    settles += budget
+    return TwinReport.NONE
+  }
+
+  override fun changes(): Flow<Unit> = changed
 
   override suspend fun plan(proposals: Collection<GroupProposal>): CleanupPlan {
     planned += proposals.toList()
@@ -189,7 +214,7 @@ fun samplePlacesOf(media: Collection<MediaId>, withNas: Boolean = true, unsafePh
   val numbers = media.map { it.value.takeLast(12).toLong() }
   return RemovalPlaces(
     media = media.size,
-    phone = numbers.map { PhoneTrashRef(MediaRef.Phone("external_primary", it, "image/jpeg"), 3_000_000) },
+    phone = numbers.map { PhoneTrashRef(MediaRef.Phone("external_primary", it, "image/jpeg"), FileStamp(3_000_000, 1_800_000_000_000L + it), SAMPLE_STORE, LocationId(it)) },
     nasPrivate = if (withNas) numbers.map { NasTrashRef("alessio", "Foto/IMG_$it.jpg", 3_000_000, 1_800_000_000_000L + it, it, CopyArea.MY_PRIVATE) } else emptyList(),
     nasCommon = if (withNas) numbers.take(1).map { NasTrashRef("famiglia", "Famiglia/IMG_$it.jpg", 3_000_000, 1_800_000_000_000L + it, it, CopyArea.COMMON) } else emptyList(),
     unsafePhoneMedia = unsafePhoneMedia,
@@ -219,6 +244,7 @@ class FakeSimilarShots(
 
   override suspend fun scan(beforeDay: Int?, budget: Duration): SimilarBatch {
     calls += beforeDay
+    order += "scan"
     if (beforeDay == null) sequence = 0
     scans++
     val index = sequence++
@@ -226,7 +252,18 @@ class FakeSimilarShots(
     return batches.getOrNull(index) ?: SimilarBatch.EMPTY
   }
 
-  override suspend fun sign(budget: Duration): SigningReport = SigningReport(0, 0, 0, finished = true)
+  /** Cosa risponde la firma degli scatti recenti (DP-4), e con che tetto di tempo e' stata chiesta. */
+  var signing: SigningReport = SigningReport(0, 0, 0, finished = true)
+  val signCalls: MutableList<Duration> = mutableListOf()
+
+  /** L'ordine delle chiamate (`sign` prima di `scan`, DP-4): una parola per chiamata. */
+  val order: MutableList<String> = mutableListOf()
+
+  override suspend fun sign(budget: Duration): SigningReport {
+    signCalls += budget
+    order += "sign"
+    return signing
+  }
 
   override suspend fun placesOf(media: Collection<MediaId>): RemovalPlaces {
     placesAsked += media.toList()
@@ -255,5 +292,19 @@ class FakeFullHashSwitch(initial: Boolean = false) : FullHashSwitch {
   override suspend fun set(on: Boolean) {
     sets += on
     state.value = on
+  }
+}
+
+/**
+ * Il controllo delle copie del telefono finto (R18): di serie il telefono dice che ogni copia e' ancora quella del piano. [changed] sono le copie che
+ * la riga del MediaStore non conferma piu' (sovrascritte, spostate): non passano. Ricorda cosa gli e' stato chiesto.
+ */
+class FakePhoneCopyCheck(var changed: Set<Long> = emptySet(), var throwing: Boolean = false) : PhoneCopyCheck {
+  val asked: MutableList<List<PhoneTrashRef>> = mutableListOf()
+
+  override suspend fun unchanged(copies: List<PhoneTrashRef>): List<PhoneTrashRef> {
+    asked += copies
+    check(!throwing) { "MediaStore non letto" }
+    return copies.filter { it.ref.mediaStoreId !in changed }
   }
 }

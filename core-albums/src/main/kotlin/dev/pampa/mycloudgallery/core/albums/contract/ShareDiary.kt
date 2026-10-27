@@ -137,6 +137,12 @@ interface ShareDiary {
 
   suspend fun openOps(): List<ShareOpRecord>
 
+  /**
+   * Revisione B, SH-2: le operazioni chiuse, le piu' recenti prima, al piu' [limit]. Servono a mostrare "N da riprovare" con il motivo anche dopo
+   * la morte del processo (prima le operazioni finite le sapeva solo la memoria del processo che le aveva viste). Di serie nessuna.
+   */
+  suspend fun closedOps(limit: Int): List<ShareOpRecord> = emptyList()
+
   suspend fun items(op: ShareOpId): List<ShareItemRecord>
 
   /** Salva il passo nuovo di un elemento; un passo non ammesso da [ShareStateMachine] e' un errore di programmazione. */

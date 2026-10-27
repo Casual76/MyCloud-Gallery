@@ -22,6 +22,12 @@
   <string name="duplicates_cleanup_action">Pulizia guidata</string>
   <string name="duplicates_identical_empty_title">Nessun doppione identico</string>
   <string name="duplicates_identical_empty_detail">Qui compaiono i file uguali che stanno nello stesso posto: due volte sul telefono, o due volte sul NAS.</string>
+  <string name="duplicates_identical_restricted_title">Doppioni non cercati</string>
+  <string name="duplicates_identical_restricted_detail">Hai dato accesso alle sole foto selezionate (o la Libreria si sta ancora leggendo): non cerco i doppioni finché non vedo tutte le foto. Con l\'accesso completo compaiono qui.</string>
+  <plurals name="duplicates_identical_verifying">
+    <item quantity="one">%1$s gruppo di file del NAS sembra uguale e lo sto controllando: appena li ho letti per intero compare qui, se è davvero un doppione.</item>
+    <item quantity="other">%1$s gruppi di file del NAS sembrano uguali e li sto controllando: appena li ho letti per intero compaiono qui, se sono davvero doppioni.</item>
+  </plurals>
   <plurals name="duplicates_others_area_note">
     <item quantity="one">%1$s copia non si tocca: è in un\'area di un altro familiare.</item>
     <item quantity="other">%1$s copie non si toccano: sono in un\'area di un altro familiare.</item>
@@ -55,6 +61,8 @@
   <string name="duplicates_blocked_other_area">Resta: non hai il permesso</string>
   <string name="duplicates_blocked_last_private">Resta: l\'ultima copia privata</string>
   <string name="duplicates_blocked_shared_album">Resta: è in un album condiviso</string>
+  <string name="duplicates_blocked_guardian_twin">Resta: la copia di sicurezza la protegge</string>
+  <string name="duplicates_blocked_last_verified">Resta: è l\'unica copia verificata</string>
   <string name="duplicates_copy_row">%1$s · %2$s</string>
 
   <!-- Da verificare (D27) -->
@@ -81,9 +89,10 @@
   <string name="duplicates_similar_empty_title">Nessuno scatto simile</string>
   <string name="duplicates_similar_empty_detail">Qui compaiono gli scatti quasi uguali fatti a pochi minuti di distanza, come una raffica a mano.</string>
   <plurals name="duplicates_similar_undecided">
-    <item quantity="one">Per %1$s scatto vicino ad altri non so ancora dire se si somigliano: serve la ricerca per contenuto, o il tempo perché l\'app lo guardi.</item>
-    <item quantity="other">Per %1$s scatti vicini ad altri non so ancora dire se si somigliano: serve la ricerca per contenuto, o il tempo perché l\'app li guardi.</item>
+    <item quantity="one">Per %1$s scatto vicino ad altri non so ancora dire se si somigliano: l\'app lo confronta di notte, con il telefono in carica.</item>
+    <item quantity="other">Per %1$s scatti vicini ad altri non so ancora dire se si somigliano: l\'app li confronta di notte, con il telefono in carica.</item>
   </plurals>
+  <string name="duplicates_similar_later">Le foto di oggi si confrontano stanotte, con il telefono in carica: fino ad allora qui possono mancare scatti simili.</string>
   <string name="duplicates_similar_searching">Cerco gli scatti simili, giorno per giorno</string>
   <plurals name="duplicates_cluster_title">
     <item quantity="one">%1$s scatto · %2$s</item>
@@ -116,6 +125,15 @@
     <item quantity="other">%1$s copie non si toccano: non hai il permesso.</item>
   </plurals>
   <string name="duplicates_sheet_keeps">Ne resta sempre una per parte.</string>
+  <plurals name="duplicates_sheet_title_copies">
+    <item quantity="one">Eliminare %1$s copia (%2$s)?</item>
+    <item quantity="other">Eliminare %1$s copie (%2$s)?</item>
+  </plurals>
+  <plurals name="duplicates_sheet_title_shots">
+    <item quantity="one">Eliminare %1$s scatto (%2$s)?</item>
+    <item quantity="other">Eliminare %1$s scatti (%2$s)?</item>
+  </plurals>
+  <string name="duplicates_sheet_common_gone">Sparirà per tutti i familiari.</string>
   <string name="duplicates_notice_title">Doppioni</string>
   <string name="duplicates_notice_cleanup_started">Pulizia avviata: le copie del NAS vanno nel cestino del NAS, le segui in Operazioni in corso.</string>
   <string name="duplicates_notice_cleanup_rejected">Il NAS non ha accettato la pulizia: le copie sono cambiate o la share è in sola lettura. Non è stato toccato niente.</string>
@@ -124,4 +142,6 @@
   <string name="duplicates_notice_last_shot">In un gruppo almeno uno scatto resta.</string>
   <string name="duplicates_notice_no_phone_trash">Su questo telefono non c\'è il cestino di sistema (serve Android 11): da qui le copie del telefono non si possono togliere. Quelle sul NAS sì.</string>
   <string name="duplicates_notice_nothing">Le copie sono cambiate nel frattempo: non c\'è più niente da togliere.</string>
+  <string name="duplicates_notice_phone_changed">Alcune copie del telefono non sono più quelle di prima (cambiate o spostate dopo la ricerca): non le ho toccate. Il resto della pulizia prosegue.</string>
+  <string name="duplicates_notice_nightly_not_saved">Non sono riuscito a salvare la scelta: i dati personali non sono ancora pronti. L\'interruttore resta com\'era, riprova fra poco.</string>
 </resources>

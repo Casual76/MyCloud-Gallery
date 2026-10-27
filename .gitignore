@@ -80,3 +80,16 @@ ritratto-*
 ritratti/*.jpg
 ritratti/*.jpeg
 ritratti/*.png
+
+# Valutazione delle persone (Fase 8, P11): le etichette dei volti veri (posti di volti nelle foto della famiglia). Stanno solo sul telefono
+# (noBackupFilesDir/eval/faces/) e nella cartella .mycloudgallery/eval/faces/ dell'utente, MAI nel repository (NoPrivateFacesEvalInGitTest,
+# docs/fase8-progetto.md par. 5.3). Niente immagini di ritratti o composizioni sotto tools/fixtures/faces/: stanno in mcg-models/faces/ (fuori) e
+# l'uscita del generatore delle composizioni va in <root>/out/p11/.
+*.mcgfac
+persone-veri*
+eval-volti-privato/
+tools/fixtures/faces/out/
+tools/fixtures/faces/**/*.png
+tools/fixtures/faces/**/*.jpg
+tools/fixtures/faces/**/*.jpeg
+tools/fixtures/faces/**/*.webp

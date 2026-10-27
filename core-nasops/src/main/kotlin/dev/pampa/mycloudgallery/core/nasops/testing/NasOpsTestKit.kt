@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.NasTrash
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
+import dev.pampa.mycloudgallery.core.nasops.contract.ProtectedFiles
 import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashReason
 import dev.pampa.mycloudgallery.core.nasops.contract.UserConfirmation
@@ -76,6 +77,8 @@ class NasOpsTestKit(
    * questa e [moves] (`completionPortOf`).
    */
   private val completions: MoveCompletionSink = NoMoveCompletionSink,
+  /** Fase 7, revisione B (R3): i file degli album condivisi che la tabella dei permessi non lascia togliere, per **entrambi** gli esecutori. */
+  private val protectedFiles: ProtectedFiles = ProtectedFiles.NONE,
 ) {
   private val completionPort: MoveCompletionSink = completionPortOf(completions, moves)
 
@@ -135,6 +138,7 @@ class NasOpsTestKit(
       readOnly = { it in readOnlyShares },
       newId = idSource(),
       completions = completionPort,
+      protectedFiles = protectedFiles,
     )
     KitEngine.PRODUCTION -> NasOpsEngine(
       deviceId = deviceId,
@@ -149,6 +153,7 @@ class NasOpsTestKit(
       lock = lock,
       newId = idSource(),
       completions = completionPort,
+      protectedFiles = protectedFiles,
     )
   }
 

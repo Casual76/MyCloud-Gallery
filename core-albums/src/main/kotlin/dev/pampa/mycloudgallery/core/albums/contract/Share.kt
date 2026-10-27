@@ -114,12 +114,27 @@ enum class ShareExclusion(override val code: String) : StableCode {
 
   /** "Riporta" o adozione: non e' (piu') nell'area comune. */
   NOT_IN_COMMON("not_in_common"),
+
+  /**
+   * Revisione B, SG-1 e I4: solo sul telefono, ma il caricamento non puo' partire: il cancello degli arrivi del backup lo ferma (D12: area non di
+   * prova; R2 della 5A: release con un account di prova) o la cartella dell'album non e' sotto la radice dei caricamenti ("Album condivisi", dopo
+   * E-SH16 verso una cartella fuori). Il foglio lo dice invece di promettere un caricamento che non partirebbe.
+   */
+  UPLOAD_BLOCKED("upload_blocked"),
 }
 
 /**
  * Il piano unico da confermare (D12): conteggi, spazio richiesto, cartella, livello, nascosti; [hash] lega la conferma a **questo**
  * piano. Scade dopo [ShareConfirmationRules.MAX_AGE_MS] dalla creazione (come le conferme). Niente percorsi: [folderLabel] e' il nome che
  * il foglio mostra ("Album condivisi/Oslo 2026"). [nonceHex] solo per un album nuovo (D7: l'id si ricalcola da account e nonce).
+ *
+ * Revisione B:
+ * - [attempt] (SH-1): un valore casuale per ogni piano chiesto con `ShareRunner.plan`, nell'impronta. Lo stesso piano (lo stesso oggetto,
+ *   la stessa conferma) non parte due volte; un piano nuovo con gli stessi media, dopo un'operazione finita con dei problemi ("Riprova", lo
+ *   stesso "Aggiungi" ripetuto), ha un'impronta sua e parte. Due operazioni aperte sugli stessi media restano impossibili per un'altra regola:
+ *   un media che una mia operazione aperta sta portando resta fuori da ogni altro piano. Vuoto = nessun tentativo (piani dei fake vecchi).
+ * - [safeCopyBlocked] (SG-1): quanti miei media, spostati dall'area privata senza copia sul telefono, non avranno subito la copia privata del
+ *   guardiano (D28) perche' il cancello del backup sull'area privata la ferma: il foglio lo dice invece di prometterla.
  */
 class SharePlan(
   val request: ShareRequest,
@@ -133,10 +148,14 @@ class SharePlan(
   val excluded: Map<ShareExclusion, Int>,
   val hidden: HiddenChoice,
   val createdAtMonotonicMs: Long,
+  val attempt: String = "",
+  val safeCopyBlocked: Int = 0,
 ) {
   init {
     require(items.isNotEmpty()) { "Un piano senza media." }
     require(items.map { it.media }.toSet().size == items.size) { "Un media due volte nello stesso piano." }
+    require(attempt.length <= 64 && attempt.all { it in '0'..'9' || it in 'a'..'f' }) { "Un tentativo e' esadecimale minuscolo, al piu' 64 cifre." }
+    require(safeCopyBlocked in 0..items.size) { "Copie del guardiano ferme fuori misura." }
   }
 
   val photos: Int get() = items.count { !it.isVideo }
@@ -229,6 +248,12 @@ enum class ShareWait(override val code: String) : StableCode {
 
   /** Il guardiano, il caricamento o il pubblicatore aspettano le loro regole (Wi-Fi di casa, attivita' pesante). */
   RULES("rules"),
+
+  /**
+   * Revisione B, I2: la copia e' nell'area comune ma il catalogo non la riconosce ancora come lo stesso media (porta di completamento, D29): la
+   * sorgente resta al suo posto e si riprova a intervalli crescenti, al piu' per 24 ore (poi l'elemento si ferma e le due copie restano).
+   */
+  CATALOG("catalog"),
 }
 
 /** Perche' un elemento non e' andato (§2.5 "Errori"). "Riprova" fa un piano nuovo. */
@@ -264,6 +289,11 @@ sealed interface ShareOpState {
     val reason: ShareWait,
     val done: Int,
     val total: Int,
+    /**
+     * Revisione B (SH-2): quanti elementi aspettano **prima** di partire (rifiutati dalla porta: spazio, scritture ferme). Partono da soli solo
+     * finche' la conferma vale (10 minuti): poi diventano "da riprovare". La striscia lo dice invece di promettere "riprendo da sola".
+     */
+    val notStarted: Int = 0,
   ) : ShareOpState
 
   data class Done(override val op: ShareOpId, override val album: AlbumId, override val kind: SharePlanKind, val done: Int) : ShareOpState
@@ -284,7 +314,8 @@ enum class ShareRunStop { FINISHED, BUDGET, WAITING }
 data class ShareRunResult(val ops: Int, val itemsDone: Int, val itemsFailed: Int, val itemsWaiting: Int, val stoppedBy: ShareRunStop)
 
 /**
- * L'orchestratore della condivisione e del "Riporta" (§2.5, §2.6). [operations]: le operazioni non ancora viste finite. [resumeAll]
+ * L'orchestratore della condivisione e del "Riporta" (§2.5, §2.6). [operations]: le operazioni non ancora viste finite e, dopo la revisione B
+ * (SH-2), anche quelle finite con elementi da riprovare (lette dal diario: restano dopo un riavvio, finche' c'e' qualcosa da riprovare). [resumeAll]
  * avanza ogni elemento lungo il suo cammino ([ShareStateMachine]) dal diario: idempotente, riprende dopo la morte del processo, un guasto
  * passeggero non diventa mai un errore permanente (invariante 8).
  */
@@ -301,4 +332,14 @@ interface ShareRunner {
 
   /** Annulla cio' che non e' ancora partito; un trasferimento in corso lo ferma la sua porta (nessun file a meta', §5.5). */
   suspend fun cancel(op: ShareOpId)
+
+  /**
+   * Revisione B, SH-2 ("Riprova", E-SH18, §2.5 "Errori"): la richiesta per gli elementi di [op] non andati e ancora da riprovare (non fatti, non
+   * in viaggio in un'altra operazione, non tornati da soli); null se non c'e' niente. **Non parte niente**: la richiesta diventa un piano nuovo
+   * (`plan`), un foglio e una conferma dell'utente, come ogni condivisione.
+   */
+  suspend fun retryRequest(op: ShareOpId): ShareRequest? = null
+
+  /** Revisione B, SH-2: la striscia dei problemi di [op] non si mostra piu' (su questo dispositivo). Niente si sposta. */
+  suspend fun dismiss(op: ShareOpId) = Unit
 }

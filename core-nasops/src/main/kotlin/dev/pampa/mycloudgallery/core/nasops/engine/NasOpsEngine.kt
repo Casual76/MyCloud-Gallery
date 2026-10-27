@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.nas.ops.RmdirOutcome
 import dev.pampa.mycloudgallery.core.nas.ops.TempFinish
 import dev.pampa.mycloudgallery.core.nasops.contract.AcceptOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.AcceptedPlan
+import dev.pampa.mycloudgallery.core.nasops.contract.CatalogHoldBackoff
 import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationGate
 import dev.pampa.mycloudgallery.core.nasops.contract.DoneSummary
 import dev.pampa.mycloudgallery.core.nasops.contract.GateStatus
@@ -49,6 +50,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanRules
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanSummary
+import dev.pampa.mycloudgallery.core.nasops.contract.ProtectedFiles
 import dev.pampa.mycloudgallery.core.nasops.contract.RunResult
 import dev.pampa.mycloudgallery.core.nasops.contract.RunStop
 import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
@@ -123,6 +125,11 @@ class NasOpsEngine internal constructor(
    * collega la posizione nuova di uno spostamento tra share **prima** che la sorgente vada nel cestino. Vincolante: vedi [completePublished].
    */
   private val completions: MoveCompletionSink = NoMoveCompletionSink,
+  /**
+   * Fase 7, revisione B (R3): i file degli album condivisi che la tabella dei permessi non lascia togliere dal loro posto. Il piano li lascia fuori
+   * con il motivo: e' il punto comune a viewer, Cartelle NAS, "Ovunque", versioni e Doppioni. Di serie nessuno.
+   */
+  private val protectedFiles: ProtectedFiles = ProtectedFiles.NONE,
 ) : NasOperations {
 
   init {
@@ -130,7 +137,7 @@ class NasOpsEngine internal constructor(
     require(fileOps.ownerDeviceId == deviceId) { "Le primitive devono essere di questo dispositivo." }
   }
 
-  private val planner = OpPlanner(deviceId, accountId, fileOps, reader, store, gate, access, newId)
+  private val planner = OpPlanner(deviceId, accountId, fileOps, reader, store, gate, access, newId, protectedFiles)
   private val purger = OwnTrashPurger(deviceId, fileOps, reader, store, presence)
   private val inventory = FolderInventory(reader, presence)
 
@@ -493,10 +500,11 @@ class NasOpsEngine internal constructor(
       val code = if (finalState == OpState.FAILED) finalItems.firstOrNull { it.errorCode != null }?.errorCode else null
       setOpState(id, finalState, code)
       GalleryLog.i(TAG) { "operazione chiusa: ${finalState.code}, fatti $doneCount, fermi $failedCount" }
-    } else if (stop == RunStop.COMPLETE && ctx.heldForCatalog) {
+    } else if (stop == RunStop.COMPLETE && (ctx.heldForCatalog || finalItems.any { it.waitingCatalog })) {
       // Fase 7 (D29): il catalogo non conosce ancora la destinazione di un file pubblicato. La sorgente resta al suo posto, l'operazione aspetta
-      // ("condizioni": riprende da sola alla prossima ripresa) e non ferma le altre operazioni.
-      pause(id, PauseReason.CONDITIONS)
+      // e non ferma le altre operazioni. Revisione B (I2): con il suo motivo ([PauseReason.CATALOG], prima "condizioni", che non diceva niente) e
+      // con il prossimo tentativo nel diario ([CatalogHoldBackoff]); anche quando questo giro ha solo saltato un elemento non ancora da riprovare.
+      pause(id, PauseReason.CATALOG)
       return OpRun(doneCount, failedCount, waitingCount, RunStop.BLOCKED, held = true)
     } else if (stop == RunStop.COMPLETE && ctx.heldForClock) {
       // R1: file gia' nel cestino, voce non ancora datata: l'operazione resta aperta (la voce e' sua, la pulizia la salta) finche' l'ora
@@ -778,8 +786,12 @@ class NasOpsEngine internal constructor(
     if (cur.state == OpItemState.COPIED) cur = verifyPhase(cur, temp, ctx)
     if (cur.state == OpItemState.VERIFIED) cur = publishPhase(cur, temp, ctx)
     if (cur.state == OpItemState.PUBLISHED) {
-      // Fase 7 (D29): la copia verificata e' al suo posto; il catalogo la collega allo stesso media **prima** che la sorgente esca.
-      if (!completePublished(cur, ctx)) return cur
+      // Fase 7 (D29): la copia verificata e' al suo posto; il catalogo la collega allo stesso media **prima** che la sorgente esca. Revisione B
+      // (R8, I2): la porta non si salta mai; senza una sua risposta l'elemento si ferma qui, con il motivo e un tetto all'attesa.
+      when (val linked = completePublished(cur, ctx)) {
+        is Completion.Linked -> cur = linked.item
+        is Completion.Stopped -> return linked.item
+      }
       cur = recordSourcePhase(cur)
     }
     if (cur.state == OpItemState.SOURCE_RECORDED) cur = trashSourcePhase(cur, ctx)
@@ -791,32 +803,69 @@ class NasOpsEngine internal constructor(
    * Fase 7 (D29, E-SH2, E-SH3; unifica `MoveCompletions` del campo A, D7): la **porta di completamento**, chiamata dopo `PUBLISHED` e **prima** di
    * `SOURCE_RECORDED`, a ogni ripresa del passo (chi la lega e' idempotente), con il timbro della destinazione letto adesso e l'impronta verificata.
    *
-   * - Destinazione presente: si chiama la porta. Se risponde, si va avanti (true). Se lancia, il catalogo non conosce ancora la destinazione:
-   *   l'elemento **resta** in `PUBLISHED` con la sorgente al suo posto, l'operazione aspetta ([RunCtx.heldForCatalog]) e si riprova alla ripresa
-   *   (false). Mai la sorgente nel cestino prima del ritorno senza errori della porta.
-   * - Destinazione sparita (tolta dal PC fra la pubblicazione e adesso) o illeggibile per un motivo che non e' la rete: niente da collegare, e la
-   *   sorgente non andra' nel cestino (la stessa occhiata la rifa' [copyStillThere], che ferma l'elemento con le due copie dove sono). Un errore di
-   *   rete mette in pausa, come ogni passo.
+   * - Destinazione presente: si chiama la porta. Se risponde, si va avanti ([Completion.Linked]). Se lancia, il catalogo non conosce ancora la
+   *   destinazione: l'elemento **resta** in `PUBLISHED` con la sorgente al suo posto e aspetta ([holdForCatalog]).
+   * - Revisione B, R8: la destinazione **non si lascia guardare** per un motivo che non e' la rete (un file aperto in esclusiva da un altro client,
+   *   un errore del NAS): prima si andava avanti **senza** la porta e, se l'occhiata dopo ([copyStillThere]) riusciva, la sorgente finiva nel
+   *   cestino con il catalogo che non sapeva la destinazione (E-SH2). Adesso e' un'attesa come quella del catalogo: la porta non si salta mai.
+   * - Destinazione sparita (tolta dal PC fra la pubblicazione e adesso) o diventata una cartella: niente da collegare; l'elemento si ferma qui
+   *   ([OpErrorCode.UNEXPECTED]) con la sorgente al suo posto, senza voce del cestino (come l'esecutore di riferimento). Un errore di rete mette in
+   *   pausa, come ogni passo.
+   * - Revisione B, I2: l'attesa ha un motivo leggibile ([PauseReason.CATALOG]) e un tetto ([CatalogHoldBackoff]: qualche ripresa subito, poi
+   *   intervalli crescenti fino a 24 ore); poi l'elemento si ferma con [OpErrorCode.CATALOG_MISMATCH] e le due copie restano.
    * Mai un'azione sul NAS nella porta: solo il catalogo locale. Nei log solo il tipo dell'errore.
    */
-  private suspend fun completePublished(cur: OpItemRecord, ctx: RunCtx): Boolean {
-    val dstShare = cur.dstShare ?: return true
-    val dst = cur.dstPath ?: return true
-    val sha = cur.sha256 ?: return true
+  private suspend fun completePublished(cur: OpItemRecord, ctx: RunCtx): Completion {
+    val dstShare = cur.dstShare
+    val dst = cur.dstPath
+    val sha = cur.sha256
+    // Un elemento pubblicato senza destinazione o senza impronta non puo' essere collegato: si ferma, la sorgente resta (mai senza la porta).
+    if (dstShare == null || dst == null || sha == null) return Completion.Stopped(fail(cur, OpErrorCode.UNEXPECTED))
     val entry = when (val r = probe(dstShare, dst, ctx.purpose)) {
-      is NasResult.Err -> if (isNetwork(r.error)) throw PauseSignal(PauseReason.NAS_UNREACHABLE) else return true
-      is NasResult.Ok -> (r.value as? Probe.Found)?.entry ?: return true
+      is NasResult.Err -> if (isNetwork(r.error)) throw PauseSignal(PauseReason.NAS_UNREACHABLE) else return holdForCatalog(cur, ctx)
+      is NasResult.Ok -> (r.value as? Probe.Found)?.entry ?: return Completion.Stopped(fail(cur, OpErrorCode.UNEXPECTED))
     }
-    if (entry.isDirectory) return true
-    return try {
+    if (entry.isDirectory) return Completion.Stopped(fail(cur, OpErrorCode.UNEXPECTED))
+    try {
       completions.published(cur.opId, cur.index, NasFileRef(cur.srcShare, cur.srcPath), NasFileRef(dstShare, dst), entry.stamp, sha)
-      true
     } catch (e: kotlinx.coroutines.CancellationException) {
       throw e
     } catch (e: Exception) {
       GalleryLog.w(TAG) { "catalogo non aggiornato dopo la pubblicazione (${e.javaClass.simpleName}): l'elemento aspetta, la sorgente resta" }
-      ctx.heldForCatalog = true
-      false
+      return holdForCatalog(cur, ctx)
+    }
+    // Un'attesa del catalogo e' finita: i suoi tentativi si azzerano (le attese dei passi dopo, file aperti, contano da capo).
+    val linked = if (cur.errorCode == OpErrorCode.CATALOG_PENDING) persist(cur, cur.copy(attempts = 0, errorCode = null, nextAttemptAtNas = null)) else cur
+    return Completion.Linked(linked)
+  }
+
+  /** L'esito della porta di completamento per un elemento `PUBLISHED`: si va avanti con [item], oppure ci si ferma qui. */
+  private sealed interface Completion {
+    val item: OpItemRecord
+
+    class Linked(override val item: OpItemRecord) : Completion
+
+    class Stopped(override val item: OpItemRecord) : Completion
+  }
+
+  /**
+   * Revisione B (I2, R8): l'elemento aspetta il catalogo in `PUBLISHED`, con la sorgente al suo posto: il prossimo tentativo e' scritto nel diario
+   * ([CatalogHoldBackoff]), l'operazione si ferma con [PauseReason.CATALOG] e non ferma le altre. Oltre il tetto l'elemento si ferma per sempre.
+   */
+  private suspend fun holdForCatalog(cur: OpItemRecord, ctx: RunCtx): Completion {
+    // I tentativi contano solo dentro questa attesa (quelli dei passi prima, file aperti, non c'entrano).
+    val attempts = if (cur.errorCode == OpErrorCode.CATALOG_PENDING) cur.attempts else 0
+    return when (val decision = CatalogHoldBackoff.decide(attempts)) {
+      is LockedBackoff.Decision.RetryAfter -> {
+        ctx.heldForCatalog = true
+        Completion.Stopped(
+          persist(cur, cur.copy(attempts = attempts + 1, nextAttemptAtNas = nasNow() + decision.delayMs, errorCode = OpErrorCode.CATALOG_PENDING)),
+        )
+      }
+      LockedBackoff.Decision.GiveUp -> {
+        GalleryLog.w(TAG) { "catalogo mai allineato dopo la pubblicazione: l'elemento si ferma, le due copie restano" }
+        Completion.Stopped(fail(cur, OpErrorCode.CATALOG_MISMATCH))
+      }
     }
   }
 

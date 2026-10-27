@@ -45,6 +45,12 @@ data class MediaFacts(
   val version: VersionId?,
   val nas: NasItemRef?,
   val onPhone: Boolean,
+  /**
+   * L'hash completo della versione corrente, se il catalogo lo conosce (I1 della revisione di sicurezza della Fase 7): la voce dell'elemento lo
+   * porta (`SharedAlbumChange.Item.sha256`) e chi legge lo confronta nell'attestazione (D9), cosi' un file diverso con la stessa chiave rapida
+   * non si mostra al suo posto.
+   */
+  val sha256: Sha256? = null,
 ) {
   override fun toString(): String = "MediaFacts(${place.code}, mine=$mine, hidden=$hidden)"
 }

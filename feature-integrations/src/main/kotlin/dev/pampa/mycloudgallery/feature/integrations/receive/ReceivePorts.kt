@@ -6,6 +6,8 @@ import dev.pampa.mycloudgallery.core.backup.contract.IncomingUploads
 import dev.pampa.mycloudgallery.core.backup.contract.NasDestination
 import dev.pampa.mycloudgallery.core.backup.noop.NoIncomingUploads
 import dev.pampa.mycloudgallery.feature.integrations.picker.UnlockFailure
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 
 // Fase 5B (P11, docs/fase5-progetto.md §1.1, §2.7, D24, C17, E-X7, E-X8): le PORTE di `ShareReceiverActivity` che `IntegrationPorts` (P0-B) non ha. La
 // activity la crea il sistema (un'altra app condivide un file), quindi non si inietta dal costruttore: `:app` le installa una volta all'avvio (P14),
@@ -100,10 +102,34 @@ interface IncomingAlbums {
   suspend fun albums(): List<IncomingAlbumChoice>
 
   /**
+   * AA-1: gli album **nel tempo**. Con l'app chiusa la condivisione in arrivo la apre il sistema e gli album si montano dopo alcuni secondi: la schermata
+   * leggeva l'elenco una volta sola, appena la copia era fatta, e se era ancora vuoto "Aggiungi ad album" non compariva piu'. Emette l'elenco di adesso e
+   * poi ogni suo cambio. Il default e' una lettura sola ([albums]).
+   */
+  fun choices(): Flow<List<IncomingAlbumChoice>> = flow { emit(albums()) }
+
+  /** AA-2: da qui si puo' creare un album nuovo (la voce "Aggiungi ad album" c'e' anche senza album, con «Nuovo album»). */
+  val canCreate: Boolean get() = false
+
+  /** AA-2: crea un album a mano di nome [title] e lo offre come scelta. Il nome e' un dato dell'utente: mai nei log. */
+  suspend fun create(title: String): IncomingAlbumCreate = IncomingAlbumCreate.Unavailable
+
+  /**
    * Il salvataggio dello stage [stage] e' in coda: quando i suoi file saranno nel catalogo, vanno in [album]. Registra la promessa in modo durevole; falso se non
    * si e' potuta registrare (la schermata lo dice, i file sono comunque in coda).
    */
   suspend fun willAdd(stage: IncomingStageId, album: IncomingAlbumChoice): Boolean
+}
+
+/** Com'e' andato «Nuovo album» dalla ricezione (AA-2). */
+sealed interface IncomingAlbumCreate {
+  data class Created(val choice: IncomingAlbumChoice) : IncomingAlbumCreate
+
+  /** Il nome non va bene (vuoto, troppo lungo, caratteri vietati). */
+  data object InvalidTitle : IncomingAlbumCreate
+
+  /** Gli album non sono pronti (nessuna famiglia): non si crea adesso. */
+  data object Unavailable : IncomingAlbumCreate
 }
 
 /** Nessun album: la voce "Aggiungi ad album" non compare. */

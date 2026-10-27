@@ -1,11 +1,13 @@
 package dev.pampa.mycloudgallery.navigation
 
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
@@ -22,6 +24,8 @@ import dev.pampa.mycloudgallery.albums.AlbumRequests
 import dev.pampa.mycloudgallery.albums.AlbumViewerAnchor
 import dev.pampa.mycloudgallery.albums.AlbumViewerItems
 import dev.pampa.mycloudgallery.albums.AppViewerAlbumActions
+import dev.pampa.mycloudgallery.albums.PickOutcome
+import dev.pampa.mycloudgallery.albums.PickRelay
 import dev.pampa.mycloudgallery.albums.LibraryAlbumRefs
 import dev.pampa.mycloudgallery.albums.withAlbums
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
@@ -71,23 +75,18 @@ class AlbumsHostViewModel @Inject constructor(private val gallery: GalleryGraph)
   /** Solo cio' che e' gia' sul dispositivo (P10-8): le miniature della Libreria, senza nascosti. */
   val thumbnails: AlbumThumbnails = AlbumThumbnails(gallery.thumbnails, gallery.placeholders, LibraryAlbumRefs { gallery.visibleTimeline.snapshot.value })
 
-  private var pick: ((List<MediaId>) -> Unit)? = null
+  private val relay = PickRelay(gallery.albumRequests)
 
   /** Il selettore sta per aprirsi: [onPicked] ricevera' la scelta (una volta sola). */
-  fun startPick(onPicked: (List<MediaId>) -> Unit) {
-    pick = onPicked
-  }
+  fun startPick(onPicked: (List<MediaId>) -> Unit) = relay.start(onPicked)
 
-  /** La scelta del selettore: va a chi l'ha chiesta; senza una richiesta in attesa (processo rinato) non succede niente. */
-  fun picked(ids: List<MediaId>) {
-    val target = pick
-    pick = null
-    if (ids.isNotEmpty()) target?.invoke(ids)
-  }
+  /**
+   * La scelta del selettore: va a chi l'ha chiesta. Se il processo e' rinato nel frattempo la richiamata non c'e' piu' (AA-3): per "Aggiungi foto" la scelta
+   * diventa un "Aggiungi ad album" con l'album della rotta, per le foto d'esempio l'esito e' [PickOutcome.Lost] e la schermata lo dice.
+   */
+  fun picked(ids: List<MediaId>, forAlbum: String?): PickOutcome = relay.picked(ids, forAlbum)
 
-  fun cancelPick() {
-    pick = null
-  }
+  fun cancelPick() = relay.cancel()
 
   /** Il viewer sugli elementi di un album, nell'ordine dell'album e vivo (un nascosto esce anche dal viewer aperto, E-H1). */
   fun viewerRequest(view: OrderedTimelineView, start: MediaId): ViewerRequest = ViewerRequest(
@@ -143,12 +142,15 @@ fun NavGraphBuilder.mediaPickerGraph(nav: NavController, host: AlbumsHostViewMod
   composable<MediaPickerDestination> { entry ->
     val route = entry.toRoute<MediaPickerDestination>()
     val title = stringResource(if (route.forAlbum != null) R.string.albums_picker_add_title else R.string.albums_picker_examples_title)
+    val context = LocalContext.current
+    val lost = stringResource(R.string.albums_picker_lost)
     MediaPickerRoute(
       title = title,
       max = route.max,
       onPicked = { ids ->
         nav.popBackStack()
-        host.picked(ids)
+        // AA-3: dopo la morte del processo la richiamata non c'e' piu': la scelta non si perde in silenzio.
+        if (host.picked(ids, route.forAlbum) == PickOutcome.Lost) Toast.makeText(context, lost, Toast.LENGTH_LONG).show()
       },
       onBack = {
         host.cancelPick()

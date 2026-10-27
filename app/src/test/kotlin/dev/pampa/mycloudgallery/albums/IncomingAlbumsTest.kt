@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.albums
 
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus
 import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.albums.noop.NoSharedAlbums
@@ -15,10 +16,15 @@ import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingAlbumChoice
+import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingAlbumCreate
 import java.io.File
 import java.nio.file.Files
 import java.util.UUID
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Test
@@ -116,5 +122,51 @@ class IncomingAlbumsTest {
     manual("A mano")
     assertThat(albums.create("Smart", AlbumKind.SMART, SmartRules(period = null, place = null, text = "mare"))).isInstanceOf(CreateOutcome.Created::class.java)
     assertThat(port().albums().map { it.name }).containsExactly("A mano")
+  }
+
+  // --- AA-1, AA-2 ---------------------------------------------------------------------------------------------------------------
+
+  @Test
+  fun laPrimaLetturaAspettaGliAlbumMontatiENonDiceNessunAlbum_AA1() = runBlocking<Unit> {
+    val port = port()
+    // L'app era chiusa e gli album si montano: lo stato dice «sto leggendo» e l'elenco e' ancora vuoto.
+    albums.status.value = AlbumsStatus.Loading
+    // La lettura parte e resta ad aspettare (UNDISPATCHED: arriva fino alla prima sospensione prima che nasca l'album).
+    val read = async(start = CoroutineStart.UNDISPATCHED) { port.albums() }
+    assertThat(read.isCompleted).isFalse()
+    manual("Compleanno")
+    albums.status.value = AlbumsStatus.Ready
+    assertThat(read.await().map { it.name }).containsExactly("Compleanno")
+  }
+
+  @Test
+  fun glialbumSeguonoLaPortaNelTempo_AA1() = runBlocking<Unit> {
+    val port = port()
+    val sawEmpty = CompletableDeferred<Unit>()
+    // Il collettore parte e vede l'elenco vuoto di adesso; solo dopo nasce l'album: prima la schermata leggeva una volta sola e non lo vedeva mai.
+    val got = async(start = CoroutineStart.UNDISPATCHED) { port.choices().onEach { sawEmpty.complete(Unit) }.first { it.isNotEmpty() } }
+    sawEmpty.await()
+    manual("Nuovo")
+    assertThat(got.await().map { it.name }).containsExactly("Nuovo")
+  }
+
+  @Test
+  fun unNuovoAlbumDallaRicezioneSiCreaEsiOffre_AA2() = runBlocking<Unit> {
+    val port = port()
+    assertThat(port.canCreate).isTrue()
+    val created = port.create("  Mare 2026 ") as IncomingAlbumCreate.Created
+    assertThat(created.choice.name).isEqualTo("Mare 2026")
+    assertThat(created.choice.shared).isFalse()
+    assertThat(port.albums().map { it.id }).containsExactly(created.choice.id)
+    // Il nome e' un dato: un album a mano, mai smart e mai condiviso.
+    assertThat(albums.all.value.albums.single()).isInstanceOf(dev.pampa.mycloudgallery.core.albums.contract.Album.Manual::class.java)
+  }
+
+  @Test
+  fun unNomeNonValidoNonCreaNiente_AA2() = runBlocking<Unit> {
+    val port = port()
+    assertThat(port.create("   ")).isEqualTo(IncomingAlbumCreate.InvalidTitle)
+    assertThat(port.create("x".repeat(65))).isEqualTo(IncomingAlbumCreate.InvalidTitle)
+    assertThat(albums.all.value.albums).isEmpty()
   }
 }

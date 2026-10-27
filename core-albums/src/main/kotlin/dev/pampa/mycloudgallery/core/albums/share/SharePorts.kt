@@ -72,7 +72,55 @@ class ShareOrchestratorPorts(
   val linkPersonal: suspend (personal: AlbumId, shared: AlbumId) -> Unit = { _, _ -> },
   /** Dopo ogni modifica accodata al pubblicatore: la vista locale si ricalcola (P13 la lega a `SharedAlbumReplica.recompute`). */
   val afterStage: suspend (AlbumId) -> Unit = { },
+  /**
+   * Revisione B, SH-5: il mio pubblicatore ha gia' la definizione di [AlbumId] (in coda o pubblicata). Allora una ripresa dopo la morte del
+   * processo **non** riaccoda la definizione e il livello del piano: li' ci puo' essere gia' un titolo, un livello o una chiusura piu' nuovi.
+   * Di serie: la replica conosce l'album (la mia vista locale comprende le mie voci in coda). :app lo lega al deposito del pubblicatore.
+   */
+  val definitionStaged: suspend (AlbumId) -> Boolean = { album -> shared.state(album) != null },
+  /**
+   * Revisione B, SG-1 e I4: cosa i cancelli del backup lasciano fare adesso, per la cartella dell'album: caricare i media solo sul telefono
+   * (cancello degli arrivi e radice dei caricamenti) e la copia privata del guardiano (cancello del backup sull'area privata). Il piano lo
+   * dice nel foglio invece di promettere cio' che non partirebbe. Di serie tutto aperto.
+   */
+  val backupGates: suspend (ShareFolder) -> ShareBackupGates = { ShareBackupGates.OPEN },
+  /** Revisione B, SH-2: le strisce dei problemi chiuse dall'utente (locali al dispositivo). Di serie in memoria. */
+  val problemMarks: ShareProblemMarks = ShareProblemMarks.inMemory(),
 )
+
+/** Revisione B (SG-1, I4): cosa la condivisione puo' chiedere al backup adesso. */
+data class ShareBackupGates(
+  /** I media solo sul telefono si possono caricare nella cartella dell'album (`INCOMING`, E-SH1). */
+  val uploads: Boolean,
+  /** Il guardiano puo' fare la copia privata dei miei media spostati che il telefono non ha piu' (D28). */
+  val safeCopies: Boolean,
+) {
+  companion object {
+    val OPEN: ShareBackupGates = ShareBackupGates(uploads = true, safeCopies = true)
+  }
+}
+
+/**
+ * Revisione B, SH-2: le strisce "N da riprovare" che l'utente ha chiuso, per operazione. Locali al dispositivo, come il diario. :app le tiene su
+ * un file (`StateFiles`); di serie in memoria.
+ */
+interface ShareProblemMarks {
+  suspend fun dismissed(): Set<ShareOpId>
+
+  suspend fun dismiss(op: ShareOpId)
+
+  companion object {
+    fun inMemory(): ShareProblemMarks = object : ShareProblemMarks {
+      private val ops = java.util.Collections.synchronizedSet(LinkedHashSet<ShareOpId>())
+
+      override suspend fun dismissed(): Set<ShareOpId> = synchronized(ops) { ops.toSet() }
+
+      override suspend fun dismiss(op: ShareOpId) {
+        ops += op
+      }
+    }
+  }
+}
 
 /**
  * La cartella di un album condiviso nell'area comune (risposta Q1 (a): "Album condivisi/<nome>"; E-SH22): il titolo resta quello scelto,
@@ -146,22 +194,34 @@ object AlbumFolderNames {
 
 /**
  * Le chiavi dei trasferimenti di un'operazione (scritte nel diario **prima** di chiamare la porta: la porta e' idempotente per chiave e
- * `TicketStatus.find` ritrova il trasferimento avviato da un processo morto). Una per tipo di trasferimento; per "Riporta" una per cartella
- * d'origine ([group]). Null per cio' che non si trasferisce.
+ * `TicketStatus.find` ritrova il trasferimento avviato da un processo morto). Una per tipo di trasferimento e per lotto ([group]); per
+ * "Riporta" una per cartella d'origine e lotto. Null per cio' che non si trasferisce.
+ *
+ * Revisione B, I2: un trasferimento porta al piu' [ShareRules.MAX_ITEMS_PER_TRANSFER] file (il tetto di un'operazione di core-nasops): un album
+ * fino a 20.000 elementi parte in piu' lotti, ognuno con la sua chiave. Il primo lotto ha la chiave di prima (`<op>:in`, `<op>:up`).
  */
 object ShareTransferKeys {
   fun keyFor(op: ShareOpId, action: ShareItemAction, group: Int = 0): TransferKey? = when (action) {
-    ShareItemAction.MOVE_IN -> TransferKey("${op.value}:in")
-    ShareItemAction.UPLOAD -> TransferKey("${op.value}:up")
+    ShareItemAction.MOVE_IN -> TransferKey(if (group == 0) "${op.value}:in" else "${op.value}:in:$group")
+    ShareItemAction.UPLOAD -> TransferKey(if (group == 0) "${op.value}:up" else "${op.value}:up:$group")
     ShareItemAction.MOVE_OUT -> TransferKey("${op.value}:out:$group")
     ShareItemAction.REFERENCE, ShareItemAction.ADOPT -> null
   }
+
+  /** L'operazione di una chiave (la parte prima del primo `:`): l'id di un'operazione non ha mai `:`. */
+  fun opOf(key: TransferKey): ShareOpId? = runCatching { ShareOpId(key.value.substringBefore(':')) }.getOrNull()
 }
 
 /** Le misure dell'orchestratore. */
 object ShareRules {
   /** Le posizioni degli elementi a intervalli (D21): si inserisce senza riscrivere gli altri. */
   const val POSITION_STEP: Long = 1_000
+
+  /**
+   * Revisione B, I2: i file di un trasferimento, al piu'. E' il tetto di un'operazione di core-nasops (`OpRules.MAX_ITEMS_PER_OP`), che
+   * core-albums non vede: un test di :app li confronta.
+   */
+  const val MAX_ITEMS_PER_TRANSFER: Int = 10_000
 
   /** La cartella d'origine di un media spostato: la cartella del file (la radice della share se il file sta li'). */
   fun originOf(source: SharePath): SharePath? = source.parent()

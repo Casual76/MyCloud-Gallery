@@ -26,6 +26,8 @@ internal enum class SpecRow(val label: String) {
   OTHER_APPS("Selettore per le altre app, provider di documenti"),
   WIDGET("Widget di prova"),
   NAS_FOLDERS("Cartelle NAS"),
+  NAS_SPACE("Cartelle NAS · Spazio (i file piu' grandi, per nome)"),
+  NAS_TRASH("Cartelle NAS · Cestino (nome e cartella di cio' che e' stato eliminato)"),
   ALBUM_VIEWER("Viewer aperto da un album"),
   ADD_TO_ALBUM("Aggiungi ad album"),
 
@@ -93,8 +95,14 @@ internal class SurfaceEntry(
   override fun toString(): String = "SurfaceEntry($id, $backing)"
 }
 
-/** Il lettore dei Nascosti (la pagina stessa) e chi li mostra dietro il cancello: leggono i nascosti **apposta**, solo dopo lo sblocco. */
-internal class GatedReader(val id: String, val title: String, val proofs: List<String>)
+/**
+ * Il lettore dei Nascosti (la pagina stessa) e chi li mostra dietro il cancello: leggono i nascosti **apposta**, solo dopo lo sblocco.
+ *
+ * @property sources i file di produzione che mostrano nomi di file di Cartelle NAS dietro il cancello (il registro li riconosce, vedi
+ *   [HiddenSurfaces.nameBearingTypes]).
+ * @property row la riga del §2.1 che questa pagina copre, se ne copre una (il Cestino di Cartelle NAS).
+ */
+internal class GatedReader(val id: String, val title: String, val proofs: List<String>, val sources: List<String> = emptyList(), val row: SpecRow? = null)
 
 internal object HiddenSurfaces {
 
@@ -111,6 +119,8 @@ internal object HiddenSurfaces {
   private const val FEATURE_ALBUMS = "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums"
   private const val FACES_PEOPLE = "core-faces/src/main/kotlin/dev/pampa/mycloudgallery/core/faces/people"
   private const val SEARCH = "core-search/src/main/kotlin/dev/pampa/mycloudgallery/core/search"
+  private const val FEATURE_NAS = "feature-nas/src/main/kotlin/dev/pampa/mycloudgallery/feature/nas"
+  private const val FEATURE_LIBRARY = "feature-library/src/main/kotlin/dev/pampa/mycloudgallery/feature/library"
 
   /** Le superfici. L'ordine e' quello del §2.1. */
   val entries: List<SurfaceEntry> = listOf(
@@ -151,7 +161,15 @@ internal object HiddenSurfaces {
     ),
     SurfaceEntry(
       id = "nas-folders", title = "Cartelle NAS: la riga dei nascosti senza nomi (I8)", row = SpecRow.NAS_FOLDERS, owner = "P9", backing = Backing.PRODUCTION,
+      sources = listOf("$FEATURE_NAS/folders/HiddenFiles.kt", "$FEATURE_NAS/folders/NasFoldersScreen.kt", "$FEATURE_NAS/folders/NasFoldersViewModel.kt"),
       probe = HiddenProbes.nasFolders, live = true, alsoProvedBy = listOf("NasHiddenFilesTest", "NasHiddenRowScreenTest"),
+    ),
+    // --- Revisione di Fase 7, pacchetto C (R4, NA-1): Spazio NAS elenca per nome i file piu' grandi, che sono quasi sempre i video; i nascosti non ci sono ------
+    SurfaceEntry(
+      id = "nas-space", title = "Cartelle NAS · Spazio: i file piu' grandi, per nome e cartella, senza i nascosti (R4, NA-1)", row = SpecRow.NAS_SPACE,
+      owner = "Revisione C", backing = Backing.PRODUCTION,
+      sources = listOf("app/src/main/kotlin/dev/pampa/mycloudgallery/nas/NasOrganizer.kt", "$FEATURE_NAS/space/NasSpaceScreen.kt"),
+      probe = HiddenProbes.nasSpace, live = true, alsoProvedBy = listOf("NasHiddenFilesTest"),
     ),
     // --- Il codice vero di P2 (album condivisi) e di P4 (condivisione): integrazione del 26/10 ---------------------------------------------------------------
     SurfaceEntry(
@@ -273,11 +291,30 @@ internal object HiddenSurfaces {
     ),
   )
 
-  /** Il lettore dei Nascosti e gli Eliminati di recente: mostrano i nascosti apposta, dietro il cancello (credenziale a ogni ingresso). */
+  /**
+   * Il lettore dei Nascosti e gli Eliminati di recente: mostrano i nascosti apposta, dietro il cancello (credenziale a ogni ingresso). Il **Cestino di
+   * Cartelle NAS** e' la stessa pagina (ED-1, R4 della revisione di Fase 7): `NasTrashGateTest` prova che ogni ingresso di `NasScreen.TRASH` passa da li'.
+   */
   val gated: List<GatedReader> = listOf(
     GatedReader("hidden-page", "Nascosti", listOf("HiddenControllerTest", "HiddenScreenTest", "HiddenAccessGateTest", "HiddenLiveViewTest")),
-    GatedReader("recently-deleted", "Eliminati di recente (con il segno sui nascosti)", listOf("RecentlyDeletedControllerTest", "RecentlyDeletedScreenTest")),
+    GatedReader(
+      "recently-deleted", "Eliminati di recente (con il segno sui nascosti)", listOf("RecentlyDeletedControllerTest", "RecentlyDeletedScreenTest"),
+      sources = listOf(
+        "$FEATURE_LIBRARY/trash/NasTrashPort.kt", "$FEATURE_LIBRARY/trash/NasTrashRows.kt", "$FEATURE_LIBRARY/trash/RecentlyDeletedController.kt",
+        "app/src/main/kotlin/dev/pampa/mycloudgallery/utility/UtilityPorts.kt",
+      ),
+    ),
+    GatedReader(
+      "nas-trash", "Cartelle NAS · Cestino: nome e cartella di cio' che e' stato eliminato, dietro il cancello", listOf("NasTrashGateTest", "RecentlyDeletedNasTest"),
+      row = SpecRow.NAS_TRASH,
+    ),
   )
+
+  /**
+   * Le pagine di Cartelle NAS che mostrano nomi di file ma **non sono raggiungibili** dall'app (R4): la vecchia pagina del Cestino, senza cancello. Il
+   * registro le riconosce per nome; `NasTrashGateTest` prova che nessuna rotta le chiama.
+   */
+  val dormant: List<String> = listOf("$FEATURE_NAS/trash/NasTrashScreen.kt", "$FEATURE_NAS/trash/NasTrashViewModel.kt")
 
   /**
    * I file che **legano** i contratti (`VisibleMedia`, `HiddenMask`, `WidgetFeed`) al catalogo senza mostrare niente: non sono superfici. Il registro li
@@ -303,4 +340,11 @@ internal object HiddenSurfaces {
 
   /** I contratti da cui ogni superficie deve passare per i nascosti. */
   val contractNames: List<String> = listOf("VisibleMedia", "HiddenMask", "WidgetFeed")
+
+  /**
+   * I tipi che portano **il nome o la cartella** di un file del NAS (spazio, cestino, elenco delle cartelle). Una schermata che li mostra senza passare
+   * da `VisibleMedia` o `HiddenMask` non era mai segnalata dal registro (R4): ora ogni file di `feature-*` e `:app` che li nomina deve stare nel
+   * registro (una superficie, un lettore dietro il cancello, o la pagina inattiva).
+   */
+  val nameBearingTypes: List<String> = listOf("LargestFile", "NasTrashItem", "NasFolderEntry", "NasTrashRow")
 }

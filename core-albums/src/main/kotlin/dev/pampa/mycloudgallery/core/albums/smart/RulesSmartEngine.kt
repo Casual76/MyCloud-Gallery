@@ -200,9 +200,14 @@ class RulesSmartEngine(
     return state.auto.values.count { it.addedAt > mark } + state.suggestions.values.count { it.addedAt > mark }
   }
 
-  /** L'utente ha visto l'album: le novita' ripartono da zero. */
+  /**
+   * L'utente ha visto l'album: le novita' ripartono da zero. **Un album senza righe non ha niente da aver visto** (AS-2): aprire la pagina di uno smart
+   * appena creato, prima del primo calcolo, non mette il segno; altrimenti le righe che il motore scrive un attimo dopo avrebbero un istante piu' recente
+   * del segno e alla riapertura tutte le foto risulterebbero "nuove". Senza segno non ci sono novita' (E-AL7): la prima apertura con le righe lo mette.
+   */
   suspend fun markSeen(id: AlbumId) {
     val state = rows.state(id) ?: return
+    if (state.auto.isEmpty() && state.suggestions.isEmpty()) return
     seen.markSeen(id, stampFor(state))
   }
 

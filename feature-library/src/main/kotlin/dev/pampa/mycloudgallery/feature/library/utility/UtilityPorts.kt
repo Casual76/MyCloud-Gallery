@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.library.utility
 
 import dev.pampa.mycloudgallery.core.library.duplicates.NasTrashRef
+import dev.pampa.mycloudgallery.core.library.duplicates.PhoneTrashRef
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
 import dev.pampa.mycloudgallery.feature.library.trash.UserTap
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -40,6 +41,21 @@ fun interface CleanupNasPort {
 /** Nessuna pulizia sul NAS (nessun NAS): le copie del NAS non si propongono. */
 object NoCleanupNas : CleanupNasPort {
   override suspend fun trash(copies: List<NasTrashRef>, tap: UserTap): NasTrashOutcome = NasTrashOutcome.REJECTED
+}
+
+/**
+ * R18 (revisione di Fase 7): prima del dialogo di sistema, le copie del telefono del piano si ricontrollano **riga per riga** nel MediaStore. Una copia
+ * sovrascritta dopo la scansione (stesso `_ID`, byte nuovi) non e' piu' un doppione e non va nel cestino. Lo lega `:app` (sopra la porta del telefono
+ * del backup, che rilegge la riga con il suo timbro); senza, nessuna copia del telefono si manda nel cestino da qui ([NoPhoneCopyCheck]).
+ */
+fun interface PhoneCopyCheck {
+  /** Delle [copies], quelle che sono ancora la stessa riga con lo stesso timbro (dimensione, data di modifica) del piano. Una che non si sa dire non c'e'. */
+  suspend fun unchanged(copies: List<PhoneTrashRef>): List<PhoneTrashRef>
+}
+
+/** Nessun controllo del telefono: nessuna copia del telefono si manda nel cestino (fallire chiusi). */
+object NoPhoneCopyCheck : PhoneCopyCheck {
+  override suspend fun unchanged(copies: List<PhoneTrashRef>): List<PhoneTrashRef> = emptyList()
 }
 
 /**

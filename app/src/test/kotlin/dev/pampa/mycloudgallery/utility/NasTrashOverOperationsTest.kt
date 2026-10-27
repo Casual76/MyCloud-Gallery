@@ -8,8 +8,6 @@ import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashFeed
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashRow
-import dev.pampa.mycloudgallery.feature.library.trash.testing.fakeDoubleTap
-import dev.pampa.mycloudgallery.feature.library.trash.testing.fakeSingleTap
 import dev.pampa.mycloudgallery.integration.Attese
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -44,7 +42,7 @@ class NasTrashOverOperationsTest {
   private suspend fun trashed(path: String, bytes: ByteArray): NasTrashRow {
     val stamp = kit.putFile(NasOpsTestKit.PRIVATE_SHARE, path, bytes)
     val copy = NasTrashRef(NasOpsTestKit.PRIVATE_SHARE, path, stamp.size, stamp.modifiedAtMillis, stamp.fileId, CopyArea.MY_PRIVATE)
-    assertThat(OperationsCleanupNas(kit.operations) { kit.clocks.monotonicMs() }.trash(listOf(copy), fakeSingleTap())).isEqualTo(NasTrashOutcome.STARTED)
+    assertThat(OperationsCleanupNas(kit.operations) { kit.clocks.monotonicMs() }.trash(listOf(copy), TestTaps.single())).isEqualTo(NasTrashOutcome.STARTED)
     port.refresh()
     return ready().rows.single()
   }
@@ -70,7 +68,7 @@ class NasTrashOverOperationsTest {
     val row = trashed(path, ByteArray(1_200) { 2 })
     assertThat(kit.exists(NasOpsTestKit.PRIVATE_SHARE, path)).isFalse()
 
-    assertThat(port.restore(setOf(row.key), fakeSingleTap())).isEqualTo(NasTrashOutcome.STARTED)
+    assertThat(port.restore(setOf(row.key), TestTaps.single())).isEqualTo(NasTrashOutcome.STARTED)
 
     assertThat(kit.exists(NasOpsTestKit.PRIVATE_SHARE, path)).isTrue()
     port.refresh()
@@ -81,11 +79,11 @@ class NasTrashOverOperationsTest {
   fun eliminaSubitoVuoleDueTocchi() = runBlocking<Unit> {
     val row = trashed("Backup/Pixel 9/2026/10/IMG_0003.jpg", ByteArray(900) { 3 })
 
-    assertThat(port.purgeNow(setOf(row.key), fakeSingleTap())).isEqualTo(NasTrashOutcome.REJECTED)
+    assertThat(port.purgeNow(setOf(row.key), TestTaps.single())).isEqualTo(NasTrashOutcome.REJECTED)
     port.refresh()
     assertThat(ready().rows).hasSize(1)
 
-    assertThat(port.purgeNow(setOf(row.key), fakeDoubleTap())).isEqualTo(NasTrashOutcome.STARTED)
+    assertThat(port.purgeNow(setOf(row.key), TestTaps.double())).isEqualTo(NasTrashOutcome.STARTED)
     port.refresh()
     assertThat(ready().rows).isEmpty()
   }
@@ -94,9 +92,9 @@ class NasTrashOverOperationsTest {
   fun unaChiaveCheNonCeNonFaNiente() = runBlocking<Unit> {
     val row = trashed("Backup/Pixel 9/2026/10/IMG_0004.jpg", ByteArray(800) { 4 })
 
-    assertThat(port.restore(setOf("${NasOpsTestKit.DEVICE_B}/inventata"), fakeSingleTap())).isEqualTo(NasTrashOutcome.REJECTED)
-    assertThat(port.purgeNow(setOf("${NasOpsTestKit.DEVICE_B}/inventata"), fakeDoubleTap())).isEqualTo(NasTrashOutcome.REJECTED)
-    assertThat(port.restore(emptySet(), fakeSingleTap())).isEqualTo(NasTrashOutcome.REJECTED)
+    assertThat(port.restore(setOf("${NasOpsTestKit.DEVICE_B}/inventata"), TestTaps.single())).isEqualTo(NasTrashOutcome.REJECTED)
+    assertThat(port.purgeNow(setOf("${NasOpsTestKit.DEVICE_B}/inventata"), TestTaps.double())).isEqualTo(NasTrashOutcome.REJECTED)
+    assertThat(port.restore(emptySet(), TestTaps.single())).isEqualTo(NasTrashOutcome.REJECTED)
     port.refresh()
     assertThat(ready().rows.map { it.key }).containsExactly(row.key)
   }
@@ -107,7 +105,7 @@ class NasTrashOverOperationsTest {
     val row = trashed(path, ByteArray(700) { 5 })
     kit.gate.byShare[NasOpsTestKit.PRIVATE_SHARE] = GateStatus.FROZEN
 
-    assertThat(port.restore(setOf(row.key), fakeSingleTap())).isIn(listOf(NasTrashOutcome.BLOCKED, NasTrashOutcome.REJECTED))
+    assertThat(port.restore(setOf(row.key), TestTaps.single())).isIn(listOf(NasTrashOutcome.BLOCKED, NasTrashOutcome.REJECTED))
     assertThat(kit.exists(NasOpsTestKit.PRIVATE_SHARE, path)).isFalse()
   }
 

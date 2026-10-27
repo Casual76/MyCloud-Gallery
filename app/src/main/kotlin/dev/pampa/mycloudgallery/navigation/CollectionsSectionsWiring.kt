@@ -34,12 +34,14 @@ import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -47,6 +49,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import dev.pampa.mycloudgallery.feature.nas.R as NasR
 
 // LE SEZIONI DELLE RACCOLTE COME FORNITORI (Fase 7, P13; D33, §2.7; P11: "un fornitore per sezione", "il ponte extraGroups tolto"). Ogni sezione e' un
@@ -150,9 +153,18 @@ class AppCollectionsSections(
  * sincronizzati fra i dispositivi dell'account), dal registro dei dati personali che c'e' solo con il NAS agganciato ([stores]). **Prima** del registro le
  * scelte valgono subito in memoria e, appena il registro c'e', vi entrano (come `PersonalSettingsHub` per `search_order`): niente si perde e niente
  * aspetta la sincronizzazione.
+ *
+ * **RC-2** (revisione di fine Fase 7): finche' una scelta non e' nel registro **vale quella dell'utente**, non quella del registro. Prima, appena il registro
+ * compariva, `order` passava a quello del registro (ancora vuoto) e la scelta tornava per un attimo l'ordine predefinito; e una consegna fallita (disco
+ * pieno) non si ritentava fino alla scelta dopo. Adesso la scelta non consegnata prevale, e la consegna si ritenta a intervalli.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
-class AppCollectionsLayoutStore(stores: StateFlow<PersonalStore?>, private val scope: CoroutineScope) : CollectionsLayoutStore {
+class AppCollectionsLayoutStore(
+  stores: StateFlow<PersonalStore?>,
+  private val scope: CoroutineScope,
+  /** Ogni quanto si ritenta una consegna fallita (la prova lo accorcia). */
+  private val retryMs: Long = RETRY_MS,
+) : CollectionsLayoutStore {
   private val synced: StateFlow<SyncedCollectionsSettings?> = stores
     .map { store -> store?.let { SyncedCollectionsSettings(it, scope) } }
     .stateIn(scope, SharingStarted.Eagerly, null)
@@ -161,55 +173,110 @@ class AppCollectionsLayoutStore(stores: StateFlow<PersonalStore?>, private val s
   private var pendingOrder: List<String>? = null
   private val pendingHidden = LinkedHashMap<String, Boolean>()
 
-  override val order: StateFlow<List<String>> = synced.flatMapLatest { s -> s?.order ?: local.order }
-    .stateIn(scope, SharingStarted.Eagerly, emptyList())
+  /** Le scelte non ancora nel registro, come flussi: prevalgono su quello che il registro dice. */
+  private val orderUndelivered = MutableStateFlow(false)
+  private val hiddenUndelivered = MutableStateFlow<Map<String, Boolean>>(emptyMap())
 
-  override val hidden: StateFlow<Set<String>> = synced.flatMapLatest { s -> s?.hidden ?: local.hidden }
-    .stateIn(scope, SharingStarted.Eagerly, emptySet())
+  override val order: StateFlow<List<String>> =
+    combine(synced.flatMapLatest { s -> s?.order ?: local.order }, local.order, orderUndelivered) { shared, mine, undelivered -> if (undelivered) mine else shared }
+      .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+  override val hidden: StateFlow<Set<String>> =
+    combine(synced.flatMapLatest { s -> s?.hidden ?: local.hidden }, hiddenUndelivered) { shared, undelivered ->
+      if (undelivered.isEmpty()) shared else shared.filterTo(HashSet()) { it !in undelivered } + undelivered.filterValues { it }.keys
+    }.stateIn(scope, SharingStarted.Eagerly, emptySet())
 
   init {
-    // Le scelte fatte prima del registro vi entrano appena c'e' (una volta: poi si scrive direttamente li').
-    scope.launch { synced.filterNotNull().collect { deliver(it) } }
+    // Le scelte fatte prima del registro vi entrano appena c'e' (una volta: poi si scrive direttamente li'); una consegna che non riesce si ritenta.
+    scope.launch { synced.filterNotNull().collect { deliverUntilDone(it) } }
   }
 
   override suspend fun setOrder(codes: List<String>) {
-    synced.value?.let { return it.setOrder(codes) }
+    synced.value?.let { settings ->
+      settings.setOrder(codes)
+      // Una scelta nuova nel registro scavalca quella vecchia che non era riuscita a entrarci.
+      pending.withLock {
+        pendingOrder = null
+        orderUndelivered.value = false
+      }
+      return
+    }
     pending.withLock {
       local.setOrder(codes)
       pendingOrder = local.order.value
+      orderUndelivered.value = true
     }
-    synced.value?.let { deliver(it) }
+    synced.value?.let { deliverUntilDone(it) }
   }
 
   override suspend fun setHidden(code: String, hidden: Boolean) {
-    synced.value?.let { return it.setHidden(code, hidden) }
+    // Come il deposito in memoria e il registro: un codice sconosciuto e le sezioni che non si nascondono mai (Album, D33) non entrano da nessuna parte.
+    if (!CollectionSections.isValidCode(code) || code in CollectionSections.neverHidden) return
+    synced.value?.let { settings ->
+      settings.setHidden(code, hidden)
+      pending.withLock {
+        pendingHidden.remove(code)
+        hiddenUndelivered.value = pendingHidden.toMap()
+      }
+      return
+    }
     pending.withLock {
       local.setHidden(code, hidden)
       pendingHidden[code] = hidden
+      hiddenUndelivered.value = pendingHidden.toMap()
     }
-    synced.value?.let { deliver(it) }
+    synced.value?.let { deliverUntilDone(it) }
   }
 
-  /** Consegna le scelte in attesa; quelle consegnate escono dall'attesa, le altre (il registro non ha scritto: disco pieno) restano per il giro dopo. */
-  private suspend fun deliver(settings: SyncedCollectionsSettings) {
+  /** Consegna finche' riesce (al piu' [MAX_ATTEMPTS] volte, ogni [RETRY_MS]): una scelta che non entra nel registro resta quella dell'utente. */
+  private suspend fun deliverUntilDone(settings: SyncedCollectionsSettings) {
+    var attempt = 0
+    while (attempt++ < MAX_ATTEMPTS) {
+      if (deliver(settings)) return
+      delay(retryMs)
+    }
+  }
+
+  /** Consegna le scelte in attesa; vero se non resta niente (quelle che il registro non ha scritto restano in attesa per il tentativo dopo). */
+  private suspend fun deliver(settings: SyncedCollectionsSettings): Boolean {
     val (order, hidden) = pending.withLock { pendingOrder to pendingHidden.toMap() }
     try {
       if (order != null) {
         settings.setOrder(order)
-        pending.withLock { if (pendingOrder === order) pendingOrder = null }
+        // La scelta dell'utente cede il posto al registro solo quando il registro l'ha riletta: se no per un attimo si vedrebbe il valore di prima.
+        withTimeoutOrNull(SETTLE_MS) { settings.order.first { it == order } }
+        pending.withLock {
+          if (pendingOrder === order) {
+            pendingOrder = null
+            orderUndelivered.value = false
+          }
+        }
       }
       for ((code, value) in hidden) {
         settings.setHidden(code, value)
-        pending.withLock { if (pendingHidden[code] == value) pendingHidden.remove(code) }
+        withTimeoutOrNull(SETTLE_MS) { settings.hidden.first { (code in it) == value } }
+        pending.withLock {
+          if (pendingHidden[code] == value) {
+            pendingHidden.remove(code)
+            hiddenUndelivered.value = pendingHidden.toMap()
+          }
+        }
       }
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       GalleryLog.w(TAG) { "scelte delle Raccolte non ancora nel registro: ${e.javaClass.simpleName}" }
+      return false
     }
+    return pending.withLock { pendingOrder == null && pendingHidden.isEmpty() }
   }
 
   private companion object {
     const val TAG = "CollectionsLayout"
+    const val MAX_ATTEMPTS = 20
+    const val RETRY_MS = 15_000L
+
+    /** Quanto si aspetta che il registro rilegga una scelta appena scritta, prima di lasciare il posto a lui. */
+    const val SETTLE_MS = 3_000L
   }
 }

@@ -40,7 +40,7 @@ import kotlinx.coroutines.withContext
  * [provisional] marca un file scritto in anticipo (un "togli subito" prima di nascondere): al prossimo avvio si mostra
  * ma si ricostruisce comunque, perche' il suo `seq` non garantisce piu' l'uguaglianza con il catalogo.
  */
-class SnapshotStore(
+open class SnapshotStore(
   dir: File,
   private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
@@ -72,7 +72,7 @@ class SnapshotStore(
    * Scrive [snapshot] in modo atomico. Falso se non e' stato possibile (disco pieno, E-P3): il file precedente resta
    * intero e il temporaneo si cancella. Un indice che non e' a colonne si copia prima (test, Libreria sintetica).
    */
-  suspend fun write(snapshot: TimelineSnapshot, provisional: Boolean = false): Boolean = withContext(io) {
+  open suspend fun write(snapshot: TimelineSnapshot, provisional: Boolean = false): Boolean = withContext(io) {
     lock.withLock {
       val s = snapshot as? ColumnarTimelineSnapshot ?: columnarCopy(snapshot)
       try {
@@ -89,7 +89,7 @@ class SnapshotStore(
    * Cancella l'istantanea (E-H1: quando non si puo' riscriverla senza un elemento appena nascosto). **Vero solo se il file non c'e' piu'**: un
    * elemento nascosto che resta in un'istantanea non cancellata non deve passare per tolto (si riprova, e il log di `StateFiles` dice se no).
    */
-  suspend fun delete(): Boolean = withContext(io) {
+  open suspend fun delete(): Boolean = withContext(io) {
     lock.withLock {
       val temporaryGone = StateFiles.delete(tmp)
       StateFiles.delete(file) && temporaryGone

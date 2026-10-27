@@ -184,8 +184,12 @@ class RoomAlbumStoresTest {
     val third = RoomAlbumReplicaStore(database)
     assertThat(third.rejectedHead(album, family.other.id)).isEqualTo(HeadMark(9, "abc"))
     assertThat(third.contribution(album, family.other.id)!!.barred).isTrue()
+    // DG-3: il conto dei rifiuti sta nel database: lo ritrova un processo nuovo e non dipende dal giro che li ha visti.
+    assertThat(third.rejectedHeads()).isEqualTo(1)
+    assertThat(RoomAlbumReplicaStore(database).rejectedHeads()).isEqualTo(1)
     third.setRejectedHead(album, family.other.id, null)
     assertThat(RoomAlbumReplicaStore(database).rejectedHead(album, family.other.id)).isNull()
+    assertThat(RoomAlbumReplicaStore(database).rejectedHeads()).isEqualTo(0)
 
     // Dimenticare un contributo lo toglie (le righe del mio pubblicatore restano).
     third.forget(album, family.other.id)
@@ -194,6 +198,53 @@ class RoomAlbumStoresTest {
     assertThat(fourth.albums()).isEmpty()
     assertThat(fourth.contributions(album)).isEmpty()
     assertThat(roomPublishStore(family.me).load(album)).isNotNull()
+  }
+
+  /**
+   * R2, R7 e R13 della revisione di sicurezza della Fase 7 sulla replica su Room: le attese di un contributo e l'ultima volta che una serie e'
+   * stata vista senza novita' sopravvivono al processo; i conti per dispositivo (voci, album, byte) sono quelli della memoria e restano al passo;
+   * con una cache piccola gli album escono dalla memoria e si rileggono uguali da Room.
+   */
+  @Test
+  fun attese_visto_contiECacheLimitataSuRoom() = runBlocking<Unit> {
+    history(publisher(family.me, roomPublishStore(family.me)), publisher(family.other, MemoryAlbumPublishStore()))
+    val memory = MemoryAlbumReplicaStore()
+    sync(family.third, memory).sync(5.minutes)
+    val room = RoomAlbumReplicaStore(database)
+    sync(family.third, room).sync(5.minutes)
+    assertThat(room.footprint(family.me.id)).isEqualTo(memory.footprint(family.me.id))
+    assertThat(room.footprint(family.me.id).bytes).isGreaterThan(0L)
+
+    val hold = dev.pampa.mycloudgallery.core.albums.shared.ReplicaHold(HeadMark(4, "h4"), 1_795_000_900_000L, 2)
+    room.setHold(album, family.other.id, hold)
+    room.setHold(album, family.me.id, dev.pampa.mycloudgallery.core.albums.shared.ReplicaHold(null, 1_795_000_100_000L, 1))
+    room.setSeenAt(album, family.other.id, 1_795_000_500_000L)
+    val reborn = RoomAlbumReplicaStore(database)
+    assertThat(reborn.hold(album, family.other.id)).isEqualTo(hold)
+    assertThat(reborn.hold(album, family.me.id)!!.mark).isNull()
+    assertThat(reborn.seenAt(album, family.other.id)).isEqualTo(1_795_000_500_000L)
+    assertThat(reborn.seenAt(album, family.me.id)).isNotNull()
+    reborn.setHold(album, family.other.id, null)
+    assertThat(RoomAlbumReplicaStore(database).hold(album, family.other.id)).isNull()
+
+    // I conti restano al passo dopo un'esclusione e un "dimentica".
+    val expected = reborn.contributions(album).sortedBy { it.device }
+    val before = reborn.footprint(family.other.id)
+    reborn.forget(album, family.other.id)
+    assertThat(reborn.footprint(family.other.id)).isEqualTo(dev.pampa.mycloudgallery.core.albums.shared.DeviceFootprint.NONE)
+    reborn.put(expected.first { it.device == family.other.id })
+    assertThat(reborn.footprint(family.other.id)).isEqualTo(before)
+    // L'ora "visto" resta anche dopo "dimentica" (dice qualcosa del dispositivo, non del contributo).
+    assertThat(RoomAlbumReplicaStore(database).seenAt(album, family.other.id)).isEqualTo(1_795_000_500_000L)
+
+    // Una cache da una voce: l'album esce dalla memoria a ogni lettura di un altro, e si rilegge uguale.
+    val tiny = RoomAlbumReplicaStore(database, maxCachedEntries = 1)
+    val other = AlbumId.derived(AccountId.of("test2"), ByteArray(16) { 9 })
+    tiny.put(expected.first().copy(album = other, entries = emptyList(), segments = emptyList()))
+    assertThat(tiny.contributions(album).sortedBy { it.device }).isEqualTo(expected)
+    assertThat(tiny.cacheSize().first).isEqualTo(1)
+    assertThat(tiny.contributions(other)).hasSize(1)
+    assertThat(tiny.contributions(album).sortedBy { it.device }).isEqualTo(expected)
   }
 
   private companion object {

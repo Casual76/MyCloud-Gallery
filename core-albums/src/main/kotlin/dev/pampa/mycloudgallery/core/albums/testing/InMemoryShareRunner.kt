@@ -73,6 +73,8 @@ class InMemoryShareRunner(
   private val planner: ReferenceSharePlanner,
   private val newNonce: () -> ByteArray = { ByteArray(16).also { java.security.SecureRandom().nextBytes(it) } },
   private val newOpId: () -> String = { UUID.randomUUID().toString() },
+  /** Revisione B, SH-1: il tentativo di ogni piano chiesto, come l'orchestratore vero. */
+  private val newAttempt: () -> String = { ByteArray(16).also { java.security.SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it.toInt() and 0xff) } },
 ) : ShareRunner {
 
   override val operations: MutableStateFlow<List<ShareOpState>> = MutableStateFlow(emptyList())
@@ -85,14 +87,14 @@ class InMemoryShareRunner(
 
   private val steps = ReferenceShareSteps(ports, live)
 
-  override suspend fun plan(request: ShareRequest): SharePlanOutcome = planner.plan(request, null, ports.clocks.monotonicMs(), newNonce)
+  override suspend fun plan(request: ShareRequest): SharePlanOutcome = planner.plan(request, null, ports.clocks.monotonicMs(), newNonce, newAttempt())
 
   override suspend fun start(plan: SharePlan, confirmation: ShareConfirmation): ShareStartOutcome {
     val now = ports.clocks.monotonicMs()
     val check = ShareConfirmationRules.check(plan, confirmation, now)
     if (check != ShareConfirmationCheck.Valid) return ShareStartOutcome.ConfirmationRejected(check)
     ports.diary.opByPlan(plan.hash)?.let { return ShareStartOutcome.AlreadyStarted(it.id) }
-    when (val again = planner.plan(plan.request, plan.nonceHex, now, newNonce)) {
+    when (val again = planner.plan(plan.request, plan.nonceHex, now, newNonce, plan.attempt)) {
       is SharePlanOutcome.Ready -> if (again.plan.hash != plan.hash) return ShareStartOutcome.PlanChanged
       is SharePlanOutcome.Blocked -> return ShareStartOutcome.Blocked(again.reason)
       else -> return ShareStartOutcome.PlanChanged

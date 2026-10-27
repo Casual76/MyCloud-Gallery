@@ -255,6 +255,8 @@ fun GalleryDeleteLocation.isAffectedBy(scope: GalleryDeleteScope): Boolean =
  *  - La nota sul **cestino di 30 giorni**: niente di quello che si elimina qui e' perso per sempre.
  *
  * Il bottone distruttivo e' uno solo, e dice cosa fa ("Elimina dal telefono", "Elimina ovunque").
+ *
+ * [title], se c'e', sostituisce "Eliminare N foto?": chi non elimina "foto" (la pulizia dei Doppioni elimina copie e scatti, con i GB, DP-6) lo scrive da se'.
  */
 @Composable
 fun GalleryDeleteSheetContent(
@@ -266,11 +268,12 @@ fun GalleryDeleteSheetContent(
   onCancel: () -> Unit,
   modifier: Modifier = Modifier,
   scopes: List<GalleryDeleteScope> = GalleryDeleteScope.entries,
+  title: String? = null,
 ) {
   GallerySheetScaffold(
     icon = Icons.Rounded.DeleteForever,
     tone = GallerySheetTone.Destructive,
-    title = pluralStringResource(R.plurals.delete_title, count, count),
+    title = title ?: pluralStringResource(R.plurals.delete_title, count, count),
     message = null,
     modifier = modifier,
     body = {
@@ -405,11 +408,12 @@ fun GalleryDeleteSheet(
   onConfirm: () -> Unit,
   onDismissRequest: () -> Unit,
   scopes: List<GalleryDeleteScope> = GalleryDeleteScope.entries,
+  title: String? = null,
 ) {
   GalleryConfirmSheet(
     visible = visible,
     onDismissRequest = onDismissRequest,
-    paneTitle = pluralStringResource(R.plurals.delete_title, count, count),
+    paneTitle = title ?: pluralStringResource(R.plurals.delete_title, count, count),
   ) {
     GalleryDeleteSheetContent(
       count = count,
@@ -419,6 +423,7 @@ fun GalleryDeleteSheet(
       onConfirm = onConfirm,
       onCancel = onDismissRequest,
       scopes = scopes,
+      title = title,
     )
   }
 }

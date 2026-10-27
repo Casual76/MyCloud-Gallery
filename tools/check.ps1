@@ -31,7 +31,8 @@
                                 sintetico del menu di debug, ne' (revisione 4B, F20) il gancio che accorcia i 30 giorni del
                                 cestino del NAS, ne' (Fase 5A, D13) la recinzione del telefono del backup in debug
                                 (`DebugBackupFence`, le cartelle `mcg-prova` e la radice `mcg-campo`), ne' (Fase 7, P12) lo strumento di valutazione
-                                degli album (`debugtools/eval/albums`, `viaggi.mcgalb`, `MCGALB01`), ne' (Fase 5B, P0-B) le prove
+                                degli album (`debugtools/eval/albums`, `viaggi.mcgalb`, `MCGALB01`), ne' (Fase 8, P11) quello delle persone
+                                (`debugtools/eval/faces`, `persone.mcgfac`, `MCGFAC01`), ne' (Fase 5B, P0-B) le prove
                                 guidate T-09, T-14, T-15 e T-16 (`FieldProbe*`, `debugtools/probes`, `field-probe`): lettura diretta del dex,
                                 FALLISCE se non lo legge; e (R11 della revisione 4A) gli esiti di R8 della release: `ShareFence`
                                 tolta per intero in usage.txt e assente da mapping.txt (una classe fusa in un'altra non lascia il
@@ -50,7 +51,10 @@
                                 `backupMayWriteAs`, risponde `TEST_ONLY` dopo ognuna ed e' istanziato da una classe del backup
     7d-bis. D30 nella release   (Fase 7, P0) la recinzione "album condivisi solo sulle share di prova" C'E' nell'APK di release:
                                 `FeatureFlags.sharedAlbumsTestSharesOnly` e la decisione `sharedAlbumsMayUse` nel dex e in mapping.txt
-                                (consumer-rules.pro di core-common); il cancello degli album che le usa lo aggiunge P13
+                                (consumer-rules.pro di core-common). E (R20 della revisione di sicurezza della Fase 7) i CANCELLI che le
+                                usano, nel bytecode della release (dexdump): `AppAlbumWriteGate.blockFor` chiama `sharedAlbumsMayUse` e
+                                risponde `AlbumWriteBlock.TEST_SHARES_ONLY`, `FlagsAlbumReadGate.mayRead` chiama la stessa decisione, li
+                                istanzia il montaggio degli album di :app e li chiamano pubblicatore, piano della condivisione e replica
     7d-ter. D34 nella release   (Fase 8, P0) la recinzione "dati dei volti sul NAS solo sulle share di prova" (risposta Q5 (a))
                                 C'E' nell'APK di release: `FeatureFlags.facesSyncTestSharesOnly` e la decisione `facesSyncMayUse`
                                 nel dex e in mapping.txt (consumer-rules.pro di core-common); il cancello dei volti lo aggiunge P13
@@ -761,9 +765,12 @@ $debugRemnants = @(
   "debugtools/widget", "FieldProbeHiddenWidget", "FieldProbeWidget",
   # Fase 7 (P12): lo strumento di valutazione degli album smart e dei viaggi (app/src/debug/.../debugtools/eval/albums): classi, porta, nomi del file di etichette
   # (`viaggi.mcgalb`, intestazione MCGALB01) e del file dei viaggi sintetici (`viaggi-sintetici`, intestazione MCGSINT1). Solo debug.
-  "debugtools/eval/albums", "AlbumsEvalEnvironmentHolder", "AlbumsEvalSession", "AlbumsEvalEntry", "AppAlbumsEvalEnvironment", "viaggi.mcgalb", "MCGALB01", "MCGSINT1", "viaggi-sintetici"
+  "debugtools/eval/albums", "AlbumsEvalEnvironmentHolder", "AlbumsEvalSession", "AlbumsEvalEntry", "AppAlbumsEvalEnvironment", "viaggi.mcgalb", "MCGALB01", "MCGSINT1", "viaggi-sintetici",
+  # Fase 8 (P11): lo strumento di valutazione delle persone (app/src/debug/.../debugtools/eval/faces): classi, porta e nome del file di etichette
+  # (`persone.mcgfac`, intestazione MCGFAC01). Le etichette sono posti di volti veri: in release non deve esistere niente di tutto questo.
+  "debugtools/eval/faces", "FacesEvalEnvironmentHolder", "FacesEvalSession", "FacesEvalEntry", "FacesEvalStore", "persone.mcgfac", "MCGFAC01"
 )
-Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
@@ -879,12 +886,179 @@ Step "D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteT
     (($gate.IncomingInstantiators | Select-Object -Unique) -join ", ")) -ForegroundColor DarkGray
 }
 
+# Il bytecode dei cancelli D30 (R20 della revisione di sicurezza della Fase 7): come per D12, `dexdump -d` dei classes*.dex dell'APK letto in
+# streaming da un piccolo lettore C#, separato da quello di D12. Cerca: il cancello delle scritture degli album (`AppAlbumWriteGate.blockFor`)
+# che chiama la decisione `FeatureFlags.sharedAlbumsMayUse` e poi risponde `AlbumWriteBlock.TEST_SHARES_ONLY`; il cancello della lettura
+# (`FlagsAlbumReadGate.mayRead`) che chiama la stessa decisione; chi istanzia i due cancelli; chi chiama i due cancelli dal motore degli album
+# (pubblicatore, piano della condivisione, replica: per interfaccia, o sulla classe se R8 la rende diretta). Senza dexdump o senza vedere la
+# MainActivity la lettura non e' affidabile e il passo FALLISCE (non salta).
+$script:dexAlbumGateReaderLoaded = $false
+function Initialize-DexAlbumGateReader {
+  if ($script:dexAlbumGateReaderLoaded) { return }
+  Add-Type -Language CSharp -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using System.Text.RegularExpressions;
+
+public class DexAlbumGateFacts {
+  public bool SawMainActivity;
+  public bool WriteGateFound;
+  public bool BlockForFound;
+  public bool BlockForCallsDecision;
+  public bool BlockForReturnsTestSharesOnly;
+  public bool ReadGateFound;
+  public bool MayReadFound;
+  public bool MayReadCallsDecision;
+  public List<string> WriteGateInstantiators = new List<string>();
+  public List<string> ReadGateInstantiators = new List<string>();
+  public List<string> DecisionCallers = new List<string>();
+  public List<string> WriteGateUsers = new List<string>();
+  public List<string> ReadGateUsers = new List<string>();
+  public int Lines;
+}
+
+public static class DexAlbumGateReader {
+  const string WriteGate = "Ldev/pampa/mycloudgallery/albums/AppAlbumWriteGate;";
+  const string ReadGate = "Ldev/pampa/mycloudgallery/albums/FlagsAlbumReadGate;";
+  const string MainClass = "Ldev/pampa/mycloudgallery/MainActivity;";
+  const string Decision = "Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.sharedAlbumsMayUse:(Ljava/lang/String;)Z";
+  const string TestSharesOnly = "Ldev/pampa/mycloudgallery/core/albums/contract/AlbumWriteBlock;.TEST_SHARES_ONLY:";
+  const string WritePort = "Ldev/pampa/mycloudgallery/core/albums/contract/AlbumWriteGate;.blockFor:";
+  const string WriteDirect = "Ldev/pampa/mycloudgallery/albums/AppAlbumWriteGate;.blockFor:";
+  const string ReadPort = "Ldev/pampa/mycloudgallery/core/albums/shared/AlbumReadGate;.mayRead:";
+  const string ReadDirect = "Ldev/pampa/mycloudgallery/albums/FlagsAlbumReadGate;.mayRead:";
+
+  static readonly Regex ClassLine = new Regex(@"^\s*Class descriptor\s*:\s*'([^']+)'", RegexOptions.Compiled);
+  static readonly Regex NameLine = new Regex(@"^\s*name\s*:\s*'([^']*)'", RegexOptions.Compiled);
+  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]{4}:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
+
+  public static void Scan(string dexdump, string dexPath, DexAlbumGateFacts facts) {
+    var info = new ProcessStartInfo(dexdump, "-d \"" + dexPath + "\"") {
+      UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
+      StandardOutputEncoding = Encoding.GetEncoding(28591),
+    };
+    using (var process = Process.Start(info)) {
+      string cls = "", method = "";
+      bool sawDecisionInBlockFor = false;
+      var errors = process.StandardError.ReadToEndAsync();
+      string line;
+      while ((line = process.StandardOutput.ReadLine()) != null) {
+        facts.Lines++;
+        var m = ClassLine.Match(line);
+        if (m.Success) {
+          cls = m.Groups[1].Value; method = ""; sawDecisionInBlockFor = false;
+          if (cls == MainClass) facts.SawMainActivity = true;
+          if (cls == WriteGate) facts.WriteGateFound = true;
+          if (cls == ReadGate) facts.ReadGateFound = true;
+          continue;
+        }
+        m = NameLine.Match(line);
+        if (m.Success) {
+          method = m.Groups[1].Value; sawDecisionInBlockFor = false;
+          if (cls == WriteGate && method == "blockFor") facts.BlockForFound = true;
+          if (cls == ReadGate && method == "mayRead") facts.MayReadFound = true;
+          continue;
+        }
+        var insn = InsnLine.Match(line);
+        if (!insn.Success) continue;
+        string op = insn.Groups[1].Value, rest = insn.Groups[2].Value;
+        string here = cls + "." + method;
+        if (op.StartsWith("invoke") && rest.Contains(Decision)) {
+          facts.DecisionCallers.Add(here);
+          if (cls == WriteGate && method == "blockFor") { facts.BlockForCallsDecision = true; sawDecisionInBlockFor = true; }
+          if (cls == ReadGate && method == "mayRead") facts.MayReadCallsDecision = true;
+        } else if (op.StartsWith("invoke") && (rest.Contains(WritePort) || rest.Contains(WriteDirect))) {
+          facts.WriteGateUsers.Add(here);
+        } else if (op.StartsWith("invoke") && (rest.Contains(ReadPort) || rest.Contains(ReadDirect))) {
+          facts.ReadGateUsers.Add(here);
+        } else if (op == "new-instance" && rest.Contains(WriteGate)) {
+          facts.WriteGateInstantiators.Add(here);
+        } else if (op == "new-instance" && rest.Contains(ReadGate)) {
+          facts.ReadGateInstantiators.Add(here);
+        } else if (op.StartsWith("sget") && rest.Contains(TestSharesOnly) && cls == WriteGate && method == "blockFor") {
+          // D30: la risposta TEST_SHARES_ONLY dopo la decisione per share.
+          if (sawDecisionInBlockFor) facts.BlockForReturnsTestSharesOnly = true;
+        }
+      }
+      process.WaitForExit();
+      if (process.ExitCode != 0) throw new InvalidOperationException("dexdump ha fallito: " + errors.Result);
+    }
+  }
+
+  // I metodi del dex ("Lclasse;.metodo") che contengono codice delle classi originali [patterns], secondo mapping.txt. Anche con
+  // -dontobfuscate R8 fonde classi di pacchetti diversi (il pubblicatore degli album finisce in NasPersonalSync, la replica in una classe di
+  // CameraX) e inlinea metodi: il nome della classe nel dex non dice da dove viene il codice, mapping.txt si'. Ogni riga di un metodo e'
+  // "[a:b:]tipo [classeOriginale.]nome(argomenti)[:x[:y]] -> nomeNelDex" sotto "classeOriginale -> classeNelDex:"; senza classe davanti al
+  // nome il codice e' della classe del blocco. Un pattern che finisce con '*' vale come prefisso; senza, la classe e le sue classi interne.
+  public static Dictionary<string, HashSet<string>> ResidualMethods(string mapping, string[] patterns) {
+    var result = new Dictionary<string, HashSet<string>>();
+    foreach (var p in patterns) result[p] = new HashSet<string>();
+    string owner = null, residual = null;
+    foreach (var raw in File.ReadLines(mapping)) {
+      if (raw.Length == 0 || raw[0] == '#') continue;
+      if (raw[0] != ' ') {
+        int arrow = raw.IndexOf(" -> ");
+        if (arrow < 0 || !raw.EndsWith(":")) { owner = null; residual = null; continue; }
+        owner = raw.Substring(0, arrow);
+        residual = "L" + raw.Substring(arrow + 4, raw.Length - arrow - 5).Replace('.', '/') + ";";
+        continue;
+      }
+      if (residual == null) continue;
+      string line = raw.Trim();
+      if (line.StartsWith("#")) continue;
+      int arrowM = line.LastIndexOf(" -> ");
+      if (arrowM < 0) continue;
+      string left = line.Substring(0, arrowM), name = line.Substring(arrowM + 4);
+      int paren = left.IndexOf('(');
+      if (paren < 0) continue;
+      int space = left.LastIndexOf(' ', paren);
+      string qualified = left.Substring(space + 1, paren - space - 1);
+      int dot = qualified.LastIndexOf('.');
+      string origin = dot < 0 ? owner : qualified.Substring(0, dot);
+      foreach (var p in patterns) {
+        bool hit = p.EndsWith("*") ? origin.StartsWith(p.Substring(0, p.Length - 1)) : (origin == p || origin.StartsWith(p + "$"));
+        if (hit) result[p].Add(residual + "." + name);
+      }
+    }
+    return result;
+  }
+}
+'@
+  $script:dexAlbumGateReaderLoaded = $true
+}
+
+# Estrae i classes*.dex dell'APK in una cartella temporanea e li legge uno a uno con il lettore dei cancelli D30.
+function Get-D30GateFacts([string]$dexdump, [string]$apk) {
+  Initialize-DexAlbumGateReader
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("mcg-dex30-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $temp | Out-Null
+  $facts = New-Object DexAlbumGateFacts
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk)
+  try {
+    $dexes = @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })
+    if ($dexes.Count -eq 0) { throw "nessun classes*.dex nell'APK" }
+    foreach ($entry in $dexes) {
+      $target = Join-Path $temp $entry.FullName
+      [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+      [DexAlbumGateReader]::Scan($dexdump, $target, $facts)
+    }
+  } finally {
+    $zip.Dispose()
+    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  return $facts
+}
+
 # Fase 7 (P0, D30): "album condivisi solo sulle share di prova" e' una protezione che deve esserci NELLA RELEASE (come D12), accesa e non
 # spegnibile (FeatureFlagsTest). Qui si controlla che R8 non l'abbia tolta: il campo e la decisione per share di `FeatureFlags`, tenuti da
-# core-common/consumer-rules.pro anche prima che P13 leghi il cancello degli album (`AlbumWriteGate`), devono stare nel dex dell'APK di
-# release e in mapping.txt. Il cancello che li usa lo aggiunge P13 a questo passo. Senza i file il passo FALLISCE (non salta).
+# core-common/consumer-rules.pro, devono stare nel dex dell'APK di release e in mapping.txt. R20 della revisione di sicurezza della Fase 7: e,
+# come per D12, il CANCELLO che li usa, nel bytecode della release (Get-D30GateFacts). Senza i file il passo FALLISCE (non salta).
 $d30Members = @("getSharedAlbumsTestSharesOnly", "sharedAlbumsMayUse")
-Step "D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt, e i cancelli degli album che li usano" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
@@ -900,6 +1074,52 @@ Step "D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsM
   }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
   Write-Host "        D30 presente nella release (dex e mapping.txt)" -ForegroundColor DarkGray
+
+  # R20 (revisione di sicurezza della Fase 7): il campo e la decisione non bastano (la regola di consumer-rules.pro li tiene anche se nessuno
+  # li chiama), serve il CANCELLO che li usa. Nel bytecode della release: `AppAlbumWriteGate.blockFor` chiama `FeatureFlags.sharedAlbumsMayUse`
+  # e poi risponde `AlbumWriteBlock.TEST_SHARES_ONLY`; `FlagsAlbumReadGate.mayRead` chiama la stessa decisione; i due cancelli li istanzia il
+  # montaggio degli album di :app (`albums/` o `di/`); il pubblicatore, il piano della condivisione e la replica li chiamano. Le regole di
+  # app\proguard-rules.pro tengono i due metodi (niente fusioni ne' inline). Le altre classi R8 le fonde e le inlinea anche fra pacchetti
+  # diversi: chi istanzia e chi chiama si riconosce dal nome nel dex o, se fuso altrove, da mapping.txt (DexAlbumGateReader.ResidualMethods).
+  $dexdump = Get-DexDump
+  if (-not $dexdump) { return "dexdump.exe non trovato accanto ad aapt2 (build-tools): non posso provare i cancelli D30 nel dex di release" }
+  $gate = Get-D30GateFacts $dexdump $apk.FullName
+  if ($gate.Lines -lt 1000 -or -not $gate.SawMainActivity) { return "lettura del bytecode non affidabile ($($gate.Lines) righe, MainActivity vista: $($gate.SawMainActivity))" }
+  if (-not $gate.WriteGateFound) { $problems += "AppAlbumWriteGate non e' nel dex di release: il cancello delle scritture degli album e' stato tolto o fuso" }
+  elseif (-not $gate.BlockForFound) { $problems += "AppAlbumWriteGate.blockFor non e' nel dex di release" }
+  elseif (-not $gate.BlockForCallsDecision) { $problems += "AppAlbumWriteGate.blockFor non chiama FeatureFlags.sharedAlbumsMayUse: la recinzione D30 non governa le scritture degli album" }
+  elseif (-not $gate.BlockForReturnsTestSharesOnly) { $problems += "AppAlbumWriteGate.blockFor non risponde AlbumWriteBlock.TEST_SHARES_ONLY dopo la decisione D30" }
+  if (-not $gate.ReadGateFound) { $problems += "FlagsAlbumReadGate non e' nel dex di release: il cancello della lettura degli album e' stato tolto o fuso" }
+  elseif (-not $gate.MayReadFound) { $problems += "FlagsAlbumReadGate.mayRead non e' nel dex di release" }
+  elseif (-not $gate.MayReadCallsDecision) { $problems += "FlagsAlbumReadGate.mayRead non chiama FeatureFlags.sharedAlbumsMayUse: la recinzione D30 non governa la lettura degli album" }
+  $origins = [DexAlbumGateReader]::ResidualMethods($mapping, [string[]]@(
+      "dev.pampa.mycloudgallery.albums.*", "dev.pampa.mycloudgallery.di.*",
+      "dev.pampa.mycloudgallery.core.albums.shared.NasAlbumPublisher", "dev.pampa.mycloudgallery.core.albums.share.Share*",
+      "dev.pampa.mycloudgallery.core.albums.shared.NasSharedAlbumSync"))
+  $wiring = { param($list) @($list | Where-Object {
+        $_ -like "Ldev/pampa/mycloudgallery/albums/*" -or $_ -like "Ldev/pampa/mycloudgallery/di/*" -or
+        $origins["dev.pampa.mycloudgallery.albums.*"].Contains($_) -or $origins["dev.pampa.mycloudgallery.di.*"].Contains($_) }) }
+  if ($gate.WriteGateInstantiators.Count -eq 0) { $problems += "nessun codice istanzia AppAlbumWriteGate: il cancello delle scritture degli album non e' collegato" }
+  elseif ((& $wiring $gate.WriteGateInstantiators).Count -eq 0) {
+    $problems += ("AppAlbumWriteGate e' istanziato solo da " + (($gate.WriteGateInstantiators | Select-Object -Unique) -join ", ") + ", non dal montaggio degli album")
+  }
+  if ($gate.ReadGateInstantiators.Count -eq 0) { $problems += "nessun codice istanzia FlagsAlbumReadGate: il cancello della lettura degli album non e' collegato" }
+  elseif ((& $wiring $gate.ReadGateInstantiators).Count -eq 0) {
+    $problems += ("FlagsAlbumReadGate e' istanziato solo da " + (($gate.ReadGateInstantiators | Select-Object -Unique) -join ", ") + ", non dal montaggio degli album")
+  }
+  foreach ($user in @(
+      @("Ldev/pampa/mycloudgallery/core/albums/shared/NasAlbumPublisher;", "dev.pampa.mycloudgallery.core.albums.shared.NasAlbumPublisher", $gate.WriteGateUsers, "il pubblicatore non chiede il cancello delle scritture degli album"),
+      @("Ldev/pampa/mycloudgallery/core/albums/share/Share", "dev.pampa.mycloudgallery.core.albums.share.Share*", $gate.WriteGateUsers, "il piano della condivisione non chiede il cancello delle scritture degli album"),
+      @("Ldev/pampa/mycloudgallery/core/albums/shared/NasSharedAlbumSync;", "dev.pampa.mycloudgallery.core.albums.shared.NasSharedAlbumSync", $gate.ReadGateUsers, "la replica non chiede il cancello della lettura degli album"))) {
+    # Il prefisso di una classe (che finisce con ';') vuole quella classe; quello di share/ (`.../share/Share`) accetta il piano o l'orchestratore,
+    # se R8 vi inlinea il piano. Se R8 ha fuso la classe in un'altra, vale un metodo del dex che secondo mapping.txt contiene il suo codice.
+    $prefix = if ($user[0].EndsWith(";")) { $user[0] + "." } else { $user[0] }
+    $merged = $origins[$user[1]]
+    if (-not (@($user[2]) | Where-Object { $_.StartsWith($prefix) -or $merged.Contains($_) })) { $problems += $user[3] }
+  }
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+  Write-Host ("        cancelli D30 provati nel bytecode: AppAlbumWriteGate.blockFor -> sharedAlbumsMayUse -> TEST_SHARES_ONLY e FlagsAlbumReadGate.mayRead -> sharedAlbumsMayUse, istanziati da {0}; decisione chiamata da {1} metodi ({2} righe di dexdump)" -f
+    ((@($gate.WriteGateInstantiators) + @($gate.ReadGateInstantiators) | Select-Object -Unique) -join ", "), @($gate.DecisionCallers | Select-Object -Unique).Count, $gate.Lines) -ForegroundColor DarkGray
 }
 
 # Fase 8 (P0, D34; risposta Q5 (a) del 27/10): "dati dei volti sul NAS solo sulle share di prova" e' una protezione che deve esserci NELLA

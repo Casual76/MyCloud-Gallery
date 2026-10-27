@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.Verdict
+import dev.pampa.mycloudgallery.core.trust.data.AcceptedAlbumHead
 import dev.pampa.mycloudgallery.core.trust.data.AlbumDefinitionState
 import dev.pampa.mycloudgallery.core.trust.data.AlbumDocs
 import dev.pampa.mycloudgallery.core.trust.data.AlbumEntry
@@ -63,6 +64,11 @@ class NasAlbumPublisher(
   /** La storia dei livelli fusa (la replica): un cambio di livello si aggiunge a quella. */
   private val levels: suspend (AlbumId) -> LevelHistory = { LevelHistory.NONE },
   private val io: CoroutineDispatcher = Dispatchers.IO,
+  /**
+   * R12: il mio contributo come l'ha letto la replica di questo dispositivo (null se non c'e'). Dopo la perdita dello store del pubblicatore
+   * vale piu' di cio' che si trova sul NAS, che dal PC si puo' togliere o rovinare.
+   */
+  private val ownReplica: suspend (AlbumId) -> StoredContribution? = { null },
 ) : AlbumPublisher, LocalContributions {
 
   private val mutex = Mutex()
@@ -70,6 +76,17 @@ class NasAlbumPublisher(
   private val pendingCount = MutableStateFlow(0)
 
   override val pending: StateFlow<Int> = pendingCount
+
+  /**
+   * R12: pubblicazioni non fatte perche' il mio contributo sul NAS non si rilegge per intero (un mio segmento rovinato, nessuna testa valida fra
+   * quelle mie) e la replica non ne ha una copia: una testa nuova toglierebbe a tutti le voci gia' pubblicate. Diagnostica: solo il numero.
+   */
+  @Volatile var adoptionRefused: Int = 0
+    private set
+
+  /** R2: i miei segmenti spariti dal NAS (tolti dal PC) e ripubblicati uguali. Diagnostica: solo il numero. */
+  @Volatile var segmentsRestored: Int = 0
+    private set
 
   /** L'account delle mie voci (forma minuscola del `nasUser` del registro), o quello della famiglia se il registro non c'e' ancora. */
   private fun myAccount(): AccountId? = identity.registry()?.registry?.device(identity.deviceId)?.nasUser?.let(AccountId::of) ?: family.me()
@@ -129,23 +146,36 @@ class NasAlbumPublisher(
     val account = myAccount() ?: return@withLock PublishOutcome.Blocked(AlbumWriteBlock.NOT_TRUSTED)
     val fs = fileSystem(share)
     try {
-      // Dopo la perdita dello store locale: il numero e l'ora della mia ultima testa li dice il NAS.
-      if (state.headVersion == 0L) state = adoptOwnHead(fs, registry, state)
+      // Dopo la perdita dello store locale: il numero, l'ora e le voci della mia ultima testa (R12: dalla replica, se ce l'ha; dal NAS solo se si
+      // rilegge tutto, altrimenti niente testa nuova).
+      if (state.headVersion == 0L) {
+        state = adoptOwnHead(fs, registry, state) ?: run {
+          adoptionRefused++
+          return@withLock PublishOutcome.Failed
+        }
+      }
       val lastHead = state.headCreatedAt
       if (lastHead != null && lastHead <= nasNow && nasNow - lastHead < PublishRules.MIN_HEAD_INTERVAL_MS) {
         return@withLock PublishOutcome.TooSoon(PublishRules.MIN_HEAD_INTERVAL_MS - (nasNow - lastHead))
       }
-      // Le modifiche da datare prendono l'ora del NAS adesso, e si salva prima di scrivere: una ripresa pubblica gli stessi byte.
-      if (state.staged.values.any { it.at == null }) {
-        state = state.copy(staged = state.staged.mapValues { (_, s) -> if (s.at == null) s.copy(at = nasNow) else s })
+      // Le modifiche da datare prendono l'ora del NAS adesso, e si salva prima di scrivere: una ripresa pubblica gli stessi byte. R7: anche
+      // una modifica rimasta in coda oltre l'eta' massima (`PublishRules.MAX_ENTRY_AGE_MS`, il NAS irraggiungibile per ore) prende l'ora di
+      // adesso: chi legge scarta come retrodatata una voce nuova piu' vecchia di cosi'.
+      val oldest = nasNow - PublishRules.MAX_ENTRY_AGE_MS
+      if (state.staged.values.any { it.at == null || it.at < oldest }) {
+        state = state.copy(staged = state.staged.mapValues { (_, s) -> if (s.at == null || s.at < oldest) s.copy(at = nasNow) else s })
         store.save(state)
       }
       val entries = contribution(state, account, lastHead)
       val segments = AlbumSegmentPlan.plan(album, entries.values)
       val text = AlbumIds.text(album)
       for (segment in segments) {
-        if (segment.ref.hash in state.segments) continue
         val path = NasLayout.albumSegment(text, identity.deviceId, segment.ref.hash)
+        if (segment.ref.hash in state.segments) {
+          // R2: un segmento gia' pubblicato che si riusa si controlla (una lettura senza byte): se dal PC l'hanno tolto, si rimette uguale.
+          if (io { fs.read(path, 0) } is NasRead.NotFound && io { fs.publishExclusive(path, segment.bytes) } == PublishResult.CREATED) segmentsRestored++
+          continue
+        }
         if (io { fs.publishExclusive(path, segment.bytes) } == PublishResult.ALREADY_EXISTS) {
           // Il nome e' l'impronta: deve essere lo stesso contenuto (una ripresa), mai un file messo li' da altri.
           val existing = io { fs.read(path, segment.bytes.size) }
@@ -232,19 +262,26 @@ class NasAlbumPublisher(
   }
 
   /**
-   * La ripresa dopo la perdita dello store locale: la mia testa piu' recente sul NAS dice il numero, l'ora e le voci gia' pubblicate (le
-   * rileggo con le regole di chi legge), cosi' la testa nuova le ripubblica invece di farle sparire per tutti. Senza una testa valida mia, si
-   * riparte da zero. Le modifiche in coda restano sopra.
+   * La ripresa dopo la perdita dello store locale (R12 della revisione di sicurezza della Fase 7): numero, ora e voci gia' pubblicate, cosi'
+   * la testa nuova le ripubblica invece di farle sparire per tutti. Prima la copia che la **replica** di questo dispositivo ha letto (se e'
+   * almeno della versione dell'ultima mia testa sul NAS: dal PC le teste piu' recenti si possono togliere, e ripubblicare uno stato vecchio
+   * con un numero gia' visto sarebbe un'equivocazione); altrimenti la mia ultima testa sul NAS, riletta con le regole di chi legge, **solo se
+   * si rilegge tutta**. Null (niente testa nuova: `Failed`) se il NAS ha teste mie ma nessuna valida, o un mio segmento rovinato. Senza
+   * nessuna testa mia si riparte da zero. Le modifiche in coda restano sopra.
    */
-  private suspend fun adoptOwnHead(fs: NasFileSystem, registry: RegistryState, state: OwnContribution): OwnContribution {
+  private suspend fun adoptOwnHead(fs: NasFileSystem, registry: RegistryState, state: OwnContribution): OwnContribution? {
     val read = io { AlbumHeadSeries.readLatest(fs, registry, state.album, identity.deviceId, null, AlbumReadBudget(TrustLimits.MAX_HEAD_READS_PER_SHARE)) }
-    val accepted = (read as? AlbumHeadRead.Accepted)?.head ?: return state
+    val accepted = (read as? AlbumHeadRead.Accepted)?.head
+    val own = ownReplica(state.album)?.takeIf { it.device == identity.deviceId && !it.barred }
+    if (own != null && (accepted == null || own.mark.version >= accepted.head.version)) return fromReplica(state, own, accepted)
+    if (accepted == null) return if (read == AlbumHeadRead.None) state else null
     val context = AlbumSegmentContext(state.album, identity.deviceId, accepted.account)
     val published = LinkedHashMap<AlbumKey, PublishedEntry>()
     for (ref in accepted.head.segments) {
       val bytes = (io { fs.read(NasLayout.albumSegment(AlbumIds.text(state.album), identity.deviceId, ref.hash), ref.size.toInt()) } as? NasRead.Data)?.bytes
         ?: throw IOException("Segmento proprio non leggibile: si riprova.")
-      val entries = (AlbumDocs.decodeSegment(bytes, ref, context) as? Verdict.Accepted)?.value ?: return state.copy(headVersion = accepted.head.version)
+      // R12: un mio segmento che non si rilegge (rovinato dal PC): una testa senza le sue voci le toglierebbe a tutti. Niente testa.
+      val entries = (AlbumDocs.decodeSegment(bytes, ref, context) as? Verdict.Accepted)?.value ?: return null
       entries.forEach { published[it.key] = PublishedEntry(it, 0) }
     }
     return state.copy(
@@ -254,6 +291,49 @@ class NasAlbumPublisher(
       segments = accepted.head.segments.map { it.hash }.toSet(),
       published = published,
     )
+  }
+
+  /** R12: il mio contributo dalla copia della replica (le voci tutte, anche quelle che un lettore ha scartato: sono mie), dopo la versione piu' alta. */
+  private fun fromReplica(state: OwnContribution, own: StoredContribution, onNas: AcceptedAlbumHead?): OwnContribution {
+    val published = LinkedHashMap<AlbumKey, PublishedEntry>()
+    own.entries.forEach { published[it.entry.key] = PublishedEntry(it.entry, 0) }
+    val nasVersion = onNas?.head?.version ?: 0L
+    return state.copy(
+      headVersion = maxOf(own.mark.version, nasVersion),
+      headMark = own.mark,
+      headCreatedAt = maxOf(own.createdAt, onNas?.head?.createdAt ?: own.createdAt),
+      segments = own.segments.map { it.hash }.toSet(),
+      published = published,
+    )
+  }
+
+  /**
+   * R2: rimette sul NAS i segmenti della mia testa che non ci sono piu' (tolti dal PC), uguali a prima: chi legge, che li aspetta, li ritrova
+   * senza una testa nuova. Dietro gli stessi cancelli della pubblicazione; solo se le voci pubblicate rifanno esattamente i segmenti della testa.
+   * Restituisce quanti segmenti ha rimesso.
+   */
+  suspend fun repairSegments(album: AlbumId): Int = mutex.withLock {
+    val share = family.commonShare() ?: return@withLock 0
+    if (gate.blockFor(share) != null) return@withLock 0
+    val registry = identity.registry() ?: return@withLock 0
+    if (!registry.canWrite(identity.deviceId) || !registry.registry.config.commonShare.equals(share, ignoreCase = true)) return@withLock 0
+    val state = store.load(album) ?: return@withLock 0
+    if (state.headVersion == 0L || state.published.isEmpty()) return@withLock 0
+    val segments = AlbumSegmentPlan.plan(album, state.published.values.map { it.entry })
+    if (segments.map { it.ref.hash }.toSet() != state.segments) return@withLock 0
+    val fs = fileSystem(share)
+    val text = AlbumIds.text(album)
+    var restored = 0
+    try {
+      for (segment in segments) {
+        val path = NasLayout.albumSegment(text, identity.deviceId, segment.ref.hash)
+        if (io { fs.read(path, 0) } is NasRead.NotFound && io { fs.publishExclusive(path, segment.bytes) } == PublishResult.CREATED) restored++
+      }
+    } catch (e: IOException) {
+      // Il NAS non risponde: si riprova al giro dopo.
+    }
+    segmentsRestored += restored
+    restored
   }
 
   private fun fieldValue(change: SharedAlbumChange): Pair<AlbumField, AlbumValue?> = when (change) {

@@ -126,8 +126,9 @@ class NasActionsController(
   /** "Elimina…": il foglio con la scelta del luogo, e il piano per il cestino del NAS in calcolo. */
   fun requestDelete() {
     val target = targetFlow.value ?: return
-    // In un'area in sola lettura le voci del menu sono spente (E-N9): nemmeno forzando il gesto si apre un foglio che non puo' agire.
-    if (!target.writable) return
+    // In un'area in sola lettura le voci del menu sono spente (E-N9): nemmeno forzando il gesto si apre un foglio che non puo' agire. Lo stesso per un
+    // elemento protetto di un album condiviso (revisione B, R3), salvo la copia del telefono (E-D1: "Solo dal telefono" resta).
+    if (!target.writable || (target.albumProtected && !target.viaPhoneCopy)) return
     val scopeChoice = if (target.onPhone) GalleryDeleteScope.PhoneOnly else GalleryDeleteScope.Everywhere
     stateFlow.value = NasActionsState.Delete(target, scopeChoice, plan = null, planning = true)
     planJob?.cancel()
@@ -156,7 +157,7 @@ class NasActionsController(
 
   fun requestRename() {
     val target = targetFlow.value ?: return
-    if (!target.writable) return
+    if (!target.writable || target.albumProtected) return
     stateFlow.value = NasActionsState.Rename(target, text = target.item.path.name, check = RenameCheck.Same)
   }
 
@@ -195,7 +196,7 @@ class NasActionsController(
 
   fun requestMove() {
     val target = targetFlow.value ?: return
-    if (!target.writable || target.destinations.isEmpty()) return
+    if (!target.writable || target.albumProtected || target.destinations.isEmpty()) return
     stateFlow.value = NasActionsState.PickDestination(target)
   }
 
@@ -263,6 +264,8 @@ class NasActionsController(
     PlanRejection.NOT_ENOUGH_SPACE -> R.string.viewer_nas_reject_not_enough_space
     PlanRejection.NAS_UNREACHABLE -> R.string.viewer_nas_reject_unreachable
     PlanRejection.WRITES_BLOCKED -> R.string.viewer_nas_done_blocked
+    // Fase 7, revisione B (R3, E-D16): il file e' un elemento di un album condiviso che il livello non mi lascia eliminare, spostare o rinominare.
+    PlanRejection.SHARED_ALBUM_ITEM -> R.string.viewer_nas_reject_shared_album_item
     else -> R.string.viewer_nas_reject_other
   }
 

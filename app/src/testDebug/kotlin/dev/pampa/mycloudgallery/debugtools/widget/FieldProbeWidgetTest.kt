@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import java.io.File
 import java.time.LocalDate
+import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -135,5 +136,44 @@ class FieldProbeWidgetTest {
     assertThat(block).contains("android:exported=\"false\"")
     assertThat(block).contains("android.appwidget.action.APPWIDGET_UPDATE")
     assertThat(main).doesNotContain("appwidget")
+  }
+
+  // --- NA-2 (revisione di Fase 7): il widget a processo freddo --------------------------------------------------------------------
+
+  @Test
+  fun na2_AProcessoFreddoLIstantaneaSiAspetta_NonSiRispondeVuoto() = kotlinx.coroutines.test.runTest {
+    // Il sistema dei widget sveglia l'app solo per ridisegnare: la Libreria non e' ancora letta, l'istantanea e' null.
+    val flow = kotlinx.coroutines.flow.MutableStateFlow<dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot?>(null)
+
+    val waiting = backgroundScope.let { scope -> scope.async { FieldProbeWidgetContent.awaitSnapshot(flow, waitMs = 8_000) } }
+    testScheduler.advanceTimeBy(3_000)
+    testScheduler.runCurrent()
+    assertThat(waiting.isCompleted).isFalse()
+
+    // L'istantanea arriva mentre si aspetta: il widget si disegna con quella, senza aspettare il giro dopo.
+    flow.value = snapshot
+    testScheduler.runCurrent()
+    assertThat(waiting.await()).isSameInstanceAs(snapshot)
+  }
+
+  @Test
+  fun na2_SeLIstantaneaNonArrivaMai_DopoIlTettoSiRispondeNullEIlWidgetRestaSenzaCelle() = kotlinx.coroutines.test.runTest {
+    val flow = kotlinx.coroutines.flow.MutableStateFlow<dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot?>(null)
+
+    val result = backgroundScope.async { FieldProbeWidgetContent.awaitSnapshot(flow, waitMs = 8_000) }
+    testScheduler.advanceTimeBy(8_001)
+    testScheduler.runCurrent()
+
+    assertThat(result.await()).isNull()
+    // Senza istantanea nessuna cella: mai un elemento che non si e' potuto filtrare.
+    val v = visibility()
+    assertThat(FieldProbeWidgetContent.cells(RotatingWidgetFeed(v, v), null) { null }).isEmpty()
+  }
+
+  @Test
+  fun na2_ConLIstantaneaGiaPronta_SiRispondeSubito() = kotlinx.coroutines.test.runTest {
+    val flow = kotlinx.coroutines.flow.MutableStateFlow<dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot?>(snapshot)
+
+    assertThat(FieldProbeWidgetContent.awaitSnapshot(flow, waitMs = 8_000)).isSameInstanceAs(snapshot)
   }
 }

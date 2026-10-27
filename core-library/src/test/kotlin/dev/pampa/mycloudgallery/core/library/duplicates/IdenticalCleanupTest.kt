@@ -25,6 +25,7 @@ class IdenticalCleanupTest {
     verifiedAt: Long? = null,
     album: Boolean = false,
     id: Long = next++,
+    guardian: Boolean = path.startsWith("Backup/Area comune/"),
   ): IdentCopy = IdentCopy(
     location = LocationId(id),
     area = area,
@@ -35,6 +36,7 @@ class IdenticalCleanupTest {
     verifiedAt = verifiedAt,
     backupFolder = if (area == CopyArea.MY_PRIVATE) IdenticalCleanup.backupFolderOf(path) else null,
     inSharedAlbum = album,
+    guardian = guardian,
   )
 
   private fun group(vararg copies: IdentCopy, hash: Sha256? = this.hash, part: CopyPart = CopyPart.NAS): IdenticalGroup =
@@ -281,5 +283,70 @@ class IdenticalCleanupTest {
       // Il piano di una scelta dell'utente rispetta le stesse regole.
       assertWithMessage(message).that(p.remove.sumOf { it.size }).isEqualTo(p.reclaimableBytes)
     }
+  }
+
+  // --- Revisione di Fase 7, pacchetto C: DP-2 e R18 ---------------------------------------------------------------------------
+
+  @Test
+  fun dp2_laCopiaDellAreaComuneConLaGemellaDelGuardianoNonSiProponeMai() {
+    // La copia di sicurezza (D28) nasce per proteggere il file dell'area comune: proporlo come "doppione" lo toglierebbe a tutti i familiari.
+    val common = copy(area = CopyArea.COMMON, path = "Famiglia/Oslo/x.jpg", modifiedAt = 1)
+    val guardian = copy(path = "Backup/Area comune/2026/10/x.jpg", verifiedAt = 5_000, modifiedAt = 9_000)
+    val proposal = IdenticalCleanup.propose(group(common, guardian))
+
+    assertThat(guardian.guardian).isTrue()
+    assertThat(guardian.backupFolder).isNull()
+    assertThat(proposal.keep).isSameInstanceAs(guardian)
+    assertThat(proposal.remove).isEmpty()
+    assertThat(proposal.status).isEqualTo(IdenticalStatus.NOTHING_TO_REMOVE)
+    assertThat(proposal.blocked.map { it.reason to it.copy }).containsExactly(BlockReason.GUARDIAN_TWIN to common)
+  }
+
+  @Test
+  fun dp2_conUnaTerzaCopiaPrivataLaComuneRestaEIlGuardianoSiPuToglierePerchePrivataResta() {
+    val common = copy(area = CopyArea.COMMON, path = "Famiglia/x.jpg", modifiedAt = 1)
+    val guardian = copy(path = "Backup/Area comune/2026/10/x.jpg", verifiedAt = 3_000)
+    val backup = copy(path = "Backup/Pixel 9/2026/10/x.jpg", verifiedAt = 4_000)
+    val proposal = IdenticalCleanup.propose(group(common, guardian, backup))
+
+    assertThat(proposal.remove).doesNotContain(common)
+    assertThat(proposal.blocked.map { it.copy }).contains(common)
+  }
+
+  @Test
+  fun dp2_unaCopiaDellAreaComuneCheEUnElementoDiAlbumPerRiferimentoNonSiProponeMai() {
+    // Un riferimento (E-SH11): il file sta fuori da `Album condivisi/`, ma il media e' attestato da un album: il flag lo porta il catalogo.
+    val verified = copy(path = "Foto/x.jpg", verifiedAt = 5_000)
+    val reference = copy(area = CopyArea.COMMON, path = "Famiglia/Oslo/x.jpg", album = true)
+    val proposal = IdenticalCleanup.propose(group(verified, reference))
+
+    assertThat(proposal.remove).isEmpty()
+    assertThat(proposal.blocked.map { it.reason }).containsExactly(BlockReason.SHARED_ALBUM)
+  }
+
+  @Test
+  fun r18_rivediNonMandaNelCestinoLUnicaCopiaVerificata() {
+    val verified = copy(path = "Documenti/x.jpg", verifiedAt = 5_000)
+    val unread = copy(path = "Backup/pixel/2026/x.jpg", modifiedAt = 1)
+    val g = group(verified, unread)
+
+    // La scelta dell'utente: tenere la copia mai riletta. La verificata non va nel cestino: il media non perde "al sicuro".
+    val proposal = IdenticalCleanup.propose(g, keepChoice = unread.location)
+
+    assertThat(proposal.keep).isSameInstanceAs(unread)
+    assertThat(proposal.remove).isEmpty()
+    assertThat(proposal.blocked.map { it.reason to it.copy }).containsExactly(BlockReason.LAST_VERIFIED to verified)
+  }
+
+  @Test
+  fun r18_conDueCopieVerificateUnaPuoAndareEUnaResta() {
+    val first = copy(path = "A/x.jpg", verifiedAt = 5_000, modifiedAt = 1)
+    val second = copy(path = "B/x.jpg", verifiedAt = 6_000, modifiedAt = 2)
+    val unread = copy(path = "Backup/pixel/x.jpg")
+    val proposal = IdenticalCleanup.propose(group(first, second, unread), keepChoice = unread.location)
+
+    // Una verificata resta (la migliore), l'altra si puo' togliere: il media resta al sicuro.
+    assertThat(proposal.remove).hasSize(1)
+    assertThat(proposal.blocked.map { it.reason }).containsExactly(BlockReason.LAST_VERIFIED)
   }
 }

@@ -127,7 +127,13 @@ sealed interface AddOutcome {
 sealed interface AlbumsStatus {
   data object Ready : AlbumsStatus
 
-  /** Ricalcolo degli album smart (D16). */
+  /**
+   * L'elenco degli album non e' ancora stato letto (AP-1): gli album non sono montati, o lo sono da un attimo. `Albums.all` vuoto qui non vuol dire
+   * "nessun album": le schermate dicono "sto leggendo", non "Nessun album, creane uno".
+   */
+  data object Loading : AlbumsStatus
+
+  /** Ricalcolo degli album smart (D16). Con [total] a zero non ci sono numeri da dire: il motore lavora e basta (AS-2). */
   data class Recomputing(val done: Int, val total: Int) : AlbumsStatus
 
   /** Condivisioni in corso ([ops] operazioni non finite). */

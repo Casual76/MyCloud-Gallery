@@ -16,7 +16,7 @@
   <string name="nas_space_quota_detail">Per il tuo account restano %1$s. È la quota che ti ha dato chi gestisce il NAS: è meno dello spazio libero del disco.</string>
 
   <!-- I file più grandi -->
-  <string name="nas_space_largest_footnote">Dall\'archivio che l\'app conosce: non interroga il NAS.</string>
+  <string name="nas_space_largest_footnote">Dall\'archivio che l\'app conosce: non interroga il NAS. I file che hai nascosto non sono in elenco.</string>
   <string name="nas_space_largest_empty">L\'app non conosce ancora file di questa area.</string>
   <string name="nas_space_largest_more">Mostra tutti e %1$s</string>
   <string name="nas_space_largest_less">Mostra meno</string>

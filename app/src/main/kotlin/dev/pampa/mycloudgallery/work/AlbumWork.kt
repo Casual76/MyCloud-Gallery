@@ -11,7 +11,9 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.pampa.mycloudgallery.albums.AlbumsGraph
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJob
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
+import dev.pampa.mycloudgallery.graph.AppGraph
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -60,11 +62,19 @@ class ShareWorker @AssistedInject constructor(
   @Assisted params: WorkerParameters,
   private val gallery: GalleryGraph,
   private val albums: AlbumsGraph,
+  private val graph: AppGraph,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
-    val open = gallery.runIfActive { albums.shareRound(BUDGET) } ?: return Result.success()
+    // DG-2: un giro della condivisione lascia traccia in "Ultimi esiti ed errori" (solo codici e numeri): l'esito, o l'errore che l'ha fermato.
+    val open = try {
+      AlbumJobReports.share(graph.events) { gallery.runIfActive { albums.shareRound(BUDGET) } }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      // Android ha fermato il giro (quota, vincoli, tempo): il motivo resta anche dopo la morte del processo, come per gli altri lavori.
+      StopReports.report(graph, DiagJob.ALBUM_SHARE, StopReports.reasonOf(this))
+      throw e
+    } ?: return Result.success()
     if (open) AlbumWorkScheduling.shareLater(applicationContext)
     return Result.success()
   }

@@ -105,7 +105,7 @@ class UtilityStyleTest {
 
   @Test
   fun laProvaDelTocco_NascePrimaSoloNelFileDelleProve() {
-    // `UserTap` si costruisce solo in NasTrashPort.kt (DoubleTapConfirm): qui il tocco sul foglio arriva da `singleTap()`.
+    // `UserTap` si costruisce solo in NasTrashPort.kt (DoubleTapConfirm, SheetTap, tapOnButton): qui il tocco sul foglio arriva da `SheetTap`.
     val found = violations(Regex("""\bUserTap\s*\("""), includeTesting = true)
     assertWithMessage("Una prova di tocco costruita a mano:\n" + found.joinToString("\n")).that(found).isEmpty()
   }

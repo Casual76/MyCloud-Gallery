@@ -1,7 +1,9 @@
 package dev.pampa.mycloudgallery.core.albums.smart
 
 import dev.pampa.mycloudgallery.core.albums.contract.CandidateFilter
+import dev.pampa.mycloudgallery.core.albums.contract.HomeClearance
 import dev.pampa.mycloudgallery.core.albums.contract.LocalDayRange
+import dev.pampa.mycloudgallery.core.albums.contract.NoHomeClearance
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceAlternative
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceRule
 import dev.pampa.mycloudgallery.core.albums.contract.ProposalNote
@@ -37,10 +39,12 @@ class RuleSmartNameInterpreter(
   private val lookup: PlaceLookup,
   private val search: SmartContentSearch = NoSmartContentSearch,
   geocoder: ReverseGeocoder? = null,
+  /** R16: dove NON si scrive il centro di un luogo (casa e luoghi abituali); senza casa nota non c'e' niente da evitare. */
+  home: HomeClearance = NoHomeClearance,
 ) : SmartNameInterpreter {
 
   private val library = VisibleCandidates(candidates, visible, mask)
-  private val resolver = PlaceResolver(library, geocoder)
+  private val resolver = PlaceResolver(library, geocoder, home)
 
   @Volatile private var cached: Pair<TimelineSnapshot, LibraryDictionary>? = null
 

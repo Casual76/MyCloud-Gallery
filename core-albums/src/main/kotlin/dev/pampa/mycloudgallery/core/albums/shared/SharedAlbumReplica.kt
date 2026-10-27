@@ -2,10 +2,13 @@ package dev.pampa.mycloudgallery.core.albums.shared
 
 import dev.pampa.mycloudgallery.core.albums.contract.AttestRequest
 import dev.pampa.mycloudgallery.core.albums.contract.CatalogFacts
+import dev.pampa.mycloudgallery.core.albums.contract.SharedState
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.trust.data.AlbumField
+import dev.pampa.mycloudgallery.core.trust.data.AlbumKey
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
 import java.util.concurrent.CopyOnWriteArrayList
@@ -46,12 +49,18 @@ data class SharedAlbumView(val merged: MergedAlbum, val attested: Map<MediaId, M
   override fun toString(): String = "SharedAlbumView(${merged.state.code}, ${attested.size}/${merged.items.size})"
 }
 
-/** La proiezione. Una per processo; le chiamate si serializzano. */
+/**
+ * La proiezione. Una per processo; le chiamate si serializzano. R1 della revisione di sicurezza della Fase 7: tiene i segni locali di questo
+ * dispositivo ([marks]: l'album visto attivo, la prima chiusura vista, la copia personale gia' scritta) e fa valere la chiusura vista come
+ * definitiva (D31): una definizione `active` letta dopo non riapre l'album, finche' il dispositivo che l'ha chiuso resta fidato (la revoca toglie
+ * cio' che ha causato).
+ */
 class SharedAlbumReplica(
   private val identity: AlbumIdentity,
   private val store: AlbumReplicaStore,
   private val catalog: CatalogFacts,
   @Volatile var local: LocalContributions = LocalContributions.NONE,
+  val marks: SharedAlbumMarks = MemorySharedAlbumMarks(),
 ) {
   private val mutex = Mutex()
   private val state = MutableStateFlow<Map<AlbumId, SharedAlbumView>>(emptyMap())
@@ -90,6 +99,10 @@ class SharedAlbumReplica(
   @Volatile var failures: Int = 0
     private set
 
+  /** R1: album di cui questo dispositivo tiene chiusa la vista nonostante una definizione `active` letta dopo la chiusura (Diagnostica). */
+  @Volatile var reopeningsRefused: Int = 0
+    private set
+
   /**
    * Ricalcola [albums] (null = tutti: replica, viste attuali e album con voci mie in coda). Da chiamare dopo un giro della replica, dopo una
    * modifica accodata e dopo un cambiamento del catalogo che tocca l'area comune (una scansione con novita': l'attestazione cambia). Il primo
@@ -104,14 +117,34 @@ class SharedAlbumReplica(
       val next = state.value.toMutableMap()
       val nextOrphans = orphanState.value.toMutableMap()
       val nextUnresolved = unresolvedState.value.toMutableSet()
+      // R1: i segni locali. Illeggibili: nessuna chiusura imposta e niente si segna (le copie, che li chiedono, non nascono).
+      val known = try {
+        marks.all()
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        failures++
+        null
+      }
+      val seen = HashMap<AlbumId, (AlbumMarks) -> AlbumMarks>()
       for (id in ids) {
         // Un album che non si riesce a ricalcolare tiene la vista di prima e non ferma gli altri (isolamento, come la replica).
         try {
-          val view = compute(id, registry)
+          val view = compute(id, registry, known?.get(id)?.closure)
+          if (view != null && known != null) noteSeen(view.merged, known[id] ?: AlbumMarks())?.let { seen[id] = it }
           val orphan = if (view == null) orphan(id, registry) else null
           if (view == null) next.remove(id) else next[id] = view
           if (orphan == null) nextOrphans.remove(id) else nextOrphans[id] = orphan
           if (view == null && orphan == null && store.contributions(id).any { !it.barred }) nextUnresolved += id else nextUnresolved -= id
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          failures++
+        }
+      }
+      if (seen.isNotEmpty()) {
+        try {
+          marks.update { all -> seen.forEach { (id, change) -> all[id] = change(all[id] ?: AlbumMarks()) } }
         } catch (e: CancellationException) {
           throw e
         } catch (e: Exception) {
@@ -126,11 +159,31 @@ class SharedAlbumReplica(
     if (done) listeners.forEach { it() }
   }
 
-  private suspend fun compute(album: AlbumId, registry: RegistryState): SharedAlbumView? {
+  /**
+   * R1: cosa segnare di [merged] (null: niente di nuovo). Attivo: visto attivo. Chiuso o eliminato la prima volta: la chiusura (stato, scelta per
+   * gli altri, ora, il dispositivo che l'ha firmata, titolo e cartella), che da qui in poi vale come definitiva.
+   */
+  private fun noteSeen(merged: MergedAlbum, mark: AlbumMarks): ((AlbumMarks) -> AlbumMarks)? {
+    if (merged.state == SharedState.ACTIVE) return if (mark.seenActive) null else { m -> m.copy(seenActive = true) }
+    if (mark.closure != null) return null
+    val author = merged.winners[AlbumKey.of(merged.album, AlbumField.Definition)]?.author.orEmpty()
+    val closure = ClosureMark(merged.state, merged.afterCloseCode, merged.closedAt ?: merged.updatedAt, author, merged.title, merged.folder)
+    return { m -> if (m.closure != null) m else m.copy(closure = closure) }
+  }
+
+  private suspend fun compute(album: AlbumId, registry: RegistryState, closure: ClosureMark? = null): SharedAlbumView? {
     val stored = store.contributions(album).filter { !it.barred && trusted(registry, it) }.map { it.verified() }
     val mine = if (registry.canWrite(identity.deviceId)) local.local(album) else null
     val contributions = if (mine == null) stored else stored.filter { it.device != identity.deviceId } + mine
-    val merged = AlbumFusion.merge(contributions, RegistryAlbumView(registry)) ?: return null
+    // R1, D31: la chiusura gia' vista resta, se chi l'ha firmata e' ancora fidato (approvato o dismesso); dopo di lei nessuna voce vale.
+    val enforced = closure?.takeIf { authorTrusted(registry, it.author) }
+    var merged = AlbumFusion.merge(contributions, RegistryAlbumView(registry), enforced?.at) ?: return null
+    if (enforced != null && merged.state == SharedState.ACTIVE) {
+      reopeningsRefused++
+      merged = merged.copy(
+        state = enforced.state, afterCloseCode = enforced.afterClose, closedAt = enforced.at, title = enforced.title, folder = enforced.folder,
+      )
+    }
     val requests = merged.items.values.map { AttestRequest(it.contentKey, it.sha256) }
     val byKey = if (requests.isEmpty()) emptyMap() else catalog.attest(requests)
     val attested = merged.items.mapNotNull { (media, item) -> byKey[item.contentKey]?.let { media to it } }.toMap()
@@ -156,6 +209,12 @@ class SharedAlbumReplica(
   }
 
   companion object {
+    /** R1: il dispositivo che ha firmato una chiusura vale ancora (approvato o dismesso); revocato, perso o sconosciuto no. */
+    fun authorTrusted(registry: RegistryState, device: String): Boolean = when (registry.registry.device(device)?.status) {
+      DeviceStatus.APPROVED, DeviceStatus.RETIRED -> true
+      else -> false
+    }
+
     /**
      * Un contributo vale con il registro di adesso (D8, A7): approvato; dismesso solo se la sua testa e' fra le congelate; revocato, perso o
      * sconosciuto mai (i suoi elementi spariscono anche se la replica non e' ancora stata ripulita dal giro, E-SH20).

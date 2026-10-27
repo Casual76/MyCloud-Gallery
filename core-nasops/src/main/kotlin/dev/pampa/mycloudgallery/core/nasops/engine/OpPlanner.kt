@@ -24,6 +24,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.PlanRejection
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanSummary
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanWarning
 import dev.pampa.mycloudgallery.core.nasops.contract.PlannedItem
+import dev.pampa.mycloudgallery.core.nasops.contract.ProtectedFiles
 import dev.pampa.mycloudgallery.core.nasops.contract.SkipReason
 import dev.pampa.mycloudgallery.core.nasops.contract.SkippedItem
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashEntryState
@@ -48,6 +49,8 @@ internal class OpPlanner(
   private val gate: OpsGate,
   private val access: ShareAccessView,
   private val newId: () -> String,
+  /** Fase 7, revisione B (R3): i file degli album condivisi che la tabella dei permessi non mi lascia togliere dal loro posto. */
+  private val protectedFiles: ProtectedFiles = ProtectedFiles.NONE,
 ) {
   private val purpose = Purpose.INTERACTIVE
 
@@ -117,6 +120,7 @@ internal class OpPlanner(
 
   private fun emptyRejection(skipped: List<SkippedItem>): PlanRejection = when {
     skipped.any { it.reason == SkipReason.READ_ONLY } -> PlanRejection.READ_ONLY
+    skipped.any { it.reason == SkipReason.SHARED_ALBUM_ITEM } -> PlanRejection.SHARED_ALBUM_ITEM
     skipped.any { it.reason == SkipReason.INTO_ITSELF } -> PlanRejection.INTO_ITSELF
     skipped.any { it.reason == SkipReason.SOURCE_MISSING } -> PlanRejection.SOURCE_MISSING
     skipped.any { it.reason == SkipReason.SAME_LOCATION } -> PlanRejection.SAME_LOCATION
@@ -124,6 +128,26 @@ internal class OpPlanner(
   }
 
   private fun key(share: String, path: SharePath) = share.lowercase(Locale.ROOT) + "/" + path.value.lowercase(Locale.ROOT)
+
+  /**
+   * Revisione B (R3, E-D16): le chiavi degli elementi di [items] che sono (o contengono) file di album condivisi che non posso togliere dal loro posto
+   * ([ProtectedFiles]). Una risposta che non arriva vale "tutti protetti": si fallisce chiusi, niente parte.
+   */
+  private suspend fun shielded(items: List<NasItem>): Set<String> {
+    val out = HashSet<String>()
+    for ((_, ofShare) in items.groupBy { it.share.lowercase(Locale.ROOT) }) {
+      val share = ofShare.first().share
+      val hit = try {
+        protectedFiles.protectedAmong(share, ofShare)
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        ofShare.map { it.path }.toSet()
+      }
+      hit.forEach { out += key(share, it) }
+    }
+    return out
+  }
 
   // --- crea cartella ----------------------------------------------------------------------------------------------------
 
@@ -148,6 +172,7 @@ internal class OpPlanner(
     if (blocked(item.share)) reject(PlanRejection.WRITES_BLOCKED)
     if (access.readOnly(item.share)) reject(PlanRejection.READ_ONLY)
     requireMedia(item.path)
+    if (key(item.share, item.path) in shielded(listOf(item))) reject(PlanRejection.SHARED_ALBUM_ITEM)
     if (NameRules.check(request.newName) !is NameRules.Check.Valid) reject(PlanRejection.INVALID_NAME)
     val dst = item.path.parent()?.child(request.newName) ?: SharePath.of(request.newName)
     requireMedia(dst)
@@ -169,14 +194,20 @@ internal class OpPlanner(
     if (blocked(request.destShare) || request.items.any { blocked(it.share) }) reject(PlanRejection.WRITES_BLOCKED)
     if (access.readOnly(request.destShare)) reject(PlanRejection.READ_ONLY)
     request.destFolder?.let(::requireMedia)
+    request.items.forEach { requireMedia(it.path) }
     val planned = ArrayList<PlannedItem>()
     val skipped = ArrayList<SkippedItem>()
     val seen = HashSet<String>()
     // R11: i file che l'utente ha chiesto di lasciare dov'erano (i nascosti, spostando nell'area comune): niente elementi per loro.
     val leave = request.leaveBehind.mapTo(HashSet()) { key(it.share, it.path) }
+    // Revisione B (R3): gli elementi di album condivisi che non posso togliere dal loro posto restano dove sono, e il foglio lo dice.
+    val shielded = shielded(request.items)
     for (item in request.items) {
-      requireMedia(item.path)
       if (!seen.add(key(item.share, item.path))) continue
+      if (key(item.share, item.path) in shielded) {
+        skipped += SkippedItem(item.share, item.path, SkipReason.SHARED_ALBUM_ITEM)
+        continue
+      }
       if (access.readOnly(item.share)) {
         skipped += SkippedItem(item.share, item.path, SkipReason.READ_ONLY)
         continue
@@ -289,9 +320,15 @@ internal class OpPlanner(
     val seen = HashSet<String>()
     // Un elemento dentro una cartella scelta anch'essa va con la cartella: un solo cestino, nessun "spostato da altri".
     val folders = request.items.filter { it.isFolder }
+    // Revisione B (R3): gli elementi di album condivisi che non posso eliminare restano dove sono, e il foglio lo dice.
+    val shielded = shielded(request.items)
     for (item in request.items) {
       if (!seen.add(key(item.share, item.path))) continue
       if (folders.any { f -> f !== item && f.share.equals(item.share, ignoreCase = true) && item.path != f.path && item.path.isWithin(f.path) }) continue
+      if (key(item.share, item.path) in shielded) {
+        skipped += SkippedItem(item.share, item.path, SkipReason.SHARED_ALBUM_ITEM)
+        continue
+      }
       // E-D11: in un'area senza permesso non si fa niente, e il foglio lo elenca.
       if (access.readOnly(item.share)) {
         skipped += SkippedItem(item.share, item.path, SkipReason.READ_ONLY)

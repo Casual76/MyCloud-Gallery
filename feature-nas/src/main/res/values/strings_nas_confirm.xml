@@ -56,6 +56,7 @@
   <string name="nas_confirm_skipped_into_itself">cartelle dentro se stesse</string>
   <string name="nas_confirm_skipped_source_missing">non ci sono più</string>
   <string name="nas_confirm_skipped_left_behind">nascosti da te</string>
+  <string name="nas_confirm_skipped_shared_album_item">in un album condiviso che non ti permette di toccarli</string>
   <string name="nas_confirm_skipped_line">%1$s (%2$s)</string>
   <string name="nas_confirm_purge_note_title">Non si possono ripristinare</string>
   <string name="nas_confirm_purge_note_detail">Eliminati subito, non passano dal cestino: non c\'è più il ripristino dei 30 giorni.</string>

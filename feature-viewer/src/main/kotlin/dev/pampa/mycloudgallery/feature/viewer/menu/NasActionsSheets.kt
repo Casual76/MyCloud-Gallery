@@ -205,8 +205,8 @@ internal fun NasDeleteSheetContent(
       GalleryDeleteLocation(
         title = nasTitle,
         kind = nasKind,
-        detail = stringResource(if (target.writable) R.string.viewer_nas_delete_nas_detail else R.string.viewer_nas_delete_nas_read_only),
-        deletable = target.writable,
+        detail = stringResource(locationDetail(target.writable, target.albumProtected)),
+        deletable = target.writable && !target.albumProtected,
       ),
     )
     // Le versioni precedenti (E-D15) sono nella loro riga ([extraLocations]): qui solo le altre aree.
@@ -215,8 +215,8 @@ internal fun NasDeleteSheetContent(
         GalleryDeleteLocation(
           title = stringResource(if (other.kind == NasLocationInfo.Kind.NAS_COMMON) R.string.viewer_nas_delete_nas_common else R.string.viewer_nas_delete_nas_private),
           kind = if (other.kind == NasLocationInfo.Kind.NAS_COMMON) GalleryDeleteLocationKind.NasShared else GalleryDeleteLocationKind.NasPrivate,
-          detail = stringResource(if (other.writable) R.string.viewer_nas_delete_nas_detail else R.string.viewer_nas_delete_nas_read_only),
-          deletable = other.writable,
+          detail = stringResource(locationDetail(other.writable, other.albumProtected)),
+          deletable = other.writable && !other.albumProtected,
         ),
       )
     }
@@ -231,6 +231,13 @@ internal fun NasDeleteSheetContent(
     onConfirm = onConfirm,
     onCancel = onCancel,
   )
+}
+
+/** Cosa succede a una copia del NAS con "Ovunque": nel cestino, oppure resta (sola lettura; revisione B, R3: elemento protetto di un album condiviso). */
+private fun locationDetail(writable: Boolean, albumProtected: Boolean): Int = when {
+  !writable -> R.string.viewer_nas_delete_nas_read_only
+  albumProtected -> R.string.viewer_nas_delete_nas_album_protected
+  else -> R.string.viewer_nas_delete_nas_detail
 }
 
 // --- Rinomina ---------------------------------------------------------------------------------------------------------------

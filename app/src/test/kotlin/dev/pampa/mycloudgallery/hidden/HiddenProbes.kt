@@ -30,7 +30,9 @@ import dev.pampa.mycloudgallery.core.search.testing.InMemorySearchEngine
 import dev.pampa.mycloudgallery.feature.integrations.picker.PickerAction
 import dev.pampa.mycloudgallery.feature.integrations.picker.PickerItems
 import dev.pampa.mycloudgallery.feature.integrations.picker.PickerRequest
+import dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceDetails
 import dev.pampa.mycloudgallery.nas.CatalogHidden
+import dev.pampa.mycloudgallery.nas.CatalogLargestFiles
 import dev.pampa.mycloudgallery.search.CatalogSearchData
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -164,6 +166,29 @@ internal object HiddenProbes {
     val hiddenKeys = CatalogHidden.hiddenLocationKeys(w.db, keyOf.values)
     val listed = keyOf.filter { it.value !in hiddenKeys }.keys.mapTo(LinkedHashSet()) { w.ids[it] }
     Probed(shown = listed, expected = w.idsOf(w.nas.keys.filter { it in w.oracle.liveShowable }))
+  }
+
+  /**
+   * Spazio NAS (R4, NA-1 della revisione di Fase 7): i file piu' grandi di ogni share, come li legge la pagina dal catalogo (`CatalogLargestFiles`, il
+   * codice vero), elencati per nome e cartella. Un video nascosto da 2 GB e' quasi sempre fra i piu' grandi: non deve esserci, ne' lui ne' i compagni
+   * del suo gruppo, e nemmeno quello nascosto un attimo fa.
+   */
+  val nasSpace = SurfaceProbe { w ->
+    val me = AccountId.of(HiddenWorldBuilder.ME)
+    val shown = LinkedHashSet<MediaId>()
+    val problems = ArrayList<String>()
+    val perShare = HashMap<String, Int>()
+    for (share in listOf(HiddenWorldBuilder.PRIVATE_SHARE, HiddenWorldBuilder.COMMON_SHARE)) {
+      val largest = CatalogLargestFiles.of(w.db, me, share)
+      largest.forEach { file -> shown += w.ids[indexOfNas(file.path.value)] }
+      perShare[share] = largest.size
+      if (largest.zipWithNext().any { (a, b) -> a.size < b.size }) problems += "i file piu' grandi di una share non sono in ordine di dimensione"
+    }
+    // Se tutti i file presenti stanno nel tetto dell'elenco, deve esserci ognuno di quelli che si possono mostrare; oltre, ne basta un sottoinsieme.
+    val showable = w.nas.filter { (index, place) -> index in w.oracle.liveShowable && place.share.isNotEmpty() }
+    val fits = listOf(HiddenWorldBuilder.PRIVATE_SHARE, HiddenWorldBuilder.COMMON_SHARE)
+      .all { share -> showable.count { it.value.share == share } <= NasSpaceDetails.MAX_LARGEST }
+    Probed(shown = shown, expected = if (fits) w.idsOf(showable.keys) else null, within = w.liveShowable, problems = problems)
   }
 
   // --- Doppioni (Fase 7, P8, D25): il codice vero sul catalogo vero ---------------------------------------------------------------------

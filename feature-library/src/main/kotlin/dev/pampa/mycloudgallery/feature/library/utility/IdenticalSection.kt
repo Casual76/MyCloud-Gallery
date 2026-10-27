@@ -78,6 +78,14 @@ internal fun LazyListScope.identicalItems(
       )
     }
     view.scanning && view.groups.isEmpty() -> item(key = "identical-scanning") { ScanningRow(stringResource(R.string.duplicates_scanning)) }
+    // UT-1: con le sole foto selezionate (o prima che la Libreria sia letta) non si cerca niente, e lo si dice invece di dire "nessun doppione".
+    view.restricted -> item(key = "identical-restricted") {
+      CollectionEmptyState(
+        icon = Icons.Rounded.CleaningServices,
+        title = stringResource(R.string.duplicates_identical_restricted_title),
+        detail = stringResource(R.string.duplicates_identical_restricted_detail),
+      )
+    }
     view.isEmpty -> item(key = "identical-empty") {
       CollectionEmptyState(
         icon = Icons.Rounded.CleaningServices,
@@ -86,6 +94,17 @@ internal fun LazyListScope.identicalItems(
       )
     }
     else -> {
+      // DP-1: file del NAS che sembrano uguali e aspettano di essere letti per intero: ancora non sono doppioni provati.
+      if (view.verifying > 0) {
+        item(key = "identical-verifying") {
+          Text(
+            text = pluralStringResource(R.plurals.duplicates_identical_verifying, view.verifying, GalleryNumbers.format(view.verifying)),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = GalleryDimens.Gutter, vertical = UtilityDimens.RowGap),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
       if (view.cleanable.isNotEmpty()) {
         item(key = "identical-summary") { IdenticalSummary(view = view, busy = busy, onCleanup = actions.onCleanup) }
         items(view.cleanable, key = { it.listKey() }) { proposal ->

@@ -9,7 +9,17 @@ import dev.pampa.mycloudgallery.core.albums.contract.SafeCopyRequester
 import dev.pampa.mycloudgallery.core.albums.contract.TicketStatus
 import dev.pampa.mycloudgallery.core.albums.personal.CatalogAlbums
 import dev.pampa.mycloudgallery.core.albums.personal.PersonalAlbumCopies
+import dev.pampa.mycloudgallery.core.albums.contract.ShareFolder
+import dev.pampa.mycloudgallery.core.albums.share.AlbumHistory
 import dev.pampa.mycloudgallery.core.albums.share.BringBackCandidates
+import dev.pampa.mycloudgallery.core.albums.share.ShareBackupGates
+import dev.pampa.mycloudgallery.core.albums.shared.AlbumPublishStore
+import dev.pampa.mycloudgallery.core.albums.shared.AlbumReplicaStore
+import dev.pampa.mycloudgallery.core.albums.shared.SharedAlbumView
+import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.ContentKey
+import dev.pampa.mycloudgallery.core.trust.data.AlbumField
+import dev.pampa.mycloudgallery.core.trust.data.AlbumValue
 import dev.pampa.mycloudgallery.core.albums.share.FolderAdoptions
 import dev.pampa.mycloudgallery.core.albums.share.PersonalKeptCopyStore
 import dev.pampa.mycloudgallery.core.albums.share.RevokedItemsRestore
@@ -30,8 +40,12 @@ import dev.pampa.mycloudgallery.core.albums.smart.NoSmartContentSearch
 import dev.pampa.mycloudgallery.core.albums.smart.RoomSmartRows
 import dev.pampa.mycloudgallery.core.albums.smart.RuleSmartNameInterpreter
 import dev.pampa.mycloudgallery.core.albums.smart.RulesSmartEngine
+import dev.pampa.mycloudgallery.core.albums.smart.SmartContentSearch
 import dev.pampa.mycloudgallery.core.albums.smart.SmartRecompute
 import dev.pampa.mycloudgallery.core.albums.trips.CatalogTrips
+import dev.pampa.mycloudgallery.core.albums.contract.TripReport
+import dev.pampa.mycloudgallery.core.albums.upkeep.SmartUpkeep
+import dev.pampa.mycloudgallery.core.albums.upkeep.TripUpkeep
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
@@ -68,8 +82,14 @@ class AlbumsLive internal constructor(
   val interpreter: RuleSmartNameInterpreter,
   val trips: CatalogTrips,
   val shared: SharedLive,
-  /** La ricerca per contenuto c'e' (le regole "descrizione" ed "esempi" degli smart contano; senza, `SMART_NO_SEARCH`). */
-  val contentSearch: Boolean = false,
+  /**
+   * La ricerca per contenuto degli smart (D15): [SmartContentSearch.ready] dice se le regole "descrizione" ed "esempi" contano adesso. Prima era un
+   * booleano fisso "c'e' un motore" (sempre vero con Hilt) e `SMART_NO_SEARCH` non scattava mai (DG-1); il motore c'e' sempre, **pronto** no.
+   */
+  val content: SmartContentSearch,
+  /** Cio' che tiene al passo gli smart dopo ogni calcolo (AS-1..AS-6) e quando si cercano i viaggi (VG-1). */
+  val smartUpkeep: SmartUpkeep,
+  val tripUpkeep: TripUpkeep,
 )
 
 /** La parte degli album condivisi: replica, pubblicatore, condivisione e le proposte che non spostano niente (D39, D31, E-SH20). */
@@ -89,6 +109,8 @@ class SharedLive internal constructor(
   val folders: CatalogCommonFolders,
   /** Gli album lasciati e gli avvisi chiusi ("Non mostrare piu'"): anche per gli avvisi di :app (E-SH16, E-SH20). */
   val choices: PersonalSharedAlbumChoices,
+  /** R9: toglie dai registri dei trasferimenti le chiavi che nessuna operazione aperta cita piu' (nel giro dell'indice); quante. */
+  val pruneTransfers: suspend () -> Int = { 0 },
 )
 
 /** Cio' che serve per montare [AlbumsLive]: tutto gia' pronto nel resto dell'app (nessuna rete, nessun NAS qui). */
@@ -118,6 +140,23 @@ internal class AlbumsInputs(
   val seenFile: File,
   /** La cartella `Backup/<dispositivo>/` di questo telefono (la regola B degli smart: "dello stesso dispositivo"); null se il backup non c'e'. */
   val ownBackupFolder: () -> String? = { null },
+  /**
+   * Revisione B (SG-1, I4): cosa i cancelli del backup lasciano fare adesso alla condivisione per una cartella d'album (caricare dal telefono, la
+   * copia del guardiano). Di serie tutto aperto (i test che non montano il backup).
+   */
+  val backupGates: suspend (ShareFolder) -> ShareBackupGates = { ShareBackupGates.OPEN },
+  /** Revisione B (SH-2): il file delle strisce dei problemi chiuse dall'utente; null = in memoria. */
+  val problemMarksFile: File? = null,
+  /** I registri dei trasferimenti (R9: potati nel giro dell'indice); null nelle prove che non li hanno. */
+  val transfers: TransferRegisters? = null,
+  /** R1: il file dei segni locali degli album condivisi (visto attivo, chiusura vista, copia scritta); null nelle prove (in memoria). */
+  val marksFile: File? = null,
+  /** R2: quali errori del NAS sono di un file (quel contributo aspetta) e quali della sessione (il giro si ferma). */
+  val ioErrors: dev.pampa.mycloudgallery.core.albums.shared.AlbumIoErrors = dev.pampa.mycloudgallery.core.albums.shared.AlbumIoErrors.SESSION,
+  /** Un errore di un giro dei motori degli album (si conta in `roundErrors`, mai il messaggio). */
+  val onError: (Exception) -> Unit = {},
+  /** Il resoconto di una ricerca dei viaggi fuori dalla notte (Diagnostica: solo numeri). */
+  val onTripReport: (TripReport) -> Unit = {},
 )
 
 /** Il montaggio, nell'ordine delle dipendenze (condivisi, poi personali e smart, poi viaggi). Nessun I/O qui: lo fanno gli oggetti quando servono. */
@@ -126,14 +165,22 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
   val replicaStore = RoomAlbumReplicaStore(i.database)
   val publishStore = RoomAlbumPublishStore(i.database, i.publishAuthor)
   val facts = AlbumCatalogFacts { i.catalog.albums }
-  val replica = SharedAlbumReplica(i.identity, replicaStore, facts)
+  val marks = i.marksFile?.let(::FileSharedAlbumMarks) ?: dev.pampa.mycloudgallery.core.albums.shared.MemorySharedAlbumMarks()
+  val replica = SharedAlbumReplica(i.identity, replicaStore, facts, marks = marks)
   val publisher = NasAlbumPublisher(
     i.identity, i.family, i.fileSystem, publishStore, i.writeGate, i.clocks,
     // La storia dei livelli fusa: un cambio di livello si aggiunge a quella (P2), anche per un album di chi e' uscito (eredita').
     levels = { id -> replica.view(id)?.merged?.levels ?: replica.orphans.value[id]?.levels ?: LevelHistory.NONE },
+    // R12: dopo la perdita dello store del pubblicatore, la copia del mio contributo letta dalla replica vale piu' di cio' che c'e' sul NAS.
+    ownReplica = { id -> i.identity.deviceId.let { me -> replicaStore.contribution(id, me) } },
   )
   replica.local = publisher
-  val sync = NasSharedAlbumSync(i.identity, i.fileSystem, replicaStore, replica, i.clocks, i.readGate, ownAlbums = { publishStore.albums() })
+  val sync = NasSharedAlbumSync(
+    i.identity, i.fileSystem, replicaStore, replica, i.clocks, i.readGate, ownAlbums = { publishStore.albums() },
+    ioErrors = i.ioErrors,
+    // R2: un mio segmento tolto dal PC si rimette uguale (dietro gli stessi cancelli della pubblicazione).
+    ownSegmentMissing = { id -> publisher.repairSegments(id) },
+  )
   val choices = PersonalSharedAlbumChoices({ i.personal }, i.noticesFile)
   val sharedAlbums = ReplicaSharedAlbums(i.identity, i.family, replica, publisher, i.writeGate, i.clocks, i.visible, choices)
   val folders = CatalogCommonFolders(i.database)
@@ -163,6 +210,12 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
     lastPosition = { id -> replica.view(id)?.merged?.items?.values?.maxOfOrNull { it.position } },
     linkPersonal = { personalId, sharedId -> personalAlbums.setShared(personalId.value, sharedId.value) },
     afterStage = { id -> replica.recompute(listOf(id)) },
+    // Revisione B, SB-1: la lapide di "Riporta" va sull'id con cui l'elemento e' pubblicato, non sull'id del mio catalogo che lo attesta.
+    publishedId = { id, media -> publishedIdIn(replica.view(id), media) },
+    // Revisione B, SH-5: una ripresa non riaccoda definizione e livello se il mio pubblicatore ha gia' l'album (in coda o pubblicato).
+    definitionStaged = { id -> hasOwnDefinition(publishStore, id) },
+    backupGates = i.backupGates,
+    problemMarks = i.problemMarksFile?.let(::FileShareProblemMarks) ?: dev.pampa.mycloudgallery.core.albums.share.ShareProblemMarks.inMemory(),
   )
   val orchestrator = ShareOrchestrator(ports)
   sharedAlbums.runner = orchestrator
@@ -172,10 +225,12 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
       i.identity, i.family, replicaStore, replica, publisher, i.writeGate, i.clocks, i.visible,
       allowed = { album, op, media -> sharedAlbums.allowed(album, op, media) },
     ),
-    adoptions = FolderAdoptions(ports) { ids -> i.visible.visible(ids) },
+    // Revisione B, SH-3: un file che e' stato un elemento (tolto con "Rimuovi dall'album") non e' "aggiunto dal PC".
+    adoptions = FolderAdoptions(ports, history = { id -> albumHistory(replicaStore, publishStore, id) }) { ids -> i.visible.visible(ids) },
     bringBack = BringBackCandidates(ports),
     folders = folders,
     choices = choices,
+    pruneTransfers = { i.transfers?.prune { (ports.diary as RoomShareDiary).openTransferKeys() } ?: 0 },
   )
 
   // --- Album personali (P3) ----------------------------------------------------------------------------------------------------------
@@ -185,25 +240,64 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
   )
   catalogAlbums = albums
 
+  // --- Viaggi ed eventi (P7) ---------------------------------------------------------------------------------------------------------
+  // Prima dell'interprete dei nomi (R16): l'interprete chiede ai viaggi dov'e' la casa per non scriverla nel centro di un luogo.
+  val trips = CatalogTrips(i.database, CatalogAlbumCandidates { i.catalog.albums }, i.visible, i.mask, i.personal, albums, i.placeNames, i.today, i.clocks, scope)
+
   // --- Album smart (P6) --------------------------------------------------------------------------------------------------------------
   val smartRows = RoomSmartRows(i.database)
   val smartCandidates = CatalogSmartCandidates(i.catalog)
   val content = i.search?.let { EngineContentSearch(it) } ?: NoSmartContentSearch
   val lookup = GeocoderPlaceLookup(i.places)
+  // AS-9: la cartella del proprio backup si legge a ogni uso (le impostazioni del backup si caricano dopo il montaggio).
   val smart = RulesSmartEngine(
-    smartRows, smartCandidates, i.visible, i.mask, content, DeviceNormalizer(i.ownBackupFolder()), lookup, i.clocks, FileSmartSeenMarks(i.seenFile),
+    smartRows, smartCandidates, i.visible, i.mask, content, DeviceNormalizer(i.ownBackupFolder), lookup, i.clocks, FileSmartSeenMarks(i.seenFile),
   )
   val recompute = SmartRecompute(smartRows, smartCandidates, smart, i.clocks)
-  val interpreter = RuleSmartNameInterpreter(ItalianQueryParser(), i.visible, i.mask, smartCandidates, lookup, content, i.places)
-
-  // --- Viaggi ed eventi (P7) ---------------------------------------------------------------------------------------------------------
-  val trips = CatalogTrips(i.database, CatalogAlbumCandidates { i.catalog.albums }, i.visible, i.mask, i.personal, albums, i.placeNames, i.today, i.clocks, scope)
+  val interpreter = RuleSmartNameInterpreter(ItalianQueryParser(), i.visible, i.mask, smartCandidates, lookup, content, i.places, home = trips.homeClearance())
+  val smartUpkeep = SmartUpkeep(scope, smartRows, recompute, albums, onError = i.onError)
+  val tripUpkeep = TripUpkeep(scope, trips, i.clocks, onReport = i.onTripReport, onError = i.onError)
 
   return AlbumsLive(
     scope, i.catalog, i.personal, albums, PersonalAlbumCopies(i.personal, i.catalog), PersonalKeptCopyStore(i.personal), smartRows, smart, recompute,
-    interpreter, trips, shared, contentSearch = i.search != null,
+    interpreter, trips, shared, content, smartUpkeep, tripUpkeep,
   )
 }
 
 /** Gli id dei media di una vista, nell'ordine della vista. */
 internal fun idsOf(view: TimelineView): List<MediaId> = List(view.size) { index -> view.snapshot.idAt(view.snapshotIndex(index)) }
+
+/**
+ * Revisione B, SB-1: l'id con cui e' pubblicato l'elemento che il mio catalogo vede come [media] in [view]: lui stesso se e' fra gli elementi, altrimenti
+ * l'elemento che il mio catalogo attesta con [media] (D9: un altro dispositivo dell'account puo' averlo pubblicato con il suo id). Null se non e' un
+ * elemento vivo. E' la regola di `ReplicaSharedAlbums` per le modifiche dell'album, usata anche da "Riporta".
+ */
+internal fun publishedIdIn(view: SharedAlbumView?, media: MediaId): MediaId? {
+  view ?: return null
+  return media.takeIf { it in view.merged.items } ?: view.attested.entries.firstOrNull { it.value == media }?.key
+}
+
+/** Revisione B, SH-5: il mio contributo ad [album] ha gia' la definizione (in coda o in una testa pubblicata). */
+internal suspend fun hasOwnDefinition(store: AlbumPublishStore, album: AlbumId): Boolean {
+  val own = store.load(album) ?: return false
+  return own.staged.values.any { it.field == AlbumField.Definition } || own.published.values.any { it.entry.field == AlbumField.Definition }
+}
+
+/**
+ * Revisione B, SH-3: cio' che [album] ha avuto, vivo o tolto (lapide): gli id pubblicati e le chiavi di contenuto delle voci `item:` di tutti i contributi
+ * che la replica ricorda e del mio (pubblicato e in coda). Solo dati locali.
+ */
+internal suspend fun albumHistory(replicaStore: AlbumReplicaStore, publishStore: AlbumPublishStore, album: AlbumId): AlbumHistory {
+  val media = HashSet<MediaId>()
+  val keys = HashSet<ContentKey>()
+  fun collect(field: AlbumField, value: AlbumValue?) {
+    (field as? AlbumField.Item)?.let { media += it.media }
+    (value as? AlbumValue.Item)?.let { keys += it.contentKey }
+  }
+  for (contribution in replicaStore.contributions(album)) contribution.entries.forEach { collect(it.entry.field, it.entry.value) }
+  publishStore.load(album)?.let { own ->
+    own.published.values.forEach { collect(it.entry.field, it.entry.value) }
+    own.staged.values.forEach { collect(it.field, it.value) }
+  }
+  return AlbumHistory(media, keys)
+}

@@ -114,7 +114,9 @@ class TripDismissalSyncTest {
       val proposals = phone.harness.trips.proposals.value.proposals
       proposals.forEach { phone.harness.trips.dismiss(it.id) }
       val state = phone.store.state()
-      assertThat(state).hasSize(proposals.size)
+      // VG-2: un viaggio scartato scrive anche l'impronta del solo inizio (un'altra impronta, mai un dato in chiaro): un viaggio che si allunga resta scartato.
+      val startKeys = proposals.filter { it.kind == TripKind.TRIP }.map { TripId.startKey(it.kind, it.days.from).value }
+      assertThat(state).hasSize(proposals.size + startKeys.size)
       for ((key, entry) in state) {
         assertThat(key.kind).isEqualTo(PersonalKind.SETTING)
         assertThat(key.subject).isEqualTo(PersonalFields.SETTINGS_SUBJECT)
@@ -122,7 +124,7 @@ class TripDismissalSyncTest {
         assertThat(entry.value).isEqualTo(PersonalValue.Flag(true))
         assertThat(entry.fingerprint).isNull()
       }
-      assertThat(state.keys.mapNotNull { PersonalFields.tripDismissedId(it.field) }).containsExactlyElementsIn(proposals.map { it.id.value })
+      assertThat(state.keys.mapNotNull { PersonalFields.tripDismissedId(it.field) }).containsExactlyElementsIn(proposals.map { it.id.value } + startKeys)
       // La stessa proposta rilevata da due dispositivi ha la stessa impronta: e' per questo che la scelta vale per tutti.
       val again = TripId.of(proposals.first().kind, proposals.first().days, proposals.first().placeIds)
       assertThat(again).isEqualTo(proposals.first().id)

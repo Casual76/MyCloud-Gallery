@@ -3,7 +3,11 @@ package dev.pampa.mycloudgallery.utility
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.library.duplicates.AlbumMembership
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneBytes
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneLookup
+import dev.pampa.mycloudgallery.core.backup.contract.PhoneRef
 import dev.pampa.mycloudgallery.core.library.duplicates.NasTrashRef
+import dev.pampa.mycloudgallery.core.library.duplicates.PhoneTrashRef
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.NasStamp
 import dev.pampa.mycloudgallery.core.nasops.contract.ConfirmationIssuer
@@ -26,6 +30,7 @@ import dev.pampa.mycloudgallery.feature.library.trash.NasTrashRow
 import dev.pampa.mycloudgallery.feature.library.trash.UserTap
 import dev.pampa.mycloudgallery.feature.library.utility.CleanupNasPort
 import dev.pampa.mycloudgallery.feature.library.utility.FullHashSwitch
+import dev.pampa.mycloudgallery.feature.library.utility.PhoneCopyCheck
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +67,24 @@ class OperationsCleanupNas(private val operations: NasOperations, private val mo
       StartOutcome.WritesBlocked -> NasTrashOutcome.BLOCKED
       else -> NasTrashOutcome.REJECTED
     }
+  }
+}
+
+/**
+ * R18 (revisione di Fase 7): `PhoneCopyCheck` sopra la porta del telefono del backup. Per ogni copia del piano rilegge la **riga del MediaStore** con la
+ * versione con cui l'`_ID` valeva e ne confronta il timbro (dimensione, data di modifica, generazione) con quello del piano. Una riga sparita, ricostruita
+ * (versione del MediaStore cambiata), nascosta dal permesso o di cui non si sa niente non passa: nel dubbio non va nel cestino.
+ */
+class MediaStorePhoneCopyCheck(private val phone: PhoneBytes) : PhoneCopyCheck {
+  override suspend fun unchanged(copies: List<PhoneTrashRef>): List<PhoneTrashRef> = copies.filter { copy ->
+    val now = try {
+      phone.lookup(PhoneRef(copy.ref.volume, copy.ref.mediaStoreId, copy.mediaStoreVersion))
+    } catch (e: CancellationException) {
+      throw e
+    } catch (_: Exception) {
+      return@filter false
+    }
+    now is PhoneLookup.Present && now.stamp.looksUnchangedFrom(copy.stamp)
   }
 }
 

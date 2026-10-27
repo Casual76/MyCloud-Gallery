@@ -9,6 +9,9 @@
   <string name="nas_hub_space_subtitle">Spazio libero, quota e file più grandi</string>
   <string name="nas_hub_trash_title">Eliminati di recente del NAS</string>
   <string name="nas_hub_trash_subtitle">Il cestino del NAS: 30 giorni per ripensarci</string>
+  <!-- ED-1 (revisione di Fase 7): la pagina del Cestino senza il cancello non c'e' piu'; questa manda agli Eliminati di recente e non elenca niente. -->
+  <string name="nas_trash_elsewhere_title">Gli eliminati di recente sono in Utility</string>
+  <string name="nas_trash_elsewhere_detail">Il cestino del NAS e quello del telefono stanno in una pagina sola, dietro lo sblocco del telefono: apri Raccolte, Utility, Eliminati di recente.</string>
   <string name="nas_hub_ops_title">Operazioni in corso</string>
   <string name="nas_hub_ops_subtitle_none">Quello che sta facendo il NAS per te</string>
   <plurals name="nas_hub_ops_subtitle_active">

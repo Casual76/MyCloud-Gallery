@@ -39,6 +39,8 @@ import dev.pampa.mycloudgallery.core.nasops.contract.NasTrash
 import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
 import dev.pampa.mycloudgallery.core.nasops.contract.OpErrorCode
+import dev.pampa.mycloudgallery.core.nasops.contract.PauseReason
+import dev.pampa.mycloudgallery.core.nasops.contract.ProtectedFiles
 import dev.pampa.mycloudgallery.core.nasops.contract.OpId
 import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
@@ -320,6 +322,14 @@ class NasOrganizer(
    */
   @Volatile
   var everywhere: (suspend (MediaId) -> EverywherePlan?)? = null
+
+  /**
+   * Fase 7, revisione B (R3): i file degli album condivisi che la tabella dei permessi non mi lascia togliere dal loro posto. Lo lega il grafo
+   * degli album appena nasce (`AlbumsWiring`, che vede la replica); il piano di ogni operazione lo chiede ([NasOpsConfig.protectedFiles]) e il menu
+   * del viewer non offre cio' che il piano rifiuterebbe. Senza album legati: nessuno (un'app senza album condivisi).
+   */
+  @Volatile
+  var protectedFiles: ProtectedFiles = ProtectedFiles.NONE
   private var watcher: Job? = null
 
   /**
@@ -382,6 +392,8 @@ class NasOrganizer(
       // Campo, gruppo A (D7) e Fase 7 (D29, P13): la posizione nuova di uno spostamento tra share nel catalogo, **lo stesso** media, prima che la
       // sorgente vada nel cestino. Una porta sola e vincolante (`MoveCompletionSink`, P4): al posto di quella "al meglio" del campo A.
       completions = dev.pampa.mycloudgallery.albums.CatalogMoveCompletionSink({ catalog }, runtime.account),
+      // Fase 7, revisione B (R3): il piano lascia fuori gli elementi di album condivisi che non posso eliminare, spostare o rinominare.
+      protectedFiles = ProtectedFiles { share, items -> protectedFiles.protectedAmong(share, items) },
     )
     val services = NasOpsWiring.build(inputs.session, opsStore, config)
 
@@ -459,7 +471,9 @@ class NasOrganizer(
     if (stopped) return
     val open = runCatching { opsStore.ops(OPEN_STATES) }.getOrNull().orEmpty()
     if (open.isEmpty()) return
-    val waitingForLockedFiles = open.all { it.state == OpState.PAUSED && it.errorCode == OpErrorCode.LOCKED }
+    // Fase 7, revisione B (I2): un'operazione che aspetta il catalogo dopo la pubblicazione ha anche lei il suo prossimo tentativo nel diario: non si
+    // riprende subito (girerebbe a vuoto), ma quando scade la prima attesa.
+    val waitingForLockedFiles = open.all { it.state == OpState.PAUSED && (it.errorCode == OpErrorCode.LOCKED || it.pauseReason == PauseReason.CATALOG) }
     jobs.resumeLater(if (waitingForLockedFiles) nextLockedRetryMs() ?: 0L else 0L)
   }
 
@@ -496,7 +510,7 @@ class NasOrganizer(
   suspend fun nextLockedRetryMs(): Long? {
     val now = inputs.nasClock.nowMillisOrNull() ?: return null
     val next = runCatching {
-      opsStore.ops(OPEN_STATES).flatMap { opsStore.items(it.id) }.filter { it.waitingLocked }.mapNotNull { it.nextAttemptAtNas }.minOrNull()
+      opsStore.ops(OPEN_STATES).flatMap { opsStore.items(it.id) }.filter { it.waitingLocked || it.waitingCatalog }.mapNotNull { it.nextAttemptAtNas }.minOrNull()
     }.getOrNull() ?: return null
     return (next - now).coerceAtLeast(0)
   }
@@ -607,6 +621,15 @@ class NasOrganizer(
   // --- Il viewer ------------------------------------------------------------------------------------------------------------------
 
   /** Il file del NAS dietro [ref] e cosa ci si puo' fare (dal catalogo e dalle aree; mai un percorso dalla UI). */
+  /** Revisione B (R3): [item] e' un elemento di un album condiviso che non posso togliere dal suo posto. Un errore vale "protetto" (fallisce chiuso). */
+  private suspend fun guarded(item: NasItem): Boolean = try {
+    protectedFiles.protectedAmong(item.share, listOf(item)).isNotEmpty()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    true
+  }
+
   private suspend fun targetOf(ref: MediaRef.Nas): NasActionTarget? {
     val p = partsFlow.value ?: return null
     val catalog = catalogProvider() ?: return null
@@ -628,8 +651,11 @@ class NasOrganizer(
     val destinations = p.areas
       .filterNot { it.share.equals(nas.share, ignoreCase = true) && path.parent() == null }
       .map { NasMoveDestination(it.share, null, it.area.toScope(), areaLabel(it.area)) }
+    val item = NasItem(share = nas.share, path = path, isFolder = false, size = info.stamp.size, stamp = info.stamp)
     return NasActionTarget(
-      item = NasItem(share = nas.share, path = path, isFolder = false, size = info.stamp.size, stamp = info.stamp),
+      item = item,
+      // Revisione B (R3, E-D16): un elemento di un album condiviso che il livello non mi lascia toccare: niente "Elimina", "Sposta", "Rinomina".
+      albumProtected = guarded(item),
       hidden = media?.let { isHidden(it.id) } == true,
       scope = area.area.toScope(),
       // E-N9: la sola lettura la dice il NAS (vedi ShareAccessView sopra). Un congelamento o l'emergenza non sono "sola lettura": il
@@ -639,10 +665,14 @@ class NasOrganizer(
       // "Solo dal telefono" qui non avrebbe niente da eliminare.
       onPhone = false,
       isVideo = media?.kind == MediaKind.VIDEO,
-      others = all,
+      others = markProtected(all),
       destinations = destinations,
     )
   }
+
+  /** Revisione B (R3): le copie che sono elementi protetti di un album condiviso restano fuori da "Ovunque", e il foglio lo dice. */
+  private suspend fun markProtected(locations: List<NasLocationInfo>): List<NasLocationInfo> =
+    locations.map { location -> location.item?.let { if (guarded(it)) location.copy(albumProtected = true) else null } ?: location }
 
   /**
    * E-D1 (piano §2), P16: un media che il viewer mostra dalla copia del telefono e che sta anche sul NAS. Le sue copie del NAS presenti
@@ -666,18 +696,22 @@ class NasOrganizer(
     val first = copies.firstOrNull { it.current } ?: copies.firstOrNull() ?: return null
     return NasActionTarget(
       item = first.item,
+      // Revisione B (R3): "Ovunque" lascia dove sono le copie che sono elementi protetti di un album condiviso; "Solo dal telefono" resta.
+      albumProtected = guarded(first.item),
       scope = first.area.area.toScope(),
       writable = true,
       onPhone = true,
       isVideo = media.kind == MediaKind.VIDEO,
-      others = everywhereOthers(id, first.locationId) ?: copies.filter { it !== first }.map { copy ->
-        NasLocationInfo(
-          kind = if (copy.area.area == NasArea.PRIVATE) NasLocationInfo.Kind.NAS_PRIVATE else NasLocationInfo.Kind.NAS_COMMON,
-          writable = true,
-          item = copy.item,
-          previousVersion = !copy.current,
-        )
-      },
+      others = markProtected(
+        everywhereOthers(id, first.locationId) ?: copies.filter { it !== first }.map { copy ->
+          NasLocationInfo(
+            kind = if (copy.area.area == NasArea.PRIVATE) NasLocationInfo.Kind.NAS_PRIVATE else NasLocationInfo.Kind.NAS_COMMON,
+            writable = true,
+            item = copy.item,
+            previousVersion = !copy.current,
+          )
+        },
+      ),
       destinations = emptyList(),
       hidden = isHidden(id),
       viaPhoneCopy = true,
@@ -910,33 +944,54 @@ internal object CatalogHidden {
         val marks = chunk.joinToString(",") { "?" }
         database.openHelper.readableDatabase.query(
           "SELECT l.location_key FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +
-            "WHERE l.location_key IN ($marks) AND (" +
-            "EXISTS (SELECT 1 FROM media_personal p WHERE p.media_id = v.media_id AND p.hidden = 1) " +
-            "OR EXISTS (SELECT 1 FROM media m JOIN media g ON g.group_id = m.group_id JOIN media_personal gp ON gp.media_id = g.media_id " +
-            "WHERE m.media_id = v.media_id AND m.group_id IS NOT NULL AND gp.hidden = 1))",
+            "WHERE l.location_key IN ($marks) AND $HIDDEN_VERSION_SQL",
           chunk.toTypedArray<Any?>(),
         ).use { c -> while (c.moveToNext()) hidden += c.getString(0) }
       }
       hidden
     }
   }
+
+  /**
+   * Il predicato SQL "questa versione `v` e' di un media nascosto, **oppure** di un gruppo in cui un altro membro lo e'" (il nascosto e' contagioso,
+   * F5-D36, E-L11). Una sola definizione per tutto cio' che elenca file di Cartelle NAS per nome: la riga dei nascosti ([hiddenLocationKeys]) e i
+   * file piu' grandi di Spazio NAS ([CatalogLargestFiles], R4/NA-1 della revisione di Fase 7).
+   */
+  const val HIDDEN_VERSION_SQL: String =
+    "(EXISTS (SELECT 1 FROM media_personal p WHERE p.media_id = v.media_id AND p.hidden = 1) " +
+      "OR EXISTS (SELECT 1 FROM media m JOIN media g ON g.group_id = m.group_id JOIN media_personal gp ON gp.media_id = g.media_id " +
+      "WHERE m.media_id = v.media_id AND m.group_id IS NOT NULL AND gp.hidden = 1))"
 }
 
-/** I file piu' grandi di una share dal catalogo (Spazio NAS, §2.7): nessuna chiamata al NAS. Solo file presenti. */
+/**
+ * I file piu' grandi di una share dal catalogo (Spazio NAS, §2.7): nessuna chiamata al NAS. Solo file presenti, **mai quelli di un media nascosto**
+ * (ne' di un gruppo con un nascosto dentro): la pagina li elenca per nome e cartella, e un video nascosto da 2 GB e' quasi sempre fra i piu' grandi
+ * (R4/NA-1, D22, D23). Il filtro e' nella query, cosi' i 50 posti si riempiono con file che si possono mostrare. Fallisce chiuso: se la lettura non
+ * riesce l'elenco e' vuoto, mai un elenco senza il filtro.
+ */
 object CatalogLargestFiles {
   suspend fun of(database: GalleryDatabase, account: AccountId, share: String): List<LargestFile> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
     val out = ArrayList<LargestFile>()
-    database.openHelper.readableDatabase.query(
-      "SELECT nas_path, size, modified_at, file_id FROM media_location WHERE location_type = 'nas' AND account_id = ? AND share_key = ? " +
-        "AND state = 'present' ORDER BY size DESC LIMIT ${dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceDetails.MAX_LARGEST}",
-      arrayOf<Any?>(account.value, Location.Nas.shareKeyOf(share)),
-    ).use { cursor ->
-      while (cursor.moveToNext()) {
-        val path = cursor.getString(0)?.let { runCatching { SharePath.parseMediaPath(it) }.getOrNull() } ?: continue
-        val size = cursor.getLong(1)
-        val fileId = if (cursor.isNull(3)) null else cursor.getLong(3)
-        out += LargestFile(share, path, size, NasStamp(size, cursor.getLong(2), fileId))
+    try {
+      database.openHelper.readableDatabase.query(
+        "SELECT l.nas_path, l.size, l.modified_at, l.file_id FROM media_location l JOIN media_version v ON v.version_id = l.version_id " +
+          "WHERE l.location_type = 'nas' AND l.account_id = ? AND l.share_key = ? AND l.state = 'present' " +
+          "AND NOT ${CatalogHidden.HIDDEN_VERSION_SQL} " +
+          "ORDER BY l.size DESC LIMIT ${dev.pampa.mycloudgallery.core.nasops.contract.NasSpaceDetails.MAX_LARGEST}",
+        arrayOf<Any?>(account.value, Location.Nas.shareKeyOf(share)),
+      ).use { cursor ->
+        while (cursor.moveToNext()) {
+          val path = cursor.getString(0)?.let { runCatching { SharePath.parseMediaPath(it) }.getOrNull() } ?: continue
+          val size = cursor.getLong(1)
+          val fileId = if (cursor.isNull(3)) null else cursor.getLong(3)
+          out += LargestFile(share, path, size, NasStamp(size, cursor.getLong(2), fileId))
+        }
       }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w("CatalogLargestFiles") { "file piu' grandi non letti: ${e.javaClass.simpleName}" }
+      out.clear()
     }
     out
   }

@@ -9,6 +9,8 @@
 
   <!-- Emergenza (§1.4) e aree non raggiungibili (E-L4). -->
   <string name="diag_nas_writes_stopped_title">Scritture sul NAS ferme</string>
+  <string name="diag_nas_writes_stop_not_saved_title">«Ferma le scritture» non salvato</string>
+  <string name="diag_nas_writes_stop_not_saved_guide">Hai fermato le scritture sul NAS ma l’app non è riuscita a ricordarlo sul telefono: vale finché l’app resta aperta. Se l’app si chiude o il telefono si riavvia, le scritture ripartono. Riprova a fermarle più tardi.</string>
   <string name="diag_nas_writes_stopped_guide">Hai fermato le scritture automatiche sul NAS: niente indice e niente prenotazioni. La Libreria e la preparazione continuano sul telefono. Riattivale quando vuoi.</string>
   <string name="diag_nas_area_unreachable_title">Area del NAS non raggiungibile</string>
   <string name="diag_nas_area_unreachable_guide">Il NAS non risponde o nega l\'accesso a un\'area: la Libreria mostra quello che conosceva, con le miniature già sul telefono. Controlla che il NAS sia acceso e di essere a casa o con la VPN.</string>

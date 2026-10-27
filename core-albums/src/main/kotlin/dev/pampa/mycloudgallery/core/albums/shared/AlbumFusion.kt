@@ -53,7 +53,11 @@ interface AlbumRegistryView {
   /** La versione del registro accettato (una voce `heir` che ne cita una piu' alta aspetta). */
   val version: Long
 
-  /** Il dispositivo e' admin e approvato. */
+  /**
+   * Il dispositivo e' admin e approvato, **o dismesso** (R6 della revisione di sicurezza della Fase 7): il contributo di un dismesso vale solo
+   * con le teste congelate alla dismissione, quindi una sua voce `heir` di allora resta, e l'eredita' non cade quando l'admin cambia telefono.
+   * Revocato o perso: no (i suoi contributi non valgono piu').
+   */
   fun isAdminDevice(device: String): Boolean
 
   /** L'account non ha piu' nessun dispositivo approvato ne' dismesso (D11: solo allora l'admin eredita). */
@@ -64,7 +68,8 @@ interface AlbumRegistryView {
 class RegistryAlbumView(private val state: RegistryState) : AlbumRegistryView {
   override val version: Long get() = state.registry.version
 
-  override fun isAdminDevice(device: String): Boolean = state.registry.device(device)?.let { it.admin && it.status == DeviceStatus.APPROVED } == true
+  override fun isAdminDevice(device: String): Boolean =
+    state.registry.device(device)?.let { it.admin && (it.status == DeviceStatus.APPROVED || it.status == DeviceStatus.RETIRED) } == true
 
   override fun accountLeft(account: AccountId): Boolean = state.registry.devices.none { d ->
     AccountId.of(d.nasUser) == account && (d.status == DeviceStatus.APPROVED || d.status == DeviceStatus.RETIRED)
@@ -157,12 +162,16 @@ object AlbumFusion {
     return out
   }
 
-  /** La fusione di [contributions] (§1.2: `AlbumFusion.merge`): null se l'album non ha una creazione valida. */
-  fun merge(contributions: Collection<VerifiedContribution>, registry: AlbumRegistryView): MergedAlbum? =
-    resolve(join(emptyMap(), contributions), registry)
+  /**
+   * La fusione di [contributions] (§1.2: `AlbumFusion.merge`): null se l'album non ha una creazione valida. [closedBefore] (R1, D31): una
+   * chiusura che chi legge ha gia' visto (ora del NAS): dopo di lei nessuna voce vale, anche se chi ha chiuso ha poi ripubblicato una
+   * definizione `active` (di ogni dispositivo conta solo l'ultima testa, e la chiusura nei contributi di adesso puo' non esserci piu').
+   */
+  fun merge(contributions: Collection<VerifiedContribution>, registry: AlbumRegistryView, closedBefore: Long? = null): MergedAlbum? =
+    resolve(join(emptyMap(), contributions), registry, closedBefore)
 
-  /** Lo stato fuso dei contributi [state] (uno per dispositivo). */
-  fun resolve(state: Map<String, VerifiedContribution>, registry: AlbumRegistryView): MergedAlbum? {
+  /** Lo stato fuso dei contributi [state] (uno per dispositivo); [closedBefore] come in [merge]. */
+  fun resolve(state: Map<String, VerifiedContribution>, registry: AlbumRegistryView, closedBefore: Long? = null): MergedAlbum? {
     val all = state.values.flatMap { it.entries }
     val album = all.firstOrNull()?.album ?: return null
     require(all.all { it.album == album }) { "Contributi di album diversi." }
@@ -209,6 +218,7 @@ object AlbumFusion {
         break
       }
     }
+    if (closedBefore != null) closedAt = minOf(closedAt ?: closedBefore, closedBefore)
 
     // 3. I livelli: l'ultima voce `level` ammessa (solo il creatore o l'erede), mai dopo la chiusura.
     var levelEntry: AlbumEntry? = null

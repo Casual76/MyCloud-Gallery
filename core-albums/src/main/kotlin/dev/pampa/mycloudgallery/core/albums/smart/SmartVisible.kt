@@ -11,7 +11,9 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 // toglie nessuna query. Per questo **ogni** candidato passa da qui prima di contare qualcosa (anche come punto fermo della regola B, anche per
 // trovare il centro di un luogo o le serie di un viaggio): [VisibleMedia.visible] (presente, non nascosto, non membro di un gruppo nascosto).
 // Quel che si **scrive** (un elemento, un suggerito) passa anche dal filtro finale [HiddenMask], subito prima della scrittura: un media nascosto
-// un attimo fa non diventa un elemento. Un errore di uno dei due non diventa "tutto visibile": l'eccezione risale e il motore non scrive niente.
+// un attimo fa non diventa un elemento. Un errore di uno dei due non diventa "tutto visibile" **ne' "niente e' visibile"** (R17 della revisione di
+// fine Fase 7): `visibleOrThrow` e `hiddenAmongOrThrow` lanciano, l'eccezione risale e il motore non scrive niente. Con le versioni che rispondono
+// "vuoto" un guasto del database svuotava le righe automatiche e i suggeriti di ogni smart ricalcolato in quel momento.
 
 internal class VisibleCandidates(
   private val source: SmartCandidates,
@@ -21,7 +23,7 @@ internal class VisibleCandidates(
   /** Dei candidati [items] solo quelli che si possono mostrare adesso (`VisibleMedia`). */
   suspend fun shown(items: List<SmartCandidate>): List<SmartCandidate> {
     if (items.isEmpty()) return items
-    val ok = visible.visible(items.map { it.media })
+    val ok = visible.visibleOrThrow(items.map { it.media })
     return if (ok.size == items.size) items else items.filter { it.media in ok }
   }
 
@@ -31,7 +33,7 @@ internal class VisibleCandidates(
    */
   suspend fun shownFinal(ids: Collection<MediaId>): Set<MediaId> {
     if (ids.isEmpty()) return emptySet()
-    return ids.toSet() - mask.hiddenAmong(ids)
+    return ids.toSet() - mask.hiddenAmongOrThrow(ids)
   }
 
   suspend fun page(filter: CandidateFilter, after: CandidateCursor?, limit: Int): SmartCandidatePage =

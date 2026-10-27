@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.feature.albums.contract.AlbumUnavailableReason
 import dev.pampa.mycloudgallery.feature.albums.contract.NoAlbumPending
 import dev.pampa.mycloudgallery.feature.albums.contract.ShareSheetState
 import dev.pampa.mycloudgallery.feature.albums.page.AlbumPageController
+import dev.pampa.mycloudgallery.feature.albums.share.ClosedAlbum
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -198,7 +199,7 @@ class AlbumPageControllerTest {
     assertThat(page.ready().content.album.title).isEqualTo("Mio condiviso")
     closed.chooseOthers(OthersAfterClose.REMOVE)
     closed.confirm()
-    assertThat(closed.closed.value).isEqualTo(id to CloseMode.DELETE)
+    assertThat(closed.closed.value).isEqualTo(ClosedAlbum(id, CloseMode.DELETE))
     assertThat(page.ui.value.page).isNotInstanceOf(AlbumPageState.Ready::class.java)
   }
 

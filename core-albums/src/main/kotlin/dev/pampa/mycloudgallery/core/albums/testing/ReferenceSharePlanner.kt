@@ -47,8 +47,19 @@ class ReferenceSharePlanner(
     else -> ShareBlock.WRITES_BLOCKED
   }
 
-  /** Il piano di [request]; [nonceHex] per rifare lo stesso piano di un album nuovo; [now] l'istante monotono. */
-  suspend fun plan(request: ShareRequest, nonceHex: String?, now: Long, newNonce: () -> ByteArray): SharePlanOutcome {
+  /**
+   * Il piano di [request]; [nonceHex] per rifare lo stesso piano di un album nuovo; [now] l'istante monotono; [attempt] il tentativo (revisione B,
+   * SH-1: come l'orchestratore vero, un piano nuovo ha un'impronta sua anche con gli stessi media).
+   */
+  suspend fun plan(request: ShareRequest, nonceHex: String?, now: Long, newNonce: () -> ByteArray, attempt: String = ""): SharePlanOutcome {
+    this.attempt = attempt
+    return planNow(request, nonceHex, now, newNonce)
+  }
+
+  /** Il tentativo del piano che si sta facendo (una chiamata alla volta, come il resto del riferimento). */
+  private var attempt: String = ""
+
+  private suspend fun planNow(request: ShareRequest, nonceHex: String?, now: Long, newNonce: () -> ByteArray): SharePlanOutcome {
     val me = family.me() ?: return SharePlanOutcome.Blocked(ShareBlock.NO_NAS)
     val common = family.commonShare() ?: return SharePlanOutcome.Blocked(ShareBlock.NO_NAS)
     gate.blockFor(common)?.let { return SharePlanOutcome.Blocked(blockOf(it)) }
@@ -133,7 +144,7 @@ class ReferenceSharePlanner(
     }
     if (items.size + members.size > SharedAlbumLimits.MAX_ITEMS) return SharePlanOutcome.Blocked(ShareBlock.TOO_MANY_ITEMS)
     if (items.isEmpty()) return SharePlanOutcome.NothingToShare(excluded)
-    return SharePlanOutcome.Ready(SharePlan(request, kind, album, title, folderLabel, level, nonceHex, items, excluded, hidden, now))
+    return SharePlanOutcome.Ready(SharePlan(request, kind, album, title, folderLabel, level, nonceHex, items, excluded, hidden, now, attempt))
   }
 
   private suspend fun bringBack(request: ShareRequest.BringBack, now: Long): SharePlanOutcome {
@@ -154,7 +165,7 @@ class ReferenceSharePlanner(
     }
     if (items.isEmpty()) return SharePlanOutcome.NothingToShare(excluded)
     val label = shared.folder(request.album)?.path?.name ?: ""
-    return SharePlanOutcome.Ready(SharePlan(request, SharePlanKind.BRING_BACK, request.album, label, label, null, null, items, excluded, HiddenChoice.SHARE_TOO, now))
+    return SharePlanOutcome.Ready(SharePlan(request, SharePlanKind.BRING_BACK, request.album, label, label, null, null, items, excluded, HiddenChoice.SHARE_TOO, now, attempt))
   }
 
   companion object {

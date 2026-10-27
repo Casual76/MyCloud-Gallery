@@ -3,12 +3,15 @@ package dev.pampa.mycloudgallery.feature.integrations.receive
 import android.app.Application
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
@@ -140,6 +143,31 @@ class ReceiveAlbumLayoutTest : ReceiveComposeBase() {
     composeRule.onNode(hasText("Salva sul NAS") and hasClickAction()).assertExists()
     composeRule.onNodeWithText("Aggiungi ad album…").performClick()
     assertThat(opened).isEqualTo(1)
+  }
+
+  @Test
+  fun senzaAlbumMaConLaCreazioneLaVoceAggiungiAdAlbumCe_AA2() {
+    show { ReceiveScreen(ui = ReceiveUiSamples.ready().copy(canCreateAlbum = true), actions = ReceiveActions()) }
+    composeRule.onNodeWithText("Aggiungi ad album…").assertExists()
+  }
+
+  @Test
+  fun nuovoAlbumPortaIlNomeAllaPorta_AA2() {
+    var created: String? = null
+    val picking = ReceiveUiSamples.ready().copy(canCreateAlbum = true, albumPick = true)
+    show { ReceiveScreen(ui = picking, actions = ReceiveActions(onCreateAlbum = { created = it })) }
+    composeRule.onNode(hasSetTextAction()).performTextInput("Mare 2026")
+    composeRule.onNodeWithText("Crea l’album").performClick()
+    assertThat(created).isEqualTo("Mare 2026")
+    // Senza un album scelto il bottone di salvataggio e' spento: non si salva «da nessuna parte».
+    composeRule.onNodeWithText("Salva e aggiungi all’album").assertIsNotEnabled()
+  }
+
+  @Test
+  fun unNomeNonValidoSiDiceVicinoAlCampo_AA2() {
+    val ui = ReceiveUiSamples.ready().copy(canCreateAlbum = true, albumPick = true, newAlbumProblem = NewAlbumProblem.INVALID_TITLE)
+    show { ReceiveScreen(ui = ui, actions = ReceiveActions()) }
+    assertThat(composeRule.onAllNodesWithText("Il nome non va bene", substring = true).fetchSemanticsNodes()).isNotEmpty()
   }
 
   @Test

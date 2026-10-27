@@ -112,6 +112,7 @@ class ShareReceiverActivity : FragmentActivity() {
             onSelectAlbum = model::selectAlbum,
             onSaveToAlbum = model::saveToAlbum,
             onBackFromAlbums = model::closeAlbumPicker,
+            onCreateAlbum = model::createAlbum,
           )
         }
         ReceiveScreen(ui = ui, actions = actions)

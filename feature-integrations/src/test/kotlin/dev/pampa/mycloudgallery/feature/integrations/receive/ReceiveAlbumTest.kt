@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.integrations.receive
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingStageId
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingStream
 import dev.pampa.mycloudgallery.core.backup.testing.FakeBackupClock
@@ -15,6 +16,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Rule
@@ -221,6 +224,134 @@ class ReceiveAlbumTest {
     model.save()
     waitFor(model, ReceiveScreenState.DONE)
     assertThat(queue.enqueued).hasSize(1)
+  }
+
+  // --- AA-1: gli album arrivano dopo, con l'app chiusa --------------------------------------------------------------------------
+
+  /** Una porta i cui album si montano dopo la prima lettura (l'app era chiusa: il sistema la apre per la condivisione e gli album si montano dopo qualche secondo). */
+  private inner class LateAlbums(initial: List<IncomingAlbumChoice> = emptyList()) : IncomingAlbums {
+    val offered = MutableStateFlow(initial)
+    val promises = mutableListOf<Pair<IncomingStageId, IncomingAlbumChoice>>()
+
+    override suspend fun albums(): List<IncomingAlbumChoice> = offered.value
+
+    override fun choices(): Flow<List<IncomingAlbumChoice>> = offered
+
+    override suspend fun willAdd(stage: IncomingStageId, album: IncomingAlbumChoice): Boolean {
+      promises += stage to album
+      return true
+    }
+  }
+
+  private fun until(what: String, condition: () -> Boolean) {
+    val deadline = System.nanoTime() + 10_000_000_000L
+    while (!condition() && System.nanoTime() < deadline) Thread.sleep(10)
+    assertWithMessage(what).that(condition()).isTrue()
+  }
+
+  @Test
+  fun glialbumCheSiMontanoDopoLaPrimaLetturaCompaionoLoStesso_AA1() {
+    val albums = LateAlbums()
+    val model = ready(albums)
+    // La prima lettura era vuota: la voce non c'e' ancora (prima non compariva piu' per tutta la schermata).
+    assertThat(model.ui.value.albums).isEmpty()
+    model.openAlbumPicker()
+    assertThat(model.ui.value.albumPick).isFalse()
+
+    albums.offered.value = listOf(mine, family)
+    until("gli album offerti") { model.ui.value.albums == listOf(mine, family) }
+    model.openAlbumPicker()
+    assertThat(model.ui.value.albumPick).isTrue()
+    assertThat(model.ui.value.selectedAlbum).isEqualTo(mine)
+  }
+
+  @Test
+  fun unAlbumScelto_CheNonCePiuSiLasciaEUnoNuovoSiPuoScegliere_AA1() {
+    val albums = LateAlbums(listOf(mine, family))
+    val model = ready(albums)
+    model.openAlbumPicker()
+    model.selectAlbum(family)
+
+    albums.offered.value = listOf(mine)
+    until("la scelta lasciata") { model.ui.value.albums == listOf(mine) }
+    assertThat(model.ui.value.selectedAlbum).isEqualTo(mine)
+  }
+
+  // --- AA-2: «Nuovo album» dalla ricezione --------------------------------------------------------------------------------------
+
+  private inner class CreatingAlbums(
+    private val outcome: IncomingAlbumCreate,
+    private val offered: List<IncomingAlbumChoice> = emptyList(),
+  ) : IncomingAlbums {
+    val asked = mutableListOf<String>()
+    val promises = mutableListOf<Pair<IncomingStageId, IncomingAlbumChoice>>()
+    override val canCreate: Boolean = true
+
+    override suspend fun albums(): List<IncomingAlbumChoice> = offered
+
+    override suspend fun create(title: String): IncomingAlbumCreate {
+      asked += title
+      return outcome
+    }
+
+    override suspend fun willAdd(stage: IncomingStageId, album: IncomingAlbumChoice): Boolean {
+      promises += stage to album
+      return true
+    }
+  }
+
+  @Test
+  fun senzaAlbumSiPuoCreareUnoNuovoESalvarciDentro_AA2() {
+    val created = IncomingAlbumChoice("album-9", "Mare 2026", shared = false)
+    val albums = CreatingAlbums(IncomingAlbumCreate.Created(created))
+    val model = ready(albums)
+    assertThat(model.ui.value.albums).isEmpty()
+    assertThat(model.ui.value.canCreateAlbum).isTrue()
+    // Prima la voce non compariva senza album; adesso si apre e offre «Nuovo album».
+    model.openAlbumPicker()
+    assertThat(model.ui.value.albumPick).isTrue()
+    assertThat(model.ui.value.selectedAlbum).isNull()
+
+    model.createAlbum("Mare 2026")
+    until("l'album creato") { model.ui.value.selectedAlbum == created }
+    assertThat(model.ui.value.albums).containsExactly(created)
+    assertThat(model.ui.value.creatingAlbum).isFalse()
+
+    model.saveToAlbum()
+    waitFor(model, ReceiveScreenState.DONE)
+    assertThat(queue.enqueued).hasSize(1)
+    assertThat(albums.promises.single().second).isEqualTo(created)
+    assertThat(albums.asked).containsExactly("Mare 2026")
+  }
+
+  @Test
+  fun unNomeNonValidoOGliAlbumNonPronti_LoDiconoESiRiprova_AA2() {
+    val invalid = CreatingAlbums(IncomingAlbumCreate.InvalidTitle)
+    val model = ready(invalid)
+    model.openAlbumPicker()
+    model.createAlbum("   ")
+    until("il problema") { model.ui.value.newAlbumProblem == NewAlbumProblem.INVALID_TITLE }
+    assertThat(model.ui.value.albums).isEmpty()
+    assertThat(model.ui.value.creatingAlbum).isFalse()
+
+    val unavailable = ready(CreatingAlbums(IncomingAlbumCreate.Unavailable))
+    unavailable.openAlbumPicker()
+    unavailable.createAlbum("Mare")
+    until("il problema") { unavailable.ui.value.newAlbumProblem == NewAlbumProblem.UNAVAILABLE }
+    // Il salvataggio normale non ne dipende.
+    unavailable.closeAlbumPicker()
+    unavailable.save()
+    waitFor(unavailable, ReceiveScreenState.DONE)
+  }
+
+  @Test
+  fun senzaLaPortaDiCreazioneNonCeNuovoAlbum_AA2() {
+    val model = ready(RecordingAlbums(offered = emptyList()))
+    assertThat(model.ui.value.canCreateAlbum).isFalse()
+    model.openAlbumPicker()
+    assertThat(model.ui.value.albumPick).isFalse()
+    model.createAlbum("Mare")
+    assertThat(model.ui.value.creatingAlbum).isFalse()
   }
 
   @Test

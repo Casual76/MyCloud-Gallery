@@ -515,6 +515,36 @@ if ($SelfTest) {
   $g13 = Invoke-Evaluation $thr @(New-Bench "scroll_days_justified" @{ jankPercent = 9.0; libraryNasShare = $mix }) "emulatore-telefono" $null @{} $true $true
   Assert-That (@($g13 | Where-Object { $_.Status -eq "FAIL" }).Count -eq 0) "smoke: nessuna soglia, nemmeno la guardia"
 
+  # Debito del 27/10: gli scenari album e volti (par. 5.4 dei progetti della Fase 7 e della Fase 8). Apertura <= 300 ms (p90), ricalcolo <= 2 s (il peggiore),
+  # meno dell'1% di fotogrammi in ritardo, regressione +15%; senza gli album sintetici (o senza la misura dei volti) la prova non vale e non si confronta.
+  $a1 = Invoke-Evaluation $thr @(New-Bench "albumOpen" @{ albumOpenMs = 300; albumsSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That (@($a1 | Where-Object { $_.Kind -eq "assoluta" -and $_.Status -eq "OK" }).Count -eq 1) "album: l'apertura di 300 ms sta nella soglia (<= 300)"
+  $a2 = Invoke-Evaluation $thr @(New-Bench "albumOpen" @{ albumOpenMs = 301; albumsSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That (@($a2 | Where-Object { $_.Kind -eq "assoluta" -and $_.Status -eq "FAIL" }).Count -eq 1) "album: l'apertura di 301 ms fallisce i 300 ms"
+  $a3 = Invoke-Evaluation $thr @(New-Bench "albumRecompute" @{ albumRecomputeMs = 2001; albumsSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That (@($a3 | Where-Object { $_.Kind -eq "assoluta" -and $_.Status -eq "FAIL" }).Count -eq 1) "album: il ricalcolo di 2001 ms fallisce i 2 s"
+  $a4 = Invoke-Evaluation $thr @(New-Bench "albumRecompute" @{ albumRecomputeMs = 2000; albumsSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That (@($a4 | Where-Object { $_.Kind -eq "assoluta" -and $_.Status -eq "OK" }).Count -eq 1) "album: il ricalcolo di 2000 ms sta nei 2 s"
+  $a5 = Invoke-Evaluation $thr @(New-Bench "albumOpen" @{ albumOpenMs = 100; albumsSeeded = 0; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That (@($a5 | Where-Object { $_.Kind -eq "validita" -and $_.Status -eq "FAIL" }).Count -eq 1) "album: senza gli album sintetici la prova e' NON VALIDA"
+  Assert-That (@($a5 | Where-Object { $_.Kind -eq "assoluta" }).Count -eq 0) "album: una prova non valida non si confronta con la soglia"
+  $albumRef = '{ "formato": 1, "dispositivo": "s25", "prove": { "albumOpen": { "albumOpenMs.p90": 200 }, "facesEngines": { "facesYunetP95Ms.median": 40 } } }' | ConvertFrom-Json
+  $a6 = Invoke-Evaluation $thr @(New-Bench "albumOpen" @{ albumOpenMs = 230; albumsSeeded = 1; libraryNasShare = $mix }) "s25" $albumRef @{} $false $true
+  Assert-That (@($a6 | Where-Object { $_.Kind -eq "regressione" -and $_.Status -eq "OK" }).Count -eq 1) "album: 230 ms su ref 200 e' dentro il +15%"
+  $a7 = Invoke-Evaluation $thr @(New-Bench "albumOpen" @{ albumOpenMs = 231; albumsSeeded = 1; libraryNasShare = $mix }) "s25" $albumRef @{} $false $true
+  Assert-That (@($a7 | Where-Object { $_.Kind -eq "regressione" -and $_.Status -eq "FAIL" }).Count -eq 1) "album: 231 ms su ref 200 e' fuori dal +15%"
+  $v1 = Invoke-Evaluation $thr @(New-Bench "facesEngines" @{ facesYunetP95Ms = 46; facesSfaceP95Ms = 10; facesMsPerPhoto = 40; facesPssKb = 300000 }) "s25" $albumRef @{} $false $true
+  Assert-That (@($v1 | Where-Object { $_.Kind -eq "regressione" -and $_.Metric -eq "facesYunetP95Ms median" -and $_.Status -eq "OK" }).Count -eq 1) "volti: YuNet p95 46 ms su ref 40 e' dentro il +15%"
+  Assert-That (@($v1 | Where-Object { $_.Kind -eq "regressione" -and $_.Status -eq "NUOVO" }).Count -eq 3) "volti: le altre metriche senza riferimento sono NUOVO, non FAIL"
+  $v2 = Invoke-Evaluation $thr @(New-Bench "facesEngines" @{ facesYunetP95Ms = 47; facesSfaceP95Ms = 10; facesMsPerPhoto = 40; facesPssKb = 300000 }) "s25" $albumRef @{} $false $true
+  Assert-That (@($v2 | Where-Object { $_.Kind -eq "regressione" -and $_.Status -eq "FAIL" }).Count -eq 1) "volti: YuNet p95 47 ms su ref 40 e' fuori dal +15%"
+  $v3 = Invoke-Evaluation $thr @(New-Bench "facesEngines" @{ facesStatusMissing = 1 }) "s25" $albumRef @{} $false $true
+  Assert-That (@($v3 | Where-Object { $_.Kind -eq "validita" -and $_.Status -eq "MANCA" }).Count -eq 1) "volti: senza la misura dell'app la prova e' MANCA, non un falso verde"
+  $v4 = Invoke-Evaluation $thr @(New-Bench "facesLoadedScroll" @{ jankPercent = 1.2; facesComputing = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That (@($v4 | Where-Object { $_.Kind -eq "assoluta" -and $_.Status -eq "FAIL" }).Count -eq 1) "volti: lo scorrimento con il calcolo in corso fallisce oltre l'1% di jank"
+  $v5 = Invoke-Evaluation $thr @(New-Bench "facesLoadedScroll" @{ jankPercent = 0.2; facesComputing = 0; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That (@($v5 | Where-Object { $_.Kind -eq "validita" -and $_.Status -eq "FAIL" }).Count -eq 1) "volti: senza il calcolo in corso lo scorrimento non vale come prova"
+
   # Il riferimento accettato si rilegge: stesso dispositivo, stesse prove.
   $text = Build-Reference $thr @($good.benchmarks) "s25" $good.context 120
   $parsed = $text | ConvertFrom-Json

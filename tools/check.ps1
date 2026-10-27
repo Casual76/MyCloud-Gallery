@@ -100,6 +100,10 @@
     +  scenari della ricerca    (Fase 6, P9/P11) gli scenari `ricerca*` in benchmark\soglie.json e `SearchBenchmark`
                                 nel modulo; i banchi delle interruzioni di P10 girano dentro galleryTest (core-models,
                                 core-ai: 2.000 + 600 + 2.000 giri)
+    +  scenari album e volti    (debito del 27/10: Fase 7 par. 5.4 e Fase 8 par. 5.4) gli scenari `album`, `album-scroll`,
+                                `album-ricalcolo`, `album-raccolte`, `volti` e `volti-scroll` in benchmark\soglie.json con le
+                                soglie dei progetti (300 ms, 2 s, 1%, +15%) e le prove che li misurano (`AlbumBenchmark`,
+                                `FacesBenchmark`) nel modulo
     +  -Bench                   (Fase 3, P9) le misure su dispositivo, SKIP senza dispositivo (vedi -Bench)
 
 .PARAMETER SkipGradle
@@ -1952,6 +1956,56 @@ Step "benchmark: scenari della ricerca (ricerca, ricerca-freddo-contenuto, ricer
   $bench = @(Get-ChildItem (Join-Path $root "benchmark\src") -Recurse -Filter "SearchBenchmark.kt" -ErrorAction SilentlyContinue)
   if ($bench.Count -eq 0) { $problems += "manca benchmark/.../SearchBenchmark.kt" }
   Write-Host ("        scenari in soglie.json: {0}" -f $ids.Count) -ForegroundColor DarkGray
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+}
+
+# Debito del 27/10 (docs/fase7-progetto.md par. 5.4, docs/fase8-progetto.md par. 5.4): gli scenari `album` e `volti`, promessi e mancanti. Come per la ricerca, senza
+# dispositivo si controlla che ci siano in soglie.json con le soglie dei progetti (apertura 300 ms, ricalcolo 2 s, meno dell'1% di fotogrammi in ritardo, regressione
+# +15%) e che le prove che li misurano esistano nel modulo (`AlbumBenchmark`, `FacesBenchmark`). Le misure vere vengono da -Bench sul telefono.
+Step "benchmark: scenari degli album e dei volti (album, album-scroll, album-ricalcolo, album-raccolte, volti, volti-scroll) in soglie.json e nel modulo" {
+  $soglie = Join-Path $root "benchmark\soglie.json"
+  if (-not (Test-Path -LiteralPath $soglie)) { return "manca benchmark\soglie.json" }
+  $json = (Read-TextFile $soglie) | ConvertFrom-Json
+  $byId = @{}
+  foreach ($s in @($json.scenari)) { $byId[[string]$s.id] = $s }
+  $sources = @(Get-ChildItem (Join-Path $root "benchmark\src") -Recurse -Filter "*.kt" -ErrorAction SilentlyContinue)
+  $wanted = @(
+    @{ Id = "album";           Test = "albumOpen";         Class = "AlbumBenchmark"; Metric = "albumOpenMs";      Max = 300.0 },
+    @{ Id = "album-scroll";    Test = "albumScroll";       Class = "AlbumBenchmark"; Metric = "jankPercent";      Max = 1.0 },
+    @{ Id = "album-ricalcolo"; Test = "albumRecompute";    Class = "AlbumBenchmark"; Metric = "albumRecomputeMs"; Max = 2000.0 },
+    @{ Id = "album-raccolte";  Test = "collectionsOpen";   Class = "AlbumBenchmark"; Metric = $null;              Max = $null },
+    @{ Id = "volti";           Test = "facesEngines";      Class = "FacesBenchmark"; Metric = $null;              Max = $null },
+    @{ Id = "volti-scroll";    Test = "facesLoadedScroll"; Class = "FacesBenchmark"; Metric = "jankPercent";      Max = 1.0 }
+  )
+  $problems = @()
+  foreach ($w in $wanted) {
+    $scenario = $byId[$w.Id]
+    if (-not $scenario) { $problems += "scenario $($w.Id) assente"; continue }
+    if (@($scenario.proveAttese) -notcontains $w.Test) { $problems += "scenario $($w.Id): la prova attesa $($w.Test) manca" }
+    if (@($scenario.classi) -notcontains $w.Class) { $problems += "scenario $($w.Id): la classe $($w.Class) manca" }
+    $file = $sources | Where-Object { $_.Name -eq "$($w.Class).kt" } | Select-Object -First 1
+    if (-not $file) {
+      $problems += "manca benchmark/.../$($w.Class).kt"
+    } elseif ((Read-TextFile $file.FullName) -notmatch ("fun\s+" + $w.Test + "\s*\(")) {
+      $problems += "$($w.Class).kt non ha la prova $($w.Test)"
+    }
+    $absolute = @($scenario.assolute)
+    if ($w.Metric) {
+      $rule = @($absolute | Where-Object { $_.metrica -eq $w.Metric }) | Select-Object -First 1
+      if (-not $rule -or [double]$rule.massimo -ne [double]$w.Max) { $problems += "scenario $($w.Id): la soglia assoluta di $($w.Metric) non e' $($w.Max)" }
+    } elseif ($absolute.Count -gt 0) {
+      $problems += "scenario $($w.Id): il progetto non fissa una soglia assoluta"
+    }
+    $rise = @(@($scenario.regressione) | Where-Object { [math]::Abs([double]$_.aumentoMassimo - 0.15) -lt 1e-9 })
+    if ($rise.Count -eq 0) { $problems += "scenario $($w.Id): manca la regressione +15%" }
+  }
+  # L'auto-test di compare.ps1 prova le soglie nuove su misure costruite a mano (300 ms contro 301, 2 s, +15%, prova non valida): non serve un dispositivo.
+  $selfTest = Invoke-Native -File "powershell" -Arguments @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $root "tools\bench\compare.ps1"), "-SelfTest")
+  if ($selfTest.Code -ne 0) {
+    Show-Lines $selfTest.Lines 20
+    $problems += "compare.ps1 -SelfTest fallisce: le soglie nuove non si confrontano come dovrebbero"
+  }
+  Write-Host ("        scenari verificati: {0}" -f $wanted.Count) -ForegroundColor DarkGray
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
 }
 

@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.search.index
 
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
 import dev.pampa.mycloudgallery.core.ai.contract.AiResults
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.database.AiTextRecord
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.OcrEngineCode
@@ -484,7 +485,10 @@ class LocalAiIndex(
     vectorFile = null
     ledger.close()
     dir.listFiles()?.forEach { f ->
-      if (f.name == LEDGER || f.name == "$LEDGER.tmp" || f.name.startsWith("vectors-") || f.name.startsWith("coarse-")) f.deleteRecursively()
+      if (f.name == LEDGER || f.name == "$LEDGER.tmp" || f.name.startsWith("vectors-") || f.name.startsWith("coarse-")) {
+        // Un file dell'indice che non si toglie riaprirebbe lo stesso indice rovinato: lo dice il log di `StateFiles`.
+        if (f.isDirectory) f.deleteRecursively() else StateFiles.delete(f)
+      }
     }
     runCatching { texts.clear() }
     lock.write { resetSlots() }
@@ -791,7 +795,7 @@ class LocalAiIndex(
 
   private fun deleteOtherGenerations() {
     val current = vectorFileFor(ledger.generation).name
-    dir.listFiles()?.filter { it.name.startsWith("vectors-${space.code}-") && it.name != current }?.forEach { it.delete() }
+    dir.listFiles()?.filter { it.name.startsWith("vectors-${space.code}-") && it.name != current }?.forEach { StateFiles.delete(it) }
   }
 
   private companion object {

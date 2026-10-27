@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.core.faces.noop
 
+import dev.pampa.mycloudgallery.core.faces.contract.ClusterSnapshot
+import dev.pampa.mycloudgallery.core.faces.contract.ClusterSnapshots
 import dev.pampa.mycloudgallery.core.faces.contract.EraseWait
 import dev.pampa.mycloudgallery.core.faces.contract.FaceBody
 import dev.pampa.mycloudgallery.core.faces.contract.FaceInput
@@ -21,6 +23,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.FacesResource
 import dev.pampa.mycloudgallery.core.faces.contract.FacesRunControl
 import dev.pampa.mycloudgallery.core.faces.contract.FacesStop
 import dev.pampa.mycloudgallery.core.faces.contract.FacesWriteBlock
+import dev.pampa.mycloudgallery.core.faces.contract.GoneContents
 import dev.pampa.mycloudgallery.core.faces.contract.GroupFace
 import dev.pampa.mycloudgallery.core.faces.contract.GroupingState
 import dev.pampa.mycloudgallery.core.faces.contract.IndexerState
@@ -159,4 +162,14 @@ class ClosedFacesArchive(override val generation: FaceGeneration) : FacesArchive
   override suspend fun datePeople(nasNow: Long): Int = closed()
 
   override suspend fun dropAuthors(authors: Set<String>): Int = closed()
+}
+
+/** Nessuna istantanea letta dal NAS (P5): il raggruppamento resta quello locale. */
+object NoClusterSnapshots : ClusterSnapshots {
+  override suspend fun latest(generation: FaceGeneration): List<ClusterSnapshot> = emptyList()
+}
+
+/** Nessun contenuto sparito (P5): finche' :app non lega il catalogo, nessun volto esce dal raggruppamento per questo motivo. */
+object NoGoneContents : GoneContents {
+  override suspend fun gone(keys: Collection<ContentKey>): Set<ContentKey> = emptySet()
 }

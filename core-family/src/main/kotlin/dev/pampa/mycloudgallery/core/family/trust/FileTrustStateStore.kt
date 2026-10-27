@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.family.trust
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.family.contract.TrustSnapshot
 import dev.pampa.mycloudgallery.core.family.contract.TrustStateStore
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
@@ -10,8 +11,6 @@ import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
@@ -23,7 +22,7 @@ import kotlinx.coroutines.withContext
  * `noBackupFilesDir` (escluso da backup e trasferimenti). E' la memoria dell'anti-rollback: i byte firmati
  * dell'ultimo registro accettato, l'impronta di chi l'ha firmato, l'ancora e i segni delle serie lette.
  *
- * Scrittura atomica (file temporaneo poi rinomina con sostituzione): un processo che muore a meta' lascia il
+ * Scrittura atomica (file temporaneo poi rinomina con sostituzione, `StateFiles`): un processo che muore a meta' lascia il
  * file vecchio o quello nuovo, mai uno a meta'. Un file illeggibile vale "nessuno stato" (si lavora chiusi:
  * `TrustGuard` risponde "non configurato", mai "approvato"). Il formato e' locale e versionato (`MCGT` 1).
  */
@@ -36,9 +35,8 @@ class FileTrustStateStore(
 
   override suspend fun load(): TrustSnapshot? = withContext(io) {
     mutex.withLock {
-      if (!file.exists()) return@withLock null
       try {
-        decode(file.readBytes())
+        StateFiles.readBytes(file)?.let { decode(it) }
       } catch (e: IOException) {
         null
       } catch (e: RuntimeException) {
@@ -48,13 +46,16 @@ class FileTrustStateStore(
   }
 
   override suspend fun save(snapshot: TrustSnapshot) = withContext(io) {
-    mutex.withLock { writeAtomically(file, encode(snapshot)) }
+    mutex.withLock { StateFiles.writeBytes(file, encode(snapshot)) }
   }
 
+  /**
+   * Toglie lo stato. **Se il file resta lancia `IOException`**: uno stato fidato che resta su un dispositivo azzerato (o su cui si
+   * riconfigura la famiglia) non deve passare per tolto; l'azzeramento ripete la fase, la riconfigurazione dice che non e' riuscita.
+   */
   override suspend fun clear() = withContext(io) {
     mutex.withLock {
-      file.delete()
-      Unit
+      if (!StateFiles.delete(file)) throw IOException("stato fidato non tolto")
     }
   }
 
@@ -104,18 +105,5 @@ class FileTrustStateStore(
       if (d.read() != -1) return null
       return TrustSnapshot(registry, signerFingerprint, familyId, familyKeyFingerprint, minVersion, heads)
     }
-  }
-}
-
-/** Scrive [bytes] in [target] passando da un temporaneo nella stessa cartella e una rinomina atomica. */
-internal fun writeAtomically(target: File, bytes: ByteArray) {
-  target.parentFile?.mkdirs()
-  val tmp = File(target.parentFile, target.name + ".tmp")
-  tmp.writeBytes(bytes)
-  try {
-    Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
-  } catch (e: IOException) {
-    tmp.delete()
-    throw e
   }
 }

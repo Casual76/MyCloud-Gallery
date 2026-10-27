@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.nas
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.index.contract.ReplicaRecords
@@ -250,8 +251,8 @@ class FilePrepAttempts(private val file: File) : PrepAttempts {
     loaded?.let { return it }
     val read = withContext(Dispatchers.IO) {
       try {
-        if (!file.isFile) return@withContext HashMap()
-        file.readLines().mapNotNull { line ->
+        val lines = StateFiles.readLines(file) ?: return@withContext HashMap()
+        lines.mapNotNull { line ->
           val parts = line.split(' ')
           val key = parts.getOrNull(0)?.takeIf { HEX.matches(it) } ?: return@mapNotNull null
           val count = parts.getOrNull(1)?.toIntOrNull()?.takeIf { it > 0 } ?: return@mapNotNull null
@@ -268,13 +269,7 @@ class FilePrepAttempts(private val file: File) : PrepAttempts {
 
   private suspend fun save(counts: Map<String, Int>) = withContext(Dispatchers.IO) {
     try {
-      file.parentFile?.mkdirs()
-      val temp = File(file.parentFile, file.name + ".tmp")
-      temp.writeText(counts.entries.joinToString("\n") { "${it.key} ${it.value}" })
-      if (!temp.renameTo(file)) {
-        file.delete()
-        temp.renameTo(file)
-      }
+      StateFiles.writeText(file, counts.entries.joinToString("\n") { "${it.key} ${it.value}" })
     } catch (e: IOException) {
       GalleryLog.w(TAG) { "tentativi della preparazione non salvati" }
     }

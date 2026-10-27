@@ -136,6 +136,41 @@ object GroupingMath {
   }
 
   /**
+   * L'abbinamento del ricalcolo completo (D22) per **componenti connesse** (F4, Fase 8 P5): le coppie riga-colonna con peso > 0 fanno un
+   * grafo; ogni componente (righe e colonne in ordine crescente) si risolve con [hungarian]. Stesso totale della matrice intera, ma gli
+   * spareggi fra soluzioni ugualmente buone non dipendono da righe e colonne che non c'entrano. Per ogni riga la colonna scelta (con peso
+   * > 0) o -1.
+   */
+  fun componentMatching(weights: Array<DoubleArray>): IntArray {
+    val rows = weights.size
+    val result = IntArray(rows) { -1 }
+    if (rows == 0) return result
+    val cols = weights[0].size
+    val seenRow = BooleanArray(rows)
+    val seenCol = BooleanArray(cols)
+    for (start in 0 until rows) {
+      if (seenRow[start] || weights[start].none { it > 0.0 }) continue
+      val rs = sortedSetOf(start)
+      val cs = sortedSetOf<Int>()
+      seenRow[start] = true
+      val queue = ArrayDeque(listOf(start to true))
+      while (queue.isNotEmpty()) {
+        val (x, isRow) = queue.removeFirst()
+        if (isRow) {
+          for (c in 0 until cols) if (weights[x][c] > 0.0 && !seenCol[c]) { seenCol[c] = true; cs += c; queue += c to false }
+        } else {
+          for (r in 0 until rows) if (weights[r][x] > 0.0 && !seenRow[r]) { seenRow[r] = true; rs += r; queue += r to true }
+        }
+      }
+      val r = rs.toList()
+      val c = cs.toList()
+      val sub = Array(r.size) { i -> DoubleArray(c.size) { j -> weights[r[i]][c[j]] } }
+      for ((i, j) in hungarian(sub).withIndex()) if (j >= 0 && sub[i][j] > 0.0) result[r[i]] = c[j]
+    }
+    return result
+  }
+
+  /**
    * L'assegnazione ottima (algoritmo ungherese, massimo del totale) per la matrice dei pesi [weights] (righe x colonne, pesi >= 0): per ogni
    * riga la colonna scelta o -1. Deterministica: a pari totale la soluzione che l'algoritmo trova scorrendo righe e colonne in ordine.
    */

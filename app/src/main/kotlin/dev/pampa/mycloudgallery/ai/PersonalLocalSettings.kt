@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.ai
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.personal.contract.MotionPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.contract.SearchOrderSetting
 import dev.pampa.mycloudgallery.core.personal.contract.SearchPersonalSettings
@@ -35,6 +36,9 @@ import kotlinx.coroutines.sync.withLock
 class PersonalLocalSettings(private val file: File?) {
   private val lock = Any()
 
+  /** Il file non dice cio' che la memoria sa (l'ultima scrittura o cancellazione non e' riuscita): si riprova alla prossima chiamata. */
+  private var pending = false
+
   private val orderFlow = MutableStateFlow<SearchOrderSetting?>(null)
   private val motionFlow = MutableStateFlow<Boolean?>(null)
 
@@ -62,14 +66,15 @@ class PersonalLocalSettings(private val file: File?) {
     synchronized(lock) {
       orderFlow.value = null
       motionFlow.value = null
-      file?.delete()
+      pending = false
+      file?.let { StateFiles.delete(it) }
     }
   }
 
   private fun update(block: () -> Unit) = synchronized(lock) {
     val before = orderFlow.value to motionFlow.value
     block()
-    if (orderFlow.value to motionFlow.value != before) write()
+    if (orderFlow.value to motionFlow.value != before || pending) write()
   }
 
   private fun write() {
@@ -77,26 +82,23 @@ class PersonalLocalSettings(private val file: File?) {
     val order = orderFlow.value
     val motion = motionFlow.value
     if (order == null && motion == null) {
-      target.delete()
+      // Un file che resta riconsegnerebbe al prossimo avvio una scelta gia' nel registro: si riprova alla prossima chiamata.
+      pending = !StateFiles.delete(target)
       return
     }
     try {
-      target.parentFile?.mkdirs()
-      val tmp = File(target.parentFile, target.name + ".tmp")
-      tmp.writeText("order=${order?.code.orEmpty()}\nmotion=${motion?.let { if (it) "1" else "0" }.orEmpty()}\n")
-      if (!tmp.renameTo(target)) {
-        target.delete()
-        tmp.renameTo(target)
-      }
+      StateFiles.writeText(target, "order=${order?.code.orEmpty()}\nmotion=${motion?.let { if (it) "1" else "0" }.orEmpty()}\n")
+      pending = false
     } catch (e: IOException) {
-      // Resta in memoria: e' solo una preferenza.
+      // Resta in memoria: e' solo una preferenza; si riprova alla prossima chiamata (l'errore e' nel log di `StateFiles`).
+      pending = true
     }
   }
 
   private fun read() {
     val source = file ?: return
     val lines = try {
-      if (source.isFile) source.readLines() else return
+      StateFiles.readLines(source) ?: return
     } catch (e: IOException) {
       return
     }

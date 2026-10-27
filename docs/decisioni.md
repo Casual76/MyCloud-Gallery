@@ -7174,3 +7174,304 @@ violazione nel bytecode richiederebbe una release costruita apposta.
 - Soglie del raggruppamento provvisorie fino alla misura sui dati veri (Q4, L97).
 - Il controllo dei modelli nell'APK (D39) lo aggiunge P1 a `tools/check.ps1`; P0 ha aggiunto D34 e LiteRT nel bytecode.
 - `feature-search` toccata al minimo (due rami di `when` e le stringhe) perché le enum nuove compilassero: il chip vero è di P10.
+
+## File di stato locali: scritture atomiche e cancellazioni verificate (27/10)
+
+Ramo `fix/file-locali-nio` (da `main` e457ee2). Un agente che stabilizzava i test ha trovato punti di produzione che ignorano l'esito di `File.delete()` e `File.renameTo()` (`BackupRunMemory`, `HeartbeatStore`). Il difetto e'
+di tutta la famiglia dei file di stato in `noBackupFilesDir` (memorie dei giri, battiti, preferenze, marche): uno stesso blocco copiato in una ventina di posti. Questo pacchetto lo toglie alla radice.
+
+**Cosa succede davvero (misurato su Windows 11, JDK 17; Android e Linux hanno un'altra semantica).** `java.io` apre i file senza `FILE_SHARE_DELETE`:
+
+| situazione | `File.delete()` / `File.renameTo()` | `Files.deleteIfExists` | `Files.move` (`ATOMIC_MOVE` + `REPLACE_EXISTING`) |
+|---|---|---|---|
+| un altro handle `java.io` (`FileInputStream`, cioe' ogni `readText()` in corso) | `false`, in silenzio | `FileSystemException` | `AccessDeniedException` |
+| un altro handle NIO | non misurato | `true` (il file sparisce subito; chi lo ha aperto finisce di leggere) | `AccessDeniedException` |
+| nessun handle, destinazione che esiste | `renameTo`: `false` | | riesce |
+
+Tre conseguenze del codice di prima: (1) un `delete` fallito lasciava uno stato vecchio (un "problema" del backup che non si cancella mai, una pausa, una marca di GPU "in prova" che a due cadute false spegne la GPU) senza
+che nessuno lo sapesse; (2) `renameTo` non sostituisce su Windows, quindi ogni scrittura passava dal ripiego "cancella e riprova", e **in quell'istante il file non esisteva** (un lettore vedeva "nessun battito"); (3) se in
+quel momento un lettore teneva il file, il ripiego falliva anch'esso e la scrittura si perdeva in silenzio. Su Android la (1) e la (3) quasi non esistono (POSIX), la (2) e' ininfluente: ma il codice non ne sapeva niente, e i
+test sulla JVM di Windows hanno retto solo perche' `integration/Attese.kt` vieta ai test di leggere in ciclo i file che la produzione cancella.
+
+**L'utilita' comune: `core-common/.../files/StateFiles.kt`.** Nessuna utilita' comune esisteva (c'erano varianti locali: `writeAtomically` in `core-family`, copie in `core-places`, `SnapshotStore`, `PackDirectory`, `EvalStore`...); `StateFiles`
+le sostituisce dove si tratta di file di stato. Regole:
+- **scrittura atomica** (`writeBytes`, `writeText`, `write { stream }`, `replace(da, a)`): `<nome>.tmp` nella stessa cartella, `force` su disco, `Files.move` con `ATOMIC_MOVE` + `REPLACE_EXISTING` (senza `ATOMIC_MOVE` solo se il file system
+  non lo sa fare). Un lettore vede il file di prima intero o quello nuovo intero, mai uno a meta' e mai uno che manca. Due scritture dello stesso file si accodano (un lucchetto per striscia di percorsi: il temporaneo e' uno solo).
+  Se non riesce, il temporaneo non resta e il file di prima e' intatto;
+- **cancellazione verificata** (`delete`): `Files.deleteIfExists`; `true` **solo** se il file non c'e' piu'. Se non si riesce si riprova e poi si risponde `false`: chi riceve `false` sa che il file c'e' ancora;
+- **lettura breve** (`readBytes`, `readText`, `readLines`): `Files.readAllBytes` apre, legge e chiude, e non impedisce a un altro thread di cancellare il file;
+- **pazienza** (`Patience`): sei tentativi in circa 310 ms (10, 20, 40, 80, 160) per la rinomina, la cancellazione, la lettura e la marca. Su Android non si riprova mai (l'errore non e' quello); su Windows basta quasi sempre il primo
+  riprovo. Non si riprova quando e' inutile (il file non c'e', la cartella non e' vuota). L'attesa e' una funzione (`pause`): le prove ci mettono dentro "chiudo l'handle", e non dipendono dall'orologio;
+- **errori**: ogni errore definitivo va nel log (`GalleryLog`, livello warn) con il **nome del file di stato** (o una `label` fissa quando il nome contiene un id) e il tipo dell'errore, mai un percorso ne' un contenuto; le
+  scritture lanciano `IOException` (senza il testo del sistema, che ha il percorso). Nessun errore sparisce.
+
+**Cosa e' cambiato, punto per punto** (le righe sono quelle di `main`):
+- `app/.../backup/BackupRunMemory.kt:46,72,89,109,125-129` e `graph/LocalData.kt:49-53,60` (`HeartbeatStore`): scrivono e tolgono con `StateFiles`. Le funzioni di `BackupRunMemory` che cambiano un segno rispondono ora `Boolean`
+  (vero solo se il file dice cio' che si e' chiesto); `HeartbeatStore.clear()` **lancia** se il battito resta, e cosi' `AppLocalDataEraser` registra il passo "battito" come non riuscito (prima lo dava per fatto). Il costruttore ha
+  un parametro `patience` (di serie quello normale) per le prove;
+- `app/.../ai/`: `AiStageMark.kt:23,31,41`; `AiStatusMemory.kt:42-46,55` (il valore "gia' salvato" si ricorda **dopo** la scrittura riuscita, non prima: prima un salvataggio fallito non veniva mai riprovato); `PersonalLocalSettings.kt:65,80,85-89`
+  e `TextReading.kt:92-93,109,115-119` (se il file non si scrive o non si toglie, la memoria ricorda di **riprovare alla chiamata dopo**: una lettura del testo spenta dall'utente non deve riaccendersi al riavvio per un file rimasto);
+  `AiCatalogPorts.kt:133,166-170`; `AiIndexAdapters.kt:188-192`; `SearchScreenPorts.kt:164`;
+- `app/.../nas/`: `FileFreezeAcceptances.kt:71,75-83` (una franchigia che non si toglie e' un errore, non un fatto); `NasClockStore.kt:66-80`; `PrepPorts.kt:272-276`; `NasPreviewQuality.kt:79-81` (`FileSwitch`) e `NasGraph.kt:1059-1061`
+  (`EmergencyStop`): un interruttore che non si riesce a spegnere **resta acceso** nello stato (`on || !saved`), cosi' l'emergenza "Ferma le scritture sul NAS", che puo' solo restringere, non dice "spenta" con il file ancora li';
+- `app/.../notify/AppNotifications.kt:240`, `work/TrustSyncScheduling.kt:36,43`;
+- `core-common/.../diagnostics/DiagnosticsLog.kt:161,168-172` (registro della Diagnostica); `core-nasmedia/.../scan/NotMediaMemory.kt:112,122-126` (se la memoria e' vuota e il file non si toglie, `dirty` resta e si riprova al salvataggio dopo);
+- `core-family`: `FileTrustStateStore`, `FileApprovalSightings`, `FileWipeJournal` (`clear()` **lancia** se il file resta: l'azzeramento registra la fase come non riuscita e la riprende al prossimo avvio, la riconfigurazione risponde
+  "passo non disponibile"; prima restavano sul dispositivo azzerato). `DeviceSelfWipe.forgetCompletedWipe()` risponde `false` e lascia il diario com'e' se non riesce a toglierlo. Sparisce `writeAtomically` (era `internal` in `FileTrustStateStore.kt:111-119`);
+- `core-nasops/.../TrashManifestFiles.kt:30-33,48` (l'id della voce non va nel log: `label` fissa); `core-personal/.../PersonalLedger.kt:79-83`; `core-library/.../SnapshotStore.kt:92-102` (`delete()` e' vero solo se sono spariti sia l'istantanea sia il suo temporaneo: un
+  nascosto non deve restare in un file dato per tolto); `core-trust/.../AndroidKeystore.kt:150-153,194` (la cassaforte della chiave di famiglia: fsync e rinomina atomica); `feature-integrations/.../DocumentIdKey.kt:77-80` (spariva il ripiego che
+  riscriveva il file sopra se la rinomina falliva, non atomico);
+- `core-ai`: `GpuTrial.kt:34,47,55-61,75` (la marca "in prova" che non si toglie farebbe contare una caduta che non c'e' stata) e `LiteRtLmSessions.kt:266`; `core-models`: `HttpsConnections.kt:48,62-64`, `HttpsModelFetcher.kt:181`, `SourceStrikes.kt:125-127`
+  (usava `Files.move` senza `ATOMIC_MOVE`), `ModelStore.kt:87-89,100,116,135-136,143-144,161,197` (solo i segni e le note accanto ai modelli, mai i modelli);
+- `core-search`: `CoarseCodes.kt:59-80`, `OriginLedger.kt:257,278-280` (la compattazione del registro usa `replace`; l'errore resta `IllegalStateException`), `LocalAiIndex.kt:487,794`.
+
+**Cosa non e' stato toccato.** I file dei media e il NAS (hanno i loro diari, le loro verifiche e i banchi di caos): `MediaStorePhoneMediaRewriter`, `DirectoryStagedFiles`, `DefaultVersionKeeper`, `DefaultCorrections`, `IncomingStager`/`IncomingQueue`, `PreparedCopies`,
+`ShareCache`, `LocationFreeShare`, `DefaultEditSessions`, `NasOriginalStore`, `MotionCache`, `TempSpill`, `ExifMetadataWriter`, `DefaultLocationStripper`, il PNG del ritaglio (`CutoutWiring`), la copia in cache di `AppEditNasCopies`, `PackDirectory` e
+`FileOutboxBlobStore` (replica e outbox del NAS), `DiskAiBuffer` (buffer di analisi con il suo banco di caos), i modelli e i parziali di `ModelStore`/`PartialFile`, `PlacesStore` (gia' atomico, estrae un asset). Inoltre `engine/` (condiviso, deve restare identico),
+gli strumenti di debug e di benchmark (`app/src/debug`, `app/src/benchmarkRelease`: `FieldProbeStore`, `EvalStore`, `BenchReplica`, `BenchDataset`), `spike/`, la Libreria sintetica e il segno di debug di `LibraryParts`.
+
+**Prove.**
+- `core-common` `StateFilesTest`: scrive (cartelle che mancano, nessun temporaneo, contenuto sostituito per intero, byte e charset), **con un altro handle che tiene il file** (aspetta e sostituisce), errore definitivo (lancia, il file di prima intero, nessun temporaneo, il log ha il
+  nome e non il percorso, `label`, interruzione dell'attesa), scrittura a pezzi (chiudere lo stream non rompe il `force`; un corpo che fallisce non lascia niente), `replace`, **un lettore concorrente non vede mai un file a meta' o assente** (200 scritture di 64 KiB, e quattro
+  scrittori sullo stesso file), cancellazione (anche con un altro handle; `false` se il file resta, con il log), marca, aggiunta, letture;
+- `app` `BackupMemoryFilesTest` (il problema, la pausa, il segno del NAS occupato, l'avanzamento e un segno scritto con un altro handle sul file; risposta falsa quando non si riesce), `HeartbeatStoreTest` (battito non perso con un altro handle, `clear` con un altro handle, `clear` che
+  lancia, **un lettore non vede mai "nessun battito"** mentre si aggiorna), `NasPiecesTest` (interruttore ed emergenza che non si spengono); `core-family` `FileStateClearTest` (`clear()` che lancia, l'azzeramento che non va avanti, il diario che non si dimentica); `core-library`
+  `SnapshotStoreTest.deleteDiceFalsoSeIlFileNonSiTogliePerDavvero`.
+- **Rosse senza la correzione**: togliendo temporaneamente la correzione da `StateFiles` (`delete` = `File.delete()`, rinomina = `renameTo` + cancella e riprova, nessun nuovo tentativo, letture con `java.io`) falliscono 11 prove su 24 di `StateFilesTest`, 6 su 7 di
+  `BackupMemoryFilesTest` e 3 su 5 di `HeartbeatStoreTest`: con un altro handle il file non si toglie e non si sostituisce ("expected to be true"), un battito si perde (`2000` atteso, `1000` trovato), il lettore vede "nessun battito" e "file assente". Con la correzione sono verdi.
+  Le prove con "un file tenuto aperto" usano `FileInputStream` (e' cio' che apre `File.readText()`) e chiudono l'handle dentro l'attesa del codice: nessun tempo scritto a mano (`NoFixedWaitsTest`), nessun test che cade sotto carico. Su Linux le stesse prove passano senza attese.
+  I lettori delle prove di concorrenza respirano un millisecondo fra una lettura e l'altra: su Windows qualunque handle aperto fa fallire la sostituzione, e un lettore che riapre il file senza mai fermarsi lo terrebbe aperto di continuo (nessuna attesa basta, e non e' il caso che si prova).
+
+**`tools\check.ps1 -NoDaemon`** (`GRADLE_OPTS=-Dorg.gradle.workers.max=2`, 27/10): **verde** ("OK: tutto a posto"; `app` 796 prove, `core-common` 118, `core-family` 298). Un primo giro era caduto su una prova di questo pacchetto (quattro scrittori e un lettore sullo
+stesso file): sotto carico lo scheduler aveva fermato il lettore con il file aperto per piu' dei sei tentativi e uno scrittore aveva lanciato, giustamente. La prova non misura la pazienza (lo fanno quelle senza orologio): adesso lo scrittore si ripete fino a riuscire
+(un tetto largo di tentativi) e l'asserzione e' solo che nessun lettore veda niente di strano; stessa cosa per il battito finale di `HeartbeatStoreTest`.
+
+**Punti aperti**
+- `GalleryLog` in release non ha un sink: l'errore definitivo e' nel log solo in debug. Il segnale che c'e' sempre e' quello che chi chiama riceve (`false`, `IOException`). Se serve un segno anche in release, un contatore o un evento della Diagnostica sono un passo successivo (non c'e' un posto
+  comune dove scriverlo da `core-common`).
+- Un lettore che tiene il file aperto di continuo (un ciclo senza pause) fa fallire anche i sei tentativi su Windows: la scrittura lancia e lo dice. Non e' il caso dei lettori veri; lo sarebbe solo un test che legge in ciclo, e `Attese.kt` lo vieta gia'.
+- Su Android non si e' potuto provare niente su dispositivo: `Files.move`/`deleteIfExists`/`FileChannel` sono gli stessi che il progetto usa gia' in `SnapshotStore`, `PersonalLedger`, `FileTrustStateStore`; l'`fsync` in piu' (`force`) costa pochi millisecondi per scrittura e nessun file di stato
+  si riscrive in ciclo stretto.
+- Restano fuori i file elencati sopra come "non toccati": hanno i loro diari, ma `PackDirectory`, `DiskAiBuffer` e `FileOutboxBlobStore` hanno ancora il `renameTo`/`delete` con esito ignorato in qualche ramo; se si vuole, si portano su `StateFiles.replace`/`delete` con il loro banco di caos davanti.
+- `engine/engine-net/.../EngineHttp.kt:58,84-91` (scarica l'aggiornamento dell'app) ha lo stesso schema: e' dell'engine condiviso, si cambia la' e si riprende con un aggiornamento dell'engine.
+
+## Fase 8 P5: raggruppamento incrementale e stabile (27-28/10)
+
+Il pacchetto P5 della Fase 8 (`docs/fase8-progetto.md` §4.4, riga P5; §2.5, D20–D23, E-F1, E-F2, E-F3, E-F15, E-F17, E-F20–E-F27,
+E-F39; §5.2, §5.3, §11). Branch `fase8/p5`, partito da `integra/28-10b` (`c2ecc9e`). Consegna il **nucleo vero** del raggruppamento
+(`FastGrouping`), il **lavoro con il custode** (`CustodianGrouping`), il **riallineamento** di due istantanee (`Realign`), le proposte
+"È la stessa persona?" per ogni dispositivo (`GroupingProposals`) e le **famiglie sintetiche** (`testing/FamilyStories`). Nessuna dipendenza
+nuova, nessun file fuori da `core-faces` (e `docs/`). Commit: vedi la fine della sezione.
+
+**Cosa c'è** (`core-faces/.../grouping/`)
+- `FastGrouping`: il `GroupingEngine` vero. Puro e deterministico (niente orologio, niente casualità fuori da `PersonIdSource`, ogni
+  spareggio per riferimento o per id). **Le regole e l'ordine dei passi sono quelli di `testing/ReferenceGrouping`** (incrementale,
+  provvisorio, notte, ricalcolo), con le sei regole F1–F6 qui sotto portate in tutti e due. La differenza è il costo:
+  - `FaceMatrix`/`ColumnBlocks`: i coseni con **gli stessi bit del riferimento** (somma in float delle componenti in ordine), 256 alla
+    volta con un accumulatore per colonna in un ciclo che la JVM vettorizza (sul PC ~10 ns a coseno contro ~60 della somma sequenziale).
+    Assegnazioni, espulsioni, esemplari, centroidi, unioni e proposte sono identici al riferimento bit per bit;
+  - `AverageLinkage`: il legame medio delle nascite senza matrici n × n. Due gruppi con media ≥ `tBirth` hanno per forza un coseno ≥
+    `tBirth` e ne devono avere uno ≥ `tEdge`: bastano gli archi con coseno ≥ max(`tBirth`, `tEdge`) fra foto diverse. La media fra due volti
+    è il loro coseno (stessi bit), fra gruppi il prodotto scalare delle somme dei vettori diviso le dimensioni (meno di 1e-6 dal
+    riferimento). Ogni gruppo tiene il vicino migliore, una coda dà il migliore di tutti; stessi spareggi (media, poi indici minori);
+  - `BirthGroups`: fino a **3.000** volti nel serbatoio delle nascite la regola del riferimento, identica; **oltre** (primo raggruppamento
+    di un archivio grande, ricalcolo completo) a **lotti di 1.500** in ordine di riferimento, come se i volti arrivassero a fine unità
+    (D21: l'incrementale dipende dall'ordine di arrivo per progetto): i volti di un lotto entrano prima nei gruppi nati dai lotti
+    precedenti (soglia `tJoin`, margine sulla seconda persona contando anche quelle che esistono, mai due volti della stessa foto), il
+    resto con i non nati di prima fa le sue nascite. Così archi e memoria restano proporzionati a un lotto (il caso peggiore, 3.000 volti
+    della stessa persona, è ~30 MB di archi);
+  - `FaceTable`/`CorrectionIndex`: le correzioni per foto (contenuto e fotogramma) e i volti della stessa foto per indice, al posto delle
+    scansioni complete del riferimento; `ExemplarScorer`: la somiglianza di un volto con tutte le persone in un colpo;
+  - `OptimalMatching`: l'abbinamento del ricalcolo per componenti (F4).
+- `CustodianGrouping`: il `FaceGrouping` (D21). A ogni giro (incrementale a fine unità, notte, ricalcolo): la prenotazione
+  `faces/<G>/cluster` (`FacesLeases`) decide il ruolo, l'istantanea locale dell'archivio e quelle lette dal NAS (`ClusterSnapshots`, nuova)
+  decidono da dove partire, il nucleo fa il passo, si salva e, da custode, si mette in coda l'istantanea (`FacesChange.Snapshot`) e si
+  chiede la pubblicazione (fine unità, fine manutenzione). Ruoli:
+  | Prenotazione | Ruolo | Cosa fa |
+  |---|---|---|
+  | presa (`Held`) | custode | si riallinea o assorbe (sotto), passo intero, pubblica |
+  | contesa (`Contended`, cartella anomala) | custode anche lui | come sopra: vince l'istantanea più alta, l'altro si riallinea (E-F26) |
+  | recinzione (`Blocked`: `TEST_SHARES_ONLY`, `FENCE`, `NO_PRIVATE_AREA`, `NO_NAS`) | custode per sé, in locale (D34) | passo intero, niente NAS letto o scritto |
+  | di un altro (`Busy`, `Lost`) | seguace | solo provvisorio sopra l'istantanea vincente; mai nascite, unioni o pubblicazioni |
+  | cancello chiuso (`FROZEN`, `EMERGENCY_STOP`, `CLOCK_JUMP`, `READ_ONLY`, `NOT_TRUSTED`) o errore del NAS (`Failed`) | in pausa | provvisorio finché non passa |
+  Un archivio chiuso a metà (generazione cambiata, chiave distrutta: `IllegalStateException` dall'archivio) ferma il giro senza salvare né
+  pubblicare; la generazione cambiata non rinnova mai la prenotazione vecchia e chiede le istantanee solo della nuova. `rebased` conta i
+  riallineamenti (il codice `FACES_HOLDER_REBASED` per la Diagnostica, solo numeri).
+- `Realign`: il riallineamento (sotto, "regola di stabilità").
+- `GroupingProposals.of(input)`: le proposte della notte senza la notte (volti non correnti, correzioni, esemplari, unioni prudenti), su
+  ogni dispositivo; pura. Per P9: "Forse è anche…" e la cima di "Tutte le persone".
+- `testing/FamilyStories`: famiglie sintetiche con la verità (persone ricorrenti con popolarità di Zipf, fratelli e gemelli con centri a
+  coseno dato, età con deriva lenta per gli adulti e forte per i bambini, foto di gruppo da 3 a 8 volti, deboli, sconosciuti, video con
+  fotogrammi deboli, la stessa persona due volte, poster) e le misure (purezza dei gruppi, errori per volto, copertura dei volti CORE
+  raggruppabili, frammentazione). Solo vettori a 128 dimensioni di identità sintetiche: nessuna immagine, nessun nome, nessun dato
+  personale (§5.2).
+
+**L'algoritmo** (le regole sono quelle del §2.5; qui l'ordine e le scelte che il §2.5 lascia aperte)
+- **Grandezze**: coseno fra vettori normalizzati; `s(f, P)` = media dei 3 coseni più alti fra f e gli esemplari di P (esclusa f se ne fa
+  parte); esemplari = al più 16 volti CORE (se non ce ne sono, i volti qualunque), il più vicino al centroide e poi via via quello con il
+  minimo del massimo coseno verso i già scelti; centroide = media normalizzata dei volti automatici e confermati.
+- **Incrementale** (a fine unità, solo il custode): volti non più correnti (le ignorate passano per posto); correzioni; assegnazione dei
+  volti liberi in ordine di riferimento con gli esemplari di inizio passo (P1 se `s ≥ tJoin`, WEAK `tJoinWeak`, e `s(P1) − s(P2) ≥ margin`,
+  senza "Non è P1", ignorato o fissato; con un volto della stessa foto già in P1 resta il più simile, mai al posto di un volto
+  confermato); nascite se i CORE liberi sono almeno `birthsEvery` (50) in più dell'ultima volta: legame medio fra foto diverse, un gruppo
+  nasce con ≥ 3 volti di ≥ 2 contenuti, id nuovi in ordine di gruppo.
+- **Provvisorio** (gli altri dispositivi): volti non più correnti, correzioni, assegnazione; mai nascite né unioni; lo stato non avanza di
+  numero e non si pubblica.
+- **Notte** (solo il custode): contenuti spariti o diventati documenti (`GoneContents`), volti non più correnti, correzioni, espulsioni
+  (un volto automatico sotto `tEject` verso la sua persona), esemplari, unioni prudenti e proposte (coppie con centroidi ≥ `tSuggest`, legame
+  medio fra gli esemplari: ≥ `tMerge` unione automatica come alias se mai insieme in una foto, non entrambe con un nome, non separate e
+  senza "Non è" fra loro; fra `tSuggest` e `tMerge` o con due nomi una proposta; il sopravvissuto è quello con il nome, poi quello con più
+  volti, poi l'id minore), esemplari, assegnazione, nascite, esemplari.
+- **Ricalcolo completo** (modello, spazio o ricetta nuovi, E-F24): nascite da capo su tutti i CORE liberi (a lotti oltre 3.000), abbinamento
+  ottimo dei gruppi nuovi alle persone vecchie per volti in comune (stesso posto, IoU ≥ 0,5) per componenti, eredità dell'id con almeno il
+  30% dei volti del gruppo in comune; poi correzioni, esemplari, assegnazione, esemplari.
+- **Correzioni** (D23), a ogni passo: le persone nate da "Dividi", fissate o nominate negli alias esistono; gli alias dell'utente valgono
+  (un ciclo ha come radice l'id minore); le dimenticate non risolvono e i loro volti restano ignorati; "Ignora" toglie il volto da tutto;
+  "Non è" lo toglie dalla persona e non ce lo rimette; "È" lo fissa (confermato, mai espulso né riassegnato).
+
+**Sei regole in più del riferimento di P0**, scoperte con le prove (proprietà su 10.000 storie, parità) e portate **anche nel riferimento**
+(`testing/GroupingSteps.kt`, `GroupingMath.componentMatching`), così la parità del §5.2 resta esatta:
+- **F1**: un volto confermato ("È", origine dell'utente) la cui correzione non c'è più (lapide di `is`) torna libero. Senza, un "Non è"
+  scritto dopo non lo toglieva mai (il riferimento toglieva solo gli automatici).
+- **F2**: dopo gli alias dell'utente, una sola faccia automatica per persona e per foto (due persone unite a mano possono avere ciascuna un
+  volto della stessa foto): resta quella confermata se c'è, altrimenti la più simile agli esemplari (a parità il riferimento minore).
+- **F3**: niente unione automatica né proposta fra due persone se l'utente ha escluso un volto di una dall'altra ("Non è"): l'unione lo
+  rimetteva nella persona da cui era stato tolto per sempre.
+- **F4**: l'abbinamento del ricalcolo per **componenti connesse** del grafo "volti in comune", ognuna con l'algoritmo ungherese (righe e
+  colonne in ordine): stesso totale della matrice intera, ma gli spareggi fra soluzioni ugualmente buone non dipendono da gruppi che non
+  c'entrano (con la matrice intera un gruppo nuovo in fondo all'archivio poteva cambiare quale id eredita un gruppo in cima) e il costo è
+  quello delle componenti, non O(n³) su migliaia di gruppi.
+- **F5**: "Separati" vale per le persone a cui portano gli alias: se A e B sono separate e A è stata unita a mano in C, C e B non si
+  uniscono da sole (E-F1, E-F20).
+- **F6**: i volti vivi di una persona che una correzione "Dimentica" arrivata adesso toglie passano **come ignorati** anche quando il loro
+  riferimento non è più corrente (il corpo vincente del contenuto è cambiato) e nel ricalcolo completo (dove le correzioni si applicano
+  dopo le nascite da capo): senza, potevano rinascere in una persona nuova (E-F27).
+
+**La regola di stabilità degli id** (D21, D22)
+1. Un `PersonId` nasce casuale a 128 bit **solo** dal custode (nascite, ricalcolo senza eredità) o dall'utente ("Dividi", "È … persona
+   nuova"). Gli altri dispositivi non generano id: leggono l'istantanea del custode e ci aggiungono solo assegnazioni provvisorie.
+2. **Una persona non sparisce mai** dallo stato: attiva → unita (alias, `MERGED`) o dimenticata (solo per correzione). Unire è un alias,
+   mai un id che cambia; `GroupingState.resolve` segue catene e cicli (radice = id minore del ciclo) per tutti.
+3. Fra un passo e l'altro un volto resta nella sua persona; si sposta solo se espulso (sotto `tEject`), sostituito da un volto più simile
+   della stessa foto, o per una correzione.
+4. **Ricalcolo completo**: il gruppo nuovo eredita l'id della persona vecchia con cui condivide più volti (per posto), se sono almeno il 30%
+   dei suoi; una persona vecchia senza gruppo resta (con il suo nome: "0 foto · ricontrolla").
+5. **Cambio di custode** (E-F25): chi prende la prenotazione riparte dall'istantanea vincente (`seq` più alta, a pari numero il dispositivo
+   minore) e continua da lì: stessi id.
+6. **Due custodi** (E-F26) e istantanee non assorbite: chi perde **si riallinea** sull'istantanea vincente (`Realign.onto`). Ogni persona
+   attiva che solo lui conosce, in ordine di id: se condivide con una persona della vincente almeno il 30% dei suoi volti (stesso
+   riferimento o stesso posto) o non ha più volti liberi, diventa un suo **alias** (se ha un nome e l'altra no l'alias va al contrario,
+   così il nome resta in vista; con due nomi non si uniscono: decide l'utente); altrimenti **rinasce con lo stesso id** con i suoi volti che
+   la vincente non ha in nessuna persona. Gli alias e le dimenticate che la vincente non ha restano. Il custode **assorbe** allo stesso
+   modo ogni istantanea letta che ha persone che lui non conosce (un custode che ha perso, uno spento prima di pubblicare che pubblica
+   dopo): così nessuna persona e nessun nome si perdono, chiunque vinca.
+7. **Seguaci**: la loro vista è sempre l'istantanea vincente (riallineata con le persone che solo loro hanno, se ne hanno) più il
+   provvisorio, **con il numero della vincente**: la prossima istantanea del custode la sostituisce sempre.
+8. Da custode si pubblica ciò che non c'è ancora sul NAS (mai di nuovo l'istantanea di un altro adottata senza cambiarla); la coda è
+   idempotente: anche dopo una morte fra il salvataggio e la coda il giro dopo la rimette.
+
+**Le soglie: provvisorie** (Q4, L97). Sono quelle di partenza del progetto, in un posto solo (`GroupingParams` in
+`core-faces/.../contract/Grouping.kt`); P5 non le ha cambiate: sul set sintetico tengono la purezza (sotto), ma i vettori sintetici sono più
+facili di quelli veri (stessa identità a coseno ~0,55, identità diverse ~0 ± 0,09) e **la misura che decide è quella sui dati veri** (F105),
+che l'utente farà più avanti con lo strumento di P11.
+| Parametro | Valore provvisorio | Cosa decide | Come si ricalibra (§2.5, §5.3) |
+|---|---|---|---|
+| `T_JOIN` / `T_JOIN_WEAK` | 0,45 / 0,55 | entrare in una persona (CORE / WEAK) | il valore più basso che tiene la purezza dei gruppi ≥ 98,5% sulle coppie della sessione 1 |
+| `MARGIN` | 0,06 | margine sulla seconda persona | come sopra, sulle coppie "persone diverse ma simili" (fratelli, gemelli) |
+| `T_EDGE`, `T_BIRTH` | 0,45, 0,48 | nascere (archi, arresto del legame medio) | nessuna persona nata mista nella sessione 1 |
+| `T_MERGE`, `T_SUGGEST` | 0,52, 0,40 | unirsi da sole / proporre | nessuna unione sbagliata; proposte giuste almeno 1 su 2 |
+| `T_EJECT` | 0,32 | espellere | tolti gli errori segnati senza togliere più del 2% dei volti giusti |
+| `MIN_FACES`, `MIN_PHOTOS` | 3, 2 | soglia di nascita | fissi (regola del piano) |
+| `MAX_EXEMPLARS`, `TOP_EXEMPLARS` | 16, 3 | esemplari | fissi |
+| `BIRTHS_EVERY` | 50 | nascite a fine unità | fisso (costo, non qualità) |
+| `INHERIT_SHARE` | 0,30 | eredità dell'id (ricalcolo, riallineamento) | fisso (D22) |
+| `BirthGroups.EXACT_POOL`, `BATCH` | 3.000, 1.500 | nascite esatte o a lotti | memoria e tempi del telefono (F104) |
+
+**Come si ricalibrano quando l'utente fa la misura (Q4, F105)**: (1) sessione 1 con lo strumento solo debug di P11 (40 gruppi, tocchi sui
+volti sbagliati): ne escono coppie "stessa persona" e "persone diverse" come numeri (mai volti o nomi nel repository); (2) si scelgono le
+soglie con la regola della tabella, nell'ordine `T_JOIN`/`MARGIN`, poi `T_BIRTH`/`T_EDGE`, poi `T_MERGE`/`T_SUGGEST`, poi `T_EJECT`; (3) si
+cambiano **solo** le costanti di `GroupingParams` (riferimento e nucleo le leggono da lì: la parità del §5.2 resta) e si riscrivono i numeri
+qui; (4) si fanno girare le prove di `core-faces` (parità, proprietà delle correzioni, qualità sul sintetico: se una soglia più severa abbassa
+la copertura sintetica sotto le asserzioni, si scrive il numero nuovo); (5) sul telefono le soglie nuove valgono dalla notte dopo per i
+volti nuovi, le unioni e le espulsioni; per rivalutare tutto l'archivio si chiede un ricalcolo completo (`FaceGrouping.recluster`: gli id si
+ereditano per volti in comune, i nomi e le correzioni restano); (6) sessione 2, la misura (purezza ≥ 97%); se manca, soglie più severe (si
+perde copertura, non purezza); con la copertura sotto il 50% dei volti CORE, il piano B del modello (§7 del progetto, D9).
+
+**Contratti: aggiunte e modifiche (minime)**
+- `contract/GroupingEngine.kt`: **`ClusterSnapshot(author, state)`** con `beats` e `winner` (la regola del §2.4: `seq` più alta, a pari
+  numero il dispositivo minore); **`ClusterSnapshots.latest(generation)`** (le istantanee lette e accettate dalla replica, l'ultima per
+  dispositivo dell'account, della generazione chiesta: è il punto aperto di P0 "l'istantanea letta dal NAS separata da quella locale");
+  **`GoneContents.gone(keys)`** (i contenuti spariti o diventati documenti, per `GroupingInput.gone`). Null-object `NoClusterSnapshots`
+  (nessuna istantanea: il raggruppamento resta locale) e `NoGoneContents` (nessun contenuto esce) in `noop/FacesPortNullObjects.kt`.
+- `FacesArchive` **non** cambia: `grouping()` è lo stato di questo dispositivo (da custode quello che pubblica, da seguace la vista
+  provvisoria). `GroupingState`, `GroupingEngine`, `FaceGrouping`, `GroupingParams` non cambiano.
+- `testing/ReferenceGrouping` (con `GroupingSteps` e `GroupingMath`): le regole F1–F6 sopra e l'intestazione che le elenca. La suite
+  `GroupingContract` di P0 passa con il riferimento e con il nucleo vero senza modifiche.
+- `testing/FamilyStories.kt` (nuovo, generatore di P5).
+
+**Le prove e le misure** (`core-faces/src/test/.../grouping/`, 27-28/10, sul PC condiviso: i tempi sono un ordine di grandezza)
+| Prova | Cosa | Esito |
+|---|---|---|
+| `FastGroupingContractTest` | la suite `GroupingContract` di P0 sul nucleo vero | 9/9 |
+| `ReferenceParityTest` (§5.2) | 500 famiglie sintetiche a caso (fratelli, gemelli, età, deboli, sconosciuti, video, specchi, poster) in 1-3 lotti: incrementale, provvisorio, correzioni a caso, notte con contenuti spariti, ricalcolo; ogni passo dallo stesso stato sui due nuclei | **2.561 passi, esiti identici in tutto** (stato, esemplari, assegnazioni con i punteggi, proposte, numeri); 0 casi vicini alle soglie, 0 differenze |
+| `CorrectionsPropertyTest` | 10.000 storie piccole, passi a caso (incrementale, provvisorio, notte con spariti, ricalcolo con un "modello nuovo") e correzioni a caso ("È" verso persone vecchie e nuove, "Non è", "Ignora", "Unisci", "Dimentica", "Separati", nomi, "Dividi", lapidi di "È"); dopo ogni passo le regole di `Invariants` | **49.830 passi, nessuna violazione**: correzioni rispettate anche dopo un ricalcolo, mai due volti della stessa foto in una persona in automatico, nessuna persona nata sotto 3 volti in 2 foto, nessuna persona sparita, i volti di una dimenticata mai di nuovo automatici |
+| `GroupingQualityTest` | 40 famiglie tipiche (12-31 identità, 300-599 foto) e 40 difficili (anche gemelli a 0,8, bambini, poster), a 4 lotti con le notti; 100 storie di base di P0 | purezza **100% (855/855 gruppi)** tipiche, **97,95% (860/878)** difficili (i gemelli: un volto del gemello entra nella persona dell'altro prima che il secondo nasca, E-F1: si divide a mano), 100% (800) di base; copertura dei volti CORE raggruppabili 99,7%; frammentazione 1,03 e 1,05 persone per identità; errori per volto 0 e 0,14% |
+| `IncrementalVsScratchTest` | 30 famiglie: 6 lotti con le notti contro un passo solo e una notte | purezza 100% contro 100%, copertura 99,69% contro 99,90%, accordo sulle coppie "stessa persona" 0,971 |
+| `GroupingStabilityTest` | 30 famiglie in 6 lotti; tre notti in più; ricalcolo completo su 30; due nuclei con gli stessi dati | **0 volti su 113.384 cambiano persona** fra un passo e l'altro, nessuna persona sparisce o cambia id; tre notti in più non spostano volti; ricalcolo: **593 persone su 600 (98,8%) ereditano l'id**, purezza 100%; due macchine: stati identici |
+| `GroupingEdgeCasesTest` | E-F1 (gemelli a 0,97 finiti insieme, "Dividi", 5 notti con foto nuove e un ricalcolo), E-F2 (bambino e adulto uniti a mano, foto nuove delle due età, ricalcolo), proposte (0 e 14 anni: proposta su ogni dispositivo, "No" per sempre, "Sì" come alias), E-F3 (poster ignorato e dimenticato), E-F15, E-F17, E-F27, E-F39, alias con catena e ciclo | tutti verdi |
+| `CustodianGroupingTest` | NAS finto con due dispositivi: custode unico e stessi id ovunque, passaggio del custode dopo un'ora (E-F25), due custodi con la prenotazione contesa e nomi da tutte e due le parti (E-F26), custode spento prima di pubblicare, seguace con persone solo sue che segue sempre l'istantanea nuova, recinzione (D34), cancello chiuso, archivio chiuso a metà, archivio rifatto (E-F19) | 10/10 |
+| `CustodianFaultsTest` | morte del processo a ognuna delle 9 chiamate di un giro, prima e dopo l'effetto; generazione che cambia | l'istantanea pubblicata è sempre quella salvata, niente in coda, nessuna persona persa; la prenotazione e le istantanee vecchie non si usano |
+| `RealignTest` | 300 divergenze di due custodi a caso; alias rovesciato verso il nome | nessuna persona persa (132 diventano alias, 95 rinascono con lo stesso id); le assegnazioni del vincitore restano; riallinearsi di nuovo non cambia niente |
+| `HostileSnapshotTest` | istantanea con numero enorme, alias verso id che non ci sono, cicli, volti inventati | adottata senza eccezioni, nessuna scrittura oltre lo stato, nessuna persona locale persa |
+| `GroupingPerformanceTest` | archivio sintetico di 400 identità con popolarità di Zipf | **21.830 volti: prima volta 2,5 s, 2,9 ms a volto dopo, notte 0,9 s** (progetto: < 60 s, < 50 ms, < 30 s); **54.415 volti: 10,0 s, 10,3 ms a volto, notte 4,5 s**; purezza 100% |
+
+**Cosa trovano pronto gli altri pacchetti**
+- **P3** (sincronizzazione): `ClusterSnapshots` da realizzare in `sync/` sopra la replica (per ogni dispositivo dell'account l'ultima
+  istantanea accettata della generazione chiesta, con le regole di chi legge); il pubblicatore pubblica `archive.grouping()` quando c'è
+  un `FacesChange.Snapshot` in coda (la `seq` dell'istantanea è quella dello stato), **anche se nel frattempo il dispositivo ha perso la
+  prenotazione** (il custode la assorbe); niente istantanee con lo stato vuoto (`seq` 0). Il codec: `GroupingState` ↔ voci `cluster`; nota
+  che `unassignedAtBirths` non è nel formato (letto vale 0: nascite un po' prima, nessun danno) e che il punteggio a 2 byte arrotonda a
+  1e-4 (il custode confronta le istantanee lette per `seq` e autore; un contenuto diverso solo nei punteggi porta al più un riallineamento
+  in più). Il centroide del formato non è in `GroupPerson`: chi scrive lo calcola dai volti, chi legge può ignorarlo.
+- **P4** (calcolo): a fine unità `FaceGrouping.incremental(budget)` (il servizio decide se è custode); di notte `nightly`; dopo un modello o
+  una ricetta nuovi (quando il nuovo copre il vecchio, E-F24) `recluster`. Il calcolo non raggruppa da sé.
+- **P9** (persone): `archive.grouping()` è sempre lo stato da mostrare (da custode quello pubblicato, da seguace la vista provvisoria con il
+  numero della vincente); `GroupingState.resolve` per gli alias; `GroupingProposals.of(GroupingInput(state, faces, corrections))` per le
+  proposte su ogni dispositivo (le risposte sono `alias` e `apart`); `PeopleState.corrections()` è la stessa lettura delle voci che usa il
+  raggruppamento. Con F1, per "Non è …" su un volto confermato P9 deve scrivere anche la lapide di `is`, altrimenti "È" vince (come in
+  `PeopleOverlay`).
+- **P11** (valutazione): `FamilyStories` con le misure (purezza dei gruppi, errori per volto, copertura dei raggruppabili, frammentazione) da
+  usare come metriche anche sui dati veri; le soglie in un posto solo (`GroupingParams`) e il modo per ricalibrarle qui sopra.
+- **P12** (banco): `CustodianFaultsTest` è il modello per il banco del custode (morte a ogni chiamata, prima e dopo l'effetto);
+  `Invariants` sono le regole da controllare dopo ogni passo.
+- **P13** (integrazione): legare `CustodianGrouping(archives = archivio della generazione corrente o null, deviceId, leases = FacesLeases
+  sotto faces/<G>/leases/, snapshots = replica di P3, publisher = P3, gone = GoneContents sopra il catalogo (nessun media, o il bit
+  DOCUMENT), engine = FastGrouping(), ids = PersonIdSource.RANDOM)`; chiamarlo dai lavori (fine unità, `LibraryMaintenanceWorker`,
+  ricalcolo); `holder` e `rebased` nella Diagnostica (`FACES_HOLDER_REBASED`, solo numeri).
+
+**Punti aperti**
+- **Q4**: le soglie restano provvisorie; il sintetico è più facile dei vettori veri (purezza 100% sulle famiglie tipiche): la misura che
+  conta è F105.
+- **E-F15**: la regola "una sola delle due entra nella persona" vale sempre; ma se gli "specchi" (o un ritratto appeso, "foto nella foto")
+  sono almeno 3 in 2 foto, fra i non assegnati possono far nascere una persona a sé, come i gemelli sempre insieme di E-F1 (mai nella
+  stessa persona): escluderli dalle nascite separerebbe anche i gemelli che compaiono sempre insieme. Si uniscono a mano o si dimenticano.
+- **"Dimentica"** (D24): un volto di una persona dimenticata che l'utente assegna a mano e poi libera (lapide di "È"), o il cui media sparisce
+  e torna (E-F39), torna come un volto nuovo (lo stato non ricorda che era ignorato).
+- **"No" a una proposta mentre il custode unisce le stesse due persone** (due dispositivi quasi insieme): l'unione automatica resta (un
+  alias non si disfa: i volti spostati non hanno storia); l'utente usa "Dividi". F5 vale per le unioni dopo.
+- **Persone senza volti**: non si tolgono mai (gli id restano validi per album, ricerche, ricordi); un archivio che vive anni ne accumula;
+  il tetto del formato è 10.000 persone per istantanea (A6): se servisse, una potatura delle persone senza nome, senza volti e senza
+  correzioni (P3/P13).
+- **Recinzione → sincronizzazione (Q5, F110)**: con la recinzione ogni dispositivo è custode per sé con id suoi; quando la sincronizzazione
+  si accende la prima istantanea pubblicata vince e gli altri si riallineano (le loro persone diventano alias per volti in comune o
+  rinascono con lo stesso id; i nomi locali restano attaccati): da provare in P13 e sul campo.
+- **Il budget** di `FaceGrouping` non interrompe un passo del nucleo (puro): conta solo per non partire (≤ 0); sul PC 20.000 volti stanno in
+  meno di un secondo di notte, sull'S25 da misurare (F104).
+
+**`tools/check.ps1 -NoDaemon`**: **verde** (27-28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, dopo aver tolto `app/build/outputs/apk/release`):
+assembleDebug, assembleRelease, galleryTest e galleryLint in 511 s; test eseguiti in ogni modulo (`core-faces` 89, prima 42); nessuna classe
+`testing` nel dex di release (le famiglie sintetiche e il riferimento restano fuori); D34 e LiteRT nel bytecode come prima. Solo SKIP il
+banco su dispositivo (-Bench).
+
+**Commit** (branch `fase8/p5`): `0480c26a` (nucleo vero e regole F1–F6 nel riferimento), `70ba9911` (famiglie sintetiche e prove del
+nucleo), `f838f8b1` (custode, istantanee, riallineamento, porte nuove) e quello di questi documenti.

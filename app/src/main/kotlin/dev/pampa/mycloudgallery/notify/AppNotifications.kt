@@ -14,6 +14,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import dev.pampa.mycloudgallery.MainActivity
 import dev.pampa.mycloudgallery.R
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.family.contract.PendingRequestView
 import java.io.File
@@ -229,17 +230,16 @@ class AppNotifications(context: Context) {
 class NotifiedRequests(private val file: File) {
 
   fun read(): Set<String> = try {
-    if (file.exists()) file.readLines(Charsets.US_ASCII).map { it.trim() }.filter { ID.matches(it) }.toSet() else emptySet()
+    StateFiles.readLines(file, Charsets.US_ASCII)?.map { it.trim() }?.filter { ID.matches(it) }?.toSet() ?: emptySet()
   } catch (e: IOException) {
     emptySet()
   }
 
   fun write(ids: Set<String>) {
     try {
-      file.parentFile?.mkdirs()
-      file.writeText(ids.filter { ID.matches(it) }.take(MAX_IDS).joinToString("\n"), Charsets.US_ASCII)
+      StateFiles.writeText(file, ids.filter { ID.matches(it) }.take(MAX_IDS).joinToString("\n"), Charsets.US_ASCII)
     } catch (e: IOException) {
-      // Al peggio una notifica in piu'.
+      // Al peggio una notifica in piu' (l'errore e' nel log di `StateFiles`).
     }
   }
 

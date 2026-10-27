@@ -65,15 +65,18 @@ internal class GroupingSteps(
     counts.removed += drop.size
   }
 
-  /** Le assegnazioni di volti che non sono piu' correnti escono; le ignorate passano al volto nello stesso posto (D23). */
+  /**
+   * Le assegnazioni di volti che non sono piu' correnti escono; le ignorate passano al volto nello stesso posto (D23), e con loro (F6) quelle
+   * di una persona che una correzione "Dimentica" toglie.
+   */
   fun dropStale(current: List<GroupFace>) {
     for ((ref, a) in w.assign.entries.sortedBy { it.key }.map { it.key to it.value }) {
       if (ref in w.faces) continue
       w.assign.remove(ref)
-      if (a.origin == AssignOrigin.IGNORED) {
-        val match = current.firstOrNull { it.ref !in w.assign && a.locator.matches(it.locator) }
-        if (match != null) w.put(GroupAssignment(match.ref, match.locator, a.person, 0f, AssignOrigin.IGNORED))
-      }
+      // F6 (Fase 8 P5): passa per posto come ignorata anche l'assegnazione viva di una persona che una correzione "Dimentica" toglie.
+      val forgottenRoot = if (a.origin == AssignOrigin.IGNORED) a.person else root(a.person)?.takeIf { it in corrections.forgotten } ?: continue
+      val match = current.firstOrNull { it.ref !in w.assign && a.locator.matches(it.locator) }
+      if (match != null) w.put(GroupAssignment(match.ref, match.locator, forgottenRoot, 0f, AssignOrigin.IGNORED))
     }
     for (person in w.persons.values.toList()) {
       if (person.exemplars.any { it !in w.faces }) update(person.copy(exemplars = person.exemplars.filter { it in w.faces }))
@@ -110,6 +113,10 @@ internal class GroupingSteps(
     for (a in w.assign.values.sortedBy { it.face }) {
       if (a.origin == AssignOrigin.AUTO && a.person in rejectedFor(a.locator)) w.assign.remove(a.face)
     }
+    // F1 (Fase 8 P5): un'origine dell'utente vale finche' c'e' la sua correzione "E' …"; tolta (lapide), il volto torna libero.
+    for (a in w.assign.values.sortedBy { it.face }) {
+      if (a.origin == AssignOrigin.USER && fixedFor(a.locator) == null) w.assign.remove(a.face)
+    }
     for (face in current) {
       val fixedTo = fixedFor(face.locator) ?: continue
       if (isIgnored(face.locator)) continue
@@ -128,6 +135,19 @@ internal class GroupingSteps(
           w.assign.remove(other.face)
         }
       }
+    }
+    // F2 (Fase 8 P5): dopo gli alias dell'utente, una sola faccia automatica per persona e per foto: resta quella dell'utente se c'e',
+    // altrimenti l'automatica piu' simile agli esemplari (a parita' il riferimento minore).
+    val live = w.assign.values.filter { it.origin != AssignOrigin.IGNORED }.sortedBy { it.face }
+    for ((_, list) in live.groupBy { it.person to w.faces.getValue(it.face).photo }) {
+      if (list.size < 2) continue
+      if (list.any { it.origin == AssignOrigin.USER }) {
+        list.filter { it.origin == AssignOrigin.AUTO }.forEach { w.assign.remove(it.face) }
+        continue
+      }
+      val person = w.persons.getValue(list.first().person)
+      val keep = list.maxWith(compareBy<GroupAssignment> { similarity(w.faces.getValue(it.face), person) ?: 0f }.thenByDescending { it.face })
+      list.filter { it.face != keep.face }.forEach { w.assign.remove(it.face) }
     }
   }
 
@@ -233,8 +253,11 @@ internal class GroupingSteps(
     pairs.sortWith(compareByDescending<Triple<PersonId, PersonId, Float>> { it.third }.thenBy { it.first }.thenBy { it.second })
     for ((a, b, link) in pairs) {
       if (w.persons[a]?.state != PersonState.ACTIVE || w.persons[b]?.state != PersonState.ACTIVE) continue
-      if (PersonPair.of(a, b) in corrections.apart) continue
+      // F5 (Fase 8 P5): "Separati" vale per le persone a cui portano gli alias.
+      if (corrections.apart.any { val x = root(it.first); val y = root(it.second); (x == a && y == b) || (x == b && y == a) }) continue
       if (photos.getValue(a).any { it in photos.getValue(b) }) continue
+      // F3 (Fase 8 P5): niente unione ne' proposta se un volto di una delle due e' escluso dall'utente dall'altra ("Non e' …").
+      if (w.facesOf(a).any { b in rejectedFor(it.locator) } || w.facesOf(b).any { a in rejectedFor(it.locator) }) continue
       val namedA = a in corrections.named
       val namedB = b in corrections.named
       if (link >= params.tMerge && !(namedA && namedB)) {
@@ -260,9 +283,12 @@ internal class GroupingSteps(
     val oldActive = w.persons.values.filter { it.state == PersonState.ACTIVE }.sortedBy { it.id }
     w.assign.clear()
     for (person in w.persons.values.toList()) if (person.exemplars.isNotEmpty()) update(person.copy(exemplars = emptyList()))
-    for (a in old.filter { it.origin == AssignOrigin.IGNORED }) {
+    // F6 (Fase 8 P5): anche i volti di una persona che una correzione "Dimentica" arrivata adesso toglie passano come ignorati (le
+    // correzioni si applicano dopo le nascite da capo: senza, quei volti potrebbero rinascere in una persona nuova).
+    for (a in old) {
+      val forgottenRoot = if (a.origin == AssignOrigin.IGNORED) a.person else root(a.person)?.takeIf { it in corrections.forgotten } ?: continue
       val match = current.firstOrNull { it.ref !in w.assign && a.locator.matches(it.locator) }
-      if (match != null) w.put(GroupAssignment(match.ref, match.locator, a.person, 0f, AssignOrigin.IGNORED))
+      if (match != null) w.put(GroupAssignment(match.ref, match.locator, forgottenRoot, 0f, AssignOrigin.IGNORED))
     }
     val pool = current.filter { it.tier == FaceTier.CORE && it.ref !in w.assign && !isIgnored(it.locator) && fixedFor(it.locator) == null }
     val groups = GroupingMath.averageLinkage(pool, params.tBirth, params.tEdge)
@@ -271,7 +297,8 @@ internal class GroupingSteps(
     val weights = Array(groups.size) { g ->
       DoubleArray(oldActive.size) { p -> groups[g].count { face -> oldFaces[p].any { it.matches(face.locator) } }.toDouble() }
     }
-    val match = GroupingMath.hungarian(weights)
+    // F4 (Fase 8 P5): l'ottimo per componenti connesse delle coppie con volti in comune (stesso totale, spareggi locali).
+    val match = GroupingMath.componentMatching(weights)
     for ((g, group) in groups.withIndex()) {
       val p = match.getOrElse(g) { -1 }
       val inherited = p >= 0 && weights[g][p] > 0 && weights[g][p] >= GroupingParams.INHERIT_SHARE * group.size

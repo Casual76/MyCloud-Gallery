@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.ai.compute.AiLocalBodiesFor
 import dev.pampa.mycloudgallery.core.ai.compute.AiOriginResults
 import dev.pampa.mycloudgallery.core.ai.contract.AiResults
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.index.ai.AiCompactionMemory
 import dev.pampa.mycloudgallery.core.index.ai.AiEntry
 import dev.pampa.mycloudgallery.core.index.ai.AiIndexCounters
@@ -184,15 +185,9 @@ class FileCompactionMemory(private val file: File) : AiCompactionMemory {
       val map = loadLocked()
       map[tag(share)] = atNasMillis
       try {
-        file.parentFile?.mkdirs()
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeText(map.entries.joinToString("") { "${it.key} ${it.value}\n" })
-        if (!tmp.renameTo(file)) {
-          file.delete()
-          tmp.renameTo(file)
-        }
+        StateFiles.writeText(file, map.entries.joinToString("") { "${it.key} ${it.value}\n" })
       } catch (e: IOException) {
-        // Resta in memoria: al prossimo processo si ricontrolla una volta di piu'.
+        // Resta in memoria: al prossimo processo si ricontrolla una volta di piu' (l'errore e' nel log di `StateFiles`).
       }
     }
   }

@@ -55,6 +55,12 @@ object FacesSettingCodec {
 
   fun off(generation: FaceGeneration): PersonalValue = PersonalValue.Text("$FORM_VERSION|$OFF|${generation.base32}")
 
+  /**
+   * La voce `faces` dentro uno stato dei dati personali (la lettura del campo): null se manca o e' una lapide. E' cio' che il gancio
+   * [PrePublishHook] passa a `FacesSwitch.reconcile` e che `SyncedFacesSettings` legge dallo stato effettivo.
+   */
+  fun read(state: Map<PersonalKey, PersonalEntry>): FacesSetting? = parse(state[KEY]?.value)
+
   /** Il valore di [setting]; [FacesSetting.Unknown] non si scrive mai (non si riscrive cio' che non si capisce). */
   fun valueOf(setting: FacesSetting): PersonalValue = when (setting) {
     is FacesSetting.On -> on(setting.generation, setting.textVersion)

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8 (P7, docs/fase8-progetto.md §2.1, D4, E-F7): l'avviso una tantum sugli altri dispositivi dell'account. Finche' l'utente non sceglie qui,
+       questo dispositivo non scarica, non calcola e non mostra niente. Q3: nessuna parola sulla famiglia, solo sui dispositivi dello stesso account. -->
+  <string name="faces_notice_title">Persone</string>
+  <string name="faces_notice_headline">Persone è attiva sul tuo account</string>
+  <string name="faces_notice_message">Hai attivato Persone da un altro tuo dispositivo. Qui vedrai le persone e i loro nomi.</string>
+  <string name="faces_notice_by">Attivato da %1$s.</string>
+  <string name="faces_notice_waiting">Finché non scegli, questo dispositivo non scarica, non calcola e non mostra niente.</string>
+  <string name="faces_notice_ok">Va bene</string>
+  <string name="faces_notice_ok_description">Va bene: Persone si attiva anche su questo dispositivo</string>
+  <string name="faces_notice_exclude">Non su questo dispositivo</string>
+  <string name="faces_notice_exclude_description">Non su questo dispositivo: Persone non lavora qui e non lascia niente</string>
+  <string name="faces_notice_read">Leggi come funziona</string>
+  <string name="faces_notice_read_description">Leggi cosa fa Persone, dove restano i dati e come si cancella</string>
+</resources>

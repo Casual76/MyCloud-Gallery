@@ -779,7 +779,7 @@ Tutte e 46 corrette. Il pacchetto fra le prime due colonne: **A** fiducia e repl
 | VG-1 | D | `TripUpkeep.poke()` dopo il montaggio e le novita'; `TripsState.Searching` (`TripUpkeepTest`) |
 | VG-2 | D | `TripId.startKey`, creazione e `markAccepted` in `NonCancellable`, `NotFound` detto (`TripsReviewTest`) |
 | SH-1 | B | Il tentativo nell'impronta del piano (`RevisioneBShareTest.sh1...`) |
-| SH-2 | B, E | Operazioni chiuse lette dal diario, motivo, tocco "Riprova" che fa un piano nuovo (`RevisioneBShareTest.sh2...`, `RevisioneBAlbumPageTest.sh2...`); E: `RoomShareDiary.closedOps` (prima valeva l'elenco vuoto di serie: dopo la morte del processo la striscia spariva) e un'operazione chiusa con un elemento fermo non e' piu' "in corso" (`RevisioneEConfiniAppTest.sh2...`) |
+| SH-2 | B, E | Operazioni chiuse lette dal diario, motivo, tocco "Riprova" che fa un piano nuovo (`RevisioneBShareTest.sh2...`, `RevisioneBAlbumPageTest.sh2...`); E: `RoomShareDiary.closedOps` (prima valeva l'elenco vuoto di serie: dopo la morte del processo la striscia spariva) e un'operazione chiusa con un elemento fermo non e' piu' "in corso" (`RevisioneEConfiniAppTest.sh2...`, `RevisioneEShareTest`) |
 | SH-3 | B | `FolderAdoptions` con la storia dell'album, `AlbumFolderWatch.notices` (`RevisioneBShareTest.sh3...`, `RevisioneBCondivisioneAppTest.sh3...`). L151 |
 | SH-4 | B | `toShare` di uno smart condiviso (`RevisioneBCondivisioneAppTest.sh4...`) |
 | SH-5 | B | `definitionStaged`: una ripresa non riaccoda definizione e livello (`RevisioneBShareTest.sh5...`) |

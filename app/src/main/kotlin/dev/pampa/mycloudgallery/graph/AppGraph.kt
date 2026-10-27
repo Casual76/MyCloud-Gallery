@@ -190,6 +190,21 @@ class AppGraph(
   @Volatile
   var albumsStopper: GalleryStopper? = null
 
+  /**
+   * Fase 8 (P13, §1.4): chi ferma le persone **per prime** all'azzeramento (motori rilasciati, calcolo fermo, niente si apre piu') prima di
+   * togliere il database dei volti e distruggere le chiavi. Nasce dopo la galleria: si registra da solo (`FacesModule`). Nei test senza persone
+   * resta null.
+   */
+  @Volatile
+  var facesStopper: GalleryStopper? = null
+
+  /**
+   * Fase 8 (P13, D14, E-F35): le chiavi dei volti (una chiave del Keystore per generazione, `mcg-faces-<G>`): **una sola** istanza per processo, quella
+   * della piattaforma (nel telefono `FacesKeyStore`: va usata cosi' com'e', senza avvolgerla, o si perde `FacesKeyProbe`). La usano lo store dei volti e
+   * l'azzeramento (`DeviceSelfWipe` le distrugge nella fase (3) con le credenziali, prima di qualunque dato).
+   */
+  val facesKeys: dev.pampa.mycloudgallery.core.security.faces.FacesKeys get() = platform.facesKeys
+
   // --- Archivi locali (DataStore e file in noBackupFilesDir: fuori da backup e trasferimenti) ---------------------
   val accountStore = DataStoreNasAccountStore(SetupDataStores.account(context, scope))
   val account: StateFlow<NasAccount?> = accountStore.observe().stateIn(scope, SharingStarted.Eagerly, null)
@@ -280,7 +295,19 @@ class AppGraph(
     journal = FileWipeJournal(File(noBackup, FileWipeJournal.FILE_NAME)),
     keys = platform.deviceKeys,
     familyKeys = platform.familyKeys,
-    credentials = CredentialWiper { credentials.wipeAll() },
+    // Fase 8 (E-F35): le chiavi dei volti vanno via con le credenziali, nella stessa fase e prima di qualunque dato: senza chiave i resti sono illeggibili.
+    // Si provano tutte e due; la fase riesce solo se riescono entrambe (altrimenti si riprende al prossimo avvio).
+    credentials = CredentialWiper {
+      val wiped = credentials.wipeAll()
+      val faces = try {
+        facesKeys.destroyAll()
+      } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        false
+      }
+      wiped && faces
+    },
     sessions = session,
     trustState = trustStore,
     eraser = eraser,

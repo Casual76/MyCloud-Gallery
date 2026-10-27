@@ -96,9 +96,9 @@ qualcosa di non verificato) o `LostReports.find` valido nell'area privata dell'a
 | (0) `MARKED` | segno nel diario (`FileWipeJournal`, `noBackupFilesDir`) | si va avanti lo stesso |
 | (1) `DEVICE_KEY_DESTROYED` | `KeyProvider.destroyDeviceKey` (poi si verifica che non ci sia piu') | ci si ferma: **nessun dato toccato** |
 | (2) `FAMILY_KEY_DESTROYED` | `FamilyKeyVault.destroy` (no-op se non admin) | ci si ferma |
-| (3) `CREDENTIALS_WIPED` | `CredentialWiper`; dalla Fase 8 (`docs/fase8-progetto.md` D14) anche le chiavi dei volti `mcg-faces-*` del Keystore (`FacesKeys.destroyAll`, legato da P13): distrutte prima dei dati, rendono illeggibili i resti del database dei volti | ci si ferma |
+| (3) `CREDENTIALS_WIPED` | `CredentialWiper`; dalla Fase 8 (`docs/fase8-progetto.md` D14, P13) anche le chiavi dei volti `mcg-faces-*` del Keystore (`FacesKeys.destroyAll`, `AppGraph`): distrutte prima dei dati, rendono illeggibili i resti del database dei volti; la fase riesce solo se riescono tutte e due le distruzioni | ci si ferma |
 | (4) `SESSIONS_CLOSED` | `NasSessionManager.invalidate(WIPE)` | ci si ferma |
-| (5) `LOCAL_DATA_ERASED` | stato fidato, richieste viste, poi `LocalDataEraser`; dalla Fase 8 anche i database dei volti `faces-<G>.db`, i modelli dei volti estratti e il file dell'esclusione `faces-local` (D14, D15) | ci si ferma |
+| (5) `LOCAL_DATA_ERASED` | stato fidato, richieste viste, poi `LocalDataEraser`; dalla Fase 8 (P13) prima di tutto le persone si fermano (`AppGraph.facesStopper`: motori rilasciati, calcolo fermo, niente si apre piu') e poi si tolgono i database dei volti `faces-<G>.db` con i compagni, le chiavi avvolte, i modelli dei volti estratti, il file dell'esclusione `faces-local`, il diario `faces-erase` e il registro `personal-heads` (D14, D15: `FacesWiring.FILES`); il NAS e gli altri dispositivi non si toccano | ci si ferma |
 | (6) `WORK_CANCELLED` | `WorkCanceller` | ci si ferma |
 | (7) `DONE` | ora di fine nel diario → `SetupState.Wiped(at)` | — |
 
@@ -223,6 +223,15 @@ della famiglia nuova non lo accettano (l'ancora e' un'altra).
 - **Reset**: un dispositivo che entra senza QR dopo un reset parte dalla versione 1 e attraversa le versioni della famiglia vecchia come
   spazzatura (oltre 32 di fila si ferma): con un reset serve il QR, o la versione della fondazione digitata.
 
+- **Persone e i dispositivi dell'account (Fase 8, P13)**: la scelta di accendere Persone vale per l'**account** (voce `faces` dei dati personali), non per la
+  famiglia: gli altri familiari non vedono niente e non ne sanno niente. Un dispositivo dello stesso account che non l'ha acceso vede l'**avviso** e non
+  tratta nessun dato dei volti finche' non lo accetta (nessun database, nessuna chiave, nessun motore). «Non su questo dispositivo» e' un'esclusione locale
+  (mai una voce). Il calcolo lo fanno solo i dispositivi con il ruolo di **Indicizzatore** (stati firmati degli ultimi 7 giorni); uno solo e' il **custode** dei
+  gruppi (prenotazione sotto `faces/<G>/leases/`). Un dispositivo **revocato o perso** non si aspetta durante «Disattiva e cancella» e le sue cartelle sul NAS le
+  toglie la pulizia di un altro dispositivo dell'account; un dispositivo **dismesso** che aveva Persone accesa si aspetta (L193 di `sicurezza.md`). Un
+  dispositivo **spento** che torna legge `off` nel primo giro dei dati personali e cancella da solo, prima di pubblicare qualunque cosa (il gancio dei dati
+  personali non lo lascia pubblicare prima: `FacesPrePublish`). Con le share vere (D34) i dati dei volti non stanno sul NAS: ogni indicizzatore e' custode per se'.
+
 ## 9. Da provare con due dispositivi (F2, F6, F7)
 
 1. S25 admin, tablet "Entra con QR": la richiesta compare entro il controllo, il codice digitato coincide, approvazione, tablet `Ready`.
@@ -240,3 +249,7 @@ della famiglia nuova non lo accettano (l'ancora e' un'altra).
    d'attesa, codice nuovo, approvazione.
 9. (Verifica funzionale, 19/10) Tablet revocato dall'S25: pagina "revocato" con "Configura di nuovo", rientro con un QR nuovo.
    Reset della famiglia sull'S25: sul tablet, Impostazioni → Famiglia → "Rientra con un QR nuovo".
+10. (Fase 8, P13, F94-F96 e F100-F103) S25 ed emulatore con lo stesso account `test`: Persone si accende sull'S25 e sull'emulatore compare l'avviso (prima
+    nessun `faces-*.db*` e nessuna chiave `mcg-faces-*`); «Va bene» attiva senza generazione nuova, «Non su questo dispositivo» toglie database e chiave
+    sull'emulatore e non cambia niente sull'S25 ne' sul NAS. Con l'emulatore spento, «Disattiva e cancella» sull'S25: la pagina aspetta l'emulatore; riacceso,
+    cancella da solo (chiave, poi file) e la pagina passa a «Fatto ovunque». Un familiare con un altro account non vede mai persone, avviso o file.

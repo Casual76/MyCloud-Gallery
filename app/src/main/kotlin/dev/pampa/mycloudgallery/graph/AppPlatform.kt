@@ -91,6 +91,14 @@ interface AppPlatform {
   val deviceKeys: KeyProvider
   val familyKeys: FamilyKeyVault
   val credentials: AppCredentialStore
+
+  /**
+   * Fase 8 (P13, D14): le chiavi dei volti, una del Keystore per generazione. Nel telefono vero `FacesKeyStore` (StrongBox se c'e'); di serie nessuna
+   * (i montaggi senza persone e i test che non le provano).
+   */
+  val facesKeys: dev.pampa.mycloudgallery.core.security.faces.FacesKeys
+    get() = dev.pampa.mycloudgallery.core.security.noop.NoFacesKeys
+
   val healthReader: BackgroundHealthReader
   val deviceState: DeviceStateSource
   val screenLock: ScreenLockSource
@@ -134,6 +142,11 @@ class AndroidAppPlatform(context: Context) : AppPlatform {
     isDeviceSecure = { app.getSystemService(KeyguardManager::class.java)?.isDeviceSecure == true },
   )
   override val credentials: AppCredentialStore = VaultCredentialStore(CredentialVault.getInstance(app))
+
+  /** Le chiavi dei volti (Fase 8): il ripiego su una chiave software solo nelle build di debug sugli emulatori senza Keystore hardware. */
+  override val facesKeys: dev.pampa.mycloudgallery.core.security.faces.FacesKeys by lazy {
+    dev.pampa.mycloudgallery.core.security.faces.FacesKeyStore.forContext(app, allowSoftwareKey = dev.pampa.mycloudgallery.BuildConfig.DEBUG)
+  }
   override val healthReader: BackgroundHealthReader = AndroidBackgroundHealthReader(app)
   override val deviceState: DeviceStateSource = AndroidDeviceStateSource(app)
   override val screenLock: ScreenLockSource = AndroidScreenLockSource(app)

@@ -46,8 +46,8 @@ object AiModule {
 
   @Provides
   @Singleton
-  fun aiStack(@ApplicationContext context: Context, graph: AppGraph, gallery: GalleryGraph): AiStack =
-    AiWiring.build(context, graph, gallery, diag = { code -> graph.events.code(code) }).also { stack ->
+  fun aiStack(@ApplicationContext context: Context, graph: AppGraph, gallery: GalleryGraph, people: dev.pampa.mycloudgallery.faces.PeopleBridge): AiStack =
+    AiWiring.build(context, graph, gallery, diag = { code -> graph.events.code(code) }, people = people).also { stack ->
       // La parte `ai` dell'indice per il NAS (legata prima che parta) e l'arresto per primo all'azzeramento (§1.4).
       graph.aiHooks = stack.ai.hooks
       graph.aiStopper = GalleryStopper {

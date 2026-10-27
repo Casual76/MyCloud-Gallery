@@ -115,6 +115,8 @@ class RecentEventsContributor(
       DiagJob.AI_COMPUTE -> R.string.diagnostics_job_ai_compute
       DiagJob.ALBUM_SHARE -> R.string.diagnostics_job_album_share
       DiagJob.LIBRARY_MAINTENANCE -> R.string.diagnostics_job_library_maintenance
+      DiagJob.FACES_COMPUTE -> R.string.diagnostics_job_faces_compute
+      DiagJob.FACES_ERASE -> R.string.diagnostics_job_faces_erase
     }
 
     @StringRes

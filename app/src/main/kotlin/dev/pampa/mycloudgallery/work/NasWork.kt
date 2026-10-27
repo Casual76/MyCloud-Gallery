@@ -286,6 +286,22 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
     })
   }
 
+  /**
+   * Fase 8 (P13, §1.4): il giro dei volti nel giro dell'indice, **dopo** i dati personali (`INDEX_SYNC`): prima un giro dei dati personali (D30: la
+   * generazione e' fresca solo dopo un giro completo di questo processo, e gli altri dispositivi ci dicono se Persone e' ancora accesa), poi [round]
+   * (`FacesGraph.syncRound`: replica, pubblicazione, pulizia del NAS). Non e' `writesToNas`: la replica legge anche con una share congelata, il
+   * pubblicatore ha il suo cancello. Vero se il giro e' finito.
+   */
+  suspend fun faces(round: suspend (Duration) -> Boolean, bytes: () -> Long = { 0L }): StageOutcome {
+    nas.start()
+    return stage(WorkRequest.Background(BackgroundActivity.INDEX_SYNC)).run({ scope, _ ->
+      nas.organizer.syncPersonal(SLICE)
+      val done = round(SLICE)
+      scope.record(bytes())
+      BatchResult(hasMore = !done)
+    })
+  }
+
   /** Una tappa di scaricamento dell'HQ (`HQ_PREVIEWS`), solo con la qualita' "Alta" (D16). */
   suspend fun hqPreviews(): StageOutcome? {
     nas.start()
@@ -405,6 +421,8 @@ class IndexSyncWorker @AssistedInject constructor(
   graph: AppGraph,
   /** Fase 7 (P13): gli album condivisi girano qui, dopo l'indice (i dati personali li porta `PersonalSyncWorker`, e gli album li seguono da soli). */
   private val albums: dev.pampa.mycloudgallery.albums.AlbumsGraph,
+  /** Fase 8 (P13, §1.4): la sincronizzazione dei volti gira qui, **dopo** i dati personali (cosi' la generazione e' fresca, D30). */
+  private val faces: dev.pampa.mycloudgallery.faces.FacesGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "IndexSyncWorker"
   override val diagJob: DiagJob = DiagJob.INDEX_SYNC
@@ -420,6 +438,14 @@ class IndexSyncWorker @AssistedInject constructor(
         throw e
       } catch (e: Exception) {
         dev.pampa.mycloudgallery.core.common.log.GalleryLog.w(tag) { "giro degli album non fatto: ${e.javaClass.simpleName}" }
+      }
+      // Fase 8 (P13): un giro dei dati personali (la generazione torna fresca) e poi quello dei volti; un errore non cambia l'esito del lavoro dell'indice.
+      try {
+        stages.faces({ budget -> faces.syncRound(budget) }, { faces.lastRoundBytes })
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        dev.pampa.mycloudgallery.core.common.log.GalleryLog.w(tag) { "giro dei volti non fatto: ${e.javaClass.simpleName}" }
       }
     }
   }
@@ -466,11 +492,21 @@ class IndexMaintenanceWorker @AssistedInject constructor(
   @Assisted params: WorkerParameters,
   gallery: GalleryGraph,
   graph: AppGraph,
+  /** Fase 8 (P13): la pulizia dei propri file dei volti sul NAS accanto alla pulizia degli altri propri file (M6). */
+  private val faces: dev.pampa.mycloudgallery.faces.FacesGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "IndexMaintenanceWorker"
   override val diagJob: DiagJob = DiagJob.INDEX_MAINTENANCE
 
-  override suspend fun stage(stages: NasStages): StageOutcome? = stages.maintainIndex()
+  override suspend fun stage(stages: NasStages): StageOutcome? = stages.maintainIndex().also {
+    try {
+      faces.maintain(NasStages.SLICE)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(tag) { "pulizia dei file dei volti non fatta: ${e.javaClass.simpleName}" }
+    }
+  }
 
   override fun continuation() =
     NasWorkScheduling.MAINTENANCE_NOW_WORK to OneTimeWorkRequestBuilder<IndexMaintenanceWorker>().addTag(NasWorkScheduling.TAG).build()

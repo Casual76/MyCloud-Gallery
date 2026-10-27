@@ -66,8 +66,9 @@ object AlbumsModule {
     // Le facciate dipendono dal grafo: si prendono al primo uso (le voci ⋮ del viewer non servono prima).
     albumsFacade: Provider<Albums>,
     sharedFacade: Provider<SharedAlbums>,
+    people: dev.pampa.mycloudgallery.faces.PeopleBridge,
   ): AlbumsGraph =
-    AlbumsWiring.build(context, graph, gallery, search, today).also { albums ->
+    AlbumsWiring.build(context, graph, gallery, search, today, people).also { albums ->
       // L'azzeramento ferma gli album per primi (§1.4): niente parte piu' e i giri in corso si aspettano, poi si cancellano i dati.
       graph.albumsStopper = GalleryStopper { albums.stop() }
       // P9: un "Nascondi" fatto qui ricalcola subito copertine e conteggi degli album condivisi.

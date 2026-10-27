@@ -362,6 +362,35 @@ viaggi (P7)      -> CatalogTrips, rilevazione una volta per notte (LibraryMainte
   `AlbumsShareBenchAppTest` (il banco della condivisione sui legami di `:app`, con guasti SMB e morti del processo), i test delle porte e del registro
   dei Nascosti.
 
+**Le persone nell'app (Fase 8, P13).** `di/FacesModule.kt` monta un `faces/FacesGraph` per processo (`FacesWiring.build`): nasce con il processo e
+monta le persone (`FacesLive`) appena la famiglia e' pronta; l'azzeramento lo ferma **per primo** (`AppGraph.facesStopper`), poi distrugge **tutte** le
+chiavi dei volti (`mcg-faces-<G>`, anche nella fase delle credenziali di `DeviceSelfWipe`) e toglie i file (`FacesWiring.FILES`: `faces/` con i database
+cifrati, le chiavi avvolte, `faces-local`, `faces-erase`, `personal-heads`, battito e segno della tappa). Il NAS non si tocca all'azzeramento di un dispositivo.
+
+```
+interruttore (P7) -> SyncedFacesSettings (voce `faces` dei dati personali) + FileFacesLocalStore + DefaultFacesSwitch; avviso una tantum all'apertura dell'app
+recinto (P8)      -> FacesEraseFence per PRIMO: ogni apertura (archivi, replica, pubblicatore, calcolo) passa da Fenced*; un solo FacesStores per processo
+calcolo (P4)      -> FacesComputeEngine sopra il catalogo (CatalogFacesCatalog), il buffer di analisi, l'indice attestato e i byte del telefono (AppFaceInputs);
+                     motori YuNet/SFace costruiti solo quando servono (FacesEngineHolder) e rilasciati a fine tappa, a memoria scarsa e allo stop
+sync (P3)         -> NasFacesRemote/Sync/Publisher/Leases sull'area privata, FacesAttestation sul catalogo; custode (P5) con CustodianGrouping
+cancella (P8)     -> DefaultFacesEraser + FacesNasWiring (core-nasops) + FacesNasJanitor; gancio PrePublishHook nei dati personali (FacesPrePublish dalla nascita del processo)
+persone (P9)      -> ArchivePeople dietro le facciate (FacesPeopleFacade, ritagli solo in memoria), sezione delle Raccolte, rotte (peopleGraph), riga nel viewer
+ricerca/album(P10)-> PeopleBridge (ricerca per persona, regola Persone degli smart, PeopleChoices, peopleChanged, cronologia ripulita dai nomi)
+```
+
+- **Lavori** (nomi distinti da quelli degli altri lavori): il calcolo `faces-compute` (tappe da 8 minuti, `AI_COMPUTE`, periodico e "Analizza ora"), la
+  cancellazione `faces-erase` (riprende dal diario), la replica e la pubblicazione nel giro dell'indice **dopo** i dati personali (`IndexSyncWorker`: la
+  generazione e' fresca), il raggruppamento notturno nella manutenzione della Libreria, la pulizia dei propri file nella manutenzione dell'indice.
+- **Cancelli**: `AppFacesWriteGate` = recinzione D34 (`FeatureFlags.facesSyncMayUse`, accesa **anche in release** fino al consenso) + `ShareFence` (solo
+  debug) + cancelli dell'indice; il passo «D34 nella release» di `tools/check.ps1` lo legge nel bytecode.
+- **Modelli**: `ModelCatalog.needed(..., FACES)` solo dove Persone e' attiva qui; i due modelli stanno nell'APK e si estraggono alla prima apertura; l'esclusione
+  e la cancellazione li tolgono.
+- **Diagnostica**: sezione Persone (`faces/FacesDiagnostics.kt`): i codici del §2.10 (`FacesDiag.ALL`), solo numeri; `FACES_KILLED_MEMORY` per la morte per memoria.
+- **Debug**: lo strumento di valutazione delle persone (`debugtools/eval/faces/`), in sola lettura; non c'e' nella release.
+- **Prove**: `FacesIntegrationTest` (due account e tre dispositivi sul grafo vero e sul simulatore SMB: attivazione, calcolo e istantanea, nomi che viaggiano,
+  l'altro account non vede niente, «Disattiva e cancella» con un dispositivo spento che torna, azzeramento completo), `FacesFenceSourcesTest`,
+  `AppFacesWriteGateTest`, `Phase8DiagCatalogTest`, `FacesWorkSchedulingTest`, `FacesStageWatchTest` e i test del registro dei Nascosti sul codice legato.
+
 Il Fluid Engine e' in `engine/` (submodule, agganciato al tag **engine-2.13.1**); entrano nel build solo
 `engine-foundation` e `engine-ui`. Per aggiungerne altri: `engine\tools\engine-install.ps1 -AppRoot . -Modules
 engine-ui,engine-storage` (e rigenerare i checksum).

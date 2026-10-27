@@ -100,6 +100,8 @@ internal class AiRig(private val app: Application, private val root: File) {
     store: FakeMediaStore = NasGalleries.newStore(),
     fence: BackupFence? = DebugBackupFence,
     readerLatencyMs: Long = 0,
+    /** Fase 8 (P13): la ricerca per persona (il ponte di `FacesModule`); di serie nessuna. */
+    people: dev.pampa.mycloudgallery.core.search.contract.PeopleLookup = dev.pampa.mycloudgallery.core.search.noop.NoPeopleLookup,
   ): Mounted {
     val gallery = NasGalleries.galleryOf(test, account, time, ai = { test.graph.aiHooks }, store = store).also { galleries += it }
     val reader = FakeTextReader(latencyMs = readerLatencyMs)
@@ -118,6 +120,7 @@ internal class AiRig(private val app: Application, private val root: File) {
       fence = fence,
       cutter = { cutterOverride ?: cutter },
       cutoutWriter = { path -> FakePhoneMediaWriter(path).also { writers += it } },
+      people = people,
     )
     reader.readingHere = { stack.textSwitch.state.value.activeHere }
     reader.fixture(RECEIPT, OcrResult(listOf(OcrLine(ShortBox(1000, 2000, 60000, 9000), 0, listOf(WordSpan(0, 30000), WordSpan(32000, 65535)), "Pizzeria Mario")), dense = false))

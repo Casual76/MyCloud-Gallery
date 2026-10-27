@@ -6,6 +6,7 @@ import androidx.navigation.NavController
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.feature.albums.nav.openEntry
 import dev.pampa.mycloudgallery.feature.albums.sections.AlbumEntryTarget
+import dev.pampa.mycloudgallery.feature.people.nav.PeopleEntryTarget
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.utility.UtilityPage
 import dev.pampa.mycloudgallery.feature.library.utility.UtilityPageRoute
@@ -28,6 +29,9 @@ internal sealed interface EntryTarget {
 
   data class Album(val target: AlbumEntryTarget) : EntryTarget
 
+  /** Fase 8 (P13): la sezione Persone (le persone, "Tutte le persone", "Altri volti", l'attivazione, l'avviso, Impostazioni). */
+  data class People(val target: PeopleEntryTarget) : EntryTarget
+
   /** Un codice che questa versione non conosce (di una versione piu' nuova): non fa niente. */
   data object Unknown : EntryTarget
 
@@ -37,6 +41,7 @@ internal sealed interface EntryTarget {
       else -> UtilityPage.fromEntryCode(code)?.let(::Utility)
         ?: nasScreenOf(code)?.let(::Nas)
         ?: AlbumEntryTarget.parse(code)?.let(::Album)
+        ?: PeopleEntryTarget.parse(code)?.let(::People)
         ?: Unknown
     }
   }
@@ -48,16 +53,23 @@ internal sealed interface EntryTarget {
  */
 internal fun hasEntryDetail(code: String): Boolean = when (EntryTarget.of(code)) {
   EntryTarget.FreeSpace, is EntryTarget.Utility, is EntryTarget.Nas -> true
-  is EntryTarget.Album, EntryTarget.Unknown -> false
+  is EntryTarget.Album, is EntryTarget.People, EntryTarget.Unknown -> false
 }
 
 /** Apre la voce [code] sul telefono (o, sul tablet, una voce senza dettaglio). */
-internal fun openCollectionEntry(code: String, nav: NavController, openFreeSpace: () -> Unit, onNewAlbum: () -> Unit) {
+internal fun openCollectionEntry(
+  code: String,
+  nav: NavController,
+  openFreeSpace: () -> Unit,
+  onNewAlbum: () -> Unit,
+  onPeople: (PeopleEntryTarget) -> Unit = {},
+) {
   when (val target = EntryTarget.of(code)) {
     EntryTarget.FreeSpace -> openFreeSpace()
     is EntryTarget.Utility -> nav.openUtility(target.page)
     is EntryTarget.Nas -> nav.openNas(target.screen)
     is EntryTarget.Album -> if (target.target == AlbumEntryTarget.NewAlbum) onNewAlbum() else nav.openEntry(target.target)
+    is EntryTarget.People -> onPeople(target.target)
     EntryTarget.Unknown -> Unit
   }
 }
@@ -75,6 +87,6 @@ internal fun CollectionEntryDetail(
     EntryTarget.FreeSpace -> FreeSpaceEntryDetail(hostPadding)
     is EntryTarget.Utility -> UtilityPageRoute(page = target.page, onOpenViewer = onOpenViewer, contentPadding = hostPadding)
     is EntryTarget.Nas -> NasEntryDetail(entry, nav, hostPadding, opener)
-    is EntryTarget.Album, EntryTarget.Unknown -> Unit
+    is EntryTarget.Album, is EntryTarget.People, EntryTarget.Unknown -> Unit
   }
 }

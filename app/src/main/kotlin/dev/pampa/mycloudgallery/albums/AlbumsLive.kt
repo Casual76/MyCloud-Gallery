@@ -164,6 +164,9 @@ internal class AlbumsInputs(
   val onError: (Exception) -> Unit = {},
   /** Il resoconto di una ricerca dei viaggi fuori dalla notte (Diagnostica: solo numeri). */
   val onTripReport: (TripReport) -> Unit = {},
+  /** Fase 8 (P13, D27): le persone per la regola degli album smart e per i nomi che diventano regole; di serie nessuna (fallisce chiuso, E-F37). */
+  val people: dev.pampa.mycloudgallery.core.albums.contract.PeopleMembership = dev.pampa.mycloudgallery.core.albums.noop.NoPeopleMembership,
+  val peopleLookup: dev.pampa.mycloudgallery.core.search.contract.PeopleLookup = dev.pampa.mycloudgallery.core.search.noop.NoPeopleLookup,
 )
 
 /** Il montaggio, nell'ordine delle dipendenze (condivisi, poi personali e smart, poi viaggi). Nessun I/O qui: lo fanno gli oggetti quando servono. */
@@ -259,10 +262,10 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
   val lookup = GeocoderPlaceLookup(i.places)
   // AS-9: la cartella del proprio backup si legge a ogni uso (le impostazioni del backup si caricano dopo il montaggio).
   val smart = RulesSmartEngine(
-    smartRows, smartCandidates, i.visible, i.mask, content, DeviceNormalizer(i.ownBackupFolder), lookup, i.clocks, FileSmartSeenMarks(i.seenFile),
+    smartRows, smartCandidates, i.visible, i.mask, content, DeviceNormalizer(i.ownBackupFolder), lookup, i.clocks, FileSmartSeenMarks(i.seenFile), i.people,
   )
   val recompute = SmartRecompute(smartRows, smartCandidates, smart, i.clocks)
-  val interpreter = RuleSmartNameInterpreter(ItalianQueryParser(), i.visible, i.mask, smartCandidates, lookup, content, i.places, home = trips.homeClearance())
+  val interpreter = RuleSmartNameInterpreter(ItalianQueryParser(), i.visible, i.mask, smartCandidates, lookup, content, i.places, home = trips.homeClearance(), people = i.peopleLookup)
   val smartUpkeep = SmartUpkeep(scope, smartRows, recompute, albums, onError = i.onError)
   val tripUpkeep = TripUpkeep(scope, trips, i.clocks, onReport = i.onTripReport, onError = i.onError)
 

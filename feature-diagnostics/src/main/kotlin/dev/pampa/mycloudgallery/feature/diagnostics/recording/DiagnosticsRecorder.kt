@@ -45,6 +45,10 @@ enum class DiagJob {
 
   /** Fase 7 (DG-2): la manutenzione notturna della Libreria (riconciliazione, META, hash, viaggi, ricalcolo degli smart, Utility). */
   LIBRARY_MAINTENANCE,
+
+  /** Fase 8 (P13): il calcolo dei volti (`FacesComputeWorker`, regole di `AI_COMPUTE`) e la ripresa di "Disattiva e cancella" (`FacesEraseWorker`). */
+  FACES_COMPUTE,
+  FACES_ERASE,
 }
 
 /** Com'e' finita una tappa di un lavoro (`StageOutcome` in parole fisse). */

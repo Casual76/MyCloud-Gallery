@@ -89,6 +89,10 @@ object ExportKeys {
     "manual", "smart", "shared", "openShares", "contributions", "syncIncomplete", "roundErrors", "tripsSearched", "tripsHomeKnown", "searchReady",
     // La manutenzione dell'Utility (DG-2): firme dei Doppioni simili e controllo notturno dei video del NAS. `queued`, `waiting` e `skipped` sono gia' sopra.
     "enabled", "scanned", "withdrawn", "signed", "finished",
+    // Le persone (Fase 8, `PeopleDiagnostics` di :app, D37): solo numeri, flag e costanti di enum; mai nomi, id di persone o di volti, chiavi di contenuto,
+    // riquadri, vettori, conteggi per persona o generazione. `mounted`, `enabled`, `count`, `roundErrors`, `rejectedHeads` e `rejectedSegments` sono gia' sopra.
+    "hereState", "awaitingNotice", "erasing", "fresh", "syncPending", "runStatus", "holder", "facesSaved", "indexers", "devicesRead",
+    "headsAccepted", "holdActive", "eraseStep", "eraseLocal", "eraseNas", "eraseWaiting",
   )
 
   /**

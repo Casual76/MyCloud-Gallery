@@ -454,7 +454,15 @@ class RevisioneBCondivisioneAppTest {
     val phone = phoneOnly()
     privatePhotos("IMG_K.jpg", "IMG_L.jpg")
     val (rig, albums) = opened(phone, TestNas.ADMIN_USER)
-    val ids = idsOf(rig, 2)
+    idsOf(rig, 2)
+    // Le due foto hanno la stessa data e id casuali: l'ordine della Libreria non dice quale e' quale. L'album prende IMG_K per nome, IMG_L e' il
+    // file estraneo (prima, una volta su due, l'album prendeva proprio IMG_L e la prova falliva).
+    val catalog = checkNotNull(rig.gallery.coreIfReady()).catalog
+    suspend fun idOf(name: String): MediaId {
+      val info = checkNotNull(catalog.nasLocationAt(Location.Nas(AccountId.of(TestNas.ADMIN_USER), TestNas.ADMIN_USER, NasPath.of("Foto/Prova/$name")))) { name }
+      return checkNotNull(catalog.mediaIdOfLocation(info.locationId)) { name }
+    }
+    val ids = listOf(idOf("IMG_K.jpg"), idOf("IMG_L.jpg"))
     val l = live(albums)
     val other = NasItemRef(TestNas.ADMIN_USER, SharePath.parse("Foto/Prova/IMG_L.jpg"))
     val elsewhere = ShareFolder(TestNas.COMMON, SharePath.parse("Album condivisi/Altrove"))

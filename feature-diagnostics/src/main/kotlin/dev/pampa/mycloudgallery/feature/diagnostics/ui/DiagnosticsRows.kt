@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.diagnostics.ui
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.DataUsage
@@ -11,6 +12,7 @@ import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.NetworkCheck
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Face
@@ -83,6 +85,8 @@ internal fun DiagSection.icon(): ImageVector = when (this) {
   DiagSection.SEARCH -> Icons.Rounded.Search
   DiagSection.ALBUMS -> Icons.Rounded.PhotoAlbum
   DiagSection.PEOPLE -> Icons.Rounded.Face
+  DiagSection.MEMORIES -> Icons.Rounded.AutoAwesome
+  DiagSection.MAP -> Icons.Rounded.Map
   DiagSection.STORAGE -> Icons.Rounded.Storage
   DiagSection.MONTHLY_TRAFFIC -> Icons.Rounded.DataUsage
   DiagSection.ANDROID_WARNINGS -> Icons.Rounded.PhoneAndroid
@@ -101,6 +105,8 @@ internal fun DiagSection.titleRes(): Int = when (this) {
   DiagSection.SEARCH -> R.string.diagnostics_section_search
   DiagSection.ALBUMS -> R.string.diagnostics_section_albums
   DiagSection.PEOPLE -> R.string.diagnostics_section_people
+  DiagSection.MEMORIES -> R.string.diagnostics_section_memories
+  DiagSection.MAP -> R.string.diagnostics_section_map
   DiagSection.STORAGE -> R.string.diagnostics_section_storage
   DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_section_traffic
   DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_section_android
@@ -119,6 +125,8 @@ internal fun DiagSection.hintRes(): Int = when (this) {
   DiagSection.SEARCH -> R.string.diagnostics_hint_search
   DiagSection.ALBUMS -> R.string.diagnostics_hint_albums
   DiagSection.PEOPLE -> R.string.diagnostics_hint_people
+  DiagSection.MEMORIES -> R.string.diagnostics_hint_memories
+  DiagSection.MAP -> R.string.diagnostics_hint_map
   DiagSection.STORAGE -> R.string.diagnostics_hint_storage
   DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_hint_traffic
   DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_hint_android

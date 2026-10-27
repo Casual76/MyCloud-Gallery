@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-map: nessun permesso e nessun componente (Fase 9, P0; docs/fase9-progetto.md §6.4, D35). Nessuna rete: la decisione su ogni
+      richiesta della mappa e' una funzione pura chiamata da feature-map/.../net/. Mai la posizione del telefono: la mappa mostra dove sono
+      state scattate le foto. Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in docs/sicurezza.md 4-bis, poi
+      quella in releaseManifestPolicy.
+  -->
+
+</manifest>

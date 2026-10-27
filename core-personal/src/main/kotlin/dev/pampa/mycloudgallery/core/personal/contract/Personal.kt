@@ -30,7 +30,10 @@ enum class PersonalKind(override val code: String, val reserved: Boolean = false
   /** Un album manuale: definizione, ordine, copertina, elementi. Soggetto = id dell'album. */
   ALBUM("album"),
 
-  /** L'ultima visione di un ricordo (campo pronto per la Fase 9). */
+  /**
+   * Un ricordo (Fase 9, D10). Soggetto = l'id del ricordo (26 caratteri base32, D9); campi [PersonalFields.MEMORY_SEEN] (giorno locale della
+   * visione) e [PersonalFields.MEMORY_DISMISSED] ("Non mostrare"). Nessuna impronta.
+   */
   MEMORY("memory"),
 
   /**
@@ -55,6 +58,11 @@ object PersonalFields {
   /** Un elemento di un album: `item:<id del media>`. */
   fun albumItem(mediaId: String): String = "item:$mediaId"
 
+  /**
+   * `MEMORY`: l'ultima visione di un ricordo. Dalla Fase 9 (D10, formato §5.5-bis A1) il valore e' il **giorno locale** della visione
+   * (`aaaammgg`, [PersonalValue.Number]), non l'ora del NAS: chi segna "visto" fuori casa non la conosce, e l'ora della modifica la porta gia'
+   * la voce. Nessuna voce `seen` e' stata scritta prima della Fase 9.
+   */
   const val MEMORY_SEEN: String = "seen"
 
   /** Il soggetto di ogni impostazione: la chiave dell'impostazione sta nel campo. */
@@ -188,6 +196,44 @@ object PersonalFields {
    * sono dati personali (D13): `PERSON` resta riservato e non si pubblica mai.
    */
   const val SETTING_FACES: String = "faces"
+
+  // --- Fase 9 (docs/fase9-progetto.md D10, D11, risposta Q9 (a); formato-nas.md §5.5-bis A1, A2). Firme di P0: **campi nuovi dentro i tipi
+  // esistenti** `MEMORY` e `SETTING`, nessun `PersonalKind` nuovo (Phase7ArchitectureTest): un'app della Fase 8 li conserva senza capirli
+  // (`Phase9MemoriesFieldsTest`). Chi li legge e li scrive e' `MemoriesRecords` (contract/MemoriesPersonal.kt); **mai un nome**: le persone
+  // sono il loro id casuale in base32 (`PersonId.base32`), i ricordi l'id deterministico del ricordo (26 caratteri base32, D9).
+
+  /** `MEMORY`: "Non mostrare questo ricordo" (D10), un [PersonalValue.Flag] vero; la lapide e' "Annulla" (entro 10 s). Nessuna impronta. */
+  const val MEMORY_DISMISSED: String = "dismissed"
+
+  /** Prefisso di "Mostra meno" e "Mai nei ricordi" per una persona (D11): vedi [memoriesLessPerson]. */
+  const val SETTING_MEMORIES_LESS: String = "memories_less"
+
+  /** Prefisso di "Mai nei ricordi" per un periodo (D11): vedi [memoriesNeverDays]. */
+  const val SETTING_MEMORIES_NEVER: String = "memories_never"
+
+  /** `SETTING`: "Ricordi con le persone" (Q9 (a)), un [PersonalValue.Flag]; **assente = acceso**. */
+  const val SETTING_MEMORIES_PEOPLE: String = "memories_people"
+
+  /**
+   * Il campo di "Mostra meno"/"Mai nei ricordi" per la persona [personBase32] (l'id della persona in base32, 26 caratteri): valore
+   * `less` o `never` ([PersonalValue.Text]), lapide = scelta tolta. Mai il nome (D11).
+   */
+  fun memoriesLessPerson(personBase32: String): String = "$SETTING_MEMORIES_LESS:person:$personBase32"
+
+  /** L'id in base32 della persona di un campo [memoriesLessPerson], o null se [field] non lo e'. */
+  fun memoriesLessPersonOf(field: String): String? = after(field, "$SETTING_MEMORIES_LESS:person:")
+
+  /** Il campo di "Mai nei ricordi" per i giorni locali da [from] a [to] (`aaaammgg`, compresi): `memories_never:days:<from>-<to>`. */
+  fun memoriesNeverDays(from: Int, to: Int): String = "$SETTING_MEMORIES_NEVER:days:$from-$to"
+
+  /** I due giorni (`aaaammgg`) di un campo [memoriesNeverDays], o null se [field] non lo e' (la validita' dei giorni la decide chi legge). */
+  fun memoriesNeverDaysOf(field: String): Pair<Int, Int>? {
+    val text = after(field, "$SETTING_MEMORIES_NEVER:days:") ?: return null
+    val match = NEVER_DAYS.matchEntire(text) ?: return null
+    return match.groupValues[1].toInt() to match.groupValues[2].toInt()
+  }
+
+  private val NEVER_DAYS = Regex("^([0-9]{8})-([0-9]{8})$")
 
   /** Una sezione delle Raccolte nascosta (valore [PersonalValue.Flag]): `collections_hidden:<codice della sezione>`. */
   fun collectionsHidden(section: String): String = "$SETTING_COLLECTIONS_HIDDEN:$section"

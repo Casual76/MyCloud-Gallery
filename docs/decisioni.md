@@ -10062,3 +10062,308 @@ Da fare: `DeviceMeasures.facesPerSecond` dell'S25 a 8,8 (oggi la stima di P2), i
 raddoppiato. Il piano (§4) chiede la timeline in meno di 1 s nel 90% degli avvii a freddo. Da indagare con le tracce salvate: lavoro
 delle Fasi 4–8 finito sul percorso critico dell'avvio (montaggi dei grafi, Persone e cancellazione creati all'avvio, modelli,
 replica, album). Va corretta prima della chiusura della Fase 8 e prima che la Fase 9 aggiunga altro all'avvio.
+
+## Fase 9 (Ricordi, notifiche, mappa): decisioni del progetto (27/10)
+Fonte: `docs/fase9-progetto.md` (§0.1 decisioni D1–D38, §0.2 edge case nuovi, §9 domande, §11 risposte del 27/10). Le decisioni valgono come
+scritte lì, **corrette dalle risposte del §11** (la nota "Come le ha applicate P0" in fondo al §11); qui il riassunto in una riga ciascuna, con
+il rimando. Le modifiche agli altri documenti (§0.3 del progetto) le ha fatte P0 il 27/10: `docs/formato-nas.md` (§5.5-bis, il tipo `memory`
+e i campi della Fase 9, A1, A2), `docs/modello-dati.md` (§16 nuovo, nota al §14.4), `docs/sicurezza.md` (Sigle, §1, §2, C17, C21, C27, C31,
+C150–C157, §4-bis, L13, L260–L274, §7 "Fase 9", §8), `docs/fase3-progetto.md` (D18), `docs/fase4-progetto.md` (§2.9),
+`docs/fase6-progetto.md` (§2.9), `docs/fase7-progetto.md` (§2.9, D33), `docs/fase8-progetto.md` (§2.11), `docs/regole-attivita.md` (§2,
+§6), `docs/android.md` (Tema 1), `docs/grafica-progetto.md` (§12.15), `docs/luoghi.md` (§10) e `README.md` (moduli e grafo). Il **piano**
+non è nel repository: gli edge case del §0.2, 9.1–9.3 precisate, la proposta 12 con la frequenza di Q4 e il §7 "Limiti" con L260–L274 li
+riporta l'orchestratore.
+
+**Numerazione.** Il progetto proponeva C128–C135 e L232–L245; C130+, C140+, L240+ e L250+ sono prenotati da altri lavori in corso. P0 ha
+usato **C150–C157** e **L260–L274** e ha rinumerato `docs/fase9-progetto.md` in un passo solo: C128→C150, C129→C153, C130→C152, C131→C151,
+C132→C154, C133→C155, C134→C156, C135→C157; L232→L260 … L245→L273 (in ordine); **L274** è nuovo ("Mai" per una persona vale dove Persone è
+attiva). Nessun altro riferimento toccato.
+
+Una fase sola con tre tappe (M1 ricordi, M2 notifiche e sincronizzazione, M3 mappa), ricordi e mappa in parallelo, **quattordici pacchetti**
+(P0–P13; opus per P0 e P1). Prove sul campo F111–F130. Chiusura: revisione di sicurezza e verifica funzionale in parallelo.
+
+**Risposte dell'utente alle domande del §9 (27/10)**
+| # | Domanda | Risposta | Effetto |
+|---|---|---|---|
+| Q1 | La mappa online | (c) **accesa per tutti fin dall'inizio** | niente pagina di consenso; interruttore per dispositivo in Impostazioni → Mappa con una nota breve; cancello di rete intero (un host, nessun cookie, zone scaricate mai online, mini-mappa mai online, casa mai mostrata); `RegionDownloadConfirmation` resta |
+| Q2 | Da dove si scaricano le regioni | (a) **dal telefono**, sul Wi-Fi, da un elenco | nessun pacchetto P14 |
+| Q3 | La musica della presentazione | **nessuna di base**; un brano proprio **o un pacchetto di musica libera** (preferito) | pacchetto installabile come i modelli (catalogo con impronte fissate, scaffale), brani e fonti da approvare prima di scaricare; brano proprio dal selettore di sistema, mai sul NAS |
+| Q4 | Quante notifiche | **2–3 a settimana** di base, nei giorni speciali **fino a una al giorno** | tetto di base 3 in 7 giorni; i giorni speciali (anniversari) passano il tetto settimanale; mai più di una al giorno |
+| Q5 | Schermata di blocco | (a) **solo "Un ricordo per te"** | modalità generica di base |
+| Q6 | Ricordi tristi | (a) **solo i pulsanti** | nessun filtro automatico |
+| Q7 | Misura sui dati veri | (a), quando l'utente vorrà | non blocca la chiusura del codice |
+| Q8 | Scaricamenti | (a) **tutto l'elenco del §8** | la musica libera ha la sua approvazione a parte (Q3) |
+| Q9 | Ricordi con le persone | (a) **sì** | solo persone con un nome, mai nascoste, mai il nome nella notifica |
+
+**Decisioni D1–D38** (rimando: `docs/fase9-progetto.md` §0.1)
+| # | In breve | Stato |
+|---|---|---|
+| D1 | Una fase, tre tappe, ricordi e mappa in parallelo; nulla tocca i media, sul NAS solo voci dei dati personali | Deciso |
+| D2 | `core-memories` e `core-map` JVM puri; viaggi, persone, vettori, pixel e punti da porte legate da `:app`; le due feature non si conoscono | Deciso (P0: moduli e `Phase9ArchitectureTest`) |
+| D3 | Tipi: "N anni fa oggi", viaggi ed eventi (anniversario e riscoperta), persone, mese; al più 2 nuovi al giorno | Deciso (P0: `MemoryKind`, `MemoryKey`, `MemoryRules`, `ReferencePlanner`; P6, P8) |
+| D4 | Di notte dentro `LibraryMaintenanceWorker` (60 s), passo leggero all'ora della notifica (5 s); nessuna attività nuova | Deciso (P0: `RefreshReason`, `RefreshBudgets`; P6, P13) |
+| D5 | Candidati: celle visibili; esclusi screenshot, documenti, animate, ritagli, illeggibili, date stimate, "Mai" | Deciso (P0: `MemoryExclusions`, `CellTable`; P7) |
+| D6 | Punteggio senza capire il contenuto (pesi provvisori), luce dalla ThumbHash, nitidezza dalla miniatura locale | Deciso (P0: `PhotoScore`, `PickWeights`, `ThumbLight`, `MemoryPixels`; P7, P11) |
+| D7 | Doppioni con i vettori (coseno ≥ 0,92), varietà a massima rilevanza marginale, tetti per giorno e per ora; senza vettori firma o 3 minuti | Deciso (P0: `ReferencePicker`, `MemoryVectors`, `MemoryLookAlikes`; P7) |
+| D8 | Ricordi tristi: solo i comandi dell'utente (Q6 (a)); scartati, nascosti e giorni di documenti mai | Deciso (Q6 (a): nessun filtro, regola 11 di `Phase9ArchitectureTest`) |
+| D9 | `MemoryId` = SHA-256 di tipo e chiave in base32 (26); ricordo pubblicato fisso, dopo si può solo togliere | Deciso (P0: `MemoryIds`, `Memory`, `ShelfStoreContract`; P6) |
+| D10 | Viaggiano `memory/<id>/seen` (giorno locale) e `dismissed` e le scelte `memories_*`; scaffale e preferenze restano sul dispositivo | Deciso (P0: campi in `core-personal`, `MemoriesRecords`, `formato-nas.md`; P6) |
+| D11 | "Mostra meno" e "Mai" per persona (`less`/`never`), "Mai" per un periodo (≤ 366 giorni); mai un nome; lapidi | Deciso (P0: `MemoriesPersonalSettings`, `LessTarget`, `LessLevel`; P8) |
+| D12 | `TripMemories.past` in `core-albums/.../trips/` senza coordinate né casa; persone da `MemoryPeople` | Deciso (P0: firma, null-object, fake, suite, `TripPrivacyTest`; P8) |
+| D13 | Pagina del ricordo, presentazione con movimento dai token, musica (Q3), carta finale | Deciso (P0: stati di `feature-memories`, `MusicChoice`; P9) |
+| D14 | Sezione `memories` delle Raccolte: fino a 6 voci, "Tutti i ricordi", vuota con il motivo | Deciso (P0: `MemoriesSectionState`; P9) |
+| D15 | Canale `memories` silenzioso, id 1009, all'ora scelta (19:00), frequenza di Q4, mai più di una al giorno | Deciso (Q4; P0: `NotifyRules`, `ReferenceNotifyPolicy`; P10) |
+| D16 | Schermata di blocco: generica di base (Q5 (a)), "Titolo e foto" a scelta, mai nomi | Deciso (P0: `LockScreenMode`, `NotifyContent`; P10) |
+| D17 | Apertura dalla notifica con una sola azione fissa, senza dati, dopo il blocco app | Deciso (P0: `NotifyRules.OPEN_ACTION`; P10) |
+| D18 | `POST_NOTIFICATIONS` già dichiarato: negato = niente notifiche, "Consenti" da un tocco | Deciso (P0: `NotifyPermission`; P9, P10) |
+| D19 | Ricordo diventato nascosto: la notifica si toglie, lo scaffale si pulisce | Deciso (P0: `Memories.prune`; P10, P13) |
+| D20 | WorkManager `memories-notify`, finestra H..H+2 h, oltre H+3 h si salta; nessun allarme esatto | Deciso (P0: `MemoryNotifyDecisions.slot`; P10) |
+| D21 | MapLibre Native Android solo in `feature-map` | Deciso (P0: recinti in sorgenti e bytecode; P1) |
+| D22 | OpenFreeMap online; stile, glifi e sprite nell'APK | Deciso (P0: `MapHost`; P1, P2) |
+| D23 | Seconda eccezione di rete: OkHttp solo in `feature-map/.../net/`, ogni richiesta decisa da una funzione pura | Deciso (P0: `MapRequestGate`, `ReferenceTilePolicy`, regola 5 di Phase6 a due pacchetti; P1) |
+| D24 | Mappa online per dispositivo: **accesa di base** (Q1 (c)), interruttore e nota breve, "Solo sul Wi-Fi", mai in roaming | Deciso, corretto da Q1 (c) (P0: `FeatureFlags.mapOnline`, `MapOnline`, `MapOnlineChoice`; P4) |
+| D25 | Carta di base offline nell'APK (Natural Earth, città GeoNames) | Deciso (P2) |
+| D26 | Regioni offline da un catalogo, stima prima, solo da un tocco, sul Wi-Fi o con la seconda conferma | Deciso (P0: `MapRegions`, `RegionDownloadConfirmation`, `InMemoryMapRegions`; P5) |
+| D27 | Punti con coordinate effettive dalle celle visibili; query a pagine, schema v6 invariato | Deciso (P0: `MapPoint`, `MapPointValidity`, `MapPointSource`; P3) |
+| D28 | Indice a z-order a mezzi livelli, bolle al più 60, griglia sotto una certa densità | Deciso (P0: `GeoGrid`, `GeoClusterIndex`, `ReferenceClusterIndex`; P3, P4) |
+| D29 | La casa mai nella mappa; prima camera con zoom ≤ 5; mini-mappa solo offline | Deciso (P0: `MapCameraRules`, `ViewerPlaceMap`, regola 6 di `Phase9ArchitectureTest`; P4) |
+| D30 | Sezione Luoghi (`places`) subito dopo Ricordi; "Mostra sulla mappa" e mini-mappa nel viewer | Deciso (P0: `CollectionSections.PLACES`, `ViewerPlaceMap`; P4) |
+| D31 | Nascosti su ogni superficie nuova (righe `MEMORIES`, `NOTIFICATIONS`, `MAP`) | Deciso (P4, P9, P10) |
+| D32 | Privacy fra familiari: tutto di chi lo usa, niente nell'area comune | Deciso |
+| D33 | Log e Diagnostica solo numeri e codici; `DiagSection.MEMORIES` e `MAP`; `toString()` sicuri | Deciso (P0: sezioni, `MemoriesDiag`, `MapDiag`, test dei `toString`) |
+| D34 | UI come stati e contratti, composable solo con i componenti G2 | Deciso (P0: `feature-memories/contract/`, `feature-map/contract/`) |
+| D35 | Nessun permesso o componente nuovo; MapLibre e transitivi le sole dipendenze nuove | Deciso (P0: manifest e regola 10 di `Phase9ArchitectureTest`; P1) |
+| D36 | Giorni locali dello scatto e porta `Today`; durate con l'orologio monotono | Deciso (P0: `MemoryClock`, `NoWallClockSourcesTest`) |
+| D37 | Azzeramento: scaffale, misure, registro, cache e regioni della mappa, ultima camera | Deciso (P13; `docs/modello-dati.md` §16) |
+| D38 | Per la Fase 10: widget dei ricordi, TalkBack, mappa a due pannelli | Rimandato alla Fase 10 |
+
+**Dubbi grafici** (per il filone grafico): sezioni Ricordi e Luoghi, pagina del ricordo, presentazione, fogli "Mostra meno", Impostazioni →
+Ricordi e notifiche, notifica, mappa, regioni offline, mini-mappa del viewer: in `docs/grafica-progetto.md` §12.15.
+
+## Fase 9 P0: fondamenta, contratti, recinti e documenti (27/10)
+
+Il pacchetto P0 della Fase 9 (`docs/fase9-progetto.md` §4.4, riga P0; §1.1–§1.5, §4.3, §5.2, §6, **§11**). Consegna i quattro moduli nuovi, i
+contratti del §1.2 con null-object, fake fedeli ed esecutori di riferimento, le suite di contratto, le firme nei moduli esistenti, i recinti
+(`Phase9ArchitectureTest`, la regola 5 della Fase 6 a due pacchetti, OkHttp e MapLibre nel bytecode in `tools/check.ps1`) e i documenti del
+§0.3. **Nessuna dipendenza esterna nuova** (MapLibre, stili, glifi e carta di base sono di P1 e P2: P0 non ha scaricato nulla), nessun
+permesso o componente Android nuovo; `:app` toccato in una riga sola (`withAlbums` copia il campo nuovo `placeMap` di `ViewerServices`,
+come vuole `ViewerServicesAlbumsTest`; il resto lo lega P13). Branch `fase9/p0`. Commit: `f64284e5` (firme nei moduli esistenti),
+`296774a9` (moduli, contratti, esecutori, suite), `55e0f901` (recinti), `29b8caf0` (la riga di `:app`) e quello dei documenti.
+
+**Moduli nuovi**
+- `core-memories` (`api` common, model, library; `implementation` personal; JVM puro, niente Hilt): `contract/` (`Identity.kt` con
+  `MemoryKind`, `DayRange`, `PersonWindow`, `MemoryKey`, `MemoryId`, `MemoryIds`; `Memory.kt` con `MemoryTitle` come dati, `Memory` da 3 a 40
+  elementi, `MemoryCard`, `ShelfView`, `MemoryView`; `Memories.kt` con il servizio, `RefreshReason`, `RefreshBudgets` 60/5 s, `DropReason`,
+  `LessLevel`, `LessTarget`, `MemoriesStatus`; `Ports.kt` con `TripDigestView`, `MemoryTrips`, `MemoryPeople`, `MemoryVectors`,
+  `MemoryLookAlikes`, `MemoryPixels`, `MemoryAlbumSignals`, `MemoryCutouts`, `MemoryClips`, `MemoryClock`; `Planning.kt` con `CellTable`,
+  `MemoryExclusions`, `PickSpec`, `MemoryRules`, `MemoryPriority`, `PlanInput`, `MemoryCandidate`, `MemoryPlanner`, `ThumbLight`;
+  `Picking.kt` con `CandidateCell`, `PickSignals`, `PickWeights`, `PhotoScore`, `PickResult`, `PhotoPicker`; `Shelf.kt` con `ShelfFile`,
+  `ShelfRead`, `MemoryShelfStore`; `Notify.kt` con `NotifyFrequency`, `LockScreenMode`, `NotifyPrefs`, `NotifyLedger`, `NotifyRules`,
+  `NotifyTexts`, `NotifyContent`, `SlotDecision`, `MemoryNotifyDecisions`, `NotifySettings`, `NotifyLedgerStore`; `Music.kt`;
+  `MemoriesDiag.kt`), `noop/`, `testing/`, `NoNetworkSourcesTest`, `NoWallClockSourcesTest`. I pacchetti interni (`plan/`, `pick/`,
+  `shelf/`, `settings/`, `notify/`) li creano P6, P7, P8 e P10.
+- `feature-memories` (`api` core-memories, core-designsystem; `implementation` library, imaging, common, model; Compose, Hilt, Roborazzi
+  come `feature-people`): `contract/MemoriesScreens.kt` (`MemoriesSectionState`, `MemoryPageState`, `MemoriesListState`, `PlayerState` con
+  il precaricamento di 2, `PlayerMusic`, `LessSheetState`, `NotifyPermission`, `MemoriesSettingsState`) e `contract/MemoriesActions.kt`,
+  `noop/`, `testing/MemoriesSamples` (un esempio per caso), test di guardia. Vede `LessLevel` di `core-memories`, mai `core-personal`.
+- `core-map` (`api` common, model; JVM puro): `contract/` (`Geo.kt` con `GeoE6`, `GeoBox` con l'antimeridiano, `MapPoint`,
+  `MapPointValidity`, `MapCoverScore`, `CellKey`, `GeoGrid` a z-order 2^24 per lato e mezzi livelli; `Points.kt` con `MapPointSource`,
+  `GeoCluster`, `GeoClusterIndex`, `GeoIndexState`, `MapPoints`; `Policy.kt` con `MapRequestFacts`, `MapNetState`, `RegionDownloadScope`,
+  `RefuseReason`, `MapVerdict`, `MapRequestGate`, `MapHost`, `MapResponseRules`; `Tiles.kt`; `Regions.kt` con `RegionSpec`, `RegionBoxes`,
+  `RegionEstimate`, `RegionState`, `RegionDownloadConfirmation` (valida 10 minuti), `DownloadStart`, `RegionLimits`, `PlaceCenters`,
+  `MapRegions`; `Settings.kt` con `MapOnline`, `MapPrivacyNote`, `MapOnlineChoice`, `CameraSpot`, `MapCameraRules`, `MapSettings`;
+  `Ports.kt` con `MapNetworkState`, `MapTraffic`; `MapDiag.kt`), `noop/`, `testing/`, test di guardia. I pacchetti `points/`, `policy/`,
+  `regions/` li creano P1, P3 e P5.
+- `feature-map` (`api` core-map, core-designsystem; `implementation` library, imaging, places, common, model, DataStore; Compose, Hilt):
+  `contract/MapScreens.kt` (`MapScreenState`, `MapNotice`, `MapBubble`, `ZoneGridState`, `PlacesSectionState` al più 8, `MapPrivacyState`,
+  `RegionsState`) e `contract/MapActions.kt`, `noop/`, `testing/MapSamples`, test di guardia; `NoNetworkSourcesTest` con la sola eccezione
+  `feature/map/net/` (vuoto: lo riempie P1). MapLibre non c'è ancora (P1).
+- `settings.gradle` e `galleryModules`; `tools/check.ps1` li conta da solo.
+
+**Firme nei moduli esistenti** (riga P0, commit `f64284e5`)
+- `core-common`: `DiagSection.MEMORIES` e `DiagSection.MAP`; `FeatureFlags.mapOnline` (costante accesa in release e in debug; in debug
+  `forBuild(mapOnline = false)` la può solo spegnere). `feature-diagnostics`: righe delle sezioni, `MEMORY_STATE`, `MAP_STATE` nel catalogo.
+- `core-personal`: campi di `MEMORY` (`seen` col giorno locale `aaaammgg`, `dismissed`) e di `SETTING` (`memories_less`, `memories_never`,
+  `memories_people`) con le funzioni di chiave; `contract/MemoriesPersonal.kt` (`MemoryLessLevel`, `MemoryDays` fino a 366 giorni,
+  `MemoriesChoices`, `MemoriesRecords` con la sola regola di lettura, la porta `MemoriesPersonalSettings`), `NoMemoriesPersonalSettings`,
+  `InMemoryMemoriesPersonalSettings` con la suite; `PersonalMemories` col giorno (`markSeen(id, day)` solo in avanti, `dismiss`).
+  `Phase9MemoriesFieldsTest`: il codec della Fase 8 legge i campi nuovi senza scartare il segmento.
+- `core-albums`: `contract/TripMemories.kt` (`TripDigest` senza coordinate né casa, l'ora d'inizio a quarti d'ora solo per gli eventi;
+  `TripMemories.past`), `NoTripMemories`, `InMemoryTripMemories` con la suite; `TripPrivacyTest` ammette `past` e prova per riflessione che
+  `TripDigest` ha esattamente id, tipo, giorni, etichetta, luoghi, membri, album e quarto d'ora.
+- `feature-viewer`: `place/ViewerPlaceMap.kt` (`ViewerMapPlace` `Loading`/`NoPosition`/`Located(miniMap)`, `place(media, sizePx)`,
+  `show(media)`), `ViewerServices.placeMap = null`, `FakeViewerPlaceMap`.
+- `feature-library`: `CollectionSections.PLACES` subito dopo `MEMORIES`, riservata come lei; con un ordine già salvato va in coda.
+
+**Adeguamento alle risposte del §11** (scritto anche in fondo al §11 del progetto)
+- **Q1 (c), mappa online accesa per tutti**: `FeatureFlags.mapOnline` acceso; `MapOnline.On(byDefault = true)` di partenza
+  (`InMemoryMapSettings`, suite `MapSettingsContract`); niente pagina di consenso: `MapOnlineConsent` è diventato **`MapOnlineChoice`**
+  (versione della nota breve e ora), che serve solo a **riaccendere** dopo averla spenta, da un tocco sull'interruttore di Impostazioni →
+  Mappa accanto alla nota `MapPrivacyNote`; si costruisce solo in `feature-map/.../privacy/MapPrivacy*.kt`. Il cancello resta intero
+  (`MapRequestGate`: un host, `GET`, percorsi, livello ≤ 14, niente cookie né redirect, zone scaricate mai online, mappa spenta = tutto
+  rifiutato); la mini-mappa delle info resta solo offline; la casa non compare (regola 6). `RegionDownloadConfirmation` resta.
+- **Q3, musica come pacchetto installabile**: `MusicChoice` (`None` di base, `OwnSong` dal selettore di sistema, `FreeTrack`),
+  `MusicPackCatalog` con `MusicTrackPin` (licenza CC0 o pubblico dominio, peso ≤ 20 MB, SHA-256 fissato) e **nessun brano** (`TRACKS`
+  vuoto finché l'utente non approva fonti e brani), `MusicLibrary` (stato per brano come lo scaffale dei modelli, `install` da un tocco),
+  `MusicSettings`. P0 non ha scaricato nulla.
+- **Q4, 2–3 a settimana, fino a una al giorno nei giorni speciali**: `NotifyFrequency.FEW_PER_WEEK` di base; `NotifyRules.WEEKLY_CAP` = 3
+  in 7 giorni; `isSpecial` (anniversario di un viaggio o di un evento) passa il tetto settimanale, mai quello giornaliero; il registro
+  (`NotifyLedger`, 14 giorni) si scrive prima di pubblicare. `ReferenceNotifyPolicy` e `NotifyPolicyContract` lo provano.
+- **Q5 (a)**: `LockScreenMode.GENERIC` di base; il contenuto generico non porta niente del ricordo (suite).
+- **Q6 (a), nessun filtro automatico**: nessun segnale "triste" nei contratti (`PickSignals` ha vettori, somiglianze, pixel, album,
+  persone e scelte; nessuna frase prototipo); la regola 11 di `Phase9ArchitectureTest` lo tiene. Restano i comandi (C153).
+- **Q9 (a)**: `MemoriesChoices.peopleMemories` acceso di base; `MemoryPeople.named()` dà solo persone con un nome; **L274** nuovo.
+
+**Contratti: scostamenti dalle firme indicative del §1.2** (i pacchetti dopo partono da quelle vere)
+- `MapOnlineConsent` → **`MapOnlineChoice`** e `MapSettings.enable(choice)` (Q1 (c), sopra); `MapOnline` ha `On(byDefault)`, `Off`,
+  `Unavailable` (flag di build spento).
+- `TilePolicy` non è un `object` del contratto: il contratto è **`fun interface MapRequestGate`** (`decide(facts, state)`), con
+  `ReferenceTilePolicy` in `testing/` (che sa anche leggere una tessera dal percorso) e la suite `TilePolicyContract`; `TilePolicy` vera la
+  scrive P1 in `core-map/.../policy/` e deve passare la suite. `MapNetState` porta lo stato (mappa accesa, rete, "Solo sul Wi-Fi", versione
+  corrente, zone coperte da `RegionDownloadScope`, scaricamento confermato); `MapHost` (host, versione, tessera stabile, percorso
+  versionato) e `MapResponseRules` (risposte ammesse) sono costanti del contratto.
+- `GeoClusterIndex` è un'**interfaccia** (`clusters(view, zoom, cellPx)`, `members(key, limit)`, `boundsOfAll()`), con
+  `ReferenceClusterIndex` a forza bruta (il confronto di P3); `MapPoints` è il servizio (stato dell'indice, ricostruzione dopo 2 s di calma,
+  pagine da 2.000, al più 60 bolle); `GeoGrid` fissa Morton, livelli e viste come funzioni pure.
+- `MemoryShelfStore.read()` risponde **`ShelfRead`** (`Missing`, `Corrupt`, `Ready`) invece di `ShelfFile?`, così un file rovinato si
+  distingue da un file che non c'è (`MEMORY_SHELF_RESET`); in più `clear()` per l'azzeramento (D37).
+- `Memories` ha in più **`prune()`** (la sola pulizia dello scaffale, D19: P13 la lega al cambio dei nascosti), `dismiss(id, dismissed)`
+  con "Annulla", `setLess(target, level?)` con `LessTarget` (persona o periodo), `lessChoices`, `peopleMemories`/`setPeopleMemories` (Q9).
+- `MemoryNotifyPolicy` non è un `object`: il contratto è **`interface MemoryNotifyDecisions`** (`nextSlot`, `slot` con `SlotDecision`,
+  `choose`, `content`), con `ReferenceNotifyPolicy` e la suite; quella vera è di P10 in `notify/`.
+- `TripDigest` ha in più **`startQuarter`** (l'ora d'inizio a quarti d'ora, solo per gli eventi: serve alla chiave `event:` di D9); in
+  `core-memories` la vista è `TripDigestView` con `key()`.
+- Porte in più per le regole di D5–D7: `MemoryLookAlikes` (firma visiva quando mancano i vettori), `MemoryAlbumSignals` (+1 negli album
+  manuali), `MemoryCutouts` (cartella `Ritagli/`), `MemoryClips` (spezzoni ≤ 8 s per la presentazione), `MemoryClock` (giorno, ora locale,
+  monotono). `MemoryPeople` ha anche `peopleIn(ids)`, `resolve` (alias) e `label`.
+- I dati personali dei ricordi passano da una porta di **`core-personal`**, `MemoriesPersonalSettings` (`MemoriesRecords` è l'unica regola
+  di lettura): `core-memories` non nomina mai `PersonalKey`, `PersonalKind` o `PersonalStore` (regola 2).
+- `ViewerPlaceMap.miniMap(...)` → **`place(media, sizePx): Flow<ViewerMapPlace>`** (`Loading`, `NoPosition`, `Located(miniMap)`): la riga
+  sparisce senza posizione e aspetta mentre carica; `show(media)` apre la mappa.
+
+**Esecutori di riferimento e fake fedeli** (in `testing/`, src/main: mai nella release, lo controlla `tools/check.ps1`)
+- `core-memories`: `ReferencePlanner` (i quattro tipi con le soglie di D3, 29 febbraio, riscoperta, periodi "Mai"), `ReferencePicker`
+  (esclusioni, punteggio, doppioni con vettori o firma o 3 minuti, varietà a massima rilevanza marginale, tetti per giorno e per ora,
+  WhatsApp al più un quarto e mai copertina), `InMemoryShelfStore` (morte a metà scrittura, file rovinato), `InMemoryMemories` (il giro
+  intero sopra planner, picker, scaffale, scelte e porte), `ReferenceNotifyPolicy`, `SyntheticMemoryLibrary` (istantanea e celle sintetiche),
+  fake di ogni porta e delle preferenze.
+- `core-map`: `ReferenceTilePolicy`, `ReferenceClusterIndex`, `InMemoryMapRegions` (con tre regioni d'esempio), `InMemoryMapSettings`,
+  `FakeMapNetworkState`, `FakeMapPointSource`, `SyntheticMapPoints`, `RecordingMapTraffic`, `FakePlaceCenters`.
+- Negli altri moduli: `InMemoryMemoriesPersonalSettings` (con `MemoriesRegister`: due dispositivi, in linea e no), `InMemoryTripMemories`,
+  `FakeViewerPlaceMap`; esempi `MemoriesSamples` e `MapSamples`.
+
+**Suite di contratto** (le implementazioni vere le estendono): `PlannerContract` (13 prove), `PickerContract` (12), `ShelfStoreContract`
+(6), `MemoriesContract` (11: scaffale vuoto, al più due nuovi più il mese, solo togliere dopo la pubblicazione, nascosti mai, visto e
+scartato ovunque, "Mai" per periodo e per persona, uscita dopo 30 giorni, file rovinato e morte a metà, guasto dei visibili che non svuota,
+anniversario con l'album), `NotifyPolicyContract` (10, con la proprietà della frequenza di serie), `MemoryPeopleContract` (3);
+`TilePolicyContract` (10, con la proprietà su 20.000 richieste a caso: nessuna esce fuori dalle regole), `ClusterIndexContract` (6,
+antimeridiano e poli), `MapRegionsContract` (7), `MapSettingsContract` (4: accesa di serie, spegnere e riaccendere, flag di build);
+`MemoriesPersonalSettingsContract` (11) in `core-personal`; `TripMemoriesContract` (5) in `core-albums`. Tutti gli esecutori di
+riferimento le passano (`core-memories`: 67 prove in 10 classi; `core-map`: 39 in 8; `feature-memories`: 5; `feature-map`: 4).
+
+**Cosa trovano pronto i pacchetti P1–P13, e cosa devono collegare**
+- **P1**: `MapRequestGate`, `MapNetState`, `MapRequestFacts`, `MapVerdict`, `RefuseReason`, `MapHost`, `MapResponseRules`,
+  `ReferenceTilePolicy` e `TilePolicyContract`; `MapTraffic`; il pacchetto `feature-map/.../net/` già ammesso (regola 5 della Fase 6,
+  `NoNetworkSourcesTest`, `Phase9ArchitectureTest` regola 4, passo del bytecode in `tools/check.ps1`). Da fare: MapLibre e transitivi in
+  `versions-app.gradle` e `verification-metadata.xml`, `TilePolicy` in `policy/` (deve passare la suite), `MapTileHttp` e l'intercettore,
+  `MapLibreInit`, i controlli di 16 KB e del manifest; il passo del bytecode avrà allora un controllo positivo (oggi passa a vuoto).
+- **P2**: `MapHost.TILES` e l'URL stabile; `PlacesAttribution` da estendere (`docs/luoghi.md` §10). Da fare: carta di base, stili, glifi,
+  sprite, licenze in `feature-map/src/main/assets/map/`.
+- **P3**: `MapPoint`, `MapPointValidity`, `MapCoverScore`, `GeoGrid`, `CellKey`, `GeoClusterIndex`, `MapPoints`, `MapPointSource`,
+  `ReferenceClusterIndex` e `ClusterIndexContract`, `SyntheticMapPoints`. Da fare: `MapPointsQueries` in `core-database` e l'indice vero in
+  `points/` (deve passare la suite e i tempi del §4.4).
+- **P4**: gli stati di `feature-map/contract/`, `MapActions`, `MapSettings` con la suite e `InMemoryMapSettings`, `MapOnlineChoice` (solo
+  da `privacy/`), `MapCameraRules`, `ViewerPlaceMap` con `ViewerServices.placeMap`, `CollectionSections.PLACES`, `DiagSection.MAP`. Da
+  fare: le schermate, `MapSettings` su DataStore, l'interruttore e la nota di Q1 (c), la riga del viewer, le righe `MAP` dei Nascosti.
+- **P5**: `MapRegions`, `RegionSpec`, `RegionBoxes`, `RegionEstimate`, `RegionDownloadConfirmation` (solo da `regions/RegionDownload*.kt`),
+  `DownloadStart`, `RegionLimits`, `PlaceCenters`, `InMemoryMapRegions` e `MapRegionsContract`, `RegionDownloadScope` per il cancello.
+  Da fare: `core-map/.../regions/` e il foglio con `OfflineManager`.
+- **P6**: `Memories`, `ShelfFile`, `MemoryShelfStore` con la suite, `MemoryRules`, `MemoryIds`, `ReferencePlanner` e `PlannerContract`,
+  `MemoriesContract`, `MemoriesPersonalSettings` con la suite, `PersonalMemories` col giorno. Da fare: `plan/`, `shelf/` (`FileShelfStore`),
+  `settings/` e `SyncedMemoriesSettings` in `core-personal/.../settings/` (deve passare `MemoriesPersonalSettingsContract`).
+- **P7**: `PhotoPicker`, `PickSpec`, `PickSignals`, `PhotoScore`, `PickWeights`, `ThumbLight`, `MemoryExclusions`, le porte dei segnali,
+  `ReferencePicker` e `PickerContract`. Da fare: `pick/` e la misura dei pixel come funzione pura. **Niente filtro di Q6** (Q6 (a)).
+- **P8**: `TripMemories` con la suite e `InMemoryTripMemories`, `TripDigestView`, `MemoryTrips`, `MemoryPeople` con la suite,
+  `MemoryLessLevel`, `MemoryDays`, `LessTarget`. Da fare: `TripMemories` sopra `TripReader`, il generatore `PERSON`, `settings/less/` e le
+  lapidi (L274 per le persone dove i volti sono spenti).
+- **P9**: gli stati di `feature-memories/contract/`, `MemoriesActions`, `PlayerState`, `MusicChoice`, `MusicLibrary`, `MusicSettings`,
+  `MusicPackCatalog` (vuoto), `MemoriesSamples`, `DiagSection.MEMORIES`. Da fare: schermate, presentazione, fogli, la voce di
+  Impostazioni, le righe `MEMORIES` dei Nascosti; i brani del pacchetto solo dopo l'approvazione dell'utente (Q3).
+- **P10**: `MemoryNotifyDecisions`, `NotifyRules` (canale, id 1009, azione `OPEN_ACTION`, finestra, tetto di Q4), `NotifyPrefs`,
+  `NotifyLedger`, `NotifyTexts`, `NotifyContent`, `NotifySettings`, `NotifyLedgerStore`, `ReferenceNotifyPolicy` e `NotifyPolicyContract`,
+  `NotifySkip`. Da fare: `notify/`, il canale, `MemoryNotifier`, `MemoryNotifyWorker`, l'azione in `MainActivity`, le righe
+  `NOTIFICATIONS` dei Nascosti.
+- **P11**: `ReferencePlanner`, `ReferencePicker`, `PickWeights` (provvisori), `SyntheticMemoryLibrary`; il passo di `tools/check.ps1`
+  che cerca lo strumento di valutazione (`debugtools/eval/memories`, `MCGMEM01`...) nel dex di release.
+- **P12**: esecutori di riferimento e fake per i banchi; `MapPoints` e `GeoGrid` per i punti seminati.
+- **P13**: i null-object di ogni porta (i default finché non lega i pezzi veri), `FeatureFlags.mapOnline`, `DiagSection.MEMORIES` e `MAP`
+  con `MEMORY_STATE` e `MAP_STATE`, `Memories.prune` per il segnale dei nascosti, `MemoryShelfStore.clear` per l'azzeramento,
+  `ViewerServices.placeMap`, `RefreshBudgets` per `LibraryMaintenanceWorker`.
+
+**Test d'architettura** (`Phase9ArchitectureTest`, 12 prove: le undici regole e il controllo che i test leggano davvero i moduli) **e la
+prova che falliscono**, reintroducendo le violazioni nel repository e togliendole subito dopo (cinque giri,
+`:core-common:testDebugUnitTest --tests "*ArchitectureTest"`, il primo anche con `TripPrivacyTest` di `core-albums`; script e log sotto
+`build/p0/`, fuori dal repository):
+1. *Giro 1*: `android.util.Log` in `core-memories/.../plan/` → `iDueCoreSonoJvmPuri`; `core.faces` nominato in `core-memories/.../pick/` →
+   `coreMemoriesNonVedeCioCheNonDeve`; `core.albums` nominato in `core-map/.../points/` → `coreMapNonVedeCioCheNonDeve`; `okhttp3` in
+   `feature-map/.../map/` → `mapLibreEOkHttpSoloDoveAmmessi` e `Phase6ArchitectureTest.ilCodiceHttpsStaSoloNelPacchettoAmmesso`; un
+   `MapOnlineChoice` costruito in `feature-map/.../contract/` → `leDueConfermeSiCostruisconoSoloNelLoroFile`; un campo `Double` in
+   `TripDigest` → `niente_CoordinateNeCasa` e `TripPrivacyTest.laPortaDeiRicordiNonHaCoordinateNeCasa`; `core.memories.plan` nominato da
+   `feature-memories` → `featureMemoriesECieca`; un `sadFilter` in `feature-memories` → `nessunFiltroTristeEIPassiDelCheck`; `core.network`
+   nominato da `feature-map` → `featureMapECieca`; `feature-viewer` che dipende da `core-map` → `ilViewerNonVedeMappaNeRicordi` e
+   `iModuliDellaFase9RispettanoIlGrafoELeRegole` ("chi dipende da core-map"). Rosse 13 prove: le undici regole, la regola 5 della Fase 6 e
+   `TripPrivacyTest`.
+2. *Giro 2*: `androidx` in `core-map` → regola 1; `core.search` → regola 2; `org.maplibre` in `feature-library` → regola 4 ("MapLibre
+   nominato fuori"); una `RegionDownloadConfirmation` costruita in `feature-map/.../map/` → regola 5; `GeoPoint` nella firma di
+   `TripMemories` → regola 6; `PersonalKind.REMINDER` → `Phase7ArchitectureTest.nessunPersonalKindNuovo`; `"Lorg/maplibre/"` tolto da
+   `tools/check.ps1` → regola 11; l'eccezione di `NoNetworkSourcesTest` di `feature-map` allargata a `map/` → regola 5 della Fase 6;
+   `feature-memories` che dipende da `core-personal` → regole 7 e 10; `core.map.points` nominato da `feature-map` → regola 8; `core-map` che
+   dipende da `core-network` → regola 3; `feature-library` che dipende da `feature-memories` → `Phase4ArchitectureTest.iFeatureNonSiConosconoFraLoro`.
+   Rosse 13 prove.
+3. *Giro 3*: `core.albums`, `core.ai` e `java.net` in tre file di `core-memories` → regola 2, che li elenca tutti e tre; `HomeEstimateView`
+   in `core-map` → regola 6 ("core-map nomina la casa") e `Phase7ArchitectureTest.homeEstimateSoloInTrips`; una classe pubblica in
+   `feature-map/.../net/` → regola 4 e regola 5 della Fase 6 ("dichiarazioni non internal"); `ACCESS_FINE_LOCATION` nel manifest di
+   `core-map` → regola 10 ("dichiara permessi o componenti").
+4. *Giro 4*: una `latitude` in `core-memories` → regola 2 ("maneggia coordinate"); il pacchetto `feature.map.net` nominato da
+   `feature-memories` → regola 4 ("nominato da fuori") e regola 7.
+5. *Giro 5*: `PersonalKey` in `core-memories/.../settings/` → regola 2 ("scrive voci dei dati personali da se'"); MapLibre nel
+   `build.gradle` di `feature-memories` → regola 4 ("build.gradle con MapLibre o OkHttp").
+Dopo ogni giro le modifiche sono state tolte (`git checkout` dei file toccati, file nuovi cancellati) e l'albero è tornato pulito; i test
+sono tornati verdi (`tools/check.ps1` qui sotto). `ilControlloVedeIModuliDellaFase9` è il controllo positivo (i test leggono davvero i
+moduli nuovi): non ha una violazione da reintrodurre. I passi nuovi del bytecode in `tools/check.ps1` (OkHttp e MapLibre, strumento di
+valutazione) oggi passano a vuoto: MapLibre arriva con P1, lo strumento con P11; una violazione nel bytecode richiederebbe una release
+costruita apposta.
+
+**`tools/check.ps1 -NoDaemon`**: **verde** (27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, dopo i cinque giri e con i documenti):
+assembleDebug, assembleRelease, galleryTest e galleryLint in 44 minuti; 15.739 test in 43 moduli, nessuno a zero (`core-memories` 67,
+`feature-memories` 5, `core-map` 39, `feature-map` 4); tutti i passi della release verdi, compreso il nuovo "OkHttp e MapLibre al loro
+posto nel bytecode". Il primo giro era rosso per due prove: `ViewerServicesAlbumsTest` di `:app` (il campo nuovo `placeMap` non copiato da
+`withAlbums`: corretto, commit `29b8caf0`) e `SmartAlbumsLiveTest` di `core-albums` (attesa scaduta solo sotto carico: da sola passa, e il
+secondo giro intero è verde). `tools/check.ps1` è cambiato poco: il passo 7h nuovo (OkHttp solo da `feature/map/net/` e da MapLibre,
+MapLibre solo da `feature/map/`), i nomi dello strumento di valutazione dei ricordi fra i resti di debug vietati nella release
+(`debugtools/eval/memories`, `MemoriesEval*`, `ricordi.mcgmem`, `MCGMEM01`) e `feature/map/net/` fra i chiamanti HTTPS ammessi del passo 7e.
+I moduli nuovi li conta da solo (legge `settings.gradle`).
+
+**Modifiche ai contratti che i pacchetti dopo potrebbero chiedere** (le scoperte scrivendo fake ed esecutori di riferimento)
+- P1: `MapRequestFacts` porta metodo, schema, host, porta, percorso, query, `userInfo` e frammento, **non gli header**: D23 li vuole
+  ripuliti dall'intercettore; se il cancello deve anche decidere su un header (un `Range`, un cookie rimasto), P1 lo aggiunge alla
+  funzione pura e alla suite, non lo decide fuori.
+- P3: `MapPoint.placeId` è un `Int` (0 = nessun luogo); se il dizionario dei luoghi usa un tipo suo, si allinea. `GeoGrid.levelFor` usa
+  512 px a tessera: da confermare con lo stile di P2.
+- P5: `RegionEstimate` è solo tessere e byte; la tabella di densità per tipo di zona sta dentro l'implementazione.
+- P6: `ShelfFile` non porta i giorni "Mai" già applicati: alla lettura lo scaffale si ripulisce con le scelte correnti (`prune`). Se servisse
+  ricordare perché un ricordo è uscito, un campo in più.
+- P8: `PersonDigest` non porta la finestra (anno o ultimi mesi): la sceglie il generatore da `MemoryRules`; `MemoryPeople.label` dà il nome
+  al momento e non va mai salvato.
+- P10: `NotifyRules.isSpecial` guarda il tipo (viaggio o evento) e gli anni del titolo; se i "giorni importanti" di Q4 diventano anche
+  altri, si allarga lì e nella suite.
+- P13: `InMemoryMemories` vive in `core-memories/testing/` ma usa `InMemoryMemoriesPersonalSettings` di `core-personal`: chi la usa nei
+  test aggiunge `testImplementation project(':core-personal')` (come `feature-memories`).
+
+**Punti aperti**
+- Le righe `MEMORIES`, `NOTIFICATIONS` e `MAP` di `HiddenSurfaces` le aggiungono P9, P10 e P4 con le superfici vere (D31): P0 non tocca il
+  registro.
+- Il pacchetto della musica libera (Q3) è vuoto: le fonti e i brani si fanno approvare all'utente prima di scaricarli.
+- I passi del bytecode di `tools/check.ps1` per OkHttp e MapLibre avranno un controllo positivo solo quando P1 porta MapLibre.
+- **L274** è nuovo (la scelta "Mai" per una persona non si applica dove Persone è spenta o esclusa).
+- La pagina della nota breve della mappa (Q1 (c)) e il testo esatto sono di P4; D24 del progetto vale come corretta dal §11.

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sezione «Ricordi» (Fase 9, docs/fase9-progetto.md §2.12, D33). Titolo e spiegazione della sezione e voce di stato (P0); le voci e i
+       codici dei ricordi e delle notifiche (MEMORY_*, NOTIFY_*) li aggiunge P13. Solo numeri e codici nelle esportazioni: mai titoli,
+       luoghi, date o id dei ricordi, nomi o id di persone, l'ora scelta per la notifica. -->
+  <string name="diagnostics_section_memories">Ricordi</string>
+  <string name="diagnostics_hint_memories">I ricordi preparati su questo dispositivo: quanti sono, quando sono stati preparati l\'ultima volta e perché una notifica non è arrivata.</string>
+  <string name="diag_memory_state_title">Stato dei ricordi</string>
+  <string name="diag_memory_state_guide">Quanti ricordi ci sono, quanti sono nuovi e quando sono stati preparati. Titoli, luoghi e date dei ricordi non escono mai dal telefono.</string>
+</resources>

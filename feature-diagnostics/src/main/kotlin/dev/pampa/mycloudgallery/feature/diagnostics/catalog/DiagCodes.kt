@@ -356,6 +356,14 @@ object DiagCodes {
   @JvmField val PRE_PUBLISH_FAILED = DiagCode("PRE_PUBLISH_FAILED")
   @JvmField val FACES_KILLED_MEMORY = DiagCode("FACES_KILLED_MEMORY", setOf("E-A16"))
 
+  // --- Ricordi e mappa (Fase 9) --------------------------------------------------------------------------------------
+  // P0 aggiunge solo i due codici di stato che tengono vive le sezioni MEMORIES e MAP (un test vuole almeno una voce per sezione), come
+  // PEOPLE_STATE nella Fase 8. Gli altri codici del §2.12 di docs/fase9-progetto.md (MEMORY_*, NOTIFY_*, MAP_*: `MemoriesDiag` di
+  // core-memories e `MapDiag` di core-map) li aggiunge P13, con le chiavi nell'elenco chiuso dell'esportazione. Mai titoli, luoghi, date,
+  // id, nomi, coordinate, riquadri, tessere, nomi delle regioni o l'ora scelta (D33).
+  @JvmField val MEMORY_STATE = DiagCode("MEMORY_STATE")
+  @JvmField val MAP_STATE = DiagCode("MAP_STATE")
+
   // P11: i codici del §2.6 (stessi id e stessi edge case di `ModelDiag`, `AiDiag`, `AiIndexDiag` e `SearchDiag`, scritti come letterali
   // perche' questo modulo non vede core-models, core-ai, core-index ne' core-search). `Phase6DiagCatalogTest` di :app verifica che ogni
   // codice dei contratti sia qui, con lo stesso id e gli stessi edge case.

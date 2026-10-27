@@ -66,11 +66,14 @@ class TripPrivacyTest {
   fun iMembriPubbliciSonoUnElencoChiusoESenzaCoordinate() {
     // R16: `homeClearance` e' l'unico membro nuovo: restituisce un oracolo che riceve punti e risponde si'/no (vedi `homeClearanceRispondeSoloSiENo`).
     val allowed = setOf("getProposals", "detect", "accept", "dismiss", "load", "refresh", "isAway", "distanceKm", "homeClearance")
+    // Fase 9 (P0, D12): il solo membro nuovo ammesso e' `past` della porta dei ricordi (`TripMemories`), che P8 scrive sopra `TripReader`.
+    // Ammesso, non ancora obbligatorio: la sua firma e' controllata da `laPortaDeiRicordiNonHaCoordinateNeCasa`.
+    val allowedLater = setOf("past")
     val banned = listOf("GeoPoint", "HomeEstimate", "Anchor", "GeoIndex", "HomeTimeline", "TripArea", "Detection", "DetectedItem", "StoredProposal", "double", "Double", "float", "Pair", "Triple")
     for (type in listOf(CatalogTrips::class.java, AwayFromHome::class.java)) {
       val methods = type.declaredMethods.filter { Modifier.isPublic(it.modifiers) && !it.isSynthetic && !it.isBridge }
       // I nomi dei metodi con tipi inline (TripId, Duration) hanno il suffisso del compilatore: `detect-VtjQ1oo`.
-      val extra = methods.map { it.name.substringBefore('-') }.toSet() - allowed
+      val extra = methods.map { it.name.substringBefore('-') }.toSet() - allowed - allowedLater
       assertWithMessage("membri pubblici nuovi in ${type.simpleName}").that(extra).isEmpty()
       for (m in methods) {
         val signature = m.genericReturnType.typeName + " " + m.genericParameterTypes.joinToString { it.typeName }
@@ -83,6 +86,31 @@ class TripPrivacyTest {
       assertThat(type.declaredFields.filter { Modifier.isPublic(it.modifiers) }).isEmpty()
     }
     assertThat(allowed - CatalogTrips::class.java.declaredMethods.map { it.name.substringBefore('-') }.toSet()).isEmpty()
+  }
+
+  /**
+   * Fase 9 (P0, D12, C31): la porta dei viaggi per i ricordi e il suo dato non portano coordinate ne' casa. Per riflessione: i metodi di
+   * `TripMemories` e i campi e i getter di `TripDigest` non nominano tipi con coordinate, numeri decimali o la casa; i campi sono un elenco
+   * chiuso. Aggiungere un campo vuol dire passare da qui.
+   */
+  @Test
+  fun laPortaDeiRicordiNonHaCoordinateNeCasa() {
+    val banned = listOf("GeoPoint", "GeoE", "HomeEstimate", "HomeClearance", "AwayFromHome", "Anchor", "double", "Double", "float", "Float", "BigDecimal")
+    val port = dev.pampa.mycloudgallery.core.albums.contract.TripMemories::class.java
+    val portMethods = port.declaredMethods.filter { !it.isSynthetic }
+    assertThat(portMethods.map { it.name.substringBefore('-') }).containsExactly("past")
+    for (m in portMethods) {
+      val signature = m.genericReturnType.typeName + " " + m.genericParameterTypes.joinToString { it.typeName }
+      for (b in banned) assertWithMessage("TripMemories.${m.name}: $signature").that(signature).doesNotContain(b)
+    }
+    val digest = dev.pampa.mycloudgallery.core.albums.contract.TripDigest::class.java
+    val fields = digest.declaredFields.filter { !java.lang.reflect.Modifier.isStatic(it.modifiers) }
+    assertThat(fields.map { it.name }).containsExactly("id", "kind", "days", "label", "placeIds", "members", "album", "startQuarter")
+    for (f in fields) for (b in banned) assertWithMessage("TripDigest.${f.name}: ${f.genericType.typeName}").that(f.genericType.typeName).doesNotContain(b)
+    for (m in digest.declaredMethods.filter { Modifier.isPublic(it.modifiers) && !it.isSynthetic }) {
+      val signature = m.genericReturnType.typeName + " " + m.genericParameterTypes.joinToString { it.typeName }
+      for (b in banned) assertWithMessage("TripDigest.${m.name}: $signature").that(signature).doesNotContain(b)
+    }
   }
 
   /** R16: l'oracolo «troppo vicino a casa» riceve punti e risponde solo si'/no: nessun tipo con coordinate, nessun numero esce dalla casa. */

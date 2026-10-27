@@ -43,6 +43,7 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.NasMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting
 import dev.pampa.mycloudgallery.feature.viewer.motion.PowerSaving
 import dev.pampa.mycloudgallery.feature.viewer.people.ViewerPeople
+import dev.pampa.mycloudgallery.feature.viewer.place.ViewerPlaceMap
 import dev.pampa.mycloudgallery.feature.viewer.video.BytesMotionVideoLocator
 import dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerAlbumActions
 import dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch
@@ -157,6 +158,11 @@ class ViewerServices(
   val albums: ViewerAlbumActions = NoViewerAlbumActions,
   /** Fase 8 (D25, firma di P0): le persone del media aperto (riga "Persone" e "Chi e'?", P9). Null = niente riga (Persone non legata). */
   val people: ViewerPeople? = null,
+  /**
+   * Fase 9 (D29, D30, firma di P0): la mappa del media aperto (riga "Mostra sulla mappa" e mini-mappa solo offline nelle info, P4). Null =
+   * niente riga e niente mini-mappa (mappa non legata); mai chiamata per un media aperto dai Nascosti (`ViewerRequest.secure`, E-H9).
+   */
+  val placeMap: ViewerPlaceMap? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

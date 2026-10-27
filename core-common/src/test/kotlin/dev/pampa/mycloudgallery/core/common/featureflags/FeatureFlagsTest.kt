@@ -170,4 +170,25 @@ class FeatureFlagsTest {
     assertThat(rules).contains("public boolean getFacesSyncTestSharesOnly();")
     assertThat(rules).contains("public boolean facesSyncMayUse(java.lang.String);")
   }
+
+  /**
+   * Fase 9, D24 e risposta Q1 (c) del 27/10: la mappa online c'e' in release (accesa di default su ogni dispositivo; ognuno la spegne per se'
+   * in Impostazioni). E' un interruttore di build: in debug `forBuild` la puo' solo **spegnere** (prove a mappa spenta), e una costante spenta
+   * non si riaccende da nessuna build. Con la mappa online o senza, il cancello di rete resta (lo provano i test di core-map e feature-map).
+   */
+  @Test
+  fun d24_laMappaOnlineCeInReleaseEInDebugSiPuoSoloSpegnere() {
+    assertThat(FeatureFlags.RELEASE.mapOnline).isTrue()
+    assertThat(FeatureFlags.forBuild(debugBuild = false, mapOnline = false).mapOnline).isTrue()
+    assertThat(FeatureFlags.forBuild(debugBuild = false, mapOnline = false)).isEqualTo(FeatureFlags.RELEASE)
+    assertThat(FeatureFlags.forBuild(debugBuild = true).mapOnline).isTrue()
+    assertThat(FeatureFlags.forBuild(debugBuild = true, mapOnline = false).mapOnline).isFalse()
+    assertThat(FeatureFlags.forBuild(debugBuild = true, mapOnline = false)).isNotEqualTo(FeatureFlags.forBuild(debugBuild = true))
+    assertThat(FeatureFlags.RELEASE.toString()).contains("mapOnline=true")
+    val root = generateSequence(File(".").absoluteFile) { it.parentFile }.first { File(it, "settings.gradle").isFile }
+    val source = File(root, "core-common/src/main/kotlin/dev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags.kt").readText()
+    assertWithMessage("D24: la costante di build").that(source).contains("private const val MAP_ONLINE: Boolean = true")
+    // Una richiesta della debug non accende una build senza mappa online: il valore e' sempre in "e" con la costante.
+    assertWithMessage("D24: forBuild puo' solo spegnere").that(source).contains("mapOnline = mapOnline && MAP_ONLINE")
+  }
 }

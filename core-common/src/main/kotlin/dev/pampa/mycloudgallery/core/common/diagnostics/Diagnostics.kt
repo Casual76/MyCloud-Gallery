@@ -94,6 +94,20 @@ enum class DiagSection {
    */
   PEOPLE,
 
+  /**
+   * I ricordi (Fase 9, `docs/fase9-progetto.md` §2.12, D33): ricordi sullo scaffale e nuovi, ultimo giro (giorni fa) e durata, scaffale
+   * rigenerato, doppioni senza vettori, esclusi per motivo, notifiche saltate, in ritardo o tolte. Solo codici e numeri: **mai** titoli,
+   * luoghi, date o id dei ricordi, nomi o id di persone, l'ora scelta per la notifica.
+   */
+  MEMORIES,
+
+  /**
+   * La mappa (Fase 9, `docs/fase9-progetto.md` §2.12, D33): mappa online accesa o spenta su questo dispositivo, richieste lasciate passare
+   * e rifiutate per motivo, byte, regioni offline (numero e byte, parziali, spazio), punti e media senza posizione, coordinate scartate.
+   * Solo codici e numeri: **mai** coordinate, riquadri, tessere `z/x/y`, nomi delle regioni o dei luoghi, l'ultima camera.
+   */
+  MAP,
+
   /** I consumi del mese (TrafficLedger). */
   MONTHLY_TRAFFIC,
 

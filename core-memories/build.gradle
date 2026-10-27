@@ -1,0 +1,36 @@
+// I ricordi della Fase 9 (docs/fase9-progetto.md §1.1, §1.2 "core-memories", D2-D20): identita' e chiavi, generatori dei quattro tipi
+// (plan/, P6), scelta delle foto (pick/, P7), scaffale stabile (shelf/, P6), scelte dell'utente e "Mostra meno" (settings/, P6 e P8), decisioni
+// delle notifiche (notify/, P10). Contratti, null-object, fake ed esecutori di riferimento (`InMemoryMemories`, `ReferencePlanner`,
+// `ReferencePicker`, `InMemoryShelfStore`, `ReferenceNotifyPolicy`) di P0.
+//
+// **JVM puro** (D2): nessuna classe Android, nessuna rete, nessun NAS, nessun orologio del telefono; generazione, scelta e decisioni si provano
+// sulla JVM con fake (Phase9ArchitectureTest). **Non vede** core-faces, core-search, core-albums, core-ai, core-models, core-nas, core-nasops,
+// core-network, core-database (per nome: lo vede solo attraverso l'`api` di core-library), core-map: viaggi, persone, vettori, pixel, album,
+// ritagli e ora arrivano da porte (contract/Ports.kt) legate da :app (P13).
+//
+// D2: core-library e' `api` (viste e visibilita' compaiono nei contratti); core-personal e' `implementation` (le scelte entrano solo nella
+// pianificazione e nella porta `MemoriesPersonalSettings`; feature-memories non vede i dati personali: per lui ci sono `LessLevel` e
+// `LessChoice`). Nessun Hilt (i core-* no).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.memories'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  api project(':core-library')
+
+  implementation project(':core-personal')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

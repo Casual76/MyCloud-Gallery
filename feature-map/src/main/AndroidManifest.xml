@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :feature-map: nessun permesso e nessun componente (Fase 9, P0; docs/fase9-progetto.md §6.4, D35). Mai la posizione del telefono: la mappa
+      mostra dove sono state scattate le foto. La rete gia' dichiarata (INTERNET) basta al client della mappa. Il manifest fuso di MapLibre lo
+      controlla P1 (nessun componente esportato, nessun permesso fuori da allowedPermissions). Un permesso o un componente nuovo si chiede
+      all'orchestratore: prima la riga in docs/sicurezza.md 4-bis, poi quella in releaseManifestPolicy.
+  -->
+
+</manifest>

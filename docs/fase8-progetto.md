@@ -1036,7 +1036,7 @@ per persona, generazione (D37). Le chiavi nuove entrano nell'elenco chiuso dell'
 **Per le fasi successive**
 | Pezzo | Come lo usano |
 |---|---|
-| `People`, `PeopleIndex`, `PeopleLookup` | Fase 9: ricordi con le persone ("Un anno fa con Anna"), solo persone con nome e non nascoste; "mostra meno" per una persona (impostazione personale `memories_less:<persona>`, nella classe `people` o nei dati personali: lo decide la Fase 9) |
+| `People`, `PeopleIndex`, `PeopleLookup` | Fase 9: ricordi con le persone ("Un anno fa con Anna"), solo persone con nome e non nascoste; "mostra meno" per una persona (impostazione personale `memories_less:<persona>`, nella classe `people` o nei dati personali: lo decide la Fase 9). *Deciso dalla Fase 9 (`docs/fase9-progetto.md` D11, D12): nei **dati personali** (`setting`, `memories_less:person:<id>` = `less`/`never`), mai nella classe `people` (un campo nuovo li' farebbe rifiutare il segmento alle app della Fase 8); le persone arrivano ai ricordi dalla porta `MemoryPeople` di `core-memories`, legata da :app sopra `PeopleIndex`/`PeopleLookup`; con Persone spenta o cancellata le voci diventano lapidi.* |
 | Riga "Persone" del viewer | Fase 10.3: descrizioni dei media per TalkBack ("Foto con Marco e Anna") |
 | Copertine ritagliate al momento | Fase 9: copertine dei ricordi; Fase 10: widget (mai persone nascoste) |
 | Ritaglio del soggetto (Fase 6) e volti | nessun legame: il ritaglio non usa i volti e i volti non salvano ritagli |

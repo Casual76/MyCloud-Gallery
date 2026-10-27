@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sezione «Mappa» (Fase 9, docs/fase9-progetto.md §2.12, D33). Titolo e spiegazione della sezione e voce di stato (P0); le voci e i
+       codici della mappa (MAP_*) li aggiunge P13. Solo numeri e codici nelle esportazioni: mai coordinate, riquadri, tessere, nomi delle
+       regioni o dei luoghi, l'ultima posizione della mappa. -->
+  <string name="diagnostics_section_map">Mappa</string>
+  <string name="diagnostics_hint_map">La mappa su questo dispositivo: se la mappa dettagliata da Internet è accesa, quante richieste sono partite o sono state fermate, le zone scaricate e le foto senza posizione.</string>
+  <string name="diag_map_state_title">Stato della mappa</string>
+  <string name="diag_map_state_guide">Se la mappa dettagliata è accesa qui, le zone scaricate e quante foto hanno una posizione. Le posizioni delle foto e le zone guardate non escono mai nella Diagnostica.</string>
+</resources>

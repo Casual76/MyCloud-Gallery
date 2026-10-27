@@ -957,8 +957,8 @@ pochi KB); i modelli una volta da Internet per famiglia (527 MB), poi dal NAS; n
 | Soglia di convinzione (sicuri e meno probabili) | Fase 7: gli album smart fanno entrare da soli i sicuri e mettono in "Suggerite" i meno probabili |
 | Testa `ai`, codec ostile, attestazione dei derivati | Fase 8: dati dei volti con lo stesso metodo, ma nell'area privata (proposta 13): testa di tipo 9 alla versione 4, classi `faces`, `cluster`, `people` (`docs/fase8-progetto.md` D11, D12, §2.4) |
 | Catalogo dei modelli fissato, scaffale sul NAS | Fase 8: modelli dei volti (YuNet, SFace) con hash fissato, **dentro l'APK** come MagicTouch (risposta Q1 (a) della Fase 8): ruoli `FACE_DETECT` e `FACE_EMBED`, mai sullo scaffale del NAS (`docs/fase8-progetto.md` D6-D8) |
-| Indice vettoriale locale e "Trova simili" | Fase 7: Utility → Doppioni (scatti simili ma diversi); Fase 9: ricordi |
-| Dizionario dei luoghi della Libreria | Fase 9: mappa e ricordi |
+| Indice vettoriale locale e "Trova simili" | Fase 7: Utility → Doppioni (scatti simili ma diversi); Fase 9: ricordi (doppioni e varieta' con i vettori `embeddinggemma2`, porta `MemoryVectors` di `core-memories`, legata da :app su `SearchData.vectors`; senza vettori la firma visiva o 3 minuti, E-MEM16; **nessun filtro dei ricordi tristi**, risposta Q6 (a): `docs/fase9-progetto.md` D7, D8, §11) |
+| Dizionario dei luoghi della Libreria | Fase 9: mappa e ricordi (titoli dei ricordi, sezione Luoghi delle Raccolte, etichette delle bolle: `docs/fase9-progetto.md` D28, D30) |
 | Filtro Documenti | Fase 7: Utility |
 
 **Fase 7 (22/10):** le righe della Fase 7 qui sopra le precisa `docs/fase7-progetto.md` §2.9 (cosa serve, l'uso, cosa succede senza). Due
@@ -967,7 +967,7 @@ pochi KB); i modelli una volta da Internet per famiglia (527 MB), poi dal NAS; n
 esempi, stessa soglia di "Trova simili") e `SearchRequest.within: CandidateFilter?` (giorni o insieme di media) senza voce nella
 cronologia per le richieste degli album. Finche' non ci sono, `core-albums` usa un adattatore sopra `search` e filtra dopo.
 | Formato del manifest firmato (§2.1) | Fase 10: versione minima e kill switch |
-| Ritagliatore (MagicTouch su LiteRT) | Fase 9: copertine dei ricordi; Fase 10: widget con il soggetto ritagliato |
+| Ritagliatore (MagicTouch su LiteRT) | Fase 9: **non serve** (le copertine dei ricordi sono foto intere, `docs/fase9-progetto.md` §3); Fase 10: widget con il soggetto ritagliato |
 
 ### 2.10 Testo dal vivo e ritaglio del soggetto nel viewer (risposta Q9; P12, P13)
 **Testo dal vivo** (D43)

@@ -199,20 +199,26 @@ class SettingsAndCollectionsTest {
 
   // --- Ricordi visti -------------------------------------------------------------------------------------------------------------------------
 
+  /**
+   * Fase 9 (D10): il valore di "visto" e' il giorno locale della visione (`aaaammgg`), non l'ora del NAS; l'id e' quello deterministico del
+   * ricordo (26 caratteri base32, D9). Visto e scartato su un dispositivo valgono su tutti (E-MEM8, E-MEM9).
+   */
   @Test
   fun unRicordoVistoSuUnDispositivoRisultaVistoSuTutti() = runTest {
     val phone = world.device()
     val tablet = world.device()
     val onPhone = PersonalMemories(phone.store)
     val onTablet = PersonalMemories(tablet.store)
-    assertThat(onTablet.lastSeen("ricordo-2025-10")).isNull()
-    onPhone.markSeen("ricordo-2025-10", NAS_NOW)
+    val memory = "0123456789abcdefghjkmnpqr0"
+    assertThat(onTablet.seenDay(memory)).isNull()
+    onPhone.markSeen(memory, 20261027)
+    onPhone.dismiss(memory)
     syncAll(phone, tablet)
-    assertThat(onTablet.lastSeen("ricordo-2025-10")).isEqualTo(NAS_NOW)
+    assertThat(onTablet.seenDay(memory)).isEqualTo(20261027)
+    assertThat(onTablet.isDismissed(memory)).isTrue()
     world.clock.advance(86_400_000)
-    val seenAgain = world.clock.now
-    onTablet.markSeen("ricordo-2025-10", seenAgain)
+    onTablet.markSeen(memory, 20261028)
     syncAll(tablet, phone)
-    assertThat(onPhone.lastSeen("ricordo-2025-10")).isEqualTo(seenAgain)
+    assertThat(onPhone.seenDay(memory)).isEqualTo(20261028)
   }
 }

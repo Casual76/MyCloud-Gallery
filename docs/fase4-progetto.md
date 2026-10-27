@@ -562,7 +562,7 @@ contenuto v1:
 ### 2.9 Dati personali sincronizzati (4.7, P13, 4B)
 | Aspetto | Comportamento |
 |---|---|
-| Cosa | preferito, nascosto, album manuali (definizione, ordine, copertina, elementi), date di ultima visione dei ricordi (campo pronto per la Fase 9), impostazioni personali (esclusioni dell'area privata, "Mostra le copertine"). **Non**: preset, qualità, ruoli (sono del dispositivo) |
+| Cosa | preferito, nascosto, album manuali (definizione, ordine, copertina, elementi), date di ultima visione dei ricordi (campo pronto per la Fase 9; *dalla Fase 9, D10: il valore di `seen` e' il **giorno locale** della visione, `aaaammgg`, non l'ora del NAS, e si aggiunge `dismissed`: `docs/fase9-progetto.md` §2.3, formato §5.5-bis A1*), impostazioni personali (esclusioni dell'area privata, "Mostra le copertine"). **Non**: preset, qualità, ruoli (sono del dispositivo) |
 | Dove | `devices/<io>/personal/` nell'**area privata** del mio account; mai nell'area comune (formato §5.5); teste di tipo `personal` con segmenti di classe `personal` |
 | Voce | chiave = SHA-256("mcg-pers\0" ‖ tipo ‖ id del media o dell'album ‖ campo); corpo `{"at":…,"author":…,"field":…,"fp":…,"media":…,"value":…}` con `at` in ora del NAS e `fp` = dimensione + `qh1` del media (per ritrovarlo se le identità divergono) |
 | Fusione | per chiave vince `(at, author)` più grande (D26); i flag locali hanno già `*_changed_at` (schema v2) |

@@ -32,7 +32,7 @@ class CollectionsLayoutTest {
     val shuffled = all.shuffled(Random(5))
     val arranged = CollectionsLayout.arrange(shuffled.map { section(it) }, saved = emptyList(), hidden = emptySet())
     assertThat(codes(arranged)).containsExactly(
-      "albums", "smart", "trips", "people", "memories", "nas", "phone", "safe", "utility", "hidden",
+      "albums", "smart", "trips", "people", "memories", "places", "nas", "phone", "safe", "utility", "hidden",
     ).inOrder()
     assertThat(codes(arranged)).isEqualTo(CollectionSections.defaultOrder)
   }
@@ -41,6 +41,8 @@ class CollectionsLayoutTest {
   fun lOrdinePredefinitoDelPianoHaIlPostoRiservatoAPersoneERicordi() {
     assertThat(CollectionSections.defaultOrder.indexOf("people")).isEqualTo(3)
     assertThat(CollectionSections.defaultOrder.indexOf("memories")).isEqualTo(4)
+    // Fase 9 (D30): Luoghi subito dopo i Ricordi.
+    assertThat(CollectionSections.defaultOrder.indexOf("places")).isEqualTo(5)
     // Una sezione che non e' nel piano va in fondo, come arriva.
     val arranged = CollectionsLayout.arrange(listOf(section("zeta"), section("albums"), section("beta")), emptyList(), emptySet())
     assertThat(codes(arranged)).containsExactly("albums", "zeta", "beta").inOrder()
@@ -179,7 +181,7 @@ class CollectionsLayoutTest {
   fun alPrimoSalvataggioLeSezioniDelPianoCheMancanoTenganoIlPostoPredefinitoMaPersoneERicordiNo() {
     val saved = CollectionsLayout.toSave(listOf("hidden", "phone", "albums"), previousSaved = emptyList())
     assertThat(saved).containsExactly("hidden", "phone", "safe", "utility", "albums", "smart", "trips", "nas").inOrder()
-    assertThat(saved).containsNoneOf("people", "memories")
+    assertThat(saved).containsNoneOf("people", "memories", "places")
     // Quando Persone arriva (Fase 8) e' nuova: in coda, e l'ordine scelto non si rompe.
     val later = CollectionsLayout.arrange(saved.map { section(it) } + section("people"), saved, emptySet())
     assertThat(codes(later)).containsExactlyElementsIn(saved + "people").inOrder()
@@ -229,5 +231,23 @@ class CollectionsLayoutTest {
     assertThat(CollectionsLayout.moved(order, "c", +1)).isNull()
     assertThat(CollectionsLayout.moved(order, "z", +1)).isNull()
     assertThat(CollectionsLayout.moved(order, "a", 0)).isNull()
+  }
+
+  // --- Fase 9 (D30, E-L14): Luoghi ---------------------------------------------------------------------------------------------
+
+  /** Luoghi e' una sezione futura come Persone e Ricordi: al primo salvataggio non prende il posto predefinito, quando arriva va in coda. */
+  @Test
+  fun luoghiArrivaDopoEVaInCodaAUnOrdineGiaSalvato() {
+    assertThat(CollectionSections.isValidCode(CollectionSections.PLACES)).isTrue()
+    assertThat(CollectionSections.reservedForLater).containsExactly("people", "memories", "places")
+    assertThat(CollectionSections.neverHidden).doesNotContain("places")
+    val saved = CollectionsLayout.toSave(listOf("hidden", "phone", "albums", "memories"), previousSaved = emptyList())
+    assertThat(saved).doesNotContain("places")
+    val later = CollectionsLayout.arrange(saved.map { section(it) } + section("places"), saved, emptySet())
+    assertThat(codes(later)).containsExactlyElementsIn(saved + "places").inOrder()
+    // Senza ordine salvato sta subito dopo i Ricordi, e si puo' nascondere come le altre.
+    val fresh = CollectionsLayout.arrange(listOf("places", "albums", "memories", "nas").map { section(it) }, emptyList(), setOf("places"))
+    assertThat(codes(fresh)).containsExactly("albums", "memories", "places", "nas").inOrder()
+    assertThat(fresh.single { it.code == "places" }.shown).isFalse()
   }
 }

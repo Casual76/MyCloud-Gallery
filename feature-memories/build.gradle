@@ -1,0 +1,80 @@
+// Le schermate dei ricordi della Fase 9 (docs/fase9-progetto.md §1.1, §1.5, §2.4, §2.5, §2.6; D13, D14, D16, D18; risposte Q3, Q4, Q5, Q6 (a),
+// Q9 del 27/10; righe P9 e P10 del §4.4): sezione Ricordi in Raccolte, pagina del ricordo, "Tutti i ricordi", presentazione (`MemoryPlayer`),
+// fogli "Mostra meno" e "Mai nei ricordi", pagina Impostazioni -> Ricordi e notifiche. Scheletro di P0: modulo, stati sigillati del §1.5 come
+// contratto, azioni come porta, stati di esempio per i test; schermate e ViewModel sono di P9 (e la parte delle notifiche di P10).
+//
+// **Aspetto: linguaggio grafico G2** (D34), la presentazione G3: le composable usano solo i componenti esistenti di `core-designsystem` e il
+// movimento solo dai token (`GalleryMotion`, `FluidMotion`; NoHandWrittenStyleTest); il filone grafico rifinisce senza toccare la logica.
+//
+// Vede di core-memories solo contratti di stato e di comando, null-object e fake; la Libreria (viste) e le miniature locali. **Cieca a
+// core-faces, core-search, core-albums, core-map, core-personal, ai dati del NAS e agli altri feature-*** (Phase9ArchitectureTest): viewer,
+// album e pagine delle persone si aprono con azioni verso :app. I nomi delle persone arrivano gia' letti (mai salvati).
+//
+// D7 della Fase 2: @HiltViewModel (KSP). Nessuna rete (NoNetworkSourcesTest), nessun orologio del telefono (NoWallClockSourcesTest): "oggi"
+// dalla porta `MemoryClock`. Stringhe in `values/strings_memories_*.xml`.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.memories'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      maxHeapSize = '2g'
+    }
+  }
+}
+
+dependencies {
+  // api: i contratti dei ricordi (stato, scaffale, notifiche, musica) e i componenti (core-designsystem) compaiono negli stati.
+  api project(':core-memories')
+  api project(':core-designsystem')
+
+  // La Libreria (viste e celle) e le miniature locali (presentazione: mai un'attesa sul NAS, E-MEM14).
+  implementation project(':core-library')
+  implementation project(':core-imaging')
+
+  implementation project(':core-common')
+  implementation project(':core-model')
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid
+  implementation appDeps.serializationCore
+
+  // Solo nei test: i dati personali finti per l'esecutore di riferimento dei ricordi (`InMemoryMemories` vuole le scelte) e il legame della
+  // sezione con le Raccolte. In produzione questo modulo non vede ne' core-personal ne' feature-library.
+  testImplementation project(':core-personal')
+  testImplementation project(':feature-library')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

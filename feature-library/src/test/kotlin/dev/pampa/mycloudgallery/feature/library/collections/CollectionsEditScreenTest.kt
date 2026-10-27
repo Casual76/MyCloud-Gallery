@@ -358,7 +358,8 @@ class CollectionsEditScreenTabletTest : CollectionsEditScreenBase() {
     composeRule.onNodeWithText("dettaglio favorites").assertExists()
     // Le due colonne: l'elenco a sinistra, il dettaglio a destra; le sezioni nello stesso ordine del telefono.
     composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("Preferiti"))
-    assertThat(codes()).isEqualTo(CollectionSections.defaultOrder.filter { it != "memories" })
+    // Ricordi e Luoghi (Fase 9) non hanno ancora un fornitore negli esempi: non ci sono.
+    assertThat(codes()).isEqualTo(CollectionSections.defaultOrder.filter { it != "memories" && it != "places" })
     val list = composeRule.onNodeWithText("Preferiti").fetchSemanticsNode().boundsInRoot
     val detail = composeRule.onNodeWithText("dettaglio favorites").fetchSemanticsNode().boundsInRoot
     assertThat(detail.left).isAtLeast(list.right)

@@ -76,6 +76,12 @@
                                 codice nostro a LiteRT (`org.tensorflow.lite`, `com.google.ai.edge.litert`) partono solo da
                                 `core/ai/` e, fra le classi dei volti, solo da `core/ai/faces/FaceLiteRtSessions`; controllo
                                 positivo: almeno una chiamata da `core/ai/` (il ritaglio). FALLISCE se non legge l'APK
+    7h. OkHttp e MapLibre       (Fase 9, P0; docs/fase9-progetto.md D21, D23, §5.5) nel bytecode della release (dexdump): ogni chiamata a
+                                OkHttp (`okhttp3`) parte da OkHttp stesso, da Okio, da MapLibre (`org.maplibre`, `com.mapbox`) o da
+                                `feature/map/net/` (`MapTileHttp`, l'unico codice di rete della mappa); ogni chiamata di codice nostro (e
+                                dell'engine) a MapLibre parte da `feature/map/`. Il passo 7e ammette i client HTTPS anche da `feature/map/net/`
+                                (la seconda eccezione dichiarata, D23). Il controllo positivo (almeno una chiamata da `feature/map/net/`) lo
+                                aggiunge P1 quando MapLibre entra nell'APK. FALLISCE se non legge l'APK
     7g. modelli dei volti       (Fase 8, P1; docs/fase8-progetto.md D39, §6.4) nell'APK di release `assets/faces/` ha YuNet e SFace con la
                                 dimensione e lo SHA-256 di `ModelCatalog.FACE_YUNET` e `FACE_SFACE` (letti dal sorgente), le due licenze
                                 (MIT, Apache-2.0) e il NOTICE che nomina le impronte, nessun altro modello nella cartella e nessun file
@@ -772,9 +778,13 @@ $debugRemnants = @(
   "debugtools/eval/albums", "AlbumsEvalEnvironmentHolder", "AlbumsEvalSession", "AlbumsEvalEntry", "AppAlbumsEvalEnvironment", "viaggi.mcgalb", "MCGALB01", "MCGSINT1", "viaggi-sintetici",
   # Fase 8 (P11): lo strumento di valutazione delle persone (app/src/debug/.../debugtools/eval/faces): classi, porta e nome del file di etichette
   # (`persone.mcgfac`, intestazione MCGFAC01). Le etichette sono posti di volti veri: in release non deve esistere niente di tutto questo.
-  "debugtools/eval/faces", "FacesEvalEnvironmentHolder", "FacesEvalSession", "FacesEvalEntry", "FacesEvalStore", "persone.mcgfac", "MCGFAC01"
+  "debugtools/eval/faces", "FacesEvalEnvironmentHolder", "FacesEvalSession", "FacesEvalEntry", "FacesEvalStore", "persone.mcgfac", "MCGFAC01",
+  # Fase 9 (P0 per P11, §5.3): lo strumento di valutazione dei ricordi (app/src/debug/.../debugtools/eval/memories): classi, porta e nome del file
+  # dei giudizi (`ricordi.mcgmem`, intestazione MCGMEM01). Giudizi su ricordi veri: in release non deve esistere niente di tutto questo. P11
+  # usa questi nomi (o aggiorna qui la riga).
+  "debugtools/eval/memories", "MemoriesEvalEnvironmentHolder", "MemoriesEvalSession", "MemoriesEvalEntry", "MemoriesEvalStore", "ricordi.mcgmem", "MCGMEM01"
 )
-Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11, valutazione dei ricordi F9-P11)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
@@ -1609,8 +1619,9 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
       if (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap;") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap$"))) {
         $problems += "MlKit.initialize chiamato fuori dal cancello: $caller"
       }
-    } elseif (-not $caller.StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/")) {
-      $problems += "client HTTPS fuori da core-models/.../download/https/: $caller ($($parts[0]))"
+    } elseif (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/feature/map/net/"))) {
+      # Fase 9 (D23): la seconda eccezione dichiarata, il client delle tessere della mappa (`MapTileHttp`); le regole sue sono nel passo 7h.
+      $problems += "client HTTPS fuori da core-models/.../download/https/ e feature/map/net/: $caller ($($parts[0]))"
     }
   }
   # P11: da quando `:app` monta `ModelFetchers` il client HTTPS dei modelli e' raggiunto e R8 lo tiene: il controllo deve vederlo (controllo
@@ -1681,6 +1692,59 @@ Step "LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/f
   }
   Write-Host ("        bytecode: {0} chiamate nostre a LiteRT, tutte da core-ai ({1} righe di dexdump)" -f $ours.Count, $facts.Lines) -ForegroundColor DarkGray
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
+}
+
+# Fase 9 (P0; docs/fase9-progetto.md D21, D23, §5.5): la rete della mappa resta al suo posto anche nel bytecode della release. I sorgenti li
+# controllano Phase6ArchitectureTest (regola 5, due pacchetti) e Phase9ArchitectureTest; qui si guarda cio' che si installa:
+#  - ogni chiamata a OkHttp (`Lokhttp3/`, anche solo come tipo nella firma) parte da OkHttp, da Okio, da MapLibre o da `feature/map/net/`
+#    (`MapTileHttp`): nessun altro codice, nostro, dell'engine o di un'altra libreria, parla con OkHttp;
+#  - ogni chiamata di codice nostro (e dell'engine) a MapLibre (`Lorg/maplibre/`, `Lcom/mapbox/`) parte da `feature/map/`.
+# Oggi MapLibre e OkHttp non sono nell'APK (le dipendenze le aggiunge P1, con l'approvazione Q8): il passo conta zero e passa; P1 aggiunge il
+# controllo positivo (almeno una chiamata da `feature/map/net/`). Senza dexdump o senza vedere la MainActivity il passo FALLISCE (non salta).
+Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  Initialize-ApkInspect
+  $dexdump = Get-DexDump
+  if (-not $dexdump) { return "dexdump.exe non trovato accanto ad aapt2 (build-tools)" }
+  $okhttp = "Lokhttp3/"
+  $mapLibre = @("Lorg/maplibre/", "Lcom/mapbox/")
+  $okhttpCallers = @("Lokhttp3/", "Lokio/", "Lorg/maplibre/", "Lcom/mapbox/", "Ldev/pampa/mycloudgallery/feature/map/net/")
+  $ownPrefixes = @("Ldev/pampa/", "Ldev/antigravity/fluidengine/")
+  $mapPrefix = "Ldev/pampa/mycloudgallery/feature/map/"
+  $facts = New-Object DexCallFacts
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("mcg-dex9-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $temp | Out-Null
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk.FullName)
+  try {
+    foreach ($entry in @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })) {
+      $target = Join-Path $temp $entry.FullName
+      [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+      [DexCallScanner]::Scan($dexdump, $target, [string[]](@($okhttp) + $mapLibre), $facts)
+    }
+  } finally {
+    $zip.Dispose()
+    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  if ($facts.Lines -lt 1000 -or -not $facts.SawMainActivity) { return "lettura del bytecode non affidabile ($($facts.Lines) righe, MainActivity vista: $($facts.SawMainActivity))" }
+  $problems = @()
+  $okCount = 0
+  $mapCount = 0
+  foreach ($call in $facts.Calls) {
+    $parts = $call -split '\|', 2
+    $caller = $parts[1]
+    if ($parts[0] -eq $okhttp) {
+      $okCount++
+      if (@($okhttpCallers | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { $problems += "OkHttp chiamato fuori da feature/map/net/ e da MapLibre: $caller" }
+    } elseif (@($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -gt 0) {
+      $mapCount++
+      if (-not $caller.StartsWith($mapPrefix)) { $problems += "MapLibre chiamato da codice nostro fuori da feature/map/: $caller ($($parts[0]))" }
+    }
+  }
+  Write-Host ("        bytecode: {0} chiamate a OkHttp, {1} chiamate nostre a MapLibre, tutte al loro posto ({2} righe di dexdump)" -f $okCount, $mapCount, $facts.Lines) -ForegroundColor DarkGray
+  if ($problems.Count -gt 0) { return ($problems | Select-Object -First 20) -join "; " }
 }
 
 # Fase 8 (P1; docs/fase8-progetto.md D39, §6.4): i due modelli dei volti viaggiano nell'APK di release (risposta Q1 (a)). Qui si guarda cio' che

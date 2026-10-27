@@ -41,6 +41,13 @@ package dev.pampa.mycloudgallery.core.common.featureflags
  *   dice. Come D30 vale in release **e in debug** e [forBuild] non ha un parametro per lui: lo spegne solo l'utente con il consenso di Q5,
  *   a fine Fase 8, insieme alla pubblicazione dell'indice sulle cartelle vere, cambiando questo file. La decisione per share e'
  *   [facesSyncMayUse]; in debug con gli account di prova vale in piu' `ShareFence` (F4-D33).
+ * @property mapOnline Fase 9, D24 (`docs/fase9-progetto.md` §0.1, risposta Q1 (c) del 27/10): la **mappa online** (le tessere di OpenFreeMap,
+ *   l'unico host nuovo della fase) **esiste** in questa build. E' un interruttore di build, non la scelta dell'utente: acceso, la mappa online e'
+ *   accesa di default su ogni dispositivo e ognuno la spegne per se' in Impostazioni -> Mappa (`MapSettings` di core-map, locale); spento, la
+ *   mappa resta la carta di base dentro l'app con le regioni gia' scaricate, e il cancello di rete (`TilePolicy`) rifiuta ogni richiesta
+ *   (`MapOnline.Unavailable`). Vale `true` in [RELEASE] (Q1 (c)); [forBuild] in debug lo puo' solo **spegnere** (una prova a mappa spenta), mai
+ *   accendere se la costante [MAP_ONLINE] e' spenta. Il cancello di rete resta per intero in ogni caso (un solo host, nessun cookie, zone
+ *   scaricate mai chieste online, mini-mappa delle info mai in rete, la "casa" mai mostrata).
  */
 class FeatureFlags private constructor(
   val wol: Boolean,
@@ -50,6 +57,7 @@ class FeatureFlags private constructor(
   val backupBlocksTestAccounts: Boolean,
   val sharedAlbumsTestSharesOnly: Boolean,
   val facesSyncTestSharesOnly: Boolean,
+  val mapOnline: Boolean,
 ) {
 
   /**
@@ -87,16 +95,17 @@ class FeatureFlags private constructor(
     other is FeatureFlags && other.wol == wol && other.nasLibrary == nasLibrary &&
       other.indexPublishTestSharesOnly == indexPublishTestSharesOnly && other.backupTestSharesOnly == backupTestSharesOnly &&
       other.backupBlocksTestAccounts == backupBlocksTestAccounts && other.sharedAlbumsTestSharesOnly == sharedAlbumsTestSharesOnly &&
-      other.facesSyncTestSharesOnly == facesSyncTestSharesOnly
+      other.facesSyncTestSharesOnly == facesSyncTestSharesOnly && other.mapOnline == mapOnline
 
   override fun hashCode(): Int =
-    (((((wol.hashCode() * 31 + nasLibrary.hashCode()) * 31 + indexPublishTestSharesOnly.hashCode()) * 31 + backupTestSharesOnly.hashCode()) * 31 +
-      backupBlocksTestAccounts.hashCode()) * 31 + sharedAlbumsTestSharesOnly.hashCode()) * 31 + facesSyncTestSharesOnly.hashCode()
+    ((((((wol.hashCode() * 31 + nasLibrary.hashCode()) * 31 + indexPublishTestSharesOnly.hashCode()) * 31 + backupTestSharesOnly.hashCode()) * 31 +
+      backupBlocksTestAccounts.hashCode()) * 31 + sharedAlbumsTestSharesOnly.hashCode()) * 31 + facesSyncTestSharesOnly.hashCode()) * 31 +
+      mapOnline.hashCode()
 
   override fun toString(): String =
     "FeatureFlags(wol=$wol, nasLibrary=$nasLibrary, indexPublishTestSharesOnly=$indexPublishTestSharesOnly, " +
       "backupTestSharesOnly=$backupTestSharesOnly, backupBlocksTestAccounts=$backupBlocksTestAccounts, " +
-      "sharedAlbumsTestSharesOnly=$sharedAlbumsTestSharesOnly, facesSyncTestSharesOnly=$facesSyncTestSharesOnly)"
+      "sharedAlbumsTestSharesOnly=$sharedAlbumsTestSharesOnly, facesSyncTestSharesOnly=$facesSyncTestSharesOnly, mapOnline=$mapOnline)"
 
   companion object {
     /**
@@ -117,6 +126,12 @@ class FeatureFlags private constructor(
      */
     private const val FACES_SYNC_TEST_SHARES_ONLY: Boolean = true
 
+    /**
+     * D24 e Q1 (c): la mappa online esiste in questa build (accesa di default su ogni dispositivo, spegnibile da ognuno per se'). Una costante:
+     * una build senza mappa online la mette a `false` qui, e nessuna richiesta di [forBuild] la riaccende.
+     */
+    private const val MAP_ONLINE: Boolean = true
+
     /** I valori di ogni build di release: funzioni sperimentali spente, protezioni accese. */
     val RELEASE: FeatureFlags = FeatureFlags(
       wol = false,
@@ -126,17 +141,20 @@ class FeatureFlags private constructor(
       backupBlocksTestAccounts = true,
       sharedAlbumsTestSharesOnly = SHARED_ALBUMS_TEST_SHARES_ONLY,
       facesSyncTestSharesOnly = FACES_SYNC_TEST_SHARES_ONLY,
+      mapOnline = MAP_ONLINE,
     )
 
     /**
      * Le funzioni di questa build. Con [debugBuild] falso il risultato e' sempre [RELEASE], qualunque cosa si chieda
-     * (anche `indexPublishTestSharesOnly = false`). [backupTestSharesOnly] (D12) non si chiede: e' sempre acceso.
+     * (anche `indexPublishTestSharesOnly = false`). [backupTestSharesOnly] (D12) non si chiede: e' sempre acceso. [mapOnline] (D24) in debug
+     * si puo' solo spegnere: vale `mapOnline && MAP_ONLINE`.
      */
     fun forBuild(
       debugBuild: Boolean,
       wol: Boolean = false,
       nasLibrary: Boolean = false,
       indexPublishTestSharesOnly: Boolean = true,
+      mapOnline: Boolean = true,
     ): FeatureFlags =
       if (!debugBuild) {
         RELEASE
@@ -156,6 +174,8 @@ class FeatureFlags private constructor(
           // D34: nessun parametro, di proposito. Anche la debug tiene i dati dei volti sul NAS solo nelle share di prova (con gli account
           // di prova vale in piu' ShareFence, F4-D33).
           facesSyncTestSharesOnly = FACES_SYNC_TEST_SHARES_ONLY,
+          // D24: la debug puo' provare la mappa senza la parte online, mai accenderla in una build che non la prevede.
+          mapOnline = mapOnline && MAP_ONLINE,
         )
       }
   }

@@ -19,9 +19,10 @@ import org.junit.Test
  * 4. un `TextReadingConsent` costruito fuori dalla pagina di attivazione di `feature-search` (`TextReadingActivation*.kt`);
  * 5. codice HTTP/TLS (`javax.net.ssl`, `java.net.URL`, `URLConnection`, `SSLSocket`, `android.net.http`, librerie; I3 della revisione:
  *    anche `Network.openConnection`, `DownloadManager`, `WebView`, `HttpEngine`, `java.net.http`) fuori da
- *    `core-models/.../download/https/`, **nei moduli dell'engine compresi** (`engine-foundation`, `engine-ui`: l'APK li contiene ma
- *    `settings.gradle` li include con un ciclo); un altro modulo che nomina quel pacchetto; una sua classe non `internal`; un'eccezione a
- *    `NoNetworkSources` usata da un altro modulo o diversa da quella;
+ *    `core-models/.../download/https/` e (Fase 9, D23: la seconda eccezione dichiarata) da `feature-map/.../net/`, **nei moduli dell'engine
+ *    compresi** (`engine-foundation`, `engine-ui`: l'APK li contiene ma `settings.gradle` li include con un ciclo); un altro modulo che nomina
+ *    il pacchetto dei modelli; una classe non `internal` in uno dei due pacchetti; un'eccezione a `NoNetworkSources` usata da altri moduli o
+ *    diversa da quelle due (le regole della mappa in piu': Phase9ArchitectureTest);
  * 6. `core-search` che vede `core-models`, `core-index`, `core-nas` (o `core-prepare`, `core-nasops`, `core-backup`), anche solo
  *    nominandone i pacchetti; di `core-ai` solo i contratti; `feature-search` che vede `core-nas`, `core-index`, `core-nasops` o
  *    `core-backup`, o nomina il codice dei motori e dello scaricamento;
@@ -203,14 +204,19 @@ class Phase6ArchitectureTest {
     for (line in harmless) assertWithMessage(line).that(HTTP_CLIENT.containsMatchIn(line)).isFalse()
   }
 
-  /** 5. D33: l'unico codice HTTPS sta in core-models/.../download/https/, con classi `internal`, e nessuno lo nomina da fuori. */
+  /**
+   * 5. D33: il codice HTTPS sta in core-models/.../download/https/ e, dalla Fase 9 (D23), in feature-map/.../net/ (il client delle tessere della
+   * mappa): due pacchetti, elencati, con classi `internal`; nessuno nomina da fuori il pacchetto dei modelli.
+   */
   @Test
   fun ilCodiceHttpsStaSoloNelPacchettoAmmesso() {
-    val http = productionMentions(HTTP_CLIENT).filter { !it.startsWith(HTTPS_DIR) && it !in HTTP_RULE_DEFINITIONS }
-    assertWithMessage("codice HTTP/TLS fuori da core-models/.../download/https/").that(http).isEmpty()
+    val http = productionMentions(HTTP_CLIENT).filter { path -> HTTP_DIRS.none { path.startsWith(it) } && path !in HTTP_RULE_DEFINITIONS }
+    assertWithMessage("codice HTTP/TLS fuori da core-models/.../download/https/ e feature-map/.../net/").that(http).isEmpty()
     val users = productionMentions(DOWNLOAD_PACKAGE, ALL_SETS).filter { !it.startsWith("$MODELS/") }
     assertWithMessage("moduli che nominano il pacchetto download di core-models").that(users).isEmpty()
-    val httpsFiles = File(root, HTTPS_DIR).takeIf { it.isDirectory }?.walkTopDown()?.filter { it.isFile && it.extension == "kt" }?.toList().orEmpty()
+    val httpsFiles = HTTP_DIRS.flatMap { dir ->
+      File(root, dir).takeIf { it.isDirectory }?.walkTopDown()?.filter { it.isFile && it.extension == "kt" }?.toList().orEmpty()
+    }
     for (file in httpsFiles) {
       val declarations = TOP_LEVEL_DECLARATION.findAll(code(file)).map { it.value.trim() }.toList()
       val public = declarations.filter { !it.startsWith("internal") && !it.startsWith("private") }
@@ -221,9 +227,13 @@ class Phase6ArchitectureTest {
     val exceptions = modules.flatMap { module ->
       sources(module, ALL_SETS).filter { NETWORK_EXCEPTION.containsMatchIn(code(it)) }.map { rel(it) }.toList()
     }
-    assertWithMessage("eccezioni a NoNetworkSources fuori dal test di core-models").that(exceptions - NETWORK_EXCEPTION_USERS).isEmpty()
+    assertWithMessage("eccezioni a NoNetworkSources fuori dai test di core-models e feature-map").that(exceptions - NETWORK_EXCEPTION_USERS).isEmpty()
     val modelsTest = File(root, "$MODELS/src/test/kotlin/dev/pampa/mycloudgallery/core/models/NoNetworkSourcesTest.kt").readText()
     assertThat(modelsTest).contains("\"kotlin/dev/pampa/mycloudgallery/core/models/download/https/\"")
+    // Fase 9 (D23): la seconda eccezione e' esattamente il pacchetto net/ di feature-map, e nient'altro.
+    val mapTest = code(File(root, "feature-map/src/test/kotlin/dev/pampa/mycloudgallery/feature/map/NoNetworkSourcesTest.kt"))
+    val allowed = Regex("""listOf\(([^)]*)\)""").find(mapTest.substringAfter(NETWORK_EXCEPTION_NAME))?.groupValues?.get(1)?.trim()
+    assertThat(allowed).isEqualTo("\"kotlin/dev/pampa/mycloudgallery/feature/map/net/\"")
   }
 
   /** 6. D33: core-search non vede ne' rete ne' NAS ne' i modelli; di core-ai solo i contratti. */
@@ -358,6 +368,10 @@ class Phase6ArchitectureTest {
     const val AI_PATH = "dev/pampa/mycloudgallery/core/ai"
     const val HTTPS_DIR = "core-models/src/main/kotlin/dev/pampa/mycloudgallery/core/models/download/https/"
 
+    /** Fase 9 (D23): il client delle tessere della mappa, la seconda eccezione dichiarata. */
+    const val MAP_NET_DIR = "feature-map/src/main/kotlin/dev/pampa/mycloudgallery/feature/map/net/"
+    val HTTP_DIRS = listOf(HTTPS_DIR, MAP_NET_DIR)
+
     val NEW_MODULES = listOf(MODELS, AI, SEARCH, FEATURE_SEARCH)
     val PRODUCTION_SETS = listOf("main", "debug", "release", "benchmarkRelease")
     val ALL_SETS = listOf("main", "debug", "release", "benchmarkRelease", "test", "androidTest", "testDebug")
@@ -393,9 +407,11 @@ class Phase6ArchitectureTest {
     val HTTP_RULE_DEFINITIONS = setOf("core-common/src/main/kotlin/dev/pampa/mycloudgallery/core/common/testing/NoNetworkSources.kt")
 
     /** Chi usa l'eccezione di `NoNetworkSources` (la funzione con un pacchetto ammesso). */
+    const val NETWORK_EXCEPTION_NAME = "violations" + "Except"
     val NETWORK_EXCEPTION = Regex("""\bviolations""" + """Except\b""")
     val NETWORK_EXCEPTION_USERS = setOf(
       "core-models/src/test/kotlin/dev/pampa/mycloudgallery/core/models/NoNetworkSourcesTest.kt",
+      "feature-map/src/test/kotlin/dev/pampa/mycloudgallery/feature/map/NoNetworkSourcesTest.kt",
       "core-common/src/test/kotlin/dev/pampa/mycloudgallery/core/common/testing/NoNetworkSourcesTest.kt",
       "core-common/src/main/kotlin/dev/pampa/mycloudgallery/core/common/testing/NoNetworkSources.kt",
     )

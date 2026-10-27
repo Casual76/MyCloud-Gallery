@@ -36,15 +36,18 @@ class CollectionsCodesMatchTest {
   @Test
   fun ogniCodiceDiSezioneEScrivibileNelleImpostazioni() {
     val codes = constants().filterKeys { it != "MAX_SECTIONS" }.values
-    assertThat(codes).hasSize(10)
+    assertThat(codes).hasSize(11)
     for (code in codes) assertWithMessage(code).that(CollectionsSettingsCodec.isValidCode(code)).isTrue()
   }
 
   @Test
-  fun l_OrdinePredefinitoElencaLeDieciSezioniDelPianoEBastaNelleVociSincronizzate() {
+  fun l_OrdinePredefinitoElencaLeUndiciSezioniDelPianoEBastaNelleVociSincronizzate() {
     val byName = constants()
     val order = listOfVal("defaultOrder").map { name -> byName.getValue(name) }
-    assertThat(order).containsExactly("albums", "smart", "trips", "people", "memories", "nas", "phone", "safe", "utility", "hidden").inOrder()
+    // Fase 9 (D30): "places" subito dopo "memories".
+    assertThat(order).containsExactly(
+      "albums", "smart", "trips", "people", "memories", "places", "nas", "phone", "safe", "utility", "hidden",
+    ).inOrder()
     assertThat(CollectionsSettingsCodec.clean(order)).isEqualTo(order)
   }
 

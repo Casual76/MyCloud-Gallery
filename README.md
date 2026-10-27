@@ -92,6 +92,10 @@ segnaposto e almeno un test.
 | `:feature-albums` | Fase 7: elenco e pagina degli album, editor delle regole, "Suggerite" e "Da condividere", fogli di condivisione, permessi e chiusura (con la scelta di Q5), proposte di viaggio. Stati e contratti, composable con i soli componenti G2. **Cieca a `core-nas`, `core-nasops`, `core-backup`, `core-index`, `core-trust`** | albums (contratti), library, imaging, designsystem |
 | `:core-faces` | Fase 8: Persone (da attivare per account). Attivazione, avviso ed esclusione, calcolo dei volti, raggruppamento incrementale con un custode, nomi e correzioni, sincronizzazione dei dati dei volti nell'area privata, "Disattiva e cancella", archivio cifrato. **Non cancella, non cerca e non tocca gli album da se'**: porte sue (`FacesEraseOps`, `PeopleIndex`, `SmartAlbumsPeople`) legate da `:app` | common, model, library (viste e visibilita'), trust (`NasFileSystem` solo in `sync/`), index (contratti), personal (contratti), ai e models (solo contratti), database (solo il database dei volti, da `store/`), security (solo la chiave dei volti). **Non vede** nasops, backup, nas, nasmedia, search, albums, rete |
 | `:feature-people` | Fase 8: sezione Persone e "Altri volti", pagina persona, revisione dei volti, fogli di unione, attivazione e avviso, Impostazioni → Persone, "Disattiva e cancella". Stati e contratti, composable con i soli componenti G2. **Cieca a `core-nas`, `core-nasops`, `core-trust`, `core-ai`, `core-models`, `core-search`, `core-albums`, `core-backup`, `core-index`** | faces (contratti), library, imaging, designsystem |
+| `:core-memories` | Fase 9: Ricordi. Pianificatore (giorno nel passato, viaggi, eventi, persone, mesi), scelta delle foto, scaffale locale, notifiche discrete, musica. **JVM puro**, non vede rete, NAS, volti, ricerca, album ne' coordinate: viaggi, persone, vettori e pixel arrivano da porte sue (`MemoryTrips`, `MemoryPeople`, `MemoryVectors`, `MemoryPixels`) legate da `:app` | common, model, library (contratti e viste), personal (porta `MemoriesPersonalSettings`) |
+| `:feature-memories` | Fase 9: sezione Ricordi, pagina del ricordo, presentazione, fogli "Mostra meno", Impostazioni → Ricordi e notifiche. Stati e contratti, composable con i soli componenti G2 | memories (contratti), library, imaging, designsystem |
+| `:core-map` | Fase 9: Mappa, la parte pura. Punti con coordinate effettive, indice a celle (z-order), cancello delle richieste di rete (`MapRequestGate`), regioni offline, impostazioni della mappa. **JVM puro**, senza MapLibre ne' OkHttp | common, model |
+| `:feature-map` | Fase 9: la mappa (MapLibre), sezione Luoghi, regioni offline, mini-mappa del viewer. L'unico HTTP della mappa sta in `feature-map/.../net/` (OkHttp dietro il cancello) | map (contratti), library, imaging, places, designsystem |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
@@ -189,6 +193,25 @@ in release e in debug e `tools/check.ps1` la cerca nel dex di release. Le aggiun
 volti in `core-models`, voce `faces` e gancio `PrePublishHook` in `core-personal`, `FacesKeys` in `core-security`, `FacesNasEraser` in
 `core-nasops`, `SearchChip.Person` e `PeopleLookup` in `core-search`, `PeopleRule` e `PeopleMembership` in `core-albums`, `ViewerPeople` in
 `feature-viewer`, `DiagSection.PEOPLE`) sono nel §1.3 del progetto e in `docs/decisioni.md` ("Fase 8 P0").
+
+**Fase 9: chi vede chi** (`docs/fase9-progetto.md` §1.1). Nascono `core-memories`, `feature-memories`, `core-map` e `feature-map` (P0 ne
+scrive i contratti, i null-object, i fake e gli esecutori di riferimento `ReferencePlanner`, `ReferencePicker`, `InMemoryShelfStore`,
+`InMemoryMemories`, `ReferenceNotifyPolicy`, `ReferenceTilePolicy`, `ReferenceClusterIndex`, `InMemoryMapRegions`, `InMemoryMapSettings`, con
+le suite di contratto che le implementazioni vere dei pacchetti dopo devono passare). Le regole:
+- `core-memories` e `core-map` sono **JVM puri** (niente Android, librerie, Compose, Hilt); `core-memories` non vede volti, ricerca, album,
+  modelli, NAS, rete, indice, trust ne' la mappa e non maneggia coordinate: tutto arriva da porte sue che `:app` lega; scrive i dati
+  personali solo dalla porta `MemoriesPersonalSettings` di `core-personal`;
+- MapLibre solo in `feature-map`; OkHttp solo in `feature-map/.../net/`, con dichiarazioni `internal` (la regola 5 della Fase 6 ammette ora
+  due pacchetti di rete), anche nel bytecode della release (`tools/check.ps1`);
+- `MapOnlineChoice` la costruisce solo `feature-map/.../privacy/` e `RegionDownloadConfirmation` solo il foglio delle regioni; la porta dei
+  viaggi per i ricordi (`TripMemories`) non porta coordinate ne' casa, e la casa non compare nei moduli della Fase 9;
+- `feature-memories` e `feature-map` vedono dei loro core solo contratti, null-object e fake; `feature-viewer` mostra la mini-mappa da una
+  porta sua (`ViewerPlaceMap`), senza vedere la mappa.
+
+`Phase9ArchitectureTest` (`core-common`, P0) tiene queste regole; ogni violazione reintrodotta lo fa fallire. La mappa online e' accesa di
+base per tutti (risposta Q1 (c) del 27/10, `FeatureFlags.mapOnline`), con l'interruttore per dispositivo in Impostazioni; il cancello di rete
+resta intero. Le aggiunte ai moduli esistenti (campi dei ricordi in `core-personal`, `TripMemories` in `core-albums`, `ViewerPlaceMap` in
+`feature-viewer`, sezione `places` delle Raccolte, `DiagSection.MEMORIES` e `MAP`) sono in `docs/decisioni.md` ("Fase 9 P0").
 
 **Fase 6 in `:app` (P11).** `AiModule` monta tutto una volta per processo (`AiWiring.build`): `LocalModels` (cartella
 `noBackupFilesDir/models`, sorgenti di `ModelFetchers`, cancello di rete per l'HTTPS; la copia sul NAS resta spenta finche' `core-nas` non

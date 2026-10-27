@@ -1,0 +1,84 @@
+// La mappa della Fase 9 (docs/fase9-progetto.md §1.1, §1.5, §2.7-§2.10; D21-D30; risposte Q1 (c) e Q2 (a) del 27/10; righe P1, P2, P4, P5 del
+// §4.4): la schermata con MapLibre (map/, P4; l'inizializzazione `MapLibreInit.kt` e' di P1), le bolle, la griglia di una zona (grid/), la
+// sezione Luoghi (places/), Impostazioni -> Mappa con l'interruttore e la nota (privacy/), le regioni offline (regions/, P5), la mini-mappa del
+// viewer (mini/), le impostazioni su DataStore (settings/). Scheletro di P0: modulo, stati sigillati del §1.5 come contratto, azioni come
+// porta, stati di esempio per i test.
+//
+// **La rete**: `feature-map/.../net/` (P1: `MapTileHttp`, il client OkHttp che MapLibre usa e il suo intercettore, che chiama la decisione pura
+// `TilePolicy` di core-map per ogni richiesta) e' l'**UNICO** codice di rete della fase, la seconda eccezione dichiarata dopo i modelli
+// (NoNetworkSourcesTest di questo modulo ammette solo quel pacchetto; Phase6ArchitectureTest e Phase9ArchitectureTest lo controllano, con
+// tutte le classi `internal`; `tools/check.ps1` lo controlla nel dex). **MapLibre e OkHttp stanno solo qui** (le dipendenze, approvate in Q8,
+// le aggiunge P1 con le impronte in `gradle/verification-metadata.xml`).
+//
+// Vede core-map (contratti), la Libreria (viste), le miniature locali e i nomi dei luoghi (core-places, contratti: etichette e sezione Luoghi).
+// **Cieca a core-network** (la rete in uso da una porta), **core-nas, core-albums, core-memories** e agli altri feature-*; la "casa" non entra
+// mai (D29). `MapOnlineChoice` la costruisce SOLO la pagina della mappa (privacy/MapPrivacy*.kt) e `RegionDownloadConfirmation` SOLO il foglio
+// (regions/RegionDownload*.kt), dopo un tocco.
+//
+// D7 della Fase 2: @HiltViewModel (KSP). Nessun orologio del telefono (NoWallClockSourcesTest): monotono per la calma e le conferme.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+  id 'org.jetbrains.kotlin.plugin.compose'
+  id 'org.jetbrains.kotlin.plugin.serialization'
+  id 'com.google.devtools.ksp'
+  id 'com.google.dagger.hilt.android'
+  id 'io.github.takahirom.roborazzi'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.map'
+
+  buildFeatures {
+    compose = true
+  }
+
+  testOptions {
+    unitTests.all {
+      maxHeapSize = '2g'
+    }
+  }
+}
+
+dependencies {
+  // api: i contratti della mappa (punti, bolle, regioni, impostazioni) e i componenti (core-designsystem) compaiono negli stati.
+  api project(':core-map')
+  api project(':core-designsystem')
+
+  // La Libreria (viste e celle della griglia di una zona), le miniature locali (bolle: mai il NAS durante il gesto) e i nomi dei luoghi.
+  implementation project(':core-library')
+  implementation project(':core-imaging')
+  implementation project(':core-places')
+
+  implementation project(':core-common')
+  implementation project(':core-model')
+
+  implementation appDeps.hiltAndroid
+  ksp appDeps.hiltCompiler
+  implementation appDeps.hiltNavigationCompose
+  implementation appDeps.navigationCompose
+  implementation appDeps.lifecycleViewModelCompose
+  implementation appDeps.lifecycleRuntimeCompose
+  implementation appDeps.coroutinesAndroid
+  implementation appDeps.serializationCore
+  implementation appDeps.datastorePreferences
+
+  // Solo nei test: il legame della sezione Luoghi con le Raccolte. In produzione i feature non si conoscono.
+  testImplementation project(':feature-library')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+  testImplementation platform("androidx.compose:compose-bom:${engine.composeBom}")
+  testImplementation appDeps.composeUiTestJunit4
+  testImplementation appDeps.composeUiTestManifest
+  testImplementation appDeps.roborazzi
+  testImplementation appDeps.roborazziCompose
+  testImplementation appDeps.roborazziJunitRule
+}

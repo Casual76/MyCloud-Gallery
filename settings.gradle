@@ -92,6 +92,16 @@ include ':feature-albums'    // elenco e pagina degli album, editor delle regole
 include ':core-faces'        // attivazione e consenso, calcolo dei volti, raggruppamento, persone, sincronizzazione, cancellazione, archivio
 include ':feature-people'    // sezione Persone, pagina persona, revisione dei volti, attivazione, avviso, impostazioni, "Disattiva e cancella"
 
+// Fase 9 (docs/fase9-progetto.md §1.1, P0): ricordi, notifiche dei ricordi e mappa. core-memories e core-map sono JVM puri (nessuna classe
+// Android, nessuna rete, nessun NAS): viaggi, persone, vettori, pixel, punti e stato della rete arrivano da porte che :app lega. MapLibre e il
+// client HTTP stanno SOLO in feature-map, e il client SOLO in feature-map/.../net/: la seconda eccezione di rete dichiarata, verso il solo
+// tiles.openfreemap.org, dietro il cancello puro `TilePolicy` di core-map. feature-memories e feature-map non si conoscono e non vedono il
+// viewer; la "casa" non entra nella mappa (Phase9ArchitectureTest).
+include ':core-memories'     // identita', generatori, scelta delle foto, scaffale, scelte dell'utente, decisioni delle notifiche
+include ':feature-memories'  // sezione Ricordi, pagina del ricordo, "Tutti i ricordi", presentazione, fogli "Mostra meno", Impostazioni -> Ricordi
+include ':core-map'          // punti, indice e raggruppamento, regioni offline, cancello di rete della mappa, impostazioni della mappa
+include ':feature-map'       // mappa (MapLibre), bolle, griglia di una zona, sezione Luoghi, Impostazioni -> Mappa, regioni, mini-mappa
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {

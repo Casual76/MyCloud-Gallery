@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :feature-memories: nessun permesso e nessun componente (Fase 9, P0; docs/fase9-progetto.md §6.4, D35). Le pagine dei ricordi sono
+      schermate di :app (navigazione, P13); il canale e la notifica sono di :app (P10); la canzone propria si sceglie con il selettore di
+      sistema, senza permessi nuovi (Q3). Nessuna rete. Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in
+      docs/sicurezza.md 4-bis, poi quella in releaseManifestPolicy.
+  -->
+
+</manifest>

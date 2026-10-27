@@ -29,6 +29,12 @@ object CollectionSections {
   /** Ricordi (Fase 9): il posto nell'ordine e' gia' riservato. */
   const val MEMORIES: String = "memories"
 
+  /**
+   * Luoghi (Fase 9, `docs/fase9-progetto.md` D30): la riga "Mappa" e i luoghi piu' fotografati, subito dopo i Ricordi nell'ordine predefinito.
+   * Compare solo quando c'e' il suo fornitore (P4, legato da :app in P13); con un ordine gia' salvato va in coda (E-L14).
+   */
+  const val PLACES: String = "places"
+
   /** Cartelle NAS (oggi "Sul NAS", da `:app`). */
   const val NAS: String = "nas"
 
@@ -45,14 +51,14 @@ object CollectionSections {
   const val HIDDEN: String = "hidden"
 
   /** L'ordine predefinito del §2.7: vale finche' l'utente non ne salva uno. */
-  val defaultOrder: List<String> = listOf(ALBUMS, SMART, TRIPS, PEOPLE, MEMORIES, NAS, PHONE, SAFE, UTILITY, HIDDEN)
+  val defaultOrder: List<String> = listOf(ALBUMS, SMART, TRIPS, PEOPLE, MEMORIES, PLACES, NAS, PHONE, SAFE, UTILITY, HIDDEN)
 
   /**
-   * Le sezioni che oggi non esistono e che una fase futura aggiunge (Persone, Ricordi): salvando un ordine non le si tiene da parte, cosi'
-   * quando arrivano **vanno in coda** senza rompere l'ordine salvato (E-L14). Le altre, se mancano un momento (il NAS non ancora
+   * Le sezioni che oggi non esistono e che una fase futura aggiunge (Persone, Ricordi, Luoghi): salvando un ordine non le si tiene da parte,
+   * cosi' quando arrivano **vanno in coda** senza rompere l'ordine salvato (E-L14). Le altre, se mancano un momento (il NAS non ancora
    * configurato, nessun cestino di sistema), tengono il loro posto.
    */
-  val reservedForLater: Set<String> = setOf(PEOPLE, MEMORIES)
+  val reservedForLater: Set<String> = setOf(PEOPLE, MEMORIES, PLACES)
 
   /** Le sezioni che non si nascondono mai (D33): lo stesso elenco di `SyncedCollectionsSettings.DEFAULT_NEVER_HIDDEN` di core-personal. */
   val neverHidden: Set<String> = setOf(ALBUMS)

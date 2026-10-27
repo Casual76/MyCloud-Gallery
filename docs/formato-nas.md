@@ -853,7 +853,7 @@ valore`. Il tipo non sta nel corpo: lo dice la chiave della tabella, che chi leg
 |---|---|---|
 | `at` | ms, ora del NAS della modifica, entro il periodo plausibile del formato | D32: mai l'orologio del telefono |
 | `author` | id del dispositivo (26 caratteri base32) | chi ha fatto la modifica, non chi pubblica (lo stato e' unito, D26) |
-| `media` | il soggetto: id del media o dell'album, o `settings`; al massimo 128 caratteri | deve corrispondere alla chiave |
+| `media` | il soggetto: id del media o dell'album, `settings`, o (Fase 9) l'id di un ricordo; al massimo 128 caratteri | deve corrispondere alla chiave |
 | `field` | il campo, al massimo 128 caratteri | deve corrispondere alla chiave |
 | `fp` | `{"qh":…,"size":…}`, facoltativo | `qh1` in base32 e dimensione del **soggetto**: lo si ritrova se gli id divergono fra dispositivi |
 | `value` | `true`/`false`, intero o testo (al massimo 1024 caratteri, senza caratteri vietati); assente = lapide | il significato dipende dal campo |
@@ -904,6 +904,24 @@ non pubblica e **non cancella** niente e dice "Aggiorna l'app" (`FacesSettingCod
 nuovo. **`person` resta riservato**: rifiutato nelle teste `personal` (`RESERVED_KIND`) e mai scritto dal magazzino
 (`Phase8FacesContractTest`); nomi e correzioni delle persone stanno nella classe `people` sotto `faces/` (sotto), cosi' "Disattiva e
 cancella" li toglie con la cartella della generazione, anche quelli dei dispositivi spenti.
+
+**Il tipo `memory` e i campi della Fase 9 (A1, A2; `docs/fase9-progetto.md` D9-D11, risposta Q9 (a); P0 del 27/10).** Nessun tipo nuovo e
+nessuna versione nuova: il tipo `memory` c'era gia' nel codice dalla 4B (`PersonalKind.MEMORY`) e qui si documenta; gli altri sono campi
+dentro `setting`. Un'app della Fase 8 legge i segmenti con questi campi **senza scartarli** e li conserva identici (il codec della classe
+`personal` non e' cambiato: `Phase9MemoriesFieldsTest` di `core-personal`). Chiavi e lettura in un posto solo: `MemoriesRecords` di
+`core-personal`.
+- `memory` (A1): soggetto = l'**id del ricordo** (`MemoryId`, D9: i primi 128 bit di SHA-256("mcg-memory\0" ‖ tipo ‖ "\0" ‖ chiave) in base32
+  di Crockford minuscolo, 26 caratteri, forma canonica; un hash, non rivela giorno, viaggio o persona). Campi: `seen` = intero `aaaammgg`,
+  il **giorno locale** dell'ultima visione (non l'ora del NAS: chi segna "visto" fuori casa non la conosce, e l'ora della modifica la porta
+  gia' `at`; nessuna voce `seen` e' stata scritta prima della Fase 9, quindi il significato nuovo non tocca dati esistenti); `dismissed` =
+  `true` ("Non mostrare questo ricordo"; la lapide e' "Annulla"). **Nessuna impronta** (`fp` assente). Un soggetto che non e' un id di
+  ricordo canonico, un `seen` che non e' una data o un `dismissed` che non e' `true` valgono "nessuna scelta".
+- `setting` (A2, soggetto `settings`): `memories_less:person:<id della persona in base32, 26 caratteri>` = testo `less` ("Mostra meno") o
+  `never` ("Mai nei ricordi"), lapide = scelta tolta; `memories_never:days:<aaaammgg>-<aaaammgg>` = `true` (un periodo di giorni locali
+  "Mai nei ricordi", estremi compresi, al piu' 366 giorni a voce; lapide = tolto); `memories_people` = `true`/`false` ("Ricordi con le
+  persone", Q9 (a): assente = acceso). **Mai un nome**: le persone sono il loro id casuale (F8-D22). Un valore che non si capisce (un
+  livello sconosciuto, un periodo rovesciato o troppo lungo, un id che non e' base32) vale "nessuna scelta" e non rovina le altre voci.
+  Quando Persone si spegne o si cancella, un dispositivo dell'account scrive la lapide su **tutte** le voci `memories_less:person:*` (D11).
 
 **Impronta obbligatoria** (`fp`) sulle voci `item:`, `exclude:`, `accept:`, `smart:example:`: chi legge ritrova il media per impronta se
 gli id divergono fra dispositivi (stessa regola delle separazioni: solo se indica un media solo).
@@ -1897,6 +1915,7 @@ e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla 
 | §2.2, §4.6 (A7), §5.8, §7, §10 (Fase 7, P2: album condivisi) | `data/AlbumDocs.kt` (`AlbumLimits`, `AlbumIds`, `AlbumField`, `AlbumKey`, `AlbumValue`, `AlbumEntry`, `AlbumHead`, codec `AlbumDocs`), righe minime in `TrustFormat.kt` (`ALBUM_VERSION`), `envelope/Envelope.kt`, `nas/NasLayout.kt` (`albumHead`, `albumSegment`), `data/IndexSegment.kt` (classe 17); serie, replica, fusione, permessi e pubblicatore in `core-albums/.../shared/` | `AlbumHeadTest`, `AlbumHostileTest`, `AlbumSegmentHostileTest`, `IndexSegmentTypesTest`; in `core-albums`: `AlbumPermissionsLogicTest`, `AlbumFusionPropertyTest`, `SharedAlbumSyncTest`, `SharedAlbumIsolationTest`, `NasAlbumPublisherTest`, `SharedAlbumBenchTest`, `Real*ContractTest` |
 | §2.2, §2.3, §4.6, §5.5-bis (`faces`, `cluster`, `people`, campo `faces`), §5.6 (prenotazioni dei volti), §5.11, §7, §9 punto 6-bis, §10 (Fase 8, P0: firme; il codec e' di P3) | `TrustFormat.kt` (`FACES_VERSION`, tetti dei volti in `TrustLimits`), `envelope/Envelope.kt` (`DocType.FACES_HEAD`), `data/IndexSegment.kt` (classi 18-20, `isFaces`, `FACES_CLASSES`), `nas/NasLayout.kt` (`faces*`); `core-model` (`FaceGeneration`, `PersonId`, `FaceLocator`, `FaceRef`, `FacesSetting`); `core-personal` (`FacesSettingCodec`); `core-nasops` (`FacesNasEraser`, contratto); codec `FacesDocs` (P3) | `FacesSignaturesTest`, `IndexSegmentTypesTest`, `Phase8TypesTest`, `Phase8FacesContractTest`, `FacesNasEraserContract`, `FacesRemoteContract`, `Phase8ArchitectureTest` |
 | §2.3 (pulizia dei volti), §5.5-bis (corpi `faces`, voci `cluster` e `people`), §5.6 (radice delle prenotazioni), §5.11 (testa, replica e pubblicazione), §7 (Fase 8, P3) | `data/FacesDocs.kt` (`FacesHead`, `SnapshotMark`, codec `FacesDocs`), `data/FacesBodies.kt` (`FacesBody`, `FaceRecord`, `FacesLimits`), `data/FacesCluster.kt` (`ClusterEntry`, `FacesBinary`), `data/FacesPeopleDocs.kt` (`PeopleDoc`, `PeopleForms`), `data/FacesOwnFiles.kt`, `data/Leases.kt` (`LeaseRoot`), `TrustFormat.kt` (tre tetti nuovi); in `core-faces/.../sync/`: `NasFacesRemote`, `FacesHeadSeries`, `NasFacesSync` (replica e `ClusterSnapshots`), `NasFacesPublisher`, `NasFacesLeases`, `FacesFusion`, `FacesWire`, `FacesSegmentPlan` | `FacesDocsTest`, `FacesHostileHeadTest`, `FacesHostileBodyTest`, `FacesHostilePeopleTest`, `FacesOwnFilesAndLeasesTest`; in `core-faces`: `NasFacesRemoteContractTest` (suite di P0), `FacesWireTest`, `FacesFusionPropertyTest`, `FacesPublisherTest`, `FacesReplicaTest`, `FacesIsolationTest`, `FacesSyncBenchTest`, `NasFacesLeasesTest` |
+| §5.5-bis (tipo `memory`, campi della Fase 9: A1, A2; Fase 9, P0) | `core-personal`: `contract/Personal.kt` (`PersonalFields`), `contract/MemoriesPersonal.kt` (`MemoriesRecords`, `MemoryDays`, `MemoryLessLevel`), `settings/PersonalCollections.kt` (`PersonalMemories`); in `core-memories` l'id (`MemoryIds`) | `Phase9MemoriesFieldsTest`, `MemoriesPersonalSettingsContract`; `ContractTypesTest` di `core-memories` |
 
 I test JVM usano un NAS finto volutamente scomodo: elenchi in ordine casuale e nomi senza distinzione di
 maiuscole (I3).

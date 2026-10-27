@@ -99,6 +99,8 @@ Preparatore la **rifa' dall'originale del NAS** come una preparazione (solo `ana
 regole di `PREPARATION`) e il suo traffico si conta come quello della preparazione. "Analizza ora" e' `UserInitiated(AI_COMPUTE)`. Il
 raggruppamento notturno del custode e la sincronizzazione dei dati dei volti (leggera, dentro `INDEX_SYNC`) non sono attivita' nuove.
 
+**Ricordi, notifiche e mappa (Fase 9, `docs/fase9-progetto.md` D4, D20, D26; P0).** Nessuna attivita' nuova (un'attivita' nuova romperebbe i `when` esaustivi e le stime): la **generazione dei ricordi** non usa rete ne' NAS, quindi la proposta 3 non la riguarda; gira **di notte dentro `LibraryMaintenanceWorker`** (in carica, dopo i viaggi, budget `memoriesNightlyBudget`), con un **passo leggero** all'ora della notifica o all'apertura dell'app se la notte non c'e' stata (budget `memoriesLightBudget`, niente misure dei pixel col risparmio energetico) e all'apertura di Raccolte se il giorno e' cambiato. La **notifica** e' un lavoro `OneTimeWork` unico (`memories-notify`) con il ritardo fino all'ora scelta, senza vincoli di rete ne' di carica, consegnato nella finestra `notifyWindow` (D20). Lo **scaricamento di una regione offline** e' contenuto chiesto dall'utente (un tocco sul foglio, come aprire una foto), nel processo dell'app, solo sul Wi-Fi o con la seconda conferma; il traffico della mappa online si conta come contenuto visibile (`MapTraffic`). Nessun lavoro in background per la mappa; l'indice dei punti si rifa' con `mapIndexRebuild`.
+
 ---
 
 ## 3. Preset × attività
@@ -365,6 +367,14 @@ Costanti nuove (ipotesi di partenza [stima], da misurare: P2 scrive `facesPerSec
 * `faceFramesPerVideo`: fotogrammi di un video analizzati per i volti (copertina e fino a 3 del blob `frames`), 3 (`FacesComputeLimits.FRAMES_PER_VIDEO`).
 * `facesGroupingNightly`: il raggruppamento notturno del custode (assegnazione, nascite, manutenzione), obiettivo < 1 minuto per ~20.000
   volti; il raggruppamento incrementale gira dopo ogni unita' (o ogni 50 volti non assegnati, `GroupingParams.BIRTHS_EVERY`).
+
+### Ricordi, notifiche e mappa (Fase 9, `docs/fase9-progetto.md` D4, D20, D27, §2.14)
+
+Costanti nuove (P0 le fissa nei contratti; [stima] i costi, misurati da P6 e P12):
+* `memoriesNightlyBudget`: 60 s per il giro notturno dei ricordi dentro `LibraryMaintenanceWorker` (`RefreshBudgets.NIGHTLY_SECONDS`); costo atteso < 2 s per 100.000 elementi sull'S25 [stima].
+* `memoriesLightBudget`: 5 s per il passo leggero (`RefreshBudgets.LIGHT_SECONDS`); atteso < 300 ms [stima].
+* `notifyWindow`: la consegna della notifica da H a H+2 h, in ritardo fino a H+3 h, oltre quel giorno si salta (`NotifyRules.WINDOW_MINUTES`, `SKIP_AFTER_MINUTES`); al piu' una al giorno e di base al piu' 3 in 7 giorni (Q4).
+* `mapIndexRebuild`: la ricostruzione dell'indice dei punti dopo 2 s di calma quando cambia l'istantanea (`MapPoints.REBUILD_QUIET_MS`); lettura di 100.000 punti < 1,5 s sull'S25 [stima], ~2,4 MB in memoria.
 
 **Prima analisi** dell'archivio dell'utente (~15.000 foto e ~2.600 video, un indicizzatore, S25): ~25-35 minuti di calcolo, di notte in
 carica; PSS +80-150 MB col calcolo in corso. Le anteprime che mancano e vanno rifatte dall'originale costano come una preparazione.

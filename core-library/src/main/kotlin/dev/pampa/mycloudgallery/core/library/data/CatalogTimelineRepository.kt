@@ -171,13 +171,25 @@ class CatalogTimelineRepository(
     lock.withLock {
       val current = snapshotFlow.value as? ColumnarTimelineSnapshot
       if (current == null) {
-        store?.delete()
+        dropStored()
         return
       }
       val next = TimelinePatcher.remove(current, ids)
       if (next === current) return
       publish(next)
-      if (writer?.writeNow(next, provisional = true, sensitive = true) == false) store?.delete()
+      if (writer?.writeNow(next, provisional = true, sensitive = true) == false) dropStored()
+    }
+  }
+
+  /**
+   * Il file dell'istantanea ha ancora un elemento appena nascosto e non si riesce a riscriverlo: lo si toglie; se nemmeno quello riesce lo si
+   * **sostituisce** con un'istantanea vuota e provvisoria, perche' al riavvio la prima immagine della Libreria viene proprio dal file (R11, E-H1).
+   */
+  private suspend fun dropStored() {
+    val store = store ?: return
+    if (store.delete()) return
+    if (!store.write(ColumnarTimelineSnapshot.EMPTY, provisional = true)) {
+      GalleryLog.w(TAG) { "Istantanea con un elemento nascosto: non si toglie ne' si sostituisce." }
     }
   }
 

@@ -24,6 +24,10 @@ import kotlinx.coroutines.coroutineScope
  * presenti hanno 128 componenti finite, norma 1 +- [FaceEngineLimits.NORM_TOLERANCE] e sono deterministici (coseno >= 0,999); le
  * chiamate in parallelo hanno i loro risultati; `release` idempotente e un `detect` dopo `release` che riscalda; i guasti solo come
  * [AiEngineException]. [withFaces] sono immagini con almeno un volto (sintetiche o di pubblico dominio: nessun dato personale).
+ *
+ * P2 aggiunge: la seconda passata ([DetectPass.HQ_TILES]) rispetta gli stessi limiti della prima e, su un'immagine che entra in 1024 px (un
+ * tassello solo), non trova meno volti dell'anteprima; un volto allineato per volto e nessun lotto vuoto ([FaceEmbedder.embed] di una lista vuota
+ * da' una lista vuota, senza aprire il motore); dopo `release` anche la seconda passata e l'embedder riscaldano.
  */
 object FaceEnginesContract {
 
@@ -49,6 +53,15 @@ object FaceEnginesContract {
     check(first.flatten().isNotEmpty(), "nessun volto in nessuna immagine")
     for (image in withoutFaces) check(detect(engines, image).isEmpty(), "volti in un'immagine che non ne ha")
 
+    // La seconda passata: gli stessi limiti; su un'immagine che entra nel quadro (un tassello solo) non perde i volti dell'anteprima.
+    for ((image, faces) in withFaces.zip(first)) {
+      val hq = detect(engines, image, DetectPass.HQ_TILES)
+      if (maxOf(image.width, image.height) <= FaceEngineLimits.DETECT_SIDE) {
+        check(hq.size >= faces.size, "la seconda passata trova ${hq.size} volti, l'anteprima ${faces.size}")
+      }
+    }
+    check(engines.embedder.embed(emptyList()).isEmpty(), "una lista vuota non da' una lista vuota")
+
     // Chiamate in parallelo: il motore le mette in fila, ognuna ha il suo risultato.
     val parallel = coroutineScope { withFaces.map { async { engines.detector.detect(it, DetectPass.PREVIEW).size } }.awaitAll() }
     check(parallel == first.map { it.size }, "rilevamenti in parallelo diversi da quelli in fila")
@@ -58,11 +71,13 @@ object FaceEnginesContract {
     val afterRelease = detect(engines, withFaces.first())
     check(afterRelease.size == first.first().size, "dopo release il rilevatore non torna uguale")
     check(vectorsOf(engines, withFaces.first(), afterRelease).size == afterRelease.size, "dopo release l'embedder non torna")
+    engines.release()
+    detect(engines, withFaces.first(), DetectPass.HQ_TILES)
   }
 
-  private suspend fun detect(engines: FaceEngines, image: FaceImage): List<DetectedFace> {
+  private suspend fun detect(engines: FaceEngines, image: FaceImage, pass: DetectPass = DetectPass.PREVIEW): List<DetectedFace> {
     val faces = try {
-      engines.detector.detect(image, DetectPass.PREVIEW)
+      engines.detector.detect(image, pass)
     } catch (e: AiEngineException) {
       throw AssertionError("rilevatore in errore su un'immagine valida: ${e.error}")
     }

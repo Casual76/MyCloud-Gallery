@@ -6954,20 +6954,20 @@ dati dei volti sulle share vere (F110).
 | D3 | Attivazione per account: voce `SETTING` `faces` (`1\|on\|G\|v`, `1\|off\|G`), generazione nuova a ogni attivazione; forma sconosciuta = niente calcolo, niente pubblicazione, nessuna cancellazione; consenso solo dalla pagina | Deciso (P0: `FacesSettingCodec`, `FacesSetting`, `FacesActivationConsent`; P7) |
 | D4 | Gli altri dispositivi lo dicono una volta (`AwaitingNotice`) e prima non trattano niente; "Non su questo dispositivo" è un'esclusione locale | Deciso (P0: `FacesState`; P7) |
 | D5 | Requisiti: area privata dichiarata e almeno un indicizzatore dell'account | Deciso (P0: `FacesRequirements`, `ActivateOutcome`; P7) |
-| D6 | YuNet ed SFace, convertiti una volta sul PC in `.tflite`, su `litert` 2.3.0 a CPU; niente GPU, NNAPI, NPU | Deciso (P1, P2) |
+| D6 | YuNet ed SFace, convertiti una volta sul PC in `.tflite`, su `litert` 2.3.0 a CPU; niente GPU, NNAPI, NPU | Deciso (P1; P2: motori scritti e provati sulla JVM, prove sul dispositivo a F104) |
 | D7 | Versioni e impronte d'ingresso fissate; regola di scelta di YuNet scritta prima di misurare; SFace float16, int8 solo a condizioni | Deciso (P1) |
 | D8 | Modelli dentro l'APK come asset di `core-ai` (Q1 (a)), estratti solo dove Persone è attiva, mai sullo scaffale del NAS | Deciso (Q1 (a); P0: ruoli `FACE_DETECT`, `FACE_EMBED`; P1) |
 | D9 | Qualità attesa dalle fonti pubbliche; la misura che decide è sui dati veri (F105, più avanti: Q4); piano B solo con licenze compatibili | Deciso (Q4) |
-| D10 | Prestazioni attese [stima]: ~30–50 ms a foto sull'S25; P2 misura `facesPerSecond` | Da misurare (P2, F104) |
+| D10 | Prestazioni attese [stima]: ~30–50 ms a foto sull'S25; P2 misura `facesPerSecond` | Da misurare (P2: `DeviceMeasures.facesPerSecond` = 25 [stima], codice nostro < 3 ms a foto sulla JVM, prove strumentate scritte; il dispositivo a F104) |
 | D11 | Dati dei volti solo nell'area privata dell'account, letti solo dai suoi dispositivi; ogni account rifà il calcolo per sé | Deciso (P0: percorsi, `FacesRemote`, suite) |
 | D12 | Testa tipo 9, versione 4 solo per `faces/`, classi `faces` (18), `cluster` (19), `people` (20); regole di chi legge come le altre teste | Deciso (P0: firme in `core-trust`; P3: codec) |
 | D13 | Nomi e correzioni nella classe `people`; `PERSON` resta riservato e rifiutato nelle teste `personal` | Deciso (P0: test end-to-end in `core-personal`) |
 | D14 | Cifratura sul dispositivo (chiave del Keystore per generazione, distrutta per prima); sul NAS in chiaro, firmati (L94) | Deciso (P0: `FacesKeys`; P6) |
 | D15 | Database a parte `faces-<G>.db`, schema proprio v1; la galleria resta v6 | Deciso (P6) |
 | D16 | Calcolano gli indicizzatori dell'account con Persone attiva; unità `faces/<G>/work/<area>/<mese>/<parte>` prenotate sotto la generazione | Deciso (P0: risorse in `NasLayout`, `FacesResource`; P4) |
-| D17 | Ingressi: anteprima di analisi (buffer, indice, telefono, ri-preparazione), HQ a tasselli; il buffer non butta ciò che serve ai volti (`BufferKeepers`) | Deciso (P0: `FaceInputs`, `BufferKeepers`; P4) |
+| D17 | Ingressi: anteprima di analisi (buffer, indice, telefono, ri-preparazione), HQ a tasselli; il buffer non butta ciò che serve ai volti (`BufferKeepers`) | Deciso (P0: `FaceInputs`, `BufferKeepers`; P2: `ModelInputs.forFaces` e i quattro tasselli; P4) |
 | D18 | Si analizzano foto, RAW, panorami, video (fotogrammi, volti deboli); mai screenshot, documenti, ritagli; i nascosti si calcolano e non si mostrano | Deciso (P0: `FacesItem.excluded`; P4) |
-| D19 | Livelli CORE, WEAK, NONE; nessun attributo | Deciso (P0: `FaceTier`, `FaceReasons`; P2) |
+| D19 | Livelli CORE, WEAK, NONE; nessun attributo | Deciso (P0: `FaceTier`, `FaceReasons`; P2: `FaceQuality`, soglie di nitidezza e imbardata provvisorie, L120) |
 | D20 | Raggruppamento: esemplari con margine, nascite a legame medio (≥ 3 volti CORE di ≥ 2 foto), manutenzione notturna, "mai insieme in una foto" | Deciso (P0: `GroupingParams`, `ReferenceGrouping`; P5; soglie provvisorie fino a P11) |
 | D21 | Un solo custode per account (`faces/<G>/cluster`), istantanee numerate, assegnazioni provvisorie locali | Deciso (P0: `FaceGrouping`, `HolderState`; P5) |
 | D22 | `PersonId` stabile; unire = alias; ricalcolo con abbinamento per volti (IoU ≥ 0,5, assegnazione ottima) | Deciso (P0: `GroupingEngine.recluster` di riferimento; P5) |
@@ -7998,3 +7998,162 @@ Diagnostica → Esporta e si legge con `adb pull`). Nessuna e' stata fatta (nien
 - **F91** Prestazioni (`AlbumBenchmark`): ricalcolo e rilevazione sulla Libreria sintetica da 100 mila.
 - **F92** 24 ore di sincronizzazione con i finti album di F84: nessuna operazione non confermata.
 - **F93** (solo col consenso, Q7) release sulle share vere: la recinzione `sharedAlbumsTestSharesOnly` e' ancora accesa in release, quindi oggi non si puo'.
+
+
+## Fase 8 P2: motori dei volti sul dispositivo (28/10)
+
+Il pacchetto P2 della Fase 8 (`docs/fase8-progetto.md` §2.2 "Nel telefono", §2.12 "Prestazioni da misurare", D6, D10, D17, D19, §5.2, §5.4; riga P2 del §4.4): YuNet e SFace su LiteRT 2.3.0 nell'app, con la
+decodifica delle uscite e l'NMS, i tasselli della seconda passata, l'allineamento, la qualità, `ModelInputs.forFaces` e `DeviceMeasures.facesPerSecond`. Branch `fase8/p2`, da `integra/28-10e` (`5a0d4ec`, con P0, P1 e P5).
+Commit: `7aa19184` (motori), `a7694170` (`facesPerSecond` e suite di contratto), `10a85547` (prove JVM), `cb5c05d4` (test strumentati, scritti e non eseguiti), `75f1524a` (aperture provabili e regola R8), `cca5a3a6` (documenti) e `df8dbf91` (esito di `check.ps1`, correzioni ai test strumentati). **Niente è stato provato sul
+telefono né sull'emulatore** (nessun `adb`, nessun dispositivo): i test strumentati compilano (`:core-ai:compileDebugAndroidTestKotlin`) e li lancia la finestra F104; i numeri del dispositivo sono da riempire sul campo.
+
+### Cosa c'è (`core-ai/.../faces/`, tutto `internal` salvo i motori e le due regole)
+| File | Cosa | Provato da |
+|---|---|---|
+| `YuNetDecoder.kt` | `YuNetLayout` (1024, passi 8/16/32, 21.504 celle, i 12 nomi nell'ordine del file), `YuNetOutputs` (le uscite per tipo e scala), `RawDetection`, decodifica e NMS: traduzione di `tools/models/faces/common.py::decodifica_yunet` | `YuNetDecoderTest` |
+| `FaceFrames.kt` | `FrameBuilder` (il quadro 1024x1024x3 BGR, media sull'area in riduzione e bilineare in ingrandimento, bordi a 0 in basso e a destra), `FaceTiling` (i tasselli), `FrameGeometry` (dal quadro all'immagine) | `FaceFramesTest`, `YuNetDetectorTest` |
+| `YuNetDetector.kt` | il rilevatore: una richiesta alla volta, thread suo, errori come codici, rilascio idempotente, riapertura da sola; `PREVIEW` e `HQ_TILES` | `YuNetDetectorTest` (17), `RealEnginesContractTest` |
+| `SFaceEmbedder.kt` | l'embedder: un volto alla volta, null per quello che lancia o dà un vettore non valido, tre guasti di fila = motore chiuso | `SFaceEmbedderTest` (10), `FaceFaultIsolationDeviceTest` |
+| `FaceAligner.kt` | la similitudine ai minimi quadrati (forma chiusa in 2D) dai cinque punti al modello a 112 px di ArcFace e il ritaglio bilineare | `FaceAlignerTest` (9) |
+| `FaceQuality.kt` | i livelli di D19, l'imbardata dai cinque punti, la nitidezza | `FaceQualityTest` (11) |
+| `FaceSessions.kt` | `DetectorSession`, `EmbedderSession`, le fabbriche, `FaceVectors` (ingresso RGB di SFace, vettore normalizzato in float32) | `SFaceEmbedderTest` |
+| `FaceLiteRtSessions.kt` | **la sola classe dei volti che nomina `org.tensorflow.lite`**: due sessioni sopra `Interpreter` (CPU, 4 thread, nessun delegato) che controllano la forma del file | `FaceModelContractTest` (la forma, sulla JVM), prove strumentate |
+| `FaceEnginesFactory.kt` | `FaceEnginesFactory.create(files)` = YuNet + SFace + `FaceAligner` + `FaceQuality` sopra `ModelFiles` (verifica a ogni apertura, descrittore mappato come MagicTouch) | prove strumentate |
+Fuori da `faces/`: `ModelInputs.forFaces(bytes, maxSide, frame = 0)`; due accessi interni senza copia in `contract/Faces.kt` (`FaceImage.raw()`, `AlignedFace.raw()`, come `CutoutImage.raw()` di P13); la suite `FaceEnginesContract`
+estesa (seconda passata a tasselli, lista vuota dell'embedder, riapertura dopo `release`); `DeviceMeasures.facesPerSecond` in `core-rules`.
+
+### Scelte
+- **La politica sta separata dal runtime** (come `MagicTouchCutter` e `LiteRtSessions`): `YuNetDetector` e `SFaceEmbedder` parlano con `DetectorSession` e `EmbedderSession`; le classi di LiteRT non si caricano sulla JVM dei test, quindi sessioni finte
+  provano la politica e il modello vero gira solo sul dispositivo. Le classi di `FaceLiteRtSessions` stanno **tutte dentro l'oggetto** (`FaceLiteRtSessions$Detector`, `$Embedder`): il passo di `tools/check.ps1` attribuisce le chiamate a LiteRT nel dex alla classe
+  che le contiene e ammette, fra i volti, solo quelle che cominciano per `FaceLiteRtSessions`.
+- **Il quadro di YuNet** è quello di `common.quadro_yunet` (P1, provato contro OpenCV): lato lungo a 1024 sempre (in giù con la media sull'area, in su con l'interpolazione bilineare), BGR 0-255 senza media né scala, bordi a 0 in basso e a destra. Un'anteprima con il lato lungo di
+  1024 px (la norma) non si ridimensiona: solo lo scambio dei canali. Le coordinate tornano all'immagine con le scale vere dei due assi (il lato lungo è esatto, il corto è arrotondato al pixel).
+- **Decodifica e NMS** sono la traduzione di quelle di P1: punteggio = radice di cls e obj portati in 0..1, centro `(colonna + dx) * passo`, lato `exp(w) * passo`, cinque punti `(kps + colonna) * passo`, soglia 0,6 (`>=`), NMS 0,3 (si scarta con IoU `>`) sui 5.000 migliori. In più, per difesa: una cella con un valore non
+  finito (o un `exp` che trabocca) non è un candidato, mai un'eccezione. **I tensori delle prove sono ricostruiti, non registrati** (sotto, "Fixture").
+- **La seconda passata (D17)**: ogni lato oltre 1024 px si divide in due parti che si sovrappongono di 128 px, e un'immagine con tutti e due i lati oltre 1024 (l'HQ è 2048 px al più) fa **quattro tasselli** (2x2, ognuno al più 1088 px, portato a 1024 nel quadro con la sua scala: per un 2048x1536
+  sono 1088x832 a 0,94); un lato che entra in 1024 px non si divide. Una sola corsa per tassello. I rilevamenti tornano alle coordinate dell'immagine intera e si fondono con l'NMS; **un rilevamento che tocca (a meno di 3 px del quadro) una giunzione fra due tasselli è tagliato dal bordo e si scarta**: lo trova intero l'altro tassello
+  se sta nella sovrapposizione. I volti più larghi di 128 px che attraversano una giunzione non escono dalla passata HQ (L123): vengono dall'anteprima. Il bordo dell'immagine non è una giunzione.
+- **Dopo il taglio**: i riquadri escono tenuti dentro l'immagine (un volto tagliato dal bordo non sfora; i cinque punti sì, sono previsti), al più 64 volti in ordine di punteggio.
+- **L'allineamento** è la forma chiusa 2D della stessa similitudine ai minimi quadrati di P1 (`a = Σ s·d / Σ|s|²`, `b = Σ s×d / Σ|s|²`, traslazione fra i baricentri; stessa soluzione di Umeyama senza il caso, che qui non serve, della riflessione), il ritaglio è
+  bilineare con i vicini fuori dall'immagine a 0 (`BORDER_CONSTANT`) e i centri dei pixel sulle coordinate intere, come `warpAffine` (P1: differenza media 0,0015 livelli su 255 da `alignCrop`, coseno dei vettori >= 0,999987). Punti coincidenti o non finiti: `AiEngineException(BAD_INPUT)`.
+- **La qualità** (D19; *soglie provvisorie, L120*): NONE sotto 24 px o oltre 60 gradi; CORE da 48 px con punteggio >= 0,80, imbardata <= 35 gradi e nitidezza >= 90; WEAK il resto, con i motivi `SMALL`, `PROFILE`, `BLURRY` (un punteggio fra 0,60 e 0,80 non ha un motivo, come nel fake di P0; `FRAME` lo aggiunge P4).
+  *Imbardata*: il naso sporge dal piano degli occhi di circa 0,5 distanze fra le pupille (3 cm su 6,3), quindi lo scarto del naso dal punto medio degli occhi, misurato lungo la retta degli occhi (il capo inclinato non conta) e diviso per la loro distanza, vale `0,5 * tan(imbardata)`; segno positivo se il naso va a destra
+  nell'immagine; occhi coincidenti = 90. *Nitidezza*: varianza del laplaciano (4 vicini) della luminanza nella finestra occhi-naso-bocca del volto allineato (80x80 px), su scala logaritmica `255 * ln(1+V) / ln(1+1000)`; un volto uniforme vale 0. Su un volto disegnato (ovale, occhi, bocca, grana, replicato in numpy) lo sfocarlo con una gaussiana dà: sigma 0
+  px 255, 1 px 171, 1,5 px 131, 2 px 100, 2,5 px 73, 3 px 53, 4 px 28: "sfocato" sotto 90 cade poco dopo i 2 px nel ritaglio da 112 (un volto vero ha bordi meno duri e finisce prima). Senza il volto allineato la nitidezza non si valuta (vale 0 e non è un motivo): il livello è provvisorio e P4 lo rifà.
+- **SFace un volto alla volta, sempre** (§2.2): un lotto che lancia perderebbe tutti; qui ogni volto è una corsa. Un'eccezione dell'interprete su un volto lo lascia senza vettore (null) e gli altri vanno avanti; un vettore non finito, di dimensione sbagliata o con la norma grezza fuori da `(0,001; 10.000)` è null (`FACES_VECTOR_INVALID`); **tre eccezioni di fila**, senza un
+  vettore buono in mezzo, sono un motore che non va più (`AiEngineException(BAD_INPUT)`, sessione chiusa, la richiesta dopo la riapre); la memoria finita o una libreria che non carica sono subito del motore intero. Il rilevatore, più semplice (un modello da 240 KB che si riapre in pochi millisecondi), **chiude la sessione dopo qualunque guasto**.
+- **Errori come codici** (`AiEngineError`, D37): `MODEL_UNAVAILABLE` (file assente, che non passa la verifica o con un'altra forma: `FACES_MODEL_MISMATCH`), `INIT_FAILED` (apertura che fallisce, libreria nativa), `OUT_OF_MEMORY`, `BAD_INPUT` (un'inferenza che lancia su un ingresso valido). Mai il messaggio di una libreria, mai pixel o vettori nei log.
+- **`ModelInputs.forFaces`** è la catena degli altri ingressi (tetto di 4 MiB, intestazione letta **senza decodificare** con `ImageHeaders`, `ImageBounds`, `ImageDecoder` già ridotto, dimensioni lette uguali a quelle dichiarate), con tre differenze: ammette JPEG e WebP (l'anteprima di analisi è un JPEG, l'HQ un WebP, i fotogrammi dei video JPEG); decodifica in **sRGB** qualunque profilo abbia
+  il file; consegna i **pixel** ARGB_8888 (con la trasparenza composta sul bianco) invece di ricodificarli. Il lato massimo è [1, 2048] (oltre l'HQ si porta a 2048, mai si ingrandisce); il fotogramma 0..8 (fuori intervallo = null). Un ingresso che non passa è null, non un errore del motore.
+- **`DeviceMeasures.facesPerSecond`** = **25 foto/s** di partenza (D10: 20-30 sull'S25, ~40 ms a foto), con il suo controllo (positiva) e la riga nella tabella del KDoc. È una **stima**: la sostituisce il valore di `facesPerSecond_suggerito` di `FaceMeasurementsDeviceTest` (F104). La seconda passata HQ (~20% delle foto, 4 corse) è un'altra costante (`facesHqShare`, di P4/P13).
+
+### Prove JVM (84 nuove in `core-ai`, 3 in `core-rules`; `core-ai` ne esegue 337 in tutto, nessuna saltata)
+| Classe | Prove | Cosa |
+|---|---|---|
+| `YuNetDecoderTest` | 9 | **decodifica e NMS contro il decodificatore di riferimento di P1** su sette scene (composizioni A e B, una senza volti, una con le due soglie): stesso numero di rilevamenti, punteggi entro 1e-5, riquadri e punti entro 2e-3 px; la soglia 0,6 (`>=`, con la cella esattamente al limite e un'unità sotto), cls e obj portati in 0..1, NMS: A tenuto, B (IoU 0,34) soppresso, C (IoU 0,26) tenuto; 40 giri a caso con le proprietà dell'NMS (nessuna coppia sopra 0,3, ordine, massimalità: ogni scartato ha un tenuto migliore con IoU > 0,3); tetto di 5.000 candidati; uscite non finite, esponente che trabocca, NaN, tutto a 1 |
+| `YuNetFixtureDetectorTest` | 4 | dalle uscite grezze ai volti che escono dal rilevatore vero: coordinate dell'atteso di P1 a 1024 px e al doppio a 2048 px, riquadro tenuto dentro l'immagine (i punti no), riquadro tutto fuori scartato, al più 64 volti |
+| `YuNetDetectorTest` | 17 | il rilevatore vero sopra sessioni finte che **guardano i pixel** (`FakeFaceSessions`): posizione e scala su immagini 2048, 1024, 512 e alte e strette, volto tagliato dal bordo, sei volti senza doppi, 64 al più, i **tasselli** (2048x1536 = 4 tasselli di 1088x832 con 128 px di sovrapposizione, una sola volta il volto nella sovrapposizione, il volto a cavallo di una giunzione non esce dall'HQ ma esce dall'anteprima, i volti ai bordi sì), errori come codici (`BAD_INPUT`, `OUT_OF_MEMORY`, `INIT_FAILED`, `MODEL_UNAVAILABLE`), rilascio, richieste in fila (mai due insieme), annullamento fra due tasselli |
+| `FaceFramesTest` | 7 | il quadro: ordine B, G, R, bordi a 0, media sull'area esatta a metà, bilineare esatta su un gradiente, immagine alta e stretta, tassello con la sua scala e le coordinate di ritorno, quadro che si riusa e si azzera, i tasselli coprono tutta l'immagine |
+| `FaceAlignerTest` | 9 | la similitudine contro le **24 matrici di P1** (`similitudine_umeyama`), i punti trasformati contro il modello, l'identità, duecento similitudini esatte ritrovate, punti coincidenti o non finiti = codice, il ritaglio 112x112 contro un gradiente analitico (al più 2 livelli), nero fuori dall'immagine, mai una riflessione |
+| `FaceQualityTest` | 11 | i livelli di D19 ai loro confini (23/24/47/48 px, 0,79/0,80, 34/38/58/63 gradi), i motivi, l'imbardata con il capo inclinato e a più scale, la nitidezza su un volto disegnato sfocato a gradi, **nessun campo diverso da livello, motivi, imbardata e nitidezza** |
+| `SFaceEmbedderTest` | 10 | ingresso RGB, normalizzazione, vettore non valido = null, **un volto che lancia non fa perdere gli altri** (e i buoni sono quelli di prima), tre guasti di fila, memoria finita, rilascio |
+| `RealEnginesContractTest` | 5 | la suite **`FaceEnginesContract` sui motori veri** (sopra sessioni finte), l'identità giusta di ogni volto di una foto di gruppo a tre scale, i livelli per dimensione, nitidezza, riapertura dopo `release` |
+| `FaceModelContractTest` | 4 | la **forma dei due `.tflite` letta dai byte** (un lettore minimo di FlatBuffers): YuNet `[1,1024,1024,3]` e le dodici uscite con nome e forma nell'ordine di `YuNetLayout.OUTPUT_NAMES`, SFace `[1,112,112,3]` e `[1,128]`, tutto float32, solo operatori di serie (nessuno personalizzato), pesi di SFace in float16 |
+| `FaceEnginesFactoryTest` | 4 | il montaggio sopra `ModelFiles`: senza i modelli `MODEL_UNAVAILABLE`; ogni apertura verifica il file, legge i byte verificati, passa 4 thread, e il modello verificato si chiude con la sessione e anche se la sessione o la mappatura falliscono |
+| `FaceFixturesGuardTest` | 3 | nessun file di immagine, di modello o binario nelle cartelle dei test, fixture di testo piccole con la loro intestazione, nessuna etichetta dei ritratti |
+| `FaceEnginesJvmMeasuresTest` | 1 | le misure JVM (sotto) |
+| `FacesMeasuresTest` (`core-rules`) | 3 | `facesPerSecond`: valore di partenza nella fascia di D10, controllo, sostituzione |
+**Le prove mordono** (mutazioni applicate al codice di produzione e tolte subito): canali B e R scambiati nel quadro, regola della giunzione tolta, il volto che lancia propagato, segno di `b` cambiato nell'allineamento, riga e colonna scambiate nella decodifica, confini di dimensione e imbardata spostati
+→ 30 prove rosse su 84, in tutte le classi interessate; senza mutazioni sono verdi.
+
+### Fixture: tensori ricostruiti, non registrati
+**P1 non ha lasciato le uscite grezze dei modelli**, solo le misure di parità e la verità di terra (`out\composizioni\verita.json`: riquadri e cinque punti dei volti incollati). Le fixture di `core-ai/src/test/resources/faces/` (88 KB di testo, **solo numeri**: nessuna immagine, nessun volto, nessuna etichetta dei ritratti)
+sono quindi **costruite**: `genera_riferimenti.py` (nel repository, con il seme fisso) accende in uscite sparse le celle che il modello accende per un volto (la centrale e le otto vicine, a volte il doppio sulla scala accanto, con scarti realistici), distrattori sotto soglia, le soglie dell'NMS e quelle del punteggio; **l'atteso lo calcola il decodificatore di riferimento di P1**
+(`common.decodifica_yunet`, provato contro OpenCV), non il nostro. Le matrici dell'allineamento sono quelle di P1 sui cinque punti di verità e su 12 insiemi ruotati e scalati. Per averne di **vere** (il modello sul PC, a F104): `esporta_riferimenti.py --tensori N` scrive `tensori-reali.txt` nello stesso formato; copiato in quella cartella, `YuNetDecoderTest` e `YuNetFixtureDetectorTest` lo prendono da soli.
+
+### Misure JVM (PC condiviso e carico, JDK 17: il costo del codice nostro, non del modello; `build/p2-misure-jvm.txt`, 40 giri)
+| Parte | p50 | p95 |
+|---|---|---|
+| quadro 1024 da un'anteprima 1024x768 (nessun ridimensionamento: solo B, G, R) | 1,7 ms | 3,0 ms |
+| quadro 1024 da un HQ 2048x1536 intero (riduzione a metà) | 12,9 ms | 17,1 ms |
+| quadro 1024 da un tassello 1088x832 dell'HQ | 6,5 ms | 9,3 ms |
+| decodifica + NMS (21.504 celle, 8 volti) | 0,30 ms | 0,40 ms |
+| decodifica + NMS (21.504 celle vuote) | 0,19 ms | 0,25 ms |
+| allineamento 112x112 | 0,23 ms | 0,41 ms |
+| nitidezza del volto allineato | 0,06 ms | 0,08 ms |
+| giudizio di qualità (con nitidezza) | 0,06 ms | 0,09 ms |
+| ingresso di SFace (RGB float) | 0,04 ms | 0,05 ms |
+| normalizzazione del vettore | 0,01 ms | 0,01 ms |
+Lettura: tutto il codice che non è il modello costa **meno di 3 ms a foto** sul PC (a 1024 px; 10-20 ms con l'HQ), e su ART sarà qualche volta di più: resta sotto il 10% dei 30-50 ms di D10. Il modello (decine di millisecondi su CPU) è il costo vero ed è da misurare sul telefono.
+
+### Misure sul dispositivo: da riempire a F104 (S25, Tab S9, emulatore)
+Le scrivono i test strumentati (`FaceMeasurementsDeviceTest`): una riga JSON per misura nel log `P2Measure` e in `files/p2-measures.jsonl`. **Nessun numero è stato misurato dal pacchetto P2** (niente telefono né emulatore); sull'emulatore la CPU è quella del PC e non vale per il telefono.
+| Misura | Emulatore | S25 | Tab S9 |
+|---|---|---|---|
+| verifica SHA-256 a ogni apertura (YuNet 0,23 MiB, SFace 18,4 MiB), p50 | da misurare | da misurare | da misurare |
+| avvio a freddo di YuNet / di SFace (verifica, mappatura, interprete, prima corsa) e dopo un rilascio | da misurare | da misurare | da misurare |
+| YuNet a 1024 (anteprima 1024x768): totale p50 / p95, di cui modello, quadro, decodifica | da misurare | da misurare | da misurare |
+| YuNet seconda passata, 4 tasselli su 2048x1536: p50 / p95 | da misurare | da misurare | da misurare |
+| SFace per volto (uno alla volta) p50 / p95; in un lotto di 6 | da misurare | da misurare | da misurare |
+| allineamento + nitidezza; `forFaces` da JPEG 1024 e da 2048 | da misurare | da misurare | da misurare |
+| PSS prima / con il motore caricato / dopo il rilascio (YuNet, SFace); in lavoro | da misurare | da misurare | da misurare |
+| foto al secondo (3 giri da 40) e stato termico; `facesPerSecond_suggerito` | da misurare | da misurare | da misurare |
+| parità con P1: IoU minimo, punti, coseno minimo; richiamo 24-47 px e da 48 px | da misurare | da misurare | da misurare |
+Stima di partenza (D10, [stima]): S25 25 foto/s (`DeviceMeasures.facesPerSecond`), Tab S9 12-20; PSS +80-150 MB col calcolo in corso.
+
+### Come lanciare i test strumentati (F104)
+Scritti in `core-ai/src/androidTest/kotlin/dev/pampa/mycloudgallery/core/ai/faces/` (28 prove in 5 classi), **compilano** (`:core-ai:compileDebugAndroidTestKotlin`) e **non sono stati eseguiti**. Le istruzioni complete sono in `core-ai/src/androidTest/faces/LEGGIMI.md`; in breve:
+1. sul PC, con l'ambiente di P1: `python -I core-ai\src\androidTest\faces\esporta_riferimenti.py --root C:\VibeCoded Projects\mcg-models\faces --dest <cartella fuori dal repository> --serie A B C --max 30 --tensori 6` (scrive `refs.txt`, le immagini in `img/` e `tensori-reali.txt`; **lo script non è stato eseguito da P2**, è scritto sulle funzioni di `parity.py` e controllato con `pyflakes` e contro il generatore delle fixture);
+2. `adb push <cartella>\. /data/local/tmp/mcg-faces/` (un dispositivo alla volta; l'emulatore si avvia solo per la prova e si spegne subito);
+3. con il posto di Gradle: `.\gradlew.bat --max-workers=2 :core-ai:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.package=dev.pampa.mycloudgallery.core.ai.faces` (o `...class=...FaceParityDeviceTest`);
+4. `adb logcat -s P2Measure` o `adb shell run-as dev.pampa.mycloudgallery.core.ai.test cat files/p2-measures.jsonl`; i numeri in questa sezione, `facesPerSecond_suggerito` in `DeviceMeasures`.
+| Classe | Prove | Servono i file di P1 |
+|---|---|---|
+| `FaceInputsDeviceTest` | 9 | no (ingressi ostili con il contatore `decodeAttempts` che non sale, 22 ingressi e 3.000 scarti; 1.000 mutazioni; sRGB, EXIF, trasparenza, fotogramma) |
+| `FaceEnginesContractDeviceTest` | 5 | la prima sì (la suite sui modelli veri); le altre no (sfondi senza volti, 4 tasselli, modello alterato che si riestrae, modello diverso = `MODEL_UNAVAILABLE`) |
+| `FaceParityDeviceTest` | 2 | sì (IoU >= 0,95, cinque punti entro 1 px, coseno >= 0,999 per ogni volto, richiamo) |
+| `FaceFaultIsolationDeviceTest` | 4 | no (l'interprete vero che lancia su un volto non fa perdere gli altri, tre guasti di fila, guasto del rilevatore, memoria dopo i cicli) |
+| `FaceMeasurementsDeviceTest` | 8 | solo l'ultima (verifica, avvio, YuNet, tasselli, SFace, allineamento, `forFaces`, foto al secondo) |
+
+### `tools\check.ps1 -NoDaemon`
+**Verde, «OK: tutto a posto»** (28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `appuild\outputspk
+elease` cancellata prima, posto del semaforo `f8-p2`): `assembleDebug assembleRelease galleryTest galleryLint` in 40 minuti (PC condiviso); test eseguiti in 38 moduli, nessuno a zero e nessuno fallito
+(`core-ai` 337, `core-rules` 355, `core-models` 294, `core-faces` 89, `feature-people` 7, `app` 828); passo «LiteRT solo in core-ai nel bytecode della release (volti solo da `FaceLiteRtSessions`)»: **60 chiamate nostre a LiteRT, tutte da `core-ai`** e, fra i volti, solo da `FaceLiteRtSessions` e dalle sue classi interne (con le due righe `-keep` di
+`consumer-rules.pro` le sessioni stanno nel dex di release anche prima che `:app` monti i motori e il passo le vede già; con il solo ritaglio erano 24); passo D39 dei modelli nell'APK verde; APK di release 88.417.449 B (+16.420 B sugli 88.401.029 B di P1: le classi delle sessioni e quel che toccano). Solo SKIP il banco su dispositivo (`-Bench`).
+Prima del giro finale, `:core-ai:lintDebug` e `:core-rules:lintDebug` e le prove di architettura (`*ArchitectureTest` di `core-common`) erano già verdi. I test strumentati compilano (`:core-ai:compileDebugAndroidTestKotlin`).
+
+### Cosa trovano pronto P4, P11 e P13
+- **P4 (calcolo dei volti)**: `FaceEnginesFactory.create(files)` dà i quattro pezzi (`FaceEngines`) sopra `ModelFiles`; `ModelInputs.forFaces(bytes, 1024)` per l'anteprima (JPEG), `forFaces(bytes, 2048)` per l'HQ (WebP), `forFaces(jpeg, 1024, frame)` per i fotogrammi dei video (0..8); le chiamate di `ModelInputs` sono **bloccanti** (thread di lavoro,
+  mai il principale) e danno `null` per un file da non usare ("non supportato", contato). Il giro di un'immagine è `detector.detect(image, PREVIEW)` e, se serve (D17: un volto sotto 40 px o almeno 5 volti), `detect(hqImage, HQ_TILES)` (4 corse del modello per un HQ di 2048x1536: **le due passate vanno unite da P4 per IoU**; il rilevatore non
+  le fonde); per ogni volto con lato corto >= 24 px nella sorgente: `aligner.align(source, face.landmarks)` (i punti sono in pixel di **quella** immagine: per allineare dall'HQ o dall'originale si riportano i punti dall'anteprima alla sorgente, scalando; i riquadri escono in pixel dell'immagine passata, a P4 serve `x / width` per `FaceBox`),
+  `quality.assess(face, sidePx, aligned)` (con `aligned = null` il livello è provvisorio: nitidezza 0 e nessun `BLURRY`), `embedder.embed(listOf(aligned))` solo per CORE e WEAK. `embed` risponde `null` per un volto con vettore non valido (`FACES_VECTOR_INVALID`) o su cui l'interprete ha lanciato; i vettori sono float32 normalizzati, si salvano con `Float16.encode`. Codici d'errore
+  (`AiEngineException.error`): `MODEL_UNAVAILABLE` (file assente o alterato: `FACES_MODEL_MISMATCH`), `INIT_FAILED`, `OUT_OF_MEMORY`, `BAD_INPUT` (due di fila su `detect` = tappa ferma con `FACES_ENGINE_FAILED`, come scritto nel §2.3). Il rilevatore chiude da sé la sessione dopo un guasto e la riapre alla richiesta dopo. `release()` a fine tappa, a `onTrimMemory` e allo stop.
+  Per le misure: `YuNetDetector.lastTimings` e `SFaceEmbedder.inferences/thrown/invalid` (interni a `core-ai`, per le prove). Ricordare che un volto tagliato dal bordo ha il riquadro tenuto dentro l'immagine e i punti no, e che `DetectedFace.score` è la radice di `cls * obj`.
+- **P11 (valutazione e calibrazione)**: le soglie provvisorie di qualità sono costanti pubbliche (`FaceQuality.BLURRY_BELOW` = 90, `FaceQuality.NOSE_DEPTH_RATIO` = 0,5, `FULL_SCALE_VARIANCE` = 1000; i limiti in `FaceEngineLimits`) e `FaceQuality.yawOf/sharpnessOf` si possono chiamare da soli sui volti del suo strumento; `esporta_riferimenti.py --tensori` produce uscite grezze vere
+  di YuNet dalle composizioni di P1 (numeri, nessuna immagine); `FaceEnginesContract` e `FakeFaceEngines` restano il riferimento per i motori finti.
+- **P13 (integrazione in `:app`)**: legare `FaceEnginesFactory.create(modelFiles)` (un'istanza per profilo, dietro `FaceEngines`) e chiamare `ModelCatalog.needed(ruoli, setOf(ModelFeature.FACES))` per estrarre i due modelli solo dove Persone è attiva; `release()` alla fine della tappa, a `onTrimMemory` (come IX-5 per il motore delle immagini) e allo stop. **R8**: ho aggiunto in `core-ai/consumer-rules.pro` due righe `-keep` per
+  `FaceLiteRtSessions` e le sue classi interne, perché il passo di `tools/check.ps1` che cerca le chiamate a LiteRT nel dex le attribuisce alla classe che le contiene e R8 potrebbe incorporare quei metodi piccoli in un'altra classe dei volti; con le righe le classi restano nel dex di release anche prima che `:app` le monti e il passo le vede già. Se P13 trova altro nel dex lo dice `check.ps1`.
+  Niente di nuovo nel manifest, nei permessi, nelle dipendenze o negli host. Diagnostica: i codici `FACES_*` sono di P4/P13; da P2 arrivano `AiEngineException` e i valori null.
+
+### Modifiche fuori dal perimetro stretto (tutte minime)
+- `core-rules/.../ConsumptionEstimator.kt`: `DeviceMeasures.facesPerSecond` (campo in fondo, 25,0, positiva, riga nel KDoc) e `FacesMeasuresTest`: lo chiede il "Fatto quando" di P2 e il campo vive in `core-rules`.
+- `core-ai/.../contract/Faces.kt`: `FaceImage.raw()` e `AlignedFace.raw()`, `internal`, senza copia (come `CutoutImage.raw()` di P13). `core-ai/.../testing/FaceEnginesContract.kt`: la suite si estende alla seconda passata, alla lista vuota dell'embedder e alla riapertura dopo `release` (il motore finto la passa ancora).
+- `core-ai/consumer-rules.pro`: due righe `-keep` per `FaceLiteRtSessions` e le sue classi interne (vedi "P13"): il passo di `check.ps1` sul bytecode le vede nel dex anche prima che `:app` monti i motori.
+- **`core-ai/src/androidTest/.../DeviceSupport.kt` e `EmbedderContractDeviceTest.kt` (Fase 6)**: il cancello di rete dei modelli ha tre parametri dalla revisione B (`ModelNetworkGate { _, _, _ -> ... }`); i test strumentati della Fase 6 non erano più stati compilati, e finché una riga non compila **nessun** test strumentato di `core-ai` si può lanciare, i miei compresi. Tre righe, nient'altro.
+- `docs/sicurezza.md` (L120-L125, C51-C54, la voce della checklist della Fase 8 e il registro delle decisioni) e `docs/regole-attivita.md` (una frase).
+
+### Interpretazioni e modifiche richieste ai contratti degli altri
+- **Tasselli**: il contratto dice "tasselli da 1024 con 128 px di sovrapposizione". Con un HQ di 2048 px due tasselli da 1024 non si sovrappongono e per sovrapporli di 128 px servono tasselli di 1088 px (o 3x3 da 1024): ho scelto i **quattro tasselli** di D17/§1.2 (2x2, al più 1088 px, portati a 1024 nel quadro a 0,94) per restare ai 100-200 ms della seconda passata di D10 (quattro corse del modello); 3x3 tasselli da 1024 sarebbero nove corse. Se P4 o P11 vogliono i 1024 nativi, cambia `FaceTiling.axis` e basta.
+- **P4 fonde le due passate** (il rilevatore non lo fa: restituisce quello che ha visto in ciascuna) e riporta i punti dell'anteprima alla sorgente dell'allineamento. `FaceQualityRule.assess(face, sidePx, null)` è il giudizio provvisorio (nitidezza 0, nessun `BLURRY`): non si salva, si rifà con il volto allineato.
+- `FaceEngineLimits.TILE_SIDE` / `TILE_OVERLAP` restano com'erano (1024 e 128): sono la misura nominale del quadro e della sovrapposizione, non la dimensione del rettangolo letto dall'immagine.
+
+### Punti aperti
+- **Niente è stato provato sul telefono né sull'emulatore**: parità con l'ONNX (IoU 0,95, cinque punti entro 1 px, coseno 0,999), isolamento dei guasti con l'interprete vero, ingressi ostili con `ImageDecoder`, misure e PSS sono scritti e compilano (F104, L121). La prima corsa può far emergere una forma o un nome delle uscite diversi da quelli letti dal file con `FaceModelContractTest`, o un'API di `Interpreter` che si comporta in modo diverso: la sessione lo dice con `MODEL_UNAVAILABLE` invece di leggere uscite sbagliate.
+- **`esporta_riferimenti.py` non è stato eseguito** (l'ambiente di P1 è fuori dalla cartella di lavoro): è scritto sulle stesse funzioni di `parity.py`, controllato con `pyflakes` e contro il generatore delle fixture (le righe dei tensori sono identiche). Se qualcosa non torna, il punto di partenza è `tools/models/faces/parity.py`.
+- **I tensori della JVM sono ricostruiti** (L122): con `--tensori` si hanno quelli veri.
+- **Le soglie di qualità sono provvisorie** (L120): nitidezza 90/255 e fattore dell'imbardata 0,5 sono tarati su un volto disegnato; le ricalibrano P11 e F105 sui dati veri.
+- **SFace float16 contro float32**: se sul telefono le `DEQUANTIZE` costassero troppo, la variante float32 (38,5 MB) è già pronta fuori dal repository (P1); cambierebbe catalogo, asset e la parità.
+- **R8 e il controllo del bytecode** (P13): vedi sopra; se P13 trova un'attribuzione diversa lo dice `check.ps1`.
+- **Soglie del benchmark** (`benchmark/soglie.json`, scenario `volti` a +15%, §5.4): serve una misura di riferimento; si aggiungono dopo F104.
+- **`ModelInputs.forFaces` ammette solo JPEG e WebP**: i media del solo telefono in un altro formato (HEIC, PNG, DNG) passano dal `Preparer` come per le altre analisi (§2.3, "Media del solo telefono").
+- Il ridimensionamento dei tasselli e dell'HQ è il nostro (media sull'area e bilineare, come `INTER_AREA` e `INTER_LINEAR`): la parità con Python è provata sulle composizioni da 1024 px, dove non si ridimensiona; per le altre taglie non c'è un riferimento di P1 (differenze attese al decimo di livello).

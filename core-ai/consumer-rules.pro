@@ -23,6 +23,15 @@
 # nativa): stessa regola.
 -keep class org.tensorflow.lite.** { *; }
 
+# --- Motori dei volti (Fase 8, P2) ---------------------------------------------------------------------------------------------------
+# Le sessioni di YuNet e SFace (`faces/FaceLiteRtSessions.kt`) sono le SOLE classi dei volti che chiamano LiteRT, e `tools/check.ps1` (passo
+# "LiteRT solo in core-ai nel bytecode") cerca nel dex di release le chiamate a `org.tensorflow.lite` e attribuisce ognuna alla classe che la contiene:
+# se R8 incorporasse i metodi delle sessioni (piccoli, con un solo chiamante) in un'altra classe dei volti, le chiamate cambierebbero classe e il
+# controllo cadrebbe senza che il codice sia cambiato. Tenerle come sono (nome e metodi) lo evita. Finche' :app non monta i motori (P13) il resto dei
+# volti si toglie dal dex come codice mai chiamato; queste classi no, e il controllo le vede gia' nella release.
+-keep class dev.pampa.mycloudgallery.core.ai.faces.FaceLiteRtSessions { *; }
+-keep class dev.pampa.mycloudgallery.core.ai.faces.FaceLiteRtSessions$* { *; }
+
 # `com.google.android.play:ai-delivery` (alpha) e' TOLTO dalle dipendenze di litert (core-ai/build.gradle): lo usa solo
 # `com.google.ai.edge.litert.deployment.AiPackModelProvider` (modelli consegnati dal Play Store), che l'app non usa: il modello del
 # ritaglio sta nell'APK (Q11). Solo il pacchetto delle AI pack di Play.

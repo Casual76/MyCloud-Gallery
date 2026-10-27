@@ -20,6 +20,7 @@ import dev.pampa.mycloudgallery.core.trust.data.AiClass
 import java.io.IOException
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.nanoseconds
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -107,7 +108,25 @@ internal class ComputeSession(
     } catch (e: IOException) {
       return
     }
-    if (done.isNotEmpty()) buffer.evict(done)
+    if (done.isNotEmpty()) evictUnlessKept(done)
+  }
+
+  /**
+   * Fase 8 (D17): il buffer non butta un'anteprima che serve ancora ai volti. [AiComputeParts.keepers] dice quali delle chiavi che stiamo per
+   * togliere il calcolo dei volti chiede ancora (di serie nessuna: il comportamento della Fase 6); quelle restano, le altre si tolgono. Un
+   * guasto di chi tiene non ferma niente: vale come "nessuno tiene niente". Vale per ogni svuotamento del buffer dopo un calcolo (inizio
+   * tappa, fine unita', fine tappa del telefono); sotto 1 GiB libero (E-A17) il buffer si svuota comunque.
+   */
+  private suspend fun evictUnlessKept(keys: Collection<ContentKey>) {
+    if (keys.isEmpty()) return
+    val kept = try {
+      parts.keepers.stillWanted(keys)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      emptySet()
+    }
+    parts.buffer.evict(if (kept.isEmpty()) keys else keys.filterNot { it in kept })
   }
 
   suspend fun share(share: String): AiRunResult {
@@ -237,7 +256,7 @@ internal class ComputeSession(
       breath()
     }
     flush(share, FlushReason.UNIT_FINISHED)
-    parts.buffer.evict(tally.finished)
+    evictUnlessKept(tally.finished)
     return UnitEnd(claim, stop, lost = false, tally.computed - computedBefore, tally.failed - failedBefore)
   }
 
@@ -330,7 +349,7 @@ internal class ComputeSession(
       control.checkpoint(AiCheckpoint(share ?: PHONE, null, batch.lastOrNull()?.contentKey?.hex))
       breath()
     }
-    parts.buffer.evict(tally.finished)
+    evictUnlessKept(tally.finished)
     return null
   }
 

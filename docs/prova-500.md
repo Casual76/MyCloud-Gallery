@@ -1,6 +1,6 @@
 # La prova delle 500 interruzioni (Fase 4B, P15)
 
-> **Parte A**: le operazioni sui file del NAS (Fase 4B, P15), qui sotto. **Parte B**: il caricamento del **backup** (Fase 5A, P6), più sotto (da "Parte B"). **Parte C**: versioni, scambi, guardiano e "Libera spazio" (Fase 5B, P13), in fondo a questo file (da "Parte C"). **Parte E**: la **condivisione** (spostamento nell'area comune, Fase 7, P5), in fondo a questo file (da "Parte E").
+> **Parte A**: le operazioni sui file del NAS (Fase 4B, P15), qui sotto. **Parte B**: il caricamento del **backup** (Fase 5A, P6), più sotto (da "Parte B"). **Parte C**: versioni, scambi, guardiano e "Libera spazio" (Fase 5B, P13), in fondo a questo file (da "Parte C"). **Parte E**: la **condivisione** (spostamento nell'area comune, Fase 7, P5), in fondo a questo file (da "Parte E"). **Parte F**: il **calcolo dei volti** e "Disattiva e cancella" (Fase 8, P12), in fondo a questo file (da "Parte F").
 
 | | |
 |---|---|
@@ -1074,3 +1074,231 @@ Prima della correzione (26/10/2026, con gli evitamenti del §E6):
 **Una nota sul rapporto.** Nel rapporto del NAS vero la riga «eventi guardati dagli osservatori» dice 0: quella prova è stata fatta prima di collegare il contatore alla statistica del giro (gli osservatori guardavano comunque ogni trasferimento, ogni completamento e ogni voce in coda: lo prova `ShareChaosMutationTest`, dove due dei quattro errori si vedono solo da lì). Corretto in `ShareChaosRound`; nei rapporti dei banchi JVM la riga ora conta (20.029 e 5.830 eventi).
 
 Una morte del processo cade in ognuno dei 9 punti dei diari e delle porte del NAS finto e in tutti gli 11 del simulatore SMB (tabella di copertura nel rapporto). Nessun test usa il tempo vero tranne la prova sul NAS vero.
+
+---
+
+# Parte F. La prova delle interruzioni del calcolo dei volti e di "Disattiva e cancella" (Fase 8, P12)
+
+| | |
+|---|---|
+| **Stato** | **Fatto** (27/10/2026): banchi sulla JVM e sul simulatore SMB verdi a ogni `check.ps1`, mutazioni rosse con l'invariante giusto, prova dal PC sul NAS vero verde (402 interruzioni); il modo `faces` del telefono è pronto e non eseguito (F103) |
+| **Dove** | `core-faces/src/test/kotlin/dev/pampa/mycloudgallery/core/faces/chaos/` (il banco), `.../faces/sync/chaos/` (il NAS finto e le sessioni: lì sta `NasFileSystem`, che `Phase8ArchitectureTest` ammette in core-faces solo sotto `sync/`), `tools/chaos/faces-pc/` (lo script dal PC e la prova a secco dello script del telefono), `tools/chaos/s25.ps1` (modo `faces`), questo file |
+| **Riferimenti** | `docs/fase8-progetto.md` §2.3 (calcolo), §2.4 (formato), §2.8 (cancellazione, i sei invarianti), §4.3, §5.5 (invarianti e interruzioni), §5.6 (F103), riga P12 del §4.4. Parti A, B, D ed E (sopra): questa ne ripete l'impianto (un mondo, un piano di colpi dal seme, un verificatore, un banco che somma i giri, errori introdotti apposta, una prova dal PC contro il NAS vero e un modo di `s25.ps1`) |
+
+Che cosa si prova: **il calcolo dei volti, la loro pubblicazione e replica, il raggruppamento con il custode e "Disattiva e cancella" si possono interrompere in qualunque punto** (processo ucciso a ogni salvataggio, rete tagliata, un guasto a caso su qualunque chiamata, la generazione che cambia a metà, un dispositivo spento che torna dopo) **senza danni**: nessun volto salvato si ricalcola, niente finisce fuori posto, dopo `off|G` niente si pubblica più di `G`, la cancellazione è completa e non esce mai da `faces/`, le istantanee si rileggono uguali, le prenotazioni non si sovrappongono e il lavoro arriva sempre in fondo.
+
+## F1. Che cosa promette
+
+Gli **otto invarianti del §5.5**, controllati dopo ogni morte del processo, a fine di ogni passo e in una rilettura finale (`ChaosVerifier`, `ChaosSnapshots`). Il numero è quello del §5.5:
+
+| N. | Invariante | Come si controlla |
+|---|---|---|
+| 1 | nessun lavoro perso o rifatto | ogni corpo `faces` che un dispositivo scrive nel suo archivio (`ChaosArchive.saveBody`) si conta per (dispositivo, generazione, contenuto): la seconda volta è un volto salvato e rifatto. I dati locali tolti (cancellazione, esclusione) azzerano il conto. A fine giro ogni media in ambito di ogni dispositivo acceso ha la sua voce o è "non supportato" (8) |
+| 2 | nessun dato fuori posto | l'area comune non ha niente sotto `faces/`; ogni tentativo di scrittura di un dispositivo (anche finito con la risposta persa) sta sotto `faces/<G>/<io>/` o sotto le prenotazioni `faces/<G>/leases/`; **prima di ogni `publishExclusive`** lo stato di Persone qui dev'essere `On` attivo, **fresco**, per la generazione del percorso (D30). Una porta dei volti costruita sull'area comune rifiuta senza mandare nessuna richiesta (prova a fine giro) |
+| 3 | dopo `off\|G`, nessuna pubblicazione di `G` | un osservatore dello stato di ogni dispositivo (a ogni emissione, anche dentro la coroutine dell'interruttore) segna quante scritture aveva sotto `faces/<G>/` quando ha visto "non più G" (stato spento, in cancellazione, in attesa dell'avviso, di un'altra generazione) e quante ne ha dopo; mentre un dispositivo non può pubblicare non scrive niente sotto `faces/`. Vale anche per un dispositivo spento durante la cancellazione e ripartito dopo |
+| 4 | cancellazione completa (i sei invarianti del §2.8) | dopo `LOCAL_DONE` nessun dato locale delle generazioni cancellate, la chiave tolta prima dei file (l'ordine registrato), nessun nome nella cronologia (anche per chi cancella dal gancio di D30); nessuna testa personale "non più G" mentre quel dispositivo ha ancora dati di `G`; un dispositivo che la pagina dice "ha cancellato" non ha davvero più niente; a cancellazione finita nessun file sotto `faces/<G>/` |
+| 5 | mai fuori da `faces/` | ogni file tolto dalla cancellazione sul NAS sta sotto `.mycloudgallery/faces/`; i media e i file dell'app messi nell'area privata prima del giro (con il loro SHA-256) ci sono ancora, con gli stessi byte, dopo ogni passo (le "impronte prima e dopo") |
+| 6 | istantanee coerenti | un osservatore (un dispositivo nuovo senza stato, la replica vera di P3) rilegge dal NAS le teste di ogni dispositivo: nessuna testa o segmento rifiutato; ogni alias punta a una persona dell'istantanea; tutto ciò che un'istantanea pubblicata dice sta nell'istantanea che l'autore ha salvato con lo stesso numero (le assegnazioni provvisorie di chi non è custode non si pubblicano); l'istantanea vincente non torna mai indietro e **nessun id di persona si perde fra due istantanee vincenti** |
+| 7 | prenotazioni | ogni presa riuscita si confronta con chi la teneva e non era scaduta (ora del NAS): una presa di un altro prima della scadenza è una violazione, salvo `Contended`; una chiamata che non torna (guasto, morte) può aver cambiato la prenotazione sul NAS lo stesso e la fa dimenticare al tracciato |
+| 8 | il lavoro arriva in fondo | a fine giro (tutti a casa, niente congelamento, il tempo passato oltre le prenotazioni, ogni dispositivo ripartito una volta) ogni dispositivo acceso ha analizzato ogni media in ambito, non ha niente in coda e **tutti scelgono gli stessi corpi vincenti**; ogni cancellazione è `DONE` o in attesa con un motivo dichiarato |
+| 10 | (del banco) il codice non lancia | nessuna eccezione esce da `FacesComputeEngine.run`, `DefaultFacesEraser`, `NasFacesPublisher`, `NasFacesSync`, `FacesNasJanitor` per un guasto previsto del NAS o di un file di stato (vedi O1 al §F6 per gli errori del database) |
+| 11 | (del banco) la ripresa a vuoto non cambia niente | a lavoro finito il processo di un dispositivo riparte e riprende i lavori dal diario: i file dei volti sul NAS, i diari, i dati su disco, l'outbox e la voce dei dati personali restano identici |
+| 12 | (del banco) il banco non cade | un'eccezione uscita dal banco stesso, non dal codice sotto prova, è un difetto del banco da sistemare qui |
+
+La morte del processo di **un** dispositivo è un `Error` (`Death`): nessun `catch (Exception)` della produzione la ferma e, dopo, ogni chiamata dei suoi vecchi oggetti si ferma con la stessa morte finché il banco non ricostruisce quel processo (interruttore, recinto, cancellazione, pubblicatore, replica, prenotazioni, calcolo e raggruppamento nuovi; resta ciò che è "su disco": diario, dati locali, outbox, stato della replica, voce dei dati personali). Un processo che riparte può morire di nuovo all'avvio (un colpo sullo stato locale mentre l'interruttore si assesta): il banco lo fa ripartire finché vive.
+
+## F2. I banchi
+
+| Dove | Che cosa | Quante | Stato |
+|---|---|---|---|
+| **JVM, NAS finto** | `FacesChaosBenchTest`: giri casuali su 2-3 dispositivi di un account sopra la share in memoria di P3 (`MemoryShare`) con i colpi su ogni richiesta (`ChaosFs`) e la cancellazione stretta con la regola di D31; il calcolo, la pubblicazione, la replica, il raggruppamento e "Disattiva e cancella" sono quelli veri | **2.000 giri**, 2.256 interruzioni cadute (1.389 morti del processo) | verde, 0 violazioni, 135 s |
+| **JVM, simulatore SMB** | `FacesChaosSmbBenchTest`: gli stessi giri con la **sessione di produzione** (`SmbNasSessionManager`, una per dispositivo, con il suo trasporto che colpisce a ogni richiesta SMB), le **primitive vere** del NAS (`FacesNasWiring`) e il **vero `NasFacesEraser`** sopra `InMemorySmbBackend` (semantica Samba); il cestino di rete (`vfs_recycle`) è emulato | **600 giri**, 761 interruzioni cadute (468 morti) | verde, 0 violazioni, 45 s |
+| **Mutazioni** | `FacesChaosMutationTest`: quattro errori introdotti apposta, 200 giri ciascuno (§F7) | 4 x 200 | verde: rossi con l'invariante giusto |
+| **Il verificatore** | `FacesChaosVerifierTest` (ogni invariante rosso su un mondo fatto a mano, un mondo sano verde), `FacesChaosDeterminismTest` (un giro si rifà identico dal seme), `FacesChaosKnownDefectsTest` (O1 e O2, §F6) | 12 + 2 + 5 test | verde |
+| **PC, area di prova del NAS vero** | `FacesNasIntegrationTest` modo `run` (`tools/chaos/faces-pc/faces-pc.ps1 -Mode run`): lo stesso motore sulla JVM del PC contro la share `test`, **solo** sotto `mcg-it/<giro>/`, dietro la guardia (§F8); processo ucciso e connessione tagliata a tempi casuali durante pubblicazione, calcolo e cancellazione; l'oracolo rilegge tutto | **400 interruzioni** | verde: 226 giri, 0 violazioni, 59 min 50 s, area di prova pulita |
+| **Il codice del NAS vero sul simulatore** | `FacesAreaRunnerTest`: guardia, trasporto recintato, oracolo, pulizia, autotest, runner e verificatore dal manifesto sopra il simulatore, senza rete | 4 test | verde |
+| **Telefono, area di prova** | `tools/chaos/s25.ps1 -Mode faces` (§F9) | >= 100 | scritto e provato a secco, **non eseguito** |
+
+File (nel pacchetto `...core.faces.chaos`): `ChaosTypes` (punti, tipi di colpo, statistiche), `ChaosInjector` (i colpi e la morte), `ChaosWraps`/`ChaosLocal`/`ChaosPersonal` (i salvataggi durevoli con la morte e i dati personali), `ChaosNas` (l'interfaccia del NAS: `MemoryChaosNas`, `SmbChaosNas`, `FacesAreaNas`), `ChaosMedia` (i media e i motori finti di P4), `ChaosDevice` (i pezzi veri legati insieme come li lega `:app`), `ChaosWorld`, `ChaosVerifier`/`ChaosSnapshots`, `ChaosPlan`, `ChaosRound`, `ChaosBench`, `ChaosMutants`; per il NAS vero `FacesAreaGuard`, `FacesAreaTransport`, `FacesAreaAdmin`, `FacesArea`, `FacesAreaReader`, `FacesManifest`. Il banco **non nomina** le primitive di scrittura del NAS, `NasFileSystem` fuori da `sync/chaos/`, `java.net` né le conferme di core-nasops: lo vietano i test d'architettura; il NAS di core-nasops si usa solo da `FacesNasWiring.build(sessione, configurazione)`.
+
+## F3. Come si lancia
+
+```powershell
+# Tutto sulla JVM, --max-workers=2, DOPO aver aspettato 2 GB di RAM libera (il PC è condiviso; chi lavora in più agenti prende prima un posto con gradle-slot.ps1, -Slot <nome>):
+powershell -ExecutionPolicy Bypass -File tools\chaos\faces-pc\faces-pc.ps1 -Mode jvm        # 2.000 giri sul NAS finto
+powershell -ExecutionPolicy Bypass -File tools\chaos\faces-pc\faces-pc.ps1 -Mode smb        # 600 giri sul simulatore SMB
+powershell -ExecutionPolicy Bypass -File tools\chaos\faces-pc\faces-pc.ps1 -Mode mutants    # i quattro errori introdotti apposta
+powershell -ExecutionPolicy Bypass -File tools\chaos\faces-pc\faces-pc.ps1 -Mode area       # il codice del NAS vero sopra il simulatore: nessuna rete
+# Rifare UN giro rosso (il rapporto dice "giro 163, seme di base 20261029"): stesso seme di base, un solo giro, a partire da quell'indice
+powershell -ExecutionPolicy Bypass -File tools\chaos\faces-pc\faces-pc.ps1 -Mode jvm -Rounds 1 -FirstRound 163 -Seed 20261029
+# Il NAS vero (serve il file delle credenziali, §F8; 400 interruzioni di norma):
+powershell -ExecutionPolicy Bypass -File tools\chaos\faces-pc\faces-pc.ps1 -Mode run -Interruptions 20 -DryRun
+powershell -ExecutionPolicy Bypass -File tools\chaos\faces-pc\faces-pc.ps1 -Mode run -Interruptions 400
+powershell -ExecutionPolicy Bypass -File tools\chaos\faces-pc\faces-pc.ps1 -Mode clean -Run <giro>      # toglie un giro rimasto dopo una prova interrotta
+# Il telefono: vedi §F9. Il piano a secco, l'autotest e la prova contro l'adb finto non vogliono né telefono né adb:
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode faces -Step interrupt -DryRun -Interruptions 100
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode faces -SelfTest
+powershell -ExecutionPolicy Bypass -File tools\chaos\faces-pc\s25-faces-finto.ps1
+```
+
+Variabili che i test leggono: `MCG_FACES_CHAOS_ROUNDS` (2.000), `MCG_FACES_CHAOS_SMB_ROUNDS` (600), `MCG_FACES_CHAOS_SEED` (20261029 sulla JVM, 20261030 sull'SMB), `MCG_FACES_CHAOS_FIRST_ROUND`; per cercare i difetti noti (§F6) `MCG_FACES_CHAOS_NO_AVOID=1` (il banco non evita O2) e `MCG_FACES_CHAOS_DB_ERRORS=1` (anche gli errori del database che la produzione non guarda: O1); per spiegare una violazione `MCG_FACES_CHAOS_TRACE=1` (la cronaca fine del giro, mai contenuti); per il NAS vero `MCG_NAS_INTEGRATION=true` (l'interruttore), `MCG_FACES_MODE` (`run`, `clean`, `verify`), `MCG_FACES_INTERRUPTIONS`, `MCG_FACES_SEED`, `MCG_FACES_FIRST_ROUND`, `MCG_FACES_RUN`, `MCG_FACES_MANIFEST`, `MCG_FACES_PHASE`. I rapporti vanno in `core-faces/build/chaos/`: `faces-jvm-report-fake.txt`, `faces-jvm-report-smb.txt`, `faces-area-report-<giro>.txt` (con `faces-area-progress-<giro>.txt` che cresce a ogni giro e `faces-area-log-<giro>.txt` con gli avvisi). Con `gradlew :core-faces:testDebugUnitTest` (e quindi `check.ps1`) i giri sono quelli di default; il NAS vero **non** gira mai da solo (si salta con il motivo se manca l'interruttore o il file).
+
+Un giro rosso si rifà dal suo seme: il seme del giro è `base x 1.000.003 + indice x 7.919 + 17` e il rapporto lo stampa insieme alla cronaca del giro (passi, colpi scattati, morti). `FacesChaosDeterminismTest` prova che due corse con lo stesso seme fanno gli stessi passi e fanno scattare gli stessi colpi; le chiavi di cifratura dei database del banco vengono da un generatore con seme (`SHA1PRNG`), non dalla ora.
+
+## F4. Come funziona un giro
+
+Un **giro** è un account con 2 o 3 dispositivi che condividono la share privata. Ognuno è fatto dai **pezzi veri** legati come li lega `:app` (l'interruttore di P7 con il recinto della cancellazione, la cancellazione locale e quella sul NAS di P8, il pubblicatore e la replica di P3, le prenotazioni, il calcolo di P4, il raggruppamento con il custode di P5) sopra uno stato che sopravvive alla morte: il diario, i dati locali (le chiavi e i database dei volti), l'outbox, lo stato della replica e la voce dei dati personali stanno in oggetti del banco che il processo ucciso non porta con sé (`ChaosLocalData`, `ChaosPersonal`, `ChaosJournal`). I motori di rilevamento e di firma sono i finti di P4 (`FakeFaceEngines`, identità sintetiche 1-3): **nessun dato biometrico**, nessun volto vero, nessun modello.
+
+Il piano di un giro dipende solo dal seme:
+
+1. **Il mondo**: media in comune sul NAS (area privata), qualche media solo sul telefono di un dispositivo, il mese e il tipo (foto, documento, ritaglio) che i finti di P4 sanno leggere, le impronte SHA-256 di tutto ciò che sta nell'area privata e non è dei volti (invariante 5).
+2. **I passi** (3-5 sul NAS vero, 3-7 sulla JVM e sul simulatore), scelti a pesi fra quindici tipi:
+
+| Passo | Peso | Che cosa fa |
+|---|---|---|
+| calcolo | 26 | un dispositivo lavora (tappe di P4: unità di mese, media, firma, corpo salvato, messa in coda) |
+| calcolo con la generazione che cambia | 8 | durante il calcolo un altro dispositivo spegne e riaccende Persone: la generazione cambia sotto i piedi del primo |
+| giro dei dati e dei volti | 12 | pubblicazione, replica degli altri, raggruppamento, ricalcolo dell'istantanea |
+| nome dato a una persona | 6 | un nome (la cronologia dei nomi è un dato personale) |
+| media nuovi | 5 | arrivano sul NAS o sul telefono |
+| "Disattiva e cancella" | 12 | scelta degli album, stato `off|G`, diario, cancellazione locale (chiave, poi file) e sul NAS, avviso agli altri |
+| riattivazione | 5 | Persone riacceso (nuova generazione) |
+| dispositivo spento | 4 | un dispositivo sparisce fino a un passo dopo |
+| dispositivo che torna | 6 | il dispositivo spento torna e trova la generazione cambiata o la sua cartella cancellata |
+| congelamento | 3 | l'area di prova resta ferma (nessuna scrittura) per un passo |
+| cestino di rete | 2 | `vfs_recycle` (solo dove c'è, non sul NAS vero) |
+| il tempo passa | 6 | scadono le prenotazioni (ora del NAS), le conferme, il lavoro di notte |
+| manutenzione notturna | 9 | il guardiano dei volti (`FacesNasJanitor`) |
+| esclusione di un dispositivo | 2 | un dispositivo dell'account non vale più |
+| morte del processo senza colpo | 4 | il processo di un dispositivo è ucciso fuori da un salvataggio, e riparte |
+
+3. **I colpi** (`Blow`), armati prima di ogni passo e fatti scattare al loro punto: **dove** (`Surface`: chiamata al NAS, cancellazione sul NAS, dati personali, quattro punti del database, outbox, replica, diario, registro, dati locali, generazione che cambia), **quando** (`Moment`: prima o dopo la chiamata, così una risposta persa si prova), **che cosa** (`FaultKind`: rete caduta, sessione scaduta, stallo, spazio finito, **morte del processo**, errore di salvataggio, generazione che cambia). Con `dense=true` (NAS vero) ogni passo ne arma di più. Un colpo non scattato nel passo si disarma.
+4. **La morte** è la morte di un dispositivo: un `Error` (`Death`) che nessun `catch (Exception)` ferma, e che dalla chiamata dopo in poi rilancia da ogni vecchio oggetto di quel dispositivo. Il banco **ricostruisce il processo** (`restart()`), che riprende i lavori dal diario e, se muore ancora all'avvio, lo rifà (fino a 12 volte). Sul simulatore SMB la morte è segnata senza lanciare (la sessione classifica le eccezioni), ma le richieste dopo di lei sono rifiutate.
+5. **Dopo ogni morte e a fine di ogni passo**: il verificatore guarda gli invarianti 1-7; **a fine giro** tutti i dispositivi tornano, il tempo passa oltre le prenotazioni, la nottata gira, ogni dispositivo riparte una volta e fa un giro finale (30 giri sul NAS vero, 24 sulla JVM) e il verificatore controlla la convergenza (8), la ripresa a vuoto (11: a lavoro finito, un riavvio e una ripresa dal diario **non cambiano niente**, nemmeno un byte: i file dei volti sul NAS, i diari, i dati su disco, l'outbox e la voce dei dati personali) e che ogni cancellazione sia finita o dichiari perché aspetta.
+
+Il giro dopo una `Death` che esce da dove non deve (ad esempio nel codice del banco) è un errore del banco (invariante 12), non una violazione: serve a non nasconderlo.
+
+## F5. Il verificatore
+
+`ChaosVerifier` (invarianti 1-5 e 12), `ChaosSnapshots` (6, 8) e `ChaosLeases`/`ChaosWorld` (7) guardano **il mondo**, non quello che il codice dice di aver fatto: rileggono il NAS con SHA-256, i dati su disco e gli eventi che gli osservatori hanno registrato (le scritture tentate, le prenotazioni, gli stati emessi, l'ordine fra chiave e file). Due scelte contano:
+
+- **Gli osservatori sono a eventi**. L'invariante 3 (dopo `off|G`, niente di `G`) si vede solo se si guarda ogni emissione dello stato e ogni scrittura nel momento in cui avviene; una rilettura del NAS dopo la morte potrebbe non vedere mai il momento sbagliato. Lo stesso per l'invariante 2 (lo stato fresco **prima** di ogni scrittura esclusiva) e per l'ordine chiave-poi-file dell'invariante 4.
+- **Il verificatore ha i denti**: `FacesChaosVerifierTest` costruisce a mano un mondo per ogni invariante (un file dei volti nell'area comune, una scrittura nella cartella di un altro dispositivo, una scrittura senza lo stato fresco, un volto salvato due volte, una scrittura dopo `off`, un media cancellato, cambiato o sparito, due dispositivi con la stessa unità, un media non analizzato, una cancellazione non finita e senza motivo) e vuole **solo** quella riga rossa; un mondo sano resta verde (8 turni, 3 dispositivi).
+
+Il verificatore **non si fida del banco per essere verde**: `ChaosSnapshots` rilegge le teste e i segmenti con la replica vera di P3 come un dispositivo nuovo senza stato, quindi un'istantanea che il codice di produzione non sa leggere è una violazione, e controlla che nessun id di persona si perda fra due istantanee vincenti (il `PersonId` è stabile).
+
+## F6. Difetti e osservazioni trovati
+
+Il perimetro di P12 non è il codice di produzione: i difetti **non sono corretti** qui. Ognuno ha il suo scenario senza giri casuali in `FacesChaosKnownDefectsTest` (il comportamento di oggi è verde; l'asserzione giusta è `@Ignore` con il motivo e si riaccende quando il difetto è corretto) e il banco lo **evita** di serie (`ChaosConfig.avoid`) per non essere rosso per un difetto che nessuno corregge in P12. Per ritrovarlo: `MCG_FACES_CHAOS_NO_AVOID=1` (O2) e `MCG_FACES_CHAOS_DB_ERRORS=1` (O1).
+
+**O1. Un errore del database che non è un `IOException` esce dalla tappa del calcolo.** `FacesComputeEngine.run` promette "mai un'eccezione per un caso previsto" e ferma la tappa con un codice (`FacesRunResult.stop`, un `FacesStop`) per un guasto del NAS e per un corpo dei volti che non si salva; ma tre salvataggi non sono guardati allo stesso modo: il segno di unità finita (`FacesUnitsDone.markDone`), la messa in coda del pubblicatore (`FacesPublishStore`) e quella del raggruppamento. Un errore di SQLite (database pieno o bloccato: Room lo lancia come `SQLiteException`, non `IOException`) li fa uscire dalla tappa come eccezione. **Nessun dato si perde** (il corpo è già salvato, e la ripresa lo rimette in coda), ma l'eccezione arriva a chi lancia la tappa: il lavoro di `:app` (P13) deve prenderla (o il motore deve fermarsi con un codice). Seme che lo trova: con `MCG_FACES_CHAOS_DB_ERRORS=1` il banco di serie (seme di base 20261029) lo trova in 33 giri su 2.000, tutti con l'invariante 10; il primo è il 71: `faces-pc.ps1 -Mode jvm -Rounds 1 -FirstRound 71 -Seed 20261029`. Sul banco di serie è evitato: nel banco il database fallisce solo nei punti dove la produzione lo gestisce (diario e dati locali, `HANDLED_FAILURES`), e solo con `MCG_FACES_CHAOS_DB_ERRORS=1` anche negli altri.
+
+**O2. Un media calcolato dai byte del telefono che poi arriva sul NAS non si pubblica mai.** Una foto solo sul telefono di D0, nello stesso mese di una foto del NAS, si calcola da D0 sui byte locali e **l'unità del mese si segna finita**. Quando il backup riesce e la foto arriva sul NAS (con la sua anteprima), la riga 5 della tabella del §2.3 dice che il corpo calcolato dal telefono va messo in coda per la pubblicazione; ma l'unità è già segnata finita e **nemmeno dopo un riavvio viene più visitata**. Gli altri dispositivi ricalcolano la foto dal NAS e non vedono mai il corpo di D0 (due corpi diversi per lo stesso media, la scelta del vincente non converge fino a una nuova unità). Lo scenario di `FacesChaosKnownDefectsTest.o2_oggiIlCorpoDelSoloTelefonoNonVieneMaiAccodatoEGliAltriScelgonoUnAltroCorpo` lo riproduce senza giri casuali. Seme e giro del banco con `MCG_FACES_CHAOS_NO_AVOID=1`: con `MCG_FACES_CHAOS_NO_AVOID=1` il banco di serie (seme di base 20261029) lo trova nel giro 1393 (seme del giro 20261100814271, invariante 8): `faces-pc.ps1 -Mode jvm -Rounds 1 -FirstRound 1393 -Seed 20261029`. È un difetto di **convergenza** (invariante 8), non di sicurezza: nessun dato esce dal posto e nessuna cancellazione è toccata.
+
+**Osservazione di modellazione.** L'archivio dei volti finto di P3/P4 tiene **solo l'ultimo nome** per persona: due nomi dati alla stessa persona nello stesso giro lasciavano il primo nella cronologia del banco e facevano credere che la cancellazione non l'avesse tolto. Il banco usa una persona per nome (`world.personIds.next()`): non è un difetto del codice di produzione, è un limite del finto, e il registro dei nomi vero (core-personal) ha la sua prova di cancellazione completa in `core-personal`.
+
+**Gli artefatti del banco corretti lungo la strada** (un giro rosso era sempre prima un dubbio sul banco, poi, se serviva, sul codice): lo stato `Off` che emette l'interruttore **vecchio** fermandosi dopo la morte non è una pubblicazione (`ChaosDevice.stopping`); un errore di salvataggio del registro dei dati personali o di `addPeople` nel codice del banco è preso dal banco, non è del codice sotto prova; un `IO_FAIL` su un salvataggio di cui la produzione non si occupa è limitato a O1; l'invariante 1 si azzera dopo l'esclusione di un dispositivo; il tempo (70 minuti) passa a fine giro perché scadano le prenotazioni; una prenotazione liberata con la risposta persa non si dà per tenuta (`leaseUnknown`); il processo che riparte e muore ancora all'avvio si fa ripartire.
+
+**Nessun altro difetto** è emerso nei 2.000 giri sul NAS finto, nei 600 sul simulatore SMB (con il vero `NasFacesEraser` e le primitive vere) e nella prova sul NAS vero (§F12): né un volto ricalcolato, né una pubblicazione dopo `off|G`, né un file fuori da `faces/`, né una cancellazione incompleta.
+
+## F7. Il banco ha i denti
+
+`FacesChaosMutationTest` introduce quattro errori, uno per promessa di sicurezza, e vuole il banco **rosso con l'invariante giusto**; lo stack sano sugli stessi 200 giri (seme 4242) resta verde. Il codice di produzione non si tocca: ogni errore è un decoratore o un'opzione dei pezzi del banco che riproduce l'**effetto** dell'errore sul codice vero.
+
+| Errore | Dove | Invariante | Esito (200 giri, seme 4242) |
+|---|---|---|---|
+| **pubblicare senza lo stato fresco** | l'interruttore che il pubblicatore, la replica e le prenotazioni vedono dice sempre "fresco" (`AlwaysFreshSwitch`) | **2**, nessuna pubblicazione senza lo stato fresco (D30) | 127 giri rossi su 200: invariante 2 (139 violazioni) |
+| **dichiarare la cancellazione prima di farla** | il gancio prima di pubblicare i dati personali (D30) non cancella più niente: la testa con `off|G` esce con i dati di `G` ancora lì | **4**, nessuna testa "non più G" con i dati di `G` ancora lì | 28 giri rossi su 200: invariante 4 (64 violazioni) e, di riflesso, 11 (6) |
+| **togliere i file prima della chiave** | la cancellazione locale toglie i file del database prima di distruggere la chiave (§2.8 passo 6) | **4**, la chiave per prima | 62 giri rossi su 200: invariante 4 (62) |
+| **cancellare fuori da `faces/`** | la cancellazione sul NAS toglie, con i file dei volti, un file fuori da `faces/` (un media) | **5**, mai fuori da `faces/`, nessun media toccato | 68 giri rossi su 200: invariante 5 (137) |
+
+Il secondo errore all'inizio non diventava rosso: l'interruttore stesso cancellava i dati prima che il banco guardasse (la cancellazione locale **vera** gira dentro l'interruttore). Per vederlo serviva un evento, non una rilettura: un dispositivo con un file bloccato (`failErase`, il file che il sistema non lascia togliere) negli altri passi di cancellazione lascia i dati di `G` in disco quando il gancio dichiara `off|G`; l'osservatore sulla testa personale (invariante 4) vede l'uscita e il banco diventa rosso. Questo è il motivo per cui gli invarianti 3 e 4 sono a eventi (§F5).
+
+## F8. L'area di prova sul NAS vero e la guardia (§5.4)
+
+Lo stesso banco gira **dal PC contro il NAS di casa** (`FacesNasIntegrationTest`, lanciato da `faces-pc.ps1 -Mode run`): il codice vero del calcolo, della pubblicazione, della replica, del raggruppamento e della cancellazione, con la sessione SMB di produzione e le primitive vere sopra `smbj` (`FacesNasWiring.build`), il socket diretto del PC e l'ora vera. Cambia solo l'ambiente: nessuno spazio da cambiare e nessun cestino di rete (`Capabilities.REAL`), 3-5 passi per giro, colpi più fitti (`dense`), e fra una ripresa e l'altra si aspetta davvero 600 ms perché le attese della sessione (un handle che il NAS non ha ancora chiuso) sono di orologio. Il giro si ferma appena le interruzioni cadute sono quelle chieste (al massimo `4 x n + 5` giri).
+
+**Il recinto** (le stesse regole delle prove 4B e 7, più strette):
+
+- **La guardia** (`FacesAreaGuard`), prima di qualunque connessione: l'account deve essere `test` (non `admin`, `alessio`, `pampa`, `root`, `administrator` in nessuna forma: NFKC, maiuscole), l'area privata esattamente la share `test`, quella comune esattamente `test-comune`, l'host un IP letterale. Un errore nel file delle credenziali **fa fallire** la prova (non la salta) e non allarga il recinto. Le sole share toccate sono `test` e `test-comune`: **`test2`, `NAS`, `Public` e le aree personali sono rifiutate in ogni forma**.
+- **Ogni chiamata** passa dal trasporto recintato (`FacesAreaTransport`): controlla la share prima del vero e **radica ogni percorso in `mcg-it/<giro>/r<N>/`** (anche `.mycloudgallery/`: i temporanei e il cestino finiscono lì, non alla radice della share). Un percorso con `..`, assoluto, con un'unità (`C:`) o vuoto lancia `FacesAreaViolation` e non arriva al NAS. Le sole cartelle fuori dalla radice di un giro che si possono creare sono i suoi antenati (`mcg-it`, `mcg-it/<giro>`); la sola che si può togliere è la radice stessa, quando è vuota. **La cancellazione dei volti ("Disattiva e cancella") toglie file e cartelle solo sotto `faces/` del giro**, e il banco lo controlla in più sul NAS vero (invariante 5).
+- **L'area comune**: `test-comune` si apre **solo** per provare che l'app non ci scrive niente dei volti (invariante 2): l'oracolo la legge, non la scrive.
+- **L'autenticazione**: al primo login rifiutato un fermo scatta e **nessun'altra autenticazione arriva al NAS** (il NAS blocca l'account dopo pochi tentativi); la prova si ferma e lo dice (`stoppedBecause`). Anche tre aperture consecutive fallite fermano tutto (rete assente).
+- **L'oracolo** (`FacesAreaAdmin`): una connessione sua, con **un solo login**, attraverso lo stesso trasporto recintato ma senza colpi. Serve a mettere i media di partenza nell'area privata (`test`), a leggere i byte di ogni file e a elencarli (gli invarianti si controllano sul NAS vero, non su quello che il codice dice di aver fatto), a cambiare un file «dal PC». Scrive solo in `test` sotto `mcg-it/<giro>/`; `test-comune` solo la legge.
+- **L'autotest** (`FacesAreaSelfTest`) gira prima del primo giro: account e share vietati in ogni forma, percorsi che escono, login rifiutato, e **zero chiamate al vero** per ogni rifiuto (contatore). Con una password sbagliata sul simulatore il banco si ferma al primo rifiuto (`FacesAreaRunnerTest`).
+- **Il file delle credenziali** (`%USERPROFILE%\.mycloudgallery\nas-it.properties`) lo legge **solo questo codice, in memoria**: `user`, `password`, `share`, `share2`, `host`, `guid` (facoltativa); le altre chiavi non si leggono nemmeno. `faces-pc.ps1` ne controlla soltanto l'esistenza (`Test-Path`), non lo apre né lo stampa. Il test si salta, con il motivo, se manca l'interruttore (`MCG_NAS_INTEGRATION=true`) o il file: **nessuna connessione prima della guardia**.
+- **Log**: senza nomi di file, percorsi, share, account, id né impronte; i rapporti dicono invarianti, numeri e primitive, mai contenuti. Lo stato di un giro rosso non si salva sul NAS vero. Nessun dato biometrico: i motori sono i finti di P4.
+
+**La pulizia.** Ogni giro del banco ha il suo mondo (`mcg-it/<giro>/r<N>/`, i suoi media, la sua cartella dell'app) e lo toglie quando ha finito; a fine prova si toglie la radice del giro e il rapporto dice **quanti file e quante cartelle ha tolto e cosa è rimasto** (`faces-area-report-<giro>.txt`, riga «pulizia»). `mcg-it` stessa e i giri più vecchi (di altre prove) non si toccano: ognuno si pulisce con il suo `-Mode clean -Run <giro>`, e solo se vuole l'utente.
+
+## F9. Il telefono (`tools/chaos/s25.ps1 -Mode faces`)
+
+**Pronto, non eseguito** (niente telefono e niente adb in questo pacchetto: la prova F103 la fa chi ha l'S25, dopo che P13 ha scritto il pannello di debug «Prove della Fase 8», §5.6). Prima, a mano: l'S25 con la build debug e l'account di prova.
+
+```powershell
+# 1. la semina: i ritratti e le composizioni di PUBBLICO DOMINIO di tools\fixtures\faces\portraits (da 10 a 200 file, non scaricati dallo script) in mcg-prova,
+#    con nomi neutri (ritratto-NN), e il MANIFESTO dei volti (# mcg-faces-manifest 1)
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode faces -Step seed -Serial RFCY61FZDHW -Run 20261030-101500-1a2b3c4d -Seed 103
+# 2. nell'app: il backup di mcg-prova (i ritratti vanno sul NAS di prova)
+# 3. almeno 100 interruzioni in tre finestre (calcolo, "Disattiva e cancella" in corso, ripresa dopo la cancellazione), poi la verifica
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode faces -Step interrupt -Serial RFCY61FZDHW -Run 20261030-101500-1a2b3c4d -Seed 103 -Interruptions 100 -SettleSeconds 300 -Verify
+#    solo il calcolo: -Window compute;  solo la cancellazione e la ripresa: -Window erase;  tutte e tre (default, pesi 5/3/2): -Window all
+# 4. (o a parte, a prova ferma) la sola verifica; -Phase computed (dopo il calcolo) | erased (dopo la cancellazione)
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode faces -Step verify -Serial RFCY61FZDHW -Run 20261030-101500-1a2b3c4d -Phase erased
+# 5. la pulizia del telefono (solo mcg-prova e il file di stato)
+powershell -ExecutionPolicy Bypass -File tools\chaos\s25.ps1 -Mode faces -Step clean -Serial RFCY61FZDHW -Run 20261030-101500-1a2b3c4d -Yes
+```
+
+**Come parla con l'app.** Lo script non tocca l'interfaccia: manda all'app di debug un broadcast mirato al suo pacchetto (`am broadcast -a dev.pampa.mycloudgallery.debug.action.FACES_SCENARIO -p dev.pampa.mycloudgallery.debug --es scenario <nome>`) con i nomi `f103-compute` (attiva Persone sull'account di prova e fa «Analizza ora» sull'area di prova), `f103-erase` («Disattiva e cancella» con la conferma) e `f103-status` (riscrive soltanto il file di stato); e legge l'esito dal **file di stato** (`run-as dev.pampa.mycloudgallery.debug cat files/prove/f8-status.txt`, righe `chiave=valore`: `phase`, `state`, `generation_present`, `local_done`, `keys`, `faces_db`, `erase_done`). I nomi stanno in testa al modo (variabili `$Faces*`): si cambiano in un punto solo se P13 li sceglie diversi.
+
+**Le guardie** (le stesse degli altri modi): un solo telefono, `RFCY61FZDHW` (con un adb finto, `MCG_ADB`, vale il numero che si vuole); solo l'app di debug `dev.pampa.mycloudgallery.debug` (`run-as` non funziona su una release: il modo rifiuta altri pacchetti); il Wi-Fi si spegne **solo** con `svc wifi disable` dello script, al massimo 120 s, e si riaccende **sempre**, anche se lo script è interrotto; da 1 a 500 interruzioni; nessun dato personale (solo ritratti di pubblico dominio, con nomi neutri sul telefono).
+
+**Il passo `verify`** fa tre cose. (1) **I media del telefono non sono cambiati**: le impronte di `mcg-prova` tornano (la funzione dei volti non tocca i media; senza `-AllowFreed` anche un file tolto è un cambiamento, codice 4). (2) **La cartella dell'app, in sola lettura** (`run-as ls` e `cat`): in fase `computed` nessun compagno `-wal`/`-shm`/`-journal` orfano senza il suo `.db` e `faces_db` del file di stato che torna con i `.db` visti; in fase `erased` **nessun file `faces-*` salvo `faces-erase` e `faces-local`** (il diario che si tiene 30 giorni per la pagina, §2.8 passo 11, e lo stato locale), e il file di stato dice `local_done=1`, `keys=0`, `faces_db=0`. (3) **Il verificatore dal PC**, in sola lettura, sull'area di prova: `faces-pc.ps1 -Mode verify -Manifest <manifesto> -Phase computed|erased`. Legge solo la cartella del backup del manifesto e `.mycloudgallery/{faces,tmp}` di `test` e `test-comune` (nessuna primitiva di scrittura per costruzione, un'allowlist di cartelle, un tetto alle dimensioni), e dice, con l'impronta di ogni file letto: niente dei volti nell'area comune, i media del manifesto ci sono e non sono cambiati, la forma dei file sotto `faces/` (teste, segmenti, prenotazioni) e, in fase `erased`, **nessun file sotto `faces/` in nessuna share**. Esce con 4 se qualcosa non torna.
+
+**Provato senza telefono**: `s25.ps1 -Mode faces -SelfTest` (manifesto, file di stato, finestre, guardie) e `tools\chaos\faces-pc\s25-faces-finto.ps1`, che lancia seme, interruzioni, verifica e pulizia contro `tools\chaos\fake-adb\fake-adb.ps1` (un adb finto che imita il telefono in una cartella) e controlla gli esiti, compreso un database orfano e un `faces-1.db` rimasto dopo la cancellazione (che il verificatore deve vedere). Il calendario delle interruzioni dipende solo dal seme.
+
+## F10. Che cosa non copre (e chi lo copre)
+
+- **I legami del banco, non quelli di `:app`.** Il banco lega i pezzi veri (interruttore, cancellazione, pubblicatore, replica, prenotazioni, calcolo, raggruppamento) come li lega `:app`, ma i legami di `:app` (P13: l'`Application`, i lavori di WorkManager, il database Room e la chiave nel Keystore) li scrive P13: **il banco va ripetuto sui legami di `:app`** quando ci sono (stessa classe `ChaosBench`, un altro `ChaosTargetFactory`). Il database è in memoria nel banco (con la stessa interfaccia e le stesse morti ai salvataggi): le migrazioni, il WAL e SQLCipher/Keystore veri sono del telefono (§F9) e di `core-faces` (P6).
+- **I dati personali veri.** Il registro dei dati personali (core-personal) e la sua voce sul NAS sono modellati in memoria (`ChaosPersonal`, `ChaosHeads`) con i punti dove cade la produzione (salvataggio del registro, pubblicazione della testa); le proprietà del registro vero (firma, replica, cronologia dei nomi) sono dei suoi banchi.
+- **Il telefono.** `s25.ps1 -Mode faces` non è eseguito (§F9). Dal PC non si legge il diario della cancellazione né il database del telefono: `verify` controlla i nomi dei file, il file di stato e l'area di prova sul NAS, non gli invarianti 1, 3, 6, 7 (quelli sono dentro il processo dell'app: li guardano il banco sulla JVM e la schermata della pagina Persone). Per questo la prova F103 chiede anche uno sguardo all'app dopo la verifica.
+- **Il NAS vero senza cestino e senza spazio finito.** Sul NAS vero non c'è `vfs_recycle` e lo spazio non si cambia: il banco di quella prova non usa «cestino di rete» né «spazio finito» (`Capabilities.REAL`). Li provano i 2.000 giri sul NAS finto e i 600 sul simulatore SMB (che emula il cestino come Samba).
+- **Il tempo vero e le ore.** Sulla JVM l'ora è finta (le prenotazioni, le conferme, la nottata avanzano a comando); sul NAS vero i tempi sono quelli veri, ma una prova dura minuti, non ore.
+- **Gli errori del database fuori dai punti guardati (O1)** e **il corpo del solo telefono (O2)**: il banco li evita di serie (§F6).
+- **L'architettura.** Il banco non nomina le primitive di scrittura del NAS (`*NasFileOps*`, la cancellazione distruttiva di core-nasops), `NasFileSystem` fuori da `faces/sync/` (le sole copie sono in `faces/sync/chaos/`, sotto la sua cartella) né `java.net`: lo vietano `Phase8ArchitectureTest` e `Phase4ArchitectureTest` (in `core-common`). Quello che viene colpito è la sessione e il trasporto; le primitive vere una per una sono del banco di core-nasops (Parte A).
+- **Il pannello di debug dell'app e i suoi scenari** (`f103-*`) sono di P13; qui c'è il loro contratto con lo script.
+
+## F11. Che cosa conta come superata
+
+1. **JVM**: 2.000 giri sul NAS finto e 600 sul simulatore SMB, **zero violazioni** (evitando solo O1 e O2, §F6).
+2. **Mutazioni**: i quattro errori sono rossi con l'invariante giusto (§F7), lo stack sano sugli stessi semi è verde.
+3. **Il verificatore**: ogni invariante ha il suo caso rosso e il mondo sano è verde; un giro si rifà dal suo seme (`FacesChaosDeterminismTest`).
+4. **NAS vero** (dal PC): 400 interruzioni cadute su `test` sotto `mcg-it/<giro>/`, zero giri rossi, nessun errore di autenticazione, l'area di prova pulita a fine prova (il rapporto dice cosa è rimasto).
+5. **Telefono** (F103, a mano dall'orchestratore): `s25.ps1 -Mode faces` con >= 100 interruzioni nelle tre finestre, `verify` verde nelle due fasi, poi in app nessun volto da ricalcolare e, dopo «Disattiva e cancella», nessun dato dei volti né sul telefono né sul NAS.
+6. I banchi esistenti (Parti A-E) e i test di `core-faces`, `core-nasops` e `core-personal` restano verdi; `tools\check.ps1 -NoDaemon` verde.
+
+## F12. Risultati e tempi
+
+27/10/2026, stesso PC, `--max-workers=2`, **senza evitamenti diversi da O1 e O2** (§F6):
+
+| Banco | Giri / interruzioni | Violazioni | Tempo |
+|---|---|---|---|
+| NAS finto, 2.000 giri (seme di base 20261029) | 2.000 giri, 2.256 interruzioni cadute (1.389 morti del processo, 422 connessioni cadute, 120 sessioni scadute, 121 stalli, 16 «spazio finito», 117 salvataggi falliti, 71 cambi di generazione; 1.259 prima della chiamata, 997 dopo), 10.027 passi, 1.384 verifiche dopo una morte o a metà e 12.027 a lavoro finito, 1.384 riavvii e 2.539 riprese a vuoto, 44.444 file riletti con SHA-256 (24 MiB), 8.442 istantanee rilette, 16.741 corpi dei volti salvati, 851 cancellazioni partite, 38.306 prenotazioni viste | **0** | 135 s |
+| simulatore SMB, 600 giri (seme di base 20261030) | 600 giri, 761 interruzioni cadute (468 morti), 3.013 passi, 467 verifiche dopo una morte e 3.613 a lavoro finito, 780 riprese a vuoto, 13.867 file riletti (7,7 MiB), 2.581 istantanee, 5.057 corpi salvati, 257 cancellazioni, 11.763 prenotazioni viste | **0** | 45 s |
+| mutazioni (200 giri per errore, seme 4242) | quattro rossi con l'invariante giusto (§F7), lo stack sano verde | — | 72 s |
+| verificatore, determinismo, difetti noti | 12 + 2 + 5 test (due `@Ignore` con il motivo: O1 e O2 giusti) | **0** | 1 s |
+| il codice del NAS vero sul simulatore | `FacesAreaRunnerTest`, 4 test | **0** | 1 s |
+| NAS vero, dal PC (`test`, sotto `mcg-it/<giro>/`) | 226 giri, **402 interruzioni cadute** (245 morti del processo, 91 connessioni cadute, 23 sessioni scadute, 20 stalli, 21 salvataggi falliti, 2 cambi di generazione; 248 prima della chiamata, 154 dopo) | **0** (nessun giro rosso, nessun login rifiutato) | 59 min 50 s |
+| telefono (S25) | **non eseguito** | — | — |
+
+Ogni cella è un conteggio del rapporto del banco; i rapporti dei due banchi JVM sono scritti a ogni corsa in `core-faces/build/chaos/`.
+
+**Il NAS vero, in dettaglio** (giro del NAS `20261027-131021`, nome in UTC; seme di base `434813905792900`, casuale come per ogni prova sul NAS; rapporti in `core-faces/build/chaos/faces-area-{report,progress,log}-20261027-131021.txt`): 886 passi dell'utente (166 calcoli, 135 giri dei dati e dei volti, 101 riattivazioni, 77 «Disattiva e cancella», 63 manutenzioni notturne, 61 «il tempo passa», 61 arrivi di media nuovi, 51 morti senza colpo, 47 congelamenti, 41 calcoli con la generazione che cambia, 39 nomi, 34 dispositivi spenti, 7 esclusioni, 3 ritorni), 242 verifiche dopo una morte o a metà e 1.112 a lavoro finito, 242 riavvii e 243 riprese a vuoto, 5.162 file riletti con SHA-256 (2,8 MiB), 768 istantanee del NAS rilette, 1.580 corpi dei volti salvati, 3.858 prenotazioni viste (0 contese); **253.808 chiamate al NAS passate dalla guardia**, nessun tentativo di login rifiutato. Copertura per punto (colpi scattati, di cui morti): chiamate al NAS 145 (52), dati personali sul NAS 52 (11), database: corpo dei volti 9 (7), istantanea 1 (1), persone 24 (24), unità finite 3 (3), outbox 14 (14), stato della replica 1 (1), diario della cancellazione 45 (31), registro dei dati personali 51 (51), stato locale 57 (50). Sul NAS vero la cancellazione non ha una porta a parte (sono richieste SMB come le altre, contate nelle chiamate al NAS) e non c'è lo «spazio finito» (`Capabilities.REAL`). Una prima prova più corta (`20261027-125847`: 19 giri, 20 interruzioni, 12 morti, 0 violazioni) ha provato guardia, recinto e pulizia prima della lunga.
+
+**Lo stato del NAS dopo la prova.** Ogni mondo di giro è stato tolto subito dopo il giro (226 mondi, 226 puliti: 5.162 file e 5.419 cartelle tolti in tutto; nella prova corta 19 mondi, 410 file e 513 cartelle) e la pulizia finale ha trovato la cartella del giro già vuota: «tolti 0 file e 0 cartelle; radice tolta, niente rimasto». **Nelle share `test` e `test-comune` non resta niente di questa prova.** `mcg-it` stessa e i giri di altre prove non sono stati toccati (la guardia lo vieta: la radice di un giro è la sola cartella che il banco può togliere). Nessun dato biometrico è stato scritto: i motori sono i finti di P4.
+
+**I due difetti, ritrovati con un seme.** Con `MCG_FACES_CHAOS_NO_AVOID=1` il banco di serie (seme di base 20261029, 2.000 giri) trova **O2** in un giro, il 1393 (seme del giro 20261100814271, invariante 8: i corpi vincenti di D1 non sono quelli di D0), e lo rifà da solo: `MCG_FACES_CHAOS_NO_AVOID=1` e `faces-pc.ps1 -Mode jvm -Rounds 1 -FirstRound 1393 -Seed 20261029`. Con `MCG_FACES_CHAOS_DB_ERRORS=1` trova **O1** in 33 giri su 2.000 (tutti con l'invariante 10, `ChaosDbFault` esce dal codice sotto prova), il primo è il 71 (seme del giro 20261090345353): `MCG_FACES_CHAOS_DB_ERRORS=1` e `faces-pc.ps1 -Mode jvm -Rounds 1 -FirstRound 71 -Seed 20261029`.
+
+**Un'avvertenza sul rapporto.** Nel rapporto del NAS vero la riga «punti dove nessun colpo è scattato» elenca anche «cambio di generazione», benché 2 cambi siano scattati (contati fra le interruzioni): il cambio di generazione è un *tipo* di colpo, non un *punto*, e il rapporto lo contava male. Corretto in `ChaosStats.neverHit` dopo la prova (che non è stata rifatta): nei rapporti nuovi non compare più, e per la cancellazione sul NAS dice perché non ha colpi (sul simulatore SMB e sul NAS vero non ha una porta a parte).
+
+Una morte del processo cade in ognuno dei 12 punti del banco sul NAS finto e negli 11 del simulatore SMB (tabella di copertura nel rapporto). Nessun test usa il tempo vero tranne la prova sul NAS vero.

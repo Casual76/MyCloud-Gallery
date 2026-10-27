@@ -43,5 +43,6 @@ fun ViewerServices.withAlbums(albums: ViewerAlbumActions): ViewerServices = View
   subjectCutter = subjectCutter,
   cutoutSaver = cutoutSaver,
   people = people,
+  placeMap = placeMap,
   albums = albums,
 )

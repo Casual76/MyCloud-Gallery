@@ -1,5 +1,7 @@
 # Verifica funzionale: Fase 7, album, condivisione, Utility, Nascosti e Raccolte (commit `870a723b`, 27/10/2026)
 
+**Stato (27/10).** Le 46 voci sono corrette nel codice dai pacchetti di correzione A, B, C, D ed E (`fase7/rev-a`...`fase7/rev-e`, uniti in `integra/27-10a` e `integra/27-10b`): ogni voce ha una correzione con un test, nessuna e' stata scartata e nessuna resta aperta. La verifica dei fake (§3) ha trovato un'altra divergenza, ora chiusa: il diario finto leggeva le operazioni chiuse (SH-2) e quello su Room no (§7). Il quadro per voce e' nel §7; le decisioni nelle sezioni "Fase 7, correzioni dopo le revisioni: pacchetto A/B/C/D/E" di `docs/decisioni.md`. I flussi del §4 restano da provare sul telefono (F72-F93).
+
 **La domanda.** Ogni funzione della Fase 7 promessa all'utente funziona davvero nell'app installata, da capo a fondo, in debug e in release? Questa non
 e' una revisione di sicurezza: quella sta in `docs/review/7-fase7.md`.
 
@@ -751,3 +753,62 @@ detto).
 - la qualita' delle regole degli smart e dei viaggi (soglie, raggi, finestre): e' F87–F89;
 - `NasOpsEngine` e `SafeUploadEngine` passo per passo: li coprono il banco di P5 e quelli della 4B e della 5B;
 - i layout, TalkBack e gli screenshot delle schermate della Fase 7.
+
+---
+
+## 7. Stato di ogni voce (27/10, revisione E)
+
+Tutte e 46 corrette. Il pacchetto fra le prime due colonne: **A** fiducia e replica (nessuna voce di questa verifica), **B** flusso della condivisione, **C** Utility, Doppioni, cestini e Nascosti in Cartelle NAS, **D** smart, viaggi, Raccolte, ricezione e Diagnostica, **E** collegamenti e confini. I limiti (L...) sono in `docs/sicurezza.md` §6.
+
+| Voce | Pacchetto | Correzione, prove, limiti |
+|---|---|---|
+| AA-1 | D | `IncomingAlbums.choices()` e' un flusso: la ricezione segue gli album dopo la prima lettura (`IncomingAlbumsTest`). L172 |
+| AA-2 | D | "Oppure un album nuovo" dalla scelta dell'album (`IncomingAlbumsTest`). L172 |
+| AA-3 | D | `PickRelay`: la scelta persa diventa "Aggiungi ad album" con l'album gia' scelto, o "La scelta non vale piu'" (`PickRelayTest`). L173 |
+| AP-1 | D | `AlbumsStatus.Loading` finche' gli album non sono montati (`AppAlbumsStatusTest`) |
+| AS-1 | D | `SmartUpkeep`/`CatalogAlbums` come `SmartWorkSink`: ogni fine di calcolo rinfresca elenco e pagine (`SmartAlbumsAppTest`, `SmartUpkeepTest`) |
+| AS-2 | D | `Recomputing(0, 0)` per uno smart senza righe; il segno "visto" dopo il primo calcolo (`SmartAlbumsAppTest`) |
+| AS-3 | D | `ChangeBatcher`: cio' che arriva durante un giro fa partire il giro dopo (`BatchingTest`) |
+| AS-4 | D | `readyChanges` della ricerca per contenuto rivaluta gli smart con testo o esempi (`SmartUpkeepTest`) |
+| AS-5 | D | `resumeAll` al montaggio e `drain` per i calcoli a meta' e i giorni saltati (`SmartUpkeepTest`). L175 |
+| AS-6 | D | Gli smart senza periodo si rifanno a catalogo fermo da 2 minuti (`SmartUpkeepTest`). L175 |
+| AS-7 | D | `propose` e `preview` dell'editor in `try/catch` (`SmartReviewTest`) |
+| AS-8 | D | Una sola pagina dopo "Salva le regole"; il selettore delle foto d'esempio senza album (`SavedRulesNavigationTest`) |
+| AS-9 | D | Cartella del backup letta a ogni uso; `reconcileNow()` al posto dei 2 secondi (`SmartReviewTest`) |
+| AS-10 | D | Da congelato "Aggiungi" scrive anche `accept:`; "Scongela" tiene le aggiunte a mano (`SmartReviewTest`) |
+| VG-1 | D | `TripUpkeep.poke()` dopo il montaggio e le novita'; `TripsState.Searching` (`TripUpkeepTest`) |
+| VG-2 | D | `TripId.startKey`, creazione e `markAccepted` in `NonCancellable`, `NotFound` detto (`TripsReviewTest`) |
+| SH-1 | B | Il tentativo nell'impronta del piano (`RevisioneBShareTest.sh1...`) |
+| SH-2 | B, E | Operazioni chiuse lette dal diario, motivo, tocco "Riprova" che fa un piano nuovo (`RevisioneBShareTest.sh2...`, `RevisioneBAlbumPageTest.sh2...`); E: `RoomShareDiary.closedOps` (prima valeva l'elenco vuoto di serie: dopo la morte del processo la striscia spariva) e un'operazione chiusa con un elemento fermo non e' piu' "in corso" (`RevisioneEConfiniAppTest.sh2...`) |
+| SH-3 | B | `FolderAdoptions` con la storia dell'album, `AlbumFolderWatch.notices` (`RevisioneBShareTest.sh3...`, `RevisioneBCondivisioneAppTest.sh3...`). L151 |
+| SH-4 | B | `toShare` di uno smart condiviso (`RevisioneBCondivisioneAppTest.sh4...`) |
+| SH-5 | B | `definitionStaged`: una ripresa non riaccoda definizione e livello (`RevisioneBShareTest.sh5...`) |
+| SP-1 | B | Il cancello degli arrivi della 5B per `AlbumFolderUploads` (`RevisioneBCondivisioneAppTest.sp1...`) |
+| SP-2 | B | "In arrivo" calcolato dal diario (`RevisioneBCondivisioneAppTest.sp2...`) |
+| SC-1 | B, E | Le copie si scrivono subito con `keepClosedCopies`, poi `copyKept` (`RevisioneBAlbumPageTest.sc1...`, `RevisioneBCondivisioneAppTest.sc1...`); E: il confine con A provato sul grafo vero (nessuna seconda copia, l'elemento tolto non torna), il creatore ha l'album anche senza il segno "visto attivo" e la copia non si ritira con il telefono che ha chiuso (`RevisioneEConfiniAppTest.sc1...`, `SharedAlbumCreatorCopyTest`). L231 |
+| SC-2 | B | `AlbumsGraph.watch` pubblica la coda rimasta (`RevisioneBCondivisioneAppTest.sc2...`) |
+| SB-1 | B | `publishedId` legato alla replica (`AlbumFileRulesTest.laLapideDiRiportaVaSullIdPubblicato`; non provato con due dispositivi dello stesso account sul grafo vero) |
+| SN-1 | B | Si contano solo gli elementi che stavano nella cartella dichiarata (`AlbumFolderWatchTest.sn1...`). L150 |
+| SG-1 | B | Il piano chiede i cancelli del backup e dichiara `UPLOAD_BLOCKED` e `safeCopyBlocked` (`RevisioneBShareTest.sg1...`, `RevisioneBCondivisioneAppTest.sg1...`) |
+| SG-2 | B | `roundDone`: un giro che non ha letto ne' scartato niente e' finito (`RevisioneBCondivisioneAppTest.sg2...`) |
+| DP-1 | C | `NasTwins.settle`: `FULL_HASH` in coda e unione dopo l'hash completo (`CatalogIdenticalRevisionCTest.dp1...`). L160 |
+| DP-2 | C | `AlbumMembership` per ogni copia dell'area comune; "mai la gemella del guardiano"; avviso E-D8 (`CatalogIdenticalRevisionCTest.dp2...`) |
+| DP-3 | C | Le copie accettate escono subito dalla vista, la pagina si rilegge al cambio del catalogo (`DuplicatesControllerTest.dp3...`). L165 |
+| DP-4 | C | Firme degli scatti all'apertura dei Simili e "stanotte" (`DuplicatesControllerTest.dp4...`, `CatalogSimilarShotsTest`) |
+| DP-5 | C | `fullHashOn` nullabile, `NIGHTLY_NOT_SAVED` (`UtilityRevisionCTest.dp5...`) |
+| DP-6 | C | "Eliminare 41 copie (3,2 GB)?" / "4 scatti (12 MB)?" (`DuplicatesScreenTest.dp6...`) |
+| DP-7 | C | `confirm` nello scope del ViewModel, `phoneRequest` nello stato (`DuplicatesControllerTest.dp7...`) |
+| UT-1 | C | Con la Libreria non leggibile per intero i Doppioni identici non si cercano (`CatalogIdenticalRevisionCTest.ut1...`) |
+| ED-1 | C | Ogni ingresso del Cestino apre gli Eliminati di recente dietro `HiddenAccessGate` (`NasTrashGateTest`) |
+| ED-2 | C | "Ripristina" su righe non ripristinabili risponde `REJECTED` e `RESTORE_PARTIAL` (`RecentlyDeletedNasTest`) |
+| NA-1 | C | Spazio NAS senza i nascosti e fallendo chiuso (`HiddenSurfacesRegistryTest`, riga `NAS_SPACE`) |
+| NA-2 | C | Il widget di prova aspetta l'istantanea (`FieldProbeWidgetContent.awaitSnapshot`). L165 |
+| RC-1 | D | "Tutti gli album" sempre, "Tutti gli smart" oltre il sesto (`CollectionsSectionBindingTest`) |
+| RC-2 | D | La scelta dell'utente vale finche' il registro non la ha riletta; consegna ritentata ogni 15 secondi (`CollectionsWiringTest`) |
+| DG-1 | D | `SmartContentSearch.ready`: `SMART_NO_SEARCH` solo con la ricerca non pronta (`AlbumsDiagnosticsRenderTest`) |
+| DG-2 | D | `DiagJob.ALBUM_SHARE` e `LIBRARY_MAINTENANCE`, `UtilityDiagnostics` (`AlbumJobReportsTest`, `AlbumJobsDiagnosticsTest`, `UtilityDiagnosticsTest`) |
+| DG-3 | D, E | D: i rifiuti durano nel database (`rejectedHeads`). E: il rifiuto ha il suo **motivo** (`AlbumRejections`, `reason.<MOTIVO>` nell'esportazione), nel resoconto del giro e nel segno durevole (`SharedAlbumRejectionReasonsTest`, `RevisioneEDiagnosticaAppTest`). L174, L230 |
+
+**Conteggio.** 46 voci: **46 corrette** (2 "Blocca" e 19 "Sbagliata" comprese), **0 non un difetto**, **0 aperte**. Le 18 voci "plausibili" erano tutte difetti veri: nessuna e' stata scartata. Cio' che resta e' dichiarato come limite (L150, L151, L160, L165, L172-L175, L230, L231) o come punto aperto delle sezioni dei pacchetti; le voci aperte della revisione di sicurezza (R3, R19, I6, I8) sono nel suo "Stato di ogni voce".
+
+**I fake del §3 dopo i pacchetti.** Gli errori dei fake che i pacchetti hanno chiuso: `InMemoryAlbums` (AS-1, AS-2: ora c'e' la prova sul grafo vero), `InMemoryShareDiary.opByPlan` (SH-1), `ReferenceShareSteps` (SB-1, I1), `FakeShareTransfers` (SP-1: la prova di `:app` usa il cancello vero), `CatalogIdenticalDuplicatesTest` e `HiddenWorldBuilder` (DP-1: l'unione dopo l'hash completo li rende veri). **Una divergenza nuova, trovata dalla revisione E**: `InMemoryShareDiary.closedOps` leggeva le operazioni chiuse e `RoomShareDiary` no (l'elenco vuoto di serie), quindi le prove di SH-2 del pacchetto B passavano e l'app vera perdeva la striscia "N da riprovare" con la morte del processo; ora il diario vero le legge e la prova gira su Room (`RevisioneEConfiniAppTest`).

@@ -1,0 +1,31 @@
+// La mappa della Fase 9 (docs/fase9-progetto.md §1.1, §1.2 "core-map", D21-D29): punti e indice a chiavi di Morton (points/, P3), catalogo,
+// stime e copertura delle regioni offline (regions/, P5), **la decisione pura su ogni richiesta di rete della mappa** (policy/, P1: `TilePolicy`).
+// Contratti, null-object, fake ed esecutori di riferimento (`ReferenceClusterIndex`, `InMemoryMapRegions`, `ReferenceTilePolicy`,
+// `InMemoryMapSettings`, `FakeMapNetworkState`) di P0.
+//
+// **JVM puro** (D2): nessuna classe Android, **nessuna rete** (ne' java.net ne' OkHttp ne' MapLibre: la rete e' solo in feature-map/.../net/,
+// che chiama di qui la decisione), nessun NAS, nessun database, nessun orologio del telefono. Non vede core-network (la rete in uso da una
+// porta), core-database (i punti da una porta), core-albums ne' la "casa" (D29, C31). La stessa funzione pura decide per l'intercettore, per
+// i test di proprieta' e per il banco (§5.5).
+//
+// Dipende solo dalle fondamenta (`api`: i tipi di core-model compaiono nei contratti). Nessun Hilt (i core-* no).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.map'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

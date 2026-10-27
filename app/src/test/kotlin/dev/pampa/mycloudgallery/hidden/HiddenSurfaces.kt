@@ -110,6 +110,7 @@ internal object HiddenSurfaces {
   private const val ALBUMS = "core-albums/src/main/kotlin/dev/pampa/mycloudgallery/core/albums"
   private const val FEATURE_ALBUMS = "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums"
   private const val FACES_PEOPLE = "core-faces/src/main/kotlin/dev/pampa/mycloudgallery/core/faces/people"
+  private const val SEARCH = "core-search/src/main/kotlin/dev/pampa/mycloudgallery/core/search"
 
   /** Le superfici. L'ordine e' quello del §2.1. */
   val entries: List<SurfaceEntry> = listOf(
@@ -262,6 +263,13 @@ internal object HiddenSurfaces {
       id = "people-dictionary", title = "Il dizionario dei nomi per la ricerca: solo nomi di persone non nascoste, con il conto delle foto mostrabili", row = SpecRow.PEOPLE, owner = "P9",
       backing = Backing.PRODUCTION, sources = listOf("$FACES_PEOPLE/PeopleVisibility.kt"), probe = RealPeopleProbes.dictionary(), live = true,
       alsoProvedBy = listOf("PeopleIndexTest"),
+    ),
+    // --- Il codice vero di P10 (ricerca per persona): i candidati vengono dall'istantanea, il filtro finale resta dei nascosti, il dizionario e' quello di `people-dictionary` ---------
+    SurfaceEntry(
+      id = "search-people", title = "Ricerca per persona: dizionario dei nomi, chip \"Persona\", candidati \"sicuri\" e \"forse\", suggerimenti e risultati (F6-D29, D26)",
+      row = SpecRow.PEOPLE, owner = "P10", backing = Backing.PRODUCTION,
+      sources = listOf("$SEARCH/engine/PeopleGate.kt", "$SEARCH/engine/LibrarySuggestions.kt"), probe = RealSearchPeopleProbes.searchPeople(), live = true,
+      alsoProvedBy = listOf("PeopleSearchEngineTest", "PeopleHistoryAndSuggestionsTest", "PeopleQueryTableTest"),
     ),
   )
 

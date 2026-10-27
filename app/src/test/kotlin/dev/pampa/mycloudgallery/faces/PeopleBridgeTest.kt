@@ -33,7 +33,7 @@ class PeopleBridgeTest {
   fun tearDown() = scope.cancel()
 
   private val person = PersonId("00000000-0000-4000-8000-000000000001")
-  private val media = MediaId("m1")
+  private val media = MediaId("00000000-0000-4000-8000-0000000000a1")
   private val rule = PeopleRule(listOf(person), PeopleMode.ANY)
 
   private class FakeLookup(override val available: MutableStateFlow<Boolean>, private val cells: Set<MediaId>) : PeopleLookup {

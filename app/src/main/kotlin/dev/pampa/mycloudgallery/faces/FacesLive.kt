@@ -92,7 +92,7 @@ class FacesLive internal constructor(
   val runControl: StageFacesControl,
   val people: ArchivePeople,
   val crops: GuardedPeopleCrops,
-  val archives: FacesArchives,
+  val archives: FencedArchives,
   val engines: FacesEngineHolder,
   val requirements: FacesRequirements,
   val backlog: FacesBacklog,

@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.FacesSwitch
 import dev.pampa.mycloudgallery.core.faces.contract.HereState
 import dev.pampa.mycloudgallery.core.faces.contract.HolderState
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleAlbumsChoice
+import dev.pampa.mycloudgallery.core.faces.contract.StepState
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.work.FacesStages
@@ -99,7 +100,10 @@ class FacesIntegrationTest {
         }
       }
     } catch (e: TimeoutCancellationException) {
-      throw AssertionError("Dopo ${Attese.TETTO} non e' successo: $what", e)
+      val parts = ArrayList<String>()
+      for (node in nodes) parts += "${node.name}: ${try { node.describe() } catch (failure: Exception) { "illeggibile (${failure.javaClass.simpleName})" }}"
+      val state = parts.joinToString(" || ")
+      throw AssertionError("Dopo ${Attese.TETTO} non e' successo: $what. $state", e)
     }
   }
 
@@ -260,7 +264,9 @@ class FacesIntegrationTest {
     }
     assertThat(s.phone.databases()).isEmpty()
     assertThat(s.phone.keys.aliases()).isEmpty()
-    assertThat(live.switch.currentState()).isEqualTo(FacesState.Erasing(generation))
+    // Finita la parte locale il segno `erasing` si toglie e la voce dice `off`: lo stato e' spento, il diario dice che qui e' fatto e che aspetta gli altri.
+    assertThat(live.switch.currentState()).isEqualTo(FacesState.Off)
+    assertThat(checkNotNull(live.eraser.status.value).local).isEqualTo(StepState.DONE)
     // Sul NAS l'intera generazione e' stata tolta (anche i file del tablet spento): resta solo da aspettare che il tablet lo sappia.
     assertThat(facesFiles(TestNas.ADMIN_USER)).isEmpty()
     // Il tablet spento ha ancora tutto: nessuno ha toccato il suo disco.
@@ -302,12 +308,13 @@ class FacesIntegrationTest {
     val lost = s.tablet
     assertThat(lost.keys.aliases()).hasSize(1)
     assertThat(lost.databases()).isNotEmpty()
-    val nasBefore = nasState()
     val lostId = checkNotNull(lost.device.graph.engine.myDeviceId())
 
     val admin = s.phone.device.graph
     admin.registry.refresh(dev.pampa.mycloudgallery.core.nas.contract.Purpose.INTERACTIVE)
     assertThat(admin.registry.changeStatus(lostId, DeviceStatus.LOST)).isEqualTo(AdminActionResult.Done)
+    // Il registro nuovo (con il dispositivo perso) e' sul NAS: da qui in poi l'azzeramento del tablet non deve cambiare niente.
+    val nasBefore = nasState()
     s.rig.time.advance(PREFLIGHT_INTERVAL)
     assertThat(TrustSyncRun(lost.device.graph, notifications = null, notified = null).execute()).isEqualTo(TrustSyncOutcome.WIPE_STARTED)
 

@@ -202,6 +202,9 @@ class FacesGraph internal constructor(
     if (report != null) {
       lastSync.value = report
       lastRoundBytes = report.bytesRead
+      // Dati nuovi dagli altri dispositivi (volti, nomi, istantanee del custode): chi non e' custode adotta l'istantanea, il custode assegna i volti arrivati.
+      // Senza questo passo un dispositivo che non calcola vedrebbe le persone solo alla notte (F96: «ogni azione si vede sull'altro dispositivo dopo un giro»).
+      if (report.headsAccepted > 0 || report.bytesRead > 0) guarded { live.grouping.incremental(budget) }
       live.dataArrived()
     }
     guarded { live.publisher.flush(FlushReason.SYNC_ROUND) }

@@ -94,6 +94,22 @@ internal class FacesNode(
   /** I file `faces-*.db` (e compagni) che il dispositivo ha sul disco. */
   fun databases(): List<File> = File(noBackup, "faces").listFiles { f -> f.name.startsWith("faces-") }.orEmpty().toList()
 
+  /** Lo stato del dispositivo in numeri e codici, per il messaggio di un'attesa scaduta (mai nomi, id o generazioni). */
+  suspend fun describe(): String {
+    val live = live()
+    return "stato=${live.switch.currentState()} fresca=${live.switch.fresh.value} calcolo=${live.status.value} custode=${live.grouping.holder.value} " +
+      "persone=${live.people.list.value} altri=${live.people.others().first()} replica=${faces.lastSync.value} pulizia=${faces.lastJanitor.value} " +
+      "errori=${faces.roundErrors} fermo=${faces.holdCode()} salvati=${live.counters.facesSaved.get()} archivio=${archiveNumbers(live)}"
+  }
+
+  /** Quanti volti e quante persone ha l'archivio aperto (solo numeri). */
+  private suspend fun archiveNumbers(live: FacesLive): String = try {
+    val archive = live.archives.opened()
+    if (archive == null) "chiuso" else "volti=${archive.groupFaces().size} persone=${archive.grouping()?.persons?.size}"
+  } catch (e: Exception) {
+    "illeggibile (${e.javaClass.simpleName})"
+  }
+
   /** Un giro come il lavoro dell'indice: i dati personali (la generazione e' fresca), poi i volti (replica, pubblicazione, pulizia del NAS). */
   suspend fun round() {
     nas.organizer.syncPersonal(30.seconds)

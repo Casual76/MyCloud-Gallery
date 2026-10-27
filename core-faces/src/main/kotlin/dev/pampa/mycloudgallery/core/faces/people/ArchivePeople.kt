@@ -93,6 +93,12 @@ class ArchivePeople(
   private val proposalLock = Mutex()
   private var proposalMemo: Triple<Loaded, Long, List<MergeProposal>>? = null
 
+  /**
+   * Dal piu' fotografato; a pari foto, per id. **Prima del blocco `init`**: il primo `refresh` parte sul dispositivo di `scope` (un altro thread) e usa questo ordine; una proprieta'
+   * dichiarata dopo `init` puo' essere ancora nulla in quel momento.
+   */
+  private val byPhotos = compareByDescending<Shown> { it.cells.size }.thenBy { it.id }
+
   override val list: StateFlow<PeopleList> = listState.asStateFlow()
 
   override val available: StateFlow<Boolean> = availability
@@ -130,7 +136,6 @@ class ArchivePeople(
   /** D25, E-F38: con un nome si compare con almeno una foto mostrabile (o con "0 foto" se non ha piu' volti), senza con almeno 3. */
   private fun showable(s: Shown): Boolean = if (s.name != null) s.cells.isNotEmpty() || !s.anyFace else s.cells.size >= MIN_UNNAMED_PHOTOS
 
-  private val byPhotos = compareByDescending<Shown> { it.cells.size }.thenBy { it.id }
 
   private suspend fun computeList(): PeopleList {
     val l = core.current() ?: return PeopleList.EMPTY

@@ -179,4 +179,26 @@ class PeopleLifecycleTest {
       assertThat(r.people.list.value.progressPercent).isEqualTo(35)
     }
   }
+
+  /**
+   * Il primo `refresh` parte da solo nel blocco `init`: ogni proprieta' che usa deve essere pronta **prima** (una era dichiarata dopo e il primo giro andava in
+   * `NullPointerException`, fuggito poi in un altro test come eccezione non presa; su un altro thread la corsa era rara, qui e' certa). Con una coroutine che parte
+   * subito nel thread del costruttore e un archivio che non sospende, il giro finisce dentro il costruttore: nessuna eccezione deve restare.
+   */
+  @Test
+  fun costruireLePersoneNonLasciaEccezioniNelPrimoGiro() = runBlocking<Unit> {
+    val world = PeopleWorld()
+    val errors = java.util.Collections.synchronizedList(mutableListOf<Throwable>())
+    val scope = kotlinx.coroutines.CoroutineScope(
+      kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Unconfined + kotlinx.coroutines.CoroutineExceptionHandler { _, e -> errors += e },
+    )
+    val archive = dev.pampa.mycloudgallery.core.faces.testing.InMemoryFacesArchive(FaceGeneration.fromBytes(ByteArray(16) { 3 }))
+    val people = ArchivePeople(
+      archives = { archive }, cells = WorldCells(world), visibility = PeopleVisibility(world.visibility, world.visibility), publisher = NoFacesPublisher,
+      clock = FakeFacesClock(), author = world.author, scope = scope,
+    )
+    assertThat(errors).isEmpty()
+    assertThat(people.list.value.named).isEmpty()
+    scope.cancel()
+  }
 }

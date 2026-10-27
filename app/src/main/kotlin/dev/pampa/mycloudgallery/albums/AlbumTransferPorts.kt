@@ -5,7 +5,12 @@ import dev.pampa.mycloudgallery.core.albums.contract.AlbumUploader
 import dev.pampa.mycloudgallery.core.albums.contract.NasItemRef
 import dev.pampa.mycloudgallery.core.albums.contract.ShareConfirmation
 import dev.pampa.mycloudgallery.core.albums.contract.ShareConfirmationRules
+import dev.pampa.mycloudgallery.core.albums.contract.ShareDiary
 import dev.pampa.mycloudgallery.core.albums.contract.ShareFolder
+import dev.pampa.mycloudgallery.core.albums.contract.ShareItemAction
+import dev.pampa.mycloudgallery.core.albums.contract.ShareItemRecord
+import dev.pampa.mycloudgallery.core.albums.contract.ShareOpRecord
+import dev.pampa.mycloudgallery.core.albums.share.ShareTransferKeys
 import dev.pampa.mycloudgallery.core.albums.contract.ShareWait
 import dev.pampa.mycloudgallery.core.albums.contract.TicketState
 import dev.pampa.mycloudgallery.core.albums.contract.TicketStatus
@@ -81,6 +86,49 @@ internal class TransferPlans(file: File) {
 }
 
 /**
+ * Revisione B, I3 (C26): la seconda chiave non e' piu' una conseguenza della prima. Prima `OpsAlbumMover` emetteva la `UserConfirmation` per
+ * **qualunque** piano gli arrivasse con una `ShareConfirmation` giovane; adesso solo per un trasferimento che il **diario** della condivisione conosce
+ * (la terza chiave, scritta allo `start` prima di chiamare la porta): l'operazione e' aperta, ha l'impronta del piano che l'utente ha confermato,
+ * la chiave e' la sua, i file chiesti sono le sorgenti dei suoi elementi e la destinazione e' la sua. Una chiamata da un altro punto di :app, anche
+ * con una conferma valida, non sposta niente.
+ */
+class ShareTransferBinding(private val diary: ShareDiary) {
+
+  /** Uno spostamento ([items] verso [dest]) che il diario conosce per [key], confermato con [confirmation]. */
+  suspend fun moveMatches(key: TransferKey, confirmation: ShareConfirmation, items: List<NasItemRef>, dest: ShareFolder): Boolean {
+    val (op, records) = opFor(key, confirmation) ?: return false
+    val expected = when (records.first().action) {
+      ShareItemAction.MOVE_IN -> op.folder
+      ShareItemAction.MOVE_OUT -> records.first().dest?.let { ShareFolder(it.share, it.path) }
+      else -> null
+    } ?: return false
+    if (!sameFolder(expected, dest)) return false
+    val sources = records.mapNotNullTo(HashSet()) { it.source }
+    return items.isNotEmpty() && items.all { it in sources }
+  }
+
+  /** Un caricamento ([media] verso [dest]) che il diario conosce per [key], confermato con [confirmation]. */
+  suspend fun uploadMatches(key: TransferKey, confirmation: ShareConfirmation, media: List<MediaId>, dest: ShareFolder): Boolean {
+    val (op, records) = opFor(key, confirmation) ?: return false
+    if (records.first().action != ShareItemAction.UPLOAD) return false
+    val folder = op.folder ?: return false
+    if (!sameFolder(folder, dest)) return false
+    val wanted = records.mapTo(HashSet()) { it.media }
+    return media.isNotEmpty() && media.all { it in wanted }
+  }
+
+  private suspend fun opFor(key: TransferKey, confirmation: ShareConfirmation): Pair<ShareOpRecord, List<ShareItemRecord>>? {
+    val id = ShareTransferKeys.opOf(key) ?: return null
+    val op = diary.openOps().firstOrNull { it.id == id } ?: return null
+    if (op.planHash != confirmation.planHash) return null
+    val records = diary.items(id).filter { it.transferKey == key }
+    return if (records.isEmpty()) null else op to records
+  }
+
+  private fun sameFolder(a: ShareFolder, b: ShareFolder): Boolean = a.share.equals(b.share, ignoreCase = true) && a.path == b.path
+}
+
+/**
  * [AlbumMover] sopra `NasOperations` (§2.5 passo 4, "Riporta" del §2.6): un `OpRequest.Move` verso la cartella, con i nascosti lasciati fuori come
  * `leaveBehind` (R11), avviato con la conferma di `ConfirmationIssuer` per **quel** piano. Copia lato server, verifica, pubblicazione esclusiva, porta
  * di completamento ([CatalogMoveCompletionSink]) e sorgente nel cestino: tutto in core-nasops. Idempotente per chiave ([TransferPlans]).
@@ -92,6 +140,8 @@ class OpsAlbumMover internal constructor(
   private val account: () -> AccountId?,
   private val plans: TransferPlans,
   private val monotonicMs: () -> Long,
+  /** Revisione B, I3: il diario della condivisione che deve conoscere il trasferimento. */
+  private val binding: ShareTransferBinding,
 ) : AlbumMover {
 
   override suspend fun move(key: TransferKey, items: List<NasItemRef>, dest: ShareFolder, leave: Set<NasItemRef>, confirmation: ShareConfirmation): TransferStart {
@@ -99,6 +149,8 @@ class OpsAlbumMover internal constructor(
     if (monotonicMs() - confirmation.issuedAtMonotonicMs !in 0..ShareConfirmationRules.MAX_AGE_MS) {
       return TransferStart.Refused(TransferRefusal.CONFIRMATION_REJECTED)
     }
+    // I3: niente conferma di core-nasops per un trasferimento che il diario non conosce (operazione, impronta, chiave, file, destinazione).
+    if (!binding.moveMatches(key, confirmation, items, dest)) return TransferStart.Refused(TransferRefusal.CONFIRMATION_REJECTED)
     val c = catalog() ?: return TransferStart.Refused(TransferRefusal.NAS_UNREACHABLE)
     val me = account() ?: return TransferStart.Refused(TransferRefusal.NAS_UNREACHABLE)
     val nasItems = items.map { ref -> itemOf(c, me, ref) ?: return TransferStart.Refused(TransferRefusal.PLAN_INVALID) }
@@ -162,6 +214,8 @@ class OpsAlbumMover internal constructor(
         op.errorCode == OpErrorCode.LOCKED -> ShareWait.LOCKED
         op.pauseReason == PauseReason.FROZEN || op.pauseReason == PauseReason.WRITES_STOPPED || op.pauseReason == PauseReason.CLOCK_JUMP -> ShareWait.WRITES_BLOCKED
         op.pauseReason == PauseReason.NAS_UNREACHABLE -> ShareWait.NAS_UNREACHABLE
+        // Revisione B (I2): la copia e' arrivata, il catalogo non la riconosce ancora: un motivo che la striscia dice (prima "in corso").
+        op.pauseReason == PauseReason.CATALOG -> ShareWait.CATALOG
         else -> ShareWait.RULES
       }
       return TicketState.Waiting(wait, done, items.size)
@@ -187,6 +241,8 @@ class FolderAlbumUploader(
   private val uploads: () -> AlbumFolderUploads?,
   private val catalog: suspend () -> MediaCatalog?,
   private val monotonicMs: () -> Long,
+  /** Revisione B, I3: il diario della condivisione che deve conoscere il caricamento. */
+  private val binding: ShareTransferBinding,
   /** Dopo un caricamento accettato: il lavoro degli arrivi (lo stesso di "Salva sul NAS"). */
   private val wake: () -> Unit,
 ) : AlbumUploader {
@@ -198,6 +254,8 @@ class FolderAlbumUploader(
     if (monotonicMs() - confirmation.issuedAtMonotonicMs !in 0..ShareConfirmationRules.MAX_AGE_MS) {
       return TransferStart.Refused(TransferRefusal.CONFIRMATION_REJECTED)
     }
+    // I3: niente caricamento per una chiave che il diario non conosce (operazione, impronta, media, cartella).
+    if (!binding.uploadMatches(key, confirmation, media, dest)) return TransferStart.Refused(TransferRefusal.CONFIRMATION_REJECTED)
     val c = catalog() ?: return TransferStart.Refused(TransferRefusal.NAS_UNREACHABLE)
     val items = media.map { id -> itemOf(c, id) ?: return TransferStart.Refused(TransferRefusal.PLAN_INVALID) }
     return when (val start = engine.start(key.value, items, IncomingDestination.AlbumFolder(dest.share, dest.path))) {

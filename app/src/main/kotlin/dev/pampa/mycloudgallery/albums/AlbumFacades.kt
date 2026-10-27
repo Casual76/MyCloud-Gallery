@@ -66,6 +66,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -113,12 +114,28 @@ class AppAlbums(private val graph: AlbumsGraph, scope: CoroutineScope) : Albums,
       flow {
         val fresh = runCatching { l.smart.newSinceSeen(id) }.getOrDefault(0)
         runCatching { l.smart.markSeen(id) }
-        l.albums.content(id).collect { c ->
-          val album = c?.album
-          emit(if (album is Album.Smart && !album.frozen && fresh > 0) c.copy(album = album.copy(newSinceSeen = fresh)) else c)
-        }
+        // Revisione B, SH-4 (D17, Q4): l'album personale (smart) da cui e' nato questo album condiviso, se l'ho creato io.
+        val linked = runCatching { l.keptStore.personalSharedAs(id) }.getOrNull()
+        val linkedContent: Flow<AlbumContent?> = if (linked != null) l.albums.content(linked) else flowOf(null)
+        // Il diario cambia (una condivisione parte, arriva, finisce): "In arrivo" e "Da condividere" si ricalcolano.
+        emitAll(
+          combine(l.albums.content(id), linkedContent, l.shared.orchestrator.operations) { c, source, _ -> c to source }.mapLatest { (c, source) ->
+            val album = c?.album
+            val base = if (album is Album.Smart && !album.frozen && fresh > 0) c.copy(album = album.copy(newSinceSeen = fresh)) else c
+            if (base != null && base.album is Album.Shared) withShareExtras(l, id, base, source) else base
+          },
+        )
       }
     }
+  }
+
+  /** Revisione B (SP-2, SH-4): "In arrivo" e "Da condividere"; una lettura che non riesce lascia la pagina com'era (si ricalcola alla novita' dopo). */
+  private suspend fun withShareExtras(l: AlbumsLive, id: AlbumId, base: AlbumContent, source: AlbumContent?): AlbumContent = try {
+    AlbumShareExtras.of(l, id, base, source)
+  } catch (e: kotlinx.coroutines.CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    base
   }
 
   override suspend fun create(title: String, kind: AlbumKind, rules: SmartRules?): CreateOutcome = albums().create(title, kind, rules)
@@ -160,13 +177,26 @@ class AppSharedAlbums(private val graph: AlbumsGraph, scope: CoroutineScope) : S
 
   private val baseNotices: StateFlow<List<SharedAlbumNotice>> = graph.follow(scope, emptyList(), { it.shared.albums.notices }, NoSharedAlbums.notices)
 
-  /** Gli avvisi della replica piu' quelli di :app (E-SH16 con la cartella nuova, E-SH20), sugli album che vedo. */
-  override val notices: StateFlow<List<SharedAlbumNotice>> = combine(baseNotices, visible, graph.folderMoves, graph.revokedCounts, graph.dismissedNotices) {
-      base, shown, moves, revoked, dismissed ->
-    val titles = shown.associate { it.id to it.title }
-    val extra = AlbumFolderWatch.notices(moves, revoked, titles, dismissed)
-    base.filterNot { it is SharedAlbumNotice.FolderChanged && it.album in moves } + extra
+  /**
+   * Gli avvisi della replica piu' quelli di :app (E-SH16 con la cartella nuova, E-SH20 e, revisione B, SH-3: "N file nuovi nella cartella", D39), sugli
+   * album che vedo.
+   */
+  override val notices: StateFlow<List<SharedAlbumNotice>> = combine(
+    combine(baseNotices, visible, graph.folderMoves, graph.revokedCounts) { base, shown, moves, revoked -> NoticeParts(base, shown, moves, revoked) },
+    graph.pcFiles,
+    graph.dismissedNotices,
+  ) { parts, pcFiles, dismissed ->
+    val titles = parts.shown.associate { it.id to it.title }
+    val extra = AlbumFolderWatch.notices(parts.moves, parts.revoked, titles, dismissed, pcFiles)
+    parts.base.filterNot { (it is SharedAlbumNotice.FolderChanged && it.album in parts.moves) || it is SharedAlbumNotice.FilesAddedFromPc } + extra
   }.stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+  private class NoticeParts(
+    val base: List<SharedAlbumNotice>,
+    val shown: List<Album.Shared>,
+    val moves: Map<AlbumId, FolderMove>,
+    val revoked: Map<AlbumId, Int>,
+  )
 
   override val left: StateFlow<List<Album.Shared>> = graph.follow(scope, emptyList(), { it.shared.albums.left }, NoSharedAlbums.left)
 
@@ -190,7 +220,35 @@ class AppSharedAlbums(private val graph: AlbumsGraph, scope: CoroutineScope) : S
     }
   }
 
-  override suspend fun close(id: AlbumId, mode: CloseMode, forOthers: OthersAfterClose): CloseOutcome = shared().close(id, mode, forOthers)
+  /**
+   * Revisione B, SC-1 (D31, §2.6): dopo "Smetti di condividere" fatto da me, l'album personale nasce **subito** (prima arrivava al giro dell'indice
+   * dopo e la pagina diceva "Album non trovato"): le copie si scrivono adesso, con la stessa strada del giro (`keepClosedCopies`).
+   */
+  override suspend fun close(id: AlbumId, mode: CloseMode, forOthers: OthersAfterClose): CloseOutcome {
+    val out = shared().close(id, mode, forOthers)
+    val live = graph.live.value
+    if (out == CloseOutcome.Closed && mode == CloseMode.STOP && live != null) {
+      try {
+        graph.keepClosedCopies(live)
+        live.albums.reconcileAll()
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        // La copia la riscrive il giro dell'indice dopo (idempotente): la chiusura e' fatta.
+        dev.pampa.mycloudgallery.core.common.log.GalleryLog.w("Albums") { "album personale dopo la chiusura non ancora scritto: ${e.javaClass.simpleName}" }
+      }
+    }
+    return out
+  }
+
+  /** Revisione B, SC-1: l'album personale del creatore dopo "Smetti di condividere": quello da cui l'aveva condiviso, o la copia nata adesso. */
+  override suspend fun keptAfterClose(id: AlbumId): AlbumId? {
+    val live = graph.live.value ?: return null
+    live.keptStore.personalSharedAs(id)?.let { return it }
+    val me = live.shared.ports.family.me() ?: return null
+    val copy = dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumCopies.copyIdFor(id, me)
+    return copy.takeIf { live.keptStore.copyState(it) == dev.pampa.mycloudgallery.core.albums.share.KeptCopyState.LIVE }
+  }
 
   override suspend fun leave(id: AlbumId): EditOutcome = shared().leave(id)
 
@@ -207,16 +265,27 @@ class AppSharedAlbums(private val graph: AlbumsGraph, scope: CoroutineScope) : S
 
   override suspend fun useNewFolder(id: AlbumId): EditOutcome {
     val live = graph.live.value ?: return EditOutcome.NotFound
-    val out = AlbumFolderWatch.useNewFolder(live, graph.folderMoves.value[id], id)
+    // Revisione B, R15: una cartella che il formato degli album non accetta (il pubblicatore lancia) e' un esito, non la caduta dell'app.
+    val out = invalidOnError { AlbumFolderWatch.useNewFolder(live, graph.folderMoves.value[id], id) }
     if (out == EditOutcome.Done) graph.scanNotices(live)
     return out
   }
 
   override suspend fun restoreRevoked(id: AlbumId): EditOutcome {
     val live = graph.live.value ?: return EditOutcome.NotFound
-    val out = AlbumFolderWatch.restoreRevoked(live, id)
+    val out = invalidOnError { AlbumFolderWatch.restoreRevoked(live, id) }
     graph.scanNotices(live)
     return out
+  }
+
+  /** Revisione B, R15: un errore di programmazione o di formato diventa [EditOutcome.Invalid]: niente e' cambiato (il pubblicatore non accoda a meta'). */
+  private suspend fun invalidOnError(block: suspend () -> EditOutcome): EditOutcome = try {
+    block()
+  } catch (e: kotlinx.coroutines.CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    dev.pampa.mycloudgallery.core.common.log.GalleryLog.w("Albums") { "modifica dell'album rifiutata: ${e.javaClass.simpleName}" }
+    EditOutcome.Invalid(null)
   }
 }
 
@@ -234,6 +303,11 @@ class AppShareRunner(private val graph: AlbumsGraph, scope: CoroutineScope) : Sh
   override suspend fun resumeAll(budget: Duration): ShareRunResult = runner().resumeAll(budget)
 
   override suspend fun cancel(op: ShareOpId) = runner().cancel(op)
+
+  /** Revisione B, SH-2: "Riprova" e "Chiudi" della striscia dei problemi, dall'orchestratore (che legge il diario). */
+  override suspend fun retryRequest(op: ShareOpId): ShareRequest? = runner().retryRequest(op)
+
+  override suspend fun dismiss(op: ShareOpId) = runner().dismiss(op)
 }
 
 /** Il motore degli album smart e l'interprete del nome (P6). */

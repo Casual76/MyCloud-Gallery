@@ -9,7 +9,17 @@ import dev.pampa.mycloudgallery.core.albums.contract.SafeCopyRequester
 import dev.pampa.mycloudgallery.core.albums.contract.TicketStatus
 import dev.pampa.mycloudgallery.core.albums.personal.CatalogAlbums
 import dev.pampa.mycloudgallery.core.albums.personal.PersonalAlbumCopies
+import dev.pampa.mycloudgallery.core.albums.contract.ShareFolder
+import dev.pampa.mycloudgallery.core.albums.share.AlbumHistory
 import dev.pampa.mycloudgallery.core.albums.share.BringBackCandidates
+import dev.pampa.mycloudgallery.core.albums.share.ShareBackupGates
+import dev.pampa.mycloudgallery.core.albums.shared.AlbumPublishStore
+import dev.pampa.mycloudgallery.core.albums.shared.AlbumReplicaStore
+import dev.pampa.mycloudgallery.core.albums.shared.SharedAlbumView
+import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.ContentKey
+import dev.pampa.mycloudgallery.core.trust.data.AlbumField
+import dev.pampa.mycloudgallery.core.trust.data.AlbumValue
 import dev.pampa.mycloudgallery.core.albums.share.FolderAdoptions
 import dev.pampa.mycloudgallery.core.albums.share.PersonalKeptCopyStore
 import dev.pampa.mycloudgallery.core.albums.share.RevokedItemsRestore
@@ -118,6 +128,13 @@ internal class AlbumsInputs(
   val seenFile: File,
   /** La cartella `Backup/<dispositivo>/` di questo telefono (la regola B degli smart: "dello stesso dispositivo"); null se il backup non c'e'. */
   val ownBackupFolder: () -> String? = { null },
+  /**
+   * Revisione B (SG-1, I4): cosa i cancelli del backup lasciano fare adesso alla condivisione per una cartella d'album (caricare dal telefono, la
+   * copia del guardiano). Di serie tutto aperto (i test che non montano il backup).
+   */
+  val backupGates: suspend (ShareFolder) -> ShareBackupGates = { ShareBackupGates.OPEN },
+  /** Revisione B (SH-2): il file delle strisce dei problemi chiuse dall'utente; null = in memoria. */
+  val problemMarksFile: File? = null,
 )
 
 /** Il montaggio, nell'ordine delle dipendenze (condivisi, poi personali e smart, poi viaggi). Nessun I/O qui: lo fanno gli oggetti quando servono. */
@@ -163,6 +180,12 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
     lastPosition = { id -> replica.view(id)?.merged?.items?.values?.maxOfOrNull { it.position } },
     linkPersonal = { personalId, sharedId -> personalAlbums.setShared(personalId.value, sharedId.value) },
     afterStage = { id -> replica.recompute(listOf(id)) },
+    // Revisione B, SB-1: la lapide di "Riporta" va sull'id con cui l'elemento e' pubblicato, non sull'id del mio catalogo che lo attesta.
+    publishedId = { id, media -> publishedIdIn(replica.view(id), media) },
+    // Revisione B, SH-5: una ripresa non riaccoda definizione e livello se il mio pubblicatore ha gia' l'album (in coda o pubblicato).
+    definitionStaged = { id -> hasOwnDefinition(publishStore, id) },
+    backupGates = i.backupGates,
+    problemMarks = i.problemMarksFile?.let(::FileShareProblemMarks) ?: dev.pampa.mycloudgallery.core.albums.share.ShareProblemMarks.inMemory(),
   )
   val orchestrator = ShareOrchestrator(ports)
   sharedAlbums.runner = orchestrator
@@ -172,7 +195,8 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
       i.identity, i.family, replicaStore, replica, publisher, i.writeGate, i.clocks, i.visible,
       allowed = { album, op, media -> sharedAlbums.allowed(album, op, media) },
     ),
-    adoptions = FolderAdoptions(ports) { ids -> i.visible.visible(ids) },
+    // Revisione B, SH-3: un file che e' stato un elemento (tolto con "Rimuovi dall'album") non e' "aggiunto dal PC".
+    adoptions = FolderAdoptions(ports, history = { id -> albumHistory(replicaStore, publishStore, id) }) { ids -> i.visible.visible(ids) },
     bringBack = BringBackCandidates(ports),
     folders = folders,
     choices = choices,
@@ -207,3 +231,38 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
 
 /** Gli id dei media di una vista, nell'ordine della vista. */
 internal fun idsOf(view: TimelineView): List<MediaId> = List(view.size) { index -> view.snapshot.idAt(view.snapshotIndex(index)) }
+
+/**
+ * Revisione B, SB-1: l'id con cui e' pubblicato l'elemento che il mio catalogo vede come [media] in [view]: lui stesso se e' fra gli elementi, altrimenti
+ * l'elemento che il mio catalogo attesta con [media] (D9: un altro dispositivo dell'account puo' averlo pubblicato con il suo id). Null se non e' un
+ * elemento vivo. E' la regola di `ReplicaSharedAlbums` per le modifiche dell'album, usata anche da "Riporta".
+ */
+internal fun publishedIdIn(view: SharedAlbumView?, media: MediaId): MediaId? {
+  view ?: return null
+  return media.takeIf { it in view.merged.items } ?: view.attested.entries.firstOrNull { it.value == media }?.key
+}
+
+/** Revisione B, SH-5: il mio contributo ad [album] ha gia' la definizione (in coda o in una testa pubblicata). */
+internal suspend fun hasOwnDefinition(store: AlbumPublishStore, album: AlbumId): Boolean {
+  val own = store.load(album) ?: return false
+  return own.staged.values.any { it.field == AlbumField.Definition } || own.published.values.any { it.entry.field == AlbumField.Definition }
+}
+
+/**
+ * Revisione B, SH-3: cio' che [album] ha avuto, vivo o tolto (lapide): gli id pubblicati e le chiavi di contenuto delle voci `item:` di tutti i contributi
+ * che la replica ricorda e del mio (pubblicato e in coda). Solo dati locali.
+ */
+internal suspend fun albumHistory(replicaStore: AlbumReplicaStore, publishStore: AlbumPublishStore, album: AlbumId): AlbumHistory {
+  val media = HashSet<MediaId>()
+  val keys = HashSet<ContentKey>()
+  fun collect(field: AlbumField, value: AlbumValue?) {
+    (field as? AlbumField.Item)?.let { media += it.media }
+    (value as? AlbumValue.Item)?.let { keys += it.contentKey }
+  }
+  for (contribution in replicaStore.contributions(album)) contribution.entries.forEach { collect(it.entry.field, it.entry.value) }
+  publishStore.load(album)?.let { own ->
+    own.published.values.forEach { collect(it.entry.field, it.entry.value) }
+    own.staged.values.forEach { collect(it.field, it.value) }
+  }
+  return AlbumHistory(media, keys)
+}

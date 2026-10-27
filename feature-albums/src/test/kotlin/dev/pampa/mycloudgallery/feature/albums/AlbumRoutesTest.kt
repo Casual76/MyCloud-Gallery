@@ -62,6 +62,7 @@ class AlbumRoutesTest : AlbumsComposeTest() {
     val viewed = mutableListOf<MediaId>()
     val opened = mutableListOf<AlbumId>()
     var pickFor: AlbumId? = null
+    var picks = 0
     var pickCallback: ((List<MediaId>) -> Unit)? = null
 
     override fun openViewer(view: OrderedTimelineView, start: MediaId) {
@@ -73,6 +74,7 @@ class AlbumRoutesTest : AlbumsComposeTest() {
     }
 
     override fun pickMedia(forAlbum: AlbumId?, max: Int, onPicked: (List<MediaId>) -> Unit) {
+      picks++
       pickFor = forAlbum
       pickCallback = onPicked
     }
@@ -80,7 +82,7 @@ class AlbumRoutesTest : AlbumsComposeTest() {
     override fun openDiagnostics() = Unit
   }
 
-  private class RouteTrips(initial: TripProposals, private val created: AlbumId) : Trips {
+  private class RouteTrips(initial: TripProposals, private val created: AlbumId?) : Trips {
     override val proposals = MutableStateFlow(initial)
     val accepted = mutableListOf<TripId>()
 
@@ -88,7 +90,7 @@ class AlbumRoutesTest : AlbumsComposeTest() {
 
     override suspend fun accept(id: TripId): TripAcceptOutcome {
       accepted += id
-      return TripAcceptOutcome.Created(created)
+      return if (created == null) TripAcceptOutcome.NotFound else TripAcceptOutcome.Created(created)
     }
 
     override suspend fun dismiss(id: TripId) = Unit
@@ -190,6 +192,17 @@ class AlbumRoutesTest : AlbumsComposeTest() {
     assertThat(composeRule.onAllNodesWithText("Non mostrare più", substring = true).fetchSemanticsNodes()).isNotEmpty()
   }
 
+  @Test
+  fun paginaDiUnoSmartNuovoCheCercaNonDiceZeroDiZero_AS2() {
+    // Il motore non ha ancora guardato niente e non sa quante foto guardera': la pagina dice che cerca, senza «0 di 0 guardate».
+    scenes.world.smart = dev.pampa.mycloudgallery.core.albums.testing.SmartMembership.EMPTY
+    scenes.world.albums.status.value = dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus.Recomputing(0, 0)
+    show(content = pageRoute(scenes.oslo))
+    composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText("Cerco le foto dell", substring = true).fetchSemanticsNodes().isNotEmpty() }
+    assertThat(composeRule.onAllNodesWithText("Le foto compaiono man mano", substring = true).fetchSemanticsNodes()).isNotEmpty()
+    assertThat(composeRule.onAllNodesWithText("guardate", substring = true).fetchSemanticsNodes()).isEmpty()
+  }
+
   // --- Suggerite, editor, viaggi ---------------------------------------------------------------------------------------------------
 
   @Test
@@ -224,6 +237,21 @@ class AlbumRoutesTest : AlbumsComposeTest() {
   }
 
   @Test
+  fun editorLeFotoDEsempioSiScelgonoSenzaAlbumDiDestinazioneAncheInModifica_AS8() {
+    val preview = SmartPreview(confident = 10, suggested = 0, tooBroad = false, sample = emptyList(), searchUsed = true)
+    val actions = RecordingActions()
+    // In modifica l'album c'e': prima il selettore riceveva il suo id e si intitolava «Aggiungi foto» (e aggiungeva alle foto dell'album, non agli esempi).
+    val handle = SavedStateHandle(mapOf("title" to null, "album" to scenes.oslo.value))
+    val model = SmartEditorViewModel(handle, deps(interpreter = FakeSmartNameInterpreter(), engine = FakeSmartAlbumEngine(nextPreview = preview)))
+    show { SmartEditorRoute(actions, thumbs, onBack = {}, onSaved = {}, viewModel = model) }
+    composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText("Aggiungi foto d", substring = true).fetchSemanticsNodes().isNotEmpty() }
+    clickText("Aggiungi foto d")
+    assertThat(actions.pickCallback).isNotNull()
+    assertThat(actions.pickFor).isNull()
+    assertThat(actions.picks).isEqualTo(1)
+  }
+
+  @Test
   fun viaggiCreareUnAlbumDaUnaPropostaLoApre() {
     val trip = dev.pampa.mycloudgallery.feature.albums.testing.AlbumSamples.trip.copy(cover = ShareFixtures.media(3))
     val trips = RouteTrips(TripProposals(listOf(trip), homeKnown = true), scenes.lake)
@@ -234,6 +262,28 @@ class AlbumRoutesTest : AlbumsComposeTest() {
     composeRule.waitUntil(5_000) { opened != null }
     assertThat(trips.accepted).containsExactly(trip.id)
     assertThat(opened).isEqualTo(scenes.lake)
+  }
+
+  @Test
+  fun viaggiPrimaDellaPrimaRicercaDiceCheCercaENonCheServonoLeFotoConLaPosizione_VG1() {
+    val trips = RouteTrips(TripProposals.EMPTY, null)
+    val model = TripsViewModel(deps(trips = trips))
+    show { TripsRoute(thumbs, onBack = {}, onOpenAlbum = {}, viewModel = model) }
+    composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText("Sto cercando i viaggi", substring = true).fetchSemanticsNodes().isNotEmpty() }
+    assertThat(composeRule.onAllNodesWithText("Servono foto con la posizione", substring = true).fetchSemanticsNodes()).isEmpty()
+  }
+
+  @Test
+  fun viaggiUnaPropostaCheNonCePiuLoDiceInveceDiNonFareNiente_VG2() {
+    val trip = dev.pampa.mycloudgallery.feature.albums.testing.AlbumSamples.trip.copy(cover = ShareFixtures.media(3))
+    val trips = RouteTrips(TripProposals(listOf(trip), homeKnown = true), null)
+    var opened: AlbumId? = null
+    val model = TripsViewModel(deps(trips = trips))
+    show { TripsRoute(thumbs, onBack = {}, onOpenAlbum = { opened = it }, viewModel = model) }
+    clickText("Crea album")
+    composeRule.waitUntil(5_000) { trips.accepted.isNotEmpty() }
+    composeRule.waitUntil(5_000) { composeRule.onAllNodesWithText("La proposta non c’è più", substring = true).fetchSemanticsNodes().isNotEmpty() }
+    assertThat(opened).isNull()
   }
 
   // --- Aggiungi ad album da fuori --------------------------------------------------------------------------------------------------

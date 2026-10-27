@@ -23,6 +23,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumScreensClock
 import dev.pampa.mycloudgallery.feature.albums.contract.BroadHint
 import dev.pampa.mycloudgallery.feature.albums.contract.SmartEditorState
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,7 +50,7 @@ sealed interface SmartEditorMode {
 }
 
 /** Perche' il salvataggio non e' andato (la schermata lo dice sopra il bottone). */
-enum class EditorProblem { INVALID_TITLE, RULES_TOO_LONG, NOT_ALLOWED, NOT_FOUND, BLOCKED, UNAVAILABLE }
+enum class EditorProblem { INVALID_TITLE, RULES_TOO_LONG, NOT_ALLOWED, NOT_FOUND, BLOCKED, UNAVAILABLE, PREVIEW_FAILED }
 
 data class SmartEditorUi(
   val title: String,
@@ -98,7 +99,19 @@ class SmartEditorController(
     scope.launch {
       when (mode) {
         is SmartEditorMode.Create -> {
-          val proposal = interpreter.propose(mode.title, clock.today())
+          // AS-7: un errore del motore (la ricerca, il catalogo) non deve arrivare al gestore dell'ambito e chiudere l'app: l'editor parte con regole vuote.
+          val proposal = try {
+            interpreter.propose(mode.title, clock.today())
+          } catch (e: CancellationException) {
+            throw e
+          } catch (_: Exception) {
+            null
+          }
+          if (proposal == null) {
+            _ui.update { it.copy(rules = SmartRules(null, null, null), problem = EditorProblem.PREVIEW_FAILED, preview = EMPTY_PREVIEW, previewing = false) }
+            _ui.update { compose(it) }
+            return@launch
+          }
           _ui.update { it.copy(rules = proposal.rules, alternatives = proposal.alternatives, series = proposal.periodSeries, notes = proposal.notes) }
         }
         is SmartEditorMode.Edit -> {
@@ -181,9 +194,23 @@ class SmartEditorController(
     val rules = _ui.value.rules ?: return
     val job = scope.launch {
       _ui.update { it.copy(previewing = true, canSave = false) }
-      val preview = engine.preview(rules)
+      // AS-7: l'anteprima e' un aiuto, non un passaggio obbligato. Se il motore sbaglia (il catalogo non risponde, la ricerca cade) l'editor lo dice e
+      // lascia salvare le regole: prima l'eccezione arrivava al gestore dell'ambito e l'app si chiudeva.
+      val preview = try {
+        engine.preview(rules)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        null
+      }
       // Un'anteprima vecchia non scavalca le regole piu' nuove.
-      _ui.update { if (it.rules != rules) it else compose(it.copy(preview = preview, previewing = false)) }
+      _ui.update {
+        when {
+          it.rules != rules -> it
+          preview == null -> compose(it.copy(preview = EMPTY_PREVIEW, previewing = false, problem = EditorProblem.PREVIEW_FAILED))
+          else -> compose(it.copy(preview = preview, previewing = false))
+        }
+      }
     }
     previewJob = job
   }

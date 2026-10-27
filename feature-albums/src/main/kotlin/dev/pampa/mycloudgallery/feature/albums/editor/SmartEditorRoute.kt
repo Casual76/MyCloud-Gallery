@@ -79,7 +79,8 @@ fun SmartEditorRoute(
 
       override fun onAddExamples() {
         val room = SmartLimits.MAX_EXAMPLES - (controller.ui.value.rules?.examples?.size ?: 0)
-        if (room > 0) actions.pickMedia(viewModel.album, room) { picked -> controller.addExamples(picked) }
+        // AS-8: le foto d'esempio non sono "Aggiungi foto" a un album: `forAlbum` e' null anche in modifica (altrimenti il selettore si intitolava "Aggiungi foto").
+        if (room > 0) actions.pickMedia(null, room) { picked -> controller.addExamples(picked) }
       }
 
       override fun onRemoveExample(media: MediaId) = controller.removeExample(media)

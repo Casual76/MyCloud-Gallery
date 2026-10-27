@@ -38,6 +38,7 @@ class AlbumSamplesTest {
     is TripsState.Proposals -> "proposals"
     is TripsState.NoGps -> "no_gps"
     TripsState.Empty -> "empty"
+    TripsState.Searching -> "searching"
   }
 
   @Test
@@ -45,7 +46,7 @@ class AlbumSamplesTest {
     assertThat(AlbumSamples.lists.map(::caseOf).toSet()).hasSize(3)
     assertThat(AlbumSamples.pages.map(::caseOf).toSet()).hasSize(4)
     assertThat(AlbumSamples.editors.map(::caseOf).toSet()).hasSize(4)
-    assertThat(AlbumSamples.trips.map(::caseOf).toSet()).hasSize(3)
+    assertThat(AlbumSamples.trips.map(::caseOf).toSet()).hasSize(4)
     assertThat(AlbumSamples.suggestions).hasSize(3)
   }
 

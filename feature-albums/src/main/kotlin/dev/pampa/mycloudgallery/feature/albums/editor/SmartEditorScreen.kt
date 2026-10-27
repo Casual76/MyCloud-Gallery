@@ -169,6 +169,7 @@ private fun ProblemMessage(problem: EditorProblem) {
     EditorProblem.NOT_FOUND -> R.string.editor_problem_not_found
     EditorProblem.BLOCKED -> R.string.editor_problem_blocked
     EditorProblem.UNAVAILABLE -> R.string.editor_problem_unavailable
+    EditorProblem.PREVIEW_FAILED -> R.string.editor_problem_preview_failed
   }
   FluidInlineMessage(message = stringResource(text), title = stringResource(R.string.editor_title_create), tone = FluidTone.Danger)
 }

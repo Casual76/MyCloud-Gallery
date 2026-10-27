@@ -123,8 +123,13 @@ private fun PlainPage(title: String, handlers: AlbumPageHandlers, modifier: Modi
 private fun LazyListScope.recomputing(page: AlbumPageState.Recomputing) {
   item(key = "recomputing") {
     Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.BlockGap)) {
-      FluidEmptyState(title = stringResource(R.string.album_recomputing_title), detail = stringResource(R.string.album_recomputing_progress, GalleryNumbers.format(page.done), GalleryNumbers.format(page.total)))
-      FluidProgressBar(progress = { if (page.total <= 0) 0f else (page.done.toFloat() / page.total).coerceIn(0f, 1f) })
+      if (page.total <= 0) {
+        // AS-2: il motore sta cercando le foto di uno smart nuovo e non sa quante ne guardera': niente numeri e niente barra a zero.
+        FluidEmptyState(title = stringResource(R.string.album_recomputing_title), detail = stringResource(R.string.album_recomputing_wait))
+      } else {
+        FluidEmptyState(title = stringResource(R.string.album_recomputing_title), detail = stringResource(R.string.album_recomputing_progress, GalleryNumbers.format(page.done), GalleryNumbers.format(page.total)))
+        FluidProgressBar(progress = { (page.done.toFloat() / page.total).coerceIn(0f, 1f) })
+      }
     }
   }
 }

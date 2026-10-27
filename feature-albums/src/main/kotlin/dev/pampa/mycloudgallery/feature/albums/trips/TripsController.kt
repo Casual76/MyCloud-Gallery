@@ -68,10 +68,12 @@ class TripsController(
 
   companion object {
     /**
-     * Lo stato dalle proposte. Senza casa (E-AL16) solo gli eventi; con la casa, gli ultimi 2 anni dal piu' recente e, se ce ne sono di piu'
+     * Lo stato dalle proposte. Prima della prima ricerca [TripsState.Searching] (VG-1). Senza casa (E-AL16) solo gli eventi; con la casa, gli ultimi 2 anni dal piu' recente e, se ce ne sono di piu'
      * vecchi, [TripsState.Proposals.hasOlder]. Funzione pura: provata senza Compose.
      */
     fun stateOf(proposals: TripProposals, showOlder: Boolean, today: LocalDate): TripsState {
+      // VG-1: prima della prima ricerca non si sa se c'e' una casa.
+      if (!proposals.searched) return TripsState.Searching
       if (!proposals.homeKnown) return TripsState.NoGps(proposals.proposals.filter { it.kind == TripKind.EVENT }.recentFirst())
       if (proposals.proposals.isEmpty()) return TripsState.Empty
       val since = TripRules.firstScreenSince(today)

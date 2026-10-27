@@ -218,8 +218,14 @@ sealed interface TripsState {
   /** Dal piu' recente; [hasOlder]: "Mostra piu' vecchi" (oltre 2 anni). */
   data class Proposals(val proposals: List<TripProposal>, val hasOlder: Boolean) : TripsState
 
-  /** Nessuna casa stimabile (E-AL16): lo dice una volta e propone gli eventi, che non vogliono il GPS. */
+  /** Nessuna casa stimabile (E-AL16): lo dice una volta e propone gli eventi, che non vogliono il GPS. Solo dopo aver cercato (VG-1). */
   data class NoGps(val events: List<TripProposal>) : TripsState
+
+  /**
+   * I viaggi non sono ancora stati cercati (VG-1): prima della prima rilevazione "nessuna casa" non vuol dire niente e la pagina non dice che servono
+   * foto con la posizione. La sezione delle Raccolte non ha righe, la pagina dice che sta cercando.
+   */
+  data object Searching : TripsState
 
   data object Empty : TripsState
 }
@@ -234,8 +240,8 @@ interface AlbumActions {
   fun openAlbum(id: AlbumId)
 
   /**
-   * Il selettore dei media per "Aggiungi foto" (a un album che c'e': [forAlbum]) o per le foto d'esempio di un album smart (anche di uno
-   * ancora da creare: [forAlbum] null). Al piu' [max] media; mai i nascosti (D22). Chiama [onPicked] con i media scelti, solo se l'utente ne
+   * Il selettore dei media per "Aggiungi foto" (a un album che c'e': [forAlbum]) o per le foto d'esempio di un album smart ([forAlbum] **null**, sia
+   * per uno ancora da creare sia per uno da modificare: AS-8). Al piu' [max] media; mai i nascosti (D22). Chiama [onPicked] con i media scelti, solo se l'utente ne
    * ha scelto (P10: prima la firma era `pickMedia(forAlbum)` senza risposta, e le schermate non avrebbero saputo cosa e' stato scelto).
    */
   fun pickMedia(forAlbum: AlbumId?, max: Int, onPicked: (List<MediaId>) -> Unit)

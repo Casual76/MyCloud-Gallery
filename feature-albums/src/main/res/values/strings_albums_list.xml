@@ -6,6 +6,7 @@
   <string name="albums_smart_section">Album smart</string>
   <string name="albums_title">Album</string>
   <string name="albums_all">Tutti gli album</string>
+  <string name="albums_smart_all">Tutti gli album smart</string>
   <string name="albums_new">Nuovo album</string>
   <string name="albums_new_detail">Un album a mano o uno smart</string>
   <string name="albums_badge_shared">Condiviso</string>

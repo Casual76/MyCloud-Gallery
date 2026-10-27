@@ -85,6 +85,7 @@
 
   <!-- Recomputing, chiuso, non disponibile -->
   <string name="album_recomputing_title">Cerco le foto dell’album</string>
+  <string name="album_recomputing_wait">Le foto compaiono man mano che le trovo.</string>
   <string name="album_recomputing_progress">%1$s di %2$s guardate</string>
   <string name="album_closed_title">Questo album non è più condiviso</string>
   <string name="album_closed_detail">«%1$s» è stato chiuso da chi l’ha creato.</string>

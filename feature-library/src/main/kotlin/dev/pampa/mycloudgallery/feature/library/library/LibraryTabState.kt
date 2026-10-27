@@ -116,6 +116,30 @@ interface LibraryCommands {
 
   /** Fase 7 (P13): apre la scelta dell'album per [ids] sopra la Libreria (`:app` mostra `AddToAlbumHost`); qui niente si scrive. */
   fun addToAlbum(ids: Set<MediaId>) {}
+
+  /** Correzioni F (TS-4, D30): "Trova simili" sulla selezione c'e' (la ricerca per contenuto e' legata). Senza, l'azione non compare. */
+  val canFindSimilar: Boolean get() = false
+
+  /**
+   * Correzioni F (TS-4): quanti media al massimo danno la query di "Trova simili" dalla selezione (il centroide di troppe foto diverse non somiglia a
+   * nessuna). Oltre, la Libreria dice di sceglierne meno e non chiama [findSimilar].
+   */
+  val findSimilarLimit: Int get() = Int.MAX_VALUE
+
+  /**
+   * Correzioni F (TS-4): cerca i media vicini a quelli scelti e apre i risultati in Cerca, con il chip "Simili a". Niente si scrive e niente si sposta. I media
+   * non ancora analizzati sono lasciati fuori e Cerca lo dice; se nessuno e' stato analizzato la ricerca non parte e la risposta e' [SimilarSelectionOutcome.NOT_ANALYZED].
+   */
+  fun findSimilar(ids: Set<MediaId>): SimilarSelectionOutcome = SimilarSelectionOutcome.STARTED
+}
+
+/** Com'e' andato "Trova simili" dalla selezione (correzioni F, TS-4): la Libreria sceglie le parole. */
+enum class SimilarSelectionOutcome {
+  /** La ricerca e' partita: Cerca mostra i simili. */
+  STARTED,
+
+  /** Nessun media della scelta e' ancora stato analizzato: non c'e' un vettore da cui partire. */
+  NOT_ANALYZED,
 }
 
 /** Nessuna richiesta: la Libreria vuota della release prima del grafo vero. */

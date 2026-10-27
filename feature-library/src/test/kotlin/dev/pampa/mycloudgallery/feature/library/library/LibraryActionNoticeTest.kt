@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -511,5 +512,92 @@ class LibraryActionNoticeTest {
     composeRule.showThemed { LibraryFooter(state, LibraryPhoneStatus(), status = {}) }
 
     composeRule.onNodeWithText("92.019 foto, 7.981 video").assertExists()
+  }
+
+  // --- Correzioni F, TS-4: "Trova simili" dalla selezione ---------------------------------------------------------------------------------
+
+  private class SimilarCommands(
+    private val outcome: SimilarSelectionOutcome = SimilarSelectionOutcome.STARTED,
+    override val findSimilarLimit: Int = 30,
+  ) : LibraryCommands {
+    val found = mutableListOf<Set<MediaId>>()
+
+    override val canFindSimilar: Boolean get() = true
+
+    override fun findSimilar(ids: Set<MediaId>): SimilarSelectionOutcome {
+      found += ids
+      return outcome
+    }
+  }
+
+  @Test
+  fun trovaSimiliDallaSelezioneNonCompareSeLaRicercaNonELegata() {
+    val state = state()
+    show(state)
+    select(state, 3)
+
+    composeRule.onAllNodesWithContentDescription("Trova simili").assertCountEquals(0)
+  }
+
+  @Test
+  fun trovaSimiliDallaSelezioneApreCercaEChiudeLaSelezione() {
+    val commands = SimilarCommands()
+    val state = state(commands = commands)
+    show(state)
+    select(state, 3)
+
+    composeRule.onNodeWithContentDescription("Trova simili").performClick()
+    composeRule.waitForIdle()
+
+    // La richiesta porta i tre media scelti; la selezione si chiude (Cerca si apre alla radice) e nessun avviso resta.
+    assertThat(commands.found).hasSize(1)
+    assertThat(commands.found.single()).hasSize(3)
+    assertThat(state.grid.selecting).isFalse()
+    composeRule.onAllNodesWithText("Foto non ancora analizzate").assertCountEquals(0)
+  }
+
+  @Test
+  fun trovaSimiliSenzaNessunaFotoAnalizzataLoDiceELaSelezioneResta() {
+    val commands = SimilarCommands(outcome = SimilarSelectionOutcome.NOT_ANALYZED)
+    val state = state(commands = commands)
+    show(state)
+    select(state, 2)
+
+    composeRule.onNodeWithContentDescription("Trova simili").performClick()
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithText("Foto non ancora analizzate").assertExists()
+    composeRule.onNodeWithText("Per cercare i simili l’app deve prima analizzare le foto scelte.", substring = true).assertExists()
+    assertThat(state.grid.selecting).isTrue()
+    assertThat(state.grid.selection.selected.value.size).isEqualTo(2)
+  }
+
+  @Test
+  fun trovaSimiliConTroppeFotoDiceIlTettoENonParte() {
+    val commands = SimilarCommands(findSimilarLimit = 2)
+    val state = state(commands = commands)
+    show(state)
+    select(state, 3)
+
+    composeRule.onNodeWithContentDescription("Trova simili").performClick()
+    composeRule.waitForIdle()
+
+    assertThat(commands.found).isEmpty()
+    composeRule.onNodeWithText("Per cercare i simili scegline al massimo 2").assertExists()
+    assertThat(state.grid.selecting).isTrue()
+  }
+
+  @Test
+  fun trovaSimiliSenzaNienteDiSelezionatoESpento() {
+    val commands = SimilarCommands()
+    val state = state(commands = commands)
+    show(state)
+    composeRule.onNodeWithContentDescription("Seleziona").performClick()
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithContentDescription("Trova simili").performClick()
+    composeRule.waitForIdle()
+
+    assertThat(commands.found).isEmpty()
   }
 }

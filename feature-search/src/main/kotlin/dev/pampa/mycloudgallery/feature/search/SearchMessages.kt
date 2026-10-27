@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
@@ -81,6 +82,7 @@ private fun noticeText(item: NoticeItem): String = when (item) {
   is NoticeItem.CoveragePartial -> stringResource(R.string.search_coverage_partial, GalleryNumbers.format(item.covered), GalleryNumbers.format(item.total))
   is NoticeItem.CoverageUpdating -> stringResource(R.string.search_coverage_updating, item.percent)
   is NoticeItem.PeopleProgress -> stringResource(R.string.search_people_progress, item.percent)
+  is NoticeItem.SimilarWithoutVectors -> pluralStringResource(R.plurals.search_similar_without_vectors, item.count, item.count)
 }
 
 /** Il titolo corto sopra la frase: dice di che cosa si parla, senza allarmare. */
@@ -92,12 +94,13 @@ private fun noticeTitle(item: NoticeItem): String = stringResource(
     is NoticeItem.Typo -> R.string.search_notice_title_typo
     NoticeItem.TextReadingOff -> R.string.search_notice_title_text
     is NoticeItem.PeopleProgress -> R.string.search_notice_title_people
+    is NoticeItem.SimilarWithoutVectors -> R.string.search_notice_title_similar
   },
 )
 
 /** Informare, non allarmare (§12.12): l'azzurro per cio' che si sta facendo, il neutro per il resto, mai il rosso. */
 private fun noticeTone(item: NoticeItem): FluidTone = when (item) {
-  NoticeItem.Preparing, is NoticeItem.CoverageUpdating, is NoticeItem.PeopleProgress -> FluidTone.Info
+  NoticeItem.Preparing, is NoticeItem.CoverageUpdating, is NoticeItem.PeopleProgress, is NoticeItem.SimilarWithoutVectors -> FluidTone.Info
   is NoticeItem.ModelMissing, is NoticeItem.NoIndexer, is NoticeItem.CoveragePartial, NoticeItem.TextReadingOff -> FluidTone.Neutral
   is NoticeItem.Typo -> FluidTone.Info
 }

@@ -232,6 +232,24 @@ class SearchScreenUiTest {
     rule.onNodeWithContentDescription("Simili a questa foto. Tocca per modificare").assertIsDisplayed()
   }
 
+  @Test
+  fun ilChipDiUnaSelezioneDiceQuanteFotoEHaLaSuaLetturaPerTalkBack_TS4() {
+    val picks = listOf(lib.id(3), lib.id(7), lib.id(9))
+    val similar = SearchChip.Similar(picks.first(), "Simili a", picks.drop(1))
+    show(results(chips = listOf(similar)))
+    rule.onNodeWithText("Simili a 3 foto").assertIsDisplayed()
+    rule.onNodeWithContentDescription("Simili a 3 foto scelte. Tocca per modificare").assertIsDisplayed()
+  }
+
+  @Test
+  fun lAvvisoDelleFotoSenzaVettoreDiceQuanteNonSonoUsate_TS4() {
+    val similar = SearchChip.Similar(lib.id(3), "Simili a", listOf(lib.id(7)))
+    show(results(chips = listOf(similar), notices = listOf(SearchNotice.SimilarWithoutVectors(2))))
+    rule.onNodeWithText("2 foto della scelta non sono ancora state analizzate: la ricerca usa le altre.").assertIsDisplayed()
+    show(results(chips = listOf(similar), notices = listOf(SearchNotice.SimilarWithoutVectors(1))))
+    rule.onNodeWithText("1 foto della scelta non è ancora stata analizzata: la ricerca usa le altre.").assertIsDisplayed()
+  }
+
   // --- Stati vuoti e d'errore ---------------------------------------------------------------------------------------------------------
 
   @Test

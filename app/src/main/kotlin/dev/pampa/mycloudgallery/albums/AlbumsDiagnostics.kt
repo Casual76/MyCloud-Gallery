@@ -68,6 +68,15 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
       unreadableRegisters = live?.let { safely { it.shared.unreadableRegisters() } } ?: 0,
       heldContributions = maxOf(sync?.contributionsHeld ?: 0, live?.let { safely { it.shared.replicaStore.heldContributions() } } ?: 0),
       pausedCatalog = problems?.waits?.get(ShareWait.CATALOG),
+      // Correzioni F (27/10): i contatori del pacchetto A che non avevano un codice (R1, R2, R12, R19), solo numeri; i byte letti dall'ultimo giro della replica;
+      // gli smart con la ricerca per contenuto che aspettano il loro turno (il budget di R19: `SmartUpkeep.waitingForBudget`).
+      copiesCapped = live?.shared?.albums?.copiesCapped ?: 0,
+      reopeningsRefused = live?.shared?.replica?.reopeningsRefused ?: 0,
+      adoptionRefused = live?.shared?.publisher?.adoptionRefused ?: 0,
+      segmentsRestored = live?.shared?.publisher?.segmentsRestored ?: 0,
+      overCap = live?.albums?.projection?.overCap ?: 0,
+      bytesRead = sync?.bytesRead ?: 0L,
+      smartSearchWaiting = live?.smartUpkeep?.waitingForBudget ?: 0,
     )
   }
 
@@ -90,6 +99,8 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
         "searchReady" to ExportValue.Flag(f.searchReady),
         "tripsSearched" to ExportValue.Flag(f.tripsSearched),
         "tripsHomeKnown" to ExportValue.Flag(f.tripsHomeKnown),
+        // Correzioni F: i byte che l'ultimo giro della replica ha letto dal NAS (solo il numero; `bytesRead` e' una chiave gia' nell'elenco chiuso).
+        "bytesRead" to ExportValue.Num(f.bytesRead),
       ),
     )
     if (f.rejected > 0) items += count(DiagCodes.ALBUM_CONTRIB_REJECTED, f.rejected, f.rejectedByReason.mapKeys { (reason, _) -> "reason.$reason" })
@@ -112,6 +123,13 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
     if (f.unreadableRegisters > 0) items += count(DiagCodes.ALBUM_REGISTRY_UNREADABLE, f.unreadableRegisters)
     if (f.heldContributions > 0) items += count(DiagCodes.ALBUM_CONTRIB_HELD, f.heldContributions)
     f.pausedCatalog?.let { items += count(DiagCodes.SHARE_PAUSED_CATALOG, it) }
+    // Correzioni F: i contatori del pacchetto A (R1, R2, R12, R19) e gli smart in fila per il budget delle ricerche (R19). Una riga solo se c'e' qualcosa.
+    if (f.copiesCapped > 0) items += count(DiagCodes.ALBUM_COPIES_CAPPED, f.copiesCapped)
+    if (f.reopeningsRefused > 0) items += count(DiagCodes.ALBUM_REOPEN_REFUSED, f.reopeningsRefused)
+    if (f.adoptionRefused > 0) items += count(DiagCodes.ALBUM_ADOPTION_REFUSED, f.adoptionRefused)
+    if (f.segmentsRestored > 0) items += count(DiagCodes.ALBUM_SEGMENTS_RESTORED, f.segmentsRestored)
+    if (f.overCap > 0) items += count(DiagCodes.ALBUM_OVER_CAP, f.overCap)
+    if (f.smartSearchWaiting > 0) items += count(DiagCodes.SMART_SEARCH_WAITING, f.smartSearchWaiting)
     return items
   }
 
@@ -184,4 +202,15 @@ internal data class AlbumsFacts(
   val heldContributions: Int = 0,
   /** Condivisioni ferme perche' il catalogo non conosce ancora la destinazione (pausa «catalogo» della porta di completamento, pacchetto B); null = nessuna. */
   val pausedCatalog: Int? = null,
+  /** Correzioni F: copie personali non fatte per il tetto per creatore (R1), riaperture di album chiusi rifiutate (R1), pubblicazioni ferme (R12), segmenti ripubblicati (R2). */
+  val copiesCapped: Int = 0,
+  val reopeningsRefused: Int = 0,
+  val adoptionRefused: Int = 0,
+  val segmentsRestored: Int = 0,
+  /** Album e riferimenti lasciati fuori dai tetti di lavoro dell'ultima proiezione (R19). */
+  val overCap: Int = 0,
+  /** I byte letti dal NAS dall'ultimo giro della replica. */
+  val bytesRead: Long = 0L,
+  /** Gli smart con una ricerca per contenuto che aspettano il loro turno (il budget di R19): si svuota da solo. */
+  val smartSearchWaiting: Int = 0,
 )

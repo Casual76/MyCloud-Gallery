@@ -61,4 +61,57 @@ class AlbumsDiagnosticsExportTest {
       scope.cancel()
     }
   }
+
+  @Test
+  fun iContatoriDelPacchettoAEGliSmartInFilaArrivanoFinoAlFile_CorrezioniF() {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    try {
+      val diagnostics = AlbumsDiagnostics(AlbumsGraph(scope, { null }, MutableStateFlow(false)))
+      val items = diagnostics.render(
+        AlbumsFacts(
+          mounted = true,
+          copiesCapped = 2,
+          reopeningsRefused = 3,
+          adoptionRefused = 4,
+          segmentsRestored = 5,
+          overCap = 6,
+          smartSearchWaiting = 292,
+          bytesRead = 123_456L,
+        ),
+      )
+
+      val json = JSONObject(DiagnosticsExporter.render(DiagnosticsSnapshot(items.groupBy { it.section }, recentEvents = 0)).text)
+      val exported = json.getJSONObject("sections").getJSONArray(DiagSection.ALBUMS.name)
+      val byCode = (0 until exported.length()).map { exported.getJSONObject(it) }.associateBy { it.getString("code") }
+      val wanted = mapOf(
+        "ALBUM_COPIES_CAPPED" to 2L,
+        "ALBUM_REOPEN_REFUSED" to 3L,
+        "ALBUM_ADOPTION_REFUSED" to 4L,
+        "ALBUM_SEGMENTS_RESTORED" to 5L,
+        "ALBUM_OVER_CAP" to 6L,
+        "SMART_SEARCH_WAITING" to 292L,
+      )
+      for ((id, n) in wanted) {
+        assertWithMessage("$id nel file esportato").that(byCode[id]).isNotNull()
+        assertThat(byCode.getValue(id).getJSONObject("values").getLong("count")).isEqualTo(n)
+      }
+      assertThat(byCode.getValue("ALBUMS_STATE").getJSONObject("values").getLong("bytesRead")).isEqualTo(123_456L)
+    } finally {
+      scope.cancel()
+    }
+  }
+
+  @Test
+  fun senzaNienteDaDireLeRigheNuoveNonCompaiono_CorrezioniF() {
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
+    try {
+      val diagnostics = AlbumsDiagnostics(AlbumsGraph(scope, { null }, MutableStateFlow(false)))
+      val codes = diagnostics.render(AlbumsFacts(mounted = true)).map { it.code.id }
+      assertThat(codes).containsNoneOf(
+        "ALBUM_COPIES_CAPPED", "ALBUM_REOPEN_REFUSED", "ALBUM_ADOPTION_REFUSED", "ALBUM_SEGMENTS_RESTORED", "ALBUM_OVER_CAP", "SMART_SEARCH_WAITING",
+      )
+    } finally {
+      scope.cancel()
+    }
+  }
 }

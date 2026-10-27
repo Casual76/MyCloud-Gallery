@@ -26,6 +26,7 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchRequest
 import dev.pampa.mycloudgallery.core.search.contract.SearchResults
 import dev.pampa.mycloudgallery.core.search.contract.SearchText
 import dev.pampa.mycloudgallery.core.search.contract.SearchThresholds
+import dev.pampa.mycloudgallery.core.search.contract.SimilarSelection
 import dev.pampa.mycloudgallery.core.search.contract.Today
 import dev.pampa.mycloudgallery.core.search.engine.PeopleGate
 import dev.pampa.mycloudgallery.core.search.engine.weighedBy
@@ -163,6 +164,49 @@ class InMemorySearchEngine(
     )
   }
 
+  /** Correzioni F (TS-4): "Trova simili" da una selezione, a forza bruta: il centroide normalizzato (di ogni media la media normalizzata, poi la media di quelle). */
+  override suspend fun similarToAll(media: List<MediaId>, order: ResultOrder): SearchResults {
+    require(media.isNotEmpty()) { "Nessun media da cui cercare i simili." }
+    if (media.size == 1) return similar(media.first(), order)
+    val requested = media.distinct().take(SimilarSelection.MAX)
+    val snapshot = data.snapshot.value ?: return empty(emptyList(), order)
+    // Mai dai Nascosti: un media nascosto o fuori dall'istantanea non entra nella query ne' nel chip.
+    val hidden = data.hidden(requested)
+    val used = requested.filter { it !in hidden && snapshot.indexOf(it) >= 0 }
+    val chip = (used.ifEmpty { requested.take(1) }).let { SearchChip.Similar(it.first(), "Simili", it.drop(1)) }
+    if (used.isEmpty()) return empty(listOf(chip), order)
+    val vectors = data.vectors(used, SpaceCode.CURRENT.space)
+    val means = used.mapNotNull { id -> vectors[id].orEmpty().takeIf { it.isNotEmpty() }?.let(::normalizedMean) }
+    val notices = ArrayList<SearchNotice>()
+    if (means.size < used.size) notices += SearchNotice.SimilarWithoutVectors(used.size - means.size)
+    if (means.isEmpty()) return empty(listOf(chip), order, notices)
+    val query = normalizedMean(means)
+    val usedSet = used.toHashSet()
+    val cells = visibleCells(snapshot) { snapshot.idAt(it) !in usedSet }
+    val scores = contentScores(cells, query)
+    val z = standardize(scores)
+    val confident = mutableListOf<ResultRanking.Ranked>()
+    val likely = mutableListOf<ResultRanking.Ranked>()
+    for (cell in cells) {
+      val zc = z[cell.id] ?: continue
+      val day = ChipMatching.dayOf(snapshot.localDayAt(cell.index))
+      val ranked = ResultRanking.Ranked(cell.index, ResultRanking.relevance(zc, 0f), day, snapshot.sortTimeAt(cell.index))
+      when {
+        zc >= SearchThresholds.ZS -> confident += ranked
+        zc >= SearchThresholds.ZLS -> likely += ranked
+      }
+    }
+    val comparator = ResultRanking.comparator(order, today.date(), params)
+    return SearchResults(
+      chips = listOf(chip),
+      confident = IndexOrderedTimelineView(snapshot, confident.sortedWith(comparator).map { it.index }.toIntArray()),
+      likely = IndexOrderedTimelineView(snapshot, likely.sortedByDescending { it.relevance }.take(SearchThresholds.MAX_LIKELY).sortedWith(comparator).map { it.index }.toIntArray()),
+      coverage = coverage.value,
+      notices = notices,
+      order = order,
+    )
+  }
+
   /** Il dizionario dei nomi per l'analizzatore, con il peso delle date dell'istantanea; vuoto dove i volti non ci sono (il nome resta testo). */
   private suspend fun peopleDictionary(snapshot: TimelineSnapshot): PeopleDictionary {
     if (!people.available.value) return PeopleDictionary.EMPTY
@@ -244,9 +288,9 @@ class InMemorySearchEngine(
     }
   }
 
-  private fun empty(chips: List<SearchChip>, order: ResultOrder): SearchResults {
+  private fun empty(chips: List<SearchChip>, order: ResultOrder, notices: List<SearchNotice> = emptyList()): SearchResults {
     val none = IndexOrderedTimelineView(EmptyTimelineSnapshot, IntArray(0))
-    return SearchResults(chips, none, none, coverage.value, emptyList(), order)
+    return SearchResults(chips, none, none, coverage.value, notices, order)
   }
 
   private fun median(sorted: List<Float>): Float =

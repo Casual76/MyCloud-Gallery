@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
 import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneMediaIntents
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
+import dev.pampa.mycloudgallery.core.search.contract.SimilarSelection
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
 import dev.pampa.mycloudgallery.feature.library.library.LibraryCommands
@@ -17,6 +18,7 @@ import dev.pampa.mycloudgallery.feature.library.library.LibraryDebugHooks
 import dev.pampa.mycloudgallery.feature.library.library.LibraryShare
 import dev.pampa.mycloudgallery.feature.library.library.LibraryStateSource
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
+import dev.pampa.mycloudgallery.feature.library.library.SimilarSelectionOutcome
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import java.util.WeakHashMap
 import javax.inject.Inject
@@ -117,6 +119,17 @@ class AppLibraryCommands(
 
   override fun addToAlbum(ids: Set<MediaId>) {
     gallery.albumRequests.add(ids)
+  }
+
+  // Correzioni F (TS-4, D30): "Trova simili" dalla selezione, se la ricerca per contenuto e' legata. Cerca la apre la radice, con il chip «Simili a».
+  override val canFindSimilar: Boolean get() = gallery.searchViewer?.selectionSimilar != null
+
+  override val findSimilarLimit: Int get() = SimilarSelection.MAX
+
+  override fun findSimilar(ids: Set<MediaId>): SimilarSelectionOutcome {
+    // Difesa in profondita': la Libreria controlla il tetto prima, ma un chiamante diverso non deve poter aggirarlo.
+    if (ids.size > SimilarSelection.MAX) return SimilarSelectionOutcome.NOT_ANALYZED
+    return gallery.searchViewer?.selectionSimilar?.find(ids) ?: SimilarSelectionOutcome.NOT_ANALYZED
   }
 
   /** Il tetto di una richiesta di cestino di sistema (Android 11+). */

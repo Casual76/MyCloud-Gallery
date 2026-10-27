@@ -387,6 +387,8 @@ class GalleryGraph(
     /** Il ritaglio del soggetto (P13, D44): il ritagliatore e le tre azioni della barra. Null = nessun ritaglio (D13). */
     val subjectCutter: dev.pampa.mycloudgallery.feature.viewer.cutout.ViewerSubjectCutter? = null,
     val cutoutSaver: dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutSaver? = null,
+    /** Correzioni F (TS-4): "Trova simili" dalla selezione della Libreria. Null = l'azione non compare. */
+    val selectionSimilar: dev.pampa.mycloudgallery.ai.SearchSelectionSimilar? = null,
   )
 
   @Volatile

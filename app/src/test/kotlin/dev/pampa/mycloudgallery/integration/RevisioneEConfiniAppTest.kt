@@ -327,17 +327,29 @@ class RevisioneEConfiniAppTest {
     val (rig, albums) = opened(phone)
     val ids = libraryIds(rig, 2)
     val plan = (live(albums).shared.albums.create("In viaggio", ShareLevel.ADD, ids) as SharePlanOutcome.Ready).plan
+    // I due file sono aperti dal PC: gli spostamenti sono chiesti ma nessun file parte (senza questo il motore, che lavora un po' subito, ne sposterebbe 0, 1 o 2
+    // a seconda della velocita' del PC: l'esito «uno in viaggio e uno no» lo prova il banco della condivisione, `ShareCloseInFlightTest`).
+    val held = listOf("IMG_N.jpg", "IMG_O.jpg").map { "Foto/Prova/$it" }
+    held.forEach { backend.lock(TestNas.ADMIN_USER, it) }
     confirmAndStart(albums, plan)
     // L'album c'e' (definizione in coda, replica che lo vede attivo) ma gli spostamenti non sono ancora finiti: il creatore smette subito di condividere.
     val shared = AppSharedAlbums(albums, facadeScope)
     assertThat(shared.close(plan.album, CloseMode.STOP, OthersAfterClose.REMOVE)).isEqualTo(CloseOutcome.Closed)
     val personal = checkNotNull(shared.keptAfterClose(plan.album)) { "l'album personale del creatore" }
-    // Gli spostamenti finiscono lo stesso (i file sono dei tuoi, la conferma e' stata data): l'operazione si chiude, nessun file si perde.
-    assertWithMessage("l'operazione in viaggio finisce").that(drive(rig, phone, albums)).isTrue()
+    // Correzioni F (L231, risposta dell'utente del 27/10): gli elementi non ancora partiti non partono piu'. Il giro che li ferma parte da solo alla chiusura
+    // (`albumClosed`); qui lo si fa anche a mano, due volte (la prima ferma, la seconda raccoglie l'esito), cosi' la prova non dipende da chi arriva prima:
+    // quello che aspetta la pubblicazione della voce (30 secondi di calma) lo finisce `drive`.
+    val orchestrator = live(albums).shared.orchestrator
+    repeat(2) { orchestrator.resumeAll(1.minutes) }
+    held.forEach { backend.unlock(TestNas.ADMIN_USER, it) }
+    assertWithMessage("l'operazione si chiude").that(drive(rig, phone, albums)).isTrue()
     indexRound(albums, times = 2)
+    // Nessun file si e' perso o duplicato, e nessuno si e' mosso: gli spostamenti non partiti sono stati annullati, i file sono ancora nell'area privata,
+    // dove stavano, e nell'area comune non c'e' niente.
     assertThat(libraryIds(rig, 2)).containsExactlyElementsIn(ids)
-    assertThat(backend.children(TestNas.COMMON, "Album condivisi/In viaggio")).hasSize(2)
-    // Una sola copia personale, e gli elementi sono quelli della prima scrittura (D31, A-3): gli arrivati dopo la chiusura non entrano nell'album personale.
+    assertThat(backend.children(TestNas.COMMON, "Album condivisi/In viaggio")).isEmpty()
+    assertThat(backend.children(TestNas.ADMIN_USER, "Foto/Prova")).containsExactly("IMG_N.jpg", "IMG_O.jpg")
+    // Una sola copia personale, e gli elementi sono quelli della prima scrittura (D31, A-3): nessuno e' arrivato, quindi l'album personale e' vuoto.
     assertThat(manualTitled(albums, "In viaggio").map { it.id }).containsExactly(personal)
     assertThat(itemsOf(albums, personal)).isEmpty()
   }

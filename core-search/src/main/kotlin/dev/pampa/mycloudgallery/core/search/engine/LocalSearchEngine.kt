@@ -152,6 +152,9 @@ class LocalSearchEngine(
 
   override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults = similarSearch.similar(media, order)
 
+  override suspend fun similarToAll(media: List<MediaId>, order: ResultOrder): SearchResults =
+    if (media.size == 1) similarSearch.similar(media.first(), order) else similarSearch.similarToAll(media, order)
+
   /**
    * PR-1 (E-I12, D31): una ricerca per contenuto o per parole dice le aree che nessun dispositivo analizza (prima l'area comune) e, se si
    * cercano parole, che la lettura del testo non e' attiva (la schermata lo mostra una volta). Un errore qui non ferma la ricerca.

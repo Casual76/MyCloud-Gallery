@@ -12,6 +12,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.core.faces.contract.AckState
+import dev.pampa.mycloudgallery.core.faces.contract.DeviceAck
 import dev.pampa.mycloudgallery.core.faces.contract.EraseWait
 import dev.pampa.mycloudgallery.core.faces.contract.FacesClock
 import dev.pampa.mycloudgallery.core.faces.contract.FacesEraser
@@ -67,7 +68,7 @@ class FacesEraseViewModel @Inject constructor(ports: Optional<ErasePorts>) : Vie
 
 /** Il foglio "Disattiva e cancella" e la sua pagina d'avanzamento. "Annulla", "Chiudi" e il tasto indietro chiudono senza cambiare niente. */
 @Composable
-fun FacesEraseRoute(onClose: () -> Unit, viewModel: FacesEraseViewModel = hiltViewModel()) {
+fun FacesEraseRoute(onClose: () -> Unit, onOpenDevices: (() -> Unit)? = null, viewModel: FacesEraseViewModel = hiltViewModel()) {
   val controller = viewModel.controller
   val state by controller.state.collectAsStateWithLifecycle()
   val token by controller.token.collectAsStateWithLifecycle()
@@ -80,11 +81,18 @@ fun FacesEraseRoute(onClose: () -> Unit, viewModel: FacesEraseViewModel = hiltVi
     onReload = controller::reload,
     onClose = onClose,
     onBack = onClose,
+    onOpenDevices = onOpenDevices,
   )
 }
 
 /** I testi del foglio che dipendono dallo stato. */
 internal object EraseText {
+
+  /**
+   * L193: un dispositivo **dismesso** che non ha ancora confermato tiene ferma la fine (le sue teste sono congelate: non puo' piu' dire `off`) finche' non lo
+   * si revoca. Risposta dell'utente del 27/10: la pagina continua ad aspettare, e la riga dice cosa fare.
+   */
+  fun holdsTheEnd(device: DeviceAck): Boolean = device.dismissed && device.state == AckState.WAITING
 
   fun step(step: StepState): Int = when (step) {
     StepState.NOT_STARTED -> R.string.faces_erase_step_not_started

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.FilterAltOff
+import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -478,6 +479,28 @@ internal fun selectionActions(
           {
             state.commands.addToAlbum(selected.ids)
             grid.stopSelecting()
+          },
+          enabled = any,
+        ),
+      )
+    }
+    // Correzioni F (TS-4, D30): "Trova simili" dalla selezione. Cerca i media vicini al centroide di quelli scelti e apre i risultati in Cerca; niente si scrive.
+    // Oltre il tetto lo dice senza partire; se nessuna foto scelta e' ancora stata analizzata lo dice, invece di aprire una ricerca vuota.
+    if (state.commands.canFindSimilar) {
+      add(
+        GalleryBarAction(
+          Icons.Rounded.ImageSearch,
+          stringResource(R.string.library_action_find_similar),
+          {
+            val limit = state.commands.findSimilarLimit
+            if (selected.size > limit) {
+              state.notice = ActionNotice.SimilarTooMany(limit)
+            } else {
+              when (state.commands.findSimilar(selected.ids)) {
+                SimilarSelectionOutcome.STARTED -> grid.stopSelecting()
+                SimilarSelectionOutcome.NOT_ANALYZED -> state.notice = ActionNotice.SimilarNotAnalyzed
+              }
+            }
           },
           enabled = any,
         ),

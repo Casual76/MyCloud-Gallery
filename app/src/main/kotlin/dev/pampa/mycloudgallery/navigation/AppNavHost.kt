@@ -169,7 +169,7 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   val searchActions = if (destination == RootDestination.Main) rememberSearchActions(nav, viewer) else null
   // Fase 6 (TS-3): "Trova simili" da un viewer aperto fuori dalla schermata principale (Raccolte, Cartelle NAS) si consuma qui, alla radice: il viewer
   // si chiude, si torna alla schermata principale e Cerca parte dai simili. Prima lo consumava la schermata principale, che durante le Raccolte non c'e'.
-  var findSimilar by remember { mutableStateOf<MediaId?>(null) }
+  var findSimilar by remember { mutableStateOf<List<MediaId>?>(null) }
   if (destination == RootDestination.Main) SimilarRequestEffect(nav, viewer) { findSimilar = it }
   // Fase 7 (P13): gli album. Uno stato per l'activity (le rotte degli album e il selettore dei media lo condividono), "Aggiungi ad album" sopra la
   // schermata che l'ha chiesto e il viewer dei Nascosti con le voci degli album che valgono li' (l'album riceve anche il nascosto: richiesta esplicita).
@@ -389,8 +389,8 @@ private fun MainDestination(
   status: GlobalStatus,
   openWireGuard: () -> Boolean,
   nasOpener: NasFileOpener,
-  /** "Trova simili" chiesto da un viewer (TS-2, TS-3): il media di cui cercare i simili, finche' Cerca non l'ha preso. */
-  findSimilar: MediaId?,
+  /** "Trova simili" chiesto da un viewer (TS-2, TS-3) o dalla selezione della Libreria (TS-4): i media di cui cercare i simili, finche' Cerca non li ha presi. */
+  findSimilar: List<MediaId>?,
   onFindSimilarHandled: () -> Unit,
   /** Il viewer della galleria per le Raccolte (con le voci degli album dei Nascosti, se la richiesta e' dei Nascosti). */
   openViewer: (ViewerRequest) -> Unit,
@@ -471,7 +471,7 @@ private fun MainDestination(
  * Cartelle NAS, se il viewer era stato aperto da li') e consegna il media a chi tiene la scheda Cerca ([onTarget]).
  */
 @Composable
-private fun SimilarRequestEffect(nav: NavHostController, viewer: ViewerHostState?, onTarget: (MediaId) -> Unit) {
+private fun SimilarRequestEffect(nav: NavHostController, viewer: ViewerHostState?, onTarget: (List<MediaId>) -> Unit) {
   val host: SearchHostViewModel = hiltViewModel()
   val request by host.similar.pending.collectAsStateWithLifecycle()
   LaunchedEffect(request) {

@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.albums.upkeep
 import dev.pampa.mycloudgallery.core.albums.contract.SmartOutcome
 import dev.pampa.mycloudgallery.core.albums.smart.SmartRecompute
 import dev.pampa.mycloudgallery.core.albums.smart.SmartRows
+import dev.pampa.mycloudgallery.core.albums.smart.searchesContent
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.MediaId
 import java.util.concurrent.ConcurrentHashMap
@@ -25,6 +26,11 @@ import kotlinx.coroutines.withContext
 //    riprendevano, e gli smart arrivati prima del montaggio non si valutavano mai.
 // Le chiamate arrivano da piu' parti insieme (il giro del catalogo, i dati personali, la notte, il montaggio): ogni album e' protetto dal lucchetto del
 // motore, qui si tiene solo l'elenco di cio' che resta da fare. Mai titoli, luoghi o id nei log (D37): questa classe non scrive log.
+//
+// IL BUDGET DELLE RICERCHE PER CONTENUTO (correzioni F, R19, L146, L250). Nessun tetto a quanti smart con una descrizione o delle foto d'esempio si creano e
+// nessun messaggio all'utente; ma ognuno costa una ricerca sull'intera Libreria a ogni rivalutazione, e un dispositivo guasto dello stesso account ne potrebbe
+// far arrivare centinaia. Per questo **ogni valutazione di uno smart con ricerca per contenuto passa da [ContentBudget]**: al piu' [ContentBudget.PER_ROUND]
+// per giro (30 s), gli altri in fila, a rotazione, al giro dopo. Gli smart senza ricerca per contenuto non aspettano mai.
 
 /** Chi mostra gli smart (`CatalogAlbums`): sa quando il motore lavora e quando ha scritto. */
 interface SmartWorkSink {
@@ -48,6 +54,9 @@ class SmartUpkeep(
   private val budget: Duration = BUDGET,
   /** AS-6: per quanto il catalogo deve restare fermo prima di rifare gli smart con una descrizione e senza periodo. */
   contentQuiet: Duration = CONTENT_QUIET,
+  /** Correzioni F (R19): quante ricerche per contenuto per giro, e quanto dura un giro. Con pochi album non cambia niente. */
+  contentPerRound: Int = ContentBudget.PER_ROUND,
+  contentRound: Duration = ContentBudget.ROUND,
 ) {
   /** Gli smart il cui calcolo e' rimasto a meta' (budget finito, errore): si riprendono da [drain]. */
   private val unfinished = ConcurrentHashMap.newKeySet<AlbumId>()
@@ -60,8 +69,14 @@ class SmartUpkeep(
   private val heavyTimer = Debouncer(scope, contentQuiet) { evaluateAll(takeHeavy()) }
   private val draining = AtomicBoolean(false)
 
+  /** Il budget delle ricerche per contenuto: gli smart che non ci stanno aspettano il giro dopo e li valuta lui, senza passare da [drain]. */
+  private val turns = ContentBudget(scope, contentPerRound, contentRound) { granted -> evaluateGranted(granted) }
+
   /** Resta qualcosa da riprendere. */
   val hasUnfinished: Boolean get() = unfinished.isNotEmpty() || skipped.isNotEmpty()
+
+  /** Quanti smart con ricerca per contenuto aspettano il loro giro (Diagnostica: solo il numero). Si svuota da solo, un giro dopo l'altro. */
+  val waitingForBudget: Int get() = turns.waiting
 
   private enum class Result { DONE, PARTIAL, FAILED }
 
@@ -78,7 +93,7 @@ class SmartUpkeep(
   suspend fun searchReady() {
     val described = rows.smartAlbums().filter { id ->
       val state = rows.state(id)
-      state != null && !state.frozen && (!state.rules.text.isNullOrBlank() || state.rules.examples.isNotEmpty())
+      state != null && !state.frozen && state.rules.searchesContent()
     }
     evaluateAll(described)
   }
@@ -102,9 +117,13 @@ class SmartUpkeep(
    */
   suspend fun catalogChanged(media: Collection<MediaId>) {
     if (media.isEmpty()) return
-    evaluateAll(smartAlbumsWith(media))
+    // Gli smart con una ricerca per contenuto che questa chiamata ha gia' valutato (o messo in fila) non si rifanno nell'incrementale: una valutazione intera
+    // vale piu' di una incrementale, e senza questo conto ogni smart userebbe due posti del giro.
+    val handled = HashSet<AlbumId>()
+    evaluateAll(smartAlbumsWith(media), handled)
     try {
-      val report = recompute.onCatalogChanged(media, emptyList(), budget, deferHeavy = true)
+      // Anche l'incrementale degli smart con periodo e ricerca per contenuto e' una ricerca sull'intera Libreria: passa dal budget (R19).
+      val report = recompute.onCatalogChanged(media, emptyList(), budget, deferHeavy = true) { id -> id !in handled && turns.admit(listOf(id)).isNotEmpty() }
       if (report.skipped > 0) skipped += media
       if (report.deferred.isNotEmpty()) {
         heavy += report.deferred
@@ -156,10 +175,21 @@ class SmartUpkeep(
     }
   }
 
-  private suspend fun evaluateAll(albums: Collection<AlbumId>) {
+  private suspend fun evaluateAll(albums: Collection<AlbumId>, handled: MutableSet<AlbumId>? = null) {
     val list = albums.distinct()
     if (list.isEmpty()) return
-    announce(list)
+    handled?.addAll(list)
+    val content = announce(list)
+    // R19: gli smart con una ricerca per contenuto passano dal budget; quelli che non ci stanno aspettano il giro dopo (li valuta `turns`), senza passare da `drain`.
+    val granted = turns.admit(content)
+    val waiting = content.filter { it !in granted }.toSet()
+    if (waiting.isNotEmpty()) unfinished.removeAll(waiting)
+    evaluateGranted(if (waiting.isEmpty()) list else list.filter { it !in waiting })
+  }
+
+  /** Valuta [list]: tutti hanno gia' il loro posto nel budget (o non ne hanno bisogno). */
+  private suspend fun evaluateGranted(list: List<AlbumId>) {
+    if (list.isEmpty()) return
     val finished = ArrayList<AlbumId>()
     try {
       for (id in list) {
@@ -177,13 +207,24 @@ class SmartUpkeep(
     }
   }
 
-  /** Gli smart ancora senza righe (nuovi, o con un risultato che non si e' mai visto): da adesso le loro pagine dicono che si sta cercando (AS-2). */
-  private suspend fun announce(albums: List<AlbumId>) {
-    val empty = albums.filter { id ->
+  /**
+   * Gli smart ancora senza righe (nuovi, o con un risultato che non si e' mai visto): da adesso le loro pagine dicono che si sta cercando (AS-2), anche se
+   * poi aspettano il loro giro (R19: cercano davvero, solo piu' tardi). Restituisce quelli che hanno una ricerca per contenuto, nell'ordine di [albums].
+   */
+  private suspend fun announce(albums: List<AlbumId>): List<AlbumId> {
+    val empty = ArrayList<AlbumId>()
+    val content = ArrayList<AlbumId>()
+    for (id in albums) {
       val state = rows.state(id)
-      state != null && !state.frozen && state.auto.isEmpty() && state.suggestions.isEmpty()
+      if (state == null || state.frozen) {
+        turns.forget(id)
+        continue
+      }
+      if (state.auto.isEmpty() && state.suggestions.isEmpty()) empty += id
+      if (state.rules.searchesContent()) content += id else turns.forget(id)
     }
     if (empty.isNotEmpty()) sink.smartWorkStarted(empty)
+    return content
   }
 
   private suspend fun evaluateOne(id: AlbumId): Result = try {

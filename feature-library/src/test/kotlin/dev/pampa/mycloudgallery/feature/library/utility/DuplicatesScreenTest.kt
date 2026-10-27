@@ -275,6 +275,42 @@ open class DuplicatesScreenTest : ComposeScreenTest() {
     composeRule.onNodeWithText("Pulizia avviata", substring = true).assertExists()
   }
 
+  // --- Correzioni F, R3: un file di un album condiviso in cui non si puo' eliminare -----------------------------------------------------------
+
+  @Test
+  fun r3_UnaSelezioneMista_LAvvisoDiceQuanteCopieSonoPartiteEQuanteNoEPerche() {
+    identical.planOverride = samplePlanOf(identical.proposals).let { CleanupPlan(it.groups, emptyList(), it.nas, 0, 0) }
+    nas.protectedAmong = { copies -> copies.drop(1) }
+    showPage(controller())
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithText("Pulizia guidata").performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Elimina ovunque").performClick()
+    composeRule.waitForIdle()
+
+    // «Pulizia avviata per 1 copia ... Non toccate: 1 copia, perche' fanno parte di un album condiviso...»: la pagina dice cosa e' partito e cosa no.
+    composeRule.onNodeWithText("Pulizia avviata per 1 copia sul NAS", substring = true).assertExists()
+    composeRule.onNodeWithText("Non toccate: 1 copia, perché fanno parte di un album condiviso in cui non puoi eliminarle, spostarle o rinominarle", substring = true).assertExists()
+  }
+
+  @Test
+  fun r3_SeTutteLeCopieSonoDiUnAlbumCondiviso_LAvvisoDiceCheNonERiuscitoEPerche() {
+    identical.planOverride = samplePlanOf(identical.proposals).let { CleanupPlan(it.groups, emptyList(), it.nas, 0, 0) }
+    nas.protectedAmong = { copies -> copies }
+    showPage(controller())
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithText("Pulizia guidata").performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Elimina ovunque").performClick()
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithText("Non è riuscito: le 2 copie sul NAS fanno parte di un album condiviso in cui non puoi eliminarle, spostarle o rinominarle", substring = true).assertExists()
+    composeRule.onNodeWithText("Non è stato toccato niente", substring = true).assertExists()
+    assertThat(system.trashRequests).isEmpty()
+  }
+
   @Test
   fun senzaDoppioniDicePercheEVuota() {
     identical.proposals = emptyList()

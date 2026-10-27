@@ -33,6 +33,7 @@ class SearchNoticeItemsTest {
       SearchNotice.TypoCorrected("screenshot", "screeshot"),
       SearchNotice.TextReadingOff,
       SearchNotice.PeopleRecognizing(60),
+      SearchNotice.SimilarWithoutVectors(2),
     )
     for (notice in samples) {
       val (item, action) = expected(notice)
@@ -50,6 +51,7 @@ class SearchNoticeItemsTest {
     is SearchNotice.TypoCorrected -> NoticeItem.Typo(notice.from, notice.to) to null
     SearchNotice.TextReadingOff -> NoticeItem.TextReadingOff to NoticeAction.LEARN_TEXT_READING
     is SearchNotice.PeopleRecognizing -> NoticeItem.PeopleProgress(notice.percent) to null
+    is SearchNotice.SimilarWithoutVectors -> NoticeItem.SimilarWithoutVectors(notice.count) to null
   }
 
   @Test

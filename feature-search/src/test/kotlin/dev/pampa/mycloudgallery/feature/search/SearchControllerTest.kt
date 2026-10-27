@@ -287,6 +287,65 @@ class SearchControllerTest {
   }
 
   @Test
+  fun trovaSimiliDallaSelezionePartePerTuttiIMediaEMostraUnChipSolo_TS4() = runTest {
+    val picks = listOf(lib.id(3), lib.id(7), lib.id(9))
+    val chip = SearchChip.Similar(picks.first(), "Simili a", picks.drop(1))
+    engine.similarSetScript = { _, order -> lib.results(chips = listOf(chip), notices = listOf(SearchNotice.SimilarWithoutVectors(1)), order = order) }
+    val c = controller()
+
+    c.findSimilar(picks)
+    runCurrent()
+
+    // Una richiesta sola al motore con tutta la scelta (nessuna ricerca per media), e un chip solo che la porta intera.
+    assertThat(engine.similarSetCalls).containsExactly(picks to ResultOrder.RECENT)
+    assertThat(engine.similarCalls).isEmpty()
+    assertThat(c.results.chips).containsExactly(chip)
+    assertThat((c.results.chips.single() as SearchChip.Similar).all).containsExactlyElementsIn(picks).inOrder()
+    assertThat(c.results.notices).containsExactly(SearchNotice.SimilarWithoutVectors(1))
+    // Non entra nella cronologia, e togliere il chip riporta a riposo.
+    assertThat(history.entries.value).isEmpty()
+    c.onRemoveChip(chip)
+    runCurrent()
+    assertThat(c.state.value).isInstanceOf(SearchScreenState.Idle::class.java)
+  }
+
+  @Test
+  fun unaSelezioneDiUnMediaSoloEIlTrovaSimiliDiSempre_TS4() = runTest {
+    val c = controller()
+
+    c.findSimilar(listOf(lib.id(3)))
+    runCurrent()
+
+    assertThat(engine.similarCalls).containsExactly(lib.id(3) to ResultOrder.RECENT)
+    assertThat(engine.similarSetCalls).isEmpty()
+  }
+
+  @Test
+  fun cambiareOrdineRipeteLaRicercaDellaSelezione_TS4() = runTest {
+    val picks = listOf(lib.id(3), lib.id(7))
+    val c = controller()
+    c.findSimilar(picks)
+    runCurrent()
+
+    c.onSetOrder(ResultOrder.RELEVANT)
+    runCurrent()
+
+    assertThat(engine.similarSetCalls.map { it.second }).containsExactly(ResultOrder.RECENT, ResultOrder.RELEVANT).inOrder()
+    assertThat(engine.similarSetCalls.map { it.first }.distinct()).containsExactly(picks)
+  }
+
+  @Test
+  fun unaSelezioneVuotaNonCercaNiente_TS4() = runTest {
+    val c = controller()
+
+    c.findSimilar(emptyList<dev.pampa.mycloudgallery.core.model.MediaId>())
+    runCurrent()
+
+    assertThat(engine.similarCalls).isEmpty()
+    assertThat(engine.similarSetCalls).isEmpty()
+  }
+
+  @Test
   fun scaricareIlModelloEUnaRichiestaDellUtente_E_Q11() = runTest {
     val c = controller()
     c.onDownloadModel()

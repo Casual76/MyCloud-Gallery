@@ -139,6 +139,20 @@
   <string name="duplicates_notice_cleanup_rejected">Il NAS non ha accettato la pulizia: le copie sono cambiate o la share è in sola lettura. Non è stato toccato niente.</string>
   <string name="duplicates_notice_cleanup_blocked">Le scritture sul NAS sono ferme adesso (congelamento, emergenza o ora del NAS). Non è stato toccato niente: riprova più tardi.</string>
   <string name="duplicates_notice_cleanup_failed">Non è riuscito. Non è stato toccato niente: riprova fra poco.</string>
+  <string name="duplicates_notice_cleanup_protected">Non è riuscito: le copie sul NAS fanno parte di un album condiviso in cui non puoi eliminarle, spostarle o rinominarle. Non è stato toccato niente.</string>
+  <plurals name="duplicates_notice_cleanup_protected_count">
+    <item quantity="one">Non è riuscito: %1$s copia sul NAS fa parte di un album condiviso in cui non puoi eliminarla, spostarla o rinominarla. Non è stato toccato niente.</item>
+    <item quantity="other">Non è riuscito: le %1$s copie sul NAS fanno parte di un album condiviso in cui non puoi eliminarle, spostarle o rinominarle. Non è stato toccato niente.</item>
+  </plurals>
+  <string name="duplicates_notice_cleanup_partly_protected">Pulizia avviata per %1$s sul NAS (le segui in Operazioni in corso). Non toccate: %2$s, perché fanno parte di un album condiviso in cui non puoi eliminarle, spostarle o rinominarle.</string>
+  <plurals name="duplicates_notice_copies_started">
+    <item quantity="one">%1$s copia</item>
+    <item quantity="other">%1$s copie</item>
+  </plurals>
+  <plurals name="duplicates_notice_copies_left">
+    <item quantity="one">%1$s copia</item>
+    <item quantity="other">%1$s copie</item>
+  </plurals>
   <string name="duplicates_notice_last_shot">In un gruppo almeno uno scatto resta.</string>
   <string name="duplicates_notice_no_phone_trash">Su questo telefono non c\'è il cestino di sistema (serve Android 11): da qui le copie del telefono non si possono togliere. Quelle sul NAS sì.</string>
   <string name="duplicates_notice_nothing">Le copie sono cambiate nel frattempo: non c\'è più niente da togliere.</string>

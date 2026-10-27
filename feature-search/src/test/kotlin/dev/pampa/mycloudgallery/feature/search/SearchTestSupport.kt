@@ -62,6 +62,10 @@ internal class ScriptedEngine(var script: (SearchRequest) -> SearchResults) : Se
   var failure: Exception? = null
   var similarScript: (MediaId, ResultOrder) -> SearchResults = { _, order -> script(SearchRequest("", order = order)) }
 
+  /** Correzioni F (TS-4): le richieste di «Trova simili» dalla selezione (piu' media) e cosa rispondono. */
+  val similarSetCalls: MutableList<Pair<List<MediaId>, ResultOrder>> = mutableListOf()
+  var similarSetScript: (List<MediaId>, ResultOrder) -> SearchResults = { _, order -> script(SearchRequest("", order = order)) }
+
   override val coverage: MutableStateFlow<SearchCoverage> = MutableStateFlow(SearchCoverage.Complete)
   override val readiness: MutableStateFlow<SearchReadiness> = MutableStateFlow(SearchReadiness.Ready)
 
@@ -75,6 +79,12 @@ internal class ScriptedEngine(var script: (SearchRequest) -> SearchResults) : Se
     similarCalls += media to order
     failure?.let { throw it }
     return similarScript(media, order)
+  }
+
+  override suspend fun similarToAll(media: List<MediaId>, order: ResultOrder): SearchResults {
+    similarSetCalls += media to order
+    failure?.let { throw it }
+    return similarSetScript(media, order)
   }
 
   override fun warmUp() {

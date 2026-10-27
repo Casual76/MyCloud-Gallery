@@ -33,6 +33,7 @@ import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextLine
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextReader
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextSource
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerWordSpan
+import dev.pampa.mycloudgallery.feature.library.library.SimilarSelectionOutcome
 import dev.pampa.mycloudgallery.feature.viewer.menu.SimilarAvailability
 import dev.pampa.mycloudgallery.feature.viewer.menu.ViewerSimilarSearch
 import java.io.File
@@ -246,14 +247,36 @@ class SearchViewerSimilar(
   override fun findSimilar(id: MediaId) = requests.request(id)
 }
 
-/** Le richieste di "Trova simili" dal viewer verso la scheda Cerca (una alla volta: la navigazione la consuma). */
-class SimilarRequests {
-  private val flow = MutableStateFlow<MediaId?>(null)
-  val pending: StateFlow<MediaId?> = flow.asStateFlow()
+/**
+ * "Trova simili" dalla selezione della Libreria (correzioni F, TS-4, D30). Ogni media della selezione che e' una cella della Libreria entra nella richiesta (mai un
+ * Nascosto: non e' una cella); la ricerca usa il centroide di quelli con un vettore e lascia fuori gli altri dicendolo (`SearchNotice.SimilarWithoutVectors`).
+ * Se **nessuno** ha un vettore la ricerca non parte: la Libreria spiega che le foto non sono ancora state analizzate, invece di aprire Cerca vuota.
+ */
+class SearchSelectionSimilar(
+  private val keys: CellKeys,
+  private val requests: SimilarRequests,
+  private val hasVectors: (ContentKey) -> Boolean = { true },
+) {
+  fun find(ids: Collection<MediaId>): SimilarSelectionOutcome {
+    val cells = ids.filter { keys[it] != null }
+    if (cells.none { id -> keys[id]?.keys?.any(hasVectors) == true }) return SimilarSelectionOutcome.NOT_ANALYZED
+    requests.request(cells)
+    return SimilarSelectionOutcome.STARTED
+  }
+}
 
-  fun request(id: MediaId) {
-    flow.value = id
+/** Le richieste di "Trova simili" dal viewer e dalla selezione verso la scheda Cerca (una alla volta: la navigazione la consuma). */
+class SimilarRequests {
+  private val flow = MutableStateFlow<List<MediaId>?>(null)
+  val pending: StateFlow<List<MediaId>?> = flow.asStateFlow()
+
+  /** Un media (il viewer). */
+  fun request(id: MediaId) = request(listOf(id))
+
+  /** Uno o piu' media (la selezione della Libreria): Cerca parte dal centroide. Una richiesta vuota non fa niente. */
+  fun request(ids: List<MediaId>) {
+    if (ids.isNotEmpty()) flow.value = ids
   }
 
-  fun consume(): MediaId? = flow.value.also { flow.value = null }
+  fun consume(): List<MediaId>? = flow.value.also { flow.value = null }
 }

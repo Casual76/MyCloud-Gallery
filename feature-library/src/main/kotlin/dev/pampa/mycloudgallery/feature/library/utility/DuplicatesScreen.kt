@@ -213,7 +213,7 @@ internal fun DuplicatesScreen(
       }
       GridTopEdgeScrim(barHeight, Modifier.align(Alignment.TopCenter))
       state.notice?.let { notice ->
-        DuplicatesNoticeRow(notice, actions.onDismissNotice, Modifier.align(Alignment.TopCenter).padding(top = barHeight))
+        DuplicatesNoticeRow(notice, actions.onDismissNotice, Modifier.align(Alignment.TopCenter).padding(top = barHeight), started = state.noticeStarted, left = state.noticeLeft)
       }
     }
     GridTopChrome(

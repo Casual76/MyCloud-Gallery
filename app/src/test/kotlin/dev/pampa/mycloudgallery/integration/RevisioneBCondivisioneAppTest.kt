@@ -38,6 +38,8 @@ import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
 import dev.pampa.mycloudgallery.core.family.contract.SetupState
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
+import dev.pampa.mycloudgallery.core.library.duplicates.CopyArea
+import dev.pampa.mycloudgallery.core.library.duplicates.NasTrashRef
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumKind
@@ -59,6 +61,9 @@ import dev.pampa.mycloudgallery.core.nasops.contract.PlanRejection
 import dev.pampa.mycloudgallery.core.search.contract.Today
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.core.trust.registry.ApprovalProof
+import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
+import dev.pampa.mycloudgallery.utility.OperationsCleanupNas
+import dev.pampa.mycloudgallery.utility.TestTaps
 import dev.pampa.mycloudgallery.work.BackupStages
 import java.io.File
 import java.time.LocalDate
@@ -294,6 +299,42 @@ class RevisioneBCondivisioneAppTest {
     val phoneItem = itemOf(phoneRig, TestNas.ADMIN_USER, path)
     assertThat(phoneRig.nas.organizer.operations.plan(OpRequest.Trash(listOf(phoneItem)))).isInstanceOf(PlanOutcome.Ready::class.java)
     assertThat(backend.exists(TestNas.COMMON, path)).isTrue()
+  }
+
+  /**
+   * Correzioni F (R3, L152, risposta dell'utente del 27/10), sul grafo vero: i Doppioni (anche «Ovunque» dei simili) chiedono il cestino del NAS per la copia
+   * dell'area comune di una foto che fa parte di un album «Gli altri guardano». Il tablet di `test2` non puo' eliminarla: il piano la lascia fuori, il file
+   * resta nell'area comune e l'adattatore dice che e' rimasta (la pagina scrive «non e' riuscito, perche' album condiviso»).
+   */
+  @Test
+  fun r3DoppioniOvunqueLasciaFuoriIlFileDiUnAlbumCondivisoEDiceChe() = runBlocking<Unit> {
+    val (phone, tablet) = family()
+    privatePhotos("IMG_C.jpg")
+    val (phoneRig, phoneAlbums) = opened(phone, TestNas.ADMIN_USER)
+    val (tabletRig, tabletAlbums) = opened(tablet, TestNas.MEMBER_USER)
+    val ids = idsOf(phoneRig, 1)
+    val plan = (live(phoneAlbums).shared.albums.create("Guardano", ShareLevel.VIEW, ids) as SharePlanOutcome.Ready).plan
+    confirmAndStart(phoneAlbums, plan)
+    assertThat(drive(phoneRig, phone, phoneAlbums)).isTrue()
+    time.advance(PublishRules.MIN_HEAD_INTERVAL_MS + 1_000)
+    phoneAlbums.syncRound(1.minutes)
+    tablet.graph.trustGuard.preflight(Purpose.BACKGROUND)
+    checkNotNull(tabletRig.nas.scan(ScanMode.Full, 5.minutes))
+    tabletAlbums.syncRound(1.minutes)
+    withTimeout(Attese.TETTO) { live(tabletAlbums).shared.albums.visible.first { list -> list.any { it.id == plan.album && it.count == 1 } } }
+    val path = "Album condivisi/Guardano/IMG_C.jpg"
+
+    val item = itemOf(tabletRig, TestNas.MEMBER_USER, path)
+    val stamp = checkNotNull(item.stamp)
+    val copy = NasTrashRef(item.share, item.path.value, stamp.size, stamp.modifiedAtMillis, stamp.fileId, CopyArea.COMMON)
+    val organizer = tabletRig.nas.organizer
+    val result = OperationsCleanupNas(organizer.operations, organizer.clocks::monotonicMs).trashReporting(listOf(copy), TestTaps.single())
+
+    assertThat(result.outcome).isEqualTo(NasTrashOutcome.REJECTED)
+    assertThat(result.started).isEqualTo(0)
+    assertThat(result.protectedLeftOut).hasSize(1)
+    assertThat(backend.exists(TestNas.COMMON, path)).isTrue()
+    assertThat(organizer.operations.operations.value).isEmpty()
   }
 
   private suspend fun locationOf(rig: BackupRig, account: String, path: String): Long {

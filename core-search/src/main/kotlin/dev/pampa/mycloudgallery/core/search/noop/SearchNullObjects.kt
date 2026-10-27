@@ -32,6 +32,9 @@ object NoSearchEngine : SearchEngine {
   override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults =
     SearchResults(emptyList(), empty, empty, SearchCoverage.Complete, emptyList(), order)
 
+  override suspend fun similarToAll(media: List<MediaId>, order: ResultOrder): SearchResults =
+    SearchResults(emptyList(), empty, empty, SearchCoverage.Complete, emptyList(), order)
+
   override val coverage: StateFlow<SearchCoverage> = MutableStateFlow(SearchCoverage.Complete)
 
   override val readiness: StateFlow<SearchReadiness> = MutableStateFlow(SearchReadiness.FiltersAndTextOnly(modelMissing = true))

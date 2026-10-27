@@ -75,8 +75,8 @@ class SearchViewerSimilarTest {
 
     similar.findSimilar(a)
 
-    assertThat(requests.pending.value).isEqualTo(a)
-    assertThat(requests.consume()).isEqualTo(a)
+    assertThat(requests.pending.value).isEqualTo(listOf(a))
+    assertThat(requests.consume()).isEqualTo(listOf(a))
     assertThat(requests.pending.value).isNull()
   }
 }

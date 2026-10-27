@@ -384,6 +384,16 @@ class AlbumsGraph internal constructor(
 
   private suspend fun resume(live: AlbumsLive, budget: Duration): ShareRunResult = live.shared.orchestrator.resumeAll(budget)
 
+  /**
+   * Un album e' appena stato chiuso da me ("Smetti di condividere", "Elimina album"; correzioni F, L231): il giro della condivisione parte subito e ferma cio' che
+   * non era ancora partito (l'orchestratore lo fa a ogni ripresa: se il processo muore adesso lo fa il lavoro in coda).
+   */
+  fun albumClosed() {
+    val live = mount.current ?: return
+    live.scope.launch { guarded { resume(live, START_BUDGET) } }
+    shareWork()
+  }
+
   /** Una condivisione e' appena partita (dal foglio): il primo passo subito, nel processo (la conferma vive solo in memoria, L73). */
   fun shareStarted() {
     val live = mount.current ?: return

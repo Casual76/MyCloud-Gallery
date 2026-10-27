@@ -83,7 +83,7 @@ class SearchController(
   private sealed interface Last {
     data class Query(val text: String, val edited: List<SearchChip>?) : Last
 
-    data class Similar(val media: MediaId) : Last
+    data class Similar(val media: List<MediaId>) : Last
   }
 
   private var last: Last? = null
@@ -272,8 +272,15 @@ class SearchController(
     publish(current)
   }
 
-  /** "Trova simili" dal viewer o dalla selezione (D30): i simili al media, con il chip "Simili a". */
-  fun findSimilar(media: MediaId) {
+  /** "Trova simili" dal viewer (D30): i simili al media, con il chip "Simili a". */
+  fun findSimilar(media: MediaId) = findSimilar(listOf(media))
+
+  /**
+   * "Trova simili" dalla selezione della Libreria (D30, correzioni F, TS-4): i media vicini al centroide dei media scelti, con il chip "Simili a" che porta
+   * tutta la scelta. Con un media solo e' [findSimilar] di sempre.
+   */
+  fun findSimilar(media: List<MediaId>) {
+    if (media.isEmpty()) return
     mutableQuery.value = ""
     recordNext = false
     launch(Last.Similar(media))
@@ -322,7 +329,7 @@ class SearchController(
         val order = orderOverride ?: orderStore.order.value
         when (request) {
           is Last.Query -> engine.search(SearchRequest(request.text, request.edited, showLikely = false, order = order))
-          is Last.Similar -> engine.similar(request.media, order)
+          is Last.Similar -> if (request.media.size == 1) engine.similar(request.media.first(), order) else engine.similarToAll(request.media, order)
         }
       } catch (e: CancellationException) {
         // Annullata davvero (una ricerca nuova, la schermata chiusa): si esce. Una cancellazione che arriva dal motore mentre noi siamo vivi non e'

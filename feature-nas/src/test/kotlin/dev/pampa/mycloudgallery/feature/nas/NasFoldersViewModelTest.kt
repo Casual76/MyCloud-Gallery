@@ -598,6 +598,8 @@ class NasFoldersViewModelTest {
     settle()
     vm.toggle(SharePath.of("nota.txt"))
     vm.openRename()
+    // R3 (correzioni F): prima di aprire il foglio si controlla che il file non sia di un album condiviso (un piano, una frazione di secondo).
+    settle()
     val draft = checkNotNull(vm.state.value.name)
     assertThat(draft.purpose).isEqualTo(NamePurpose.RENAME)
     assertThat(draft.text).isEqualTo("nota.txt")

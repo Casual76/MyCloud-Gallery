@@ -7765,7 +7765,7 @@ Tutti «Public domain» con «Copyrighted: False» nei metadati di Commons (ripr
 
 Il pacchetto P2 della Fase 8 (`docs/fase8-progetto.md` §2.2 "Nel telefono", §2.12 "Prestazioni da misurare", D6, D10, D17, D19, §5.2, §5.4; riga P2 del §4.4): YuNet e SFace su LiteRT 2.3.0 nell'app, con la
 decodifica delle uscite e l'NMS, i tasselli della seconda passata, l'allineamento, la qualità, `ModelInputs.forFaces` e `DeviceMeasures.facesPerSecond`. Branch `fase8/p2`, da `integra/28-10e` (`5a0d4ec`, con P0, P1 e P5).
-Commit: `7aa19184` (motori), `a7694170` (`facesPerSecond` e suite di contratto), `10a85547` (prove JVM), `cb5c05d4` (test strumentati, scritti e non eseguiti), `75f1524a` (aperture provabili e regola R8) e quello dei documenti. **Niente è stato provato sul
+Commit: `7aa19184` (motori), `a7694170` (`facesPerSecond` e suite di contratto), `10a85547` (prove JVM), `cb5c05d4` (test strumentati, scritti e non eseguiti), `75f1524a` (aperture provabili e regola R8), `cca5a3a6` (documenti) e `df8dbf91` (esito di `check.ps1`, correzioni ai test strumentati). **Niente è stato provato sul
 telefono né sull'emulatore** (nessun `adb`, nessun dispositivo): i test strumentati compilano (`:core-ai:compileDebugAndroidTestKotlin`) e li lancia la finestra F104; i numeri del dispositivo sono da riempire sul campo.
 
 ### Cosa c'è (`core-ai/.../faces/`, tutto `internal` salvo i motori e le due regole)
@@ -7877,7 +7877,8 @@ Scritti in `core-ai/src/androidTest/kotlin/dev/pampa/mycloudgallery/core/ai/face
 | `FaceMeasurementsDeviceTest` | 8 | solo l'ultima (verifica, avvio, YuNet, tasselli, SFace, allineamento, `forFaces`, foto al secondo) |
 
 ### `tools\check.ps1 -NoDaemon`
-**Verde, «OK: tutto a posto»** (28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `appuild\outputspkelease` cancellata prima, posto del semaforo `f8-p2`): `assembleDebug assembleRelease galleryTest galleryLint` in 40 minuti (PC condiviso); test eseguiti in 38 moduli, nessuno a zero e nessuno fallito
+**Verde, «OK: tutto a posto»** (28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `appuild\outputspk
+elease` cancellata prima, posto del semaforo `f8-p2`): `assembleDebug assembleRelease galleryTest galleryLint` in 40 minuti (PC condiviso); test eseguiti in 38 moduli, nessuno a zero e nessuno fallito
 (`core-ai` 337, `core-rules` 355, `core-models` 294, `core-faces` 89, `feature-people` 7, `app` 828); passo «LiteRT solo in core-ai nel bytecode della release (volti solo da `FaceLiteRtSessions`)»: **60 chiamate nostre a LiteRT, tutte da `core-ai`** e, fra i volti, solo da `FaceLiteRtSessions` e dalle sue classi interne (con le due righe `-keep` di
 `consumer-rules.pro` le sessioni stanno nel dex di release anche prima che `:app` monti i motori e il passo le vede già; con il solo ritaglio erano 24); passo D39 dei modelli nell'APK verde; APK di release 88.417.449 B (+16.420 B sugli 88.401.029 B di P1: le classi delle sessioni e quel che toccano). Solo SKIP il banco su dispositivo (`-Bench`).
 Prima del giro finale, `:core-ai:lintDebug` e `:core-rules:lintDebug` e le prove di architettura (`*ArchitectureTest` di `core-common`) erano già verdi. I test strumentati compilano (`:core-ai:compileDebugAndroidTestKotlin`).

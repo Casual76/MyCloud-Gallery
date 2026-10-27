@@ -69,6 +69,10 @@ object CollectionsSectionSamples {
   /**
    * Persone (Fase 8): finche' il riconoscimento dei volti e' spento la sezione ha la sola riga che lo propone; acceso, le persone.
    * Una sezione consegnata come dato non ha bisogno di niente di piu': e' una riga che `:app` sa aprire.
+   *
+   * Il testo della riga "Attiva" (P9): i dati dei volti **viaggiano fra i dispositivi dell'account** (nomi, unioni e divisioni arrivano
+   * sul tablet), restano nell'area privata e si cancellano con "Disattiva e cancella": non sono "solo su questo telefono". Lo stesso testo
+   * della sezione vera (`feature-people`, `PeopleSectionSources`).
    */
   fun people(recognitionOn: Boolean = false): FixedCollectionsSection = FixedCollectionsSection(
     CollectionSections.PEOPLE,
@@ -79,7 +83,7 @@ object CollectionsSectionSamples {
       } else {
         listOf(
           CollectionEntry(
-            "people/enable", "Attiva riconoscimento dei volti", "Raggruppa le foto per persona, solo su questo telefono",
+            "people/enable", "Attiva riconoscimento dei volti", "Raggruppa le foto per persona. I nomi viaggiano fra i tuoi dispositivi e restano tuoi.",
             Icons.Rounded.Face, FluidTone.Primary,
           ),
         )

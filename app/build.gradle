@@ -289,6 +289,9 @@ dependencies {
   testImplementation project(':core-albums')
   // Fase 7 (P10): le sonde dei Nascosti (HiddenSurfaces) fanno girare i controllori veri delle schermate degli album sullo stack vero. Solo test: la dipendenza di produzione la lega P13.
   testImplementation project(':feature-albums')
+  // Fase 8 (P9): il registro dei Nascosti prova le persone vere (core-faces) e le loro schermate (feature-people) sul catalogo vero. Solo test: in produzione le lega P13.
+  testImplementation project(':core-faces')
+  testImplementation project(':feature-people')
   testImplementation appDeps.workTesting
   // Screenshot dello scaffold (docs/screenshots/2-P0/) e test Compose su JVM.
   testImplementation appDeps.robolectric

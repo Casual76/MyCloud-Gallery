@@ -7851,3 +7851,176 @@ niente di P6: lo fa P13); D34 nel dex e in mapping.txt; LiteRT nel bytecode: 24 
 - **Memoria dei vettori** (`GroupFaceCache`): ~0,55 KB a volto; il tetto e' 120.000 volti (~65 MB). Se P5 li tiene gia' per conto suo si puo' abbassare o togliere la memoria qui.
 - **Eccezioni dell'archivio**: un database pieno o un errore di disco a meta' di `saveBody` esce come eccezione di SQLite (non e' un caso previsto dal contratto): P4 la deve prendere come un errore del media.
 - **Integrazione**: in `docs/sicurezza.md` qui L110-L114 seguono L103 e C45-C48 seguono C41; all'integrazione con gli altri pacchetti si tengono tutte in ordine di numero (come per P0).
+
+## Fase 8 P9: persone, gestione e schermate (27/10)
+
+Il pacchetto che dà alle persone la loro vita di ogni giorno: le **azioni** del §2.6 (nome, unisci, dividi, "È", "Non è", ignora, nascondi, dimentica, copertina), le **schermate** (sezione delle Raccolte,
+"Tutte le persone", "Altri volti", pagina di una persona, "Controlla le foto" e "Dividi", "Persone nascoste"), la **riga "Persone"** nelle info del viewer, e la **prova che un nascosto non esce mai**
+(riga `PEOPLE` del registro `HiddenSurfaces`). Tutto sul contratto `People` di P0 e sull'archivio di P6; niente rete, niente NAS vero, nessun volto vero (ritagli e foto dei test sono sagome e gradienti).
+I volti dei test sono sintetici (`GroupingStories`: vettori senza immagini).
+
+### Cosa c'è, dove
+
+| Dove | Cosa |
+|---|---|
+| `core-faces/.../people/` | `ArchivePeople` (`People` + `PeopleIndex` + `HiddenPeople` + `MediaFaces` + `PersonFaces` + `FaceCropGate`), `PeopleCore` (lettura dell'archivio, una passata per le celle mostrabili), `PeopleLens` (alias, correzioni, volti), `PeopleVisibility` (**l'unico punto** che nomina `VisibleMedia` e `HiddenMask`), `PeopleEditor` (le azioni), `PeopleLikely` (il livello "forse" per la ricerca), `FacesCatalogCells` (le celle sopra `FacesCatalog`) |
+| `core-faces/.../contract/PeopleExtras.kt`, `noop/PeopleExtrasNullObjects.kt` | le aggiunte ai contratti (sotto "Modifiche ai contratti"): `PeopleVariant`, `HiddenPeople`, `FaceCropGate`, `MediaFaces`, `PersonFaces`, `FaceTokens`, `PeopleArchiveSource`, `PeopleCells` |
+| `feature-people/.../{list,page,review,hidden,sheets,section,crops,nav,ui}` | controllori (senza Compose), schermate, rotte (un grafo da agganciare), la sezione delle Raccolte come dato, i ritagli (`GuardedPeopleCrops`), le misure (`PeopleDimens`, l'unico file con dei `dp`) |
+| `feature-viewer/.../info/People*.kt` | la riga "Persone" (`rememberPeoplePanel`), i chip, i fogli "Chi è?", il menu del volto e la conferma di "Ignora questo volto". `ViewerOverlay.kt`: dieci righe (vedi "Punti aperti") |
+| `feature-library/.../CollectionsSectionSamples.kt` | solo il testo della riga "Attiva riconoscimento dei volti" (non dice più "solo su questo telefono") |
+| `app/src/test/.../hidden/` | `SpecRow.PEOPLE`, cinque superfici con le loro sonde (`RealPeopleStack`, `RealPeopleProbes`), la prova al contrario (`HiddenPeopleMutationTest`) |
+
+### Decisioni
+
+1. **Un solo punto per i nascosti** (D28, §2.9): ogni conteggio, copertina, pagina, proposta, chip del viewer e voce del dizionario passa da `PeopleVisibility.shown`: i candidati → `VisibleMedia.visible`
+   → `HiddenMask.hiddenAmong` (il filtro finale è l'**ultimo** passo, D22) → **solo celle presenti nell'istantanea della Libreria**. Senza istantanea, o con una fonte che dà errore, non si mostra niente
+   (fallisce chiuso). I volti dei media nascosti si calcolano e si raggruppano (F6-Q6): qui si decide che non si mostrano. Una persona con soli media nascosti non compare da nessuna parte (E-F38); una con un nome
+   compare con almeno una foto mostrabile, una senza nome con almeno tre (Q2 b).
+2. **Le celle, non i membri**: una persona compare nella cella che contiene il suo volto; per un membro di una raffica o di una coppia di copie simili la cella è la copertina del gruppo (D26). La convenzione
+   è quella di `FacesCatalog.mediaWith` e `cellKeys` (che `:app` lega comunque): nessuna query nuova sul catalogo. Un media eliminato o sparito esce dai conteggi e rientra con la stessa chiave (E-F39).
+3. **Q2 è un'opzione** (`PeopleVariant`): **(b) predefinita** (in primo piano solo chi ha un nome, gli altri gruppi con almeno 3 foto mostrabili in "Altri volti", a un tocco), **(a)** dietro l'opzione
+   (tutti in "Persone", prima quelli con un nome; "Altri volti" è vuoto). Le due varianti cambiano solo come si dividono i gruppi senza nome: nessun gruppo sparisce. P13 lega l'opzione a una scelta salvata.
+4. **Le azioni vivono in un solo editor** (`PeopleEditor`), una per volta sotto un lucchetto: leggono lo stato, decidono le voci, le scrivono con **una** `addPeople` (una transazione), poi si rifanno le viste
+   **subito** e la voce si accoda alla pubblicazione. Senza l'ora del NAS la voce resta "da datare" e vale lo stesso (E-F5); le ore date da questo dispositivo sono **strettamente crescenti** (una lapide alla
+   pari perderebbe contro il valore che toglie). Se l'accodamento fallisce l'azione è fatta lo stesso (si logga solo il nome della classe dell'errore, D37).
+   - **"Non è" su un volto confermato** scrive anche la lapide di `is`; **"Ignora"** idem; **"È"** su un volto escluso o ignorato scrive la lapide di `not` o `ignore` (avvertenza di P5).
+   - **"Unisci"** scrive un alias per ogni persona che sparisce, più `apart(false)` per le coppie che erano state separate; con **due nomi** serve dire quale tenere (`NeedsNameChoice`); la persona che resta
+     è quella con il nome, o la più fotografata. Il ciclo di due unioni contrarie da due dispositivi si risolve con l'id minore, uguale ovunque (E-F23).
+   - **"Dividi"** nasce subito (`born`, `is` per ogni volto, `apart` con la prima); non si possono scegliere tutti i volti né quelli di un'altra persona; la persona nuova, con meno di tre foto, si apre
+     dalla pagina (non è in nessun elenco).
+   - **"Dimentica"** scrive `forget` e la lapide del nome; i volti restano calcolati e **ignorati** nell'archivio cifrato (L134), senza nessuna impronta per riconoscere la persona (E-F27).
+   - **Nascondi** scrive `hidden`; la persona sparisce da Persone, dai suggerimenti e dal dizionario, ma ha ancora la sua pagina e la sua riga in "Persone nascoste" (E-F28).
+   - **La copertina** è un volto della persona **e** di un media mostrabile; "Usa quella automatica" scrive la lapide.
+5. **Copertine e ritagli** (D25, D28): `PeopleCrops` taglia al momento dall'immagine che c'è già sul dispositivo; `GuardedPeopleCrops` chiede il **cancello** (`FaceCropGate`, che passa da `PeopleVisibility`)
+   **prima di ogni ritaglio, anche se l'immagine è in cache**: un media nascosto un attimo fa non dà una copertina, e il suo ritaglio in memoria si toglie. La cache è **solo in memoria** (LRU da 8 MB,
+   `ByteLru`): nessun file, nessun database, nessuna preferenza (`NoDiskSourcesTest`). `clear()` la svuota (P13 lo chiama a Persone spenta, alla cancellazione e a `onTrimMemory`).
+6. **La sezione Persone delle Raccolte è un dato** consegnato nella forma di `CollectionEntryGroup` (`PeopleSectionSources`, come `AlbumsSectionSources`): i `feature-*` non si conoscono, quindi `:app` (P13) lo
+   trasforma con `toGroup()` e lo registra con un `CollectionsSectionProvider` (codice `people`). **Spenta**, la sezione c'è lo stesso con la riga "Attiva riconoscimento dei volti"; gli altri stati sono una
+   riga sola (avviso da vedere, esclusa, primo calcolo con la percentuale, "Aggiorna l'app", "Cancellazione in corso", "Modelli non disponibili") o fino a otto persone con "Tutte le persone" e "Altri volti (N)"
+   (con la nota "Solo su questo dispositivo" sotto la recinzione, D34). I codici delle voci sono stabili e non portano mai un nome (`people/person/<id>`): `PeopleEntryTarget.parse` li riconosce.
+7. **Una proposta fra due nomi si può rifiutare**: "È la stessa persona?" fra due persone con un nome apre prima la scelta del nome da tenere, e il foglio ha anche "No, sono diverse" (`PickName.proposal`).
+   Senza, la coppia con due nomi non si poteva separare per sempre.
+8. **La riga "Persone" del viewer** (D24, D25): un chip per volto (il volto rotondo ritagliato al momento, **sotto** il nome o "Chi è?"), "N volti non riconoscibili", un tocco apre la pagina (o "Chi è?"), la
+   pressione lunga e le azioni di TalkBack aprono il menu ("Chi è?", "Non è …", "Apri la pagina", "Ignora questo volto", con la conferma). Dai Nascosti la riga c'è (il media è aperto) ma non porta mai a una pagina
+   che mostra altri nascosti (F99). Il viewer non vede core-faces: `ViewerPeople` è la sua porta, il volto è un riferimento opaco (`FaceTokens`).
+9. **Accessibilità**: ogni tessera è un controllo solo ("Marco, 120 foto", "Persona senza nome, 12 foto"; in selezione scelta/non scelta); le azioni di TalkBack sostituiscono la pressione lunga ("Seleziona", "Non è
+   Anna", "Mostra di nuovo"); bersagli da 48 dp almeno e bottoni da 50; il testo a 1,3x non sovrappone nulla (verificato scena per scena). La scelta è un anello e una spunta **accanto** al nome, mai un pallino
+   sul volto; nessun testo sopra le foto.
+
+### Prove (per edge case; i nomi sono quelli dei metodi)
+
+**core-faces, banco di P9** (archivio vero con le chiavi finte di P0, Libreria finta, `PeopleWorld`; 49 test): `ArchivePeopleContractTest` (la suite `PeopleContract` di P0 sulle persone vere, 9),
+`PeopleActionsTest` (12), `PeopleVisibilityTest` (9), `PeopleLifecycleTest` (6), `PeopleIndexTest` (4), `PeopleTwoDevicesTest` (6), `PeopleVariantTest` (3).
+
+| ID | Dove e cosa |
+|---|---|
+| **E-F5** (nomi, unioni e divisioni convergono fra due dispositivi) | `PeopleTwoDevicesTest`: `unNomeSuUnDispositivoArrivaSulAltro`, `dueUnioniContrarieFannoUnCicloConLaStessaRadiceOvunque`, `unaDivisioneArrivaConLoStessoId`, `unaSceltaFattaFuoriCasaValeSubitoEPoiArriva`, `storieACasoConvergono` (6 storie a caso di 40 azioni ciascuna su due dispositivi: nome, nascondi, unisci, dividi, "È", "Non è", ignora, persona nuova, dimentica, copertina, con scambi a metà; dopo lo scambio le due viste e le voci sono uguali) |
+| **E-F22** (due nomi quasi insieme: vince l'ultima per ora del NAS) | `dueNomiQuasiInsiemeVinceLUltimaPerOraDelNas` (due dispositivi fuori casa che pubblicano a ore diverse, in entrambi gli ordini); `unaVoceDaDatareVaSubitoEUnaVoceNuovaSostituisceLaVecchiaDellaStessaChiave` (avvertenza di P6) |
+| **E-F23** (unisci con due nomi: si sceglie quale tenere) | `unisciTogliIlSeparatiETieneIlNome`, `rispondereSiAUnaPropostaConDueNomiChiedeQualeTenere`; controllori: `unisciConDueNomiSceglieQualeTenere`, `conPiuDiDueNomiSiUniscePiuAllaVolta`, `unaPropostaFraDueNomi_sipuoRifiutareAncheDalFoglioDeiNomi`, `unisciConUnaAltraPersona` |
+| **E-F20** (Dividi) | `dividiLaPersonaNuovaHaPaginaMaNonCompareSottoTreFoto`, `unaDivisioneArrivaConLoStessoId`; `FaceReviewControllerTest.dividi_nonTuttiEMaiNessuno`, `unaDivisioneCheNonRiesce_laGrigliaTornaConIlMessaggio` |
+| **E-F21** ("È"/"Non è" permanenti) | `nonEsuUnVoltoConfermatoScriveAncheLaLapideDiIs` (avvertenza di P5), `eDopoNonEToglieLEsclusione`; `nonEQuestaPersona_leVociSonoUnaPerVolto`, `nonEQuestaPersona_suUnVoltoSolo_comeFaTalkBack` |
+| **E-F3** (ignora poster, TV, statue) | `ignoraUnVoltoConfermatoTogliAncheLaConferma`, `unVoltoNonRiconoscibileONonEsistenteNonSiCorregge`; `ignoraIVoltiScelti` |
+| **E-F27** (Dimentica) | `dimenticaTogliLePersoneEIVolti`; `PersonPageControllerTest.dimenticaChiedeLaConferma`, `laPersonaDimenticataAltrove_laPaginaSiChiude`; `OthersControllerTest.dimenticareUnGruppoChiedeLaConferma` |
+| **E-F28** (Nascondi, "Persone nascoste") | `unaPersonaNascostaNonCompareInPersoneNeNellaRigaMaSiRitrova`; `PersonPageControllerTest.nascondiEMostraDiNuovo`; `HiddenPeopleControllerTest` (4) |
+| **E-F38** (un nascosto con volti: calcolato, mai mostrato) | `unaPersonaConSoliMediaNascostiNonCompareDaNessunaParte`, `unNascostoDellUltimoMomentoNonEsce`, `ilFiltroFinaleEUltimoAncheSeLaFonteEdLIstantaneaDiconoSi`, `senzaIstantaneaDellaLibreriaNonSiMostraNiente`, `dalMediaNascostoLaRigaCeMaLePagineNo`; `HiddenSurfacesPropertyTest` (cinque sonde), `HiddenPeopleMutationTest` |
+| **E-F39** (media sparito: esce dai conteggi, torna con la stessa chiave) | `unMediaCheSparisceEscoDaiConteggiEQuandoTornaRientra` |
+| **Q2** (a) e (b) | `lOpzioneDiQ2CambiaLaVistaSenzaTogliereNessunGruppo`, `PeopleVariantTest`; `q2b_inPrimoPianoSoloChiHaUnNome_glialtriInAltriVolti`, `q2a_tuttiInPersone`, `OthersControllerTest.conQ2a_laListaEVuota`; la sonda `people-lists` prova entrambe sul catalogo vero |
+| Persone non attiva qui, archivio che si chiude o cambia generazione | `personeNonAttivaQuiNienteDaMostrareEOgniAzioneNonAttiva` (corretto in questo pacchetto: le azioni non guardavano la disponibilità), `unArchivioCheSiChiudeNonFaCrollare`, `laGenerazioneCambiaAMeta`; `lAzioneFinisceAncheSeLaPubblicazioneNonRiesce` |
+| Dizionario e indice | `PeopleIndexTest`: solo nomi visibili e non nascosti, "una qualunque" e "tutte" ai livelli sicuro e "forse", alias e dimenticate |
+
+**feature-people** (JVM con Robolectric; i controllori sul riferimento `InMemoryPeople`, le schermate con ritagli e foto sintetici): `PeopleListControllerTest` (10), `OthersControllerTest` (7),
+`PersonPageControllerTest` (9), `FaceReviewControllerTest` (10), `HiddenPeopleControllerTest` (4), `PeopleSectionStatesTest` (10, ogni stato e il tetto di 8), `PeopleSectionsTest` (9) e
+`PeopleSectionBindingTest` (4: la sezione passa nel `CollectionEntryGroup` e nel `CollectionsSectionProvider` veri di feature-library, solo nei test), `GuardedPeopleCropsTest` (9: cancello, cache da 8 MB,
+ritaglio nascosto un attimo fa), `NoDiskSourcesTest` (5), `NoHandWrittenStyleTest` (10: nessun colore, raggio, testo, movimento o `dp` fuori da `PeopleDimens`, nessun log, nessun dato nei messaggi),
+`PeopleListScreensTest` (27) e `PersonPageScreensTest` (26: ogni stato si compone e dice le cose giuste, i tocchi arrivano ai gestori, bersagli da 48 dp e nessuna sovrapposizione a testo normale e a 1,3x scena per
+scena, frasi e azioni personalizzate di TalkBack), `PeopleRoutesTest` (16: dal gesto alla voce passando per ViewModel e controllore, uscite verso `:app`) e due screenshot (`PeoplePhoneScreenshotTest`,
+`PeopleTabletScreenshotTest`: 56 scene ognuna, chiaro e scuro).
+**feature-viewer**: `ViewerPeopleInfoTest` (31) e `ViewerPeopleInfoTabletTest` (2): chip, volti non riconoscibili, "Chi è?", menu, conferma di "Ignora", avvisi, TalkBack, 48 dp, 1,3x, screenshot.
+**app** (il registro dei Nascosti): `HiddenSurfacesPropertyTest` (cinque superfici nuove sui 40 mondi casuali e sui casi estremi), `HiddenSurfacesRegistryTest` (`PeopleVisibility.kt` è fra i file che nominano i contratti),
+`HiddenPeopleMutationTest` (3).
+
+### Le superfici nel registro dei Nascosti (riga `PEOPLE`, sonde sul catalogo vero e sulle persone vere)
+
+`RealPeopleStack` costruisce, sopra il mondo casuale di `HiddenWorldBuilder` (nascosti, membri di gruppi con un nascosto, "ultimi nascosti" dopo l'istantanea, copie nell'area comune), un archivio dei volti sintetici
+(da zero a quattro per media, anche sui nascosti; una persona che vive solo su media da non mostrare; un volto non riconoscibile ogni tanto) con `ArchivePeople` sopra e la visibilità **vera**
+(`CatalogVisibleMedia`, `CatalogHiddenMask`). Tre persone con un nome, una con un nome nascosta, una senza nome nascosta, una dimenticata, due gruppi senza nome. L'oracolo ricava cosa deve comparire dal solo
+spec del mondo (per ogni persona: le celle dei suoi volti sui media mostrabili adesso). Le cinque superfici:
+`people-lists` (la sezione delle Raccolte, "Tutte le persone" in Q2 (b) e Q2 (a), "Altri volti", "Persone nascoste": elenchi esatti, conti per persona, copertine),
+`person-pages` (la pagina di ogni persona: foto esatte, conto, "Forse è anche…" e proposte), `face-review` ("Controlla le foto", "Dividi" e il cancello dei ritagli su **ogni** volto del mondo),
+`viewer-people` (i chip su **ogni** media, anche quelli nascosti che si aprono dai Nascosti; dove portano; "Chi è?") e `people-dictionary` (nomi e conti per la ricerca).
+`HiddenPeopleMutationTest` toglie il filtro (una `VisibleMedia` che lascia passare tutto e una `HiddenMask` che non nasconde niente) e controlla che **ognuna** delle cinque sonde diventi rossa su un mondo con
+"ultimi nascosti"; con il filtro, gli stessi mondi sono verdi; e che con tutto nascosto non compaia niente.
+
+### Screenshot (`docs/screenshots/8-P9/`)
+
+Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), più il testo a 1,3x sul telefono, per ogni stato del §1.5: la sezione delle Raccolte (spenta, avviso da vedere, esclusa, primo calcolo, pronta, solo su
+questo dispositivo, "Aggiorna l'app", "Cancellazione in corso", "Modelli non disponibili"), "Tutte le persone" (pronta, Q2 (a), selezione, vuota, in calcolo), i fogli di unione (due nomi, proposta fra due
+gruppi, proposta fra due nomi), "Altri volti" (pronta, selezione, vuota, "Dimentica", unione), la pagina di una persona (con nome, senza nome, nascosta, dimenticata, non trovata, in caricamento, con un
+messaggio, il menu ⋮) con i fogli del nome (nuovo, non valido, rinomina), di "Dimentica", della copertina, dell'unione (scelta, due nomi, conferma, proposta), "Controlla le foto" e "Dividi" (griglia, selezione,
+fatto, vuota, in corso), "Persone nascoste" (con persone, vuota, in caricamento) e la riga "Persone" del viewer (chip, menu, "Chi è?", "Ignora", avviso). Si rifanno con
+`gradlew :feature-people:recordRoborazziDebug` e `:feature-viewer:recordRoborazziDebug --tests "*ViewerPeopleInfo*"`. I ritagli sono sagome astratte e i nomi inventati.
+
+### Cosa trova pronto P13 (`:app`)
+
+- **Le rotte**: `NavGraphBuilder.peopleGraph(nav, actions, thumbnails, crops)` dentro il `NavHost` (come `albumsGraph`): "Tutte le persone", "Altri volti", la pagina di una persona, "Controlla le foto" e "Dividi",
+  "Persone nascoste". Si aprono con `NavController.openPeople()`, `openOthers()`, `openPerson(id)`, `openReview(id, split)`, `openHiddenPeople()` e, da una voce della sezione, con
+  `PeopleEntryTarget.parse(code)` e `NavController.openPeopleEntry(target, actions)` (attivazione e Impostazioni passano da `PeopleActions.openActivation()` e `openPeopleSettings()`, di P7).
+- **La sezione delle Raccolte**: `PeopleSectionSources(resources, people, state, status, scope)` dà `section: StateFlow<SectionData?>` (la stessa forma di `CollectionEntryGroup`); in `:app` un
+  `CollectionsSectionProvider` con `code = PeopleSectionSources.CODE` ("people", uguale a `CollectionSections.PEOPLE`) e `group = section.map { it?.toGroup() }`: la trasformazione campo per campo sta in
+  `PeopleSectionBindingTest`. Le righe si aprono con `PeopleEntryTarget.parse`.
+- **Le porte** (Dagger opzionali: senza, le schermate partono con i null-object e dicono "Persone non è attiva qui"): un'istanza sola di `ArchivePeople` legata a `People`, `PeopleIndex`, `HiddenPeople`,
+  `PersonFaces`, `MediaFaces` e `FaceCropGate`. Costruttore: `archives` = `PeopleArchiveSource { facesStores.current() }` (l'archivio della generazione corrente, null se Persone non è attiva qui),
+  `cells` = `FacesCatalogCells(facesCatalog)` (**la convenzione di `mediaWith` è che risponde con le celle, la copertina del gruppo per un membro**), `visibility` = `PeopleVisibility(visibleMedia, hiddenMask)`
+  (le stesse fonti degli album), `publisher` = il pubblicatore di P3, `clock`, `author` = l'id del dispositivo, `variant` = la scelta di Q2 salvata (predefinita `PeopleVariant.DEFAULT`), `availability` =
+  `FacesState.activeHere` e `progress` dal calcolo; `triggers` = la sincronizzazione e il custode quando arriva un dato nuovo.
+- **I ritagli**: `GuardedPeopleCrops(source, gate)` con `source` = il taglio dalla migliore immagine già sul dispositivo (l'originale con la decodifica della sola regione, l'HQ della replica, l'anteprima del
+  buffer, la miniatura) e `gate` = `ArchivePeople`; `clear()` quando Persone si spegne, alla cancellazione e a `onTrimMemory`.
+- **Il viewer**: `ViewerPeople` (di P0) legata sopra `MediaFaces`, con `FaceTokens.of/parse` per il riferimento opaco e `FaceCropGate` per il ritaglio; `act`: `Is` → `People.assign(face, Existing)`, `IsNew(nome)` →
+  `assign(face, New(nome))`, `IsNot` → `reject`, `Ignore` → `ignore`; `openPerson` → `openPerson`. `ViewerFaceRef` accetta al più 128 caratteri: un dato ostile che non rispetta il limite va scartato prima.
+- **Azioni** (`PeopleActions`): `openViewer(view, start)`, `createSmartAlbum(person, title)` (apre l'editor degli album di `feature-albums` con la regola "Persone" e il nome come titolo) e `openHiddenPeople()`
+  (la riga "Persone nascoste" di Impostazioni → Persone, di P7, ci porta). `app/build.gradle`: `testImplementation project(':core-faces')` e `project(':feature-people')` (solo test, per il registro dei Nascosti).
+
+### Modifiche ai contratti
+
+Nessun contratto di P0 cambia in modo incompatibile. **Aggiunte**: `core-faces/contract/PeopleExtras.kt` (`PeopleVariant`, `HiddenPeople`, `FaceCropGate`, `MediaFaces`, `PersonFace`, `PersonFaces`, `FaceTokens`,
+`PeopleArchiveSource`, `PeopleCells`) e `noop/PeopleExtrasNullObjects.kt`; `PersonAction.SMART_ALBUM`, `PeopleActions.openHiddenPeople()` e `createSmartAlbum()` (con un default che non fa niente) e
+`MergeSheetState.PickName.proposal` (default null) in `feature-people/contract/PeopleScreens.kt`; i tipi in più delle schermate in `PeopleFlows.kt` e `PeopleScreenPorts.kt`.
+
+### Cosa provare sul telefono
+
+- **F99** (S25): da spenta, la sezione Persone delle Raccolte con la riga "Attiva riconoscimento dei volti"; con Persone attiva, "Tutte le persone" e "Altri volti"; dare un nome a un gruppo, unirne due, dividere,
+  nascondere e dimenticare; "Controlla le foto" con "Non è …" e "Ignora questo volto". La riga "Persone" nelle info di una foto: chip, "Chi è?", pressione lunga, TalkBack (frasi e azioni). **Aprire un media
+  nascosto dai Nascosti**: la riga c'è, e un tocco su un chip porta a una pagina che non mostra nessun altro nascosto; un media nascosto non dà mai una copertina.
+- **F96** (due dispositivi): un nome, un'unione, una divisione fatti su uno arrivano sull'altro dopo la pubblicazione; fuori casa valgono subito sul dispositivo che li ha fatti e arrivano con l'ora del NAS.
+- Con TalkBack e con il testo grande (1,3x e oltre): ogni tessera si legge come "Marco, 120 foto", la selezione si fa con "Seleziona" senza pressione lunga, nessun controllo si sovrappone.
+
+### Punti aperti
+
+- **Scelte grafiche da far vedere all'utente** (PNG in `docs/screenshots/8-P9/`): (1) la **sezione delle Raccolte** è fatta di righe con un'icona, non di una striscia di volti come in Foto, perché `CollectionEntry`
+  non ha un posto per un'immagine; una striscia chiederebbe un cambio in `feature-library`; (2) sulla **pagina di una persona** il nome sta solo nel titolo grande (che scorre via), sotto il volto rotondo e due bottoni
+  ("Rinomina", "Controlla le foto"), il resto nel menu ⋮; (3) la **selezione** è un anello e una spunta accanto al nome, mai un pallino sul volto, e le azioni stanno nella barra (icone da 48 dp) e, nelle griglie dei
+  volti, anche come bottoni con il testo; (4) i **chip del viewer** hanno il nome sotto il volto, o "Chi è?" in colore d'accento; nessun riquadro sulla foto; (5) sul **tablet** le griglie di volti hanno la stessa
+  misura del telefono e lasciano spazio a destra: un adattamento (più colonne, due pannelli) è del filone grafico; (6) la riga di una **proposta** mostra i due volti a destra, prima della freccia.
+- **`ViewerOverlay.kt`** è toccato fuori da `info/` (10 righe: la riga "Persone" si monta accanto a quella delle copie, e il suo foglio accanto agli altri fogli) e `InfoPanel.kt` ha una sezione con contenuto proprio.
+- **Il riferimento `InMemoryPeople`** (P0) dà per una persona con soli media nascosti una pagina con 0 foto, mentre le persone vere dicono "non c'è" (D28): non è del mio perimetro, ma la suite di contratto non lo vede.
+- **Se l'accodamento alla pubblicazione fallisce** la voce è nell'archivio "da datare" e vale qui, ma non è nell'outbox: la riprende una ripresa della pubblicazione (`FlushReason.RESUME`, come dice il codice di
+  P6): P3 deve confermarlo.
+- **L'opzione di Q2** è una porta (`PeopleVariant`): in P9 nessuna schermata la cambia; P7 o P13 la espongono (per esempio in Impostazioni → Persone).
+- **Dopo "Controlla le foto"** la rotta torna alla pagina senza mostrare "Fatto" (la pagina si aggiorna da sé); lo stato `Done` c'è e si compone, ma resta un lampo.
+- **Violazione dello slot**: un comando `gradlew help` (9 secondi) è girato una volta senza il posto del semaforo, perché avevo ucciso io il mio processo che aspettava il posto; non ha toccato i file di altri e non si può ripetere
+  (il mio script di lancio ora si ferma se il posto non c'è).
+
+### Trovato dalla verifica (corretto)
+
+`tools\check.ps1` ha trovato un difetto vero di `ArchivePeople`: il primo `refresh` parte da solo nel blocco `init`, su `scope` (un altro thread), e usava `byPhotos`, una proprietà dichiarata **dopo** `init`;
+in una corsa rara il giro finiva in `NullPointerException` e l'eccezione, non presa, compariva come `UncaughtExceptionsBeforeTest` in un altro test dello stesso processo (`P9FlowsPhoneScreenshotTest`, in `:app`).
+Ora la proprietà è prima di `init`; `costruireLePersoneNonLasciaEccezioniNelPrimoGiro` (coroutina che parte subito nel thread del costruttore e archivio che non sospende) è rossa con l'ordine di prima e verde adesso.
+Il lint ha preso cinque `ViewModelConstructorInComposable` nei test delle rotte (i ViewModel si costruiscono fuori dal composable, come negli album). Una prima corsa è fallita per disco pieno (meno di 5 GB liberi sul PC):
+rifatta quando lo spazio è tornato.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+
+**Verde** ("OK: tutto a posto", 27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, sul commit `cfb12d56`, dopo aver tolto `appuild\outputspkelease`): assembleDebug, assembleRelease, galleryTest e galleryLint; test eseguiti in ogni modulo
+(`core-faces` 182, `feature-people` 387, `feature-viewer` 874, `feature-library` 921, `app` 831, `core-common` 130; nessuno a zero, nessuno fallito); nessuna classe `testing` nel dex di release; D34 nel dex e in
+mapping.txt; LiteRT solo in `core-ai`. Solo SKIP il banco su dispositivo (-Bench). Le corse prima di questa: una fallita per disco pieno (sopra), una per il difetto di `ArchivePeople` trovato dal test di `:app` (sopra), una per
+il lint dei test delle rotte; l'ultima rifà solo i moduli cambiati, perché la precedente aveva già eseguito tutti i test con lo stesso codice di produzione.

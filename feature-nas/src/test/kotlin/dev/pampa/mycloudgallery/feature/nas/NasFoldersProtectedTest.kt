@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.feature.nas.confirm.confirmFacts
 import dev.pampa.mycloudgallery.feature.nas.folders.FolderWhere
 import dev.pampa.mycloudgallery.feature.nas.folders.FoldersMode
 import dev.pampa.mycloudgallery.feature.nas.folders.NasFoldersViewModel
+import dev.pampa.mycloudgallery.feature.nas.ui.CountedText
 import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -86,7 +87,7 @@ class NasFoldersProtectedTest {
     val notice = checkNotNull(vm.state.value.notice)
     assertThat(notice.text).isEqualTo(R.string.nas_reject_shared_album_item)
     assertThat(notice.tone).isEqualTo(NasTone.Alarm)
-    assertThat(notice.count).isNull()
+    assertThat(notice.counted).isNull()
     assertThat(kit.exists("test-comune", "Album condivisi/Guardano/album-1.jpg")).isTrue()
     assertThat(kit.exists("test-comune", "Album condivisi/Guardano/album-2.jpg")).isTrue()
   }
@@ -112,8 +113,7 @@ class NasFoldersProtectedTest {
     settle()
 
     val notice = checkNotNull(vm.state.value.notice)
-    assertThat(notice.text).isEqualTo(R.plurals.nas_started_partly_protected)
-    assertThat(notice.count).isEqualTo(2)
+    assertThat(notice.counted).isEqualTo(CountedText(R.plurals.nas_started_partly_protected, 2))
     assertThat(notice.opensOperations).isTrue()
     assertThat(notice.tone).isEqualTo(NasTone.Attention)
     assertThat(kit.exists("test-comune", "Album condivisi/Guardano/libera.jpg")).isFalse()
@@ -136,7 +136,7 @@ class NasFoldersProtectedTest {
 
     val notice = checkNotNull(vm.state.value.notice)
     assertThat(notice.text).isEqualTo(R.string.nas_started)
-    assertThat(notice.count).isNull()
+    assertThat(notice.counted).isNull()
     assertThat(notice.tone).isEqualTo(NasTone.Calm)
   }
 
@@ -181,8 +181,7 @@ class NasFoldersProtectedTest {
     vm.confirmed(plan, checkNotNull(ConfirmationSheet(plan).tap(vm.monotonicMs())))
     settle()
 
-    assertThat(vm.state.value.notice?.text).isEqualTo(R.plurals.nas_started_partly_protected)
-    assertThat(vm.state.value.notice?.count).isEqualTo(1)
+    assertThat(vm.state.value.notice?.counted).isEqualTo(CountedText(R.plurals.nas_started_partly_protected, 1))
     assertThat(kit.exists("test-comune", "Famiglia/libera.jpg")).isTrue()
     assertThat(kit.exists("test-comune", "Album condivisi/Guardano/album-1.jpg")).isTrue()
   }

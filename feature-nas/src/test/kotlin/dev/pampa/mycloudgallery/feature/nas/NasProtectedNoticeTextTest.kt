@@ -4,6 +4,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanRejection
+import dev.pampa.mycloudgallery.feature.nas.ui.CountedText
 import dev.pampa.mycloudgallery.feature.nas.ui.NasNoticeLine
 import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
 import dev.pampa.mycloudgallery.feature.nas.ui.UiNotice
@@ -39,7 +40,7 @@ class NasProtectedNoticeTextTest : ComposeNasTest() {
 
   @Test
   fun unaSelezioneMistaDiceQuantiNoEPerche_alSingolare() {
-    val one = UiNotice(R.plurals.nas_started_partly_protected, NasTone.Attention, opensOperations = true, count = 1)
+    val one = UiNotice(R.string.nas_started, NasTone.Attention, opensOperations = true, counted = CountedText(R.plurals.nas_started_partly_protected, 1))
     show { NasNoticeLine(notice = one, onDismiss = {}, onOpenOperations = {}) }
 
     assertShows("singolare", "Operazione avviata, ma 1 elemento no", "fa parte di un album condiviso", "resta dov’è", "Operazioni in corso")
@@ -47,7 +48,7 @@ class NasProtectedNoticeTextTest : ComposeNasTest() {
 
   @Test
   fun unaSelezioneMistaDiceQuantiNoEPerche_alPlurale() {
-    val many = UiNotice(R.plurals.nas_started_partly_protected, NasTone.Attention, opensOperations = true, count = 12)
+    val many = UiNotice(R.string.nas_started, NasTone.Attention, opensOperations = true, counted = CountedText(R.plurals.nas_started_partly_protected, 12))
     show { NasNoticeLine(notice = many, onDismiss = {}, onOpenOperations = {}) }
 
     assertShows("plurale", "Operazione avviata, ma 12 elementi no", "fanno parte di un album condiviso", "restano dove sono", "non puoi eliminarli, spostarli o rinominarli")

@@ -307,7 +307,7 @@ internal fun NasNoticeLine(
   ) {
     Icon(imageVector = glyph, contentDescription = null, tint = style.glyph)
     Text(
-      text = notice.count?.let { count -> pluralStringResource(notice.text, count, GalleryNumbers.format(count)) } ?: stringResource(notice.text),
+      text = notice.counted?.let { pluralStringResource(it.plural, it.count, GalleryNumbers.format(it.count)) } ?: stringResource(notice.text),
       modifier = Modifier.weight(1f).padding(vertical = NasDimens.BlockGap),
       style = MaterialTheme.typography.bodyMedium,
       color = style.text,

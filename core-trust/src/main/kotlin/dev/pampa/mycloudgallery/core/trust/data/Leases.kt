@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.trust.data
 
+import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.Verdict
@@ -17,6 +18,7 @@ import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.NasRead
 import dev.pampa.mycloudgallery.core.trust.nas.PublishResult
+import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceTrust
 import dev.pampa.mycloudgallery.core.trust.registry.RegistryState
 import dev.pampa.mycloudgallery.core.trust.registry.ShareNames
@@ -61,6 +63,42 @@ data class Lease(
     signer,
   )
 }
+
+/**
+ * Dove stanno le prenotazioni (§5.6, §6.2). [Shared] = `leases/` della share (il lavoro delle Fasi 4 e 6); [Faces] = `faces/<G>/leases/`
+ * dell'area privata (Fase 8, A5, D16), sotto la generazione: "Disattiva e cancella" le toglie con la cartella. Le risorse dei volti
+ * (`faces/<G>/...`, `NasLayout.facesWorkResource` e `facesClusterResource`) stanno solo sotto la loro generazione, le altre mai: i percorsi
+ * li costruisce sempre `NasLayout`, mai un dato letto.
+ */
+sealed interface LeaseRoot {
+  /** `<radice>/<impronta della risorsa>/`. */
+  fun dir(resource: String): SharePath
+
+  /** Vero se [resource] puo' stare sotto questa radice. */
+  fun admits(resource: String): Boolean
+
+  fun shardDir(resource: String, shard: Long): SharePath = dir(resource).child(NasLayout.versionName(shard))
+
+  fun file(resource: String, generation: Long): SharePath =
+    shardDir(resource, NasLayout.leaseShardOf(generation)).child(NasLayout.versionName(generation))
+
+  data object Shared : LeaseRoot {
+    override fun dir(resource: String): SharePath = NasLayout.leaseDir(resource)
+
+    override fun admits(resource: String): Boolean = !resource.startsWith(FACES_RESOURCE_PREFIX)
+  }
+
+  data class Faces(val generation: FaceGeneration) : LeaseRoot {
+    override fun dir(resource: String): SharePath = NasLayout.facesLeaseDir(generation, resource)
+
+    override fun admits(resource: String): Boolean = resource.startsWith("$FACES_RESOURCE_PREFIX${generation.base32}/")
+
+    override fun toString(): String = "LeaseRoot.Faces"
+  }
+}
+
+/** Il prefisso delle risorse dei volti (`NasLayout.facesWorkResource`, `facesClusterResource`). */
+private const val FACES_RESOURCE_PREFIX = "faces/"
 
 /** Lo stato di una risorsa secondo la generazione piu' alta trovata. */
 sealed interface LeaseStatus {
@@ -112,16 +150,19 @@ class LeaseManager(
   private val share: NasFileSystem,
   private val signer: Signer,
   private val clock: NasClock,
+  /** Fase 8 (A5, D16): la radice delle prenotazioni; quelle dei volti stanno sotto la loro generazione ([LeaseRoot.Faces]). */
+  private val root: LeaseRoot = LeaseRoot.Shared,
 ) {
   private val me: String = TrustIds.deviceIdOf(signer.publicKey)
 
   /** Lo stato della risorsa e la generazione piu' alta trovata (0 se nessuna); null se le cartelle sono anomale. */
   fun inspect(registry: RegistryState, resource: String): Pair<LeaseStatus, Long>? {
     Leases.checkResource(resource)
-    val shards = share.list(NasLayout.leaseDir(resource), TrustLimits.MAX_LIST_LEASE_SHARDS)
+    require(root.admits(resource)) { "Risorsa fuori dalla sua radice delle prenotazioni." }
+    val shards = share.list(root.dir(resource), TrustLimits.MAX_LIST_LEASE_SHARDS)
     if (shards.truncated) return null
     val shard = shards.names.mapNotNull(NasLayout::parseVersionName).maxOrNull() ?: return LeaseStatus.Free to 0L
-    val names = share.list(NasLayout.leaseShardDir(resource, shard), TrustLimits.MAX_LIST_LEASE_GENERATIONS)
+    val names = share.list(root.shardDir(resource, shard), TrustLimits.MAX_LIST_LEASE_GENERATIONS)
     if (names.truncated) return null
     val highest = names.names.mapNotNull(NasLayout::parseVersionName).filter { NasLayout.leaseShardOf(it) == shard }.maxOrNull()
       // Gruppo vuoto o pieno di spazzatura: la prossima generazione e' la prima del gruppo.
@@ -149,14 +190,14 @@ class LeaseManager(
     val generation = highest + 1
     val now = clock.nowMillis()
     val lease = Lease(registry.registry.familyId, me, share.shareName, resource, generation, now, durationMillis)
-    return when (share.publishExclusive(NasLayout.leaseFile(resource, generation), lease.sign(signer))) {
+    return when (share.publishExclusive(root.file(resource, generation), lease.sign(signer))) {
       PublishResult.CREATED -> AcquireResult.Acquired(generation, now + durationMillis)
       PublishResult.ALREADY_EXISTS -> AcquireResult.Lost
     }
   }
 
   private fun read(registry: RegistryState, resource: String, generation: Long): Verdict<Lease> {
-    val bytes = when (val read = share.read(NasLayout.leaseFile(resource, generation), Envelope.maxFileBytes(DocType.LEASE))) {
+    val bytes = when (val read = share.read(root.file(resource, generation), Envelope.maxFileBytes(DocType.LEASE))) {
       is NasRead.Data -> read.bytes
       NasRead.NotFound -> return Verdict.Rejected(RejectReason.MALFORMED)
       NasRead.TooLarge -> return Verdict.Rejected(RejectReason.TOO_LARGE)

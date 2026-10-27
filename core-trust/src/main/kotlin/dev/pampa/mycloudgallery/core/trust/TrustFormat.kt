@@ -295,6 +295,18 @@ object TrustLimits {
 
   /** Generazioni elencate in `faces/` per giro (la corrente e quelle da togliere, D31). */
   const val MAX_LIST_FACES_GENERATIONS: Int = 64
+
+  /** P3: voci di un segmento dei volti (tutte le classi; un segmento resta comunque sotto [MAX_FACES_SEGMENT_BYTES]). */
+  const val MAX_FACES_SEGMENT_ENTRIES: Int = 65_536
+
+  /**
+   * P3: la somma delle dimensioni dei segmenti dichiarata da una testa dei volti. Oltre, la testa si rifiuta **prima** di scaricare (8.192
+   * segmenti da 12 MiB farebbero 96 GiB); un contributo onesto da 100.000 corpi con l'istantanea piu' grande sta sotto i 300 MiB.
+   */
+  const val MAX_FACES_HEAD_BYTES: Long = 512L * 1024 * 1024
+
+  /** P3: byte di segmenti dei volti scaricati per dispositivo e per giro (il resto al giro dopo, a rotazione: E-F41, isolamento). */
+  const val MAX_FACES_BYTES_PER_DEVICE_ROUND: Int = 32 * 1024 * 1024
 }
 
 /**

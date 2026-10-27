@@ -18,6 +18,9 @@ import kotlinx.coroutines.flow.StateFlow
 //  - la RILEVAZIONE parte solo da `VisibleMedia.visible` (un nascosto non crea un viaggio, non sposta la casa, non fa un evento);
 //  - tutto cio' che si MOSTRA (conteggio, copertina) ripassa dal filtro finale `HiddenMask` subito prima: un media nascosto un attimo fa
 //    (dopo la rilevazione) non compare ne' si conta.
+// **Un guasto di lettura non e' "niente visibile"** (R17 della revisione di fine Fase 7): qui si usano `visibleOrThrow` e `hiddenAmongOrThrow`, che lanciano.
+// Con le versioni che rispondono "vuoto" la rilevazione notturna sostituiva casa e proposte con il nulla, e un ricontrollo azzerava le proposte
+// mostrate. Un'eccezione lascia tutto com'era (la rilevazione scrive solo alla fine, il ricontrollo pubblica solo alla fine).
 
 internal class TripVisibility(private val visible: VisibleMedia, private val mask: HiddenMask) {
 
@@ -25,11 +28,11 @@ internal class TripVisibility(private val visible: VisibleMedia, private val mas
   val snapshot: StateFlow<TimelineSnapshot?> get() = visible.snapshot
 
   /** Fra [ids] quelli che la Libreria mostra (presenti, non nascosti, non membri di un gruppo nascosto): l'ingresso della rilevazione. */
-  suspend fun visibleAmong(ids: Collection<MediaId>): Set<MediaId> = if (ids.isEmpty()) emptySet() else visible.visible(ids)
+  suspend fun visibleAmong(ids: Collection<MediaId>): Set<MediaId> = if (ids.isEmpty()) emptySet() else visible.visibleOrThrow(ids)
 
   /** Fra [ids] quelli che non sono nascosti **adesso**: il filtro finale, subito prima di mostrare. */
   suspend fun withoutHidden(ids: Collection<MediaId>): Set<MediaId> =
-    if (ids.isEmpty()) emptySet() else ids.toCollection(LinkedHashSet()).also { it.removeAll(mask.hiddenAmong(ids)) }
+    if (ids.isEmpty()) emptySet() else ids.toCollection(LinkedHashSet()).also { it.removeAll(mask.hiddenAmongOrThrow(ids)) }
 }
 
 /**

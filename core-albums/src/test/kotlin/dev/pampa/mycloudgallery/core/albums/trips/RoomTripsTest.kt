@@ -215,7 +215,9 @@ class RoomTripsTest {
     world.room.db.openHelper.writableDatabase.execSQL("UPDATE version_metadata SET latitude = NULL, longitude = NULL")
     val report = trips.detect(2.minutes)
     assertThat(report.homeKnown).isFalse()
-    assertThat(world.room.db.tripDao().home()).isEmpty()
+    // La stima di prima non resta; resta solo il segno "cercato, senza casa" (VG-1), una riga senza coordinate.
+    assertThat(world.room.db.tripDao().home().map { it.kind }).containsExactly("searched")
+    assertThat(world.room.db.tripDao().home().single().let { it.latitude to it.longitude }).isEqualTo(0.0 to 0.0)
     assertThat(trips.proposals.value.proposals.map { it.kind }.toSet()).containsExactly(TripKind.EVENT)
   }
 
@@ -245,12 +247,14 @@ class RoomTripsTest {
     val store = personal()
     val trips = trips(world, store)
     trips.detect(2.minutes)
-    trips.proposals.value.proposals.forEach { trips.dismiss(it.id) }
+    val proposals = trips.proposals.value.proposals
+    proposals.forEach { trips.dismiss(it.id) }
     // I dati personali hanno solo l'impronta della proposta scartata: nessuna voce con un nome, un luogo o una coordinata.
     for ((key, entry) in store.state()) {
       assertThat(key.field).startsWith("trip_dismissed:")
       assertThat(entry.fingerprint).isNull()
     }
-    assertThat(store.state()).hasSize(2)
+    // Un'impronta per proposta e, per un viaggio, anche quella del solo inizio (VG-2): un'altra impronta, mai un dato in chiaro.
+    assertThat(store.state()).hasSize(proposals.size + proposals.count { it.kind == TripKind.TRIP })
   }
 }

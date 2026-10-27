@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.AlbumCandidates
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumClocks
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
 import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
+import dev.pampa.mycloudgallery.core.albums.contract.HomeClearance
 import dev.pampa.mycloudgallery.core.albums.contract.LocalDayRange
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceRule
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceScope
@@ -30,6 +31,7 @@ import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -100,7 +102,10 @@ class CatalogTrips internal constructor(
   @Volatile private var checked: List<TripProposal> = emptyList()
   @Volatile private var homeKnown = false
 
-  private val state = MutableStateFlow(TripProposals(emptyList(), homeKnown = false))
+  /** VG-1: la rilevazione ha girato almeno una volta (anche senza trovare una casa); si ricorda fra un processo e l'altro. */
+  @Volatile private var searched = false
+
+  private val state = MutableStateFlow(TripProposals(emptyList(), homeKnown = false, searched = false))
 
   override val proposals: StateFlow<TripProposals> = state.asStateFlow()
 
@@ -121,6 +126,7 @@ class CatalogTrips internal constructor(
     lock.withLock {
       rows = store.proposals()
       homeKnown = store.anchors() != null
+      searched = store.searched()
       recheck()
     }
   }
@@ -142,6 +148,8 @@ class CatalogTrips internal constructor(
         return@withLock TripReport(rows.count { it.kind == TripKind.TRIP }, rows.count { it.kind == TripKind.EVENT }, homeKnown, incomplete = true)
       }
       // Il conto e' tutto CPU (qualche centinaio di millisecondi su una Libreria vera): fuori dal thread di chi chiama.
+      // VG-1: una Libreria senza un solo scatto proprio (la prima scansione non e' ancora arrivata) non e' una ricerca: "nessuna casa" non vuol dire niente.
+      if (shots.isEmpty() && !searched) return@withLock TripReport(0, 0, homeKnown = false, incomplete = true)
       val day = today.date()
       val detection = withContext(Dispatchers.Default) { TripDetector.detect(shots, day) }
       val now = clocks.nasNowMs() ?: 0L
@@ -149,6 +157,7 @@ class CatalogTrips internal constructor(
       rows = merged(detection, rows, now)
       store.replaceProposals(rows)
       homeKnown = detection.current != null
+      searched = true
       if (!homeKnown && shots.isNotEmpty()) TripLog.noGps()
       recheck()
       TripLog.detected(detection.trips, detection.events, homeKnown, clocks.monotonicMs() - started)
@@ -176,36 +185,99 @@ class CatalogTrips internal constructor(
   override suspend fun accept(id: TripId): TripAcceptOutcome = lock.withLock {
     val row = rows.firstOrNull { it.id == id } ?: return@withLock TripAcceptOutcome.NotFound
     row.album?.let { return@withLock TripAcceptOutcome.AlreadyAlbum(it) }
-    if (id in dismissals.dismissed.value) return@withLock TripAcceptOutcome.NotFound
+    if (isDismissed(row.id, row.kind, row.days)) return@withLock TripAcceptOutcome.NotFound
+    // R17: un guasto di lettura non e' "nessun media": la proposta resta e il tocco dice "non riuscito".
+    val outcome = try {
+      accepting(row)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      TripLog.failed(e)
+      null
+    }
+    outcome ?: TripAcceptOutcome.NotFound
+  }
+
+  /**
+   * "Crea album" di una riga. **L'album e il segno "e' diventato un album" non si separano** (VG-2): se la pagina si chiude fra l'uno e l'altro
+   * l'annullamento li lascerebbe a meta' (la proposta resta e un secondo tocco farebbe un doppione), quindi la parte che scrive non si annulla.
+   * Titolo e luoghi sono quelli dei media visibili **adesso** (R16): un luogo di soli media nascosti dopo la rilevazione non entra ne' nel titolo ne' nel
+   * cerchio dell'album, che finiscono nei dati personali.
+   */
+  private suspend fun accepting(row: StoredProposal): TripAcceptOutcome? {
     val pool = reader.mine(days = row.days, finalMask = true).orEmpty()
-    if (pool.isEmpty()) return@withLock TripAcceptOutcome.NotFound
-    val rules = SmartRules(SmartPeriod.Ranges(listOf(row.days)), placeRuleOf(row, pool), text = null)
-    val created = albums.create(row.label, AlbumKind.SMART, rules) as? CreateOutcome.Created ?: return@withLock TripAcceptOutcome.NotFound
-    store.markAccepted(id, created.id)
-    rows = rows.map { if (it.id == id) it.copy(album = created.id) else it }
-    checked = checked.filter { it.id != id }
-    publish()
-    TripAcceptOutcome.Created(created.id)
+    if (pool.isEmpty()) return TripAcceptOutcome.NotFound
+    val shown = viewOf(row, pool)
+    val rules = SmartRules(SmartPeriod.Ranges(listOf(row.days)), placeRuleOf(row.kind, shown, pool, store.anchors()), text = null)
+    return withContext(NonCancellable) {
+      val created = albums.create(shown.label, AlbumKind.SMART, rules) as? CreateOutcome.Created ?: return@withContext null
+      store.markAccepted(row.id, created.id)
+      rows = rows.map { if (it.id == row.id) it.copy(album = created.id) else it }
+      checked = checked.filter { it.id != row.id }
+      publish()
+      TripAcceptOutcome.Created(created.id)
+    }
   }
 
   override suspend fun dismiss(id: TripId) {
     dismissals.dismiss(id)
+    // VG-2: un viaggio scartato resta scartato anche se, essendo in corso, si allunga (l'impronta cambierebbe con la fine).
+    val known = (checked + state.value.proposals).firstOrNull { it.id == id }
+    if (known != null && known.kind == TripKind.TRIP) dismissals.dismiss(TripId.startKey(known.kind, known.days.from))
     publish()
+  }
+
+  private fun isDismissed(id: TripId, kind: TripKind, days: LocalDayRange): Boolean {
+    val dismissed = dismissals.dismissed.value
+    return id in dismissed || (kind == TripKind.TRIP && TripId.startKey(kind, days.from) in dismissed)
+  }
+
+  /** Il titolo e i luoghi di una proposta con i soli media visibili adesso (R16). */
+  private class ShownRow(val label: String, val placeIds: List<Int>) {
+    override fun toString(): String = "ShownRow"
+  }
+
+  /**
+   * R16: titolo e luoghi si fissano alla rilevazione, ma un media nascosto dopo non deve restare nel titolo ("A e B, marzo 2026" con l'unica foto di B
+   * nascosta) ne' finire nei dati personali con "Crea album". Se tutti i luoghi della riga hanno ancora un media visibile con il GPS, la riga resta
+   * com'e' (neanche un trasloco cambia i viaggi gia' proposti, E-AL15: qui non conta dov'e' la casa di oggi); se un luogo non ne ha piu', titolo e
+   * luoghi si rifanno con quelli che restano. [pool] e' gia' senza nascosti (`reader.mine(finalMask = true)`).
+   */
+  private fun viewOf(row: StoredProposal, pool: List<AlbumCandidate>): ShownRow {
+    if (row.placeIds.isEmpty()) return ShownRow(row.label, row.placeIds)
+    val located = pool.filter { it.gps != null && it.placeId != 0 }
+    val seen = located.mapTo(HashSet()) { it.placeId }
+    val kept = row.placeIds.filter { it in seen }
+    if (kept.size == row.placeIds.size) return ShownRow(row.label, row.placeIds)
+    val stats = PlaceStats.of(located.filter { it.placeId in kept })
+    val label = if (row.kind == TripKind.TRIP) titles.trip(row.days, stats) else titles.event(row.days, stats)
+    return ShownRow(label, kept)
+  }
+
+  /** Le foto con il GPS lontane da casa e dai luoghi abituali: le sole che danno i luoghi di un viaggio (L86). Senza casa nota, nessuna. */
+  private fun awayShots(pool: List<AlbumCandidate>, anchors: Anchors?): List<AlbumCandidate> {
+    if (anchors == null) return emptyList()
+    return pool.filter { c -> c.gps?.let { TripGeometry.usable(it.latitude, it.longitude) && !anchors.isNear(it.latitude, it.longitude) } == true }
   }
 
   /**
    * Il luogo dell'album di un viaggio: il cerchio che copre le foto lontane da casa, con i luoghi della proposta. Un **evento** non ha luogo:
    * potrebbe essere a casa, e le coordinate di casa non devono finire in un album (che viaggia nei dati personali). Un viaggio senza luoghi
-   * noti al dataset, o senza foto geolocalizzate lontane da casa, ha solo il periodo.
+   * noti al dataset, o senza foto geolocalizzate lontane da casa, ha solo il periodo. **R16**: anche un viaggio con due mete ai lati opposti di casa,
+   * il cui cerchio comprende la casa o ha il centro a meno di [TripRules.CENTER_CLEARANCE_KM] da lei, ha solo il periodo: il centro di un cerchio
+   * cosi' sarebbe, quasi alla lettera, la casa.
    */
-  private suspend fun placeRuleOf(row: StoredProposal, pool: List<AlbumCandidate>): PlaceRule? {
-    if (row.kind != TripKind.TRIP || row.placeIds.isEmpty()) return null
-    val anchors = store.anchors() ?: return null
+  private fun placeRuleOf(kind: TripKind, shown: ShownRow, pool: List<AlbumCandidate>, anchors: Anchors?): PlaceRule? {
+    if (kind != TripKind.TRIP || shown.placeIds.isEmpty()) return null
+    anchors ?: return null
     val area = TripDetector.areaOf(pool, anchors) ?: return null
-    val away = pool.filter { c -> c.gps?.let { TripGeometry.usable(it.latitude, it.longitude) && !anchors.isNear(it.latitude, it.longitude) } == true }
-    val label = titles.placeLabel(PlaceStats.of(away)).ifEmpty { VIAGGIO }
-    return PlaceRule(row.placeIds, GeoPoint(area.lat, area.lon), area.radiusKm, label, PlaceScope.AROUND)
+    if (anchors.hidesCenter(area.lat, area.lon) || anchors.nearestKm(area.lat, area.lon) <= area.radiusKm) return null
+    val label = titles.placeLabel(PlaceStats.of(awayShots(pool, anchors).filter { it.placeId in shown.placeIds })).ifEmpty { VIAGGIO }
+    return PlaceRule(shown.placeIds, GeoPoint(area.lat, area.lon), area.radiusKm, label, PlaceScope.AROUND)
   }
+
+  /** R16: l'oracolo "troppo vicino a casa" per chi calcola un centro (le coordinate entrano, un si'/no esce). */
+  fun homeClearance(): HomeClearance = StoreHomeClearance(store)
 
   // --- cio' che si mostra -------------------------------------------------------------------------------------------------------------
 
@@ -216,7 +288,8 @@ class CatalogTrips internal constructor(
       val pool = reader.mine(days = row.days, finalMask = true).orEmpty()
       if (pool.isEmpty()) continue
       val cover = pool.firstOrNull { it.media == row.cover } ?: CoverPicker.pick(pool)
-      shown += TripProposal(row.id, row.kind, row.days, row.label, pool.size, cover.media, row.placeIds)
+      val view = viewOf(row, pool)
+      shown += TripProposal(row.id, row.kind, row.days, view.label, pool.size, cover.media, view.placeIds)
     }
     checked = shown
     publish()
@@ -224,8 +297,7 @@ class CatalogTrips internal constructor(
   }
 
   private fun publish() {
-    val dismissed = dismissals.dismissed.value
-    state.value = TripProposals(checked.filter { it.id !in dismissed }, homeKnown)
+    state.value = TripProposals(checked.filter { !isDismissed(it.id, it.kind, it.days) }, homeKnown, searched)
   }
 
   private suspend fun loadQuietly() {
@@ -257,7 +329,15 @@ class CatalogTrips internal constructor(
   /** La casa di oggi e la distanza mediana delle foto proprie geolocalizzate del giorno; null se manca l'una o le altre. */
   private suspend fun awayOn(day: LocalDate): Pair<Anchors, Double>? {
     val anchors = store.anchors() ?: return null
-    val shots = reader.mine(days = LocalDayRange(day, day), finalMask = true).orEmpty()
+    // R17: un guasto di lettura e' "non so", non una giornata senza foto.
+    val shots = try {
+      reader.mine(days = LocalDayRange(day, day), finalMask = true).orEmpty()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      TripLog.failed(e)
+      return null
+    }
     val km = shots.mapNotNull { c -> c.gps?.takeIf { TripGeometry.usable(it.latitude, it.longitude) } }
       .map { anchors.nearestKm(it.latitude, it.longitude) }.toDoubleArray().also { it.sort() }
     return if (km.isEmpty()) null else anchors to TripGeometry.median(km)

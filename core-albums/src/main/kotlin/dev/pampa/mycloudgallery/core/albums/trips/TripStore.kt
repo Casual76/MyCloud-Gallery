@@ -40,8 +40,14 @@ internal interface TripStore {
   /** La casa e i luoghi abituali di oggi, o null se non c'e' una stima. */
   suspend fun anchors(): Anchors?
 
-  /** Conserva la stima di oggi (null = nessuna casa: la stima di prima si toglie). */
+  /** Conserva la stima di oggi (null = nessuna casa: la stima di prima si toglie, e resta il segno che la ricerca c'e' stata). */
   suspend fun saveAnchors(anchors: Anchors?, estimatedAtMs: Long)
+
+  /**
+   * VG-1: la rilevazione ha girato almeno una volta (con o senza casa). Senza questo segno "nessuna casa" vuol dire anche "non ho ancora cercato", e la
+   * sezione Viaggi diceva "Servono foto con la posizione" a chi aveva migliaia di foto con il GPS e una ricerca che non era mai partita.
+   */
+  suspend fun searched(): Boolean
 
   /** Le proposte conservate, dalla piu' recente. */
   suspend fun proposals(): List<StoredProposal>
@@ -57,8 +63,8 @@ internal class RoomTripStore(private val database: GalleryDatabase) : TripStore 
 
   override suspend fun anchors(): Anchors? {
     val rows = dao.home().sortedBy { it.slot }
-    val home = rows.firstOrNull { it.slot == HOME_SLOT } ?: return null
-    return Anchors(anchorOf(home), rows.filter { it.slot != HOME_SLOT }.map(::anchorOf), home.totalDays)
+    val home = rows.firstOrNull { it.slot == HOME_SLOT && it.kind == KIND_HOME } ?: return null
+    return Anchors(anchorOf(home), rows.filter { it.slot != HOME_SLOT && it.kind == KIND_HABITUAL }.map(::anchorOf), home.totalDays)
   }
 
   override suspend fun saveAnchors(anchors: Anchors?, estimatedAtMs: Long) {
@@ -70,9 +76,14 @@ internal class RoomTripStore(private val database: GalleryDatabase) : TripStore 
             HomeEstimateEntity(i, if (i == HOME_SLOT) KIND_HOME else KIND_HABITUAL, a.lat, a.lon, a.radiusKm, a.days, anchors.gpsDays, estimatedAtMs)
           },
         )
+      } else {
+        // VG-1: nessuna casa, ma la ricerca c'e' stata. Una riga senza coordinate ne' giorni (lo schema non cambia, nessuna migrazione): `anchors()` la ignora.
+        dao.upsertHome(listOf(HomeEstimateEntity(HOME_SLOT, KIND_SEARCHED, 0.0, 0.0, 0.0, 0, 0, estimatedAtMs)))
       }
     }
   }
+
+  override suspend fun searched(): Boolean = dao.home().isNotEmpty()
 
   override suspend fun proposals(): List<StoredProposal> = dao.proposals().mapNotNull(::storedOf)
 
@@ -131,5 +142,8 @@ internal class RoomTripStore(private val database: GalleryDatabase) : TripStore 
     const val HOME_SLOT = 0
     const val KIND_HOME = "home"
     const val KIND_HABITUAL = "habitual"
+
+    /** Il segno "cercato, senza casa" (VG-1): la ricerca ha girato e non ha trovato una casa. */
+    const val KIND_SEARCHED = "searched"
   }
 }

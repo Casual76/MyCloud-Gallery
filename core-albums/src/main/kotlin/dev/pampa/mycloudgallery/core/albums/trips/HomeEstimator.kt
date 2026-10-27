@@ -35,6 +35,13 @@ internal class Anchors(val home: Anchor, val habitual: List<Anchor>, val gpsDays
   /** Vicino a casa o a un luogo abituale: quel posto non va nei titoli (rivelerebbe dove si abita) ne' fra i luoghi di un viaggio. */
   fun isNear(lat: Double, lon: Double): Boolean = all.any { TripGeometry.km(it.lat, it.lon, lat, lon) <= maxOf(NEAR_KM, it.radiusKm) }
 
+  /**
+   * R16: troppo vicino a casa o a un luogo abituale perche' un punto possa fare da centro di un luogo nei dati personali: a meno di
+   * [TripRules.CENTER_CLEARANCE_KM] o del raggio del posto, se piu' grande. Piu' stretto di [isNear]: un album sulla propria citta' ha il centro in citta'.
+   */
+  fun hidesCenter(lat: Double, lon: Double): Boolean =
+    all.any { TripGeometry.km(it.lat, it.lon, lat, lon) <= maxOf(TripRules.CENTER_CLEARANCE_KM, it.radiusKm) }
+
   override fun toString(): String = "Anchors(${all.size})"
 
   companion object {

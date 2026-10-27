@@ -62,6 +62,7 @@ class InMemoryTrips(
 
   private var found: List<Found> = emptyList()
   private var homeKnown = false
+  private var searched = false
   private val accepted = HashMap<TripId, AlbumId>()
 
   private suspend fun mine(): List<AlbumCandidate> {
@@ -77,8 +78,11 @@ class InMemoryTrips(
 
   override suspend fun detect(budget: Duration): TripReport {
     val media = mine()
+    // VG-1: una Libreria senza scatti propri non e' una ricerca (la prima scansione non e' arrivata).
+    if (media.isEmpty() && !searched) return TripReport(0, 0, homeKnown = false, incomplete = true)
     val anchors = anchors(media)
     homeKnown = anchors.isNotEmpty()
+    searched = true
     val trips = if (homeKnown) trips(media, anchors) else emptyList()
     val tripDays = trips.flatMap { t -> generateSequence(t.proposal.days.from) { it.plusDays(1) }.takeWhile { !it.isAfter(t.proposal.days.to) }.toList() }.toSet()
     val events = events(media.filter { it.day !in tripDays })
@@ -88,7 +92,7 @@ class InMemoryTrips(
   }
 
   private fun publish() {
-    proposals.value = TripProposals(found.map { it.proposal }.filter { it.id !in dismissals.dismissed && it.id !in accepted }, homeKnown)
+    proposals.value = TripProposals(found.map { it.proposal }.filter { !isDismissed(it) && it.id !in accepted }, homeKnown, searched)
   }
 
   /** D18: casa (la prima) e luoghi abituali, dalle foto serali proprie con GPS degli ultimi 12 mesi, pesate per giorni distinti. */
@@ -189,8 +193,13 @@ class InMemoryTrips(
 
   override suspend fun dismiss(id: TripId) {
     dismissals.dismissed += id
+    // VG-2: un viaggio scartato resta scartato anche se, essendo in corso, si allunga.
+    found.firstOrNull { it.proposal.id == id }?.proposal?.takeIf { it.kind == TripKind.TRIP }?.let { dismissals.dismissed += TripId.startKey(it.kind, it.days.from) }
     publish()
   }
+
+  private fun isDismissed(p: TripProposal): Boolean =
+    p.id in dismissals.dismissed || (p.kind == TripKind.TRIP && TripId.startKey(p.kind, p.days.from) in dismissals.dismissed)
 
   private companion object {
     fun cellOf(p: GeoPoint): Pair<Int, Int> = floor(p.latitude / TripRules.HOME_CELL_DEGREES).toInt() to floor(p.longitude / TripRules.HOME_CELL_DEGREES).toInt()

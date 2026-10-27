@@ -66,4 +66,7 @@ internal object AlbumDimens {
 
   /** Il lato dell'icona dentro la piastrella. */
   val TileGlyph: Dp = 20.dp
+
+  /** Fase 8: l'altezza massima dell'elenco di persone nel foglio di scelta; oltre, l'elenco scorre dentro il foglio (e il foglio resta sul telefono). */
+  val PickerMaxHeight: Dp = 360.dp
 }

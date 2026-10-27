@@ -13,12 +13,15 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pampa.mycloudgallery.core.albums.contract.LocalDayRange
+import dev.pampa.mycloudgallery.core.albums.contract.PeopleRule
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceAlternative
 import dev.pampa.mycloudgallery.core.albums.contract.SmartLimits
 import dev.pampa.mycloudgallery.core.albums.contract.SmartMediaType
 import dev.pampa.mycloudgallery.core.albums.contract.SmartSource
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.PeopleMode
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumActions
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.nav.AlbumDependencies
@@ -36,13 +39,17 @@ class SmartEditorViewModel @Inject constructor(savedStateHandle: SavedStateHandl
   /** L'album di cui si cambiano le regole, o null se si sta creando. */
   val album: AlbumId? = route.album?.let(::AlbumId)
 
+  /** Fase 8: dalla pagina persona ("Crea album smart") la regola parte con quella persona (`SmartEditorDestination.person`); un id illeggibile vale "nessuna". */
+  private val startWith: PeopleRule? = route.person?.let { PersonId.fromBase32(it) }?.let { PeopleRule(listOf(it), PeopleMode.ANY) }
+
   val controller: SmartEditorController = SmartEditorController(
-    mode = if (album != null) SmartEditorMode.Edit(album) else SmartEditorMode.Create(route.title.orEmpty()),
+    mode = if (album != null) SmartEditorMode.Edit(album) else SmartEditorMode.Create(route.title.orEmpty(), startWith = startWith),
     interpreter = ports.interpreter,
     engine = ports.engine,
     albums = ports.albums,
     clock = ports.clock,
     scope = viewModelScope,
+    people = ports.peopleChoices,
   )
 }
 
@@ -74,6 +81,14 @@ fun SmartEditorRoute(
       override fun onRadius(km: Int) = controller.setRadius(km)
 
       override fun onRemovePlace() = controller.removePlace()
+
+      override fun onTogglePerson(id: PersonId) = controller.togglePerson(id)
+
+      override fun onRemovePerson(id: PersonId) = controller.removePerson(id)
+
+      override fun onPeopleMode(mode: PeopleMode) = controller.setPeopleMode(mode)
+
+      override fun onRemovePeople() = controller.removePeople()
 
       override fun onText(text: String) = controller.setText(text)
 

@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.Albums
 import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.EditOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.LocalDayRange
+import dev.pampa.mycloudgallery.core.albums.contract.PeopleRule
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceAlternative
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceRule
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceScope
@@ -20,8 +21,14 @@ import dev.pampa.mycloudgallery.core.albums.contract.SmartSource
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.PeopleMode
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumScreensClock
 import dev.pampa.mycloudgallery.feature.albums.contract.BroadHint
+import dev.pampa.mycloudgallery.feature.albums.contract.NoPeopleChoices
+import dev.pampa.mycloudgallery.feature.albums.contract.PeopleChoices
+import dev.pampa.mycloudgallery.feature.albums.contract.PeopleRuleInfo
+import dev.pampa.mycloudgallery.feature.albums.contract.PersonChoice
 import dev.pampa.mycloudgallery.feature.albums.contract.SmartEditorState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -40,10 +47,18 @@ import kotlinx.coroutines.launch
 //
 // Due modi: **creare** (parte dal titolo, che passa dall'interprete) e **cambiare** le regole di un album che c'e' (parte dalle sue regole).
 // Non sa niente di Compose. Mai un nascosto: l'anteprima e' del motore, che parte dai candidati visibili.
+//
+// Fase 8 (P10, D27, E-F23, E-F27, E-F28, E-F37): la regola **Persone**. Si scelgono dalla porta [PeopleChoices] (le persone con un nome, le piu' frequenti prima),
+// "tutte" o "una qualunque"; le persone della regola si mostrano per nome (una persona perduta o nascosta non ha nome: l'editor lo dice, senza nome). Dove i volti
+// non ci sono (E-F37) la sezione lo dice e la regola resta com'e': l'album non cambia. Dalla pagina persona l'editor parte con la regola gia' messa
+// ([SmartEditorMode.Create.startWith]) e senza passare dall'interprete (il titolo e' un nome, non un'idea di regole).
 
 sealed interface SmartEditorMode {
-  /** Un album nuovo: [title] e' il nome scelto, da cui l'interprete propone le regole. */
-  data class Create(val title: String) : SmartEditorMode
+  /**
+   * Un album nuovo: [title] e' il nome scelto, da cui l'interprete propone le regole. Con [startWith] (dalla pagina persona, "Crea album smart") le regole partono
+   * dalla sola regola delle persone e l'interprete non si chiede.
+   */
+  data class Create(val title: String, val startWith: PeopleRule? = null) : SmartEditorMode
 
   /** Le regole di uno smart che c'e'. */
   data class Edit(val album: AlbumId) : SmartEditorMode
@@ -71,6 +86,12 @@ data class SmartEditorUi(
   val savedAlbum: AlbumId? = null,
   val canSave: Boolean = false,
   val creating: Boolean = true,
+  /** Fase 8: vero se qui i volti ci sono (E-F37); falso = "Le persone non sono attive su questo dispositivo". */
+  val peopleOn: Boolean = true,
+  /** Le persone che si possono scegliere (con un nome, non nascoste), le piu' frequenti prima. */
+  val peopleChoices: List<PersonChoice> = emptyList(),
+  /** I nomi delle persone della regola e quelle perse (E-F27). */
+  val peopleInfo: PeopleRuleInfo = PeopleRuleInfo.EMPTY,
 )
 
 class SmartEditorController(
@@ -80,6 +101,8 @@ class SmartEditorController(
   private val albums: Albums,
   private val clock: AlbumScreensClock,
   private val scope: CoroutineScope,
+  /** Fase 8: le persone che si scelgono; di serie nessuna (le persone non sono attive). */
+  private val people: PeopleChoices = NoPeopleChoices,
 ) {
   private val titleOf: String = when (mode) {
     is SmartEditorMode.Create -> mode.title
@@ -98,7 +121,9 @@ class SmartEditorController(
     started = true
     scope.launch {
       when (mode) {
-        is SmartEditorMode.Create -> {
+        is SmartEditorMode.Create -> if (mode.startWith != null) {
+          _ui.update { it.copy(rules = SmartRules(null, null, null, people = mode.startWith)) }
+        } else {
           // AS-7: un errore del motore (la ricerca, il catalogo) non deve arrivare al gestore dell'ambito e chiudere l'app: l'editor parte con regole vuote.
           val proposal = try {
             interpreter.propose(mode.title, clock.today())
@@ -124,8 +149,36 @@ class SmartEditorController(
           _ui.update { it.copy(rules = smart.rules, series = ranges) }
         }
       }
+      refreshPeopleInfo()
       refreshPreview()
     }
+    scope.launch { watchPeople() }
+  }
+
+  // --- Le persone (Fase 8) -----------------------------------------------------------------------------------------------
+
+  /** Segue la porta: se i volti si accendono o si spengono, la sezione si rifa'; le persone da scegliere si rileggono. */
+  private suspend fun watchPeople() {
+    people.available.collect { on ->
+      val choices = if (on) guarded { people.choices() }.orEmpty() else emptyList()
+      _ui.update { it.copy(peopleOn = on, peopleChoices = choices) }
+      refreshPeopleInfo()
+    }
+  }
+
+  private suspend fun refreshPeopleInfo() {
+    val rule = _ui.value.rules?.people
+    val info = if (rule == null) PeopleRuleInfo.EMPTY else guarded { people.inspect(rule.ids) } ?: PeopleRuleInfo.EMPTY
+    _ui.update { it.copy(peopleInfo = info) }
+  }
+
+  /** Un errore della porta delle persone non deve arrivare al gestore dell'ambito (AS-7): vale "non so". */
+  private suspend fun <T> guarded(block: suspend () -> T): T? = try {
+    block()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (_: Exception) {
+    null
   }
 
   // --- Cambiare le regole -------------------------------------------------------------------------------------------------
@@ -166,6 +219,49 @@ class SmartEditorController(
   }
 
   fun removePlace() = change { it.copy(place = null) }
+
+  /**
+   * Aggiunge [ids] alla regola delle persone (E-F36 a parte, al piu' [PeopleRule.MAX_PEOPLE]). Con una sola persona il modo non conta: chi ne aggiunge una seconda
+   * vuole di solito "tutte" (come "Marco e Anna"), e il modo si cambia subito dopo.
+   */
+  fun addPeople(ids: List<PersonId>) {
+    change { rules ->
+      val current = rules.people
+      val all = (current?.ids.orEmpty() + ids).distinct().take(PeopleRule.MAX_PEOPLE)
+      if (all.isEmpty()) {
+        rules
+      } else {
+        val mode = if (current != null && current.ids.size > 1) current.mode else PeopleMode.ALL
+        rules.copy(people = PeopleRule(all, mode))
+      }
+    }
+    scope.launch { refreshPeopleInfo() }
+  }
+
+  /** Tocca una persona del foglio di scelta: la mette se non c'e', la toglie se c'e'. */
+  fun togglePerson(id: PersonId) {
+    if (_ui.value.rules?.people?.ids?.contains(id) == true) removePerson(id) else addPeople(listOf(id))
+  }
+
+  fun removePerson(id: PersonId) {
+    change { rules ->
+      val current = rules.people ?: return@change rules
+      val rest = current.ids - id
+      rules.copy(people = if (rest.isEmpty()) null else PeopleRule(rest, current.mode))
+    }
+    scope.launch { refreshPeopleInfo() }
+  }
+
+  /** "Tutte" o "una qualunque": cambia solo il modo, e solo con due persone o piu'. */
+  fun setPeopleMode(mode: PeopleMode) = change { rules ->
+    val current = rules.people ?: return@change rules
+    if (current.ids.size < 2) rules else rules.copy(people = current.copy(mode = mode))
+  }
+
+  fun removePeople() {
+    change { it.copy(people = null) }
+    scope.launch { refreshPeopleInfo() }
+  }
 
   fun setText(text: String) = change { it.copy(text = text.takeIf { value -> value.isNotBlank() }) }
 
@@ -224,7 +320,7 @@ class SmartEditorController(
       usesSearch && !preview.searchUsed -> SmartEditorState.NoSearch(rules, preview)
       else -> SmartEditorState.Proposal(rules, ui.alternatives, ui.series, preview, ui.notes)
     }
-    val hasRule = rules.period != null || rules.place != null || !rules.text.isNullOrBlank() || rules.examples.isNotEmpty()
+    val hasRule = rules.period != null || rules.place != null || rules.people != null || !rules.text.isNullOrBlank() || rules.examples.isNotEmpty()
     return ui.copy(state = state, canSave = hasRule && !ui.saving && !ui.previewing)
   }
 

@@ -279,6 +279,8 @@ internal fun PreviewSection(ui: SmartEditorUi, thumbnails: AlbumThumbnails) {
     FluidListGroup {
       if (preview == null || ui.previewing) {
         SectionNote(stringResource(R.string.editor_preview_working))
+      } else if (!preview.peopleAvailable) {
+        SectionNote(stringResource(R.string.editor_preview_people_off))
       } else if (preview.sample.isEmpty()) {
         SectionNote(stringResource(R.string.editor_preview_none))
       } else {

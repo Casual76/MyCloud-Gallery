@@ -29,6 +29,8 @@ import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPolicy
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumScreensClock
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumUnavailableReason
 import dev.pampa.mycloudgallery.feature.albums.contract.ItemActions
+import dev.pampa.mycloudgallery.feature.albums.contract.NoPeopleChoices
+import dev.pampa.mycloudgallery.feature.albums.contract.PeopleChoices
 import dev.pampa.mycloudgallery.feature.albums.contract.PermissionInfo
 import dev.pampa.mycloudgallery.feature.albums.contract.SuggestionsState
 import dev.pampa.mycloudgallery.feature.albums.contract.WhyBlocked
@@ -40,6 +42,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -90,6 +94,8 @@ class AlbumPageController(
   private val pending: AlbumPending,
   clock: AlbumScreensClock,
   private val scope: CoroutineScope,
+  /** Fase 8 (P10): per dire "Le persone non sono attive su questo dispositivo" e "Una persona della regola non e' piu' riconosciuta" (E-F37, E-F27). */
+  private val peopleChoices: PeopleChoices = NoPeopleChoices,
 ) {
   /** Il foglio di condivisione di questa pagina ("Condividi", "Aggiungi", "Da condividere", "Riporta", file dal PC). */
   val share: ShareSheetController = ShareSheetController(runner, clock, scope)
@@ -105,11 +111,37 @@ class AlbumPageController(
   /** Vero dopo "Elimina l'album" personale: la pagina non ha piu' niente da mostrare e la schermata torna indietro. */
   val deleted: StateFlow<Boolean> = _deleted.asStateFlow()
 
+  /**
+   * Fase 8 (E-F37, E-F27): se questo album ha la regola delle persone, la striscia che dice che qui i volti non ci sono (l'album non cambia) o che una persona della
+   * regola non e' piu' riconosciuta. Null per ogni altro album. Si rifa' quando cambia la regola o quando i volti si accendono o si spengono.
+   */
+  private val peopleBanner: StateFlow<AlbumBanner?> = combine(
+    albums.all.map { list -> (list.byId(id) as? Album.Smart)?.rules?.people }.distinctUntilChanged(),
+    peopleChoices.available,
+  ) { rule, on -> rule to on }
+    .map { (rule, on) ->
+      when {
+        rule == null -> null
+        !on -> AlbumBanner.PeopleOff
+        else -> {
+          val lost = try {
+            peopleChoices.inspect(rule.ids).lost.count { it in rule.ids }
+          } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+          } catch (_: Exception) {
+            0
+          }
+          if (lost > 0) AlbumBanner.PeopleLost(lost) else null
+        }
+      }
+    }
+    .stateIn(scope, SharingStarted.Eagerly, null)
+
   val ui: StateFlow<AlbumPageUi> = combine(
     combine(albums.content(id), albums.status, albums.all) { content, status, list -> Triple(content, status, list.byId(id)) },
     combine(runner.operations, shared.notices, shared.left) { ops, notices, left -> Triple(ops, notices, left) },
-    local,
-  ) { (content, status, listed), (ops, notices, left), loc -> build(content, status, listed, ops, notices, left, loc) }
+    combine(local, peopleBanner) { loc, people -> loc to people },
+  ) { (content, status, listed), (ops, notices, left), (loc, people) -> build(content, status, listed, ops, notices, left, loc, people) }
     .stateIn(scope, SharingStarted.Eagerly, AlbumPageUi())
 
   private fun build(
@@ -120,6 +152,7 @@ class AlbumPageController(
     notices: List<SharedAlbumNotice>,
     left: List<Album.Shared>,
     loc: Local,
+    peopleBanner: AlbumBanner?,
   ): AlbumPageUi {
     val mine = notices.filter { it.album == id }
     val closed = mine.filterIsInstance<SharedAlbumNotice.Closed>().firstOrNull()
@@ -144,7 +177,7 @@ class AlbumPageController(
       if (status is AlbumsStatus.Recomputing && album is Album.Smart && content.items.size == 0) {
         AlbumPageState.Recomputing(album, status.done, status.total)
       } else {
-        AlbumPageState.Ready(content, album.sort, permissions, banners(content, mine, ops))
+        AlbumPageState.Ready(content, album.sort, permissions, banners(content, mine, ops, peopleBanner))
       }
     val suggested = content.suggested?.takeIf { it.size > 0 }?.let { SuggestionsState.Some(it.size, it) } ?: SuggestionsState.None
     val toShare = content.toShare?.takeIf { it.size > 0 }?.let { SuggestionsState.ToShare(it.size, it) } ?: SuggestionsState.None
@@ -162,7 +195,7 @@ class AlbumPageController(
     )
   }
 
-  private fun banners(content: AlbumContent, notices: List<SharedAlbumNotice>, ops: List<ShareOpState>): List<AlbumBanner> = buildList {
+  private fun banners(content: AlbumContent, notices: List<SharedAlbumNotice>, ops: List<ShareOpState>, peopleBanner: AlbumBanner?): List<AlbumBanner> = buildList {
     // Prima cio' che e' in corso, poi cio' che chiede un gesto, poi le informazioni.
     ops.filter { it.album == id && it !is ShareOpState.Done }.forEach { add(AlbumBanner.Sharing(it)) }
     if (content.incoming > 0) add(AlbumBanner.Incoming(content.incoming))
@@ -181,6 +214,8 @@ class AlbumPageController(
     }
     val smart = content.album as? Album.Smart
     if (smart != null && smart.newSinceSeen > 0) add(AlbumBanner.NewItems(smart.newSinceSeen))
+    // Fase 8: le persone della regola (E-F37, E-F27) -- solo per uno smart, e solo se c'e' qualcosa da dire.
+    if (smart != null && peopleBanner != null) add(peopleBanner)
   }
 
   // --- Messaggi e modalita' -----------------------------------------------------------------------------------------------------

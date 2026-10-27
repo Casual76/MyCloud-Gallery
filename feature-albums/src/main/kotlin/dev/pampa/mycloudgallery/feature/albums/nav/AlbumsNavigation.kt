@@ -6,6 +6,7 @@ import androidx.navigation.toRoute
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.composable
 import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumActions
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.editor.SmartEditorRoute
@@ -35,9 +36,12 @@ data class AlbumPageDestination(val id: String)
 @Serializable
 data class SuggestionsDestination(val id: String, val toShare: Boolean = false)
 
-/** L'editor delle regole: [title] per un album smart nuovo (parte dal nome), [album] per cambiare le regole di uno che c'e'. */
+/**
+ * L'editor delle regole: [title] per un album smart nuovo (parte dal nome), [album] per cambiare le regole di uno che c'e'. Fase 8: [person] (con [title]) e' l'id della
+ * persona in base32 da cui parte la regola delle persone ("Crea album smart" dalla pagina persona): l'editor non interpreta il nome e parte da quella persona.
+ */
 @Serializable
-data class SmartEditorDestination(val title: String? = null, val album: String? = null)
+data class SmartEditorDestination(val title: String? = null, val album: String? = null, val person: String? = null)
 
 /** Le proposte di viaggio. */
 @Serializable
@@ -51,6 +55,12 @@ fun NavController.openSuggestions(id: AlbumId, kind: SuggestionKind) = navigate(
 
 /** Crea un album smart dal nome [title]: l'editor interpreta il nome e propone le regole. */
 fun NavController.openSmartEditor(title: String) = navigate(SmartEditorDestination(title = title))
+
+/**
+ * Fase 8: "Crea album smart" dalla pagina di una persona: il nome [title] (quello della persona) e la regola con [person]. Lo chiama `:app` (P13) dalla pagina persona,
+ * che sta in un altro feature: i feature non si conoscono, il ponte e' questa funzione.
+ */
+fun NavController.openSmartEditorForPerson(title: String, person: PersonId) = navigate(SmartEditorDestination(title = title, person = person.base32()))
 
 /** Cambia le regole dello smart [id]. */
 fun NavController.openRules(id: AlbumId) = navigate(SmartEditorDestination(album = id.value))

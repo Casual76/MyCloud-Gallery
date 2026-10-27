@@ -36,6 +36,8 @@ import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.albums.contract.SmartSource
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.PeopleMode
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.albums.R
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.contract.SmartEditorState
@@ -61,6 +63,17 @@ interface SmartEditorHandlers {
   fun onRadius(km: Int)
 
   fun onRemovePlace()
+
+  /** Fase 8: tocca una persona nel foglio di scelta (la mette o la toglie). */
+  fun onTogglePerson(id: PersonId)
+
+  /** Fase 8: toglie una persona dalla regola (la riga nella sezione). */
+  fun onRemovePerson(id: PersonId)
+
+  /** Fase 8: "tutte" o "una qualunque". */
+  fun onPeopleMode(mode: PeopleMode)
+
+  fun onRemovePeople()
 
   fun onText(text: String)
 
@@ -90,6 +103,14 @@ object NoSmartEditorHandlers : SmartEditorHandlers {
 
   override fun onRemovePlace() = Unit
 
+  override fun onTogglePerson(id: PersonId) = Unit
+
+  override fun onRemovePerson(id: PersonId) = Unit
+
+  override fun onPeopleMode(mode: PeopleMode) = Unit
+
+  override fun onRemovePeople() = Unit
+
   override fun onText(text: String) = Unit
 
   override fun onAddExamples() = Unit
@@ -118,6 +139,7 @@ fun SmartEditorScreen(
   }
   LaunchedEffect(requests, thumbnails) { thumbnails.loader.window(requests, emptyList()) }
   var datesFor by remember { mutableStateOf(false) }
+  var picking by remember { mutableStateOf(false) }
   Column(modifier = modifier.fillMaxSize()) {
     FluidScreen(
       title = stringResource(if (ui.creating) R.string.editor_title_create else R.string.editor_title_edit),
@@ -130,7 +152,7 @@ fun SmartEditorScreen(
       if (rules == null) {
         item(key = "interpreting") { Text(stringResource(R.string.editor_interpreting, ui.title), color = MaterialTheme.colorScheme.onSurfaceVariant) }
       } else {
-        editorSections(ui, rules, thumbnails, handlers) { datesFor = true }
+        editorSections(ui, rules, thumbnails, handlers, onEditDates = { datesFor = true }, onPickPeople = { picking = true })
       }
     }
     if (rules != null) SaveBar(ui, handlers)
@@ -139,6 +161,9 @@ fun SmartEditorScreen(
     handlers.onPeriod(it)
     datesFor = false
   }, onDismiss = { datesFor = false })
+  PeoplePickerSheet(
+    visible = picking, choices = ui.peopleChoices, chosen = rules?.people?.ids.orEmpty().toSet(), onToggle = handlers::onTogglePerson, onDismiss = { picking = false },
+  )
 }
 
 private fun LazyListScope.editorSections(
@@ -147,11 +172,13 @@ private fun LazyListScope.editorSections(
   thumbnails: AlbumThumbnails,
   handlers: SmartEditorHandlers,
   onEditDates: () -> Unit,
+  onPickPeople: () -> Unit,
 ) {
   item(key = "intro") { Text(stringResource(R.string.editor_intro), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
   (ui.state as? SmartEditorState.TooBroad)?.let { broad -> item(key = "broad") { BroadCard(broad) } }
   item(key = "period") { PeriodSection(rules.period, ui.series, handlers, onEditDates) }
   item(key = "place") { PlaceSection(rules.place, ui.alternatives, handlers) }
+  if (showsPeopleSection(ui, rules.people)) item(key = "people") { PeopleSection(ui, rules.people, handlers, onPickPeople) }
   item(key = "text") { TextSection(rules.text.orEmpty(), noSearch = ui.state is SmartEditorState.NoSearch || ProposalNote.NO_SEARCH in ui.notes, handlers) }
   item(key = "examples") { ExamplesSection(rules.examples, thumbnails, handlers) }
   item(key = "sources") { SourcesSection(rules.sources, handlers) }
@@ -186,13 +213,15 @@ private fun SaveBar(ui: SmartEditorUi, handlers: SmartEditorHandlers) {
     ) {
       val summary = when {
         ui.previewing || preview == null -> stringResource(R.string.editor_preview_working)
+        // Fase 8 (E-F37): senza i volti qui l'anteprima e' vuota per un motivo preciso, non perche' le regole non trovino foto.
+        !preview.peopleAvailable -> stringResource(R.string.editor_preview_people_off)
         preview.confident + preview.suggested == 0 -> stringResource(R.string.editor_preview_none)
         else -> resources.getQuantityString(R.plurals.editor_preview_confident, preview.confident, preview.confident) + " · " +
           resources.getQuantityString(R.plurals.editor_preview_suggested, preview.suggested, preview.suggested)
       }
       Text(summary, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
       if (!ui.canSave && !ui.saving && !ui.previewing && ui.rules != null && ui.state !is SmartEditorState.Interpreting) {
-        val empty = ui.rules.period == null && ui.rules.place == null && ui.rules.text.isNullOrBlank() && ui.rules.examples.isEmpty()
+        val empty = ui.rules.period == null && ui.rules.place == null && ui.rules.people == null && ui.rules.text.isNullOrBlank() && ui.rules.examples.isEmpty()
         if (empty) Text(stringResource(R.string.editor_no_rules), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
       }
       FluidButton(

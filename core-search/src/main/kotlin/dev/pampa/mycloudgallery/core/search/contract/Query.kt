@@ -31,9 +31,16 @@ sealed interface SearchChip {
 
   /**
    * Un periodo di giorni **nell'ora del posto dello scatto** (`local_day`, come le intestazioni della Libreria), estremi inclusi.
-   * [everyYear] = solo mese e giorno contano ("Agosto (tutti gli anni)", "Natale").
+   * [everyYear] = solo mese e giorno contano ("Agosto (tutti gli anni)", "Natale"). [person]: la stessa parola e' anche il nome di una persona
+   * che ha meno media (E-F36): il foglio del chip propone "Cerca la persona".
    */
-  data class DateRange(val from: LocalDate, val to: LocalDate, val everyYear: Boolean, override val label: String) : SearchChip {
+  data class DateRange(
+    val from: LocalDate,
+    val to: LocalDate,
+    val everyYear: Boolean,
+    override val label: String,
+    val person: PersonOption? = null,
+  ) : SearchChip {
     init {
       require(!to.isBefore(from) || everyYear) { "Periodo rovesciato." }
     }
@@ -43,7 +50,7 @@ sealed interface SearchChip {
    * Un **insieme di giorni** (P6, richiesta di P7): una festa mobile "tutti gli anni" ("Pasqua" senza anno = ogni domenica di
    * Pasqua dal [FIRST_YEAR] a oggi). Come [DateRange], i giorni **nell'ora del posto dello scatto**. Mai vuoto, al piu' [MAX_DAYS].
    */
-  data class DateSet(val days: Set<LocalDate>, override val label: String) : SearchChip {
+  data class DateSet(val days: Set<LocalDate>, override val label: String, val person: PersonOption? = null) : SearchChip {
     init {
       require(days.isNotEmpty()) { "Insieme di giorni vuoto." }
       require(days.size <= MAX_DAYS) { "Troppi giorni." }
@@ -60,8 +67,16 @@ sealed interface SearchChip {
     }
   }
 
-  /** Un luogo, una regione o un paese; [alternatives] sono gli omonimi e "Cerca come parola" (E-Q10) lo propone la UI. */
-  data class Place(val option: PlaceOption, val alternatives: List<PlaceOption>, val word: String) : SearchChip {
+  /**
+   * Un luogo, una regione o un paese; [alternatives] sono gli omonimi e "Cerca come parola" (E-Q10) lo propone la UI. [person]: la stessa
+   * parola e' anche il nome di una persona che ha meno media (E-F36): il foglio del chip propone "Cerca la persona".
+   */
+  data class Place(
+    val option: PlaceOption,
+    val alternatives: List<PlaceOption>,
+    val word: String,
+    val person: PersonOption? = null,
+  ) : SearchChip {
     override val label: String get() = option.label
   }
 

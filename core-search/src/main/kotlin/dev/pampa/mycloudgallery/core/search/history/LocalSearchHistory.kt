@@ -23,6 +23,13 @@ interface HistoryStore {
   suspend fun clear()
 
   fun changes(limit: Int): Flow<List<SearchHistoryRecord>>
+
+  /**
+   * Le voci **adesso**, in una lettura sola (`AiIndexCatalog.searchHistory`), o null se questo deposito non sa farla: allora la cancellazione dei
+   * nomi (Fase 8, [LocalSearchHistory.purge]) legge l'ultimo elenco vivo. La lettura sola e' piu' sicura: [changes] emette prima un elenco vuoto e
+   * poi quello vero, quindi subito dopo l'avvio l'elenco vivo potrebbe essere ancora vuoto.
+   */
+  suspend fun records(limit: Int): List<SearchHistoryRecord>? = null
 }
 
 /**
@@ -45,6 +52,24 @@ class LocalSearchHistory(private val store: HistoryStore, scope: CoroutineScope)
   override suspend fun delete(id: Long) = store.delete(id)
 
   override suspend fun clear() = store.clear()
+
+  /**
+   * Fase 8 (D29 passo 4): toglie le voci con un nome ([HistoryNames]). Legge le voci adesso dal deposito; se non sa farlo, l'ultimo elenco vivo.
+   * Ogni voce che non si riesce a togliere fa fallire la chiamata (l'eccezione sale: chi cancella riprova, e' idempotente).
+   */
+  override suspend fun purge(names: Collection<String>): Int {
+    val wanted = HistoryNames.wanted(names)
+    if (wanted.isEmpty()) return 0
+    val rows = store.records(SearchHistory.MAX_ENTRIES) ?: entries.value.map { SearchHistoryRecord(it.id, it.text, it.chipLabels) }
+    var removed = 0
+    for (row in rows) {
+      if (HistoryNames.contains(row.text, row.chipLabels, wanted)) {
+        store.delete(row.id)
+        removed++
+      }
+    }
+    return removed
+  }
 
   companion object {
     /** Le etichette da salvare: senza "Simili a" (D29). */

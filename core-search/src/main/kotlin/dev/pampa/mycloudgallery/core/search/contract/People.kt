@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.search.contract
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PeopleMode
 import dev.pampa.mycloudgallery.core.model.PersonId
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 // LA RICERCA PER PERSONA (docs/fase8-progetto.md §1.2 "core-search", §2.7, D26, D28, E-F36). Firme di P0; l'analizzatore (dizionario dei
@@ -60,11 +61,31 @@ data class PersonEntry(val name: String, val id: PersonId, val label: String, va
   override fun toString(): String = "PersonEntry($mediaCount)"
 }
 
-/** Il dizionario dei nomi delle persone (D26). Vuoto quando Persone e' spenta, in attesa dell'avviso o esclusa: il nome resta testo. */
-class PeopleDictionary(val entries: List<PersonEntry>) {
+/**
+ * Quanti media **visibili** coprirebbe una lettura "di data" di una parola (una festa, un mese): serve all'analizzatore solo quando un
+ * nome di persona e' anche una festa o un mese (E-F36, "vince l'interpretazione con piu' media visibili"). Il motore la lega
+ * all'istantanea della Libreria (che non ha mai nascosti); [UNKNOWN] (di serie) risponde 0 e il nome vince sempre sulla data.
+ */
+fun interface DateMediaCount {
+  fun count(chip: SearchChip): Int
+
+  companion object {
+    val UNKNOWN = DateMediaCount { 0 }
+  }
+}
+
+/**
+ * Il dizionario dei nomi delle persone (D26). Vuoto quando Persone e' spenta, in attesa dell'avviso o esclusa: il nome resta testo.
+ * [dates] pesa le feste e i mesi quando un nome e' anche una data (E-F36).
+ */
+class PeopleDictionary(val entries: List<PersonEntry>, val dates: DateMediaCount = DateMediaCount.UNKNOWN) {
   /** Gli omonimi di [name] (normalizzato), dal piu' frequente; a pari numero l'id minore (deterministico). */
   fun lookup(name: String): List<PersonEntry> =
     entries.filter { it.name == name }.sortedWith(compareByDescending<PersonEntry> { it.mediaCount }.thenBy { it.id })
+
+  /** Le persone piu' fotografate, una per id, dalla piu' frequente (a pari numero per nome e id: deterministico). */
+  fun top(limit: Int): List<PersonEntry> =
+    entries.sortedWith(compareByDescending<PersonEntry> { it.mediaCount }.thenBy { it.name }.thenBy { it.id }).distinctBy { it.id }.take(limit)
 
   val isEmpty: Boolean get() = entries.isEmpty()
 
@@ -88,7 +109,18 @@ class PeopleDictionary(val entries: List<PersonEntry>) {
 interface PeopleLookup {
   val available: StateFlow<Boolean>
 
+  /**
+   * Il primo calcolo dei volti in corso: la percentuale (0..100), o null quando non c'e' (finito, spento). Sopra i risultati con un chip
+   * "Persona" Cerca dice "Sto ancora riconoscendo i volti: 60%" (§2.7, come `SearchCoverage`). Di serie nessuno: chi lega la porta
+   * (P13) lo prende da `PeopleList.progressPercent`.
+   */
+  val progressPercent: StateFlow<Int?> get() = NO_PROGRESS
+
   suspend fun dictionary(): PeopleDictionary
 
   suspend fun cells(option: PersonOption, includeLikely: Boolean = false): Set<MediaId>
+
+  companion object {
+    val NO_PROGRESS: StateFlow<Int?> = MutableStateFlow<Int?>(null)
+  }
 }

@@ -18,8 +18,17 @@ I chip si separano con " ; ", nell'ordine in cui compaiono nella query:
   F STATO etichetta      FAVORITE, EDITED
   L PRESENZA etichetta   ON_PHONE, ON_NAS, NAS_ONLY
   W exact testo          testo esatto fra virgolette
+  N etichetta #n modo word=parola [alt=lettura | lettura]   (Fase 8) persona o persone: n = quante, modo any (una qualunque) o all (tutte); alt = le altre
+                         letture della stessa parola, separate da " | ": data:<chip di data>, luogo:<chip di luogo>, parola:<testo> ("Cerca come parola")
+Un chip di data o di luogo puo' finire con ` persona=Nome`: la stessa parola e' anche il nome di una persona con meno media (E-F36).
 Le correzioni sono "cercato<-scritto" ("screenshot<-screeshot": «Ho cercato screenshot invece di screeshot»), anche per le date
 impossibili ("29 febbraio 2024<-31 febbraio").
 
 Pasqua e Pasquetta dal 2015 al 2035 stanno in pasqua-2015-2035.txt: date scritte a mano, confrontate dal test PasquaTest con il
 risultato del parser (non con un secondo calcolo).
+
+Le persone (Fase 8, P10, docs/fase8-progetto.md §2.7, D26, E-F36) hanno le loro tabelle, eseguite da PeopleQueryTableTest con il dizionario del banco
+(`TestPeople`: nomi INVENTATI, mai nomi di persone vere; luoghi di TestPlaces piu' "Marina"): query-persone.txt (un nome, congiunzioni, nomi di piu'
+parole, luoghi), query-persone-ambiguita.txt (feste, mesi e luoghi che sono anche nomi), query-persone-refusi.txt (refusi). query-persone-spente.txt gira con
+il dizionario vuoto (Persone spenta, in attesa dell'avviso, esclusa): il nome resta testo e nessun chip "Persona" nasce. Nel banco i pesi sono: media
+visibili delle persone nel dizionario (Marco 120, Anna 80...), dei luoghi in TestPlaces e delle date (Natale 40, Aprile 25, Maggio 60, il resto 10).

@@ -45,6 +45,8 @@ object NoSearchHistory : SearchHistory {
   override suspend fun delete(id: Long) = Unit
 
   override suspend fun clear() = Unit
+
+  override suspend fun purge(names: Collection<String>): Int = 0
 }
 
 object NoSuggestions : Suggestions {

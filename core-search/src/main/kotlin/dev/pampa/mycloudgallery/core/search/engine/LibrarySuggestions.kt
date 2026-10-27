@@ -1,7 +1,12 @@
 package dev.pampa.mycloudgallery.core.search.engine
 
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
+import dev.pampa.mycloudgallery.core.model.PeopleMode
 import dev.pampa.mycloudgallery.core.search.contract.IdleSuggestions
+import dev.pampa.mycloudgallery.core.search.contract.PeopleDictionary
+import dev.pampa.mycloudgallery.core.search.contract.PeopleLookup
+import dev.pampa.mycloudgallery.core.search.contract.PersonEntry
+import dev.pampa.mycloudgallery.core.search.contract.PersonOption
 import dev.pampa.mycloudgallery.core.search.contract.PlaceDictionary
 import dev.pampa.mycloudgallery.core.search.contract.PlaceEntry
 import dev.pampa.mycloudgallery.core.search.contract.PlaceLevel
@@ -13,6 +18,8 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchMediaType
 import dev.pampa.mycloudgallery.core.search.contract.SearchText
 import dev.pampa.mycloudgallery.core.search.contract.Suggestion
 import dev.pampa.mycloudgallery.core.search.contract.Suggestions
+import dev.pampa.mycloudgallery.core.search.noop.NoPeopleLookup
+import kotlin.coroutines.cancellation.CancellationException
 
 /**
  * IL DIZIONARIO DEI LUOGHI della Libreria (§2.5) per l'analizzatore e i suggerimenti: **solo dalle celle dell'istantanea**, che non
@@ -63,11 +70,16 @@ class LibraryPlaces(private val lookup: PlaceLookup) {
  * I SUGGERIMENTI di Cerca (§2.6): a riposo le ricerche recenti (fino a 10), i luoghi piu' frequenti (fino a 8) e i tipi; mentre si
  * scrive le ricerche recenti, i luoghi e i tipi che cominciano cosi'. **Mai** parole del testo letto (il vocabolario contiene anche
  * quelle dei nascosti, D29), mai un luogo che non ha celle visibili.
+ *
+ * Fase 8 (P10, §2.7): a riposo una riga "Persone" (fino a [MAX_IDLE_PEOPLE], le piu' frequenti con un nome) e, mentre si scrive, i nomi che cominciano
+ * cosi'. Vengono dal dizionario della porta [PeopleLookup]: persone con un nome, mai nascoste ne' dimenticate, con almeno un media **visibile** (D28);
+ * dove i volti non ci sono (Persone spenta, in attesa dell'avviso, esclusa) il dizionario e' vuoto e non si propone niente.
  */
 class LibrarySuggestions(
   private val data: SearchData,
   private val places: LibraryPlaces,
   private val history: SearchHistory,
+  private val people: PeopleLookup = NoPeopleLookup,
 ) : Suggestions {
 
   override suspend fun idle(): IdleSuggestions {
@@ -76,6 +88,7 @@ class LibrarySuggestions(
       recents = history.entries.value.take(MAX_RECENTS),
       places = snapshot?.let { places.top(it) }.orEmpty(),
       types = TYPES.map { it.first },
+      people = peopleDictionary().top(MAX_IDLE_PEOPLE).map { optionOf(it) },
     )
   }
 
@@ -84,6 +97,9 @@ class LibrarySuggestions(
     if (p.isEmpty()) return emptyList()
     val out = ArrayList<Suggestion>()
     history.entries.value.filter { SearchText.normalize(it.text).startsWith(p) }.take(MAX_RECENTS).forEach { out += Suggestion.Recent(it) }
+    peopleDictionary().entries.filter { e -> e.name.startsWith(p) || e.name.split(' ').any { it.startsWith(p) } }
+      .sortedWith(compareByDescending<PersonEntry> { it.mediaCount }.thenBy { it.name }.thenBy { it.id })
+      .distinctBy { it.id }.take(MAX_PEOPLE).forEach { out += Suggestion.PersonSuggestion(optionOf(it)) }
     data.snapshot.value?.let { snapshot ->
       places.dictionary(snapshot).entries.filter { e -> e.name.startsWith(p) || e.name.split(' ').any { it.startsWith(p) } }
         .sortedWith(compareByDescending<PlaceEntry> { it.mediaCount }.thenBy { it.name })
@@ -93,9 +109,29 @@ class LibrarySuggestions(
     return out
   }
 
+  /** Il dizionario dei nomi; vuoto dove i volti non ci sono o se la porta sbaglia (le persone sono un di piu': mai un errore per Cerca). */
+  private suspend fun peopleDictionary(): PeopleDictionary {
+    if (!people.available.value) return PeopleDictionary.EMPTY
+    return try {
+      people.dictionary()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      PeopleDictionary.EMPTY
+    }
+  }
+
+  private fun optionOf(entry: PersonEntry) = PersonOption(listOf(entry.id), PeopleMode.ANY, entry.label)
+
   companion object {
     const val MAX_RECENTS: Int = 10
     const val MAX_PLACES: Int = 8
+
+    /** La riga "Persone" a riposo (§2.7). */
+    const val MAX_IDLE_PEOPLE: Int = 6
+
+    /** I nomi proposti mentre si scrive. */
+    const val MAX_PEOPLE: Int = 4
 
     /** I tipi proposti (le etichette come quelle dei chip dell'analizzatore). */
     val TYPES: List<Pair<SearchMediaType, String>> = listOf(

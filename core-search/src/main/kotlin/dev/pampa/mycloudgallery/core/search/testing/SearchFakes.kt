@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchMediaType
 import dev.pampa.mycloudgallery.core.search.contract.SearchText
 import dev.pampa.mycloudgallery.core.search.contract.TextLayout
 import dev.pampa.mycloudgallery.core.search.contract.Today
+import dev.pampa.mycloudgallery.core.search.history.HistoryNames
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -117,6 +118,13 @@ class InMemorySearchHistory : SearchHistory {
 
   override suspend fun clear() {
     entries.value = emptyList()
+  }
+
+  override suspend fun purge(names: Collection<String>): Int {
+    val wanted = HistoryNames.wanted(names)
+    val before = entries.value.size
+    entries.value = entries.value.filterNot { HistoryNames.contains(it.text, it.chipLabels, wanted) }
+    return before - entries.value.size
   }
 }
 

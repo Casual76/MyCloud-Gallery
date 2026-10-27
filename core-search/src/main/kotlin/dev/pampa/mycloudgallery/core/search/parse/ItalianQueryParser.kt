@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.search.parse
 
 import dev.pampa.mycloudgallery.core.search.contract.ParsedQuery
+import dev.pampa.mycloudgallery.core.search.contract.PeopleDictionary
 import dev.pampa.mycloudgallery.core.search.contract.PlaceDictionary
 import dev.pampa.mycloudgallery.core.search.contract.QueryParser
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
@@ -14,9 +15,15 @@ import java.time.LocalDate
  * dizionario scritte con un refuso si correggono (E-Q5) e le regole di data, calendario, tipo e luogo consumano i token: quello che
  * resta e' il contenuto (con le parole vuote) e le parole del testo letto (senza). Le virgolette chiedono il testo esatto; nessun'altra
  * sintassi si interpreta (E-Q9).
+ *
+ * Fase 8 (P10, D26, §2.7): con il dizionario delle persone un nome diventa un chip "Persona" -- **dopo le virgolette e prima dei luoghi**, la
+ * corrispondenza piu' lunga; "Marco e Anna" sono tutte, "Marco o Anna" una qualunque, piu' nomi senza congiunzione tutte; se il nome e' anche una
+ * festa, un mese o un luogo vince la lettura con piu' media visibili e il chip propone l'altra (E-F36). Senza dizionario (Persone spenta) un nome
+ * resta testo: l'analisi e' quella di prima, riga per riga.
  */
 class ItalianQueryParser : QueryParser {
   @Volatile private var cached: Pair<PlaceDictionary, PlaceIndex>? = null
+  @Volatile private var cachedNames: Pair<PeopleDictionary, PeopleNameIndex>? = null
 
   private fun indexFor(places: PlaceDictionary): PlaceIndex {
     val c = cached
@@ -24,9 +31,18 @@ class ItalianQueryParser : QueryParser {
     return PlaceIndex(places).also { cached = places to it }
   }
 
+  private fun namesFor(people: PeopleDictionary): PeopleNameIndex? {
+    if (people.isEmpty) return null
+    val c = cachedNames
+    if (c != null && c.first === people) return c.second.takeUnless { it.isEmpty }
+    return PeopleNameIndex(people).also { cachedNames = people to it }.takeUnless { it.isEmpty }
+  }
+
   private class Found(val pos: Int, val chip: SearchChip)
 
-  override fun parse(text: String, today: LocalDate, places: PlaceDictionary): ParsedQuery {
+  override fun parse(text: String, today: LocalDate, places: PlaceDictionary): ParsedQuery = parse(text, today, places, PeopleDictionary.EMPTY)
+
+  override fun parse(text: String, today: LocalDate, places: PlaceDictionary, people: PeopleDictionary): ParsedQuery {
     val input = truncate(text).trim()
     if (input.length <= 1) return EMPTY
     val folded = QueryTokenizer.fold(input).toCharArray()
@@ -44,8 +60,9 @@ class ItalianQueryParser : QueryParser {
     }
     val tokens = QueryTokenizer.tokenize(String(folded))
     val index = indexFor(places)
+    val names = namesFor(people)
     for (tk in tokens) {
-      if (tk.isWord && tk.word.length >= 4 && !QueryVocabulary.isProtected(tk.word) && !index.hasWord(tk.word)) {
+      if (tk.isWord && tk.word.length >= 4 && !QueryVocabulary.isProtected(tk.word) && !index.hasWord(tk.word) && names?.hasWord(tk.word) != true && names?.looksLikeName(tk.word) != true) {
         QueryVocabulary.correct(tk.word)?.let { tk.word = it }
       }
     }
@@ -54,33 +71,29 @@ class ItalianQueryParser : QueryParser {
     val calendar = CalendarRules(ctx)
     val types = TypeRules(ctx)
     val corrections = ArrayList<Pair<String, String>>()
+    val readings = QueryReadings(tokens, index, names, dates, calendar, types)
     val consumed = BooleanArray(tokens.size)
     var i = 0
     while (i < tokens.size) {
       val tk = tokens[i]
-      if (tk.kind == TokenKind.BARRIER) {
+      val reading = readings.at(i)
+      if (reading == null) {
         i++; continue
       }
-      var best: RuleMatch? = dates.match(i)
-      fun consider(m: RuleMatch?) {
-        if (m != null && (best == null || m.len > best!!.len)) best = m
-      }
-      consider(calendar.match(i))
-      consider(types.match(i))
-      val place = index.exact(tokens, i)
-      var len = best?.len ?: 0
-      var chip: SearchChip? = best?.chip
-      var correction: Pair<String, String>? = null
-      if (place != null && place.len > len) {
-        len = place.len; chip = place.chip; best = null
-      } else if (best == null) {
-        val fuzzy = if (tk.isWord && tk.word == tk.typed) index.fuzzy(tokens, i) else null
-        if (fuzzy != null) {
-          len = fuzzy.len; chip = fuzzy.chip; correction = fuzzy.correction
-        }
-      }
-      if (chip == null) {
-        i++; continue
+      var len = reading.len
+      val chip: SearchChip
+      val declared: List<Pair<String, String>>
+      if (reading is PersonReading) {
+        val chain = readings.chain(i, reading)
+        len = chain.end - i
+        chip = chain.chip
+        declared = chain.corrections
+        // Anche i separatori fra una persona e l'altra (virgole, congiunzioni) escono dal contenuto.
+        for (p in tk.start until tokens[chain.end - 1].end) removed[p] = true
+      } else {
+        reading as PlainReading
+        chip = reading.chip
+        declared = reading.notes + listOfNotNull(reading.correction)
       }
       for (k in i until i + len) {
         consumed[k] = true
@@ -88,8 +101,7 @@ class ItalianQueryParser : QueryParser {
         for (p in t.start until t.end) removed[p] = true
         if (t.isWord && t.word != t.typed) corrections += t.word to t.typed
       }
-      best?.notes?.let { corrections += it }
-      correction?.let { corrections += it }
+      corrections += declared
       // La preposizione o l'articolo subito prima esce con il chip ("a Firenze", "nel 2023", "di ieri").
       if (i > 0 && !consumed[i - 1] && tokens[i - 1].isWord && tokens[i - 1].word in QueryVocabulary.GLUE) {
         consumed[i - 1] = true

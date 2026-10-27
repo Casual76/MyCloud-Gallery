@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.search.parse
 
 import dev.pampa.mycloudgallery.core.search.contract.ParsedQuery
+import dev.pampa.mycloudgallery.core.search.contract.PersonOption
 import dev.pampa.mycloudgallery.core.search.contract.PlaceDictionary
 import dev.pampa.mycloudgallery.core.search.contract.PlaceEntry
 import dev.pampa.mycloudgallery.core.search.contract.PlaceLevel
@@ -43,11 +44,11 @@ internal object TestPlaces {
 internal object QueryRenderer {
   fun chip(chip: SearchChip): String = when (chip) {
     is SearchChip.DateRange ->
-      if (chip.everyYear) "Y ${md(chip.from)}..${md(chip.to)} ${chip.label}" else "D ${chip.from}..${chip.to} ${chip.label}"
-    is SearchChip.DateSet -> chip.days.sorted().let { "E ${it.first()}..${it.last()} #${it.size} ${chip.label}" }
+      (if (chip.everyYear) "Y ${md(chip.from)}..${md(chip.to)} ${chip.label}" else "D ${chip.from}..${chip.to} ${chip.label}") + asPerson(chip.person)
+    is SearchChip.DateSet -> chip.days.sorted().let { "E ${it.first()}..${it.last()} #${it.size} ${chip.label}" } + asPerson(chip.person)
     is SearchChip.Place -> {
       val alt = if (chip.alternatives.isEmpty()) "" else " alt=" + chip.alternatives.joinToString(",") { "${it.label}#${ids(it.ids)}" }
-      "P ${chip.option.label} #${ids(chip.option.ids)} ${chip.option.level} word=${chip.word}$alt"
+      "P ${chip.option.label} #${ids(chip.option.ids)} ${chip.option.level} word=${chip.word}$alt" + asPerson(chip.person)
     }
     is SearchChip.MediaType -> "T ${chip.type} ${chip.label}"
     is SearchChip.Source -> "S ${chip.source} ${chip.label}"
@@ -55,9 +56,23 @@ internal object QueryRenderer {
     is SearchChip.Presence -> "L ${chip.where} ${chip.label}"
     is SearchChip.Similar -> "M ${chip.media} ${chip.label}"
     is SearchChip.Word -> "W ${if (chip.exact) "exact" else "free"} ${chip.text}"
-    // Fase 8 (P0): il chip "Persona" (D26). Nessuna query della tabella lo produce ancora: la forma la fissa P10 nel LEGGIMI.txt.
-    is SearchChip.Person -> "N ${chip.option.label} #${chip.option.ids.size} ${chip.option.mode.code} word=${chip.word}"
+    // Fase 8 (P10): il chip "Persona" (D26): etichetta, quante persone, modo, parola e le altre letture della stessa parola.
+    is SearchChip.Person -> {
+      val alt = if (chip.alternatives.isEmpty()) "" else " alt=" + chip.alternatives.joinToString(" | ") { alternative(it.chip) }
+      "N ${chip.option.label} #${chip.option.ids.size} ${chip.option.mode.code} word=${chip.word}$alt"
+    }
   }
+
+  /** Un'altra lettura di un chip "Persona": "data:" (festa o mese), "luogo:" o "parola:". */
+  private fun alternative(chip: SearchChip): String = when (chip) {
+    is SearchChip.DateRange, is SearchChip.DateSet -> "data:${chip.label}"
+    is SearchChip.Place -> "luogo:${chip.label}"
+    is SearchChip.Word -> "parola:${chip.text}"
+    else -> "altro:${chip.label}"
+  }
+
+  /** La stessa parola e' anche una persona con meno media (E-F36): "persona=Marina". */
+  private fun asPerson(option: PersonOption?): String = if (option == null) "" else " persona=${option.label}"
 
   private fun md(d: LocalDate): String = "%02d-%02d".format(d.monthValue, d.dayOfMonth)
 

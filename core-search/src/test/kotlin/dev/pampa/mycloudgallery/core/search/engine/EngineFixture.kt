@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.database.MemberContent
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.search.contract.PeopleLookup
 import dev.pampa.mycloudgallery.core.search.contract.PlaceLookup
 import dev.pampa.mycloudgallery.core.search.contract.PlaceName
 import dev.pampa.mycloudgallery.core.search.coverage.CoverageTracker
@@ -18,6 +19,7 @@ import dev.pampa.mycloudgallery.core.search.index.RecordingRepair
 import dev.pampa.mycloudgallery.core.search.index.key
 import dev.pampa.mycloudgallery.core.search.index.ocrBody
 import dev.pampa.mycloudgallery.core.search.index.vecBody
+import dev.pampa.mycloudgallery.core.search.noop.NoPeopleLookup
 import dev.pampa.mycloudgallery.core.search.parse.ItalianQueryParser
 import dev.pampa.mycloudgallery.core.search.testing.FakeSearchData
 import dev.pampa.mycloudgallery.core.search.testing.FixedToday
@@ -81,11 +83,11 @@ internal class EngineFixture(dir: File, val library: SyntheticLibrary = Syntheti
     index.saveText(key(keyId), ocrBody(text))
   }
 
-  fun engine(embedder: FakeTextEmbedder? = FakeTextEmbedder(), coverage: CoverageTracker = CoverageTracker()) =
-    LocalSearchEngine(data, index, keys, texts, EmbedderQueryEmbedding(embedder), today, places, coverageTracker = coverage)
+  fun engine(embedder: FakeTextEmbedder? = FakeTextEmbedder(), coverage: CoverageTracker = CoverageTracker(), people: PeopleLookup = NoPeopleLookup) =
+    LocalSearchEngine(data, index, keys, texts, EmbedderQueryEmbedding(embedder), today, places, coverageTracker = coverage, people = people)
 
-  fun reference(embedder: FakeTextEmbedder? = FakeTextEmbedder()) =
-    InMemorySearchEngine(IndexSearchData(data, keys, index), embedder, ItalianQueryParser(), today, { places.dictionary(snapshot) })
+  fun reference(embedder: FakeTextEmbedder? = FakeTextEmbedder(), people: PeopleLookup = NoPeopleLookup) =
+    InMemorySearchEngine(IndexSearchData(data, keys, index), embedder, ItalianQueryParser(), today, { places.dictionary(snapshot) }, people = people)
 
   fun id(i: Int): MediaId = snapshot.idAt(i)
 

@@ -85,6 +85,8 @@ internal class SearchCore(
    * [onlyFilters]); una cella sta fra i **sicuri** se il contenuto supera la soglia alta (e il minimo assoluto) o il testo ha tutte le
    * parole, fra i **meno probabili** se il contenuto supera la soglia bassa o il testo almeno meta'.
    *
+   * [softCells] (Fase 8): le posizioni che al meglio sono "meno probabili" (solo un volto nella fascia "forse" di una persona del chip "Persona", §2.7).
+   *
    * Prima di ordinare si chiede quali celle **e quali membri** che hanno dato il punteggio sono nascosti adesso: una cella nascosta
    * esce; un membro nascosto non porta il suo contenuto (la cella resta solo per il testo) e la sua cella si rilegge.
    */
@@ -98,17 +100,22 @@ internal class SearchCore(
     order: ResultOrder,
     notices: List<SearchNotice>,
     freeText: Boolean = false,
+    softCells: BooleanArray? = null,
   ): SearchResults {
     val day = today.date()
     fun classify(c: Scored): Int {
-      if (onlyFilters) return SURE
-      val sure = c.z != null && c.s != null && c.z >= thresholds.sure && c.s >= thresholds.minScore
-      val likely = c.z != null && c.z >= thresholds.likely
-      return when {
-        sure || c.t >= 1f -> SURE
-        likely || c.t > 0f -> LIKELY
-        else -> OUT
+      val base = if (onlyFilters) {
+        SURE
+      } else {
+        val sure = c.z != null && c.s != null && c.z >= thresholds.sure && c.s >= thresholds.minScore
+        val likely = c.z != null && c.z >= thresholds.likely
+        when {
+          sure || c.t >= 1f -> SURE
+          likely || c.t > 0f -> LIKELY
+          else -> OUT
+        }
       }
+      return if (base == SURE && softCells != null && softCells[c.position]) LIKELY else base
     }
     val inResults = scored.filter { classify(it) != OUT }
     val ids = HashMap<MediaId, Int>(inResults.size * 2)

@@ -44,6 +44,10 @@ internal object QueryVocabulary {
     "su", "sul", "sullo", "sulla", "sull", "sui", "sugli", "sulle", "per", "tra", "fra", "il", "lo", "la", "l", "i", "gli", "le",
   )
 
+  /** Fase 8 (§2.7): "Marco e Anna", "Marco con Anna" = tutte le persone; "Marco o Anna" = una qualunque. Senza congiunzione: tutte. */
+  val AND_WORDS: Set<String> = setOf("e", "ed", "con")
+  val OR_WORDS: Set<String> = setOf("o", "od", "oppure")
+
   /** Le parole che le regole usano: mai corrette come refusi. */
   private val RULE_WORDS: Set<String> = buildSet {
     addAll(MONTH_WORDS.keys); addAll(WEEKDAYS.keys); addAll(SEASONS.keys); addAll(SCORSO); addAll(QUESTO); addAll(NUMBER_WORDS.keys)
@@ -55,7 +59,7 @@ internal object QueryVocabulary {
         "pasquetta", "ferragosto", "foto", "fotografia", "fotografie", "video", "filmato", "filmati", "screenshot", "screenshots",
         "schermata", "schermate", "panorami", "panoramica", "panoramiche", "movimento", "animate", "motion", "photo", "documenti",
         "documento", "whatsapp", "quick", "share", "quickshare", "preferiti", "preferite", "preferito", "preferita", "modificate",
-        "modificati", "modificata", "modificato", "telefono", "nas", "solo", "soltanto", "primo", "e",
+        "modificati", "modificata", "modificato", "telefono", "nas", "solo", "soltanto", "primo", "e", "ed", "od", "oppure",
       ),
     )
   }

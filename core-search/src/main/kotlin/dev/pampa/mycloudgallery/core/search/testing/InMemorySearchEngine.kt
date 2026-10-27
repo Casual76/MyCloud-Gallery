@@ -9,6 +9,8 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.SpaceCode
 import dev.pampa.mycloudgallery.core.search.contract.ChipMatching
 import dev.pampa.mycloudgallery.core.search.contract.CoverageReason
+import dev.pampa.mycloudgallery.core.search.contract.PeopleDictionary
+import dev.pampa.mycloudgallery.core.search.contract.PeopleLookup
 import dev.pampa.mycloudgallery.core.search.contract.PlaceDictionary
 import dev.pampa.mycloudgallery.core.search.contract.QueryParser
 import dev.pampa.mycloudgallery.core.search.contract.RankParams
@@ -25,6 +27,10 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchResults
 import dev.pampa.mycloudgallery.core.search.contract.SearchText
 import dev.pampa.mycloudgallery.core.search.contract.SearchThresholds
 import dev.pampa.mycloudgallery.core.search.contract.Today
+import dev.pampa.mycloudgallery.core.search.engine.PeopleGate
+import dev.pampa.mycloudgallery.core.search.engine.weighedBy
+import dev.pampa.mycloudgallery.core.search.noop.NoPeopleLookup
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
@@ -37,6 +43,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
  * Regole: filtri come vincoli; contenuto con la soglia relativa alla query (z = (s - mediana) / (1,4826 x MAD)); testo con tutte
  * le parole (sicuro) o almeno meta' (meno probabile); classe = la migliore delle due; nascosti mai (l'istantanea non li ha e il filtro
  * finale li toglie ancora, D29); senza motore delle query solo filtri e testo (D35).
+ *
+ * Fase 8 (P10): con [people] un nome e' un chip "Persona" e il chip e' un filtro sulle celle della porta (le sicure fra i risultati, quelle con un volto
+ * nella fascia "forse" fra i meno probabili): le stesse regole del motore vero ([PeopleGate]).
  */
 class InMemorySearchEngine(
   private val data: SearchData,
@@ -45,6 +54,7 @@ class InMemorySearchEngine(
   private val today: Today,
   private val places: () -> PlaceDictionary = { PlaceDictionary.EMPTY },
   private val params: RankParams = RankParams(),
+  private val people: PeopleLookup = NoPeopleLookup,
 ) : SearchEngine {
 
   override val coverage: MutableStateFlow<SearchCoverage> = MutableStateFlow(SearchCoverage.Complete)
@@ -56,7 +66,7 @@ class InMemorySearchEngine(
 
   override suspend fun search(request: SearchRequest): SearchResults {
     val snapshot = data.snapshot.value ?: return empty(emptyList(), request.order)
-    val parsed = parser.parse(request.text.take(QueryParser.MAX_QUERY_CHARS), today.date(), places())
+    val parsed = parser.parse(request.text.take(QueryParser.MAX_QUERY_CHARS), today.date(), places(), peopleDictionary(snapshot))
     val chips = request.editedChips ?: parsed.chips
     val wordChips = chips.filterIsInstance<SearchChip.Word>()
     // CE-2: come il motore vero, le parole libere della query restano quando si modifica un chip.
@@ -69,9 +79,12 @@ class InMemorySearchEngine(
     val filters = chips.filter { it.isFilter }
     val freeText = parsed.semantic != null || parsed.words.isNotEmpty()
     if (request.editedChips != null && filters.isEmpty() && !freeText && wordChips.isEmpty()) return empty(chips, request.order)
-    val cells = visibleCells(snapshot) { ChipMatching.accepts(filters, snapshot, it) }
+    val gate = PeopleGate.of(filters, people)
+    val plain = filters.filterNot { it is SearchChip.Person }
+    val cells = visibleCells(snapshot) { ChipMatching.accepts(plain, snapshot, it) && (gate == null || gate.accepts(snapshot.idAt(it))) }
     val notices = mutableListOf<SearchNotice>()
     parsed.corrections.forEach { (from, to) -> notices += SearchNotice.TypoCorrected(from, to) }
+    if (gate != null) people.progressPercent.value?.let { notices += SearchNotice.PeopleRecognizing(it.coerceIn(0, 99)) }
 
     var scores: Map<MediaId, Float> = emptyMap()
     if (parsed.semantic != null) {
@@ -88,7 +101,8 @@ class InMemorySearchEngine(
     for (cell in cells) {
       val day = ChipMatching.dayOf(snapshot.localDayAt(cell.index))
       if (onlyFilters) {
-        confident += ResultRanking.Ranked(cell.index, 1f, day, snapshot.sortTimeAt(cell.index))
+        val ranked = ResultRanking.Ranked(cell.index, 1f, day, snapshot.sortTimeAt(cell.index))
+        if (gate != null && !gate.isSure(cell.id)) likely += ranked else confident += ranked
         continue
       }
       val zc = z[cell.id]
@@ -97,9 +111,10 @@ class InMemorySearchEngine(
       val contentSure = zc != null && s != null && zc >= SearchThresholds.ZC && s >= SearchThresholds.S_MIN
       val contentLikely = zc != null && zc >= SearchThresholds.ZL
       val ranked = ResultRanking.Ranked(cell.index, ResultRanking.relevance(zc, t), day, snapshot.sortTimeAt(cell.index))
+      val soft = gate != null && !gate.isSure(cell.id)
       when {
-        contentSure || t >= 1f -> confident += ranked
-        contentLikely || t > 0f -> likely += ranked
+        (contentSure || t >= 1f) && !soft -> confident += ranked
+        contentSure || t >= 1f || contentLikely || t > 0f -> likely += ranked
       }
     }
     val cappedLikely = likely.sortedByDescending { it.relevance }.take(SearchThresholds.MAX_LIKELY)
@@ -146,6 +161,19 @@ class InMemorySearchEngine(
       notices = emptyList(),
       order = order,
     )
+  }
+
+  /** Il dizionario dei nomi per l'analizzatore, con il peso delle date dell'istantanea; vuoto dove i volti non ci sono (il nome resta testo). */
+  private suspend fun peopleDictionary(snapshot: TimelineSnapshot): PeopleDictionary {
+    if (!people.available.value) return PeopleDictionary.EMPTY
+    val loaded = try {
+      people.dictionary()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return PeopleDictionary.EMPTY
+    }
+    return loaded.weighedBy(snapshot)
   }
 
   /** Le celle dell'istantanea che passano [accept], senza i nascosti (il filtro finale, D29). */

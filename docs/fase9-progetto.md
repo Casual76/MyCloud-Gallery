@@ -1388,3 +1388,17 @@ Poche, solo quelle che decidono cosa vedi, cosa esce dal telefono e cosa entra n
   `https://github.com/openmaptiles/fonts`.
 
 <!-- fine del documento -->
+
+## 11. Risposte del 27/10 e cosa cambiano
+
+| # | Risposta | Cosa cambia |
+|---|---|---|
+| Q1 | (c) **Accesa per tutti fin dall'inizio.** | La mappa online (OpenFreeMap) è accesa di default su ogni dispositivo, senza pagina di consenso; resta un interruttore per dispositivo in Impostazioni per spegnerla, con una nota breve su cosa esce (la zona guardata, mai le foto). Il cancello di rete resta com'è (un solo host, nessun cookie, zone già scaricate mai chieste online). Restano anche le altre protezioni: la "casa" non si mostra mai e la mini-mappa delle info non va in rete. |
+| Q2 | (a) **Dal telefono**, sul Wi-Fi, da un elenco. | Nessun pacchetto P14. |
+| Q3 | **Di base nessuna musica.** Dalle Impostazioni si può scegliere una propria canzone **oppure installare un pacchetto di musica libera**, che poi si usa da solo; **la musica libera è l'opzione preferita**. | La presentazione parte muta. Il pacchetto di musica libera (brani CC0 o di pubblico dominio, qualche MB) si installa a richiesta, come i modelli della Fase 6: si scarica una volta per la famiglia e poi si prende dal NAS; impronte fissate nell'app. **Le fonti e i brani precisi si fanno approvare all'utente prima di scaricarli** (pacchetto dei ricordi o delle impostazioni, come deciso al §4). La canzone propria resta un file del telefono scelto con il selettore di sistema, mai copiato sul NAS. |
+| Q4 | **Di base 2–3 notifiche a settimana**; nei giorni più speciali (anniversari dei viaggi, giornate importanti) **fino a una al giorno**. | Il tetto settimanale di base è 3, con le eccezioni dei giorni speciali che possono arrivare a una al giorno; mai più di una al giorno. |
+| Q5 | (a) **Solo "Un ricordo per te"** a telefono bloccato. | Visibilità privata della notifica; il contenuto si vede solo dopo lo sblocco. |
+| Q6 | (a) **Solo i pulsanti** ("Non mostrare", "Mostra meno", "Non ricordarmi questo periodo"). | Nessun filtro automatico dei ricordi tristi. |
+| Q7 | Non chiesta esplicitamente: vale la raccomandazione **(a)**, quando l'utente vorrà. | Come F105 della Fase 8, la misura sui dati veri non blocca la chiusura del codice della fase. |
+| Q8 | (a) **Approvo tutto l'elenco**, comprese le prove della mappa online sul telefono di prova. | I download del §8 sono approvati; la musica libera ha la sua approvazione a parte (Q3). |
+| Q9 | (a) **Sì**, ricordi con le persone. | Solo persone con un nome, mai nascoste, mai il nome nella notifica. |

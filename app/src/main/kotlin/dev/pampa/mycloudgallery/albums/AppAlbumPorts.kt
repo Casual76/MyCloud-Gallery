@@ -107,13 +107,13 @@ class AppAlbumWriteGate(
     if (guard != null && !guard.allows(account, share)) return AlbumWriteBlock.FENCE
     val gate = index() ?: return AlbumWriteBlock.NO_NAS
     return when (gate.blockFor(share)) {
-      null -> null
+      // D31 (l'indice solo locale sulle share vere) non e' la recinzione degli album: per loro decide D30, sopra.
+      null, WriteBlock.LOCAL_ONLY -> null
       WriteBlock.FROZEN -> AlbumWriteBlock.FROZEN
       WriteBlock.CLOCK_JUMP -> AlbumWriteBlock.CLOCK_JUMP
       WriteBlock.READ_ONLY_AREA -> AlbumWriteBlock.READ_ONLY
       WriteBlock.EMERGENCY_STOP -> AlbumWriteBlock.EMERGENCY_STOP
       WriteBlock.NOT_TRUSTED -> AlbumWriteBlock.NOT_TRUSTED
-      else -> AlbumWriteBlock.NOT_TRUSTED
     }
   }
 }

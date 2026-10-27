@@ -50,6 +50,9 @@ class InMemoryShareDiary : ShareDiary {
 
   override suspend fun openOps(): List<ShareOpRecord> = ops.values.filter { !it.finished }
 
+  /** Le chiuse, dall'ultima creata (l'ordine d'inserimento: il diario vero ordina per ora dell'ultima scrittura). */
+  override suspend fun closedOps(limit: Int): List<ShareOpRecord> = ops.values.filter { it.finished }.reversed().take(limit)
+
   override suspend fun items(op: ShareOpId): List<ShareItemRecord> = items[op].orEmpty().toList()
 
   override suspend fun update(item: ShareItemRecord) = save {

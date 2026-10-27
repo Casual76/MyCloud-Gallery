@@ -147,9 +147,12 @@ class Phase7ArchitectureTest {
     assertWithMessage("ShareConfirmation costruita fuori dal file della conferma").that(constructors.map { it.second }).isEmpty()
     val text = code(File(root, confirmationFile))
     assertWithMessage("il costruttore di ShareConfirmation deve essere internal").that(INTERNAL_SHARE_CONFIRMATION.containsMatchIn(text)).isTrue()
+    // Revisione B, I3: prima feature-albums e tutto :app potevano nominarli (un'emissione nuova in :app sarebbe passata). Ora il foglio della
+    // condivisione e basta; in :app solo i test (le prove sul grafo vero toccano il foglio come la UI).
     val misplaced = mentions(SHARE_ISSUERS, ALL_SETS).filter { (module, path) ->
       when (module) {
-        FEATURE_ALBUMS, "app" -> false
+        FEATURE_ALBUMS -> !(path == SHARE_SHEET || "/src/test/" in path)
+        "app" -> "/src/test/" !in path
         ALBUMS -> !(path == confirmationFile || "/src/test/" in path || "/testing/" in path)
         else -> true
       }
@@ -248,6 +251,9 @@ class Phase7ArchitectureTest {
     const val NASOPS = "core-nasops"
     const val BACKUP = "core-backup"
     const val ALBUMS_MAIN = "core-albums/src/main/kotlin/dev/pampa/mycloudgallery/core/albums"
+
+    /** Revisione B, I3: l'unico file di produzione che tocca il foglio della conferma (D12, C26). */
+    const val SHARE_SHEET = "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums/share/ShareSheetController.kt"
 
     val PRODUCTION_SETS = listOf("main", "debug", "release", "benchmarkRelease")
     val TEST_SETS = listOf("test", "androidTest", "testDebug")

@@ -56,6 +56,12 @@
   <string name="share_excluded_unavailable">%1$d non disponibili adesso</string>
   <string name="share_excluded_not_mine">%1$d non sono tue o non hanno la cartella d’origine</string>
   <string name="share_excluded_not_in_common">%1$d non sono più nell’area comune</string>
+  <string name="share_excluded_upload_blocked">%1$d solo sul telefono: adesso non si possono caricare in questa cartella</string>
+  <string name="share_safe_copy_blocked_title">Copia privata ferma</string>
+  <plurals name="share_safe_copy_blocked">
+    <item quantity="one">Questa foto non è più sul telefono e la copia privata di sicurezza adesso non si può fare: resta nell’area comune, e l’originale 30 giorni nel cestino del NAS.</item>
+    <item quantity="other">%1$d foto non sono più sul telefono e la copia privata di sicurezza adesso non si può fare: restano nell’area comune, e gli originali 30 giorni nel cestino del NAS.</item>
+  </plurals>
 
   <string name="share_notice_changed">Qualcosa è cambiato mentre guardavi. Ecco il foglio aggiornato: rileggi i conteggi.</string>
   <string name="share_notice_expired">Il foglio era aperto da troppo tempo. Ecco quello nuovo: controlla e conferma di nuovo.</string>

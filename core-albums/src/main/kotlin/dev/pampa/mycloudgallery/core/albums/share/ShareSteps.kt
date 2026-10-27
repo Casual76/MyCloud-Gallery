@@ -70,6 +70,17 @@ internal class ShareSteps(
   suspend fun ensureDefinition(op: ShareOpRecord): Boolean {
     val nonce = op.nonceHex ?: return true
     if (op.id in defined) return true
+    // Revisione B, SH-5: dopo la morte del processo la definizione e il livello del piano NON si riaccodano se il mio pubblicatore ha gia'
+    // l'album: li' ci possono essere un titolo, un livello o una chiusura piu' nuovi (la voce del dispositivo tornerebbe indietro, o un album
+    // chiuso si riaprirebbe). Un errore della lettura vale "non so": si riprova al giro dopo, senza accodare.
+    when (transient { p.definitionStaged(op.album) }) {
+      true -> {
+        defined += op.id
+        return true
+      }
+      null -> return false
+      false -> Unit
+    }
     val folder = op.folder ?: return false
     val me = p.family.me() ?: return false
     val changes = buildList {

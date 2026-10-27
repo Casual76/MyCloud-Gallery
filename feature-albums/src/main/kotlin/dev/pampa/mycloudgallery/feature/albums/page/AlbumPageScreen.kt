@@ -306,5 +306,6 @@ private fun messageText(message: AlbumMessage): String {
       resources.getString(R.string.album_message_nothing_to_add, message.excluded.entries.joinToString(", ") { (reason, n) -> AlbumText.excluded(resources, reason, n) })
     AlbumMessage.RulesTooLong -> stringResource(R.string.album_message_rules_too_long)
     AlbumMessage.NotInAlbum -> stringResource(R.string.album_message_not_in_album)
+    AlbumMessage.NotDone -> stringResource(R.string.album_message_not_done)
   }
 }

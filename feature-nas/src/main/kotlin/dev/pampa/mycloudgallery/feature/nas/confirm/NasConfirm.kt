@@ -390,6 +390,8 @@ private fun skippedText(skipped: List<Pair<SkipReason, Int>>): String = skipped.
         SkipReason.INTO_ITSELF -> R.string.nas_confirm_skipped_into_itself
         SkipReason.SOURCE_MISSING -> R.string.nas_confirm_skipped_source_missing
         SkipReason.LEFT_BEHIND -> R.string.nas_confirm_skipped_left_behind
+        // Fase 7, revisione B (R3, E-D16).
+        SkipReason.SHARED_ALBUM_ITEM -> R.string.nas_confirm_skipped_shared_album_item
       },
     ),
     NasText.count(count),

@@ -7,6 +7,7 @@
   <string name="viewer_nas_action_rename">Rinomina</string>
   <string name="viewer_nas_action_delete">Elimina…</string>
   <string name="viewer_nas_action_read_only">Area in sola lettura per te</string>
+  <string name="viewer_nas_action_album_locked">In un album condiviso: il livello non ti permette di toccarla</string>
 
   <!-- Elimina… con la scelta del luogo -->
   <string name="viewer_nas_delete_phone">Telefono</string>
@@ -16,6 +17,7 @@
   <string name="viewer_nas_delete_phone_detail_gallery">Nel Cestino di Galleria per 30 giorni.</string>
   <string name="viewer_nas_delete_nas_detail">Nel cestino del NAS per 30 giorni.</string>
   <string name="viewer_nas_delete_nas_read_only">Non hai il permesso di eliminare qui.</string>
+  <string name="viewer_nas_delete_nas_album_protected">È in un album condiviso: resta dov’è, il livello non ti permette di eliminarla.</string>
   <string name="viewer_nas_delete_nas_only_photo_title">Eliminare questa foto dal NAS?</string>
   <string name="viewer_nas_delete_nas_only_video_title">Eliminare questo video dal NAS?</string>
   <string name="viewer_nas_delete_nas_only_message">Sta solo sul NAS. Va nel cestino del NAS per 30 giorni: la trovi in Eliminati di recente del NAS.</string>
@@ -62,6 +64,7 @@
   <string name="viewer_nas_reject_not_enough_space">Sulla destinazione non c\'è abbastanza spazio.</string>
   <string name="viewer_nas_reject_unreachable">Il NAS non risponde.</string>
   <string name="viewer_nas_reject_other">Non posso preparare questa operazione.</string>
+  <string name="viewer_nas_reject_shared_album_item">È in un album condiviso e il livello dell’album non ti permette di eliminarla, spostarla o rinominarla.</string>
 
   <string name="viewer_nas_cancel">Annulla</string>
 </resources>

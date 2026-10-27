@@ -30,6 +30,9 @@ internal fun opErrorRes(code: OpErrorCode): Int = when (code) {
   OpErrorCode.PERMISSION_DENIED -> R.string.nas_error_permission_denied
   OpErrorCode.UNEXPECTED -> R.string.nas_error_unexpected
   OpErrorCode.STOPPED_BY_USER -> R.string.nas_ops_pause_user
+  // Fase 7, revisione B (I2): l'attesa del catalogo dopo la pubblicazione e il suo tetto.
+  OpErrorCode.CATALOG_PENDING -> R.string.nas_ops_pause_catalog
+  OpErrorCode.CATALOG_MISMATCH -> R.string.nas_error_catalog_mismatch
 }
 
 @StringRes
@@ -47,6 +50,8 @@ internal fun planRejectionRes(rejection: PlanRejection): Int = when (rejection) 
   PlanRejection.WRITES_BLOCKED -> R.string.nas_reject_writes_blocked
   PlanRejection.NAS_UNREACHABLE -> R.string.nas_reject_nas_unreachable
   PlanRejection.NOT_MINE -> R.string.nas_reject_not_mine
+  // Fase 7, revisione B (R3, E-D16): un elemento di un album condiviso che il livello non mi lascia toccare.
+  PlanRejection.SHARED_ALBUM_ITEM -> R.string.nas_reject_shared_album_item
 }
 
 @StringRes
@@ -57,6 +62,7 @@ internal fun pauseReasonRes(reason: PauseReason): Int = when (reason) {
   PauseReason.CLOCK_JUMP -> R.string.nas_ops_pause_clock_jump
   PauseReason.WRITES_STOPPED -> R.string.nas_ops_pause_writes_stopped
   PauseReason.USER -> R.string.nas_ops_pause_user
+  PauseReason.CATALOG -> R.string.nas_ops_pause_catalog
 }
 
 /** La frase per l'esito di un `start`, o null se l'operazione e' partita e non c'e' niente da dire di storto. */

@@ -37,7 +37,8 @@ import org.junit.Test
  *    alternativo, se quello scelto era occupato), la sorgente e' ancora al suo posto e nessuna voce del cestino e' ancora scritta;
  *  - il timbro e' quello della destinazione letto adesso, l'impronta quella verificata;
  *  - **vincolante**: finche' non risponde senza errori l'elemento resta in `PUBLISHED`, la sorgente non va nel cestino e l'operazione aspetta
- *    ("condizioni") senza fermare le altre; una ripresa la richiama con gli stessi argomenti (idempotenza di chi la lega);
+ *    (revisione B, I2: con il motivo "catalogo" e il prossimo tentativo nel diario) senza fermare le altre; una ripresa la richiama con gli stessi
+ *    argomenti (idempotenza di chi la lega);
  *  - con un guasto a **ogni** chiamata al NAS e con la morte del processo a **ogni** passo (diario, NAS, e la porta stessa, prima e dopo che il
  *    catalogo si sia aggiornato) la sorgente non e' **mai** nel cestino senza che la porta abbia risposto per quell'elemento.
  */
@@ -142,9 +143,11 @@ class CompletionSinkEngineTest {
       assertWithMessage(label).that(kit.exists("test-comune", "F/a.jpg")).isTrue()
       assertWithMessage(label).that(kit.store.allTrash()).isEmpty()
       assertWithMessage(label).that(kit.store.op(held.id)!!.state).isEqualTo(OpState.PAUSED)
-      assertWithMessage(label).that(kit.store.op(held.id)!!.pauseReason).isEqualTo(PauseReason.CONDITIONS)
+      // Revisione B (I2): il motivo e' "catalogo" (prima "condizioni", che non diceva niente) e il prossimo tentativo e' nel diario.
+      assertWithMessage(label).that(kit.store.op(held.id)!!.pauseReason).isEqualTo(PauseReason.CATALOG)
+      assertWithMessage(label).that(kit.store.items(held.id).single().waitingCatalog).isTrue()
       val shown = kit.operations.operations.value.single { it.id == held.id }
-      assertWithMessage(label).that((shown as NasOperationState.Paused).reason).isEqualTo(PauseReason.CONDITIONS)
+      assertWithMessage(label).that((shown as NasOperationState.Paused).reason).isEqualTo(PauseReason.CATALOG)
 
       // Un'altra operazione ferma per la rete: la ripresa la porta in fondo anche se la prima aspetta ancora il catalogo.
       val second = kit.planOf(OpRequest.Move(listOf(kit.itemOf("test", "B/b.jpg")), "test-comune", SharePath.parse("G")))
@@ -167,7 +170,7 @@ class CompletionSinkEngineTest {
       assertWithMessage(label).that(kit.exists("test", "A/a.jpg")).isFalse()
       assertWithMessage(label).that(kit.store.op(held.id)!!.state).isEqualTo(OpState.DONE)
       val forA = recorder.calls.filter { it.source.path.value == "A/a.jpg" }
-      assertWithMessage(label).that(forA.size).isAtLeast(3)
+      assertWithMessage(label).that(forA.size).isAtLeast(2)
       assertWithMessage("$label: idempotente, stessi argomenti").that(forA.map { Triple(it.dest, it.sha, it.stamp) }.toSet()).hasSize(1)
     }
   }

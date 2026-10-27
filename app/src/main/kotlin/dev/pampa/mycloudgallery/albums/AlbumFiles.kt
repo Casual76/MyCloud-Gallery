@@ -217,6 +217,43 @@ internal class FileSafeCopyRequestLog(file: File) : SafeCopyRequestLog {
 }
 
 /**
+ * Revisione B (SH-2): le strisce "N non andati" che l'utente ha chiuso, per operazione della condivisione. **Locali al dispositivo** come il diario;
+ * su file con `StateFiles` (scrittura atomica). Un file illeggibile vale "nessuna chiusa": al piu' una striscia torna a farsi vedere.
+ */
+internal class FileShareProblemMarks(file: File) : dev.pampa.mycloudgallery.core.albums.share.ShareProblemMarks {
+  private val records = object : DurableRecords<String, Boolean>(file, "strisce dei problemi della condivisione chiuse") {
+    override fun encode(out: DataOutputStream, records: Map<String, Boolean>) {
+      out.writeInt(VERSION)
+      out.writeInt(records.size)
+      records.keys.forEach(out::writeUTF)
+    }
+
+    override fun decode(input: DataInputStream): LinkedHashMap<String, Boolean> {
+      if (input.readInt() != VERSION) throw IOException("versione")
+      val out = LinkedHashMap<String, Boolean>()
+      repeat(input.readInt()) { out[input.readUTF()] = true }
+      return out
+    }
+  }
+
+  override suspend fun dismissed(): Set<dev.pampa.mycloudgallery.core.albums.contract.ShareOpId> =
+    records.read { map -> map.keys.mapNotNullTo(LinkedHashSet()) { runCatching { dev.pampa.mycloudgallery.core.albums.contract.ShareOpId(it) }.getOrNull() } }
+
+  override suspend fun dismiss(op: dev.pampa.mycloudgallery.core.albums.contract.ShareOpId) {
+    records.update { map ->
+      map[op.value] = true
+      // Le piu' vecchie escono: il diario mostra al piu' le ultime 20 chiuse (ShareOrchestrator.MAX_PROBLEM_OPS).
+      while (map.size > MAX_MARKS) map.remove(map.keys.first())
+    }
+  }
+
+  private companion object {
+    const val VERSION = 1
+    const val MAX_MARKS = 200
+  }
+}
+
+/**
  * I segni "visto fino a" degli album smart (P6, E-AL7: "Nuove: 12"): **locali al dispositivo**, mai sincronizzati (L84). Ora del NAS (come
  * `added_at` delle righe del motore).
  */

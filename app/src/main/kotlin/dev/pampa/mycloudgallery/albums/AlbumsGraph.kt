@@ -81,6 +81,9 @@ class AlbumsGraph internal constructor(
   /** E-SH20 (P13): quanti elementi di un mio dispositivo revocato si possono ripristinare, per album. */
   val revokedCounts = MutableStateFlow<Map<AlbumId, Int>>(emptyMap())
 
+  /** Revisione B, SH-3 (D39): quanti file aggiunti dal PC nella cartella di ogni album in cui posso adottarli (`FolderAdoptions.pending`). */
+  val pcFiles = MutableStateFlow<Map<AlbumId, Int>>(emptyMap())
+
   /** Gli avvisi chiusi dall'utente ("Non mostrare piu'"), riletti a ogni scansione e dopo una chiusura. */
   val dismissedNotices = MutableStateFlow<Set<String>>(emptySet())
 
@@ -125,6 +128,15 @@ class AlbumsGraph internal constructor(
       guarded { resume(live, START_BUDGET) }
       guarded { afterCatalog() }
       guarded { scanNotices(live) }
+      // Revisione B, SC-2: le modifiche dei miei album condivisi rimaste in coda da un processo di prima (una rinomina, una chiusura, una voce) si
+      // pubblicano adesso, non al giro dell'indice dopo: il contatore del pubblicatore riparte da zero e prima nessuno le guardava.
+      if (guarded { hasStagedChanges(live) } == true) {
+        flushAll(live, FlushReason.RESUME)
+        if (guarded { hasStagedChanges(live) } == true) {
+          flushUntilEmpty(live)
+          shareWork()
+        }
+      }
       if (guarded { live.shared.diary.openOps().isNotEmpty() } == true) shareWork()
     }
     live.scope.launch { watchCatalog(live) }
@@ -171,7 +183,19 @@ class AlbumsGraph internal constructor(
       AlbumFolderWatch.scan(live.shared.replica.views.value.values, live.shared.ports.family.me()) { media -> live.shared.folders.foldersOf(share, media) }
     }
     revokedCounts.value = live.shared.revoked.candidates()
+    // Revisione B, SH-3 (D39): "N file nuovi nella cartella: aggiungili" sugli album che vedo (prima non lo calcolava nessuno).
+    pcFiles.value = guarded { pcFilesOf(live) } ?: pcFiles.value
     dismissedNotices.value = live.shared.choices.dismissed()
+  }
+
+  /** I file aggiunti dal PC nella cartella di ogni album attivo che vedo e in cui posso adottarli (solo lettura del catalogo e della replica). */
+  private suspend fun pcFilesOf(live: AlbumsLive): Map<AlbumId, Int> {
+    val out = LinkedHashMap<AlbumId, Int>()
+    for (album in live.shared.albums.visible.value) {
+      val n = live.shared.adoptions.pending(album.id).size
+      if (n > 0) out[album.id] = n
+    }
+    return out
   }
 
   /** Gli album smart che hanno righe del motore (elementi automatici o suggeriti) su [ids]. */
@@ -232,6 +256,28 @@ class AlbumsGraph internal constructor(
   }
 
   /**
+   * Revisione B, SC-2: le modifiche rimaste in coda da un processo di prima, riprovate finche' escono ("troppo presto": 5 minuti fra due teste). Il
+   * contatore del pubblicatore qui non serve (riparte da zero): si guarda il deposito. Se il processo muore ancora, ci pensa il lavoro della
+   * condivisione ([shareRound] resta aperto finche' ci sono modifiche in coda).
+   */
+  private fun flushUntilEmpty(live: AlbumsLive) {
+    live.scope.launch {
+      var attempts = 0
+      while (guarded { hasStagedChanges(live) } == true && attempts < MAX_FLUSH_ATTEMPTS) {
+        attempts++
+        val retry = flushAll(live, FlushReason.SYNC_ROUND) ?: break
+        delay(retry.coerceAtLeast(MIN_RETRY_MS).milliseconds)
+      }
+    }
+  }
+
+  /** Revisione B, SC-2: c'e' almeno una modifica dei miei album condivisi in coda nel deposito del pubblicatore (anche di un processo di prima). */
+  private suspend fun hasStagedChanges(live: AlbumsLive): Boolean {
+    val store = live.shared.publishStore
+    return store.albums().any { store.load(it)?.staged?.isNotEmpty() == true }
+  }
+
+  /**
    * Prova a pubblicare gli album con modifiche in coda. Restituisce fra quanto riprovare (ms), o null se non serve (tutto pubblicato) o non ha
    * senso adesso (bloccato dal cancello, NAS che non risponde: ci pensa il giro dopo).
    */
@@ -265,7 +311,7 @@ class AlbumsGraph internal constructor(
     guarded { scanNotices(live) }
     // Un'operazione rimasta aperta (processo morto, NAS spento, regole): il suo lavoro (se ce n'e' gia' uno, resta quello).
     if (guarded { live.shared.diary.openOps().isNotEmpty() } == true) shareWork()
-    return report?.incomplete != true
+    return roundDone(report)
   }
 
   /** Le copie personali degli album chiusi (Q5 b, D31): con `PersonalAlbumCopies.keep` (impronta sugli elementi, P3); mai un file toccato. */
@@ -282,13 +328,18 @@ class AlbumsGraph internal constructor(
     return written
   }
 
-  /** Un giro della condivisione (lavoro dedicato): avanza le operazioni dal diario e pubblica le voci pronte. Vero se resta qualcosa di aperto. */
+  /**
+   * Un giro della condivisione (lavoro dedicato): avanza le operazioni dal diario e pubblica le voci pronte. Vero se resta qualcosa di aperto:
+   * un'operazione o, revisione B (SC-2), una modifica dei miei album condivisi ancora in coda (il lavoro si riaccoda e la pubblica senza aspettare
+   * il giro dell'indice, anche dopo la morte del processo).
+   */
   suspend fun shareRound(budget: Duration): Boolean {
     val live = ensureLive() ?: return false
     guarded { resume(live, budget) }
     flushAll(live, FlushReason.DEBOUNCE)
     guarded { resume(live, SHARE_SLICE) }
-    return guarded { live.shared.diary.openOps().isNotEmpty() } ?: false
+    val open = guarded { live.shared.diary.openOps().isNotEmpty() } ?: false
+    return open || guarded { hasStagedChanges(live) } == true
   }
 
   private suspend fun resume(live: AlbumsLive, budget: Duration): ShareRunResult = live.shared.orchestrator.resumeAll(budget)
@@ -349,6 +400,17 @@ class AlbumsGraph internal constructor(
         out[key.subject] = (out[key.subject] ?: 0) + (f.hashCode() * 31 + entry.value.hashCode())
       }
       return out
+    }
+
+    /**
+     * Revisione B, SG-2: il giro degli album e' "finito" per la tappa se la replica ha finito, oppure se non e' potuta andare avanti: niente registro,
+     * niente ora del NAS fidata, l'elenco di `albums/` non letto (nessun contributo letto ne' scartato). Allora si riprova al giro dell'indice dopo,
+     * invece di ripetere subito, a vuoto, fino al tetto della tappa (con un passo della condivisione e la scansione degli avvisi a ogni ripetizione).
+     * Un giro fermato dal budget dopo aver letto qualcosa resta "da continuare".
+     */
+    fun roundDone(report: AlbumSyncReport?): Boolean {
+      if (report == null || !report.incomplete) return true
+      return report.contributionsRead == 0 && report.contributionsRejected == 0
     }
 
     /** Un'impronta dei nascosti dei dati personali (cambia se un nascosto arriva o se ne va). */

@@ -3,7 +3,9 @@ package dev.pampa.mycloudgallery.albums
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumWriteBlock
 import dev.pampa.mycloudgallery.core.albums.contract.EditOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumChange
+import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumLimits
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
+import dev.pampa.mycloudgallery.core.trust.data.AlbumTexts
 import dev.pampa.mycloudgallery.core.albums.contract.SharedState
 import dev.pampa.mycloudgallery.core.albums.share.RestoreOutcome
 import dev.pampa.mycloudgallery.core.albums.shared.SharedAlbumView
@@ -47,7 +49,11 @@ internal object AlbumFolderWatch {
     for (view in views) {
       val merged = view.merged
       if (merged.state != SharedState.ACTIVE || (merged.creator != me && merged.heir != me)) continue
-      val attested = view.attested.values.toSet()
+      // Revisione B, SN-1: contano solo gli elementi che stavano nella cartella dell'album quando sono stati aggiunti (spostati o caricati li': il
+      // percorso della voce). Un riferimento (E-SH11, un file gia' nell'area comune altrove) non dice niente della cartella: un album fatto solo di
+      // riferimenti proponeva, per esempio, la cartella delle vacanze, e adottarla cambiava dove andavano le aggiunte dopo.
+      val placed = merged.items.values.filter { item -> item.path.parent()?.let { within(it, merged.folder) } == true }
+      val attested = placed.mapNotNullTo(HashSet()) { view.attested[it.media] }
       if (attested.isEmpty()) continue
       val present = foldersOf(attested).filterValues { it.isNotEmpty() }
       if (present.isEmpty()) continue
@@ -60,6 +66,9 @@ internal object AlbumFolderWatch {
       // La maggioranza dei media presenti: elementi sparsi (cartella cancellata, file rimessi a mano qua e la') non fanno una cartella nuova.
       if (n * 2 <= present.size) continue
       if (best.components.firstOrNull()?.equals(APP_AREA, ignoreCase = true) == true) continue
+      // Revisione B, R15: solo una cartella che il formato degli album accetta (percorso di media, al piu' 1.024 byte, mai l'area dell'app): i percorsi
+      // del catalogo arrivano a 4.096 byte, e il pubblicatore ne rifiuterebbe una piu' lunga (prima: l'app si chiudeva al tocco su "Usa la nuova cartella").
+      if (!acceptedFolder(best)) continue
       out[merged.album] = FolderMove(merged.album, merged.title, best)
     }
     return out
@@ -72,6 +81,10 @@ internal object AlbumFolderWatch {
 
   /** L'area comune e' una share SMB: i nomi non distinguono le maiuscole. */
   private fun key(path: SharePath): String = path.value.lowercase(Locale.ROOT)
+
+  /** Revisione B, R15: [folder] sta in una voce `definition` come la legge chi legge (`AlbumTexts.mediaPath`, tetto del formato). */
+  fun acceptedFolder(folder: SharePath): Boolean =
+    folder.value.toByteArray(Charsets.UTF_8).size <= SharedAlbumLimits.MAX_PATH_BYTES && runCatching { AlbumTexts.mediaPath(folder.value) }.isSuccess
 
   private fun within(path: SharePath, folder: SharePath): Boolean {
     val p = key(path)
@@ -87,6 +100,7 @@ internal object AlbumFolderWatch {
     val me = live.shared.ports.family.me()
     if (me == null || (merged.creator != me && merged.heir != me)) return EditOutcome.NotAllowed(null)
     val target = move?.takeIf { it.album == id } ?: return EditOutcome.Invalid(null)
+    if (!acceptedFolder(target.folder)) return EditOutcome.Invalid(null)
     blocked(live)?.let { return EditOutcome.Blocked(it) }
     live.shared.publisher.stage(id, listOf(SharedAlbumChange.Definition(merged.title, target.folder, SharedState.ACTIVE, merged.creator, merged.nonceHex, null)))
     live.shared.replica.recompute(listOf(id))
@@ -109,13 +123,24 @@ internal object AlbumFolderWatch {
     return if (ports.clocks.nasNowMs() == null) AlbumWriteBlock.NO_NAS else null
   }
 
-  /** Gli avvisi di :app (E-SH16, E-SH20) per gli album che vedo, tolti quelli che l'utente ha chiuso ("Non mostrare piu'"). */
+  /** La chiave dell'avviso dei file aggiunti dal PC come la scrive "Non mostrare piu'" (`ReplicaSharedAlbums.dismissNotice`). */
+  fun pcFilesKey(album: AlbumId, count: Int): String = "pcfiles:${album.value}:$count"
+
+  /**
+   * Gli avvisi di :app (E-SH16, E-SH20 e, revisione B, SH-3: "N file nuovi nella cartella: aggiungili", D39) per gli album che vedo, tolti quelli che
+   * l'utente ha chiuso ("Non mostrare piu'").
+   */
   fun notices(
     moves: Map<AlbumId, FolderMove>,
     revoked: Map<AlbumId, Int>,
     titles: Map<AlbumId, String>,
     dismissed: Set<String>,
+    pcFiles: Map<AlbumId, Int> = emptyMap(),
   ): List<SharedAlbumNotice> = buildList {
+    for ((album, count) in pcFiles) {
+      val title = titles[album] ?: continue
+      if (count > 0 && pcFilesKey(album, count) !in dismissed) add(SharedAlbumNotice.FilesAddedFromPc(album, title, count))
+    }
     for (move in moves.values) {
       if (move.album in titles && folderKey(move) !in dismissed) add(SharedAlbumNotice.FolderChanged(move.album, move.title, move.folder.value))
     }

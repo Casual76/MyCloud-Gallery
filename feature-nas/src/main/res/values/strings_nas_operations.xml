@@ -103,6 +103,7 @@
   <!-- Perché è in pausa -->
   <string name="nas_ops_pause_nas_unreachable">Il NAS non risponde: riprende da sola appena torna raggiungibile.</string>
   <string name="nas_ops_pause_conditions">In attesa delle condizioni giuste (rete o batteria): riprende da sola.</string>
+  <string name="nas_ops_pause_catalog">La copia è già nella destinazione: aspetto che l’app la riconosca come la stessa foto. Riprende da sola, al più per un giorno; l’originale resta al suo posto.</string>
   <string name="nas_ops_pause_frozen">Questa area è ferma per cambiamenti anomali: serve un tuo controllo in Diagnostica.</string>
   <string name="nas_ops_pause_clock_jump">L\'ora del NAS è cambiata di colpo: aspetto che si stabilizzi.</string>
   <string name="nas_ops_pause_writes_stopped">Le scritture sul NAS sono ferme (interruttore di emergenza in Diagnostica).</string>

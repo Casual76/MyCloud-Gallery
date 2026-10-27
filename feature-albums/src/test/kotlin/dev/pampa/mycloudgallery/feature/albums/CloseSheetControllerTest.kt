@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.model.ShareLevel
 import dev.pampa.mycloudgallery.feature.albums.contract.FixedAlbumScreensClock
 import dev.pampa.mycloudgallery.feature.albums.contract.ShareSheetState
 import dev.pampa.mycloudgallery.feature.albums.share.CloseSheetController
+import dev.pampa.mycloudgallery.feature.albums.share.ClosedAlbum
 import dev.pampa.mycloudgallery.feature.albums.share.ShareSheetController
 import java.time.LocalDate
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -63,7 +64,7 @@ class CloseSheetControllerTest {
       close.chooseOthers(choice)
       assertThat(close.ui.value!!.sheet.canConfirm).isTrue()
       close.confirm()
-      assertThat(close.closed.value).isEqualTo(id to CloseMode.STOP)
+      assertThat(close.closed.value).isEqualTo(ClosedAlbum(id, CloseMode.STOP))
       assertThat(close.ui.value).isNull()
       assertThat(world.common.album(id)!!.afterClose).isEqualTo(choice)
       assertThat(world.common.album(id)!!.state).isEqualTo(SharedState.CLOSED)
@@ -102,7 +103,7 @@ class CloseSheetControllerTest {
     clock.nowMs += ShareConfirmationRules.MIN_TAP_GAP_MS
     share.confirm()
     assertThat(runner.starts).hasSize(1)
-    assertThat(close.closed.value).isEqualTo(id to CloseMode.STOP)
+    assertThat(close.closed.value).isEqualTo(ClosedAlbum(id, CloseMode.STOP))
     assertThat(world.common.album(id)!!.state).isEqualTo(SharedState.CLOSED)
   }
 

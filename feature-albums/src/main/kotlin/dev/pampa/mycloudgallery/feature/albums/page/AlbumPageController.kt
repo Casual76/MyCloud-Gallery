@@ -84,7 +84,7 @@ class AlbumPageController(
   private val albums: Albums,
   private val shared: SharedAlbums,
   private val choices: SmartChoices,
-  runner: ShareRunner,
+  private val runner: ShareRunner,
   private val people: AlbumPeople,
   private val members: AlbumMembers,
   private val pending: AlbumPending,
@@ -124,8 +124,11 @@ class AlbumPageController(
     val mine = notices.filter { it.album == id }
     val closed = mine.filterIsInstance<SharedAlbumNotice.Closed>().firstOrNull()
     if (content == null) {
+      // Revisione B (SC-1): l'ho appena chiuso io (o lo sto chiudendo): la pagina aspetta di portarmi all'album personale, non dice "non trovato".
+      val closingHere = close.closed.value?.album == id || close.ui.value?.let { it.busy && it.sheet.album == id } == true
       val page: AlbumPageState? = when {
         closed != null -> AlbumPageState.Closed(closed)
+        closingHere -> null
         left.any { it.id == id } -> AlbumPageState.Unavailable(AlbumUnavailableReason.LEFT)
         // Il catalogo non ha ancora la vista (l'album c'e' nell'elenco): ancora in lettura, non "non trovato".
         listed != null -> null
@@ -145,9 +148,11 @@ class AlbumPageController(
       }
     val suggested = content.suggested?.takeIf { it.size > 0 }?.let { SuggestionsState.Some(it.size, it) } ?: SuggestionsState.None
     val toShare = content.toShare?.takeIf { it.size > 0 }?.let { SuggestionsState.ToShare(it.size, it) } ?: SuggestionsState.None
+    // Revisione B (SH-3, D39): "Aggiungi i file della cartella" solo quando ci sono davvero file aggiunti dal PC (prima c'era sempre e spesso non faceva niente).
+    val pcFiles = mine.any { it is SharedAlbumNotice.FilesAddedFromPc && it.count > 0 }
     return AlbumPageUi(
       page = page,
-      actions = AlbumPolicy.pageActions(album, allowedOps),
+      actions = AlbumPolicy.pageActions(album, allowedOps).filter { it != AlbumAction.ADOPT_FOLDER_FILES || pcFiles },
       suggested = suggested,
       toShare = toShare,
       creatorName = shown?.let { people.nameOf(it.creator) },
@@ -293,14 +298,39 @@ class AlbumPageController(
     }
   }
 
-  /** E-SH16 (P13): "Usa la nuova cartella" (solo il creatore o l'erede): la definizione prende la cartella dove gli elementi stanno ora. */
+  /**
+   * E-SH16 (P13): "Usa la nuova cartella" (solo il creatore o l'erede): la definizione prende la cartella dove gli elementi stanno ora. Revisione B (R15):
+   * un errore imprevisto (una cartella che il formato degli album non accetta) diventa un messaggio, non la caduta dell'app.
+   */
   fun useNewFolder() {
-    scope.launch { report(shared.useNewFolder(id)) }
+    scope.launch { guarded { shared.useNewFolder(id) }?.let(::report) }
   }
 
-  /** E-SH20 (P13): "Ripristina gli elementi" di un mio dispositivo revocato: tornano come mie voci (nessun file si muove). */
+  /** E-SH20 (P13): "Ripristina gli elementi" di un mio dispositivo revocato: tornano come mie voci (nessun file si muove). Revisione B (R15): come sopra. */
   fun restoreRevoked() {
-    scope.launch { report(shared.restoreRevoked(id)) }
+    scope.launch { guarded { shared.restoreRevoked(id) }?.let(::report) }
+  }
+
+  /** Revisione B (R15): un'azione dell'album che lancia non arriva all'ambito della pagina: lo dice un messaggio, niente e' cambiato. */
+  private suspend fun guarded(block: suspend () -> EditOutcome): EditOutcome? = try {
+    block()
+  } catch (e: kotlinx.coroutines.CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    say(AlbumMessage.NotDone)
+    null
+  }
+
+  /**
+   * Revisione B (SH-2, E-SH18, §2.5 "Errori"): "Riprova" dalla striscia di una condivisione finita con dei problemi. Gli elementi da riprovare li
+   * dice l'orchestratore; diventano un piano nuovo e il foglio di sempre, con la conferma dell'utente. Niente da riprovare: la striscia si chiude.
+   */
+  fun retryShare() {
+    val op = runner.operations.value.firstOrNull { it.album == id && it is ShareOpState.PartlyDone } ?: return
+    scope.launch {
+      val request = runner.retryRequest(op.op)
+      if (request == null) runner.dismiss(op.op) else share.request(request)
+    }
   }
 
   /** Dall'ordine personalizzato (D21): [media] in cima o in fondo all'album. */

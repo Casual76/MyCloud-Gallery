@@ -5,6 +5,9 @@ import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
 import dev.pampa.mycloudgallery.core.albums.contract.SharedState
 import dev.pampa.mycloudgallery.core.albums.shared.LevelHistory
 import dev.pampa.mycloudgallery.core.albums.shared.MergedAlbum
+import dev.pampa.mycloudgallery.core.albums.shared.ResolvedItem
+import dev.pampa.mycloudgallery.core.model.ContentKey
+import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.albums.shared.SharedAlbumView
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.AlbumId
@@ -26,11 +29,19 @@ class AlbumFolderWatchTest {
   private val album = AlbumId(UUID(3L, 3L).toString())
   private val media = (1..4).map { MediaId(UUID(4L, it.toLong()).toString()) }
 
-  private fun view(creator: AccountId = me, state: SharedState = SharedState.ACTIVE) = SharedAlbumView(
+  /**
+   * L'album: gli elementi spostati o caricati nella cartella dell'album (il percorso della voce e' li') oppure, con [references], riferimenti a file
+   * che stavano gia' altrove nell'area comune (E-SH11).
+   */
+  private fun view(creator: AccountId = me, state: SharedState = SharedState.ACTIVE, references: Boolean = false) = SharedAlbumView(
     MergedAlbum(
       album = album, creator = creator, nonceHex = "0".repeat(32), title = "Prova Oslo", folder = SharePath.parse("Album condivisi/Prova Oslo"), state = state,
       afterCloseCode = null, createdAt = 1L, closedAt = null, levels = LevelHistory.NONE, heirs = emptyList(), cover = null, sort = null,
-      items = emptyMap(), winners = emptyMap(), denied = emptyList(), updatedAt = 1L,
+      items = media.associateWith { id ->
+        val folder = if (references) "Foto/Vacanze" else "Album condivisi/Prova Oslo"
+        ResolvedItem(id, ContentKey.of(QuickHash("cd".repeat(32)), 1), null, SharePath.parse("$folder/${id.value}.jpg"), 1_000, creator, null, 1L, 1L)
+      },
+      winners = emptyMap(), denied = emptyList(), updatedAt = 1L,
     ),
     attested = media.associateWith { it },
   )
@@ -56,6 +67,35 @@ class AlbumFolderWatchTest {
   fun elementiSparsiOLAreaDellAppNonSonoUnaCartellaNuova() {
     assertThat(scan(view()) { id -> setOf("Cartella ${media.indexOf(id)}") }).isEmpty()
     assertThat(scan(view()) { setOf(".mycloudgallery/albums") }).isEmpty()
+  }
+
+  @Test
+  fun sn1UnAlbumFattoSoloDiRiferimentiNonHaUnaCartellaCambiata() {
+    // Revisione B, SN-1: i file stanno dove stavano (la cartella delle vacanze), mai nella cartella dichiarata: prima si proponeva "Foto/Vacanze".
+    assertThat(scan(view(references = true)) { setOf("Foto/Vacanze") }).isEmpty()
+    // Gli elementi messi nella cartella dell'album, spostati dal PC, si'.
+    assertThat(scan(view()) { setOf("Album condivisi/Oslo 2026") }).hasSize(1)
+  }
+
+  @Test
+  fun r15UnaCartellaCheIlFormatoNonAccettaNonSiPropone() {
+    // Revisione B, R15: i percorsi del catalogo arrivano a 4.096 byte, una definizione d'album al piu' 1.024: prima la proposta c'era e il tocco su
+    // "Usa la nuova cartella" faceva lanciare il pubblicatore (l'app si chiudeva).
+    val long = "Album condivisi/" + (1..12).joinToString("/") { "c".repeat(100) }
+    assertThat(long.toByteArray().size).isGreaterThan(1_024)
+    assertThat(scan(view()) { setOf(long) }).isEmpty()
+    assertThat(AlbumFolderWatch.acceptedFolder(SharePath.parse(long))).isFalse()
+    assertThat(AlbumFolderWatch.acceptedFolder(SharePath.parse("Album condivisi/Oslo 2026"))).isTrue()
+  }
+
+  @Test
+  fun sh3IFileDelPcSonoUnAvvisoFinoAQuandoNonSiChiude() {
+    val titles = mapOf(album to "Prova Oslo")
+    val notices = AlbumFolderWatch.notices(emptyMap(), emptyMap(), titles, emptySet(), pcFiles = mapOf(album to 2))
+    assertThat(notices).containsExactly(SharedAlbumNotice.FilesAddedFromPc(album, "Prova Oslo", 2))
+    assertThat(AlbumFolderWatch.notices(emptyMap(), emptyMap(), titles, setOf(AlbumFolderWatch.pcFilesKey(album, 2)), pcFiles = mapOf(album to 2))).isEmpty()
+    // Un file in piu' dal PC si dice di nuovo.
+    assertThat(AlbumFolderWatch.notices(emptyMap(), emptyMap(), titles, setOf(AlbumFolderWatch.pcFilesKey(album, 2)), pcFiles = mapOf(album to 3))).hasSize(1)
   }
 
   @Test

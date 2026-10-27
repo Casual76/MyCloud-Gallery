@@ -2,6 +2,9 @@ package dev.pampa.mycloudgallery.albums
 
 import android.content.Context
 import dev.pampa.mycloudgallery.core.albums.contract.SafeCopyRequester
+import dev.pampa.mycloudgallery.core.albums.contract.ShareFolder
+import dev.pampa.mycloudgallery.core.albums.share.ShareBackupGates
+import dev.pampa.mycloudgallery.core.backup.contract.BackupGateState
 import dev.pampa.mycloudgallery.core.backup.upload.AlbumFolderUploads
 import dev.pampa.mycloudgallery.core.search.contract.SearchEngine
 import dev.pampa.mycloudgallery.core.search.contract.Today
@@ -38,7 +41,10 @@ object AlbumsWiring {
     val writeGate = AppAlbumWriteGate(graph.flags, DeveloperTools.shareGuard(), { inputs.account() }, { nas?.writeGate })
     val journal = FileAlbumUploadJournal(File(noBackup, "$DIR/upload-journal"))
     val uploads: AlbumFolderUploads? by lazy {
-      gallery.backup?.let { backup -> AlbumFolderUploads(backup.store, journal, backup.gate, backup.fiveB.incomingPorts(), family::commonShare) }
+      // Revisione B, SP-1: il cancello degli arrivi (`fiveB.incomingGate`: area privata **e** area comune, D12, R2), lo stesso del motore che li
+      // carica. Prima era il cancello del backup (`backup.gate`), che per l'area comune risponde "nessuna area privata": ogni caricamento verso un
+      // album era rifiutato come "scritture ferme" e finiva "non partito".
+      gallery.backup?.let { backup -> AlbumFolderUploads(backup.store, journal, backup.fiveB.incomingGate, backup.fiveB.incomingPorts(), family::commonShare) }
     }
     val ready: StateFlow<Boolean> = if (nas == null) {
       MutableStateFlow(false)
@@ -50,8 +56,13 @@ object AlbumsWiring {
       val parts = organizer.parts ?: return@build null
       val core = gallery.coreIfReady() ?: return@build null
       val catalog = core.catalog
-      val mover = OpsAlbumMover(organizer.operations, organizer.opsStore, { catalog }, family::me, TransferPlans(File(noBackup, "$DIR/transfer-plans")), monotonic)
-      val uploader = FolderAlbumUploader({ uploads }, { catalog }, monotonic) { BackupWorkScheduling.incoming(context) }
+      // Revisione B, I3: la conferma di core-nasops nasce solo per un trasferimento che il diario della condivisione conosce (stessa impronta, stessi
+      // file, stessa destinazione): la seconda chiave di C26 non e' piu' una conseguenza della sola eta' della prima.
+      val binding = ShareTransferBinding(RoomShareDiary(gallery.database) { graph.platform.deviceNow() })
+      val mover = OpsAlbumMover(
+        organizer.operations, organizer.opsStore, { catalog }, family::me, TransferPlans(File(noBackup, "$DIR/transfer-plans")), monotonic, binding,
+      )
+      val uploader = FolderAlbumUploader({ uploads }, { catalog }, monotonic, binding) { BackupWorkScheduling.incoming(context) }
       buildAlbumsLive(
         scope,
         AlbumsInputs(
@@ -83,11 +94,40 @@ object AlbumsWiring {
           noticesFile = File(noBackup, "$DIR/notices-seen"),
           seenFile = File(noBackup, "$DIR/smart-seen"),
           ownBackupFolder = { ownBackupFolder(gallery) },
+          backupGates = { folder -> backupGates(gallery, family, folder) },
+          problemMarksFile = File(noBackup, "$DIR/share-problems-closed"),
         ),
       )
     }
-    return AlbumsGraph(graph.scope, build, ready, shareWork = { AlbumWorkScheduling.shareNow(context) })
+    val albums = AlbumsGraph(graph.scope, build, ready, shareWork = { AlbumWorkScheduling.shareNow(context) })
+    // Revisione B, R3: il piano di ogni operazione sui file del NAS chiede agli album quali file sono elementi che non posso togliere dal loro posto.
+    nas?.organizer?.protectedFiles = AlbumFileGuard(albums)
+    return albums
   }
+
+  /**
+   * Revisione B (SG-1, I4): cosa i cancelli del backup lasciano fare adesso alla condivisione per la cartella [folder]: caricare i media solo sul
+   * telefono (il cancello degli arrivi sulla share della cartella, e la cartella sotto la radice dei caricamenti "Album condivisi") e la copia del
+   * guardiano (il cancello del backup sull'area privata). Una pausa, un congelamento o "Ferma le scritture" non chiudono: passano da soli. Senza il
+   * backup niente delle due.
+   */
+  private fun backupGates(gallery: GalleryGraph, family: AppAlbumFamily, folder: ShareFolder): ShareBackupGates {
+    val backup = gallery.backup ?: return ShareBackupGates(uploads = false, safeCopies = false)
+    val uploads = passes(backup.fiveB.incomingGate.stateOf(folder.share)) &&
+      runCatching { backup.fiveB.incomingPorts().allowsAlbum(folder.path.child(PROBE_NAME)) }.getOrDefault(false)
+    val private = family.privateShare()
+    val safeCopies = private != null && passes(backup.gate.stateOf(private))
+    return ShareBackupGates(uploads, safeCopies)
+  }
+
+  /** Uno stato del cancello che lascia partire (subito o appena passa una pausa): non le prove (D12, R2), la sola lettura o la famiglia non pronta. */
+  private fun passes(state: BackupGateState): Boolean = when (state) {
+    BackupGateState.OPEN, BackupGateState.PAUSED, BackupGateState.FROZEN, BackupGateState.WRITES_STOPPED -> true
+    BackupGateState.TEST_ONLY, BackupGateState.READ_ONLY_AREA, BackupGateState.NOT_READY, BackupGateState.NO_PRIVATE_AREA -> false
+  }
+
+  /** Un nome di file qualunque per chiedere se la cartella accetta i caricamenti. */
+  private const val PROBE_NAME = "prova.jpg"
 
   /**
    * Il nome della cartella `Backup/<dispositivo>/` di questo telefono (senza il prefisso), null finche' il backup non ha una cartella: la regola B degli

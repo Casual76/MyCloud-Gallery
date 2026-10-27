@@ -21,10 +21,13 @@ import dev.pampa.mycloudgallery.core.nasops.contract.DoneSummary
 import dev.pampa.mycloudgallery.core.nasops.contract.GateStatus
 import dev.pampa.mycloudgallery.core.nasops.contract.ItemFlow
 import dev.pampa.mycloudgallery.core.nasops.contract.LocalTrashRecord
+import dev.pampa.mycloudgallery.core.nasops.contract.CatalogHoldBackoff
 import dev.pampa.mycloudgallery.core.nasops.contract.LockedBackoff
 import dev.pampa.mycloudgallery.core.nasops.contract.MoveCompletionSink
 import dev.pampa.mycloudgallery.core.nasops.contract.NameRules
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFileRef
+import dev.pampa.mycloudgallery.core.nasops.contract.NasItem
+import dev.pampa.mycloudgallery.core.nasops.contract.ProtectedFiles
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperationState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasOperations
 import dev.pampa.mycloudgallery.core.nasops.contract.OpClocks
@@ -107,6 +110,8 @@ class InMemoryNasOperations(
    * nell'esecutore vero. Un errore lascia l'elemento in `PUBLISHED` con la sorgente al suo posto e l'operazione in attesa, senza fermare le altre.
    */
   private val completions: MoveCompletionSink = NoMoveCompletionSink,
+  /** Fase 7, revisione B (R3): come l'esecutore vero, gli elementi di album condivisi che non posso togliere restano fuori dal piano. */
+  private val protectedFiles: ProtectedFiles = ProtectedFiles.NONE,
 ) : NasOperations {
 
   private val states = MutableStateFlow<List<NasOperationState>>(emptyList())
@@ -138,6 +143,23 @@ class InMemoryNasOperations(
   }
 
   private fun blocked(share: String): Boolean = gate.statusOf(share).blocksUserOps
+
+  /** Revisione B (R3): gli elementi protetti di [items], per (share, percorso) senza maiuscole; un errore vale "tutti protetti". */
+  private suspend fun shielded(items: List<NasItem>): Set<String> {
+    val out = HashSet<String>()
+    for ((_, ofShare) in items.groupBy { it.share.lowercase(java.util.Locale.ROOT) }) {
+      val share = ofShare.first().share
+      val hit = try {
+        protectedFiles.protectedAmong(share, ofShare)
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        ofShare.map { it.path }.toSet()
+      }
+      hit.forEach { out += leaveKey(share, it) }
+    }
+    return out
+  }
 
   private sealed interface Probe {
     data class Found(val entry: NasEntry) : Probe
@@ -184,6 +206,7 @@ class InMemoryNasOperations(
     if (blocked(item.share)) return PlanOutcome.Rejected(PlanRejection.WRITES_BLOCKED)
     if (readOnly(item.share)) return PlanOutcome.Rejected(PlanRejection.READ_ONLY)
     if (!NasOpsPaths.isMediaPath(item.path)) return PlanOutcome.Rejected(PlanRejection.PATH_NOT_ALLOWED)
+    if (leaveKey(item.share, item.path) in shielded(listOf(item))) return PlanOutcome.Rejected(PlanRejection.SHARED_ALBUM_ITEM)
     if (NameRules.check(request.newName) !is NameRules.Check.Valid) return PlanOutcome.Rejected(PlanRejection.INVALID_NAME)
     val dst = item.path.parent()?.child(request.newName) ?: SharePath.of(request.newName)
     if (dst == item.path) return PlanOutcome.Rejected(PlanRejection.SAME_LOCATION)
@@ -214,8 +237,13 @@ class InMemoryNasOperations(
     val skipped = ArrayList<SkippedItem>()
     // R11: i file da lasciare dov'erano (i nascosti, spostando nell'area comune) non diventano elementi: vanno fra gli esclusi.
     val leave = request.leaveBehind.mapTo(HashSet()) { leaveKey(it.share, it.path) }
+    if (request.items.any { !NasOpsPaths.isMediaPath(it.path) }) return PlanOutcome.Rejected(PlanRejection.PATH_NOT_ALLOWED)
+    val shielded = shielded(request.items)
     for (item in request.items) {
-      if (!NasOpsPaths.isMediaPath(item.path)) return PlanOutcome.Rejected(PlanRejection.PATH_NOT_ALLOWED)
+      if (leaveKey(item.share, item.path) in shielded) {
+        skipped += SkippedItem(item.share, item.path, SkipReason.SHARED_ALBUM_ITEM)
+        continue
+      }
       if (readOnly(item.share)) {
         skipped += SkippedItem(item.share, item.path, SkipReason.READ_ONLY)
         continue
@@ -247,6 +275,7 @@ class InMemoryNasOperations(
       return PlanOutcome.Rejected(
         when {
           skipped.any { it.reason == SkipReason.READ_ONLY } -> PlanRejection.READ_ONLY
+          skipped.any { it.reason == SkipReason.SHARED_ALBUM_ITEM } -> PlanRejection.SHARED_ALBUM_ITEM
           skipped.any { it.reason == SkipReason.INTO_ITSELF } -> PlanRejection.INTO_ITSELF
           skipped.any { it.reason == SkipReason.SAME_LOCATION } || skipped.isEmpty() -> PlanRejection.SAME_LOCATION
           else -> PlanRejection.EMPTY
@@ -307,8 +336,13 @@ class InMemoryNasOperations(
     if (request.items.any { blocked(it.share) }) return PlanOutcome.Rejected(PlanRejection.WRITES_BLOCKED)
     val planned = ArrayList<PlannedItem>()
     val skipped = ArrayList<SkippedItem>()
+    if (request.items.any { !NasOpsPaths.isMediaPath(it.path) }) return PlanOutcome.Rejected(PlanRejection.PATH_NOT_ALLOWED)
+    val shielded = shielded(request.items)
     for (item in request.items) {
-      if (!NasOpsPaths.isMediaPath(item.path)) return PlanOutcome.Rejected(PlanRejection.PATH_NOT_ALLOWED)
+      if (leaveKey(item.share, item.path) in shielded) {
+        skipped += SkippedItem(item.share, item.path, SkipReason.SHARED_ALBUM_ITEM)
+        continue
+      }
       if (readOnly(item.share)) {
         skipped += SkippedItem(item.share, item.path, SkipReason.READ_ONLY)
         continue
@@ -322,7 +356,13 @@ class InMemoryNasOperations(
     }
     if (planned.size > OpRules.MAX_ITEMS_PER_OP) return PlanOutcome.Rejected(PlanRejection.TOO_MANY_ITEMS)
     if (planned.isEmpty()) {
-      return PlanOutcome.Rejected(if (skipped.any { it.reason == SkipReason.READ_ONLY }) PlanRejection.READ_ONLY else PlanRejection.SOURCE_MISSING)
+      return PlanOutcome.Rejected(
+        when {
+          skipped.any { it.reason == SkipReason.READ_ONLY } -> PlanRejection.READ_ONLY
+          skipped.any { it.reason == SkipReason.SHARED_ALBUM_ITEM } -> PlanRejection.SHARED_ALBUM_ITEM
+          else -> PlanRejection.SOURCE_MISSING
+        },
+      )
     }
     return PlanOutcome.Ready(buildPlan(OpKind.TRASH, planned, skipped, null, null))
   }
@@ -519,8 +559,9 @@ class InMemoryNasOperations(
       }
       val code = if (finalState == OpState.FAILED) items.firstOrNull { it.errorCode != null }?.errorCode else null
       store.setOpState(id, finalState, code, clocks.nasNowMs() ?: op.updatedAtNas)
-    } else if (stop == RunStop.COMPLETE && heldForCatalog) {
-      pause(id, PauseReason.CONDITIONS)
+    } else if (stop == RunStop.COMPLETE && (heldForCatalog || items.any { it.waitingCatalog })) {
+      // Revisione B (I2): con il suo motivo, come l'esecutore vero.
+      pause(id, PauseReason.CATALOG)
       return OpRun(doneCount, failedCount, waitingCount, RunStop.BLOCKED, held = true)
     } else if (stop == RunStop.COMPLETE && waitingCount > 0) {
       stop = RunStop.WAITING_LOCKED
@@ -712,7 +753,10 @@ class InMemoryNasOperations(
     }
     if (!reached(OpItemState.SOURCE_RECORDED)) {
       // Fase 7 (D29): il catalogo collega la destinazione allo stesso media prima che la sorgente esca.
-      completePublished(cur)?.let { return it }
+      when (val c = completePublished(cur)) {
+        is Step.Next -> cur = c.item
+        is Step.Stop -> return c.item
+      }
       when (val s = recordSourcePhase(cur)) {
         is Step.Next -> cur = s.item
         is Step.Stop -> return s.item
@@ -894,28 +938,43 @@ class InMemoryNasOperations(
   }
 
   /**
-   * Fase 7 (D29): la porta di completamento dopo `PUBLISHED`, con il timbro della destinazione letto adesso e l'impronta verificata. null = si va
-   * avanti; un elemento = ci si ferma qui (la destinazione e' sparita: l'elemento si ferma con le copie dove sono; o la porta non ha risposto:
-   * l'elemento resta in `PUBLISHED` e l'operazione aspetta).
+   * Fase 7 (D29): la porta di completamento dopo `PUBLISHED`, con il timbro della destinazione letto adesso e l'impronta verificata. [Step.Next] = si
+   * va avanti; [Step.Stop] = ci si ferma qui (la destinazione e' sparita: l'elemento si ferma con le copie dove sono; o la porta non ha risposto, o
+   * la copia non si lascia guardare: l'elemento resta in `PUBLISHED`, aspetta il catalogo e l'operazione si ferma). Revisione B (R8, I2), come
+   * l'esecutore vero: la porta non si salta mai, l'attesa ha il suo motivo e un tetto ([CatalogHoldBackoff]).
    */
-  private suspend fun completePublished(cur: OpItemRecord): OpItemRecord? {
-    val dstShare = cur.dstShare ?: return null
-    val dst = cur.dstPath ?: return null
-    val sha = cur.sha256 ?: return null
+  private suspend fun completePublished(cur: OpItemRecord): Step {
+    val dstShare = cur.dstShare
+    val dst = cur.dstPath
+    val sha = cur.sha256
+    if (dstShare == null || dst == null || sha == null) return Step.Stop(fail(cur, OpErrorCode.UNEXPECTED))
     val entry = when (val found = probeOrPause(dstShare, dst)) {
       is Probe.Found -> found.entry
-      // La copia pubblicata non c'e' piu' (tolta dal PC) o non si legge: nessun collegamento e nessun cestino; la sorgente resta.
-      Probe.Absent, Probe.Unreachable -> return fail(cur, OpErrorCode.UNEXPECTED)
+      // La copia pubblicata non c'e' piu' (tolta dal PC): nessun collegamento e nessun cestino; la sorgente resta.
+      Probe.Absent -> return Step.Stop(fail(cur, OpErrorCode.UNEXPECTED))
+      // Non si lascia guardare per un motivo che non e' la rete (R8): si aspetta come per il catalogo.
+      Probe.Unreachable -> return holdForCatalog(cur)
     }
-    if (entry.isDirectory) return fail(cur, OpErrorCode.UNEXPECTED)
-    return try {
+    if (entry.isDirectory) return Step.Stop(fail(cur, OpErrorCode.UNEXPECTED))
+    try {
       completions.published(cur.opId, cur.index, NasFileRef(cur.srcShare, cur.srcPath), NasFileRef(dstShare, dst), entry.stamp, sha)
-      null
     } catch (e: kotlinx.coroutines.CancellationException) {
       throw e
     } catch (_: Exception) {
-      heldForCatalog = true
-      cur
+      return holdForCatalog(cur)
+    }
+    return Step.Next(if (cur.errorCode == OpErrorCode.CATALOG_PENDING) persist(cur.copy(attempts = 0, errorCode = null, nextAttemptAtNas = null)) else cur)
+  }
+
+  /** Revisione B (I2): l'attesa del catalogo, con il prossimo tentativo nel diario; oltre il tetto l'elemento si ferma ([OpErrorCode.CATALOG_MISMATCH]). */
+  private suspend fun holdForCatalog(cur: OpItemRecord): Step {
+    val attempts = if (cur.errorCode == OpErrorCode.CATALOG_PENDING) cur.attempts else 0
+    return when (val decision = CatalogHoldBackoff.decide(attempts)) {
+      is LockedBackoff.Decision.RetryAfter -> {
+        heldForCatalog = true
+        Step.Stop(persist(cur.copy(attempts = attempts + 1, nextAttemptAtNas = nasNow() + decision.delayMs, errorCode = OpErrorCode.CATALOG_PENDING)))
+      }
+      LockedBackoff.Decision.GiveUp -> Step.Stop(fail(cur, OpErrorCode.CATALOG_MISMATCH))
     }
   }
 

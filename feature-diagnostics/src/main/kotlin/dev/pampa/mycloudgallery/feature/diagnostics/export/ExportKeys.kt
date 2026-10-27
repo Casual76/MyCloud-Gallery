@@ -83,6 +83,12 @@ object ExportKeys {
     "edit_settled_new_version", "edit_settled_restored", "edit_settled_unchanged", "edit_unreadable",
     "share_items_direct", "share_items_stripped", "share_prepared", "share_released", "share_stopped_failed", "share_stopped_format",
     "share_stopped_limits", "share_stopped_location_remains", "share_stopped_unavailable",
+    // Gli album (Fase 7, `AlbumsDiagnostics` di :app; R22 della revisione di fine fase: prima l'esportazione aveva solo `mounted` e `count`, e le prove
+    // sul campo F72-F93 leggono la Diagnostica esportata). Solo numeri e flag: mai titoli, cartelle, luoghi, casa, coordinate o id. `mounted` e `count`
+    // sono gia' sopra.
+    "manual", "smart", "shared", "openShares", "contributions", "syncIncomplete", "roundErrors", "tripsSearched", "tripsHomeKnown", "searchReady",
+    // La manutenzione dell'Utility (DG-2): firme dei Doppioni simili e controllo notturno dei video del NAS. `queued`, `waiting` e `skipped` sono gia' sopra.
+    "enabled", "scanned", "withdrawn", "signed", "finished",
   )
 
   /**

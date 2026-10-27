@@ -308,6 +308,8 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.SMART_NO_SEARCH, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_smart_no_search_title, R.string.diag_smart_no_search_guide, null),
     DiagEntry(DiagCodes.TRIP_NO_GPS, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_trip_no_gps_title, R.string.diag_trip_no_gps_guide, null),
     DiagEntry(DiagCodes.ALBUM_PROJECTION_PENDING, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_projection_pending_title, R.string.diag_album_projection_pending_guide, null),
+    DiagEntry(DiagCodes.UTILITY_FULL_HASH, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_utility_full_hash_title, R.string.diag_utility_full_hash_guide, null),
+    DiagEntry(DiagCodes.UTILITY_SIGNING, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_utility_signing_title, R.string.diag_utility_signing_guide, null),
 
     // --- Le persone (Fase 8, P0: la voce di stato; i codici del §2.10 li aggiunge P13) -----------------------------------
     DiagEntry(DiagCodes.PEOPLE_STATE, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_people_state_title, R.string.diag_people_state_guide, null),

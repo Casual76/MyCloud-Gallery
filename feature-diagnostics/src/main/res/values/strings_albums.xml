@@ -33,4 +33,8 @@
   <string name="diag_trip_no_gps_guide">Le foto non hanno abbastanza posizioni per capire dove abiti: l’app propone solo eventi, non viaggi.</string>
   <string name="diag_album_projection_pending_title">Elementi degli album in attesa</string>
   <string name="diag_album_projection_pending_guide">Elementi dei tuoi album il cui media non è ancora nella Libreria di questo dispositivo: compaiono quando arriva.</string>
+  <string name="diag_utility_full_hash_title">Controllo notturno dei video del NAS</string>
+  <string name="diag_utility_full_hash_guide">L’ultimo giro di «Controlla di notte i video del NAS»: quanti video guardati, messi in coda per la verifica completa e ritirati (con l’interruttore spento). Solo numeri.</string>
+  <string name="diag_utility_signing_title">Firme dei Doppioni simili</string>
+  <string name="diag_utility_signing_guide">L’ultimo giro che prepara gli scatti per cercare i doppioni simili: quanti firmati, quanti in attesa e quanti saltati. Solo numeri.</string>
 </resources>

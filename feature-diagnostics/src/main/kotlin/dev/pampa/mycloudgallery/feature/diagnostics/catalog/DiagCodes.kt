@@ -313,6 +313,10 @@ object DiagCodes {
   @JvmField val TRIP_NO_GPS = DiagCode("TRIP_NO_GPS", setOf("E-AL16"))
   @JvmField val ALBUM_PROJECTION_PENDING = DiagCode("ALBUM_PROJECTION_PENDING")
 
+  // Revisione di fine Fase 7 (DG-2): la manutenzione dell'Utility (Doppioni), che girava senza lasciare traccia. Stessi id di `AlbumDiag`.
+  @JvmField val UTILITY_FULL_HASH = DiagCode("UTILITY_FULL_HASH", setOf("E-U4"))
+  @JvmField val UTILITY_SIGNING = DiagCode("UTILITY_SIGNING")
+
   // --- Le persone (Fase 8) -------------------------------------------------------------------------------------------
   // P0 aggiunge solo il codice di stato che tiene viva la sezione PEOPLE (un test vuole almeno una voce per sezione), come per ALBUMS nella
   // Fase 7. I codici del §2.10 di docs/fase8-progetto.md (FACES_*, PEOPLE_*: `FacesDiag` di core-faces) li aggiunge P13, con le chiavi

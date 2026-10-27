@@ -26,7 +26,10 @@ import org.junit.Test
  * 6. nessuna eccezione verso fuori.
  * Alla fine, senza guasti, i tre dispositivi convergono: stesse voci `people`, stessi corpi vincenti, stessa istantanea vincente.
  */
-class FacesSyncBenchTest {
+open class FacesSyncBenchTest {
+
+  /** Il mondo della prova: in memoria (P3). La versione sul database dei volti (P6) lo sostituisce con lo stesso mondo sopra `RoomSyncStorage`. */
+  protected open fun newWorld(): FacesSyncWorld = FacesSyncWorld()
 
   /** Tre mondi diversi (gli id dei dispositivi sono casuali: cambiano gli spareggi), 200 giri ciascuno. */
   @Test
@@ -35,7 +38,7 @@ class FacesSyncBenchTest {
   }
 
   private suspend fun bench(seed: Long) {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val plan = FacesFaultPlan(seed = seed, probability = 0.15)
     val share = world.share("test")
     val phone = world.device("Telefono", "test")

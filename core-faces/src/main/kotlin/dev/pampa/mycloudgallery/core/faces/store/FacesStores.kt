@@ -10,6 +10,11 @@ import dev.pampa.mycloudgallery.core.database.faces.FacesDatabase
 import dev.pampa.mycloudgallery.core.database.faces.FacesDatabaseFiles
 import dev.pampa.mycloudgallery.core.database.faces.FacesDatabaseOpener
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesMetaEntity
+import dev.pampa.mycloudgallery.core.faces.sync.FacesArchives
+import dev.pampa.mycloudgallery.core.faces.sync.FacesPublishState
+import dev.pampa.mycloudgallery.core.faces.sync.FacesPublishStore
+import dev.pampa.mycloudgallery.core.faces.sync.FacesReplicaState
+import dev.pampa.mycloudgallery.core.faces.sync.FacesReplicaStore
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.security.faces.FacesDataKey
 import dev.pampa.mycloudgallery.core.security.faces.FacesKeyProbe
@@ -44,6 +49,8 @@ class FacesStores(
   private val keys: FacesKeys,
   private val dispatchers: DispatcherProvider = DefaultDispatcherProvider,
   private val patience: Patience = Patience.STANDARD,
+  /** Chiamata quando un negozio e' stato rifatto da capo (E-F19: `FACES_KEY_LOST`; file danneggiato): la Diagnostica lo conta. Solo il motivo. */
+  private val onRecovered: (FacesRecovery) -> Unit = {},
 ) {
   private val lock = Mutex()
   private val opened = HashMap<FaceGeneration, FacesStore>()
@@ -61,6 +68,37 @@ class FacesStores(
       opened.remove(generation)
       openLocked(generation)
     }
+  }
+
+  /**
+   * Le tre porte che la sincronizzazione (P3) vuole dal database, con il negozio che si apre da solo: i legami per `:app` (P13).
+   * - [archives]: l'archivio della generazione, o null se il negozio non si apre adesso (Keystore, disco, versione);
+   * - [replicaStore] e [publishStore]: lo stato della replica e del pubblicatore, durevole. Un negozio che non si apre da' una replica vuota in
+   *   lettura e `IllegalStateException` in scrittura (chi sincronizza se n'e' gia' accorto da [archives]).
+   * Un negozio rifatto da capo per una chiave sparita passa da [onRecovered].
+   */
+  fun archives(): FacesArchives = FacesArchives { generation -> storeOf(generation)?.archive }
+
+  fun replicaStore(): FacesReplicaStore = object : FacesReplicaStore {
+    override suspend fun load(generation: FaceGeneration): FacesReplicaState =
+      storeOf(generation)?.replicaStore?.load(generation) ?: FacesReplicaState.EMPTY
+
+    override suspend fun save(generation: FaceGeneration, state: FacesReplicaState) =
+      (storeOf(generation) ?: throw IllegalStateException("Il database dei volti non si apre adesso.")).replicaStore.save(generation, state)
+  }
+
+  fun publishStore(): FacesPublishStore = object : FacesPublishStore {
+    override suspend fun load(generation: FaceGeneration): FacesPublishState =
+      storeOf(generation)?.publishStore?.load(generation) ?: FacesPublishState.EMPTY
+
+    override suspend fun save(generation: FaceGeneration, state: FacesPublishState) =
+      (storeOf(generation) ?: throw IllegalStateException("Il database dei volti non si apre adesso.")).publishStore.save(generation, state)
+  }
+
+  private suspend fun storeOf(generation: FaceGeneration): FacesStore? = when (val opened = open(generation)) {
+    is FacesStoreOpen.Ready -> opened.store
+    is FacesStoreOpen.Recovered -> opened.store
+    is FacesStoreOpen.Unavailable -> null
   }
 
   /**
@@ -180,7 +218,13 @@ class FacesStores(
     }
     val store = FacesStore(generation, result.db, key)
     opened[generation] = store
-    return if (recovery == null) FacesStoreOpen.Ready(store) else FacesStoreOpen.Recovered(store, recovery)
+    if (recovery == null) return FacesStoreOpen.Ready(store)
+    try {
+      onRecovered(recovery)
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "chi ascolta i negozi rifatti ha lanciato (${e.javaClass.simpleName})" }
+    }
+    return FacesStoreOpen.Recovered(store, recovery)
   }
 
   /** Apre il database e controlla che sia di [key]: un testo noto sigillato alla creazione (`faces_meta`). */

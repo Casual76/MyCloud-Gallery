@@ -20,7 +20,10 @@ import org.junit.Test
  * si ignora; le teste di un altro account non si leggono mai; niente senza lo stato fresco; la generazione che cambia a meta'; §2.4, D11,
  * D21, D30, D31, E-F41, E-F42).
  */
-class FacesReplicaTest {
+open class FacesReplicaTest {
+
+  /** Il mondo della prova: in memoria (P3). La versione sul database dei volti (P6) lo sostituisce con lo stesso mondo sopra `RoomSyncStorage`. */
+  protected open fun newWorld(): FacesSyncWorld = FacesSyncWorld()
 
   private val a = FacesSyncWorld.person(1)
   private val b = FacesSyncWorld.person(2)
@@ -31,7 +34,7 @@ class FacesReplicaTest {
 
   @Test
   fun treDispositiviDellAccountConvergono() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")
     val laptop = world.device("Portatile", "test")
@@ -70,7 +73,7 @@ class FacesReplicaTest {
   /** D11, C37: le cartelle dei dispositivi di un altro account non si leggono, nemmeno copiate nella mia area; una sua testa messa nella cartella di un mio dispositivo e' rifiutata. */
   @Test
   fun leTesteDiUnAltroAccountNonSiLeggonoMai() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")
     val stranger = world.device("Telefono di Test2", "test2")
@@ -91,7 +94,7 @@ class FacesReplicaTest {
   /** Un dispositivo dismesso vale con le sole teste congelate; uno revocato si ignora e i suoi dati escono dall'archivio (L99). */
   @Test
   fun dismessoConLeTesteCongelateRevocatoIgnorato() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val tablet = world.device("Tablet", "test")
     val laptop = world.device("Portatile", "test")
     tablet.edit(PeopleEdit.Name(a, "Uno"))
@@ -124,7 +127,7 @@ class FacesReplicaTest {
   /** Anti-rollback: togliere dal NAS la testa piu' recente non riporta indietro chi l'ha gia' letta. */
   @Test
   fun antiRollback() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")
     tablet.edit(PeopleEdit.Name(a, "Uno"))
@@ -150,7 +153,7 @@ class FacesReplicaTest {
   /** D30: senza lo stato fresco non parte nessuna richiesta; le generazioni non correnti si contano e non si leggono mai (D31). */
   @Test
   fun freschezzaEGenerazioniNonCorrenti() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")
     tablet.edit(PeopleEdit.Name(a, "Uno"))
@@ -173,7 +176,7 @@ class FacesReplicaTest {
   /** La generazione che cambia a meta' del giro: si ferma, e niente entra nell'archivio dopo. */
   @Test
   fun laGenerazioneCheCambiaAMeta() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")
     tablet.compute(1)
@@ -196,7 +199,7 @@ class FacesReplicaTest {
    */
   @Test
   fun leIstantaneeLettePerIlCustode() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")
     val laptop = world.device("Portatile", "test")

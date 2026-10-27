@@ -18,7 +18,6 @@ import dev.pampa.mycloudgallery.core.faces.contract.PeopleRecord
 import dev.pampa.mycloudgallery.core.faces.contract.PersonState
 import dev.pampa.mycloudgallery.core.faces.testing.FakeFacesClock
 import dev.pampa.mycloudgallery.core.faces.testing.FakeFacesSwitch
-import dev.pampa.mycloudgallery.core.faces.testing.InMemoryFacesArchive
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.FaceBox
 import dev.pampa.mycloudgallery.core.model.FaceDetectorCode
@@ -40,9 +39,10 @@ import kotlin.time.Duration.Companion.hours
 /**
  * Il mondo dei test di sync/ (Fase 8, P3): una famiglia vera con due account (`test`, `test2`), le loro aree private in memoria e l'area
  * comune, l'ora del NAS e l'orologio monotono finti, una generazione corrente. Ogni [SyncDevice] ha il suo archivio, i suoi store, la sua
- * replica e il suo pubblicatore veri sopra `NasFacesRemote`. Solo identita' sintetiche, nomi inventati.
+ * replica e il suo pubblicatore veri sopra `NasFacesRemote`. Dove stanno archivio e store lo dice [storage]: in memoria (P3, il riferimento)
+ * o sul database dei volti cifrato (P6, `store/RoomSyncStorage`) con le stesse prove. Solo identita' sintetiche, nomi inventati.
  */
-class FacesSyncWorld(val flags: FeatureFlags = FeatureFlags.RELEASE) {
+class FacesSyncWorld(val flags: FeatureFlags = FeatureFlags.RELEASE, val storage: SyncStorage = SyncStorage.Memory) {
   val clock = FakeFacesClock()
   val family = FacesTestFamily(clock)
   val generation: FaceGeneration = FaceGeneration.fromBytes(ByteArray(16) { (it * 13 + 1).toByte() })
@@ -89,9 +89,10 @@ class FacesSyncWorld(val flags: FeatureFlags = FeatureFlags.RELEASE) {
 class SyncDevice(val world: FacesSyncWorld, val name: String, val signer: Signer, val share: MemoryShare) {
   val id: String = TrustIds.deviceIdOf(signer.publicKey)
   val switch = FakeFacesSwitch(initial = FacesState.On(world.generation, HereState.ACTIVE))
-  var archive = InMemoryFacesArchive(world.generation)
-  var replicaStore = InMemoryFacesReplicaStore()
-  var publishStore = InMemoryFacesPublishStore()
+  private val storage: SyncDeviceStorage = world.storage.open(name, world.generation)
+  val archive: SyncArchive get() = storage.archive
+  val replicaStore: FacesReplicaStore get() = storage.replicaStore
+  val publishStore: FacesPublishStore get() = storage.publishStore
 
   /** Le chiavi che "M3 dei volti" ammette (null = tutte quelle chieste). */
   var attested: Set<ContentKey>? = null
@@ -128,11 +129,7 @@ class SyncDevice(val world: FacesSyncWorld, val name: String, val signer: Signer
 
   /** Un processo nuovo (la morte del processo); con [loseLocal] anche lo stato locale perso (reinstallazione dei dati, non della chiave). */
   fun restart(loseLocal: Boolean = false) {
-    if (loseLocal) {
-      archive = InMemoryFacesArchive(world.generation)
-      replicaStore = InMemoryFacesReplicaStore()
-      publishStore = InMemoryFacesPublishStore()
-    }
+    if (loseLocal) storage.lose() else storage.reopen()
     publisher = NasFacesPublisher(identity, switch, remote, archives, publishStore, attestation, gate, world.clock, world.flags)
     sync = NasFacesSync(identity, switch, remote, archives, replicaStore, gate, world.clock, publisher, world.flags)
   }

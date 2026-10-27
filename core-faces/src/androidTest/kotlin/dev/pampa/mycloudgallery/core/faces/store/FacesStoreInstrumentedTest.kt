@@ -8,6 +8,10 @@ import dev.pampa.mycloudgallery.core.faces.contract.FaceBody
 import dev.pampa.mycloudgallery.core.faces.contract.FaceEntry
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleEdit
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleRecord
+import dev.pampa.mycloudgallery.core.faces.sync.DeviceReplica
+import dev.pampa.mycloudgallery.core.faces.sync.FacesPublishState
+import dev.pampa.mycloudgallery.core.faces.sync.FacesReplicaState
+import dev.pampa.mycloudgallery.core.faces.sync.StagedSnapshot
 import dev.pampa.mycloudgallery.core.faces.testing.GroupingStories
 import dev.pampa.mycloudgallery.core.model.FaceBox
 import dev.pampa.mycloudgallery.core.model.FaceDetectorCode
@@ -15,10 +19,22 @@ import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.FaceSource
 import dev.pampa.mycloudgallery.core.model.FaceSpaceCode
 import dev.pampa.mycloudgallery.core.model.FaceTier
+import dev.pampa.mycloudgallery.core.model.FaceRef
 import dev.pampa.mycloudgallery.core.model.Float16
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.security.faces.FacesKeyAliases
 import dev.pampa.mycloudgallery.core.security.faces.FacesKeyStore
+import dev.pampa.mycloudgallery.core.trust.Verdict
+import dev.pampa.mycloudgallery.core.trust.crypto.Hashes
+import dev.pampa.mycloudgallery.core.trust.data.ClassedSegment
+import dev.pampa.mycloudgallery.core.trust.data.ClusterEntry
+import dev.pampa.mycloudgallery.core.trust.data.ClusterOrigin
+import dev.pampa.mycloudgallery.core.trust.data.ClusterPersonState
+import dev.pampa.mycloudgallery.core.trust.data.FacesDocs
+import dev.pampa.mycloudgallery.core.trust.data.HeadMark
+import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
+import dev.pampa.mycloudgallery.core.trust.data.SegmentRef
+import dev.pampa.mycloudgallery.core.trust.data.SnapshotMark
 import java.io.File
 import java.security.KeyStore
 import java.util.Random
@@ -196,5 +212,64 @@ class FacesStoreInstrumentedTest {
     assertFalse(stores.hasFiles(generation))
     assertTrue(stores.generationsOnDisk().isEmpty())
     assertFalse(store.isOpen)
+  }
+
+  /**
+   * P3 + P6: lo stato della replica e del pubblicatore sul database con la chiave vera. Un'istantanea del custode (persone con il centroide,
+   * assegnazioni) sopravvive alla chiusura e alla riapertura del database e **non e' in chiaro nel file** (nemmeno nel `-wal`).
+   */
+  @Test
+  fun leVociClusterDellaSincronizzazioneSopravvivonoEStannoSigillate() = runBlocking<Unit> {
+    val store = (stores.open(generation) as FacesStoreOpen.Ready).store
+    val centroid = vector(777)
+    val person = PersonId.fromBytes(ByteArray(16) { (it + 40).toByte() })
+    val face = FaceRef(GroupingStories.contentKey(5, 91), 0, 0, 1234L)
+    val entries = listOf<ClusterEntry>(
+      ClusterEntry.Person(person, ClusterPersonState.ACTIVE, null, 1, 3, 1, centroid, listOf(face)),
+      ClusterEntry.Assignment(face, person, 7_500, ClusterOrigin.AUTO),
+    )
+    val mark = SnapshotMark(3, 1)
+    val segment = SegmentRef(Hashes.sha256Name("segmento-di-prova".toByteArray()), 4_000)
+    val head = HeadMark(2, "testa-di-prova")
+    val replica = DeviceReplica(
+      mark = head,
+      segments = listOf(ClassedSegment(SegmentClass.CLUSTER, segment)),
+      snapshotMark = mark,
+      done = setOf(segment.hash),
+      counts = mapOf(segment.hash to 2),
+      cluster = mapOf(segment.hash to entries),
+      snapshot = (FacesDocs.checkSnapshot(mark, entries) as Verdict.Accepted).value,
+      snapshotHead = head,
+      checked = head,
+    )
+    store.replicaStore.save(generation, FacesReplicaState(mapOf("dispositivo-di-prova" to replica), setOf("dispositivo-revocato")))
+    store.publishStore.save(generation, FacesPublishState(snapshot = StagedSnapshot(mark, entries), pending = 2, adopted = true))
+
+    // Il centroide (float16, in due ordini di byte) non e' nel file.
+    val be = ByteArray(16) { i -> val h = centroid[i / 2].toInt(); (if (i % 2 == 0) h shr 8 else h).toByte() }
+    val le = ByteArray(16) { i -> val h = centroid[i / 2].toInt(); (if (i % 2 == 0) h else h shr 8).toByte() }
+    fun check() {
+      assertTrue(bytesOfDatabase().isNotEmpty())
+      for (file in bytesOfDatabase()) {
+        assertFalse(contains(file, be))
+        assertFalse(contains(file, le))
+        assertFalse(contains(file, face.contentKey.bytes()))
+      }
+    }
+    check()
+    store.close()
+    check()
+
+    // Dopo la riapertura (un processo nuovo) lo stato c'e' tutto, con le voci decifrate.
+    val again = (stores.open(generation) as FacesStoreOpen.Ready).store
+    val read = again.replicaStore.load(generation).devices.getValue("dispositivo-di-prova")
+    assertEquals(head, read.mark)
+    assertEquals(entries.toSet(), read.cluster.getValue(segment.hash).toSet())
+    assertEquals(2, read.snapshot!!.persons.size + read.snapshot!!.assignments.size)
+    assertEquals(setOf("dispositivo-revocato"), again.replicaStore.load(generation).revoked)
+    val published = again.publishStore.load(generation)
+    assertEquals(2, published.pending)
+    assertEquals(entries.toSet(), published.snapshot!!.entries.toSet())
+    again.close()
   }
 }

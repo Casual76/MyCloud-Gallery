@@ -4,6 +4,8 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.faces.FacesDatabase
 import dev.pampa.mycloudgallery.core.faces.contract.FacesArchive
 import dev.pampa.mycloudgallery.core.faces.contract.FacesDiag
+import dev.pampa.mycloudgallery.core.faces.sync.FacesPublishStore
+import dev.pampa.mycloudgallery.core.faces.sync.FacesReplicaStore
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.StableCode
 import dev.pampa.mycloudgallery.core.security.faces.FacesDataKey
@@ -32,6 +34,19 @@ class FacesStore internal constructor(
 
   val units: FacesUnitsDone = DatabaseUnitsDone(db.unitDao())
 
+  private val replica = RoomFacesReplicaStore(generation, db.syncDao(), key)
+
+  private val publication = RoomFacesPublishStore(generation, db.syncDao(), key)
+
+  /**
+   * Lo stato della replica dei dispositivi dell'account (P3, `NasFacesSync`) nel database: sopravvive alla morte del processo, le voci
+   * `cluster` sigillate. Vale per la generazione di questo negozio.
+   */
+  val replicaStore: FacesReplicaStore get() = replica
+
+  /** Lo stato del pubblicatore (P3, `NasFacesPublisher`): l'outbox che sopravvive alla morte del processo. Vale per la generazione di questo negozio. */
+  val publishStore: FacesPublishStore get() = publication
+
   @Volatile private var closed = false
 
   val isOpen: Boolean get() = !closed
@@ -40,13 +55,17 @@ class FacesStore internal constructor(
   suspend fun counts(): FacesStoreCounts = databaseArchive.counts().let { (bodies, faces) -> FacesStoreCounts(bodies, faces) }
 
   /** Fa lanciare l'archivio senza chiudere il database: il primo passo della cancellazione, prima ancora di distruggere la chiave. */
-  internal fun retire() = databaseArchive.retire()
+  internal fun retire() {
+    databaseArchive.retire()
+    replica.retire()
+    publication.retire()
+  }
 
   @Synchronized
   fun close() {
     if (closed) return
     closed = true
-    databaseArchive.retire()
+    retire()
     try {
       db.close()
     } catch (e: Exception) {

@@ -27,7 +27,10 @@ import org.junit.Test
  * `publishExclusive`, mai nell'area comune (proprieta'); niente si pubblica senza lo stato fresco; la recinzione delle share vere; §2.4
  * "Pubblicazione", D30, D34, D35, D36, Q5).
  */
-class FacesPublisherTest {
+open class FacesPublisherTest {
+
+  /** Il mondo della prova: in memoria (P3). La versione sul database dei volti (P6) lo sostituisce con lo stesso mondo sopra `RoomSyncStorage`. */
+  protected open fun newWorld(): FacesSyncWorld = FacesSyncWorld()
 
   /** La testa piu' recente di [device] letta come la leggerebbe un altro dispositivo dell'account. */
   private fun latestHead(world: FacesSyncWorld, device: SyncDevice): dev.pampa.mycloudgallery.core.trust.data.FacesHead? {
@@ -40,7 +43,7 @@ class FacesPublisherTest {
 
   @Test
   fun pubblicaIlContributoIntero() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     phone.compute(1)
     phone.compute(2, faces = 3)
@@ -61,7 +64,7 @@ class FacesPublisherTest {
   /** Proprieta': operazioni a caso di tre dispositivi di due account non scrivono mai fuori da `faces/<G>/<io>/`, mai nell'area comune. */
   @Test
   fun scriveSoloSottoLaPropriaCartellaMaiNellAreaComune() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val devices = listOf(world.device("Telefono", "test"), world.device("Tablet", "test"), world.device("Telefono di Test2", "test2"))
     val common = world.family.common.paths().toSet()
     val random = Random(8)
@@ -91,7 +94,7 @@ class FacesPublisherTest {
   /** L23, E-F42: una "area privata" che e' l'area comune non riceve niente, nemmeno una lettura. */
   @Test
   fun nellAreaComuneNiente() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test", share = "test-comune")
     phone.compute(1)
     assertThat(phone.publisher.flush(FlushReason.UNIT_FINISHED)).isEqualTo(FacesPublishOutcome.Blocked(FacesWriteBlock.NO_PRIVATE_AREA))
@@ -105,7 +108,7 @@ class FacesPublisherTest {
   /** D30: niente si pubblica senza lo stato fresco che dice `On(G)` qui; nemmeno in attesa dell'avviso, esclusi o in cancellazione. */
   @Test
   fun nienteSenzaLoStatoFresco() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     phone.compute(1)
     phone.switch.fresh.value = false
@@ -130,7 +133,7 @@ class FacesPublisherTest {
   /** "Un test per pacchetto con la generazione che cambia a meta'" (§4.3): i segmenti scritti restano orfani, la testa no. */
   @Test
   fun laGenerazioneCheCambiaAMetaNonPubblicaLaTesta() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     phone.compute(1)
     phone.edit(PeopleEdit.Name(FacesSyncWorld.person(1), "Uno"))
@@ -148,7 +151,7 @@ class FacesPublisherTest {
   /** D34, Q5: sulle share vere niente sul NAS (ne' letture ne' scritture) finche' l'utente non dice di si'; sulle share di prova si'. */
   @Test
   fun recinzioneDelleShareVere() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val real = world.device("Telefono", "mamma", share = "foto-mamma")
     real.compute(1)
     assertThat(real.publisher.flush(FlushReason.UNIT_FINISHED)).isEqualTo(FacesPublishOutcome.Blocked(FacesWriteBlock.TEST_SHARES_ONLY))
@@ -171,7 +174,7 @@ class FacesPublisherTest {
   /** D35: i cancelli delle scritture (congelamento, emergenza, salto dell'ora, fiducia, sola lettura) e il dispositivo non piu' approvato. */
   @Test
   fun cancelli() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     phone.compute(1)
     for (block in listOf(FacesWriteBlock.FROZEN, FacesWriteBlock.EMERGENCY_STOP, FacesWriteBlock.CLOCK_JUMP, FacesWriteBlock.READ_ONLY)) {
@@ -187,7 +190,7 @@ class FacesPublisherTest {
   /** Una testa ogni 5 minuti d'ora del NAS salvo la fine di un'unita' o della manutenzione; l'accorpamento di 30 s. */
   @Test
   fun ritmo() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     phone.compute(1)
     assertThat(phone.publisher.flush(FlushReason.SYNC_ROUND)).isInstanceOf(FacesPublishOutcome.Published::class.java)
@@ -203,7 +206,7 @@ class FacesPublisherTest {
   /** "M3 dei volti": solo le chiavi attestate; tutti i propri corpi, vincenti o no. */
   @Test
   fun soloICorpiAttestati() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     phone.compute(1)
     phone.compute(2)
@@ -227,7 +230,7 @@ class FacesPublisherTest {
   /** D36: una scelta fatta senza l'ora del NAS prende l'ora alla pubblicazione e da li' vale l'ultima scrittura. */
   @Test
   fun leVociDaDatarePrendonoLOraAllaPubblicazione() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val a = FacesSyncWorld.person(1)
     phone.edit(PeopleEdit.Name(a, "Uno"), dated = false)
@@ -242,7 +245,7 @@ class FacesPublisherTest {
    */
   @Test
   fun lIstantaneaInCodaSiPubblicaAncheDopoLaPrenotazionePersa() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")
     val phoneLeases = NasFacesLeases(phone.identity, phone.switch, phone.share, world.clock, phone.gate, world.flags)

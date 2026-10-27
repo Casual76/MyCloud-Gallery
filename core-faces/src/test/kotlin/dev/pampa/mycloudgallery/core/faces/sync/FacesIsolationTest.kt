@@ -25,7 +25,10 @@ import org.junit.Test
  * per dispositivo; E-F41; come la revisione A della Fase 6). Le teste ostili sono firmate davvero da un dispositivo dell'account (un
  * dispositivo compromesso, L99): la firma da sola non basta a far passare un dato.
  */
-class FacesIsolationTest {
+open class FacesIsolationTest {
+
+  /** Il mondo della prova: in memoria (P3). La versione sul database dei volti (P6) lo sostituisce con lo stesso mondo sopra `RoomSyncStorage`. */
+  protected open fun newWorld(): FacesSyncWorld = FacesSyncWorld()
 
   private val a = FacesSyncWorld.person(1)
   private val b = FacesSyncWorld.person(2)
@@ -48,7 +51,7 @@ class FacesIsolationTest {
 
   @Test
   fun unSegmentoOstileNonFermaGliAltri() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")
     val laptop = world.device("Portatile", "test")
@@ -93,7 +96,7 @@ class FacesIsolationTest {
   /** I tetti per dispositivo e per giro: un dispositivo con tanto da scaricare avanza a rate, gli altri arrivano subito (a rotazione). */
   @Test
   fun unDispositivoEnormeAvanzaARateEGliAltriArrivano() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")
     val laptop = world.device("Portatile", "test")
@@ -122,7 +125,7 @@ class FacesIsolationTest {
    */
   @Test
   fun tettiPerDispositivo() = runTest {
-    val world = FacesSyncWorld()
+    val world = newWorld()
     val phone = world.device("Telefono", "test")
     val tablet = world.device("Tablet", "test")
     val laptop = world.device("Portatile", "test")

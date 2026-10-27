@@ -798,4 +798,90 @@ class DuplicatesControllerTest {
     assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.NIGHTLY_NOT_SAVED)
     assertThat(c.state.value.nightly.on).isFalse()
   }
+
+  // --- Correzioni F, R3: file di un album condiviso in cui non si puo' eliminare ------------------------------------------------------
+  // L'azione si offre ancora (l'utente non vuole toglierla); al tocco il piano di `NasOperations` lascia fuori quei file e la pagina dice quanti e perche',
+  // anche per una selezione mista. Il piano di core-nasops e' quello che protegge davvero (`CleanupProtectedByAlbumsTest` in `:app` lo prova sul piano vero).
+
+  @Test
+  fun r3_ConUnaCopiaDiUnAlbumCondiviso_LaPuliziaPartePerLeAltre_ELAvvisoDiceQuanteNoEPerche() = runTest(UnconfinedTestDispatcher()) {
+    val cleanup = FakeCleanupNas().apply { protectedAmong = { copies -> copies.filter { it.path.startsWith("Famiglia/") } } }
+    val c = controller(cleanup = cleanup).opened()
+    c.prepareIdentical()
+
+    c.confirm(userTap())
+
+    // Una copia sul NAS parte (Backup/...), una (Famiglia/...) e' di un album condiviso: resta dov'e', e l'avviso lo dice con i numeri.
+    val state = c.state.value
+    assertThat(state.notice).isEqualTo(DuplicatesNotice.CLEANUP_PARTLY_PROTECTED)
+    assertThat(state.noticeStarted).isEqualTo(1)
+    assertThat(state.noticeLeft).isEqualTo(1)
+    // Quella lasciata fuori non esce dalla vista come se fosse partita (DP-3): e' ancora li', nel gruppo.
+    val group = state.identical.groups.first { it.group.media == sampleMediaId(2) }
+    assertThat(group.group.copies.map { it.location.value }).contains(22L)
+    assertThat(group.group.copies.map { it.location.value }).doesNotContain(21L)
+    assertThat(state.busy).isFalse()
+  }
+
+  @Test
+  fun r3_SeTutteLeCopieSulNasSonoDiUnAlbumCondiviso_NonPartePienteELAvvisoDicePerche() = runTest(UnconfinedTestDispatcher()) {
+    val cleanup = FakeCleanupNas().apply { protectedAmong = { copies -> copies } }
+    val c = controller(cleanup = cleanup).opened()
+    c.prepareIdentical()
+
+    assertThat(c.confirm(userTap())).isNull()
+
+    // Non e' riuscito, e il motivo non e' il generico «il NAS non ha accettato»: le copie sono di un album condiviso. Il telefono non si tocca.
+    val state = c.state.value
+    assertThat(state.notice).isEqualTo(DuplicatesNotice.CLEANUP_PROTECTED)
+    assertThat(state.noticeLeft).isEqualTo(2)
+    assertThat(state.noticeStarted).isEqualTo(0)
+    assertThat(system.trashRequests).isEmpty()
+    assertThat(state.sheet).isNull()
+    // Nessuna copia esce dalla vista: non e' partito niente.
+    assertThat(state.identical.groups.first { it.group.media == sampleMediaId(2) }.group.copies.map { it.location.value }).containsAtLeast(21L, 22L)
+  }
+
+  @Test
+  fun r3_GliScattiSimiliConOvunque_DiconoLoStessoQuandoUnaCopiaEDiUnAlbumCondiviso() = runTest(UnconfinedTestDispatcher()) {
+    val cleanup = FakeCleanupNas().apply { protectedAmong = { copies -> copies.take(1) } }
+    val c = controller(cleanup = cleanup).opened()
+    c.prepareSimilar()
+    c.chooseScope(CleanupScope.EVERYWHERE)
+    val asked = c.state.value.sheet!!.plan.nas.size
+
+    c.confirm(userTap())
+
+    val state = c.state.value
+    assertThat(asked).isAtLeast(2)
+    assertThat(state.notice).isEqualTo(DuplicatesNotice.CLEANUP_PARTLY_PROTECTED)
+    assertThat(state.noticeLeft).isEqualTo(1)
+    assertThat(state.noticeStarted).isEqualTo(asked - 1)
+  }
+
+  @Test
+  fun r3_SeNienteECoinvoltoDiUnAlbumCondiviso_LAvvisoDelloStatoPartitoRestaQuelloDiSempre() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller().opened()
+    c.prepareIdentical()
+
+    c.confirm(userTap())
+
+    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.CLEANUP_STARTED)
+    assertThat(c.state.value.noticeLeft).isEqualTo(0)
+  }
+
+  @Test
+  fun r3_ChiudereLAvvisoAzzeraIConteggi() = runTest(UnconfinedTestDispatcher()) {
+    val cleanup = FakeCleanupNas().apply { protectedAmong = { copies -> copies.take(1) } }
+    val c = controller(cleanup = cleanup).opened()
+    c.prepareIdentical()
+    c.confirm(userTap())
+    assertThat(c.state.value.noticeLeft).isEqualTo(1)
+
+    c.dismissNotice()
+
+    assertThat(c.state.value.notice).isNull()
+    assertThat(c.state.value.noticeLeft).isEqualTo(0)
+    assertThat(c.state.value.noticeStarted).isEqualTo(0)
+  }
 }

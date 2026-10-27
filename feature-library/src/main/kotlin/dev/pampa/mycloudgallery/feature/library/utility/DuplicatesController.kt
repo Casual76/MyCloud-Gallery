@@ -134,7 +134,7 @@ class DuplicatesController(
   }
 
   fun dismissNotice() {
-    mutable.update { it.copy(notice = null) }
+    mutable.update { it.copy(notice = null, noticeStarted = 0, noticeLeft = 0) }
   }
 
   // --- Identici ---------------------------------------------------------------------------------------------------------------
@@ -409,35 +409,62 @@ class DuplicatesController(
         return null
       }
       var notice: DuplicatesNotice? = null
+      var started = 0
+      var left = 0
       if (plan.nas.isNotEmpty()) {
-        val outcome = try {
-          cleanupNas.trash(plan.nas, tap)
+        val result = try {
+          cleanupNas.trashReporting(plan.nas, tap)
         } catch (e: CancellationException) {
           throw e
         } catch (_: Exception) {
-          NasTrashOutcome.FAILED
+          CleanupNasResult(NasTrashOutcome.FAILED)
         }
+        val outcome = result.outcome
+        left = result.protectedLeftOut.size
         if (outcome != NasTrashOutcome.STARTED) {
-          mutable.update { it.copy(sheet = null, notice = noticeFor(outcome)) }
+          // R3: se il NAS ha lasciato fuori tutto perche' sono file di un album condiviso, l'avviso dice perche', non un generico «non accettato».
+          val protectedOnly = outcome == NasTrashOutcome.REJECTED && left > 0
+          mutable.update {
+            it.copy(sheet = null, notice = if (protectedOnly) DuplicatesNotice.CLEANUP_PROTECTED else noticeFor(outcome), noticeStarted = 0, noticeLeft = left)
+          }
           return null
         }
-        notice = DuplicatesNotice.CLEANUP_STARTED
-        // DP-3: le copie accettate escono subito dalla vista; la scansione del catalogo le togliera' davvero a operazione chiusa.
-        removedLocations += plan.nas.mapNotNull { it.location }
+        started = (result.started.takeIf { it > 0 } ?: (plan.nas.size - left)).coerceAtLeast(0)
+        // Una selezione mista: le copie partite e quelle lasciate fuori (R3) stanno nello stesso avviso.
+        notice = if (left > 0) DuplicatesNotice.CLEANUP_PARTLY_PROTECTED else DuplicatesNotice.CLEANUP_STARTED
+        // DP-3: le copie accettate escono subito dalla vista; la scansione del catalogo le togliera' davvero a operazione chiusa. Quelle lasciate fuori
+        // (elementi di un album condiviso) restano dov'erano: non escono dalla vista.
+        removedLocations += plan.nas.filterNot { copy -> result.protectedLeftOut.any { sameNas(copy, it) } }.mapNotNull { it.location }
         publishIdentical(scanning = mutable.value.identical.scanning, failed = false)
       }
       // R18: le copie del telefono sono ancora quelle del piano (stessa riga, stesso timbro)? Una sovrascritta dopo la lettura non e' piu' un doppione.
       val phone = if (plan.phone.isEmpty()) emptyList() else unchangedPhone(plan.phone)
-      if (phone.size < plan.phone.size) notice = DuplicatesNotice.PHONE_CHANGED
+      // R3 vince su R18 se capitano insieme: l'avviso che spiega un file lasciato nel NAS non si perde sotto quello delle copie del telefono cambiate.
+      if (phone.size < plan.phone.size && notice != DuplicatesNotice.CLEANUP_PARTLY_PROTECTED) notice = DuplicatesNotice.PHONE_CHANGED
       val request = if (phone.isEmpty()) null else intents.trashRequest(phone.map { it.ref }, trash = true)
       if (phone.isNotEmpty() && request == null) {
         // Le copie del NAS, se c'erano, sono gia' partite (e restano nei cestini): l'avviso non dice "non e' stato toccato niente".
-        mutable.update { it.copy(sheet = null, notice = if (plan.nas.isNotEmpty()) (notice ?: DuplicatesNotice.CLEANUP_STARTED) else DuplicatesNotice.CLEANUP_FAILED) }
+        mutable.update {
+          it.copy(
+            sheet = null,
+            notice = if (plan.nas.isNotEmpty()) (notice ?: DuplicatesNotice.CLEANUP_STARTED) else DuplicatesNotice.CLEANUP_FAILED,
+            noticeStarted = started,
+            noticeLeft = left,
+          )
+        }
         if (plan.nas.isNotEmpty()) rescan()
         return null
       }
       phonePending = phone.mapNotNullTo(HashSet()) { it.location }
-      mutable.update { it.copy(sheet = null, notice = notice ?: it.notice, phoneRequest = request) }
+      mutable.update {
+        it.copy(
+          sheet = null,
+          notice = notice ?: it.notice,
+          noticeStarted = if (notice != null) started else it.noticeStarted,
+          noticeLeft = if (notice != null) left else it.noticeLeft,
+          phoneRequest = request,
+        )
+      }
       // Solo NAS: la pulizia e' partita, la pagina si rilegge; con il telefono si rilegge a risposta del dialogo di sistema.
       if (request == null) rescan()
       return request

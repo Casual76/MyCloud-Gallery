@@ -122,6 +122,18 @@ enum class DuplicatesNotice {
   /** Non e' riuscito. */
   CLEANUP_FAILED,
 
+  /**
+   * R3 (correzioni F): non e' riuscito perche' le copie sul NAS fanno parte di un album condiviso in cui l'utente non puo' eliminarle, spostarle o
+   * rinominarle: non e' stato toccato niente. Il numero sta in [DuplicatesState.noticeLeft].
+   */
+  CLEANUP_PROTECTED,
+
+  /**
+   * R3 (correzioni F): la pulizia e' partita per una parte ([DuplicatesState.noticeStarted] copie sul NAS), ma [DuplicatesState.noticeLeft] copie sono rimaste
+   * dove sono perche' fanno parte di un album condiviso in cui l'utente non puo' eliminarle. Una selezione mista.
+   */
+  CLEANUP_PARTLY_PROTECTED,
+
   /** Lo scatto non si toglie: in un gruppo almeno uno resta. */
   LAST_SHOT_STAYS,
 
@@ -147,6 +159,9 @@ data class DuplicatesState(
   val nightly: NightlyView = NightlyView(),
   val sheet: CleanupSheet? = null,
   val notice: DuplicatesNotice? = null,
+  /** I numeri dell'avviso [notice] quando ne ha (R3: copie partite e copie lasciate fuori da un album condiviso). Solo conteggi. */
+  val noticeStarted: Int = 0,
+  val noticeLeft: Int = 0,
   /** Una richiesta del dialogo di sistema o del NAS e' in corso: i comandi di pulizia stanno fermi. */
   val busy: Boolean = false,
   /**

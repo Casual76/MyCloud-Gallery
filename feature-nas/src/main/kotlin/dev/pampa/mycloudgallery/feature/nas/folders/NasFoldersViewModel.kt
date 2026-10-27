@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.nasops.contract.OpPlan
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanRejection
+import dev.pampa.mycloudgallery.core.nasops.contract.SkipReason
 import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.UserConfirmation
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
@@ -395,9 +396,12 @@ class NasFoldersViewModel @Inject constructor(
         }
         return@launch
       }
+      // R3 (correzioni F): gli elementi che il piano ha lasciato dove sono perche' fanno parte di un album condiviso in cui non si possono toccare: anche a
+      // operazione partita l'avviso lo dice, con il numero (una selezione mista).
+      val leftOut = plan.skipped.count { it.reason == SkipReason.SHARED_ALBUM_ITEM }
       mutable.update {
         it.copy(
-          notice = noticeFor(outcome),
+          notice = noticeFor(outcome, leftOut),
           // Fatto lo spostamento (o l'eliminazione) si torna a sfogliare.
           mode = FoldersMode.Browse,
           selecting = false,
@@ -460,7 +464,23 @@ class NasFoldersViewModel @Inject constructor(
   internal fun openRename() {
     val current = mutable.value
     val item = current.takeIf { it.canModify }?.selectedItems()?.singleOrNull() ?: return
-    mutable.update { it.copy(name = NameDraft(NamePurpose.RENAME, item.path.name, NameCheck.Same)) }
+    viewModelScope.launch {
+      // R3 (correzioni F): se il file fa parte di un album condiviso in cui non puo' essere rinominato lo si dice **al tocco**, senza far scrivere un nome che poi
+      // non servirebbe. Il piano controlla l'appartenenza per primo, prima del nome: chiesto con il nome di adesso risponde SHARED_ALBUM_ITEM se e' protetto e
+      // (per qualunque altro motivo) altro; solo il primo ferma il foglio, il resto lo dice il controllo del nome come prima.
+      val probe = try {
+        operations.plan(OpRequest.Rename(item, item.path.name))
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        null
+      }
+      if (probe is PlanOutcome.Rejected && probe.reason == PlanRejection.SHARED_ALBUM_ITEM) {
+        mutable.update { it.copy(notice = noticeFor(probe)) }
+        return@launch
+      }
+      mutable.update { it.copy(name = NameDraft(NamePurpose.RENAME, item.path.name, NameCheck.Same)) }
+    }
   }
 
   internal fun onNameChanged(text: String) {

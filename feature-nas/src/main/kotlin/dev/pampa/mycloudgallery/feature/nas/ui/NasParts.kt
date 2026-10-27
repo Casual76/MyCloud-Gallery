@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.unit.Dp
@@ -61,6 +62,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryLegibility
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
+import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.feature.nas.NasDimens
 import dev.pampa.mycloudgallery.feature.nas.R
 
@@ -293,7 +295,7 @@ internal fun NasNoticeLine(
 ) {
   val style = nasToneStyle(notice.tone, MaterialTheme.colorScheme)
   val dismissText = stringResource(R.string.nas_notice_dismiss)
-  val glyph = if (notice.tone == NasTone.Alarm) Icons.Rounded.ErrorOutline else Icons.Rounded.CheckCircle
+  val glyph = if (notice.tone == NasTone.Alarm || notice.tone == NasTone.Attention) Icons.Rounded.ErrorOutline else Icons.Rounded.CheckCircle
   Row(
     modifier = modifier
       .fillMaxWidth()
@@ -305,7 +307,7 @@ internal fun NasNoticeLine(
   ) {
     Icon(imageVector = glyph, contentDescription = null, tint = style.glyph)
     Text(
-      text = stringResource(notice.text),
+      text = notice.count?.let { count -> pluralStringResource(notice.text, count, GalleryNumbers.format(count)) } ?: stringResource(notice.text),
       modifier = Modifier.weight(1f).padding(vertical = NasDimens.BlockGap),
       style = MaterialTheme.typography.bodyMedium,
       color = style.text,

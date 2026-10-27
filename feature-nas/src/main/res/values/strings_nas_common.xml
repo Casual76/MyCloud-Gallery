@@ -83,10 +83,14 @@
   <string name="nas_reject_writes_blocked">Le scritture sul NAS sono ferme adesso. Riprova più tardi.</string>
   <string name="nas_reject_nas_unreachable">Il NAS non risponde: riprova quando è raggiungibile.</string>
   <string name="nas_reject_not_mine">Puoi eliminare subito solo ciò che hai eliminato da questo dispositivo.</string>
-  <string name="nas_reject_shared_album_item">È in un album condiviso e il livello dell’album non ti permette di eliminarlo, spostarlo o rinominarlo: può farlo chi l’ha creato (o chi l’ha aggiunto, a “Gli altri aggiungono”).</string>
+  <string name="nas_reject_shared_album_item">Non è riuscito: fa parte di un album condiviso in cui non puoi eliminarlo, spostarlo o rinominarlo. Può farlo chi ha creato l’album o, a “Gli altri aggiungono”, chi l’ha aggiunto.</string>
 
   <!-- Dopo aver confermato (StartOutcome) -->
   <string name="nas_started">Operazione avviata. La trovi in Operazioni in corso.</string>
+  <plurals name="nas_started_partly_protected">
+    <item quantity="one">Operazione avviata, ma %1$s elemento no: fa parte di un album condiviso in cui non puoi eliminarlo, spostarlo o rinominarlo, e resta dov’è. Il resto lo trovi in Operazioni in corso.</item>
+    <item quantity="other">Operazione avviata, ma %1$s elementi no: fanno parte di un album condiviso in cui non puoi eliminarli, spostarli o rinominarli, e restano dove sono. Il resto lo trovi in Operazioni in corso.</item>
+  </plurals>
   <string name="nas_already_started">Questa operazione è già partita.</string>
   <string name="nas_confirmation_expired">La conferma è scaduta: ricomincia.</string>
   <string name="nas_confirmation_wrong">Nel frattempo è cambiato qualcosa: ricomincia dall\'inizio.</string>

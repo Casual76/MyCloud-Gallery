@@ -19,6 +19,8 @@ import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpRequest
 import dev.pampa.mycloudgallery.core.nasops.contract.OwnTrashRef
 import dev.pampa.mycloudgallery.core.nasops.contract.PlanOutcome
+import dev.pampa.mycloudgallery.core.nasops.contract.PlanRejection
+import dev.pampa.mycloudgallery.core.nasops.contract.SkipReason
 import dev.pampa.mycloudgallery.core.nasops.contract.StartOutcome
 import dev.pampa.mycloudgallery.core.nasops.contract.TrashRestoreRef
 import dev.pampa.mycloudgallery.core.personal.contract.FullHashPersonalSettings
@@ -29,6 +31,7 @@ import dev.pampa.mycloudgallery.feature.library.trash.NasTrashPort
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashRow
 import dev.pampa.mycloudgallery.feature.library.trash.UserTap
 import dev.pampa.mycloudgallery.feature.library.utility.CleanupNasPort
+import dev.pampa.mycloudgallery.feature.library.utility.CleanupNasResult
 import dev.pampa.mycloudgallery.feature.library.utility.FullHashSwitch
 import dev.pampa.mycloudgallery.feature.library.utility.PhoneCopyCheck
 import java.util.Locale
@@ -52,22 +55,42 @@ import kotlinx.coroutines.withContext
 
 /** `CleanupNasPort` sopra `NasOperations` (l'adattatore di riferimento di `CleanupOverOperationsTest`, P8): piano di `Trash`, conferma, avvio. */
 class OperationsCleanupNas(private val operations: NasOperations, private val monotonicMs: () -> Long) : CleanupNasPort {
-  override suspend fun trash(copies: List<NasTrashRef>, tap: UserTap): NasTrashOutcome {
-    if (copies.isEmpty()) return NasTrashOutcome.REJECTED
+  override suspend fun trash(copies: List<NasTrashRef>, tap: UserTap): NasTrashOutcome = trashReporting(copies, tap).outcome
+
+  /**
+   * Il piano di `Trash` e' **il punto per cui passa ogni scrittura sul NAS** (R3, pacchetto B): lascia fuori i file di un album condiviso che il livello non mi
+   * lascia eliminare (`SkipReason.SHARED_ALBUM_ITEM`), anche da "Ovunque" dei Doppioni simili. Correzioni F: qui si **contano** e si restituiscono, cosi' la
+   * pagina dice al tocco quante copie non sono state toccate e perche', anche in una selezione mista.
+   */
+  override suspend fun trashReporting(copies: List<NasTrashRef>, tap: UserTap): CleanupNasResult {
+    if (copies.isEmpty()) return CleanupNasResult(NasTrashOutcome.REJECTED)
     val items = copies.map { copy ->
       NasItem(copy.share, SharePath.parse(copy.path), isFolder = false, size = copy.size, stamp = NasStamp(copy.size, copy.modifiedAt, copy.fileId))
     }
-    val plan = (operations.plan(OpRequest.Trash(items)) as? PlanOutcome.Ready)?.plan ?: return NasTrashOutcome.REJECTED
+    val plan = when (val outcome = operations.plan(OpRequest.Trash(items))) {
+      is PlanOutcome.Ready -> outcome.plan
+      // Tutte le copie sono file di un album condiviso (o non c'e' altro da fare): niente parte, e la pagina sa se il motivo e' l'album.
+      is PlanOutcome.Rejected -> return CleanupNasResult(
+        NasTrashOutcome.REJECTED,
+        protectedLeftOut = if (outcome.reason == PlanRejection.SHARED_ALBUM_ITEM) copies else emptyList(),
+      )
+    }
+    val kept = plan.skipped.filter { it.reason == SkipReason.SHARED_ALBUM_ITEM }.mapTo(HashSet()) { keyOf(it.share, it.path.value) }
+    val left = copies.filter { keyOf(it.share, it.path) in kept }
     // Un piano senza elementi (tutti esclusi: share in sola lettura, file spariti) non avvia nessuna operazione.
-    if (plan.items.isEmpty()) return NasTrashOutcome.REJECTED
+    if (plan.items.isEmpty()) return CleanupNasResult(NasTrashOutcome.REJECTED, protectedLeftOut = left)
     // Il tocco c'e' gia' stato (sul foglio): la conferma si emette adesso, con i tocchi che la prova dice, e il piano ne chiede uno.
-    if (tap.taps < plan.requiredConfirmations) return NasTrashOutcome.REJECTED
-    return when (operations.start(plan, ConfirmationIssuer.issue(plan, tap.taps, monotonicMs()))) {
+    if (tap.taps < plan.requiredConfirmations) return CleanupNasResult(NasTrashOutcome.REJECTED, protectedLeftOut = left)
+    val outcome = when (operations.start(plan, ConfirmationIssuer.issue(plan, tap.taps, monotonicMs()))) {
       is StartOutcome.Started, is StartOutcome.AlreadyStarted -> NasTrashOutcome.STARTED
       StartOutcome.WritesBlocked -> NasTrashOutcome.BLOCKED
       else -> NasTrashOutcome.REJECTED
     }
+    return CleanupNasResult(outcome, started = if (outcome == NasTrashOutcome.STARTED) plan.items.size else 0, protectedLeftOut = left)
   }
+
+  /** La stessa chiave del piano (`OpPlanner.key`): share e percorso, senza badare alle maiuscole. */
+  private fun keyOf(share: String, path: String): String = share.lowercase(Locale.ROOT) + "/" + path.lowercase(Locale.ROOT)
 }
 
 /**

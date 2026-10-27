@@ -36,6 +36,26 @@ object NoFullHashSwitch : FullHashSwitch {
  */
 fun interface CleanupNasPort {
   suspend fun trash(copies: List<NasTrashRef>, tap: UserTap): NasTrashOutcome
+
+  /**
+   * Correzioni F (R3, L152, risposta dell'utente del 27/10): come [trash], ma dice anche **quali copie il piano ha lasciato fuori** perche' sono file di un
+   * album condiviso in cui l'utente non puo' eliminare, spostare o rinominare. L'azione si offre lo stesso; al tocco la pagina dice che cosa non e' andato e
+   * perche' (anche in una selezione mista). Di serie nessuna copia e' lasciata fuori: chi non sa dirlo risponde come [trash].
+   */
+  suspend fun trashReporting(copies: List<NasTrashRef>, tap: UserTap): CleanupNasResult = CleanupNasResult(trash(copies, tap))
+}
+
+/**
+ * L'esito di [CleanupNasPort.trashReporting]: [outcome] come sempre, [started] le copie che il piano ha davvero messo in viaggio verso il cestino del NAS e
+ * [protectedLeftOut] quelle che ha lasciato dov'erano perche' elementi di un album condiviso che il livello non permette di eliminare (R3). Mai un percorso
+ * in un messaggio: la pagina conta soltanto.
+ */
+class CleanupNasResult(
+  val outcome: NasTrashOutcome,
+  val started: Int = 0,
+  val protectedLeftOut: List<NasTrashRef> = emptyList(),
+) {
+  override fun toString(): String = "CleanupNasResult($outcome, started=$started, protectedLeftOut=${protectedLeftOut.size})"
 }
 
 /** Nessuna pulizia sul NAS (nessun NAS): le copie del NAS non si propongono. */

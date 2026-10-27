@@ -29,6 +29,7 @@ import dev.pampa.mycloudgallery.core.model.VersionId
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
 import dev.pampa.mycloudgallery.feature.library.trash.UserTap
 import dev.pampa.mycloudgallery.feature.library.utility.CleanupNasPort
+import dev.pampa.mycloudgallery.feature.library.utility.CleanupNasResult
 import dev.pampa.mycloudgallery.feature.library.utility.FullHashSwitch
 import dev.pampa.mycloudgallery.feature.library.utility.PhoneCopyCheck
 import kotlin.time.Duration
@@ -275,9 +276,17 @@ class FakeSimilarShots(
 class FakeCleanupNas(var outcome: NasTrashOutcome = NasTrashOutcome.STARTED) : CleanupNasPort {
   val calls: MutableList<Pair<List<NasTrashRef>, Int>> = mutableListOf()
 
-  override suspend fun trash(copies: List<NasTrashRef>, tap: UserTap): NasTrashOutcome {
+  /** R3 (correzioni F): fra le copie chieste, quelle che il piano lascia fuori perche' fanno parte di un album condiviso (di serie nessuna). */
+  var protectedAmong: (List<NasTrashRef>) -> List<NasTrashRef> = { emptyList() }
+
+  override suspend fun trash(copies: List<NasTrashRef>, tap: UserTap): NasTrashOutcome = trashReporting(copies, tap).outcome
+
+  override suspend fun trashReporting(copies: List<NasTrashRef>, tap: UserTap): CleanupNasResult {
     calls += copies to tap.taps
-    return outcome
+    val left = protectedAmong(copies)
+    // Come l'adattatore vero: se non resta niente da fare perche' tutto e' protetto, il piano si rifiuta.
+    val result = if (left.isNotEmpty() && left.size == copies.size) NasTrashOutcome.REJECTED else outcome
+    return CleanupNasResult(result, started = if (result == NasTrashOutcome.STARTED) copies.size - left.size else 0, protectedLeftOut = left)
   }
 }
 

@@ -9,6 +9,10 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchEngine
 import dev.pampa.mycloudgallery.core.search.contract.SearchReadiness
 import dev.pampa.mycloudgallery.core.search.contract.SearchRequest
 import java.time.MonthDay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 
 // LA RICERCA PER CONTENUTO DEGLI ALBUM SMART (D15, §2.2 regole C e S4, §2.9). Descrizione e foto d'esempio passano dai contratti della Fase 6:
 // `SearchEngine.search` con i chip del periodo come vincoli e la descrizione come testo; `SearchEngine.similar` per ogni foto d'esempio. Le
@@ -22,6 +26,12 @@ import java.time.MonthDay
 interface SmartContentSearch {
   /** Il motore puo' rispondere adesso per contenuto (modello caricato). Se no, [match] da' [ContentMatches.NONE]. */
   val ready: Boolean
+
+  /**
+   * [ready] nel tempo (AS-4, DG-1): il modello si carica dopo l'avvio e gli smart con una descrizione o delle foto d'esempio, che fin li' tacevano,
+   * vanno rivalutati appena il motore e' pronto. Emette il valore di adesso e poi ogni cambio. Il default e' un valore solo (un motore che non cambia).
+   */
+  val readyChanges: Flow<Boolean> get() = flowOf(ready)
 
   /** I media che [text] e le foto d'[examples] indicano, nel [period] (null = sempre). Mai un nascosto (il motore non li ha). */
   suspend fun match(text: String?, examples: List<MediaId>, period: SmartPeriod?): ContentMatches
@@ -37,6 +47,8 @@ object NoSmartContentSearch : SmartContentSearch {
 /** Il motore di ricerca della Fase 6 (vero o di riferimento) come ricerca degli album. */
 class EngineContentSearch(private val engine: SearchEngine) : SmartContentSearch {
   override val ready: Boolean get() = engine.readiness.value is SearchReadiness.Ready
+
+  override val readyChanges: Flow<Boolean> get() = engine.readiness.map { it is SearchReadiness.Ready }.distinctUntilChanged()
 
   override suspend fun match(text: String?, examples: List<MediaId>, period: SmartPeriod?): ContentMatches {
     val query = text?.trim().orEmpty()

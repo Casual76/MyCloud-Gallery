@@ -131,16 +131,31 @@ internal class PlaceMatcher(private val rule: PlaceRule, private val lookup: Pla
  * che ha perso la copia sul telefono passa dall'una all'altra) e valgono lo stesso dispositivo. Il resto si confronta com'e'. Null = origine
  * sconosciuta (nessuna regola B per quel media). [ownBackupFolder] e' `AlbumFamily.backupFolderName()` (con o senza il prefisso `Backup/`).
  */
-class DeviceNormalizer(ownBackupFolder: String?) {
-  private val ownBackup: String? = ownBackupFolder?.let { folder ->
-    val trimmed = folder.trim().trim('/').let { if (it.startsWith("Backup/", ignoreCase = true)) it.substring("Backup/".length) else it }
-    Normalizer.normalize(trimmed.trim('/'), Normalizer.Form.NFC).lowercase(Locale.ROOT).takeIf { it.isNotEmpty() }
+class DeviceNormalizer(private val ownBackupFolder: () -> String?) {
+  constructor(ownBackupFolder: String?) : this({ ownBackupFolder })
+
+  /**
+   * AS-9: la cartella del proprio backup si legge **a ogni uso**, non una volta al montaggio. Le impostazioni del backup si caricano dopo l'avvio: se
+   * il montaggio vinceva la corsa la cartella era null per tutto il processo e le foto liberate dal telefono contavano come "di un altro dispositivo".
+   * L'ultima cartella letta e la sua forma normalizzata si ricordano: il costo per candidato resta quello di un confronto di stringhe.
+   */
+  @Volatile private var last: Pair<String?, String?> = null to null
+
+  private fun ownBackup(): String? {
+    val raw = ownBackupFolder()
+    last.let { (seenRaw, normalized) -> if (seenRaw == raw) return normalized }
+    val normalized = raw?.let { folder ->
+      val trimmed = folder.trim().trim('/').let { if (it.startsWith("Backup/", ignoreCase = true)) it.substring("Backup/".length) else it }
+      Normalizer.normalize(trimmed.trim('/'), Normalizer.Form.NFC).lowercase(Locale.ROOT).takeIf { it.isNotEmpty() }
+    }
+    last = raw to normalized
+    return normalized
   }
 
-  fun of(origin: String?): String? = when {
-    origin == null -> null
-    origin == OriginDevice.PHONE -> OriginDevice.PHONE
-    ownBackup != null && origin == OriginDevice.backup(ownBackup) -> OriginDevice.PHONE
-    else -> origin
+  fun of(origin: String?): String? {
+    if (origin == null) return null
+    if (origin == OriginDevice.PHONE) return OriginDevice.PHONE
+    val backup = ownBackup()
+    return if (backup != null && origin == OriginDevice.backup(backup)) OriginDevice.PHONE else origin
   }
 }

@@ -53,7 +53,10 @@ class SmartInterpreterTest {
     val place = propose(world, "Oslo 2026").rules.place!!
     assertThat(place.scope).isEqualTo(PlaceScope.AROUND)
     assertThat(place.radiusKm).isEqualTo(SmartLimits.CITY_RADIUS_KM)
-    assertThat(SmartGeo.distanceKm(place.center, Spots.OSLO)).isLessThan(3.0)
+    // R16: il centro scritto nei dati personali sta su una griglia di 0,1 gradi (~11 km): dice la citta', non il punto esatto (la casa).
+    assertThat(SmartGeo.distanceKm(place.center, Spots.OSLO)).isLessThan(8.0)
+    assertThat(kotlin.math.abs(place.center.latitude * 10 - kotlin.math.round(place.center.latitude * 10))).isLessThan(1e-6)
+    assertThat(kotlin.math.abs(place.center.longitude * 10 - kotlin.math.round(place.center.longitude * 10))).isLessThan(1e-6)
   }
 
   @Test

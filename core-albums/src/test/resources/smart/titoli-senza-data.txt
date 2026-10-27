@@ -11,4 +11,4 @@ Norvegia => - => country Norvegia r300 #3143244+3161732 => - => - => NO_DATE
 Portogallo => - => country Portogallo r300 #2267057 => - => - => NO_DATE
 Germania => - => country Germania r300 #2867714 => - => - => NO_DATE
 Italia => - => country Italia r300 #6001+6002+6003+6004+6005+6006+6007+6008+6015+6016+6017+3169070+3170647+3173435+3174530+3176959+3182351 => - => - => NO_DATE
-Oslo Bergen => - => around Oslo (Norvegia) e Bergen r178 #3143244+3161732 alt=Oslo (Stati Uniti)#5036001:3 => - => - => NO_DATE
+Oslo Bergen => - => around Oslo (Norvegia) e Bergen r181 #3143244+3161732 alt=Oslo (Stati Uniti)#5036001:3 => - => - => NO_DATE

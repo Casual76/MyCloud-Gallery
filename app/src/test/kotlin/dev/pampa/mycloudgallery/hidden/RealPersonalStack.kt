@@ -128,6 +128,9 @@ internal class RealPersonalStack private constructor(val w: BuiltWorld) : AutoCl
     smartSuggested = pick(salt = 5, share = 4).filter { it !in smartAccepted && it !in smartAuto }
     w.db.albumDao().upsertItems(smartAuto.mapIndexed { n, i -> AlbumItemEntity(smart.value, w.ids[i].value, (n + 1) * 1_000L, T0, origin = "auto") })
     w.db.albumChoiceDao().upsertSuggestions(smartSuggested.map { AlbumSuggestionEntity(smart.value, w.ids[it].value, "s1", T0) })
+    // Le righe del motore le scrive questo stack a mano: come farebbe `SmartUpkeep`, dice che il calcolo e' finito (revisione di fine Fase 7, AS-2: uno smart appena creato
+    // e' "in calcolo" finche' il motore non ha finito; senza questa riga uno smart senza foto visibili resterebbe "in calcolo" e la pagina direbbe "cerco").
+    albums.smartWorkFinished(listOf(smart))
 
     // --- La copia personale di un album chiuso (Q5): tutti i media dell'area comune, nascosti compresi (la lettura li toglie) ---
     val sharedId = AlbumId.derived(AccountId.of("test2"), ByteArray(AlbumId.NONCE_BYTES) { (it + w.spec.seed.toInt()).toByte() })

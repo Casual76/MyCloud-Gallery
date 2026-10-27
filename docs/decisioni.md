@@ -8037,7 +8037,9 @@ punto della griglia piu' vicino e lontano da casa; il raggio non cambia. La casa
 regola del luogo se il suo cerchio conterrebbe la casa (resta il periodo). I titoli e i luoghi di una proposta si ricalcolano a **ogni controllo** delle
 proposte e a `accept`, sulle sole foto visibili: dopo un "nascondi" il titolo non porta piu' un luogo che solo le foto nascoste avevano, e `accept` rilegge
 prima di scrivere. La tabella pubblica dei titoli cambia di conseguenza in tre righe (il raggio dei titoli con piu' luoghi dipende dal centro: 141 -> 147,
-278 -> 283, 178 -> 181 km); nient'altro nella tabella cambia.
+278 -> 283, 178 -> 181 km); nient'altro nella tabella cambia. La qualita' sui viaggi sintetici (§5.3) si sposta di quasi niente: le foto
+coperte sono 13.999 invece di 14.003 su 14.162 (copertura 98,88% -> 98,85%), sicuri e precisione (99,96%) uguali, soglie del 99% e del 95% rispettate (`SyntheticAlbumsEvalTest`,
+`TripFixtureExportTest`).
 
 **R17: fallire chiusi non e' "vuoto".** `VisibleMedia.visibleOrThrow` e `HiddenMask.hiddenAmongOrThrow` (di serie uguali alle versioni che non lanciano; il
 catalogo le implementa senza `try/catch`, quelle morbide le chiamano dentro un `try/catch`). Il motore degli smart e i viaggi usano quelle severe:

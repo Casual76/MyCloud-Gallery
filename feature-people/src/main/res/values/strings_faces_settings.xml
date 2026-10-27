@@ -39,6 +39,8 @@
   <string name="faces_settings_wait_models">Preparo i modelli</string>
   <string name="faces_settings_wait_erasing">In attesa: cancellazione in corso</string>
   <string name="faces_settings_wait_update">In attesa: serve aggiornare l’app</string>
+  <string name="faces_settings_wait_next_stage">Riprendo fra poco</string>
+  <string name="faces_settings_wait_storage">In attesa: poco spazio libero sul telefono</string>
 
   <string name="faces_settings_section_device">Questo dispositivo</string>
   <string name="faces_settings_exclude_title">Non su questo dispositivo</string>

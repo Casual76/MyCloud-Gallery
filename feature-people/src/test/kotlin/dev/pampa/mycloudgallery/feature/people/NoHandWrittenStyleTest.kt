@@ -6,7 +6,7 @@ import org.junit.Test
 
 /**
  * La regola 1 del design system verificata sul codice di `:feature-people` (Fase 8, P9): **nessun colore, raggio, dimensione di testo o movimento scritto
- * a mano** nelle schermate, nessun `dp` letterale fuori da `PeopleDimens.kt` e nessuna dissolvenza fra pagine. Come `NoHandWrittenStyleTest` di
+ * a mano** nelle schermate, nessun `dp` letterale fuori da `PeopleDimens.kt` e `ActivationDimens.kt` (le misure della pagina di attivazione, P7) e nessuna dissolvenza fra pagine. Come `NoHandWrittenStyleTest` di
  * `:feature-albums`. Cerca nei sorgenti di `src/main` e fallisce con la lista delle righe. Ci sono anche due regole di riservatezza: nessun log (D37, mai un
  * nome o un id di persona) e nessun nome o testo dell'utente in un messaggio di eccezione.
  */
@@ -59,7 +59,7 @@ class NoHandWrittenStyleTest {
 
   @Test
   fun nessunDpLetteraleFuoriDaPeopleDimens() {
-    val found = violations(Regex("""\b\d+(\.\d+)?\.dp\b"""), allowedFiles = setOf("PeopleDimens.kt"))
+    val found = violations(Regex("""\b\d+(\.\d+)?\.dp\b"""), allowedFiles = setOf("PeopleDimens.kt", "ActivationDimens.kt"))
     assertWithMessage("Misure scritte a mano (stanno in PeopleDimens, o vengono da GalleryDimens):\n" + found.joinToString("\n")).that(found).isEmpty()
   }
 

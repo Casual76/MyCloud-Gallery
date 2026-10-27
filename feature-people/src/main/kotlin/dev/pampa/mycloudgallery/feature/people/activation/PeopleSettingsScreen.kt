@@ -176,6 +176,8 @@ internal fun waitText(reason: FacesWait): Int = when (reason) {
   FacesWait.MODELS -> R.string.faces_settings_wait_models
   FacesWait.ERASING -> R.string.faces_settings_wait_erasing
   FacesWait.NEEDS_UPDATE -> R.string.faces_settings_wait_update
+  FacesWait.NEXT_STAGE -> R.string.faces_settings_wait_next_stage
+  FacesWait.STORAGE -> R.string.faces_settings_wait_storage
 }
 
 /** "Non su questo dispositivo" (con una conferma nella pagina: cancella i dati di qui) oppure "Attiva qui". */

@@ -129,7 +129,15 @@ class DeviceSelfWipe(
    */
   suspend fun forgetCompletedWipe(): Boolean = mutex.withLock {
     if (readJournal()?.phase != WipePhase.DONE) return@withLock false
-    journal.clear()
+    // Un diario che non si toglie resta com'e' (anche in memoria): si dice "non fatto" e l'utente puo' riprovare.
+    try {
+      journal.clear()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.e(TAG, e) { "diario dell'azzeramento non tolto" }
+      return@withLock false
+    }
     _record.value = null
     _progress.value = null
     true

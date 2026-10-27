@@ -1,10 +1,9 @@
 package dev.pampa.mycloudgallery.core.models.manager
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelLimits
 import java.io.File
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 
 // Gli ERRORI DELLE SORGENTI (E-A2): "dopo due errori della stessa sorgente in un giorno la sorgente si salta fino al giorno dopo".
 // Una sorgente che da' un file sbagliato (un dispositivo compromesso, un CDN rotto) non si riprova a ogni giro del lavoro: costerebbe
@@ -121,12 +120,9 @@ internal class SourceStrikes(
   private fun persist() {
     val target = file ?: return
     try {
-      target.parentFile?.mkdirs()
-      val temp = File(target.path + ".tmp")
-      temp.writeText(strikes.entries.joinToString("\n") { (k, s) -> "$k ${s.count} ${s.firstAtMillis}" }, Charsets.UTF_8)
-      Files.move(temp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+      StateFiles.writeText(target, strikes.entries.joinToString("\n") { (k, s) -> "$k ${s.count} ${s.firstAtMillis}" }, Charsets.UTF_8)
     } catch (e: IOException) {
-      // Best effort: senza il file la memoria si perde con il processo, non altro.
+      // Best effort: senza il file la memoria si perde con il processo, non altro (l'errore e' nel log di `StateFiles`).
     }
   }
 

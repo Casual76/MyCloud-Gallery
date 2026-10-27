@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.models.store
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelCounters
 import dev.pampa.mycloudgallery.core.models.contract.ModelId
 import dev.pampa.mycloudgallery.core.models.contract.ModelSource
@@ -83,21 +84,19 @@ internal class ModelStore(
     try {
       val file = removedFile(spec)
       if (removed) {
-        file.parentFile?.mkdirs()
-        file.writeText("1", Charsets.US_ASCII)
-      } else {
-        file.delete()
+        StateFiles.writeText(file, "1", Charsets.US_ASCII)
+      } else if (!StateFiles.delete(file)) {
+        // Il segno "tolto dall'utente" che resta terrebbe fermi i lavori automatici anche dopo "Scarica ora": non si da' per tolto.
+        throw IOException("segno di rimozione non tolto")
       }
     } catch (e: IOException) {
-      // Solo una preferenza: senza il segno il giro periodico riprende il modello, come prima.
+      // Solo una preferenza: senza il segno il giro periodico riprende il modello, come prima (l'errore e' nel log di `StateFiles`).
     }
   }
 
   fun writeSource(spec: ModelSpec, kind: ModelSourceKind) {
     try {
-      val file = metaFile(spec)
-      file.parentFile?.mkdirs()
-      file.writeText(kind.name, Charsets.US_ASCII)
+      StateFiles.writeText(metaFile(spec), kind.name, Charsets.US_ASCII)
     } catch (e: IOException) {
       // Solo un'etichetta per la pagina: il modello c'e' lo stesso.
     }
@@ -113,7 +112,7 @@ internal class ModelStore(
   /** Toglie il file verificato, la nota e i programmi compilati. True se il file verificato non c'e' piu'. */
   fun deleteVerified(spec: ModelSpec): Boolean {
     cacheDirs(spec).forEach { it.deleteRecursively() }
-    metaFile(spec).delete()
+    StateFiles.delete(metaFile(spec))
     val file = finalFile(spec)
     deleteFile(file)
     return !file.exists()
@@ -132,16 +131,16 @@ internal class ModelStore(
   fun deletePartial(spec: ModelSpec) {
     val partial = partialFile(spec)
     partial.delete()
-    File(partial.path + ETAG_SUFFIX).delete()
-    File(partial.path + SOURCE_SUFFIX).delete()
+    StateFiles.delete(File(partial.path + ETAG_SUFFIX))
+    StateFiles.delete(File(partial.path + SOURCE_SUFFIX))
   }
 
   /** Le note accanto a un parziale che non c'e' (la sorgente non ha dato niente) non servono a nessuno: si tolgono. */
   fun tidyPartialNotes(spec: ModelSpec) {
     val partial = partialFile(spec)
     if (partial.exists()) return
-    File(partial.path + ETAG_SUFFIX).delete()
-    File(partial.path + SOURCE_SUFFIX).delete()
+    StateFiles.delete(File(partial.path + ETAG_SUFFIX))
+    StateFiles.delete(File(partial.path + SOURCE_SUFFIX))
   }
 
   /**
@@ -158,7 +157,7 @@ internal class ModelStore(
       val lines = readWriterLines(note)
       val line = writer.line()
       if (lines.lastOrNull() == line) return
-      note.writeText((lines + line).takeLast(MAX_WRITERS).joinToString("\n"), Charsets.US_ASCII)
+      StateFiles.writeText(note, (lines + line).takeLast(MAX_WRITERS).joinToString("\n"), Charsets.US_ASCII)
     } catch (e: IOException) {
       // Solo un'etichetta: senza la nota nessuno ha la colpa di niente (si riprova da zero senza segnare errori).
     }
@@ -194,7 +193,7 @@ internal class ModelStore(
     deleteFile(target)
     root.mkdirs()
     Files.move(partial.toPath(), target.toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE)
-    File(partial.path + ETAG_SUFFIX).delete()
+    StateFiles.delete(File(partial.path + ETAG_SUFFIX))
     target.setReadOnly()
   }
 

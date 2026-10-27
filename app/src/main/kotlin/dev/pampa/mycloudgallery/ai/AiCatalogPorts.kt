@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.ai.compute.IndexerAreas
 import dev.pampa.mycloudgallery.core.ai.contract.AiCandidate
 import dev.pampa.mycloudgallery.core.ai.contract.AiCandidates
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.database.NasWorkItem
 import dev.pampa.mycloudgallery.core.index.ai.AiKey
@@ -129,10 +130,9 @@ class FileAiUnsupported(
       val mark = Mark(AiKey(key, cls), share, device, at)
       marks += mark
       try {
-        file.parentFile?.mkdirs()
-        file.appendText(line(mark))
+        StateFiles.append(file, line(mark))
       } catch (e: IOException) {
-        // Resta in memoria per questo processo: al prossimo il media si riprova una volta.
+        // Resta in memoria per questo processo: al prossimo il media si riprova una volta (l'errore e' nel log di `StateFiles`).
       }
     }
   }
@@ -163,14 +163,9 @@ class FileAiUnsupported(
   private fun rewriteLocked(marks: List<Mark>) {
     try {
       val fresh = now()
-      val tmp = File(file.parentFile, file.name + ".tmp")
-      tmp.writeText(marks.filter { fresh - it.at in 0 until EXPIRY_MILLIS }.joinToString("") { line(it) })
-      if (!tmp.renameTo(file)) {
-        file.delete()
-        tmp.renameTo(file)
-      }
+      StateFiles.writeText(file, marks.filter { fresh - it.at in 0 until EXPIRY_MILLIS }.joinToString("") { line(it) })
     } catch (e: IOException) {
-      // Resta in memoria.
+      // Resta in memoria (l'errore e' nel log di `StateFiles`).
     }
   }
 

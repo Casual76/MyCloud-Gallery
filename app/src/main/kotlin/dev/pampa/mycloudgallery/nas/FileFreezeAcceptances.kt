@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.nas
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.nasmedia.contract.FreezeAcceptance
@@ -43,9 +44,8 @@ class FileFreezeAcceptances(private val file: File) : FreezeAcceptances {
   private fun key(account: AccountId, share: String) = "${account.value}\t${share.lowercase(Locale.ROOT)}"
 
   private fun read(): Map<String, FreezeAcceptance> {
-    if (!file.isFile) return emptyMap()
     return try {
-      file.readLines().mapNotNull(::parse).toMap()
+      StateFiles.readLines(file)?.mapNotNull(::parse)?.toMap() ?: emptyMap()
     } catch (e: IOException) {
       GalleryLog.w(TAG) { "franchigia salvata non letta" }
       emptyMap()
@@ -68,20 +68,16 @@ class FileFreezeAcceptances(private val file: File) : FreezeAcceptances {
   private fun write(all: Map<String, FreezeAcceptance>) {
     try {
       if (all.isEmpty()) {
-        file.delete()
+        // Una franchigia che resta nel file varrebbe ancora: se non si toglie e' un errore, non un "fatto".
+        if (!StateFiles.delete(file)) throw IOException("franchigia non tolta")
         return
       }
-      file.parentFile?.mkdirs()
-      val temp = File(file.parentFile, file.name + ".tmp")
-      temp.writeText(
+      StateFiles.writeText(
+        file,
         all.entries.joinToString("\n") { (key, a) ->
           "$key\t${a.diff.knownPresent}\t${a.diff.vanished}\t${a.diff.changed}\t${a.diff.notMedia}\t${a.atNasMillis}"
         },
       )
-      if (!temp.renameTo(file)) {
-        file.delete()
-        if (!temp.renameTo(file)) throw IOException("rinomina non riuscita")
-      }
     } catch (e: IOException) {
       GalleryLog.w(TAG) { "franchigia non salvata: ${e.javaClass.simpleName}" }
     }

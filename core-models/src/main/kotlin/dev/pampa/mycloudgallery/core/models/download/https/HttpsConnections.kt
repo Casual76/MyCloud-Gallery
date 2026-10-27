@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.models.download.https
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import java.io.File
 import java.io.IOException
 import java.net.URL
@@ -35,7 +36,7 @@ internal object ETags {
 
   fun read(partial: File): String? =
     try {
-      sidecar(partial).takeIf { it.isFile && it.length() < 512 }?.readText(Charsets.US_ASCII)?.trim()?.takeIf { STRONG.matches(it) }
+      sidecar(partial).takeIf { it.isFile && it.length() < 512 }?.let { StateFiles.readText(it, Charsets.US_ASCII) }?.trim()?.takeIf { STRONG.matches(it) }
     } catch (e: IOException) {
       null
     }
@@ -43,11 +44,9 @@ internal object ETags {
   /** Da qui in poi il parziale riprende col solo `Range` (un CDN che cambia ETag a ogni richiesta farebbe ripartire da zero a ogni fetta). */
   fun markNoValidator(partial: File) {
     try {
-      val file = sidecar(partial)
-      file.parentFile?.mkdirs()
-      file.writeText(NO_VALIDATOR, Charsets.US_ASCII)
+      StateFiles.writeText(sidecar(partial), NO_VALIDATOR, Charsets.US_ASCII)
     } catch (e: IOException) {
-      // Senza il segno la prossima ripresa riprova con `If-Range`: al peggio un'altra fetta da zero.
+      // Senza il segno la prossima ripresa riprova con `If-Range`: al peggio un'altra fetta da zero (l'errore e' nel log di `StateFiles`).
     }
   }
 
@@ -55,13 +54,13 @@ internal object ETags {
     try {
       val file = sidecar(partial)
       // Il segno "senza validatore" e' definitivo per questo parziale: un ETag nuovo non lo toglie.
-      if (file.isFile && file.length() < 512 && file.readText(Charsets.US_ASCII).trim() == NO_VALIDATOR) return
+      if (file.isFile && file.length() < 512 && StateFiles.readText(file, Charsets.US_ASCII)?.trim() == NO_VALIDATOR) return
       val value = header?.trim()
       if (value != null && STRONG.matches(value)) {
-        file.parentFile?.mkdirs()
-        file.writeText(value, Charsets.US_ASCII)
+        StateFiles.writeText(file, value, Charsets.US_ASCII)
       } else {
-        file.delete()
+        // Un validatore vecchio che resta fa solo ripartire il parziale da zero (il server risponde 200): niente di grave, ma il log lo dice.
+        StateFiles.delete(file)
       }
     } catch (e: IOException) {
       // Senza validatore la ripresa funziona lo stesso.

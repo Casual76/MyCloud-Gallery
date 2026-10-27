@@ -5,7 +5,9 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyInfo
 import android.security.keystore.KeyProperties
 import android.security.keystore.StrongBoxUnavailableException
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import java.io.File
+import java.io.IOException
 import java.security.KeyFactory
 import java.security.KeyPairGenerator
 import java.security.KeyStore
@@ -146,10 +148,10 @@ class AndroidKeystoreFamilyKeyVault(
         val sealed = cipher.doFinal(plain)
         val iv = cipher.iv
         check(iv.size == IV_BYTES) { "IV inatteso dal Keystore." }
-        val tmp = File(file.parentFile, file.name + ".tmp")
-        tmp.writeBytes(HEADER + iv + sealed)
-        if (!tmp.renameTo(file)) {
-          tmp.delete()
+        try {
+          // Temporaneo, fsync e rinomina atomica: o la cassaforte vecchia intera o la nuova intera (il file non e' mai a meta').
+          StateFiles.writeBytes(file, HEADER + iv + sealed)
+        } catch (e: IOException) {
           error("Impossibile salvare la chiave di famiglia.")
         }
       } finally {
@@ -191,7 +193,8 @@ class AndroidKeystoreFamilyKeyVault(
 
   override fun destroy() {
     synchronized(LOCK) {
-      file.delete()
+      // Se il file resta (il log di `StateFiles` lo dice) e' un blocco cifrato senza piu' la chiave per aprirlo: l'alias si toglie lo stesso.
+      StateFiles.delete(file)
       val keyStore = androidKeyStore()
       if (keyStore.containsAlias(alias)) keyStore.deleteEntry(alias)
     }

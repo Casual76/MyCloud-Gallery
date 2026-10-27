@@ -2,6 +2,8 @@ package dev.pampa.mycloudgallery.backup
 
 import dev.pampa.mycloudgallery.core.backup.contract.BackupKind
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
+import dev.pampa.mycloudgallery.core.common.files.Patience
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.graph.HeartbeatStore
 import java.io.File
@@ -18,12 +20,16 @@ import kotlinx.coroutines.withContext
  * **La pausa dell'utente** (R4 della revisione di sicurezza della 5A): "Ferma" non e' un tasto che vale per un giro, e' una pausa che dura
  * finche' l'utente non tocca "Riprendi" o "Fai ora". Il segno sta qui, in un file, cosi' regge fra un giro e l'altro e alla morte del
  * processo; il cancello del backup lo guarda a ogni elemento ([isPaused], senza attese: una lettura in memoria dopo la prima).
+ *
+ * **File di stato verificati**: si scrive e si toglie con [StateFiles] (temporaneo + rinomina atomica, `Files.deleteIfExists`, con un po' di
+ * pazienza se un altro handle tiene il file). Le funzioni che cambiano un segno rispondono **vero solo se il file dice ora cio' che si e'
+ * chiesto**: un segno che non si riesce a togliere (o a scrivere) finisce nel log e rende falso, non passa in silenzio. [patience] serve alle prove.
  */
-class BackupRunMemory(private val dir: File) {
+class BackupRunMemory(private val dir: File, private val patience: Patience = Patience.STANDARD) {
 
   /** Il battito dei giri delle foto e dei video che hanno fatto strada (E-P15): l'ora del dispositivo, come gli altri battiti. */
-  val photoBeat = HeartbeatStore(File(dir, HEARTBEAT_PHOTOS))
-  val videoBeat = HeartbeatStore(File(dir, HEARTBEAT_VIDEOS))
+  val photoBeat = HeartbeatStore(File(dir, HEARTBEAT_PHOTOS), patience)
+  val videoBeat = HeartbeatStore(File(dir, HEARTBEAT_VIDEOS), patience)
 
   private val completeFile = File(dir, LAST_COMPLETE)
   private val problemFile = File(dir, LAST_PROBLEM)
@@ -41,10 +47,8 @@ class BackupRunMemory(private val dir: File) {
    */
   suspend fun progress(): String? = readText(progressFile)
 
-  /** Salva l'avanzamento ([RunProgress.EMPTY] = la campagna e' finita: il file si toglie). */
-  suspend fun setProgress(text: String) {
-    if (text.isEmpty()) withContext(Dispatchers.IO) { progressFile.delete() } else writeText(progressFile, text)
-  }
+  /** Salva l'avanzamento ([RunProgress.EMPTY] = la campagna e' finita: il file si toglie). Vero se il file dice ora cio' che si e' chiesto. */
+  suspend fun setProgress(text: String): Boolean = if (text.isEmpty()) remove(progressFile) else writeText(progressFile, text)
 
   /** Il segno della pausa in memoria: letto dal file una volta sola, poi aggiornato da [pauseNow] e [setPaused]. */
   @Volatile private var pausedCache: Boolean? = null
@@ -55,22 +59,19 @@ class BackupRunMemory(private val dir: File) {
    */
   suspend fun startedAt(): Long? = readLong(startedFile)
 
-  /** Segna l'inizio del backup, una volta sola. */
-  suspend fun markStartedOnce(deviceNowMs: Long) {
-    if (startedAt() == null) writeText(startedFile, deviceNowMs.toString())
-  }
+  /** Segna l'inizio del backup, una volta sola. Vero se c'e' (gia' o adesso). */
+  suspend fun markStartedOnce(deviceNowMs: Long): Boolean = startedAt() != null || writeText(startedFile, deviceNowMs.toString())
 
   /** L'ultima volta che un giro e' finito senza altro da fare (ora del NAS, ms), o null. */
   suspend fun lastComplete(): Long? = readLong(completeFile)
 
-  suspend fun markComplete(nasMs: Long) = writeText(completeFile, nasMs.toString())
+  suspend fun markComplete(nasMs: Long): Boolean = writeText(completeFile, nasMs.toString())
 
   /** L'ultimo problema che ha fermato un giro, o null se l'ultimo giro e' andato bene. */
   suspend fun lastProblem(): BackupProblemCode? = readText(problemFile)?.let { code -> BackupProblemCode.entries.firstOrNull { it.code == code } }
 
-  suspend fun setProblem(problem: BackupProblemCode?) {
-    if (problem == null) withContext(Dispatchers.IO) { problemFile.delete() } else writeText(problemFile, problem.code)
-  }
+  /** Ricorda [problem], o toglie il segno (null). Vero se il file dice ora cio' che si e' chiesto: un problema che non si toglie resterebbe per sempre. */
+  suspend fun setProblem(problem: BackupProblemCode?): Boolean = if (problem == null) remove(problemFile) else writeText(problemFile, problem.code)
 
   /**
    * D-13 (prove sul campo): l'ultimo giro di [kind] e' finito perche' il NAS teneva occupato un file del backup (`RunStop.BUSY`): l'ora del NAS di
@@ -82,14 +83,10 @@ class BackupRunMemory(private val dir: File) {
   /** Un tipo di media ha l'ultimo giro fermo su un file occupato ([busySince]). */
   suspend fun anyBusy(): Boolean = busySince(BackupKind.PHOTOS) != null || busySince(BackupKind.VIDEOS) != null
 
-  /** Segna (con l'ora del NAS, se non c'era gia') o toglie (null) il giro di [kind] fermo su un file occupato. */
-  suspend fun setBusy(kind: BackupKind, nasMs: Long?) {
+  /** Segna (con l'ora del NAS, se non c'era gia') o toglie (null) il giro di [kind] fermo su un file occupato. Vero se il file dice ora cio' che si e' chiesto. */
+  suspend fun setBusy(kind: BackupKind, nasMs: Long?): Boolean {
     val file = busyFile(kind)
-    if (nasMs == null) {
-      withContext(Dispatchers.IO) { file.delete() }
-    } else if (busySince(kind) == null) {
-      writeText(file, nasMs.toString())
-    }
+    return if (nasMs == null) remove(file) else busySince(kind) != null || writeText(file, nasMs.toString())
   }
 
   /**
@@ -103,33 +100,40 @@ class BackupRunMemory(private val dir: File) {
     pausedCache = true
   }
 
-  /** Scrive (o toglie) il segno della pausa: dura anche se il processo muore. */
-  suspend fun setPaused(paused: Boolean) {
+  /**
+   * Scrive (o toglie) il segno della pausa: dura anche se il processo muore. In questo processo vale subito la scelta dell'utente; il risultato
+   * dice se anche il file la ricorda (falso = al prossimo avvio potrebbe tornare quella di prima, e il log lo dice).
+   */
+  suspend fun setPaused(paused: Boolean): Boolean {
     pausedCache = paused
-    if (paused) writeText(pausedFile, "1") else withContext(Dispatchers.IO) { pausedFile.delete() }
+    return if (paused) writeText(pausedFile, "1") else remove(pausedFile)
   }
 
   private suspend fun readLong(file: File): Long? = readText(file)?.toLongOrNull()?.takeIf { it > 0 }
 
   private suspend fun readText(file: File): String? = withContext(Dispatchers.IO) {
     try {
-      if (file.isFile) file.readText(Charsets.US_ASCII).trim().takeIf { it.isNotEmpty() && it.length <= MAX_LENGTH } else null
+      StateFiles.readText(file, Charsets.US_ASCII, patience = patience)?.trim()?.takeIf { it.isNotEmpty() && it.length <= MAX_LENGTH }
     } catch (e: IOException) {
       null
     }
   }
 
-  private suspend fun writeText(file: File, text: String) = withContext(Dispatchers.IO) {
+  /** Scrive [text] in modo atomico. Vero se e' salvato; falso (con il motivo nel log di [StateFiles]) se no. */
+  private suspend fun writeText(file: File, text: String): Boolean = withContext(Dispatchers.IO) {
     try {
-      file.parentFile?.mkdirs()
-      val temp = File(file.parentFile, file.name + ".tmp")
-      temp.writeText(text, Charsets.US_ASCII)
-      if (!temp.renameTo(file)) {
-        file.delete()
-        temp.renameTo(file)
-      }
+      StateFiles.writeText(file, text, Charsets.US_ASCII, patience = patience)
+      true
     } catch (e: IOException) {
       GalleryLog.w(TAG) { "memoria del backup non salvata" }
+      false
+    }
+  }
+
+  /** Toglie il file. Vero solo se non c'e' piu'; falso se c'e' ancora (il log di [StateFiles] dice quale): il chiamante non lo dia per tolto. */
+  private suspend fun remove(file: File): Boolean = withContext(Dispatchers.IO) {
+    StateFiles.delete(file, patience = patience).also { gone ->
+      if (!gone) GalleryLog.w(TAG) { "memoria del backup non tolta" }
     }
   }
 

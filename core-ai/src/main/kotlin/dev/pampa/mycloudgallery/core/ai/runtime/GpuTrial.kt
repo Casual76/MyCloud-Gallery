@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.ai.runtime
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import java.io.File
 import java.io.IOException
 
@@ -31,7 +32,7 @@ internal class GpuTrial(private val base: File?) {
       // Il processo di prima e' morto con la GPU in prova (nessuno ha tolto il segno): una caduta.
       count++
       writeCount(count)
-      runCatching { trial?.delete() }
+      removeTrial()
     }
     crashCount = count
   }
@@ -43,27 +44,34 @@ internal class GpuTrial(private val base: File?) {
   fun begin() {
     val file = trial ?: return
     try {
-      file.parentFile?.mkdirs()
-      file.writeText("1", Charsets.US_ASCII)
+      StateFiles.writeText(file, "1", Charsets.US_ASCII)
     } catch (_: IOException) {
-      // Senza il segno la GPU si riprova come prima: al peggio un'altra tappa che cade.
+      // Senza il segno la GPU si riprova come prima: al peggio un'altra tappa che cade (l'errore e' nel log di `StateFiles`).
     }
   }
 
   /** Un vettore valido dalla GPU: la prova e' riuscita, nessuna caduta da ricordare. */
   fun passed() {
-    runCatching { trial?.delete() }
-    runCatching { crashes?.delete() }
+    removeTrial()
+    crashes?.let { StateFiles.delete(it) }
   }
 
   /** La prova e' finita senza cadere (un'eccezione gestita, il ripiego, la chiusura del motore): il segno si toglie, il conto resta com'e'. */
   fun handled() {
-    runCatching { trial?.delete() }
+    removeTrial()
+  }
+
+  /**
+   * Toglie il segno "in prova". Se resta (il log di `StateFiles` lo dice, dopo i tentativi) il processo dopo conterebbe una caduta che non
+   * c'e' stata: per questo non si da' per tolto alla leggera.
+   */
+  private fun removeTrial() {
+    trial?.let { StateFiles.delete(it) }
   }
 
   private fun readCount(): Int =
     try {
-      crashes?.takeIf { it.isFile && it.length() < 16 }?.readText(Charsets.US_ASCII)?.trim()?.toIntOrNull()?.coerceIn(0, MAX_CRASHES) ?: 0
+      crashes?.takeIf { it.isFile && it.length() < 16 }?.let { StateFiles.readText(it, Charsets.US_ASCII) }?.trim()?.toIntOrNull()?.coerceIn(0, MAX_CRASHES) ?: 0
     } catch (_: IOException) {
       0
     }
@@ -71,8 +79,7 @@ internal class GpuTrial(private val base: File?) {
   private fun writeCount(count: Int) {
     val file = crashes ?: return
     try {
-      file.parentFile?.mkdirs()
-      file.writeText(count.toString(), Charsets.US_ASCII)
+      StateFiles.writeText(file, count.toString(), Charsets.US_ASCII)
     } catch (_: IOException) {
       // Resta solo in memoria per questo processo.
     }

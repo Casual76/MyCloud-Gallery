@@ -1,6 +1,6 @@
 package dev.pampa.mycloudgallery.core.family.registry
 
-import dev.pampa.mycloudgallery.core.family.trust.writeAtomically
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
 import java.io.File
 import java.io.IOException
@@ -61,16 +61,15 @@ class FileApprovalSightings(private val file: File, private val io: CoroutineDis
 
   override suspend fun clear() = withContext(io) {
     mutex.withLock {
-      file.delete()
-      Unit
+      // Se il file resta lancia `IOException`: delle richieste viste sul dispositivo azzerato non devono sopravvivere (l'azzeramento riprova).
+      if (!StateFiles.delete(file)) throw IOException("richieste viste non tolte")
     }
   }
 
   private fun readAll(): LinkedHashMap<String, Long> {
     val out = LinkedHashMap<String, Long>()
-    if (!file.exists()) return out
     val lines = try {
-      file.readLines(Charsets.US_ASCII)
+      StateFiles.readLines(file, Charsets.US_ASCII) ?: return out
     } catch (e: IOException) {
       return out
     }
@@ -84,7 +83,7 @@ class FileApprovalSightings(private val file: File, private val io: CoroutineDis
 
   private fun writeAll(all: Map<String, Long>) {
     val text = all.entries.toList().takeLast(MAX_ENTRIES).joinToString("\n") { "${it.key};${it.value}" }
-    writeAtomically(file, text.toByteArray(Charsets.US_ASCII))
+    StateFiles.writeText(file, text, Charsets.US_ASCII)
   }
 
   private companion object {

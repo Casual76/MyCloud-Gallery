@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.personal.store
 
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFingerprint
@@ -13,10 +14,7 @@ import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
-import java.nio.file.Files
-import java.nio.file.StandardCopyOption
 import java.util.zip.CRC32
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -63,7 +61,7 @@ class FilePersonalLedger(private val file: File) : PersonalLedger {
   override suspend fun load(): LedgerSnapshot = withContext(Dispatchers.IO) {
     try {
       if (!file.isFile || file.length() > MAX_FILE_BYTES) return@withContext LedgerSnapshot.EMPTY
-      decode(file.readBytes())
+      StateFiles.readBytes(file)?.let { decode(it) } ?: LedgerSnapshot.EMPTY
     } catch (e: IOException) {
       LedgerSnapshot.EMPTY
     } catch (e: RuntimeException) {
@@ -72,15 +70,8 @@ class FilePersonalLedger(private val file: File) : PersonalLedger {
   }
 
   override suspend fun save(snapshot: LedgerSnapshot): Unit = withContext(Dispatchers.IO) {
-    val bytes = encode(snapshot)
-    val dir = file.absoluteFile.parentFile
-    if (dir != null && !dir.isDirectory) dir.mkdirs()
-    val temp = File(dir, file.name + ".tmp")
-    FileOutputStream(temp).use { out ->
-      out.write(bytes)
-      out.fd.sync()
-    }
-    Files.move(temp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+    // Temporaneo, fsync e rinomina atomica (con qualche tentativo se un altro handle tiene il file): `StateFiles`.
+    StateFiles.writeBytes(file, encode(snapshot))
   }
 
   internal companion object {

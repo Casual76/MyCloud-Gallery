@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.ai
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.AiWaitReason
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
+import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.rules.WaitReason
 import java.io.File
 import java.io.IOException
@@ -22,11 +23,12 @@ class AiStatusMemory(private val file: File?) {
 
   fun load(): AiStatus? = synchronized(lock) {
     val source = file ?: return null
-    val line = try {
-      if (source.isFile && source.length() < 256) source.readText(Charsets.UTF_8).trim() else return null
+    val text = try {
+      if (source.isFile && source.length() < 256) StateFiles.readText(source, Charsets.UTF_8) else null
     } catch (e: IOException) {
-      return null
+      null
     }
+    val line = text?.trim() ?: return null
     last = line
     parse(line)
   }
@@ -36,23 +38,19 @@ class AiStatusMemory(private val file: File?) {
     val target = file ?: return
     val line = encode(status) ?: return
     if (line == last) return
-    last = line
     try {
-      target.parentFile?.mkdirs()
-      val tmp = File(target.parentFile, target.name + ".tmp")
-      tmp.writeText(line, Charsets.UTF_8)
-      if (!tmp.renameTo(target)) {
-        target.delete()
-        tmp.renameTo(target)
-      }
+      StateFiles.writeText(target, line, Charsets.UTF_8)
+      // Solo a scrittura riuscita: un file che non si e' potuto scrivere non vale "gia' salvato", il prossimo salvataggio riprova.
+      last = line
     } catch (e: IOException) {
-      // Solo una comodita' della pagina: resta il valore in memoria.
+      // Solo una comodita' della pagina (l'errore e' nel log di `StateFiles`).
     }
   }
 
-  fun clear() = synchronized(lock) {
+  /** Dimentica lo stato e toglie il file. Vero se il file non c'e' piu' (o non c'era un file). */
+  fun clear(): Boolean = synchronized(lock) {
     last = null
-    file?.delete()
+    file?.let { StateFiles.delete(it) } ?: true
   }
 
   companion object {

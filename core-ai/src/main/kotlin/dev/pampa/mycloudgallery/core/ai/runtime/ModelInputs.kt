@@ -3,8 +3,11 @@ package dev.pampa.mycloudgallery.core.ai.runtime
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorSpace
 import android.graphics.ImageDecoder
 import dev.pampa.mycloudgallery.core.ai.contract.AiRecipe
+import dev.pampa.mycloudgallery.core.ai.contract.FaceEngineLimits
+import dev.pampa.mycloudgallery.core.ai.contract.FaceImage
 import dev.pampa.mycloudgallery.core.ai.contract.ModelImage
 import dev.pampa.mycloudgallery.core.ai.contract.OcrImage
 import dev.pampa.mycloudgallery.core.index.contract.VideoFrame
@@ -82,6 +85,39 @@ object ModelInputs {
   fun forOcr(bytes: ByteArray, source: OcrSource): OcrImage? =
     prepare(bytes, JPEG_OR_WEBP, OCR_MAX_LONG_SIDE, OCR_JPEG_QUALITY)?.let { OcrImage(it.jpeg, it.width, it.height, source) }
 
+  /**
+   * Fase 8 (D17, P2): l'immagine per i motori dei volti. Stessa catena degli altri ingressi (tetto dei byte, intestazione letta **senza
+   * decodificare**, `ImageBounds`, decodifica gia' ridotta della piattaforma, trasparenza composta sul bianco), con due differenze: ammette
+   * JPEG e WebP (l'anteprima di analisi e' un JPEG, l'HQ un WebP, i fotogrammi dei video JPEG) e consegna i **pixel** (ARGB_8888 in sRGB,
+   * gia' raddrizzati dall'orientamento EXIF) invece di ricodificarli: il rilevatore e l'allineamento lavorano sui pixel. [maxSide] e' il
+   * lato lungo massimo (1024 per l'anteprima, 2048 per l'HQ; oltre [FaceEngineLimits.HQ_SIDE] si riduce comunque a quello), mai si ingrandisce.
+   * [frame] e' il fotogramma (0 per una foto). Null per un ingresso da non usare: non e' un errore del motore ma un file da non analizzare.
+   */
+  fun forFaces(bytes: ByteArray, maxSide: Int, frame: Int = 0): FaceImage? {
+    if (frame !in 0..FaceEngineLimits.MAX_FRAME || maxSide < 1) return null
+    if (bytes.isEmpty() || bytes.size > MAX_INPUT_BYTES) return null
+    val header = ImageHeaders.read(bytes) ?: return null
+    if (header.format !in JPEG_OR_WEBP) return null
+    val decoded = decode(bytes, header, minOf(maxSide, FaceEngineLimits.HQ_SIDE), srgb = true) ?: return null
+    var flat: Bitmap? = null
+    try {
+      flat = flattenOnWhite(decoded)
+      val width = flat.width
+      val height = flat.height
+      if (width < 1 || height < 1 || maxOf(width, height) > FaceEngineLimits.HQ_SIDE) return null
+      val pixels = IntArray(width * height)
+      flat.getPixels(pixels, 0, width, 0, 0, width, height)
+      return FaceImage(pixels, width, height, frame)
+    } catch (_: OutOfMemoryError) {
+      return null
+    } catch (_: RuntimeException) {
+      return null
+    } finally {
+      if (flat != null && flat !== decoded) flat.recycle()
+      decoded.recycle()
+    }
+  }
+
   // --- Decodifica difesa ----------------------------------------------------------------------------------------------------
 
   private val JPEG_ONLY = setOf(InputFormat.JPEG)
@@ -111,7 +147,7 @@ object ModelInputs {
     }
   }
 
-  private fun decode(bytes: ByteArray, header: ImageHeader, maxLongSide: Int): Bitmap? =
+  private fun decode(bytes: ByteArray, header: ImageHeader, maxLongSide: Int, srgb: Boolean = false): Bitmap? =
     try {
       decodeAttempts.incrementAndGet()
       ImageDecoder.decodeBitmap(ImageDecoder.createSource(ByteBuffer.wrap(bytes))) { decoder, info, _ ->
@@ -121,6 +157,8 @@ object ModelInputs {
         val sameAsDeclared = (w == header.width && h == header.height) || (w == header.height && h == header.width)
         if (!sameAsDeclared) throw Rejected()
         decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        // I volti: pixel in sRGB qualunque sia il profilo del file (un'immagine a gamma larga non sposta i colori che YuNet e SFace hanno visto).
+        if (srgb) decoder.setTargetColorSpace(ColorSpace.get(ColorSpace.Named.SRGB))
         val longSide = max(w, h)
         if (longSide > maxLongSide) {
           val scale = maxLongSide.toDouble() / longSide

@@ -38,6 +38,9 @@ class FaceImage internal constructor(
 
   internal fun pixelAt(x: Int, y: Int): Int = data[y * width + x]
 
+  /** P2: i pixel **senza copia** (fino a 16 MB all'HQ): per i motori di core-ai (`faces/`), che non li cambiano e non li fanno uscire. */
+  internal fun raw(): IntArray = data
+
   /** Mai i pixel nei log (D37). */
   override fun toString(): String = "FaceImage(${width}x$height)"
 }
@@ -90,6 +93,9 @@ class AlignedFace internal constructor(pixels: IntArray) {
   val pixels: IntArray get() = data.copyOf()
 
   internal fun pixelAt(x: Int, y: Int): Int = data[y * FaceEngineLimits.ALIGNED_SIDE + x]
+
+  /** P2: i pixel senza copia (112x112), per l'embedder e la qualita' di core-ai. */
+  internal fun raw(): IntArray = data
 
   override fun toString(): String = "AlignedFace"
 }

@@ -138,6 +138,8 @@ class ClosedFacesArchive(override val generation: FaceGeneration) : FacesArchive
 
   override suspend fun winners(keys: Collection<ContentKey>): Map<ContentKey, FaceBody> = emptyMap()
 
+  override suspend fun bodiesOf(author: String, keys: Collection<ContentKey>): Map<ContentKey, FaceBody> = emptyMap()
+
   override suspend fun analyzed(keys: Collection<ContentKey>, recipe: Int): Set<ContentKey> = emptySet()
 
   override suspend fun markUnsupported(key: ContentKey, recipe: Int) = closed()
@@ -153,4 +155,8 @@ class ClosedFacesArchive(override val generation: FaceGeneration) : FacesArchive
   override suspend fun people(): Map<PeopleKey, PeopleRecord> = emptyMap()
 
   override suspend fun addPeople(records: List<PeopleRecord>) = closed()
+
+  override suspend fun datePeople(nasNow: Long): Int = closed()
+
+  override suspend fun dropAuthors(authors: Set<String>): Int = closed()
 }

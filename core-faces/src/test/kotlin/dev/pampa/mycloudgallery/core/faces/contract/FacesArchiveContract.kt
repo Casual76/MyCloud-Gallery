@@ -154,6 +154,48 @@ abstract class FacesArchiveContract {
     assertThat(a.people()).hasSize(2)
   }
 
+  /** P3: i corpi di un autore, vincenti o no (il pubblicatore pubblica tutti i propri). */
+  @Test
+  fun iCorpiDiUnAutoreVincentiONo() = runTest {
+    val a = archive(g)
+    a.saveBody(body(key(1), small, recipe = 1))
+    a.saveBody(body(key(1), big, recipe = 2))
+    a.saveBody(body(key(2), small))
+    assertThat(a.bodiesOf(small, listOf(key(1), key(2), key(3))).mapValues { it.value.recipe }).containsExactly(key(1), 1, key(2), 1)
+    assertThat(a.bodiesOf(big, listOf(key(1), key(2))).keys).containsExactly(key(1))
+    assertThat(a.winners(listOf(key(1))).getValue(key(1)).author).isEqualTo(big)
+  }
+
+  /** P3: una voce da datare prende l'ora del NAS alla pubblicazione e da li' vale l'ultima scrittura (una modifica dopo la batte). */
+  @Test
+  fun leVociDaDatarePrendonoLOraDelNas() = runTest {
+    val a = archive(g)
+    val p = ids.next()
+    a.addPeople(listOf(PeopleRecord(PeopleEdit.Name(p, "Anna"), atNas = null, author = small)))
+    a.addPeople(listOf(PeopleRecord(PeopleEdit.Hidden(p, true), atNas = 50, author = small)))
+    assertThat(a.datePeople(100)).isEqualTo(1)
+    assertThat(a.datePeople(200)).isEqualTo(0)
+    assertThat(a.people().values.map { it.atNas }).containsExactly(100L, 50L)
+    a.addPeople(listOf(PeopleRecord(PeopleEdit.Name(p, "Bea"), atNas = 150, author = big)))
+    assertThat(a.people().getValue(PeopleKey(p.base32(), "name")).edit).isEqualTo(PeopleEdit.Name(p, "Bea"))
+  }
+
+  /** P3, L99: i corpi e le voci di un dispositivo revocato spariscono; quelli degli altri restano. */
+  @Test
+  fun gliAutoriRevocatiSpariscono() = runTest {
+    val a = archive(g)
+    val p = ids.next()
+    a.saveBody(body(key(1), small))
+    a.saveBody(body(key(1), big, recipe = 2))
+    a.saveBody(body(key(2), big))
+    a.addPeople(listOf(PeopleRecord(PeopleEdit.Name(p, "Anna"), atNas = 100, author = big)))
+    a.addPeople(listOf(PeopleRecord(PeopleEdit.Hidden(p, true), atNas = 100, author = small)))
+    assertThat(a.dropAuthors(setOf(big))).isEqualTo(3)
+    assertThat(a.winners(listOf(key(1), key(2))).mapValues { it.value.author }).containsExactly(key(1), small)
+    assertThat(a.people().values.map { it.author }).containsExactly(small)
+    assertThat(a.dropAuthors(setOf(big))).isEqualTo(0)
+  }
+
   @Test
   fun unArchivioChiusoNonRisponde() = runTest {
     val a = archive(g)

@@ -7313,6 +7313,10 @@ con la chiave vera, rilegge i valori, cerca nei byte del file (anche il `-wal`) 
 l'alias dal Keystore a mano (come un ripristino) e verifica la cancellazione. Girano nel processo del test (un'altra UID dell'app vera): non toccano le chiavi dell'app. Compilano
 (`:core-faces:compileDebugAndroidTestKotlin`, `:core-security:compileDebugAndroidTestKotlin` sono verdi).
 
+**`tools\check.ps1 -NoDaemon`**: **verde** ("OK: tutto a posto", 28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, sul commit `4f20314f`): assembleDebug, assembleRelease, galleryTest e galleryLint in 41 minuti; test eseguiti in ogni
+modulo (`core-faces` 85, `core-database` 268, `core-security` 173, `feature-people` 7; nessuno a zero, nessuno fallito); nessuna classe `testing` nel dex di release (`:app` non lega ancora
+niente di P6: lo fa P13); D34 nel dex e in mapping.txt; LiteRT nel bytecode: 24 chiamate nostre, tutte da `core-ai`. Solo SKIP il banco su dispositivo (-Bench).
+
 **Cosa trovano pronto i pacchetti dopo**
 - **P3** (sync/): `FacesStore.headMarks` (`record` non abbassa mai il numero), `FacesStore.outbox` (`stage(FacesChange)`, `pending`, `acknowledge`), l'archivio (`saveBody`, `winners`, `grouping`, `saveGrouping`,
   `people`, `addPeople` con la regola di "datare") e `PeopleEditCodec` (da testo a `PeopleEdit`, interno al modulo: P3 puo' usarlo o scrivere il suo). Per **datare** una voce `people` dopo la pubblicazione:

@@ -135,7 +135,7 @@ fun SearchTab(
   slot: CollectionsSlot,
   actions: SearchActions,
   host: SearchHostViewModel,
-  findSimilar: MediaId?,
+  findSimilar: List<MediaId>?,
   onFindSimilarHandled: () -> Unit,
 ) {
   val backdrop = rememberGlassBackdrop()

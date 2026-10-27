@@ -116,6 +116,12 @@ internal object HiddenProbes {
     }
     // "Trova simili" da ogni media, anche da uno nascosto: non deve mostrare nessun nascosto.
     for (id in w.ids) collect(engine.similar(id, ResultOrder.RECENT))
+    // "Trova simili" dalla selezione della Libreria (correzioni F, TS-4): da tutti i media insieme (il motore tiene i primi), da gruppi di cinque, da coppie;
+    // con dei nascosti dentro la scelta. Nessun nascosto deve uscire, ne' entrare nella query.
+    val everyone = w.ids.toList()
+    for (order in ResultOrder.entries) collect(engine.similarToAll(everyone, order))
+    for (chunk in everyone.chunked(5)) collect(engine.similarToAll(chunk, ResultOrder.RECENT))
+    for (pair in everyone.windowed(2, step = 3)) collect(engine.similarToAll(pair, ResultOrder.RELEVANT))
     Probed(shown = shown, within = w.libraryCells)
   }
 

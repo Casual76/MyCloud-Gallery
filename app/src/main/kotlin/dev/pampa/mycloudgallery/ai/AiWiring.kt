@@ -133,6 +133,7 @@ class AiStack(
       textSource = IndexViewerTextSource(search.mediaText, search.index.version.drop(1).map { }.conflate()),
       textReader = textReader,
       similarSearch = SearchViewerSimilar(search.keys, similar) { key -> search.index.hasVectors(key) },
+      selectionSimilar = SearchSelectionSimilar(search.keys, similar) { key -> search.index.hasVectors(key) },
       motionAnimation = dev.pampa.mycloudgallery.feature.viewer.motion.MotionAnimationSetting { personal.motionAnimation.value },
       motionTraffic = dev.pampa.mycloudgallery.feature.viewer.video.MotionTraffic { bytes, _ ->
         graph.scope.launch {

@@ -88,8 +88,14 @@ sealed interface SearchChip {
 
   data class Presence(val where: SearchPresence, override val label: String) : SearchChip
 
-  /** "Simili a" (D30): la miniatura la mostra la UI dal [media]. */
-  data class Similar(val media: MediaId, override val label: String) : SearchChip
+  /**
+   * "Simili a" (D30): la miniatura la mostra la UI dal [media]. Correzioni F (TS-4): "Trova simili" dalla selezione porta in [more] gli altri media della
+   * scelta ([media] e' il primo): la ricerca usa il centroide di tutti. Con [more] vuoto e' il chip di sempre, di un media solo.
+   */
+  data class Similar(val media: MediaId, override val label: String, val more: List<MediaId> = emptyList()) : SearchChip {
+    /** Tutti i media della richiesta, il primo per primo. */
+    val all: List<MediaId> get() = listOf(media) + more
+  }
 
   /** Una parola o una frase da cercare nel testo letto; [exact] = fra virgolette (testo esatto). */
   data class Word(val text: String, val exact: Boolean) : SearchChip {

@@ -74,6 +74,7 @@
   <string name="library_action_free_space">Libera spazio</string>
   <!-- Fase 7 (P10, P13): "Aggiungi ad album" sulla selezione della Libreria (D35). -->
   <string name="library_action_add_to_album">Aggiungi ad album</string>
+  <string name="library_action_find_similar">Trova simili</string>
   <!-- Fase 7 (P13): il selettore dei media degli album ("Aggiungi foto", foto d'esempio di un album smart). -->
   <string name="picker_choose">Scegli</string>
   <string name="picker_empty_title">Nessuna foto da scegliere</string>

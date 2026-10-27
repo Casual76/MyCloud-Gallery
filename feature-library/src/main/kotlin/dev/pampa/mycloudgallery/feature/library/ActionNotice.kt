@@ -64,6 +64,12 @@ internal sealed interface ActionNotice {
    */
   data class FamilyStillSees(val count: Int) : ActionNotice
 
+  /** Correzioni F (TS-4): "Trova simili" dalla selezione ha piu' di [limit] media: si sceglie un esempio, non una raccolta. */
+  data class SimilarTooMany(val limit: Int) : ActionNotice
+
+  /** Correzioni F (TS-4): nessun media della selezione e' ancora stato analizzato: "Trova simili" non ha da dove partire. */
+  data object SimilarNotAnalyzed : ActionNotice
+
   /** Fase 7 (P13): nel selettore dei media (le foto d'esempio di un album smart, "Aggiungi foto") se ne possono scegliere al piu' [limit]. */
   data class PickTooMany(val limit: Int) : ActionNotice
 }
@@ -156,6 +162,14 @@ internal fun ActionNoticeCard(notice: ActionNotice, backdrop: GlassBackdropState
     is ActionNotice.PickTooMany -> {
       title = stringResource(R.string.notice_pick_too_many_title, GalleryNumbers.format(notice.limit))
       message = stringResource(R.string.notice_too_many_message)
+    }
+    is ActionNotice.SimilarTooMany -> {
+      title = stringResource(R.string.notice_similar_too_many_title, GalleryNumbers.format(notice.limit))
+      message = stringResource(R.string.notice_similar_too_many_message)
+    }
+    ActionNotice.SimilarNotAnalyzed -> {
+      title = stringResource(R.string.notice_similar_not_analyzed_title)
+      message = stringResource(R.string.notice_similar_not_analyzed_message)
     }
   }
   GalleryGridNotice(

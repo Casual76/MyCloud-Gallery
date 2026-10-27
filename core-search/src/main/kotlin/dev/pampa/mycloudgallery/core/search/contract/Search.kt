@@ -97,6 +97,16 @@ sealed interface SearchNotice {
       require(percent in 0..99) { "Percentuale fuori misura." }
     }
   }
+
+  /**
+   * Correzioni F (TS-4): "Trova simili" dalla selezione ha lasciato fuori [count] media della scelta perche' non hanno ancora un vettore (non sono stati
+   * analizzati): la ricerca usa gli altri, e lo dice. Solo un numero.
+   */
+  data class SimilarWithoutVectors(val count: Int) : SearchNotice {
+    init {
+      require(count > 0) { "Un avviso senza media lasciati fuori non si da'." }
+    }
+  }
 }
 
 /**
@@ -117,12 +127,34 @@ data class SearchResults(
   val freeText: Boolean = false,
 )
 
+/** I limiti di "Trova simili" dalla selezione (correzioni F, TS-4). */
+object SimilarSelection {
+  /**
+   * Quanti media al massimo danno la query. Il centroide di tante foto diverse non somiglia a nessuna: oltre, la selezione e' una raccolta, non un esempio.
+   * La Libreria lo dice prima di partire; il motore tiene i primi se gli arrivano di piu' (difesa in profondita').
+   */
+  const val MAX: Int = 30
+}
+
 /** Il motore (D23-D31). Mai un'eccezione per un indice incompleto: risponde con cio' che ha e lo dice ([SearchResults.coverage]). */
 interface SearchEngine {
   suspend fun search(request: SearchRequest): SearchResults
 
   /** "Trova simili" (D30): il vettore del media come query; esclusi la cella e il gruppo del media; mai dai Nascosti. */
   suspend fun similar(media: MediaId, order: ResultOrder = ResultOrder.RECENT): SearchResults
+
+  /**
+   * Correzioni F (TS-4, risposta dell'utente del 27/10): "Trova simili" dalla selezione della Libreria. La query e' il **centroide normalizzato** dei media scelti
+   * (la media normalizzata dei vettori di ognuno, ognuno con lo stesso peso): una passata sola sull'indice, le soglie di "Trova simili". Esclusi dai risultati tutti
+   * i media scelti; mai dai Nascosti (un media nascosto non entra nella query ne' nel chip); i media senza vettore sono lasciati fuori e
+   * [SearchNotice.SimilarWithoutVectors] lo dice. Con un media solo e' [similar]. Al piu' [SimilarSelection.MAX] media: i primi.
+   *
+   * Di serie (un motore che non lo sa) vale per il primo media: gli esecutori veri lo ridefiniscono tutti.
+   */
+  suspend fun similarToAll(media: List<MediaId>, order: ResultOrder = ResultOrder.RECENT): SearchResults {
+    require(media.isNotEmpty()) { "Nessun media da cui cercare i simili." }
+    return similar(media.first(), order)
+  }
 
   val coverage: StateFlow<SearchCoverage>
 

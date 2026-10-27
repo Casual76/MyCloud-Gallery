@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -65,7 +66,8 @@ internal fun chipDescription(resources: android.content.res.Resources, chip: Sea
   is SearchChip.Presence -> resources.getString(R.string.search_chip_presence, chip.label)
   is SearchChip.Flag -> resources.getString(R.string.search_chip_flag, chip.label)
   is SearchChip.Word -> resources.getString(R.string.search_chip_word, chip.label)
-  is SearchChip.Similar -> resources.getString(R.string.search_chip_similar)
+  is SearchChip.Similar ->
+    if (chip.more.isEmpty()) resources.getString(R.string.search_chip_similar) else resources.getQuantityString(R.plurals.search_chip_similar_many_description, chip.all.size, chip.all.size)
   // Fase 8 (P0): il chip "Persona" (D26); l'alternativa e i suggerimenti sono di P10.
   is SearchChip.Person -> resources.getString(R.string.search_chip_person, chip.label)
 }
@@ -105,7 +107,11 @@ internal fun SearchChipBar(
   ) {
     items(chips, key = { chipKey(it) }) { chip ->
       FluidChip(
-        label = if (chip is SearchChip.Similar) stringResource(R.string.search_chip_similar_label) else chip.label,
+        label = when {
+          chip is SearchChip.Similar && chip.more.isNotEmpty() -> pluralStringResource(R.plurals.search_chip_similar_many_label, chip.all.size, chip.all.size)
+          chip is SearchChip.Similar -> stringResource(R.string.search_chip_similar_label)
+          else -> chip.label
+        },
         selected = true,
         onClick = { editing = chip },
         modifier = Modifier.semantics { contentDescription = chipDescription(resources, chip) },

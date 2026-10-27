@@ -58,6 +58,11 @@ internal sealed interface NoticeItem {
     override val action: NoticeAction? = null
   }
 
+  /** "Una foto della scelta non e' ancora stata analizzata: non l'ho usata." (correzioni F, TS-4): [count] media lasciati fuori da «Trova simili» dalla selezione. */
+  data class SimilarWithoutVectors(val count: Int) : NoticeItem {
+    override val action: NoticeAction? = null
+  }
+
   /** "Sto ancora riconoscendo i volti: 60%." (Fase 8, §2.7): sopra i risultati con un chip "Persona", finche' il primo calcolo non e' finito. */
   data class PeopleProgress(val percent: Int) : NoticeItem {
     override val action: NoticeAction? = null
@@ -94,6 +99,7 @@ internal object SearchNoticeItems {
         is SearchNotice.TypoCorrected -> out += NoticeItem.Typo(notice.from, notice.to)
         SearchNotice.TextReadingOff -> out += NoticeItem.TextReadingOff
         is SearchNotice.PeopleRecognizing -> out += NoticeItem.PeopleProgress(notice.percent)
+        is SearchNotice.SimilarWithoutVectors -> out += NoticeItem.SimilarWithoutVectors(notice.count)
       }
     }
     if (coverage is SearchCoverage.ModelMissing) model(coverage.sizeBytes)

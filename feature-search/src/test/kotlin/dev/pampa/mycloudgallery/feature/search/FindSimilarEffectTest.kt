@@ -33,9 +33,9 @@ class FindSimilarEffectTest {
 
   /** Chi tiene la richiesta (come `AppNavGraph`) e la scheda che entra e esce dalla composizione (come `MainScaffold`). */
   private class Host {
-    var request by mutableStateOf<MediaId?>(null)
+    var request by mutableStateOf<List<MediaId>?>(null)
     var tabShown by mutableStateOf(true)
-    val found = ArrayList<MediaId>()
+    val found = ArrayList<List<MediaId>>()
     var handled = 0
   }
 
@@ -59,9 +59,9 @@ class FindSimilarEffectTest {
     val host = Host()
     compose(host)
 
-    host.request = media
+    host.request = listOf(media)
     rule.waitForIdle()
-    assertThat(host.found).containsExactly(media)
+    assertThat(host.found).containsExactly(listOf(media))
     assertThat(host.request).isNull()
 
     // L'utente cambia scheda e torna: Cerca non rilancia i simili.
@@ -69,7 +69,7 @@ class FindSimilarEffectTest {
     rule.waitForIdle()
     host.tabShown = true
     rule.waitForIdle()
-    assertThat(host.found).containsExactly(media)
+    assertThat(host.found).containsExactly(listOf(media))
   }
 
   @Test
@@ -77,12 +77,12 @@ class FindSimilarEffectTest {
     val host = Host()
     compose(host)
 
-    host.request = media
+    host.request = listOf(media)
     rule.waitForIdle()
-    host.request = media
+    host.request = listOf(media)
     rule.waitForIdle()
 
-    assertThat(host.found).containsExactly(media, media).inOrder()
+    assertThat(host.found).containsExactly(listOf(media), listOf(media)).inOrder()
     assertThat(host.handled).isEqualTo(2)
   }
 
@@ -93,13 +93,13 @@ class FindSimilarEffectTest {
     host.tabShown = false
     rule.waitForIdle()
 
-    host.request = other
+    host.request = listOf(other)
     rule.waitForIdle()
     assertThat(host.found).isEmpty()
 
     host.tabShown = true
     rule.waitForIdle()
-    assertThat(host.found).containsExactly(other)
+    assertThat(host.found).containsExactly(listOf(other))
     assertThat(host.request).isNull()
   }
 
@@ -109,13 +109,13 @@ class FindSimilarEffectTest {
     val host = Host()
     compose(host, clearsRequest = false)
 
-    host.request = media
+    host.request = listOf(media)
     rule.waitForIdle()
     host.tabShown = false
     rule.waitForIdle()
     host.tabShown = true
     rule.waitForIdle()
 
-    assertThat(host.found).containsExactly(media, media).inOrder()
+    assertThat(host.found).containsExactly(listOf(media), listOf(media)).inOrder()
   }
 }

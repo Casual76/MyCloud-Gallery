@@ -204,7 +204,7 @@ internal class ActionSearchHandlers(
  * tornavano i simili; e una seconda richiesta sullo stesso media non cambierebbe il valore, quindi non farebbe niente.
  */
 @Composable
-internal fun FindSimilarEffect(request: MediaId?, onFind: (MediaId) -> Unit, onHandled: () -> Unit) {
+internal fun FindSimilarEffect(request: List<MediaId>?, onFind: (List<MediaId>) -> Unit, onHandled: () -> Unit) {
   LaunchedEffect(request) {
     if (request != null) {
       onFind(request)
@@ -215,7 +215,7 @@ internal fun FindSimilarEffect(request: MediaId?, onFind: (MediaId) -> Unit, onH
 
 /**
  * La rotta di Cerca per `:app` (P11): il ViewModel con il motore vero, le uscite in [actions] e le miniature locali in [thumbnails]. "Trova simili" dal
- * viewer arriva con [findSimilar] (un media): la schermata parte dai suoi simili, con il chip "Simili a". La richiesta si consegna **una volta**:
+ * viewer arriva con [findSimilar] (un media) e la selezione della Libreria con piu' media (correzioni F, TS-4): la schermata parte dai simili, con il chip "Simili a". La richiesta si consegna **una volta**:
  * [onFindSimilarHandled] la azzera in chi la tiene, cosi' un rientro nella scheda non la ripete (TS-2) e una seconda richiesta sullo stesso media riparte.
  */
 @Composable
@@ -223,7 +223,7 @@ fun SearchRoute(
   actions: SearchActions,
   thumbnails: SearchThumbnails,
   modifier: Modifier = Modifier,
-  findSimilar: MediaId? = null,
+  findSimilar: List<MediaId>? = null,
   onFindSimilarHandled: () -> Unit = {},
   viewModel: SearchViewModel = hiltViewModel(),
 ) {

@@ -33,6 +33,19 @@
   <string name="search_chip_word">Parola cercata: %1$s. Tocca per modificare</string>
   <string name="search_chip_similar">Simili a questa foto. Tocca per modificare</string>
   <string name="search_chip_similar_label">Simili a questa foto</string>
+  <plurals name="search_chip_similar_many_label">
+    <item quantity="one">Simili a %d foto</item>
+    <item quantity="other">Simili a %d foto</item>
+  </plurals>
+  <plurals name="search_chip_similar_many_description">
+    <item quantity="one">Simili a %d foto scelta. Tocca per modificare</item>
+    <item quantity="other">Simili a %d foto scelte. Tocca per modificare</item>
+  </plurals>
+  <string name="search_notice_title_similar">Simili alla scelta</string>
+  <plurals name="search_similar_without_vectors">
+    <item quantity="one">%d foto della scelta non è ancora stata analizzata: la ricerca usa le altre.</item>
+    <item quantity="other">%d foto della scelta non sono ancora state analizzate: la ricerca usa le altre.</item>
+  </plurals>
   <string name="search_chip_sheet_title">Modifica il filtro</string>
   <string name="search_chip_sheet_message">%1$s</string>
   <string name="search_chip_remove">Togli il filtro</string>

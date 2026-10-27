@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.models.contract.ModelId
 import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
+import dev.pampa.mycloudgallery.core.search.contract.PersonOption
 import dev.pampa.mycloudgallery.core.search.contract.PlaceOption
 import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
@@ -53,6 +54,10 @@ internal class RecordingHandlers : SearchHandlers {
   override fun onChooseAlternative(chip: SearchChip.Place, option: PlaceOption) { calls += "alternative:${option.label}" }
 
   override fun onPlaceAsWord(chip: SearchChip.Place) { calls += "asWord:${chip.word}" }
+
+  override fun onPerson(option: PersonOption) { calls += "person:${option.label}" }
+
+  override fun onSwitchReading(chip: SearchChip, to: SearchChip) { calls += "reading:${chip.label}->${to.label}" }
 
   override fun onSetOrder(order: ResultOrder) { calls += "order:${order.code}" }
 

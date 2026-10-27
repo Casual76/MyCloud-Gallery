@@ -57,6 +57,11 @@ internal sealed interface NoticeItem {
   data class CoverageUpdating(val percent: Int) : NoticeItem {
     override val action: NoticeAction? = null
   }
+
+  /** "Sto ancora riconoscendo i volti: 60%." (Fase 8, §2.7): sopra i risultati con un chip "Persona", finche' il primo calcolo non e' finito. */
+  data class PeopleProgress(val percent: Int) : NoticeItem {
+    override val action: NoticeAction? = null
+  }
 }
 
 internal object SearchNoticeItems {
@@ -88,6 +93,7 @@ internal object SearchNoticeItems {
         is SearchNotice.NoIndexerForArea -> out += NoticeItem.NoIndexer(notice.commonArea)
         is SearchNotice.TypoCorrected -> out += NoticeItem.Typo(notice.from, notice.to)
         SearchNotice.TextReadingOff -> out += NoticeItem.TextReadingOff
+        is SearchNotice.PeopleRecognizing -> out += NoticeItem.PeopleProgress(notice.percent)
       }
     }
     if (coverage is SearchCoverage.ModelMissing) model(coverage.sizeBytes)

@@ -46,6 +46,7 @@ import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
+import dev.pampa.mycloudgallery.core.search.contract.ChipReadings
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
 import dev.pampa.mycloudgallery.core.search.contract.SearchFlag
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
@@ -151,55 +152,103 @@ private fun ChipSheet(chip: SearchChip?, handlers: SearchHandlers, onDismiss: ()
   var shown by remember { mutableStateOf<SearchChip?>(null) }
   if (chip != null) shown = chip
   val current = shown
+  GalleryConfirmSheet(visible = chip != null, onDismissRequest = onDismiss, paneTitle = stringResource(R.string.search_chip_sheet_title)) {
+    if (current != null) ChipSheetContent(current, handlers, onDismiss)
+  }
+}
+
+/**
+ * Il contenuto del foglio di un chip (separato dalla finestra, cosi' gli screenshot lo mostrano dentro la pagina). Un chip "Persona" propone le altre letture
+ * della sua parola (la data, il luogo: una riga ciascuna, che dice cosa cerca) e "Cerca come parola"; una data o un luogo con una persona dello stesso nome
+ * propone "Cerca la persona" (Fase 8, E-F36).
+ */
+@Composable
+internal fun ChipSheetContent(current: SearchChip, handlers: SearchHandlers, onDismiss: () -> Unit) {
   val title = stringResource(R.string.search_chip_sheet_title)
-  GalleryConfirmSheet(visible = chip != null, onDismissRequest = onDismiss, paneTitle = title) {
-    if (current != null) {
-      GallerySheetScaffold(
-        icon = glyphOf(current),
-        tone = GallerySheetTone.Brand,
-        title = title,
-        message = stringResource(R.string.search_chip_sheet_message, if (current is SearchChip.Similar) stringResource(R.string.search_chip_similar_label) else current.label),
-        body = {
-          if (current is SearchChip.Place && current.alternatives.isNotEmpty()) {
-            FluidListGroup {
-              current.alternatives.forEach { option ->
-                FluidListRow(
-                  title = option.label,
-                  subtitle = stringResource(R.string.search_chip_alternatives, current.word),
-                  tone = FluidTone.Primary,
-                  onClick = { handlers.onChooseAlternative(current, option); onDismiss() },
-                  disclosure = false,
-                  titleMaxLines = 3,
-                )
-              }
-            }
-          }
-        },
-        actions = {
-          if (current is SearchChip.Place) {
-            FluidButton(
-              text = stringResource(R.string.search_chip_as_word),
-              onClick = { handlers.onPlaceAsWord(current); onDismiss() },
-              style = FluidButtonStyle.Tinted,
-              size = FluidButtonSize.Large,
-              fillWidth = true,
+  GallerySheetScaffold(
+    icon = glyphOf(current),
+    tone = GallerySheetTone.Brand,
+    title = title,
+    message = stringResource(R.string.search_chip_sheet_message, if (current is SearchChip.Similar) stringResource(R.string.search_chip_similar_label) else current.label),
+    body = {
+      if (current is SearchChip.Place && current.alternatives.isNotEmpty()) {
+        FluidListGroup {
+          current.alternatives.forEach { option ->
+            FluidListRow(
+              title = option.label,
+              subtitle = stringResource(R.string.search_chip_alternatives, current.word),
+              tone = FluidTone.Primary,
+              onClick = { handlers.onChooseAlternative(current, option); onDismiss() },
+              disclosure = false,
+              titleMaxLines = 3,
             )
           }
-          FluidButton(
-            text = stringResource(R.string.search_chip_remove),
-            onClick = { handlers.onRemoveChip(current); onDismiss() },
-            size = FluidButtonSize.Large,
-            fillWidth = true,
+        }
+      }
+      if (current is SearchChip.Person) {
+        val readings = current.alternatives.filter { it.chip !is SearchChip.Word }
+        if (readings.isNotEmpty()) {
+          FluidListGroup {
+            readings.forEach { reading ->
+              FluidListRow(
+                title = reading.label,
+                subtitle = stringResource(if (reading.chip is SearchChip.Place) R.string.search_chip_alt_place else R.string.search_chip_alt_date),
+                tone = FluidTone.Primary,
+                onClick = { handlers.onSwitchReading(current, ChipReadings.switchTo(current, reading)); onDismiss() },
+                disclosure = false,
+                titleMaxLines = 3,
+              )
+            }
+          }
+        }
+      }
+      ChipReadings.personOf(current)?.let { person ->
+        FluidListGroup {
+          FluidListRow(
+            title = person.label,
+            subtitle = stringResource(R.string.search_chip_alt_person),
+            tone = FluidTone.Primary,
+            onClick = { ChipReadings.backToPerson(current)?.let { back -> handlers.onSwitchReading(current, back) }; onDismiss() },
+            disclosure = false,
+            titleMaxLines = 3,
           )
+        }
+      }
+    },
+    actions = {
+      if (current is SearchChip.Place) {
+        FluidButton(
+          text = stringResource(R.string.search_chip_as_word),
+          onClick = { handlers.onPlaceAsWord(current); onDismiss() },
+          style = FluidButtonStyle.Tinted,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+        )
+      }
+      if (current is SearchChip.Person) {
+        current.alternatives.firstOrNull { it.chip is SearchChip.Word }?.let { word ->
           FluidButton(
-            text = stringResource(R.string.search_sheet_close),
-            onClick = onDismiss,
+            text = stringResource(R.string.search_chip_as_word),
+            onClick = { handlers.onSwitchReading(current, word.chip); onDismiss() },
             style = FluidButtonStyle.Tinted,
             size = FluidButtonSize.Large,
             fillWidth = true,
           )
-        },
+        }
+      }
+      FluidButton(
+        text = stringResource(R.string.search_chip_remove),
+        onClick = { handlers.onRemoveChip(current); onDismiss() },
+        size = FluidButtonSize.Large,
+        fillWidth = true,
       )
-    }
-  }
+      FluidButton(
+        text = stringResource(R.string.search_sheet_close),
+        onClick = onDismiss,
+        style = FluidButtonStyle.Tinted,
+        size = FluidButtonSize.Large,
+        fillWidth = true,
+      )
+    },
+  )
 }

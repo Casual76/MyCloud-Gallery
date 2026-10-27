@@ -1,6 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Fase 8 (docs/fase8-progetto.md D26, §2.7): il chip «Persona» della barra di Cerca. P0 mette solo la frase di TalkBack, perche' il
-       chip esiste nel contratto (SearchChip.Person); il chip con l'alternativa, i suggerimenti «Persone» e la copertura sono di P10. -->
+  <!-- Fase 8 (docs/fase8-progetto.md D26, §2.7, E-F36; P10): ricerca per persona. Il chip «Persona» della barra di Cerca, la riga «Persone» a riposo, le altre letture
+       di un nome che e' anche una festa, un mese o un luogo, e l'avviso del primo calcolo dei volti. Solo nomi scelti dall'utente: mai nei log. -->
   <string name="search_chip_person">Filtro persona: %1$s. Tocca per modificare</string>
+
+  <!-- A riposo e mentre si scrive -->
+  <string name="search_people">Persone</string>
+  <string name="search_person_open">Cerca le foto di %1$s</string>
+
+  <!-- Il foglio del chip: un'altra lettura della stessa parola (E-F36, come E-Q10) -->
+  <string name="search_chip_alt_date">Cerca la data</string>
+  <string name="search_chip_alt_place">Cerca il luogo</string>
+  <string name="search_chip_alt_person">Cerca la persona</string>
+
+  <!-- Sopra i risultati con un chip «Persona», finche' il primo calcolo dei volti non e' finito (come la copertura, F6-D31) -->
+  <string name="search_notice_title_people">Persone</string>
+  <string name="search_people_progress">Sto ancora riconoscendo i volti: %1$d%%.</string>
 </resources>

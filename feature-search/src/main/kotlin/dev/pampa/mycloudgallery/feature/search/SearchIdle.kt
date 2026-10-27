@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.Search
@@ -60,7 +61,7 @@ internal fun SearchIdleContent(
 ) {
   val notices = SearchNoticeItems.of(emptyList(), SearchCoverage.Complete, readiness, queryModel)
   val typeChips = state.suggestions.types.map { it to typeLabel(it) }
-  val empty = state.recents.isEmpty() && state.suggestions.places.isEmpty() && typeChips.isEmpty()
+  val empty = state.recents.isEmpty() && state.suggestions.people.isEmpty() && state.suggestions.places.isEmpty() && typeChips.isEmpty()
   LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = SearchDimens.ListBottom), verticalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
     if (notices.isNotEmpty()) item(key = "notices") { SearchNotices(notices, handlers) }
     if (state.recents.isNotEmpty()) {
@@ -84,6 +85,23 @@ internal fun SearchIdleContent(
           state.recents.forEachIndexed { index, entry ->
             if (index > 0) FluidListDivider()
             RecentRow(entry, handlers)
+          }
+        }
+      }
+    }
+    // Fase 8 (§2.7): la riga "Persone", fino a 6 nomi, le persone piu' fotografate. Una pillola da 48 dp per nome, come i luoghi.
+    if (state.suggestions.people.isNotEmpty()) {
+      item(key = "people") {
+        ChipsSection(stringResource(R.string.search_people)) {
+          state.suggestions.people.forEach { person ->
+            val open = stringResource(R.string.search_person_open, person.label)
+            FluidChip(
+              label = person.label,
+              selected = false,
+              onClick = { handlers.onPerson(person) },
+              modifier = Modifier.semantics { contentDescription = open },
+              leading = { Icon(Icons.Rounded.Face, null) },
+            )
           }
         }
       }
@@ -192,6 +210,7 @@ private fun glyphOf(suggestion: Suggestion) = when (suggestion) {
   is Suggestion.PlaceSuggestion -> Icons.Rounded.Place
   is Suggestion.Type -> Icons.Rounded.PhotoLibrary
   is Suggestion.Term -> Icons.Rounded.CalendarMonth
+  is Suggestion.PersonSuggestion -> Icons.Rounded.Face
 }
 
 @Composable

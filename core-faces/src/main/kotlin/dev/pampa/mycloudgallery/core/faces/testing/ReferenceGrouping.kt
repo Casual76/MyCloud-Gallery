@@ -31,6 +31,10 @@ import dev.pampa.mycloudgallery.core.model.PersonId
  *   il 30%), correzioni, esemplari, assegnazione del resto, esemplari.
  * Ogni spareggio per riferimento o per id; ogni insieme si scorre in ordine. Lo stato nuovo ha `seq` + 1 e `base` = `seq` di partenza se e'
  * cambiato qualcosa, altrimenti e' quello di partenza.
+ *
+ * P5 ha aggiunto sei regole, qui e nel nucleo vero (`grouping/FastGrouping`), segnate F1-F6 in `GroupingSteps` e spiegate in
+ * `docs/decisioni.md` ("Fase 8 P5"): conferma senza correzione che torna libera, una faccia per foto dopo gli alias, unioni bloccate dai
+ * "Non e' …", abbinamento del ricalcolo per componenti, "Separati" attraverso gli alias, "Dimentica" rispettata anche nel ricalcolo.
  */
 class ReferenceGrouping : GroupingEngine {
 

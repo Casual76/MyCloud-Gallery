@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.utility
 
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
@@ -12,6 +13,7 @@ import dev.pampa.mycloudgallery.core.library.duplicates.FullHashNightly
 import dev.pampa.mycloudgallery.core.library.duplicates.GroupProposal
 import dev.pampa.mycloudgallery.core.library.duplicates.IdenticalDuplicates
 import dev.pampa.mycloudgallery.core.library.duplicates.IdenticalScan
+import dev.pampa.mycloudgallery.core.library.duplicates.NasTwins
 import dev.pampa.mycloudgallery.core.library.duplicates.NightlyReport
 import dev.pampa.mycloudgallery.core.library.duplicates.NoIdenticalDuplicates
 import dev.pampa.mycloudgallery.core.library.duplicates.NoSimilarShots
@@ -19,11 +21,15 @@ import dev.pampa.mycloudgallery.core.library.duplicates.RemovalPlaces
 import dev.pampa.mycloudgallery.core.library.duplicates.SigningReport
 import dev.pampa.mycloudgallery.core.library.duplicates.SimilarBatch
 import dev.pampa.mycloudgallery.core.library.duplicates.SimilarShots
+import dev.pampa.mycloudgallery.core.library.duplicates.TwinReport
 import dev.pampa.mycloudgallery.core.library.similar.SignatureSource
+import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.MediaId
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -35,7 +41,11 @@ import kotlinx.coroutines.sync.withLock
  * @param catalog il catalogo, null finche' la galleria non e' pronta.
  * @param signatures da dove vengono i pixel da firmare: la stessa sorgente della manutenzione delle firme della Fase 5 (`SimilarCopiesGraph`), null
  *   senza NAS o dati personali (le firme restano quelle gia' fatte).
- * @param fullHashOn l'interruttore notturno di adesso (`full_hash_nightly`).
+ * @param fullHashOn l'interruttore notturno di adesso (`full_hash_nightly`); null = i dati personali non sono ancora pronti: non si sa se e' acceso o
+ *   spento, e la manutenzione non tocca niente (DP-5: prima "non pronto" valeva "spento" e ritirava dalla coda le righe `FULL_HASH` chieste dall'utente).
+ * @param sharedAlbums i media attestati dagli album condivisi (DP-2): le loro copie dell'area comune non si propongono mai per l'eliminazione.
+ * @param database serve ai gemelli del NAS (DP-1, `NasTwins`).
+ * @param account l'account NAS del dispositivo (DP-1): solo le sue copie sul NAS contano; senza, i file uguali fra cartelle non si cercano.
  */
 class UtilityGraph(
   private val catalog: suspend () -> MediaCatalog?,
@@ -43,7 +53,10 @@ class UtilityGraph(
   private val hidden: HiddenMask,
   private val albums: AlbumMembership,
   private val signatures: suspend () -> SignatureSource?,
-  private val fullHashOn: () -> Boolean,
+  private val fullHashOn: () -> Boolean?,
+  private val sharedAlbums: AlbumMembership = AlbumMembership { emptySet() },
+  private val database: GalleryDatabase? = null,
+  private val account: () -> AccountId? = { null },
 ) {
   private val lock = Mutex()
   private var identicalOn: CatalogIdenticalDuplicates? = null
@@ -57,8 +70,15 @@ class UtilityGraph(
   @Volatile var lastSigning: SigningReport? = null
     private set
 
+  @Volatile var lastTwins: TwinReport? = null
+    private set
+
   private suspend fun identical(): CatalogIdenticalDuplicates? = lock.withLock {
-    identicalOn ?: catalog()?.let { CatalogIdenticalDuplicates(it, visible) }?.also { identicalOn = it }
+    identicalOn ?: catalog()?.let { c ->
+      // DP-1: i file uguali fra cartelle del NAS (serve il database e l'account); DP-2: gli elementi degli album condivisi non si propongono.
+      val twins = database?.let { db -> account()?.let { me -> NasTwins(c, db, me) } }
+      CatalogIdenticalDuplicates(c, visible, sharedAlbums = sharedAlbums, twins = twins)
+    }?.also { identicalOn = it }
   }
 
   /** Il rilevatore dei simili; si rifa' una volta quando la sorgente delle firme arriva (prima: solo le firme che ci sono). */
@@ -84,6 +104,10 @@ class UtilityGraph(
 
     override suspend fun plan(proposals: Collection<GroupProposal>): CleanupPlan =
       identical()?.plan(proposals) ?: NoIdenticalDuplicates.plan(proposals)
+
+    override suspend fun settle(budget: Duration): TwinReport = identical()?.settle(budget) ?: TwinReport.NONE
+
+    override fun changes(): Flow<Unit> = flow { identical()?.changes()?.collect { emit(it) } }
   }
 
   val similarShots: SimilarShots = object : SimilarShots {
@@ -107,7 +131,10 @@ class UtilityGraph(
    */
   suspend fun nightly(budget: Duration) {
     try {
-      applyFullHash(fullHashOn(), budget)
+      // DP-1: i file uguali fra cartelle del NAS (hash completo in coda dove serve, unione di cio' che e' provato). Prima dell'interruttore: e' mirato.
+      lastTwins = identicalDuplicates.settle(budget)
+      // DP-5: con i dati personali non pronti non si sa cosa ha scelto l'utente: il passo si salta, non si prende per "spento".
+      fullHashOn()?.let { applyFullHash(it, budget) }
       lastSigning = similarShots.sign(budget)
     } catch (e: CancellationException) {
       throw e

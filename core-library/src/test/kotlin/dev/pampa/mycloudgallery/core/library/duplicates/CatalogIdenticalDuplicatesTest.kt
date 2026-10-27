@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.database.entity.AlbumEntity
 import dev.pampa.mycloudgallery.core.database.entity.AlbumItemEntity
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.data.CatalogTimelineSource
+import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.similar.Fx
 import dev.pampa.mycloudgallery.core.library.similar.SimilarCatalogTestBase
 import dev.pampa.mycloudgallery.core.library.visibility.CatalogVisibleMedia
@@ -37,7 +38,8 @@ class CatalogIdenticalDuplicatesTest : SimilarCatalogTestBase() {
   private val fingerprint = Fingerprint.ofContent(bytes)
 
   private fun finder(): CatalogIdenticalDuplicates {
-    val snapshot = MutableStateFlow<TimelineSnapshot?>(null)
+    // UT-1: i doppioni identici si cercano solo con la Libreria leggibile per intero (l'istantanea c'e'); una vuota basta, i gruppi vengono dal catalogo.
+    val snapshot = MutableStateFlow<TimelineSnapshot?>(ColumnarTimelineSnapshot.EMPTY)
     return CatalogIdenticalDuplicates(catalog, CatalogVisibleMedia(db, snapshot))
   }
 

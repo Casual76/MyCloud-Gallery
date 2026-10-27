@@ -84,9 +84,10 @@ enum class NasTrashOutcome {
 }
 
 /**
- * La prova che l'utente ha toccato: [taps] tocchi di conferma fatti su questa schermata. Il costruttore e' `internal` e lo chiama solo il foglio di
- * questa schermata dopo il gesto (`TrashTapGuardTest` lo controlla sul codice): l'adattatore di `:app` la riceve, non puo' farsela da solo. Un'azione
- * che toglie dal cestino per sempre ne vuole due (Q8).
+ * La prova che l'utente ha toccato: [taps] tocchi di conferma fatti su questa schermata. Il costruttore e' `internal` e lo chiama solo un composable
+ * di questo modulo dopo il gesto ([tapOnButton], [SheetTap], [DoubleTapConfirm]; `TrashTapGuardTest` lo controlla sul codice): un controllore non se la
+ * fabbrica e `:app` la riceve, non puo' farsela da solo (R18 della revisione di Fase 7: prima il controllore dei Doppioni la fabbricava dentro `confirm()`,
+ * e dei falsi pubblici in `src/main` ne davano una a chiunque). Un'azione che toglie dal cestino per sempre ne vuole due (Q8).
  */
 class UserTap internal constructor(val taps: Int) {
   override fun toString(): String = "UserTap($taps)"
@@ -130,7 +131,7 @@ object NoNasTrash : NasTrashPort {
  * che il pannello nuovo (con l'avviso sul backup esterno) e' comparso. Un tocco arrivato meno di [MIN_GAP_MS] dopo il precedente (un doppio tocco,
  * un tocco registrato due volte) non conta. Pura: la provano i test su JVM; l'orologio e' monotono e lo da' il chiamante.
  */
-class DoubleTapConfirm(private val shownAtMonotonicMs: Long) {
+internal class DoubleTapConfirm(private val shownAtMonotonicMs: Long) {
 
   /** Quanti tocchi sono stati contati (0, 1 o 2). */
   var taps: Int = 0
@@ -153,7 +154,7 @@ class DoubleTapConfirm(private val shownAtMonotonicMs: Long) {
   }
 
   /** La prova dei tocchi fatti: solo dopo due tocchi contati. */
-  fun proof(): UserTap? = if (taps >= REQUIRED) UserTap(taps) else null
+  internal fun proof(): UserTap? = if (taps >= REQUIRED) UserTap(taps) else null
 
   companion object {
     const val REQUIRED: Int = 2
@@ -163,5 +164,25 @@ class DoubleTapConfirm(private val shownAtMonotonicMs: Long) {
   }
 }
 
-/** La prova di un solo tocco (ripristina): il tocco sul pulsante "Ripristina". */
-internal fun singleTap(): UserTap = UserTap(1)
+/**
+ * La prova di **un** tocco su un pulsante che agisce subito (il "Ripristina" degli Eliminati di recente: non toglie niente e non sovrascrive mai).
+ * Si chiama solo dal composable che disegna il pulsante, nel gesto di quel tocco: il controllore riceve la prova, non se la fa.
+ */
+internal fun tapOnButton(): UserTap = UserTap(1)
+
+/**
+ * Il tocco di conferma di un **foglio** che si apre (il foglio "Elimina" dei Doppioni): una macchina nuova a ogni apertura, e un tocco arrivato prima di
+ * [MIN_SHOWN_MS] dalla comparsa del foglio non conta (come C34 per la conferma degli album, 600 ms): un tocco che era per quello che c'era dietro, o un
+ * doppio tocco, non elimina niente. Pura: la provano i test su JVM; l'orologio e' monotono e lo da' il chiamante.
+ */
+internal class SheetTap(private val shownAtMonotonicMs: Long) {
+
+  /** Il tocco di conferma all'istante [nowMonotonicMs]: la prova se il foglio e' visibile da abbastanza, altrimenti null. */
+  fun confirm(nowMonotonicMs: Long): UserTap? =
+    if (nowMonotonicMs - shownAtMonotonicMs >= MIN_SHOWN_MS) UserTap(1) else null
+
+  companion object {
+    /** Come `ShareConfirmation` (C34) e `DoubleTapConfirm`: un tocco prima di 600 ms dalla comparsa non e' una scelta. */
+    const val MIN_SHOWN_MS: Long = 600
+  }
+}

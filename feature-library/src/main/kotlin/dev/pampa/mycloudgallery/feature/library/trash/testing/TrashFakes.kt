@@ -1,17 +1,18 @@
 package dev.pampa.mycloudgallery.feature.library.trash.testing
 
-import dev.pampa.mycloudgallery.feature.library.trash.DoubleTapConfirm
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashFeed
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashPort
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashRow
 import dev.pampa.mycloudgallery.feature.library.trash.UserTap
-import dev.pampa.mycloudgallery.feature.library.trash.singleTap
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 // I fake degli Eliminati di recente (Fase 7, P8, D26): in src/main, cosi' i test di questo modulo, gli screenshot e i test d'integrazione di `:app`
 // (P13) li riusano. Mai nella release: tools/check.ps1 fallisce se una classe di un package `testing` compare nel dex dell'APK di release.
+//
+// **Niente prove del tocco qui** (R18 della revisione di Fase 7): `fakeSingleTap()` e `fakeDoubleTap()` stavano in questo file, pubbliche, e davano una
+// `UserTap` a chiunque nel set `main`. I test che servono una prova se la fanno da soli, nei propri `src/test` (`TestTaps`).
 
 /**
  * Il cestino del NAS finto: tiene le voci, registra i gesti e si comporta come l'adattatore vero sopra `NasOperations`:
@@ -97,17 +98,3 @@ fun sampleNasRows(): List<NasTrashRow> = listOf(
     key = "tab/b3", name = null, folder = null, sizeBytes = 900_000, daysLeft = 5, withoutValidRecord = true, restorable = false,
   ),
 )
-
-/**
- * La prova di **un** tocco, per i test di chi lega le porte (`:app`): la prova vera nasce solo nel foglio, e il suo costruttore e' interno a questo modulo
- * (un test d'architettura lo guarda), quindi `:app` non ne puo' fabbricare una. Mai usata dalle schermate.
- */
-fun fakeSingleTap(): UserTap = singleTap()
-
-/** La prova di **due tocchi distinti**, come la da' il foglio "Elimina subito" (il secondo oltre i 600 ms dal primo). */
-fun fakeDoubleTap(): UserTap {
-  val confirm = DoubleTapConfirm(shownAtMonotonicMs = 0)
-  check(!confirm.tap(1_000))
-  check(confirm.tap(2_000))
-  return checkNotNull(confirm.proof())
-}

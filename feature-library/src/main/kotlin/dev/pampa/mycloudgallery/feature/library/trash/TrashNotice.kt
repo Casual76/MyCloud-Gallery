@@ -17,6 +17,10 @@ import dev.pampa.mycloudgallery.feature.library.collections.CollectionsDimens
 /** Cosa e' successo all'ultimo gesto sul cestino del NAS (ripristino o "Elimina subito"). */
 enum class TrashNotice(@StringRes val message: Int, val tone: FluidTone) {
   RESTORE_STARTED(R.string.trash_notice_restore_started, FluidTone.Success),
+
+  /** ED-2: il ripristino e' partito per una parte della selezione; le altre voci non si possono ripristinare adesso. */
+  RESTORE_PARTIAL(R.string.trash_notice_restore_partial, FluidTone.Warning),
+
   PURGE_STARTED(R.string.trash_notice_purge_started, FluidTone.Success),
   REJECTED(R.string.trash_notice_rejected, FluidTone.Warning),
   BLOCKED(R.string.trash_notice_blocked, FluidTone.Warning),

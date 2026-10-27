@@ -88,6 +88,8 @@ internal fun blockedText(reason: BlockReason): String = stringResource(
     BlockReason.OTHER_AREA -> R.string.duplicates_blocked_other_area
     BlockReason.LAST_PRIVATE -> R.string.duplicates_blocked_last_private
     BlockReason.SHARED_ALBUM -> R.string.duplicates_blocked_shared_album
+    BlockReason.GUARDIAN_TWIN -> R.string.duplicates_blocked_guardian_twin
+    BlockReason.LAST_VERIFIED -> R.string.duplicates_blocked_last_verified
   },
 )
 

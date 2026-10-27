@@ -144,9 +144,16 @@ internal fun RecentlyDeletedHost(
     onSelectAll = controller::selectAll,
     onClearSelection = controller::clearSelection,
     onRestore = {
-      // Le foto del telefono: il dialogo di sistema. Le voci del NAS: la porta, dopo questo tocco.
+      // Le foto del telefono: il dialogo di sistema. Le voci del NAS: la porta, dopo questo tocco (la prova nasce qui, nel gesto del pulsante).
+      val tap = tapOnButton()
+      val skipped = controller.unrestorableNas()
       val phoneRequest = controller.restoreRequest()
-      scope.launch { controller.restoreNas()?.let { notice = TrashNotice.of(it, purge = false) } }
+      scope.launch {
+        controller.restoreNas(tap)?.let { outcome ->
+          // ED-2: voci che non si possono ripristinare non cadono in silenzio, e una selezione mista dice che una parte e' rimasta.
+          notice = if (outcome == NasTrashOutcome.STARTED && skipped > 0) TrashNotice.RESTORE_PARTIAL else TrashNotice.of(outcome, purge = false)
+        }
+      }
       phoneRequest?.let { restoreDialog.launch(IntentSenderRequest.Builder(it).build()) }
     },
     onRetry = controller::refresh,

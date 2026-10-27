@@ -38,6 +38,7 @@ import dev.pampa.mycloudgallery.feature.library.collections.testing.fakeThumbnai
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeCleanupNas
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeFullHashSwitch
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeIdenticalDuplicates
+import dev.pampa.mycloudgallery.feature.library.utility.testing.FakePhoneCopyCheck
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeSimilarShots
 import dev.pampa.mycloudgallery.feature.library.utility.testing.sampleMediaId
 import dev.pampa.mycloudgallery.feature.library.utility.testing.samplePlanOf
@@ -72,7 +73,14 @@ open class DuplicatesScreenTest : ComposeScreenTest() {
   }
 
   protected fun controller(fullHash: FullHashSwitch = switch) =
-    DuplicatesController(identical, similar, nas, SenderIntents(system, testIntentSender()), fullHash, scope)
+    DuplicatesController(identical, similar, nas, SenderIntents(system, testIntentSender()), fullHash, scope, phoneCheck = FakePhoneCopyCheck())
+
+  /**
+   * L'orologio monotono del foglio (R18): ogni lettura avanza di [clockStep]. Di serie un secondo, cosi' il tocco su "Elimina" arriva oltre i 600 ms dalla
+   * comparsa del foglio; con 0 il tempo non passa e il tocco non conta.
+   */
+  protected var clockMs: Long = 0
+  protected var clockStep: Long = 1_000
 
   @Composable
   private fun Stage(content: @Composable () -> Unit) {
@@ -94,6 +102,7 @@ open class DuplicatesScreenTest : ComposeScreenTest() {
         refOf = ::sampleRefOf,
         familyName = { share -> if (share == "marco") "Marco" else null },
         onBack = {},
+        monotonicMs = { clockMs += clockStep; clockMs },
       )
     }
   }
@@ -207,6 +216,44 @@ open class DuplicatesScreenTest : ComposeScreenTest() {
     composeRule.onAllNodesWithText("Elimina ovunque").assertCountEquals(0)
     assertThat(nas.calls).isEmpty()
     assertThat(system.trashRequests).isEmpty()
+  }
+
+  @Test
+  fun dp6_ilTitoloDelFoglioContaLeCopieEDiceIGb_ELaCopiaComuneDiceCheSparisceVeramente() {
+    showPage(controller())
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithText("Pulizia guidata").performClick()
+    composeRule.waitForIdle()
+
+    // 3 copie (una del telefono e due del NAS), non "N foto"; e ci sono i GB.
+    composeRule.onNodeWithText("Eliminare 3 copie (", substring = true).assertExists()
+    composeRule.onAllNodesWithText("foto?", substring = true).assertCountEquals(0)
+    // E-D8: una copia dell'area comune la vedono tutti i familiari.
+    composeRule.onNodeWithText("Sparirà per tutti i familiari", substring = true).assertExists()
+  }
+
+  @Test
+  fun r18_UnTocco_PrimaDelTempoMinimoDallaComparsaDelFoglio_NonEliminaNiente() {
+    clockStep = 0
+    identical.planOverride = samplePlanOf(identical.proposals).let { CleanupPlan(it.groups, emptyList(), it.nas, 0, 0) }
+    showPage(controller())
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Pulizia guidata").performClick()
+    composeRule.waitForIdle()
+
+    composeRule.onNodeWithText("Elimina ovunque").performClick()
+    composeRule.waitForIdle()
+
+    // L'orologio non e' avanzato: il tocco non vale, il foglio resta e il NAS non e' stato toccato.
+    assertThat(nas.calls).isEmpty()
+    composeRule.onNodeWithText("Elimina ovunque").assertExists()
+
+    // Passato il tempo, lo stesso tocco conta.
+    clockStep = 1_000
+    composeRule.onNodeWithText("Elimina ovunque").performClick()
+    composeRule.waitForIdle()
+    assertThat(nas.calls).hasSize(1)
   }
 
   @Test

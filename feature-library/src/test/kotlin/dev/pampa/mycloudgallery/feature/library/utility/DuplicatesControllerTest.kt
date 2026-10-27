@@ -8,12 +8,18 @@ import dev.pampa.mycloudgallery.core.library.duplicates.CopyPart
 import dev.pampa.mycloudgallery.core.library.duplicates.GroupKey
 import dev.pampa.mycloudgallery.core.library.duplicates.IdenticalStatus
 import dev.pampa.mycloudgallery.core.library.duplicates.PhoneTrashRef
+import dev.pampa.mycloudgallery.core.library.duplicates.GroupProposal
+import dev.pampa.mycloudgallery.core.library.duplicates.IdenticalDuplicates
+import dev.pampa.mycloudgallery.core.library.duplicates.SigningReport
 import dev.pampa.mycloudgallery.core.library.duplicates.SimilarBatch
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaIntents
+import dev.pampa.mycloudgallery.core.model.FileStamp
 import dev.pampa.mycloudgallery.core.model.LocationId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashOutcome
+import dev.pampa.mycloudgallery.feature.library.trash.userTap
+import dev.pampa.mycloudgallery.feature.library.utility.testing.FakePhoneCopyCheck
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeCleanupNas
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeFullHashSwitch
 import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeIdenticalDuplicates
@@ -21,7 +27,10 @@ import dev.pampa.mycloudgallery.feature.library.utility.testing.FakeSimilarShots
 import dev.pampa.mycloudgallery.feature.library.utility.testing.sampleClusters
 import dev.pampa.mycloudgallery.feature.library.utility.testing.sampleMediaId
 import dev.pampa.mycloudgallery.feature.library.utility.testing.samplePlacesOf
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
@@ -47,6 +56,7 @@ class DuplicatesControllerTest {
   private val similar = FakeSimilarShots()
   private val nas = FakeCleanupNas()
   private val switch = FakeFullHashSwitch()
+  private val phoneCheck = FakePhoneCopyCheck()
 
   private fun TestScope.controller(
     id: FakeIdenticalDuplicates = identical,
@@ -54,9 +64,10 @@ class DuplicatesControllerTest {
     cleanup: FakeCleanupNas = nas,
     fullHash: dev.pampa.mycloudgallery.feature.library.utility.FullHashSwitch = switch,
     canTrash: Boolean = true,
+    check: PhoneCopyCheck = phoneCheck,
   ): DuplicatesController {
     system.canTrash = canTrash
-    return DuplicatesController(id, sim, cleanup, SenderIntents(system, sender), fullHash, backgroundScope)
+    return DuplicatesController(id, sim, cleanup, SenderIntents(system, sender), fullHash, backgroundScope, phoneCheck = check)
   }
 
   private fun DuplicatesController.opened(): DuplicatesController {
@@ -147,7 +158,10 @@ class DuplicatesControllerTest {
     c.keepCopy(key, LocationId(21))
     var group = c.state.value.identical.groups.first { it.group.key == key }
     assertThat(group.keep!!.location.value).isEqualTo(21L)
-    assertThat(c.locations(2) { it.remove }).contains(20L)
+    // R18: la scelta di tenere la copia mai riletta (21) non manda nel cestino l'unica verificata (20): resta, e si dice perche'. Si toglie l'area comune.
+    assertThat(c.locations(2) { it.remove }).containsExactly(22L)
+    assertThat(group.blocked.map { it.copy.location.value to it.reason })
+      .contains(20L to dev.pampa.mycloudgallery.core.library.duplicates.BlockReason.LAST_VERIFIED)
 
     // Una copia nell'area di un altro, o che non e' del gruppo, non si puo' scegliere da tenere.
     c.keepCopy(key, LocationId(23))
@@ -202,7 +216,7 @@ class DuplicatesControllerTest {
     val c = controller().opened()
     c.prepareIdentical()
 
-    val request = c.confirm()
+    val request = c.confirm(userTap())
 
     assertThat(request).isNotNull()
     // Il NAS: due copie, una sola conferma (un tocco), nel cestino del NAS.
@@ -229,7 +243,7 @@ class DuplicatesControllerTest {
       val c = controller(cleanup = cleanup).opened()
       c.prepareIdentical()
 
-      assertThat(c.confirm()).isNull()
+      assertThat(c.confirm(userTap())).isNull()
 
       assertThat(cleanup.calls).hasSize(1)
       assertThat(system.trashRequests).isEmpty()
@@ -241,10 +255,10 @@ class DuplicatesControllerTest {
   @Test
   fun unaPortaDelNasCheLancia_EUnFallimento_NonUnaCancellazione() = runTest(UnconfinedTestDispatcher()) {
     val throwing = dev.pampa.mycloudgallery.feature.library.utility.CleanupNasPort { _, _ -> error("nas non raggiungibile") }
-    val c = DuplicatesController(identical, similar, throwing, SenderIntents(system, sender), switch, backgroundScope).opened()
+    val c = DuplicatesController(identical, similar, throwing, SenderIntents(system, sender), switch, backgroundScope, phoneCheck = phoneCheck).opened()
     c.prepareIdentical()
 
-    assertThat(c.confirm()).isNull()
+    assertThat(c.confirm(userTap())).isNull()
 
     assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.CLEANUP_FAILED)
     assertThat(system.trashRequests).isEmpty()
@@ -254,7 +268,7 @@ class DuplicatesControllerTest {
   fun senzaFoglioNonPartiNiente() = runTest(UnconfinedTestDispatcher()) {
     val c = controller().opened()
 
-    assertThat(c.confirm()).isNull()
+    assertThat(c.confirm(userTap())).isNull()
 
     assertThat(nas.calls).isEmpty()
     assertThat(system.trashRequests).isEmpty()
@@ -272,7 +286,7 @@ class DuplicatesControllerTest {
     assertThat(sheet.plan.unsafePhone).isEqualTo(0)
     assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.NO_PHONE_TRASH)
 
-    assertThat(c.confirm()).isNull()
+    assertThat(c.confirm(userTap())).isNull()
 
     // Il NAS parte; il telefono non si tocca (e mai una richiesta di eliminazione).
     assertThat(nas.calls).hasSize(1)
@@ -290,7 +304,7 @@ class DuplicatesControllerTest {
 
     assertThat(c.state.value.sheet).isNull()
     assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.NO_PHONE_TRASH)
-    assertThat(c.confirm()).isNull()
+    assertThat(c.confirm(userTap())).isNull()
     assertThat(system.trashRequests).isEmpty()
   }
 
@@ -314,7 +328,7 @@ class DuplicatesControllerTest {
     // Il cestino di sistema sparisce fra il foglio e il tocco (non succede, ma l'avviso non deve mentire).
     system.canTrash = false
 
-    assertThat(c.confirm()).isNull()
+    assertThat(c.confirm(userTap())).isNull()
 
     assertThat(nas.calls).hasSize(1)
     assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.CLEANUP_STARTED)
@@ -326,7 +340,7 @@ class DuplicatesControllerTest {
   fun alleCopieDelTelefonoSiRileggeSoloSeIlDialogoEConfermato() = runTest(UnconfinedTestDispatcher()) {
     val c = controller().opened()
     c.prepareIdentical()
-    c.confirm()
+    c.confirm(userTap())
     val scansAfterNas = identical.scans
 
     c.onPhoneResult(confirmed = false)
@@ -350,7 +364,7 @@ class DuplicatesControllerTest {
 
   @Test
   fun unDialogoDiSistemaPortaAlMassimoDuemilaElementi_IlResto_RestaPerUnAltroGiro() = runTest(UnconfinedTestDispatcher()) {
-    val phone = (1L..2_500L).map { PhoneTrashRef(MediaRef.Phone("external_primary", it, "image/jpeg"), 1_000) }
+    val phone = (1L..2_500L).map { PhoneTrashRef(MediaRef.Phone("external_primary", it, "image/jpeg"), FileStamp(1_000, it), "store-v1") }
     identical.planOverride = CleanupPlan(groups = 1, phone = phone, nas = emptyList(), unsafePhone = 0, skipped = 0)
     val c = controller().opened()
 
@@ -360,7 +374,7 @@ class DuplicatesControllerTest {
     assertThat(sheet.plan.phone).hasSize(PhoneMediaIntents.MAX_REQUEST_URIS)
     assertThat(sheet.phoneLeft).isEqualTo(500)
     assertThat(sheet.scopes).containsExactly(CleanupScope.PHONE_ONLY)
-    c.confirm()
+    c.confirm(userTap())
     assertThat(system.trashRequests.single().first).hasSize(PhoneMediaIntents.MAX_REQUEST_URIS)
   }
 
@@ -490,13 +504,13 @@ class DuplicatesControllerTest {
     val c = controller().opened()
     c.prepareSimilar()
 
-    c.confirm()
+    c.confirm(userTap())
     assertThat(nas.calls).isEmpty()
     assertThat(system.trashRequests.single().first).hasSize(2)
 
     c.prepareSimilar()
     c.chooseScope(CleanupScope.EVERYWHERE)
-    c.confirm()
+    c.confirm(userTap())
     assertThat(nas.calls).hasSize(1)
     assertThat(nas.calls.single().second).isEqualTo(1)
     assertThat(system.trashRequests).hasSize(2)
@@ -584,5 +598,204 @@ class DuplicatesControllerTest {
     c.selectTab(DuplicatesTab.SIMILAR)
 
     assertThat(c.state.value.tab).isEqualTo(DuplicatesTab.SIMILAR)
+  }
+
+  // --- Revisione di Fase 7, pacchetto C ---------------------------------------------------------------------------------------
+
+  @Test
+  fun r5_ilTocco_RifaIlPianoSuiDatiDiAdesso_ECioCheNonSiTogliePiuNonParte() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller().opened()
+    c.prepareIdentical()
+    val shown = c.state.value.sheet!!.plan
+    assertThat(shown.nas).hasSize(2)
+
+    // Fra il foglio e il tocco una copia da togliere non e' piu' da togliere (la copia da tenere e' sparita, o e' stata spostata): il catalogo non la propone.
+    val fresh = CleanupPlan(shown.groups, shown.phone, shown.nas.take(1), shown.unsafePhone, 0)
+    identical.planOverride = fresh
+    c.confirm(userTap())
+
+    assertThat(nas.calls.single().first.map { it.path }).containsExactly(shown.nas.first().path)
+    assertThat(system.trashRequests.single().first).hasSize(1)
+  }
+
+  @Test
+  fun r5_SeIlPianoDiAdessoEVuoto_NienteParte() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller().opened()
+    c.prepareIdentical()
+
+    identical.planOverride = CleanupPlan.EMPTY
+    assertThat(c.confirm(userTap())).isNull()
+
+    assertThat(nas.calls).isEmpty()
+    assertThat(system.trashRequests).isEmpty()
+    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.NOTHING_TO_CLEAN)
+    assertThat(c.state.value.sheet).isNull()
+  }
+
+  @Test
+  fun r5_SeIlPianoNonSiRiescaARifare_NienteParte() = runTest(UnconfinedTestDispatcher()) {
+    val broken = object : IdenticalDuplicates by identical {
+      var calls = 0
+
+      override suspend fun plan(proposals: Collection<GroupProposal>): CleanupPlan {
+        // La prima volta (il foglio) risponde, la seconda (il tocco) no: fallire chiusi.
+        if (++calls > 1) error("catalogo non risponde")
+        return identical.plan(proposals)
+      }
+    }
+    val c = DuplicatesController(broken, similar, nas, SenderIntents(system, sender), switch, backgroundScope, phoneCheck = phoneCheck).opened()
+    c.prepareIdentical()
+    assertThat(c.state.value.sheet).isNotNull()
+
+    assertThat(c.confirm(userTap())).isNull()
+
+    assertThat(nas.calls).isEmpty()
+    assertThat(system.trashRequests).isEmpty()
+  }
+
+  @Test
+  fun r18_UnaCopiaDelTelefonoCambiataDopoLaLetturaNonVaNelCestino() = runTest(UnconfinedTestDispatcher()) {
+    // La copia del telefono del gruppo 1 (la riga 11) e' stata sovrascritta dopo la scansione: stesso `_ID`, byte nuovi.
+    val check = FakePhoneCopyCheck(changed = setOf(11L))
+    val c = controller(check = check).opened()
+    c.prepareIdentical()
+
+    val request = c.confirm(userTap())
+
+    assertThat(request).isNull()
+    assertThat(check.asked.single().map { it.ref.mediaStoreId }).containsExactly(11L)
+    assertThat(system.trashRequests).isEmpty()
+    // Il NAS e' partito lo stesso, e la pagina dice che una parte del telefono non e' stata toccata.
+    assertThat(nas.calls).hasSize(1)
+    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.PHONE_CHANGED)
+    assertThat(c.state.value.phoneRequest).isNull()
+  }
+
+  @Test
+  fun r18_SeIlTelefonoNonRispondeONonCeIlControllo_NessunaCopiaDelTelefonoVaNelCestino() = runTest(UnconfinedTestDispatcher()) {
+    for (check in listOf<PhoneCopyCheck>(FakePhoneCopyCheck(throwing = true), NoPhoneCopyCheck)) {
+      system.trashRequests.clear()
+      val c = controller(check = check).opened()
+      c.prepareIdentical()
+
+      assertThat(c.confirm(userTap())).isNull()
+
+      assertThat(system.trashRequests).isEmpty()
+      assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.PHONE_CHANGED)
+    }
+  }
+
+  @Test
+  fun r18_LaRichiestaDelTelefonoSta_NelloStatoEUnaVoltaLanciataSiDimentica() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller().opened()
+    c.prepareIdentical()
+
+    val request = c.confirm(userTap())
+
+    assertThat(request).isNotNull()
+    assertThat(c.state.value.phoneRequest).isSameInstanceAs(request)
+    c.phoneRequestLaunched()
+    assertThat(c.state.value.phoneRequest).isNull()
+  }
+
+  @Test
+  fun dp7_UnaRotazioneDuranteElimina_NonPerdeLaParteDelTelefono() = runTest(UnconfinedTestDispatcher()) {
+    val gate = CompletableDeferred<NasTrashOutcome>()
+    val slow = CleanupNasPort { _, _ -> gate.await() }
+    val c = DuplicatesController(identical, similar, slow, SenderIntents(system, sender), switch, backgroundScope, phoneCheck = phoneCheck).opened()
+    c.prepareIdentical()
+
+    // La composizione che chiama "Elimina" sparisce (l'attivita' si ricrea) mentre il NAS lavora.
+    val caller = backgroundScope.launch(start = CoroutineStart.UNDISPATCHED) { c.confirm(userTap()) }
+    caller.cancel()
+    gate.complete(NasTrashOutcome.STARTED)
+
+    // Il lavoro gira nello scope del ViewModel: la richiesta del telefono aspetta nello stato la composizione nuova.
+    assertThat(c.state.value.phoneRequest).isNotNull()
+    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.CLEANUP_STARTED)
+    assertThat(c.state.value.busy).isFalse()
+  }
+
+  @Test
+  fun dp3_LeCopieMandateNeiCestiniEscono_SubitoDallaVista() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller().opened()
+    c.prepareIdentical()
+    val before = c.state.value.identical.cleanable.map { it.group.media }
+    assertThat(before).contains(sampleMediaId(2))
+
+    c.confirm(userTap())
+
+    // Il catalogo si aggiorna solo a operazione chiusa: intanto la pagina non propone di nuovo le stesse copie (il gruppo 2 non ha piu' niente da togliere).
+    val view = c.state.value.identical
+    assertThat(view.cleanable.map { it.group.media }).doesNotContain(sampleMediaId(2))
+    assertThat(view.groups.first { it.group.media == sampleMediaId(2) }.group.copies.map { it.location.value }).containsNoneOf(21L, 22L)
+  }
+
+  @Test
+  fun dp3_QuandoIlCatalogoCambia_LaPaginaSiRilegge() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller().opened()
+    val scans = identical.scans
+
+    identical.changed.tryEmit(Unit)
+    identical.changed.tryEmit(Unit)
+    testScheduler.advanceTimeBy(2_000)
+    testScheduler.runCurrent()
+
+    // Piu' cambiamenti ravvicinati fanno una sola rilettura.
+    assertThat(identical.scans).isEqualTo(scans + 1)
+    assertThat(c.state.value.identical.scanning).isFalse()
+  }
+
+  @Test
+  fun dp1_AllAperturaSiFaIlGiroDeiGemelliDelNas_PrimaDellaLettura() = runTest(UnconfinedTestDispatcher()) {
+    controller().opened()
+
+    assertThat(identical.settles).hasSize(1)
+    assertThat(identical.scans).isEqualTo(1)
+  }
+
+  @Test
+  fun dp1_IGruppiInVerificaEUnaLibreriaNonLeggibileSiDiconoEIlVuotoNonMente() = runTest(UnconfinedTestDispatcher()) {
+    identical.proposals = emptyList()
+    identical.verifying = 3
+    val c = controller().opened()
+
+    assertThat(c.state.value.identical.verifying).isEqualTo(3)
+    assertThat(c.state.value.identical.isEmpty).isFalse()
+
+    identical.verifying = 0
+    identical.restricted = true
+    c.refreshIdentical()
+    assertThat(c.state.value.identical.restricted).isTrue()
+    assertThat(c.state.value.identical.isEmpty).isFalse()
+  }
+
+  @Test
+  fun dp4_AllAperturaDeiSimiliSiFirmanoGliScattiRecenti_PrimaDellaRicerca() = runTest(UnconfinedTestDispatcher()) {
+    similar.signing = SigningReport(signed = 0, waiting = 2, skipped = 0, finished = true)
+    val c = controller().opened()
+
+    assertThat(similar.order.take(2)).containsExactly("sign", "scan").inOrder()
+    assertThat(similar.signCalls).hasSize(1)
+    // Pixel non ancora leggibili: la scheda dice che le foto di oggi si confrontano stanotte.
+    assertThat(c.state.value.similar.signingLater).isTrue()
+    assertThat(c.state.value.similar.clusters).hasSize(2)
+
+    similar.signing = SigningReport(signed = 4, waiting = 0, skipped = 0, finished = true)
+    c.scanSimilar()
+    assertThat(c.state.value.similar.signingLater).isFalse()
+  }
+
+  @Test
+  fun dp5_SeLInterruttoreNotturnoNonSiSalva_LaPaginaLoDice() = runTest(UnconfinedTestDispatcher()) {
+    val notReady = object : FullHashSwitch by switch {
+      override suspend fun set(on: Boolean) = throw IllegalStateException("Dati personali non pronti.")
+    }
+    val c = controller(fullHash = notReady).opened()
+
+    c.setNightly(true)
+
+    assertThat(c.state.value.notice).isEqualTo(DuplicatesNotice.NIGHTLY_NOT_SAVED)
+    assertThat(c.state.value.nightly.on).isFalse()
   }
 }

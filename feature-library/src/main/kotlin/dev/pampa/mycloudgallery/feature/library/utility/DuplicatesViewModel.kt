@@ -28,6 +28,7 @@ class DuplicatesViewModel @Inject constructor(
   cleanupNas: Optional<CleanupNasPort>,
   fullHash: Optional<FullHashSwitch>,
   names: Optional<DuplicatesNames>,
+  phoneCheck: Optional<PhoneCopyCheck>,
   intents: PhoneMediaIntents,
   source: CollectionItemsSource,
   val environment: GridEnvironment,
@@ -40,6 +41,7 @@ class DuplicatesViewModel @Inject constructor(
     intents = intents,
     fullHash = fullHash.orElse(NoFullHashSwitch),
     scope = viewModelScope,
+    phoneCheck = phoneCheck.orElse(NoPhoneCopyCheck),
   )
 
   /** Gli elementi della Libreria intera: da qui il riferimento ai byte di un media per la sua miniatura. */

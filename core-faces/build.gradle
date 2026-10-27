@@ -52,6 +52,13 @@ dependencies {
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
 
+  // Fase 8, P12 (banco delle interruzioni): il banco gira anche sul simulatore SMB di core-nas con la sessione di produzione, le vere primitive del
+  // NAS e il vero `NasFacesEraser` di core-nasops (`FacesNasWiring`), e dal PC contro il NAS di prova con smbj. Solo nei test, come fa core-albums
+  // (Phase7ArchitectureTest): il codice di produzione non vede ne' core-nas ne' core-nasops (Phase8ArchitectureTest legge le sole dipendenze di produzione
+  // e vieta i loro pacchetti nei sorgenti di produzione).
+  testImplementation project(':core-nas')
+  testImplementation project(':core-nasops')
+
   // Fase 8, P6: l'archivio vero (`store/`) gira sopra il database vero (Room) e si prova sulla JVM con Robolectric, con la chiave finta di
   // core-security (`FakeFacesKeys`) e file veri in una cartella temporanea.
   testImplementation appDeps.robolectric

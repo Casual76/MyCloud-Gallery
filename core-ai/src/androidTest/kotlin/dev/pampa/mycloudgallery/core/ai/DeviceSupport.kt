@@ -46,7 +46,7 @@ internal object TestModels {
     cached ?: LocalModels(
       root = root,
       fetcher = ModelFetcher { _, _, _, _ -> FetchResult.NotFound },
-      networkGate = ModelNetworkGate { _, _ -> ModelNetworkVerdict.Refused("prova") },
+      networkGate = ModelNetworkGate { _, _, _ -> ModelNetworkVerdict.Refused("prova") },
     ).also { cached = it }
 
   val files: ModelFiles get() = models().files

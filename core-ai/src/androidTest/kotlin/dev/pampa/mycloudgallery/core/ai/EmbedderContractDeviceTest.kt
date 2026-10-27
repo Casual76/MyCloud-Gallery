@@ -94,7 +94,7 @@ class EmbedderContractDeviceTest {
     val files = LocalModels(
       root = empty,
       fetcher = ModelFetcher { _, _, _, _ -> FetchResult.NotFound },
-      networkGate = ModelNetworkGate { _, _ -> ModelNetworkVerdict.Refused("prova") },
+      networkGate = ModelNetworkGate { _, _, _ -> ModelNetworkVerdict.Refused("prova") },
     ).files
     val text = LiteRtLmTextEmbedder(files, TestModels.cacheRoot)
     assertEquals(WarmUpResult.Failed(AiEngineError.MODEL_UNAVAILABLE), text.warmUp())
@@ -124,7 +124,7 @@ class EmbedderContractDeviceTest {
     val files = LocalModels(
       root = altered,
       fetcher = ModelFetcher { _, _, _, _ -> FetchResult.NotFound },
-      networkGate = ModelNetworkGate { _, _ -> ModelNetworkVerdict.Refused("prova") },
+      networkGate = ModelNetworkGate { _, _, _ -> ModelNetworkVerdict.Refused("prova") },
     ).files
     val text = LiteRtLmTextEmbedder(files, TestModels.cacheRoot)
     assertEquals(WarmUpResult.Failed(AiEngineError.MODEL_UNAVAILABLE), text.warmUp())

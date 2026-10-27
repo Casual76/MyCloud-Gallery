@@ -1420,15 +1420,9 @@ class MediaCatalog(
     // 1. La versione (e con lei le sue posizioni, che puntano alla versione) passa a [into] come modifica di [parent].
     mergeDao.moveVersion(version.id.value, target.value, parent.value)
     mergeDao.setVersionKind(version.id.value, VersionKind.EDITED.code, parent.value)
-    // 2. I riferimenti della copia (come in un'unione): album, copertine, diari del backup, attivita', sessioni, "Libera spazio".
-    mergeDao.copyAlbumItems(source.value, target.value)
-    mergeDao.repointAlbumCovers(source.value, target.value)
-    mergeDao.repointGroupCovers(source.value, target.value)
-    mergeDao.repointBackupItemMedia(source.value, target.value)
-    mergeDao.repointBackupProblem(source.value, target.value)
-    mergeDao.repointPendingTaskMedia(source.value, target.value)
-    mergeDao.repointEditSessionMedia(source.value, target.value)
-    mergeDao.repointFreeSpaceItemMedia(source.value, target.value)
+    // 2. I riferimenti della copia, **gli stessi** di un'unione (R21 della revisione di sicurezza della Fase 7): album, copertine, le tabelle
+    //    della v6 (foto d'esempio, esclusioni, suggeriti, diario della condivisione, copertine delle proposte) e quelle della v4.
+    repointMediaReferences(source.value, target.value)
     // 3. La versione nuova e' la corrente: i pixel sono cambiati, le fasi si rifanno.
     mediaDao.setCurrentVersion(target.value, version.id.value, now)
     val states = workDao.forMedia(target.value).map { it.toDomain() }
@@ -2384,6 +2378,31 @@ class MediaCatalog(
     if (plan.changedLocations.isNotEmpty()) tx.refChanged(before.id)
   }
 
+  /**
+   * Ogni riga che punta al media [loser] (per id, non per versione) passa a [survivor], prima che [loser] se ne vada: album e copertine, gruppi,
+   * le tabelle della v6 (foto d'esempio delle regole, esclusioni, suggeriti, diario della condivisione, copertine delle proposte di viaggio) e
+   * quelle della v4 (diario del backup, problemi, attivita', sessioni di modifica, "Libera spazio"). **Una sola strada** per l'unione
+   * ([mergeInTransaction]) e per la copia di un editor ([linkCopyAsVersion]): una tabella nuova che punta a `media` si aggiunge qui, e vale
+   * per entrambe (R21 della revisione di sicurezza della Fase 7; `MergeReferencesTest` elenca le colonne, `MergeV6Test` prova le due strade).
+   */
+  private suspend fun repointMediaReferences(loser: String, survivor: String) {
+    mergeDao.copyAlbumItems(loser, survivor)
+    mergeDao.repointAlbumCovers(loser, survivor)
+    mergeDao.repointGroupCovers(loser, survivor)
+    // v6: foto d'esempio, esclusioni, suggeriti, diario della condivisione e copertine delle proposte restano attaccati al sopravvissuto.
+    mergeDao.repointAlbumRules(loser, survivor)
+    mergeDao.copyAlbumExclusions(loser, survivor)
+    mergeDao.copyAlbumSuggestions(loser, survivor)
+    mergeDao.repointAlbumShareItems(loser, survivor)
+    mergeDao.repointTripCovers(loser, survivor)
+    // v4: nessuna riga del diario, del problema o delle attivita' si perde con il perdente.
+    mergeDao.repointBackupItemMedia(loser, survivor)
+    mergeDao.repointBackupProblem(loser, survivor)
+    mergeDao.repointPendingTaskMedia(loser, survivor)
+    mergeDao.repointEditSessionMedia(loser, survivor)
+    mergeDao.repointFreeSpaceItemMedia(loser, survivor)
+  }
+
   private suspend fun mergeInTransaction(tx: Tx, a: MediaId, b: MediaId): MergeOutcome {
     val first = mediaDao.graph(a.value) ?: return MergeOutcome.NotFound
     val second = mediaDao.graph(b.value) ?: return MergeOutcome.NotFound
@@ -2425,22 +2444,8 @@ class MediaCatalog(
       personalDao.upsert(mergedPersonal(plan.survivor, merged, mine, theirs, now))
     }
 
-    // 4. Album, copertine, gruppi.
-    mergeDao.copyAlbumItems(loser, survivor)
-    mergeDao.repointAlbumCovers(loser, survivor)
-    mergeDao.repointGroupCovers(loser, survivor)
-    // v6: foto d'esempio, esclusioni, suggeriti, diario della condivisione e copertine delle proposte restano attaccati al sopravvissuto.
-    mergeDao.repointAlbumRules(loser, survivor)
-    mergeDao.copyAlbumExclusions(loser, survivor)
-    mergeDao.copyAlbumSuggestions(loser, survivor)
-    mergeDao.repointAlbumShareItems(loser, survivor)
-    mergeDao.repointTripCovers(loser, survivor)
-    // v4: nessuna riga del diario, del problema o delle attivita' si perde con il perdente.
-    mergeDao.repointBackupItemMedia(loser, survivor)
-    mergeDao.repointBackupProblem(loser, survivor)
-    mergeDao.repointPendingTaskMedia(loser, survivor)
-    mergeDao.repointEditSessionMedia(loser, survivor)
-    mergeDao.repointFreeSpaceItemMedia(loser, survivor)
+    // 4. Album, copertine, gruppi, le tabelle della v6 e della v4 (una sola strada con `linkCopyAsVersion`).
+    repointMediaReferences(loser, survivor)
 
     // 5. Vettori: per ogni spazio e indice, quello calcolato dalla versione corrente.
     val survivorVectors = embeddingDao.forMedia(survivor).associateBy { slotOf(it) }

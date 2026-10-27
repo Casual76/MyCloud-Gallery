@@ -369,6 +369,8 @@ class DiagnosticsScreensTest {
     DiagSection.SEARCH -> R.string.diagnostics_section_search
     DiagSection.ALBUMS -> R.string.diagnostics_section_albums
     DiagSection.PEOPLE -> R.string.diagnostics_section_people
+    DiagSection.MEMORIES -> R.string.diagnostics_section_memories
+    DiagSection.MAP -> R.string.diagnostics_section_map
     DiagSection.STORAGE -> R.string.diagnostics_section_storage
     DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_section_traffic
     DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_section_android

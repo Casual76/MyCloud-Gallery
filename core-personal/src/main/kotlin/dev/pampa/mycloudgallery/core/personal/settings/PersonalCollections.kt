@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.personal.settings
 
 import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.core.model.AlbumSort
+import dev.pampa.mycloudgallery.core.personal.contract.MemoriesRecords
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFingerprint
@@ -292,14 +293,39 @@ class PersonalAlbums(private val store: PersonalStore) {
   }
 }
 
-/** Le date di ultima visione dei ricordi (campo pronto per la Fase 9): un ricordo visto su un dispositivo risulta visto su tutti. */
+/**
+ * I ricordi visti e scartati (Fase 9, D10; formato §5.5-bis A1): un ricordo visto o scartato su un dispositivo risulta visto o scartato su tutti
+ * i dispositivi dell'account (gli id sono deterministici, D9). Firme di P0: il valore di `seen` e' il **giorno locale** della visione
+ * (`aaaammgg`), non piu' l'ora del NAS (nessun chiamante l'aveva mai scritta). Si legge lo stato "effettivo" (E-MEM22: una scelta fatta fuori
+ * casa vale subito). Chiavi e lettura sono quelle di [MemoriesRecords]; le altre scelte (persone, periodi, Q9) le scrive
+ * `SyncedMemoriesSettings` (P6) con le stesse chiavi.
+ */
 class PersonalMemories(private val store: PersonalStore) {
 
-  /** [seenAtNas] e' l'ora del NAS in cui l'utente l'ha visto. */
-  suspend fun markSeen(memoryId: String, seenAtNas: Long) = store.set(key(memoryId), PersonalValue.Number(seenAtNas))
+  /**
+   * "Visto" il giorno [day] (`aaaammgg`). Non scrive se il giorno che c'e' e' gia' quello o uno piu' recente (aprire due volte lo stesso
+   * ricordo non fa crescere il registro; un orologio tornato indietro non riporta indietro il giorno).
+   */
+  suspend fun markSeen(memoryId: String, day: Int) {
+    val key = MemoriesRecords.seenKey(memoryId)
+    val value = MemoriesRecords.seenValue(day)
+    val now = seenDay(memoryId)
+    if (now != null && now >= day) return
+    store.set(key, value)
+  }
 
-  fun lastSeen(memoryId: String, entries: Map<PersonalKey, PersonalEntry> = store.entries.value): Long? =
-    (entries[key(memoryId)]?.value as? PersonalValue.Number)?.value
+  /** Il giorno (`aaaammgg`) dell'ultima visione di [memoryId], o null se non e' mai stato visto (o il valore non si capisce). */
+  fun seenDay(memoryId: String, entries: Map<PersonalKey, PersonalEntry> = store.effectiveEntries.value): Int? {
+    val entry = entries[MemoriesRecords.seenKey(memoryId)] ?: return null
+    return MemoriesRecords.read(mapOf(entry.key to entry)).seen[memoryId]
+  }
 
-  private fun key(memoryId: String) = PersonalKey(PersonalKind.MEMORY, memoryId, PersonalFields.MEMORY_SEEN)
+  /** "Non mostrare questo ricordo" ([dismissed] vero) o "Annulla" (falso: la lapide, D10). */
+  suspend fun dismiss(memoryId: String, dismissed: Boolean = true) {
+    store.set(MemoriesRecords.dismissedKey(memoryId), if (dismissed) PersonalValue.Flag(true) else PersonalValue.Removed)
+  }
+
+  /** Se [memoryId] e' scartato ("Non mostrare"): non torna su nessun dispositivo dell'account, nemmeno fra un anno (E-MEM9). */
+  fun isDismissed(memoryId: String, entries: Map<PersonalKey, PersonalEntry> = store.effectiveEntries.value): Boolean =
+    (entries[MemoriesRecords.dismissedKey(memoryId)]?.value as? PersonalValue.Flag)?.on == true
 }

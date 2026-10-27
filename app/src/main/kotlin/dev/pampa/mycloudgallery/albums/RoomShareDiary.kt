@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.albums
 
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Dispatchers
 import dev.pampa.mycloudgallery.core.albums.contract.HiddenChoice
 import dev.pampa.mycloudgallery.core.albums.contract.NasItemRef
 import dev.pampa.mycloudgallery.core.albums.contract.ShareDiary
@@ -73,6 +75,28 @@ class RoomShareDiary(private val database: GalleryDatabase, private val now: () 
 
   /** Quanti elementi per stato (Diagnostica: solo numeri). */
   suspend fun countsByState(): List<ShareStateCountRow> = dao.countsByState()
+
+  /**
+   * I problemi della condivisione per la Diagnostica (§2.8, solo numeri): le attese degli elementi ancora aperti (spazio, scritture ferme, file in
+   * uso), gli esiti per codice e le copie al sicuro chieste al guardiano.
+   */
+  suspend fun problemCounts(): ShareProblemCounts = withContext(Dispatchers.IO) {
+    val db = database.openHelper.readableDatabase
+    val waits = HashMap<String, Int>()
+    db.query("SELECT wait, COUNT(*) FROM album_share_item WHERE wait IS NOT NULL AND state NOT IN ('done', 'failed', 'cancelled') GROUP BY wait").use { c ->
+      while (c.moveToNext()) waits[c.getString(0)] = c.getInt(1)
+    }
+    val failures = HashMap<String, Int>()
+    db.query("SELECT failure, COUNT(*) FROM album_share_item WHERE failure IS NOT NULL GROUP BY failure").use { c ->
+      while (c.moveToNext()) failures[c.getString(0)] = c.getInt(1)
+    }
+    val safe = db.query("SELECT COUNT(*) FROM album_share_item WHERE safe_copy_requested = 1").use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+    ShareProblemCounts(
+      waits = waits.mapNotNull { (code, n) -> enumByCodeOrNull<ShareWait>(code)?.let { it to n } }.toMap(),
+      failures = failures.mapNotNull { (code, n) -> enumByCodeOrNull<ShareFailure>(code)?.let { it to n } }.toMap(),
+      safeCopies = safe,
+    )
+  }
 
   // --- Traduzione campo per campo (nessuna logica) ------------------------------------------------------------------
 
@@ -153,3 +177,6 @@ class RoomShareDiary(private val database: GalleryDatabase, private val now: () 
   private fun refOf(share: String?, path: String?): NasItemRef? =
     if (share != null && path != null) NasItemRef(share, SharePath.parse(path)) else null
 }
+
+/** I conteggi dei problemi della condivisione (Diagnostica): solo codici e numeri. */
+class ShareProblemCounts(val waits: Map<ShareWait, Int>, val failures: Map<ShareFailure, Int>, val safeCopies: Int)

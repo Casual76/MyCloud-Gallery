@@ -13,7 +13,6 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import dev.pampa.mycloudgallery.feature.nas.hub.nasGraph
-import dev.pampa.mycloudgallery.feature.nas.hub.openNas
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,11 +46,14 @@ import dev.pampa.mycloudgallery.feature.diagnostics.diagnosticsGraph
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.feature.albums.nav.albumsGraph
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionKind
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsTab
 import dev.pampa.mycloudgallery.feature.library.collections.collectionsGraph
 import dev.pampa.mycloudgallery.feature.library.collections.openCollection
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
 import dev.pampa.mycloudgallery.feature.library.library.LibraryViewModel
+import dev.pampa.mycloudgallery.feature.library.utility.utilityGraph
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingGraphRoute
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingRenewRoute
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingResumeRoute
@@ -167,6 +169,16 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   // si chiude, si torna alla schermata principale e Cerca parte dai simili. Prima lo consumava la schermata principale, che durante le Raccolte non c'e'.
   var findSimilar by remember { mutableStateOf<MediaId?>(null) }
   if (destination == RootDestination.Main) SimilarRequestEffect(nav, viewer) { findSimilar = it }
+  // Fase 7 (P13): gli album. Uno stato per l'activity (le rotte degli album e il selettore dei media lo condividono), "Aggiungi ad album" sopra la
+  // schermata che l'ha chiesto e il viewer dei Nascosti con le voci degli album che valgono li' (l'album riceve anche il nascosto: richiesta esplicita).
+  val albumsHost: AlbumsHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
+  val albumActions = remember(nav, viewer, albumsHost, gallery) {
+    albumsHost?.let { host -> AppAlbumActions(nav, viewer, host) { gallery?.viewerServices } }
+  }
+  val openViewer: (ViewerRequest) -> Unit = { request ->
+    gallery?.let { host -> viewer?.open(request, albumsHost?.servicesForRequest(host.viewerServices, request) ?: host.viewerServices) }
+  }
+  if (albumsHost != null) AlbumRequestsHost(albumsHost, nav, viewer)
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),
@@ -187,10 +199,18 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
               nasOpener = nasOpener,
               findSimilar = findSimilar,
               onFindSimilarHandled = { findSimilar = null },
+              openViewer = openViewer,
             )
           }
           // Fase 3 (P10): le pagine delle Raccolte sul telefono (griglie filtrate, Nascosti, Eliminati di recente).
-          collectionsGraph(nav = nav, onOpenViewer = { request -> gallery?.let { viewer?.open(request, it.viewerServices) } })
+          collectionsGraph(nav = nav, onOpenViewer = openViewer)
+          // Fase 7 (P8): le pagine dell'Utility (Screenshot, Video, Modificate, WhatsApp, Doppioni); gli Eliminati di recente sono nelle Raccolte.
+          utilityGraph(nav = nav, onOpenViewer = openViewer)
+          // Fase 7 (P10, P13): le pagine degli album (elenco, pagina, Suggerite, editor delle regole, viaggi) e il selettore dei media.
+          if (albumsHost != null && albumActions != null) {
+            albumsGraph(nav = nav, actions = albumActions, thumbnails = albumsHost.thumbnails)
+            mediaPickerGraph(nav = nav, host = albumsHost)
+          }
           // Fase 4B (P16): Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso (rotte a schermo intero).
           nasGraph(nav = nav, onOpenFile = nasOpener::open)
           // Fase 5A (P7): la pagina Backup, le impostazioni, la cartella del dispositivo e il riepilogo del primo backup.
@@ -212,6 +232,8 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
             openBackup = if (gallery?.backupAvailable == true) ({ nav.openBackupPage() }) else null,
             // Fase 6 (P11): "Ricerca e modelli".
             openSearch = { nav.navigate(SearchSettingsPageRoute) },
+            // Fase 7 (P9, D33): Privacy → Nascosti, sempre (anche con la sezione nascosta dalle Raccolte), dietro il suo cancello.
+            openHidden = { nav.openCollection(CollectionKind.HIDDEN) },
           )
           // Fase 6 (P11): la pagina Ricerca e modelli e quella di attivazione della lettura del testo.
           searchActions?.let { searchGraph(nav, it) }
@@ -354,6 +376,8 @@ private fun MainDestination(
   /** "Trova simili" chiesto da un viewer (TS-2, TS-3): il media di cui cercare i simili, finche' Cerca non l'ha preso. */
   findSimilar: MediaId?,
   onFindSimilarHandled: () -> Unit,
+  /** Il viewer della galleria per le Raccolte (con le voci degli album dei Nascosti, se la richiesta e' dei Nascosti). */
+  openViewer: (ViewerRequest) -> Unit,
 ) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
   val library: LibraryViewModel = hiltViewModel()
@@ -366,8 +390,9 @@ private fun MainDestination(
     nasOpener.library = state
     nasOpener.services = libraryViewer
   }
-  val nasConfigured by gallery.nasConfigured.collectAsStateWithLifecycle()
-  val nasGroups = nasCollectionGroups(nasConfigured) + utilityCollectionGroups(gallery.fiveB != null)
+  // Fase 7 (P13): "Nuovo album" dalle Raccolte (il foglio sopra la scheda).
+  var newAlbum by rememberSaveable { mutableStateOf(false) }
+  NewAlbumHost(visible = newAlbum, onDismiss = { newAlbum = false }, nav = nav)
 
   // Fase 6 (P11): la scheda Cerca e "Trova simili" dal viewer (la richiesta chiude il viewer e porta a Cerca con il chip "Simili a").
   val searchHost: SearchHostViewModel = hiltViewModel()
@@ -400,19 +425,17 @@ private fun MainDestination(
       CollectionsTab(
         contentPadding = slot.contentPadding,
         backdropOut = slot.backdropOut,
-        onOpenViewer = { request -> viewer?.open(request, gallery.viewerServices) },
+        onOpenViewer = openViewer,
         onOpenCollection = { kind -> nav.openCollection(kind) },
         onOpenSettings = { nav.navigate(SettingsGraphRoute) },
         statusHeader = slot.statusHeader,
-        // Fase 4B (P16): "Sul NAS". Sul telefono la voce apre la sua rotta, sul tablet la pagina sta nel pannello di dettaglio.
-        extraGroups = nasGroups,
+        // Fase 7 (P11, P13): le sezioni arrivano dai fornitori (`CollectionsModule`); le voci date come dati si aprono qui. Sul telefono la rotta, sul
+        // tablet la pagina nel pannello di dettaglio (le pagine degli album sono rotte anche li').
         onOpenEntry = { entry ->
-          // Fase 5B (P14): "Libera spazio" (Utilita') apre la sua pagina senza selezione.
-          if (isFreeSpaceEntry(entry.code)) gallery.fiveB?.openFreeSpace(null) else nasScreenOf(entry.code)?.let(nav::openNas)
+          openCollectionEntry(entry.code, nav, openFreeSpace = { gallery.fiveB?.openFreeSpace(null) }, onNewAlbum = { newAlbum = true })
         },
-        entryDetail = { entry ->
-          if (isFreeSpaceEntry(entry.code)) FreeSpaceEntryDetail(slot.contentPadding) else NasEntryDetail(entry, nav, slot.contentPadding, nasOpener)
-        },
+        entryDetail = { entry -> CollectionEntryDetail(entry, nav, slot.contentPadding, nasOpener, openViewer) },
+        entryHasDetail = { entry -> hasEntryDetail(entry.code) },
       )
     },
     search = { slot -> SearchTab(slot, searchActions, searchHost, findSimilar, onFindSimilarHandled) },

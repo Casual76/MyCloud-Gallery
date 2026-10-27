@@ -1,0 +1,215 @@
+package dev.pampa.mycloudgallery.navigation
+
+import android.content.res.Resources
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Sync
+import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.R
+import dev.pampa.mycloudgallery.core.albums.contract.Albums
+import dev.pampa.mycloudgallery.core.albums.contract.Trips
+import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.designsystem.state.PhoneTrash
+import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalStore
+import dev.pampa.mycloudgallery.core.personal.settings.SyncedCollectionsSettings
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPeople
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumScreensClock
+import dev.pampa.mycloudgallery.feature.albums.sections.AlbumsSectionSources
+import dev.pampa.mycloudgallery.feature.albums.sections.SectionData
+import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionItemsSource
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionSections
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionsLayoutStore
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
+import dev.pampa.mycloudgallery.feature.library.collections.MemoryCollectionsLayoutStore
+import dev.pampa.mycloudgallery.feature.library.utility.utilityCountsFlow
+import dev.pampa.mycloudgallery.feature.library.utility.utilityEntryGroup
+import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import dev.pampa.mycloudgallery.feature.nas.R as NasR
+
+// LE SEZIONI DELLE RACCOLTE COME FORNITORI (Fase 7, P13; D33, §2.7; P11: "un fornitore per sezione", "il ponte extraGroups tolto"). Ogni sezione e' un
+// `CollectionsSectionProvider` legato con `@IntoSet` (`CollectionsSectionsModule`): Album, Album smart e Viaggi dai dati di feature-albums
+// (`AlbumsSectionSources`, P10, con `toGroup()`), Cartelle NAS (prima "Sul NAS", passato come `extraGroups`), Utility con "Libera spazio" (P8 e Fase 5) e
+// "Da tenere al sicuro" senza voci: gli Eliminati di recente stanno ora nell'Utility (D24, D26), una volta sola. I codici delle voci sono stabili e non
+// portano mai un dato dell'utente; li riconoscono `onOpenEntry` ed `entryDetail` in `AppNavHost`.
+
+/** La trasformazione campo per campo dei dati di feature-albums nel gruppo delle Raccolte (i due moduli non si conoscono, P10-7). */
+internal fun SectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
+  title = title,
+  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing) },
+  code = code,
+  hideable = hideable,
+  hint = hint,
+)
+
+/** Un fornitore da un codice e da un flusso. */
+internal class FlowSection(override val code: String, override val group: StateFlow<CollectionEntryGroup?>) : CollectionsSectionProvider
+
+/**
+ * Le sezioni di `:app`. [nasConfigured]: il NAS e' collegato (senza, Cartelle NAS non c'e'); [operations]: le operazioni sui file in corso (il numero
+ * sulla voce "Operazioni in corso"); [freeSpace]: c'e' "Libera spazio" (solo con il backup); [canTrash]: c'e' un cestino (di sistema o del NAS).
+ */
+class AppCollectionsSections(
+  private val resources: Resources,
+  albums: Albums,
+  trips: Trips,
+  people: AlbumPeople,
+  clock: AlbumScreensClock,
+  items: CollectionItemsSource,
+  nasConfigured: Flow<Boolean>,
+  operations: Flow<Int>,
+  private val freeSpace: Boolean,
+  private val canTrash: Boolean,
+  /** D-3: il cestino di questo telefono (su Samsung quello di Galleria), per la frase della voce "Eliminati di recente". */
+  private val phoneTrash: PhoneTrash,
+  scope: CoroutineScope,
+) {
+  private val sources = AlbumsSectionSources(resources, albums, trips, people, clock, scope)
+
+  val albums: CollectionsSectionProvider = FlowSection(CollectionSections.ALBUMS, sources.albums.mapState(scope) { it?.toGroup() })
+
+  val smart: CollectionsSectionProvider = FlowSection(CollectionSections.SMART, sources.smart.mapState(scope) { it?.toGroup() })
+
+  val trips: CollectionsSectionProvider = FlowSection(CollectionSections.TRIPS, sources.trips.mapState(scope) { it?.toGroup() })
+
+  /** Cartelle NAS (D33: "oggi Sul NAS"): le quattro pagine della 4B, solo con il NAS collegato. */
+  val nas: CollectionsSectionProvider = FlowSection(
+    CollectionSections.NAS,
+    combine(nasConfigured, operations) { configured, active -> if (configured) nasGroup(active) else null }.stateIn(scope, SharingStarted.Eagerly, null),
+  )
+
+  /** Utility (D24): Screenshot, Video, Modificate, WhatsApp, Doppioni, Eliminati di recente, e "Libera spazio" della Fase 5 nello stesso gruppo. */
+  val utility: CollectionsSectionProvider = FlowSection(
+    CollectionSections.UTILITY,
+    items.utilityCountsFlow().map { counts -> utilityEntryGroup(resources, counts, canTrash, freeSpaceEntries(), phoneTrash) }.stateIn(scope, SharingStarted.Eagerly, null),
+  )
+
+  /** "Da tenere al sicuro" senza voci: gli Eliminati di recente si aprono dall'Utility (D26), una volta sola nelle Raccolte. */
+  val safe: CollectionsSectionProvider = FlowSection(CollectionSections.SAFE, MutableStateFlow(CollectionEntryGroup("", emptyList(), code = CollectionSections.SAFE)))
+
+  val all: List<CollectionsSectionProvider> get() = listOf(albums, smart, trips, nas, utility, safe)
+
+  private fun freeSpaceEntries(): List<CollectionEntry> = if (!freeSpace) emptyList() else listOf(
+    CollectionEntry(
+      BackupScreen.FREE_SPACE.route, resources.getString(R.string.fiveb_free_space_title), resources.getString(R.string.fiveb_free_space_subtitle),
+      Icons.Rounded.CleaningServices, FluidTone.Primary,
+    ),
+  )
+
+  private fun nasGroup(active: Int): CollectionEntryGroup = CollectionEntryGroup(
+    title = resources.getString(NasR.string.nas_hub_group),
+    entries = listOf(
+      CollectionEntry(NasScreen.FOLDERS.route, resources.getString(NasR.string.nas_hub_folders_title), resources.getString(NasR.string.nas_hub_folders_subtitle), Icons.Rounded.Folder, FluidTone.Primary),
+      CollectionEntry(NasScreen.SPACE.route, resources.getString(NasR.string.nas_hub_space_title), resources.getString(NasR.string.nas_hub_space_subtitle), Icons.Rounded.Storage, FluidTone.Info),
+      CollectionEntry(NasScreen.TRASH.route, resources.getString(NasR.string.nas_hub_trash_title), resources.getString(NasR.string.nas_hub_trash_subtitle), Icons.Rounded.Delete, FluidTone.Danger),
+      CollectionEntry(
+        NasScreen.OPERATIONS.route,
+        resources.getString(NasR.string.nas_hub_ops_title),
+        if (active > 0) resources.getQuantityString(NasR.plurals.nas_hub_ops_subtitle_active, active, GalleryNumbers.format(active)) else resources.getString(NasR.string.nas_hub_ops_subtitle_none),
+        Icons.Rounded.Sync,
+        FluidTone.Success,
+        badge = active,
+      ),
+    ),
+    code = CollectionSections.NAS,
+  )
+
+  private fun <T, R> StateFlow<T>.mapState(scope: CoroutineScope, transform: (T) -> R): StateFlow<R> =
+    map(transform).stateIn(scope, SharingStarted.Eagerly, transform(value))
+
+  internal companion object {
+    /** Nessun NAS: Cartelle NAS non c'e'. */
+    val NO_OPERATIONS: Flow<Int> = flowOf(0)
+  }
+}
+
+/**
+ * L'ordine e la visibilita' delle sezioni (P11) sopra `SyncedCollectionsSettings` di core-personal (`collections_order`, `collections_hidden:<codice>`,
+ * sincronizzati fra i dispositivi dell'account), dal registro dei dati personali che c'e' solo con il NAS agganciato ([stores]). **Prima** del registro le
+ * scelte valgono subito in memoria e, appena il registro c'e', vi entrano (come `PersonalSettingsHub` per `search_order`): niente si perde e niente
+ * aspetta la sincronizzazione.
+ */
+@OptIn(ExperimentalCoroutinesApi::class)
+class AppCollectionsLayoutStore(stores: StateFlow<PersonalStore?>, private val scope: CoroutineScope) : CollectionsLayoutStore {
+  private val synced: StateFlow<SyncedCollectionsSettings?> = stores
+    .map { store -> store?.let { SyncedCollectionsSettings(it, scope) } }
+    .stateIn(scope, SharingStarted.Eagerly, null)
+  private val local = MemoryCollectionsLayoutStore()
+  private val pending = Mutex()
+  private var pendingOrder: List<String>? = null
+  private val pendingHidden = LinkedHashMap<String, Boolean>()
+
+  override val order: StateFlow<List<String>> = synced.flatMapLatest { s -> s?.order ?: local.order }
+    .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
+  override val hidden: StateFlow<Set<String>> = synced.flatMapLatest { s -> s?.hidden ?: local.hidden }
+    .stateIn(scope, SharingStarted.Eagerly, emptySet())
+
+  init {
+    // Le scelte fatte prima del registro vi entrano appena c'e' (una volta: poi si scrive direttamente li').
+    scope.launch { synced.filterNotNull().collect { deliver(it) } }
+  }
+
+  override suspend fun setOrder(codes: List<String>) {
+    synced.value?.let { return it.setOrder(codes) }
+    pending.withLock {
+      local.setOrder(codes)
+      pendingOrder = local.order.value
+    }
+    synced.value?.let { deliver(it) }
+  }
+
+  override suspend fun setHidden(code: String, hidden: Boolean) {
+    synced.value?.let { return it.setHidden(code, hidden) }
+    pending.withLock {
+      local.setHidden(code, hidden)
+      pendingHidden[code] = hidden
+    }
+    synced.value?.let { deliver(it) }
+  }
+
+  /** Consegna le scelte in attesa; quelle consegnate escono dall'attesa, le altre (il registro non ha scritto: disco pieno) restano per il giro dopo. */
+  private suspend fun deliver(settings: SyncedCollectionsSettings) {
+    val (order, hidden) = pending.withLock { pendingOrder to pendingHidden.toMap() }
+    try {
+      if (order != null) {
+        settings.setOrder(order)
+        pending.withLock { if (pendingOrder === order) pendingOrder = null }
+      }
+      for ((code, value) in hidden) {
+        settings.setHidden(code, value)
+        pending.withLock { if (pendingHidden[code] == value) pendingHidden.remove(code) }
+      }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "scelte delle Raccolte non ancora nel registro: ${e.javaClass.simpleName}" }
+    }
+  }
+
+  private companion object {
+    const val TAG = "CollectionsLayout"
+  }
+}

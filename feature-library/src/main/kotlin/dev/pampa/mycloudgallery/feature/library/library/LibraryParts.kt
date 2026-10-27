@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.CleaningServices
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Favorite
@@ -467,6 +468,21 @@ internal fun selectionActions(
         enabled = any,
       ),
     )
+    // Fase 7 (P10, P13, D35): "Aggiungi ad album" per i media scelti; la scelta dell'album (e, per un condiviso, la conferma col conteggio) la
+    // mostra `:app` sopra la Libreria. Un album personale non sposta niente; i nascosti non sono nella Libreria.
+    if (state.commands.canAddToAlbum) {
+      add(
+        GalleryBarAction(
+          Icons.Rounded.AddPhotoAlternate,
+          stringResource(R.string.library_action_add_to_album),
+          {
+            state.commands.addToAlbum(selected.ids)
+            grid.stopSelecting()
+          },
+          enabled = any,
+        ),
+      )
+    }
     // Fase 5B (P14, D21): "Libera spazio" per i media scelti, solo quelli con una copia sul telefono; la pagina verifica e conferma.
     if (state.commands.canFreeSpace) {
       add(

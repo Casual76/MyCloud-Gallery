@@ -312,8 +312,10 @@ class ReplicaSharedAlbums(
       is SharedAlbumNotice.Closed -> "closed:${notice.album.value}"
       is SharedAlbumNotice.NotAddedLevelChanged -> "notadded:${notice.album.value}:${notice.count}"
       is SharedAlbumNotice.Inherited -> "inherited:${notice.album.value}"
-      is SharedAlbumNotice.FolderChanged -> "folder:${notice.album.value}"
+      // P13: con la cartella nuova nella chiave (come impronta): un secondo cambio dal PC si dice di nuovo.
+      is SharedAlbumNotice.FolderChanged -> "folder:${notice.album.value}:${notice.newFolder?.let { Integer.toHexString(it.hashCode()) } ?: "-"}"
       is SharedAlbumNotice.FilesAddedFromPc -> "pcfiles:${notice.album.value}:${notice.count}"
+      is SharedAlbumNotice.RevokedItems -> "revoked:${notice.album.value}:${notice.count}"
     }
     choices.dismiss(key)
     refresh()

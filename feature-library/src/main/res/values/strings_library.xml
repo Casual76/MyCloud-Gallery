@@ -72,6 +72,12 @@
   <string name="library_action_hide">Nascondi</string>
   <string name="library_action_delete">Elimina dal telefono</string>
   <string name="library_action_free_space">Libera spazio</string>
+  <!-- Fase 7 (P10, P13): "Aggiungi ad album" sulla selezione della Libreria (D35). -->
+  <string name="library_action_add_to_album">Aggiungi ad album</string>
+  <!-- Fase 7 (P13): il selettore dei media degli album ("Aggiungi foto", foto d'esempio di un album smart). -->
+  <string name="picker_choose">Scegli</string>
+  <string name="picker_empty_title">Nessuna foto da scegliere</string>
+  <string name="picker_empty_message">Quando la Libreria avrà delle foto, le potrai scegliere da qui.</string>
   <string name="library_delete_location_phone">Telefono</string>
   <!-- D-B1: l'avviso solo per i media che non sono al sicuro; con una selezione mista, con i numeri. -->
   <plurals name="library_delete_phone_safe">

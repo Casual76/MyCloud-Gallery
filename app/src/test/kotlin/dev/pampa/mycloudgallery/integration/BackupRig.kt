@@ -87,6 +87,11 @@ internal class BackupRig(
   fiveB: ((FakeMediaStore) -> FiveBInputs)? = null,
   /** Lo stato del dispositivo che la galleria vede: di norma quello del dispositivo; D-7 lo fa passare per "non configurato" all'avvio. */
   setup: FamilySetupRepository = device.graph.setup,
+  /**
+   * Fase 7 (P13): il database della galleria su file, con questo nome (unico per dispositivo e per prova), perche' sopravviva alla morte del
+   * processo (il banco della condivisione); di norma null, in memoria.
+   */
+  databaseName: String? = null,
 ) {
 
   val access = FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
@@ -95,7 +100,7 @@ internal class BackupRig(
     context = device.context,
     scope = device.scope,
     parts = GalleryParts(
-      databaseName = null,
+      databaseName = databaseName,
       replicaDir = File(device.context.noBackupFilesDir, "replica"),
       preferencesFile = File(device.context.noBackupFilesDir, "library.preferences_pb"),
       access = access,

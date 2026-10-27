@@ -67,6 +67,23 @@ class AlbumsGraph internal constructor(
   /** L'ultima rilevazione dei viaggi (Diagnostica). */
   val lastTrips = MutableStateFlow<TripReport?>(null)
 
+  /**
+   * P13 (P10-10): "Aggiungi ad album" dalla condivisione in arrivo. [incoming] e' la porta che la ricezione riceve (`ReceivePorts`); [afterCatalog] mantiene
+   * le sue promesse dopo un cambio del catalogo, all'avvio e a ogni giro (i file ricevuti sono diventati media). Li lega `AlbumsModule`.
+   */
+  @Volatile var incoming: dev.pampa.mycloudgallery.feature.integrations.receive.IncomingAlbums? = null
+
+  @Volatile var afterCatalog: suspend () -> Unit = {}
+
+  /** E-SH16 (P13): le cartelle nuove degli album di cui sono il creatore o l'erede, dall'ultima scansione del catalogo. */
+  val folderMoves = MutableStateFlow<Map<AlbumId, FolderMove>>(emptyMap())
+
+  /** E-SH20 (P13): quanti elementi di un mio dispositivo revocato si possono ripristinare, per album. */
+  val revokedCounts = MutableStateFlow<Map<AlbumId, Int>>(emptyMap())
+
+  /** Gli avvisi chiusi dall'utente ("Non mostrare piu'"), riletti a ogni scansione e dopo una chiusura. */
+  val dismissedNotices = MutableStateFlow<Set<String>>(emptySet())
+
   /** Errori isolati dei giri degli album (non fermano niente, si contano). */
   @Volatile var roundErrors: Int = 0
     private set
@@ -106,6 +123,8 @@ class AlbumsGraph internal constructor(
       guarded { live.albums.reconcileAll() }
       guarded { live.shared.replica.recompute() }
       guarded { resume(live, START_BUDGET) }
+      guarded { afterCatalog() }
+      guarded { scanNotices(live) }
       if (guarded { live.shared.diary.openOps().isNotEmpty() } == true) shareWork()
     }
     live.scope.launch { watchCatalog(live) }
@@ -139,6 +158,20 @@ class AlbumsGraph internal constructor(
       for (album in smartAlbumsWith(live, ids)) live.recompute.onRulesChanged(album, SMART_BUDGET)
       live.recompute.onCatalogChanged(ids, emptyList(), SMART_BUDGET)
     }
+    guarded { afterCatalog() }
+    guarded { scanNotices(live) }
+  }
+
+  /** E-SH16, E-SH20: le cartelle nuove e gli elementi da ripristinare, per gli avvisi delle pagine degli album (solo lettura del catalogo). */
+  internal suspend fun scanNotices(live: AlbumsLive) {
+    val share = live.shared.ports.family.commonShare()
+    folderMoves.value = if (share == null) {
+      emptyMap()
+    } else {
+      AlbumFolderWatch.scan(live.shared.replica.views.value.values, live.shared.ports.family.me()) { media -> live.shared.folders.foldersOf(share, media) }
+    }
+    revokedCounts.value = live.shared.revoked.candidates()
+    dismissedNotices.value = live.shared.choices.dismissed()
   }
 
   /** Gli album smart che hanno righe del motore (elementi automatici o suggeriti) su [ids]. */
@@ -228,6 +261,8 @@ class AlbumsGraph internal constructor(
     flushAll(live, FlushReason.SYNC_ROUND)
     guarded { keepClosedCopies(live) }
     guarded { resume(live, SHARE_SLICE) }
+    guarded { afterCatalog() }
+    guarded { scanNotices(live) }
     // Un'operazione rimasta aperta (processo morto, NAS spento, regole): il suo lavoro (se ce n'e' gia' uno, resta quello).
     if (guarded { live.shared.diary.openOps().isNotEmpty() } == true) shareWork()
     return report?.incomplete != true

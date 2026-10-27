@@ -63,6 +63,9 @@ internal sealed interface ActionNotice {
    * ancora: Nascosti protegge solo dentro l'app. Non e' un errore, e' una cosa che l'utente deve sapere.
    */
   data class FamilyStillSees(val count: Int) : ActionNotice
+
+  /** Fase 7 (P13): nel selettore dei media (le foto d'esempio di un album smart, "Aggiungi foto") se ne possono scegliere al piu' [limit]. */
+  data class PickTooMany(val limit: Int) : ActionNotice
 }
 
 /**
@@ -149,6 +152,10 @@ internal fun ActionNoticeCard(notice: ActionNotice, backdrop: GlassBackdropState
     is ActionNotice.FamilyStillSees -> {
       title = pluralStringResource(R.plurals.notice_family_sees_title, notice.count, GalleryNumbers.format(notice.count))
       message = stringResource(R.string.notice_family_sees_message)
+    }
+    is ActionNotice.PickTooMany -> {
+      title = stringResource(R.string.notice_pick_too_many_title, GalleryNumbers.format(notice.limit))
+      message = stringResource(R.string.notice_too_many_message)
     }
   }
   GalleryGridNotice(

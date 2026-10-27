@@ -65,6 +65,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
@@ -157,7 +158,15 @@ class AppSharedAlbums(private val graph: AlbumsGraph, scope: CoroutineScope) : S
 
   override val visible: StateFlow<List<Album.Shared>> = graph.follow(scope, emptyList(), { it.shared.albums.visible }, NoSharedAlbums.visible)
 
-  override val notices: StateFlow<List<SharedAlbumNotice>> = graph.follow(scope, emptyList(), { it.shared.albums.notices }, NoSharedAlbums.notices)
+  private val baseNotices: StateFlow<List<SharedAlbumNotice>> = graph.follow(scope, emptyList(), { it.shared.albums.notices }, NoSharedAlbums.notices)
+
+  /** Gli avvisi della replica piu' quelli di :app (E-SH16 con la cartella nuova, E-SH20), sugli album che vedo. */
+  override val notices: StateFlow<List<SharedAlbumNotice>> = combine(baseNotices, visible, graph.folderMoves, graph.revokedCounts, graph.dismissedNotices) {
+      base, shown, moves, revoked, dismissed ->
+    val titles = shown.associate { it.id to it.title }
+    val extra = AlbumFolderWatch.notices(moves, revoked, titles, dismissed)
+    base.filterNot { it is SharedAlbumNotice.FolderChanged && it.album in moves } + extra
+  }.stateIn(scope, SharingStarted.Eagerly, emptyList())
 
   override val left: StateFlow<List<Album.Shared>> = graph.follow(scope, emptyList(), { it.shared.albums.left }, NoSharedAlbums.left)
 
@@ -191,7 +200,24 @@ class AppSharedAlbums(private val graph: AlbumsGraph, scope: CoroutineScope) : S
 
   override fun allowed(id: AlbumId, op: AlbumOp, item: MediaId?): Boolean = shared().allowed(id, op, item)
 
-  override suspend fun dismissNotice(notice: SharedAlbumNotice) = shared().dismissNotice(notice)
+  override suspend fun dismissNotice(notice: SharedAlbumNotice) {
+    shared().dismissNotice(notice)
+    graph.live.value?.let { live -> graph.dismissedNotices.value = live.shared.choices.dismissed() }
+  }
+
+  override suspend fun useNewFolder(id: AlbumId): EditOutcome {
+    val live = graph.live.value ?: return EditOutcome.NotFound
+    val out = AlbumFolderWatch.useNewFolder(live, graph.folderMoves.value[id], id)
+    if (out == EditOutcome.Done) graph.scanNotices(live)
+    return out
+  }
+
+  override suspend fun restoreRevoked(id: AlbumId): EditOutcome {
+    val live = graph.live.value ?: return EditOutcome.NotFound
+    val out = AlbumFolderWatch.restoreRevoked(live, id)
+    graph.scanNotices(live)
+    return out
+  }
 }
 
 /** [ShareRunner] vero (`ShareOrchestrator`, P4): dopo una conferma il primo passo parte subito e il lavoro della condivisione e' chiesto. */

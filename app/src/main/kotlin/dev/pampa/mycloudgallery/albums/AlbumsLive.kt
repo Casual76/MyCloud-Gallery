@@ -68,6 +68,8 @@ class AlbumsLive internal constructor(
   val interpreter: RuleSmartNameInterpreter,
   val trips: CatalogTrips,
   val shared: SharedLive,
+  /** La ricerca per contenuto c'e' (le regole "descrizione" ed "esempi" degli smart contano; senza, `SMART_NO_SEARCH`). */
+  val contentSearch: Boolean = false,
 )
 
 /** La parte degli album condivisi: replica, pubblicatore, condivisione e le proposte che non spostano niente (D39, D31, E-SH20). */
@@ -85,6 +87,8 @@ class SharedLive internal constructor(
   val adoptions: FolderAdoptions,
   val bringBack: BringBackCandidates,
   val folders: CatalogCommonFolders,
+  /** Gli album lasciati e gli avvisi chiusi ("Non mostrare piu'"): anche per gli avvisi di :app (E-SH16, E-SH20). */
+  val choices: PersonalSharedAlbumChoices,
 )
 
 /** Cio' che serve per montare [AlbumsLive]: tutto gia' pronto nel resto dell'app (nessuna rete, nessun NAS qui). */
@@ -171,6 +175,7 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
     adoptions = FolderAdoptions(ports) { ids -> i.visible.visible(ids) },
     bringBack = BringBackCandidates(ports),
     folders = folders,
+    choices = choices,
   )
 
   // --- Album personali (P3) ----------------------------------------------------------------------------------------------------------
@@ -196,7 +201,7 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
 
   return AlbumsLive(
     scope, i.catalog, i.personal, albums, PersonalAlbumCopies(i.personal, i.catalog), PersonalKeptCopyStore(i.personal), smartRows, smart, recompute,
-    interpreter, trips, shared,
+    interpreter, trips, shared, contentSearch = i.search != null,
   )
 }
 

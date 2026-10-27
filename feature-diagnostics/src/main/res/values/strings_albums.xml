@@ -7,4 +7,30 @@
   <string name="diagnostics_hint_albums">Album condivisi, condivisioni in corso, album smart e viaggi su questo dispositivo: stato, avanzamento e problemi da risolvere.</string>
   <string name="diag_albums_state_title">Stato degli album</string>
   <string name="diag_albums_state_guide">Quanti album ci sono, quante condivisioni sono in corso o in pausa e se gli album smart si stanno aggiornando. I titoli degli album e i luoghi non escono mai dal telefono.</string>
+
+  <!-- P13: i codici del §2.8 (stessi id di AlbumDiag di core-albums). -->
+  <string name="diag_album_contrib_rejected_title">Contributi d’album scartati</string>
+  <string name="diag_album_contrib_rejected_guide">Alcuni file degli album condivisi sul NAS non sono stati accettati: firma, dispositivo o contenuto non validi. L’app li ignora e tiene quelli buoni; se il numero cresce, controlla dal PC chi scrive nella cartella degli album dell’area comune.</string>
+  <string name="diag_album_entry_denied_title">Modifiche agli album non permesse</string>
+  <string name="diag_album_entry_denied_guide">Alcune modifiche agli album condivisi non sono state applicate perché chi le ha fatte non aveva il permesso a quel livello. Non serve fare niente.</string>
+  <string name="diag_album_item_unattested_title">Elementi degli album non ancora visti</string>
+  <string name="diag_album_item_unattested_guide">Elementi degli album condivisi il cui file nell’area comune non è ancora nella Libreria di questo dispositivo: compaiono dopo la prossima lettura del NAS.</string>
+  <string name="diag_share_paused_space_title">Condivisione in pausa: spazio</string>
+  <string name="diag_share_paused_space_guide">Sul NAS non c’è abbastanza spazio (o la quota dell’area è piena) per spostare le foto nell’area comune. Libera spazio sul NAS: la condivisione riprende da sola.</string>
+  <string name="diag_share_paused_frozen_title">Condivisione in pausa: scritture ferme</string>
+  <string name="diag_share_paused_frozen_guide">Le scritture sul NAS sono ferme (congelamento, emergenza o ora del NAS non affidabile). Quando ripartono, la condivisione riprende da dove era.</string>
+  <string name="diag_share_waiting_locked_title">Condivisione in attesa: file in uso</string>
+  <string name="diag_share_waiting_locked_guide">Un file da spostare è aperto da un altro programma. L’app riprova da sola più tardi.</string>
+  <string name="diag_share_source_changed_title">File cambiati durante la condivisione</string>
+  <string name="diag_share_source_changed_guide">Alcuni file sono stati cambiati dal PC mentre si spostavano: l’app non li ha toccati. Rifai la condivisione di quegli elementi se servono nell’album.</string>
+  <string name="diag_share_safe_copy_queued_title">Copie al sicuro chieste</string>
+  <string name="diag_share_safe_copy_queued_guide">Dopo una condivisione l’app ha chiesto al backup una copia privata delle foto del telefono spostate nell’area comune.</string>
+  <string name="diag_smart_too_broad_title">Album smart con regole larghe</string>
+  <string name="diag_smart_too_broad_guide">Le regole di un album smart prendono molte foto: l’editor lo dice e propone di restringerle.</string>
+  <string name="diag_smart_no_search_title">Album smart senza ricerca per contenuto</string>
+  <string name="diag_smart_no_search_guide">Una regola descrive il contenuto delle foto ma la ricerca per contenuto non è attiva su questo dispositivo: la regola non conta finché non lo è.</string>
+  <string name="diag_trip_no_gps_title">Viaggi senza posizione</string>
+  <string name="diag_trip_no_gps_guide">Le foto non hanno abbastanza posizioni per capire dove abiti: l’app propone solo eventi, non viaggi.</string>
+  <string name="diag_album_projection_pending_title">Elementi degli album in attesa</string>
+  <string name="diag_album_projection_pending_guide">Elementi dei tuoi album il cui media non è ancora nella Libreria di questo dispositivo: compaiono quando arriva.</string>
 </resources>

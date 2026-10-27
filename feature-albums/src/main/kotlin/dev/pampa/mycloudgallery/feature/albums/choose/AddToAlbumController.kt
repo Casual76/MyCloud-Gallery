@@ -98,6 +98,9 @@ class AddToAlbumController(
         val ok = visible?.visible(ids).orEmpty()
         ids.filter { it in ok }
       }
+      // P13: l'album scelto prima (la condivisione in arrivo): si aggiunge li', con le stesse regole di un tocco sull'elenco (un condiviso apre la
+      // conferma col conteggio, D12). Un album che non c'e' piu' o che non riceve: resta l'elenco, e l'utente sceglie.
+      request.album?.let { preset -> albums.all.value.albums.firstOrNull { it.id == preset }?.takeIf(::canAdd)?.let(::add) }
     }
   }
 

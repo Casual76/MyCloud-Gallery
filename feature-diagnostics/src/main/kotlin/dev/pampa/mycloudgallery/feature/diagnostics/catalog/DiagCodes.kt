@@ -298,6 +298,21 @@ object DiagCodes {
   // aggiunge P13.
   @JvmField val ALBUMS_STATE = DiagCode("ALBUMS_STATE")
 
+  // P13: i codici del §2.8 (stessi id e stessi edge case di `AlbumDiag` di core-albums, scritti come letterali perche' questo modulo non vede
+  // core-albums). `Phase7DiagCatalogTest` di :app verifica che ogni codice del contratto sia qui, con lo stesso id e gli stessi edge case.
+  @JvmField val ALBUM_CONTRIB_REJECTED = DiagCode("ALBUM_CONTRIB_REJECTED", setOf("E-SH14", "C24"))
+  @JvmField val ALBUM_ENTRY_DENIED = DiagCode("ALBUM_ENTRY_DENIED", setOf("E-SH13", "C25"))
+  @JvmField val ALBUM_ITEM_UNATTESTED = DiagCode("ALBUM_ITEM_UNATTESTED", setOf("E-SH15", "E-SH17"))
+  @JvmField val SHARE_PAUSED_SPACE = DiagCode("SHARE_PAUSED_SPACE", setOf("E-SH8"))
+  @JvmField val SHARE_PAUSED_FROZEN = DiagCode("SHARE_PAUSED_FROZEN", setOf("E-SH19"))
+  @JvmField val SHARE_WAITING_LOCKED = DiagCode("SHARE_WAITING_LOCKED")
+  @JvmField val SHARE_SOURCE_CHANGED = DiagCode("SHARE_SOURCE_CHANGED", setOf("E-SH18"))
+  @JvmField val SHARE_SAFE_COPY_QUEUED = DiagCode("SHARE_SAFE_COPY_QUEUED", setOf("E-B13", "E-B14"))
+  @JvmField val SMART_TOO_BROAD = DiagCode("SMART_TOO_BROAD", setOf("E-AL6"))
+  @JvmField val SMART_NO_SEARCH = DiagCode("SMART_NO_SEARCH", setOf("E-AL9"))
+  @JvmField val TRIP_NO_GPS = DiagCode("TRIP_NO_GPS", setOf("E-AL16"))
+  @JvmField val ALBUM_PROJECTION_PENDING = DiagCode("ALBUM_PROJECTION_PENDING")
+
   // P11: i codici del §2.6 (stessi id e stessi edge case di `ModelDiag`, `AiDiag`, `AiIndexDiag` e `SearchDiag`, scritti come letterali
   // perche' questo modulo non vede core-models, core-ai, core-index ne' core-search). `Phase6DiagCatalogTest` di :app verifica che ogni
   // codice dei contratti sia qui, con lo stesso id e gli stessi edge case.

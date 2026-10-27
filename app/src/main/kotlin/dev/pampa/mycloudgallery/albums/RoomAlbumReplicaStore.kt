@@ -90,6 +90,12 @@ class RoomAlbumReplicaStore(private val database: GalleryDatabase) : AlbumReplic
     HeadMark(version, hash)
   }
 
+  /**
+   * Quante teste di contributo sono rifiutate **adesso** (DG-3): il segno sta nel database, quindi il conto sopravvive al giro in cui il rifiuto e' nato, alla
+   * morte del processo e al prossimo giro (che non ricarica una testa gia' rifiutata). Si azzera da solo quando il dispositivo pubblica una testa buona.
+   */
+  suspend fun rejectedHeads(): Int = mutex.withLock { withContext(Dispatchers.IO) { AlbumRowCodec.countKey(database, REJECTED) } }
+
   override suspend fun setRejectedHead(album: AlbumId, device: String, mark: HeadMark?) = mutex.withLock {
     require(!device.startsWith("~")) { "Dispositivo non valido." }
     if (mark == null) {

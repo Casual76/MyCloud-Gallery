@@ -45,6 +45,8 @@ object AlbumsWiring {
     } else {
       combine(gallery.started, nas.organizer.partsState) { started, parts -> started && parts != null }.stateIn(graph.scope, SharingStarted.Eagerly, false)
     }
+    // I motori degli smart e dei viaggi contano i loro errori e dicono l'esito di una ricerca dei viaggi al grafo, che nasce dopo di loro.
+    val graphRef = arrayOfNulls<AlbumsGraph>(1)
     val build: suspend (kotlinx.coroutines.CoroutineScope) -> AlbumsLive? = build@{ scope ->
       val organizer = nas?.organizer ?: return@build null
       val parts = organizer.parts ?: return@build null
@@ -83,10 +85,12 @@ object AlbumsWiring {
           noticesFile = File(noBackup, "$DIR/notices-seen"),
           seenFile = File(noBackup, "$DIR/smart-seen"),
           ownBackupFolder = { ownBackupFolder(gallery) },
+          onError = { error -> graphRef[0]?.noteError(error) },
+          onTripReport = { report -> graphRef[0]?.noteTrips(report) },
         ),
       )
     }
-    return AlbumsGraph(graph.scope, build, ready, shareWork = { AlbumWorkScheduling.shareNow(context) })
+    return AlbumsGraph(graph.scope, build, ready, shareWork = { AlbumWorkScheduling.shareNow(context) }).also { graphRef[0] = it }
   }
 
   /**

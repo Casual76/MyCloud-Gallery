@@ -24,52 +24,83 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
 
   override val section: DiagSection = DiagSection.ALBUMS
 
-  override suspend fun collect(): List<DiagItem> {
+  override suspend fun collect(): List<DiagItem> = render(facts())
+
+  /** Quello che il grafo sa adesso, in soli numeri e segni: la sezione si compone da qui (e si prova senza montare gli album). */
+  internal suspend fun facts(): AlbumsFacts {
     val live = graph.live.value
-    val items = ArrayList<DiagItem>()
-    val list = live?.let { safely { it.albums.all.value } }
-    val albums = list?.albums.orEmpty()
+    val albums = live?.let { safely { it.albums.all.value } }?.albums.orEmpty()
     val problems = live?.let { safely { it.shared.diary.problemCounts() } }
-    val openOps = live?.let { safely { it.shared.diary.openOps().size } } ?: 0
-    val pending = live?.let { safely { it.albums.projection.pending.value } } ?: 0
     val sync = graph.lastSync.value
+    val trips = live?.trips?.proposals?.value
+    val smart = albums.filterIsInstance<Album.Smart>()
+    val library = if (live == null) 0 else safely { live.catalog.albums.visibleCount() } ?: 0
+    return AlbumsFacts(
+      mounted = live != null,
+      manual = albums.count { it is Album.Manual },
+      smart = smart.size,
+      shared = albums.count { it is Album.Shared },
+      openShares = live?.let { safely { it.shared.diary.openOps().size } } ?: 0,
+      contributions = sync?.contributionsRead ?: 0,
+      syncIncomplete = sync?.incomplete == true,
+      roundErrors = graph.roundErrors,
+      searchReady = live?.content?.ready == true,
+      tripsSearched = trips?.searched == true,
+      tripsHomeKnown = trips?.homeKnown == true,
+      // DG-3: i rifiuti non spariscono al giro dopo. Il segno della testa rifiutata sta nel database (resta finche' il dispositivo non ne pubblica una
+      // buona); il resoconto dell'ultimo giro conta anche le teste in attesa dell'ora (senza un segno). Vale il maggiore.
+      rejected = maxOf(sync?.contributionsRejected ?: 0, live?.let { safely { it.shared.replicaStore.rejectedHeads() } } ?: 0),
+      denied = sync?.entriesDenied ?: 0,
+      unattested = live?.let { safely { it.shared.replica.views.value.values.sumOf { view -> view.unattested } } } ?: 0,
+      pausedSpace = problems?.waits?.get(ShareWait.NO_SPACE),
+      pausedFrozen = problems?.waits?.get(ShareWait.WRITES_BLOCKED),
+      waitingLocked = problems?.waits?.get(ShareWait.LOCKED),
+      sourceChanged = problems?.failures?.get(ShareFailure.SOURCE_CHANGED),
+      safeCopies = problems?.safeCopies ?: 0,
+      tooBroad = smart.count { tooBroad(it.count, library) },
+      // DG-1: conta che la ricerca per contenuto sia **pronta** (modello e indice), non che il motore ci sia (con Hilt c'e' sempre).
+      described = smart.count { !it.rules.text.isNullOrBlank() || it.rules.examples.isNotEmpty() },
+      projectionPending = live?.let { safely { it.albums.projection.pending.value } } ?: 0,
+    )
+  }
+
+  /** Le voci della sezione per [f]: lo stato e un elemento per ogni codice del §2.8 che ha qualcosa da dire. */
+  internal fun render(f: AlbumsFacts): List<DiagItem> {
+    val items = ArrayList<DiagItem>()
     items += item(
       DiagCodes.ALBUMS_STATE,
       DiagSeverity.INFO,
       mapOf(
-        "mounted" to ExportValue.Flag(live != null),
-        "manual" to ExportValue.Num(albums.count { it is Album.Manual }.toLong()),
-        "smart" to ExportValue.Num(albums.count { it is Album.Smart }.toLong()),
-        "shared" to ExportValue.Num(albums.count { it is Album.Shared }.toLong()),
-        "openShares" to ExportValue.Num(openOps.toLong()),
-        "contributions" to ExportValue.Num((sync?.contributionsRead ?: 0).toLong()),
-        "syncIncomplete" to ExportValue.Flag(sync?.incomplete == true),
-        "roundErrors" to ExportValue.Num(graph.roundErrors.toLong()),
+        "mounted" to ExportValue.Flag(f.mounted),
+        "manual" to ExportValue.Num(f.manual.toLong()),
+        "smart" to ExportValue.Num(f.smart.toLong()),
+        "shared" to ExportValue.Num(f.shared.toLong()),
+        "openShares" to ExportValue.Num(f.openShares.toLong()),
+        "contributions" to ExportValue.Num(f.contributions.toLong()),
+        "syncIncomplete" to ExportValue.Flag(f.syncIncomplete),
+        "roundErrors" to ExportValue.Num(f.roundErrors.toLong()),
+        // DG-1, VG-1: la ricerca per contenuto e' pronta adesso; i viaggi sono stati cercati e si e' trovata una casa (solo si'/no, mai dove).
+        "searchReady" to ExportValue.Flag(f.searchReady),
+        "tripsSearched" to ExportValue.Flag(f.tripsSearched),
+        "tripsHomeKnown" to ExportValue.Flag(f.tripsHomeKnown),
       ),
     )
-    if (sync != null) {
-      if (sync.contributionsRejected > 0) items += count(DiagCodes.ALBUM_CONTRIB_REJECTED, sync.contributionsRejected)
-      if (sync.entriesDenied > 0) items += count(DiagCodes.ALBUM_ENTRY_DENIED, sync.entriesDenied)
+    if (f.rejected > 0) items += count(DiagCodes.ALBUM_CONTRIB_REJECTED, f.rejected)
+    if (f.denied > 0) items += count(DiagCodes.ALBUM_ENTRY_DENIED, f.denied)
+    if (f.unattested > 0) items += count(DiagCodes.ALBUM_ITEM_UNATTESTED, f.unattested)
+    f.pausedSpace?.let { items += count(DiagCodes.SHARE_PAUSED_SPACE, it) }
+    f.pausedFrozen?.let { items += count(DiagCodes.SHARE_PAUSED_FROZEN, it) }
+    f.waitingLocked?.let { items += count(DiagCodes.SHARE_WAITING_LOCKED, it) }
+    f.sourceChanged?.let { items += count(DiagCodes.SHARE_SOURCE_CHANGED, it) }
+    if (f.safeCopies > 0) items += count(DiagCodes.SHARE_SAFE_COPY_QUEUED, f.safeCopies)
+    if (f.mounted) {
+      if (f.tooBroad > 0) items += count(DiagCodes.SMART_TOO_BROAD, f.tooBroad)
+      if (!f.searchReady && f.described > 0) items += count(DiagCodes.SMART_NO_SEARCH, f.described)
     }
-    val unattested = live?.let { safely { it.shared.replica.views.value.values.sumOf { view -> view.unattested } } } ?: 0
-    if (unattested > 0) items += count(DiagCodes.ALBUM_ITEM_UNATTESTED, unattested)
-    if (problems != null) {
-      problems.waits[ShareWait.NO_SPACE]?.let { items += count(DiagCodes.SHARE_PAUSED_SPACE, it) }
-      problems.waits[ShareWait.WRITES_BLOCKED]?.let { items += count(DiagCodes.SHARE_PAUSED_FROZEN, it) }
-      problems.waits[ShareWait.LOCKED]?.let { items += count(DiagCodes.SHARE_WAITING_LOCKED, it) }
-      problems.failures[ShareFailure.SOURCE_CHANGED]?.let { items += count(DiagCodes.SHARE_SOURCE_CHANGED, it) }
-      if (problems.safeCopies > 0) items += count(DiagCodes.SHARE_SAFE_COPY_QUEUED, problems.safeCopies)
-    }
-    if (live != null) {
-      val smart = albums.filterIsInstance<Album.Smart>()
-      val library = safely { live.catalog.albums.visibleCount() } ?: 0
-      val broad = smart.count { tooBroad(it.count, library) }
-      if (broad > 0) items += count(DiagCodes.SMART_TOO_BROAD, broad)
-      val described = smart.count { !it.rules.text.isNullOrBlank() || it.rules.examples.isNotEmpty() }
-      if (!live.contentSearch && described > 0) items += count(DiagCodes.SMART_NO_SEARCH, described)
-    }
-    if (graph.lastTrips.value?.homeKnown == false) items += item(DiagCodes.TRIP_NO_GPS, DiagSeverity.INFO, emptyMap())
-    if (pending > 0) items += count(DiagCodes.ALBUM_PROJECTION_PENDING, pending)
+    // VG-1, DG-3: "nessuna casa" solo dopo aver cercato, e dalla memoria locale dei viaggi: resta dopo la morte del processo (prima: l'esito in memoria
+    // dell'ultima notte).
+    if (f.tripsSearched && !f.tripsHomeKnown) items += item(DiagCodes.TRIP_NO_GPS, DiagSeverity.INFO, emptyMap())
+    if (f.projectionPending > 0) items += count(DiagCodes.ALBUM_PROJECTION_PENDING, f.projectionPending)
     return items
   }
 
@@ -95,3 +126,30 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
       count > SmartLimits.TOO_BROAD_ITEMS || (library > 0 && count > library * SmartLimits.TOO_BROAD_FRACTION)
   }
 }
+
+/** Cio' che la sezione degli album dice, in soli numeri e segni (D37): mai un titolo, una cartella, un luogo, una coordinata o un id. */
+internal data class AlbumsFacts(
+  val mounted: Boolean = false,
+  val manual: Int = 0,
+  val smart: Int = 0,
+  val shared: Int = 0,
+  val openShares: Int = 0,
+  val contributions: Int = 0,
+  val syncIncomplete: Boolean = false,
+  val roundErrors: Int = 0,
+  val searchReady: Boolean = false,
+  val tripsSearched: Boolean = false,
+  val tripsHomeKnown: Boolean = false,
+  val rejected: Int = 0,
+  val denied: Int = 0,
+  val unattested: Int = 0,
+  val pausedSpace: Int? = null,
+  val pausedFrozen: Int? = null,
+  val waitingLocked: Int? = null,
+  val sourceChanged: Int? = null,
+  val safeCopies: Int = 0,
+  val tooBroad: Int = 0,
+  /** Gli smart con una descrizione o delle foto d'esempio (che contano solo con la ricerca per contenuto pronta). */
+  val described: Int = 0,
+  val projectionPending: Int = 0,
+)

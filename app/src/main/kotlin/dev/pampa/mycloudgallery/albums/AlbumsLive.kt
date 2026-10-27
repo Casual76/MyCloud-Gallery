@@ -30,8 +30,12 @@ import dev.pampa.mycloudgallery.core.albums.smart.NoSmartContentSearch
 import dev.pampa.mycloudgallery.core.albums.smart.RoomSmartRows
 import dev.pampa.mycloudgallery.core.albums.smart.RuleSmartNameInterpreter
 import dev.pampa.mycloudgallery.core.albums.smart.RulesSmartEngine
+import dev.pampa.mycloudgallery.core.albums.smart.SmartContentSearch
 import dev.pampa.mycloudgallery.core.albums.smart.SmartRecompute
 import dev.pampa.mycloudgallery.core.albums.trips.CatalogTrips
+import dev.pampa.mycloudgallery.core.albums.contract.TripReport
+import dev.pampa.mycloudgallery.core.albums.upkeep.SmartUpkeep
+import dev.pampa.mycloudgallery.core.albums.upkeep.TripUpkeep
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
@@ -68,8 +72,14 @@ class AlbumsLive internal constructor(
   val interpreter: RuleSmartNameInterpreter,
   val trips: CatalogTrips,
   val shared: SharedLive,
-  /** La ricerca per contenuto c'e' (le regole "descrizione" ed "esempi" degli smart contano; senza, `SMART_NO_SEARCH`). */
-  val contentSearch: Boolean = false,
+  /**
+   * La ricerca per contenuto degli smart (D15): [SmartContentSearch.ready] dice se le regole "descrizione" ed "esempi" contano adesso. Prima era un
+   * booleano fisso "c'e' un motore" (sempre vero con Hilt) e `SMART_NO_SEARCH` non scattava mai (DG-1); il motore c'e' sempre, **pronto** no.
+   */
+  val content: SmartContentSearch,
+  /** Cio' che tiene al passo gli smart dopo ogni calcolo (AS-1..AS-6) e quando si cercano i viaggi (VG-1). */
+  val smartUpkeep: SmartUpkeep,
+  val tripUpkeep: TripUpkeep,
 )
 
 /** La parte degli album condivisi: replica, pubblicatore, condivisione e le proposte che non spostano niente (D39, D31, E-SH20). */
@@ -118,6 +128,10 @@ internal class AlbumsInputs(
   val seenFile: File,
   /** La cartella `Backup/<dispositivo>/` di questo telefono (la regola B degli smart: "dello stesso dispositivo"); null se il backup non c'e'. */
   val ownBackupFolder: () -> String? = { null },
+  /** Un errore di un giro dei motori degli album (si conta in `roundErrors`, mai il messaggio). */
+  val onError: (Exception) -> Unit = {},
+  /** Il resoconto di una ricerca dei viaggi fuori dalla notte (Diagnostica: solo numeri). */
+  val onTripReport: (TripReport) -> Unit = {},
 )
 
 /** Il montaggio, nell'ordine delle dipendenze (condivisi, poi personali e smart, poi viaggi). Nessun I/O qui: lo fanno gli oggetti quando servono. */
@@ -185,23 +199,27 @@ internal fun buildAlbumsLive(scope: CoroutineScope, i: AlbumsInputs): AlbumsLive
   )
   catalogAlbums = albums
 
+  // --- Viaggi ed eventi (P7) ---------------------------------------------------------------------------------------------------------
+  // Prima dell'interprete dei nomi (R16): l'interprete chiede ai viaggi dov'e' la casa per non scriverla nel centro di un luogo.
+  val trips = CatalogTrips(i.database, CatalogAlbumCandidates { i.catalog.albums }, i.visible, i.mask, i.personal, albums, i.placeNames, i.today, i.clocks, scope)
+
   // --- Album smart (P6) --------------------------------------------------------------------------------------------------------------
   val smartRows = RoomSmartRows(i.database)
   val smartCandidates = CatalogSmartCandidates(i.catalog)
   val content = i.search?.let { EngineContentSearch(it) } ?: NoSmartContentSearch
   val lookup = GeocoderPlaceLookup(i.places)
+  // AS-9: la cartella del proprio backup si legge a ogni uso (le impostazioni del backup si caricano dopo il montaggio).
   val smart = RulesSmartEngine(
-    smartRows, smartCandidates, i.visible, i.mask, content, DeviceNormalizer(i.ownBackupFolder()), lookup, i.clocks, FileSmartSeenMarks(i.seenFile),
+    smartRows, smartCandidates, i.visible, i.mask, content, DeviceNormalizer(i.ownBackupFolder), lookup, i.clocks, FileSmartSeenMarks(i.seenFile),
   )
   val recompute = SmartRecompute(smartRows, smartCandidates, smart, i.clocks)
-  val interpreter = RuleSmartNameInterpreter(ItalianQueryParser(), i.visible, i.mask, smartCandidates, lookup, content, i.places)
-
-  // --- Viaggi ed eventi (P7) ---------------------------------------------------------------------------------------------------------
-  val trips = CatalogTrips(i.database, CatalogAlbumCandidates { i.catalog.albums }, i.visible, i.mask, i.personal, albums, i.placeNames, i.today, i.clocks, scope)
+  val interpreter = RuleSmartNameInterpreter(ItalianQueryParser(), i.visible, i.mask, smartCandidates, lookup, content, i.places, home = trips.homeClearance())
+  val smartUpkeep = SmartUpkeep(scope, smartRows, recompute, albums, onError = i.onError)
+  val tripUpkeep = TripUpkeep(scope, trips, i.clocks, onReport = i.onTripReport, onError = i.onError)
 
   return AlbumsLive(
     scope, i.catalog, i.personal, albums, PersonalAlbumCopies(i.personal, i.catalog), PersonalKeptCopyStore(i.personal), smartRows, smart, recompute,
-    interpreter, trips, shared, contentSearch = i.search != null,
+    interpreter, trips, shared, content, smartUpkeep, tripUpkeep,
   )
 }
 

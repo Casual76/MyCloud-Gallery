@@ -4,6 +4,15 @@ import androidx.room.ColumnInfo
 import androidx.room.Embedded
 import androidx.room.Relation
 
+/** Una versione con GPS da cui ricalcolare il luogo (`VersionDao.placesToRecompute`). Sensibile: niente nel testo. */
+class PlaceCandidateRow(
+  @ColumnInfo(name = "version_id") val versionId: String,
+  @ColumnInfo(name = "latitude") val latitude: Double,
+  @ColumnInfo(name = "longitude") val longitude: Double,
+) {
+  override fun toString(): String = "PlaceCandidateRow([posizione nascosta])"
+}
+
 /** Una versione con le sue posizioni e i suoi metadati. */
 data class VersionGraph(
   @Embedded val version: MediaVersionEntity,

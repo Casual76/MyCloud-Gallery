@@ -46,7 +46,6 @@ import dev.pampa.mycloudgallery.core.model.MediaMetadata
 import dev.pampa.mycloudgallery.core.model.MediaTrait
 import dev.pampa.mycloudgallery.core.model.PlaceRef
 import dev.pampa.mycloudgallery.core.model.ThumbHash
-import dev.pampa.mycloudgallery.core.places.contract.PlacePrecision
 import dev.pampa.mycloudgallery.core.places.contract.ReverseGeocoder
 import dev.pampa.mycloudgallery.core.places.contract.TimeZoneLookup
 import java.time.LocalTime
@@ -413,13 +412,8 @@ class DefaultMetadataExtractor(
     return hints.dateTakenMs ?: hints.dateModifiedMs
   }
 
-  /** Il luogo, solo se e' abbastanza vicino da dirne il nome (`CITY` o `NEAR`): oltre, "Firenze" per una foto a 120 km sarebbe una bugia. */
-  private fun placeOf(point: GeoPoint?): PlaceRef? {
-    if (point == null || geocoder.dataset <= 0) return null
-    val match = geocoder.nearest(point) ?: return null
-    if (match.precision != PlacePrecision.CITY && match.precision != PlacePrecision.NEAR) return null
-    return PlaceRef(match.place.id.value, geocoder.dataset)
-  }
+  /** Il luogo, con la regola di [PlaceChoice] (la stessa del ricalcolo a un dataset nuovo). */
+  private fun placeOf(point: GeoPoint?): PlaceRef? = PlaceChoice.of(geocoder, point)
 
   /** Solo la rotazione in gradi (il MediaStore non conosce gli specchi); un valore non valido vale "dritta". */
   private fun rotationOnly(degrees: Int): ExifOrientation = when (((degrees % 360) + 360) % 360) {

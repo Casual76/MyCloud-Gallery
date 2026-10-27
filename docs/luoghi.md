@@ -97,7 +97,7 @@ val zones: TimeZoneLookup = data ?: NoTimeZoneLookup
 val names: PlaceNames = data ?: NoPlaceNames
 ```
 
-`PlacesData` e' insieme geocoder, cercatore di fusi e nomi per la UI sullo stesso file. `openResult` dice anche perche' manca (`NotBundled`, `Failed(ASSET_MISSING | HASH_MISMATCH | IO_ERROR | INVALID_FORMAT)`) per la Diagnostica. Un cambio di `dataset` (versione) rispetto a `catalog_meta.places_dataset` sara' il segnale per il ricalcolo in manutenzione: **il ricalcolo non c'e' ancora** (serve una query nuova, Fase 4; `docs/decisioni.md`, "Non fatti"), quindi un dataset nuovo vale per le foto lette dopo.
+`PlacesData` e' insieme geocoder, cercatore di fusi e nomi per la UI sullo stesso file. `openResult` dice anche perche' manca (`NotBundled`, `Failed(ASSET_MISSING | HASH_MISMATCH | IO_ERROR | INVALID_FORMAT)`) per la Diagnostica. Un cambio di `dataset` (versione) rispetto a `catalog_meta.places_dataset` e' il segnale per il ricalcolo in manutenzione: `PlacesRecompute` (core-mediastore, chiamato da `LibraryMaintenanceWorker`; debito del 27/10) riscrive a lotti i `place_id` delle versioni con GPS e scrive `places_dataset` alla fine, una volta sola (`docs/decisioni.md`, "Debiti delle fasi precedenti (27/10)"). Prima del 27/10 il ricalcolo non c'era e un dataset nuovo valeva solo per le foto lette dopo.
 
 ## 3. Il formato `MCGP1`
 

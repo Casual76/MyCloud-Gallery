@@ -17,6 +17,7 @@ import dagger.assisted.AssistedInject
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncReason
 import dev.pampa.mycloudgallery.core.mediastore.noop.NoMetaPriority
+import dev.pampa.mycloudgallery.core.mediastore.sync.PlacesRecompute
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
@@ -126,7 +127,7 @@ class PhoneSyncWorker @AssistedInject constructor(
 /**
  * La manutenzione quotidiana in carica (§1.4): riconciliazione degli `_ID` e pulizia delle assenze scadute (il giro
  * `MAINTENANCE` della sincronizzazione), META residua, hash completi rimandati. Tutto entro un budget: cio' che resta si fa
- * domani. Il ricalcolo dei luoghi a un dataset nuovo non e' ancora qui (vedi docs/decisioni.md, Fase 3).
+ * domani. Il ricalcolo dei luoghi a un dataset nuovo (`PlacesRecompute`, debito del 27/10) e' qui, a tappe.
  */
 @HiltWorker
 class LibraryMaintenanceWorker @AssistedInject constructor(
@@ -175,6 +176,8 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
       // Fase 5A (D36): META residua finita, quindi un giro del confronto delle copie simili.
       gallery.similarCopies?.requestRun()
     }
+    // Debito del 27/10 (Fase 3 §2.3): se l'app porta un dataset dei luoghi nuovo, i `place_id` si ricalcolano una volta, a tappe, prima che i viaggi li leggano.
+    val places = gallery.runIfActive { core -> PlacesRecompute(core.catalog, gallery.places).run(PLACES_BUDGET) }
     // Fase 7 (P13): la rilevazione dei viaggi (la casa e i viaggi si ricalcolano di notte, D18, D19) e il ricalcolo di sicurezza degli smart.
     gallery.runIfActive { albums.nightly(ALBUMS_BUDGET) }
     // Fase 8 (P13): il raggruppamento notturno delle persone (solo il custode lo fa davvero; senza Persone attiva qui non fa niente).
@@ -182,7 +185,8 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
     // Fase 7 (P8): "Controlla di notte i video del NAS" applicato (la coda `FULL_HASH` la prende il lavoro di sicurezza del backup) e le firme
     // visive che mancano ai Doppioni simili.
     val utilityDone = gallery.runIfActive { utility.nightly(UTILITY_BUDGET) }
-    return done != null && utilityDone != null
+    // I luoghi a meta' (budget finito) non sono "fatto tutto": la notte dopo riprende dalle versioni che mancano.
+    return done != null && utilityDone != null && places?.outcome != PlacesRecompute.Outcome.PARTIAL
   }
 
   companion object {
@@ -190,6 +194,7 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
     val SYNC_BUDGET: Duration = 3.minutes
     val META_BUDGET: Duration = 3.minutes
     val HASH_BUDGET: Duration = 2.minutes
+    val PLACES_BUDGET: Duration = 1.minutes
     val ALBUMS_BUDGET: Duration = 1.minutes
     val FACES_BUDGET: Duration = 2.minutes
     val UTILITY_BUDGET: Duration = 2.minutes

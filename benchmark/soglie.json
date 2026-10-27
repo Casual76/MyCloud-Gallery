@@ -1,6 +1,6 @@
 {
   "formato": 2,
-  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md par. 2.6, D21) e guardia della Fase 4A (docs/fase4-progetto.md par. 5.6, P10). Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione e la guardia si confrontano con il riferimento: docs/bench/riferimento-<dispositivo>.json se l'utente ne ha accettato uno, altrimenti le misure del 13/10 (riferimento-<dispositivo>-fase3.json). Una soglia assoluta che il riferimento violava gia' (lo scorrimento giustificato, il fotogramma piu' lungo dell'apertura) non fa fallire: vale la guardia, cioe' 'non peggiorare'. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica. 'mista': la prova deve girare sulla libreria mista di 100 mila righe con il 60% di media solo-NAS (metrica libraryNasShare).",
+  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md par. 2.6, D21) e guardia della Fase 4A (docs/fase4-progetto.md par. 5.6, P10); dal 27/10 anche gli scenari album (Fase 7, par. 5.4) e volti (Fase 8, par. 5.4), promessi dai progetti e mancanti. Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione e la guardia si confrontano con il riferimento: docs/bench/riferimento-<dispositivo>.json se l'utente ne ha accettato uno, altrimenti le misure del 13/10 (riferimento-<dispositivo>-fase3.json). Una soglia assoluta che il riferimento violava gia' (lo scorrimento giustificato, il fotogramma piu' lungo dell'apertura) non fa fallire: vale la guardia, cioe' 'non peggiorare'. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica. 'mista': la prova deve girare sulla libreria mista di 100 mila righe con il 60% di media solo-NAS (metrica libraryNasShare).",
   "dispositivi": {
     "s25": {
       "nome": "Galaxy S25",
@@ -217,6 +217,100 @@
       "assolute": [],
       "regressione": [
         { "metrica": "searchPssKb", "statistica": "max", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "album",
+      "descrizione": "NUOVA (Fase 7, par. 5.4, P12; debito del 27/10): apertura dell'album a mano da 5.000 elementi dalle Raccolte, dal tocco alla prima cella della sua griglia, sulla libreria mista da 100 mila elementi con gli album sintetici (almeno 50 album, uno smart sulle 100 mila righe), 12 iterazioni. Misurata da UiAutomator (comprende il ritardo di rilevamento dell'albero di accessibilita'). Il dataset con gli album lo prepara l'app (AlbumBenchTarget): senza, la prova si salta",
+      "prove": "^albumOpen$",
+      "proveAttese": ["albumOpen"],
+      "classi": ["AlbumBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "albumsSeeded", "statistica": "min", "minimo": 1, "spiega": "gli album sintetici del par. 5.4 c'erano tutti (50 album, uno da 5.000 elementi, uno smart su 100 mila righe): altrimenti l'apertura misurata non e' quella" },
+      "assolute": [
+        { "metrica": "albumOpenMs", "statistica": "p90", "massimo": 300.0, "spiega": "par. 5.4: apertura di un album da 5.000 elementi entro 300 ms, p90 sulle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "albumOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "album-scroll",
+      "descrizione": "NUOVA (Fase 7, par. 5.4, P12; debito del 27/10): fling avanti e indietro nell'album da 5.000 elementi, con la stessa guardia della Libreria (FrameJankMetric e FrameTimingMetric), 8 iterazioni",
+      "prove": "^albumScroll$",
+      "proveAttese": ["albumScroll"],
+      "classi": ["AlbumBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "albumsSeeded", "statistica": "min", "minimo": 1, "spiega": "gli album sintetici del par. 5.4 c'erano tutti: altrimenti lo scorrimento misurato non e' quello dell'album da 5.000" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: stessa guardia della Libreria, meno dell'1% di fotogrammi davvero in ritardo (App Deadline Missed o Dropped Frame di FrameTimeline sul totale), media delle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "album-ricalcolo",
+      "descrizione": "NUOVA (Fase 7, par. 5.4, P12; debito del 27/10): ricalcolo di un album smart sulla libreria mista da 100 mila elementi con il lavoro in corso (la lettura della libreria all'avvio), come lo misura l'app e lo scrive in bench-albums.json, 5 iterazioni. Il ricalcolo nel dataset lo prepara l'app (AlbumBenchTarget): senza, la prova si salta",
+      "prove": "^albumRecompute$",
+      "proveAttese": ["albumRecompute"],
+      "classi": ["AlbumBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "albumsSeeded", "statistica": "min", "minimo": 1, "spiega": "gli album sintetici del par. 5.4 c'erano tutti (lo smart copre le 100 mila righe): altrimenti il ricalcolo misurato non e' quello" },
+      "assolute": [
+        { "metrica": "albumRecomputeMs", "statistica": "max", "massimo": 2000.0, "spiega": "par. 5.4: ricalcolo di uno smart su 100 mila elementi entro 2 s; la peggiore delle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "albumRecomputeMs", "statistica": "median", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "album-raccolte",
+      "descrizione": "NUOVA (Fase 7, par. 5.4, P12; debito del 27/10): le Raccolte con 50 album, dal tocco sulla scheda alla riga dell'album da 5.000, 12 iterazioni. Il progetto non fissa un tetto: solo la regressione sul riferimento accettato",
+      "prove": "^collectionsOpen$",
+      "proveAttese": ["collectionsOpen"],
+      "classi": ["AlbumBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "albumsSeeded", "statistica": "min", "minimo": 1, "spiega": "gli album sintetici del par. 5.4 c'erano tutti (50 album): altrimenti le Raccolte misurate non sono quelle" },
+      "assolute": [],
+      "regressione": [
+        { "metrica": "collectionsOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "volti",
+      "descrizione": "NUOVA (Fase 8, par. 5.4, P2/P13; debito del 27/10): i motori dei volti (YuNet a 1024 px e SFace) misurati dentro l'app su immagini e volti disegnati, come il test strumentato di P2: p95 di YuNet, p95 di SFace per volto, millisecondi per foto e PSS, 5 avvii. Solo regressione (+15%): la misura di riferimento arriva con F104 sull'S25 e sul Tab S9. La misura nell'app la prepara la variante di misura (FacesBenchTarget): senza, la prova si salta",
+      "prove": "^facesEngines$",
+      "proveAttese": ["facesEngines"],
+      "classi": ["FacesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "validita": { "metrica": "facesMsPerPhoto", "statistica": "min", "minimo": 0.001, "spiega": "l'app ha scritto la misura dei motori (bench-faces.json): altrimenti non c'e' niente da confrontare" },
+      "assolute": [],
+      "regressione": [
+        { "metrica": "facesYunetP95Ms", "statistica": "median", "aumentoMassimo": 0.15, "arrotondaSu": 1 },
+        { "metrica": "facesSfaceP95Ms", "statistica": "median", "aumentoMassimo": 0.15, "arrotondaSu": 1 },
+        { "metrica": "facesMsPerPhoto", "statistica": "median", "aumentoMassimo": 0.15, "arrotondaSu": 1 },
+        { "metrica": "facesPssKb", "statistica": "max", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "volti-scroll",
+      "descrizione": "NUOVA (Fase 8, par. 5.4; debito del 27/10): la guardia di scorrimento della Libreria (livello Tutte, stile quadrato) con il calcolo dei volti in corso nell'app, 8 iterazioni: le guardie esistenti non devono peggiorare. Il calcolo in corso lo prepara la variante di misura (FacesBenchTarget): senza, la prova si salta",
+      "prove": "^facesLoadedScroll$",
+      "proveAttese": ["facesLoadedScroll"],
+      "classi": ["FacesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "facesComputing", "statistica": "min", "minimo": 1, "spiega": "il calcolo dei volti lavorava durante la misura (calcoloInCorso in bench-faces.json): altrimenti e' lo scorrimento di sempre" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: con il calcolo dei volti in corso la Libreria non peggiora; stessa guardia dello scorrimento, meno dell'1% di fotogrammi davvero in ritardo, media delle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }
       ]
     }
   ]

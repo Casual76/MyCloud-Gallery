@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.personal.contract.FullHashPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.settings.SyncedFullHashSettings
+import dev.pampa.mycloudgallery.core.search.contract.SearchData
 import dev.pampa.mycloudgallery.feature.library.trash.NasTrashPort
 import dev.pampa.mycloudgallery.feature.library.trash.NoNasTrash
 import dev.pampa.mycloudgallery.feature.library.utility.CleanupNasPort
@@ -28,7 +29,9 @@ import dev.pampa.mycloudgallery.utility.MediaStorePhoneCopyCheck
 import dev.pampa.mycloudgallery.utility.OperationsCleanupNas
 import dev.pampa.mycloudgallery.utility.OperationsNasTrash
 import dev.pampa.mycloudgallery.utility.PersonalFullHashSwitch
+import dev.pampa.mycloudgallery.utility.SearchShotVectors
 import dev.pampa.mycloudgallery.utility.UtilityGraph
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -61,12 +64,15 @@ object UtilityModule {
 
   @Provides
   @Singleton
-  fun utilityGraph(gallery: GalleryGraph, albums: AlbumsGraph, source: FullHashSettingsSource): UtilityGraph =
+  fun utilityGraph(gallery: GalleryGraph, albums: AlbumsGraph, source: FullHashSettingsSource, search: Provider<SearchData>): UtilityGraph =
     UtilityGraph(
       catalog = { gallery.coreIfReady()?.catalog },
       visible = gallery.visibleMedia,
       hidden = gallery.hiddenMask,
       albums = AppAlbumMembership(gallery.database) { sharedMembers(albums) },
+      // Debito del 27/10: i Doppioni simili giudicano con i vettori veri della ricerca (Fase 6, D25) e ripiegano sulla firma dove manca il vettore.
+      // La ricerca si chiede al primo uso, fuori dal thread principale (`SearchShotVectors`): l'Utility non la costruisce prima che serva.
+      vectors = SearchShotVectors(data = { search.get() }),
       signatures = { gallery.similarCopies?.signatureSource() },
       // DP-5: null = i dati personali non sono pronti: la manutenzione non sa se l'interruttore e' acceso e non ritira niente dalla coda.
       fullHashOn = { source.settings.value?.fullHashNightly?.value },

@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.library.duplicates.NightlyReport
 import dev.pampa.mycloudgallery.core.library.duplicates.NoIdenticalDuplicates
 import dev.pampa.mycloudgallery.core.library.duplicates.NoSimilarShots
 import dev.pampa.mycloudgallery.core.library.duplicates.RemovalPlaces
+import dev.pampa.mycloudgallery.core.library.duplicates.ShotVectorSource
 import dev.pampa.mycloudgallery.core.library.duplicates.SigningReport
 import dev.pampa.mycloudgallery.core.library.duplicates.SimilarBatch
 import dev.pampa.mycloudgallery.core.library.duplicates.SimilarShots
@@ -39,6 +40,8 @@ import kotlinx.coroutines.sync.withLock
  * la pagina), e la manutenzione notturna. Una sola istanza per processo (`UtilityModule`).
  *
  * @param catalog il catalogo, null finche' la galleria non e' pronta.
+ * @param vectors i vettori della ricerca (Fase 6) per i Doppioni simili (`SearchShotVectors`); chi non ne ha si giudica con la firma. Senza valore di serie:
+ *   una porta dimenticata non deve far tornare i Doppioni alla sola firma in silenzio (debito del 27/10).
  * @param signatures da dove vengono i pixel da firmare: la stessa sorgente della manutenzione delle firme della Fase 5 (`SimilarCopiesGraph`), null
  *   senza NAS o dati personali (le firme restano quelle gia' fatte).
  * @param fullHashOn l'interruttore notturno di adesso (`full_hash_nightly`); null = i dati personali non sono ancora pronti: non si sa se e' acceso o
@@ -52,6 +55,7 @@ class UtilityGraph(
   private val visible: VisibleMedia,
   private val hidden: HiddenMask,
   private val albums: AlbumMembership,
+  private val vectors: ShotVectorSource,
   private val signatures: suspend () -> SignatureSource?,
   private val fullHashOn: () -> Boolean?,
   private val sharedAlbums: AlbumMembership = AlbumMembership { emptySet() },
@@ -88,7 +92,7 @@ class UtilityGraph(
     return lock.withLock {
       val existing = similarOn
       if (existing != null && (similarSigned || source == null)) return@withLock existing
-      val built = catalog()?.let { CatalogSimilarShots(it, visible, hidden, albums = albums, signatures = source) } ?: return@withLock null
+      val built = catalog()?.let { CatalogSimilarShots(it, visible, hidden, vectors = vectors, albums = albums, signatures = source) } ?: return@withLock null
       similarOn = built
       similarSigned = source != null
       built

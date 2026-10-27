@@ -1337,8 +1337,9 @@ privata diversa dalla comune, recinzione D34, Persone attiva qui e stato fresco:
 5. **contenuto**: i corpi nell'archivio con l'autore = il firmatario della testa (i corpi della propria testa solo dove qui manca un corpo
    proprio: un ricalcolo non ancora pubblicato e' piu' nuovo); le voci `people` valide unite con l'ultima scrittura che vince; le voci
    `cluster` tenute per l'istantanea del dispositivo, che vale quando tutti i suoi segmenti `cluster` sono letti e coerenti
-   (`checkSnapshot`); per ogni dispositivo si tiene l'ultima valida. `ClusterSnapshots.latest` (P5) le da' tutte, risolte sui corpi vincenti
-   di qui (un'assegnazione il cui riferimento non torna con il corpo vincente manca: il volto e' "nuovo" per il custode);
+   (`checkSnapshot`); per ogni dispositivo si tiene l'ultima valida. `ClusterSnapshots.latest` (P5) le da' tutte, anche quella di questo
+   dispositivo, risolte sui corpi vincenti di qui (un'assegnazione il cui riferimento non torna con il corpo vincente manca: il volto e'
+   "nuovo" per il custode), dall'ultimo stato salvato senza aspettare il giro in corso, e vuote se l'archivio si chiude;
 6. la generazione che cambia a meta' ferma il giro prima di scrivere altro nell'archivio.
 
 **La pubblicazione nel codice (P3, `NasFacesPublisher`).** Il contributo intero, ogni volta: i corpi dei contenuti calcolati qui per cui

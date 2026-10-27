@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.core.faces.sync
 
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.faces.contract.ClusterSnapshot
+import dev.pampa.mycloudgallery.core.faces.contract.ClusterSnapshots
 import dev.pampa.mycloudgallery.core.faces.contract.FacesArchive
 import dev.pampa.mycloudgallery.core.faces.contract.FacesClock
 import dev.pampa.mycloudgallery.core.faces.contract.FacesPublishOutcome
@@ -19,6 +21,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.HereState
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleRecord
 import dev.pampa.mycloudgallery.core.index.contract.RemoteFailure
 import dev.pampa.mycloudgallery.core.index.contract.RemoteResult
+import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.Verdict
@@ -26,6 +29,7 @@ import dev.pampa.mycloudgallery.core.trust.codec.TextRules
 import dev.pampa.mycloudgallery.core.trust.data.FacesDocs
 import dev.pampa.mycloudgallery.core.trust.data.FacesHead
 import dev.pampa.mycloudgallery.core.trust.data.FacesSegmentContent
+import dev.pampa.mycloudgallery.core.trust.data.FacesSnapshotDoc
 import dev.pampa.mycloudgallery.core.trust.data.HeadMark
 import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
@@ -70,7 +74,7 @@ class NasFacesSync(
   private val publisher: FacesPublisher? = null,
   private val flags: FeatureFlags = FeatureFlags.RELEASE,
   private val limits: FacesSyncLimits = FacesSyncLimits(),
-) : FacesSync, FacesSnapshotSource {
+) : FacesSync, FacesSnapshotSource, ClusterSnapshots {
 
   private val lock = Mutex()
   private val guard = FacesSyncGuard(identity, switch, { remote.share }, flags)
@@ -395,28 +399,54 @@ class NasFacesSync(
     }
   }
 
-  // --- L'istantanea vincente ---------------------------------------------------------------------------------------------------------
+  // --- Le istantanee lette (P5) -----------------------------------------------------------------------------------------------------
 
-  /**
-   * L'istantanea con la `seq` piu' alta fra quelle dei dispositivi **dell'account** (a pari, il dispositivo minore, D21), risolta sui corpi
-   * vincenti di qui. Legge solo lo stato locale della replica (nessuna richiesta al NAS): basta Persone attiva qui nella generazione corrente.
-   */
-  override suspend fun winningSnapshot(): RemoteSnapshot? = lock.withLock {
-    val state = switch.currentState() as? FacesState.On ?: return@withLock null
-    if (state.here != HereState.ACTIVE) return@withLock null
-    val registry = identity.registry() ?: return@withLock null
-    val account = registry.registry.device(identity.deviceId)?.nasUser ?: return@withLock null
-    val archive = archives.open(state.generation)?.takeIf { it.generation == state.generation } ?: return@withLock null
-    val replica = store.load(state.generation)
+  /** Le istantanee valide dei dispositivi dell'account nello stato della replica, con il loro candidato (seq, dispositivo, testa). */
+  private suspend fun candidates(generation: FaceGeneration): Pair<FacesArchive, List<Pair<SnapshotCandidate, FacesSnapshotDoc>>>? {
+    val state = switch.currentState() as? FacesState.On ?: return null
+    if (state.generation != generation || state.here != HereState.ACTIVE) return null
+    val registry = identity.registry() ?: return null
+    val account = registry.registry.device(identity.deviceId)?.nasUser ?: return null
+    val archive = archives.open(generation)?.takeIf { it.generation == generation } ?: return null
     val allowed = FacesSyncGuard.accountDevices(registry, account).toSet()
-    val candidates = replica.devices.filterKeys { it in allowed }.mapNotNull { (device, d) ->
+    val list = store.load(generation).devices.filterKeys { it in allowed }.mapNotNull { (device, d) ->
       val doc = d.snapshot ?: return@mapNotNull null
       val head = d.snapshotHead ?: return@mapNotNull null
-      SnapshotCandidate(device, doc.mark, head.version, head.contentHash)
+      SnapshotCandidate(device, doc.mark, head.version, head.contentHash) to doc
     }
-    val winner = FacesFusion.winner(candidates) ?: return@withLock null
-    val doc = replica.devices.getValue(winner.device).snapshot!!
+    return archive to list
+  }
+
+  /**
+   * `ClusterSnapshots` di P5: per ogni dispositivo **dell'account** (anche questo) l'ultima istantanea valida che ha pubblicato nella
+   * generazione [generation], risolta sui corpi vincenti di qui (un'assegnazione il cui riferimento non torna con il corpo vincente manca: il
+   * volto e' "nuovo" per il custode). Vuoto se [generation] non e' la corrente attiva qui. Legge solo lo stato della replica: nessuna
+   * richiesta al NAS (le regole di chi legge sono gia' passate: firmatario dell'account, generazione, anti-rollback, tetti, coerenza). Non
+   * aspetta il giro in corso: legge l'ultimo stato salvato (ogni salvataggio della replica e' atomico), e i dispositivi revocati nel registro
+   * accettato di adesso sono gia' fuori anche prima che il giro li tolga. Un archivio chiuso a meta' (generazione cambiata, chiave
+   * distrutta) da' la lista vuota, mai un'eccezione.
+   */
+  override suspend fun latest(generation: FaceGeneration): List<ClusterSnapshot> = try {
+    val (archive, list) = candidates(generation) ?: return emptyList()
+    val winners = archive.winners(list.flatMap { (_, doc) -> doc.assignments.map { it.face.contentKey } }.toSet())
+    list.sortedBy { it.first.device }.map { (candidate, doc) -> ClusterSnapshot(candidate.device, FacesWire.resolve(candidate.device, doc, winners).state) }
+  } catch (closed: IllegalStateException) {
+    emptyList()
+  }
+
+  /**
+   * L'istantanea con la `seq` piu' alta fra quelle dei dispositivi dell'account (a pari, il dispositivo minore, D21; lo stesso ordine di
+   * `ClusterSnapshot.winner`), risolta sui corpi vincenti di qui, con i centroidi e il numero delle assegnazioni non risolte. Come [latest],
+   * senza aspettare il giro in corso e senza eccezioni (archivio chiuso: null).
+   */
+  override suspend fun winningSnapshot(): RemoteSnapshot? = try {
+    val generation = (switch.currentState() as? FacesState.On)?.generation ?: return null
+    val (archive, list) = candidates(generation) ?: return null
+    val winner = FacesFusion.winner(list.map { it.first }) ?: return null
+    val doc = list.first { it.first == winner }.second
     FacesWire.resolve(winner.device, doc, archive.winners(doc.assignments.mapTo(HashSet()) { it.face.contentKey }))
+  } catch (closed: IllegalStateException) {
+    null
   }
 
   private fun isFatal(failure: RemoteFailure): Boolean = when (failure) {

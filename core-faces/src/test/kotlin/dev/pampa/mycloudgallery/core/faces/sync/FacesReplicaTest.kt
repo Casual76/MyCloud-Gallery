@@ -189,4 +189,46 @@ class FacesReplicaTest {
     assertThat(phone.archive.people()).isEmpty()
     assertThat(phone.archive.winners(listOf(FacesSyncWorld.key(1)))).isEmpty()
   }
+
+  /**
+   * `ClusterSnapshots` per P5 (D21, E-F26): l'ultima istantanea valida di ogni dispositivo dell'account, anche di questo, risolta sui corpi
+   * vincenti di qui; la vincente e' la stessa per `ClusterSnapshot.winner` e per la replica; una generazione che non e' la corrente non ne ha.
+   */
+  @Test
+  fun leIstantaneeLettePerIlCustode() = runTest {
+    val world = FacesSyncWorld()
+    val phone = world.device("Telefono", "test")
+    val tablet = world.device("Tablet", "test")
+    val laptop = world.device("Portatile", "test")
+    phone.compute(1)
+    tablet.compute(2)
+    for (d in listOf(phone, tablet)) {
+      d.round()
+      d.publisher.flush(FlushReason.UNIT_FINISHED)
+    }
+    for (d in listOf(phone, tablet)) d.round()
+    // Due custodi insieme (una prenotazione contesa): stessa seq, persone diverse.
+    phone.snapshot(4, 3, mapOf(a to listOf(1 to 0, 1 to 1)))
+    tablet.snapshot(4, 2, mapOf(b to listOf(2 to 0, 2 to 1)))
+    for (d in listOf(phone, tablet)) d.publisher.flush(FlushReason.UNIT_FINISHED)
+    for (d in listOf(laptop, phone)) d.round()
+    val latest = laptop.sync.latest(world.generation)
+    assertThat(latest.map { it.author }).containsExactly(phone.id, tablet.id)
+    assertThat(latest.all { it.state.seq == 4L }).isTrue()
+    val expected = minOf(phone.id, tablet.id)
+    assertThat(dev.pampa.mycloudgallery.core.faces.contract.ClusterSnapshot.winner(latest)!!.author).isEqualTo(expected)
+    assertThat(laptop.sync.winningSnapshot()!!.device).isEqualTo(expected)
+    // Ogni assegnazione si e' risolta sui corpi vincenti di qui.
+    assertThat(latest.sumOf { it.state.assignments.size }).isEqualTo(4)
+    // Anche questo dispositivo vede la propria istantanea pubblicata.
+    assertThat(phone.sync.latest(world.generation).map { it.author }).contains(phone.id)
+    // Una generazione che non e' la corrente, o Persone non attiva qui: niente.
+    assertThat(laptop.sync.latest(FaceGeneration.fromBytes(ByteArray(16) { 5 }))).isEmpty()
+    laptop.switch.state.value = FacesState.On(world.generation, HereState.EXCLUDED)
+    assertThat(laptop.sync.latest(world.generation)).isEmpty()
+    // Un archivio chiuso (generazione cambiata, chiave distrutta): vuoto, mai un'eccezione verso il custode.
+    phone.archive.close()
+    assertThat(phone.sync.latest(world.generation)).isEmpty()
+    assertThat(phone.sync.winningSnapshot()).isNull()
+  }
 }

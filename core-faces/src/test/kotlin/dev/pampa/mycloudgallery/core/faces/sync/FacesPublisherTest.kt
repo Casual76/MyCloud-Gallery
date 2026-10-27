@@ -235,4 +235,29 @@ class FacesPublisherTest {
     phone.publisher.flush(FlushReason.UNIT_FINISHED)
     assertThat(phone.archive.people().values.single().atNas).isEqualTo(world.clock.nasNow)
   }
+
+  /**
+   * La richiesta di P5: un'istantanea messa in coda dal custode si pubblica anche se intanto la prenotazione `faces/<G>/cluster` e' passata
+   * a un altro (il custode che perde pubblica comunque cio' che ha calcolato; vince la seq piu' alta, D21, E-F26).
+   */
+  @Test
+  fun lIstantaneaInCodaSiPubblicaAncheDopoLaPrenotazionePersa() = runTest {
+    val world = FacesSyncWorld()
+    val phone = world.device("Telefono", "test")
+    val tablet = world.device("Tablet", "test")
+    val phoneLeases = NasFacesLeases(phone.identity, phone.switch, phone.share, world.clock, phone.gate, world.flags)
+    val tabletLeases = NasFacesLeases(tablet.identity, tablet.switch, tablet.share, world.clock, tablet.gate, world.flags)
+    assertThat(phoneLeases.acquire(world.generation, dev.pampa.mycloudgallery.core.faces.contract.FacesResource.Cluster))
+      .isInstanceOf(dev.pampa.mycloudgallery.core.faces.contract.FacesLease.Held::class.java)
+    phone.compute(1)
+    phone.snapshot(2, 1, mapOf(FacesSyncWorld.person(1) to listOf(1 to 0, 1 to 1)))
+    // La pubblicazione non riesce (NAS giu'), poi la prenotazione scade e la prende il tablet.
+    phone.share.failNext = 1
+    assertThat(phone.publisher.flush(FlushReason.UNIT_FINISHED)).isEqualTo(FacesPublishOutcome.Failed)
+    world.clock.advanceMillis(dev.pampa.mycloudgallery.core.trust.TrustLimits.MAX_LEASE_MILLIS + 1)
+    assertThat(tabletLeases.acquire(world.generation, dev.pampa.mycloudgallery.core.faces.contract.FacesResource.Cluster))
+      .isInstanceOf(dev.pampa.mycloudgallery.core.faces.contract.FacesLease.Held::class.java)
+    assertThat(phone.publisher.flush(FlushReason.SYNC_ROUND)).isInstanceOf(FacesPublishOutcome.Published::class.java)
+    assertThat(latestHead(world, phone)!!.snapshot!!.seq).isEqualTo(2)
+  }
 }

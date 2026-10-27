@@ -37,6 +37,7 @@ object AlbumsWiring {
     val identity = AppAlbumIdentity(inputs)
     val writeGate = AppAlbumWriteGate(graph.flags, DeveloperTools.shareGuard(), { inputs.account() }, { nas?.writeGate })
     val journal = FileAlbumUploadJournal(File(noBackup, "$DIR/upload-journal"))
+    val plans = TransferPlans(File(noBackup, "$DIR/transfer-plans"))
     val uploads: AlbumFolderUploads? by lazy {
       gallery.backup?.let { backup -> AlbumFolderUploads(backup.store, journal, backup.gate, backup.fiveB.incomingPorts(), family::commonShare) }
     }
@@ -50,7 +51,7 @@ object AlbumsWiring {
       val parts = organizer.parts ?: return@build null
       val core = gallery.coreIfReady() ?: return@build null
       val catalog = core.catalog
-      val mover = OpsAlbumMover(organizer.operations, organizer.opsStore, { catalog }, family::me, TransferPlans(File(noBackup, "$DIR/transfer-plans")), monotonic)
+      val mover = OpsAlbumMover(organizer.operations, organizer.opsStore, { catalog }, family::me, plans, monotonic)
       val uploader = FolderAlbumUploader({ uploads }, { catalog }, monotonic) { BackupWorkScheduling.incoming(context) }
       buildAlbumsLive(
         scope,
@@ -83,10 +84,16 @@ object AlbumsWiring {
           noticesFile = File(noBackup, "$DIR/notices-seen"),
           seenFile = File(noBackup, "$DIR/smart-seen"),
           ownBackupFolder = { ownBackupFolder(gallery) },
+          transfers = TransferRegisters(plans, journal),
+          marksFile = File(noBackup, "$DIR/shared-marks"),
+          ioErrors = NasAlbumIoErrors,
         ),
       )
     }
-    return AlbumsGraph(graph.scope, build, ready, shareWork = { AlbumWorkScheduling.shareNow(context) })
+    return AlbumsGraph(graph.scope, build, ready, shareWork = { AlbumWorkScheduling.shareNow(context) }).also { albums ->
+      // R6: la dismissione di un dispositivo congela le sue teste d'album che questa replica ha accettato (A7).
+      graph.writer.retireHeads = dev.pampa.mycloudgallery.core.family.registry.RetireHeads { device -> albums.frozenAlbumHeads(device) }
+    }
   }
 
   /**

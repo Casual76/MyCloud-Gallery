@@ -276,11 +276,12 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
    * recinzione permette). [round] e' `AlbumsGraph.syncRound`: replica, pubblicazione del mio contributo, copie degli album chiusi, un passo della
    * condivisione; vero se e' finito. Non e' `writesToNas`: la replica legge anche con una share congelata, il pubblicatore ha il suo cancello.
    */
-  suspend fun albums(round: suspend (Duration) -> Boolean): StageOutcome {
+  suspend fun albums(round: suspend (Duration) -> Boolean, bytes: () -> Long = { 0L }): StageOutcome {
     nas.start()
     return stage(WorkRequest.Background(BackgroundActivity.INDEX_SYNC)).run({ scope, _ ->
       val done = round(SLICE)
-      scope.record(0)
+      // R2 (revisione di sicurezza della Fase 7): i byte che il giro degli album ha letto dal NAS contano nel traffico del lavoro.
+      scope.record(bytes())
       BatchResult(hasMore = !done)
     })
   }
@@ -414,7 +415,7 @@ class IndexSyncWorker @AssistedInject constructor(
     // L'esito del lavoro resta quello dell'indice: un giro degli album fermo dalle regole o incompleto riprende al giro dopo.
     if (outcome is StageOutcome.Finished) {
       try {
-        stages.albums { budget -> albums.syncRound(budget) }
+        stages.albums({ budget -> albums.syncRound(budget) }, { albums.lastRoundBytes })
       } catch (e: kotlinx.coroutines.CancellationException) {
         throw e
       } catch (e: Exception) {

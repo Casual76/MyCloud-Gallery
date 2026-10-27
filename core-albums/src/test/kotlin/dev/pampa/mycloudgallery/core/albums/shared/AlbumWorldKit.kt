@@ -33,6 +33,10 @@ class AlbumDevice(
   val nasUser: String,
   val library: FakeAlbumLibrary = FakeAlbumLibrary(),
   private val fs: (NasFileSystem) -> NasFileSystem = { it },
+  /** R2: quali errori di I/O sono di un file (come lo lega :app con gli errori del NAS). */
+  private val ioErrors: AlbumIoErrors = AlbumIoErrors.SESSION,
+  /** I tetti del giro della replica (R2, R13). */
+  private val limits: AlbumSyncLimits = AlbumSyncLimits(),
 ) {
   val account: AccountId get() = AccountId.of(nasUser)
   val deviceId: String get() = TrustIds.deviceIdOf(signer.publicKey)
@@ -48,6 +52,9 @@ class AlbumDevice(
   val albumFamily = FakeAlbumFamily(account = AccountId.of(nasUser), common = world.nas.shareName)
   var replicaStore = MemoryAlbumReplicaStore()
   var publishStore = MemoryAlbumPublishStore()
+
+  /** R1: i segni locali (visto attivo, chiusura vista, copia scritta): "il disco", come gli store. */
+  var marks: SharedAlbumMarks = MemorySharedAlbumMarks()
   val choices = MemorySharedAlbumChoices()
 
   lateinit var replica: SharedAlbumReplica
@@ -65,14 +72,19 @@ class AlbumDevice(
   /** Un processo nuovo sopra gli stessi store (morte del processo). */
   fun restart() {
     val share = { _: String -> fs(world.nas) }
-    replica = SharedAlbumReplica(identity, replicaStore, library)
+    replica = SharedAlbumReplica(identity, replicaStore, library, marks = marks)
     publisher = NasAlbumPublisher(
       identity, albumFamily, share, publishStore, gate, world.clocks,
       levels = { id -> replica.view(id)?.merged?.levels ?: replica.orphans.value[id]?.levels ?: LevelHistory.NONE },
       io = Dispatchers.Unconfined,
+      // Come :app (AlbumsLive): R12, la copia del mio contributo nella replica.
+      ownReplica = { id -> replicaStore.contribution(id, deviceId) },
     )
     replica.local = publisher
-    sync = NasSharedAlbumSync(identity, share, replicaStore, replica, world.clocks, { true }, ownAlbums = { publishStore.albums() }, io = Dispatchers.Unconfined)
+    sync = NasSharedAlbumSync(
+      identity, share, replicaStore, replica, world.clocks, { true }, limits, ownAlbums = { publishStore.albums() }, io = Dispatchers.Unconfined,
+      ioErrors = ioErrors, ownSegmentMissing = { id -> publisher.repairSegments(id) },
+    )
     shared = ReplicaSharedAlbums(identity, albumFamily, replica, publisher, gate, world.clocks, library, choices)
   }
 
@@ -81,6 +93,7 @@ class AlbumDevice(
     signer = newSigner
     replicaStore = MemoryAlbumReplicaStore()
     publishStore = MemoryAlbumPublishStore()
+    marks = MemorySharedAlbumMarks()
     restart()
   }
 
@@ -116,8 +129,14 @@ class AlbumWorld {
   fun nextNonce(): ByteArray = ByteArray(16) { (it * 13 + ++nonces).toByte() }
 
   /** Un dispositivo approvato dell'account [nasUser]. */
-  fun device(nasUser: String, admin: Boolean = false, library: FakeAlbumLibrary = FakeAlbumLibrary(), fs: (NasFileSystem) -> NasFileSystem = { it }): AlbumDevice =
-    AlbumDevice(this, family.approve("Telefono di $nasUser", nasUser, admin), nasUser, library, fs).also { devices += it }
+  fun device(
+    nasUser: String,
+    admin: Boolean = false,
+    library: FakeAlbumLibrary = FakeAlbumLibrary(),
+    fs: (NasFileSystem) -> NasFileSystem = { it },
+    ioErrors: AlbumIoErrors = AlbumIoErrors.SESSION,
+    limits: AlbumSyncLimits = AlbumSyncLimits(),
+  ): AlbumDevice = AlbumDevice(this, family.approve("Telefono di $nasUser", nasUser, admin), nasUser, library, fs, ioErrors, limits).also { devices += it }
 
   /** Fa passare il tempo di una testa (5 minuti) e fa pubblicare e leggere tutti, [rounds] volte. */
   suspend fun settle(rounds: Int = 2) {

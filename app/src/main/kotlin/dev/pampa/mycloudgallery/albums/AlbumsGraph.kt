@@ -64,6 +64,10 @@ class AlbumsGraph internal constructor(
   /** L'ultimo giro della replica (Diagnostica: solo numeri). */
   val lastSync = MutableStateFlow<AlbumSyncReport?>(null)
 
+  /** R2: i byte letti dal NAS dall'ultimo [syncRound] (0 se il giro non c'e' stato): il conto del traffico del lavoro dell'indice. */
+  @Volatile var lastRoundBytes: Long = 0
+    private set
+
   /** L'ultima rilevazione dei viaggi (Diagnostica). */
   val lastTrips = MutableStateFlow<TripReport?>(null)
 
@@ -255,12 +259,16 @@ class AlbumsGraph internal constructor(
    * degli album chiusi con "ognuno tiene una copia" (Q5), e un passo della condivisione. Vero se il giro e' finito.
    */
   suspend fun syncRound(budget: Duration): Boolean {
+    lastRoundBytes = 0
     val live = ensureLive() ?: return true
     val report = guarded { live.shared.sync.sync(budget) }
     if (report != null) lastSync.value = report
+    lastRoundBytes = report?.bytesRead ?: 0
     flushAll(live, FlushReason.SYNC_ROUND)
     guarded { keepClosedCopies(live) }
     guarded { resume(live, SHARE_SLICE) }
+    // R9: i registri dei trasferimenti tengono solo le chiavi delle operazioni ancora aperte (non crescono verso il tetto del file).
+    guarded { live.shared.pruneTransfers() }
     guarded { afterCatalog() }
     guarded { scanNotices(live) }
     // Un'operazione rimasta aperta (processo morto, NAS spento, regole): il suo lavoro (se ce n'e' gia' uno, resta quello).
@@ -268,16 +276,42 @@ class AlbumsGraph internal constructor(
     return report?.incomplete != true
   }
 
-  /** Le copie personali degli album chiusi (Q5 b, D31): con `PersonalAlbumCopies.keep` (impronta sugli elementi, P3); mai un file toccato. */
+  /**
+   * R6 (revisione di sicurezza della Fase 7, A7): le teste d'album di [device] da congelare quando l'admin lo dismette, cioe' quelle che la
+   * replica di questo dispositivo ha accettato, dopo un giro breve della replica (per non congelare una testa vecchia). Senza album montati
+   * (famiglia non pronta, recinzione D30) nessuna. La lega `AlbumsWiring` a `RegistryWriter.retireHeads`.
+   */
+  suspend fun frozenAlbumHeads(device: String): List<String> {
+    val live = ensureLive() ?: return emptyList()
+    guarded { live.shared.sync.sync(RETIRE_SYNC) }
+    return dev.pampa.mycloudgallery.core.albums.shared.RetireAlbumHeads.of(
+      live.shared.replicaStore, device, dev.pampa.mycloudgallery.core.trust.TrustLimits.MAX_FROZEN_HEADS,
+    )
+  }
+
+  /**
+   * Le copie personali degli album chiusi (Q5 b, D31): con `PersonalAlbumCopies.keep` (impronta sugli elementi, P3); mai un file toccato. R1 della
+   * revisione di sicurezza della Fase 7: la replica le propone solo per album visti attivi ed entro i tetti; ognuna si scrive **una volta** (poi
+   * `copyKept`: gli elementi restano quelli della prima scrittura), e quelle nate da una chiusura firmata da un dispositivo poi revocato o perso
+   * si ritirano.
+   */
   internal suspend fun keepClosedCopies(live: AlbumsLive): Int {
     var written = 0
     for (copy in live.shared.albums.keptCopies()) {
-      // Il creatore dopo "Smetti" che aveva condiviso un suo album personale ritrova quello (voce `shared`): nessuna copia.
-      if (copy.mine && live.keptStore.personalSharedAs(copy.shared) != null) continue
+      // Il creatore dopo "Smetti" che aveva condiviso un suo album personale ritrova quello (voce `shared`): nessuna copia (e nessun elemento contato).
+      if (copy.mine && live.keptStore.personalSharedAs(copy.shared) != null) {
+        live.shared.albums.copyKept(copy.copy(items = emptyList()))
+        continue
+      }
       when (live.copies.keep(copy.copy, copy.shared, copy.title, copy.items)) {
         PersonalAlbumCopies.Result.CREATED, PersonalAlbumCopies.Result.UPDATED -> written++
         PersonalAlbumCopies.Result.UNCHANGED, PersonalAlbumCopies.Result.DELETED_BY_USER -> Unit
       }
+      live.shared.albums.copyKept(copy)
+    }
+    for (copy in live.shared.albums.copiesToWithdraw()) {
+      live.copies.withdraw(copy.copy, copy.shared)
+      live.shared.albums.copyWithdrawn(copy.shared)
     }
     return written
   }
@@ -333,6 +367,9 @@ class AlbumsGraph internal constructor(
     val SMART_BUDGET: Duration = 10.seconds
     val SHARE_SLICE: Duration = 20.seconds
     val START_BUDGET: Duration = 10.seconds
+
+    /** R6: il giro della replica prima di dire quali teste congelare (un'azione dell'admin: breve). */
+    val RETIRE_SYNC: Duration = 20.seconds
     const val MIN_RETRY_MS: Long = 5_000L
     const val MAX_FLUSH_ATTEMPTS: Int = 20
 

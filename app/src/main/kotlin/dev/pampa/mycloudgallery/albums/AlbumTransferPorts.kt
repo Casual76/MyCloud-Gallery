@@ -53,9 +53,12 @@ import java.io.IOException
 // gia' controllata l'orchestratore). Nessuna di queste classi si chiama da un dato letto dal NAS: le chiama solo l'orchestratore, dopo una conferma.
 // Dal diario di core-nasops si ritrova ogni trasferimento per chiave anche dopo la morte del processo (la chiave si lega al piano **prima** di avviarlo).
 
-/** Le chiavi dei trasferimenti avviati e il piano di core-nasops a cui sono legate (durevole, scritto prima di `start`). */
+/**
+ * Le chiavi dei trasferimenti avviati e il piano di core-nasops a cui sono legate (durevole, scritto prima di `start`). R9: un file che c'e'
+ * ma non si legge vale "non so" ([planOf] lancia: SD-2 lascia il gruppo `PLANNED` invece di dirlo "mai partito"), e non si sovrascrive.
+ */
 internal class TransferPlans(file: File) {
-  private val records = object : DurableRecords<String, String>(file, "piani dei trasferimenti degli album") {
+  private val records = object : DurableRecords<String, String>(file, "piani dei trasferimenti degli album", DurableRecords.Unreadable.UNKNOWN) {
     override fun encode(out: DataOutputStream, records: Map<String, String>) {
       out.writeInt(1)
       out.writeInt(records.size)
@@ -68,7 +71,7 @@ internal class TransferPlans(file: File) {
     override fun decode(input: DataInputStream): LinkedHashMap<String, String> {
       if (input.readInt() != 1) throw IOException("versione")
       val out = LinkedHashMap<String, String>()
-      repeat(input.readInt()) { out[input.readUTF()] = input.readUTF() }
+      repeat(input.count(4)) { out[input.readUTF()] = input.readUTF() }
       return out
     }
   }
@@ -78,6 +81,32 @@ internal class TransferPlans(file: File) {
   suspend fun bind(key: TransferKey, plan: PlanHash) = records.update { it[key.value] = plan.hex }
 
   suspend fun unbind(key: TransferKey) = records.update { it.remove(key.value) }
+
+  /** Le chiavi legate adesso (la prima meta' di [TransferRegisters.prune]). */
+  suspend fun keys(): Set<String> = records.read { it.keys.toSet() }
+
+  /** Toglie i legami di [keys] (chiavi che nessuna operazione aperta della condivisione cita piu'): il registro non cresce senza fine (R9). */
+  suspend fun forget(keys: Set<String>): Int = if (keys.isEmpty()) 0 else records.update { map -> keys.count { map.remove(it) != null } }
+
+  /** Quante volte il file non si e' potuto leggere (Diagnostica). */
+  val unreadable: Int get() = records.unreadable
+}
+
+/**
+ * I due registri dei trasferimenti verso gli album (legami chiave -> piano di core-nasops, intenzioni dei caricamenti dal telefono) e la loro
+ * potatura (R9): le chiavi che nessuna operazione aperta della condivisione cita piu' si tolgono, cosi' i registri non crescono senza fine
+ * verso il tetto (oltre il quale varrebbero "non so"). Prima si leggono le chiavi legate, poi quelle del diario: una chiave legata dopo non si
+ * tocca, e una legata prima e' gia' nel diario (che la scrive sempre prima di chiamare la porta).
+ */
+internal class TransferRegisters(val plans: TransferPlans, val uploads: FileAlbumUploadJournal) {
+  /** Toglie le chiavi che [openKeys] (il diario della condivisione) non cita piu'; quante. */
+  suspend fun prune(openKeys: suspend () -> Set<String>): Int {
+    val bound = plans.keys()
+    val intents = uploads.keys()
+    if (bound.isEmpty() && intents.isEmpty()) return 0
+    val keep = openKeys()
+    return plans.forget(bound - keep) + uploads.forget(intents - keep)
+  }
 }
 
 /**

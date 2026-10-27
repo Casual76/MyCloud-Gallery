@@ -61,7 +61,9 @@ class MemorySharedAlbumChoices : SharedAlbumChoices {
 
 /**
  * I tetti di un giro della replica (D8, A4; isolamento degli errori come la revisione A della Fase 6): un album ostile o enorme non ferma gli
- * altri ne' la sincronizzazione dell'indice, e un dispositivo compromesso non riempie il telefono.
+ * altri ne' la sincronizzazione dell'indice, e un dispositivo compromesso non riempie il telefono. R2 e R13 della revisione di sicurezza della
+ * Fase 7: i tetti in byte si controllano **prima** di scaricare (le dimensioni le dichiara la testa firmata), e un contributo che non si puo'
+ * leggere adesso aspetta a intervalli crescenti invece di farsi riscaricare a ogni giro.
  */
 data class AlbumSyncLimits(
   /** Cartelle in `albums/` lette per giro (oltre: l'elenco e' "inondato", si leggono comunque gli album gia' noti e i propri). */
@@ -70,8 +72,44 @@ data class AlbumSyncLimits(
   val maxHeadReads: Int = 4_096,
   /** Byte di segmenti scaricati per giro (il resto si riprende al giro dopo). */
   val maxBytesPerRound: Long = 64L * 1024 * 1024,
+  /**
+   * R2: byte di segmenti di **un** dispositivo per giro. Il suo primo contributo del giro passa comunque (entro [maxBytesPerRound]: un
+   * contributo onesto grande si scarica sempre), gli altri aspettano il giro dopo: un dispositivo non si prende il giro di tutti.
+   */
+  val maxBytesPerDeviceRound: Long = 32L * 1024 * 1024,
+  /** R13: byte dei segmenti tenuti nella replica per dispositivo, in tutti gli album insieme; si controlla prima di scaricare. */
+  val maxBytesPerDevice: Long = 128L * 1024 * 1024,
   /** Voci tenute nella replica per dispositivo, in tutti gli album insieme. */
   val maxEntriesPerDevice: Int = 100_000,
-  /** Album a cui un dispositivo contribuisce, nella replica. */
+  /** Album a cui un dispositivo contribuisce, nella replica (R13: si controlla prima di scaricare). */
   val maxAlbumsPerDevice: Int = 512,
-)
+  /** R2: la prima attesa di un contributo che non si legge adesso (un segmento sparito, un file illeggibile); poi raddoppia. */
+  val holdFirstMs: Long = 15L * 60 * 1000,
+  /** R2: l'attesa piu' lunga fra due tentativi dello stesso contributo. */
+  val holdMaxMs: Long = 24L * 60 * 60 * 1000,
+  /**
+   * R7: ogni quanto si aggiorna, al piu', l'ora in cui si e' visto che la serie di un dispositivo non aveva niente di nuovo (una scrittura per
+   * contributo e per ora, non per giro). Le voci si possono retrodatare al piu' di questo, piu' l'eta' massima di una modifica.
+   */
+  val seenRefreshMs: Long = 60L * 60 * 1000,
+) {
+  /** L'attesa dopo il tentativo numero [attempts] (1 = il primo fallito). */
+  fun holdFor(attempts: Int): Long {
+    var wait = holdFirstMs
+    repeat((attempts - 1).coerceIn(0, 30)) { wait = minOf(holdMaxMs, wait * 2) }
+    return minOf(holdMaxMs, wait)
+  }
+}
+
+/**
+ * R2: un errore di I/O e' di **un file** (quel contributo aspetta, il giro continua: un permesso negato, un file tenuto aperto dal PC) o della
+ * **sessione** (il NAS non risponde: il giro si ferma)? core-albums non vede core-nas: lo dice :app, che conosce gli errori del NAS. Senza
+ * legame ogni errore vale "sessione" (il comportamento di prima: il giro si ferma e riprova).
+ */
+fun interface AlbumIoErrors {
+  fun isFileError(error: java.io.IOException): Boolean
+
+  companion object {
+    val SESSION: AlbumIoErrors = AlbumIoErrors { false }
+  }
+}

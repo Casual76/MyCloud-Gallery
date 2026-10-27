@@ -3,6 +3,9 @@ package dev.pampa.mycloudgallery.core.albums.personal
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalKey
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalKind
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalStore
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalValue
 import dev.pampa.mycloudgallery.core.personal.settings.PersonalAlbums
@@ -56,5 +59,21 @@ class PersonalAlbumCopies(private val store: PersonalStore, private val catalog:
       return Result.CREATED
     }
     return if (plan.changes.isEmpty()) Result.UNCHANGED else Result.UPDATED
+  }
+
+  /**
+   * R1 della revisione di sicurezza della Fase 7: ritira la copia [copy] dell'album condiviso [shared], perche' il dispositivo che ha firmato la
+   * chiusura che l'ha fatta nascere e' stato revocato ("la revoca toglie cio' che il dispositivo revocato ha causato"). Come "Elimina album" di
+   * un album personale: la definizione diventa una lapide (sincronizzata; nessun file si tocca), e la copia non si ricrea. Niente se la copia non
+   * c'e', e' gia' eliminata o non e' una copia di [shared]. Vero se l'ha ritirata.
+   */
+  suspend fun withdraw(copy: AlbumId, shared: AlbumId): Boolean {
+    val entries = store.effective()
+    val definition = albums.definition(copy.value, entries) ?: return false
+    if (definition.value !is PersonalValue.Text) return false
+    val copyOf = entries[PersonalKey(PersonalKind.ALBUM, copy.value, PersonalFields.ALBUM_COPY_OF)]?.value as? PersonalValue.Text
+    if (copyOf?.text != shared.value) return false
+    albums.delete(copy.value)
+    return true
   }
 }

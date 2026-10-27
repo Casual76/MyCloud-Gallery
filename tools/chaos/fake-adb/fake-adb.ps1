@@ -51,6 +51,49 @@ function Map-Path([string]$p) {
   return Join-Path $root ($p.TrimStart('/').Replace('/', '\'))
 }
 
+# --- Modo faces (Fase 8, P12): l'app di debug finta, i suoi file dei volti e il suo file di stato -------------------------------------------------------
+# La cartella dell'app finta e' <FAKE_PHONE>\data\data\<pacchetto>: no_backup\ ha i file dei volti, files\prove\f8-status.txt il file di stato che scrive lo scenario.
+# `am broadcast -a ...FACES_SCENARIO -p <pacchetto> --es scenario <nome>` esegue lo scenario sul telefono finto: f103-compute crea faces-1.db (con il suo -wal) e scrive
+# phase=computed; f103-erase toglie tutti i faces-*.db* e scrive phase=erased (local_done=1, keys=0, faces_db=0); con FAKE_ERASE_LEAVES=1 la cancellazione "dimentica"
+# faces-1.db e la chiave (local_done=0, keys=1): il caso rosso. f103-status non fa niente.
+function Get-FakeAppDir([string]$package) { return Join-Path $root ("data\data\" + $package) }
+
+function Write-FakeFacesStatus([string]$package, [hashtable]$values) {
+  $dir = Join-Path (Get-FakeAppDir $package) "files\prove"
+  New-Item -ItemType Directory -Force -Path $dir | Out-Null
+  $lines = @()
+  foreach ($key in @("phase", "state", "generation_present", "local_done", "keys", "faces_db", "erase_done")) { if ($values.ContainsKey($key)) { $lines += ("{0}={1}" -f $key, $values[$key]) } }
+  Set-Content -LiteralPath (Join-Path $dir "f8-status.txt") -Value $lines
+}
+
+function Invoke-FakeFacesScenario([string]$package, [string]$scenario) {
+  $noBackup = Join-Path (Get-FakeAppDir $package) "no_backup"
+  New-Item -ItemType Directory -Force -Path $noBackup | Out-Null
+  switch ($scenario) {
+    "f103-compute" {
+      Set-Content -LiteralPath (Join-Path $noBackup "faces-1.db") -Value "db finto"
+      Set-Content -LiteralPath (Join-Path $noBackup "faces-1.db-wal") -Value "wal finto"
+      Set-Content -LiteralPath (Join-Path $noBackup "faces-local") -Value "stato locale finto"
+      Write-FakeFacesStatus $package @{ phase = "computed"; state = "on"; generation_present = 1; local_done = 0; keys = 1; faces_db = 1; erase_done = 0 }
+      return $true
+    }
+    "f103-erase" {
+      Get-ChildItem -LiteralPath $noBackup -File -Filter "faces-*.db*" -ErrorAction SilentlyContinue | Remove-Item -Force
+      Set-Content -LiteralPath (Join-Path $noBackup "faces-erase") -Value "diario finto"
+      Set-Content -LiteralPath (Join-Path $noBackup "faces-local") -Value "stato locale finto"
+      if ($env:FAKE_ERASE_LEAVES -eq "1") {
+        Set-Content -LiteralPath (Join-Path $noBackup "faces-1.db") -Value "db rimasto"
+        Write-FakeFacesStatus $package @{ phase = "erased"; state = "off"; generation_present = 0; local_done = 0; keys = 1; faces_db = 1; erase_done = 0 }
+      } else {
+        Write-FakeFacesStatus $package @{ phase = "erased"; state = "off"; generation_present = 0; local_done = 1; keys = 0; faces_db = 0; erase_done = 1 }
+      }
+      return $true
+    }
+    "f103-status" { return $true }
+    default { return $false }
+  }
+}
+
 # -s <serial>
 $i = 0
 if ($all.Count -ge 2 -and $all[0] -eq "-s") { $i = 2 }
@@ -133,6 +176,31 @@ switch ($cmd) {
         if ($wantsHash) { Write-Output ("{0}  {1}" -f (Get-FileHash -LiteralPath $f.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $rel) }
         else { Write-Output ("{0} {1}" -f $f.Length, $rel) }
       }
+      exit 0
+    }
+    if ($line -match '^am broadcast -a (\S+) -p (\S+) --es scenario (\S+)$') {
+      # Modo faces: solo l'azione degli scenari della Fase 8, mirata a un pacchetto.
+      if ($Matches[1] -ne 'dev.pampa.mycloudgallery.debug.action.FACES_SCENARIO' -or -not (Invoke-FakeFacesScenario $Matches[2] $Matches[3])) { Write-Output "fake adb: scenario non previsto: $line"; exit 7 }
+      Write-Output "Broadcast completed: result=0"
+      exit 0
+    }
+    if ($line -match '^run-as (\S+) ls -1 (\S+)$') {
+      # Modo faces: i nomi dei file di una cartella dell'app finta, uno per riga (come `ls -1`).
+      $full = Join-Path (Get-FakeAppDir $Matches[1]) ($Matches[2].Replace('/', '\'))
+      if (-not (Test-Path -LiteralPath $full -PathType Container)) { Write-Output "ls: $($Matches[2]): No such file or directory"; exit 1 }
+      foreach ($f in (Get-ChildItem -LiteralPath $full | Sort-Object Name)) { Write-Output $f.Name }
+      exit 0
+    }
+    if ($line -match '^run-as (\S+) cat (\S+)$') {
+      # Modo faces: il file di stato dell'app finta (shell, non exec-out).
+      $file = Join-Path (Get-FakeAppDir $Matches[1]) ($Matches[2].Replace('/', '\'))
+      if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { Write-Output "cat: $($Matches[2]): No such file or directory"; exit 1 }
+      Get-Content -LiteralPath $file | ForEach-Object { Write-Output $_ }
+      exit 0
+    }
+    if ($line -match '^run-as (\S+) rm -f (files/prove/f8-status\.txt)$') {
+      # Modo faces: l'unico file che la pulizia toglie dalla cartella dell'app, per nome intero.
+      Remove-Item -LiteralPath (Join-Path (Get-FakeAppDir $Matches[1]) ($Matches[2].Replace('/', '\'))) -Force -ErrorAction SilentlyContinue
       exit 0
     }
     if ($line -match '^chmod -R a\+rX (\S+)$') { exit 0 }

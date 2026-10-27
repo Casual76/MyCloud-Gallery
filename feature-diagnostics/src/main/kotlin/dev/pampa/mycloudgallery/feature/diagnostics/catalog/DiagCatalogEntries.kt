@@ -315,8 +315,29 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.ALBUM_CONTRIB_HELD, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_contrib_held_title, R.string.diag_album_contrib_held_guide, null),
     DiagEntry(DiagCodes.SHARE_PAUSED_CATALOG, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_share_paused_catalog_title, R.string.diag_share_paused_catalog_guide, null),
 
-    // --- Le persone (Fase 8, P0: la voce di stato; i codici del §2.10 li aggiunge P13) -----------------------------------
+    // --- Le persone (Fase 8: P0 la voce di stato, P13 i codici del §2.10) -----------------------------------
     DiagEntry(DiagCodes.PEOPLE_STATE, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_people_state_title, R.string.diag_people_state_guide, null),
+
+    DiagEntry(DiagCodes.FACES_MODEL_MISMATCH, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_model_mismatch_title, R.string.diag_faces_model_mismatch_guide, null),
+    DiagEntry(DiagCodes.FACES_ENGINE_FAILED, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_engine_failed_title, R.string.diag_faces_engine_failed_guide, null),
+    DiagEntry(DiagCodes.FACES_VECTOR_INVALID, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_vector_invalid_title, R.string.diag_faces_vector_invalid_guide, null),
+    DiagEntry(DiagCodes.FACES_NO_INDEXER, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_no_indexer_title, R.string.diag_faces_no_indexer_guide, null),
+    DiagEntry(DiagCodes.FACES_NO_PRIVATE_AREA, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_no_private_area_title, R.string.diag_faces_no_private_area_guide, null),
+    DiagEntry(DiagCodes.FACES_WAITING_PREVIEWS, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_waiting_previews_title, R.string.diag_faces_waiting_previews_guide, null),
+    DiagEntry(DiagCodes.FACES_SEGMENT_REJECTED, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_segment_rejected_title, R.string.diag_faces_segment_rejected_guide, null),
+    DiagEntry(DiagCodes.FACES_HEAD_REJECTED, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_head_rejected_title, R.string.diag_faces_head_rejected_guide, null),
+    DiagEntry(DiagCodes.FACES_FOREIGN_GENERATION, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_foreign_generation_title, R.string.diag_faces_foreign_generation_guide, null),
+    DiagEntry(DiagCodes.FACES_HOLDER_REBASED, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_holder_rebased_title, R.string.diag_faces_holder_rebased_guide, null),
+    DiagEntry(DiagCodes.FACES_KEY_LOST, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_key_lost_title, R.string.diag_faces_key_lost_guide, null),
+    DiagEntry(DiagCodes.FACES_ERASE_LOCAL_DONE, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_erase_local_done_title, R.string.diag_faces_erase_local_done_guide, null),
+    DiagEntry(DiagCodes.FACES_ERASE_NAS_PENDING, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_erase_nas_pending_title, R.string.diag_faces_erase_nas_pending_guide, null),
+    DiagEntry(DiagCodes.FACES_ERASE_NAS_DONE, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_erase_nas_done_title, R.string.diag_faces_erase_nas_done_guide, null),
+    DiagEntry(DiagCodes.FACES_ERASE_WAITING_DEVICES, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_erase_waiting_devices_title, R.string.diag_faces_erase_waiting_devices_guide, null),
+    DiagEntry(DiagCodes.FACES_RECYCLE_BIN, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_recycle_bin_title, R.string.diag_faces_recycle_bin_guide, null),
+    DiagEntry(DiagCodes.FACES_NEEDS_UPDATE, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_needs_update_title, R.string.diag_faces_needs_update_guide, null),
+    DiagEntry(DiagCodes.FACES_ERASE_PENDING, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_erase_pending_title, R.string.diag_faces_erase_pending_guide, null),
+    DiagEntry(DiagCodes.PRE_PUBLISH_FAILED, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_pre_publish_failed_title, R.string.diag_pre_publish_failed_guide, null),
+    DiagEntry(DiagCodes.FACES_KILLED_MEMORY, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_killed_memory_title, R.string.diag_faces_killed_memory_guide, null),
 
     // P11: i codici del §2.6 (modelli, motori, calcolo, dati AI dell'indice, indice di ricerca, ritaglio).
     DiagEntry(DiagCodes.AI_MODEL_MISSING, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_model_missing_title, R.string.diag_ai_model_missing_guide, null),

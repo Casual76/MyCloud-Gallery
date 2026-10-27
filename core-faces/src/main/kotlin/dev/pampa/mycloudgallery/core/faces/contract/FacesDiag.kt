@@ -48,6 +48,12 @@ object FacesDiag {
   /** Voce `faces` sconosciuta (E-F12): Aggiorna. */
   const val FACES_NEEDS_UPDATE: String = "FACES_NEEDS_UPDATE"
 
+  /** P7, P13: dati dei volti di una generazione cancellata ancora da togliere da questo dispositivo: il giro dei dati personali non pubblica (D30). */
+  const val FACES_ERASE_PENDING: String = "FACES_ERASE_PENDING"
+
+  /** E-A16: Android ha chiuso il processo per memoria durante una tappa del calcolo dei volti (come `AI_KILLED_MEMORY`). */
+  const val FACES_KILLED_MEMORY: String = "FACES_KILLED_MEMORY"
+
   /** La voce di stato della sezione (`DiagSection.PEOPLE`). */
   const val PEOPLE_STATE: String = "PEOPLE_STATE"
 
@@ -55,6 +61,6 @@ object FacesDiag {
   val ALL: List<String> = listOf(
     FACES_MODEL_MISMATCH, FACES_ENGINE_FAILED, FACES_VECTOR_INVALID, FACES_NO_INDEXER, FACES_NO_PRIVATE_AREA, FACES_WAITING_PREVIEWS,
     FACES_SEGMENT_REJECTED, FACES_HEAD_REJECTED, FACES_FOREIGN_GENERATION, FACES_HOLDER_REBASED, FACES_KEY_LOST, FACES_ERASE_LOCAL_DONE,
-    FACES_ERASE_NAS_PENDING, FACES_ERASE_NAS_DONE, FACES_ERASE_WAITING_DEVICES, FACES_RECYCLE_BIN, FACES_NEEDS_UPDATE, PEOPLE_STATE,
+    FACES_ERASE_NAS_PENDING, FACES_ERASE_NAS_DONE, FACES_ERASE_WAITING_DEVICES, FACES_RECYCLE_BIN, FACES_NEEDS_UPDATE, FACES_ERASE_PENDING, FACES_KILLED_MEMORY, PEOPLE_STATE,
   )
 }

@@ -332,6 +332,30 @@ object DiagCodes {
   // nell'elenco chiuso dell'esportazione. Mai nomi, id, chiavi, riquadri, vettori, conteggi per persona o generazione (D37).
   @JvmField val PEOPLE_STATE = DiagCode("PEOPLE_STATE")
 
+  // P13: i codici del §2.10 di docs/fase8-progetto.md (stessi id di `FacesDiag` di core-faces, scritti come letterali perche' questo modulo non vede
+  // core-faces); `Phase8DiagCatalogTest` di :app verifica che ogni codice di `FacesDiag.ALL` sia qui. Solo numeri e codici: mai nomi, id, chiavi, riquadri,
+  // vettori, conteggi per persona o generazione (D37). `PRE_PUBLISH_FAILED` e' il codice del gancio dei dati personali (P8).
+  @JvmField val FACES_MODEL_MISMATCH = DiagCode("FACES_MODEL_MISMATCH", setOf("E-A11"))
+  @JvmField val FACES_ENGINE_FAILED = DiagCode("FACES_ENGINE_FAILED")
+  @JvmField val FACES_VECTOR_INVALID = DiagCode("FACES_VECTOR_INVALID", setOf("E-A12"))
+  @JvmField val FACES_NO_INDEXER = DiagCode("FACES_NO_INDEXER", setOf("E-F10"))
+  @JvmField val FACES_NO_PRIVATE_AREA = DiagCode("FACES_NO_PRIVATE_AREA", setOf("E-F10"))
+  @JvmField val FACES_WAITING_PREVIEWS = DiagCode("FACES_WAITING_PREVIEWS", setOf("E-F18"))
+  @JvmField val FACES_SEGMENT_REJECTED = DiagCode("FACES_SEGMENT_REJECTED", setOf("E-F41"))
+  @JvmField val FACES_HEAD_REJECTED = DiagCode("FACES_HEAD_REJECTED", setOf("E-F41"))
+  @JvmField val FACES_FOREIGN_GENERATION = DiagCode("FACES_FOREIGN_GENERATION", setOf("E-F33"))
+  @JvmField val FACES_HOLDER_REBASED = DiagCode("FACES_HOLDER_REBASED", setOf("E-F26"))
+  @JvmField val FACES_KEY_LOST = DiagCode("FACES_KEY_LOST", setOf("E-F19"))
+  @JvmField val FACES_ERASE_LOCAL_DONE = DiagCode("FACES_ERASE_LOCAL_DONE", setOf("E-F30"))
+  @JvmField val FACES_ERASE_NAS_PENDING = DiagCode("FACES_ERASE_NAS_PENDING", setOf("E-F30"))
+  @JvmField val FACES_ERASE_NAS_DONE = DiagCode("FACES_ERASE_NAS_DONE")
+  @JvmField val FACES_ERASE_WAITING_DEVICES = DiagCode("FACES_ERASE_WAITING_DEVICES", setOf("E-F32"))
+  @JvmField val FACES_RECYCLE_BIN = DiagCode("FACES_RECYCLE_BIN", setOf("E-F34"))
+  @JvmField val FACES_NEEDS_UPDATE = DiagCode("FACES_NEEDS_UPDATE", setOf("E-F12"))
+  @JvmField val FACES_ERASE_PENDING = DiagCode("FACES_ERASE_PENDING", setOf("E-F32"))
+  @JvmField val PRE_PUBLISH_FAILED = DiagCode("PRE_PUBLISH_FAILED")
+  @JvmField val FACES_KILLED_MEMORY = DiagCode("FACES_KILLED_MEMORY", setOf("E-A16"))
+
   // P11: i codici del §2.6 (stessi id e stessi edge case di `ModelDiag`, `AiDiag`, `AiIndexDiag` e `SearchDiag`, scritti come letterali
   // perche' questo modulo non vede core-models, core-ai, core-index ne' core-search). `Phase6DiagCatalogTest` di :app verifica che ogni
   // codice dei contratti sia qui, con lo stesso id e gli stessi edge case.

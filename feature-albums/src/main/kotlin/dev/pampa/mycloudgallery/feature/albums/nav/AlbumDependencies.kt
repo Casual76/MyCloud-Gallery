@@ -27,6 +27,8 @@ import dev.pampa.mycloudgallery.feature.albums.contract.AlbumScreensClock
 import dev.pampa.mycloudgallery.feature.albums.contract.FixedAlbumScreensClock
 import dev.pampa.mycloudgallery.feature.albums.contract.NoAlbumMembers
 import dev.pampa.mycloudgallery.feature.albums.contract.NoAlbumPending
+import dev.pampa.mycloudgallery.feature.albums.contract.NoPeopleChoices
+import dev.pampa.mycloudgallery.feature.albums.contract.PeopleChoices
 import java.time.LocalDate
 import java.util.Optional
 import javax.inject.Inject
@@ -50,6 +52,8 @@ class AlbumDependencies @Inject constructor(
   pending: Optional<AlbumPending>,
   clock: Optional<AlbumScreensClock>,
   visible: Optional<VisibleMedia>,
+  /** Fase 8 (P10): le persone che si scelgono per un album smart; senza, l'editor dice che le persone non sono attive. */
+  peopleChoices: Optional<PeopleChoices>,
 ) {
   val albums: Albums = albums.orElse(NoAlbums)
   val shared: SharedAlbums = shared.orElse(NoSharedAlbums)
@@ -67,6 +71,9 @@ class AlbumDependencies @Inject constructor(
 
   /** Senza la porta della visibilita' "Aggiungi ad album" non offre nessun media (D22): fallisce chiuso. */
   val visible: VisibleMedia? = visible.orElse(null)
+
+  /** Senza la porta delle persone nessuna persona si offre e l'editor lo dice (E-F37): fallisce chiuso. */
+  val peopleChoices: PeopleChoices = peopleChoices.orElse(NoPeopleChoices)
 }
 
 /** Le porte delle schermate degli album, opzionali per Dagger: `:app` le lega ai contratti di core-albums, core-library e alle porte di questo modulo. */
@@ -109,4 +116,7 @@ abstract class AlbumPortsModule {
 
   @BindsOptionalOf
   abstract fun visibleMedia(): VisibleMedia
+
+  @BindsOptionalOf
+  abstract fun peopleChoices(): PeopleChoices
 }

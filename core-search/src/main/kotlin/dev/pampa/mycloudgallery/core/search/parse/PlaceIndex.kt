@@ -8,7 +8,7 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchText
 // L'indice del dizionario dei luoghi (P7, §2.5): costruito una volta per dizionario (il parser lo ricorda), cosi' una query non
 // scandisce mai tutte le voci. Corrispondenza piu' lunga, omonimi dal piu' frequente, refusi solo sui nomi di almeno 5 lettere.
 
-internal class PlaceHit(val len: Int, val chip: SearchChip.Place, val correction: Pair<String, String>?)
+internal class PlaceHit(val len: Int, val chip: SearchChip.Place, val correction: Pair<String, String>?, val count: Int = 0)
 
 internal class PlaceIndex(dictionary: PlaceDictionary) {
   private val byName = HashMap<String, List<PlaceEntry>>()
@@ -80,7 +80,7 @@ internal class PlaceIndex(dictionary: PlaceDictionary) {
   private fun hit(entries: List<PlaceEntry>, n: Int, word: String, correction: Pair<String, String>?): PlaceHit {
     val option = entries.first().option
     val others = entries.drop(1).map { it.option }.filter { it != option }.distinct()
-    return PlaceHit(n, SearchChip.Place(option, others, word), correction)
+    return PlaceHit(n, SearchChip.Place(option, others, word), correction, entries.first().mediaCount)
   }
 
   private fun wordRun(tokens: List<Token>, i: Int, max: Int): Int {

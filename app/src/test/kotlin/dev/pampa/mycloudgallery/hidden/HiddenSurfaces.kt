@@ -118,6 +118,7 @@ internal object HiddenSurfaces {
   private const val ALBUMS = "core-albums/src/main/kotlin/dev/pampa/mycloudgallery/core/albums"
   private const val FEATURE_ALBUMS = "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums"
   private const val FACES_PEOPLE = "core-faces/src/main/kotlin/dev/pampa/mycloudgallery/core/faces/people"
+  private const val SEARCH = "core-search/src/main/kotlin/dev/pampa/mycloudgallery/core/search"
   private const val FEATURE_NAS = "feature-nas/src/main/kotlin/dev/pampa/mycloudgallery/feature/nas"
   private const val FEATURE_LIBRARY = "feature-library/src/main/kotlin/dev/pampa/mycloudgallery/feature/library"
 
@@ -280,6 +281,20 @@ internal object HiddenSurfaces {
       id = "people-dictionary", title = "Il dizionario dei nomi per la ricerca: solo nomi di persone non nascoste, con il conto delle foto mostrabili", row = SpecRow.PEOPLE, owner = "P9",
       backing = Backing.PRODUCTION, sources = listOf("$FACES_PEOPLE/PeopleVisibility.kt"), probe = RealPeopleProbes.dictionary(), live = true,
       alsoProvedBy = listOf("PeopleIndexTest"),
+    ),
+    // --- Il codice vero di P10 (ricerca per persona): i candidati vengono dall'istantanea, il filtro finale resta dei nascosti, il dizionario e' quello di `people-dictionary` ---------
+    SurfaceEntry(
+      id = "search-people", title = "Ricerca per persona: dizionario dei nomi, chip \"Persona\", candidati \"sicuri\" e \"forse\", suggerimenti e risultati (F6-D29, D26)",
+      row = SpecRow.PEOPLE, owner = "P10", backing = Backing.PRODUCTION,
+      sources = listOf("$SEARCH/engine/PeopleGate.kt", "$SEARCH/engine/LibrarySuggestions.kt"), probe = RealSearchPeopleProbes.searchPeople(), live = true,
+      alsoProvedBy = listOf("PeopleSearchEngineTest", "PeopleHistoryAndSuggestionsTest", "PeopleQueryTableTest"),
+    ),
+    // --- Il codice vero di P10 (album smart con le persone): i candidati sono quelli VISIBILI del catalogo, le celle delle persone passano da `PeopleVisibility` ---------------
+    SurfaceEntry(
+      id = "albums-people", title = "Album smart con le persone: la regola \"Persone\" (sicuri e suggeriti, \"e\" con il periodo, alias, persona dimenticata, volti spenti) e il nome che diventa regola (D27)",
+      row = SpecRow.PEOPLE, owner = "P10", backing = Backing.PRODUCTION,
+      sources = listOf("$ALBUMS/smart/SmartPeople.kt", "$ALBUMS/smart/SmartClassifier.kt"), probe = RealAlbumsPeopleProbes.albumsPeople(), live = true,
+      alsoProvedBy = listOf("SmartPeopleTest", "SmartPeoplePropertyTest", "SmartPeopleInterpreterTest", "SmartUpkeepPeopleTest"),
     ),
   )
 

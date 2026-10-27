@@ -32,6 +32,7 @@ class SearchNoticeItemsTest {
       SearchNotice.NoIndexerForArea(commonArea = false),
       SearchNotice.TypoCorrected("screenshot", "screeshot"),
       SearchNotice.TextReadingOff,
+      SearchNotice.PeopleRecognizing(60),
     )
     for (notice in samples) {
       val (item, action) = expected(notice)
@@ -48,6 +49,7 @@ class SearchNoticeItemsTest {
     is SearchNotice.NoIndexerForArea -> NoticeItem.NoIndexer(notice.commonArea) to NoticeAction.ENABLE_INDEXER
     is SearchNotice.TypoCorrected -> NoticeItem.Typo(notice.from, notice.to) to null
     SearchNotice.TextReadingOff -> NoticeItem.TextReadingOff to NoticeAction.LEARN_TEXT_READING
+    is SearchNotice.PeopleRecognizing -> NoticeItem.PeopleProgress(notice.percent) to null
   }
 
   @Test

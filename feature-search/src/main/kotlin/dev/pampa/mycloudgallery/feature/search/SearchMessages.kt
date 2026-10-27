@@ -80,6 +80,7 @@ private fun noticeText(item: NoticeItem): String = when (item) {
   NoticeItem.TextReadingOff -> stringResource(R.string.search_text_reading_off)
   is NoticeItem.CoveragePartial -> stringResource(R.string.search_coverage_partial, GalleryNumbers.format(item.covered), GalleryNumbers.format(item.total))
   is NoticeItem.CoverageUpdating -> stringResource(R.string.search_coverage_updating, item.percent)
+  is NoticeItem.PeopleProgress -> stringResource(R.string.search_people_progress, item.percent)
 }
 
 /** Il titolo corto sopra la frase: dice di che cosa si parla, senza allarmare. */
@@ -90,12 +91,13 @@ private fun noticeTitle(item: NoticeItem): String = stringResource(
     is NoticeItem.NoIndexer, is NoticeItem.CoveragePartial, is NoticeItem.CoverageUpdating -> R.string.search_notice_title_coverage
     is NoticeItem.Typo -> R.string.search_notice_title_typo
     NoticeItem.TextReadingOff -> R.string.search_notice_title_text
+    is NoticeItem.PeopleProgress -> R.string.search_notice_title_people
   },
 )
 
 /** Informare, non allarmare (§12.12): l'azzurro per cio' che si sta facendo, il neutro per il resto, mai il rosso. */
 private fun noticeTone(item: NoticeItem): FluidTone = when (item) {
-  NoticeItem.Preparing, is NoticeItem.CoverageUpdating -> FluidTone.Info
+  NoticeItem.Preparing, is NoticeItem.CoverageUpdating, is NoticeItem.PeopleProgress -> FluidTone.Info
   is NoticeItem.ModelMissing, is NoticeItem.NoIndexer, is NoticeItem.CoveragePartial, NoticeItem.TextReadingOff -> FluidTone.Neutral
   is NoticeItem.Typo -> FluidTone.Info
 }

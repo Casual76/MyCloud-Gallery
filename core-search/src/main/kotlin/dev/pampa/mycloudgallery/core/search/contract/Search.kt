@@ -87,6 +87,16 @@ sealed interface SearchNotice {
 
   /** Parole cercate con la lettura del testo spenta ovunque (una volta, poi solo nella pagina, D31). */
   data object TextReadingOff : SearchNotice
+
+  /**
+   * Fase 8 (§2.7, come `SearchCoverage`, F6-D31): sopra i risultati con un chip "Persona", finche' il primo calcolo dei volti non e' finito,
+   * "Sto ancora riconoscendo i volti: 60%". [percent] va da 0 a 99 (a cento il calcolo e' finito e l'avviso non c'e' piu').
+   */
+  data class PeopleRecognizing(val percent: Int) : SearchNotice {
+    init {
+      require(percent in 0..99) { "Percentuale fuori misura." }
+    }
+  }
 }
 
 /**
@@ -250,10 +260,26 @@ sealed interface Suggestion {
   data class Type(val type: SearchMediaType, override val label: String) : Suggestion
 
   data class Term(override val label: String) : Suggestion
+
+  /** Fase 8 (§2.7): un nome del dizionario che comincia cosi'. Mai una persona nascosta, mai da media nascosti (D28). */
+  data class PersonSuggestion(val option: PersonOption) : Suggestion {
+    override val label: String get() = option.label
+
+    /** Mai il nome (D37). */
+    override fun toString(): String = "PersonSuggestion(${option.ids.size})"
+  }
 }
 
-/** Cerca a riposo (§2.6): ricerche recenti (fino a 10), luoghi piu' frequenti (fino a 8, mai da nascosti), tipi. */
-data class IdleSuggestions(val recents: List<HistoryEntry>, val places: List<PlaceOption>, val types: List<SearchMediaType>)
+/**
+ * Cerca a riposo (§2.6): ricerche recenti (fino a 10), luoghi piu' frequenti (fino a 8, mai da nascosti), tipi e, dalla Fase 8, una riga
+ * "Persone" (fino a 6, le piu' frequenti con un nome, §2.7).
+ */
+data class IdleSuggestions(
+  val recents: List<HistoryEntry>,
+  val places: List<PlaceOption>,
+  val types: List<SearchMediaType>,
+  val people: List<PersonOption> = emptyList(),
+)
 
 interface Suggestions {
   suspend fun idle(): IdleSuggestions
@@ -273,6 +299,13 @@ interface SearchHistory {
   suspend fun delete(id: Long)
 
   suspend fun clear()
+
+  /**
+   * Fase 8 (D29 passo 4, F6-D32, invariante 1 del §2.8): toglie le ricerche che contengono uno dei [names] (nel testo o nelle etichette dei
+   * chip, a parole intere, senza badare a maiuscole e accenti), anche i nomi vecchi. Quante ne ha tolte. Idempotente. La porta `SearchHistoryPurge`
+   * di core-faces la lega :app (P13) a questa.
+   */
+  suspend fun purge(names: Collection<String>): Int
 
   companion object {
     const val MAX_ENTRIES: Int = 50

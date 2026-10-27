@@ -54,7 +54,7 @@ class AlbumPageViewModel @Inject constructor(savedStateHandle: SavedStateHandle,
   val id: AlbumId = AlbumId(savedStateHandle.toRoute<AlbumPageDestination>().id)
 
   val controller: AlbumPageController = AlbumPageController(
-    id, ports.albums, ports.shared, ports.choices, ports.runner, ports.people, ports.members, ports.pending, ports.clock, viewModelScope,
+    id, ports.albums, ports.shared, ports.choices, ports.runner, ports.people, ports.members, ports.pending, ports.clock, viewModelScope, ports.peopleChoices,
   )
 
   val people = ports.people

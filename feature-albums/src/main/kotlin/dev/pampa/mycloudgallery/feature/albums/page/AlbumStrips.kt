@@ -11,6 +11,7 @@ import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.PauseCircle
+import androidx.compose.material.icons.rounded.PersonOff
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Verified
@@ -110,6 +111,13 @@ internal object AlbumStrips {
       "not_added", Icons.Rounded.ErrorOutline, FluidTone.Warning, resources.getString(R.string.album_banner_not_added),
       resources.getQuantityString(R.plurals.album_banner_not_added_detail, banner.count, banner.count),
       if (canBringBack) StripAction.BRING_BACK_REJECTED else StripAction.NONE,
+    )
+    AlbumBanner.PeopleOff -> Strip(
+      "people_off", Icons.Rounded.PersonOff, FluidTone.Info, resources.getString(R.string.album_banner_people_off), resources.getString(R.string.album_banner_people_off_detail),
+    )
+    is AlbumBanner.PeopleLost -> Strip(
+      "people_lost", Icons.Rounded.ErrorOutline, FluidTone.Warning, resources.getQuantityString(R.plurals.album_banner_people_lost, banner.count, banner.count),
+      resources.getString(R.string.album_banner_people_lost_detail),
     )
     AlbumBanner.Inherited -> Strip(
       "inherited", Icons.Rounded.Verified, FluidTone.Success, resources.getString(R.string.album_banner_inherited), resources.getString(R.string.album_banner_inherited_detail),

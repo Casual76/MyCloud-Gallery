@@ -126,6 +126,12 @@ object PersonalFields {
   /** `ALBUM` smart: i tipi ammessi (foto, video), un testo con i codici. */
   const val SMART_TYPES: String = "smart:types"
 
+  /**
+   * `ALBUM` smart (Fase 8, D27, F7-D4: un campo nuovo dentro `ALBUM`, nessun tipo nuovo): le persone della regola, `any:<id>,<id>` (una qualunque) o
+   * `all:<id>,...` (tutte), gli id in base32 (26 caratteri); al piu' 32 persone. Un'app senza la Fase 8 conserva la voce senza capirla.
+   */
+  const val SMART_PEOPLE: String = "smart:people"
+
   /** Prefisso di una foto d'esempio (al piu' 6, D13): vedi [smartExample]. */
   const val SMART_EXAMPLE: String = "smart:example"
 
@@ -230,7 +236,7 @@ object PersonalFields {
   fun albumAcceptMedia(field: String): String? = after(field, "$ALBUM_ACCEPT:")
 
   /** I campi `smart:*` che portano una regola intera (un testo); le foto d'esempio sono voci a parte ([smartExample]). */
-  val SMART_RULE_FIELDS: List<String> = listOf(SMART_PERIOD, SMART_PLACE, SMART_TEXT, SMART_SOURCES, SMART_TYPES)
+  val SMART_RULE_FIELDS: List<String> = listOf(SMART_PERIOD, SMART_PLACE, SMART_TEXT, SMART_SOURCES, SMART_TYPES, SMART_PEOPLE)
 
   /** Il codice della sezione delle Raccolte di una visibilita' (`collections_hidden:<sezione>`), o null. */
   fun collectionsHiddenSection(field: String): String? = after(field, "$SETTING_COLLECTIONS_HIDDEN:")

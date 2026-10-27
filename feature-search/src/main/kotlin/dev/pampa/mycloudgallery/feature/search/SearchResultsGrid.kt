@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridInteractionState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
@@ -150,6 +151,8 @@ private fun ShowLikelyRow(count: Int, onShowLikely: () -> Unit) {
     text = stringResource(R.string.search_show_likely, GalleryNumbers.format(count)),
     onClick = onShowLikely,
     style = FluidButtonStyle.Tinted,
+    // Fase 8 (P10): da 48 dp come ogni controllo (era 42): e' il modo di vedere anche le foto con un volto "forse" di una persona.
+    size = FluidButtonSize.Large,
     fillWidth = true,
     modifier = Modifier.padding(horizontal = GalleryDimens.Gutter, vertical = SearchDimens.NoticeInset),
   )

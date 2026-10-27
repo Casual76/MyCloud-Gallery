@@ -1,0 +1,16 @@
+# Fase 8 (P10, D26, E-F37): con il dizionario vuoto (Persone spenta, in attesa dell'avviso o esclusa su questo dispositivo) un nome e' solo testo per il
+# contenuto: nessun chip "Persona" e nessun errore. Le altre regole valgono come prima.
+
+Marco => - => Marco => marco
+Marco al mare => - => Marco al mare => marco, mare
+Marco e Anna => - => Marco e Anna => marco, anna
+Marco o Anna a Natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) => Marco o Anna => marco, anna
+foto di Anna => T PHOTO Foto => di Anna => anna
+Natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni)
+Marina => P Marina #20 PLACE word=marina
+Lucca => P Lucca #17 PLACE word=lucca
+Marco 2024 => D 2024-01-01..2024-12-31 2024 => Marco => marco
+Anna ieri => D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026 => Anna => anna
+"Marco" => W exact Marco => - => - => Marco
+Marco a Firenze => P Firenze #1 PLACE word=firenze => Marco => marco
+San Marco => P San Marco (Veneto) #11 PLACE word=san marco alt=San Marco (Toscana)#10

@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.search
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
+import dev.pampa.mycloudgallery.core.search.contract.PersonOption
 import dev.pampa.mycloudgallery.core.search.contract.PlaceOption
 import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
@@ -39,6 +40,18 @@ interface SearchHandlers {
 
   /** "Cerca come parola" (E-Q10): il luogo torna a essere una parola del testo. */
   fun onPlaceAsWord(chip: SearchChip.Place)
+
+  /**
+   * Una persona della riga "Persone" a riposo o dei completamenti (Fase 8, §2.7): cerca quel nome, con il chip "Persona" gia' fatto (non passa
+   * dall'analizzatore: un nome che e' anche un luogo non cambia lettura).
+   */
+  fun onPerson(option: PersonOption)
+
+  /**
+   * Un'altra lettura della stessa parola (Fase 8, E-F36, come E-Q10): "Cerca la festa", "Cerca il luogo", "Cerca come parola" da un chip "Persona";
+   * "Cerca la persona" da una data o da un luogo che ha una persona con lo stesso nome. [to] e' il chip che prende il posto di [chip].
+   */
+  fun onSwitchReading(chip: SearchChip, to: SearchChip)
 
   fun onSetOrder(order: ResultOrder)
 
@@ -91,6 +104,10 @@ object NoSearchHandlers : SearchHandlers {
   override fun onChooseAlternative(chip: SearchChip.Place, option: PlaceOption) = Unit
 
   override fun onPlaceAsWord(chip: SearchChip.Place) = Unit
+
+  override fun onPerson(option: PersonOption) = Unit
+
+  override fun onSwitchReading(chip: SearchChip, to: SearchChip) = Unit
 
   override fun onSetOrder(order: ResultOrder) = Unit
 

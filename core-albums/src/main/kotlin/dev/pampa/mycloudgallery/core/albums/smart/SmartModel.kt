@@ -33,6 +33,9 @@ enum class SmartReason(override val code: String) : StableCode {
 
   /** Nel periodo, senza GPS, dello stesso dispositivo ma fuori dalla finestra di B (E-AL11). */
   S5("s5"),
+
+  /** Fase 8 (D27): le altre regole la farebbero entrare, ma una persona della regola c'e' solo come "forse" (un volto fra la soglia dei suggerimenti e quella dell'assegnazione). */
+  S6("s6"),
   ;
 
   companion object {

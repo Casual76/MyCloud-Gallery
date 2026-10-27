@@ -21,9 +21,8 @@ import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
- * Fase 8 (P0, D26): le firme della ricerca per persona. Finche' P10 non scrive l'analizzatore con il dizionario, un nome resta testo (la
- * firma nuova di `QueryParser` ignora le persone); il chip "Persona" e' un filtro che sull'istantanea da sola non allarga mai i risultati;
- * nomi e id non escono nei log.
+ * Fase 8 (P0, D26): le firme della ricerca per persona. Con il dizionario vuoto un nome resta testo (come prima di P10); il chip "Persona" e' un
+ * filtro che sull'istantanea da sola non allarga mai i risultati (lo decidono le celle della porta, P10); nomi e id non escono nei log.
  */
 class PeopleSignaturesTest {
 
@@ -61,16 +60,20 @@ class PeopleSignaturesTest {
     assertThat(PeopleDictionary.EMPTY.isEmpty).isTrue()
   }
 
-  /** Fino a P10 la firma con le persone e' quella di prima: "Marco" e' testo per il contenuto, nessun chip. */
+  /** Con il dizionario vuoto (Persone spenta) la firma con le persone e' quella di prima: "Marco" e' testo per il contenuto, nessun chip (P10 la riempie). */
   @Test
-  fun senzaLAnalizzatoreDiP10UnNomeRestaTesto() {
+  fun conIlDizionarioVuotoUnNomeRestaTesto() {
     val parser = ItalianQueryParser()
     val today = LocalDate.of(2026, 10, 27)
-    val people = PeopleDictionary(listOf(PersonEntry("marco", marco, "Marco", 5)))
-    val with = parser.parse("Marco al mare", today, PlaceDictionary.EMPTY, people)
+    val with = parser.parse("Marco al mare", today, PlaceDictionary.EMPTY, PeopleDictionary.EMPTY)
     val without = parser.parse("Marco al mare", today, PlaceDictionary.EMPTY)
     assertThat(with).isEqualTo(without)
     assertThat(with.chips.none { it is SearchChip.Person }).isTrue()
+    // Con il nome nel dizionario, invece, e' un chip "Persona" e "al mare" resta il contenuto.
+    val people = PeopleDictionary(listOf(PersonEntry("marco", marco, "Marco", 5)))
+    val named = parser.parse("Marco al mare", today, PlaceDictionary.EMPTY, people)
+    assertThat(named.chips.filterIsInstance<SearchChip.Person>().map { it.label }).containsExactly("Marco")
+    assertThat(named.words).containsExactly("mare")
   }
 
   /** Il chip "Persona" non si giudica sulla cella: sull'istantanea da sola esclude (non mostra mai altre persone). */

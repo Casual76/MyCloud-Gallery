@@ -6974,8 +6974,8 @@ dati dei volti sulle share vere (F110).
 | D23 | Correzioni come vincoli permanenti per posto (`FaceLocator`) | Deciso (P0: `PeopleEdit`, `PeopleState`; P5, P9) |
 | D24 | Rinomina, Unisci, Dividi, "È …", "Non è …", Ignora, Nascondi, Dimentica, Copertina, sincronizzati | Deciso (P0: `People`, `InMemoryPeople`; P9) |
 | D25 | Sezione Persone, pagina persona, "Altri volti" (Q2 (b)), riga "Persone" nelle info; copertine ritagliate al momento, mai salvate | Deciso (Q2 (b); P0: stati, `ViewerPeople`; P9) |
-| D26 | Ricerca per persona: chip `SearchChip.Person` dal dizionario dei nomi, candidati da `PeopleLookup`; `core-search` non vede `core-faces` | Deciso (P0: firme in `core-search`; P10) |
-| D27 | Album smart con persone: `smart:people`, `PeopleRule`, candidati da `PeopleMembership` | Deciso (P0: firme in `core-albums`; P10) |
+| D26 | Ricerca per persona: chip `SearchChip.Person` dal dizionario dei nomi, candidati da `PeopleLookup`; `core-search` non vede `core-faces` | Fatto (P0: firme in `core-search`; P10 il 27/10: sezione «Fase 8 P10») |
+| D27 | Album smart con persone: `smart:people`, `PeopleRule`, candidati da `PeopleMembership` | Fatto (P0: firme in `core-albums`; P10 il 27/10: sezione «Fase 8 P10») |
 | D28 | Nascosti mai nelle superfici delle persone (riga `PEOPLE` del registro) | Deciso (P9, P10) |
 | D29 | "Disattiva e cancella": azione locale confermata, diario prima, chiave per prima, l'intera `faces/<G>/` sul NAS | Deciso (P0: `FacesEraser`, `FacesEraseConfirmation`; P8) |
 | D30 | Un dispositivo pubblica `off` solo dopo aver cancellato (`PrePublishHook`); niente dati dei volti senza uno stato fresco | Deciso (P0: `PrePublishHook`, `PersonalHeadsView`, `FacesSwitch.fresh`; P7, P8) |
@@ -7126,7 +7126,7 @@ e letture con i tetti, guasti come esiti, proprietà su 300 operazioni a caso), 
   schermate con gli esempi; `ViewerPeople`. Da fare: `people/`, le schermate, la riga "Persone" nel viewer, le righe `PEOPLE` del registro dei
   Nascosti.
 - **P10**: `SearchChip.Person`, `PeopleDictionary`, `PeopleLookup`; `SmartRules.people`, `PeopleRule`, `PeopleMembership`; tutti con
-  null-object e fake. Da fare: regole dell'analizzatore, candidati, chip, regola nel motore smart, `smart:people`.
+  null-object e fake. Fatto da P10 (27/10, sezione «Fase 8 P10»): regole dell'analizzatore, candidati, chip, regola nel motore smart, `smart:people`.
 - **P11**: soglie provvisorie in `GroupingParams`, storie sintetiche con purezza e copertura. **P12**: esecutori di riferimento, suite e
   `FailingFacesPorts` per i banchi. **P13**: null-object di ogni porta (i default finché non lega i pezzi veri), `DiagSection.PEOPLE`, i
   codici di `FacesDiag`, `FeatureFlags.facesSyncMayUse` per `FacesWriteGate` (il passo D34 di `check.ps1` da estendere col cancello),
@@ -9515,3 +9515,176 @@ Tutte sulla JVM o Robolectric, nessun dispositivo. `core-faces` 35 nuove (`erase
 
 ### Esito di `tools\check.ps1 -NoDaemon`
 **Verde** (27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, APK di release vecchio cancellato prima, dopo l'unione di `integra/29-10c`): assembleDebug, assembleRelease, galleryTest e galleryLint; test eseguiti in ogni modulo, fra cui `core-faces` 485, `core-nasops` 348, `core-personal` 248, `feature-people` 603, `core-common` 130, `app` 872; D34 nel dex e in mapping.txt e LiteRT solo in `core-ai` ancora ok; nessuna classe `testing` nel dex di release; manifest e permessi invariati. Solo SKIP il banco su dispositivo (-Bench). Il primo giro era rosso per `NoRemoteDataToActionTest` (le due classi nuove che tolgono file dei volti non erano nell'elenco): corretto come scritto sopra, poi verde.
+
+## Fase 8 P10: ricerca per persona e album smart con persone (27/10)
+
+Il pacchetto P10 della Fase 8 (`docs/fase8-progetto.md` §4.4 riga P10, §2.7, D26, D27, §2.9 `search-people` e `albums-people`, E-F36–E-F38, risposte Q2 (b) e Q3). Branch `fase8/p10` da `main` `4eb7c207`. Lavora sulle porte
+di P0 (`PeopleLookup` in `core-search`, `PeopleMembership` in `core-albums`) e **non vede `core-faces`**: il legame con le persone vere (`PeopleIndex`, `PeopleCells`, `PeopleVisibility`) lo fa `:app` (P13); qui c'è la
+forma del legame, scritta nelle sonde del registro dei Nascosti (`IndexPeopleLookup`), e i null-object e i fake di P0 ancora validi. Nessuna dipendenza, permesso, componente o host nuovo. Si cerca **per nome** (D26): nessuna
+porta prende un vettore, un volto o una chiave di contenuto. Solo nomi inventati nel codice, nei test, negli screenshot e qui.
+
+### La ricerca per persona (`core-search`, `feature-search`)
+
+**Cosa c'è, dove**
+
+| Dove | Cosa |
+|---|---|
+| `core-search/.../parse/PeopleNameIndex.kt` | l'indice dei nomi del dizionario (costruito una volta per dizionario, come quello dei luoghi): corrispondenza più lunga, omonimi dal più frequente, refusi conservativi |
+| `core-search/.../parse/QueryReadings.kt` | le **letture** di una posizione della query (data/tipo, luogo, nome), la scelta fra loro (E-F36) e la **catena** di persone ("Marco e Anna", "Marco o Anna") |
+| `core-search/.../parse/ItalianQueryParser.kt` | `parse(text, today, places, people)`: il nome è una lettura come le altre, **dopo le virgolette e prima dei luoghi**; con il dizionario vuoto la tabella di prima dà lo stesso risultato riga per riga |
+| `core-search/.../engine/PeopleGate.kt` | il chip "Persona" come **filtro** sulle celle della porta (`PeopleLookup.cells`), sicure e "forse"; il peso delle date dell'istantanea (`SnapshotDateMedia`) |
+| `core-search/.../engine/{LocalSearchEngine,SearchCore}.kt`, `testing/InMemorySearchEngine.kt` | il filtro nei due motori (parità), l'avviso di copertura, la classe "meno probabili" per le celle "forse" |
+| `core-search/.../engine/LibrarySuggestions.kt` | la riga "Persone" a riposo (fino a 6) e i nomi mentre si scrive (fino a 4) |
+| `core-search/.../history/{HistoryNames,LocalSearchHistory}.kt` | `SearchHistory.purge(names)`: la cronologia ripulita dai nomi (a parole intere) |
+| `core-search/.../contract/ChipReadings.kt` | le due mosse del foglio di un chip: dalla persona alla festa/al luogo e ritorno |
+| `feature-search/...` | la riga "Persone", i completamenti, il chip e il suo foglio, l'avviso "Sto ancora riconoscendo i volti: 60%" |
+
+**Decisioni**
+
+1. **Dove sta il nome nell'analisi.** Il nome si legge dopo le virgolette (il testo esatto non è mai una persona) e prima dei luoghi. In ogni posizione le letture possibili sono tre: un periodo o un tipo
+   (calendario), un luogo, un nome. Vince la **più lunga**: il nome più corto di un luogo o di una data cede ("San Marco" è il luogo, "Natale 2024" è la data). A parole uguali (E-F36) vince la lettura con **più media
+   visibili**: la persona ha `PersonEntry.mediaCount`, il luogo `PlaceEntry.mediaCount`, la festa o il mese li conta l'istantanea della Libreria (`DateMediaCount`, dentro `PeopleDictionary.dates`: il motore la lega a
+   `SnapshotDateMedia`; di serie vale 0 e il nome vince). **Alla pari vince il nome** (l'ha scritto l'utente). Chi perde diventa l'alternativa del chip: dal chip "Persona" "Cerca la data" / "Cerca il luogo" / "Cerca
+   come parola"; da una data o da un luogo che hanno vinto, "Cerca la persona" (`DateRange.person`, `DateSet.person`, `Place.person`: un campo in più con valore di serie nullo, così le tabelle di prima non cambiano).
+   Senza il ritorno chi ha un luogo e una persona con lo stesso nome non avrebbe modo di cercare la persona.
+2. **Congiunzioni.** "e", "ed", "con" = **tutte**; "o", "od", "oppure" = **una qualunque**; più nomi senza congiunzione (anche con le virgole) = tutte. Dopo una congiunzione può esserci una preposizione o "con" ("foto
+   di Marco e di Anna"). La **prima** congiunzione fissa il modo del chip e un nome senza congiunzione prende quello: "Marco, Anna o Giulia" è una qualunque delle tre, "Marco, Anna e Giulia" tutte e tre. Una congiunzione
+   diversa dalla prima chiude il chip e la persona dopo ne comincia un altro, in "e" con il primo ("Marco o Anna e Giulia" = *Marco o Anna* e *Giulia*): i chip sono filtri in "e", la lettura "(Marco e Anna) o Giulia" non
+   si può dire con i chip (L202). Al più 32 persone in un chip; un nome ripetuto conta una volta.
+3. **Omonimi.** Fra persone con lo stesso nome vince quella con più media, a pari numero l'id minore (il contratto di P0: `PeopleDictionary.lookup`); le altre non si propongono (un chip "Persona" non ha altre persone come
+   alternativa, L200). Un nome di più parole vince su uno che ne è un pezzo ("Anna Maria" su "Anna", "Gian Luca" su "Luca").
+4. **Refusi dei nomi, conservativi** (E-Q5). Il nome l'ha scelto l'utente: correggere un'altra parola nel nome sbagliato è peggio che non correggere. Si corregge da cinque lettere, con la stessa iniziale, una sola modifica, se
+   il migliore è unico, mai solo l'ultima lettera ("Chiaro" non è "Chiara", "Paola" non è "Paolo"), mai una parola delle regole o dei luoghi, e solo se la modifica è **una lettera scambiata con la vicina, una lettera raddoppiata o
+   tolta dal raddoppio, una "k" per una "c"**, oppure — da sette lettere in su — una lettera qualunque ("Maria" non diventa "Marina"; "Elana" resta testo, L201). La correzione è dichiarata come le altre ("Ho cercato «Giulia»
+   invece di «giulai»"). Un refuso di un nome vince sul refuso di un mese ("Marko" è "Marco", non "marzo"), e una parola che compare in un nome non è mai corretta come mese o festa. Un nome scritto con un refuso accanto a un
+   nome più lungo che ne comincia ("Anna Marria") non si corregge: vince il nome esatto più corto.
+5. **Il chip è un filtro, non un punteggio** (§2.7). `PeopleGate` chiede alla porta le celle "sicure" (`includeLikely = false`) e quelle con anche il "forse"; una cella passa se sta, per ogni chip "Persona", fra le seconde; è
+   "sicura" solo se sta fra le prime di ogni chip, altrimenti al meglio "meno probabile" (anche se il contenuto la dà per sicura). Le altre regole (tipi, date, luoghi, contenuto, testo) restano in "e" come prima.
+   `ChipMatching.accepts` per `Person` resta `false` (P0): sulla sola istantanea il chip non allarga mai niente.
+6. **Nascosti mai** (D28). Il dizionario viene dalla porta (persone con un nome, non nascoste né dimenticate, con almeno un media **visibile**); i candidati sono le celle della porta **intersecate con l'istantanea della Libreria**
+   (che non ha nascosti), e il filtro finale dei nascosti di `SearchCore.finish` li toglie ancora; una porta che sbaglia (celle nascoste, un'eccezione) non fa uscire niente e non ferma la ricerca. Dove i volti non ci sono
+   (`available = false`, dizionario vuoto) un nome è testo e un chip arrivato da prima non trova celle (E-F37).
+7. **Copertura.** `PeopleLookup.progressPercent` (di serie senza avanzamento) porta la percentuale del primo calcolo; sopra i risultati con un chip "Persona" Cerca dice "Sto ancora riconoscendo i volti: 60%"
+   (`SearchNotice.PeopleRecognizing`), come la copertura (F6-D31).
+8. **Suggerimenti.** A riposo la riga "Persone": le più fotografate con un nome, fino a 6, una pillola da 48 dp ciascuna, prima dei luoghi; mentre si scrive, i nomi (o una loro parola) che cominciano così, fino a 4, prima dei
+   luoghi. Toccare un nome cerca **con il chip già fatto** (non passa dall'analizzatore: un nome che è anche un luogo non cambia lettura).
+9. **Cronologia** (F6-D32, invariante 1 del §2.8). Le etichette dei chip e il testo sono già nella cronologia: `SearchHistory.purge(names)` toglie le voci che contengono un nome (testo o etichette dei chip), **a parole intere**
+   normalizzate come i luoghi ("Giovanna" non contiene "Anna"; "Nicolò D'Amico" si trova come "nicolo d amico"). Un nome di una lettera o una parola comune toglie anche le voci che la usano come parola qualunque: meglio una
+   voce in più che un nome rimasto. Legge le voci **adesso** da `HistoryStore.records` (se il deposito la sa), altrimenti l'ultimo elenco vivo; è idempotente. La porta che chiama P8 (`SearchHistoryPurge.purge(names): Int`, in
+   `DefaultFacesEraser`, passo 4) la lega P13 a questa.
+10. **Si cerca per nome, mai per somiglianza** (D26): `PeopleLookup` non prende vettori né volti né chiavi di contenuto (`PeopleSearchByNameOnlyTest` lo legge dalle firme); non esiste da nessuna parte "trova questo volto".
+11. **Bersagli da 48 dp.** Il bottone "Mostra anche risultati meno probabili" era di 42 dp: è il modo di vedere le foto con un volto "forse", ora è `FluidButtonSize.Large`.
+
+### Gli album smart con le persone (`core-albums`, `feature-albums`)
+
+Sopra il motore di P6 e l'editor di P10 della Fase 7, dopo le correzioni del pacchetto D (unite da `integra/27-10b`).
+
+**Cosa c'è, dove**
+
+| Dove | Cosa |
+|---|---|
+| `core-albums/.../personal/SmartRulesText.kt`, `core-personal/.../contract/Personal.kt` | il campo `smart:people` = `any:`/`all:` + gli id in base32 separati da virgola; `PersonalFields.SMART_RULE_FIELDS` lo porta nella riga `album_rule` `people` |
+| `core-albums/.../smart/SmartPeople.kt` | `PeopleMatches` (le classi dei candidati caricati) e `LookupPeopleMembership`: `PeopleMembership` sopra la **stessa** porta della ricerca (`PeopleLookup`, una porta sola per P13) |
+| `core-albums/.../smart/SmartClassifier.kt`, `SmartModel.kt` | il verdetto con le persone "in e"; nuova ragione `S6` |
+| `core-albums/.../smart/RulesSmartEngine.kt` | classi chieste a lotti per i candidati caricati; senza volti l'album non cambia; l'anteprima con `peopleAvailable` e `peopleLost` |
+| `core-albums/.../smart/RuleSmartNameInterpreter.kt` | "Marco 2025" → la regola delle persone, con il dizionario pesato dalle date dell'istantanea |
+| `core-albums/.../upkeep/SmartUpkeep.kt` | `peopleChanged()`: rivaluta gli smart con le persone |
+| `feature-albums/.../editor/{PeopleSection,PeoplePickerSheet,SmartEditorController}.kt` | la sezione "Persone" e il foglio di scelta; `SmartEditorMode.Create(title, startWith)` |
+| `feature-albums/.../contract/PeopleChoices.kt` | la porta delle persone da scegliere (nomi, perse), con il null-object che fallisce chiuso e `FakePeopleChoices` |
+| `feature-albums/.../nav/AlbumsNavigation.kt` | `SmartEditorDestination.person` e `openSmartEditorForPerson(title, person)` |
+| `feature-albums/.../page/{AlbumPageController,AlbumStrips}.kt` | le strisce `PeopleOff` e `PeopleLost` in testa alla pagina |
+| `app/src/test/.../hidden/{RealAlbumsPeopleProbes,HiddenAlbumsPeopleMutationTest,RealSmartStack}.kt` | la sonda `albums-people` e la sua prova al contrario |
+
+**Decisioni**
+
+12. **La regola e il suo testo.** `SmartRules.people` (`PeopleRule(ids, mode)`, al più 32 persone, senza ripetizioni) si scrive come `smart:people`: `any:<id>,<id>` o `all:<id>,...`, gli id in base32 (26 caratteri, la forma
+    che già hanno nei dati dei volti): 32 persone sono 868 caratteri, sotto i 1.024 della voce (con la forma UUID di 36 non ci starebbero). Un campo che non si legge (modo sconosciuto, più di 32 persone, ripetizioni, base32
+    sbagliato, un'app più nuova) vale **regola assente** e non rovina le altre regole (L205); una regola della Fase 7 si legge e si scrive come prima, con il campo nuovo vuoto. Il campo nuovo sta in
+    `PersonalFields.SMART_RULE_FIELDS` (due righe in `core-personal`, fuori dal perimetro del brief ma necessarie: è la lista che la proiezione `album_rule` usa per sapere quali campi sono regole).
+13. **Sicuro e suggerito, "in e".** Il motore chiede a `PeopleMembership.classify(regola, candidati)` la classe di ogni candidato **caricato** (e solo quelli: vengono da `VisibleMedia`, quindi mai un nascosto): `SURE` se
+    ogni persona (con "tutte") o una (con "una qualunque") ha un volto assegnato, `LIKELY` se basta un volto nella fascia "forse", niente altrimenti. Il verdetto delle altre regole si combina così: nessuna classe =
+    **fuori**; `SURE` = il verdetto di prima; `LIKELY` = al più suggerito (un sicuro diventa suggerito con la nuova ragione `S6`, un suggerito resta com'è). Esclusioni e accettazioni restano (E-AL5). Una regola di sole
+    persone è una regola come le altre (a differenza delle sole parole chiave senza motore, E-AL9): l'album si riempie; legge la Libreria intera a ogni valutazione completa (L203).
+14. **Senza volti qui (E-F37) l'album non cambia.** Con `PeopleMembership.available = false` il motore non inserisce niente **e non toglie niente**: restituisce i conti che l'album ha, come per le regole C e S4 senza il
+    motore di ricerca (D15): un dispositivo senza volti (Persone spenta, in attesa dell'avviso, escluso) non deve svuotare un album riempito da un altro. È più stretto del testo del §2.7 ("non inserisce niente"),
+    che non diceva cosa fare di ciò che c'era. L'anteprima è vuota e dice `peopleAvailable = false`; l'editor e la pagina dell'album lo dicono con le parole del progetto: «Le persone non sono attive su questo dispositivo».
+    Le altre regole non riempiono l'album da sole (sarebbe un album diverso): `SmartPeopleTest.senzaVoltiLaRegolaNonInserisceNienteENonTogliePiuNiente`.
+15. **Persone unite, nascoste, dimenticate (E-F23, E-F27, E-F28).** La regola tiene l'id scelto; seguire gli alias lo fa la porta (`PeopleIndex.contentWith` risolve l'unione), quindi una regola con la persona sparita
+    nell'unione vale la persona che resta, con le foto di tutte e due (provato sul registro vero: `albums-people`, passo 6). Una persona **dimenticata** (o sconosciuta) non può stare in nessuna foto: con "tutte"
+    l'album non prende niente, con "una qualunque" prende le altre; si **conta** (`PeopleMembership.unrecognized`, di serie 0; `LookupPeopleMembership` lo calcola con `resolve` = `PeopleIndex.resolve`, che P13 lega) e
+    l'anteprima dice `peopleLost`. Una persona **nascosta** vale ancora (E-F28: le foto non cambiano) e il suo nome non si mostra: l'editor scrive «Una persona nascosta» (L204). Pagina e editor avvisano:
+    «Una persona della regola non è più riconosciuta».
+16. **Dal nome alla regola.** `RuleSmartNameInterpreter` ha una porta `PeopleLookup` (di serie `NoPeopleLookup`: il nome resta testo) e passa al `QueryParser` il dizionario con il **peso delle date** dell'istantanea
+    (`ChipMatching` conta i media che un mese o una festa avrebbero, per E-F36): "Marco 2025" = Marco nel 2025, "Marco e Anna" = tutte e due, "Marco o Anna" = una qualunque. Più chip "Persona" in "e" (ciascuno una
+    persona o "tutte") si fondono in una regola "tutte"; se uno è "una qualunque" di più persone vale il primo e gli altri restano chip che il titolo non porta (L206). Una porta che sbaglia vale dizionario vuoto.
+17. **Ricalcolo.** `SmartUpkeep.peopleChanged()` rivaluta interi gli smart con le persone, uno alla volta e con il budget di ogni valutazione (`drain` riprende quelli rimasti a metà); non tocca i congelati né gli smart
+    senza persone. Lo chiama P13 quando cambiano `People.list` o lo stato di Persone. Gli arrivi di media vanno già per la strada di prima (`catalogChanged`, che passa dal motore con le persone).
+18. **L'editor.** Una sezione "Persone" dopo "Luogo": le persone della regola per nome (una riga da 48 dp ciascuna, si tocca per toglierla), «Tutte queste persone» / «Almeno una di loro» quando sono due o più, «Aggiungi
+    persone» che apre il foglio di scelta (le persone con un nome, le più fotografate prima; ogni tocco cambia subito la regola e l'anteprima; con più di otto persone un campo «Cerca per nome» senza accenti né maiuscole),
+    «Togli le persone». Aggiungere la seconda persona a una regola mette «tutte» (come «Marco e Anna»); il modo si cambia subito. Dove i volti non ci sono la sezione compare **solo** se la regola ha già delle persone
+    (altrimenti non c'è niente da scegliere né da perdere) e lo dice. Un errore della porta delle persone non rompe l'editor (AS-7). Dalla pagina persona («Crea album smart») P13 apre
+    `openSmartEditorForPerson(titolo, persona)`: l'editor parte con la regola già messa e **senza passare dall'interprete** (il titolo è un nome, non un'idea di regole); una regola di sole persone si può creare.
+19. **La pagina dell'album** dice due cose in testa, nel gruppo delle strisce: «Le persone non sono attive su questo dispositivo» (informazione) e «Una persona della regola non è più riconosciuta» (avviso), quando lo smart
+    ha la regola delle persone; si rifanno quando cambia la regola o si accendono i volti.
+20. **La superficie `albums-people`** (registro dei Nascosti, riga `PEOPLE`): la sonda mette il motore vero (`RulesSmartEngine` con `LookupPeopleMembership`) sul catalogo e sulle persone vere del mondo casuale e
+    controlla, contro l'oracolo del mondo, sicuri e suggeriti di una persona, di due ("tutte", "una qualunque"), con il periodo, una nascosta, una che vive solo su media da non mostrare, una dimenticata (con il conto delle
+    perse), il dispositivo senza volti (nulla cambia e l'anteprima lo dice), il nome che diventa regola, l'unione. Diventa rossa togliendo i filtri (`HiddenAlbumsPeopleMutationTest`).
+
+**Proprietà su 200 album sintetici** (`SmartPeoplePropertyTest`): un mondo a caso e cinque persone con volti «sicuri» e «forse» a caso; per 200 album con periodo e/o luogo il verdetto con le persone è **esattamente**
+quello dell'album gemello senza persone, combinato con la classe (fuori / uguale / suggerito S6 / già suggerito); dove i volti non ci sono nessuna riga cambia; e il ricalcolo incrementale con le persone (40 storie, 240 lotti
+con arrivi, spostamenti di assegnazioni e nascosti) è uguale a quello da zero.
+
+**Prove per caso limite**
+
+| Caso | Dove si prova |
+|---|---|
+| E-F36 (un nome che è anche una festa, un luogo, un mese) | `PeopleQueryTableTest` (tabella pubblica: ambiguità con feste, luoghi e mesi, e il ritorno «Cerca la persona»), `PeopleSearchEngineTest` (il peso delle date dell'istantanea), `SmartPeopleInterpreterTest.unNomeCheELuogoLoDecideChiHaPiuMediaVisibili`, `PeopleSearchControllerTest`, `PeopleSearchScreenTest` |
+| E-F37 (dispositivo senza volti) | `PeopleOffQueryTableTest` (dizionario vuoto = testo), `PeopleSearchEngineTest`, `SmartPeopleTest.senzaVolti…` e `SmartPeoplePropertyTest.senzaVoltiNessunaRigaCambia…`, `SmartUpkeepPeopleTest.senzaVolti…`, `PeopleEditorControllerTest.senzaIVolti…`, `PeopleAlbumBannerTest.senzaVolti…`, `albums-people` passo 4 |
+| E-F38 (nascosti mai) | `search-people` e `albums-people` nel registro (`HiddenSurfacesPropertyTest`), `HiddenSearchPeopleMutationTest` e `HiddenAlbumsPeopleMutationTest` (senza i filtri sono rosse; con tutto nascosto non esce niente), `PeopleSearchEngineTest`, `SmartPeopleTest.unNascostoNonEntraMai…` |
+| E-F23 (persone unite) | `albums-people` passo 6 (unione sul registro vero: la regola con la persona sparita vale quella che resta, non conta come persa), `SmartPeopleTest.unaPersonaDimenticata…` (le unite e nascoste non sono perse) |
+| E-F27 (persona dimenticata) | `SmartPeopleTest.unaPersonaDimenticataSiContaETutteNonDaNiente`, `albums-people` passo 3, `PeopleEditorControllerTest.unaPersonaPerduta…`, `PeopleAlbumBannerTest.unaPersonaPerduta…`, `PeopleEditorScreenTest` |
+| E-F28 (persona nascosta) | `PeopleEditorControllerTest`, `PeopleAlbumBannerTest.unaPersonaNascosta…`, `albums-people` («persona nascosta»), `PeopleSearchEngineTest` (la ricerca non la conosce) |
+| E-Q5 (refusi) | `PeopleQueryTableTest` (righe di refusi di nomi), `PeopleParserPropertiesTest` |
+| E-Q10 (alternativa del chip) | `PeopleQueryTableTest`, `PeopleSearchControllerTest`, `PeopleSearchScreenshotTest` |
+| `smart:people` andata e ritorno | `PeopleRulesTextTest` (le due forme, 32 persone sotto il tetto, campi illeggibili, regole vecchie), `PersonalAlbumsFieldsTest` |
+
+**Ganci per P13** (`:app` lega, P10 non tocca il grafo)
+
+| Porta | Cosa lega P13 |
+|---|---|
+| `PeopleLookup` (core-search) | `IndexPeopleLookup` del registro è la forma: `PeopleIndex.dictionary/contentWith` → celle (`PeopleCells`) → `PeopleVisibility`; `progressPercent` dal primo calcolo |
+| `PeopleMembership` (core-albums) | `LookupPeopleMembership(lookup, resolve = PeopleIndex::resolve)` sopra **lo stesso** `PeopleLookup`; va passata a `RulesSmartEngine(people = …)` e `RuleSmartNameInterpreter(people = lookup)` |
+| `SearchHistoryPurge` (core-faces, P8) | `SearchHistory.purge(names)` |
+| `SmartUpkeep.peopleChanged()` | chiamarla quando cambiano `People.list` o lo stato di Persone |
+| `PeopleChoices` (feature-albums, `@BindsOptionalOf`) | `choices()` dalle persone con un nome e un media visibile (non nascoste, le più frequenti prima), `inspect(ids)` con `PeopleIndex.resolve` (nomi, perse), `available` da `PeopleIndex.available` |
+| «Crea album smart» (pagina persona) | `NavController.openSmartEditorForPerson(nome, persona)` |
+
+**Limiti nuovi** (`docs/sicurezza.md`): L200 omonimi, L201 refusi dei nomi, L202 «(A e B) o C», L203 smart di sole persone legge tutta la Libreria, L204 persona nascosta senza nome nella regola, L205 campo
+`smart:people` illeggibile = regola assente, L206 titoli con più chip «Persona» non fondibili.
+
+### Da provare sul telefono (F97, F98)
+
+- **F97 (ricerca per persona)**: con Persone accesa e almeno due persone con un nome, in Cerca scrivere un nome (diventa un chip "Persona"), «Marco e Anna», «Marco o Anna», «Marco 2025», un nome che è anche un
+  luogo o una festa (il chip propone l'altra lettura), toccare «Mostra anche risultati meno probabili», vedere la riga «Persone» a riposo e i nomi mentre si scrive, l'avviso «Sto ancora riconoscendo i volti» nel primo
+  calcolo; con Persone spenta lo stesso nome è testo; dopo «Disattiva e cancella» nessun nome resta fra le ricerche recenti (serve il legame di P13).
+- **F98 (album smart con persone)**: «Crea album smart» dalla pagina persona (serve il legame di P13: `openSmartEditorForPerson`), una regola «tutte» con due persone, l'anteprima con sicuri e suggeriti, un ritratto nuovo
+  della persona che entra da solo (`peopleChanged`), sul dispositivo escluso la striscia «Le persone non sono attive su questo dispositivo» e l'album che non cambia, una persona dimenticata («Una persona della regola non è
+  più riconosciuta»).
+
+### Scelte grafiche da mostrare all'utente
+
+Solo componenti G2 esistenti (D38), nessuna modifica a `core-designsystem`. Screenshot in `docs/screenshots/8-P10/` (`cerca-persona*`, `cerca-persone*`, `albums-*`; chiaro e scuro, telefono e tablet, testo a 1,3x sul telefono).
+
+1. **Cerca**: la riga «Persone» a riposo come pillole da 48 dp; il chip «Persona» e il suo foglio con le alternative («Cerca la festa», «Cerca il luogo», «Cerca come parola», «Cerca la persona»); l'avviso del primo calcolo; il
+   bottone «Mostra anche risultati meno probabili», da 42 a 50 dp.
+2. **Editor degli album**: la sezione «Persone» dopo «Luogo»: una riga per persona con il segno di chiusura a destra (tutta la riga si tocca), poi i due bottoni radio «Tutte queste persone» / «Almeno una di loro» (solo con
+   due persone o più), «Aggiungi persone» e «Togli le persone»; per una persona nascosta o perduta la riga dice cosa è, senza nome; il foglio di scelta è un elenco di interruttori con il numero di foto.
+3. **Pagina dell'album**: due strisce nel gruppo di quelle che già ci sono (icona «persona sbarrata» per i volti spenti, avviso per la persona perduta).
+
+### Aperto
+
+- **Il legame di P13**: `PeopleLookup`, `PeopleMembership` (con `resolve`), `PeopleChoices`, `SearchHistoryPurge`, `SmartUpkeep.peopleChanged()`, `openSmartEditorForPerson` (tabella sopra). Finché P13 non lega, Cerca e gli album
+  partono con i null-object e **falliscono chiusi**: il nome è testo, la regola delle persone non inserisce niente e non toglie niente, l'editor non offre persone.
+- **`core-personal`**: `PersonalFields.SMART_PEOPLE` e il suo posto in `SMART_RULE_FIELDS` sono fuori dal perimetro del brief (due righe e una riga di test): la lista che la proiezione `album_rule` usa è lì.
+- **Il costo di uno smart di sole persone sul telefono** (L203) non è misurato: sulla JVM la prova di scala dei 100.000 elementi resta quella di prima.
+- **Disattiva e cancella** con album smart con persone: la scelta «Tieni le foto di adesso» la fa P8 sulla regola `smart:people` (§2.8 passo 3); da qui basta che il campo sia quello di `PersonalFields`.

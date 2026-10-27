@@ -105,6 +105,7 @@ class AlbumRoutesTest : AlbumsComposeTest() {
     Optional.of(scenes.world.albums), Optional.of(scenes.world.sharedAlbums), Optional.of(scenes.world.albums), Optional.of(scenes.world.runner),
     Optional.ofNullable(interpreter), Optional.ofNullable(engine), Optional.ofNullable(trips), Optional.of(scenes.people),
     Optional.empty(), Optional.empty(), Optional.of(scenes.world.screens), if (visible) Optional.of(scenes.world.library) else Optional.empty(),
+    Optional.empty(),
   )
 
   private fun idHandle(id: AlbumId) = SavedStateHandle(mapOf("id" to id.value, "toShare" to false))

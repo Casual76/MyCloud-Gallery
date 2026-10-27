@@ -6,8 +6,10 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelManager
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
+import dev.pampa.mycloudgallery.core.search.contract.ChipReadings
 import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
 import dev.pampa.mycloudgallery.core.search.contract.IdleSuggestions
+import dev.pampa.mycloudgallery.core.search.contract.PersonOption
 import dev.pampa.mycloudgallery.core.search.contract.PlaceOption
 import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
@@ -177,6 +179,10 @@ class SearchController(
   }
 
   override fun onCompletion(suggestion: Suggestion) {
+    if (suggestion is Suggestion.PersonSuggestion) {
+      onPerson(suggestion.option)
+      return
+    }
     val text = suggestion.label
     mutableQuery.value = text
     recordNext = true
@@ -224,10 +230,24 @@ class SearchController(
     launch(Last.Query(mutableQuery.value, remaining))
   }
 
+  /** Fase 8 (§2.7): il nome scelto dalla riga "Persone" o dai completamenti, con il chip gia' fatto: un nome che e' anche un luogo non cambia lettura. */
+  override fun onPerson(option: PersonOption) {
+    mutableQuery.value = option.label
+    recordNext = true
+    launch(Last.Query(option.label, listOf(ChipReadings.ofOption(option))))
+  }
+
+  /** Fase 8 (E-F36): un'altra lettura della stessa parola prende il posto del chip; la ricerca riparte con i chip cosi'. */
+  override fun onSwitchReading(chip: SearchChip, to: SearchChip) {
+    val current = results ?: return
+    recordNext = false
+    launch(Last.Query(mutableQuery.value, current.chips.map { if (it == chip) to else it }))
+  }
+
   override fun onChooseAlternative(chip: SearchChip.Place, option: PlaceOption) {
     val current = results ?: return
     val others = (listOf(chip.option) + chip.alternatives).filter { it != option }
-    val replaced = SearchChip.Place(option, others, chip.word)
+    val replaced = SearchChip.Place(option, others, chip.word, chip.person)
     recordNext = false
     launch(Last.Query(mutableQuery.value, current.chips.map { if (it == chip) replaced else it }))
   }

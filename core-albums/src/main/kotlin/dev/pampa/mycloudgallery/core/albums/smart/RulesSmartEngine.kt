@@ -3,11 +3,13 @@ package dev.pampa.mycloudgallery.core.albums.smart
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumClocks
 import dev.pampa.mycloudgallery.core.albums.contract.CandidateFilter
 import dev.pampa.mycloudgallery.core.albums.contract.LocalDayRange
+import dev.pampa.mycloudgallery.core.albums.contract.PeopleMembership
 import dev.pampa.mycloudgallery.core.albums.contract.SmartAlbumEngine
 import dev.pampa.mycloudgallery.core.albums.contract.SmartLimits
 import dev.pampa.mycloudgallery.core.albums.contract.SmartOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.SmartPreview
 import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
+import dev.pampa.mycloudgallery.core.albums.noop.NoPeopleMembership
 import dev.pampa.mycloudgallery.core.albums.personal.SmartRulesText
 import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
@@ -30,6 +32,10 @@ import kotlinx.coroutines.sync.withLock
 //    (il verdetto di un candidato dipende solo dai tre giorni attorno al suo: [SmartClassifier]), provata come proprieta';
 //  - [preview]: l'anteprima di regole non ancora salvate, senza scrivere niente.
 //
+// Fase 8 (D27): la regola delle persone si combina "in e" con le altre ([SmartClassifier]); le classi arrivano da [PeopleMembership] per i candidati caricati (mai un
+// nascosto: vengono da `VisibleMedia`). Dove i volti non ci sono (Persone spenta, in attesa dell'avviso, esclusa: E-F37) un album con le persone **non cambia**: non inserisce
+// niente e non toglie niente (come le regole C e S4 senza il motore di ricerca: un dispositivo senza volti non svuota un album), l'anteprima e' vuota e lo dice.
+//
 // Senza il motore di ricerca (non pronto) le regole C e S4 **tacciono** (D15): l'album non perde le righe che il motore di ricerca gli aveva dato (un
 // modello che si sta ancora caricando non deve svuotare gli album); un album fatto di sola descrizione resta com'e'. Mai titoli, luoghi, date o id
 // nei log (D37): questa classe non scrive log.
@@ -44,6 +50,8 @@ class RulesSmartEngine(
   private val lookup: PlaceLookup?,
   private val clocks: AlbumClocks,
   private val seen: SmartSeenMarks = InMemorySeenMarks(),
+  /** Fase 8 (D27): chi sa quali media contengono le persone della regola; di serie nessuno (la regola non inserisce niente, E-F37). */
+  private val people: PeopleMembership = NoPeopleMembership,
 ) : SmartAlbumEngine {
 
   private val library = VisibleCandidates(candidates, visible, mask)
@@ -66,6 +74,7 @@ class RulesSmartEngine(
     val state = rows.state(id) ?: return SmartOutcome.NotFound
     if (state.frozen) return SmartOutcome.Frozen
     val rules = state.rules
+    if (rules.people != null && !people.available.value) return counts(id, state.auto, state.suggestions)
     val signature = signatureOf(rules)
     val start = clocks.monotonicMs()
     val resumed = pending[id]?.takeIf { it.signature == signature }
@@ -101,6 +110,7 @@ class RulesSmartEngine(
     val state = rows.state(id) ?: return SmartOutcome.NotFound
     if (state.frozen) return SmartOutcome.Frozen
     val rules = state.rules
+    if (rules.people != null && !people.available.value) return counts(id, state.auto, state.suggestions)
     if (!rules.text.isNullOrBlank() || rules.examples.isNotEmpty()) return evaluateLocked(id, Duration.INFINITE)
     val classifier = classifierOf(rules, ContentMatches.NONE, state)
     if (!classifier.hasConstraints || days.isEmpty()) return counts(id, state.auto, state.suggestions)
@@ -135,7 +145,10 @@ class RulesSmartEngine(
     restricted: Restricted?,
   ): SmartOutcome {
     val index = DayIndex(loaded)
-    val verdicts = classifier.classify(index, restricted?.affected)
+    // Fase 8: la classe di ogni candidato caricato per la regola delle persone (un'eccezione sale: il motore non scrive niente, come per i nascosti, R17).
+    val matches = peopleFor(state.rules, loaded)
+    val withPeople = if (state.rules.people == null) classifier else classifierOf(state.rules, content, state, matches)
+    val verdicts = withPeople.classify(index, restricted?.affected)
     val target = Target.of(verdicts, loaded)
     val targetSuggested = target.suggested.toMutableMap()
     // Il motore di ricerca non c'e': i suggeriti S4 di prima restano (tacciono, non si ritirano).
@@ -173,14 +186,19 @@ class RulesSmartEngine(
 
   override suspend fun preview(rules: SmartRules): SmartPreview {
     val content = contentFor(rules)
+    val peopleRule = rules.people
+    val peopleHere = peopleRule == null || people.available.value
+    val lost = if (peopleRule != null && peopleHere) people.unrecognized(peopleRule) else 0
     val classifier = SmartClassifier(rules, placeOf(rules), devices, content, emptySet(), emptySet())
-    if (!classifier.hasConstraints || (rules.place == null && classifier.contentRequested && !content.used)) {
-      return SmartPreview(0, 0, tooBroad = false, sample = emptyList(), searchUsed = content.used)
+    // Le persone ci sono nella regola ma qui non ci sono i volti: la regola non inserisce niente (E-F37), l'anteprima e' vuota e lo dice.
+    if (!peopleHere || !classifier.hasConstraints || (rules.place == null && classifier.contentRequested && !content.used)) {
+      return SmartPreview(0, 0, tooBroad = false, sample = emptyList(), searchUsed = content.used, peopleAvailable = peopleHere)
     }
     val load = CandidateLoad(library, SmartLoading.plan(rules, content))
     while (!load.done) load.step()
     val loaded = load.result()
-    val target = Target.of(classifier.classify(DayIndex(loaded)), loaded)
+    val withPeople = SmartClassifier(rules, placeOf(rules), devices, content, emptySet(), emptySet(), peopleFor(rules, loaded))
+    val target = Target.of(withPeople.classify(DayIndex(loaded)), loaded)
     val sure = target.auto.keys.size
     val suggested = target.suggested.size
     val total = library.visibleTotal()
@@ -188,7 +206,7 @@ class RulesSmartEngine(
     // Le miniature sono quelle che si mostrano: passano anche dal filtro finale.
     val sample = target.sample(SmartLimits.PREVIEW_SAMPLE)
     val shown = library.shownFinal(sample)
-    return SmartPreview(sure, suggested, broad, sample.filter { it in shown }, searchUsed = content.used)
+    return SmartPreview(sure, suggested, broad, sample.filter { it in shown }, searchUsed = content.used, peopleAvailable = true, peopleLost = lost)
   }
 
   // --- "Nuove: 12" -----------------------------------------------------------------------------------------------------------
@@ -218,8 +236,27 @@ class RulesSmartEngine(
 
   private fun placeOf(rules: SmartRules): PlaceMatcher? = rules.place?.let { PlaceMatcher(it, lookup) }
 
-  private fun classifierOf(rules: SmartRules, content: ContentMatches, state: SmartAlbumState): SmartClassifier =
-    SmartClassifier(rules, placeOf(rules), devices, content, state.exclusions, state.owned)
+  private fun classifierOf(rules: SmartRules, content: ContentMatches, state: SmartAlbumState, matches: PeopleMatches = PeopleMatches.NONE): SmartClassifier =
+    SmartClassifier(rules, placeOf(rules), devices, content, state.exclusions, state.owned, matches)
+
+  /** Le classi dei [loaded] per la regola delle persone di [rules] (nessuna se la regola non c'e'). */
+  private suspend fun peopleFor(rules: SmartRules, loaded: List<SmartCandidate>): PeopleMatches {
+    val rule = rules.people ?: return PeopleMatches.NONE
+    if (loaded.isEmpty()) return PeopleMatches.NONE
+    return PeopleMatches(people.classify(rule, loaded.map { it.media }))
+  }
+
+  /**
+   * Quante persone della regola di [id] non sono piu' riconosciute (dimenticate, E-F27): la pagina dell'album dice "Una persona della regola non e' piu' riconosciuta".
+   * Zero se la regola non ha le persone o se i volti non ci sono qui.
+   */
+  suspend fun peopleLost(id: AlbumId): Int {
+    val rule = rows.state(id)?.rules?.people ?: return 0
+    return if (people.available.value) people.unrecognized(rule) else 0
+  }
+
+  /** Vero se [id] ha la regola delle persone e qui i volti non ci sono (E-F37): "Le persone non sono attive su questo dispositivo". */
+  suspend fun peopleUnavailable(id: AlbumId): Boolean = rows.state(id)?.rules?.people != null && !people.available.value
 
   /** L'istante delle righe nuove: l'ora del NAS se nota, altrimenti subito dopo l'ultima riga che l'album ha (mai indietro). */
   private fun stampFor(state: SmartAlbumState): Long =

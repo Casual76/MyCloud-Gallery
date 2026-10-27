@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8, P10: la regola "Persone" degli album smart (docs/fase8-progetto.md §2.7, D27). Solo nomi inventati negli esempi dei test. -->
+
+  <!-- La sezione dell'editor -->
+  <string name="editor_people">Persone</string>
+  <string name="editor_people_none">Qualunque persona</string>
+  <string name="editor_people_none_detail">Nessuna persona: conta solo il resto.</string>
+  <string name="editor_people_add">Aggiungi persone</string>
+  <string name="editor_people_remove">Togli %1$s dalla regola</string>
+  <string name="editor_people_remove_all">Togli le persone</string>
+  <string name="editor_people_none_to_choose">Non ci sono persone con un nome da scegliere. Dai un nome a una persona dalla scheda Persone.</string>
+  <string name="editor_people_hidden_name">Una persona nascosta</string>
+  <string name="editor_people_hidden_detail">Vale ancora nella regola. Il nome non si mostra.</string>
+  <string name="editor_people_lost_name">Persona non più riconosciuta</string>
+  <string name="editor_people_lost_detail">Non c’è più: toglila o scegli un’altra persona.</string>
+  <plurals name="editor_people_lost_note">
+    <item quantity="one">Una persona della regola non è più riconosciuta. Toglila o scegli un’altra persona.</item>
+    <item quantity="other">%1$d persone della regola non sono più riconosciute. Toglile o scegli altre persone.</item>
+  </plurals>
+  <string name="editor_people_classes_note">Le foto in cui il volto è solo probabile restano fra le suggerite.</string>
+  <string name="editor_people_mode_header">Le foto devono avere</string>
+  <string name="editor_people_mode_all">Tutte queste persone</string>
+  <string name="editor_people_mode_all_detail">Solo le foto in cui ci sono tutte.</string>
+  <string name="editor_people_mode_any">Almeno una di loro</string>
+  <string name="editor_people_mode_any_detail">Le foto in cui c’è anche una sola.</string>
+  <string name="editor_people_off">Le persone non sono attive su questo dispositivo</string>
+  <string name="editor_people_off_detail">L’album resta com’è finché i volti non sono di nuovo attivi qui.</string>
+
+  <string name="editor_preview_people_off">Qui le persone non sono attive: non posso contare le foto. L’album resta com’è.</string>
+
+  <!-- Il foglio di scelta -->
+  <string name="editor_people_pick_title">Scegli le persone</string>
+  <string name="editor_people_pick_message">Tocca una persona per metterla o toglierla.</string>
+  <string name="editor_people_pick_done">Fatto</string>
+  <string name="editor_people_pick_filter">Cerca per nome</string>
+  <string name="editor_people_pick_empty">Nessuna persona con questo nome.</string>
+  <plurals name="editor_people_photos">
+    <item quantity="one">%1$d foto</item>
+    <item quantity="other">%1$d foto</item>
+  </plurals>
+
+  <!-- Le strisce della pagina dell'album -->
+  <string name="album_banner_people_off">Le persone non sono attive su questo dispositivo</string>
+  <string name="album_banner_people_off_detail">L’album resta com’è finché i volti non sono di nuovo attivi qui.</string>
+  <plurals name="album_banner_people_lost">
+    <item quantity="one">Una persona della regola non è più riconosciuta</item>
+    <item quantity="other">%1$d persone della regola non sono più riconosciute</item>
+  </plurals>
+  <string name="album_banner_people_lost_detail">Cambia le regole per toglierla o sceglierne un’altra.</string>
+</resources>

@@ -1,0 +1,52 @@
+# Fase 8 (P10, E-F36): un nome che e' anche una festa, un mese o un luogo. Vince la lettura con piu' media visibili (a parita' il nome) e il chip propone l'altra.
+# Pesi del banco: Natale (festa) 40 media, Aprile (mese) 25, Maggio (mese) 60, le altre date 10. Persone: Natale 3, Aprile 6, Maggio 90, Marina 40, Lucca 40, Roma 5, Bianchi 14.
+# Luoghi: Marina 12, Lucca 4, Roma 30, Bianchi 2.
+
+# --- Una festa: la festa ha piu' media del nome, vince la festa e propone la persona
+Natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) persona=Natale
+natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) persona=Natale
+a Natale => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) persona=Natale
+foto di Natale => T PHOTO Foto ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) persona=Natale
+Natale 2024 => D 2024-12-24..2024-12-26 Natale 2024 (24–26 dicembre)
+Natale scorso => D 2025-12-24..2025-12-26 Natale 2025 (24–26 dicembre)
+Natale e Marco => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) persona=Natale ; N Marco #1 any word=marco alt=parola:marco
+Marco a Natale => N Marco #1 any word=marco alt=parola:marco ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) persona=Natale
+Marco e Natale => N Marco #1 any word=marco alt=parola:marco ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) persona=Natale
+Marco e Anna a Natale => N Marco e Anna #2 all word=marco e anna alt=parola:marco e anna ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) persona=Natale
+
+# --- Un mese: Aprile ha meno media del mese, Maggio piu'
+Aprile => Y 04-01..04-30 Aprile (tutti gli anni) persona=Aprile
+aprile 2024 => D 2024-04-01..2024-04-30 Aprile 2024
+ad aprile => Y 04-01..04-30 Aprile (tutti gli anni) persona=Aprile
+Maggio => N Maggio #1 any word=maggio alt=data:Maggio (tutti gli anni) | parola:maggio
+maggio 2024 => D 2024-05-01..2024-05-31 Maggio 2024
+a Maggio => N Maggio #1 any word=maggio alt=data:Maggio (tutti gli anni) | parola:maggio
+Maggio e Anna => N Maggio e Anna #2 all word=maggio e anna alt=parola:maggio e anna
+Anna e Maggio => N Anna e Maggio #2 all word=anna e maggio alt=parola:anna e maggio
+foto di Maggio => T PHOTO Foto ; N Maggio #1 any word=maggio alt=data:Maggio (tutti gli anni) | parola:maggio
+
+# --- Un luogo: Marina e Lucca hanno piu' media dei luoghi, Roma e Bianchi no
+Marina => N Marina #1 any word=marina alt=luogo:Marina | parola:marina
+a Marina => N Marina #1 any word=marina alt=luogo:Marina | parola:marina
+foto di Marina => T PHOTO Foto ; N Marina #1 any word=marina alt=luogo:Marina | parola:marina
+Marina e Anna => N Marina e Anna #2 all word=marina e anna alt=parola:marina e anna
+Marina a Firenze => N Marina #1 any word=marina alt=luogo:Marina | parola:marina ; P Firenze #1 PLACE word=firenze
+Lucca => N Lucca #1 any word=lucca alt=luogo:Lucca | parola:lucca
+a Lucca => N Lucca #1 any word=lucca alt=luogo:Lucca | parola:lucca
+foto di Lucca => T PHOTO Foto ; N Lucca #1 any word=lucca alt=luogo:Lucca | parola:lucca
+Lucca e Marco => N Lucca e Marco #2 all word=lucca e marco alt=parola:lucca e marco
+Roma => P Roma #16 PLACE word=roma persona=Roma
+a Roma => P Roma #16 PLACE word=roma persona=Roma
+Roma e Anna => P Roma #16 PLACE word=roma persona=Roma ; N Anna #1 any word=anna alt=parola:anna
+Anna a Roma => N Anna #1 any word=anna alt=parola:anna ; P Roma #16 PLACE word=roma persona=Roma
+Bianchi => N Bianchi #1 any word=bianchi alt=luogo:Bianchi | parola:bianchi
+foto di Bianchi => T PHOTO Foto ; N Bianchi #1 any word=bianchi alt=luogo:Bianchi | parola:bianchi
+
+# --- Il piu' lungo vince sempre, anche contro il nome
+Santo Stefano => Y 12-26..12-26 Santo Stefano (26 dicembre, tutti gli anni)
+Stefano => N Stefano #1 any word=stefano alt=parola:stefano
+Santo Stefano e Stefano => Y 12-26..12-26 Santo Stefano (26 dicembre, tutti gli anni) ; N Stefano #1 any word=stefano alt=parola:stefano
+Mario => N Mario #1 any word=mario alt=parola:mario
+Marzo => Y 03-01..03-31 Marzo (tutti gli anni)
+Natale Bianchi => Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) persona=Natale ; N Bianchi #1 any word=bianchi alt=luogo:Bianchi | parola:bianchi
+Pasqua Marco => E 1900-04-15..2026-04-05 #127 Pasqua (tutti gli anni) ; N Marco #1 any word=marco alt=parola:marco

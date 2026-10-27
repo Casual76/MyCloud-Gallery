@@ -1,0 +1,52 @@
+# Fase 8 (P10, E-Q5): i refusi dei nomi. Conservativi: un nome l'ha scelto l'utente, correggere un'altra parola nel nome sbagliato e' peggio che non correggere.
+# Da cinque lettere, la stessa iniziale, una modifica sola, un solo nome possibile, mai solo l'ultima lettera ("Chiaro" non e' Chiara, "Paola" non e' Paolo); si corregge
+# una lettera scambiata con la vicina, raddoppiata o tolta dal raddoppio, una "k" per una "c" e, da sette lettere in su, una lettera qualunque. "Nome cercato<-scritto".
+
+# --- Un nome scritto male
+Marko => N Marco #1 any word=marko alt=parola:marko => - => - => - => Marco<-marko
+Marcoo => N Marco #1 any word=marcoo alt=parola:marcoo => - => - => - => Marco<-marcoo
+Giulai => N Giulia #1 any word=giulai alt=parola:giulai => - => - => - => Giulia<-giulai
+Elana => - => Elana => elana
+Chiarra => N Chiara #1 any word=chiarra alt=parola:chiarra => - => - => - => Chiara<-chiarra
+Chiaro => - => Chiaro => chiaro
+Paola => - => Paola => paola
+Marc => - => Marc => marc
+Anan => - => Anan => anan
+Ann => - => Ann => ann
+Sara => N Sara #1 any word=sara alt=parola:sara
+
+# --- Il refuso in una frase
+Marko al mare => N Marco #1 any word=marko alt=parola:marko => al mare => mare => - => Marco<-marko
+Marko e Anna => N Marco e Anna #2 all word=marko e anna alt=parola:marko e anna => - => - => - => Marco<-marko
+Marco e Annna => N Marco e Anna #2 all word=marco e annna alt=parola:marco e annna => - => - => - => Anna<-annna
+Marko e Giulai => N Marco e Giulia #2 all word=marko e giulai alt=parola:marko e giulai => - => - => - => Marco<-marko ; Giulia<-giulai
+foto di Marko a Firenze => T PHOTO Foto ; N Marco #1 any word=marko alt=parola:marko ; P Firenze #1 PLACE word=firenze => - => - => - => Marco<-marko
+Marko 2024 => N Marco #1 any word=marko alt=parola:marko ; D 2024-01-01..2024-12-31 2024 => - => - => - => Marco<-marko
+marko o elana => N Marco #1 any word=marko alt=parola:marko => o elana => elana => - => Marco<-marko
+Elana e Paolo => N Paolo #1 any word=paolo alt=parola:paolo => Elana e => elana
+
+# --- Nomi di piu' parole con un refuso
+Maria Teresa al mare => N Maria Teresa #1 any word=maria teresa alt=parola:maria teresa => al mare => mare
+Gian Lucca => N Gian Luca #1 any word=gian lucca alt=parola:gian lucca => - => - => - => Gian Luca<-gian lucca
+Maria Tersea => N Maria Teresa #1 any word=maria tersea alt=parola:maria tersea => - => - => - => Maria Teresa<-maria tersea
+Zio Pierro => N Zio Piero #1 any word=zio pierro alt=parola:zio pierro => - => - => - => Zio Piero<-zio pierro
+Nonna Rosa e Zio Piero => N Nonna Rosa e Zio Piero #2 all word=nonna rosa e zio piero alt=parola:nonna rosa e zio piero
+Nona Rosa => N Nonna Rosa #1 any word=nona rosa alt=parola:nona rosa => - => - => - => Nonna Rosa<-nona rosa
+
+# --- Il refuso di una parola che non e' un nome continua a funzionare
+Marco al mare natle => N Marco #1 any word=marco alt=parola:marco ; Y 12-24..12-26 Natale (24–26 dicembre, tutti gli anni) => al mare => mare => - => natale<-natle
+Marco ad agsto => N Marco #1 any word=marco alt=parola:marco ; Y 08-01..08-31 Agosto (tutti gli anni) => - => - => - => agosto<-agsto
+Marco e Anna ferragsto => N Marco e Anna #2 all word=marco e anna alt=parola:marco e anna ; Y 08-15..08-15 Ferragosto (15 agosto, tutti gli anni) => - => - => - => ferragosto<-ferragsto
+Marco screeshot => N Marco #1 any word=marco alt=parola:marco ; T SCREENSHOT Screenshot => - => - => - => screenshot<-screeshot
+Marco di ieri => N Marco #1 any word=marco alt=parola:marco ; D 2026-10-20..2026-10-20 Ieri · 20 ottobre 2026
+
+# --- Parole comuni che non devono diventare un nome
+gatto bianco => - => gatto bianco => gatto, bianco
+cielo chiaro => - => cielo chiaro => cielo, chiaro
+ragazza => - => ragazza => ragazza
+mare => - => mare => mare
+casa al mare => - => casa al mare => casa, mare
+Marta => - => Marta => marta
+Marti => - => Marti => marti
+Mariano => - => Mariano => mariano
+Giuliano => - => Giuliano => giuliano

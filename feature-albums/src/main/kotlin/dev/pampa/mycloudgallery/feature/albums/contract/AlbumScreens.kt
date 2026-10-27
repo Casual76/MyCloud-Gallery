@@ -87,6 +87,12 @@ sealed interface AlbumBanner {
 
   /** D11: "Sei il nuovo responsabile di questo album" (una volta). */
   data object Inherited : AlbumBanner
+
+  /** Fase 8 (E-F37): l'album ha la regola delle persone e qui i volti non ci sono: "Le persone non sono attive su questo dispositivo"; l'album non cambia. */
+  data object PeopleOff : AlbumBanner
+
+  /** Fase 8 (E-F27): [count] persone della regola dimenticate o sconosciute: "Una persona della regola non e' piu' riconosciuta". */
+  data class PeopleLost(val count: Int) : AlbumBanner
 }
 
 /**

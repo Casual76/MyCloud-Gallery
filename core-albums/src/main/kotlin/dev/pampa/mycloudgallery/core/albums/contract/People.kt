@@ -47,4 +47,10 @@ interface PeopleMembership {
   val available: StateFlow<Boolean>
 
   suspend fun classify(rule: PeopleRule, candidates: Collection<MediaId>): Map<MediaId, PeopleClass>
+
+  /**
+   * Quante persone della [rule] non sono piu' riconosciute (dimenticate o sconosciute: `PeopleIndex.resolve` null, E-F27): "Una persona della regola non e'
+   * piu' riconosciuta". Una persona unita si segue (alias) e una nascosta vale ancora (E-F28): non contano. Di serie nessuna.
+   */
+  suspend fun unrecognized(rule: PeopleRule): Int = 0
 }

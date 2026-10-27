@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.search.contract.PeopleLookup
 import dev.pampa.mycloudgallery.core.search.contract.PersonEntry
 import dev.pampa.mycloudgallery.core.search.contract.PersonOption
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Fase 8 (P0, D26): le persone finte per i test della ricerca (P10). Un nome per persona ([name]), le celle **sicure** ([sure]) e quelle
@@ -16,6 +17,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
  */
 class FakePeopleLookup : PeopleLookup {
   override val available = MutableStateFlow(true)
+
+  /** Il primo calcolo dei volti in corso (percentuale), o null: lo legge Cerca per l'avviso "Sto ancora riconoscendo i volti". */
+  val progress = MutableStateFlow<Int?>(null)
+
+  override val progressPercent: StateFlow<Int?> get() = progress
 
   private val names = LinkedHashMap<PersonId, String>()
   private val sure = HashMap<PersonId, MutableSet<MediaId>>()

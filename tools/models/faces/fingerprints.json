@@ -1,0 +1,47 @@
+{
+  "nota": "Impronte dei file ONNX di OpenCV Zoo (docs/fase8-progetto.md §2.2, docs/research/ocr-volti.md §3.2: le impronte SHA-256 erano quelle delle voci Git LFS, verificate il 12/10/2026). Le dimensioni di SFace sono quelle del file scaricato il 27/10/2026.",
+  "sorgente": {
+    "repository": "opencv/opencv_zoo",
+    "commit": "48b10fa505aeb51fbd127fc60a5c660040e823b7",
+    "data_commit": "2026-10-20",
+    "host_ammessi": ["github.com", "raw.githubusercontent.com", "media.githubusercontent.com"]
+  },
+  "file": {
+    "face_detection_yunet_2023mar.onnx": {
+      "cartella": "face_detection_yunet",
+      "dimensione": 232589,
+      "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+    },
+    "face_detection_yunet_2026may.onnx": {
+      "cartella": "face_detection_yunet",
+      "dimensione": 229738,
+      "sha256": "ebafce4e3c118d6554634be5c27ab333b4c047a9a8c3faf1d7cf93101c22f0f0"
+    },
+    "face_recognition_sface_2021dec.onnx": {
+      "cartella": "face_recognition_sface",
+      "dimensione": 38696353,
+      "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"
+    },
+    "face_recognition_sface_2021dec_int8.onnx": {
+      "cartella": "face_recognition_sface",
+      "dimensione": 9896933,
+      "sha256": "2b0e941e6f16cc048c20aee0c8e31f569118f65d702914540f7bfdc14048d78a"
+    }
+  },
+  "licenze": {
+    "LICENSE-face_detection_yunet": {
+      "cartella": "face_detection_yunet",
+      "file": "LICENSE",
+      "spdx": "MIT",
+      "dimensione": 1085,
+      "sha256": "c83b8120c50ccbd4c4f96edf53141bdd566ebb8f8e9227e415326aa1b1aba958"
+    },
+    "LICENSE-face_recognition_sface": {
+      "cartella": "face_recognition_sface",
+      "file": "LICENSE",
+      "spdx": "Apache-2.0",
+      "dimensione": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    }
+  }
+}

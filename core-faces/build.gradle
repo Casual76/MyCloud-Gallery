@@ -51,4 +51,16 @@ dependencies {
 
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
+
+  // Fase 8, P6: l'archivio vero (`store/`) gira sopra il database vero (Room) e si prova sulla JVM con Robolectric, con la chiave finta di
+  // core-security (`FakeFacesKeys`) e file veri in una cartella temporanea.
+  testImplementation appDeps.robolectric
+  testImplementation appDeps.androidxTestCore
+  testImplementation appDeps.androidxTestExtJunit
+
+  // Prove sul telefono (S25): l'archivio cifrato con la chiave vera del Keystore. Scritte e non eseguite da P6 (nessun telefono):
+  //   gradlew :core-faces:connectedDebugAndroidTest
+  androidTestImplementation appDeps.androidxTestExtJunit
+  androidTestImplementation appDeps.androidxTestCore
+  androidTestImplementation appDeps.androidxTestRunner
 }

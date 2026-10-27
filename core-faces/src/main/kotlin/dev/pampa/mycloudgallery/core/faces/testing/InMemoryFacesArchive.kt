@@ -49,6 +49,11 @@ class InMemoryFacesArchive(override val generation: FaceGeneration) : FacesArchi
     keys.mapNotNull { key -> bodies[key]?.values?.reduce(FaceBody::winner)?.let { key to it } }.toMap()
   }
 
+  override suspend fun bodiesOf(author: String, keys: Collection<ContentKey>): Map<ContentKey, FaceBody> = synchronized(this) {
+    open()
+    keys.mapNotNull { key -> bodies[key]?.get(author)?.let { key to it } }.toMap()
+  }
+
   override suspend fun analyzed(keys: Collection<ContentKey>, recipe: Int): Set<ContentKey> = synchronized(this) {
     open()
     keys.filterTo(LinkedHashSet()) { key ->
@@ -99,6 +104,32 @@ class InMemoryFacesArchive(override val generation: FaceGeneration) : FacesArchi
   override suspend fun addPeople(records: List<PeopleRecord>): Unit = synchronized(this) {
     open()
     this.records = PeopleRecord.merge(this.records, records)
+  }
+
+  override suspend fun datePeople(nasNow: Long): Int = synchronized(this) {
+    open()
+    var dated = 0
+    records = records.mapValues { (_, record) ->
+      if (record.atNas != null) {
+        record
+      } else {
+        dated++
+        record.copy(atNas = nasNow)
+      }
+    }
+    dated
+  }
+
+  override suspend fun dropAuthors(authors: Set<String>): Int = synchronized(this) {
+    open()
+    var dropped = 0
+    for (byAuthor in bodies.values) {
+      for (author in authors) if (byAuthor.remove(author) != null) dropped++
+    }
+    bodies.entries.removeAll { it.value.isEmpty() }
+    val before = records.size
+    records = records.filterValues { it.author !in authors }
+    dropped + before - records.size
   }
 
   override fun toString(): String = "InMemoryFacesArchive(${bodies.size} contenuti, chiuso=$closed)"

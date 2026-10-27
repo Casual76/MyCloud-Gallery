@@ -1009,7 +1009,15 @@ offset  byte        contenuto
 ```
 
 Lunghezza esatta; ogni componente finita; norma ricalcolata in float32 fra 0,99 e 1,01; al piu' `MAX_FACES_BODY_BYTES` (il corpo piu'
-grande e' di 18.630 byte: 6 + 64 volti da 291). Nessun attributo della persona (eta', genere, emozioni: D19). Chi pubblica scrive una voce
+grande e' di 18.630 byte: 6 + 64 volti da 291). Nessun attributo della persona (eta', genere, emozioni: D19). **Regole del codec (P3,
+`FacesDocs`/`FacesBinary`)**, le stesse per chi scrive e per chi legge, ognuna un rifiuto del segmento intero: versione del corpo 1; spazio,
+rilevatore e sorgente fra quelli noti; ricetta 1..255; livello 0..2 (il 3 non esiste) e motivi solo fra i quattro noti; **un volto CORE non
+ha motivi** (i motivi dicono perche' un volto non e' CORE); vettore presente **se e solo se** il livello e' WEAK o CORE; riquadro con
+`x0 < x1` e `y0 < y1`; lato corto da 1 a 65.535; imbardata da -90 a 90; **solo un corpo di fotogrammi** (sorgente 3) ha volti con un
+fotogramma diverso da 0 o con il motivo "fotogramma", e i suoi volti sono al piu' WEAK (D18). I cinque punti sono valori senza segno: ogni
+valore e' ammesso. **L'impronta del corpo** (`FaceRef.bodyDigest`, il punto aperto di P0, confermato da P3) sono le **prime 8 byte, big
+endian, dello SHA-256 dei byte del corpo** cosi' come stanno nel segmento (`FacesDocs.bodyDigest`); la codifica e' unica, quindi
+l'impronta e' la stessa su ogni dispositivo. Chi pubblica scrive una voce
 solo per chiavi di contenuto di media del NAS di questo account che il suo catalogo conosce con timbro e `qh1` freschi; chi legge **usa**
 una voce solo se il suo catalogo ha un media visibile con quella chiave. **Fusione**: per una chiave, fra i corpi dei dispositivi
 dell'account vince la ricetta piu' alta, poi il dispositivo minore, poi l'impronta del corpo minore (`FaceBody.winner` di `core-faces`);
@@ -1021,6 +1029,19 @@ i riferimenti dell'istantanea portano le prime 8 byte di quell'impronta (`FaceRe
 |---|---|---|
 | Persona | SHA-256(`"mcg-face-person\0"` ‖ 16 byte dell'id) | versione (1), stato (1 attiva, 2 unita in un'altra, 3 dimenticata), id (16), alias (16, zeri se nessuno), `bornSeq` (8), `changedSeq` (8), volti (4), centroide (128 x 2 float16), N esemplari (1, ≤ 16) x riferimento a un volto (chiave di contenuto 32, fotogramma 1, indice 1, prime 8 byte dell'impronta del corpo `faces`) |
 | Assegnazione | SHA-256(`"mcg-face-assign\0"` ‖ riferimento del volto) | versione (1), riferimento del volto (42), persona (16), punteggio (2: coseno x 10.000), origine (1: automatica, dell'utente, ignorata) |
+
+**Regole del codec delle voci `cluster` (P3).** La forma la dice la lunghezza: un'assegnazione e' di **esattamente 62 byte**, una persona di
+**311 + 42 x N** byte (N da 0 a 16). La chiave deve tornare con l'id o con il riferimento (`INVALID_FIELD`). Persona: stato 1..3; l'id tutto
+zero e' **riservato** (nei corpi vuol dire "nessun alias") e non e' mai una persona; alias presente **se e solo se** la persona e' unita,
+mai uguale al suo id; `bornSeq` da 0 a 10^9 e `changedSeq` da `bornSeq` a 10^9; volti da 0 a `MAX_SNAPSHOT_ASSIGNMENTS`; centroide di
+componenti finite, **tutto zero** (nessun volto con vettore disponibile al custode) oppure di norma fra 0,99 e 1,01; esemplari distinti, con
+fotogramma 0..8 e indice 0..63. Assegnazione: persona mai riservata, punteggio con segno da -10.000 a 10.000, origine 1..3.
+**L'istantanea intera** (`FacesDocs.checkSnapshot`, dopo aver letto **tutti** i segmenti `cluster` della testa; una violazione rifiuta
+l'istantanea, non la testa): almeno una persona, al piu' `MAX_SNAPSHOT_PERSONS` persone e `MAX_SNAPSHOT_ASSIGNMENTS` assegnazioni; una voce
+per persona e una per volto anche fra segmenti diversi; ogni assegnazione nomina una persona dell'istantanea; ogni alias porta a una persona
+dell'istantanea; il numero dei volti di ogni persona e' quello delle sue assegnazioni **non ignorate**; nessun `changedSeq` oltre la `seq`
+della testa. Il punteggio arrotondato a 1/10.000 e l'assenza del contatore delle nascite (`unassignedAtBirths`) sono voluti: il custode (P5)
+ne tiene conto.
 
 *Voci `people`* (classe 20; JSON canonico al piu' `MAX_PEOPLE_ENTRY_BYTES`, come i dati personali): `{at, author, field, subject,
 value}`, `value` assente = lapide; chiave = SHA-256(`"mcg-people\0"` ‖ soggetto ‖ `\0` ‖ campo); `at` = ora del NAS (dal 2020 al 2100,
@@ -1044,6 +1065,17 @@ Persona = `PersonId` (UUID canonico, 128 bit; nei corpi binari 16 byte, nei nomi
 `<chiave di contenuto in base32>:<fotogramma>:<x0>.<y0>.<x1>.<y1>` (riquadro in 1/65535), al piu' `MAX_FACE_LOCATOR_CHARS`; un volto
 attuale corrisponde con IoU ≥ 0,5. Un campo sconosciuto o un valore d'altra forma rifiuta il segmento. Ogni dispositivo pubblica **lo
 stato unito** delle voci `people` che conosce (come F4-D26): un telefono spento non porta via i nomi.
+
+**Regole del codec delle voci `people` (P3, `PeopleForms`).** Una persona sta nella sua sola scrittura (26 caratteri base32 canonici, mai
+l'id tutto zero), un localizzatore nella sola forma di `FaceLocator.encode` (niente zeri davanti, niente spazi). La lapide (valore assente)
+vale solo dove `PeopleEdit` la produce: `name`, `apart:`, `cover`, `is`, `not:`, `ignore`; `hidden` vale `true` o `false`, `forget` solo
+`true`, `alias` un'altra persona, `born` `split:` piu' un'altra persona, `apart:` e `not:` solo `true`. Il nome ha la regola di
+`PersonNames.normalize` di core-faces (da 1 a 64 caratteri, senza spazi ai bordi, nessun carattere vietato da `TextRules`; un test lo
+confronta su campioni ostili). JSON canonico stretto (spazi = `MALFORMED`, escape superflui = `NOT_CANONICAL`), i campi esattamente quei
+cinque, `at` dal 2020 al 2100, `author` un id di dispositivo. **Chi legge** giudica poi ogni voce da sola (`PeopleRules`, come i dati
+personali): l'autore dev'essere un dispositivo approvato o dismesso **dell'account** e mai revocato o perso (anche se la voce e' ripubblicata
+da un dispositivo fidato), l'ora non oltre 2 minuti nel futuro (la voce aspetta e il segmento si rilegge dopo quell'ora); le altre voci
+dello stesso segmento valgono.
 
 ### 5.6 Prenotazione (tipo 4)
 
@@ -1075,7 +1107,11 @@ cartelle o file**: `faces/<G>/work/<area>/<aaaa-mm>/<parte>` (`area` = `priv` o 
 `WORK_UNIT_MAX_ITEMS` (200) media del mese per parte, per chiave di contenuto; `NasLayout.facesWorkResource`) e `faces/<G>/cluster` (il
 custode del raggruppamento, uno per account; `NasLayout.facesClusterResource`). Stessa durata (1 ora) e stesso rinnovo (20 minuti), nessun
 campo nuovo. Un contenuto e' "fatto" quando un dispositivo **dell'account** ha una voce `faces` della ricetta corrente o lo ha segnato
-"non supportato": le unita' della Fase 6 stanno nella share e sono di tutti gli account, quelle dei volti no.
+"non supportato": le unita' della Fase 6 stanno nella share e sono di tutti gli account, quelle dei volti no. **Nel codice (P3)**:
+`LeaseManager` prende la radice (`LeaseRoot.Shared` = `leases/`, `LeaseRoot.Faces(G)` = `faces/<G>/leases/`); una risorsa `faces/<G>/...`
+si prenota solo sotto la sua generazione e mai sotto `leases/`, e il contrario (errore di chi chiama). `NasFacesLeases` (core-faces,
+`sync/`) e' la porta `FacesLeases` con gli stessi cancelli della pubblicazione: mai nell'area comune, mai sulle share vere con la recinzione
+accesa, mai senza lo stato fresco o in una generazione che non e' la corrente.
 
 ### 5.7 Record del cestino (tipo 5)
 
@@ -1283,6 +1319,40 @@ e `MAX_SNAPSHOT_ASSIGNMENTS` (§7).
 **Una testa dei volti non decide azioni**: mostra gruppi e nomi solo per contenuti che il catalogo di chi legge vede gia' (come
 l'attestazione degli album, F7-D9). Le sole cancellazioni legate ai dati dei volti sono quelle del §9, punto 6-bis.
 
+**La replica nel codice (P3, `NasFacesSync` in `core-faces/.../sync/`).** Un giro, dopo il cancello (registro, dispositivo approvato, area
+privata diversa dalla comune, recinzione D34, Persone attiva qui e stato fresco: senza, **nessuna richiesta** parte):
+1. **revoche**: i dispositivi revocati o persi dall'ultimo giro escono dall'archivio (corpi e voci `people` di cui sono autori,
+   `FacesArchive.dropAuthors`) e le teste degli altri si rileggono intere (le voci valide che avevano tornano);
+2. **cartelle**: si elencano le generazioni (le non correnti si contano, mai lette: le toglie P8) e le cartelle della generazione corrente;
+   si leggono **solo** i dispositivi approvati o dismessi **dell'account** secondo il registro (tutti se l'elenco e' inondato), al piu' 32
+   per giro, a rotazione. Le cartelle di un altro account, di un dispositivo sconosciuto o revocato **non si leggono mai** (si contano come
+   `NOT_OWNER`, `SIGNER_NOT_APPROVED`, `SIGNER_REVOKED`); una testa di un altro account messa nella cartella di un mio dispositivo si legge e
+   si rifiuta (`NOT_OWNER`);
+3. **teste**: per nome dall'ultima accettata (`FacesHeadSeries`, come `HeadSeries`), con l'anti-rollback per (generazione, dispositivo)
+   ricordato nello stato della replica;
+4. **segmenti**: un segmento e' il suo contenuto, quindi una testa nuova fa scaricare solo i segmenti nuovi; uno rifiutato (impronta,
+   forma, tetti) non si riscarica mai, uno che manca si riprova. Tetti: `MAX_FACES_BYTES_PER_DEVICE_ROUND` per dispositivo (il resto al giro
+   dopo), `MAX_FACES_BYTES_PER_ROUND` per giro, `MAX_FACES_HEAD_ENTRIES` corpi e voci `people` per dispositivo, le voci `cluster` entro i
+   tetti dell'istantanea; un segmento oltre e' rifiutato (`TOO_LARGE`) e gli altri dispositivi vanno avanti;
+5. **contenuto**: i corpi nell'archivio con l'autore = il firmatario della testa (i corpi della propria testa solo dove qui manca un corpo
+   proprio: un ricalcolo non ancora pubblicato e' piu' nuovo); le voci `people` valide unite con l'ultima scrittura che vince; le voci
+   `cluster` tenute per l'istantanea del dispositivo, che vale quando tutti i suoi segmenti `cluster` sono letti e coerenti
+   (`checkSnapshot`); per ogni dispositivo si tiene l'ultima valida. `ClusterSnapshots.latest` (P5) le da' tutte, anche quella di questo
+   dispositivo, risolte sui corpi vincenti di qui (un'assegnazione il cui riferimento non torna con il corpo vincente manca: il volto e'
+   "nuovo" per il custode), dall'ultimo stato salvato senza aspettare il giro in corso, e vuote se l'archivio si chiude;
+6. la generazione che cambia a meta' ferma il giro prima di scrivere altro nell'archivio.
+
+**La pubblicazione nel codice (P3, `NasFacesPublisher`).** Il contributo intero, ogni volta: i corpi dei contenuti calcolati qui per cui
+"M3 dei volti" (`FacesAttestation`, legata da `:app`) dice che sono media del NAS dell'account con timbro e `qh1` freschi, **tutti**,
+vincenti o no (`FacesArchive.bodiesOf`: il contributo di un dispositivo non si restringe mai, cosi' chi legge le stesse teste ha gli stessi
+corpi e sceglie lo stesso vincitore anche dopo che un dispositivo ha perso il suo stato locale; il banco l'ha mostrato); lo stato unito delle voci
+`people` datate (le voci "da datare" prendono l'ora del NAS adesso, `FacesArchive.datePeople`); l'ultima istantanea che il custode ha messo in
+coda, anche dopo aver perso la prenotazione. Segmenti stabili per secchi della chiave (512 corpi, 1.024 voci `people`, 4.096 voci `cluster`
+per segmento, al piu' 8 MiB di corpi); il diario delle impronte (la prova "e' mio" della pulizia dei propri file) si scrive **prima** dei
+segmenti; un nome gia' presente deve avere gli stessi byte; la generazione si ricontrolla prima di ogni segmento e prima della testa; la
+testa al primo nome libero (una testa valida mia gia' li' si adotta se elenca gli stessi segmenti). Dopo la perdita dello stato locale la
+propria testa sul NAS dice numero, ora, chiavi dei corpi e istantanea, cosi' la testa nuova non fa sparire niente per gli altri.
+
 ---
 
 ## 6. Ora di riferimento e prenotazioni
@@ -1425,7 +1495,10 @@ insieme, il risultato resta coerente.
 | Voce `people`, JSON canonico (`MAX_PEOPLE_ENTRY_BYTES`, Fase 8) | 4096 byte (4 KiB) |
 | Nome di una persona (`MAX_PERSON_NAME_CHARS`, Fase 8) | 64 caratteri (almeno 1, regole di `TextRules`) |
 | Localizzatore di un volto (`MAX_FACE_LOCATOR_CHARS`, Fase 8) | 128 caratteri |
-| Voci per testa dei volti (`MAX_FACES_HEAD_ENTRIES`, Fase 8) | 100000 |
+| Voci per testa dei volti (`MAX_FACES_HEAD_ENTRIES`, Fase 8) | 100000 corpi `faces` e voci `people` insieme (P3: le voci `cluster` hanno i tetti dell'istantanea, sopra) |
+| Voci per segmento dei volti (`MAX_FACES_SEGMENT_ENTRIES`, Fase 8, P3) | 65536 |
+| Segmenti dichiarati da una testa dei volti, in tutto (`MAX_FACES_HEAD_BYTES`, Fase 8, P3) | 536870912 byte (512 MiB): oltre, la testa si rifiuta prima di scaricare |
+| Segmenti dei volti letti per dispositivo e per giro (`MAX_FACES_BYTES_PER_DEVICE_ROUND`, Fase 8, P3) | 33554432 byte (32 MiB), il resto al giro dopo, a rotazione |
 | Segmenti dei volti letti per giro (`MAX_FACES_BYTES_PER_ROUND`, Fase 8) | 67108864 byte (64 MiB), il resto al giro dopo |
 | Cartelle di dispositivi per generazione e per giro (`MAX_FACES_DEVICES_PER_GENERATION`, Fase 8) | 32 |
 | Generazioni elencate in `faces/` per giro (`MAX_LIST_FACES_GENERATIONS`, Fase 8) | 64 |
@@ -1820,6 +1893,7 @@ e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla 
 | §2.2, §5.5 (testa `ai`), §5.5-bis (`vec`, `ocr`, attestazione e fusione), §5.6 (unita' `ai`), §7, §10 (Fase 6, **da scrivere**) | `data/AiSegments.kt` (P2, da scrivere; piu' le righe minime in `data/IndexSegment.kt`, `data/DeviceHead.kt`, `nas/NasLayout.kt`, `TrustFormat.kt`); fusione e pubblicazione in `core-index/.../ai/` | P2: test ostili per ogni campo dei corpi, un lettore della versione 1 che ignora `ai/`, attestazione, fusione, proprieta' M3; `IndexSegmentTypesTest` per i tetti nominati |
 | §2.2, §4.6 (A7), §5.8, §7, §10 (Fase 7, P2: album condivisi) | `data/AlbumDocs.kt` (`AlbumLimits`, `AlbumIds`, `AlbumField`, `AlbumKey`, `AlbumValue`, `AlbumEntry`, `AlbumHead`, codec `AlbumDocs`), righe minime in `TrustFormat.kt` (`ALBUM_VERSION`), `envelope/Envelope.kt`, `nas/NasLayout.kt` (`albumHead`, `albumSegment`), `data/IndexSegment.kt` (classe 17); serie, replica, fusione, permessi e pubblicatore in `core-albums/.../shared/` | `AlbumHeadTest`, `AlbumHostileTest`, `AlbumSegmentHostileTest`, `IndexSegmentTypesTest`; in `core-albums`: `AlbumPermissionsLogicTest`, `AlbumFusionPropertyTest`, `SharedAlbumSyncTest`, `SharedAlbumIsolationTest`, `NasAlbumPublisherTest`, `SharedAlbumBenchTest`, `Real*ContractTest` |
 | §2.2, §2.3, §4.6, §5.5-bis (`faces`, `cluster`, `people`, campo `faces`), §5.6 (prenotazioni dei volti), §5.11, §7, §9 punto 6-bis, §10 (Fase 8, P0: firme; il codec e' di P3) | `TrustFormat.kt` (`FACES_VERSION`, tetti dei volti in `TrustLimits`), `envelope/Envelope.kt` (`DocType.FACES_HEAD`), `data/IndexSegment.kt` (classi 18-20, `isFaces`, `FACES_CLASSES`), `nas/NasLayout.kt` (`faces*`); `core-model` (`FaceGeneration`, `PersonId`, `FaceLocator`, `FaceRef`, `FacesSetting`); `core-personal` (`FacesSettingCodec`); `core-nasops` (`FacesNasEraser`, contratto); codec `FacesDocs` (P3) | `FacesSignaturesTest`, `IndexSegmentTypesTest`, `Phase8TypesTest`, `Phase8FacesContractTest`, `FacesNasEraserContract`, `FacesRemoteContract`, `Phase8ArchitectureTest` |
+| §2.3 (pulizia dei volti), §5.5-bis (corpi `faces`, voci `cluster` e `people`), §5.6 (radice delle prenotazioni), §5.11 (testa, replica e pubblicazione), §7 (Fase 8, P3) | `data/FacesDocs.kt` (`FacesHead`, `SnapshotMark`, codec `FacesDocs`), `data/FacesBodies.kt` (`FacesBody`, `FaceRecord`, `FacesLimits`), `data/FacesCluster.kt` (`ClusterEntry`, `FacesBinary`), `data/FacesPeopleDocs.kt` (`PeopleDoc`, `PeopleForms`), `data/FacesOwnFiles.kt`, `data/Leases.kt` (`LeaseRoot`), `TrustFormat.kt` (tre tetti nuovi); in `core-faces/.../sync/`: `NasFacesRemote`, `FacesHeadSeries`, `NasFacesSync` (replica e `ClusterSnapshots`), `NasFacesPublisher`, `NasFacesLeases`, `FacesFusion`, `FacesWire`, `FacesSegmentPlan` | `FacesDocsTest`, `FacesHostileHeadTest`, `FacesHostileBodyTest`, `FacesHostilePeopleTest`, `FacesOwnFilesAndLeasesTest`; in `core-faces`: `NasFacesRemoteContractTest` (suite di P0), `FacesWireTest`, `FacesFusionPropertyTest`, `FacesPublisherTest`, `FacesReplicaTest`, `FacesIsolationTest`, `FacesSyncBenchTest`, `NasFacesLeasesTest` |
 
 I test JVM usano un NAS finto volutamente scomodo: elenchi in ordine casuale e nomi senza distinzione di
 maiuscole (I3).

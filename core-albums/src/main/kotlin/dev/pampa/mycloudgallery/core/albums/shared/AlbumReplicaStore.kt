@@ -60,6 +60,28 @@ data class ReplicaHold(val mark: HeadMark?, val retryAt: Long, val attempts: Int
   override fun toString(): String = "ReplicaHold(tentativi=$attempts)"
 }
 
+/**
+ * DG-3 (§2.8, revisione di fine Fase 7): il **motivo** per cui un contributo si rifiuta, in nomi fissi. Sono costanti del codice, mai un dato letto dal NAS:
+ * quelli del formato firmato ([dev.pampa.mycloudgallery.core.trust.RejectReason], per nome) piu' i tre che nascono nel giro della replica. Vanno in
+ * Diagnostica come `reason.<NOME>` (la famiglia di chiavi di `ExportKeys` per i motivi di scarto), solo come numeri.
+ */
+object AlbumRejections {
+  /** R7, L59: la testa (o le sue voci) dichiara un'ora prima di cio' che questo dispositivo ha gia' visto. */
+  const val RETRODATED: String = "RETRODATED"
+
+  /** R13: i tetti per dispositivo (album, byte, voci) sono superati. */
+  const val OVER_LIMITS: String = "OVER_LIMITS"
+
+  /** La testa o le sue voci portano un'ora nel futuro del NAS: si aspetta che l'ora arrivi (conta come rifiuto del giro, non lascia un segno). */
+  const val FUTURE_DATED: String = "FUTURE_DATED"
+
+  /** Un segno senza motivo (scritto da una versione di prima): si conta, non si inventa. */
+  const val UNKNOWN: String = "UNKNOWN"
+
+  /** Il nome e' una costante ammessa per l'esportazione (`reason.` + maiuscole, cifre e trattino basso, 3-32 caratteri). */
+  fun isValid(name: String): Boolean = name.length in 3..32 && name[0] in 'A'..'Z' && name.all { it in 'A'..'Z' || it in '0'..'9' || it == '_' }
+}
+
 /** La replica: una scrittura sostituisce il contributo intero di (album, dispositivo) in una sola transazione. */
 interface AlbumReplicaStore {
   suspend fun albums(): Set<AlbumId>
@@ -79,7 +101,11 @@ interface AlbumReplicaStore {
   /** L'ultima testa rifiutata di (album, dispositivo): non si riscarica finche' non ne compare una diversa. */
   suspend fun rejectedHead(album: AlbumId, device: String): HeadMark?
 
-  suspend fun setRejectedHead(album: AlbumId, device: String, mark: HeadMark?)
+  /** [reason]: il motivo ([AlbumRejections], DG-3) che resta col segno e si conta in [rejectedByReason]; null per un segno senza motivo. */
+  suspend fun setRejectedHead(album: AlbumId, device: String, mark: HeadMark?, reason: String? = null)
+
+  /** DG-3: le teste rifiutate **adesso** (i segni durevoli) per motivo; un segno senza motivo vale [AlbumRejections.UNKNOWN]. */
+  suspend fun rejectedByReason(): Map<String, Int>
 
   /** R2: l'attesa di (album, dispositivo), o null. */
   suspend fun hold(album: AlbumId, device: String): ReplicaHold?
@@ -101,6 +127,7 @@ class MemoryAlbumReplicaStore : AlbumReplicaStore {
   private val lock = Any()
   private val byAlbum = LinkedHashMap<AlbumId, LinkedHashMap<String, StoredContribution>>()
   private val rejected = HashMap<Pair<AlbumId, String>, HeadMark>()
+  private val rejectedReasons = HashMap<Pair<AlbumId, String>, String>()
   private val holds = HashMap<Pair<AlbumId, String>, ReplicaHold>()
   private val seen = HashMap<Pair<AlbumId, String>, Long>()
 
@@ -136,8 +163,20 @@ class MemoryAlbumReplicaStore : AlbumReplicaStore {
 
   override suspend fun rejectedHead(album: AlbumId, device: String): HeadMark? = synchronized(lock) { rejected[album to device] }
 
-  override suspend fun setRejectedHead(album: AlbumId, device: String, mark: HeadMark?) {
-    synchronized(lock) { if (mark == null) rejected.remove(album to device) else rejected[album to device] = mark }
+  override suspend fun setRejectedHead(album: AlbumId, device: String, mark: HeadMark?, reason: String?) {
+    synchronized(lock) {
+      if (mark == null) {
+        rejected.remove(album to device)
+        rejectedReasons.remove(album to device)
+      } else {
+        rejected[album to device] = mark
+        if (reason != null) rejectedReasons[album to device] = reason else rejectedReasons.remove(album to device)
+      }
+    }
+  }
+
+  override suspend fun rejectedByReason(): Map<String, Int> = synchronized(lock) {
+    rejected.keys.groupingBy { key -> rejectedReasons[key]?.takeIf(AlbumRejections::isValid) ?: AlbumRejections.UNKNOWN }.eachCount()
   }
 
   override suspend fun hold(album: AlbumId, device: String): ReplicaHold? = synchronized(lock) { holds[album to device] }

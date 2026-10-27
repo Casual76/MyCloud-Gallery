@@ -58,6 +58,13 @@ class RoomShareDiary(private val database: GalleryDatabase, private val now: () 
   override suspend fun openOps(): List<ShareOpRecord> = dao.openOps().mapNotNull(::readOp)
 
   /**
+   * Revisione E, SH-2: le ultime operazioni **chiuse** (il pacchetto B le leggeva dal diario di riferimento ma questo diario non le dava mai: la striscia
+   * "N da riprovare" e il tocco "Riprova" sparivano con la morte del processo). Una riga di operazione che questa versione non sa leggere si salta: e'
+   * chiusa, non c'e' niente da riprendere e niente da riprovare (a differenza di un'operazione aperta, che resta ferma: I5).
+   */
+  override suspend fun closedOps(limit: Int): List<ShareOpRecord> = dao.closedOps(limit).mapNotNull { it.toRecord() }
+
+  /**
    * Gli elementi di [op], **tutti** (I5 della revisione di sicurezza della Fase 7): una riga che questa versione non sa leggere non sparisce
    * dall'elenco (l'operazione si chiuderebbe con un elemento ancora in viaggio, o lo spostamento SD-1 assegnerebbe gli esiti alle posizioni
    * sbagliate): diventa un elemento **fermo** ([frozen]), che nessun passo tocca e che tiene aperta l'operazione. Con la riga dell'operazione

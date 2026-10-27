@@ -106,6 +106,7 @@ object AlbumsWiring {
           backupGates = { folder -> backupGates(gallery, family, folder) },
           problemMarksFile = File(noBackup, "$DIR/share-problems-closed"),
           transfers = TransferRegisters(plans, journal),
+          guardianLogUnreadable = { gallery.backup?.safeCopyLogUnreadable ?: 0 },
           marksFile = File(noBackup, "$DIR/shared-marks"),
           ioErrors = NasAlbumIoErrors,
           onError = { error -> graphRef[0]?.noteError(error) },

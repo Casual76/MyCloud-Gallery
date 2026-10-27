@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.AlbumSyncReport
 import dev.pampa.mycloudgallery.core.albums.contract.PublishRules
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumSync
 import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.Verdict
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
@@ -113,9 +114,17 @@ class NasSharedAlbumSync(
     val bytesByDevice = HashMap<String, Long>()
     var read = 0
     var rejected = 0
+
+    /** DG-3: i rifiuti del giro per motivo ([AlbumRejections]); la somma e' [rejected]. */
+    val rejectedBy = HashMap<String, Int>()
     var held = 0
     var incomplete = false
     val changed = LinkedHashSet<AlbumId>()
+
+    fun rejection(reason: String) {
+      rejected++
+      rejectedBy.merge(reason, 1, Int::plus)
+    }
   }
 
   /** Come e' finito un album nel giro: fatto (anche con contributi rifiutati o in attesa), fermo per il budget, NAS che non risponde. */
@@ -252,7 +261,7 @@ class NasSharedAlbumSync(
         }
         AlbumHeadRead.OutOfBudget -> Pass.BUDGET
         is AlbumHeadRead.Rejected -> {
-          round.rejected++
+          round.rejection(read.reason.name)
           Pass.DONE
         }
         is AlbumHeadRead.Accepted -> {
@@ -291,12 +300,14 @@ class NasSharedAlbumSync(
     val anchor = store.seenAt(album, device)
     if ((stored != null && head.createdAt < stored.createdAt) || (anchor != null && head.createdAt < anchor - PublishRules.HEAD_TIME_TOLERANCE_MS)) {
       retrodatedHeads++
-      return reject(round, album, device, mark)
+      return reject(round, album, device, mark, AlbumRejections.RETRODATED)
     }
     // R13: i tetti per dispositivo prima di scaricare (le dimensioni le dichiara la testa firmata): album e byte nella replica.
     val footprint = store.footprint(device)
-    if (stored == null && footprint.albums + 1 > limits.maxAlbumsPerDevice) return reject(round, album, device, mark)
-    if (footprint.bytes - (stored?.bytes ?: 0L) + head.segments.sumOf { it.size } > limits.maxBytesPerDevice) return reject(round, album, device, mark)
+    if (stored == null && footprint.albums + 1 > limits.maxAlbumsPerDevice) return reject(round, album, device, mark, AlbumRejections.OVER_LIMITS)
+    if (footprint.bytes - (stored?.bytes ?: 0L) + head.segments.sumOf { it.size } > limits.maxBytesPerDevice) {
+      return reject(round, album, device, mark, AlbumRejections.OVER_LIMITS)
+    }
     val cached = stored?.entries.orEmpty().groupBy { it.segment }
     val fresh = head.segments.filter { it.hash !in cached }
     val needed = fresh.sumOf { it.size }
@@ -319,17 +330,18 @@ class NasSharedAlbumSync(
           if (device == identity.deviceId) guarded { ownSegmentMissing(album) }
           return Pass.DONE
         }
-        NasRead.TooLarge -> return reject(round, album, device, mark)
+        NasRead.TooLarge -> return reject(round, album, device, mark, RejectReason.TOO_LARGE.name)
         is NasRead.Data -> got.bytes
       }
       round.bytes += ref.size
       round.bytesByDevice[device] = (round.bytesByDevice[device] ?: 0L) + ref.size
       when (val verdict = AlbumDocs.decodeSegment(bytes, ref, context)) {
         is Verdict.Accepted -> verdict.value.forEach { entries += it to ref.hash }
-        is Verdict.Rejected -> return reject(round, album, device, mark)
+        is Verdict.Rejected -> return reject(round, album, device, mark, verdict.reason.name)
       }
     }
-    if (AlbumDocs.checkContribution(album, entries.map { it.first }) is Verdict.Rejected) return reject(round, album, device, mark)
+    val whole = AlbumDocs.checkContribution(album, entries.map { it.first })
+    if (whole is Verdict.Rejected) return reject(round, album, device, mark, whole.reason.name)
     val future = entries.map { it.first.at }.filter { it > round.nasNow + skew }
     if (future.isNotEmpty()) {
       holdUntil(round, album, device, mark, future.min() - skew)
@@ -337,7 +349,7 @@ class NasSharedAlbumSync(
     }
     // Tetti per dispositivo: un dispositivo compromesso non riempie la replica creando album o voci senza fine.
     val entriesAfter = footprint.entries - (stored?.entries?.size ?: 0) + entries.size
-    if (entriesAfter > limits.maxEntriesPerDevice) return reject(round, album, device, mark)
+    if (entriesAfter > limits.maxEntriesPerDevice) return reject(round, album, device, mark, AlbumRejections.OVER_LIMITS)
     // §2.4, L59, R7: una voce nuova (assente o diversa nella testa precedente) piu' vecchia del riferimento e' retrodatata: si scarta, e
     // scartata resta nelle teste dopo (la voce identica eredita il segno). Il riferimento e' l'ora della testa precedente e, piu' forte,
     // l'ultima volta che questo dispositivo ha visto la serie senza le voci nuove meno l'eta' massima di una modifica
@@ -369,9 +381,10 @@ class NasSharedAlbumSync(
     if (seen == null || round.nasNow - seen >= limits.seenRefreshMs) store.setSeenAt(album, device, round.nasNow)
   }
 
-  private suspend fun reject(round: Round, album: AlbumId, device: String, mark: HeadMark): Pass {
-    store.setRejectedHead(album, device, mark)
-    round.rejected++
+  /** Un contributo rifiutato per [reason] (DG-3): il segno resta, col suo motivo, e il rifiuto si conta nel giro. */
+  private suspend fun reject(round: Round, album: AlbumId, device: String, mark: HeadMark, reason: String): Pass {
+    store.setRejectedHead(album, device, mark, reason)
+    round.rejection(reason)
     return Pass.DONE
   }
 
@@ -379,7 +392,7 @@ class NasSharedAlbumSync(
   private suspend fun holdUntil(round: Round, album: AlbumId, device: String, mark: HeadMark, retryAt: Long) {
     store.setHold(album, device, ReplicaHold(mark, retryAt, attempts = 0))
     round.held++
-    round.rejected++
+    round.rejection(AlbumRejections.FUTURE_DATED)
   }
 
   /** R2: un contributo che adesso non si legge aspetta, ogni volta il doppio (fino al tetto); [mark] null se nemmeno la testa si e' letta. */
@@ -400,6 +413,7 @@ class NasSharedAlbumSync(
       incomplete = incomplete,
       bytesRead = round?.fs?.bytesRead ?: 0,
       contributionsHeld = round?.held ?: 0,
+      rejectedByReason = round?.rejectedBy?.toMap().orEmpty(),
     )
   }
 }

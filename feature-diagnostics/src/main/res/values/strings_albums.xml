@@ -10,7 +10,7 @@
 
   <!-- P13: i codici del §2.8 (stessi id di AlbumDiag di core-albums). -->
   <string name="diag_album_contrib_rejected_title">Contributi d’album scartati</string>
-  <string name="diag_album_contrib_rejected_guide">Alcuni file degli album condivisi sul NAS non sono stati accettati: firma, dispositivo o contenuto non validi. L’app li ignora e tiene quelli buoni; se il numero cresce, controlla dal PC chi scrive nella cartella degli album dell’area comune.</string>
+  <string name="diag_album_contrib_rejected_guide">Alcuni file degli album condivisi sul NAS non sono stati accettati: firma, dispositivo o contenuto non validi. L’app li ignora e tiene quelli buoni; se il numero cresce, controlla dal PC chi scrive nella cartella degli album dell’area comune. Nell’esportazione ogni rifiuto è contato per motivo (firma, ora, tetti…), mai con nomi o percorsi.</string>
   <string name="diag_album_entry_denied_title">Modifiche agli album non permesse</string>
   <string name="diag_album_entry_denied_guide">Alcune modifiche agli album condivisi non sono state applicate perché chi le ha fatte non aveva il permesso a quel livello. Non serve fare niente.</string>
   <string name="diag_album_item_unattested_title">Elementi degli album non ancora visti</string>

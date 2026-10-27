@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.places.testing.FakePlaces
 import dev.pampa.mycloudgallery.core.search.contract.Today
 import java.time.LocalDate
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,6 +48,12 @@ internal class StoryLibrary(shots: List<AlbumCandidate>) : AlbumCandidates, Visi
   /** Quante volte si e' chiesto il filtro finale (un'implementazione che non lo usa si vede). */
   var maskCalls: Int = 0
     private set
+
+  /**
+   * R17: il database non risponde. Come il catalogo vero, `visible` e `hiddenAmong` falliscono **chiusi** ("niente e' visibile", "tutto e' nascosto") e le
+   * versioni `OrThrow` lanciano: chi riscrive uno stato (la rilevazione, il ricontrollo) non deve prendere il guasto per una Libreria vuota.
+   */
+  var failing: Boolean = false
 
   override val snapshot: MutableStateFlow<TimelineSnapshot?> = MutableStateFlow(null)
 
@@ -78,11 +85,22 @@ internal class StoryLibrary(shots: List<AlbumCandidate>) : AlbumCandidates, Visi
 
   override suspend fun visibleTotal(): Int = sorted.count { it.media !in hidden }
 
-  override suspend fun visible(ids: Collection<MediaId>): Set<MediaId> = ids.filterTo(HashSet()) { it in known && it !in hidden && it !in contagion }
+  override suspend fun visible(ids: Collection<MediaId>): Set<MediaId> =
+    if (failing) emptySet() else ids.filterTo(HashSet()) { it in known && it !in hidden && it !in contagion }
+
+  override suspend fun visibleOrThrow(ids: Collection<MediaId>): Set<MediaId> {
+    check(!failing) { "database non risponde" }
+    return visible(ids)
+  }
 
   override suspend fun hiddenAmong(ids: Collection<MediaId>): Set<MediaId> {
     maskCalls++
-    return ids.filterTo(HashSet()) { it !in known || it in hidden || it in contagion }
+    return if (failing) ids.toSet() else ids.filterTo(HashSet()) { it !in known || it in hidden || it in contagion }
+  }
+
+  override suspend fun hiddenAmongOrThrow(ids: Collection<MediaId>): Set<MediaId> {
+    check(!failing) { "database non risponde" }
+    return hiddenAmong(ids)
   }
 }
 
@@ -92,11 +110,21 @@ internal class MemoryTripStore : TripStore {
   var saved: List<StoredProposal> = emptyList()
   var replacements: Int = 0
 
+  /** VG-1: la ricerca c'e' stata (con o senza casa). */
+  var wasSearched: Boolean = false
+
+  /** VG-2: se c'e', `markAccepted` aspetta qui (e dice di essere arrivato): per annullare la pagina fra l'album creato e il segno. */
+  var markGate: CompletableDeferred<Unit>? = null
+  val markEntered: CompletableDeferred<Unit> = CompletableDeferred()
+
   override suspend fun anchors(): Anchors? = home
 
   override suspend fun saveAnchors(anchors: Anchors?, estimatedAtMs: Long) {
     home = anchors
+    wasSearched = true
   }
+
+  override suspend fun searched(): Boolean = wasSearched
 
   override suspend fun proposals(): List<StoredProposal> = saved
 
@@ -106,6 +134,10 @@ internal class MemoryTripStore : TripStore {
   }
 
   override suspend fun markAccepted(id: TripId, album: AlbumId) {
+    markGate?.let {
+      markEntered.complete(Unit)
+      it.await()
+    }
     saved = saved.map { if (it.id == id) it.copy(album = album) else it }
   }
 }

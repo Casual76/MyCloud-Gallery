@@ -24,6 +24,8 @@ class Fase4ACatalogTest {
     // :app (NasLibraryDiagnostics): lo stato (P0), l'emergenza (§1.4), le aree non raggiungibili.
     "NAS_LIBRARY_STATE" to emptySet(),
     "NAS_WRITES_STOPPED" to emptySet(),
+    // Revisione di fine Fase 7 (R11, pacchetto C): l'emergenza che non si e' potuta salvare su disco.
+    "NAS_WRITES_STOP_NOT_SAVED" to emptySet(),
     "NAS_AREA_UNREACHABLE" to setOf("E-L4"),
     // core-nasmedia (NasMediaDiag, P0/P5).
     "NAS_SCAN_STATE" to setOf("E-N5"),

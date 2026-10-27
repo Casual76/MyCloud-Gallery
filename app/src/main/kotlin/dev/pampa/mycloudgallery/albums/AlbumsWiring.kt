@@ -52,6 +52,8 @@ object AlbumsWiring {
     } else {
       combine(gallery.started, nas.organizer.partsState) { started, parts -> started && parts != null }.stateIn(graph.scope, SharingStarted.Eagerly, false)
     }
+    // I motori degli smart e dei viaggi contano i loro errori e dicono l'esito di una ricerca dei viaggi al grafo, che nasce dopo di loro.
+    val graphRef = arrayOfNulls<AlbumsGraph>(1)
     val build: suspend (kotlinx.coroutines.CoroutineScope) -> AlbumsLive? = build@{ scope ->
       val organizer = nas?.organizer ?: return@build null
       val parts = organizer.parts ?: return@build null
@@ -98,10 +100,12 @@ object AlbumsWiring {
           transfers = TransferRegisters(plans, journal),
           marksFile = File(noBackup, "$DIR/shared-marks"),
           ioErrors = NasAlbumIoErrors,
+          onError = { error -> graphRef[0]?.noteError(error) },
+          onTripReport = { report -> graphRef[0]?.noteTrips(report) },
         ),
       )
     }
-    val albums = AlbumsGraph(graph.scope, build, ready, shareWork = { AlbumWorkScheduling.shareNow(context) })
+    val albums = AlbumsGraph(graph.scope, build, ready, shareWork = { AlbumWorkScheduling.shareNow(context) }).also { graphRef[0] = it }
     // Revisione B, R3: il piano di ogni operazione sui file del NAS chiede agli album quali file sono elementi che non posso togliere dal loro posto.
     nas?.organizer?.protectedFiles = AlbumFileGuard(albums)
     // R6: la dismissione di un dispositivo congela le sue teste d'album che questa replica ha accettato (A7).

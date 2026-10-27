@@ -71,6 +71,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 
@@ -95,7 +96,13 @@ class AppAlbums(private val graph: AlbumsGraph, scope: CoroutineScope) : Albums,
     if (l == null) NoAlbums.all else l.albums.all.mapLatest { list -> withNew(l, list) }
   }.stateIn(scope, SharingStarted.Eagerly, NoAlbums.all.value)
 
-  override val status: StateFlow<AlbumsStatus> = graph.follow(scope, NoAlbums.status.value, { it.albums.status }, NoAlbums.status)
+  /**
+   * AP-1: prima del montaggio gli album "si stanno leggendo" (`Loading`), e `all` vuoto non vuol dire "nessun album". Se la famiglia non e' pronta e non
+   * lo sara' a breve (nessun NAS, nessuna famiglia: [AlbumsGraph.settled]) lo stato torna `Ready` e l'elenco dice quello che e'.
+   */
+  override val status: StateFlow<AlbumsStatus> = graph.live.flatMapLatest { l ->
+    if (l != null) l.albums.status else graph.settled.map { settled -> if (settled) AlbumsStatus.Ready else AlbumsStatus.Loading }
+  }.stateIn(scope, SharingStarted.Eagerly, AlbumsStatus.Loading)
 
   /** Il numero delle novita' di ogni smart non congelato (dal segno "visto fino a" di questo dispositivo, L84). */
   private suspend fun withNew(live: AlbumsLive, list: AlbumList): AlbumList {

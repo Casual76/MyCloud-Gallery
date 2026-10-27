@@ -26,6 +26,10 @@ import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -42,6 +46,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
+import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -83,6 +88,8 @@ class ReceiveActions(
   val onSelectAlbum: (IncomingAlbumChoice) -> Unit = {},
   val onSaveToAlbum: () -> Unit = {},
   val onBackFromAlbums: () -> Unit = {},
+  /** AA-2: «Nuovo album» dalla scelta dell'album. */
+  val onCreateAlbum: (String) -> Unit = {},
 )
 
 @Composable
@@ -329,10 +336,44 @@ private fun ReceiveAlbums(ui: ReceiveUi, actions: ReceiveActions) {
         )
       }
     }
+    // AA-2: «Nuovo album» (un album a mano: nessun file si sposta, nessuna conferma da chiedere). Anche quando non c'e' ancora nessun album.
+    if (ui.canCreateAlbum) NewAlbum(ui, actions)
     Text(
       text = stringResource(R.string.integrations_receive_album_hint),
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+  }
+}
+
+@Composable
+private fun NewAlbum(ui: ReceiveUi, actions: ReceiveActions) {
+  var title by rememberSaveable { mutableStateOf("") }
+  Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Text(
+      text = stringResource(R.string.integrations_receive_album_new),
+      style = MaterialTheme.typography.titleSmall,
+      color = MaterialTheme.colorScheme.onSurface,
+    )
+    FluidTextField(
+      value = title,
+      onValueChange = { title = it },
+      placeholder = stringResource(R.string.integrations_receive_album_new_name),
+      modifier = Modifier.fillMaxWidth(),
+      isError = ui.newAlbumProblem != null,
+      supportingText = when (ui.newAlbumProblem) {
+        NewAlbumProblem.INVALID_TITLE -> stringResource(R.string.integrations_receive_album_new_invalid)
+        NewAlbumProblem.UNAVAILABLE -> stringResource(R.string.integrations_receive_album_new_unavailable)
+        null -> null
+      },
+    )
+    FluidButton(
+      text = stringResource(R.string.integrations_receive_album_new_create),
+      onClick = { actions.onCreateAlbum(title) },
+      size = FluidButtonSize.Large,
+      style = FluidButtonStyle.Tinted,
+      fillWidth = true,
+      enabled = title.isNotBlank() && !ui.creatingAlbum,
     )
   }
 }
@@ -376,7 +417,7 @@ private fun ReceiveBottomBar(ui: ReceiveUi, actions: ReceiveActions) {
         enabled = ui.selected != null,
       )
       // D13: la voce c'e' solo se ci sono album dove aggiungere.
-      if (ui.albums.isNotEmpty()) {
+      if (ui.albums.isNotEmpty() || ui.canCreateAlbum) {
         FluidButton(
           text = stringResource(R.string.integrations_receive_album_open),
           onClick = actions.onPickAlbum,

@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbums
 import dev.pampa.mycloudgallery.core.albums.contract.SmartChoices
 import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.albums.noop.NoShareRunner
+import dev.pampa.mycloudgallery.core.albums.upkeep.SmartWorkSink
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.database.entity.AlbumItemEntity
@@ -43,9 +44,12 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -77,7 +81,7 @@ class CatalogAlbums(
   private val newNonce: () -> ByteArray = { ByteArray(AlbumId.NONCE_BYTES).also { SecureRandom().nextBytes(it) } },
   /** La proiezione sul catalogo; condivisa con chi la deve richiamare (lavori di :app), altrimenti ne nasce una. */
   val projection: CatalogAlbumProjection = CatalogAlbumProjection(catalog, database),
-) : Albums, SmartChoices {
+) : Albums, SmartChoices, SmartWorkSink {
 
   private val reader = AlbumReader(catalog, database, visible, mask)
   private val editor = AlbumEditor(store, catalog, database, MediaResolver(catalog, database), reader::shown)
@@ -92,7 +96,23 @@ class CatalogAlbums(
 
   override val all: StateFlow<AlbumList> = mutableAll
 
-  override val status: StateFlow<AlbumsStatus> = MutableStateFlow(AlbumsStatus.Ready)
+  /** AP-1: l'elenco e' stato letto almeno una volta. Prima, `all` e' vuoto perche' non ha ancora letto, non perche' non ci sono album. */
+  private val loaded = MutableStateFlow(false)
+
+  /** AS-2: gli smart che aspettano il primo calcolo del motore (nuovi, o arrivati da un altro dispositivo) o lo stanno facendo. */
+  private val awaiting = MutableStateFlow<Set<AlbumId>>(emptySet())
+
+  /**
+   * `Loading` finche' l'elenco non e' stato letto (AP-1); `Recomputing` mentre uno smart senza righe aspetta il primo calcolo (AS-2: la pagina dice
+   * "cerco le foto", non "nessuna foto"; senza numeri, `Recomputing(0, 0)`); altrimenti `Ready`.
+   */
+  override val status: StateFlow<AlbumsStatus> = combine(loaded, awaiting) { done, waiting ->
+    when {
+      !done -> AlbumsStatus.Loading
+      waiting.isNotEmpty() -> AlbumsStatus.Recomputing(done = 0, total = 0)
+      else -> AlbumsStatus.Ready
+    }
+  }.stateIn(scope, SharingStarted.Eagerly, AlbumsStatus.Loading)
 
   init {
     // Lo stato dei dati personali si segue da solo: un'aggiunta fatta su un altro dispositivo arriva qui e diventa righe e conteggi.
@@ -141,12 +161,18 @@ class CatalogAlbums(
   /** Ricalcola l'elenco dalle tabelle e dallo stato: dopo ogni modifica, ogni cambiamento di Libreria e ogni novita' degli album condivisi. */
   private suspend fun refresh() {
     refreshLock.withLock {
+      // Gli smart in attesa all'inizio di questo giro: solo questi si possono togliere (uno annunciato mentre si legge non era ancora nelle tabelle).
+      val waitingBefore = awaiting.value
       val entries = store.effectiveEntries.value
       val states = statesById(entries)
       val sort = AlbumListSort.fromCode(albums.listSort(entries))
       val list = reader.personal(states, family.me()) + shared?.visible?.value.orEmpty()
       mutableAll.value = AlbumList(sorted(list, sort, states), sort)
       revision.value = revision.value + 1
+      loaded.value = true
+      // Uno smart eliminato (o mai arrivato) non resta "in attesa del primo calcolo" per sempre.
+      val gone = waitingBefore.filterTo(HashSet()) { id -> list.none { it.id == id } }
+      if (gone.isNotEmpty()) awaiting.update { it - gone }
     }
   }
 
@@ -198,6 +224,27 @@ class CatalogAlbums(
     refresh()
   }
 
+  /**
+   * Porta nelle tabelle lo stato dei dati personali **di adesso** e aspetta che sia fatto (AS-9): chi deve leggere `album_rule` (il motore degli smart,
+   * dopo una regola arrivata da un altro dispositivo) non indovina con un'attesa quanto ci mette la proiezione; chiede qui. Se un altro collettore la sta
+   * facendo, aspetta che finisca (stesso lucchetto) e non rifa' niente.
+   */
+  suspend fun reconcileNow() = reconcile(emptySet())
+
+  // --- SmartWorkSink: il motore degli smart (AS-1, AS-2) ------------------------------------------------------------------------
+
+  override fun smartWorkStarted(albums: Collection<AlbumId>) {
+    awaiting.update { it + albums }
+  }
+
+  override suspend fun smartWorkFinished(albums: Collection<AlbumId>) {
+    // Prima le righe nuove (elenco e pagine si rileggono), poi lo stato torna a Ready: la pagina non passa da "nessuna foto".
+    refresh()
+    awaiting.update { it - albums.toSet() }
+  }
+
+  override suspend fun smartRowsChanged() = refresh()
+
   // --- Modifiche --------------------------------------------------------------------------------------------------------------
 
   private fun isShared(id: AlbumId): Boolean = editor.definedState(id) == null && shared?.visible?.value?.any { it.id == id } == true
@@ -205,7 +252,12 @@ class CatalogAlbums(
   override suspend fun create(title: String, kind: AlbumKind, rules: SmartRules?): CreateOutcome = editLock.withLock {
     val me = family.me() ?: return@withLock CreateOutcome.Unavailable
     val outcome = editor.create(me, newNonce(), title, kind, rules)
-    if (outcome is CreateOutcome.Created) settle(outcome.id.value)
+    if (outcome is CreateOutcome.Created) {
+      // AS-2: uno smart nuovo non ha righe finche' il motore non lo calcola. Il segno "aspetta il calcolo" c'e' prima che l'album compaia: la sua pagina
+      // non passa mai per "nessuna foto corrisponde alle regole".
+      if (kind == AlbumKind.SMART) smartWorkStarted(listOf(outcome.id))
+      settle(outcome.id.value)
+    }
     outcome
   }
 

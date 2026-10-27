@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.PublishRules
 import dev.pampa.mycloudgallery.core.albums.contract.ShareRunResult
 import dev.pampa.mycloudgallery.core.albums.contract.TripReport
 import dev.pampa.mycloudgallery.core.albums.personal.PersonalAlbumCopies
+import dev.pampa.mycloudgallery.core.albums.upkeep.ChangeBatcher
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -14,7 +15,6 @@ import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKey
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKind
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -27,9 +27,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 
 /**
  * GLI ALBUM NELL'APP (Fase 7, P13; docs/fase7-progetto.md §1.4). Nasce con il processo e monta [AlbumsLive] quando la famiglia e' pronta: catalogo
@@ -54,12 +53,19 @@ class AlbumsGraph internal constructor(
 ) {
   private val job = SupervisorJob(parent.coroutineContext[Job])
   private val scope = CoroutineScope(parent.coroutineContext + job)
-  private val liveFlow = MutableStateFlow<AlbumsLive?>(null)
-  private val building = Mutex()
-  private val stopped = AtomicBoolean(false)
+
+  /** Gli album montati, uno solo per processo; lo stop aspetta un montaggio in corso (I11). */
+  private val mount = Mount(scope, build) { live -> watch(live) }
 
   /** Gli album di adesso: null finche' la famiglia non e' pronta, e dopo [stop]. */
-  val live: StateFlow<AlbumsLive?> = liveFlow.asStateFlow()
+  val live: StateFlow<AlbumsLive?> get() = mount.flow
+
+  /**
+   * AP-1: gli album sono montati, o non lo saranno a breve (dopo [LOADING_GRACE] senza famiglia pronta: nessun NAS, nessuna famiglia). Prima di allora un
+   * elenco vuoto vuol dire "non ho ancora letto", non "nessun album": le schermate dicono "sto leggendo".
+   */
+  val settled: StateFlow<Boolean> get() = gaveUp.asStateFlow()
+  private val gaveUp = MutableStateFlow(false)
 
   /** L'ultimo giro della replica (Diagnostica: solo numeri). */
   val lastSync = MutableStateFlow<AlbumSyncReport?>(null)
@@ -98,29 +104,24 @@ class AlbumsGraph internal constructor(
   /** Parte (idempotente): appena la famiglia e' pronta monta gli album. */
   fun start() {
     scope.launch { ready.collect { if (it) ensureLive() } }
+    scope.launch {
+      delay(LOADING_GRACE)
+      gaveUp.value = true
+    }
   }
 
   /** Gli album, montati adesso se si puo' (i lavori li chiedono prima di un giro). */
-  suspend fun ensureLive(): AlbumsLive? {
-    liveFlow.value?.let { return it }
-    if (stopped.get()) return null
-    return building.withLock {
-      liveFlow.value ?: run {
-        if (stopped.get()) return@withLock null
-        val liveScope = CoroutineScope(scope.coroutineContext + SupervisorJob(job))
-        val built = try {
-          build(liveScope)
-        } catch (e: CancellationException) {
-          throw e
-        } catch (e: Exception) {
-          GalleryLog.w(TAG) { "album non montati: ${e.javaClass.simpleName}" }
-          null
-        } ?: return@withLock null
-        liveFlow.value = built
-        watch(built)
-        built
-      }
-    }
+  suspend fun ensureLive(): AlbumsLive? = mount.ensure()
+
+  /** Un errore di un giro (anche dei motori degli smart e dei viaggi): si conta, mai il messaggio. */
+  internal fun noteError(e: Exception) {
+    roundErrors++
+    GalleryLog.w(TAG) { "giro degli album: ${e.javaClass.simpleName}" }
+  }
+
+  /** Il resoconto di una ricerca dei viaggi (Diagnostica: solo numeri). */
+  internal fun noteTrips(report: TripReport) {
+    lastTrips.value = report
   }
 
   // --- Al passo ------------------------------------------------------------------------------------------------------------------------
@@ -142,27 +143,23 @@ class AlbumsGraph internal constructor(
         }
       }
       if (guarded { live.shared.diary.openOps().isNotEmpty() } == true) shareWork()
+      // AS-5: gli smart arrivati prima del montaggio (da un altro dispositivo, o le cui novita' sono passate mentre gli album non c'erano) si valutano
+      // adesso, non alla notte; e cio' che resta a meta' si riprende.
+      guarded { live.smartUpkeep.resumeAll() }
+      guarded { live.smartUpkeep.drain() }
     }
     live.scope.launch { watchCatalog(live) }
     live.scope.launch { watchPersonal(live) }
     live.scope.launch { watchPending(live) }
+    live.scope.launch { watchSearch(live) }
+    // VG-1: i viaggi si cercano anche dopo la prima scansione, non solo di notte (quando il catalogo e' fermo).
+    live.tripUpkeep.poke()
   }
 
-  /** Le novita' del catalogo, accorpate: un giro per gruppo, non per file. */
+  /** Le novita' del catalogo, accorpate: un giro per gruppo, non per file. Cio' che arriva durante un giro ne fa partire un altro (AS-3). */
   private suspend fun watchCatalog(live: AlbumsLive) {
-    val touched = LinkedHashSet<MediaId>()
-    val lock = Any()
-    var pending: Job? = null
-    live.catalog.changes.collect { change ->
-      synchronized(lock) { touched += change.ids }
-      if (pending?.isActive != true) {
-        pending = live.scope.launch {
-          delay(CATALOG_QUIET)
-          val ids = synchronized(lock) { touched.toList().also { touched.clear() } }
-          onCatalogChanged(live, ids)
-        }
-      }
-    }
+    val batches = ChangeBatcher<MediaId>(live.scope, CATALOG_QUIET) { ids -> onCatalogChanged(live, ids) }
+    live.catalog.changes.collect { change -> batches.add(change.ids) }
   }
 
   /** Dopo una scansione con novita', un'unione d'identita', un nascosto: proiezione, attestazione, smart (D5, D9, D16). */
@@ -170,12 +167,13 @@ class AlbumsGraph internal constructor(
     guarded { live.albums.onCatalogChanged(ids) }
     guarded { live.shared.replica.recompute() }
     // Un media che cambia giorno (data corretta) puo' uscire da uno smart che lo aveva: quegli album si rivalutano interi (il giorno di prima e' il loro).
-    guarded {
-      for (album in smartAlbumsWith(live, ids)) live.recompute.onRulesChanged(album, SMART_BUDGET)
-      live.recompute.onCatalogChanged(ids, emptyList(), SMART_BUDGET)
-    }
+    // Poi l'incrementale; alla fine elenco e pagine si rileggono (AS-1: il motore scrive solo su Room e nessuno lo diceva a chi mostra).
+    guarded { live.smartUpkeep.catalogChanged(ids) }
     guarded { afterCatalog() }
     guarded { scanNotices(live) }
+    live.tripUpkeep.poke()
+    // AS-5: i giorni che il budget ha lasciato e i calcoli falliti si riprendono, a distanza, senza tenere fermo questo giro.
+    if (live.smartUpkeep.hasUnfinished) live.scope.launch { guarded { live.smartUpkeep.drain() } }
   }
 
   /** E-SH16, E-SH20: le cartelle nuove e gli elementi da ripristinare, per gli avvisi delle pagine degli album (solo lettura del catalogo). */
@@ -202,17 +200,6 @@ class AlbumsGraph internal constructor(
     return out
   }
 
-  /** Gli album smart che hanno righe del motore (elementi automatici o suggeriti) su [ids]. */
-  private suspend fun smartAlbumsWith(live: AlbumsLive, ids: Collection<MediaId>): Set<AlbumId> {
-    if (ids.isEmpty()) return emptySet()
-    val out = LinkedHashSet<AlbumId>()
-    for (album in live.smartRows.smartAlbums()) {
-      val state = live.smartRows.state(album) ?: continue
-      if (ids.any { it in state.auto || it in state.suggestions }) out += album
-    }
-    return out
-  }
-
   /** Regole, esclusioni, accettazioni, congelamento (anche da un altro dispositivo) e nascosti arrivati con i dati personali. */
   private suspend fun watchPersonal(live: AlbumsLive) {
     var smartBefore: Map<String, Int>? = null
@@ -226,18 +213,37 @@ class AlbumsGraph internal constructor(
       hiddenBefore = hiddenNow
       if (changed.isNotEmpty()) {
         live.scope.launch {
-          // La proiezione dei dati personali va prima del motore (legge `album_rule`): la segue `CatalogAlbums` da sola, qui si aspetta un attimo.
-          delay(RULES_QUIET)
-          for (raw in changed) runCatching { AlbumId(raw) }.getOrNull()?.let { guarded { live.recompute.onRulesChanged(it, SMART_BUDGET) } }
+          // AS-9: la proiezione dei dati personali va prima del motore (legge `album_rule`). Non si indovina con un'attesa quanto ci mette (con molti
+          // album il motore leggeva `album_rule` vuota): si chiede alla proiezione di finire, se la sta facendo un altro collettore si aspetta.
+          guarded { live.albums.reconcileNow() }
+          for (raw in changed) runCatching { AlbumId(raw) }.getOrNull()?.let { guarded { live.smartUpkeep.rulesChanged(it) } }
+          if (live.smartUpkeep.hasUnfinished) guarded { live.smartUpkeep.drain() }
         }
       }
       if (hiddenChanged) live.scope.launch { guarded { live.shared.albums.refresh() } }
     }
   }
 
+  /**
+   * AS-4: la ricerca per contenuto diventa pronta (il modello si carica dopo l'avvio). Le regole "descrizione" ed "esempi" degli smart, che fin li'
+   * tacevano (D15), agiscono da adesso: gli smart che le hanno si rivalutano, senza aspettare un evento sul loro periodo o la notte. Il primo valore
+   * (gia' pronta al montaggio) non rifa' niente: ci pensa [AlbumsGraph.watch] con `resumeAll`.
+   */
+  private suspend fun watchSearch(live: AlbumsLive) {
+    var before: Boolean? = null
+    live.content.readyChanges.distinctUntilChanged().collect { ready ->
+      val wasReady = before
+      before = ready
+      if (ready && wasReady == false) {
+        guarded { live.smartUpkeep.searchReady() }
+        if (live.smartUpkeep.hasUnfinished) guarded { live.smartUpkeep.drain() }
+      }
+    }
+  }
+
   /** Un nascosto fatto qui (`GalleryGraph.setHidden`): copertine e conteggi degli album condivisi senza aspettare il giro dopo (P9). */
   fun hiddenChanged() {
-    val live = liveFlow.value ?: return
+    val live = mount.current ?: return
     live.scope.launch { guarded { live.shared.albums.refresh() } }
   }
 
@@ -380,7 +386,7 @@ class AlbumsGraph internal constructor(
 
   /** Una condivisione e' appena partita (dal foglio): il primo passo subito, nel processo (la conferma vive solo in memoria, L73). */
   fun shareStarted() {
-    val live = liveFlow.value ?: return
+    val live = mount.current ?: return
     live.scope.launch { guarded { resume(live, START_BUDGET) } }
     shareWork()
   }
@@ -389,15 +395,18 @@ class AlbumsGraph internal constructor(
   suspend fun nightly(budget: Duration) {
     val live = ensureLive() ?: return
     guarded { live.trips.detect(budget) }?.let { lastTrips.value = it }
-    guarded { for (album in live.smartRows.smartAlbums()) live.recompute.onRulesChanged(album, SMART_BUDGET) }
+    guarded { live.smartUpkeep.nightly() }
+    // Cio' che il budget ha lasciato a meta' lo riprende il processo, non il lavoro (che ha il suo tempo).
+    if (live.smartUpkeep.hasUnfinished) live.scope.launch { guarded { live.smartUpkeep.drain() } }
   }
 
   // --- Fine --------------------------------------------------------------------------------------------------------------------------
 
   /** L'azzeramento (§1.4): per primo. Niente parte piu', i giri in corso si fermano e si aspettano; le tabelle le toglie la cancellazione del database. */
   suspend fun stop() {
-    stopped.set(true)
-    liveFlow.value = null
+    // I11: un montaggio in corso finisce (o si accorge dello stop e butta cio' che ha costruito) prima di annullare tutto.
+    mount.stop()
+    gaveUp.value = true
     job.cancelAndJoin()
   }
 
@@ -406,16 +415,16 @@ class AlbumsGraph internal constructor(
   } catch (e: CancellationException) {
     throw e
   } catch (e: Exception) {
-    roundErrors++
-    GalleryLog.w(TAG) { "giro degli album: ${e.javaClass.simpleName}" }
+    noteError(e)
     null
   }
 
   internal companion object {
     private const val TAG = "Albums"
     val CATALOG_QUIET: Duration = 5.seconds
-    val RULES_QUIET: Duration = 2.seconds
-    val SMART_BUDGET: Duration = 10.seconds
+
+    /** AP-1: per quanto, senza una famiglia pronta, le schermate dicono ancora "sto leggendo" prima di "nessun album". */
+    val LOADING_GRACE: Duration = 15.seconds
     val SHARE_SLICE: Duration = 20.seconds
     val START_BUDGET: Duration = 10.seconds
 

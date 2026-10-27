@@ -221,6 +221,7 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.NAS_LIBRARY_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_library_state_title, R.string.diag_nas_library_state_guide, null),
     // P11: emergenza e aree non raggiungibili (NasLibraryDiagnostics di :app).
     DiagEntry(DiagCodes.NAS_WRITES_STOPPED, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_writes_stopped_title, R.string.diag_nas_writes_stopped_guide, DiagnosticsActions.NAS_RESUME_WRITES),
+    DiagEntry(DiagCodes.NAS_WRITES_STOP_NOT_SAVED, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_writes_stop_not_saved_title, R.string.diag_nas_writes_stop_not_saved_guide, null),
     DiagEntry(DiagCodes.NAS_AREA_UNREACHABLE, DiagSection.NAS_LIBRARY, DiagSeverity.WARNING, R.string.diag_nas_area_unreachable_title, R.string.diag_nas_area_unreachable_guide, DiagAction.RUN_CONNECTION_TEST),
     // Scansione (NasMediaDiag di core-nasmedia).
     DiagEntry(DiagCodes.NAS_SCAN_STATE, DiagSection.NAS_LIBRARY, DiagSeverity.INFO, R.string.diag_nas_scan_state_title, R.string.diag_nas_scan_state_guide, null),
@@ -308,6 +309,11 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.SMART_NO_SEARCH, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_smart_no_search_title, R.string.diag_smart_no_search_guide, null),
     DiagEntry(DiagCodes.TRIP_NO_GPS, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_trip_no_gps_title, R.string.diag_trip_no_gps_guide, null),
     DiagEntry(DiagCodes.ALBUM_PROJECTION_PENDING, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_projection_pending_title, R.string.diag_album_projection_pending_guide, null),
+    DiagEntry(DiagCodes.UTILITY_FULL_HASH, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_utility_full_hash_title, R.string.diag_utility_full_hash_guide, null),
+    DiagEntry(DiagCodes.UTILITY_SIGNING, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_utility_signing_title, R.string.diag_utility_signing_guide, null),
+    DiagEntry(DiagCodes.ALBUM_REGISTRY_UNREADABLE, DiagSection.ALBUMS, DiagSeverity.WARNING, R.string.diag_album_registry_unreadable_title, R.string.diag_album_registry_unreadable_guide, null),
+    DiagEntry(DiagCodes.ALBUM_CONTRIB_HELD, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_contrib_held_title, R.string.diag_album_contrib_held_guide, null),
+    DiagEntry(DiagCodes.SHARE_PAUSED_CATALOG, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_share_paused_catalog_title, R.string.diag_share_paused_catalog_guide, null),
 
     // --- Le persone (Fase 8, P0: la voce di stato; i codici del §2.10 li aggiunge P13) -----------------------------------
     DiagEntry(DiagCodes.PEOPLE_STATE, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_people_state_title, R.string.diag_people_state_guide, null),

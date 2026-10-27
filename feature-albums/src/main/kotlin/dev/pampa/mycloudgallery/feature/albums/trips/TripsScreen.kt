@@ -73,12 +73,15 @@ fun TripsScreen(
   handlers: TripsHandlers,
   modifier: Modifier = Modifier,
   creating: TripId? = null,
+  /** VG-2: un messaggio sopra le proposte (la proposta non c'e' piu'); null = nessuno. */
+  notice: String? = null,
+  onDismissNotice: () -> Unit = {},
   listState: LazyListState = rememberLazyListState(),
 ) {
   val shown = when (state) {
     is TripsState.Proposals -> state.proposals
     is TripsState.NoGps -> state.events
-    TripsState.Empty -> emptyList()
+    TripsState.Empty, TripsState.Searching -> emptyList()
   }
   val requests = remember(shown) { shown.mapNotNull { thumbnails.refs.request(it.cover) } }
   LaunchedEffect(requests, thumbnails) { thumbnails.loader.window(requests, emptyList()) }
@@ -90,7 +93,11 @@ fun TripsScreen(
     listState = listState,
     contentMaxWidth = AlbumDimens.SheetWidth,
   ) {
+    if (notice != null) item(key = "notice") { FluidInlineMessage(message = notice, tone = FluidTone.Info, onDismiss = onDismissNotice) }
     when (state) {
+      TripsState.Searching -> item(key = "searching") {
+        FluidEmptyState(title = stringResource(R.string.trips_searching_title), detail = stringResource(R.string.trips_searching_detail))
+      }
       TripsState.Empty -> item(key = "empty") { FluidEmptyState(title = stringResource(R.string.trips_empty_title), detail = stringResource(R.string.trips_empty_detail)) }
       is TripsState.NoGps -> {
         item(key = "no-gps") {

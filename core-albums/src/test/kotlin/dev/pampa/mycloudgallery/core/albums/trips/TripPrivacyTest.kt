@@ -64,7 +64,8 @@ class TripPrivacyTest {
   /** I membri pubblici di `CatalogTrips` e `AwayFromHome` sono un elenco chiuso: aggiungerne uno vuol dire passare da qui. */
   @Test
   fun iMembriPubbliciSonoUnElencoChiusoESenzaCoordinate() {
-    val allowed = setOf("getProposals", "detect", "accept", "dismiss", "load", "refresh", "isAway", "distanceKm")
+    // R16: `homeClearance` e' l'unico membro nuovo: restituisce un oracolo che riceve punti e risponde si'/no (vedi `homeClearanceRispondeSoloSiENo`).
+    val allowed = setOf("getProposals", "detect", "accept", "dismiss", "load", "refresh", "isAway", "distanceKm", "homeClearance")
     val banned = listOf("GeoPoint", "HomeEstimate", "Anchor", "GeoIndex", "HomeTimeline", "TripArea", "Detection", "DetectedItem", "StoredProposal", "double", "Double", "float", "Pair", "Triple")
     for (type in listOf(CatalogTrips::class.java, AwayFromHome::class.java)) {
       val methods = type.declaredMethods.filter { Modifier.isPublic(it.modifiers) && !it.isSynthetic && !it.isBridge }
@@ -82,6 +83,17 @@ class TripPrivacyTest {
       assertThat(type.declaredFields.filter { Modifier.isPublic(it.modifiers) }).isEmpty()
     }
     assertThat(allowed - CatalogTrips::class.java.declaredMethods.map { it.name.substringBefore('-') }.toSet()).isEmpty()
+  }
+
+  /** R16: l'oracolo «troppo vicino a casa» riceve punti e risponde solo si'/no: nessun tipo con coordinate, nessun numero esce dalla casa. */
+  @Test
+  fun homeClearanceRispondeSoloSiENo() {
+    val methods = dev.pampa.mycloudgallery.core.albums.contract.HomeClearance::class.java.declaredMethods.filter { !it.isSynthetic }
+    assertThat(methods.map { it.name }).containsExactly("closeToHome")
+    // Il risultato e' una lista di booleani (la coroutine aggiunge il parametro di continuazione: il tipo di ritorno e' Object).
+    assertThat(methods.single().parameterTypes.size).isEqualTo(2)
+    val impl = CatalogTrips::class.java.declaredMethods.single { it.name == "homeClearance" }
+    assertThat(impl.returnType).isEqualTo(dev.pampa.mycloudgallery.core.albums.contract.HomeClearance::class.java)
   }
 
   /** Una `data class` con coordinate scriverebbe la posizione nel `toString()`: in trips/ non ce ne sono senza un `toString()` suo. */

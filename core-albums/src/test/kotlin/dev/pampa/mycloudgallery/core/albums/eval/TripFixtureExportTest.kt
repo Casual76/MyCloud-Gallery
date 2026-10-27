@@ -132,7 +132,8 @@ class TripFixtureExportTest {
     assertThat(fullTotal.truth).isEqualTo(14_162)
     assertWithMessage("sicuri").that(fullTotal.sure).isEqualTo(12_411)
     assertWithMessage("giusti").that(fullTotal.sureRight).isEqualTo(12_406)
-    assertWithMessage("coperte").that(fullTotal.covered).isEqualTo(14_003)
+    // R16: centro su griglia e senza le foto di casa, 14.003 -> 13.999 (vedi SyntheticAlbumsEvalTest).
+    assertWithMessage("coperte").that(fullTotal.covered).isEqualTo(13_999)
     assertThat(fullTotal.precision).isAtLeast(0.99)
     assertThat(fullTotal.coverage).isAtLeast(0.95)
     // Solo il telefono (quello che si carica in mcg-prova senza passare dal NAS): le soglie sintetiche valgono ancora.

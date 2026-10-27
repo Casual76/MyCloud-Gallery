@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.albums.contract
 
 import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.GeoPoint
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.TripKind
 import java.security.MessageDigest
@@ -34,6 +35,18 @@ value class TripId(val value: String) {
       md.update(placeIds.toSortedSet().joinToString(",").toByteArray(Charsets.UTF_8))
       return TripId(md.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) })
     }
+
+    /**
+     * VG-2: la seconda impronta di un **viaggio** scartato, dal solo giorno d'inizio. L'impronta di [of] dipende anche dalla fine e dai luoghi: un
+     * viaggio in corso, scartato e poi allungato dalle foto dei giorni dopo, tornava con un'impronta nuova e quindi come una proposta nuova. Chi scarta
+     * un viaggio scrive anche questa; chi legge considera scartato un viaggio con la stessa impronta o con lo stesso inizio. Come l'altra, e' un hash
+     * senza nulla in chiaro (L87). Per gli eventi non serve (una finestra di ore non si allunga).
+     */
+    fun startKey(kind: TripKind, from: LocalDate): TripId {
+      val md = MessageDigest.getInstance("SHA-256")
+      md.update("mcg-trip-start\u0000${kind.code}\u0000$from".toByteArray(Charsets.UTF_8))
+      return TripId(md.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) })
+    }
   }
 }
 
@@ -54,10 +67,17 @@ data class TripProposal(
   override fun toString(): String = "TripProposal(${kind.code}, $count)"
 }
 
-/** Le proposte (§1.5 `TripsState`): dal piu' recente; [homeKnown] falso = nessuna casa stimabile (E-AL16: solo eventi, `TRIP_NO_GPS`). */
-data class TripProposals(val proposals: List<TripProposal>, val homeKnown: Boolean) {
+/**
+ * Le proposte (§1.5 `TripsState`): dal piu' recente; [homeKnown] falso = nessuna casa stimabile (E-AL16: solo eventi, `TRIP_NO_GPS`).
+ *
+ * [searched] (VG-1): la rilevazione ha girato almeno una volta su questo dispositivo. Prima di allora "nessuna casa" non vuol dire niente: la
+ * sezione Viaggi non deve dire "Servono foto con la posizione" a chi ha migliaia di foto con il GPS e non ha ancora aspettato la prima ricerca. Lo
+ * stato (cercato / non ancora) sopravvive alla morte del processo (sta nella memoria locale dei viaggi).
+ */
+data class TripProposals(val proposals: List<TripProposal>, val homeKnown: Boolean, val searched: Boolean = true) {
   companion object {
-    val EMPTY: TripProposals = TripProposals(emptyList(), homeKnown = false)
+    /** Niente da dire e niente cercato: lo stato prima del montaggio e della prima rilevazione. */
+    val EMPTY: TripProposals = TripProposals(emptyList(), homeKnown = false, searched = false)
   }
 }
 
@@ -74,6 +94,22 @@ sealed interface TripAcceptOutcome {
   data object NotFound : TripAcceptOutcome
 }
 
+/**
+ * R16: dove NON si puo' scrivere il centro di un luogo (R16 della revisione di fine Fase 7). Il centro di un luogo di un album smart finisce nei
+ * dati personali (area privata sul NAS) e quello di una citta' di casa e' la mediana delle foto proprie li': in pratica la casa. Chi calcola un centro
+ * chiede qui quali dei suoi punti stanno troppo vicino a casa o a un luogo abituale (meno di [TripRules.CENTER_CLEARANCE_KM], o il raggio di casa se piu'
+ * grande) e li lascia fuori. **Le coordinate entrano e un si'/no esce**: la casa non esce mai (D18, TripPrivacyTest).
+ */
+interface HomeClearance {
+  /** Per ogni punto di [points], nello stesso ordine: sta troppo vicino a casa o a un luogo abituale per finire in un dato personale? */
+  suspend fun closeToHome(points: List<GeoPoint>): List<Boolean>
+}
+
+/** Nessuna casa nota: nessun punto e' vicino a casa. */
+object NoHomeClearance : HomeClearance {
+  override suspend fun closeToHome(points: List<GeoPoint>): List<Boolean> = List(points.size) { false }
+}
+
 /** Viaggi ed eventi (D18-D20). Nessuna notifica nella Fase 7. */
 interface Trips {
   val proposals: StateFlow<TripProposals>
@@ -84,7 +120,10 @@ interface Trips {
   /** "Crea album": un tocco (D20). */
   suspend fun accept(id: TripId): TripAcceptOutcome
 
-  /** "Non mi interessa": voce sincronizzata `trip_dismissed:<impronta>`; non torna su nessun dispositivo. */
+  /**
+   * "Non mi interessa": voce sincronizzata `trip_dismissed:<impronta>`; non torna su nessun dispositivo. Per un viaggio si scrive anche
+   * [TripId.startKey] (VG-2): se il viaggio in corso si allunga resta scartato.
+   */
   suspend fun dismiss(id: TripId)
 }
 
@@ -125,6 +164,15 @@ object TripRules {
 
   /** L'unica distanza da casa che esce da trips/: arrotondata a 10 km. */
   const val DISTANCE_ROUNDING_KM: Int = 10
+
+  /**
+   * R16: un centro scritto nei dati personali sta ad almeno questa distanza da casa e dai luoghi abituali (o dal loro raggio, se piu' grande) e su una
+   * griglia di [CENTER_GRID_DEGREES]. Piu' stretto dei 20 km con cui i titoli evitano la casa: un album sulla propria citta' ha il centro in citta'.
+   */
+  const val CENTER_CLEARANCE_KM: Double = 5.0
+
+  /** R16: i centri dei luoghi nei dati personali si arrotondano a 0,1 gradi (~11 km): dicono la citta', che il titolo gia' dice, non la casa. */
+  const val CENTER_GRID_DEGREES: Double = 0.1
 
   /** La prima schermata mostra gli ultimi 2 anni ("Mostra piu' vecchi"). */
   const val FIRST_SCREEN_YEARS: Long = 2

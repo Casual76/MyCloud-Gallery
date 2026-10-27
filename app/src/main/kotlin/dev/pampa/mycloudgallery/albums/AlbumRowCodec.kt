@@ -188,6 +188,13 @@ internal object AlbumRowCodec {
     return out
   }
 
+  /** Quante righe di servizio [key] ci sono in tutta la replica (non quelle del mio pubblicatore). */
+  fun countKey(database: GalleryDatabase, key: String): Int {
+    database.openHelper.readableDatabase.query("SELECT COUNT(*) FROM shared_album_entry WHERE entry_key = ? AND device_id != ?", arrayOf<Any?>(key, OWN)).use { c ->
+      return if (c.moveToFirst()) c.getInt(0) else 0
+    }
+  }
+
   /** Il corpo della riga di servizio [key] di (album, dispositivo), o null. */
   fun serviceBody(database: GalleryDatabase, album: AlbumId, device: String, key: String): ByteArray? {
     val sql = "SELECT body FROM shared_album_entry WHERE album_id = ? AND device_id = ? AND entry_key = ?"

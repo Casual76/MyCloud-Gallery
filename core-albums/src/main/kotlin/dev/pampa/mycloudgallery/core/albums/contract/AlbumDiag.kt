@@ -21,8 +21,21 @@ object AlbumDiag {
   val TRIP_NO_GPS = DiagCode("TRIP_NO_GPS", setOf("E-AL16"))
   val ALBUM_PROJECTION_PENDING = DiagCode("ALBUM_PROJECTION_PENDING")
 
+  /** DG-2: il controllo notturno dei video del NAS (hash completo, D27) e la firma dei Doppioni simili (D25): l'ultimo giro, solo numeri. */
+  val UTILITY_FULL_HASH = DiagCode("UTILITY_FULL_HASH", setOf("E-U4"))
+  val UTILITY_SIGNING = DiagCode("UTILITY_SIGNING")
+
+  /**
+   * R22 (conteggi che arrivano con la correzione dei contributi, pacchetto A) e la pausa di B: i registri durevoli della condivisione che non si leggono, i
+   * contributi che la replica tiene da parte, la condivisione che aspetta il catalogo. Solo numeri; li collega chi unisce i pacchetti.
+   */
+  val ALBUM_REGISTRY_UNREADABLE = DiagCode("ALBUM_REGISTRY_UNREADABLE")
+  val ALBUM_CONTRIB_HELD = DiagCode("ALBUM_CONTRIB_HELD")
+  val SHARE_PAUSED_CATALOG = DiagCode("SHARE_PAUSED_CATALOG", setOf("C26"))
+
   val ALL: List<DiagCode> = listOf(
     ALBUM_CONTRIB_REJECTED, ALBUM_ENTRY_DENIED, ALBUM_ITEM_UNATTESTED, SHARE_PAUSED_SPACE, SHARE_PAUSED_FROZEN, SHARE_WAITING_LOCKED,
-    SHARE_SOURCE_CHANGED, SHARE_SAFE_COPY_QUEUED, SMART_TOO_BROAD, SMART_NO_SEARCH, TRIP_NO_GPS, ALBUM_PROJECTION_PENDING,
+    SHARE_SOURCE_CHANGED, SHARE_SAFE_COPY_QUEUED, SMART_TOO_BROAD, SMART_NO_SEARCH, TRIP_NO_GPS, ALBUM_PROJECTION_PENDING, UTILITY_FULL_HASH, UTILITY_SIGNING,
+    ALBUM_REGISTRY_UNREADABLE, ALBUM_CONTRIB_HELD, SHARE_PAUSED_CATALOG,
   )
 }

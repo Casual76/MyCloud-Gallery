@@ -203,6 +203,53 @@ class SmartEditorControllerTest {
     assertThat((world.albums.all.value.byId(id) as dev.pampa.mycloudgallery.core.albums.contract.Album.Smart).rules.text).isEqualTo("neve")
   }
 
+  /** Il motore che sbaglia: l'anteprima e (poi) la proposta lanciano. */
+  private class BrokenEngine : dev.pampa.mycloudgallery.core.albums.contract.SmartAlbumEngine {
+    var previews = 0
+
+    override suspend fun evaluate(id: dev.pampa.mycloudgallery.core.model.AlbumId, budget: kotlin.time.Duration) = error("non qui")
+
+    override suspend fun preview(rules: SmartRules): SmartPreview {
+      previews++
+      error("il catalogo non risponde")
+    }
+  }
+
+  private class BrokenInterpreter : dev.pampa.mycloudgallery.core.albums.contract.SmartNameInterpreter {
+    override suspend fun propose(title: String, today: LocalDate): RuleProposal = error("la ricerca e' caduta")
+  }
+
+  @Test
+  fun seLAnteprimaSbagliaLEditorLoDiceELasciaSalvareLeRegole_AS7() = runTest(UnconfinedTestDispatcher()) {
+    val world = AlbumsTestWorld()
+    val engine = BrokenEngine()
+    // Prima l'eccezione usciva dalla coroutine dell'editor e arrivava al gestore dell'ambito: l'app si chiudeva.
+    val controller = SmartEditorController(SmartEditorMode.Create("Oslo 2026"), FakeSmartNameInterpreter(proposal), engine, world.albums, world.screens, backgroundScope)
+      .also { it.start() }
+    assertThat(engine.previews).isEqualTo(1)
+    assertThat(controller.ui.value.problem).isEqualTo(EditorProblem.PREVIEW_FAILED)
+    assertThat(controller.ui.value.previewing).isFalse()
+    assertThat(controller.ui.value.canSave).isTrue()
+    controller.save()
+    val id = controller.ui.value.savedAlbum!!
+    assertThat(world.albums.all.value.byId(id)).isNotNull()
+  }
+
+  @Test
+  fun seLaPropostaDelNomeSbagliaLEditorParteConRegoleVuote_AS7() = runTest(UnconfinedTestDispatcher()) {
+    val world = AlbumsTestWorld()
+    val controller = SmartEditorController(SmartEditorMode.Create("Oslo 2026"), BrokenInterpreter(), FakeSmartAlbumEngine(nextPreview = preview), world.albums, world.screens, backgroundScope)
+      .also { it.start() }
+    assertThat(controller.ui.value.problem).isEqualTo(EditorProblem.PREVIEW_FAILED)
+    assertThat(controller.ui.value.rules).isEqualTo(SmartRules(null, null, null))
+    assertThat(controller.ui.value.canSave).isFalse()
+    // Si possono comunque scrivere le regole a mano.
+    controller.setText("neve")
+    assertThat(controller.ui.value.rules?.text).isEqualTo("neve")
+    assertThat(controller.ui.value.problem).isNull()
+    assertThat(controller.ui.value.canSave).isTrue()
+  }
+
   @Test
   fun leRegoleDiUnAlbumCheNonCePiuODiUnManualeNonSiCambiano() = runTest(UnconfinedTestDispatcher()) {
     val world = AlbumsTestWorld()

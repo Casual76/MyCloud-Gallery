@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.albums.list
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumListSort
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
+import dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus
 import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbums
@@ -52,10 +53,15 @@ class AlbumListController(
 ) {
   private val dismissed = MutableStateFlow<Set<SharedAlbumNotice>>(emptySet())
 
-  /** L'elenco di adesso: `Loading` solo prima della prima lettura, `Empty` senza album ne' avvisi. */
-  val ui: StateFlow<AlbumListUi> = combine(albums.all, shared.notices, shared.left, dismissed) { list, notices, left, gone ->
+  /**
+   * L'elenco di adesso: `Loading` finche' gli album non sono stati letti (AP-1: `AlbumsStatus.Loading` con l'elenco ancora vuoto; prima un elenco vuoto
+   * del primo secondo dopo l'avvio diceva "Nessun album, creane uno"), `Empty` senza album ne' avvisi.
+   */
+  val ui: StateFlow<AlbumListUi> = combine(albums.all, albums.status, shared.notices, shared.left, dismissed) { list, status, notices, left, gone ->
     val shown = notices.filter { it !in gone }
-    val state = if (list.albums.isEmpty() && shown.isEmpty() && left.isEmpty()) {
+    val nothing = list.albums.isEmpty() && shown.isEmpty() && left.isEmpty()
+    if (nothing && status == AlbumsStatus.Loading) return@combine AlbumListUi(AlbumListState.Loading)
+    val state = if (nothing) {
       AlbumListState.Empty
     } else {
       AlbumListState.Ready(list.manualAndShared, list.smart, list.sort, shown)

@@ -4,16 +4,21 @@ import dev.pampa.mycloudgallery.backup.IncomingStates
 import dev.pampa.mycloudgallery.core.albums.contract.AddOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumOp
 import dev.pampa.mycloudgallery.core.albums.contract.Album
+import dev.pampa.mycloudgallery.core.albums.contract.AlbumList
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
+import dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus
+import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbums
 import dev.pampa.mycloudgallery.core.albums.contract.SharedState
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingStageId
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.albums.contract.AddToAlbumRequest
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingAlbumChoice
+import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingAlbumCreate
 import dev.pampa.mycloudgallery.feature.integrations.receive.IncomingAlbums
 import java.io.DataInputStream
 import java.io.DataOutputStream
@@ -21,9 +26,16 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 // "AGGIUNGI AD ALBUM" DALLA CONDIVISIONE IN ARRIVO (Fase 7, P13; P10-10, D35, D12). La ricezione salva i file sul NAS con "Salva sul NAS" (la sua
 // conferma) e registra qui una **promessa**: quando i file di quello stage sono nel catalogo (caricati e riletti: `incoming_item` UPLOADED, il media del
@@ -99,19 +111,43 @@ internal class AppIncomingAlbums(
   }
 
   override suspend fun albums(): List<IncomingAlbumChoice> = try {
-    albumsPort().all.value.albums.mapNotNull { album ->
-      when (album) {
-        is Album.Manual -> IncomingAlbumChoice(album.id.value, album.title, shared = false)
-        is Album.Smart -> null
-        is Album.Shared -> IncomingAlbumChoice(album.id.value, album.title, shared = true)
-          .takeIf { album.state == SharedState.ACTIVE && shared().allowed(album.id, AlbumOp.ADD_MEDIA) }
-      }
-    }
+    // AA-1: con l'app chiusa gli album si montano dopo la condivisione. Si aspetta un attimo che siano letti, senza tenere ferma la schermata
+    // (l'elenco poi la segue con `choices`): un elenco letto troppo presto era vuoto e la voce "Aggiungi ad album" non compariva piu'.
+    withTimeoutOrNull(FIRST_READ_WAIT) { albumsPort().status.first { it !is AlbumsStatus.Loading } }
+    offered(albumsPort().all.value)
   } catch (e: CancellationException) {
     throw e
   } catch (e: Exception) {
     GalleryLog.w(TAG) { "album per la ricezione: ${e.javaClass.simpleName}" }
     emptyList()
+  }
+
+  /** AA-1: gli album nel tempo (la schermata li segue finche' vive); i permessi di un condiviso cambiano con l'elenco. */
+  override fun choices(): Flow<List<IncomingAlbumChoice>> = albumsPort().all.map { list -> offered(list) }.distinctUntilChanged()
+
+  private fun offered(list: AlbumList): List<IncomingAlbumChoice> = list.albums.mapNotNull { album ->
+    when (album) {
+      is Album.Manual -> IncomingAlbumChoice(album.id.value, album.title, shared = false)
+      is Album.Smart -> null
+      is Album.Shared -> IncomingAlbumChoice(album.id.value, album.title, shared = true)
+        .takeIf { album.state == SharedState.ACTIVE && shared().allowed(album.id, AlbumOp.ADD_MEDIA) }
+    }
+  }
+
+  override val canCreate: Boolean get() = true
+
+  /** AA-2: un album a mano nuovo (nessun file si sposta); il foglio di conferma non serve. */
+  override suspend fun create(title: String): IncomingAlbumCreate = try {
+    when (val out = albumsPort().create(title, AlbumKind.MANUAL, null)) {
+      is CreateOutcome.Created -> IncomingAlbumCreate.Created(IncomingAlbumChoice(out.id.value, albumsPort().all.value.byId(out.id)?.title ?: title.trim(), shared = false))
+      is CreateOutcome.Invalid -> IncomingAlbumCreate.InvalidTitle
+      CreateOutcome.RulesTooLong, CreateOutcome.Unavailable -> IncomingAlbumCreate.Unavailable
+    }
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    GalleryLog.w(TAG) { "album nuovo dalla ricezione: ${e.javaClass.simpleName}" }
+    IncomingAlbumCreate.Unavailable
   }
 
   override suspend fun willAdd(stage: IncomingStageId, album: IncomingAlbumChoice): Boolean = try {
@@ -162,6 +198,9 @@ internal class AppIncomingAlbums(
 
   companion object {
     private const val TAG = "IncomingAlbums"
+
+    /** Quanto la prima lettura aspetta che gli album siano montati; poi l'elenco segue la porta da solo. */
+    val FIRST_READ_WAIT: Duration = 2.seconds
 
     /** I media caricati di uno stage dal database: `incoming_item` UPLOADED e il media del suo elemento `INCOMING` del diario. */
     suspend fun stageMediaOf(database: GalleryDatabase, stage: IncomingStageId): StageMedia = withContext(Dispatchers.IO) {

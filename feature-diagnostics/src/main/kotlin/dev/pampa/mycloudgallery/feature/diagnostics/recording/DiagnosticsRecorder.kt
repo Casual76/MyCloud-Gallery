@@ -39,6 +39,12 @@ enum class DiagJob {
   /** Fase 6 (P11): lo scaricamento dei modelli della ricerca e il calcolo AI. */
   MODEL_FETCH,
   AI_COMPUTE,
+
+  /** Fase 7 (revisione di fine fase, DG-2): un giro della condivisione di un album (`ShareWorker`: avanza il diario, accoda, pubblica). */
+  ALBUM_SHARE,
+
+  /** Fase 7 (DG-2): la manutenzione notturna della Libreria (riconciliazione, META, hash, viaggi, ricalcolo degli smart, Utility). */
+  LIBRARY_MAINTENANCE,
 }
 
 /** Com'e' finita una tappa di un lavoro (`StageOutcome` in parole fisse). */

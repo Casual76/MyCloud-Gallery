@@ -146,6 +146,11 @@ class ReceiveUi(
   val addedToAlbum: IncomingAlbumChoice? = null,
   /** "Aggiungi ad album": la promessa non si e' potuta registrare (i file sono comunque in coda). */
   val albumNotRegistered: Boolean = false,
+  /** AA-2: dalla scelta dell'album si puo' creare un «Nuovo album» (anche senza album: la voce "Aggiungi ad album" c'e' lo stesso). */
+  val canCreateAlbum: Boolean = false,
+  val creatingAlbum: Boolean = false,
+  /** AA-2: perche' «Nuovo album» non e' riuscito, o null. */
+  val newAlbumProblem: NewAlbumProblem? = null,
 ) {
   fun copy(
     screen: ReceiveScreenState = this.screen,
@@ -171,15 +176,27 @@ class ReceiveUi(
     selectedAlbum: IncomingAlbumChoice? = this.selectedAlbum,
     addedToAlbum: IncomingAlbumChoice? = this.addedToAlbum,
     albumNotRegistered: Boolean = this.albumNotRegistered,
+    canCreateAlbum: Boolean = this.canCreateAlbum,
+    creatingAlbum: Boolean = this.creatingAlbum,
+    newAlbumProblem: NewAlbumProblem? = this.newAlbumProblem,
   ): ReceiveUi = ReceiveUi(
     screen, stage, photos, videos, bytes, rejected, trail, choices, selected, queued, nasWait, failure, unlocking, unlockFailed, unlockFailure, noFolder,
-    notQueued, noSubfolders, albums, albumPick, selectedAlbum, addedToAlbum, albumNotRegistered,
+    notQueued, noSubfolders, albums, albumPick, selectedAlbum, addedToAlbum, albumNotRegistered, canCreateAlbum, creatingAlbum, newAlbumProblem,
   )
 
   /** Il foglio avvisa "Lo vedranno tutti i familiari" quando la cartella scelta e' dell'area comune (D24). */
   val commonNotice: Boolean get() = selected?.destination?.area == DestinationArea.COMMON
 
   override fun toString(): String = "ReceiveUi($screen, $photos foto, $videos video)"
+}
+
+/** AA-2: perche' «Nuovo album» dalla ricezione non e' riuscito. */
+enum class NewAlbumProblem {
+  /** Il nome non va bene (vuoto, troppo lungo, caratteri vietati). */
+  INVALID_TITLE,
+
+  /** Gli album non sono pronti (nessuna famiglia): non si crea adesso. */
+  UNAVAILABLE,
 }
 
 /** Come finisce la schermata: l'activity si chiude. */
@@ -222,6 +239,7 @@ class ReceiveViewModel(
   private var saved = false
   private var stagingJob: Job? = null
   private var savingJob: Job? = null
+  private var albumsJob: Job? = null
   private var loadingJob: Job? = null
 
   /** Una condivisione nuova arrivata mentre c'era gia' lavoro in corso (CA-2): parte appena la copia o il salvataggio di prima finiscono. */
@@ -391,7 +409,37 @@ class ReceiveViewModel(
         selectedAlbum = null,
         addedToAlbum = null,
         albumNotRegistered = false,
+        canCreateAlbum = albums.canCreate,
+        creatingAlbum = false,
+        newAlbumProblem = null,
       )
+    }
+    followAlbums()
+  }
+
+  /**
+   * AA-1: gli album **dopo** la prima lettura. Con l'app chiusa gli album si montano alcuni secondi dopo l'arrivo dei file; la lettura di sopra puo' essere
+   * vuota e senza questo "Aggiungi ad album" non compariva piu'. L'elenco segue la porta finche' la schermata vive; una scelta che non c'e' piu' si lascia.
+   */
+  private fun followAlbums() {
+    albumsJob?.cancel()
+    albumsJob = scope.launch {
+      try {
+        albums.choices().collect { offered ->
+          mutate { ui ->
+            if (ui.albums == offered) {
+              ui
+            } else {
+              val keep = ui.selectedAlbum?.takeIf { it in offered }
+              ui.copy(albums = offered, selectedAlbum = keep ?: if (ui.albumPick) offered.firstOrNull() else null)
+            }
+          }
+        }
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        // Una porta che non risponde vale come nessun album in piu': il salvataggio non ne dipende (D13).
+      }
     }
   }
 
@@ -485,13 +533,40 @@ class ReceiveViewModel(
 
   /** Apre la scelta dell'album al posto della scelta della cartella (c'e' solo se `:app` ha degli album). */
   fun openAlbumPicker() {
-    if (_ui.value.screen != ReceiveScreenState.READY || _ui.value.albums.isEmpty()) return
-    mutate { it.copy(albumPick = true, selectedAlbum = it.selectedAlbum ?: it.albums.firstOrNull()) }
+    if (_ui.value.screen != ReceiveScreenState.READY || (_ui.value.albums.isEmpty() && !_ui.value.canCreateAlbum)) return
+    mutate { it.copy(albumPick = true, newAlbumProblem = null, selectedAlbum = it.selectedAlbum ?: it.albums.firstOrNull()) }
   }
 
   fun closeAlbumPicker() {
     if (_ui.value.screen != ReceiveScreenState.READY) return
     mutate { it.copy(albumPick = false) }
+  }
+
+  /**
+   * AA-2: «Nuovo album» dalla scelta dell'album. Crea un album a mano (nessun file si sposta, nessuna conferma da chiedere) e lo sceglie: il salvataggio
+   * resta quello di sempre, "Salva sul NAS" nella cartella scelta con la sua conferma, piu' la promessa dell'album. Il nome e' un dato dell'utente: mai nei log.
+   */
+  fun createAlbum(title: String) {
+    val current = _ui.value
+    if (current.screen != ReceiveScreenState.READY || !current.albumPick || !current.canCreateAlbum || current.creatingAlbum) return
+    mutate { it.copy(creatingAlbum = true, newAlbumProblem = null) }
+    scope.launch {
+      val outcome = try {
+        albums.create(title)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        IncomingAlbumCreate.Unavailable
+      }
+      mutate { ui ->
+        when (outcome) {
+          is IncomingAlbumCreate.Created ->
+            ui.copy(creatingAlbum = false, albums = ui.albums.filterNot { it.id == outcome.choice.id } + outcome.choice, selectedAlbum = outcome.choice, newAlbumProblem = null)
+          IncomingAlbumCreate.InvalidTitle -> ui.copy(creatingAlbum = false, newAlbumProblem = NewAlbumProblem.INVALID_TITLE)
+          IncomingAlbumCreate.Unavailable -> ui.copy(creatingAlbum = false, newAlbumProblem = NewAlbumProblem.UNAVAILABLE)
+        }
+      }
+    }
   }
 
   fun selectAlbum(choice: IncomingAlbumChoice) {
@@ -633,6 +708,7 @@ class ReceiveViewModel(
     if (savingJob?.isActive == true) return
     stagingJob?.cancel()
     loadingJob?.cancel()
+    albumsJob?.cancel()
     discardUnsaved()
     _outcome.value = ReceiveOutcome.FINISHED
   }

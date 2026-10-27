@@ -35,7 +35,9 @@ class SyntheticAlbumsEvalTest {
     assertThat(total.sure).isEqualTo(12_411)
     assertThat(total.sureRight).isEqualTo(12_406)
     assertThat(total.truth).isEqualTo(14_162)
-    assertThat(total.covered).isEqualTo(14_003)
+    // R16 (revisione di fine fase): il centro dei luoghi sta su una griglia di 0,1 gradi e senza le foto di casa: 4 foto di bordo cerchio in meno (14.003 -> 13.999 su 14.162,
+    // copertura 98,88% -> 98,85%); precisione e sicuri non cambiano.
+    assertThat(total.covered).isEqualTo(13_999)
     // L'utente ideale ha giudicato ogni foto che l'album ha messo: niente "non giudicati".
     assertThat(total.sureUnjudged).isEqualTo(0)
     assertThat(total.sureWrong).isEqualTo(total.sure - total.sureRight)

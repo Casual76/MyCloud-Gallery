@@ -121,5 +121,5 @@ object AlbumSamples {
     CloseSheetState(album(3), "Prova Oslo", CloseMode.DELETE, forOthers = OthersAfterClose.KEEP_COPY, bringBackCount = 20, bringBack = true),
   )
 
-  val trips: List<TripsState> = listOf(TripsState.Proposals(listOf(trip, event), hasOlder = true), TripsState.NoGps(listOf(event)), TripsState.Empty)
+  val trips: List<TripsState> = listOf(TripsState.Proposals(listOf(trip, event), hasOlder = true), TripsState.NoGps(listOf(event)), TripsState.Empty, TripsState.Searching)
 }

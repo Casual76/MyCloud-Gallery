@@ -20,6 +20,8 @@
   <string name="trips_cover">Copertina della proposta</string>
   <string name="trips_empty_title">Nessuna proposta</string>
   <string name="trips_empty_detail">Quando trovo giorni lontani da casa, o tante foto in poche ore, te li propongo qui. Un tocco e diventano un album.</string>
+  <string name="trips_searching_title">Sto cercando i viaggi</string>
+  <string name="trips_searching_detail">Guardo le tue foto per capire dove abiti e quali giorni sono stati lontano da casa. Torna fra poco.</string>
   <string name="trips_no_gps_title">Non riesco a capire dov’è casa</string>
   <string name="trips_no_gps_detail">Servono foto con la posizione. Senza, non posso riconoscere i viaggi: ti propongo solo gli eventi, cioè tante foto in poche ore.</string>
   <string name="trips_no_gps_row">Viaggi ed eventi</string>

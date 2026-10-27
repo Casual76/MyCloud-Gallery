@@ -162,6 +162,36 @@ class AlbumListAndTripsControllerTest {
   }
 
   @Test
+  fun primaDellaPrimaRicercaNonSiDiceCheServonoFotoConLaPosizione_VG1() {
+    // VG-1: «nessuna casa» prima della prima ricerca non vuol dire niente; con TripProposals.EMPTY lo stato e' «sta cercando», non NoGps.
+    assertThat(TripsController.stateOf(TripProposals.EMPTY, false, today)).isEqualTo(TripsState.Searching)
+    assertThat(TripsController.stateOf(TripProposals(emptyList(), homeKnown = false, searched = false), true, today)).isEqualTo(TripsState.Searching)
+    // Dopo la ricerca, senza casa, si': solo allora.
+    assertThat(TripsController.stateOf(TripProposals(emptyList(), homeKnown = false, searched = true), false, today)).isEqualTo(TripsState.NoGps(emptyList()))
+  }
+
+  @Test
+  fun unElencoVuotoNelPrimoSecondoNonDiceNessunAlbum_AP1() = runTest(UnconfinedTestDispatcher()) {
+    val world = AlbumsTestWorld()
+    world.albums.status.value = dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus.Loading
+    val list = AlbumListController(world.albums, world.sharedAlbums, backgroundScope)
+    assertThat(list.ui.value.state).isEqualTo(AlbumListState.Loading)
+    // Gli album sono stati letti e davvero non ce ne sono: allora si'.
+    world.albums.status.value = dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus.Ready
+    assertThat(list.ui.value.state).isEqualTo(AlbumListState.Empty)
+  }
+
+  @Test
+  fun conGliAlbumGiaLettiNonSiTornaInCaricamentoSeLoStatoOscilla_AP1() = runTest(UnconfinedTestDispatcher()) {
+    val world = AlbumsTestWorld()
+    val list = AlbumListController(world.albums, world.sharedAlbums, backgroundScope)
+    list.createManual("Mio")
+    world.albums.status.value = dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus.Loading
+    // Con un album in elenco il caricamento non cancella la schermata.
+    assertThat(list.ui.value.state).isInstanceOf(AlbumListState.Ready::class.java)
+  }
+
+  @Test
   fun soloProposteVecchieDannoUnaPrimaSchermataVuotaEPiuVecchi() {
     val state = TripsController.stateOf(TripProposals(listOf(old, older), homeKnown = true), false, today) as TripsState.Proposals
     assertThat(state.proposals).isEmpty()

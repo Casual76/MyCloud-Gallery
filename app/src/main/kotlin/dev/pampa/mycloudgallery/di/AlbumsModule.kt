@@ -25,6 +25,8 @@ import dev.pampa.mycloudgallery.albums.AppTrips
 import dev.pampa.mycloudgallery.albums.AppViewerAlbumActions
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
+import dev.pampa.mycloudgallery.utility.UtilityDiagnostics
+import dev.pampa.mycloudgallery.utility.UtilityGraph
 import dev.pampa.mycloudgallery.core.albums.contract.ShareRunner
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbums
 import dev.pampa.mycloudgallery.core.albums.contract.SmartAlbumEngine
@@ -130,6 +132,11 @@ object AlbumsModule {
   @Provides
   @IntoSet
   fun albumsDiagnostics(albums: AlbumsGraph): DiagnosticsContributor = AlbumsDiagnostics(albums)
+
+  /** DG-2: la manutenzione dell'Utility (controllo notturno dei video del NAS, firme dei Doppioni simili): solo numeri, nella stessa sezione. */
+  @Provides
+  @IntoSet
+  fun utilityDiagnostics(utility: UtilityGraph): DiagnosticsContributor = UtilityDiagnostics(utility)
 
   /** La vista senza nascosti della Libreria (D22): "Aggiungi ad album" offre solo questi. */
   @Provides fun visibleMedia(gallery: GalleryGraph): VisibleMedia = gallery.visibleMedia

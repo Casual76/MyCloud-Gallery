@@ -98,7 +98,15 @@ internal class AlbumEditor(
       }
     } else {
       write(id, AlbumPositions.append(manualPositions(rows), fresh.map { it.value }))
-      if (smart) for (m in fresh) clearExclusions(state, resolution, m)
+      if (smart) {
+        for (m in fresh) {
+          // AS-10: uno smart congelato mostra gli elementi a mano (`item:`, le stesse voci che scrive "Congela"). "Scongela" le toglie tutte: senza una
+          // voce `accept:` anche la foto che l'utente ha aggiunto da congelato sparirebbe con il resto. Con l'accettazione resta (D16: "tenendo
+          // esclusioni e accettazioni").
+          albums.accept(id.value, m.value, on = true)
+          clearExclusions(state, resolution, m)
+        }
+      }
     }
     return AddOutcome.Added(fresh.size, already)
   }

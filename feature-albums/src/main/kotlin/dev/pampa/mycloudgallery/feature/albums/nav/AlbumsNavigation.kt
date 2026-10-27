@@ -2,6 +2,8 @@ package dev.pampa.mycloudgallery.feature.albums.nav
 
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
+import androidx.navigation.toRoute
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.compose.composable
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumActions
@@ -55,6 +57,17 @@ fun NavController.openRules(id: AlbumId) = navigate(SmartEditorDestination(album
 
 fun NavController.openTrips() = navigate(TripsDestination)
 
+/**
+ * L'editor delle regole ha salvato lo smart [id]: l'editor esce dalla pila e si e' sulla pagina di quell'album. AS-8: in modifica la pagina dell'album e'
+ * gia' sotto l'editor (ci si e' arrivati da li'), quindi basta toglierlo; aprirne una seconda lasciava due pagine dello stesso album e chiedeva due "indietro".
+ * In creazione sotto c'e' l'elenco (o le Raccolte): si apre la pagina nuova.
+ */
+fun NavController.afterRulesSaved(id: AlbumId) {
+  popBackStack()
+  val below = currentBackStackEntry?.takeIf { it.destination.hasRoute<AlbumPageDestination>() }?.toRoute<AlbumPageDestination>()
+  if (below?.id != id.value) openAlbum(id)
+}
+
 /** Apre la destinazione di una voce delle sezioni delle Raccolte ([AlbumEntryTarget.parse]); `NewAlbum` la gestisce chi ha il foglio "Nuovo album". */
 fun NavController.openEntry(target: AlbumEntryTarget) {
   when (target) {
@@ -101,10 +114,7 @@ fun NavGraphBuilder.albumsGraph(nav: NavController, actions: AlbumActions, thumb
       thumbnails = thumbnails,
       onBack = back,
       // Salvato: si va alla pagina dell'album e l'editor esce dalla pila (indietro non riporta alle regole).
-      onSaved = { id ->
-        nav.popBackStack()
-        nav.openAlbum(id)
-      },
+      onSaved = nav::afterRulesSaved,
     )
   }
   composable<TripsDestination> { TripsRoute(thumbnails = thumbnails, onBack = back, onOpenAlbum = nav::openAlbum) }

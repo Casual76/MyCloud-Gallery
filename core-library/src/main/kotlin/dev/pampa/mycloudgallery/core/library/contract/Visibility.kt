@@ -23,6 +23,14 @@ interface VisibleMedia {
    * copertina di un gruppo visibile e' visibile (si mostra con il suo gruppo). Un id sconosciuto non e' visibile.
    */
   suspend fun visible(ids: Collection<MediaId>): Set<MediaId>
+
+  /**
+   * Come [visible], ma un errore di lettura **lancia** invece di rispondere "niente e' visibile" (R17 della revisione di fine Fase 7). Per chi
+   * confronta il risultato con uno stato salvato e lo riscrive (gli album smart e i viaggi): un guasto del database non deve passare per una
+   * Libreria vuota, che cancellerebbe le righe automatiche e le proposte. Chi mostra e basta (le schermate) resta su [visible], che fallisce
+   * chiuso. Il default risponde come [visible]: le implementazioni che non leggono un database (i fake) non hanno un guasto da distinguere.
+   */
+  suspend fun visibleOrThrow(ids: Collection<MediaId>): Set<MediaId> = visible(ids)
 }
 
 /**
@@ -32,6 +40,9 @@ interface VisibleMedia {
  */
 fun interface HiddenMask {
   suspend fun hiddenAmong(ids: Collection<MediaId>): Set<MediaId>
+
+  /** Come [hiddenAmong], ma un errore di lettura lancia invece di rendere nascosti tutti gli id (vedi [VisibleMedia.visibleOrThrow], R17). */
+  suspend fun hiddenAmongOrThrow(ids: Collection<MediaId>): Set<MediaId> = hiddenAmong(ids)
 }
 
 /**

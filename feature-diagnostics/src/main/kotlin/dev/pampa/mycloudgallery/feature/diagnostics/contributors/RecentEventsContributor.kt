@@ -113,6 +113,8 @@ class RecentEventsContributor(
       DiagJob.BACKUP_INCOMING -> R.string.diagnostics_job_backup_incoming
       DiagJob.MODEL_FETCH -> R.string.diagnostics_job_model_fetch
       DiagJob.AI_COMPUTE -> R.string.diagnostics_job_ai_compute
+      DiagJob.ALBUM_SHARE -> R.string.diagnostics_job_album_share
+      DiagJob.LIBRARY_MAINTENANCE -> R.string.diagnostics_job_library_maintenance
     }
 
     @StringRes

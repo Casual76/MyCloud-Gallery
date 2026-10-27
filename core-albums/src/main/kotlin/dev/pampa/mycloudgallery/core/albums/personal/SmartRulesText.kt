@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.albums.personal
 
 import dev.pampa.mycloudgallery.core.albums.contract.LocalDayRange
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceRule
+import dev.pampa.mycloudgallery.core.albums.contract.PeopleRule
 import dev.pampa.mycloudgallery.core.albums.contract.PlaceScope
 import dev.pampa.mycloudgallery.core.albums.contract.SmartLimits
 import dev.pampa.mycloudgallery.core.albums.contract.SmartMediaType
@@ -10,6 +11,8 @@ import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.albums.contract.SmartSource
 import dev.pampa.mycloudgallery.core.model.GeoPoint
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.PeopleMode
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.model.StableCode
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalValue
@@ -28,6 +31,8 @@ import java.util.Locale
 //                  pezzo e puo' contenere i due punti)
 //   smart:text     la descrizione, com'e'
 //   smart:sources  i codici di `SmartSource` separati da virgola;  smart:types  i codici di `SmartMediaType`
+//   smart:people   (Fase 8, D27) `any:<id>,<id>` (una qualunque) o `all:<id>,...` (tutte); gli id sono quelli in base32 dei file dei volti (26 caratteri):
+//                  al piu' 32 persone stanno sotto i 1.024 caratteri (4 + 32 x 27). Mai i nomi: il campo dice chi, non come si chiama
 //   smart:example:<media>  una foto d'esempio (flag acceso + impronta): non e' un testo, ne' qui ne' nel formato
 //
 // Una regola che non sta nel tetto di una voce, o che ha caratteri che il formato rifiuta, **non si scrive** ([encode] la riporta come
@@ -54,6 +59,7 @@ object SmartRulesText {
     put(PersonalFields.SMART_TEXT, rules.text?.takeIf { it.isNotEmpty() })
     put(PersonalFields.SMART_SOURCES, if (rules.sources == SmartSource.ALL) null else codes(rules.sources))
     put(PersonalFields.SMART_TYPES, if (rules.types == SmartMediaType.ALL) null else codes(rules.types))
+    put(PersonalFields.SMART_PEOPLE, rules.people?.let { encodePeople(it) })
     return Encoded(fields, bad)
   }
 
@@ -68,6 +74,7 @@ object SmartRulesText {
       examples = examples.distinct().take(SmartLimits.MAX_EXAMPLES),
       sources = sources ?: SmartSource.ALL,
       types = types ?: SmartMediaType.ALL,
+      people = fields[PersonalFields.SMART_PEOPLE]?.let { decodePeople(it) },
     )
   }
 
@@ -105,6 +112,21 @@ object SmartRulesText {
     }
   } catch (e: RuntimeException) {
     null
+  }
+
+  /** `any:<id>,<id>` o `all:...`: gli id in base32 (26 caratteri), nell'ordine della regola. */
+  fun encodePeople(rule: PeopleRule): String = rule.mode.code + ":" + rule.ids.joinToString(",") { it.base32() }
+
+  /** La regola delle persone, o null se il campo non e' nella forma (un'app piu' nuova, un dato rovinato): una regola illeggibile vale "regola assente" (L205). */
+  fun decodePeople(text: String): PeopleRule? {
+    val colon = text.indexOf(':')
+    if (colon <= 0) return null
+    val mode = PeopleMode.fromCode(text.substring(0, colon)) ?: return null
+    val parts = text.substring(colon + 1).split(',')
+    if (parts.isEmpty() || parts.size > PeopleRule.MAX_PEOPLE) return null
+    val ids = parts.map { PersonId.fromBase32(it) ?: return null }
+    if (ids.toSet().size != ids.size) return null
+    return PeopleRule(ids, mode)
   }
 
   private fun monthDay(value: MonthDay): String = String.format(Locale.ROOT, "%02d-%02d", value.monthValue, value.dayOfMonth)

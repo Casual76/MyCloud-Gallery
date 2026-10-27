@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.albums.smart
 
+import dev.pampa.mycloudgallery.core.albums.contract.PeopleClass
 import dev.pampa.mycloudgallery.core.albums.contract.SmartMediaType
 import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -18,6 +19,9 @@ import java.time.LocalDate
 //  - B  sicuro  senza GPS, stesso dispositivo, fra due sicuri A dello stesso dispositivo a meno di 6 ore da ciascuno;
 //  - C  sicuro  album senza luogo: nel periodo (se c'e') e descrizione "sicura" per il motore di ricerca;
 //  - S1-S5      suggeriti (vedi [SmartReason]); uno screenshot e' sempre e solo S2, un familiare mai sicuro (E-AL17).
+//  - persone    (Fase 8, D27) la regola delle persone si **combina in "e"** con le altre: un media che non e' di nessuna persona della regola e' fuori; con una persona
+//               solo "forse" un sicuro diventa suggerito (S6); un suggerito resta com'e'. Il verdetto di un candidato dipende ancora solo dai tre giorni attorno al suo
+//               (la classe di una persona e' del media stesso): l'incrementale resta uguale alla valutazione intera.
 // **Fuori**: nascosti (non arrivano nemmeno qui), esclusi (E-AL5), sorgente o tipo non ammessi, fuori periodo, GPS che contraddice il luogo.
 
 /** Cio' che la ricerca per contenuto dice dell'album: i media "sicuri" e "meno probabili" per la descrizione e le foto d'esempio (C e S4). */
@@ -37,12 +41,17 @@ internal class SmartClassifier(
   private val content: ContentMatches,
   private val excluded: Set<MediaId>,
   private val owned: Set<MediaId>,
+  /** Fase 8: la classe di ogni candidato per la regola delle persone ([PeopleMatches.NONE] senza la regola, o dove i volti non ci sono: allora il motore non valuta). */
+  private val people: PeopleMatches = PeopleMatches.NONE,
 ) {
   /** La descrizione o le foto d'esempio ci sono (anche se il motore non c'e'). */
   val contentRequested: Boolean = !rules.text.isNullOrBlank() || rules.examples.isNotEmpty()
 
-  /** Un album senza periodo, luogo ne' descrizione non ha regole: e' vuoto (E-AL9). */
-  val hasConstraints: Boolean = rules.period != null || place != null || contentRequested
+  /** La regola delle persone c'e' (Fase 8). */
+  val peopleRequested: Boolean = rules.people != null
+
+  /** Un album senza periodo, luogo, descrizione ne' persone non ha regole: e' vuoto (E-AL9). */
+  val hasConstraints: Boolean = rules.period != null || place != null || contentRequested || peopleRequested
 
   private val contentActive: Boolean = contentRequested && content.used
 
@@ -112,6 +121,17 @@ internal class SmartClassifier(
   }
 
   private fun verdict(c: SmartCandidate, anchors: Anchors): SmartVerdict? {
+    val base = baseVerdict(c, anchors)
+    if (!peopleRequested || base == null) return base
+    // Fase 8: "e" con le persone. Un media senza nessuna persona della regola e' fuori; con una persona solo "forse" un sicuro diventa suggerito.
+    return when (people.classOf(c.media)) {
+      null -> null
+      PeopleClass.SURE -> base
+      PeopleClass.LIKELY -> if (base is SmartVerdict.Sure) SmartVerdict.Suggested(SmartReason.S6) else base
+    }
+  }
+
+  private fun baseVerdict(c: SmartCandidate, anchors: Anchors): SmartVerdict? {
     if (!inPeriod(c)) return null
     val matcher = place
     val fit = if (matcher != null && c.c.gps != null) matcher.fit(c.c) else null

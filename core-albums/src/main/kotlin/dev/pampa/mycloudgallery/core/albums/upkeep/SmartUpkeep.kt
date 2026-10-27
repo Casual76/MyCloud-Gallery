@@ -84,6 +84,19 @@ class SmartUpkeep(
   }
 
   /**
+   * Fase 8 (D27, E-AL7): le persone sono cambiate (un'istantanea del raggruppamento nuova, un nome, un'unione, una correzione, una persona dimenticata, Persone attivata o
+   * spenta qui): gli smart **con la regola delle persone** si rivalutano interi, uno alla volta (a lotti con il budget, come ogni valutazione: `drain` riprende quelli
+   * rimasti a meta'). Dove i volti non ci sono il motore li lascia come sono (E-F37). Lo chiama `:app` (P13) quando `People.list` o lo stato di Persone cambiano.
+   */
+  suspend fun peopleChanged() {
+    val withPeople = rows.smartAlbums().filter { id ->
+      val state = rows.state(id)
+      state != null && !state.frozen && state.rules.people != null
+    }
+    evaluateAll(withPeople)
+  }
+
+  /**
    * Il catalogo e' cambiato per [media] (un gruppo di novita' accorpato): gli smart che hanno righe su quei media si rivalutano interi (un media che
    * cambia giorno puo' uscirne), poi l'incrementale per gli altri. **I giorni che il budget ha lasciato** e i calcoli falliti si riprendono con [drain].
    */

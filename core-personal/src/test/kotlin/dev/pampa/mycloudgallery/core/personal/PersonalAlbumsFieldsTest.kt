@@ -223,6 +223,7 @@ class PersonalAlbumsFieldsTest {
     assertThat(failed.isFailure).isTrue()
     assertThat(PersonalFields.SMART_RULE_FIELDS).containsExactly(
       PersonalFields.SMART_PERIOD, PersonalFields.SMART_PLACE, PersonalFields.SMART_TEXT, PersonalFields.SMART_SOURCES, PersonalFields.SMART_TYPES,
+      PersonalFields.SMART_PEOPLE,
     )
   }
 

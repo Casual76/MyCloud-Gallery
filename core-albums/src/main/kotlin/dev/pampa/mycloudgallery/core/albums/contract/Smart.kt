@@ -218,6 +218,13 @@ data class SmartPreview(
   val sample: List<MediaId>,
   /** Se descrizione ed esempi hanno contato (motore pronto, D15). */
   val searchUsed: Boolean,
+  /**
+   * Fase 8 (E-F37): falso se le regole hanno le persone e qui i volti non ci sono (Persone spenta o esclusa): la regola non inserisce niente e l'anteprima
+   * e' vuota; l'editor dice "Le persone non sono attive su questo dispositivo". Vero (di serie) per ogni altra regola.
+   */
+  val peopleAvailable: Boolean = true,
+  /** Quante persone della regola non sono piu' riconosciute (dimenticate, E-F27): l'editor dice "Una persona della regola non e' piu' riconosciuta". */
+  val peopleLost: Int = 0,
 )
 
 /** L'esito di un ricalcolo (D16). */

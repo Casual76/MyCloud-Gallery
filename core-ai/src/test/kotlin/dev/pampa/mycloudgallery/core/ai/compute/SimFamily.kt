@@ -93,6 +93,9 @@ class SimDevice(
   val phoneMedia = LinkedHashMap<ContentKey, Pair<MediaKind, String>>()
   val preparer = PhonePreparer()
   var recipe: AiRecipe = AiRecipe.CURRENT
+
+  /** Fase 8 (D17): chi tiene ancora le anteprime del buffer (di serie nessuno, come nella Fase 6). */
+  var keepers: dev.pampa.mycloudgallery.core.ai.contract.BufferKeepers = dev.pampa.mycloudgallery.core.ai.contract.BufferKeepers.NONE
   var freeBytes: Long = Long.MAX_VALUE
   var clock = 0L
   val images = CountingEmbedder(FakeImageEmbedder()) { clock += 1_000_000_000L }
@@ -190,6 +193,7 @@ class SimDevice(
       localBodies = bodiesOverride ?: localBodies,
       unsupported = AiUnsupported { key, cls -> unsupported += key to cls },
       freeSpace = AiFreeSpace { freeBytes },
+      keepers = keepers,
     )
     engine = AiComputeEngine(parts, recipe, config, nanos = { clock }, pause = { pauses?.add(it) })
   }

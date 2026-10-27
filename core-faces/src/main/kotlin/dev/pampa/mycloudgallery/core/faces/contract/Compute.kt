@@ -62,6 +62,12 @@ enum class FacesStop(override val code: String) : StableCode {
 
   /** Sotto 1 GiB libero (E-A17): buffer svuotato e calcolo fermo. */
   STORAGE_LOW("storage_low"),
+
+  /**
+   * P4: il database dei volti non si apre adesso (Keystore che non risponde, file bloccato, database di una versione piu' nuova di
+   * quella dell'app). Non e' un errore e non cancella niente: si riprova alla tappa dopo.
+   */
+  STORE_UNAVAILABLE("store_unavailable"),
 }
 
 /** Il resoconto di una tappa: solo numeri (D37). [waiting] = media che aspettano un'anteprima da nessuna parte (D17, `FACES_WAITING_PREVIEWS`). */
@@ -98,6 +104,12 @@ enum class FacesWait(override val code: String) : StableCode {
   MODELS("models"),
   ERASING("erasing"),
   NEEDS_UPDATE("needs_update"),
+
+  /** P4: la tappa e' finita per tempo e ce n'e' un'altra in coda: "riprendo fra poco" (non e' un'attesa delle regole, come IX-2 della Fase 6). */
+  NEXT_STAGE("next_stage"),
+
+  /** P4: poco spazio sul telefono (sotto 1 GiB, E-A17) o database dei volti non disponibile adesso. */
+  STORAGE("storage"),
 }
 
 /** La fase del lavoro in corso. */

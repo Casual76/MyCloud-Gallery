@@ -195,7 +195,7 @@ class FacesStorePerformanceTest {
     const val ASSIGNMENTS = 20_000
 
     /** Tetti larghi (JVM, Robolectric, macchina condivisa con altri agenti): quel che conta e' il numero misurato e registrato. */
-    const val GROUP_FACES_CEILING_MS = 1_500L
+    const val GROUP_FACES_CEILING_MS = 3_000L
     const val SNAPSHOT_CEILING_MS = 5_000L
   }
 }

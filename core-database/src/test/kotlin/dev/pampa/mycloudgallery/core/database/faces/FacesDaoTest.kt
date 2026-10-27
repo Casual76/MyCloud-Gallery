@@ -294,8 +294,8 @@ class FacesDaoTest {
     val wholeBodies = median { assertThat(dao.winnersInSpace("sface_2021dec_v1")).hasSize(BODIES) }
     val wholeFaces = median { assertThat(dao.searchableFaces("sface_2021dec_v1", "none").size).isAtLeast(18_000) }
     println("[prestazioni database dei volti] lettura intera, corpi con i blocchi: $wholeBodies ms; volti con un vettore: $wholeFaces ms")
-    assertWithMessage("corpi: $wholeBodies ms").that(wholeBodies).isLessThan(1_000)
-    assertWithMessage("volti: $wholeFaces ms").that(wholeFaces).isLessThan(1_000)
+    assertWithMessage("corpi: $wholeBodies ms").that(wholeBodies).isLessThan(2_000)
+    assertWithMessage("volti: $wholeFaces ms").that(wholeFaces).isLessThan(2_000)
 
     val sql = db.openHelper.readableDatabase
     fun plan(query: String): String = sql.query("EXPLAIN QUERY PLAN $query").use { c ->

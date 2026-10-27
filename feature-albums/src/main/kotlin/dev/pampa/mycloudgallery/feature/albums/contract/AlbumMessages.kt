@@ -69,4 +69,10 @@ sealed interface AlbumMessage {
 
   /** Un'azione di scelta (copertina, esclusione) non ha trovato l'elemento nell'album. */
   data object NotInAlbum : AlbumMessage
+
+  /**
+   * Revisione B (R15): un'azione dell'album non e' riuscita per un motivo imprevisto (una cartella che il formato degli album non accetta, dati che
+   * non tornano): niente e' cambiato. Prima l'eccezione arrivava all'ambito della pagina e poteva far cadere l'app.
+   */
+  data object NotDone : AlbumMessage
 }

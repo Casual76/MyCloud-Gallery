@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.albums.contract.Album
+import dev.pampa.mycloudgallery.core.albums.contract.ShareFailure
 import dev.pampa.mycloudgallery.core.albums.contract.ShareOpState
 import dev.pampa.mycloudgallery.core.albums.contract.SharePlanKind
 import dev.pampa.mycloudgallery.core.albums.contract.ShareWait
@@ -33,7 +34,12 @@ import dev.pampa.mycloudgallery.feature.albums.ui.AlbumText
 // informazioni; i permessi chiudono il gruppo.
 
 /** Cosa succede toccando una striscia. */
-enum class StripAction { NONE, OPEN_TO_SHARE, OPEN_SUGGESTED, ADOPT_FOLDER_FILES, BRING_BACK_REJECTED, OPEN_PERMISSIONS, USE_NEW_FOLDER, RESTORE_REVOKED }
+enum class StripAction {
+  NONE, OPEN_TO_SHARE, OPEN_SUGGESTED, ADOPT_FOLDER_FILES, BRING_BACK_REJECTED, OPEN_PERMISSIONS, USE_NEW_FOLDER, RESTORE_REVOKED,
+
+  /** Revisione B (SH-2, E-SH18): "Riprova" gli elementi non andati di una condivisione finita con dei problemi (un piano nuovo, con il foglio). */
+  RETRY_SHARE,
+}
 
 /** Una riga di striscia: icona e tono (il colore sta sulla piastrella), parole, e cosa fa al tocco. */
 data class Strip(
@@ -115,27 +121,46 @@ internal object AlbumStrips {
       "sharing", Icons.Rounded.CloudUpload, FluidTone.Primary, progressTitle(resources, progress.kind, progress.done, progress.total),
       resources.getString(R.string.album_banner_sharing_running_detail),
     )
-    is ShareOpState.Paused -> Strip(
-      "sharing", Icons.Rounded.PauseCircle, FluidTone.Warning, resources.getString(R.string.album_banner_paused),
-      resources.getString(
+    is ShareOpState.Paused -> {
+      val why = resources.getString(
         when (progress.reason) {
           ShareWait.NO_SPACE -> R.string.album_banner_paused_space
           ShareWait.WRITES_BLOCKED -> R.string.album_banner_paused_blocked
           ShareWait.LOCKED -> R.string.album_banner_paused_locked
           ShareWait.NAS_UNREACHABLE -> R.string.album_banner_paused_nas
           ShareWait.RULES -> R.string.album_banner_paused_rules
+          ShareWait.CATALOG -> R.string.album_banner_paused_catalog
         },
-      ),
-    )
+      )
+      // Revisione B (SH-2): chi non e' ancora partito riparte da solo solo per 10 minuti (la conferma); poi la striscia offre "Riprova".
+      val detail = if (progress.notStarted > 0) resources.getString(R.string.album_banner_paused_not_started, why) else why
+      Strip("sharing", Icons.Rounded.PauseCircle, FluidTone.Warning, resources.getString(R.string.album_banner_paused), detail)
+    }
     is ShareOpState.PartlyDone -> Strip(
       "sharing", Icons.Rounded.ErrorOutline, FluidTone.Warning, resources.getString(R.string.album_banner_sharing_partly),
+      // Revisione B (SH-2): il motivo principale e il gesto ("Tocca per riprovare"): prima la striscia non diceva perche' e non faceva niente.
       resources.getString(
-        R.string.album_banner_sharing_partly_detail, GalleryNumbers.format(progress.done), GalleryNumbers.format(progress.failures.values.sum() + progress.cancelled),
+        R.string.album_banner_sharing_partly_retry, GalleryNumbers.format(progress.done),
+        GalleryNumbers.format(progress.failures.values.sum() + progress.cancelled), resources.getString(mainReason(progress)),
       ),
+      StripAction.RETRY_SHARE,
     )
     is ShareOpState.Done -> Strip(
       "sharing", Icons.Rounded.Group, FluidTone.Success, resources.getString(R.string.album_banner_sharing_done, GalleryNumbers.format(progress.done)), "",
     )
+  }
+
+  /** Il motivo piu' frequente fra gli elementi non andati (a parita', il primo nell'ordine dei codici). */
+  private fun mainReason(progress: ShareOpState.PartlyDone): Int {
+    val top = progress.failures.entries.sortedWith(compareByDescending<Map.Entry<ShareFailure, Int>> { it.value }.thenBy { it.key.ordinal }).firstOrNull()?.key
+    return when (top) {
+      ShareFailure.SOURCE_CHANGED -> R.string.album_problem_source_changed
+      ShareFailure.SOURCE_GONE -> R.string.album_problem_source_gone
+      ShareFailure.NOT_ALLOWED -> R.string.album_problem_not_allowed
+      ShareFailure.TRANSFER_FAILED -> R.string.album_problem_transfer_failed
+      ShareFailure.NOT_STARTED -> R.string.album_problem_not_started
+      null -> R.string.album_problem_cancelled
+    }
   }
 
   private fun progressTitle(resources: Resources, kind: SharePlanKind, done: Int, total: Int): String = resources.getString(

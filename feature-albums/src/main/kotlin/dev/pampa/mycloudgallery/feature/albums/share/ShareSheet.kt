@@ -167,6 +167,15 @@ private fun PlanContent(state: ShareSheetState.Plan, busy: Boolean, handlers: Sh
           tone = FluidTone.Warning,
         )
       }
+      // Revisione B (SG-1, D28): il guardiano e' fermo dai cancelli del backup; per questi media la copia privata non arrivera' subito. Il foglio lo
+      // dice prima del tocco (la conferma vale anche per questo: e' nell'impronta del piano).
+      if (plan.safeCopyBlocked > 0) {
+        FluidInlineMessage(
+          message = LocalContext.current.resources.getQuantityString(R.plurals.share_safe_copy_blocked, plan.safeCopyBlocked, plan.safeCopyBlocked),
+          title = stringResource(R.string.share_safe_copy_blocked_title),
+          tone = FluidTone.Warning,
+        )
+      }
       if (sharedKind) {
         Text(
           text = stringResource(R.string.album_declaration),

@@ -98,6 +98,8 @@ internal object AlbumText {
       ShareExclusion.UNAVAILABLE -> R.string.share_excluded_unavailable
       ShareExclusion.NOT_MINE -> R.string.share_excluded_not_mine
       ShareExclusion.NOT_IN_COMMON -> R.string.share_excluded_not_in_common
+      // Revisione B (SG-1, I4): il caricamento dal telefono non partirebbe; il foglio lo dice invece di prometterlo.
+      ShareExclusion.UPLOAD_BLOCKED -> R.string.share_excluded_upload_blocked
     },
     n,
   )

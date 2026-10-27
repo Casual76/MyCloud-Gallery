@@ -26,6 +26,12 @@ import kotlinx.coroutines.launch
 // L'ordine, quando si riporta: prima il foglio di "Riporta" (se l'utente non conferma, l'album non si e' chiuso e niente e' cambiato), poi la
 // chiusura. Chiudere non sposta mai un file da sola.
 
+/**
+ * Una chiusura riuscita. Revisione B (SC-1, D31): dopo "Smetti di condividere" [personal] e' l'album personale che il creatore ha adesso con gli stessi
+ * elementi (quello da cui l'aveva condiviso, o la copia nata subito): la pagina ci porta l'utente, invece di restare su "Album non trovato".
+ */
+data class ClosedAlbum(val album: AlbumId, val mode: CloseMode, val personal: AlbumId? = null)
+
 /** Il foglio di chiusura con il riepilogo e cio' che sta facendo. */
 data class CloseSheetUi(
   val sheet: CloseSheetState,
@@ -46,9 +52,9 @@ class CloseSheetController(
   /** Il foglio di chiusura di adesso, o null. */
   val ui: StateFlow<CloseSheetUi?> = _ui.asStateFlow()
 
-  /** L'ultima chiusura riuscita: la schermata porta l'utente fuori dalla pagina (diventata personale, o eliminata). */
-  private val _closed = MutableStateFlow<Pair<AlbumId, CloseMode>?>(null)
-  val closed: StateFlow<Pair<AlbumId, CloseMode>?> = _closed.asStateFlow()
+  /** L'ultima chiusura riuscita: la schermata porta l'utente fuori dalla pagina (all'album diventato personale, o indietro se eliminato). */
+  private val _closed = MutableStateFlow<ClosedAlbum?>(null)
+  val closed: StateFlow<ClosedAlbum?> = _closed.asStateFlow()
 
   /** Apre il foglio per [id]: il riepilogo (quanti miei posso riportare, quanti altri lo vedono) viene dal catalogo e dalla replica. */
   fun open(id: AlbumId, mode: CloseMode) {
@@ -89,12 +95,23 @@ class CloseSheetController(
     }
   }
 
+  /** SC-1: l'album personale dopo la chiusura; un errore della lettura vale "nessuno" (si torna all'elenco), l'annullamento passa. */
+  private suspend fun keptAfter(id: AlbumId): AlbumId? = try {
+    shared.keptAfterClose(id)
+  } catch (e: kotlinx.coroutines.CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    null
+  }
+
   private suspend fun close(id: AlbumId, mode: CloseMode, others: OthersAfterClose) {
     _ui.value = _ui.value?.copy(busy = true, problem = null)
     when (val out = shared.close(id, mode, others)) {
       CloseOutcome.Closed -> {
+        // SC-1: per il creatore l'album diventa personale subito (non al giro dell'indice dopo); un errore qui non annulla la chiusura.
+        val personal = if (mode == CloseMode.STOP) keptAfter(id) else null
         _ui.value = null
-        _closed.value = id to mode
+        _closed.value = ClosedAlbum(id, mode, personal)
       }
       is CloseOutcome.Blocked -> _ui.value = _ui.value?.copy(busy = false, problem = WhyBlocked.of(out.reason))
       is CloseOutcome.NotAllowed, CloseOutcome.NotFound -> _ui.value = _ui.value?.copy(busy = false, problem = WhyBlocked.NOT_ACTIVE)

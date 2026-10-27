@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.faces.contract
 
 import dev.pampa.mycloudgallery.core.model.ContentKey
+import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.PersonId
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.StateFlow
@@ -75,6 +76,43 @@ interface GroupingEngine {
   fun nightly(input: GroupingInput, ids: PersonIdSource): GroupingOutcome
 
   fun recluster(input: GroupingInput, previous: GroupingState, ids: PersonIdSource): GroupingOutcome
+}
+
+/**
+ * Un'istantanea del raggruppamento letta dal NAS (classe `cluster`, §2.4, D21): lo stato (con `seq` e `base`) e il dispositivo
+ * dell'account che l'ha pubblicata ([author]). Aggiunta di P5 (Fase 8 P5 in `docs/decisioni.md`): l'istantanea letta dal NAS sta
+ * **separata** da quella locale dell'archivio, perche' il custode che perde si riallinea partendo da quella vincente senza perdere la sua.
+ */
+class ClusterSnapshot(val author: String, val state: GroupingState) {
+  override fun toString(): String = "ClusterSnapshot(seq=${state.seq})"
+
+  companion object {
+    /** Vero se [a] batte [b] (§2.4): `seq` piu' alta, a pari numero il dispositivo minore. */
+    fun beats(a: ClusterSnapshot, b: ClusterSnapshot): Boolean =
+      a.state.seq > b.state.seq || (a.state.seq == b.state.seq && a.author < b.author)
+
+    /** L'istantanea vincente fra [snapshots], o null se non ce ne sono. */
+    fun winner(snapshots: Collection<ClusterSnapshot>): ClusterSnapshot? =
+      snapshots.fold(null as ClusterSnapshot?) { best, s -> if (best == null || beats(s, best)) s else best }
+  }
+}
+
+/**
+ * Le istantanee del raggruppamento che la replica (P3, sync/) ha letto e accettato per la generazione [generation]: per ogni dispositivo
+ * dell'account l'ultima che ha pubblicato (anche questo dispositivo). Vuoto = nessuna, NAS mai letto o recinzione (D34). Le regole di chi
+ * legge (firmatario dell'account, generazione corrente, anti-rollback, tetti) sono di P3; qui arrivano solo istantanee valide.
+ */
+fun interface ClusterSnapshots {
+  suspend fun latest(generation: FaceGeneration): List<ClusterSnapshot>
+}
+
+/**
+ * I contenuti i cui volti escono dal raggruppamento (E-F16, E-F39, §2.5 (e)): fra [keys], quelli che non hanno piu' un media nel catalogo
+ * di questo dispositivo o il cui media e' diventato un documento (bit `DOCUMENT`). Legata da :app (P13) sopra il catalogo. I nascosti
+ * **non** escono (si raggruppano e non si mostrano, D28). Aggiunta di P5.
+ */
+fun interface GoneContents {
+  suspend fun gone(keys: Collection<ContentKey>): Set<ContentKey>
 }
 
 /** Chi e' il custode del raggruppamento (D21): la prenotazione `faces/<G>/cluster` (1 ora, rinnovo ogni 20 minuti). */

@@ -122,7 +122,7 @@ switch ($Mode) {
 }
 # Nessun dispositivo: questa prova non usa adb.
 $environment["ANDROID_SERIAL"] = "none"
-if ($env:MCG_FACES_CHAOS_TRACE) { $environment["MCG_FACES_CHAOS_TRACE"] = $env:MCG_FACES_CHAOS_TRACE }
+foreach ($extra in @("MCG_FACES_CHAOS_TRACE", "MCG_FACES_CHAOS_NO_AVOID", "MCG_FACES_CHAOS_DB_ERRORS")) { if (Get-Item -Path "Env:$extra" -ErrorAction SilentlyContinue) { $environment[$extra] = (Get-Item -Path "Env:$extra").Value } }
 $arguments = @(":core-faces:testDebugUnitTest", "--tests", $test, "--max-workers=2", "--console=plain", "--rerun", "-PmcgTestTimeoutMinutes=$TimeoutMinutes")
 
 if ($DryRun) {

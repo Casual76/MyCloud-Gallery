@@ -76,9 +76,21 @@ internal object ChaosPlan {
     }
   }
 
-  /** Il numero di colpi di un passo: 0-4 (25/25/25/15/10%). */
-  private fun count(random: Random): Int {
+  /**
+   * Il numero di colpi di un passo: 0-4 (25/25/25/15/10%); sul NAS vero, dove ogni giro costa decine di secondi, 1-5 (10/25/30/20/15%) e le chiamate colpite
+   * piu' vicine, cosi' le 400 interruzioni cadono in qualche decina di giri e non in qualche centinaio.
+   */
+  private fun count(random: Random, dense: Boolean): Int {
     val r = random.nextInt(100)
+    if (dense) {
+      return when {
+        r < 10 -> 1
+        r < 35 -> 2
+        r < 65 -> 3
+        r < 85 -> 4
+        else -> 5
+      }
+    }
     return when {
       r < 25 -> 0
       r < 50 -> 1
@@ -89,14 +101,14 @@ internal object ChaosPlan {
   }
 
   /** I colpi di un passo di tipo [kind], per i dispositivi [actors] (indici). */
-  fun blows(random: Random, kind: StepKind, actors: List<Int>, caps: Capabilities, databaseErrors: Boolean = false): List<Blow> {
+  fun blows(random: Random, kind: StepKind, actors: List<Int>, caps: Capabilities, databaseErrors: Boolean = false, dense: Boolean = false): List<Blow> {
     val choices = table(kind, caps)
     if (choices.isEmpty() || actors.isEmpty()) return emptyList()
     val out = ArrayList<Blow>()
-    repeat(count(random)) {
+    repeat(count(random, dense)) {
       val surface = pickSurface(random, choices)
       val device = actors[random.nextInt(actors.size)]
-      out += blow(random, device, surface, caps, databaseErrors)
+      out += blow(random, device, surface, caps, databaseErrors, dense)
     }
     if (kind == StepKind.COMPUTE_FLIP) {
       // Il cambio di generazione cade al salvataggio n-esimo di un corpo del dispositivo che calcola.
@@ -114,11 +126,11 @@ internal object ChaosPlan {
     return choices.last().surface
   }
 
-  private fun blow(random: Random, device: Int, surface: Surface, caps: Capabilities, databaseErrors: Boolean): Blow {
+  private fun blow(random: Random, device: Int, surface: Surface, caps: Capabilities, databaseErrors: Boolean, dense: Boolean): Blow {
     val moment = if (random.nextBoolean()) Moment.BEFORE else Moment.AFTER
     val nth = when (surface) {
-      Surface.NAS -> 1 + geometric(random, 14, 60)
-      Surface.ERASE_OPS -> 1 + geometric(random, 5, 40)
+      Surface.NAS -> 1 + geometric(random, if (dense) 7 else 14, 60)
+      Surface.ERASE_OPS -> 1 + geometric(random, if (dense) 3 else 5, 40)
       else -> 1 + geometric(random, 2, 12)
     }
     val kind = when {

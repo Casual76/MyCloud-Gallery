@@ -372,7 +372,7 @@ internal object FacesAreaRunner {
    * gestore della sessione (un handle che il NAS non ha ancora chiuso) sono di orologio vero, quindi l'assestamento aspetta davvero fra un giro e l'altro.
    */
   fun defaultConfig(real: Boolean = true): ChaosConfig =
-    ChaosConfig(Capabilities.REAL, minSteps = 3, maxSteps = 5, settleTurns = if (real) 14 else 10, finalTurns = if (real) 30 else 24, settlePauseMs = if (real) 1_500 else 0)
+    ChaosConfig(Capabilities.REAL, minSteps = 3, maxSteps = 5, settleTurns = if (real) 14 else 10, finalTurns = if (real) 30 else 24, settlePauseMs = if (real) 600 else 0, dense = true)
 
   /** Fa i giri necessari: si ferma appena le interruzioni cadute sono [Settings.interruptions] (al massimo `4 x + 5` giri), o a un login rifiutato. */
   suspend fun run(area: FacesArea, settings: Settings, progress: ((rounds: Int, red: Int, fired: Int) -> Unit)? = null): ChaosResult {

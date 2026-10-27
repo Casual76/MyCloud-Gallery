@@ -51,6 +51,8 @@ internal class ChaosConfig(
   val restartAtEnd: Boolean = true,
   /** Anche i salvataggi del database che non riescono con un errore di SQLite fuori dai punti dove la produzione li gestisce (l'osservazione O1 del §F6: oggi escono dalla tappa come eccezione). */
   val databaseErrors: Boolean = false,
+  /** Piu' colpi per passo e piu' vicini (il NAS vero: ogni giro costa decine di secondi). */
+  val dense: Boolean = false,
   /** I difetti noti che il banco evita (di serie tutti, finche' non sono corretti). */
   val avoid: Set<KnownDefect> = KnownDefect.entries.toSet(),
   /** Un errore introdotto apposta (solo `FacesChaosMutationTest`). */
@@ -163,7 +165,7 @@ internal class ChaosRound(
     val actor = actorFor(kind)
     world.note("--- passo $n: ${kind.label} su ${actor.name}")
     val actors = if (kind == StepKind.SYNC || kind == StepKind.COMPUTE || kind == StepKind.COMPUTE_FLIP) online().map { it.index } else listOf(actor.index)
-    val blows = ChaosPlan.blows(random, kind, if (kind == StepKind.COMPUTE_FLIP) listOf(actor.index) else actors, config.capabilities, config.databaseErrors)
+    val blows = ChaosPlan.blows(random, kind, if (kind == StepKind.COMPUTE_FLIP) listOf(actor.index) else actors, config.capabilities, config.databaseErrors, config.dense)
     story += "passo $n: ${kind.label} su ${actor.name}" + if (blows.isEmpty()) "" else ", colpi: " + blows.joinToString("; ")
     inj.arm(blows)
     try {

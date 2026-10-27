@@ -68,6 +68,7 @@ data class LibraryBacklog(
  * | [framesPerVideo] | 4 | Fase 6 §2.8: ~4 fotogrammi a video (un vettore ciascuno, al piu' 9: D11) |
  * | [modelBytes] | 370 MiB | Fase 6 §2.1: EmbeddingGemma 2 440M, il modello degli indicizzatori (da scaricare una volta) |
  * | [ocrDenseShare] | 15 % | Fase 6 §2.8: quota di media con la seconda passata sull'HQ (screenshot e testo fitto, D12) |
+ * | [facesPerSecond] | 25 foto/s | Fase 8 D10, `regole-attivita.md`: IPOTESI [stima] (YuNet a 1024 px + SFace per volto sulla CPU, ~40 ms a foto sull'S25; Tab S9 12-20): P2 la misura (`docs/decisioni.md`, "Fase 8 P2"), F104 la conferma sul telefono e la sostituisce |
  * | [verifyReadBytesPerSecond] | 16,0 MB/s | Fase 5, D4: la rilettura di verifica del backup; stessa misura della lettura cifrata a 4 flussi. IPOTESI per il temporaneo appena scritto (da misurare a M2) |
  * | [perFileOverheadSeconds] | 0,12 s | Fase 5, `fase5-progetto.md` §2.9: ~12 viaggi SMB per file a ~10 ms l'uno. IPOTESI (da misurare in F22) |
  * | [uploadStreams] | 1 | Fase 5: i 9 MB/s di [smbWriteBytesPerSecond] sono la misura con **un** flusso; due caricamenti paralleli non sono misurati (F22) |
@@ -87,10 +88,12 @@ data class DeviceMeasures(
   val framesPerVideo: Double = 4.0,
   val modelBytes: Long = 370L * 1024 * 1024,
   val ocrDenseShare: Double = 0.15,
+  val facesPerSecond: Double = 25.0,
 ) {
   init {
     require(ocrSecondsPerItem >= 0 && framesPerVideo >= 1.0 && modelBytes >= 0) { "Misure del calcolo AI non valide." }
     require(ocrDenseShare in 0.0..1.0) { "La quota del testo fitto e' una frazione." }
+    require(facesPerSecond > 0) { "La velocita' del calcolo dei volti deve essere positiva." }
     require(smbWriteBytesPerSecond > 0 && smbReadBytesPerSecond > 0 && aiItemsPerSecond > 0) {
       "Le velocita' misurate devono essere positive."
     }

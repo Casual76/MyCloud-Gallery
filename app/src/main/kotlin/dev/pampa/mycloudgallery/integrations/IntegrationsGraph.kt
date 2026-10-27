@@ -291,6 +291,10 @@ class IntegrationsGraph(
   @Volatile
   private var installed = false
 
+  /** Fase 7 (P13, P10-10): "Aggiungi ad album" nella ricezione (la porta degli album, `AlbumsGraph.incoming`); null = la voce non compare. */
+  @Volatile
+  var incomingAlbums: dev.pampa.mycloudgallery.feature.integrations.receive.IncomingAlbums? = null
+
   /**
    * All'avvio del processo: le impostazioni del blocco seguite a livello di processo, le porte dei componenti d'ingresso installate, le pulizie
    * dei file lasciati (copie di condivisione e di modifica, file in arrivo non piu' citati). Idempotente.
@@ -302,7 +306,7 @@ class IntegrationsGraph(
     wireIncomingMetadata()
     IntegrationPorts.install(entryGate, documents)
     PickerPorts.install(library, unlock, preparedCopies)
-    ReceivePorts.install(uploads, destinations, unlock)
+    ReceivePorts.install(uploads, destinations, unlock, incomingAlbums)
     gallery.onShutdown { revokeAll() }
     followActivities()
     // IN-2: le radici si notificano al sistema quando cambia cio' che la radice dice (l'app diventa pronta, il blocco cambia): DocumentsUI le tiene

@@ -110,6 +110,12 @@ interface LibraryCommands {
 
   /** Fase 5B (P14): apre "Libera spazio" per [ids] (la pagina di feature-backup verifica e chiede la conferma; qui niente si toglie). */
   fun freeSpace(ids: Set<MediaId>) {}
+
+  /** Fase 7 (P10, P13, D35): "Aggiungi ad album" sulla selezione c'e' (gli album sono legati). Senza, l'azione non compare. */
+  val canAddToAlbum: Boolean get() = false
+
+  /** Fase 7 (P13): apre la scelta dell'album per [ids] sopra la Libreria (`:app` mostra `AddToAlbumHost`); qui niente si scrive. */
+  fun addToAlbum(ids: Set<MediaId>) {}
 }
 
 /** Nessuna richiesta: la Libreria vuota della release prima del grafo vero. */

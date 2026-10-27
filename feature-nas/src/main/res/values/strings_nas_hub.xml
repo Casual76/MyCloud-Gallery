@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-  <!-- Fase 4B, P14: le voci delle quattro schermate in Raccolte (il gruppo "Sul NAS"). -->
+  <!-- Fase 4B, P14: le voci delle quattro schermate in Raccolte (il gruppo "Cartelle NAS", D33: prima "Sul NAS"). -->
 
-  <string name="nas_hub_group">Sul NAS</string>
+  <string name="nas_hub_group">Cartelle NAS</string>
   <string name="nas_hub_folders_title">Cartelle NAS</string>
   <string name="nas_hub_folders_subtitle">Sfoglia, crea, rinomina, sposta ed elimina</string>
   <string name="nas_hub_space_title">Spazio NAS</string>

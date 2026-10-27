@@ -139,6 +139,8 @@ fun AlbumPageRoute(
           StripAction.ADOPT_FOLDER_FILES -> controller.adoptFolderFiles()
           StripAction.BRING_BACK_REJECTED -> controller.bringBackRejected()
           StripAction.OPEN_PERMISSIONS -> dialog = PageDialog.PERMISSIONS
+          StripAction.USE_NEW_FOLDER -> controller.useNewFolder()
+          StripAction.RESTORE_REVOKED -> controller.restoreRevoked()
         }
       }
 

@@ -166,7 +166,9 @@ class AlbumPageController(
     notices.forEach { notice ->
       when (notice) {
         is SharedAlbumNotice.FilesAddedFromPc -> add(AlbumBanner.FilesFromPc(notice.count))
-        is SharedAlbumNotice.FolderChanged -> add(AlbumBanner.FolderChanged)
+        // P13 (E-SH16): con la cartella nuova nota, il creatore la puo' adottare con un tocco.
+        is SharedAlbumNotice.FolderChanged -> add(notice.newFolder?.let { AlbumBanner.UseNewFolder(it) } ?: AlbumBanner.FolderChanged)
+        is SharedAlbumNotice.RevokedItems -> if (notice.count > 0) add(AlbumBanner.RevokedItems(notice.count))
         is SharedAlbumNotice.NotAddedLevelChanged -> add(AlbumBanner.NotAdded(notice.count))
         is SharedAlbumNotice.Inherited -> add(AlbumBanner.Inherited)
         is SharedAlbumNotice.Closed -> Unit
@@ -289,6 +291,16 @@ class AlbumPageController(
       val media = pending.notAdded(id)
       if (media.isNotEmpty()) share.request(ShareRequest.BringBack(id, media))
     }
+  }
+
+  /** E-SH16 (P13): "Usa la nuova cartella" (solo il creatore o l'erede): la definizione prende la cartella dove gli elementi stanno ora. */
+  fun useNewFolder() {
+    scope.launch { report(shared.useNewFolder(id)) }
+  }
+
+  /** E-SH20 (P13): "Ripristina gli elementi" di un mio dispositivo revocato: tornano come mie voci (nessun file si muove). */
+  fun restoreRevoked() {
+    scope.launch { report(shared.restoreRevoked(id)) }
   }
 
   /** Dall'ordine personalizzato (D21): [media] in cima o in fondo all'album. */

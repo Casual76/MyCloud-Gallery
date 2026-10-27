@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.gallery
 
+import dev.pampa.mycloudgallery.albums.AlbumRequests
+import dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerAlbumActions
+import dev.pampa.mycloudgallery.feature.viewer.menu.ViewerAlbumActions
 import android.content.ComponentCallbacks2
 import android.content.Context
 import android.os.SystemClock
@@ -499,12 +502,27 @@ class GalleryGraph(
         nas?.organizer?.personalChanged()
         // Fase 7 (P9, D22): il widget di prova (solo debug) si ridisegna subito; in release non fa niente.
         DeveloperTools.hiddenChanged(context)
+        // Fase 7 (P13): copertine e conteggi degli album condivisi senza aspettare il giro dopo.
+        onHiddenChanged()
       }
 
       // Fase 7 (P9, E-H2): quanti degli elementi nascosti i familiari vedono ancora (area comune, album condivisi).
       override suspend fun familyStillSees(ids: Set<MediaId>): Int = core().actions.familyStillSees(ids)
     },
   )
+
+  /** Fase 7 (P13): dopo un "Nascondi" o "Mostra" fatto qui (lo lega `AlbumsModule`: gli album condivisi ricalcolano copertine e conteggi). */
+  @Volatile
+  var onHiddenChanged: () -> Unit = {}
+
+  /**
+   * Fase 7 (P13, P10-10, D35): le richieste "Aggiungi ad album" (selezione della Libreria, viewer, Nascosti), che la radice mostra con `AddToAlbumHost`,
+   * e le voci ⋮ degli album di ogni viewer ([viewerAlbums], lo lega `AlbumsModule`; di serie nessuna voce).
+   */
+  val albumRequests: AlbumRequests = AlbumRequests()
+
+  @Volatile
+  var viewerAlbums: ViewerAlbumActions = NoViewerAlbumActions
 
   /** Una scrittura che tocca catalogo e istantanea: mai insieme a [shutdown], e mai dopo. */
   private suspend fun <T> writing(block: suspend () -> T): T = lifecycle.withLock {
@@ -660,6 +678,16 @@ class GalleryGraph(
       similarSearch = searchViewer?.similarSearch ?: dev.pampa.mycloudgallery.feature.viewer.menu.NoViewerSimilarSearch,
       subjectCutter = searchViewer?.subjectCutter,
       cutoutSaver = searchViewer?.cutoutSaver,
+      // Fase 7 (P13): "Aggiungi ad album" dal viewer; le voci si leggono a ogni richiesta da [viewerAlbums] (gli album si legano dopo la galleria).
+      albums = object : ViewerAlbumActions {
+        override fun menu(id: MediaId) = viewerAlbums.menu(id)
+
+        override fun addToAlbum(id: MediaId) = viewerAlbums.addToAlbum(id)
+
+        override suspend fun removeFromAlbum(id: MediaId) = viewerAlbums.removeFromAlbum(id)
+
+        override suspend fun setAsCover(id: MediaId) = viewerAlbums.setAsCover(id)
+      },
     )
   }
 

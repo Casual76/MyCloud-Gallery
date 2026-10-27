@@ -108,7 +108,10 @@ object NoAlbumPending : AlbumPending {
  * Cosa si vuole aggiungere a un album (D35: dalla selezione in Libreria, dal viewer ⋮, dai risultati di Cerca, dalla condivisione in arrivo).
  * [fromHidden] e' vero solo dai Nascosti: li' l'album riceve il media ma non lo mostra finche' e' nascosto (D22); da ogni altro posto un
  * nascosto non si offre mai ("i nascosti non si offrono fuori dai Nascosti", §2.1).
+ *
+ * [album] (Fase 7, P13): l'album e' gia' scelto (la condivisione in arrivo l'ha scelto prima che i file fossero nel catalogo, P10-10): il foglio
+ * aggiunge subito li', e per un album condiviso apre direttamente la conferma col conteggio (D12). Null = l'utente sceglie dall'elenco.
  */
-class AddToAlbumRequest(val media: List<MediaId>, val fromHidden: Boolean = false) {
-  override fun toString(): String = "AddToAlbumRequest(${media.size}, fromHidden=$fromHidden)"
+class AddToAlbumRequest(val media: List<MediaId>, val fromHidden: Boolean = false, val album: AlbumId? = null) {
+  override fun toString(): String = "AddToAlbumRequest(${media.size}, fromHidden=$fromHidden, preselected=${album != null})"
 }

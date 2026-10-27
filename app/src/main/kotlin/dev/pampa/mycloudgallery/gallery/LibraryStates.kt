@@ -112,6 +112,13 @@ class AppLibraryCommands(
     gallery.fiveB?.freeSpace?.invoke(ids)
   }
 
+  // Fase 7 (P13, D35): "Aggiungi ad album" sulla selezione, con gli album (che vivono nei dati personali del NAS, D3): la scelta la mostra la radice.
+  override val canAddToAlbum: Boolean get() = gallery.nas != null
+
+  override fun addToAlbum(ids: Set<MediaId>) {
+    gallery.albumRequests.add(ids)
+  }
+
   /** Il tetto di una richiesta di cestino di sistema (Android 11+). */
   override val deleteLimit: Int get() = DELETE_LIMIT
 

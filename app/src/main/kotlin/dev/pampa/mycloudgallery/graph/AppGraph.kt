@@ -182,6 +182,14 @@ class AppGraph(
   @Volatile
   var aiHooks: dev.pampa.mycloudgallery.nas.NasAiHooks? = null
 
+  /**
+   * Fase 7 (P13, §1.4): chi ferma gli album **per primi** all'azzeramento (condivisione, replica, pubblicazione, ricalcoli): niente parte piu' e i
+   * giri in corso si aspettano, poi si cancellano diario, replica, proposte e casa (con il database). Nasce dopo la galleria: si registra da solo
+   * (`AlbumsModule`). Nei test senza album resta null.
+   */
+  @Volatile
+  var albumsStopper: GalleryStopper? = null
+
   // --- Archivi locali (DataStore e file in noBackupFilesDir: fuori da backup e trasferimenti) ---------------------
   val accountStore = DataStoreNasAccountStore(SetupDataStores.account(context, scope))
   val account: StateFlow<NasAccount?> = accountStore.observe().stateIn(scope, SharingStarted.Eagerly, null)

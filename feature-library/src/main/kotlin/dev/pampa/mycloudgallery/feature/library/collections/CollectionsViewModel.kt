@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.library.collections
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -32,6 +33,9 @@ class CollectionsViewModel @Inject constructor(
 
   /** Gli elementi di una raccolta-filtro, o null per i Nascosti e gli Eliminati di recente (che non sono filtri). */
   fun items(kind: CollectionKind): ViewerItems? = kind.filter?.let(source::items)
+
+  /** Tutta la Libreria (senza nascosti, E-H1): il selettore dei media degli album (Fase 7, P13). */
+  fun allItems(): ViewerItems = source.items(LibraryFilter.ALL)
 
   private val noticeFlow = MutableStateFlow<ActionNotice?>(null)
 

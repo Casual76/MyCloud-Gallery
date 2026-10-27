@@ -3,19 +3,13 @@ package dev.pampa.mycloudgallery.navigation
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.remember
-import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavController
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
-import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
-import dev.pampa.mycloudgallery.feature.nas.R as NasScreensR
 import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
-import dev.pampa.mycloudgallery.feature.nas.hub.NasHubEntry
 import dev.pampa.mycloudgallery.feature.nas.hub.NasScreenContent
-import dev.pampa.mycloudgallery.feature.nas.hub.nasHubEntries
 import dev.pampa.mycloudgallery.feature.nas.hub.openNas
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.main.GalleryHostViewModel
@@ -30,26 +24,8 @@ import kotlinx.coroutines.launch
 /** La pagina della 4B con questo codice (la rotta di `NasScreen`), o null per una voce che questa versione non conosce. */
 internal fun nasScreenOf(code: String): NasScreen? = NasScreen.entries.firstOrNull { it.route == code }
 
-/** Una voce della 4B come riga delle Raccolte: lo stesso codice della rotta, gli stessi testi, glifo, tono e numero. */
-internal fun NasHubEntry.toCollectionEntry(): CollectionEntry = CollectionEntry(
-  code = screen.route,
-  title = title,
-  subtitle = subtitle,
-  icon = glyph,
-  tone = tone,
-  badge = badge,
-)
-
-/** Il gruppo "Sul NAS" delle Raccolte, solo con il NAS collegato (senza, il gruppo non c'e' nemmeno come intestazione). */
-@Composable
-internal fun nasCollectionGroups(configured: Boolean): List<CollectionEntryGroup> {
-  if (!configured) return emptyList()
-  val entries = nasHubEntries()
-  val title = stringResource(NasScreensR.string.nas_hub_group)
-  return remember(entries, title) { listOf(CollectionEntryGroup(title, entries.map { it.toCollectionEntry() })) }
-}
-
-/** La pagina di una voce "Sul NAS" nel pannello di dettaglio del tablet: senza tasto indietro, sopra la pillola. */
+/** La pagina di una voce di Cartelle NAS nel pannello di dettaglio del tablet: senza tasto indietro, sopra la pillola. (La sezione delle Raccolte la
+ * fa `AppCollectionsSections.nas`, Fase 7 P13: prima era un gruppo passato come `extraGroups`.) */
 @Composable
 internal fun NasEntryDetail(entry: CollectionEntry, nav: NavController, hostPadding: PaddingValues, opener: NasFileOpener) {
   val screen = nasScreenOf(entry.code) ?: return

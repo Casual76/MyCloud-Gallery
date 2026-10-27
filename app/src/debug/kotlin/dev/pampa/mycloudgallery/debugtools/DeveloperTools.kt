@@ -96,13 +96,14 @@ internal object DeveloperTools {
   fun installSearch(stack: dev.pampa.mycloudgallery.ai.AiStack, gallery: dev.pampa.mycloudgallery.gallery.GalleryGraph, context: Context) {
     dev.pampa.mycloudgallery.debugtools.eval.EvalEnvironmentHolder.current =
       dev.pampa.mycloudgallery.debugtools.eval.AppEvalEnvironment(stack, gallery, context.noBackupFilesDir)
-    // Fase 7 (P12): la porta dello strumento di valutazione degli album e dei viaggi, sopra la stessa Libreria (sola lettura). P13 puo' passare qui la
-    // cartella `Backup/<dispositivo>/` di questo dispositivo (`ownBackupFolder`).
+    // Fase 7 (P12): la porta dello strumento di valutazione degli album e dei viaggi, sopra la stessa Libreria (sola lettura). P13: la cartella
+    // `Backup/<dispositivo>/` di questo dispositivo (`ownBackupFolder`), la stessa che usano gli album smart veri (`AlbumsWiring.ownBackupFolder`).
     dev.pampa.mycloudgallery.debugtools.eval.albums.AlbumsEvalEnvironmentHolder.current = dev.pampa.mycloudgallery.debugtools.eval.albums.AppAlbumsEvalEnvironment.over(
       gallery,
       context.applicationContext,
       dev.pampa.mycloudgallery.core.albums.smart.EngineContentSearch(stack.search.engine),
       stack.search.today,
+      ownBackupFolder = { dev.pampa.mycloudgallery.albums.AlbumsWiring.ownBackupFolder(gallery) },
     )
   }
 

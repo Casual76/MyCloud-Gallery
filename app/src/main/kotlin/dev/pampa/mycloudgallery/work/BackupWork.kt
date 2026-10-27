@@ -297,6 +297,11 @@ object BackupWorkScheduling {
     enqueue(context, request(work), work, ExistingWorkPolicy.KEEP)
   }
 
+  /** Fase 7 (D28, P13): il guardiano chiesto subito dopo una condivisione: il lavoro della tappa `safety` (unico, `KEEP`). */
+  fun safety(context: Context) {
+    enqueue(context, request(Kind.SAFETY), Kind.SAFETY, ExistingWorkPolicy.KEEP)
+  }
+
   /** Campo, gruppo A (D6): le foto appena scattate trovate dalla lettura del telefono con l'app aperta: il lavoro rapido (unico, `KEEP`). */
   fun quickWork(context: Context) {
     enqueue(context, request(Kind.QUICK), Kind.QUICK, ExistingWorkPolicy.KEEP)

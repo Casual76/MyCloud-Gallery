@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.backup
 
+import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumLimits
 import dev.pampa.mycloudgallery.core.backup.contract.BackupCandidate
 import dev.pampa.mycloudgallery.core.backup.contract.BackupCatalog
 import dev.pampa.mycloudgallery.core.backup.contract.BackupClock
@@ -220,8 +221,12 @@ class FiveBGraph(
     onChanged = onReceivedChanged,
   )
 
-  /** Il motore carica i file in arrivo con queste porte (D24): copie locali, cancello della destinazione, radice di D13. */
-  fun incomingPorts(): IncomingUploadPorts = IncomingUploadPorts(incomingFiles, incomingGate, fenceRoot())
+  /**
+   * Il motore carica i file in arrivo con queste porte (D24): copie locali, cancello della destinazione, radice di D13. Fase 7 (E-SH1, Q1 (a), P13):
+   * la radice delle cartelle degli album condivisi, sotto cui il motore pubblica i media del telefono caricati in un album (`AlbumFolderUploads`).
+   */
+  fun incomingPorts(): IncomingUploadPorts =
+    IncomingUploadPorts(incomingFiles, incomingGate, fenceRoot(), albumRoot = SharePath.of(SharedAlbumLimits.FOLDER_ROOT))
 
   /** D13: la radice di prova (`mcg-campo`) con un account di prova in debug; null altrimenti. */
   fun fenceRoot(): SharePath? = account()?.let { fence?.destinationRoot(it) }

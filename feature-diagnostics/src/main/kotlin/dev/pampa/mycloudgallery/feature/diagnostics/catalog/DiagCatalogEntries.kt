@@ -295,6 +295,19 @@ internal object DiagCatalogEntries {
 
     // --- Gli album (Fase 7, P0: la voce di stato; i codici del §2.8 li aggiunge P13) ------------------------------------
     DiagEntry(DiagCodes.ALBUMS_STATE, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_albums_state_title, R.string.diag_albums_state_guide, null),
+    // P13: i codici del §2.8 (contributi, voci, attestazione, spostamenti, guardiano, smart, viaggi, proiezione). Solo conteggi e codici.
+    DiagEntry(DiagCodes.ALBUM_CONTRIB_REJECTED, DiagSection.ALBUMS, DiagSeverity.WARNING, R.string.diag_album_contrib_rejected_title, R.string.diag_album_contrib_rejected_guide, null),
+    DiagEntry(DiagCodes.ALBUM_ENTRY_DENIED, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_entry_denied_title, R.string.diag_album_entry_denied_guide, null),
+    DiagEntry(DiagCodes.ALBUM_ITEM_UNATTESTED, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_item_unattested_title, R.string.diag_album_item_unattested_guide, null),
+    DiagEntry(DiagCodes.SHARE_PAUSED_SPACE, DiagSection.ALBUMS, DiagSeverity.WARNING, R.string.diag_share_paused_space_title, R.string.diag_share_paused_space_guide, null),
+    DiagEntry(DiagCodes.SHARE_PAUSED_FROZEN, DiagSection.ALBUMS, DiagSeverity.WARNING, R.string.diag_share_paused_frozen_title, R.string.diag_share_paused_frozen_guide, null),
+    DiagEntry(DiagCodes.SHARE_WAITING_LOCKED, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_share_waiting_locked_title, R.string.diag_share_waiting_locked_guide, null),
+    DiagEntry(DiagCodes.SHARE_SOURCE_CHANGED, DiagSection.ALBUMS, DiagSeverity.WARNING, R.string.diag_share_source_changed_title, R.string.diag_share_source_changed_guide, null),
+    DiagEntry(DiagCodes.SHARE_SAFE_COPY_QUEUED, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_share_safe_copy_queued_title, R.string.diag_share_safe_copy_queued_guide, null),
+    DiagEntry(DiagCodes.SMART_TOO_BROAD, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_smart_too_broad_title, R.string.diag_smart_too_broad_guide, null),
+    DiagEntry(DiagCodes.SMART_NO_SEARCH, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_smart_no_search_title, R.string.diag_smart_no_search_guide, null),
+    DiagEntry(DiagCodes.TRIP_NO_GPS, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_trip_no_gps_title, R.string.diag_trip_no_gps_guide, null),
+    DiagEntry(DiagCodes.ALBUM_PROJECTION_PENDING, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_projection_pending_title, R.string.diag_album_projection_pending_guide, null),
 
     // --- Le persone (Fase 8, P0: la voce di stato; i codici del §2.10 li aggiunge P13) -----------------------------------
     DiagEntry(DiagCodes.PEOPLE_STATE, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_people_state_title, R.string.diag_people_state_guide, null),

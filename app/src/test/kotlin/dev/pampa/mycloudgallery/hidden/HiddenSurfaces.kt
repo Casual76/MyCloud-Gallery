@@ -249,6 +249,13 @@ internal object HiddenSurfaces {
     "app/src/main/kotlin/dev/pampa/mycloudgallery/gallery/GalleryGraph.kt",
     // Le porte facoltative di feature-albums (la visibilita' per "Aggiungi ad album"): le raccoglie e le passa ai controllori, non mostra niente.
     "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums/nav/AlbumDependencies.kt",
+    // Fase 7 (P13): il montaggio degli album in :app (P7: "il file di :app che nomina VisibleMedia/HiddenMask va nell'elenco wiring"). Passano
+    // `GalleryGraph.visibleMedia`/`hiddenMask` alle superfici registrate qui sopra (album, smart, viaggi, condivisi) e alle schermate; non mostrano niente.
+    "app/src/main/kotlin/dev/pampa/mycloudgallery/albums/AlbumsLive.kt",
+    "app/src/main/kotlin/dev/pampa/mycloudgallery/di/AlbumsModule.kt",
+    // Fase 7 (P13, P8): le pagine dell'Utility in :app passano `visibleMedia`/`hiddenMask` a `CatalogIdenticalDuplicates`, `CatalogSimilarShots` e
+    // `FullHashNightly` (le superfici `duplicates` registrate qui sopra), costruite al primo uso; non mostrano niente.
+    "app/src/main/kotlin/dev/pampa/mycloudgallery/utility/UtilityGraph.kt",
     // Fase 7 (P12): lo strumento di valutazione degli album (solo debug, `app/src/debug/.../eval/albums/`) passa `VisibleMedia` e `HiddenMask` alla corsa degli album
     // smart di P6 (che li usa gia') e filtra con loro le celle che mostra. Non e' una superficie del prodotto (nessuna riga del §2.1): la prova che un nascosto non esce
     // mai e' `AppAlbumsEvalEnvironmentTest` (catalogo vero, mondi casuali) e `AlbumsEvalSessionTest`.

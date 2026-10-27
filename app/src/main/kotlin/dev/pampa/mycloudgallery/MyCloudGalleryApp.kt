@@ -68,6 +68,10 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   @Inject
   lateinit var ai: AiStack
 
+  /** Fase 7 (P13): gli album (`AlbumsModule`): nascono con il processo e si montano da soli quando la famiglia e' pronta. */
+  @Inject
+  lateinit var albums: dev.pampa.mycloudgallery.albums.AlbumsGraph
+
   override val workManagerConfiguration: Configuration
     get() = Configuration.Builder()
       .setWorkerFactory(workerFactory)
@@ -83,6 +87,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     // Nella build release questa funzione e' vuota: vedi src/release/.../AppLogging.kt.
     installLogging()
     notifications.createChannels()
+    // Fase 7 (P13): "Aggiungi ad album" nella ricezione, installato con le altre porte della ricezione.
+    integrations.incomingAlbums = albums.incoming
     // Fase 5B (P14): prima di qualunque componente creato dal sistema (selettore, provider, ricezione) e di qualunque schermata.
     integrations.install()
     // Correzioni 5B (R4, MC-2): "Condividi" con l'impostazione per il viewer (anche senza backup) e per la selezione della Libreria.

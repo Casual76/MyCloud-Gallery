@@ -11,6 +11,7 @@ import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.PauseCircle
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -32,7 +33,7 @@ import dev.pampa.mycloudgallery.feature.albums.ui.AlbumText
 // informazioni; i permessi chiudono il gruppo.
 
 /** Cosa succede toccando una striscia. */
-enum class StripAction { NONE, OPEN_TO_SHARE, OPEN_SUGGESTED, ADOPT_FOLDER_FILES, BRING_BACK_REJECTED, OPEN_PERMISSIONS }
+enum class StripAction { NONE, OPEN_TO_SHARE, OPEN_SUGGESTED, ADOPT_FOLDER_FILES, BRING_BACK_REJECTED, OPEN_PERMISSIONS, USE_NEW_FOLDER, RESTORE_REVOKED }
 
 /** Una riga di striscia: icona e tono (il colore sta sulla piastrella), parole, e cosa fa al tocco. */
 data class Strip(
@@ -90,6 +91,14 @@ internal object AlbumStrips {
     AlbumBanner.FolderChanged -> Strip(
       "folder_changed", Icons.Rounded.FolderOpen, FluidTone.Warning, resources.getString(R.string.album_banner_folder_changed),
       resources.getString(R.string.album_banner_folder_changed_detail),
+    )
+    is AlbumBanner.UseNewFolder -> Strip(
+      "folder_changed", Icons.Rounded.FolderOpen, FluidTone.Warning, resources.getString(R.string.album_banner_folder_changed),
+      resources.getString(R.string.album_banner_use_new_folder_detail, banner.folder), StripAction.USE_NEW_FOLDER,
+    )
+    is AlbumBanner.RevokedItems -> Strip(
+      "revoked", Icons.Rounded.Restore, FluidTone.Info, resources.getQuantityString(R.plurals.album_banner_revoked, banner.count, banner.count),
+      resources.getString(R.string.album_banner_revoked_detail), StripAction.RESTORE_REVOKED,
     )
     is AlbumBanner.NotAdded -> Strip(
       "not_added", Icons.Rounded.ErrorOutline, FluidTone.Warning, resources.getString(R.string.album_banner_not_added),

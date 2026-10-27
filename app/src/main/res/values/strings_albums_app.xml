@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 7 (P13): il selettore dei media degli album ("Aggiungi foto" della pagina di un album, foto d'esempio di un album smart). -->
+  <string name="albums_picker_add_title">Aggiungi foto</string>
+  <string name="albums_picker_examples_title">Foto d’esempio</string>
+</resources>

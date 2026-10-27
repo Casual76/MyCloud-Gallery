@@ -281,7 +281,8 @@ class BackupStages(private val graph: AppGraph, private val backup: BackupGraph)
           if (backup.gate.stateOf(parts.share).open && backup.guardianHasWork()) {
             val run = staged(WorkRequest.Background(BackgroundActivity.PHOTO_BACKUP, writesToNas = true))
             stages += run.run({ scope, _ ->
-              val report = parts.guardian.ensure(GuardScope.All, SLICE)
+              // Fase 7 (D28): con richieste dopo una condivisione il giro e' lo stesso, e a giro finito le richieste si tolgono.
+              val report = backup.safeCopyRequests.runRequested(SLICE) ?: parts.guardian.ensure(GuardScope.All, SLICE)
               created += report.created
               problem = problem ?: report.problem
               // La copia lato server non passa dal telefono: nessun traffico da registrare (se ripiega, i byte sono nel conto del giro).

@@ -68,6 +68,17 @@ sealed interface AlbumBanner {
   /** E-SH16: la cartella e' cambiata dal PC. */
   data object FolderChanged : AlbumBanner
 
+  /**
+   * E-SH16 (P13): la cartella e' cambiata dal PC e gli elementi stanno ora in [folder] (relativa all'area comune, dato dell'utente): il creatore la puo'
+   * adottare con un tocco ("Usa la nuova cartella", `SharedAlbums.useNewFolder`).
+   */
+  data class UseNewFolder(val folder: String) : AlbumBanner {
+    override fun toString(): String = "AlbumBanner.UseNewFolder"
+  }
+
+  /** E-SH20 (P13): [count] elementi di un mio dispositivo revocato da ripristinare ("Ripristina gli elementi", `SharedAlbums.restoreRevoked`). */
+  data class RevokedItems(val count: Int) : AlbumBanner
+
   /** E-SH13: "Non aggiunte: l'album ora e' in sola visione", con "Riporta nelle mie cartelle". */
   data class NotAdded(val count: Int) : AlbumBanner
 

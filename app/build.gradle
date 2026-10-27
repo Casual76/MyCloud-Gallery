@@ -248,6 +248,11 @@ dependencies {
   implementation project(':core-ai')
   implementation project(':core-search')
   implementation project(':feature-search')
+  // Fase 7 (docs/fase7-progetto.md §1.1, §1.4, P13): gli album. `:app` cabla `AlbumsGraph` (album personali e smart, viaggi, album condivisi,
+  // condivisione), le porte verso `NasOperations`, il backup (`INCOMING` verso la cartella dell'album, guardiano) e il catalogo, le schermate e i
+  // lavori. core-albums non vede core-nasops ne' core-backup (Phase7ArchitectureTest): le porte che spostano o caricano le lega solo `:app`.
+  implementation project(':core-albums')
+  implementation project(':feature-albums')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')
@@ -284,11 +289,6 @@ dependencies {
 
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
-  // Fase 7 (P9, D22): le sonde di riferimento di album e viaggi del registro dei Nascosti usano gli esecutori di riferimento di core-albums. Solo le prove:
-  // il modulo entra nell'app con P13 (`implementation`), non adesso.
-  testImplementation project(':core-albums')
-  // Fase 7 (P10): le sonde dei Nascosti (HiddenSurfaces) fanno girare i controllori veri delle schermate degli album sullo stack vero. Solo test: la dipendenza di produzione la lega P13.
-  testImplementation project(':feature-albums')
   testImplementation appDeps.workTesting
   // Screenshot dello scaffold (docs/screenshots/2-P0/) e test Compose su JVM.
   testImplementation appDeps.robolectric
@@ -310,7 +310,5 @@ dependencies {
   androidTestImplementation appDeps.junit
 
   // Fase 7 (P12): lo strumento di valutazione degli album e dei viaggi (F88, F89) sta in src/debug e usa il motore degli album smart e `CatalogTrips` di
-  // core-albums. Solo la build di debug: il modulo entra nell'app vera con P13 (`implementation`), non adesso; la release non lo vede e `check.ps1` cerca
-  // lo strumento nel dex di release.
-  debugImplementation project(':core-albums')
+  // core-albums: da P13 il modulo e' `implementation` (sopra) e lo strumento resta solo nella build di debug (`check.ps1` lo cerca nel dex di release).
 }

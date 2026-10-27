@@ -18,6 +18,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -93,6 +94,8 @@ internal class SelectionAction(
  * @param footnote una nota sotto il riepilogo (i Nascosti dicono che nascondere vale solo in app).
  * @param actionsFor le azioni della barra per la selezione di adesso; vuoto = nessuna barra.
  * @param notice l'azione che non e' riuscita (R8: nascondi, preferito, mostra), sotto la chrome finche' non si chiude.
+ * @param pickMode il selettore dei media (Fase 7, P13): la pagina parte gia' in selezione e, quando la selezione finisce ("Fine", Indietro), esce
+ *   con [onBack]: si sceglie e basta, la griglia non apre il viewer.
  */
 @Composable
 internal fun CollectionGridPage(
@@ -110,6 +113,7 @@ internal fun CollectionGridPage(
   actionsFor: (TimelineView, Set<MediaId>) -> List<SelectionAction> = { _, _ -> emptyList() },
   notice: ActionNotice? = null,
   onDismissNotice: () -> Unit = {},
+  pickMode: Boolean = false,
 ) {
   val view by items.view.collectAsState()
   // La griglia tiene il suo stato (scorrimento, livello, selezione) finche' gli elementi sono gli stessi: una vista nuova
@@ -119,6 +123,17 @@ internal fun CollectionGridPage(
   SideEffect { if (grid.view !== view) grid.view = view }
   val selected by grid.selection.selected.collectAsState()
   val selecting = grid.selecting
+  if (pickMode) {
+    // Il selettore e' una selezione: parte selezionando e, finita la selezione, si esce (niente griglia "normale" da cui aprire il viewer).
+    var started by remember(grid) { mutableStateOf(false) }
+    LaunchedEffect(grid, selecting) {
+      when {
+        !started && !selecting -> grid.startSelecting()
+        selecting -> started = true
+        else -> onBack?.invoke()
+      }
+    }
+  }
 
   val backdrop = rememberGlassBackdrop()
   if (backdropOut != null) SideEffect { backdropOut(backdrop) }
@@ -221,7 +236,8 @@ internal fun CollectionGridPage(
           contentDescription = stringResource(spec.labelRes),
           onClick = {
             spec.run(selected.ids)
-            grid.stopSelecting()
+            // Nel selettore la scelta la chiude chi l'ha aperto (oltre il massimo la selezione resta, con l'avviso).
+            if (!pickMode) grid.stopSelecting()
           },
         )
       }

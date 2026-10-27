@@ -10,6 +10,8 @@
   <string name="notice_share_too_many_title">Puoi condividere al massimo %1$s elementi alla volta</string>
   <string name="notice_delete_too_many_title">Puoi eliminare al massimo %1$s elementi alla volta</string>
   <string name="notice_too_many_message">Togli qualche elemento dalla selezione e riprova.</string>
+  <!-- Fase 7 (P13): il selettore dei media degli album. -->
+  <string name="notice_pick_too_many_title">Puoi sceglierne al massimo %1$s</string>
   <string name="notice_share_failed_title">Non è stato possibile condividere</string>
   <string name="notice_share_failed_message">Android non ha aperto la condivisione. Prova con meno elementi.</string>
   <string name="notice_delete_failed_title">Non è stato possibile eliminare</string>

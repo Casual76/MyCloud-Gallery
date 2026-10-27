@@ -271,8 +271,8 @@ cancello OpsGate            -> emergenza, congelamento (D10), salto dell'ora (D3
 NasPersonalSync (P13)       -> registro locale in noBackupFilesDir/personal, proiezione sul catalogo, solo area privata (M7)
 ```
 
-- **Schermate**: le quattro pagine di `feature-nas` sono rotte (`nasGraph`) e, in Raccolte, il gruppo "Sul NAS" (voci come dati,
-  `CollectionEntry`): sul telefono una voce apre la rotta, sul tablet la pagina sta nel pannello di dettaglio. Un file toccato in
+- **Schermate**: le quattro pagine di `feature-nas` sono rotte (`nasGraph`) e, in Raccolte, la sezione "Cartelle NAS" (prima "Sul NAS"; voci come
+  dati, `CollectionEntry`): sul telefono una voce apre la rotta, sul tablet la pagina sta nel pannello di dettaglio. Un file toccato in
   Cartelle NAS si apre nel viewer della Libreria (solo se la Libreria lo mostra).
 - **Viewer**: `ViewerServices.nasActions` (`NasOrganizer.mediaActions`) accende "Sposta", "Rinomina", "Elimina…" (P14).
 - **Avvio e ripresa**: `start` esegue nello scope della galleria (la schermata puo' chiudersi) e risponde appena l'operazione e' nel
@@ -325,11 +325,42 @@ selettore, provider, ricezione -> EntryGate: famiglia pronta e blocco dell'app v
 - **Porte**: `di/FiveBModule.kt` lega `FreeSpace`, `VersionKeeper`, `Corrections`, `PendingTasks`, `BackupClock`, i dialoghi di sistema
   (con la recinzione D13 riga per riga), "Elimina solo dal telefono", "Da decidere", "Elimina le intermedie…" e le voci del backup nel viewer
   (`backup/FiveBUi.kt`); le facciate vanno ai servizi veri appena il backup parte (`FiveBButtonsTest`: nessuna e' un null-object).
-- **Navigazione**: "Libera spazio" in Raccolte → Utilita' e nella selezione della Libreria; "Da decidere" nella pagina Backup.
+- **Navigazione**: "Libera spazio" in Raccolte → Utility e nella selezione della Libreria; "Da decidere" nella pagina Backup.
 - **D12/R2/D13** valgono anche qui: le versioni con un account di prova stanno sotto `mcg-campo/Versioni/`, i file in arrivo passano dal
   cancello della share di **destinazione**; dalla 5B non si scrive mai nell'area comune (correzioni e versioni si fermano con un avviso).
 - **Lavori**: i file in arrivo con `IncomingUploadWorker` (o, per una condivisione grande, `BackupJobService` con l'id `1_000_104`).
 - **Prove**: `FiveBIntegrationTest` (sei percorsi interi sul grafo vero, finti solo NAS e telefono), `FiveBButtonsTest`, `AppEntryGateTest`.
+
+**Gli album nell'app (Fase 7, P13).** `di/AlbumsModule.kt` monta un `albums/AlbumsGraph` per processo (`AlbumsWiring.build`): nasce con il
+processo e monta gli album (`AlbumsLive`) appena la famiglia e' pronta (galleria partita e dati personali agganciati); l'azzeramento lo ferma
+**per primo** (`AppGraph.albumsStopper`), poi galleria e dati (`albums/` in `noBackupFilesDir`, il database):
+
+```
+condivisi (P2)   -> replica e pubblicatore su Room (RoomAlbumReplicaStore, RoomAlbumPublishStore: righe di shared_album_entry), NasSharedAlbumSync
+condivisione (P4)-> ShareOrchestrator + RoomShareDiary; OpsAlbumMover sulle NasOperations della 4B (ConfirmationIssuer sullo stesso piano),
+                    FolderAlbumUploader sui caricamenti INCOMING del backup (cartella "Album condivisi" dell'area comune), guardiano
+                    (GuardianSafeCopyRequests), una sola porta di completamento sul catalogo (CatalogMoveCompletionSink -> attachMoved)
+personali (P3)   -> CatalogAlbums sui dati personali; copie degli album chiusi con PersonalAlbumCopies.keep
+smart (P6)       -> RulesSmartEngine, SmartRecompute (a fine scansione, accorpato), segni "Nuove" su file
+viaggi (P7)      -> CatalogTrips, rilevazione una volta per notte (LibraryMaintenanceWorker)
+```
+
+- **Lavori**: il giro degli album nel lavoro dell'indice (`IndexSyncWorker`: replica, pubblicazione, copie, ripresa), la condivisione nel suo lavoro
+  (`work/AlbumWork.kt`, `ShareWorker`), la notte (`LibraryMaintenanceWorker`: viaggi, ricalcolo degli smart, hash completo dei video e firme dei
+  Doppioni simili). Recinzione D30 (`FeatureFlags.sharedAlbumsMayUse`) e cancelli dell'indice (`AppAlbumWriteGate`), mai `LOCAL_ONLY`.
+- **Schermate**: `albumsGraph` (elenco, pagina, Suggerite, editor, viaggi) e il selettore dei media (`MediaPickerDestination`), `utilityGraph`
+  (Utility e Doppioni), Impostazioni → Privacy → Nascosti. "Aggiungi ad album" (selezione della Libreria, menu ⋮ del viewer, Nascosti,
+  condivisione in arrivo) e' un foglio sopra la schermata (`AlbumRequestsHost`), mai una rotta; il viewer aperto da un album ha anche "Copertina"
+  e "Rimuovi" secondo la tabella dei permessi.
+- **Raccolte** (`di/CollectionsModule.kt`): un fornitore per sezione (Album, Album smart, Viaggi, Cartelle NAS, Utility con "Libera spazio",
+  "Da tenere al sicuro" vuota perche' gli Eliminati di recente sono nell'Utility); ordine e visibilita' nei dati personali
+  (`SyncedCollectionsSettings`), validi subito anche prima del registro.
+- **Utility** (`di/UtilityModule.kt`): Doppioni identici e simili sul catalogo, cestino del NAS e pulizia sopra `NasOperations` (un tocco per il
+  cestino, due per "Elimina subito"), "Controlla di notte i video del NAS".
+- **Diagnostica**: sezione Album con i codici del §2.8 (`albums/AlbumsDiagnostics.kt`, solo numeri).
+- **Prove**: `AlbumsIntegrationTest` (due famiglie di dispositivi sul grafo vero e sul simulatore SMB, album ostile, azzeramento),
+  `AlbumsShareBenchAppTest` (il banco della condivisione sui legami di `:app`, con guasti SMB e morti del processo), i test delle porte e del registro
+  dei Nascosti.
 
 Il Fluid Engine e' in `engine/` (submodule, agganciato al tag **engine-2.13.1**); entrano nel build solo
 `engine-foundation` e `engine-ui`. Per aggiungerne altri: `engine\tools\engine-install.ps1 -AppRoot . -Modules

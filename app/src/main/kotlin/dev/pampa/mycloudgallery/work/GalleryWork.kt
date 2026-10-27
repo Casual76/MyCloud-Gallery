@@ -135,6 +135,10 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
   private val gallery: GalleryGraph,
   /** Fase 6 (P11, §1.4): la compattazione dei file dell'indice di ricerca e i record rovinati da riavere. */
   private val search: dev.pampa.mycloudgallery.search.SearchGraph,
+  /** Fase 7 (P13, §1.4, D19): viaggi ed eventi una volta per notte, e il ricalcolo di sicurezza degli album smart. */
+  private val albums: dev.pampa.mycloudgallery.albums.AlbumsGraph,
+  /** Fase 7 (P13, P8): l'hash completo notturno dei video del NAS (D27) e la firma visiva dei Doppioni simili. */
+  private val utility: dev.pampa.mycloudgallery.utility.UtilityGraph,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
@@ -153,6 +157,11 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
       // Fase 5A (D36): META residua finita, quindi un giro del confronto delle copie simili.
       gallery.similarCopies?.requestRun()
     }
+    // Fase 7 (P13): la rilevazione dei viaggi (la casa e i viaggi si ricalcolano di notte, D18, D19) e il ricalcolo di sicurezza degli smart.
+    gallery.runIfActive { albums.nightly(ALBUMS_BUDGET) }
+    // Fase 7 (P8): "Controlla di notte i video del NAS" applicato (la coda `FULL_HASH` la prende il lavoro di sicurezza del backup) e le firme
+    // visive che mancano ai Doppioni simili.
+    gallery.runIfActive { utility.nightly(UTILITY_BUDGET) }
     return Result.success()
   }
 
@@ -161,5 +170,7 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
     val SYNC_BUDGET: Duration = 3.minutes
     val META_BUDGET: Duration = 3.minutes
     val HASH_BUDGET: Duration = 2.minutes
+    val ALBUMS_BUDGET: Duration = 1.minutes
+    val UTILITY_BUDGET: Duration = 2.minutes
   }
 }

@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.library.utility
 
+import android.content.res.Resources
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Chat
@@ -12,11 +13,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.state.PhoneTrash
 import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionSections
+import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionItemsSource
+import kotlinx.coroutines.flow.Flow
 import dev.pampa.mycloudgallery.feature.library.countText
 
 // Fase 7, P8 (D24, docs/fase7-progetto.md §2.1 "Utility"): le PAGINE DELL'UTILITY come dati. Screenshot, Video, Modificate, WhatsApp, Doppioni ed
@@ -137,3 +143,33 @@ fun utilityEntries(counts: Map<UtilityPage, Int>, canTrash: Boolean = true): Lis
 @Composable
 fun utilityEntryGroup(counts: Map<UtilityPage, Int>, canTrash: Boolean = true): CollectionEntryGroup =
   CollectionEntryGroup(stringResource(R.string.utility_group_title), utilityEntries(counts, canTrash))
+
+/**
+ * Fase 7 (P13): le stesse voci di [utilityEntries], fuori da una composable: il fornitore della sezione "Utility" delle Raccolte (`:app`, un
+ * `CollectionsSectionProvider` con un `StateFlow`) le costruisce con le risorse dell'app. [extra] sono le voci di `:app` dello stesso gruppo
+ * ("Libera spazio", Fase 5); [phoneTrash] il cestino di questo telefono (D-3: su Samsung quello di Galleria). Il gruppo porta il suo codice
+ * ([CollectionSections.UTILITY]).
+ */
+fun utilityEntryGroup(
+  resources: Resources,
+  counts: Map<UtilityPage, Int>,
+  canTrash: Boolean,
+  extra: List<CollectionEntry> = emptyList(),
+  phoneTrash: PhoneTrash = PhoneTrash.ANDROID,
+): CollectionEntryGroup {
+  val entries = UtilityPage.entries.mapNotNull { page ->
+    if (page == UtilityPage.RECENTLY_DELETED && !canTrash) return@mapNotNull null
+    val subtitle = when (page) {
+      UtilityPage.DUPLICATES -> resources.getString(R.string.utility_duplicates_subtitle)
+      UtilityPage.RECENTLY_DELETED ->
+        resources.getString(if (phoneTrash == PhoneTrash.GALLERY) R.string.utility_recently_deleted_subtitle_gallery else R.string.utility_recently_deleted_subtitle)
+      else -> counts[page]?.let { resources.getQuantityString(R.plurals.collection_count, it, GalleryNumbers.format(it)) }
+        ?: resources.getString(R.string.collection_count_none)
+    }
+    CollectionEntry(code = page.entryCode, title = resources.getString(page.titleRes), subtitle = subtitle, icon = page.icon, tone = page.tone)
+  }
+  return CollectionEntryGroup(resources.getString(R.string.utility_group_title), entries + extra, code = CollectionSections.UTILITY)
+}
+
+/** Fase 7 (P13): i conteggi vivi delle pagine-filtro, per il fornitore della sezione "Utility" (la stessa fonte delle Raccolte, senza nascosti). */
+fun CollectionItemsSource.utilityCountsFlow(): Flow<Map<UtilityPage, Int>> = utilityCounts()

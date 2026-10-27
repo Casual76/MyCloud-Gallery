@@ -140,9 +140,21 @@ sealed interface SharedAlbumNotice {
     override fun toString(): String = "Notice.Inherited"
   }
 
-  /** E-SH16: la cartella e' cambiata dal PC; il creatore puo' adottare quella nuova (azione locale). */
-  data class FolderChanged(override val album: AlbumId, override val title: String) : SharedAlbumNotice {
-    override fun toString(): String = "Notice.FolderChanged"
+  /**
+   * E-SH16: la cartella e' cambiata dal PC; il creatore puo' adottare quella nuova (azione locale, [SharedAlbums.useNewFolder]). [newFolder] (P13) e'
+   * la cartella dove stanno adesso gli elementi, relativa all'area comune, da mostrare ("usa «…»"); null = non si sa (nessuna azione). Dato
+   * dell'utente: mai nei log.
+   */
+  data class FolderChanged(override val album: AlbumId, override val title: String, val newFolder: String? = null) : SharedAlbumNotice {
+    override fun toString(): String = "Notice.FolderChanged(${newFolder != null})"
+  }
+
+  /**
+   * E-SH20 (P13): [count] elementi che un mio dispositivo revocato aveva aggiunto e che il mio catalogo vede ancora nell'area comune: "Ripristina gli
+   * elementi" ([SharedAlbums.restoreRevoked]) li ripubblica a nome di questo dispositivo. Nessun file si muove.
+   */
+  data class RevokedItems(override val album: AlbumId, override val title: String, val count: Int) : SharedAlbumNotice {
+    override fun toString(): String = "Notice.RevokedItems($count)"
   }
 
   /** D39: "N file nuovi nella cartella: aggiungili" (aggiunti dal PC; azione locale con conferma). */
@@ -214,6 +226,18 @@ interface SharedAlbums {
   fun allowedOps(id: AlbumId, item: MediaId? = null): Set<AlbumOp> = AlbumOp.entries.filterTo(LinkedHashSet()) { allowed(id, it, item) }
 
   suspend fun dismissNotice(notice: SharedAlbumNotice)
+
+  /**
+   * E-SH16 (P13): "Usa la nuova cartella": la definizione dell'album prende la cartella dove gli elementi stanno adesso ([SharedAlbumNotice.FolderChanged]).
+   * Solo il creatore o l'erede; nessun file si muove (la cartella l'ha gia' cambiata il PC). Ha un corpo: nessuna implementazione deve cambiare.
+   */
+  suspend fun useNewFolder(id: AlbumId): EditOutcome = EditOutcome.NotAllowed(null)
+
+  /**
+   * E-SH20 (P13): "Ripristina gli elementi" di un mio dispositivo revocato ([SharedAlbumNotice.RevokedItems]): tornano come mie voci, solo quelli i cui
+   * file il mio catalogo vede nell'area comune, dietro gli stessi cancelli delle scritture. Ha un corpo: nessuna implementazione deve cambiare.
+   */
+  suspend fun restoreRevoked(id: AlbumId): EditOutcome = EditOutcome.NotAllowed(null)
 }
 
 /** I tetti degli album condivisi (A4 del §0.3 del progetto; formato §7). */

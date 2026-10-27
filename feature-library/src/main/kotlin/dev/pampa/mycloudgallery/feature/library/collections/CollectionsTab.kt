@@ -54,6 +54,8 @@ import dev.pampa.mycloudgallery.feature.library.trash.RecentlyDeletedRoute
  *   con il codice che dichiara o che si ricava dalle sue voci ([CollectionSections.codeOf]); nessuno di default.
  * @param onOpenEntry sul telefono, la voce di una sezione consegnata come dato (`:app` apre la sua rotta).
  * @param entryDetail sul tablet, la pagina di una voce nel pannello di dettaglio; null = la voce apre la rotta anche li'.
+ * @param entryHasDetail sul tablet, se [entryDetail] ha una pagina per quella voce (Fase 7, P13): le voci che non ce l'hanno (la pagina di un album, che
+ *   e' una rotta con la sua barra) si aprono con [onOpenEntry] anche li'.
  */
 @Composable
 fun CollectionsTab(
@@ -67,6 +69,7 @@ fun CollectionsTab(
   extraGroups: List<CollectionEntryGroup> = emptyList(),
   onOpenEntry: (CollectionEntry) -> Unit = {},
   entryDetail: (@Composable (CollectionEntry) -> Unit)? = null,
+  entryHasDetail: (CollectionEntry) -> Boolean = { true },
   viewModel: CollectionsLayoutViewModel = hiltViewModel(),
 ) {
   val inputs by viewModel.inputs.collectAsStateWithLifecycle()
@@ -83,6 +86,7 @@ fun CollectionsTab(
     modifier = modifier,
     onOpenEntry = onOpenEntry,
     entryDetail = entryDetail,
+    entryHasDetail = entryHasDetail,
     onEdit = viewModel::startEditing,
     onDone = viewModel::stopEditing,
     onReorder = viewModel::reorder,
@@ -116,6 +120,7 @@ internal fun CollectionsScreen(
   initialSelection: CollectionKind? = null,
   onOpenEntry: (CollectionEntry) -> Unit = {},
   entryDetail: (@Composable (CollectionEntry) -> Unit)? = null,
+  entryHasDetail: (CollectionEntry) -> Boolean = { true },
   onEdit: () -> Unit = {},
   onDone: () -> Unit = {},
   onReorder: (List<String>) -> Unit = {},
@@ -128,7 +133,7 @@ internal fun CollectionsScreen(
   var savedCode by rememberSaveable { mutableStateOf(initialSelection?.code) }
   var savedEntry by rememberSaveable { mutableStateOf<String?>(null) }
   val selectedKind = CollectionKind.fromCode(savedCode)?.takeIf { it in state } ?: state.firstFilter
-  val selectedEntry = if (entryDetail != null) state.findEntry(savedEntry) else null
+  val selectedEntry = if (entryDetail != null) state.findEntry(savedEntry)?.takeIf(entryHasDetail) else null
   val selection: CollectionsSelection = when {
     selectedEntry != null -> CollectionsSelection.Entry(selectedEntry)
     selectedKind != null -> CollectionsSelection.Kind(selectedKind)
@@ -154,7 +159,7 @@ internal fun CollectionsScreen(
             onOpenCollection(kind)
           }
         },
-        onSelectEntry = { entry -> if (twoPane && entryDetail != null) savedEntry = entry.code else onOpenEntry(entry) },
+        onSelectEntry = { entry -> if (twoPane && entryDetail != null && entryHasDetail(entry)) savedEntry = entry.code else onOpenEntry(entry) },
         onOpenSettings = onOpenSettings,
         statusHeader = statusHeader,
         onEdit = onEdit,

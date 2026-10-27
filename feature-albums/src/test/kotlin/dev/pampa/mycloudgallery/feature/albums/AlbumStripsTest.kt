@@ -91,6 +91,19 @@ class AlbumStripsTest {
     assertThat(no.single { it.id == "not_added" }.action).isEqualTo(StripAction.NONE)
   }
 
+  /** P13 (E-SH16, E-SH20): la cartella nuova si adotta con un tocco e dice dove; gli elementi di un dispositivo revocato si ripristinano con un tocco. */
+  @Test
+  fun laCartellaNuovaEGliElementiRevocatiSonoAzioni() {
+    val list = strips(listOf(AlbumBanner.UseNewFolder("Album condivisi/Oslo 2026"), AlbumBanner.RevokedItems(3), AlbumBanner.FolderChanged))
+    val moved = list.first { it.id == "folder_changed" }
+    assertThat(moved.action).isEqualTo(StripAction.USE_NEW_FOLDER)
+    assertThat(moved.detail).contains("«Album condivisi/Oslo 2026»")
+    assertThat(list.single { it.id == "revoked" }.action).isEqualTo(StripAction.RESTORE_REVOKED)
+    assertThat(list.single { it.id == "revoked" }.title).contains("3")
+    // Senza la cartella nuova la striscia resta un'informazione.
+    assertThat(list.last { it.id == "folder_changed" }.action).isEqualTo(StripAction.NONE)
+  }
+
   @Test
   fun leCondivisioniInCorsoDiconoQuantiELeAttesePerche() {
     val running = strips(listOf(AlbumBanner.Sharing(ShareOpState.Running(op, scenes.osloShared, SharePlanKind.SHARE, 7, 18)))).first()

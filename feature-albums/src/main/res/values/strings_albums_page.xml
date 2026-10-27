@@ -121,6 +121,13 @@
   <string name="album_banner_files_from_pc_detail">Aggiunti dal computer: aggiungili all’album.</string>
   <string name="album_banner_folder_changed">La cartella è cambiata</string>
   <string name="album_banner_folder_changed_detail">Dal computer la cartella dell’album è stata rinominata o spostata. Le foto si ritrovano da sole.</string>
+  <!-- P13 (E-SH16, E-SH20). -->
+  <string name="album_banner_use_new_folder_detail">Le foto ora stanno in «%1$s». Tocca per usare la nuova cartella: nessun file si sposta.</string>
+  <plurals name="album_banner_revoked">
+    <item quantity="one">%1$d elemento da ripristinare</item>
+    <item quantity="other">%1$d elementi da ripristinare</item>
+  </plurals>
+  <string name="album_banner_revoked_detail">Li aveva aggiunti un tuo dispositivo revocato. Tocca per ripristinarli da qui: nessun file si sposta.</string>
   <string name="album_banner_not_added">Non aggiunte: l’album ora è in sola visione</string>
   <plurals name="album_banner_not_added_detail">
     <item quantity="one">%1$d tua foto è già nell’area comune. Puoi riportarla nelle tue cartelle.</item>

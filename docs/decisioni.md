@@ -7998,3 +7998,116 @@ Diagnostica → Esporta e si legge con `adb pull`). Nessuna e' stata fatta (nien
 - **F91** Prestazioni (`AlbumBenchmark`): ricalcolo e rilevazione sulla Libreria sintetica da 100 mila.
 - **F92** 24 ore di sincronizzazione con i finti album di F84: nessuna operazione non confermata.
 - **F93** (solo col consenso, Q7) release sulle share vere: la recinzione `sharedAlbumsTestSharesOnly` e' ancora accesa in release, quindi oggi non si puo'.
+
+## Fase 7, correzioni dopo le revisioni: pacchetto D (27/10)
+
+Le due revisioni di fine Fase 7 (`docs/review/7-fase7.md`, `docs/review/funzionale-7.md`) hanno assegnato al pacchetto D gli album smart, i viaggi, le
+Raccolte, "Aggiungi ad album" dalla ricezione e la Diagnostica. Qui sta cosa si e' deciso per ogni voce, dove non e' ovvio; il resoconto con le righe e i test
+e' nella risposta del pacchetto. Tutto sulla JVM (Robolectric, grafo vero dell'app, simulatore SMB): nessun telefono, nessun NAS vero.
+
+**Voci "plausibili" verificate prima di correggere.** AA-1, AP-1, AS-5, AS-6, AS-7, AS-9: tutte erano difetti veri (ognuna ha il suo test, rosso senza la
+correzione). Nessuna voce e' stata scartata. Due sono corrette solo in parte, per un confine di pacchetto o di dato (vedi "Aperto").
+
+**Una struttura sola per tenere al passo gli smart** (AS-1..AS-6, VG-1; `core-albums/.../upkeep/`). `SmartUpkeep` e `TripUpkeep` stanno in `core-albums`
+(non in `:app`) perche' cosi' si provano sulla JVM con Room vero e un orologio finto: in `:app` il legame con `AlbumsGraph` e' solo un collegamento. Il
+motore di P6 non cambia contratto.
+- **AS-1, AS-2.** `CatalogAlbums` e' ora il `SmartWorkSink` del motore: `smartWorkStarted` prima di un calcolo su uno smart senza righe,
+  `smartWorkFinished`/`smartRowsChanged` dopo; ogni fine rinfresca elenco e pagine. `AlbumsStatus` ha `Loading` (AP-1) e `Recomputing(0, 0)` vuol dire
+  "sto cercando, non so quante": la pagina non dice piu' "Nessuna foto corrisponde" e non scrive "0 di 0 guardate". Un `create` annuncia il lavoro
+  **prima** di `settle`, quindi la pagina non passa mai da "vuoto". Il segno "visto fino a" non si mette su uno smart che non ha ancora righe (`markSeen`),
+  altrimenti il primo riempimento diventava "Nuove: N".
+- **AS-3.** `ChangeBatcher`: un canale con accorpamento; cio' che arriva durante un giro non si perde e fa partire il giro dopo (prima: un indicatore
+  `pending` e un `touched` svuotato a meta').
+- **AS-4.** `SmartContentSearch.readyChanges` (da `readiness` del motore AI): al passaggio a "pronta" `searchReady()` rivaluta gli smart con descrizione o
+  esempi. Il primo valore (gia' pronta al montaggio) non rifa' niente: ci pensa `resumeAll`.
+- **AS-5.** Al montaggio `resumeAll()` valuta ogni smart una volta; un calcolo `Partial`, un errore o i giorni saltati dal budget restano in `unfinished`/
+  `skipped` e `drain()` li riprende a distanza (30 s fra un passo e l'altro, al piu' 40 passi), senza tenere fermo il giro del catalogo.
+- **AS-6.** Gli smart con descrizione e senza periodo (la ricerca per contenuto sull'intera Libreria) non si rifanno a ogni gruppo di novita': si rifanno
+  quando il catalogo sta fermo da 2 minuti (`Debouncer`).
+- **VG-1.** `TripUpkeep.poke()` dopo il montaggio e a ogni gruppo di novita' del catalogo: una ricerca dei viaggi dopo 1 minuto di calma, al piu' una ogni
+  10 minuti se non e' finita; la notte resta. `TripProposals` ha `searched` (falso finche' la ricerca non ha girato) e `TripsState.Searching`: la sezione non
+  dice "Servono foto con la posizione" prima di aver cercato. L'esito "cercato" sta nella memoria locale dei viaggi (`home_estimate`, riga `searched`, nessuna
+  coordinata) e sopravvive alla morte del processo. Una Libreria vuota non conta come "cercato".
+
+**R16: nessuna coordinata di casa nei dati personali.** Il centro di un luogo di uno smart e' la mediana delle foto proprie in quel luogo; per la citta' dove
+si abita e' la casa. Adesso (a) le foto a meno di max(5 km, raggio di casa) da una casa o da un luogo abituale non entrano nel calcolo del centro, (b) il
+centro scritto sta su una griglia di 0,1 gradi (~11 km: dice la citta', che il titolo gia' dice), (c) se tutte le foto sono a casa il centro si sposta sul
+punto della griglia piu' vicino e lontano da casa; il raggio non cambia. La casa non esce da `trips/`: l'interprete chiede a `HomeClearance`
+(coordinate in, "troppo vicino si'/no" fuori; `TripPrivacyTest` la ammette come unico nuovo tipo pubblico). Un album nato da un viaggio non scrive la
+regola del luogo se il suo cerchio conterrebbe la casa (resta il periodo). I titoli e i luoghi di una proposta si ricalcolano a **ogni controllo** delle
+proposte e a `accept`, sulle sole foto visibili: dopo un "nascondi" il titolo non porta piu' un luogo che solo le foto nascoste avevano, e `accept` rilegge
+prima di scrivere. La tabella pubblica dei titoli cambia di conseguenza in tre righe (il raggio dei titoli con piu' luoghi dipende dal centro: 141 -> 147,
+278 -> 283, 178 -> 181 km); nient'altro nella tabella cambia.
+
+**R17: fallire chiusi non e' "vuoto".** `VisibleMedia.visibleOrThrow` e `HiddenMask.hiddenAmongOrThrow` (di serie uguali alle versioni che non lanciano; il
+catalogo le implementa senza `try/catch`, quelle morbide le chiamano dentro un `try/catch`). Il motore degli smart e i viaggi usano quelle severe:
+un errore di lettura lancia (il motore non scrive niente, `SmartUpkeep` riprova) o da' "proposta non trovata" (casa e proposte restano), invece di scrivere
+zero righe o zero proposte. Il mondo finto (`FlakyWorld`, `StoryLibrary.failing`) fa lanciare la lettura in mezzo a un calcolo.
+
+**VG-2.** `TripId.startKey(kind, from)`: seconda impronta (SHA-256, nessun dato in chiaro) del solo giorno d'inizio di un **viaggio**; `dismiss` scrive
+anche questa e chi legge considera scartato un viaggio con la stessa impronta o lo stesso inizio. Un viaggio in corso, scartato e poi allungato, non torna.
+Per gli eventi non serve. `accept` crea l'album e fa `markAccepted` dentro `NonCancellable`: uscire dalla pagina a meta' non lascia un doppione.
+`NotFound` ora lo dice ("La proposta non c'e' piu'").
+
+**AS-7, AS-8, AS-9, AS-10.**
+- AS-7: `propose` e `preview` dell'editor dentro `try/catch` (la cancellazione si lascia passare): l'editor dice "anteprima non riuscita"
+  (`EditorProblem.PREVIEW_FAILED`) e lascia salvare le regole.
+- AS-8: il selettore delle foto d'esempio riceve `forAlbum = null` anche in modifica (il contratto lo dice); dopo "Salva le regole" `afterRulesSaved`
+  toglie l'editor dalla pila e apre la pagina solo se sotto non c'e' gia' quella dell'album: una pagina sola, un "indietro" solo.
+- AS-9: la cartella del backup per la regola B (`DeviceNormalizer`) e' una funzione letta a ogni uso (con una cache per valore); la proiezione dei dati
+  personali si chiede con `reconcileNow()` invece di aspettare 2 secondi.
+- AS-10: da congelato, "Aggiungi" scrive anche `accept:` oltre a `item:`; "Scongela" toglie solo gli elementi del congelamento (D16) e tiene le
+  aggiunte a mano. Provato su Room vero.
+
+**Raccolte (RC-1, RC-2).**
+- RC-1: la voce "Tutti gli album" c'e' sempre (con sei album o meno l'elenco intero, con l'ordine "Personalizzato", gli album lasciati e gli avvisi di chiusura,
+  non si raggiungeva); gli smart oltre il sesto hanno la voce "Tutti gli smart" (`smart/all`, stesso bersaglio dell'elenco intero). I codici delle voci
+  restano un elenco chiuso senza dati dell'utente.
+- RC-2: finche' una scelta (ordine, sezione nascosta) non e' nel registro dei dati personali **vale quella dell'utente**; la consegna fallita (disco pieno)
+  si ritenta ogni 15 secondi (al piu' 20 volte) invece di restare persa fino alla scelta dopo; la scelta cede il posto al registro solo quando il registro
+  l'ha riletta (se no per un attimo si vedeva il valore di prima). Le sezioni che non si nascondono mai (Album) e i codici sconosciuti non entrano da
+  nessuna parte, come nel registro.
+
+**"Aggiungi ad album" dalla ricezione (AA-1, AA-2, AA-3).**
+- AA-1: `IncomingAlbums.choices()` e' un flusso: la schermata di ricezione segue gli album **dopo** la prima lettura (con l'app chiusa si montano alcuni
+  secondi dopo l'arrivo dei file). `albums()` aspetta, al piu' 2 secondi, che gli album non siano piu' "in lettura" e poi risponde: la schermata non resta in
+  attesa. Una scelta che non c'e' piu' si lascia; una porta che lancia vale "nessun album in piu'", il salvataggio non ne dipende (D13).
+- AA-2: dalla scelta dell'album c'e' "Oppure un album nuovo" (nome, "Crea l'album"): `IncomingAlbums.create(title)` crea un album **a mano** (nessun file si
+  sposta, nessuna conferma da chiedere) e lo sceglie; il salvataggio resta quello di sempre ("Salva sul NAS" nella cartella scelta, con la sua conferma, piu' la
+  promessa). La voce "Aggiungi ad album" c'e' anche con zero album. Il nome e' un dato dell'utente: mai nei log.
+- AA-3: `PickRelay` (in memoria, per chi apre il selettore) distingue tre esiti. Richiamata viva: la scelta arriva. Richiamata persa ma selettore di "Aggiungi
+  foto" a un album (l'album e' nella rotta, che sopravvive): la scelta diventa la richiesta "Aggiungi ad album" con l'album gia' scelto (un personale riceve
+  subito, un condiviso apre la conferma col conteggio, D12). Richiamata persa e foto d'esempio di uno smart (stanno nello stato di una schermata che non c'e'
+  piu'): "La scelta non vale piu', riprova", invece del silenzio.
+
+**AP-1.** `AlbumsStatus.Loading` finche' gli album non sono montati o non e' chiaro che non lo saranno (15 secondi senza famiglia pronta: nessun NAS, nessuna
+famiglia); l'elenco vuoto con `Loading` mostra "in lettura", mai "Nessun album, creane uno". Con almeno un album l'elenco non torna in caricamento.
+
+**Diagnostica (DG-1, DG-2, DG-3, R22).**
+- DG-1: la ricerca per contenuto conta se e' **pronta** (`SmartContentSearch.ready`, modello e indice), non se il motore esiste (con Hilt c'e' sempre):
+  `SMART_NO_SEARCH` con il numero di smart che ne hanno bisogno, e solo con gli album montati.
+- DG-2: `DiagJob.ALBUM_SHARE` e `DiagJob.LIBRARY_MAINTENANCE`. `AlbumJobReports` (in `:app`, `work/`) registra l'esito di `ShareWorker` e di
+  `LibraryMaintenanceWorker` e, se lanciano, "lavoro fallito" (mai il messaggio); i due lavori registrano il motivo dello stop con `StopReports`, come gli
+  altri. L'Utility ha un contributo (`UtilityDiagnostics`, sezione Album) con `UTILITY_FULL_HASH` (acceso, guardati, in coda, ritirati, finito) e
+  `UTILITY_SIGNING` (firmati, in attesa, saltati, finito): la prova F76 ora ha dove guardare. Solo numeri e segni.
+- DG-3: il rifiuto di un contributo non sparisce al giro dopo: `rejected` e' il maggiore fra il resoconto dell'ultimo giro e il numero dei **segni di testa
+  rifiutata** nel database (`RoomAlbumReplicaStore.rejectedHeads()`, restano finche' il dispositivo non ne pubblica una buona: sopravvivono alla morte del
+  processo). `TRIP_NO_GPS` viene dalla memoria locale dei viaggi (`tripsSearched` e `tripsHomeKnown`), non dall'esito in memoria dell'ultima notte.
+- R22: la sezione Album esporta `manual`, `smart`, `shared`, `openShares`, `contributions`, `syncIncomplete`, `roundErrors`, `searchReady`, `tripsSearched`,
+  `tripsHomeKnown` e quelle dell'Utility (`enabled`, `scanned`, `withdrawn`, `signed`, `finished`) nell'elenco chiuso di `ExportKeys`. Sono numeri e segni; mai
+  titoli, cartelle, luoghi, casa, coordinate o id. Un test passa dall'esportatore vero e controlla che ogni valore arrivi nel file.
+
+**I7, I8, I11.**
+- I7: `toString()` esplicito, senza dati, su `AlbumRuleEntity`, `AlbumItemEntity`, `AlbumExclusionEntity`, `AlbumSuggestionEntity` e
+  `SharedAlbumHeadMarkEntity` (resta il tipo di regola o il codice del suggerito).
+- I8: l'impronta `trip_dismissed` resta uno SHA-256 senza segreto: e' il limite gia' dichiarato in L87 (e L170 aggiunge la seconda impronta del solo inizio). Il
+  controllo dell'account nella query dei doppioni (`AlbumQueries.kt`) e' del pacchetto C (Doppioni): non toccato qui.
+- I11: `Mount` (in `:app`, `albums/`) tiene il montaggio e lo stop sotto lo stesso lucchetto: `AlbumsGraph.stop()` aspetta un montaggio in corso, e un
+  montaggio che si accorge dello stop butta cio' che ha costruito e il suo ambito invece di pubblicarlo.
+
+**Aperto / confini di pacchetto.**
+- DG-3, "conteggio per motivo" (§2.8): il motivo di un rifiuto nasce in `NasSharedAlbumSync` (fiducia e replica: pacchetto A). Qui c'e' il conteggio durevole,
+  non la divisione per motivo.
+- I8, controllo dell'account nella query dei Doppioni: pacchetto C.
+- Nessuna prova sul telefono: il percorso con l'app chiusa (AA-1), la morte del processo (AA-3) e la ricerca per contenuto vera (AS-4, AS-6, DG-1) si provano
+  solo li' (F88, F90, F92).

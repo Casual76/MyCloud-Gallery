@@ -173,11 +173,11 @@ internal class ChaosRound(
     } finally {
       inj.disarm()
     }
-    settle(config.settleTurns, "dopo il passo $n")
+    val still = settle(config.settleTurns, "dopo il passo $n")
     verifier.check("passo $n (${kind.label})")
     stats.quietChecks++
     snapshots.check("passo $n (${kind.label})")
-    if (random.nextInt(4) == 0) idleRestart(n)
+    if (random.nextInt(4) == 0) idleRestart(n, still)
   }
 
   private fun actorFor(kind: StepKind): ChaosDevice {
@@ -299,8 +299,8 @@ internal class ChaosRound(
     if (config.settlePauseMs > 0) delay(config.settlePauseMs)
   }
 
-  /** Senza guasti, il mondo lavora finche' non cambia piu' niente (al piu' [turns] giri). */
-  private suspend fun settle(turns: Int, phase: String) {
+  /** Senza guasti, il mondo lavora finche' non cambia piu' niente (al piu' [turns] giri). Dice se si e' fermato. */
+  private suspend fun settle(turns: Int, phase: String): Boolean {
     inj.disarm()
     var last = fingerprint()
     var still = 0
@@ -309,12 +309,13 @@ internal class ChaosRound(
       val now = fingerprint()
       if (now == last) {
         still++
-        if (still >= 2) return
+        if (still >= 2) return true
       } else {
         still = 0
       }
       last = now
     }
+    return false
   }
 
   /** L'impronta del mondo: se non cambia fra due giri non c'e' piu' niente da fare. */
@@ -331,23 +332,24 @@ internal class ChaosRound(
     append(world.heads.snapshot().size)
   }
 
-  /** La morte senza colpo: il processo riparte e riprende i lavori dal diario, senza far partire altro. */
-  private suspend fun idleRestart(n: Int) {
+  /**
+   * La morte senza colpo (invariante 11): a lavoro finito il processo di un dispositivo riparte e riprende i lavori dal diario; il NAS (i file dei volti), i diari, i
+   * dati su disco e l'outbox devono restare identici. Poi il mondo lavora ancora (se qualcosa si e' mosso lo ha detto l'impronta, non serve altro).
+   */
+  private suspend fun idleRestart(n: Int, still: Boolean) {
     val device = world.devices.filter { it.online }.let { if (it.isEmpty()) return else it[random.nextInt(it.size)] }
-    val before = fingerprint()
+    val before = ChaosIdle.fingerprint(world)
     stats.idleRestarts++
     device.restart()
     guard("ripresa a vuoto dopo il passo $n") {
       device.eraser.resume(1.hours)
       device.publisher.flush(FlushReason.RESUME)
     }
+    val after = ChaosIdle.fingerprint(world)
+    // Il confronto vale solo se il mondo era fermo (se l'assestamento ha finito i giri a disposizione, il lavoro poteva essere ancora a meta').
+    if (still) ChaosIdle.compare(verifier, "ripresa a vuoto dopo il passo $n", before, after)
     settle(config.settleTurns, "ripresa a vuoto")
-    val after = fingerprint()
-    if (before != after && !changedByTime()) story += "nota: la ripresa a vuoto dopo il passo $n ha mosso il mondo"
   }
-
-  /** Il mondo puo' muoversi da solo (il tempo passa, i lavori finiscono): la ripresa a vuoto non e' una violazione per questo, solo una nota. */
-  private fun changedByTime(): Boolean = true
 
   // --- Le morti e il resto ----------------------------------------------------------------------------------------------------------
 

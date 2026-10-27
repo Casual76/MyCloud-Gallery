@@ -211,6 +211,36 @@ class FacesChaosVerifierTest {
   }
 
   @Test
+  fun unaRipresaAVuotoCheCambiaIlMondoEUnaViolazioneDelRiavvio(): Unit = runBlocking {
+    val world = ChaosTestKit.world(devices = 2, privateMedia = 4)
+    try {
+      ChaosTestKit.turns(world, 6)
+      val g = world.devices.first().generation()!!
+      // Un mondo che non si muove ha la stessa impronta, e non e' una violazione.
+      val before = ChaosIdle.fingerprint(world)
+      val same = ChaosVerifier(world)
+      ChaosIdle.compare(same, "prova", before, ChaosIdle.fingerprint(world))
+      assertWithMessage("violazioni: ${same.found}").that(same.found).isEmpty()
+      // Un file dei volti in piu' sul NAS dopo la ripresa: il mondo e' cambiato.
+      world.nas.plant(NasLayout.facesGenerationDir(g).child("x"), ByteArray(4))
+      val moved = ChaosVerifier(world)
+      ChaosIdle.compare(moved, "prova", before, ChaosIdle.fingerprint(world))
+      only(moved, Invariant.IDLE)
+      // Anche il diario della cancellazione che compare dal nulla.
+      val journal = ChaosVerifier(world)
+      val device = world.devices.first()
+      val idle = ChaosIdle.fingerprint(world)
+      device.journal.stored = dev.pampa.mycloudgallery.core.faces.erase.EraseJournal(
+        generation = g, choice = dev.pampa.mycloudgallery.core.faces.contract.PeopleAlbumsChoice.KEEP_PHOTOS, digest = 1, localOnly = false,
+      )
+      ChaosIdle.compare(journal, "prova", idle, ChaosIdle.fingerprint(world))
+      only(journal, Invariant.IDLE)
+    } finally {
+      world.close()
+    }
+  }
+
+  @Test
   fun unGiroNonCadeSuUnPercorsoCheNonEFacesPerErrore() {
     // I percorsi dei volti stanno tutti sotto .mycloudgallery/faces/ (NasLayout): il verificatore usa quelli, non una regola sua.
     assertThat(NasLayout.FACES_DIR.value).isEqualTo(".mycloudgallery/faces")

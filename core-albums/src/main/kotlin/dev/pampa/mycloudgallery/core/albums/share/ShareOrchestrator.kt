@@ -59,6 +59,8 @@ class ShareOrchestrator(
   private val ports: ShareOrchestratorPorts,
   private val newNonce: () -> ByteArray = { ByteArray(16).also { SecureRandom().nextBytes(it) } },
   private val newOpId: () -> String = { UUID.randomUUID().toString() },
+  /** Revisione B, SH-1: il tentativo di ogni piano chiesto (esadecimale): due `plan` con gli stessi media hanno impronte diverse. */
+  private val newAttempt: () -> String = { SharePlanner.hexOf(ByteArray(16).also { SecureRandom().nextBytes(it) }) },
 ) : ShareRunner {
 
   private val planner = SharePlanner(ports)
@@ -75,14 +77,15 @@ class ShareOrchestrator(
   private val states = MutableStateFlow<List<ShareOpState>>(emptyList())
   override val operations: StateFlow<List<ShareOpState>> = states
 
-  override suspend fun plan(request: ShareRequest): SharePlanOutcome = planner.plan(request, null, ports.clocks.monotonicMs(), newNonce)
+  override suspend fun plan(request: ShareRequest): SharePlanOutcome = planner.plan(request, null, ports.clocks.monotonicMs(), newNonce, newAttempt())
 
   override suspend fun start(plan: SharePlan, confirmation: ShareConfirmation): ShareStartOutcome = lock.withLock {
     val now = ports.clocks.monotonicMs()
     val check = ShareConfirmationRules.check(plan, confirmation, now)
     if (check != ShareConfirmationCheck.Valid) return@withLock ShareStartOutcome.ConfirmationRejected(check)
+    // Lo stesso piano (lo stesso tentativo) non parte due volte; un piano nuovo con gli stessi media si', anche dopo un'operazione finita (SH-1).
     ports.diary.opByPlan(plan.hash)?.let { return@withLock ShareStartOutcome.AlreadyStarted(it.id) }
-    when (val again = planner.plan(plan.request, plan.nonceHex, now, newNonce)) {
+    when (val again = planner.plan(plan.request, plan.nonceHex, now, newNonce, plan.attempt)) {
       is SharePlanOutcome.Ready -> if (again.plan.hash != plan.hash) return@withLock ShareStartOutcome.PlanChanged
       is SharePlanOutcome.Blocked -> return@withLock ShareStartOutcome.Blocked(again.reason)
       else -> return@withLock ShareStartOutcome.PlanChanged
@@ -129,7 +132,7 @@ class ShareOrchestrator(
       val origin = ports.origins.originOf(item.media) ?: return null
       destinations[item.media] = SharePlanner.bringBackFolder(origin, private ?: return null, ports.family.backupFolderName(), nasNow)
     }
-    val groups = destinations.values.distinct()
+    val keys = transferKeys(id, plan, destinations)
     return plan.items.mapIndexed { index, item ->
       val f = known[item.media] ?: return null
       val dest = destinations[item.media]
@@ -144,9 +147,32 @@ class ShareOrchestrator(
         contentKey = f.contentKey,
         source = f.nas,
         dest = dest?.let { NasItemRef(it.share, it.path) },
-        transferKey = ShareTransferKeys.keyFor(id, item.action, if (dest == null) 0 else groups.indexOf(dest)),
+        transferKey = keys[index],
       )
     }
+  }
+
+  /**
+   * Le chiavi dei trasferimenti, per elemento del piano. Revisione B, I2: un trasferimento porta al piu' [ShareRules.MAX_ITEMS_PER_TRANSFER] file
+   * (un'operazione di core-nasops ne accetta 10.000, un album 20.000): oltre, l'azione si divide in lotti, ognuno con la sua chiave e il suo
+   * trasferimento. "Riporta" ha un trasferimento per cartella d'origine e, dentro, per lotto. Con un solo lotto le chiavi sono quelle di prima.
+   */
+  private fun transferKeys(id: ShareOpId, plan: SharePlan, destinations: Map<dev.pampa.mycloudgallery.core.model.MediaId, ShareFolder>): List<TransferKey?> {
+    val keys = arrayOfNulls<TransferKey>(plan.items.size)
+    for (action in listOf(ShareItemAction.MOVE_IN, ShareItemAction.UPLOAD)) {
+      plan.items.withIndex().filter { it.value.action == action }.forEachIndexed { n, (index, _) ->
+        keys[index] = ShareTransferKeys.keyFor(id, action, n / ShareRules.MAX_ITEMS_PER_TRANSFER)
+      }
+    }
+    var group = 0
+    for (dest in destinations.values.distinct()) {
+      val sameDest = plan.items.withIndex().filter { it.value.action == ShareItemAction.MOVE_OUT && destinations[it.value.media] == dest }
+      for (chunk in sameDest.chunked(ShareRules.MAX_ITEMS_PER_TRANSFER)) {
+        chunk.forEach { keys[it.index] = ShareTransferKeys.keyFor(id, ShareItemAction.MOVE_OUT, group) }
+        group++
+      }
+    }
+    return keys.toList()
   }
 
   override suspend fun resumeAll(budget: Duration): ShareRunResult = lock.withLock {
@@ -224,12 +250,93 @@ class ShareOrchestrator(
     refresh()
   }
 
+  override suspend fun retryRequest(op: ShareOpId): ShareRequest? = lock.withLock {
+    val record = seen[op] ?: guardedOrNull { ports.diary.closedOps(MAX_PROBLEM_OPS) }?.firstOrNull { it.id == op } ?: return@withLock null
+    val items = ports.diary.items(op)
+    if (items.isEmpty() || !items.all { it.state.terminal }) return@withLock null
+    val media = toRetry(record, items, inFlightMedia())
+    if (media.isEmpty()) return@withLock null
+    when (record.kind) {
+      SharePlanKind.SHARE -> ShareRequest.AddToShared(record.album, media, record.hidden)
+      SharePlanKind.ADOPT -> ShareRequest.FolderAdoption(record.album, media)
+      SharePlanKind.BRING_BACK -> ShareRequest.BringBack(record.album, media)
+    }
+  }
+
+  override suspend fun dismiss(op: ShareOpId) = lock.withLock {
+    ports.problemMarks.dismiss(op)
+    refresh()
+  }
+
+  /**
+   * Le operazioni per la UI (SH-2): quelle viste da questo processo e, dal diario, le ultime chiuse; una chiusa con problemi ("fatta in parte") si
+   * mostra solo se ha ancora elementi da riprovare e l'utente non ha chiuso la sua striscia. Cosi' "N da riprovare" con il motivo resta anche dopo
+   * la morte del processo, e sparisce da sola quando "Riprova" li ha rimessi in viaggio o sono arrivati per altra via.
+   */
   private suspend fun refresh() {
-    states.value = seen.values.map { op -> stateOf(op, ports.diary.items(op.id)) }
+    val closed = guardedOrNull { ports.diary.closedOps(MAX_PROBLEM_OPS) }.orEmpty()
+    val dismissed = guardedOrNull { ports.problemMarks.dismissed() }.orEmpty()
+    val busy = inFlightMedia()
+    val out = ArrayList<ShareOpState>()
+    for (op in seen.values + closed.filter { it.id !in seen }) {
+      val items = ports.diary.items(op.id)
+      val state = stateOf(op, items)
+      if (state is ShareOpState.PartlyDone) {
+        // Una lettura che non riesce non nasconde niente: la striscia resta (si ricalcola al giro dopo).
+        val retry = guardedOrNull { toRetry(op, items, busy) }
+        if (op.id in dismissed || (retry != null && retry.isEmpty())) continue
+      }
+      if (state is ShareOpState.Done && op.id !in seen) continue
+      out += state
+    }
+    states.value = out
+  }
+
+  /** I media che una mia operazione aperta sta ancora portando (un elemento non finito). */
+  private suspend fun inFlightMedia(): Set<dev.pampa.mycloudgallery.core.model.MediaId> {
+    val out = HashSet<dev.pampa.mycloudgallery.core.model.MediaId>()
+    for (open in ports.diary.openOps()) ports.diary.items(open.id).filter { !it.state.terminal }.mapTo(out) { it.media }
+    return out
+  }
+
+  /**
+   * SH-2: gli elementi di [op] (chiusa) da riprovare: falliti per un motivo che un piano nuovo puo' superare (non partiti, trasferimento non
+   * riuscito, file cambiato: E-SH18), non in viaggio in un'altra mia operazione e non gia' dall'altra parte (elementi dell'album; per "Riporta"
+   * ancora nell'area comune). Un file sparito, un livello che non lo permette piu' (E-SH13, che ha la sua striscia) o un annullamento no.
+   */
+  private suspend fun toRetry(
+    op: ShareOpRecord,
+    items: List<ShareItemRecord>,
+    busy: Set<dev.pampa.mycloudgallery.core.model.MediaId>,
+  ): List<dev.pampa.mycloudgallery.core.model.MediaId> {
+    val failed = items.filter { it.state == ShareItemState.FAILED && it.failure in RETRYABLE }.map { it.media }.distinct().filter { it !in busy }
+    if (failed.isEmpty()) return failed
+    val facts = ports.facts.facts(failed)
+    return if (op.kind == SharePlanKind.BRING_BACK) {
+      failed.filter { facts[it]?.place == dev.pampa.mycloudgallery.core.albums.contract.MediaPlace.COMMON }
+    } else {
+      val members = ports.shared.members(op.album).keys
+      failed.filter { it in facts && it !in members }
+    }
+  }
+
+  private suspend fun <T> guardedOrNull(block: suspend () -> T): T? = try {
+    block()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    GalleryLog.d(TAG) { "lettura per le strisce non riuscita (${e.javaClass.simpleName})" }
+    null
   }
 
   companion object {
     private const val TAG = "AlbumCondivisione"
+
+    /** SH-2: le ultime operazioni chiuse guardate per i problemi da riprovare. */
+    const val MAX_PROBLEM_OPS: Int = 20
+
+    /** SH-2: i motivi per cui un piano nuovo puo' riuscire. */
+    val RETRYABLE: Set<ShareFailure> = setOf(ShareFailure.NOT_STARTED, ShareFailure.TRANSFER_FAILED, ShareFailure.SOURCE_CHANGED)
 
     /** Lo stato per la UI di [op] (§1.5 `ShareProgress`): in corso, in pausa con il motivo, fatto, fatto in parte con i motivi. */
     fun stateOf(op: ShareOpRecord, items: List<ShareItemRecord>): ShareOpState {
@@ -245,7 +352,9 @@ class ShareOrchestrator(
       }
       val wait = items.firstOrNull { !it.state.terminal && it.wait != null && it.wait != ShareWait.RULES }?.wait
       return if (wait != null) {
-        ShareOpState.Paused(op.id, op.album, op.kind, wait, done, items.size)
+        // SH-2: chi aspetta prima di partire riparte da solo solo finche' vale la conferma (10 minuti); poi diventa "da riprovare".
+        val notStarted = items.count { it.state == ShareItemState.PLANNED && it.transferKey != null && it.wait != null }
+        ShareOpState.Paused(op.id, op.album, op.kind, wait, done, items.size, notStarted)
       } else {
         ShareOpState.Running(op.id, op.album, op.kind, done, items.size)
       }

@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.MediaPlace
 import dev.pampa.mycloudgallery.core.albums.contract.ShareItemState
 import dev.pampa.mycloudgallery.core.albums.contract.SharedState
 import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.MediaId
 
 // LE PROPOSTE DELLA CONDIVISIONE (docs/fase7-progetto.md D31, D39, §2.6; P4): cosa il foglio puo' offrire, calcolato solo dal catalogo locale, dai
@@ -36,13 +37,30 @@ class BringBackCandidates(private val ports: ShareOrchestratorPorts) {
 }
 
 /**
+ * Revisione B, SH-3: cio' che un album condiviso ha gia' avuto, vivo o tolto: gli id con cui gli elementi sono stati pubblicati (anche quelli con la
+ * lapide di "Rimuovi dall'album") e le loro chiavi di contenuto, da tutti i contributi che la replica ricorda e dal mio. Un file della cartella che
+ * e' stato un elemento non e' "aggiunto dal PC" (D39: "Rimuovi dall'album" lascia il file nella cartella).
+ */
+data class AlbumHistory(val media: Set<MediaId>, val contentKeys: Set<ContentKey>) {
+  override fun toString(): String = "AlbumHistory(${media.size}, ${contentKeys.size})"
+
+  companion object {
+    val NONE: AlbumHistory = AlbumHistory(emptySet(), emptySet())
+  }
+}
+
+/**
  * D39: "N file nuovi nella cartella: aggiungili". Un file aggiunto **dal PC** nella cartella dell'album non entra da solo nell'album (l'appartenenza
  * sta nella definizione); l'album lo propone. Sono i media che il mio catalogo vede nella cartella dell'album e che non sono elementi, tolti i
  * nascosti (D22) e quelli che una mia condivisione sta ancora portando li' (la voce non e' ancora pubblicata: non sono "del PC"). Solo per un album
  * attivo in cui posso adottare (§2.4). L'adozione e' un piano `FolderAdoption` con il suo foglio e la sua conferma: nessuno spostamento.
+ *
+ * Revisione B, SH-3: tolti anche i file che sono stati elementi dell'album ([history]: tolti con "Rimuovi dall'album", D39), per id pubblicato o per
+ * chiave di contenuto. Il numero lo calcola :app a ogni scansione (l'avviso `FilesAddedFromPc`), e la voce del menu c'e' solo con la lista non vuota.
  */
 class FolderAdoptions(
   private val ports: ShareOrchestratorPorts,
+  private val history: suspend (AlbumId) -> AlbumHistory = { AlbumHistory.NONE },
   /** I media visibili fra quelli dati (`VisibleMedia.visible`): i nascosti non si propongono. */
   private val visible: suspend (Collection<MediaId>) -> Set<MediaId>,
 ) {
@@ -57,10 +75,14 @@ class FolderAdoptions(
     for (op in ports.diary.openOps().filter { it.album == album }) {
       ports.diary.items(op.id).filter { !it.state.terminal || it.state == ShareItemState.DONE }.forEach { inFlight += it.media }
     }
-    val candidates = inFolder.filter { it !in members && it !in inFlight }
+    val past = history(album)
+    val candidates = inFolder.filter { it !in members && it !in inFlight && it !in past.media }
     if (candidates.isEmpty()) return emptyList()
     val shown = visible(candidates)
     val facts = ports.facts.facts(candidates)
-    return candidates.filter { it in shown && facts[it]?.place == MediaPlace.COMMON }.sortedBy { it.value }
+    return candidates.filter { id ->
+      val f = facts[id]
+      id in shown && f?.place == MediaPlace.COMMON && f.contentKey !in past.contentKeys
+    }.sortedBy { it.value }
   }
 }

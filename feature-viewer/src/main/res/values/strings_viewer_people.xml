@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 8, P9: la riga "Persone" delle informazioni e i suoi fogli ("Chi è?", "Non è …", "Ignora questo volto"). -->
+
+  <string name="viewer_people_header">Persone</string>
+  <string name="viewer_people_who">Chi è?</string>
+  <string name="viewer_people_menu">Azioni sul volto</string>
+  <string name="viewer_people_chip_spoken">%1$s. Tocca per aprire la pagina, tieni premuto per le azioni.</string>
+  <string name="viewer_people_chip_unnamed_spoken">Volto senza nome. Tocca per dire chi è, tieni premuto per le azioni.</string>
+  <string name="viewer_people_not">Non è %1$s</string>
+  <string name="viewer_people_not_this">Non è questa persona</string>
+  <string name="viewer_people_not_detail">Il volto esce da questa persona e non ci torna</string>
+  <string name="viewer_people_ignore">Ignora questo volto</string>
+  <string name="viewer_people_ignore_detail">Per un poster, uno schermo, uno sconosciuto sullo sfondo</string>
+  <string name="viewer_people_open_page">Apri la pagina</string>
+  <string name="viewer_people_open_page_detail">Tutte le foto di questa persona</string>
+  <string name="viewer_people_who_detail">Scegli una persona o aggiungine una nuova</string>
+  <string name="viewer_people_who_message">Scegli una persona o aggiungine una nuova. Vale subito, anche sugli altri tuoi dispositivi.</string>
+  <string name="viewer_people_new_person">Oppure una persona nuova</string>
+  <string name="viewer_people_new_hint">Nome</string>
+  <string name="viewer_people_new_save">Aggiungi persona</string>
+  <string name="viewer_people_name_invalid">Da 1 a 64 caratteri, senza caratteri speciali.</string>
+  <string name="viewer_people_ignore_title">Ignorare questo volto?</string>
+  <string name="viewer_people_ignore_message">Non verrà più raggruppato né mostrato in Persone. Le foto restano dove sono.</string>
+  <string name="viewer_people_ignore_confirm">Ignora</string>
+  <string name="viewer_people_cancel">Annulla</string>
+  <plurals name="viewer_people_unrecognizable">
+    <item quantity="one">%1$d volto non riconoscibile</item>
+    <item quantity="other">%1$d volti non riconoscibili</item>
+  </plurals>
+  <string name="viewer_people_not_found">Questo volto non c\'è più.</string>
+  <string name="viewer_people_unavailable">Persone non è attiva su questo dispositivo.</string>
+</resources>

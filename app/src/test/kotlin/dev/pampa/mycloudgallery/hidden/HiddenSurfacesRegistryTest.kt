@@ -47,6 +47,8 @@ class HiddenSurfacesRegistryTest {
     assertThat(consumers.any { it.endsWith("core/library/visibility/RotatingWidgetFeed.kt") }).isTrue()
     assertThat(consumers).contains(HiddenSurfaces.WIDGET_CONTENT_FILE)
     assertThat(consumers.any { it.endsWith("gallery/GalleryGraph.kt") }).isTrue()
+    // Fase 8 (P9): le persone chiedono cosa si puo' mostrare in un posto solo, e il registro lo vede.
+    assertThat(consumers.any { it.endsWith("core/faces/people/PeopleVisibility.kt") }).isTrue()
     // I contratti, i null-object e i fake non sono superfici.
     assertThat(consumers.none { "/contract/" in it || "/noop/" in it || "/testing/" in it }).isTrue()
   }

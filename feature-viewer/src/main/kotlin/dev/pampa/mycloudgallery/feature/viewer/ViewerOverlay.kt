@@ -129,7 +129,9 @@ import dev.pampa.mycloudgallery.feature.viewer.livetext.TextSelections
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSidePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoSections
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberBackupState
+import dev.pampa.mycloudgallery.feature.viewer.info.rememberPeoplePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberSimilarCopiesPanel
+import dev.pampa.mycloudgallery.feature.viewer.info.sectionsWithPeople
 import dev.pampa.mycloudgallery.feature.viewer.info.sheetHeight
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionBadge
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionNotice
@@ -1023,6 +1025,8 @@ private fun ViewerOverlays(
       if (page >= 0) scope.launch { controller.pager.animateScrollToPage(page) } else if (services.outsideCopy != null) outsideCopy = copyId
     },
   )
+  // Fase 8 (P9, D25): la riga "Persone" (volti, nomi, "Chi e'?"), solo con la porta legata e il pannello aperto.
+  val peoplePanel = rememberPeoplePanel(services.people, currentId, active = infoVisible)
   if (infoVisible && currentKind != null) {
     val kind = currentKind
     val baseSections = remember(current, kind, controller.motionUnplayableVersion, placeName, currentId, backupState) {
@@ -1040,7 +1044,9 @@ private fun ViewerOverlays(
         onOpenMaps = if (details?.location != null) controller::askMaps else null,
       )
     }
-    val sections = remember(baseSections, similar.sections) { sectionsWithSimilar(baseSections, similar.sections, format) }
+    val sections = remember(baseSections, similar.sections, peoplePanel.sections) {
+      sectionsWithSimilar(sectionsWithPeople(baseSections, peoplePanel.sections), similar.sections, format)
+    }
     val infoTitle = stringResource(R.string.viewer_info_title)
     Box(Modifier.fillMaxSize().testTag(ViewerTags.InfoPanel)) {
       if (sidePanel) {
@@ -1101,6 +1107,8 @@ private fun ViewerOverlays(
   )
   // Fase 5A (D36): il foglio "Separare questa copia?", accanto agli altri fogli.
   similar.confirmSheet()
+  // Fase 8 (P9): i fogli della riga "Persone" ("Chi e'?", "Non e' …", "Ignora questo volto").
+  peoplePanel.sheets()
   // I fogli delle voci del NAS (P14): "Solo dal telefono" usa il cestino di sistema del viewer.
   if (nasController != null) {
     // Fase 5B (E-D15, D22): con "Ovunque" il foglio elenca anche le versioni precedenti; "Solo dal telefono" passa dalla verifica del backup.

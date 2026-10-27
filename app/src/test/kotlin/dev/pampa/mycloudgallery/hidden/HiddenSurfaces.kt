@@ -28,6 +28,9 @@ internal enum class SpecRow(val label: String) {
   NAS_FOLDERS("Cartelle NAS"),
   ALBUM_VIEWER("Viewer aperto da un album"),
   ADD_TO_ALBUM("Aggiungi ad album"),
+
+  /** Fase 8 (P9, D28): le persone -- la sezione delle Raccolte, "Tutte le persone", "Altri volti", la pagina, la revisione dei volti, la riga del viewer, il dizionario. */
+  PEOPLE("Persone: sezione, elenchi, pagina, revisione dei volti, viewer, dizionario"),
 }
 
 /** Con cosa e' provata una superficie. */
@@ -106,6 +109,7 @@ internal object HiddenSurfaces {
   const val WIDGET_TEST: String = "Field" + "ProbeWidgetTest"
   private const val ALBUMS = "core-albums/src/main/kotlin/dev/pampa/mycloudgallery/core/albums"
   private const val FEATURE_ALBUMS = "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums"
+  private const val FACES_PEOPLE = "core-faces/src/main/kotlin/dev/pampa/mycloudgallery/core/faces/people"
 
   /** Le superfici. L'ordine e' quello del §2.1. */
   val entries: List<SurfaceEntry> = listOf(
@@ -232,6 +236,32 @@ internal object HiddenSurfaces {
       row = SpecRow.ALBUMS, owner = "P10", backing = Backing.PRODUCTION,
       sources = listOf("$FEATURE_ALBUMS/page/AlbumPageController.kt", "$FEATURE_ALBUMS/page/SuggestionsController.kt"), probe = RealAlbumScreensProbes.albumPages, live = true,
       alsoProvedBy = listOf("AlbumPageControllerTest"),
+    ),
+    // --- Il codice vero di P9 (persone): integrazione del 27/10. Tutte passano da `PeopleVisibility`, l'unico punto in cui le persone chiedono cosa si puo' mostrare ----------------
+    SurfaceEntry(
+      id = "people-lists", title = "Persone: la sezione delle Raccolte, \"Tutte le persone\" (Q2 b e Q2 a), \"Altri volti\" e \"Persone nascoste\": conti, copertine", row = SpecRow.PEOPLE,
+      owner = "P9", backing = Backing.PRODUCTION, sources = listOf("$FACES_PEOPLE/PeopleVisibility.kt"), probe = RealPeopleProbes.peopleLists(), live = true,
+      alsoProvedBy = listOf("PeopleVisibilityTest", "ArchivePeopleContractTest", "PeopleListControllerTest", "OthersControllerTest", "HiddenPeopleControllerTest", "PeopleSectionsTest"),
+    ),
+    SurfaceEntry(
+      id = "person-pages", title = "La pagina di una persona (foto, carta, \"Forse e' anche…\") e le proposte \"E' la stessa persona?\"", row = SpecRow.PEOPLE, owner = "P9",
+      backing = Backing.PRODUCTION, sources = listOf("$FACES_PEOPLE/PeopleVisibility.kt"), probe = RealPeopleProbes.personPages(), live = true,
+      alsoProvedBy = listOf("PeopleVisibilityTest", "PersonPageControllerTest"),
+    ),
+    SurfaceEntry(
+      id = "face-review", title = "\"Controlla le foto\", \"Dividi\" e i ritagli dei volti (il cancello): solo da celle mostrabili", row = SpecRow.PEOPLE, owner = "P9",
+      backing = Backing.PRODUCTION, sources = listOf("$FACES_PEOPLE/PeopleVisibility.kt"), probe = RealPeopleProbes.faceReview(), live = true,
+      alsoProvedBy = listOf("FaceReviewControllerTest", "GuardedPeopleCropsTest"),
+    ),
+    SurfaceEntry(
+      id = "viewer-people", title = "La riga \"Persone\" del viewer, anche dai Nascosti (F99): i chip non portano mai a una pagina con altri nascosti; \"Chi e'?\"", row = SpecRow.PEOPLE,
+      owner = "P9", backing = Backing.PRODUCTION, sources = listOf("$FACES_PEOPLE/PeopleVisibility.kt"), probe = RealPeopleProbes.viewerRow(), live = true,
+      alsoProvedBy = listOf("PeopleLifecycleTest", "ViewerPeopleInfoTest"),
+    ),
+    SurfaceEntry(
+      id = "people-dictionary", title = "Il dizionario dei nomi per la ricerca: solo nomi di persone non nascoste, con il conto delle foto mostrabili", row = SpecRow.PEOPLE, owner = "P9",
+      backing = Backing.PRODUCTION, sources = listOf("$FACES_PEOPLE/PeopleVisibility.kt"), probe = RealPeopleProbes.dictionary(), live = true,
+      alsoProvedBy = listOf("PeopleIndexTest"),
     ),
   )
 

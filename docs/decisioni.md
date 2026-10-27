@@ -7876,6 +7876,12 @@ Scritti in `core-ai/src/androidTest/kotlin/dev/pampa/mycloudgallery/core/ai/face
 | `FaceFaultIsolationDeviceTest` | 4 | no (l'interprete vero che lancia su un volto non fa perdere gli altri, tre guasti di fila, guasto del rilevatore, memoria dopo i cicli) |
 | `FaceMeasurementsDeviceTest` | 8 | solo l'ultima (verifica, avvio, YuNet, tasselli, SFace, allineamento, `forFaces`, foto al secondo) |
 
+### `tools\check.ps1 -NoDaemon`
+**Verde, «OK: tutto a posto»** (28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `appuild\outputspkelease` cancellata prima, posto del semaforo `f8-p2`): `assembleDebug assembleRelease galleryTest galleryLint` in 40 minuti (PC condiviso); test eseguiti in 38 moduli, nessuno a zero e nessuno fallito
+(`core-ai` 337, `core-rules` 355, `core-models` 294, `core-faces` 89, `feature-people` 7, `app` 828); passo «LiteRT solo in core-ai nel bytecode della release (volti solo da `FaceLiteRtSessions`)»: **60 chiamate nostre a LiteRT, tutte da `core-ai`** e, fra i volti, solo da `FaceLiteRtSessions` e dalle sue classi interne (con le due righe `-keep` di
+`consumer-rules.pro` le sessioni stanno nel dex di release anche prima che `:app` monti i motori e il passo le vede già; con il solo ritaglio erano 24); passo D39 dei modelli nell'APK verde; APK di release 88.417.449 B (+16.420 B sugli 88.401.029 B di P1: le classi delle sessioni e quel che toccano). Solo SKIP il banco su dispositivo (`-Bench`).
+Prima del giro finale, `:core-ai:lintDebug` e `:core-rules:lintDebug` e le prove di architettura (`*ArchitectureTest` di `core-common`) erano già verdi. I test strumentati compilano (`:core-ai:compileDebugAndroidTestKotlin`).
+
 ### Cosa trovano pronto P4, P11 e P13
 - **P4 (calcolo dei volti)**: `FaceEnginesFactory.create(files)` dà i quattro pezzi (`FaceEngines`) sopra `ModelFiles`; `ModelInputs.forFaces(bytes, 1024)` per l'anteprima (JPEG), `forFaces(bytes, 2048)` per l'HQ (WebP), `forFaces(jpeg, 1024, frame)` per i fotogrammi dei video (0..8); le chiamate di `ModelInputs` sono **bloccanti** (thread di lavoro,
   mai il principale) e danno `null` per un file da non usare ("non supportato", contato). Il giro di un'immagine è `detector.detect(image, PREVIEW)` e, se serve (D17: un volto sotto 40 px o almeno 5 volti), `detect(hqImage, HQ_TILES)` (4 corse del modello per un HQ di 2048x1536: **le due passate vanno unite da P4 per IoU**; il rilevatore non

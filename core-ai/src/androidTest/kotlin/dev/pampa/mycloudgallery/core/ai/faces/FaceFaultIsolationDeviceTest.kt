@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.FaceImage
 import dev.pampa.mycloudgallery.core.ai.testing.FaceEnginesContract
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import java.util.Random
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -26,25 +27,22 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class FaceFaultIsolationDeviceTest {
 
-  /** Un embedder vero che lancia alle corse indicate (1, 2, 3...). */
-  private class FlakyEmbedder(private val real: EmbedderSession, private val failOn: Set<Int>) : EmbedderSession {
-    var runs = 0
-
+  /**
+   * Un embedder vero che lancia alle corse indicate (1, 2, 3...). Le corse si contano in [runs], che vale per tutte le sessioni di una prova: una sessione
+   * riaperta dopo il guasto non ricomincia da uno (altrimenti ricadrebbe nello stesso guasto).
+   */
+  private class FlakyEmbedder(private val real: EmbedderSession, private val failOn: Set<Int>, private val runs: AtomicInteger) : EmbedderSession {
     override fun run(rgb: FloatArray): FloatArray {
-      runs++
-      if (runs in failOn) throw IllegalStateException("interprete di prova")
+      if (runs.incrementAndGet() in failOn) throw IllegalStateException("interprete di prova")
       return real.run(rgb)
     }
 
     override fun close() = real.close()
   }
 
-  private class FlakyDetector(private val real: DetectorSession, private val failOn: Set<Int>) : DetectorSession {
-    var runs = 0
-
+  private class FlakyDetector(private val real: DetectorSession, private val failOn: Set<Int>, private val runs: AtomicInteger) : DetectorSession {
     override fun run(frame: FloatArray): YuNetOutputs {
-      runs++
-      if (runs in failOn) throw IllegalStateException("interprete di prova")
+      if (runs.incrementAndGet() in failOn) throw IllegalStateException("interprete di prova")
       return real.run(frame)
     }
 
@@ -81,7 +79,8 @@ class FaceFaultIsolationDeviceTest {
     baseline.forEach { FaceEnginesContract.checkVector(checkNotNull(it)) }
 
     val real = FaceModelOpeners.embedder(files, ModelCatalog.FACE_SFACE, FaceEngineLimits.CPU_THREADS)
-    val flaky = SFaceEmbedder(EmbedderOpener { FlakyEmbedder(real.open(), setOf(2, 5)) })
+    val runs = AtomicInteger()
+    val flaky = SFaceEmbedder(EmbedderOpener { FlakyEmbedder(real.open(), setOf(2, 5), runs) })
     val got = flaky.embed(faces)
     assertEquals(6, got.size)
     assertNull("il secondo volto lancia", got[1])
@@ -104,7 +103,8 @@ class FaceFaultIsolationDeviceTest {
     val files = FacesDevice.files()
     val faces = (0 until 5).map(::drawn)
     val real = FaceModelOpeners.embedder(files, ModelCatalog.FACE_SFACE, FaceEngineLimits.CPU_THREADS)
-    val flaky = SFaceEmbedder(EmbedderOpener { FlakyEmbedder(real.open(), setOf(1, 2, 3)) })
+    val runs = AtomicInteger()
+    val flaky = SFaceEmbedder(EmbedderOpener { FlakyEmbedder(real.open(), setOf(1, 2, 3), runs) })
     val error = runCatching { flaky.embed(faces) }.exceptionOrNull() as? AiEngineException
     assertEquals(AiEngineError.BAD_INPUT, error?.error)
     // La sessione nuova e' una sessione vera con i suoi contatori da zero: la richiesta dopo va a buon fine.
@@ -118,7 +118,8 @@ class FaceFaultIsolationDeviceTest {
   fun unGuastoDelRilevatoreEUnCodiceELaRichiestaDopoSiAprePulita() = runBlocking<Unit> {
     val files = FacesDevice.files()
     val real = FaceModelOpeners.detector(files, ModelCatalog.FACE_YUNET, FaceEngineLimits.CPU_THREADS)
-    val detector = YuNetDetector(DetectorOpener { FlakyDetector(real.open(), setOf(1)) })
+    val runs = AtomicInteger()
+    val detector = YuNetDetector(DetectorOpener { FlakyDetector(real.open(), setOf(1), runs) })
     val image = FaceImage(IntArray(640 * 480) { i -> (0xFF shl 24) or (((i % 640) * 255 / 640) shl 16) or (((i / 640) * 255 / 480) shl 8) or 90 }, 640, 480)
     val error = runCatching { detector.detect(image, DetectPass.PREVIEW) }.exceptionOrNull() as? AiEngineException
     assertEquals(AiEngineError.BAD_INPUT, error?.error)

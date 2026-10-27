@@ -13,7 +13,6 @@ import dev.pampa.mycloudgallery.core.models.contract.BundledAssets
 import dev.pampa.mycloudgallery.core.models.contract.EnsureResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
-import dev.pampa.mycloudgallery.core.models.contract.ModelFeature
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
 import dev.pampa.mycloudgallery.core.models.noop.ClosedModelNetworkGate
@@ -65,7 +64,8 @@ internal object FacesDevice {
   fun files(): ModelFiles {
     val models = models()
     runBlocking {
-      for (spec in ModelCatalog.needed(emptySet(), setOf(ModelFeature.FACES))) {
+      // Solo i due modelli dei volti (`ModelCatalog.needed(...)` conterrebbe anche il 270M, che non sta nell'APK).
+      for (spec in ModelCatalog.FACES) {
         val result = models.manager.ensure(spec.id, ModelTrigger.USER_NOW, 120.seconds)
         check(result == EnsureResult.Ready) { "il modello ${spec.id} non e' pronto: $result" }
       }

@@ -200,4 +200,7 @@ data class AlbumItemEntity(
   @ColumnInfo(name = "origin", defaultValue = "'manual'") val origin: String = "manual",
   @ColumnInfo(name = "fp") val fp: String? = null,
   @ColumnInfo(name = "added_by") val addedBy: String? = null,
-)
+) {
+  /** I7: l'id dell'album e del media, l'impronta e l'account di chi l'ha aggiunto non finiscono in un log. */
+  override fun toString(): String = "AlbumItemEntity($origin)"
+}

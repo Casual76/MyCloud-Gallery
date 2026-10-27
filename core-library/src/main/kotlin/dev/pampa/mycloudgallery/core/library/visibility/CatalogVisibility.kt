@@ -33,14 +33,20 @@ class CatalogHiddenMask(database: GalleryDatabase) : HiddenMask {
   override suspend fun hiddenAmong(ids: Collection<MediaId>): Set<MediaId> {
     if (ids.isEmpty()) return emptySet()
     return try {
-      val answer = queries.answer(ids)
-      ids.filterTo(LinkedHashSet()) { answer.isHidden(it) }
+      hiddenAmongOrThrow(ids)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       GalleryLog.w(TAG, e) { "Filtro dei nascosti non riuscito: tutto si tratta come nascosto." }
       ids.toSet()
     }
+  }
+
+  /** R17: la stessa risposta, ma un guasto di lettura lancia (chi riscrive uno stato non deve prenderlo per "tutto nascosto"). */
+  override suspend fun hiddenAmongOrThrow(ids: Collection<MediaId>): Set<MediaId> {
+    if (ids.isEmpty()) return emptySet()
+    val answer = queries.answer(ids)
+    return ids.filterTo(LinkedHashSet()) { answer.isHidden(it) }
   }
 }
 
@@ -59,14 +65,20 @@ class CatalogVisibleMedia(
   override suspend fun visible(ids: Collection<MediaId>): Set<MediaId> {
     if (ids.isEmpty()) return emptySet()
     return try {
-      val answer = queries.answer(ids)
-      ids.filterTo(LinkedHashSet()) { answer.isVisible(it) }
+      visibleOrThrow(ids)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       GalleryLog.w(TAG, e) { "Visibilita' non letta: niente si mostra." }
       emptySet()
     }
+  }
+
+  /** R17: la stessa risposta, ma un guasto di lettura lancia (chi riscrive uno stato non deve prenderlo per "niente e' visibile"). */
+  override suspend fun visibleOrThrow(ids: Collection<MediaId>): Set<MediaId> {
+    if (ids.isEmpty()) return emptySet()
+    val answer = queries.answer(ids)
+    return ids.filterTo(LinkedHashSet()) { answer.isVisible(it) }
   }
 }
 

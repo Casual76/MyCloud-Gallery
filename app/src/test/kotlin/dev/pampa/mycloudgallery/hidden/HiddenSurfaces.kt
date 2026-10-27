@@ -289,6 +289,13 @@ internal object HiddenSurfaces {
       sources = listOf("$SEARCH/engine/PeopleGate.kt", "$SEARCH/engine/LibrarySuggestions.kt"), probe = RealSearchPeopleProbes.searchPeople(), live = true,
       alsoProvedBy = listOf("PeopleSearchEngineTest", "PeopleHistoryAndSuggestionsTest", "PeopleQueryTableTest"),
     ),
+    // --- Il codice vero di P10 (album smart con le persone): i candidati sono quelli VISIBILI del catalogo, le celle delle persone passano da `PeopleVisibility` ---------------
+    SurfaceEntry(
+      id = "albums-people", title = "Album smart con le persone: la regola \"Persone\" (sicuri e suggeriti, \"e\" con il periodo, alias, persona dimenticata, volti spenti) e il nome che diventa regola (D27)",
+      row = SpecRow.PEOPLE, owner = "P10", backing = Backing.PRODUCTION,
+      sources = listOf("$ALBUMS/smart/SmartPeople.kt", "$ALBUMS/smart/SmartClassifier.kt"), probe = RealAlbumsPeopleProbes.albumsPeople(), live = true,
+      alsoProvedBy = listOf("SmartPeopleTest", "SmartPeoplePropertyTest", "SmartPeopleInterpreterTest", "SmartUpkeepPeopleTest"),
+    ),
   )
 
   /**

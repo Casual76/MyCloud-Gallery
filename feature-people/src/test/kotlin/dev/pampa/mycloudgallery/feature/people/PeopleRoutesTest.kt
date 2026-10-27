@@ -90,7 +90,8 @@ class PeopleRoutesTest : PeopleScreenTest() {
     val opened = mutableListOf<PersonId>()
     var others = 0
     var hidden = 0
-    show { PeopleListRoute(scenes.crops, opened::add, { others++ }, { hidden++ }, {}, viewModel = PeopleListViewModel(deps())) }
+    val model = PeopleListViewModel(deps())
+    show { PeopleListRoute(scenes.crops, opened::add, { others++ }, { hidden++ }, {}, viewModel = model) }
     composeRule.onNode(hasContentDescription("Anna, 4 foto")).performClick()
     assertThat(opened).containsExactly(world.anna)
     composeRule.onNodeWithText("Altri volti (3)", useUnmergedTree = true).performClick()
@@ -102,7 +103,8 @@ class PeopleRoutesTest : PeopleScreenTest() {
   /** Dal gesto alla voce: pressione lunga, un'altra persona, "Unisci", il nome da tenere, la conferma: la voce `people` e' scritta e l'elenco si aggiorna. */
   @Test
   fun elenco_unireDuePersoneConDueNomi_finoAllaVoce() {
-    show { PeopleListRoute(scenes.crops, {}, {}, {}, {}, viewModel = PeopleListViewModel(deps())) }
+    val model = PeopleListViewModel(deps())
+    show { PeopleListRoute(scenes.crops, {}, {}, {}, {}, viewModel = model) }
     composeRule.onNode(hasContentDescription("Anna, 4 foto")).performTouchInput { longClick() }
     composeRule.onNode(hasContentDescription("Marco, 5 foto")).performClick()
     composeRule.onNodeWithContentDescription("Unisci").performClick()
@@ -122,7 +124,8 @@ class PeopleRoutesTest : PeopleScreenTest() {
 
   @Test
   fun elenco_unaPropostaSiRifiuta_eNonTornaPiu() {
-    show { PeopleListRoute(scenes.crops, {}, {}, {}, {}, viewModel = PeopleListViewModel(deps())) }
+    val model = PeopleListViewModel(deps())
+    show { PeopleListRoute(scenes.crops, {}, {}, {}, {}, viewModel = model) }
     // L'intestazione della sezione e' in maiuscolo: il testo esatto e' solo il titolo della riga.
     composeRule.onNodeWithText("È la stessa persona?", useUnmergedTree = true).performClick()
     composeRule.waitForIdle()
@@ -137,7 +140,8 @@ class PeopleRoutesTest : PeopleScreenTest() {
   @Test
   fun altriVolti_unTocco_apreLaPaginaDelGruppo_eDimenticaPassaDallaConferma() {
     val opened = mutableListOf<PersonId>()
-    show { OthersRoute(scenes.crops, opened::add, {}, viewModel = OthersViewModel(deps())) }
+    val model = OthersViewModel(deps())
+    show { OthersRoute(scenes.crops, opened::add, {}, viewModel = model) }
     composeRule.onAllNodesWithContentDescription("Persona senza nome, 5 foto")[0].performClick()
     assertThat(opened).hasSize(1)
     composeRule.onAllNodesWithContentDescription("Persona senza nome, 5 foto")[0].performTouchInput { longClick() }
@@ -295,7 +299,8 @@ class PeopleRoutesTest : PeopleScreenTest() {
   @Test
   fun nascoste_unTocco_laMostraDiNuovo() {
     hide(scenes.giulia)
-    show { HiddenPeopleRoute(scenes.crops, {}, viewModel = HiddenPeopleViewModel(deps())) }
+    val model = HiddenPeopleViewModel(deps())
+    show { HiddenPeopleRoute(scenes.crops, {}, viewModel = model) }
     assertShows("nascoste", "Giulia")
     composeRule.onNodeWithText("Giulia", useUnmergedTree = true).performClick()
     composeRule.waitForIdle()

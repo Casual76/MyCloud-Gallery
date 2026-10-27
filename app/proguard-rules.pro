@@ -44,3 +44,16 @@
 -keep class dev.pampa.mycloudgallery.backup.IncomingGate {
     public *** stateOf(java.lang.String);
 }
+
+# --- Fase 7 (R20 della revisione di sicurezza): i cancelli degli album condivisi -----------------------------------------------------------
+# "Album condivisi solo sulle share di prova" (D30) vale nella release finche' l'utente non da' il consenso (Q7): il cancello delle scritture
+# (`AppAlbumWriteGate.blockFor`) chiama la decisione per share (`FeatureFlags.sharedAlbumsMayUse`, tenuta da core-common/consumer-rules.pro) e
+# risponde `TEST_SHARES_ONLY`; quello della lettura (`FlagsAlbumReadGate.mayRead`) chiama la stessa decisione. R8 non deve ne' toglierli ne'
+# fonderli ne' inlinearli: tools/check.ps1 (passo "D30 nella release") legge il bytecode della release e prova le due chiamate, la risposta,
+# chi li istanzia e chi li chiama.
+-keep class dev.pampa.mycloudgallery.albums.AppAlbumWriteGate {
+    public *** blockFor(java.lang.String, kotlin.coroutines.Continuation);
+}
+-keep class dev.pampa.mycloudgallery.albums.FlagsAlbumReadGate {
+    public boolean mayRead(java.lang.String);
+}

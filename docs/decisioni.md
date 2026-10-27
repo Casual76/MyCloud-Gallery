@@ -7998,3 +7998,132 @@ Diagnostica → Esporta e si legge con `adb pull`). Nessuna e' stata fatta (nien
 - **F91** Prestazioni (`AlbumBenchmark`): ricalcolo e rilevazione sulla Libreria sintetica da 100 mila.
 - **F92** 24 ore di sincronizzazione con i finti album di F84: nessuna operazione non confermata.
 - **F93** (solo col consenso, Q7) release sulle share vere: la recinzione `sharedAlbumsTestSharesOnly` e' ancora accesa in release, quindi oggi non si puo'.
+
+## Fase 7, correzioni dopo le revisioni: pacchetto A (27/10)
+
+Il pacchetto A delle correzioni della Fase 7 (branch `fase7/rev-a` da `main` a `6b0bf79`): **la fiducia e la replica degli album condivisi**.
+Voci di `docs/review/7-fase7.md`: R1, R2, R6, R7, R9, R12, R13, R14, R19, R20, R21, I1, I5, I6. Lo stato di ogni voce, le prove e cosa provare sul
+telefono stanno nel resoconto del pacchetto; qui le decisioni. Nessuna dipendenza nuova, nessun permesso o componente Android, **nessuna modifica
+al formato** (`AlbumDocs` e la versione 3 non cambiano), **nessuna migrazione** (le righe nuove della replica sono righe di servizio di
+`shared_album_entry`, come P13-1).
+
+### Copie di Q5 (b) e chiusura definitiva (R1)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-1 | **Segni locali** di questo dispositivo per ogni album condiviso (`SharedAlbumMarks`, su file in `noBackupFilesDir/albums/shared-marks` con `StateFiles`): visto attivo, prima chiusura vista (stato, `afterClose`, ora, dispositivo che l'ha firmata, titolo, cartella), copia gia' scritta o ritirata. Li scrive la proiezione (`SharedAlbumReplica.recompute`); mai sincronizzati ne' pubblicati | La revisione: "copia solo per un album che questo account ha visto attivo (un segno locale)", "la chiusura vista resta in locale per quell'id" |
+| A-2 | **Copia e avviso di chiusura solo per un album visto attivo** da questo dispositivo. Un altro dispositivo dello stesso account che non l'ha visto non scrive la copia: gli arriva con i dati personali da chi l'ha scritta | Un album nato chiuso (o mai visto) non e' "un album che si teneva": non fa scrivere niente nei dati personali di nessuno |
+| A-3 | **La copia si scrive una volta** (`ReplicaSharedAlbums.copyKept` dopo `PersonalAlbumCopies.keep`): gli elementi restano quelli della prima scrittura; una copia gia' eliminata dall'utente si segna come scritta | "Riapri, aggiungi, richiudi" non la allunga piu' |
+| A-4 | **La chiusura vista e' definitiva** (D31): con il segno, la fusione si fa con `closedBefore` (nessuna voce dopo la chiusura vale) e una definizione `active` letta dopo si scarta (lo stato, la scelta per gli altri, il titolo e la cartella restano quelli della chiusura). Vale finche' il dispositivo che l'ha firmata e' approvato o dismesso; revocato o perso, la chiusura non si impone piu' (la revoca toglie cio' che ha causato) | Di ogni dispositivo conta solo l'ultima testa: il creatore poteva riaprire ripubblicando `active` |
+| A-5 | **Tetti per creatore** (`ClosedCopyLimits`): 32 copie e 20.000 elementi in tutto, contando le copie gia' scritte e non ritirate; in ordine di chiusura. Una copia oltre i tetti non nasce, l'avviso non la promette, si conta (`copiesCapped`) | Un dispositivo compromesso non riempie i dati personali (262.144 record per dispositivo) di ogni familiare; un creatore onesto non ci arriva |
+| A-6 | **La revoca ritira le copie**: se il dispositivo che ha firmato la chiusura diventa revocato o perso, la copia si ritira come "Elimina album" (lapide della definizione, `PersonalAlbumCopies.withdraw`, solo se e' davvero la copia di quell'album) e non si ricrea. Un dismesso no | Il brief: "la revoca toglie cio' che il dispositivo revocato ha causato". Un telefono perso (non compromesso) fa perdere anche le copie automatiche nate da lui: e' la stessa regola dei contributi |
+| A-7 | `AlbumsGraph.keepClosedCopies` scrive, segna e ritira; resta nel giro dell'indice | Il cambio di quando nasce la copia per il creatore dopo "Smetti" (SC-1) e' del pacchetto B |
+
+### Isolamento, tetti, attese e traffico della replica (R2, R13)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-8 | Un contributo che adesso non si legge (un segmento elencato e sparito, un file che il NAS nega) **aspetta** (`ReplicaHold`, durevole in una riga `~hold`): 15 minuti, poi il doppio a ogni tentativo fino a 24 ore; una testa diversa si legge subito. Non rende il giro "incompleto" | Prima si riscaricava a ogni giro, e la tappa ripeteva subito il giro |
+| A-9 | **Errori di un file e della sessione** (`AlbumIoErrors`, legato da :app a `NasAlbumIoErrors`): permesso negato e file occupato fermano solo quel contributo (o quell'album, se e' la sua cartella); il resto ferma il giro come prima. Senza legame tutto vale "sessione" | Un'ACL o un file tenuto aperto dal PC non fermano piu' gli album di tutti |
+| A-10 | Il **cursore** va oltre gli album finiti e falliti; si ferma sul primo rimasto a meta' per il budget (che al giro dopo riparte primo, con il budget intero) | Un album rotto non resta il primo di ogni giro |
+| A-11 | **Tetti prima di scaricare** (le dimensioni le dichiara la testa firmata): album per dispositivo (512) e byte per dispositivo nella replica (128 MiB) prima di leggere un segmento; per giro 64 MiB e 32 MiB per dispositivo (il suo primo contributo del giro passa comunque). Le voci (100.000 per dispositivo) restano dopo la decodifica | R13; un contributo onesto al massimo (sotto i 30 MiB) si scarica sempre |
+| A-12 | **Traffico**: i byte letti dal NAS dal giro degli album (`AlbumSyncReport.bytesRead`) vanno nel conto della tappa (`NasWork.albums`) | Prima `scope.record(0)` |
+| A-13 | **Il proprietario rimette i suoi segmenti tolti dal PC**: a ogni pubblicazione si controlla (una lettura senza byte) che i segmenti riusati ci siano, e la replica, quando trova un buco nella **mia** testa, chiede al pubblicatore di rimetterli uguali (`repairSegments`, dietro gli stessi cancelli, solo se le voci pubblicate rifanno esattamente i segmenti) | Chi aspetta li ritrova senza una testa nuova |
+| A-14 | La cache della replica su Room tiene al piu' 50.000 voci (gli album usati meno di recente escono e si rileggono); i conti per dispositivo si fanno una volta e si tengono al passo; attese e ore "visto" in una cache | R13: memoria limitata; nessuna scansione di `shared_album_entry` a ogni contributo (non c'e' un indice su `device_id` e lo schema v6 non cambia) |
+
+### Voci retrodatate (R7, L59 riscritto)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-15 | Chi legge tiene, per (album, dispositivo), **l'ultima ora del NAS in cui ha visto la serie senza niente di nuovo** (`seenAt`, riga `~seen`): all'accettazione di una testa, e a un giro senza novita' al piu' una volta l'ora | Le ore dichiarate da chi scrive si confrontano con un'ora di chi legge, che chi scrive non sceglie |
+| A-16 | Una testa nuova che dichiara un'ora **prima della testa di prima**, o prima di `seenAt` meno 10 minuti, si **rifiuta** (retrodatata; `retrodatedHeads`) | Esisteva gia', l'avrei letta allora |
+| A-17 | Una voce **nuova** e' retrodatata se piu' vecchia della testa di prima meno 2 minuti (come prima) **o** di `seenAt` meno l'eta' massima di una modifica e 2 minuti. Vale anche per la **prima** testa di un dispositivo che chi legge ha visto senza contributo | Chiude l'aggiramento (ora della testa) e la prima testa non controllata |
+| A-18 | **Eta' massima di una modifica** (`PublishRules.MAX_ENTRY_AGE_MS`, un'ora): il pubblicatore data con l'ora della pubblicazione una modifica rimasta in coda piu' a lungo (il NAS irraggiungibile) | Senza, una modifica onesta fatta prima di un'assenza lunga risulterebbe retrodatata. Il costo: e' giudicata con il livello dell'ora della pubblicazione (se si e' stretto nel frattempo, l'avviso E-SH13) |
+
+### Registri durevoli (R9) e diario (I5)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-19 | Un registro che **c'e' ma non si legge** (errore di I/O, oltre i 16 MiB, formato rovinato) **non vale vuoto e non si sovrascrive**. Legami chiave -> piano dei trasferimenti e intenzioni dei caricamenti: **"non so"** (ogni lettura e modifica lancia `UnreadableRecords`; `find` lancia, SD-2 lascia il gruppo `PLANNED`). Gli altri (richieste al guardiano, segni "Nuove", avvisi visti, promesse della ricezione, segni degli album condivisi): il file va da parte come `<nome>.bad` e si riparte vuoti | Il brief: "illeggibile = non so, senza sovrascrittura". Per le richieste al guardiano "vuoto" non perde copie (il guardiano trova dal catalogo i media con la sola copia comune, `guardianHasWork`), mentre "non so" fermerebbe ogni condivisione all'ultimo passo |
+| A-20 | I contatori letti dal file hanno un tetto legato ai byte rimasti | Un file rovinato non fa allocare a ogni avvio |
+| A-21 | **Potatura** dei registri dei trasferimenti nel giro dell'indice (`TransferRegisters.prune`): si tolgono le chiavi che nessuna operazione aperta della condivisione cita (lette dalla colonna del diario, anche per le righe che non si decodificano), prima lette le chiavi legate e poi il diario | Senza, un registro cresciuto oltre il tetto varrebbe "non so" per sempre. Una chiave legata dopo la lettura non si tocca; il diario la scrive sempre prima di chiamare la porta |
+| A-22 | I5: una riga del diario che non si decodifica diventa un elemento **fermo** (in viaggio senza biglietto: nessun passo lo tocca, l'operazione non si chiude, il media resta occupato, `update` su di lui fallisce); con la riga dell'operazione illeggibile l'operazione resta fra le aperte, con lo stesso piano (che non riparte) e tutti gli elementi fermi. Si contano (`unreadableRows`) e si dicono nel log | "Resta ferma, non si inventa un passo" (era il commento del diario, ma la riga spariva) |
+
+### Pubblicatore ricostruito (R12)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-23 | Dopo la perdita dello store del pubblicatore vale prima **la copia del mio contributo nella replica** di questo dispositivo, se e' almeno della versione dell'ultima mia testa sul NAS: si pubblica dopo la versione piu' alta | Dal PC le mie teste piu' recenti si possono togliere: ripubblicare uno stato vecchio con un numero gia' visto e' un'equivocazione che chi legge rifiuta |
+| A-24 | Dal NAS si adotta solo se la mia ultima testa si rilegge **tutta**: un mio segmento che non si decodifica, o teste mie ma nessuna valida, e la testa nuova non si pubblica (`Failed`, `adoptionRefused`). Senza nessuna testa mia si riparte da zero | La testa nuova toglierebbe a tutti le voci gia' pubblicate (per il creatore, la definizione) |
+
+### Dismissione (R6), contenuto delle voci (R14, I1), tetti dei dati personali (R19), unioni (R21), recinzione (R20)
+| # | Decisione | Perche' |
+|---|---|---|
+| A-25 | **R6**: `RegistryWriter.retireHeads` (porta di core-family, legata da :app) dice le teste da congelare alla dismissione: quelle d'album che la replica dell'admin ha accettato, dopo un giro breve della replica; prima quelle che governano l'album (definizione, livello, eredita'), poi per elementi; al piu' 64 (il tetto del registro). Se chi le cerca sbaglia la dismissione non parte | A7: "dismesso: valgono le teste congelate". Le teste dell'indice e dei dati personali non le dice ancora nessuno (prima di R6 nessuna) |
+| A-26 | **R6, l'eredita'**: una voce `heir` vale se il suo dispositivo e' admin **approvato o dismesso** (il dismesso vale solo con le teste congelate) | L'eredita' non cade quando l'erede cambia telefono |
+| A-27 | **R14**: sull'elemento vivo di un altro account una voce nuova puo' cambiare solo la posizione; un contenuto diverso si scarta (`OWNERSHIP`) | Nessuno scrittore produce quella voce; il lettore era piu' largo |
+| A-28 | **I1**: `MediaFacts.sha256` (dal catalogo, `full_hash` della versione corrente) va nella voce dell'elemento e nell'attestazione E-SH12; anche nel riferimento di P0. Il finto catalogo lo confronta come il vero | La voce porta l'hash quando chi aggiunge lo conosce (`Publishing.kt`); chi legge lo confronta (D9) |
+| A-29 | **R19**: la proiezione degli album personali cerca le impronte a blocchi (400 per domanda, sull'indice `(size, quick_hash)`); riproietta un album "in attesa" solo se i media cambiati possono risolvere un suo riferimento (per id o impronta); al piu' 5.000 album e 20.000 riferimenti per album (`overCap`) | Il lavoro che un altro dispositivo dell'account impone ha un tetto. Gli album smart con descrizione (il motore) sono del pacchetto D |
+| A-30 | **R21**: `repointMediaReferences` e' l'unica strada per l'unione e per `linkCopyAsVersion` | Una tabella nuova si aggiunge in un posto solo |
+| A-31 | **R20**: il passo D30 di `check.ps1` legge il bytecode della release come per D12 (lettore suo): `AppAlbumWriteGate.blockFor` chiama `sharedAlbumsMayUse` e poi risponde `TEST_SHARES_ONLY`, `FlagsAlbumReadGate.mayRead` chiama la stessa decisione, li istanzia il montaggio degli album, li chiamano pubblicatore, piano della condivisione e replica. `app/proguard-rules.pro` tiene i due metodi. Anche con `-dontobfuscate` R8 fonde classi di pacchetti diversi (nella release di oggi il pubblicatore sta in `NasPersonalSync`, la replica in `OpenGlRenderer` di CameraX, il montaggio in `AiModule_TodayFactory`): chi istanzia e chi chiama si riconosce dal nome nel dex o, se la classe e' fusa, da `mapping.txt` (i metodi del dex che contengono il suo codice). Provato: con i due cancelli rotti apposta (decisione non chiamata) il passo fallisce, con i cancelli veri passa. Il valore di `FeatureFlags.RELEASE` lo provava gia' `FeatureFlagsTest` | La regola di consumer-rules tiene campo e decisione anche se nessuno li chiama |
+
+### I6: non corretta (punto aperto)
+La pulizia delle proprie teste e dei propri segmenti d'album (`KEEP_HEADS`, `GRACE_DAYS`) **non si fa in questo pacchetto**. Toglie file sul NAS: per
+D1 e C10 lo fa solo `core-nasops` (`OwnFilesCleaner`, fuori dal perimetro), che non conosce `albums/`; servono anche (1) un diario dei segmenti d'album
+pubblicati (oggi il pubblicatore ricorda solo quelli della testa corrente: un segmento non suo nella sua cartella non si deve toccare, E-S11) e
+(2) un lettore che non resti fermo quando le teste fra la sua e l'ultima sono state tolte (oggi prova solo la versione successiva; con 3 teste
+tenute e una ogni 5 minuti, un tablet spento un'ora non ritroverebbe piu' la serie). Senza (2) la pulizia romperebbe la sincronizzazione. Lo stesso
+punto e' rimasto aperto per i segmenti `ai` (Fase 6, pacchetto A, R14). Il NAS cresce: al piu' una testa ogni 5 minuti per album e dispositivo, e
+un segmento (al piu' 4 MiB, di solito qualche centinaio di KB) per modifica. Limite dichiarato L145.
+
+### Prove
+| Voce | Test (rosso senza la correzione, verde con) |
+|---|---|
+| R1 | `SharedAlbumClosedCopiesTest` (album nati chiusi: nessuna copia ne' avviso; riapri-aggiungi-richiudi; tetti; revoca), `PersonalAlbumCopiesTest.r1LaCopiaSiRitiraSoloSeECopiaDiQuellAlbum` |
+| R2, R13 | `SharedAlbumRobustnessTest` (segmento tolto: attesa, secondo album aggiornato, niente riscaricato, segmento rimesso dal proprietario; file negato; tetti prima di scaricare), `RoomAlbumStoresTest.attese_visto_contiECacheLimitataSuRoom` |
+| R6 | `RetireFrozenHeadsTest` (core-family), `SharedAlbumRetireTest` (telefono del creatore dismesso, eredita' con il telefono dell'erede dismesso) |
+| R7 | `SharedAlbumRetrodatingTest` (testa con l'ora della creazione, voce datata quando l'album era aperto, prima testa; una modifica rimasta in coda tre ore non e' retrodatata) |
+| R9, I5 | `AlbumDurableStoresTest` (`r9UnRegistroIllegibileValeNonSoENonSiSovrascrive`, `r9IRegistriDeiTrasferimentiSiPotanoConIlDiario`, `i5UnaRigaIllegibileDelDiarioRestaFermaENonSparisce`) |
+| R12 | `NasAlbumPublisherAdoptionTest` |
+| R14 | `AlbumPermissionsLogicTest.r14LElementoDiUnAltroNonCambiaContenuto` |
+| R19 | `AlbumProjectionWorkCapTest` |
+| R20 | il passo D30 di `check.ps1`, provato anche su una release con il cancello rotto apposta (il passo fallisce) |
+| R21 | `MergeV6Test.laCopiaDiUnEditorPortaConSeLeRigheDellaV6` |
+| I1 | `ShareFullHashTest` |
+
+### File toccati fuori dal perimetro stretto (modifiche minime)
+- `core-albums/.../share/ShareSteps.kt` e `testing/ReferenceShareSteps.kt` (I1: l'hash nella voce e in E-SH12), `contract/Catalog.kt`
+  (`MediaFacts.sha256`), `contract/Publishing.kt` (`AlbumSyncReport.bytesRead`/`contributionsHeld`, `PublishRules.MAX_ENTRY_AGE_MS` e
+  `HEAD_TIME_TOLERANCE_MS`), `testing/FakeAlbumLibrary.kt` (hash completo e attestazione come il vero).
+- `core-albums/.../personal/PersonalAlbumCopies.kt` (`withdraw`, R1), `MediaResolver.kt` e `CatalogAlbumProjection.kt` (R19).
+- `core-database`: `AlbumQueries.FACTS_SQL`, `FactsRow`, `CatalogMediaFacts`, `AlbumCatalog.facts` (I1: `full_hash`); `MediaCatalog` (R21).
+- `core-family/.../registry/RegistryWriter.kt` (`RetireHeads`, R6).
+- `:app`: `albums/AlbumsGraph.kt` (copie, potatura, byte del giro, teste da congelare), `albums/AlbumsWiring.kt` e `AlbumsLive.kt` (legami),
+  `work/NasWork.kt` (byte del giro nel conto della tappa), `app/proguard-rules.pro` (R20).
+- Prove: `app/src/test/.../hidden/RealSharedStack.kt` (l'album "Chiuso" del registro dei Nascosti si vede prima attivo: la copia nasce solo
+  cosi'), `AlbumDurableStoresTest` (la prova che diceva "un file rovinato vale vuoto" dice ora il contrario).
+
+### Cosa chiede agli altri pacchetti
+- **B** (flusso della condivisione): con R1 la copia del creatore dopo "Smetti" (SC-1) passa da `copyKept`; la "Riprova" (SH-2) e ogni passo nuovo
+  dell'orchestratore non devono agire su un elemento in viaggio **senza biglietto** (I5: e' una riga del diario che non si legge).
+- **D** (Diagnostica, R22): i contatori nuovi (`contributionsHeld`, `bytesRead`, `retrodatedHeads`, `copiesCapped`, `reopeningsRefused`,
+  `adoptionRefused`, `segmentsRestored`, `unreadableRows` del diario e dei registri, `overCap`) sono numeri pronti da esportare; gli album smart
+  con descrizione (R19, `RulesSmartEngine`) restano senza tetto.
+
+### Punti aperti
+- I6 (sopra). Il congelamento delle teste dell'indice e dei dati personali alla dismissione (nessuno le dice ancora).
+- Un lettore che aveva gia' una testa d'album **piu' nuova** di quella congelata dall'admin perde il contributo del dismesso (anti-rollback): la
+  replica dell'admin fa un giro prima di congelare, ma non e' una garanzia (L142).
+- Con il registro dei trasferimenti o delle intenzioni illeggibile per sempre, l'operazione resta aperta finche' il file non si rilegge o
+  l'app si azzera: si conta, e il numero arriva nella Diagnostica con R22 (L143).
+- Niente e' stato provato su un dispositivo.
+
+### Da provare sul telefono (S25 e Tab S9, account e share di prova `test`, `test2`, `test-comune`; nessuna fatta)
+- **R1** (con un pubblicatore ostile di debug, mai sulle share vere): un album nato chiuso con `keep_copy` dal telefono di `test`: sul tablet di
+  `test2` nessun album personale nuovo e nessun avviso; un album visto attivo e poi chiuso con "ognuno tiene una copia": una copia sola, che non
+  cresce dopo "riapri, aggiungi, richiudi"; revocare il telefono che ha chiuso: la copia sparisce dal tablet (e dall'altro dispositivo di `test2`).
+- **R2** (F84, F92): dal PC togliere un segmento della testa piu' recente di un album di prova; sul tablet, per 30 minuti, il secondo album riceve una
+  modifica fatta dopo, la Diagnostica non dice `syncIncomplete` di continuo e il traffico dell'app resta piccolo; dopo una modifica dell'autore (o
+  dopo che il suo telefono rilegge l'album) il segmento torna. Variante: una testa resa illeggibile dal PC (permessi).
+- **R6**: dismettere l'emulatore di `test` dopo che ha creato un album condiviso e aggiunto foto: l'album resta sul tablet, con le foto; il telefono
+  nuovo di `test` cambia ancora il livello.
+- **R7**: con il pubblicatore ostile di debug, una testa con l'ora della creazione dell'album dopo un cambio di livello: sul tablet niente cambia.
+- **R9, I5**: rovinare a mano (debug, `run-as`) `noBackupFilesDir/albums/transfer-plans` durante una condivisione: l'operazione resta aperta e non
+  dice "non partito"; `notices-seen` rovinato: il file `.bad` accanto e gli avvisi di nuovo.
+- **R12**: azzerare l'app sul telefono di `test` dopo aver cambiato dal PC un suo segmento: una modifica all'album non toglie le foto agli altri.
+- **R20**: `tools\check.ps1` (passo "D30 nella release").

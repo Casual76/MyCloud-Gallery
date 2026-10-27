@@ -1,6 +1,6 @@
 # Verifica funzionale: Fase 6, la ricerca (commit `263dcc7`, 22/10/2026)
 
-**Stato (26/10).** Le voci sono corrette nel codice dai pacchetti di correzione A, B e C, uniti in `main` a `f24e1792`: ogni voce ha una correzione con un test, oppure e' motivata nelle sezioni "Fase 6, correzioni dopo le revisioni: pacchetto A/B/C" di `docs/decisioni.md`. Resta aperta **TS-4** ("Trova simili" dalla selezione della Libreria: funzione nuova, da decidere). I flussi del §4 restano da provare sul telefono (F46-F71).
+**Stato (26/10).** Le voci sono corrette nel codice dai pacchetti di correzione A, B e C, uniti in `main` a `f24e1792`: ogni voce ha una correzione con un test, oppure e' motivata nelle sezioni "Fase 6, correzioni dopo le revisioni: pacchetto A/B/C" di `docs/decisioni.md`. **TS-4** ("Trova simili" dalla selezione della Libreria) e' chiusa il 27/10 dalle correzioni F (`fase7/rev-f`), dopo la risposta dell'utente. I flussi del §4 restano da provare sul telefono (F46-F71).
 
 **La domanda.** Ogni funzione della Fase 6 promessa all'utente funziona davvero nell'app installata, da capo a fondo, in debug e in release? Questa non
 e' una revisione di sicurezza: quella sta in un altro file di `docs/review/`.
@@ -590,6 +590,17 @@ sta per `core-ai/src/main/kotlin/dev/pampa/mycloudgallery/core/ai/...`, e cosi' 
 - **Percorso:** nessuna azione di selezione di `feature-library` la offre; l'unico ingresso e' la voce del viewer (`GalleryGraph.kt:372`, `:632`).
 - **Atteso:** D30: "dal viewer (⋮) e dalla selezione".
 - **Correzione:** un'azione per la selezione di un solo elemento con la stessa porta (`SimilarRequests`), oppure togliere la promessa dal progetto.
+- **Stato: chiusa il 27/10 (correzioni F, risposta dell'utente: "lo voglio se non e' troppo costoso").** Non e' costata il cambio del motore: il motore usa gia' la
+  media normalizzata dei vettori di una cella (un video, un gruppo) come query, quindi la selezione e' la stessa idea su piu' celle. **Scelta e motivazione:** il
+  **centroide normalizzato** (di ogni media la media normalizzata dei suoi vettori, poi la media di quelle: ognuno conta uno) e non l'unione dei vicini, perche' e' una
+  passata sola dell'indice con le soglie di "Trova simili" e un chip solo (l'unione chiede una ricerca per media e di fondere soglie nate per query diverse). Il limite
+  e' dichiarato (L251): foto di soggetti diversi danno un centroide che non somiglia a nessuna, quindi **al piu' 30 media**. `SearchEngine.similarToAll`
+  (`SimilarSearch.similarToAll`, e l'esecutore di riferimento a forza bruta), il chip `Simili a` porta tutta la scelta (`SearchChip.Similar.more`, "Simili a 5 foto"),
+  l'azione "Trova simili" nella barra della selezione della Libreria (`LibraryCommands.canFindSimilar`, `findSimilar`), `SimilarRequests` porta una lista fino a Cerca.
+  **Mai nascosti:** un nascosto non entra nella query ne' nel chip e non esce dai risultati (la sonda `search` del registro `HiddenSurfaces` e' estesa a tutte le
+  selezioni). **Media senza vettore:** lasciati fuori e `SearchNotice.SimilarWithoutVectors` lo dice in Cerca ("2 foto della scelta non sono ancora state analizzate:
+  la ricerca usa le altre"); se nessuno ha un vettore la ricerca non parte e la Libreria lo spiega. Prove: `SimilarSelectionTest` (parita' con il riferimento, un media solo =
+  "Trova simili" di sempre, nascosti, tetto), `SearchControllerTest`, `SearchScreenUiTest`, `LibraryActionNoticeTest`, `SearchSelectionSimilarTest`, `HiddenSurfaces*`.
 
 #### TS-5 · Il chip "Simili a" mostra un'icona al posto della miniatura
 - **Gravità:** Minore. **Stato:** plausibile (agente di Cerca; provare con un media non in cache e con un solo-NAS).

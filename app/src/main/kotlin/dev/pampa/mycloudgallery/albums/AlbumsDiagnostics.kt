@@ -101,6 +101,10 @@ class AlbumsDiagnostics(private val graph: AlbumsGraph) : DiagnosticsContributor
     // dell'ultima notte).
     if (f.tripsSearched && !f.tripsHomeKnown) items += item(DiagCodes.TRIP_NO_GPS, DiagSeverity.INFO, emptyMap())
     if (f.projectionPending > 0) items += count(DiagCodes.ALBUM_PROJECTION_PENDING, f.projectionPending)
+    // R22 (pacchetti A e B): i registri della condivisione che non si leggono, i contributi tenuti da parte, la pausa «catalogo» della porta di completamento.
+    if (f.unreadableRegisters > 0) items += count(DiagCodes.ALBUM_REGISTRY_UNREADABLE, f.unreadableRegisters)
+    if (f.heldContributions > 0) items += count(DiagCodes.ALBUM_CONTRIB_HELD, f.heldContributions)
+    f.pausedCatalog?.let { items += count(DiagCodes.SHARE_PAUSED_CATALOG, it) }
     return items
   }
 
@@ -152,4 +156,13 @@ internal data class AlbumsFacts(
   /** Gli smart con una descrizione o delle foto d'esempio (che contano solo con la ricerca per contenuto pronta). */
   val described: Int = 0,
   val projectionPending: Int = 0,
+  /**
+   * Registri durevoli della condivisione (piani dei trasferimenti, caricamenti, richieste al guardiano) che non si sono potuti leggere. Il conto lo da' il codice del
+   * pacchetto A (`unreadable`): chi unisce i pacchetti lo collega in [AlbumsDiagnostics.facts]; finche' non e' collegato resta 0 e la riga non compare.
+   */
+  val unreadableRegisters: Int = 0,
+  /** Contributi che la replica tiene da parte (`ReplicaHold`, pacchetto A): stesso collegamento di [unreadableRegisters]. */
+  val heldContributions: Int = 0,
+  /** Condivisioni ferme perche' il catalogo non conosce ancora la destinazione (pausa «catalogo» della porta di completamento, pacchetto B); null = nessuna. */
+  val pausedCatalog: Int? = null,
 )

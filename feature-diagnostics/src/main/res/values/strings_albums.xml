@@ -37,4 +37,10 @@
   <string name="diag_utility_full_hash_guide">L’ultimo giro di «Controlla di notte i video del NAS»: quanti video guardati, messi in coda per la verifica completa e ritirati (con l’interruttore spento). Solo numeri.</string>
   <string name="diag_utility_signing_title">Firme dei Doppioni simili</string>
   <string name="diag_utility_signing_guide">L’ultimo giro che prepara gli scatti per cercare i doppioni simili: quanti firmati, quanti in attesa e quanti saltati. Solo numeri.</string>
+  <string name="diag_album_registry_unreadable_title">Registri della condivisione illeggibili</string>
+  <string name="diag_album_registry_unreadable_guide">Alcuni registri che l’app tiene sul telefono per le condivisioni in corso (piani, caricamenti, richieste al backup) non si sono potuti leggere. Le condivisioni interessate si fermano invece di ripartire da zero: ripeti l’operazione se non riprende. Solo un numero.</string>
+  <string name="diag_album_contrib_held_title">Contributi d’album tenuti da parte</string>
+  <string name="diag_album_contrib_held_guide">La lettura degli album condivisi ha tenuto da parte alcuni contributi di altri dispositivi invece di applicarli subito: li riprende al giro dopo. Se il numero non scende, apri la pagina dell’album e lascia finire la lettura del NAS. Solo un numero.</string>
+  <string name="diag_share_paused_catalog_title">Condivisione in pausa: aspetto il catalogo</string>
+  <string name="diag_share_paused_catalog_guide">Lo spostamento aspetta che il catalogo dell’app conosca il file nella nuova cartella prima di togliere l’originale. Riprende da solo; se resta così a lungo, lascia finire la scansione della Libreria.</string>
 </resources>

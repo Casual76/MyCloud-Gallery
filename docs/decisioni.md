@@ -8098,6 +8098,12 @@ famiglia); l'elenco vuoto con `Loading` mostra "in lettura", mai "Nessun album, 
 - R22: la sezione Album esporta `manual`, `smart`, `shared`, `openShares`, `contributions`, `syncIncomplete`, `roundErrors`, `searchReady`, `tripsSearched`,
   `tripsHomeKnown` e quelle dell'Utility (`enabled`, `scanned`, `withdrawn`, `signed`, `finished`) nell'elenco chiuso di `ExportKeys`. Sono numeri e segni; mai
   titoli, cartelle, luoghi, casa, coordinate o id. Un test passa dall'esportatore vero e controlla che ogni valore arrivi nel file.
+- Codici **preparati per gli altri pacchetti** (note del coordinatore, A, B, C finiti): `ALBUM_REGISTRY_UNREADABLE` (registri della condivisione illeggibili,
+  `unreadable`, pacchetto A), `ALBUM_CONTRIB_HELD` (contributi tenuti da parte, `ReplicaHold`, A), `SHARE_PAUSED_CATALOG` (la pausa «catalogo» della porta di
+  completamento, B) nella sezione Album, e `NAS_WRITES_STOP_NOT_SAVED` (l'emergenza «Ferma le scritture» che non si e' potuta salvare su disco, C, R11) nella sezione
+  del NAS. Ci sono nel contratto (`AlbumDiag`), nel catalogo con titolo e guida e, per i tre degli album, come campi di `AlbumsFacts` con la loro riga (`count`,
+  chiavi gia' nell'elenco chiuso). **Non sono collegati**: il codice che li produce non e' in questo ramo, quindi restano a zero finche' chi unisce non li collega in
+  `AlbumsDiagnostics.facts()` (e `NasLibraryDiagnostics` per l'ultimo).
 
 **I7, I8, I11.**
 - I7: `toString()` esplicito, senza dati, su `AlbumRuleEntity`, `AlbumItemEntity`, `AlbumExclusionEntity`, `AlbumSuggestionEntity` e
@@ -8111,5 +8117,10 @@ famiglia); l'elenco vuoto con `Loading` mostra "in lettura", mai "Nessun album, 
 - DG-3, "conteggio per motivo" (§2.8): il motivo di un rifiuto nasce in `NasSharedAlbumSync` (fiducia e replica: pacchetto A). Qui c'e' il conteggio durevole,
   non la divisione per motivo.
 - I8, controllo dell'account nella query dei Doppioni: pacchetto C.
+- **Tetto agli album smart con descrizione** (richiesta del pacchetto A, R19): non fatto. Non e' una voce DG o R22 e serve una scelta di prodotto: quanti smart con
+  descrizione o foto d'esempio (ognuno costa una ricerca per contenuto sull'intera Libreria) e cosa succede agli altri, quelli creati qui e quelli arrivati da un altro
+  dispositivo. Proposta: un tetto in `SmartLimits` applicato da `CatalogAlbums.create`/`setRules` (esito nuovo dell'editor) e da `SmartUpkeep` (gli smart oltre il
+  tetto non si valutano e `SMART_NO_SEARCH`/`SMART_TOO_BROAD` lo dicono). Oggi `SmartUpkeep` li accorpa a catalogo fermo da 2 minuti (AS-6), che limita la frequenza,
+  non il numero.
 - Nessuna prova sul telefono: il percorso con l'app chiusa (AA-1), la morte del processo (AA-3) e la ricerca per contenuto vera (AS-4, AS-6, DG-1) si provano
   solo li' (F88, F90, F92).

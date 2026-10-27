@@ -201,6 +201,9 @@ object DiagCodes {
   // di :app (`DiagnosticsWiringTest`) verifica l'uguaglianza, `Fase4ACatalogTest` qui la tabella e gli edge case.
   // Quelli del contributore di :app (`NasLibraryDiagnostics`): l'emergenza e le aree non raggiungibili.
   @JvmField val NAS_WRITES_STOPPED = DiagCode("NAS_WRITES_STOPPED")
+
+  // Revisione di fine Fase 7 (R11, pacchetto C): l'emergenza «Ferma le scritture» che non si e' potuta salvare su disco vale solo finche' l'app resta aperta.
+  @JvmField val NAS_WRITES_STOP_NOT_SAVED = DiagCode("NAS_WRITES_STOP_NOT_SAVED")
   @JvmField val NAS_AREA_UNREACHABLE = DiagCode("NAS_AREA_UNREACHABLE", setOf("E-L4"))
 
   // Scansione (NasMediaDiag).
@@ -316,6 +319,12 @@ object DiagCodes {
   // Revisione di fine Fase 7 (DG-2): la manutenzione dell'Utility (Doppioni), che girava senza lasciare traccia. Stessi id di `AlbumDiag`.
   @JvmField val UTILITY_FULL_HASH = DiagCode("UTILITY_FULL_HASH", setOf("E-U4"))
   @JvmField val UTILITY_SIGNING = DiagCode("UTILITY_SIGNING")
+
+  // Revisione di fine Fase 7 (R22, pacchetti A e B): i registri della condivisione illeggibili, i contributi tenuti da parte, la pausa «catalogo» della porta di
+  // completamento. Stessi id ed edge case di `AlbumDiag`.
+  @JvmField val ALBUM_REGISTRY_UNREADABLE = DiagCode("ALBUM_REGISTRY_UNREADABLE")
+  @JvmField val ALBUM_CONTRIB_HELD = DiagCode("ALBUM_CONTRIB_HELD")
+  @JvmField val SHARE_PAUSED_CATALOG = DiagCode("SHARE_PAUSED_CATALOG", setOf("C26"))
 
   // --- Le persone (Fase 8) -------------------------------------------------------------------------------------------
   // P0 aggiunge solo il codice di stato che tiene viva la sezione PEOPLE (un test vuole almeno una voce per sezione), come per ALBUMS nella

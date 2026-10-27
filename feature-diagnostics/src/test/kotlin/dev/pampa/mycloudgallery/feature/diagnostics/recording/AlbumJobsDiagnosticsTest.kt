@@ -73,4 +73,22 @@ class AlbumJobsDiagnosticsTest {
       assertThat(entry!!.section).isEqualTo(DiagSection.ALBUMS)
     }
   }
+
+  @Test
+  fun iCodiciPreparatiPerGliAltriPacchettiHannoVoceTitoloEGuida() {
+    // R22 (pacchetti A e B) e R11 (pacchetto C): i codici ci sono nel catalogo, nella sezione giusta, con testo; chi unisce i pacchetti li collega.
+    val expected = mapOf(
+      DiagCodes.ALBUM_REGISTRY_UNREADABLE to DiagSection.ALBUMS,
+      DiagCodes.ALBUM_CONTRIB_HELD to DiagSection.ALBUMS,
+      DiagCodes.SHARE_PAUSED_CATALOG to DiagSection.ALBUMS,
+      DiagCodes.NAS_WRITES_STOP_NOT_SAVED to DiagSection.NAS_LIBRARY,
+    )
+    for ((code, section) in expected) {
+      val entry = DiagCatalog.entry(code)
+      assertWithMessage("manca ${code.id} nel catalogo").that(entry).isNotNull()
+      assertThat(entry!!.section).isEqualTo(section)
+      assertThat(context.getString(entry.titleRes)).isNotEmpty()
+      assertThat(context.getString(entry.guideRes)).isNotEmpty()
+    }
+  }
 }

@@ -109,6 +109,21 @@ class AlbumsDiagnosticsRenderTest {
   }
 
   @Test
+  fun iNuoviConteggiDegliAlbumCondivisiHannoLaLoroRigaSoloQuandoCeQualcosaDaDire_R22() {
+    val quiet = render(busy.copy(unreadableRegisters = 0, heldContributions = 0, pausedCatalog = null)).ids()
+    assertThat(quiet).containsNoneOf("ALBUM_REGISTRY_UNREADABLE", "ALBUM_CONTRIB_HELD", "SHARE_PAUSED_CATALOG")
+
+    val items = render(busy.copy(unreadableRegisters = 2, heldContributions = 5, pausedCatalog = 1))
+    assertThat(items.ids()).containsAtLeast("ALBUM_REGISTRY_UNREADABLE", "ALBUM_CONTRIB_HELD", "SHARE_PAUSED_CATALOG")
+    assertThat(items.first { it.code.id == "ALBUM_REGISTRY_UNREADABLE" }.export["count"]).isEqualTo(ExportValue.Num(2))
+    assertThat(items.first { it.code.id == "ALBUM_CONTRIB_HELD" }.export["count"]).isEqualTo(ExportValue.Num(5))
+    assertThat(items.first { it.code.id == "SHARE_PAUSED_CATALOG" }.export["count"]).isEqualTo(ExportValue.Num(1))
+    // Solo numeri, chiavi dell'elenco chiuso, codici del catalogo.
+    assertThat(items.flatMap { it.export.keys }.distinct().filterNot(ExportKeys::isAllowed)).isEmpty()
+    assertThat(items.map { it.code }.filterNot { it in DiagCatalog }).isEmpty()
+  }
+
+  @Test
   fun primaDelMontaggioCeSoloLoStatoSpento() {
     val items = render(AlbumsFacts())
     assertThat(items.ids()).containsExactly("ALBUMS_STATE")

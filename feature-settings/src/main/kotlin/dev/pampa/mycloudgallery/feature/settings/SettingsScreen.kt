@@ -41,6 +41,9 @@ import dev.pampa.mycloudgallery.feature.settings.search.SearchEntryRow
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationRow
 import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationViewModel
+import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntryRow
+import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntrySummary
+import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharingEntryRow
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharingEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
@@ -83,6 +86,11 @@ class SettingsLinks(
    * (P11). Null = la voce non c'e'.
    */
   val openHidden: (() -> Unit)? = null,
+  /**
+   * Fase 8 (P7, D3): la voce "Persone" porta alla pagina Impostazioni -> Persone di feature-people, che le Impostazioni non conoscono (la callback la
+   * scrive `:app`). Null = la voce non c'e'.
+   */
+  val openPeople: (() -> Unit)? = null,
 ) {
   companion object {
     val None = SettingsLinks()
@@ -107,6 +115,8 @@ internal fun SettingsRoute(
   val motionAnimation by motionViewModel.enabled.collectAsStateWithLifecycle()
   val searchViewModel: dev.pampa.mycloudgallery.feature.settings.search.SearchEntryViewModel = hiltViewModel()
   val searchSummary by searchViewModel.summary.collectAsStateWithLifecycle()
+  val peopleViewModel: PeopleEntryViewModel = hiltViewModel()
+  val peopleSummary by peopleViewModel.summary.collectAsStateWithLifecycle()
   SettingsScreen(
     state = state,
     onBack = onBack,
@@ -119,6 +129,7 @@ internal fun SettingsRoute(
     motionAnimation = motionAnimation,
     onMotionAnimation = motionViewModel::set,
     searchSummary = searchSummary,
+    peopleSummary = peopleSummary,
   )
 }
 
@@ -143,6 +154,7 @@ fun SettingsScreen(
   motionAnimation: Boolean? = null,
   onMotionAnimation: (Boolean) -> Unit = {},
   searchSummary: dev.pampa.mycloudgallery.feature.settings.search.SearchEntrySummary? = null,
+  peopleSummary: PeopleEntrySummary? = null,
 ) {
   val family = familyHero(state)
   FluidScreen(
@@ -228,6 +240,11 @@ fun SettingsScreen(
         links.openSearch?.let { openSearch ->
           FluidListDivider()
           SearchEntryRow(summary = searchSummary, onClick = openSearch)
+        }
+        // Fase 8 (P7, D3): "Persone" (stato su questo dispositivo), solo se `:app` ha scritto dove porta.
+        links.openPeople?.let { openPeople ->
+          FluidListDivider()
+          PeopleEntryRow(summary = peopleSummary, onClick = openPeople)
         }
       }
     }

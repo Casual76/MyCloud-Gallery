@@ -30,6 +30,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.After
@@ -165,5 +166,59 @@ class CollectionsWiringTest {
     layout.setHidden(CollectionSections.ALBUMS, true)
     assertThat(layout.hidden.value).doesNotContain(CollectionSections.ALBUMS)
     work.cancel()
+  }
+
+  /**
+   * RC-2: finche' una scelta non e' nel registro vale quella dell'utente (prima, appena il registro c'era, `order` diventava quello del registro, ancora
+   * vuoto, e la scelta tornava per un attimo l'ordine predefinito) e una consegna fallita (disco pieno) si ritenta, non resta persa fino alla scelta dopo.
+   */
+  @Test
+  fun unaSceltaNonConsegnataRestaQuellaDellUtenteEsiRitenta() = runBlocking<Unit> {
+    val stores = MutableStateFlow<PersonalStore?>(null)
+    val work = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val layout = AppCollectionsLayoutStore(stores, work, retryMs = 10L)
+    val mine = listOf(CollectionSections.UTILITY, CollectionSections.ALBUMS)
+    layout.setOrder(mine)
+    layout.setHidden(CollectionSections.TRIPS, true)
+    withTimeout(Attese.TETTO) { layout.order.first { it == mine } }
+    withTimeout(Attese.TETTO) { layout.hidden.first { it == setOf(CollectionSections.TRIPS) } }
+
+    val seenOrder = java.util.concurrent.CopyOnWriteArrayList<List<String>>()
+    val seenHidden = java.util.concurrent.CopyOnWriteArrayList<Set<String>>()
+    val orderWatcher = work.launch { layout.order.collect { seenOrder += it } }
+    val hiddenWatcher = work.launch { layout.hidden.collect { seenHidden += it } }
+
+    // Il registro compare ma rifiuta le prime scritture.
+    var nasNow = 1_760_000_000_000L
+    val flaky = FlakyPersonalStore(InMemoryPersonalStore(TrustIds.random(), nasNow = { nasNow++ }), failures = 3)
+    stores.value = flaky
+    val synced = SyncedCollectionsSettings(flaky, work)
+
+    // Alla fine la scelta e' nel registro: le consegne fallite si sono ritentate da sole.
+    withTimeout(Attese.TETTO) { synced.order.first { it == mine } }
+    withTimeout(Attese.TETTO) { synced.hidden.first { it == setOf(CollectionSections.TRIPS) } }
+    assertThat(flaky.attempts.get()).isAtLeast(4)
+
+    // E nel frattempo non e' mai tornato l'ordine predefinito, ne' la sezione nascosta e' riapparsa.
+    assertThat(layout.order.value).isEqualTo(mine)
+    assertThat(layout.hidden.value).containsExactly(CollectionSections.TRIPS)
+    assertThat(seenOrder.filter { it != mine }).isEmpty()
+    assertThat(seenHidden.filter { it != setOf(CollectionSections.TRIPS) }).isEmpty()
+    orderWatcher.cancel()
+    hiddenWatcher.cancel()
+    work.cancel()
+  }
+
+}
+
+/** Un registro che rifiuta le prime [failures] scritture (disco pieno) e poi funziona. */
+private class FlakyPersonalStore(private val inner: PersonalStore, failures: Int) : PersonalStore by inner {
+  private val left = java.util.concurrent.atomic.AtomicInteger(failures)
+  val attempts = java.util.concurrent.atomic.AtomicInteger()
+
+  override suspend fun set(key: dev.pampa.mycloudgallery.core.personal.contract.PersonalKey, value: dev.pampa.mycloudgallery.core.personal.contract.PersonalValue, fingerprint: dev.pampa.mycloudgallery.core.personal.contract.PersonalFingerprint?) {
+    attempts.incrementAndGet()
+    if (left.getAndDecrement() > 0) throw java.io.IOException("disco pieno")
+    inner.set(key, value, fingerprint)
   }
 }

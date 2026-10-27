@@ -35,7 +35,10 @@ internal class ChaosResult(
     appendLine("copertura per punto:")
     append(stats.coverageTable())
     val never = stats.neverHit()
-    if (never.isNotEmpty()) appendLine("punti dove nessun colpo e' scattato: " + never.joinToString { it.label })
+    if (never.isNotEmpty()) {
+      appendLine("punti dove nessun colpo e' scattato: " + never.joinToString { it.label })
+      if (Surface.ERASE_OPS in never) appendLine("  (la cancellazione sul NAS ha una porta a parte solo sul NAS finto: sul simulatore SMB e sul NAS vero e' fatta di richieste SMB come le altre, contate nelle chiamate al NAS)")
+    }
   }
 
   private fun percent(part: Int, total: Int): String = if (total == 0) "0%" else "%.0f%%".format(100.0 * part / total)

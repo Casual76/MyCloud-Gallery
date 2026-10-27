@@ -173,6 +173,6 @@ internal class ChaosStats {
     }
   }
 
-  /** Le superfici dove nessun colpo e' scattato mai (un banco che non colpisce un punto lo dice). */
-  fun neverHit(): List<Surface> = Surface.entries.filter { (firedBy[it] ?: 0) == 0 }
+  /** Le superfici dove nessun colpo e' scattato mai (un banco che non colpisce un punto lo dice). Il cambio di generazione e' un tipo di colpo, non un punto: non conta. */
+  fun neverHit(): List<Surface> = Surface.entries.filter { it != Surface.FLIP && (firedBy[it] ?: 0) == 0 }
 }

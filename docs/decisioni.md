@@ -10024,3 +10024,41 @@ Prima del `check.ps1`, sul codice dei commit, con tre mutazioni provvisorie (poi
 
 ### Commit (branch `debiti/27-10`)
 `5bcba657` (Doppioni simili con i vettori), `089613a9` (scenari album e volti), `a7ddc698` (ricalcolo dei luoghi), e quello che porta questa sezione finale.
+
+## Misure sull'S25 del 27/10 (F104 e benchmark, orchestratore)
+
+S25 `RFCY61FZDHW`, Android 17 (SDK 37), schermo a 120 Hz, codice di `main` a `c64f0b68`. I file grezzi stanno fuori dal repository
+(`MyCloud-Gallery-2-note-agenti\bench-s25-27-10\`, con le tracce Perfetto dell'avvio e del viewer).
+
+**F104, prove strumentate dei motori dei volti (`core-ai`, pacchetto `faces`): 28 su 28 passate**, nessuna saltata.
+
+| Misura | Valore |
+|---|---|
+| Parità con l'ONNX di P1 (90 immagini, 417 volti) | IoU minimo 0,99999; punti entro 0,0001 px; coseno minimo 0,9995 (soglia 0,999) |
+| Richiamo sulle composizioni | 295 su 299 volti fra 24 e 47 px; 105 su 105 da 48 px |
+| YuNet a 1024 (anteprima 1024x768) | p50 62 ms, p95 64 ms |
+| YuNet HQ a 4 tasselli (2048x1536) | p50 344 ms |
+| SFace per volto | p50 25 ms, p95 28 ms |
+| Foto al secondo (decodifica, YuNet, allineamento, SFace) | circa 8,8 (`facesPerSecond_suggerito` 8,80), stato termico 0 |
+| Avvio a freddo con prima corsa | YuNet 129 ms, SFace 93 ms |
+| PSS durante il lavoro | circa 348 MB |
+
+Da fare: `DeviceMeasures.facesPerSecond` dell'S25 a 8,8 (oggi la stima di P2), in un pacchetto di codice.
+
+**Benchmark (`:benchmark`, tre giri: il primo interrotto dal cavo USB dopo 11 prove su 20)**
+
+| Prova | Esito | Valore | Soglia o riferimento |
+|---|---|---|---|
+| Scorrimento della Libreria, 100.000 elementi, 8 viste | **ok** | fotogrammi a scatti 0,1–0,5% (mediana), al più 0,7% (Giorni, proporzioni) | ≤ 1% |
+| Pizzico fra i livelli | ok, al limite | 0,5% in mediana, 1,1% nel giro peggiore | ≤ 1% |
+| Memoria della Libreria | da confrontare | PSS circa 600 MB | soglie.json |
+| Avvio con la Libreria dal NAS | **ok** | p90 918 ms | < 1.000 ms |
+| Viewer dal NAS | **ok** | p90 20 ms | < 100 ms |
+| Viewer | **ok** | p90 17 ms (riferimento 21 ms) | < 100 ms |
+| **Avvio a freddo** | **FUORI SOGLIA** | **p90 1.342 ms** | < 1.000 ms; riferimento del 13/10 681 ms (+10% = 750) |
+| Zoom a 200 MP, ricerca (4 prove) | saltate | prerequisiti mancanti sul telefono (immagine grande, modelli della ricerca) | — |
+
+**Regressione dell'avvio a freddo (aperta, priorità alta).** Dal 13/10 (fine Fase 3) l'avvio con la Libreria visibile è quasi
+raddoppiato. Il piano (§4) chiede la timeline in meno di 1 s nel 90% degli avvii a freddo. Da indagare con le tracce salvate: lavoro
+delle Fasi 4–8 finito sul percorso critico dell'avvio (montaggi dei grafi, Persone e cancellazione creati all'avvio, modelli,
+replica, album). Va corretta prima della chiusura della Fase 8 e prima che la Fase 9 aggiunga altro all'avvio.

@@ -33,9 +33,22 @@ object AlbumDiag {
   val ALBUM_CONTRIB_HELD = DiagCode("ALBUM_CONTRIB_HELD")
   val SHARE_PAUSED_CATALOG = DiagCode("SHARE_PAUSED_CATALOG", setOf("C26"))
 
+  /**
+   * Correzioni F (decisione del 27/10 sui contatori del pacchetto A, R1, R2, R12, R19): le copie personali oltre il tetto per creatore, le riaperture rifiutate
+   * di album chiusi, le pubblicazioni non fatte perche' il mio contributo sul NAS non si rilegge, i miei segmenti ripubblicati, gli album e i riferimenti
+   * lasciati fuori dai tetti di lavoro. E gli smart in fila per il budget delle ricerche per contenuto (R19). Solo numeri.
+   */
+  val ALBUM_COPIES_CAPPED = DiagCode("ALBUM_COPIES_CAPPED")
+  val ALBUM_REOPEN_REFUSED = DiagCode("ALBUM_REOPEN_REFUSED")
+  val ALBUM_ADOPTION_REFUSED = DiagCode("ALBUM_ADOPTION_REFUSED")
+  val ALBUM_SEGMENTS_RESTORED = DiagCode("ALBUM_SEGMENTS_RESTORED")
+  val ALBUM_OVER_CAP = DiagCode("ALBUM_OVER_CAP")
+  val SMART_SEARCH_WAITING = DiagCode("SMART_SEARCH_WAITING")
+
   val ALL: List<DiagCode> = listOf(
     ALBUM_CONTRIB_REJECTED, ALBUM_ENTRY_DENIED, ALBUM_ITEM_UNATTESTED, SHARE_PAUSED_SPACE, SHARE_PAUSED_FROZEN, SHARE_WAITING_LOCKED,
     SHARE_SOURCE_CHANGED, SHARE_SAFE_COPY_QUEUED, SMART_TOO_BROAD, SMART_NO_SEARCH, TRIP_NO_GPS, ALBUM_PROJECTION_PENDING, UTILITY_FULL_HASH, UTILITY_SIGNING,
-    ALBUM_REGISTRY_UNREADABLE, ALBUM_CONTRIB_HELD, SHARE_PAUSED_CATALOG,
+    ALBUM_REGISTRY_UNREADABLE, ALBUM_CONTRIB_HELD, SHARE_PAUSED_CATALOG, ALBUM_COPIES_CAPPED, ALBUM_REOPEN_REFUSED, ALBUM_ADOPTION_REFUSED,
+    ALBUM_SEGMENTS_RESTORED, ALBUM_OVER_CAP, SMART_SEARCH_WAITING,
   )
 }

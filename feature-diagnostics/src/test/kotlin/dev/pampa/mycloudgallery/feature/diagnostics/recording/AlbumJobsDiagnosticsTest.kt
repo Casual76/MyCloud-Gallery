@@ -82,6 +82,13 @@ class AlbumJobsDiagnosticsTest {
       DiagCodes.ALBUM_CONTRIB_HELD to DiagSection.ALBUMS,
       DiagCodes.SHARE_PAUSED_CATALOG to DiagSection.ALBUMS,
       DiagCodes.NAS_WRITES_STOP_NOT_SAVED to DiagSection.NAS_LIBRARY,
+      // Correzioni F (27/10): i contatori del pacchetto A senza codice e gli smart in fila per il budget delle ricerche per contenuto.
+      DiagCodes.ALBUM_COPIES_CAPPED to DiagSection.ALBUMS,
+      DiagCodes.ALBUM_REOPEN_REFUSED to DiagSection.ALBUMS,
+      DiagCodes.ALBUM_ADOPTION_REFUSED to DiagSection.ALBUMS,
+      DiagCodes.ALBUM_SEGMENTS_RESTORED to DiagSection.ALBUMS,
+      DiagCodes.ALBUM_OVER_CAP to DiagSection.ALBUMS,
+      DiagCodes.SMART_SEARCH_WAITING to DiagSection.ALBUMS,
     )
     for ((code, section) in expected) {
       val entry = DiagCatalog.entry(code)

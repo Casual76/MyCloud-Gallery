@@ -326,6 +326,15 @@ object DiagCodes {
   @JvmField val ALBUM_CONTRIB_HELD = DiagCode("ALBUM_CONTRIB_HELD")
   @JvmField val SHARE_PAUSED_CATALOG = DiagCode("SHARE_PAUSED_CATALOG", setOf("C26"))
 
+  // Correzioni F (27/10): i contatori del pacchetto A senza codice (R1, R2, R12, R19) e gli smart in fila per il budget delle ricerche per contenuto. Stessi id
+  // di `AlbumDiag`. Solo numeri.
+  @JvmField val ALBUM_COPIES_CAPPED = DiagCode("ALBUM_COPIES_CAPPED")
+  @JvmField val ALBUM_REOPEN_REFUSED = DiagCode("ALBUM_REOPEN_REFUSED")
+  @JvmField val ALBUM_ADOPTION_REFUSED = DiagCode("ALBUM_ADOPTION_REFUSED")
+  @JvmField val ALBUM_SEGMENTS_RESTORED = DiagCode("ALBUM_SEGMENTS_RESTORED")
+  @JvmField val ALBUM_OVER_CAP = DiagCode("ALBUM_OVER_CAP")
+  @JvmField val SMART_SEARCH_WAITING = DiagCode("SMART_SEARCH_WAITING")
+
   // --- Le persone (Fase 8) -------------------------------------------------------------------------------------------
   // P0 aggiunge solo il codice di stato che tiene viva la sezione PEOPLE (un test vuole almeno una voce per sezione), come per ALBUMS nella
   // Fase 7. I codici del §2.10 di docs/fase8-progetto.md (FACES_*, PEOPLE_*: `FacesDiag` di core-faces) li aggiunge P13, con le chiavi

@@ -314,6 +314,12 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.ALBUM_REGISTRY_UNREADABLE, DiagSection.ALBUMS, DiagSeverity.WARNING, R.string.diag_album_registry_unreadable_title, R.string.diag_album_registry_unreadable_guide, null),
     DiagEntry(DiagCodes.ALBUM_CONTRIB_HELD, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_contrib_held_title, R.string.diag_album_contrib_held_guide, null),
     DiagEntry(DiagCodes.SHARE_PAUSED_CATALOG, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_share_paused_catalog_title, R.string.diag_share_paused_catalog_guide, null),
+    DiagEntry(DiagCodes.ALBUM_COPIES_CAPPED, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_copies_capped_title, R.string.diag_album_copies_capped_guide, null),
+    DiagEntry(DiagCodes.ALBUM_REOPEN_REFUSED, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_reopen_refused_title, R.string.diag_album_reopen_refused_guide, null),
+    DiagEntry(DiagCodes.ALBUM_ADOPTION_REFUSED, DiagSection.ALBUMS, DiagSeverity.WARNING, R.string.diag_album_adoption_refused_title, R.string.diag_album_adoption_refused_guide, null),
+    DiagEntry(DiagCodes.ALBUM_SEGMENTS_RESTORED, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_segments_restored_title, R.string.diag_album_segments_restored_guide, null),
+    DiagEntry(DiagCodes.ALBUM_OVER_CAP, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_album_over_cap_title, R.string.diag_album_over_cap_guide, null),
+    DiagEntry(DiagCodes.SMART_SEARCH_WAITING, DiagSection.ALBUMS, DiagSeverity.INFO, R.string.diag_smart_search_waiting_title, R.string.diag_smart_search_waiting_guide, null),
 
     // --- Le persone (Fase 8, P0: la voce di stato; i codici del §2.10 li aggiunge P13) -----------------------------------
     DiagEntry(DiagCodes.PEOPLE_STATE, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_people_state_title, R.string.diag_people_state_guide, null),

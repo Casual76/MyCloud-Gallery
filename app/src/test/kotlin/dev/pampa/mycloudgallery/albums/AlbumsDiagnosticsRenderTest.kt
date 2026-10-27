@@ -124,6 +124,33 @@ class AlbumsDiagnosticsRenderTest {
   }
 
   @Test
+  fun iContatoriDelPacchettoAeGliSmartInFilaHannoLaLoroRigaSoloNumeri_CorrezioniF() {
+    val quiet = render(busy).ids()
+    assertThat(quiet).containsNoneOf(
+      "ALBUM_COPIES_CAPPED", "ALBUM_REOPEN_REFUSED", "ALBUM_ADOPTION_REFUSED", "ALBUM_SEGMENTS_RESTORED", "ALBUM_OVER_CAP", "SMART_SEARCH_WAITING",
+    )
+
+    val items = render(
+      busy.copy(copiesCapped = 2, reopeningsRefused = 3, adoptionRefused = 4, segmentsRestored = 5, overCap = 6, smartSearchWaiting = 292, bytesRead = 123_456L),
+    )
+    val wanted = mapOf(
+      "ALBUM_COPIES_CAPPED" to 2L,
+      "ALBUM_REOPEN_REFUSED" to 3L,
+      "ALBUM_ADOPTION_REFUSED" to 4L,
+      "ALBUM_SEGMENTS_RESTORED" to 5L,
+      "ALBUM_OVER_CAP" to 6L,
+      "SMART_SEARCH_WAITING" to 292L,
+    )
+    for ((id, n) in wanted) assertThat(items.first { it.code.id == id }.export["count"]).isEqualTo(ExportValue.Num(n))
+    // I byte letti dall'ultimo giro stanno nello stato, accanto agli altri conti.
+    assertThat(items.first { it.code == DiagCodes.ALBUMS_STATE }.export["bytesRead"]).isEqualTo(ExportValue.Num(123_456L))
+    // Solo numeri, chiavi dell'elenco chiuso, codici del catalogo (con titolo e guida): nessuna chiave fuori elenco, nessun codice senza voce.
+    assertThat(items.flatMap { it.export.keys }.distinct().filterNot(ExportKeys::isAllowed)).isEmpty()
+    assertThat(items.map { it.code }.filterNot { it in DiagCatalog }).isEmpty()
+    assertThat(items.flatMap { it.export.values }.filterNot { it is ExportValue.Num || it is ExportValue.Flag }).isEmpty()
+  }
+
+  @Test
   fun primaDelMontaggioCeSoloLoStatoSpento() {
     val items = render(AlbumsFacts())
     assertThat(items.ids()).containsExactly("ALBUMS_STATE")

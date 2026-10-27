@@ -43,4 +43,16 @@
   <string name="diag_album_contrib_held_guide">La lettura degli album condivisi ha tenuto da parte alcuni contributi di altri dispositivi invece di applicarli subito: li riprende al giro dopo. Se il numero non scende, apri la pagina dell’album e lascia finire la lettura del NAS. Solo un numero.</string>
   <string name="diag_share_paused_catalog_title">Condivisione in pausa: aspetto il catalogo</string>
   <string name="diag_share_paused_catalog_guide">Lo spostamento aspetta che il catalogo dell’app conosca il file nella nuova cartella prima di togliere l’originale. Riprende da solo; se resta così a lungo, lascia finire la scansione della Libreria.</string>
+  <string name="diag_album_copies_capped_title">Copie di album chiusi non fatte</string>
+  <string name="diag_album_copies_capped_guide">Alcuni album condivisi chiusi non hanno ricevuto la copia personale perché chi li ha creati ne aveva già troppi: è un limite di sicurezza dell’app, non un guasto. Gli album restano com’erano. Solo un numero.</string>
+  <string name="diag_album_reopen_refused_title">Riaperture di album chiusi rifiutate</string>
+  <string name="diag_album_reopen_refused_guide">Dopo la chiusura di un album condiviso sono arrivate da un altro dispositivo voci che lo davano ancora attivo: l’app tiene l’album chiuso, come stabilito dalla chiusura. Il numero conta le volte, non gli album. Solo un numero.</string>
+  <string name="diag_album_adoption_refused_title">Pubblicazioni di album ferme</string>
+  <string name="diag_album_adoption_refused_guide">Il tuo contributo a un album condiviso, sul NAS, non si rilegge per intero (un file rovinato o tolto dal PC) e il telefono non ne ha una copia: l’app non pubblica altro per non far sparire le voci già pubblicate. Apri la pagina dell’album e lascia finire la lettura del NAS. Il numero conta i tentativi. Solo un numero.</string>
+  <string name="diag_album_segments_restored_title">Tuoi file d’album ripubblicati</string>
+  <string name="diag_album_segments_restored_guide">Alcuni file che l’app aveva pubblicato per i tuoi album condivisi non c’erano più sul NAS (tolti dal PC): l’app li ha ripubblicati uguali. Solo un numero.</string>
+  <string name="diag_album_over_cap_title">Album o elementi oltre i limiti di lavoro</string>
+  <string name="diag_album_over_cap_guide">Tra gli album personali arrivati da un altro dispositivo del tuo account, alcuni album o elementi sono oltre i limiti di lavoro dell’app (5.000 album, 20.000 elementi per album): non si mostrano, ma non si perdono. Solo un numero.</string>
+  <string name="diag_smart_search_waiting_title">Album smart in attesa del loro turno</string>
+  <string name="diag_smart_search_waiting_guide">Per non tenere il telefono occupato, l’app fa solo alcune ricerche per contenuto alla volta: gli album smart con una descrizione o delle foto d’esempio che non ci stanno aspettano il turno e si aggiornano un po’ più tardi, da soli. Niente da fare. Solo un numero.</string>
 </resources>

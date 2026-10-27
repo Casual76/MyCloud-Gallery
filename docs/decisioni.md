@@ -7366,6 +7366,18 @@ I `.tflite` entrano nell'APK senza compressione (come `magic_touch.tflite`: AGP 
 cartella e nessun file `.onnx` in tutto l'APK; controllo positivo: `assets/cutout/magic_touch.tflite` c'è. Provato **da solo sull'APK vero** (esito verde) e **su tre mutazioni** del catalogo (SHA-256 di YuNet cambiato di una cifra, dimensione
 di SFace più uno, asset con un altro nome): rosso ogni volta, con il motivo giusto. Un APK senza i modelli, o con un file diverso, fa fallire `check.ps1`.
 
+### Prove e `tools\check.ps1 -NoDaemon`
+- **Test nuovi o toccati**: `NoFaceModelSourcesInGitTest` (nuovo, 4: nessun `.onnx`, `.pyc`, ambiente Python o ritratto tracciato da git; in `tools/models/faces/` solo script e testo sotto i 256 KB;
+  `.tflite` solo negli asset di `core-ai`; le regole del `.gitignore`; `requirements.txt` con versioni e impronte; il controllo è provato su file veri in una cartella temporanea),
+  `BundledFaceModelsTest` (nuovo, 4: asset = catalogo, licenze e `NOTICE`, solo il necessario in `assets/faces/`, e **il gestore dei modelli che estrae e verifica i due file veri** da un'origine `Bundled`
+  senza rete), `ModelCatalogTest` (+2), `CatalogMatchesDesignTest` (+2: la tabella di questo documento contro il catalogo; le impronte degli ONNX di `fingerprints.json` contro il progetto),
+  `BundledModelTest` e `ModelWiringTest` (adeguati).
+- **Il test su git morde** (prova con violazioni vere, tolte subito): un `prova.onnx` aggiunto all'indice → rosso `nelRepositoryNonCiSonoOnnxAmbientiPythonNeRitratti`; la riga `*.onnx` tolta dal
+  `.gitignore` → rosso `ilGitignoreEscludeOnnxAmbientiERitratti`; senza violazioni verde. (La prova del passo D39 di `check.ps1` è sopra.)
+- **`tools\check.ps1 -NoDaemon`** (27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima): **verde, «OK: tutto a posto»**. `assembleDebug assembleRelease galleryTest galleryLint` in 17 minuti;
+  13.381 test eseguiti in 39 moduli, nessuno a zero e nessuno fallito (`core-models` 294, `core-ai` 253, `core-faces` 42, `feature-people` 7); il passo nuovo D39 verde; LiteRT solo in `core-ai` (stesso controllo di P0) verde; gli altri passi
+  come prima. Solo SKIP il banco su dispositivo (`-Bench`). APK di release: 88.401.029 B, come nella tabella sopra.
+
 ### Cosa trova pronto P2 (`core-ai/.../faces/`, `FaceLiteRtSessions`, `ModelInputs.forFaces`)
 - **Apertura**: `ModelFiles.open(ModelCatalog.FACE_YUNET.id)` e `open(ModelCatalog.FACE_SFACE.id)` (dopo `ensure` con `ModelCatalog.needed(ruoli, setOf(ModelFeature.FACES))`: il
   gestore estrae l'asset in `models/<sha256>` e ne verifica dimensione e SHA-256 a ogni apertura, come per MagicTouch). Due `Interpreter` di `litert` 2.3.0, CPU, 4 thread.

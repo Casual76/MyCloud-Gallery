@@ -9845,3 +9845,20 @@ Aggiunti, solo numeri: `ALBUM_COPIES_CAPPED` (`copiesCapped`: copie personali no
 - **Punto 6**: in Libreria scegliere 3-4 foto dello stesso soggetto e toccare «Trova simili» (si apre Cerca con il chip «Simili a 4 foto»); con una foto non ancora analizzata, l'avviso; una foto nascosta nella scelta: non compare.
 - **Punto 7**: Esporta e cercare le righe nuove nella sezione Album e `bytesRead` nello stato.
 - **Punto 8**: «Disattiva e cancella» con un telefono dismesso e non confermato: la riga dice cosa fare (il tasto «Apri Dispositivi» quando P13 lega la rotta); revocarlo e vedere la cancellazione chiudersi.
+
+### Verifica
+
+- **Rosso senza la modifica, verde con.** Controllo di mutazione fatto a mano: il budget che concede sempre rende rosse 6 prove su 10 di `ContentBudgetTest`; la ripresa senza `stopIfAlbumClosed` ne rende rosse 3 su 5 di `ShareCloseInFlightTest` (e i file si spostano dopo la chiusura). Le altre voci hanno API nuove (`trashReporting`, `similarToAll`, `onOpenDevices`, `dismissed`, i codici di Diagnostica): senza di esse le prove non compilano.
+- **Garanzie che restano verdi**: i banchi della condivisione (`ShareChaos*`, `AlbumsShareBenchAppTest`, tutto `core-albums`: 838 prove, 3 ignorate come prima), `ChaosBenchTest`, `ChaosMutationTest`, i test di fiducia e ostili di `core-trust`, il registro dei Nascosti (`HiddenSurfaces*`, con la sonda della ricerca estesa a tutte le selezioni), `Phase7ArchitectureTest`, `NoFixedWaitsTest` (le prove nuove usano `Attese`/`until` o il tempo virtuale di `runTest`) e le recinzioni D30 e D34 (passi di `check.ps1`).
+- **`tools\check.ps1 -NoDaemon` verde** (27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, posto `f7-rf` preso e rilasciato attorno a ogni comando Gradle): il passo di Gradle 874 s; 15.658 prove, nessuna fallita (`app` 1.023, `core-albums` 838, `core-search` 849, `core-faces` 567, `feature-albums` 578, `feature-library` 961, `feature-nas` 366, `feature-people` 609, `feature-search` 248, `feature-diagnostics` 331); lint; i controlli del dex e del manifest di release (D12, D30, D34). APK di release non firmato: 89.850.885 byte.
+- **Un primo giro del check era caduto sul lint di `feature-nas`** (un id di plurale dove il lint voleva una stringa, `ResourceType`): corretto con `UiNotice.counted` e rifatto il lint dei moduli toccati prima del giro intero.
+- **Un'instabilita' trovata e tolta dalla prova di `:app`**: `RevisioneEConfiniAppTest.sc1...` all'inizio dava esiti diversi a ogni giro, perche' il motore di `core-nasops` lavora un po' subito dopo l'avvio (0, 1 o 2 file spostati prima della chiusura secondo la velocita' del PC). Ora i due file sono tenuti aperti dal PC e l'esito «uno in viaggio e uno no» lo prova il banco (`ShareCloseInFlightTest`), che e' deterministico.
+
+### Punti aperti
+
+1. **Il legame di «Apri Dispositivi»** (`FacesEraseRoute(onOpenDevices = ...)`) con `SettingsDevicesRoute` e' di P13, che lega Persone in `:app` in parallelo. Finche' non c'e', la riga del dismesso dice cosa fare ma il tasto non compare.
+2. **Il foglio dei Doppioni simili** conta ancora le copie che il piano lascera' fuori (L152): l'avviso dopo il tocco dice la verita', il conto prima no.
+3. **«Trova simili» dalla selezione**: il centroide non somiglia a nessuno se le foto sono di soggetti diversi (tetto di 30, L251); se l'uso sul telefono lo chiede, l'alternativa e' l'unione dei vicini (una ricerca per media).
+4. **Il budget degli smart** non ha una corsia per la modifica dell'utente (L250): con centinaia di smart aspetta il suo turno. Si aggiunge in un punto solo (`ContentBudget.admit`) se serve.
+5. **Per chi unisce**: P13 tocca anche `FacesEraseRoute`, la Diagnostica e `AppNavHost.kt`; le mie modifiche in quei file sono aggiunte piccole (un parametro opzionale, codici nuovi nella sezione Album, il tipo di `findSimilar`).
+6. Niente e' stato provato su un dispositivo.

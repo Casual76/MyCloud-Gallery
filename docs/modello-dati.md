@@ -958,3 +958,180 @@ Libreria sintetica da 100.000 media (`BigLibrary`: 3 anni di giorni, 200 luoghi,
 | Indice (`version_id`, `location_type`) per i doppioni | Leggere le righe di tutte le versioni con piu' posizioni (telefono + NAS e' il caso comune: 271 ms su 100.000); una colonna derivata di conteggio (un altro derivato da tenere) |
 | `attachMoved` sposta la riga | Creare la posizione nuova e lasciare la vecchia (la sorgente in cestino resterebbe "presente" fino alla scansione: il media sembrerebbe al sicuro); `relocate` (non guarda l'altro media ne' l'hash) |
 | Replica senza chiavi esterne | Tabelle con chiavi esterne a `media` per gli elementi dei contributi: i `MediaId` dentro le voci sono di chi ha scritto, non i locali (D9) |
+
+## 15. Schema v1 del database dei volti (Fase 8: Persone)
+
+Progetto: `docs/fase8-progetto.md` D14, D15 (e D16, D20-D24, D29, E-F19, E-F35), §1.2 (`FacesArchive`, `FacesKeys`), §2.3-§2.5, §2.8, riga P6 del §4.4, §5.2, §6.1
+(C39); decisioni di P0 e di P6 in `docs/decisioni.md` ("Fase 8 P0", "Fase 8 P6"). Pacchetto P6. E' un **database a parte, uno per generazione**: il database della
+galleria **resta v6** (nessuna tabella condivisa, nessuna migrazione sul campo per chi non attiva Persone; lo prova `FacesSchemaTest`). Qui il file e la chiave, le tabelle, cosa
+e' cifrato e come, le operazioni dell'archivio, come si apre, si rifa' e si cancella, le misure.
+
+**Nessun valore nei log** (D37): chiavi di contenuto, riquadri, id di persone, autori, nomi, vettori e generazioni non escono da qui; i `toString()` delle entita' e dei tipi di
+questo paragrafo dicono solo di che tabella o che tipo sono; i file si nominano nei log con un'etichetta fissa (`faces-db`, `faces-key`).
+
+### 15.1 Il file e la chiave
+
+| Cosa | Dove | Note |
+|---|---|---|
+| Database | `faces-<G>.db` (+ `-wal`, `-shm`, `-journal`) in una cartella che sceglie chi lo costruisce (`FacesStores(directory, ...)`, di norma `noBackupFilesDir/faces/`) | un file per generazione `G` (base32, 26 caratteri); Room, **WAL**; **mai** `fallbackToDestructiveMigration`; fuori da qualunque backup e trasferimento fra telefoni |
+| Schema esportato | `core-database/schemas/dev.pampa.mycloudgallery.core.database.faces.FacesDatabase/1.json` | accanto a quelli di `GalleryDatabase` (`.../GalleryDatabase/1.json`..`6.json`, invariati) |
+| Chiave del Keystore | alias `mcg-faces-<G>` (AES-256-GCM, StrongBox se c'e', altrimenti TEE; **senza** autenticazione ne' telefono sbloccato) | `FacesKeyStore` (core-security); in release senza Keystore hardware la chiave non si crea e Persone non parte |
+| Chiave dati | 256 bit casuali, **avvolta** dalla chiave del Keystore in `<alias>.key` (di norma `noBackupFilesDir/faces-keys/`) | mai su disco in chiaro; in memoria solo mentre il negozio e' aperto; `FacesDataKey.close()` la azzera |
+
+Il file non sta in `databases/`: `FacesDatabase.build(context, file)` usa un contesto che mette i database nella cartella data (Room vuole un nome e lo cerca con
+`getDatabasePath`; un percorso assoluto come nome non funziona sulla JVM di Windows dei test). Un database di una versione futura (app tornata indietro) non si apre e **non si
+cancella** (`FacesDatabaseFiles.versionOf` lo guarda prima di Room).
+
+### 15.2 Tabelle
+
+I codici (`space`, `detector`, `source`, `tier`, `state`, `origin`, `kind`, `area`) sono `StableCode.code` di core-model, scritti come testo; una riga con un codice che questa
+versione non conosce (scritta da un'app piu' nuova) e' "non per me" e chi legge la salta. Le tabelle sono **riferimenti e numeri**: i valori sensibili stanno solo nelle colonne
+BLOB sigillate (§15.3).
+
+| Tabella | Chiave | Colonne | Note |
+|---|---|---|---|
+| `face_body` | `content_key`, `author` | `is_winner`, `space`, `detector`, `recipe`, `source`, `digest`, `face_count`, **`secret`** (BLOB sigillato) | un corpo `faces` per chiave di contenuto e dispositivo (§2.4). `is_winner`: il vincitore della chiave (ricetta piu' alta, poi autore minore, poi impronta minore: `FaceBody.winner`), rifatto **nella transazione che scrive il corpo**. Indice (`is_winner`, `space`, `content_key`): l'ingresso del raggruppamento senza ordinare |
+| `face` | `content_key`, `author`, `idx` | `frame`, `x0..y1` (1/65535), `score`, `tier`, `reasons`, `side_px`, `yaw`, `sharpness` | i volti **in chiaro** che le query chiedono senza decifrare (livello, riquadro). Chiave esterna sul corpo, **in cascata** |
+| `face_unsupported` | `content_key` | `recipe` | formato non decodificabile, con la ricetta piu' alta vista (non si abbassa) |
+| `group_state` | `id` (= 1) | `seq`, `base`, `unassigned_at_births` | i numeri dell'istantanea del raggruppamento (D21) |
+| `group_person` | `person_id` | `state`, `alias_of`, `born_seq`, `changed_seq` | persone dell'istantanea (§2.4): `active`, `merged` (con alias), `forgotten`. **Nessun nome** |
+| `group_exemplar` | `person_id`, `position` | `content_key`, `frame`, `face_index`, `body_digest` | al piu' 16 esemplari per persona, riferimenti a volti. Cascata sulla persona |
+| `group_assignment` | `content_key`, `frame`, `face_index`, `body_digest` | `loc_key`, `loc_frame` (NULL = quelli del riferimento), `x0..y1`, `person_id`, `score` (REAL), `origin` | le assegnazioni. Indice su `person_id`. Cascata sulla persona |
+| `people_record` | `subject`, `field` | `value`, **`sealed_value`**, `at_nas`, `author` | le voci `people` (nomi e correzioni, §2.4): l'ultima scrittura per chiave. Il campo `name` ha il testo **solo** in `sealed_value`; gli altri campi in `value`; `value` e `sealed_value` entrambi NULL = lapide. `at_nas` NULL = "da datare" |
+| `faces_head_mark` | `device_id` | `version`, `content_hash`, `registry_version`, `created_at` | l'anti-rollback e l'equivocazione delle teste (`HeadMark`, §2.4) per dispositivo |
+| `faces_outbox` | `entry_id` (AUTOINCREMENT), unico (`kind`, `ref`) | `kind` (`faces`, `snapshot`, `people`), `ref` | cosa c'e' da pubblicare: durevole, una voce sola per la stessa cosa |
+| `faces_unit_done` | `area`, `month`, `part` | `recipe`, `done_at_nas` | le unita' di lavoro finite (§2.3) |
+| `faces_meta` | `name` | `data` (BLOB) | valori di servizio; oggi `key_check` (§15.3) |
+
+La **galleria non e' toccata**: `GalleryDatabase` resta v6, il suo `6.json` ha la stessa impronta di prima della Fase 8 e i due database non hanno nessun nome di tabella in
+comune. Non ci sono i centroidi: `GroupingState` (contratto di P0) non li porta; quando P5 ne avra' bisogno saranno una colonna sigillata di `group_person`, e questo e' il
+motivo di una v2 (§15.10).
+
+### 15.3 Cosa e' cifrato, come, e cosa resta in chiaro
+
+**Cifrato** (D14, C39): i **vettori** (float16, 256 byte a volto), i **landmark** (cinque punti, geometria del volto: li aggiunge P6 per minimizzazione, C40) e i **nomi** delle
+persone. Mai i riquadri, i livelli, gli id, le chiavi di contenuto e le assegnazioni: servono alle query (meno di 50 ms senza decifrare) e non dicono chi e' una persona (L111).
+
+- **Un blocco per corpo** (`face_body.secret`): landmark e vettori di tutti i suoi volti, un'operazione AES-GCM per contenuto e non per volto. Formato in chiaro, big endian,
+  prima di sigillare: `versione (1) | N volti | N x [10 x 2 byte landmark | 1 byte "ha un vettore" | se 1: D x 2 byte float16]`. Autodescrittivo: chi lo legge lo confronta con le
+  righe `face` e scarta il corpo se non tornano.
+- **Un blocco per nome** (`people_record.sealed_value`): il testo UTF-8 del nome. Una riga `name` con il testo in chiaro non l'abbiamo scritta noi e non vale.
+- **Formato del blocco sigillato** (`FacesDataKey.seal`): `versione (1) | nonce (12 byte casuali) | testo cifrato + tag (n + 16)`, AES-256-GCM con la chiave dati. Nonce nuovo a
+  ogni cifratura. Il **`aad`** lega il blocco alla sua riga: per un corpo `contentKey|autore|impronta|ricetta|numero di volti`, per un nome `soggetto|campo`; un blocco spostato in
+  un'altra riga, o una colonna di metadati alterata, non si apre piu' (la riga si salta: il contenuto si rifa' o si riscarica).
+- **Controllo della chiave** (`faces_meta.key_check`): un testo noto sigillato alla creazione del database. All'apertura, se con la chiave di oggi non si apre, il database e' di
+  un'altra chiave (sparita e ricreata da altri) e **si rifa'** invece di fingere un archivio vuoto con righe che nessuno legge.
+- **Nessun vettore, landmark o nome in chiaro nel file**: `FacesStoreEncryptionTest` cerca nei byte di `faces-<G>.db`, `-wal` e `-shm` ogni valore seminato in ogni forma
+  (nomi in UTF-8 e UTF-16 LE/BE; vettori in float16 big e little endian e in float32; landmark) e prima si assicura, con un database in chiaro, che il cercatore li trovi.
+
+### 15.4 L'archivio (`FacesArchive` sul database)
+
+`DatabaseFacesArchive` (core-faces, `store/`) passa la stessa suite di contratto dell'archivio in memoria di P0 (`FacesArchiveContract`) e risponde come lui a ogni lettura dopo
+la stessa storia di scritture (`FacesStoreParityTest`, storie a caso). Le regole:
+
+| Operazione | Cosa fa |
+|---|---|
+| `saveBody` | **una transazione** (`FaceBodyDao.replaceBody`): cancella i volti del corpo che c'era per (chiave, autore), scrive il corpo sigillato e i volti, rifa' il vincitore. Idempotente; dopo una morte del processo un media gia' salvato non si rifa' |
+| `winners` | per le chiavi chieste (a gruppi da 500: SQLite di Android 8-10 accetta 999 variabili) i corpi con `is_winner`, i loro volti, i blocchi decifrati. Un corpo che non si apre, di una forma sconosciuta o con righe che non tornano **non si restituisce** (come se non ci fosse: si rifa' o si riscarica) |
+| `analyzed` | le chiavi con un corpo di ricetta >= `recipe` (di un autore qualunque) piu' i "non supportati" con ricetta >= `recipe`: dalle colonne in chiaro, senza decifrare |
+| `markUnsupported` | tiene la ricetta piu' alta vista |
+| `groupFaces` | i volti CORE e WEAK dei corpi vincenti nello spazio corrente, in ordine di chiave e indice, con i vettori in chiaro **solo in memoria**. La prima volta legge e decifra tutto; poi `GroupFaceCache` tiene i volti e rilegge solo i contenuti salvati nel frattempo (tetto 120.000 volti, ~65 MB; oltre, ogni chiamata rilegge) |
+| `unrecognizable` | i volti NONE del corpo vincente per chiave: dalle colonne in chiaro |
+| `grouping` / `saveGrouping` | l'istantanea si legge e si scrive **intera**: la scrittura sostituisce tutto in una transazione (la vecchia intera o la nuova intera, mai una a meta'); un'assegnazione a una persona che non c'e' fa fallire la scrittura e lascia la vecchia |
+| `people` / `addPeople` | l'ultima scrittura per chiave con `PeopleRecord.winner`, piu' due regole per le voci "da datare" (`at_nas` NULL): due voci entrambe da datare si **sostituiscono** (la nuova vince, qualunque sia il valore), e una voce **datata** che e' la stessa scelta (stessa modifica, stesso autore) di una da datare **la data** (senza, la voce da datare, che vince su tutte, non verrebbe mai datata). Una riga che non si apre o non si capisce si salta e si riscrive alla voce dopo |
+
+Un archivio **chiuso** (chiave distrutta, generazione cambiata, `FacesStore.close`) lancia `IllegalStateException` a ogni chiamata (chi chiama riconcilia, §2.8).
+
+### 15.5 Aprire, rifare, cancellare (`FacesStores`)
+
+`FacesStores(directory, databases, keys)` e' l'unica porta del database e della chiave per il resto dell'app (`Phase8ArchitectureTest`). `open(G)` risponde con un esito, mai
+un'eccezione per un caso previsto:
+
+| Situazione | Esito |
+|---|---|
+| generazione nuova (nessun file, nessuna chiave) | `Ready`: crea la chiave (`keys.create`), il file e il controllo della chiave |
+| file e chiave ci sono | `Ready` (lo stesso oggetto finche' e' aperto) |
+| **chiave sparita** (ripristino, aggiornamento del sistema: E-F19) con il file ancora li' | `Recovered(KEY_LOST)`: i dati sono illeggibili, si **cancellano**, il negozio e' nuovo e **vuoto**; chi riceve l'esito riscarica dal NAS o ricalcola e segnala `FACES_KEY_LOST`. Nessun crollo |
+| il Keystore **non risponde** (guasto passeggero) | `Unavailable(KEYSTORE)`: **niente si cancella**. Con chiavi che sanno dire come stanno (`FacesKeyProbe`, il Keystore vero) lo si distingue da "sparita"; senza (il fake di P0), tre risposte "nessuna chiave" di fila sono "sparita" |
+| il file e' di un'altra chiave (chiave ricreata da altri) | `Recovered(KEY_LOST)` (controllo della chiave) |
+| il file e' danneggiato | `Recovered(DATABASE_DAMAGED)`: la chiave resta, il file si rifa' |
+| il file e' di una versione piu' nuova | `Unavailable(NEWER_DATABASE)`: non si apre e non si cancella |
+| il file non si apre o non si toglie | `Unavailable(STORAGE)` |
+
+**Cancellazione come file** (`eraseLocal(G)`, D29 passo 6; `eraseAllExcept(keep)` per le generazioni non correnti, E-F33; `eraseEverything()` per l'azzeramento, E-F35): 1. il
+negozio aperto si **ritira** (da quel momento lancia); 2. **la chiave per prima** (`keys.destroy`: alias del Keystore, poi file avvolto); 3. si chiude il database e si azzera la
+chiave dati in memoria; 4. si tolgono `faces-<G>.db`, `-wal`, `-shm` e `-journal`, **uno per uno con la cancellazione verificata di `StateFiles`** (vera solo se il file non c'e'
+piu'; un file che non si toglie non ferma gli altri). `LocalErase(keyDestroyed, filesGone)`: finita solo se tutte e due sono vere, altrimenti si richiama (ogni passo e' idempotente).
+L'azzeramento distrugge **tutte** le chiavi prima di toccare un file.
+
+### 15.6 Segni, outbox e unita' fatte
+
+Tre piccoli magazzini nello stesso database, per P3 (pubblicazione e replica) e P4 (calcolo); spariscono con la generazione (§2.8: "la sua outbox sparisce con il database").
+
+| Magazzino | API (`store/`) | Regole |
+|---|---|---|
+| Segni delle teste | `FacesHeadMarks.get/all/record/forget` | `record` non abbassa mai il numero (risponde falso); uguale o piu' nuovo si'. L'equivocazione (stesso numero, altra impronta) la decide chi sincronizza |
+| Outbox | `FacesOutbox.stage/pending/count/acknowledge`, `stage(FacesChange)` | una voce per (`kind`, `ref`); rimettere in coda da' un id nuovo; `acknowledge` toglie solo cio' che e' stato letto (per id), una voce rimessa in coda nel frattempo resta; un `kind` sconosciuto resta e non si legge |
+| Unita' fatte | `FacesUnitsDone.markDone/isDone/done` | per `FacesResource.WorkUnit` e ricetta; una ricetta piu' vecchia non abbassa quella che c'e'; una ricetta nuova le rifa' |
+
+### 15.7 La chiave (`FacesKeyStore`, core-security)
+
+Implementa `FacesKeys` (contratto di P0) sopra l'`AndroidSecretKeyStore` delle credenziali, piu' `FacesKeyProbe` (`state(G)`: `USABLE`, `MISSING`, `UNUSABLE`, `UNAVAILABLE`).
+`create` e' idempotente e **non rifa'** una chiave che funziona (rifarla renderebbe illeggibili i dati); se c'e' solo meta' (alias senza file avvolto, o il contrario) la rifa' da
+zero; con un guasto passeggero risponde falso senza toccare niente; in release senza Keystore hardware non la crea. `open` non ha effetti. `destroy` toglie **prima** l'alias dal
+Keystore, **poi** il file avvolto, e dice vero solo se non resta ne' l'uno ne' l'altro; anche con il Keystore che non risponde il file avvolto si toglie (la chiave dati esiste solo
+li'). `destroyAll` toglie ogni alias `mcg-faces-*` e ogni file avvolto, anche orfani, e nessun'altra chiave. Il test strumentato con la chiave vera (`FacesKeyStoreInstrumentedTest`,
+`FacesStoreInstrumentedTest`) e' scritto e non eseguito (vedi "Fase 8 P6" in `docs/decisioni.md`).
+
+### 15.8 Invarianti e prove
+
+| Invariante | Prova |
+|---|---|
+| lo schema v1 e' esportato, coincide con quello che Room crea oggi e un database creato dal JSON con una riga per tabella si apre e si legge | `FacesSchemaTest` |
+| `GalleryDatabase` resta v6: `6.json` con la stessa impronta, nessuna v7, nessuna tabella in comune | `FacesSchemaTest.laV6DellaGalleriaRestaInvariata` |
+| chiavi esterne accese e in cascata; il giornale e' WAL e `FacesDatabaseFiles` conosce `-wal`, `-shm`, `-journal` | `FacesSchemaTest` |
+| il vincitore e' uno solo e segue `FaceBody.winner`; sostituire un corpo toglie i volti vecchi; una scrittura che fallisce non lascia un corpo senza volti; l'istantanea si sostituisce intera o per niente | `FacesDaoTest` |
+| l'archivio vero passa la suite di contratto di P0 e risponde come quello in memoria su storie a caso, anche dopo chiusura e riapertura | `FacesStoreContractTest`, `FacesStoreParityTest` |
+| **nessun vettore, landmark o nome in chiaro nel file** (anche nel `-wal`); il cercatore trova i valori in un database in chiaro | `FacesStoreEncryptionTest` |
+| **chiave distrutta = dati illeggibili** anche se il file resta; blocco spostato o alterato non si apre; un nome non si sposta in un'altra voce | `FacesStoreEncryptionTest` |
+| **chiave sparita = `FACES_KEY_LOST` senza crollo** (E-F19); un guasto passeggero non cancella; file danneggiato e versione futura | `FacesStoresTest` |
+| **cancellazione come file**: la chiave prima, poi `.db`, `-wal`, `-shm`; verificata; ripetibile; azzeramento con tutte le chiavi prima dei file | `FacesStoresTest` |
+| ogni tipo di voce `people` va e torna uguale, il nome non e' mai in chiaro, "da datare" | `FacesStoreStateTest` |
+| nessuna generazione, nome, chiave o percorso nei log | `FacesStoresTest`, `FacesKeyStoreTest` |
+| query su 20.000 volti in meno di 50 ms; piani senza `USE TEMP B-TREE` | `FacesDaoTest`, `FacesStorePerformanceTest` |
+| la chiave: contratto, avvolta, distruzione in ordine, sparita contro passeggero, nessun alias orfano | `FacesKeyStoreTest` (JVM), `FacesKeyStoreInstrumentedTest` (telefono) |
+
+### 15.9 Misure (JVM, Robolectric; il dispositivo si misura sul campo)
+
+Un database cifrato vero con **6.700 contenuti e 20.100 volti** (CORE, WEAK e NONE), 300 persone con 20.000 assegnazioni e 1.100 voci `people`. Mediana di cinque giri dopo due
+di riscaldamento (`FacesDaoTest`, `FacesStorePerformanceTest`).
+
+| Misura | Esito |
+|---|---|
+| **query per chiave su 20.000 volti**: gia' fatto (200 chiavi), non riconoscibili (200), vincitori di un'unita' (200 chiavi, con la decifratura), vincitori di una schermata (30), quanti corpi e volti | **0-4 ms** (tetto del requisito: 50 ms); al livello del solo database 1-4 ms |
+| piani | per chiave `SEARCH ... USING INDEX sqlite_autoindex_face_body_1`; ingresso del raggruppamento `USING INDEX index_face_body_is_winner_space_content_key (is_winner=? AND space=?)` senza `USE TEMP B-TREE`; volti `SEARCH face USING INDEX sqlite_autoindex_face_1` (anche dopo `ANALYZE`) |
+| `groupFaces` **la prima volta** dopo l'apertura (legge 6 MB di blocchi e 18.700 righe di volti, decifra e decodifica tutti i vettori) | **~450 ms** (lettura intera dei soli corpi 89 ms, dei volti 227 ms) |
+| `groupFaces` dalla seconda volta (in memoria, `GroupFaceCache`) | **0 ms** |
+| `groupFaces` dopo un'unita' di 200 contenuti rifatti (solo la lettura) | **7 ms** |
+| istantanea di 300 persone e 20.000 assegnazioni: scrittura intera / lettura intera | 139 ms / 85 ms |
+| 1.100 voci `people`: unione (ognuna con la sua lettura) / lettura intera con la decifratura dei nomi | 99 ms / 18 ms |
+| scrivere 6.700 contenuti (una transazione ciascuno, con la cifratura) | 1,9 s (0,29 ms l'uno) |
+
+Il requisito "query su 20.000 volti in meno di 50 ms" vale per tutte le query che l'app fa a ogni schermata e a ogni unita'. La lettura **intera** per il raggruppamento (tutti i
+vettori in chiaro) costa la prima volta circa 450 ms: sono 6 MB da leggere e decifrare, e il contratto (`groupFaces`) li vuole tutti; per questo la si fa **una volta** per negozio
+aperto e poi si rileggono solo i contenuti salvati (`GroupFaceCache`). Sul telefono si rimisura (L112 dice cosa resta in memoria).
+
+### 15.10 Scelte e scarti
+
+| Scelta | Alternative scartate e perche' |
+|---|---|
+| Un file per generazione, in `noBackupFilesDir` | Tabelle nel database della galleria (v7): una migrazione sul campo per una funzione che molti non attivano, e nessun modo di "cancellare un file" per verificare che non ci sia piu' (D15) |
+| Vettori e landmark di un corpo in **un blocco sigillato**; riquadro e livello in chiaro | Un blocco per volto (3 volte le operazioni AES, 3 nonce, lo stesso costo di lettura); tutto cifrato, riquadri compresi (ogni query per livello o per posto dovrebbe decifrare: da 3 ms a centinaia); tutto in un solo blocco per database (ogni lettura decifra tutto) |
+| Landmark cifrati (in piu' di D14) | Lasciarli in chiaro nelle righe `face`: sono geometria del volto e non servono a nessuna query (C40) |
+| `aad` legato alla riga e controllo della chiave nel database | Nessun `aad` (un blocco si sposterebbe in un'altra riga); nessun controllo (con la chiave ricreata da altri il database si aprirebbe "vuoto" con righe che nessuno legge) |
+| `is_winner` scritto nella transazione del corpo | Calcolare il vincitore a ogni lettura (una sottoquery correlata per riga, o una finestra: SQLite 3.22 di Android 10 non le ha); ricalcolare in memoria (ogni lettura del raggruppamento rilegge tutti gli autori) |
+| L'istantanea del raggruppamento riscritta intera | Una differenza riga per riga (leggere, confrontare, scrivere: 139 ms per 20.000 assegnazioni non lo giustificano; il custode scrive a fine unita') |
+| `GroupFaceCache` (vettori in memoria fino a 120.000 volti) | Rileggere e decifrare a ogni `groupFaces` (450 ms ogni unita'); una copia dei vettori in chiaro su disco (mai) |
+| Chiave dati avvolta in un file accanto al database | La chiave del Keystore che cifra direttamente ogni riga (un'operazione del Keystore per riga: ms l'una, StrongBox decine); la chiave dati dentro il database (non si aprirebbe senza averla) |
+| `FacesKeyProbe` (sparita contro non risponde) | Cancellare a ogni `open == null` (un guasto passeggero del Keystore farebbe perdere nomi che con la recinzione esistono solo qui); non cancellare mai (un database illeggibile per sempre) |
+| Nessuna colonna per i centroidi | Una colonna `centroid` inutilizzata: lo schema esportato la promette e nessuno la scrive. Quando P5 ne avra' bisogno e' una colonna sigillata di `group_person`, quindi una v2 con una migrazione vera (mai distruttiva) |

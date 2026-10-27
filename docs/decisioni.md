@@ -7760,3 +7760,94 @@ Tutti «Public domain» con «Copyrighted: False» nei metadati di Commons (ripr
 | `ritratto-34` | m03 | The Chess Game (Sofonisba Anguissola) 1555 (4096x3236px).jpg | 1920×1517 | 1.190.866 | `13bc561160ef…` |
 | `ritratto-35` | m04 | "The School of Athens" by Raffaello Sanzio da Urbino.jpg | 1920×1490 | 1.105.653 | `cf21c5c57264…` |
 | totale | | 35 ritratti | | 20.040.072 | |
+## Fase 8 P6: database dei volti e cifratura (28/10)
+
+Il pacchetto P6 della Fase 8 (`docs/fase8-progetto.md` D14, D15, §4.4 riga P6, §5.2, §6.1 C39). Consegna il database locale dei volti (schema v1, un file per generazione), l'archivio
+cifrato che passa la suite di contratto di P0, la chiave dei volti sul Keystore e la cancellazione locale "come file" con la chiave per prima. Branch `fase8/p6` da `main` (`c2ecc9e`) piu'
+`integra/28-10c` (per `StateFiles`, come chiede il brief). Commit: `3e616293` (database, schema v1, DAO), `8a234b88` (`FacesKeyStore`), `83465996` (archivio cifrato e negozio, `store/`) e
+quello dei documenti. Perimetro: `core-database/.../faces/**`, `core-faces/.../store/**`, `core-security/.../faces/**`, `docs/modello-dati.md` §15; piu' le dipendenze di prova di
+`core-faces/build.gradle` (Robolectric, test strumentati) e, nei documenti, `sicurezza.md` (L110-L114, C45-C48) e questa sezione. Nessun'altra riga di nessun altro pacchetto e nessuna
+tabella della galleria: **`GalleryDatabase` resta v6** (il suo `6.json` ha la stessa impronta, `FacesSchemaTest`).
+
+**Che cosa c'e'**
+- `core-database/.../faces/`: `FacesDatabase` (12 tabelle, `faces_meta` compresa; WAL, schema esportato in `schemas/dev.pampa.mycloudgallery.core.database.faces.FacesDatabase/1.json`), le entita' e i DAO
+  (`FaceBodyDao`, `FaceGroupingDao`, `PeopleRecordDao`, `FacesHeadMarkDao`, `FacesOutboxDao`, `FacesUnitDao`, `FacesMetaDao`), `FacesDatabaseFiles` (nomi dei file e dei compagni, versione
+  senza cancellare), `FacesDatabases.forContext` (l'apertura vera). Descrizione tabella per tabella: `docs/modello-dati.md` §15.
+- `core-security/.../faces/`: `FacesKeyStore` (la chiave dei volti: chiave dati AES-256 avvolta da `mcg-faces-<G>`), `AesGcmDataKey` (la `FacesDataKey` vera), `FacesKeyProbe`/`FacesKeyState`
+  (sparita contro non risponde).
+- `core-faces/.../store/`: `FacesStores` (apre, rifa', cancella), `FacesStore` (archivio, segni, outbox, unita'), `DatabaseFacesArchive` (il `FacesArchive` vero), `FaceSecrets` (il blocco
+  sigillato), `GroupFaceCache`, `GroupingTables`, `PeopleTables`, `PeopleEditCodec`, `FacesSyncState` (`FacesHeadMarks`, `FacesOutbox`, `FacesUnitsDone`).
+
+**Scelte** (le ragioni e gli scarti in `docs/modello-dati.md` §15.10)
+- **Cosa e' cifrato**: vettori, nomi (D14) e **anche i landmark** (geometria del volto: minimizzazione, C40; non servono a nessuna query). Riquadri, livelli, id, chiavi di contenuto e appartenenza ai
+  gruppi restano in chiaro per rispondere alle query senza decifrare: e' un limite dichiarato (L111). **Un blocco per corpo**, non per volto; `aad` legato alla riga; **controllo della chiave nel
+  database** (`faces_meta.key_check`) per riconoscere un file di un'altra chiave.
+- **Chiave dati avvolta, in un file** (`noBackupFilesDir/faces-keys/<alias>.key`): il Keystore fa un'operazione per apertura, non una per riga; la chiave che conta non esce dall'hardware.
+  Distruggere = alias del Keystore **per primo**, poi il file avvolto; vero solo se spariti tutti e due; anche con il Keystore che non risponde il file avvolto si toglie (la chiave dati esiste solo li').
+- **Chiave sparita (E-F19)**: `FacesStores.open` risponde `Recovered(KEY_LOST)` (con `FacesRecovery.diag = FACES_KEY_LOST`): i dati locali si **cancellano** e il negozio riparte nuovo e vuoto;
+  chi riceve l'esito riscarica dal NAS o ricalcola. Non si cancella per un guasto passeggero: con `FacesKeyProbe` (il Keystore vero) si distingue; senza (il fake di P0) servono tre risposte
+  "nessuna chiave" di fila. File danneggiato: `Recovered(DATABASE_DAMAGED)`; versione futura: `Unavailable(NEWER_DATABASE)`, non si apre e non si cancella.
+- **Cancellazione come file**: `FacesStores.eraseLocal(G)` ritira l'archivio, **distrugge la chiave**, chiude il database e toglie `faces-<G>.db`, `-wal`, `-shm`, `-journal` con `StateFiles.delete`
+  (cancellazione verificata); `LocalErase(keyDestroyed, filesGone)`, ripetibile. `eraseAllExcept(keep)` per le generazioni non correnti (E-F33), `eraseEverything()` per l'azzeramento (tutte le chiavi
+  prima di qualunque file, E-F35).
+- **Il database sta in `noBackupFilesDir`**, aperto con un contesto che mette i database in quella cartella (un percorso assoluto come nome non funziona sulla JVM di Windows dei test).
+- **`GroupFaceCache`**: `groupFaces` costa la prima volta ~450 ms (6 MB da leggere e decifrare); poi i vettori restano in memoria (fino a 120.000 volti, ~65 MB) e si rileggono solo i contenuti salvati
+  (7 ms per un'unita' di 200). E' il "cache in memoria" di D29 passo 6: `retire`/`close` lo azzerano. Limite L112.
+- **Voci `people` "da datare"** (`at_nas` NULL): due voci da datare della stessa chiave si **sostituiscono** (la nuova vince, qualunque sia il valore); una voce **datata** che e' la stessa scelta (stessa
+  modifica e stesso autore) di una da datare **la data**. Senza la seconda regola `PeopleRecord.winner` terrebbe la voce da datare (che vince su tutte) per sempre.
+- **Lo schema non ha i centroidi**: `GroupingState` non li porta; quando P5 ne avra' bisogno e' una colonna sigillata di `group_person`, quindi una v2 con una migrazione vera.
+
+**Prove e misure** (JVM, Robolectric)
+- `core-database`: `FacesSchemaTest` (9: schema esportato = quello di Room, una v1 con una riga per tabella, versione futura, v6 invariata, file e compagni, cascate, nessuna colonna sensibile in chiaro),
+  `FacesDaoTest` (9: vincitore, cascata, scrittura atomica, istantanea intera o niente, outbox, 20.000 volti con i piani).
+- `core-security`: `FacesKeyStoreTest` (14: contratto, chiave dati mai in chiaro, ordine della distruzione, sparita contro passeggero, nessun alias orfano, niente nei log).
+- `core-faces`: `FacesStoreContractTest` (7, la suite di P0 sull'archivio vero), `FacesStoreParityTest` (2, storie a caso contro l'archivio in memoria), `FacesStoreEncryptionTest` (5), `FacesStoresTest` (15),
+  `FacesStoreStateTest` (12), `FacesStorePerformanceTest` (2).
+- **Nessun vettore, landmark o nome in chiaro nel file**: il test cerca nei byte di `.db`, `-wal` e `-shm` ogni valore seminato in ogni forma e prima verifica, con un database in chiaro, che il cercatore li trovi.
+- **Misure** (6.700 contenuti, 20.100 volti): query per chiave (gia' fatto, non riconoscibili, vincitori di un'unita' con la decifratura, una schermata) **0-4 ms**; `groupFaces` la prima volta ~450 ms,
+  poi 0 ms, dopo 200 contenuti rifatti 7 ms; istantanea di 300 persone e 20.000 assegnazioni: scrittura 139 ms, lettura 85 ms; scrivere 6.700 contenuti 1,9 s. Il requisito "query su 20.000 volti in meno
+  di 50 ms" e' soddisfatto per tutte le query per chiave e per `groupFaces` a caldo; **la lettura intera a freddo non lo e'** (~450 ms, una volta per negozio aperto): sul telefono si rimisura.
+
+**Come lanciare il test strumentato** (scritto, **non eseguito**: nessun telefono). Con l'S25 collegato e lo sblocco fatto:
+```
+gradlew :core-security:connectedDebugAndroidTest --tests "*FacesKeyStoreInstrumentedTest"
+gradlew :core-faces:connectedDebugAndroidTest --tests "*FacesStoreInstrumentedTest"
+```
+Il primo fa girare `FacesKeysContract` sul Keystore vero e controlla che la chiave che avvolge sia in hardware (StrongBox o TEE), non estraibile e senza autenticazione; il secondo apre l'archivio
+con la chiave vera, rilegge i valori, cerca nei byte del file (anche il `-wal`) i valori seminati, distrugge la chiave e verifica che il file non si legga piu' e che il negozio riparta vuoto, toglie
+l'alias dal Keystore a mano (come un ripristino) e verifica la cancellazione. Girano nel processo del test (un'altra UID dell'app vera): non toccano le chiavi dell'app. Compilano
+(`:core-faces:compileDebugAndroidTestKotlin`, `:core-security:compileDebugAndroidTestKotlin` sono verdi).
+
+**`tools\check.ps1 -NoDaemon`**: **verde** ("OK: tutto a posto", 28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, sul commit `4f20314f`): assembleDebug, assembleRelease, galleryTest e galleryLint in 41 minuti; test eseguiti in ogni
+modulo (`core-faces` 85, `core-database` 268, `core-security` 173, `feature-people` 7; nessuno a zero, nessuno fallito); nessuna classe `testing` nel dex di release (`:app` non lega ancora
+niente di P6: lo fa P13); D34 nel dex e in mapping.txt; LiteRT nel bytecode: 24 chiamate nostre, tutte da `core-ai`. Solo SKIP il banco su dispositivo (-Bench).
+
+**Cosa trovano pronto i pacchetti dopo**
+- **P3** (sync/): `FacesStore.headMarks` (`record` non abbassa mai il numero), `FacesStore.outbox` (`stage(FacesChange)`, `pending`, `acknowledge`), l'archivio (`saveBody`, `winners`, `grouping`, `saveGrouping`,
+  `people`, `addPeople` con la regola di "datare") e `PeopleEditCodec` (da testo a `PeopleEdit`, interno al modulo: P3 puo' usarlo o scrivere il suo). Per **datare** una voce `people` dopo la pubblicazione:
+  `addPeople` con la stessa modifica e lo stesso autore e l'ora del NAS.
+- **P4** (compute/): `FacesStore.archive` per il salvataggio **subito** (una transazione per contenuto), `analyzed`/`markUnsupported`, `FacesStore.units` (`markDone`/`isDone`/`done`), `outbox.stage`.
+  Ottenere il negozio: `FacesStores.open(G)`; se risponde `Recovered(KEY_LOST)` il calcolo riparte da zero e va segnalato `FACES_KEY_LOST`; `Unavailable` = aspettare, non e' un errore.
+- **P8** (erase/): `FacesStores.eraseLocal(G)` fa il passo 6 (chiave per prima, poi file, verificato); `LocalErase.done` dice se ripetere; `generationsOnDisk()`/`hasFiles(G)` per l'invariante 1 del §2.8
+  ("nessun file `faces-<G>.db*`"); `eraseAllExcept(current)` per `reconcile`. P8 non nomina il database: lo fa il negozio. Prima di `eraseLocal` P8 fa gli album e la cronologia, che servono i nomi
+  (che si leggono con `archive.people()`).
+- **P9** (people/): `FacesStore.archive.people()` e `addPeople` (le voci "da datare" si sostituiscono), `grouping()`, `unrecognizable`, `winners`.
+- **P13** (:app): `FacesStores(File(context.noBackupFilesDir, FacesStores.DIRECTORY), FacesDatabases.forContext(context), FacesKeyStore.forContext(context, allowSoftwareKey = BuildConfig.DEBUG))`,
+  **un solo `FacesStores` per processo** (la memoria dei volti e' per negozio: due oggetti sullo stesso file si vedrebbero scrivere solo al riavvio) e **senza avvolgere** `FacesKeyStore` in un altro tipo
+  (si perde `FacesKeyProbe`: `FacesStores` ripiega su tre tentativi). Per l'azzeramento (E-F35, fase 3 con le credenziali): `FacesStores.eraseEverything()`.
+
+**Modifiche ai contratti**
+- **Nessun contratto di P0 e' cambiato** (`FacesArchive`, `FacesKeys`, `FacesDataKey`, `FacesKeyAliases`, la suite `FacesArchiveContract` e `FacesKeysContract` sono quelli di P0).
+- **Aggiunte**: `FacesKeyProbe` e `FacesKeyState` (core-security), `FacesStores`, `FacesStore`, `FacesStoreOpen`, `FacesRecovery`, `FacesUnavailable`, `LocalErase`, `FacesHeadMarks`, `FacesOutbox`/`OutboxKind`/`OutboxEntry`,
+  `FacesUnitsDone` (core-faces, `store/`); `FacesDatabase`, `FacesDatabases`, `FacesDatabaseFiles` (core-database).
+- **Richieste agli altri**: (1) `InMemoryFacesArchive.addPeople` (P0) non data una voce da datare con la voce datata della stessa scelta e non sostituisce due voci da datare di valore "minore": l'archivio
+  vero lo fa (§15.4); se P9 o P3 vogliono la parita' con il fake, va allineato il fake (non e' del mio perimetro) e `PeopleRecord.winner` documentato; (2) `FakeFacesKeys` (P0) non e' un `FacesKeyProbe`: i banchi
+  di P8 e P12 che simulano la chiave sparita con `lose()` funzionano (tre risposte "nessuna chiave"), ma un guasto passeggero indistinguibile da una chiave sparita lo vedono solo con il Keystore vero;
+  se serve, il fake puo' implementare `FacesKeyProbe`; (3) `GroupingState`/`GroupPerson` non portano i centroidi di D14: vedi "Punti aperti".
+
+**Punti aperti**
+- **Centroidi** (D14 li cifra): il contratto `GroupingState` non li ha, quindi lo schema v1 non ha una colonna; quando P5 li aggiunge serve una v2 (`group_person.centroid` sigillato) con una migrazione.
+- **Prova sul telefono con la chiave vera**: scritta, non eseguita (sopra). Resta anche da misurare sul telefono la lettura intera a freddo (~450 ms sulla JVM).
+- **Memoria dei vettori** (`GroupFaceCache`): ~0,55 KB a volto; il tetto e' 120.000 volti (~65 MB). Se P5 li tiene gia' per conto suo si puo' abbassare o togliere la memoria qui.
+- **Eccezioni dell'archivio**: un database pieno o un errore di disco a meta' di `saveBody` esce come eccezione di SQLite (non e' un caso previsto dal contratto): P4 la deve prendere come un errore del media.
+- **Integrazione**: in `docs/sicurezza.md` qui L110-L114 seguono L103 e C45-C48 seguono C41; all'integrazione con gli altri pacchetti si tengono tutte in ordine di numero (come per P0).

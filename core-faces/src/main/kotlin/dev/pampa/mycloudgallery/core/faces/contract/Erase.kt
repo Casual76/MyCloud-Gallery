@@ -137,6 +137,12 @@ sealed interface EraseStart {
 
   /** Persone non e' attiva per l'account: niente da cancellare. */
   data object NothingToErase : EraseStart
+
+  /**
+   * P8 (aggiunta al contratto di P0): il diario non si e' potuto scrivere (disco pieno, file bloccato). Senza diario non parte niente: nessun
+   * dato e' stato toccato, il foglio dice "Non e' stato possibile iniziare" e si riprova.
+   */
+  data object Unavailable : EraseStart
 }
 
 /** Il resoconto di una ripresa (solo numeri e codici). */

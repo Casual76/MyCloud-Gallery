@@ -2,12 +2,19 @@ package dev.pampa.mycloudgallery.core.nasops.p12
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.nas.testing.NasContent
 import dev.pampa.mycloudgallery.core.nasops.clean.OwnFilesCleaner
+import dev.pampa.mycloudgallery.core.nasops.contract.FacesCurrent
+import dev.pampa.mycloudgallery.core.nasops.contract.FacesEraseFacts
+import dev.pampa.mycloudgallery.core.nasops.contract.FacesEraseReason
+import dev.pampa.mycloudgallery.core.nasops.contract.FacesEraseStop
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderState
 import dev.pampa.mycloudgallery.core.nasops.contract.NasTrashState
 import dev.pampa.mycloudgallery.core.nasops.contract.OpState
 import dev.pampa.mycloudgallery.core.nasops.engine.NasOpsLock
+import dev.pampa.mycloudgallery.core.nasops.faces.FacesOwnFilesCleaner
+import dev.pampa.mycloudgallery.core.nasops.faces.NasFacesEraser
 import dev.pampa.mycloudgallery.core.nasops.testing.FakeOpClocks
 import dev.pampa.mycloudgallery.core.nasops.testing.KitEngine
 import dev.pampa.mycloudgallery.core.nasops.testing.NasOpsTestKit
@@ -30,10 +37,13 @@ import org.junit.Test
  *
  * 1. **Nel codice**: il diario nasce solo da `start` (con la conferma) e le voci del cestino solo dall'esecuzione di un elemento del
  *    diario; l'esecuzione, la pulizia del cestino e quella dei propri file non nominano mai i record letti dal NAS; le primitive
- *    distruttive si chiamano solo dall'esecuzione, dall'eliminazione del proprio cestino e dalla pulizia dei propri file.
+ *    distruttive si chiamano solo dall'esecuzione, dall'eliminazione del proprio cestino e dalla pulizia dei propri file. Fase 8 (P8, D31):
+ *    l'unica eccezione dichiarata sono i dati dei volti dell'account, e solo `deleteIfUnchanged`, solo da `faces/NasFacesEraser.kt` e
+ *    `faces/FacesOwnFilesCleaner.kt` (il cammino stretto di `faces/<G>/`).
  * 2. **Sui dati**: un NAS pieno di contenuti ostili (record falsi e firmati da altri, finti cestini, teste e segmenti piantati, nomi
  *    strani, prenotazioni, temporanei altrui) attraversato da **tutti** gli ingressi automatici (ripresa dal diario vuoto, scadenza del
- *    cestino dopo un anno, pulizia dei propri file, "Eliminati di recente", Cartelle NAS, Spazio NAS) resta identico byte per byte.
+ *    cestino dopo un anno, pulizia dei propri file, "Eliminati di recente", Cartelle NAS, Spazio NAS; dalla Fase 8 anche la pulizia dei
+ *    propri file dei volti e la cancellazione stretta dei volti, con file dei volti piantati) resta identico byte per byte.
  */
 class NoRemoteDataToActionTest {
 
@@ -85,8 +95,11 @@ class NoRemoteDataToActionTest {
       "openTemp" to Regex("""\bfileOps\.openTemp\("""),
     )
     val allowed = setOf("engine/NasOpsEngine.kt", "trash/OwnTrashPurger.kt", "clean/OwnFilesCleaner.kt")
+    // Fase 8 (P8, D31): i dati dei volti dell'account si tolgono solo con un handle (deleteIfUnchanged), e solo da questi due file.
+    val faces = setOf("faces/NasFacesEraser.kt", "faces/FacesOwnFilesCleaner.kt")
     for ((name, pattern) in destructive) {
-      assertWithMessage(name).that(users(pattern) - allowed).isEmpty()
+      val ok = if (name == "deleteIfUnchanged") allowed + faces else allowed
+      assertWithMessage(name).that(users(pattern) - ok).isEmpty()
     }
     // La pulizia dei propri file elimina solo con un handle (dimensione appena vista), mai rinomine o temporanei altrui.
     assertThat(users(Regex("""\bfileOps\.(rename|trashMove|publishTemp|copyToTemp|openTemp)\(""")) - setOf("engine/NasOpsEngine.kt")).isEmpty()
@@ -133,6 +146,28 @@ class NoRemoteDataToActionTest {
     }
   }
 
+  /**
+   * Fase 8 (P8): file dei volti piantati sotto `faces/<G>/` dell'area privata (teste e segmenti "miei" e dell'altro, prenotazioni, nomi
+   * strani), tutti con byte a caso: nessuno e' firmato da me.
+   */
+  private fun hostileFaces(kit: NasOpsTestKit, random: Random, g: FaceGeneration) {
+    val me = kit.deviceId
+    val them = other.deviceId()
+    for (owner in listOf(me, them)) {
+      kit.nas.putFile("test", NasLayout.facesHead(g, owner, 1L + random.nextInt(9)).value, NasContent.of(random.nextBytes(30)), modifiedAt = 0L)
+      kit.nas.putFile("test", NasLayout.facesSegment(g, owner, Base32.encode(random.nextBytes(32))).value, NasContent.of(random.nextBytes(30)), modifiedAt = 0L)
+      kit.nas.putFile("test", NasLayout.facesSegmentDir(g, owner).value + "/strano.jpg", NasContent.of(random.nextBytes(30)), modifiedAt = 0L)
+    }
+    kit.nas.putFile("test", NasLayout.facesLeaseFile(g, "compute", 1L + random.nextInt(9)).value, NasContent.of(random.nextBytes(30)), modifiedAt = 0L)
+    kit.nas.putFile("test-comune", NasLayout.facesHead(g, them, 1L).value, NasContent.of(random.nextBytes(30)), modifiedAt = 0L)
+  }
+
+  private class Facts(private val current: FacesCurrent) : FacesEraseFacts {
+    override suspend fun current(): FacesCurrent = current
+
+    override suspend fun revokedOrLost(deviceId: String): Boolean = false
+  }
+
   private fun everything(kit: NasOpsTestKit): Map<String, List<Byte>> =
     listOf("test", "test-comune").flatMap { share -> kit.filesIn(share).map { "$share/$it" to kit.bytes(share, it)!!.toList() } }.toMap()
 
@@ -141,6 +176,8 @@ class NoRemoteDataToActionTest {
     for (seed in 1..25) {
       val kit = NasOpsTestKit(deviceId = device.deviceId(), engine = KitEngine.PRODUCTION, signing = family.identity(device))
       hostile(kit, Random(seed))
+      val g = FaceGeneration.fromBytes(Random(seed).nextBytes(16))
+      hostileFaces(kit, Random(seed), g)
       val before = everything(kit)
       kit.advance(400L * 86_400_000)
       // Ripresa dal diario (vuoto): niente da fare.
@@ -158,6 +195,22 @@ class NoRemoteDataToActionTest {
       // Pulizia dei propri file: nessuna testa ne' segmento proprio vero, nessun temporaneo proprio.
       OwnFilesCleaner(kit.deviceId, kit.accountId, kit.fileOps, kit.nas.reader, kit.store, kit.clocks, kit.gate, NasOpsLock(), { family.state })
         .clean(listOf("test", "test-comune"), 1.minutes)
+      // Fase 8 (P8, D31): la pulizia dei propri file dei volti (niente e' firmato da me) e la cancellazione stretta: con lo stato che non
+      // si sa niente; la generazione corrente mai, ne' come "non corrente" ne' per un dispositivo non revocato; mai l'area comune.
+      val current = Facts(FacesCurrent.Known(g))
+      FacesOwnFilesCleaner(
+        kit.deviceId, kit.accountId, kit.fileOps, kit.nas.reader, current, { family.state }, { emptySet() }, { "test" }, { "test-comune" },
+        { null }, kit.clocks,
+      ).clean(listOf("test", "test-comune"), 1.minutes)
+      val unsure = NasFacesEraser(kit.fileOps, kit.nas.reader, Facts(FacesCurrent.Unknown), { "test" }, { "test-comune" }, { null }, kit.clocks)
+      assertThat(unsure.eraseGeneration("test", g, FacesEraseReason.NOT_CURRENT, 1.minutes).stoppedBy).isEqualTo(FacesEraseStop.UNSURE)
+      val strict = NasFacesEraser(kit.fileOps, kit.nas.reader, current, { "test" }, { "test-comune" }, { null }, kit.clocks)
+      for (reason in FacesEraseReason.entries) {
+        assertWithMessage("seme $seed: $reason").that(strict.eraseGeneration("test", g, reason, 1.minutes).stoppedBy).isEqualTo(FacesEraseStop.NOT_ALLOWED)
+        assertWithMessage("seme $seed: $reason").that(strict.eraseDevice("test", g, other.deviceId(), reason, 1.minutes).stoppedBy).isEqualTo(FacesEraseStop.NOT_ALLOWED)
+      }
+      val elsewhere = FaceGeneration.fromBytes(ByteArray(16) { 1 })
+      assertThat(strict.eraseGeneration("test-comune", elsewhere, FacesEraseReason.USER_CONFIRMED, 1.minutes).stoppedBy).isEqualTo(FacesEraseStop.NOT_PRIVATE_AREA)
       // Cartelle NAS e Spazio NAS: solo lettura.
       kit.folders.observe("test", SharePath.parse("Foto")).first { it !is NasFolderState.Loading }
       kit.space.load("test")

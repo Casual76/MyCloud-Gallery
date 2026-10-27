@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.ShareRunner
 import dev.pampa.mycloudgallery.core.albums.contract.ShareStartOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.ShareWait
 import dev.pampa.mycloudgallery.core.albums.contract.ShareFolder
+import dev.pampa.mycloudgallery.core.albums.contract.SharedState
 import dev.pampa.mycloudgallery.core.albums.contract.TransferKey
 import dev.pampa.mycloudgallery.core.albums.contract.TransferTicket
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
@@ -189,6 +190,8 @@ class ShareOrchestrator(
       }
       ops++
       seen[op.id] = op
+      // Correzioni F (L231): se l'album e' stato chiuso (da me o da un altro dispositivo) cio' che non e' ancora partito non parte piu'.
+      stopIfAlbumClosed(op)
       steps.startTransfers(op)
       steps.advance(op)
       val items = ports.diary.items(op.id)
@@ -214,6 +217,11 @@ class ShareOrchestrator(
    * dell'operazione si toglie: niente di nuovo parte, al giro dopo un trasferimento partito si ritrova e uno mai partito chiude "non partito".
    */
   override suspend fun cancel(op: ShareOpId) = lock.withLock {
+    cancelItems(op)
+    refresh()
+  }
+
+  private suspend fun cancelItems(op: ShareOpId) {
     live.remove(op)
     val lookups = HashMap<TransferKey, ShareSteps.TicketLookup>()
     val tickets = LinkedHashSet<TransferTicket>()
@@ -247,7 +255,22 @@ class ShareOrchestrator(
         GalleryLog.w(TAG) { "annullamento non arrivato alla porta (${e.javaClass.simpleName})" }
       }
     }
-    refresh()
+  }
+
+  /**
+   * "Smetti di condividere" (o "Elimina album") con degli elementi ancora in viaggio (correzioni F, risposta dell'utente del 27/10 su L231): quando l'album
+   * di un'operazione che aggiunge elementi non e' piu' attivo, cio' che **non e' ancora partito si annulla** (resta dov'e', mai toccato) e cio' che e' **gia' in
+   * viaggio finisce il suo passo atomico** (copia verificata, poi cestino: lo decide la porta, come per «Annulla»), poi l'operazione si chiude. E' la strada
+   * di [cancel], quindi niente file a meta', niente doppioni, niente perdite; vale anche se a chiudere l'album e' stato un altro dispositivo e dopo la morte
+   * del processo fra la chiusura e questo passo (si rifa' a ogni ripresa, idempotente). "Riporta" non si ferma mai: sono file dell'utente che tornano a casa.
+   * Un album che la replica non conosce (ancora) non e' un album chiuso: non si decide.
+   */
+  private suspend fun stopIfAlbumClosed(op: ShareOpRecord) {
+    if (op.kind == SharePlanKind.BRING_BACK) return
+    val state = guardedOrNull { ports.shared.state(op.album) } ?: return
+    if (state == SharedState.ACTIVE) return
+    cancelItems(op.id)
+    GalleryLog.i(TAG) { "album chiuso: ${op.kind.code}, cio' che non era partito non parte" }
   }
 
   override suspend fun retryRequest(op: ShareOpId): ShareRequest? = lock.withLock {

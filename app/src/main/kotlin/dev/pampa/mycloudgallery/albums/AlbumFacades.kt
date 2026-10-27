@@ -245,6 +245,9 @@ class AppSharedAlbums(private val graph: AlbumsGraph, scope: CoroutineScope) : S
         dev.pampa.mycloudgallery.core.common.log.GalleryLog.w("Albums") { "album personale dopo la chiusura non ancora scritto: ${e.javaClass.simpleName}" }
       }
     }
+    // Correzioni F (L231): gli elementi non ancora partiti non partono piu'. Dopo la copia personale (che conta gli elementi arrivati fin qui), il giro che li
+    // ferma parte subito; se il processo muore adesso lo fa la ripresa del lavoro in coda (l'orchestratore guarda lo stato dell'album a ogni ripresa).
+    if (out == CloseOutcome.Closed) graph.albumClosed()
     return out
   }
 

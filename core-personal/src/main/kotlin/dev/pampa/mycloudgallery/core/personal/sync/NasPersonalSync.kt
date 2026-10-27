@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.index.contract.WriteBlock
 import dev.pampa.mycloudgallery.core.index.publish.IndexIdentity
 import dev.pampa.mycloudgallery.core.personal.codec.PersonalSegments
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalHeadsView
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKey
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalLimits
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalPublication
@@ -19,6 +20,9 @@ import dev.pampa.mycloudgallery.core.personal.contract.PersonalSyncStore
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalUnavailable
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalValidity
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalVerdict
+import dev.pampa.mycloudgallery.core.personal.contract.PrePublish
+import dev.pampa.mycloudgallery.core.personal.contract.PrePublishHook
+import dev.pampa.mycloudgallery.core.personal.noop.NoPrePublishHook
 import dev.pampa.mycloudgallery.core.personal.remote.PersonalHeadFetch
 import dev.pampa.mycloudgallery.core.personal.remote.PersonalHeadView
 import dev.pampa.mycloudgallery.core.personal.remote.PersonalRemote
@@ -27,6 +31,7 @@ import dev.pampa.mycloudgallery.core.personal.rules.PersonalRulesFactory
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.nas.NasClock
 import java.io.IOException
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -54,6 +59,12 @@ data class SyncLimits(
  *    (anti-rollback) solo se e' stata letta per intero e senza voci "dal futuro", che potrebbero valere al giro dopo.
  * 4. **Pubblicazione**: lo stato unito diviso in segmenti stabili, poi una testa nuova, al massimo una ogni 5 minuti (M3) e solo
  *    se lo stato e' cambiato. Non con un congelamento, una sospensione, un'area in sola lettura o un dispositivo non approvato: si legge soltanto.
+ *    **Fase 8 (D30, P8)**: subito prima di scrivere, il gancio [prePublish] riceve lo stato che sta per uscire e puo' fermare quel giro
+ *    ([PrePublish.Hold]): `:app` lo lega a `FacesSwitch.reconcile`, cosi' una testa che dice `faces` = `off|G` (o un'altra generazione)
+ *    esce solo dopo che i dati dei volti di `G` su questo dispositivo sono tolti.
+ * 5. **Fase 8 (D30, §2.8 passo 10)**: di ogni testa letta per intero (e della propria appena pubblicata) si ricordano le voci guardate in
+ *    [heads] (la `PersonalHeadsView` che legge "Disattiva e cancella"), **prima** di ricordarne il segno anti-rollback: se il ricordo non
+ *    si scrive, la testa si rilegge al giro dopo.
  *
  * Nessun orologio del telefono: l'ora e' [clock] (NAS) e la durata si misura con [monotonicMillis].
  */
@@ -69,7 +80,19 @@ class NasPersonalSync(
   private val gate: IndexWriteGate,
   private val monotonicMillis: () -> Long = { System.nanoTime() / NANOS_PER_MILLI },
   private val limits: SyncLimits = SyncLimits(),
+  /** Fase 8 (D30): il gancio prima di ogni pubblicazione; di serie si pubblica sempre. */
+  private val prePublish: PrePublishHook = NoPrePublishHook,
+  /** Fase 8 (D30, §2.8 passo 10): cosa dice l'ultima testa di ogni dispositivo dell'account (durevole se `:app` gli da' un file). */
+  private val heads: PersonalHeadsRecord = PersonalHeadsRecord(),
 ) : PersonalSync {
+
+  /** Fase 8: la vista delle teste che questo motore aggiorna ("Disattiva e cancella" la legge). */
+  val headsView: PersonalHeadsView get() = heads
+
+  private val holdState = MutableStateFlow<String?>(null)
+
+  /** Fase 8: il codice dell'ultimo giro che il gancio ha fermato prima di pubblicare (null = l'ultimo ha potuto). Per la Diagnostica. */
+  val lastHold: StateFlow<String?> = holdState
 
   private val lock = Mutex()
   private val state = MutableStateFlow<PersonalSyncStatus>(PersonalSyncStatus.Idle)
@@ -167,7 +190,9 @@ class NasPersonalSync(
             abort = read.abort
             break
           }
-          val mark = if (read.complete && !read.hasFuture) fetch.head.mark else null
+          var mark = if (read.complete && !read.hasFuture) fetch.head.mark else null
+          // D30: cio' che dice la testa si ricorda PRIMA del segno; se non si ricorda, il segno non si salva e la testa si rilegge.
+          if (mark != null && !heads.record(device, fetch.head.createdAtNasMillis, read.valid)) mark = null
           if (read.hasFuture) futureHold[device] = FutureHold(fetch.head.version, read.retryAtNas) else futureHold.remove(device)
           tally.applied += store.applyFrom(device, read.valid, mark).applied
           // La testa che questo dispositivo ha gia' pubblicato (un registro locale perso, una reinstallazione con la stessa chiave): da
@@ -195,7 +220,8 @@ class NasPersonalSync(
         is Published -> published = outcome.entries
         is TooSoon -> retryAt = outcome.retryAtNas
         is PublishFailed -> publishFailure = outcome.reason
-        Unchanged -> Unit
+        // D30: il gancio ha fermato la pubblicazione (i dati dei volti non sono ancora tolti): questo giro legge soltanto, il prossimo riprova.
+        is Held, Unchanged -> Unit
       }
       tally.notPublishable = planned?.skipped ?: 0
     }
@@ -301,6 +327,8 @@ class NasPersonalSync(
 
   private class PublishFailed(val reason: PersonalUnavailable) : PublishOutcome
 
+  private class Held(val code: String) : PublishOutcome
+
   private data object Unchanged : PublishOutcome
 
   /** L'ultimo stato di cui si e' calcolato il piano: solo i nomi dei segmenti (i byte servono solo a chi pubblica). */
@@ -324,14 +352,28 @@ class NasPersonalSync(
       val next = last.publishedAtNas + TrustLimits.HEAD_MIN_INTERVAL_MILLIS
       if (nasNow < next) return TooSoon(next)
     }
+    // D30 (Fase 8, P8): il gancio vede lo stato che sta per uscire e puo' fermare il giro. Un gancio che lancia e' un gancio che ferma.
+    val verdict = try {
+      prePublish.beforePublish(merged)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      PrePublish.Hold(HOOK_FAILED)
+    }
+    if (verdict is PrePublish.Hold) {
+      holdState.value = verdict.code
+      return Held(verdict.code)
+    }
+    holdState.value = null
     val knownVersion = store.marks()[identity.deviceId]?.version ?: 0L
     val after = maxOf(last?.version ?: 0L, knownVersion)
     return when (val result = remote.publish(plan, last?.segments.orEmpty(), after, nasNow)) {
       is RemoteResult.Ok -> {
         val head = result.value
         store.setPublished(PersonalPublication(head.version, head.mark, nasNow, plan.names, plan.entries))
-        // La testa che abbiamo scritto e' gia' dentro il nostro stato: non serve rileggerla.
-        store.applyFrom(identity.deviceId, emptyList(), head.mark)
+        // La testa che abbiamo scritto e' gia' dentro il nostro stato: non serve rileggerla (se pero' non si e' potuto ricordare cosa
+        // dice, il segno non si salva e la si rilegge al giro dopo, D30).
+        if (heads.record(identity.deviceId, nasNow, merged.values)) store.applyFrom(identity.deviceId, emptyList(), head.mark)
         Published(plan.entries)
       }
       is RemoteResult.Failed -> PublishFailed(unavailableFor(result.failure))
@@ -383,5 +425,8 @@ class NasPersonalSync(
 
   private companion object {
     const val NANOS_PER_MILLI = 1_000_000L
+
+    /** Il codice di un gancio che ha lanciato invece di rispondere: si ferma la pubblicazione (D30). */
+    const val HOOK_FAILED = "PRE_PUBLISH_FAILED"
   }
 }

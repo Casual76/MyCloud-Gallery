@@ -183,6 +183,12 @@ internal class ThumbnailScheduler(
     failure != null && failure.attempts >= retry.maxAttempts
   }
 
+  /**
+   * Avvio istantaneo: vero se per [key] c'e' gia' stata una risposta che non e' una miniatura (un tentativo fallito, o "non adesso"): la cella
+   * mostra il segnaposto finche' non riprova. Serve al segno del primo disegno utile, che non aspetta un nuovo tentativo di un secondo.
+   */
+  fun answeredWithout(key: ThumbKey): Boolean = synchronized(lock) { key in failures || key in deferred }
+
   fun counters(): SchedulerCounters = synchronized(lock) {
     SchedulerCounters(started, cancelled, failed, running.size, peak)
   }

@@ -54,6 +54,12 @@ class DataStoreLibraryPreferences(
     data.first()
   }
 
+  /** Avvio istantaneo: filtro, livello e stile come sono nel file (non i valori di partenza delle `StateFlow`, che arrivano un attimo dopo). */
+  suspend fun read(): Triple<LibraryFilter, GridLevel, GridStyle> {
+    val prefs = data.first()
+    return Triple(LibraryFilter.fromCode(prefs[FILTER]), GridLevel.fromCode(prefs[LEVEL]), GridStyle.fromCode(prefs[STYLE]))
+  }
+
   override suspend fun setFilter(filter: LibraryFilter) {
     store.edit { it[FILTER] = filter.code }
   }

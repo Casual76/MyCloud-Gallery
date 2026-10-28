@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.library.grid
 
+import dev.pampa.mycloudgallery.core.common.perf.AfterFirstDraw
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
@@ -569,6 +571,53 @@ class MediaGridState(
 
   internal fun updateVisibleIds(ids: List<MediaId>) {
     if (ids != visibleIdsFlow.value) visibleIdsFlow.value = ids
+  }
+
+  /**
+   * Avvio istantaneo (28/10): vero solo per la griglia della Libreria, che scrive nella traccia il **primo disegno utile**
+   * (`AvvioTrace.LIBRARY_USEFUL`): la prima volta che tutte le celle in vista hanno la loro risposta (la miniatura in memoria, o un tentativo
+   * finito senza: quella cella resta sul segnaposto e riprova da sola).
+   */
+  var reportsStartup: Boolean = false
+
+  @Volatile
+  private var visibleThumbKeys: List<ThumbKey> = emptyList()
+
+  private var firstWindowSent = false
+
+  /**
+   * Avvio istantaneo: la **prima** finestra delle miniature parte nello stesso fotogramma in cui la griglia compare, appena la lista e' misurata
+   * (`onPlaced`), e non dopo: l'effetto che la manda di solito gira solo quando il thread principale e' libero, cioe' dopo che il primo
+   * fotogramma (quello che sull'S25 compila la grafica, 250-300 ms) e' finito. Cosi' le miniature si decodificano mentre il primo fotogramma si
+   * disegna. Una volta sola; poi la finestra la segue l'effetto di sempre (la stessa richiesta non riparte).
+   */
+  internal fun sendFirstWindow() {
+    if (firstWindowSent) return
+    val l = layout ?: return
+    if (l.rowCount == 0 || viewport.height <= 0) return
+    firstWindowSent = true
+    val plan = GridThumbWindow(this).plan(GridThumbWindow.rows(this, l, shownView, 1))
+    loader.window(plan.visible, plan.ahead)
+    updateVisibleIds(plan.visibleIds)
+    updateVisibleThumbs(plan.visible.map { it.key })
+  }
+
+  /** Le chiavi delle miniature in vista (dalla finestra del caricatore): servono al segno del primo disegno utile. */
+  internal fun updateVisibleThumbs(keys: List<ThumbKey>) {
+    visibleThumbKeys = keys
+    noteUsefulIfReady()
+  }
+
+  /** Scrive il segno del primo disegno utile, una volta per processo, quando ogni cella in vista ha la sua risposta. */
+  internal fun noteUsefulIfReady() {
+    if (!reportsStartup || AvvioTrace.marked(AvvioTrace.LIBRARY_USEFUL)) return
+    val keys = visibleThumbKeys
+    if (keys.isEmpty()) return
+    if (keys.all { loader.settled(it) }) {
+      AvvioTrace.markOnce(AvvioTrace.LIBRARY_USEFUL)
+      // Cio' che aspettava il primo disegno utile (NAS, lavori, ricerca, lettura del telefono) parte adesso.
+      AfterFirstDraw.open()
+    }
   }
 
   internal companion object {

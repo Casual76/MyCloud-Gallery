@@ -5,11 +5,15 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
+import dev.pampa.mycloudgallery.core.common.perf.AfterFirstDraw
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.security.lock.AppLockController
 import dev.pampa.mycloudgallery.core.security.lock.AppLockGate
 import dev.pampa.mycloudgallery.core.security.lock.SystemCredentialAuthenticator
@@ -36,8 +40,16 @@ internal fun AppRoot(
   AppLockGate(
     controller = lockController,
     authenticator = authenticator,
-    lockedContent = { LockedScreen(it) },
+    lockedContent = {
+      LockedScreen(it)
+      // Avvio istantaneo: con il blocco app la prima schermata e' questa; il lavoro rimandato parte dopo il suo primo fotogramma.
+      LaunchedEffect(Unit) {
+        withFrameNanos { }
+        AfterFirstDraw.open()
+      }
+    },
   ) {
+    AvvioTrace.markOnce(AvvioTrace.UNLOCKED)
     val destination by rootViewModel.destination.collectAsStateWithLifecycle()
     val status by rootViewModel.status.collectAsStateWithLifecycle()
     val context = LocalContext.current

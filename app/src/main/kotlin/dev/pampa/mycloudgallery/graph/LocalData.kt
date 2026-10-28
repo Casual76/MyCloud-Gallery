@@ -176,6 +176,8 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     // sorgenti scelte) appartengono alla famiglia che si lascia.
     steps.run("backup") { graph.backupSettingsStorage.clear() }
     steps.run("file") {
+      // Avvio istantaneo: le forme delle pagine (solo numeri) non si riscrivono piu' in questo processo; il file sta in `replica/`.
+      dev.pampa.mycloudgallery.core.common.perf.InstantShapes.clear()
       withContext(Dispatchers.IO) {
         if (!deleteChildren(context.cacheDir)) steps.ok = false
         if (allDatabases) {

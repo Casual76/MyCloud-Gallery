@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.di
 
+import dev.pampa.mycloudgallery.core.common.perf.AfterFirstDraw
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import android.content.Context
 import dagger.Module
 import dagger.Provides
@@ -92,7 +94,12 @@ object GalleryModule {
     hooks: @JvmSuppressWildcards Optional<MeasurementHooks>,
   ): GalleryGraph {
     val measurement = hooks.orElse(null)
-    val parts = GalleryParts(
+    val parts = AvvioTrace.section("MCG:galleria:parti") { galleryParts(context, graph, measurement) }
+    return AvvioTrace.section("MCG:galleria:grafo") { galleryGraph(context, graph, setup, parts) }
+  }
+
+  private fun galleryParts(context: Context, graph: AppGraph, measurement: MeasurementHooks?): GalleryParts =
+    GalleryParts(
       databaseName = databaseName(measurement),
       replicaDir = SnapshotStore.directory(context),
       preferencesFile = DataStoreLibraryPreferences.file(context),
@@ -114,8 +121,12 @@ object GalleryModule {
       backup = if (measurement == null) backupInputs(context, graph) else null,
       // Fase 6 (P11): le teste `ai` e il buffer del calcolo, legati da `AiModule` prima che il NAS parta.
       ai = { graph.aiHooks },
+      // Avvio istantaneo: NAS, backup e lettura del telefono dopo il primo disegno utile (o al piu' 1,5 s dall'avvio del processo).
+      afterFirstDraw = { AfterFirstDraw.await() },
     )
-    return GalleryGraph(
+
+  private fun galleryGraph(context: Context, graph: AppGraph, setup: FamilySetupRepository, parts: GalleryParts): GalleryGraph =
+    GalleryGraph(
       context = context,
       scope = graph.scope,
       parts = parts,
@@ -127,7 +138,6 @@ object GalleryModule {
       // L'azzeramento (fase 5) ferma la galleria viva prima di cancellare i file (R7).
       graph.galleryStopper = GalleryStopper { gallery.shutdown() }
     }
-  }
 
   /**
    * Cio' che il backup riceve dall'app (Fase 5A, P7): impostazioni del dispositivo, regole (D34), sonda delle share (E-I19), nome del

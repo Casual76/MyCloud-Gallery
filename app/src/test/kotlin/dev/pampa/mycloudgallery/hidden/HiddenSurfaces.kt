@@ -128,7 +128,8 @@ internal object HiddenSurfaces {
     SurfaceEntry(
       id = "library", title = "Libreria, filtri, intestazioni e conteggi", row = SpecRow.LIBRARY, owner = "Fase 3", backing = Backing.PRODUCTION,
       probe = HiddenProbes.library,
-      alsoProvedBy = listOf("CatalogIntegrationTest", "TimelineIndexTest", "LibraryContractTest"),
+      // Avvio istantaneo (28/10, C190): l'istantanea della partenza (pubblicata prima del catalogo) non ha i nascosti dell'ultima volta.
+      alsoProvedBy = listOf("CatalogIntegrationTest", "TimelineIndexTest", "LibraryContractTest", "RepositoryPreloadTest", "LibraryInstantTest"),
     ),
     SurfaceEntry(
       id = "collections", title = "Raccolte: Preferiti, Video, Screenshot, WhatsApp, Modificate e i loro conteggi", row = SpecRow.COLLECTIONS, owner = "Fase 3",

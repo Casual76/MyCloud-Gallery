@@ -445,11 +445,13 @@ if ($SelfTest) {
   Assert-That (@($badFails | Where-Object { $_.Test -eq "viewerOpen" -and $_.Metric -eq "viewerOpenMaxFrameMs max" }).Count -eq 1) "viewerOpen del campione cattivo deve fallire il fotogramma piu' lungo dell'apertura (> 16,7 ms)"
   Assert-That (@($rowsGood | Where-Object { $_.Test -eq "viewerOpen" -and $_.Metric -eq "viewerOpenMaxFrameMs max" -and $_.Status -eq "OK" }).Count -eq 1) "viewerOpen del campione buono passa il fotogramma piu' lungo"
   Assert-That (@($badFails | Where-Object { $_.Test -eq "scroll_days_square" -and $_.Kind -eq "regressione" }).Count -eq 1) "scroll_days_square deve fallire la regressione (+10%)"
-  Assert-That (@($badFails | Where-Object { $_.Test -eq "coldStart" -and $_.Kind -eq "assoluta" }).Count -eq 1) "coldStart deve fallire TTFD p90 < 1000"
+  # Avvio istantaneo (28/10): il primo disegno utile e' la soglia stretta; il caricamento completo (TTFD) ha la soglia larga di 1500 ms.
+  Assert-That (@($badFails | Where-Object { $_.Test -eq "coldStart" -and $_.Kind -eq "assoluta" -and $_.Metric -eq "libraryUsefulMs p90" }).Count -eq 1) "coldStart deve fallire il primo disegno utile p90 < 750"
+  Assert-That (@($rowsBad | Where-Object { $_.Test -eq "coldStart" -and $_.Kind -eq "assoluta" -and $_.Metric -eq "timeToFullDisplayMs p90" -and $_.Status -eq "OK" }).Count -eq 1) "coldStart con TTFD p90 1164 passa il caricamento completo (< 1500)"
   Assert-That (@($badFails | Where-Object { $_.Test -eq "viewerOpen" -and $_.Kind -eq "regressione" }).Count -eq 1) "viewerOpen deve fallire la regressione (+15%)"
   Assert-That (@($rowsBad | Where-Object { $_.Test -eq "pinch" -and $_.Status -eq "FAIL" }).Count -eq 0) "pinch del campione cattivo e' dentro le soglie"
 
-  # Senza Libreria visibile l'avvio non e' valido e non si confronta con 1000 ms.
+  # Senza Libreria visibile l'avvio non e' valido e non si confronta con le soglie.
   $rowsNoLib = Invoke-Evaluation $thr @($bad.benchmarks | Where-Object { $_.name -eq "coldStartSenzaLibreria" } | ForEach-Object { $c = $_.PSObject.Copy(); $c.name = "coldStart"; $c }) "s25" $ref @{} $false
   Assert-That (@($rowsNoLib | Where-Object { $_.Kind -eq "validita" -and $_.Status -eq "FAIL" }).Count -eq 1) "coldStart senza Libreria visibile deve essere NON VALIDA"
   Assert-That (@($rowsNoLib | Where-Object { $_.Kind -eq "assoluta" }).Count -eq 0) "coldStart non valida non deve confrontare TTFD con la soglia"

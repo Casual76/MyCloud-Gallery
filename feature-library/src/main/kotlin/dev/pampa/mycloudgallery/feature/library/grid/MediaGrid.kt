@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.library.grid
 
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -22,6 +23,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.TransformOrigin
@@ -68,6 +70,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -143,7 +146,8 @@ fun MediaGrid(
     val shownLevel by remember(state, widthPx, gapPx) { derivedStateOf { state.displayLevelFor(widthPx, gapPx) } }
     val level = shownLevel
     val ready = state.layouts.get(inputs, level)
-    val immediate = if (ready == null) remember(inputs, level) { state.layouts.layoutNowIfSmall(inputs, level) } else null
+    // Avvio istantaneo: la vista grande della Libreria trova il layout gia' preparato mentre il processo nasceva (`GridWarmup`).
+    val immediate = if (ready == null) remember(inputs, level) { state.layouts.layoutNowIfSmall(inputs, level) ?: GridWarmup.take(inputs, level) } else null
     val renderLayout = ready ?: immediate ?: state.layout
     val renderView = if (ready != null || immediate != null) inputs.view else state.shownView
 
@@ -157,6 +161,7 @@ fun MediaGrid(
       state.viewport = viewport
       if (immediate != null) state.layouts.offer(inputs, level, immediate)
       if (renderLayout != null) state.onLayoutShown(renderLayout, renderView)
+      if (renderLayout != null && state.reportsStartup) AvvioTrace.markOnce(AvvioTrace.GRID_SHOWN)
     }
     LaunchedEffect(inputs) { state.layouts.compute(inputs, state.level) }
 
@@ -185,6 +190,8 @@ fun MediaGrid(
         state = state.listState,
         modifier = Modifier
           .fillMaxSize()
+          // Avvio istantaneo: la prima finestra delle miniature parte appena la lista e' misurata, nello stesso fotogramma.
+          .onPlaced { state.sendFirstWindow() }
           .pinchLayer(state),
         contentPadding = PaddingValues(top = topPad, bottom = bottomPad),
         userScrollEnabled = !state.pinching,
@@ -224,7 +231,13 @@ private fun GridEffects(state: MediaGridState, reducedMotion: Boolean) {
         val plan = window.plan(rows)
         state.loader.window(plan.visible, plan.ahead)
         state.updateVisibleIds(plan.visibleIds)
+        if (state.watchingUseful) state.updateVisibleThumbs(plan.visible.map { it.key })
       }
+  }
+
+  // Avvio istantaneo: il primo disegno utile della Libreria (ogni miniatura in vista arrivata), una volta per processo; poi non si segue piu'.
+  if (state.reportsStartup) {
+    LaunchedEffect(state) { state.loader.stats.first { state.noteUsefulIfReady(); !state.watchingUseful } }
   }
 
   // I segnaposto delle celle attorno a dove si e', per tutti i livelli, decodificati su un thread di lavoro: la

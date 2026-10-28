@@ -37,6 +37,11 @@ import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.instant.InstantBlock
+import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShape
+import dev.pampa.mycloudgallery.core.designsystem.instant.KeepInstantShape
+import dev.pampa.mycloudgallery.core.designsystem.instant.instantSkeleton
+import dev.pampa.mycloudgallery.core.designsystem.instant.rememberInstantShape
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
@@ -62,8 +67,19 @@ internal fun SearchIdleContent(
   val notices = SearchNoticeItems.of(emptyList(), SearchCoverage.Complete, readiness, queryModel)
   val typeChips = state.suggestions.types.map { it to typeLabel(it) }
   val empty = state.recents.isEmpty() && state.suggestions.people.isEmpty() && state.suggestions.places.isEmpty() && typeChips.isEmpty()
-  LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = SearchDimens.ListBottom), verticalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
+  // Avvio istantaneo: al primo ingresso, finche' i suggerimenti non sono letti, lo scheletro con la forma dell'ultima volta (mai una rotella).
+  val skeleton = rememberInstantShape(SearchInstant.CODE, SearchInstant.DEFAULT)
+  if (state.known) KeepInstantShape(SearchInstant.CODE, SearchInstant.shapeOf(state, typeChips.isNotEmpty()))
+  LazyColumn(
+    modifier = modifier,
+    contentPadding = PaddingValues(bottom = SearchDimens.ListBottom),
+    verticalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap),
+  ) {
     if (notices.isNotEmpty()) item(key = "notices") { SearchNotices(notices, handlers) }
+    if (!state.known) {
+      instantSkeleton(skeleton, keyPrefix = "instant-search")
+      return@LazyColumn
+    }
     if (state.recents.isNotEmpty()) {
       item(key = "recents-title") {
         Row(
@@ -224,3 +240,24 @@ private fun typeLabel(type: SearchMediaType): String = stringResource(
     SearchMediaType.MOTION_PHOTO -> R.string.search_type_motion
   },
 )
+
+/** La forma di Cerca a riposo per lo scheletro (Avvio istantaneo): le recenti come righe, ogni gruppo di pillole come una riga. Solo numeri. */
+internal object SearchInstant {
+  const val CODE: String = "cerca"
+
+  val DEFAULT: InstantShape = InstantShape.of(InstantBlock.Header, InstantBlock.Rows(3), InstantBlock.Header, InstantBlock.Rows(1))
+
+  fun shapeOf(state: SearchScreenState.Idle, types: Boolean): InstantShape {
+    val blocks = ArrayList<InstantBlock>()
+    if (state.recents.isNotEmpty()) {
+      blocks += InstantBlock.Header
+      blocks += InstantBlock.Rows(state.recents.size)
+    }
+    val chipGroups = listOf(state.suggestions.people.isNotEmpty(), state.suggestions.places.isNotEmpty(), types).count { it }
+    repeat(chipGroups) {
+      blocks += InstantBlock.Header
+      blocks += InstantBlock.Rows(1)
+    }
+    return InstantShape.of(*blocks.toTypedArray())
+  }
+}

@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.people.nav
 
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
@@ -41,7 +42,11 @@ data class ReviewDestination(val id: String, val split: Boolean = false)
 @Serializable
 data object HiddenPeopleDestination
 
-fun NavController.openPeople() = navigate(PeopleListDestination)
+fun NavController.openPeople() {
+  // Avvio istantaneo: l'apertura di "Tutte le persone" si misura dal tocco al primo fotogramma (ultimo stato o scheletro).
+  AvvioTrace.pageOpened(AvvioTrace.PAGE_PEOPLE)
+  navigate(PeopleListDestination)
+}
 
 fun NavController.openOthers() = navigate(OthersDestination)
 

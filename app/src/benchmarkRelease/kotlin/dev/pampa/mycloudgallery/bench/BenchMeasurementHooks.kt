@@ -1,5 +1,10 @@
 package dev.pampa.mycloudgallery.bench
 
+import java.nio.ByteBuffer
+import dev.pampa.mycloudgallery.core.index.contract.SpaceEstimate
+import dev.pampa.mycloudgallery.core.index.contract.QualityLevel
+import dev.pampa.mycloudgallery.core.trust.data.SegmentClass
+import dev.pampa.mycloudgallery.core.index.contract.BlobLocation
 import android.content.Context
 import dagger.Binds
 import dagger.Module
@@ -41,7 +46,32 @@ class BenchMeasurementHooks @Inject constructor(
 
   private val blobs: ReplicaBlobs? by lazy { replica?.let { BenchReplicaBlobs(it) } }
 
-  override val replicaBlobs: ReplicaBlobs? get() = blobs
+  /**
+   * Avvio istantaneo (28/10): la replica si apre **al primo uso** (la prima miniatura solo-NAS, su un thread di lavoro), non quando la
+   * galleria si costruisce. Aprirla legge l'indice sintetico (132 mila voci): sull'S25 erano 60 ms sul thread principale, dentro
+   * `Application.onCreate`, che la release non ha (lavoro solo della variante di misura, che gonfiava l'avvio misurato). Se il dataset
+   * non c'e' (nessun indice sul disco) resta null, come prima.
+   */
+  private val lazyBlobs: ReplicaBlobs by lazy { LazyReplicaBlobs { blobs } }
+
+  override val replicaBlobs: ReplicaBlobs?
+    get() = if (BenchReplicaStore.indexFile(context, profile).exists()) lazyBlobs else null
+
+  init {
+    // La replica comincia ad aprirsi subito, su un thread suo: la prima miniatura solo-NAS la trova di solito gia' aperta.
+    Thread({ runCatching { blobs } }, "bench-replica").apply { isDaemon = true }.start()
+  }
+}
+
+/** Una replica che si apre alla prima chiamata (vedi [BenchMeasurementHooks.replicaBlobs]); se non si apre, nessun blob. */
+private class LazyReplicaBlobs(open: () -> ReplicaBlobs?) : ReplicaBlobs {
+  private val target: ReplicaBlobs? by lazy(open)
+
+  override fun locate(contentKey: Long, cls: SegmentClass): BlobLocation? = target?.locate(contentKey, cls)
+
+  override fun read(location: BlobLocation): ByteBuffer = target?.read(location) ?: throw java.io.IOException("replica sintetica non aperta")
+
+  override suspend fun estimate(quality: QualityLevel): SpaceEstimate = target?.estimate(quality) ?: SpaceEstimate(0L, 0)
 }
 
 @Module

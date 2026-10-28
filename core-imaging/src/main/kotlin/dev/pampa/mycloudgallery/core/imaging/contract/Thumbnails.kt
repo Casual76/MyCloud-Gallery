@@ -88,6 +88,12 @@ interface ThumbnailLoader {
   fun peek(key: ThumbKey): ImageBitmap?
 
   /**
+   * Avvio istantaneo (28/10): vero se la cella di [key] ha gia' la sua risposta, cioe' la miniatura in memoria oppure un tentativo finito senza
+   * (la cella resta sul segnaposto finche' non riprova). Non conta come lettura della cache. Di serie: la miniatura c'e'.
+   */
+  fun settled(key: ThumbKey): Boolean = peek(key) != null
+
+  /**
    * La finestra di richieste: [visible] sono le celle sullo schermo (priorita' massima), [ahead] quelle che stanno
    * per entrare, nella direzione dello scorrimento. Ogni richiesta fuori da entrambe e ancora in volo si annulla
    * (`CancellationSignal`). Si chiama quando la finestra cambia, non a ogni fotogramma.

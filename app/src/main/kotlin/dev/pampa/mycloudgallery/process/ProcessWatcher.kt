@@ -38,6 +38,11 @@ class ProcessWatcher(
   private val graph: AppGraph,
   private val notifications: AppNotifications,
   private val gallery: GalleryLifecycle = GalleryLifecycle.None,
+  /**
+   * Avvio istantaneo (28/10): l'attesa del primo disegno utile. La sonda della rete, la richiesta di sincronizzazione "all'apertura" e il
+   * controllo quotidiano partono dopo (al piu' 1,5 s dall'avvio del processo). Di serie nessuna attesa (test).
+   */
+  private val afterFirstDraw: suspend () -> Unit = {},
   private val ensureDaily: () -> Unit,
 ) : Application.ActivityLifecycleCallbacks {
 
@@ -48,7 +53,7 @@ class ProcessWatcher(
     application.registerActivityLifecycleCallbacks(this)
     val scope = graph.scope
     graph.appContext.update(inForeground = false, profileActive = graph.platform.isUserForeground() ?: true)
-    scope.launch { graph.start() }
+    scope.launch { dev.pampa.mycloudgallery.core.common.perf.AvvioTrace.asyncSection("MCG:grafo:avvio") { graph.start() } }
     graph.vpnAutomation.attach(scope)
     // Fase 3: la galleria del telefono vive quanto il processo (repository della timeline, lavori in background).
     gallery.start()
@@ -59,6 +64,7 @@ class ProcessWatcher(
       }
     }
     scope.launch {
+      afterFirstDraw()
       graph.setup.state.map { it is SetupState.Ready || it is SetupState.AwaitingApproval }.distinctUntilChanged().collect { configured ->
         if (configured) ensureDaily()
       }
@@ -92,10 +98,14 @@ class ProcessWatcher(
     // RE-7: per un'app visibile la quota dei job non vale. RE-6: se non si sa che il NAS risponda (una sonda fallita, un guasto), si
     // riguarda: una sola connessione TCP, non sveglia i dischi. Cosi' l'indicatore non resta "non raggiungibile" a NAS tornato.
     graph.androidLimits.clear()
-    graph.scope.launch { graph.networkSettler.settle() }
+    graph.scope.launch {
+      afterFirstDraw()
+      graph.networkSettler.settle()
+    }
     gallery.onForeground()
     // Alla prima apertura lo stato salvato si sta ancora leggendo (AppGraph.start): si aspetta di saperlo.
     graph.scope.launch {
+      afterFirstDraw()
       val state = graph.setup.state.first { it !is SetupState.Loading }
       if (state is SetupState.Ready || state is SetupState.AwaitingApproval || state is SetupState.Blocked) {
         graph.scheduler.requestSoon(SyncReason.APP_OPENED)

@@ -229,6 +229,13 @@ class AppLibraryStates @Inject constructor(
         if (snapshot is ColumnarTimelineSnapshot) snapshot.thumbRefAt(index) else gallery.repository.mediaRefOf(snapshot.idAt(index))
       },
     )
+    // Avvio istantaneo: la griglia della Libreria scrive nella traccia il primo disegno utile, riparte dal punto dell'ultima volta
+    // (un id che non c'e' piu' nella vista vale "dai piu' recenti") e lo ricorda quando l'app va in secondo piano.
+    grid.reportsStartup = true
+    gallery.takeStartPosition()?.let(grid::restorePosition)
+    val position: () -> dev.pampa.mycloudgallery.feature.library.grid.SavedGridPosition? = { grid.savePosition() }
+    gallery.libraryPosition = position
+    scope.coroutineContext[Job]?.invokeOnCompletion { if (gallery.libraryPosition === position) gallery.libraryPosition = null }
     // D11: la finestra visibile della griglia guida la fase META (prima i media sullo schermo).
     scope.launch { grid.visibleIds.collect { gallery.metaPriority.show(it) } }
     val state = LibraryTabState(

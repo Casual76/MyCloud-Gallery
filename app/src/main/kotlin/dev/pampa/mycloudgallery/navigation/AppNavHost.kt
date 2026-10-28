@@ -9,6 +9,9 @@ import androidx.activity.compose.ReportDrawnAfter
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.withFrameNanos
+import dev.pampa.mycloudgallery.core.common.perf.AfterFirstDraw
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -134,6 +137,15 @@ fun AppNavHost(
   if (destination == RootDestination.Loading) {
     FluidScreenSurface(modifier = Modifier.fillMaxSize()) {}
     return
+  }
+  AvvioTrace.markOnce(AvvioTrace.DESTINATION)
+  // Avvio istantaneo: se la prima schermata non e' la galleria (onboarding, attesa, dispositivo fermo), il lavoro rimandato parte
+  // dopo il suo primo fotogramma; con la galleria lo fa partire il primo disegno utile della Libreria.
+  if (destination != RootDestination.Main) {
+    LaunchedEffect(Unit) {
+      withFrameNanos { }
+      AfterFirstDraw.open()
+    }
   }
   key(destination) {
     val nav = rememberNavController()
@@ -424,7 +436,17 @@ private fun MainDestination(
   MainScaffold(
     status = status,
     selectedTab = tab,
-    onSelectTab = { tab = it },
+    onSelectTab = { selected ->
+      // Avvio istantaneo: l'apertura di Raccolte e di Cerca si misura dal tocco al primo fotogramma con l'ultimo stato o lo scheletro.
+      if (selected != tab) {
+        when (selected) {
+          GalleryTab.Collections -> AvvioTrace.pageOpened(AvvioTrace.PAGE_COLLECTIONS)
+          GalleryTab.Search -> AvvioTrace.pageOpened(AvvioTrace.PAGE_SEARCH)
+          else -> Unit
+        }
+      }
+      tab = selected
+    },
     onStatusClick = {
       when (status.action) {
         StatusAction.OPEN_WIREGUARD -> if (!openWireGuard()) nav.navigate(DiagnosticsGraphRoute)

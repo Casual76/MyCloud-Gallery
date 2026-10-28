@@ -175,6 +175,8 @@ class PipelineThumbnailLoader(
     return upgraded
   }
 
+  override fun settled(key: ThumbKey): Boolean = cache.touch(key) || scheduler.answeredWithout(key)
+
   /** Vero se la miniatura di [key] non e' arrivata dopo tutti i tentativi (la cella resta sul segnaposto). */
   fun hasGivenUp(key: ThumbKey): Boolean = scheduler.hasGivenUp(key)
 

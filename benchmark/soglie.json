@@ -1,6 +1,6 @@
 {
   "formato": 2,
-  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md par. 2.6, D21) e guardia della Fase 4A (docs/fase4-progetto.md par. 5.6, P10); dal 27/10 anche gli scenari album (Fase 7, par. 5.4) e volti (Fase 8, par. 5.4), promessi dai progetti e mancanti. Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione e la guardia si confrontano con il riferimento: docs/bench/riferimento-<dispositivo>.json se l'utente ne ha accettato uno, altrimenti le misure del 13/10 (riferimento-<dispositivo>-fase3.json). Una soglia assoluta che il riferimento violava gia' (lo scorrimento giustificato, il fotogramma piu' lungo dell'apertura) non fa fallire: vale la guardia, cioe' 'non peggiorare'. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica. 'mista': la prova deve girare sulla libreria mista di 100 mila righe con il 60% di media solo-NAS (metrica libraryNasShare).",
+  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md par. 2.6, D21) e guardia della Fase 4A (docs/fase4-progetto.md par. 5.6, P10); dal 27/10 anche gli scenari album (Fase 7, par. 5.4) e volti (Fase 8, par. 5.4), promessi dai progetti e mancanti; dal 28/10 il primo disegno utile, l'avvio abituale e le pagine principali (Avvio istantaneo). Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione e la guardia si confrontano con il riferimento: docs/bench/riferimento-<dispositivo>.json se l'utente ne ha accettato uno, altrimenti le misure del 13/10 (riferimento-<dispositivo>-fase3.json). Una soglia assoluta che il riferimento violava gia' (lo scorrimento giustificato, il fotogramma piu' lungo dell'apertura) non fa fallire: vale la guardia, cioe' 'non peggiorare'. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica. 'mista': la prova deve girare sulla libreria mista di 100 mila righe con il 60% di media solo-NAS (metrica libraryNasShare).",
   "dispositivi": {
     "s25": {
       "nome": "Galaxy S25",
@@ -65,7 +65,7 @@
     },
     {
       "id": "avvio",
-      "descrizione": "Avvio a freddo sulla libreria mista (le 120 righe piu' recenti sul telefono, come il 13/10), 15 ripetizioni, TTFD alla prima pagina di miniature (StartupTimingMetric)",
+      "descrizione": "Avvio a freddo sulla libreria mista (le 120 righe piu' recenti sul telefono, come il 13/10), 15 ripetizioni, con le cache delle pipeline grafiche e del disco buttate (StartupMode.COLD: il primo avvio dopo un'installazione o un aggiornamento). Dal 28/10 (Avvio istantaneo) due soglie: il primo disegno utile (la Libreria con le miniature delle celle in vista, LibraryUsefulMetric) stretta, il caricamento completo (TTFD, reportFullyDrawn) larga",
       "prove": "^coldStart$",
       "proveAttese": ["coldStart"],
       "classi": ["StartupBenchmark"],
@@ -73,10 +73,89 @@
       "mista": true,
       "validita": { "metrica": "libraryShown", "statistica": "min", "minimo": 1, "spiega": "la Libreria era visibile: altrimenti l'avvio misurato e' quello dell'onboarding" },
       "assolute": [
-        { "metrica": "timeToFullDisplayMs", "statistica": "p90", "massimoEsclusivo": 1000.0, "spiega": "TTFD p90 sotto il secondo; l'app deve chiamare reportFullyDrawn (prima pagina di miniature o dopo 300 ms)" }
+        { "metrica": "libraryUsefulMs", "statistica": "p90", "massimoEsclusivo": 750.0, "spiega": "primo disegno utile p90 sotto i 750 ms con la grafica da ricompilare (S25, 28/10: 628 e 693 in due corse, prima 870); la parte che resta e' la compilazione delle pipeline (L295)" },
+        { "metrica": "timeToFullDisplayMs", "statistica": "p90", "massimoEsclusivo": 1500.0, "spiega": "caricamento completo p90 sotto 1,5 s (il piano, par. 4, riletto il 28/10: il secondo vale per il primo disegno utile dell'avvio abituale); l'app deve chiamare reportFullyDrawn" }
       ],
       "regressione": [
+        { "metrica": "libraryUsefulMs", "statistica": "p90", "aumentoMassimo": 0.10, "arrotondaSu": 1 },
         { "metrica": "timeToFullDisplayMs", "statistica": "p90", "aumentoMassimo": 0.10, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "avvio-abituale",
+      "descrizione": "Avvio a freddo di tutti i giorni (Avvio istantaneo, 28/10): processo nuovo a ogni ripetizione, cache delle pipeline grafiche e del disco calde, 15 ripetizioni sulla libreria mista",
+      "prove": "^coldStartUsual$",
+      "proveAttese": ["coldStartUsual"],
+      "classi": ["StartupBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "libraryShown", "statistica": "min", "minimo": 1, "spiega": "la Libreria era visibile: altrimenti l'avvio misurato e' quello dell'onboarding" },
+      "assolute": [
+        { "metrica": "libraryUsefulMs", "statistica": "p90", "massimoEsclusivo": 400.0, "spiega": "primo disegno utile p90 sotto i 400 ms: la Libreria dell'ultima volta con le miniature, subito (S25, 28/10: 280, prima 350)" },
+        { "metrica": "timeToFullDisplayMs", "statistica": "p90", "massimoEsclusivo": 1500.0, "spiega": "caricamento completo p90 sotto 1,5 s" }
+      ],
+      "regressione": [
+        { "metrica": "libraryUsefulMs", "statistica": "p90", "aumentoMassimo": 0.10, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "pagina-raccolte",
+      "descrizione": "Primo ingresso nelle Raccolte dopo un avvio a freddo (Avvio istantaneo, 28/10): dal tocco sulla scheda al primo fotogramma con le sezioni (sezione MCG:pagina:raccolte)",
+      "prove": "^collectionsPage$",
+      "proveAttese": ["collectionsPage"],
+      "classi": ["PagesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "assolute": [
+        { "metrica": "raccoltePageMs", "statistica": "p90", "massimoEsclusivo": 150.0, "spiega": "la pagina si vede subito (ultimo stato o scheletro, mai una rotella)" }
+      ],
+      "regressione": [
+        { "metrica": "raccoltePageMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "pagina-cerca",
+      "descrizione": "Primo ingresso in Cerca a riposo dopo un avvio a freddo (Avvio istantaneo, 28/10): dal tocco sulla scheda al primo fotogramma con lo scheletro o le recenti (sezione MCG:pagina:cerca)",
+      "prove": "^searchPage$",
+      "proveAttese": ["searchPage"],
+      "classi": ["PagesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "assolute": [
+        { "metrica": "cercaPageMs", "statistica": "p90", "massimoEsclusivo": 150.0, "spiega": "la pagina si vede subito (ultimo stato o scheletro, mai una rotella)" }
+      ],
+      "regressione": [
+        { "metrica": "cercaPageMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "pagina-album",
+      "descrizione": "Primo ingresso nella pagina di un album dalle Raccolte (Avvio istantaneo, 28/10; sezione MCG:pagina:album). Si salta finche' la variante di misura non monta gli album (L287)",
+      "prove": "^albumPage$",
+      "proveAttese": ["albumPage"],
+      "classi": ["PagesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "assolute": [
+        { "metrica": "albumPageMs", "statistica": "p90", "massimoEsclusivo": 150.0, "spiega": "il titolo e lo scheletro della griglia subito" }
+      ],
+      "regressione": [
+        { "metrica": "albumPageMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "pagina-persone",
+      "descrizione": "Primo ingresso in Persone dalle Raccolte (Avvio istantaneo, 28/10; sezione MCG:pagina:persone). Si salta finche' la variante di misura non monta Persone (L287)",
+      "prove": "^peoplePage$",
+      "proveAttese": ["peoplePage"],
+      "classi": ["PagesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "assolute": [
+        { "metrica": "personePageMs", "statistica": "p90", "massimoEsclusivo": 150.0, "spiega": "le persone o lo scheletro subito" }
+      ],
+      "regressione": [
+        { "metrica": "personePageMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
       ]
     },
     {

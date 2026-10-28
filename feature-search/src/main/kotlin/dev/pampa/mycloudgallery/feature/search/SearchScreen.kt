@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.search
 
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
+import dev.pampa.mycloudgallery.core.designsystem.instant.onFirstDraw
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -71,7 +73,12 @@ fun SearchScreen(
   gridState: LazyGridState = rememberLazyGridState(),
 ) {
   // Lo sfondo e' della schermata (non di chi la ospita): chiaro e scuro si vedono uguali nella scheda, nei test e negli screenshot.
-  Surface(modifier = modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background, contentColor = MaterialTheme.colorScheme.onBackground) {
+  // Avvio istantaneo: l'apertura di Cerca si chiude al primo fotogramma della schermata, in qualunque stato (a riposo: recenti o scheletro).
+  Surface(
+    modifier = modifier.fillMaxSize().onFirstDraw { AvvioTrace.pageDrawn(AvvioTrace.PAGE_SEARCH) },
+    color = MaterialTheme.colorScheme.background,
+    contentColor = MaterialTheme.colorScheme.onBackground,
+  ) {
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
       SearchField(query = query, handlers = handlers)
       Box(modifier = Modifier.weight(1f).fillMaxWidth()) {

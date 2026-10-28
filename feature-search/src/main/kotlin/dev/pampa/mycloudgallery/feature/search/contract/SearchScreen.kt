@@ -30,8 +30,11 @@ enum class SearchUnavailableReason {
 
 /** La schermata Cerca (§1.5). */
 sealed interface SearchScreenState {
-  /** A riposo: ricerche recenti (fino a 10), luoghi frequenti (fino a 8, mai da nascosti), tipi. */
-  data class Idle(val suggestions: IdleSuggestions, val recents: List<HistoryEntry>) : SearchScreenState
+  /**
+   * A riposo: ricerche recenti (fino a 10), luoghi frequenti (fino a 8, mai da nascosti), tipi. [known] falso = i suggerimenti non sono ancora
+   * stati letti (il primo ingresso): la pagina disegna lo scheletro con la forma dell'ultima volta (Avvio istantaneo), mai una rotella.
+   */
+  data class Idle(val suggestions: IdleSuggestions, val recents: List<HistoryEntry>, val known: Boolean = true) : SearchScreenState
 
   /** Mentre si scrive: completamenti di luoghi, mesi, feste, tipi e ricerche recenti, **mai** parole del testo letto (D29). */
   data class Typing(val text: String, val completions: List<Suggestion>) : SearchScreenState

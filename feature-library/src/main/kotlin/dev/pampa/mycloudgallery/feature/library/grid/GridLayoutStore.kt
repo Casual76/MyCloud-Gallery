@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.GridSpec
 import dev.pampa.mycloudgallery.core.library.contract.GridStyle
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
@@ -84,7 +85,7 @@ internal class GridLayoutStore(
       val layout = if (current.view.size <= SyncLimit) {
         engine.layout(current.view, current.spec(level))
       } else {
-        withContext(dispatcher) { engine.layout(current.view, current.spec(level)) }
+        withContext(dispatcher) { AvvioTrace.section("MCG:griglia:layout") { engine.layout(current.view, current.spec(level)) } }
       }
       if (inputs != current) return
       ready[level] = layout

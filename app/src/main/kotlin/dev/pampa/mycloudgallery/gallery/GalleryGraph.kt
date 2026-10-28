@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.common.diagnostics.DiagItem
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagSection
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
 import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
@@ -122,6 +123,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -175,6 +177,11 @@ class GalleryParts(
   val similarSignatures: ((MediaCatalog) -> SignatureSource)? = null,
   /** Fase 6 (P11): la parte `ai` dell'indice condiviso per il NAS (`AiGraph.hooks`), letta quando il NAS parte; null = niente AI. */
   val ai: () -> dev.pampa.mycloudgallery.nas.NasAiHooks? = { null },
+  /**
+   * Avvio istantaneo (28/10): l'attesa del primo disegno utile (`AfterFirstDraw.await` nell'app). Il NAS, il backup, il confronto delle
+   * copie simili e la lettura del telefono partono dopo, cosi' non rubano la CPU al primo fotogramma. Di serie nessuna attesa (test).
+   */
+  val afterFirstDraw: suspend () -> Unit = {},
 )
 
 /** Il catalogo e la lettura del telefono: esistono solo quando l'account del dispositivo e' noto (vedi [GalleryGraph]). */
@@ -236,10 +243,10 @@ class GalleryGraph(
   private var retired = false
   private val retiredFlow = MutableStateFlow(false)
 
-  val database: GalleryDatabase = GalleryDatabase.build(context, parts.databaseName)
+  val database: GalleryDatabase = AvvioTrace.section("MCG:galleria:database") { GalleryDatabase.build(context, parts.databaseName) }
 
   // --- Luoghi (P4): null-object finche' il dataset non c'e' -------------------------------------------------------
-  val places: LazyPlaces = LazyPlaces(scope, dispatchers.io, parts.openPlaces)
+  val places: LazyPlaces = AvvioTrace.section("MCG:galleria:luoghi") { LazyPlaces(scope, dispatchers.io, parts.openPlaces) }
 
   // --- Il NAS nella Libreria (Fase 4A, P11) ------------------------------------------------------------------------
 
@@ -248,7 +255,9 @@ class GalleryGraph(
    * con la galleria ([startWhenReady]); l'azzeramento lo ferma con lei ([shutdown]). Null senza NAS o con
    * `FeatureFlags.nasLibrary` spento.
    */
-  val nas: NasGraph? = parts.nas?.takeIf { it.flags.nasLibrary }?.let { inputs ->
+  val nas: NasGraph? = AvvioTrace.section("MCG:galleria:nas") { nasGraphOrNull() }
+
+  private fun nasGraphOrNull(): NasGraph? = parts.nas?.takeIf { it.flags.nasLibrary }?.let { inputs ->
     NasGraph(
       context = context.applicationContext,
       scope = galleryScope,
@@ -274,14 +283,15 @@ class GalleryGraph(
   }
 
   // --- Miniature e viewer (P6) ------------------------------------------------------------------------------------
-  val imagingBudget: ImagingBudget = ImagingBudget.of(context)
-  val thumbnailSource: ThumbnailSource =
+  val imagingBudget: ImagingBudget = AvvioTrace.section("MCG:galleria:budget") { ImagingBudget.of(context) }
+  val thumbnailSource: ThumbnailSource = AvvioTrace.section("MCG:galleria:sorgenteMiniature") {
     ImagingPipeline.thumbnailSource(
       context,
       parts.syntheticThumbnails,
       nas = nas?.thumbnails ?: parts.benchReplica?.let { NasThumbnailSource(it, NoProvisionalThumbnails) } ?: NoThumbnailSource,
     )
-  val thumbnails: PipelineThumbnailLoader = ImagingPipeline.thumbnailLoader(thumbnailSource, imagingBudget, dispatchers)
+  }
+  val thumbnails: PipelineThumbnailLoader = AvvioTrace.section("MCG:galleria:miniature") { ImagingPipeline.thumbnailLoader(thumbnailSource, imagingBudget, dispatchers) }
 
   /** I segnaposto sfocati: il decodificatore ThumbHash e' di core-metadata, che core-imaging non vede (nota di P6). */
   val placeholders: ThumbHashPlaceholderCache =
@@ -322,7 +332,9 @@ class GalleryGraph(
    * senza I/O e parte con la galleria ([startWhenReady]); l'azzeramento lo ferma **per primo** ([shutdown]). Null senza NAS o senza
    * ingressi del backup.
    */
-  val backup: BackupGraph? = if (nas != null && similarCopies != null && parts.nas != null && parts.backup != null) {
+  val backup: BackupGraph? = AvvioTrace.section("MCG:galleria:backup") { backupGraphOrNull() }
+
+  private fun backupGraphOrNull(): BackupGraph? = if (nas != null && similarCopies != null && parts.nas != null && parts.backup != null) {
     BackupGraph(
       context = context.applicationContext,
       scope = galleryScope,
@@ -409,8 +421,8 @@ class GalleryGraph(
   val backupUi: BackupUi? = backup?.let { b -> BackupUi(b, database, galleryScope, context, parts.nas?.account ?: { null }) }
 
   // --- Libreria (P5) -----------------------------------------------------------------------------------------------
-  val preferences: DataStoreLibraryPreferences = DataStoreLibraryPreferences.create(parts.preferencesFile, scope)
-  val layoutEngine: TimelineLayoutEngine = TimelineLayoutEngine()
+  val preferences: DataStoreLibraryPreferences = AvvioTrace.section("MCG:galleria:preferenze") { DataStoreLibraryPreferences.create(parts.preferencesFile, scope) }
+  val layoutEngine: TimelineLayoutEngine = AvvioTrace.section("MCG:galleria:motoreLayout") { TimelineLayoutEngine() }
 
   /** La finestra visibile della griglia (D11): la fase META legge per primi i media sullo schermo. */
   val metaPriority: WindowMetaPriority = WindowMetaPriority()
@@ -485,8 +497,9 @@ class GalleryGraph(
   private val timelineSource = DeferredTimelineSource { core().timelineSource }
 
   /** Il repository della timeline: uno per processo. Parte con [startWhenReady]. */
-  val repository: CatalogTimelineRepository =
+  val repository: CatalogTimelineRepository = AvvioTrace.section("MCG:galleria:repositoryNuovo") {
     CatalogTimelineRepository(timelineSource, SnapshotStore(parts.replicaDir), galleryScope, dispatchers.default, parts.snapshotDelayMs)
+  }
 
   /** Preferiti e nascosti sul catalogo (nascondere toglie prima dall'indice e dall'istantanea, E-H1). */
   val actions: LocalMediaActions = GuardedMediaActions(
@@ -719,6 +732,48 @@ class GalleryGraph(
     override suspend fun collect(): List<DiagItem> = coreFlow.value?.phone?.diagnostics?.collect().orEmpty()
   }
 
+  // --- Avvio istantaneo (28/10) ------------------------------------------------------------------------------------------
+
+  private val startPositionFlow = MutableStateFlow<dev.pampa.mycloudgallery.feature.library.grid.SavedGridPosition?>(null)
+
+  /** Il punto della Libreria dell'ultima volta, letto da [warmLibrary] (null = dai piu' recenti). Si consegna una volta, al primo stato della Libreria. */
+  fun takeStartPosition(): dev.pampa.mycloudgallery.feature.library.grid.SavedGridPosition? = startPositionFlow.getAndUpdate { null }
+
+  /** Chi sa dov'e' la Libreria adesso (la griglia vera, legata da `AppLibraryStates`): serve a [onBackground] per ricordare il punto. */
+  @Volatile
+  var libraryPosition: (() -> dev.pampa.mycloudgallery.feature.library.grid.SavedGridPosition?)? = null
+
+  /**
+   * Dall'avvio del processo, prima di ogni schermata: l'istantanea della Libreria pubblicata, filtro, livello e stile ricordati, il punto in
+   * cui si era e il layout del livello ricordato, tutto fuori dal thread principale ([LibraryInstant]). Non aspetta la famiglia ne' il
+   * catalogo; la Libreria si vede comunque solo con la famiglia pronta e dopo il blocco app. A galleria ferma non fa niente.
+   */
+  fun warmLibrary(screen: LibraryInstant.Screen) {
+    if (retired) return
+    galleryScope.launch(dispatchers.default) {
+      try {
+        startPositionFlow.value = LibraryInstant.warm(repository, visibleTimeline, preferences, layoutEngine, parts.replicaDir, screen)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        GalleryLog.w(TAG) { "Libreria non preparata: ${e.javaClass.simpleName}" }
+      }
+    }
+  }
+
+  /**
+   * Il punto della Libreria, quando l'app va in secondo piano: si scrive in `replica/` come l'istantanea, mai a galleria ferma (dopo
+   * l'azzeramento niente deve riscrivere `replica/`, R7). Null = niente da scrivere (Libreria mai mostrata in questo processo).
+   */
+  fun saveLibraryPosition(position: dev.pampa.mycloudgallery.feature.library.grid.SavedGridPosition?) {
+    if (position == null || retired) return
+    galleryScope.launch(dispatchers.io) {
+      lifecycle.withLock {
+        if (!retired) LibraryInstant.writePosition(java.io.File(parts.replicaDir, LibraryInstant.POSITION_FILE), position)
+      }
+    }
+  }
+
   // --- Processo ------------------------------------------------------------------------------------------------------
 
   private val startedFlow = MutableStateFlow(false)
@@ -737,12 +792,14 @@ class GalleryGraph(
   fun startWhenReady(onStarted: () -> Unit = {}) {
     galleryScope.launch {
       try {
-        core()
-        repository.start()
+        AvvioTrace.asyncSection("MCG:galleria:catalogo") { core() }
+        AvvioTrace.asyncSection("MCG:galleria:repository") { repository.start() }
         startedFlow.value = true
         // Il NAS nella Libreria parte con la galleria (famiglia pronta, catalogo costruito); senza NAS non fa niente.
+        // Avvio istantaneo: dopo il primo disegno utile (la sessione, la scansione e il backup non servono a disegnare la Libreria).
         nas?.let { n ->
           galleryScope.launch {
+            parts.afterFirstDraw()
             runCatching { n.start() }
             // Il backup parte dopo il NAS: area privata, chiave del dispositivo e catalogo servono tutti (senza, non parte niente).
             backup?.let { b -> runCatching { b.start() } }
@@ -764,7 +821,7 @@ class GalleryGraph(
             phoneStatus.map { it is SyncStatus.Idle }.distinctUntilChanged().filter { it }.collect { runCatching { b.afterPhoneRead() } }
           }
         }
-        if (foreground) attachSync()
+        if (foreground) attachSyncWhenUseful()
         onStarted()
       } catch (e: CancellationException) {
         throw e
@@ -780,12 +837,14 @@ class GalleryGraph(
     refreshAccess()
     // GA-3: un `onTrimMemory` in secondo piano ha svuotato le miniature della finestra: al ritorno si richiedono.
     if (!retired) thumbnails.resume()
-    if (startedFlow.value && !retired) attachSync()
+    if (startedFlow.value && !retired) attachSyncWhenUseful()
   }
 
   /** L'app va in secondo piano: la lettura si ferma (resta il lavoro a trigger di contenuto) e l'istantanea si salva. */
   fun onBackground() {
     foreground = false
+    // Avvio istantaneo: il punto della Libreria per la prossima partenza (letto qui, sul thread principale; scritto fuori).
+    saveLibraryPosition(runCatching { libraryPosition?.invoke() }.getOrNull())
     currentSync()?.detach()
     if (startedFlow.value) galleryScope.launch { runCatching { flush() } }
   }
@@ -806,6 +865,22 @@ class GalleryGraph(
   /** La sincronizzazione agganciata al primo piano (quella vera o quella ferma della misura). */
   private fun attachSync() {
     currentSync()?.attach(galleryScope)
+  }
+
+  /**
+   * Avvio istantaneo: con l'accesso completo ai media la lettura del telefono si aggancia **dopo** il primo disegno utile (la Libreria
+   * parte dall'istantanea, e la lettura riconcilia dopo). Con l'accesso parziale (E-P1) no: la Libreria aspetta proprio la prima lettura
+   * per sapere quali foto mostrare, e rimandarla la terrebbe vuota piu' a lungo.
+   */
+  private fun attachSyncWhenUseful() {
+    if (access.state.value.media != dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess.FULL) {
+      attachSync()
+      return
+    }
+    galleryScope.launch {
+      parts.afterFirstDraw()
+      if (foreground && !retired) attachSync()
+    }
   }
 
   /**

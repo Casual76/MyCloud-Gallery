@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.library.collections
 
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
+import dev.pampa.mycloudgallery.core.designsystem.instant.onFirstDraw
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
@@ -83,7 +85,8 @@ fun CollectionsTab(
     onOpenCollection = onOpenCollection,
     onOpenSettings = onOpenSettings,
     statusHeader = statusHeader,
-    modifier = modifier,
+    // Avvio istantaneo: l'apertura della scheda si chiude al primo fotogramma (le sezioni sono quelle gia' in memoria).
+    modifier = modifier.onFirstDraw { AvvioTrace.pageDrawn(AvvioTrace.PAGE_COLLECTIONS) },
     onOpenEntry = onOpenEntry,
     entryDetail = entryDetail,
     entryHasDetail = entryHasDetail,

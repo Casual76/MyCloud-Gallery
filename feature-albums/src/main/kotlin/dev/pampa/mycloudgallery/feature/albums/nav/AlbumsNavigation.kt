@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.albums.nav
 
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.toRoute
@@ -49,7 +50,11 @@ data object TripsDestination
 
 fun NavController.openAlbums() = navigate(AlbumListDestination)
 
-fun NavController.openAlbum(id: AlbumId) = navigate(AlbumPageDestination(id.value))
+fun NavController.openAlbum(id: AlbumId) {
+  // Avvio istantaneo: l'apertura della pagina di un album si misura dal tocco al primo fotogramma (scheletro o album).
+  AvvioTrace.pageOpened(AvvioTrace.PAGE_ALBUM)
+  navigate(AlbumPageDestination(id.value))
+}
 
 fun NavController.openSuggestions(id: AlbumId, kind: SuggestionKind) = navigate(SuggestionsDestination(id.value, toShare = kind == SuggestionKind.TO_SHARE))
 

@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.library.data
 
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.database.CatalogChange
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.TimelineRepository
@@ -93,6 +94,34 @@ class CatalogTimelineRepository(
 
   /** Le scritture dell'istantanea arrivate al disco. */
   val snapshotWrites: Int get() = writer?.writes ?: 0
+
+  /** L'istantanea letta in anticipo da [preload], che [run] usa invece di rileggere il file. */
+  private val preloaded = CompletableDeferred<SnapshotStore.Loaded?>()
+  private val preloadStarted = AtomicBoolean(false)
+
+  /**
+   * **Avvio istantaneo** (28/10): legge l'istantanea su file e la pubblica **subito**, senza aspettare il catalogo (che serve solo a
+   * riconciliarla, in [start]): la Libreria disegna l'ultima volta mentre il database si apre. Si chiama una volta, dall'avvio del processo;
+   * [start] poi riusa la lettura (niente doppio I/O) e riconcilia come sempre. Il file non contiene mai un nascosto (E-H1): mostrarlo prima
+   * non mostra niente che la Libreria non avrebbe mostrato un istante dopo.
+   */
+  suspend fun preload() {
+    if (!preloadStarted.compareAndSet(false, true)) return
+    val loaded = try {
+      store?.read()
+    } catch (e: CancellationException) {
+      preloaded.complete(null)
+      throw e
+    } catch (e: Exception) {
+      null
+    }
+    lock.withLock {
+      // Se qualcosa e' gia' stato pubblicato (un [forget], la riconciliazione) quello e' piu' nuovo: l'istantanea letta non lo copre.
+      if (loaded != null && snapshotFlow.value == null) publish(loaded.snapshot)
+    }
+    preloaded.complete(loaded)
+    AvvioTrace.mark(AvvioTrace.SNAPSHOT_READ)
+  }
 
   override suspend fun start() {
     if (started.compareAndSet(false, true)) {
@@ -207,19 +236,26 @@ class CatalogTimelineRepository(
 
   private suspend fun run() {
     try {
-      val loaded = try {
-        store?.read()
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        null
+      // Avvio istantaneo: se [preload] e' partito, la sua lettura (anche a meta': la si aspetta) vale anche qui.
+      val loaded = if (preloadStarted.get()) {
+        preloaded.await()
+      } else {
+        try {
+          store?.read()
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          null
+        }.also { AvvioTrace.mark(AvvioTrace.SNAPSHOT_READ) }
       }
       lock.withLock {
-        if (loaded != null) publish(loaded.snapshot)
+        // Gia' pubblicata da [preload] (o superata da un [forget]): non si ripubblica, le viste restano le stesse (niente layout rifatti).
+        if (loaded != null && snapshotFlow.value == null) publish(loaded.snapshot)
         val seq = source.changeSeq()
         if (loaded == null || loaded.provisional || loaded.snapshot.seq != seq) rebuild()
       }
       reconciledFlow.value = true
+      AvvioTrace.markOnce(AvvioTrace.LIBRARY_LIVE)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {

@@ -2073,6 +2073,50 @@ Step "benchmark: scenari degli album e dei volti (album, album-scroll, album-ric
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
 }
 
+# Avvio istantaneo (28/10, docs/decisioni.md "Avvio e pagine istantanei"): il primo disegno utile e l'apertura delle pagine principali. Senza
+# dispositivo si controlla che le soglie ci siano (primo disegno utile stretto, caricamento completo largo a 1500 ms, pagine) e che le prove e la
+# metrica esistano nel modulo. Le misure vere vengono da -Bench sul telefono.
+Step "benchmark: scenari dell'avvio istantaneo (avvio, avvio-abituale, pagine) in soglie.json e nel modulo" {
+  $soglie = Join-Path $root "benchmark\soglie.json"
+  if (-not (Test-Path -LiteralPath $soglie)) { return "manca benchmark\soglie.json" }
+  $json = (Read-TextFile $soglie) | ConvertFrom-Json
+  $byId = @{}
+  foreach ($s in @($json.scenari)) { $byId[[string]$s.id] = $s }
+  $sources = @(Get-ChildItem (Join-Path $root "benchmark\src") -Recurse -Filter "*.kt" -ErrorAction SilentlyContinue)
+  $wanted = @(
+    @{ Id = "avvio";           Test = "coldStart";       Class = "StartupBenchmark"; Useful = $true },
+    @{ Id = "avvio-abituale";  Test = "coldStartUsual";  Class = "StartupBenchmark"; Useful = $true },
+    @{ Id = "pagina-raccolte"; Test = "collectionsPage"; Class = "PagesBenchmark";   Metric = "raccoltePageMs" },
+    @{ Id = "pagina-cerca";    Test = "searchPage";      Class = "PagesBenchmark";   Metric = "cercaPageMs" },
+    @{ Id = "pagina-album";    Test = "albumPage";       Class = "PagesBenchmark";   Metric = "albumPageMs" },
+    @{ Id = "pagina-persone";  Test = "peoplePage";      Class = "PagesBenchmark";   Metric = "personePageMs" }
+  )
+  $problems = @()
+  foreach ($w in $wanted) {
+    $scenario = $byId[$w.Id]
+    if (-not $scenario) { $problems += "scenario $($w.Id) assente"; continue }
+    if (@($scenario.proveAttese) -notcontains $w.Test) { $problems += "scenario $($w.Id): la prova attesa $($w.Test) manca" }
+    $file = $sources | Where-Object { $_.Name -eq "$($w.Class).kt" } | Select-Object -First 1
+    if (-not $file) {
+      $problems += "manca benchmark/.../$($w.Class).kt"
+    } elseif ((Read-TextFile $file.FullName) -notmatch ("fun\s+" + $w.Test + "\s*\(")) {
+      $problems += "$($w.Class).kt non ha la prova $($w.Test)"
+    }
+    $absolute = @($scenario.assolute)
+    if ($w.Useful) {
+      if (-not (@($absolute | Where-Object { $_.metrica -eq "libraryUsefulMs" -and $_.statistica -eq "p90" }))) { $problems += "scenario $($w.Id): manca la soglia del primo disegno utile" }
+      $full = @($absolute | Where-Object { $_.metrica -eq "timeToFullDisplayMs" }) | Select-Object -First 1
+      if (-not $full -or [double]$full.massimoEsclusivo -ne 1500.0) { $problems += "scenario $($w.Id): il caricamento completo non e' p90 < 1500 ms" }
+    } elseif (-not (@($absolute | Where-Object { $_.metrica -eq $w.Metric -and $_.statistica -eq "p90" }))) {
+      $problems += "scenario $($w.Id): manca la soglia di $($w.Metric)"
+    }
+  }
+  $metrics = $sources | Where-Object { $_.Name -eq "AvvioMetrics.kt" } | Select-Object -First 1
+  if (-not $metrics -or (Read-TextFile $metrics.FullName) -notmatch "class LibraryUsefulMetric") { $problems += "manca LibraryUsefulMetric (benchmark/.../AvvioMetrics.kt)" }
+  Write-Host ("        scenari verificati: {0}" -f $wanted.Count) -ForegroundColor DarkGray
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+}
+
 # -Bench: le misure del par. 2.6 su un dispositivo collegato. Senza -Bench o senza dispositivo il passo e' SKIP (non fallisce).
 $benchAdb = $null
 $benchTarget = $null

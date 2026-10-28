@@ -196,6 +196,29 @@
       "className": "dev.pampa.mycloudgallery.benchmark.StartupBenchmark",
       "totalRunTimeNs": 41234567890,
       "metrics": {
+        "libraryUsefulMs": {
+          "minimum": 700.0,
+          "maximum": 840.0,
+          "median": 770.0,
+          "coefficientOfVariation": 0.03,
+          "runs": [
+            700.0,
+            710.0,
+            720.0,
+            730.0,
+            740.0,
+            750.0,
+            760.0,
+            770.0,
+            780.0,
+            790.0,
+            800.0,
+            810.0,
+            820.0,
+            830.0,
+            840.0
+          ]
+        },
         "timeToInitialDisplayMs": {
           "minimum": 500.0,
           "maximum": 500.0,

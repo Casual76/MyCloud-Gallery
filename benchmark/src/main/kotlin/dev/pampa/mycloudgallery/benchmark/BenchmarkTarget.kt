@@ -41,6 +41,28 @@ object BenchmarkTarget {
   /** Il nome della sezione di traccia di cui la misura del viewer si fida (`ViewerOpenMetric`). La emette il viewer (P8). */
   const val TRACE_VIEWER_OPEN: String = "MCG:viewerOpen"
 
+  /**
+   * Avvio istantaneo (28/10): il segno del **primo disegno utile** (la Libreria con le miniature delle celle in vista) e quello
+   * dei dati vivi al posto dell'istantanea. Stessi nomi di `AvvioTrace.LIBRARY_USEFUL` e `AvvioTrace.LIBRARY_LIVE` nell'app.
+   */
+  const val TRACE_LIBRARY_USEFUL: String = "MCG:avvio:libreriaUtile"
+  const val TRACE_LIBRARY_LIVE: String = "MCG:avvio:libreriaViva"
+
+  /** I segni intermedi dell'avvio (`AvvioTrace`) e il nome della misura che ne riporta l'istante dal lancio. */
+  val TRACE_STARTUP_STEPS: List<Pair<String, String>> = listOf(
+    "MCG:avvio:sbloccato" to "avvioSbloccatoMs",
+    "MCG:avvio:destinazione" to "avvioDestinazioneMs",
+    "MCG:avvio:istantaneaLetta" to "avvioIstantaneaMs",
+    "MCG:avvio:griglia" to "avvioGrigliaMs",
+    "MCG:avvio:dopoPrimoDisegno" to "avvioRimandatiMs",
+  )
+
+  /** Le sezioni asincrone dell'apertura delle pagine principali (`AvvioTrace.PAGE_*` nell'app). */
+  const val TRACE_PAGE_COLLECTIONS: String = "MCG:pagina:raccolte"
+  const val TRACE_PAGE_ALBUM: String = "MCG:pagina:album"
+  const val TRACE_PAGE_PEOPLE: String = "MCG:pagina:persone"
+  const val TRACE_PAGE_SEARCH: String = "MCG:pagina:cerca"
+
   /** L'unica activity dell'app (launcher): serve ad avviarla da shell fuori da Macrobenchmark (preparazione, sonda). */
   const val MAIN_ACTIVITY: String = "dev.pampa.mycloudgallery.MainActivity"
 

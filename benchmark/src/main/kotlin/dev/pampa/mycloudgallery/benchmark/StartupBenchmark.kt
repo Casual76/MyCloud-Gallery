@@ -10,9 +10,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 /**
- * Avvio a freddo (§2.6, riga 3): `StartupMode.COLD`, 15 ripetizioni. La soglia e' TTFD p90 < 1000 ms
- * (`timeToFullDisplayMs`: l'app chiama `reportFullyDrawn` alla prima pagina di miniature disegnata, o dopo 300 ms);
- * la regressione e' +10%.
+ * Avvio a freddo (§2.6, riga 3): `StartupMode.COLD`, 15 ripetizioni. Dall'Avvio istantaneo (28/10) le soglie sono due: il **primo disegno
+ * utile** (`libraryUsefulMs`, [LibraryUsefulMetric]: la Libreria con le miniature delle celle in vista), stretta, e il **caricamento completo**
+ * (`timeToFullDisplayMs`: l'app chiama `reportFullyDrawn` alla prima pagina di miniature disegnata, o dopo 300 ms), larga (1.500 ms). Vedi
+ * `benchmark/soglie.json` e docs/bench/README.md §2-quater.
+ *
+ * `StartupMode.COLD` butta la cache delle pipeline grafiche e quella delle pagine del kernel prima di ogni avvio: e' il primo avvio dopo
+ * un'installazione o un aggiornamento, il caso peggiore. L'avvio di tutti i giorni e' [coldStartUsual].
  *
  * Il percorso d'avvio e' quello del §2.6: grafo della Fase 2 pigro e senza sessione NAS, database aperto fuori dal
  * thread principale, istantanea mappata in meno di 20 ms, primo fotogramma con i segnaposto ThumbHash, riconciliazione
@@ -42,7 +46,7 @@ class StartupBenchmark {
   fun coldStart() {
     rule.measureRepeated(
       packageName = BenchSession.targetPackage,
-      metrics = listOf(StartupTimingMetric(), LibraryShownMetric(), LibraryMixMetric()),
+      metrics = listOf(StartupTimingMetric(), LibraryUsefulMetric(), LibraryShownMetric(), LibraryMixMetric()),
       compilationMode = BenchConfig.compilationMode,
       startupMode = StartupMode.COLD,
       iterations = BenchConfig.iterations(ITERATIONS),
@@ -56,6 +60,31 @@ class StartupBenchmark {
         // La prima cella si vede prima di reportFullyDrawn (che aspetta le miniature, al piu' 300 ms): la traccia deve
         // contenere anche il fotogramma che lo segue, o StartupTimingMetric non trova il fotogramma del RenderThread
         // ("No RT frame slice ... after reportFullyDrawn", S25 13/10, quando l'avvio e' diventato piu' veloce).
+        if (BenchState.libraryShown) Thread.sleep(FULLY_DRAWN_SETTLE_MS)
+      },
+    )
+  }
+
+  /**
+   * Avvio istantaneo (28/10): l'**avvio a freddo abituale**, quello di tutti i giorni. Un processo nuovo ogni volta (lo si uccide nel
+   * `setupBlock`), ma senza buttare la cache delle pipeline grafiche e quella delle pagine del kernel, come fa `StartupMode.COLD`: un utente
+   * le butta solo installando o aggiornando l'app. `StartupTimingMetric` senza modo d'avvio legge l'avvio come freddo (e' un processo nuovo).
+   */
+  @Test
+  fun coldStartUsual() {
+    rule.measureRepeated(
+      packageName = BenchSession.targetPackage,
+      metrics = listOf(StartupTimingMetric(), LibraryUsefulMetric(), LibraryShownMetric(), LibraryMixMetric()),
+      compilationMode = BenchConfig.compilationMode,
+      startupMode = null,
+      iterations = BenchConfig.iterations(ITERATIONS),
+      setupBlock = {
+        pressHome()
+        killProcess()
+      },
+      measureBlock = {
+        startActivityAndWait()
+        BenchState.libraryShown = BenchUi.waitForLibrary(device, if (libraryReachable) FULL_DISPLAY_WAIT_MS else NO_LIBRARY_WAIT_MS)
         if (BenchState.libraryShown) Thread.sleep(FULLY_DRAWN_SETTLE_MS)
       },
     )

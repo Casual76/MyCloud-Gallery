@@ -10681,6 +10681,36 @@ resta e oggi passa. Album e Persone nel banco si saltano finche' la variante di 
    ripetizione) da' mediana 0,90%, media 1,03%. Il peggioramento c'e' davvero: circa +0,3 punti, ancora sotto l'1% del piano (§4) nelle corse
    pulite, ma fuori dalla guardia 4A. **Da correggere** prima di accettare il riferimento: cercare nelle tracce del pizzico che cosa fa in piu'
    la griglia (layout preparato, celle, miniature) rispetto a `main`.
+   **Bisezione e campione grande (28/10 sera, ramo `perf/pizzico`): la differenza non regge, il codice dell'app non cambia.**
+   - **Bisezione** (orchestratore, 6 ripetizioni): `b9889ff5`, che sul percorso del pizzico e' identico a `361a3f57` (aggiunge solo il
+     `:benchmark` e `AvvioTrace.kt`, che li' nessuno chiama), da' mediana 0,885% e media 0,83%, come il pacchetto. Il rumore fra corse di
+     6 ripetizioni arriva a circa 0,3 punti. `0d0b6046` (P95 anomalo, 7,25 ms) e `82568cc6` (prova fallita) non sono misure utili.
+   - **Corse alternate nello stesso pomeriggio** (S25, stato termico 0 prima di ogni corsa, solo `LibraryPinchBenchmark`, **10 ripetizioni**
+     per corsa in una copia locale non committata, ordine A B B A A B; A = `361a3f57`, B = `perf/pizzico` = `629919c3`):
+     A 0,687 / 0,568 / 0,477 (30 ripetizioni: media 0,578%, mediana 0,595%); B 1,033 / 0,746 / 0,541. La prima corsa B e' disturbata: la
+     tendina delle notifiche era rimasta aperta prima della corsa e durante il pizzico lavorava un'altra app (probabilmente un servizio di accessibilita'),
+     circa 3 s di CPU in piu' sul telefono per iterazione e P95 della CPU dei fotogrammi 13,98 ms contro 11,6-12,3 delle altre. Senza quella
+     corsa B fa media 0,643% e mediana 0,621% (20 ripetizioni): +0,07 punti, Mann-Whitney a una coda p = 0,19, permutazione sulle medie di
+     corsa p = 0,30. Tenendo tutto lo storico (7 corse per parte, non tutte alternate nella stessa sessione) la differenza e' +0,13/+0,17
+     punti, ma in quello storico c'e' anche `b9889ff5` a 0,83: e' la deriva fra sessioni, non il codice.
+   - **Le tracce dicono che durante il pizzico l'app fa lo stesso lavoro** (10 tracce per corsa, A2 e A3 contro B2 e B3, piu' `base1`,
+     `base2` e `run5` del pacchetto): stessa CPU per thread dell'app (principale circa 1,2 s, RenderThread circa 3,4 s, `DefaultDispatcher`
+     circa 0,55 s per iterazione), nessuna sezione `MCG:` (niente layout ricalcolato, niente layout preparato), nessun lavoro rimandato,
+     stessi caricamenti di texture (circa 6200 per traccia, stesse dimensioni, stesso profilo secondo per secondo), stessa CPU di tutto il
+     telefono. I fotogrammi lunghi hanno lo stesso contenuto (compilazione delle pipeline e prime allocazioni nel primo secondo); in B ce ne
+     sono un po' di piu' nei primi due secondi del gesto (22 e 24 sopra 12 ms del RenderThread su 10 tracce, contro 15 e 19), con la stessa
+     quantita' di lavoro: e' l'unica traccia di differenza, troppo piccola per una correzione mirata.
+   - **Conclusione**: nessuna modifica al codice (cambiare senza una causa misurata rischierebbe l'avvio istantaneo per niente). Il pizzico
+     resta sotto l'1% del piano in tutte le corse pulite. La guardia 4A con 6 ripetizioni e' troppo sensibile: per ripetizione il jank del
+     pizzico ha deviazione standard di circa 0,28 punti, e ricampionando le ripetizioni di `361a3f57` la media di 6 supera 0,685 nel 20% dei
+     casi (11% con 12, 5% con 18) **senza nessun cambiamento**. Proposta (non applicata, la decide l'utente):
+     1. la guardia del jank (pizzico e scorrimento) giudica la media di **almeno 18 ripetizioni** (tre corse da 6 o una corsa lunga), con il
+        pavimento max(0,15; 2 x deviazione standard / radice di n);
+     2. una corsa da 6 sopra la guardia vale "DA RIMISURARE", non FAIL: altre due corse alternate con il riferimento, decide la media delle 18;
+     3. meglio ancora, confrontare con il riferimento **ricompilato e misurato nella stessa sessione**, alternato, invece che con i numeri
+        del 13/10: la deriva fra sessioni (0,1-0,3 punti) e' grande quanto il pavimento;
+     4. prima di ogni corsa, oltre allo stato termico: telefono sbloccato, tendina chiusa, cavo stabile, e i servizi di accessibilita' delle
+        altre app spenti dall'utente (accesi aggiungono lavoro e rumore a ogni fotogramma).
 5. **Le cache delle miniature**: una cella su venti, al primo avvio, fallisce il primo tentativo e riprova dopo 1 s (`RetryPolicy`); la causa
    non e' stata cercata (succede anche su `main`).
 6. **Il lettore delle tracce** usato per l'analisi (Python, formato Perfetto) e' rimasto fra gli script di lavoro; se serve ancora va portato

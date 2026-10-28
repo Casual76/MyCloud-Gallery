@@ -10675,6 +10675,12 @@ resta e oggi passa. Album e Persone nel banco si saltano finche' la variante di 
    fotogramma in ritardo in piu' su 650 per ripetizione; sempre sotto l'1%, ma sopra la guardia 4A di 0,685). Nelle tracce del pizzico non
    cade nessuna sezione del lavoro rimandato, e dopo il primo disegno utile la griglia non segue piu' niente per l'avvio (ritoccato dopo
    `run5`). Sei ripetizioni sono poche per dirlo: da rimisurare in una corsa lunga prima di accettare il riferimento.
+   **Rimisurato dall'orchestratore il 28/10 sera** (S25, a telefono freddo, stato termico 0 prima di ogni corsa, solo `LibraryPinchBenchmark`,
+   versioni alternate): `main` di prima (`361a3f57`) mediana 0,535% e 0,535% (medie 0,71% e 0,59%); questo pacchetto (`127631ac`, con il
+   ritocco) mediana 0,845% (media 0,88%). Una corsa con `StartupBenchmark` prima (con una notifica arrivata sul telefono nella prima
+   ripetizione) da' mediana 0,90%, media 1,03%. Il peggioramento c'e' davvero: circa +0,3 punti, ancora sotto l'1% del piano (§4) nelle corse
+   pulite, ma fuori dalla guardia 4A. **Da correggere** prima di accettare il riferimento: cercare nelle tracce del pizzico che cosa fa in piu'
+   la griglia (layout preparato, celle, miniature) rispetto a `main`.
 5. **Le cache delle miniature**: una cella su venti, al primo avvio, fallisce il primo tentativo e riprova dopo 1 s (`RetryPolicy`); la causa
    non e' stata cercata (succede anche su `main`).
 6. **Il lettore delle tracce** usato per l'analisi (Python, formato Perfetto) e' rimasto fra gli script di lavoro; se serve ancora va portato
@@ -10692,3 +10698,6 @@ resta e oggi passa. Album e Persone nel banco si saltano finche' la variante di 
 - **Sul telefono resta da rifare una corsa** (il telefono e' stato staccato dopo `run5`): `LibraryPinchBenchmark` e `StartupBenchmark` nella
   stessa corsa, con l'ultimo ritocco (la griglia non segue piu' niente dopo il primo disegno utile), per vedere se il jank del pizzico torna
   sotto la guardia 4A (punto aperto 4) e per accettare i riferimenti nuovi con `compare.ps1 -Accept`.
+- **Corsa fatta il 28/10 sera** (orchestratore, `127631ac`): l'avvio e' dentro le soglie (primo disegno utile p90 654 ms dopo un
+  aggiornamento e 271 ms nell'avvio abituale; caricamento completo p90 663 e 278 ms), il pizzico no (punto aperto 4). Riferimenti **non**
+  accettati finche' il pizzico non torna sotto la guardia.

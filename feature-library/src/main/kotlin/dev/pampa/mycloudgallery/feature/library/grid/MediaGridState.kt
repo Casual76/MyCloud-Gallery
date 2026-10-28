@@ -608,9 +608,12 @@ class MediaGridState(
     noteUsefulIfReady()
   }
 
+  /** Vero finche' questa griglia aspetta il primo disegno utile del processo (dopo, niente si segue piu': nessun costo per fotogramma). */
+  internal val watchingUseful: Boolean get() = reportsStartup && !AvvioTrace.marked(AvvioTrace.LIBRARY_USEFUL)
+
   /** Scrive il segno del primo disegno utile, una volta per processo, quando ogni cella in vista ha la sua risposta. */
   internal fun noteUsefulIfReady() {
-    if (!reportsStartup || AvvioTrace.marked(AvvioTrace.LIBRARY_USEFUL)) return
+    if (!watchingUseful) return
     val keys = visibleThumbKeys
     if (keys.isEmpty()) return
     if (keys.all { loader.settled(it) }) {

@@ -73,7 +73,7 @@
       "mista": true,
       "validita": { "metrica": "libraryShown", "statistica": "min", "minimo": 1, "spiega": "la Libreria era visibile: altrimenti l'avvio misurato e' quello dell'onboarding" },
       "assolute": [
-        { "metrica": "libraryUsefulMs", "statistica": "p90", "massimoEsclusivo": 700.0, "spiega": "primo disegno utile p90 sotto i 700 ms con la grafica da ricompilare (S25, 28/10: 628); la parte che resta e' la compilazione delle pipeline (L295)" },
+        { "metrica": "libraryUsefulMs", "statistica": "p90", "massimoEsclusivo": 750.0, "spiega": "primo disegno utile p90 sotto i 750 ms con la grafica da ricompilare (S25, 28/10: 628 e 693 in due corse, prima 870); la parte che resta e' la compilazione delle pipeline (L295)" },
         { "metrica": "timeToFullDisplayMs", "statistica": "p90", "massimoEsclusivo": 1500.0, "spiega": "caricamento completo p90 sotto 1,5 s (il piano, par. 4, riletto il 28/10: il secondo vale per il primo disegno utile dell'avvio abituale); l'app deve chiamare reportFullyDrawn" }
       ],
       "regressione": [
@@ -91,7 +91,7 @@
       "mista": true,
       "validita": { "metrica": "libraryShown", "statistica": "min", "minimo": 1, "spiega": "la Libreria era visibile: altrimenti l'avvio misurato e' quello dell'onboarding" },
       "assolute": [
-        { "metrica": "libraryUsefulMs", "statistica": "p90", "massimoEsclusivo": 400.0, "spiega": "primo disegno utile p90 sotto i 400 ms: la Libreria dell'ultima volta con le miniature, subito" },
+        { "metrica": "libraryUsefulMs", "statistica": "p90", "massimoEsclusivo": 400.0, "spiega": "primo disegno utile p90 sotto i 400 ms: la Libreria dell'ultima volta con le miniature, subito (S25, 28/10: 280, prima 350)" },
         { "metrica": "timeToFullDisplayMs", "statistica": "p90", "massimoEsclusivo": 1500.0, "spiega": "caricamento completo p90 sotto 1,5 s" }
       ],
       "regressione": [

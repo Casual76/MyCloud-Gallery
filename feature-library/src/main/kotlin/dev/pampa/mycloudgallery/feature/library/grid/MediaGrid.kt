@@ -70,6 +70,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -230,13 +231,13 @@ private fun GridEffects(state: MediaGridState, reducedMotion: Boolean) {
         val plan = window.plan(rows)
         state.loader.window(plan.visible, plan.ahead)
         state.updateVisibleIds(plan.visibleIds)
-        state.updateVisibleThumbs(plan.visible.map { it.key })
+        if (state.watchingUseful) state.updateVisibleThumbs(plan.visible.map { it.key })
       }
   }
 
-  // Avvio istantaneo: il primo disegno utile della Libreria (ogni miniatura in vista arrivata), una volta per processo.
+  // Avvio istantaneo: il primo disegno utile della Libreria (ogni miniatura in vista arrivata), una volta per processo; poi non si segue piu'.
   if (state.reportsStartup) {
-    LaunchedEffect(state) { state.loader.stats.collect { state.noteUsefulIfReady() } }
+    LaunchedEffect(state) { state.loader.stats.first { state.noteUsefulIfReady(); !state.watchingUseful } }
   }
 
   // I segnaposto delle celle attorno a dove si e', per tutti i livelli, decodificati su un thread di lavoro: la

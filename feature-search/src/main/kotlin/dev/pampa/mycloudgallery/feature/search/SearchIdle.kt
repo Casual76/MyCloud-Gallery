@@ -37,12 +37,10 @@ import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
-import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.designsystem.instant.InstantBlock
 import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShape
 import dev.pampa.mycloudgallery.core.designsystem.instant.KeepInstantShape
 import dev.pampa.mycloudgallery.core.designsystem.instant.instantSkeleton
-import dev.pampa.mycloudgallery.core.designsystem.instant.onFirstDraw
 import dev.pampa.mycloudgallery.core.designsystem.instant.rememberInstantShape
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
@@ -73,7 +71,7 @@ internal fun SearchIdleContent(
   val skeleton = rememberInstantShape(SearchInstant.CODE, SearchInstant.DEFAULT)
   if (state.known) KeepInstantShape(SearchInstant.CODE, SearchInstant.shapeOf(state, typeChips.isNotEmpty()))
   LazyColumn(
-    modifier = modifier.onFirstDraw { AvvioTrace.pageDrawn(AvvioTrace.PAGE_SEARCH) },
+    modifier = modifier,
     contentPadding = PaddingValues(bottom = SearchDimens.ListBottom),
     verticalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap),
   ) {

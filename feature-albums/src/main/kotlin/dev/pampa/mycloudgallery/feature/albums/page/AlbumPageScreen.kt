@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.feature.albums.page
 
+import dev.pampa.mycloudgallery.core.designsystem.instant.InstantBlock
+import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShape
+import dev.pampa.mycloudgallery.core.designsystem.instant.instantSkeleton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -105,9 +108,16 @@ fun AlbumPageScreen(
   handlers: AlbumPageHandlers,
   modifier: Modifier = Modifier,
   listState: LazyListState = rememberLazyListState(),
+  /** Avvio istantaneo: quante celle ha lo scheletro della griglia finche' l'album non e' letto; null = la riga "Caricamento" di prima. */
+  skeletonCells: Int? = null,
 ) {
   when (val page = ui.page) {
-    null -> PlainPage(fallbackTitle, handlers, modifier, listState) { item(key = "loading") { Text(stringResource(R.string.album_loading)) } }
+    null -> if (skeletonCells != null && skeletonCells > 0) {
+      val columns = rememberFluidScreenMetrics().columns(minColumn = AlbumDimens.CellMin, spacing = GalleryWall.Gap, maxColumns = MaxColumns)
+      PlainPage(fallbackTitle, handlers, modifier, listState) { instantSkeleton(InstantShape.of(InstantBlock.Tiles(skeletonCells, columns)), "instant-album") }
+    } else {
+      PlainPage(fallbackTitle, handlers, modifier, listState) { item(key = "loading") { Text(stringResource(R.string.album_loading)) } }
+    }
     is AlbumPageState.Ready -> ReadyPage(ui, page, thumbnails, handlers, modifier, listState)
     is AlbumPageState.Recomputing -> PlainPage(page.album.title, handlers, modifier, listState) { recomputing(page) }
     is AlbumPageState.Closed -> PlainPage(page.notice.title, handlers, modifier, listState) { closed(page, handlers) }

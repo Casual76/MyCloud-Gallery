@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.people.list
 
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
+import dev.pampa.mycloudgallery.core.designsystem.instant.onFirstDraw
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -78,7 +80,15 @@ fun PeopleListRoute(
       override fun onDismissMerge() = controller.dismissMerge()
     }
   }
-  PeopleHost { PeopleListScreen(ui = ui, crops = crops, handlers = handlers, modifier = modifier) }
+  // Avvio istantaneo: al primo ingresso, finche' le persone non sono lette (l'elenco arriva vuoto finche' Persone non e' montata), lo scheletro
+  // con la forma dell'ultima volta invece di "Nessuna persona"; dopo [PeopleInstant.PATIENCE_MS] il vuoto e' vero e si dice.
+  val skeleton = PeopleInstant.rememberSkeleton(ui)
+  PeopleHost {
+    PeopleListScreen(
+      ui = ui, crops = crops, handlers = handlers, skeleton = skeleton,
+      modifier = modifier.onFirstDraw { AvvioTrace.pageDrawn(AvvioTrace.PAGE_PEOPLE) },
+    )
+  }
 }
 
 @HiltViewModel

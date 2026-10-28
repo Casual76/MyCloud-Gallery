@@ -24,6 +24,8 @@
 
   <!-- Cella della griglia -->
   <string name="cell_loading">Anteprima in caricamento</string>
+  <!-- Avvio istantaneo: lo scheletro di una pagina al primo ingresso (una frase sola per TalkBack). -->
+  <string name="instant_skeleton_description">Sto caricando</string>
   <string name="cell_selected">Selezionato</string>
   <string name="cell_not_selected">Non selezionato</string>
 

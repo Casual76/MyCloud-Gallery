@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.feature.people.list
 
+import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShape
+import dev.pampa.mycloudgallery.core.designsystem.instant.KeepInstantShape
+import dev.pampa.mycloudgallery.core.designsystem.instant.instantSkeleton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -89,10 +92,13 @@ internal fun PeopleListScreen(
   handlers: PeopleListHandlers,
   modifier: Modifier = Modifier,
   listState: LazyListState = rememberLazyListState(),
+  /** Avvio istantaneo: lo scheletro da disegnare al posto dello stato (le persone non ancora lette); null = lo stato com'e'. */
+  skeleton: InstantShape? = null,
 ) {
   val metrics = rememberFluidScreenMetrics()
   val columns = metrics.columns(minColumn = PeopleDimens.TileMin, spacing = PeopleDimens.BlockGap, maxColumns = MAX_COLUMNS)
   val ready = ui.state as? PeopleListState.Ready
+  if (ready != null && !ui.selecting) KeepInstantShape(PeopleInstant.CODE, PeopleInstant.shapeOf(ready, columns))
   FluidScreen(
     title = if (ui.selecting) LocalContext.current.resources.getQuantityString(R.plurals.persone_selected, ui.selected.size, ui.selected.size) else stringResource(R.string.persone_title),
     modifier = modifier,
@@ -113,6 +119,10 @@ internal fun PeopleListScreen(
     },
   ) {
     ui.message?.let { message -> item(key = "message") { PeopleMessageBlock(message, handlers::onDismissMessage) } }
+    if (skeleton != null) {
+      instantSkeleton(skeleton, keyPrefix = "instant-people")
+      return@FluidScreen
+    }
     when (val state = ui.state) {
       is PeopleListState.Working -> working(state)
       PeopleListState.Empty -> item(key = "empty") {

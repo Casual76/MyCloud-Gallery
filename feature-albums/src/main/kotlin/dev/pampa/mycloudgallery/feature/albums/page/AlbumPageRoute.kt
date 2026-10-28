@@ -1,11 +1,14 @@
 package dev.pampa.mycloudgallery.feature.albums.page
 
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
+import dev.pampa.mycloudgallery.core.designsystem.instant.onFirstDraw
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -167,7 +170,14 @@ fun AlbumPageRoute(
   val permissions = (ui.page as? AlbumPageState.Ready)?.permissions
 
   AlbumHost {
-    AlbumPageScreen(ui = ui, fallbackTitle = fallbackTitle, thumbnails = thumbnails, handlers = handlers, modifier = modifier)
+    // Avvio istantaneo: lo scheletro della griglia finche' l'album non e' letto; chiude la misura dell'apertura al primo fotogramma.
+    val readyCells = (ui.page as? AlbumPageState.Ready)?.content?.items?.size
+    if (readyCells != null) SideEffect { AlbumInstant.remember(id.value, readyCells) }
+    AlbumPageScreen(
+      ui = ui, fallbackTitle = fallbackTitle, thumbnails = thumbnails, handlers = handlers,
+      modifier = modifier.onFirstDraw { AvvioTrace.pageDrawn(AvvioTrace.PAGE_ALBUM) },
+      skeletonCells = AlbumInstant.cellsFor(id.value),
+    )
     ItemMenuSheet(
       menu = ui.itemMenu,
       creatorName = viewModel.people::nameOf,

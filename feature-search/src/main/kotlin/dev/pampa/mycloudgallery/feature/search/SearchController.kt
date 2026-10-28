@@ -66,7 +66,7 @@ class SearchController(
   private val debounceMillis: Long = COMPLETION_DEBOUNCE_MILLIS,
 ) : SearchHandlers {
 
-  private val mutableState = MutableStateFlow<SearchScreenState>(SearchScreenState.Idle(emptyIdle(), emptyList()))
+  private val mutableState = MutableStateFlow<SearchScreenState>(SearchScreenState.Idle(emptyIdle(), emptyList(), known = false))
   val state: StateFlow<SearchScreenState> = mutableState
 
   private val mutableQuery = MutableStateFlow("")

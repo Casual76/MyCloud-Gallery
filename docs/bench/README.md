@@ -26,7 +26,9 @@ Tutti con `CompilationMode.Partial(BaselineProfileMode.Require)` (si cambia con 
 |---|---|---|---|
 | `scroll_<livello>_<stile>` (`LibraryScrollBenchmark`), 8 prove: `years/months/days/all` × `square/justified` | App appena avviata, livello e stile impostati, fling avanti e indietro nel tempo su 100 mila elementi | `FrameJankMetric`: `jankPercent` medio ≤ 1% (fotogrammi davvero in ritardo, vedi §2-bis) | P95 `frameDurationCpuMs` +10% |
 | `pinch` (`LibraryPinchBenchmark`) | 10 pinch continui (5 chiusure + 5 aperture) fra i livelli | `jankPercent` medio ≤ 1% | P95 `frameDurationCpuMs` +10% |
-| `coldStart` (`StartupBenchmark`) | `StartupMode.COLD`, 15 ripetizioni | `timeToFullDisplayMs` p90 < 1000 ms (serve `reportFullyDrawn`) | p90 +10% |
+| `coldStart` (`StartupBenchmark`) | `StartupMode.COLD`, 15 ripetizioni: cache delle pipeline grafiche e del disco buttate, il primo avvio dopo un'installazione o un aggiornamento | **primo disegno utile** `libraryUsefulMs` p90 < 750 ms; caricamento completo `timeToFullDisplayMs` p90 < 1500 ms (§2-quater) | p90 +10% di tutti e due |
+| `coldStartUsual` (`StartupBenchmark`), **nuova** | Avvio a freddo di tutti i giorni: processo nuovo, cache delle pipeline e del disco calde; 15 ripetizioni | `libraryUsefulMs` p90 < 400 ms; `timeToFullDisplayMs` p90 < 1500 ms | p90 +10% |
+| `collectionsPage`, `searchPage`, `albumPage`, `peoplePage` (`PagesBenchmark`), **nuove** | Primo ingresso dopo un avvio a freddo nelle Raccolte, in Cerca a riposo, in un album, in Persone; 10 iterazioni | dal tocco al primo fotogramma con l'ultimo stato o lo scheletro (`raccoltePageMs`, `cercaPageMs`, `albumPageMs`, `personePageMs`) p90 < 150 ms | p90 +15% |
 | `viewerOpen` (`ViewerBenchmark`) | Tocco su una miniatura, attesa, Indietro; 12 iterazioni | sezione di traccia `MCG:viewerOpen` p90 < 100 ms; `viewerOpenMaxFrameMs` (il fotogramma più lungo nei primi 500 ms dell'apertura) massimo ≤ 16,7 ms | p90 +15% |
 | `zoom200Mp` (`Zoom200MpBenchmark`), solo tablet | Apre la foto più grande (la riga più recente), 5 cicli di zoom e pan sui quattro angoli | `processAlive` = 1 (nessun OOM); `pssPeakKb` sotto il tetto calibrato alla prima misura | PSS +15% |
 | `coldStartNasFirst` (`NasLibraryBenchmark`), **nuova 4A** | Avvio a freddo con la prima pagina fatta solo di miniature del NAS (profilo «NAS prima», §5) | TTFD p90 < 1000 ms (proposta di P10: il §5.6 non fissa una soglia) | p90 +10% |
@@ -85,6 +87,43 @@ La Fase 4 non deve peggiorare la fluidità. Le misure del 13/10 (`misure-s25-202
 - La guardia si applica da sola sui dispositivi veri quando esiste un riferimento (`check.ps1 -Bench` non cambia); `-NoGuard` la spegne. Sugli emulatori (smoke) non c'è nessuna soglia.
 - Il Tab S9 non ha un riferimento del 13/10: la prima corsa buona con la libreria mista (`-Accept`) lo diventa.
 - Le misure del 15/10 sulla G2 con la libreria mista (pinch e scorrimento, cause e correzioni): `misure-s25-2026-10-15.md`.
+
+## 2-quater. Avvio e pagine istantanei (28/10)
+
+Il principio dell'utente: si vede **subito** qualcosa di vero (l'ultima Libreria, l'ultimo stato o lo scheletro di una pagina), il resto si carica
+dopo. Due numeri per l'avvio, e uno per ogni pagina:
+
+- **Primo disegno utile** (`libraryUsefulMs`, `LibraryUsefulMetric` in `AvvioMetrics.kt`): dall'inizio del lancio (`launching:`, lo stesso
+  punto di `timeToInitialDisplayMs`) alla fine del primo fotogramma del RenderThread dopo il segno `MCG:avvio:libreriaUtile`, che l'app scrive
+  la prima volta che **ogni cella in vista** ha la sua risposta (la miniatura in memoria, o un tentativo finito senza: quella cella resta sul
+  segnaposto e riprova da sola). E' il numero che conta. Senza il segno la misura scrive `libraryUsefulMissing` = 1, mai un numero inventato.
+- **Caricamento completo** (`timeToFullDisplayMs`, `reportFullyDrawn` come prima): soglia larga, 1.500 ms.
+- I segni intermedi, utili per leggere dove va il tempo, viaggiano nel JSON come `avvio*Ms` dal lancio: `avvioIstantaneaMs` (istantanea
+  pubblicata), `avvioSbloccatoMs` (blocco app superato), `avvioDestinazioneMs` (destinazione nota), `avvioGrigliaMs` (prima griglia composta),
+  `avvioRimandatiMs` (parte il lavoro rimandato a dopo il primo disegno), `libraryLiveMs` (indice riconciliato con il catalogo).
+- **Pagine** (`PageOpenMetric`): la sezione asincrona `MCG:pagina:<nome>` che l'app apre al tocco e chiude al primo disegno della pagina, piu'
+  il fotogramma che la segue. Album e Persone si saltano finche' la variante di misura non li monta (L287, nessun NAS).
+
+**Due avvii a freddo, due casi.** `StartupMode.COLD` butta prima di ogni avvio la cache delle pipeline grafiche (un broadcast al
+`ProfileInstallReceiver`) e quella delle pagine del kernel: sull'S25 i primi fotogrammi ricompilano circa 70 pipeline Vulkan, 250-350 ms di
+RenderThread. Un utente ci passa solo dopo un'installazione o un aggiornamento: e' `coldStart`, il caso peggiore. Tutti gli altri giorni la cache
+c'e': e' `coldStartUsual` (`startupMode = null`, il processo si uccide nel `setupBlock`, `StartupTimingMetric` lo legge come freddo). Si puo'
+anche far girare `coldStart` senza buttare le pipeline con l'argomento `-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.dropShaders.enable=false`.
+
+**Lo stesso metodo della bisezione** per confrontare: nella stessa corsa prima `LibraryPinchBenchmark` (la Libreria aperta, il dataset pronto)
+e poi le prove dell'avvio. Con l'app di misura appena installata `coldStart` misura la pagina iniziale (`libraryShown` = 0) e non vale; dopo 10
+minuti di scorrimento il telefono e' caldo e l'avvio esce gonfiato (il 1.342 ms del 27/10).
+
+```powershell
+$env:ANDROID_SERIAL = "RFCY61FZDHW"
+.\gradlew.bat --no-daemon --max-workers=2 :benchmark:connectedBenchmarkReleaseAndroidTest `
+  "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=macrobenchmark" `
+  "-Pandroid.testInstrumentationRunnerArguments.class=dev.pampa.mycloudgallery.benchmark.LibraryPinchBenchmark,dev.pampa.mycloudgallery.benchmark.StartupBenchmark,dev.pampa.mycloudgallery.benchmark.PagesBenchmark"
+```
+
+Le tracce Perfetto si possono leggere anche sul PC senza scaricare niente: per questo pacchetto e' bastato un lettore minimo del formato in
+Python (sezioni di atrace, nomi dei thread, tempi di CPU dallo scheduler), rimasto fra gli script di lavoro fuori dal repository (vedi
+`docs/decisioni.md`, "Avvio e pagine istantanei"). Se serve ancora, va portato in `tools/bench/`.
 
 ## 3. Come si usa
 

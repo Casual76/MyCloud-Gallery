@@ -10058,6 +10058,21 @@ Da fare: `DeviceMeasures.facesPerSecond` dell'S25 a 8,8 (oggi la stima di P2), i
 | **Avvio a freddo** | **FUORI SOGLIA** | **p90 1.342 ms** | < 1.000 ms; riferimento del 13/10 681 ms (+10% = 750) |
 | Zoom a 200 MP, ricerca (4 prove) | saltate | prerequisiti mancanti sul telefono (immagine grande, modelli della ricerca) | — |
 
+**Nota del 28/10: il 1.342 ms era gonfiato.** In questi tre giri `coldStart` girava subito dopo 10 minuti di `scroll_months_justified`, con il
+telefono caldo. Rifatta con un metodo solo (S25, `connectedBenchmarkReleaseAndroidTest` con `LibraryPinchBenchmark` e poi `StartupBenchmark` nella
+stessa corsa, 15 avvii, `libraryShown` = 1 in tutti) la bisezione dell'orchestratore dice, al p90 (mediana fra parentesi):
+
+| Versione | `timeToFullDisplayMs` | `timeToInitialDisplayMs` |
+|---|---|---|
+| fine Fase 4 `0bb8dd56` (15/10) | 729 (596) | **201** (183) |
+| fine Fase 6 `e4a23065` (22/10) | 765 (658) | **481** (416) |
+| fine Fase 7 `870a723b` | 889 (781) | 517 (455) |
+| dopo P13 della Fase 8 `84575948` | 823 (754) | 496 (451) |
+| `main` del 28/10 `361a3f57` | **928** (783) | **573** (460) |
+
+Il caricamento completo di oggi e' quindi 928 ms al p90, non 1.342; il problema vero e' il **primo disegno** (`timeToInitialDisplayMs`), salito da
+201 a 481 ms fra la Fase 4 e la Fase 6 e a 573 oggi. Analisi e correzione in "Avvio e pagine istantanei" in fondo a questo documento.
+
 **Regressione dell'avvio a freddo (aperta, priorità alta).** Dal 13/10 (fine Fase 3) l'avvio con la Libreria visibile è quasi
 raddoppiato. Il piano (§4) chiede la timeline in meno di 1 s nel 90% degli avvii a freddo. Da indagare con le tracce salvate: lavoro
 delle Fasi 4–8 finito sul percorso critico dell'avvio (montaggi dei grafi, Persone e cancellazione creati all'avvio, modelli,
@@ -10475,3 +10490,205 @@ Aggiunti, solo numeri: `ALBUM_COPIES_CAPPED` (`copiesCapped`: copie personali no
 4. **Il budget degli smart** non ha una corsia per la modifica dell'utente (L250): con centinaia di smart aspetta il suo turno. Si aggiunge in un punto solo (`ContentBudget.admit`) se serve.
 5. **Per chi unisce**: P13 tocca anche `FacesEraseRoute`, la Diagnostica e `AppNavHost.kt`; le mie modifiche in quei file sono aggiunte piccole (un parametro opzionale, codici nuovi nella sezione Album, il tipo di `findSimilar`).
 6. Niente e' stato provato su un dispositivo.
+
+## Avvio e pagine istantanei (28/10)
+
+Pacchetto di prestazioni percepite sul branch `perf/avvio-istantaneo`. Il principio dell'utente: l'app deve **sembrare sempre istantanea**,
+come su iOS. All'avvio si vede subito l'ultima Libreria, dallo stesso punto, con le miniature gia' sul telefono; al primo ingresso in ogni
+pagina si vede l'ultimo stato o uno scheletro con le dimensioni giuste, **mai una rotella**; tutto cio' che pesa parte dopo il primo disegno.
+Che il caricamento completo prenda circa 1,3 s va bene: conta quanto presto si vede qualcosa di vero.
+
+### Come si e' misurato
+
+- S25 `RFCY61FZDHW` (Android 17), variante `benchmarkRelease`, **lo stesso metodo della bisezione** dell'orchestratore: nella stessa corsa
+  `LibraryPinchBenchmark` e poi `StartupBenchmark` (15 avvii a freddo), piu' `PagesBenchmark` dove serve. I file grezzi e le tracce stanno
+  sotto `build\avvio\` di questo albero di lavoro (fuori dal repository).
+- **Prima** = `main` (`361a3f57`) senza modifiche con le prove nuove del `:benchmark` (corsa `base2`), e `main` con le sole sezioni di
+  traccia (corsa `base1`, per vedere dove va il tempo). **Dopo** = questo branch (corsa `run5`, l'ultima; `run3` prima delle ultime rifiniture).
+  Le tracce si leggono sul PC con un lettore minimo del formato Perfetto scritto per l'occasione (Python, nessuno scaricamento; script di
+  lavoro fuori dal repository). Su `main` il primo disegno utile non ha il suo segno: si ricostruisce dalle tracce (la fine del fotogramma
+  dopo le decodifiche delle celle in vista); sulle corse con il segno la ricostruzione da' gli stessi numeri della misura (558/628 su 558/628).
+- `StartupMode.COLD` di Macrobenchmark **butta la cache delle pipeline grafiche e la cache delle pagine del kernel** prima di ogni avvio:
+  `coldStart` misura quindi il caso peggiore, il primo avvio dopo un'installazione o un aggiornamento. L'avvio di tutti i giorni la cache la
+  trova pronta: e' la prova nuova `coldStartUsual` (processo nuovo a ogni ripetizione, cache calde).
+
+### Cosa stava sul percorso critico (prima: corsa `base1`, mediana dei 15 avvii di `coldStart`, ms dal tocco)
+
+Le sezioni nuove (`AvvioTrace`, prefisso `MCG:`) dicono dove va il tempo. Il primo disegno (`timeToInitialDisplayMs`) era a 454 (p90 523), il
+caricamento completo (`timeToFullDisplayMs`) a 755 (p90 909); il primo disegno utile (la griglia con le miniature in vista, ricostruito dalle
+tracce: fine del fotogramma dopo le decodifiche delle celle in vista) a 722 (p90 878).
+
+| Passo | Quando | Costo | Note |
+|---|---|---|---|
+| Nascita del processo, `bindApplication` | 47 | 108 (p90 127) sul thread principale | 22 di apertura del dex (sistema), poi `Application.onCreate` |
+| `TextReadingStartup` (D41) | 80 | 1,3 | resta prima di Hilt |
+| `AppGraph` | 81 | 5,0 | |
+| **`GalleryGraph`** | 86 | **59,3** (p90 69) | **58 ms erano l'indice della replica sintetica** (132 mila voci) letto sul thread principale: lavoro della **sola variante di misura**, che la release non ha |
+| `IntegrationsGraph`, `AiStack`, album, persone, notifiche, integrazioni, viewer AI | 146-154 | 2,5 + 3,1 + 0,4 + 0,4 + 0,6 + 0,3 + 0,6 | album e persone nascono gia' leggeri: si montano da soli dopo |
+| Catalogo e repository della timeline | 154 | 1,2 + 18,6 (fuori dal thread principale) | l'istantanea su file si leggeva solo **dopo** il catalogo |
+| Istantanea letta, indice riconciliato | 175 | — | nel banco il `seq` coincide: nessuna ricostruzione |
+| Blocco app superato e destinazione nota (prima composizione) | 202 | — | impostazioni del blocco e stato della famiglia arrivano prima |
+| **Primo fotogramma** (Libreria con la chrome di vetro, griglia **vuota**) | 202 → 454 | RenderThread ~250: 41 pipeline Vulkan compilate (~200) e l'istanza Vulkan (~30) | la cache delle pipeline buttata (vedi sopra) |
+| **Layout della griglia** (100 mila elementi, fuori dal thread principale) | pronto durante il primo fotogramma | ~10 | entrava solo alla composizione **dopo** il primo fotogramma: griglia a **542** (p90 649) |
+| Richiesta delle miniature in vista | 540 | — | l'effetto che la manda gira solo a thread principale libero |
+| Decodifica delle miniature in vista (21, telefono e replica) | 540-575 | ~35 in parallelo | |
+| Fotogrammi con le celle e con le miniature | 575-720 | RenderThread ~100 + ~130: altre ~30 pipeline | |
+| Una cella su 21 | +1.000 | — | primo tentativo fallito, ritentata dopo 1 s (`RetryPolicy`): il vecchio `reportFullyDrawn` scadeva sui 300 ms |
+| Lavoro di avvio in parallelo | 175 → | indice di ricerca 1,2, modelli 0,2, ritagli 163 (in attesa), poi NAS, backup, lettura del telefono, WorkManager | nella variante di misura NAS, backup e lettura del telefono sono spenti; nel telefono vero si sommano ai fotogrammi |
+
+Il salto della bisezione fra la Fase 4 (TTID 201) e la Fase 6 (481) sta nel primo fotogramma: oggi e' gia' la Libreria con il vetro e, con la
+cache delle pipeline buttata, costa 250 ms di RenderThread. Le tracce della Fase 4 non ci sono, quindi resta un'ipotesi da confermare (la
+spiegazione piu' semplice: allora il primo fotogramma era ancora la superficie vuota della destinazione in caricamento, e la Libreria arrivava
+dopo). Il resto lo aggiungono la replica sintetica sul thread principale e il layout che arriva un fotogramma dopo.
+
+### Misure prima e dopo (S25, stesso metodo; mediana / p90, ms)
+
+| Misura | Prima (`main`, `base2`) | Dopo (`run5`) |
+|---|---|---|
+| **Primo disegno utile, avvio abituale** (`coldStartUsual`) | 334 / 350 (dalle tracce) | **241 / 280** |
+| Caricamento completo, avvio abituale (TTFD) | 350 / 367 | **248 / 318** |
+| Primo fotogramma, avvio abituale (TTID) | 203 / 230 | 222 / 288 |
+| **Primo disegno utile, dopo un aggiornamento** (`coldStart`) | 749 / 870 (dalle tracce) | **572 / 693** (`run3`: 558 / 628) |
+| Caricamento completo, dopo un aggiornamento (TTFD) | 778 / 877 | **580 / 702** (`run3`: 566 / 634) |
+| Primo fotogramma, dopo un aggiornamento (TTID) | 461 / 520 | 486 / 562 |
+| Griglia composta dal tocco (`avvioGrigliaMs`) | 542 / 649 (`base1`) | **181 / 205** |
+| `bindApplication` (thread principale) | 108 / 127 (`base1`) | 56 / 75 |
+| Raccolte al primo ingresso (`raccoltePageMs`) | non misurabile su `main` | 81 / 87 |
+| Cerca a riposo al primo ingresso (`cercaPageMs`) | non misurabile su `main` | 51 / 53 |
+| Pizzico, jank medio (`pinch`) | 0,59% (`base1` 0,57%) | 0,75% (`run2` 0,72%, `run3` 0,73%) |
+
+Il primo fotogramma (TTID) e' un poco piu' tardi perche' adesso **contiene gia' la griglia** (prima era la chrome con la griglia vuota, e la
+griglia arrivava due fotogrammi dopo): non e' piu' il numero da guardare. Quello che conta, il primo disegno utile, e' sceso di circa 100 ms
+nell'avvio abituale (sotto i 300 ms al p90) e di 180 nel primo avvio dopo un aggiornamento; il caricamento completo di 100-200 ms. Il pizzico e'
+sempre sotto l'1% ma sopra la guardia 4A (0,685): vedi i punti aperti.
+
+### Cosa si e' spostato
+
+1. **La Libreria dell'ultima volta si prepara mentre il processo nasce** (`LibraryInstant`, `GalleryGraph.warmLibrary`, solo se il processo
+   nasce per una schermata). Su un thread di lavoro, subito dopo `GalleryGraph`: il punto in cui si era (`replica/library-position`), l'istantanea
+   su file pubblicata **prima del catalogo** (`CatalogTimelineRepository.preload`: la riconciliazione poi la riusa senza rileggere ne'
+   ripubblicare, cosi' le viste restano le stesse), filtro, livello e stile dal file delle preferenze (`DataStoreLibraryPreferences.read`) e il
+   layout del livello ricordato con gli stessi ingressi che calcolera' la griglia (`GridWarmup`). Costo: 34 ms in parallelo (12 di layout).
+   La prima composizione trova il layout pronto e disegna subito le celle (griglia a **181** invece di 542).
+2. **La prima finestra delle miniature parte nello stesso fotogramma** in cui la griglia compare (`MediaGridState.sendFirstWindow`, da
+   `onPlaced` della lista), non quando il thread principale si libera: le miniature in vista si decodificano mentre il primo fotogramma si disegna
+   (decodifiche da 222 invece che da 540) e il fotogramma dopo le mostra.
+3. **Il cancello "dopo il primo disegno"** (`AfterFirstDraw`, core-common): si apre al primo disegno utile della Libreria, al primo fotogramma
+   di un'altra schermata (blocco app, onboarding, dispositivo fermo) o comunque 1,5 s dopo la nascita del processo. Ci aspettano: l'avvio del NAS,
+   del backup e del confronto delle copie simili (`GalleryParts.afterFirstDraw`), l'aggancio della lettura del telefono **con l'accesso completo**
+   (con l'accesso parziale, E-P1, la Libreria aspetta proprio la prima lettura e non si rimanda), la pianificazione dei lavori di WorkManager,
+   l'apertura dell'indice di ricerca, la verifica dei modelli, la pulizia dei ritagli e la sorgente "Ritagli" del backup, la sonda della rete,
+   la richiesta di sincronizzazione "all'apertura" e il controllo quotidiano (`ProcessWatcher`). Nel banco si apre a 484 (p90 561) nel primo avvio dopo un aggiornamento e a 221 (p90 257) in quello abituale; nel
+   telefono vero toglie dal primo fotogramma la sessione NAS, la scansione e la lettura del MediaStore.
+4. **I grafi dell'applicazione arrivano pigri** (`dagger.Lazy`) e si costruiscono uno per sezione di traccia, nello stesso ordine di prima:
+   stesse garanzie, ma la traccia dice quanto costa ognuno. Misurati, nessuno valeva la pena di spostare: senza la replica sintetica
+   `bindApplication` costa 56 ms (p90 75), di cui una ventina di apertura del dex (sistema) e circa 25 del codice dell'app.
+5. **La replica sintetica della variante di misura si apre al primo uso, su un thread suo** (`BenchMeasurementHooks`): erano 58 ms sul thread
+   principale che la release non ha. Il banco ora misura l'avvio della release, non quello della sua impalcatura.
+6. **Il primo disegno utile non aspetta una cella che ha fallito**: una cella in vista conta come pronta quando ha la miniatura o un tentativo
+   finito senza (`ThumbnailLoader.settled`); la cella resta sul segnaposto e riprova da sola come prima.
+
+Restano dove erano, e il codice lo dice accanto a ogni riga: `TextReadingStartup` prima di Hilt (D41), `FacesGraph` con il gancio dei dati
+personali (C131), `integrations.install()` prima di ogni componente del sistema, i canali delle notifiche, il blocco app. Vedi C190-C192.
+
+### L'istantanea della Libreria e i nascosti
+
+- Non c'e' un file nuovo con le immagini: l'istantanea e' quella di sempre (`replica/timeline.idx`, E-H1), pubblicata prima. Un media visibile
+  quando il file e' stato scritto e nascosto dopo **non compare nemmeno nel primo fotogramma**: nascondere toglie prima dall'indice e riscrive il
+  file (provvisorio) e solo poi scrive il catalogo, e il file provvisorio si ricostruisce alla partenza dopo (`RepositoryPreloadTest`).
+- Il punto e' un id e tre numeri: un id che non e' piu' nella vista (nascosto, eliminato, fuori dal filtro) vale "dai piu' recenti". Si scrive
+  quando l'app va in secondo piano, mai a galleria ferma (l'azzeramento toglie `replica/` intera).
+- Con il blocco app attivo la Libreria non e' in composizione (`AppLockGate`): nessuna miniatura si chiede e niente si vede prima dello sblocco;
+  la preparazione e' solo dati e geometria. La Libreria si vede solo con la famiglia pronta, come prima.
+- Il registro dei Nascosti cita le prove nuove nella superficie `library` (`HiddenSurfaces`).
+
+### Le pagine principali: ultimo stato o scheletro, mai una rotella
+
+- **Componente riusabile** in core-designsystem (`instant/`): `InstantShape` (la forma di una pagina: intestazioni, gruppi di righe, griglie
+  di piastrelle, solo numeri), `instantSkeleton` (gli elementi di una `LazyColumn`/`FluidScreen`, fermi, senza testo ne' immagini, una frase
+  per TalkBack), `rememberInstantShape`/`KeepInstantShape` (la forma dell'ultima volta, ricordata da `InstantShapes` in core-common in
+  `replica/instant-shapes` con `StateFiles`) e `Modifier.onFirstDraw` (chiude la misura dell'apertura). Le pagine della Fase 9 (ricordi,
+  mappa) lo usano allo stesso modo: un codice fisso, la forma quando ci sono i dati, lo scheletro finche' non ci sono.
+- **Raccolte**: la scheda nasce gia' con le sezioni in memoria (le sue e quelle dei fornitori pronti); si misura (`MCG:pagina:raccolte`).
+  Le sezioni di album e persone, che si montano dopo, compaiono quando arrivano: lo scheletro al loro posto e' un punto aperto (L297).
+- **Pagina di un album**: finche' l'album non e' letto, il titolo che si conosce gia' e lo scheletro della griglia con le celle che l'album
+  aveva l'ultima volta in questo processo (al piu' una schermata), invece della riga "Caricamento".
+- **Persone** ("Tutte le persone"): l'elenco arriva vuoto finche' Persone non e' montata e diceva "Nessuna persona" per un attimo; se l'ultima
+  volta c'erano persone, un elenco vuoto nei primi 1,5 s vale "non ancora letto" e si disegna lo scheletro con quella forma.
+- **Cerca a riposo**: finche' recenti e suggerimenti non sono letti, lo scheletro con la forma dell'ultima volta (righe delle recenti, gruppi
+  di pillole) invece della pagina vuota che poi si riempiva.
+
+### Soglie, e la soglia del piano riletta
+
+Il piano (§4) chiede "la timeline in meno di 1 s nel 90% degli avvii a freddo". Con il principio dell'utente quella frase si legge cosi':
+**in meno di 1 s si vede la Libreria vera** (l'ultima, con le miniature), e il secondo e' largo; quello che si guarda da vicino e' il **primo
+disegno utile**, mentre il caricamento completo (dati vivi, il resto della pagina) puo' prendersi il suo tempo. In `benchmark/soglie.json`:
+
+| Scenario | Prova | Soglia assoluta (p90) | Regressione |
+|---|---|---|---|
+| `avvio` | `coldStart` (pipeline e disco da ricaricare: dopo un'installazione o un aggiornamento) | `libraryUsefulMs` < 750 ms; `timeToFullDisplayMs` < 1500 ms | +10% di tutti e due |
+| `avvio-abituale` | `coldStartUsual` (l'avvio di tutti i giorni) | `libraryUsefulMs` < 400 ms; `timeToFullDisplayMs` < 1500 ms | +10% del primo disegno utile |
+| `pagina-raccolte`, `pagina-cerca`, `pagina-album`, `pagina-persone` | `PagesBenchmark` | apertura < 150 ms | +15% |
+
+Le soglie del primo disegno utile vengono dalle misure di questo pacchetto: 750 ms sta sopra i 628 e 693 delle due corse (prima 870), 400 ms
+e' il tetto dell'ordine di grandezza atteso (300-400) con il p90 misurato a 280 (prima 350); quelle delle pagine
+sono "subito" (un fotogramma o due a 120 Hz, piu' la composizione della pagina). La guardia della Fase 4A sul TTFD (681 ms del 13/10, +10%)
+resta e oggi passa. Album e Persone nel banco si saltano finche' la variante di misura non li monta (L287): `MANCA` con il motivo.
+
+### Garanzie verificate
+
+- **C131** (il gancio dei dati personali nasce con il processo): `FacesGraph` nasce in `Application.onCreate` come prima e lega
+  `FacesPrePublish` al `NasOrganizer`; il NAS, che e' il solo a poter pubblicare, ora parte dopo il primo disegno: il gancio c'e' sempre prima.
+- **P8 e C98/C130** (il recinto prima di ogni apertura dei volti): il montaggio di Persone non e' cambiato (interruttore, recinto e
+  cancellazione insieme, nel montaggio, prima di ogni apertura); parte quando parte il NAS, cioe' dopo.
+- **D12, D30, D34** e i cancelli delle scritture: nessuna riga toccata; il backup e i dati personali partono dopo il primo disegno con i loro
+  cancelli.
+- **Blocco app e `FLAG_SECURE`**: `AppLockGate` invariato; la Libreria non si compone e non chiede miniature finche' l'app e' bloccata. Con il
+  blocco la prima schermata e' quella del blocco: il cancello si apre dopo il suo primo fotogramma.
+- **Lavori dopo la morte del processo**: sono di WorkManager e JobScheduler e partono senza passare dal cancello; le richieste di
+  `ensure()` sono le stesse, al piu' 1,5 s dopo.
+- **Nascosti**: `HiddenSurfacesRegistryTest` e `HiddenSurfacesPropertyTest` verdi; la superficie `library` cita `RepositoryPreloadTest` e
+  `LibraryInstantTest`.
+- **Test d'architettura delle Fasi 6-9, banchi delle interruzioni, test di fiducia e ostili**: nel `check.ps1` (sotto).
+
+### Da provare sul telefono, a mano
+
+1. Aprire l'app dalla Libreria scorsa a meta' (un mese fa, livello Mesi), chiuderla con il tasto Home, riaprirla dopo aver tolto l'app dai
+   recenti: si riapre **sullo stesso punto e livello**, con le miniature, senza un fotogramma vuoto ne' un salto quando arrivano i dati vivi.
+2. Nascondere una foto in vista, uscire, togliere l'app dai recenti e riaprire: la foto non c'e' nemmeno per un istante.
+3. Con il blocco app attivo: all'apertura c'e' solo la schermata del blocco; dopo lo sblocco la Libreria dell'ultima volta.
+4. Primo ingresso dopo l'avvio in Cerca (lo scheletro delle recenti e poi le recenti, senza la pagina vuota), in Persone (lo scheletro dei
+   volti, mai "Nessuna persona" per un attimo), nella pagina di un album (titolo e scheletro della griglia, mai "Caricamento").
+5. Con il NAS: l'indicatore del NAS e il piede della Libreria arrivano un attimo dopo la griglia; una foto scattata ad app chiusa compare entro
+   circa 1,5 s (L298).
+6. Dopo un aggiornamento dell'app il primo avvio e' piu' lento (la grafica si ricompila, L295); dal secondo in poi no.
+
+### Punti aperti
+
+1. **La compilazione delle pipeline grafiche** resta la parte piu' grande del primo avvio dopo un aggiornamento (L295): circa 70 pipeline;
+   il solo primo fotogramma ne compila una quarantina, 240 ms di RenderThread. Precompilarle mentre il processo nasce (il RenderThread e'
+   fermo per circa 70 ms) si potrebbe con un disegno di prova fuori schermo, ma la chiave di una pipeline dipende da come disegnano Compose e
+   il vetro dell'engine: da valutare con l'engine, non qui.
+2. **Raccolte**: lo scheletro al posto delle sezioni di album e persone che arrivano dopo (L297).
+3. **Album e Persone nel banco**: si saltano finche' la variante di misura non li monta (L287); la misura c'e' e nell'app funziona.
+4. **Il pizzico**: nelle tre corse di questo pacchetto il jank medio e' 0,72-0,75% contro 0,57-0,59% delle due corse di `main` (circa un
+   fotogramma in ritardo in piu' su 650 per ripetizione; sempre sotto l'1%, ma sopra la guardia 4A di 0,685). Nelle tracce del pizzico non
+   cade nessuna sezione del lavoro rimandato, e dopo il primo disegno utile la griglia non segue piu' niente per l'avvio (ritoccato dopo
+   `run5`). Sei ripetizioni sono poche per dirlo: da rimisurare in una corsa lunga prima di accettare il riferimento.
+5. **Le cache delle miniature**: una cella su venti, al primo avvio, fallisce il primo tentativo e riprova dopo 1 s (`RetryPolicy`); la causa
+   non e' stata cercata (succede anche su `main`).
+6. **Il lettore delle tracce** usato per l'analisi (Python, formato Perfetto) e' rimasto fra gli script di lavoro; se serve ancora va portato
+   in `tools/bench/`.
+
+### Verifica
+
+- **`tools\check.ps1 -NoDaemon` verde** (28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, posto
+  `avvio` preso e rilasciato attorno a ogni comando Gradle): "OK: tutto a posto", il passo Gradle (`assembleDebug assembleRelease galleryTest
+  galleryLint`, 54 minuti) compreso; solo `-Bench` saltato (senza il flag). Il passo nuovo "scenari dell'avvio istantaneo" controlla soglie,
+  prove e metrica senza dispositivo; `compare.ps1 -SelfTest` prova le soglie nuove sui campioni.
+- Prove nuove: `RepositoryPreloadTest` (3), `GridWarmupTest` (3, Robolectric: la prima composizione usa proprio il layout preparato),
+  `LibraryInstantTest` (4), `InstantShapesTest` (5, con il cancello), `InstantShapeTest` (4). Verdi anche, dentro il check, il registro e la
+  proprieta' dei Nascosti, i banchi delle interruzioni, i test di fiducia e ostili e i test d'architettura delle Fasi 6-9.
+- **Sul telefono resta da rifare una corsa** (il telefono e' stato staccato dopo `run5`): `LibraryPinchBenchmark` e `StartupBenchmark` nella
+  stessa corsa, con l'ultimo ritocco (la griglia non segue piu' niente dopo il primo disegno utile), per vedere se il jank del pizzico torna
+  sotto la guardia 4A (punto aperto 4) e per accettare i riferimenti nuovi con `compare.ps1 -Accept`.

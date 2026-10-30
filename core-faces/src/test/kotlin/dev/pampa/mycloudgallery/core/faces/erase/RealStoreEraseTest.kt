@@ -11,7 +11,10 @@ import dev.pampa.mycloudgallery.core.faces.contract.PeopleAlbumsChoice
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleEdit
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleRecord
 import dev.pampa.mycloudgallery.core.faces.contract.PrivateAreaState
+import dev.pampa.mycloudgallery.core.common.files.Patience
+import dev.pampa.mycloudgallery.core.database.faces.FacesDatabases
 import dev.pampa.mycloudgallery.core.faces.store.FaceFixtures
+import dev.pampa.mycloudgallery.core.faces.store.FacesStores
 import dev.pampa.mycloudgallery.core.faces.store.StoreWorld
 import dev.pampa.mycloudgallery.core.faces.switch.LocalEraseWhy
 import dev.pampa.mycloudgallery.core.faces.testing.FailingFacesPorts
@@ -79,6 +82,34 @@ class RealStoreEraseTest {
     assertThat(local.hasData(g2)).isFalse()
     assertThat(world.filesOf(g2)).isEmpty()
     assertThat(world.fake.exists(g2)).isFalse()
+  }
+
+  /**
+   * I6 (correzioni A della Fase 8): la cancellazione e' morta fra la chiave distrutta e i file tolti. Alla ripresa la lettura dei nomi (per la cronologia)
+   * **non fa nascere** una chiave nuova e un database vuoto, non toglie niente da sola e non segnala il falso `FACES_KEY_LOST`: dice "nessun nome", e i file li
+   * toglie la cancellazione che segue.
+   */
+  @Test
+  fun i6_conLaChiaveGiaDistruttaLaLetturaDeiNomiNonRifaNienteENonSegnalaUnaPerditaFalsa() = runBlocking<Unit> {
+    val world = StoreWorld(File(folder.root, "faces"))
+    filled(world, g1, "Lontano")
+    // Il processo muore: il database non e' piu' aperto (i file restano), poi la chiave distrutta della cancellazione a meta'.
+    world.ready(g1).close()
+    world.fake.destroy(g1)
+    // Un processo nuovo sugli stessi file e sulle stesse chiavi (la chiave non c'e' piu').
+    val recovered = mutableListOf<Any>()
+    val restarted = FacesStores(world.directory, FacesDatabases.forContext(world.context), world.fake, patience = Patience.NONE, onRecovered = { recovered += it })
+    assertThat(world.filesOf(g1)).isNotEmpty()
+    assertThat(StoresLocalData(restarted).people(g1)).isEmpty()
+    // Niente chiave nuova, nessun file tolto, nessuna perdita segnalata (il database si e' solo guardato per capire la versione).
+    assertThat(world.fake.exists(g1)).isFalse()
+    assertThat(recovered).isEmpty()
+    assertThat(world.mainFile(g1).exists()).isTrue()
+    assertThat(world.mainFile(g1).length()).isGreaterThan(0L)
+    // La cancellazione che segue toglie i file e la chiave resta assente.
+    assertThat(restarted.eraseLocal(g1).done).isTrue()
+    assertThat(world.filesOf(g1)).isEmpty()
+    assertThat(world.fake.exists(g1)).isFalse()
   }
 
   @Test

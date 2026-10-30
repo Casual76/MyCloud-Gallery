@@ -102,6 +102,12 @@ enum class EraseWait(override val code: String) : StableCode {
   NOT_TRUSTED("not_trusted"),
   DEVICES("devices"),
   RECYCLE_BIN("recycle_bin"),
+
+  /**
+   * R13 (correzioni A): un giro sul NAS non ha tolto niente e non per il tempo: un file della generazione e' tenuto aperto da un altro (per esempio dal PC), o
+   * e' cambiato dopo l'elenco. Si dice e si riprova con attese sempre piu' lunghe, invece di ripartire ogni minuto in silenzio.
+   */
+  FILE_OPEN("file_open"),
 }
 
 /** I passi del diario `faces-erase` (§2.8): scritti con `fsync` prima di ogni passo; una ripresa parte dal passo dopo l'ultimo segnato. */

@@ -3,7 +3,7 @@ package dev.pampa.mycloudgallery.core.faces.erase
 import dev.pampa.mycloudgallery.core.faces.contract.EraseWait
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleKey
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleRecord
-import dev.pampa.mycloudgallery.core.faces.store.FacesStoreOpen
+import dev.pampa.mycloudgallery.core.faces.store.ExistingStore
 import dev.pampa.mycloudgallery.core.faces.store.FacesStores
 import dev.pampa.mycloudgallery.core.faces.store.LocalErase
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
@@ -101,11 +101,12 @@ class StoresLocalData(private val stores: FacesStores) : FacesLocalData {
   override suspend fun people(generation: FaceGeneration): Map<PeopleKey, PeopleRecord>? {
     // Nessun file = nessun dato: si risponde senza aprire (aprire creerebbe una chiave e un database nuovi).
     if (!stores.hasFiles(generation)) return emptyMap()
-    return when (val opened = stores.open(generation)) {
-      is FacesStoreOpen.Ready -> opened.store.archive.people()
-      // I dati erano illeggibili e sono gia' stati tolti: nessun nome si puo' piu' conoscere.
-      is FacesStoreOpen.Recovered -> emptyMap()
-      is FacesStoreOpen.Unavailable -> null
+    // I6: si apre solo cio' che c'e' e si legge. Una chiave gia' distrutta (morte fra la chiave e i file) vale "nessun nome": niente si rifa', niente
+    // `FACES_KEY_LOST`; i file li toglie la cancellazione che segue.
+    return when (val opened = stores.openExisting(generation)) {
+      is ExistingStore.Ready -> opened.store.archive.people()
+      ExistingStore.Unreadable -> emptyMap()
+      ExistingStore.Unknown -> null
     }
   }
 

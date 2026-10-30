@@ -141,8 +141,13 @@ internal class EraseRemote(
         }
         is NasEraseRound.More -> {
           removed.files += round.removedFiles
-          // Un giro che non toglie niente (un file aperto, cambiato) non si ripete subito: si riprova alla ripresa dopo.
-          if (expired() || round.removedFiles == 0) return false
+          if (expired()) return false
+          // Un giro che non toglie niente senza che il tempo sia finito (un file aperto da un altro, cambiato dopo l'elenco) non si ripete subito e non e' un
+          // avanzamento: e' un'attesa dichiarata (R13), con il suo motivo, e chi riprende (`FacesGraph.eraseRound`) allunga le attese.
+          if (round.removedFiles == 0) {
+            waitFor(EraseWait.FILE_OPEN)
+            return false
+          }
         }
         is NasEraseRound.Waiting -> {
           waitFor(round.reason)

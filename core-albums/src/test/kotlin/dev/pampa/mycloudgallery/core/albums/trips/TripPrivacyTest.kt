@@ -64,16 +64,15 @@ class TripPrivacyTest {
   /** I membri pubblici di `CatalogTrips` e `AwayFromHome` sono un elenco chiuso: aggiungerne uno vuol dire passare da qui. */
   @Test
   fun iMembriPubbliciSonoUnElencoChiusoESenzaCoordinate() {
-    // R16: `homeClearance` e' l'unico membro nuovo: restituisce un oracolo che riceve punti e risponde si'/no (vedi `homeClearanceRispondeSoloSiENo`).
-    val allowed = setOf("getProposals", "detect", "accept", "dismiss", "load", "refresh", "isAway", "distanceKm", "homeClearance")
-    // Fase 9 (P0, D12): il solo membro nuovo ammesso e' `past` della porta dei ricordi (`TripMemories`), che P8 scrive sopra `TripReader`.
-    // Ammesso, non ancora obbligatorio: la sua firma e' controllata da `laPortaDeiRicordiNonHaCoordinateNeCasa`.
-    val allowedLater = setOf("past")
+    // R16: `homeClearance` restituisce un oracolo che riceve punti e risponde si'/no (vedi `homeClearanceRispondeSoloSiENo`).
+    // Fase 9 (P8, D12): `past` e' la porta dei ricordi (`TripMemories`), scritta sopra `TripReader`: riceve un giorno e un tempo, risponde con le
+    // `TripDigest` (nessuna coordinata, nessun decimale: la sua firma e' controllata da `laPortaDeiRicordiNonHaCoordinateNeCasa`).
+    val allowed = setOf("getProposals", "detect", "accept", "dismiss", "load", "refresh", "isAway", "distanceKm", "homeClearance", "past")
     val banned = listOf("GeoPoint", "HomeEstimate", "Anchor", "GeoIndex", "HomeTimeline", "TripArea", "Detection", "DetectedItem", "StoredProposal", "double", "Double", "float", "Pair", "Triple")
     for (type in listOf(CatalogTrips::class.java, AwayFromHome::class.java)) {
       val methods = type.declaredMethods.filter { Modifier.isPublic(it.modifiers) && !it.isSynthetic && !it.isBridge }
       // I nomi dei metodi con tipi inline (TripId, Duration) hanno il suffisso del compilatore: `detect-VtjQ1oo`.
-      val extra = methods.map { it.name.substringBefore('-') }.toSet() - allowed - allowedLater
+      val extra = methods.map { it.name.substringBefore('-') }.toSet() - allowed
       assertWithMessage("membri pubblici nuovi in ${type.simpleName}").that(extra).isEmpty()
       for (m in methods) {
         val signature = m.genericReturnType.typeName + " " + m.genericParameterTypes.joinToString { it.typeName }

@@ -11977,3 +11977,101 @@ in piu' nell'elenco `wiring` di `HiddenSurfaces`** provata in locale e **non** c
 `"core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories/pick/VisiblePhotoPicker.kt",` in testa a `HiddenSurfaces.wiring` (o, in alternativa, la riga `MEMORIES` di P9
 che lo elenca fra i sorgenti). I file di P6 non nominano i contratti dei nascosti (porta `MemoryVisibility`) e il registro era verde prima del merge. Una corsa intera aveva
 avuto un'unica rossa, `HiddenSurfacesPropertyTest` (sonda `album-pages`, mondo 6, sotto carico); rilanciata da sola e poi nel check intero e' verde.
+
+## Fase 9 P8: viaggi e persone nei ricordi (30/10)
+
+Il pacchetto P8 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P8; §2.1, §2.3, §2.11, D3, D11, D12, D31; risposta Q9 (a) del 27/10). Branch `fase9/p8`.
+Consegna i **viaggi** nei ricordi (`TripMemories` vera, in `core-albums`, sopra `TripReader`), le **persone** (`PeoplePlanner`, il generatore dei ricordi `PERSON`), le
+scelte **"Mostra meno" e "Mai"** con la pulizia (`PeopleLessJanitor`, `AliasFollowingSettings`) e il fake delle persone fedele alla porta. Nessuna UI, nessuna rete,
+nessuna dipendenza, nessun permesso, nessun componente, nessun contratto di P0 cambiato; `core-memories` resta JVM puro (`Phase9ArchitectureTest` verde). **Non** toccati:
+`plan/` di P6 (a parte `plan/people/`), `pick/`, `shelf/`, `feature-*`, `:app`, `HiddenSurfaces`, i file degli altri pacchetti in parallelo.
+
+**Cosa c'e'**
+- `core-albums/.../trips/PastTrips.kt` (interna) e `CatalogTrips.past` (la porta `TripMemories`: `CatalogTrips` la implementa, il membro pubblico nuovo e' `past`, ora
+  nell'elenco chiuso di `TripPrivacyTest`); `ShownTrips.kt` (la regola R16 di titolo e luoghi, tolta da `CatalogTrips` e usata da tutti e due, nessun cambiamento di comportamento).
+- `core-memories/.../plan/people/PeoplePlanner.kt`: il `MemoryPlanner` che da' **solo** candidati `PERSON`, da passare a `IndexedPlanner(people = PeoplePlanner())`.
+- `core-memories/.../settings/less/`: `PeopleLessJanitor` (+ `SweepReport`), `PeopleSwitch` e `PeoplePhase` (la porta dello stato di Persone dell'account, con `NoPeopleSwitch`),
+  `AliasFollowingSettings` (le scelte che seguono l'alias), `LessLevels` (quale scelta vale quando due id si uniscono) e `PhaseGatedPeople` (le persone che spariscono nell'istante
+  in cui Persone si spegne, qualunque sia il ritardo dell'adattatore).
+- `core-memories/.../testing/`: `FakeMemoryPeople` fedele alla porta (unioni: i media dell'alias sono di chi resta; `merge`, `hide`), `FakePeopleSwitch`.
+
+**Come si comporta**
+- **`TripMemories.past(until, budget)`**: legge le proposte che la rilevazione ha gia' conservato (`TripStore.proposals`) e, per ognuna, i media propri e visibili dei suoi giorni
+  (`TripReader.mine` con il filtro finale dei Nascosti), in ordine di scatto. Finiti prima di `until`, dal piu' recente (inizio, poi impronta). **Scartati mai**: per impronta e, per un
+  viaggio, per giorno d'inizio (`TripId.startKey`), anche se nel frattempo e' diventato album; **accettati compresi**, con l'album. Una proposta senza piu' un media visibile non c'e'.
+  Titolo e luoghi come la sezione Viaggi (R16). Un guasto della lettura si propaga (R17). Entro il budget: finito il tempo, quelli fatti (i piu' recenti), senza errore. Nessuna
+  coordinata e nessuna casa: il `TripDigest` non ha un tipo che le porti e il file non nomina la casa.
+- **`PeoplePlanner`**: persone dalla porta (con nome, non nascoste, non dimenticate, alias risolti, media visibili): il generatore **non vede mai un nome**. Una persona per giro,
+  la piu' fotografata (poi l'id), al piu' una a settimana; non per una persona con "Mostra meno" o "Mai", con "Ricordi con le persone" spento o con Persone non disponibile;
+  almeno 20 foto buone in 3 giorni, il primo anno passato con 15 foto la cui chiave non sia quieta (`MemoryQuiet`), altrimenti "negli ultimi mesi" (182 giorni fino a ieri). Le celle
+  sono posizioni della tabella delle celle visibili, dopo le esclusioni di D5 e i periodi "Mai" (`MemoryExclusions`, `PlanDates.good`: nessuna definizione nuova).
+- **`PeopleLessJanitor.sweep`** (idempotente): con Persone **spenta o in cancellazione** (`PeopleSwitch`) `dropAllPeopleChoices()` (lapidi su tutte le voci `memories_less:person:*`,
+  anche di persone sconosciute qui) e poi `Memories.prune()`; con Persone disponibile, le scelte di una persona unita passano sull'id di adesso (la piu' forte) e la vecchia e' una lapide;
+  poi sempre `prune()` (i ricordi di una persona nascosta o dimenticata escono). `watch(scope)` lo rifa' a ogni cambio di stato, di disponibilita' o di scelte.
+- **`AliasFollowingSettings`**: scrivendo "Mostra meno" o "Mai" per una persona unita la scelta va sull'id di adesso e la voce dell'id vecchio diventa una lapide.
+- **`PhaseGatedPeople`**: sta fra il motore e `MemoryPeople`; con `OFF` o `ERASING` risponde "non disponibile" e vuoto subito, cosi' lo scaffale perde i ricordi `PERSON` nello stesso
+  istante (il motore chiede `available` a ogni pulizia) anche se l'adattatore di :app e' in ritardo.
+
+**Interpretazioni e scostamenti** (nessun contratto di P0 e' cambiato)
+1. **Lo stato di Persone e' una porta nuova, in `settings/less/`** (`PeopleSwitch`): `MemoryPeople.available` e' falso anche solo perche' questo dispositivo non ha i volti pronti, e
+   cancellare le scelte per questo sarebbe un danno per tutto l'account; D11 vuole le lapidi con `FacesState` `Off` o `Erasing`, che core-memories non vede. P13 la lega a `FacesSwitch`.
+   Con `UNKNOWN` (non lo so ancora, o nessuna porta) il janitor non cancella niente.
+2. **Nessuna lapide per un'assenza** (L450): una persona che `resolve` non conosce (nascosta, dimenticata o non ancora arrivata) non fa togliere la sua scelta, perche' la porta non
+   distingue le tre cose e una lapide scritta qui per un ritardo toglierebbe la scelta a tutto l'account. E-MEM10 dice "le voci diventano lapidi": lo fanno `Off`/`Erasing`; per una persona
+   sola il ricordo esce subito (`ChoiceRules.personStillShown`) e la scelta resta visibile in Impostazioni con "Togli".
+3. **`TripMemories` sta in `CatalogTrips`**, non in una classe pubblica nuova: `TripPrivacyTest` ammette solo `CatalogTrips` e `AwayFromHome` come dichiarazioni pubbliche di `trips/`
+   e P0 ci aveva lasciato proprio `past` nell'elenco dei membri ammessi. P13 lega `MemoryTrips` allo stesso `CatalogTrips` che gia' lega a `Trips`.
+4. **Il quarto d'ora di un evento** (la chiave `event:<giorno>:<quarto d'ora>`, D9) non e' nelle proposte conservate: si ricalcola dai media del primo giorno (il primo scatto da cui parte una
+   finestra di 4 ore con almeno 30 scatti, lo stesso criterio della rilevazione nel suo minimo), cosi' uno scatto sperduto del mattino non lo sposta (L451).
+5. **Un evento ha tutti i media propri dei suoi giorni** (come la sezione Viaggi lo conta): e' il `members` della proposta di Fase 7 (L452).
+6. **Il fake delle persone attribuisce ora i media di una persona unita a quella che resta** (prima li perdeva): e' quello che dice il contratto (alias risolti), e la suite di P0 passa invariata.
+7. **`PhaseGatedPeople` e' una decisione di P8 sopra la porta** (non un cambiamento): senza, E-MEM10 ("i ricordi escono subito") dipende dalla puntualita' dell'adattatore di P13; con,
+   dipende solo da `PeopleSwitch`.
+8. **`sweep` pulisce sempre lo scaffale**, anche senza scelte da muovere: una persona nascosta o dimenticata non cambia nessuna scelta ma i suoi ricordi devono uscire (E-MEM10). `prune()` scrive solo se cambia qualcosa.
+
+**Prove** (`core-memories` e `core-albums`; i numeri sono quelli dell'ultima corsa dei pacchetti toccati)
+- `core-albums` (`trips/`): `CatalogTripMemoriesContractTest` (la suite `TripMemoriesContract` di P0, 5 prove, sulla porta vera con rilevazione vera su una storia sintetica) e `PastTripsTest`
+  (14 prove): scartati per impronta e per giorno d'inizio (anche dopo una nuova rilevazione, anche se erano album), accettati con l'album, solo media propri e visibili (familiari,
+  screenshot, nascosti, contagio dei gruppi), **proprieta'** "mai un nascosto, un altrui o uno screenshot" su 10 storie con nascosti a caso, solo i finiti prima del giorno, quarto d'ora
+  degli eventi (e uno scatto sperduto che non lo sposta), R16, R17 (un guasto si propaga), budget (i piu' recenti, mai una proposta a meta'), determinismo, `toString()` senza tracce, **parita' con
+  `InMemoryTripMemories`** sulle storie sintetiche con nascosti e scarti a caso. `TripPrivacyTest` (12) verde con `past` nell'elenco chiuso e la firma controllata per riflessione.
+- `core-memories` (52 prove nuove, 0 rosse): `PeoplePlannerParityTest` (generatore contro riferimento a forza bruta su **2.000 giorni** con otto persone di forme diverse, scelte, periodi,
+  chiavi viste o scartate, storia dello scaffale; poi 600 giorni dentro `IndexedPlanner` contro il riferimento intero; stesso risultato in qualunque ordine arrivino le persone; il confronto
+  non e' vuoto: oltre 150 candidati "anno", oltre 40 "ultimi mesi", oltre 200 giorni muti); `PeoplePlannerContractTest` e `MemoryEngineWithPeopleContractTest` (le suite di contratto di P0,
+  13 e 11 prove, con il generatore vero al posto del riferimento); `PeoplePlannerTest` (9: soglie, una per giro, chiavi quiete, ultimi mesi, Mostra meno/Mai/Q9, una a settimana, esclusioni,
+  **proprieta'** sui nascosti, nessun nome); `PeopleLessJanitorTest` (8); `PeopleEffectsPropertyTest` (**60 storie** di ricordi che passano, foto nascoste, scelte che vanno e vengono, persone che
+  si nascondono, si uniscono, si spengono: dopo ogni passo mai una foto di una persona "Mai" o di un giorno "Mai", mai un nascosto, mai in copertina una persona con "Mostra meno", mai un
+  ricordo `PERSON` di una persona nascosta, unita a una con "Mostra meno", con Persone spenta o con "Ricordi con le persone" spento; piu' lo stesso scaffale da due corse della stessa storia);
+  `PeopleNamesTest` (nessun nome di prova, in UTF-8, UTF-16, maiuscolo e minuscolo, nel file dello scaffale vero, in ogni voce dei dati personali nella forma che viaggia e nelle lapidi, nei log e
+  nei `toString()`); `FakeMemoryPeopleTest` (5). Tre regole chiave sono state provate al contrario togliendo il controllo (il generatore che ignora "Mostra meno" e "Mai", il janitor che ignora
+  lo stato spento, la porta dei viaggi che non guarda gli scartati: rosse 8 prove di `core-memories` e 4 di `core-albums`) e rimettendolo.
+- `Phase9ArchitectureTest` (regola 6 e le altre), `NoNetworkSourcesTest`, `NoWallClockSourcesTest`, `HiddenSurfacesRegistryTest`: verdi nel `check.ps1` intero (esito qui sotto).
+
+**Edge case per ID**
+- E-MEM10: `PeopleLessJanitorTest` (spenta, in cancellazione, unione, nascosta, `watch`, guasto), `PeopleEffectsPropertyTest`, `MemoryEngineWithPeopleContractTest`. E-MEM11: `PeopleEffectsPropertyTest`
+  (copertina), `PeoplePlannerTest.mostraMenoMaiEQ9`. E-MEM12: `PeoplePlannerTest.leEsclusioniNonContano`, `PeopleEffectsPropertyTest` (giorni "Mai"), `PeoplePlannerContractTest`.
+  E-MEM13: `PastTripsTest.gliScartatiNonEntranoMaiNeConImprontaNeConGiornoDInizio`, `unViaggioAccettatoESpoiScartatoNonEntra`, `gliAccettatiEntranoConLAlbum`. E-H1, E-H7, E-H8, E-H10 e D31:
+  `PastTripsTest.unNascostoNonEntraMaiProprieta`, `soloMediaPropriEVisibili`, `PeoplePlannerTest.unNascostoNonEMaiUnaCella`, `PeopleEffectsPropertyTest`. R16 e R17 dei viaggi: `PastTripsTest`.
+  Nomi: `PeopleNamesTest`. E-MEM8, E-MEM9, E-MEM22: gia' di P6 (le scelte che viaggiano; il janitor le tocca solo con Persone spenta o per un'unione).
+
+**Richieste agli altri pacchetti** (nessun contratto di P0 cambia)
+- **P13 (integrazione)**: (1) `MemoryTrips` legata allo stesso `CatalogTrips` che e' gia' `Trips` (`TripDigest` -> `TripDigestView`, campo per campo, senza `id`); (2) `MemoryPeople` sopra
+  `PeopleIndex`/`PeopleLookup`/`PeopleVisibility` (la suite `MemoryPeopleContract` deve girare sull'adattatore; `available` falso se Persone non e' `On` con `ACTIVE` o `LOCAL_ONLY` qui, `peopleIn` con gli alias
+  risolti); (3) `PeopleSwitch` legata a `FacesSwitch` (`Off` e `Erasing` -> `OFF` e `ERASING`, `On` -> `ON`, "non so ancora" -> `UNKNOWN`) e la catena `gated = PhaseGatedPeople(people, switch, scope)`,
+  motore con `people = gated`, `personal = AliasFollowingSettings(SyncedMemoriesSettings(...), gated)` e `planner = IndexedPlanner(people = PeoplePlanner())`; (4) `PeopleLessJanitor(personal, gated, switch,
+  engine)`: `watch(scope)` all'avvio e `sweep()` dopo ogni giro dei volti e a ogni nascondi, dimentica o unisci di una persona (nessuno di questi cambia `available`, lo stato o le scelte); (5) i file nuovi non
+  nominano `VisibleMedia` ne' `HiddenMask`: il registro `HiddenSurfaces` non cambia per P8.
+- **P9**: `LessTarget.Person` si costruisce con l'id con cui il ricordo e' stato pubblicato (`memory.title.person`): `AliasFollowingSettings` lo porta sull'id di adesso. Un "Mostra meno" di una persona
+  che questo dispositivo non conosce si vede come "Una persona" con "Togli" (L450).
+- **P10**: nessuna richiesta. Un ricordo `PERSON` di una persona con "Mostra meno" o "Mai" non e' mai sullo scaffale (la pulizia lo toglie), quindi non e' mai una notifica.
+- **P6**: nessuna. `IndexedPlanner(people = ...)`, `MemoryQuiet`, `ChoiceRules`, `ShelfPruner` e `dropAllPeopleChoices` si usano come documentati.
+- **P0 / contratti**: nessun cambiamento. Se si volesse la lapide anche per una persona nascosta o dimenticata (E-MEM10 alla lettera) servirebbe distinguere "nascosta o dimenticata" da "non ancora
+  arrivata" nella porta: un membro in piu' di `MemoryPeople` (per esempio `gone(person)`), che P8 non puo' aggiungere da solo.
+
+**Punti aperti**
+- **L450, L451, L452** (`docs/sicurezza.md`): la scelta di una persona nascosta o dimenticata resta finche' Persone non si spegne o l'utente non la toglie; l'id di un evento segue il suo primo scatto;
+  un ricordo di viaggio o evento contiene tutti i media propri dei suoi giorni.
+- Prove sul telefono: **F114** (scelte che viaggiano fra S25 ed emulatore, nessun nome nei segmenti: cercare il nome di prova nei file dell'area privata di `test`) e **F130** (ricordi con le persone con
+  ritratti di pubblico dominio e nomi di prova, "Mostra meno" rispettato, poi "Disattiva e cancella": nessun ricordo `PERSON` e le voci `memories_less` diventate lapidi). I viaggi non hanno prove nuove sul telefono oltre a F111-F112.
+
+**Esito di `tools/check.ps1 -NoDaemon`** (30/10, dopo `git merge main` a 23edd354, che aggiunge solo la correzione della sonda `album-pages`): **tutto a posto** (27 passi verdi, un solo SKIP: `-Bench`). Gradle `assembleDebug assembleRelease galleryTest galleryLint` verde in 1.308 s; test per modulo senza zeri e senza rossi (`core-memories` 357, di cui 52 nuovi di P8; `core-albums` 867, di cui 19 nuovi; `app` 1.154); `Phase9ArchitectureTest`, `TripPrivacyTest`, `NoNetworkSourcesTest`, `NoWallClockSourcesTest`, `HiddenSurfacesRegistryTest` e `HiddenSurfacesPropertyTest` verdi, senza righe nuove nel registro `HiddenSurfaces`. Nessun test di tempo e' caduto sotto carico.

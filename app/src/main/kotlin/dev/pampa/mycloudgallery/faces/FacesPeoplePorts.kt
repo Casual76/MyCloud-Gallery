@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.EditOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.PeopleClass
 import dev.pampa.mycloudgallery.core.albums.contract.PeopleMembership
 import dev.pampa.mycloudgallery.core.albums.contract.PeopleRule
+import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.albums.smart.LookupPeopleMembership
 import dev.pampa.mycloudgallery.core.faces.contract.MatchLevel
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleAlbumsChoice
@@ -14,6 +15,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.People
 import dev.pampa.mycloudgallery.core.faces.contract.SearchHistoryPurge
 import dev.pampa.mycloudgallery.core.faces.contract.SmartAlbumsPeople
 import dev.pampa.mycloudgallery.core.faces.people.PeopleVisibility
+import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PeopleMode
 import dev.pampa.mycloudgallery.core.model.PersonId
@@ -176,31 +178,67 @@ class AppPeopleChoices(private val people: People, private val index: PeopleInde
  * "Disattiva e cancella" verso gli album smart con le persone (§2.8 passo 3, D27): quanti sono, e sciogliere la regola con la scelta dell'utente. Con
  * [PeopleAlbumsChoice.KEEP_PHOTOS] l'album si **congela** (gli elementi di adesso diventano elementi con impronta, D16) e poi la regola delle persone
  * si toglie; con [PeopleAlbumsChoice.DROP_RULE] si toglie solo la regola. Si fa **prima** di cancellare i dati dei volti. Idempotente: un album gia'
- * senza la regola non conta piu'. Senza gli album montati (famiglia non pronta) non c'e' niente che si possa sciogliere: zero.
+ * senza la regola non conta piu'.
+ *
+ * CE-4 (correzioni A): **lancia** se gli album non sono ancora montati (famiglia non pronta: non si sa se ce ne sono) o se anche un solo album non si e'
+ * sciolto, dopo averli provati tutti. Cosi' il tentativo del diario fallisce davvero e il passo si segna saltato (L190) invece di "fatto" con un album
+ * che resta smart con una regola che non si valuta piu'.
  */
-class AppSmartAlbumsPeople(private val live: () -> AlbumsLive?) : SmartAlbumsPeople {
+class AppSmartAlbumsPeople internal constructor(private val access: () -> PeopleAlbumsAccess?) : SmartAlbumsPeople {
 
-  override suspend fun albumsWithPeople(): Int = live()?.let { withPeople(it).size } ?: 0
+  override suspend fun albumsWithPeople(): Int = access()?.withPeople()?.size ?: 0
 
   override suspend fun release(choice: PeopleAlbumsChoice): Int {
-    val albums = live() ?: return 0
+    val albums = access() ?: throw IllegalStateException("Gli album non sono ancora montati.")
     var done = 0
-    for (album in withPeople(albums)) {
+    var failed = 0
+    for (album in albums.withPeople()) {
       try {
-        if (choice == PeopleAlbumsChoice.KEEP_PHOTOS && !album.frozen && albums.albums.freeze(album.id) !is EditOutcome.Done) continue
-        if (albums.albums.setRules(album.id, album.rules.copy(people = null)) is EditOutcome.Done) done++
+        if (choice == PeopleAlbumsChoice.KEEP_PHOTOS && !album.frozen && albums.freeze(album.id) !is EditOutcome.Done) {
+          failed++
+          continue
+        }
+        if (albums.setRules(album.id, album.rules.copy(people = null)) is EditOutcome.Done) done++ else failed++
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
-        // Un album che non si scioglie adesso resta com'e': il diario riprova (poi lo segna "saltato").
+        // Un album che non si scioglie adesso resta com'e': si conta e il tentativo fallisce (il diario riprova, poi lo segna "saltato").
+        failed++
       }
     }
+    check(failed == 0) { "Album con persone non sciolti: $failed." }
     return done
   }
 
-  private fun withPeople(albums: AlbumsLive) = albums.albums.all.value.smart.filter { it.rules.people != null }
-
   override fun toString(): String = "AppSmartAlbumsPeople"
+
+  companion object {
+    /** Sugli album montati di `:app` (null finche' la famiglia non e' pronta). */
+    fun over(live: () -> AlbumsLive?): AppSmartAlbumsPeople = AppSmartAlbumsPeople { live()?.let(::LiveAlbumsAccess) }
+  }
+}
+
+/** Un album smart con la regola "Persone", con cio' che serve a scioglierla (CE-4). */
+internal class SmartWithPeople(val id: AlbumId, val rules: SmartRules, val frozen: Boolean) {
+  override fun toString(): String = "SmartWithPeople(frozen=$frozen)"
+}
+
+/** Gli album come li usa "Disattiva e cancella": gli smart con le persone e le due scelte che sciolgono la regola. Dietro una porta piccola per provarla (CE-4). */
+internal interface PeopleAlbumsAccess {
+  fun withPeople(): List<SmartWithPeople>
+
+  suspend fun freeze(id: AlbumId): EditOutcome
+
+  suspend fun setRules(id: AlbumId, rules: SmartRules): EditOutcome
+}
+
+private class LiveAlbumsAccess(private val albums: AlbumsLive) : PeopleAlbumsAccess {
+  override fun withPeople(): List<SmartWithPeople> =
+    albums.albums.all.value.smart.filter { it.rules.people != null }.map { SmartWithPeople(it.id, it.rules, it.frozen) }
+
+  override suspend fun freeze(id: AlbumId): EditOutcome = albums.albums.freeze(id)
+
+  override suspend fun setRules(id: AlbumId, rules: SmartRules): EditOutcome = albums.albums.setRules(id, rules)
 }
 
 /** Le ricerche recenti che nominano una persona si tolgono a parole intere (§2.8 passo 4): `SearchHistory.purge`. */

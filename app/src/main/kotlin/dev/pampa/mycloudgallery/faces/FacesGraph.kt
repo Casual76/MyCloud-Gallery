@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.faces
 
 import android.content.ComponentCallbacks2
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.common.perf.InstantShapes
 import dev.pampa.mycloudgallery.core.faces.contract.EraseStep
 import dev.pampa.mycloudgallery.core.faces.contract.FacesRunResult
 import dev.pampa.mycloudgallery.core.faces.contract.FacesScope
@@ -13,6 +14,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.EraseReport
 import dev.pampa.mycloudgallery.core.faces.contract.EraseWait
 import dev.pampa.mycloudgallery.core.faces.erase.JanitorReport
 import dev.pampa.mycloudgallery.core.rules.run.StageScope
+import dev.pampa.mycloudgallery.feature.people.list.PEOPLE_INSTANT_SHAPE_CODE
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
@@ -158,6 +160,8 @@ class FacesGraph internal constructor(
   private fun watch(live: FacesLive) {
     live.scope.launch {
       guarded { live.afterMount() }
+      // R11: la forma ricordata della pagina Persone non sopravvive a dati che non ci sono piu' (spenta qui).
+      if (live.switch.currentState() is FacesState.Off) InstantShapes.remove(PEOPLE_INSTANT_SHAPE_CODE)
       // Una cancellazione lasciata a meta' si riprende subito (diario), non alla notte.
       if (live.eraser.status.value?.let { it.step != EraseStep.DONE } == true) workRequest(FacesWork.ERASE)
     }
@@ -175,6 +179,8 @@ class FacesGraph internal constructor(
     // Persone si accende qui (o torna attiva): il primo calcolo parte dal lavoro, senza aspettare il giro delle 6 ore.
     if (to is FacesState.On && to.here != HereState.EXCLUDED && (from !is FacesState.On || from.here == HereState.EXCLUDED)) workRequest(FacesWork.COMPUTE)
     if (to is FacesState.Erasing) workRequest(FacesWork.ERASE)
+    // R11: senza i dati dei volti qui (cancellati, esclusi, avviso da rivedere) la forma ricordata della pagina Persone si toglie.
+    if (!to.activeHere) InstantShapes.remove(PEOPLE_INSTANT_SHAPE_CODE)
     // Le persone cambiano con lo stato: ricerca e album smart le rivalutano (E-F37).
     live.statusChanged()
   }
@@ -197,6 +203,9 @@ class FacesGraph internal constructor(
     }
     val janitor = guarded { live.janitor.run(budget) }
     if (janitor != null) lastJanitor.value = janitor
+    // CE-2 (correzioni A): "attesa dei dispositivi", cestino di rete e fine si riprendono qui, in qualunque stato (dopo la parte locale lo stato e' `Off`, non piu'
+    // `Erasing`): `eraseRound` lascia questi motivi ai giri dell'indice (P13-7) e senza questo passo nessuno rileggeva le conferme fino al prossimo processo.
+    if (live.eraser.status.value != null) guarded { live.eraser.resume(budget) }
     if (state !is FacesState.On || state.here != HereState.ACTIVE) return true
     val report = guarded { live.sync.sync(budget) }
     if (report != null) {
@@ -248,13 +257,13 @@ class FacesGraph internal constructor(
   suspend fun eraseRound(budget: Duration): Duration? {
     val live = ensureLive() ?: return null
     val report: EraseReport = guarded { live.eraser.resume(budget) } ?: return ERASE_SOON
-    return when {
-      report.done -> null
-      report.waiting == null -> ERASE_SOON
-      report.waiting == EraseWait.DEVICES || report.waiting == EraseWait.RECYCLE_BIN -> null
-      else -> ERASE_LATER
-    }
+    // R13: i giri di fila fermi su un file tenuto aperto dal NAS allungano l'attesa; ogni altro esito la riparte da capo.
+    heldRounds = if (report.waiting == EraseWait.FILE_OPEN) heldRounds + 1 else 0
+    return eraseDelay(report, heldRounds)
   }
+
+  /** Quanti giri di fila hanno aspettato un file tenuto aperto sul NAS (R13): per allungare l'attesa. Per processo. */
+  @Volatile private var heldRounds: Int = 0
 
   /** La pulizia dei propri file dei volti sul NAS (con la manutenzione dell'indice). */
   suspend fun maintain(budget: Duration) {
@@ -310,5 +319,21 @@ class FacesGraph internal constructor(
     /** La cancellazione riprende presto se avanza, piu' tardi se aspetta il NAS o un cancello (E-F30). */
     val ERASE_SOON: Duration = 1.minutes
     val ERASE_LATER: Duration = 30.minutes
+
+    /**
+     * Fra quanto riprende la cancellazione dopo un giro (null = non serve il lavoro: finita, o in attesa di una cosa che riprendono i giri dell'indice, CE-2).
+     * R13: con un file tenuto aperto dal NAS l'attesa cresce a ogni giro di fila ([heldRounds]): 2, 4, 8, 16 minuti, poi [ERASE_LATER]; mai un giro al minuto
+     * senza motivo.
+     */
+    fun eraseDelay(report: EraseReport, heldRounds: Int): Duration? = when {
+      report.done -> null
+      report.waiting == null -> ERASE_SOON
+      report.waiting == EraseWait.DEVICES || report.waiting == EraseWait.RECYCLE_BIN -> null
+      report.waiting == EraseWait.FILE_OPEN -> heldDelay(heldRounds)
+      else -> ERASE_LATER
+    }
+
+    /** L'attesa dopo [rounds] giri di fila fermi su un file aperto (1 = il primo): raddoppia da 2 minuti fino a [ERASE_LATER]. */
+    fun heldDelay(rounds: Int): Duration = ERASE_SOON.times(1 shl rounds.coerceIn(1, 5)).coerceAtMost(ERASE_LATER)
   }
 }

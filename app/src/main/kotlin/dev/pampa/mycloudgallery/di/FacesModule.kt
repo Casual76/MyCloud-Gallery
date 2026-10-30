@@ -165,7 +165,7 @@ object FacesModule {
     switch: FacesSwitch,
     faces: FacesGraph,
     graph: AppGraph,
-  ): CollectionsSectionProvider = peopleSectionProvider(context.applicationContext.resources, people, switch.state, faces, graph.scope)
+  ): CollectionsSectionProvider = peopleSectionProvider(context.applicationContext.resources, people, switch.state, faces, graph.scope, switch.offElsewhere)
 
   /** La sezione "Persone" della Diagnostica (§2.10): stato e un elemento per codice, solo numeri. */
   @Provides

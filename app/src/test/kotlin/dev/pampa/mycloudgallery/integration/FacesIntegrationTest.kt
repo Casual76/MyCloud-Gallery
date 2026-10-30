@@ -286,8 +286,9 @@ class FacesIntegrationTest {
     assertThat(s.tablet.engines.detectCalls.get()).isEqualTo(0)
 
     // Il telefono vede la conferma e chiude: ovunque fatto, nessun file dei volti sul NAS, nessuna foto toccata.
+    // CE-2 (correzioni A): qui non si chiama piu' `eraseRound`. Dopo la parte locale lo stato e' `Off` e l'attesa dei dispositivi la riprende il giro dell'indice
+    // (`syncRound`): senza, le conferme non si rileggevano fino al processo dopo e la pagina restava "in attesa" per sempre.
     roundsUntil(rig, "la cancellazione e' finita", s.phone, s.tablet) {
-      s.phone.faces.eraseRound(30.seconds)
       live.eraser.status.value?.step == EraseStep.DONE
     }
     assertThat(facesFiles(TestNas.ADMIN_USER)).isEmpty()

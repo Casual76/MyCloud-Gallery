@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.FaceEngines
 import dev.pampa.mycloudgallery.core.ai.faces.FaceEnginesFactory
 import dev.pampa.mycloudgallery.core.database.CatalogPhoneOnly
 import dev.pampa.mycloudgallery.core.database.MediaCatalog
+import dev.pampa.mycloudgallery.core.common.perf.InstantShapes
 import dev.pampa.mycloudgallery.core.database.faces.FacesDatabases
 import dev.pampa.mycloudgallery.core.faces.compute.FacesBacklog
 import dev.pampa.mycloudgallery.core.faces.compute.FacesBufferKeepers
@@ -55,12 +56,14 @@ import dev.pampa.mycloudgallery.core.faces.store.FacesRecovery
 import dev.pampa.mycloudgallery.core.faces.store.FacesStores
 import dev.pampa.mycloudgallery.core.faces.switch.DefaultFacesSwitch
 import dev.pampa.mycloudgallery.core.faces.switch.FacesLocalDataEraser
+import dev.pampa.mycloudgallery.core.faces.switch.LocalEraseWhy
 import dev.pampa.mycloudgallery.core.faces.switch.FileFacesLocalStore
 import dev.pampa.mycloudgallery.core.faces.sync.NasFacesLeases
 import dev.pampa.mycloudgallery.core.faces.sync.NasFacesPublisher
 import dev.pampa.mycloudgallery.core.faces.sync.NasFacesRemote
 import dev.pampa.mycloudgallery.core.faces.sync.NasFacesSync
 import dev.pampa.mycloudgallery.core.model.AccountId
+import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
@@ -74,6 +77,7 @@ import dev.pampa.mycloudgallery.core.personal.sync.PersonalHeadsRecord
 import dev.pampa.mycloudgallery.core.security.faces.FacesKeyStore
 import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.people.crops.GuardedPeopleCrops
+import dev.pampa.mycloudgallery.feature.people.list.PEOPLE_INSTANT_SHAPE_CODE
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.nas.CatalogPresenceSql
@@ -190,8 +194,22 @@ object FacesWiring {
       val visibility = PeopleVisibility(gallery.visibleMedia, gallery.hiddenMask)
       val ensuring = EnsuringModelFiles(ai.localModels.files) { id -> ai.localModels.manager.ensure(id, ModelTrigger.USER_NOW, 30.seconds) }
       val cropsRef = arrayOfNulls<GuardedPeopleCrops>(1)
+      val peopleRef = arrayOfNulls<ArchivePeople>(1)
+      // Un dato nuovo da fuori (replica, custode, calcolo) o un cambio di memoria: le persone si rileggono (dal recinto, quindi dopo una cancellazione in corso).
+      val arrivals = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+      val archivesRef = arrayOfNulls<FencedArchives>(1)
       val leftovers = AppFacesLeftovers(
-        memory = { cropsRef[0]?.clear() },
+        // R11 (correzioni A): dopo una cancellazione locale non resta niente in memoria: copertine, nomi e raggruppamento delle persone, l'ultimo archivio
+        // aperto e la forma ricordata della pagina Persone (numeri che non devono sopravvivere ai dati).
+        memory = {
+          cropsRef[0]?.clear()
+          peopleRef[0]?.release()
+          archivesRef[0]?.forget()
+          InstantShapes.remove(PEOPLE_INSTANT_SHAPE_CODE)
+          // Se la generazione tolta non era quella in uso (una vecchia, un'esclusione a meta') le persone rileggono da capo; se era quella, il recinto non
+          // ammette piu' l'archivio e la rilettura da' una lista vuota.
+          arrivals.tryEmit(Unit)
+        },
         models = {
           for (spec in ModelCatalog.FACES) runCatching { ai.localModels.manager.remove(spec.id) }
           ModelCatalog.FACES.none { spec -> ai.localModels.manager.states.value[spec.id] is ModelState.Ready }
@@ -205,9 +223,17 @@ object FacesWiring {
         account = settings,
         localStore = localStore,
         requirements = requirements,
-        eraser = FacesLocalDataEraser { generation, why ->
-          started.await()
-          localErase.erase(generation, why)
+        eraser = object : FacesLocalDataEraser {
+          override suspend fun erase(generation: FaceGeneration, why: LocalEraseWhy): Boolean {
+            started.await()
+            return localErase.erase(generation, why)
+          }
+
+          // R1: l'interruttore guarda anche le generazioni sul disco che `faces-local` non ricorda.
+          override suspend fun generationsOnDisk(): List<FaceGeneration>? {
+            started.await()
+            return localErase.generationsOnDisk()
+          }
         },
         clock = clock,
       )
@@ -215,12 +241,67 @@ object FacesWiring {
       val history = AppSearchHistoryPurge { ai.search.history }
       localErase = FacesLocalErase(StoresLocalData(stores), fence, leftovers, history)
       val archives = FencedArchives(fence, stores.archives())
+      archivesRef[0] = archives
       val replicaStore = FencedReplicaStore(fence, stores.replicaStore())
       val publishStore = FencedPublishStore(fence, stores.publishStore())
 
       // --- Il NAS: la share privata dichiarata, solo con il registro (D11) --------------------------------------------------------------
       val privateShare = shares.privateShare()
       val fileSystem = privateShare?.let { share -> inputs.session.fileSystem(share) }
+      val engines = FacesEngineHolder { testing?.engines?.invoke() ?: FaceEnginesFactory.create(ensuring) }
+
+      // --- "Disattiva e cancella" ---------------------------------------------------------------------------------------------------------
+      // I1 (correzioni A): la cancellazione nasce **prima** delle persone. `DefaultFacesEraser` legge il diario e chiude il recinto (`fence.block`) nel suo
+      // costruttore; `ArchivePeople`, piu' sotto, lancia subito una lettura che apre l'archivio dal recinto: con questo ordine un diario a meta' chiude il
+      // recinto prima di ogni apertura (C130), per costruzione e non per fortuna.
+      val services: FacesNasServices? = fileSystem?.let {
+        FacesNasWiring.build(
+          inputs.session,
+          FacesNasConfig(
+            deviceId = deviceId,
+            accountId = inputs.account().orEmpty(),
+            facts = AccountEraseFacts(FacesAccountFacts(switch, settings, identity)),
+            privateShare = { shares.privateShare() },
+            commonShare = { shares.commonShare() },
+            gate = writeGate.asEraseGate(),
+            clocks = organizer.clocks,
+            registry = { inputs.registry() },
+            publishedSegments = { generation -> publishStore.load(generation).diary },
+            catalogPresence = CatalogPresenceSql(gallery.database, AccountId.of(inputs.account().orEmpty())),
+          ),
+        )
+      }
+      val eraseOps = services?.let { NasFacesEraseOps(it.eraser) { shares.privateShare() } } ?: NoFacesEraseOps
+      val announcer = EraseAnnouncer { budget ->
+        val report = organizer.syncPersonal(budget)
+        if (report?.stoppedBy == PersonalStop.COMPLETE) AnnounceResult.Completed else AnnounceResult.Waiting(EraseWait.NAS)
+      }
+      val eraser = DefaultFacesEraser(
+        FacesEraseParts(
+          journal = FileEraseJournalStore(File(noBackup, FileEraseJournalStore.FILE)),
+          switch = switch,
+          settings = settings,
+          localStore = localStore,
+          requirements = requirements,
+          local = StoresLocalData(stores),
+          fence = fence,
+          localErase = localErase,
+          albums = AppSmartAlbumsPeople.over { albums.live.value },
+          history = history,
+          nas = eraseOps,
+          announcer = announcer,
+          heads = organizer.personalHeads,
+          identity = identity,
+          clock = clock,
+          stopWork = EraseStopWork {
+            runCatching { WorkManager.getInstance(context.applicationContext).cancelUniqueWork(FacesWorkScheduling.COMPUTE_WORK) }
+            engines.release()
+          },
+        ),
+      )
+      val janitor = FacesNasJanitor(eraseOps, FacesAccountFacts(switch, settings, identity), identity, organizer.personalHeads, clock)
+
+      // --- Il NAS: replica, pubblicazione e prenotazioni (D11) --------------------------------------------------------------
       val remote = fileSystem?.let { fs -> NasFacesRemote(fs, deviceId, { inputs.registry()?.registry?.config?.commonShare }) } ?: NoFacesRemote()
       val attestation = CatalogFacesAttestation(catalogOf, account, shares)
       val publisher = if (fileSystem != null) {
@@ -247,7 +328,6 @@ object FacesWiring {
       )
 
       // --- Il calcolo --------------------------------------------------------------------------------------------------------------------
-      val engines = FacesEngineHolder { testing?.engines?.invoke() ?: FaceEnginesFactory.create(ensuring) }
       val inputsPort = AppFaceInputs(
         buffer = ai.ai.buffer,
         fetcher = { nas.runtime?.ai?.fetcher },
@@ -288,7 +368,6 @@ object FacesWiring {
         (status as? FacesStatus.Running)?.takeIf { it.total > 0 }?.let { (it.done * 100L / it.total).toInt().coerceIn(0, 100) }
       }.stateIn(scope, SharingStarted.Eagerly, null)
       val available = switch.state.map { it.activeHere }.stateIn(scope, SharingStarted.Eagerly, switch.currentState().activeHere)
-      val arrivals = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
       val people = ArchivePeople(
         archives = PeopleArchiveSource { currentArchive(switch, archives) },
         cells = FacesCatalogCells(catalogPort),
@@ -303,56 +382,10 @@ object FacesWiring {
         progress = progress,
         triggers = arrivals,
       )
+      peopleRef[0] = people
       val crops = GuardedPeopleCrops(AppPeopleCropSource(cells, ai.ai.buffer, catalogOf, CutoutSources(context.contentResolver, gallery.intents::uriOf, nas.imageOrigin, ReplicaHq(nas.blobs, nas.locations))), people)
       cropsRef[0] = crops
 
-      // --- "Disattiva e cancella" ------------------------------------------------------------------------------------------------------------
-      val services: FacesNasServices? = fileSystem?.let {
-        FacesNasWiring.build(
-          inputs.session,
-          FacesNasConfig(
-            deviceId = deviceId,
-            accountId = inputs.account().orEmpty(),
-            facts = AccountEraseFacts(FacesAccountFacts(switch, settings, identity)),
-            privateShare = { shares.privateShare() },
-            commonShare = { shares.commonShare() },
-            gate = writeGate.asEraseGate(),
-            clocks = organizer.clocks,
-            registry = { inputs.registry() },
-            publishedSegments = { generation -> publishStore.load(generation).diary },
-            catalogPresence = CatalogPresenceSql(gallery.database, AccountId.of(inputs.account().orEmpty())),
-          ),
-        )
-      }
-      val eraseOps = services?.let { NasFacesEraseOps(it.eraser) { shares.privateShare() } } ?: NoFacesEraseOps
-      val announcer = EraseAnnouncer { budget ->
-        val report = organizer.syncPersonal(budget)
-        if (report?.stoppedBy == PersonalStop.COMPLETE) AnnounceResult.Completed else AnnounceResult.Waiting(EraseWait.NAS)
-      }
-      val eraser = DefaultFacesEraser(
-        FacesEraseParts(
-          journal = FileEraseJournalStore(File(noBackup, FileEraseJournalStore.FILE)),
-          switch = switch,
-          settings = settings,
-          localStore = localStore,
-          requirements = requirements,
-          local = StoresLocalData(stores),
-          fence = fence,
-          localErase = localErase,
-          albums = AppSmartAlbumsPeople { albums.live.value },
-          history = history,
-          nas = eraseOps,
-          announcer = announcer,
-          heads = organizer.personalHeads,
-          identity = identity,
-          clock = clock,
-          stopWork = EraseStopWork {
-            runCatching { WorkManager.getInstance(context.applicationContext).cancelUniqueWork(FacesWorkScheduling.COMPUTE_WORK) }
-            engines.release()
-          },
-        ),
-      )
-      val janitor = FacesNasJanitor(eraseOps, FacesAccountFacts(switch, settings, identity), identity, organizer.personalHeads, clock)
       started.complete(Unit)
 
       FacesLive(

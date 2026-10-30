@@ -42,6 +42,7 @@ import dev.pampa.mycloudgallery.navigation.FlowSection
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -180,9 +181,11 @@ fun peopleSectionProvider(
   state: StateFlow<FacesState>,
   faces: FacesGraph,
   scope: CoroutineScope,
+  /** CE-3: Persone spenta da un altro dispositivo dell'account (la riga che lo dice sopra "Attiva riconoscimento dei volti"). */
+  offElsewhere: StateFlow<Boolean> = MutableStateFlow(false),
 ): CollectionsSectionProvider {
   val status: StateFlow<FacesStatus> = faces.live.flatMapLatest { it?.status ?: flowOf(FacesStatus.Off) }.stateIn(scope, SharingStarted.Eagerly, FacesStatus.Off)
-  val sources = PeopleSectionSources(resources, people, state, status, scope)
+  val sources = PeopleSectionSources(resources, people, state, status, scope, offElsewhere)
   return FlowSection(
     PeopleSectionSources.CODE,
     sources.section.map { it?.toGroup() }.stateIn(scope, SharingStarted.Eagerly, sources.section.value?.toGroup()),

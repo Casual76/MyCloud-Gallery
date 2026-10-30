@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 9 (P9, docs/fase9-progetto.md §2.6, D15, D18): la voce "Ricordi e notifiche" delle Impostazioni. Solo come sono le notifiche di questo dispositivo (D33): niente titoli, luoghi, nomi o ore. -->
+  <string name="settings_memories">Ricordi e notifiche</string>
+  <string name="settings_memories_detail">Ricordi di un anno fa, viaggi e persone, con una notifica discreta quando ce n’è uno bello.</string>
+  <string name="settings_memories_few">Poche notifiche a settimana</string>
+  <string name="settings_memories_daily">Una notifica al giorno, quando c’è un bel ricordo</string>
+  <string name="settings_memories_anniversaries">Solo gli anniversari dei viaggi e degli eventi</string>
+  <string name="settings_memories_off">Notifiche spente</string>
+  <string name="settings_memories_pill_attention">Da sistemare</string>
+</resources>

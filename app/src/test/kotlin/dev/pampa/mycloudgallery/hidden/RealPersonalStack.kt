@@ -32,13 +32,13 @@ import dev.pampa.mycloudgallery.core.personal.store.PersonalProjection
 import dev.pampa.mycloudgallery.core.personal.store.ProjectionResult
 import dev.pampa.mycloudgallery.core.personal.testing.InMemoryPersonalLedger
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.integration.closeScope
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 
 // Fase 7 (P9, D22; integrazione 26/10): lo STACK VERO degli album personali (P3: `CatalogAlbums`, la proiezione sulle tabelle v6, la lettura, le copie di
@@ -171,8 +171,9 @@ internal class RealPersonalStack private constructor(val w: BuiltWorld) : AutoCl
     return checkNotNull(w.catalog.record(observation, MediaCatalog.WhenUndecided.KEEP_SEPARATE).mediaId) { "il media arrivato non e' entrato" }
   }
 
+  /** Il lavoro si chiude e si aspetta: una lettura di Room ancora in volo non deve finire sul database che il mondo chiude subito dopo. */
   override fun close() {
-    scope.cancel()
+    closeScope(scope)
   }
 
   companion object {

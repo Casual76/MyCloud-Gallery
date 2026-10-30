@@ -18,11 +18,13 @@ import dev.pampa.mycloudgallery.feature.albums.contract.SuggestionsState
 import dev.pampa.mycloudgallery.feature.albums.page.AlbumPageController
 import dev.pampa.mycloudgallery.feature.albums.page.SuggestionKind
 import dev.pampa.mycloudgallery.feature.albums.page.SuggestionsController
+import dev.pampa.mycloudgallery.integration.Attese
 import java.time.LocalDate
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 
@@ -38,7 +40,8 @@ internal object RealAlbumScreensProbes {
 
   private val clock = FixedAlbumScreensClock(LocalDate.of(2026, 10, 21), 0L)
 
-  private const val WAIT_MS = 20_000L
+  /** Il tetto di ogni attesa su un evento: quello di tutti i test sul grafo vero (venti secondi non bastavano con altre build sul PC). */
+  private val WAIT_MS = Attese.TETTO_MS
 
   private fun idsOf(view: OrderedTimelineView?): List<MediaId> = view?.let { v -> (0 until v.size).map { v.snapshot.idAt(v.snapshotIndex(it)) } }.orEmpty()
 
@@ -92,7 +95,7 @@ internal object RealAlbumScreensProbes {
         for (media in w.liveMustNeverShow) if (media in after) problems += "l'album mostra un nascosto dopo l'aggiunta"
         Probed(shown = offered, expected = w.liveShowable, within = w.liveShowable, problems = problems)
       } finally {
-        scope.cancel()
+        scope.coroutineContext[Job]?.cancelAndJoin()
       }
     }
   }
@@ -132,7 +135,7 @@ internal object RealAlbumScreensProbes {
         for (media in suggestions.target()) if (media in w.liveMustNeverShow) problems += "le Suggerite propongono un nascosto"
         Probed(shown = shown, within = w.liveShowable, problems = problems)
       } finally {
-        scope.cancel()
+        scope.coroutineContext[Job]?.cancelAndJoin()
       }
     }
   }

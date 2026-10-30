@@ -190,8 +190,9 @@ class RicevutiInCodaAppTest {
 
     receive(rig, mp4(1, size = 6_000), "Mare.mp4")
 
-    val queued = items(rig) { it.size == 1 }.single()
-    assertThat(queued.phase).isEqualTo(ReceivedPhase.WAITING)
+    // Lo stato preciso, non il primo elenco da una riga: la frase di un file in coda dipende anche dallo stato del backup (`ReceivedStates.of`), che dopo
+    // `chooseFolder` si assesta da solo e, con altre build sul PC, poteva essere ancora quello di prima (un elenco da una riga con un'altra fase).
+    val queued = items(rig) { it.singleOrNull()?.phase == ReceivedPhase.WAITING }.single()
     assertThat(queued.folder).isEqualTo("Ricevute")
     assertThat(queued.isVideo).isTrue()
     assertThat(queued.size).isEqualTo(6_000L)

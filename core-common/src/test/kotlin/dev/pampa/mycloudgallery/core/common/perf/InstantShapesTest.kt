@@ -45,6 +45,26 @@ class InstantShapesTest {
     assertThat(InstantShapes["cerca"]).containsExactly(2, 3, 0).inOrder()
   }
 
+  /** R11 (correzioni A della Fase 8): la forma di una pagina si toglie (con i dati a cui apparteneva) e il file non la porta piu'. */
+  @Test
+  fun r11_removeTogliLaFormaEIlFileNonLaPortaPiu() {
+    InstantShapes.install(file)
+    InstantShapes.put("persone", listOf(3, 6, 3))
+    InstantShapes.put("cerca", listOf(2, 3, 0))
+    InstantShapes.flushNow()
+    assertThat(file.readText()).contains("persone=3,6,3")
+    InstantShapes.remove("persone")
+    assertThat(InstantShapes["persone"]).isNull()
+    InstantShapes.flushNow()
+    assertThat(file.readText()).isEqualTo("cerca=2,3,0")
+    // Un codice che non c'e' non fa niente; l'altra forma resta.
+    InstantShapes.remove("non-c-e")
+    assertThat(InstantShapes["cerca"]).containsExactly(2, 3, 0).inOrder()
+    InstantShapes.clear()
+    InstantShapes.load()
+    assertThat(InstantShapes["persone"]).isNull()
+  }
+
   @Test
   fun codiciEFormeFuoriDaiLimitiSiIgnorano() {
     InstantShapes.install(file)

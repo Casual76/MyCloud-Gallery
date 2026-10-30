@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PersonId
+import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /**
@@ -38,15 +39,28 @@ internal class PeopleCore(
 
   private val loaded = AtomicReference<Loaded?>(null)
 
+  /** Sale a ogni [release]: una lettura iniziata prima non rimette in memoria cio' che e' stato appena buttato (R11). */
+  private val epoch = AtomicLong(0)
+
+  /**
+   * R11 (correzioni A): butta cio' che si e' letto (voci `people` con i nomi, raggruppamento). Non prende nessun lucchetto (la cancellazione locale lo chiama
+   * mentre tiene il recinto, e una lettura che aspetta il recinto tiene il suo): la lettura dopo, se c'e' ancora un archivio, rilegge da capo.
+   */
+  fun release() {
+    epoch.incrementAndGet()
+    loaded.set(null)
+  }
+
   /** Rilegge l'archivio. Null se non c'e' un archivio della generazione corrente o si e' chiuso mentre lo leggevamo. */
   suspend fun reload(): Loaded? {
+    val start = epoch.get()
     val archive = archives.current()
     if (archive == null) {
       loaded.set(null)
       return null
     }
     return try {
-      Loaded(archive, archive.grouping(), archive.people()).also { loaded.set(it) }
+      Loaded(archive, archive.grouping(), archive.people()).also { if (epoch.get() == start) loaded.set(it) }
     } catch (_: IllegalStateException) {
       loaded.set(null)
       null

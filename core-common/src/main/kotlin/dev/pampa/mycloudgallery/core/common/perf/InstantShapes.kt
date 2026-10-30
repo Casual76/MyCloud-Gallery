@@ -83,6 +83,14 @@ object InstantShapes {
     schedule()
   }
 
+  /**
+   * Dimentica la forma di [code] (R11, correzioni A: la forma della pagina Persone non resta dopo "Disattiva e cancella") e riscrive il file senza: la
+   * prossima apertura a freddo non disegna piu' lo scheletro con i numeri di prima. Un codice che non c'era non fa niente.
+   */
+  fun remove(code: String) {
+    if (values.remove(code) != null) schedule()
+  }
+
   /** Dimentica tutto (l'azzeramento): niente si riscrive. */
   fun clear() {
     pending?.cancel()

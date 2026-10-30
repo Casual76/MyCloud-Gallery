@@ -11666,3 +11666,130 @@ transitorio `Recomputing`, non un problema di carico (punto aperto per chi ha `c
 2. Le misure di prestazione sono su questo PC; sull'S25 vanno rifatte (P12).
 3. Nessuna prova su dispositivo e nessun Gradle fuori dal posto; nessun sotto-agente.
 4. `InMemoryMemories` (P0) non usa ancora `MemoryPhotoPicker` ne' il raccoglitore (default `ReferencePicker`): lo cambiano P6 e P13.
+
+## Fase 9 P6: motore dei ricordi e scaffale (30/10)
+
+Il pacchetto P6 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P6; §2.1, §2.3, D3, D4, D9, D10, D11 per le scelte, D31; §5.2; risposte Q6 (a) e Q9
+(a) del 27/10). Branch `fase9/p6`. Consegna il **motore vero** di `Memories` (`MemoryEngine`), il generatore dei tipi "N anni fa oggi", viaggi ed eventi
+e "il meglio del mese" (`IndexedPlanner`), lo **scaffale su file** (`FileShelfStore`, `ShelfCodec`, pulizia che toglie e basta) e le scelte
+dell'utente sui dati personali (`SyncedMemoriesSettings`, in `core-personal`). Nessuna dipendenza nuova, nessun permesso, nessun componente, niente
+rete; `core-memories` resta JVM puro (`Phase9ArchitectureTest` verde). **Non** toccati: `pick/` e le porte `MemoryVectors`/`MemoryPixels` (P7),
+`plan/people/` e `settings/less/` (P8), i contratti di P0 e il registro `HiddenSurfaces`.
+
+**Cosa c'e'**
+- `core-memories/.../plan/`: `IndexedPlanner` (con `OnThisDayPlanning`, `TripPlanning`, `MonthPlanning`, `PlanDates`), `PublishRound` (i ricordi nuovi
+  del giorno), `MemoryChoice` (il punto d'innesto del passo 5, vedi sotto), `MemoryEngine` (il servizio).
+- `core-memories/.../shelf/`: `ShelfCodec` (formato), `FileShelfStore` (deposito atomico), `ShelfPruner` (pulizia), `ShelfCards` (la sezione),
+  `MemoryVisibility` (la porta della visibilita', vedi sotto).
+- `core-memories/.../settings/`: `MemoryQuiet` (le chiavi che non si propongono, una sola definizione per P6 e P8), `ChoiceRules` ("Mai" e "Mostra meno").
+- `core-personal/.../settings/SyncedMemoriesSettings.kt`: la porta `MemoriesPersonalSettings` sopra lo store e il motore di sincronizzazione veri.
+
+**Come si comporta** (le regole di D3, D9, D10, §2.1; provate dalle suite di contratto di P0 e dalle prove sotto)
+- **Il giro** (`refresh`; uguale per notte, passo leggero e apertura: cambia solo il budget; l'apertura non rifa' niente se oggi il giro e' gia'
+  stato fatto): pulizia dello scaffale, tabella a colonne dell'istantanea visibile (si rifa' solo se l'istantanea o i ritagli cambiano, e si lascia
+  andare con `releaseCaches()`), viaggi e persone dalle porte, candidati, scelta e pubblicazione di al piu' **2 ricordi nuovi al giorno piu' il mese**,
+  **una** scrittura atomica dello scaffale. Il budget finito lascia lo scaffale valido e il giro "incompleto".
+- **Il generatore** cerca **per giorno** nell'indice della tabella (una ricerca per anno, 28-31 per il mese): nessuna scansione della Libreria per
+  tipo. Stessi candidati, chiavi, celle e priorita' del riferimento a forza bruta su 2.000 giorni casuali (`PlannerParityTest`).
+- **Lo scaffale**: dopo la pubblicazione **solo togliere** (nascosti, eliminati, "Mai" per periodo e per persona; ricordi di piu' di 30 giorni, sotto
+  3 elementi, di persone non piu' mostrabili; mai aggiungere, riordinare o cambiare il titolo; la copertina passa al primo elemento rimasto che non
+  sia di una persona "Mostra meno"). **R17**: un guasto della lettura dei visibili lancia e lo scaffale resta com'era.
+- **Il file** (`shelf.bin`): "MCGS", versione, lunghezza, corpo, CRC-32; temporaneo + `fsync` + rinomina (`StateFiles`); letto in un colpo. Un file
+  troncato, rovinato, di un'altra versione o oltre 256 KiB vale scaffale vuoto e si rigenera (`MEMORY_SHELF_RESET`); un errore del disco lancia e non
+  butta lo scaffale buono. Del titolo si salva l'**id** della persona e mai il nome; l'etichetta di un viaggio e' al piu' 120 caratteri.
+- **Avvio istantaneo**: `restore()` legge il file e disegna Raccolte -> Ricordi **senza** la Libreria, il database, i viaggi o la generazione; il
+  lavoro pesante gira su un dispatcher del motore (mai sul thread di chi chiama). La sezione (`shelf`) segue da sola le scelte (anche quelle che
+  arrivano da un altro dispositivo) e l'istantanea.
+- **Scelte** (`SyncedMemoriesSettings`): visto (giorno locale, solo in avanti), "Non mostrare" e "Annulla", "Mostra meno" e "Mai" per persona, "Mai" per
+  periodo, "Ricordi con le persone"; valgono subito anche senza l'ora del NAS (stato "effettivo"), viaggiano con `PersonalMerge`; togliere una scelta
+  che non c'e' non scrive niente; un'app della Fase 8 conserva i campi senza usarli. Mai un nome.
+
+**Interpretazioni e scostamenti** (nessun contratto di P0 e' cambiato)
+1. **`MemoryVisibility`**: il motore chiede la visibilita' a una porta di tre membri (`snapshot`, `visibleOrThrow`, `hiddenOrThrow`) invece di nominare
+   `VisibleMedia` e `HiddenMask`. Il registro `HiddenSurfaces` (`app/src/test/.../hidden/`) fa fallire il test per ogni file di produzione fuori da
+   `contract/`, `noop/`, `testing/` che nomina i due contratti e non e' elencato: P6 non puo' toccare il registro (la riga `MEMORIES` e' di P9), quindi
+   i file del motore non li nominano; li nomina l'adattatore di :app (P13), che va nell'elenco `wiring`; la riga `MEMORIES` di P9 elenca i file del motore
+   (`shelf/ShelfPruner.kt`, `shelf/ShelfCards.kt`, `plan/MemoryEngine.kt`, `plan/PublishRound.kt`) come sorgenti. Le prove (`ShelfOnlyRemoveTest`,
+   `MemoryEngineRuntimeTest`) costruiscono l'adattatore sopra `FakeVisibility`.
+2. **Il generatore delle persone e' un innesto**: `IndexedPlanner(people: MemoryPlanner = NoMemoryPlanner)`; P8 scrive in `plan/people/` un `MemoryPlanner`
+   che da' **solo** candidati `PERSON` (usa `MemoryQuiet`); dal suo risultato si tengono solo i `PERSON`. Le suite di P0 (che hanno una prova con le persone)
+   girano con l'innesto sostituito dal riferimento (`ReferencePeople`, nei test).
+3. **La scelta delle foto e' un innesto** (`MemoryChoice`: "dato un ricordo, i segnali e la scelta"): in produzione `MemoryPhotoChoice`, che lega la scelta di P7
+   (`PickSignalsLoader`, una volta per ricordo e solo per quelli che provano a nascere, pixel per i 200 finalisti entro il budget; `VisiblePhotoPicker` sopra
+   `MemoryPhotoPicker`, maschera dei Nascosti prima e dopo, fallisce chiuso); di serie, e nelle prove sul riferimento, `PortsMemoryChoice` (un `PhotoPicker` puro
+   sopra le porte). Il motore ricontrolla comunque i nascosti prima di pubblicare. La parita' con il riferimento vale con entrambe.
+4. **Lo scaffale si riscrive a ogni giro** (una volta, atomico), anche senza novita': il file e la memoria tornano uguali anche se il file e' stato
+   rovinato nel frattempo. La pulizia scrive solo se cambia qualcosa.
+5. **La sezione si filtra con l'istantanea**: nell'istante fra un "Nascondi" e `prune()` la sezione, la copertina e la pagina non mostrano gia' il
+   nascosto (D31); `Memories` dice "noti all'ultimo giro", questo e' piu' stretto. Prima del primo giro la sezione dice "sto preparando" anche dopo una
+   pulizia (il riferimento dice "vuoto"): la parita' e' sul file e dopo il primo giro.
+6. **Senza scaffale in memoria si rilegge il file** a ogni giro (il file puo' essere cambiato); con uno scaffale in memoria si legge una volta.
+7. **Scelte "tolte che non c'erano"** non scrivono lapidi (`SyncedMemoriesSettings`): niente crescita del registro per chiamate a vuoto.
+
+**Misure** (JVM di questo PC, Windows, `MemoryEnginePerformanceTest`, Libreria sintetica da 100.000 celle su cinque anni con anniversari, screenshot, documenti
+e preferiti; soglia del "Fatto quando": **meno di 1 s**)
+| Cosa | Misura |
+|---|---|
+| Giro intero su 100.000 celle, **JVM nuova** (tabella e indice, generatore, scelta di riferimento, scaffale; 3 ricordi: due "anni fa" e il mese) | 61-102 ms (la prima corsa include il riscaldamento della JVM) |
+| Lo stesso con la scelta vera di P7 (`PickSignalsLoader` + `VisiblePhotoPicker`) | 12-100 ms (da JVM calda a JVM nuova) |
+| Giro del giorno dopo sulla stessa istantanea (la tabella e' gia' pronta) | 2-5 ms |
+| Tabella a colonne con l'indice per giorno | 1-2 ms |
+| Generatore (tre candidati) | 0,4-2 ms |
+| Pulizia di uno scaffale | 0,1-0,3 ms |
+| Scaffale pieno (60 ricordi da 40 elementi, etichette da 120 caratteri) | 48.206 byte (tetto di lettura 256 KiB) |
+| Lettura da file e decodifica dello scaffale pieno | 1,7 ms |
+
+Soglie nei test (larghe, per non diventare rosse sotto carico): giro < 1.000 ms (quella del "Fatto quando"), tabella e indice < 500 ms, generatore
+< 200 ms, pulizia < 100 ms, lettura dello scaffale pieno < 50 ms. I numeri stanno una decina di volte sotto la soglia: non e' servito ottimizzare
+oltre l'indice per giorno.
+
+**Prove** (in `core-memories` e `core-personal`; i numeri sono quelli dell'ultima corsa)
+- `core-memories` (305 test, 0 rossi nell'ultima corsa): suite di contratto di P0 sul **motore vero** (`MemoryEngineContractTest`, anche con la scelta di P7:
+  `MemoryPhotoChoiceTest`), sul **generatore vero** (`IndexedPlannerContractTest`) e su **file veri** (`FileShelfStoreContractTest`); `PlannerParityTest` (generatore
+  contro riferimento a forza bruta su 2.000 giorni casuali: stessi candidati, chiavi, celle e priorita'; ogni tipo visto molte volte); `MemoryEngineParityTest`
+  (500 storie sintetiche di giorni che passano, foto che arrivano dopo, nascosti, eliminati, scelte su due dispositivi, scaffale rovinato, scrittura che
+  muore: scaffale uguale a quello del riferimento dopo ogni passo, anche con la scelta di P7); `ShelfOnlyRemoveTest` (10.000 storie di nascosti, rimessi
+  visibili, eliminati, arrivi e giorni: solo togliere, mai un nascosto); `MemoryEngineCrashTest` (morte del processo a **ogni** scrittura e in ognuno dei tre
+  punti: lo scaffale e' intero e, ripetendo il passo, la storia arriva allo stesso scaffale finale); `ShelfCodecTest` (ogni troncamento, ogni bit, 20.000
+  corpi cambiati con il CRC rifatto, spazzatura: mai un'eccezione); `FileShelfStoreTest`; `MemoryEngineTest` (E-MEM, soglie di D3); `MemoryEngineRuntimeTest` (thread,
+  avvio da file, budget, cancellazione, file rovinato, nascosti prima della pulizia, scelte fuori casa, nessun nome, nessun dato nei log e nei `toString()`);
+  `MemoryEnginePerformanceTest`. `NoNetworkSourcesTest` e `NoWallClockSourcesTest` verdi.
+- `core-personal` (283 test, 0 rossi): `SyncedMemoriesSettingsTest` (la suite `MemoriesPersonalSettingsContract` sul motore vero, un'app della Fase 8 che conserva
+  i campi, scelte senza l'ora del NAS, due store finti, lapidi del janitor).
+- `app`: `HiddenSurfacesRegistryTest` e `HiddenSurfacesPropertyTest` verdi (i file del motore non nominano `VisibleMedia` ne' `HiddenMask`); `core-common`: i test
+  d'architettura delle Fasi 6-9 verdi.
+
+**Edge case per ID**
+- E-MEM1 (`MemoryEngineTest.unaLibreriaGiovaneNonHaRicordi`), E-MEM2 e E-MEM18 (`ungiornoDiSoliScreenshotNonFaUnAnniFa`), E-MEM3 (`ilVentinoveFebbraio`,
+  `PlannerParityTest`), E-MEM4 (`iFusiOrari`: giorno locale, non di UTC), E-MEM5 e E-MEM6 (`ShelfOnlyRemoveTest`, `MemoriesContract`), E-MEM7
+  (`alPiuDueNuoviAlGiorno`, `ShelfOnlyRemoveTest`), E-MEM8 (`idUgualiSuDueDispositiviConLibrerieDiverse`, `leSceltaFuoriCasaValgonoSubitoEViaggiano`),
+  E-MEM9 (`vistoPerDodiciMesiEScartatoPerSempre`), E-MEM10 e E-MEM11 (pulizia per persona: `MemoriesContract`, `MemoryEngineParityTest`; le lapidi e il
+  janitor sono di P8), E-MEM12 (`PlannerParityTest`, suite del generatore), E-MEM16 (`MemoryEngineRuntimeTest.ilPassoCinqueEUnPuntoDInnesto`: il giro dice "senza
+  vettori"), E-MEM20 (`ilLavoroPesanteNonStaSulThreadDiChiChiama`, `restoreDisegnaSubitoLoScaffaleDaFile`), E-MEM21 (il titolo e' fisso: `ShelfOnlyRemoveTest`),
+  E-MEM22 (`SyncedMemoriesSettingsTest`, `MemoriesPersonalSettingsContract`). E-H1, E-H8 e R17: `ShelfOnlyRemoveTest`, `unNascostoNonSiVedeNemmenoPrimaDellaPulizia`,
+  `MemoriesContract.unGuastoDeiVisibiliNonSvuotaLoScaffale`. E-MEM13 e E-MEM14-E-MEM15, E-MEM17 non sono di P6 (viaggi scartati: P8; miniature e presentazione: P9).
+
+**Richieste agli altri pacchetti** (nessun contratto di P0 cambia)
+- **P13 (integrazione)**: (1) un adattatore di `MemoryVisibility` sopra `VisibleMedia` (`snapshot`, `visibleOrThrow`) e `HiddenMask` (`hiddenAmongOrThrow`), da
+  mettere nell'elenco `wiring` di `HiddenSurfaces`; (2) il passo 5: `MemoryEngine(..., choice = MemoryPhotoChoice(PickSignalsLoader(vettori, firma, pixel, album, persone),
+  VisiblePhotoPicker(MemoryPhotoPicker(), hiddenMask)))`; (3) `restore()` all'avvio (su un thread di lavoro, prima di tutto il resto) e `releaseCaches()` in
+  `onTrimMemory`; (4) la porta dei pixel deve tacere col risparmio energetico (il motore non distingue il motivo del giro: cambia solo il budget); (5)
+  `prune()` a ogni cambio dei nascosti (lo stesso segnale di `MemoryNotifier.revalidate()`); (6) `FileShelfStore(noBackupFilesDir/memories)` e `clear()` dall'azzeramento.
+- **P9 (schermate)**: la riga `MEMORIES` del registro elenca come sorgenti `shelf/ShelfPruner.kt`, `shelf/ShelfCards.kt`, `plan/MemoryEngine.kt`, `plan/PublishRound.kt`
+  e `plan/MemoryPhotoChoice.kt`; la sonda costruisce il motore con un `MemoryVisibility` sopra il mondo casuale (come `visibilityOf` nei test di P6) e legge `shelf` e
+  `memory(id)`; la sezione e' gia' filtrata con l'istantanea, ma la superficie applica ancora il filtro finale. `shelf` ha lo stato "sto preparando" prima del primo giro.
+  (`pick/VisiblePhotoPicker.kt` di P7 nomina `HiddenMask`: se il registro lo segnala va elencato nella stessa riga.)
+- **P8**: il generatore `PERSON` e' un `MemoryPlanner` che da' solo candidati `PERSON` e si passa a `IndexedPlanner(people = ...)`; `MemoryQuiet.isQuiet` e' la regola delle
+  chiavi che non si propongono. Il janitor chiama `MemoriesPersonalSettings.dropAllPeopleChoices()` e poi `Memories.prune()` (toglie i ricordi `PERSON`: gia' fatto dalla pulizia).
+- **P0 / `testing/`** (fuori dal perimetro di P6, non toccato): `InMemoryMemories` usa ancora `ReferencePicker` e chiede i pixel per **tutti** i candidati; il motore vero
+  chiede i segnali per ricordo con il tetto di 200 di P7. La parita' vale perche' le prove usano pochi candidati; se serve allinearlo, e' una modifica del riferimento.
+  Nessun'altra modifica ai contratti.
+
+**Punti aperti**
+- **L410**: un ricordo uscito dallo scaffale senza essere mai aperto puo' ripresentarsi (la riscoperta di un viaggio vecchio, il piu' lungo prima, a distanza di un mese);
+  `Memories` ricorda solo "visto" e "scartato" (D9). Se all'utente non piace, serve un elenco locale degli id pubblicati (con i loro giorni) nello scaffale: un campo nuovo
+  in `ShelfFile` (contratto di P0).
+- Il motore passa a ogni ricordo **tutti** i suoi candidati (fino a ~1.700 per il mese): il tetto di 200 misure dei pixel lo mette il raccoglitore di P7, non il motore.
+- Il giro non distingue le porte lente: un viaggio o una persona che impiegano piu' del budget fanno finire il giro "incompleto" prima della scelta.
+- Misure sul telefono (S25, Tab S9): F111, F112 con `benchmark` (P12); qui solo la JVM.
+

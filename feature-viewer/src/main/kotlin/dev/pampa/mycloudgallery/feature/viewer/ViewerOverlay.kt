@@ -131,7 +131,9 @@ import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoSections
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberBackupState
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberPeoplePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberSimilarCopiesPanel
+import dev.pampa.mycloudgallery.feature.viewer.info.rememberPlaceMapPanel
 import dev.pampa.mycloudgallery.feature.viewer.info.sectionsWithPeople
+import dev.pampa.mycloudgallery.feature.viewer.info.sectionsWithPlaceMap
 import dev.pampa.mycloudgallery.feature.viewer.info.sheetHeight
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionBadge
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionNotice
@@ -1027,6 +1029,8 @@ private fun ViewerOverlays(
   )
   // Fase 8 (P9, D25): la riga "Persone" (volti, nomi, "Chi e'?"), solo con la porta legata e il pannello aperto.
   val peoplePanel = rememberPeoplePanel(services.people, currentId, active = infoVisible)
+  // Fase 9 (P4, D30): la riga "Mostra sulla mappa" e la mini-mappa (solo offline), mai per un media aperto dai Nascosti.
+  val placeMapPanel = rememberPlaceMapPanel(services.placeMap, currentId, active = infoVisible, secure = request.secure)
   if (infoVisible && currentKind != null) {
     val kind = currentKind
     val baseSections = remember(current, kind, controller.motionUnplayableVersion, placeName, currentId, backupState) {
@@ -1044,8 +1048,9 @@ private fun ViewerOverlays(
         onOpenMaps = if (details?.location != null) controller::askMaps else null,
       )
     }
-    val sections = remember(baseSections, similar.sections, peoplePanel.sections) {
-      sectionsWithSimilar(sectionsWithPeople(baseSections, peoplePanel.sections), similar.sections, format)
+    val placeHeader = stringResource(R.string.viewer_info_h_place)
+    val sections = remember(baseSections, similar.sections, peoplePanel.sections, placeMapPanel.sections, placeHeader) {
+      sectionsWithPlaceMap(sectionsWithSimilar(sectionsWithPeople(baseSections, peoplePanel.sections), similar.sections, format), placeMapPanel.sections, placeHeader)
     }
     val infoTitle = stringResource(R.string.viewer_info_title)
     Box(Modifier.fillMaxSize().testTag(ViewerTags.InfoPanel)) {

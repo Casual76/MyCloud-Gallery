@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 9 (P4, §2.10, D28, E-MAP5): frasi comuni della mappa, delle bolle e delle griglie. -->
+  <plurals name="mappa_photos">
+    <item quantity="one">%s foto</item>
+    <item quantity="other">%s foto</item>
+  </plurals>
+  <!-- TalkBack di una bolla: "12 foto, Firenze". -->
+  <string name="mappa_bubble_place">%1$s, %2$s</string>
+  <plurals name="mappa_with_position">
+    <item quantity="one">%s foto con la posizione</item>
+    <item quantity="other">%s foto con la posizione</item>
+  </plurals>
+  <plurals name="mappa_without_position">
+    <item quantity="one">%s foto senza posizione</item>
+    <item quantity="other">%s foto senza posizione</item>
+  </plurals>
+  <string name="mappa_cell_photo">Foto del %1$s</string>
+  <string name="mappa_cell_video">Video del %1$s</string>
+  <string name="mappa_cell_undated">Foto senza data</string>
+  <string name="mappa_cell_open">Apri la foto</string>
+</resources>

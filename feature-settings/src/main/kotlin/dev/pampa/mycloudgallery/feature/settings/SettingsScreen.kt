@@ -41,6 +41,9 @@ import dev.pampa.mycloudgallery.feature.settings.search.SearchEntryRow
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationRow
 import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationViewModel
+import dev.pampa.mycloudgallery.feature.settings.map.MapEntryRow
+import dev.pampa.mycloudgallery.feature.settings.map.MapEntrySummary
+import dev.pampa.mycloudgallery.feature.settings.map.MapEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.memories.MemoriesEntryRow
 import dev.pampa.mycloudgallery.feature.settings.memories.MemoriesEntrySummary
 import dev.pampa.mycloudgallery.feature.settings.memories.MemoriesEntryViewModel
@@ -99,6 +102,11 @@ class SettingsLinks(
    * callback la scrive `:app`). Null = la voce non c'e'.
    */
   val openMemories: (() -> Unit)? = null,
+  /**
+   * Fase 9 (P4, D24, Q1 (c)): la voce "Mappa" (sezione "Protezione": decide cosa esce dal telefono) porta alla pagina Impostazioni -> Mappa di feature-map, che le Impostazioni non conoscono (la callback la scrive
+   * `:app`). Null = la voce non c'e'.
+   */
+  val openMap: (() -> Unit)? = null,
 ) {
   companion object {
     val None = SettingsLinks()
@@ -127,6 +135,8 @@ internal fun SettingsRoute(
   val peopleSummary by peopleViewModel.summary.collectAsStateWithLifecycle()
   val memoriesViewModel: MemoriesEntryViewModel = hiltViewModel()
   val memoriesSummary by memoriesViewModel.summary.collectAsStateWithLifecycle()
+  val mapViewModel: MapEntryViewModel = hiltViewModel()
+  val mapSummary by mapViewModel.summary.collectAsStateWithLifecycle()
   SettingsScreen(
     state = state,
     onBack = onBack,
@@ -141,6 +151,7 @@ internal fun SettingsRoute(
     searchSummary = searchSummary,
     peopleSummary = peopleSummary,
     memoriesSummary = memoriesSummary,
+    mapSummary = mapSummary,
   )
 }
 
@@ -167,6 +178,7 @@ fun SettingsScreen(
   searchSummary: dev.pampa.mycloudgallery.feature.settings.search.SearchEntrySummary? = null,
   peopleSummary: PeopleEntrySummary? = null,
   memoriesSummary: MemoriesEntrySummary? = null,
+  mapSummary: MapEntrySummary? = null,
 ) {
   val family = familyHero(state)
   FluidScreen(
@@ -284,6 +296,11 @@ fun SettingsScreen(
           onClick = links.openSecurity,
         )
         FluidListDivider()
+        // Fase 9 (P4, D24, Q1 (c)): "Mappa" (la mappa dettagliata di questo dispositivo), solo se `:app` ha scritto dove porta.
+        links.openMap?.let { openMap ->
+          MapEntryRow(summary = mapSummary, onClick = openMap)
+          FluidListDivider()
+        }
         // Fase 7 (P9, D33): "Nascosti", sempre raggiungibili da qui anche se la sezione delle Raccolte e' nascosta. Solo se `:app` ha scritto dove porta.
         links.openHidden?.let { openHidden ->
           FluidListRow(

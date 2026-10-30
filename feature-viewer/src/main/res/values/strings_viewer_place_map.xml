@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 9 (P4, §2.10, D30, E-MAP19): la riga "Mostra sulla mappa" e la mini-mappa delle informazioni. -->
+  <string name="viewer_place_map_header">Mappa</string>
+  <string name="viewer_place_map_image">Mini-mappa del posto. Tocca per mostrarlo sulla mappa.</string>
+  <string name="viewer_place_show_map">Mostra sulla mappa</string>
+  <string name="viewer_place_show_map_caption">Nella mappa dell’app, con le tue foto intorno</string>
+</resources>

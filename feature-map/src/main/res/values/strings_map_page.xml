@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 9 (P4, §1.5 MapScreenState, §2.10): la pagina della mappa e la griglia di una zona. -->
+  <string name="mappa_title">Mappa</string>
+  <string name="mappa_back">Indietro</string>
+  <string name="mappa_settings">Impostazioni della mappa</string>
+  <string name="mappa_notice_base">Carta semplice · Mappa dettagliata</string>
+  <string name="mappa_notice_wifi">Mappa dettagliata solo sul Wi-Fi</string>
+  <string name="mappa_notice_offline">Nessuna rete: la carta semplice e le zone scaricate</string>
+  <string name="mappa_loading">Cerco le foto con la posizione…</string>
+  <string name="mappa_empty_title">Nessuna foto con la posizione</string>
+  <string name="mappa_empty_detail">Le foto con la posizione compaiono qui, sulla carta.</string>
+  <string name="mappa_zone_title">Questa zona</string>
+  <string name="mappa_zone_empty_title">Nessuna foto qui</string>
+  <string name="mappa_zone_empty_detail">Le foto di questa zona non ci sono più, oppure sono nascoste.</string>
+  <string name="mappa_zone_back">Torna alla mappa</string>
+</resources>

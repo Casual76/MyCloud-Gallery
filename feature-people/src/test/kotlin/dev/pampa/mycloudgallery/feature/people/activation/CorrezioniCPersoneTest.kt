@@ -466,11 +466,13 @@ class CorrezioniCPersoneTest {
     assertThat(c.analyzeState.value).isEqualTo(AnalyzeNowState.Ready(first))
 
     val taps = Taps()
+    val pageState = c.state.value
+    val analyzeState = c.analyzeState.value
     rule.setPeopleContent {
       FacesActivationScreen(
-        state = c.state.value,
+        state = pageState,
         onActivate = {}, onNotNow = {}, onBecomeIndexer = {}, onOpenLicenses = {}, onRetry = {}, onDone = {}, onBack = {},
-        analyze = c.analyzeState.value,
+        analyze = analyzeState,
         onAnalyzeAsk = { taps.ask++ },
       )
     }

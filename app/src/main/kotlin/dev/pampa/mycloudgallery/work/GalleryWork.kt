@@ -92,9 +92,17 @@ class PhoneSyncWorker @AssistedInject constructor(
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
-    // Famiglia non pronta (non configurato, in attesa, azzerato) o galleria ferma: niente da fare e niente da riaccodare.
+    // L372 (correzioni C, come RG-1 e D-7): in un processo nato per questo lavoro lo stato "non configurato" dura un attimo; senza aspettare la famiglia pronta
+    // `runIfActive` rispondeva null e il giro andava perso (e, peggio, la catena a trigger di contenuto non si riaccodava).
+    gallery.awaitReady(COLD_START_WAIT)
     // `runIfActive` permette all'azzeramento di fermare un giro in corso e di aspettarlo (R7).
-    val outcome = gallery.runIfActive { core -> core.phone.runner.run(BUDGET) } ?: return Result.success()
+    val outcome = gallery.runIfActive { core -> core.phone.runner.run(BUDGET) }
+    if (outcome == null) {
+      // Famiglia non pronta nemmeno dopo l'attesa (non configurata, in attesa, azzerata) o galleria ferma: niente da leggere adesso, ma il lavoro a trigger di
+      // contenuto vale una volta sola: se non si riaccoda, il prossimo cambiamento del MediaStore non trova nessuno fino al prossimo avvio dell'app.
+      requeue()
+      return Result.success()
+    }
     GalleryLog.d(TAG) { "lettura del telefono in background: ${outcome.javaClass.simpleName}" }
     // Fase 5A (D11, E-B13): media nuovi in una sorgente del backup => il lavoro del tipo giusto (lavoro unico, KEEP); la copia del telefono
     // puo' essere sparita mentre la sola copia sul NAS e' nell'area comune => il guardiano. Dal catalogo e dal diario, nessun polling.
@@ -111,16 +119,25 @@ class PhoneSyncWorker @AssistedInject constructor(
     }
     // Fase 5A (D36): dopo META, un giro del confronto delle copie simili (a tappe, su Default; chi lo chiede non aspetta).
     gallery.similarCopies?.requestRun()
-    // Il trigger di contenuto vale una volta: il prossimo cambiamento del MediaStore deve trovarne uno nuovo, accodato
-    // dopo questo (APPEND: mai annullare il lavoro in corso).
+    requeue()
+    return Result.success()
+  }
+
+  /**
+   * Il trigger di contenuto vale una volta: il prossimo cambiamento del MediaStore deve trovarne uno nuovo, accodato dopo questo (APPEND: mai annullare il lavoro in
+   * corso).
+   */
+  private fun requeue() {
     WorkManager.getInstance(applicationContext)
       .enqueueUniqueWork(GalleryWorkScheduling.PHONE_SYNC_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, GalleryWorkScheduling.phoneSyncRequest())
-    return Result.success()
   }
 
   companion object {
     const val TAG = "PhoneSyncWorker"
     val BUDGET: Duration = 8.minutes
+
+    /** L372: quanto aspetta la famiglia pronta in un processo appena nato (come gli altri lavori). */
+    val COLD_START_WAIT: Duration = 20.seconds
   }
 }
 

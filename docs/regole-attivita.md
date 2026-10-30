@@ -98,6 +98,12 @@ anteprime di analisi del buffer, dell'indice o del telefono; se un'anteprima non
 Preparatore la **rifa' dall'originale del NAS** come una preparazione (solo `analysis`): e' un'attivita' **pesante** (Wi-Fi di casa,
 regole di `PREPARATION`) e il suo traffico si conta come quello della preparazione. "Analizza ora" e' `UserInitiated(AI_COMPUTE)`. Il
 raggruppamento notturno del custode e la sincronizzazione dei dati dei volti (leggera, dentro `INDEX_SYNC`) non sono attivita' nuove.
+**Il primo calcolo dopo l'accensione di Persone segue le regole come ogni altro giro** (notte, carica, Wi-Fi di casa, batteria, caldo: lavoro `Background`, non
+`UserInitiated`; correzioni C della Fase 8, CA-3, risposta dell'utente del 30/10), cosi' «di notte, in carica» e' vero. **«Analizza ora» (Impostazioni → Persone, e la
+pagina di attivazione dopo «Attiva») e' l'unico modo di scavalcarle**: mostra «Analizzare le tue N foto richiede circa M minuti» (il conto dal catalogo e i ritmi
+misurati: 8,8 foto al secondo sull'S25, `DeviceMeasures.facesPerSecond`), chiede sempre una conferma e, sui dati mobili, in roaming o oltre il tetto, la conferma porta
+anche la stima dei dati delle anteprime (come gli altri «Fai ora»). La temperatura critica ferma anche questo lavoro dell'utente, e **non
+scarica originali dal NAS**: un media senza anteprima aspetta, e la pagina lo dice.
 
 **Ricordi, notifiche e mappa (Fase 9, `docs/fase9-progetto.md` D4, D20, D26; P0).** Nessuna attivita' nuova (un'attivita' nuova romperebbe i `when` esaustivi e le stime): la **generazione dei ricordi** non usa rete ne' NAS, quindi la proposta 3 non la riguarda; gira **di notte dentro `LibraryMaintenanceWorker`** (in carica, dopo i viaggi, budget `memoriesNightlyBudget`), con un **passo leggero** all'ora della notifica o all'apertura dell'app se la notte non c'e' stata (budget `memoriesLightBudget`, niente misure dei pixel col risparmio energetico) e all'apertura di Raccolte se il giorno e' cambiato. La **notifica** e' un lavoro `OneTimeWork` unico (`memories-notify`) con il ritardo fino all'ora scelta, senza vincoli di rete ne' di carica, consegnato nella finestra `notifyWindow` (D20). Lo **scaricamento di una regione offline** e' contenuto chiesto dall'utente (un tocco sul foglio, come aprire una foto), nel processo dell'app, solo sul Wi-Fi o con la seconda conferma; il traffico della mappa online si conta come contenuto visibile (`MapTraffic`). Nessun lavoro in background per la mappa; l'indice dei punti si rifa' con `mapIndexRebuild`.
 

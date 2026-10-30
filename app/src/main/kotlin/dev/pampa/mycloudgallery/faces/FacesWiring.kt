@@ -22,6 +22,8 @@ import dev.pampa.mycloudgallery.core.faces.compute.FacesComputeCounters
 import dev.pampa.mycloudgallery.core.faces.contract.FacesComputeLimits
 import dev.pampa.mycloudgallery.core.faces.compute.FacesComputeEngine
 import dev.pampa.mycloudgallery.core.faces.compute.FacesComputeParts
+import dev.pampa.mycloudgallery.core.faces.compute.FacesRateMeter
+import dev.pampa.mycloudgallery.core.faces.compute.FacesRates
 import dev.pampa.mycloudgallery.core.faces.compute.FacesRefresh
 import dev.pampa.mycloudgallery.core.faces.compute.Sha256FaceBodyDigest
 import dev.pampa.mycloudgallery.core.faces.contract.ClusterSnapshots
@@ -74,6 +76,7 @@ import dev.pampa.mycloudgallery.core.nasops.faces.FacesNasConfig
 import dev.pampa.mycloudgallery.core.nasops.faces.FacesNasServices
 import dev.pampa.mycloudgallery.core.nasops.faces.FacesNasWiring
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalStop
+import dev.pampa.mycloudgallery.core.rules.estimate.DeviceMeasures
 import dev.pampa.mycloudgallery.core.personal.settings.SyncedFacesSettings
 import dev.pampa.mycloudgallery.core.personal.sync.PersonalHeadsRecord
 import dev.pampa.mycloudgallery.core.security.faces.FacesKeyStore
@@ -330,14 +333,16 @@ object FacesWiring {
       )
 
       // --- Il calcolo --------------------------------------------------------------------------------------------------------------------
+      val control = StageFacesControl()
       val inputsPort = AppFaceInputs(
         buffer = ai.ai.buffer,
         fetcher = { nas.runtime?.ai?.fetcher },
         phone = ai.ai.phone,
         preparer = { nas.runtime?.ai?.preparer?.let { p -> ai.ai.phone?.let { phone -> CheckedPreparer(p, phone::expectedQuickHash) } ?: p } },
         shares = shares,
+        // CA-6: con le regole della tappa che dicono "solo in locale" (NAS spento, fuori casa) non si prova a scaricare: la pagina dice «In attesa del NAS».
+        mayFetch = control::mayFetch,
       )
-      val control = StageFacesControl()
       val counters = FacesComputeCounters()
       // DR-2 (F109): in debug lo scenario `f109-recipe` forza la ricetta 2 dal prossimo avvio; in release e senza il segno e' la ricetta di serie.
       val recipe = DeveloperTools.facesRecipe(context) ?: FacesComputeLimits.RECIPE
@@ -365,8 +370,12 @@ object FacesWiring {
         ),
         config = FacesComputeConfig(recipe = recipe),
         counters = counters,
+        // CA-2: la stima parte dalla misura sul campo dell'S25 (8,8 foto al secondo) finche' il calcolo non ha misurato il dispositivo vero.
+        rates = FacesRateMeter(FacesRates.forPhotosPerSecond(DeviceMeasures.PHASE_0.facesPerSecond)),
       )
-      val backlog = FacesBacklog(switch, requirements, catalogPort, archive = { archives.opened() }, recipe = recipe)
+      // CA-2: la stima di "Analizza ora" conta anche prima del primo calcolo, quando l'archivio non e' ancora stato aperto da nessuno: lo apre dal recinto (solo con
+      // Persone attiva qui, come per le persone), invece di `archives.opened()` che finche' il calcolo non e' partito risponde "nessuno" e conterebbe zero.
+      val backlog = FacesBacklog(switch, requirements, catalogPort, archive = { currentArchive(switch, archives) }, recipe = recipe)
 
       // --- Le persone ----------------------------------------------------------------------------------------------------------------------
       val progress: StateFlow<Int?> = compute.status.map { status ->
@@ -427,13 +436,9 @@ object FacesWiring {
         requirementsChanged = graph.account.map { },
       )
     }
-    val workRequest: (FacesGraph.FacesWork) -> Unit = { work ->
-      when (work) {
-        FacesGraph.FacesWork.COMPUTE -> FacesWorkScheduling.computeNow(context)
-        FacesGraph.FacesWork.ERASE -> FacesWorkScheduling.eraseNow(context)
-      }
-    }
-    return FacesGraph(graph.scope, build, ready, workRequest) { nas?.organizer?.parts?.personalSync?.lastHold?.value }.also { faces ->
+    // CA-3: il primo calcolo dopo l'accensione segue le regole di sottofondo; «Analizza ora» (COMPUTE_NOW) e' l'unico a scavalcarle (mappa in `FacesWorkScheduling`).
+    val workRequest: (FacesGraph.FacesWork) -> Unit = { work -> FacesWorkScheduling.request(context, work) }
+    return FacesGraph(graph.scope, build, ready, workRequest, canMount = nas != null) { nas?.organizer?.parts?.personalSync?.lastHold?.value }.also { faces ->
       graphRef[0] = faces
       // Il gancio dei dati personali nasce con il processo: finche' le persone non sono montate, con dati dei volti sul disco non si pubblica.
       nas?.organizer?.prePublish = FacesPrePublish({ graphRef[0] }, stores)

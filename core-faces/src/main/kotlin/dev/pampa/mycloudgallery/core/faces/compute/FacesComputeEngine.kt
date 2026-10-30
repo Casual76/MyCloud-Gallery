@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.FacesWait
 import dev.pampa.mycloudgallery.core.faces.contract.HereState
 import dev.pampa.mycloudgallery.core.faces.contract.PrivateAreaState
 import dev.pampa.mycloudgallery.core.faces.store.FacesRecovery
+import dev.pampa.mycloudgallery.core.faces.store.FacesUnavailable
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import java.util.Locale
 import kotlin.time.Duration
@@ -60,7 +61,11 @@ class FacesComputeEngine(
   private val memory = FacesMemory()
   private val mutex = Mutex()
 
-  override suspend fun run(scope: FacesScope, budget: Duration): FacesRunResult = mutex.withLock { runLocked(scope, budget) }
+  override suspend fun run(scope: FacesScope, budget: Duration): FacesRunResult = runWith(scope, budget, LibraryProgress())
+
+  /** Una tappa su un ambito con l'avanzamento della libreria di [progress]: lo condividono tutti gli ambiti di una tappa ([runAll], CA-1). */
+  private suspend fun runWith(scope: FacesScope, budget: Duration, progress: LibraryProgress): FacesRunResult =
+    mutex.withLock { runLocked(scope, budget, progress) }
 
   /**
    * Tutti gli ambiti di questo dispositivo in ordine (D16: prima l'area privata, poi l'area comune, poi i media del solo telefono), finche' il
@@ -76,10 +81,12 @@ class FacesComputeEngine(
       FacesScope.PhoneOnly,
     )
     val out = ArrayList<Pair<FacesScope, FacesRunResult>>()
+    // CA-1: la libreria si conta una volta per tappa (non per ambito, non per media): l'avanzamento e' suo.
+    val progress = LibraryProgress()
     for (scope in scopes) {
       val left = budget - (parts.clock.monotonicNanos() - start).nanoseconds
       if (!left.isPositive()) break
-      val result = run(scope, left)
+      val result = runWith(scope, left, progress)
       out += scope to result
       // Il NAS che non risponde non toglie i media del telefono (E-A6); ogni altro arresto ferma tutto.
       if (result.stop != FacesStop.DONE && result.stop != FacesStop.NO_NAS) break
@@ -87,7 +94,7 @@ class FacesComputeEngine(
     return out
   }
 
-  private suspend fun runLocked(scope: FacesScope, budget: Duration): FacesRunResult {
+  private suspend fun runLocked(scope: FacesScope, budget: Duration, progress: LibraryProgress): FacesRunResult {
     val started = parts.switch.currentState()
     val generation = started.generationOrNull
     if (generation == null) return notRunning(FacesStop.NOT_ACTIVE, started)
@@ -112,8 +119,11 @@ class FacesComputeEngine(
       return notRunning(FacesStop.MODELS_UNAVAILABLE, started)
     }
 
-    val opened = parts.stores.open(generation)
-    if (opened !is ComputeStoreOpen.Ready) return notRunning(FacesStop.STORE_UNAVAILABLE, started)
+    // CA-7: un archivio che non si apre ha il suo motivo (Keystore, dati di una versione piu' nuova, file): non e' "poco spazio libero".
+    val opened = when (val result = parts.stores.open(generation)) {
+      is ComputeStoreOpen.Ready -> result
+      is ComputeStoreOpen.Unavailable -> return storeUnavailable(result.reason)
+    }
     when (opened.recovery) {
       FacesRecovery.KEY_LOST -> {
         // E-F19: i dati locali non si leggevano piu' e sono stati rifatti da capo. Il calcolo riparte da zero (o dalla replica del NAS).
@@ -124,7 +134,7 @@ class FacesComputeEngine(
       null -> Unit
     }
 
-    val ctx = RunContext(parts, config, counters, memory, rates, generation, opened.store, budget, pause, state)
+    val ctx = RunContext(parts, config, counters, memory, rates, generation, opened.store, budget, pause, state, progress)
     val engines = EngineHolder(ctx)
     val runner = UnitRunner(ctx, engines)
     val invalidBefore = counters.vectorsInvalid.get()
@@ -155,6 +165,8 @@ class FacesComputeEngine(
     var stop: FacesStop? = null
     for (round in 0 until config.maxUnitsPerRun) {
       val unit = nextUnit(units, area, ctx, seen) ?: break
+      // CA-1: c'e' lavoro, quindi la libreria si conta (una volta per tappa) e lo stato di questa tappa e' della libreria, non di questa unita'.
+      ctx.progress.count { countLibrary(ctx) }
       // Le regole si chiedono una volta per lotto, e prima di prendere un'unita': la prima volta l'ha gia' chiesta l'inizio della tappa.
       if (round > 0) stop = ctx.gate()
       if (stop != null) break
@@ -169,6 +181,10 @@ class FacesComputeEngine(
     }
     return stop ?: FacesStop.DONE
   }
+
+  /** La libreria contata con le porte di questa tappa (catalogo, archivio della generazione e ricetta): i media fatti e quelli che restano. */
+  private suspend fun countLibrary(ctx: RunContext): FacesTally =
+    FacesBacklog(parts.switch, parts.requirements, parts.catalog, { ctx.store.archive }, config.recipe).tally()
 
   /** La prossima unita' con qualcosa da fare; un archivio chiuso a meta' (generazione cambiata) ferma la tappa. */
   private suspend fun nextUnit(units: FacesUnits, area: FacesArea, ctx: RunContext, seen: Set<UnitId>): PlannedUnit? = try {
@@ -193,6 +209,24 @@ class FacesComputeEngine(
 
   /** I nomi delle share si confrontano senza maiuscole (Samba, I13). */
   private fun same(a: String, b: String): Boolean = a.lowercase(Locale.ROOT) == b.lowercase(Locale.ROOT)
+
+  /**
+   * CA-7: l'archivio dei volti non si apre adesso. Lo stato dice **il motivo vero** (la chiave del Keystore che non risponde, i dati di una versione piu' nuova
+   * dell'app, il file che non si apre) e la Diagnostica lo conta (`FACES_STORE_UNAVAILABLE`, solo il numero): non e' "poco spazio libero sul telefono". Niente
+   * e' stato cancellato e si riprova alla tappa dopo.
+   */
+  private fun storeUnavailable(reason: FacesUnavailable): FacesRunResult {
+    counters.storeUnavailable.incrementAndGet()
+    parts.signals.report(FacesDiag.FACES_STORE_UNAVAILABLE, 1)
+    state.value = FacesStatus.Waiting(
+      when (reason) {
+        FacesUnavailable.KEYSTORE -> FacesWait.KEYSTORE
+        FacesUnavailable.NEWER_DATABASE -> FacesWait.NEEDS_UPDATE
+        FacesUnavailable.STORAGE -> FacesWait.STORAGE
+      },
+    )
+    return FacesRunResult.stopped(FacesStop.STORE_UNAVAILABLE)
+  }
 
   /** Il resoconto di una tappa che non e' partita: lo stato dice perche'. */
   private fun notRunning(stop: FacesStop, current: FacesState, because: FacesStatus? = null): FacesRunResult {

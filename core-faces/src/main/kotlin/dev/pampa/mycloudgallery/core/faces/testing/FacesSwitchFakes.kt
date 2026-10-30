@@ -38,6 +38,12 @@ class FakeFacesSwitch(
   override val fresh = MutableStateFlow(true)
   override val syncPending = MutableStateFlow(false)
 
+  /** L350: di serie lo stato e' quello vero; un test mette `false` per provare "non ancora". */
+  override val known = MutableStateFlow(true)
+
+  /** CE-3 e L322: Persone e' spenta da un altro dispositivo (un test lo mette a `true` da spenta). */
+  override val offElsewhere = MutableStateFlow(false)
+
   var setting: FacesSetting? = null
     private set
 

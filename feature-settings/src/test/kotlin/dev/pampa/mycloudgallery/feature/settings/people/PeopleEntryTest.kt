@@ -102,4 +102,22 @@ class PeopleEntryTest {
       assertThat(phrase).doesNotContainMatch("[0-9]")
     }
   }
+
+  /**
+   * L350 (correzioni C): prima che le persone siano montate la voce non dice «spenta» a chi le ha accese: la sua frase non nomina nessuno stato, il tono e' neutro e non
+   * c'e' pillola. E non e' la frase di «spenta» (che spiega come si attiva).
+   */
+  @Test
+  fun l350_primaDelMontaggioLaVoceNonDiceNeSpentaNeAttiva() {
+    val phrase = subtitle(PeopleEntryState.NOT_YET)
+    assertThat(phrase).isEqualTo("Raggruppa le foto per volto")
+    assertThat(phrase).isNotEqualTo(subtitle(PeopleEntryState.OFF))
+    for (state in listOf("spenta", "attiva", "si attiva", "confermi", "cancellazione", "aggiornare")) assertThat(phrase.lowercase()).doesNotContain(state)
+    assertThat(peopleEntryTone(PeopleEntrySummary(PeopleEntryState.NOT_YET))).isEqualTo(FluidTone.Neutral)
+
+    rule.setContent { MyCloudGalleryTheme { FluidListGroup { PeopleEntryRow(PeopleEntrySummary(PeopleEntryState.NOT_YET)) {} } } }
+    rule.onNodeWithText("Persone").assertIsDisplayed()
+    assertThat(rule.onAllNodesWithText("Da confermare").fetchSemanticsNodes()).isEmpty()
+    assertThat(rule.onAllNodesWithText("Aggiorna").fetchSemanticsNodes()).isEmpty()
+  }
 }

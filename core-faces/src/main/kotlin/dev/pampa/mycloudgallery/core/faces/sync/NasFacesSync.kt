@@ -445,6 +445,8 @@ class NasFacesSync(
         }
         val valid = ArrayList<PeopleRecord>(content.size)
         var retryAt: Long? = null
+        // L362: i nomi che non si vedono (scritti prima della regola) sono saltati voce per voce: contano come voci rifiutate, il resto del segmento vale.
+        repeat(content.skipped) { tally.segment(RejectReason.INVALID_FIELD.name) }
         for (doc in content.entries) {
           when (val verdict = rules.verdict(doc.author, doc.at)) {
             PeopleVerdict.VALID -> valid += FacesWire.record(doc)

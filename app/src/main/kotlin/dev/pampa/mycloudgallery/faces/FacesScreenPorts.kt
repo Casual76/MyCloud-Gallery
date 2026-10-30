@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.faces
 
 import android.content.res.Resources
 import dev.pampa.mycloudgallery.core.ai.compute.IndexerAreas
+import dev.pampa.mycloudgallery.core.faces.compute.FacesRates
 import dev.pampa.mycloudgallery.core.faces.contract.EraseStart
 import dev.pampa.mycloudgallery.core.faces.contract.EraseStatus
 import dev.pampa.mycloudgallery.core.faces.contract.ErasePreview
@@ -18,12 +19,16 @@ import dev.pampa.mycloudgallery.core.faces.contract.PeopleAlbumsChoice
 import dev.pampa.mycloudgallery.core.faces.noop.NoFacesEraser
 import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
 import dev.pampa.mycloudgallery.core.personal.contract.FacesSettingCodec
+import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
+import dev.pampa.mycloudgallery.core.rules.WorkRequest
+import dev.pampa.mycloudgallery.core.rules.estimate.DeviceMeasures
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
 import dev.pampa.mycloudgallery.feature.people.activation.ActivationIndexerRole
 import dev.pampa.mycloudgallery.feature.people.activation.ActivationPorts
+import dev.pampa.mycloudgallery.feature.people.activation.FacesAnalyzeNow
 import dev.pampa.mycloudgallery.feature.people.activation.FacesActivatedBy
 import dev.pampa.mycloudgallery.feature.people.activation.PeopleSettingsFacts
 import dev.pampa.mycloudgallery.feature.people.contract.ComputingDevice
@@ -77,8 +82,11 @@ class FacesEraserFacade(private val graph: FacesGraph, scope: CoroutineScope) : 
  * D37).
  */
 class AppPeopleEntryStatus(switch: FacesSwitch, scope: CoroutineScope) : PeopleEntryStatus {
-  override val summary: StateFlow<PeopleEntrySummary> = switch.state.map { PeopleEntrySummary(entryOf(it)) }
-    .stateIn(scope, SharingStarted.Eagerly, PeopleEntrySummary(entryOf(switch.state.value)))
+  // L350: prima del montaggio l'interruttore risponde `Off` come un null-object: non e' lo stato vero, e la voce non dice «spenta» (`NOT_YET`).
+  override val summary: StateFlow<PeopleEntrySummary> = combine(switch.state, switch.known) { state, known -> PeopleEntrySummary(entryOf(state, known)) }
+    .stateIn(scope, SharingStarted.Eagerly, PeopleEntrySummary(entryOf(switch.state.value, switch.known.value)))
+
+  private fun entryOf(state: FacesState, known: Boolean): PeopleEntryState = if (known) entryOf(state) else PeopleEntryState.NOT_YET
 
   private fun entryOf(state: FacesState): PeopleEntryState = when (state) {
     FacesState.Off -> PeopleEntryState.OFF
@@ -117,6 +125,19 @@ class AppActivationPorts(
 
   private val status: StateFlow<FacesStatus> =
     faces.live.flatMapLatest { it?.status ?: flowOf(FacesStatus.Off) }.stateIn(graph.scope, SharingStarted.Eagerly, FacesStatus.Off)
+
+  /**
+   * CA-2: «Analizza ora» con la stima. Il conto legge il catalogo dal grafo montato (`FacesLive.backlog`); i ritmi sono quelli misurati dal calcolo di questo processo; il
+   * verdetto dei dati mobili e' delle regole per un lavoro dell'utente su `AI_COMPUTE` (la stessa strada degli altri «Fai ora»).
+   */
+  override val analyze: FacesAnalyzeNow = AppFacesAnalyzeNow(
+    tally = { faces.live.value?.backlog?.tally() },
+    rates = { faces.live.value?.compute?.rates?.rates() ?: FacesRates.forPhotosPerSecond(DeviceMeasures.PHASE_0.facesPerSecond) },
+    decide = { bytes ->
+      graph.nasInputs.rules.evaluate(WorkRequest.UserInitiated(BackgroundActivity.AI_COMPUTE, bytes, confirmed = false, writesToNas = true))
+    },
+    request = { faces.analyzeNow() },
+  )
 
   override val facts: StateFlow<PeopleSettingsFacts> =
     combine(combine(status, people.list, eraser.status, graph.statuses.latest, switch.state) { progress, list, erase, _, _ ->

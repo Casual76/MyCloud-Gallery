@@ -49,6 +49,14 @@ internal class FacesMount<T : Any>(
 
   val current: T? get() = state.value
 
+  private val settledState = MutableStateFlow(false)
+
+  /**
+   * L350: il montaggio ha una risposta: riuscito, fallito, non possibile adesso o fermato (un montaggio che non e' ancora stato tentato, perche' la famiglia non
+   * e' pronta, non ce l'ha). Chi mostra lo stato delle persone aspetta questo prima di dire «spenta» o «non disponibile».
+   */
+  val settled: StateFlow<Boolean> = settledState.asStateFlow()
+
   /** Vero se un montaggio e' stato tentato e non e' riuscito (per non tenere fermo il resto dell'app per sempre). */
   @Volatile var failed: Boolean = false
     private set
@@ -67,14 +75,19 @@ internal class FacesMount<T : Any>(
           throw e
         } catch (e: Exception) {
           failed = true
+          settledState.value = true
           GalleryLog.w(TAG) { "persone non montate: ${e.javaClass.simpleName}" }
           null
         }
         if (built == null || stopped.get()) {
           mountScope.cancel()
+          // Un montaggio che non puo' esserci adesso (nessun dispositivo registrato, famiglia senza parti) o che e' stato fermato ha comunque la sua risposta: non
+          // "non ancora" (L350).
+          settledState.value = true
           return@withLock null
         }
         state.value = built
+        settledState.value = true
         onMounted(built)
         built
       }
@@ -84,6 +97,7 @@ internal class FacesMount<T : Any>(
   suspend fun stop() {
     stopped.set(true)
     building.withLock { state.value = null }
+    settledState.value = true
   }
 
   private companion object {
@@ -107,11 +121,16 @@ class FacesGraph internal constructor(
   private val ready: StateFlow<Boolean>,
   /** Dopo un cambio di stato che richiede un lavoro (calcolo da fare, cancellazione da riprendere): il lavoro di WorkManager. */
   private val workRequest: (FacesWork) -> Unit = {},
+  /** L350: le persone potranno mai montarsi qui? Falso senza famiglia (nessun NAS): l'attesa del montaggio non finirebbe mai e lo stato di sempre e' la verita'. */
+  private val canMount: Boolean = true,
   /** Il codice dell'ultimo giro dei dati personali che il gancio dei volti ha fermato (D30), o null: per la Diagnostica. */
   private val holdSource: () -> String? = { null },
 ) {
-  /** Cosa chiede un lavoro di WorkManager. */
-  enum class FacesWork { COMPUTE, ERASE }
+  /**
+   * Cosa chiede un lavoro di WorkManager: [COMPUTE] il primo giro dopo l'accensione (con le regole di sottofondo, CA-3), [COMPUTE_NOW] "Analizza ora"
+   * (confermato dall'utente, scavalca le regole), [ERASE] la ripresa della cancellazione.
+   */
+  enum class FacesWork { COMPUTE, COMPUTE_NOW, ERASE }
 
   private val job = SupervisorJob(parent.coroutineContext[Job])
   private val scope = CoroutineScope(parent.coroutineContext + job)
@@ -123,6 +142,12 @@ class FacesGraph internal constructor(
 
   /** Il montaggio e' fallito (un bug): il resto dell'app non lo aspetta. */
   val mountFailed: Boolean get() = mount.failed
+
+  /**
+   * L350: lo stato delle persone e' **noto**: montate, o montaggio fallito o fermato, o impossibile (senza famiglia). Falso e' "non ancora": le schermate non
+   * dicono «spenta» ne' «non disponibile» ([dev.pampa.mycloudgallery.core.faces.contract.FacesSwitch.known]).
+   */
+  val settled: StateFlow<Boolean> = if (canMount) mount.settled else MutableStateFlow(true)
 
   /** L'ultimo giro della replica (Diagnostica: solo numeri). */
   val lastSync = MutableStateFlow<FacesSyncReport?>(null)
@@ -143,6 +168,9 @@ class FacesGraph internal constructor(
 
   /** Il codice dell'ultimo giro dei dati personali fermato dal gancio dei volti, o null. */
   fun holdCode(): String? = holdSource()
+
+  /** "Analizza ora" (CA-2): il tocco confermato dell'utente chiede il calcolo adesso, scavalcando le regole di sottofondo. E' l'unico modo di farlo. */
+  fun analyzeNow() = workRequest(FacesWork.COMPUTE_NOW)
 
   /** Parte (idempotente): appena la famiglia e' pronta monta le persone. */
   fun start() {
@@ -178,7 +206,8 @@ class FacesGraph internal constructor(
   }
 
   private fun onStateChanged(live: FacesLive, from: FacesState, to: FacesState) {
-    // Persone si accende qui (o torna attiva): il primo calcolo parte dal lavoro, senza aspettare il giro delle 6 ore.
+    // Persone si accende qui (o torna attiva): il primo calcolo e il lavoro periodico si programmano (CA-3, CA-5). Il giro segue le regole di sottofondo (notte,
+    // carica, Wi-Fi): «Analizza ora» e' l'unico a scavalcarle.
     if (to is FacesState.On && to.here != HereState.EXCLUDED && (from !is FacesState.On || from.here == HereState.EXCLUDED)) workRequest(FacesWork.COMPUTE)
     if (to is FacesState.Erasing) workRequest(FacesWork.ERASE)
     // R11: senza i dati dei volti qui (cancellati, esclusi, avviso da rivedere) la forma ricordata della pagina Persone si toglie.

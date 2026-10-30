@@ -242,6 +242,9 @@ class FacesComputeCounters {
   val keyLost = AtomicInteger()
   val databaseRebuilt = AtomicInteger()
 
+  /** CA-7: tappe che non sono partite perche' l'archivio dei volti non si apre adesso (`FACES_STORE_UNAVAILABLE`): Keystore, dati piu' nuovi dell'app, file. */
+  val storeUnavailable = AtomicInteger()
+
   /** Un errore del database a meta' di un salvataggio (il corpo, la messa in coda, il segno di unita' finita, la pubblicazione, O1): il media o l'unita' resta da fare. */
   val storeFailures = AtomicInteger()
 

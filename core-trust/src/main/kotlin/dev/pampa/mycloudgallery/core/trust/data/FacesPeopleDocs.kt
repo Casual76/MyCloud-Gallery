@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.trust.data
 
 import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.core.model.PersonId
+import dev.pampa.mycloudgallery.core.model.VisibleText
 import dev.pampa.mycloudgallery.core.trust.RejectReason
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.codec.CanonicalJson
@@ -51,9 +52,18 @@ object PeopleForms {
 
   /**
    * Il nome di una persona (D24): da 1 a 64 caratteri, senza spazi ai bordi, nessun carattere che `TextRules` vieta (controlli, direzione,
-   * invisibili, surrogati spaiati). E' la regola di `PersonNames.normalize` di core-faces (lo prova un test di core-faces).
+   * invisibili, surrogati spaiati) e **almeno un carattere che si veda** ([VisibleText], L362 delle correzioni C): un nome fatto solo di giunti ZWJ e selettori di
+   * variante appare vuoto. E' la regola di `PersonNames.forNewName` di core-faces, quella con cui si scrive (lo prova un test di core-faces); `PersonNames.normalize`
+   * resta piu' larga perche' rilegge anche i dati locali scritti prima.
    */
-  fun isName(text: String): Boolean =
+  fun isName(text: String): Boolean = hasNameShape(text) && VisibleText.hasVisible(text)
+
+  /**
+   * La forma di un nome **senza** guardare se si vede: la regola di prima (D24). Serve a chi legge per distinguere un nome che non si vede (si salta quella voce
+   * sola, [PeopleJson.read]) da un valore d'altra forma (rifiuta il segmento): un dispositivo che ha scritto un nome del genere prima di questa regola non fa perdere
+   * le altre voci del suo segmento.
+   */
+  fun hasNameShape(text: String): Boolean =
     text.isNotEmpty() && text.length <= TrustLimits.MAX_PERSON_NAME_CHARS && text.trim() == text && !TextRules.hasForbidden(text)
 
   /** Vero se ([subject], [field], [value]) e' una voce del formato (§2.4); null = lapide, ammessa solo dove ha un senso. */
@@ -115,17 +125,31 @@ internal object PeopleJson {
     return bytes
   }
 
-  fun read(json: ByteArray): PeopleDoc {
+  /** Una voce con tutti i suoi controlli (un nome che non si vede e' di un'altra forma). */
+  fun read(json: ByteArray): PeopleDoc = readOrSkip(json, skipInvisibleName = false) ?: error("voce people: nome che non si vede")
+
+  /**
+   * Come [read], ma una voce `name` il cui nome ha la forma di prima e **non si vede** (L362: la regola del nome ora vuole un carattere visibile) non rifiuta il
+   * segmento: risponde null e chi legge salta quella voce sola. Tutte le altre parti della voce (ora, autore, soggetto) si controllano lo stesso.
+   */
+  fun readOrSkip(json: ByteArray): PeopleDoc? = readOrSkip(json, skipInvisibleName = true)
+
+  private fun readOrSkip(json: ByteArray, skipInvisibleName: Boolean): PeopleDoc? {
     ensure(json.size <= TrustLimits.MAX_PEOPLE_ENTRY_BYTES, RejectReason.TOO_LARGE, "voce people: oltre il tetto")
     val obj = CanonicalJson.parseCanonical(json) as? JsonObject ?: violation(RejectReason.MALFORMED, "voce people: oggetto atteso")
     return Fields.read(obj) { f ->
-      PeopleDoc(
-        at = f.time("at"),
-        author = f.string("author", TrustIds.LENGTH),
-        field = f.string("field", PeopleForms.MAX_FIELD_CHARS),
-        subject = f.string("subject", PeopleForms.MAX_TEXT_CHARS),
-        value = f.optString("value", PeopleForms.MAX_TEXT_CHARS),
-      )
+      val at = f.time("at")
+      val author = f.string("author", TrustIds.LENGTH)
+      val field = f.string("field", PeopleForms.MAX_FIELD_CHARS)
+      val subject = f.string("subject", PeopleForms.MAX_TEXT_CHARS)
+      val value = f.optString("value", PeopleForms.MAX_TEXT_CHARS)
+      if (skipInvisibleName && field == PeopleForms.NAME && value != null && PeopleForms.hasNameShape(value) && !VisibleText.hasVisible(value)) {
+        // Il resto della voce vale come per ogni altra (ora, autore, soggetto): lo prova una lapide al posto del nome che non si vede.
+        PeopleDoc(subject, field, null, at, author)
+        null
+      } else {
+        PeopleDoc(subject, field, value, at, author)
+      }
     }
   }
 }

@@ -78,6 +78,12 @@ object FacesDiag {
   /** N segmenti o voci che non entrano perche' l'archivio dei volti e' pieno: aspettano una revoca o un contenuto tolto. */
   const val FACES_ARCHIVE_FULL: String = "FACES_ARCHIVE_FULL"
 
+  /**
+   * Correzioni C (CA-7, C280): l'archivio dei volti di questo dispositivo non si apre adesso (la chiave del Keystore non risponde, i dati sono di una versione
+   * piu' nuova dell'app, o il file non si apre). N tappe del calcolo non sono partite per questo; niente e' stato cancellato. Solo il numero, non il motivo.
+   */
+  const val FACES_STORE_UNAVAILABLE: String = "FACES_STORE_UNAVAILABLE"
+
   /** La voce di stato della sezione (`DiagSection.PEOPLE`). */
   const val PEOPLE_STATE: String = "PEOPLE_STATE"
 
@@ -86,6 +92,6 @@ object FacesDiag {
     FACES_MODEL_MISMATCH, FACES_ENGINE_FAILED, FACES_VECTOR_INVALID, FACES_NO_INDEXER, FACES_NO_PRIVATE_AREA, FACES_WAITING_PREVIEWS,
     FACES_SEGMENT_REJECTED, FACES_HEAD_REJECTED, FACES_FOREIGN_GENERATION, FACES_HOLDER_REBASED, FACES_KEY_LOST, FACES_ERASE_LOCAL_DONE,
     FACES_ERASE_NAS_PENDING, FACES_ERASE_NAS_DONE, FACES_ERASE_WAITING_DEVICES, FACES_RECYCLE_BIN, FACES_NEEDS_UPDATE, FACES_ERASE_PENDING, FACES_HISTORY_KEPT, FACES_KILLED_MEMORY, PEOPLE_STATE,
-    FACES_MOUNT_FAILED, FACES_ERASE_FILES_HELD, FACES_GROUPING_SKIPPED, FACES_SEGMENT_WAITING, FACES_ARCHIVE_FULL,
+    FACES_MOUNT_FAILED, FACES_ERASE_FILES_HELD, FACES_GROUPING_SKIPPED, FACES_SEGMENT_WAITING, FACES_ARCHIVE_FULL, FACES_STORE_UNAVAILABLE,
   )
 }

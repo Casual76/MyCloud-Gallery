@@ -7,6 +7,9 @@
 
   <string name="faces_settings_off_title">Persone è spenta</string>
   <string name="faces_settings_off_message">Raggruppa le tue foto per volto, di notte, in carica. Si accende per tutto il tuo account, dopo una pagina che spiega cosa fa.</string>
+  <!-- L322 (CE-3): spenta da un altro dispositivo, anche qui sopra lo stato (lo stesso testo della riga delle Raccolte: persone_row_off_elsewhere). -->
+  <string name="faces_settings_off_elsewhere_title">Persone è stata disattivata da un altro tuo dispositivo</string>
+  <string name="faces_settings_off_elsewhere_message">I volti e i nomi sono stati cancellati anche da qui. Se vuoi, puoi riattivarla.</string>
   <string name="faces_settings_off_action">Attiva riconoscimento dei volti</string>
   <string name="faces_settings_on_title">Persone è attiva</string>
   <string name="faces_settings_on_message">Su tutti i tuoi dispositivi, tranne quelli che escludi.</string>
@@ -27,7 +30,8 @@
   <string name="faces_settings_device_here">Questo dispositivo</string>
   <string name="faces_settings_device_excluded">escluso</string>
   <string name="faces_settings_device_computing">analizza le foto</string>
-  <string name="faces_settings_progress_running">Analizzate %1$,d foto su %2$,d</string>
+  <string name="faces_settings_progress_running">Analizzate %1$s foto su %2$s</string>
+  <string name="faces_settings_progress_running_unknown">Sto analizzando le foto</string>
   <string name="faces_settings_progress_idle">Tutto analizzato</string>
   <string name="faces_settings_progress_problem">Qualcosa non va: la Diagnostica dice cosa.</string>
   <string name="faces_settings_not_here_title">Qui le persone non si calcolano</string>
@@ -43,6 +47,7 @@
   <string name="faces_settings_wait_update">In attesa: serve aggiornare l’app</string>
   <string name="faces_settings_wait_next_stage">Riprendo fra poco</string>
   <string name="faces_settings_wait_storage">In attesa: poco spazio libero sul telefono</string>
+  <string name="faces_settings_wait_keystore">In attesa: la chiave che protegge i dati dei volti non risponde</string>
 
   <string name="faces_settings_section_device">Questo dispositivo</string>
   <string name="faces_settings_exclude_title">Non su questo dispositivo</string>
@@ -75,4 +80,34 @@
   <string name="faces_settings_step_not_started">da fare</string>
   <string name="faces_settings_step_not_needed">non serve</string>
   <string name="faces_settings_diagnostics">Apri la Diagnostica</string>
+
+  <!-- CA-2 (correzioni C, risposta dell'utente del 30/10): «Analizza ora» con la stima. Il primo calcolo segue le regole di sottofondo (notte, carica, Wi-Fi); questo
+       tasto, con la sua conferma, e' l'unico modo di scavalcarle. Non scarica originali dal NAS. Nomi con il prefisso faces_analyze_ (le risorse dei moduli si fondono). -->
+  <string name="faces_analyze_counting">Conto le foto da analizzare…</string>
+  <plurals name="faces_analyze_estimate_first">
+    <item quantity="one">Analizzare la tua foto richiede circa %2$s.</item>
+    <item quantity="other">Analizzare le tue %1$s foto richiede circa %2$s.</item>
+  </plurals>
+  <plurals name="faces_analyze_estimate_left">
+    <item quantity="one">Resta %1$s foto da analizzare: serve circa %2$s.</item>
+    <item quantity="other">Restano %1$s foto da analizzare: servono circa %2$s.</item>
+  </plurals>
+  <plurals name="faces_analyze_minutes">
+    <item quantity="one">%d minuto</item>
+    <item quantity="other">%d minuti</item>
+  </plurals>
+  <plurals name="faces_analyze_hours">
+    <item quantity="one">%d ora</item>
+    <item quantity="other">%d ore</item>
+  </plurals>
+  <string name="faces_analyze_hours_and_minutes">%1$s e %2$s</string>
+  <string name="faces_analyze_rules">Di norma l’analisi parte da sola, di notte, in carica e sul Wi-Fi di casa.</string>
+  <string name="faces_analyze_action">Analizza ora</string>
+  <string name="faces_analyze_action_description">Analizza subito le foto, anche di giorno e a batteria</string>
+  <string name="faces_analyze_footnote">Usa le anteprime che ci sono già: una foto che non ne ha aspetta, e l’app non scarica mai gli originali dal NAS.</string>
+  <string name="faces_analyze_confirm_title">Analizzare adesso?</string>
+  <string name="faces_analyze_confirm_message">Parte subito, anche di giorno e a batteria: il telefono può scaldarsi e la batteria scende. Si ferma da sola se il telefono diventa troppo caldo. Servono circa %1$s.</string>
+  <string name="faces_analyze_confirm_cancel">Annulla</string>
+  <string name="faces_analyze_confirm_go">Analizza ora</string>
+  <string name="faces_analyze_started">Fatto: l’analisi parte adesso. Puoi tornare qui per vedere a che punto è.</string>
 </resources>

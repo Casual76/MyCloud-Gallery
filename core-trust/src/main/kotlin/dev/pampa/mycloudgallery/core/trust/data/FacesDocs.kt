@@ -135,8 +135,12 @@ sealed interface FacesSegmentContent {
     override fun toString(): String = "FacesSegmentContent.Cluster($size)"
   }
 
-  class People(val entries: List<PeopleDoc>) : FacesSegmentContent {
-    override val size: Int get() = entries.size
+  /**
+   * Le voci `people` di un segmento. [skipped] (L362): voci `name` con un nome che non si vede, scritte prima che la regola del nome volesse un carattere visibile; sono
+   * saltate **una per una** e il resto del segmento vale. [size] conta tutte le voci del file.
+   */
+  class People(val entries: List<PeopleDoc>, val skipped: Int = 0) : FacesSegmentContent {
+    override val size: Int get() = entries.size + skipped
 
     override fun toString(): String = "FacesSegmentContent.People($size)"
   }
@@ -385,13 +389,15 @@ object FacesDocs {
           }
         },
       )
-      else -> FacesSegmentContent.People(
-        rows.map { (row, at, length) ->
-          PeopleJson.read(own.copyOfRange(at, at + length)).also { doc ->
+      else -> {
+        // L362: un nome che non si vede si salta da solo (non rifiuta il segmento: le altre voci valgono).
+        val docs = rows.mapNotNull { (row, at, length) ->
+          PeopleJson.readOrSkip(own.copyOfRange(at, at + length))?.also { doc ->
             ensure(sameKey(own, row, doc.key), RejectReason.INVALID_FIELD, "segmento dei volti: chiave diversa da soggetto e campo")
           }
-        },
-      )
+        }
+        FacesSegmentContent.People(docs, skipped = rows.size - docs.size)
+      }
     }
   }
 

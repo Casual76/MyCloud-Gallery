@@ -142,22 +142,27 @@ class FacesOwnFilesCleaner internal constructor(
     val heads = walk.files.filter { (it.file as? FacesOwnFile.Head)?.deviceId == deviceId }
       .sortedByDescending { (it.file as FacesOwnFile.Head).version }
     val valid = HashMap<Long, Set<String>>()
-    val headFacts = ArrayList<Pair<FacesOwnFile.Head, Boolean>>()
+    val headFacts = ArrayList<Triple<FacesFound, Boolean, Boolean>>()
     for ((read, found) in heads.withIndex()) {
       val file = found.file as FacesOwnFile.Head
       if (read >= MAX_HEADS_READ) {
-        headFacts += file to false
+        headFacts += Triple(found, false, false)
         continue
       }
-      val bytes = readSmall(share, found, DocType.FACES_HEAD.maxFileBytes)
+      val max = DocType.FACES_HEAD.maxFileBytes
+      val bytes = readSmall(share, found, max)
       val verdict = bytes?.let {
         FacesDocs.decodeHead(it, state, FacesHeadLocation(generation, deviceId, file.version), accountId, previous = null)
       }
       val mine = verdict is Verdict.Accepted && verdict.value.signer.id == deviceId
       if (mine) valid[file.version] = (verdict as Verdict.Accepted).value.head.segments.mapTo(HashSet()) { it.ref.hash }
-      headFacts += file to mine
+      // R7: letto e non una mia testa valida (troppo grande, vuoto, busta o firma che non tornano). Un file sparito nel frattempo non e' spazzatura.
+      val junk = !mine && (bytes != null || found.entry.size <= 0 || found.entry.size > max)
+      headFacts += Triple(found, mine, junk)
     }
-    for ((file, mine) in headFacts) facts += FacesOwnFileFacts.HeadFacts(file, signedByMe = mine, ownVersions = valid.keys)
+    for ((found, mine, junk) in headFacts) {
+      facts += FacesOwnFileFacts.HeadFacts(found.file as FacesOwnFile.Head, signedByMe = mine, ownVersions = valid.keys, junk = junk, modifiedAtNas = found.entry.modifiedAt)
+    }
     // Senza nessuna testa valida non si sa che cosa e' elencato: i segmenti restano tutti.
     if (valid.isNotEmpty()) {
       val recent = valid.keys.sortedDescending().take(TrustLimits.OWN_FILES_KEEP_HEADS).flatMapTo(HashSet()) { valid.getValue(it) }

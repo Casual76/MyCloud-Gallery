@@ -214,10 +214,10 @@ class FacesStoreStateTest {
     val store = world.ready(generation)
     store.archive.addPeople(listOf(PeopleRecord(PeopleEdit.Hidden(person(1), true), 10, small)))
     val sql = store.database.openHelper.writableDatabase
-    sql.execSQL("INSERT INTO people_record VALUES ('non-un-id', 'hidden', 'true', NULL, 1, 'x')")
-    sql.execSQL("INSERT INTO people_record VALUES ('${person(2).base32()}', 'campo-nuovo', 'true', NULL, 1, 'x')")
-    sql.execSQL("INSERT INTO people_record VALUES ('${person(2).base32()}', 'hidden', 'forse', NULL, 1, 'x')")
-    sql.execSQL("INSERT INTO people_record VALUES ('${person(2).base32()}', 'apart:${person(2).base32()}', 'true', NULL, 1, 'x')")
+    sql.execSQL("INSERT INTO people_record VALUES ('non-un-id', 'hidden', 'true', NULL, 1, 'x', 'x')")
+    sql.execSQL("INSERT INTO people_record VALUES ('${person(2).base32()}', 'campo-nuovo', 'true', NULL, 1, 'x', 'x')")
+    sql.execSQL("INSERT INTO people_record VALUES ('${person(2).base32()}', 'hidden', 'forse', NULL, 1, 'x', 'x')")
+    sql.execSQL("INSERT INTO people_record VALUES ('${person(2).base32()}', 'apart:${person(2).base32()}', 'true', NULL, 1, 'x', 'x')")
     assertThat(store.archive.people().values.map { it.edit }).containsExactly(PeopleEdit.Hidden(person(1), true))
     store.close()
   }

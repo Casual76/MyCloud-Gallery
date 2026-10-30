@@ -75,6 +75,15 @@ class Phase8DiagCatalogTest {
     assertThat(items.single().export).containsExactly("mounted", ExportValue.Flag(false))
   }
 
+  /** I7 (correzioni della Fase 8): un montaggio fallito si dice con il suo codice, anche con le persone non montate. */
+  @Test
+  fun i7_conIlMontaggioFallitoLaSezioneLoDiceConIlSuoCodice() {
+    val items = diagnostics.render(PeopleFacts(mountFailed = true))
+    assertThat(items.map { it.code }).containsExactly(DiagCodes.PEOPLE_STATE, DiagCodes.FACES_MOUNT_FAILED)
+    assertThat(DiagCodes.FACES_MOUNT_FAILED.id).isIn(FacesDiag.ALL)
+    assertThat(DiagCodes.FACES_MOUNT_FAILED in DiagCatalog).isTrue()
+  }
+
   /** Una fotografia in cui ogni cosa che puo' dire qualcosa la dice: ogni codice che la sezione sa emettere. */
   private fun everything() = PeopleFacts(
     mounted = true,

@@ -33,7 +33,7 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
 
   /** Quello che il grafo sa adesso, in soli numeri e segni: la sezione si compone da qui (e si prova senza montare le persone). */
   internal suspend fun facts(): PeopleFacts {
-    val live = graph.live.value ?: return PeopleFacts(roundErrors = graph.roundErrors)
+    val live = graph.live.value ?: return PeopleFacts(roundErrors = graph.roundErrors, mountFailed = graph.mountFailed)
     val state = live.switch.currentState()
     val c = live.counters
     val sync = graph.lastSync.value
@@ -111,6 +111,8 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
       f.eraseWaiting?.let { export["eraseWaiting"] = ExportValue.Enum.of(it) }
     }
     items += item(DiagCodes.PEOPLE_STATE, DiagSeverity.INFO, export)
+    // I7: un montaggio fallito si dice con il suo codice (i dati personali escono senza la voce dei volti).
+    if (!f.mounted && f.mountFailed) items += item(DiagCodes.FACES_MOUNT_FAILED, DiagSeverity.WARNING, emptyMap())
     if (!f.mounted) return items
     if (state == FacesState.NeedsUpdate) items += item(DiagCodes.FACES_NEEDS_UPDATE, DiagSeverity.WARNING, emptyMap())
     val active = state is FacesState.On && state.here != HereState.EXCLUDED
@@ -183,6 +185,8 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
 /** Cio' che la sezione delle persone dice, in soli numeri e segni (D37): mai un nome, un id, una chiave, un riquadro, un vettore o la generazione. */
 internal data class PeopleFacts(
   val mounted: Boolean = false,
+  /** I7: il montaggio delle persone e' fallito in questo processo. */
+  val mountFailed: Boolean = false,
   val state: FacesState? = null,
   val status: FacesStatus = FacesStatus.Off,
   val holder: HolderState = HolderState.Unknown,

@@ -60,6 +60,14 @@ internal class ChaosArchive(
 
   override suspend fun addPeople(records: List<PeopleRecord>) = inj.around(device, Surface.DB_PEOPLE) { inner.addPeople(records) }
 
+  override suspend fun addPeopleFrom(via: String, records: List<PeopleRecord>, own: String?): Int =
+    inj.around(device, Surface.DB_PEOPLE) { inner.addPeopleFrom(via, records, own) }
+
+  override suspend fun directPeople(): Map<PeopleKey, PeopleRecord> = alive { inner.directPeople() }
+
+  override suspend fun bodyTotals(author: String?, keys: Collection<ContentKey>?): dev.pampa.mycloudgallery.core.faces.contract.FacesTotals =
+    alive { inner.bodyTotals(author, keys) }
+
   override suspend fun datePeople(nasNow: Long): Int = inj.around(device, Surface.DB_PEOPLE) { inner.datePeople(nasNow) }
 
   override suspend fun dropAuthors(authors: Set<String>): Int = inj.around(device, Surface.DB_PEOPLE) { inner.dropAuthors(authors) }

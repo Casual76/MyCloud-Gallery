@@ -45,15 +45,19 @@ class NasFacesLeases(
   private val guard = FacesSyncGuard(identity, switch, { fs.shareName }, flags)
 
   override suspend fun acquire(generation: FaceGeneration, resource: FacesResource): FacesLease =
-    withManager(generation) { manager, registry -> toLease(manager.tryAcquire(registry, resourceName(generation, resource), DURATION_MILLIS)) }
+    withManager(generation) { manager, registry -> toLease(onIo { manager.tryAcquire(registry, resourceName(generation, resource), DURATION_MILLIS) }) }
 
-  /** Il rinnovo: una generazione nuova se la prenotazione e' ancora mia (o libera); se un altro l'ha presa, [FacesLease.Lost]. */
+  /**
+   * Il rinnovo: una generazione nuova se la prenotazione e' ancora mia (o libera); se un altro l'ha presa, [FacesLease.Lost]. R8: fra la lettura
+   * e la scrittura il cancello D35 si richiede (un congelamento scattato nel frattempo non lascia scrivere).
+   */
   override suspend fun renew(generation: FaceGeneration, resource: FacesResource, held: FacesLease.Held): FacesLease =
     withManager(generation) { manager, registry ->
       val name = resourceName(generation, resource)
-      val (status, _) = manager.inspect(registry, name) ?: return@withManager FacesLease.Contended
+      val (status, _) = onIo { manager.inspect(registry, name) } ?: return@withManager FacesLease.Contended
       if (status is LeaseStatus.HeldByOther) return@withManager FacesLease.Lost
-      when (val result = toLease(manager.tryAcquire(registry, name, DURATION_MILLIS))) {
+      gate.blockFor(fs.shareName)?.let { return@withManager FacesLease.Blocked(it) }
+      when (val result = toLease(onIo { manager.tryAcquire(registry, name, DURATION_MILLIS) })) {
         FacesLease.Busy -> FacesLease.Lost
         else -> result
       }
@@ -61,12 +65,14 @@ class NasFacesLeases(
 
   override suspend fun release(generation: FaceGeneration, resource: FacesResource, held: FacesLease.Held) {
     withManager(generation) { manager, registry ->
-      manager.release(registry, resourceName(generation, resource))
+      onIo { manager.release(registry, resourceName(generation, resource)) }
       held
     }
   }
 
-  private suspend fun withManager(generation: FaceGeneration, block: (LeaseManager, RegistryState) -> FacesLease): FacesLease {
+  private suspend fun <T> onIo(block: () -> T): T = withContext(io) { block() }
+
+  private suspend fun withManager(generation: FaceGeneration, block: suspend (LeaseManager, RegistryState) -> FacesLease): FacesLease {
     val open = when (val checked = guard.check()) {
       is FacesGate.Closed -> return checked.block?.let { FacesLease.Blocked(it) } ?: FacesLease.Failed
       is FacesGate.Open -> checked
@@ -78,7 +84,7 @@ class NasFacesLeases(
     val nas = NasClock { clock.nasNowMillis() ?: throw IOException("Ora del NAS non disponibile.") }
     val manager = LeaseManager(fs, identity.signer, nas, LeaseRoot.Faces(generation))
     return try {
-      withContext(io) { block(manager, open.registry) }
+      block(manager, open.registry)
     } catch (e: IOException) {
       FacesLease.Failed
     }

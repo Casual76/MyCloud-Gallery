@@ -78,6 +78,9 @@ class FacesStore internal constructor(
   /** Il database sotto, per le prove di questo pacchetto. */
   internal val database: FacesDatabase get() = db
 
+  /** Per le prove (R3): la chiave dati della generazione. */
+  internal val dataKey: FacesDataKey get() = key
+
   override fun toString(): String = "FacesStore(aperto=$isOpen)"
 
   private companion object {

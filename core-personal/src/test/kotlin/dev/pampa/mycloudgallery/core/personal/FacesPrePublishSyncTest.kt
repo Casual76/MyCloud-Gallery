@@ -91,6 +91,40 @@ class FacesPrePublishSyncTest {
     assertThat(sync.lastHold.value).isNull()
   }
 
+  /**
+   * I7 (correzioni della Fase 8): con le persone non montate per un guasto il gancio chiede di pubblicare **senza** la voce `faces`. La testa esce (i
+   * dati personali non restano fermi per tutto il processo) ma non contiene la voce: chi la legge, e il ricordo della propria testa, non sanno niente
+   * dei volti di questo dispositivo (nessuna conferma di una cancellazione, nessuna generazione trattata). Quando il gancio torna a dire `Proceed`,
+   * la voce torna.
+   */
+  @Test
+  fun i7_senzaLaVoceFacesLaTestaEsceENonDiceNienteDeiVolti() = runTest {
+    val a = world.device()
+    val b = world.device()
+    val aView = PersonalHeadsRecord()
+    val bView = PersonalHeadsRecord()
+    val syncA = a.engine(RecordingPrePublishHook(), aView)
+    val hook = RecordingPrePublishHook(PrePublish.ProceedWithout(setOf(FacesSettingCodec.KEY), "FACES_MOUNT_FAILED"))
+    val syncB = b.engine(hook, bView)
+    b.faces(FacesSetting.On(g, 1))
+    b.favorite(mediaId(1))
+    assertThat(syncB.sync(5.minutes).published).isGreaterThan(0)
+    assertThat(b.headFiles()).hasSize(1)
+    assertThat(syncB.lastHold.value).isEqualTo("FACES_MOUNT_FAILED")
+    syncA.sync(5.minutes)
+    val seen = aView.latestValueOf(FacesSettingCodec.KEY)[b.id]
+    assertThat(seen).isNotNull()
+    assertThat(seen!!.entry).isNull()
+    assertThat(bView.latestValueOf(FacesSettingCodec.KEY)[b.id]!!.entry).isNull()
+    // Lo stato di B non cambia: la voce resta nel suo stato, solo la testa non la porta. Con il gancio che torna a dire si', la voce esce.
+    assertThat(FacesSettingCodec.read(b.store.state())).isEqualTo(FacesSetting.On(g, 1))
+    hook.answer = PrePublish.Proceed
+    world.clock.advance(6 * 60_000L)
+    syncB.sync(5.minutes)
+    syncA.sync(5.minutes)
+    assertThat(FacesSettingCodec.parse(aView.latestValueOf(FacesSettingCodec.KEY)[b.id]!!.entry!!.value)).isEqualTo(FacesSetting.On(g, 1))
+  }
+
   @Test
   fun unGancioCheLanciaFermaComeHold() = runTest {
     val a = world.device()

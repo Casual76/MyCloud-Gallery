@@ -41,7 +41,9 @@ import java.io.File
 
 /**
  * Il database dei volti di UNA generazione (Fase 8, P6; `docs/fase8-progetto.md` D14, D15; `docs/modello-dati.md` §15): un file a parte
- * (`faces-<G>.db`), con un suo schema **v1** esportato in `schemas/dev.pampa.mycloudgallery.core.database.faces.FacesDatabase/`.
+ * (`faces-<G>.db`), con un suo schema esportato in `schemas/dev.pampa.mycloudgallery.core.database.faces.FacesDatabase/`: **v1** della Fase 8,
+ * **v2** delle correzioni della Fase 8 (provenienza delle voci `people`, attese dei segmenti della replica, indice dei corpi per autore:
+ * [FacesMigrations]).
  * **Non** e' il database della galleria (`GalleryDatabase` resta v6, nessuna tabella condivisa): si cancella come un file e si verifica che
  * non ci sia piu' ("Disattiva e cancella", D29), e chi non attiva Persone non lo crea nemmeno (nessuna migrazione sul campo).
  *
@@ -97,8 +99,8 @@ abstract class FacesDatabase : RoomDatabase() {
   abstract fun syncDao(): FacesSyncDao
 
   companion object {
-    /** Versione dello schema. Alzarla richiede una migrazione vera (mai distruttiva) e il suo schema esportato. */
-    const val VERSION: Int = 1
+    /** Versione dello schema. Alzarla richiede una migrazione vera (mai distruttiva, in [FacesMigrations]) e il suo schema esportato. */
+    const val VERSION: Int = 2
 
     /**
      * Il database nel file [file] (le cartelle che mancano si creano). Il giornale e' WAL: accanto al file ci sono `-wal` e `-shm`, che la
@@ -109,6 +111,7 @@ abstract class FacesDatabase : RoomDatabase() {
       parent.mkdirs()
       return Room.databaseBuilder(DirectoryContext(context, parent), FacesDatabase::class.java, file.name)
         .setJournalMode(JournalMode.WRITE_AHEAD_LOGGING)
+        .addMigrations(*FacesMigrations.ALL)
         .build()
     }
   }

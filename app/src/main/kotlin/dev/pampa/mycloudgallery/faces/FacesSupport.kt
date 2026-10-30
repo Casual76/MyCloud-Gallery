@@ -2,8 +2,10 @@ package dev.pampa.mycloudgallery.faces
 
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
 import dev.pampa.mycloudgallery.core.faces.compute.FacesSignals
+import dev.pampa.mycloudgallery.core.faces.contract.FacesDiag
 import dev.pampa.mycloudgallery.core.faces.erase.FacesLocalLeftovers
 import dev.pampa.mycloudgallery.core.faces.store.FacesStores
+import dev.pampa.mycloudgallery.core.personal.contract.FacesSettingCodec
 import dev.pampa.mycloudgallery.core.personal.contract.PrePublish
 import dev.pampa.mycloudgallery.core.personal.contract.PrePublishHook
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
@@ -48,13 +50,23 @@ class AppFacesLeftovers(
  * pronta). Montate: decide l'interruttore ([FacesLive.hook]: i dati di una generazione che la voce non nomina piu' accesa si tolgono **prima**, e se non
  * si riesce quel giro non pubblica). Non ancora montate: se sul disco ci sono dati dei volti non si puo' dire di averli tolti, quindi non si pubblica
  * (`Hold`); senza dati dei volti non c'e' niente da togliere e si pubblica. Cosi' una testa personale con `off|G` esiste solo dopo la cancellazione.
+ *
+ * I7 (correzioni della Fase 8): se il montaggio e' **fallito** (non solo "non ancora"), i dati personali non restano fermi per tutto il processo: escono
+ * **senza la voce `faces`** ([PrePublish.ProceedWithout], codice [MOUNT_FAILED] nella Diagnostica). La testa cosi' non contiene la voce, quindi non vale
+ * come conferma di una cancellazione (`EraseRules.confirms` vuole la voce) e non dice che questo dispositivo tratti una generazione. L'ordine di C131
+ * non cambia: prima del montaggio (riuscito o fallito) nessuna testa con la voce `faces` esce con un database dei volti sul disco.
  */
 class FacesPrePublish(private val graph: () -> FacesGraph?, private val stores: FacesStores) : PrePublishHook {
   override suspend fun beforePublish(state: Map<PersonalKey, PersonalEntry>): PrePublish {
-    val live = graph()?.live?.value
+    val faces = graph()
+    val live = faces?.live?.value
     if (live != null) return live.hook.beforePublish(state)
     return try {
-      if (stores.generationsOnDisk().isEmpty()) PrePublish.Proceed else PrePublish.Hold(NOT_READY)
+      when {
+        stores.generationsOnDisk().isEmpty() -> PrePublish.Proceed
+        faces?.mountFailed == true -> PrePublish.ProceedWithout(setOf(FacesSettingCodec.KEY), MOUNT_FAILED)
+        else -> PrePublish.Hold(NOT_READY)
+      }
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
@@ -65,5 +77,8 @@ class FacesPrePublish(private val graph: () -> FacesGraph?, private val stores: 
   companion object {
     /** Il codice stabile del giro fermato perche' le persone non sono ancora montate (mai un dato). */
     const val NOT_READY: String = "FACES_ERASE_PENDING"
+
+    /** I7: il codice stabile dei giri che pubblicano senza la voce `faces` perche' il montaggio e' fallito (mai un dato). */
+    const val MOUNT_FAILED: String = FacesDiag.FACES_MOUNT_FAILED
   }
 }

@@ -24,6 +24,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.PeopleState
 import dev.pampa.mycloudgallery.core.faces.contract.PersonIdSource
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
+import dev.pampa.mycloudgallery.core.model.PersonId
 import kotlin.time.Duration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -48,6 +49,10 @@ import kotlinx.coroutines.sync.withLock
  *    contenuti spariti ([GoneContents]); chi non e' custode fa solo il provvisorio (mai nascite, mai unioni, mai pubblicato);
  * 4. **salva** se e' cambiato qualcosa e, da custode, **mette in coda** l'istantanea ([FacesChange.Snapshot], idempotente: anche dopo una
  *    morte fra il salvataggio e la coda) e chiede la pubblicazione (fine unita' o fine manutenzione).
+ *
+ * Correzioni della Fase 8 (pacchetto "formato e replica dei volti"): le voci `people` creano persone solo per id che un'istantanea o un volto
+ * nominano ([BoundedCorrections], R3); una persona la cui voce `forget` e' sparita con la revoca torna ([Unforget], R3); un'istantanea con la `seq`
+ * oltre il tetto riparte da una `seq` ammessa ([Renumber], R4); al piu' [MAX_REALIGNS_PER_PASS] riallineamenti per passo (R6).
  *
  * L'archivio e' quello della generazione corrente ([archives], null = Persone non attiva qui): un archivio chiuso a meta' (generazione
  * cambiata, chiave distrutta: `IllegalStateException` dall'archivio) ferma il giro senza salvare ne' pubblicare. Mai un'eccezione per un
@@ -77,6 +82,9 @@ class CustodianGrouping(
   private var held: FacesLease.Held? = null
   private var heldGeneration: FaceGeneration? = null
 
+  /** R3: le persone con una voce `forget` al passo prima (per generazione). In memoria: dopo una morte del processo non si ripristina niente. */
+  private var lastForgotten: Pair<FaceGeneration, Set<PersonId>>? = null
+
   private enum class Kind { INCREMENTAL, NIGHTLY, RECLUSTER }
 
   private enum class Role(val custodian: Boolean, val publishes: Boolean, val readsNas: Boolean) {
@@ -101,13 +109,21 @@ class CustodianGrouping(
     val faces = closedSafe { archive.groupFaces() } ?: return GroupingReport.EMPTY
     val records = closedSafe { archive.people() } ?: return GroupingReport.EMPTY
     val local = closedSafe { archive.grouping() } ?: return GroupingReport.EMPTY
-    val corrections = PeopleState.of(records.values).corrections()
+    val all = PeopleState.of(records.values).corrections()
     val keys = (faces.map { it.ref.contentKey } + local.assignments.keys.map { it.contentKey }).toSet()
     val goneKeys = gone.gone(keys)
     val remote = if (role.readsNas) snapshots.latest(generation) else emptyList()
-    val outcome = if (role.custodian) custodial(kind, role, local, remote, faces, corrections, goneKeys) else provisional(local, remote, faces, corrections, goneKeys)
+    // R3: le voci creano persone solo per id che un'istantanea (questa o una letta) o un volto di adesso nominano.
+    val corrections = BoundedCorrections.within(all, local.persons.keys + remote.flatMap { it.state.persons.keys }, faces)
+    val unforgotten = lastForgotten?.takeIf { it.first == generation }?.second.orEmpty() - all.forgotten
+    val outcome = if (role.custodian) {
+      custodial(kind, role, local, remote, faces, corrections, goneKeys, unforgotten)
+    } else {
+      provisional(local, remote, faces, corrections, goneKeys)
+    }
     val state = outcome.first
     if (!same(state, local) && !saved(archive, state)) return GroupingReport.EMPTY
+    lastForgotten = generation to all.forgotten
     // Da custode si pubblica cio' che non c'e' ancora sul NAS: non la stessa istantanea di un altro (dopo averla adottata senza cambiarla).
     val alreadyThere = remote.any { sameContent(it.state, state) }
     if (role.publishes && state.seq > publishedSeq(remote) && !alreadyThere) {
@@ -139,25 +155,36 @@ class CustodianGrouping(
     faces: List<GroupFace>,
     corrections: GroupingCorrections,
     goneKeys: Set<ContentKey>,
+    unforgotten: Set<PersonId>,
   ): Pair<GroupingState, GroupingReport> {
     var base = local
+    var realigns = 0
     val winner = ClusterSnapshot.winner(remote)
     if (role.readsNas && winner != null && beatsLocal(winner, local)) {
       base = Realign.onto(winner.state, local, faces, corrections, params)
       rebasedCount.value++
+      realigns++
     }
     for (s in remote.sortedWith { a, b -> if (ClusterSnapshot.beats(a, b)) -1 else if (ClusterSnapshot.beats(b, a)) 1 else 0 }) {
       if (Realign.contains(base, s.state)) continue
+      // R6: al piu' qualche riallineamento per passo (il resto al passo dopo): un passo costa al piu' MAX_REALIGNS_PER_PASS volte l'istantanea.
+      if (realigns >= MAX_REALIGNS_PER_PASS) break
       base = Realign.onto(base, s.state, faces, corrections, params)
       rebasedCount.value++
+      realigns++
     }
+    // R3: una persona la cui voce `forget` e' sparita (revocata con la sua provenienza) torna attiva con i suoi volti.
+    base = Unforget.restore(base, unforgotten, faces, params)
     val input = GroupingInput(base, faces, corrections, params, goneKeys)
     val out = when (kind) {
       Kind.INCREMENTAL -> engine.incremental(input, ids)
       Kind.NIGHTLY -> engine.nightly(input, ids)
       Kind.RECLUSTER -> engine.recluster(input, base, ids)
     }
-    return out.state to out.report
+    // R4: una `seq` oltre il tetto del formato (adottata da chi l'aveva messa vicino al tetto) riparte da una ammessa.
+    val state = Renumber.within(out.state, remote)
+    if (state !== out.state) rebasedCount.value++
+    return state to out.report
   }
 
   /** Chi non e' custode: l'istantanea vincente (con le persone che solo questo dispositivo ha, se ne ha) e l'assegnazione provvisoria. */
@@ -218,11 +245,17 @@ class CustodianGrouping(
 
   private suspend fun <T> closedSafe(block: suspend () -> T): T? = try {
     block()
-  } catch (e: IllegalStateException) {
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    // I5: un archivio chiuso a meta' o un errore del database (O1) fermano il giro senza cadere.
     null
   }
 
-  private companion object {
+  internal companion object {
+    /** R6: i riallineamenti (adozioni e assorbimenti di istantanee lette) in un passo. Di solito uno: il custode e' uno solo. */
+    const val MAX_REALIGNS_PER_PASS: Int = 4
+
     /** I motivi per cui il raggruppamento resta locale per sempre (finche' valgono): ogni dispositivo e' custode per se' (D34). */
     val LOCAL_REASONS = setOf(FacesWriteBlock.TEST_SHARES_ONLY, FacesWriteBlock.FENCE, FacesWriteBlock.NO_PRIVATE_AREA, FacesWriteBlock.NO_NAS)
 

@@ -8,6 +8,8 @@ import dev.pampa.mycloudgallery.core.database.faces.entity.FaceEntity
 import dev.pampa.mycloudgallery.core.faces.contract.FaceBody
 import dev.pampa.mycloudgallery.core.faces.contract.FaceEntry
 import dev.pampa.mycloudgallery.core.faces.contract.FacesArchive
+import dev.pampa.mycloudgallery.core.faces.contract.FacesArchiveLimits
+import dev.pampa.mycloudgallery.core.faces.contract.FacesTotals
 import dev.pampa.mycloudgallery.core.faces.contract.GroupFace
 import dev.pampa.mycloudgallery.core.faces.contract.GroupingState
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleKey
@@ -35,18 +37,27 @@ import dev.pampa.mycloudgallery.core.security.faces.FacesDataKey
  *
  * Le liste di chiavi si spezzano in gruppi da [FaceBodyDao.IN_LIMIT] (SQLite di Android 8-10 accetta 999 variabili). Mai valori nei log (D37).
  */
+/** R3, R6 (correzioni della Fase 8): i tetti dell'archivio sul database, di serie quelli di [FacesArchiveLimits]. */
+internal data class StoreCaps(
+  val maxPeople: Int = FacesArchiveLimits.MAX_PEOPLE,
+  val maxPeoplePerSigner: Int = FacesArchiveLimits.MAX_PEOPLE_PER_SIGNER,
+  val maxGroupFaces: Int = FacesArchiveLimits.MAX_GROUP_FACES,
+)
+
 class DatabaseFacesArchive internal constructor(
   override val generation: FaceGeneration,
   private val db: FacesDatabase,
   private val key: FacesDataKey,
+  /** R3, R6: i tetti dell'archivio ([FacesArchiveLimits]; le prove li abbassano). */
+  caps: StoreCaps = StoreCaps(),
 ) : FacesArchive {
 
   @Volatile private var closed = false
 
   private val bodies = db.bodyDao()
   private val grouping = GroupingTables(db.groupingDao())
-  private val people = PeopleTables(db.peopleDao(), key)
-  private val groupCache = GroupFaceCache(bodies, ::openSecrets)
+  private val people = PeopleTables(db.peopleDao(), key, caps.maxPeople, caps.maxPeoplePerSigner)
+  private val groupCache = GroupFaceCache(bodies, ::openSecrets, caps.maxGroupFaces)
 
   /** Da qui ogni chiamata lancia `IllegalStateException`. Lo fa `FacesStore.close` (e quindi la cancellazione locale, **dopo** la chiave). */
   internal fun retire() {
@@ -161,6 +172,30 @@ class DatabaseFacesArchive internal constructor(
   override suspend fun addPeople(records: List<PeopleRecord>) {
     open()
     people.add(records)
+  }
+
+  override suspend fun addPeopleFrom(via: String, records: List<PeopleRecord>, own: String?): Int {
+    open()
+    return people.addFrom(via, records, own)
+  }
+
+  override suspend fun directPeople(): Map<PeopleKey, PeopleRecord> {
+    open()
+    return people.direct()
+  }
+
+  override suspend fun bodyTotals(author: String?, keys: Collection<ContentKey>?): FacesTotals {
+    open()
+    if (keys == null) {
+      val row = if (author == null) bodies.totals() else bodies.totalsOf(author)
+      return FacesTotals(row.bodies, row.faces)
+    }
+    var out = FacesTotals.ZERO
+    for (chunk in keys.map { it.hex }.distinct().chunked(FaceBodyDao.IN_LIMIT)) {
+      val row = if (author == null) bodies.totalsOfKeys(chunk) else bodies.totalsOfAuthorKeys(author, chunk)
+      out += FacesTotals(row.bodies, row.faces)
+    }
+    return out
   }
 
   override suspend fun datePeople(nasNow: Long): Int {

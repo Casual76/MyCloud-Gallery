@@ -98,6 +98,12 @@ class NasFacesRemote(
     return call { RemoteResult.Ok(put(NasLayout.facesSegment(generation, deviceId, hash), bytes)) }
   }
 
+  override suspend fun segmentNames(generation: FaceGeneration): RemoteResult<FacesListing<String>> = call {
+    val listing = fs.list(NasLayout.facesSegmentDir(generation, deviceId), MAX_SEGMENT_NAMES)
+    val valid = listing.names.filter(Hashes::isHashName).distinct()
+    RemoteResult.Ok(FacesListing(valid, listing.names.size - valid.size, listing.truncated))
+  }
+
   override suspend fun publishHead(generation: FaceGeneration, version: Long, bytes: ByteArray): RemoteResult<FacesPut> {
     if (version !in 1..TrustLimits.MAX_VERSION || bytes.size > DocType.FACES_HEAD.maxFileBytes) return denied
     return call { RemoteResult.Ok(put(NasLayout.facesHead(generation, deviceId, version), bytes)) }
@@ -116,4 +122,9 @@ class NasFacesRemote(
   }
 
   override fun toString(): String = "NasFacesRemote"
+
+  private companion object {
+    /** R7: i propri segmenti elencati al piu' (le ultime teste e il diario della pulizia ne tengono qualche volta [TrustLimits.MAX_HEAD_SEGMENTS]). */
+    const val MAX_SEGMENT_NAMES: Int = 4 * TrustLimits.MAX_HEAD_SEGMENTS
+  }
 }

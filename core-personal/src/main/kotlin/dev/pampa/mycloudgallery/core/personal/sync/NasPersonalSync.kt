@@ -364,17 +364,22 @@ class NasPersonalSync(
       holdState.value = verdict.code
       return Held(verdict.code)
     }
-    holdState.value = null
+    // I7 (correzioni della Fase 8): il gancio puo' chiedere di pubblicare lo stato senza alcune voci (la voce `faces` con le persone non montate).
+    // La testa allora non le contiene, e il ricordo della propria testa nemmeno: per tutti questo dispositivo non dice niente su di loro.
+    val outgoing = if (verdict is PrePublish.ProceedWithout) merged.filterKeys { it !in verdict.keys } else merged
+    val outgoingPlan = if (outgoing === merged) plan else PersonalSegments.plan(outgoing.values)
+    holdState.value = (verdict as? PrePublish.ProceedWithout)?.code
+    if (outgoingPlan.entries == 0 || (last != null && last.segments == outgoingPlan.names)) return Unchanged
     val knownVersion = store.marks()[identity.deviceId]?.version ?: 0L
     val after = maxOf(last?.version ?: 0L, knownVersion)
-    return when (val result = remote.publish(plan, last?.segments.orEmpty(), after, nasNow)) {
+    return when (val result = remote.publish(outgoingPlan, last?.segments.orEmpty(), after, nasNow)) {
       is RemoteResult.Ok -> {
         val head = result.value
-        store.setPublished(PersonalPublication(head.version, head.mark, nasNow, plan.names, plan.entries))
+        store.setPublished(PersonalPublication(head.version, head.mark, nasNow, outgoingPlan.names, outgoingPlan.entries))
         // La testa che abbiamo scritto e' gia' dentro il nostro stato: non serve rileggerla (se pero' non si e' potuto ricordare cosa
         // dice, il segno non si salva e la si rilegge al giro dopo, D30).
-        if (heads.record(identity.deviceId, nasNow, merged.values)) store.applyFrom(identity.deviceId, emptyList(), head.mark)
-        Published(plan.entries)
+        if (heads.record(identity.deviceId, nasNow, outgoing.values)) store.applyFrom(identity.deviceId, emptyList(), head.mark)
+        Published(outgoingPlan.entries)
       }
       is RemoteResult.Failed -> PublishFailed(unavailableFor(result.failure))
     }

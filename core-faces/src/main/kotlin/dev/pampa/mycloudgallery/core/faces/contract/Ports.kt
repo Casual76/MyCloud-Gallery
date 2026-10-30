@@ -145,6 +145,12 @@ interface FacesRemote {
 
   suspend fun publishSegment(generation: FaceGeneration, hash: String, bytes: ByteArray): RemoteResult<FacesPut>
 
+  /**
+   * R7 (correzioni della Fase 8): i nomi dei segmenti di **questo** dispositivo nella generazione [generation] (solo un indizio: il pubblicatore
+   * rimette quelli che la sua ultima testa elenca e che mancano, tolti dal PC). Un elenco troncato non prova che un segmento manchi.
+   */
+  suspend fun segmentNames(generation: FaceGeneration): RemoteResult<FacesListing<String>>
+
   suspend fun publishHead(generation: FaceGeneration, version: Long, bytes: ByteArray): RemoteResult<FacesPut>
 }
 

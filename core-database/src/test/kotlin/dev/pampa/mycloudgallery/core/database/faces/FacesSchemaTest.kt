@@ -21,7 +21,7 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 
 /**
- * Lo schema del database dei volti, v1 (Fase 8, P6; `docs/fase8-progetto.md` D15, riga P6 del §4.4; `docs/modello-dati.md` §15).
+ * Lo schema del database dei volti, v1 e v2 (Fase 8, P6, e le correzioni del pacchetto "formato e replica dei volti"; `docs/fase8-progetto.md` D15, riga P6 del §4.4; `docs/modello-dati.md` §15).
  *
  * - Lo schema **esportato** (`schemas/<FacesDatabase>/1.json`, sotto controllo di versione) e' quello che Room crea oggi, e un database creato
  *   **dal JSON** (come lo avrebbe creato quella versione dell'app) con dati si apre con il codice di oggi.
@@ -60,11 +60,15 @@ class FacesSchemaTest {
   }
 
   @Test
-  fun loSchemaV1EEsportatoENonCeNientAltro() {
-    assertThat(FacesDatabase.VERSION).isEqualTo(1)
-    assertThat(exportedVersions(schemaDir)).containsExactly(1)
-    val schema = JSONObject(File(schemaDir, "1.json").readText()).getJSONObject("database")
-    assertThat(schema.getInt("version")).isEqualTo(1)
+  fun gliSchemiV1EV2SonoEsportatiENonCeNientAltro() {
+    assertThat(FacesDatabase.VERSION).isEqualTo(2)
+    assertThat(exportedVersions(schemaDir)).containsExactly(1, 2).inOrder()
+    for (version in 1..2) {
+      val schema = JSONObject(File(schemaDir, "$version.json").readText()).getJSONObject("database")
+      assertThat(schema.getInt("version")).isEqualTo(version)
+    }
+    // La v2 aggiunge colonne e un indice, nessuna tabella.
+    assertThat(tablesOf(File(schemaDir, "2.json"))).isEqualTo(tablesOf(File(schemaDir, "1.json")))
     assertThat(tablesOf(File(schemaDir, "1.json"))).containsExactly(
       "face_body", "face", "face_unsupported", "group_state", "group_person", "group_exemplar", "group_assignment", "people_record",
       "faces_head_mark", "faces_outbox", "faces_unit_done", "faces_meta",
@@ -76,7 +80,7 @@ class FacesSchemaTest {
 
   @Test
   fun loSchemaEsportatoCoincideConQuelloCheRoomCreaOggi() {
-    val fromJson = SchemaFiles.create(context, schemaDir, 1, "faces-da-json.db")
+    val fromJson = SchemaFiles.create(context, schemaDir, FacesDatabase.VERSION, "faces-da-json.db")
     val expected = SQLiteDatabase.openDatabase(fromJson.path, null, SQLiteDatabase.OPEN_READONLY).use { schemaOf(it.rawQuery(SCHEMA_SQL, null)) }
     val database = newDatabase("faces-da-room.db")
     try {
@@ -89,7 +93,7 @@ class FacesSchemaTest {
   }
 
   @Test
-  fun unaV1CreataDalJsonConUnaRigaPerTabellaSiRiapreESiLegge() = runBlocking<Unit> {
+  fun unaV1CreataDalJsonConUnaRigaPerTabellaSiMigraSiRiapreESiLegge() = runBlocking<Unit> {
     val file = SchemaFiles.create(context, schemaDir, 1, "faces-v1-con-dati.db") { db ->
       val k = "a".repeat(64)
       val p = "11111111-1111-4111-8111-111111111111"
@@ -126,6 +130,16 @@ class FacesSchemaTest {
       assertThat(database.groupingDao().exemplars()).hasSize(1)
       assertThat(database.groupingDao().assignments()).hasSize(1)
       assertThat(database.peopleDao().all()).hasSize(1)
+      // v1 -> v2: la provenienza delle voci di prima e' il loro autore, i segmenti letti non hanno attese, l'indice per autore c'e'.
+      assertThat(database.peopleDao().all().single().via).isEqualTo("dev-a")
+      assertThat(database.peopleDao().countVia("dev-a")).isEqualTo(1)
+      assertThat(database.peopleDao().direct()).hasSize(1)
+      assertThat(database.syncDao().replicaStates().single().attempts).isEqualTo(0)
+      assertThat(database.syncDao().replicaStates().single().retryAt).isNull()
+      assertThat(database.bodyDao().totalsOf("dev-a").bodies).isEqualTo(1)
+      database.openHelper.readableDatabase.query("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'index_face_body_author'").use {
+        assertThat(it.count).isEqualTo(1)
+      }
       assertThat(database.headMarkDao().get("dev-a")!!.version).isEqualTo(3)
       assertThat(database.outboxDao().count()).isEqualTo(1)
       assertThat(database.unitDao().get("priv", "2025-03", 0)!!.recipe).isEqualTo(1)

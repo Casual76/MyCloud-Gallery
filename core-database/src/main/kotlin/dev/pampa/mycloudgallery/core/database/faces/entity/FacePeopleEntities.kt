@@ -13,6 +13,10 @@ import androidx.room.PrimaryKey
  * **lapide**. Il **nome** di una persona (campo `name`) non sta mai in [value]: sta in [sealedValue], sigillato con la chiave dati; tutti
  * gli altri campi (id, localizzatori, `true`) hanno [value] in chiaro e [sealedValue] null. [atNas] = ora del NAS (null = "da datare":
  * vale subito qui, si data alla prima sincronizzazione), [author] = il dispositivo che l'ha scritta.
+ *
+ * [via] (schema v2, R3 delle correzioni della Fase 8) = la **provenienza**: il dispositivo che ha firmato il segmento da cui la voce e' arrivata
+ * (uguale ad [author] per le scelte fatte qui e per le voci lette dalla testa del loro autore). La revoca toglie per autore **e** per provenienza.
+ * NULL solo nelle righe scritte prima della v2: la migrazione le porta all'autore.
  */
 @Entity(tableName = "people_record", primaryKeys = ["subject", "field"])
 class PeopleRecordEntity(
@@ -22,6 +26,7 @@ class PeopleRecordEntity(
   @ColumnInfo(name = "sealed_value", typeAffinity = ColumnInfo.BLOB) val sealedValue: ByteArray?,
   @ColumnInfo(name = "at_nas") val atNas: Long?,
   @ColumnInfo(name = "author") val author: String,
+  @ColumnInfo(name = "via") val via: String? = null,
 ) {
   override fun toString(): String = "PeopleRecordEntity"
 }

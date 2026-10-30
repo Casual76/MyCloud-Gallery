@@ -43,6 +43,11 @@ internal object Realign {
     for (f in faces) atPlace.getOrPut(f.photo) { ArrayList() } += f
     val persons = LinkedHashMap(winner.persons)
     val assign = HashMap(winner.assignments)
+    // R6 (correzioni della Fase 8): le assegnazioni indicizzate per persona, una volta sola. Senza, ogni persona orfana scorreva tutte le
+    // assegnazioni: 10.000 orfane per 200.000 assegnazioni erano 2 miliardi di confronti a ogni passo.
+    val theirs = other.assignments.values.filter { it.origin != AssignOrigin.IGNORED }.groupBy { it.person }
+    val ours = HashMap<PersonId, MutableList<FaceRef>>()
+    for (a in assign.values) ours.getOrPut(a.person) { ArrayList() } += a.face
 
     /** Il volto corrente di un'assegnazione: lo stesso riferimento, o il primo volto nello stesso posto (D23). */
     fun currentOf(a: GroupAssignment): GroupFace? =
@@ -51,7 +56,7 @@ internal object Realign {
     fun live(a: GroupAssignment?) = a != null && a.origin != AssignOrigin.IGNORED
 
     for (p in orphans.filter { it.state == PersonState.ACTIVE }) {
-      val mine = other.assignments.values.filter { it.person == p.id && it.origin != AssignOrigin.IGNORED }.sortedBy { it.face }
+      val mine = theirs[p.id].orEmpty().sortedBy { it.face }
       val common = HashMap<PersonId, Int>()
       val free = ArrayList<Pair<GroupFace, GroupAssignment>>()
       val seen = HashSet<FaceRef>()
@@ -73,11 +78,16 @@ internal object Realign {
           val target = persons.getValue(q!!)
           persons[p.id] = GroupPerson(p.id, PersonState.ACTIVE, null, p.bornSeq, newSeq, target.exemplars)
           persons[q] = target.copy(state = PersonState.MERGED, aliasOf = p.id, exemplars = emptyList(), changedSeq = newSeq)
-          for (a in assign.values.filter { it.person == q }) assign[a.face] = a.copy(person = p.id)
+          val moved = ours.remove(q).orEmpty()
+          for (ref in moved) assign[ref] = assign.getValue(ref).copy(person = p.id)
+          ours.getOrPut(p.id) { ArrayList() } += moved
         }
         same -> persons[p.id] = GroupPerson(p.id, PersonState.MERGED, q, p.bornSeq, newSeq, emptyList())
         else -> {
-          for ((face, a) in free) assign[face.ref] = GroupAssignment(face.ref, face.locator, p.id, a.score, a.origin)
+          for ((face, a) in free) {
+            assign[face.ref] = GroupAssignment(face.ref, face.locator, p.id, a.score, a.origin)
+            ours.getOrPut(p.id) { ArrayList() } += face.ref
+          }
           val rows = free.map { it.first }.sortedBy { it.ref }
           persons[p.id] = GroupPerson(p.id, PersonState.ACTIVE, null, p.bornSeq, newSeq, exemplars(rows, params))
         }

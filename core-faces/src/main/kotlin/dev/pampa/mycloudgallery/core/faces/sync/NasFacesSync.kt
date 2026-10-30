@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.FacesSwitch
 import dev.pampa.mycloudgallery.core.faces.contract.FacesSync
 import dev.pampa.mycloudgallery.core.faces.contract.FacesSyncReport
 import dev.pampa.mycloudgallery.core.faces.contract.FacesSyncStop
+import dev.pampa.mycloudgallery.core.faces.contract.FacesTotals
 import dev.pampa.mycloudgallery.core.faces.contract.FacesWriteBlock
 import dev.pampa.mycloudgallery.core.faces.contract.FacesWriteGate
 import dev.pampa.mycloudgallery.core.faces.contract.FlushReason
@@ -61,7 +62,9 @@ interface FacesSnapshotSource {
  *    delle scritture e' aperto.
  *
  * Ogni errore scarta la testa o il segmento e non ferma gli altri dispositivi; un'eccezione dell'archivio (chiuso: la generazione e' cambiata
- * a meta') ferma il giro con [FacesSyncStop.NOT_FRESH]. Solo numeri e codici nel resoconto (D37). Lo stato e' in [store] (in memoria finche'
+ * a meta') ferma il giro con [FacesSyncStop.NOT_FRESH]. Correzioni della Fase 8 (pacchetto "formato e replica dei volti"): le voci `people`
+ * entrano con la loro provenienza e mai a nome mio da un altro (R3); un file che non si legge o che manca aspetta con attese crescenti e il giro va
+ * avanti (R5, R7), con un tetto alle richieste; i corpi degli altri hanno tetti per autore e in tutto (R6). Solo numeri e codici nel resoconto (D37). Lo stato e' in [store] (in memoria finche'
  * P6 non lega il database dei volti).
  */
 class NasFacesSync(
@@ -85,6 +88,9 @@ class NasFacesSync(
 
   /** Segmenti con voci "dal futuro": non si riscaricano prima dell'ora del NAS indicata (stessa regola dei dati personali). */
   private val futureHold = HashMap<Pair<String, String>, Long>()
+
+  /** R5: le teste che non si leggono (il NAS risponde, quel file no): per dispositivo, con attese crescenti. In memoria: costa una richiesta. */
+  private val headHold = HashMap<String, SegmentWait>()
 
   override suspend fun sync(budget: Duration): FacesSyncReport = lock.withLock {
     val tally = SyncTally()
@@ -136,6 +142,8 @@ class NasFacesSync(
     val order = rotate(listed).take(limits.maxDevices)
     val heads = FacesReadBudget(limits.maxHeadReads)
     val rules = PeopleRules(open.registry, open.account, nasNow)
+    val caps = BodyCaps(archive, limits)
+    val count = ReadCount()
     var stop = FacesSyncStop.COMPLETE
     for (device in order) {
       if (overBudget()) {
@@ -150,16 +158,28 @@ class NasFacesSync(
       tally.devicesRead++
       val previous = state.devices[device] ?: DeviceReplica()
       var current = previous
-      when (val read = FacesHeadSeries.readLatest(remote, open.registry, open.generation, device, previous.mark, open.account, heads, nasNow)) {
+      val held = headHold[device]?.takeIf { !it.due(nasNow) }
+      val read = if (held != null) FacesHeadRead.NoChange else {
+        FacesHeadSeries.readLatest(remote, open.registry, open.generation, device, previous.mark, open.account, heads, nasNow)
+      }
+      when (read) {
         is FacesHeadRead.Accepted -> {
+          headHold.remove(device)
           tally.headsAccepted++
           read.skipped.forEach { tally.head(it.name) }
           current = adopt(previous, read.head.head, read.head.mark)
         }
         is FacesHeadRead.Rejected -> tally.head(read.reason.name)
         is FacesHeadRead.Failed -> if (isFatal(read.failure)) {
-          stop = FacesSyncStop.UNAVAILABLE
-          break
+          // R5: una testa che non si legge ferma il giro solo se il NAS non risponde nemmeno a un elenco; altrimenti aspetta e si va avanti
+          // (con i segmenti della testa gia' nota).
+          if (!nasAnswers(open, count)) {
+            stop = FacesSyncStop.UNAVAILABLE
+            break
+          }
+          tally.head(CODE_UNREADABLE)
+          val attempts = (headHold[device]?.attempts ?: 0) + 1
+          headHold[device] = SegmentWait(attempts, nasNow + SegmentWait.delayAfter(attempts))
         }
         FacesHeadRead.OutOfBudget -> {
           stop = FacesSyncStop.BUDGET
@@ -167,7 +187,7 @@ class NasFacesSync(
         }
         FacesHeadRead.NoChange, FacesHeadRead.None -> Unit
       }
-      val step = readSegments(open, archive, device, current, rules, tally, overBudget)
+      val step = readSegments(open, archive, device, current, rules, tally, overBudget, caps, count)
       if (step.stop == FacesSyncStop.NOT_FRESH) {
         // La generazione non e' piu' la corrente: niente si salva per lei.
         stop = FacesSyncStop.NOT_FRESH
@@ -201,7 +221,7 @@ class NasFacesSync(
     val fresh = barred - loaded.revoked
     if (fresh.isEmpty()) return loaded
     archive.dropAuthors(fresh)
-    val devices = loaded.devices.filterKeys { it !in barred }.mapValues { (_, d) -> d.copy(done = emptySet(), counts = emptyMap(), checked = null) }
+    val devices = loaded.devices.filterKeys { it !in barred }.mapValues { (_, d) -> d.copy(done = emptySet(), counts = emptyMap(), checked = null, waits = emptyMap()) }
     val state = FacesReplicaState(devices, loaded.revoked + fresh)
     store.save(open.generation, state)
     return state
@@ -240,6 +260,7 @@ class NasFacesSync(
       cluster = previous.cluster.filterKeys { it in cluster },
       snapshot = if (head.snapshot == null) null else previous.snapshot,
       snapshotHead = if (head.snapshot == null) null else previous.snapshotHead,
+      waits = previous.waits.filterKeys { it in hashes },
     )
   }
 
@@ -247,10 +268,44 @@ class NasFacesSync(
 
   private class Step(val replica: DeviceReplica, val stop: FacesSyncStop?)
 
+  /** R5: le richieste di segmenti di questo giro (tutti i dispositivi insieme). */
+  private class ReadCount(var reads: Int = 0)
+
   /**
-   * I segmenti non ancora fatti della testa di [device]: al piu' [FacesSyncLimits.maxBytesPerDevice] per dispositivo (il resto al giro dopo)
-   * e [FacesSyncLimits.maxBytesPerRound] per giro. Un segmento rifiutato (impronta, forma, tetti) e' fatto per sempre: un segmento e' il suo
-   * contenuto, riscaricarlo darebbe lo stesso rifiuto. Uno che manca o che il NAS non da' si riprova.
+   * R6: i tetti dei corpi che arrivano dagli altri dispositivi ([FacesSyncLimits], di serie `FacesArchiveLimits`): i conti dell'archivio si leggono una volta per giro (in
+   * tutto) e per dispositivo, poi si tengono a mano con quello che si scrive. Un corpo che sostituisce quello dello stesso autore e contenuto
+   * conta solo per la differenza.
+   */
+  private class BodyCaps(private val archive: FacesArchive, private val limits: FacesSyncLimits) {
+    private var total: FacesTotals? = null
+    private val authors = HashMap<String, FacesTotals>()
+
+    /** Null se [delta] di [author] sta nei tetti; altrimenti il codice del tetto superato. */
+    suspend fun refusal(author: String, delta: FacesTotals): String? {
+      val mine = authors[author] ?: archive.bodyTotals(author).also { authors[author] = it }
+      val all = total ?: archive.bodyTotals(null).also { total = it }
+      val nextMine = mine + delta
+      val nextAll = all + delta
+      return when {
+        nextMine.bodies > limits.maxBodiesPerAuthor || nextMine.formatBytes > limits.maxBytesPerAuthor -> CODE_AUTHOR_FULL
+        nextAll.bodies > limits.maxBodiesTotal || nextAll.formatBytes > limits.maxBytesTotal -> CODE_ARCHIVE_FULL
+        else -> null
+      }
+    }
+
+    fun add(author: String, delta: FacesTotals) {
+      authors[author] = (authors[author] ?: FacesTotals.ZERO) + delta
+      total = (total ?: FacesTotals.ZERO) + delta
+    }
+  }
+
+  /**
+   * I segmenti non ancora fatti della testa di [device]: al piu' [FacesSyncLimits.maxBytesPerDevice] byte e
+   * [FacesSyncLimits.maxSegmentReadsPerDevice] richieste per dispositivo (il resto al giro dopo), [FacesSyncLimits.maxBytesPerRound] byte e
+   * [FacesSyncLimits.maxSegmentReadsPerRound] richieste per giro. Un segmento rifiutato per il contenuto (forma, tetti) e' fatto per sempre: un
+   * segmento e' il suo contenuto, riscaricarlo darebbe lo stesso rifiuto. R5 e R7: uno assente, illeggibile o letto male (impronta o dimensione
+   * sbagliate: una lettura corta, un file sostituito dal PC) **aspetta** con attese crescenti ([SegmentWait], durevole) e il giro va avanti; letto
+   * male tre volte, e' rifiutato per sempre. Un errore del NAS su un file ferma il giro solo se il NAS non risponde nemmeno a un elenco.
    */
   private suspend fun readSegments(
     open: FacesGate.Open,
@@ -260,9 +315,13 @@ class NasFacesSync(
     rules: PeopleRules,
     tally: SyncTally,
     overBudget: () -> Boolean,
+    caps: BodyCaps,
+    count: ReadCount,
   ): Step {
     var replica = start
     var deviceBytes = 0L
+    var deviceReads = 0
+    val nasNow = rules.nasNow
     for (segment in start.segments) {
       val hash = segment.ref.hash
       if (hash in replica.done) continue
@@ -270,23 +329,36 @@ class NasFacesSync(
       // La generazione che cambia a meta' ferma anche la lettura dei segmenti: niente nell'archivio di una generazione non corrente.
       if (!guard.stillOpen(open)) return Step(replica, FacesSyncStop.NOT_FRESH)
       val hold = futureHold[device to hash]
-      if (hold != null && rules.nasNow < hold) continue
+      if (hold != null && nasNow < hold) continue
+      if (replica.waits[hash]?.due(nasNow) == false) continue
       val size = segment.ref.size
-      if (deviceBytes + size > limits.maxBytesPerDevice) break
-      if (tally.bytesRead + size > limits.maxBytesPerRound) return Step(evaluate(replica, tally), FacesSyncStop.BUDGET)
+      if (deviceBytes + size > limits.maxBytesPerDevice || deviceReads >= limits.maxSegmentReadsPerDevice) break
+      if (tally.bytesRead + size > limits.maxBytesPerRound || count.reads >= limits.maxSegmentReadsPerRound) {
+        return Step(evaluate(replica, tally), FacesSyncStop.BUDGET)
+      }
+      deviceReads++
+      count.reads++
       val fetched = when (val read = remote.readSegment(open.generation, device, hash, size.toInt())) {
-        is RemoteResult.Failed -> if (isFatal(read.failure)) return Step(evaluate(replica, tally), FacesSyncStop.UNAVAILABLE) else continue
+        is RemoteResult.Failed -> {
+          if (!isFatal(read.failure)) continue
+          // R5: un file che non si legge (un'ACL, un file aperto in esclusiva dal PC) non ferma il giro se il NAS risponde ancora.
+          if (!nasAnswers(open, count)) return Step(evaluate(replica, tally), FacesSyncStop.UNAVAILABLE)
+          tally.segment(CODE_UNREADABLE)
+          replica = replica.waiting(hash, nasNow)
+          continue
+        }
         is RemoteResult.Ok -> read.value
       }
       if (!guard.stillOpen(open)) return Step(replica, FacesSyncStop.NOT_FRESH)
       replica = when (fetched) {
         FacesRead.NotFound -> {
+          // R5: elencato e assente. Si richiede con attese crescenti (la sua testa resta quella), mai a ogni giro.
           tally.segment(CODE_MISSING)
-          continue
+          replica.waiting(hash, nasNow)
         }
         FacesRead.TooLarge -> {
           tally.segment(RejectReason.HASH_MISMATCH.name)
-          replica.markDone(hash, 0)
+          replica.badRead(hash, nasNow)
         }
         is FacesRead.Data -> {
           deviceBytes += size
@@ -294,9 +366,10 @@ class NasFacesSync(
           when (val verdict = FacesDocs.decodeSegment(fetched.bytes, segment.ref, segment.cls)) {
             is Verdict.Rejected -> {
               tally.segment(verdict.reason.name)
-              replica.markDone(hash, 0)
+              // R7: impronta o dimensione sbagliate possono essere una lettura corta o un file sostituito e poi rimesso: si riprova.
+              if (verdict.reason == RejectReason.HASH_MISMATCH) replica.badRead(hash, nasNow) else replica.markDone(hash, 0)
             }
-            is Verdict.Accepted -> apply(archive, device, replica, hash, verdict.value, rules, tally)
+            is Verdict.Accepted -> apply(archive, device, replica, hash, verdict.value, rules, tally, caps)
           }
         }
       }
@@ -304,10 +377,17 @@ class NasFacesSync(
     return Step(evaluate(replica, tally), null)
   }
 
+  /** R5: dopo un errore su un file, il NAS risponde ancora a un elenco? (Una richiesta in piu', contata nel tetto del giro.) */
+  private suspend fun nasAnswers(open: FacesGate.Open, count: ReadCount): Boolean {
+    count.reads++
+    return remote.devices(open.generation) is RemoteResult.Ok
+  }
+
   /**
-   * Il contenuto di un segmento accettato. Corpi: nell'archivio con l'autore = il firmatario della testa. Voci `people`: solo quelle con un
-   * autore dell'account non revocato e un'ora non nel futuro (le altre si contano; una voce "dal futuro" fa riprovare il segmento piu' tardi).
-   * Voci `cluster`: tenute per l'istantanea del dispositivo. Tetti per dispositivo: un segmento oltre e' rifiutato (`TOO_LARGE`).
+   * Il contenuto di un segmento accettato. Corpi: nell'archivio con l'autore = il firmatario della testa, nei tetti per autore e in tutto (R6).
+   * Voci `people`: solo quelle con un autore dell'account non revocato e un'ora non nel futuro; entrano con la **provenienza** = [device] (R3),
+   * nei tetti dell'archivio, e una copia a nome mio portata da un altro non sostituisce mai una mia scelta. Voci `cluster`: tenute per l'istantanea del
+   * dispositivo. Tetti per dispositivo: un segmento oltre e' rifiutato (`TOO_LARGE`).
    */
   private suspend fun apply(
     archive: FacesArchive,
@@ -317,27 +397,44 @@ class NasFacesSync(
     content: FacesSegmentContent,
     rules: PeopleRules,
     tally: SyncTally,
+    caps: BodyCaps,
   ): DeviceReplica {
     val clusterHashes = replica.segments.filter { it.cls == SegmentClass.CLUSTER }.mapTo(HashSet()) { it.ref.hash }
     val used = replica.counts.filterKeys { it !in clusterHashes }.values.sum()
+    val mineHere = device == identity.deviceId
     return when (content) {
       is FacesSegmentContent.Bodies -> {
         if (used + content.size > limits.maxEntriesPerDevice) {
           tally.segment(RejectReason.TOO_LARGE.name)
           return replica.markDone(hash, 0)
         }
+        val keys = content.entries.map { it.contentKey }
+        if (!mineHere) {
+          // R6: i tetti contano la differenza con i corpi che lo stesso autore ha gia' per quei contenuti.
+          val incoming = FacesTotals(content.entries.size, content.entries.sumOf { it.body.faces.size.toLong() })
+          val delta = incoming - archive.bodyTotals(device, keys)
+          when (val refused = caps.refusal(device, delta)) {
+            null -> caps.add(device, delta)
+            // Il dispositivo ha gia' i suoi tetti pieni: il segmento e' rifiutato (una testa onesta non ci arriva mai).
+            CODE_AUTHOR_FULL -> {
+              tally.segment(refused)
+              return replica.markDone(hash, 0)
+            }
+            // L'archivio e' pieno: si riprova piu' tardi (una revoca o un contenuto tolto fanno posto).
+            else -> {
+              tally.segment(refused)
+              return replica.waiting(hash, rules.nasNow)
+            }
+          }
+        }
         // I corpi della mia testa: l'archivio di qui e' la fonte (un ricalcolo non ancora pubblicato e' piu' nuovo). Si riprendono solo
         // quelli che qui mancano (dopo la perdita dello stato locale), mai sopra un corpo mio.
-        val mine = if (device == identity.deviceId) {
-          archive.bodiesOf(device, content.entries.map { it.contentKey }).keys
-        } else {
-          emptySet()
-        }
+        val mine = if (mineHere) archive.bodiesOf(device, keys).keys else emptySet()
         for (entry in content.entries) {
           if (entry.contentKey in mine) continue
           archive.saveBody(FacesWire.body(entry.contentKey, device, entry.body, entry.digest))
         }
-        if (device == identity.deviceId) (publisher as? NasFacesPublisher)?.ownBodies(archive.generation, content.entries.map { it.contentKey })
+        if (mineHere) (publisher as? NasFacesPublisher)?.ownBodies(archive.generation, keys)
         replica.markDone(hash, content.size)
       }
       is FacesSegmentContent.People -> {
@@ -358,7 +455,12 @@ class NasFacesSync(
             else -> tally.segment(verdict.code)
           }
         }
-        if (valid.isNotEmpty()) archive.addPeople(valid)
+        if (valid.isNotEmpty()) {
+          // R3: una voce a nome mio portata da un altro (la copia che un dispositivo onesto ripubblica, o una falsa) non sostituisce mai una mia
+          // scelta: io resto la fonte che, dopo una revoca, rimette il valore vero. Se la voce qui non c'e' (stato locale perso), torna da loro.
+          val refused = archive.addPeopleFrom(device, valid, own = identity.deviceId)
+          if (refused > 0) repeat(refused) { tally.segment(CODE_PEOPLE_FULL) }
+        }
         if (retryAt != null) {
           futureHold[device to hash] = retryAt
           replica
@@ -378,7 +480,20 @@ class NasFacesSync(
     }
   }
 
-  private fun DeviceReplica.markDone(hash: String, entries: Int): DeviceReplica = copy(done = done + hash, counts = counts + (hash to entries))
+  private fun DeviceReplica.markDone(hash: String, entries: Int): DeviceReplica =
+    copy(done = done + hash, counts = counts + (hash to entries), waits = waits - hash)
+
+  /** R5: il segmento aspetta (assente, illeggibile, archivio pieno): un tentativo in piu', l'attesa raddoppia. */
+  private fun DeviceReplica.waiting(hash: String, nasNow: Long): DeviceReplica {
+    val attempts = (waits[hash]?.attempts ?: 0) + 1
+    return copy(waits = waits + (hash to SegmentWait(attempts, nasNow + SegmentWait.delayAfter(attempts))))
+  }
+
+  /** R7: una lettura sbagliata (impronta o dimensione): si riprova con attese crescenti, e dopo [SegmentWait.MAX_BAD_READS] e' rifiutato per sempre. */
+  private fun DeviceReplica.badRead(hash: String, nasNow: Long): DeviceReplica {
+    val attempts = (waits[hash]?.attempts ?: 0) + 1
+    return if (attempts >= SegmentWait.MAX_BAD_READS) markDone(hash, 0) else waiting(hash, nasNow)
+  }
 
   /**
    * L'istantanea della testa del dispositivo, quando tutti i suoi segmenti `cluster` sono fatti (D21): tutte le voci insieme, con le regole
@@ -437,7 +552,10 @@ class NasFacesSync(
     val (archive, list) = candidates(generation) ?: return emptyList()
     val winners = archive.winners(list.flatMap { (_, doc) -> doc.assignments.map { it.face.contentKey } }.toSet())
     list.sortedBy { it.first.device }.map { (candidate, doc) -> ClusterSnapshot(candidate.device, FacesWire.resolve(candidate.device, doc, winners).state) }
-  } catch (closed: IllegalStateException) {
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    // I5: un archivio chiuso a meta' o un errore del database (O1) danno la lista vuota, mai un'eccezione per chi chiama.
     emptyList()
   }
 
@@ -452,7 +570,10 @@ class NasFacesSync(
     val winner = FacesFusion.winner(list.map { it.first }) ?: return null
     val doc = list.first { it.first == winner }.second
     FacesWire.resolve(winner.device, doc, archive.winners(doc.assignments.mapTo(HashSet()) { it.face.contentKey }))
-  } catch (closed: IllegalStateException) {
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    // I5: come [latest].
     null
   }
 
@@ -463,6 +584,16 @@ class NasFacesSync(
 
   private companion object {
     const val CODE_MISSING = "MISSING"
+
+    /** R5: un file (testa o segmento) che il NAS non da' mentre risponde a un elenco: aspetta. */
+    const val CODE_UNREADABLE = "UNREADABLE"
+
+    /** R6: i corpi di un autore oltre i suoi tetti (segmento rifiutato) o l'archivio pieno (segmento rimandato). */
+    const val CODE_AUTHOR_FULL = "AUTHOR_FULL"
+    const val CODE_ARCHIVE_FULL = "ARCHIVE_FULL"
+
+    /** R3: voci `people` che non entrano nell'archivio per i tetti (in tutto o per provenienza). */
+    const val CODE_PEOPLE_FULL = "PEOPLE_FULL"
     const val CODE_SNAPSHOT_INCOMPLETE = "SNAPSHOT_INCOMPLETE"
     const val CODE_SNAPSHOT_PREFIX = "SNAPSHOT_"
   }

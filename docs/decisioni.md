@@ -12250,3 +12250,126 @@ e che **senza il filtro finale la proprieta' diventa rossa** (provato). `HiddenS
 - `HiddenSurfacesPropertyTest` dura circa 100 s in piu' di prima: le sonde `MEMORIES` costruiscono il motore vero e fanno girare le schermate vere su tre "oggi" per ogni mondo casuale.
 
 **Verifica**: `tools\check.ps1 -NoDaemon` (con `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, un posto Gradle tenuto per tutta la durata) e' finito con **OK: tutto a posto** (codice di uscita 0, tutti i passi OK, `-Bench` saltato per scelta): assembleDebug, assembleRelease, galleryTest e galleryLint in circa 21 minuti, nessun modulo a zero test (`feature-memories` = 296, `app` = 1158) e nessun resto dei ricordi nel dex di release.
+
+
+## Fase 9 P4: schermate della mappa (30/10)
+
+Il pacchetto P4 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P4; §1.5, §2.5, §2.7, §2.8, §2.10, §2.11, D24, D28-D31, D33, D34, §4.3; risposta **Q1 (c)** del §11). Branch `fase9/p4`. Consegna **cio' che l'utente vede della
+mappa**, sopra i contratti di P0, il cancello e MapLibre di P1, la carta di base di P2 e i punti di P3: la pagina della mappa con le bolle, la griglia di una zona e di un luogo, la sezione Luoghi delle Raccolte, la mini-mappa e la
+riga "Mostra sulla mappa" nelle info del viewer, Impostazioni -> Mappa con l'interruttore e la nota breve, la voce "Mappa" in `feature-settings` e la riga `MAP` del registro dei Nascosti con le sue sonde. Il montaggio in `:app`
+(`MapGraph`, porte vere) resta di **P13**: le porte sono pronte e opzionali per Dagger. Nessun permesso, componente, dipendenza o host nuovo; **`feature-map/.../net/`, `MapLibreInit.kt`, `versions-app.gradle`,
+`verification-metadata.xml` e i contratti di `core-map` non sono stati toccati** (il cancello `MapRequestGate` e' com'era). Nessun contratto di P0, P1, P2 o P3 e' cambiato.
+
+**Come e' fatto (`feature-map`)**
+- **Una superficie, due mappe.** Il controllore, le bolle e le schermate non parlano con MapLibre ma con una `MapSurface` (`map/MapSurface.kt`: vista, proiezione di un punto, comandi di camera, un contatore di fotogrammi). La mappa
+  **vera** (`MapLibreSurface`, `MapLibreSurfaceContent`) e la **finta** (`testing/FakeMapSurface`: Mercatore a tessere da 512 dp come MapLibre e `GeoGrid`, `pan`, `zoomTo`, `settle`) la implementano. MapLibre non si disegna in
+  Robolectric: gli screenshot e i test di composizione usano la finta; la vera si prova sul telefono. I soli file che chiamano MapLibre sono `MapLibreSurface.kt` e `mini/MapLibreMiniMap.kt`.
+- **Istantaneo** (principio "Avvio e pagine istantanei"). Il primo fotogramma della pagina ha subito i controlli, il titolo, il credito e "Cerco le foto con la posizione..."; la carta (`MapView`) nasce solo quando la camera e' decisa e
+  MapLibre parte **dopo il primo fotogramma** (`MapEngineStarter`, con il nostro client gia' installato da `MapLibreInit.ensure`), mai nella composizione che apre la pagina; l'indice dei punti si costruisce fuori dal thread principale
+  all'apertura (`MapPoints.rebuild(OPEN)`), mai all'avvio dell'app. La **riga "Mappa" di Luoghi c'e' subito** (senza numeri), i conti arrivano dall'indice, calcolati fuori dal thread principale e solo quando qualcuno guarda
+  (`SharingStarted.Lazily`). La griglia ha subito lo scheletro con il suo titolo.
+- **Camera** (D29, `MapCameraPolicy`): l'ultima posizione salvata **solo in locale** (si parte da quella senza aspettare l'indice, dopo aver atteso la lettura del file); la prima volta tutte le foto (`boundsOfAll`) con lo zoom **non
+  oltre 5** (`FIRST_MAX_ZOOM`, provato su 2.000 riquadri a caso e per un punto solo), mai la casa; senza punti il mondo. Si salva dopo 1 s di calma e **subito uscendo dalla pagina** (`flushCamera`); a ogni sosta si aggiorna anche il
+  punto di partenza in memoria, cosi' una mappa ricreata (rotazione, E-MAP17) riparte da dov'era. Nord in alto: niente rotazione ne' inclinazione, `uiSettings` spenti.
+- **Bolle** (D28, `BubbleEngine`): dalle celle di `GeoClusterIndex` a **al piu' 60** (le piu' grandi, a parita' la chiave minore), ordinate per cella (stabili per `key`), con il conto, la copertina **dopo il filtro finale dei
+  Nascosti** e, per le celle da 30 elementi in su e solo per le 12 piu' grandi, il nome del luogo (`MapLabels`: **mai "Casa"/"Home"**, per parola). Il calcolo non tiene il thread principale (`compute`, `Dispatchers.Default`) e si
+  rifa **a camera ferma o al cambio di mezzo livello** della griglia (`onIdle`/`onMoved`), mai a ogni fotogramma; quando l'indice cambia si rifa da solo (E-MAP15). Una copertina che la Libreria non sa disegnare (membro non
+  copertina di un gruppo) cede il posto a un altro media della cella. Il tocco (`BubbleTap`): da 30 elementi in giu', o vicino al massimo, la griglia della zona; altrimenti la camera si avvicina di 2 livelli (mai oltre il massimo).
+- **Bolle senza nuova misura** (`BubbleLayer`): ogni bolla e' un composable misurato **una volta**; la posizione non e' un `offset` ne' un `padding` ma la **traslazione del layer grafico**, riletta dentro il layer a ogni fotogramma
+  (`surface.frame` e `surface.project`, che MapLibre risolve con `projection.toScreenLocation`): un gesto sposta le bolle senza ricomporre e senza toccare il layout. Test di composizione (`MapScreensTest`): 5 fotogrammi di
+  movimento, **zero misure in piu'** (`LayoutProbe`) e le bolle spostate di 300 x 100 px come la camera. Le miniature si chiedono solo quando cambia l'insieme delle bolle, mai durante il gesto (`loader.window`, una finestra sola);
+  la porta `MapRefs` da' solo sorgenti locali.
+- **Accessibilita'**: la frase di TalkBack di una bolla e' "12 foto, Firenze" (o "1.240 foto", "1 foto"), bersagli da 56 dp (le bolle), 48 dp (i tasti e le righe), a testo 1,3x niente sovrapposizioni (`MapScreensTest`); il credito e le
+  righe di stato sono regioni vive. Controlli e righe su **superfici piene**, mai vetro sopra la carta.
+- **Stile e avvisi** (`MapStyles`, `MapNotices`): stile **online** se la mappa dettagliata e' accesa (anche senza rete: la carta di base sta sotto e la cache resta) o se c'e' una regione (anche parziale: le sue tessere sono nel
+  database di MapLibre), **offline** a mappa spenta e senza regioni (cosi' non c'e' mai la terra senza mare oltre z8; zoom fermo a 9). Il **credito** e' una scritta della pagina (`PlacesAttribution.MAP_ONLINE_SHORT` o
+  `MAP_BASE_SHORT`, L430), **l'attribuzione di MapLibre e il suo logo sono spenti** (il pulsante apre il browser). I livelli di P4 vanno sopra tutti gli altri e dopo il caricamento dello stile: la **selezione** di "Mostra sulla mappa"
+  (un `CircleLayer` con i colori del tema); le bolle sono composable (D28). Avvisi (§2.10, una riga discreta, mai un dialogo): spenta -> "Carta semplice · Mappa dettagliata" (apre Impostazioni -> Mappa); dati mobili con "Solo sul
+  Wi-Fi" -> "Mappa dettagliata solo sul Wi-Fi"; roaming o nessuna rete -> "Nessuna rete: la carta semplice e le zone scaricate"; con l'interruttore di build spento nessuna riga che offra la mappa.
+- **Griglia di una zona o di un luogo** (`grid/`): `IndexOrderedTimelineView` degli elementi **dal piu' recente** (l'ordine dell'istantanea), **viva** (si rifa a ogni cambio dell'istantanea e dell'indice), con il filtro finale dei
+  Nascosti subito prima di mostrare; una zona e' una cella della bolla (`ZoneDestination(level, prefix)`), un luogo le celle dell'istantanea con quel `place_id`; il nome e' quello del luogo (o il piu' frequente nella zona, mai
+  "Casa"), altrimenti "Questa zona". Al piu' 50.000 elementi (E-MAP9: migliaia nello stesso punto sono una bolla, la griglia scorre come la Libreria). Un tocco apre il viewer (`MapActions.openViewer(view, start)`).
+- **Luoghi** (`places/`): la riga "Mappa" (codice `map`, "9.000 foto con la posizione"), **fino a 8 luoghi** (codici `place_<id GeoNames>`: nome e numero, **solo con un nome**, mai "Casa"), "1.240 foto senza posizione"; i luoghi si
+  contano sommando per `place_id` le celle dell'indice all'ultimo livello (centomila punti: poche decine di ms, fuori dal thread principale). Il dato ha la forma di `CollectionEntryGroup` campo per campo (come Persone e Ricordi) e
+  `PlacesSectionTest` lo prova su un fornitore vero di feature-library (codice `places`, subito dopo `memories`, nascondibile, il layout la tiene anche prima dei numeri).
+- **Impostazioni -> Mappa** (`privacy/`, Q1 (c)): l'interruttore della mappa dettagliata con la nota breve (`MapPrivacyNote`, versione 1: "OpenFreeMap riceve l'indirizzo della tua connessione e la zona che stai guardando. Non riceve le tue
+  foto ne' la loro posizione. La scelta vale solo su questo dispositivo"), "Solo sul Wi-Fi" (con l'avviso sul consumo quando e' spento; non c'e' a mappa spenta), "Zone senza Internet" (apre le regioni di P5). **`MapOnlineChoice` la costruisce
+  solo `MapPrivacyController`** (riaccendere dopo un tocco); spegnere non chiede niente e chiama `MapRegions.pauseAll()` (E-MAP20). `DataStoreMapSettings` (locale, mai sincronizzata) sta in `noBackupFilesDir/map/settings/` (cosi' l'azzeramento
+  di `map/` la toglie, camera compresa); accesa di serie (`On(byDefault = true)`), file rovinato o valore sconosciuto = di serie; con l'interruttore di build spento `Unavailable` qualunque cosa dica il file; senza legame `NoMapSettings`
+  non salva niente.
+- **Mini-mappa** (`mini/`): `MiniMapService` (posizione dalla porta `MapMediaPositions`, mai per un nascosto, ultime sei immagini **solo in memoria**) e `MapLibreMiniMap` (`MapSnapshotter` con lo stile `style-*-offline.json`: nessuna sorgente
+  online, **nessuna richiesta**; 320 x 160 dp, un segno sul punto). Il viewer non vede core-map: `:app` lega `MiniMapService` alla sua porta `ViewerPlaceMap`.
+- **`feature-viewer`** (`info/PlaceMapInfo.kt`, `rememberPlaceMapPanel`): sotto il luogo, **solo con una posizione**, la mini-mappa con il credito "Natural Earth · GeoNames" e la riga "Mostra sulla mappa" (che apre la mappa vera); "Apri in
+  Mappe" resta; per un media aperto dai Nascosti (`ViewerRequest.secure`) la porta **non viene nemmeno chiamata**. Fuori da `info/` ho toccato **solo `ViewerOverlay.kt`**: 3 righe per montare il pannello (come `rememberPeoplePanel`).
+- **`feature-settings`** (`map/MapEntry.kt`): la voce "Mappa" nella sezione "Protezione" (decide cosa esce), come callback nullable `SettingsLinks.openMap` e `settingsGraph(openMap = ...)`; senza la callback la voce non c'e'. Lo stato e' una
+  frase ("Mappa dettagliata accesa", "spenta: la carta semplice dentro l'app", "Solo la carta semplice dentro l'app"), mai un luogo o un numero.
+
+**Registro dei Nascosti** (`HiddenSurfaces`, riga `MAP`, D31). Quattro superfici (`map-points`, `map-zone`, `places-section`, `viewer-minimap`); `FinalFilter` e' l'unico file di `feature-map` che nomina `HiddenMask` (piu' `MapDependencies`, dove `:app`
+lega la maschera, e `ZoneGridController`, che legge l'istantanea di `VisibleMedia`). La sonda (`RealMapProbes`, `RealMapProbeTest`, file nuovi sotto `app/src/test/.../hidden/`) costruisce la **catena vera dei punti** (la query
+`MapPointsQueries` di core-database, `PagedMapPointSource`, `GeoMapPoints`: quello che montera' P13) sul catalogo vero del mondo casuale, con coordinate e luoghi **inventati** scritti nelle tabelle di una copia privata (citta' pubbliche,
+qualche media senza posizione, due tipi di coordinata assurda, E-MAP7), e le **schermate vere** sopra. Dopo l'indice **il catalogo nasconde le copertine delle bolle piu' grandi e un elemento in mezzo** (senza che indice e istantanea lo sappiano) e ogni
+superficie deve toglierli; poi `HIDDEN_CHANGED` e l'indice rifatto dalla query deve avere conteggi, senza posizione, scartati e luoghi **esatti** (oracolo dalla descrizione del mondo, mai dal codice). La proprieta' e' **verde** su 12 mondi
+(piu' i 40 del registro) e **rossa togliendo il filtro finale** (provato: almeno 3 mondi su 4 su 10 diventano rossi). `HiddenSurfacesPropertyTest` non e' stato toccato.
+
+**Modifiche fuori dal perimetro, minime e dichiarate**
+- `app/build.gradle`: `testImplementation project(':core-map')` e `project(':feature-map')` (serve alla sonda; `:app` non dipende ancora da `:feature-map`, lo fara' P13 con `implementation`). Sono configurazioni di test: `Phase9ArchitectureTest` guarda solo
+  le dipendenze di produzione.
+- `HiddenSurfaces.kt` (`SpecRow.MAP`, le quattro righe, i sorgenti `MAP_SOURCES`).
+- `feature-viewer/.../ViewerOverlay.kt` (3 righe), `feature-settings/.../SettingsScreen.kt` e `SettingsNavigation.kt` (la voce e il parametro).
+
+**Edge case**
+| ID | Dove e' provato |
+|---|---|
+| E-MAP1 (mappa spenta) | stile offline e avviso (`MapCameraAndStylesTest`); zero richieste e' del cancello di P1 (non toccato); la mini-mappa non ha la sorgente online (test sul JSON dei due stili) |
+| E-MAP2, E-R3, E-R13 (dati mobili, roaming) | `MapNotices` (tabella), `MapControllerTest.gliStatiDellaPaginaSeguonoLIndiceEL_Avviso`, screenshot `mappa-solo-wifi` e `mappa-senza-rete` |
+| E-MAP5 (senza posizione) | `MapScreenState.Empty` e Luoghi `NoGps` (`MapControllerTest`, `PlacesSectionTest`, screenshot `mappa-vuota`, `luoghi-senza-posizione`); il conto vero e' esatto nella sonda |
+| E-MAP6 (solo NAS) | le bolle usano solo `MapRefs` locali (segnaposto senza sorgente); il viewer lo apre `:app` come dalla Libreria; la griglia comprende i media solo-NAS dell'istantanea |
+| E-MAP7 (coordinate assurde) | sonda `RealMapProbeTest` ((0, 0) e oltre 85 gradi scritte nel catalogo, scartate e contate); `MapPointValidity` in `DataStoreMapSettings.cameraOf` |
+| E-MAP8 (luogo corretto) | porta `MapMediaPositions` (P13 la lega alla riga `version_metadata`, la stessa del pannello info) |
+| E-MAP9 (migliaia nello stesso punto) | una bolla (indice di P3), griglia fino a 50.000 con lista pigra |
+| E-MAP10 (antimeridiano, poli) | `MapViewportMath.boxOf` (`MapCameraAndStylesTest.ilRiquadroConLAntimeridianoEIlSuoCentro`), antimeridiano e poli dell'indice sono di P3 |
+| E-MAP15, E-H9 (un nascosto con la mappa aperta) | `BubbleEngineTest`, `MapControllerTest.quandoLIndiceCambiaLeBolleSiRifannoDaSole`, `ZoneGridControllerTest.unNascostoEsceSubitoDallaGrigliaViva...`, sonda `RealMapProbeTest` (verde e rossa) |
+| E-MAP16 (mini-mappa senza zona scaricata) | solo carta di base, mai in rete (`MapCameraAndStylesTest`, `MiniMapServiceTest`) |
+| E-MAP17 (rotazione, finestre, tablet) | il ViewModel tiene controllore e camera (`initial` aggiornato a ogni sosta); screenshot telefono e tablet |
+| E-MAP18 (foto di casa) | `MapLabels` (per parola), `BubbleEngineTest`, `PlacesSectionTest.nessunaVoceDirraMaiLaParolaCasa`, nessuna lettura di `home_estimate` (regola 6 verde) |
+| E-MAP19 ("Mostra sulla mappa") | `MapControllerTest.ilFuocoVaSulPuntoDelMedia_MaMaiSeEUnNascosto`, `ViewerPlaceMapInfoTest` |
+| E-MAP20 (mappa spenta durante uno scaricamento) | `MapSettingsAndPrivacyTest.spegnereFermaGliScaricamentiInCorso_E20` |
+| E-L14 (Luoghi in coda a un ordine salvato) | lo fa `CollectionSections` di feature-library (P0); qui il codice `places` e' provato |
+| E-V6 (media eliminato mentre si guarda dalla griglia) | la griglia viva lo toglie al cambio dell'istantanea; il viewer si chiude gentile (di `:app`) |
+
+**Prove**: `feature-map` +83 prove JVM e Robolectric (`MapCameraAndStylesTest` 10, `MapControllerTest` 8, `BubbleEngineTest` 7, `MapScreensTest` 12, `MapSettingsAndPrivacyTest` 11 sul DataStore vero, `MiniMapServiceTest` 4, `PlacesSectionTest` 9,
+`ZoneGridControllerTest` 7, `NoHandWrittenStyleTest` 11, `NoNamesInToStringTest` 4) e gli screenshot (`MapPhoneScreenshotTest`, `MapTabletScreenshotTest`); `feature-viewer` `ViewerPlaceMapInfoTest` 12; `feature-settings` `MapEntryTest` 5; `:app`
+`RealMapProbeTest` 4. **I test d'architettura delle Fasi 6-9 sono verdi** (`NoNetworkSourcesTest` di feature-map compreso: nessun codice di rete fuori da `net/`).
+
+**Screenshot** (`docs/screenshots/9-P4/`, Roborazzi con `FakeMapSurface`, `gradlew :feature-map:recordRoborazziDebug --tests "*ScreenshotTest*"`): ogni stato del §1.5 della mappa (primo fotogramma, in caricamento, pronta con le bolle, carta semplice, solo
+sul Wi-Fi, senza rete, vuota, con la selezione), la griglia (scheletro, con e senza nome, vuota), Luoghi (primo fotogramma, pronta, senza posizione), Impostazioni -> Mappa (accesa, spenta, non disponibile); chiaro e scuro, telefono e tablet, piu' il
+testo a 1,3x sul telefono; in piu' le info del viewer con la mini-mappa (`info-viewer-mini-mappa-*`). **Dicono come stanno controlli, bolle, righe e credito, non com'e' disegnata la carta** (la carta e' finta).
+
+**Per gli altri pacchetti**
+- **P13** (`MapGraph`, da legare): `MapPoints` (`GeoMapPoints(PagedMapPointSource(pager), Dispatchers.Default)` con `MapPointsQueries` come nella sonda; `rebuild(SNAPSHOT_CHANGED)` a ogni nuovo `seq`, **`rebuild(HIDDEN_CHANGED)` quando cambiano i nascosti**), `MapSettings` =
+  `DataStoreMapSettings.create(DataStoreMapSettings.file(context), scope, FeatureFlags.mapOnline)`, `MapRegions` (P5), `MapNetworkState`, `MapPlaceNames` (`PlaceNames.labelOfId`), `MapMediaPositions` (**solo media visibili**, riga `version_metadata`),
+  `VisibleMedia` e `HiddenMask` (**legare la maschera: senza, il filtro finale non fa niente**), `MapEngineStarter` (`MapLibreInit.ensure(context, MapNetWiring(...), scopeDelProcesso)`, `true` se pronta) e `MapThumbnails(loader, placeholders, MapRefs
+  locali)`; un'implementazione di `MapActions` con le funzioni `open...` di `MapNavigation.kt` (`mapGraph(nav, actions, thumbnails)` nel `NavHost`); la sezione Luoghi (`PlacesSectionSources` con `PlacesSectionModel`, `toGroup()` come in
+  `PlacesSectionTest`, voci con `PlacesEntryTarget.parse` e `openPlacesEntry`); `settingsGraph(openMap = { nav.openMapSettings() })` e `MapEntryStatus` (lo stato dalla `MapSettings.online`); la porta `ViewerServices.placeMap`: `place(media, sizePx)` =
+  `MiniMapService(positions, filter, MapLibreMiniMap(context, starter)) { MiniMapLook(...) }.place(media, sizePx)` tradotta in `ViewerMapPlace`, `show(media)` = `nav.openMapAt(media)`; `MiniMapService.clear()` al cambio dei nascosti e al blocco app;
+  l'azzeramento toglie `noBackupFilesDir/map/` (settings e camera comprese). I `@BindsOptionalOf` di `HiddenMask` e `VisibleMedia` sono dichiarati anche da `feature-memories` e `feature-albums`: duplicati ammessi da Dagger, **li verifica la compilazione di `:app`**.
+  Se il passo 7h di `tools/check.ps1` si lamenta di codice nostro che chiama MapLibre: aggiungere `MapLibreSurface*` e `MapLibreMiniMap` a `feature-map/consumer-rules.pro` (file di P1, che non ho toccato).
+- **P5**: "Svuota la cache della mappa" deve togliere solo le tessere, **mai `map/settings/`** (impostazioni e camera); lo stile e' online anche con una sola regione in qualunque stato; la pagina delle impostazioni apre `MapActions.openRegions()`.
+- **P12**: il punto da misurare per `map.clusters` e' `BubbleEngine.compute` (la pagina non chiama altro per le bolle); `LayoutProbe` conta le misure delle bolle in un test di composizione.
+
+**Da provare sul telefono** (F119, F122; niente emulatore ne' telefono in questo pacchetto)
+- La mappa vera: primo fotogramma, apertura a freddo e a caldo, **le bolle seguono il gesto senza scatti con 60 bolle**, tocco su una bolla (avvicinamento animato o griglia), rotazione del telefono (la camera resta), tasto indietro dalla griglia (la camera e' quella di prima).
+- Il **credito** "© OpenStreetMap contributors · OpenMapTiles · OpenFreeMap" visibile e **nessun logo ne' pulsante di MapLibre**; con la mappa spenta "Natural Earth · GeoNames".
+- Interruttore in Impostazioni -> Mappa: da acceso a spento a acceso la mappa cambia stile (`setStyle`) e la **selezione** di "Mostra sulla mappa" resta **sopra** tutti i livelli; con la mappa spenta nessuna richiesta (cattura di rete come F119).
+- La **mini-mappa** (`MapSnapshotter` con lo stile offline: glifi e sprite da `asset://`, nessuna richiesta di rete anche a mappa accesa), il segno sul punto e il credito sotto; "Mostra sulla mappa" dal viewer (a mappa accesa chiede le tessere di quella zona, E-MAP19).
+- **I cinque punti segnalati da P2**: nomi che si sovrappongono (qui anche con i **nomi e i conti delle bolle** sopra la carta), peso dei confini e delle regioni tratteggiate, nomi sull'acqua, passaggio carta di base - tessere a z7-8, nomi di strada sulle strade chiare.
+- TalkBack sulle bolle ("12 foto, Firenze"), testo a 1,3x e bersagli da 48 dp sulla mappa vera; zoom fermo a 9 con lo stile offline.
+
+**Punti aperti**
+- La parte vera con MapLibre (`MapLibreSurface`, `MapLibreMiniMap`: `MapView`, `MapSnapshotter`, il livello della selezione, il ciclo di vita, `onTrimMemory`) **compila ma non e' stata eseguita**: Robolectric non la disegna e qui non c'e' un telefono.
+- La durata dell'animazione di camera (`ANIMATION_MS`, 450 ms) e' una costante del file della mappa vera e **non un token di movimento**: `MapLibreMap.animateCamera` vuole millisecondi, non una spec di `FluidMotion`; il filone grafico puo' leggerla dai token (la regola di `NoHandWrittenStyleTest` guarda i composable).
+- **Grafica**: bolle, conti ed etichette sono pagine pulite e leggibili, non rifinite (la rifinitura e' della fase dedicata alla fine); i nomi delle bolle e i loro conti possono coprire i nomi della carta.
+- Il conto di una bolla comprende i membri dei gruppi (raffiche, copie), la griglia una cella per gruppo (come la Libreria); e per un attimo dopo un "Nascondi" puo' essere piu' alto di uno (L480).
+- La mini-mappa non mostra le zone scaricate (stile senza la sorgente online, L481); una bolla senza cella da disegnare ha il segnaposto (L482).
+- Il tablet a due pannelli (mappa e griglia insieme) e' della Fase 10 (D38): qui la mappa e la griglia sono pagine a schermo pieno.
+- **Nessuna prova sul dispositivo** (niente telefono, emulatore, NAS, rete).

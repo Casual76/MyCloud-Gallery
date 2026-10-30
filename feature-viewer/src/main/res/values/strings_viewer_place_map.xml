@@ -4,5 +4,5 @@
   <string name="viewer_place_map_header">Mappa</string>
   <string name="viewer_place_map_image">Mini-mappa del posto. Tocca per mostrarlo sulla mappa.</string>
   <string name="viewer_place_show_map">Mostra sulla mappa</string>
-  <string name="viewer_place_show_map_caption">Nella mappa dell’app, senza uscire da qui</string>
+  <string name="viewer_place_show_map_caption">Nella mappa dell’app, con le tue foto intorno</string>
 </resources>

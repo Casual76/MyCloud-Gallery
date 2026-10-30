@@ -15,9 +15,11 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.github.takahirom.roborazzi.captureRoboImage
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -170,6 +172,33 @@ class ViewerPlaceMapInfoTest {
     show(located(Bitmap.createBitmap(640, 320, Bitmap.Config.ARGB_8888)), fontScale = 1.3f)
     assertTouchTargets("1,3x")
     assertThat(exists("Mostra sulla mappa")).isTrue()
+  }
+
+  // --- Screenshot (docs/screenshots/9-P4/): il pannello con la mini-mappa. L'immagine e' una carta piatta finta con il segno sul punto: MapSnapshotter non si disegna in Robolectric -------------------
+
+  private fun fakeMiniMap(): Bitmap = Bitmap.createBitmap(640, 320, Bitmap.Config.ARGB_8888).also { bitmap ->
+    val canvas = android.graphics.Canvas(bitmap)
+    canvas.drawColor(android.graphics.Color.rgb(226, 222, 240))
+    val sea = android.graphics.Paint().apply { color = android.graphics.Color.rgb(205, 196, 232) }
+    canvas.drawRect(0f, 200f, 360f, 320f, sea)
+    val ring = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.WHITE }
+    val dot = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = android.graphics.Color.rgb(153, 102, 204) }
+    canvas.drawCircle(320f, 160f, 18f, ring)
+    canvas.drawCircle(320f, 160f, 12f, dot)
+  }
+
+  @Test
+  fun screenshotInfoConMiniMappaChiaro() {
+    show(located(fakeMiniMap()))
+    assertThat(exists("Mostra sulla mappa")).isTrue()
+    composeRule.onRoot().captureRoboImage("../docs/screenshots/9-P4/info-viewer-mini-mappa-chiaro-telefono.png")
+  }
+
+  @Test
+  fun screenshotInfoConMiniMappaScuro() {
+    show(located(fakeMiniMap()), dark = true)
+    assertThat(exists("Mostra sulla mappa")).isTrue()
+    composeRule.onRoot().captureRoboImage("../docs/screenshots/9-P4/info-viewer-mini-mappa-scuro-telefono.png")
   }
 
   // --- L'ordine delle sezioni -----------------------------------------------------------------------------------------------------------

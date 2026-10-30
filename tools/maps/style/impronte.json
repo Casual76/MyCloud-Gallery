@@ -1,0 +1,97 @@
+{
+  "descrizione": "Impronte di stile, sprite, glifi e licenze (feature-map/src/main/assets/map/). Le scrive `build_style.py`; `MapStyleAssetsTest` le confronta con i file.",
+  "file": {
+    "LICENSE-Dark.txt": {
+      "byte": 3068,
+      "sha256": "7bc994370067d4160209ea9bc85239403871284c2c930c34ddc792723d05f89f"
+    },
+    "LICENSE-NaturalEarth.txt": {
+      "byte": 4636,
+      "sha256": "2631b5b39b6d1acc56de75235109b5af2dbb4b0ac5a127b6f06185977247fd4b"
+    },
+    "LICENSE-NotoSans.txt": {
+      "byte": 4301,
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
+    },
+    "LICENSE-OpenFreeMapStyles.txt": {
+      "byte": 4118,
+      "sha256": "d1754e5d291e4e8b9b0047ddba0a6ec75e1046ccd61a02c2cea3dac58f3fe355"
+    },
+    "LICENSE-Positron.txt": {
+      "byte": 3094,
+      "sha256": "de6d9326e657475f6795b327923aeb9fdcbcc45f94e84380c50aeee2a6bf3064"
+    },
+    "NOTICE.txt": {
+      "byte": 4552,
+      "sha256": "8c30fe678cf2b84d5f65231441b6aa7305bd412453e6d0efbc3539b92c058173"
+    },
+    "glyphs/NotoSans-Bold/0-255.pbf": {
+      "byte": 81170,
+      "sha256": "f60ce4cb899455c2203bd8293b550394ade53ffce8032bf9cc7f59255e49259c"
+    },
+    "glyphs/NotoSans-Bold/256-511.pbf": {
+      "byte": 134545,
+      "sha256": "77c830f114b84a58f8829ca1eac4627a6a688bbce4bdb6a04de00f98fa74bb52"
+    },
+    "glyphs/NotoSans-Bold/768-1023.pbf": {
+      "byte": 78937,
+      "sha256": "3c7ea7f7b52a97c75bfc123a303badd4fd7c5eaa1bfe66ebaba38cf3fce16ee7"
+    },
+    "glyphs/NotoSans-Bold/8192-8447.pbf": {
+      "byte": 35678,
+      "sha256": "f31c3c9dcacbd7f9760462c0af5017d9c9f2a9543ab4938476f7a13ffabf0acf"
+    },
+    "glyphs/NotoSans-Regular/0-255.pbf": {
+      "byte": 76580,
+      "sha256": "ef1f38a3f1978591e846e9eaddf8a54f7047f546fc6aaed7872cc53151a5de78"
+    },
+    "glyphs/NotoSans-Regular/256-511.pbf": {
+      "byte": 127219,
+      "sha256": "992557f9e2574cfb9a75e16c7b52832578849772b7c9a6e480d6213fb008fe5d"
+    },
+    "glyphs/NotoSans-Regular/768-1023.pbf": {
+      "byte": 74752,
+      "sha256": "6e27cdd6edce5b11c469a24b333ecefc0d4b082491b71d6924ce0be6eeba71c3"
+    },
+    "glyphs/NotoSans-Regular/8192-8447.pbf": {
+      "byte": 34070,
+      "sha256": "f061e5b4e42e5925228534d8822b423a029569263db09f5ce44573600d45295f"
+    },
+    "sprites/mcg.json": {
+      "byte": 275,
+      "sha256": "f3f5616315937f61f16c00fdc8b87381e651b87ea766cd3fe2c86ee6a1439b42"
+    },
+    "sprites/mcg.png": {
+      "byte": 7145,
+      "sha256": "6347aeb328b4c87325a8e1fd1f6b38032649234b765f244c0c8fccbbfd2dc8c3"
+    },
+    "sprites/mcg@2x.json": {
+      "byte": 276,
+      "sha256": "e3e7e3f7c641f07332263d421a7945cbe2f30ec40408de93a4c282f8bda34cae"
+    },
+    "sprites/mcg@2x.png": {
+      "byte": 26990,
+      "sha256": "03ba6ddd32611a4ae902aaa140e201c422417b7efb323227d91467edb03ae4e4"
+    },
+    "style-chiaro-offline.json": {
+      "byte": 8766,
+      "sha256": "91b5ba55e42b8a7a36a3c987e60241828a400371d7e10ee4722f6f6c17b0cac0"
+    },
+    "style-chiaro.json": {
+      "byte": 26322,
+      "sha256": "7a499079cc6d1fe8596de9537db1718d21071eb2b615b85db61721eeab0c51d7"
+    },
+    "style-scuro-offline.json": {
+      "byte": 8764,
+      "sha256": "78fc938c0e8faf823fca94c0320dbf8d6240c99f13c66fccdd540daa260f207d"
+    },
+    "style-scuro.json": {
+      "byte": 26037,
+      "sha256": "1e155256b31512a222776eac71a940692d755fef1c09e12871d09ea3977da407"
+    }
+  },
+  "glifi_vuoti": {
+    "quanti": 504,
+    "sha256_dell_elenco_e_dei_byte": "e84bc5f7dccbdca72742f17c707abe5f2348f549171ded1b0203e76febc0cef1"
+  }
+}

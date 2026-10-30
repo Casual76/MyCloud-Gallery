@@ -1,0 +1,73 @@
+{
+  "descrizione": "Ingressi scaricati (a mano, con `fetch.py --scarica`) della carta di base: Natural Earth 5.1.2 dal repository nvkelso/natural-earth-vector, commit fissato. Ognuno va nella sua cartella nuova e vuota sotto build/download/<id>/.",
+  "natural_earth": {
+    "versione": "5.1.2",
+    "tag": "v5.1.2",
+    "commit": "f1890d9f152c896d250a77557a5751a93d494776"
+  },
+  "scaricati": [
+    {
+      "id": "ne-5.1.2-ne_50m_land",
+      "file": "ne_50m_land.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/f1890d9f152c896d250a77557a5751a93d494776/geojson/ne_50m_land.geojson",
+      "sha256": "e874b27a51d146452be360cafb3cc50c86001074a67d534113e6534682f9826b",
+      "size": 1636166
+    },
+    {
+      "id": "ne-5.1.2-ne_50m_coastline",
+      "file": "ne_50m_coastline.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/f1890d9f152c896d250a77557a5751a93d494776/geojson/ne_50m_coastline.geojson",
+      "sha256": "271f1c4c1908312bac6b29d158ea1356544beafc129f260005300913aa5ea283",
+      "size": 1640858
+    },
+    {
+      "id": "ne-5.1.2-ne_50m_lakes",
+      "file": "ne_50m_lakes.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/f1890d9f152c896d250a77557a5751a93d494776/geojson/ne_50m_lakes.geojson",
+      "sha256": "d350b75978b26fe839b797c2c529b2fb8f47fb3983c03f4964e36d5df9378a52",
+      "size": 876018
+    },
+    {
+      "id": "ne-5.1.2-ne_50m_admin_0_boundary_lines_land",
+      "file": "ne_50m_admin_0_boundary_lines_land.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/f1890d9f152c896d250a77557a5751a93d494776/geojson/ne_50m_admin_0_boundary_lines_land.geojson",
+      "sha256": "2faac4f6b34386f3d21b6e018cf151f241f00e5c936d44dd17d7d9bfb147fa48",
+      "size": 760189
+    },
+    {
+      "id": "ne-5.1.2-ne_50m_admin_0_countries",
+      "file": "ne_50m_admin_0_countries.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/f1890d9f152c896d250a77557a5751a93d494776/geojson/ne_50m_admin_0_countries.geojson",
+      "sha256": "3e458fc036ad0a66411f2c1e6cac49c5d7bfb81cb1123bc513b22511a2b7fdeb",
+      "size": 3083490
+    },
+    {
+      "id": "ne-5.1.2-ne_10m_admin_1_states_provinces",
+      "file": "ne_10m_admin_1_states_provinces.geojson",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/f1890d9f152c896d250a77557a5751a93d494776/geojson/ne_10m_admin_1_states_provinces.geojson",
+      "sha256": "22d0e3ad85eb3e27f17cabf8ba2d50e554fbc27a87796ff891d958185da62fb5",
+      "size": 40726851
+    },
+    {
+      "id": "ne-5.1.2-LICENSE",
+      "file": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/f1890d9f152c896d250a77557a5751a93d494776/LICENSE.md",
+      "sha256": "2631b5b39b6d1acc56de75235109b5af2dbb4b0ac5a127b6f06185977247fd4b",
+      "size": 4636
+    }
+  ],
+  "locali": [
+    {
+      "id": "geonames-cities1000",
+      "percorso": "build/input/geonames/cities1000.zip",
+      "sha256": "ed7963ce473c7ff0a03c03481b6cc359b1849a05d5b30cccc02114e5967b16d3",
+      "nota": "GeoNames cities1000 del dump 2026-10-12, copiato dall'orchestratore (stesso file della Fase 3); non si scarica."
+    },
+    {
+      "id": "places-mcgp1",
+      "percorso": "core-places/src/main/assets/places/places.mcgp1",
+      "sha256": "a26fcfcdbc2a09f3c0a7cdedfb3a9297399226c183795e37fbfe962b5a7652d8",
+      "nota": "Il dataset dei luoghi della Fase 3 (dal dump 20261012 di GeoNames, con i nomi italiani): qui si leggono SOLO i nomi per id GeoNames. Impronta di PlacesDatasetPin."
+    }
+  ]
+}

@@ -345,6 +345,9 @@ internal object HiddenSurfaces {
     // mai e' `AppAlbumsEvalEnvironmentTest` (catalogo vero, mondi casuali) e `AlbumsEvalSessionTest`.
     "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/eval/albums/AlbumsEvalRunner.kt",
     "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/eval/albums/AppAlbumsEvalEnvironment.kt",
+    // Fase 9 (P7): il filtro dei nascosti attorno alla scelta delle foto dei ricordi chiede `HiddenMask` prima e dopo la scelta e non mostra
+    // niente. La superficie dei Ricordi (riga `MEMORIES`, con la sonda) e' di P9, che potra' spostarlo fra i suoi sorgenti.
+    "core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories/pick/VisiblePhotoPicker.kt",
   )
 
   /** I contratti da cui ogni superficie deve passare per i nascosti. */

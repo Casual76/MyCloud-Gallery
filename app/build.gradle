@@ -121,6 +121,14 @@ android {
     unitTests.all {
       // Screenshot dello scaffold (Roborazzi), come in core-designsystem.
       maxHeapSize = '3g'
+      // Fase 9 (orchestratore, 30/10): HiddenSurfacesRegistryTest legge i sorgenti di TUTTI i moduli (RepoFiles), anche di quelli da cui :app
+      // non dipende (core-memories). Sono ingressi del test, come in core-common: senza, un file nuovo che nomina HiddenMask lasciava il
+      // risultato "dalla cache" e il registro non lo vedeva.
+      inputs.files(rootProject.file('settings.gradle'))
+      inputs.files(fileTree(rootDir) {
+        include '*/src/*/kotlin/**/*.kt'
+        exclude 'engine/**', 'spike/**', '**/build/**'
+      }).withPropertyName('galleryModuleSources')
     }
   }
 }

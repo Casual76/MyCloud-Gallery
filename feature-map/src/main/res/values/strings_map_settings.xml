@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 9 (P4, §1.5 MapPrivacyState, §2.8, D24, Q1 (c)): Impostazioni -> Mappa. -->
+  <string name="mappa_settings_title">Mappa</string>
+  <string name="mappa_settings_online_header">Mappa dettagliata</string>
+  <string name="mappa_settings_online">Mappa dettagliata</string>
+  <string name="mappa_settings_online_on">Accesa su questo dispositivo</string>
+  <string name="mappa_settings_online_off">Spenta: resta la carta semplice dentro l’app</string>
+  <string name="mappa_settings_wifi">Solo sul Wi-Fi</string>
+  <string name="mappa_settings_wifi_on">Mai con i dati mobili</string>
+  <string name="mappa_settings_wifi_off">Anche con i dati mobili: consuma dati</string>
+  <!-- La nota breve (MapPrivacyNote, versione 1): cosa esce, a chi, e che vale solo qui. -->
+  <string name="mappa_settings_note">La mappa dettagliata arriva da OpenFreeMap, un servizio gratuito che usa i dati di OpenStreetMap. Quando la usi, OpenFreeMap riceve l’indirizzo della tua connessione e la zona che stai guardando. Non riceve le tue foto né la loro posizione. La scelta vale solo su questo dispositivo.</string>
+  <string name="mappa_settings_zones_header">Zone senza Internet</string>
+  <string name="mappa_settings_zones">Zone senza Internet</string>
+  <string name="mappa_settings_zones_none">Nessuna zona scaricata</string>
+  <plurals name="mappa_settings_zones_count">
+    <item quantity="one">%d zona scaricata</item>
+    <item quantity="other">%d zone scaricate</item>
+  </plurals>
+  <string name="mappa_settings_zones_note">Per non far sapere a nessuno una zona, scaricala: le zone scaricate non si chiedono più a OpenFreeMap.</string>
+  <string name="mappa_settings_unavailable_title">La mappa dettagliata non c’è in questa versione</string>
+  <string name="mappa_settings_unavailable_detail">Resta la carta semplice dentro l’app: non esce niente dal telefono.</string>
+</resources>

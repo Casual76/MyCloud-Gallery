@@ -1333,7 +1333,10 @@ function Test-AppUsesFeatureMap {
   $gradle = Read-TextFile (Join-Path $root "app\build.gradle")
   foreach ($line in ($gradle -split '\r?\n')) {
     $code = ($line -replace '//.*$', '')
-    if ($code -match "project\(\s*['""]:feature-map['""]\s*\)") { return $true }
+    # Fase 9 (orchestratore, 30/10): le configurazioni dei soli test (testImplementation, androidTestImplementation, ...) non finiscono nell'APK;
+    # la forma con path: conta come quella corta, cosi' una dipendenza di produzione scritta in quel modo non sfugge al controllo.
+    if ($code -match '^\s*(test|androidTest)\w*\s*[\(\s]') { continue }
+    if ($code -match "project\(\s*(path\s*:\s*)?['""]:feature-map['""]") { return $true }
   }
   return $false
 }

@@ -35,6 +35,8 @@ internal object NasGalleries {
     time: TestTime,
     ai: () -> NasAiHooks? = { null },
     store: FakeMediaStore = newStore(),
+    /** Lo stato della famiglia che la galleria vede (di serie quello del dispositivo): le prove di un processo appena nato ci mettono un passaggio per "non configurato" (D-7). */
+    setup: dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository = device.graph.setup,
   ): GalleryGraph {
     val access = FakePhoneAccessReader(PhoneAccess(MediaAccess.FULL, mediaLocation = true, volumes = setOf(PRIMARY)))
     fun phone(inputs: PhoneInputs): PhoneLibrary {
@@ -70,7 +72,7 @@ internal object NasGalleries {
         monotonicMs = { System.nanoTime() / 1_000_000 },
         ai = ai,
       ),
-      setup = device.graph.setup,
+      setup = setup,
       ownerAccount = { AccountId.of(account) },
       clock = { time.now() },
     )

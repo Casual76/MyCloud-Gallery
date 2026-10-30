@@ -102,8 +102,10 @@ internal class AiRig(private val app: Application, private val root: File) {
     readerLatencyMs: Long = 0,
     /** Fase 8 (P13): la ricerca per persona (il ponte di `FacesModule`); di serie nessuna. */
     people: dev.pampa.mycloudgallery.core.search.contract.PeopleLookup = dev.pampa.mycloudgallery.core.search.noop.NoPeopleLookup,
+    /** Lo stato della famiglia che la galleria vede (di serie quello del dispositivo); le prove di un processo appena nato lo avvolgono in un `ColdStartSetup`. */
+    setup: dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository = test.graph.setup,
   ): Mounted {
-    val gallery = NasGalleries.galleryOf(test, account, time, ai = { test.graph.aiHooks }, store = store).also { galleries += it }
+    val gallery = NasGalleries.galleryOf(test, account, time, ai = { test.graph.aiHooks }, store = store, setup = setup).also { galleries += it }
     val reader = FakeTextReader(latencyMs = readerLatencyMs)
     val writers = mutableListOf<FakePhoneMediaWriter>()
     val cutter = FakeSubjectCutter()

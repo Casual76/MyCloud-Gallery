@@ -49,8 +49,11 @@ import kotlin.time.Duration.Companion.seconds
  *   notte e periodico; "Analizza ora" e' una richiesta dell'utente (`UserInitiated`). Le tappe si concatenano; un'attesa delle regole riprogramma;
  * - [FacesEraseWorker]: riprende il diario di "Disattiva e cancella" (i passi locali non chiedono la rete); si riaccoda finche' la cancellazione non e'
  *   finita o non aspetta qualcosa di dichiarato (NAS, congelamento, dispositivi);
- * - la sincronizzazione dei volti gira nello stesso `IndexSyncWorker`, **dopo** i dati personali (la generazione e' fresca: D30), e il raggruppamento notturno
- *   dentro `LibraryMaintenanceWorker`.
+ * - [FacesNightlyWorker] (correzioni E, RG-1): il raggruppamento notturno del custode (nascite sotto soglia, unioni, esemplari), **un lavoro suo**: parte **dopo la
+ *   tappa del calcolo** che ha analizzato qualcosa (in coda a lei, nella stessa notte) e una volta al giorno in carica come rete di sicurezza, con le regole di
+ *   `AI_COMPUTE` (notte, carica, Wi-Fi). Prima stava in coda a `LibraryMaintenanceWorker`: dopo sette manutenzioni da 14 minuti di budget (oltre i 10 che Android
+ *   da' a un lavoro) e senza aspettare la famiglia pronta;
+ * - la sincronizzazione dei volti gira nello stesso `IndexSyncWorker`, **dopo** i dati personali (la generazione e' fresca: D30).
  */
 object FacesWorkScheduling {
   const val COMPUTE_WORK = "faces-compute"
@@ -64,10 +67,19 @@ object FacesWorkScheduling {
   /** La tappa dopo di un giro non richiesto dall'utente: si accoda a quella in corso, mai buttata. */
   const val COMPUTE_NEXT_WORK = "faces-compute-next"
   const val ERASE_WORK = "faces-erase"
+
+  /** RG-1: il raggruppamento notturno, periodico una volta al giorno in carica (la rete di sicurezza: anche senza un calcolo che lo chiami). */
+  const val NIGHTLY_WORK = "faces-nightly"
+
+  /** RG-1: il raggruppamento notturno subito dopo una tappa del calcolo che ha analizzato qualcosa, o dopo un'attesa delle regole. Lavoro unico. */
+  const val NIGHTLY_NEXT_WORK = "faces-nightly-next"
   const val TAG = "faces"
   const val KEY_USER = "user"
 
   val PERIOD: Duration = 6.hours
+
+  /** RG-1: una volta al giorno (come la manutenzione della Libreria, da cui il raggruppamento e' uscito). */
+  val NIGHTLY_PERIOD: Duration = 24.hours
 
   fun ensure(context: Context) {
     WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
@@ -75,7 +87,38 @@ object FacesWorkScheduling {
       ExistingPeriodicWorkPolicy.KEEP,
       PeriodicWorkRequestBuilder<FacesComputeWorker>(PERIOD.inWholeHours, TimeUnit.HOURS).addTag(TAG).build(),
     )
+    // RG-1: il raggruppamento notturno e' un lavoro suo, in carica e a batteria non scarica come la manutenzione da cui e' uscito (le regole di `AI_COMPUTE` si
+    // rivedono dentro: notte, Wi-Fi, caldo).
+    WorkManager.getInstance(context.applicationContext).enqueueUniquePeriodicWork(
+      NIGHTLY_WORK,
+      ExistingPeriodicWorkPolicy.KEEP,
+      PeriodicWorkRequestBuilder<FacesNightlyWorker>(NIGHTLY_PERIOD.inWholeHours, TimeUnit.HOURS)
+        .setConstraints(Constraints.Builder().setRequiresCharging(true).setRequiresBatteryNotLow(true).build())
+        .addTag(TAG)
+        .build(),
+    )
   }
+
+  /**
+   * RG-1: il raggruppamento notturno **dopo** la tappa del calcolo (nella stessa notte, in una finestra di Android tutta sua): lavoro unico, `KEEP` (una richiesta
+   * in coda basta: assorbe quelle che arrivano mentre aspetta).
+   */
+  fun nightlyAfterCompute(context: Context) {
+    enqueue(context, NIGHTLY_NEXT_WORK, ExistingWorkPolicy.KEEP, nightlyRequest())
+  }
+
+  /** RG-1: un'attesa delle regole riprogramma anche il raggruppamento notturno (come il calcolo): con il vincolo o il ritardo esatti. */
+  fun nightlyAfterWait(context: Context, wait: WaitReason) {
+    val follow = AiWorkScheduling.followUpOf(wait, java.time.LocalDateTime.now()) ?: return
+    enqueue(context, NIGHTLY_NEXT_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, nightlyRequest(follow.delay.inWholeMilliseconds, follow.constraints()))
+  }
+
+  private fun nightlyRequest(delayMs: Long = 0, constraints: Constraints = Constraints.NONE): OneTimeWorkRequest =
+    OneTimeWorkRequestBuilder<FacesNightlyWorker>()
+      .setConstraints(constraints)
+      .apply { if (delayMs > 0) setInitialDelay(delayMs, TimeUnit.MILLISECONDS) }
+      .addTag(TAG)
+      .build()
 
   /** "Analizza ora": una richiesta dell'utente, una sola alla volta (un secondo tocco mentre gira o aspetta non ne mette un altro). */
   fun computeNow(context: Context) {
@@ -166,6 +209,9 @@ class FacesStageWatch(
 /** Una tappa del calcolo dei volti (testabile senza WorkManager): regole di `AI_COMPUTE`, 8 minuti, battito a lavoro finito. */
 class FacesStages(private val graph: AppGraph, private val faces: FacesGraph, noBackup: File) {
   val beat = HeartbeatStore(File(noBackup, FacesWiring.HEARTBEAT))
+
+  /** RG-1: l'ultimo raggruppamento notturno finito (il battito, come `beat` per il calcolo): la Diagnostica e le prove sanno se e quando e' girato. */
+  val nightlyBeat = HeartbeatStore(File(noBackup, NIGHTLY_BEAT))
   private val watch = FacesStageWatch(
     mark = AiStageMark(File(noBackup, FacesWiring.STAGE_MARK)),
     exits = { graph.platform.healthReader.read().lastExitReasons },
@@ -173,7 +219,14 @@ class FacesStages(private val graph: AppGraph, private val faces: FacesGraph, no
     now = { graph.platform.deviceNow() },
   )
 
-  suspend fun compute(user: Boolean): StageOutcome = watch.around { stage(user) }
+  /** RG-1: quanti media l'ultima chiamata di [compute] ha analizzato. Zero = niente di nuovo: il raggruppamento notturno non ha motivo di seguire. */
+  @Volatile var lastAnalyzed: Int = 0
+    private set
+
+  suspend fun compute(user: Boolean): StageOutcome {
+    lastAnalyzed = 0
+    return watch.around { stage(user) }
+  }
 
   private suspend fun stage(user: Boolean): StageOutcome {
     val request = if (user) {
@@ -184,10 +237,35 @@ class FacesStages(private val graph: AppGraph, private val faces: FacesGraph, no
     val outcome = StagedRun(request = request, rules = graph.stageRules(), ledger = graph.trafficLedger, checkpoints = NoCheckpoints)
       .run({ scope, _ ->
         val results = faces.computeStage(scope) ?: return@run BatchResult(hasMore = false)
+        lastAnalyzed += results.sumOf { it.second.analyzed }
         BatchResult(hasMore = results.any { it.second.stop == FacesStop.BUDGET || it.second.stop == FacesStop.RULES })
       })
     if (outcome is StageOutcome.Finished) beat.beat(graph.platform.deviceNow())
     return outcome
+  }
+
+  /**
+   * RG-1: il raggruppamento notturno come **una tappa sua**: stesse regole del calcolo (`AI_COMPUTE`, in background: notte, carica, Wi-Fi, caldo; e scrive sul NAS),
+   * un solo lotto di [FACES_NIGHTLY_BUDGET]. Senza Persone attiva qui, o se questo dispositivo non e' il custode, `FacesGraph.nightly` non fa niente e la tappa e'
+   * comunque finita. Il battito si scrive solo a tappa finita.
+   */
+  suspend fun nightly(): StageOutcome {
+    val request = WorkRequest.Background(BackgroundActivity.AI_COMPUTE, writesToNas = true)
+    val outcome = StagedRun(request = request, rules = graph.stageRules(), ledger = graph.trafficLedger, checkpoints = NoCheckpoints)
+      .run({ _, _ ->
+        faces.nightly(FACES_NIGHTLY_BUDGET)
+        BatchResult(hasMore = false)
+      })
+    if (outcome is StageOutcome.Finished) nightlyBeat.beat(graph.platform.deviceNow())
+    return outcome
+  }
+
+  companion object {
+    /** Il battito del raggruppamento notturno (file di stato nuovo, sotto `noBackupFilesDir`, scritto da [HeartbeatStore] con `StateFiles`). */
+    const val NIGHTLY_BEAT: String = "faces-nightly-beat"
+
+    /** Quanto dura il raggruppamento notturno: come prima, dentro la manutenzione (due minuti); ora ha pero' la sua finestra di Android. */
+    val FACES_NIGHTLY_BUDGET: Duration = 2.minutes
   }
 }
 
@@ -205,10 +283,11 @@ class FacesComputeWorker @AssistedInject constructor(
     if (!gallery.backgroundWorkAllowed) return Result.success()
     gallery.awaitReady(COLD_START_WAIT)
     val user = inputData.getBoolean(FacesWorkScheduling.KEY_USER, false)
+    val stages = FacesStages(graph, faces, applicationContext.noBackupFilesDir)
     val outcome = try {
       gallery.runIfActive {
         gallery.nas?.start()
-        FacesStages(graph, faces, applicationContext.noBackupFilesDir).compute(user)
+        stages.compute(user)
       }
     } catch (e: kotlinx.coroutines.CancellationException) {
       StopReports.report(graph, DiagJob.FACES_COMPUTE, StopReports.reasonOf(this))
@@ -223,6 +302,9 @@ class FacesComputeWorker @AssistedInject constructor(
       is StageOutcome.Yielded -> FacesWorkScheduling.continueCompute(applicationContext, user)
       is StageOutcome.Waiting -> FacesWorkScheduling.afterWait(applicationContext, user, outcome.reason)
       is StageOutcome.Stopped -> FacesWorkScheduling.afterWait(applicationContext, user, outcome.reason)
+      // RG-1: il calcolo e' finito e ha analizzato qualcosa: il raggruppamento notturno segue, nella stessa notte (nascite sotto soglia, unioni, esemplari), in una
+      // finestra di Android tutta sua e con le sue regole.
+      is StageOutcome.Finished -> if (stages.lastAnalyzed > 0) FacesWorkScheduling.nightlyAfterCompute(applicationContext)
       else -> Unit
     }
     return Result.success()
@@ -231,6 +313,50 @@ class FacesComputeWorker @AssistedInject constructor(
   companion object {
     const val TAG = "FacesComputeWorker"
     val COLD_START_WAIT: Duration = 20.seconds
+  }
+}
+
+/**
+ * Il raggruppamento notturno delle persone (RG-1; docs/fase8-progetto.md §2.5 "Manutenzione notturna"): un lavoro suo. Aspetta la famiglia pronta come gli altri lavori
+ * ([GalleryGraph.awaitReady], D-7: in un processo nato per lui lo stato "non configurato" dura un attimo) e poi gira dentro `runIfActive`, con le regole di
+ * `AI_COMPUTE` ([FacesStages.nightly]). Solo il custode raggruppa davvero; senza Persone attiva qui non fa niente.
+ */
+@HiltWorker
+class FacesNightlyWorker @AssistedInject constructor(
+  @Assisted appContext: Context,
+  @Assisted params: WorkerParameters,
+  private val gallery: GalleryGraph,
+  private val graph: AppGraph,
+  private val faces: FacesGraph,
+) : CoroutineWorker(appContext, params) {
+
+  override suspend fun doWork(): Result {
+    if (!gallery.backgroundWorkAllowed) return Result.success()
+    gallery.awaitReady(FacesComputeWorker.COLD_START_WAIT)
+    val outcome = try {
+      gallery.runIfActive {
+        gallery.nas?.start()
+        FacesStages(graph, faces, applicationContext.noBackupFilesDir).nightly()
+      }
+    } catch (e: kotlinx.coroutines.CancellationException) {
+      StopReports.report(graph, DiagJob.FACES_NIGHTLY, StopReports.reasonOf(this))
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.e(TAG) { "raggruppamento notturno dei volti non riuscito: ${e.javaClass.simpleName}" }
+      graph.events.jobFailed(DiagJob.FACES_NIGHTLY)
+      return Result.success()
+    }
+    outcome?.let { graph.events.stage(DiagJob.FACES_NIGHTLY, it) }
+    when (outcome) {
+      is StageOutcome.Waiting -> FacesWorkScheduling.nightlyAfterWait(applicationContext, outcome.reason)
+      is StageOutcome.Stopped -> FacesWorkScheduling.nightlyAfterWait(applicationContext, outcome.reason)
+      else -> Unit
+    }
+    return Result.success()
+  }
+
+  private companion object {
+    const val TAG = "FacesNightlyWorker"
   }
 }
 

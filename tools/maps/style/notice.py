@@ -1,0 +1,70 @@
+"""Il testo di `NOTICE.txt` (feature-map/src/main/assets/map/): da dove viene ogni pezzo della mappa, con quale licenza e con quale impronta.
+
+Lo scrive `build_style.py` con gli ingressi e le impronte di `fingerprints.json` (stile e glifi) e di `base/fingerprints.json` (carta di base):
+un solo testo, riproducibile. Le attribuzioni brevi sono quelle di `PlacesAttribution` (core-places) e di Informazioni e licenze.
+"""
+
+ONLINE = "© OpenStreetMap contributors · OpenMapTiles · OpenFreeMap"
+BASE = "Natural Earth · GeoNames"
+
+
+def testo(stile, base, uscite):
+    """[stile] e [base] sono i `fingerprints.json` dei due strumenti; [uscite] {nome: (byte, sha256)} dei file scritti."""
+    ofm = stile["openfreemap_styles"]
+    fonts = stile["openmaptiles_fonts"]
+    ne = base["natural_earth"]
+    zip_font = next(e for e in stile["scaricati"] if e["id"].endswith("noto-sans-zip"))
+    righe = [
+        "Mappa di MyCloud Gallery (Fase 9): carta di base, stile, caratteri e icone",
+        "",
+        "Questa cartella contiene tutto cio' che la mappa disegna SENZA Internet e lo stile con cui disegna le tessere online. Ogni pezzo e' di altri",
+        "autori e ha la sua licenza, qui sotto e nei file LICENSE-*.txt di questa cartella. Le attribuzioni brevi che l'app mostra sulla mappa sono:",
+        "",
+        "  mappa online:      " + ONLINE,
+        "  carta di base:     " + BASE,
+        "",
+        "Il testo completo sta in Impostazioni, Informazioni e licenze. Nulla di tutto questo esce dal dispositivo: le sole richieste di rete della",
+        "mappa sono le tessere vettoriali di tiles.openfreemap.org (solo a mappa online accesa), e nessuna e' per stile, caratteri o icone.",
+        "",
+        "1) CARTA DI BASE (base/): terre, coste, laghi, confini dei paesi, confini delle regioni e delle province italiane, nomi dei paesi",
+        "   file:        " + ", ".join(sorted(n for n in uscite if n.startswith("base/") and n.endswith(".geojson"))),
+        "   origine:     Natural Earth " + ne["versione"] + " (https://www.naturalearthdata.com), repository nvkelso/natural-earth-vector, tag " + ne["tag"] + ", commit",
+        "                " + ne["commit"] + "; 1:50m per terre, coste, laghi, confini e nomi dei paesi, 1:10m per le province italiane",
+        "   licenza:     pubblico dominio (testo in LICENSE-NaturalEarth.txt); i dati sono stati modificati: semplificati con Douglas-Peucker, a 5 decimali",
+        "   strumento:   tools/maps/base/build_base.py (tolleranze e impronte in tools/maps/base/impronte.json)",
+        "",
+        "2) CITTA' (base/cities.geojson): le citta' con almeno 50.000 abitanti e le capitali di Stato",
+        "   origine:     GeoNames, cities1000 del dump 2026-10-12 (https://www.geonames.org), e i nomi italiani del dataset dei luoghi dell'app",
+        "                (core-places, stessi dati GeoNames)",
+        "   licenza:     Creative Commons Attribuzione 4.0 (CC BY 4.0, https://creativecommons.org/licenses/by/4.0/). I dati sono stati modificati:",
+        "                ridotti, in parte tradotti in italiano e convertiti in un formato compatto.",
+        "",
+        "3) STILE (style-chiaro.json, style-scuro.json e le due versioni senza tessere online)",
+        "   origine:     stili Positron (chiaro) e Dark (scuro) di OpenFreeMap, repository hyperknot/openfreemap-styles, commit",
+        "                " + ofm["commit"] + " (" + ofm["data"] + "), a loro volta derivati da positron-gl-style e dark-matter-gl-style di OpenMapTiles",
+        "   licenza:     codice BSD 3-Clause; disegno CC BY 4.0; Positron deriva da \"CartoDB Basemaps\" (Stamen e Paul Norman per CartoDB Inc., CC BY 3.0)",
+        "                (testi in LICENSE-Positron.txt, LICENSE-Dark.txt e LICENSE-OpenFreeMapStyles.txt)",
+        "   modifiche:   livelli ridotti (niente edifici, ferrovie, sentieri, punti di interesse), colori in Ametista, caratteri NotoSans-Regular e",
+        "                NotoSans-Bold, nomi \"italiano, inglese, latino\", sorgente delle tessere con l'URL stabile, risorse da asset://, carta di base sotto",
+        "   strumento:   tools/maps/style/build_style.py",
+        "",
+        "4) DATI DELLE TESSERE ONLINE (non sono in questa cartella)",
+        "   Le tessere vettoriali vengono da OpenFreeMap (https://openfreemap.org), schema OpenMapTiles (https://openmaptiles.org), con dati di",
+        "   OpenStreetMap, © OpenStreetMap contributors, licenza ODbL 1.0 (https://www.openstreetmap.org/copyright). Il credito \"OpenMapTiles\" e",
+        "   \"OpenStreetMap contributors\" va sempre mostrato sulla mappa online.",
+        "",
+        "5) CARATTERI (glyphs/NotoSans-Regular, glyphs/NotoSans-Bold)",
+        "   file:        0-255.pbf, 256-511.pbf, 768-1023.pbf, 8192-8447.pbf per carattere (latino, latino esteso, greco, punteggiatura); gli altri",
+        "                intervalli sono file vuoti: servono solo a non far aspettare MapLibre un carattere che non c'e'",
+        "   origine:     Noto Sans (patched by Klokan Technologies) come PBF di MapLibre, release " + fonts["release"] + " di openmaptiles/fonts",
+        "                (" + zip_font["file"] + ", " + str(zip_font["size"]) + " byte, SHA-256 " + zip_font["sha256"] + ")",
+        "   licenza:     SIL Open Font License 1.1 (testo in LICENSE-NotoSans.txt); i file sono quelli della release, senza modifiche",
+        "",
+        "6) ICONE (sprites/mcg*)",
+        "   origine:     le icone dell'aeroporto e del senso unico dello sprite di OpenFreeMap (Maki di Mapbox, CC0 1.0; la freccia e' di pubblico",
+        "                dominio), ritagliate e riunite in un atlante piu' piccolo; la versione bianca e' la stessa icona con il colore cambiato",
+        "",
+        "Impronte (SHA-256) dei file di questa cartella: tools/maps/base/impronte.json e tools/maps/style/impronte.json.",
+        "",
+    ]
+    return ("\n".join(righe)).encode("utf-8")

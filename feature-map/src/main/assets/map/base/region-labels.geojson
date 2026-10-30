@@ -1,0 +1,22 @@
+{"type":"FeatureCollection","features":[
+{"type":"Feature","properties":{"name":"Piemonte"},"geometry":{"type":"Point","coordinates":[7.80273,45.0008]}},
+{"type":"Feature","properties":{"name":"Valle d’Aosta"},"geometry":{"type":"Point","coordinates":[7.25199,45.69629]}},
+{"type":"Feature","properties":{"name":"Lombardia"},"geometry":{"type":"Point","coordinates":[9.77837,45.67882]}},
+{"type":"Feature","properties":{"name":"Trentino-Alto Adige"},"geometry":{"type":"Point","coordinates":[11.21917,46.39165]}},
+{"type":"Feature","properties":{"name":"Veneto"},"geometry":{"type":"Point","coordinates":[11.59053,45.43345]}},
+{"type":"Feature","properties":{"name":"Friuli-Venezia Giulia"},"geometry":{"type":"Point","coordinates":[12.94592,46.17125]}},
+{"type":"Feature","properties":{"name":"Liguria"},"geometry":{"type":"Point","coordinates":[7.85787,43.98449]}},
+{"type":"Feature","properties":{"name":"Emilia-Romagna"},"geometry":{"type":"Point","coordinates":[11.02143,44.53286]}},
+{"type":"Feature","properties":{"name":"Toscana"},"geometry":{"type":"Point","coordinates":[11.25698,43.42873]}},
+{"type":"Feature","properties":{"name":"Umbria"},"geometry":{"type":"Point","coordinates":[12.42902,42.95847]}},
+{"type":"Feature","properties":{"name":"Marche"},"geometry":{"type":"Point","coordinates":[13.32349,43.17766]}},
+{"type":"Feature","properties":{"name":"Lazio"},"geometry":{"type":"Point","coordinates":[12.8815,41.73588]}},
+{"type":"Feature","properties":{"name":"Abruzzo"},"geometry":{"type":"Point","coordinates":[13.882,42.16691]}},
+{"type":"Feature","properties":{"name":"Molise"},"geometry":{"type":"Point","coordinates":[14.6157,41.60013]}},
+{"type":"Feature","properties":{"name":"Campania"},"geometry":{"type":"Point","coordinates":[14.75366,41.03397]}},
+{"type":"Feature","properties":{"name":"Puglia"},"geometry":{"type":"Point","coordinates":[15.49194,41.51662]}},
+{"type":"Feature","properties":{"name":"Basilicata"},"geometry":{"type":"Point","coordinates":[16.18426,40.4208]}},
+{"type":"Feature","properties":{"name":"Calabria"},"geometry":{"type":"Point","coordinates":[16.55403,39.23901]}},
+{"type":"Feature","properties":{"name":"Sicilia"},"geometry":{"type":"Point","coordinates":[14.47221,37.52924]}},
+{"type":"Feature","properties":{"name":"Sardegna"},"geometry":{"type":"Point","coordinates":[9.0538,40.48433]}}
+]}

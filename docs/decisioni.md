@@ -10841,6 +10841,183 @@ delle Fasi 6-9 verdi.
 `uses-feature android.hardware.wifi` facoltativo nel manifest (innocuo, lasciato); le tessere di una versione restano nella cache di MapLibre
 finche' non vengono buttate (`Cache-Control` di 10 anni): meno richieste, strade nuove piu' tardi.
 
+## Fase 9 P2: carta di base, stile e glifi (30/10)
+
+Il pacchetto P2 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P2; §2.7, §2.8, D22, D25; risposte Q1 (c) e Q8 (a) del 27/10). Branch `fase9/p2`.
+Consegna, in `feature-map/src/main/assets/map/`, la **carta di base** (terre, coste, laghi, confini dei paesi e delle regioni italiane, nomi di paesi,
+regioni e citta'), **quattro stili** (chiaro e scuro, ognuno con la sorgente online e senza), i **glifi** Noto Sans, lo **sprite**, le **licenze** e il
+`NOTICE`; gli strumenti che li producono, in `tools/maps/`; le **attribuzioni** (`PlacesAttribution` esteso, Informazioni e licenze); le prove; un'anteprima
+SVG chiara e scura in `docs/screenshots/9-P2/`. Tutto sul PC, niente emulatore ne' telefono; `:app` non dipende ancora da `:feature-map` (lo collega P13): il
+peso dell'APK e' stato misurato collegandolo in locale, senza committarlo (come P1).
+
+**Scaricamenti** (solo l'elenco del §8, a mano con `--scarica`, ognuno in una cartella nuova e vuota sotto `build\download\<id>\`, mai nel repository; Python
+sempre con `-I`; nessun eseguibile scaricato). Le versioni e le impronte sono fissate in `tools/maps/base/fingerprints.json` e
+`tools/maps/style/fingerprints.json`, e uno strumento rifiuta un file con un'impronta diversa. Per risolvere il tag in un commit e l'elenco dei file si e'
+interrogata l'API di GitHub **dei soli tre repository approvati** (solo metadati, nessun file). Si sono scaricati anche i testi di licenza degli stessi
+repository e commit (`LICENSE.md`, `LICENSE`), che servono a `LICENSE-*`.
+
+| Origine e versione fissata | Cartella sotto `build\download\` | File | Byte | SHA-256 |
+|---|---|---|---|---|
+| Natural Earth 5.1.2 | `ne-5.1.2-ne_50m_land` | `ne_50m_land.geojson` | 1.636.166 | `e874b27a51d146452be360cafb3cc50c86001074a67d534113e6534682f9826b` |
+| Natural Earth 5.1.2 | `ne-5.1.2-ne_50m_coastline` | `ne_50m_coastline.geojson` | 1.640.858 | `271f1c4c1908312bac6b29d158ea1356544beafc129f260005300913aa5ea283` |
+| Natural Earth 5.1.2 | `ne-5.1.2-ne_50m_lakes` | `ne_50m_lakes.geojson` | 876.018 | `d350b75978b26fe839b797c2c529b2fb8f47fb3983c03f4964e36d5df9378a52` |
+| Natural Earth 5.1.2 | `ne-5.1.2-ne_50m_admin_0_boundary_lines_land` | `ne_50m_admin_0_boundary_lines_land.geojson` | 760.189 | `2faac4f6b34386f3d21b6e018cf151f241f00e5c936d44dd17d7d9bfb147fa48` |
+| Natural Earth 5.1.2 | `ne-5.1.2-ne_50m_admin_0_countries` | `ne_50m_admin_0_countries.geojson` | 3.083.490 | `3e458fc036ad0a66411f2c1e6cac49c5d7bfb81cb1123bc513b22511a2b7fdeb` |
+| Natural Earth 5.1.2 | `ne-5.1.2-ne_10m_admin_1_states_provinces` | `ne_10m_admin_1_states_provinces.geojson` | 40.726.851 | `22d0e3ad85eb3e27f17cabf8ba2d50e554fbc27a87796ff891d958185da62fb5` |
+| Natural Earth 5.1.2 | `ne-5.1.2-LICENSE` | `LICENSE.md` | 4.636 | `2631b5b39b6d1acc56de75235109b5af2dbb4b0ac5a127b6f06185977247fd4b` |
+| OpenFreeMap styles @006ea57 | `ofm-styles-006ea57-positron-style` | `style.json` | 40.060 | `3c983bbe247bb116cbfd5192422ea3c8a5d3230362657aac65cdf8c546f8e913` |
+| OpenFreeMap styles @006ea57 | `ofm-styles-006ea57-positron-license` | `LICENSE.md` | 3.094 | `de6d9326e657475f6795b327923aeb9fdcbcc45f94e84380c50aeee2a6bf3064` |
+| OpenFreeMap styles @006ea57 | `ofm-styles-006ea57-dark-style` | `style.json` | 32.803 | `e92aaac9b9fc01f5e94fca1ae726d491efef737874160e90fce796713373c392` |
+| OpenFreeMap styles @006ea57 | `ofm-styles-006ea57-dark-license` | `LICENSE.md` | 3.068 | `7bc994370067d4160209ea9bc85239403871284c2c930c34ddc792723d05f89f` |
+| OpenFreeMap styles @006ea57 | `ofm-styles-006ea57-repo-license` | `LICENSE.md` | 4.118 | `d1754e5d291e4e8b9b0047ddba0a6ec75e1046ccd61a02c2cea3dac58f3fe355` |
+| OpenFreeMap styles @006ea57 | `ofm-styles-006ea57-sprite-1x-json` | `ofm.json` | 27.737 | `73e75e58d8c7bb62cc25d9d150660500552f4d04f6eac5efa4e236076773c356` |
+| OpenFreeMap styles @006ea57 | `ofm-styles-006ea57-sprite-1x-png` | `ofm.png` | 49.454 | `8996a519d218dc5f98015267709dae272a77bb74ef0ecc5a0992dcf276c1be4c` |
+| OpenFreeMap styles @006ea57 | `ofm-styles-006ea57-sprite-2x-json` | `ofm@2x.json` | 27.822 | `82a4aaeed2c5ce6e98553915754dbe394ee66fd9a2aacc4318d25cdd74e8730b` |
+| OpenFreeMap styles @006ea57 | `ofm-styles-006ea57-sprite-2x-png` | `ofm@2x.png` | 118.872 | `3793faf7dc47960636e4b6b1039978fa6925e6c90a7cb49ef23b37e153635c9b` |
+| openmaptiles/fonts v2.0 | `openmaptiles-fonts-2.0-noto-sans-zip` | `noto-sans.zip` | 61.899.817 | `d117316544b43a5dde7ee761b36e17701e9f85574e181d76a74814240fdbaf34` |
+| openmaptiles/fonts v2.0 | `openmaptiles-fonts-2.0-noto-sans-license` | `LICENSE` | 4.301 | `6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2` |
+
+- **Natural Earth 5.1.2**: repository `nvkelso/natural-earth-vector`, tag `v5.1.2`, commit `f1890d9f152c896d250a77557a5751a93d494776`, `raw.githubusercontent.com`.
+  1:50m per terre, coste, laghi, confini e nomi dei paesi; 1:10m (`admin_1_states_provinces`, 110 province con il codice della regione) per i confini
+  di regione e di provincia italiani. Pubblico dominio.
+- **Stili e sprite di OpenFreeMap**: repository `hyperknot/openfreemap-styles`, commit `006ea5796803ba2df4330888836cb0a8f17473b4` (25/10/2026), Positron e Dark
+  (`styles/positron/style.json`, `styles/dark/style.json`), sprite `ofm_f384`. Licenza: codice BSD 3-Clause, disegno CC BY 4.0, Positron derivato da CartoDB
+  Basemaps (CC BY 3.0); il repository e' MIT.
+- **Glifi**: release `v2.0` di `openmaptiles/fonts` (commit `a4f9e7cf18aa382945c0a912f3022ba94a0b1d52`), `noto-sans.zip` (PBF di fontnik per Noto Sans
+  Regular, Bold e Italic, 771 file); di tutto lo ZIP servono otto file. SIL OFL 1.1.
+- **GeoNames**: `build\input\geonames\cities1000.zip` (SHA-256 `ed7963ce473c7ff0a03c03481b6cc359b1849a05d5b30cccc02114e5967b16d3`), copiato dall'orchestratore, nessuno
+  scaricamento. **In piu'**, solo per i nomi italiani delle citta': `core-places/.../places.mcgp1` (SHA-256 `a26fcfcdbc2a09f3c0a7cdedfb3a9297399226c183795e37fbfe962b5a7652d8`, quello di
+  `PlacesDatasetPin`), che e' GeoNames con i nomi `it` di `alternateNamesV2` (Fase 3): in `cities1000` i nomi sono inglesi ("Rome", "Naples", "Florence") e un'app in italiano
+  deve scrivere Roma, Napoli, Firenze. Lettura da sola (`tools/maps/base/mcgp1.py`, per id GeoNames); 11 citta' su 11.429 non hanno il nome italiano e restano con quello di GeoNames.
+  `alternateNamesV2` non si e' scaricato (non e' nell'elenco).
+
+**Gli strumenti** (`tools/maps/`, solo libreria standard di Python 3, sempre `python -I`; `LEGGIMI.md` dice come si lanciano)
+- `base/build_base.py`: filtra, semplifica con **Douglas-Peucker a tolleranza fissata** (0,01 gradi, circa 1,1 km, per terre, coste, laghi e confini; 0,002 per i
+  confini di regione e 0,003 per quelli di provincia; gli anelli sotto 0,0002 gradi quadrati spariscono), arrotonda a **5 decimali**, ordina in modo stabile
+  e scrive i GeoJSON e `base/impronte.json`. I confini di regione e di provincia non sono i bordi dei poligoni (si disegnerebbero due volte e non combacerebbero):
+  `topologia.py` cerca i lati che due province dividono, li concatena in spezzate da un incrocio all'altro e li semplifica una volta sola. Il nome di ogni regione
+  si scrive nel suo **punto piu' lontano dal bordo** (griglia a due passate). I nomi italiani delle 20 regioni sono una tabella per codice ISO 3166-2 (in Natural
+  Earth sono in parte inglesi: "Apulia", "Sicily"); un codice che non c'e' ferma lo strumento. Si ferma anche se incontra un nome "Casa" o "Home".
+- `style/build_style.py`: adatta gli stili scaricati (`layers_online.py`), compone la carta di base (`layers_base.py`), ritaglia lo sprite (`png.py`, PNG senza
+  compressione: i byte non dipendono dalla versione di zlib), estrae i glifi, copia le licenze e scrive il `NOTICE` (`notice.py`) e `style/impronte.json`.
+  `check_style.py` fa i controlli del "Fatto quando"; `preview.py` disegna l'anteprima; `selftest.py` prova gli strumenti (13 prove).
+- **Fine riga**: `.gitattributes` ha `* text=auto` e Windows ha `core.autocrlf`: su un checkout i GeoJSON, gli stili e le impronte sarebbero diventati CRLF (e un glifo vuoto, che contiene il byte 0A, sarebbe stato
+  rovinato). `feature-map/src/main/assets/map/.gitattributes` (`* -text`) e `tools/maps/.gitattributes` (`*.json -text`) li tengono byte per byte; i file che iniziano con un punto non entrano nell'APK.
+- **Riproducibile**: due corse nello stesso processo, e una corsa con Python 3.11 e una con 3.14 (`--verifica`), danno **gli stessi byte e le stesse impronte** di quelle committate.
+  Le impronte sono anche confrontate con gli asset dell'APK dai test di feature-map.
+
+**La carta di base** (`assets/map/base/`, GeoJSON; terre, coste e confini a z0-z7, dove le tessere non ci sono)
+| File | Contenuto | Byte | Compresso (deflate) | SHA-256 (primi 16) |
+|---|---|---|---|---|
+| `borders.geojson` | confini dei paesi (1:50m), internazionali e contesi | 251.872 | 101.372 | `0b294d8fa3529c0e` |
+| `cities.geojson` | citta' (GeoNames) | 1.358.865 | 214.684 | `2d1ab1e4f09b4eb5` |
+| `coast.geojson` | coste (1:50m) | 997.661 | 374.270 | `2f7af9297750a25d` |
+| `country-labels.geojson` | nomi e punti dei paesi | 30.605 | 5.043 | `dccd91d5f847d174` |
+| `lakes.geojson` | laghi (1:50m) | 256.793 | 92.328 | `755d6d6db85f7b94` |
+| `land.geojson` | terre (un MultiPolygon, 1:50m) | 1.001.640 | 374.856 | `0ffd6bbfd3b31180` |
+| `region-labels.geojson` | nomi delle 20 regioni | 2.354 | 509 | `bee934e42b9b2195` |
+| `regions.geojson` | confini di regione e di provincia italiani (1:10m) | 86.889 | 32.208 | `206b17f5bd74a5c3` |
+Totale **3.986.679 B** scritti (meno dei 4.000.000 B del tetto anche senza comprimere), **1.195.270 B** compressi, **1.195.222 B** nell'APK di release (vedi sotto). Conteggi:
+1.415 poligoni di terra, 1.429 linee di costa, 411 laghi, 392 linee di confine (35 contesi, tratteggiati), 34 linee di confine di regione e 153 di provincia, 242
+nomi di paesi (`NAME_IT`; punto `LABEL_X/LABEL_Y` e `LABELRANK` di Natural Earth), 20 nomi di regione, **11.429 citta'**: quelle di `cities1000` con almeno 50.000
+abitanti e le capitali di Stato di qualunque dimensione (San Marino, Vaduz...), senza i `PPLX` (quartieri) e senza i distretti del dataset dei luoghi (i 206 che non competono),
+con il livello 1-5 (`rank`: sopra 3 milioni, 1 milione, 400.000, 150.000, il resto senza la proprieta') e `cap` per le capitali. Le proprieta' sono un elenco chiuso
+(`name`, `rank`, `cap`, `d`, `lvl`). Ogni nome sta dentro gli intervalli dei glifi (0-511, 768-1023, 8192-8447: se non ci sta si usa il nome ASCII di GeoNames). Le province di
+Natural Earth sono le 110 del 2010 circa (ci sono ancora Carbonia-Iglesias e Olbia-Tempio): i confini di **regione** non ne risentono, quelli di provincia vanno letti come "circa".
+
+**Lo stile** (quattro file in `assets/map/`, ognuno sotto i 100 KB: `style-chiaro.json` 26.322 B, `style-scuro.json` 26.037 B, `style-chiaro-offline.json` 8.766 B, `style-scuro-offline.json` 8.764 B)
+- **Online** (`style-chiaro.json`, `style-scuro.json`, 59 e 57 livelli): la sorgente `openmaptiles` e' `{"type":"vector","tiles":["https://tiles.openfreemap.org/planet/v/{z}/{x}/{y}.pbf"],"minzoom":0,"maxzoom":14}`
+  (l'URL **stabile** di `MapHost`; niente `url` di TileJSON: lo chiede il cancello), glifi e sprite da `asset://map/...`. Dal telefono non esce altro che le tessere.
+  La carta di base sta sotto e fa da disegno quando le tessere non ci sono (mappa online spenta, nessuna rete); le tessere la sostituiscono **fra z7 e z8**: i livelli
+  della carta sfumano (coste, laghi, confini, nomi; le regioni a z8-z9) mentre il mare di sfondo lascia il posto alla terra (l'acqua la disegnano le tessere) e i confini e i nomi
+  delle tessere entrano con la stessa sfumatura, cosi' una linea o un nome non sono mai doppi. Sopra z8 senza tessere resta la terra senza mare: per quel caso P4 usa lo stile offline.
+- **Offline** (`*-offline.json`, 23 livelli): nessuna sorgente vettoriale, nessun `{z}`, nessuno sprite, nessuna sfumatura; la carta di base a tutti gli zoom. E' lo stile della
+  **mini-mappa** delle info (D29: "uno stile senza la sorgente online") e, a scelta di P4, della mappa con l'online spento e nessuna regione.
+- Dai due stili scaricati si tiene solo una parte, per id: via edifici, ferrovie, sentieri, piste, tunnel, ponti, scudetti, e ogni punto di interesse (i due stili non hanno
+  edifici 3D ne' livelli `poi`, ma il controllo lo verifica: `source-layer` ammessi `water`, `landcover`, `landuse`, `park`, `waterway`, `aeroway`, `transportation`,
+  `transportation_name`, `boundary`, `place`, `water_name`, `aerodrome_label`). Restano: acqua, boschi, parchi, ghiacci, strade principali, confini, nomi di acqua, strade e luoghi, aeroporto.
+  Lo scuro viene da Dark; il livello dell'aeroporto, che Dark non ha, viene da Positron ricolorato; i sensi unici dalla definizione di Dark.
+- **Nomi**: ogni `text-field` e' `coalesce(name:it, name_en, name:latin)` (niente `name` nudo: un nome in cirillico o arabo non entra, vedi L431); ogni `text-font` e' `NotoSans-Regular` o
+  `NotoSans-Bold` (senza spazi: l'URL dei glifi non ha codifiche percentuali).
+- **Colori**: tutti esadecimali, dalla tavolozza `tools/maps/style/palette.py`. Acqua e confini in **Ametista** (quella di `GalleryAccent`: #9966CC in chiaro e #B88CE8 in scuro per i confini
+  dei paesi, larghezza fino a 1,4 px; l'acqua e' una tinta di Ametista, #D8CCEC chiaro e #33264A scuro, tonalita' 262 gradi in entrambi). La terra e' un grigio appena violaceo.
+
+| Contrasto delle etichette (WCAG, testo contro ogni sfondo su cui puo' cadere: terra, acqua, parchi, boschi, aree residenziali, ghiacci, aeroporti e le strade) | chiaro | scuro |
+|---|---|---|
+| nomi di citta' e luoghi (`text_primary`) | 9,5 su acqua, 12,8 su terra | 11,4 su acqua, 13,6 su terra |
+| nomi secondari: regioni, strade, aeroporti (`text_secondary`) | 5,1 su acqua, 6,9 su terra | 7,8 su acqua, 9,3 su terra |
+| nomi dei paesi (`text_country`) | 8,2 su acqua, 11,1 su terra | 12,2 su acqua, 14,5 su terra |
+| nomi dell'acqua (`text_water`) | 6,9 su acqua, 9,3 su terra | 8,1 su acqua, 9,6 su terra |
+| **peggiore in assoluto, nello stile online** | **4,89:1** (nome di strada, `#5A4B73`, sul bordo di una strada, `#D2C9DE`) | **6,33:1** (nome di strada sulla strada principale) |
+| peggiore nello stile offline | 5,12:1 | 7,82:1 |
+Il minimo e' 4,5:1 (`MapStyleAssetsTest` lo ricalcola sui colori dei file, `check_style.py` per conto suo).
+
+**I glifi** (`glyphs/NotoSans-Regular/` e `NotoSans-Bold/`): i quattro intervalli del §2.7 (`0-255`, `256-511`, `768-1023`, `8192-8447`: latino, latino esteso, greco, punteggiatura) sono i PBF
+della release, senza modifiche (643.951 B in tutto: 76.580, 127.219, 74.752 e 34.070 B il Regular; 81.170, 134.545, 78.937 e 35.678 B il Bold). Tutti gli altri 252 intervalli per carattere
+(504 file) sono **file validi e senza glifi** (40 byte: un messaggio `glyphs` con la sola `fontstack`). Il motivo: MapLibre aspetta i glifi di un intervallo prima di disegnare i nomi di una
+tessera, e un file che manca resta un errore per sempre: un solo nome con una lettera fuori dai quattro intervalli (ș, ọ, un'altra scrittura) bloccherebbe tutte le etichette
+di quella tessera. Con il file vuoto il carattere manca e gli altri nomi si vedono. Lo si dice dal comportamento di MapLibre Native che si conosce: **da provare sul telefono** (vedi i punti aperti). Le cartelle si chiamano come i caratteri dello stile
+(`NotoSans-Regular`, `NotoSans-Bold`, dalle `Noto Sans Regular` e `Noto Sans Bold` dello ZIP): senza spazi, cosi' l'URL non ha codifiche percentuali.
+
+**Lo sprite** (`sprites/mcg`, 1x e 2x): quattro icone ritagliate da quelle di OpenFreeMap (Maki, CC0; la freccia e' di pubblico dominio): `airport-black`, `airport-white`, `oneway-black`, `oneway-white`
+(la bianca e' la stessa icona con il colore cambiato, per lo scuro). Atlante da 7.145 B (1x) e 26.990 B (2x) invece dei 168 KB di quello di OpenFreeMap (che per il 2x vale 2 MB di texture).
+Ogni `icon-image` dello stile e' qui (prova), l'aeroporto da z11 e i sensi unici da z15.
+
+**Licenze e attribuzioni**
+- `LICENSE-NaturalEarth.txt`, `LICENSE-Positron.txt`, `LICENSE-Dark.txt`, `LICENSE-OpenFreeMapStyles.txt`, `LICENSE-NotoSans.txt` (testi dei repository, copiati senza modifiche) e `NOTICE.txt`
+  (da dove viene ogni pezzo, con quali licenze, versioni e modifiche) in `assets/map/`.
+- Righe brevi: **"© OpenStreetMap contributors · OpenMapTiles · OpenFreeMap"** (mappa online; e' l'`attribution` della sorgente `openmaptiles`) e **"Natural Earth · GeoNames"** (carta di base; le `attribution` di
+  `base-land` e `base-cities`): `PlacesAttribution.MAP_ONLINE_SHORT` e `MAP_BASE_SHORT`. Testi completi (`MAP_ONLINE_TEXT`, `MAP_BASE_TEXT`, `MAP_STYLE_TEXT`, `MAP_ODBL_URL`) nella nuova sezione
+  "Mappa" di Impostazioni, Informazioni e licenze (`about_map_*` di feature-settings; testo da leggere, mai un collegamento). L'attribuzione di GeoNames della Fase 3 (`TEXT`) non cambia. Il
+  credito sulla mappa deve **mostrarlo P4** (L430): il pulsante di MapLibre apre un collegamento nel browser e va spento.
+- Non c'e' un testo della CC BY 4.0 (completo) ne' della ODbL nell'app: i repository degli stili non li contengono e scaricarli non era nell'elenco; ci sono i nomi, le sigle e gli indirizzi (come per GeoNames).
+
+**Peso**. APK di release (`:app:assembleRelease`, con `:feature-map` collegato in locale come per P1, MapLibre dentro):
+| | Byte |
+|---|---|
+| prima (senza asset della mappa) | **102.982.908** |
+| dopo (con `assets/map/`) | **104.673.732** |
+| differenza | **+1.690.824** (1,61 MiB: il 70% e' la carta di base compressa, il resto glifi, stili e sprite; senza i glifi vuoti sarebbero 16.726 B in meno) |
+Nell'APK `assets/map/` occupa 1.597.658 B compressi per 4.773.704 B scritti: la **carta di base** (`base/`) 1.195.222 B compressi nell'APK (**<= 4 MB**), glifi veri 332.980 B,
+glifi vuoti (504 file) 16.726 B, stili 8.485 B, sprite 34.356 B, licenze e NOTICE 9.889 B.
+
+**Prove**
+- Python (`tools/maps/selftest.py`, 13 prove): Douglas-Peucker (estremi, tolleranza, determinismo su 20.000 punti), numeri, PNG, glifi vuoti, tavolozza, **riproducibilita'** (due corse, stessi byte e stesse
+  impronte committate), nomi italiani da `places.mcgp1` (161.650 luoghi, 206 distretti).
+- Kotlin, JVM (`feature-map/src/test/.../assets/`): `MapStyleAssetsTest` (12 prove: nessun URL fuori da `asset://` e dall'URL stabile; sorgenti; l'URL stabile passa `TilePolicy` e viene riscritto sulla versione; ogni `text-font`
+  ha i suoi glifi e ogni intervallo esiste; ogni icona ha il suo sprite; niente 3D, niente `poi`, niente Casa; contrasto >= 4,5:1 sui colori; acqua e confini in Ametista, quella di `GalleryAccent`; solo chiavi note; < 100 KB),
+  `BaseMapAssetsTest` (6: peso <= 4 MB, impronte, forma e 5 decimali, nomi italiani, mai Casa, licenze), `MapAttributionTest` (3: righe brevi uguali negli stili, nel NOTICE e in `PlacesAttribution`; testi di Informazioni e licenze uguali alle costanti);
+  `core-places` `PlacesAttributionMapTest` (3); `feature-settings` `AboutMapSectionTest` (3).
+- **Rete**: nessun codice di rete fuori da `feature-map/.../net/` (`NoNetworkSourcesTest` verde); nessuno scaricamento nei test ne' nella build.
+- **Test d'architettura** delle Fasi 6-9 verdi, `Phase9ArchitectureTest` compreso (regola 6: i moduli della Fase 9, prove comprese, non nominano i campi della casa: `BaseMapAssetsTest` cerca solo i nomi "Casa" e "Home").
+  Le prove ai bordi (provate cambiando i file a mano): un URL esterno in uno stile, un `text-font` senza glifi, un livello `fill-extrusion`, un testo con contrasto 2:1, un'etichetta "Casa" e un file della carta toccato fanno
+  fallire, ognuno, la prova che lo guarda.
+- **`tools/check.ps1 -NoDaemon`** (`GRADLE_OPTS=-Dorg.gradle.workers.max=2`, senza `app/build/outputs/apk/release` all'inizio): **OK, tutto a posto** (Gradle `assembleDebug assembleRelease galleryTest galleryLint` in 23 min 44 s). `:app` non
+  dipende ancora da `:feature-map`: i passi 7e e 7h della mappa nel dex non si applicano finche' P13 non la collega (il peso e' stato misurato a parte, sopra).
+
+**Edge case**: E-MAP1 (stile offline senza sorgente online; la carta di base basta), E-MAP14 (nessuna richiesta di caratteri: i glifi sono `asset://`), E-MAP16 (mini-mappa solo con la carta di base), D29/C156 (mai la casa).
+
+**Per gli altri pacchetti**
+- **P4** (schermate): gli stili sono `asset://map/style-chiaro.json` e `style-scuro.json` (online) e `style-chiaro-offline.json` e `style-scuro-offline.json` (senza sorgente online); i metadati `mcg:stile` (`chiaro` o `scuro`) e
+  `mcg:online` dicono quale e'. Si sceglie il file con il tema dell'app. Gli stili **offline** servono alla mini-mappa (D29) e, a scelta di P4, alla mappa grande quando l'online e' spento e non ci sono regioni scaricate (cosi' non c'e' mai la terra senza mare sopra z8);
+  con una regione scaricata serve lo stile online (le tessere della regione sono nel database di MapLibre). **Spegnere l'attribuzione di MapLibre** (il suo pulsante apre un collegamento nel browser) e mostrare sulla mappa
+  `PlacesAttribution.MAP_ONLINE_SHORT` (o `MAP_BASE_SHORT` con l'offline), L430. Zoom: lo stile online e' pensato per 0-14, quello offline per 0-9 (oltre, i dati sono grossolani: `maxZoom` 9). I livelli di P4 (bolle, punti, camera) si aggiungono
+  **sopra tutti gli altri** dopo il caricamento dello stile. **Da guardare** sul telefono (F119, F122): vedi i punti aperti.
+- **P5** (regioni): la sorgente dello stile e' `openmaptiles` con l'URL stabile, `minzoom 0` e `maxzoom 14`: e' quella che una regione scaricata riempie. Lo stile **non riduce** cio' che si scarica: MapLibre scarica le tessere intere del server (tutti i
+  livelli, edifici e punti di interesse compresi), quindi le stime di peso di P5 contano tessere intere, non quelle che lo stile disegna. Le regioni non toccano la carta di base.
+- **P13** (integrazione): aggiungere a `ABOUT_LIBRARIES` MapLibre (BSD-2-Clause) e le librerie che porta, quando `:app` collega `:feature-map` (`AboutLibrariesTest` le chiede); i `LICENSE-*` e il `NOTICE` sono gia' in `assets/map/`.
+  Nessuna richiesta di cambio dei contratti di P0 o P1.
+
+**Punti aperti**
+- **Da provare sul telefono** (niente emulatore in questo pacchetto): che MapLibre carichi **glifi e sprite da `asset://`** con i file veri (P1 ha provato lo stile e il GeoJSON); che un intervallo di glifi **vuoto** non faccia aspettare ne' dia errore;
+  che le tessere di OpenFreeMap abbiano `name:it` (altrimenti si ripiega su `name_en`); che il passaggio carta di base - tessere fra z7 e z8 si veda bene (chiaro e scuro) e che a mappa online spenta si usi lo stile offline.
+  Anteprima: `docs/screenshots/9-P2/` (SVG chiaro e scuro, mondo, Europa e Italia, senza MapLibre: dati e colori, non il disegno vero). **P4 deve guardare**: nomi che si sovrappongono (la collisione di MapLibre e' diversa da quella dell'anteprima), il peso visivo dei confini e
+  delle regioni tratteggiate, la leggibilita' dei nomi sull'acqua, il momento in cui i confini delle tessere prendono il posto della carta, un nome di strada su una strada chiara (e' il contrasto piu' basso, 4,89:1).
+- Le **province** di Natural Earth sono quelle del 2010 circa (ci sono ancora Carbonia-Iglesias, Olbia-Tempio, Medio Campidano e Ogliastra): i confini di regione sono giusti, quelli di provincia solo indicativi.
+- I nomi dei paesi sono quelli italiani di Natural Earth (`NAME_IT`) e i confini quelli del suo punto di vista politico (con i contesi tratteggiati): se un nome o un confine non piace, e' una riga in `build_base.py`.
+- Un aggiornamento di Natural Earth, dello stile o dei glifi e' un cambio di commit e di impronte in `fingerprints.json`, un nuovo scaricamento a mano e una nuova corsa; `selftest.py` e i test lo guardano.
+- `ABOUT_LIBRARIES` (Informazioni e licenze) non ha ancora MapLibre e OkHttp: li aggiunge P13 con il collegamento di `:app`.
+
 ## Fase 9 P3: punti e raggruppamento (30/10)
 
 Il pacchetto P3 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P3; §2.10 "L'indice", D27, D28, D31; §5.2). Branch `fase9/p3` (commit `5da4fc83` la query, `7377cf32` l'indice, il servizio e la Libreria sintetica, piu' quello dei documenti). E' la parte **pura**

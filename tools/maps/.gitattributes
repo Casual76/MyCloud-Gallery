@@ -1,0 +1,2 @@
+# Le impronte e i registri si confrontano byte per byte (`--verifica`, `selftest.py`): niente conversione dei fine riga.
+*.json -text

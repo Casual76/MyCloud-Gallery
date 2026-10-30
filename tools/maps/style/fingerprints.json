@@ -1,0 +1,90 @@
+{
+  "descrizione": "Ingressi scaricati (a mano, con `fetch.py --scarica`) di stile, sprite e glifi. Stili e sprite: repository hyperknot/openfreemap-styles al commit fissato; glifi: release v2.0 di openmaptiles/fonts (noto-sans.zip, PBF di fontnik). Ognuno nella sua cartella nuova e vuota sotto build/download/<id>/.",
+  "openfreemap_styles": {
+    "commit": "006ea5796803ba2df4330888836cb0a8f17473b4",
+    "data": "2026-10-25"
+  },
+  "openmaptiles_fonts": {
+    "release": "v2.0",
+    "commit": "a4f9e7cf18aa382945c0a912f3022ba94a0b1d52"
+  },
+  "scaricati": [
+    {
+      "id": "ofm-styles-006ea57-positron-style",
+      "file": "style.json",
+      "url": "https://raw.githubusercontent.com/hyperknot/openfreemap-styles/006ea5796803ba2df4330888836cb0a8f17473b4/styles/positron/style.json",
+      "sha256": "3c983bbe247bb116cbfd5192422ea3c8a5d3230362657aac65cdf8c546f8e913",
+      "size": 40060
+    },
+    {
+      "id": "ofm-styles-006ea57-positron-license",
+      "file": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/hyperknot/openfreemap-styles/006ea5796803ba2df4330888836cb0a8f17473b4/styles/positron/LICENSE.md",
+      "sha256": "de6d9326e657475f6795b327923aeb9fdcbcc45f94e84380c50aeee2a6bf3064",
+      "size": 3094
+    },
+    {
+      "id": "ofm-styles-006ea57-dark-style",
+      "file": "style.json",
+      "url": "https://raw.githubusercontent.com/hyperknot/openfreemap-styles/006ea5796803ba2df4330888836cb0a8f17473b4/styles/dark/style.json",
+      "sha256": "e92aaac9b9fc01f5e94fca1ae726d491efef737874160e90fce796713373c392",
+      "size": 32803
+    },
+    {
+      "id": "ofm-styles-006ea57-dark-license",
+      "file": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/hyperknot/openfreemap-styles/006ea5796803ba2df4330888836cb0a8f17473b4/styles/dark/LICENSE.md",
+      "sha256": "7bc994370067d4160209ea9bc85239403871284c2c930c34ddc792723d05f89f",
+      "size": 3068
+    },
+    {
+      "id": "ofm-styles-006ea57-repo-license",
+      "file": "LICENSE.md",
+      "url": "https://raw.githubusercontent.com/hyperknot/openfreemap-styles/006ea5796803ba2df4330888836cb0a8f17473b4/LICENSE.md",
+      "sha256": "d1754e5d291e4e8b9b0047ddba0a6ec75e1046ccd61a02c2cea3dac58f3fe355",
+      "size": 4118
+    },
+    {
+      "id": "ofm-styles-006ea57-sprite-1x-json",
+      "file": "ofm.json",
+      "url": "https://raw.githubusercontent.com/hyperknot/openfreemap-styles/006ea5796803ba2df4330888836cb0a8f17473b4/sprites/sprites/ofm_f384/ofm.json",
+      "sha256": "73e75e58d8c7bb62cc25d9d150660500552f4d04f6eac5efa4e236076773c356",
+      "size": 27737
+    },
+    {
+      "id": "ofm-styles-006ea57-sprite-1x-png",
+      "file": "ofm.png",
+      "url": "https://raw.githubusercontent.com/hyperknot/openfreemap-styles/006ea5796803ba2df4330888836cb0a8f17473b4/sprites/sprites/ofm_f384/ofm.png",
+      "sha256": "8996a519d218dc5f98015267709dae272a77bb74ef0ecc5a0992dcf276c1be4c",
+      "size": 49454
+    },
+    {
+      "id": "ofm-styles-006ea57-sprite-2x-json",
+      "file": "ofm@2x.json",
+      "url": "https://raw.githubusercontent.com/hyperknot/openfreemap-styles/006ea5796803ba2df4330888836cb0a8f17473b4/sprites/sprites/ofm_f384/ofm@2x.json",
+      "sha256": "82a4aaeed2c5ce6e98553915754dbe394ee66fd9a2aacc4318d25cdd74e8730b",
+      "size": 27822
+    },
+    {
+      "id": "ofm-styles-006ea57-sprite-2x-png",
+      "file": "ofm@2x.png",
+      "url": "https://raw.githubusercontent.com/hyperknot/openfreemap-styles/006ea5796803ba2df4330888836cb0a8f17473b4/sprites/sprites/ofm_f384/ofm@2x.png",
+      "sha256": "3793faf7dc47960636e4b6b1039978fa6925e6c90a7cb49ef23b37e153635c9b",
+      "size": 118872
+    },
+    {
+      "id": "openmaptiles-fonts-2.0-noto-sans-zip",
+      "file": "noto-sans.zip",
+      "url": "https://github.com/openmaptiles/fonts/releases/download/v2.0/noto-sans.zip",
+      "sha256": "d117316544b43a5dde7ee761b36e17701e9f85574e181d76a74814240fdbaf34",
+      "size": 61899817
+    },
+    {
+      "id": "openmaptiles-fonts-2.0-noto-sans-license",
+      "file": "LICENSE",
+      "url": "https://raw.githubusercontent.com/openmaptiles/fonts/a4f9e7cf18aa382945c0a912f3022ba94a0b1d52/noto-sans/LICENSE",
+      "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+      "size": 4301
+    }
+  ]
+}

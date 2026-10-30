@@ -1,0 +1,61 @@
+{
+  "conteggi": {
+    "citta": 11429,
+    "citta_con_nome_inglese": 11,
+    "confini_linee": [
+      357,
+      35
+    ],
+    "coste_linee": 1429,
+    "laghi_poligoni": 411,
+    "regioni_linee": [
+      34,
+      153
+    ],
+    "terre_poligoni": 1415
+  },
+  "decimali": 5,
+  "descrizione": "Impronte della carta di base (feature-map/src/main/assets/map/base/). Le scrive `build_base.py`; `CartaDiBaseTest` le confronta con i file.",
+  "file": {
+    "borders.geojson": {
+      "byte": 251872,
+      "sha256": "0b294d8fa3529c0ebba67c0fea8c84146bf1b484ded2e50f1d15bed5b84155c6"
+    },
+    "cities.geojson": {
+      "byte": 1358865,
+      "sha256": "2d1ab1e4f09b4eb59311821d3a78c7d45c81fe6991d28fe2a970e026c45bf6f2"
+    },
+    "coast.geojson": {
+      "byte": 997661,
+      "sha256": "2f7af9297750a25da53f9f703db044d10a00b52e8c5d0343aae0791279737164"
+    },
+    "country-labels.geojson": {
+      "byte": 30605,
+      "sha256": "dccd91d5f847d174007259fc37f9e6a68f292a9ae72bac619704b933e66752b8"
+    },
+    "lakes.geojson": {
+      "byte": 256793,
+      "sha256": "755d6d6db85f7b941882e1cbedd73473a17801c17da8cd46b911083c1a4c4ab6"
+    },
+    "land.geojson": {
+      "byte": 1001640,
+      "sha256": "0ffd6bbfd3b31180e304a72f9c84e1ec25598d390401b827115bffcb48de8289"
+    },
+    "region-labels.geojson": {
+      "byte": 2354,
+      "sha256": "bee934e42b9b219587e12eda8020383332fbb0ea9cea18eb09173a5c3cc9c2f4"
+    },
+    "regions.geojson": {
+      "byte": 86889,
+      "sha256": "206b17f5bd74a5c3ad6bce2e53d5098b57d119807ce2dc862454fa9b64de10a5"
+    }
+  },
+  "natural_earth": "5.1.2",
+  "popolazione_minima": 50000,
+  "tolleranze_gradi": {
+    "area_minima_anello": 0.0002,
+    "province": 0.003,
+    "regioni": 0.002,
+    "terre_coste_laghi_confini": 0.01
+  }
+}

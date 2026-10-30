@@ -96,6 +96,53 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit) {
     }
     item { FluidSectionFootnote(text = stringResource(R.string.about_geonames_note)) }
 
+    // --- La mappa (Fase 9, P2): OpenStreetMap e OpenMapTiles (online), Natural Earth e GeoNames (carta di base), stile e caratteri ---------
+    item {
+      FluidSectionHeader(
+        title = stringResource(R.string.about_section_map),
+        detail = stringResource(R.string.about_section_map_detail),
+      )
+    }
+    item {
+      SelectionContainer {
+        FluidListGroup {
+          FluidListRow(
+            title = stringResource(R.string.about_map_online_title),
+            subtitle = stringResource(R.string.about_map_online_attribution),
+            tone = FluidTone.Info,
+            leading = { RowGlyph(Icons.Rounded.Public) },
+            disclosure = false,
+          )
+          FluidListDivider()
+          FluidListRow(
+            eyebrow = stringResource(R.string.about_license_label),
+            title = stringResource(R.string.about_license_odbl),
+            subtitle = stringResource(R.string.about_license_odbl_url),
+            tone = FluidTone.Neutral,
+            leading = { RowGlyph(Icons.Rounded.Description) },
+            disclosure = false,
+          )
+          FluidListDivider()
+          FluidListRow(
+            title = stringResource(R.string.about_map_base_title),
+            subtitle = stringResource(R.string.about_map_base_attribution),
+            tone = FluidTone.Info,
+            leading = { RowGlyph(Icons.Rounded.Public) },
+            disclosure = false,
+          )
+          FluidListDivider()
+          FluidListRow(
+            title = stringResource(R.string.about_map_style_title),
+            subtitle = stringResource(R.string.about_map_style_attribution),
+            tone = FluidTone.Neutral,
+            leading = { RowGlyph(Icons.Rounded.Code) },
+            disclosure = false,
+          )
+        }
+      }
+    }
+    item { FluidSectionFootnote(text = stringResource(R.string.about_map_note)) }
+
     // --- Librerie (tutte quelle dell'APK di release) -----------------------------------------------------------------
     item {
       FluidSectionHeader(

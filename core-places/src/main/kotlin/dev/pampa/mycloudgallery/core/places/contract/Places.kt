@@ -133,4 +133,32 @@ object PlacesAttribution {
 
   /** La sigla della licenza. */
   const val LICENSE_NAME: String = "CC BY 4.0"
+
+  // --- La mappa (Fase 9, P2; docs/fase9-progetto.md §2.7, D22, D25) -----------------------------------------------------------
+  // Stesse parole nelle risorse di Informazioni e licenze (`about_map_*` di feature-settings): `MapAttributionTest` di feature-map le confronta.
+
+  /** La riga breve da mostrare sulla mappa ONLINE: obbligo di ODbL (OpenStreetMap) e di OpenMapTiles. */
+  const val MAP_ONLINE_SHORT: String = "© OpenStreetMap contributors · OpenMapTiles · OpenFreeMap"
+
+  /** La riga breve da mostrare sulla carta di base, quella senza Internet. */
+  const val MAP_BASE_SHORT: String = "Natural Earth · GeoNames"
+
+  /** Il testo completo sulle tessere online (Impostazioni → Informazioni e licenze). */
+  const val MAP_ONLINE_TEXT: String =
+    "Mappa online: tessere di OpenFreeMap (openfreemap.org) con dati di OpenStreetMap, © OpenStreetMap contributors, " +
+      "licenza ODbL 1.0, nello schema di OpenMapTiles (openmaptiles.org). Si usa solo con la mappa online accesa."
+
+  /** Il testo completo sulla carta di base: Natural Earth e le città di GeoNames (CC BY 4.0, quindi «modificati» va detto). */
+  const val MAP_BASE_TEXT: String =
+    "Carta di base senza Internet: dati di Natural Earth (naturalearthdata.com), pubblico dominio, semplificati; " +
+      "città e nomi dei luoghi da GeoNames (geonames.org), licenza Creative Commons Attribuzione 4.0, ridotti e in parte tradotti in italiano."
+
+  /** Il testo su stile, caratteri e icone (BSD 3-Clause e CC BY 4.0 per lo stile, SIL OFL 1.1 per i caratteri, CC0 per le icone). */
+  const val MAP_STYLE_TEXT: String =
+    "Stile della mappa: derivato da Positron e Dark di OpenFreeMap e OpenMapTiles (codice BSD 3-Clause, disegno CC BY 4.0; " +
+      "Positron deriva da CartoDB Basemaps, CC BY 3.0), modificato: livelli ridotti, colori Ametista. " +
+      "Caratteri: Noto Sans, SIL Open Font License 1.1. Icone: Maki, CC0."
+
+  /** La licenza dei dati di OpenStreetMap. Si mostra come testo e non si apre da sola. */
+  const val MAP_ODBL_URL: String = "https://opendatacommons.org/licenses/odbl/1-0/"
 }

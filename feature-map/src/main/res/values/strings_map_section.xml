@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 9 (P4, §2.5, D30, E-MAP5): la sezione Luoghi delle Raccolte. -->
+  <string name="mappa_section">Luoghi</string>
+  <string name="mappa_row_map">Mappa</string>
+  <string name="mappa_row_map_detail">Le tue foto sulla carta</string>
+  <string name="mappa_row_map_none">Nessuna foto con la posizione</string>
+  <string name="mappa_row_without_detail">Non compaiono sulla mappa</string>
+</resources>

@@ -33,6 +33,9 @@ internal enum class SpecRow(val label: String) {
 
   /** Fase 8 (P9, D28): le persone -- la sezione delle Raccolte, "Tutte le persone", "Altri volti", la pagina, la revisione dei volti, la riga del viewer, il dizionario. */
   PEOPLE("Persone: sezione, elenchi, pagina, revisione dei volti, viewer, dizionario"),
+
+  /** Fase 9 (P9, D31): i ricordi -- la sezione delle Raccolte, la pagina del ricordo, "Tutti i ricordi", la presentazione, le copertine e i ricordi con le persone. */
+  MEMORIES("Ricordi: sezione, pagina, \"Tutti i ricordi\", presentazione, copertine, persone"),
 }
 
 /** Con cosa e' provata una superficie. */
@@ -122,6 +125,19 @@ internal object HiddenSurfaces {
   private const val APP_FACES = "app/src/main/kotlin/dev/pampa/mycloudgallery/faces"
   private const val FEATURE_NAS = "feature-nas/src/main/kotlin/dev/pampa/mycloudgallery/feature/nas"
   private const val FEATURE_LIBRARY = "feature-library/src/main/kotlin/dev/pampa/mycloudgallery/feature/library"
+  private const val MEMORIES_CORE = "core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories"
+  private const val FEATURE_MEMORIES = "feature-memories/src/main/kotlin/dev/pampa/mycloudgallery/feature/memories"
+
+  /**
+   * I file che fanno vivere la riga `MEMORIES`: il motore di P6 (la pulizia dello scaffale, le voci della sezione, il giro e la pubblicazione, la scelta delle foto), il
+   * filtro finale di P7 (`VisiblePhotoPicker`) e il filtro finale delle schermate di P9 (`FinalFilter`, che le superfici chiamano tutte; `MemoriesDependencies` e' dove `:app`
+   * lega la maschera). Un file nuovo che nomina `VisibleMedia` o `HiddenMask` si elenca qui, con la sua sonda.
+   */
+  private val MEMORIES_SOURCES = listOf(
+    "$MEMORIES_CORE/shelf/ShelfPruner.kt", "$MEMORIES_CORE/shelf/ShelfCards.kt", "$MEMORIES_CORE/plan/MemoryEngine.kt", "$MEMORIES_CORE/plan/PublishRound.kt",
+    "$MEMORIES_CORE/plan/MemoryPhotoChoice.kt", "$MEMORIES_CORE/pick/VisiblePhotoPicker.kt",
+    "$FEATURE_MEMORIES/ui/FinalFilter.kt", "$FEATURE_MEMORIES/nav/MemoriesDependencies.kt",
+  )
 
   /** Le superfici. L'ordine e' quello del §2.1. */
   val entries: List<SurfaceEntry> = listOf(
@@ -298,6 +314,28 @@ internal object HiddenSurfaces {
       sources = listOf("$ALBUMS/smart/SmartPeople.kt", "$ALBUMS/smart/SmartClassifier.kt", "$APP_FACES/FacesPeoplePorts.kt"), probe = RealAlbumsPeopleProbes.albumsPeople(), live = true,
       alsoProvedBy = listOf("SmartPeopleTest", "SmartPeoplePropertyTest", "SmartPeopleInterpreterTest", "SmartUpkeepPeopleTest"),
     ),
+
+    // --- Il codice vero di P6, P7 e P9 (i ricordi): integrazione del 30/10. Il motore vero e le schermate vere sul catalogo vero; dopo la pubblicazione il catalogo nasconde
+    // alcuni elementi (senza che l'istantanea e lo scaffale lo sappiano) e ogni superficie deve toglierli (E-MEM5, E-H8, E-H10, D31) -------------------------------------------------------
+    SurfaceEntry(
+      id = "memories-section", title = "Ricordi: la sezione delle Raccolte (voci, conti, segni \"nuovo\", copertine, codici)", row = SpecRow.MEMORIES, owner = "P9",
+      backing = Backing.PRODUCTION, sources = MEMORIES_SOURCES + "$FEATURE_MEMORIES/section/MemoriesSections.kt", probe = RealMemoriesProbes.section, live = true,
+      alsoProvedBy = listOf("MemoriesSectionSourcesTest", "MemoriesSectionStatesTest", "MemoriesSectionBindingTest"),
+    ),
+    SurfaceEntry(
+      id = "memories-page", title = "Ricordi: la pagina del ricordo e \"Tutti i ricordi\" (elementi, copertina, conti, viewer)", row = SpecRow.MEMORIES, owner = "P9",
+      backing = Backing.PRODUCTION, sources = listOf("$FEATURE_MEMORIES/page/MemoryPageController.kt", "$FEATURE_MEMORIES/list/AllMemoriesController.kt"),
+      probe = RealMemoriesProbes.page, live = true, alsoProvedBy = listOf("MemoryPageControllerTest", "AllMemoriesControllerTest"),
+    ),
+    SurfaceEntry(
+      id = "memories-player", title = "Ricordi: la presentazione (elementi, copertina del titolo, precaricamento, carta finale)", row = SpecRow.MEMORIES, owner = "P9",
+      backing = Backing.PRODUCTION, sources = listOf("$FEATURE_MEMORIES/player/PlayerController.kt"), probe = RealMemoriesProbes.player, live = true,
+      alsoProvedBy = listOf("PlayerControllerTest", "ThumbnailPlayerImagesTest"),
+    ),
+    SurfaceEntry(
+      id = "memories-people", title = "Ricordi con le persone: mai una persona nascosta, mai un nascosto nei ricordi di una persona (E-H10)", row = SpecRow.MEMORIES, owner = "P9",
+      backing = Backing.PRODUCTION, sources = listOf("$MEMORIES_CORE/shelf/ShelfPruner.kt"), probe = RealMemoriesProbes.people, live = true,
+    ),
   )
 
   /**
@@ -345,9 +383,7 @@ internal object HiddenSurfaces {
     // mai e' `AppAlbumsEvalEnvironmentTest` (catalogo vero, mondi casuali) e `AlbumsEvalSessionTest`.
     "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/eval/albums/AlbumsEvalRunner.kt",
     "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/eval/albums/AppAlbumsEvalEnvironment.kt",
-    // Fase 9 (P7): il filtro dei nascosti attorno alla scelta delle foto dei ricordi chiede `HiddenMask` prima e dopo la scelta e non mostra
-    // niente. La superficie dei Ricordi (riga `MEMORIES`, con la sonda) e' di P9, che potra' spostarlo fra i suoi sorgenti.
-    "core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories/pick/VisiblePhotoPicker.kt",
+    // Fase 9 (P9): `VisiblePhotoPicker` (il filtro dei nascosti attorno alla scelta delle foto dei ricordi, P7) e' passato fra i sorgenti della riga `MEMORIES`.
   )
 
   /** I contratti da cui ogni superficie deve passare per i nascosti. */

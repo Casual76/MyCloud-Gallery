@@ -47,8 +47,14 @@ class MapNetWiring(
     mobileAllowed = !settings.wifiOnly.value,
     covered = regions::covers,
     currentVersion = currentVersion,
-    download = downloadScope(),
+    download = activeDownload(),
   )
+
+  /**
+   * Lo scaricamento confermato in corso, ma solo con l'interruttore di build acceso: spento, il cancello rifiuta **ogni** richiesta, anche quelle
+   * di una regione (`FeatureFlags.mapOnline`, D24).
+   */
+  fun activeDownload(): RegionDownloadScope? = if (buildFlag) downloadScope() else null
 
   override fun toString(): String = "MapNetWiring(buildFlag=$buildFlag)"
 }
@@ -139,7 +145,7 @@ object MapLibreInit {
   fun refreshConnectivity() {
     val w = wiring ?: return
     val online = w.buildFlag && w.settings.online.value is MapOnline.On
-    MapLibre.setConnected(MapConnectivity.connected(online, w.settings.wifiOnly.value, w.network.current.value, w.downloadScope()))
+    MapLibre.setConnected(MapConnectivity.connected(online, w.settings.wifiOnly.value, w.network.current.value, w.activeDownload()))
   }
 
   /** Le opzioni di ogni mappa: `SurfaceView` (non `TextureView`), niente precaricamento dei livelli piu' bassi. Dopo [ensure]. */

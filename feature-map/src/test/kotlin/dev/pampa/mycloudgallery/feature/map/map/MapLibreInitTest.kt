@@ -2,7 +2,10 @@ package dev.pampa.mycloudgallery.feature.map.map
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.map.contract.MapHost
 import dev.pampa.mycloudgallery.core.map.contract.MapNetwork
+import dev.pampa.mycloudgallery.core.map.contract.MapRequestFacts
+import dev.pampa.mycloudgallery.core.map.contract.MapVerdict
 import dev.pampa.mycloudgallery.core.map.contract.RefuseReason
 import dev.pampa.mycloudgallery.core.map.contract.RegionDownloadScope
 import dev.pampa.mycloudgallery.core.map.contract.TileKey
@@ -68,8 +71,13 @@ class MapLibreInitTest {
     assertThat(off.covered(TileKey(0, 0, 0))).isEqualTo(regions.covers(TileKey(0, 0, 0)))
 
     // L'interruttore di build spento vince su tutto (D24): mappa online mai accesa.
-    val noBuild = MapNetWiring(TilePolicy, buildFlag = false, InMemoryMapSettings(), network, regions, RecordingMapTraffic())
+    val noBuild = MapNetWiring(TilePolicy, buildFlag = false, InMemoryMapSettings(), network, regions, RecordingMapTraffic()) { scope }
     assertThat(noBuild.state("v1").online).isFalse()
+    assertThat(noBuild.state("v1").download).isNull() // nemmeno uno scaricamento confermato
+    assertThat(noBuild.activeDownload()).isNull()
+    network.set(MapNetwork.WIFI)
+    assertThat(TilePolicy.decide(MapRequestFacts("GET", "https", MapHost.TILES, 443, "/planet/v/3/1/1.pbf", null), noBuild.state("v1")))
+      .isEqualTo(MapVerdict.Refuse(RefuseReason.OFF))
     assertThat(noBuild.toString()).doesNotContain("v1")
   }
 

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 9 (P9, §2.3, D11): i fogli "Mostra meno" e "Non ricordarmi questo periodo". -->
+  <string name="memorie_less_title">Mostra meno %s</string>
+  <string name="memorie_less_title_unnamed">Mostra meno questa persona</string>
+  <string name="memorie_less_message">Scegli quanto vuoi vedere questa persona nei ricordi. Puoi cambiare idea dalle Impostazioni.</string>
+  <string name="memorie_less_option_less">Mostra meno</string>
+  <string name="memorie_less_option_less_detail">Niente ricordi dedicati e mai come copertina. Può comparire nelle foto di gruppo.</string>
+  <string name="memorie_less_option_never">Mai nei ricordi</string>
+  <string name="memorie_less_option_never_detail">Nessuna sua foto nei ricordi.</string>
+  <string name="memorie_less_clear">Togli la scelta</string>
+  <string name="memorie_less_confirm">Conferma</string>
+  <string name="memorie_days_title">Non ricordarmi questo periodo</string>
+  <string name="memorie_days_message">Le foto di questi giorni non compariranno più nei ricordi.</string>
+  <string name="memorie_days_from">Dal</string>
+  <string name="memorie_days_to">Al</string>
+  <string name="memorie_days_earlier">−1 giorno</string>
+  <string name="memorie_days_later">+1 giorno</string>
+  <string name="memorie_days_only_first">Solo un giorno</string>
+  <string name="memorie_days_whole">Tutto il periodo del ricordo</string>
+  <plurals name="memorie_days_count">
+    <item quantity="one">%d giorno</item>
+    <item quantity="other">%d giorni</item>
+  </plurals>
+  <string name="memorie_days_limit">Al massimo 366 giorni.</string>
+  <string name="memorie_days_confirm">Non ricordare questo periodo</string>
+</resources>

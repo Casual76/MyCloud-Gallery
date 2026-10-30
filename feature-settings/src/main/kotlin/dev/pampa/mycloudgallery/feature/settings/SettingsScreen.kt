@@ -41,6 +41,9 @@ import dev.pampa.mycloudgallery.feature.settings.search.SearchEntryRow
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationRow
 import dev.pampa.mycloudgallery.feature.settings.library.MotionAnimationViewModel
+import dev.pampa.mycloudgallery.feature.settings.memories.MemoriesEntryRow
+import dev.pampa.mycloudgallery.feature.settings.memories.MemoriesEntrySummary
+import dev.pampa.mycloudgallery.feature.settings.memories.MemoriesEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntryRow
 import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntrySummary
 import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntryViewModel
@@ -91,6 +94,11 @@ class SettingsLinks(
    * scrive `:app`). Null = la voce non c'e'.
    */
   val openPeople: (() -> Unit)? = null,
+  /**
+   * Fase 9 (P9, D15, D18): la voce "Ricordi e notifiche" porta alla pagina Impostazioni -> Ricordi e notifiche di feature-memories, che le Impostazioni non conoscono (la
+   * callback la scrive `:app`). Null = la voce non c'e'.
+   */
+  val openMemories: (() -> Unit)? = null,
 ) {
   companion object {
     val None = SettingsLinks()
@@ -117,6 +125,8 @@ internal fun SettingsRoute(
   val searchSummary by searchViewModel.summary.collectAsStateWithLifecycle()
   val peopleViewModel: PeopleEntryViewModel = hiltViewModel()
   val peopleSummary by peopleViewModel.summary.collectAsStateWithLifecycle()
+  val memoriesViewModel: MemoriesEntryViewModel = hiltViewModel()
+  val memoriesSummary by memoriesViewModel.summary.collectAsStateWithLifecycle()
   SettingsScreen(
     state = state,
     onBack = onBack,
@@ -130,6 +140,7 @@ internal fun SettingsRoute(
     onMotionAnimation = motionViewModel::set,
     searchSummary = searchSummary,
     peopleSummary = peopleSummary,
+    memoriesSummary = memoriesSummary,
   )
 }
 
@@ -155,6 +166,7 @@ fun SettingsScreen(
   onMotionAnimation: (Boolean) -> Unit = {},
   searchSummary: dev.pampa.mycloudgallery.feature.settings.search.SearchEntrySummary? = null,
   peopleSummary: PeopleEntrySummary? = null,
+  memoriesSummary: MemoriesEntrySummary? = null,
 ) {
   val family = familyHero(state)
   FluidScreen(
@@ -245,6 +257,11 @@ fun SettingsScreen(
         links.openPeople?.let { openPeople ->
           FluidListDivider()
           PeopleEntryRow(summary = peopleSummary, onClick = openPeople)
+        }
+        // Fase 9 (P9, D15, D18): "Ricordi e notifiche" (come sono le notifiche di questo dispositivo), solo se `:app` ha scritto dove porta.
+        links.openMemories?.let { openMemories ->
+          FluidListDivider()
+          MemoriesEntryRow(summary = memoriesSummary, onClick = openMemories)
         }
       }
     }

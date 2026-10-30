@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 9 (P9, §2.5, D14, E-MEM1): la sezione Ricordi delle Raccolte. -->
+  <string name="memorie_section">Ricordi</string>
+  <string name="memorie_row_all">Tutti i ricordi</string>
+  <plurals name="memorie_row_all_detail">
+    <item quantity="one">%s ricordo</item>
+    <item quantity="other">%s ricordi</item>
+  </plurals>
+  <string name="memorie_row_empty">I ricordi arrivano quando ci sono abbastanza foto</string>
+  <string name="memorie_row_empty_detail">Qui compariranno gli anniversari, i viaggi e i momenti da rivedere.</string>
+  <string name="memorie_row_library">Aspetto la tua libreria</string>
+  <string name="memorie_row_library_detail">I ricordi si preparano appena le foto sono pronte.</string>
+  <string name="memorie_row_working">Sto preparando i ricordi</string>
+  <string name="memorie_row_working_detail">Ci vuole un momento, solo la prima volta.</string>
+</resources>

@@ -137,6 +137,8 @@ fun NavGraphBuilder.settingsGraph(
   openHidden: (() -> Unit)? = null,
   /** Fase 8 (P7, D3): la pagina Impostazioni -> Persone di feature-people (la scrive `:app`); null = la voce "Persone" non c'e'. */
   openPeople: (() -> Unit)? = null,
+  /** Fase 9 (P9, D15, D18): la pagina Impostazioni -> Ricordi e notifiche di feature-memories (la scrive `:app`); null = la voce "Ricordi e notifiche" non c'e'. */
+  openMemories: (() -> Unit)? = null,
 ) {
   val back: () -> Unit = { nav.popBackStack() }
   navigation<SettingsGraphRoute>(startDestination = SettingsHomeRoute) {
@@ -159,6 +161,7 @@ fun NavGraphBuilder.settingsGraph(
             openSearch = openSearch,
             openHidden = openHidden,
             openPeople = openPeople,
+            openMemories = openMemories,
           ),
           openDiagnostics = openDiagnostics,
           resumeStep = resumeStep,

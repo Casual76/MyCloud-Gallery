@@ -79,8 +79,12 @@ object PickWeights {
   /** Due foto con coseno almeno questo (spazio `embeddinggemma2`) sono doppioni (D7). */
   const val DUPLICATE_COSINE: Double = 0.92
 
-  /** Senza vettori ne' firma: due scatti a meno di 3 minuti sono doppioni (D7). */
-  const val DUPLICATE_WINDOW_MS: Long = 180_000
+  /**
+   * Senza vettori ne' firma: due scatti a meno di **5 minuti** sono doppioni. D7 diceva 3 minuti: P11 (`MemoriesEvalCalibrationTest`, `docs/decisioni.md` "Fase 9 P11")
+   * l'ha portata a 5 con la regola di §5.3, perche' sul sintetico con 3 minuti i doppioni tolti erano il 94,0% (meno del 95% richiesto) e con 5 sono il 95,1%.
+   * I commenti degli altri file che dicono "3 minuti" si leggono "la finestra dei doppioni".
+   */
+  const val DUPLICATE_WINDOW_MS: Long = 300_000
 
   /** La massima rilevanza marginale: punteggio - LAMBDA x somiglianza massima con le gia' scelte (D7). */
   const val MMR_LAMBDA: Double = 0.5

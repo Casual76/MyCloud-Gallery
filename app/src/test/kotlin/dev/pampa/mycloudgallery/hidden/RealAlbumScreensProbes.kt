@@ -25,6 +25,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 // Fase 7 (P10, D22, D35): le SONDE sul codice VERO delle schermate degli album (`feature-albums`): "Aggiungi ad album" e le pagine degli album (la pagina
 // e "Suggerite"), con i controllori veri sopra lo STACK VERO di P3 (`CatalogAlbums`, il catalogo vero del mondo casuale, la visibilita' vera). Prendono il posto
@@ -121,7 +122,10 @@ internal object RealAlbumScreensProbes {
           // Controllo positivo: per un elemento che la vista mostra il menu si apre (altrimenti il controllo qui sopra passerebbe sempre).
           items.firstOrNull()?.let { first ->
             page.openItemMenu(first)
-            if (page.ui.value.itemMenu?.media != first) problems += "la pagina dell'album $name non apre il menu di un elemento che mostra"
+            // Il menu si apre in una coroutine e arriva a `ui` passando da `combine(...).stateIn`: si aspetta lo stato preciso invece di
+            // leggerlo subito (con altre build sul PC la lettura immediata vedeva ancora il menu chiuso, su semi diversi a ogni corsa).
+            val opened = withTimeoutOrNull(WAIT_MS) { page.ui.first { it.itemMenu?.media == first } }
+            if (opened == null) problems += "la pagina dell'album $name non apre il menu di un elemento che mostra"
             page.closeItemMenu()
           }
         }

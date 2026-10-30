@@ -52,7 +52,7 @@ class CorrezioniDNomiTest {
   private val today = LocalDate.of(2026, 10, 21)
 
   // I nomi del banco: tre non cercabili (un emoji, un segno, un nome fatto solo di giunto ZWJ e selettori di variante) e due in altri alfabeti, accanto a un nome normale.
-  private val zwjOnly = "‍️‍"
+  private val zwjOnly = "\u200D\uFE0F\u200D"
   private val oddNames = listOf("❤", "?", zwjOnly)
   private val otherAlphabets = listOf("Анна", "李明")
 

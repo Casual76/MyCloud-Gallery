@@ -120,17 +120,17 @@ class PeopleCorrDTest {
   fun unNomeInvisibileNonSiScriveUnEmojiEUnAltroAlfabetoSi() = runBlocking<Unit> {
     rig().use { r ->
       val a = r.world.a
-      val zwjOnly = "‍️‍"
+      val zwjOnly = "\u200D\uFE0F\u200D"
       // Solo giunti e selettori di variante: appare vuoto. (`TextRules` li ammette: `PeopleForms.isName` e' di core-trust.)
       assertThat(r.people.rename(a, zwjOnly)).isEqualTo(EditOutcome.InvalidName)
       assertThat(r.people.assign(r.world.facesOf(r.world.b).first().locator, PersonTarget.New(zwjOnly))).isEqualTo(EditOutcome.InvalidName)
       assertThat(PersonNames.forNewName(zwjOnly)).isNull()
       // Visibili: un emoji (anche con il suo selettore), un segno, un nome in cirillico e in cinese.
-      for (name in listOf("❤", "❤️", "?", "Анна", "李明")) {
+      for (name in listOf("❤", "❤\uFE0F", "?", "Анна", "李明")) {
         assertThat(PersonNames.forNewName(name)).isEqualTo(name)
         assertThat(r.people.rename(a, name)).isEqualTo(EditOutcome.Done)
       }
-      assertThat(VisibleText.hasVisible("  ‍ ")).isFalse()
+      assertThat(VisibleText.hasVisible("  \u200D ")).isFalse()
       assertThat(VisibleText.hasVisible("a")).isTrue()
       // Resta la regola del formato: il nome di una lettura non cambia (`normalize` e `PeopleForms.isName` sono la stessa regola).
       assertThat(PersonNames.normalize(zwjOnly)).isEqualTo(zwjOnly)

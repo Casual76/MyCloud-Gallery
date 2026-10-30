@@ -77,7 +77,7 @@ class FacesCorrectionsDTest {
 
   @Test
   fun unNomeNonCercabileNonSpegneLaRicercaPerPersonaDegliAltriNomi() = runTest {
-    val zwjOnly = "‍️‍"
+    val zwjOnly = "\u200D\uFE0F\u200D"
     val names = listOf("❤", "?", zwjOnly, "Анна", "李明", "Marco Quarzo").mapIndexed { i, name -> PersonName(person(i + 1), name, 5 + i) }
     val dictionary = lookup(FakeIndex(names.toMutableList())).dictionary()
     // Prima: `PersonEntry(normalize("❤"))` lanciava dentro il `map` e **tutti** i nomi sparivano (il dizionario diventava vuoto).

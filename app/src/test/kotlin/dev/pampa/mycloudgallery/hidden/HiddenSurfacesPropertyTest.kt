@@ -69,7 +69,12 @@ class HiddenSurfacesPropertyTest {
 
   @Test
   fun nessunaSuperficieMostraMaiUnNascosto_suMondiCasuali() {
-    val failures = (1L..SEEDS).flatMap { runWorld(WorldSpec.random(it)) }
+    // Al primo mondo che sbaglia ci si ferma: il fallimento dice quale seme (e' riproducibile), e una sonda che dopo il tetto non ottiene lo stato che aspetta non costa 40 volte il tetto.
+    val failures = ArrayList<String>()
+    for (seed in 1L..SEEDS) {
+      failures += runWorld(WorldSpec.random(seed))
+      if (failures.isNotEmpty()) break
+    }
     assertWithMessage("superfici che mostrano nascosti o sbagliano i numeri").that(failures).isEmpty()
   }
 

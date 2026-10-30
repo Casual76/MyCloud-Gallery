@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.feature.albums.contract.NoAlbumMembers
 import dev.pampa.mycloudgallery.feature.albums.contract.NoAlbumPending
 import dev.pampa.mycloudgallery.feature.albums.contract.SuggestionsState
 import dev.pampa.mycloudgallery.feature.albums.page.AlbumPageController
+import dev.pampa.mycloudgallery.feature.albums.page.AlbumPageUi
 import dev.pampa.mycloudgallery.feature.albums.page.SuggestionKind
 import dev.pampa.mycloudgallery.feature.albums.page.SuggestionsController
 import dev.pampa.mycloudgallery.integration.Attese
@@ -27,6 +28,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 
 // Fase 7 (P10, D22, D35): le SONDE sul codice VERO delle schermate degli album (`feature-albums`): "Aggiungi ad album" e le pagine degli album (la pagina
 // e "Suggerite"), con i controllori veri sopra lo STACK VERO di P3 (`CatalogAlbums`, il catalogo vero del mondo casuale, la visibilita' vera). Prendono il posto
@@ -108,6 +110,7 @@ internal object RealAlbumScreensProbes {
       val scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined)
       try {
         val albums = listOf("manuale" to stack.manual, "smart" to stack.smart, "copia personale" to stack.copy, "con elementi in attesa" to stack.pending)
+        var menuBroken = false
         for ((name, id) in albums) {
           val page = AlbumPageController(id, stack.albums, NoSharedAlbums, stack.albums, NoShareRunner, AccountNamesAsIs, NoAlbumMembers, NoAlbumPending, clock, scope)
           val ui = withTimeout(WAIT_MS) { page.ui.first { it.page is AlbumPageState.Ready } }
@@ -121,10 +124,31 @@ internal object RealAlbumScreensProbes {
             page.openItemMenu(hidden)
             if (page.ui.value.itemMenu != null) problems += "la pagina dell'album $name apre il menu di un nascosto"
           }
-          // Controllo positivo: per un elemento che la vista mostra il menu si apre (altrimenti il controllo qui sopra passerebbe sempre).
-          items.firstOrNull()?.let { first ->
-            page.openItemMenu(first)
-            if (page.ui.value.itemMenu?.media != first) problems += "la pagina dell'album $name non apre il menu di un elemento che mostra"
+          // Controllo positivo: per un elemento che la vista mostra il menu si apre (altrimenti il controllo qui sopra passerebbe sempre). La vista e il menu della pagina sono
+          // un solo flusso `ui` messo insieme da piu' sorgenti su thread diversi: subito dopo `openItemMenu` il valore letto puo' essere ancora quello di prima (una lettura del
+          // catalogo in volo), e la prova cadeva solo a volte (seme 18, sotto carico). Si aspetta lo stato preciso: il menu di un elemento che la vista mostra **adesso**, e se la
+          // vista e' cambiata sotto i piedi si chiede di nuovo (come farebbe un secondo tocco). Una pagina che non lo apre mai da' il suo problema dopo il tetto, una volta per mondo.
+          if (!menuBroken && items.isNotEmpty()) {
+            var lastSeen: AlbumPageUi? = null
+            val opened = withTimeoutOrNull(WAIT_MS) {
+              page.ui.first { state ->
+                lastSeen = state
+                val candidate = (state.page as? AlbumPageState.Ready)?.content?.items?.let { idsOf(it).firstOrNull() }
+                when {
+                  candidate == null -> false
+                  state.itemMenu?.media == candidate -> true
+                  else -> {
+                    page.openItemMenu(candidate)
+                    false
+                  }
+                }
+              }
+            }
+            if (opened == null) {
+              menuBroken = true
+              val now = lastSeen
+              problems += "la pagina dell'album $name non apre il menu di un elemento che mostra (pagina ${now?.page?.let { it::class.simpleName }}, elementi nella vista: ${(now?.page as? AlbumPageState.Ready)?.content?.items?.size}, menu: ${now?.itemMenu != null})"
+            }
             page.closeItemMenu()
           }
         }

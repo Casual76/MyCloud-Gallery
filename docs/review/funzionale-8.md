@@ -2,7 +2,7 @@
 
 **Stato (30/10).** Le 26 voci sono nuove: nessuna e' ancora corretta nel codice. Ne risultano 1 che blocca, 9 sbagliate e 16 minori; 18 sono confermate nel
 codice e 8 plausibili (serve il telefono o un test, descritto nella voce). La verifica dei fake (§3) ha trovato dieci divergenze, quattro delle quali
-nascondono voci di questo documento (CE-1 e CE-2, AT-1, CA-3 e CA-4, RI-1). I flussi del §4 sono da provare sul telefono (F111-F126), insieme a quelli di P13 non ancora fatti (F94-F110, con le
+nascondono voci di questo documento (CE-1 e CE-2, AT-1, CA-3 e CA-4, RI-1). I flussi del §4 sono da provare sul telefono (F131-F146), insieme a quelli di P13 non ancora fatti (F94-F110, con le
 correzioni del §4).
 
 **La domanda.** Ogni funzione della Fase 8 (Persone) promessa all'utente funziona davvero nell'app installata, da capo a fondo, in debug e in release?
@@ -152,7 +152,7 @@ Funziona 7, Sbagliata 5, Blocca 1 (su 13 flussi).
   - un test su `sectionOf(Ready vuoto)` (oggi `PeopleSectionStatesTest` prova lo stato, non le righe).
 
 #### AT-2 · Prima del montaggio le schermate di Persone dicono "spenta" o "non trovata" invece di "non ancora letta"
-- **Gravita':** Sbagliata (per qualche secondo a ogni avvio a freddo). **Stato:** plausibile (avvio a freddo con Raccolte aperta subito: F113).
+- **Gravita':** Sbagliata (per qualche secondo a ogni avvio a freddo). **Stato:** plausibile (avvio a freddo con Raccolte aperta subito: F133).
 - **Flusso:** Persone e' accesa; l'app parte a freddo e si apre Raccolte (o si ripristina una pagina persona dopo la morte del processo).
 - **Percorso:**
   - `FacesGraph.live` e' null finche' la galleria non e' partita e i dati personali non sono agganciati (`app/.../faces/FacesWiring.kt:154-157`);
@@ -176,7 +176,7 @@ Funziona 7, Sbagliata 5, Blocca 1 (su 13 flussi).
 ### 2.2 Calcolo dei volti e lavori (CA)
 
 #### CA-1 · Il progresso e' dell'unita' (al piu' 200 media), non della libreria
-- **Gravita':** Sbagliata. **Stato:** confermato (il valore e' nel codice; l'effetto visivo va visto: F112).
+- **Gravita':** Sbagliata. **Stato:** confermato (il valore e' nel codice; l'effetto visivo va visto: F132).
 - **Flusso:** primo calcolo di una libreria da 12.000 foto; Raccolte e Impostazioni → Persone.
 - **Percorso:**
   - `core-faces/.../compute/UnitRunner.kt:201`: `Running(state.done, unit.items.size, DETECT)`, dove `done` e `size` sono dell'unita' corrente (200 media per
@@ -229,7 +229,7 @@ Funziona 7, Sbagliata 5, Blocca 1 (su 13 flussi).
 - **Correzione:** `FacesWorkScheduling.ensure(context)` anche nel passaggio a `On` (`onStateChanged`).
 
 #### CA-6 · Una porta mai legata: `mayFetch`
-- **Gravita':** Minore. **Stato:** plausibile (NAS spento durante il calcolo: F125).
+- **Gravita':** Minore. **Stato:** plausibile (NAS spento durante il calcolo: F145).
 - **Percorso:** `AppFaceInputs` ha `mayFetch: () -> Boolean = { true }` (`app/.../faces/FacesInputs.kt:54`) e `FacesWiring.kt:251-257` non lo passa; `fetch` inghiotte
   l'`IOException` (`FacesInputs.kt:130`, `:140`, `:148`) e `waiting()` risponde sempre `NO_PREVIEW` (`:179`). `InputWait.NAS` ("In attesa del NAS") nasce
   solo da una pubblicazione che fallisce (`UnitRunner.kt:512`, `nasDown`).
@@ -247,7 +247,7 @@ Funziona 7, Sbagliata 5, Blocca 1 (su 13 flussi).
 ### 2.3 Raggruppamento notturno (RG)
 
 #### RG-1 · Il raggruppamento notturno gira in un lavoro che non aspetta la famiglia pronta
-- **Gravita':** Sbagliata. **Stato:** plausibile (una notte vera in carica: F117). E' un difetto del lavoro, comune ai viaggi e agli smart della Fase 7 (VG-1).
+- **Gravita':** Sbagliata. **Stato:** plausibile (una notte vera in carica: F137). E' un difetto del lavoro, comune ai viaggi e agli smart della Fase 7 (VG-1).
 - **Flusso:** il telefono e' in carica di notte; `LibraryMaintenanceWorker` parte in un processo nato per lui.
 - **Percorso:**
   - le persone nascono a fine unita' solo se i volti CORE non assegnati sono almeno 50 in piu' dell'ultima volta (`core-faces/.../grouping/FastGrouping.kt:35`,
@@ -266,7 +266,7 @@ Funziona 7, Sbagliata 5, Blocca 1 (su 13 flussi).
 ### 2.4 Gestione e viewer (GE)
 
 #### GE-1 · I nomi e le unioni non partono "dopo 30 secondi"
-- **Gravita':** Minore. **Stato:** plausibile (due dispositivi, share di prova, con il cronometro: F120).
+- **Gravita':** Minore. **Stato:** plausibile (due dispositivi, share di prova, con il cronometro: F140).
 - **Percorso:** `PeopleEditor` accoda soltanto (`core-faces/.../people/PeopleEditor.kt:75`, `publisher.stage(FacesChange.People(edits))`); `FlushReason.DEBOUNCE` ("30 s dopo
   l'ultima modifica", `sync/NasFacesPublisher.kt:133`) non ha chiamanti per i volti (gli album hanno `watchPending`, `app/.../albums/AlbumsGraph.kt:251-268`). Si pubblica
   in `syncRound` (`FacesGraph.kt:210`), a fine unita' (`UnitRunner.kt:512`) e di notte (`FacesGraph.kt:240`).
@@ -282,7 +282,7 @@ Funziona 7, Sbagliata 5, Blocca 1 (su 13 flussi).
 - **Correzione:** se `message != null` restare sulla schermata e mostrarlo.
 
 #### GE-3 · Nel viewer il volto di un gruppo senza nome si nomina da solo
-- **Gravita':** Minore. **Stato:** plausibile (F122).
+- **Gravita':** Minore. **Stato:** plausibile (F142).
 - **Percorso:** il tocco su `ViewerFaceChip.Unnamed` apre sempre "Chi e'?" (`feature-viewer/.../info/PeopleInfoController.kt:53`) anche quando il chip porta il gruppo
   (`Unnamed(ref, person)`, `app/.../faces/FacesFacades.kt:185-190`); "Apri la pagina" esiste solo per `Named`; `IsNew` fa `assign(face, PersonTarget.New(name))` (`FacesFacades.kt:209`),
   una persona nuova con quel volto solo, non il nome al gruppo.
@@ -340,7 +340,7 @@ Funziona 7, Sbagliata 5, Blocca 1 (su 13 flussi).
   - un test "attiva, cancella, riattiva: il foglio mostra l'anteprima" (§3: ne' `ScriptedEraser` ne' `FakeFacesEraser` lo provano).
 
 #### CE-2 · "Attesa dei dispositivi" e cestino di rete non vengono mai riprese dal giro dell'indice
-- **Gravita':** Sbagliata. **Stato:** confermato (il percorso; l'effetto dipende da quanti riavvii fa il processo, plausibile sul secondo dispositivo: F116).
+- **Gravita':** Sbagliata. **Stato:** confermato (il percorso; l'effetto dipende da quanti riavvii fa il processo, plausibile sul secondo dispositivo: F136).
 - **Flusso:** "Disattiva e cancella" sull'S25 con il tablet spento o che torna dopo giorni.
 - **Percorso:**
   - finita la parte locale `clearMarker` toglie il segno e lo stato diventa `Off` (`core-faces/.../erase/DefaultFacesEraser.kt:186`, `:233-237`);
@@ -359,7 +359,7 @@ Funziona 7, Sbagliata 5, Blocca 1 (su 13 flussi).
 - **Correzione:** una riga informativa nella sezione ("Persone e' stata disattivata da un altro tuo dispositivo") o aggiornare il documento. **Decisione dell'utente** (§7).
 
 #### CE-4 · Gli album smart con persone possono restare con la regola, senza che il diario riprovi
-- **Gravita':** Minore. **Stato:** plausibile (F123).
+- **Gravita':** Minore. **Stato:** plausibile (F143).
 - **Percorso:** `DefaultFacesEraser.runLocal` riprova `albums.release` solo se lancia (`core-faces/.../erase/DefaultFacesEraser.kt:173`); `AppSmartAlbumsPeople.release` ingoia ogni errore e risponde il numero dei riusciti
   (`app/.../faces/FacesPeoplePorts.kt:185-200`) e `live() ?: return 0` (`:186`) se gli album non sono ancora montati; il passo si segna `DONE` con un album ancora con la regola.
 - **Effetto:** "Tieni le foto di adesso come album normali" non vale per quell'album, che resta smart con una regola che non si valuta piu' (la striscia "Le persone non sono attive").
@@ -384,7 +384,7 @@ Funziona 7, Sbagliata 5, Blocca 1 (su 13 flussi).
 ### 2.9 Diagnostica (DG)
 
 #### DG-1 · `FACES_NO_INDEXER` puo' comparire anche quando questo dispositivo e' l'indicizzatore
-- **Gravita':** Minore. **Stato:** plausibile (aprire la Diagnostica appena dopo aver acceso "Analizza le foto": F118).
+- **Gravita':** Minore. **Stato:** plausibile (aprire la Diagnostica appena dopo aver acceso "Analizza le foto": F138).
 - **Percorso:** `PeopleDiagnostics` guarda solo `accountIndexers` (`app/.../faces/FacesDiagnostics.kt:73`, `:118`); `AppFacesRequirements.indexers` conta i ruoli degli stati firmati e, se `roles()` non c'e' ancora
   (nessuno stato firmato letto), `live` vale 0 anche con `thisDevice = true` (`app/.../faces/FacesPorts.kt:140-149`). L'attivazione invece ammette `accountIndexers == 0 && thisDevice`
   (`core-faces/.../switch/DefaultFacesSwitch.kt:124`).
@@ -438,38 +438,38 @@ Funziona 7, Sbagliata 5, Blocca 1 (su 13 flussi).
 
 ---
 
-## 4. Flussi da provare sul telefono: da mettere per primi nelle prove sul campo (F111-F126)
+## 4. Flussi da provare sul telefono: da mettere per primi nelle prove sul campo (F131-F146)
 
 In ordine di rischio. Tra parentesi i difetti che una prova farebbe emergere. `FacesIntegrationTest` copre il grafo vero con motori finti, a processo caldo, due account e tre dispositivi:
 non ha mai riattivato dopo una cancellazione, ne' avviato a freddo con le Raccolte aperte, ne' avuto una libreria senza volti.
 
-1. **F111, seconda "Disattiva e cancella"** (CE-1, CE-2): su `test`, S25 ed emulatore: attiva, "Disattiva e cancella" ("Tieni le foto"), aspetta "Fatto ovunque", "Attiva" di nuovo, lascia calcolare
+1. **F131, seconda "Disattiva e cancella"** (CE-1, CE-2): su `test`, S25 ed emulatore: attiva, "Disattiva e cancella" ("Tieni le foto"), aspetta "Fatto ovunque", "Attiva" di nuovo, lascia calcolare
    finche' c'e' una persona; poi di nuovo Impostazioni → Persone → "Disattiva e cancella". Atteso: l'anteprima. Oggi: "Fatto ovunque". Fare **dopo** F100 (che la cancellazione e' gia' stata fatta una volta).
-2. **F112, primo calcolo di giorno a batteria** (CA-3, CA-1, AT-1): su un'installazione pulita (o dopo F111) attiva Persone di giorno, senza carica, e guarda per 10 minuti Raccolte e Impostazioni → Persone: la sezione c'e' sempre?
+2. **F132, primo calcolo di giorno a batteria** (CA-3, CA-1, AT-1): su un'installazione pulita (o dopo F131) attiva Persone di giorno, senza carica, e guarda per 10 minuti Raccolte e Impostazioni → Persone: la sezione c'e' sempre?
    la percentuale cresce o fa il dente di sega (0-100% a ogni 200 foto)? "Analizzate N foto su 200"? Parte da sola mentre il testo dice "di notte, in carica"? `ADB shell dumpsys batterystats` per il consumo.
-3. **F113, avvio a freddo con Persone accesa** (AT-2): `ADB shell am force-stop`, apri subito Raccolte e riprendi la riga della sezione per i primi secondi (dieci avvii); poi su una pagina persona, `am kill` e ripristino: "Questa persona non c'e'"?
-4. **F114, dov'e' "Analizza ora"** (CA-2): in Impostazioni → Persone cerca il tasto e la stima; se la decisione e' toglierlo, riscrivere F94.
-5. **F115, nomi senza lettere latine** (RI-1): dai a una persona il nome "❤" (o "?" o "Анна"), poi cerca un'altra persona con nome: i chip "Persona" e la riga "Persone" dei suggerimenti ci sono ancora?
-6. **F116, cancellazione con il tablet spento, poi acceso** (CE-2, CE-3): cancella sull'S25 a tablet spento; lascia l'app; accendi il tablet; guarda Impostazioni → Persone sull'S25 finche' passa a "Fatto" senza riavviare l'app
+3. **F133, avvio a freddo con Persone accesa** (AT-2): `ADB shell am force-stop`, apri subito Raccolte e riprendi la riga della sezione per i primi secondi (dieci avvii); poi su una pagina persona, `am kill` e ripristino: "Questa persona non c'e'"?
+4. **F134, dov'e' "Analizza ora"** (CA-2): in Impostazioni → Persone cerca il tasto e la stima; se la decisione e' toglierlo, riscrivere F94.
+5. **F135, nomi senza lettere latine** (RI-1): dai a una persona il nome "❤" (o "?" o "Анна"), poi cerca un'altra persona con nome: i chip "Persona" e la riga "Persone" dei suggerimenti ci sono ancora?
+6. **F136, cancellazione con il tablet spento, poi acceso** (CE-2, CE-3): cancella sull'S25 a tablet spento; lascia l'app; accendi il tablet; guarda Impostazioni → Persone sull'S25 finche' passa a "Fatto" senza riavviare l'app
    (`ADB shell cmd jobscheduler run` del lavoro dell'indice); sul tablet, cosa dicono Raccolte e Persone dopo che ha cancellato.
-7. **F117, la notte** (RG-1): libreria piccola (meno di 50 volti nuovi) o appena attivata: lascia l'S25 in carica una notte e vedi se le persone nascono e se si uniscono quelle spezzate; leggi in Diagnostica l'esito di
+7. **F137, la notte** (RG-1): libreria piccola (meno di 50 volti nuovi) o appena attivata: lascia l'S25 in carica una notte e vedi se le persone nascono e se si uniscono quelle spezzate; leggi in Diagnostica l'esito di
    `LIBRARY_MAINTENANCE` (quando e' girato e come e' finito); se non lascia traccia, il lavoro e' partito senza famiglia pronta.
-8. **F118, release su un tablet non indicizzatore** (DR-1, DG-1): APK di release, `test2` o un account di prova con un solo indicizzatore: la riga della sezione sul tablet; il testo prima dell'attivazione ("I nomi viaggiano...");
+8. **F138, release su un tablet non indicizzatore** (DR-1, DG-1): APK di release, `test2` o un account di prova con un solo indicizzatore: la riga della sezione sul tablet; il testo prima dell'attivazione ("I nomi viaggiano...");
    Diagnostica poco dopo aver acceso "Analizza le foto" su questo dispositivo.
-9. **F119, il periodico dopo cancella e riattiva** (CA-5, CA-4): dopo F111 senza riavviare l'app, `ADB shell dumpsys jobscheduler | grep faces` (nomi dei lavori, non dati): `faces-compute` c'e'?
-10. **F120, nomi fra due dispositivi** (GE-1, E-F5): in debug sulle share di prova, rinomina sull'S25 e cronometra quando compare sull'emulatore con l'app in primo piano e con il solo giro dell'indice; in release il nome non deve uscire dal telefono.
-11. **F121, piccoli gesti** (GE-2, SM-1, NV-1): "Non e'..." dalla revisione con Persone appena esclusa (l'errore si vede?); "Crea album smart" da una persona senza nome (SM-1); la pagina di una persona con tutte le foto nascoste (NV-1).
-12. **F122, viewer su un gruppo senza nome** (GE-3): "Chi e'?" con un nome nuovo su un volto di un gruppo senza nome: quante foto ha la persona nuova, cosa resta in "Altri volti".
-13. **F123, album smart al momento di cancellare** (CE-4): "Disattiva e cancella" con "Tieni le foto" appena dopo l'avvio a freddo, e con "Togli la regola": gli album sono diventati normali?
-14. **F124, dispositivo dismesso** (CE-5): revoca il tablet (dismesso) prima di cancellare: "In attesa dei dispositivi" e il tasto "Apri Dispositivi" (oggi manca).
-15. **F125, NAS spento durante il calcolo** (CA-6): Wi-Fi di casa spento a meta' tappa: quanto impiega ogni media a fallire, che stato mostra la pagina ("In attesa delle anteprime" o "del NAS").
-16. **F126, release completa** (R8): APK di release: pagina persona, Dividi, chip del viewer, "<nome> 2024", "<nome> e <nome>", "Crea album smart", "Disattiva e cancella"; la prima esecuzione e la seconda (CE-1).
+9. **F139, il periodico dopo cancella e riattiva** (CA-5, CA-4): dopo F131 senza riavviare l'app, `ADB shell dumpsys jobscheduler | grep faces` (nomi dei lavori, non dati): `faces-compute` c'e'?
+10. **F140, nomi fra due dispositivi** (GE-1, E-F5): in debug sulle share di prova, rinomina sull'S25 e cronometra quando compare sull'emulatore con l'app in primo piano e con il solo giro dell'indice; in release il nome non deve uscire dal telefono.
+11. **F141, piccoli gesti** (GE-2, SM-1, NV-1): "Non e'..." dalla revisione con Persone appena esclusa (l'errore si vede?); "Crea album smart" da una persona senza nome (SM-1); la pagina di una persona con tutte le foto nascoste (NV-1).
+12. **F142, viewer su un gruppo senza nome** (GE-3): "Chi e'?" con un nome nuovo su un volto di un gruppo senza nome: quante foto ha la persona nuova, cosa resta in "Altri volti".
+13. **F143, album smart al momento di cancellare** (CE-4): "Disattiva e cancella" con "Tieni le foto" appena dopo l'avvio a freddo, e con "Togli la regola": gli album sono diventati normali?
+14. **F144, dispositivo dismesso** (CE-5): revoca il tablet (dismesso) prima di cancellare: "In attesa dei dispositivi" e il tasto "Apri Dispositivi" (oggi manca).
+15. **F145, NAS spento durante il calcolo** (CA-6): Wi-Fi di casa spento a meta' tappa: quanto impiega ogni media a fallire, che stato mostra la pagina ("In attesa delle anteprime" o "del NAS").
+16. **F146, release completa** (R8): APK di release: pagina persona, Dividi, chip del viewer, "<nome> 2024", "<nome> e <nome>", "Crea album smart", "Disattiva e cancella"; la prima esecuzione e la seconda (CE-1).
 
 **I flussi di P13 non ancora fatti (F94-F110), con le correzioni:**
 - **F94:** "Analizza ora" non c'e' (CA-2) e il calcolo parte da solo (CA-3): si guarda la tappa dalla Diagnostica e dai file sul NAS.
 - **F95:** invariata; prima di "Va bene" l'emulatore parte comunque con `faces-local` (come scritto).
-- **F96, F97, F98:** invariate; F96 conta il tempo (GE-1), F97 aggiunge F115, F98 aggiunge SM-1.
-- **F100:** farla per ultima di giornata e seguirla subito da F111.
+- **F96, F97, F98:** invariate; F96 conta il tempo (GE-1), F97 aggiunge F135, F98 aggiunge SM-1.
+- **F100:** farla per ultima di giornata e seguirla subito da F131.
 - **F101:** si legge anche con CE-2 e CE-3.
 - **F103 e F109:** non si possono fare sul telefono (DR-2, L243): restano al banco dal PC.
 - **F104:** il calcolo "a batteria" parte da solo (CA-3): partire dall'APK pulito e misurare il consumo.
@@ -508,7 +508,7 @@ Una riga ciascuno: il percorso e' completo nel codice e i dati arrivano alla sch
 
 **Gestione, ricerca, smart**
 - **Rinomina (pagina e viewer), unisci (pagina, elenco, proposte, "Altri volti"), dividi, ignora, nascondi e mostra, dimentica, copertina, "Altri volti":** controller → `FacesPeopleFacade` → `PeopleEditor`/`ArchivePeople` → `stage`
-  e `refresh`; lista, dizionario e `choices()` si aggiornano subito; sul secondo dispositivo il percorso arriva a `archive.addPeople` (`NasFacesSync`) e a `dataArrived` (non provato: F120).
+  e `refresh`; lista, dizionario e `choices()` si aggiornano subito; sul secondo dispositivo il percorso arriva a `archive.addPeople` (`NasFacesSync`) e a `dataArrived` (non provato: F140).
 - **Viewer:** `AppViewerPeople.act` copre `Is`, `IsNew`, `IsNot`, `Ignore`; `PeopleOpener` e' legato in `AppNavHost`; `viewerPeople` e' impostato in `onCreate` prima della costruzione pigra di `viewerServices`.
 - **Ricerca:** `PeopleBridge` legato da `AiModule`, `AlbumsModule` e `AlbumsWiring`, e alle persone vere da `FacesWiring.mounted`; il dizionario si rilegge a ogni query (un nome appena dato e' cercabile); "e", "o", nome piu' data,
   nome che e' anche un luogo (con l'alternativa del chip); `PeopleGate` fallisce chiuso senza persone.

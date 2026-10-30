@@ -11436,7 +11436,14 @@ Nascosti da `VisiblePhotoPicker` e i divieti della copertina da `MemoryPhotoPick
 | E-H10 | una persona nascosta non arriva alla scelta (la porta `MemoryPeople` non la da'); "Mai" per persona verificato per foto |
 | D33 | risultato con soli conteggi, nessun log, `toString()` senza id ne' date (`PickNoTraceTest`) |
 
-**`tools/check.ps1 -NoDaemon`**: vedi l'esito in fondo a questa sezione (scritto dopo la corsa).
+**`tools/check.ps1 -NoDaemon`**: **verde** (30/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, dentro il posto
+Gradle `ocp7`, preso prima e rilasciato dopo): «OK: tutto a posto»; il passo Gradle (`assembleDebug assembleRelease galleryTest galleryLint`) in 700
+secondi, 16.351 prove in 43 moduli (`core-memories` 206, `core-common` 157, `core-albums` 848), nessuna fallita; i test d'architettura delle Fasi 6-9 verdi
+(anche da soli prima del check); solo `-Bench` saltato (senza il flag). **Il primo giro era rosso** per `SmartAlbumsLiveTest.unoSmartNuovoDiceCheCerca...`
+di `core-albums` (attesa di 120 s scaduta alla riga 98, `status.until { it is Recomputing }`): non e' di P7 (nessun file fuori da `core-memories` e
+`docs/` e' cambiato, e `core-albums` non vede `core-memories`); rilanciata la sola classe ha fallito una volta e passato la seconda (4 prove, 4,6 s),
+poi il check intero e' passato. E' la stessa prova che P0 aveva trovato lenta sotto carico: sembra una corsa fra l'osservatore e lo stato
+transitorio `Recomputing`, non un problema di carico (punto aperto per chi ha `core-albums`).
 
 **Modifiche richieste ai contratti degli altri** (nessuna fatta qui)
 - **P6**: per avere il tetto di 200 misure dei pixel (D6) il generatore deve chiedere i segnali con `PickSignalsLoader` (o equivalente) invece di

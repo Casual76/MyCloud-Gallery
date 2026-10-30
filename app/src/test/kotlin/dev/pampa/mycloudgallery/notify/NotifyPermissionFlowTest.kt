@@ -68,15 +68,22 @@ class NotifyPermissionFlowTest {
 
   private fun rig(explain: (String) -> Boolean? = { null }) = Rig(app, dir!!, visibility, explain)
 
+  /** I quattro stati della pagina hanno gli **stessi codici** di `NotifyPermission` di P9: P13 li trasforma l'uno nell'altro per codice. */
+  @Test
+  fun gliStatiHannoGliStessiCodiciDiP9() {
+    assertThat(NotifyPagePermission.entries.map { it.code }).containsExactlyElementsIn(NotifyPermission.entries.map { it.code })
+    for (page in NotifyPagePermission.entries) assertThat(NotifyPermission.entries.first { it.code == page.code }.code).isEqualTo(page.code)
+  }
+
   /** I quattro stati del sistema nei quattro della pagina; "Consenti" (chiesto, Android propone ancora di spiegare) resta "si puo' chiedere". */
   @Test
   fun iQuattroStatiDellaPagina() {
-    assertThat(NotifyPermissionFlow.permissionOf(NotifyAccessState.GRANTED, deniedForGood = false)).isEqualTo(NotifyPermission.GRANTED)
-    assertThat(NotifyPermissionFlow.permissionOf(NotifyAccessState.PERMISSION_MISSING, deniedForGood = false)).isEqualTo(NotifyPermission.ASKABLE)
-    assertThat(NotifyPermissionFlow.permissionOf(NotifyAccessState.PERMISSION_MISSING, deniedForGood = true)).isEqualTo(NotifyPermission.DENIED)
-    assertThat(NotifyPermissionFlow.permissionOf(NotifyAccessState.APP_OFF, deniedForGood = false)).isEqualTo(NotifyPermission.DENIED)
-    assertThat(NotifyPermissionFlow.permissionOf(NotifyAccessState.CHANNEL_OFF, deniedForGood = false)).isEqualTo(NotifyPermission.CHANNEL_OFF)
-    assertThat(NotifyPermission.entries.map { NotifyPermissionFlow.stepFor(it) }.toSet()).containsExactlyElementsIn(NotifyPermissionStep.entries)
+    assertThat(NotifyPermissionFlow.permissionOf(NotifyAccessState.GRANTED, deniedForGood = false)).isEqualTo(NotifyPagePermission.GRANTED)
+    assertThat(NotifyPermissionFlow.permissionOf(NotifyAccessState.PERMISSION_MISSING, deniedForGood = false)).isEqualTo(NotifyPagePermission.ASKABLE)
+    assertThat(NotifyPermissionFlow.permissionOf(NotifyAccessState.PERMISSION_MISSING, deniedForGood = true)).isEqualTo(NotifyPagePermission.DENIED)
+    assertThat(NotifyPermissionFlow.permissionOf(NotifyAccessState.APP_OFF, deniedForGood = false)).isEqualTo(NotifyPagePermission.DENIED)
+    assertThat(NotifyPermissionFlow.permissionOf(NotifyAccessState.CHANNEL_OFF, deniedForGood = false)).isEqualTo(NotifyPagePermission.CHANNEL_OFF)
+    assertThat(NotifyPagePermission.entries.map { NotifyPermissionFlow.stepFor(it) }.toSet()).containsExactlyElementsIn(NotifyPermissionStep.entries)
   }
 
   /** Mai chiesto: "Consenti" lancia il dialogo di sistema, una volta, e si ricorda di averlo chiesto. */
@@ -84,7 +91,7 @@ class NotifyPermissionFlowTest {
   fun consentiChiedeIlPermessoSeAndroidLoPermette() {
     shadowOf(app).denyPermissions(permission)
     val rig = rig()
-    assertThat(rig.access.state.value).isEqualTo(NotifyPermission.ASKABLE)
+    assertThat(rig.access.state.value).isEqualTo(NotifyPagePermission.ASKABLE)
     rig.actions.requestNotificationPermission()
     assertThat(rig.systemDialogs).isEqualTo(1)
     assertThat(rig.opened).isEmpty()
@@ -98,7 +105,7 @@ class NotifyPermissionFlowTest {
     val rig = rig(explain = { false })
     rig.asks.markAsked(listOf(permission))
     rig.access.refresh()
-    assertThat(rig.access.state.value).isEqualTo(NotifyPermission.DENIED)
+    assertThat(rig.access.state.value).isEqualTo(NotifyPagePermission.DENIED)
     rig.actions.requestNotificationPermission()
     assertThat(rig.systemDialogs).isEqualTo(0)
     assertThat(rig.opened.single().action).isEqualTo(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
@@ -111,7 +118,7 @@ class NotifyPermissionFlowTest {
     val rig = rig(explain = { true })
     rig.asks.markAsked(listOf(permission))
     rig.access.refresh()
-    assertThat(rig.access.state.value).isEqualTo(NotifyPermission.ASKABLE)
+    assertThat(rig.access.state.value).isEqualTo(NotifyPagePermission.ASKABLE)
   }
 
   @Test
@@ -122,7 +129,7 @@ class NotifyPermissionFlowTest {
     manager.createNotificationChannel(android.app.NotificationChannel("memories", "Ricordi", android.app.NotificationManager.IMPORTANCE_NONE))
     shadowOf(app).grantPermissions(permission)
     val rig = rig()
-    assertThat(rig.access.state.value).isEqualTo(NotifyPermission.CHANNEL_OFF)
+    assertThat(rig.access.state.value).isEqualTo(NotifyPagePermission.CHANNEL_OFF)
     rig.actions.requestNotificationPermission()
     assertThat(rig.opened.single().action).isEqualTo(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
     rig.actions.openNotificationChannel()
@@ -138,7 +145,7 @@ class NotifyPermissionFlowTest {
     val rig = rig()
     rig.asks.markAsked(listOf(permission))
     rig.access.refresh()
-    assertThat(rig.access.state.value).isEqualTo(NotifyPermission.GRANTED)
+    assertThat(rig.access.state.value).isEqualTo(NotifyPagePermission.GRANTED)
     assertThat(rig.asks.asked(permission)).isFalse()
     rig.actions.requestNotificationPermission()
     assertThat(rig.systemDialogs).isEqualTo(0)

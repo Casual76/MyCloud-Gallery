@@ -269,8 +269,6 @@ dependencies {
   // Fase 9 (docs/fase9-progetto.md §1.1, §1.4, P10): i ricordi. Qui, per ora, solo le notifiche (`MemoryNotifier`, `MemoryNotifyWorker`, l'azione `OPEN_MEMORIES`
   // di `MainActivity`): le decisioni stanno in core-memories (JVM puro), il sistema (canale, notifica, lavoro unico) qui. Il montaggio di `MemoriesGraph` e' di P13.
   implementation project(':core-memories')
-  // Per ora solo `NotificationAccess` (la porta del permesso che la pagina delle impostazioni di P9 legge, `notify/NotifyPermissionFlow.kt`): le schermate le monta P13.
-  implementation project(':feature-memories')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')

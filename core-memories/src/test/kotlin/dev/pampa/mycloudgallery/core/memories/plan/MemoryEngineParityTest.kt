@@ -9,6 +9,9 @@ import dev.pampa.mycloudgallery.core.memories.contract.Memories
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryKind
 import dev.pampa.mycloudgallery.core.memories.contract.RefreshReason
 import dev.pampa.mycloudgallery.core.memories.contract.RefreshReport
+import dev.pampa.mycloudgallery.core.memories.pick.MemoryPhotoPicker
+import dev.pampa.mycloudgallery.core.memories.pick.PickSignalsLoader
+import dev.pampa.mycloudgallery.core.memories.pick.VisiblePhotoPicker
 import dev.pampa.mycloudgallery.core.memories.testing.FakeMemoryClock
 import dev.pampa.mycloudgallery.core.memories.testing.FakeMemoryPeople
 import dev.pampa.mycloudgallery.core.memories.testing.FakeMemoryTrips
@@ -65,7 +68,7 @@ class MemoryEngineParityTest {
     else -> world.anchors[(seed % world.anchors.size).toInt()].let { (month, day) -> runCatching { LocalDate.of(2026, month, day) }.getOrElse { LocalDate.of(2026, month, 28) } }.minusDays(seed % 2)
   }
 
-  private fun runStory(seed: Long, kinds: MutableMap<MemoryKind, Int>) {
+  private fun runStory(seed: Long, kinds: MutableMap<MemoryKind, Int>, p7: Boolean) {
     val scope = CoroutineScope(Dispatchers.Unconfined + Job())
     try {
       val reference = Side(seed, LocalDate.of(2026, 11, 2)) { side ->
@@ -78,6 +81,8 @@ class MemoryEngineParityTest {
         MemoryEngine(
           library = visibilityOf(side.world.lib), personal = side.phone, store = side.store, clock = side.clock, picker = ReferencePicker(), scope = scope,
           planner = IndexedPlanner(ReferencePeople), trips = side.trips, people = side.people, dispatcher = Dispatchers.Unconfined,
+          // Con `p7` il passo 5 e' la scelta vera di P7: raccoglitore dei segnali + scelta con la maschera dei Nascosti.
+          choice = if (p7) MemoryPhotoChoice(PickSignalsLoader(people = side.people), VisiblePhotoPicker(MemoryPhotoPicker(), side.world.lib.visibility)) else null,
         )
       }
       val start = startOf(seed, reference.world)
@@ -213,8 +218,16 @@ class MemoryEngineParityTest {
   @Test
   fun lo_scaffale_del_motore_e_uguale_a_quello_del_riferimento_su_500_storie() {
     val kinds = EnumMap<MemoryKind, Int>(MemoryKind::class.java)
-    for (seed in 1L..500L) runStory(seed, kinds)
+    for (seed in 1L..500L) runStory(seed, kinds, p7 = false)
     // Il confronto non e' vuoto: ogni tipo di ricordo e' passato dallo scaffale molte volte.
+    for (kind in MemoryKind.entries) assertWithMessage("ricordi di tipo $kind (visti: $kinds)").that(kinds[kind] ?: 0).isAtLeast(30)
+  }
+
+  /** Le stesse 500 storie con la scelta vera di P7 (`PickSignalsLoader` + `VisiblePhotoPicker` sopra `MemoryPhotoPicker`) al posto del riferimento. */
+  @Test
+  fun lo_stesso_con_la_scelta_di_P7_su_500_storie() {
+    val kinds = EnumMap<MemoryKind, Int>(MemoryKind::class.java)
+    for (seed in 1L..500L) runStory(seed, kinds, p7 = true)
     for (kind in MemoryKind.entries) assertWithMessage("ricordi di tipo $kind (visti: $kinds)").that(kinds[kind] ?: 0).isAtLeast(30)
   }
 }

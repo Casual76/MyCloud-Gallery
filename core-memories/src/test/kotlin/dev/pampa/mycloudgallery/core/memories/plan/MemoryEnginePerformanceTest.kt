@@ -7,6 +7,9 @@ import dev.pampa.mycloudgallery.core.memories.contract.CellTable
 import dev.pampa.mycloudgallery.core.memories.contract.PlanHistory
 import dev.pampa.mycloudgallery.core.memories.contract.PlanInput
 import dev.pampa.mycloudgallery.core.memories.contract.RefreshReason
+import dev.pampa.mycloudgallery.core.memories.pick.MemoryPhotoPicker
+import dev.pampa.mycloudgallery.core.memories.pick.PickSignalsLoader
+import dev.pampa.mycloudgallery.core.memories.pick.VisiblePhotoPicker
 import dev.pampa.mycloudgallery.core.memories.testing.FakeMemoryClock
 import dev.pampa.mycloudgallery.core.memories.testing.InMemoryShelfStore
 import dev.pampa.mycloudgallery.core.memories.testing.ReferencePicker
@@ -81,6 +84,28 @@ class MemoryEnginePerformanceTest {
       assertWithMessage("un ricordo almeno e' nato").that(published).isAtLeast(1)
       assertWithMessage("giro a freddo su 100.000 celle: %.0f ms".format(cold)).that(cold).isLessThan(1_000.0)
       assertWithMessage("giro a caldo su 100.000 celle: %.0f ms".format(warm)).that(warm).isLessThan(1_000.0)
+    } finally {
+      scope.cancel()
+    }
+  }
+
+  /** Lo stesso giro con la scelta vera di P7 (raccoglitore dei segnali, scelta senza costi quadratici, maschera dei Nascosti): sotto la soglia. */
+  @Test
+  fun ilGiroConLaSceltaDiP7Su100milaCelle() {
+    val shots = library()
+    val visibility = FakeVisibility(snapshot = snapshotOf(shots), present = shots.map { it.id }.toSet())
+    val scope = CoroutineScope(Dispatchers.Unconfined + Job())
+    try {
+      val engine = MemoryEngine(
+        library = visibilityOf(visibility, visibility), personal = InMemoryMemoriesPersonalSettings(), store = InMemoryShelfStore(),
+        clock = FakeMemoryClock(LocalDate.of(2026, 11, 3)), scope = scope, dispatcher = Dispatchers.Unconfined,
+        choice = MemoryPhotoChoice(PickSignalsLoader(), VisiblePhotoPicker(MemoryPhotoPicker(), visibility)),
+      )
+      var published = 0
+      val ms = millis { published = runBlocking { engine.refresh(RefreshReason.NIGHTLY, 60.seconds) }.published }
+      println("P6 misure: giro con la scelta di P7 su 100.000 celle = %.0f ms (%d ricordi)".format(ms, published))
+      assertThat(published).isAtLeast(1)
+      assertWithMessage("giro con la scelta di P7: %.0f ms".format(ms)).that(ms).isLessThan(1_000.0)
     } finally {
       scope.cancel()
     }

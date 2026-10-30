@@ -149,13 +149,13 @@ internal abstract class MemoriesShots(private val dark: Boolean, private val dev
 
   @Test fun presentazioneVideo() = shoot("presentazione-video", "Chiudi", content = player(scenes.playerVideo))
 
-  @Test fun presentazionePausa() = shoot("presentazione-pausa", "Riproduci", "Foto successiva", content = player(scenes.playerPaused))
+  @Test fun presentazionePausa() = shoot("presentazione-pausa", "Riproduci", "Avanti", content = player(scenes.playerPaused))
 
   @Test fun presentazionePausaTestoGrande() = shoot("presentazione-pausa", "Riproduci", fontScale = LARGE_TEXT, content = player(scenes.playerPaused))
 
   @Test fun presentazioneAnimazioniRidotte() = shoot("presentazione-animazioni-ridotte", "Chiudi", content = player(scenes.playerReduced))
 
-  @Test fun presentazioneTalkBack() = shoot("presentazione-talkback", "Foto successiva", content = player(scenes.playerTalkBack))
+  @Test fun presentazioneTalkBack() = shoot("presentazione-talkback", "Avanti", content = player(scenes.playerTalkBack))
 
   @Test fun presentazioneTalkBackTitolo() = shoot("presentazione-talkback-titolo", "Tocca per cominciare", content = player(scenes.playerTalkBackIntro))
 

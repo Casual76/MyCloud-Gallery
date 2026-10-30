@@ -11977,3 +11977,70 @@ in piu' nell'elenco `wiring` di `HiddenSurfaces`** provata in locale e **non** c
 `"core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories/pick/VisiblePhotoPicker.kt",` in testa a `HiddenSurfaces.wiring` (o, in alternativa, la riga `MEMORIES` di P9
 che lo elenca fra i sorgenti). I file di P6 non nominano i contratti dei nascosti (porta `MemoryVisibility`) e il registro era verde prima del merge. Una corsa intera aveva
 avuto un'unica rossa, `HiddenSurfacesPropertyTest` (sonda `album-pages`, mondo 6, sotto carico); rilanciata da sola e poi nel check intero e' verde.
+
+## Fase 9 P9: schermate dei ricordi e presentazione (30/10)
+
+Il pacchetto P9 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P9; §1.5, §2.4, §2.5, §2.11, D13, D14, D31, D33, D34, §4.3; risposte **Q3**, **Q5 (a)**, **Q6 (a)**, **Q9 (a)** del §11). Branch
+`fase9/p9`. Consegna **cio' che l'utente vede** dei ricordi, sopra i contratti di P0 e con i fake: la sezione Ricordi delle Raccolte, la pagina del ricordo, "Tutti i ricordi", la presentazione
+(`MemoryPlayer`), i fogli "Mostra meno" e "Non ricordarmi questo periodo" con "Annulla" per 10 secondi, Impostazioni -> Ricordi e notifiche, la voce "Ricordi e notifiche" in `feature-settings` e la riga
+`MEMORIES` del registro dei Nascosti con le sue sonde. Il montaggio in `:app` (`MemoriesGraph`, porte vere) resta di **P13**: qui le porte sono pronte e opzionali per Dagger (come per le persone).
+Nessun permesso, componente, dipendenza o host nuovo. **Nessun contratto di P0, P6 o P7 e' cambiato.**
+
+**Come e' fatto (`feature-memories`)**
+- **Controllori senza Compose, schermate fatte solo con componenti G2.** Ogni schermata ha il suo controllore (`MemoryPageController`, `AllMemoriesController`, `PlayerController`, `MemoriesSettingsController`,
+  `MemoriesSectionSources`, `LessFlow`), una schermata che dice lo stato e una rotta con il suo `@HiltViewModel` (`nav/`, `memoriesGraph`, rotte `@Serializable` che non dicono mai l'id nel `toString()`).
+  Gli stati del §1.5 sono quelli di P0; cio' che la schermata ci aggiunge (foglio aperto, "Annulla", titolo della presentazione, copertine dopo il filtro) sta in tipi **di P9** (`contract/MemoriesUi.kt`).
+- **Porte nuove di P9** (`contract/MemoriesPorts.kt`, tutte con null-object che non fanno niente di pericoloso): `MemoriesThumbnails` (miniature e, opzionale, l'anteprima **locale** per la presentazione), `MemoryPlaceNames`,
+  `NotificationAccess` (permesso e canale, D18), `MusicPlayback` (lettore audio con gli eventi del **focus audio**), `PlayerClipSurface` (il clip muto dei video del telefono), `PlayerEnvironment` (animazioni ridotte, TalkBack).
+  Fake in `testing/PlayerFakes.kt`. Le porte dei contratti di P6 si legano con `@BindsOptionalOf` (`MemoriesPortsModule`); le preferenze delle notifiche e della musica, finche' P13 non le lega, stanno in memoria.
+- **Istantaneo** (principio "Avvio e pagine istantanei"). La sezione si disegna **dall'ultimo scaffale** (`Memories.shelf`, che `restore()` ha letto da file) senza Libreria ne' database; un istante dopo il filtro finale
+  rifa' conti e copertine. La pagina ha subito titolo, periodo e conto dalla voce dello scaffale e lo scheletro della griglia; "Tutti i ricordi" ha subito i mesi e **nessuna copertina**: le copertine arrivano solo dopo
+  il filtro dei Nascosti (cosi' un nascosto non compare mai nemmeno per un fotogramma).
+- **Il filtro finale e' un file solo** (`ui/FinalFilter.kt`, D31): e' l'unico file del modulo che nomina `HiddenMask` (piu' `MemoriesDependencies`, dove `:app` lo lega). Fallisce chiuso (un guasto = tutti nascosti); senza maschera
+  vale il solo filtro del servizio. La sezione e l'elenco rifanno copertina e conto sui media mostrabili (sotto 3 elementi la voce non c'e'); la pagina filtra griglia e copertina; la presentazione filtra la vista, la
+  **copertina del titolo** (quella del servizio puo' essere stata nascosta un attimo fa: trovato scrivendo la sonda) e i prossimi tre elementi **prima di ogni passaggio**.
+- **La presentazione** (`PlayerController`, tempo del `CoroutineScope`, virtuale nei test; `PlayerPace` per accorciarlo nelle prove sul catalogo vero). Titolo sopra la copertina 2 s, una foto 4 s (un video senza clip: il fotogramma;
+  con il clip muto del telefono la sua durata, al piu' 8 s), carta finale con le miniature e "Rivedi"; tocco = pausa e comandi, scorrimento = avanti e indietro (`PlayerGestures`, stesse soglie del viewer), trascinamento in
+  basso = esci. **Nessuna attesa sul NAS**: `PlayerImages.want` e' fire-and-forget (le due successive si decodificano prima, anteprima locale se c'e', poi miniatura grande, poi `ThumbHash`), al piu' tre bitmap in memoria,
+  una anteprima che non arriva si lascia dopo 8 s (`ThumbnailPlayerImagesTest`, con una sorgente che non risponde mai). Un elemento nascosto durante la presentazione si salta al passaggio; quello sullo schermo esce subito
+  (passa al successivo); sotto 3 elementi "Questo ricordo non c'e' piu'".
+- **Movimento solo dai token** (`NoHandWrittenStyleTest`): Ken Burns (zoom 100% -> 108% e un piccolo spostamento, solo `graphicsLayer`, nessuna misura del layout) e dissolvenza di 600 ms sono `FluidMotion.crossFade` con una
+  durata; con le animazioni ridotte nessun movimento e dissolvenza breve; in pausa il movimento si ferma dov'e'. **TalkBack**: parte in pausa, niente avanzamento automatico ne' musica, i comandi ci sono sempre e le azioni
+  personalizzate "Foto successiva" e "Foto precedente" scorrono; ogni foto dice "Foto del <data>, <luogo>" (e, solo in un ricordo di una persona, "con <nome>"). Il tema della presentazione e' scuro (`FluidTheme` AMOLED, senza
+  toccare le barre di sistema).
+- **Musica (Q3)**: di serie nessuna; la canzone propria (selettore di sistema, `MusicChoice.OwnSong`, la salva `:app` in `MusicSettings`) o un brano libero partono con la presentazione; il **focus audio** ferma presentazione e musica
+  per una chiamata e al ritorno riparte (non se l'utente era gia' in pausa); se un'altra app prende l'audio per sempre la presentazione aspetta l'utente, muta; il file sparito (`MusicEvent.MISSING` o brano che non si apre)
+  lascia la presentazione muta con un avviso. Il pacchetto di musica libera ha `TRACKS` **vuoto** (non si scarica e non si aggiunge nessun brano): la pagina dice "il pacchetto di musica libera non e' ancora disponibile", e la
+  lista dei brani (installa, avanzamento, pronto, non riuscito, in uso) e' pronta e provata con brani finti.
+- **"Mostra meno" e "Non ricordarmi questo periodo"** (`LessFlow`): foglio per persona (due livelli e "Togli la scelta"), foglio per periodo (i giorni del ricordo, spostabili di un giorno alla volta, al piu' 366), effetto
+  immediato (`Memories.setLess`), "Annulla" per 10 s (anche per "Non mostrare questo ricordo"); passati i 10 s la scelta resta. Nessun nome salvato: il nome sta solo nel titolo del foglio.
+- **Impostazioni -> Ricordi e notifiche**: ricordi con le persone (la riga c'e' solo con Persone attiva qui, Q9), notifiche (accese, ora a passi di 15 minuti, frequenza di Q4, schermata di blocco di Q5 (a) generica di serie),
+  permesso e canale (D18: "Consenti" da un tocco o le impostazioni di Android, "Apri il canale Ricordi"; mai una richiesta automatica), persone e periodi nascosti con "Togli", musica. **Nessuna riga del filtro automatico** (Q6 (a)).
+  La voce in `feature-settings` e' una riga con lo stato in una frase e un tocco (`SettingsLinks.openMemories`, scritta da `:app`: senza, la voce non c'e').
+
+**Registro dei Nascosti** (`HiddenSurfaces`, riga `MEMORIES`, D31). Quattro superfici (`memories-section`, `memories-page`, `memories-player`, `memories-people`) con i sorgenti di P6 (`ShelfPruner`, `ShelfCards`, `MemoryEngine`,
+`PublishRound`, `MemoryPhotoChoice`), di P7 (`VisiblePhotoPicker`, tolto da `wiring`) e di P9 (`FinalFilter`, `MemoriesDependencies`). La sonda (`RealMemoriesStack`, `RealMemoriesSurfaces`, `RealMemoriesProbes`, tutti file nuovi sotto
+`app/src/test/.../hidden/`) costruisce il **motore vero** con la scelta delle foto di P7 sul catalogo vero del mondo casuale (`CatalogVisibleMedia`, `CatalogHiddenMask`), in **tre "oggi"** (il mese prima, gli anniversari con un
+viaggio che include apposta dei nascosti, un giorno di sola persona con una persona nascosta e una visibile), pubblica, poi **nasconde nel catalogo la copertina e un elemento in mezzo di qualche ricordo** senza che istantanea e
+scaffale lo sappiano e fa girare le **schermate vere** (sezione, ogni pagina, "Tutti i ricordi", le prime tre presentazioni fino alla carta finale) controllando elementi, copertine, **conti** e codici contro un oracolo ricavato
+dalla descrizione del mondo (gruppi compresi). La prova gira su una **copia privata** del mondo (come i viaggi) e restituisce gli id del mondo originale. `RealMemoriesProbeTest` prova che la sonda vede ricordi veri di ogni tipo
+e che **senza il filtro finale la proprieta' diventa rossa** (provato). `HiddenSurfacesPropertyTest` non e' stato toccato. Le persone sono fittizie (`FakeMemoryPeople` con le regole della porta vera): la porta vera sopra
+`PeopleVisibility` e' di P13.
+
+**Modifiche fuori dal perimetro, minime e dichiarate**
+- `app/build.gradle`: `testImplementation project(':core-memories')` e `project(':feature-memories')` (serve alla sonda; `:app` non dipende ancora dai moduli dei ricordi, lo fara' P13 con `implementation`). Sono configurazioni di
+  test: `Phase9ArchitectureTest` guarda solo le dipendenze di produzione.
+- `HiddenSurfaces.kt` (`SpecRow.MEMORIES`, le quattro righe, `VisiblePhotoPicker` spostato da `wiring`).
+
+**Per gli altri pacchetti**
+- **P13**: legare le porte nel `MemoriesGraph` (`Memories` = `MemoryEngine`, `MemoryPeople`, `MemoryPlaceNames` sopra `PlaceNames`, `HiddenMask`, `NotifySettings`, `MusicSettings`, `MusicLibrary`, `NotificationAccess`, `MusicPlayback` con
+  Media3 e il focus audio, `MemoryClips` e `PlayerClipSurface`, `PlayerPreviewSource` dentro `MemoriesThumbnails`); `memoriesGraph(...)` nel `NavHost`; la sezione (`MemoriesSectionSources.section` -> `CollectionsSectionProvider` con il `toGroup()` provato da
+  `MemoriesSectionBindingTest`, e `MemoriesEntryTarget.parse`/`resolve` per aprire le voci); `SettingsLinks.openMemories` e `MemoriesEntryStatus`; il selettore di sistema per la canzone propria (`ACTION_OPEN_DOCUMENT`, `audio/*`, permesso persistito,
+  poi `MusicSettings.set(OwnSong(token))`); `Memories.refresh(OPEN)` all'apertura di Raccolte.
+- **P10**: la pagina delle impostazioni ha gia' permesso e canale dietro `NotificationAccess` e `MemoriesActions.requestNotificationPermission`/`openNotificationChannel`; `NotifySettings.set` e' tutto cio' che chiama.
+- **P12**: il benchmark `ricordi` puo' aprire `MemoryPageRoute` e `MemoryPlayerRoute` con le rotte del grafo.
+
+**Punti aperti**
+- **L440** (`docs/sicurezza.md`): clip dei video e Media3 sono di P13; per TalkBack il "con <nome>" e' solo dei ricordi di una persona; un filtro dei Nascosti lento (> 1 s) fa saltare i prossimi tre elementi.
+- Il titolo "Il meglio di <mese>" e il nome del mese dipendono dalla lingua di `GalleryDates` (italiano); non c'e' altra lingua in questa fase.
+- Prove sul telefono: vedi il resoconto (F113, F118).

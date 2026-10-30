@@ -84,7 +84,7 @@ fun rememberPlayerEnvironment(): PlayerEnvironment {
 private fun isTouchExploring(context: Context): Boolean =
   (context.getSystemService(Context.ACCESSIBILITY_SERVICE) as? AccessibilityManager)?.isTouchExplorationEnabled == true
 
-/** La presentazione e' sempre scura (§2.4): un tema scuro dedicato, senza toccare le barre di sistema della pagina sotto. */
+/** La presentazione e' sempre scura (§2.4): un tema scuro dedicato, senza toccare le barre di sistema della pagina sotto (lo applica `PlayerScreen`). */
 @Composable
 internal fun PlayerTheme(content: @Composable () -> Unit) {
   FluidTheme(
@@ -107,7 +107,7 @@ fun MemoryPlayerRoute(
   val environment = rememberPlayerEnvironment()
   val controller = remember(viewModel, thumbnails) { viewModel.controller(thumbnails, environment) }
   if (controller == null) {
-    PlayerTheme { PlayerScreen(PlayerUi(gone = true), thumbnails, NoPlayerImages, clips, NoPlayerHandlers.withExit(onExit), modifier) }
+    PlayerScreen(PlayerUi(gone = true), thumbnails, NoPlayerImages, clips, NoPlayerHandlers.withExit(onExit), modifier)
     return
   }
   LaunchedEffect(controller, environment) { controller.setEnvironment(environment) }
@@ -132,7 +132,7 @@ fun MemoryPlayerRoute(
       }
     }
   }
-  PlayerTheme { PlayerScreen(ui, thumbnails, viewModel.images, clips, handlers, modifier) }
+  PlayerScreen(ui, thumbnails, viewModel.images, clips, handlers, modifier)
 }
 
 private fun PlayerHandlers.withExit(exit: () -> Unit): PlayerHandlers = object : PlayerHandlers by this {

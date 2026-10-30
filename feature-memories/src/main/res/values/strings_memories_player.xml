@@ -7,6 +7,8 @@
   <string name="memorie_player_pause">Pausa</string>
   <string name="memorie_player_next">Foto successiva</string>
   <string name="memorie_player_previous">Foto precedente</string>
+  <string name="memorie_player_back">Indietro</string>
+  <string name="memorie_player_forward">Avanti</string>
   <string name="memorie_player_restart">Rivedi</string>
   <string name="memorie_player_end_title">Fine del ricordo</string>
   <string name="memorie_player_position">%1$d di %2$d</string>

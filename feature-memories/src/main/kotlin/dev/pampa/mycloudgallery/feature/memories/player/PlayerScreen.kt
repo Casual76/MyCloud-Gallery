@@ -95,14 +95,17 @@ internal fun PlayerScreen(
   handlers: PlayerHandlers,
   modifier: Modifier = Modifier,
 ) {
-  val state = ui.state
-  val snapshot = ui.snapshot
-  Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-    when {
-      ui.gone -> Gone(handlers)
-      state == null || snapshot == null -> Loading()
-      state is PlayerState.Ended -> EndCard(ui, state, snapshot, thumbnails, handlers)
-      else -> Playing(ui, state, snapshot, thumbnails, images, clips, handlers)
+  // La presentazione e' sempre scura (§2.4): un tema scuro dedicato, qualunque sia il tema dell'app.
+  PlayerTheme {
+    val state = ui.state
+    val snapshot = ui.snapshot
+    Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+      when {
+        ui.gone -> Gone(handlers)
+        state == null || snapshot == null -> Loading()
+        state is PlayerState.Ended -> EndCard(ui, state, snapshot, thumbnails, handlers)
+        else -> Playing(ui, state, snapshot, thumbnails, images, clips, handlers)
+      }
     }
   }
 }
@@ -242,26 +245,34 @@ private fun TopBar(position: String, notice: Boolean, handlers: PlayerHandlers) 
   }
 }
 
-/** In basso: precedente, pausa o riproduci, successiva. Con TalkBack niente "Riproduci": non parte niente da solo. */
+/**
+ * In basso: "Pausa" o "Riproduci" a tutta larghezza e, sotto, "Foto precedente" e "Foto successiva" una accanto all'altra (mai tre bottoni stretti in una riga: le
+ * parole si spezzerebbero). Con TalkBack niente "Riproduci": non parte niente da solo.
+ */
 @Composable
 private fun Controls(playing: Boolean, talkBack: Boolean, handlers: PlayerHandlers) {
-  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MemoriesDimens.TightGap)) {
-    FluidButton(
-      text = stringResource(R.string.memorie_player_previous), onClick = handlers::onPrevious, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large,
-      modifier = Modifier.weight(1f), leading = { Icon(imageVector = Icons.Rounded.NavigateBefore, contentDescription = null) },
-    )
+  Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MemoriesDimens.TightGap)) {
     if (!talkBack) {
       FluidButton(
         text = stringResource(if (playing) R.string.memorie_player_pause else R.string.memorie_player_play),
         onClick = if (playing) handlers::onPause else handlers::onPlay,
-        size = FluidButtonSize.Large, modifier = Modifier.weight(1f),
+        size = FluidButtonSize.Large, fillWidth = true,
         leading = { Icon(imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, contentDescription = null) },
       )
     }
-    FluidButton(
-      text = stringResource(R.string.memorie_player_next), onClick = handlers::onNext, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large,
-      modifier = Modifier.weight(1f), leading = { Icon(imageVector = Icons.Rounded.NavigateNext, contentDescription = null) },
-    )
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MemoriesDimens.TightGap)) {
+      // Il testo e' corto (un bottone da 50 dp non regge due righe a testo grande); per TalkBack la frase intera.
+      val previous = stringResource(R.string.memorie_player_previous)
+      val next = stringResource(R.string.memorie_player_next)
+      FluidButton(
+        text = stringResource(R.string.memorie_player_back), onClick = handlers::onPrevious, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large,
+        modifier = Modifier.weight(1f).semantics { contentDescription = previous }, leading = { Icon(imageVector = Icons.Rounded.NavigateBefore, contentDescription = null) },
+      )
+      FluidButton(
+        text = stringResource(R.string.memorie_player_forward), onClick = handlers::onNext, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large,
+        modifier = Modifier.weight(1f).semantics { contentDescription = next }, leading = { Icon(imageVector = Icons.Rounded.NavigateNext, contentDescription = null) },
+      )
+    }
   }
 }
 

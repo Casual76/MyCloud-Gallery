@@ -247,7 +247,7 @@ internal class MemoriesScreensTest : MemoriesScreenTest() {
     assertShows("foto", "Chiudi", "4 di 9")
     assertDoesNotShow("foto", "Pausa")
     set(scenes.playerPaused)
-    assertShows("pausa", "Foto precedente", "Riproduci", "Foto successiva", "Chiudi")
+    assertShows("pausa", "Indietro", "Riproduci", "Avanti", "Chiudi")
     set(scenes.playerEnded)
     assertShows("fine", "Fine del ricordo", "9 foto", "Rivedi", "Chiudi")
     set(scenes.playerMusicMissing)
@@ -262,7 +262,7 @@ internal class MemoriesScreensTest : MemoriesScreenTest() {
   @Test
   fun conTalkBackNonCeRiproduci_eOgniFotoHaLaSuaDescrizione() {
     val set = switching(scenes.playerTalkBack) { PlayerScreen(it, thumbs, NoPlayerImages, NoPlayerClipSurface, NoPlayerHandlers) }
-    assertShows("talkback", "Foto precedente", "Foto successiva", "Chiudi")
+    assertShows("talkback", "Indietro", "Avanti", "Chiudi")
     assertDoesNotShow("talkback", "Riproduci", "Pausa")
     assertThat(countDescribed("Foto del")).isAtLeast(1)
     set(scenes.playerTalkBackIntro)
@@ -276,9 +276,9 @@ internal class MemoriesScreensTest : MemoriesScreenTest() {
   fun iComandiDellaPresentazioneRispondono() {
     val log = PlayerLog()
     val set = switching(scenes.playerPaused) { PlayerScreen(it, thumbs, NoPlayerImages, NoPlayerClipSurface, log) }
-    clickText("Foto precedente")
+    clickText("Indietro")
     clickText("Riproduci")
-    clickText("Foto successiva")
+    clickText("Avanti")
     clickText("Chiudi")
     assertThat(log.calls).containsExactly("previous", "play", "next", "exit").inOrder()
     set(scenes.playerEnded)

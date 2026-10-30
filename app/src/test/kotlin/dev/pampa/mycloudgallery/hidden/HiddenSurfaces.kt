@@ -36,6 +36,9 @@ internal enum class SpecRow(val label: String) {
 
   /** Fase 9 (P9, D31): i ricordi -- la sezione delle Raccolte, la pagina del ricordo, "Tutti i ricordi", la presentazione, le copertine e i ricordi con le persone. */
   MEMORIES("Ricordi: sezione, pagina, \"Tutti i ricordi\", presentazione, copertine, persone"),
+
+  /** Fase 9 (P4, D31): la mappa -- i punti e i conteggi, le bolle e le copertine, la griglia di una zona, la sezione Luoghi delle Raccolte e la mini-mappa del viewer. */
+  MAP("Mappa: punti, bolle, copertine, griglia di una zona, Luoghi, mini-mappa del viewer"),
 }
 
 /** Con cosa e' provata una superficie. */
@@ -127,6 +130,7 @@ internal object HiddenSurfaces {
   private const val FEATURE_LIBRARY = "feature-library/src/main/kotlin/dev/pampa/mycloudgallery/feature/library"
   private const val MEMORIES_CORE = "core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories"
   private const val FEATURE_MEMORIES = "feature-memories/src/main/kotlin/dev/pampa/mycloudgallery/feature/memories"
+  private const val FEATURE_MAP = "feature-map/src/main/kotlin/dev/pampa/mycloudgallery/feature/map"
 
   /**
    * I file che fanno vivere la riga `MEMORIES`: il motore di P6 (la pulizia dello scaffale, le voci della sezione, il giro e la pubblicazione, la scelta delle foto), il
@@ -138,6 +142,13 @@ internal object HiddenSurfaces {
     "$MEMORIES_CORE/plan/MemoryPhotoChoice.kt", "$MEMORIES_CORE/pick/VisiblePhotoPicker.kt",
     "$FEATURE_MEMORIES/ui/FinalFilter.kt", "$FEATURE_MEMORIES/nav/MemoriesDependencies.kt",
   )
+
+  /**
+   * I file che fanno vivere la riga `MAP` e nominano i contratti dei nascosti: il filtro finale delle superfici della mappa (`FinalFilter`, l'unico file di feature-map che nomina `HiddenMask`: bolle, griglia e mini-mappa
+   * passano tutte da li'), le porte per Dagger (`MapDependencies`, dove `:app` lega la maschera e l'istantanea visibile) e la griglia di una zona (`ZoneGridController`, che legge l'istantanea di `VisibleMedia`). Un file
+   * nuovo di feature-map che nomina `VisibleMedia` o `HiddenMask` si elenca qui, con la sua sonda.
+   */
+  private val MAP_SOURCES = listOf("$FEATURE_MAP/ui/FinalFilter.kt", "$FEATURE_MAP/nav/MapDependencies.kt", "$FEATURE_MAP/grid/ZoneGridController.kt")
 
   /** Le superfici. L'ordine e' quello del §2.1. */
   val entries: List<SurfaceEntry> = listOf(
@@ -335,6 +346,25 @@ internal object HiddenSurfaces {
     SurfaceEntry(
       id = "memories-people", title = "Ricordi con le persone: mai una persona nascosta, mai un nascosto nei ricordi di una persona (E-H10)", row = SpecRow.MEMORIES, owner = "P9",
       backing = Backing.PRODUCTION, sources = listOf("$MEMORIES_CORE/shelf/ShelfPruner.kt"), probe = RealMemoriesProbes.people, live = true,
+    ),
+
+    // --- Il codice vero di P3 e P4 (la mappa): la catena vera dei punti (query, lettura a pagine, servizio) sul catalogo vero e le schermate vere sopra. Dopo l'indice il catalogo nasconde le copertine delle bolle piu' grandi
+    // e un elemento in mezzo (senza che l'indice lo sappia): bolle, copertine e griglie li tolgono (E-MAP15, E-H9); rifatto l'indice, i conteggi sono esatti. La mini-mappa non c'e' mai per un nascosto (D30) -------------------
+    SurfaceEntry(
+      id = "map-points", title = "Mappa: punti, conteggi, bolle, copertine ed etichette (mai un nascosto, mai Casa; conteggi esatti dopo il cambio dei nascosti)", row = SpecRow.MAP, owner = "P4",
+      backing = Backing.PRODUCTION, sources = MAP_SOURCES, probe = RealMapProbes.points, live = true, alsoProvedBy = listOf("BubbleEngineTest", "MapControllerTest", "MapScreensTest", "HiddenNeverShownTest"),
+    ),
+    SurfaceEntry(
+      id = "map-zone", title = "Mappa: la griglia di una zona (elementi dal piu' recente, viva sull'istantanea, senza nascosti)", row = SpecRow.MAP, owner = "P4",
+      backing = Backing.PRODUCTION, sources = listOf("$FEATURE_MAP/grid/ZoneGridController.kt"), probe = RealMapProbes.zone, live = true, alsoProvedBy = listOf("ZoneGridControllerTest"),
+    ),
+    SurfaceEntry(
+      id = "places-section", title = "Raccolte -> Luoghi: la riga Mappa, i luoghi piu' fotografati, le foto senza posizione (conteggi esatti, mai Casa)", row = SpecRow.MAP, owner = "P4",
+      backing = Backing.PRODUCTION, sources = listOf("$FEATURE_MAP/nav/MapDependencies.kt"), probe = RealMapProbes.places, live = true, alsoProvedBy = listOf("PlacesSectionTest"),
+    ),
+    SurfaceEntry(
+      id = "viewer-minimap", title = "Viewer: la riga Mostra sulla mappa e la mini-mappa (mai per un media dei Nascosti)", row = SpecRow.MAP, owner = "P4",
+      backing = Backing.PRODUCTION, sources = listOf("$FEATURE_MAP/ui/FinalFilter.kt"), probe = RealMapProbes.minimap, live = true, alsoProvedBy = listOf("MiniMapServiceTest", "ViewerPlaceMapInfoTest"),
     ),
   )
 

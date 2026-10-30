@@ -117,7 +117,8 @@ class FacesEraseControllerTest {
       EraseStart.Expired to EraseSheetState.Expired,
       EraseStart.PreviewChanged to EraseSheetState.Expired,
       EraseStart.Unavailable to EraseSheetState.Expired,
-      EraseStart.NothingToErase to EraseSheetState.Done,
+      // R12: niente da cancellare non e' "fatto ovunque".
+      EraseStart.NothingToErase to EraseSheetState.NothingToErase,
     )
     for ((outcome, page) in cases) {
       val controller = FacesEraseController(ScriptedEraser(preview(), outcome), Clock(), scope).also { it.load() }
@@ -145,12 +146,13 @@ class FacesEraseControllerTest {
     val controller = FacesEraseController(eraser, Clock(), scope).also { it.load() }
     assertThat(controller.state.value).isEqualTo(EraseSheetState.Progress(StepState.DONE, StepState.WAITING, listOf(phone, tablet), EraseWait.FROZEN))
     val off = FacesEraseController(ScriptedEraser(preview(digest = 0)), Clock(), scope).also { it.load() }
-    assertThat(off.state.value).isEqualTo(EraseSheetState.Done)
+    assertThat(off.state.value).isEqualTo(EraseSheetState.NothingToErase)
   }
 
   @Test
   fun loStatoDellaPaginaDalloStatoDellaCancellazione() {
-    assertThat(EraseSheetStates.of(status(EraseStep.DONE, StepState.DONE, StepState.DONE, null))).isEqualTo(EraseSheetState.Done)
+    assertThat(EraseSheetStates.of(status(EraseStep.DONE, StepState.DONE, StepState.DONE, null, listOf(phone, tablet.copy(state = AckState.CONFIRMED)))))
+      .isEqualTo(EraseSheetState.Done)
     // Finita ma con una copia nel cestino di rete (E-F34): l'avanzamento con il motivo, che la pagina dice.
     assertThat(EraseSheetStates.of(status(EraseStep.DONE, StepState.DONE, StepState.DONE, EraseWait.RECYCLE_BIN)))
       .isEqualTo(EraseSheetState.Progress(StepState.DONE, StepState.DONE, listOf(phone, tablet), EraseWait.RECYCLE_BIN))
@@ -159,5 +161,58 @@ class FacesEraseControllerTest {
     assertThat(EraseSheetStates.of(status(EraseStep.LOCAL_DONE, StepState.DONE, StepState.WAITING, EraseWait.NAS)))
       .isEqualTo(EraseSheetState.Progress(StepState.DONE, StepState.WAITING, listOf(phone, tablet), EraseWait.NAS))
     assertThat(EraseSheetStates.progress(status(EraseStep.DONE, StepState.DONE, StepState.DONE, null)).local).isEqualTo(StepState.DONE)
+  }
+
+  // --- Correzioni A della Fase 8 -------------------------------------------------------------------------------------------------------
+
+  /**
+   * CE-1: dopo una cancellazione finita e una riattivazione il diario `DONE` resta 30 giorni per la pagina, ma non e' una cancellazione in corso: il foglio
+   * rifa' l'anteprima e offre di nuovo il tasto (prima diceva "Fatto ovunque" senza toccare niente, e i dati della generazione nuova restavano per sempre).
+   */
+  @Test
+  fun ce1_unDiarioFinitoNonEUnaCancellazioneInCorso_IlFoglioRifaLAnteprima() {
+    val eraser = ScriptedEraser(preview())
+    eraser.status.value = status(EraseStep.DONE, StepState.DONE, StepState.DONE, null, listOf(phone, tablet.copy(state = AckState.CONFIRMED)))
+    val controller = FacesEraseController(eraser, Clock(), scope).also { it.load() }
+    val shown = controller.state.value as EraseSheetState.Preview
+    assertThat(shown.canConfirm).isTrue()
+    assertThat(controller.token.value).isEqualTo(EraseSheetToken(42, 7_000L))
+    // E la seconda cancellazione parte davvero, poi si segue quella nuova.
+    eraser.onErase = { eraser.status.value = status(EraseStep.LOCAL_DONE, StepState.DONE, StepState.RUNNING, null) }
+    controller.confirm(FacesEraseConfirmation(42, 7_000L))
+    assertThat(eraser.calls).hasSize(1)
+    assertThat(controller.state.value).isEqualTo(EraseSheetState.Progress(StepState.DONE, StepState.RUNNING, listOf(phone, tablet), null))
+  }
+
+  /** CE-1: con una cancellazione davvero in corso il foglio la segue (come prima). */
+  @Test
+  fun ce1_unaCancellazioneInCorsoSiSegueSempre() {
+    val eraser = ScriptedEraser(preview())
+    eraser.status.value = status(EraseStep.NAS_DONE, StepState.DONE, StepState.RUNNING, null)
+    val controller = FacesEraseController(eraser, Clock(), scope).also { it.load() }
+    assertThat(controller.state.value).isInstanceOf(EraseSheetState.Progress::class.java)
+    assertThat(controller.token.value).isNull()
+  }
+
+  /** R12: "Fatto ovunque" solo con il NAS e tutti i dispositivi confermati; la cancellazione solo locale dice cio' che e' successo. */
+  @Test
+  fun r12_fattoOvunqueSoloConNasETuttiIDispositivi() {
+    val confirmed = listOf(phone, tablet.copy(state = AckState.CONFIRMED))
+    assertThat(EraseSheetStates.of(status(EraseStep.DONE, StepState.DONE, StepState.DONE, null, confirmed))).isEqualTo(EraseSheetState.Done)
+    // Cancellazione solo locale (D34: niente sul NAS): "Cancellati da questo dispositivo", mai "ovunque".
+    assertThat(EraseSheetStates.of(status(EraseStep.DONE, StepState.DONE, StepState.NOT_NEEDED, null, emptyList()))).isEqualTo(EraseSheetState.DoneHere)
+    // Un dispositivo che manca ancora, o un NAS non fatto, non sono "fatto ovunque" nemmeno con il diario `DONE`.
+    assertThat(EraseSheetStates.of(status(EraseStep.DONE, StepState.DONE, StepState.DONE, null, listOf(phone, tablet)))).isInstanceOf(EraseSheetState.Progress::class.java)
+    assertThat(EraseSheetStates.of(status(EraseStep.DONE, StepState.DONE, StepState.WAITING, null, confirmed))).isInstanceOf(EraseSheetState.Progress::class.java)
+  }
+
+  /** R12: niente da cancellare (anteprima vuota o esito `NothingToErase`) non parla di NAS ne' di altri dispositivi e non e' "fatto ovunque". */
+  @Test
+  fun r12_nienteDaCancellareNonEFattoOvunque() {
+    val empty = FacesEraseController(ScriptedEraser(preview(digest = 0)), Clock(), scope).also { it.load() }
+    assertThat(empty.state.value).isEqualTo(EraseSheetState.NothingToErase)
+    val gone = FacesEraseController(ScriptedEraser(preview(), EraseStart.NothingToErase), Clock(), scope).also { it.load() }
+    gone.confirm(FacesEraseConfirmation(42, 7_000L))
+    assertThat(gone.state.value).isEqualTo(EraseSheetState.NothingToErase)
   }
 }

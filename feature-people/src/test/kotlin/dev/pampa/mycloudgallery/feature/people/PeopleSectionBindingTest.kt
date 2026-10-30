@@ -55,6 +55,7 @@ class PeopleSectionBindingTest {
     val anna = card("Anna", 10)
     val states = listOf(
       PeopleSectionState.Off,
+      PeopleSectionState.OffElsewhere,
       PeopleSectionState.AwaitingNotice,
       PeopleSectionState.Excluded,
       PeopleSectionState.FirstRun(12),

@@ -58,6 +58,7 @@ object PeopleSamples {
 
   val sections: List<PeopleSectionState> = listOf(
     PeopleSectionState.Off,
+    PeopleSectionState.OffElsewhere,
     PeopleSectionState.AwaitingNotice,
     PeopleSectionState.Excluded,
     PeopleSectionState.FirstRun(42),
@@ -139,6 +140,8 @@ object PeopleSamples {
     progress,
     progress.copy(nas = StepState.WAITING, waiting = EraseWait.NAS),
     EraseSheetState.Done,
+    EraseSheetState.DoneHere,
+    EraseSheetState.NothingToErase,
     EraseSheetState.WaitingDevices(listOf(old)),
   )
 

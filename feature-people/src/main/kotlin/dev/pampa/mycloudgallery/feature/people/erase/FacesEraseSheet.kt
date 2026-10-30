@@ -84,6 +84,8 @@ fun FacesEraseSheet(
       EraseSheetState.Expired -> expired(onReload, onClose)
       is EraseSheetState.Progress -> progress(state, onClose, onOpenDevices)
       EraseSheetState.Done -> message(R.string.faces_erase_done_title, R.string.faces_erase_done_message, FluidTone.Success, onClose)
+      EraseSheetState.DoneHere -> message(R.string.faces_erase_done_here_title, R.string.faces_erase_done_here_message, FluidTone.Success, onClose)
+      EraseSheetState.NothingToErase -> message(R.string.faces_erase_nothing_title, R.string.faces_erase_nothing_message, FluidTone.Info, onClose)
       is EraseSheetState.WaitingDevices -> waitingDevices(state, onClose, onOpenDevices)
     }
   }

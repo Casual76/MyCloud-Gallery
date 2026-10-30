@@ -13,7 +13,7 @@ import dev.pampa.mycloudgallery.feature.people.contract.PeopleUnavailable
  * Lo stato della sezione Persone delle Raccolte (docs/fase8-progetto.md §1.5 `PeopleSectionState`, §2.6 "Cosa si vede", Q2 (b), D4, D34): una
  * funzione pura da cio' che c'e' gia' (lo stato di Persone su questo dispositivo, le persone e il calcolo). Provata su ogni caso.
  *
- *  - spenta: la riga "Attiva riconoscimento dei volti"; in attesa dell'avviso: la riga dell'avviso; esclusa: "Non attiva su questo dispositivo";
+ *  - spenta: la riga "Attiva riconoscimento dei volti" (con sopra, se l'ha spenta un altro dispositivo, la riga che lo dice: CE-3); in attesa dell'avviso: la riga dell'avviso; esclusa: "Non attiva su questo dispositivo";
  *  - il primo calcolo (nessuna persona ancora): "Sto riconoscendo i volti: 35%", o l'attesa (senza percentuale);
  *  - con Q2 (b) **solo le persone con un nome** in primo piano ([TOP]) e "Altri volti (N)"; con Q2 (a) anche le altre, dopo quelle con un nome;
  *  - con la recinzione dei volti (D34: sulle share vere i dati restano su questo dispositivo) la stessa cosa con la nota ([PeopleSectionState.LocalOnly]);
@@ -24,8 +24,9 @@ object PeopleSectionStates {
   /** Fino a 8 persone in primo piano (§2.6). */
   const val TOP: Int = 8
 
-  fun of(state: FacesState, list: PeopleList, status: FacesStatus): PeopleSectionState = when (state) {
-    FacesState.Off -> PeopleSectionState.Off
+  /** [offElsewhere] (CE-3): da spenta, Persone e' stata disattivata da un altro dispositivo e qui i dati sono stati tolti. */
+  fun of(state: FacesState, list: PeopleList, status: FacesStatus, offElsewhere: Boolean = false): PeopleSectionState = when (state) {
+    FacesState.Off -> if (offElsewhere) PeopleSectionState.OffElsewhere else PeopleSectionState.Off
     is FacesState.AwaitingNotice -> PeopleSectionState.AwaitingNotice
     is FacesState.Erasing -> PeopleSectionState.Unavailable(PeopleUnavailable.ERASING)
     FacesState.NeedsUpdate -> PeopleSectionState.Unavailable(PeopleUnavailable.NEEDS_UPDATE)

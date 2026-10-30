@@ -111,6 +111,7 @@ internal object EraseText {
     EraseWait.NOT_TRUSTED -> R.string.faces_erase_wait_not_trusted
     EraseWait.DEVICES -> R.string.faces_erase_wait_devices
     EraseWait.RECYCLE_BIN -> R.string.faces_erase_wait_recycle_bin
+    EraseWait.FILE_OPEN -> R.string.faces_erase_wait_file_open
   }
 
   fun ack(state: AckState): Int = when (state) {

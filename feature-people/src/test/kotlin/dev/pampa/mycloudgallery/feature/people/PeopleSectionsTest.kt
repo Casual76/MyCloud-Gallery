@@ -59,6 +59,32 @@ class PeopleSectionsTest {
     assertThat(PeopleEntryTarget.parse(row.code)).isEqualTo(PeopleEntryTarget.Activation)
   }
 
+  /** CE-3: la riga che dice perche' sta sopra "Attiva riconoscimento dei volti"; tutte e due portano alla pagina di attivazione. */
+  @Test
+  fun ce3_spentaDaUnAltroDispositivo_LaRigaCheLoDiceStaSopraAttiva() {
+    val entries = sectionOf(PeopleSectionState.OffElsewhere).entries
+    assertThat(entries.map { it.code }).containsExactly(PeopleEntryTarget.OFF_ELSEWHERE, PeopleEntryTarget.ENABLE).inOrder()
+    assertThat(entries[0].title).isEqualTo("Persone è stata disattivata da un altro tuo dispositivo")
+    assertThat(entries[1].title).isEqualTo("Attiva riconoscimento dei volti")
+    for (entry in entries) assertThat(PeopleEntryTarget.parse(entry.code)).isEqualTo(PeopleEntryTarget.Activation)
+    // Nessun nome, nessun id: solo testo fisso.
+    assertThat(entries[0].subtitle).doesNotContain("Anna")
+  }
+
+  /** CE-3: la sezione vera segue il segno dell'interruttore, e la riga sparisce con la riattivazione. */
+  @Test
+  fun ce3_laSezioneSegueIlSegnoDellInterruttore() = runTest(UnconfinedTestDispatcher()) {
+    val world = PeopleFixture()
+    val state = MutableStateFlow<FacesState>(FacesState.Off)
+    val off = MutableStateFlow(true)
+    val sources = PeopleSectionSources(resources, world.people, state, MutableStateFlow(FacesStatus.Off), backgroundScope, off)
+    assertThat(sources.sectionState.value).isEqualTo(PeopleSectionState.OffElsewhere)
+    assertThat(sources.section.value!!.entries.map { it.code }).containsExactly(PeopleEntryTarget.OFF_ELSEWHERE, PeopleEntryTarget.ENABLE).inOrder()
+    off.value = false
+    assertThat(sources.sectionState.value).isEqualTo(PeopleSectionState.Off)
+    assertThat(sources.section.value!!.entries.map { it.code }).containsExactly(PeopleEntryTarget.ENABLE)
+  }
+
   @Test
   fun leRigheDegliStatiCheNonSonoPersone() {
     val notice = sectionOf(PeopleSectionState.AwaitingNotice).entries.single()

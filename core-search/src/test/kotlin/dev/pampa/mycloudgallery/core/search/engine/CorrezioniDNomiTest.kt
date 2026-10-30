@@ -183,10 +183,12 @@ class CorrezioniDNomiTest {
     history.record("foto di Анна al mare", emptyList())
     history.record("李明 e Marco", emptyList())
     history.record("Анн", emptyList())
+    // A parole intere anche in cirillico: "Анна" non e' "Аннабелла".
+    history.record("Аннабелла в горах", emptyList())
     history.record("mare", emptyList())
     // Un nome in cirillico e uno in cinese: prima la normalizzazione li svuotava e le voci restavano.
     assertThat(history.purge(listOf("Анна", "李明"))).isEqualTo(2)
-    assertThat(history.entries.value.map { it.text }).containsExactly("Анн", "mare")
+    assertThat(history.entries.value.map { it.text }).containsExactly("Анн", "Аннабелла в горах", "mare")
   }
 
   @Test

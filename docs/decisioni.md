@@ -12044,3 +12044,6 @@ e che **senza il filtro finale la proprieta' diventa rossa** (provato). `HiddenS
 - **L440** (`docs/sicurezza.md`): clip dei video e Media3 sono di P13; per TalkBack il "con <nome>" e' solo dei ricordi di una persona; un filtro dei Nascosti lento (> 1 s) fa saltare i prossimi tre elementi.
 - Il titolo "Il meglio di <mese>" e il nome del mese dipendono dalla lingua di `GalleryDates` (italiano); non c'e' altra lingua in questa fase.
 - Prove sul telefono: vedi il resoconto (F113, F118).
+- `HiddenSurfacesPropertyTest` dura circa 100 s in piu' di prima: le sonde `MEMORIES` costruiscono il motore vero e fanno girare le schermate vere su tre "oggi" per ogni mondo casuale.
+
+**Verifica**: `tools\check.ps1 -NoDaemon` (con `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, un posto Gradle tenuto per tutta la durata) e' finito con **OK: tutto a posto** (codice di uscita 0, tutti i passi OK, `-Bench` saltato per scelta): assembleDebug, assembleRelease, galleryTest e galleryLint in circa 21 minuti, nessun modulo a zero test (`feature-memories` = 296, `app` = 1158) e nessun resto dei ricordi nel dex di release.

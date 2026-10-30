@@ -62,6 +62,10 @@ class FakeMemoryTrips(var trips: List<TripDigestView> = emptyList()) : MemoryTri
 /**
  * Le persone finte (D12): [people] persona -> media in cui compare (con nome), [hidden] persone nascoste o dimenticate (non ci sono mai),
  * [aliases] le unioni (la vecchia -> la nuova), [names] i nomi da mostrare. [visible] filtra i media (i nascosti della Libreria).
+ *
+ * Fedele alla porta (suite `MemoryPeopleContract`): una persona **unita** a un'altra non c'e' piu' con il suo id, ma i suoi media sono della
+ * persona che resta (E-MEM10: gli alias sono risolti), una nascosta, dimenticata o senza nome non compare mai ne' nei media ne' nell'elenco.
+ * Il nome serve solo a [label] e a questa tabella: nessun altro metodo lo restituisce.
  */
 class FakeMemoryPeople(
   available: Boolean = true,
@@ -79,32 +83,47 @@ class FakeMemoryPeople(
     names[id] = name
   }
 
+  /** [old] e' stata unita a [into]: da ora l'id vecchio e' un alias e i suoi media sono di [into]. */
+  fun merge(old: PersonId, into: PersonId): FakeMemoryPeople = apply { aliases[old] = into }
+
+  /** L'utente nasconde (o dimentica) [id]: non ci sara' piu' fra le persone. */
+  fun hide(id: PersonId): FakeMemoryPeople = apply { hidden += id }
+
+  /** La persona di adesso per [person]: l'alias seguito fino in fondo, null se e' nascosta o senza nome. */
+  private fun current(person: PersonId): PersonId? {
+    var now = person
+    repeat(MAX_ALIAS_HOPS) { now = aliases[now] ?: return now.takeIf { it !in hidden && names[it] != null } }
+    return now.takeIf { it !in hidden && names[it] != null }
+  }
+
   override suspend fun named(): List<PersonDigest> {
     if (!available.value) return emptyList()
-    return people.entries.filter { it.key !in hidden && it.key !in aliases && names[it.key] != null }
-      .map { (id, media) -> PersonDigest(id, media.filter { it in visible(media) }) }
-      .sortedBy { it.person }
+    val media = LinkedHashMap<PersonId, MutableSet<MediaId>>()
+    for ((id, own) in people) {
+      val target = current(id) ?: continue
+      media.getOrPut(target) { LinkedHashSet() } += own
+    }
+    return media.map { (id, all) -> PersonDigest(id, visible(all).let { shown -> all.filter { it in shown } }) }.sortedBy { it.person }
   }
 
   override suspend fun peopleIn(ids: Collection<MediaId>): Map<MediaId, Set<PersonId>> {
     if (!available.value) return emptyMap()
     val shown = visible(ids)
     val out = HashMap<MediaId, MutableSet<PersonId>>()
-    for ((person, media) in people) {
-      if (person in hidden || person in aliases || names[person] == null) continue
-      for (id in ids) if (id in shown && id in media) out.getOrPut(id) { HashSet() } += person
+    for ((id, media) in people) {
+      val target = current(id) ?: continue
+      for (m in ids) if (m in shown && m in media) out.getOrPut(m) { HashSet() } += target
     }
     return out
   }
 
-  override suspend fun resolve(person: PersonId): PersonId? {
-    if (!available.value) return null
-    var current = person
-    repeat(8) { current = aliases[current] ?: return@repeat }
-    return current.takeIf { it !in hidden && names[it] != null }
-  }
+  override suspend fun resolve(person: PersonId): PersonId? = if (available.value) current(person) else null
 
   override suspend fun label(person: PersonId): String? = resolve(person)?.let { names[it] }
+
+  private companion object {
+    const val MAX_ALIAS_HOPS = 8
+  }
 }
 
 /**

@@ -12,8 +12,9 @@ import java.time.LocalDate
  * Il contratto di [generate] (la corsa; la definizione sul banco e' `FamilyRig.run` di `core-memories/src/test/.../eval/MemoriesEvalKit.kt`, provata con la Libreria
  * sintetica; docs/decisioni.md, "Fase 9 P11"):
  *  - per ognuno degli ultimi `days` giorni, dal piu' vecchio a oggi, "oggi" e' quel giorno e si fa un giro di notte (budget di 60 secondi) con **un motore suo**: scaffale
- *    in memoria (`InMemoryShelfStore`, che parte vuoto), scelte dell'utente (visti, scartati, "Mostra meno", "Mai") **copiate in sola lettura** in un deposito in memoria,
- *    le stesse porte vere (viaggi, persone, vettori, pixel, album, ritagli) e la visibilita' vera dei Nascosti;
+ *    in memoria (`InMemoryShelfStore`, che parte vuoto), le scelte "Mostra meno", "Mai" e "Ricordi con le persone" **copiate in sola lettura** in un deposito in memoria
+ *    (i **visti** e gli **scartati** NO: la corsa deve dire tutto cio' che il motore avrebbe prodotto, anche cio' che l'utente ha gia' visto o scartato), le stesse
+ *    porte vere (viaggi, persone, vettori, pixel, album, ritagli) e la visibilita' vera dei Nascosti;
  *  - ogni ricordo **nuovo** sullo scaffale dopo il giro e' un ricordo da giudicare, nato in quel giorno; i ricordi gia' visti nella corsa non si ripetono;
  *  - **mai un nascosto**, nemmeno nei conti; mai coordinate, mai la casa; il titolo e' composto come lo vedrebbe l'utente (date e luoghi veri) ma **mai con il nome di una
  *    persona** (il file dei giudizi lo salva: D12, i nomi non si salvano);

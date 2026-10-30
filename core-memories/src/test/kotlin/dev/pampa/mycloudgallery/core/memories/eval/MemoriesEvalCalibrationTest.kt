@@ -2,7 +2,13 @@ package dev.pampa.mycloudgallery.core.memories.eval
 
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.memories.contract.CandidateCell
+import dev.pampa.mycloudgallery.core.memories.contract.PhotoScore
+import dev.pampa.mycloudgallery.core.memories.contract.PickSignals
 import dev.pampa.mycloudgallery.core.memories.contract.PickWeights
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaSource
+import dev.pampa.mycloudgallery.core.model.PersonId
 import kotlin.math.abs
 import org.junit.Test
 
@@ -78,6 +84,46 @@ class MemoriesEvalCalibrationTest {
     // La forma della curva: piu' larga e' la finestra, piu' doppioni si tolgono e piu' foto uniche si perdono.
     assertThat(figures.getValue(10.0).recall).isGreaterThan(figures.getValue(1.0).recall)
     assertThat(figures.getValue(10.0).lostShare).isGreaterThan(figures.getValue(1.0).lostShare)
+  }
+
+  @Test
+  fun ilPunteggioDeiPesiProvvisoriSeparaIDifettiVisibiliDalleFotoBuone() {
+    // Una misura, non una calibrazione: i pesi di D6 non si possono variare senza toccare il codice, ma si puo' dire quanto bene i valori attuali separano i difetti
+    // che il punteggio vede (mossa, buia, ricevuta da WhatsApp e "non c'entra") dalle foto buone dello stesso giorno: la probabilita' che una foto buona abbia un
+    // punteggio piu' alto di una col difetto (a pari punteggio, meta'). Solo nei giorni con almeno 8 candidati, dove l'ordine conta: nei giorni piccoli le foto
+    // stanno tutte nel ricordo e il punteggio non decide niente (e' il limite che la calibrazione dei pesi non puo' correggere: servirebbe una soglia minima).
+    val people = HashMap<MediaId, Set<PersonId>>()
+    for ((person, media) in world.personMedia) for (m in media) people[m] = (people[m] ?: emptySet()) + person
+    val signals = PickSignals(pixels = world.probes, people = people)
+    fun score(s: FamilyShot): Double = PhotoScore.of(
+      CandidateCell(s.id, 0, 0, s.kind, s.source, s.flags, 0, 1_333, null, false), signals,
+    )
+    val wins = DoubleArray(3)
+    val pairs = IntArray(3)
+    for ((_, shots) in world.visibleShots.filter { !it.excluded }.groupBy { it.day }) {
+      if (shots.size < 8) continue
+      val good = shots.filter { it.fault == null && it.dupGroup == null && it.source == MediaSource.CAMERA && !it.blurry && !it.dark }
+      val classes = listOf(
+        shots.filter { it.blurry },
+        shots.filter { it.dark },
+        shots.filter { it.source == MediaSource.WHATSAPP && it.fault == EvalFault.UNRELATED },
+      )
+      for ((k, faulty) in classes.withIndex()) for (f in faulty) for (g in good) {
+        val diff = score(g) - score(f)
+        pairs[k]++
+        wins[k] += if (diff > 0) 1.0 else if (diff == 0.0) 0.5 else 0.0
+      }
+    }
+    val auc = List(3) { wins[it] / pairs[it] }
+    println("CALIBRAZIONE punteggio (giorni da 8 candidati): mosse ${pairs[0]} coppie, ${"%.3f".format(java.util.Locale.ROOT, auc[0])}; buie ${pairs[1]} coppie, ${"%.3f".format(java.util.Locale.ROOT, auc[1])}; WhatsApp non pertinenti ${pairs[2]} coppie, ${"%.3f".format(java.util.Locale.ROOT, auc[2])}")
+    for (k in 0 until 3) assertThat(pairs[k]).isGreaterThan(300)
+    // Una guardia, non un obiettivo: le mosse (BLURRY -1,5) si separano bene (0,86), le buie (BAD_LIGHT -1,0) meno (0,75: un'esposizione sbagliata pesa meno di una
+    // preferita o di una persona, e il 10% delle buie sta sopra la soglia di luce), le ricevute da WhatsApp non pertinenti (-1,5) abbastanza (0,90). Se la misura vera
+    // (F125) dice che ci sono troppe foto buie nei ricordi, il primo sospetto e' BAD_LIGHT.
+    assertThat(auc[0]).isAtLeast(0.80)
+    assertThat(auc[1]).isAtLeast(0.70)
+    assertThat(auc[2]).isAtLeast(0.80)
+    assertThat(auc.all { it < 1.0 }).isTrue()
   }
 
   private companion object {

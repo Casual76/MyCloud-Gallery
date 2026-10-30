@@ -49,6 +49,9 @@ enum class DiagJob {
   /** Fase 8 (P13): il calcolo dei volti (`FacesComputeWorker`, regole di `AI_COMPUTE`) e la ripresa di "Disattiva e cancella" (`FacesEraseWorker`). */
   FACES_COMPUTE,
   FACES_ERASE,
+
+  /** Fase 8 (correzioni E, RG-1): il raggruppamento notturno delle persone (`FacesNightlyWorker`, regole di `AI_COMPUTE`), un lavoro suo. */
+  FACES_NIGHTLY,
 }
 
 /** Com'e' finita una tappa di un lavoro (`StageOutcome` in parole fisse). */

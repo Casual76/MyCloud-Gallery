@@ -372,6 +372,8 @@ internal val DIAGNOSTICS_APP_ACTIONS = setOf(
   DiagnosticsActions.NAS_STOP_WRITES,
   DiagnosticsActions.NAS_RESUME_WRITES,
   DiagnosticsActions.NAS_RELEASE_FREEZE,
+  // Fase 8 (correzioni E, DG-2): "Fallo su questo dispositivo" di `FACES_NO_INDEXER` porta a Ricerca e modelli, dove si accende il ruolo di Indicizzatore.
+  DiagnosticsActions.OPEN_INDEXER_ROLE,
 )
 
 private fun onDiagnosticsAction(nav: NavHostController, action: DiagAction) {
@@ -387,6 +389,7 @@ internal fun diagnosticsRouteOf(action: DiagAction): Any? = when (action) {
   DiagAction.OPEN_DEVICES -> SettingsDevicesRoute
   DiagAction.RESUME_ONBOARDING -> SettingsGraphRoute
   NetworkDiagActions.RECAPTURE_HOME, NetworkDiagActions.OPEN_VPN_CONTROL -> SettingsNetworkRoute
+  DiagnosticsActions.OPEN_INDEXER_ROLE -> SearchSettingsPageRoute
   else -> null
 }
 

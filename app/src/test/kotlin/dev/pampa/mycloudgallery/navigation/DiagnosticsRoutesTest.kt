@@ -33,6 +33,14 @@ class DiagnosticsRoutesTest {
     assertThat(NetworkDiagActions.ALL).containsExactlyElementsIn(DIAGNOSTICS_APP_ACTIONS.filter { it in NetworkDiagActions.ALL })
   }
 
+  /** DG-2 (correzioni E): "Fallo su questo dispositivo" di `FACES_NO_INDEXER` porta a Ricerca e modelli, dove si accende il ruolo di Indicizzatore. */
+  @Test
+  fun dg2_falloSuQuestoDispositivoPortaARicercaEModelli() {
+    assertThat(DiagnosticsActions.OPEN_INDEXER_ROLE).isIn(DIAGNOSTICS_APP_ACTIONS)
+    assertThat(diagnosticsRouteOf(DiagnosticsActions.OPEN_INDEXER_ROLE)).isEqualTo(SearchSettingsPageRoute)
+    assertThat(DiagnosticsActions.labelRes(DiagnosticsActions.OPEN_INDEXER_ROLE)).isNotEqualTo(0)
+  }
+
   @Test
   fun unAzioneSconosciutaNonPortaDaNessunaParte() {
     assertThat(diagnosticsRouteOf(DiagAction("azione_inventata"))).isNull()

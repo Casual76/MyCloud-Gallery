@@ -93,6 +93,8 @@ object ExportKeys {
     // riquadri, vettori, conteggi per persona o generazione. `mounted`, `enabled`, `count`, `roundErrors`, `rejectedHeads` e `rejectedSegments` sono gia' sopra.
     "hereState", "awaitingNotice", "erasing", "fresh", "syncPending", "runStatus", "holder", "facesSaved", "indexers", "devicesRead",
     "headsAccepted", "holdActive", "eraseStep", "eraseLocal", "eraseNas", "eraseWaiting",
+    // Correzioni E (C234): i segmenti in attesa (non sono rifiuti: `rejectedSegments` conta solo i veri rifiuti).
+    "waitingSegments",
   )
 
   /**

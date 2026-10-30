@@ -95,6 +95,8 @@ class FacesPeopleFacade(private val graph: FacesGraph, scope: CoroutineScope) : 
 
   override suspend fun answer(proposal: MergeProposal, same: Boolean): EditOutcome = now()?.answer(proposal, same) ?: EditOutcome.NotActive
 
+  override suspend fun knows(id: PersonId): Boolean = now()?.knows(id) ?: false
+
   override fun hidden(): Flow<List<PersonCard>> = live.flatMapLatest { it?.people?.hidden() ?: flowOf(emptyList()) }
 
   override suspend fun reviewFaces(person: PersonId): List<PersonFace> = now()?.reviewFaces(person).orEmpty()
@@ -111,8 +113,9 @@ class FacesPeopleFacade(private val graph: FacesGraph, scope: CoroutineScope) : 
 
   override suspend fun dictionary(): List<PersonName> = now()?.dictionary().orEmpty()
 
+  /** R10: le persone non montate sono "non so", non "nessuna foto": lancia (Cerca non da' risultati, gli album smart non scrivono niente). */
   override suspend fun contentWith(persons: Set<PersonId>, mode: PeopleMode, level: MatchLevel): Map<ContentKey, MatchLevel> =
-    now()?.contentWith(persons, mode, level).orEmpty()
+    (now() ?: throw IllegalStateException("Persone non montate.")).contentWith(persons, mode, level)
 
   override fun resolve(id: PersonId): PersonId? = now()?.resolve(id)
 

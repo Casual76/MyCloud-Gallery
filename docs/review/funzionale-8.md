@@ -615,6 +615,20 @@ Nessuna voce e' corretta. Il pacchetto e' la proposta; ogni correzione porta un 
 | DR-2 | Corretta (E) in debug, **mai provata sul telefono** | `FieldProbeFacesScenarioReceiver` in `app/src/debug` (DUMP, una sola azione, scenari `f103-compute`, `f103-erase`, `f103-status`, `f109-recipe`; C262). **Non attiva Persone e non conferma la cancellazione** (consenso e conferma sono solo della pagina e del foglio: `needs_activation`, `needs_erase`); F109 vale dal prossimo avvio (L371, L243). `FieldProbeFacesScenariosTest`; `check.ps1` cerca i nomi nel dex e nel manifesto di release. `s25.ps1` elenca anche `no_backup/faces` |
 | Conteggi (L320, L343, C232, C234) | Corretti (E) | Quattro codici nuovi, solo numeri (C261): `FACES_ERASE_FILES_HELD`, `FACES_GROUPING_SKIPPED`, `FACES_SEGMENT_WAITING`, `FACES_ARCHIVE_FULL`; `FACES_SEGMENT_REJECTED` conta solo i veri rifiuti |
 
+### Stato dopo il pacchetto D (30/10)
+
+**Corretta**: la correzione e i suoi test. Le sigle C e L nuove sono in `docs/sicurezza.md` (C250-C254, L360-L364). Il resoconto per voce, con le decisioni, sta in `docs/decisioni.md` ("Fase 8, correzioni dopo le revisioni: pacchetto D"). **Risposta dell'utente del 30/10 per GE-3: la pagina del gruppo** (che offre «Aggiungi un nome»).
+
+| Voce | Stato | Prove, limiti |
+|---|---|---|
+| RI-1 | Corretta (D) | Una sola normalizzazione dei nomi (`NameText`, la stessa del tokenizzatore delle query): un nome che si svuota («❤», «?», un nome di soli giunti) non e' una voce del dizionario e non spegne la ricerca degli altri; «Анна» e «李明» si cercano e si completano (C250: `CorrezioniDNomiTest`, `FacesCorrectionsDTest.unNomeNonCercabile...` sull'`AppPeopleLookup` vero) |
+| GE-1 | Corretta (D) | `FacesPendingFlusher` segue `publisher.pending` dal montaggio e pubblica dopo 30 s di calma (come gli album); `NasFacesPublisher.kt` non toccato. Con la recinzione D34 la prova resta una (la recinzione chiude): `FacesCorrectionsDTest` (tempo virtuale). F140 da fare sul telefono |
+| GE-2 | Corretta (D) | `FaceReviewController.apply` resta sulla schermata con il messaggio e la griglia di adesso; `Done` solo se tutto e' andato bene (`FaceReviewControllerTest.conPersoneNonPiuAttivaLAzioneNonSembraRiuscita`, screenshot in `docs/screenshots/8-corr-d/`) |
+| GE-3 | Corretta (D), **risposta dell'utente del 30/10: la pagina del gruppo** | Il tocco su un chip «Senza nome» con un gruppo apre la pagina del gruppo, dove «Aggiungi un nome» da' il nome al gruppo intero; un volto fuori da ogni gruppo chiede ancora «Chi e'?»; il menu offre «Apri la pagina» (`ViewerPeopleInfoTest`, screenshot) |
+| SM-1 | Corretta (D) | «Crea album smart» solo a una persona con un nome; `createSmartAlbum` non apre un editor vuoto (`PersonPageControllerTest.creaAlbumSmartSiOffreSoloConUnNome`) |
+| NV-1 | Corretta (D) | `People.knows` distingue «dimenticata» da «foto tutte nascoste»; `PersonPageState.AllHidden`: «Tutte le foto sono nascoste. Il nome e il gruppo ci sono ancora...». `person()` resta `null` (D28 e il registro dei Nascosti invariati) (`PersonPageControllerTest.leFotoTutteNascoste...`, `PeopleCorrDTest.unaPersonaConLeFotoTutteNascoste...`, screenshot) |
+| Le altre | Aperte | CA: pacchetto C |
+
 **Pacchetti di correzione proposti** (modello consigliato per ognuno: sonnet; nessuna parte e' di fondazione):
 - **A, la cancellazione** (CE-1, CE-2, CE-4, CE-5; CE-3 dopo la decisione): `FacesEraseController.load` e `housekeeping` a `DONE` scaduto, `FacesGraph.syncRound` che riprende il diario, `AppSmartAlbumsPeople.release` con il conteggio dei
   falliti, `onOpenDevices`. Test: foglio "cancella, riattiva, riapri"; `FacesIntegrationTest` con un secondo giro; `syncRound` che chiude l'attesa dei dispositivi.
@@ -631,5 +645,5 @@ Nessuna voce e' corretta. Il pacchetto e' la proposta; ogni correzione porta un 
 2. **"Analizza ora" e la stima (CA-2):** si fanno (tasto in Impostazioni → Persone con la stima di `FacesBacklog`, che rilegge il catalogo: L242) o si tolgono dal progetto e da F94?
 3. **Il secondo dispositivo dopo la cancellazione (CE-3):** una riga che lo dica ("Persone e' stata disattivata da un altro tuo dispositivo") o resta muto a "Attiva"?
 4. **Release e dispositivo non indicizzatore (DR-1):** finche' D34 e' acceso, il tablet che non analizza non avra' mai persone: lo si dice con un testo onesto, o gli si permette di calcolarle per conto suo (`LOCAL_ONLY`, a spese della batteria)? **Risposta dell'utente del 30/10: lo si dice chiaramente** (corretta nel pacchetto B; il dispositivo non calcola per conto suo).
-5. **Il tocco su un volto di un gruppo senza nome nel viewer (GE-3):** "Chi e'?" come oggi, o la pagina del gruppo con "Dai un nome" (come dice il §2.6)?
+5. **Il tocco su un volto di un gruppo senza nome nel viewer (GE-3):** "Chi e'?" come oggi, o la pagina del gruppo con "Dai un nome" (come dice il §2.6)? **Risposta dell'utente del 30/10: la pagina del gruppo, con "Dai un nome"** (corretta nel pacchetto D: «Aggiungi un nome» sulla pagina del gruppo).
 

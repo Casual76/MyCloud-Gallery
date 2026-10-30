@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.SmartAlbumsPeople
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.PersonId
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -100,11 +101,33 @@ class FakeSmartAlbumsPeople(var albums: Int = 0) : SmartAlbumsPeople {
 
 /** La cronologia finta: le voci (testo e chip) e quali nomi sono stati tolti. */
 class FakeSearchHistoryPurge(val entries: MutableList<String> = mutableListOf()) : SearchHistoryPurge {
-  override suspend fun purge(names: Collection<String>): Int {
+  /** Le persone di cui e' stata chiesta la cancellazione per id (R2), nell'ordine delle chiamate. */
+  val personsAsked: MutableList<PersonId> = mutableListOf()
+
+  /** I nomi di cui e' stata chiesta la cancellazione, nell'ordine delle chiamate. */
+  val namesAsked: MutableList<String> = mutableListOf()
+
+  /** Se vero la cronologia "non risponde": `purge` e `purgePersonSearches` lanciano. */
+  var failing: Boolean = false
+
+  /** Quante volte e' stata chiesta la cancellazione di ogni ricerca con persone (R2: i nomi non si leggono). */
+  var personSearchesPurged: Int = 0
+    private set
+
+  override suspend fun purge(names: Collection<String>, persons: Collection<PersonId>): Int {
+    check(!failing) { "La cronologia non risponde." }
+    personsAsked += persons
+    namesAsked += names
     val lowered = names.map { it.lowercase() }
     val before = entries.size
     entries.removeAll { e -> lowered.any { it in e.lowercase() } }
     return before - entries.size
+  }
+
+  override suspend fun purgePersonSearches(): Int {
+    check(!failing) { "La cronologia non risponde." }
+    personSearchesPurged++
+    return 0
   }
 }
 
@@ -143,5 +166,9 @@ object FailingFacesPorts {
     override suspend fun release(choice: PeopleAlbumsChoice): Int = throw ForbiddenCall("SmartAlbumsPeople.release")
   }
 
-  val history: SearchHistoryPurge = SearchHistoryPurge { throw ForbiddenCall("SearchHistoryPurge.purge") }
+  val history: SearchHistoryPurge = object : SearchHistoryPurge {
+    override suspend fun purge(names: Collection<String>, persons: Collection<PersonId>): Int = throw ForbiddenCall("SearchHistoryPurge.purge")
+
+    override suspend fun purgePersonSearches(): Int = throw ForbiddenCall("SearchHistoryPurge.purgePersonSearches")
+  }
 }

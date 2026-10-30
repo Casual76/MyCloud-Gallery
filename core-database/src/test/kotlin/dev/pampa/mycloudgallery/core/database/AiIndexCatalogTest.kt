@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.database.entity.SEARCH_HISTORY_MAX
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.OcrEngineCode
 import dev.pampa.mycloudgallery.core.model.OcrSource
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.model.SpaceCode
 import dev.pampa.mycloudgallery.core.model.VecSource
 import kotlinx.coroutines.flow.first
@@ -285,6 +286,36 @@ class AiIndexCatalogTest : CatalogTestBase() {
     assertThat(long.chipLabels).hasSize(AiIndexCatalog.MAX_HISTORY_CHIPS)
   }
 
+
+  /** Correzioni D (R2): la ricerca ricorda le persone dei chip "Persona" (id), senza ripetizioni, al piu' [AiIndexCatalog.MAX_HISTORY_PERSONS]; una senza persone non ne ha. */
+  @Test
+  fun laCronologiaRicordaLePersoneDeiChipPersonaSenzaRipetizioniENienteAltro() = runBlocking<Unit> {
+    val marco = PersonId.parse("11111111-1111-4111-8111-111111111111")!!
+    val anna = PersonId.parse("22222222-2222-4222-8222-222222222222")!!
+    ai.recordSearch("Marco e Anna al mare", listOf("Marco e Anna"), listOf(marco, anna, marco))
+    ai.recordSearch("mare", listOf("Mare"))
+    val entries = ai.searchHistory().associateBy { it.text }
+    assertThat(entries.getValue("Marco e Anna al mare").persons).containsExactly(marco, anna).inOrder()
+    assertThat(entries.getValue("mare").persons).isEmpty()
+    // La stessa ricerca di nuovo, senza persone (il nome e' stato dimenticato): sostituisce la voce di prima, e le persone con lei.
+    ai.recordSearch("Marco e Anna al mare", listOf("Marco e Anna"))
+    assertThat(ai.searchHistory().first { it.text == "Marco e Anna al mare" }.persons).isEmpty()
+    // Mai nomi ne' id in `toString()`.
+    assertThat(SearchHistoryRecord(1, "Marco al mare", listOf("Marco"), listOf(marco)).toString()).doesNotContain("Marco")
+    assertThat(SearchHistoryRecord(1, "x", emptyList(), listOf(marco)).toString()).doesNotContain(marco.value)
+    // Il tetto delle persone.
+    ai.recordSearch("tanti", emptyList(), List(AiIndexCatalog.MAX_HISTORY_PERSONS + 10) { PersonId.random() })
+    assertThat(ai.searchHistory().first { it.text == "tanti" }.persons).hasSize(AiIndexCatalog.MAX_HISTORY_PERSONS)
+  }
+
+  /** Un valore scritto male in `persons` (un database toccato a mano) non rompe la lettura: si scarta. */
+  @Test
+  fun unaColonnaPersonsMalScrittaSiScartaSenzaRompereLaLettura() = runBlocking<Unit> {
+    val marco = PersonId.parse("11111111-1111-4111-8111-111111111111")!!
+    ai.recordSearch("uno", emptyList(), listOf(marco))
+    db.openHelper.writableDatabase.execSQL("UPDATE search_history SET persons = '${marco.value},non-un-id,,' WHERE text = 'uno'")
+    assertThat(ai.searchHistory().single().persons).containsExactly(marco)
+  }
   @Test
   fun laCronologiaVivaSiRiemetteAOgniCambiamento() = runBlocking<Unit> {
     assertThat(ai.searchHistoryChanges().first()).isEmpty()

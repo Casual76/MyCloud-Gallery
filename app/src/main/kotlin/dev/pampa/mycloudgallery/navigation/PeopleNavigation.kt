@@ -133,10 +133,13 @@ class AppPeopleActions(
 
   override fun openHiddenPeople() = nav.openHiddenPeople()
 
-  /** "Crea album smart" dalla pagina persona: l'editor parte con la regola gia' messa e il nome come titolo (senza nome un titolo neutro). */
+  /**
+   * "Crea album smart" dalla pagina persona: l'editor parte con la regola gia' messa e il nome come titolo. SM-1 (correzioni D): la pagina offre la voce solo a una persona **con un
+   * nome** (le scelte dell'editor sono persone con un nome); senza nome non apre un editor vuoto, senza la regola.
+   */
   override fun createSmartAlbum(person: PersonId, title: String?) {
     val name = title?.takeIf { it.isNotBlank() }
-    if (name != null) nav.openSmartEditorForPerson(name, person) else nav.openSmartEditor("")
+    if (name != null) nav.openSmartEditorForPerson(name, person)
   }
 }
 

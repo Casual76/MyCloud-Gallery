@@ -42,6 +42,7 @@ import dev.pampa.mycloudgallery.core.index.contract.RemoteResult
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.PersonId
 import kotlin.time.Duration
 
 // I null-object delle porte di core-faces (Fase 8, P0): falliscono CHIUSI. Nessun ingresso, nessun media, nessuna lettura o scrittura sul
@@ -116,7 +117,9 @@ object NoSmartAlbumsPeople : SmartAlbumsPeople {
 }
 
 object NoSearchHistoryPurge : SearchHistoryPurge {
-  override suspend fun purge(names: Collection<String>): Int = 0
+  override suspend fun purge(names: Collection<String>, persons: Collection<PersonId>): Int = 0
+
+  override suspend fun purgePersonSearches(): Int = 0
 }
 
 object NoFacesRunControl : FacesRunControl {

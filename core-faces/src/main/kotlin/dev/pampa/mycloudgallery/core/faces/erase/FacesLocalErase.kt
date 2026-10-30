@@ -1,8 +1,12 @@
 package dev.pampa.mycloudgallery.core.faces.erase
 
+import dev.pampa.mycloudgallery.core.faces.compute.FacesSignals
 import dev.pampa.mycloudgallery.core.faces.contract.FacesArchive
+import dev.pampa.mycloudgallery.core.faces.contract.FacesDiag
 import dev.pampa.mycloudgallery.core.faces.contract.FacesState
 import dev.pampa.mycloudgallery.core.faces.contract.FacesSwitch
+import dev.pampa.mycloudgallery.core.faces.contract.PeopleKey
+import dev.pampa.mycloudgallery.core.faces.contract.PeopleRecord
 import dev.pampa.mycloudgallery.core.faces.contract.SearchHistoryPurge
 import dev.pampa.mycloudgallery.core.faces.store.LocalErase
 import dev.pampa.mycloudgallery.core.faces.switch.FacesLocalDataEraser
@@ -64,12 +68,17 @@ class FacesEraseFence(private val switch: FacesSwitch) {
  * ([FacesLocalData.erase]), le cache in memoria, e (salvo un cambio di generazione) i modelli estratti e i segni dei lavori. **Vero solo se non resta niente del database e della chiave**: i resti
  * secondari (un modello che non si toglie) si ritentano alla volta dopo, non tengono ferma la cancellazione ne' il gancio di D30. Idempotente, non
  * si interrompe a meta' (`NonCancellable`), mai un'eccezione per un caso previsto. E' la `FacesLocalDataEraser` che l'interruttore di P7 vuole.
+ *
+ * Correzioni D (R2): i nomi si leggono **fino a tre volte** (un Keystore che non risponde un attimo non fa perdere i nomi: poi la chiave si distrugge e non si
+ * leggono piu'), si tolgono per nome **e per id** della persona, e se i nomi non si leggono lo stesso si toglie ogni ricerca nata da un chip "Persona"; se
+ * la cronologia resta com'era la Diagnostica lo dice ([signals]: `FACES_HISTORY_KEPT`; L190 esteso agli altri dispositivi).
  */
 class FacesLocalErase(
   private val data: FacesLocalData,
   private val fence: FacesEraseFence,
   private val leftovers: FacesLocalLeftovers = FacesLocalLeftovers.NONE,
   private val history: SearchHistoryPurge? = null,
+  private val signals: FacesSignals = FacesSignals.NONE,
 ) : FacesLocalDataEraser {
 
   override suspend fun erase(generation: FaceGeneration, why: LocalEraseWhy): Boolean =
@@ -80,11 +89,8 @@ class FacesLocalErase(
 
   /** La cancellazione con il lucchetto del recinto gia' preso. */
   internal suspend fun eraseUnlocked(generation: FaceGeneration, why: LocalEraseWhy): Boolean {
-    // Le ricerche recenti con i nomi: al meglio (i dati biometrici non aspettano la cronologia).
-    if (history != null) {
-      val names = attempt { data.people(generation) }?.let { EraseRules.names(it.values) }.orEmpty()
-      if (names.isNotEmpty()) attempt { history.purge(names) }
-    }
+    // Le ricerche recenti con i nomi: al meglio (i dati biometrici non aspettano la cronologia), ma con piu' tentativi e un segno se resta com'era.
+    if (history != null) purgeHistory(history, generation)
     val erased = attempt { data.erase(generation) } ?: LocalErase(keyDestroyed = false, filesGone = false)
     attempt { leftovers.clearMemory() }
     if (why != LocalEraseWhy.GENERATION_CHANGED) {
@@ -92,6 +98,27 @@ class FacesLocalErase(
       attempt { leftovers.clearWorkMarks() }
     }
     return erased.done && attempt { !data.hasData(generation) } == true
+  }
+
+  /**
+   * R2: i nomi e le persone di [generation] si leggono fino a [ATTEMPTS] volte e si tolgono dalla cronologia per nome e per id. Se non si leggono, ogni ricerca con
+   * un chip "Persona" si toglie lo stesso. Se la cronologia non si e' potuta ripulire (nomi illeggibili o la porta che non risponde) lo dice la Diagnostica.
+   */
+  private suspend fun purgeHistory(history: SearchHistoryPurge, generation: FaceGeneration) {
+    var records: Map<PeopleKey, PeopleRecord>? = null
+    for (i in 1..ATTEMPTS) {
+      records = attempt { data.people(generation) }
+      if (records != null) break
+    }
+    if (records == null) {
+      (1..ATTEMPTS).any { attempt { history.purgePersonSearches() } != null }
+      signals.report(FacesDiag.FACES_HISTORY_KEPT, 1)
+      return
+    }
+    val names = EraseRules.names(records.values)
+    val persons = EraseRules.persons(records.values)
+    if (names.isEmpty() && persons.isEmpty()) return
+    if ((1..ATTEMPTS).none { attempt { history.purge(names, persons) } != null }) signals.report(FacesDiag.FACES_HISTORY_KEPT, 1)
   }
 
   private suspend fun <T> attempt(block: suspend () -> T): T? = try {
@@ -103,4 +130,9 @@ class FacesLocalErase(
   }
 
   override fun toString(): String = "FacesLocalErase"
+
+  private companion object {
+    /** I tentativi per leggere i nomi e per ripulire la cronologia (come `DefaultFacesEraser.ATTEMPTS`). */
+    const val ATTEMPTS = 3
+  }
 }

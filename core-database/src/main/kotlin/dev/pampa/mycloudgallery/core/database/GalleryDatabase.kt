@@ -300,7 +300,7 @@ abstract class GalleryDatabase : RoomDatabase() {
     const val NAME: String = "gallery.db"
 
     /** Versione dello schema. Alzarla richiede una migrazione in [GalleryMigrations] (mai distruttiva). */
-    const val VERSION: Int = 6
+    const val VERSION: Int = 7
 
     /**
      * Il database con tutte le migrazioni. **Mai** `fallbackToDestructiveMigration`: una migrazione

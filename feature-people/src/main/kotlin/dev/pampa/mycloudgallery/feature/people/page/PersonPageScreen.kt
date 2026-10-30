@@ -120,6 +120,15 @@ internal fun PersonPageScreen(
     PersonPageState.Loading -> Plain(stringResource(R.string.persone_page_title_unknown), handlers, modifier, listState) { item(key = "loading") { FluidLoadingBlock() } }
     is PersonPageState.Ready -> ReadyPage(ui, page, thumbnails, crops, handlers, modifier, listState)
     is PersonPageState.Hidden -> Plain(titleOf(page.header), handlers, modifier, listState) { hidden(page.header, crops, handlers, ui) }
+    // NV-1: il nome c'e' ancora, sono le foto a essere tutte nascoste (non "persona dimenticata").
+    is PersonPageState.AllHidden -> Plain(titleOf(page.header), handlers, modifier, listState) {
+      item(key = "all-hidden") {
+        Column(verticalArrangement = Arrangement.spacedBy(PeopleDimens.BlockGap)) {
+          FluidEmptyState(title = stringResource(R.string.persone_all_hidden_title), detail = stringResource(R.string.persone_all_hidden_detail))
+          FluidButton(text = stringResource(R.string.persone_back), onClick = handlers::onBack, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
+        }
+      }
+    }
     PersonPageState.Forgotten -> Plain(stringResource(R.string.persone_page_title_unknown), handlers, modifier, listState) {
       item(key = "forgotten") {
         Column(verticalArrangement = Arrangement.spacedBy(PeopleDimens.BlockGap)) {

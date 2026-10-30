@@ -2,10 +2,13 @@ package dev.pampa.mycloudgallery.core.search.engine
 
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.PeopleMode
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.search.contract.ChipMatching
 import dev.pampa.mycloudgallery.core.search.contract.DateMediaCount
 import dev.pampa.mycloudgallery.core.search.contract.PeopleDictionary
 import dev.pampa.mycloudgallery.core.search.contract.PeopleLookup
+import dev.pampa.mycloudgallery.core.search.contract.PersonOption
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
 import kotlin.coroutines.cancellation.CancellationException
 
@@ -28,20 +31,45 @@ internal class PeopleGate private constructor(private val likely: List<Set<Media
     /**
      * Il filtro per i chip "Persona" di [chips], o null se non ce ne sono. Una porta che sbaglia o che dice che le persone non ci sono qui
      * (Persone spenta, in attesa dell'avviso, dispositivo escluso: E-F37) non da' celle: i risultati sono vuoti, mai quelli di altre persone.
+     *
+     * I2 (correzioni D): un chip che era gia' in Cerca quando una persona e' stata nascosta o dimenticata non vale piu' per quella persona (E-F28: una persona
+     * nascosta non si propone mai): le persone del chip si filtrano sul dizionario **di adesso** ([PeopleLookup.visibleAmong]). Con "una qualunque" restano
+     * le altre; con "tutte" una persona che manca svuota il chip (mai i risultati delle altre).
      */
     suspend fun of(chips: List<SearchChip>, lookup: PeopleLookup): PeopleGate? {
       val persons = chips.filterIsInstance<SearchChip.Person>()
       if (persons.isEmpty()) return null
       val here = lookup.available.value
+      val alive = if (here) guardedIds { lookup.visibleAmong(persons.flatMap { it.option.ids }.distinct()) } else emptySet()
       val sure = ArrayList<Set<MediaId>>(persons.size)
       val likely = ArrayList<Set<MediaId>>(persons.size)
       for (chip in persons) {
-        val s = if (here) guarded { lookup.cells(chip.option, includeLikely = false) } else emptySet()
-        val l = if (here) guarded { lookup.cells(chip.option, includeLikely = true) } else emptySet()
+        val option = if (here) stillSearchable(chip.option, alive) else null
+        val s = if (option != null) guarded { lookup.cells(option, includeLikely = false) } else emptySet()
+        val l = if (option != null) guarded { lookup.cells(option, includeLikely = true) } else emptySet()
         sure += s
         likely += s + l
       }
       return PeopleGate(likely, sure)
+    }
+
+    /** La scelta con le sole persone [alive], o null se non ne resta una cercabile ("tutte" con una persona in meno non e' piu' quella scelta). */
+    private fun stillSearchable(option: PersonOption, alive: Set<PersonId>): PersonOption? {
+      val kept = option.ids.filter { it in alive }
+      return when {
+        kept.isEmpty() -> null
+        kept.size == option.ids.size -> option
+        option.mode == PeopleMode.ALL -> null
+        else -> PersonOption(kept, option.mode, option.label)
+      }
+    }
+
+    private suspend fun guardedIds(block: suspend () -> Set<PersonId>): Set<PersonId> = try {
+      block()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      emptySet()
     }
 
     private suspend fun guarded(block: suspend () -> Set<MediaId>): Set<MediaId> = try {

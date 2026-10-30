@@ -29,7 +29,8 @@ class PeopleMatches(private val classes: Map<MediaId, PeopleClass>) {
 /**
  * [PeopleMembership] sopra la porta della ricerca [PeopleLookup]: la regola delle persone e' la scelta di persone di un chip "Persona" (`PersonOption`), quindi le celle "sicure" e
  * quelle con anche il "forse" le da' la stessa porta che `:app` lega per la ricerca (P13: una porta sola). Un media e' **sicuro** se sta fra le celle sicure di quella scelta
- * ("tutte" o "una qualunque", come il chip), **suggerito** se sta solo fra quelle con il "forse"; senza volti qui ([available] falso) non classifica niente (E-F37).
+ * ("tutte" o "una qualunque", come il chip), **suggerito** se sta solo fra quelle con il "forse"; senza volti qui ([available] falso) la regola non inserisce niente (E-F37)
+ * e [classify] **lancia** (R10, correzioni D: "non so" non vale "nessuno"; se i volti spariscono a meta' di una valutazione il motore non scrive e le righe automatiche restano).
  *
  * [resolve] segue gli alias e dice null per una persona dimenticata o sconosciuta (`PeopleIndex.resolve`, E-F23, E-F27): serve solo a contare le persone non piu'
  * riconosciute ([unrecognized]); le classi le risolve la porta. Di serie ogni persona si riconosce.
@@ -42,7 +43,9 @@ class LookupPeopleMembership(
   override val available: StateFlow<Boolean> get() = lookup.available
 
   override suspend fun classify(rule: PeopleRule, candidates: Collection<MediaId>): Map<MediaId, PeopleClass> {
-    if (!lookup.available.value || candidates.isEmpty()) return emptyMap()
+    if (candidates.isEmpty()) return emptyMap()
+    // R10 (correzioni D): "i volti non ci sono adesso" e' "non so", non "nessuna foto": lancia, il motore non scrive niente (le righe automatiche restano).
+    check(lookup.available.value) { "Le persone non sono attive qui." }
     val option = PersonOption(rule.ids, rule.mode, label = "")
     val sure = lookup.cells(option, includeLikely = false)
     val likely = lookup.cells(option, includeLikely = true)

@@ -124,6 +124,8 @@ object NoPeople : People {
   override suspend fun proposals(): List<MergeProposal> = emptyList()
 
   override suspend fun answer(proposal: MergeProposal, same: Boolean): EditOutcome = EditOutcome.NotActive
+
+  override suspend fun knows(id: PersonId): Boolean = false
 }
 
 /** Nessun indice: il dizionario e' vuoto, nessuna chiave, nessun alias (il nome resta testo nella ricerca, E-F37). */

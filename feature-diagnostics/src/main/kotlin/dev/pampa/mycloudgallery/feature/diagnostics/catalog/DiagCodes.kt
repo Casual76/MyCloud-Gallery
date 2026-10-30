@@ -372,6 +372,9 @@ object DiagCodes {
   @JvmField val FACES_SEGMENT_WAITING = DiagCode("FACES_SEGMENT_WAITING", setOf("E-F41"))
   @JvmField val FACES_ARCHIVE_FULL = DiagCode("FACES_ARCHIVE_FULL", setOf("E-F41"))
 
+  // Correzioni D (R2, L190 esteso): la cronologia delle ricerche potrebbe tenere ancora un nome.
+  @JvmField val FACES_HISTORY_KEPT = DiagCode("FACES_HISTORY_KEPT", setOf("E-F6"))
+
   // --- Ricordi e mappa (Fase 9) --------------------------------------------------------------------------------------
   // P0 aggiunge solo i due codici di stato che tengono vive le sezioni MEMORIES e MAP (un test vuole almeno una voce per sezione), come
   // PEOPLE_STATE nella Fase 8. Gli altri codici del §2.12 di docs/fase9-progetto.md (MEMORY_*, NOTIFY_*, MAP_*: `MemoriesDiag` di

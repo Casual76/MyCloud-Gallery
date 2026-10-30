@@ -5,6 +5,7 @@ import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.EmbeddingSpace
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.PersonId
 import java.time.LocalDate
 import kotlinx.coroutines.flow.StateFlow
 
@@ -83,7 +84,10 @@ sealed interface SearchNotice {
   /** "Nessun dispositivo analizza l'area comune" (E-I12): l'area come codice, mai il nome della share. */
   data class NoIndexerForArea(val commonArea: Boolean) : SearchNotice
 
-  data class TypoCorrected(val from: String, val to: String) : SearchNotice
+  /** Le parole corrette: la nuova puo' essere un nome di persona (I4: mai nel `toString()`, D37). */
+  data class TypoCorrected(val from: String, val to: String) : SearchNotice {
+    override fun toString(): String = "SearchNotice.TypoCorrected"
+  }
 
   /** Parole cercate con la lettura del testo spenta ovunque (una volta, poi solo nella pagina, D31). */
   data object TextReadingOff : SearchNotice
@@ -319,8 +323,15 @@ interface Suggestions {
   suspend fun complete(prefix: String): List<Suggestion>
 }
 
-/** Una ricerca recente (D32): testo e chip come etichette, **senza miniature**. */
-data class HistoryEntry(val id: Long, val text: String, val chipLabels: List<String>)
+/**
+ * Una ricerca recente (D32): testo e chip come etichette, **senza miniature**. [persons] (correzioni D, R2): gli id delle persone dei chip "Persona" da cui la
+ * ricerca e' nata (mai il nome fuori dal testo gia' salvato), perche' "Rinomina", "Dimentica", "Nascondi persona" e "Disattiva e cancella" la tolgano anche quando
+ * il nome di prima non si ritrova piu'.
+ */
+data class HistoryEntry(val id: Long, val text: String, val chipLabels: List<String>, val persons: List<PersonId> = emptyList()) {
+  /** Mai il testo, le etichette (nomi) ne' gli id delle persone (I4, D37). */
+  override fun toString(): String = "HistoryEntry($id, ${chipLabels.size} chip, ${persons.size} persone)"
+}
 
 /** La cronologia locale (D32): al massimo 50 voci, mai sincronizzata, tolta dall'azzeramento. */
 interface SearchHistory {
@@ -334,10 +345,16 @@ interface SearchHistory {
 
   /**
    * Fase 8 (D29 passo 4, F6-D32, invariante 1 del §2.8): toglie le ricerche che contengono uno dei [names] (nel testo o nelle etichette dei
-   * chip, a parole intere, senza badare a maiuscole e accenti), anche i nomi vecchi. Quante ne ha tolte. Idempotente. La porta `SearchHistoryPurge`
-   * di core-faces la lega :app (P13) a questa.
+   * chip, a parole intere, senza badare a maiuscole e accenti), anche i nomi vecchi, **e** quelle nate da una delle [persons] (per id: R2, correzioni D).
+   * Quante ne ha tolte. Idempotente. La porta `SearchHistoryPurge` di core-faces la lega :app (P13) a questa.
    */
-  suspend fun purge(names: Collection<String>): Int
+  suspend fun purge(names: Collection<String>, persons: Collection<PersonId> = emptyList()): Int
+
+  /**
+   * Correzioni D, R2: toglie ogni ricerca nata da un chip "Persona" (qualunque persona). Per quando i nomi non si leggono piu' (un Keystore che non risponde
+   * su un altro dispositivo): le ricerche con una persona non servono piu' a niente senza le persone. Quante ne ha tolte. Idempotente.
+   */
+  suspend fun purgePersonSearches(): Int
 
   companion object {
     const val MAX_ENTRIES: Int = 50

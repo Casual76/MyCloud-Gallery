@@ -36,8 +36,9 @@ class PeopleSearchByNameOnlyTest {
     for (method in methods) {
       assertWithMessage("${method.name}: ${typeNames(method)}").that(typeNames(method).filter { it in faceCarriers }).isEmpty()
     }
-    // E' il contratto a tre voci di P0 (piu' l'avanzamento del primo calcolo): una voce in piu' va decisa, non aggiunta di passaggio.
-    assertThat(methods.map { it.name }.toSet()).containsExactly("getAvailable", "getProgressPercent", "dictionary", "cells")
+    // E' il contratto a tre voci di P0 (piu' l'avanzamento del primo calcolo): una voce in piu' va decisa, non aggiunta di passaggio. Correzioni D, I2: `visibleAmong` e' la quinta,
+    // decisa e dichiarata (quali persone di un chip gia' in Cerca si possono ancora cercare): prende e da' solo id di persone.
+    assertThat(methods.map { it.name }.toSet()).containsExactly("getAvailable", "getProgressPercent", "dictionary", "cells", "visibleAmong")
   }
 
   @Test

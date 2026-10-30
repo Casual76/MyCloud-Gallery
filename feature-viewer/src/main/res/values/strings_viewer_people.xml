@@ -7,6 +7,9 @@
   <string name="viewer_people_menu">Azioni sul volto</string>
   <string name="viewer_people_chip_spoken">%1$s. Tocca per aprire la pagina, tieni premuto per le azioni.</string>
   <string name="viewer_people_chip_unnamed_spoken">Volto senza nome. Tocca per dire chi è, tieni premuto per le azioni.</string>
+  <string name="viewer_people_unnamed_group">Senza nome</string>
+  <string name="viewer_people_chip_group_spoken">Gruppo senza nome. Tocca per aprire la pagina e dargli un nome, tieni premuto per le azioni.</string>
+  <string name="viewer_people_open_group_detail">Le foto di questo gruppo: lì gli dai un nome</string>
   <string name="viewer_people_not">Non è %1$s</string>
   <string name="viewer_people_not_this">Non è questa persona</string>
   <string name="viewer_people_not_detail">Il volto esce da questa persona e non ci torna</string>

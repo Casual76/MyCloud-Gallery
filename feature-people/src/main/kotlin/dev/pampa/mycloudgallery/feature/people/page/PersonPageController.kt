@@ -35,7 +35,8 @@ import kotlinx.coroutines.launch
  *
  * - La vista viene da `People.person` (celle mostrabili, mai un nascosto; nemmeno `viewIndexOf` ne raggiunge uno): qui non si filtra.
  * - Una persona **unita** a un'altra (alias) mostra la persona che resta: la pagina e' sempre della radice.
- * - Una persona che sparisce mentre la pagina e' aperta (dimenticata da un altro dispositivo, E-F27) lascia [PersonPageState.Forgotten];
+ * - Una persona che sparisce mentre la pagina e' aperta (dimenticata da un altro dispositivo, E-F27) lascia [PersonPageState.Forgotten]; una a cui si nascondono **tutte le foto**
+ *   ([People.knows], NV-1) lascia [PersonPageState.AllHidden], che dice un'altra cosa (il nome c'e' ancora);
  *   una che non c'e' mai stata [PersonPageState.NotFound]. Nascosta: [PersonPageState.Hidden], che dice come mostrarla di nuovo.
  * - Le azioni sono tutte voci `people` di `People` ("vale subito"); "Dimentica" chiede la conferma, "Unisci" i suoi passi
  *   ([MergeFlow]). Il nome si da' in un foglio (`NamingUi`): 1-64 caratteri, il resto lo decide `People`.
@@ -59,7 +60,7 @@ class PersonPageController(
 
   private val page: StateFlow<PersonPageState> = people.person(id).map { view ->
     when {
-      view == null -> if (seen) PersonPageState.Forgotten else PersonPageState.NotFound
+      view == null -> if (seen) goneState() else PersonPageState.NotFound
       else -> {
         seen = true
         current = view.card
@@ -67,6 +68,22 @@ class PersonPageController(
       }
     }
   }.stateIn(scope, SharingStarted.Eagerly, PersonPageState.Loading)
+
+  /**
+   * NV-1 (correzioni D): la vista di una persona che la pagina aveva gia' non c'e' piu'. Se la persona esiste ancora ([People.knows]) non e' stata dimenticata: ha solo
+   * le foto tutte nascoste, e la pagina lo dice ([PersonPageState.AllHidden], senza foto ne' conto e senza copertina). Altrimenti e' [PersonPageState.Forgotten].
+   */
+  private suspend fun goneState(): PersonPageState {
+    val card = current ?: return PersonPageState.Forgotten
+    val exists = try {
+      people.knows(id)
+    } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      false
+    }
+    return if (exists) PersonPageState.AllHidden(PersonHeader(card.id, card.name, 0, null)) else PersonPageState.Forgotten
+  }
 
   private val sheets: StateFlow<Sheets> = combine(naming, forgetting, covers, message) { n, f, c, m -> Sheets(n, f, c, m) }
     .stateIn(scope, SharingStarted.Eagerly, Sheets(null, false, null, null))
@@ -87,7 +104,8 @@ class PersonPageController(
       if (card.photos > 0) {
         add(PersonAction.REVIEW)
         add(PersonAction.SET_COVER)
-        add(PersonAction.SMART_ALBUM)
+        // SM-1: l'album smart di una persona ha per titolo il suo nome e per regola lei, fra le persone con un nome: senza nome prima si da' un nome.
+        if (card.name != null) add(PersonAction.SMART_ALBUM)
       }
       if (card.photos > 1) add(PersonAction.SPLIT)
       add(PersonAction.HIDE)

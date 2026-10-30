@@ -27,7 +27,7 @@ internal class PeopleNameIndex(dictionary: PeopleDictionary) {
     val top = compareByDescending<PersonEntry> { it.mediaCount }.thenBy { it.id }
     val grouped = LinkedHashMap<String, MutableList<PersonEntry>>()
     for (entry in dictionary.entries) {
-      val name = SearchText.normalize(entry.name)
+      val name = PeopleDictionary.normalize(entry.name)
       val parts = name.split(' ')
       // Un nome che e' solo una parola vuota ("e", "di") non si puo' riconoscere: e' la colla della frase.
       if (name.isEmpty() || (parts.size == 1 && name in SearchText.STOPWORDS)) continue

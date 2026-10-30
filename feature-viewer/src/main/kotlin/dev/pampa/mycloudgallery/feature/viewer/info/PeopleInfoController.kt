@@ -46,11 +46,14 @@ internal class PeopleInfoController(
   /** L'ultimo esito che non era "fatto" (il volto non c'e' piu', Persone non e' attiva qui), o null. */
   val notice: StateFlow<ViewerFaceOutcome?> = noticeState.asStateFlow()
 
-  /** Il tocco su un chip: una persona con nome apre la sua pagina; un volto senza nome chiede "Chi e'?". */
+  /**
+   * Il tocco su un chip: una persona con nome apre la sua pagina; **un gruppo senza nome apre la pagina del gruppo** (GE-3, risposta dell'utente del 30/10: la pagina offre
+   * "Aggiungi un nome", che da' il nome al gruppo intero, non a una persona nuova con questo volto solo); un volto non ancora in nessun gruppo chiede "Chi e'?".
+   */
   fun tap(media: MediaId, chip: ViewerFaceChip) {
     when (chip) {
       is ViewerFaceChip.Named -> source.openPerson(chip.person)
-      is ViewerFaceChip.Unnamed -> who(media, chip.face)
+      is ViewerFaceChip.Unnamed -> chip.person?.let(source::openPerson) ?: who(media, chip.face)
       is ViewerFaceChip.Unrecognizable -> Unit
     }
   }

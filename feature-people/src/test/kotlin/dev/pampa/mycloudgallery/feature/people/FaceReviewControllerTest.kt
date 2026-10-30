@@ -88,6 +88,31 @@ class FaceReviewControllerTest {
     assertThat(c.ui.value.changed).isEqualTo(1)
   }
 
+  // --- GE-2 (correzioni D): un'azione fallita non sembra riuscita -----------------------------------------------------------------------------
+
+  /**
+   * Persone non piu' attiva nel frattempo (cambio di stato): ogni azione fallisce. Prima il controllore chiudeva con `Done` e la pagina tornava indietro
+   * come se fosse andata; ora resta sulla schermata (griglia, senza selezione) con il messaggio.
+   */
+  @Test
+  fun conPersoneNonPiuAttivaLAzioneNonSembraRiuscita() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller(backgroundScope, ReviewPurpose.CHECK)
+    val faces = c.grid().faces.map { it.face }
+    c.toggle(faces[0])
+    c.toggle(faces[1])
+    world.people.available.value = false
+    c.rejectSelected()
+    assertThat(c.ui.value.state).isNotEqualTo(FaceReviewState.Done)
+    assertThat(c.ui.value.state).isInstanceOf(FaceReviewState.Grid::class.java)
+    assertThat(c.ui.value.message).isEqualTo(PeopleMessage.NOT_ACTIVE)
+    assertThat(c.ui.value.changed).isEqualTo(0)
+    assertThat(c.grid().selection).isEmpty()
+    assertThat(world.people.edits).isEmpty()
+    // Il messaggio si chiude con un tocco, e si resta sulla schermata (la griglia).
+    c.dismissMessage()
+    assertThat(c.ui.value.message).isNull()
+  }
+
   /** E-F3: un poster, uno schermo: "Ignora questo volto". */
   @Test
   fun ignoraIVoltiScelti() = runTest(UnconfinedTestDispatcher()) {

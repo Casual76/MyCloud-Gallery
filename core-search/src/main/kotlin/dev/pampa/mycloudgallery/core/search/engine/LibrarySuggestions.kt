@@ -94,12 +94,19 @@ class LibrarySuggestions(
 
   override suspend fun complete(prefix: String): List<Suggestion> {
     val p = SearchText.normalize(prefix)
-    if (p.isEmpty()) return emptyList()
+    // I nomi delle persone si completano in ogni alfabeto (RI-1: "Ан" propone "Анна"); luoghi e tipi restano latini.
+    val pn = PeopleDictionary.normalize(prefix)
+    if (p.isEmpty() && pn.isEmpty()) return emptyList()
     val out = ArrayList<Suggestion>()
-    history.entries.value.filter { SearchText.normalize(it.text).startsWith(p) }.take(MAX_RECENTS).forEach { out += Suggestion.Recent(it) }
-    peopleDictionary().entries.filter { e -> e.name.startsWith(p) || e.name.split(' ').any { it.startsWith(p) } }
-      .sortedWith(compareByDescending<PersonEntry> { it.mediaCount }.thenBy { it.name }.thenBy { it.id })
-      .distinctBy { it.id }.take(MAX_PEOPLE).forEach { out += Suggestion.PersonSuggestion(optionOf(it)) }
+    val latin = p.isNotEmpty()
+    history.entries.value.filter { if (latin) SearchText.normalize(it.text).startsWith(p) else PeopleDictionary.normalize(it.text).startsWith(pn) }
+      .take(MAX_RECENTS).forEach { out += Suggestion.Recent(it) }
+    if (pn.isNotEmpty()) {
+      peopleDictionary().entries.filter { e -> e.name.startsWith(pn) || e.name.split(' ').any { it.startsWith(pn) } }
+        .sortedWith(compareByDescending<PersonEntry> { it.mediaCount }.thenBy { it.name }.thenBy { it.id })
+        .distinctBy { it.id }.take(MAX_PEOPLE).forEach { out += Suggestion.PersonSuggestion(optionOf(it)) }
+    }
+    if (p.isEmpty()) return out
     data.snapshot.value?.let { snapshot ->
       places.dictionary(snapshot).entries.filter { e -> e.name.startsWith(p) || e.name.split(' ').any { it.startsWith(p) } }
         .sortedWith(compareByDescending<PlaceEntry> { it.mediaCount }.thenBy { it.name })

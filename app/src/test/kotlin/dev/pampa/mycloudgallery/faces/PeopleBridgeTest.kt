@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -59,7 +60,8 @@ class PeopleBridgeTest {
     assertThat(bridge.progressPercent.value).isNull()
     assertThat(bridge.dictionary().entries).isEmpty()
     assertThat(bridge.cells(PersonOption(listOf(person), PeopleMode.ANY, "x"), includeLikely = true)).isEmpty()
-    assertThat(bridge.classify(rule, listOf(media))).isEmpty()
+    // R10: "le persone non sono montate" e' "non so", non "nessuna foto": lancia, e il motore degli album non scrive niente.
+    assertThrows(IllegalStateException::class.java) { runBlocking { bridge.classify(rule, listOf(media)) } }
     assertThat(bridge.unrecognized(rule)).isEqualTo(0)
   }
 
@@ -92,7 +94,8 @@ class PeopleBridgeTest {
     assertThat(bridge.available.value).isFalse()
     assertThat(bridge.progressPercent.value).isNull()
     assertThat(bridge.cells(PersonOption(listOf(person), PeopleMode.ANY, "x"), includeLikely = true)).isEmpty()
-    assertThat(bridge.classify(rule, listOf(media))).isEmpty()
+    // R10: "le persone non sono montate" e' "non so", non "nessuna foto": lancia, e il motore degli album non scrive niente.
+    assertThrows(IllegalStateException::class.java) { runBlocking { bridge.classify(rule, listOf(media)) } }
     assertThat(bridge.unrecognized(rule)).isEqualTo(0)
   }
 

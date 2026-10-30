@@ -408,7 +408,7 @@ ricerca/album(P10)-> PeopleBridge (ricerca per persona, regola Persone degli sma
   debug) + cancelli dell'indice; il passo «D34 nella release» di `tools/check.ps1` lo legge nel bytecode.
 - **Modelli**: `ModelCatalog.needed(..., FACES)` solo dove Persone e' attiva qui; i due modelli stanno nell'APK e si estraggono alla prima apertura; l'esclusione
   e la cancellazione li tolgono.
-- **Diagnostica**: sezione Persone (`faces/FacesDiagnostics.kt`): i codici del §2.10 (`FacesDiag.ALL`), solo numeri; `FACES_KILLED_MEMORY` per la morte per memoria.
+- **Diagnostica**: sezione Persone (`faces/FacesDiagnostics.kt`): i codici del §2.10 (`FacesDiag.ALL`), solo numeri; `FACES_KILLED_MEMORY` per la morte per memoria; `FACES_HISTORY_KEPT` quando le ricerche recenti potrebbero tenere ancora un nome (correzioni D).
 - **Debug**: lo strumento di valutazione delle persone (`debugtools/eval/faces/`), in sola lettura; non c'e' nella release.
 - **Prove**: `FacesIntegrationTest` (due account e tre dispositivi sul grafo vero e sul simulatore SMB: attivazione, calcolo e istantanea, nomi che viaggiano,
   l'altro account non vede niente, «Disattiva e cancella» con un dispositivo spento che torna, azzeramento completo), `FacesFenceSourcesTest`,

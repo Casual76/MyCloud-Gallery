@@ -312,6 +312,8 @@ class InMemoryPeople(
     return merge(listOf(a, b), keepNameOf = listOf(a, b).firstOrNull { o.people.names[it] != null }.takeIf { o.people.names[a] == null || o.people.names[b] == null })
   }
 
+  override suspend fun knows(id: PersonId): Boolean = available.value && overlay().resolve(id) != null
+
   // --- Indice per la ricerca e gli album --------------------------------------------------------------------------------------
 
   override suspend fun dictionary(): List<PersonName> {
@@ -323,7 +325,9 @@ class InMemoryPeople(
   }
 
   override suspend fun contentWith(persons: Set<PersonId>, mode: PeopleMode, level: MatchLevel): Map<ContentKey, MatchLevel> {
-    if (!available.value || persons.isEmpty()) return emptyMap()
+    if (persons.isEmpty()) return emptyMap()
+    // R10: come ArchivePeople, "i volti non ci sono adesso" e' "non so", non "nessuna foto".
+    check(available.value) { "Persone non attiva qui." }
     val o = overlay()
     val roots = persons.map { o.resolve(it) ?: return emptyMap() }.distinct()
     val sure = roots.associateWith { r -> o.facesOf(r).map { it.contentKey }.toSet() }

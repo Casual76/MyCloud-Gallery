@@ -252,6 +252,113 @@ class ViewerPeopleInfoTest {
     assertThat(exists("Ignora questo volto")).isTrue()
   }
 
+
+  // --- GE-3 (correzioni D): un gruppo senza nome si nomina dalla sua pagina ---------------------------------------------------------------
+
+  private val group = PersonId.random()
+  private val faceGroup = ViewerFaceRef("group-face")
+
+  /** Un volto in un gruppo senza nome (ha una persona, non ha un nome): il tocco apre la pagina del gruppo, dove si da' il nome al gruppo intero. */
+  private fun groupChip() = ViewerFaceChip.Unnamed(faceGroup, group)
+
+  private fun withGroup(): FakeViewerPeople = people(named(), groupChip(), unnamed()).also {
+    it.choices = listOf(ViewerPersonChoice(anna, "Anna"))
+  }
+
+  @Test
+  fun toccareUnGruppoSenzaNome_neApreLaPagina_enonChiedeChiE() {
+    val source = withGroup()
+    show(source)
+    // Il chip del gruppo si dice "Senza nome" (non "Chi è?"): resta "Chi è?" solo per il volto che non e' in nessun gruppo.
+    assertThat(exists("Senza nome")).isTrue()
+    composeRule.onNodeWithText("Senza nome", useUnmergedTree = true).performClick()
+    composeRule.waitForIdle()
+    // Prima si apriva "Chi e'?" e "E' una persona nuova" faceva una persona di un volto solo; ora si apre la pagina del gruppo ("Aggiungi un nome" li').
+    assertThat(source.opened).containsExactly(group)
+    assertThat(source.acts).isEmpty()
+    assertThat(exists("Scegli una persona o aggiungine una nuova")).isFalse()
+  }
+
+  @Test
+  fun unVoltoFuoriDaOgniGruppoChiedeAncoraChiE() {
+    val source = withGroup()
+    show(source)
+    composeRule.onAllNodesWithText("Chi è?")[0].performClick()
+    composeRule.waitForIdle()
+    assertThat(exists("Scegli una persona o aggiungine una nuova")).isTrue()
+    assertThat(source.opened).isEmpty()
+  }
+
+  @Test
+  fun ilMenuDiUnGruppoSenzaNomeOffreLaPaginaELeAltreAzioni() {
+    val source = withGroup()
+    show(source)
+    composeRule.onNodeWithText("Senza nome", useUnmergedTree = true).performTouchInput { longClick() }
+    composeRule.waitForIdle()
+    assertThat(exists("Azioni sul volto")).isTrue()
+    assertThat(exists("Apri la pagina")).isTrue()
+    assertThat(exists("lì gli dai un nome")).isTrue()
+    assertThat(exists("Chi è?")).isTrue()
+    assertThat(exists("Non è questa persona")).isTrue()
+    assertThat(exists("Ignora questo volto")).isTrue()
+    composeRule.onNodeWithText("Apri la pagina", useUnmergedTree = true).performClick()
+    composeRule.waitForIdle()
+    assertThat(source.opened).containsExactly(group)
+  }
+
+  @Test
+  fun lAnnuncioDiTalkBackDiUnGruppoSenzaNomeDiceCheSiApreLaPagina() {
+    show(withGroup())
+    val node = chipNode("Gruppo senza nome")
+    assertThat(node.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ")).contains("dargli un nome")
+    assertThat(labels(node)).contains("Azioni sul volto")
+  }
+
+  private fun shotD(name: String, dark: Boolean, suffix: String = "") {
+    composeRule.onRoot().captureRoboImage("../docs/screenshots/8-corr-d/viewer-$name-${if (dark) "scuro" else "chiaro"}-telefono$suffix.png")
+  }
+
+  @Test
+  fun screenshotGruppoSenzaNome_chiaro() {
+    show(withGroup(), dark = false)
+    shotD("gruppo-senza-nome", dark = false)
+  }
+
+  @Test
+  fun screenshotGruppoSenzaNome_scuro() {
+    show(withGroup(), dark = true)
+    shotD("gruppo-senza-nome", dark = true)
+  }
+
+  @Test
+  fun screenshotGruppoSenzaNome_testoGrande() {
+    show(withGroup(), dark = false, fontScale = 1.3f)
+    shotD("gruppo-senza-nome", dark = false, suffix = "-testo-grande")
+  }
+
+  @Test
+  fun screenshotMenuDelGruppoSenzaNome_chiaro() {
+    show(withGroup(), dark = false)
+    composeRule.onNodeWithText("Senza nome", useUnmergedTree = true).performTouchInput { longClick() }
+    composeRule.waitForIdle()
+    shotD("gruppo-senza-nome-menu", dark = false)
+  }
+
+  @Test
+  fun screenshotMenuDelGruppoSenzaNome_scuro() {
+    show(withGroup(), dark = true)
+    composeRule.onNodeWithText("Senza nome", useUnmergedTree = true).performTouchInput { longClick() }
+    composeRule.waitForIdle()
+    shotD("gruppo-senza-nome-menu", dark = true)
+  }
+
+  @Test
+  fun screenshotMenuDelGruppoSenzaNome_testoGrande() {
+    show(withGroup(), dark = false, fontScale = 1.3f)
+    composeRule.onNodeWithText("Senza nome", useUnmergedTree = true).performTouchInput { longClick() }
+    composeRule.waitForIdle()
+    shotD("gruppo-senza-nome-menu", dark = false, suffix = "-testo-grande")
+  }
   @Test
   fun ignoraQuestoVolto_chiedeLaConferma() {
     val source = both()

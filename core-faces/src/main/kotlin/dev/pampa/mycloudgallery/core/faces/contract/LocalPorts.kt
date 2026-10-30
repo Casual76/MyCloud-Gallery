@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.faces.contract
 
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.model.StableCode
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.StateFlow
@@ -68,10 +69,14 @@ interface SmartAlbumsPeople {
 
 /**
  * La cronologia della ricerca (D26, D29 passo 4), legata da :app a `SearchHistory` di core-search: toglie le ricerche recenti che contengono
- * uno dei [names] (anche i nomi vecchi, tenuti cifrati nel database dei volti finche' c'e'). Quante ne ha tolte. Idempotente.
+ * uno dei [names] (anche i nomi vecchi, tenuti cifrati nel database dei volti finche' c'e') **o** nate da una delle [persons] (per id: R2, correzioni D).
+ * Quante ne ha tolte. Idempotente. Anche a ogni "Rinomina", "Dimentica" e "Nascondi persona" (subito, su questo dispositivo).
  */
-fun interface SearchHistoryPurge {
-  suspend fun purge(names: Collection<String>): Int
+interface SearchHistoryPurge {
+  suspend fun purge(names: Collection<String>, persons: Collection<PersonId> = emptyList()): Int
+
+  /** R2: ogni ricerca nata da un chip "Persona", per quando i nomi non si leggono (un Keystore che non risponde su un altro dispositivo). Quante ne ha tolte. */
+  suspend fun purgePersonSearches(): Int
 }
 
 /** Il permesso di lavorare adesso (le regole di `AI_COMPUTE`, E-A5, E-A17). */

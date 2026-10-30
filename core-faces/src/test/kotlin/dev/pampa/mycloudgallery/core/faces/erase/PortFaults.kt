@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.SmartAlbumsPeople
 import dev.pampa.mycloudgallery.core.faces.store.LocalErase
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.FacesSetting
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.personal.contract.FacesPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.contract.HeadValue
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalHeadsView
@@ -97,7 +98,9 @@ internal class FaultyAlbums(private val inner: SmartAlbumsPeople, private val fa
 }
 
 internal class FaultyHistory(private val inner: SearchHistoryPurge, private val faults: PortFaults) : SearchHistoryPurge {
-  override suspend fun purge(names: Collection<String>): Int = faults.tick("history.purge") { inner.purge(names) }
+  override suspend fun purge(names: Collection<String>, persons: Collection<PersonId>): Int = faults.tick("history.purge") { inner.purge(names, persons) }
+
+  override suspend fun purgePersonSearches(): Int = faults.tick("history.purgePersons") { inner.purgePersonSearches() }
 }
 
 internal class FaultyOps(private val inner: FacesEraseOps, private val faults: PortFaults) : FacesEraseOps {

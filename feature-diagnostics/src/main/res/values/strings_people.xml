@@ -61,6 +61,8 @@
   <string name="diag_faces_killed_memory_title">Android ha chiuso l’app durante l’analisi dei volti</string>
   <string name="diag_faces_killed_memory_guide">Il sistema ha chiuso l’app per poca memoria mentre analizzava i volti. L’analisi riprende dal media dopo, senza rifare niente. Se succede spesso, chiudi qualche app in secondo piano di notte.</string>
   <string name="diagnostics_action_open_indexer_role">Fallo su questo dispositivo</string>
+  <string name="diag_faces_history_kept_title">Ricerche recenti da svuotare</string>
+  <string name="diag_faces_history_kept_guide">Persone si è spenta o ha cambiato dati su questo dispositivo, ma le ricerche recenti potrebbero tenere ancora un nome. Apri Cerca e usa “Cancella tutte” nelle ricerche recenti.</string>
   <string name="diagnostics_job_faces_compute">Analisi dei volti per Persone</string>
   <string name="diagnostics_job_faces_nightly">Raggruppamento notturno delle persone</string>
   <string name="diagnostics_job_faces_erase">Cancellazione dei dati dei volti</string>

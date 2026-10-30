@@ -245,7 +245,7 @@ entita' (il build esporta `N.json`), scrivere `Migration(N-1, N)` in `GalleryMig
     ha chiamanti) e `ai_vector` e `ai_text`, per chiave di contenuto, la sostituiscono. Non si toglie: la migrazione 4→5 non e'
     distruttiva.
   - **Volti: progettati nella Fase 8** (`docs/fase8-progetto.md` D14, D15; P0 del 27/10): **non** stanno nel database della galleria,
-    che resta **v6**, ma in un database a parte per generazione, `faces-<G>.db` (`FacesDatabase` di `core-database`, schema proprio
+    che resta **v6** (poi v7 solo per una colonna della cronologia delle ricerche, correzioni D), ma in un database a parte per generazione, `faces-<G>.db` (`FacesDatabase` di `core-database`, schema proprio
     **v1** esportato in `schemas/`): volti, persone, esemplari, assegnazioni, voci `people`, segni anti-rollback, outbox e unita' fatte,
     con vettori, centroidi e nomi **cifrati** con la chiave della generazione (C39 di `docs/sicurezza.md`). Un file si cancella e si
     verifica ("non c'e'"); nessuna migrazione sul campo per una funzione che molti non attivano. Lo descrive il §15 "Database dei volti,
@@ -658,7 +658,7 @@ Indice locale e cronologia (per chiave di contenuto):
 | `ai_text` | `text_id` (rowid) | `content_key` (unico), `recipe`, `engine`, `source`, `text`, `lines`, `chars`, `layout` (BLOB), `created_at` | una riga per chiave. `text` e' il testo **gia' normalizzato** (`SearchText.normalize`); `lines` e `chars` misurano il testo **letto** (regola del bit `DOCUMENT`); `layout` e' il testo con righe e riquadri per il testo dal vivo, **opaco** per il database |
 | `ai_text_fts` | rowid = `ai_text.text_id` | `text` | FTS4 a contenuto esterno su `ai_text.text`, tokenizzatore `simple` (D25); Room crea i quattro trigger che lo tengono allineato |
 | `ai_vocabulary` | `word` | `docs` | per ogni parola letta, in quanti testi compare (una parola conta una volta per testo, al piu' 64 lettere); una parola a 0 esce. Per i refusi e i completamenti: **mai** proposte nella schermata Cerca (D29) |
-| `search_history` | `id` (`AUTOINCREMENT`) | `text`, `chips` (etichette separate da `\n`) | D32: mai sincronizzata ne' esportata; al massimo 50 righe; niente orario (l'id non si riusa e dice l'ordine); indice su `text` |
+| `search_history` | `id` (`AUTOINCREMENT`) | `text`, `chips` (etichette separate da `\n`), dalla **v7** `persons` (id delle persone dei chip "Persona", UUID separati da una virgola; vuota se non ce n'erano) | D32: mai sincronizzata ne' esportata; al massimo 50 righe; niente orario (l'id non si riusa e dice l'ordine); indice su `text`. `persons` (Fase 8, correzioni D, R2): serve a togliere le ricerche di una persona anche quando il nome di prima non si ritrova piu' (Rinomina, Dimentica, Nascondi persona, "Disattiva e cancella"); mai un nome, solo id casuali |
 
 Le nove tabelle dell'indice condiviso (porte `AiPublishStore` e `AiReplicaStore` di P2). `share` e' gia' una chiave (minuscolo); `cls` e'
 il codice di `AiClass` (7 `vec`, 8 `ocr`, quelli di `SegmentClass`); `body` e' il corpo come pubblicato:
@@ -969,7 +969,7 @@ Libreria sintetica da 100.000 media (`BigLibrary`: 3 anni di giorni, 200 luoghi,
 
 Progetto: `docs/fase8-progetto.md` D14, D15 (e D16, D20-D24, D29, E-F19, E-F35), §1.2 (`FacesArchive`, `FacesKeys`), §2.3-§2.5, §2.8, riga P6 del §4.4, §5.2, §6.1
 (C39); decisioni di P0 e di P6 in `docs/decisioni.md` ("Fase 8 P0", "Fase 8 P6"). Pacchetto P6. E' un **database a parte, uno per generazione**: il database della
-galleria **resta v6** (nessuna tabella condivisa, nessuna migrazione sul campo per chi non attiva Persone; lo prova `FacesSchemaTest`). Qui il file e la chiave, le tabelle, cosa
+galleria **non riceve nessuna tabella** (nessuna tabella condivisa; lo prova `FacesSchemaTest`). La galleria passa da v6 a **v7** solo con le correzioni dopo le revisioni (pacchetto D, R2): una colonna, `search_history.persons` (`Migration6To7`, mai distruttiva; lo schema v6 resta invariato, impronta in `FacesSchemaTest`). Qui il file e la chiave, le tabelle, cosa
 e' cifrato e come, le operazioni dell'archivio, come si apre, si rifa' e si cancella, le misure.
 
 **Nessun valore nei log** (D37): chiavi di contenuto, riquadri, id di persone, autori, nomi, vettori e generazioni non escono da qui; i `toString()` delle entita' e dei tipi di

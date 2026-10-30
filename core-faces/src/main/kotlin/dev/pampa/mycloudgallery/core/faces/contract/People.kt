@@ -166,13 +166,20 @@ interface People {
   suspend fun proposals(): List<MergeProposal>
 
   suspend fun answer(proposal: MergeProposal, same: Boolean): EditOutcome
+
+  /**
+   * NV-1 (correzioni D): la persona **c'e' ancora** (anche unita a un'altra), dimenticata no. Serve a distinguere, quando [person] non da' piu' una pagina, "dimenticata" da
+   * "ha le foto tutte nascoste": nessuna foto, nessun conto, solo un si' o un no per un id che la pagina aperta gia' ha. False se Persone non e' attiva qui.
+   */
+  suspend fun knows(id: PersonId): Boolean
 }
 
 /**
  * L'indice delle persone per la ricerca e gli album smart (D26, D27): le porte `PeopleLookup` di core-search e `PeopleMembership` di
  * core-albums le lega :app sopra questo (core-search e core-albums non vedono core-faces). [available] falso = Persone non attiva qui (il
  * dizionario e' vuoto, nessuna classe). [dictionary]: persone con un nome, non nascoste ne' dimenticate, con almeno un media visibile.
- * [contentWith]: le chiavi di contenuto con un volto delle persone, "una qualunque" o "tutte", al livello [level] o meglio. [resolve] segue
+ * [contentWith]: le chiavi di contenuto con un volto delle persone, "una qualunque" o "tutte", al livello [level] o meglio; **lancia** (`IllegalStateException`) se i volti
+ * non si leggono adesso (R10: "non so" non vale "nessuna foto"), e un vuoto e' un vuoto vero. [resolve] segue
  * gli alias (catene e cicli, §2.5); null = dimenticata o sconosciuta.
  */
 interface PeopleIndex {

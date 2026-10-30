@@ -40,6 +40,11 @@ internal class PeopleEditor(
   private val author: String,
   private val ids: PersonIdSource,
   private val changed: suspend () -> Unit,
+  /**
+   * R2 (correzioni D): dopo "Rinomina", "Dimentica" e "Nascondi persona" i nomi di prima e gli id della persona escono **subito** dalla cronologia delle ricerche di questo
+   * dispositivo (le ricerche recenti non tengono un nome cambiato, dimenticato o di una persona nascosta). Al meglio: un errore non annulla l'azione.
+   */
+  private val forgetInHistory: suspend (names: Set<String>, persons: Set<PersonId>) -> Unit = { _, _ -> },
 ) {
   private val lock = Mutex()
   private var wrote = false
@@ -47,11 +52,16 @@ internal class PeopleEditor(
   /** L'ultima ora del NAS data a una voce: la successiva e' sempre piu' tarda (alla pari una lapide perderebbe contro il valore che toglie). */
   private var lastAt = Long.MIN_VALUE
 
-  /** Una azione sotto il lucchetto; `changed()` (le viste si rifanno) solo se ha scritto qualcosa, e fuori dal lucchetto. */
+  /**
+   * Una azione sotto il lucchetto; `changed()` (le viste si rifanno) solo se ha scritto qualcosa, e fuori dal lucchetto. Se l'azione ha dichiarato cosa
+   * dimenticare ([forgetting]) e ha scritto, la cronologia si ripulisce **prima** di rifare le viste (R2).
+   */
   private suspend fun <R> guarded(inactive: R, body: suspend (Loaded) -> R): R {
     var didWrite = false
+    var forget: Forgetting? = null
     val result = lock.withLock {
       wrote = false
+      forgetting = null
       val loaded = core.current() ?: return@withLock inactive
       val out = try {
         body(loaded)
@@ -60,10 +70,36 @@ internal class PeopleEditor(
         return@withLock inactive
       }
       didWrite = wrote
+      forget = if (wrote) forgetting else null
       out
+    }
+    forget?.let { f ->
+      try {
+        forgetInHistory(f.names, f.persons)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (_: Exception) {
+        // La cronologia non risponde: l'azione e' fatta; "Disattiva e cancella" ritoglie per id e per nome.
+      }
     }
     if (didWrite) changed()
     return result
+  }
+
+  /** Cio' che la cronologia deve dimenticare dopo l'azione in corso (sotto il lucchetto): i nomi di prima e gli id della persona (R2). Mai nei log. */
+  private class Forgetting(val names: Set<String>, val persons: Set<PersonId>) {
+    override fun toString(): String = "Forgetting(${names.size}, ${persons.size})"
+  }
+
+  private var forgetting: Forgetting? = null
+
+  /** La persona [root] con tutte quelle unite in lei (gli id che una ricerca puo' aver ricordato) e i loro nomi di adesso: quello che la cronologia puo' avere. */
+  private fun historyOf(l: Loaded, root: PersonId): Forgetting {
+    val members = LinkedHashSet<PersonId>().apply {
+      add(root)
+      l.lens.people.aliases.keys.filterTo(this) { l.lens.resolve(it) == root }
+    }
+    return Forgetting(members.mapNotNullTo(LinkedHashSet()) { l.lens.people.names[it] }, members)
   }
 
   private suspend fun write(l: Loaded, edits: List<PeopleEdit>): EditOutcome {
@@ -86,17 +122,25 @@ internal class PeopleEditor(
 
   suspend fun rename(id: PersonId, name: String?): EditOutcome = guarded(EditOutcome.NotActive) { l ->
     val root = l.lens.resolve(id) ?: return@guarded EditOutcome.NotFound
-    val clean = if (name == null) null else PersonNames.normalize(name) ?: return@guarded EditOutcome.InvalidName
-    if (l.lens.people.names[root] == clean) EditOutcome.Done else write(l, listOf(PeopleEdit.Name(root, clean)))
+    val clean = if (name == null) null else PersonNames.forNewName(name) ?: return@guarded EditOutcome.InvalidName
+    if (l.lens.people.names[root] == clean) return@guarded EditOutcome.Done
+    // R2: il nome di prima esce dalle ricerche recenti (se non c'era un nome non c'e' niente da togliere).
+    historyOf(l, root).takeIf { it.names.isNotEmpty() }?.let { forgetting = it }
+    write(l, listOf(PeopleEdit.Name(root, clean)))
   }
 
   suspend fun setHidden(id: PersonId, hidden: Boolean): EditOutcome = guarded(EditOutcome.NotActive) { l ->
     val root = l.lens.resolve(id) ?: return@guarded EditOutcome.NotFound
-    if ((root in l.lens.people.hidden) == hidden) EditOutcome.Done else write(l, listOf(PeopleEdit.Hidden(root, hidden)))
+    if ((root in l.lens.people.hidden) == hidden) return@guarded EditOutcome.Done
+    // R2: una persona nascosta non si propone mai (E-F28): le sue ricerche recenti escono, per id e per nome.
+    if (hidden) forgetting = historyOf(l, root)
+    write(l, listOf(PeopleEdit.Hidden(root, hidden)))
   }
 
   suspend fun forget(id: PersonId): EditOutcome = guarded(EditOutcome.NotActive) { l ->
     val root = l.lens.resolve(id) ?: return@guarded EditOutcome.NotFound
+    // R2: dimenticata la persona, le ricerche con il suo nome (o nate dal suo chip) escono dalla cronologia.
+    forgetting = historyOf(l, root)
     write(l, listOf(PeopleEdit.Forget(root), PeopleEdit.Name(root, null)))
   }
 
@@ -191,7 +235,7 @@ internal class PeopleEditor(
     val person = when (to) {
       is PersonTarget.Existing -> lens.resolve(to.id) ?: return@guarded EditOutcome.NotFound
       is PersonTarget.New -> {
-        val clean = PersonNames.normalize(to.name) ?: return@guarded EditOutcome.InvalidName
+        val clean = PersonNames.forNewName(to.name) ?: return@guarded EditOutcome.InvalidName
         ids.next().also { edits += PeopleEdit.Name(it, clean) }
       }
     }

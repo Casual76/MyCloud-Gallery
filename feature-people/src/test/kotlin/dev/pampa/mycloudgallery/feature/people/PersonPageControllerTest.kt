@@ -2,6 +2,8 @@ package dev.pampa.mycloudgallery.feature.people
 
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleEdit
+import dev.pampa.mycloudgallery.core.faces.contract.People
+import dev.pampa.mycloudgallery.core.faces.contract.PersonView
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.people.contract.MergeSheetState
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleMessage
@@ -9,6 +11,10 @@ import dev.pampa.mycloudgallery.feature.people.contract.PersonAction
 import dev.pampa.mycloudgallery.feature.people.contract.PersonPageState
 import dev.pampa.mycloudgallery.feature.people.page.PersonPageController
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -34,10 +40,12 @@ class PersonPageControllerTest {
     assertThat(page.header.name).isNull()
     assertThat(page.view.size).isEqualTo(PeopleFixture.PHOTOS - 1)
     assertThat(page.actions).containsAtLeast(
-      PersonAction.RENAME, PersonAction.MERGE, PersonAction.REVIEW, PersonAction.SPLIT, PersonAction.SET_COVER, PersonAction.SMART_ALBUM,
+      PersonAction.RENAME, PersonAction.MERGE, PersonAction.REVIEW, PersonAction.SPLIT, PersonAction.SET_COVER,
       PersonAction.HIDE, PersonAction.FORGET,
     )
     assertThat(page.actions).doesNotContain(PersonAction.UNHIDE)
+    // SM-1: senza un nome non c'e' "Crea album smart" (l'editor non avrebbe ne' il titolo ne' la regola).
+    assertThat(page.actions).doesNotContain(PersonAction.SMART_ALBUM)
     // "Forse e' anche…": la proposta con Marco, con le carte gia' visibili.
     assertThat(page.proposals.single().second.id).isEqualTo(world.marco)
   }
@@ -108,6 +116,62 @@ class PersonPageControllerTest {
     assertThat(c.ui.value.page).isEqualTo(PersonPageState.Forgotten)
   }
 
+
+  // --- Correzioni dopo le revisioni, pacchetto D ------------------------------------------------------------------------------------
+
+  /** SM-1: "Crea album smart" si offre a una persona con un nome (titolo = nome, regola = lei) e a nessun'altra; con il nome compare. */
+  @Test
+  fun creaAlbumSmartSiOffreSoloConUnNome() = runTest(UnconfinedTestDispatcher()) {
+    val c = controller(backgroundScope)
+    assertThat(c.ready().actions).doesNotContain(PersonAction.SMART_ALBUM)
+    c.startNaming()
+    c.saveName("Anna")
+    assertThat(c.ready().actions).contains(PersonAction.SMART_ALBUM)
+    c.startNaming()
+    c.removeName()
+    assertThat(c.ready().actions).doesNotContain(PersonAction.SMART_ALBUM)
+  }
+
+  /** Una persona le cui foto spariscono dalla vista: dal punto di vista della pagina e' o dimenticata o con le foto tutte nascoste, secondo [knowsIt]. */
+  private class GonePeople(private val inner: People, private val knowsIt: Boolean) : People by inner {
+    val gone = MutableStateFlow(false)
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    override fun person(id: PersonId): Flow<PersonView?> = gone.flatMapLatest { if (it) flowOf(null) else inner.person(id) }
+
+    override suspend fun knows(id: PersonId): Boolean = knowsIt
+  }
+
+  /** NV-1: nascondendo l'ultima foto con la pagina aperta, il nome c'e' ancora: lo dice, non "Persona dimenticata". */
+  @Test
+  fun leFotoTutteNascosteNonSonoUnaPersonaDimenticata() = runTest(UnconfinedTestDispatcher()) {
+    val people = GonePeople(world.people, knowsIt = true)
+    val c = PersonPageController(world.anna, people, world.personFaces, backgroundScope)
+    c.startNaming()
+    c.saveName("Anna")
+    assertThat(c.ready().header.name).isEqualTo("Anna")
+    people.gone.value = true
+    val page = c.ui.value.page as PersonPageState.AllHidden
+    // La carta di prima, senza foto, senza conto e senza copertina (non c'e' niente da mostrare).
+    assertThat(page.header.name).isEqualTo("Anna")
+    assertThat(page.header.count).isEqualTo(0)
+    assertThat(page.header.cover).isNull()
+    // Tornano foto mostrabili: la pagina e' di nuovo pronta.
+    people.gone.value = false
+    assertThat(c.ui.value.page).isInstanceOf(PersonPageState.Ready::class.java)
+  }
+
+  @Test
+  fun unaPersonaCheLaPersonaNonConoscePiuEDimenticata() = runTest(UnconfinedTestDispatcher()) {
+    val people = GonePeople(world.people, knowsIt = false)
+    val c = PersonPageController(world.anna, people, world.personFaces, backgroundScope)
+    assertThat(c.ui.value.page).isInstanceOf(PersonPageState.Ready::class.java)
+    people.gone.value = true
+    assertThat(c.ui.value.page).isEqualTo(PersonPageState.Forgotten)
+    // Mai vista: non trovata, qualunque cosa dica `knows`.
+    val never = GonePeople(world.people, knowsIt = true).also { it.gone.value = true }
+    assertThat(PersonPageController(world.anna, never, world.personFaces, backgroundScope).ui.value.page).isEqualTo(PersonPageState.NotFound)
+  }
   @Test
   fun laCopertinaSiSceglieFraIVoltiMostrabili() = runTest(UnconfinedTestDispatcher()) {
     val c = controller(backgroundScope)

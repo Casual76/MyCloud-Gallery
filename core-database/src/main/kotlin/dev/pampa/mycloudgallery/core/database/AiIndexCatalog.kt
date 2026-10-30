@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.database.entity.SearchHistoryEntity
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.OcrEngineCode
 import dev.pampa.mycloudgallery.core.model.OcrSource
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.model.SpaceCode
 import dev.pampa.mycloudgallery.core.model.VecSource
 import dev.pampa.mycloudgallery.core.model.enumByCodeOrNull
@@ -209,15 +210,16 @@ class AiIndexCatalog internal constructor(private val database: GalleryDatabase)
 
   /**
    * Registra una ricerca: la stessa (stesso testo) resta una volta sola, la piu' recente per prima, e al massimo [SEARCH_HISTORY_MAX]
-   * voci. Testo vuoto: niente. Il testo si tronca a [MAX_HISTORY_TEXT], i chip a [MAX_HISTORY_CHIPS] etichette.
+   * voci. Testo vuoto: niente. Il testo si tronca a [MAX_HISTORY_TEXT], i chip a [MAX_HISTORY_CHIPS] etichette. [persons]: le persone dei chip "Persona" da cui
+   * nasce la ricerca (R2, correzioni D), al piu' [MAX_HISTORY_PERSONS].
    */
-  suspend fun recordSearch(text: String, chipLabels: List<String>) {
+  suspend fun recordSearch(text: String, chipLabels: List<String>, persons: List<PersonId> = emptyList()) {
     val trimmed = text.trim().take(MAX_HISTORY_TEXT)
     if (trimmed.isEmpty()) return
     val chips = chipLabels.take(MAX_HISTORY_CHIPS).joinToString("\n") { it.replace('\n', ' ').trim().take(MAX_CHIP_LABEL) }
     database.withTransaction {
       historyDao.deleteByText(trimmed)
-      historyDao.insert(SearchHistoryEntity(text = trimmed, chips = chips))
+      historyDao.insert(SearchHistoryEntity(text = trimmed, chips = chips, persons = ownersOf(persons)))
       historyDao.trim(SEARCH_HISTORY_MAX)
     }
   }
@@ -259,7 +261,14 @@ class AiIndexCatalog internal constructor(private val database: GalleryDatabase)
     return AiTextRecord(ContentKey(contentKey), recipe, engineCode, sourceCode, text, lines, chars, layout, createdAt)
   }
 
-  private fun SearchHistoryEntity.toRecord() = SearchHistoryRecord(id, text, if (chips.isEmpty()) emptyList() else chips.split('\n'))
+  private fun SearchHistoryEntity.toRecord() =
+    SearchHistoryRecord(id, text, if (chips.isEmpty()) emptyList() else chips.split('\n'), personsOf(persons))
+
+  /** Gli id delle persone come stanno nella riga: UUID canonici separati da una virgola, senza ripetizioni. */
+  private fun ownersOf(persons: List<PersonId>): String = persons.distinct().take(MAX_HISTORY_PERSONS).joinToString(",") { it.value }
+
+  /** Gli id di una riga; un valore che non e' un id si scarta (un database toccato a mano non rompe la lettura). */
+  private fun personsOf(stored: String): List<PersonId> = if (stored.isEmpty()) emptyList() else stored.split(',').mapNotNull { PersonId.parse(it) }
 
   /** Un termine in minuscolo ridotto a `[a-z0-9 ]` con spazi singoli, al piu' [MAX_TERM_CHARS] caratteri (mai testo dell'utente com'e' in una `MATCH`). */
   private fun literal(term: String): String {
@@ -285,6 +294,7 @@ class AiIndexCatalog internal constructor(private val database: GalleryDatabase)
     const val MAX_HISTORY_TEXT: Int = 200
     const val MAX_HISTORY_CHIPS: Int = 16
     const val MAX_CHIP_LABEL: Int = 80
+    const val MAX_HISTORY_PERSONS: Int = 64
   }
 }
 

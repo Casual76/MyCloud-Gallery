@@ -57,13 +57,21 @@ class AppPeopleLookup(
 ) : PeopleLookup {
   override val available: StateFlow<Boolean> get() = index.available
 
+  /**
+   * Il dizionario dei nomi che si possono cercare. RI-1 e R9 (correzioni D): un nome che la normalizzazione svuota ("❤", "?", un nome fatto solo di giunti) **non e'**
+   * una voce ([PersonEntry.of]) e non toglie niente agli altri: resta testo da cercare. Un nome in un altro alfabeto ("Анна", "李明") si normalizza e si cerca.
+   */
   override suspend fun dictionary(): PeopleDictionary {
     if (!index.available.value) return PeopleDictionary.EMPTY
-    return PeopleDictionary(index.dictionary().map { PersonEntry(PeopleDictionary.normalize(it.name), it.id, it.name, it.visibleMedia) })
+    return PeopleDictionary(index.dictionary().mapNotNull { PersonEntry.of(it.name, it.id, it.visibleMedia) })
   }
 
+  /**
+   * Le celle della scelta. **Lancia** se i volti non si leggono adesso (Persone non attiva qui, o l'archivio che non si apre: un Keystore che non risponde): "non so"
+   * non vale "nessuna foto" (R10). Cerca prende l'eccezione e non da' risultati; gli album smart non scrivono niente. Un vuoto vero e' una persona senza foto.
+   */
   override suspend fun cells(option: PersonOption, includeLikely: Boolean): Set<MediaId> {
-    if (!index.available.value) return emptySet()
+    check(index.available.value) { "Persone non e' attiva qui." }
     val level = if (includeLikely) MatchLevel.LIKELY else MatchLevel.SURE
     val perPerson = option.ids.map { id -> cellsOf(id, level) }
     if (perPerson.isEmpty()) return emptySet()
@@ -71,6 +79,13 @@ class AppPeopleLookup(
       PeopleMode.ANY -> perPerson.flatten().toSet()
       PeopleMode.ALL -> perPerson.reduce { acc, set -> acc intersect set }
     }
+  }
+
+  /** I2: le persone di [ids] che si possono cercare adesso, seguendo gli alias (una persona unita a un'altra vale quella che resta) e leggendo il dizionario di adesso. */
+  override suspend fun visibleAmong(ids: Collection<PersonId>): Set<PersonId> {
+    if (!index.available.value) return emptySet()
+    val live = index.dictionary().mapTo(HashSet()) { it.id }
+    return ids.filterTo(LinkedHashSet()) { id -> index.resolve(id)?.let { it in live } == true }
   }
 
   private suspend fun cellsOf(id: PersonId, level: MatchLevel): Set<MediaId> {
@@ -129,8 +144,9 @@ class PeopleBridge : PeopleLookup, PeopleMembership {
 
   override suspend fun cells(option: PersonOption, includeLikely: Boolean): Set<MediaId> = lookup.cells(option, includeLikely)
 
+  /** R10: le persone non montate adesso (azzeramento, stop) sono "non so", non "nessuna foto": lancia, e il motore degli album non scrive niente. */
   override suspend fun classify(rule: PeopleRule, candidates: Collection<MediaId>): Map<MediaId, PeopleClass> =
-    membership?.classify(rule, candidates).orEmpty()
+    (membership ?: throw IllegalStateException("Persone non montate.")).classify(rule, candidates)
 
   override suspend fun unrecognized(rule: PeopleRule): Int = membership?.unrecognized(rule) ?: 0
 
@@ -241,7 +257,9 @@ private class LiveAlbumsAccess(private val albums: AlbumsLive) : PeopleAlbumsAcc
   override suspend fun setRules(id: AlbumId, rules: SmartRules): EditOutcome = albums.albums.setRules(id, rules)
 }
 
-/** Le ricerche recenti che nominano una persona si tolgono a parole intere (§2.8 passo 4): `SearchHistory.purge`. */
+/** Le ricerche recenti che nominano una persona si tolgono a parole intere e per id (§2.8 passo 4, R2): `SearchHistory.purge`. */
 class AppSearchHistoryPurge(private val history: () -> SearchHistory) : SearchHistoryPurge {
-  override suspend fun purge(names: Collection<String>): Int = history().purge(names)
+  override suspend fun purge(names: Collection<String>, persons: Collection<PersonId>): Int = history().purge(names, persons)
+
+  override suspend fun purgePersonSearches(): Int = history().purgePersonSearches()
 }

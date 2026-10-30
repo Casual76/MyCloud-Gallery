@@ -1,17 +1,12 @@
 package dev.pampa.mycloudgallery.debugtools.probes
 
 import android.app.Application
-import android.content.Context
 import android.content.Intent
 import android.os.SystemClock
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
-import androidx.work.CoroutineWorker
-import androidx.work.ListenableWorker
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import androidx.work.WorkerFactory
-import androidx.work.WorkerParameters
 import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.common.truth.Truth.assertThat
@@ -26,10 +21,10 @@ import dev.pampa.mycloudgallery.integration.Attese
 import dev.pampa.mycloudgallery.integration.FacesNode
 import dev.pampa.mycloudgallery.integration.FacesRig
 import dev.pampa.mycloudgallery.integration.TestNas
+import dev.pampa.mycloudgallery.work.ParkedWorkers
 import java.io.File
 import kotlin.time.Duration.Companion.minutes
 import javax.xml.parsers.DocumentBuilderFactory
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -60,20 +55,18 @@ class FieldProbeFacesScenariosTest {
   private val workManager: WorkManager get() = WorkManager.getInstance(app)
   private var rig: FacesRig? = null
 
+  private val parked = ParkedWorkers()
+
   @Before
   fun setUp() {
     // Un lavoro che non finisce mai: resta in coda (come fra un giro e l'altro in produzione) e si guarda, senza eseguirlo davvero (lo scenario vero lo prova `run`).
-    val factory = object : WorkerFactory() {
-      override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
-        object : CoroutineWorker(appContext, workerParameters) {
-          override suspend fun doWork(): Result = awaitCancellation()
-        }
-    }
-    WorkManagerTestInitHelper.initializeTestWorkManager(app, Configuration.Builder().setExecutor(SynchronousExecutor()).setWorkerFactory(factory).build())
+    WorkManagerTestInitHelper.initializeTestWorkManager(app, Configuration.Builder().setExecutor(SynchronousExecutor()).setWorkerFactory(parked.factory).build())
   }
 
   @After
   fun tearDown() {
+    // I lavori che non finiscono mai si chiudono a database aperto: lasciati appesi diventavano spazzatura piu' tardi e facevano cadere un test di un'altra classe.
+    parked.release(workManager)
     rig?.close()
     File(app.filesDir, FieldProbeFacesStatus.DIR).deleteRecursively()
   }

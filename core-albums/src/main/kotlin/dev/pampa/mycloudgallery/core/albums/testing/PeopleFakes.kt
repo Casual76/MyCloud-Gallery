@@ -11,10 +11,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 /**
  * Fase 8 (P0, D27): le persone finte per i test degli album smart (P10). Per ogni persona i media **sicuri** e quelli **suggeriti**; la
  * classe di un media segue la regola: con "tutte" e' sicuro se e' sicuro per ognuna, suggerito se per ognuna e' almeno suggerito; con
- * "una qualunque" sicuro se e' sicuro per una, suggerito se e' almeno suggerito per una. Con [available] falso non classifica niente.
+ * "una qualunque" sicuro se e' sicuro per una, suggerito se e' almeno suggerito per una. Con [available] falso o con [failing] vero **lancia** (R10: "non so" non vale "nessuno").
  */
 class FakePeopleMembership : PeopleMembership {
   override val available = MutableStateFlow(true)
+
+  /** Se vero i volti "non si leggono adesso" (il Keystore non risponde): `classify` lancia, anche con [available] vero. */
+  @Volatile var failing: Boolean = false
 
   private val sure = HashMap<PersonId, MutableSet<MediaId>>()
   private val likely = HashMap<PersonId, MutableSet<MediaId>>()
@@ -35,7 +38,8 @@ class FakePeopleMembership : PeopleMembership {
 
   override suspend fun classify(rule: PeopleRule, candidates: Collection<MediaId>): Map<MediaId, PeopleClass> = synchronized(this) {
     classifyCalls++
-    if (!available.value) return emptyMap()
+    // R10 (correzioni D): come la porta vera, "i volti non ci sono adesso" e' "non so": lancia (il motore non scrive niente).
+    check(available.value && !failing) { "Le persone non sono leggibili adesso." }
     val out = LinkedHashMap<MediaId, PeopleClass>()
     for (media in candidates) {
       val classes = rule.ids.map { classOf(it, media) }

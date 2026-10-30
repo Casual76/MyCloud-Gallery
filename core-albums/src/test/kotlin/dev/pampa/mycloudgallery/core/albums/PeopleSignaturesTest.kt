@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.albums.testing.FakePeopleMembership
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PeopleMode
 import dev.pampa.mycloudgallery.core.model.PersonId
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertThrows
 import org.junit.Test
@@ -47,7 +48,8 @@ class PeopleSignaturesTest {
     val any = fake.classify(PeopleRule(listOf(marco, anna), PeopleMode.ANY), listOf(a, b, c))
     assertThat(any).containsExactly(a, PeopleClass.SURE, b, PeopleClass.SURE, c, PeopleClass.LIKELY)
     fake.available.value = false
-    assertThat(fake.classify(PeopleRule(listOf(marco), PeopleMode.ANY), listOf(a))).isEmpty()
+    // R10: senza volti la porta non risponde "nessuno": lancia ("non so"), e il motore non scrive niente.
+    assertThrows(IllegalStateException::class.java) { runBlocking { fake.classify(PeopleRule(listOf(marco), PeopleMode.ANY), listOf(a)) } }
     assertThat(NoPeopleMembership.available.value).isFalse()
     assertThat(NoPeopleMembership.classify(PeopleRule(listOf(marco), PeopleMode.ANY), listOf(a))).isEmpty()
   }

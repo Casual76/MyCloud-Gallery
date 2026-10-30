@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.search.contract.PlaceLookup
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -145,8 +146,11 @@ class RulesSmartEngine(
     restricted: Restricted?,
   ): SmartOutcome {
     val index = DayIndex(loaded)
-    // Fase 8: la classe di ogni candidato caricato per la regola delle persone (un'eccezione sale: il motore non scrive niente, come per i nascosti, R17).
+    // Fase 8: la classe di ogni candidato caricato per la regola delle persone. R10 (correzioni D): se i volti non si leggono adesso `classify` **lancia** (un'eccezione
+    // sale: il motore non scrive niente, come per i nascosti, R17) e, se sono spariti a meta' (la disponibilita' si e' chiesta solo all'inizio), si ricontrolla qui prima
+    // di scrivere: "non so" non vale "nessuno", le righe automatiche restano.
     val matches = peopleFor(state.rules, loaded)
+    if (state.rules.people != null && !people.available.value) return counts(id, state.auto, state.suggestions)
     val withPeople = if (state.rules.people == null) classifier else classifierOf(state.rules, content, state, matches)
     val verdicts = withPeople.classify(index, restricted?.affected)
     val target = Target.of(verdicts, loaded)
@@ -197,7 +201,15 @@ class RulesSmartEngine(
     val load = CandidateLoad(library, SmartLoading.plan(rules, content))
     while (!load.done) load.step()
     val loaded = load.result()
-    val withPeople = SmartClassifier(rules, placeOf(rules), devices, content, emptySet(), emptySet(), peopleFor(rules, loaded))
+    // R10: se i volti non si leggono proprio adesso l'anteprima non inventa "nessuna foto": dice che le persone non ci sono (come E-F37).
+    val matches = try {
+      peopleFor(rules, loaded)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return SmartPreview(0, 0, tooBroad = false, sample = emptyList(), searchUsed = content.used, peopleAvailable = false)
+    }
+    val withPeople = SmartClassifier(rules, placeOf(rules), devices, content, emptySet(), emptySet(), matches)
     val target = Target.of(withPeople.classify(DayIndex(loaded)), loaded)
     val sure = target.auto.keys.size
     val suggested = target.suggested.size

@@ -13,7 +13,9 @@ import dev.pampa.mycloudgallery.core.model.PeopleMode
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.search.testing.FakePeopleLookup
 import kotlin.time.Duration
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import org.junit.Assert.assertThrows
 import org.junit.Test
 
 /**
@@ -209,7 +211,8 @@ class SmartPeopleTest {
     assertThat(classes.filterValues { it == dev.pampa.mycloudgallery.core.albums.contract.PeopleClass.LIKELY }.keys).containsExactlyElementsIn(ids(10..12))
     lookup.available.value = false
     assertThat(membership.available.value).isFalse()
-    assertThat(membership.classify(rule, ids(0..39))).isEmpty()
+    // R10: "non so" non vale "nessuno": la porta lancia.
+    assertThrows(IllegalStateException::class.java) { runBlocking { membership.classify(rule, ids(0..39)) } }
   }
 
   // --- Nascosti mai (D28, E-F38) --------------------------------------------------------------------------------------------------

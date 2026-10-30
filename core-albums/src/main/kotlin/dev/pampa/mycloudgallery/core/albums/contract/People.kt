@@ -41,7 +41,8 @@ enum class PeopleClass { SURE, LIKELY }
  * Chi sa quali media contengono le persone (D27), legato da :app (P10, P13). [available] e' falso dove i volti non ci sono (Persone
  * spenta, in attesa dell'avviso, dispositivo escluso): allora la regola **non inserisce niente** e l'album lo dice ("Le persone non sono
  * attive su questo dispositivo", E-F37). [classify] guarda solo [candidates] (che il motore prende da `VisibleMedia`: mai un nascosto,
- * D28) e restituisce solo quelli che stanno in una classe.
+ * D28) e restituisce solo quelli che stanno in una classe. **Lancia** se adesso non sa (i volti non si leggono, le persone non sono montate): "non so" non vale "nessuno" e il
+ * motore non scrive niente (R10, correzioni D).
  */
 interface PeopleMembership {
   val available: StateFlow<Boolean>

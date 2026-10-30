@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fase 9 (P10, D15, D16): le notifiche dei ricordi, testi di :app. Il canale "Ricordi" e il testo della notifica. A telefono bloccato (di serie, Q5 (a))
+  e nella versione pubblica si vedono SOLO le due frasi generiche: niente titolo, luogo, data, foto o nome. "Titolo e foto" aggiunge il titolo, mai un
+  nome di persona (Q9). I segnaposto sono numeri (anni, anno e mese) e il solo testo dell'utente ammesso: il titolo di un viaggio della Fase 7.
+-->
+<resources>
+  <string name="channel_memories_name">Ricordi</string>
+  <string name="channel_memories_description">Un ricordo al giorno al massimo, all\'ora che scegli</string>
+
+  <!-- La notifica generica e la versione pubblica (schermata di blocco): le stesse parole, sempre. -->
+  <string name="memories_notify_generic_title">Un ricordo per te</string>
+  <string name="memories_notify_generic_text">Tocca per vederlo</string>
+
+  <!-- "Titolo e foto": il testo sotto il titolo. -->
+  <string name="memories_notify_titled_text">Tocca per rivederlo</string>
+
+  <!-- I titoli di "Titolo e foto": mai il nome di una persona. %1$d = anni fa (da 2), %2$s = nome del luogo o titolo del viaggio. Un anno solo ha il suo testo. -->
+  <string name="memories_notify_title_years_one">Un anno fa</string>
+  <string name="memories_notify_title_years_many">%1$d anni fa</string>
+  <string name="memories_notify_title_years_place_one">Un anno fa · %1$s</string>
+  <string name="memories_notify_title_years_place_many">%1$d anni fa · %2$s</string>
+  <string name="memories_notify_title_trip_one">Un anno fa · %1$s</string>
+  <string name="memories_notify_title_trip_many">%1$d anni fa · %2$s</string>
+  <!-- La riscoperta di un viaggio vecchio: solo il titolo del viaggio. -->
+  <string name="memories_notify_title_trip_plain">%1$s</string>
+  <!-- Il meglio del mese: %1$s = il mese per esteso, %2$d = l'anno. -->
+  <string name="memories_notify_title_month">Il meglio di %1$s %2$d</string>
+</resources>

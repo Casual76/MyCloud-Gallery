@@ -3,8 +3,11 @@ package dev.pampa.mycloudgallery.navigation
 import android.app.Application
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.net.Uri
+import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.compose.material3.Text
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.navigation.NavHostController
@@ -14,6 +17,17 @@ import dev.pampa.mycloudgallery.MainActivity
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.family.contract.BlockReason
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
+import dev.pampa.mycloudgallery.core.memories.contract.NotifyRules
+import dev.pampa.mycloudgallery.core.security.AppLockMode
+import dev.pampa.mycloudgallery.core.security.lock.AppLockController
+import dev.pampa.mycloudgallery.core.security.lock.AppLockGate
+import dev.pampa.mycloudgallery.core.security.lock.AppLockSettings
+import dev.pampa.mycloudgallery.core.security.lock.AppLockState
+import dev.pampa.mycloudgallery.core.security.lock.AppLockTimeout
+import dev.pampa.mycloudgallery.core.security.lock.AuthAvailability
+import dev.pampa.mycloudgallery.core.security.lock.AuthPromptText
+import dev.pampa.mycloudgallery.core.security.lock.AuthResult
+import dev.pampa.mycloudgallery.core.security.lock.SystemCredentialAuthenticator
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
 import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingCurrentStepRoute
@@ -21,8 +35,11 @@ import dev.pampa.mycloudgallery.feature.onboarding.OnboardingGraphRoute
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingResumeRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsDevicesRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
+import dev.pampa.mycloudgallery.notify.OpenMemoriesRequests
+import dev.pampa.mycloudgallery.notify.ServeOpenMemoriesRequests
 import dev.pampa.mycloudgallery.root.RootDestination
 import dev.pampa.mycloudgallery.status.GlobalStatus
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Assert.assertThrows
 import org.junit.Rule
@@ -144,5 +161,141 @@ class EntryHardeningTest {
     val blocked = show(RootDestination.Blocked(BlockReason.STORAGE_LOCKED))
     assertUnreachable(blocked, MainRoute, AwaitingApprovalRoute, SettingsGraphRoute, DiagnosticsGraphRoute)
     assertNasUnreachable(blocked)
+  }
+
+  // --- Fase 9, P10 (D17, C151, E-NT8, E-NT9): un'azione nota, nessun dato, apertura dopo il blocco app ----------------------------------------------
+
+  private val app: Application get() = ApplicationProvider.getApplicationContext()
+
+  /** Un intent ostile: l'azione scelta, con deep link interni di Navigation, dati, categorie, flag e un componente di un'altra app. */
+  private fun hostile(action: String?): Intent = Intent().apply {
+    this.action = action
+    putExtra("android-support-nav:controller:deepLinkIds", intArrayOf(1, 2, 3))
+    putExtra("android-support-nav:controller:deepLinkArgs", Bundle().apply { putString("code", "ABCD-EFGH-JKMN-PQRS") })
+    putExtra("memoryId", "0123456789abcdefghjkmnpqrs")
+    setData(Uri.parse("mycloudgallery://memory/0123456789abcdefghjkmnpqrs"))
+    addCategory(Intent.CATEGORY_BROWSABLE)
+    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    setClassName("com.altra.app", "com.altra.app.Qualcosa")
+  }
+
+  /** L'azione dei Ricordi e' l'unica azione nota: la `MainActivity` la riconosce e l'intent resta pulito come sempre (niente extra, dati, categorie, flag, componenti altrui). */
+  @Test
+  fun lAzioneDeiRicordiEUnicaAzioneNotaEdIntentRestaPulito() {
+    assertThat(NotifyRules.OPEN_ACTION).isEqualTo("dev.pampa.mycloudgallery.action.OPEN_MEMORIES")
+    for (incoming in listOf(Intent(NotifyRules.OPEN_ACTION), hostile(NotifyRules.OPEN_ACTION))) {
+      val entry = MainActivity.entryOf(app, incoming)
+      assertThat(entry.opensMemories).isTrue()
+      val clean = entry.clean
+      assertThat(clean.action).isEqualTo(Intent.ACTION_MAIN)
+      assertThat(clean.categories).containsExactly(Intent.CATEGORY_LAUNCHER)
+      assertThat(clean.component?.className).isEqualTo(MainActivity::class.java.name)
+      assertThat(clean.extras).isNull()
+      assertThat(clean.data).isNull()
+      assertThat(clean.type).isNull()
+      assertThat(clean.flags).isEqualTo(0)
+    }
+  }
+
+  /** Ogni altra azione (o nessuna) non apre niente: ne' un'azione parente (stesso inizio, un'altra coda), ne' le maiuscole, ne' uno spazio, ne' le azioni di sistema. */
+  @Test
+  fun ogniAltraAzioneNonApreIRicordi() {
+    val others = listOf(
+      null, Intent.ACTION_MAIN, Intent.ACTION_VIEW, Intent.ACTION_SEND, Intent.ACTION_VIEW + "x", "dev.pampa.mycloudgallery.action.OPEN_MEMORY",
+      NotifyRules.OPEN_ACTION + " ", NotifyRules.OPEN_ACTION.lowercase(), NotifyRules.OPEN_ACTION + ".x", "com.altra.app.action.OPEN_MEMORIES", "", NotifyRules.OPEN_ACTION.uppercase(),
+    )
+    for (action in others) {
+      val entry = MainActivity.entryOf(app, hostile(action))
+      assertThat(entry.opensMemories).isFalse()
+      assertThat(entry.clean.extras).isNull()
+      assertThat(entry.clean.data).isNull()
+    }
+    assertThat(MainActivity.entryOf(app, null).opensMemories).isFalse()
+    assertThat(MainActivity.entryOf(app, MainActivity.launcherIntent(app)).opensMemories).isFalse()
+  }
+
+  /**
+   * E-NT9: un'altra app che manda l'azione dei Ricordi (con extra e dati ostili) puo' al piu' chiedere la pagina Ricordi: la richiesta e' un solo evento interno senza contenuto, e
+   * la navigazione non apre nient'altro (come per ogni intent d'ingresso: F5).
+   */
+  @Test
+  fun unAltraAppPuoSoloChiedereLaPaginaRicordi() {
+    val requests = OpenMemoriesRequests()
+    val entry = MainActivity.entryOf(app, hostile(NotifyRules.OPEN_ACTION))
+    if (entry.opensMemories) requests.request()
+    assertThat(requests.pending.value).isTrue()
+    // L'evento non porta niente: un booleano. Due richieste prima di essere servite sono una.
+    requests.request()
+    assertThat(requests.take()).isTrue()
+    assertThat(requests.take()).isFalse()
+    val nav = show(RootDestination.AwaitingApproval("ABCD-EFGH-JKMN-PQRS"))
+    assertUnreachable(nav, MainRoute, SettingsGraphRoute, DiagnosticsGraphRoute, OnboardingGraphRoute)
+  }
+
+  /** Un'autenticazione che finisce quando il test lo decide: lo sblocco vero (BiometricPrompt) e' sostituito da questo. */
+  private class GatedAuthenticator(val result: CompletableDeferred<AuthResult> = CompletableDeferred()) : SystemCredentialAuthenticator {
+    override fun availability(): AuthAvailability = AuthAvailability.AVAILABLE
+
+    override suspend fun authenticate(text: AuthPromptText): AuthResult = result.await()
+  }
+
+  /**
+   * D17, E-NT8: con il blocco app attivo il tocco sulla notifica **non apre niente** finche' l'app e' bloccata (il contenuto non e' nemmeno in composizione); allo sblocco la richiesta
+   * si serve, **una volta sola**. Il blocco app e' quello vero (`AppLockGate`).
+   */
+  @Test
+  fun laRichiestaSiServeSoloDopoIlBloccoApp() {
+    val controller = AppLockController()
+    controller.updateSettings(AppLockSettings(AppLockMode.SYSTEM_CREDENTIAL, AppLockTimeout.AFTER_1_MINUTE))
+    assertThat(controller.state.value).isEqualTo(AppLockState.LOCKED)
+    val requests = OpenMemoriesRequests()
+    val authenticator = GatedAuthenticator()
+    var opened = 0
+    compose.setContent {
+      MyCloudGalleryTheme {
+        AppLockGate(controller = controller, authenticator = authenticator, lockedContent = { Text("bloccata") }) {
+          Text("sbloccata")
+          ServeOpenMemoriesRequests(requests) { opened++ }
+        }
+      }
+    }
+    // Il tocco arriva con l'app bloccata: la richiesta resta in attesa, non si apre niente, e il contenuto non c'e'.
+    requests.request()
+    compose.waitForIdle()
+    assertThat(opened).isEqualTo(0)
+    assertThat(requests.pending.value).isTrue()
+    assertThat(compose.onAllNodesWithText("sbloccata").fetchSemanticsNodes()).isEmpty()
+    // Lo sblocco riesce: ora la richiesta si serve, una volta.
+    authenticator.result.complete(AuthResult.Success)
+    compose.waitForIdle()
+    assertThat(controller.state.value).isEqualTo(AppLockState.UNLOCKED)
+    assertThat(opened).isEqualTo(1)
+    assertThat(requests.pending.value).isFalse()
+    // Una richiesta nuova a app sbloccata si serve subito, una volta per richiesta.
+    requests.request()
+    compose.waitForIdle()
+    assertThat(opened).isEqualTo(2)
+    compose.waitForIdle()
+    assertThat(opened).isEqualTo(2)
+  }
+
+  /** Senza il blocco app la richiesta si serve subito, una volta sola. */
+  @Test
+  fun senzaBloccoLaRichiestaSiServeSubito() {
+    val controller = AppLockController()
+    controller.updateSettings(AppLockSettings())
+    val requests = OpenMemoriesRequests().also { it.request() }
+    var opened = 0
+    compose.setContent {
+      MyCloudGalleryTheme {
+        AppLockGate(controller = controller, authenticator = GatedAuthenticator(), lockedContent = { Text("bloccata") }) {
+          ServeOpenMemoriesRequests(requests) { opened++ }
+        }
+      }
+    }
+    compose.waitForIdle()
+    assertThat(opened).isEqualTo(1)
+    compose.waitForIdle()
+    assertThat(opened).isEqualTo(1)
   }
 }

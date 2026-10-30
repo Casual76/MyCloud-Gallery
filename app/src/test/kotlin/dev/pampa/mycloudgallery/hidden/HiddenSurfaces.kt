@@ -39,6 +39,9 @@ internal enum class SpecRow(val label: String) {
 
   /** Fase 9 (P4, D31): la mappa -- i punti e i conteggi, le bolle e le copertine, la griglia di una zona, la sezione Luoghi delle Raccolte e la mini-mappa del viewer. */
   MAP("Mappa: punti, bolle, copertine, griglia di una zona, Luoghi, mini-mappa del viewer"),
+
+  /** Fase 9 (P10, D19, D31): le notifiche dei ricordi -- la scelta del ricordo, il contenuto, la miniatura della copertina, la revoca. */
+  NOTIFICATIONS("Notifiche dei ricordi: scelta, contenuto, miniatura, revoca"),
 }
 
 /** Con cosa e' provata una superficie. */
@@ -128,6 +131,7 @@ internal object HiddenSurfaces {
   private const val APP_FACES = "app/src/main/kotlin/dev/pampa/mycloudgallery/faces"
   private const val FEATURE_NAS = "feature-nas/src/main/kotlin/dev/pampa/mycloudgallery/feature/nas"
   private const val FEATURE_LIBRARY = "feature-library/src/main/kotlin/dev/pampa/mycloudgallery/feature/library"
+  private const val MEMORIES_NOTIFY = "core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories/notify"
   private const val MEMORIES_CORE = "core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories"
   private const val FEATURE_MEMORIES = "feature-memories/src/main/kotlin/dev/pampa/mycloudgallery/feature/memories"
   private const val FEATURE_MAP = "feature-map/src/main/kotlin/dev/pampa/mycloudgallery/feature/map"
@@ -365,6 +369,14 @@ internal object HiddenSurfaces {
     SurfaceEntry(
       id = "viewer-minimap", title = "Viewer: la riga Mostra sulla mappa e la mini-mappa (mai per un media dei Nascosti)", row = SpecRow.MAP, owner = "P4",
       backing = Backing.PRODUCTION, sources = listOf("$FEATURE_MAP/ui/FinalFilter.kt"), probe = RealMapProbes.minimap, live = true, alsoProvedBy = listOf("MiniMapServiceTest", "ViewerPlaceMapInfoTest"),
+    ),
+    // --- Il codice vero di P10 (notifiche dei ricordi): la scelta passa dallo scaffale e da `MemoryVisibility` (il filtro finale dei nascosti, D19) subito prima di pubblicare; la revoca a ogni cambio ---
+    SurfaceEntry(
+      id = "memories-notify", title = "Notifiche dei ricordi: scelta, contenuto, miniatura della copertina e revoca (D19, F116): mai un nascosto, mai una copertina nascosta in tendina",
+      row = SpecRow.NOTIFICATIONS, owner = "P10", backing = Backing.PRODUCTION,
+      sources = listOf("$MEMORIES_NOTIFY/MemoryNotifyRun.kt", "$MEMORIES_NOTIFY/MemoryNotifyRevocation.kt", "$MEMORIES_NOTIFY/MemoryNotifyPolicy.kt", "app/src/main/kotlin/dev/pampa/mycloudgallery/notify/MemoryNotifier.kt"),
+      probe = RealNotifyProbes.notifications(), live = true,
+      alsoProvedBy = listOf("HiddenNotifyMutationTest", "MemoryNotifyRunTest", "MemoryNotifyRevocationTest", "NotifyOncePerDayPropertyTest", "MemoryNotifierTest"),
     ),
   )
 

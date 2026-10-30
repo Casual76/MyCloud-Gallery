@@ -62,4 +62,8 @@ internal object DeveloperTools {
   /** Fase 8 (P13): lo strumento di valutazione delle persone esiste solo in debug. */
   @Suppress("UNUSED_PARAMETER")
   fun installPeople(graph: Any, people: Any) = Unit
+
+  /** Fase 8 (DR-2, F109): nessuna ricetta forzata; la ricetta dei volti e' sempre quella di serie. */
+  @Suppress("UNUSED_PARAMETER")
+  fun facesRecipe(context: Context): Int? = null
 }

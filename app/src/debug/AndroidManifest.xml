@@ -101,6 +101,21 @@
     </receiver>
 
     <!--
+        Fase 8 (correzioni E, DR-2, F103 e F109): gli scenari delle persone da `adb shell am broadcast` con l'azione dev.pampa.mycloudgallery.debug.action.FACES_SCENARIO,
+        il pacchetto dev.pampa.mycloudgallery.debug e l'extra stringa scenario (f103-compute, f103-erase, f103-status, f109-recipe). Esportato ma protetto da DUMP, come
+        PERIODIC_NOW: lo ha la shell di adb, non un'app normale. Ascolta una sola azione e accoda un lavoro di prova che passa dai cancelli di sempre (regole delle
+        attivita', D34, recinzione delle share di prova). Solo in questo manifest: la release non lo ha (verifyReleaseManifest e tools/check.ps1 lo controllano).
+    -->
+    <receiver
+        android:name="dev.pampa.mycloudgallery.debugtools.probes.FieldProbeFacesScenarioReceiver"
+        android:exported="true"
+        android:permission="android.permission.DUMP">
+      <intent-filter>
+        <action android:name="dev.pampa.mycloudgallery.debug.action.FACES_SCENARIO" />
+      </intent-filter>
+    </receiver>
+
+    <!--
         Fase 7 (P9, D22, L65, F73): il widget di prova dei Nascosti (RemoteViews della piattaforma, niente Glance). NON esportato: l'azione di aggiornamento
         la manda il sistema dei widget (uid di sistema), nessun'altra app. Sta solo in questo manifest: la release non ha il widget (verifyReleaseManifest e
         tools/check.ps1 lo controllano sul manifest fuso e sul dex).

@@ -17,7 +17,9 @@ import dev.pampa.mycloudgallery.core.common.perf.InstantShapes
 import dev.pampa.mycloudgallery.core.database.faces.FacesDatabases
 import dev.pampa.mycloudgallery.core.faces.compute.FacesBacklog
 import dev.pampa.mycloudgallery.core.faces.compute.FacesBufferKeepers
+import dev.pampa.mycloudgallery.core.faces.compute.FacesComputeConfig
 import dev.pampa.mycloudgallery.core.faces.compute.FacesComputeCounters
+import dev.pampa.mycloudgallery.core.faces.contract.FacesComputeLimits
 import dev.pampa.mycloudgallery.core.faces.compute.FacesComputeEngine
 import dev.pampa.mycloudgallery.core.faces.compute.FacesComputeParts
 import dev.pampa.mycloudgallery.core.faces.compute.FacesRefresh
@@ -337,6 +339,8 @@ object FacesWiring {
       )
       val control = StageFacesControl()
       val counters = FacesComputeCounters()
+      // DR-2 (F109): in debug lo scenario `f109-recipe` forza la ricetta 2 dal prossimo avvio; in release e senza il segno e' la ricetta di serie.
+      val recipe = DeveloperTools.facesRecipe(context) ?: FacesComputeLimits.RECIPE
       val compute = FacesComputeEngine(
         FacesComputeParts(
           switch = switch,
@@ -359,9 +363,10 @@ object FacesWiring {
           signals = signals,
           refresh = if (fileSystem != null) FacesRefresh { sync.sync(5.seconds) } else FacesRefresh.NONE,
         ),
+        config = FacesComputeConfig(recipe = recipe),
         counters = counters,
       )
-      val backlog = FacesBacklog(switch, requirements, catalogPort, archive = { archives.opened() })
+      val backlog = FacesBacklog(switch, requirements, catalogPort, archive = { archives.opened() }, recipe = recipe)
 
       // --- Le persone ----------------------------------------------------------------------------------------------------------------------
       val progress: StateFlow<Int?> = compute.status.map { status ->
@@ -416,7 +421,7 @@ object FacesWiring {
           organizer.onPersonalRoundCompleted = { switch.onPersonalRoundCompleted() }
           val lookup = AppPeopleLookup(people, FacesCatalogCells(catalogPort), visibility, progress)
           bridge.bind(lookup, PeopleBridge.membershipOf(lookup, people), scope)
-          ai.ai.keepers = FacesBufferKeepers(switch, requirements, catalogPort, archive = { archives.opened() })
+          ai.ai.keepers = FacesBufferKeepers(switch, requirements, catalogPort, archive = { archives.opened() }, recipe = recipe)
         },
         requirementsChanged = graph.account.map { },
       )

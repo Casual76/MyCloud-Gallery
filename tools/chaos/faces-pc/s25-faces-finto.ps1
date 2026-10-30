@@ -86,7 +86,7 @@ $allowedCalls = @(
   '^-s \| FAKE123 \| shell \| content query --uri content://media/external/file --projection _data$',
   '^-s \| FAKE123 \| shell \| find /sdcard/DCIM/mcg-prova /sdcard/Pictures/mcg-prova -type f -exec (sha256sum \{\} \+|stat -c ''%s %n'' \{\} \+)$',
   '^-s \| FAKE123 \| shell \| am \| broadcast \| -a \| dev\.pampa\.mycloudgallery\.debug\.action\.FACES_SCENARIO \| -p \| dev\.pampa\.mycloudgallery\.debug \| --es \| scenario \| f103-(compute|erase|status)$',
-  '^-s \| FAKE123 \| shell \| run-as dev\.pampa\.mycloudgallery\.debug (ls -1 (no_backup|databases)|cat files/prove/f8-status\.txt|rm -f files/prove/f8-status\.txt)$',
+  '^-s \| FAKE123 \| shell \| run-as dev\.pampa\.mycloudgallery\.debug (ls -1 (no_backup|no_backup/faces|databases)|cat files/prove/f8-status\.txt|rm -f files/prove/f8-status\.txt)$',
   '^-s \| FAKE123 \| shell \| rm \| -rf \| /sdcard/(DCIM|Pictures)/mcg-prova$',
   '^morto: dev\.pampa\.mycloudgallery\.debug$'
 )

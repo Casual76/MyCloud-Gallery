@@ -49,13 +49,19 @@ class ReplicaSegmentEntity(
   override fun toString(): String = "ReplicaSegmentEntity"
 }
 
-/** Un segmento gia' letto di un dispositivo ([done]: applicato o rifiutato per sempre) e quante voci ha portato ([entries], per i tetti). */
+/**
+ * Un segmento gia' letto di un dispositivo ([done]: applicato o rifiutato per sempre) e quante voci ha portato ([entries], per i tetti). Schema
+ * v2 (R5, R7 delle correzioni della Fase 8): un segmento **in attesa** ([done] falso) ha i tentativi gia' fatti ([attempts]) e l'ora del NAS
+ * prima della quale non si richiede ([retryAt]): assente, illeggibile, con l'impronta o la dimensione sbagliate, o rimandato per un tetto.
+ */
 @Entity(tableName = "replica_segment_state", primaryKeys = ["device_id", "hash"])
 class ReplicaSegmentStateEntity(
   @ColumnInfo(name = "device_id") val deviceId: String,
   @ColumnInfo(name = "hash") val hash: String,
   @ColumnInfo(name = "done") val done: Boolean,
   @ColumnInfo(name = "entries") val entries: Int?,
+  @ColumnInfo(name = "attempts", defaultValue = "0") val attempts: Int = 0,
+  @ColumnInfo(name = "retry_at") val retryAt: Long? = null,
 ) {
   override fun toString(): String = "ReplicaSegmentStateEntity"
 }

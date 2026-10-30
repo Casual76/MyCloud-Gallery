@@ -36,6 +36,18 @@ interface PeopleRecordDao {
   /** Toglie le voci scritte da [authors] (dispositivi revocati o persi, L99); quante. [authors] al piu' 500. */
   @Query("DELETE FROM people_record WHERE author IN (:authors)")
   suspend fun deleteByAuthors(authors: List<String>): Int
+
+  /** R3: toglie le voci scritte da [devices] **o arrivate da loro** (la provenienza, `via`); quante. [devices] al piu' 500. */
+  @Query("DELETE FROM people_record WHERE author IN (:devices) OR via IN (:devices)")
+  suspend fun deleteByAuthorsOrVia(devices: List<String>): Int
+
+  /** R3: quante voci sono arrivate da [via] (la provenienza; una riga di prima della v2 vale come arrivata dal suo autore). */
+  @Query("SELECT COUNT(*) FROM people_record WHERE COALESCE(via, author) = :via")
+  suspend fun countVia(via: String): Int
+
+  /** R3: le voci arrivate dal loro autore (scelte fatte qui, o lette dalla testa di chi le ha scritte): le sole che si ripubblicano. */
+  @Query("SELECT * FROM people_record WHERE via IS NULL OR via = author ORDER BY subject, field")
+  suspend fun direct(): List<PeopleRecordEntity>
 }
 
 /** Gli anti-rollback delle teste dei dispositivi (`HeadMark`, §2.4): l'ultima testa accettata per dispositivo. */

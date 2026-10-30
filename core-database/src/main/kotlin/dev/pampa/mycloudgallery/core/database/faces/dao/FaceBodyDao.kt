@@ -22,6 +22,14 @@ class FaceCountRow(
   override fun toString(): String = "FaceCountRow($count)"
 }
 
+/** R6: quanti corpi e quanti volti (di ogni livello) ci sono, di un autore o in tutto. */
+class FaceTotalsRow(
+  @ColumnInfo(name = "bodies") val bodies: Int,
+  @ColumnInfo(name = "faces") val faces: Long,
+) {
+  override fun toString(): String = "FaceTotalsRow($bodies, $faces)"
+}
+
 /** Le colonne di un corpo che bastano a scegliere il vincitore (senza il blocco sigillato). */
 class FaceBodyHeader(
   @ColumnInfo(name = "author") val author: String,
@@ -85,6 +93,29 @@ abstract class FaceBodyDao {
 
   @Query("SELECT COUNT(*) FROM face_body")
   abstract suspend fun bodyCount(): Int
+
+  /** R6: quanti volti [searchableFaces] restituirebbe, senza leggerli (il tetto del raggruppamento si guarda prima di caricare). */
+  @Query(
+    "SELECT COUNT(*) FROM face_body b JOIN face f ON f.content_key = b.content_key AND f.author = b.author " +
+      "WHERE b.is_winner = 1 AND b.space = :space AND f.tier <> :none",
+  )
+  abstract suspend fun countSearchableFaces(space: String, none: String): Int
+
+  /** R6: i corpi e i volti scritti da [author] (l'indice per autore della v2). */
+  @Query("SELECT COUNT(*) AS bodies, COALESCE(SUM(face_count), 0) AS faces FROM face_body WHERE author = :author")
+  abstract suspend fun totalsOf(author: String): FaceTotalsRow
+
+  /** R6: i corpi e i volti di [author] per le chiavi [keys] (al piu' [IN_LIMIT]). */
+  @Query("SELECT COUNT(*) AS bodies, COALESCE(SUM(face_count), 0) AS faces FROM face_body WHERE author = :author AND content_key IN (:keys)")
+  abstract suspend fun totalsOfAuthorKeys(author: String, keys: List<String>): FaceTotalsRow
+
+  /** R6: i corpi e i volti di tutti gli autori per le chiavi [keys] (al piu' [IN_LIMIT]). */
+  @Query("SELECT COUNT(*) AS bodies, COALESCE(SUM(face_count), 0) AS faces FROM face_body WHERE content_key IN (:keys)")
+  abstract suspend fun totalsOfKeys(keys: List<String>): FaceTotalsRow
+
+  /** R6: i corpi e i volti di tutti gli autori. */
+  @Query("SELECT COUNT(*) AS bodies, COALESCE(SUM(face_count), 0) AS faces FROM face_body")
+  abstract suspend fun totals(): FaceTotalsRow
 
   @Query("SELECT COUNT(*) FROM face")
   abstract suspend fun faceCount(): Int

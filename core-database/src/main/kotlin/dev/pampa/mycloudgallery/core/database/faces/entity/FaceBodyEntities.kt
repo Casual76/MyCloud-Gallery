@@ -27,7 +27,8 @@ import androidx.room.Index
 @Entity(
   tableName = "face_body",
   primaryKeys = ["content_key", "author"],
-  indices = [Index(value = ["is_winner", "space", "content_key"])],
+  // Schema v2 (R6 delle correzioni della Fase 8): l'indice per autore conta i corpi di un dispositivo senza scorrere la tabella.
+  indices = [Index(value = ["is_winner", "space", "content_key"]), Index(value = ["author"])],
 )
 class FaceBodyEntity(
   @ColumnInfo(name = "content_key") val contentKey: String,

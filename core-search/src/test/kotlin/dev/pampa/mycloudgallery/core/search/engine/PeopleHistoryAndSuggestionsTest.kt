@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.database.SearchHistoryRecord
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PeopleMode
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.search.contract.ChipAlternative
 import dev.pampa.mycloudgallery.core.search.contract.ChipReadings
 import dev.pampa.mycloudgallery.core.search.contract.PersonOption
@@ -103,8 +104,8 @@ class PeopleHistoryAndSuggestionsTest {
     var next = 1L
     var oneShot: Boolean = true
 
-    override suspend fun record(text: String, chipLabels: List<String>) {
-      rows.value = listOf(SearchHistoryRecord(next++, text, chipLabels)) + rows.value.filter { it.text != text }
+    override suspend fun record(text: String, chipLabels: List<String>, persons: List<PersonId>) {
+      rows.value = listOf(SearchHistoryRecord(next++, text, chipLabels, persons)) + rows.value.filter { it.text != text }
     }
 
     override suspend fun delete(id: Long) {
@@ -146,11 +147,11 @@ class PeopleHistoryAndSuggestionsTest {
   @Test
   fun iNomiSiRiconosconoAParoleIntereSenzaMaiuscoleNeAccentiNeApostrofi() {
     val wanted = HistoryNames.wanted(listOf("Nicolò D'Amico", "  Anna  ", ""))
-    assertThat(wanted).containsExactly(listOf("nicolo", "d", "amico"), listOf("anna"))
+    assertThat(wanted.words).containsExactly(listOf("nicolo", "d", "amico"), listOf("anna"))
     assertThat(HistoryNames.contains("foto di NICOLO d'amico a Roma", emptyList(), wanted)).isTrue()
     assertThat(HistoryNames.contains("a Roma", listOf("Anna e Marco"), wanted)).isTrue()
     assertThat(HistoryNames.contains("Giovanna", emptyList(), wanted)).isFalse()
-    assertThat(HistoryNames.contains("Anna", emptyList(), emptyList())).isFalse()
+    assertThat(HistoryNames.contains("Anna", emptyList(), HistoryNames.wanted(emptyList()))).isFalse()
     assertThat(HistoryNames.contains("nicolo", emptyList(), wanted)).isFalse()
   }
 

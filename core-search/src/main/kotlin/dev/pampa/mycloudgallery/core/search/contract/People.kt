@@ -47,9 +47,12 @@ data class ChipAlternative(val chip: SearchChip) {
 }
 
 /**
- * Un nome del dizionario (D26): il nome **normalizzato** come i luoghi ([PeopleDictionary.normalize]: minuscolo, senza accenti, apostrofi
- * uniformi; anche di piu' parole), la persona, l'etichetta da mostrare e quanti media **visibili** ha (fra omonimi vince il piu' frequente).
- * Solo persone con un nome, non nascoste ne' dimenticate, con almeno un media visibile (P10 lo prova sulle sonde dei Nascosti).
+ * Un nome del dizionario (D26): il nome **normalizzato** ([PeopleDictionary.normalize], [NameText]: minuscolo, senza accenti, apostrofi
+ * uniformi, lettere e cifre di ogni alfabeto; anche di piu' parole), la persona, l'etichetta da mostrare e quanti media **visibili** ha (fra omonimi
+ * vince il piu' frequente). Solo persone con un nome, non nascoste ne' dimenticate, con almeno un media visibile (P10 lo prova sulle sonde dei Nascosti).
+ *
+ * Un nome che la normalizzazione svuota ("❤", "?", un nome fatto solo di giunti ZWJ) non e' una voce del dizionario: il costruttore lancia, e chi
+ * costruisce il dizionario passa da [of] (RI-1, R9, correzioni D: un solo nome non cercabile non spegne la ricerca degli altri).
  */
 data class PersonEntry(val name: String, val id: PersonId, val label: String, val mediaCount: Int) {
   init {
@@ -59,6 +62,18 @@ data class PersonEntry(val name: String, val id: PersonId, val label: String, va
 
   /** Mai il nome (D37). */
   override fun toString(): String = "PersonEntry($mediaCount)"
+
+  companion object {
+    /**
+     * La voce di una persona con il nome [label] com'e' scritto, o **null** se non si puo' cercare per nome: nessuna lettera ne' cifra
+     * ([NameText.isSearchable]) o nessun media visibile. Mai un'eccezione: e' la porta di chi costruisce il dizionario (RI-1, R9).
+     */
+    fun of(label: String, id: PersonId, mediaCount: Int): PersonEntry? {
+      val name = PeopleDictionary.normalize(label)
+      if (name.isEmpty() || mediaCount < 1) return null
+      return PersonEntry(name, id, label, mediaCount)
+    }
+  }
 }
 
 /**
@@ -94,8 +109,11 @@ class PeopleDictionary(val entries: List<PersonEntry>, val dates: DateMediaCount
   companion object {
     val EMPTY = PeopleDictionary(emptyList())
 
-    /** La stessa normalizzazione dei luoghi e delle parole ([SearchText.normalize]). */
-    fun normalize(name: String): String = SearchText.normalize(name)
+    /**
+     * La normalizzazione Unicode dei nomi ([NameText.normalize]): una sola per il dizionario, i suggerimenti, la cronologia e gli album; la stessa
+     * piegatura del tokenizzatore delle query, quindi un nome si ritrova scritto in Cerca in qualunque alfabeto. Vuota per un nome senza lettere ne' cifre.
+     */
+    fun normalize(name: String): String = NameText.normalize(name)
   }
 }
 
@@ -119,6 +137,16 @@ interface PeopleLookup {
   suspend fun dictionary(): PeopleDictionary
 
   suspend fun cells(option: PersonOption, includeLikely: Boolean = false): Set<MediaId>
+
+  /**
+   * I2 (correzioni D): quali di [ids] si possono **cercare adesso** (con un nome, non nascosta ne' dimenticata, con un media visibile). Un chip "Persona" gia' in
+   * Cerca porta gli id di quando e' nato: se poi la persona e' stata nascosta, il chip non deve piu' dare i suoi risultati (E-F28). Di serie guarda il dizionario di
+   * adesso; chi sa seguire gli alias (`AppPeopleLookup` di `:app`) li segue.
+   */
+  suspend fun visibleAmong(ids: Collection<PersonId>): Set<PersonId> {
+    val live = dictionary().entries.mapTo(HashSet()) { it.id }
+    return ids.filterTo(LinkedHashSet()) { it in live }
+  }
 
   companion object {
     val NO_PROGRESS: StateFlow<Int?> = MutableStateFlow<Int?>(null)

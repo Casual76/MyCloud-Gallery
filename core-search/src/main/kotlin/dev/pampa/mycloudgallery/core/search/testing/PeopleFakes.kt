@@ -26,6 +26,7 @@ class FakePeopleLookup : PeopleLookup {
   private val names = LinkedHashMap<PersonId, String>()
   private val sure = HashMap<PersonId, MutableSet<MediaId>>()
   private val likely = HashMap<PersonId, MutableSet<MediaId>>()
+  private val hidden = HashSet<PersonId>()
 
   /** Quante volte e' stato chiesto il dizionario (P10 lo legge una volta per query). */
   var dictionaryCalls: Int = 0
@@ -49,13 +50,29 @@ class FakePeopleLookup : PeopleLookup {
     return this
   }
 
+  /**
+   * "Nascondi persona" (E-F28): la persona esce dal dizionario, ma `cells` continua a dare le sue celle (come l'indice vero, che i nascosti non li guarda: I2).
+   * [show] la rimette.
+   */
+  @Synchronized
+  fun hide(id: PersonId): FakePeopleLookup {
+    hidden += id
+    return this
+  }
+
+  @Synchronized
+  fun show(id: PersonId): FakePeopleLookup {
+    hidden -= id
+    return this
+  }
+
   override suspend fun dictionary(): PeopleDictionary = synchronized(this) {
     dictionaryCalls++
     if (!available.value) return PeopleDictionary.EMPTY
     PeopleDictionary(
       names.mapNotNull { (id, label) ->
         val count = sure[id].orEmpty().size
-        if (count == 0) null else PersonEntry(PeopleDictionary.normalize(label), id, label, count)
+        if (count == 0 || id in hidden) null else PersonEntry.of(label, id, count)
       },
     )
   }

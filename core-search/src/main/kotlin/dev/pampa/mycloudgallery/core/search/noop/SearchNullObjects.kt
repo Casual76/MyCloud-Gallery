@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.search.noop
 import dev.pampa.mycloudgallery.core.library.index.IndexOrderedTimelineView
 import dev.pampa.mycloudgallery.core.library.noop.EmptyTimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
 import dev.pampa.mycloudgallery.core.search.contract.IdleSuggestions
 import dev.pampa.mycloudgallery.core.search.contract.MediaText
@@ -49,7 +50,9 @@ object NoSearchHistory : SearchHistory {
 
   override suspend fun clear() = Unit
 
-  override suspend fun purge(names: Collection<String>): Int = 0
+  override suspend fun purge(names: Collection<String>, persons: Collection<PersonId>): Int = 0
+
+  override suspend fun purgePersonSearches(): Int = 0
 }
 
 object NoSuggestions : Suggestions {

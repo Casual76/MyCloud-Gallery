@@ -1,7 +1,6 @@
 package dev.pampa.mycloudgallery.core.search.parse
 
-import java.text.Normalizer
-import java.util.concurrent.ConcurrentHashMap
+import dev.pampa.mycloudgallery.core.search.contract.NameText
 
 // Il tokenizzatore delle query (P7): il testo si "piega" carattere per carattere (minuscolo, senza accenti: la lunghezza non cambia,
 // cosi' ogni token ricorda il suo tratto nel testo originale) e si spezza in parole, numeri e date numeriche (12/8, 8/2023).
@@ -26,19 +25,8 @@ internal class Token(
 }
 
 internal object QueryTokenizer {
-  private val FOLD_CACHE = ConcurrentHashMap<Char, Char>()
-
-  /** Un carattere -> un carattere: minuscolo e senza accento ("è" -> "e"); gli apostrofi e il resto diventano separatori. */
-  fun foldChar(c: Char): Char {
-    if (c in 'a'..'z' || c in '0'..'9') return c
-    if (c in 'A'..'Z') return c + 32
-    if (c.code < 128) return c
-    return FOLD_CACHE.getOrPut(c) {
-      val base = Normalizer.normalize(c.toString(), Normalizer.Form.NFD)
-      val first = base.firstOrNull() ?: c
-      first.lowercaseChar()
-    }
-  }
+  /** Un carattere -> un carattere: minuscolo e senza accento ("è" -> "e"); gli apostrofi e il resto diventano separatori. La stessa piegatura dei nomi ([NameText]). */
+  fun foldChar(c: Char): Char = NameText.foldChar(c)
 
   fun fold(text: String): String {
     val out = CharArray(text.length)

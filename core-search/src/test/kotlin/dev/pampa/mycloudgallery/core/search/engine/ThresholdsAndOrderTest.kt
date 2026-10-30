@@ -96,8 +96,8 @@ class ThresholdsAndOrderTest {
     val store = object : HistoryStore {
       val rows = MutableStateFlow<List<SearchHistoryRecord>>(emptyList())
       var next = 1L
-      override suspend fun record(text: String, chipLabels: List<String>) {
-        rows.value = listOf(SearchHistoryRecord(next++, text, chipLabels)) + rows.value.filter { it.text != text }
+      override suspend fun record(text: String, chipLabels: List<String>, persons: List<dev.pampa.mycloudgallery.core.model.PersonId>) {
+        rows.value = listOf(SearchHistoryRecord(next++, text, chipLabels, persons)) + rows.value.filter { it.text != text }
       }
       override suspend fun delete(id: Long) { rows.value = rows.value.filter { it.id != id } }
       override suspend fun clear() { rows.value = emptyList() }

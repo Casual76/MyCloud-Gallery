@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.EmbeddingSpace
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaSource
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.model.SpaceCode
 import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
 import dev.pampa.mycloudgallery.core.search.contract.MediaText
@@ -19,6 +20,7 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchText
 import dev.pampa.mycloudgallery.core.search.contract.TextLayout
 import dev.pampa.mycloudgallery.core.search.contract.Today
 import dev.pampa.mycloudgallery.core.search.history.HistoryNames
+import dev.pampa.mycloudgallery.core.search.history.LocalSearchHistory
 import java.time.LocalDate
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -108,7 +110,7 @@ class InMemorySearchHistory : SearchHistory {
   override suspend fun record(text: String, chips: List<SearchChip>) {
     val trimmed = text.trim()
     if (trimmed.isEmpty()) return
-    val entry = HistoryEntry(nextId++, trimmed, chips.map { it.label })
+    val entry = HistoryEntry(nextId++, trimmed, chips.map { it.label }, LocalSearchHistory.personsOf(chips))
     entries.value = (listOf(entry) + entries.value.filter { it.text != trimmed }).take(SearchHistory.MAX_ENTRIES)
   }
 
@@ -120,10 +122,17 @@ class InMemorySearchHistory : SearchHistory {
     entries.value = emptyList()
   }
 
-  override suspend fun purge(names: Collection<String>): Int {
-    val wanted = HistoryNames.wanted(names)
+  override suspend fun purge(names: Collection<String>, persons: Collection<PersonId>): Int {
+    val wanted = HistoryNames.wanted(names, persons)
+    if (wanted.isEmpty) return 0
     val before = entries.value.size
-    entries.value = entries.value.filterNot { HistoryNames.contains(it.text, it.chipLabels, wanted) }
+    entries.value = entries.value.filterNot { HistoryNames.contains(it.text, it.chipLabels, wanted, it.persons) }
+    return before - entries.value.size
+  }
+
+  override suspend fun purgePersonSearches(): Int {
+    val before = entries.value.size
+    entries.value = entries.value.filter { it.persons.isEmpty() }
     return before - entries.value.size
   }
 }

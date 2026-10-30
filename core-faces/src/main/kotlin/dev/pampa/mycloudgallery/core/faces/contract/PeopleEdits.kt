@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.faces.contract
 
 import dev.pampa.mycloudgallery.core.model.FaceLocator
 import dev.pampa.mycloudgallery.core.model.PersonId
+import dev.pampa.mycloudgallery.core.model.VisibleText
 import dev.pampa.mycloudgallery.core.trust.codec.TextRules
 
 // LE VOCI `people` COME LE PENSA CHI LE FA (docs/fase8-progetto.md §2.4 "Voci people", §2.6, D13, D23, D24). Contratti di P0: le azioni di
@@ -25,6 +26,14 @@ object PersonNames {
     if (TextRules.hasForbidden(name)) return null
     return name
   }
+
+  /**
+   * Il nome **di una persona che l'utente sta nominando adesso** (R9, correzioni D): come [normalize], piu' **almeno un carattere che si veda** ([VisibleText]): un
+   * nome fatto solo di giunti ZWJ e selettori di variante appare vuoto e non si scrive. Un emoji, un simbolo o una lettera di qualunque alfabeto vanno bene. Solo
+   * in scrittura: la lettura di un nome degli altri dispositivi segue il formato (`PeopleForms.isName`, che e' la stessa regola di [normalize]) e la ricerca salta
+   * da sola un nome senza lettere ne' cifre (`PersonEntry.of`).
+   */
+  fun forNewName(raw: String): String? = normalize(raw)?.takeIf { VisibleText.hasVisible(it) }
 }
 
 /**

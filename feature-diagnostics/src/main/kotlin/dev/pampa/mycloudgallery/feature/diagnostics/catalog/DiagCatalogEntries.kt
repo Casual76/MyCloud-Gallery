@@ -344,6 +344,7 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.FACES_ERASE_PENDING, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_erase_pending_title, R.string.diag_faces_erase_pending_guide, null),
     DiagEntry(DiagCodes.PRE_PUBLISH_FAILED, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_pre_publish_failed_title, R.string.diag_pre_publish_failed_guide, null),
     DiagEntry(DiagCodes.FACES_KILLED_MEMORY, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_killed_memory_title, R.string.diag_faces_killed_memory_guide, null),
+    DiagEntry(DiagCodes.FACES_HISTORY_KEPT, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_history_kept_title, R.string.diag_faces_history_kept_guide, null),
 
     // --- Ricordi e mappa (Fase 9, P0: le voci di stato; i codici del §2.12 li aggiunge P13) --------------------------------
     DiagEntry(DiagCodes.MEMORY_STATE, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_state_title, R.string.diag_memory_state_guide, null),

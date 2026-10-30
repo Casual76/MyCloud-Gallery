@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.PeopleRecord
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleState
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.FacesSetting
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.personal.contract.FacesSettingCodec
 import dev.pampa.mycloudgallery.core.personal.contract.HeadValue
 import dev.pampa.mycloudgallery.core.trust.codec.TextRules
@@ -104,6 +105,31 @@ object EraseRules {
 
   /** Tutti i nomi che le voci `people` nominano (anche di persone unite o dimenticate dopo): la cronologia li perde tutti (passo 4). */
   fun names(records: Collection<PeopleRecord>): Set<String> = records.mapNotNull { (it.edit as? PeopleEdit.Name)?.name }.toSet()
+
+  /**
+   * Tutte le persone che le voci `people` nominano come soggetto di un nome, di un "nascondi", di un "dimentica", di un'unione o di una divisione (R2,
+   * correzioni D): la cronologia le ricorda per id e le toglie anche quando il nome di prima non si ritrova piu'. Solo id casuali, mai nomi.
+   */
+  fun persons(records: Collection<PeopleRecord>): Set<PersonId> {
+    val out = LinkedHashSet<PersonId>()
+    for (record in records) {
+      when (val edit = record.edit) {
+        is PeopleEdit.Name -> out += edit.person
+        is PeopleEdit.Hidden -> out += edit.person
+        is PeopleEdit.Forget -> out += edit.person
+        is PeopleEdit.Alias -> {
+          out += edit.person
+          out += edit.into
+        }
+        is PeopleEdit.Born -> {
+          out += edit.person
+          out += edit.splitFrom
+        }
+        else -> Unit
+      }
+    }
+    return out
+  }
 
   /** Le persone con un nome che l'utente vede (non unite in un'altra, non dimenticate): "Perderai i nomi di N persone". */
   fun namedPeople(records: Collection<PeopleRecord>): Int {

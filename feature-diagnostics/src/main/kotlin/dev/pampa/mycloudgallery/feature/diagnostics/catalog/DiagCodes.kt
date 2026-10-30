@@ -364,6 +364,7 @@ object DiagCodes {
   @JvmField val FACES_ERASE_PENDING = DiagCode("FACES_ERASE_PENDING", setOf("E-F32"))
   @JvmField val PRE_PUBLISH_FAILED = DiagCode("PRE_PUBLISH_FAILED")
   @JvmField val FACES_KILLED_MEMORY = DiagCode("FACES_KILLED_MEMORY", setOf("E-A16"))
+  @JvmField val FACES_HISTORY_KEPT = DiagCode("FACES_HISTORY_KEPT", setOf("E-F6"))
 
   // --- Ricordi e mappa (Fase 9) --------------------------------------------------------------------------------------
   // P0 aggiunge solo i due codici di stato che tengono vive le sezioni MEMORIES e MAP (un test vuole almeno una voce per sezione), come

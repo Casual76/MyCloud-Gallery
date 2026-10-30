@@ -239,7 +239,7 @@ object FacesWiring {
       )
       val fence = FacesEraseFence(switch)
       val history = AppSearchHistoryPurge { ai.search.history }
-      localErase = FacesLocalErase(StoresLocalData(stores), fence, leftovers, history)
+      localErase = FacesLocalErase(StoresLocalData(stores), fence, leftovers, history, signals)
       val archives = FencedArchives(fence, stores.archives())
       archivesRef[0] = archives
       val replicaStore = FencedReplicaStore(fence, stores.replicaStore())
@@ -381,6 +381,7 @@ object FacesWiring {
         availability = available,
         progress = progress,
         triggers = arrivals,
+        history = history,
       )
       peopleRef[0] = people
       val crops = GuardedPeopleCrops(AppPeopleCropSource(cells, ai.ai.buffer, catalogOf, CutoutSources(context.contentResolver, gallery.intents::uriOf, nas.imageOrigin, ReplicaHq(nas.blobs, nas.locations))), people)

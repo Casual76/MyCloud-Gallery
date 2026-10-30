@@ -27,6 +27,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.StepState
 import dev.pampa.mycloudgallery.core.faces.switch.LocalEraseWhy
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.FacesSetting
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.personal.contract.FacesPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.contract.FacesSettingCodec
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalHeadsView
@@ -173,10 +174,17 @@ class DefaultFacesEraser(
       val ok = (1..ATTEMPTS).any { attempt { parts.albums.release(j.choice) } != null }
       j = saved(j.copy(albums = if (ok) ErasePart.DONE else ErasePart.SKIPPED)) ?: return j
     }
-    // 4. Cronologia: i nomi noti in queste generazioni (anche quelli vecchi ancora nelle voci).
+    // 4. Cronologia: i nomi e le persone noti in queste generazioni (anche quelli vecchi ancora nelle voci), per nome e per id (R2). Se i dati non si leggono
+    // dopo i tentativi, almeno ogni ricerca nata da un chip "Persona" si toglie senza sapere i nomi; il passo resta "saltato" (L190: un nome scritto a mano nel
+    // testo, senza chip, puo' restare).
     if (j.history == ErasePart.PENDING) {
-      val names = namesOf(j.erased)
-      val ok = names != null && (1..ATTEMPTS).any { attempt { parts.history.purge(names) } != null }
+      val known = namesOf(j.erased)
+      val ok = if (known != null) {
+        (1..ATTEMPTS).any { attempt { parts.history.purge(known.names, known.persons) } != null }
+      } else {
+        (1..ATTEMPTS).any { attempt { parts.history.purgePersonSearches() } != null }
+        false
+      }
       j = saved(j.copy(history = if (ok) ErasePart.DONE else ErasePart.SKIPPED)) ?: return j
     }
     // 5. La voce `faces = off|G` (vale subito, anche senza l'ora del NAS: "da datare").
@@ -211,17 +219,26 @@ class DefaultFacesEraser(
     ok
   }
 
-  private suspend fun namesOf(generations: List<FaceGeneration>): Set<String>? {
+  /** I nomi e le persone che le voci `people` di [generations] nominano (con i tentativi per leggerle), o null se non si leggono. */
+  private class Known(val names: Set<String>, val persons: Set<PersonId>) {
+    /** Mai nomi ne' id (D37). */
+    override fun toString(): String = "Known(${names.size}, ${persons.size})"
+  }
+
+  private suspend fun namesOf(generations: List<FaceGeneration>): Known? {
     val names = HashSet<String>()
+    val persons = LinkedHashSet<PersonId>()
     for (generation in generations) {
       var records: Map<PeopleKey, PeopleRecord>? = null
       for (i in 1..ATTEMPTS) {
         records = attempt { parts.fence.exclusive { parts.local.people(generation) } }
         if (records != null) break
       }
-      names += EraseRules.names((records ?: return null).values)
+      val values = (records ?: return null).values
+      names += EraseRules.names(values)
+      persons += EraseRules.persons(values)
     }
-    return names
+    return Known(names, persons)
   }
 
   private suspend fun ensureMarker(generation: FaceGeneration) {

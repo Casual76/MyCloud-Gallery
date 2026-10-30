@@ -15,6 +15,8 @@ import dev.pampa.mycloudgallery.core.faces.contract.PeopleRecord
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleVariant
 import dev.pampa.mycloudgallery.core.faces.contract.PersonIdSource
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleWorld
+import dev.pampa.mycloudgallery.core.faces.contract.SearchHistoryPurge
+import dev.pampa.mycloudgallery.core.faces.noop.NoSearchHistoryPurge
 import dev.pampa.mycloudgallery.core.faces.store.FacesStore
 import dev.pampa.mycloudgallery.core.faces.store.StoreWorld
 import dev.pampa.mycloudgallery.core.faces.testing.FakeFacesClock
@@ -179,6 +181,8 @@ internal class PeopleRig(
   ids: PersonIdSource = GroupingStories.ids(99),
   vectorOf: (GroupFace) -> FloatArray = { it.vector() },
   seedFaces: Boolean = true,
+  /** R2: le ricerche recenti di questo dispositivo (Rinomina, Dimentica, Nascondi persona le ripuliscono). */
+  val history: SearchHistoryPurge = NoSearchHistoryPurge,
 ) : AutoCloseable {
   val storeWorld = StoreWorld(folder)
   val store: FacesStore = runBlocking { storeWorld.ready(generation) }
@@ -209,6 +213,7 @@ internal class PeopleRig(
       availability = available,
       progress = progress,
       triggers = triggers,
+      history = history,
     )
     runBlocking { people.refresh() }
   }

@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.EmbeddingSpace
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.places.contract.PlaceId
 import dev.pampa.mycloudgallery.core.places.contract.ReverseGeocoder
 import dev.pampa.mycloudgallery.core.search.contract.PlaceLookup
@@ -70,8 +71,8 @@ class CatalogHistoryStore(
   private val catalog: suspend () -> MediaCatalog?,
   private val ready: suspend () -> Unit = {},
 ) : HistoryStore {
-  override suspend fun record(text: String, chipLabels: List<String>) {
-    catalog()?.aiIndex?.recordSearch(text, chipLabels)
+  override suspend fun record(text: String, chipLabels: List<String>, persons: List<PersonId>) {
+    catalog()?.aiIndex?.recordSearch(text, chipLabels, persons)
   }
 
   override suspend fun delete(id: Long) {

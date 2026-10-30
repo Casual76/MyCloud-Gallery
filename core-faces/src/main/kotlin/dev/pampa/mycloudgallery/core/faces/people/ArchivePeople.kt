@@ -25,8 +25,10 @@ import dev.pampa.mycloudgallery.core.faces.contract.PersonName
 import dev.pampa.mycloudgallery.core.faces.contract.PersonPair
 import dev.pampa.mycloudgallery.core.faces.contract.PersonTarget
 import dev.pampa.mycloudgallery.core.faces.contract.PersonView
+import dev.pampa.mycloudgallery.core.faces.contract.SearchHistoryPurge
 import dev.pampa.mycloudgallery.core.faces.contract.SplitOutcome
 import dev.pampa.mycloudgallery.core.faces.grouping.GroupingProposals
+import dev.pampa.mycloudgallery.core.faces.noop.NoSearchHistoryPurge
 import dev.pampa.mycloudgallery.core.faces.people.PeopleCore.Loaded
 import dev.pampa.mycloudgallery.core.faces.people.PeopleCore.Shown
 import dev.pampa.mycloudgallery.core.library.index.IndexOrderedTimelineView
@@ -83,13 +85,15 @@ class ArchivePeople(
   private val availability: StateFlow<Boolean> = constant(true),
   private val progress: StateFlow<Int?> = constant(null),
   triggers: Flow<Unit> = emptyFlow(),
+  /** R2 (correzioni D): le ricerche recenti di questo dispositivo, da ripulire a ogni "Rinomina", "Dimentica" e "Nascondi persona". Di serie nessuna. */
+  history: SearchHistoryPurge = NoSearchHistoryPurge,
 ) : People, PeopleIndex, HiddenPeople, MediaFaces, PersonFaces, FaceCropGate {
 
   private val core = PeopleCore(archives, cells, visibility)
   private val viewLock = Mutex()
   private val tick = MutableStateFlow(0L)
   private val listState = MutableStateFlow(PeopleList.EMPTY)
-  private val editor = PeopleEditor(core, publisher, clock, author, ids) { refresh(reload = false) }
+  private val editor = PeopleEditor(core, publisher, clock, author, ids, changed = { refresh(reload = false) }, forgetInHistory = { names, persons -> history.purge(names, persons) })
   private val proposalLock = Mutex()
   @Volatile private var proposalMemo: Triple<Loaded, Long, List<MergeProposal>>? = null
 
@@ -246,7 +250,10 @@ class ArchivePeople(
   }
 
   override suspend fun coverMedia(persons: Collection<PersonId>): Map<PersonId, MediaId> {
-    if (!availability.value || persons.isEmpty()) return emptyMap()
+    if (persons.isEmpty()) return emptyMap()
+    // R10 (correzioni D): "i volti non si leggono adesso" (Persone non attiva, l'archivio che non si apre: un Keystore che non risponde) e' "non so", non "nessuna foto":
+    // lancia, e chi classifica (gli album smart) non scrive niente. Un vuoto vero e' una persona dimenticata o senza volti.
+    check(availability.value) { "Persone non attiva qui." }
     val l = core.current() ?: return emptyMap()
     val roots = persons.mapNotNull { l.lens.resolve(it) }.distinct()
     val shown = core.shownFor(l, roots)
@@ -316,6 +323,13 @@ class ArchivePeople(
   override suspend fun answer(proposal: MergeProposal, same: Boolean): EditOutcome =
     act { editor.answer(proposal.first.id, proposal.second.id, same) }
 
+  /** NV-1: la persona c'e' ancora (anche unita a un'altra); dimenticata o sconosciuta no. Nessun conto, nessuna foto: solo se l'archivio la conosce. */
+  override suspend fun knows(id: PersonId): Boolean {
+    if (!availability.value) return false
+    val l = core.current() ?: return false
+    return l.lens.resolve(id) != null
+  }
+
   // --- Indice per la ricerca e gli album ---------------------------------------------------------------------------------------------
 
   override suspend fun dictionary(): List<PersonName> {
@@ -326,8 +340,11 @@ class ArchivePeople(
   }
 
   override suspend fun contentWith(persons: Set<PersonId>, mode: PeopleMode, level: MatchLevel): Map<ContentKey, MatchLevel> {
-    if (!availability.value || persons.isEmpty()) return emptyMap()
-    val l = core.current() ?: return emptyMap()
+    if (persons.isEmpty()) return emptyMap()
+    // R10 (correzioni D): "i volti non si leggono adesso" (Persone non attiva, l'archivio che non si apre: un Keystore che non risponde) e' "non so", non "nessuna foto":
+    // lancia, e chi classifica (gli album smart) non scrive niente. Un vuoto vero e' una persona dimenticata o senza volti.
+    check(availability.value) { "Persone non attiva qui." }
+    val l = checkNotNull(core.current()) { "L'archivio dei volti non si apre adesso." }
     val resolved = persons.map { l.lens.resolve(it) }
     // "Tutte": una persona che non c'e' piu' (dimenticata) non puo' esserci in nessuna foto; "una qualunque": le altre contano.
     if (mode == PeopleMode.ALL && resolved.any { it == null }) return emptyMap()

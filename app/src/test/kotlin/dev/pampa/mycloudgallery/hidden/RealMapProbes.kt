@@ -21,6 +21,7 @@ import dev.pampa.mycloudgallery.core.map.points.PagedMapPointSource
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaSource
+import dev.pampa.mycloudgallery.integration.Attese
 import dev.pampa.mycloudgallery.feature.map.contract.MapMediaPositions
 import dev.pampa.mycloudgallery.feature.map.contract.MapPlaceNames
 import dev.pampa.mycloudgallery.feature.map.contract.PlacesSectionState
@@ -223,7 +224,7 @@ internal object RealMapProbes {
     for (cluster in clusters) {
       val expected = stale.index.members(cluster.key, ZoneGridController.MEMBER_LIMIT).filter { world.snapshot.indexOf(it) >= 0 && it !in forbidden }.toSet()
       val controller = ZoneGridController(ZoneTarget.Cell(cluster.key), frozen, visible, Names(), filter, scope, Dispatchers.Unconfined)
-      val state = withTimeout(TIMEOUT) { controller.state.first { it != null } }
+      val state = withTimeout(Attese.TETTO) { controller.state.first { it != null } }
       MapProbeStats.zones++
       val shown: Set<MediaId> = (state as? ZoneGridState.Ready)?.view?.let { view -> (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }.toSet() }.orEmpty()
       into.shown += shown
@@ -289,8 +290,6 @@ internal object RealMapProbes {
     val missing = expected - into.shown
     if (missing.isNotEmpty()) into.problems += "${missing.size} media visibili con una posizione non hanno la mini-mappa"
   }
-
-  private const val TIMEOUT = 10_000L
 
   private fun probed(report: SurfaceReport, world: BuiltWorld) = Probed(shown = report.shown, within = world.liveShowable, problems = report.problems)
 

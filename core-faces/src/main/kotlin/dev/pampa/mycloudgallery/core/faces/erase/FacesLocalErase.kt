@@ -75,6 +75,9 @@ class FacesLocalErase(
   override suspend fun erase(generation: FaceGeneration, why: LocalEraseWhy): Boolean =
     withContext(NonCancellable) { fence.exclusive { eraseUnlocked(generation, why) } }
 
+  /** R1: tutto cio' che e' sul disco (anche una generazione che nessuno ricorda); null se adesso non si legge. */
+  override suspend fun generationsOnDisk(): List<FaceGeneration>? = attempt { data.generationsOnDisk() }
+
   /** La cancellazione con il lucchetto del recinto gia' preso. */
   internal suspend fun eraseUnlocked(generation: FaceGeneration, why: LocalEraseWhy): Boolean {
     // Le ricerche recenti con i nomi: al meglio (i dati biometrici non aspettano la cronologia).

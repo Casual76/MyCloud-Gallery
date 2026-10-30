@@ -77,6 +77,9 @@ class DefaultFacesSwitch(
 
   private val mutableState = MutableStateFlow<FacesState>(FacesState.Off)
   override val state: StateFlow<FacesState> = mutableState.asStateFlow()
+
+  private val mutableOffElsewhere = MutableStateFlow(false)
+  override val offElsewhere: StateFlow<Boolean> = mutableOffElsewhere.asStateFlow()
   override val fresh: StateFlow<Boolean> = freshness.flow
   override val syncPending: StateFlow<Boolean> get() = account.syncPending
 
@@ -126,7 +129,7 @@ class DefaultFacesSwitch(
     val generation = newGeneration()
     // Prima il locale (avviso visto, generazione dei dati), poi la voce: nel mezzo lo stato resta spento e un crollo non lascia niente da trattare.
     localStore.update {
-      it.copy(excluded = false, noticedGeneration = generation, noticedTextVersion = textVersion, dataGeneration = generation)
+      it.copy(excluded = false, noticedGeneration = generation, noticedTextVersion = textVersion, dataGeneration = generation, offElsewhere = false)
     }
     val written = try {
       account.set(FacesSetting.On(generation, textVersion))
@@ -177,7 +180,8 @@ class DefaultFacesSwitch(
       // Prima la scelta (vale subito, anche se i dati non si riescono a togliere adesso), poi i dati.
       localStore.update { it.copy(excluded = true) }
       refresh()
-      localStore.local.value.dataGeneration?.let { eraseLocalData(it, LocalEraseWhy.EXCLUDED) }
+      // R1: tutto cio' che e' sul disco, non solo la generazione che `faces-local` ricorda.
+      eraseAllLocal(LocalEraseWhy.EXCLUDED)
       refresh()
     }
   }
@@ -186,7 +190,7 @@ class DefaultFacesSwitch(
     guarded {
       if (stopped || !localStore.local.value.excluded) return@guarded
       // Un'esclusione interrotta a meta' si finisce prima: non si riprende con dati a meta'.
-      localStore.local.value.dataGeneration?.let { if (!eraseLocalData(it, LocalEraseWhy.EXCLUDED)) return@guarded }
+      if (!eraseAllLocal(LocalEraseWhy.EXCLUDED)) return@guarded
       val setting = account.current()
       localStore.update { current ->
         val seen = setting is FacesSetting.On && setting.textVersion <= textVersion &&
@@ -247,7 +251,10 @@ class DefaultFacesSwitch(
 
   private fun refresh() {
     synchronized(stateLock) {
-      mutableState.value = currentState()
+      val now = currentState()
+      mutableState.value = now
+      // CE-3: la riga "disattivata da un altro tuo dispositivo" vale solo da spenta.
+      mutableOffElsewhere.value = !stopped && now == FacesState.Off && localStore.local.value.offElsewhere
       freshness.tick()
     }
   }
@@ -281,34 +288,61 @@ class DefaultFacesSwitch(
   }
 
   /**
-   * L'allineamento dei dati locali con la voce [evidence] (D30). Cancella i dati di [FacesLocal.dataGeneration] solo se: l'utente ha escluso
-   * questo dispositivo, oppure [evidence] e' una prova (voce spenta o altra generazione) **e** la voce di adesso non nomina quella generazione
-   * accesa (un argomento piu' vecchio di una scelta fatta qui non cancella i dati appena nati). Falso solo se la cancellazione e' fallita.
+   * L'allineamento dei dati locali con la voce [evidence] (D30). Per **ogni** generazione di cui questo dispositivo ha qualcosa sul disco (R1: anche quelle
+   * che `faces-local` non ricorda) o che ricorda, cancella i dati solo se: l'utente ha escluso questo dispositivo, oppure [evidence] e' una prova (voce
+   * spenta o altra generazione) **e** la voce di adesso non nomina quella generazione accesa (un argomento piu' vecchio di una scelta fatta qui non cancella i
+   * dati appena nati). Fallisce chiuso ([ReconcileOutcome.Failed]) se una cancellazione non e' finita o se il disco adesso non si legge: il gancio non lascia
+   * uscire una testa che dice `off` finche' sul disco resta una generazione che la voce non nomina piu' accesa.
    */
   private suspend fun settleLocked(evidence: FacesSetting?): ReconcileOutcome {
     if (stopped) return ReconcileOutcome.Done
     val local = localStore.local.value
-    val data = local.dataGeneration
-    if (data != null) {
-      val current = account.current()
-      val stillNamed = current is FacesSetting.On && current.generation == data
+    val onDisk = disk() ?: return ReconcileOutcome.Failed(ERASE_PENDING)
+    val current = account.current()
+    var failed = false
+    for (generation in (onDisk + listOfNotNull(local.dataGeneration)).distinct()) {
+      val stillNamed = current is FacesSetting.On && current.generation == generation
       val why = when {
         local.excluded -> LocalEraseWhy.EXCLUDED
-        stillNamed || !FacesStateRules.replacedBy(evidence, data) -> null
+        stillNamed || !FacesStateRules.replacedBy(evidence, generation) -> null
         evidence is FacesSetting.Off -> LocalEraseWhy.ACCOUNT_OFF
         else -> LocalEraseWhy.GENERATION_CHANGED
       }
-      if (why != null && !eraseLocalData(data, why)) return ReconcileOutcome.Failed(ERASE_PENDING)
+      if (why != null && !eraseLocalData(generation, why)) failed = true
     }
+    if (failed) return ReconcileOutcome.Failed(ERASE_PENDING)
     refresh()
     return ReconcileOutcome.Done
   }
 
-  /** Toglie i dati locali di una generazione diversa da [keep] (una generazione vecchia non convive con la nuova). Vero se non resta niente. */
+  /** Toglie i dati locali di ogni generazione diversa da [keep] (una generazione vecchia non convive con la nuova). Vero se non resta niente. */
   private suspend fun eraseStale(keep: FaceGeneration?): Boolean {
-    val data = localStore.local.value.dataGeneration ?: return true
-    if (data == keep) return true
-    return eraseLocalData(data, LocalEraseWhy.GENERATION_CHANGED)
+    val onDisk = disk() ?: return false
+    var ok = true
+    for (generation in (onDisk + listOfNotNull(localStore.local.value.dataGeneration)).distinct()) {
+      if (generation == keep) continue
+      if (!eraseLocalData(generation, LocalEraseWhy.GENERATION_CHANGED)) ok = false
+    }
+    return ok
+  }
+
+  /** Tutto cio' che questo dispositivo ha dei volti (l'esclusione, E-F8). Vero se non resta niente. */
+  private suspend fun eraseAllLocal(why: LocalEraseWhy): Boolean {
+    val onDisk = disk() ?: return false
+    var ok = true
+    for (generation in (onDisk + listOfNotNull(localStore.local.value.dataGeneration)).distinct()) {
+      if (!eraseLocalData(generation, why)) ok = false
+    }
+    return ok
+  }
+
+  /** Le generazioni sul disco; null se adesso non si leggono (non e' un'eccezione per chi chiama). */
+  private suspend fun disk(): List<FaceGeneration>? = try {
+    eraser.generationsOnDisk()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    null
   }
 
   private suspend fun eraseLocalData(generation: FaceGeneration, why: LocalEraseWhy): Boolean {
@@ -323,7 +357,12 @@ class DefaultFacesSwitch(
     // "non finita": i dati sono gia' tolti, la volta dopo la cancellazione non trova niente e il segno si riprova.
     if (!done) return false
     return try {
-      localStore.update { if (it.dataGeneration == generation) it.copy(dataGeneration = null) else it }
+      localStore.update {
+        var next = if (it.dataGeneration == generation) it.copy(dataGeneration = null) else it
+        // CE-3: i dati tolti perche' l'account e' stato spento **da un altro** dispositivo (chi cancella qui ha il segno `erasing` e lo toglie con tutto il resto).
+        if (why == LocalEraseWhy.ACCOUNT_OFF && it.erasing == null && !next.offElsewhere) next = next.copy(offElsewhere = true)
+        next
+      }
       true
     } catch (e: CancellationException) {
       throw e
@@ -341,6 +380,7 @@ class DefaultFacesSwitch(
         noticedGeneration = generation,
         noticedTextVersion = maxOf(textVersion, if (sameGeneration) it.noticedTextVersion ?: 0 else 0),
         dataGeneration = generation,
+        offElsewhere = false,
       )
     }
   }

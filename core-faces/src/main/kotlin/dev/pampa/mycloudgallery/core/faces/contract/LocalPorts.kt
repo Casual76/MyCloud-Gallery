@@ -56,6 +56,9 @@ interface FacesEraseOps {
  * la scelta dell'utente ([PeopleAlbumsChoice.KEEP_PHOTOS]: gli elementi attuali diventano voci `item:` con impronta, la regola si toglie,
  * un album che aveva solo quella diventa manuale; [PeopleAlbumsChoice.DROP_RULE]: solo la regola). Si fa **prima** di cancellare i dati dei
  * volti (servono per sapere gli elementi). Idempotente.
+ *
+ * CE-4 (correzioni A): [release] risponde quanti ne ha sciolti e **lancia** se anche un solo album non si e' sciolto (o gli album non sono ancora montati):
+ * cosi' il tentativo del diario fallisce e il passo non si segna fatto con un album ancora con la regola (dopo i tentativi si segna saltato, L190).
  */
 interface SmartAlbumsPeople {
   suspend fun albumsWithPeople(): Int
@@ -130,8 +133,14 @@ data class FacesLocal(
   val noticedTextVersion: Int? = null,
   val dataGeneration: FaceGeneration? = null,
   val erasing: FaceGeneration? = null,
+  /**
+   * CE-3 (Fase 8, correzioni A): Persone e' stata disattivata da **un altro** dispositivo dell'account e qui i dati sono stati tolti dalla pulizia
+   * dell'interruttore ([LocalEraseWhy.ACCOUNT_OFF]). Serve solo a dire il perche' sopra "Attiva riconoscimento dei volti"; si toglie con una nuova
+   * attivazione. Chi ha cancellato (segno [erasing]) non lo porta mai: il segno e' tolto con tutto il resto.
+   */
+  val offElsewhere: Boolean = false,
 ) {
-  override fun toString(): String = "FacesLocal(escluso=$excluded, avviso=$noticedTextVersion, dati=${dataGeneration != null}, cancella=${erasing != null})"
+  override fun toString(): String = "FacesLocal(escluso=$excluded, avviso=$noticedTextVersion, dati=${dataGeneration != null}, cancella=${erasing != null}, spenta=$offElsewhere)"
 
   companion object {
     val EMPTY = FacesLocal()

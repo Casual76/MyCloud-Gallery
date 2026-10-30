@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.PrivateAreaState
 import dev.pampa.mycloudgallery.core.faces.store.LocalErase
 import dev.pampa.mycloudgallery.core.faces.switch.DefaultFacesSwitch
 import dev.pampa.mycloudgallery.core.faces.switch.FacesLocalDataEraser
+import dev.pampa.mycloudgallery.core.faces.switch.LocalEraseWhy
 import dev.pampa.mycloudgallery.core.faces.switch.FacesPrePublishHook
 import dev.pampa.mycloudgallery.core.faces.sync.FacesArchives
 import dev.pampa.mycloudgallery.core.faces.sync.FacesAttestation
@@ -187,7 +188,12 @@ internal class EraseDevice(val world: EraseWorld, val name: String, val signer: 
     if (::scope.isInitialized) shutdown()
     scope = CoroutineScope(Dispatchers.Unconfined + Job())
     // L'interruttore cancella i dati locali con la stessa operazione di "Disattiva e cancella" (come la lega :app, P13).
-    val eraserPort = FacesLocalDataEraser { g, why -> localErase.erase(g, why) }
+    val eraserPort = object : FacesLocalDataEraser {
+      override suspend fun erase(generation: FaceGeneration, why: LocalEraseWhy): Boolean = localErase.erase(generation, why)
+
+      // R1: come in :app, l'interruttore guarda tutto cio' che e' sul disco.
+      override suspend fun generationsOnDisk(): List<FaceGeneration>? = localErase.generationsOnDisk()
+    }
     switch = DefaultFacesSwitch(scope, personal, localStore, requirements, eraserPort, world.clock, newGeneration = { generation() })
     fence = FacesEraseFence(switch)
     localErase = FacesLocalErase(local, fence, history = history)

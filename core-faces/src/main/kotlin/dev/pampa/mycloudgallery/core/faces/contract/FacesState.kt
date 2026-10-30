@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.faces.contract
 
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.FacesSetting
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 // L'ATTIVAZIONE PER ACCOUNT, L'AVVISO E L'ESCLUSIONE (docs/fase8-progetto.md §1.2 "Stato", "Interruttore", §2.1, D3-D5, D30, D34, E-F7-E-F12).
@@ -130,6 +131,12 @@ interface FacesSwitch {
   val fresh: StateFlow<Boolean>
 
   val syncPending: StateFlow<Boolean>
+
+  /**
+   * CE-3 (correzioni A): Persone e' spenta **qui** perche' un altro dispositivo dell'account ha fatto "Disattiva e cancella" e questo dispositivo ha tolto i
+   * suoi dati. La sezione lo dice sopra "Attiva riconoscimento dei volti"; si spegne con una nuova attivazione. Di serie (fake, null-object) mai.
+   */
+  val offElsewhere: StateFlow<Boolean> get() = MutableStateFlow(false)
 
   suspend fun activate(consent: FacesActivationConsent): ActivateOutcome
 

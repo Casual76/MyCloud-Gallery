@@ -25,13 +25,12 @@ internal object RealMemoriesProbes {
   suspend fun report(original: BuiltWorld, finalFilter: Boolean = true, remember: Boolean = true): MemoriesReport {
     if (remember) cache[original]?.let { return it }
     val context = ApplicationProvider.getApplicationContext<Context>()
-    val resources = context.resources
     val own = HiddenWorldBuilder.build(context, original.spec)
     val merged = MemoriesReport(SurfaceReport(), SurfaceReport(), SurfaceReport(), SurfaceReport())
     try {
       for (day in MemoriesDay.entries) {
         RealMemoriesStack(own, day).use { stack ->
-          val one = RealMemoriesSurfaces.evaluate(stack, resources, finalFilter)
+          val one = RealMemoriesSurfaces.evaluate(stack, finalFilter)
           merge(merged.section, one.section, own, original)
           merge(merged.page, one.page, own, original)
           merge(merged.player, one.player, own, original)

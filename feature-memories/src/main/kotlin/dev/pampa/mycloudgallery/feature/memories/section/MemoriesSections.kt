@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.memories.contract.MemoryCard
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryId
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryKind
 import dev.pampa.mycloudgallery.core.memories.contract.ShelfEmptyReason
+import dev.pampa.mycloudgallery.core.memories.contract.ShelfView
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.memories.R
 import dev.pampa.mycloudgallery.feature.memories.contract.MemoriesSectionState
@@ -70,23 +71,24 @@ data class SectionData(
   override fun toString(): String = "SectionData($code, ${entries.size} voci)"
 }
 
+/** Cio' che serve a disegnare la sezione, nello stesso istante: lo stato, quante voci ha lo scaffale e i nomi delle persone gia' letti (per ricomporre i titoli quando arrivano). */
+data class SectionSnapshot(val state: MemoriesSectionState, val total: Int, val named: Map<PersonId, String>)
+
 /**
- * I dati della sezione Ricordi: [state] e' lo stato del §1.5 di adesso (le Raccolte e gli screenshot lo leggono), [section] la sezione come dato.
- * Montata, **c'e' sempre una riga almeno** (da vuota "I ricordi arrivano quando ci sono abbastanza foto", in generazione "Sto preparando i ricordi"),
- * cosi' la sezione non sparisce dal layout delle Raccolte (E-MEM1: "senza voci non c'e' sezione").
+ * Lo stato della sezione Ricordi **senza risorse** (nessun testo, nessuna `R`): dall'ultimo scaffale subito, poi rifatto dal filtro finale dei Nascosti
+ * ([FinalFilter]). E' la parte che si prova sul motore vero (`HiddenSurfaces`, riga `MEMORIES`) e che [MemoriesSectionSources] veste con i testi.
  */
-class MemoriesSectionSources(
-  private val resources: Resources,
+class MemoriesSectionModel(
   private val memories: Memories,
   private val names: MemoryNames,
   private val filter: FinalFilter,
   scope: CoroutineScope,
 ) {
 
-  /** Tutto cio' che serve a disegnare la sezione, nello stesso istante: lo stato, le voci e i nomi gia' letti (per ricomporre i titoli quando arrivano). */
+  /** Lo stato, le voci (tutte, non solo le sei della sezione) e i nomi gia' letti. */
   private data class Resolved(val state: MemoriesSectionState, val cards: List<MemoryCard>, val named: Map<PersonId, String>)
 
-  private fun resolve(view: dev.pampa.mycloudgallery.core.memories.contract.ShelfView, cards: List<MemoryCard>): Resolved {
+  private fun resolve(view: ShelfView, cards: List<MemoryCard>): Resolved {
     val named = cards.mapNotNull { it.title.person }.distinct().mapNotNull { id -> names.cachedPerson(id)?.let { id to it } }.toMap()
     return Resolved(MemoriesSectionStates.section(view, cards), cards, named)
   }
@@ -101,12 +103,37 @@ class MemoriesSectionSources(
   /** Lo stato del §1.5 di adesso. */
   val sectionState: StateFlow<MemoriesSectionState> = resolved.map { it.state }.stateIn(scope, SharingStarted.Eagerly, resolved.value.state)
 
-  /** La sezione come dato: mai vuota (almeno una riga che dice a che punto si e'). */
-  val section: StateFlow<SectionData> = resolved.map { sectionOf(resources, it.state, names, it.named, it.cards.size) }
-    .stateIn(scope, SharingStarted.Eagerly, sectionOf(resources, resolved.value.state, names, resolved.value.named, resolved.value.cards.size))
+  /** Lo stato con quanto serve a comporre le righe. */
+  val snapshot: StateFlow<SectionSnapshot> = resolved.map { SectionSnapshot(it.state, it.cards.size, it.named) }
+    .stateIn(scope, SharingStarted.Eagerly, resolved.value.let { SectionSnapshot(it.state, it.cards.size, it.named) })
 
   /** Il ricordo di una voce (`m_<16 caratteri>`), o null se non c'e' piu' (uscito dallo scaffale mentre si toccava). */
   fun resolve(code: String): MemoryId? = resolved.value.cards.firstOrNull { MemoriesSectionStates.codeOf(it.id) == code }?.id
+}
+
+/**
+ * I dati della sezione Ricordi: [sectionState] e' lo stato del §1.5 di adesso (le Raccolte e gli screenshot lo leggono), [section] la sezione come dato.
+ * Montata, **c'e' sempre una riga almeno** (da vuota "I ricordi arrivano quando ci sono abbastanza foto", in generazione "Sto preparando i ricordi"),
+ * cosi' la sezione non sparisce dal layout delle Raccolte (E-MEM1: "senza voci non c'e' sezione").
+ */
+class MemoriesSectionSources(
+  private val resources: Resources,
+  memories: Memories,
+  private val names: MemoryNames,
+  filter: FinalFilter,
+  scope: CoroutineScope,
+) {
+  private val model = MemoriesSectionModel(memories, names, filter, scope)
+
+  /** Lo stato del §1.5 di adesso. */
+  val sectionState: StateFlow<MemoriesSectionState> get() = model.sectionState
+
+  /** La sezione come dato: mai vuota (almeno una riga che dice a che punto si e'). */
+  val section: StateFlow<SectionData> = model.snapshot.map { sectionOf(resources, it.state, names, it.named, it.total) }
+    .stateIn(scope, SharingStarted.Eagerly, model.snapshot.value.let { sectionOf(resources, it.state, names, it.named, it.total) })
+
+  /** Il ricordo di una voce (`m_<16 caratteri>`), o null se non c'e' piu' (uscito dallo scaffale mentre si toccava). */
+  fun resolve(code: String): MemoryId? = model.resolve(code)
 
   companion object {
     /** Il codice stabile della sezione: lo stesso di `CollectionSections.MEMORIES` (lo prova `MemoriesSectionBindingTest`). */

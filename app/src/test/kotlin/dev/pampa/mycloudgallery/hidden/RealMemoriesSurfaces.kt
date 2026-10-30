@@ -1,11 +1,11 @@
 package dev.pampa.mycloudgallery.hidden
 
-import android.content.res.Resources
 import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
 import dev.pampa.mycloudgallery.core.memories.contract.Memory
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryCard
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryId
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryKind
+import dev.pampa.mycloudgallery.core.memories.contract.ShelfState
 import dev.pampa.mycloudgallery.core.memories.noop.NoMemoryClips
 import dev.pampa.mycloudgallery.core.memories.noop.NoMusicLibrary
 import dev.pampa.mycloudgallery.core.memories.testing.InMemoryMusicSettings
@@ -21,17 +21,20 @@ import dev.pampa.mycloudgallery.feature.memories.list.AllMemoriesController
 import dev.pampa.mycloudgallery.feature.memories.page.MemoryPageController
 import dev.pampa.mycloudgallery.feature.memories.player.PlayerController
 import dev.pampa.mycloudgallery.feature.memories.player.PlayerPace
-import dev.pampa.mycloudgallery.feature.memories.section.MemoriesSectionSources
+import dev.pampa.mycloudgallery.feature.memories.section.MemoriesSectionModel
 import dev.pampa.mycloudgallery.feature.memories.section.MemoriesSectionStates
 import dev.pampa.mycloudgallery.feature.memories.ui.FinalFilter
 import dev.pampa.mycloudgallery.feature.memories.ui.MemoryNames
-import dev.pampa.mycloudgallery.integration.until
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 
 // Fase 9 (P9, D31, E-MEM5, E-H8, E-H10; 30/10): le SUPERFICI VERE dei ricordi (sezione, pagina, "Tutti i ricordi", presentazione) sopra il motore vero, con il
 // **filtro finale dei Nascosti** acceso o spento (lo spegne solo la prova al contrario: la proprieta' deve diventare rossa).
@@ -92,10 +95,14 @@ internal object RealMemoriesSurfaces {
     return victims
   }
 
-  suspend fun evaluate(stack: RealMemoriesStack, resources: Resources, finalFilter: Boolean): MemoriesReport {
+  suspend fun evaluate(stack: RealMemoriesStack, finalFilter: Boolean): MemoriesReport {
     val report = MemoriesReport(SurfaceReport(), SurfaceReport(), SurfaceReport(), SurfaceReport())
     stack.refresh()
-    val cards = stack.engine.shelf.value.items
+    // Lo scaffale che le superfici vedono si rifa' da solo sul suo scope, un istante dopo il giro: si aspetta lo stato preciso (le voci del file appena scritto),
+    // mai una lettura subito dopo l'azione asincrona.
+    val published = stack.engine.current()?.memories?.map { it.id }.orEmpty()
+    val shelf = withTimeout(WAIT) { stack.engine.shelf.first { it.items.map { card -> card.id } == published && (published.isNotEmpty() || it.state !is ShelfState.Working) } }
+    val cards = shelf.items
     Stats.worlds++
     Stats.memories += cards.size
     cards.forEach { Stats.kinds += it.kind }
@@ -115,15 +122,10 @@ internal object RealMemoriesSurfaces {
     try {
       val expected = cards.associate { card -> card.id to membersOf(stack, card).filter { it !in never } }
 
-      section(stack, resources, names, filter, scope, cards, expected, never, report.section)
-      pages(stack, names, filter, scope, cards, expected, never, report.page)
+      section(stack, names, filter, scope, cards, expected, never, report.section)
+      pages(stack, names, filter, scope, cards, expected, never, report.page, report.people)
       list(stack, names, filter, scope, cards, expected, never, report.page)
       presentations(stack, names, filter, scope, cards, expected, never, report.player)
-      for (card in persons) {
-        for (member in membersOf(stack, card)) if (member in never) report.people.problems += "un ricordo di una persona ha un elemento nascosto nel catalogo (prima del filtro)"
-        report.people.shown += expected.getValue(card.id)
-        report.people.shown += card.cover.takeIf { it !in never } ?: continue
-      }
     } finally {
       scope.cancel()
     }
@@ -141,7 +143,6 @@ internal object RealMemoriesSurfaces {
 
   private suspend fun section(
     stack: RealMemoriesStack,
-    resources: Resources,
     names: MemoryNames,
     filter: FinalFilter,
     scope: CoroutineScope,
@@ -150,17 +151,12 @@ internal object RealMemoriesSurfaces {
     never: Set<MediaId>,
     out: SurfaceReport,
   ) {
-    val sources = MemoriesSectionSources(resources, stack.engine, names, filter, scope)
-    val total = cards.count { (expected[it.id]?.size ?: 0) >= Memory.MIN_MEMBERS }
-    // Aspetta le voci dopo il filtro finale (arrivano un istante dopo la prima immagine, che e' lo scaffale com'e').
-    val settled = guard(out, "la sezione non si e' assestata") {
-      until("la sezione ha le voci filtrate") {
-        val state = sources.sectionState.value
-        state is MemoriesSectionState.Ready && state.cards.all { (expected[it.id]?.size ?: 0) == it.count } ||
-          total == 0 && state !is MemoriesSectionState.Ready
-      }
-    }
-    if (!settled) return
+    val sources = MemoriesSectionModel(stack.engine, names, filter, scope)
+    // Lo stato preciso che la sezione deve raggiungere: lo scaffale com'e' ripulito dal filtro finale (arriva un istante dopo la prima immagine, che e' lo scaffale
+    // com'e'). Poi i conti si confrontano con l'oracolo, che non dipende dal codice che si prova.
+    val shelf = stack.engine.shelf.value
+    val target = MemoriesSectionStates.section(shelf, filter.refine(stack.engine, shelf.items))
+    if (!awaitState(out, "la sezione non si e' assestata", sources.sectionState) { it == target }) return
     val state = sources.sectionState.value
     if (state is MemoriesSectionState.Ready) {
       for (card in state.cards) {
@@ -186,17 +182,23 @@ internal object RealMemoriesSurfaces {
     expected: Map<MemoryId, List<MediaId>>,
     never: Set<MediaId>,
     out: SurfaceReport,
+    people: SurfaceReport,
   ) {
     for (card in cards) {
       val page = MemoryPageController(card.id, stack.engine, names, filter, scope)
       val want = expected[card.id].orEmpty()
-      if (!guard(out, "una pagina non si e' assestata") { until("la pagina ha la sua vista") { page.ui.value.page != MemoryPageState.Loading } }) continue
+      if (!awaitState(out, "una pagina non si e' assestata", page.ui) { it.page != MemoryPageState.Loading }) continue
       when (val state = page.ui.value.page) {
         is MemoryPageState.Ready -> {
           Stats.pagesReady++
           val shown = (0 until state.view.size).map { state.view.snapshot.idAt(state.view.snapshotIndex(it)) }
           out.shown += shown
           out.shown += state.cover
+          // I ricordi di una persona (E-H10) sono anche una superficie a se': cio' che la pagina di una persona mostra.
+          if (card.kind == MemoryKind.PERSON) {
+            people.shown += shown
+            people.shown += state.cover
+          }
           if (shown.any { it in never }) out.problems += "la pagina di un ricordo mostra un media nascosto"
           if (state.cover in never) out.problems += "la copertina della pagina di un ricordo e' un media nascosto"
           if (shown.toSet() != want.toSet()) out.problems += "la pagina di un ricordo ha ${shown.size} elementi, ne attendeva ${want.size}"
@@ -223,10 +225,7 @@ internal object RealMemoriesSurfaces {
   ) {
     val all = AllMemoriesController(stack.engine, names, filter, scope)
     val wanted = cards.filter { (expected[it.id]?.size ?: 0) >= Memory.MIN_MEMBERS }
-    if (!guard(out, "\"Tutti i ricordi\" non si e' assestato") {
-        until("l'elenco ha le copertine filtrate") { all.ui.value.snapshot != null || wanted.isEmpty() && all.ui.value.state is MemoriesListState.Empty }
-      }
-    ) return
+    if (!awaitState(out, "\"Tutti i ricordi\" non si e' assestato", all.ui) { it.snapshot != null || wanted.isEmpty() && it.state is MemoriesListState.Empty }) return
     val shown = (all.ui.value.state as? MemoriesListState.Ready)?.byMonth.orEmpty().flatMap { it.cards }
     for (card in shown) {
       out.shown += card.cover
@@ -261,11 +260,7 @@ internal object RealMemoriesSurfaces {
           seen += ui.items.map { it.media }
         }
       }
-      val finished = guard(out, "una presentazione non e' finita") {
-        until("la presentazione arriva alla carta finale o dice che il ricordo non c'e' piu'") {
-          player.ui.value.state is PlayerState.Ended || player.ui.value.gone
-        }
-      }
+      val finished = awaitState(out, "una presentazione non e' finita", player.ui) { it.state is PlayerState.Ended || it.gone }
       watcher.cancel()
       player.exit()
       val ended = player.ui.value
@@ -288,14 +283,20 @@ internal object RealMemoriesSurfaces {
   @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
   private fun singleThreaded(): CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.Default.limitedParallelism(1))
 
-  /** Aspetta una condizione e, se non arriva, la registra come violazione (mai un test appeso). */
-  private suspend fun guard(out: SurfaceReport, problem: String, wait: suspend () -> Unit): Boolean = try {
-    wait()
+  /**
+   * Aspetta lo **stato preciso** (`first { ... }` dentro un tetto, mai una lettura subito dopo l'azione asincrona) e, se non arriva, lo registra come violazione:
+   * una prova non resta mai appesa e non legge uno stato di mezzo.
+   */
+  private suspend fun <T> awaitState(out: SurfaceReport, problem: String, flow: Flow<T>, condition: (T) -> Boolean): Boolean = try {
+    withTimeout(WAIT) { flow.first(condition) }
     true
-  } catch (e: AssertionError) {
+  } catch (e: TimeoutCancellationException) {
     out.problems += problem
     false
   }
+
+  /** Il tetto di ogni attesa di uno stato (la prova non resta mai appesa: scaduto, e' una violazione). */
+  private val WAIT = 30.seconds
 
   private const val MAX_VICTIM_CARDS = 3
   private const val MAX_PRESENTATIONS = 3

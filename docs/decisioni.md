@@ -10731,3 +10731,107 @@ resta e oggi passa. Album e Persone nel banco si saltano finche' la variante di 
 - **Corsa fatta il 28/10 sera** (orchestratore, `127631ac`): l'avvio e' dentro le soglie (primo disegno utile p90 654 ms dopo un
   aggiornamento e 271 ms nell'avvio abituale; caricamento completo p90 663 e 278 ms), il pizzico no (punto aperto 4). Riferimenti **non**
   accettati finche' il pizzico non torna sotto la guardia.
+
+
+## Fase 8, correzioni dopo le revisioni: pacchetto A (30/10)
+
+Il pacchetto A chiude le voci di "Disattiva e cancella" e dello stato locale delle due revisioni di fine Fase 8 (`docs/review/8-fase8.md`: **R1, R11, R12, R13, I1, I6**; `docs/review/funzionale-8.md`: **CE-1, CE-2, CE-3, CE-4, CE-5**). Ramo `fase8/corr-a` da `main` (`6fc08ddf`). Le voci si toccano fra loro (R1 e R12 con CE-1, R13 con CE-2) e sono corrette alla radice, una volta sola. Nessun sotto-agente, nessuna rete, nessun telefono: tutto sulla JVM e su Robolectric. **CE-3** era in attesa di una decisione dell'utente; la risposta e' arrivata durante il lavoro (**risposta dell'utente del 30/10: si', una riga** "Persone e' stata disattivata da un altro tuo dispositivo" sopra "Attiva riconoscimento dei volti") e la voce e' fatta come le altre.
+
+### Le voci: causa, correzione, prove
+
+**R1. Una generazione che `faces-local` non ricorda restava sul disco, e il dispositivo "confermava" lo stesso.**
+- *Causa.* `settleLocked`, `eraseStale`, `excludeThisDevice` e `includeThisDevice` guardavano solo `FacesLocal.dataGeneration`; `FacesStores.eraseAllExcept` non aveva chiamanti. Dopo una scrittura non riuscita di `faces-local` e una morte del processo, `faces-<G>.db` e la chiave restavano; con `off|G` il gancio rispondeva `Done` e la testa personale usciva.
+- *Correzione.* `FacesLocalDataEraser` ha un secondo metodo, `generationsOnDisk()` (di serie nessuna generazione; `null` = adesso non si legge), che `FacesLocalErase` risponde con l'elencazione di `FacesLocalData` (la stessa usata da chi cancella); in `:app` l'oggetto che l'interruttore usa aspetta `started` come per `erase`. `DefaultFacesSwitch` decide per **ogni** generazione (ricordata o sul disco) con la regola di prima: esclusione dell'utente, oppure prova (voce spenta o altra generazione) con la voce di adesso che non la nomina accesa. Un disco che non si legge fa fallire chiuso (`Failed(FACES_ERASE_PENDING)`: il gancio non pubblica). Esclusione, "Includi di nuovo", attivazione e avviso passano dalla stessa elencazione (`eraseStale` toglie ogni generazione diversa da quella tenuta).
+- *Prove.* `SwitchDiskGenerationsTest` (8 `r1_`), `EraseCorrectionsATest.r1_unDispositivoCheHaPersoLaGenerazioneNonConfermaFincheISuoiFileCiSono` (due dispositivi: nessuna testa `off` finche' i file ci sono, poi niente sul disco e conferma), banco di P12 (`EraseDevice` e `ChaosDevice` legano l'elencazione come `:app`).
+
+**R11. Dopo la cancellazione restavano nomi e raggruppamento in memoria, e la forma della pagina Persone sul disco.**
+- *Causa.* `clearMemory` toglieva solo le copertine; `PeopleCore.loaded` e `proposalMemo` restavano (anche con la disponibilita' spenta); `FencedArchives.last` non si dimenticava mai; `GroupFaceCache` poteva riempirsi dopo il ritiro; `InstantShapes` teneva `persone` fino all'azzeramento.
+- *Correzione.* `ArchivePeople.release()` (lista vuota, `loaded` e proposte azzerati; **non prende il lucchetto delle viste**: la cancellazione lo chiama sotto il recinto e un `refresh` che aspetta il recinto tiene il suo, quindi un lucchetto qui sarebbe uno stallo; una lettura iniziata prima non rimette niente grazie a un'epoca in `PeopleCore`); `refresh` con la disponibilita' spenta butta anche `loaded` e le proposte; `clearMemory` in `FacesWiring` chiama copertine, `people.release()`, `archives.forget()` e `InstantShapes.remove(PEOPLE_INSTANT_SHAPE_CODE)` (nuova `remove` in `InstantShapes`); `FacesGraph` toglie la forma quando Persone non e' piu' attiva qui e al montaggio con Persone spenta; `GroupFaceCache.clear()` mette un segno `closed` che una lettura in corso controlla prima di riempire la cache (lancia, come ogni lettura di un archivio chiuso).
+- *Prove.* `PeopleReleaseTest` (2), `GroupCacheRetireTest` (un archivio ritirato a meta' lettura non tiene i vettori), `InstantShapesTest.r11_*`, `FacesCorrectionsATest.r11_*`, `FacesFenceSourcesTest.r11_*`.
+
+**R12. Il foglio diceva "Fatto ovunque" anche quando non lo era.**
+- *Causa.* `EraseSheetStates.of` dava `Done` a ogni diario `DONE` senza risposta; `NothingToErase` e l'anteprima vuota davano `Done`; il testo parla del NAS e di tutti i dispositivi.
+- *Correzione (decisione dell'orchestratore).* "Fatto ovunque" solo con il passo sul NAS fatto **e** tutti i dispositivi confermati. Cancellazione solo locale (D34, `nas == NOT_NEEDED`): nuovo stato `DoneHere`, titolo «Cancellati da questo dispositivo», messaggio «I volti e i nomi delle persone sono stati cancellati da questo dispositivo. Le foto non si sono toccate.». `NothingToErase` e anteprima vuota: nuovo stato `NothingToErase`, «Niente da cancellare qui», «Non e' stato cancellato niente: adesso Persone non risulta attiva su questo dispositivo.» (nessuna parola su NAS o altri dispositivi).
+- *Prove.* `FacesEraseControllerTest` (`r12_*` e gli esiti), `FacesEraseSheetTest`, due scene nuove in `EraseScreenshotTest`.
+
+**R13. Un file tenuto aperto dal PC lasciava la cancellazione "in corso" senza motivo, con un giro al minuto.**
+- *Causa.* `NasFacesEraser` risponde `More` senza togliere niente per `Locked`/`SizeChanged`/`NotAFile`; `EraseRemote.rounds` usciva senza motivo; `eraseRound` rispondeva `ERASE_SOON`.
+- *Correzione.* Un giro che non toglie niente **senza che il tempo sia finito** diventa un'attesa dichiarata, `EraseWait.FILE_OPEN` («Un file dei volti e' tenuto aperto sul NAS, forse da un computer di casa: chiudilo e la cancellazione riparte da sola...»), e `FacesGraph.eraseRound` allunga l'attesa a ogni giro di fila (2, 4, 8, 16, poi 30 minuti: `heldDelay`). Un giro che toglie qualcosa, o che finisce il tempo, resta un avanzamento.
+- *Prove.* `EraseCorrectionsATest.r13_*` (un solo giro per ripresa con il motivo; il tempo finito non e' un file aperto; poi si chiude il file e la cancellazione arriva in fondo), `FacesCorrectionsATest.r13_*`.
+
+**I1. La lettura delle persone partiva prima che il diario chiudesse il recinto.**
+- *Causa.* In `FacesWiring` `ArchivePeople` (che nel costruttore lancia la prima lettura) nasceva prima di `DefaultFacesEraser` (che nel costruttore legge il diario e chiude il recinto).
+- *Correzione.* La cancellazione (e il suo gruppo di porte: `FacesNasWiring`, annuncio, pulizia del NAS) nasce subito dopo il recinto e prima di replica, pubblicatore, calcolo, custode e persone; `FacesEngineHolder` sale prima (e' solo un contenitore). `started.complete` resta in fondo.
+- *Prova.* `FacesFenceSourcesTest.i1_*` (ordine di `DefaultFacesEraser(` rispetto a `ArchivePeople(`, `CustodianGrouping(`, `FacesComputeEngine(`, `NasFacesPublisher(`, `NasFacesSync(`, `GuardedPeopleCrops(`); le altre prove di ordine restano verdi.
+
+**I6. Una ripresa dopo "chiave distrutta, file non ancora tolti" faceva nascere una chiave nuova.**
+- *Causa.* `StoresLocalData.people` usava `FacesStores.open`, che con la chiave sparita toglie i file, crea una chiave e un database vuoto e segnala `FACES_KEY_LOST`.
+- *Correzione.* `FacesStores.openExisting`: apre solo se database e chiave ci sono e si leggono; chiave sparita, file mancante, di un'altra chiave, danneggiato o di una versione piu' nuova = "nessun nome"; Keystore che non risponde = "non si sa" (si riprova). Niente si crea, niente si toglie, niente `FACES_KEY_LOST`.
+- *Prova.* `RealStoreEraseTest.i6_*` (negozio vero, chiave distrutta a mano, nessuna chiave nuova, nessuna perdita segnalata, file ancora li' fino alla cancellazione).
+
+**CE-1. Dopo una cancellazione finita e una riattivazione il foglio non offriva piu' il tasto.**
+- *Correzione.* `FacesEraseController.load` segue solo una cancellazione **non finita** (`step != DONE`); con un diario `DONE` (resta 30 giorni) rifa' l'anteprima. Il `housekeeping` a `DONE` scaduto non ha bisogno di un passo suo: lo fa `resume`, che adesso parte da `syncRound` (CE-2). Non confronto la generazione dello stato con quella corrente (la proposta della revisione): un diario `DONE` non e' mai una cancellazione in corso, qualunque generazione nomini.
+- *Prove.* `FacesEraseControllerTest.ce1_*` (anteprima dopo un diario `DONE`, seconda cancellazione che parte e si segue; una cancellazione in corso si segue ancora).
+
+**CE-2. L'attesa dei dispositivi e il cestino di rete non venivano mai ripresi dal giro dell'indice.**
+- *Correzione.* `FacesGraph.syncRound` riprende il diario con un diario qualunque (non solo `Erasing`), dopo la pulizia del NAS e prima della replica: `eraseRound` lascia `DEVICES` e `RECYCLE_BIN` ai giri dell'indice e adesso qualcuno li fa davvero.
+- *Prove.* `FacesIntegrationTest.disattivaECancellaConUnDispositivoSpentoCheTorna` (sul grafo vero: la fine arriva **solo** dai giri dell'indice, senza `eraseRound`), `FacesFenceSourcesTest.ce2_*`.
+
+**CE-3. Il secondo dispositivo non sapeva che l'altro aveva cancellato (risposta dell'utente del 30/10).**
+- *Correzione.* `FacesLocal.offElsewhere` (file `faces-local`: settima riga **solo quando vale si**, quindi il file di prima non cambia e un'app piu' vecchia lo legge uguale); `DefaultFacesSwitch` lo accende quando toglie i dati con `ACCOUNT_OFF` e il segno `erasing` non c'e' (chi ha cancellato non lo porta), lo spegne con una nuova attivazione o un nuovo avviso; `FacesSwitch.offElsewhere` lo espone (`FacesSwitchFacade` lo inoltra); nuovo stato `PeopleSectionState.OffElsewhere`: sopra la riga «Attiva riconoscimento dei volti» c'e' la riga «Persone e' stata disattivata da un altro tuo dispositivo» («I volti e i nomi sono stati cancellati anche da qui. Se vuoi, puoi riattivarla.»), che porta alla stessa pagina di attivazione. Vale solo da spenta.
+- *Prove.* `SwitchDiskGenerationsTest.ce3_*` (5), `FileFacesLocalStoreTest.ce3_*`, `PeopleSectionStatesTest.ce3_*`, `PeopleSectionsTest.ce3_*` (2).
+
+**CE-4. Gli album smart con le persone potevano restare con la regola senza che il diario riprovasse.**
+- *Correzione.* `AppSmartAlbumsPeople.release` prova tutti gli album e **lancia** se anche uno non si e' sciolto o se gli album non sono ancora montati: il tentativo fallisce davvero (tre tentativi) e il passo si segna `SKIPPED`, non `DONE` (L190, L321). L'accesso agli album sta dietro una porta piccola (`PeopleAlbumsAccess`) per provarlo senza montare gli album.
+- *Prove.* `FacesCorrectionsATest.ce4_*` (4).
+
+**CE-5. Il tasto "Apri Dispositivi" del foglio non era legato.**
+- *Correzione.* `FacesEraseRoute(onClose = ..., onOpenDevices = { nav.navigate(SettingsDevicesRoute) })` in `PeopleNavigation` di `:app`, la stessa rotta di `onOpenDevices` della revisione F della Fase 7.
+- *Prova.* `FacesFenceSourcesTest.ce5_*`.
+
+### Decisioni, e dove mi discosto dalle proposte delle revisioni
+
+| # | Decisione | Perche' |
+|---|---|---|
+| A-1 | **R1 resta una regola a prove**: si tolgono le generazioni sul disco solo con l'esclusione o con una prova (voce spenta o altra generazione). Una voce assente o sconosciuta non toglie niente, anche con dati sul disco | La proposta della revisione diceva "il gancio montato non risponde `Proceed` finche' sul disco resta una generazione che la voce non nomina accesa"; con una voce assente nessuna voce `off` esce (la testa non dice niente), mentre cancellare senza prova violerebbe E-F12. Il gancio non montato (C131) resta piu' stretto, come prima |
+| A-2 | `generationsOnDisk` e' un metodo **con un valore di serie** (nessuna generazione) di `FacesLocalDataEraser` | I fake e le prove senza disco non cambiano; `FacesLocalErase` e `:app` lo legano; il banco di P12 lo lega come `:app` |
+| A-3 | **R12**: "Fatto ovunque" richiede NAS fatto **e** nessun dispositivo in attesa, anche se il diario dice `DONE`; il testo per la cancellazione solo locale e' «Cancellati da questo dispositivo» | La decisione dell'orchestratore; la regola piu' stretta non cambia l'esito di una cancellazione vera (il diario `DONE` implica le conferme) |
+| A-4 | **R13**: un motivo nuovo (`FILE_OPEN`) e attese crescenti **per processo**; la Diagnostica non conta ancora i file trattenuti | Il diario ha un formato stretto (un campo nuovo vorrebbe una versione); la crescita per processo basta a non fare un giro al minuto. L320 |
+| A-5 | **CE-4**: gli album non montati valgono "non sciolti" (il tentativo fallisce) | Non si sa se ce ne sono; `SKIPPED` lo dice la verita' invece di "fatto". L'attesa del montaggio non puo' tenere ferma la cancellazione dei volti (L321) |
+| A-6 | **CE-3**: il segno nasce solo dove c'erano dati tolti per `ACCOUNT_OFF` senza il segno `erasing`; la riga e' nelle Raccolte, non ancora in Impostazioni → Persone | Un dispositivo che non aveva mai visto Persone non ha niente da spiegare; Impostazioni ha una macchina a stati propria (`PeopleSwitchShown`) e una riga in piu' li' vuole un'altra decisione grafica. L322 |
+| A-7 | **R11**: `ArchivePeople.release` senza lucchetto, `GroupFaceCache` con un segno `closed` invece di un lucchetto in `clear` | `clear()` non e' sospensiva e la cancellazione lo chiama sotto il recinto: un lucchetto che una lettura tiene mentre aspetta il recinto sarebbe uno stallo |
+| A-8 | **I1** si chiude con l'ordine, non con la lettura del diario nel costruttore del recinto | L'ordine e' provato dal test sui sorgenti come gli altri ordini del montaggio; il recinto in piu' leggerebbe il diario due volte |
+| A-9 | `FacesStores.eraseAllExcept` resta com'e' (senza chiamanti) | Le strade dell'interruttore passano da `FacesLocalErase` (cronologia prima, chiave per prima, recinto) come chiedeva la revisione |
+
+### Modifiche fuori dal perimetro stretto
+- `core-common` (`InstantShapes.remove`), `feature-people` (`PEOPLE_INSTANT_SHAPE_CODE` pubblico, stati e stringhe del foglio e della sezione), `core-faces` (contratti: `EraseWait.FILE_OPEN`, `FacesLocal.offElsewhere`, `FacesSwitch.offElsewhere`, `SmartAlbumsPeople` documentato), `:app` (`FacesWiring`, `FacesGraph`, `FacesFacades`, `FacesScreenPorts`, `FacesModule`, `FacesPeoplePorts`, `PeopleNavigation`).
+- Le prove esistenti cambiate perche' il comportamento e' cambiato: il banco (`EraseDevice`, `ChaosDevice`) lega `generationsOnDisk`; `FacesEraseControllerTest` (`NothingToErase` non e' piu' `Done`; `Done` richiede dispositivi confermati), `PeopleSamples` e `PeopleSamplesTest` (due stati di foglio e uno di sezione in piu'), `PeopleSectionBindingTest`, `FacesIntegrationTest` (la fine solo dai giri dell'indice), `RecordingEraser` (elenca i dati che "esistono").
+
+### Verifica
+
+- **Rosso senza la correzione, verde con** (controllo di mutazione fatto sul ramo gia' committato, togliendo le correzioni una per una e poi ripristinando i file con `git checkout`): 
+  - `core-faces`: 16 prove su 24 diventano rosse (`SwitchDiskGenerationsTest`: 10 su 13, tutte le `r1_` che toccano il disco e le `ce3_` che accendono il segno; `EraseCorrectionsATest.r1_*` e `r13_*`; `RealStoreEraseTest.i6_*`; `PeopleReleaseTest` 2 su 2; `GroupCacheRetireTest`); le altre restano verdi perche' provano le garanzie (nessuna prova nessuna cancellazione, chi ha cancellato non porta la riga, "il tempo finito non e' un file aperto");
+  - `feature-people`: 7 prove su 31 (`ce1_*`, `r12_*`, gli esiti di `ogniEsitoHaLaSuaPagina` e dell'anteprima vuota, `ce3_*` della sezione);
+  - `:app`: 8 prove su 19 (`FacesCorrectionsATest` `r13_*` e `ce4_*`; `FacesFenceSourcesTest` `i1_*`, `r11_*`, `ce2_*`, `ce5_*`; `FacesIntegrationTest.disattivaECancellaConUnDispositivoSpentoCheTorna`, che senza CE-2 non arriva piu' alla fine con i soli giri dell'indice).
+- **Garanzie che restano verdi**: il banco delle interruzioni dei volti e di "Disattiva e cancella" (P12: `core-faces` intero, 632 prove, con `EraseDevice` e `ChaosDevice` che legano l'elencazione come `:app`), `EraseInvariantsPropertyTest`, `EraseResumeTest`, `EraseScenariosTest`, `FacesFenceSourcesTest` (recinto prima di ogni apertura, un solo `FacesStores`, chiavi distrutte solo da chi ha il compito), `FacesSupportTest` (C131), i test di fiducia e ostili di `core-trust`, `HiddenSurfacesRegistryTest` e `HiddenSurfacesPropertyTest`, i test d'architettura delle Fasi 6-9, `NoFixedWaitsTest` (le prove nuove non hanno attese scritte a mano) e le recinzioni D12, D30, D34 e F4-D31 nel bytecode della release.
+- **`tools\check.ps1 -NoDaemon` verde al primo giro** (30/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, posto `f8ca` preso e rilasciato attorno a ogni comando Gradle): "OK: tutto a posto"; il passo Gradle (`assembleDebug assembleRelease galleryTest galleryLint`) in 59 minuti; test per modulo `app` 1096, `core-faces` 632, `feature-people` 626, `core-trust` 302, `core-common` 157, `core-albums` 844, `feature-library` 965 (e gli altri moduli, nessuno a zero, nessuno fallito); passo D34 (`AppFacesWriteGate` nel bytecode della release), LiteRT solo in `core-ai`, modelli dei volti con le impronte; solo `-Bench` saltato (senza il flag).
+- Nessun Gradle fuori dal posto, nessun processo fermato, nessun demone (`--no-daemon`).
+
+### Punti aperti
+1. **Impostazioni → Persone** dice ancora il testo di sempre da spenta: la riga "disattivata da un altro tuo dispositivo" (CE-3) c'e' nelle Raccolte, dove la revisione la chiedeva e dove sta il tasto "Attiva riconoscimento dei volti". Una riga anche li' vuole un valore nuovo di `PeopleSwitchShown` e la scelta grafica del filone grafico (L322).
+2. **La Diagnostica non conta i file trattenuti** (R13): oggi c'e' il motivo dichiarato nella pagina e le attese crescenti; un codice di Diagnostica per "file aperto sul NAS" aspetta il pacchetto che tocca il catalogo (L320). Le attese crescenti valgono per processo.
+3. **La pagina non dice quale album smart non si e' sciolto** (L190, L321): ora il passo e' "saltato" davvero, ma `EraseStatus` non porta il campo.
+4. **R2** (nomi vecchi, rinominati o non latini nella cronologia) era nella proposta del pacchetto A ma non nell'incarico: aspetta la decisione dell'utente e va con la normalizzazione Unicode di R9 (pacchetto C). `FacesStores.eraseAllExcept` resta senza chiamanti (A-9).
+5. Niente e' stato provato su un dispositivo.
+
+### Da provare sul telefono (S25 e Tab S9, account e share di prova `test`, `test2`, `test-comune`; nessuna fatta)
+- **R1 (F100, F101)**: sul tablet, Persone attiva e calcolo fatto; togliere `faces-local` (debug, `run-as`) lasciando `faces/`; dal telefono "Disattiva e cancella": il tablet non deve pubblicare la testa personale con `off` finche' `faces-<G>.db` c'e' (Diagnostica: `FACES_ERASE_PENDING`), e alla fine non deve restare niente in `noBackupFilesDir/faces*`. Lo stesso con "Non su questo dispositivo" e con una nuova attivazione.
+- **R11**: dopo "Disattiva e cancella", senza chiudere l'app, un dump della memoria (debug) non deve contenere i nomi; la pagina Persone non deve mostrare lo scheletro di prima (riaprire l'app a freddo: nessuno scheletro).
+- **R12**: sulle share vere (D34 accesa) "Disattiva e cancella" deve finire con «Cancellati da questo dispositivo»; da Persone non attiva il foglio dice «Niente da cancellare qui».
+- **R13 (F102)**: tenere aperto dal PC un segmento della generazione che si cancella: la pagina deve dire perche' aspetta (file aperto sul NAS) e il lavoro non deve ripartire ogni minuto (2, 4, 8... minuti); chiuso il file, la cancellazione finisce da sola.
+- **CE-1**: cancellare, riattivare, aprire di nuovo "Disattiva e cancella": il foglio mostra l'anteprima con il tasto, e la seconda cancellazione toglie i dati della generazione nuova.
+- **CE-2 (F136)**: cancellare con il tablet spento; riaccendere il tablet: la pagina del telefono passa a «Fatto ovunque» al giro dell'indice, senza riavviare l'app.
+- **CE-3**: dopo una cancellazione fatta dal telefono, sul tablet (che aveva dati) Raccolte → Persone mostra sopra «Attiva riconoscimento dei volti» la riga «Persone e' stata disattivata da un altro tuo dispositivo»; dopo "Attiva" la riga sparisce; sul telefono che ha cancellato non c'e'.
+- **CE-4 (F143)**: un album smart con persone e "Tieni le foto di adesso": l'album resta con le foto e senza la regola; con gli album non ancora montati (riavvio a meta' cancellazione) il passo risulta "saltato".
+- **CE-5**: con un dispositivo dismesso che tiene ferma la fine, il tasto «Apri Dispositivi» del foglio porta a Impostazioni → Dispositivi.
+- **I1**: avviare l'app con un diario a meta' (uccidere il processo durante la parte locale) e aprire subito Persone: nessun archivio si apre, la cancellazione riprende.

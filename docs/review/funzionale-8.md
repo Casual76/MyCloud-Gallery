@@ -1,6 +1,6 @@
 # Verifica funzionale: Fase 8, Persone (commit `e9086269`, 30/10/2026)
 
-**Stato (30/10).** Le 26 voci sono nuove: nessuna e' ancora corretta nel codice. Ne risultano 1 che blocca, 9 sbagliate e 16 minori; 18 sono confermate nel
+**Stato (30/10, dopo il pacchetto A).** Il pacchetto A (`fase8/corr-a`, "cancellazione e stato locale") ha corretto nel codice **CE-1, CE-2, CE-3, CE-4 e CE-5** (ognuna con un test: §7, "Stato dopo il pacchetto A"); le altre 21 voci restano aperte per i pacchetti B, C, D ed E. Alla stesura le 26 voci erano nuove: nessuna era corretta nel codice. Ne risultano 1 che blocca, 9 sbagliate e 16 minori; 18 sono confermate nel
 codice e 8 plausibili (serve il telefono o un test, descritto nella voce). La verifica dei fake (§3) ha trovato dieci divergenze, quattro delle quali
 nascondono voci di questo documento (CE-1 e CE-2, AT-1, CA-3 e CA-4, RI-1). I flussi del §4 sono da provare sul telefono (F131-F146), insieme a quelli di P13 non ancora fatti (F94-F110, con le
 correzioni del §4).
@@ -578,6 +578,19 @@ Nessuna voce e' corretta. Il pacchetto e' la proposta; ogni correzione porta un 
 | DG-1 `FACES_NO_INDEXER` a torto | Minore | plausibile | E |
 | DG-2 Azioni della Diagnostica | Minore | confermato | E |
 | DR-2 Ricevitore del banco F103 | Minore | confermato | E |
+
+### Stato dopo il pacchetto A (30/10)
+
+**Corretta**: la correzione e i suoi test. **Aperta**: il pacchetto che la chiude. Le sigle C e L sono in `docs/sicurezza.md`.
+
+| Voce | Stato | Prove, limiti |
+|---|---|---|
+| CE-1 | Corretta (A) | `FacesEraseController.load` segue solo una cancellazione non finita: con un diario `DONE` (30 giorni) il foglio rifa' l'anteprima e, dopo una riattivazione, offre di nuovo il tasto (C214: `FacesEraseControllerTest.ce1_*`). Il `housekeeping` a `DONE` scaduto gira da `syncRound` (CE-2) |
+| CE-2 | Corretta (A) | `FacesGraph.syncRound` riprende il diario in qualunque stato, dopo la pulizia del NAS (C214: `FacesIntegrationTest.disattivaECancellaConUnDispositivoSpentoCheTorna`, che ora finisce solo dai giri dell'indice; `FacesFenceSourcesTest.ce2_*`) |
+| CE-3 | Corretta (A) | **Risposta dell'utente del 30/10: si', una riga.** Sopra «Attiva riconoscimento dei volti» la sezione delle Raccolte dice «Persone e' stata disattivata da un altro tuo dispositivo» (C218: `SwitchDiskGenerationsTest.ce3_*`, `FileFacesLocalStoreTest.ce3_*`, `PeopleSectionStatesTest.ce3_*`, `PeopleSectionsTest.ce3_*`). La riga non c'e' ancora in Impostazioni → Persone (L322) |
+| CE-4 | Corretta (A) | `AppSmartAlbumsPeople.release` lancia se un album non si scioglie o gli album non sono montati: il passo si segna «saltato», non «fatto» (C215: `FacesCorrectionsATest.ce4_*`). L321, L190 |
+| CE-5 | Corretta (A) | `onOpenDevices = { nav.navigate(SettingsDevicesRoute) }` (C214: `FacesFenceSourcesTest.ce5_*`) |
+| Le altre | Aperte | AT, DR: pacchetto B; CA: pacchetto C; RI, GE, SM, NV: pacchetto D; RG, DG: pacchetto E |
 
 **Pacchetti di correzione proposti** (modello consigliato per ognuno: sonnet; nessuna parte e' di fondazione):
 - **A, la cancellazione** (CE-1, CE-2, CE-4, CE-5; CE-3 dopo la decisione): `FacesEraseController.load` e `housekeeping` a `DONE` scaduto, `FacesGraph.syncRound` che riprende il diario, `AppSmartAlbumsPeople.release` con il conteggio dei

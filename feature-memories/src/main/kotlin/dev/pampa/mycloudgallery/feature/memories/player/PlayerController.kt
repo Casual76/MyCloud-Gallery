@@ -274,13 +274,19 @@ class PlayerController(
   fun tap() {
     if (!loaded || ended) return
     if (talkBack) return
+    // In pausa (per un'altra app che ha preso l'audio, o per l'utente) il tocco riprende, anche durante il titolo.
+    if (isPaused()) {
+      introActive = false
+      resume()
+      return
+    }
     if (introActive) {
       introActive = false
       restartTimer()
       publish()
       return
     }
-    if (isPaused()) resume() else pause()
+    pause()
   }
 
   fun pause() {

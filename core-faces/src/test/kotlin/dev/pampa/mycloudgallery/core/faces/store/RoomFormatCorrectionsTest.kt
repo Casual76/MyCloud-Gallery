@@ -4,6 +4,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.database.faces.FacesDatabases
+import dev.pampa.mycloudgallery.core.faces.contract.GroupingOverCapException
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleEdit
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleKey
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleRecord
@@ -122,8 +123,9 @@ class ArchiveFormatCorrectionsTest {
     assertThat(archive.groupFaces()).hasSize(2)
     archive.saveBody(FaceFixtures.body(FaceFixtures.key(2), FaceFixtures.AUTHOR_SMALL, faces = listOf(FaceFixtures.entry(0, FaceTier.CORE))))
     // La cache c'era (2 volti): il terzo la fa crescere oltre il tetto e la lettura si ferma; anche quella dopo, prima di leggere i corpi.
-    assertThrows(IllegalStateException::class.java) { runBlocking { archive.groupFaces() } }
+    // L343 (correzioni E): il tipo e' quello del tetto, cosi' il custode lo riconosce e lo conta (e' ancora una `IllegalStateException`).
+    assertThrows(GroupingOverCapException::class.java) { runBlocking { archive.groupFaces() } }
     assertThat(archive.cachedVectors).isFalse()
-    assertThrows(IllegalStateException::class.java) { runBlocking { archive.groupFaces() } }
+    assertThrows(GroupingOverCapException::class.java) { runBlocking { archive.groupFaces() } }
   }
 }

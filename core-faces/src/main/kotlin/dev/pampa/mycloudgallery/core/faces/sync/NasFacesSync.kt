@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.FacesPublishOutcome
 import dev.pampa.mycloudgallery.core.faces.contract.FacesPublisher
 import dev.pampa.mycloudgallery.core.faces.contract.FacesRead
 import dev.pampa.mycloudgallery.core.faces.contract.FacesRemote
+import dev.pampa.mycloudgallery.core.faces.contract.FacesSegmentCodes
 import dev.pampa.mycloudgallery.core.faces.contract.FacesState
 import dev.pampa.mycloudgallery.core.faces.contract.FacesSwitch
 import dev.pampa.mycloudgallery.core.faces.contract.FacesSync
@@ -583,17 +584,17 @@ class NasFacesSync(
   }
 
   private companion object {
-    const val CODE_MISSING = "MISSING"
+    const val CODE_MISSING = FacesSegmentCodes.MISSING
 
     /** R5: un file (testa o segmento) che il NAS non da' mentre risponde a un elenco: aspetta. */
-    const val CODE_UNREADABLE = "UNREADABLE"
+    const val CODE_UNREADABLE = FacesSegmentCodes.UNREADABLE
 
     /** R6: i corpi di un autore oltre i suoi tetti (segmento rifiutato) o l'archivio pieno (segmento rimandato). */
-    const val CODE_AUTHOR_FULL = "AUTHOR_FULL"
-    const val CODE_ARCHIVE_FULL = "ARCHIVE_FULL"
+    const val CODE_AUTHOR_FULL = FacesSegmentCodes.AUTHOR_FULL
+    const val CODE_ARCHIVE_FULL = FacesSegmentCodes.ARCHIVE_FULL
 
     /** R3: voci `people` che non entrano nell'archivio per i tetti (in tutto o per provenienza). */
-    const val CODE_PEOPLE_FULL = "PEOPLE_FULL"
+    const val CODE_PEOPLE_FULL = FacesSegmentCodes.PEOPLE_FULL
     const val CODE_SNAPSHOT_INCOMPLETE = "SNAPSHOT_INCOMPLETE"
     const val CODE_SNAPSHOT_PREFIX = "SNAPSHOT_"
   }

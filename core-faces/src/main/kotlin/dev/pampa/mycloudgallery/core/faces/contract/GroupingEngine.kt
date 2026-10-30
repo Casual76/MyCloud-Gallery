@@ -52,6 +52,13 @@ data class GroupingReport(
   }
 }
 
+/**
+ * R6, L343: il raggruppamento non si fa perche' i volti con vettore della generazione superano il tetto duro (`FacesArchiveLimits.MAX_GROUP_FACES`). E' una
+ * `IllegalStateException` come un archivio chiuso (chi non la conosce salta il giro), ma il custode la riconosce e la conta (`FACES_GROUPING_SKIPPED`):
+ * un account cosi' grande non si raggruppa, e ora la Diagnostica lo dice. Niente numeri di volti nel messaggio.
+ */
+class GroupingOverCapException : IllegalStateException("Troppi volti per il raggruppamento.")
+
 /** L'uscita di un passo: lo stato nuovo (`seq` + 1 se e' cambiato qualcosa), le proposte e i numeri. */
 data class GroupingOutcome(val state: GroupingState, val suggestions: List<MergeSuggestion>, val report: GroupingReport)
 

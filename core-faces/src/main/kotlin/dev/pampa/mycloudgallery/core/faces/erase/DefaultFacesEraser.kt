@@ -91,6 +91,9 @@ class DefaultFacesEraser(
   private var acks: List<DeviceAck> = emptyList()
   private var wait: EraseWait? = null
 
+  /** L320: i file che il NAS tiene mentre l'attesa e' [EraseWait.FILE_OPEN] (0 altrimenti). */
+  private var held: Int = 0
+
   init {
     when (val read = parts.journal.load()) {
       EraseJournalRead.Absent -> Unit
@@ -282,8 +285,9 @@ class DefaultFacesEraser(
 
   internal fun current(): EraseJournal? = journal
 
-  internal fun setWait(reason: EraseWait?) {
+  internal fun setWait(reason: EraseWait?, heldFiles: Int = 0) {
     wait = reason
+    held = if (reason == EraseWait.FILE_OPEN) heldFiles else 0
   }
 
   internal fun setAcks(list: List<DeviceAck>) {
@@ -356,7 +360,7 @@ class DefaultFacesEraser(
       else -> wait ?: if (j.recycleBin) EraseWait.RECYCLE_BIN else null
     }
     val devices = if (j.localOnly) emptyList() else acks
-    state.value = EraseStatus(j.generation, j.step, local, nas, devices, waiting)
+    state.value = EraseStatus(j.generation, j.step, local, nas, devices, waiting, heldFiles = if (waiting == EraseWait.FILE_OPEN) held else 0)
   }
 
   internal fun publishStatus() = publish()

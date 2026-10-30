@@ -12358,3 +12358,9 @@ dei doppioni, calibrata), E-H8 (un nascosto perfetto non esce mai, né in un ric
 - **I commenti con "3 minuti"** negli altri file di P0/P7 e `docs/fase9-progetto.md` (D7, §2.2) non sono stati aggiornati (modifica minima della sola costante).
 - Niente screenshot: lo strumento è solo debug e non è una superficie dell'utente.
 - Nessuna prova sul telefono e nessun Gradle fuori dal posto (`ocp11`); nessun sotto-agente.
+
+### Esito di `tools/check.ps1 -NoDaemon`
+
+**Verde** («OK: tutto a posto», 30/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, dentro il posto Gradle `ocp11`, preso prima e rilasciato dopo): il passo Gradle (`assembleDebug assembleRelease galleryTest galleryLint`) in 1.016 secondi, test in ogni
+modulo senza zeri e senza rossi (`core-memories` 416 prove, di cui 59 nuove di P11; `app` 1.176, di cui 22 nuove; `core-common` 157: i test d'architettura delle Fasi 6-9 verdi); il passo del dex di release (con i nomi `debugtools/eval/memories`, `MemoriesEval*`, `ricordi.mcgmem`, `MCGMEM01`) verde **senza modifiche a `check.ps1`**;
+solo `-Bench` saltato (senza il flag). `NoPrivateMemoriesEvalInGitTest` e il passo delle etichette private (P9) verdi sui file tracciati.

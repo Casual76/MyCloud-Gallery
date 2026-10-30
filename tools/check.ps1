@@ -80,8 +80,12 @@
                                 OkHttp (`okhttp3`) parte da OkHttp stesso, da Okio, da MapLibre (`org.maplibre`, `com.mapbox`) o da
                                 `feature/map/net/` (`MapTileHttp`, l'unico codice di rete della mappa); ogni chiamata di codice nostro (e
                                 dell'engine) a MapLibre parte da `feature/map/`. Il passo 7e ammette i client HTTPS anche da `feature/map/net/`
-                                (la seconda eccezione dichiarata, D23). Il controllo positivo (almeno una chiamata da `feature/map/net/`) lo
-                                aggiunge P1 quando MapLibre entra nell'APK. FALLISCE se non legge l'APK
+                                (la seconda eccezione dichiarata, D23). P1: `HttpRequestUtil.setOkHttpClient` solo da
+                                `feature/map/net/MapTileHttp`, `MapLibre.getInstance` solo da `feature/map/map/MapLibreInit`; quando
+                                `:app` dipende da `:feature-map` (P13) il controllo positivo: almeno una chiamata a OkHttp da
+                                `feature/map/net/`, il client installato in MapLibre, MapLibre inizializzato, `libmaplibre.so` nell'APK
+                                (anche nel passo 7e, con i 16 KB). Le classi di OkHttp, MapLibre e `net/` non si fondono con altre
+                                (feature-map/consumer-rules.pro): senza, R8 le mescola e il passo non prova niente. FALLISCE se non legge l'APK
     7g. modelli dei volti       (Fase 8, P1; docs/fase8-progetto.md D39, §6.4) nell'APK di release `assets/faces/` ha YuNet e SFace con la
                                 dimensione e lo SHA-256 di `ModelCatalog.FACE_YUNET` e `FACE_SFACE` (letti dal sorgente), le due licenze
                                 (MIT, Apache-2.0) e il NOTICE che nomina le impronte, nessun altro modello nella cartella e nessun file
@@ -1320,6 +1324,17 @@ function Get-PolicyList([string]$name) {
   return $values
 }
 
+# Fase 9 (P1): vero se `:app` dipende da `:feature-map` (lo collega P13). Da li' in poi MapLibre e il client delle tessere sono nell'APK e i
+# passi 7e e 7h pretendono di vederli (controllo positivo). Si legge il codice di app\build.gradle senza i commenti `//`.
+function Test-AppUsesFeatureMap {
+  $gradle = Read-TextFile (Join-Path $root "app\build.gradle")
+  foreach ($line in ($gradle -split '\r?\n')) {
+    $code = ($line -replace '//.*$', '')
+    if ($code -match "project\(\s*['""]:feature-map['""]\s*\)") { return $true }
+  }
+  return $false
+}
+
 $script:apkInspectLoaded = $false
 function Initialize-ApkInspect {
   if ($script:apkInspectLoaded) { return }
@@ -1489,7 +1504,10 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
   # (1) Le librerie native.
   $libs = @([ApkInspect]::NativeLibs($apk.FullName))
   if ($libs.Count -eq 0) { return "nessuna libreria nativa nell'APK di release: la lettura non e' affidabile (LiteRT-LM, LiteRT e ML Kit ne portano)" }
-  foreach ($expected in @("liblitertlm_jni.so", "libLiteRt.so", "liblitert_jni.so", "libmlkit_google_ocr_pipeline.so")) {
+  $expectedLibs = @("liblitertlm_jni.so", "libLiteRt.so", "liblitert_jni.so", "libmlkit_google_ocr_pipeline.so")
+  # Fase 9 (P1, D21): con `:feature-map` nell'app (P13) c'e' anche MapLibre, e i 16 KB qui sotto valgono anche per lui.
+  if (Test-AppUsesFeatureMap) { $expectedLibs += "libmaplibre.so" }
+  foreach ($expected in $expectedLibs) {
     # P11 (modifica a D3): la release porta solo arm64-v8a; x86_64 resta nella debug per gli emulatori.
     if (-not ($libs | Where-Object { $_.Name -eq "lib/arm64-v8a/$expected" })) { $problems += "manca lib/arm64-v8a/$expected" }
   }
@@ -1699,8 +1717,13 @@ Step "LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/f
 #  - ogni chiamata a OkHttp (`Lokhttp3/`, anche solo come tipo nella firma) parte da OkHttp, da Okio, da MapLibre o da `feature/map/net/`
 #    (`MapTileHttp`): nessun altro codice, nostro, dell'engine o di un'altra libreria, parla con OkHttp;
 #  - ogni chiamata di codice nostro (e dell'engine) a MapLibre (`Lorg/maplibre/`, `Lcom/mapbox/`) parte da `feature/map/`.
-# Oggi MapLibre e OkHttp non sono nell'APK (le dipendenze le aggiunge P1, con l'approvazione Q8): il passo conta zero e passa; P1 aggiunge il
-# controllo positivo (almeno una chiamata da `feature/map/net/`). Senza dexdump o senza vedere la MainActivity il passo FALLISCE (non salta).
+# P1 (docs/decisioni.md "Fase 9 P1"): in piu' il client si installa in MapLibre (`HttpRequestUtil.setOkHttpClient`) solo da
+# `feature/map/net/MapTileHttp`, e MapLibre si inizializza (`MapLibre.getInstance`) da codice nostro solo da `feature/map/map/MapLibreInit`.
+# Le dipendenze sono in `:feature-map` da P1, ma nell'APK entrano quando `:app` dipende da `:feature-map` (P13): da quel momento il passo
+# pretende di vederle (controllo positivo: almeno una chiamata a OkHttp da `net/`, il client installato, MapLibre inizializzato,
+# `libmaplibre.so` nell'APK); prima conta zero e lo dice. feature-map/consumer-rules.pro tiene OkHttp, MapLibre e `net/` fuori dalle fusioni di
+# classi di R8 (provato il 30/10: senza, metodi dell'app e di Compose finiscono in classi di OkHttp e il passo segnalerebbe mezza app).
+# Senza dexdump o senza vedere la MainActivity il passo FALLISCE (non salta).
 Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -1713,6 +1736,12 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
   $okhttpCallers = @("Lokhttp3/", "Lokio/", "Lorg/maplibre/", "Lcom/mapbox/", "Ldev/pampa/mycloudgallery/feature/map/net/")
   $ownPrefixes = @("Ldev/pampa/", "Ldev/antigravity/fluidengine/")
   $mapPrefix = "Ldev/pampa/mycloudgallery/feature/map/"
+  $netPrefix = "Ldev/pampa/mycloudgallery/feature/map/net/"
+  $setClient = "Lorg/maplibre/android/module/http/HttpRequestUtil;.setOkHttpClient:"
+  $getInstance = "Lorg/maplibre/android/MapLibre;.getInstance:"
+  $installer = "Ldev/pampa/mycloudgallery/feature/map/net/MapTileHttp"
+  $initializer = "Ldev/pampa/mycloudgallery/feature/map/map/MapLibreInit"
+  $mapInApp = Test-AppUsesFeatureMap
   $facts = New-Object DexCallFacts
   Add-Type -AssemblyName System.IO.Compression.FileSystem
   $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("mcg-dex9-" + [guid]::NewGuid().ToString("N"))
@@ -1722,8 +1751,9 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
     foreach ($entry in @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })) {
       $target = Join-Path $temp $entry.FullName
       [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
-      [DexCallScanner]::Scan($dexdump, $target, [string[]](@($okhttp) + $mapLibre), $facts)
+      [DexCallScanner]::Scan($dexdump, $target, [string[]](@($okhttp, $setClient, $getInstance) + $mapLibre), $facts)
     }
+    $hasMapLibreLib = @($zip.Entries | Where-Object { $_.FullName -eq "lib/arm64-v8a/libmaplibre.so" }).Count -gt 0
   } finally {
     $zip.Dispose()
     Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
@@ -1732,10 +1762,26 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
   $problems = @()
   $okCount = 0
   $mapCount = 0
+  $okFromNet = 0
+  $installs = 0
+  $inits = 0
   foreach ($call in $facts.Calls) {
     $parts = $call -split '\|', 2
     $caller = $parts[1]
+    $ours = @($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -gt 0
+    if ($parts[0] -eq $setClient) {
+      # Il client delle tessere in MapLibre: solo il nostro, solo da MapTileHttp (nessun altro codice cambia il client di MapLibre).
+      if ($caller.StartsWith("$installer;") -or $caller.StartsWith("$installer`$")) { $installs++ }
+      elseif (-not $caller.StartsWith("Lorg/maplibre/")) { $problems += "client di MapLibre installato fuori da feature/map/net/MapTileHttp: $caller" }
+      continue
+    }
+    if ($parts[0] -eq $getInstance) {
+      if ($caller.StartsWith("$initializer;") -or $caller.StartsWith("$initializer`$")) { $inits++ }
+      elseif ($ours) { $problems += "MapLibre inizializzato fuori da feature/map/map/MapLibreInit: $caller" }
+      continue
+    }
     if ($parts[0] -eq $okhttp) {
+      if ($caller.StartsWith($netPrefix)) { $okFromNet++ }
       $okCount++
       if (@($okhttpCallers | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { $problems += "OkHttp chiamato fuori da feature/map/net/ e da MapLibre: $caller" }
     } elseif (@($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -gt 0) {
@@ -1743,7 +1789,15 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
       if (-not $caller.StartsWith($mapPrefix)) { $problems += "MapLibre chiamato da codice nostro fuori da feature/map/: $caller ($($parts[0]))" }
     }
   }
-  Write-Host ("        bytecode: {0} chiamate a OkHttp, {1} chiamate nostre a MapLibre, tutte al loro posto ({2} righe di dexdump)" -f $okCount, $mapCount, $facts.Lines) -ForegroundColor DarkGray
+  if ($mapInApp) {
+    # P13 ha collegato la mappa: il client delle tessere, MapLibre e la sua libreria nativa DEVONO esserci (un passo che non vede niente non prova niente).
+    if ($okFromNet -eq 0) { $problems += "nessuna chiamata a OkHttp da feature/map/net/ nel dex: il client delle tessere non e' nell'APK (o la lettura non e' affidabile)" }
+    if ($installs -eq 0) { $problems += "nessuna chiamata a HttpRequestUtil.setOkHttpClient da MapTileHttp: MapLibre userebbe il suo client" }
+    if ($inits -eq 0) { $problems += "nessuna chiamata a MapLibre.getInstance da MapLibreInit nel dex" }
+    if (-not $hasMapLibreLib) { $problems += "lib/arm64-v8a/libmaplibre.so non e' nell'APK di release" }
+  }
+  $state = if ($mapInApp) { "mappa nell'app" } else { "mappa non ancora nell'app (P13)" }
+  Write-Host ("        bytecode ({0}): {1} chiamate a OkHttp ({2} da net/), {3} chiamate nostre a MapLibre, client installato {4}, MapLibre inizializzato {5}; libmaplibre.so: {6} ({7} righe di dexdump)" -f $state, $okCount, $okFromNet, $mapCount, $installs, $inits, $hasMapLibreLib, $facts.Lines) -ForegroundColor DarkGray
   if ($problems.Count -gt 0) { return ($problems | Select-Object -First 20) -join "; " }
 }
 

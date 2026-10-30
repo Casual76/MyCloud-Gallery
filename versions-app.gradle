@@ -19,6 +19,9 @@
 //         tolto dal manifest fuso, `MlKit.initialize` solo nel cancello di core-ai/.../ocr/.
 //     L'unico codice HTTPS dell'app resta NOSTRO (`HttpsURLConnection` della piattaforma, nessuna libreria), in
 //     core-models/.../download/https/ (D33): solo per scaricare i modelli fissati nell'app.
+//     Fase 9 (D21, D23, approvate in Q8), tutte SOLO in :feature-map: MapLibre Native Android e OkHttp (la seconda eccezione di rete
+//     dichiarata): il client delle tessere con il cancello sta in feature-map/.../net/ e solo li' si nomina OkHttp; un solo host
+//     (tiles.openfreemap.org), nessuna richiesta a mappa spenta. MapLibre non ha telemetria (verifiche di P1 in docs/decisioni.md).
 //
 // Questo file si applica DOPO engine/versions.gradle (usa la mappa `engine`).
 
@@ -121,6 +124,18 @@ ext.appVersions = [
   // Runtime LiteRT (ex TensorFlow Lite) per il ritaglio del soggetto con MagicTouch (D44), Apache 2.0, nativo. NON MediaPipe Tasks
   // (statistiche d'uso annunciate senza modo di spegnerle). Convive con litertlm-android nello stesso processo (test strumentato di P0).
   litert                 : '2.3.0',
+
+  // --- Fase 9 (P1, docs/fase9-progetto.md D21, D23, §2.7, §8; righe in docs/sicurezza.md §8) -------------------------------------
+  // SOLO :feature-map (Phase9ArchitectureTest: MapLibre e OkHttp in nessun altro build.gradle). Approvate dall'utente il 27/10 (Q8).
+  // MapLibre Native Android, BSD-2-Clause, nativo (`libmaplibre.so`, arm64-v8a e x86_64 allineate a 16 KB). 13.7.1 (15/10/2026) e'
+  // l'ultima stabile (le `-pre*` e `-globe` scartate). L'artefatto `android-sdk-opengl` (OpenGL ES) e non `android-sdk`, che dalla
+  // serie 12 e' il motore Vulkan: piu' leggero (15,9 MB contro 18,7 MB di AAR), lo stesso codice Java e la stessa API, e il disegno
+  // gira anche sugli emulatori dei test strumentati (decisione in docs/decisioni.md, "Fase 9 P1"). Porta a runtime OkHttp 4.12.0,
+  // Okio, Timber 5.0.1 (nessun albero piantato: non scrive niente), le librerie geojson, turf e gesti di MapLibre, fragment 1.8.9.
+  maplibre               : '13.7.1',
+  // OkHttp: la STESSA versione che MapLibre chiede a runtime, dichiarata perche' `feature-map/.../net/` (il solo codice che la nomina)
+  // la vede a compilazione: il client con il cancello che MapLibre usa (`HttpRequestUtil.setOkHttpClient`). Nessuna versione in piu'.
+  okhttp                 : '4.12.0',
 ]
 
 ext.appSdk = [
@@ -193,6 +208,10 @@ ext.appDeps = [
   litertlmAndroid          : "com.google.ai.edge.litertlm:litertlm-android:${appVersions.litertlm}",
   mlkitTextRecognition     : "com.google.mlkit:text-recognition:${appVersions.mlkitTextRecognition}",
   litert                   : "com.google.ai.edge.litert:litert:${appVersions.litert}",
+
+  // --- Fase 9: la mappa (SOLO :feature-map, Phase9ArchitectureTest; OkHttp nominato solo da feature-map/.../net/) ------------------
+  maplibreAndroid          : "org.maplibre.gl:android-sdk-opengl:${appVersions.maplibre}",
+  okhttp                   : "com.squareup.okhttp3:okhttp:${appVersions.okhttp}",
 
   // --- Test ---------------------------------------------------------------------------------------
   junit                    : "junit:junit:${engine.junit}",

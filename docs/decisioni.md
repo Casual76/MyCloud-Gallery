@@ -10731,3 +10731,112 @@ resta e oggi passa. Album e Persone nel banco si saltano finche' la variante di 
 - **Corsa fatta il 28/10 sera** (orchestratore, `127631ac`): l'avvio e' dentro le soglie (primo disegno utile p90 654 ms dopo un
   aggiornamento e 271 ms nell'avvio abituale; caricamento completo p90 663 e 278 ms), il pizzico no (punto aperto 4). Riferimenti **non**
   accettati finche' il pizzico non torna sotto la guardia.
+
+## Fase 9 P1: libreria delle mappe e cancello di rete (30/10)
+
+Il pacchetto P1 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P1; §2.7, §2.8, D21-D24; risposte Q1 (c) e Q8 (a) del 27/10). Branch
+`fase9/p1`. Consegna MapLibre e i suoi transitivi con le impronte, il cancello puro `TilePolicy` (`core-map/.../policy/`), il client delle
+tessere (`feature-map/.../net/`), l'inizializzazione pigra di MapLibre (`feature-map/.../map/MapLibreInit.kt`), il filtro del manifest fuso e i
+controlli del dex e dei 16 KB in `tools/check.ps1`. `:app` **non** dipende ancora da `:feature-map` (lo collega P13): peso, manifest e dex sono
+stati misurati collegandolo in locale, senza committarlo. Niente prova in `spike/maplibre/`: le verifiche sono state fatte sul modulo vero (test
+strumentati di `feature-map`) e sull'APK di release vero, che provano di piu' di un'app a parte.
+
+**Versione scelta.** `org.maplibre.gl:android-sdk-opengl:13.7.1` (15/10/2026, l'ultima stabile su Maven Central; scartate le `-pre*`, la
+`13.7.0-pre-globe.0` e la `2026.10.19-globe`), AAR 15.866.238 B, SHA-256 `4a6762e8...a8a072` in `gradle/verification-metadata.xml`. Dalla
+serie 12 l'artefatto `android-sdk` e' il motore **Vulkan** (18.707.096 B); si prende quello **OpenGL ES**: stessa API e stesso codice Java,
+2,8 MB in meno di AAR, e disegna anche sugli emulatori dei test strumentati (GPU software). Si puo' cambiare con una riga
+(`appDeps.maplibreAndroid`) dopo una misura sull'S25. Transitivi nuovi (licenze dai POM): OkHttp 4.12.0 e Okio 3.6.0 (Apache-2.0), Timber 5.0.1
+(Apache-2.0; MapLibre pianta zero alberi, quindi non scrive niente), `android-sdk-geojson` e `android-sdk-turf` 6.0.1 (Apache-2.0),
+`maplibre-android-gestures` 0.0.4 (BSD), `androidx.fragment` 1.8.9 (nel grafo dell'app sale da 1.5.x quando P13 collega la mappa), le
+`kotlin-stdlib-jdk7/jdk8` 1.8.21 e 1.9.10 di OkHttp; gson 2.10.1 c'era gia'. OkHttp e' dichiarato alla stessa versione perche' `net/` lo vede a
+compilazione. I metadati di verifica coprono anche la risoluzione di `:app` con `:feature-map` (provata).
+
+**Il server** (pagine pubbliche lette il 30/10: `openfreemap.org`, `/tos/`, `/privacy/`, il README e il codice di `hyperknot/openfreemap`)
+- `https://tiles.openfreemap.org/planet` e' il TileJSON 3.0.0 (lo stesso che usano gli stili di OpenFreeMap), `application/json`, in cache
+  un'ora; `tiles` = `https://tiles.openfreemap.org/planet/<versione>/{z}/{x}/{y}.pbf` (`metadata_to_tilejson.py`), z0-z14. Le tessere di una
+  versione sono `application/vnd.mapbox-vector-tile` con `Content-Encoding: gzip`, in cache 10 anni; una tessera che non c'e' e' un 200 vuoto;
+  una versione che non esiste piu' risponde con l'ultima (cache di un giorno). Il pianeta si rigenera ogni settimana; dei file completi si
+  tengono le ultime 4 corse e la prima di ognuno degli ultimi 6 mesi.
+- Condizioni d'uso: servizio gratuito "cosi' com'e'", nessun limite di visualizzazioni; **scaricamenti offline ammessi solo se ognuno e' al
+  piu' di 3.000 tessere o 50 MB, con al piu' 4 richieste insieme e un User-Agent unico che identifichi l'app** (oltre: scrivere a
+  info@openfreemap.org); vietata la raccolta automatica fuori da questo; **Cloudflare puo' fare da CDN**; il servizio puo' finire senza
+  preavviso.
+- Privacy: nessun cookie, nessun account; i log di accesso non hanno l'IP, quelli d'errore possono avere IP e indirizzo chiesto; la
+  registrazione degli IP si puo' accendere per al piu' 30 giorni; i log si cancellano dopo 7 giorni (30 per gli incidenti). Server dedicati,
+  nessun cloud (piu' Cloudflare, con la sua politica). Riportato in `docs/sicurezza.md` L264.
+
+**Le dieci verifiche del §2.7**
+| # | Verifica | Esito |
+|---|---|---|
+| 1 | Librerie native a 16 KB | **OK.** `libmaplibre.so` arm64-v8a e x86_64: segmenti LOAD a 16.384 (armeabi-v7a e x86 a 4 KB, ma non entrano: `abiFilters`). Nell'APK di release non compressa e allineata a 16 KB nel file; caricata e disegnata su un emulatore Android 17 con pagine da 16 KB (`getconf PAGE_SIZE` = 16384). `check.ps1` 7e la pretende quando la mappa e' nell'app. |
+| 2 | Manifest fuso | **OK con il filtro.** MapLibre dichiara INTERNET e ACCESS_NETWORK_STATE (gia' dell'app), **ACCESS_FINE_LOCATION, ACCESS_COARSE_LOCATION, ACCESS_WIFI_STATE** e `uses-feature android.hardware.wifi` facoltativa; nessun componente. Le tre li toglie il filtro del manifest fuso (`droppedLibraryPermissions`, ogni variante) e `verifyReleaseManifest` le vieta per nome. Release con la mappa: permessi identici a prima (`aapt2 dump permissions`), nessun componente in piu', l'unica differenza e' quel `uses-feature`. |
+| 3 | Ogni richiesta dal nostro client | **OK.** MapLibre fa ogni richiesta HTTP da `HttpRequestImpl` con il client statico di `HttpRequestUtil.setOkHttpClient`. Strumentato (`MapNetDeviceTest`): a mappa accesa le richieste di una `MapView` vera arrivano tutte al server finto attraverso il cancello; con MapLibre forzato "in rete" a mappa spenta il cancello le rifiuta (`OFF` contati), **zero socket, zero DNS, zero byte dell'UID** (`TrafficStats`). Nota: in 1 corsa su 7 la prova a mappa accesa ha contato 3,07 MB sull'UID con zero socket e zero DNS del client; mai piu' ripetuto, e nelle due corse con un controllo dei socket dell'UID (`/proc/net`, ogni secondo) non ne e' comparso nessuno: attribuito al sistema subito dopo l'installazione, non spiegato (punto aperto; la cattura F119 resta la prova che conta, L267). |
+| 4 | Nessuna telemetria ne' richiesta all'avvio | **OK.** `MapLibre.getInstance(context)` senza chiave (il bytecode: thread, `Timber.plant()` senza alberi, motore di disegno, percorsi dei file, ricevitore della connettivita', opzioni del server; nessuna rete); nessuna richiesta finche' non c'e' una mappa (contatori a zero). L'inizializzazione e' pigra (`MapLibreInit.ensure` alla prima mappa): niente sul percorso dell'avvio. |
+| 5 | `asset://` | **OK.** `AssetManagerFileSource` nel nativo; strumentato: stile e GeoJSON da `asset://` caricati e disegnati a mappa spenta, nessuna richiesta al client. Glifi e sprite da `asset://` li prova P2 con i file veri. |
+| 6 | Database offline | **Percorso fatto.** `FileSource.setResourcesCachePath` su `noBackupFilesDir/map/` in `MapLibreInit` (cache e regioni nello stesso database). Tetto delle tessere e ripresa: P5 (con i limiti delle condizioni d'uso, sopra). |
+| 7 | `setConnected(false)` e precaricamento | **OK.** `MapConnectivity` (falso a mappa spenta, in roaming, senza rete, sui dati mobili con "Solo sul Wi-Fi"; vero durante uno scaricamento confermato) tenuto allineato da `MapLibreInit`; `prefetchZoomDelta = 0` (in MapLibre 13 sostituisce `prefetchesTiles`, deprecato) nelle opzioni e su ogni mappa. |
+| 8 | `User-Agent` | **OK.** MapLibre mette `<id dell'app>/<versione> MapLibre Android/13.7.1 (4cf121e) Android/<sdk> (<abi>)`; il cancello ricostruisce la richiesta e mette `MapLibre Android` (generico, nessuna richiesta delle condizioni d'uso per guardare) o, per le tessere di uno scaricamento confermato, `MyCloudGallery-offline/1` (le condizioni d'uso lo chiedono; L300). Provato sull'emulatore. |
+| 9 | Peso dell'APK | Release prima 90.940.433 B; con la mappa (MapLibreInit raggiungibile) **103.073.488 B: +12.133.055 B (+11,6 MiB)**: `libmaplibre.so` 11.042.072 B (non compressa: lo vuole l'allineamento a 16 KB), dex +914.228 B, risorse +167.233 B. Sopra la stima (+5-9 MB) perche' la libreria nativa non si comprime; nessun piano B necessario. |
+| 10 | Apertura a freddo e memoria sull'S25 | **Non misurate**: il telefono non era collegato. Sull'emulatore (GPU software) le quattro prove strumentate girano in 13 s. Da misurare in F119 e nel banco della mappa (P12). |
+
+**Il cancello e il client** (C155, C195)
+- `TilePolicy` (`object`, `MapRequestGate`): le regole del §2.8 nell'ordine della suite; percorso delle tessere letto a mano (cifre ASCII, niente
+  zeri davanti, z <= 14, x e y nei limiti), mai con `toInt()` (accetterebbe cifre non ASCII e il segno).
+- `MapGateInterceptor`, primo intercettore: decide prima del DNS; la richiesta che esce e' **ricostruita da zero** (`GET https`, unico host,
+  percorso deciso, nessuna query) con il `User-Agent` fisso e i soli `If-None-Match`/`If-Modified-Since` (al piu' 256 caratteri stampabili);
+  redirect seguiti a mano solo se l'indirizzo nuovo passa il cancello (al piu' 2); risposta 200 solo con il tipo atteso e al piu' 8 MiB dopo la
+  decompressione; della risposta restano `Content-Type`, `ETag`, `Last-Modified`, `Cache-Control`, `Expires`, `Retry-After`. Un rifiuto
+  "per adesso" (`OFF`, `NETWORK`, `COVERED`, versione non nota, attesa) arriva a MapLibre come errore di connessione (`SocketException`: riprova
+  quando la rete torna e tiene cio' che ha); un rifiuto "per sempre" (`HOST`, `PATH`, `REDIRECT`, `CONTENT`) come errore definitivo.
+- Versione del server: TileJSON chiesto solo se una tessera ammessa ne ha bisogno (mai per una tessera che non uscirebbe), una volta per
+  tutte le richieste in coda, al piu' una volta al giorno o dopo un riavvio (file `noBackupFilesDir/map/tilejson-version` con `StateFiles`,
+  orologio monotono e numero dell'avvio), riprovato al piu' ogni 10 minuti se non arriva, riletto un'ora dopo un 404 di una tessera. Un
+  TileJSON che non ha esattamente la forma attesa non entra: senza versione nessuna tessera esce.
+- Attesa crescente dopo un 5xx, un 429 o una rete che non risponde: 2 s, 4 s ... fino a 5 minuti; un successo la azzera (E-MAP3).
+- `MapWireGuard`, intercettore di rete: ricontrolla metodo, host, porta e header subito prima del filo; al piu' 2 MiB **sulla rete**; i byte
+  arrivati vanno nel registro del traffico (`MapTraffic`) una volta sola.
+- Client: DNS che risolve solo `tiles.openfreemap.org`, nessun proxy, solo TLS moderno, niente redirect automatici, cookie, cache di OkHttp o
+  nuovi tentativi; **al piu' 4 richieste insieme** (condizioni d'uso). Log di rete di MapLibre e `Logger` di MapLibre spenti: nessun indirizzo
+  di tessera nel logcat (controllato sui logcat delle prove strumentate).
+- `MapLibreInit` (pubblico, l'unico ingresso: `:app` non nomina `net/`): `ensure(context, MapNetWiring, scope)` sul thread principale, una
+  volta per processo: `Logger.NONE`, `MapLibre.getInstance`, **poi** il client (la classe delle richieste di MapLibre si inizializza leggendo il
+  contesto di MapLibre: chiamarla prima fa crollare l'inizializzazione, visto sull'emulatore), `setConnected`, il database in
+  `noBackupFilesDir/map/`. `mapOptions` (vietato prima di `ensure`) e `configure`; `counts()` per la Diagnostica; `refreshConnectivity()` per
+  P5.
+
+**R8 e il controllo del dex.** Nell'APK di release con la mappa dentro R8 fondeva classi senza stato anche di librerie diverse: metodi di
+Compose e dell'app finivano in classi di OkHttp e MapLibre (`okhttp3/HttpUrl$Companion`, `org/maplibre/android/http/HttpRequestUrl`) e il passo
+7h vedeva "OkHttp chiamato" da mezza app. `feature-map/consumer-rules.pro` tiene OkHttp, MapLibre, `net/` e `MapLibreInit` fuori dalle fusioni
+(`-keep,allowshrinking`); in piu' `MapTileHttp` non usa `lazy` (R8 spostava la lambda che restituisce il client in una classe di `:app`) e
+`MapLibreInit` non vede tipi di OkHttp nelle firme. Con questo il passo 7h sull'APK con la mappa: 2.952 chiamate a OkHttp (60 da `net/`, le altre
+da OkHttp e MapLibre), 10 chiamate nostre a MapLibre tutte da `feature/map/`, il client installato una volta da `MapTileHttp`, MapLibre
+inizializzato una volta da `MapLibreInit`. Il passo 7f (LiteRT) e il 7e restano verdi.
+
+**Edge case**: E-MAP1 (mappa spenta: nessuna richiesta, nemmeno il TileJSON; JVM e strumentato), E-MAP2, E-R3, E-R13 (`NETWORK`; la rete
+validata e a consumo la dice la porta `MapNetworkState`, P13), E-MAP3 (attesa crescente, mai raffiche), E-MAP4 (redirect fuori host, tipi e
+dimensioni), E-MAP13 (URL stabile riscritto sulla versione; versione nuova al giorno dopo), E-MAP14 (nessuna richiesta di caratteri: `/fonts/...`
+rifiutato `PATH`), E-MAP19 (a mappa accesa la zona si chiede), E-P10 (nessun lavoro in background per la mappa).
+
+**Prove**: `core-map` 56 (con `TilePolicyContractTest` a 100.000 richieste e `TilePolicyTest`: oracolo a parte su 100.000 richieste ostili,
+confronto con il riferimento su 100.000, casi quasi giusti, host simili, stati che vietano, scaricamenti, purezza); `feature-map` 26 sulla JVM
+(`MapTileHttpTest` 13, `MapGatePropertyTest` 20.000 richieste attraverso il client vero, `MapWireGuardTest` 3, `TileJsonReaderTest` 2,
+`MapLibreInitTest` 3, piu' le guardie); 4 strumentate (`MapNetDeviceTest`) su emulatore Android 17 a pagine da 16 KB, 7 corse; test d'architettura
+delle Fasi 6-9 verdi.
+
+**Per gli altri pacchetti**
+- **P13**: `implementation project(':feature-map')` in `:app`; `MapLibreInit.ensure(context, MapNetWiring(TilePolicy, FeatureFlags.mapOnline,
+  settings, network, regions, traffic, downloadScope), scopeDelProcesso)` sul thread principale alla prima mappa o mini-mappa, **mai**
+  all'avvio; da quel commit `check.ps1` pretende MapLibre e il client nel dex (controllo positivo). `MapLibreInit.counts()` per `MAP_REQUESTS` e
+  `MAP_REFUSED`. L'azzeramento toglie `noBackupFilesDir/map/` (database di MapLibre e `tilejson-version`).
+- **P4**: ogni `MapView` con `MapLibreInit.mapOptions(context)` e `MapLibreInit.configure(map)` sulla mappa pronta. Se R8 portasse in `:app`
+  codice di P4 che chiama MapLibre, il passo 7h lo dice: la classe va in `feature-map/consumer-rules.pro`.
+- **P2**: la sorgente dello stile con `"tiles": ["https://tiles.openfreemap.org/planet/v/{z}/{x}/{y}.pbf"]` (non `url`: il TileJSON lo
+  chiede il cancello), glifi e sprite da `asset://`.
+- **P5**: lo scaricamento confermato passa da `MapNetWiring.downloadScope` e `MapLibreInit.refreshConnectivity()`; il `User-Agent` dello
+  scaricamento lo mette il cancello. **Le condizioni d'uso (3.000 tessere o 50 MB per scaricamento, 4 richieste insieme) non reggono il
+  catalogo di D26** (la Toscana da z0 a z14 sono circa 23.000 tessere, fino a z12 circa 1.550): serve una decisione dell'utente (scrivere a OpenFreeMap, regioni fino a
+  un livello piu' basso, zone piu' piccole, o Q2 (b)).
+
+**Punti aperti**: la scelta per le regioni (sopra); la misura di apertura e memoria sull'S25 (F119, P12); i 3,07 MB della verifica (3);
+`uses-feature android.hardware.wifi` facoltativo nel manifest (innocuo, lasciato); le tessere di una versione restano nella cache di MapLibre
+finche' non vengono buttate (`Cache-Control` di 10 anni): meno richieste, strade nuove piu' tardi.

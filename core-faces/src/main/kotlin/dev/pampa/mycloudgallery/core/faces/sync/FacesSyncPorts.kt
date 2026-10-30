@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.faces.sync
 
 import dev.pampa.mycloudgallery.core.faces.contract.FacesArchive
+import dev.pampa.mycloudgallery.core.faces.contract.FacesArchiveLimits
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
@@ -55,7 +56,40 @@ data class FacesSyncLimits(
   val maxHeadReads: Int = TrustLimits.MAX_HEAD_READS_PER_SHARE,
   /** Corpi `faces` e voci `people` tenuti per dispositivo (le voci `cluster` hanno i tetti dell'istantanea). */
   val maxEntriesPerDevice: Int = TrustLimits.MAX_FACES_HEAD_ENTRIES,
+  /**
+   * R5: richieste di segmenti per giro (tutti i dispositivi insieme), oltre al tetto dei byte: una testa che elenca 8.192 segmenti mai scritti
+   * non costa 8.192 richieste a ogni giro. Un giro onesto ne fa poche decine (un segmento porta fino a 512 corpi).
+   */
+  val maxSegmentReadsPerRound: Int = 1_024,
+  /** R5: richieste di segmenti per dispositivo e per giro (a rotazione, il resto al giro dopo). */
+  val maxSegmentReadsPerDevice: Int = 256,
+  /** R6: i tetti dei corpi degli altri dispositivi nell'archivio ([FacesArchiveLimits]; le prove li abbassano). */
+  val maxBodiesPerAuthor: Int = FacesArchiveLimits.MAX_BODIES_PER_AUTHOR,
+  val maxBytesPerAuthor: Long = FacesArchiveLimits.MAX_BYTES_PER_AUTHOR,
+  val maxBodiesTotal: Int = FacesArchiveLimits.MAX_BODIES_TOTAL,
+  val maxBytesTotal: Long = FacesArchiveLimits.MAX_BYTES_TOTAL,
 )
+
+/**
+ * R5, R7 (correzioni della Fase 8): un segmento **in attesa**: assente, illeggibile, con l'impronta o la dimensione sbagliate, o rimandato per il
+ * tetto dell'archivio. [attempts] tentativi gia' fatti, [retryAtNas] l'ora del NAS prima della quale non si richiede (attese crescenti, da
+ * [FIRST_WAIT_MS] a [MAX_WAIT_MS]). Durevole con lo stato della replica: una morte del processo non lo fa richiedere a ogni giro.
+ */
+data class SegmentWait(val attempts: Int, val retryAtNas: Long) {
+  /** Vero se adesso ([nasNow]) il segmento si puo' richiedere (un'ora del NAS tornata molto indietro non lo tiene fermo oltre [MAX_WAIT_MS]). */
+  fun due(nasNow: Long): Boolean = nasNow >= retryAtNas || retryAtNas - nasNow > MAX_WAIT_MS
+
+  companion object {
+    const val FIRST_WAIT_MS: Long = 15L * 60 * 1000
+    const val MAX_WAIT_MS: Long = 24L * 60 * 60 * 1000
+
+    /** Letture sbagliate (impronta o dimensione) dopo le quali il rifiuto e' definitivo (R7): la prima e due riprove. */
+    const val MAX_BAD_READS: Int = 3
+
+    /** L'attesa dopo il tentativo [attempts] (1, 2, ...): 15 minuti, poi il doppio a ogni volta, al piu' 24 ore. */
+    fun delayAfter(attempts: Int): Long = minOf(FIRST_WAIT_MS shl (attempts.coerceIn(1, 8) - 1), MAX_WAIT_MS)
+  }
+}
 
 /**
  * Quello che la replica ricorda di un dispositivo dell'account nella generazione corrente: l'ultima testa accettata ([mark], anti-rollback ed
@@ -75,6 +109,8 @@ data class DeviceReplica(
   val snapshotHead: HeadMark? = null,
   /** La testa la cui istantanea e' gia' stata giudicata (completa o no): non si rigiudica a ogni giro. */
   val checked: HeadMark? = null,
+  /** R5, R7: i segmenti in attesa (non fatti) e quando si richiedono. */
+  val waits: Map<String, SegmentWait> = emptyMap(),
 ) {
   /** Tutti i segmenti della testa sono stati applicati o rifiutati. */
   val complete: Boolean get() = segments.all { it.ref.hash in done }

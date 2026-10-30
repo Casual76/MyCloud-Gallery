@@ -80,15 +80,19 @@ open class FacesIsolationTest {
     assertThat(nameOf(phone, b)).isEqualTo("Dal portatile")
     assertThat(phone.archive.people()[PeopleKey(a.base32(), "hidden")]).isNull()
     assertThat(phone.archive.winners(listOf(FacesSyncWorld.key(7))).keys).containsExactly(FacesSyncWorld.key(7))
-    // Il segmento rifiutato non si riscarica; quello "dal futuro" nemmeno prima della sua ora; quello che manca torna e passa.
+    // Il segmento rifiutato non si riscarica; quello "dal futuro" nemmeno prima della sua ora; quello che manca aspetta (R5, correzioni della
+    // Fase 8: mai a ogni giro, 15 minuti la prima volta), poi torna e passa.
     tablet.share.plant(NasLayout.facesSegment(world.generation, tablet.id, missing.ref.hash), missing.bytes)
+    val segDir = NasLayout.facesSegmentDir(world.generation, tablet.id)
     val reads = phone.share.reads.size
     phone.round()
-    val again = phone.share.reads.drop(reads).filter { it.isWithin(NasLayout.facesSegmentDir(world.generation, tablet.id)) }.map { it.name }
-    assertThat(again).containsExactly(missing.ref.hash)
-    assertThat(phone.archive.people()[PeopleKey(b.base32(), "forget")]).isNotNull()
-    world.clock.advanceMillis(10 * 60_000)
+    assertThat(phone.share.reads.drop(reads).filter { it.isWithin(segDir) }).isEmpty()
+    world.clock.advanceMillis(SegmentWait.FIRST_WAIT_MS)
+    val later = phone.share.reads.size
     phone.round()
+    val again = phone.share.reads.drop(later).filter { it.isWithin(segDir) }.map { it.name }
+    assertThat(again).containsExactly(missing.ref.hash, good.ref.hash)
+    assertThat(phone.archive.people()[PeopleKey(b.base32(), "forget")]).isNotNull()
     assertThat(phone.archive.people()[PeopleKey(b.base32(), "hidden")]).isNotNull()
   }
 

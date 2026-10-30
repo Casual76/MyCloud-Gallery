@@ -51,6 +51,10 @@ import kotlinx.coroutines.sync.withLock
  * lo stato fresco** che dice `On(G)` (D30), dietro [gate] (D35). Prima i segmenti (nome = impronta; un nome occupato da altri byte ferma la
  * pubblicazione), poi la testa al primo numero libero; al piu' una testa ogni 5 minuti d'ora del NAS, salvo la fine di un'unita' o della
  * manutenzione. La generazione che cambia a meta' ferma la pubblicazione prima della testa ([FacesPublishOutcome.NotFresh]).
+ *
+ * Correzioni della Fase 8 (pacchetto "formato e replica dei volti"): delle voci `people` si ripubblicano solo quelle arrivate dal loro autore
+ * (R3: la provenienza resta di un passo e la revoca di chi ha portato una voce falsa la toglie ovunque); il cancello D35 si richiede prima di ogni
+ * segmento e prima della testa (R8); una volta al giorno si rimettono i propri segmenti che la propria testa elenca e che mancano dal NAS (R7).
  */
 class NasFacesPublisher(
   private val identity: FacesSyncIdentity,
@@ -74,6 +78,13 @@ class NasFacesPublisher(
 
   /** Quante voci l'ultima pubblicazione non ha potuto scrivere perche' il formato non le ammetteva (solo un numero, per la Diagnostica). */
   @Volatile var notPublishable: Int = 0
+    private set
+
+  /** R7: quando (ora del NAS) e in quale generazione si e' guardato l'ultima volta se mancano propri segmenti. In memoria: costa un elenco. */
+  @Volatile private var verified: Pair<FaceGeneration, Long>? = null
+
+  /** R7: quanti propri segmenti mancanti sono stati rimessi (solo un numero, per la Diagnostica e le prove). */
+  @Volatile var restored: Int = 0
     private set
 
   override suspend fun stage(change: FacesChange): Unit = mutex.withLock {
@@ -135,8 +146,9 @@ class NasFacesPublisher(
       if (since != null && since < FacesPublishRules.DEBOUNCE_MS) return@withLock FacesPublishOutcome.TooSoon(FacesPublishRules.DEBOUNCE_MS - since)
     }
     val nasNow = clock.nasNowMillis() ?: return@withLock FacesPublishOutcome.Failed
-    val archive = archives.open(open.generation)?.takeIf { it.generation == open.generation } ?: return@withLock FacesPublishOutcome.Failed
     try {
+      // I5: anche l'apertura dell'archivio sta nel `try` (un errore del database non e' un'eccezione per chi chiama).
+      val archive = archives.open(open.generation)?.takeIf { it.generation == open.generation } ?: return@withLock FacesPublishOutcome.Failed
       publish(open, archive, reason, nasNow)
     } catch (e: CancellationException) {
       throw e
@@ -175,7 +187,10 @@ class NasFacesPublisher(
     if (plan.bodies + plan.people > TrustLimits.MAX_FACES_HEAD_ENTRIES) return FacesPublishOutcome.Failed
     val names = plan.segments.mapTo(LinkedHashSet()) { it.ref.hash }
     val unchanged = !state.uncertain && if (last == null) plan.segments.isEmpty() else last.segments == names && last.snapshot == plan.snapshot
+    // R7: i segmenti della mia ultima testa tolti dal NAS (dal PC) non si rimetterebbero mai: una volta al giorno si guarda e si rimettono.
+    val missing = missingSegments(open, last, nasNow)
     if (unchanged) {
+      if (missing.isNotEmpty()) restore(open, plan.segments.filter { it.ref.hash in missing })?.let { return it }
       if (state.pending != 0) store.save(generation, state.copy(pending = 0))
       pendingCount.value = 0
       return FacesPublishOutcome.NothingToPublish
@@ -184,16 +199,25 @@ class NasFacesPublisher(
     state = state.copy(diary = (state.diary + names).let { if (it.size > FacesPublishState.MAX_DIARY) it.drop(it.size - FacesPublishState.MAX_DIARY).toSet() else it })
     store.save(generation, state)
     for (segment in plan.segments) {
-      if (last != null && segment.ref.hash in last.segments) continue
+      if (last != null && segment.ref.hash in last.segments && segment.ref.hash !in missing) continue
       // Una generazione che non e' piu' la corrente non riceve altri file (nemmeno segmenti senza testa).
       if (!guard.stillOpen(open)) return FacesPublishOutcome.NotFresh
+      // R8: il cancello D35 (congelamento, arresto d'emergenza, salto dell'ora, fiducia dell'indice) prima di ogni segmento, non solo all'inizio.
+      gate.blockFor(remote.share)?.let { return FacesPublishOutcome.Blocked(it) }
       when (val put = remote.publishSegment(generation, segment.ref.hash, segment.bytes)) {
         is RemoteResult.Failed -> return FacesPublishOutcome.Failed
-        is RemoteResult.Ok -> if (put.value == FacesPut.ALREADY_EXISTS && !sameBytes(generation, segment)) return FacesPublishOutcome.Failed
+        is RemoteResult.Ok -> when {
+          put.value == FacesPut.CREATED -> if (last != null && segment.ref.hash in last.segments) restored++
+          // Un mio segmento gia' elencato e' quello che ho scritto io (il nome e' l'impronta, chi legge la controlla): non si rilegge intero.
+          last != null && segment.ref.hash in last.segments -> Unit
+          !sameBytes(generation, segment) -> return FacesPublishOutcome.Failed
+        }
       }
     }
     // D30: la generazione che cambia a meta' (o lo stato che non e' piu' fresco) ferma tutto prima della testa.
     if (!guard.stillOpen(open)) return FacesPublishOutcome.NotFresh
+    // R8: e il cancello D35 di nuovo, prima della testa.
+    gate.blockFor(remote.share)?.let { return FacesPublishOutcome.Blocked(it) }
     val classed = plan.segments.map { it.classed }.sortedBy { it.ref.hash }
     val registry = open.registry
     // Da qui una testa potrebbe finire sul NAS anche se la risposta non arriva: lo si ricorda prima di provarci.
@@ -217,6 +241,34 @@ class NasFacesPublisher(
       is FacesHeadPublish.ExistingOwn -> done(generation, state, names, plan, result.version, result.head.mark, result.head.head.createdAt)
       FacesHeadPublish.Blocked, FacesHeadPublish.NoRoom, is FacesHeadPublish.Failed -> FacesPublishOutcome.Failed
     }
+  }
+
+  /**
+   * R7: i segmenti della mia ultima testa [last] che il NAS non ha piu', guardati al piu' una volta ogni [VERIFY_EVERY_MS] d'ora del NAS. Vuoto se
+   * non e' ora, se l'elenco non riesce o e' troppo lungo (un elenco troncato non prova che un segmento manchi).
+   */
+  private suspend fun missingSegments(open: FacesGate.Open, last: FacesPublication?, nasNow: Long): Set<String> {
+    if (last == null || last.segments.isEmpty()) return emptySet()
+    val seen = verified
+    if (seen != null && seen.first == open.generation && nasNow >= seen.second && nasNow - seen.second < VERIFY_EVERY_MS) return emptySet()
+    val listing = (remote.segmentNames(open.generation) as? RemoteResult.Ok)?.value ?: return emptySet()
+    verified = open.generation to nasNow
+    if (listing.truncated) return emptySet()
+    val present = listing.items.toHashSet()
+    return last.segments.filterTo(HashSet()) { it !in present }
+  }
+
+  /** R7: rimette [segments] (gia' elencati dalla mia ultima testa): nessuna testa nuova. Null se riuscito, altrimenti l'esito da restituire. */
+  private suspend fun restore(open: FacesGate.Open, segments: List<EncodedSegment>): FacesPublishOutcome? {
+    for (segment in segments) {
+      if (!guard.stillOpen(open)) return FacesPublishOutcome.NotFresh
+      gate.blockFor(remote.share)?.let { return FacesPublishOutcome.Blocked(it) }
+      when (val put = remote.publishSegment(open.generation, segment.ref.hash, segment.bytes)) {
+        is RemoteResult.Failed -> return FacesPublishOutcome.Failed
+        is RemoteResult.Ok -> if (put.value == FacesPut.CREATED) restored++
+      }
+    }
+    return null
   }
 
   /** Il nome e' l'impronta: un segmento gia' presente deve avere gli stessi byte (una ripresa), mai un file messo li' da altri. */
@@ -249,7 +301,10 @@ class NasFacesPublisher(
     // vincitore, anche dopo che un dispositivo ha perso il suo stato locale.
     val attested = if (state.keys.isEmpty()) emptySet() else attestation.publishable(state.keys).intersect(state.keys)
     val bodies = ArrayList<Pair<ContentKey, FacesBody>>()
-    for ((key, body) in archive.bodiesOf(identity.deviceId, attested)) {
+    val found = archive.bodiesOf(identity.deviceId, attested)
+    // I5: un corpo attestato che qui non si apre (o non c'e') non si pubblica: si conta, non sparisce in silenzio.
+    skipped += attested.count { it !in found }
+    for ((key, body) in found) {
       if (body.author != identity.deviceId || key != body.contentKey) continue
       if (!FacesWire.admits(body)) {
         skipped++
@@ -257,10 +312,11 @@ class NasFacesPublisher(
       }
       bodies += key to FacesWire.doc(body)
     }
-    // Voci `people`: lo stato unito, gia' datato, con autori dell'account non revocati (le altre non dovrebbero esserci: si contano).
+    // Voci `people`: lo stato unito, gia' datato, con autori dell'account non revocati (le altre non dovrebbero esserci: si contano). R3: solo
+    // le voci arrivate dal loro autore (le scelte fatte qui e quelle lette dalla testa di chi le ha scritte), mai quelle portate da un altro.
     val rules = PeopleRules(open.registry, open.account, nasNow)
     val docs = ArrayList<PeopleDoc>()
-    for (record in archive.people().values) {
+    for (record in archive.directPeople().values) {
       val at = record.atNas
       val doc = if (at != null && rules.verdict(record.author, at) == PeopleVerdict.VALID) FacesWire.doc(record, at) else null
       if (doc == null) skipped++ else docs += doc
@@ -322,5 +378,8 @@ class NasFacesPublisher(
 
   private companion object {
     const val NANOS_PER_MILLI = 1_000_000L
+
+    /** R7: ogni quanto (ora del NAS) si guarda se mancano propri segmenti. */
+    const val VERIFY_EVERY_MS: Long = 24L * 60 * 60 * 1000
   }
 }

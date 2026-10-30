@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.database.faces.entity.ReplicaSegmentStateEn
 import dev.pampa.mycloudgallery.core.faces.sync.DeviceReplica
 import dev.pampa.mycloudgallery.core.faces.sync.FacesReplicaState
 import dev.pampa.mycloudgallery.core.faces.sync.FacesReplicaStore
+import dev.pampa.mycloudgallery.core.faces.sync.SegmentWait
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.security.faces.FacesDataKey
 import dev.pampa.mycloudgallery.core.trust.Verdict
@@ -105,6 +106,8 @@ internal class RoomFacesReplicaStore(
     val segments = segmentRows.sortedBy { it.position }.mapNotNull { segmentOf(it) }
     var done = stateRows.filter { it.done }.mapTo(LinkedHashSet()) { it.hash }
     var counts = stateRows.filter { it.entries != null }.associate { it.hash to it.entries!! }
+    // R5, R7 (schema v2): i segmenti in attesa.
+    val waits = stateRows.filter { !it.done && it.retryAt != null && it.attempts > 0 }.associate { it.hash to SegmentWait(it.attempts, it.retryAt!!) }
     var checked = mark(row.checkedVersion, row.checkedHash)
     // I segmenti `cluster` fatti si rileggono dai blocchi; uno che non si legge torna "da fare" (e l'istantanea da rigiudicare).
     val cluster = LinkedHashMap<String, List<ClusterEntry>>()
@@ -142,6 +145,7 @@ internal class RoomFacesReplicaStore(
       snapshot = snapshot,
       snapshotHead = snapshotHead,
       checked = checked,
+      waits = waits.filterKeys { it !in done },
     )
   }
 
@@ -169,10 +173,13 @@ internal class RoomFacesReplicaStore(
       if (before === replica) continue
       val entity = entityOf(id, replica)
       if (before == null || !sameScalars(entityOf(id, before), entity)) devices += entity
-      if (before == null || before.segments != replica.segments || before.done != replica.done || before.counts != replica.counts) {
+      if (before == null || before.segments != replica.segments || before.done != replica.done || before.counts != replica.counts || before.waits != replica.waits) {
         rewritten += id
         replica.segments.forEachIndexed { position, s -> segments += ReplicaSegmentEntity(id, position, s.cls.code, s.ref.hash, s.ref.size) }
-        for (hash in replica.done + replica.counts.keys) states += ReplicaSegmentStateEntity(id, hash, hash in replica.done, replica.counts[hash])
+        for (hash in replica.done + replica.counts.keys + replica.waits.keys) {
+          val wait = replica.waits[hash]?.takeIf { hash !in replica.done }
+          states += ReplicaSegmentStateEntity(id, hash, hash in replica.done, replica.counts[hash], wait?.attempts ?: 0, wait?.retryAtNas)
+        }
       }
       // Un segmento e' il suo contenuto: se l'impronta c'era gia' non si riscrive.
       val oldCluster = before?.cluster.orEmpty()

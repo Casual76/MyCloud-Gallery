@@ -83,6 +83,8 @@ class NoFacesRemote(override val share: String = "", override val deviceId: Stri
 
   override suspend fun publishSegment(generation: FaceGeneration, hash: String, bytes: ByteArray): RemoteResult<FacesPut> = denied
 
+  override suspend fun segmentNames(generation: FaceGeneration): RemoteResult<FacesListing<String>> = denied
+
   override suspend fun publishHead(generation: FaceGeneration, version: Long, bytes: ByteArray): RemoteResult<FacesPut> = denied
 }
 
@@ -158,6 +160,13 @@ class ClosedFacesArchive(override val generation: FaceGeneration) : FacesArchive
   override suspend fun people(): Map<PeopleKey, PeopleRecord> = emptyMap()
 
   override suspend fun addPeople(records: List<PeopleRecord>) = closed()
+
+  override suspend fun addPeopleFrom(via: String, records: List<PeopleRecord>, own: String?): Int = closed()
+
+  override suspend fun directPeople(): Map<PeopleKey, PeopleRecord> = emptyMap()
+
+  override suspend fun bodyTotals(author: String?, keys: Collection<ContentKey>?): dev.pampa.mycloudgallery.core.faces.contract.FacesTotals =
+    dev.pampa.mycloudgallery.core.faces.contract.FacesTotals.ZERO
 
   override suspend fun datePeople(nasNow: Long): Int = closed()
 

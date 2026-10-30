@@ -9,6 +9,8 @@ import dev.pampa.mycloudgallery.core.model.FaceRef
 import dev.pampa.mycloudgallery.core.model.FaceSource
 import dev.pampa.mycloudgallery.core.model.FaceSpaceCode
 import dev.pampa.mycloudgallery.core.model.FaceTier
+import dev.pampa.mycloudgallery.core.trust.TrustLimits
+import dev.pampa.mycloudgallery.core.trust.data.FacesLimits
 
 // L'ARCHIVIO DEI VOLTI DI UNA GENERAZIONE (docs/fase8-progetto.md §1.1 "store/", §2.3 "Salvataggio", §2.4, D14, D15). Contratto di P0 perche'
 // calcolo (P4), raggruppamento (P5), sincronizzazione (P3), persone (P9) e cancellazione (P8) partono insieme; l'archivio vero e' di P6
@@ -135,6 +137,51 @@ data class PeopleRecord(val edit: PeopleEdit, val atNas: Long?, val author: Stri
 }
 
 /**
+ * R6 (correzioni della Fase 8): quanti corpi e quanti volti (di ogni livello) tiene l'archivio, di un autore o in tutto. [formatBytes] sono i
+ * byte del formato che occupano **al piu'** (ogni volto contato con il suo vettore): la misura dei tetti in byte.
+ */
+data class FacesTotals(val bodies: Int, val faces: Long) {
+  val formatBytes: Long get() = bodies.toLong() * FacesLimits.BODY_HEADER_BYTES + faces * (FacesLimits.FACE_BYTES + FacesLimits.VECTOR_BYTES)
+
+  operator fun plus(other: FacesTotals): FacesTotals = FacesTotals(bodies + other.bodies, faces + other.faces)
+
+  operator fun minus(other: FacesTotals): FacesTotals = FacesTotals(bodies - other.bodies, faces - other.faces)
+
+  companion object {
+    val ZERO = FacesTotals(0, 0)
+  }
+}
+
+/**
+ * I TETTI DELL'ARCHIVIO DEI VOLTI DI UNA GENERAZIONE (R3, R6 delle correzioni della Fase 8; il calcolo e' in `docs/decisioni.md`, sezione "Fase 8,
+ * correzioni dopo le revisioni: formato e replica dei volti"). Valgono per cio' che arriva **dagli altri dispositivi** (la replica): le scelte
+ * fatte qui e i corpi calcolati qui non si rifiutano mai. Larghi sopra una famiglia vera (centinaia di migliaia di foto, decine di persone per
+ * dispositivo), stretti sotto un dispositivo compromesso che pubblica a ogni testa chiavi nuove.
+ */
+object FacesArchiveLimits {
+  /** Voci `people` nell'archivio, in tutto. */
+  const val MAX_PEOPLE: Int = 200_000
+
+  /** Voci `people` arrivate da uno stesso dispositivo (la provenienza): quante ne porta al piu' una sua testa. */
+  const val MAX_PEOPLE_PER_SIGNER: Int = TrustLimits.MAX_FACES_HEAD_ENTRIES
+
+  /** Corpi `faces` di un autore letti dal NAS: due teste piene (il resto di contenuti tolti dal catalogo nel tempo). */
+  const val MAX_BODIES_PER_AUTHOR: Int = 2 * TrustLimits.MAX_FACES_HEAD_ENTRIES
+
+  /** Byte del formato dei corpi di un autore ([FacesTotals.formatBytes]). */
+  const val MAX_BYTES_PER_AUTHOR: Long = 128L * 1024 * 1024
+
+  /** Corpi `faces` nell'archivio, di tutti gli autori. */
+  const val MAX_BODIES_TOTAL: Int = 1_000_000
+
+  /** Byte del formato dei corpi di tutti gli autori. */
+  const val MAX_BYTES_TOTAL: Long = 512L * 1024 * 1024
+
+  /** Volti con un vettore letti per il raggruppamento ([FacesArchive.groupFaces]): ~0,55 KB l'uno in memoria, 300.000 sono ~165 MB. */
+  const val MAX_GROUP_FACES: Int = 300_000
+}
+
+/**
  * L'archivio dei volti della generazione [generation] su questo dispositivo (P6). Salva **subito** (D16, §2.3: dopo una morte del processo
  * un media gia' salvato non si rifa'); tiene i corpi di tutti i dispositivi dell'account (dalla replica, P3) e risponde con i vincitori;
  * tiene l'istantanea del raggruppamento e le voci `people` unite. Ogni metodo e' idempotente; un archivio chiuso (chiave distrutta, generazione
@@ -175,8 +222,30 @@ interface FacesArchive {
   /** Le voci `people` unite (una per chiave). */
   suspend fun people(): Map<PeopleKey, PeopleRecord>
 
-  /** Unisce [records] con [PeopleRecord.merge]. */
+  /** Unisce [records] con [PeopleRecord.merge]: scelte fatte **qui** (la provenienza e' l'autore), mai rifiutate per i tetti. */
   suspend fun addPeople(records: List<PeopleRecord>)
+
+  /**
+   * R3 (correzioni della Fase 8): unisce [records] lette da un segmento firmato da [via] e ricorda con ogni voce la sua **provenienza** ([via]).
+   * Una voce uguale (stessa modifica, ora e autore) gia' presente con un'altra provenienza prende quella del suo autore, se arriva da lui. Con
+   * [own] (questo dispositivo): una voce a nome di [own] arrivata da un altro non sostituisce mai una scelta di [own] (una riga sua con la sua
+   * provenienza); se la chiave non c'e' (stato locale perso) entra come le altre. Una chiave nuova oltre [FacesArchiveLimits.MAX_PEOPLE] in tutto,
+   * o oltre [FacesArchiveLimits.MAX_PEOPLE_PER_SIGNER] arrivate da [via], non entra. Restituisce quante voci non sono entrate. Idempotente.
+   */
+  suspend fun addPeopleFrom(via: String, records: List<PeopleRecord>, own: String? = null): Int
+
+  /**
+   * R3: le voci `people` arrivate **dal loro autore** (scelte fatte qui, o lette dalla testa di chi le ha scritte): le sole che il pubblicatore
+   * ripubblica nello stato unito. Una voce arrivata da un altro dispositivo non si ripubblica: cosi' la sua provenienza resta di un passo e la
+   * revoca di chi l'ha portata la toglie ovunque.
+   */
+  suspend fun directPeople(): Map<PeopleKey, PeopleRecord>
+
+  /**
+   * R6: i corpi e i volti scritti da [author] (di tutti gli autori se [author] e' null); con [keys], solo quelli di quelle chiavi di contenuto
+   * (cio' che un segmento letto sostituirebbe).
+   */
+  suspend fun bodyTotals(author: String?, keys: Collection<ContentKey>? = null): FacesTotals
 
   /**
    * P3 (aggiunta al contratto di P0): le voci `people` **da datare** ([PeopleRecord.atNas] null, scelte fatte qui senza l'ora del NAS)
@@ -188,7 +257,8 @@ interface FacesArchive {
 
   /**
    * P3 (aggiunta al contratto di P0): toglie i corpi e le voci `people` scritti da [authors], i dispositivi dell'account revocati o persi
-   * nel registro accettato ("la revoca lo toglie", L99, formato §4.6): i loro corpi non vincono piu' e i loro nomi non si mostrano piu'.
+   * nel registro accettato ("la revoca lo toglie", L99, formato §4.6): i loro corpi non vincono piu' e i loro nomi non si mostrano piu'. R3:
+   * anche le voci `people` **arrivate** da loro (la provenienza), qualunque autore dichiarino.
    * La replica poi rilegge le teste degli altri dispositivi (le voci valide che le loro avevano tornano). Restituisce quante voci e quanti
    * corpi ha tolto. Idempotente.
    */

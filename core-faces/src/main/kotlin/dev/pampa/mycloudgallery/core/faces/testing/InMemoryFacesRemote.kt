@@ -127,6 +127,12 @@ class InMemoryFacesRemote(private val area: InMemoryFacesArea, override val devi
     put(NasLayout.facesSegment(generation, deviceId, hash), bytes)
   }
 
+  override suspend fun segmentNames(generation: FaceGeneration): RemoteResult<FacesListing<String>> = call {
+    val names = area.names(NasLayout.facesSegmentDir(generation, deviceId))
+    val valid = names.filter { Hashes.isHashName(it) }
+    RemoteResult.Ok(FacesListing(valid, names.size - valid.size, truncated = false))
+  }
+
   override suspend fun publishHead(generation: FaceGeneration, version: Long, bytes: ByteArray): RemoteResult<FacesPut> = call {
     if (version < 1) return@call denied
     put(NasLayout.facesHead(generation, deviceId, version), bytes)

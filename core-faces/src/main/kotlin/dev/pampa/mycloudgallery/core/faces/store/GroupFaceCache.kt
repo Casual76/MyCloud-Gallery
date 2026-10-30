@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.faces.dao.FaceBodyDao
 import dev.pampa.mycloudgallery.core.database.faces.entity.FaceBodyEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FaceEntity
+import dev.pampa.mycloudgallery.core.faces.contract.FacesArchiveLimits
 import dev.pampa.mycloudgallery.core.faces.contract.GroupFace
 import dev.pampa.mycloudgallery.core.model.ContentKey
 import dev.pampa.mycloudgallery.core.model.FaceBox
@@ -26,12 +27,17 @@ import kotlinx.coroutines.sync.withLock
 // - I vettori in chiaro restano in memoria finche' il negozio e' aperto (la chiave dati che li decifra e' li' comunque, D14); [clear] li
 //   lascia al primo ritiro dell'archivio (chiusura, cancellazione locale). Mai su disco, mai nei log (D37).
 // - Un tetto ([MAX_FACES]): oltre, non si tiene niente e ogni chiamata rilegge (meglio piu' lenta che un heap gonfio).
+// - R6 (correzioni della Fase 8): un tetto **duro** ([FacesArchiveLimits.MAX_GROUP_FACES]) che si guarda **prima** di caricare (un conteggio):
+//   oltre, la lettura fallisce come un archivio chiuso (`IllegalStateException`: il raggruppamento salta il giro senza cadere) invece di
+//   riempire la memoria fino a far morire il processo a ogni passo.
 // - Un solo processo scrive questo database (un solo `FacesStores`): chi salva segna la chiave **dopo** aver scritto, e chi legge prende
 //   l'elenco delle chiavi da rileggere **prima** di leggere: una scrittura che si incrocia con una lettura si vede al giro dopo, mai persa.
 
 internal class GroupFaceCache(
   private val bodies: FaceBodyDao,
   private val secretsOf: (FaceBodyEntity) -> List<FaceSecrets.Secret>?,
+  /** R6: il tetto duro dei volti letti per il raggruppamento. */
+  private val maxGroupFaces: Int = FacesArchiveLimits.MAX_GROUP_FACES,
 ) {
   private val lock = Mutex()
   private val dirty = ConcurrentHashMap.newKeySet<String>()
@@ -90,6 +96,14 @@ internal class GroupFaceCache(
     if (stale.isNotEmpty()) {
       dirty.removeAll(stale.toSet())
       for (chunk in stale.chunked(FaceBodyDao.IN_LIMIT)) refresh(current, chunk, space)
+      // R6: cresciuta oltre il tetto della memoria, la cache si lascia e la prossima lettura ripassa dal tetto duro di [loadAll]; oltre il tetto
+      // duro, nemmeno questa lettura risponde.
+      val total = current.values.sumOf { it.size }
+      if (total > MAX_FACES || total > maxGroupFaces) {
+        tooBig = true
+        cache = null
+      }
+      check(total <= maxGroupFaces) { TOO_MANY }
     }
     flatten(current)
   }
@@ -103,10 +117,15 @@ internal class GroupFaceCache(
   /** Tutto, con due letture: i corpi vincenti nello spazio e i loro volti con un vettore. */
   private suspend fun loadAll(space: String): TreeMap<String, List<GroupFace>> {
     dirty.clear() // quel che e' stato scritto fin qui e' gia' nel database che si sta per leggere
+    // R6: il tetto duro prima di leggere un solo corpo (e di nuovo sulle righe lette: un salvataggio nel frattempo non lo scavalca).
+    val expected = bodies.countSearchableFaces(space, FaceTier.NONE.code)
+    check(expected <= maxGroupFaces) { TOO_MANY }
     val headers = bodies.winnersInSpace(space)
     val out = TreeMap<String, List<GroupFace>>()
     if (headers.isEmpty()) return out
-    val rows = bodies.searchableFaces(space, FaceTier.NONE.code).groupBy { it.contentKey to it.author }
+    val faceRows = bodies.searchableFaces(space, FaceTier.NONE.code)
+    check(faceRows.size <= maxGroupFaces) { TOO_MANY }
+    val rows = faceRows.groupBy { it.contentKey to it.author }
     for (header in headers) {
       val faces = rows[header.contentKey to header.author] ?: continue
       out[header.contentKey] = facesOf(header, faces)
@@ -147,5 +166,7 @@ internal class GroupFaceCache(
 
     /** Volti con vettore che si tengono in memoria (~0,55 KB l'uno): 120.000 sono circa 65 MB. */
     const val MAX_FACES = 120_000
+
+    const val TOO_MANY = "Troppi volti per il raggruppamento."
   }
 }

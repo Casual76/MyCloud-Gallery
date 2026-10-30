@@ -12312,8 +12312,10 @@ superficie deve toglierli; poi `HIDDEN_CHANGED` e l'indice rifatto dalla query d
 (piu' i 40 del registro) e **rossa togliendo il filtro finale** (provato: almeno 3 mondi su 4 su 10 diventano rossi). `HiddenSurfacesPropertyTest` non e' stato toccato.
 
 **Modifiche fuori dal perimetro, minime e dichiarate**
-- `app/build.gradle`: `testImplementation project(':core-map')` e `project(':feature-map')` (serve alla sonda; `:app` non dipende ancora da `:feature-map`, lo fara' P13 con `implementation`). Sono configurazioni di test: `Phase9ArchitectureTest` guarda solo
-  le dipendenze di produzione.
+- `app/build.gradle`: `testImplementation project(':core-map')` e `project(path: ':feature-map')` (serve alla sonda; `:app` non dipende ancora da `:feature-map`, lo fara' P13 con `implementation`). Sono configurazioni di test: `Phase9ArchitectureTest` guarda solo
+  le dipendenze di produzione. **`feature-map` e' scritto con `path:` apposta**: `Test-AppUsesFeatureMap` di `tools/check.ps1` legge ogni riga con `project(':feature-map')`, anche una di test, come "`:app` dipende dalla mappa" e allora i passi 7e e 7h
+  pretendono `libmaplibre.so` e il client delle tessere nell'APK di release (il primo giro del check era caduto li'). Quando P13 collega la mappa con `implementation project(':feature-map')` il controllo positivo parte da solo; `check.ps1` non l'ho toccato (conviene che chi
+  lo tiene faccia ignorare a `Test-AppUsesFeatureMap` le configurazioni di test).
 - `HiddenSurfaces.kt` (`SpecRow.MAP`, le quattro righe, i sorgenti `MAP_SOURCES`).
 - `feature-viewer/.../ViewerOverlay.kt` (3 righe), `feature-settings/.../SettingsScreen.kt` e `SettingsNavigation.kt` (la voce e il parametro).
 
@@ -12373,3 +12375,5 @@ testo a 1,3x sul telefono; in piu' le info del viewer con la mini-mappa (`info-v
 - La mini-mappa non mostra le zone scaricate (stile senza la sorgente online, L481); una bolla senza cella da disegnare ha il segnaposto (L482).
 - Il tablet a due pannelli (mappa e griglia insieme) e' della Fase 10 (D38): qui la mappa e la griglia sono pagine a schermo pieno.
 - **Nessuna prova sul dispositivo** (niente telefono, emulatore, NAS, rete).
+
+**Verifica**: `tools\check.ps1 -NoDaemon` (con `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, un posto Gradle `f9p4` preso e rilasciato attorno ai comandi) e' finito con **OK: tutto a posto** (codice di uscita 0): assembleDebug, assembleRelease, galleryTest e galleryLint verdi, nessun modulo a zero test (`feature-map` 222, `core-map` 104, `feature-viewer` 899, `feature-settings` 606, `app` 1.162), tutti i passi dell'APK di release verdi, nessuna classe di un package `testing` e nessun resto di debug nel dex. Il primo giro (gradle in 1.208 s, tutto verde) era caduto solo sui passi 7e e 7h per la riga `testImplementation project(':feature-map')` (vedi sopra); corretta con `path:` e rifatto: il secondo giro e' tornato verde (gradle in 346 s, con le prove dei moduli che non cambiano prese dalla cache). Un primo errore trovato prima: `NoFixedWaitsTest` non vuole una costante `TIMEOUT` con un numero nelle sonde di `:app`; la sonda della mappa aspetta con `Attese.TETTO`. APK di release non firmato: 91.049.961 byte.

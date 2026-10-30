@@ -350,6 +350,8 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.FACES_GROUPING_SKIPPED, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_grouping_skipped_title, R.string.diag_faces_grouping_skipped_guide, null),
     DiagEntry(DiagCodes.FACES_SEGMENT_WAITING, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_segment_waiting_title, R.string.diag_faces_segment_waiting_guide, null),
     DiagEntry(DiagCodes.FACES_ARCHIVE_FULL, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_archive_full_title, R.string.diag_faces_archive_full_guide, null),
+    // Correzioni C (CA-7, C280): l'archivio dei volti non si apre adesso (Keystore, dati piu' nuovi dell'app, file).
+    DiagEntry(DiagCodes.FACES_STORE_UNAVAILABLE, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_store_unavailable_title, R.string.diag_faces_store_unavailable_guide, null),
     DiagEntry(DiagCodes.FACES_HISTORY_KEPT, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_history_kept_title, R.string.diag_faces_history_kept_guide, null),
 
     // --- Ricordi e mappa (Fase 9, P0: le voci di stato; i codici del §2.12 li aggiunge P13) --------------------------------

@@ -108,8 +108,11 @@ enum class FacesWait(override val code: String) : StableCode {
   /** P4: la tappa e' finita per tempo e ce n'e' un'altra in coda: "riprendo fra poco" (non e' un'attesa delle regole, come IX-2 della Fase 6). */
   NEXT_STAGE("next_stage"),
 
-  /** P4: poco spazio sul telefono (sotto 1 GiB, E-A17) o database dei volti non disponibile adesso. */
+  /** P4: poco spazio sul telefono (sotto 1 GiB, E-A17) o database dei volti che non si apre adesso per un file (CA-7: il motivo di una chiave o di una versione ha il suo). */
   STORAGE("storage"),
+
+  /** CA-7: la chiave che protegge i dati dei volti non risponde adesso (Keystore passeggero, o senza Keystore hardware): non e' mancanza di spazio; si riprova alla tappa dopo. */
+  KEYSTORE("keystore"),
 }
 
 /** La fase del lavoro in corso. */

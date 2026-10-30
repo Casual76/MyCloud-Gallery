@@ -68,7 +68,6 @@ private class UnitState {
   var complete = true
   var computed = 0
   var restaged = 0
-  var done = 0
 }
 
 /** I passi sul database fuori dal salvataggio del corpo, ognuno con i suoi errori di fila ([UnitRunner.queueFailed]). */
@@ -198,7 +197,8 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
   /** Null = si continua; altrimenti perche' la tappa si ferma. */
   private suspend fun process(unit: PlannedUnit, item: FacesItem, state: UnitState): FacesStop? {
     val computer = engine.computer() ?: return engineStop()
-    ctx.status.value = FacesStatus.Running(state.done, unit.items.size, FacesPhase.DETECT)
+    // CA-1: il progresso e' della libreria (fatti e totale contati una volta per tappa), non dell'unita' da 200 media.
+    ctx.status.value = ctx.progress.running(FacesPhase.DETECT)
     val started = parts.clock.monotonicNanos()
     val key = item.contentKey
     when (val outcome = computer.compute(item)) {
@@ -212,14 +212,12 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
         engineStreak = 0
         ctx.memory.strikes.remove(key)
         ctx.tally.analyzed++
+        ctx.progress.advance()
         ctx.tally.faces += outcome.body.faces.size
         counters.facesSaved.addAndGet(outcome.body.faces.size)
         state.computed++
         ctx.rates.record(item.kind, outcome.hqUsed, parts.clock.monotonicNanos() - started)
-        stage(unit, item, state)?.let {
-          state.done++
-          return it
-        }
+        stage(unit, item, state)?.let { return it }
       }
       MediaOutcome.Refused -> {
         if (markUnsupported(key, state)) {
@@ -245,7 +243,6 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
         return halt(outcome.stop)
       }
     }
-    state.done++
     return null
   }
 
@@ -304,6 +301,8 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
   private suspend fun markUnsupported(key: ContentKey, state: UnitState): Boolean = try {
     archive { ctx.store.archive.markUnsupported(key, ctx.config.recipe) }
     queueOk(QueueStep.UNSUPPORTED)
+    // CA-1: anche un media "non supportato" e' finito (e' nell'archivio): la libreria avanza.
+    ctx.progress.advance()
     true
   } catch (e: ArchiveClosed) {
     throw e
@@ -495,7 +494,7 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
 
   /** A fine unita' l'assegnazione ai gruppi: se questo e' il custode il passo vero, altrimenti la vista provvisoria (D21). Non ferma mai il calcolo. */
   private suspend fun group() {
-    ctx.status.value = FacesStatus.Running(ctx.tally.analyzed, ctx.tally.analyzed, FacesPhase.GROUPING)
+    ctx.status.value = ctx.progress.running(FacesPhase.GROUPING)
     try {
       parts.grouping.incremental(ctx.left())
     } catch (e: CancellationException) {
@@ -507,7 +506,7 @@ internal class UnitRunner(private val ctx: RunContext, private val engine: Engin
 
   /** La pubblicazione a fine unita'. Null = si continua; un errore del database (O1) lo conta come la messa in coda: al secondo di fila la tappa si ferma. */
   private suspend fun flush(): FacesStop? {
-    ctx.status.value = FacesStatus.Running(ctx.tally.analyzed, ctx.tally.analyzed, FacesPhase.PUBLISH)
+    ctx.status.value = ctx.progress.running(FacesPhase.PUBLISH)
     try {
       if (parts.publisher.flush(FlushReason.UNIT_FINISHED) is FacesPublishOutcome.Failed) {
         counters.publishFailures.incrementAndGet()

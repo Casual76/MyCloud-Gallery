@@ -58,6 +58,7 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
       engineStops = c.engineStops.get(),
       modelStops = c.modelStops.get(),
       keyLost = c.keyLost.get(),
+      storeUnavailable = c.storeUnavailable.get(),
       databaseRebuilt = c.databaseRebuilt.get(),
       storeFailures = c.storeFailures.get(),
       unitsLost = c.unitsLost.get(),
@@ -132,6 +133,8 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
     if (f.engineStops > 0 || f.engineFailures > 0) items += count(DiagCodes.FACES_ENGINE_FAILED, f.engineStops + f.engineFailures)
     if (f.modelStops > 0) items += count(DiagCodes.FACES_MODEL_MISMATCH, f.modelStops)
     if (f.keyLost > 0) items += count(DiagCodes.FACES_KEY_LOST, f.keyLost)
+    // CA-7: l'archivio non si apre adesso (Keystore, dati piu' nuovi, file): solo quante tappe non sono partite.
+    if (f.storeUnavailable > 0) items += count(DiagCodes.FACES_STORE_UNAVAILABLE, f.storeUnavailable)
     if (f.segmentsRejected > 0) items += count(DiagCodes.FACES_SEGMENT_REJECTED, f.segmentsRejected)
     if (f.segmentsWaiting > 0) items += count(DiagCodes.FACES_SEGMENT_WAITING, f.segmentsWaiting)
     if (f.archiveFull > 0) items += count(DiagCodes.FACES_ARCHIVE_FULL, f.archiveFull)
@@ -226,6 +229,8 @@ internal data class PeopleFacts(
   val engineStops: Int = 0,
   val modelStops: Int = 0,
   val keyLost: Int = 0,
+  /** CA-7: tappe del calcolo non partite perche' l'archivio dei volti non si apre adesso. */
+  val storeUnavailable: Int = 0,
   val databaseRebuilt: Int = 0,
   val storeFailures: Int = 0,
   val unitsLost: Int = 0,

@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -61,7 +62,12 @@ class FacesPeopleFacade(private val graph: FacesGraph, scope: CoroutineScope) : 
 
   override val list: StateFlow<PeopleList> = live.flatMapLatest { it?.people?.list ?: flowOf(PeopleList.EMPTY) }.stateIn(scope, SharingStarted.Eagerly, PeopleList.EMPTY)
 
-  override fun person(id: PersonId): Flow<PersonView?> = live.flatMapLatest { it?.people?.person(id) ?: flowOf(null) }
+  /**
+   * AT-2 (correzioni B): prima del montaggio una persona non e' "non trovata" ma "non ancora letta": il flusso **non emette niente** e la pagina resta
+   * `Loading` (come dopo la morte del processo, con una pagina persona ripristinata prima che la galleria sia partita). Dalle persone montate `null` vuol dire
+   * davvero "non c'e'" (o "non c'e' piu'").
+   */
+  override fun person(id: PersonId): Flow<PersonView?> = live.flatMapLatest { it?.people?.person(id) ?: emptyFlow() }
 
   override fun others(): Flow<OthersView> = live.flatMapLatest { it?.people?.others() ?: flowOf(OthersView(emptyList())) }
 

@@ -156,16 +156,20 @@ object FacesModule {
   fun peopleChoices(people: FacesPeopleFacade): PeopleChoices =
     AppPeopleChoices(people, people)
 
-  /** La sezione Persone delle Raccolte (§2.1, D25): sempre c'e', anche da spenta, con "Attiva riconoscimento dei volti". */
+  /**
+   * La sezione Persone delle Raccolte (§2.1, D25): montata c'e' sempre, anche da spenta, con "Attiva riconoscimento dei volti"; prima del montaggio non c'e' (AT-2).
+   * **`@Singleton`** (AT-3, correzioni B): senza, ogni `CollectionsLayoutViewModel` (a ogni apertura della scheda) costruiva un fornitore nuovo, con i suoi collettori
+   * `Eagerly` su `graph.scope` che non finivano piu'. Uno solo per processo.
+   */
   @Provides
   @IntoSet
+  @Singleton
   fun peopleSection(
     @ApplicationContext context: Context,
-    people: FacesPeopleFacade,
-    switch: FacesSwitch,
     faces: FacesGraph,
     graph: AppGraph,
-  ): CollectionsSectionProvider = peopleSectionProvider(context.applicationContext.resources, people, switch.state, faces, graph.scope, switch.offElsewhere)
+    ai: AiStack,
+  ): CollectionsSectionProvider = peopleSectionProvider(context.applicationContext.resources, faces, graph.scope, ai.ai.indexer)
 
   /** La sezione "Persone" della Diagnostica (§2.10): stato e un elemento per codice, solo numeri. */
   @Provides

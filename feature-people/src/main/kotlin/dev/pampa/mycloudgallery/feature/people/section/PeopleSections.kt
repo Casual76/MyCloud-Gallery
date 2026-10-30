@@ -6,6 +6,7 @@ import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PhoneAndroid
+import androidx.compose.material.icons.rounded.PhonelinkOff
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Warning
@@ -24,10 +25,12 @@ import dev.pampa.mycloudgallery.feature.people.contract.PeopleUnavailable
 import dev.pampa.mycloudgallery.feature.people.nav.PeopleEntryTarget
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleText
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 
 // LA SEZIONE PERSONE DELLE RACCOLTE (Fase 8, P9; docs/fase8-progetto.md §1.5 `PeopleSectionState`, §2.6 "Cosa si vede", Q2 (b), D4, D25, D34;
@@ -70,25 +73,58 @@ data class SectionData(
 )
 
 /**
+ * Tutto cio' che serve a decidere la sezione, **preso nello stesso istante** (AT-2, correzioni B): lo stato di Persone su questo dispositivo, le persone, il
+ * calcolo, il segno di CE-3 e se questo dispositivo analizza le foto (DR-1). Un flusso di questi, con **null finche' le persone non sono montate**: non e'
+ * "spenta" ne' "vuota", e' "non ancora letta" (il principio del primo disegno istantaneo: mai uno stato sbagliato).
+ */
+data class PeopleSectionInputs(
+  val state: FacesState,
+  val list: PeopleList,
+  val status: FacesStatus,
+  val offElsewhere: Boolean = false,
+  /** Questo dispositivo analizza le foto (DR-1); `null` = non si sa. */
+  val computesHere: Boolean? = null,
+)
+
+/**
  * I dati della sezione Persone: [section] cambia da sola con lo stato di Persone, le persone e il calcolo. Le voci: da spenta una riga sola;
- * accesa fino a [PeopleSectionStates.TOP] persone, "Tutte le persone" e (Q2 (b)) "Altri volti (N)".
+ * accesa fino a [PeopleSectionStates.TOP] persone, "Tutte le persone" e (Q2 (b)) "Altri volti (N)"; con Persone accesa e nessuna persona sempre una riga che dice
+ * a che punto si e' (AT-1). **Finche' le persone non sono montate ([inputs] null) la sezione non c'e'** (AT-2, L297): ne' "Attiva riconoscimento dei volti" a chi
+ * ha gia' Persone accesa, ne' niente altro.
  */
 class PeopleSectionSources(
   private val resources: Resources,
-  people: People,
-  state: StateFlow<FacesState>,
-  status: StateFlow<FacesStatus>,
+  inputs: Flow<PeopleSectionInputs?>,
   scope: CoroutineScope,
-  /** CE-3: Persone spenta da un altro dispositivo (di serie mai). */
-  offElsewhere: StateFlow<Boolean> = MutableStateFlow(false),
 ) {
-  /** Lo stato del §1.5 di adesso (la scheda delle Raccolte e gli screenshot lo leggono). */
-  val sectionState: StateFlow<PeopleSectionState> = combine(state, people.list, status, offElsewhere) { facesState, list, calc, off -> PeopleSectionStates.of(facesState, list, calc, off) }
-    .stateIn(scope, SharingStarted.Eagerly, PeopleSectionState.Off)
+  /** Per chi ha i pezzi separati (i test e le schermate): le persone sono sempre "montate". */
+  constructor(
+    resources: Resources,
+    people: People,
+    state: StateFlow<FacesState>,
+    status: StateFlow<FacesStatus>,
+    scope: CoroutineScope,
+    /** CE-3: Persone spenta da un altro dispositivo (di serie mai). */
+    offElsewhere: StateFlow<Boolean> = MutableStateFlow(false),
+    /** DR-1: questo dispositivo analizza le foto (di serie non si sa). */
+    computesHere: StateFlow<Boolean?> = MutableStateFlow(null),
+  ) : this(
+    resources,
+    combine(state, people.list, status, offElsewhere, computesHere) { facesState, list, calc, off, here -> PeopleSectionInputs(facesState, list, calc, off, here) },
+    scope,
+  )
 
-  /** La sezione come dato. Sempre una riga almeno: persino spenta la sezione c'e' (con "Attiva riconoscimento dei volti"). */
-  val section: StateFlow<SectionData?> = combine(sectionState, people.list) { s, list -> sectionOf(resources, s, list) }
+  private class Resolved(val state: PeopleSectionState, val list: PeopleList)
+
+  private val resolved: StateFlow<Resolved?> = inputs.map { i -> i?.let { Resolved(PeopleSectionStates.of(it.state, it.list, it.status, it.offElsewhere, it.computesHere), it.list) } }
     .stateIn(scope, SharingStarted.Eagerly, null)
+
+  /** Lo stato del §1.5 di adesso (la scheda delle Raccolte e gli screenshot lo leggono); null = le persone non sono ancora montate. */
+  val sectionState: StateFlow<PeopleSectionState?> = resolved.map { it?.state }.stateIn(scope, SharingStarted.Eagerly, resolved.value?.state)
+
+  /** La sezione come dato; null = non ancora (AT-2). Montata, c'e' sempre una riga almeno: persino spenta la sezione c'e' (con "Attiva riconoscimento dei volti"). */
+  val section: StateFlow<SectionData?> = resolved.map { it?.let { r -> sectionOf(resources, r.state, r.list) } }
+    .stateIn(scope, SharingStarted.Eagerly, resolved.value?.let { r -> sectionOf(resources, r.state, r.list) })
 
   companion object {
     /** Il codice stabile della sezione: lo stesso di `CollectionSections.PEOPLE` (lo prova `PeopleSectionBindingTest`). */
@@ -119,6 +155,12 @@ class PeopleSectionSources(
             PeopleEntryTarget.PROGRESS,
             state.percent?.let { resources.getString(R.string.persone_row_progress, it) } ?: resources.getString(R.string.persone_row_progress_waiting),
             resources.getString(R.string.persone_row_progress_detail), Icons.Rounded.Schedule, FluidTone.Info,
+          ),
+        )
+        is PeopleSectionState.NotComputedHere -> listOf(
+          row(
+            PeopleEntryTarget.NOT_COMPUTED, resources.getString(R.string.persone_row_not_here), resources.getString(R.string.persone_row_not_here_detail),
+            Icons.Rounded.PhonelinkOff, FluidTone.Warning,
           ),
         )
         is PeopleSectionState.Ready -> people(resources, state.top, state.total, state.othersCount, list.hiddenCount)
@@ -168,6 +210,10 @@ class PeopleSectionSources(
       }
       if (rows.isEmpty() && hidden > 0) {
         rows += SectionEntry(PeopleEntryTarget.ALL, resources.getString(R.string.persone_row_all), resources.getString(R.string.persone_row_hidden_only), Icons.Rounded.Group, FluidTone.Neutral)
+      }
+      // AT-1: con Persone accesa la sezione dice sempre qualcosa; senza nessuna persona (e il calcolo in pari) la riga apre "Tutte le persone", che lo spiega.
+      if (rows.isEmpty()) {
+        rows += SectionEntry(PeopleEntryTarget.ALL, resources.getString(R.string.persone_row_nobody), resources.getString(R.string.persone_row_nobody_detail), Icons.Rounded.Group, FluidTone.Neutral)
       }
       return rows
     }

@@ -96,6 +96,10 @@ class PeopleSettingsTest {
     facts.value = PeopleSettingsFacts(hiddenPeople = 2, progress = FacesStatus.Running(5, 10, FacesPhase.DETECT))
     assertThat(c.state.value.hiddenPeople).isEqualTo(2)
     assertThat(c.state.value.progress).isEqualTo(FacesStatus.Running(5, 10, FacesPhase.DETECT))
+    // DR-1 (correzioni B): se questo dispositivo non analizza le foto, la pagina lo sa (di serie si').
+    assertThat(c.state.value.computesHere).isTrue()
+    facts.value = PeopleSettingsFacts(computesHere = false)
+    assertThat(c.state.value.computesHere).isFalse()
   }
 
   @Test
@@ -134,7 +138,11 @@ class PeopleSettingsTest {
     hidden: Int = 0,
     canErase: Boolean = false,
     erase: EraseSheetState.Progress? = null,
-  ) = PeopleSettingsState(shown, devices, progress, excludedHere = shown == PeopleSwitchShown.EXCLUDED_HERE, hiddenPeople = hidden, models = models, canErase = canErase, erase = erase)
+    computesHere: Boolean = true,
+  ) = PeopleSettingsState(
+    shown, devices, progress, excludedHere = shown == PeopleSwitchShown.EXCLUDED_HERE, hiddenPeople = hidden, models = models, canErase = canErase, erase = erase,
+    computesHere = computesHere,
+  )
 
   private fun show(
     state: PeopleSettingsState,
@@ -215,6 +223,26 @@ class PeopleSettingsTest {
   fun senzaDispositiviCheAnalizzanoLaPaginaLoDice() {
     show(state(PeopleSwitchShown.ON, devices = emptyList()))
     text("Nessun tuo dispositivo analizza le foto.")
+  }
+
+  /**
+   * DR-1 (correzioni B): un dispositivo che non analizza le foto non ha un avanzamento suo: la pagina dice che qui le persone non si calcolano, e dove si accende il
+   * ruolo che serve. Non mostra "In attesa: ..." ne' "Tutto analizzato" per un calcolo che qui non c'e'.
+   */
+  @Test
+  fun dr1_unDispositivoCheNonAnalizzaDiceCheQuiLePersoneNonSiCalcolano() {
+    show(state(PeopleSwitchShown.LOCAL_ONLY, devices = listOf(tablet), progress = FacesStatus.Waiting(FacesWait.NOT_INDEXER), computesHere = false))
+    text("Qui le persone non si calcolano", "Indicizzatore", "Impostazioni → Ricerca e modelli")
+    assertThat(count("In attesa: questo dispositivo non analizza le foto")).isEqualTo(0)
+    assertThat(count("Tutto analizzato")).isEqualTo(0)
+  }
+
+  /** DR-1: chi analizza le foto non vede mai "qui le persone non si calcolano". */
+  @Test
+  fun dr1_unDispositivoCheAnalizzaNonLoDice() {
+    show(state(PeopleSwitchShown.LOCAL_ONLY, devices = listOf(phone), progress = FacesStatus.Idle(atNas = 1L)))
+    text("Tutto analizzato")
+    assertThat(count("Qui le persone non si calcolano")).isEqualTo(0)
   }
 
   @Test

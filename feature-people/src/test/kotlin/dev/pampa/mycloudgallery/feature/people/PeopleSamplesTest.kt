@@ -24,6 +24,7 @@ class PeopleSamplesTest {
     PeopleSectionState.AwaitingNotice -> "awaiting_notice"
     PeopleSectionState.Excluded -> "excluded"
     is PeopleSectionState.FirstRun -> "first_run"
+    PeopleSectionState.NotComputedHere -> "not_computed_here"
     is PeopleSectionState.Ready -> "ready"
     is PeopleSectionState.LocalOnly -> "local_only"
     is PeopleSectionState.Unavailable -> "unavailable"
@@ -83,7 +84,7 @@ class PeopleSamplesTest {
 
   @Test
   fun ogniCasoDegliStatiHaUnEsempio() {
-    assertThat(PeopleSamples.sections.map(::caseOf).toSet()).hasSize(8)
+    assertThat(PeopleSamples.sections.map(::caseOf).toSet()).hasSize(9)
     assertThat(PeopleSamples.lists.map(::caseOf).toSet()).hasSize(3)
     assertThat(PeopleSamples.pages.map(::caseOf).toSet()).hasSize(5)
     assertThat(PeopleSamples.reviews.map(::caseOf).toSet()).hasSize(ReviewPurpose.entries.size + 2)

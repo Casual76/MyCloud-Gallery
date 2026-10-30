@@ -141,16 +141,29 @@ private fun LazyListScope.workSection(state: PeopleSettingsState, handlers: Peop
           disclosure = false,
         )
       }
-      progressLine(state.progress)?.let { (text, tone) ->
+      if (!state.computesHere) {
+        // DR-1 (correzioni B): un dispositivo che non analizza le foto non ha un avanzamento suo da mostrare: dice che qui le persone non si calcolano e dove si
+        // accende il ruolo che serve. Non calcola per conto suo, nemmeno con la recinzione dei volti (D34).
         if (state.devices.isNotEmpty()) FluidListDivider()
         FluidListRow(
-          title = text,
-          subtitle = "",
-          tone = tone,
-          leading = { Glyph(Icons.Rounded.Face) },
-          onClick = if (state.progress is FacesStatus.Problem) handlers.onOpenDiagnostics else null,
-          disclosure = state.progress is FacesStatus.Problem && handlers.onOpenDiagnostics != null,
+          title = stringResource(R.string.faces_settings_not_here_title),
+          subtitle = stringResource(R.string.faces_settings_not_here_detail),
+          tone = FluidTone.Warning,
+          leading = { Glyph(Icons.Rounded.PhonelinkOff) },
+          disclosure = false,
         )
+      } else {
+        progressLine(state.progress)?.let { (text, tone) ->
+          if (state.devices.isNotEmpty()) FluidListDivider()
+          FluidListRow(
+            title = text,
+            subtitle = "",
+            tone = tone,
+            leading = { Glyph(Icons.Rounded.Face) },
+            onClick = if (state.progress is FacesStatus.Problem) handlers.onOpenDiagnostics else null,
+            disclosure = state.progress is FacesStatus.Problem && handlers.onOpenDiagnostics != null,
+          )
+        }
       }
     }
   }

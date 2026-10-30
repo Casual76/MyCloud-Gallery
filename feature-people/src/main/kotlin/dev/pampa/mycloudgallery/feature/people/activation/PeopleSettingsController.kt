@@ -64,6 +64,7 @@ class PeopleSettingsController(
     models = extra.models,
     canErase = PeopleSettingsRules.canErase(current),
     erase = extra.erase,
+    computesHere = extra.computesHere,
   )
 
   /** "Non su questo dispositivo": esclusione locale. */

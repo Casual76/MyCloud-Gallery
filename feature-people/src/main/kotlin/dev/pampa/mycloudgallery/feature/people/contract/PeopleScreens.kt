@@ -53,6 +53,13 @@ sealed interface PeopleSectionState {
   }
 
   /**
+   * DR-1 (correzioni B): Persone e' accesa, ma **questo dispositivo non analizza le foto** (non ha il ruolo di Indicizzatore) e non ci sono ancora persone da
+   * mostrare. Qui le persone non si calcolano (il dispositivo non calcola per conto suo; risposta dell'utente del 30/10): la riga lo dice e dice dove si
+   * accende il ruolo. Con la recinzione dei volti (D34) le persone degli altri dispositivi non arrivano, e questa riga non cambia mai da sola.
+   */
+  data object NotComputedHere : PeopleSectionState
+
+  /**
    * Le persone in primo piano: con Q2 (b) **solo chi ha un nome** ([top], dal piu' fotografato), [total] persone con un nome, e la riga
    * "Altri volti" con [othersCount] gruppi senza nome (a un tocco). Nessun gruppo sparisce.
    */

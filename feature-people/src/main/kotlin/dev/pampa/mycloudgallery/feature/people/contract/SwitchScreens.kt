@@ -98,6 +98,8 @@ data class PeopleSettingsState(
   /** "Disattiva e cancella" si offre solo con Persone accesa o in attesa dell'avviso, e mai due volte. */
   val canErase: Boolean,
   val erase: EraseSheetState.Progress?,
+  /** DR-1 (correzioni B): questo dispositivo analizza le foto (ruolo Indicizzatore). Falso = "qui le persone non si calcolano" e come cambiarlo. */
+  val computesHere: Boolean = true,
 ) {
   override fun toString(): String = "PeopleSettingsState(${shown.code}, ${devices.size} dispositivi, nascoste=$hiddenPeople)"
 }

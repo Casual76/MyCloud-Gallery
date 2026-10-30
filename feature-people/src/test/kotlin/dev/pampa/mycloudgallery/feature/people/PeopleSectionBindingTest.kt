@@ -3,16 +3,24 @@ package dev.pampa.mycloudgallery.feature.people
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.faces.contract.FacesPhase
+import dev.pampa.mycloudgallery.core.faces.contract.FacesState
+import dev.pampa.mycloudgallery.core.faces.contract.FacesStatus
+import dev.pampa.mycloudgallery.core.faces.contract.FacesWait
+import dev.pampa.mycloudgallery.core.faces.contract.HereState
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleList
 import dev.pampa.mycloudgallery.core.faces.contract.PersonCard
+import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntries
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionSections
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionsLayout
 import dev.pampa.mycloudgallery.feature.library.collections.FixedCollectionsSection
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleSectionState
 import dev.pampa.mycloudgallery.feature.people.section.PeopleSectionSources
+import dev.pampa.mycloudgallery.feature.people.section.PeopleSectionStates
 import dev.pampa.mycloudgallery.feature.people.section.SectionData
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -59,6 +67,7 @@ class PeopleSectionBindingTest {
       PeopleSectionState.AwaitingNotice,
       PeopleSectionState.Excluded,
       PeopleSectionState.FirstRun(12),
+      PeopleSectionState.NotComputedHere,
       PeopleSectionState.Ready(listOf(anna), 1, 3),
       PeopleSectionState.LocalOnly(listOf(anna), 1, 0),
     )
@@ -89,5 +98,23 @@ class PeopleSectionBindingTest {
     val off = PeopleSectionSources.sectionOf(resources, PeopleSectionState.Off, PeopleList.EMPTY).toGroup()
     assertThat(off.entries.single().title).isEqualTo("Attiva riconoscimento dei volti")
     assertThat(off.isEmpty).isFalse()
+  }
+
+  /**
+   * AT-1 (correzioni B), dalla parte delle Raccolte: con Persone accesa la sezione **sopravvive al layout vero**. `CollectionsLayout.sectionOf` scarta un gruppo senza
+   * voci ("Senza voci non c'e' sezione"): e' li' che la sezione spariva quando era accesa e senza persone. Per ogni stato del calcolo, con e senza recinzione, con e
+   * senza il ruolo di Indicizzatore, a lista vuota, il layout vero tiene la sezione.
+   */
+  @Test
+  fun at1_conPersoneAccesaIlLayoutVeroTieneLaSezione() {
+    val statuses = listOf(FacesStatus.Off, FacesStatus.Idle(atNas = 1L), FacesStatus.Running(3, 9, FacesPhase.DETECT), FacesStatus.Problem("FACES_ENGINE_FAILED")) +
+      FacesWait.entries.map { FacesStatus.Waiting(it) }
+    for (here in listOf(HereState.ACTIVE, HereState.LOCAL_ONLY)) for (status in statuses) for (computes in listOf(null, true, false)) {
+      val state = PeopleSectionStates.of(FacesState.On(FaceGeneration.random(), here), PeopleList.EMPTY, status, computesHere = computes)
+      val group = PeopleSectionSources.sectionOf(resources, state, PeopleList.EMPTY).toGroup()
+      val kept = CollectionsLayout.sectionOf(PeopleSectionSources.CODE, group)
+      assertThat(kept).isNotNull()
+      assertThat(kept!!.rows).isNotEmpty()
+    }
   }
 }

@@ -41,6 +41,8 @@ data class PeopleSettingsFacts(
   val models: List<FaceModelRow> = emptyList(),
   /** L'avanzamento di "Disattiva e cancella", se c'e' (lo scrive P8). */
   val erase: EraseSheetState.Progress? = null,
+  /** DR-1 (correzioni B): questo dispositivo ha il ruolo di Indicizzatore. Di serie si'; senza, la pagina dice che qui le persone non si calcolano. */
+  val computesHere: Boolean = true,
 ) {
   override fun toString(): String = "PeopleSettingsFacts(${devices.size} dispositivi, nascoste=$hiddenPeople)"
 }

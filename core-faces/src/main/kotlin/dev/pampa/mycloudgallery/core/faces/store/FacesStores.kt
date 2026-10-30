@@ -71,6 +71,38 @@ class FacesStores(
   }
 
   /**
+   * I6 (correzioni A): il negozio di [generation] **solo se c'e' gia' e si legge**, per i nomi che la cancellazione toglie dalla cronologia. A differenza di
+   * [open] non fa mai nascere una chiave o un database e non toglie mai un file: con la chiave gia' distrutta (la cancellazione e' morta fra la chiave e i
+   * file) risponde [ExistingStore.Unreadable], senza rifare niente e senza il falso `FACES_KEY_LOST`.
+   */
+  suspend fun openExisting(generation: FaceGeneration): ExistingStore = withContext(dispatchers.io) {
+    lock.withLock {
+      opened[generation]?.let { if (it.isOpen) return@withLock ExistingStore.Ready(it) }
+      opened.remove(generation)
+      val main = fileOf(generation)
+      if (!main.exists() || main.length() == 0L) return@withLock ExistingStore.Unreadable
+      val onDisk = FacesDatabaseFiles.versionOf(main)
+      if (onDisk != null && onDisk > FacesDatabase.VERSION) return@withLock ExistingStore.Unreadable
+      val key = when (val found = openKey(generation)) {
+        is KeyOpen.Key -> found.key
+        KeyOpen.Lost -> return@withLock ExistingStore.Unreadable
+        KeyOpen.Unknown -> return@withLock ExistingStore.Unknown
+      }
+      when (val result = tryOpen(main, key)) {
+        is DbOpen.Ok -> FacesStore(generation, result.db, key).also { opened[generation] = it }.let { ExistingStore.Ready(it) }
+        DbOpen.WrongKey, DbOpen.Damaged -> {
+          key.close()
+          ExistingStore.Unreadable
+        }
+        DbOpen.Failed -> {
+          key.close()
+          ExistingStore.Unknown
+        }
+      }
+    }
+  }
+
+  /**
    * Le tre porte che la sincronizzazione (P3) vuole dal database, con il negozio che si apre da solo: i legami per `:app` (P13).
    * - [archives]: l'archivio della generazione, o null se il negozio non si apre adesso (Keystore, disco, versione);
    * - [replicaStore] e [publishStore]: lo stato della replica e del pubblicatore, durevole. Un negozio che non si apre da' una replica vuota in

@@ -14,6 +14,12 @@ import dev.pampa.mycloudgallery.feature.people.contract.PeopleListUi
 import kotlinx.coroutines.delay
 
 /**
+ * Il codice della forma della pagina Persone in `InstantShapes`: pubblico perche' `:app` la toglie quando i dati dei volti si cancellano o Persone non e'
+ * piu' attiva qui (R11, correzioni A: i numeri non devono sopravvivere ai dati).
+ */
+const val PEOPLE_INSTANT_SHAPE_CODE: String = "persone"
+
+/**
  * Persone al primo ingresso (Avvio istantaneo, 28/10). L'elenco arriva vuoto finche' Persone non e' montata e l'archivio non e' letto: senza
  * questo, la pagina diceva "Nessuna persona" per un attimo e poi mostrava la griglia (un lampo). Se l'ultima volta c'erano delle persone (una
  * forma ricordata), un elenco vuoto nei primi [PATIENCE_MS] vale "non ancora letto": si disegna lo scheletro con la forma dell'ultima volta. Poi
@@ -21,7 +27,7 @@ import kotlinx.coroutines.delay
  */
 internal object PeopleInstant {
 
-  const val CODE: String = "persone"
+  const val CODE: String = PEOPLE_INSTANT_SHAPE_CODE
 
   /** Quanto un elenco vuoto vale "non ancora letto" al primo ingresso. */
   const val PATIENCE_MS: Long = 1_500L

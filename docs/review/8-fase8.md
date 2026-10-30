@@ -8,7 +8,28 @@
 | **Tipo** | Revisione avversariale in sola lettura. Nessuna correzione al codice. Niente Gradle, nessun telefono, nessun `adb`, nessun NAS, nessuna rete. |
 | **Data** | 30/10/2026 |
 | **Metodo** | Lettura del codice nel worktree `rev8/sicurezza` a `e9086269`, seguendo ogni via che porta dati da un altro dispositivo o dal NAS fino a cio' che l'utente vede o a un'azione sui file, e ogni file che l'app scrive o toglie. Due revisori di supporto, in sola lettura, hanno letto in parallelo: (a) formato firmato, replica e pubblicazione dei dati dei volti; (b) Nascosti, ricerca per persona, album smart con persone, Diagnostica e log. Il revisore principale ha letto "Disattiva e cancella" (diario, passi locali e sul NAS, pulizia di ogni dispositivo, gancio di D30), l'interruttore, il recinto, la cifratura (chiavi del Keystore, negozi, colonne sigillate), i motori e i loro ingressi, il montaggio e l'avvio istantaneo, le recinzioni. **Ogni voce riportata qui e' stata ricontrollata nel codice**; per ognuna si dice se e' confermata (dal codice) o plausibile (dipende da un comportamento del NAS, della piattaforma o da un attacco che qui non si prova). Nessun test eseguito. Nessun file del repository modificato a parte questo documento. |
-| **Stato** | **Aperta**: nessuna voce e' ancora corretta. La proposta dei pacchetti e' in fondo ("Pacchetti di correzione proposti"). |
+| **Stato** | **Chiusa in parte il 30/10** dal pacchetto di correzione A (`fase8/corr-a`: "cancellazione e stato locale"): **R1, R11, R12, R13, I1 e I6** hanno una correzione con un test (C210-C218, L320-L322); le altre voci restano **aperte** per i pacchetti B (R3-R8, I5) e C (R9, R10, I2-I4), per il documento finale (I7, I8) e per la decisione dell'utente su R2. Lo stato di ogni voce e' nella sezione "Stato di ogni voce" qui sotto; la sezione "Fase 8, correzioni dopo le revisioni: pacchetto A" di `docs/decisioni.md` ha le decisioni. Restano da provare sul telefono le prove elencate in fondo (R1, R11, R12, R13) e F100-F103. |
+
+## Stato di ogni voce (30/10, pacchetto A)
+
+**Corretta**: la correzione e i suoi test (le sigle C e L sono in `docs/sicurezza.md`). **Aperta**: il pacchetto che la chiude o la decisione che serve. La voce R2 era nella proposta del pacchetto A ma non nell'incarico di questo pacchetto: va con la normalizzazione Unicode dei nomi (R9) e aspetta la decisione dell'utente (vedi "Decisioni che servono all'utente").
+
+| Voce | Stato | Pacchetto, prove, limiti |
+|---|---|---|
+| R1 | Corretta (A) | L'interruttore toglie ogni generazione sul disco, non solo quella ricordata da `faces-local`; il gancio non lascia uscire `off` finche' i file ci sono, nemmeno se il disco non si legge; vale per voce spenta, esclusione e attivazione (C210: `SwitchDiskGenerationsTest` `r1_*`, `EraseCorrectionsATest.r1_*`, il banco di P12 con l'elencazione legata) |
+| R2 | Aperta | Nomi vecchi e non latini nella cronologia: decisione dell'utente (R2) e normalizzazione Unicode con R9 (pacchetto C) |
+| R3-R8 | Aperte | Pacchetto B (formato e replica dei volti), prima del si' di Q5 |
+| R9, R10 | Aperte | Pacchetto C (ricerca e album con persone) |
+| R11 | Corretta (A) | `ArchivePeople.release`, `FencedArchives.forget`, `GroupFaceCache` che non si riempie dopo il ritiro, forma della pagina Persone tolta, spenta = memoria vuota (C211: `PeopleReleaseTest`, `GroupCacheRetireTest`, `InstantShapesTest.r11_*`, `FacesCorrectionsATest.r11_*`, `FacesFenceSourcesTest.r11_*`). L322 |
+| R12 | Corretta (A) | Testo deciso dall'orchestratore: «Fatto ovunque» solo con NAS e tutti i dispositivi; «Cancellati da questo dispositivo» per la cancellazione solo locale; «Niente da cancellare qui» (C212: `FacesEraseControllerTest` `r12_*`, `FacesEraseSheetTest`) |
+| R13 | Corretta (A) | `EraseWait.FILE_OPEN` e attese crescenti (2, 4, 8, 16, 30 minuti) invece di un giro al minuto (C213: `EraseCorrectionsATest` `r13_*`, `FacesCorrectionsATest` `r13_*`). **Aperta in parte**: la Diagnostica non conta i file trattenuti (L320) |
+| I1 | Corretta (A) | La cancellazione nasce prima di `ArchivePeople`, per costruzione (C216, C130: `FacesFenceSourcesTest.i1_*`) |
+| I2-I4 | Aperte | Pacchetto C |
+| I5 | Aperta | Pacchetto B |
+| I6 | Corretta (A) | `FacesStores.openExisting`: la lettura dei nomi non crea mai chiavi ne' database e non segnala `FACES_KEY_LOST` (C217: `RealStoreEraseTest.i6_*`) |
+| I7, I8 | Aperte | Documento finale (un codice della Diagnostica per un montaggio fallito; C39 e il commento di `FacesStores`) |
+
+---
 
 ## Riepilogo
 

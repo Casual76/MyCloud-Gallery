@@ -136,6 +136,9 @@ class FacesSwitchFacade(private val graph: FacesGraph, scope: CoroutineScope) : 
 
   override val syncPending: StateFlow<Boolean> = live.flatMapLatest { it?.switch?.syncPending ?: flowOf(false) }.stateIn(scope, SharingStarted.Eagerly, false)
 
+  /** CE-3: spenta da un altro dispositivo (la riga sopra "Attiva riconoscimento dei volti"). */
+  override val offElsewhere: StateFlow<Boolean> = live.flatMapLatest { it?.switch?.offElsewhere ?: flowOf(false) }.stateIn(scope, SharingStarted.Eagerly, false)
+
   override suspend fun activate(consent: FacesActivationConsent): ActivateOutcome = graph.live.value?.switch?.activate(consent) ?: ActivateOutcome.Unavailable
 
   override suspend fun acceptNotice(textVersion: Int) {

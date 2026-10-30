@@ -141,7 +141,14 @@ sealed interface EraseSheetState {
     override fun toString(): String = "EraseSheetState.Progress(${local.code}, ${nas.code}, $confirmed/${devices.size})"
   }
 
+  /** "Fatto ovunque" (R12): cancellato dal NAS e **tutti** i dispositivi hanno confermato. Mai per la cancellazione solo locale e mai per "niente da cancellare". */
   data object Done : EraseSheetState
+
+  /** R12: la cancellazione era solo locale (D34, niente sul NAS): "Cancellati da questo dispositivo". Non dice niente del NAS ne' degli altri dispositivi. */
+  data object DoneHere : EraseSheetState
+
+  /** R12: non c'era niente da cancellare qui (Persone non attiva su questo dispositivo, o voce che non si capisce): non e' stato toccato niente. */
+  data object NothingToErase : EraseSheetState
 
   /** Tutto fatto tranne le conferme di [devices] (spenti o lontani): finiranno da soli quando tornano. */
   data class WaitingDevices(val devices: List<DeviceAck>) : EraseSheetState {

@@ -30,6 +30,14 @@ enum class LocalEraseWhy(override val code: String) : StableCode {
  */
 fun interface FacesLocalDataEraser {
   suspend fun erase(generation: FaceGeneration, why: LocalEraseWhy): Boolean
+
+  /**
+   * R1 (correzioni A): le generazioni di cui questo dispositivo ha **qualcosa sul disco** (un database, una chiave), anche quelle che `faces-local` non
+   * ricorda (una scrittura non riuscita prima di una morte del processo, un file rovinato). L'interruttore toglie da qui, non solo da
+   * [dev.pampa.mycloudgallery.core.faces.contract.FacesLocal.dataGeneration]. Null = adesso non si legge: nel dubbio l'allineamento non e' finito (il gancio
+   * non lascia uscire una testa che dice `off`). Di serie nessuna (chi non ha un disco, come i fake senza dati).
+   */
+  suspend fun generationsOnDisk(): List<FaceGeneration>? = emptyList()
 }
 
 /**

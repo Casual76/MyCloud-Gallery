@@ -37,6 +37,7 @@ import dev.pampa.mycloudgallery.core.faces.store.FacesUnavailable
 import dev.pampa.mycloudgallery.core.faces.store.FacesUnitsDone
 import dev.pampa.mycloudgallery.core.faces.switch.DefaultFacesSwitch
 import dev.pampa.mycloudgallery.core.faces.switch.FacesLocalDataEraser
+import dev.pampa.mycloudgallery.core.faces.switch.LocalEraseWhy
 import dev.pampa.mycloudgallery.core.faces.sync.FacesArchives
 import dev.pampa.mycloudgallery.core.faces.sync.FacesAttestation
 import dev.pampa.mycloudgallery.core.faces.sync.FacesSyncIdentity
@@ -149,7 +150,12 @@ internal class ChaosDevice(val world: ChaosWorld, val index: Int, val name: Stri
     scope = CoroutineScope(Dispatchers.Unconfined + Job() + CoroutineExceptionHandler { _, e -> if (e !is Death) world.escapedFromScope(name, e) })
     val store = ChaosLocalStore(localStore, inj, index)
     // L'interruttore cancella i dati locali con la stessa operazione di "Disattiva e cancella" (come la lega :app, P13).
-    val eraserPort = FacesLocalDataEraser { g, why -> localErase.erase(g, why) }
+    val eraserPort = object : FacesLocalDataEraser {
+      override suspend fun erase(generation: FaceGeneration, why: LocalEraseWhy): Boolean = localErase.erase(generation, why)
+
+      // R1: come in :app, l'interruttore guarda tutto cio' che e' sul disco.
+      override suspend fun generationsOnDisk(): List<FaceGeneration>? = localErase.generationsOnDisk()
+    }
     switch = DefaultFacesSwitch(scope, personal, store, requirements, eraserPort, world.clock, newGeneration = { nextGeneration() })
     fence = FacesEraseFence(switch)
     localErase = FacesLocalErase(local, fence, history = history)

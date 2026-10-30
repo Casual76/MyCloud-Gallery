@@ -33,6 +33,12 @@ sealed interface PeopleSectionState {
   /** La riga "Attiva riconoscimento dei volti" (apre la pagina di attivazione). */
   data object Off : PeopleSectionState
 
+  /**
+   * CE-3 (correzioni A): spenta qui perche' un altro dispositivo dell'account ha fatto "Disattiva e cancella" e questo ha tolto i suoi dati. Sopra la riga
+   * "Attiva riconoscimento dei volti" c'e' la riga che lo dice ("Persone e' stata disattivata da un altro tuo dispositivo").
+   */
+  data object OffElsewhere : PeopleSectionState
+
   /** Attiva sull'account, ma questo dispositivo non ha ancora visto l'avviso (D4): niente si scarica ne' si calcola qui. */
   data object AwaitingNotice : PeopleSectionState
 

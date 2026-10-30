@@ -75,6 +75,7 @@ sealed interface PeopleEntryTarget {
 
   companion object {
     const val ENABLE = "people/enable"
+    const val OFF_ELSEWHERE = "people/off-elsewhere"
     const val NOTICE = "people/notice"
     const val EXCLUDED = "people/excluded"
     const val PROGRESS = "people/progress"
@@ -88,7 +89,7 @@ sealed interface PeopleEntryTarget {
 
     /** Il bersaglio di una voce, o null se il codice non e' di questa sezione (o e' di una versione piu' nuova). */
     fun parse(code: String): PeopleEntryTarget? = when {
-      code == ENABLE || code == NOTICE -> Activation
+      code == ENABLE || code == NOTICE || code == OFF_ELSEWHERE -> Activation
       code == EXCLUDED || code == PROGRESS || code == LOCAL || code == UPDATE || code == ERASING || code == MODELS -> Settings
       code == ALL -> All
       code == OTHERS -> Others

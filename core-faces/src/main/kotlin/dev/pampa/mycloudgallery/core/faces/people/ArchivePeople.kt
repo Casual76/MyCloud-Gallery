@@ -91,7 +91,7 @@ class ArchivePeople(
   private val listState = MutableStateFlow(PeopleList.EMPTY)
   private val editor = PeopleEditor(core, publisher, clock, author, ids) { refresh(reload = false) }
   private val proposalLock = Mutex()
-  private var proposalMemo: Triple<Loaded, Long, List<MergeProposal>>? = null
+  @Volatile private var proposalMemo: Triple<Loaded, Long, List<MergeProposal>>? = null
 
   /**
    * Dal piu' fotografato; a pari foto, per id. **Prima del blocco `init`**: il primo `refresh` parte sul dispositivo di `scope` (un altro thread) e usa questo ordine; una proprieta'
@@ -125,11 +125,32 @@ class ArchivePeople(
         if (reload) core.reload()
         computeList()
       } else {
+        // R11: spenta (cancellata, esclusa, avviso da rivedere) non resta in memoria niente di cio' che si era letto.
+        forget()
         PeopleList.EMPTY
       }
       tick.update { it + 1 }
     }
   }
+
+  /**
+   * R11 (correzioni A): dopo una cancellazione locale (o un cambio di generazione) nomi, raggruppamento e proposte non restano nella memoria del processo, e
+   * la lista torna vuota. Non prende il lucchetto delle viste: la cancellazione lo chiama sotto il recinto, e un `refresh` che aspetta il recinto tiene il suo.
+   * Le viste si rifanno alla prossima lettura (la sincronizzazione, l'attivazione, un'azione).
+   */
+  fun release() {
+    forget()
+    listState.value = PeopleList.EMPTY
+    tick.update { it + 1 }
+  }
+
+  private fun forget() {
+    core.release()
+    proposalMemo = null
+  }
+
+  /** Per le prove (R11): nella memoria di queste persone c'e' ancora qualcosa letto dall'archivio (voci con i nomi, raggruppamento, proposte). */
+  internal val holdsArchiveData: Boolean get() = core.peek() != null || proposalMemo != null
 
   // --- Viste ------------------------------------------------------------------------------------------------------------------------
 

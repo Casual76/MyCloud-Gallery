@@ -40,6 +40,12 @@ internal class RecordingEraser(val data: MutableSet<FaceGeneration> = mutableSet
     return true
   }
 
+  /** R1: il disco non si legge adesso (l'elenco risponde null). */
+  var diskUnreadable: Boolean = false
+
+  /** R1: tutto cio' che e' "sul disco" ([data]), anche una generazione che lo stato locale non ricorda. */
+  override suspend fun generationsOnDisk(): List<FaceGeneration>? = if (diskUnreadable) null else data.toList()
+
   val erased: List<FaceGeneration> get() = calls.map { it.first }
 }
 

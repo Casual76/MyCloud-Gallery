@@ -55,7 +55,8 @@ class FacesEraseController(
   /** Apre il foglio: la cancellazione in corso, se c'e', altrimenti l'anteprima. */
   fun load() {
     scope.launch {
-      val running = eraser.status.value
+      // CE-1: un diario `DONE` resta 30 giorni per la pagina: dopo una riattivazione non e' una cancellazione in corso, e il foglio rifa' l'anteprima.
+      val running = eraser.status.value?.takeIf { it.step != EraseStep.DONE }
       if (running != null) follow() else showPreview()
     }
   }
@@ -88,7 +89,7 @@ class FacesEraseController(
           follow()
         }
         EraseStart.AlreadyRunning -> follow()
-        EraseStart.NothingToErase -> mutableState.value = EraseSheetState.Done
+        EraseStart.NothingToErase -> mutableState.value = EraseSheetState.NothingToErase
         EraseStart.Expired, EraseStart.PreviewChanged, EraseStart.Unavailable -> mutableState.value = EraseSheetState.Expired
       }
     }
@@ -109,8 +110,8 @@ class FacesEraseController(
       null
     }
     if (preview == null || preview.digest == 0L) {
-      // Niente da cancellare (Persone spenta qui): non resta niente.
-      mutableState.value = EraseSheetState.Done
+      // Niente da cancellare (Persone spenta qui): R12, non si dice "fatto ovunque" e non si parla del NAS ne' degli altri dispositivi.
+      mutableState.value = EraseSheetState.NothingToErase
       return
     }
     mutableToken.value = EraseSheetToken(preview.digest, clock.monotonicNanos())
@@ -139,14 +140,20 @@ class FacesEraseController(
 
 /**
  * Lo stato della pagina dallo stato della cancellazione ([EraseStatus]): per il foglio e per Impostazioni -> Persone (`PeopleSettingsFacts.erase`,
- * legato da `:app`, P13). Finita senza copie nel cestino di rete = [EraseSheetState.Done]; tutto fatto tranne le conferme dei dispositivi =
+ * legato da `:app`, P13). Finita senza copie nel cestino di rete = [EraseSheetState.Done] (NAS e tutti i dispositivi) o [EraseSheetState.DoneHere]
+ * (solo locale, R12); tutto fatto tranne le conferme dei dispositivi =
  * [EraseSheetState.WaitingDevices] (solo quelli che mancano); altrimenti l'avanzamento con il motivo dell'attesa (anche il cestino di rete, E-F34).
  */
 object EraseSheetStates {
   fun of(status: EraseStatus): EraseSheetState {
     val waitingDevices = status.devices.filter { it.state == AckState.WAITING }
     return when {
-      status.step == EraseStep.DONE && status.waiting == null -> EraseSheetState.Done
+      // R12: "Fatto ovunque" solo con il NAS e tutti i dispositivi confermati; la cancellazione solo locale (nessun passo sul NAS) dice quello che e' successo.
+      status.step == EraseStep.DONE && status.waiting == null -> when {
+        status.nas == StepState.NOT_NEEDED -> EraseSheetState.DoneHere
+        status.nas == StepState.DONE && waitingDevices.isEmpty() -> EraseSheetState.Done
+        else -> progress(status)
+      }
       status.local == StepState.DONE && status.nas.settled && status.waiting == EraseWait.DEVICES && waitingDevices.isNotEmpty() ->
         EraseSheetState.WaitingDevices(waitingDevices)
       else -> progress(status)

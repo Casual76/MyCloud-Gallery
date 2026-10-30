@@ -45,6 +45,7 @@ import dev.pampa.mycloudgallery.feature.people.nav.openPeople
 import dev.pampa.mycloudgallery.feature.people.nav.openPerson
 import dev.pampa.mycloudgallery.feature.people.nav.peopleGraph
 import dev.pampa.mycloudgallery.feature.settings.SettingsAboutRoute
+import dev.pampa.mycloudgallery.feature.settings.SettingsDevicesRoute
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.main.ViewerHostState
@@ -165,7 +166,9 @@ fun NavGraphBuilder.peopleScreens(nav: NavController, actions: PeopleActions, ho
       onErase = { nav.navigate(FacesEraseDestination) },
     )
   }
-  composable<FacesEraseDestination> { FacesEraseRoute(onClose = { nav.popBackStack() }) }
+  // CE-5: "Apri Dispositivi" del foglio porta a Impostazioni, Dispositivi (la stessa rotta di `onOpenDevices` della revisione F della Fase 7), dove si revoca un
+  // dispositivo dismesso che tiene ferma la fine (L193).
+  composable<FacesEraseDestination> { FacesEraseRoute(onClose = { nav.popBackStack() }, onOpenDevices = { nav.navigate(SettingsDevicesRoute) }) }
 }
 
 /**

@@ -65,6 +65,11 @@
   <string name="faces_erase_recycle_title">Cestino del NAS</string>
   <string name="faces_erase_done_title">Fatto ovunque</string>
   <string name="faces_erase_done_message">I volti e i nomi delle persone sono stati cancellati dal NAS e da tutti i tuoi dispositivi.</string>
+  <string name="faces_erase_done_here_title">Cancellati da questo dispositivo</string>
+  <string name="faces_erase_done_here_message">I volti e i nomi delle persone sono stati cancellati da questo dispositivo. Le foto non si sono toccate.</string>
+  <string name="faces_erase_nothing_title">Niente da cancellare qui</string>
+  <string name="faces_erase_nothing_message">Non è stato cancellato niente: adesso Persone non risulta attiva su questo dispositivo.</string>
+  <string name="faces_erase_wait_file_open">Un file dei volti è tenuto aperto sul NAS, forse da un computer di casa: chiudilo e la cancellazione riparte da sola, con attese sempre più lunghe.</string>
   <string name="faces_erase_waiting_title">Manca qualche dispositivo</string>
   <string name="faces_erase_waiting_message">Il NAS e questo dispositivo sono a posto. I dispositivi qui sotto cancelleranno appena si riaccendono, prima di pubblicare qualunque cosa.</string>
   <string name="faces_erase_close">Chiudi</string>

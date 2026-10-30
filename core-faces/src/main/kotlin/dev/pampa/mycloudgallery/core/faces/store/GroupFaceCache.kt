@@ -46,17 +46,35 @@ internal class GroupFaceCache(
     dirty += contentKey
   }
 
-  /** Lascia andare i vettori in chiaro (archivio ritirato). */
+  /** Per le prove (R11): ci sono vettori in chiaro in memoria. */
+  internal val holdsVectors: Boolean get() = cache != null
+
+  /** L'archivio e' ritirato (R11): niente torna in memoria, una lettura in corso non rimette i vettori in chiaro nella cache. */
+  @Volatile private var closed = false
+
+  /** Lascia andare i vettori in chiaro (dopo una revoca: la prossima lettura rilegge da capo). */
   fun clear() {
     cache = null
     dirty.clear()
   }
 
+  /**
+   * L'archivio e' ritirato (la cancellazione locale): come [clear], e da qui la cache non si riempie piu'. Non aspetta il lucchetto (la cancellazione lo chiama
+   * sotto il recinto): il segno [closed] impedisce a una lettura gia' in corso di rimettere i vettori in chiaro in memoria.
+   */
+  fun retire() {
+    closed = true
+    clear()
+  }
+
   suspend fun faces(): List<GroupFace> = lock.withLock {
+    check(!closed) { "Archivio dei volti chiuso." }
     val space = FaceSpaceCode.CURRENT.code
     val current = cache
     if (current == null || tooBig) {
       val loaded = loadAll(space)
+      // Ritirato mentre si leggeva: i vettori letti non si tengono (chi chiama prende l'eccezione, come per ogni altra lettura di un archivio chiuso).
+      check(!closed) { "Archivio dei volti chiuso." }
       val total = loaded.values.sumOf { it.size }
       if (total > MAX_FACES) {
         tooBig = true

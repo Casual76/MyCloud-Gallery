@@ -40,6 +40,22 @@ class FileFacesLocalStoreTest {
     assertThat(folder.root.listFiles()!!.map { it.name }).containsExactly("faces-local")
   }
 
+  /** CE-3: "spenta da un altro dispositivo" arriva intera dopo un riavvio; un file di prima (sei righe) vale "no"; una settima riga strana non si capisce. */
+  @Test
+  fun ce3_laRigaDellAltroDispositivoSopravvivealRiavvio_EUnFileDiPrimaValeNo() = runTest {
+    val store = FileFacesLocalStore(file())
+    store.update { it.copy(offElsewhere = true) }
+    assertThat(file().exists()).isTrue()
+    assertThat(FileFacesLocalStore(file()).local.value).isEqualTo(FacesLocal(offElsewhere = true))
+    store.update { it.copy(offElsewhere = false, excluded = true) }
+    assertThat(file().readText().lines().filter { it.isNotEmpty() }).hasSize(6)
+    assertThat(FileFacesLocalStore(file()).local.value).isEqualTo(FacesLocal(excluded = true))
+    val sixLines = listOf("1", "0", "-", "0", "-", "-")
+    assertThat(FileFacesLocalStore.decode(sixLines)).isEqualTo(FacesLocal.EMPTY)
+    assertThat(FileFacesLocalStore.decode(sixLines + "1")).isEqualTo(FacesLocal(offElsewhere = true))
+    assertThat(FileFacesLocalStore.decode(sixLines + "x")).isNull()
+  }
+
   @Test
   fun unFileDiSoliValoriDiSerieNonSiScriveEQuelloCheCeraSiToglie() = runTest {
     val store = FileFacesLocalStore(file())

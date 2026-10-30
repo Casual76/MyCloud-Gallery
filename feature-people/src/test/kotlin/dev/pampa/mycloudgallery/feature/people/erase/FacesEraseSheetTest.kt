@@ -138,6 +138,13 @@ class FacesEraseSheetTest : PeopleScreenTest() {
     assertShows("recinzione", "Non serve: niente sul NAS")
     show(EraseSheetState.Done)
     assertShows("fine", "Fatto ovunque")
+    // R12: la cancellazione solo locale e "niente da cancellare" non parlano di NAS ne' di altri dispositivi.
+    show(EraseSheetState.DoneHere)
+    assertShows("fatto qui", "Cancellati da questo dispositivo")
+    assertDoesNotShow("fatto qui", "Fatto ovunque", "NAS", "tuoi dispositivi")
+    show(EraseSheetState.NothingToErase)
+    assertShows("niente", "Niente da cancellare qui")
+    assertDoesNotShow("niente", "Fatto ovunque", "NAS", "tuoi dispositivi")
     show(EraseSheetState.WaitingDevices(listOf(tablet)))
     assertShows("dispositivi mancanti", "Manca qualche dispositivo", "Tablet del soggiorno")
     show(EraseSheetState.Expired)

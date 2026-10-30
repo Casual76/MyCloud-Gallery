@@ -58,6 +58,9 @@ internal class EraseWorld {
   /** File tolti al piu' per giro dalla cancellazione sul NAS. */
   var maxFilesPerRound = 1_000
 
+  /** R13: il NAS non lascia togliere i file (tenuti aperti da un altro, per esempio dal PC): ogni giro non toglie niente e dice "altro al giro dopo". */
+  @Volatile var filesHeldOpen = false
+
   /** I file che non sono dati dei volti: media e altri file dell'app. Mai toccati. */
   val untouchable: List<SharePath> = listOf(
     SharePath.parse("Foto/2025/IMG_0001.jpg"),
@@ -191,6 +194,7 @@ internal class WorldEraseOps(private val world: EraseWorld, private val device: 
   }
 
   private fun remove(files: List<SharePath>): NasEraseRound {
+    if (world.filesHeldOpen && files.isNotEmpty()) return NasEraseRound.More(0, files.size)
     val batch = files.take(world.maxFilesPerRound)
     for (path in batch) {
       world.share.delete(path)

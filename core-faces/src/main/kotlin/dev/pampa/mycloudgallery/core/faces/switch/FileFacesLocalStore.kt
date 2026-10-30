@@ -88,13 +88,15 @@ class FileFacesLocalStore(private val file: File) : FacesLocalStore {
     private const val FORMAT = "1"
     private const val NONE = "-"
 
-    internal fun encode(value: FacesLocal): String = listOf(
+    internal fun encode(value: FacesLocal): String = listOfNotNull(
       FORMAT,
       if (value.excluded) "1" else "0",
       value.noticedGeneration?.base32 ?: NONE,
       (value.noticedTextVersion ?: 0).toString(),
       value.dataGeneration?.base32 ?: NONE,
       value.erasing?.base32 ?: NONE,
+      // CE-3: settima riga, solo quando vale "si": il file di prima (sei righe) resta identico e un'app piu' vecchia lo legge uguale.
+      if (value.offElsewhere) "1" else null,
     ).joinToString("\n", postfix = "\n")
 
     /** Null = file che non si capisce. */
@@ -109,12 +111,18 @@ class FileFacesLocalStore(private val file: File) : FacesLocalStore {
       val version = lines[3].toIntOrNull()?.takeIf { it >= 0 } ?: return null
       val data = generationOf(lines[4]) ?: return null
       val erasing = generationOf(lines[5]) ?: return null
+      val offElsewhere = when (lines.getOrNull(6)) {
+        null, "0" -> false
+        "1" -> true
+        else -> return null
+      }
       return FacesLocal(
         excluded = excluded,
         noticedGeneration = noticed.value,
         noticedTextVersion = if (noticed.value != null && version > 0) version else null,
         dataGeneration = data.value,
         erasing = erasing.value,
+        offElsewhere = offElsewhere,
       )
     }
 

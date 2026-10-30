@@ -20,6 +20,7 @@ class PeopleSamplesTest {
   // I `when` sono esaustivi: un caso nuovo senza esempio non compila qui o fa fallire il conteggio.
   private fun caseOf(state: PeopleSectionState): String = when (state) {
     PeopleSectionState.Off -> "off"
+    PeopleSectionState.OffElsewhere -> "off_elsewhere"
     PeopleSectionState.AwaitingNotice -> "awaiting_notice"
     PeopleSectionState.Excluded -> "excluded"
     is PeopleSectionState.FirstRun -> "first_run"
@@ -75,19 +76,21 @@ class PeopleSamplesTest {
     EraseSheetState.Expired -> "expired"
     is EraseSheetState.Progress -> "progress"
     EraseSheetState.Done -> "done"
+    EraseSheetState.DoneHere -> "done_here"
+    EraseSheetState.NothingToErase -> "nothing_to_erase"
     is EraseSheetState.WaitingDevices -> "waiting_devices"
   }
 
   @Test
   fun ogniCasoDegliStatiHaUnEsempio() {
-    assertThat(PeopleSamples.sections.map(::caseOf).toSet()).hasSize(7)
+    assertThat(PeopleSamples.sections.map(::caseOf).toSet()).hasSize(8)
     assertThat(PeopleSamples.lists.map(::caseOf).toSet()).hasSize(3)
     assertThat(PeopleSamples.pages.map(::caseOf).toSet()).hasSize(5)
     assertThat(PeopleSamples.reviews.map(::caseOf).toSet()).hasSize(ReviewPurpose.entries.size + 2)
     assertThat(PeopleSamples.merges.map(::caseOf).toSet()).hasSize(3)
     assertThat(PeopleSamples.activations.map(::caseOf).toSet()).hasSize(6)
     assertThat(PeopleSamples.notices.map(::caseOf).toSet()).hasSize(2)
-    assertThat(PeopleSamples.erases.map(::caseOf).toSet()).hasSize(7)
+    assertThat(PeopleSamples.erases.map(::caseOf).toSet()).hasSize(9)
     assertThat(PeopleSamples.settings).isNotEmpty()
   }
 

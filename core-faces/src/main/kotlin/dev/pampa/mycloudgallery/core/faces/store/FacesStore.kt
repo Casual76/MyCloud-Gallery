@@ -128,6 +128,22 @@ sealed interface FacesStoreOpen {
 }
 
 /**
+ * L'esito di [FacesStores.openExisting] (I6, correzioni A): serve solo a **leggere cio' che c'e'** prima di cancellarlo (i nomi per la cronologia). Non crea
+ * mai una chiave o un database e non toglie mai un file: cio' che non si legge si cancella dopo, dalla cancellazione.
+ */
+sealed interface ExistingStore {
+  class Ready(val store: FacesStore) : ExistingStore {
+    override fun toString(): String = "ExistingStore.Ready"
+  }
+
+  /** Niente di leggibile: chiave sparita, file mancante o vuoto, di un'altra chiave, danneggiato, di una versione piu' nuova. Nessun nome si puo' conoscere. */
+  data object Unreadable : ExistingStore
+
+  /** Non si sa adesso (Keystore che non risponde, disco): si riprova. */
+  data object Unknown : ExistingStore
+}
+
+/**
  * L'esito della cancellazione locale di una generazione ([FacesStores.eraseLocal]): la chiave distrutta **per prima**, poi i file. Finita
  * solo se tutte e due le cose sono vere; altrimenti si riprova (ogni passo e' idempotente, D29 passo 6).
  */

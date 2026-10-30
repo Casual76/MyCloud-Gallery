@@ -39,6 +39,16 @@ class PeopleSectionStatesTest {
       .isEqualTo(PeopleSectionState.AwaitingNotice)
   }
 
+  /** CE-3: da spenta perche' l'ha spenta un altro dispositivo la sezione lo sa; il segno non vale se Persone non e' spenta. */
+  @Test
+  fun ce3_spentaDaUnAltroDispositivo() {
+    assertThat(PeopleSectionStates.of(FacesState.Off, list(), FacesStatus.Off, offElsewhere = true)).isEqualTo(PeopleSectionState.OffElsewhere)
+    assertThat(PeopleSectionStates.of(FacesState.Off, list(), FacesStatus.Off, offElsewhere = false)).isEqualTo(PeopleSectionState.Off)
+    assertThat(PeopleSectionStates.of(FacesState.AwaitingNotice(generation, 1), list(), FacesStatus.Waiting(FacesWait.NOTICE), offElsewhere = true))
+      .isEqualTo(PeopleSectionState.AwaitingNotice)
+    assertThat(PeopleSectionStates.of(on, list(), idle, offElsewhere = true)).isNotEqualTo(PeopleSectionState.OffElsewhere)
+  }
+
   /** Spenta o in attesa dell'avviso, la sezione non lascia trapelare nessuna persona anche se il custode ne tiene in memoria. */
   @Test
   fun seNonEAttiva_nonSiVedeNessunaPersona() {

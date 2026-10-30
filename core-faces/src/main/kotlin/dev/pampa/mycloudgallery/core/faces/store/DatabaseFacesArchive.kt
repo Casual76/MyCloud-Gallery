@@ -51,8 +51,11 @@ class DatabaseFacesArchive internal constructor(
   /** Da qui ogni chiamata lancia `IllegalStateException`. Lo fa `FacesStore.close` (e quindi la cancellazione locale, **dopo** la chiave). */
   internal fun retire() {
     closed = true
-    groupCache.clear()
+    groupCache.retire()
   }
+
+  /** Per le prove (R11): la cache dei raggruppamenti tiene vettori in chiaro in memoria. */
+  internal val cachedVectors: Boolean get() = groupCache.holdsVectors
 
   private fun open() = check(!closed) { "Archivio dei volti chiuso." }
 

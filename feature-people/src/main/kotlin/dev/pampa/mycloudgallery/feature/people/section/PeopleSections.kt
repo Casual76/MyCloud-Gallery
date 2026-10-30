@@ -24,6 +24,7 @@ import dev.pampa.mycloudgallery.feature.people.contract.PeopleUnavailable
 import dev.pampa.mycloudgallery.feature.people.nav.PeopleEntryTarget
 import dev.pampa.mycloudgallery.feature.people.ui.PeopleText
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -78,9 +79,11 @@ class PeopleSectionSources(
   state: StateFlow<FacesState>,
   status: StateFlow<FacesStatus>,
   scope: CoroutineScope,
+  /** CE-3: Persone spenta da un altro dispositivo (di serie mai). */
+  offElsewhere: StateFlow<Boolean> = MutableStateFlow(false),
 ) {
   /** Lo stato del §1.5 di adesso (la scheda delle Raccolte e gli screenshot lo leggono). */
-  val sectionState: StateFlow<PeopleSectionState> = combine(state, people.list, status) { facesState, list, calc -> PeopleSectionStates.of(facesState, list, calc) }
+  val sectionState: StateFlow<PeopleSectionState> = combine(state, people.list, status, offElsewhere) { facesState, list, calc, off -> PeopleSectionStates.of(facesState, list, calc, off) }
     .stateIn(scope, SharingStarted.Eagerly, PeopleSectionState.Off)
 
   /** La sezione come dato. Sempre una riga almeno: persino spenta la sezione c'e' (con "Attiva riconoscimento dei volti"). */
@@ -96,6 +99,13 @@ class PeopleSectionSources(
       val title = resources.getString(R.string.persone_section)
       val entries = when (state) {
         PeopleSectionState.Off -> listOf(
+          row(PeopleEntryTarget.ENABLE, resources.getString(R.string.persone_row_enable), resources.getString(R.string.persone_row_enable_detail), Icons.Rounded.Face, FluidTone.Primary),
+        )
+        PeopleSectionState.OffElsewhere -> listOf(
+          row(
+            PeopleEntryTarget.OFF_ELSEWHERE, resources.getString(R.string.persone_row_off_elsewhere), resources.getString(R.string.persone_row_off_elsewhere_detail),
+            Icons.Rounded.PhoneAndroid, FluidTone.Info,
+          ),
           row(PeopleEntryTarget.ENABLE, resources.getString(R.string.persone_row_enable), resources.getString(R.string.persone_row_enable_detail), Icons.Rounded.Face, FluidTone.Primary),
         )
         PeopleSectionState.AwaitingNotice -> listOf(

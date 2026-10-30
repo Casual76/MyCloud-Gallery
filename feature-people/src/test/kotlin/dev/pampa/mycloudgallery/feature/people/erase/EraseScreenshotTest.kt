@@ -34,6 +34,8 @@ internal enum class EraseScene(val file: String, val tall: Boolean = false) {
   CESTINO("cestino-di-rete", tall = true),
   DISPOSITIVI_MANCANTI("dispositivi-mancanti"),
   FATTO("fatto-ovunque"),
+  FATTO_QUI("fatto-su-questo-dispositivo"),
+  NIENTE("niente-da-cancellare"),
   SCADUTA("riepilogo-cambiato"),
 }
 
@@ -51,6 +53,8 @@ private fun stateOf(scene: EraseScene): EraseSheetState = when (scene) {
   EraseScene.CESTINO -> EraseSheetState.Progress(StepState.DONE, StepState.DONE, listOf(phone, tablet.copy(state = AckState.CONFIRMED)), EraseWait.RECYCLE_BIN)
   EraseScene.DISPOSITIVI_MANCANTI -> EraseSheetState.WaitingDevices(listOf(tablet))
   EraseScene.FATTO -> EraseSheetState.Done
+  EraseScene.FATTO_QUI -> EraseSheetState.DoneHere
+  EraseScene.NIENTE -> EraseSheetState.NothingToErase
   EraseScene.SCADUTA -> EraseSheetState.Expired
 }
 

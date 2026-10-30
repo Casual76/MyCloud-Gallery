@@ -165,6 +165,8 @@ class FacesGraph internal constructor(
       // Una cancellazione lasciata a meta' si riprende subito (diario), non alla notte.
       if (live.eraser.status.value?.let { it.step != EraseStep.DONE } == true) workRequest(FacesWork.ERASE)
     }
+    // GE-1: un nome dato o un'unione fatta partono dopo 30 s di calma (come le modifiche degli album condivisi), non al prossimo giro dell'indice.
+    live.scope.launch { FacesPendingFlusher(live.scope, live.publisher, onError = ::noteError).watch() }
     live.scope.launch {
       var before: FacesState? = null
       live.switch.state.collect { state ->

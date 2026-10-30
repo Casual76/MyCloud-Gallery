@@ -1,6 +1,6 @@
 # Verifica funzionale: Fase 8, Persone (commit `e9086269`, 30/10/2026)
 
-**Stato (30/10, dopo il pacchetto A).** Il pacchetto A (`fase8/corr-a`, "cancellazione e stato locale") ha corretto nel codice **CE-1, CE-2, CE-3, CE-4 e CE-5** (ognuna con un test: §7, "Stato dopo il pacchetto A"); le altre 21 voci restano aperte per i pacchetti B, C, D ed E. Alla stesura le 26 voci erano nuove: nessuna era corretta nel codice. Ne risultano 1 che blocca, 9 sbagliate e 16 minori; 18 sono confermate nel
+**Stato (30/10, dopo i pacchetti A e B).** Il pacchetto A (`fase8/corr-a`, "cancellazione e stato locale") ha corretto nel codice **CE-1, CE-2, CE-3, CE-4 e CE-5**, e il pacchetto B (`fase8/corr-b`, "sezione Persone e prima apertura") **AT-1, AT-2, AT-3 e DR-1** (ognuna con un test: §7, "Stato dopo il pacchetto A" e "Stato dopo il pacchetto B"); le altre 17 voci restano aperte per i pacchetti C, D ed E. Alla stesura le 26 voci erano nuove: nessuna era corretta nel codice. Ne risultano 1 che blocca, 9 sbagliate e 16 minori; 18 sono confermate nel
 codice e 8 plausibili (serve il telefono o un test, descritto nella voce). La verifica dei fake (§3) ha trovato dieci divergenze, quattro delle quali
 nascondono voci di questo documento (CE-1 e CE-2, AT-1, CA-3 e CA-4, RI-1). I flussi del §4 sono da provare sul telefono (F131-F146), insieme a quelli di P13 non ancora fatti (F94-F110, con le
 correzioni del §4).
@@ -590,7 +590,18 @@ Nessuna voce e' corretta. Il pacchetto e' la proposta; ogni correzione porta un 
 | CE-3 | Corretta (A) | **Risposta dell'utente del 30/10: si', una riga.** Sopra «Attiva riconoscimento dei volti» la sezione delle Raccolte dice «Persone e' stata disattivata da un altro tuo dispositivo» (C218: `SwitchDiskGenerationsTest.ce3_*`, `FileFacesLocalStoreTest.ce3_*`, `PeopleSectionStatesTest.ce3_*`, `PeopleSectionsTest.ce3_*`). La riga non c'e' ancora in Impostazioni → Persone (L322) |
 | CE-4 | Corretta (A) | `AppSmartAlbumsPeople.release` lancia se un album non si scioglie o gli album non sono montati: il passo si segna «saltato», non «fatto» (C215: `FacesCorrectionsATest.ce4_*`). L321, L190 |
 | CE-5 | Corretta (A) | `onOpenDevices = { nav.navigate(SettingsDevicesRoute) }` (C214: `FacesFenceSourcesTest.ce5_*`) |
-| Le altre | Aperte | AT, DR: pacchetto B; CA: pacchetto C; RI, GE, SM, NV: pacchetto D; RG, DG: pacchetto E |
+| Le altre | Aperte | AT, DR-1: pacchetto B (corrette qui sotto); CA: pacchetto C; RI, GE, SM, NV: pacchetto D; RG, DG, DR-2: pacchetto E |
+
+### Stato dopo il pacchetto B (30/10)
+
+**Corretta**: la correzione e i suoi test. Le sigle C e L nuove sono in `docs/sicurezza.md` (C240, C241, L350, L351). Il resoconto per voce, con le decisioni, sta in `docs/decisioni.md` ("Fase 8, correzioni dopo le revisioni: pacchetto B").
+
+| Voce | Stato | Prove, limiti |
+|---|---|---|
+| AT-1 | Corretta (B) | Con Persone accesa e nessuna persona solo a calcolo in pari (`Idle`) la sezione e' "pronta e vuota", e ora ha la sua riga («Ancora nessuna persona», che apre «Tutte le persone»); ogni altro stato del calcolo (spento, attese, guasto) e' «Sto per riconoscere i volti»; con persone nascoste resta la riga di sempre. Mai zero righe: `PeopleSectionsTest.at1_conPersoneAccesaLeRigheNonSonoMaiZero` (le righe di `sectionOf` per ogni stato) e `PeopleSectionBindingTest.at1_conPersoneAccesaIlLayoutVeroTieneLaSezione` (il layout vero delle Raccolte). Un guasto che non e' dei modelli (`Problem`) dice ancora «Sto per riconoscere i volti», come proponeva la revisione |
+| AT-2 | Corretta (B) per la sezione e la pagina persona | La sezione guarda un solo flusso di ingressi preso dalle persone montate (`FacesGraph.live`): prima del montaggio non c'e' (L297), mai «Attiva» a chi ha Persone accesa; `FacesPeopleFacade.person` non emette niente prima del montaggio e la pagina resta `Loading` (C240: `FacesCorrectionsBTest.at2_*`, `PeopleSectionsTest.at2_*`, `FacesIntegrationTest.laSezioneDelleRaccolteNonCePrimaDelMontaggioEPoiDiceLaVerita`). **Aperto (L350)**: la voce «Persone» delle Impostazioni, Impostazioni → Persone e la pagina di attivazione leggono ancora la facciata dell'interruttore, che prima del montaggio dice `Off` / «non disponibile». La forma ricordata (`InstantShapes`) non e' usata: la sezione resta assente (B-1) |
+| AT-3 | Corretta (B) | `@Singleton` su `FacesModule.peopleSection` (`FacesCorrectionsBTest.at3_*`) |
+| DR-1 | Corretta (B), **risposta dell'utente del 30/10: lo si dice chiaramente** | Sezione e Impostazioni → Persone dicono «Qui le persone non si calcolano», il ruolo che serve (Indicizzatore) e dove si accende (Impostazioni → Ricerca e modelli); il dispositivo non calcola per conto suo; si decide dal ruolo, non dal solo motivo di attesa (C241: `PeopleSectionStatesTest.dr1_*`, `PeopleSectionsTest.dr1_*`, `PeopleSettingsTest.dr1_*`, `FacesIntegrationTest`). I testi «I nomi viaggiano fra i tuoi dispositivi» / «viaggia» sono diventati veri in tutti e due i casi («nessun familiare li vede»). Resta aperto (L351) che senza NAS la sezione non c'e' |
 
 **Pacchetti di correzione proposti** (modello consigliato per ognuno: sonnet; nessuna parte e' di fondazione):
 - **A, la cancellazione** (CE-1, CE-2, CE-4, CE-5; CE-3 dopo la decisione): `FacesEraseController.load` e `housekeeping` a `DONE` scaduto, `FacesGraph.syncRound` che riprende il diario, `AppSmartAlbumsPeople.release` con il conteggio dei
@@ -607,6 +618,6 @@ Nessuna voce e' corretta. Il pacchetto e' la proposta; ogni correzione porta un 
 1. **Il primo calcolo dopo l'accensione (CA-3):** parte subito come richiesta dell'utente (scavalcando notte e carica) e si cambia il testo, oppure segue le regole di sottofondo e "Analizza ora" e' l'unico a scavalcarle?
 2. **"Analizza ora" e la stima (CA-2):** si fanno (tasto in Impostazioni → Persone con la stima di `FacesBacklog`, che rilegge il catalogo: L242) o si tolgono dal progetto e da F94?
 3. **Il secondo dispositivo dopo la cancellazione (CE-3):** una riga che lo dica ("Persone e' stata disattivata da un altro tuo dispositivo") o resta muto a "Attiva"?
-4. **Release e dispositivo non indicizzatore (DR-1):** finche' D34 e' acceso, il tablet che non analizza non avra' mai persone: lo si dice con un testo onesto, o gli si permette di calcolarle per conto suo (`LOCAL_ONLY`, a spese della batteria)?
+4. **Release e dispositivo non indicizzatore (DR-1):** finche' D34 e' acceso, il tablet che non analizza non avra' mai persone: lo si dice con un testo onesto, o gli si permette di calcolarle per conto suo (`LOCAL_ONLY`, a spese della batteria)? **Risposta dell'utente del 30/10: lo si dice chiaramente** (corretta nel pacchetto B; il dispositivo non calcola per conto suo).
 5. **Il tocco su un volto di un gruppo senza nome nel viewer (GE-3):** "Chi e'?" come oggi, o la pagina del gruppo con "Dai un nome" (come dice il §2.6)?
 

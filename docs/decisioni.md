@@ -11793,3 +11793,10 @@ oltre l'indice per giorno.
 - Il giro non distingue le porte lente: un viaggio o una persona che impiegano piu' del budget fanno finire il giro "incompleto" prima della scelta.
 - Misure sul telefono (S25, Tab S9): F111, F112 con `benchmark` (P12); qui solo la JVM.
 
+
+**Esito di `tools/check.ps1 -NoDaemon`** (30/10, dopo il merge di `main` con P3, P7 e le correzioni C della Fase 8): **tutto a posto** (nessun rosso, un solo SKIP: `-Bench`), **con una riga
+in piu' nell'elenco `wiring` di `HiddenSurfaces`** provata in locale e **non** committata (non e' un file di P6): `HiddenSurfacesRegistryTest` segnala
+`core-memories/.../pick/VisiblePhotoPicker.kt` (di P7), che nomina `HiddenMask` e non e' elencato. Senza la riga il check di `main` e' rosso su quel solo test; la riga e'
+`"core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories/pick/VisiblePhotoPicker.kt",` in testa a `HiddenSurfaces.wiring` (o, in alternativa, la riga `MEMORIES` di P9
+che lo elenca fra i sorgenti). I file di P6 non nominano i contratti dei nascosti (porta `MemoryVisibility`) e il registro era verde prima del merge. Una corsa intera aveva
+avuto un'unica rossa, `HiddenSurfacesPropertyTest` (sonda `album-pages`, mondo 6, sotto carico); rilanciata da sola e poi nel check intero e' verde.

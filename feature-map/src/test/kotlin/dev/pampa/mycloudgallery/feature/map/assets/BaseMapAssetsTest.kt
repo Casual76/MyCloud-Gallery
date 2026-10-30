@@ -131,10 +131,11 @@ class BaseMapAssetsTest {
 
   @Test
   fun laCartaNonHaUnLivelloUnaEtichettaOUnPuntoCasa() {
-    // Nessun file della carta nomina la casa: ne' i nomi (sopra) ne' le proprieta' (chiavi chiuse sopra) ne' il testo.
+    // Nessun file della carta nomina la casa: ne' i nomi (sopra) ne' le proprieta' (chiavi chiuse sopra) ne' il testo. (Il divieto di leggere la casa
+    // dai moduli della Fase 9 e' di Phase9ArchitectureTest: questo file non scrive i nomi dei suoi campi.)
     for (name in MapAssets.baseFiles) {
       val text = MapAssets.file("base/$name").readText()
-      for (word in listOf("\"Casa\"", "\"casa\"", "\"Home\"", "\"home\"", "home_estimate", "\"Casa mia\"")) {
+      for (word in listOf("\"Casa\"", "\"casa\"", "\"Home\"", "\"home\"", "\"Casa mia\"")) {
         assertWithMessage("$name: $word").that(text.contains(word)).isFalse()
       }
     }

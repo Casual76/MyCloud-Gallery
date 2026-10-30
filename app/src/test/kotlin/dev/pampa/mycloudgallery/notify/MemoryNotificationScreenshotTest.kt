@@ -33,9 +33,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.text.font.FontWeight
@@ -202,7 +202,7 @@ internal class MemoryNotificationScreenshotTest(private val dark: Boolean) {
 /** La scheda di una notifica come la mostra la tendina: icona piccola, nome dell'app, titolo e testo, e la miniatura a destra se c'e'. Solo per lo screenshot. */
 @Composable
 private fun NotificationCard(title: String, text: String, photo: Bitmap?) {
-  val appName = LocalContext.current.getString(R.string.app_name)
+  val appName = stringResource(R.string.app_name)
   Surface(shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.fillMaxWidth()) {
     Column(Modifier.padding(16.dp)) {
       Row(verticalAlignment = Alignment.CenterVertically) {

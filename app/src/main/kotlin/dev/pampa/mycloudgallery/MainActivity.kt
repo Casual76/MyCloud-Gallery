@@ -18,8 +18,10 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.designsystem.state.LocalPhoneTrash
 import dev.pampa.mycloudgallery.core.designsystem.state.PhoneTrash
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
+import dev.pampa.mycloudgallery.core.memories.contract.NotifyRules
 import dev.pampa.mycloudgallery.core.security.lock.AppLockController
 import dev.pampa.mycloudgallery.core.security.lock.BiometricPromptAuthenticator
+import dev.pampa.mycloudgallery.notify.OpenMemoriesRequests
 import javax.inject.Inject
 
 /**
@@ -33,6 +35,10 @@ import javax.inject.Inject
  * puo' avviarla con extra scelti da lei, e Navigation Compose li leggerebbe come deep link interni
  * (`android-support-nav:controller:deepLinkIds`/`deepLinkArgs`): per esempio l'attesa dell'approvazione con un codice
  * falso. L'app non ha deep link: prima di `setContent`, e a ogni `onNewIntent`, l'intent si sostituisce con uno pulito.
+ *
+ * **Una sola azione e' nota** (Fase 9, P10, D17, C151): [NotifyRules.OPEN_ACTION], quella della notifica dei ricordi. Mentre ripulisce, l'activity la riconosce e la
+ * trasforma in un evento interno ([OpenMemoriesRequests]: nessun id, nessun dato) che si serve **dopo il blocco app**; l'intent resta pulito come prima, con extra, dati,
+ * categorie e flag buttati. Chi manda quell'azione da un'altra app puo' ottenere al piu' la pagina Ricordi, dietro il blocco.
  */
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
@@ -41,9 +47,16 @@ class MainActivity : FragmentActivity() {
   @Inject
   lateinit var lockController: AppLockController
 
+  /** Fase 9 (P10, D17): la richiesta di aprire i Ricordi, che arriva dall'azione fissa della notifica e si serve dopo il blocco app. */
+  @Inject
+  lateinit var openMemories: OpenMemoriesRequests
+
   override fun onCreate(savedInstanceState: Bundle?) {
-    intent = launcherIntent(this)
+    val entry = entryOf(this, intent)
+    intent = entry.clean
     super.onCreate(savedInstanceState)
+    // Solo a un avvio vero: l'intent con cui il sistema ricrea l'activity (rotazione, processo morto e ripreso dai recenti) e' quello di prima, e non riapre i Ricordi.
+    if (entry.opensMemories && savedInstanceState == null) openMemories.request()
     enableEdgeToEdge()
     GalleryLog.d(TAG) { "MainActivity pronta" }
     val authenticator = BiometricPromptAuthenticator(this)
@@ -62,9 +75,10 @@ class MainActivity : FragmentActivity() {
   }
 
   override fun onNewIntent(intent: Intent) {
-    val clean = launcherIntent(this)
-    super.onNewIntent(clean)
-    setIntent(clean)
+    val entry = entryOf(this, intent)
+    super.onNewIntent(entry.clean)
+    setIntent(entry.clean)
+    if (entry.opensMemories) openMemories.request()
   }
 
   internal companion object {
@@ -75,5 +89,15 @@ class MainActivity : FragmentActivity() {
       Intent(context, MainActivity::class.java)
         .setAction(Intent.ACTION_MAIN)
         .addCategory(Intent.CATEGORY_LAUNCHER)
+
+    /**
+     * Cosa fa l'activity di un intent in arrivo: l'intent **ripulito** ([Entry.clean], sempre quello del launcher) e se chiedeva di aprire i Ricordi ([Entry.opensMemories]).
+     * Si guarda **solo l'azione**, per uguaglianza esatta con [NotifyRules.OPEN_ACTION]: extra, dati, categorie, flag e componenti non contano e non passano.
+     */
+    fun entryOf(context: Context, incoming: Intent?): Entry =
+      Entry(launcherIntent(context), opensMemories = incoming?.action == NotifyRules.OPEN_ACTION)
   }
+
+  /** L'intent pulito e se l'azione era quella dei Ricordi. */
+  internal class Entry(val clean: Intent, val opensMemories: Boolean)
 }

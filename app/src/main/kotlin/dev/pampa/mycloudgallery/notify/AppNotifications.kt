@@ -69,6 +69,15 @@ class AppNotifications(context: Context) {
         setShowBadge(false)
       },
     )
+    // Fase 9 (P10, D15): i ricordi, **senza suono ne' vibrazione**; a telefono bloccato la notifica e' privata (la versione pubblica e' generica, D16).
+    manager.createNotificationChannel(
+      NotificationChannel(CHANNEL_MEMORIES, app.getString(R.string.channel_memories_name), NotificationManager.IMPORTANCE_DEFAULT).apply {
+        description = app.getString(R.string.channel_memories_description)
+        lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+        setSound(null, null)
+        enableVibration(false)
+      },
+    )
   }
 
   /** Si possono mostrare notifiche? (permesso concesso e notifiche dell'app non spente) */
@@ -218,6 +227,10 @@ class AppNotifications(context: Context) {
 
     /** IN-7: "N file ricevuti non salvati" (restano in "Ricevuti in coda"), anche dopo la fine del lavoro dei file ricevuti. */
     const val ID_INCOMING_PROBLEMS = 1008
+
+    /** Fase 9 (P10, D15): il canale dei ricordi (importanza predefinita, senza suono ne' vibrazione) e la sua notifica: una sola, al giorno, id 1009. */
+    const val CHANNEL_MEMORIES = "memories"
+    const val ID_MEMORY = 1009
     private const val REQUEST_OPEN_APP = 0
     private const val TAG = "Notifications"
   }

@@ -76,6 +76,37 @@ class MemoriesEvalLabelsTest {
   }
 
   @Test
+  fun unNascostoEsceDalRicordoEDalleMisure() {
+    val a = run[0]
+    val b = run[1]
+    val c = run[2]
+    val labels = MemoriesLabelSet().withRun(run)
+      .withJudgement(a.id, EvalVerdict.GOOD).withFault(a.id, a.members[1], EvalFault.DUPLICATE).withFault(a.id, a.members[5], EvalFault.SAD)
+      .withJudgement(b.id, EvalVerdict.SO_SO).withFault(b.id, b.members[0], EvalFault.UNRELATED)
+      .withJudgement(c.id, EvalVerdict.GOOD)
+    // Un nascosto del ricordo `a` (una foto segnata, e la copertina), tutti i media di `b` tranne due (il ricordo scende sotto 3 elementi).
+    val hidden = setOf(a.members[1], a.cover) + b.members.drop(2)
+    val after = labels.withVisibleOnly { it !in hidden }
+    assertThat(after.memory(a.id)!!.members).containsNoneIn(hidden)
+    assertThat(after.memory(a.id)!!.members).hasSize(a.members.size - 2)
+    assertThat(after.memory(a.id)!!.cover).isEqualTo(a.members[2])
+    // La foto segnata che e' uscita perde il segno; l'altra resta.
+    assertThat(after.faultsOf(a.id)).containsExactly(a.members[5], EvalFault.SAD)
+    // Il ricordo sceso sotto 3 elementi esce con il suo giudizio e le sue foto segnate; quello intatto e' lo stesso oggetto.
+    assertThat(after.memory(b.id)).isNull()
+    assertThat(after.judgement(b.id)).isNull()
+    assertThat(after.faultsOf(b.id)).isEmpty()
+    assertThat(after.memory(c.id)).isSameInstanceAs(c.let { labels.memory(it.id) })
+    assertThat(after.judgement(c.id)!!.verdict).isEqualTo(EvalVerdict.GOOD)
+    // Nelle metriche non c'e' piu' nessuna foto nascosta.
+    val photos = MemoriesEvalMetrics.of(after).photos
+    assertThat(photos).isEqualTo(after.judged.sumOf { it.members.size })
+    assertThat(after.judged.flatMap { it.members }).containsNoneIn(hidden)
+    // Senza nascosti non cambia niente.
+    assertThat(labels.withVisibleOnly { true }.run.map { it.id }).isEqualTo(run.map { it.id })
+  }
+
+  @Test
   fun leEtichetteIncoerentiSiRifiutano() {
     val memory = run[0]
     assertThrows(IllegalArgumentException::class.java) { MemoriesLabelSet(run, judgements = mapOf(sampleMemoryId(77) to EvalJudgement(EvalVerdict.GOOD))) }

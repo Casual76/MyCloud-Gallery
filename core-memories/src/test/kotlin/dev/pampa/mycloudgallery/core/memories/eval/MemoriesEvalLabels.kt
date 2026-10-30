@@ -120,6 +120,22 @@ class MemoriesLabelSet(
   /** Toglie tutte le foto segnate di un ricordo ("sono tutte giuste"). */
   fun withoutFaults(id: String): MemoriesLabelSet = MemoriesLabelSet(run, judgements, faults - id)
 
+  /**
+   * Toglie dai ricordi i media che [isVisible] non riconosce piu' (nascosti o eliminati dopo la corsa): **mai un nascosto nello strumento ne' nelle metriche**. Un ricordo
+   * che resta con meno di 3 elementi esce, con il suo giudizio; una copertina uscita passa al primo elemento rimasto; le foto segnate che escono perdono il segno.
+   */
+  fun withVisibleOnly(isVisible: (String) -> Boolean): MemoriesLabelSet {
+    val kept = ArrayList<EvalMemory>()
+    for (m in run) {
+      val members = m.members.filter(isVisible)
+      if (members.size < EvalMemory.MIN_MEMBERS) continue
+      kept += if (members.size == m.members.size) m else EvalMemory(m.id, m.kind, m.day, if (m.cover in members) m.cover else members.first(), members, m.title)
+    }
+    val byId = kept.associateBy { it.id }
+    val keptFaults = faults.filterKeys { it in byId }.mapValues { (id, marked) -> marked.filterKeys { it in byId.getValue(id).members } }.filterValues { it.isNotEmpty() }
+    return MemoriesLabelSet(kept, judgements.filterKeys { it in byId }, keptFaults)
+  }
+
   /** Solo conteggi. */
   override fun toString(): String = "MemoriesLabelSet(${run.size} ricordi, ${judgements.size} giudicati, ${faults.values.sumOf { it.size }} foto segnate)"
 

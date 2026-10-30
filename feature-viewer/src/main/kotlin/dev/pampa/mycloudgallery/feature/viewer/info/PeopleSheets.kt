@@ -82,11 +82,13 @@ private fun MenuSheet(sheet: PeopleSheet.Menu?, media: MediaId, controller: Peop
               leading = { Icon(Icons.Rounded.PersonAdd, contentDescription = null) },
             )
           }
-          if (named != null) {
+          // GE-3: anche un gruppo senza nome ha la sua pagina (e li' si da' il nome al gruppo intero).
+          if (person != null) {
             FluidListDivider()
             FluidListRow(
-              title = stringResource(R.string.viewer_people_open_page), subtitle = stringResource(R.string.viewer_people_open_page_detail), tone = FluidTone.Primary,
-              disclosure = false, onClick = { controller.openPage(named.person) },
+              title = stringResource(R.string.viewer_people_open_page),
+              subtitle = stringResource(if (named != null) R.string.viewer_people_open_page_detail else R.string.viewer_people_open_group_detail), tone = FluidTone.Primary,
+              disclosure = false, onClick = { controller.openPage(person) },
               leading = { Icon(Icons.Rounded.Face, contentDescription = null) },
             )
           }

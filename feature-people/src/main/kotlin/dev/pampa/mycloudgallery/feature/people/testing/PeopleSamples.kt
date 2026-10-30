@@ -88,6 +88,7 @@ object PeopleSamples {
     ),
     PersonPageState.Forgotten,
     PersonPageState.Hidden(header),
+    PersonPageState.AllHidden(header),
     PersonPageState.NotFound,
   )
 

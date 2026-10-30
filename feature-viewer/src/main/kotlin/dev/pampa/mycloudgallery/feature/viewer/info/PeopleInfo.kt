@@ -148,8 +148,14 @@ private fun FaceChipView(source: ViewerPeople, media: MediaId, chip: ViewerFaceC
   val scheme = MaterialTheme.colorScheme
   val resources = LocalContext.current.resources
   val name = (chip as? ViewerFaceChip.Named)?.name
-  val label = name ?: resources.getString(R.string.viewer_people_who)
-  val spoken = if (name != null) resources.getString(R.string.viewer_people_chip_spoken, name) else resources.getString(R.string.viewer_people_chip_unnamed_spoken)
+  // GE-3: un gruppo senza nome si dice "Senza nome" e il tocco ne apre la pagina; solo un volto fuori da ogni gruppo chiede "Chi e'?".
+  val group = chip is ViewerFaceChip.Unnamed && chip.person != null
+  val label = name ?: resources.getString(if (group) R.string.viewer_people_unnamed_group else R.string.viewer_people_who)
+  val spoken = when {
+    name != null -> resources.getString(R.string.viewer_people_chip_spoken, name)
+    group -> resources.getString(R.string.viewer_people_chip_group_spoken)
+    else -> resources.getString(R.string.viewer_people_chip_unnamed_spoken)
+  }
   val actions = buildList {
     add(CustomAccessibilityAction(resources.getString(R.string.viewer_people_menu)) { controller.menu(chip); true })
     add(CustomAccessibilityAction(resources.getString(R.string.viewer_people_who)) { controller.who(media, face); true })

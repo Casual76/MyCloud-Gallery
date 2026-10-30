@@ -41,6 +41,7 @@ class PeopleSamplesTest {
     is PersonPageState.Ready -> "ready"
     PersonPageState.Forgotten -> "forgotten"
     is PersonPageState.Hidden -> "hidden"
+    is PersonPageState.AllHidden -> "all_hidden"
     PersonPageState.NotFound -> "not_found"
   }
 
@@ -86,7 +87,7 @@ class PeopleSamplesTest {
   fun ogniCasoDegliStatiHaUnEsempio() {
     assertThat(PeopleSamples.sections.map(::caseOf).toSet()).hasSize(9)
     assertThat(PeopleSamples.lists.map(::caseOf).toSet()).hasSize(3)
-    assertThat(PeopleSamples.pages.map(::caseOf).toSet()).hasSize(5)
+    assertThat(PeopleSamples.pages.map(::caseOf).toSet()).hasSize(6)
     assertThat(PeopleSamples.reviews.map(::caseOf).toSet()).hasSize(ReviewPurpose.entries.size + 2)
     assertThat(PeopleSamples.merges.map(::caseOf).toSet()).hasSize(3)
     assertThat(PeopleSamples.activations.map(::caseOf).toSet()).hasSize(6)

@@ -138,6 +138,12 @@ sealed interface PersonPageState {
   /** La persona e' stata dimenticata (anche da un altro dispositivo, E-F27): la pagina si chiude con un messaggio. */
   data object Forgotten : PersonPageState
 
+  /**
+   * NV-1 (correzioni D): la persona ha un nome e dei volti, ma **tutte le sue foto sono nascoste** (nascosta l'ultima con la pagina aperta): il nome e il gruppo ci sono ancora,
+   * non e' "dimenticata". La pagina lo dice e rimanda ai Nascosti; le foto tornano appena una si mostra di nuovo.
+   */
+  data class AllHidden(val header: PersonHeader) : PersonPageState
+
   /** La persona e' nascosta: la pagina dice come mostrarla di nuovo, senza le foto. */
   data class Hidden(val header: PersonHeader) : PersonPageState
 

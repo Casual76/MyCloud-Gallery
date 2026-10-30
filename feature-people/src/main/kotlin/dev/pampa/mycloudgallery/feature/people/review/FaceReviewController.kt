@@ -101,8 +101,24 @@ class FaceReviewController(
         val out = action(face)
         if (out == EditOutcome.Done) done++ else if (failure == null) failure = out
       }
-      state.value = FaceReviewUi(FaceReviewState.Done, message = failure?.asMessage(), changed = done)
+      val message = failure?.asMessage()
+      state.value = if (message == null) {
+        FaceReviewUi(FaceReviewState.Done, changed = done)
+      } else {
+        // GE-2 (correzioni D): un'azione fallita non sembra riuscita. Si resta sulla schermata, con la griglia di adesso (i volti riusciti sono usciti) e il messaggio, che si legge:
+        // "Persone non e' attiva", "il volto non c'e' piu'". Prima la pagina tornava indietro appena lo stato era `Done`, senza dire niente.
+        FaceReviewUi(regrid(current), message = message, changed = done)
+      }
     }
+  }
+
+  /** La griglia di adesso dopo un'azione che non e' andata fino in fondo: i volti ancora della persona, senza selezione. Se non si rilegge, quella di prima. */
+  private suspend fun regrid(before: FaceReviewState.Grid): FaceReviewState.Grid = try {
+    before.copy(faces = faces.reviewFaces(person).map { ReviewFace(it.face, it.media, person) }, selection = emptySet())
+  } catch (e: kotlin.coroutines.cancellation.CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    before.copy(selection = emptySet())
   }
 
   /** "Sposta in una persona nuova": i volti scelti, non tutti. La persona nuova si apre dopo (la porta il risultato). */

@@ -20,6 +20,8 @@
   <string name="persone_page_empty_detail">I volti di questa persona non si ritrovano più nelle foto. Puoi ricontrollare dopo il prossimo calcolo.</string>
   <string name="persone_forgotten_title">Persona dimenticata</string>
   <string name="persone_forgotten_detail">Il gruppo e il nome non ci sono più. Se arrivano foto nuove, potrebbe ricomparire senza nome.</string>
+  <string name="persone_all_hidden_title">Tutte le foto sono nascoste</string>
+  <string name="persone_all_hidden_detail">Il nome e il gruppo ci sono ancora: sono le foto a stare tra i Nascosti. Tornano qui appena ne mostri una.</string>
   <string name="persone_not_found_title">Questa persona non c\'è</string>
   <string name="persone_not_found_detail">Può essere stata unita a un\'altra o dimenticata.</string>
   <string name="persone_hidden_title">Persona nascosta</string>

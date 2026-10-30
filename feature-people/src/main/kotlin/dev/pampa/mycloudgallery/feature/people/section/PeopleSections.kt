@@ -60,7 +60,10 @@ data class SectionEntry(
   val tone: FluidTone,
   val badge: Int = 0,
   val trailing: String? = null,
-)
+) {
+  /** I4 (correzioni D): mai il titolo o il sottotitolo (possono portare un nome o un conteggio di persone, D37): solo il codice, che non porta mai un nome. */
+  override fun toString(): String = "SectionEntry($code)"
+}
 
 /** Una sezione: la stessa forma di `CollectionEntryGroup`. Persone si puo' nascondere dalle Raccolte (non e' "Album"). */
 @Immutable
@@ -70,7 +73,10 @@ data class SectionData(
   val entries: List<SectionEntry>,
   val hideable: Boolean = true,
   val hint: String? = null,
-)
+) {
+  /** I4: mai il titolo ne' l'avviso, ne' le voci per esteso (D37): il codice e quante voci. */
+  override fun toString(): String = "SectionData($code, ${entries.size} voci)"
+}
 
 /**
  * Tutto cio' che serve a decidere la sezione, **preso nello stesso istante** (AT-2, correzioni B): lo stato di Persone su questo dispositivo, le persone, il

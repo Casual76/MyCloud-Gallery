@@ -32,11 +32,17 @@ data object OthersDestination
 
 /** La pagina di una persona. [id] e' il `PersonId` come testo (stabile; mai un nome). */
 @Serializable
-data class PersonDestination(val id: String)
+data class PersonDestination(val id: String) {
+  /** I4 (correzioni D): mai l'id della persona (D37). */
+  override fun toString(): String = "PersonDestination"
+}
 
 /** "Controlla le foto" ([split] falso) o "Dividi" ([split] vero) di una persona. */
 @Serializable
-data class ReviewDestination(val id: String, val split: Boolean = false)
+data class ReviewDestination(val id: String, val split: Boolean = false) {
+  /** I4: mai l'id della persona (D37). */
+  override fun toString(): String = "ReviewDestination(split=$split)"
+}
 
 /** Le persone nascoste (Impostazioni -> Persone -> "Persone nascoste", E-F28). */
 @Serializable

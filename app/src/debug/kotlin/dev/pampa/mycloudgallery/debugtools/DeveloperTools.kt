@@ -85,6 +85,8 @@ internal object DeveloperTools {
     with(dev.pampa.mycloudgallery.debugtools.eval.albums.AlbumsEvalEntry) { destination(nav) }
     // Fase 8 (P11): lo strumento di valutazione delle persone (F105). La porta la lega P13 (`FacesEvalEnvironmentHolder.current`).
     with(dev.pampa.mycloudgallery.debugtools.eval.faces.FacesEvalEntry) { destination(nav) }
+    // Fase 9 (P11): lo strumento di valutazione dei ricordi (F125). La porta la lega P13 (MemoriesEvalEnvironmentHolder.current).
+    with(dev.pampa.mycloudgallery.debugtools.eval.memories.MemoriesEvalEntry) { destination(nav) }
   }
 
   /**
@@ -163,6 +165,8 @@ internal object DeveloperTools {
       dev.pampa.mycloudgallery.debugtools.eval.albums.AlbumsEvalEntry.row(nav)
       FluidListDivider()
       dev.pampa.mycloudgallery.debugtools.eval.faces.FacesEvalEntry.row(nav)
+      FluidListDivider()
+      dev.pampa.mycloudgallery.debugtools.eval.memories.MemoriesEvalEntry.row(nav)
     }
   }
 

@@ -93,3 +93,16 @@ tools/fixtures/faces/**/*.png
 tools/fixtures/faces/**/*.jpg
 tools/fixtures/faces/**/*.jpeg
 tools/fixtures/faces/**/*.webp
+
+# Valutazione dei ricordi (Fase 9, P11): i giudizi sui ricordi veri (titoli, giorni e foto della famiglia). Stanno solo sul telefono
+# (noBackupFilesDir/eval/memories/) e nella cartella .mycloudgallery/eval/memories/ dell'utente, MAI nel repository
+# (NoPrivateMemoriesEvalInGitTest, docs/fase9-progetto.md par. 5.3). L'uscita del generatore della Libreria di prova (immagini con date relative a oggi)
+# va in tools/fixtures/memories/out/ e non si committa: nel repository solo gli script e le specifiche con giorni relativi.
+*.mcgmem
+ricordi-veri*
+eval-ricordi-privato/
+tools/fixtures/memories/out/
+tools/fixtures/memories/**/*.jpg
+tools/fixtures/memories/**/*.jpeg
+tools/fixtures/memories/**/*.png
+tools/fixtures/memories/**/*.webp

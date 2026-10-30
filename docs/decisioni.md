@@ -12250,3 +12250,186 @@ e che **senza il filtro finale la proprieta' diventa rossa** (provato). `HiddenS
 - `HiddenSurfacesPropertyTest` dura circa 100 s in piu' di prima: le sonde `MEMORIES` costruiscono il motore vero e fanno girare le schermate vere su tre "oggi" per ogni mondo casuale.
 
 **Verifica**: `tools\check.ps1 -NoDaemon` (con `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, un posto Gradle tenuto per tutta la durata) e' finito con **OK: tutto a posto** (codice di uscita 0, tutti i passi OK, `-Bench` saltato per scelta): assembleDebug, assembleRelease, galleryTest e galleryLint in circa 21 minuti, nessun modulo a zero test (`feature-memories` = 296, `app` = 1158) e nessun resto dei ricordi nel dex di release.
+
+## Fase 9 P11: valutazione dei ricordi (30/10)
+
+Il pacchetto P11 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P11; §5.3, §2.1, §2.2, §4.3, §11 **Q6 (a)** e **Q7**). Branch `fase9/p11`. Consegna gli **strumenti per misurare se i ricordi sono buoni**: le metriche, la
+Libreria sintetica "di una famiglia" con la corsa del riferimento e i suoi numeri attesi, la regola di scelta di pesi e soglie scritta in codice e provata, il generatore della Libreria di prova per il telefono (date relative
+al giorno della prova) e lo strumento **solo debug** "Valutazione dei ricordi" per la corsa sui dati veri (F125), che fa l'utente quando vuole e non blocca la chiusura della fase (Q7). Con **Q6 (a)** non c'è nessun filtro dei
+ricordi tristi: "triste" e "da non mostrare" sono **misure**, mai un filtro. Nessuna dipendenza, nessun permesso, nessun componente; `core-memories` resta JVM puro (`Phase9ArchitectureTest`, `NoWallClockSourcesTest`).
+
+### Cosa c'è
+
+| Dove | Cosa |
+|---|---|
+| `core-memories/src/test/.../eval/` | codice **puro**: `MemoriesEvalModel` (il ricordo da giudicare, la finestra dei 45 giorni e la scelta dei ricordi), `MemoriesEvalLabels` (i giudizi), `MemoriesEvalFormat` (il file `ricordi.mcgmem`, `MCGMEM01`), `MemoriesEvalMetrics` (le metriche e il resoconto di soli numeri); i banchi `*Kit` (la Libreria sintetica `MemoriesEvalFamilyKit`, i due esecutori e la corsa `MemoriesEvalKit`, la regola di scelta e le misure `MemoriesEvalChoiceKit`, la specifica per il telefono `MemoriesFixtureKit`) e le loro prove |
+| `app/src/debug/.../debugtools/eval/memories/` | la **copia identica** dei quattro file puri (cambia solo la riga `package`: `MemoriesEvalSourceParityTest` lo controlla) e lo strumento: porta (`MemoriesEvalEnvironment`), deposito dei file (`MemoriesEvalStore`, con `StateFiles`), sessione (`MemoriesEvalSession`), schermate (`MemoriesEvalScreen`, `MemoriesEvalGrid`), testi |
+| `app/src/debug/.../DeveloperTools.kt` | **la sola voce d'ingresso** aggiunta a un elenco debug esistente (la rotta in `destinations` e la riga di Impostazioni → Sviluppo, dopo quella delle persone: quattro righe con il commento); `src/release` non cambia |
+| `app/src/testDebug/.../eval/memories/` | banco (`MemoriesEvalTestRig`), sessione, schermata (Robolectric), azzeramento, parità dei sorgenti e guardie |
+| `tools/fixtures/memories/` | `generate_memories.py` e `generate-memories.ps1` (la Libreria di prova con date relative), `campione/spec-campione.tsv` (per le prove del solo Python), `LEGGIMI.md` |
+| `.gitignore` | `*.mcgmem`, `ricordi-veri*`, `eval-ricordi-privato/`, `tools/fixtures/memories/out/` e le immagini sotto `tools/fixtures/memories/` |
+| `tools/check.ps1` | **non cambia**: il passo del dex di release cercava già `debugtools/eval/memories`, `MemoriesEvalEnvironmentHolder`, `MemoriesEvalSession`, `MemoriesEvalEntry`, `MemoriesEvalStore`, `ricordi.mcgmem` e `MCGMEM01` (P0), e il prefisso `debugtools/eval` copre ogni classe del pacchetto |
+
+### Le metriche (giudizi → numeri; mai id, titoli, giorni)
+
+Lo strumento genera i ricordi e per ognuno l'utente risponde con un tocco (**Bello**, **Così così**, **Da non mostrare**, col motivo facoltativo triste, sbagliato, noioso) e tocca nella griglia le foto che **non** dovevano
+esserci, dicendo perché (**doppione**, **mossa o buia**, **screenshot o documento**, **non c'entra**, **triste**). Contano solo i ricordi con un giudizio. Obiettivi di §5.3 (`MemoriesEvalTargets`, limiti inclusivi):
+- **ricordi graditi**: "Bello" ≥ 70% (con l'intervallo di Wilson al 95%, largo con 40-60 ricordi);
+- **ricordi "da non mostrare"**: ≤ 3% (con il motivo; per Q6 (a) è solo una misura);
+- **foto da togliere per ricordo**: in media ≤ 1 su 12 (8,3%): la media, ricordo per ricordo, della quota di foto segnate (si dice anche la quota sul totale delle foto);
+- **doppioni**: ≤ 3% delle foto;
+- il resoconto dà anche i numeri per tipo di ricordo, per motivo delle foto segnate, le foto "tristi" (misura, nessun filtro) e i ricordi senza nessuna foto da togliere.
+
+### La Libreria sintetica "di una famiglia" (`FamilyBuilder`, tutto da un seme, date relative a "oggi")
+
+Cinque anni di foto: **5.570 foto** (54 nascoste), 692 giorni con foto, 501 gruppi di riprese ripetute (i doppioni: coseno 0,94-0,995 col primo scatto, il 20% a più di 3 minuti di distanza), **anniversari** (sei feste, ognuna per
+uno, due e tre anni fa), **sette viaggi** (quattro con l'anniversario nella finestra di 45 giorni, tre da "riscoprire") e **un evento**, **tre persone** con nomi neutri ("persona-a"), **346 screenshot** (con giorni di soli screenshot,
+E-MEM2), **115 documenti** riconosciuti e qualcuno sfuggito, **364 ricevute da WhatsApp**, 268 video, **158 foto mosse e 107 buie come misure finte** dei pixel (nitidezza e luce; le mosse hanno mediana 45, le nitide 600, con code
+che si sovrappongono), **31 foto tristi** in cinque "giorni tristi" (concetti nei vettori finti, vicini a tre prototipi; il motore non li legge), foto "simili ma diverse" (coseno 0,82-0,90: non sono doppioni), il 90% delle foto con
+un vettore e l'85% con la misura dei pixel, e **54 nascosti perfetti** (preferiti, modificati, nitidi, di persone: se uscissero in un ricordo sarebbero la prima scelta). I difetti seminati sono l'8,6% delle foto (mosse 3,5%, buie 2%,
+documenti sfuggiti 0,6%, ricevute non pertinenti 2%, estranee 0,5%). Nessun dato vero: luoghi con id inventati (da 9.000.000), nessuna coordinata. Gli anniversari restano tali per **qualunque** "oggi" (prova con il 30/10/2026, il 5/3/2027
+e il 29/2/2028: `MemoriesEvalFamilyTest`).
+
+**L'utente ideale** (`FamilyIdealUser`) sa la verità di ogni foto (il motore no) e compila i giudizi come una persona calma: segna ogni doppione tranne il primo scatto del gruppo e il difetto proprio della foto; il ricordo è **Bello**
+con al più una foto da togliere ogni sei, **Così così** fino a una su tre, **Da non mostrare** oltre (sbagliato) o, per tristezza, se almeno il 25% delle foto è triste o la copertina lo è.
+
+### La corsa del riferimento sul sintetico (i numeri attesi, `MemoriesEvalReferenceRunTest`)
+
+"Oggi" = 30/10/2026; gli ultimi 45 giorni simulati uno per uno con un motore suo (scaffale e scelte in memoria): il riferimento (`InMemoryMemories`, tutte le coppie) e il motore vero (`MemoryEngine` con la scelta di P7 e la maschera
+dei Nascosti) danno **gli stessi 51 ricordi** (stessi elementi, stessa copertina).
+| Misura | Valore | Obiettivo |
+|---|---|---|
+| Ricordi (45 giorni) | **51**: 37 "anni fa", 7 viaggi, 5 persone, 1 evento, 1 il mese (929 foto) | circa 40-60 |
+| Bello | **45 su 51 = 88,2%** (intervallo 76,6%-94,5%); Così così 5 | ≥ 70% ✓ |
+| Da non mostrare | **1 su 51 = 2,0%** (0,3%-10,3%), per tristezza (il giorno triste che cade in un anniversario ESCE: nessun filtro, Q6 (a)) | ≤ 3% ✓ |
+| Foto da togliere | **70 su 929** (7,5%); in media per ricordo **8,9%**: doppioni 4, mosse o buie 37, screenshot o documenti 6, non c'entrano 13, tristi 10; 13 ricordi senza nessuna | ≤ 8,3% **✗ (di poco)** |
+| Doppioni | **0,4%** delle foto | ≤ 3% ✓ |
+| Doppioni seminati tolti (a livello di scelta, §5.3 punto 1) | **431 gruppi su 453 = 95,1%** (con 3 minuti erano 94,0%); foto uniche perse 108 su 3.531 (3,06%) | ≥ 95% ✓ |
+
+Le altre garanzie pubbliche di §5.3 punto 1, tutte provate a ogni `check.ps1`: **nessun escluso di D5 nei ricordi (100%)**, nessun nascosto (i 54 perfetti non escono mai), dimensioni dentro i limiti di D7, copertina mai un video né
+una ricevuta WhatsApp, elementi in ordine di scatto, **ricordi deterministici** (stessa Libreria e stesso giorno = stessi ricordi), la corsa non scrive nella Libreria. "Nessun concetto triste con Q6 (b) acceso" **non si applica**: con Q6 (a) non
+c'è un filtro; al suo posto il test fissa che il giorno triste esce e che l'utente ideale lo conta come "da non mostrare".
+
+**Che cosa NON dicono** (L470 a parte): il sintetico non dice se i ricordi piacciono, lo sa solo l'utente sulle sue foto (F125). Il riferimento "regge" tre obiettivi su quattro perché i difetti seminati sono pochi; sulle foto da togliere sta
+appena sopra il limite per una ragione **di struttura, non di parametro**: il punteggio **ordina senza escludere**, quindi un ricordo che nasce da un giorno piccolo (6-24 foto, il tetto del tipo) si tiene tutte le sue foto, mosse comprese; i difetti
+seminati sono l'8,6% delle foto e nei ricordi se ne trova in media l'8,9% (il 7,5% sul totale delle foto). Provato con il banco: nessuna soglia di nitidezza abbassa la media sotto l'8,6% (tabella sotto). Se la misura vera dice che le foto mosse o buie sono troppe, serve **una soglia minima di punteggio**
+(escludere sotto una soglia, finché restano almeno `minSize` foto): è un cambio di **logica** di P7, non un valore.
+
+### La regola di scelta di pesi e soglie (§5.3 punto 3, `MemoriesEvalChoice`, scritta prima di guardare i numeri)
+
+1. Si provano alcuni valori di un parametro con lo stesso mondo; per ognuno si dice se **regge i criteri** (quelli di §5.3, più un tetto al danno collaterale).
+2. Se il valore provvisorio regge, **resta** (senza una prova contraria non si tocca un valore di progetto).
+3. Altrimenti si prende il valore che regge **più vicino** al provvisorio (il cambiamento più piccolo), a parità il più basso.
+4. Se nessun valore regge, si prende quello col margine migliore e si dice che l'obiettivo **non è raggiungibile** con quel parametro.
+Si calibra solo cosa si può provare **senza toccare il codice**: la soglia di nitidezza (le misure si moltiplicano per `SHARPNESS_MIN / T`: è esatto, una foto è "mossa" se `nitidezza < SHARPNESS_MIN`), la finestra dei doppioni (i tempi si
+moltiplicano per `DUPLICATE_WINDOW_MS / finestra`: è esatto, le altre regole guardano solo l'ordine) e il coseno (direttamente sulle coppie seminate).
+
+**Nitidezza** (la corsa intera del motore vero per ogni soglia; criteri: mosse rimaste ≤ 2,5% delle foto, nitide punite ≤ 0,5%):
+| Soglia | 40 | 60 | 80 | **100** | 130 | 160 | 200 | 300 |
+|---|---|---|---|---|---|---|---|---|
+| mosse rimaste nei ricordi | 31 (3,34%) | 26 (2,80%) | 23 (2,48%) | **23 (2,48%)** | 23 | 23 | 23 | 25 (2,69%) |
+| foto davvero nitide punite | 0 | 0 | 1 (0,11%) | **4 (0,43%)** | 7 (0,75%) | 12 (1,29%) | 26 (2,80%) | 69 (7,43%) |
+| regge | no | no | sì | **sì** | no | no | no | no |
+→ **resta 100** (il provvisorio regge). Sopra 100 non si toglie nessuna mossa in più e si puniscono sempre più foto nitide; sotto 80 restano troppe mosse. La media delle foto da togliere resta 8,6%-9,6% per ogni soglia.
+
+**Coseno dei doppioni** (direttamente sulle coppie con i due vettori; criteri: ≥ 95% delle riprese riconosciute, ≤ 5% delle "simili ma diverse" scambiate):
+| Coseno | 0,86 | 0,88 | 0,90 | **0,92** | 0,94 | 0,96 |
+|---|---|---|---|---|---|---|
+| riprese riconosciute (447) | 100% | 100% | 100% | **100%** | 100% | 64,2% |
+| simili scambiate per doppioni (296) | 50,0% | 20,3% | 0% | **0%** | 0% | 0% |
+→ **resta 0,92** (regge anche 0,90 e 0,94: il margine c'è da entrambi i lati; vale per queste distribuzioni seminate, la misura vera dirà le code reali).
+
+**Finestra dei doppioni senza vettori né firma** (scelta delle foto su ogni giorno con riprese ripetute; criteri: ≥ 95% dei doppioni seminati tolti, foto uniche perse al più un punto in più di quelle perse con 3 minuti, cioè ≤ 3,72%):
+| Finestra | 1 min | 2 | **3 (D7)** | 4 | **5** | 6 | 8 | 10 |
+|---|---|---|---|---|---|---|---|---|
+| doppioni tolti (453 gruppi) | 86,1% | 90,1% | 94,0% | 94,3% | **95,1%** | 95,8% | 97,4% | 99,1% |
+| foto uniche perse (3.531) | 2,07% | 2,44% | 2,72% | 2,92% | **3,06%** | 3,46% | 4,56% | 5,69% |
+| regge | no | no | no | no | **sì** | sì | no | no |
+→ con 3 minuti il criterio **non regge** (94,0%); il valore che regge più vicino è **5 minuti**. **È la sola costante cambiata** (vedi sotto).
+
+**I pesi del punteggio** (`PickWeights`, D6): **non cambiano** e **non si possono calibrare sul sintetico**. Preferito +3, modificato +1, in un album +1, persona con nome +1, panorama +0,5, foto in movimento +0,3, video da 3 a 60 s +0,5, video oltre 5 minuti
+-0,5, WhatsApp -1,5, luce -1,0, nitidezza -1,5: i segnali dell'utente non hanno sul sintetico una verità indipendente ("questa foto è più bella"), e comunque il punteggio **ordina senza escludere**, per cui nei giorni piccoli nessun peso
+cambia l'esito. Una misura (non una calibrazione, `MemoriesEvalCalibrationTest`) dice quanto bene i pesi attuali separano i difetti che il punteggio vede dalle foto buone dello stesso giorno (giorni da almeno 8 candidati, la probabilità che una
+foto buona abbia un punteggio più alto di una col difetto): **mosse 0,86** (1.065 coppie), **buie 0,75** (740), **ricevute WhatsApp non pertinenti 0,90** (751). Le buie sono il punto debole (-1,0 pesa meno di una preferita o di una persona, e
+il 10% delle buie sta sopra la soglia di luce 0,12): se F125 dice che ci sono troppe foto buie, il primo sospetto è `BAD_LIGHT`. **Restano provvisori** anche: il tetto dei WhatsApp (un quarto), λ della varietà (0,5), le soglie di luce (0,12 e 0,92) e i
+minimi di D7 (`MemoryRules.spec`): sul sintetico nessuno di loro si può provare senza toccare il codice, e nessuna misura li muove.
+
+| Parametro | Valore | Scelta |
+|---|---|---|
+| `SHARPNESS_MIN` | 100 (scala 0..255, 256 px) | **resta** (la regola) |
+| `DUPLICATE_COSINE` | 0,92 | **resta** (la regola) |
+| `DUPLICATE_WINDOW_MS` | **300.000 (5 minuti)**, prima 180.000 | **cambiata** (la regola: con 3 minuti il 94,0%) |
+| `MMR_LAMBDA`, `WHATSAPP_MAX_SHARE`, `DARK_LUMA`, `BURNT_LUMA`, pesi del punteggio, minimi di D7 | invariati | provvisori fino a F125 |
+
+#### Modifica fuori dal perimetro (in evidenza)
+
+**`PickWeights.DUPLICATE_WINDOW_MS`: da 180.000 a 300.000 ms**, in `core-memories/.../contract/Picking.kt` (la tabella dei pesi di P0/P7). Cambia la sola costante (e il suo KDoc, che dice cosa leggere). Per tenere verdi le prove di P7 sono cambiate due righe di test:
+`PickScoreTest` (la riga che fissa il valore) e `PickVarietyTest.alPiuQuattroNellaStessaOra` (le dieci foto "migliori" stanno a **6** minuti l'una dall'altra invece di 5: due scatti a 5 minuti esatti sono ora doppioni). **I commenti degli altri file che dicono
+"3 minuti"** (`MemoryPhotoPicker`, `ReferencePicker`, `PickSignalsLoader`, `Ports.kt`, `MemoriesDiag.kt`, `PickerContract`, `PickFixtures`) **non sono stati toccati**: si leggono "la finestra dei doppioni" (lo dice il KDoc della costante). Ricadute: `docs/fase9-progetto.md`
+(D7, §2.2) dice ancora 3 minuti. Nessun altro valore di P6 o P7 è cambiato.
+
+### Lo strumento sul telefono (`debugtools/eval/memories`, solo debug)
+
+Impostazioni → Sviluppo → **"Valutazione dei ricordi"** (la sezione che il progetto chiama "Diagnostica → Sviluppo"). Senza la porta dice "I ricordi non sono ancora collegati allo strumento".
+- **Genera i ricordi degli ultimi 45 giorni**: la porta li fa **in memoria** come se "oggi" fosse ognuno di quei giorni (45 giri di notte con un motore suo); ne restano al più 60 (sempre gli stessi per la stessa corsa: l'id è un hash) e si salvano in `ricordi.mcgmem`.
+- **Per ogni ricordo**: titolo e griglia (miniature locali, mai dal NAS); un tocco su una foto che non doveva esserci e il motivo; poi **Bello**, **Così così** o **Da non mostrare** (col motivo facoltativo); "Sono tutte giuste" toglie i segni; "Prossimo da giudicare". Tutto si salva a ogni tocco: si può smettere e riprendere.
+- **Numeri di F125**: i numeri della sezione sopra, per tipo e in totale, salvati come `report-NN.txt` (**solo numeri**).
+- **Cancella giudizi e resoconti**. L'azzeramento dell'app toglie tutta `eval/` (`DeveloperTools.erasableDirs`).
+- **Mai un nascosto**: alla corsa, quando si apre lo strumento e prima dei numeri, `withVisibleOnly` toglie dai ricordi i media nascosti o eliminati nel frattempo (un ricordo che resta sotto 3 elementi esce col suo giudizio): non compaiono né nella schermata né nelle metriche.
+- Niente log (solo numeri e codici), niente rete, scritture solo con `StateFiles` in `noBackupFilesDir/eval/memories/` (fuori dai backup), niente nei `toString()`; il titolo non porta mai il nome di una persona (D12).
+
+#### La porta (`MemoriesEvalEnvironment`) e come la lega P13
+
+`:app` non vede ancora `core-memories` (lo aggiunge P13): per questo la porta parla solo con tipi neutri (`EvalMemory` con testo, `LocalDate`, `MediaId`; come `FacesEvalEnvironment`), e **l'adattatore con il grafo vero lo scrive P13** in `app/src/debug/.../debugtools/`
+(fuori da `eval/memories/`, che non nomina mai `core.memories`; `MemoriesEvalSourceParityTest`), installato da `DeveloperTools` (`MemoriesEvalEnvironmentHolder.current`). Il contratto, scritto nel file della porta:
+1. `generate(days)` = la corsa di `FamilyRig.run` (`MemoriesEvalKit.kt`, provata con la Libreria sintetica): per ogni giorno, dal più vecchio a oggi, `clock.today = giorno`, `engine.refresh(NIGHTLY, 60 s)`, e ogni ricordo **nuovo** sullo scaffale è un `EvalMemory` nato quel giorno (`memories.memory(id)` per elementi e copertina);
+2. il motore è uno **suo**: `MemoryEngine(library = l'adattatore di visibilità di :app, personal = InMemoryMemoriesPersonalSettings con le sole scelte "Mostra meno", "Mai" e "Ricordi con le persone" copiate in sola lettura (**non** i visti né gli scartati: la corsa deve dire tutto
+   ciò che il motore avrebbe prodotto), store = InMemoryShelfStore, clock che si sposta, planner = IndexedPlanner(PeoplePlanner()), porte vere di viaggi (`until` = il giorno simulato), persone, vettori, pixel, album, ritagli, choice = MemoryPhotoChoice(PickSignalsLoader(...), VisiblePhotoPicker(MemoryPhotoPicker(), hiddenMask)))`;
+3. il titolo si compone come lo vedrebbe l'utente (date e luoghi veri) **senza il nome di una persona** ("Con una persona");
+4. `visibleAmong(ids)` = `VisibleMedia.visible(ids)` (D31); `thumbnail` = la miniatura **locale** (come `AppAlbumsEvalEnvironment`);
+5. l'adattatore nomina `VisibleMedia` e `HiddenMask`: va nell'elenco `wiring` di `HiddenSurfaces` (P13); niente log, niente scrittura, niente rete.
+
+### La Libreria di prova per il telefono (`tools/fixtures/memories/`)
+
+`generate-memories.ps1` lancia il test `MemoriesFixtureExportTest` (che scrive `spec-media.tsv` e `attesi.tsv` in `core-memories/build/memories-fixtures/`, **con `anni_fa` e `giorni_fa` al posto delle date**) e poi `generate_memories.py`, che scrive per il giorno `-Oggi` (di
+default oggi) 5.570 JPEG piccoli con l'EXIF (riusa il disegno e lo scrittore di `tools/fixtures/trips/generate_trips.py`), `MANIFEST.tsv`, `concetti.tsv` (i concetti dei vettori finti), `nascoste.txt` (le foto da nascondere a mano per provare i Nascosti) e `LEGGIMI.txt` con i comandi
+`adb push` per le cartelle recintate `mcg-prova`. **Nessun GPS, nessun dato personale, nessuna data nel repository.** Provato sul solo Python (`generate-memories.ps1 -Verifica`: EXIF riletto, nessun GPS, uscita deterministica, date relative per due giorni di prova
+diversi, un 29 febbraio compreso) e dal test (il campione è una parte della Libreria di oggi). Limite: l'EXIF ha l'ora al minuto, quindi le riprese a meno di un minuto hanno lo stesso orario sul telefono; e le immagini non hanno vettori (sul telefono i doppioni
+si cercano senza vettori).
+
+### Passi per l'utente (F125, circa 25 minuti più 10 di conferma; Q7: quando vuole, sul telefono, non serve il tablet)
+
+0. **Prima**: build debug dell'S25 con **P13 integrata** (la porta legata: se la schermata dice "i ricordi non sono ancora collegati allo strumento", manca il legame di P13), la Libreria pronta e i vettori della ricerca calcolati; Persone attiva se si vogliono i ricordi con le persone.
+1. **Impostazioni → Sviluppo → "Valutazione dei ricordi"** → **"Genera i ricordi degli ultimi 45 giorni"**; aspettare la fine (45 giri di notte): "Ricordi da giudicare: N", circa 40-60.
+2. **Per ogni ricordo** (circa 25 secondi l'uno): aprirlo, toccare le foto che **non** dovevano esserci e scegliere perché; poi **Bello**, **Così così** o **Da non mostrare** (col motivo, se vuole). "Prossimo da giudicare" porta al successivo. Si può smettere e riprendere.
+3. **"Numeri di F125"**: il resoconto (`report-01.txt`). Obiettivi: Bello ≥ 70%, Da non mostrare ≤ 3%, foto da togliere ≤ 1 su 12 in media, doppioni ≤ 3% delle foto. Si porta fuori **solo il resoconto**:
+   `adb exec-out run-as dev.pampa.mycloudgallery.debug cat no_backup/eval/memories/report-01.txt`, e si incolla in una sezione "Misura sui dati veri (F125)" di questo file. **Mai** `ricordi.mcgmem` (titoli, giorni e foto veri), mai schermate di ricordi.
+4. **Se mancano gli obiettivi si cambiano solo i parametri** (§5.3 punto 3), guardando i numeri per tipo e per motivo: troppe "mosse o buie" → `SHARPNESS_MIN` (`PickWeights`), `BAD_LIGHT`, e se non basta una soglia minima di punteggio (cambio di logica); troppi "doppioni" → `DUPLICATE_COSINE` verso 0,90 o la finestra;
+   troppe "non c'entra" da WhatsApp → `WHATSAPP` e `WHATSAPP_MAX_SHARE`; troppi "screenshot o documenti" → il riconoscimento dei documenti (Fase 6), non questo pacchetto; troppi "da non mostrare" per tristezza → per Q6 (a) niente da regolare (solo i pulsanti): è l'utente a dire se vuole rivedere Q6. Poi una **seconda sessione breve** (circa 10 minuti):
+   "Genera" ricomincia (i giudizi di prima si perdono: salvare prima il resoconto).
+5. **A fine misura**: "Cancella giudizi e resoconti" (o l'azzeramento dell'app: `eval/` li toglie).
+
+### Prove
+
+`core-memories` (59 nuove, tutte verdi): `MemoriesEvalLabelsTest` (9), `MemoriesEvalFormatTest` (6: va e torna, un file rovinato o ostile dà il numero della riga e mai il contenuto, 400 mutazioni), `MemoriesEvalMetricsTest` (9: numeri contati a mano, limiti inclusivi, Wilson, resoconto senza dati
+privati, finestra e scelta dei ricordi), `MemoriesEvalFamilyTest` (7: forma, date relative per tre "oggi" diversi, concetti tristi, misure finte, nascosti perfetti, niente di personale), `MemoriesEvalReferenceRunTest` (9: i numeri attesi, riferimento = motore vero, D5, nascosti, D7, determinismo, la corsa non
+scrive, il "da non mostrare" come misura, ≥ 95% dei doppioni), `MemoriesEvalCalibrationTest` (4), `MemoriesEvalChoiceTest` (6: la regola), `MemoriesFixtureExportTest` (5), `NoPrivateMemoriesEvalInGitTest` (4: git, `.gitignore`, il controllo vede le violazioni su file veri, i sorgenti del formato non sono una violazione).
+`app` (22 nuove): `MemoriesEvalSessionTest` (9), `MemoriesEvalScreenTest` (4, Robolectric), `MemoriesEvalErasableTest` (2), `MemoriesEvalSourceParityTest` (7). **Una modifica ai file puri va fatta nelle due copie** (il test lo ricorda). Il generatore Python ha le sue prove (`-Verifica`).
+
+**Edge case**: E-MEM1 (una Libreria giovane: lo strumento dice "non ci sono ricordi da giudicare"), E-MEM2 (giorni di soli screenshot seminati: non fanno un "anni fa"), E-MEM3 (un 29 febbraio non ha un modo relativo di dirsi: nel banco le sue foto stanno sul 28; il comportamento del generatore resta di P6), E-MEM12 e E-MEM13 (non di P11), E-MEM16 (senza vettori: la finestra
+dei doppioni, calibrata), E-H8 (un nascosto perfetto non esce mai, né in un ricordo né nella sessione né nei numeri), D31, D33 (solo numeri nei resoconti).
+
+### Punti aperti
+
+- **La misura vera non c'è (Q7, L470)**: gli obiettivi di F125 sono obiettivi, non risultati; pesi, λ, tetto WhatsApp, soglie di luce e minimi di D7 restano provvisori. La finestra dei doppioni a 5 minuti e la soglia di nitidezza a 100 sono scelte con **dati inventati**: valgono finché F125 non dice altro.
+- **Lo strumento non è ancora collegato**: l'adattatore di P13 (sopra) non c'è; la schermata, la sessione, i numeri e la corsa sono provati sul banco (`MemoriesEvalTestRig`, e la corsa vera con `FamilyRig`), non sul grafo vero. La prova sul telefono è F125.
+- **Il punteggio ordina senza escludere** (vedi sopra): sul sintetico le foto da togliere stanno appena sopra il limite (8,9% contro 8,3%) e nessun parametro le abbassa; una soglia minima di punteggio è un cambio di logica di P7, da decidere dopo F125.
+- **I commenti con "3 minuti"** negli altri file di P0/P7 e `docs/fase9-progetto.md` (D7, §2.2) non sono stati aggiornati (modifica minima della sola costante).
+- Niente screenshot: lo strumento è solo debug e non è una superficie dell'utente.
+- Nessuna prova sul telefono e nessun Gradle fuori dal posto (`ocp11`); nessun sotto-agente.
+
+### Esito di `tools/check.ps1 -NoDaemon`
+
+**Verde** («OK: tutto a posto», 30/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, dentro il posto Gradle `ocp11`, preso prima e rilasciato dopo): il passo Gradle (`assembleDebug assembleRelease galleryTest galleryLint`) in 1.016 secondi, test in ogni
+modulo senza zeri e senza rossi (`core-memories` 416 prove, di cui 59 nuove di P11; `app` 1.176, di cui 22 nuove; `core-common` 157: i test d'architettura delle Fasi 6-9 verdi); il passo del dex di release (con i nomi `debugtools/eval/memories`, `MemoriesEval*`, `ricordi.mcgmem`, `MCGMEM01`) verde **senza modifiche a `check.ps1`**;
+solo `-Bench` saltato (senza il flag). `NoPrivateMemoriesEvalInGitTest` e il passo delle etichette private (P9) verdi sui file tracciati.

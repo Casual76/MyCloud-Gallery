@@ -41,7 +41,8 @@ class PickScoreTest {
     assertThat(PickWeights.DARK_LUMA).isEqualTo(0.12)
     assertThat(PickWeights.BURNT_LUMA).isEqualTo(0.92)
     assertThat(PickWeights.DUPLICATE_COSINE).isEqualTo(0.92)
-    assertThat(PickWeights.DUPLICATE_WINDOW_MS).isEqualTo(180_000L)
+    // 5 minuti (D7 diceva 3): la regola di §5.3 di P11, `MemoriesEvalCalibrationTest`.
+    assertThat(PickWeights.DUPLICATE_WINDOW_MS).isEqualTo(300_000L)
     assertThat(PickWeights.MMR_LAMBDA).isEqualTo(0.5)
     assertThat(PickWeights.WHATSAPP_MAX_SHARE).isEqualTo(0.25)
   }

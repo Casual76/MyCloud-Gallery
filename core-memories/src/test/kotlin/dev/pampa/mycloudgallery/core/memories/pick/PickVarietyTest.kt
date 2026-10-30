@@ -46,7 +46,8 @@ class PickVarietyTest {
   /** Al piu' 4 nella stessa ora (ricordo "anni fa"), anche se il punteggio le vorrebbe tutte. */
   @Test
   fun alPiuQuattroNellaStessaOra() {
-    val best = List(10) { cells.cell(it * 5, flags = CellFlags.FAVORITE) }
+    // Sei minuti l'una dall'altra (non 5): la finestra dei doppioni e' di 5 minuti (P11) e due scatti a 5 minuti esatti sarebbero doppioni.
+    val best = List(10) { cells.cell(it * 6, flags = CellFlags.FAVORITE) }
     val rest = List(8) { cells.cell(120 + it * 60) }
     val result = picker.pick(best + rest, MemoryRules.spec(MemoryKind.ON_THIS_DAY), PickSignals())
     val hour = (best + rest).associate { it.id to it.timeMs / 3_600_000 }

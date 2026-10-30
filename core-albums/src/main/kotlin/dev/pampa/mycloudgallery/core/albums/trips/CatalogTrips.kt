@@ -12,7 +12,9 @@ import dev.pampa.mycloudgallery.core.albums.contract.PlaceScope
 import dev.pampa.mycloudgallery.core.albums.contract.SmartPeriod
 import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.albums.contract.TripAcceptOutcome
+import dev.pampa.mycloudgallery.core.albums.contract.TripDigest
 import dev.pampa.mycloudgallery.core.albums.contract.TripId
+import dev.pampa.mycloudgallery.core.albums.contract.TripMemories
 import dev.pampa.mycloudgallery.core.albums.contract.TripProposal
 import dev.pampa.mycloudgallery.core.albums.contract.TripProposals
 import dev.pampa.mycloudgallery.core.albums.contract.TripReport
@@ -76,7 +78,7 @@ class CatalogTrips internal constructor(
   private val clocks: AlbumClocks,
   scope: CoroutineScope,
   private val refreshDelayMs: Long = REFRESH_DELAY_MS,
-) : Trips, AwayFromHome {
+) : Trips, AwayFromHome, TripMemories {
 
   constructor(
     database: GalleryDatabase,
@@ -95,6 +97,7 @@ class CatalogTrips internal constructor(
   )
 
   private val reader = TripReader(candidates, visibility)
+  private val pastTrips = PastTrips(reader, store, dismissals, titles, clocks)
   private val lock = Mutex()
 
   /** Le proposte conservate (anche quelle gia' diventate album) e quelle ricontrollate con la visibilita' di adesso. */
@@ -232,27 +235,8 @@ class CatalogTrips internal constructor(
     return id in dismissed || (kind == TripKind.TRIP && TripId.startKey(kind, days.from) in dismissed)
   }
 
-  /** Il titolo e i luoghi di una proposta con i soli media visibili adesso (R16). */
-  private class ShownRow(val label: String, val placeIds: List<Int>) {
-    override fun toString(): String = "ShownRow"
-  }
-
-  /**
-   * R16: titolo e luoghi si fissano alla rilevazione, ma un media nascosto dopo non deve restare nel titolo ("A e B, marzo 2026" con l'unica foto di B
-   * nascosta) ne' finire nei dati personali con "Crea album". Se tutti i luoghi della riga hanno ancora un media visibile con il GPS, la riga resta
-   * com'e' (neanche un trasloco cambia i viaggi gia' proposti, E-AL15: qui non conta dov'e' la casa di oggi); se un luogo non ne ha piu', titolo e
-   * luoghi si rifanno con quelli che restano. [pool] e' gia' senza nascosti (`reader.mine(finalMask = true)`).
-   */
-  private fun viewOf(row: StoredProposal, pool: List<AlbumCandidate>): ShownRow {
-    if (row.placeIds.isEmpty()) return ShownRow(row.label, row.placeIds)
-    val located = pool.filter { it.gps != null && it.placeId != 0 }
-    val seen = located.mapTo(HashSet()) { it.placeId }
-    val kept = row.placeIds.filter { it in seen }
-    if (kept.size == row.placeIds.size) return ShownRow(row.label, row.placeIds)
-    val stats = PlaceStats.of(located.filter { it.placeId in kept })
-    val label = if (row.kind == TripKind.TRIP) titles.trip(row.days, stats) else titles.event(row.days, stats)
-    return ShownRow(label, kept)
-  }
+  /** R16: il titolo e i luoghi di una proposta con i soli media visibili adesso (la regola e' in `ShownTrips`, la stessa dei ricordi). */
+  private fun viewOf(row: StoredProposal, pool: List<AlbumCandidate>): ShownRow = ShownTrips.of(titles, row, pool)
 
   /** Le foto con il GPS lontane da casa e dai luoghi abituali: le sole che danno i luoghi di un viaggio (L86). Senza casa nota, nessuna. */
   private fun awayShots(pool: List<AlbumCandidate>, anchors: Anchors?): List<AlbumCandidate> {
@@ -278,6 +262,11 @@ class CatalogTrips internal constructor(
 
   /** R16: l'oracolo "troppo vicino a casa" per chi calcola un centro (le coordinate entrano, un si'/no esce). */
   fun homeClearance(): HomeClearance = StoreHomeClearance(store)
+
+  // --- TripMemories -------------------------------------------------------------------------------------------------------------------
+
+  /** Fase 9 (P8, D12): i viaggi e gli eventi passati per i ricordi, sopra [TripReader] e le proposte conservate (vedi [PastTrips]). */
+  override suspend fun past(until: LocalDate, budget: Duration): List<TripDigest> = pastTrips.past(until, budget)
 
   // --- cio' che si mostra -------------------------------------------------------------------------------------------------------------
 

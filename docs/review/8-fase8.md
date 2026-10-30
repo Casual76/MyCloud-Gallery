@@ -12,19 +12,19 @@
 
 ## Stato di ogni voce (30/10, pacchetto A)
 
-**Corretta**: la correzione e i suoi test (le sigle C e L sono in `docs/sicurezza.md`). **Aperta**: il pacchetto che la chiude o la decisione che serve. La voce R2 era nella proposta del pacchetto A ma non nell'incarico di questo pacchetto: va con la normalizzazione Unicode dei nomi (R9) e aspetta la decisione dell'utente (vedi "Decisioni che servono all'utente").
+**Corretta**: la correzione e i suoi test (le sigle C e L sono in `docs/sicurezza.md`). **Aperta**: il pacchetto che la chiude o la decisione che serve. La voce R2 non era nell'incarico del pacchetto A: l'orchestratore ha deciso il 30/10 che «Rinomina», «Dimentica» e «Nascondi persona» tolgono subito le ricerche della persona, ed e' stata corretta nel pacchetto D insieme a R9, R10 e I2-I4 (voci qui sotto; il resoconto sta in `docs/decisioni.md`, «Fase 8, correzioni dopo le revisioni: pacchetto D»).
 
 | Voce | Stato | Pacchetto, prove, limiti |
 |---|---|---|
 | R1 | Corretta (A) | L'interruttore toglie ogni generazione sul disco, non solo quella ricordata da `faces-local`; il gancio non lascia uscire `off` finche' i file ci sono, nemmeno se il disco non si legge; vale per voce spenta, esclusione e attivazione (C210: `SwitchDiskGenerationsTest` `r1_*`, `EraseCorrectionsATest.r1_*`, il banco di P12 con l'elencazione legata) |
-| R2 | Aperta | Nomi vecchi e non latini nella cronologia: decisione dell'utente (R2) e normalizzazione Unicode con R9 (pacchetto C) |
+| R2 | Corretta (D) | **Decisione dell'orchestratore del 30/10:** «Rinomina», «Dimentica» e «Nascondi persona» tolgono subito le ricerche della persona (per id e per il nome di prima). La cronologia ricorda gli id dei chip «Persona» (schema v7), toglie per id e per nome con la normalizzazione Unicode (anche «Анна», «李明», «❤»), «Disattiva e cancella» e gli altri dispositivi con tre letture e, se non bastano, ogni ricerca con un chip «Persona» e il segno `FACES_HISTORY_KEPT` (C251: `PeopleCorrDTest`, `CorrezioniDEraseTest`, `CorrezioniDNomiTest`, `AiIndexCatalogTest`, `ExportedSchemaTest`). L190 esteso, L361, L363, L364 |
 | R3-R8 | Aperte | Pacchetto B (formato e replica dei volti), prima del si' di Q5 |
-| R9, R10 | Aperte | Pacchetto C (ricerca e album con persone) |
+| R9, R10 | Corrette (D) | R9: una sola normalizzazione dei nomi (`NameText`): un nome che si svuota non spegne piu' gli altri, un altro alfabeto si cerca; `PersonNames.forNewName` esige un carattere che si veda (C250: `CorrezioniDNomiTest`, `FacesCorrectionsDTest`, `PeopleCorrDTest`). **Aperto (L362):** `PeopleForms.isName` e' del pacchetto del formato. R10: `contentWith`, le celle e `classify` lanciano quando non sanno e il motore non scrive (C253: `SmartPeopleUnknownTest`) |
 | R11 | Corretta (A) | `ArchivePeople.release`, `FencedArchives.forget`, `GroupFaceCache` che non si riempie dopo il ritiro, forma della pagina Persone tolta, spenta = memoria vuota (C211: `PeopleReleaseTest`, `GroupCacheRetireTest`, `InstantShapesTest.r11_*`, `FacesCorrectionsATest.r11_*`, `FacesFenceSourcesTest.r11_*`). L322 |
 | R12 | Corretta (A) | Testo deciso dall'orchestratore: «Fatto ovunque» solo con NAS e tutti i dispositivi; «Cancellati da questo dispositivo» per la cancellazione solo locale; «Niente da cancellare qui» (C212: `FacesEraseControllerTest` `r12_*`, `FacesEraseSheetTest`) |
 | R13 | Corretta (A) | `EraseWait.FILE_OPEN` e attese crescenti (2, 4, 8, 16, 30 minuti) invece di un giro al minuto (C213: `EraseCorrectionsATest` `r13_*`, `FacesCorrectionsATest` `r13_*`). **Aperta in parte**: la Diagnostica non conta i file trattenuti (L320) |
 | I1 | Corretta (A) | La cancellazione nasce prima di `ArchivePeople`, per costruzione (C216, C130: `FacesFenceSourcesTest.i1_*`) |
-| I2-I4 | Aperte | Pacchetto C |
+| I2-I4 | I2 e I4 corrette (D), I3 dichiarata | I2: i chip gia' in Cerca si filtrano sul dizionario di adesso (C252: `CorrezioniDNomiTest`, `FacesCorrectionsDTest`). I3: finestre brevi dichiarate, non corrette (L360). I4: `toString()` senza nomi ne' id (C254: `NoNamesInToStringTest`, `CorrezioniDNomiTest`) |
 | I5 | Aperta | Pacchetto B |
 | I6 | Corretta (A) | `FacesStores.openExisting`: la lettura dei nomi non crea mai chiavi ne' database e non segnala `FACES_KEY_LOST` (C217: `RealStoreEraseTest.i6_*`) |
 | I7, I8 | Aperte | Documento finale (un codice della Diagnostica per un montaggio fallito; C39 e il commento di `FacesStores`) |

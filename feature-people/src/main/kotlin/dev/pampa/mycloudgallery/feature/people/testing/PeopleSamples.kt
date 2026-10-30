@@ -63,6 +63,7 @@ object PeopleSamples {
     PeopleSectionState.Excluded,
     PeopleSectionState.FirstRun(42),
     PeopleSectionState.FirstRun(null),
+    PeopleSectionState.NotComputedHere,
     PeopleSectionState.Ready(listOf(anna, marco, nonna), total = 3, othersCount = 12),
     PeopleSectionState.LocalOnly(listOf(anna), total = 1, othersCount = 3),
     PeopleSectionState.Unavailable(PeopleUnavailable.NEEDS_UPDATE),

@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.people
 
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.faces.contract.FacesDiag
 import dev.pampa.mycloudgallery.core.faces.contract.FacesPhase
 import dev.pampa.mycloudgallery.core.faces.contract.FacesState
@@ -86,15 +87,66 @@ class PeopleSectionStatesTest {
     assertThat(PeopleSectionStates.of(on, some, FacesStatus.Waiting(FacesWait.MODELS))).isInstanceOf(PeopleSectionState.Ready::class.java)
   }
 
-  /** Nessuna persona e il calcolo in pari: la sezione e' "pronta" e vuota (la riga lo dice, non sparisce). */
+  /** Nessuna persona e il calcolo in pari: la sezione e' "pronta" e vuota (la riga "Ancora nessuna persona" lo dice, non sparisce: AT-1). */
   @Test
   fun inPariSenzaPersone_eProntaEVuota() {
     val ready = PeopleSectionStates.of(on, list(), idle) as PeopleSectionState.Ready
     assertThat(ready.top).isEmpty()
     assertThat(ready.total).isEqualTo(0)
     assertThat(ready.othersCount).isEqualTo(0)
-    val waitingForNotice = PeopleSectionStates.of(on, list(), FacesStatus.Waiting(FacesWait.NOTICE))
-    assertThat(waitingForNotice).isInstanceOf(PeopleSectionState.Ready::class.java)
+  }
+
+  /**
+   * AT-1 (correzioni B): con Persone accesa e nessuna persona **solo a calcolo in pari** la sezione e' "pronta e vuota". Lo stato del calcolo parte da `Off` a ogni
+   * processo e cambia solo quando una tappa parte: ogni altro stato (spento, in attesa dell'avviso, in attesa delle regole, un guasto) e' un calcolo da fare, in
+   * corso o in attesa, e la sezione lo dice (`FirstRun`), invece di cadere su "pronta e vuota" (zero righe: la sezione spariva).
+   */
+  @Test
+  fun at1_conNessunaPersonaSoloUnCalcoloInPariEPronto() {
+    assertThat(PeopleSectionStates.of(on, list(), FacesStatus.Off)).isEqualTo(PeopleSectionState.FirstRun(null))
+    assertThat(PeopleSectionStates.of(on, list(), FacesStatus.Problem(FacesDiag.FACES_ENGINE_FAILED))).isEqualTo(PeopleSectionState.FirstRun(null))
+    for (reason in FacesWait.entries) {
+      // I motivi che hanno una riga loro (modelli: Unavailable; il dispositivo che non analizza: NotComputedHere) non sono un "primo calcolo".
+      if (reason == FacesWait.MODELS || reason == FacesWait.NOT_INDEXER) continue
+      assertWithMessage("$reason").that(PeopleSectionStates.of(on, list(), FacesStatus.Waiting(reason))).isEqualTo(PeopleSectionState.FirstRun(null))
+    }
+    assertThat(PeopleSectionStates.of(on, list(), idle)).isInstanceOf(PeopleSectionState.Ready::class.java)
+    // Anche con la recinzione (D34) e con Persone accesa da un altro dispositivo e qui ancora senza calcolo.
+    val local = FacesState.On(generation, HereState.LOCAL_ONLY)
+    assertThat(PeopleSectionStates.of(local, list(), FacesStatus.Off)).isEqualTo(PeopleSectionState.FirstRun(null))
+    assertThat(PeopleSectionStates.of(local, list(), idle)).isInstanceOf(PeopleSectionState.LocalOnly::class.java)
+  }
+
+  /** AT-1: con persone nascoste le persone ci sono: la riga "Le persone che hai sono nascoste" resta com'era, qualunque sia lo stato del calcolo. */
+  @Test
+  fun at1_leSoloNascosteNonSonoUnPrimoCalcolo() {
+    for (status in listOf(FacesStatus.Off, idle, FacesStatus.Waiting(FacesWait.RULES))) {
+      assertWithMessage("$status").that(PeopleSectionStates.of(on, list(hidden = 2), status)).isInstanceOf(PeopleSectionState.Ready::class.java)
+    }
+  }
+
+  /**
+   * DR-1 (correzioni B): un dispositivo che non analizza le foto dice che qui le persone non si calcolano, **non** "Sto per riconoscere i volti": con D34 non
+   * arriverebbe mai. Vale sia con il motivo di attesa del calcolo (`Waiting(NOT_INDEXER)`, dopo la prima tappa) sia prima, con il solo segno del ruolo.
+   */
+  @Test
+  fun dr1_unDispositivoCheNonAnalizzaDiceCheQuiNonSiCalcola() {
+    assertThat(PeopleSectionStates.of(on, list(), FacesStatus.Waiting(FacesWait.NOT_INDEXER))).isEqualTo(PeopleSectionState.NotComputedHere)
+    for (status in listOf(FacesStatus.Off, idle, FacesStatus.Waiting(FacesWait.RULES), FacesStatus.Problem(FacesDiag.FACES_ENGINE_FAILED))) {
+      assertWithMessage("$status").that(PeopleSectionStates.of(on, list(), status, computesHere = false)).isEqualTo(PeopleSectionState.NotComputedHere)
+    }
+    val local = FacesState.On(generation, HereState.LOCAL_ONLY)
+    assertThat(PeopleSectionStates.of(local, list(), FacesStatus.Off, computesHere = false)).isEqualTo(PeopleSectionState.NotComputedHere)
+    // Chi analizza non lo vede mai, nemmeno con uno stato del calcolo vecchio (il ruolo e' appena stato acceso); chi ha gia' persone da mostrare le vede comunque.
+    assertThat(PeopleSectionStates.of(on, list(), FacesStatus.Off, computesHere = true)).isEqualTo(PeopleSectionState.FirstRun(null))
+    assertThat(PeopleSectionStates.of(on, list(), FacesStatus.Waiting(FacesWait.NOT_INDEXER), computesHere = true)).isEqualTo(PeopleSectionState.FirstRun(null))
+    assertThat(PeopleSectionStates.of(on, list(named = listOf(card("Anna", 12))), FacesStatus.Off, computesHere = false)).isInstanceOf(PeopleSectionState.Ready::class.java)
+    // Il calcolo che gira o ha una percentuale vince (il ruolo e' appena stato tolto a meta' tappa), e un guasto dei modelli resta tale.
+    assertThat(PeopleSectionStates.of(on, list(), FacesStatus.Running(done = 5, total = 10, phase = FacesPhase.DETECT), computesHere = false)).isEqualTo(PeopleSectionState.FirstRun(50))
+    assertThat(PeopleSectionStates.of(on, list(), FacesStatus.Waiting(FacesWait.MODELS), computesHere = false)).isEqualTo(PeopleSectionState.Unavailable(PeopleUnavailable.MODELS))
+    // Gli altri stati di Persone non cambiano per il ruolo.
+    assertThat(PeopleSectionStates.of(FacesState.Off, list(), FacesStatus.Off, computesHere = false)).isEqualTo(PeopleSectionState.Off)
+    assertThat(PeopleSectionStates.of(FacesState.On(generation, HereState.EXCLUDED), list(), idle, computesHere = false)).isEqualTo(PeopleSectionState.Excluded)
   }
 
   /** Q2 (b): in primo piano solo chi ha un nome, fino a 8; gli altri gruppi sono "Altri volti (N)". */

@@ -4,7 +4,7 @@
 
   <string name="persone_name_add_title">Aggiungi un nome</string>
   <string name="persone_name_rename_title">Rinomina</string>
-  <string name="persone_name_message">Il nome è solo tuo e viaggia fra i tuoi dispositivi. Compare nelle foto, nelle informazioni e nella ricerca.</string>
+  <string name="persone_name_message">Il nome è solo tuo: nessun familiare lo vede. Compare nelle foto, nelle informazioni e nella ricerca.</string>
   <string name="persone_name_hint">Nome</string>
   <string name="persone_name_invalid">Da 1 a 64 caratteri, senza caratteri speciali.</string>
   <string name="persone_name_save">Salva</string>
@@ -50,7 +50,7 @@
   <string name="persone_row_enable">Attiva riconoscimento dei volti</string>
   <string name="persone_row_off_elsewhere">Persone è stata disattivata da un altro tuo dispositivo</string>
   <string name="persone_row_off_elsewhere_detail">I volti e i nomi sono stati cancellati anche da qui. Se vuoi, puoi riattivarla.</string>
-  <string name="persone_row_enable_detail">Raggruppa le foto per persona. I nomi viaggiano fra i tuoi dispositivi e restano tuoi.</string>
+  <string name="persone_row_enable_detail">Raggruppa le foto per persona. I nomi sono solo tuoi: nessun familiare li vede.</string>
   <string name="persone_row_notice">Persone è attiva sul tuo account</string>
   <string name="persone_row_notice_detail">Scegli se usarla su questo dispositivo</string>
   <string name="persone_row_excluded">Non attiva su questo dispositivo</string>
@@ -72,4 +72,10 @@
     <item quantity="other">%1$s persone</item>
   </plurals>
   <string name="persone_row_hidden_only">Le persone che hai sono nascoste</string>
+  <!-- AT-1 (correzioni B): con Persone accesa la sezione dice sempre qualcosa, anche quando non ci sono ancora persone. -->
+  <string name="persone_row_nobody">Ancora nessuna persona</string>
+  <string name="persone_row_nobody_detail">Una persona compare qui quando ha almeno tre foto, o quando le dai un nome.</string>
+  <!-- DR-1 (correzioni B): un dispositivo che non analizza le foto non calcola le persone per conto suo, nemmeno con la recinzione dei volti (D34). -->
+  <string name="persone_row_not_here">Qui le persone non si calcolano</string>
+  <string name="persone_row_not_here_detail">Serve il ruolo Indicizzatore: accendi «Analizza le foto di questo dispositivo» in Impostazioni → Ricerca e modelli.</string>
 </resources>

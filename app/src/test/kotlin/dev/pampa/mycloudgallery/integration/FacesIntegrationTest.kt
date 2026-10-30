@@ -21,13 +21,20 @@ import dev.pampa.mycloudgallery.core.faces.contract.PeopleAlbumsChoice
 import dev.pampa.mycloudgallery.core.faces.contract.StepState
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
+import dev.pampa.mycloudgallery.faces.peopleSectionProvider
+import dev.pampa.mycloudgallery.feature.people.nav.PeopleEntryTarget
 import dev.pampa.mycloudgallery.work.FacesStages
 import dev.pampa.mycloudgallery.work.TrustSyncOutcome
 import dev.pampa.mycloudgallery.work.TrustSyncRun
 import java.io.File
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -217,6 +224,49 @@ class FacesIntegrationTest {
     assertThat(s.other.keys.aliases()).isEmpty()
     assertThat(s.other.engines.detectCalls.get()).isEqualTo(0)
     assertThat(facesFiles(TestNas.MEMBER_USER)).isEmpty()
+  }
+
+  /**
+   * AT-2, AT-1 e DR-1 (correzioni B) sul grafo vero: la sezione delle Raccolte **non c'e' finche' le persone non sono montate** (ne' "Attiva riconoscimento dei volti"
+   * a chi ha gia' Persone accesa), montata e spenta dice "Attiva", accesa e senza persone dice sempre qualcosa (il primo calcolo che aspetta), e su un dispositivo che
+   * non analizza le foto dice che qui le persone non si calcolano. Ogni riga e' consegnata dal fornitore vero delle Raccolte, quello di `FacesModule`.
+   */
+  @Test
+  fun laSezioneDelleRaccolteNonCePrimaDelMontaggioEPoiDiceLaVerita() = runBlocking<Unit> {
+    val faces = FacesRig(app, temp.root).also { rig = it }
+    val node = faces.node("telefono", faces.ai.foundedDevice(), TestNas.ADMIN_USER)
+    val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    try {
+      val computes = MutableStateFlow(true)
+      val provider = peopleSectionProvider(app.resources, node.faces, scope, computes)
+      suspend fun codes(what: String, condition: (List<String>) -> Boolean): List<String> = try {
+        withTimeout(Attese.TETTO) { provider.group.first { condition(it?.entries?.map { entry -> entry.code }.orEmpty()) } }?.entries?.map { it.code }.orEmpty()
+      } catch (e: TimeoutCancellationException) {
+        throw AssertionError("Dopo ${Attese.TETTO} la sezione non e' arrivata a: $what. Ora: ${provider.group.value?.entries?.map { it.code }}", e)
+      }
+
+      // 1. Prima del montaggio: niente (non "spenta").
+      assertThat(node.faces.live.value).isNull()
+      assertThat(provider.group.value).isNull()
+
+      // 2. Montate, Persone e' spenta: la riga che attiva.
+      node.live()
+      assertThat(codes("la riga \"Attiva\"") { it.isNotEmpty() }).containsExactly(PeopleEntryTarget.ENABLE)
+
+      // 3. Accesa, prima di qualunque tappa del calcolo e senza persone: il primo calcolo che aspetta, mai zero righe (AT-1).
+      activate(node)
+      assertThat(codes("il primo calcolo") { it == listOf(PeopleEntryTarget.PROGRESS) }).containsExactly(PeopleEntryTarget.PROGRESS)
+      assertThat(node.live().people.list.value.named).isEmpty()
+
+      // 4. Un dispositivo che non analizza le foto dice che qui le persone non si calcolano (DR-1), e torna al primo calcolo se il ruolo si accende.
+      computes.value = false
+      assertThat(codes("\"Qui le persone non si calcolano\"") { it == listOf(PeopleEntryTarget.NOT_COMPUTED) }).containsExactly(PeopleEntryTarget.NOT_COMPUTED)
+      assertThat(PeopleEntryTarget.parse(PeopleEntryTarget.NOT_COMPUTED)).isEqualTo(PeopleEntryTarget.Settings)
+      computes.value = true
+      codes("di nuovo il primo calcolo") { it == listOf(PeopleEntryTarget.PROGRESS) }
+    } finally {
+      scope.cancel()
+    }
   }
 
   /** Persone attive sul telefono e sul tablet, calcolate, con un nome: la base di "Disattiva e cancella". */

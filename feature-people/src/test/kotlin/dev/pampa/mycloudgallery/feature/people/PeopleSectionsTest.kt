@@ -4,19 +4,27 @@ import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.faces.contract.FacesDiag
+import dev.pampa.mycloudgallery.core.faces.contract.FacesPhase
 import dev.pampa.mycloudgallery.core.faces.contract.FacesState
 import dev.pampa.mycloudgallery.core.faces.contract.FacesStatus
+import dev.pampa.mycloudgallery.core.faces.contract.FacesWait
 import dev.pampa.mycloudgallery.core.faces.contract.HereState
+import dev.pampa.mycloudgallery.core.faces.contract.People
 import dev.pampa.mycloudgallery.core.faces.contract.PeopleList
 import dev.pampa.mycloudgallery.core.faces.contract.PersonCard
 import dev.pampa.mycloudgallery.core.model.FaceGeneration
 import dev.pampa.mycloudgallery.core.model.PersonId
+import dev.pampa.mycloudgallery.feature.people.R
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleSectionState
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleUnavailable
 import dev.pampa.mycloudgallery.feature.people.nav.PeopleEntryTarget
+import dev.pampa.mycloudgallery.feature.people.section.PeopleSectionInputs
 import dev.pampa.mycloudgallery.feature.people.section.PeopleSectionSources
+import dev.pampa.mycloudgallery.feature.people.section.PeopleSectionStates
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -56,6 +64,8 @@ class PeopleSectionsTest {
     assertThat(row.title).isEqualTo("Attiva riconoscimento dei volti")
     // Il testo non dice piu' "solo su questo telefono": i nomi viaggiano fra i dispositivi dell'account.
     assertThat(row.subtitle).doesNotContain("solo su questo telefono")
+    // DR-1 (correzioni B): sulle share vere (D34) i nomi non viaggiano: il testo resta vero in tutti e due i casi, senza dire dove stanno.
+    assertThat(row.subtitle).doesNotContain("viaggia")
     assertThat(PeopleEntryTarget.parse(row.code)).isEqualTo(PeopleEntryTarget.Activation)
   }
 
@@ -181,5 +191,139 @@ class PeopleSectionsTest {
     state.value = FacesState.On(FaceGeneration.random(), HereState.EXCLUDED)
     assertThat(sources.sectionState.value).isEqualTo(PeopleSectionState.Excluded)
     assertThat(sources.section.value!!.entries.single().code).isEqualTo(PeopleEntryTarget.EXCLUDED)
+  }
+
+  // --- Correzioni B della Fase 8 ---------------------------------------------------------------------------------------------------------
+
+  private val generation = FaceGeneration.random()
+
+  private val everyStatus: List<FacesStatus> =
+    listOf(
+      FacesStatus.Off,
+      FacesStatus.Idle(atNas = 1L),
+      FacesStatus.Running(0, 0, FacesPhase.DETECT),
+      FacesStatus.Running(5, 10, FacesPhase.GROUPING),
+      FacesStatus.Problem(FacesDiag.FACES_ENGINE_FAILED),
+      FacesStatus.Problem(FacesDiag.FACES_MODEL_MISMATCH),
+    ) + FacesWait.entries.map { FacesStatus.Waiting(it) }
+
+  /**
+   * AT-1: con Persone accesa la sezione dice **sempre qualcosa**: per ogni stato del calcolo, con o senza recinzione (D34), con o senza il ruolo di Indicizzatore,
+   * a lista vuota, con persone nascoste o con una persona, le **righe** di `sectionOf` non sono mai zero (le Raccolte scartano una sezione senza voci) e ogni riga
+   * porta a una pagina. Provare lo stato non basta: e' dalle righe che la sezione spariva.
+   */
+  @Test
+  fun at1_conPersoneAccesaLeRigheNonSonoMaiZero() {
+    val one = card("Anna", 3)
+    val lists = listOf(
+      PeopleList.EMPTY,
+      PeopleList(emptyList(), emptyList(), 0, 2, null),
+      PeopleList(listOf(one), emptyList(), 0, 0, null),
+      PeopleList(emptyList(), emptyList(), 4, 0, null),
+    )
+    for (here in listOf(HereState.ACTIVE, HereState.LOCAL_ONLY)) {
+      for (status in everyStatus) for (computes in listOf(null, true, false)) for (list in lists) {
+        val state = PeopleSectionStates.of(FacesState.On(generation, here), list, status, computesHere = computes)
+        val entries = sectionOf(state, list).entries
+        assertWithMessage("$here $status computa=$computes $state").that(entries).isNotEmpty()
+        for (entry in entries) assertWithMessage(entry.code).that(PeopleEntryTarget.parse(entry.code)).isNotNull()
+      }
+    }
+  }
+
+  /** AT-1: a calcolo in pari e senza persone la riga lo dice e apre "Tutte le persone"; con la recinzione c'e' anche la nota. */
+  @Test
+  fun at1_senzaPersone_laRigaDiceAncoraNessunaPersona() {
+    val active = FacesState.On(generation, HereState.ACTIVE)
+    val idle = FacesStatus.Idle(atNas = 1L)
+    val row = sectionOf(PeopleSectionStates.of(active, PeopleList.EMPTY, idle), PeopleList.EMPTY).entries.single()
+    assertThat(row.code).isEqualTo(PeopleEntryTarget.ALL)
+    assertThat(row.title).isEqualTo("Ancora nessuna persona")
+    assertThat(PeopleEntryTarget.parse(row.code)).isEqualTo(PeopleEntryTarget.All)
+
+    val local = sectionOf(PeopleSectionStates.of(FacesState.On(generation, HereState.LOCAL_ONLY), PeopleList.EMPTY, idle), PeopleList.EMPTY)
+    assertThat(local.entries.map { it.code }).containsExactly(PeopleEntryTarget.ALL, PeopleEntryTarget.LOCAL).inOrder()
+
+    // Prima della prima tappa (stato del calcolo spento) non e' "nessuna persona": e' il primo calcolo che aspetta.
+    val first = sectionOf(PeopleSectionStates.of(active, PeopleList.EMPTY, FacesStatus.Off), PeopleList.EMPTY).entries.single()
+    assertThat(first.code).isEqualTo(PeopleEntryTarget.PROGRESS)
+    assertThat(first.title).isEqualTo("Sto per riconoscere i volti")
+
+    // Con persone nascoste la riga e' quella di sempre.
+    val hidden = PeopleList(emptyList(), emptyList(), 0, 2, null)
+    val hiddenRow = sectionOf(PeopleSectionStates.of(active, hidden, FacesStatus.Off), hidden).entries.single()
+    assertThat(hiddenRow.subtitle).isEqualTo("Le persone che hai sono nascoste")
+  }
+
+  /**
+   * DR-1: la riga di un dispositivo che non analizza le foto dice che qui le persone non si calcolano, dice **il ruolo che serve** (Indicizzatore) e **dove si accende**
+   * (Impostazioni → Ricerca e modelli), e porta a Impostazioni → Persone. Mai nomi, mai "Sto per riconoscere i volti".
+   */
+  @Test
+  fun dr1_unDispositivoCheNonAnalizzaDiceCheQuiNonSiCalcola() {
+    val row = sectionOf(PeopleSectionState.NotComputedHere).entries.single()
+    assertThat(row.code).isEqualTo(PeopleEntryTarget.NOT_COMPUTED)
+    assertThat(row.title).isEqualTo("Qui le persone non si calcolano")
+    assertThat(row.subtitle).contains("Indicizzatore")
+    assertThat(row.subtitle).contains("Analizza le foto di questo dispositivo")
+    assertThat(row.subtitle).contains("Impostazioni → Ricerca e modelli")
+    assertThat(PeopleEntryTarget.parse(row.code)).isEqualTo(PeopleEntryTarget.Settings)
+
+    // Dagli stati veri, con D34 e senza: lo stesso testo.
+    for (here in listOf(HereState.ACTIVE, HereState.LOCAL_ONLY)) {
+      val state = PeopleSectionStates.of(FacesState.On(generation, here), PeopleList.EMPTY, FacesStatus.Off, computesHere = false)
+      assertThat(sectionOf(state).entries.single().title).isEqualTo("Qui le persone non si calcolano")
+    }
+  }
+
+  /** DR-1: i testi che dicevano che i nomi viaggiano fra i dispositivi (falso con la recinzione D34) non lo dicono piu'. */
+  @Test
+  fun dr1_iTestiNonDiconoCheINomiViaggiano() {
+    assertThat(resources.getString(R.string.persone_row_enable_detail)).doesNotContain("viaggia")
+    assertThat(resources.getString(R.string.persone_name_message)).doesNotContain("viaggia")
+  }
+
+  /**
+   * AT-2: **finche' le persone non sono montate la sezione non c'e'** (ne' "Attiva riconoscimento dei volti" a chi ha gia' Persone accesa, ne' niente altro), poi c'e'
+   * quella giusta in un colpo solo; se le persone si smontano (l'azzeramento) torna assente.
+   */
+  @Test
+  fun at2_primaDelMontaggioLaSezioneNonCe() = runTest(UnconfinedTestDispatcher()) {
+    val inputs = MutableStateFlow<PeopleSectionInputs?>(null)
+    val sources = PeopleSectionSources(resources, inputs, backgroundScope)
+    assertThat(sources.section.value).isNull()
+    assertThat(sources.sectionState.value).isNull()
+
+    inputs.value = PeopleSectionInputs(FacesState.On(generation, HereState.ACTIVE), PeopleList.EMPTY, FacesStatus.Off)
+    assertThat(sources.sectionState.value).isEqualTo(PeopleSectionState.FirstRun(null))
+    assertThat(sources.section.value!!.entries.single().code).isEqualTo(PeopleEntryTarget.PROGRESS)
+
+    inputs.value = null
+    assertThat(sources.section.value).isNull()
+
+    // Persone spenta e montata: la riga "Attiva" c'e' (e' la verita'), ma solo dopo il montaggio.
+    inputs.value = PeopleSectionInputs(FacesState.Off, PeopleList.EMPTY, FacesStatus.Off)
+    assertThat(sources.section.value!!.entries.single().code).isEqualTo(PeopleEntryTarget.ENABLE)
+  }
+
+  /** AT-1 e DR-1 dai flussi separati: la sezione segue il ruolo di Indicizzatore e lo stato del calcolo, e sparisce mai. */
+  @Test
+  fun laSezioneSegueIlRuoloEIlCalcolo() = runTest(UnconfinedTestDispatcher()) {
+    val none = MutableStateFlow(PeopleList.EMPTY)
+    val people = object : People by PeopleFixture().people {
+      override val list: StateFlow<PeopleList> = none
+    }
+    val state = MutableStateFlow<FacesState>(FacesState.On(generation, HereState.LOCAL_ONLY))
+    val status = MutableStateFlow<FacesStatus>(FacesStatus.Off)
+    val computes = MutableStateFlow(false)
+    val sources = PeopleSectionSources(resources, people, state, status, backgroundScope, computesHere = computes)
+    assertThat(sources.sectionState.value).isEqualTo(PeopleSectionState.NotComputedHere)
+    assertThat(sources.section.value!!.entries.single().code).isEqualTo(PeopleEntryTarget.NOT_COMPUTED)
+
+    computes.value = true
+    assertThat(sources.sectionState.value).isEqualTo(PeopleSectionState.FirstRun(null))
+    status.value = FacesStatus.Idle(atNas = 1L)
+    assertThat(sources.sectionState.value).isInstanceOf(PeopleSectionState.LocalOnly::class.java)
+    assertThat(sources.section.value!!.entries.map { it.code }).containsExactly(PeopleEntryTarget.ALL, PeopleEntryTarget.LOCAL).inOrder()
   }
 }

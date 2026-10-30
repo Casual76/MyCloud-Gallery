@@ -64,7 +64,10 @@ sealed interface PeopleEntryTarget {
   /** "Attiva riconoscimento dei volti" o l'avviso sugli altri dispositivi: la pagina di P7. */
   data object Activation : PeopleEntryTarget
 
-  /** "Non attiva su questo dispositivo", il primo calcolo, la nota della recinzione, "Aggiorna l'app", la cancellazione: Impostazioni -> Persone. */
+  /**
+   * "Non attiva su questo dispositivo", il primo calcolo, "Qui le persone non si calcolano", la nota della recinzione, "Aggiorna l'app", la cancellazione:
+   * Impostazioni -> Persone.
+   */
   data object Settings : PeopleEntryTarget
 
   data class Person(val id: PersonId) : PeopleEntryTarget
@@ -79,6 +82,9 @@ sealed interface PeopleEntryTarget {
     const val NOTICE = "people/notice"
     const val EXCLUDED = "people/excluded"
     const val PROGRESS = "people/progress"
+
+    /** DR-1 (correzioni B): "Qui le persone non si calcolano" (il dispositivo non analizza le foto). */
+    const val NOT_COMPUTED = "people/not-computed"
     const val LOCAL = "people/local"
     const val UPDATE = "people/update"
     const val ERASING = "people/erasing"
@@ -90,7 +96,7 @@ sealed interface PeopleEntryTarget {
     /** Il bersaglio di una voce, o null se il codice non e' di questa sezione (o e' di una versione piu' nuova). */
     fun parse(code: String): PeopleEntryTarget? = when {
       code == ENABLE || code == NOTICE || code == OFF_ELSEWHERE -> Activation
-      code == EXCLUDED || code == PROGRESS || code == LOCAL || code == UPDATE || code == ERASING || code == MODELS -> Settings
+      code == EXCLUDED || code == PROGRESS || code == NOT_COMPUTED || code == LOCAL || code == UPDATE || code == ERASING || code == MODELS -> Settings
       code == ALL -> All
       code == OTHERS -> Others
       code.startsWith(PERSON_PREFIX) -> PersonId.parse(code.removePrefix(PERSON_PREFIX))?.let(::Person)

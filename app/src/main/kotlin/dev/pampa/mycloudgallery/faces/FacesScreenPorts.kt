@@ -29,6 +29,7 @@ import dev.pampa.mycloudgallery.feature.people.activation.PeopleSettingsFacts
 import dev.pampa.mycloudgallery.feature.people.contract.ComputingDevice
 import dev.pampa.mycloudgallery.feature.people.contract.FaceModelRow
 import dev.pampa.mycloudgallery.feature.people.erase.EraseSheetStates
+import dev.pampa.mycloudgallery.feature.people.section.PeopleSectionInputs
 import dev.pampa.mycloudgallery.feature.people.section.PeopleSectionSources
 import dev.pampa.mycloudgallery.feature.people.section.SectionData
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerChange
@@ -42,6 +43,7 @@ import dev.pampa.mycloudgallery.navigation.FlowSection
 import kotlin.time.Duration
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -116,15 +118,17 @@ class AppActivationPorts(
   private val status: StateFlow<FacesStatus> =
     faces.live.flatMapLatest { it?.status ?: flowOf(FacesStatus.Off) }.stateIn(graph.scope, SharingStarted.Eagerly, FacesStatus.Off)
 
-  override val facts: StateFlow<PeopleSettingsFacts> = combine(status, people.list, eraser.status, graph.statuses.latest, switch.state) { progress, list, erase, _, _ ->
-    PeopleSettingsFacts(
-      devices = computingDevices(),
-      progress = progress,
-      hiddenPeople = list.hiddenCount,
-      models = MODELS,
-      erase = erase?.takeIf { it.step != EraseStep.DONE }?.let(EraseSheetStates::progress),
-    )
-  }.stateIn(graph.scope, SharingStarted.Eagerly, PeopleSettingsFacts(models = MODELS))
+  override val facts: StateFlow<PeopleSettingsFacts> =
+    combine(combine(status, people.list, eraser.status, graph.statuses.latest, switch.state) { progress, list, erase, _, _ ->
+      PeopleSettingsFacts(
+        devices = computingDevices(),
+        progress = progress,
+        hiddenPeople = list.hiddenCount,
+        models = MODELS,
+        erase = erase?.takeIf { it.step != EraseStep.DONE }?.let(EraseSheetStates::progress),
+      )
+    }, indexer.indexer) { base, computes -> base.copy(computesHere = computes) }
+      .stateIn(graph.scope, SharingStarted.Eagerly, PeopleSettingsFacts(models = MODELS, computesHere = indexer.indexer.value))
 
   /** Il nome (del registro) del dispositivo dell'account che ha scritto la voce `faces`; null se non si sa o se non e' dell'account. */
   private fun activatedByLabel(): String? {
@@ -173,19 +177,35 @@ internal fun SectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
   hint = hint,
 )
 
-/** La sezione Persone delle Raccolte come fornitore (codice `people`): sempre una riga almeno, anche da spenta con "Attiva riconoscimento dei volti". */
+/**
+ * Cio' che la sezione Persone delle Raccolte guarda, **tutto dalle persone montate e preso insieme** (AT-2, correzioni B): finche' [FacesGraph.live] e' null
+ * il flusso emette null ("non ancora": la sezione non c'e'), poi un valore solo per volta con lo stato dell'interruttore, le persone, il calcolo, il segno di CE-3
+ * e [computesHere]. Non passa dalle facciate, che prima del montaggio rispondono "spenta" e "vuota": un istante in cui la facciata dell'interruttore dice ancora
+ * `Off` e il grafo e' gia' montato non puo' arrivare fino alla riga "Attiva riconoscimento dei volti" di chi ha Persone accesa.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
+internal fun peopleSectionInputs(faces: FacesGraph, computesHere: Flow<Boolean>): Flow<PeopleSectionInputs?> = faces.live.flatMapLatest { live ->
+  if (live == null) {
+    flowOf<PeopleSectionInputs?>(null)
+  } else {
+    combine(live.switch.state, live.people.list, live.status, live.switch.offElsewhere, computesHere) { state, list, status, off, here ->
+      PeopleSectionInputs(state, list, status, off, here)
+    }
+  }
+}
+
+/**
+ * La sezione Persone delle Raccolte come fornitore (codice `people`): montata, sempre una riga almeno, anche da spenta con "Attiva riconoscimento dei volti";
+ * prima del montaggio assente (AT-2, L297). **Uno solo per processo** (AT-3): lo lega `@Singleton` in `FacesModule`, perche' i suoi collettori vivono quanto [scope].
+ * [computesHere]: questo dispositivo analizza le foto (DR-1); senza, la sezione dice che qui le persone non si calcolano.
+ */
 fun peopleSectionProvider(
   resources: Resources,
-  people: FacesPeopleFacade,
-  state: StateFlow<FacesState>,
   faces: FacesGraph,
   scope: CoroutineScope,
-  /** CE-3: Persone spenta da un altro dispositivo dell'account (la riga che lo dice sopra "Attiva riconoscimento dei volti"). */
-  offElsewhere: StateFlow<Boolean> = MutableStateFlow(false),
+  computesHere: StateFlow<Boolean> = MutableStateFlow(true),
 ): CollectionsSectionProvider {
-  val status: StateFlow<FacesStatus> = faces.live.flatMapLatest { it?.status ?: flowOf(FacesStatus.Off) }.stateIn(scope, SharingStarted.Eagerly, FacesStatus.Off)
-  val sources = PeopleSectionSources(resources, people, state, status, scope, offElsewhere)
+  val sources = PeopleSectionSources(resources, peopleSectionInputs(faces, computesHere), scope)
   return FlowSection(
     PeopleSectionSources.CODE,
     sources.section.map { it?.toGroup() }.stateIn(scope, SharingStarted.Eagerly, sources.section.value?.toGroup()),

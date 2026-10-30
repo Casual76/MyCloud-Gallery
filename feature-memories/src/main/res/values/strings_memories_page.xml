@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 9 (P9, §2.4, D13, §1.5 `MemoryPageState`, E-MEM5, E-MEM13): la pagina del ricordo e "Tutti i ricordi". -->
+  <string name="memorie_page_title_unknown">Ricordo</string>
+  <string name="memorie_play">Riproduci</string>
+  <string name="memorie_more">Altre azioni</string>
+  <string name="memorie_menu_less_person">Mostra meno %s</string>
+  <string name="memorie_menu_less_person_unnamed">Mostra meno questa persona</string>
+  <string name="memorie_menu_never_days">Non ricordarmi questo periodo</string>
+  <string name="memorie_menu_dismiss">Non mostrare questo ricordo</string>
+  <string name="memorie_menu_open_album">Apri l’album</string>
+  <string name="memorie_gone_title">Questo ricordo non c’è più</string>
+  <string name="memorie_gone_detail">Succede quando restano poche foto da mostrare o quando lo nascondi.</string>
+  <string name="memorie_not_found_title">Non trovo questo ricordo</string>
+  <string name="memorie_not_found_detail">Potrebbe essere uscito dallo scaffale dei ricordi.</string>
+  <string name="memorie_back_to_memories">Torna ai ricordi</string>
+  <string name="memorie_undo">Annulla</string>
+  <string name="memorie_undo_dismiss">Non lo vedrai più nei ricordi.</string>
+  <string name="memorie_undo_less">Fatto: lo vedrai meno nei ricordi.</string>
+  <string name="memorie_undo_never">Fatto: quel periodo non comparirà più nei ricordi.</string>
+  <string name="memorie_all_title">Tutti i ricordi</string>
+  <string name="memorie_all_empty_title">Ancora nessun ricordo</string>
+  <string name="memorie_all_empty_detail">I ricordi arrivano quando ci sono abbastanza foto.</string>
+  <string name="memorie_all_row_detail">%1$s · %2$s</string>
+</resources>

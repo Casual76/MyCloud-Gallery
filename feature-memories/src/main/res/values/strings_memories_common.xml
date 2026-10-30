@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 9 (P9, docs/fase9-progetto.md §2.4, §2.5): i testi che piu' schermate dei ricordi dicono allo stesso modo. Nessun nome o luogo vero: arrivano gia' letti. -->
+  <plurals name="memorie_photos">
+    <item quantity="one">%s foto</item>
+    <item quantity="other">%s foto</item>
+  </plurals>
+  <plurals name="memorie_years_ago">
+    <item quantity="one">Un anno fa</item>
+    <item quantity="other">%d anni fa</item>
+  </plurals>
+  <string name="memorie_title_person_with">Con %s</string>
+  <string name="memorie_title_person_year">%1$s nel %2$d</string>
+  <string name="memorie_title_person_unnamed">Una persona</string>
+  <string name="memorie_title_month">Il meglio di %s</string>
+  <string name="memorie_title_trip_fallback">Un viaggio</string>
+  <string name="memorie_title_event_fallback">Un evento</string>
+  <string name="memorie_title_day_fallback">Un giorno da ricordare</string>
+  <string name="memorie_period_range">%1$s – %2$s</string>
+  <string name="memorie_new">Nuovo</string>
+  <string name="memorie_spoken_new">Nuovo. %s</string>
+  <string name="memorie_spoken_card">%1$s, %2$s</string>
+  <string name="memorie_back">Indietro</string>
+  <string name="memorie_cancel">Annulla</string>
+  <string name="memorie_cell_photo">Foto del %s</string>
+  <string name="memorie_cell_video">Video del %s</string>
+  <string name="memorie_cell_undated">Foto senza data</string>
+  <string name="memorie_cell_open">Apri</string>
+  <string name="memorie_message_title">Ricordi</string>
+  <string name="memorie_message_gone">Questo ricordo non c’è più.</string>
+  <string name="memorie_message_failed">Non sono riuscito a salvare la scelta adesso. Riprova.</string>
+</resources>

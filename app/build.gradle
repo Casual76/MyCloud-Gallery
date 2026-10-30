@@ -315,6 +315,12 @@ dependencies {
   testImplementation appDeps.roborazziCompose
   testImplementation appDeps.roborazziJunitRule
 
+  // Fase 9 (P9, D31): la riga `MEMORIES` del registro dei Nascosti (`HiddenSurfaces`) prova il motore vero dei ricordi (core-memories) e le
+  // schermate vere (feature-memories) sul mondo casuale. Solo nei test: `:app` li montera' in produzione con P13 (`MemoriesGraph`); qui non
+  // entrano nel codice dell'app, e la regola dei moduli di `Phase9ArchitectureTest` guarda solo le dipendenze di produzione.
+  testImplementation project(':core-memories')
+  testImplementation project(':feature-memories')
+
   // Fase 6 (P0, D41): il test strumentato che prova, nel processo dell'app vera, che con la lettura del testo spenta ML Kit non si
   // inizializza (`MlKitOffAtStartupDeviceTest`). Solo l'APK di prova, mai l'app.
   androidTestImplementation appDeps.androidxTestCore

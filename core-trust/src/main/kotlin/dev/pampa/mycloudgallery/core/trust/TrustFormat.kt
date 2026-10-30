@@ -218,6 +218,12 @@ object TrustLimits {
   /** Un segmento non elencato dalle ultime teste si toglie solo se piu' vecchio di cosi' (ora del NAS). */
   const val OWN_FILES_GRACE_MILLIS: Long = 7L * 24 * 60 * 60 * 1000
 
+  /**
+   * R7 (Fase 8, correzioni formato): un file non valido nella propria `faces/<G>/<io>/head/` si toglie solo dopo 15 minuti dalla sua data: una
+   * propria testa che si sta scrivendo adesso non si scambia mai per spazzatura.
+   */
+  const val OWN_FILES_JUNK_GRACE_MILLIS: Long = 15L * 60 * 1000
+
   /** File propri tolti al massimo per giro. */
   const val MAX_OWN_FILES_PER_ROUND: Int = 500
 
@@ -271,6 +277,14 @@ object TrustLimits {
 
   /** Persone in un'istantanea del raggruppamento. */
   const val MAX_SNAPSHOT_PERSONS: Int = 10_000
+
+  /**
+   * R4 (Fase 8, correzioni formato): la `seq` piu' alta di un'istantanea che si accetta o si pubblica (`FacesDocs.checkSnapshot`, chi legge e chi
+   * scrive). Un custode fa un passo per volta (`seq + 1`): un passo al minuto per 190 anni resta sotto i 10^8. Il formato della testa ammette ancora
+   * fino a [MAX_VERSION] (una testa con una `seq` piu' alta resta leggibile: e' l'istantanea che non vale), cosi' le app della Fase 8 leggono
+   * tutto cio' che le app di oggi scrivono.
+   */
+  const val MAX_SNAPSHOT_SEQ: Long = 100_000_000L
 
   /** Assegnazioni in un'istantanea del raggruppamento. */
   const val MAX_SNAPSHOT_ASSIGNMENTS: Int = 200_000

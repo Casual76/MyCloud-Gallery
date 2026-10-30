@@ -407,6 +407,9 @@ object FacesDocs {
     val persons = entries.filterIsInstance<ClusterEntry.Person>()
     val assignments = entries.filterIsInstance<ClusterEntry.Assignment>()
     ensure(persons.isNotEmpty(), RejectReason.INVALID_FIELD, "istantanea: nessuna persona")
+    // R4 (Fase 8, correzioni formato): una `seq` oltre il tetto delle istantanee non vale ne' per chi legge ne' per chi scrive. Il tetto sta molto
+    // sotto `MAX_VERSION`: un custode che ne adotta una vicina ha ancora spazio per andare avanti, e una vincente oltre non si adotta mai.
+    ensure(mark.seq <= TrustLimits.MAX_SNAPSHOT_SEQ, RejectReason.TOO_LARGE, "istantanea: numero oltre il tetto")
     ensure(persons.size <= TrustLimits.MAX_SNAPSHOT_PERSONS, RejectReason.TOO_LARGE, "istantanea: troppe persone")
     ensure(assignments.size <= TrustLimits.MAX_SNAPSHOT_ASSIGNMENTS, RejectReason.TOO_LARGE, "istantanea: troppe assegnazioni")
     val byId = HashMap<PersonId, ClusterEntry.Person>(persons.size * 2)

@@ -43,7 +43,8 @@ import org.junit.Test
  * 2. **Sui dati**: un NAS pieno di contenuti ostili (record falsi e firmati da altri, finti cestini, teste e segmenti piantati, nomi
  *    strani, prenotazioni, temporanei altrui) attraversato da **tutti** gli ingressi automatici (ripresa dal diario vuoto, scadenza del
  *    cestino dopo un anno, pulizia dei propri file, "Eliminati di recente", Cartelle NAS, Spazio NAS; dalla Fase 8 anche la pulizia dei
- *    propri file dei volti e la cancellazione stretta dei volti, con file dei volti piantati) resta identico byte per byte.
+ *    propri file dei volti e la cancellazione stretta dei volti, con file dei volti piantati) resta identico byte per byte. Correzioni della
+ *    Fase 8 (R7): tranne la spazzatura piantata nella **mia** `faces/<G>/<io>/head/`, che la pulizia dei propri file dei volti toglie.
  */
 class NoRemoteDataToActionTest {
 
@@ -214,7 +215,11 @@ class NoRemoteDataToActionTest {
       // Cartelle NAS e Spazio NAS: solo lettura.
       kit.folders.observe("test", SharePath.parse("Foto")).first { it !is NasFolderState.Loading }
       kit.space.load("test")
-      assertWithMessage("seme $seed: il NAS e' cambiato").that(everything(kit)).isEqualTo(before)
+      // R7 (correzioni della Fase 8): l'unica eccezione dichiarata e' la spazzatura nella **mia** `faces/<G>/<io>/head/` (letta, non una mia testa
+      // valida, piu' vecchia della grazia), che la pulizia dei propri file dei volti toglie. Tutto il resto resta identico byte per byte.
+      val myHeads = "test/" + NasLayout.facesHeadDir(g, kit.deviceId).value + "/"
+      assertWithMessage("seme $seed: la spazzatura nella mia head/").that(before.keys.count { it.startsWith(myHeads) }).isEqualTo(1)
+      assertWithMessage("seme $seed: il NAS e' cambiato").that(everything(kit)).isEqualTo(before.filterKeys { !it.startsWith(myHeads) })
       assertWithMessage("seme $seed: diario").that(kit.store.ops(OpState.entries.toSet())).isEmpty()
       assertWithMessage("seme $seed: cestino").that(kit.store.allTrash()).isEmpty()
     }

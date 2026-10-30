@@ -62,8 +62,19 @@ sealed interface FacesOwnFile {
 sealed interface FacesOwnFileFacts {
   val file: FacesOwnFile
 
-  /** [signedByMe]: la testa e' firmata da me (busta verificata); [ownVersions]: le mie teste valide della stessa generazione. */
-  data class HeadFacts(override val file: FacesOwnFile.Head, val signedByMe: Boolean, val ownVersions: Set<Long>) : FacesOwnFileFacts
+  /**
+   * [signedByMe]: la testa e' firmata da me (busta verificata); [ownVersions]: le mie teste valide della stessa generazione. [junk] (R7):
+   * il file e' stato **letto** e non e' una testa valida (troppo grande, busta o firma che non tornano, un'altra testa): spazzatura messa nella
+   * mia cartella, che scavalcata in fila ferma la mia pubblicazione e nasconde le mie teste; [modifiedAtNas] la sua data. Un file non letto
+   * (oltre il tetto delle letture) non e' mai spazzatura.
+   */
+  data class HeadFacts(
+    override val file: FacesOwnFile.Head,
+    val signedByMe: Boolean,
+    val ownVersions: Set<Long>,
+    val junk: Boolean = false,
+    val modifiedAtNas: Long? = null,
+  ) : FacesOwnFileFacts
 
   /** [listedByRecentHeads]: elencato da una delle mie ultime teste; [inDiary]: pubblicato da me (diario del pubblicatore). */
   data class SegmentFacts(
@@ -98,7 +109,7 @@ class FacesOwnFilesPolicy(private val me: String, private val current: FaceGener
     if (FacesOwnFile.classify(facts.file.path) != facts.file) return keep(OwnKeepReason.NOT_MINE)
     if (facts.file.generation != current) return keep(OwnKeepReason.NOT_MINE)
     return when (facts) {
-      is FacesOwnFileFacts.HeadFacts -> head(facts, keepHeads)
+      is FacesOwnFileFacts.HeadFacts -> head(facts, keepHeads, nasNow)
       is FacesOwnFileFacts.SegmentFacts -> segment(facts, nasNow, graceMillis)
       is FacesOwnFileFacts.LeaseFacts -> lease(facts)
     }
@@ -119,11 +130,24 @@ class FacesOwnFilesPolicy(private val me: String, private val current: FaceGener
     return OwnFilesPlan(remove, kept)
   }
 
-  private fun head(f: FacesOwnFileFacts.HeadFacts, keepHeads: Int): OwnFileDecision {
+  private fun head(f: FacesOwnFileFacts.HeadFacts, keepHeads: Int, nasNow: Long): OwnFileDecision {
     if (f.file.deviceId != me) return keep(OwnKeepReason.NOT_MINE)
-    if (!f.signedByMe) return keep(OwnKeepReason.NOT_SIGNED_BY_ME)
+    if (!f.signedByMe) return if (f.junk) junk(f.modifiedAtNas, nasNow) else keep(OwnKeepReason.NOT_SIGNED_BY_ME)
     val recent = (f.ownVersions + f.file.version).sortedDescending().take(keepHeads)
     return if (f.file.version in recent) keep(OwnKeepReason.RECENT_HEAD) else OwnFileDecision.Remove
+  }
+
+  /**
+   * R7 (Fase 8, correzioni formato): un nome della mia `head/` occupato da un file che non e' una mia testa valida si toglie, dopo
+   * [TrustLimits.OWN_FILES_JUNK_GRACE_MILLIS] dalla sua data (una mia testa che si sta scrivendo adesso non e' mai spazzatura). Solo nella mia
+   * cartella della generazione corrente: oltre [TrustLimits.MAX_JUNK_RUN] file cosi' di fila non pubblicherei piu' e chi arriva non vedrebbe le
+   * mie teste. Senza la data, o con una data nel futuro, resta.
+   */
+  private fun junk(modifiedAt: Long?, nasNow: Long): OwnFileDecision = when {
+    modifiedAt == null -> keep(OwnKeepReason.AGE_UNKNOWN)
+    modifiedAt > nasNow + TrustLimits.MAX_FUTURE_SKEW_MILLIS -> keep(OwnKeepReason.TIME_IN_FUTURE)
+    nasNow - modifiedAt < TrustLimits.OWN_FILES_JUNK_GRACE_MILLIS -> keep(OwnKeepReason.TOO_RECENT)
+    else -> OwnFileDecision.Remove
   }
 
   private fun segment(f: FacesOwnFileFacts.SegmentFacts, nasNow: Long, graceMillis: Long): OwnFileDecision {

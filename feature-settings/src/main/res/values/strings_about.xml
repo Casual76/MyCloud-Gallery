@@ -23,6 +23,19 @@
   <string name="about_license_cc_by">Creative Commons Attribuzione 4.0 (CC BY 4.0)</string>
   <string name="about_license_cc_by_url">https://creativecommons.org/licenses/by/4.0/</string>
 
+  <!-- La mappa (Fase 9, P2). Le frasi sono quelle di `PlacesAttribution.MAP_*` (core-places): `MapAttributionTest` di feature-map le confronta. -->
+  <string name="about_section_map">Mappa</string>
+  <string name="about_section_map_detail">La carta di base è dentro l’app; strade e nomi dettagliati arrivano da OpenFreeMap solo con la mappa online accesa.</string>
+  <string name="about_map_online_title">OpenStreetMap, OpenMapTiles e OpenFreeMap</string>
+  <string name="about_map_online_attribution">Mappa online: tessere di OpenFreeMap (openfreemap.org) con dati di OpenStreetMap, © OpenStreetMap contributors, licenza ODbL 1.0, nello schema di OpenMapTiles (openmaptiles.org). Si usa solo con la mappa online accesa.</string>
+  <string name="about_license_odbl">Open Database License 1.0 (ODbL)</string>
+  <string name="about_license_odbl_url">https://opendatacommons.org/licenses/odbl/1-0/</string>
+  <string name="about_map_base_title">Natural Earth e GeoNames</string>
+  <string name="about_map_base_attribution">Carta di base senza Internet: dati di Natural Earth (naturalearthdata.com), pubblico dominio, semplificati; città e nomi dei luoghi da GeoNames (geonames.org), licenza Creative Commons Attribuzione 4.0, ridotti e in parte tradotti in italiano.</string>
+  <string name="about_map_style_title">Stile, caratteri e icone della mappa</string>
+  <string name="about_map_style_attribution">Stile della mappa: derivato da Positron e Dark di OpenFreeMap e OpenMapTiles (codice BSD 3-Clause, disegno CC BY 4.0; Positron deriva da CartoDB Basemaps, CC BY 3.0), modificato: livelli ridotti, colori Ametista. Caratteri: Noto Sans, SIL Open Font License 1.1. Icone: Maki, CC0.</string>
+  <string name="about_map_note">Gli avvisi completi e il testo delle licenze di ogni pezzo sono nei file NOTICE e LICENSE-* dentro l’app. Nessuna foto e nessuna posizione delle tue foto va a questi servizi.</string>
+
   <string name="about_section_libraries">Librerie</string>
   <string name="about_section_libraries_detail">Tutto il software di altri autori che sta dentro l’app, con la sua licenza.</string>
   <string name="about_section_engine">Fluid Engine</string>

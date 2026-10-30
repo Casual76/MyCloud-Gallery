@@ -1,0 +1,3 @@
+# I file della mappa si leggono byte per byte (impronte SHA-256 negli strumenti di tools/maps e nelle prove di feature-map): mai una conversione dei fine riga,
+# nemmeno su Windows con core.autocrlf. Un glifo vuoto contiene il byte 0A e un'icona o un GeoJSON non devono cambiare di un byte.
+* -text

@@ -324,8 +324,10 @@ dependencies {
   // Fase 9 (P4, D31): la riga `MAP` del registro dei Nascosti prova la catena vera dei punti (la query di core-database, `PagedMapPointSource`, `GeoMapPoints`) e le schermate vere della mappa
   // (feature-map: bolle, griglia di una zona, sezione Luoghi, mini-mappa) sul mondo casuale. Solo nei test: `:app` le montera' in produzione con P13 (`MapGraph`); la regola dei moduli di
   // `Phase9ArchitectureTest` guarda solo le dipendenze di produzione.
+  // `feature-map` e' scritto con `path:` apposta: i passi 7e e 7h di `tools/check.ps1` (`Test-AppUsesFeatureMap`) leggono ogni riga con `project(':feature-map')`, anche di test, come "`:app` dipende dalla
+  // mappa" e allora pretendono MapLibre e il client nell'APK di release (che li avra' solo quando P13 collega `:feature-map` con `implementation`). Qui e' solo per i test.
   testImplementation project(':core-map')
-  testImplementation project(':feature-map')
+  testImplementation project(path: ':feature-map')
 
   // Fase 6 (P0, D41): il test strumentato che prova, nel processo dell'app vera, che con la lettura del testo spenta ML Kit non si
   // inizializza (`MlKitOffAtStartupDeviceTest`). Solo l'APK di prova, mai l'app.

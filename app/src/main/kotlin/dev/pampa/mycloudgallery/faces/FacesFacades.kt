@@ -130,8 +130,9 @@ class FacesCropsFacade(private val graph: FacesGraph) : PeopleCrops {
 }
 
 /**
- * L'interruttore di adesso per le pagine di attivazione, dell'avviso e di Impostazioni -> Persone. Prima del montaggio Persone e' spenta e non
- * accendibile ([ActivateOutcome.Unavailable]); i gesti dell'utente non fanno niente di nascosto.
+ * L'interruttore di adesso per le pagine di attivazione, dell'avviso e di Impostazioni -> Persone. Prima del montaggio lo stato e' `Off` e «Attiva» risponde
+ * [ActivateOutcome.Unavailable], ma **non e' la verita'**: [known] e' falso e le pagine mostrano uno scheletro invece di «spenta» (L350). I gesti dell'utente non
+ * fanno niente di nascosto.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class FacesSwitchFacade(private val graph: FacesGraph, scope: CoroutineScope) : FacesSwitch {
@@ -144,6 +145,9 @@ class FacesSwitchFacade(private val graph: FacesGraph, scope: CoroutineScope) : 
   override val fresh: StateFlow<Boolean> = live.flatMapLatest { it?.switch?.fresh ?: flowOf(false) }.stateIn(scope, SharingStarted.Eagerly, false)
 
   override val syncPending: StateFlow<Boolean> = live.flatMapLatest { it?.switch?.syncPending ?: flowOf(false) }.stateIn(scope, SharingStarted.Eagerly, false)
+
+  /** L350: prima del montaggio lo stato sopra e' un null-object ("spenta"): non e' ancora quello vero e le pagine mostrano uno scheletro. */
+  override val known: StateFlow<Boolean> = graph.settled
 
   /** CE-3: spenta da un altro dispositivo (la riga sopra "Attiva riconoscimento dei volti"). */
   override val offElsewhere: StateFlow<Boolean> = live.flatMapLatest { it?.switch?.offElsewhere ?: flowOf(false) }.stateIn(scope, SharingStarted.Eagerly, false)

@@ -380,6 +380,9 @@ abstract class NasWorker(
     // Fase 6 (P11, §1.4): dopo la sincronizzazione e la preparazione un giro del calcolo AI (lavoro unico, KEEP; senza il ruolo finisce subito).
     if (outcome is StageOutcome.Finished && (diagJob == DiagJob.INDEX_SYNC || diagJob == DiagJob.PREPARATION)) {
       AiWorkScheduling.afterNews(applicationContext)
+      // Fase 8 (CA-4, correzioni C): anche un giro del calcolo dei volti, con le regole di sottofondo, **se Persone e' accesa per l'account** (P13-7: «un giro del
+      // calcolo dei volti dopo un giro con novita'»). Prima `FacesWorkScheduling.afterNews` non aveva chiamanti e le foto nuove aspettavano il periodico da 6 ore.
+      FacesWorkScheduling.afterNewsIfOn(applicationContext, FacesWorkScheduling.settingOf(gallery))
     }
     if (outcome is StageOutcome.Yielded) continuation()?.let { (name, request) -> NasWorkScheduling.continueLater(applicationContext, name, request) }
     return Result.success()

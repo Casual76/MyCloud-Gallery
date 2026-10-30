@@ -10841,6 +10841,81 @@ delle Fasi 6-9 verdi.
 `uses-feature android.hardware.wifi` facoltativo nel manifest (innocuo, lasciato); le tessere di una versione restano nella cache di MapLibre
 finche' non vengono buttate (`Cache-Control` di 10 anni): meno richieste, strade nuove piu' tardi.
 
+## Fase 9 P3: punti e raggruppamento (30/10)
+
+Il pacchetto P3 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P3; §2.10 "L'indice", D27, D28, D31; §5.2). Branch `fase9/p3` (commit `5da4fc83` la query, `7377cf32` l'indice, il servizio e la Libreria sintetica, piu' quello dei documenti). E' la parte **pura**
+della mappa: quali foto stanno in quale punto e come si raggruppano in bolle a ogni zoom con 100 mila elementi. Niente rete, niente MapLibre, niente
+interfaccia, nessuna dipendenza nuova, **schema invariato** (nessuna tabella, nessun indice, nessuna migrazione). Consegna: la query dei punti
+(`core-database/.../dao/MapPointsQueries.kt`), l'indice e il servizio (`core-map/.../points/`), la Libreria sintetica con le coordinate
+(`core-map/.../testing/SyntheticMapLibrary.kt`, in `src/main` ma mai nel dex di release, lo controlla `check.ps1`) e le prove.
+
+**Cosa c'e'**
+| Pezzo | Dove | Cosa fa |
+|---|---|---|
+| `MapPointsQueries` | `core-database/.../dao/` | `page(after, limit)`: le celle **visibili** con coordinate effettive, a pagine; `countWithoutPosition()`; il testo SQL e' pubblico (`PAGE_SQL`, `WITHOUT_POSITION_SQL`) per il test del piano |
+| `MapPointRaw`, `MapPointPager`, `PagedMapPointSource` | `core-map/.../points/` | la porta verso la query e la sua lettura a pagine da 2.000 come `MapPointSource`: conversione in microgradi, coordinate scartate **e contate** (E-MAP7), punteggio della copertina (`MapCoverScore`); l'adattatore di `:app` (P13) non ha logica |
+| `GeoPointIndex`, `GeoPointIndexBuilder` | `core-map/.../points/` | l'indice (`GeoClusterIndex`): colonne ordinate per chiave di Morton, `clusters`, `members`, `boundsOfAll`; il costruttore (radice a 6 passi, doppioni, punti non validi) |
+| `GeoMapPoints` | `core-map/.../points/` | il servizio (`MapPoints`): niente all'avvio, ricostruzione fuori dal thread principale, calma di 2 s, scambio atomico |
+| `Morton`, `PlaceTally` | `core-map/.../points/` | aritmetica veloce delle chiavi (uguale a `GeoGrid`, provata) e conteggio dei luoghi senza allocazioni |
+| `SyntheticMapLibrary` | `core-map/.../testing/` | la Libreria sintetica con coordinate e **il modello della query** (cosa vede e cosa mai); `pager()` per l'indice senza database |
+
+**Scelte** (le prime due sono la regola, le altre scostamenti o precisazioni del progetto)
+| # | Scelta | Perche' |
+|---|---|---|
+| P3-1 | **Coordinate effettive = la riga `version_metadata` della versione corrente**, la stessa che legge il pannello info (`CatalogMediaDetailsSource`). La correzione di luogo (`metadata_correction`) vi e' gia' sopra: `MediaCatalog.correctInApp` la scrive nella stessa transazione e `updateMetadata` la rimette a ogni rilettura di META (`CatalogFiveBTest` lo prova per la data e il luogo). Anche i media solo sul NAS: i loro metadati stanno nella stessa riga | D27: la regola deve essere una sola. Mettere sopra la correzione anche nella query darebbe, nei casi in cui la riga e la correzione divergessero, un punto diverso da quello che il pannello dice |
+| P3-2 | **Solo celle visibili**: `AlbumQueries.VISIBLE` (presente in qualche posto, non nascosto da `media_personal`, non dietro la copertina del gruppo) **piu'** il gruppo senza nessun nascosto. Per le raffiche il nascosto non si propaga ai membri (solo le copie simili lo fanno): un gruppo con un nascosto solo a meta' esce **per intero** (D31) | il predicato del gruppo e' riscritto in `MapPointsQueries.NOT_IN_HIDDEN_GROUP`: quello di `AlbumQueries` parte dai nascosti (senza statistiche scorre `index_media_personal_hidden`, con le statistiche **tutta** `media_personal`) a ogni media di un gruppo; il nuovo parte dal gruppo (`index_media_group_id`) e cerca il nascosto per chiave primaria |
+| P3-3 | **Ordine d'inserimento (`rowid`), non `media_id`**; il cursore resta l'id dell'ultimo media (si ritrova il suo `rowid` con una ricerca). Un cursore che non c'e' piu' (media cancellato fra due pagine) **fa fallire** la lettura (`IllegalStateException`), non da' una pagina vuota | le righe di `media` e di `version_metadata` nascono insieme: in ordine d'inserimento le due letture sono quasi sequenziali, in ordine d'id (UUID casuali) ogni riga e' un salto in due tabelle. Misurato nella stessa corsa su 85 mila righe: **379 ms per `media_id`, 166 ms per `rowid`**. Chi legge non dipende dall'ordine (l'indice ordina per chiave di Morton, copertine e membri sono ordini totali). Una pagina vuota al posto del guasto darebbe un indice monco senza dirlo |
+| P3-4 | La pagina ha **solo le righe con coordinate**; i **senza posizione** sono un conteggio a parte (`countWithoutPosition`, una scansione di `media`, 81 ms su 100 mila). Le coordinate **assurde** ((0, 0), fuori dai limiti, oltre 85 gradi) la query le consegna: le scarta e le conta chi legge (`PagedMapPointSource`), cosi' la regola di E-MAP7 e' in un posto solo | D27, E-MAP5, E-MAP7 |
+| P3-5 | **Nessun livello si pre-calcola per intero** (il progetto diceva "livelli pigri in una cache LRU di 8"). Le celle di un livello sono intervalli dell'array ordinato: una vista di poche celle le elenca e cerca ciascuna (due ricerche binarie), una vista enorme (il mondo a zoom alto) cammina l'array una volta. Solo le **celle pesanti** (da 256 punti) tengono il loro contenuto (centro, copertina, luogo) in una cache LRU di 1.024 voci (~100 KB) | un livello fine ha tante celle quanti sono i punti (circa 2 MB a livello per 100 mila): otto livelli sarebbero 16 MB contro i 3 della soglia. Dove il calcolo costa (celle con migliaia di punti) la cache c'e'; dove le celle sono piccole il calcolo al volo costa meno di tenere la tabella |
+| P3-6 | **Memoria**: 26 byte a punto per le colonne con cui l'indice raggruppa (chiave 8, latitudine e longitudine esatte 8, giorno 4, punteggio 2, luogo 4) = **2,6 MB per 100 mila**, piu' **16 byte a punto per gli id** (due `Long`, le stesse colonne `idMsb`/`idLsb` dell'istantanea della Libreria) = 1,6 MB; totale **4,2 MB**. La soglia "al piu' 3 MB" vale per le colonne di raggruppamento: i 24 byte del progetto non contavano ne' gli id (nel progetto stanno nell'istantanea: "posizione nell'istantanea") ne' la posizione esatta | il contratto di P0 porta il `MediaId` in ogni punto e vuole il **centro esatto** (media intera in microgradi, `ClusterIndexContract`): servono gli id e le coordinate esatte. Per scendere sotto 3 MB **totali** servirebbe cambiare il contratto: gli id dall'istantanea condivisa della Libreria (-16 byte a punto: 2,6 MB totali); il solo centro dalla chiave (-8 byte) non basta (3,4 MB): vedi i punti aperti |
+| P3-7 | **Servizio** (`GeoMapPoints`): niente si legge alla costruzione; l'indice si fa alla prima `rebuild(OPEN)` (prima: `Building`); un'apertura con l'indice al passo non rifa niente; `SNAPSHOT_CHANGED` aspetta la calma di 2 s e ricostruisce solo l'ultima di una raffica; **`HIDDEN_CHANGED` non aspetta** (un nascosto deve uscire da bolle e copertine appena l'indice e' pronto, E-MAP15); una ricostruzione alla volta; durante una ricostruzione resta l'indice vecchio (mai `Building` di nuovo); annullata = niente pubblicato e non "al passo"; una lettura che fallisce lascia l'indice che c'era (o `Empty(0)`: il contratto non ha uno stato d'errore, ma non se il mondo e' gia' cambiato durante la lettura) e la prossima richiesta ci riprova | §2.10 "Aggiornamento", D27; il filtro finale `HiddenMask` di chi mostra le copertine copre l'intervallo |
+| P3-8 | **Doppioni e non validi nel costruttore**: vale il primo di due punti con lo stesso id (come `distinctBy` del riferimento), i non validi non entrano e si contano (`invalid` si somma a quelli che la sorgente ha gia' scartato) | parita' con `ReferenceClusterIndex`; il catalogo non da' doppioni (chiave primaria) |
+| P3-9 | **Log solo numeri**: quanti punti, quanti scartati, quanti millisecondi, il tipo di un guasto (mai il messaggio, che potrebbe nominare dati); `toString()` di indice, costruttore, righe, pagine, servizio e `Ready` senza coordinate ne' id (provato) | D33, §4.3 |
+
+**Misure** (JVM; il PC aveva altre build in corso, i numeri sono quindi un po' alti)
+| Misura | Soglia | Risultato |
+|---|---|---|
+| Lettura della query: **101.653 righe** (120.000 media, 51 pagine da 2.000, con i gruppi e i nascosti a meta') | < 400 ms | **319-331 ms** (mediana di 5, in due corse, con altre build in corso sul PC); conteggio dei senza posizione su 120.000 media 139-153 ms (81 ms su 100.000) |
+| Costruzione dell'indice, 100.000 punti | < 800 ms (§5.4) | **21 ms** (mediana di 3 dopo il riscaldamento) |
+| `clusters`, viste di schermata (412 x 892 dp, zoom 0-18), 100.000 punti | < 4 ms p95 | p50 **0,015 ms**, p95 **0,065-0,08 ms**, p99 0,09-0,11 ms, massimo 0,14-3,3 ms (un colpo di GC) |
+| `clusters` sul mondo intero (non e' una vista vera: prova dei casi estremi) | — | zoom 0: 32 bolle in 0,02 ms; zoom 3: 1.903 bolle in 1,0 ms; zoom 6: 17.991 in 7-8 ms; zoom 12: 21.723 in 8-10 ms; zoom 20: 99.970 in 37-40 ms |
+| Memoria, 100.000 punti | <= 3 MB | colonne di raggruppamento **2,6 MB**; id 1,6 MB; totale **4,2 MB** (42 byte a punto); la cache delle celle pesanti al piu' ~100 KB |
+
+**Piano della query** (`EXPLAIN QUERY PLAN`, prima pagina e pagina con cursore, senza statistiche come sul telefono e con `ANALYZE`; identico nei quattro casi):
+`SEARCH m USING INTEGER PRIMARY KEY (rowid>?) | CORRELATED SCALAR SUBQUERY 2 | SEARCH gm USING INDEX index_media_group_id (group_id=?) | CORRELATED SCALAR SUBQUERY 1 | SEARCH gp USING INDEX sqlite_autoindex_media_personal_1 (media_id=?) | SEARCH p USING INDEX sqlite_autoindex_media_personal_1 (media_id=?) LEFT-JOIN | SEARCH vm USING INDEX sqlite_autoindex_version_metadata_1 (version_id=?)`.
+**Nessun `TEMP B-TREE`**, nessuna scansione di `version_metadata` ne' di `media_personal`. Il conteggio dei senza posizione e' una `SCAN m` (una volta a ricostruzione).
+Dove va il tempo (stessa corsa, 85 mila righe): l'indice da solo 74 ms, + la tabella `media` 136, + `media_personal` e il gruppo 172, + `version_metadata` (due ricerche per riga) 379 ms; per `rowid` 166 ms.
+
+**Prove**
+- `core-map`: `MortonTest` (4: le versioni veloci uguali a `GeoGrid`, 20.000 valori casuali l'una); `GeoPointIndexContractTest` (6: la suite di P0 sull'indice vero); `GeoPointIndexTest` (12: **1.000 viste casuali per ognuno dei 49 livelli** uguali al riferimento a forza bruta per conteggi, centri, copertine, luoghi e membri, due volte con la cache sui 30.000 punti, antimeridiano e poli compresi, `ReferenceClusterIndex` contro la sua versione veloce); `GeoPointIndexPerformanceTest` (1); `GeoMapPointsTest` (15, tempo virtuale); `PagedMapPointSourceTest` (7); `HiddenNeverShownTest` (3: 25 Librerie sintetiche, 150 viste ciascuna, **un nascosto perfetto non esce mai**, e la prova di segno contrario che diventa rossa senza il filtro).
+- `core-database`: `MapPointsQueriesTest` (9): le correzioni di luogo (`Set`, `Clear`, `Set` su un media senza GPS, rilettura di META) uguali alla riga che legge il pannello; il solo NAS; nascosti, assenti, membri di gruppo e gruppi con un nascosto solo a meta' (proprieta' su 40 giri casuali con un conto indipendente dalle tabelle); paginazione e cursore perso; i senza posizione; 100 mila righe: tempi, piano, risultato.
+
+**Edge case**
+| ID | Dove e' provato |
+|---|---|
+| E-MAP5 (senza posizione) | `countWithoutPosition` (`MapPointsQueriesTest`), `GeoIndexState.Empty(withoutPosition)` e `Ready.withoutPosition` (`GeoMapPointsTest`) |
+| E-MAP6 (solo NAS) | `leCoordinateEffettiveSonoQuelleDelPannelloInfoConLeCorrezioniDiLuogo` (un media solo sul NAS e' un punto) |
+| E-MAP7 (coordinate assurde) | `PagedMapPointSourceTest` (NaN, infinito, oltre 85 gradi, (0, 0), 180,000001), `GeoPointIndexTest.lePosizioniAssurdeNonEntranoESiContano`, la riga (0, 0) consegnata dalla query |
+| E-MAP8 (luogo corretto) | `MapPointsQueriesTest` con `metadata_correction` |
+| E-MAP9 (migliaia nello stesso punto) | `stessoPuntoUnaBollaSola` (2.000, di P0) e `ventimilaFotoNelloStessoPuntoSonoUnaBollaSola` (20.000, con la cache, copertina e membri) |
+| E-MAP10 (antimeridiano e poli) | parita' con viste che attraversano l'antimeridiano e stanno ai poli; `unaVistaChePassaLAntimeridianoNonDuplicaLeCelle` (le due meta' dividono una colonna di celle) |
+| E-MAP15 (nascosto con la mappa aperta) | `unNascostoRicostruisceSubito`, `unMediaCheDiventaNascostoEsceAlPassoDopo` |
+| E-MAP18 (casa) | la query e il servizio non leggono `home_estimate` ne' niente che la nomini (`Phase9ArchitectureTest` regola 6 verde); le foto di casa sono punti come gli altri |
+| E-H9 / D31 (nascosti) | `HiddenNeverShownTest`, `unNascostoPerfettoNonEsceMaiDallaQuery`, `soloLeCelleVisibili...` |
+| E-L7 (100 mila elementi) | `GeoPointIndexPerformanceTest`, `centoMilaRigheSottoI400MillisecondiSenzaOrdinareInMemoria` |
+
+**Porte e contratti degli altri** (nessun contratto di P0 e' stato cambiato)
+- **P13**: l'adattatore di `:app` e' di una riga per metodo: `MapPointPager.page(after, limit)` = `MapPointsQueries(database).page(...)` con `source` e `kind` letti con `enumByCode` (`MediaSource`, `MediaKind`), `countWithoutPosition()` uguale; poi `PagedMapPointSource(pager)` come `MapPointSource` e `GeoMapPoints(source, Dispatchers.Default)` come `MapPoints`. Il servizio non legge niente fino alla prima `rebuild(OPEN)`: **P13 non lo chiami dall'avvio**, ma dalla mappa o dalla sezione Luoghi. Per il cambio di istantanea: `rebuild(SNAPSHOT_CHANGED)` a ogni nuovo `seq` (con `collectLatest` la calma e' gia' la calma di `delay`), `rebuild(HIDDEN_CHANGED)` quando cambiano i nascosti.
+- **P4**: le righe `MAP` di `HiddenSurfaces` (`map-points`, `map-zone`) le scrive P4. Per la sonda sul mondo casuale (`HiddenWorld`) servono i metadati con le coordinate (il `WorldSpec` oggi non ne ha: `HiddenWorldBuilder` deve scrivere `MediaMetadata.location`) e poi la stessa catena di P13 sul database vero (`MapPointsQueries` -> `PagedMapPointSource` -> `GeoMapPoints`); l'oracolo e' `SyntheticMapLibrary.neverShown` per il modello e il conto indipendente di `unNascostoPerfettoNonEsceMaiDallaQuery` per il catalogo. `GeoCluster.cover` e `members` danno id: **il filtro finale `HiddenMask` sulle copertine resta di chi le mostra** (P4).
+- **P12**: `GeoPointIndex` e `GeoMapPoints` hanno le sezioni di traccia da mettere (`map.clusters`) solo in `feature-map`: il core non ha Android.
+- **Altri**: `AlbumQueries.NOT_IN_HIDDEN_GROUP` (Fase 7) ha il piano peggiore descritto in P3-2: se `AlbumV6Daos.summaries` o `suggestionCounts` lo usano su Librerie con molti gruppi, vale la riscrittura fatta qui (dal gruppo, non dai nascosti).
+
+**Punti aperti**
+- La soglia di memoria di **3 MB** e' rispettata dalle colonne di raggruppamento (2,6 MB) ma non dal totale con gli id (4,2 MB). Per rientrare serve cambiare un contratto di P0: `GeoPointIndex` dovrebbe prendere gli id da una tabella condivisa con l'istantanea della Libreria (i punti porterebbero la posizione nell'istantanea, non l'id, come dice il §2.10): 2,6 MB totali. Far diventare il centro di una bolla quello della cella (e non piu' la media esatta) toglie solo 8 byte a punto (3,4 MB). Decide l'orchestratore; per ora i numeri sono quelli sopra.
+- Il contratto `GeoIndexState` non ha uno stato d'errore: una lettura che fallisce senza un indice precedente da' `Empty(0)` ("Nessuna foto con la posizione"), come meno peggio di una rotella eterna.
+- La lettura di 100 mila righe sta a 319-331 ms (soglia 400) con altre build in corso sul PC: il margine e' di un quinto, quindi un test di tempo puo' fallire sotto carico (rilanciare la sola classe). Sull'S25 non e' misurata (la stima del progetto e' 1,5 s). Se servisse meno, la strada rimasta e' un indice di copertura su `version_metadata(version_id, latitude, longitude)` (migrazione, ~7 MB per 100 mila): non l'ho fatto, non serve per la soglia.
+- Il conteggio dei senza posizione e' una scansione di `media` (81-139 ms): si potrebbe avere gratis dalla lettura delle pagine solo se la query restituisse anche le righe senza coordinate (piu' dati per pagina).
+
 ## Fase 8, correzioni dopo le revisioni: pacchetto A (30/10)
 
 Il pacchetto A chiude le voci di "Disattiva e cancella" e dello stato locale delle due revisioni di fine Fase 8 (`docs/review/8-fase8.md`: **R1, R11, R12, R13, I1, I6**; `docs/review/funzionale-8.md`: **CE-1, CE-2, CE-3, CE-4, CE-5**). Ramo `fase8/corr-a` da `main` (`6fc08ddf`). Le voci si toccano fra loro (R1 e R12 con CE-1, R13 con CE-2) e sono corrette alla radice, una volta sola. Nessun sotto-agente, nessuna rete, nessun telefono: tutto sulla JVM e su Robolectric. **CE-3** era in attesa di una decisione dell'utente; la risposta e' arrivata durante il lavoro (**risposta dell'utente del 30/10: si', una riga** "Persone e' stata disattivata da un altro tuo dispositivo" sopra "Attiva riconoscimento dei volti") e la voce e' fatta come le altre.
@@ -11318,3 +11393,276 @@ Le voci si toccavano fra loro e sono corrette alla radice, una volta sola: **una
 - **F99 (I2)**: con un chip «Persona» in Cerca, nascondere quella persona da un altro percorso: rilanciando la ricerca (ordine, «mostra anche i meno probabili») il chip non da' piu' risultati.
 - **Ricerca per persona con un nome non latino**: dare a una persona il nome «Анна» (o «李明») e cercarlo; «❤» come nome: gli altri nomi continuano a funzionare in Cerca.
 - **Chiaro, scuro e testo a 1,3x** (TalkBack): i due messaggi e la pagina «Tutte le foto sono nascoste» non tagliano il testo; screenshot in `docs/screenshots/8-corr-d/`.
+
+## Fase 8, correzioni dopo le revisioni: pacchetto C (30/10)
+
+Il pacchetto C chiude le voci della verifica funzionale di fine Fase 8 (`docs/review/funzionale-8.md`, §2.2) sul **calcolo dei volti: avanzamento, primo avvio e «Analizza ora»**: **CA-1, CA-2, CA-3, CA-4, CA-5, CA-6, CA-7**, piu' i limiti rimasti aperti dai pacchetti prima (`docs/sicurezza.md`): **L242** («Analizzare le tue N foto richiede circa M minuti» non si vede), **L350** (le schermate dicono «spenta» prima del montaggio), **L322** («disattivata da un altro tuo dispositivo» solo nelle Raccolte), **L372** (`PhoneSyncWorker` e `ShareWorker` non aspettano la famiglia pronta) e **L362** (il formato accetta un nome «invisibile»). Ramo `fase8/corr-c` dalla base che ha gia' i pacchetti A, B, D, E e «formato e replica dei volti». Nessun sotto-agente, nessuna rete, nessun telefono, nessun NAS vero: tutto sulla JVM e su Robolectric. In parallelo lavora la Fase 9 P3 (`core-map`, `MapPointsQueries.kt`, `feature-map`): non toccati.
+
+### Le risposte dell'utente del 30/10 e le decisioni dell'orchestratore
+
+| Domanda (§7 della verifica) | Risposta |
+|---|---|
+| **CA-3. Il primo calcolo dopo l'accensione** | **Risposta dell'utente del 30/10: segue le regole delle attivita' di sottofondo** (notte, carica, Wi-Fi, batteria, caldo), come ogni altro giro. I testi che dicono «di notte, in carica» (pagina di attivazione, riga della sezione, Impostazioni) diventano veri e non si cambiano. |
+| **CA-2. «Analizza ora» e la stima** | **Risposta dell'utente del 30/10: si fanno.** Un tasto «Analizza ora» con la stima («Analizzare le tue N foto richiede circa M minuti») e una conferma; e' **l'unico modo di scavalcare le regole**. Sui dati mobili la conferma mostra la stima dei dati, come gli altri «Fai ora» dell'app. Sta in **Impostazioni → Persone**, e anche nella **pagina di attivazione** (dopo «Attiva», sotto il messaggio, sopra «Fatto»: ci sta senza confondere, «Fatto» resta il tasto principale). La stima viene da `FacesBacklog` e dai ritmi misurati; per l'S25 la misura sul campo, **8,8 foto al secondo** (`DeviceMeasures.facesPerSecond`, F104 del 27/10). Chiude L242. |
+| **L240 («Analizza ora» e i media senza anteprima)** | **Decisione dell'orchestratore: «Analizza ora» non scarica originali dal NAS.** Un media senza anteprima aspetta come oggi (`FACES_WAITING_PREVIEWS`) e la pagina lo dice («Usa le anteprime che ci sono gia': una foto che non ne ha aspetta, e l'app non scarica mai gli originali dal NAS»). |
+| **Primo disegno istantaneo** («Avvio e pagine istantanei» in fondo a questo documento) | La pagina si disegna subito e la stima arriva dopo: contare il lavoro rilegge il catalogo (L242), quindi il conto gira dentro la porta su `Dispatchers.Default`, mai sul thread principale e mai sul percorso dell'avvio; intanto lo scheletro «Conto le foto da analizzare…». |
+
+### Le voci: causa, correzione, prove
+
+**CA-1. Il progresso era dell'unita' (al piu' 200 media), non della libreria.**
+- *Causa.* `UnitRunner.process` diceva `Running(fatti dell'unita', media dell'unita')` a ogni media e `group()`/`flush()` `Running(analizzati, analizzati)`, cioe' 100% a fine unita': la sezione delle Raccolte («Sto riconoscendo i volti: 35%»), la lista e Impostazioni («Analizzate 40 foto su 200») mostravano una percentuale a dente di sega e un «su 200» per una libreria da 12.000 foto.
+- *Correzione.* `LibraryProgress` (core-faces, `compute/`): uno per tappa, creato da `FacesComputeEngine.runAll` e condiviso da tutti gli ambiti (privata, comune, solo telefono). La libreria si **conta una volta per tappa**, quando c'e' davvero la prima unita' da lavorare (una tappa che si ferma subito non paga la lettura del catalogo), con `FacesBacklog.tally()` (nuovo: i media gia' fatti, «non supportati» compresi, e quelli che restano, con le stesse porte e le stesse regole del calcolo). I fatti partono da quelli di prima e crescono di uno a ogni media finito (analizzato o «non supportato»; uno che aspetta un'anteprima no); il totale non si abbassa e i fatti non lo superano mai. `Running(fatti, totale, fase)` e' lo stesso in `DETECT`, `GROUPING` e `PUBLISH`. Un conteggio che fallisce lascia il totale a zero: la pagina dice «Sto analizzando le foto» senza numeri (mai numeri sbagliati). I numeri in Impostazioni passano da `GalleryNumbers` (separatore italiano delle migliaia: «Analizzate 3.400 foto su 12.000»).
+- *Prove.* `CorrezioniCCalcoloTest.ca1_*` (core-faces, 7 media in 3 unita': totale 7 a ogni media e fatti 0...6 senza tornare indietro; il raggruppamento a fine unita' vede 3, 4, 7 di 7, mai 3 di 3; una tappa che riparte dopo un arresto delle regole parte dai fatti di prima; il conto del catalogo e' uno per tappa, non per media; una tappa che si ferma subito non conta; un media in attesa non e' «fatto»), `CorrezioniCPersoneTest.ca1_*` (la riga di Impostazioni).
+
+**CA-3. Il primo calcolo partiva subito, scavalcava notte e carica, e la pagina diceva il contrario.**
+- *Causa.* `FacesGraph.onStateChanged` chiedeva `FacesWork.COMPUTE` a ogni passaggio a `On` e `FacesWiring` lo mappava su `FacesWorkScheduling.computeNow`, che accoda `UserInitiated(AI_COMPUTE, confirmed = true)`: il lavoro dell'utente scavalca fascia e carica. «Attiva» e' il consenso a Persone, non una richiesta di calcolo pesante: YuNet e SFace giravano a batteria e di giorno su tutta la libreria, e «Le foto si analizzano di notte, in carica» era falso.
+- *Correzione* (risposta dell'utente del 30/10: il primo giro segue le regole). `FacesWorkScheduling.request(context, work)` e' l'unica mappa fra le richieste del grafo e i lavori di WorkManager: `COMPUTE` → `afterActivation` (il lavoro unico delle novita', `Background(AI_COMPUTE)`, quindi notte, carica, Wi-Fi di casa, batteria, caldo; un'attesa delle regole riprogramma con il vincolo giusto, come ogni altro giro); `COMPUTE_NOW` → `computeNow`; `ERASE` → `eraseNow`. Nessun testo cambia: «di notte, in carica» ora e' vero.
+- *Prove.* `FacesWorkSchedulingTest.ca3_*` (il primo calcolo non e' un lavoro dell'utente: nessun `faces-compute-now` in coda, uno solo delle novita'), `ca2_soloAnalizzaOraEUnLavoroDellUtente`.
+
+**CA-2 (e L242). «Analizza ora» e la stima non esistevano.**
+- *Causa.* Nessun tasto, nessuna porta; `FacesLive.backlog` non aveva lettori, `FacesWorkScheduling.computeNow` un solo chiamante (il cambio di stato). Dopo un'attesa delle regole l'utente non poteva dire «adesso» (F94 non si poteva fare). La stima era nota come L242.
+- *Correzione* (risposta dell'utente del 30/10). **Contratto** (feature-people): `FacesAnalyzeNow` (`estimate()`, `networkNote()`, `start()`), porta opzionale di `ActivationPorts` (di serie `null`: niente tasto); `AnalyzeNowState` (`Hidden`, `Counting`, `Ready`, `Confirming`, `Started`) e `FacesAnalyzeEstimate` (foto da fare, gia' fatte, minuti, byte al piu' delle anteprime) in `SwitchScreens.kt`. **Logica** comune alle due pagine: `AnalyzeNowController` (il tasto chiede **sempre** una conferma; senza aver chiesto la conferma non parte niente; una conferma aperta o una richiesta gia' fatta non si chiudono da sole). **Pagine**: Impostazioni → Persone mostra, sotto «Analisi delle foto», «Analizzare le tue 12.000 foto richiede circa 37 minuti» (poi «Restano 4.200 foto da analizzare: servono circa 11 minuti»), «Di norma l'analisi parte da sola, di notte, in carica e sul Wi-Fi di casa», il tasto «Analizza ora» (48 dp, contentDescription) e la nota sulle anteprime; la conferma («Analizzare adesso? Parte subito, anche di giorno e a batteria... Servono circa 37 minuti», «Annulla», «Analizza ora»); a richiesta fatta «Fatto: l'analisi parte adesso». Dove questo dispositivo non analizza le foto o il calcolo e' gia' in corso il blocco non c'e'. La pagina di attivazione, dopo «Attiva», offre lo stesso blocco fra il messaggio e «Fatto». **`:app`**: `AppFacesAnalyzeNow` (la stima da `FacesBacklog.tally()` sulle persone montate e dai ritmi di adesso: la misura del lavoro vero se il calcolo ha lavorato in questo processo, altrimenti **8,8 foto al secondo**; sui dati mobili la frase delle regole per un lavoro dell'utente con la stima dei dati, quella degli altri «Fai ora»: «Stai per usare i dati mobili. Servono circa 1,7 GB. Vuoi continuare?»); `FacesGraph.analyzeNow()` chiede `COMPUTE_NOW` (lavoro unico `faces-compute-now`, una richiesta alla volta). **I ritmi**: `DeviceMeasures.facesPerSecond` passa da 25 (ipotesi di P2) a **8,8** (F104, S25), `FacesRates.DEFAULT` e `FacesRates.forPhotosPerSecond` nascono da quel numero (una foto costa il suo inverso, un video quattro foto, il 20% delle foto la seconda passata da 0,344 s, il p50 di YuNet a 4 tasselli misurato nella stessa prova); 12.000 foto fanno 37 minuti (prima 14), e `FacesWiring` dice al misuratore di partire da li'.
+- **Primo disegno istantaneo**: la pagina si disegna con lo scheletro «Conto le foto da analizzare…» e la stima arriva dopo; il conto (`FacesBacklog.tally`, che rilegge il catalogo: L242) gira dentro la porta su `Dispatchers.Default`, parte solo dove «Analizza ora» ha senso (Persone attiva qui, questo dispositivo analizza, il calcolo non e' in corso, stato noto) e di nuovo quando il calcolo cambia fase; mai sul percorso dell'avvio. Per contare anche prima del primo calcolo (archivio mai aperto) `FacesBacklog` apre l'archivio dal recinto con `currentArchive`, come le persone (P8, C130: solo con lo stato `On` attivo qui).
+- *Prove.* `CorrezioniCPersoneTest.ca2_*` (il controllore: scheletro poi stima, conferma obbligatoria, annulla, conferma aperta e richiesta fatta che restano, niente lavoro o stima che non si sa dare nasconde tutto; Impostazioni conta solo dove si analizza, non da spenta ne' durante il calcolo ne' prima del montaggio; la pagina: la frase con i puntini delle migliaia, il tasto da 48 dp, la conferma con la durata e i dati mobili, le frasi italiane `1 ora`, `2 ore e 10 minuti`, `Resta 1 foto`; la pagina di attivazione), `FacesCorrectionsCTest.ca2_*` (`AppFacesAnalyzeNow`: la stima dal conto e dagli 8,8 al secondo, 42 minuti per 11.000 foto e 1.000 video; «non si sa» e un conto che lancia; libreria a meta'; i dati mobili con la frase delle regole e senza su Wi-Fi o con un'attesa; il tocco; `FacesRates.DEFAULT` uguale alla misura di `DeviceMeasures`), `CorrezioniCCalcoloTest.ca2_*` (il conto: fatti, restano, totale; i ritmi di partenza), `FacesMeasuresTest` (8,8), `EstimateAndKeepersTest` (37 minuti per 12.000 foto ai ritmi di partenza), `PeopleCorrCScreenshotTest` (le schermate).
+
+**CA-4. Un lavoro che nessuno programmava: `FacesWorkScheduling.afterNews`.**
+- *Causa.* P13-7 promette «un giro del calcolo dei volti dopo un giro con novita'», ma `NasWork.kt` e `AiWork.kt` chiamano solo `AiWorkScheduling.afterNews`: le foto nuove si analizzavano solo con il periodico da 6 ore.
+- *Correzione.* I due punti in cui finisce bene `AiWorkScheduling.afterNews` chiamano anche i volti: la sincronizzazione dell'indice e la preparazione finite (`NasWorker`: `FacesWorkScheduling.afterNewsIfOn`, solo se la voce `faces` dei dati personali e' `On`: senza Persone accesa ogni giro dell'indice accoderebbe un lavoro per niente) e i modelli pronti (`ModelFetchWorker`: se Persone e' attiva qui). Lavoro unico, `KEEP`, con le regole di sottofondo.
+- *Prove.* `FacesWorkSchedulingTest.ca4_*` (solo con `On`, un solo lavoro; i due punti chiamano davvero i volti, dopo l'AI).
+
+**CA-5. Dopo «Disattiva e cancella» e una riattivazione nello stesso processo mancava il periodico.**
+- *Causa.* `EraseStopWork` toglie `faces-compute` (`cancelUniqueWork`); `FacesWorkScheduling.ensure` girava solo all'avvio del processo.
+- *Correzione.* `afterActivation` chiama `ensure` (il periodico da 6 ore e il raggruppamento giornaliero, idempotenti) e il primo giro: li' passa ogni passaggio a `On`.
+- *Prove.* `FacesWorkSchedulingTest.ca5_*` (periodico e raggruppamento in coda, tolti, tornano con l'accensione, uno solo con due accensioni).
+
+**CA-6. `mayFetch` non era legato.**
+- *Causa.* `AppFaceInputs.mayFetch` valeva sempre `true`: con il NAS spento ogni media di un'unita' ritentava lo scaricamento e il motore vedeva `NO_PREVIEW`; la pagina diceva «In attesa delle anteprime» invece di «In attesa del NAS».
+- *Correzione.* `StageFacesControl.mayFetch()`: vero solo dentro una tappa le cui regole non dicono `RunScope.LOCAL_BUFFER_ONLY` (fuori casa, NAS spento, rete non fidata: E-A6); `FacesWiring` lo passa a `AppFaceInputs`. Senza, un media che non ha l'anteprima in locale aspetta con `InputWait.NAS` (e `nasDown`: la tappa finisce `NO_NAS`, «In attesa del NAS»), senza provare a scaricare.
+- *Prove.* `FacesCorrectionsCTest.ca6_*` (`mayFetch` secondo le regole della tappa e fuori da una tappa; con `mayFetch` falso `preview` risponde `Waiting(NAS)` e `prefetch` non chiama il NAS; con `mayFetch` vero prova a scaricare).
+
+**CA-7. Un archivio che non si apre si leggeva «poco spazio libero».**
+- *Causa.* `FacesStores.open` distingue `KEYSTORE`, `NEWER_DATABASE` e `STORAGE`, ma il motore buttava `ComputeStoreOpen.Unavailable` in `FacesStop.STORE_UNAVAILABLE` e `statusFor` lo mostrava come `Waiting(STORAGE)`; nessun codice di Diagnostica.
+- *Correzione.* Il motivo arriva allo stato: `KEYSTORE` → `Waiting(KEYSTORE)` (nuovo: «In attesa: la chiave che protegge i dati dei volti non risponde»), `NEWER_DATABASE` → `Waiting(NEEDS_UPDATE)` («serve aggiornare l'app»), `STORAGE` → `Waiting(STORAGE)`. Codice nuovo `FACES_STORE_UNAVAILABLE` (C283; `FacesComputeCounters.storeUnavailable`, segnale del motore, voce del catalogo con titolo e «cosa fare», `count` nell'esportazione a chiavi chiuse): solo quante tappe non sono partite, mai il motivo ne' un nome. Niente e' cancellato e si riprova alla tappa dopo.
+- *Prove.* `CorrezioniCCalcoloTest.ca7_*` (i tre motivi, il contatore e il segnale; nessuna analisi), `Phase8DiagCatalogTest` (il codice e' nel catalogo e nel contratto), `CorrezioniCPersoneTest.ca7_*` (la riga della pagina).
+
+**L350. «Spenta» o «non disponibile» prima del montaggio.**
+- *Causa.* La voce «Persone» di Impostazioni, Impostazioni → Persone e la pagina di attivazione leggevano le facciate di `FacesFacades`, che prima del montaggio rispondono come i null-object (`Off`, `ActivateOutcome.Unavailable`): per qualche secondo dopo un avvio a freddo dicevano «spenta» a chi ha Persone accesa, e un'attivazione risponderebbe «non disponibile».
+- *Correzione.* Un valore «non ancora» che non dice mai uno stato sbagliato: `FacesSwitch.known` (nuovo nel contratto, di serie `true` per null-object e fake). `FacesSwitchFacade.known` e' `FacesGraph.settled`: vero a montaggio riuscito, **fallito**, **non possibile adesso** o fermato (lo stato `Off` e «non disponibile» sono allora la verita'), e subito dove non potra' mai esserci (senza famiglia, `canMount = false`: niente scheletro eterno senza NAS). Finche' e' falso: **Impostazioni → Persone** mostra uno scheletro fermo (`instantSkeleton`: TalkBack sente «Sto caricando», nessuna rotella; con i modelli, che non dipendono dallo stato) e nessuna frase di stato; la **pagina di attivazione** non legge i requisiti (aspetta `known`: resta allo scheletro, non propone «Attiva»); la **voce delle Impostazioni** dice «Raggruppa le foto per volto» (`PeopleEntryState.NOT_YET`, tono neutro, nessuna pillola). La forma ricordata (`InstantShapes`) non e' usata: scheletro, come la sezione delle Raccolte (C240).
+- *Prove.* `FacesCorrectionsCTest.l350_*` (la facciata: non nota, poi nota a montaggio fallito, non possibile, fermato, senza famiglia; la voce non dice `OFF`), `CorrezioniCPersoneTest.l350_*` (il controllore, la pagina senza «spenta» ne' «Attiva», la pagina di attivazione che aspetta), `PeopleEntryTest.l350_*`.
+
+**L322. «Disattivata da un altro tuo dispositivo» anche in Impostazioni → Persone.**
+- *Correzione.* `PeopleSettingsState.offElsewhere` (dal `FacesSwitch.offElsewhere` di CE-3, solo da spenta: con Persone riaccesa non vale piu'): sopra lo stato, la stessa riga delle Raccolte («Persone e' stata disattivata da un altro tuo dispositivo. I volti e i nomi sono stati cancellati anche da qui. Se vuoi, puoi riattivarla»), con «Attiva riconoscimento dei volti» sotto.
+- *Prove.* `CorrezioniCPersoneTest.l322_*`.
+
+**L372. `PhoneSyncWorker` e `ShareWorker` non aspettavano la famiglia pronta.**
+- *Correzione.* Come RG-1 e D-7: `gallery.awaitReady(COLD_START_WAIT)` (20 secondi) prima di `runIfActive`, in tutti e due. `PhoneSyncWorker`, se dopo l'attesa la famiglia non e' pronta (o la galleria e' ferma), **riaccoda il lavoro a trigger di contenuto** (che vale una volta sola) invece di spegnere la catena fino al prossimo avvio dell'app.
+- *Prove.* `Correzioni8CLavoriAppTest` (grafo vero, famiglia «non configurata» per un attimo): il giro della condivisione e la lettura del telefono escono a famiglia pronta; la condivisione lascia il suo esito; un dispositivo non pronto riaccoda comunque la catena.
+
+**L362. Il formato accettava un nome «invisibile».**
+- *Correzione.* `PeopleForms.isName` (core-trust) chiede anche `VisibleText.hasVisible`: e' la regola di `PersonNames.forNewName` con cui si scrive (`normalize` resta piu' larga: rilegge anche i dati locali scritti prima). **Compatibilita' con i dati gia' scritti**: un segmento di un dispositivo che ha scritto un nome del genere prima della regola **non si rifiuta intero** (perderebbe le altre voci): `PeopleJson.readOrSkip` salta quella sola voce (le altre parti si controllano lo stesso: ora, autore, soggetto) e `FacesSegmentContent.People.skipped` la conta; la sincronizzazione la registra come voce rifiutata (`FACES_SEGMENT_REJECTED`, solo il numero). Un valore d'altra forma (spazio ai bordi, troppo lungo, carattere vietato) rifiuta ancora il segmento intero.
+- *Prove.* `FacesNameVisibleTest` (core-trust: la regola; un segmento con tre voci, una con il nome che non si vede: le altre due valgono e la terza e' saltata e contata; una voce saltata con l'autore rovinato rifiuta il segmento; un valore d'altra forma lo rifiuta ancora), `FacesWireTest.laRegolaDelNomeELaStessa` (scrittura e lettura uguali, con i nomi di soli giunti), `PeopleCorrDTest.unNomeInvisibileNonSiScriveUnEmojiEUnAltroAlfabetoSi`.
+
+### Decisioni, e dove mi discosto dalle proposte della revisione
+
+| # | Decisione | Perche' |
+|---|---|---|
+| C-1 | **CA-3: il primo giro e' il lavoro delle novita', non un lavoro nuovo** (`faces-compute-news`, `KEEP`), e `ensure` parte dallo stesso passaggio | Un nome di lavoro in piu' per «il primo calcolo» sarebbe un altro cancello da tenere in ordine (i nomi distinti sono una regola dei lavori: `FacesWorkSchedulingTest.iNomiSonoDistinti...`); le novita' fanno gia' esattamente cio' che serve: un giro con le regole di sottofondo, assorbito se ce n'e' gia' uno in coda. Il periodico da 6 ore e il raggruppamento giornaliero tornano nello stesso passaggio (CA-5) |
+| C-2 | **CA-2: la conferma c'e' sempre, anche su Wi-Fi; la stima dei dati solo dove le regole la chiedono** | «Analizza ora» scavalca notte, carica e Wi-Fi: dire «adesso, anche di giorno e a batteria» e' il minimo. La stima dei dati e' quella delle regole per `UserInitiated(AI_COMPUTE)` (come `BackupGraph.userDecision` per «Fai ora»), non un testo mio: dati mobili, roaming e tetto sono giudicati da chi li conosce |
+| C-3 | **CA-2: un tasto e una conferma dentro la pagina, non un foglio** | Come «Non su questo dispositivo» in Impostazioni → Persone: nessun foglio, la conferma e' un messaggio con «Annulla» e «Analizza ora» (48 dp), e il testo a 1,3x non la taglia (screenshot). Il tasto sta sotto la riga dell'avanzamento, dove si guarda a che punto e'; scompare con il calcolo in corso (la riga dell'avanzamento dice il resto) |
+| C-4 | **CA-2: anche nella pagina di attivazione, solo dopo «Attiva»** (non nella spiegazione) | Prima dell'attivazione non c'e' niente da contare (`FacesBacklog` vale zero se Persone non e' attiva qui) e un secondo tasto accanto ad «Attiva» e «Non ora» romperebbe il loro stesso peso (D3). Dopo, ci sta senza confondere: messaggio «Persone e' attiva», la stima, «Analizza ora» tinto, «Fatto» pieno |
+| C-5 | **CA-2: la stima parte dalla misura sul campo e passa a quella del lavoro vero** | `FacesRates.forPhotosPerSecond(8,8)`: una foto costa 0,114 s, il 20% ha la seconda passata (0,344 s, il p50 di YuNet a 4 tasselli misurato nella stessa prova F104), un video e' la copertina piu' tre fotogrammi. 12.000 foto fanno 37 minuti: il piano diceva «circa mezz'ora». `DeviceMeasures.facesPerSecond` e' la fonte unica del numero (core-faces non vede le regole: `FacesRates.DEFAULT` e' una copia protetta da una prova); appena il calcolo lavora nel processo la misura vera (`FacesRateMeter`) sostituisce le ipotesi |
+| C-6 | **CA-1: la libreria si conta in core-faces, nel motore, non nell'app** | Il motore conosce le porte e le regole (cosa si analizza, cosa e' fatto, la ricetta) e `FacesBacklog` le usa gia': un conto dell'app sarebbe una seconda opinione. Una volta per tappa e solo con una prima unita' vera da lavorare |
+| C-7 | **CA-1: i fatti non superano mai il totale e il totale non scende** | Un media arrivato dopo il conto non deve fare 101%; un conto che fallisce non deve mettere numeri sbagliati: totale zero = «Sto analizzando le foto» senza numeri |
+| C-8 | **CA-6: legato alle regole della tappa, non a un nuovo cancello** | Il «cancello di rete delle regole» e' `RunScope.LOCAL_BUFFER_ONLY` (fuori casa, NAS spento, rete non fidata): e' gia' cio' che l'AI usa per lavorare sul buffer senza rete (E-A6). Un secondo giudizio dell'app sulla rete avrebbe potuto contraddirlo |
+| C-9 | **CA-7: un codice solo, senza il motivo** (`FACES_STORE_UNAVAILABLE`) | La Diagnostica dice «quante tappe non sono partite»; il motivo sta nello stato della pagina («chiave», «aggiorna l'app», «spazio»). Un codice per motivo avrebbe dato tre voci da tenere nel catalogo, nell'esportazione e nei test per un solo gesto («riavvia o aggiorna») |
+| C-10 | **L350: `known` e' un'altra proprieta' di `FacesSwitch`, non un nuovo stato `FacesState`** | Un caso in piu' in `FacesState` romperebbe ogni `when` esaustivo del progetto (motore, interruttore, cancellazione, sezioni, Diagnostica) per una cosa che non e' uno stato di Persone ma «non so ancora». Di serie `true`: null-object e fake restano com'erano |
+| C-11 | **L350: «non ancora» finisce anche quando il montaggio non puo' esserci** (fallito, senza dispositivo registrato, senza famiglia) | Altrimenti lo scheletro durerebbe per sempre per chi non ha un NAS (L351): li' «spenta» e «non disponibile» sono la verita' |
+| C-12 | **L362: si salta la voce, non il segmento, e solo per la forma di prima** | La proposta del brief e' proprio questa: «un rifiuto non deve far perdere le altre voci». Un nome di un altro dispositivo con una forma sbagliata (spazio ai bordi, troppo lungo, carattere vietato) resta un rifiuto del segmento intero, perche' e' un segnale di un dispositivo che non segue il formato |
+| C-13 | **L372: `PhoneSyncWorker` riaccoda anche se la famiglia non e' pronta** | La proposta e' quella del brief; l'unico caso in cui si perde e' un'app azzerata nello stesso processo, dove il lavoro si riaccoda a vuoto una volta e il prossimo avvio rimette tutto a posto (`GalleryWorkScheduling.ensure`, `KEEP`) |
+| C-14 | **Il totale della libreria non e' nella Diagnostica** (L242, L393) | Il conto rilegge il catalogo: nella Diagnostica sarebbe un costo a ogni apertura per un numero che la pagina di Persone gia' dice |
+
+### Modifiche fuori dal perimetro stretto
+- `core-rules`: `DeviceMeasures.facesPerSecond` da 25 a 8,8 (la misura del campo; nessun altro lettore nel codice di produzione) e `FacesMeasuresTest`.
+- `core-faces`: `FacesTally`, `FacesBacklog.tally`, `FacesRates.forPhotosPerSecond` e `FacesRates.DEFAULT` (8,8), `LibraryProgress`, `FacesWait.KEYSTORE`, `FacesComputeCounters.storeUnavailable`, `FacesDiag.FACES_STORE_UNAVAILABLE`, `FacesSwitch.known` (con valore di serie), `FakeFacesSwitch.known` e `.offElsewhere`, `FacesSegmentContent.People.skipped` (in `core-trust`), `NasFacesSync` (conta le voci saltate). **`NasFacesPublisher.kt` non e' stato toccato.**
+- `core-trust`: `PeopleForms.isName`, `PeopleForms.hasNameShape`, `PeopleJson.readOrSkip` (il pacchetto del formato aveva la regola: il brief chiede questa modifica).
+- `feature-diagnostics`: la voce del catalogo con titolo e «cosa fare», `DiagCodes.FACES_STORE_UNAVAILABLE`.
+- `feature-settings`: `PeopleEntryState.NOT_YET` e la sua frase.
+- `feature-people`: `FacesAnalyzeNow` (porta opzionale di `ActivationPorts`), `AnalyzeNowState`, `FacesAnalyzeEstimate`, `AnalyzeNowController`, `AnalyzeNowBlock`, `PeopleSettingsState` (`known`, `offElsewhere`, `analyze`), i controllori e le due pagine, i testi.
+- `:app`: `FacesGraph` (`settled`, `canMount`, `analyzeNow`, `COMPUTE_NOW`), `FacesWiring` (ritmi, `mayFetch`, `workRequest`, il conto dall'archivio dal recinto), `FacesFacades` (`known`), `FacesScreenPorts` (la voce, `analyze`), `AppFacesAnalyzeNow`, `FacesPorts` (`mayFetch`), `FacesDiagnostics`, `FacesWork` (`request`, `afterActivation`, `afterNewsIfOn`), `NasWork`, `AiWork`, `GalleryWork` e `AlbumWork` (l'attesa).
+- Prove esistenti cambiate perche' il comportamento e' cambiato: `EstimateAndKeepersTest` (37 minuti per 12.000 foto ai ritmi di partenza), `FacesMeasuresTest` (8,8), `FacesWireTest.laRegolaDelNomeELaStessa` (`forNewName` con i nomi di soli giunti), `PeopleCorrDTest` (un commento e un'asserzione: il formato ora rifiuta il nome invisibile), `PeopleEntryTest` (una frase in piu').
+- Nessun file di `core-map`, `core-database/.../MapPointsQueries.kt`, `feature-map`, `core-search`, `FacesPeoplePorts`, `feature-viewer`.
+
+### Punti aperti
+1. **La stima sul Tab S9 non e' misurata** (L390): parte dalle 8,8 foto al secondo dell'S25; la misura vera (`FacesRateMeter`) non si salva su disco.
+2. **I byte dei dati mobili sono un tetto** (L391).
+3. **Lo scheletro «non ancora» non ricorda l'ultimo stato** (L392).
+4. **Il conto di «Analizza ora» e' una lettura del catalogo a ogni apertura di Impostazioni → Persone** (L393): da misurare con 100.000 media sul telefono; se pesasse, la risposta e' una cache per processo con `seq` del catalogo.
+5. **Un nome invisibile gia' scritto da un altro dispositivo si salta in silenzio** (L394).
+6. **F94 e F104 vanno rifatte sul telefono** con il tasto: la stima contro il tempo vero (la tabella del 27/10 diceva 8,8 foto al secondo senza HQ), il primo calcolo che aspetta la notte, «Analizza ora» che parte di giorno.
+7. Niente e' stato provato su un dispositivo.
+
+### Da provare sul telefono (S25 e Tab S9, account e share di prova `test`, `test2`, `test-comune`; nessuna fatta)
+- **F94 (CA-2, CA-3)**: con Persone spenta e il telefono a batteria, di giorno: «Attiva». La pagina dice «Persone e' attiva», «Analizzare le tue N foto richiede circa M minuti» e «Analizza ora». **Non parte niente da solo** (Impostazioni → Persone: «In attesa della notte, della carica e del Wi-Fi di casa»; in Diagnostica, «Ultimi esiti ed errori»: il calcolo dei volti aspetta). Toccare «Analizza ora» → «Annulla» (non parte niente); di nuovo → «Analizza ora» nella conferma: l'analisi parte subito (la riga dice «Analizzate X foto su N», la percentuale in Raccolte cresce senza tornare a zero a ogni unita'). Poi collegare il caricabatterie la sera e controllare che il calcolo parta da solo.
+- **CA-1**: con una libreria da qualche migliaio di foto, guardare la percentuale della sezione «Persone» nelle Raccolte e «Analizzate X foto su N» in Impostazioni durante il primo calcolo: sale di continuo, non fa il 100% a ogni 200 foto, non e' mai al 100% durante il raggruppamento.
+- **Stima contro tempo vero**: cronometrare un «Analizza ora» su 1.000 foto e confrontare con «circa M minuti» (il punto aperto 1: sul Tab S9 e' probabile che sia piu' lenta della stima).
+- **«Analizza ora» sui dati mobili**: con il Wi-Fi spento e i dati mobili accesi, la conferma dice «Stai per usare i dati mobili. Servono circa X GB. Vuoi continuare?»; «Annulla» non parte, «Analizza ora» parte (le regole non chiedono una seconda conferma).
+- **L350**: avvio a freddo (`adb shell am force-stop`, poi aprire subito Impostazioni → Persone, o la voce «Persone» delle Impostazioni): per qualche secondo uno scheletro fermo (non «Persone e' spenta»), poi lo stato vero; con Persone accesa, mai «Persone e' spenta» ne' «non disponibile». La pagina di attivazione aperta subito resta allo scheletro e poi spiega.
+- **L322**: da un secondo dispositivo «Disattiva e cancella»; sul primo, con Persone spenta, Impostazioni → Persone dice «Persone e' stata disattivata da un altro tuo dispositivo» sopra «Persone e' spenta»; dopo una nuova attivazione la riga non c'e' piu'.
+- **CA-4**: con Persone accesa, aggiungere foto sul NAS dal PC: dopo il giro dell'indice parte il calcolo delle foto nuove (in Diagnostica, «Ultimi esiti ed errori») senza aspettare le 6 ore, sempre con le regole (di giorno, a batteria: «in attesa»).
+- **CA-5**: «Disattiva e cancella», poi riattivare senza chiudere l'app: `adb shell dumpsys jobscheduler | findstr faces` mostra di nuovo `faces-compute` (periodico) e `faces-nightly`.
+- **CA-6**: spegnere il NAS (o uscire dal Wi-Fi di casa) durante il calcolo: Impostazioni → Persone dice «In attesa del NAS», non «In attesa delle anteprime»; lo stato torna normale a NAS acceso.
+- **CA-7**: non provabile a mano senza un telefono con il Keystore che non risponde; in debug lo si vede solo con i fake.
+- **L372**: `adb shell am force-stop dev.pampa.mycloudgallery.debug`, poi `adb shell cmd jobscheduler run -f dev.pampa.mycloudgallery.debug <id>` della lettura del telefono (`gallery-phone-sync`) e della condivisione (`albums-share`): in un processo appena nato non finiscono in decimi di secondo e la lettura del telefono si riaccoda (`dumpsys jobscheduler`).
+- **Chiaro, scuro e testo a 1,3x** (TalkBack): il blocco di «Analizza ora», la conferma (anche sui dati mobili), lo scheletro e la riga «disattivata da un altro tuo dispositivo» non tagliano il testo, nessun controllo sotto 48 dp; screenshot in `docs/screenshots/8-corr-c/`.
+
+### Verifica
+
+- **Rosso senza la correzione, verde con** (controllo di mutazione fatto sul ramo gia' committato: diciannove correzioni tolte insieme con uno script (`build/mutate.py`: una sostituzione esatta per file, controllata), si lanciano le prove nuove, poi i file tornano com'erano con `git checkout` e `git status` e' pulito): **32 prove rosse** e nessuna correzione senza una prova rossa. Per voce: CA-1 (il conto della libreria spento) quattro prove di `CorrezioniCCalcoloTest.ca1_*`; CA-7 (la chiave letta come spazio) `ca7_unArchivioCheNonSiApreDiceIlSuoMotivo`; i ritmi (25 invece di 8,8, in `DeviceMeasures` e in `FacesRates.DEFAULT`) `ca2_iRitmiDiPartenza...`, `FacesMeasuresTest` (due), `EstimateAndKeepersTest.iRitmiNascono_dalLavoroVero`, `FacesCorrectionsCTest.ca2_*` (due); L362 (`isName` senza il carattere visibile e senza il salto della voce) quattro prove di `FacesNameVisibleTest`; CA-3 (il primo giro che torna `computeNow`) `FacesWorkSchedulingTest.ca3_*`; CA-5 (senza `ensure`) `ca5_*`; CA-4 (`afterNewsIfOn` senza il controllo di `On`, e senza la chiamata in `NasWork`) due prove di `ca4_*`; CA-6 (`mayFetch` sempre vero) `FacesCorrectionsCTest.ca6_conLeRegole...`; L350 (`known` sempre vero, la pagina senza lo scheletro, la pagina di attivazione che non aspetta, la voce senza `NOT_YET`) tre prove di `FacesCorrectionsCTest.l350_*`, due di `CorrezioniCPersoneTest.l350_*`, due di `PeopleEntryTest`; CA-2 (la conferma non obbligatoria) due prove del controllore; L322 (la riga sempre spenta) `l322_ilControlloreDiceLaRiga...`; L372 (senza `awaitReady`, nella condivisione e nella lettura del telefono) due prove di `Correzioni8CLavoriAppTest`. Il ramo che riaccoda la catena a famiglia non pronta (`l372_unDispositivoNonPronto...`) non e' stato mutato: senza `requeue()` la sua asserzione (un lavoro in coda dopo il giro) cade per costruzione.
+- **Le garanzie che restano verdi**: il banco delle interruzioni e di «Disattiva e cancella» di P12 (`core-faces` intero), i test di fiducia e ostili (`core-trust` intero), `HiddenSurfacesRegistryTest` e `HiddenSurfacesPropertyTest`, i test d'architettura delle Fasi 6-9 (`Phase8ArchitectureTest`: consenso e conferma costruiti solo dalla pagina e dal foglio), `NoFixedWaitsTest` (le attese nuove passano da `Attese.TETTO`), `ActivationStyleTest` e `NoHandWrittenStyleTest` (nessun colore, raggio o `dp` scritto a mano), le recinzioni D12, D30, D34 e F4-D31 nel bytecode della release.
+- **Avvio istantaneo**: nessun lavoro nuovo sul percorso dell'avvio. `FacesSwitchFacade.known` e `FacesGraph.settled` sono flussi gia' costruiti; `AppFacesAnalyzeNow` e' costruita con le porte (tre lambda) e non conta niente finche' l'utente non apre Impostazioni → Persone o la pagina di attivazione; il lavoro periodico si programma in `FacesWorkScheduling.ensure`, che gia' parte dopo il primo disegno. Il benchmark dell'avvio non e' stato rieseguito (nessun telefono).
+- **`tools\check.ps1 -NoDaemon` verde** (30/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, posto `f8cc` preso prima e rilasciato dopo ogni comando Gradle e attorno al check): «OK: tutto a posto». Prima di arrivarci: il primo giro e' caduto per `CutoutClipboardTest.laRegistrazioneAlCicloDiVitaDelleSchermateFaLoStessoDaSola_VR3` («uncaught exceptions before the test started», un'eccezione di un test vicino sotto carico: la classe sola passa, non e' di questo pacchetto); il secondo per un errore di lint nel mio `CorrezioniCPersoneTest` (`StateFlow.value` letto dentro la composizione), corretto in un commit a parte; `galleryLint` poi verde e il terzo giro verde. Test per modulo `app` 1.154, `core-faces` 699, `core-trust` 314, `core-rules` 355, `feature-people` 753, `feature-settings` 592, `feature-diagnostics` 331 (e gli altri moduli, nessuno a zero, nessuno fallito); i passi dell'APK di release (recinzioni D12, D30, D34 e D33, nessun componente esposto, nessun resto di debug, nessun `FieldProbe*`) verdi. Il terzo giro Gradle ha riusato i risultati dei moduli non cambiati dal secondo (157 secondi); il secondo li aveva eseguiti tutti (36 minuti, il PC era carico).
+- Screenshot (telefono 412 dp, chiaro e scuro, testo a 1,3x) in `docs/screenshots/8-corr-c/` (`PeopleCorrCScreenshotTest`, `recordRoborazziDebug`): Impostazioni → Persone con «Analizza ora» e la stima (prima analisi e libreria a meta'), il conteggio, la conferma (anche sui dati mobili), la richiesta partita, l'avanzamento della libreria, l'attesa della chiave e del NAS, lo scheletro «non ancora» e «disattivata da un altro tuo dispositivo»; la pagina di attivazione dopo «Attiva» con la stima, la conferma e senza stima. Ogni schermata controlla i bersagli da 48 dp e i testi.
+
+## Fase 9 P7: scelta delle foto (30/10)
+
+Il pacchetto P7 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P7; §2.2, §2.11, D5-D8, D31, §4.3, §5.2; risposta **Q6 (a)** del §11). Branch
+`fase9/p7`. Consegna la scelta vera delle foto di un ricordo (`core-memories/.../pick/`), la misura dei pixel come funzione pura, il filtro
+finale dei Nascosti attorno alla scelta, il raccoglitore dei segnali dalle porte, le suite di contratto di `MemoryVectors` e `MemoryPixels` con i
+loro fake fedeli. **Nessun contratto di P0 e' cambiato** (`PickSignals`, `PickSpec`, `PickWeights`, `PhotoScore`, `PickResult`, `DropReason`,
+le porte): P7 implementa sopra. Nessuna dipendenza, nessun permesso, nessun componente nuovo; niente fuori da `core-memories`.
+
+**Il filtro di Q6 non c'e'** (scostamento dal brief, deciso qui). Il brief chiede "il filtro di Q6 dietro un'opzione, che toglie e basta e non
+lascia tracce". La risposta dell'utente a Q6 e' **(a), solo i pulsanti, nessun filtro automatico** (§11 del progetto; D8 punto 6 e §2.2 sono
+scritti per la proposta (b), poi scartata). I contratti di P0 la applicano gia': `MemoryVectors` non ha `sadScores`, `PickSignals` non ha frasi
+prototipo, e la regola 11 di `Phase9ArchitectureTest` fa fallire chi nomina un filtro dei ricordi tristi in `core-memories` (e il brief chiede
+di tenere verdi i test d'architettura). Quindi niente filtro e niente opzione. Cio' che quella frase proteggeva resta vero e **e' provato**
+(`PickNoTraceTest`): la scelta non decide dal contenuto, non ha stato fra una chiamata e l'altra (nessun campo di istanza), non scrive sugli
+ingressi, non scrive log (ne' su `System.out`/`err` ne' su `java.util.logging`, e nessun `println`/`Log`/`Logger` in `pick/`), i suoi
+`toString()` non dicono id ne' date, e il risultato porta soli conteggi per motivo. Se l'utente cambiasse idea su Q6, andrebbero riaperti: il
+contratto (`MemoryVectors.sadScores` o un segnale equivalente in `PickSignals`, un `DropReason` per il filtro), la regola 11, C153 e L261.
+
+**Cosa c'e' in `pick/`**
+- `MemoryPhotoPicker` (`PhotoPicker`): gli stessi passi del riferimento `ReferencePicker`, nello stesso ordine, senza i costi quadratici:
+  1. esclusioni di D5 e "Mai" per periodi e persone (`MemoryExclusions`, una sola definizione), contate per motivo; un id ripetuto vale una volta;
+  2. punteggio (`PhotoScore`, pesi in `PickWeights`) e ordine: punteggio decrescente, a parita' lo scatto piu' vecchio, poi l'id minore;
+  3. doppioni contro le sole foto **tenute**: coseno >= 0,92 se ci sono i due vettori, altrimenti la firma visiva se risponde (`true`/`false`),
+     altrimenti la finestra di 3 minuti (inclusi i 180.000 ms esatti);
+  4. varieta': con `perDayMin` >= 1 prima la migliore di ogni giorno (dal piu' vecchio), poi la massima rilevanza marginale (punteggio -
+     0,5 x somiglianza massima con le gia' scelte, solo dove c'e' il vettore) fino a `maxSize`, con i tetti per giorno, per ora e di WhatsApp
+     (`maxSize / 4`); la somiglianza massima si aggiorna a ogni scelta invece di ricalcolarsi, le norme dei vettori si calcolano una volta;
+  5. WhatsApp al piu' un quarto degli elementi (si tolgono le peggiori finche' il conto torna); sotto `minSize` il ricordo non nasce;
+  6. copertina: il miglior elemento che non e' un video, non e' di WhatsApp, non ha persone "Mostra meno" o "Mai", orizzontale o quadrato
+     (>= 1000 millesimi) se ce n'e'; senza copertina possibile il ricordo non nasce (`NO_COVER`);
+  7. elementi in ordine di scatto (a parita' l'id).
+- `VisiblePhotoPicker`: la scelta con il **filtro finale dei Nascosti** (D31, E-H8). Chiede `HiddenMask` due volte: prima della scelta (i
+  nascosti non partecipano a niente, nemmeno ai doppioni: un gemello nascosto e migliore non fa uscire la foto visibile) e dopo, sugli
+  scelti. Se qualcuno e' diventato nascosto nel frattempo, esce e si sceglie di nuovo (al piu' `MAX_ROUNDS` = 3 volte, poi il ricordo non
+  nasce). **Fallisce chiuso**: un guasto della maschera prima della scelta toglie tutti i candidati, dopo la scelta il ricordo non nasce; una
+  cancellazione passa. I nascosti non hanno un motivo in `DropReason` e non si contano (vedi "Modifiche richieste").
+- `PixelMeasure`: la misura dei pixel come funzione pura su un array di luminanze (la decodifica e il ridimensionamento a 256 px li lega P13).
+- `PickSignalsLoader`: raccoglie i segnali dalle porte una volta per ricordo (vettori, firma visiva, album, persone, pixel). Chiede solo cio'
+  che serve (mai gli esclusi di D5), tiene solo gli id chiesti, scarta i vettori vuoti o non finiti, chiede le misure dei pixel solo per i
+  **200 finalisti** (D6: il punteggio di prima delle misure ordina) entro il budget. Una porta opzionale che fallisce toglie solo il suo
+  segnale (E-MEM15, E-MEM16); la porta delle **persone fallisce chiusa**: con scelte "Mostra meno" o "Mai" un guasto lancia, perche' senza
+  sapere chi c'e' nelle foto un "Mai" non si potrebbe applicare. La cancellazione passa sempre. `InMemoryMemories` (P0) continua a chiedere i
+  pixel per tutti i candidati: P6 e P13 passano dal raccoglitore per avere il tetto di 200.
+- Nei fake (`testing/`): `FakeMemoryVectors` e `FakeMemoryPixels` ora sono fedeli alle loro suite (risposte come copie; budget per misura nel
+  fake dei pixel; contatori delle richieste), e `SyntheticVectors` semina vettori con un coseno voluto (per provare la soglia da una parte e
+  dall'altra).
+
+**Pesi e soglie** (tabella `PickWeights` di P0, **non cambiata**: la calibrazione e' di P11; `PickScoreTest` fissa i valori di D6)
+| Segnale | Peso | Segnale | Peso |
+|---|---|---|---|
+| preferito | +3,0 | WhatsApp | -1,5 |
+| modificato | +1,0 | luce (luminanza < 0,12 o > 0,92) | -1,0 |
+| in un album manuale | +1,0 | nitidezza (varianza del laplaciano < 100) | -1,5 |
+| una persona con nome visibile (una volta sola) | +1,0 | video da 3 a 60 s (estremi inclusi) | +0,5 |
+| panorama | +0,5 | video oltre 5 minuti (> 300.000 ms) | -0,5 |
+| foto in movimento | +0,3 | | |
+
+Doppioni: coseno >= 0,92; senza vettori ne' firma, 180.000 ms. Varieta': lambda 0,5; tetti da `MemoryRules.spec` (per giorno e per ora come in D7);
+WhatsApp al piu' `maxSize / 4` (arrotondato in giu' per il tetto in corsa, `count x 4 <= elementi` alla fine). Le luminanze sotto/sopra soglia
+usano la misura dei pixel se c'e', altrimenti il `ThumbHash` (`ThumbLight`); i limiti sono stretti (0,12 e 0,92 non penalizzano).
+
+**Scelte di P7 sulla misura dei pixel** (`PixelMeasure`)
+- **Luce**: luminanza media 0..1 delle luminanze 0..255. Il cammino ARGB (`probeArgb`, per `Bitmap.getPixels`) usa Rec. 709 in interi,
+  `(2126 R + 7152 G + 722 B + 5000) / 10000`: bianco 255, nero 0, rosso 54, verde 182, blu 18; l'alfa non conta.
+- **Nitidezza**: varianza del laplaciano a quattro vicini (`[0 1 0; 1 -4 1; 0 1 0]`) sulle luminanze 0..255 dei soli pixel interni, con somme
+  intere (nessun errore di arrotondamento): una scacchiera da un pixel e' 1.040.400 (il massimo, 1020 al quadrato), un'immagine uniforme e una
+  rampa di luce 0. E' la misura comune della messa a fuoco; dipende dalla risoluzione: la soglia di 100 (`SHARPNESS_MIN`, provvisoria) e' sul
+  lato lungo di **256 px** (`TARGET_SIDE`).
+- **Non misurabile = `null`**, mai un'eccezione ne' un numero inventato: lato minore di 3 px (il laplaciano ha bisogno di un pixel interno),
+  lato oltre **512 px** (`MAX_SIDE`: non e' piu' confrontabile con la soglia e il costo cresce), array di lunghezza sbagliata.
+- Misure di prova (immagini sintetiche, 128 x 96): rumore uniforme 108.447; lo stesso con tre giri di filtro a scatola 3 x 3, 68,73 (gia' sotto
+  la soglia di 100: una foto cosi' sfocata e' "mossa"); dodici giri, 3,08. Una miniatura da 256 x 192 si misura in meno di 20 ms anche a
+  freddo (la prova mette il tetto a 20 ms per chiamata; in pratica sono pochi millisecondi). La soglia di 100 non e' stata calibrata su foto
+  vere: lo fa P11 con il banco e F125 sui dati veri (se toglie piu' del 3% dei candidati di un ricordo medio la soglia sale).
+
+**Misure di prestazione** (JVM, test `PickPerformanceTest`: 25 corse di riscaldamento, mediana di 21; vettori da 768 numeri su tutti i
+candidati, pochi concetti = molti doppioni, misure dei pixel, album e persone; limite del "Fatto quando": < 50 ms)
+| Caso | Mediana | Massimo |
+|---|---|---|
+| "anni fa", 200 candidati | 10,0 ms | 10,9 ms |
+| viaggio, 200 candidati | 11,4 ms | 12,1 ms |
+| persona, 200 candidati | 10,5 ms | 11,0 ms |
+| mese, 200 candidati | 9,6 ms | 10,0 ms |
+| viaggio, 200 candidati tutti di concetti diversi (nessun doppione: il confronto va fino in fondo) | 13,9 ms | 18,4 ms |
+| viaggio, 200 candidati senza vettori | 0,16 ms | 0,17 ms |
+| mese pesante, 1.500 candidati, vettori da 256 (fuori dal "Fatto quando": tetto a 1 s) | 155,7 ms | 188,4 ms |
+Il tempo e' dopo il riscaldamento: a freddo (prima chiamata del processo) puo' essere piu' alto, ma la generazione e' un lavoro notturno con 60 s
+di budget (D4) e un passo leggero con 5 s. Misurato con `System.nanoTime` (monotono). Numeri su questo PC, non sull'S25.
+
+**Parita' con il riferimento** (§5.2): su 700 ingressi casuali (tipi, sorgenti, flag, giorni, scatti ravvicinati, vettori con rumore e
+concetti ripetuti, persone, "Mai", album, misure dei pixel, firma visiva a tre valori, meta' senza vettori) `MemoryPhotoPicker` e
+`ReferencePicker` danno **gli stessi elementi, la stessa copertina e gli stessi conteggi** (uguaglianza esatta, non solo entro 1e-4: i conti
+sono gli stessi nello stesso ordine). Lo stesso ingresso in un altro ordine da' la stessa scelta (80 ingressi x 4 mescolamenti).
+
+**Test** (`core-memories`: da 67 a **206 prove in 26 classi**, debug e release; nuove 139): `MemoryPhotoPickerContractTest` (la suite `PickerContract`
+di P0 sulla scelta vera, 12), `PickParityTest` (3), `PickExclusionsTest` (16), `PickScoreTest` (14), `PickDuplicatesTest` (12), `PickVarietyTest`
+(10), `PickCoverTest` (8), `PickHiddenTest` (11), `PickNoTraceTest` (8), `PickPerformanceTest` (4), `PixelMeasureTest` (14),
+`PickSignalsLoaderTest` (11); le suite di contratto delle porte `MemoryVectorsContract` e `MemoryPixelsContract` (gireranno anche sugli
+adattatori veri di P13) sui fake (14) e `NoMemoryVectorsTest`/`NoMemoryPixelsTest` (2). **Prova che falliscono**: tolti i due controlli dei
+Nascosti da `VisiblePhotoPicker` e i divieti della copertina da `MemoryPhotoPicker` (una mutazione sola per file, poi ripristinati) le prove
+`PickHiddenTest`, `PickCoverTest` e il contratto diventano rosse (18 su 31); ripristinati, verdi.
+
+**Edge case**
+| ID | Come e' coperto |
+|---|---|
+| E-MEM1 | sotto `minSize` il ricordo non nasce, `TOO_FEW` contato (`PickVarietyTest.sottoIlMinimoNonNasce`, contratto) |
+| E-MEM2 | un giorno di soli screenshot: nessun ricordo, `SCREENSHOT` e `TOO_FEW` contati (`PickExclusionsTest`); documenti e WhatsApp idem (uno per uno) |
+| E-MEM5, E-NT7 | un media che diventa nascosto a scelta finita esce e non e' copertina (`PickHiddenTest.nascostoDellUltimoMomento`); la revoca della notifica e' di P10 |
+| E-MEM11 | "Mostra meno" resta nel ricordo ma non e' mai copertina; "Mai" esce (`PickExclusionsTest`, `PickCoverTest`) |
+| E-MEM12 | un periodo "Mai" esclude i suoi giorni per tutti i tipi (`PickExclusionsTest.ilMaiVaPerTuttiITipi`); il viaggio che lo tocca e' di P6 |
+| E-MEM15 | senza misure dei pixel nessuna penalita' di nitidezza e la luce dal `ThumbHash`; porta che fallisce = nessun segnale (`PickSignalsLoaderTest`) |
+| E-MEM16 | senza vettori: firma visiva (vale `true` e `false`), "non so" = finestra di 3 minuti, estremi inclusi (`PickDuplicatesTest`) |
+| E-MEM18 | data stimata o giorno che non e' una data: fuori nei ricordi legati a una data, dentro per una persona (`PickExclusionsTest`) |
+| E-H8 | un nascosto perfetto (preferito, modificato, in album, nitido) non esce mai, ne' elemento ne' copertina: proprieta' su 400 ingressi con nascosti sparsi (`PickHiddenTest.unNascostoPerfettoNonEsceMai`); maschera che fallisce = nessun ricordo |
+| E-H10 | una persona nascosta non arriva alla scelta (la porta `MemoryPeople` non la da'); "Mai" per persona verificato per foto |
+| D33 | risultato con soli conteggi, nessun log, `toString()` senza id ne' date (`PickNoTraceTest`) |
+
+**`tools/check.ps1 -NoDaemon`**: **verde** (30/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, dentro il posto
+Gradle `ocp7`, preso prima e rilasciato dopo): «OK: tutto a posto»; il passo Gradle (`assembleDebug assembleRelease galleryTest galleryLint`) in 700
+secondi, 16.351 prove in 43 moduli (`core-memories` 206, `core-common` 157, `core-albums` 848), nessuna fallita; i test d'architettura delle Fasi 6-9 verdi
+(anche da soli prima del check); solo `-Bench` saltato (senza il flag). **Il primo giro era rosso** per `SmartAlbumsLiveTest.unoSmartNuovoDiceCheCerca...`
+di `core-albums` (attesa di 120 s scaduta alla riga 98, `status.until { it is Recomputing }`): non e' di P7 (nessun file fuori da `core-memories` e
+`docs/` e' cambiato, e `core-albums` non vede `core-memories`); rilanciata la sola classe ha fallito una volta e passato la seconda (4 prove, 4,6 s),
+poi il check intero e' passato. E' la stessa prova che P0 aveva trovato lenta sotto carico: sembra una corsa fra l'osservatore e lo stato
+transitorio `Recomputing`, non un problema di carico (punto aperto per chi ha `core-albums`).
+
+**Modifiche richieste ai contratti degli altri** (nessuna fatta qui)
+- **P6**: per avere il tetto di 200 misure dei pixel (D6) il generatore deve chiedere i segnali con `PickSignalsLoader` (o equivalente) invece di
+  chiedere le misure per tutti i candidati come fa `InMemoryMemories`; e per il filtro finale dei Nascosti deve scegliere con
+  `VisiblePhotoPicker(picker, hiddenMask)` (`suspend`, la scelta nuda non e' `suspend`).
+- **P11**: la calibrazione di `PickWeights` e della soglia di nitidezza (100, scala 0..255, 256 px): la misura e' pronta; `SyntheticVectors` semina
+  coppie con il coseno voluto per provare 0,92.
+- **P13**: legare `MemoryPixels` a una miniatura locale **gia' a 256 px sul lato lungo** (non oltre 512) e passarla a `PixelMeasure.probe` (byte
+  senza segno, per righe) o `probeArgb`; legare `MemoryVectors`, `MemoryLookAlikes`, `MemoryAlbumSignals`, `MemoryPeople` come da §1.4.
+- **`DropReason` (P0)**: aggiungere `HIDDEN` se la Diagnostica deve dire quanti nascosti ha tolto la scelta; oggi no (il numero di nascosti di una
+  Libreria e' gia' un'informazione su di loro, L400).
+- **Q6**: se si volesse il filtro dei ricordi tristi, serve una decisione dell'utente e le modifiche del paragrafo sopra.
+
+**Punti aperti**
+1. La soglia di nitidezza (100) e i pesi sono provvisori: nessuna foto vera e' stata misurata (P11, F125).
+2. Le misure di prestazione sono su questo PC; sull'S25 vanno rifatte (P12).
+3. Nessuna prova su dispositivo e nessun Gradle fuori dal posto; nessun sotto-agente.
+4. `InMemoryMemories` (P0) non usa ancora `MemoryPhotoPicker` ne' il raccoglitore (default `ReferencePicker`): lo cambiano P6 e P13.

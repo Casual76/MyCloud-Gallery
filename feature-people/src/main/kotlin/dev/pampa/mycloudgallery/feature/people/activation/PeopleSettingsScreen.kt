@@ -37,10 +37,14 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.instant.InstantBlock
+import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShape
+import dev.pampa.mycloudgallery.core.designsystem.instant.instantSkeleton
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.faces.contract.FacesStatus
 import dev.pampa.mycloudgallery.core.faces.contract.FacesWait
 import dev.pampa.mycloudgallery.core.faces.contract.StepState
+import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.feature.people.R
 import dev.pampa.mycloudgallery.feature.people.contract.EraseSheetState
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleSettingsState
@@ -60,6 +64,10 @@ class PeopleSettingsHandlers(
   val onOpenLicenses: () -> Unit,
   val onOpenDiagnostics: (() -> Unit)? = null,
   val onErase: (() -> Unit)? = null,
+  /** CA-2: «Analizza ora» (chiede la conferma), «Annulla» e la conferma che fa partire il calcolo adesso. */
+  val onAnalyzeAsk: () -> Unit = {},
+  val onAnalyzeCancel: () -> Unit = {},
+  val onAnalyzeConfirm: () -> Unit = {},
 )
 
 @Composable
@@ -72,16 +80,45 @@ fun PeopleSettingsScreen(
   // La conferma dell'esclusione e' dentro la pagina (nessun foglio): cancella dati di questo dispositivo, e sotto la recinzione sono i soli che ci sono.
   var confirmingExclusion by rememberSaveable { mutableStateOf(false) }
   FluidScreen(title = stringResource(R.string.faces_settings_title), modifier = modifier, onBack = onBack) {
-    item(key = "state") { StateMessage(state.shown) }
-    stateAction(state, handlers)
-    if (state.shown.showsWork()) workSection(state, handlers)
-    deviceSection(state, handlers, confirmingExclusion, onAsk = { confirmingExclusion = true }, onCancel = { confirmingExclusion = false }) {
-      confirmingExclusion = false
+    if (!state.known) {
+      // L350: finche' le persone non sono montate lo stato non si sa: uno scheletro, mai «Persone e' spenta». I modelli sono fatti dell'app e non dipendono dallo stato.
+      loadingBlock()
+      modelsSection(state, handlers)
+    } else {
+      // L322 (CE-3): da spenta perche' l'ha spenta un altro dispositivo, la riga che lo dice sta sopra lo stato (come nelle Raccolte).
+      if (state.offElsewhere && state.shown == PeopleSwitchShown.OFF) item(key = "off-elsewhere") { OffElsewhereMessage() }
+      item(key = "state") { StateMessage(state.shown) }
+      stateAction(state, handlers)
+      if (state.shown.showsWork()) workSection(state, handlers)
+      deviceSection(state, handlers, confirmingExclusion, onAsk = { confirmingExclusion = true }, onCancel = { confirmingExclusion = false }) {
+        confirmingExclusion = false
+      }
+      if (state.hiddenPeople > 0 && state.shown.showsWork() && handlers.onOpenHidden != null) hiddenSection(state.hiddenPeople, handlers.onOpenHidden)
+      modelsSection(state, handlers)
+      if ((state.canErase && handlers.onErase != null) || state.erase != null) eraseSection(state, handlers.onErase.takeIf { state.canErase })
     }
-    if (state.hiddenPeople > 0 && state.shown.showsWork() && handlers.onOpenHidden != null) hiddenSection(state.hiddenPeople, handlers.onOpenHidden)
-    modelsSection(state, handlers)
-    if ((state.canErase && handlers.onErase != null) || state.erase != null) eraseSection(state, handlers.onErase.takeIf { state.canErase })
   }
+}
+
+/**
+ * L350: lo scheletro di una pagina il cui stato non si sa ancora (il principio del primo disegno istantaneo: uno scheletro fermo, mai una rotella; TalkBack sente «Sto
+ * caricando»). Nessun testo di stato: ogni frase di stato, a questo punto, potrebbe essere sbagliata.
+ */
+private fun LazyListScope.loadingBlock() {
+  instantSkeleton(InstantShape.of(InstantBlock.Rows(SKELETON_ROWS)), keyPrefix = "instant-people-settings")
+}
+
+private const val SKELETON_ROWS = 3
+
+/** L322: «Persone e' stata disattivata da un altro tuo dispositivo», con cio' che e' successo ai dati di qui e che si puo' riattivare. */
+@Composable
+private fun OffElsewhereMessage() {
+  FluidInlineMessage(
+    message = stringResource(R.string.faces_settings_off_elsewhere_message),
+    title = stringResource(R.string.faces_settings_off_elsewhere_title),
+    tone = FluidTone.Info,
+    modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
+  )
 }
 
 private fun PeopleSwitchShown.showsWork(): Boolean = this == PeopleSwitchShown.ON || this == PeopleSwitchShown.LOCAL_ONLY
@@ -167,13 +204,22 @@ private fun LazyListScope.workSection(state: PeopleSettingsState, handlers: Peop
       }
     }
   }
+  // CA-2: la stima e «Analizza ora», dove questo dispositivo analizza e il calcolo non e' gia' in corso.
+  if (state.computesHere && state.progress !is FacesStatus.Running) {
+    analyzeNowBlock(state.analyze, onAsk = handlers.onAnalyzeAsk, onCancel = handlers.onAnalyzeCancel, onConfirm = handlers.onAnalyzeConfirm)
+  }
 }
 
 /** L'avanzamento del calcolo in una riga: numeri e motivi, mai nomi (D37). Null = niente da dire. */
 @Composable
 private fun progressLine(progress: FacesStatus): Pair<String, FluidTone>? = when (progress) {
   FacesStatus.Off -> null
-  is FacesStatus.Running -> stringResource(R.string.faces_settings_progress_running, progress.done, progress.total) to FluidTone.Info
+  // CA-1: i fatti e il totale sono della libreria (non dell'unita' da 200 media); senza totale ("non so quanti") niente numeri.
+  is FacesStatus.Running -> if (progress.total > 0) {
+    stringResource(R.string.faces_settings_progress_running, GalleryNumbers.format(progress.done), GalleryNumbers.format(progress.total)) to FluidTone.Info
+  } else {
+    stringResource(R.string.faces_settings_progress_running_unknown) to FluidTone.Info
+  }
   is FacesStatus.Idle -> stringResource(R.string.faces_settings_progress_idle) to FluidTone.Success
   is FacesStatus.Problem -> stringResource(R.string.faces_settings_progress_problem) to FluidTone.Warning
   is FacesStatus.Waiting -> stringResource(waitText(progress.reason)) to FluidTone.Neutral
@@ -191,6 +237,7 @@ internal fun waitText(reason: FacesWait): Int = when (reason) {
   FacesWait.NEEDS_UPDATE -> R.string.faces_settings_wait_update
   FacesWait.NEXT_STAGE -> R.string.faces_settings_wait_next_stage
   FacesWait.STORAGE -> R.string.faces_settings_wait_storage
+  FacesWait.KEYSTORE -> R.string.faces_settings_wait_keystore
 }
 
 /** "Non su questo dispositivo" (con una conferma nella pagina: cancella i dati di qui) oppure "Attiva qui". */

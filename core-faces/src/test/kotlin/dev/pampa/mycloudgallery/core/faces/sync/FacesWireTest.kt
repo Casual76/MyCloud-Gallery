@@ -96,17 +96,25 @@ class FacesWireTest {
     assertThat(FacesWire.doc(PeopleRecord(PeopleEdit.Born(a, a), 1_800_000_000_000L, author), 1_800_000_000_000L)).isNull()
   }
 
-  /** D24: la regola del nome e' la stessa in core-faces (chi scrive) e in core-trust (chi legge). */
+  /**
+   * D24 e L362 (correzioni C): la regola del nome e' la stessa in core-faces (chi scrive: `forNewName`, con almeno un carattere che si veda) e in core-trust (chi
+   * legge: `PeopleForms.isName`). Un nome fatto solo di giunti e selettori di variante non si scrive e non si legge.
+   */
   @Test
   fun laRegolaDelNomeELaStessa() {
     val samples = listOf(
       "Anna", "Anna Maria", " Anna", "Anna ", "", " ", "x".repeat(64), "x".repeat(65), "An‮na", "An​na", "An\u0007na",
       "Zoë", "李小龙", "👩‍👩‍👧", "\uD83D", "Anna ", "Anna﻿", "O'Brien", "Ana-Lucía",
+      "\u200D\uFE0F\u200D", "\u200D", "\uFE0F", "\u2764", "\u2764\uFE0F", "?",
     )
     for (sample in samples) {
-      val writer = PersonNames.normalize(sample) == sample
+      val writer = PersonNames.forNewName(sample) == sample
       assertWithMessage("'${sample.map { it.code }}'").that(PeopleForms.isName(sample)).isEqualTo(writer)
     }
+    // `normalize` resta piu' larga (rilegge anche i dati locali scritti prima): l'unica differenza sono i nomi che non si vedono.
+    val zwj = "\u200D\uFE0F\u200D"
+    assertThat(PersonNames.normalize(zwj)).isEqualTo(zwj)
+    assertThat(PeopleForms.isName(zwj)).isFalse()
   }
 
   @Test

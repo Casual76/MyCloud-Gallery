@@ -56,6 +56,8 @@
   <string name="diag_faces_segment_waiting_guide">Alcuni dati dei volti non c’erano sul NAS o non si sono potuti leggere: l’app riprova con attese sempre più lunghe, fino a un giorno. Qui si vede solo quanti.</string>
   <string name="diag_faces_archive_full_title">Archivio dei volti pieno</string>
   <string name="diag_faces_archive_full_guide">L’archivio dei volti di questo dispositivo è arrivato al suo limite per i dati che vengono dagli altri dispositivi: quelli nuovi aspettano che si liberi posto (una revoca o un contenuto tolto). Le tue scelte e quello che calcola questo dispositivo non sono toccati.</string>
+  <string name="diag_faces_store_unavailable_title">I dati dei volti non si aprono adesso</string>
+  <string name="diag_faces_store_unavailable_guide">I dati dei volti di questo dispositivo non si sono potuti aprire: la chiave del telefono non risponde, i dati sono di una versione più nuova dell’app, oppure il file non si apre. Non è stato cancellato niente: l’app riprova alla prossima analisi. Se resta, riavvia il telefono o aggiorna l’app.</string>
   <string name="diag_pre_publish_failed_title">Dati personali non pubblicati</string>
   <string name="diag_pre_publish_failed_guide">Un controllo prima della pubblicazione dei dati personali non è riuscito, quindi quel giro non ha pubblicato niente. Riprova da solo al giro dopo.</string>
   <string name="diag_faces_killed_memory_title">Android ha chiuso l’app durante l’analisi dei volti</string>

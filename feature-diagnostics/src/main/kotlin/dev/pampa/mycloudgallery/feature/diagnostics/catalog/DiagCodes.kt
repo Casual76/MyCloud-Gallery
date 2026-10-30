@@ -372,6 +372,9 @@ object DiagCodes {
   @JvmField val FACES_SEGMENT_WAITING = DiagCode("FACES_SEGMENT_WAITING", setOf("E-F41"))
   @JvmField val FACES_ARCHIVE_FULL = DiagCode("FACES_ARCHIVE_FULL", setOf("E-F41"))
 
+  // Correzioni C (CA-7, C280): l'archivio dei volti di questo dispositivo non si apre adesso. Solo un numero, non il motivo.
+  @JvmField val FACES_STORE_UNAVAILABLE = DiagCode("FACES_STORE_UNAVAILABLE")
+
   // Correzioni D (R2, L190 esteso): la cronologia delle ricerche potrebbe tenere ancora un nome.
   @JvmField val FACES_HISTORY_KEPT = DiagCode("FACES_HISTORY_KEPT", setOf("E-F6"))
 

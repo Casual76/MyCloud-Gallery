@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.core.nas.session.ShareGuard
 import dev.pampa.mycloudgallery.core.nasops.contract.FacesEraseStop
 import dev.pampa.mycloudgallery.core.rules.Pace
+import dev.pampa.mycloudgallery.core.rules.RunScope
 import dev.pampa.mycloudgallery.core.rules.run.StageHalt
 import dev.pampa.mycloudgallery.core.rules.run.StageScope
 import dev.pampa.mycloudgallery.core.trust.codec.Base32
@@ -178,6 +179,13 @@ class StageFacesControl : FacesRunControl {
       current = null
     }
   }
+
+  /**
+   * CA-6: il NAS si puo' leggere adesso? Lo dicono le regole della tappa in corso: con `Run(LOCAL_BUFFER_ONLY)` (fuori casa, NAS spento, rete non fidata: E-A6) si
+   * lavora solo su cio' che e' gia' in locale e **non si prova nemmeno a scaricare** (prima ogni media ritentava lo scaricamento e il motore vedeva "nessuna
+   * anteprima": la pagina diceva «In attesa delle anteprime» invece di «In attesa del NAS»). Fuori da una tappa niente gira, quindi niente si scarica.
+   */
+  fun mayFetch(): Boolean = current?.let { it.runScope != RunScope.LOCAL_BUFFER_ONLY } ?: false
 
   override suspend fun permit(): FacesPermit {
     val scope = current ?: return FacesPermit.Stop(FacesStop.RULES)

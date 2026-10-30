@@ -50,6 +50,12 @@ enum class PeopleEntryState {
 
   /** La voce dell'account e' di un'app piu' nuova. */
   NEEDS_UPDATE,
+
+  /**
+   * L350 (correzioni C): le persone non sono ancora montate (pochi secondi dopo un avvio a freddo): lo stato non si sa. La voce non dice «spenta» a chi ha Persone
+   * accesa: una frase che vale per tutti i casi, senza pillola.
+   */
+  NOT_YET,
 }
 
 /** Cio' che la voce dice: lo stato, e basta (D37). */
@@ -103,7 +109,7 @@ internal fun peopleEntryTone(summary: PeopleEntrySummary?): FluidTone = when (su
   PeopleEntryState.ON -> FluidTone.Success
   PeopleEntryState.LOCAL_ONLY -> FluidTone.Info
   PeopleEntryState.AWAITING_NOTICE, PeopleEntryState.NEEDS_UPDATE, PeopleEntryState.ERASING -> FluidTone.Warning
-  PeopleEntryState.EXCLUDED_HERE -> FluidTone.Neutral
+  PeopleEntryState.EXCLUDED_HERE, PeopleEntryState.NOT_YET -> FluidTone.Neutral
 }
 
 /** Le frasi della voce, da funzioni pure (si provano senza comporre). */
@@ -118,6 +124,7 @@ internal object PeopleEntryTexts {
       PeopleEntryState.EXCLUDED_HERE -> R.string.settings_people_excluded
       PeopleEntryState.ERASING -> R.string.settings_people_erasing
       PeopleEntryState.NEEDS_UPDATE -> R.string.settings_people_update
+      PeopleEntryState.NOT_YET -> R.string.settings_people_not_yet
     },
   )
 }

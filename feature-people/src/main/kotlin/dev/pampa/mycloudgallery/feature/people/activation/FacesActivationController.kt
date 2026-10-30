@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.FacesState
 import dev.pampa.mycloudgallery.core.faces.contract.FacesSwitch
 import dev.pampa.mycloudgallery.core.faces.contract.PrivateAreaState
 import dev.pampa.mycloudgallery.feature.people.contract.ActivationProblem
+import dev.pampa.mycloudgallery.feature.people.contract.AnalyzeNowState
 import dev.pampa.mycloudgallery.feature.people.contract.ActivationRequirements
 import dev.pampa.mycloudgallery.feature.people.contract.FacesActivationState
 import kotlinx.coroutines.CancellationException
@@ -14,6 +15,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -27,20 +29,34 @@ class FacesActivationController(
   private val requirements: FacesRequirements,
   private val indexerRole: ActivationIndexerRole?,
   private val scope: CoroutineScope,
+  /** CA-2: «Analizza ora» con la stima, dopo l'attivazione (null = non si offre). */
+  analyze: FacesAnalyzeNow? = null,
 ) {
   private val mutableState = MutableStateFlow<FacesActivationState?>(null)
 
   /** Null finche' i requisiti non sono stati letti. */
   val state: StateFlow<FacesActivationState?> = mutableState.asStateFlow()
 
+  private val analyzeNow = AnalyzeNowController(analyze, scope)
+
+  /** CA-2: la stima e «Analizza ora», solo a Persone attivata (`Hidden` prima e altrove). */
+  val analyzeState: StateFlow<AnalyzeNowState> = analyzeNow.state
+
   private val lock = Mutex()
 
   /** "Fallo su questo dispositivo" si offre solo se `:app` ha legato il ruolo. */
   val canOfferIndexerRole: Boolean get() = indexerRole != null
 
-  /** Legge i requisiti e dice cosa mostrare. Non tocca una pagina gia' attivata o in corso di attivazione. */
+  /**
+   * Legge i requisiti e dice cosa mostrare. Non tocca una pagina gia' attivata o in corso di attivazione. **L350**: prima del montaggio delle persone lo stato
+   * dell'interruttore e' un null-object ("spenta") e leggere i requisiti direbbe una cosa sbagliata (anche un'attivazione risponderebbe «non disponibile»): si
+   * aspetta che lo stato sia noto, e la pagina intanto resta allo scheletro (`state` null).
+   */
   fun load() {
-    scope.launch { lock.withLock { loadLocked() } }
+    scope.launch {
+      switch.known.first { it }
+      lock.withLock { loadLocked() }
+    }
   }
 
   private suspend fun loadLocked() {
@@ -50,7 +66,7 @@ class FacesActivationController(
       FacesState.NeedsUpdate -> FacesActivationState.Failed(ActivationProblem.NEEDS_UPDATE)
       is FacesState.Erasing -> FacesActivationState.Failed(ActivationProblem.UNAVAILABLE)
       // Persone e' gia' attiva qui: niente da accendere.
-      is FacesState.On -> if (now.activeHere) FacesActivationState.Activated(switch.syncPending.value) else explain(joining = true)
+      is FacesState.On -> if (now.activeHere) activated() else explain(joining = true)
       // L'account l'ha gia' acceso altrove: la pagina serve a leggerla e a dire "Attiva" qui, senza requisiti da soddisfare (non si crea niente).
       is FacesState.AwaitingNotice -> explain(joining = true)
       FacesState.Off -> explain(joining = false)
@@ -100,8 +116,14 @@ class FacesActivationController(
     }
   }
 
+  /** Attivata: la pagina lo dice e, dopo il primo disegno, offre la stima e «Analizza ora» (CA-2). */
+  private fun activated(): FacesActivationState {
+    analyzeNow.refresh()
+    return FacesActivationState.Activated(switch.syncPending.value)
+  }
+
   private fun outcomeState(outcome: ActivateOutcome): FacesActivationState = when (outcome) {
-    is ActivateOutcome.Activated -> FacesActivationState.Activated(switch.syncPending.value)
+    is ActivateOutcome.Activated -> activated()
     ActivateOutcome.NoPrivateArea -> FacesActivationState.NoPrivateArea
     is ActivateOutcome.NoIndexer -> FacesActivationState.NeedsIndexer(outcome.canBecomeIndexer && canOfferIndexerRole)
     ActivateOutcome.StaleConsent -> FacesActivationState.Failed(ActivationProblem.STALE_CONSENT)
@@ -126,6 +148,14 @@ class FacesActivationController(
       }
     }
   }
+
+  /** «Analizza ora» dopo l'attivazione: il tocco chiede la conferma (con la stima dei dati sui dati mobili). */
+  fun askAnalyze() = analyzeNow.ask()
+
+  fun cancelAnalyze() = analyzeNow.cancel()
+
+  /** La conferma: il calcolo parte adesso e scavalca le regole di sottofondo. */
+  fun confirmAnalyze() = analyzeNow.confirm()
 
   /** Dopo un errore: si rileggono i requisiti e si ripropone la pagina. */
   fun retry() {

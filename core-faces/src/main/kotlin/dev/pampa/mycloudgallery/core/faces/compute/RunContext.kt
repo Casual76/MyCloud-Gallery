@@ -62,6 +62,8 @@ internal class RunContext(
   private val budget: Duration,
   private val pauseFor: suspend (Duration) -> Unit,
   val status: MutableStateFlow<FacesStatus>,
+  /** CA-1: l'avanzamento della libreria, uno per tappa (tutti gli ambiti lo condividono). */
+  val progress: LibraryProgress,
 ) {
   private val startNanos = parts.clock.monotonicNanos()
   private var pace: FacesPermit.Go = FacesPermit.Go(reducedPace = false)

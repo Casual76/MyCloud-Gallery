@@ -95,10 +95,10 @@ class EstimateAndKeepersTest {
     assertThat(meter.samples()).isEqualTo(10)
     assertThat(rates.secondsPerPhoto).isWithin(1e-9).of(0.045)
     assertThat(rates.hqShare).isEqualTo(0.0) // nessuna seconda passata fin qui
-    // 12.000 foto a 0,045 s: 9 minuti. Le ipotesi di partenza (25 al secondo, il 20% con l'HQ) ne avrebbero detti 14.
+    // 12.000 foto a 0,045 s: 9 minuti. I ritmi di partenza (la misura dell'S25, 8,8 foto al secondo, e il 20% con l'HQ da 344 ms: CA-2) ne dicono 37.
     val work = FacesWork(photos = 12_000, videos = 0)
     assertThat(FacesEstimate.minutes(work, rates)).isEqualTo(9)
-    assertThat(FacesEstimate.minutes(work, FacesRates.DEFAULT)).isEqualTo(14)
+    assertThat(FacesEstimate.minutes(work, FacesRates.DEFAULT)).isEqualTo(37)
   }
 
   @Test

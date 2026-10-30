@@ -29,6 +29,7 @@ import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.faces.contract.FacesActivationConsent
 import dev.pampa.mycloudgallery.feature.people.R
 import dev.pampa.mycloudgallery.feature.people.contract.ActivationProblem
+import dev.pampa.mycloudgallery.feature.people.contract.AnalyzeNowState
 import dev.pampa.mycloudgallery.feature.people.contract.FacesActivationState
 
 // LA PAGINA DI ATTIVAZIONE DI PERSONE (docs/fase8-progetto.md §2.1, D3, D4, D5, D32, D34; riga P7 del §4.4). Dice in frasi brevi cosa fa, dove restano
@@ -50,6 +51,11 @@ fun FacesActivationScreen(
   onDone: () -> Unit,
   onBack: () -> Unit,
   modifier: Modifier = Modifier,
+  /** CA-2: a Persone attivata, la stima e «Analizza ora» (di serie non si offre). */
+  analyze: AnalyzeNowState = AnalyzeNowState.Hidden,
+  onAnalyzeAsk: () -> Unit = {},
+  onAnalyzeCancel: () -> Unit = {},
+  onAnalyzeConfirm: () -> Unit = {},
 ) {
   // L'istante (orologio monotono) in cui la pagina di spiegazione e' sullo schermo: il consenso lo porta con se'. Si ripete se la pagina torna (testo cambiato).
   val shownAt = remember(state is FacesActivationState.Explain) { System.nanoTime() }
@@ -60,7 +66,7 @@ fun FacesActivationScreen(
       is FacesActivationState.NeedsIndexer -> needsIndexer(state.canBecomeIndexer, onBecomeIndexer, onDone)
       FacesActivationState.NoPrivateArea -> noPrivateArea(onDone)
       FacesActivationState.Activating -> loadingBlock(R.string.faces_activation_activating)
-      is FacesActivationState.Activated -> activated(state.syncPending, onDone)
+      is FacesActivationState.Activated -> activated(state.syncPending, analyze, onAnalyzeAsk, onAnalyzeCancel, onAnalyzeConfirm, onDone)
       is FacesActivationState.Failed -> failed(state.problem, onRetry, onDone)
     }
   }
@@ -201,7 +207,14 @@ private fun LazyListScope.noPrivateArea(onClose: () -> Unit) {
   closeButton(onClose)
 }
 
-private fun LazyListScope.activated(syncPending: Boolean, onDone: () -> Unit) {
+private fun LazyListScope.activated(
+  syncPending: Boolean,
+  analyze: AnalyzeNowState,
+  onAnalyzeAsk: () -> Unit,
+  onAnalyzeCancel: () -> Unit,
+  onAnalyzeConfirm: () -> Unit,
+  onDone: () -> Unit,
+) {
   item(key = "done") {
     FluidInlineMessage(
       message = stringResource(R.string.faces_activation_done_message),
@@ -220,6 +233,8 @@ private fun LazyListScope.activated(syncPending: Boolean, onDone: () -> Unit) {
       )
     }
   }
+  // CA-2: la stima di quanto richiede analizzare le foto e, se si vuole, «Analizza ora» (con la sua conferma): il primo calcolo, altrimenti, segue la notte.
+  analyzeNowBlock(analyze, onAsk = onAnalyzeAsk, onCancel = onAnalyzeCancel, onConfirm = onAnalyzeConfirm)
   item(key = "ok") {
     FluidButton(
       text = stringResource(R.string.faces_activation_done_action),

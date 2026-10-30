@@ -14,6 +14,8 @@ import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.model.FacesSetting
+import dev.pampa.mycloudgallery.faces.FacesGraph
 import java.io.File
 import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.awaitCancellation
@@ -143,5 +145,93 @@ class FacesWorkSchedulingTest {
     // Non tocca ne' il periodico ne' il calcolo.
     assertThat(queued(FacesWorkScheduling.NIGHTLY_WORK)).isEmpty()
     assertThat(queued(FacesWorkScheduling.COMPUTE_NEXT_WORK)).isEmpty()
+  }
+
+  // ---- Correzioni C -----------------------------------------------------------------------------------------------------------------------
+
+  /**
+   * CA-3: il primo calcolo dopo l'accensione segue le regole di sottofondo. Prima la richiesta del grafo (`COMPUTE`) accodava `computeNow`, cioe' un lavoro
+   * dell'utente (`UserInitiated`) che scavalca notte e carica: la pagina diceva «di notte, in carica» e il calcolo partiva di giorno, a batteria.
+   */
+  @Test
+  fun ca3_ilPrimoCalcoloDopoLAccensioneNonEUnLavoroDellUtente() {
+    FacesWorkScheduling.request(context, FacesGraph.FacesWork.COMPUTE)
+
+    assertThat(queued(FacesWorkScheduling.COMPUTE_NEWS_WORK)).hasSize(1)
+    // Il lavoro dell'utente («Analizza ora») ha un nome suo e qui non c'e'.
+    assertThat(queued(FacesWorkScheduling.COMPUTE_NOW_WORK)).isEmpty()
+  }
+
+  /** CA-2: «Analizza ora» e' l'unica richiesta dell'utente; un secondo tocco non ne mette un'altra. */
+  @Test
+  fun ca2_soloAnalizzaOraEUnLavoroDellUtente() {
+    FacesWorkScheduling.request(context, FacesGraph.FacesWork.COMPUTE_NOW)
+    FacesWorkScheduling.request(context, FacesGraph.FacesWork.COMPUTE_NOW)
+
+    assertThat(queued(FacesWorkScheduling.COMPUTE_NOW_WORK)).hasSize(1)
+    assertThat(queued(FacesWorkScheduling.COMPUTE_NEWS_WORK)).isEmpty()
+  }
+
+  @Test
+  fun ca3_laCancellazioneRiprendeSenzaToccareIlCalcolo() {
+    FacesWorkScheduling.request(context, FacesGraph.FacesWork.ERASE)
+
+    assertThat(queued(FacesWorkScheduling.ERASE_WORK)).hasSize(1)
+    assertThat(queued(FacesWorkScheduling.COMPUTE_NOW_WORK)).isEmpty()
+    assertThat(queued(FacesWorkScheduling.COMPUTE_NEWS_WORK)).isEmpty()
+  }
+
+  /**
+   * CA-5: dopo «Disattiva e cancella» (che toglie il lavoro periodico) e una riattivazione **nello stesso processo** il periodico torna: prima `ensure` girava solo
+   * all'avvio dell'app e il calcolo delle foto nuove non aveva il giro delle 6 ore fino al riavvio.
+   */
+  @Test
+  fun ca5_dopoLaCancellazioneELaRiattivazioneIlPeriodicoTorna() {
+    FacesWorkScheduling.ensure(context)
+    assertThat(queued(FacesWorkScheduling.COMPUTE_WORK)).hasSize(1)
+    // Come `EraseStopWork`: la cancellazione toglie il periodico.
+    workManager.cancelUniqueWork(FacesWorkScheduling.COMPUTE_WORK).result.get()
+    assertThat(queued(FacesWorkScheduling.COMPUTE_WORK)).isEmpty()
+
+    // Persone si riaccende qui: lo stesso passaggio che chiede il primo calcolo riprogramma il periodico.
+    FacesWorkScheduling.request(context, FacesGraph.FacesWork.COMPUTE)
+
+    assertThat(queued(FacesWorkScheduling.COMPUTE_WORK)).hasSize(1)
+    assertThat(queued(FacesWorkScheduling.NIGHTLY_WORK)).hasSize(1)
+    // Una seconda accensione non ne mette un secondo.
+    FacesWorkScheduling.request(context, FacesGraph.FacesWork.COMPUTE)
+    assertThat(queued(FacesWorkScheduling.COMPUTE_WORK)).hasSize(1)
+  }
+
+  /** CA-4: dopo un giro con novita' il calcolo dei volti segue, ma solo se Persone e' accesa per l'account. */
+  @Test
+  fun ca4_dopoUnGiroConNovitaIlCalcoloSeguiSoloConPersoneAccesa() {
+    val generation = dev.pampa.mycloudgallery.core.model.FaceGeneration.random()
+    for (setting in listOf(null, FacesSetting.Off(generation), FacesSetting.Unknown)) {
+      FacesWorkScheduling.afterNewsIfOn(context, setting)
+      assertThat(queued(FacesWorkScheduling.COMPUTE_NEWS_WORK)).isEmpty()
+    }
+
+    FacesWorkScheduling.afterNewsIfOn(context, FacesSetting.On(generation, 1))
+    FacesWorkScheduling.afterNewsIfOn(context, FacesSetting.On(generation, 1))
+
+    assertThat(queued(FacesWorkScheduling.COMPUTE_NEWS_WORK)).hasSize(1)
+    assertThat(queued(FacesWorkScheduling.COMPUTE_NOW_WORK)).isEmpty()
+  }
+
+  /**
+   * CA-4: chi chiama `afterNews` dei volti. Prima non aveva chiamanti: i due punti in cui finisce bene `AiWorkScheduling.afterNews` (il giro dell'indice e la
+   * preparazione, i modelli pronti) ora chiamano anche i volti.
+   */
+  @Test
+  fun ca4_iPuntiDoveFinisceBeneIlCalcoloAiChiamanoAncheIVolti() {
+    val dir = File("src/main/kotlin/dev/pampa/mycloudgallery/work")
+    val nas = File(dir, "NasWork.kt").readText()
+    val ai = File(dir, "AiWork.kt").readText()
+    assertThat(nas).contains("FacesWorkScheduling.afterNewsIfOn(")
+    assertThat(ai).contains("FacesWorkScheduling.afterNews(applicationContext)")
+    // Ognuno dopo il corrispondente dell'AI, nello stesso punto.
+    assertThat(nas.indexOf("FacesWorkScheduling.afterNewsIfOn(")).isGreaterThan(nas.indexOf("AiWorkScheduling.afterNews(applicationContext)"))
+    assertThat(ai.lastIndexOf("FacesWorkScheduling.afterNews(applicationContext)")).isGreaterThan(ai.indexOf("AiWorkScheduling.afterNews(applicationContext)"))
   }
 }

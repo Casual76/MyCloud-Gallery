@@ -217,6 +217,17 @@ class FacesCorrectionsDTest {
     assertThat(errors).hasSize(1)
   }
 
+
+  /**
+   * Il montaggio guarda la coda: senza questo legame `FacesPendingFlusher` esisterebbe e nessuno lo userebbe (come prima, quando `FlushReason.DEBOUNCE` non aveva chiamanti per i
+   * volti). Una prova sul sorgente, come `FacesFenceSourcesTest`: l'app vera non si puo' far girare 30 secondi dentro un test.
+   */
+  @Test
+  fun ilMontaggioGuardaLaCodaDelPubblicatore() {
+    val graph = java.io.File("src/main/kotlin/dev/pampa/mycloudgallery/faces/FacesGraph.kt").readText()
+    assertThat(graph).contains("FacesPendingFlusher(live.scope, live.publisher")
+    assertThat(graph).contains(".watch()")
+  }
   @Test
   fun iTentativiHannoUnTetto() = runTest {
     val publisher = ScriptedPublisher().also { it.answers = ArrayDeque(List(100) { FacesPublishOutcome.Failed }) }

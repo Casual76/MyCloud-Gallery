@@ -1,15 +1,10 @@
 package dev.pampa.mycloudgallery.work
 
 import android.app.Application
-import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
-import androidx.work.CoroutineWorker
-import androidx.work.ListenableWorker
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
-import androidx.work.WorkerFactory
-import androidx.work.WorkerParameters
 import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.common.truth.Truth.assertThat
@@ -18,7 +13,7 @@ import dev.pampa.mycloudgallery.core.model.FacesSetting
 import dev.pampa.mycloudgallery.faces.FacesGraph
 import java.io.File
 import kotlin.time.Duration.Companion.minutes
-import kotlinx.coroutines.awaitCancellation
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,17 +31,17 @@ class FacesWorkSchedulingTest {
   private val context: Application = ApplicationProvider.getApplicationContext()
   private val workManager: WorkManager get() = WorkManager.getInstance(context)
 
+  private val parked = ParkedWorkers()
+
   @Before
   fun setUp() {
     // Un lavoro che non finisce mai: resta in coda (come fra un giro e l'altro in produzione) e si guarda, senza eseguirlo davvero (niente Hilt qui).
-    val factory = object : WorkerFactory() {
-      override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
-        object : CoroutineWorker(appContext, workerParameters) {
-          override suspend fun doWork(): Result = awaitCancellation()
-        }
-    }
-    WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor(SynchronousExecutor()).setWorkerFactory(factory).build())
+    WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor(SynchronousExecutor()).setWorkerFactory(parked.factory).build())
   }
+
+  /** I lavori che non finiscono mai si chiudono qui, a database aperto: lasciati appesi diventavano spazzatura piu' tardi e facevano cadere un test di un'altra classe. */
+  @After
+  fun tearDown() = parked.release(workManager)
 
   private fun queued(name: String): List<WorkInfo> = workManager.getWorkInfosForUniqueWork(name).get().filter { !it.state.isFinished }
 

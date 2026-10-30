@@ -36,11 +36,11 @@ import dev.pampa.mycloudgallery.core.model.FaceTier
 import dev.pampa.mycloudgallery.core.model.Float16
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PersonId
+import dev.pampa.mycloudgallery.integration.closeScope
 import kotlin.random.Random
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 
@@ -227,8 +227,9 @@ internal class RealPeopleStack private constructor(val w: BuiltWorld, leaky: Boo
   /** L'indice del media che ha la chiave [key]. */
   fun indexOfKey(key: ContentKey): Int = w.ids.indices.first { keyOf(it) == key }
 
+  /** Prima si chiude il lavoro (e si aspetta che finisca), poi l'archivio: un `refresh` ancora in volo sul thread di Default non trova l'archivio chiuso. */
   override fun close() {
-    scope.cancel()
+    closeScope(scope)
     archive.close()
   }
 

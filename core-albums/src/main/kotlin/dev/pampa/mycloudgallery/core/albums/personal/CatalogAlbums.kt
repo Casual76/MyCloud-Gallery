@@ -40,7 +40,9 @@ import dev.pampa.mycloudgallery.core.personal.settings.PersonalAlbums
 import java.security.SecureRandom
 import java.text.Normalizer
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +55,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 // GLI ALBUM PERSONALI VERI (docs/fase7-progetto.md D3-D5, D12, D16, D21, D22, D39; §2.1): l'implementazione di `Albums` (e delle scelte
 // sugli smart) sopra i dati personali e le tabelle v6. Le modifiche sono voci dei dati personali ([AlbumEditor]); le tabelle le segue la
@@ -101,6 +104,12 @@ class CatalogAlbums(
 
   /** AS-2: gli smart che aspettano il primo calcolo del motore (nuovi, o arrivati da un altro dispositivo) o lo stanno facendo. */
   private val awaiting = MutableStateFlow<Set<AlbumId>>(emptySet())
+
+  /**
+   * Gli smart che [create] sta creando: il segno "in attesa" c'e' gia' ma l'album non e' ancora nelle tabelle (la proiezione viene dopo). Un giro dell'elenco che e'
+   * partito in mezzo non li vede e non deve crederli spariti (vedi [refresh]); il segno si toglie da qui solo con le tabelle a posto, sotto `refreshLock`.
+   */
+  private val creating: MutableSet<AlbumId> = ConcurrentHashMap.newKeySet()
 
   /**
    * `Loading` finche' l'elenco non e' stato letto (AP-1); `Recomputing` mentre uno smart senza righe aspetta il primo calcolo (AS-2: la pagina dice
@@ -170,8 +179,10 @@ class CatalogAlbums(
       mutableAll.value = AlbumList(sorted(list, sort, states), sort)
       revision.value = revision.value + 1
       loaded.value = true
-      // Uno smart eliminato (o mai arrivato) non resta "in attesa del primo calcolo" per sempre.
-      val gone = waitingBefore.filterTo(HashSet()) { id -> list.none { it.id == id } }
+      // Uno smart eliminato (o mai arrivato) non resta "in attesa del primo calcolo" per sempre. Non uno che `create` sta ancora scrivendo nelle tabelle: questo giro puo'
+      // essere partito dopo il suo segno e prima della proiezione, e non lo vede ancora (`creating` si svuota solo sotto questo stesso lucchetto: o il giro finisce
+      // prima, e lo vede in `creating`, o parte dopo, e le tabelle ci sono).
+      val gone = waitingBefore.filterTo(HashSet()) { id -> id !in creating && list.none { it.id == id } }
       if (gone.isNotEmpty()) awaiting.update { it - gone }
     }
   }
@@ -255,8 +266,16 @@ class CatalogAlbums(
     if (outcome is CreateOutcome.Created) {
       // AS-2: uno smart nuovo non ha righe finche' il motore non lo calcola. Il segno "aspetta il calcolo" c'e' prima che l'album compaia: la sua pagina
       // non passa mai per "nessuna foto corrisponde alle regole".
-      if (kind == AlbumKind.SMART) smartWorkStarted(listOf(outcome.id))
-      settle(outcome.id.value)
+      if (kind == AlbumKind.SMART) {
+        creating += outcome.id
+        smartWorkStarted(listOf(outcome.id))
+      }
+      try {
+        settle(outcome.id.value)
+      } finally {
+        // Le tabelle hanno l'album (o la proiezione e' fallita): un giro dell'elenco d'ora in poi lo vede. Si toglie sotto `refreshLock`, cioe' dopo un giro in corso.
+        if (kind == AlbumKind.SMART) withContext(NonCancellable) { refreshLock.withLock { creating -= outcome.id } }
+      }
     }
     outcome
   }

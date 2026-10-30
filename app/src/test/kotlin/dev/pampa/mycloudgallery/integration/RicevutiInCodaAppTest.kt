@@ -190,8 +190,9 @@ class RicevutiInCodaAppTest {
 
     receive(rig, mp4(1, size = 6_000), "Mare.mp4")
 
-    val queued = items(rig) { it.size == 1 }.single()
-    assertThat(queued.phase).isEqualTo(ReceivedPhase.WAITING)
+    // Lo stato preciso, non il primo elenco da una riga: la frase di un file in coda dipende anche dallo stato del backup (`ReceivedStates.of`), che dopo
+    // `chooseFolder` si assesta da solo e, con altre build sul PC, poteva essere ancora quello di prima (un elenco da una riga con un'altra fase).
+    val queued = items(rig) { it.singleOrNull()?.phase == ReceivedPhase.WAITING }.single()
     assertThat(queued.folder).isEqualTo("Ricevute")
     assertThat(queued.isVideo).isTrue()
     assertThat(queued.size).isEqualTo(6_000L)
@@ -524,7 +525,10 @@ class RicevutiInCodaAppTest {
     check(checkNotNull(runIncoming(rig).last).failed == 1)
 
     until("la notifica") { "problemi:1" in notices.events }
-    assertThat(ui.receivedRequests.value).isGreaterThan(0L)
+    // La notifica e la richiesta di portare l'utente alla pagina Backup sono due effetti dello stesso passo del controllo, **uno dopo l'altro** (`IncomingProblemWatcher`:
+    // prima `notices.problems`, poi `openRequest`): visto l'uno non e' detto che ci sia gia' l'altro (con il PC carico il thread del controllo si fermava in mezzo e la
+    // prova leggeva 0). Si aspetta la richiesta, lo stato preciso che questa riga vuole.
+    until("la richiesta di aprire la pagina Backup") { ui.receivedRequests.value > 0L }
 
     assertThat(rig.backup.fiveB.receivedQueue.discard(ReceivedId(row.incomingId))).isEqualTo(ReceivedDiscard.Discarded)
     until("la notifica tolta") { notices.events.last() == "via" }

@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.albums.personal
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus
 import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.EditOutcome
@@ -23,10 +24,15 @@ import dev.pampa.mycloudgallery.core.albums.upkeep.SmartUpkeep
 import dev.pampa.mycloudgallery.core.database.entity.AlbumItemEntity
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumKind
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import kotlin.time.Duration.Companion.minutes
 import org.junit.After
 import org.junit.Test
@@ -76,6 +82,9 @@ class SmartAlbumsLiveTest {
   /** Il tetto di ogni attesa su un evento (un flusso che cambia): largo, perche' non misura la velocita' ma trasforma un blocco in un fallimento. */
   private val cap = 2.minutes
 
+  /** Quanti smart si creano di fila con i giri dell'elenco addosso: ogni creazione ha una finestra, venti bastano a prenderla sempre. */
+  private val creazioni = 20
+
   private suspend fun <T> StateFlow<T>.until(predicate: (T) -> Boolean): T = withTimeout(cap) { first(predicate) }
 
   // --- AP-1, AS-2, AS-1 ----------------------------------------------------------------------------------------------------------
@@ -103,6 +112,36 @@ class SmartAlbumsLiveTest {
     // Prima il motore scriveva su Room e nessuno rinfrescava elenco e pagina: restavano a 0 finche' non si rientrava.
     assertThat(device.albums.all.until { it.byId(id)?.count == 6 }.byId(id)!!.count).isEqualTo(6)
     assertThat(device.albums.status.until { it == AlbumsStatus.Ready }).isEqualTo(AlbumsStatus.Ready)
+  }
+
+  /**
+   * La corsa dietro la caduta a 120 s di [unoSmartNuovoDiceCheCercaEDopoIlCalcoloElencoEPaginaSiRileggono] (vista una volta su tre sotto carico): il segno «cerco
+   * le foto» di uno smart nuovo c'e' prima che l'album compaia nelle tabelle (AS-2), e un giro dell'elenco che era gia' partito (una scansione del catalogo, il primo
+   * giro dopo la nascita) leggeva i «gia' in attesa» **dopo** quel segno ma le tabelle **prima** della proiezione: non vedeva l'album, lo credeva sparito e spegneva il segno.
+   * La pagina diceva «nessuna foto» (il difetto di AS-2) e il test aspettava per sempre uno stato che non ci sarebbe piu' stato. Qui i giri dell'elenco arrivano di continuo
+   * mentre si creano smart: dopo ogni creazione il segno deve esserci ancora, e lo toglie solo il motore.
+   */
+  @Test
+  fun unGiroDellElencoCheIncrociaLaCreazioneNonSpegneIlSegnoCerco() = runBlocking<Unit> {
+    val device = device("telefono", 1)
+    device.albums.status.until { it == AlbumsStatus.Ready }
+    val giri = launch(Dispatchers.Default) {
+      while (isActive) {
+        device.albums.onCatalogChanged()
+        yield()
+      }
+    }
+    try {
+      repeat(creazioni) { n ->
+        val id = device.createSmart("Smart $n")
+        assertWithMessage("smart n. $n: appena creato deve dire che cerca").that(device.albums.status.value).isInstanceOf(AlbumsStatus.Recomputing::class.java)
+        // Il motore ha finito (lo dice lui, non un'attesa): solo adesso il segno si toglie.
+        device.albums.smartWorkFinished(listOf(id))
+        assertThat(device.albums.status.until { it == AlbumsStatus.Ready }).isEqualTo(AlbumsStatus.Ready)
+      }
+    } finally {
+      giri.cancelAndJoin()
+    }
   }
 
   @Test

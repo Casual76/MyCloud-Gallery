@@ -17,12 +17,12 @@ import dev.pampa.mycloudgallery.core.personal.testing.InMemoryPersonalLedger
 import dev.pampa.mycloudgallery.core.places.testing.FakePlaceData
 import dev.pampa.mycloudgallery.core.places.testing.FakePlaces
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.integration.closeScope
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 
 // Fase 7 (P9/P7, D22, E-H7; 26/10): lo STACK VERO dei viaggi (P7: `CatalogTrips`, le tabelle v6 `home_estimate` e `trip_proposal`, la rilevazione sulle query
@@ -63,8 +63,9 @@ internal class RealTripsStack private constructor(val w: BuiltWorld) : AutoClose
     }
   }
 
+  /** Il lavoro si chiude e si aspetta prima di chiudere il mondo (il suo database). */
   override fun close() {
-    scope.cancel()
+    closeScope(scope)
     w.close()
   }
 

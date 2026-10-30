@@ -45,6 +45,8 @@
   <string name="diag_faces_needs_update_guide">Persone è stata attivata da un’app più nuova di questa, con un testo che questa versione non conosce. Finché non aggiorni l’app, qui non si calcola, non si pubblica e non si cancella niente.</string>
   <string name="diag_faces_erase_pending_title">Dati dei volti ancora da togliere</string>
   <string name="diag_faces_erase_pending_guide">Questo dispositivo ha ancora dati dei volti di un’attivazione cancellata: li toglie prima di pubblicare i dati personali, e riprova al giro dopo.</string>
+  <string name="diag_faces_mount_failed_title">Persone non avviate</string>
+  <string name="diag_faces_mount_failed_guide">Persone non si è avviata in questa sessione dell’app. Album personali, preferiti e nascosti continuano a sincronizzarsi, senza dire niente sui volti. Riavvia l’app; se si ripete, esporta la Diagnostica.</string>
   <string name="diag_pre_publish_failed_title">Dati personali non pubblicati</string>
   <string name="diag_pre_publish_failed_guide">Un controllo prima della pubblicazione dei dati personali non è riuscito, quindi quel giro non ha pubblicato niente. Riprova da solo al giro dopo.</string>
   <string name="diag_faces_killed_memory_title">Android ha chiuso l’app durante l’analisi dei volti</string>

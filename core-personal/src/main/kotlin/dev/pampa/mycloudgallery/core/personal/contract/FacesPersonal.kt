@@ -79,10 +79,25 @@ sealed interface PrePublish {
     init {
       require(CODE.matches(code)) { "Codice non valido." }
     }
+  }
 
-    private companion object {
-      val CODE = Regex("^[A-Z][A-Z0-9_]{0,47}$")
+  /**
+   * I7 (correzioni della Fase 8): si pubblica lo stato **senza** le voci [keys] (la testa non le contiene: chi la legge non sa niente di loro,
+   * come da una testa che non le ha mai avute), con [code] stabile per la Diagnostica. Serve alla voce `faces` quando le persone non si sono
+   * potute montare: i dati personali (album personali, preferiti, nascosti) continuano a uscire, ma la testa non dice niente sui volti, quindi
+   * non vale mai come conferma di una cancellazione e non dice che questo dispositivo tratti una generazione.
+   */
+  data class ProceedWithout(val keys: Set<PersonalKey>, val code: String) : PrePublish {
+    init {
+      require(keys.isNotEmpty()) { "Nessuna voce da togliere." }
+      require(CODE.matches(code)) { "Codice non valido." }
     }
+
+    override fun toString(): String = "PrePublish.ProceedWithout(${keys.size}, $code)"
+  }
+
+  private companion object {
+    val CODE = Regex("^[A-Z][A-Z0-9_]{0,47}$")
   }
 }
 

@@ -111,6 +111,8 @@ data class SearchHistoryEntity(
   @PrimaryKey(autoGenerate = true) @ColumnInfo(name = "id") val id: Long = 0,
   @ColumnInfo(name = "text") val text: String,
   @ColumnInfo(name = "chips") val chips: String,
+  /** Fase 8, correzioni D (R2): gli id delle persone dei chip "Persona" (UUID canonici separati da una virgola), vuota se non ce n'erano. */
+  @ColumnInfo(name = "persons", defaultValue = "''") val persons: String = "",
 )
 
 /** Il tetto della cronologia (`SearchHistory.MAX_ENTRIES` di core-search, che core-database non vede: un test li confronta). */

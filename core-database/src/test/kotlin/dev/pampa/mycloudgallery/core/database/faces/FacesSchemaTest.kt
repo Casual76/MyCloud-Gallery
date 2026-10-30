@@ -167,15 +167,18 @@ class FacesSchemaTest {
   // --- la galleria non e' toccata ----------------------------------------------------------------------------------------------
 
   @Test
-  fun laV6DellaGalleriaRestaInvariata() {
-    assertThat(GalleryDatabase.VERSION).isEqualTo(6)
-    assertThat(exportedVersions(gallerySchemaDir)).containsExactly(1, 2, 3, 4, 5, 6).inOrder()
+  fun laV6DellaGalleriaRestaInvariataELaV7AggiungeSoloLeColonneDellaCronologia() {
+    // Correzioni D (R2): la v7 e' la prima modifica della galleria dopo la Fase 7, e aggiunge una colonna sola (`search_history.persons`).
+    assertThat(GalleryDatabase.VERSION).isEqualTo(7)
+    assertThat(exportedVersions(gallerySchemaDir)).containsExactly(1, 2, 3, 4, 5, 6, 7).inOrder()
     // L'impronta dello schema v6 com'era prima della Fase 8 (a capo normalizzati): un file di schema esportato non si modifica mai.
     val text = File(gallerySchemaDir, "6.json").readText().replace("\r\n", "\n")
     val digest = MessageDigest.getInstance("SHA-256").digest(text.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
     assertThat(digest).isEqualTo(GALLERY_V6_SHA256)
+    // Le tabelle della v7 sono quelle della v6: la Fase 8 non ne ha messa nessuna nella galleria (i volti stanno nel loro database).
+    assertThat(tablesOf(File(gallerySchemaDir, "7.json"))).isEqualTo(tablesOf(File(gallerySchemaDir, "6.json")))
     // Nessuna tabella in comune: il database dei volti e' un altro file con altre tabelle.
-    val gallery = tablesOf(File(gallerySchemaDir, "6.json"))
+    val gallery = tablesOf(File(gallerySchemaDir, "7.json"))
     val faces = tablesOf(File(schemaDir, "1.json"))
     assertThat(gallery.intersect(faces)).isEmpty()
     assertThat(gallery.filter { it.startsWith("face") || it.startsWith("group_") || it.startsWith("people") }).isEmpty()

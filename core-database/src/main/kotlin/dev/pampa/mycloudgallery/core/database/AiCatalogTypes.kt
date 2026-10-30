@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaSource
 import dev.pampa.mycloudgallery.core.model.OcrEngineCode
 import dev.pampa.mycloudgallery.core.model.OcrSource
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.model.QuickHash
 import dev.pampa.mycloudgallery.core.model.SpaceCode
 import dev.pampa.mycloudgallery.core.model.VecSource
@@ -164,7 +165,7 @@ class TextMatchCounts(val terms: Int, val hits: Map<ContentKey, Int>) {
 data class VocabularyWord(val word: String, val docs: Int)
 
 /** Una ricerca recente (D32): testo e chip come etichette, senza miniature. */
-data class SearchHistoryRecord(val id: Long, val text: String, val chipLabels: List<String>) {
+data class SearchHistoryRecord(val id: Long, val text: String, val chipLabels: List<String>, val persons: List<PersonId> = emptyList()) {
   /** Mai il testo (D40). */
-  override fun toString(): String = "SearchHistoryRecord($id, ${chipLabels.size} chip)"
+  override fun toString(): String = "SearchHistoryRecord($id, ${chipLabels.size} chip, ${persons.size} persone)"
 }

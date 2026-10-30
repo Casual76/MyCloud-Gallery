@@ -20,6 +20,7 @@ import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.core.model.NasPath
 import dev.pampa.mycloudgallery.core.model.NasShare
 import dev.pampa.mycloudgallery.core.model.NasStamp
+import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.model.PlaceRef
 import dev.pampa.mycloudgallery.core.model.Presence
 import dev.pampa.mycloudgallery.core.model.SafetyStatus
@@ -124,14 +125,14 @@ class ExportedSchemaTest {
   }
 
   /**
-   * 4 -> 6 e 5 -> 6 non distruggono **mai** dati: ogni riga di ogni tabella della versione di partenza (con il suo seed) e' identica dopo
+   * 4 -> 7, 5 -> 7 e 6 -> 7 non distruggono **mai** dati: ogni riga di ogni tabella della versione di partenza (con il suo seed) e' identica dopo
    * la migrazione, colonna per colonna **tra quelle che c'erano** (le colonne nuove hanno i loro valori: `album_item.fp`, `origin_device`,
-   * ... li provano i test della v6), e le tabelle nuove nascono vuote (le tabelle FTS4 comprese).
+   * ... li provano i test della v6, e `search_history.persons` della v7), e le tabelle nuove nascono vuote (le tabelle FTS4 comprese).
    */
   @Test
-  fun leMigrazioniDalla4EDalla5NonCambianoNessunaRigaEsistente() {
-    for (from in listOf(4, 5)) {
-      val name = "migrazione-$from-6-righe.db"
+  fun leMigrazioniDalla4Dalla5EDalla6NonCambianoNessunaRigaEsistente() {
+    for (from in listOf(4, 5, 6)) {
+      val name = "migrazione-$from-7-righe.db"
       val file = createFromSchema(from, name) { SchemaSeeds.seed(from, it) }
       val (columns, before) = SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
         val tables = userTables(db)
@@ -155,7 +156,7 @@ class ExportedSchemaTest {
           "ai_vector", "ai_text", "ai_text_fts", "ai_vocabulary", "search_history", "ai_pending_publish", "ai_own_head", "ai_own_segment",
           "ai_own_live", "ai_replica_head", "ai_replica_segment", "ai_replica_entry", "ai_replica_applied", "ai_replica_dirty",
         )
-        assertThat(added).containsAtLeastElementsIn(if (from < 5) v5 + v6 else v6)
+        assertThat(added).containsAtLeastElementsIn(if (from < 5) v5 + v6 else if (from < 6) v6 else emptySet<String>())
         added.forEach { table -> sql.query("SELECT COUNT(*) FROM `$table`").use { assertThat(it.moveToFirst() && it.getInt(0) == 0).isTrue() } }
       } finally {
         database.close()
@@ -362,7 +363,17 @@ object SchemaSeeds {
     4 -> seedV4(db)
     5 -> seedV5(db)
     6 -> seedV6(db)
+    7 -> seedV7(db)
     else -> error("Manca il seed della versione $version dello schema (vedi SchemaSeeds).")
+  }
+
+  // --- v7 (Fase 8, correzioni D) ---
+  const val HISTORY_PERSON = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+
+  /** La v7: le righe della v6 piu' le persone di una ricerca recente (la colonna `search_history.persons`, R2). */
+  private fun seedV7(db: SQLiteDatabase) {
+    seedV6(db)
+    db.execSQL("UPDATE search_history SET persons = '$HISTORY_PERSON' WHERE id = 1")
   }
 
   // --- v6 (Fase 7) ---
@@ -955,6 +966,18 @@ object SchemaSeeds {
       assertThat(listOf(shareItem.state, shareItem.wait, shareItem.transferKey, shareItem.stageSeq)).containsExactly("transferring", "locked", "k-1", 3L).inOrder()
       assertThat(database.tripDao().proposals().single().placeIds).isEqualTo("$OSLO,3144000")
       assertThat(database.tripDao().home().map { it.kind }).containsExactly("home", "habitual").inOrder()
+    }
+
+    // --- v7 (Fase 8, correzioni D) ---
+    // La cronologia ricorda le persone dei chip "Persona": una ricerca che c'era prima della v7 non ne ha, e dopo la migrazione e' com'era.
+    if (fromVersion >= 5) {
+      val history = ai.searchHistory().single()
+      assertThat(history.chipLabels).containsExactly("Documenti", "2025").inOrder()
+      if (fromVersion < 7) {
+        assertThat(history.persons).isEmpty()
+      } else {
+        assertThat(history.persons).containsExactly(PersonId.parse(HISTORY_PERSON))
+      }
     }
 
     // I derivati scritti dalla migrazione (o dal seed) sono quelli che il catalogo calcola: ricalcolarli

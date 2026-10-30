@@ -525,7 +525,10 @@ class RicevutiInCodaAppTest {
     check(checkNotNull(runIncoming(rig).last).failed == 1)
 
     until("la notifica") { "problemi:1" in notices.events }
-    assertThat(ui.receivedRequests.value).isGreaterThan(0L)
+    // La notifica e la richiesta di portare l'utente alla pagina Backup sono due effetti dello stesso passo del controllo, **uno dopo l'altro** (`IncomingProblemWatcher`:
+    // prima `notices.problems`, poi `openRequest`): visto l'uno non e' detto che ci sia gia' l'altro (con il PC carico il thread del controllo si fermava in mezzo e la
+    // prova leggeva 0). Si aspetta la richiesta, lo stato preciso che questa riga vuole.
+    until("la richiesta di aprire la pagina Backup") { ui.receivedRequests.value > 0L }
 
     assertThat(rig.backup.fiveB.receivedQueue.discard(ReceivedId(row.incomingId))).isEqualTo(ReceivedDiscard.Discarded)
     until("la notifica tolta") { notices.events.last() == "via" }

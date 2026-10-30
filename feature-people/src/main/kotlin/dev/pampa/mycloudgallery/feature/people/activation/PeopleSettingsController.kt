@@ -1,14 +1,18 @@
 package dev.pampa.mycloudgallery.feature.people.activation
 
 import dev.pampa.mycloudgallery.core.faces.contract.FacesState
+import dev.pampa.mycloudgallery.core.faces.contract.FacesStatus
 import dev.pampa.mycloudgallery.core.faces.contract.FacesSwitch
 import dev.pampa.mycloudgallery.core.faces.contract.HereState
+import dev.pampa.mycloudgallery.feature.people.contract.AnalyzeNowState
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleSettingsState
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleSwitchShown
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -48,23 +52,67 @@ class PeopleSettingsController(
   private val switch: FacesSwitch,
   facts: StateFlow<PeopleSettingsFacts>,
   private val scope: CoroutineScope,
+  /** CA-2: «Analizza ora» con la stima (null = non si offre). */
+  analyze: FacesAnalyzeNow? = null,
 ) {
-  val state: StateFlow<PeopleSettingsState> = combine(switch.state, facts) { current, extra -> compose(current, extra) }
-    .stateIn(scope, SharingStarted.Eagerly, compose(switch.currentState(), facts.value))
+  private val analyzeNow = AnalyzeNowController(analyze, scope)
+
+  /** Tutto cio' che cambia lo stato della pagina, preso insieme: i pezzi non si leggono mai a meta' (una pagina "nota" con lo stato di prima). */
+  private class Inputs(
+    val current: FacesState,
+    val extra: PeopleSettingsFacts,
+    val known: Boolean,
+    val offElsewhere: Boolean,
+    val analyze: AnalyzeNowState,
+  )
+
+  private val inputs = combine(switch.state, facts, switch.known, switch.offElsewhere, analyzeNow.state) { current, extra, known, off, analyzeState ->
+    Inputs(current, extra, known, off, analyzeState)
+  }
+
+  val state: StateFlow<PeopleSettingsState> = inputs.map(::compose).stateIn(scope, SharingStarted.Eagerly, compose(initialInputs(facts)))
 
   /** Lo stato dell'interruttore, per sapere cosa offrire (escludere, includere, cancellare). */
   val switchState: StateFlow<FacesState> = switch.state
 
-  private fun compose(current: FacesState, extra: PeopleSettingsFacts): PeopleSettingsState = PeopleSettingsState(
-    shown = PeopleSettingsRules.shownOf(current),
-    devices = extra.devices,
-    progress = extra.progress,
-    excludedHere = current is FacesState.On && current.here == HereState.EXCLUDED,
-    hiddenPeople = extra.hiddenPeople,
-    models = extra.models,
-    canErase = PeopleSettingsRules.canErase(current),
-    erase = extra.erase,
-    computesHere = extra.computesHere,
+  init {
+    // CA-2: la stima si conta quando «Analizza ora» ha senso (Persone lavora qui, questo dispositivo analizza, il calcolo non e' in corso) e di nuovo quando il
+    // calcolo cambia di fase: dopo il primo disegno e fuori dal thread principale (il conto vive nella porta). Con lo stato non ancora noto non si conta niente.
+    scope.launch {
+      var first = true
+      combine(switch.state, switch.known, facts) { current, known, extra ->
+        val offered = known && PeopleSettingsRules.showsWork(current) && extra.computesHere && extra.progress !is FacesStatus.Running
+        offered to extra.progress::class
+      }.distinctUntilChanged().collect { (offered, _) ->
+        if (offered) {
+          // Il calcolo e' cambiato di fase dopo una richiesta (e' finito, o aspetta di nuovo le regole): «Fatto: l'analisi parte adesso» non e' piu' vero, si rilegge.
+          if (!first) analyzeNow.reset()
+          analyzeNow.refresh()
+        } else {
+          analyzeNow.hide()
+        }
+        first = false
+      }
+    }
+  }
+
+  private fun initialInputs(facts: StateFlow<PeopleSettingsFacts>) =
+    Inputs(switch.currentState(), facts.value, switch.known.value, switch.offElsewhere.value, analyzeNow.state.value)
+
+  private fun compose(i: Inputs): PeopleSettingsState = PeopleSettingsState(
+    shown = PeopleSettingsRules.shownOf(i.current),
+    devices = i.extra.devices,
+    progress = i.extra.progress,
+    excludedHere = i.current is FacesState.On && i.current.here == HereState.EXCLUDED,
+    hiddenPeople = i.extra.hiddenPeople,
+    models = i.extra.models,
+    canErase = PeopleSettingsRules.canErase(i.current),
+    erase = i.extra.erase,
+    computesHere = i.extra.computesHere,
+    known = i.known,
+    // L322: la riga c'e' solo da spenta; con Persone accesa (o di nuovo accesa) non si dice piu' niente.
+    offElsewhere = i.offElsewhere && i.current == FacesState.Off,
+    analyze = i.analyze,
   )
 
   /** "Non su questo dispositivo": esclusione locale. */
@@ -76,4 +124,12 @@ class PeopleSettingsController(
   fun include() {
     scope.launch { switch.includeThisDevice() }
   }
+
+  /** «Analizza ora»: il tocco chiede la conferma, che puo' portare la stima dei dati mobili. */
+  fun askAnalyze() = analyzeNow.ask()
+
+  fun cancelAnalyze() = analyzeNow.cancel()
+
+  /** La conferma: il calcolo parte adesso e scavalca le regole di sottofondo. */
+  fun confirmAnalyze() = analyzeNow.confirm()
 }

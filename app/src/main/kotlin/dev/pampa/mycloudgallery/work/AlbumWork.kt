@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.graph.AppGraph
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 /**
  * I lavori degli album (Fase 7, P13; docs/fase7-progetto.md §1.4). Tutti dentro `GalleryGraph.runIfActive` (l'azzeramento li ferma e li aspetta):
@@ -67,6 +68,9 @@ class ShareWorker @AssistedInject constructor(
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
+    // L372 (correzioni C, come RG-1 e D-7): un lavoro nato in un processo nuovo aspetta la famiglia pronta, poco; senza l'attesa `runIfActive` rispondeva null (lo
+    // stato "non configurato" dura un attimo all'avvio) e il giro si saltava: la condivisione aspettava il giro dell'indice o il diario di un altro avvio.
+    gallery.awaitReady(COLD_START_WAIT)
     // DG-2: un giro della condivisione lascia traccia in "Ultimi esiti ed errori" (solo codici e numeri): l'esito, o l'errore che l'ha fermato.
     val open = try {
       AlbumJobReports.share(graph.events) { gallery.runIfActive { albums.shareRound(BUDGET) } }
@@ -81,5 +85,8 @@ class ShareWorker @AssistedInject constructor(
 
   private companion object {
     val BUDGET: Duration = 3.minutes
+
+    /** L372: quanto aspetta la famiglia pronta in un processo appena nato (come gli altri lavori). */
+    val COLD_START_WAIT: Duration = 20.seconds
   }
 }

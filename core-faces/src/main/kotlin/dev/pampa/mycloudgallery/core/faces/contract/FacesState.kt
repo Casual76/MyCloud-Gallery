@@ -138,6 +138,15 @@ interface FacesSwitch {
    */
   val offElsewhere: StateFlow<Boolean> get() = MutableStateFlow(false)
 
+  /**
+   * L350 (correzioni C): lo stato di sopra e' quello **vero**? Falso finche' le persone non sono montate in questo processo (la famiglia non e' ancora pronta:
+   * pochi secondi dopo un avvio a freddo): allora [state] risponde `Off` come un null-object, e una schermata che lo mostrasse direbbe «Persone e' spenta» a chi
+   * l'ha accesa (e «Attiva» risponderebbe «non disponibile»). Le pagine di Persone mostrano uno scheletro finche' e' falso (il principio del primo disegno
+   * istantaneo: mai uno stato sbagliato). Vero anche quando il montaggio e' fallito o non puo' esserci (nessuna famiglia): li' `Off` e «non disponibile» sono la
+   * verita'. Di serie (fake, null-object) sempre vero.
+   */
+  val known: StateFlow<Boolean> get() = MutableStateFlow(true)
+
   suspend fun activate(consent: FacesActivationConsent): ActivateOutcome
 
   suspend fun acceptNotice(textVersion: Int)

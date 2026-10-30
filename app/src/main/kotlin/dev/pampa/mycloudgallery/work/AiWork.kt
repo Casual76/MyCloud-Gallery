@@ -364,6 +364,8 @@ class ModelFetchWorker @AssistedInject constructor(
     if (results != null) report(results)
     if (results != null && results.all { it.second is EnsureResult.Ready } && stack.ai.indexer.value) {
       AiWorkScheduling.afterNews(applicationContext)
+      // CA-4: i modelli pronti sono la novita' che mancava anche ai volti (YuNet e SFace si preparano qui): se Persone e' attiva qui il suo calcolo segue.
+      if (faces.activeHere()) FacesWorkScheduling.afterNews(applicationContext)
     }
     return Result.success()
   }

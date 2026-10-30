@@ -9,6 +9,8 @@
   <string name="settings_people_excluded">Non attiva su questo dispositivo</string>
   <string name="settings_people_erasing">Cancellazione in corso</string>
   <string name="settings_people_update">Serve aggiornare l’app</string>
+  <!-- L350: prima che le persone siano montate (avvio a freddo) lo stato non si sa: una frase che non dice «spenta» ne' «attiva». -->
+  <string name="settings_people_not_yet">Raggruppa le foto per volto</string>
   <string name="settings_people_pill_notice">Da confermare</string>
   <string name="settings_people_pill_update">Aggiorna</string>
 </resources>

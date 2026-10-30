@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.faces.noop.NoFacesRequirements
 import dev.pampa.mycloudgallery.core.faces.noop.NoFacesSwitch
 import dev.pampa.mycloudgallery.feature.people.contract.ComputingDevice
 import dev.pampa.mycloudgallery.feature.people.contract.EraseSheetState
+import dev.pampa.mycloudgallery.feature.people.contract.FacesAnalyzeEstimate
 import dev.pampa.mycloudgallery.feature.people.contract.FaceModelRow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,24 @@ fun interface ActivationIndexerRole {
  */
 fun interface FacesActivatedBy {
   suspend fun label(): String?
+}
+
+/**
+ * «Analizza ora» (CA-2, correzioni C; risposta dell'utente del 30/10): la stima di cio' che resta ("Analizzare le tue N foto richiede circa M minuti") e il tocco
+ * confermato che chiede il calcolo adesso. **E' l'unico modo di scavalcare le regole di sottofondo** (notte, carica, Wi-Fi): il primo calcolo dopo l'accensione le segue
+ * come ogni altro giro. Non scarica originali dal NAS: un media senza anteprima aspetta come sempre. `:app` lo lega a `FacesBacklog` e ai ritmi misurati.
+ *
+ * Contare cio' che resta rilegge il catalogo (L242): [estimate] gira fuori dal thread principale, mai sul percorso dell'avvio, e la pagina si disegna prima.
+ */
+interface FacesAnalyzeNow {
+  /** La stima di adesso; null = non si sa (Persone non lavora qui, o la lettura non e' riuscita). Nessun errore: un guasto e' null. */
+  suspend fun estimate(): FacesAnalyzeEstimate?
+
+  /** Sui dati mobili, in roaming o oltre il tetto: la frase delle regole con la stima dei dati; null su Wi-Fi (le regole non chiedono niente). */
+  suspend fun networkNote(estimate: FacesAnalyzeEstimate): String?
+
+  /** Il tocco confermato: il calcolo parte adesso (un lavoro dell'utente, una richiesta alla volta). */
+  fun start()
 }
 
 /** Cio' che Impostazioni -> Persone mostra oltre allo stato dell'interruttore: chi calcola, l'avanzamento, le persone nascoste, i modelli, la cancellazione. */
@@ -62,6 +81,9 @@ interface ActivationPorts {
 
   /** Il resto di Impostazioni -> Persone; di serie vuoto. */
   val facts: StateFlow<PeopleSettingsFacts>
+
+  /** CA-2: «Analizza ora» con la stima. Null = non si offre (di serie). */
+  val analyze: FacesAnalyzeNow? get() = null
 }
 
 /** Persone spenta e non accendibile: i null-object di core-faces. Il default finche' `:app` non lega le porte vere. */

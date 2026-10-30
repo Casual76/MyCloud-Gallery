@@ -37,7 +37,7 @@ class FacesActivationViewModel @Inject constructor(ports: Optional<ActivationPor
   private val bound = ports.orElse(NoActivationPorts)
 
   val controller: FacesActivationController =
-    FacesActivationController(bound.switch, bound.requirements, bound.indexerRole, viewModelScope)
+    FacesActivationController(bound.switch, bound.requirements, bound.indexerRole, viewModelScope, bound.analyze)
 
   init {
     controller.load()
@@ -59,7 +59,7 @@ class FacesNoticeViewModel @Inject constructor(ports: Optional<ActivationPorts>)
 class PeopleSettingsViewModel @Inject constructor(ports: Optional<ActivationPorts>) : ViewModel() {
   private val bound = ports.orElse(NoActivationPorts)
 
-  val controller: PeopleSettingsController = PeopleSettingsController(bound.switch, bound.facts, viewModelScope)
+  val controller: PeopleSettingsController = PeopleSettingsController(bound.switch, bound.facts, viewModelScope, bound.analyze)
 }
 
 /** La pagina di attivazione. "Attiva" porta il consenso all'interruttore; "Non ora", "Fatto" e il tasto indietro chiudono senza cambiare niente. */
@@ -71,6 +71,7 @@ fun FacesActivationRoute(
 ) {
   val controller = viewModel.controller
   val state by controller.state.collectAsStateWithLifecycle()
+  val analyze by controller.analyzeState.collectAsStateWithLifecycle()
   FacesActivationScreen(
     state = state,
     onActivate = controller::activate,
@@ -80,6 +81,10 @@ fun FacesActivationRoute(
     onRetry = controller::retry,
     onDone = onClose,
     onBack = onClose,
+    analyze = analyze,
+    onAnalyzeAsk = controller::askAnalyze,
+    onAnalyzeCancel = controller::cancelAnalyze,
+    onAnalyzeConfirm = controller::confirmAnalyze,
   )
 }
 
@@ -133,6 +138,9 @@ fun PeopleSettingsRoute(
       onOpenLicenses = onOpenLicenses,
       onOpenDiagnostics = onOpenDiagnostics,
       onErase = onErase,
+      onAnalyzeAsk = controller::askAnalyze,
+      onAnalyzeCancel = controller::cancelAnalyze,
+      onAnalyzeConfirm = controller::confirmAnalyze,
     )
   }
   PeopleSettingsScreen(state = state, handlers = handlers, onBack = onBack)

@@ -21,6 +21,8 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.faces.contract.FacesDiag
 import dev.pampa.mycloudgallery.core.rules.platform.health.ExitRecord
 import dev.pampa.mycloudgallery.core.faces.contract.FacesStop
+import dev.pampa.mycloudgallery.core.model.FacesSetting
+import dev.pampa.mycloudgallery.core.personal.contract.FacesSettingCodec
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
 import dev.pampa.mycloudgallery.core.rules.WaitReason
 import dev.pampa.mycloudgallery.core.rules.WorkRequest
@@ -46,7 +48,9 @@ import kotlin.time.Duration.Companion.seconds
  * e mai nella variante di misura, con **nomi distinti** da quelli degli altri lavori (come IX-1 della revisione B della Fase 6):
  *
  * - [FacesComputeWorker]: il calcolo dei volti (`AI_COMPUTE`, tappe da 8 minuti, scrive sul NAS: prenotazioni e teste), **dopo** `AiComputeWorker` della stessa
- *   notte e periodico; "Analizza ora" e' una richiesta dell'utente (`UserInitiated`). Le tappe si concatenano; un'attesa delle regole riprogramma;
+ *   notte e periodico; "Analizza ora" e' una richiesta dell'utente (`UserInitiated`, confermata sulla pagina), l'unica che scavalca le regole: **il primo giro dopo
+ *   l'accensione e ogni altro giro seguono le regole di sottofondo** (CA-3: notte, carica, Wi-Fi, batteria, caldo). Le tappe si concatenano; un'attesa delle
+ *   regole riprogramma;
  * - [FacesEraseWorker]: riprende il diario di "Disattiva e cancella" (i passi locali non chiedono la rete); si riaccoda finche' la cancellazione non e'
  *   finita o non aspetta qualcosa di dichiarato (NAS, congelamento, dispositivi);
  * - [FacesNightlyWorker] (correzioni E, RG-1): il raggruppamento notturno del custode (nascite sotto soglia, unioni, esemplari), **un lavoro suo**: parte **dopo la
@@ -120,14 +124,54 @@ object FacesWorkScheduling {
       .addTag(TAG)
       .build()
 
-  /** "Analizza ora": una richiesta dell'utente, una sola alla volta (un secondo tocco mentre gira o aspetta non ne mette un altro). */
+  /**
+   * "Analizza ora" (CA-2, confermata dall'utente sulla pagina): una richiesta dell'utente, una sola alla volta (un secondo tocco mentre gira o aspetta non ne mette
+   * un altro). **E' l'unico lavoro dei volti che scavalca le regole** (notte, carica, Wi-Fi: `UserInitiated`); non la temperatura, e non scarica originali.
+   */
   fun computeNow(context: Context) {
     enqueue(context, COMPUTE_NOW_WORK, ExistingWorkPolicy.KEEP, request(user = true))
   }
 
-  /** Dopo un giro con novita' (calcolo AI finito, sincronizzazione dell'indice): un giro del calcolo dei volti, lavoro unico. */
+  /** Dopo un giro con novita' (calcolo AI finito, sincronizzazione dell'indice): un giro del calcolo dei volti, lavoro unico, con le regole di sottofondo. */
   fun afterNews(context: Context) {
     enqueue(context, COMPUTE_NEWS_WORK, ExistingWorkPolicy.KEEP, request(user = false))
+  }
+
+  /**
+   * CA-4: dopo un giro con novita' (sincronizzazione dell'indice, preparazione) il calcolo dei volti segue, **solo se Persone e' accesa per l'account** (la voce
+   * `faces` dei dati personali): senza, il lavoro non avrebbe niente da fare e ogni giro dell'indice ne accoderebbe uno per niente. Come
+   * [AiWorkScheduling.afterNews]: lavoro unico, `KEEP`.
+   */
+  fun afterNewsIfOn(context: Context, setting: FacesSetting?) {
+    if (setting is FacesSetting.On) afterNews(context)
+  }
+
+  /** La voce `faces` dei dati personali di adesso (null = non c'e' o la famiglia non e' pronta): per [afterNewsIfOn]. Una lettura in memoria, nessun I/O. */
+  internal fun settingOf(gallery: GalleryGraph): FacesSetting? =
+    gallery.nas?.organizer?.parts?.personalStore?.effectiveEntries?.value?.get(FacesSettingCodec.KEY)?.let { FacesSettingCodec.parse(it.value) }
+
+  /**
+   * CA-3 e CA-5: Persone si accende qui (o torna attiva, anche dopo "Disattiva e cancella" nello stesso processo). Il primo calcolo **segue le regole di
+   * sottofondo** (notte, carica, Wi-Fi: lo stesso lavoro delle novita', non `UserInitiated`): la pagina dice «di notte, in carica» e ora e' vero; chi vuole
+   * subito tocca «Analizza ora». E il lavoro periodico si riprogramma (`ensure`: lo toglie «Disattiva e cancella», e prima tornava solo al riavvio dell'app).
+   */
+  fun afterActivation(context: Context) {
+    try {
+      ensure(context)
+    } catch (e: IllegalStateException) {
+      // WorkManager non inizializzato (test senza lavori): il giro lo fa quello dell'indice.
+      GalleryLog.w(TAG) { "lavoro periodico delle persone non programmato: ${e.javaClass.simpleName}" }
+    }
+    afterNews(context)
+  }
+
+  /** La richiesta di lavoro del grafo delle persone (`FacesGraph.workRequest`) e il lavoro di WorkManager che ne nasce: un posto solo per la mappa. */
+  fun request(context: Context, work: FacesGraph.FacesWork) {
+    when (work) {
+      FacesGraph.FacesWork.COMPUTE -> afterActivation(context)
+      FacesGraph.FacesWork.COMPUTE_NOW -> computeNow(context)
+      FacesGraph.FacesWork.ERASE -> eraseNow(context)
+    }
   }
 
   /** La tappa dopo (IX-1): il nome della catena, accodata a quella che gira. */

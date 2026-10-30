@@ -87,6 +87,41 @@ data class ComputingDevice(val label: String, val thisDevice: Boolean, val exclu
 /** Un modello dei volti con la sua licenza (Q1: dentro l'APK), per la riga "Modelli e licenze". */
 data class FaceModelRow(val name: String, val version: String, val license: String)
 
+/**
+ * Quanto costa analizzare le foto che restano (CA-2, correzioni C): [remaining] foto e video ancora da analizzare e [done] gia' fatti, il tempo in [minutes] (al
+ * ritmo misurato sull'S25 finche' il calcolo non ha misurato questo dispositivo) e, per il dato che costa soldi, [bytes] di anteprime da scaricare al piu'.
+ * Solo numeri.
+ */
+data class FacesAnalyzeEstimate(val remaining: Long, val done: Long, val minutes: Int, val bytes: Long? = null) {
+  init {
+    require(remaining >= 0 && done >= 0 && minutes >= 0) { "Numeri negativi." }
+  }
+
+  /** E' la prima analisi (niente di fatto): "Analizzare le tue N foto"; altrimenti "Restano N foto". */
+  val isFirstRun: Boolean get() = done == 0L
+}
+
+/**
+ * «Analizza ora» di Impostazioni -> Persone e della pagina di attivazione (CA-2; risposta dell'utente del 30/10). [Hidden]: non si offre (niente da analizzare, non
+ * qui, o il calcolo e' in corso). La stima si legge dal catalogo **dopo** il primo disegno: [Counting] e' lo scheletro. Il tasto chiede sempre una conferma
+ * ([Confirming]); sui dati mobili la conferma porta anche la stima dei dati ([Confirming.network]).
+ */
+sealed interface AnalyzeNowState {
+  data object Hidden : AnalyzeNowState
+
+  data object Counting : AnalyzeNowState
+
+  data class Ready(val estimate: FacesAnalyzeEstimate) : AnalyzeNowState
+
+  /** Il tocco su «Analizza ora» aspetta la conferma. [network]: la frase delle regole sui dati mobili (con la stima dei dati), o null su Wi-Fi. */
+  data class Confirming(val estimate: FacesAnalyzeEstimate, val network: String?) : AnalyzeNowState {
+    override fun toString(): String = "AnalyzeNowState.Confirming(${network != null})"
+  }
+
+  /** La richiesta e' partita: il calcolo gira adesso, scavalcando le regole di sottofondo. */
+  data object Started : AnalyzeNowState
+}
+
 /** Impostazioni -> Persone (§1.5 `PeopleSettingsState`). */
 data class PeopleSettingsState(
   val shown: PeopleSwitchShown,
@@ -100,8 +135,14 @@ data class PeopleSettingsState(
   val erase: EraseSheetState.Progress?,
   /** DR-1 (correzioni B): questo dispositivo analizza le foto (ruolo Indicizzatore). Falso = "qui le persone non si calcolano" e come cambiarlo. */
   val computesHere: Boolean = true,
+  /** L350: lo stato e' quello vero. Falso = le persone non sono ancora montate (avvio a freddo): la pagina mostra uno scheletro, mai «spenta» o «non disponibile». */
+  val known: Boolean = true,
+  /** L322 (CE-3): da spenta, Persone e' stata disattivata da un altro tuo dispositivo e qui i dati sono stati tolti. */
+  val offElsewhere: Boolean = false,
+  /** CA-2: «Analizza ora» con la stima. */
+  val analyze: AnalyzeNowState = AnalyzeNowState.Hidden,
 ) {
-  override fun toString(): String = "PeopleSettingsState(${shown.code}, ${devices.size} dispositivi, nascoste=$hiddenPeople)"
+  override fun toString(): String = "PeopleSettingsState(${shown.code}, ${devices.size} dispositivi, nascoste=$hiddenPeople, noto=$known)"
 }
 
 /** Il foglio e la pagina "Disattiva e cancella" (§1.5 `EraseSheetState`, §2.8). */

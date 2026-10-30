@@ -67,6 +67,12 @@ dependencies {
   implementation appDeps.serializationCore
   implementation appDeps.datastorePreferences
 
+  // P1 (D21, D23; approvate in Q8): il motore della mappa e il client delle tessere. MapLibre si inizializza pigro (map/MapLibreInit.kt),
+  // mai sul percorso dell'avvio, con il NOSTRO client gia' installato; OkHttp e' la stessa versione che MapLibre porta a runtime e la
+  // nomina solo net/ (Phase9ArchitectureTest regola 4, tools/check.ps1 sul dex).
+  implementation appDeps.maplibreAndroid
+  implementation appDeps.okhttp
+
   // Solo nei test: il legame della sezione Luoghi con le Raccolte. In produzione i feature non si conoscono.
   testImplementation project(':feature-library')
 
@@ -81,4 +87,12 @@ dependencies {
   testImplementation appDeps.roborazzi
   testImplementation appDeps.roborazziCompose
   testImplementation appDeps.roborazziJunitRule
+
+  // P1 (§5.5, riga "Strumentato"): la mappa vera sull'emulatore con un client che conta socket e risoluzioni DNS e un server finto dentro
+  // l'intercettore (mai Internet). Solo l'APK di prova, mai l'app.
+  androidTestImplementation appDeps.androidxTestCore
+  androidTestImplementation appDeps.androidxTestExtJunit
+  androidTestImplementation appDeps.androidxTestRunner
+  androidTestImplementation appDeps.junit
+  androidTestImplementation appDeps.truth
 }

@@ -109,6 +109,19 @@ ext.releaseManifestPolicy = [
   forbiddenPermissions: [
     'android.permission.MANAGE_MEDIA'            : 'le modifiche e le eliminazioni passano dai dialoghi di sistema (createWriteRequest, createTrashRequest, createDeleteRequest): seconda conferma gratuita, nessun permesso speciale',
     'android.permission.MANAGE_EXTERNAL_STORAGE' : 'non serve accedere a tutti i file: i media si leggono dal MediaStore e le cartelle le sceglie l utente con i selettori di sistema',
+    // Fase 9 (P1, D35): li dichiara MapLibre e li toglie il filtro (`droppedLibraryPermissions`, sotto); se restassero, qui il manifest non passa.
+    'android.permission.ACCESS_FINE_LOCATION'   : 'mai la posizione del telefono (Fase 9, D35): la mappa mostra dove sono state scattate le foto',
+    'android.permission.ACCESS_COARSE_LOCATION' : 'mai la posizione del telefono (Fase 9, D35): la mappa mostra dove sono state scattate le foto',
+    'android.permission.ACCESS_WIFI_STATE'      : 'la mappa non legge il Wi-Fi (Fase 9, D35): la rete in uso arriva da core-network con ACCESS_NETWORK_STATE',
+  ],
+  // Fase 9 (P1, D35; docs/sicurezza.md 4-bis "Non richiesti"): i permessi che una libreria dichiara e che l'app NON vuole, tolti dal manifest fuso
+  // di ogni variante da `filter<Variante>NativeLibraries` (sotto) prima di `verifyReleaseManifest`, che li vieta comunque (`forbiddenPermissions`).
+  // MapLibre Native Android 13.7.1 dichiara, oltre a INTERNET e ACCESS_NETWORK_STATE (gia' dell'app), la posizione precisa e approssimativa (per il
+  // suo componente della posizione, che l'app non usa) e lo stato del Wi-Fi. Una chiave per permesso, con il motivo.
+  droppedLibraryPermissions: [
+    'android.permission.ACCESS_FINE_LOCATION'   : 'MapLibre: componente della posizione, non usato',
+    'android.permission.ACCESS_COARSE_LOCATION' : 'MapLibre: componente della posizione, non usato',
+    'android.permission.ACCESS_WIFI_STATE'      : 'MapLibre: stato del Wi-Fi, non usato (la rete arriva da core-network)',
   ],
   // Permessi che sono ammessi SOLO con un tetto di SDK: nome -> android:maxSdkVersion atteso. Senza l'attributo (o con un
   // altro valore) il manifest non passa: un READ_EXTERNAL_STORAGE senza tetto chiederebbe l'accesso ai file anche su
@@ -164,6 +177,9 @@ ext.releaseManifestPolicy = [
 // manifest di AGP 8.13 non da' una chiave a quell'elemento (le accoda tutte, anche ripetute) e ignora tools:node="remove": litert-api
 // 2.3.0 ne dichiara 31. E' una trasformazione dell'artefatto MERGED_MANIFEST di ogni variante (app/build.gradle la lega), quindi vale
 // per l'APK e per `verifyReleaseManifest`, che ricontrolla l'esito. Lavora sul testo: tocca solo gli elementi `uses-native-library`.
+// Fase 9 (P1, D35): toglie anche i `uses-permission` (e `uses-permission-sdk-23`) elencati in `droppedLibraryPermissions`, quelli che MapLibre
+// porta (la posizione e lo stato del Wi-Fi). Un `tools:node="remove"` nel manifest di feature-map non si puo' (Phase9ArchitectureTest regola
+// 10: i moduli nuovi non nominano permessi nel manifest) e il manifest dell'app e' di P13: qui vale per ogni variante, debug compresa.
 abstract class FilterNativeLibraries extends DefaultTask {
 
   @InputFile
@@ -176,6 +192,9 @@ abstract class FilterNativeLibraries extends DefaultTask {
   @Input
   abstract ListProperty<String> getAllowed()
 
+  @Input
+  abstract ListProperty<String> getDroppedPermissions()
+
   @TaskAction
   void filter() {
     String text = mergedManifest.get().asFile.getText('UTF-8')
@@ -185,6 +204,11 @@ abstract class FilterNativeLibraries extends DefaultTask {
       def name = (match =~ /android:name\s*=\s*"([^"]*)"/)
       String library = name.find() ? name.group(1) : ''
       (library in allowed.get() && seen.add(library)) ? match : ''
+    }
+    def permission = ~/(?s)[ \t]*<uses-permission(?:-sdk-23)?\b[^>]*?\/>[ \t]*\r?\n?/
+    out = out.replaceAll(permission) { String match ->
+      def name = (match =~ /android:name\s*=\s*"([^"]*)"/)
+      (name.find() && name.group(1) in droppedPermissions.get()) ? '' : match
     }
     updatedManifest.get().asFile.setText(out, 'UTF-8')
   }
@@ -202,8 +226,9 @@ abstract class FilterNativeLibraries extends DefaultTask {
 ext.registerNativeLibraryFilter = { variant ->
   return tasks.register("filter${variant.name.capitalize()}NativeLibraries", FilterNativeLibraries) {
     group = 'build'
-    description = "Tiene nel manifest fuso di ${variant.name} solo le uses-native-library ammesse (Fase 6, D38)."
+    description = "Tiene nel manifest fuso di ${variant.name} solo le uses-native-library ammesse (Fase 6, D38) e toglie i permessi non voluti delle librerie (Fase 9, D35)."
     allowed.set(releaseManifestPolicy.allowedNativeLibraries)
+    droppedPermissions.set(releaseManifestPolicy.droppedLibraryPermissions.keySet().toList())
   }
 }
 

@@ -30,6 +30,8 @@
   <string name="faces_settings_progress_running">Analizzate %1$,d foto su %2$,d</string>
   <string name="faces_settings_progress_idle">Tutto analizzato</string>
   <string name="faces_settings_progress_problem">Qualcosa non va: la Diagnostica dice cosa.</string>
+  <string name="faces_settings_not_here_title">Qui le persone non si calcolano</string>
+  <string name="faces_settings_not_here_detail">Questo dispositivo non analizza le foto, e non le analizza per conto suo. Serve il ruolo Indicizzatore: accendi «Analizza le foto di questo dispositivo» in Impostazioni → Ricerca e modelli.</string>
   <string name="faces_settings_wait_notice">In attesa che tu veda l’avviso</string>
   <string name="faces_settings_wait_excluded">In attesa: questo dispositivo è escluso</string>
   <string name="faces_settings_wait_not_indexer">In attesa: questo dispositivo non analizza le foto</string>

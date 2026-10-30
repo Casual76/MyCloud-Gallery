@@ -42,6 +42,7 @@ import java.io.File
 import java.io.IOException
 import java.time.Month
 import java.time.format.TextStyle
+import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineDispatcher
@@ -287,8 +288,8 @@ internal class NotifyTextResolver(private val resources: Resources, private val 
 
   private fun month(year: Int?, month: Int?): String {
     if (year == null || month == null || month !in 1..12) return generic()
-    val locale = resources.configuration.locales[0]
-    return resources.getString(R.string.memories_notify_title_month, Month.of(month).getDisplayName(TextStyle.FULL_STANDALONE, locale), year)
+    // L'app ha i testi solo in italiano (risorse di serie): anche il mese e' in italiano, qualunque sia la lingua del telefono.
+    return resources.getString(R.string.memories_notify_title_month, Month.of(month).getDisplayName(TextStyle.FULL_STANDALONE, Locale.ITALIAN), year)
   }
 
   private companion object {

@@ -36,6 +36,9 @@ internal enum class SpecRow(val label: String) {
 
   /** Fase 9 (P9, D31): i ricordi -- la sezione delle Raccolte, la pagina del ricordo, "Tutti i ricordi", la presentazione, le copertine e i ricordi con le persone. */
   MEMORIES("Ricordi: sezione, pagina, \"Tutti i ricordi\", presentazione, copertine, persone"),
+
+  /** Fase 9 (P10, D19, D31): le notifiche dei ricordi -- la scelta del ricordo, il contenuto, la miniatura della copertina, la revoca. */
+  NOTIFICATIONS("Notifiche dei ricordi: scelta, contenuto, miniatura, revoca"),
 }
 
 /** Con cosa e' provata una superficie. */
@@ -125,6 +128,7 @@ internal object HiddenSurfaces {
   private const val APP_FACES = "app/src/main/kotlin/dev/pampa/mycloudgallery/faces"
   private const val FEATURE_NAS = "feature-nas/src/main/kotlin/dev/pampa/mycloudgallery/feature/nas"
   private const val FEATURE_LIBRARY = "feature-library/src/main/kotlin/dev/pampa/mycloudgallery/feature/library"
+  private const val MEMORIES_NOTIFY = "core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories/notify"
   private const val MEMORIES_CORE = "core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories"
   private const val FEATURE_MEMORIES = "feature-memories/src/main/kotlin/dev/pampa/mycloudgallery/feature/memories"
 
@@ -335,6 +339,14 @@ internal object HiddenSurfaces {
     SurfaceEntry(
       id = "memories-people", title = "Ricordi con le persone: mai una persona nascosta, mai un nascosto nei ricordi di una persona (E-H10)", row = SpecRow.MEMORIES, owner = "P9",
       backing = Backing.PRODUCTION, sources = listOf("$MEMORIES_CORE/shelf/ShelfPruner.kt"), probe = RealMemoriesProbes.people, live = true,
+    ),
+    // --- Il codice vero di P10 (notifiche dei ricordi): la scelta passa dallo scaffale e da `MemoryVisibility` (il filtro finale dei nascosti, D19) subito prima di pubblicare; la revoca a ogni cambio ---
+    SurfaceEntry(
+      id = "memories-notify", title = "Notifiche dei ricordi: scelta, contenuto, miniatura della copertina e revoca (D19, F116): mai un nascosto, mai una copertina nascosta in tendina",
+      row = SpecRow.NOTIFICATIONS, owner = "P10", backing = Backing.PRODUCTION,
+      sources = listOf("$MEMORIES_NOTIFY/MemoryNotifyRun.kt", "$MEMORIES_NOTIFY/MemoryNotifyRevocation.kt", "$MEMORIES_NOTIFY/MemoryNotifyPolicy.kt", "app/src/main/kotlin/dev/pampa/mycloudgallery/notify/MemoryNotifier.kt"),
+      probe = RealNotifyProbes.notifications(), live = true,
+      alsoProvedBy = listOf("HiddenNotifyMutationTest", "MemoryNotifyRunTest", "MemoryNotifyRevocationTest", "NotifyOncePerDayPropertyTest", "MemoryNotifierTest"),
     ),
   )
 

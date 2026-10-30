@@ -121,7 +121,7 @@ class PeopleCorrDTest {
     rig().use { r ->
       val a = r.world.a
       val zwjOnly = "\u200D\uFE0F\u200D"
-      // Solo giunti e selettori di variante: appare vuoto. (`TextRules` li ammette: `PeopleForms.isName` e' di core-trust.)
+      // Solo giunti e selettori di variante: appare vuoto. (`TextRules` li ammette; dalle correzioni C anche il formato, `PeopleForms.isName`, vuole un carattere visibile.)
       assertThat(r.people.rename(a, zwjOnly)).isEqualTo(EditOutcome.InvalidName)
       assertThat(r.people.assign(r.world.facesOf(r.world.b).first().locator, PersonTarget.New(zwjOnly))).isEqualTo(EditOutcome.InvalidName)
       assertThat(PersonNames.forNewName(zwjOnly)).isNull()
@@ -132,8 +132,9 @@ class PeopleCorrDTest {
       }
       assertThat(VisibleText.hasVisible("  \u200D ")).isFalse()
       assertThat(VisibleText.hasVisible("a")).isTrue()
-      // Resta la regola del formato: il nome di una lettura non cambia (`normalize` e `PeopleForms.isName` sono la stessa regola).
+      // `normalize` resta larga (legge anche i dati locali di prima); chi scrive e chi legge dagli altri dispositivi vogliono un carattere visibile (L362).
       assertThat(PersonNames.normalize(zwjOnly)).isEqualTo(zwjOnly)
+      assertThat(dev.pampa.mycloudgallery.core.trust.data.PeopleForms.isName(zwjOnly)).isFalse()
     }
   }
 

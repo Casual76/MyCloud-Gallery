@@ -11522,3 +11522,147 @@ Il pacchetto C chiude le voci della verifica funzionale di fine Fase 8 (`docs/re
 - **Avvio istantaneo**: nessun lavoro nuovo sul percorso dell'avvio. `FacesSwitchFacade.known` e `FacesGraph.settled` sono flussi gia' costruiti; `AppFacesAnalyzeNow` e' costruita con le porte (tre lambda) e non conta niente finche' l'utente non apre Impostazioni → Persone o la pagina di attivazione; il lavoro periodico si programma in `FacesWorkScheduling.ensure`, che gia' parte dopo il primo disegno. Il benchmark dell'avvio non e' stato rieseguito (nessun telefono).
 - **`tools\check.ps1 -NoDaemon` verde** (30/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, posto `f8cc` preso prima e rilasciato dopo ogni comando Gradle e attorno al check): «OK: tutto a posto». Prima di arrivarci: il primo giro e' caduto per `CutoutClipboardTest.laRegistrazioneAlCicloDiVitaDelleSchermateFaLoStessoDaSola_VR3` («uncaught exceptions before the test started», un'eccezione di un test vicino sotto carico: la classe sola passa, non e' di questo pacchetto); il secondo per un errore di lint nel mio `CorrezioniCPersoneTest` (`StateFlow.value` letto dentro la composizione), corretto in un commit a parte; `galleryLint` poi verde e il terzo giro verde. Test per modulo `app` 1.154, `core-faces` 699, `core-trust` 314, `core-rules` 355, `feature-people` 753, `feature-settings` 592, `feature-diagnostics` 331 (e gli altri moduli, nessuno a zero, nessuno fallito); i passi dell'APK di release (recinzioni D12, D30, D34 e D33, nessun componente esposto, nessun resto di debug, nessun `FieldProbe*`) verdi. Il terzo giro Gradle ha riusato i risultati dei moduli non cambiati dal secondo (157 secondi); il secondo li aveva eseguiti tutti (36 minuti, il PC era carico).
 - Screenshot (telefono 412 dp, chiaro e scuro, testo a 1,3x) in `docs/screenshots/8-corr-c/` (`PeopleCorrCScreenshotTest`, `recordRoborazziDebug`): Impostazioni → Persone con «Analizza ora» e la stima (prima analisi e libreria a meta'), il conteggio, la conferma (anche sui dati mobili), la richiesta partita, l'avanzamento della libreria, l'attesa della chiave e del NAS, lo scheletro «non ancora» e «disattivata da un altro tuo dispositivo»; la pagina di attivazione dopo «Attiva» con la stima, la conferma e senza stima. Ogni schermata controlla i bersagli da 48 dp e i testi.
+
+## Fase 9 P7: scelta delle foto (30/10)
+
+Il pacchetto P7 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P7; §2.2, §2.11, D5-D8, D31, §4.3, §5.2; risposta **Q6 (a)** del §11). Branch
+`fase9/p7`. Consegna la scelta vera delle foto di un ricordo (`core-memories/.../pick/`), la misura dei pixel come funzione pura, il filtro
+finale dei Nascosti attorno alla scelta, il raccoglitore dei segnali dalle porte, le suite di contratto di `MemoryVectors` e `MemoryPixels` con i
+loro fake fedeli. **Nessun contratto di P0 e' cambiato** (`PickSignals`, `PickSpec`, `PickWeights`, `PhotoScore`, `PickResult`, `DropReason`,
+le porte): P7 implementa sopra. Nessuna dipendenza, nessun permesso, nessun componente nuovo; niente fuori da `core-memories`.
+
+**Il filtro di Q6 non c'e'** (scostamento dal brief, deciso qui). Il brief chiede "il filtro di Q6 dietro un'opzione, che toglie e basta e non
+lascia tracce". La risposta dell'utente a Q6 e' **(a), solo i pulsanti, nessun filtro automatico** (§11 del progetto; D8 punto 6 e §2.2 sono
+scritti per la proposta (b), poi scartata). I contratti di P0 la applicano gia': `MemoryVectors` non ha `sadScores`, `PickSignals` non ha frasi
+prototipo, e la regola 11 di `Phase9ArchitectureTest` fa fallire chi nomina un filtro dei ricordi tristi in `core-memories` (e il brief chiede
+di tenere verdi i test d'architettura). Quindi niente filtro e niente opzione. Cio' che quella frase proteggeva resta vero e **e' provato**
+(`PickNoTraceTest`): la scelta non decide dal contenuto, non ha stato fra una chiamata e l'altra (nessun campo di istanza), non scrive sugli
+ingressi, non scrive log (ne' su `System.out`/`err` ne' su `java.util.logging`, e nessun `println`/`Log`/`Logger` in `pick/`), i suoi
+`toString()` non dicono id ne' date, e il risultato porta soli conteggi per motivo. Se l'utente cambiasse idea su Q6, andrebbero riaperti: il
+contratto (`MemoryVectors.sadScores` o un segnale equivalente in `PickSignals`, un `DropReason` per il filtro), la regola 11, C153 e L261.
+
+**Cosa c'e' in `pick/`**
+- `MemoryPhotoPicker` (`PhotoPicker`): gli stessi passi del riferimento `ReferencePicker`, nello stesso ordine, senza i costi quadratici:
+  1. esclusioni di D5 e "Mai" per periodi e persone (`MemoryExclusions`, una sola definizione), contate per motivo; un id ripetuto vale una volta;
+  2. punteggio (`PhotoScore`, pesi in `PickWeights`) e ordine: punteggio decrescente, a parita' lo scatto piu' vecchio, poi l'id minore;
+  3. doppioni contro le sole foto **tenute**: coseno >= 0,92 se ci sono i due vettori, altrimenti la firma visiva se risponde (`true`/`false`),
+     altrimenti la finestra di 3 minuti (inclusi i 180.000 ms esatti);
+  4. varieta': con `perDayMin` >= 1 prima la migliore di ogni giorno (dal piu' vecchio), poi la massima rilevanza marginale (punteggio -
+     0,5 x somiglianza massima con le gia' scelte, solo dove c'e' il vettore) fino a `maxSize`, con i tetti per giorno, per ora e di WhatsApp
+     (`maxSize / 4`); la somiglianza massima si aggiorna a ogni scelta invece di ricalcolarsi, le norme dei vettori si calcolano una volta;
+  5. WhatsApp al piu' un quarto degli elementi (si tolgono le peggiori finche' il conto torna); sotto `minSize` il ricordo non nasce;
+  6. copertina: il miglior elemento che non e' un video, non e' di WhatsApp, non ha persone "Mostra meno" o "Mai", orizzontale o quadrato
+     (>= 1000 millesimi) se ce n'e'; senza copertina possibile il ricordo non nasce (`NO_COVER`);
+  7. elementi in ordine di scatto (a parita' l'id).
+- `VisiblePhotoPicker`: la scelta con il **filtro finale dei Nascosti** (D31, E-H8). Chiede `HiddenMask` due volte: prima della scelta (i
+  nascosti non partecipano a niente, nemmeno ai doppioni: un gemello nascosto e migliore non fa uscire la foto visibile) e dopo, sugli
+  scelti. Se qualcuno e' diventato nascosto nel frattempo, esce e si sceglie di nuovo (al piu' `MAX_ROUNDS` = 3 volte, poi il ricordo non
+  nasce). **Fallisce chiuso**: un guasto della maschera prima della scelta toglie tutti i candidati, dopo la scelta il ricordo non nasce; una
+  cancellazione passa. I nascosti non hanno un motivo in `DropReason` e non si contano (vedi "Modifiche richieste").
+- `PixelMeasure`: la misura dei pixel come funzione pura su un array di luminanze (la decodifica e il ridimensionamento a 256 px li lega P13).
+- `PickSignalsLoader`: raccoglie i segnali dalle porte una volta per ricordo (vettori, firma visiva, album, persone, pixel). Chiede solo cio'
+  che serve (mai gli esclusi di D5), tiene solo gli id chiesti, scarta i vettori vuoti o non finiti, chiede le misure dei pixel solo per i
+  **200 finalisti** (D6: il punteggio di prima delle misure ordina) entro il budget. Una porta opzionale che fallisce toglie solo il suo
+  segnale (E-MEM15, E-MEM16); la porta delle **persone fallisce chiusa**: con scelte "Mostra meno" o "Mai" un guasto lancia, perche' senza
+  sapere chi c'e' nelle foto un "Mai" non si potrebbe applicare. La cancellazione passa sempre. `InMemoryMemories` (P0) continua a chiedere i
+  pixel per tutti i candidati: P6 e P13 passano dal raccoglitore per avere il tetto di 200.
+- Nei fake (`testing/`): `FakeMemoryVectors` e `FakeMemoryPixels` ora sono fedeli alle loro suite (risposte come copie; budget per misura nel
+  fake dei pixel; contatori delle richieste), e `SyntheticVectors` semina vettori con un coseno voluto (per provare la soglia da una parte e
+  dall'altra).
+
+**Pesi e soglie** (tabella `PickWeights` di P0, **non cambiata**: la calibrazione e' di P11; `PickScoreTest` fissa i valori di D6)
+| Segnale | Peso | Segnale | Peso |
+|---|---|---|---|
+| preferito | +3,0 | WhatsApp | -1,5 |
+| modificato | +1,0 | luce (luminanza < 0,12 o > 0,92) | -1,0 |
+| in un album manuale | +1,0 | nitidezza (varianza del laplaciano < 100) | -1,5 |
+| una persona con nome visibile (una volta sola) | +1,0 | video da 3 a 60 s (estremi inclusi) | +0,5 |
+| panorama | +0,5 | video oltre 5 minuti (> 300.000 ms) | -0,5 |
+| foto in movimento | +0,3 | | |
+
+Doppioni: coseno >= 0,92; senza vettori ne' firma, 180.000 ms. Varieta': lambda 0,5; tetti da `MemoryRules.spec` (per giorno e per ora come in D7);
+WhatsApp al piu' `maxSize / 4` (arrotondato in giu' per il tetto in corsa, `count x 4 <= elementi` alla fine). Le luminanze sotto/sopra soglia
+usano la misura dei pixel se c'e', altrimenti il `ThumbHash` (`ThumbLight`); i limiti sono stretti (0,12 e 0,92 non penalizzano).
+
+**Scelte di P7 sulla misura dei pixel** (`PixelMeasure`)
+- **Luce**: luminanza media 0..1 delle luminanze 0..255. Il cammino ARGB (`probeArgb`, per `Bitmap.getPixels`) usa Rec. 709 in interi,
+  `(2126 R + 7152 G + 722 B + 5000) / 10000`: bianco 255, nero 0, rosso 54, verde 182, blu 18; l'alfa non conta.
+- **Nitidezza**: varianza del laplaciano a quattro vicini (`[0 1 0; 1 -4 1; 0 1 0]`) sulle luminanze 0..255 dei soli pixel interni, con somme
+  intere (nessun errore di arrotondamento): una scacchiera da un pixel e' 1.040.400 (il massimo, 1020 al quadrato), un'immagine uniforme e una
+  rampa di luce 0. E' la misura comune della messa a fuoco; dipende dalla risoluzione: la soglia di 100 (`SHARPNESS_MIN`, provvisoria) e' sul
+  lato lungo di **256 px** (`TARGET_SIDE`).
+- **Non misurabile = `null`**, mai un'eccezione ne' un numero inventato: lato minore di 3 px (il laplaciano ha bisogno di un pixel interno),
+  lato oltre **512 px** (`MAX_SIDE`: non e' piu' confrontabile con la soglia e il costo cresce), array di lunghezza sbagliata.
+- Misure di prova (immagini sintetiche, 128 x 96): rumore uniforme 108.447; lo stesso con tre giri di filtro a scatola 3 x 3, 68,73 (gia' sotto
+  la soglia di 100: una foto cosi' sfocata e' "mossa"); dodici giri, 3,08. Una miniatura da 256 x 192 si misura in meno di 20 ms anche a
+  freddo (la prova mette il tetto a 20 ms per chiamata; in pratica sono pochi millisecondi). La soglia di 100 non e' stata calibrata su foto
+  vere: lo fa P11 con il banco e F125 sui dati veri (se toglie piu' del 3% dei candidati di un ricordo medio la soglia sale).
+
+**Misure di prestazione** (JVM, test `PickPerformanceTest`: 25 corse di riscaldamento, mediana di 21; vettori da 768 numeri su tutti i
+candidati, pochi concetti = molti doppioni, misure dei pixel, album e persone; limite del "Fatto quando": < 50 ms)
+| Caso | Mediana | Massimo |
+|---|---|---|
+| "anni fa", 200 candidati | 10,0 ms | 10,9 ms |
+| viaggio, 200 candidati | 11,4 ms | 12,1 ms |
+| persona, 200 candidati | 10,5 ms | 11,0 ms |
+| mese, 200 candidati | 9,6 ms | 10,0 ms |
+| viaggio, 200 candidati tutti di concetti diversi (nessun doppione: il confronto va fino in fondo) | 13,9 ms | 18,4 ms |
+| viaggio, 200 candidati senza vettori | 0,16 ms | 0,17 ms |
+| mese pesante, 1.500 candidati, vettori da 256 (fuori dal "Fatto quando": tetto a 1 s) | 155,7 ms | 188,4 ms |
+Il tempo e' dopo il riscaldamento: a freddo (prima chiamata del processo) puo' essere piu' alto, ma la generazione e' un lavoro notturno con 60 s
+di budget (D4) e un passo leggero con 5 s. Misurato con `System.nanoTime` (monotono). Numeri su questo PC, non sull'S25.
+
+**Parita' con il riferimento** (§5.2): su 700 ingressi casuali (tipi, sorgenti, flag, giorni, scatti ravvicinati, vettori con rumore e
+concetti ripetuti, persone, "Mai", album, misure dei pixel, firma visiva a tre valori, meta' senza vettori) `MemoryPhotoPicker` e
+`ReferencePicker` danno **gli stessi elementi, la stessa copertina e gli stessi conteggi** (uguaglianza esatta, non solo entro 1e-4: i conti
+sono gli stessi nello stesso ordine). Lo stesso ingresso in un altro ordine da' la stessa scelta (80 ingressi x 4 mescolamenti).
+
+**Test** (`core-memories`: da 67 a **206 prove in 26 classi**, debug e release; nuove 139): `MemoryPhotoPickerContractTest` (la suite `PickerContract`
+di P0 sulla scelta vera, 12), `PickParityTest` (3), `PickExclusionsTest` (16), `PickScoreTest` (14), `PickDuplicatesTest` (12), `PickVarietyTest`
+(10), `PickCoverTest` (8), `PickHiddenTest` (11), `PickNoTraceTest` (8), `PickPerformanceTest` (4), `PixelMeasureTest` (14),
+`PickSignalsLoaderTest` (11); le suite di contratto delle porte `MemoryVectorsContract` e `MemoryPixelsContract` (gireranno anche sugli
+adattatori veri di P13) sui fake (14) e `NoMemoryVectorsTest`/`NoMemoryPixelsTest` (2). **Prova che falliscono**: tolti i due controlli dei
+Nascosti da `VisiblePhotoPicker` e i divieti della copertina da `MemoryPhotoPicker` (una mutazione sola per file, poi ripristinati) le prove
+`PickHiddenTest`, `PickCoverTest` e il contratto diventano rosse (18 su 31); ripristinati, verdi.
+
+**Edge case**
+| ID | Come e' coperto |
+|---|---|
+| E-MEM1 | sotto `minSize` il ricordo non nasce, `TOO_FEW` contato (`PickVarietyTest.sottoIlMinimoNonNasce`, contratto) |
+| E-MEM2 | un giorno di soli screenshot: nessun ricordo, `SCREENSHOT` e `TOO_FEW` contati (`PickExclusionsTest`); documenti e WhatsApp idem (uno per uno) |
+| E-MEM5, E-NT7 | un media che diventa nascosto a scelta finita esce e non e' copertina (`PickHiddenTest.nascostoDellUltimoMomento`); la revoca della notifica e' di P10 |
+| E-MEM11 | "Mostra meno" resta nel ricordo ma non e' mai copertina; "Mai" esce (`PickExclusionsTest`, `PickCoverTest`) |
+| E-MEM12 | un periodo "Mai" esclude i suoi giorni per tutti i tipi (`PickExclusionsTest.ilMaiVaPerTuttiITipi`); il viaggio che lo tocca e' di P6 |
+| E-MEM15 | senza misure dei pixel nessuna penalita' di nitidezza e la luce dal `ThumbHash`; porta che fallisce = nessun segnale (`PickSignalsLoaderTest`) |
+| E-MEM16 | senza vettori: firma visiva (vale `true` e `false`), "non so" = finestra di 3 minuti, estremi inclusi (`PickDuplicatesTest`) |
+| E-MEM18 | data stimata o giorno che non e' una data: fuori nei ricordi legati a una data, dentro per una persona (`PickExclusionsTest`) |
+| E-H8 | un nascosto perfetto (preferito, modificato, in album, nitido) non esce mai, ne' elemento ne' copertina: proprieta' su 400 ingressi con nascosti sparsi (`PickHiddenTest.unNascostoPerfettoNonEsceMai`); maschera che fallisce = nessun ricordo |
+| E-H10 | una persona nascosta non arriva alla scelta (la porta `MemoryPeople` non la da'); "Mai" per persona verificato per foto |
+| D33 | risultato con soli conteggi, nessun log, `toString()` senza id ne' date (`PickNoTraceTest`) |
+
+**`tools/check.ps1 -NoDaemon`**: **verde** (30/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, dentro il posto
+Gradle `ocp7`, preso prima e rilasciato dopo): «OK: tutto a posto»; il passo Gradle (`assembleDebug assembleRelease galleryTest galleryLint`) in 700
+secondi, 16.351 prove in 43 moduli (`core-memories` 206, `core-common` 157, `core-albums` 848), nessuna fallita; i test d'architettura delle Fasi 6-9 verdi
+(anche da soli prima del check); solo `-Bench` saltato (senza il flag). **Il primo giro era rosso** per `SmartAlbumsLiveTest.unoSmartNuovoDiceCheCerca...`
+di `core-albums` (attesa di 120 s scaduta alla riga 98, `status.until { it is Recomputing }`): non e' di P7 (nessun file fuori da `core-memories` e
+`docs/` e' cambiato, e `core-albums` non vede `core-memories`); rilanciata la sola classe ha fallito una volta e passato la seconda (4 prove, 4,6 s),
+poi il check intero e' passato. E' la stessa prova che P0 aveva trovato lenta sotto carico: sembra una corsa fra l'osservatore e lo stato
+transitorio `Recomputing`, non un problema di carico (punto aperto per chi ha `core-albums`).
+
+**Modifiche richieste ai contratti degli altri** (nessuna fatta qui)
+- **P6**: per avere il tetto di 200 misure dei pixel (D6) il generatore deve chiedere i segnali con `PickSignalsLoader` (o equivalente) invece di
+  chiedere le misure per tutti i candidati come fa `InMemoryMemories`; e per il filtro finale dei Nascosti deve scegliere con
+  `VisiblePhotoPicker(picker, hiddenMask)` (`suspend`, la scelta nuda non e' `suspend`).
+- **P11**: la calibrazione di `PickWeights` e della soglia di nitidezza (100, scala 0..255, 256 px): la misura e' pronta; `SyntheticVectors` semina
+  coppie con il coseno voluto per provare 0,92.
+- **P13**: legare `MemoryPixels` a una miniatura locale **gia' a 256 px sul lato lungo** (non oltre 512) e passarla a `PixelMeasure.probe` (byte
+  senza segno, per righe) o `probeArgb`; legare `MemoryVectors`, `MemoryLookAlikes`, `MemoryAlbumSignals`, `MemoryPeople` come da §1.4.
+- **`DropReason` (P0)**: aggiungere `HIDDEN` se la Diagnostica deve dire quanti nascosti ha tolto la scelta; oggi no (il numero di nascosti di una
+  Libreria e' gia' un'informazione su di loro, L400).
+- **Q6**: se si volesse il filtro dei ricordi tristi, serve una decisione dell'utente e le modifiche del paragrafo sopra.
+
+**Punti aperti**
+1. La soglia di nitidezza (100) e i pesi sono provvisori: nessuna foto vera e' stata misurata (P11, F125).
+2. Le misure di prestazione sono su questo PC; sull'S25 vanno rifatte (P12).
+3. Nessuna prova su dispositivo e nessun Gradle fuori dal posto; nessun sotto-agente.
+4. `InMemoryMemories` (P0) non usa ancora `MemoryPhotoPicker` ne' il raccoglitore (default `ReferencePicker`): lo cambiano P6 e P13.

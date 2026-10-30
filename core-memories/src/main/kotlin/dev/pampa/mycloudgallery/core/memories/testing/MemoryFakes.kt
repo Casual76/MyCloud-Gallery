@@ -107,9 +107,24 @@ class FakeMemoryPeople(
   override suspend fun label(person: PersonId): String? = resolve(person)?.let { names[it] }
 }
 
-/** Vettori finti normalizzati, messi dal test (doppioni seminati: stesso vettore o quasi). */
+/**
+ * Vettori finti normalizzati, messi dal test (doppioni seminati: stesso vettore o quasi, `SyntheticVectors`). Fedele alla porta (suite
+ * `MemoryVectorsContract`): risponde solo per gli id chiesti e che conosce, e ogni risposta porta **copie** (chi la riceve puo' scriverci senza
+ * toccare lo stato della sorgente, come un adattatore che legge dal database). [calls] conta le richieste, [asked] gli id chiesti in tutto.
+ */
 class FakeMemoryVectors(val vectors: MutableMap<MediaId, FloatArray> = HashMap()) : MemoryVectors {
-  override suspend fun vectors(ids: Collection<MediaId>): Map<MediaId, FloatArray> = ids.mapNotNull { id -> vectors[id]?.let { id to it } }.toMap()
+  var calls: Int = 0
+    private set
+  var asked: Int = 0
+    private set
+
+  override suspend fun vectors(ids: Collection<MediaId>): Map<MediaId, FloatArray> {
+    calls++
+    asked += ids.size
+    val out = LinkedHashMap<MediaId, FloatArray>()
+    for (id in ids) vectors[id]?.let { out[id] = it.copyOf() }
+    return out
+  }
 }
 
 /** La firma visiva finta: [pairs] le coppie "quasi lo stesso scatto"; le altre "non si sa" se [unknownElse], altrimenti "no". */
@@ -123,14 +138,32 @@ class FakeMemoryLookAlikes(private val pairs: Set<Set<MediaId>>, private val unk
   }
 }
 
-/** Misure dei pixel da tabella (foto buie, mosse). */
-class FakeMemoryPixels(val probes: MutableMap<MediaId, PixelProbe> = HashMap()) : MemoryPixels {
+/**
+ * Misure dei pixel da tabella (foto buie, mosse). Fedele alla porta (suite `MemoryPixelsContract`): risponde solo per gli id chiesti e che conosce,
+ * e rispetta il budget: ogni misura costa [costPerId] e, quando il budget finisce, si ferma (le misure gia' fatte restano, quelle dopo no).
+ * Con il costo a zero risponde sempre, anche a budget zero (una misura in cache non costa niente). [asked] conta gli id chiesti in tutto.
+ */
+class FakeMemoryPixels(
+  val probes: MutableMap<MediaId, PixelProbe> = HashMap(),
+  private val costPerId: Duration = Duration.ZERO,
+) : MemoryPixels {
   var calls: Int = 0
+    private set
+  var asked: Int = 0
     private set
 
   override suspend fun probe(ids: Collection<MediaId>, budget: Duration): Map<MediaId, PixelProbe> {
     calls++
-    return ids.mapNotNull { id -> probes[id]?.let { id to it } }.toMap()
+    asked += ids.size
+    val out = LinkedHashMap<MediaId, PixelProbe>()
+    var spent = Duration.ZERO
+    for (id in ids) {
+      val probe = probes[id] ?: continue
+      if (spent + costPerId > budget) break
+      spent += costPerId
+      out[id] = probe
+    }
+    return out
   }
 }
 

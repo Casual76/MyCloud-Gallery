@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.GroupingCorrections
 import dev.pampa.mycloudgallery.core.faces.contract.GroupingEngine
 import dev.pampa.mycloudgallery.core.faces.contract.GroupingInput
 import dev.pampa.mycloudgallery.core.faces.contract.GroupingParams
+import dev.pampa.mycloudgallery.core.faces.contract.GroupingOverCapException
 import dev.pampa.mycloudgallery.core.faces.contract.GroupingReport
 import dev.pampa.mycloudgallery.core.faces.contract.GroupingState
 import dev.pampa.mycloudgallery.core.faces.contract.HolderState
@@ -77,6 +78,14 @@ class CustodianGrouping(
 
   /** Quante volte questo dispositivo si e' riallineato o ha assorbito un'istantanea (codice `FACES_HOLDER_REBASED`, solo numeri). */
   val rebased: StateFlow<Int> = rebasedCount
+
+  private val skippedCount = MutableStateFlow(0)
+
+  /**
+   * L343 (correzioni E): quante volte un passo e' stato saltato perche' i volti della generazione superano il tetto duro (`FACES_GROUPING_SKIPPED`, solo il
+   * numero). Un account cosi' grande non si raggruppa finche' il raggruppamento non lavora a pezzi.
+   */
+  val skipped: StateFlow<Int> = skippedCount
 
   private val mutex = Mutex()
   private var held: FacesLease.Held? = null
@@ -247,6 +256,10 @@ class CustodianGrouping(
     block()
   } catch (e: CancellationException) {
     throw e
+  } catch (e: GroupingOverCapException) {
+    // L343: oltre il tetto duro il passo salta (come per un archivio chiuso), ma lo dice: un numero, mai quanti volti.
+    skippedCount.value++
+    null
   } catch (e: Exception) {
     // I5: un archivio chiuso a meta' o un errore del database (O1) fermano il giro senza cadere.
     null

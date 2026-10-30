@@ -125,9 +125,15 @@ internal class FacesRig(private val app: Application, root: File) {
   private val faceGraphs = mutableListOf<FacesGraph>()
 
   /** Il dispositivo [test] con la galleria avviata, il NAS agganciato e le persone costruite (non ancora attive: Off). */
-  suspend fun node(name: String, test: TestDevice, account: String): FacesNode {
+  suspend fun node(
+    name: String,
+    test: TestDevice,
+    account: String,
+    /** Lo stato della famiglia che la galleria vede (di serie quello del dispositivo): le prove di un lavoro in un processo appena nato lo avvolgono (D-7). */
+    setup: dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository = test.graph.setup,
+  ): FacesNode {
     val bridge = PeopleBridge()
-    val mounted = ai.startMounted(ai.mount(test, account, people = bridge))
+    val mounted = ai.startMounted(ai.mount(test, account, people = bridge, setup = setup))
     test.graph.trustGuard.preflight(Purpose.BACKGROUND)
     val albums = AlbumsWiring.build(test.context, test.graph, mounted.gallery, search = null, today = FACES_TODAY, people = bridge).also { albumGraphs += it }
     val engines = FakeFaceEngines()

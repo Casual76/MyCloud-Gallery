@@ -327,8 +327,8 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.FACES_MODEL_MISMATCH, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_model_mismatch_title, R.string.diag_faces_model_mismatch_guide, null),
     DiagEntry(DiagCodes.FACES_ENGINE_FAILED, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_engine_failed_title, R.string.diag_faces_engine_failed_guide, null),
     DiagEntry(DiagCodes.FACES_VECTOR_INVALID, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_vector_invalid_title, R.string.diag_faces_vector_invalid_guide, null),
-    DiagEntry(DiagCodes.FACES_NO_INDEXER, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_no_indexer_title, R.string.diag_faces_no_indexer_guide, null),
-    DiagEntry(DiagCodes.FACES_NO_PRIVATE_AREA, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_no_private_area_title, R.string.diag_faces_no_private_area_guide, null),
+    DiagEntry(DiagCodes.FACES_NO_INDEXER, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_no_indexer_title, R.string.diag_faces_no_indexer_guide, DiagnosticsActions.OPEN_INDEXER_ROLE),
+    DiagEntry(DiagCodes.FACES_NO_PRIVATE_AREA, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_no_private_area_title, R.string.diag_faces_no_private_area_guide, DiagAction.RESUME_ONBOARDING),
     DiagEntry(DiagCodes.FACES_WAITING_PREVIEWS, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_waiting_previews_title, R.string.diag_faces_waiting_previews_guide, null),
     DiagEntry(DiagCodes.FACES_SEGMENT_REJECTED, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_segment_rejected_title, R.string.diag_faces_segment_rejected_guide, null),
     DiagEntry(DiagCodes.FACES_HEAD_REJECTED, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_head_rejected_title, R.string.diag_faces_head_rejected_guide, null),
@@ -345,6 +345,11 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.PRE_PUBLISH_FAILED, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_pre_publish_failed_title, R.string.diag_pre_publish_failed_guide, null),
     DiagEntry(DiagCodes.FACES_KILLED_MEMORY, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_killed_memory_title, R.string.diag_faces_killed_memory_guide, null),
     DiagEntry(DiagCodes.FACES_MOUNT_FAILED, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_mount_failed_title, R.string.diag_faces_mount_failed_guide, null),
+    // Correzioni E (L320, L343, C232, C234): i conteggi che prima non avevano un codice proprio.
+    DiagEntry(DiagCodes.FACES_ERASE_FILES_HELD, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_erase_files_held_title, R.string.diag_faces_erase_files_held_guide, null),
+    DiagEntry(DiagCodes.FACES_GROUPING_SKIPPED, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_grouping_skipped_title, R.string.diag_faces_grouping_skipped_guide, null),
+    DiagEntry(DiagCodes.FACES_SEGMENT_WAITING, DiagSection.PEOPLE, DiagSeverity.INFO, R.string.diag_faces_segment_waiting_title, R.string.diag_faces_segment_waiting_guide, null),
+    DiagEntry(DiagCodes.FACES_ARCHIVE_FULL, DiagSection.PEOPLE, DiagSeverity.WARNING, R.string.diag_faces_archive_full_title, R.string.diag_faces_archive_full_guide, null),
 
     // --- Ricordi e mappa (Fase 9, P0: le voci di stato; i codici del §2.12 li aggiunge P13) --------------------------------
     DiagEntry(DiagCodes.MEMORY_STATE, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_state_title, R.string.diag_memory_state_guide, null),

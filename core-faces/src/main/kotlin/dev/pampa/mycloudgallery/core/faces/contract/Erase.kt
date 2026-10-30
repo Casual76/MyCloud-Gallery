@@ -133,6 +133,11 @@ data class EraseStatus(
   val nas: StepState,
   val devices: List<DeviceAck>,
   val waiting: EraseWait?,
+  /**
+   * L320 (correzioni E): con l'attesa [EraseWait.FILE_OPEN], quanti file della generazione il NAS tiene (aperti da un altro o cambiati dopo l'elenco) e il
+   * giro non ha potuto togliere; 0 se non si aspetta per questo o se il NAS non l'ha detto. Solo il numero: `FACES_ERASE_FILES_HELD`.
+   */
+  val heldFiles: Int = 0,
 ) {
   override fun toString(): String = "EraseStatus(${step.code}, ${local.code}, ${nas.code}, ${waiting?.code})"
 }

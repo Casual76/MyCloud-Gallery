@@ -366,6 +366,12 @@ object DiagCodes {
   @JvmField val FACES_KILLED_MEMORY = DiagCode("FACES_KILLED_MEMORY", setOf("E-A16"))
   @JvmField val FACES_MOUNT_FAILED = DiagCode("FACES_MOUNT_FAILED")
 
+  // Correzioni E (L320, L343, C232, C234): quattro conteggi con il loro codice. Solo numeri.
+  @JvmField val FACES_ERASE_FILES_HELD = DiagCode("FACES_ERASE_FILES_HELD", setOf("E-F30"))
+  @JvmField val FACES_GROUPING_SKIPPED = DiagCode("FACES_GROUPING_SKIPPED")
+  @JvmField val FACES_SEGMENT_WAITING = DiagCode("FACES_SEGMENT_WAITING", setOf("E-F41"))
+  @JvmField val FACES_ARCHIVE_FULL = DiagCode("FACES_ARCHIVE_FULL", setOf("E-F41"))
+
   // --- Ricordi e mappa (Fase 9) --------------------------------------------------------------------------------------
   // P0 aggiunge solo i due codici di stato che tengono vive le sezioni MEMORIES e MAP (un test vuole almeno una voce per sezione), come
   // PEOPLE_STATE nella Fase 8. Gli altri codici del §2.12 di docs/fase9-progetto.md (MEMORY_*, NOTIFY_*, MAP_*: `MemoriesDiag` di

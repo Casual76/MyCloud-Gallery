@@ -88,8 +88,8 @@
 
   --- Modo faces (-Mode faces, Fase 8, P12; -Step seed | interrupt | verify | clean) ---
   Sull'S25 con la build DEBUG e l'account `test`. PRONTO MA NON ESEGUITO (niente telefono, niente adb): la prova vera (F103) la fa chi ha il telefono. Gli scenari
-  dell'app (attivare Persone, "Analizza ora", "Disattiva e cancella" con la conferma) sono quelli del pannello di debug "Prove della Fase 8" (par. 5.6), che
-  P13 scrivera': lo script li avvia con `am broadcast -a dev.pampa.mycloudgallery.debug.action.FACES_SCENARIO -p <pacchetto> --es scenario <nome>` (nomi
+  dell'app ("Analizza ora" e il raggruppamento, la ripresa di "Disattiva e cancella") li riceve `FieldProbeFacesScenarioReceiver` (solo build debug, correzioni E, DR-2).
+  Persone si attiva e "Disattiva e cancella" si conferma dall'app (consenso e conferma sono solo di quelle pagine): gli scenari seguono da li'. Lo script li avvia con `am broadcast -a dev.pampa.mycloudgallery.debug.action.FACES_SCENARIO -p <pacchetto> --es scenario <nome>` (nomi
   f103-compute, f103-erase, f103-status) e legge l'esito dal file di stato dell'app (`run-as <pacchetto> cat files/prove/f8-status.txt`, righe chiave=valore:
   phase, state, generation_present, local_done, keys, faces_db, erase_done). I nomi stanno in testa al modo (variabili $Faces*): si cambiano in un punto solo.
     seed       porta sul telefono i ritratti e le composizioni di PUBBLICO DOMINIO di -PortraitsDir (default tools\fixtures\faces\portraits; da 10 a 200 file, mai
@@ -604,13 +604,13 @@ if ($SelfTest -and $isShare) {
 # (`am broadcast -a <azione> -p <pacchetto> --es scenario <nome>`) e scrive l'esito, a righe `chiave=valore`, nel file di stato della sua cartella
 # (`run-as <pacchetto> cat files/prove/f8-status.txt`): phase=, state=, generation_present=, local_done=, keys=, faces_db=, erase_done=.
 $FacesBroadcastAction = "dev.pampa.mycloudgallery.debug.action.FACES_SCENARIO"
-$FacesScenarioCompute = "f103-compute"     # attiva Persone (account di prova), "Analizza ora" sull'area di prova; phase=computed a calcolo e raggruppamento finiti
-$FacesScenarioErase = "f103-erase"         # "Disattiva e cancella" con la conferma; phase=erased a cancellazione locale e sul NAS finite
+$FacesScenarioCompute = "f103-compute"     # "Analizza ora" sull'area di prova e raggruppamento; Persone deve essere gia' attiva (il consenso lo da' solo la pagina di attivazione: senza, phase=needs_activation); phase=computed a calcolo e raggruppamento finiti
+$FacesScenarioErase = "f103-erase"         # riprende e segue "Disattiva e cancella" gia' confermata dal foglio (la conferma e' solo del foglio: senza, phase=needs_erase); phase=erased a cancellazione locale e sul NAS finite
 $FacesScenarioStatus = "f103-status"       # riscrive solo il file di stato (nessun lavoro)
 $FacesStatusFile = "files/prove/f8-status.txt"
-# Le cartelle dell'app di debug da elencare (`run-as <pacchetto> ls -1 <cartella>`): i file dei volti stanno in `noBackupFilesDir` (faces-<G>.db con -wal, -shm,
-# -journal; faces-local; faces-erase). `databases` si guarda per prudenza (una cartella che non c'e' e' vuota).
-$FacesAppDirs = @("no_backup", "databases")
+# Le cartelle dell'app di debug da elencare (`run-as <pacchetto> ls -1 <cartella>`): faces-local e faces-erase stanno in `noBackupFilesDir`, i database dei volti
+# (faces-<G>.db con -wal, -shm, -journal) in `noBackupFilesDir/faces/`. `databases` si guarda per prudenza (una cartella che non c'e' e' vuota).
+$FacesAppDirs = @("no_backup", "no_backup/faces", "databases")
 # Dopo la cancellazione restano questi due (il diario si tiene 30 giorni per la pagina, par. 2.8 passo 11; lo stato locale), con il loro temporaneo.
 $FacesKeepPattern = '^(faces-erase|faces-local)(\.tmp)?$'
 $FacesPhases = @("computed", "erased")

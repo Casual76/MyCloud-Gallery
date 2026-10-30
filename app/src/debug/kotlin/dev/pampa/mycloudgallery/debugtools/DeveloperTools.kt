@@ -120,6 +120,12 @@ internal object DeveloperTools {
     dev.pampa.mycloudgallery.debugtools.eval.faces.FacesEvalEnvironmentHolder.current = AppFacesEvalEnvironment(live, facade)
   }
 
+  /**
+   * Fase 8 (DR-2, F109), SOLO debug, SOLO con il segno: la ricetta dei volti forzata dallo scenario `f109-recipe` (ricetta 2), letta quando si montano le persone.
+   * Senza il segno la debug e' l'app vera. In release non esiste (tools/check.ps1 cerca i resti degli scenari nel dex).
+   */
+  fun facesRecipe(context: Context): Int? = dev.pampa.mycloudgallery.debugtools.probes.FieldProbeFacesRecipe.read(context.filesDir)
+
   fun settingsSection(nav: NavController): (@Composable () -> Unit)? = {
     FluidListGroup {
       FluidListRow(

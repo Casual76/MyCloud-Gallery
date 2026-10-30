@@ -54,6 +54,8 @@ class FacesWorkSchedulingTest {
     FacesWorkScheduling.COMPUTE_NEWS_WORK,
     FacesWorkScheduling.COMPUTE_NEXT_WORK,
     FacesWorkScheduling.ERASE_WORK,
+    FacesWorkScheduling.NIGHTLY_WORK,
+    FacesWorkScheduling.NIGHTLY_NEXT_WORK,
   )
 
   @Test
@@ -113,5 +115,33 @@ class FacesWorkSchedulingTest {
     for (info in queued(FacesWorkScheduling.ERASE_WORK)) {
       assertThat(info.tags).contains(FacesWorkScheduling.TAG)
     }
+  }
+
+  /** RG-1 (correzioni E): il raggruppamento notturno ha un lavoro suo, periodico una volta al giorno in carica e a batteria non scarica. */
+  @Test
+  fun rg1_ilRaggruppamentoNotturnoHaUnLavoroPeriodicoSuoInCarica() {
+    FacesWorkScheduling.ensure(context)
+    FacesWorkScheduling.ensure(context)
+
+    val nightly = queued(FacesWorkScheduling.NIGHTLY_WORK)
+    assertThat(nightly).hasSize(1)
+    assertThat(nightly.single().constraints.requiresCharging()).isTrue()
+    assertThat(nightly.single().constraints.requiresBatteryNotLow()).isTrue()
+    // Non e' piu' dentro la manutenzione della Libreria e non e' il calcolo: nomi e lavori distinti.
+    assertThat(FacesWorkScheduling.NIGHTLY_WORK).isNotEqualTo(GalleryWorkScheduling.MAINTENANCE_WORK)
+    assertThat(queued(FacesWorkScheduling.COMPUTE_WORK)).hasSize(1)
+    assertThat(queued(FacesWorkScheduling.NIGHTLY_NEXT_WORK)).isEmpty()
+  }
+
+  /** RG-1: dopo la tappa del calcolo il raggruppamento segue nella stessa notte, in un lavoro unico (due richieste valgono una). */
+  @Test
+  fun rg1_dopoIlCalcoloIlRaggruppamentoSegueInUnLavoroUnico() {
+    FacesWorkScheduling.nightlyAfterCompute(context)
+    FacesWorkScheduling.nightlyAfterCompute(context)
+
+    assertThat(queued(FacesWorkScheduling.NIGHTLY_NEXT_WORK)).hasSize(1)
+    // Non tocca ne' il periodico ne' il calcolo.
+    assertThat(queued(FacesWorkScheduling.NIGHTLY_WORK)).isEmpty()
+    assertThat(queued(FacesWorkScheduling.COMPUTE_NEXT_WORK)).isEmpty()
   }
 }

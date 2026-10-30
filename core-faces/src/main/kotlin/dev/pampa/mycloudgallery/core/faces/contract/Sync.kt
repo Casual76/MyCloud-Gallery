@@ -156,12 +156,54 @@ data class FacesSyncReport(
   val devicesRead: Int,
   val headsAccepted: Int,
   val headsRejected: Map<String, Int>,
+  /**
+   * I segmenti che non sono entrati, per motivo (codici stabili di [FacesSegmentCodes] o motivi di rifiuto). Dentro ci sono anche quelli **in attesa** e quelli
+   * rimandati per l'archivio pieno: `FACES_SEGMENT_REJECTED` conta solo i veri rifiuti ([segmentsRefused]), gli altri hanno i loro codici
+   * ([segmentsWaiting], [segmentsArchiveFull]).
+   */
   val segmentsRejected: Map<String, Int>,
   val bytesRead: Long,
   val foreignGenerations: Int,
   val published: FacesPublishOutcome?,
   val stop: FacesSyncStop,
-)
+) {
+  /** Segmenti che aspettano e si riprovano (assenti, illeggibili, con l'ora nel futuro): `FACES_SEGMENT_WAITING` (C234). */
+  val segmentsWaiting: Int get() = segmentsRejected.filterKeys { it in FacesSegmentCodes.WAITING }.values.sum()
+
+  /** Segmenti e voci che non entrano perche' l'archivio dei volti e' pieno: `FACES_ARCHIVE_FULL` (C232). */
+  val segmentsArchiveFull: Int get() = segmentsRejected.filterKeys { it in FacesSegmentCodes.ARCHIVE_FULL_CODES }.values.sum()
+
+  /** Segmenti davvero rifiutati (forma, tetti dell'autore, impronta): `FACES_SEGMENT_REJECTED`. */
+  val segmentsRefused: Int get() = segmentsRejected.values.sum() - segmentsWaiting - segmentsArchiveFull
+}
+
+/**
+ * I motivi, nel [FacesSyncReport.segmentsRejected], che non sono un rifiuto: il segmento **aspetta** ([WAITING]) o l'archivio e' **pieno**
+ * ([ARCHIVE_FULL_CODES]: C232, C234). Stessi valori che scrive `NasFacesSync`; la Diagnostica li separa dal conto dei rifiutati (solo numeri).
+ */
+object FacesSegmentCodes {
+  /** R5: elencato e assente. */
+  const val MISSING: String = "MISSING"
+
+  /** R5: un file che il NAS non da' mentre risponde a un elenco. */
+  const val UNREADABLE: String = "UNREADABLE"
+
+  /** R6: i corpi di un autore oltre i suoi tetti (segmento rifiutato per sempre). */
+  const val AUTHOR_FULL: String = "AUTHOR_FULL"
+
+  /** R6: l'archivio e' pieno (segmento rimandato). */
+  const val ARCHIVE_FULL: String = "ARCHIVE_FULL"
+
+  /** R3: voci `people` che non entrano nell'archivio per i tetti. */
+  const val PEOPLE_FULL: String = "PEOPLE_FULL"
+
+  /** Una voce `people` con l'ora oltre i 2 minuti nel futuro (`PeopleVerdict.FROM_FUTURE.code`): aspetta. */
+  const val FROM_FUTURE: String = "people_from_future"
+
+  val WAITING: Set<String> = setOf(MISSING, UNREADABLE, FROM_FUTURE)
+
+  val ARCHIVE_FULL_CODES: Set<String> = setOf(ARCHIVE_FULL, PEOPLE_FULL)
+}
 
 /** La replica dei dati dei volti dei dispositivi dell'account (P3). */
 interface FacesSync {

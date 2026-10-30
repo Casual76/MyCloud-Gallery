@@ -47,10 +47,21 @@
   <string name="diag_faces_erase_pending_guide">Questo dispositivo ha ancora dati dei volti di un’attivazione cancellata: li toglie prima di pubblicare i dati personali, e riprova al giro dopo.</string>
   <string name="diag_faces_mount_failed_title">Persone non avviate</string>
   <string name="diag_faces_mount_failed_guide">Persone non si è avviata in questa sessione dell’app. Album personali, preferiti e nascosti continuano a sincronizzarsi, senza dire niente sui volti. Riavvia l’app; se si ripete, esporta la Diagnostica.</string>
+  <!-- Correzioni E (L320, L343, C232, C234): i conteggi con il loro codice. Solo numeri nelle esportazioni. -->
+  <string name="diag_faces_erase_files_held_title">Cancellazione dei volti: file tenuti aperti sul NAS</string>
+  <string name="diag_faces_erase_files_held_guide">Il NAS tiene aperti alcuni file dei volti (di solito un computer li ha aperti) e non si possono togliere adesso. L’app riprova da sola con attese sempre più lunghe: chiudi quei file sul computer.</string>
+  <string name="diag_faces_grouping_skipped_title">Troppi volti per formare le persone</string>
+  <string name="diag_faces_grouping_skipped_guide">I volti trovati sono più di quanti il telefono riesce a raggruppare in una volta: il raggruppamento in persone viene saltato per non far chiudere l’app. Le persone già formate restano. Esporta la Diagnostica se ti serve.</string>
+  <string name="diag_faces_segment_waiting_title">Dati dei volti in attesa</string>
+  <string name="diag_faces_segment_waiting_guide">Alcuni dati dei volti non c’erano sul NAS o non si sono potuti leggere: l’app riprova con attese sempre più lunghe, fino a un giorno. Qui si vede solo quanti.</string>
+  <string name="diag_faces_archive_full_title">Archivio dei volti pieno</string>
+  <string name="diag_faces_archive_full_guide">L’archivio dei volti di questo dispositivo è arrivato al suo limite per i dati che vengono dagli altri dispositivi: quelli nuovi aspettano che si liberi posto (una revoca o un contenuto tolto). Le tue scelte e quello che calcola questo dispositivo non sono toccati.</string>
   <string name="diag_pre_publish_failed_title">Dati personali non pubblicati</string>
   <string name="diag_pre_publish_failed_guide">Un controllo prima della pubblicazione dei dati personali non è riuscito, quindi quel giro non ha pubblicato niente. Riprova da solo al giro dopo.</string>
   <string name="diag_faces_killed_memory_title">Android ha chiuso l’app durante l’analisi dei volti</string>
   <string name="diag_faces_killed_memory_guide">Il sistema ha chiuso l’app per poca memoria mentre analizzava i volti. L’analisi riprende dal media dopo, senza rifare niente. Se succede spesso, chiudi qualche app in secondo piano di notte.</string>
+  <string name="diagnostics_action_open_indexer_role">Fallo su questo dispositivo</string>
   <string name="diagnostics_job_faces_compute">Analisi dei volti per Persone</string>
+  <string name="diagnostics_job_faces_nightly">Raggruppamento notturno delle persone</string>
   <string name="diagnostics_job_faces_erase">Cancellazione dei dati dei volti</string>
 </resources>

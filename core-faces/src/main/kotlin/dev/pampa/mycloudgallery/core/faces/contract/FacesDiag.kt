@@ -60,6 +60,21 @@ object FacesDiag {
   /** E-A16: Android ha chiuso il processo per memoria durante una tappa del calcolo dei volti (come `AI_KILLED_MEMORY`). */
   const val FACES_KILLED_MEMORY: String = "FACES_KILLED_MEMORY"
 
+  /**
+   * Correzioni E (L320, L343, C232, C234): quattro conteggi che prima non avevano un codice proprio. Solo numeri: mai nomi, id, generazioni o percorsi.
+   * `FACES_ERASE_FILES_HELD`: N file dei volti che il NAS tiene (aperti da un altro) durante "Disattiva e cancella".
+   */
+  const val FACES_ERASE_FILES_HELD: String = "FACES_ERASE_FILES_HELD"
+
+  /** N passi del raggruppamento saltati perche' i volti superano il tetto duro (300.000). */
+  const val FACES_GROUPING_SKIPPED: String = "FACES_GROUPING_SKIPPED"
+
+  /** N segmenti dei volti che aspettano (assenti, illeggibili, ora nel futuro) e si riprovano con attese crescenti. */
+  const val FACES_SEGMENT_WAITING: String = "FACES_SEGMENT_WAITING"
+
+  /** N segmenti o voci che non entrano perche' l'archivio dei volti e' pieno: aspettano una revoca o un contenuto tolto. */
+  const val FACES_ARCHIVE_FULL: String = "FACES_ARCHIVE_FULL"
+
   /** La voce di stato della sezione (`DiagSection.PEOPLE`). */
   const val PEOPLE_STATE: String = "PEOPLE_STATE"
 
@@ -68,6 +83,6 @@ object FacesDiag {
     FACES_MODEL_MISMATCH, FACES_ENGINE_FAILED, FACES_VECTOR_INVALID, FACES_NO_INDEXER, FACES_NO_PRIVATE_AREA, FACES_WAITING_PREVIEWS,
     FACES_SEGMENT_REJECTED, FACES_HEAD_REJECTED, FACES_FOREIGN_GENERATION, FACES_HOLDER_REBASED, FACES_KEY_LOST, FACES_ERASE_LOCAL_DONE,
     FACES_ERASE_NAS_PENDING, FACES_ERASE_NAS_DONE, FACES_ERASE_WAITING_DEVICES, FACES_RECYCLE_BIN, FACES_NEEDS_UPDATE, FACES_ERASE_PENDING, FACES_KILLED_MEMORY, PEOPLE_STATE,
-    FACES_MOUNT_FAILED,
+    FACES_MOUNT_FAILED, FACES_ERASE_FILES_HELD, FACES_GROUPING_SKIPPED, FACES_SEGMENT_WAITING, FACES_ARCHIVE_FULL,
   )
 }

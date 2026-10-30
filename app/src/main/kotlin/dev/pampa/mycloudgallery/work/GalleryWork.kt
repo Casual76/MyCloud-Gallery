@@ -142,12 +142,14 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
   private val utility: dev.pampa.mycloudgallery.utility.UtilityGraph,
   /** Fase 7 (DG-2): gli esiti e gli errori della manutenzione nella Diagnostica ("Ultimi esiti ed errori"). */
   private val graph: dev.pampa.mycloudgallery.graph.AppGraph,
-  /** Fase 8 (P13, §1.4): il raggruppamento notturno del custode, dentro la stessa manutenzione. */
-  private val faces: dev.pampa.mycloudgallery.faces.FacesGraph,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
+    // RG-1 (e VG-1 della Fase 7): un lavoro nato in un processo nuovo aspetta la famiglia **pronta**, come tutti gli altri (D-7). Senza questa attesa `runIfActive`
+    // rispondeva null (lo stato "non configurato" dura un attimo all'avvio): la manutenzione finiva in qualche decimo di secondo con `success`, senza viaggi, smart
+    // ne' Utility, e riprovava solo la notte dopo. Dopo il tempo, un dispositivo davvero non pronto non fa niente (come gli altri lavori).
+    gallery.awaitReady(COLD_START_WAIT)
     // DG-2: la manutenzione notturna girava senza lasciare traccia (un errore o un budget finito non arrivavano mai a "Ultimi esiti ed errori").
     // Un errore si registra (solo il nome del lavoro) e poi prosegue come prima: WorkManager lo vede.
     try {
@@ -180,8 +182,8 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
     val places = gallery.runIfActive { core -> PlacesRecompute(core.catalog, gallery.places).run(PLACES_BUDGET) }
     // Fase 7 (P13): la rilevazione dei viaggi (la casa e i viaggi si ricalcolano di notte, D18, D19) e il ricalcolo di sicurezza degli smart.
     gallery.runIfActive { albums.nightly(ALBUMS_BUDGET) }
-    // Fase 8 (P13): il raggruppamento notturno delle persone (solo il custode lo fa davvero; senza Persone attiva qui non fa niente).
-    gallery.runIfActive { faces.nightly(FACES_BUDGET) }
+    // Fase 8 (RG-1): il raggruppamento notturno delle persone non e' piu' qui: ha un lavoro suo (`FacesNightlyWorker`, dopo la tappa del calcolo e una volta al
+    // giorno), con le regole di `AI_COMPUTE` e la sua finestra di Android. Qui, in coda a sette manutenzioni da 14 minuti di budget, non arrivava mai.
     // Fase 7 (P8): "Controlla di notte i video del NAS" applicato (la coda `FULL_HASH` la prende il lavoro di sicurezza del backup) e le firme
     // visive che mancano ai Doppioni simili.
     val utilityDone = gallery.runIfActive { utility.nightly(UTILITY_BUDGET) }
@@ -191,12 +193,14 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
 
   companion object {
     const val TAG = "LibraryMaintenance"
+
+    /** RG-1: quanto aspetta la famiglia pronta in un processo appena nato (come `FacesComputeWorker` e `IndexSyncWorker`). */
+    val COLD_START_WAIT: Duration = 20.seconds
     val SYNC_BUDGET: Duration = 3.minutes
     val META_BUDGET: Duration = 3.minutes
     val HASH_BUDGET: Duration = 2.minutes
     val PLACES_BUDGET: Duration = 1.minutes
     val ALBUMS_BUDGET: Duration = 1.minutes
-    val FACES_BUDGET: Duration = 2.minutes
     val UTILITY_BUDGET: Duration = 2.minutes
   }
 }

@@ -117,6 +117,7 @@ class RecentEventsContributor(
       DiagJob.LIBRARY_MAINTENANCE -> R.string.diagnostics_job_library_maintenance
       DiagJob.FACES_COMPUTE -> R.string.diagnostics_job_faces_compute
       DiagJob.FACES_ERASE -> R.string.diagnostics_job_faces_erase
+      DiagJob.FACES_NIGHTLY -> R.string.diagnostics_job_faces_nightly
     }
 
     @StringRes

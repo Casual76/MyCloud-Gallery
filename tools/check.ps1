@@ -773,6 +773,9 @@ $debugRemnants = @(
   # prova, resoconto di soli numeri): classi `FieldProbe*` in app/src/debug, componenti nel manifest di debug, cartella `field-probe`.
   # In release DeveloperTools torna senza la rotta e niente di questo deve esistere (ne' nel dex ne' nel manifest).
   "FieldProbe", "debugtools/probes", "field-probe", "fieldprobe",
+  # Fase 8 (correzioni E, DR-2): il ricevitore degli scenari delle persone (banco F103 e ricetta forzata F109) e il suo lavoro, il file di stato e la ricetta forzata.
+  # Gia' coperti dal prefisso `FieldProbe`, ma nominati: in release non deve esistere niente di tutto questo (il ricevitore vive solo in app/src/debug).
+  "FieldProbeFacesScenario", "FieldProbeFacesStatus", "FieldProbeFacesRecipe", "FieldProbeFacesEntryPoint",
   # Fase 6 (P9): lo strumento di valutazione della ricerca (app/src/debug/.../debugtools/eval): classi, porta e nome del file di etichette.
   "debugtools/eval", "EvalEnvironmentHolder", "EvalSession", "EvalEntry", "labels.mcgeval", "MCGEVAL1",
   # Fase 7 (P9, D22, L65): il widget di prova dei Nascosti (app/src/debug/.../debugtools/widget): ricevitore, contenuto e disegno. Solo debug.

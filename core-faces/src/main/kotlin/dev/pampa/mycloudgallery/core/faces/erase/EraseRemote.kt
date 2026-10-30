@@ -33,6 +33,9 @@ internal class EraseRemote(
 ) {
   private var waitNow: EraseWait? = null
 
+  /** L320: quanti file il NAS tiene (aperti da un altro) nell'ultimo giro fermo su [EraseWait.FILE_OPEN]; 0 se non lo dice. */
+  private var heldFiles: Int = 0
+
   private fun remaining(): Duration = (deadline - parts.clock.monotonicNanos()).coerceAtLeast(0).nanoseconds
 
   private fun expired(): Boolean = parts.clock.monotonicNanos() >= deadline
@@ -98,7 +101,7 @@ internal class EraseRemote(
   }
 
   private fun finish(j: EraseJournal): EraseJournal {
-    eraser.setWait(if (j.done) null else waitNow)
+    eraser.setWait(if (j.done) null else waitNow, heldFiles)
     eraser.publishStatus()
     return j
   }
@@ -145,6 +148,8 @@ internal class EraseRemote(
           // Un giro che non toglie niente senza che il tempo sia finito (un file aperto da un altro, cambiato dopo l'elenco) non si ripete subito e non e' un
           // avanzamento: e' un'attesa dichiarata (R13), con il suo motivo, e chi riprende (`FacesGraph.eraseRound`) allunga le attese.
           if (round.removedFiles == 0) {
+            // L320: se e' questa l'attesa che si dichiara (la prima vince), anche quanti file il NAS tiene.
+            if (waitNow == null) heldFiles = round.remainingFiles ?: 0
             waitFor(EraseWait.FILE_OPEN)
             return false
           }

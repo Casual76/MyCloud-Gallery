@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.faces.contract.FacesState
 import dev.pampa.mycloudgallery.core.faces.contract.FacesStatus
 import dev.pampa.mycloudgallery.core.faces.contract.HereState
 import dev.pampa.mycloudgallery.core.faces.contract.HolderState
+import dev.pampa.mycloudgallery.core.faces.contract.IndexerState
 import dev.pampa.mycloudgallery.core.faces.contract.StepState
 import dev.pampa.mycloudgallery.core.faces.contract.AckState
 import dev.pampa.mycloudgallery.core.faces.contract.EraseWait
@@ -39,7 +40,7 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
     val sync = graph.lastSync.value
     val janitor = graph.lastJanitor.value
     val erase = live.eraser.status.value
-    val indexers = safely { live.requirements.indexers() }
+    val indexerState = safely { live.requirements.indexers() }
     val area = safely { live.requirements.privateArea() }
     return PeopleFacts(
       mounted = true,
@@ -67,10 +68,15 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
       devicesRead = sync?.devicesRead ?: 0,
       headsAccepted = sync?.headsAccepted ?: 0,
       headsRejected = sync?.headsRejected?.values?.sum() ?: 0,
-      segmentsRejected = sync?.segmentsRejected?.values?.sum() ?: 0,
+      // C232, C234: i veri rifiuti, i segmenti in attesa e l'archivio pieno hanno ognuno il suo conto (prima stavano tutti nei rifiutati).
+      segmentsRejected = sync?.segmentsRefused ?: 0,
+      segmentsWaiting = sync?.segmentsWaiting ?: 0,
+      archiveFull = sync?.segmentsArchiveFull ?: 0,
+      groupingSkipped = live.grouping.skipped.value,
       foreignGenerations = maxOf(sync?.foreignGenerations ?: 0, janitor?.foreignGenerations ?: 0),
       removedFiles = janitor?.removedFiles ?: 0,
-      indexers = indexers?.accountIndexers ?: 0,
+      // DG-1: questo dispositivo, se e' l'indicizzatore, conta anche prima che lo stato firmato col suo ruolo sia stato letto.
+      indexers = indexersOf(indexerState),
       noPrivateArea = area != null && area !is dev.pampa.mycloudgallery.core.faces.contract.PrivateAreaState.Declared,
       hold = graph.holdCode(),
       eraseStep = erase?.step,
@@ -80,6 +86,8 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
       devicesWaiting = erase?.devices?.count { it.state == AckState.WAITING } ?: 0,
       devicesConfirmed = erase?.devices?.count { it.state == AckState.CONFIRMED } ?: 0,
       recycleBin = erase?.waiting == EraseWait.RECYCLE_BIN,
+      eraseHeldFiles = if (erase?.waiting == EraseWait.FILE_OPEN) erase.heldFiles else 0,
+      eraseFileHeld = erase?.waiting == EraseWait.FILE_OPEN,
     )
   }
 
@@ -103,6 +111,7 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
       export["headsAccepted"] = ExportValue.Num(f.headsAccepted.toLong())
       export["rejectedHeads"] = ExportValue.Num(f.headsRejected.toLong())
       export["rejectedSegments"] = ExportValue.Num(f.segmentsRejected.toLong())
+      export["waitingSegments"] = ExportValue.Num(f.segmentsWaiting.toLong())
       export["roundErrors"] = ExportValue.Num(f.roundErrors.toLong())
       export["holdActive"] = ExportValue.Flag(f.hold != null)
       f.eraseStep?.let { export["eraseStep"] = ExportValue.Enum.of(it) }
@@ -124,6 +133,9 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
     if (f.modelStops > 0) items += count(DiagCodes.FACES_MODEL_MISMATCH, f.modelStops)
     if (f.keyLost > 0) items += count(DiagCodes.FACES_KEY_LOST, f.keyLost)
     if (f.segmentsRejected > 0) items += count(DiagCodes.FACES_SEGMENT_REJECTED, f.segmentsRejected)
+    if (f.segmentsWaiting > 0) items += count(DiagCodes.FACES_SEGMENT_WAITING, f.segmentsWaiting)
+    if (f.archiveFull > 0) items += count(DiagCodes.FACES_ARCHIVE_FULL, f.archiveFull)
+    if (f.groupingSkipped > 0) items += count(DiagCodes.FACES_GROUPING_SKIPPED, f.groupingSkipped)
     if (f.headsRejected > 0) items += count(DiagCodes.FACES_HEAD_REJECTED, f.headsRejected)
     if (f.foreignGenerations > 0) items += count(DiagCodes.FACES_FOREIGN_GENERATION, f.foreignGenerations)
     if (f.rebased > 0) items += count(DiagCodes.FACES_HOLDER_REBASED, f.rebased)
@@ -139,6 +151,8 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
       }
       if (f.devicesWaiting > 0 && f.eraseWaiting == EraseWait.DEVICES) items += count(DiagCodes.FACES_ERASE_WAITING_DEVICES, f.devicesWaiting)
       if (f.recycleBin) items += item(DiagCodes.FACES_RECYCLE_BIN, DiagSeverity.WARNING, emptyMap())
+      // L320: i file che il NAS tiene aperti (se non dice quanti, la voce c'e' senza il numero).
+      if (f.eraseFileHeld) items += if (f.eraseHeldFiles > 0) count(DiagCodes.FACES_ERASE_FILES_HELD, f.eraseHeldFiles) else item(DiagCodes.FACES_ERASE_FILES_HELD, DiagSeverity.INFO, emptyMap())
     }
     return items
   }
@@ -161,6 +175,17 @@ class PeopleDiagnostics(private val graph: FacesGraph) : DiagnosticsContributor 
     val CONTRACT_CODES: List<String> = FacesDiag.ALL
 
     const val PRE_PUBLISH_FAILED: String = "PRE_PUBLISH_FAILED"
+
+    /**
+     * DG-1: gli indicizzatori dell'account **con questo dispositivo**. `accountIndexers` conta i ruoli degli stati firmati e, finche' nessuno stato firmato
+     * e' stato letto, vale 0 anche se qui il ruolo c'e' (`AppFacesRequirements.indexers`): l'attivazione ammette `accountIndexers == 0 && thisDevice`, quindi
+     * la Diagnostica non puo' dire "nessun indicizzatore" a chi sta analizzando. Un dispositivo che non lo sa (null) conta zero.
+     */
+    fun indexersOf(state: IndexerState?): Int = when {
+      state == null -> 0
+      state.accountIndexers == 0 && state.thisDevice -> 1
+      else -> state.accountIndexers
+    }
 
     /** Lo stato del calcolo in un numero: 0 spento, 1 attesa, 2 in corso, 3 fermo, 4 problema. */
     fun statusCode(status: FacesStatus): Long = when (status) {
@@ -212,6 +237,12 @@ internal data class PeopleFacts(
   val headsAccepted: Int = 0,
   val headsRejected: Int = 0,
   val segmentsRejected: Int = 0,
+  /** C234: segmenti che aspettano (assenti, illeggibili, ora nel futuro); non sono rifiuti. */
+  val segmentsWaiting: Int = 0,
+  /** C232: segmenti e voci che non entrano per l'archivio pieno; non sono rifiuti. */
+  val archiveFull: Int = 0,
+  /** L343: passi del raggruppamento saltati oltre il tetto duro dei volti. */
+  val groupingSkipped: Int = 0,
   val foreignGenerations: Int = 0,
   val removedFiles: Int = 0,
   val indexers: Int = 0,
@@ -225,4 +256,7 @@ internal data class PeopleFacts(
   val devicesWaiting: Int = 0,
   val devicesConfirmed: Int = 0,
   val recycleBin: Boolean = false,
+  /** L320: la cancellazione aspetta un file tenuto aperto sul NAS, e quanti ne tiene (0 = non lo dice). */
+  val eraseFileHeld: Boolean = false,
+  val eraseHeldFiles: Int = 0,
 )

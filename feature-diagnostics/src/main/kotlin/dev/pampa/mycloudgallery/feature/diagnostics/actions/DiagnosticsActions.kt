@@ -41,6 +41,12 @@ object DiagnosticsActions {
   /** Fase 4A (D10): "Ho controllato, continua" su un'area congelata, con la conferma del numero. La esegue :app. */
   val NAS_RELEASE_FREEZE = DiagAction("nas_release_freeze")
 
+  /**
+   * Correzioni E (DG-2): "Fallo su questo dispositivo" su `FACES_NO_INDEXER`: porta a Impostazioni → Ricerca e modelli, dove si accende il ruolo di
+   * Indicizzatore. Non lo accende da sola (analizzare le foto pesa sulla batteria: lo decide chi tocca l'interruttore). La esegue :app.
+   */
+  val OPEN_INDEXER_ROLE = DiagAction("open_indexer_role")
+
   /** Le azioni che questo modulo esegue da solo con un intent verso Android. */
   val INTENT_ACTIONS: Set<DiagAction> = setOf(
     DiagAction.OPEN_BATTERY_SETTINGS,
@@ -72,6 +78,7 @@ object DiagnosticsActions {
     NAS_STOP_WRITES -> R.string.diagnostics_action_nas_stop_writes
     NAS_RESUME_WRITES -> R.string.diagnostics_action_nas_resume_writes
     NAS_RELEASE_FREEZE -> R.string.diagnostics_action_nas_release_freeze
+    OPEN_INDEXER_ROLE -> R.string.diagnostics_action_open_indexer_role
     // Verifica funzionale, RE-10 e RE-1/RE-2: portano a Impostazioni → Rete e VPN, dove si fanno. Le esegue :app.
     NetworkDiagActions.RECAPTURE_HOME -> R.string.diagnostics_action_recapture_home
     NetworkDiagActions.OPEN_VPN_CONTROL -> R.string.diagnostics_action_open_vpn_control

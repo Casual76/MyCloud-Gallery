@@ -65,7 +65,8 @@ class InMemoryReleaseState(
     if (manifest.seq == seenSeq) return OfferResult.SAME
     val fresh = statusFor(manifest, version.code)
     val expired = expired(manifest)
-    val now = current?.status ?: ReleaseStatus.Normal
+    // P1: "solo piu' severo" rispetto allo stato in vigore, anche quello rimasto in memoria dopo un salvataggio morto (regole 3 e 4).
+    val now = mutableStatus.value
     val next = if (expired) ReleaseStatus.strictest(now, fresh) else fresh
     val candidate = StoredRelease(manifest.seq, manifest, ok.keyId, version.code, next)
     try {

@@ -439,3 +439,13 @@ Nessuna voce e' corretta. Il pacchetto e' la proposta; ogni correzione porta un 
 **Decisioni per l'utente** (dettaglio in `REPORT.md`): (1) la notifica a processo morto: attendere il montaggio nel lavoro (proposto) o il piano B di D20; (2) quando rifare il giro dei ricordi di oggi; (3) conti di Diagnostica
 persistenti o dichiarati "dall'avvio"; (4) uno stato d'errore per i punti della mappa (L495); (5) i brani del pacchetto di musica libera (nessuna musica di serie fino ad allora).
 
+
+---
+
+## Stato dopo il pacchetto mappa e rete (31/10)
+
+| Voce | Stato | Cosa e' stato fatto | Prova |
+|---|---|---|---|
+| MA-1 Errore dell'indice letto "nessuna posizione" (L495) | **Corretta** (decisione dell'orchestratore del 31/10: uno stato d'errore) | `GeoIndexState.Failed` (solo se non c'e' un indice buono da tenere; "Riprova" fa `rebuild(OPEN)`), `MapScreenState.Failed`, `ZoneGridState.Failed`, `PlacesSectionState.Failed` (riga "Mappa" con la frase e riga "Riprova"): "Non riesco a leggere le posizioni delle foto". L'indice che c'era resta valido. In Diagnostica `MAP_INDEX_FAILED`. L495 chiusa in `docs/sicurezza.md` (C404). | `GeoMapPointsTest`, `MapFailureStatesTest`, `MapFailureHandlersTest`, `MapFailureScreenshotTest` (chiaro e scuro in `docs/screenshots/9-corr/`) |
+
+Le altre voci di questa revisione (NT, AZ, RP, MO, IM, MU, DG, DR) non sono del pacchetto "mappa e rete".

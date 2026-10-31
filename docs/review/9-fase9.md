@@ -239,3 +239,20 @@ Delle voci "per ogni fase, sempre":
 - **R2**: con il file delle impostazioni rovinato, la mappa dettagliata resta **spenta** finche' l'utente non la riaccende (fallisce chiusa, consigliato) oppure torna **di serie** (accesa) con un avviso.
 - **R4**: **dichiarare** che le scelte sui ricordi dicono giorni e viaggi a chi legge la share privata (consigliato), oppure un pacchetto che nasconde gli id con un segreto dell'account.
 - **I1**: togliere `If-None-Match` ed `ETag` dalle richieste della mappa, oppure dichiararlo.
+
+---
+
+## Stato dopo il pacchetto mappa e rete (31/10)
+
+Pacchetto "mappa e rete" (branch `fase9/corr-mappa`; le decisioni dell'orchestratore del 31/10 sono in `docs/decisioni.md`, sezione "Fase 9, correzioni dopo le revisioni: mappa e rete (31/10)"). Le tabelle sopra non sono riscritte.
+
+| Voce | Stato | Cosa e' stato fatto | Prova |
+|---|---|---|---|
+| R1 nota della mappa | **Corretta** (punti 1, 2 e 4) | La nota (versione 2) dice che OpenFreeMap riceve la zona guardata **anche attorno a una foto** aperta con "Mostra sulla mappa" o avvicinandosi alle sue foto, e mai foto, coordinate esatte o quante sono; `mappa_settings_zones_note` dice "Per non far sapere una zona, spegni la mappa dettagliata prima di aprirla" finche' P5 non c'e'; L13, C155, §2.8 aggiornati. **Punto 3 (aprire "Mostra sulla mappa" sulla sola carta di base) non fatto: decide l'utente**, il comportamento non cambia. | `MapPrivacyNoteTest`, `MapScreensTest` |
+| R2 scelta "spenta" | **Corretta** | Prima della prima lettura riuscita il cancello e `setConnected` valgono "spenta" (un solo lettore aggiorna tutte le `StateFlow`, `loaded()` torna a valori gia' scritti); errore di lettura = spenta per il processo con `MAP_SETTINGS_UNREADABLE`, il flusso non finisce e la lettura si riprova; file rovinato = spenta finche' non la riaccendi (segno `damaged`, `MAP_SETTINGS_DAMAGED`, riga nella pagina). | `MapFailClosedTest` (zero richieste dal cancello con file rovinato, lettura che lancia e prima lettura lenta) |
+| R5 azzeramento | **Corretta** (punti 1-3; il 4 e' F127) | `MapGraph.stop()` svuota le impostazioni attraverso DataStore (`MapSettings.clear()`) e il database di MapLibre con `OfflineManager.resetDatabase` prima della cartella, poi nessuna scrittura; `setResourcesCachePath` con un callback vero (errore = rete chiusa, stile offline, `MAP_CACHE_UNMOVED`); l'eraser toglie anche `mbgl-offline.db*` dalle cartelle di serie. | `MapEraseTest`, `MapFailClosedTest`, `MapWiringAndEraseTest` |
+| I1 `If-None-Match` | **Corretta** | Tolti `If-None-Match` ed `ETag` (in uscita e in cache): restano `If-Modified-Since` e `Last-Modified`. | `MapTileHttpTest`, `MapGatePropertyTest`, `MapWireGuardTest`, `MapNetDeviceTest` |
+| I3 punto d'aggancio di P5 | **Corretta** | `MapNetWiring` legge le regioni a ogni richiesta (`regions: () -> MapRegions`). | `MapWiringAndEraseTest` (regione legata dopo l'avvio: `COVERED`) |
+| R3, R4, I2, I4, I5, I6 | non di questo pacchetto | R3 e I4 sono del pacchetto "ricordi"; R4 e I2 aspettano l'utente e le prove F119-F120; I5 e' della revisione funzionale. | - |
+
+Da guardare sul telefono (F127 ampliata, F119, F120): vedi `REPORT.md` e `docs/decisioni.md`.

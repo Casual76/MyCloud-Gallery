@@ -742,7 +742,7 @@ non si scaricano. Si vede la carta di base, le regioni già scaricate e la cache
 | Il **nome dell'host** (`tiles.openfreemap.org`) nella richiesta DNS e nel TLS (SNI) | il DNS della rete in uso (FRITZ!Box, operatore) e chi osserva la rete | che si usa una mappa, non dove si guarda |
 | Il **percorso** `/planet/<versione>/<z>/<x>/<y>.pbf` | OpenFreeMap | **la zona guardata**: a z14 un quadrato di circa 1,7 km di lato alle nostre latitudini; ai livelli bassi un paese o una regione |
 | L'**ora** e il ritmo delle richieste | OpenFreeMap | quando si usa la mappa e quanto |
-| Gli **header** | OpenFreeMap | solo un `User-Agent` fisso e generico (senza nome dell'app, versione o dispositivo; il valore esatto lo sceglie P1 leggendo le condizioni d'uso del servizio), `Accept-Encoding: gzip`, eventuali `If-None-Match`/`If-Modified-Since` per le tessere in cache; **mai** cookie, `Referer`, identificativi, chiavi |
+| Gli **header** | OpenFreeMap | solo un `User-Agent` fisso e generico (senza nome dell'app, versione o dispositivo; il valore esatto lo sceglie P1 leggendo le condizioni d'uso del servizio), `Accept-Encoding: gzip`, l'eventuale `If-Modified-Since` per le tessere in cache; **mai** `If-None-Match` né `ETag` (un valore scelto dal server tornerebbe a ogni convalida: sarebbe un identificativo; correzione I1, aggiornato il 31/10), cookie, `Referer`, identificativi, chiavi |
 | Il **TileJSON** (`/planet`) | OpenFreeMap | solo che l'app è aperta (al più una volta al giorno, poi in cache) |
 
 **Che cosa non esce mai**: foto, miniature, coordinate delle foto, numero o posizione dei punti, nomi di luoghi, la casa, l'account, l'id del
@@ -767,9 +767,11 @@ Un errore del server non fa ripartire richieste a raffica (attesa crescente, E-M
 
 **La pagina sulla privacy** (`MapOnlineConsent`, versionata), in frasi brevi:
 - "La mappa dettagliata arriva da OpenFreeMap, un servizio gratuito che usa i dati di OpenStreetMap. Non serve un account."
-- "Quando la usi, OpenFreeMap riceve l'indirizzo della tua connessione e **quale zona stai guardando**. Non riceve le tue foto né la loro
-  posizione."
-- "Per non far sapere a nessuno una zona, **scaricala**: le zone scaricate non si chiedono più a OpenFreeMap."
+- "Quando la usi, OpenFreeMap riceve l'indirizzo della tua connessione e **quale zona stai guardando**, anche quella attorno a una foto quando la
+  apri sulla mappa con "Mostra sulla mappa" o ti avvicini alle sue foto. Non riceve mai le tue foto, le coordinate esatte né quante sono."
+- "Per non far sapere una zona, **spegni la mappa dettagliata prima di aprirla**." (finché le regioni offline di P5 non ci sono; con P5 tornerà
+  "scaricala: le zone scaricate non si chiedono più a OpenFreeMap").
+- *Aggiornato il 31/10 (correzioni R1, R2, I1 della revisione di sicurezza): le due frasi sopra, la versione 2 della nota (`MapPrivacyNote`); la scelta "spenta" fallisce chiusa (file illeggibile o rovinato = spenta, finché non si riaccende; prima della prima lettura = spenta); niente `If-None-Match` né `ETag`.*
 - "La scelta vale **solo su questo dispositivo**. Puoi spegnere la mappa dettagliata quando vuoi: resta la carta semplice dentro l'app."
 - "Solo sul Wi-Fi" (acceso) e, se spento, l'avviso sul consumo di dati.
 
@@ -867,6 +869,9 @@ Il registro fallisce da solo se un file nuovo che nomina `VisibleMedia` o `Hidde
 | `MAP_REFUSED` | richieste rifiutate per motivo (`OFF`, `NETWORK`, `HOST`, `PATH`, `COVERED`, `REDIRECT`) | un `HOST` o `PATH` diverso da zero è un difetto: "Segnala" |
 | `MAP_REGION_PARTIAL`, `MAP_REGION_SPACE` | regione interrotta; spazio insufficiente | "Riprendi"; "Libera spazio" |
 | `MAP_INVALID_POINTS` | coordinate scartate (E-MAP7) | — |
+| `MAP_SETTINGS_UNREADABLE`, `MAP_SETTINGS_DAMAGED` | (aggiunti il 31/10, R2) il file delle impostazioni non si legge (spenta per il processo) o si era rovinato (spenta finché non la riaccendi) | "Riaccendi da Impostazioni, Mappa" |
+| `MAP_CACHE_UNMOVED` | (aggiunto il 31/10, R5) MapLibre non ha spostato il suo database in `map/`: nessuna richiesta, carta semplice | — |
+| `MAP_INDEX_FAILED` | (aggiunto il 31/10, MA-1) l'indice dei punti non si legge: la mappa e i Luoghi dicono "Non riesco a leggere le posizioni delle foto" | "Riprova" nelle schermate |
 
 Mai titoli, luoghi, date, id, nomi, coordinate, riquadri, tessere, nomi delle regioni, ora scelta (D33). Le chiavi nuove entrano nell'elenco
 chiuso dell'esportazione (`ExportKeys`).

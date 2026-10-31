@@ -13967,3 +13967,22 @@ aggiungono circa 40 secondi. Nessuna classe rifatta con `--rerun`, nessun `hs_er
 ### Commit (branch `fase10/p11`)
 `9f48b1f2` (i test JVM delle voci e il corpus), `05b3b61e` (le prove dal PC e `tools/security`), `8e539d74` e `78d9467c` (la riconciliazione
 e le intestazioni delle revisioni), `aaa3d85a` (il filtro delle classi di `run-all.ps1`) e quello dei documenti.
+
+## Decisioni dell'utente del 31/10 dopo la revisione finale, prima parte
+
+Domande raccolte dalla riconciliazione delle revisioni (`docs/review/10-chiusura.md`, Fase 10 P11 prima parte), risposte dell'utente del 31/10:
+- **1.4 M3, decisione 2: (a), impronta o PIN a ogni uso della chiave di famiglia** (la raccomandata). La chiave serve solo ad azioni
+  dell'admin rare e interattive (approvare un dispositivo, segnarne uno perso, cambiare la configurazione), quindi un'autenticazione a ogni
+  uso costa poco e toglie la chiave a un telefono rubato acceso dopo il primo sblocco e a un malware. Da fare: la chiave AES della cassaforte
+  con autenticazione per operazione (`setUserAuthenticationRequired`, durata 0, biometria forte o credenziale del dispositivo) e il foglio di
+  autenticazione di sistema prima di ogni firma con la chiave di famiglia; la chiave del dispositivo resta com'e' (lavori notturni). Lo fa un
+  pacchetto della Fase 10 dopo P4 (che tocca `core-security/.../lock/`), con prove: nessuna firma senza autenticazione, annullare il foglio
+  non firma niente, il lavoro notturno non tocca la chiave di famiglia. Fino ad allora M3 resta aperta (Media).
+- **5A I5: la copia privata dei file dell'area comune parte sempre**, anche se il backup non e' mai stato avviato (la raccomandata, come
+  D9). Va detto nella pagina del backup (P13).
+
+Lo stesso giorno l'utente ha consegnato la **prima lista di problemi grafici** (`docs/grafica-segnalazioni-utente.md`): e' la base della
+fase della grafica, che parte dopo la Fase 10 (Q5 (a)) e **dopo l'aggiornamento del Fluid Engine** in corso in un'altra sessione; fino ad
+allora non si implementa niente della lista. Il principio dell'avvio cambia per il punto 1 della lista: **prima la fluidita', poi la
+velocita' di caricamento**; i caricamenti in sottofondo dopo il primo disegno non devono mai far perdere fotogrammi.
+

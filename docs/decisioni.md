@@ -13987,3 +13987,12 @@ lo stesso percorso del gesto Indietro: chiude per primo il livello piu' alto). I
 - **DeX**: nessun metadato di Samsung (D15). `isInMultiWindowMode` e' l'approssimazione di "in DeX" per la voce di menu.
 - **Android sotto la 12**: il tetto e' una finestra (provato sulla JVM con `sdkInt`), mai su un dispositivo.
 - **`closeOtherWindows`** non ha una prova (Robolectric non ha una `AppTask` vera): F167.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde al primo giro** ("OK: tutto a posto.", uscita 0, 31/10, dalle 14:45 alle 15:44), lanciato come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del semaforo.
+`assembleDebug`, `assembleRelease` (con `verifyReleaseManifest` e la nuova `mainActivityPolicy`), `galleryTest` e `galleryLint` in 54 minuti; **18.033 prove in 47 moduli, 0 fallite, 28 saltate per assunzione**, nessun modulo a zero
+(`app` 1.348, `core-security` 218, `core-designsystem` 183, `core-common` 170, `feature-library` 997, `feature-viewer` 906); tutti i passi della release verdi (manifest, dex, R8, Glance al suo posto, nessun `KT`). Nessuna classe rifatta con
+`--rerun`, nessun `hs_err_pid*.log`. Le corse intermedie (prove mirate, mutazioni, Roborazzi) sono in `build\p4\*.log`, fuori dal repository.
+
+### Commit (branch `fase10/p4`)
+`2d5f60fc` (il blocco per processo), `e7b9691d` (due finestre, `singleInstancePerTask`, ingressi alla principale), `2f8e1867` (tastiera, mouse, selezione ripristinata) e `8b683778` (documenti); questa riga con l'esito, dopo.

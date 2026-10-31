@@ -444,7 +444,7 @@ class Phase6ArchitectureTest {
       MODELS to setOf("core-common", "core-model", "core-trust", "core-nas", "core-rules"),
       AI to setOf("core-common", "core-model", "core-trust", "core-index", "core-prepare", MODELS, "core-rules"),
       SEARCH to setOf("core-common", "core-model", "core-database", "core-library", "core-places", AI),
-      FEATURE_SEARCH to setOf(SEARCH, "core-library", "core-imaging", "core-designsystem", AI, MODELS, "core-common", "core-model"),
+      FEATURE_SEARCH to setOf(SEARCH, "core-library", "core-imaging", "core-designsystem", AI, MODELS, "core-common", "core-model", "core-describe"),
     )
 
     /** Chi puo' dipendere dai moduli nuovi (elenco chiuso). */

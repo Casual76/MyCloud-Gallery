@@ -316,6 +316,8 @@ dependencies {
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
   testImplementation appDeps.workTesting
+  // Fase 10 (P7): la sonda DESCRIPTIONS del registro dei Nascosti fa girare il descrittore vero (e i fake delle sue porte). Il legame vero in :app e' di P13.
+  testImplementation project(':core-describe')
   // Screenshot dello scaffold (docs/screenshots/2-P0/) e test Compose su JVM.
   testImplementation appDeps.robolectric
   testImplementation appDeps.androidxTestCore

@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.search
 
+import java.time.ZoneId
+import dev.pampa.mycloudgallery.core.describe.rules.MediaDescribers
 import android.content.res.Resources
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
@@ -89,9 +91,8 @@ internal fun duration(ms: Long): String {
 
 /** La frase che TalkBack legge per una cella: tipo e giorno dello scatto, mai il nome del file. */
 internal fun cellDescription(resources: Resources, snapshot: TimelineSnapshot, index: Int): String {
-  val day = ChipMatching.dayOf(snapshot.localDayAt(index)) ?: return resources.getString(R.string.search_cell_undated)
-  val text = day.format(DayFormat)
-  return resources.getString(if (snapshot.kindAt(index) == MediaKind.VIDEO) R.string.search_cell_video else R.string.search_cell_photo, text)
+  // Fase 10 (P7, D22): la frase la scrive il descrittore unico (tipo, data, ora, stato; persone e testo letto solo se :app ha legato le porte).
+  return MediaDescribers.describeCell(MediaDescribers.shared(), snapshot, index, ZoneId.systemDefault()) ?: resources.getString(R.string.search_cell_undated)
 }
 
 /** Una cella dei risultati. Il tocco apre il viewer sui risultati, nell'ordine mostrato. */

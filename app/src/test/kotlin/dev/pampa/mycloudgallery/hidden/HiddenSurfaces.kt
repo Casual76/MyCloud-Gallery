@@ -388,14 +388,19 @@ internal object HiddenSurfaces {
     ),
     // --- Fase 10 (P0): le superfici nuove che arrivano con i pacchetti dopo (D41). La riga c'e' gia', in attesa: quando arriva il codice vero
     // (il marcatore `landedWhen` esiste), il registro fallisce finche' il pacchetto non scrive la sonda e passa la riga a PRODUCTION. La riga
-    // WIDGET passa da "di prova" a produzione con P3; la riga PANES (pannelli e seconda finestra) la aggiunge P5 con la sua superficie.
+    // WIDGET passa da "di prova" a produzione con P3; la riga PANES (pannelli e seconda finestra) la aggiunge P5 con la sua superficie; DESCRIPTIONS e' passata a produzione con P7.
     SurfaceEntry(
       id = "drag-out", title = "Trascinamento verso un'altra app: mai un nascosto, mai dai Nascosti (D20, E-H11)", row = SpecRow.DRAG, owner = "P6",
       backing = Backing.PENDING, landedWhen = listOf("$INTEGRATIONS/drag"),
     ),
     SurfaceEntry(
       id = "descriptions", title = "Descrizioni per superficie: mai una persona nascosta, mai un nascosto fuori dai Nascosti (D22)", row = SpecRow.DESCRIPTIONS,
-      owner = "P7", backing = Backing.PENDING, landedWhen = listOf("$DESCRIBE/rules"),
+      owner = "P7", backing = Backing.PRODUCTION,
+      // Il descrittore vero e la sua porta d'ingresso per gli schermi (nessuno dei due nomina `VisibleMedia` o `HiddenMask`: descrivono solo le celle che
+      // le schermate gli danno, e le schermate le prendono dall'istantanea gia' filtrata; la sonda lo prova sulle celle della Libreria vera).
+      sources = listOf("$DESCRIBE/rules/DefaultMediaDescriber.kt", "$DESCRIBE/rules/MediaDescribers.kt"),
+      probe = RealDescriptionProbes.descriptions,
+      alsoProvedBy = listOf("DefaultMediaDescriberTest", "MediaDescribersTest", "GridTextDescribeNonRegressionTest", "RealDescriptionsProbeTest"),
     ),
   )
 

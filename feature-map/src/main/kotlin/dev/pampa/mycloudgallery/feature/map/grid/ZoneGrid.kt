@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.map.grid
 
+import java.time.ZoneId
+import dev.pampa.mycloudgallery.core.describe.rules.MediaDescribers
 import android.content.res.Resources
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -92,8 +94,8 @@ internal fun dayOf(yyyymmdd: Int): LocalDate? {
 
 /** La frase che TalkBack legge per una cella: tipo e giorno dello scatto, mai il nome del file e mai il luogo preciso. */
 internal fun cellDescription(resources: Resources, snapshot: TimelineSnapshot, index: Int): String {
-  val day = dayOf(snapshot.localDayAt(index)) ?: return resources.getString(R.string.mappa_cell_undated)
-  return resources.getString(if (snapshot.kindAt(index) == MediaKind.VIDEO) R.string.mappa_cell_video else R.string.mappa_cell_photo, GalleryDates.date(day))
+  // Fase 10 (P7, D22): la frase la scrive il descrittore unico (tipo, data, ora, stato; persone e testo letto solo se :app ha legato le porte).
+  return MediaDescribers.describeCell(MediaDescribers.shared(), snapshot, index, ZoneId.systemDefault()) ?: resources.getString(R.string.mappa_cell_undated)
 }
 
 /** Le azioni di una cella per il lettore di schermo: aprire la foto. */

@@ -43,6 +43,7 @@ dependencies {
 
   implementation project(':core-common')
   implementation project(':core-model')
+  implementation project(':core-describe')
   implementation project(':core-mediastore')
   implementation project(':core-places')
   implementation project(':core-security')

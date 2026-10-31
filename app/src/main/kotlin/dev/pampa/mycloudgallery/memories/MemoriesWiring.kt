@@ -26,6 +26,7 @@ import dev.pampa.mycloudgallery.core.memories.settings.less.PhaseGatedPeople
 import dev.pampa.mycloudgallery.core.memories.shelf.FileShelfStore
 import dev.pampa.mycloudgallery.core.memories.shelf.MemoryVisibility
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalStore
 import dev.pampa.mycloudgallery.core.personal.settings.SyncedMemoriesSettings
 import dev.pampa.mycloudgallery.core.search.contract.PeopleLookup
 import dev.pampa.mycloudgallery.core.search.contract.Today
@@ -94,6 +95,8 @@ object MemoriesWiring {
     cutoutsFolder: () -> String,
     slot: MemoryNotifySlot,
     afterFirstDraw: suspend () -> Unit,
+    /** Solo una variante di misura (P12, `MeasurementHooks`): lo store personale locale con cui i ricordi si montano **senza NAS**; null in ogni altro caso. */
+    measuredStore: PersonalStore? = null,
   ): MemoriesGraph {
     val app = context.applicationContext
     val dir = File(app.noBackupFilesDir, DIR)
@@ -102,10 +105,11 @@ object MemoriesWiring {
     val counters = MemoriesCounters(LateDeliveries(File(dir, LateDeliveries.FILE), clock::today))
     val nas = gallery.nas
     // I ricordi stanno nei dati personali (D10, D11): si montano con la galleria partita e i dati personali agganciati, come gli album.
-    val ready: StateFlow<Boolean> = if (nas == null) {
-      MutableStateFlow(false)
-    } else {
-      combine(gallery.started, nas.organizer.partsState) { started, parts -> started && parts != null }.stateIn(scope, SharingStarted.Eagerly, false)
+    val ready: StateFlow<Boolean> = when {
+      nas != null -> combine(gallery.started, nas.organizer.partsState) { started, parts -> started && parts != null }.stateIn(scope, SharingStarted.Eagerly, false)
+      // P12: la variante di misura non ha il NAS ne' l'archivio dei dati personali: i ricordi si montano con la galleria partita e le scelte in memoria.
+      measuredStore != null -> gallery.started
+      else -> MutableStateFlow(false)
     }
     val thumbs = LocalThumbs(ImagingPipeline.thumbnailSource(app), catalogPhoneRefs { gallery.coreIfReady()?.catalog })
     val power = app.getSystemService(PowerManager::class.java)
@@ -117,7 +121,7 @@ object MemoriesWiring {
     val peopleChanged: Flow<Unit> = faces.live.flatMapLatest { live -> live?.people?.list ?: flowOf(null) }.drop(1).map { }
 
     val build: suspend (CoroutineScope) -> MemoriesLive? = build@{ mountScope ->
-      val parts = nas?.organizer?.parts ?: return@build null
+      val personalStore = nas?.organizer?.parts?.personalStore ?: measuredStore ?: return@build null
       val switch = FacesPeopleSwitch(faces, mountScope)
       val people = PhaseGatedPeople(
         IndexMemoryPeople({ faces.live.value?.people }, lookup) { faces.live.value?.people?.list?.value to visibility.snapshot.value?.seq },
@@ -125,7 +129,7 @@ object MemoriesWiring {
         mountScope,
       )
       // P8: le scelte "Mostra meno" e "Mai" seguono gli alias delle persone; il motore e il janitor vedono le stesse scelte.
-      val personal = AliasFollowingSettings(SyncedMemoriesSettings(parts.personalStore, mountScope), people)
+      val personal = AliasFollowingSettings(SyncedMemoriesSettings(personalStore, mountScope), people)
       val cutouts = CatalogMemoryCutouts(gallery.database, cutoutsFolder)
       val loader = PickSignalsLoader(
         vectors = SearchMemoryVectors(vectors),
@@ -157,7 +161,7 @@ object MemoriesWiring {
     return MemoriesGraph(
       parent = scope,
       ready = ready,
-      canMount = nas != null,
+      canMount = nas != null || measuredStore != null,
       build = build,
       visibility = visibility,
       notifier = notifier,

@@ -20,7 +20,8 @@
     <item quantity="one">%d zona scaricata</item>
     <item quantity="other">%d zone scaricate</item>
   </plurals>
-  <string name="mappa_settings_zones_note">Per non far sapere una zona, spegni la mappa dettagliata prima di aprirla.</string>
+  <!-- P5 (31/10): le zone scaricate ci sono (dentro i limiti di OpenFreeMap: regioni fino a z12, attorno a un luogo fino a z14): la nota torna a consigliarle, e dice il limite vero (i livelli oltre il dettaglio scaricato si chiedono ancora). -->
+  <string name="mappa_settings_zones_note">Per non far sapere una zona, scaricala prima di aprirla, oppure spegni la mappa dettagliata. Una zona scaricata non si chiede più a OpenFreeMap, ma se ti avvicini oltre il suo dettaglio le tessere più precise sì.</string>
   <string name="mappa_settings_unavailable_title">La mappa dettagliata non c’è in questa versione</string>
   <string name="mappa_settings_unavailable_detail">Resta la carta semplice dentro l’app: non esce niente dal telefono.</string>
 </resources>

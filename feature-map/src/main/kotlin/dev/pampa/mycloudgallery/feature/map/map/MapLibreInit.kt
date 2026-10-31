@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
@@ -105,6 +106,8 @@ data class MapNetCounts(
   val paused: Long,
   val withoutVersion: Long,
   val tileJsonFetches: Long,
+  /** Il massimo di richieste insieme visto in questo processo (condizioni d'uso di OpenFreeMap: al piu' 4 verso l'host). */
+  val peakInFlight: Int = 0,
 )
 
 /** Quando MapLibre deve credersi "in rete" (D23, verifica (7) del §2.7): con la mappa online permessa adesso, o con uno scaricamento confermato. */
@@ -139,6 +142,9 @@ object MapLibreInit {
   /** Il nome (e il prefisso dei suoi `-journal`, `-wal`, `-shm`) del database di MapLibre: l'azzeramento lo toglie anche dalle cartelle di serie della libreria (R5, seconda difesa). */
   const val DATABASE_PREFIX: String = "mbgl-offline.db"
 
+  /** Al piu' quanto si aspetta, prima di uno scaricamento di regione, che MapLibre abbia spostato il suo database in `map/`. */
+  const val CACHE_WAIT_MS: Long = 30_000
+
   /** Al piu' quanto si aspetta che MapLibre svuoti il suo database prima che l'azzeramento tolga i file (poi ci pensano i file). */
   const val ERASE_WAIT_MS: Long = 5_000
 
@@ -157,12 +163,25 @@ object MapLibreInit {
 
   private val cacheFailedState = MutableStateFlow(false)
 
+  /** Vero quando MapLibre ha detto che il suo database sta in `noBackupFilesDir/map/` (P5: le regioni si creano solo dopo, cosi' non finiscono nella cartella di serie). */
+  private val cacheMovedState = MutableStateFlow(false)
+
   /**
    * Vero se MapLibre **non ha potuto** spostare il suo database in `noBackupFilesDir/map/` (R5): la cache delle tessere starebbe fuori dalla cartella che l'azzeramento toglie. Fallisce
    * chiusa: nessuna richiesta esce ([MapNetWiring.onlineNow]), `setConnected(false)`, e la mappa grande resta sullo stile offline (il controllore lo legge). Un codice in Diagnostica
    * (`MAP_CACHE_UNMOVED`).
    */
   val cacheFailed: StateFlow<Boolean> = cacheFailedState.asStateFlow()
+
+  /**
+   * Aspetta (al piu' [CACHE_WAIT_MS]) che il database di MapLibre sia in `map/` (P5, scaricamento delle regioni): vero se e' li', falso se lo spostamento e' fallito o non e' arrivato in tempo
+   * (la regione resta parziale e si riprova alla prossima apertura: mai un database fuori dalla cartella che l'azzeramento toglie).
+   */
+  suspend fun awaitCacheReady(): Boolean {
+    if (cacheFailedState.value) return false
+    val ok = withTimeoutOrNull(CACHE_WAIT_MS) { combine(cacheMovedState, cacheFailedState) { moved, failed -> if (failed) false else if (moved) true else null }.first { it != null } }
+    return ok == true
+  }
 
   /** Vero dopo [ensure]: nessuna `MapView` va creata prima (il client non sarebbe il nostro). */
   val isReady: Boolean get() = http != null
@@ -220,7 +239,9 @@ object MapLibreInit {
       FileSource.setResourcesCachePath(
         mapDir.absolutePath,
         object : FileSource.ResourcesCachePathChangeCallback {
-          override fun onSuccess(path: String) = Unit
+          override fun onSuccess(path: String) {
+            cacheMovedState.value = true
+          }
 
           override fun onError(message: String) = fail()
         },
@@ -304,6 +325,7 @@ object MapLibreInit {
       paused = snapshot.paused,
       withoutVersion = snapshot.noVersion,
       tileJsonFetches = snapshot.tileJsonFetches,
+      peakInFlight = snapshot.peakInFlight,
     )
   }
 

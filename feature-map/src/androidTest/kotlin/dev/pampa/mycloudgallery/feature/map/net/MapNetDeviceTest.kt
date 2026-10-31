@@ -10,14 +10,8 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.map.contract.MapHost
-import dev.pampa.mycloudgallery.core.map.contract.MapNetwork
 import dev.pampa.mycloudgallery.core.map.contract.MapOnlineChoice
 import dev.pampa.mycloudgallery.core.map.contract.RefuseReason
-import dev.pampa.mycloudgallery.core.map.policy.TilePolicy
-import dev.pampa.mycloudgallery.core.map.testing.FakeMapNetworkState
-import dev.pampa.mycloudgallery.core.map.testing.InMemoryMapRegions
-import dev.pampa.mycloudgallery.core.map.testing.InMemoryMapSettings
-import dev.pampa.mycloudgallery.core.map.testing.RecordingMapTraffic
 import dev.pampa.mycloudgallery.feature.map.map.MapLibreInit
 import dev.pampa.mycloudgallery.feature.map.map.MapNetWiring
 import java.net.InetAddress
@@ -292,8 +286,8 @@ class MapNetDeviceTest {
     val sockets = AtomicInteger(0)
     val lookups = AtomicInteger(0)
     val server = FakeServer()
-    val settings = InMemoryMapSettings()
-    private val network = FakeMapNetworkState(MapNetwork.WIFI)
-    val wiring = MapNetWiring(TilePolicy, buildFlag = true, settings, network, InMemoryMapRegions(network), RecordingMapTraffic())
+    // P5: MapLibre si inizializza una volta per processo con un solo cancello: i test strumentati lo condividono (`MapDeviceRig`).
+    val settings = MapDeviceRig.settings
+    val wiring = MapDeviceRig.wiring
   }
 }

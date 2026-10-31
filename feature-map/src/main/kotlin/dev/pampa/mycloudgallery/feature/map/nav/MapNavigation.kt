@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.feature.map.grid.ZoneGridRoute
 import dev.pampa.mycloudgallery.feature.map.map.MapRoute
 import dev.pampa.mycloudgallery.feature.map.places.PlacesEntryTarget
 import dev.pampa.mycloudgallery.feature.map.privacy.MapPrivacyRoute
+import dev.pampa.mycloudgallery.feature.map.regions.RegionsRoute
 import kotlinx.serialization.Serializable
 
 // LE ROTTE DELLA MAPPA (Fase 9, P4): un grafo da agganciare, come `peopleGraph`, `albumsGraph` e `memoriesGraph`. **Non** tocca `MainScaffold` ne' `AppNavHost` (sono di P13): P13 chiama [mapGraph] dentro il
@@ -43,6 +44,10 @@ data class PlaceDestination(val placeId: Int) {
 @Serializable
 data object MapSettingsDestination
 
+/** "Zone senza Internet" (P5): le regioni offline, il catalogo e "la zona attorno a un luogo". */
+@Serializable
+data object RegionsDestination
+
 fun NavController.openMap() = navigate(MapDestination())
 
 fun NavController.openMapAt(media: MediaId) = navigate(MapDestination(media.value))
@@ -52,6 +57,8 @@ fun NavController.openZone(key: CellKey) = navigate(ZoneDestination(key.level, k
 fun NavController.openPlace(placeId: Int) = navigate(PlaceDestination(placeId))
 
 fun NavController.openMapSettings() = navigate(MapSettingsDestination)
+
+fun NavController.openRegions() = navigate(RegionsDestination)
 
 /** Apre la destinazione di una voce della sezione Luoghi ([PlacesEntryTarget.parse]): la mappa, la griglia del luogo; le righe che dicono come stanno le cose non portano da nessuna parte. */
 fun NavController.openPlacesEntry(target: PlacesEntryTarget) {
@@ -65,7 +72,7 @@ fun NavController.openPlacesEntry(target: PlacesEntryTarget) {
 
 /**
  * Le pagine della mappa nel grafo di navigazione: la mappa, la griglia di una zona, la griglia di un luogo e Impostazioni -> Mappa. [actions] sono le uscite verso `:app` (viewer, zone, impostazioni, regioni);
- * [thumbnails] le miniature locali della Libreria. Le "Zone senza Internet" (pagina delle regioni) le aggiunge P5 al suo grafo.
+ * [thumbnails] le miniature locali della Libreria. Le "Zone senza Internet" (pagina delle regioni, P5) sono la rotta [RegionsDestination].
  */
 fun NavGraphBuilder.mapGraph(
   nav: NavController,
@@ -78,4 +85,5 @@ fun NavGraphBuilder.mapGraph(
   composable<ZoneDestination> { ZoneGridRoute(actions = actions, thumbnails = thumbnails, onBack = back) }
   composable<PlaceDestination> { PlaceGridRoute(actions = actions, thumbnails = thumbnails, onBack = back) }
   composable<MapSettingsDestination> { MapPrivacyRoute(actions = actions, onBack = back) }
+  composable<RegionsDestination> { RegionsRoute(onBack = back) }
 }

@@ -19,3 +19,7 @@
 -keep,allowshrinking class dev.pampa.mycloudgallery.feature.map.map.MapLibreSurface*$* { *; }
 -keep,allowshrinking class dev.pampa.mycloudgallery.feature.map.mini.MapLibreMiniMap { *; }
 -keep,allowshrinking class dev.pampa.mycloudgallery.feature.map.mini.MapLibreMiniMap$* { *; }
+#
+# Fase 9, P5: il motore degli scaricamenti delle regioni nomina `OfflineManager` di MapLibre (e le sue classi interne, anche le lambda dei callback): resta al suo posto.
+-keep,allowshrinking class dev.pampa.mycloudgallery.feature.map.regions.MapLibreRegionEngine { *; }
+-keep,allowshrinking class dev.pampa.mycloudgallery.feature.map.regions.MapLibreRegionEngine$* { *; }

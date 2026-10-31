@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.map.net
 
+import dev.pampa.mycloudgallery.core.map.contract.DownloadBudget
 import dev.pampa.mycloudgallery.core.map.contract.MapHost
 import dev.pampa.mycloudgallery.core.map.contract.MapNetState
 import dev.pampa.mycloudgallery.core.map.contract.MapRequestFacts
@@ -10,6 +11,7 @@ import dev.pampa.mycloudgallery.core.map.contract.RefuseReason
 import dev.pampa.mycloudgallery.core.map.contract.TileKey
 import java.io.IOException
 import okhttp3.Headers
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.Request
@@ -44,13 +46,17 @@ internal class MapGateInterceptor(
 
   override fun intercept(chain: Interceptor.Chain): Response {
     val original = chain.request()
+    // P5: lo stile dello scaricamento di una regione lo serve il cancello da se' (un indirizzo `.invalid`, mai dalla rete): vedi [RegionStyleSource].
+    if (original.url.host == RegionStyleSource.HOST) return regionStyle(original)
     val facts = factsOf(original.method, original.url)
     val tile = stableTileOf(facts)
-    var verdict = gate.decide(facts, conditions(tileJson.version()))
+    var state = conditions(tileJson.version())
+    var verdict = gate.decide(facts, state)
     // Prima la decisione, poi (se serve) il TileJSON: una tessera che non uscirebbe non fa uscire nemmeno quello.
     if (verdict == MapVerdict.VersionFirst || (verdict is MapVerdict.Allow && tile != null && tileJson.wantsRefresh())) {
-      refreshVersion(chain)
-      verdict = gate.decide(facts, conditions(tileJson.version()))
+      refreshVersion(chain, inDownload = tile != null && state.download?.includes?.invoke(tile) == true)
+      state = conditions(tileJson.version())
+      verdict = gate.decide(facts, state)
     }
     val path = when (verdict) {
       is MapVerdict.Allow -> verdict.path
@@ -60,10 +66,41 @@ internal class MapGateInterceptor(
       }
       is MapVerdict.Refuse -> throw refusal(verdict.reason)
     }
-    val inDownload = tile != null && conditions(null).download?.includes?.invoke(tile) == true
-    val response = exchange(chain, outgoing(original, path, inDownload), isTile = tile != null)
-    counters.allowed(tile?.z)
-    return response.newBuilder().request(original).build()
+    // P5: una tessera dello scaricamento confermato di una regione porta il suo conto (3.000 tessere, 50 MB, condizioni d'uso di OpenFreeMap): posto per una tessera sola alla volta.
+    val scope = if (tile != null) state.download?.takeIf { it.includes(tile) } else null
+    val budget = scope?.budget
+    if (budget != null && !budget.tryAdmit()) throw refusal(RefuseReason.LIMIT)
+    counters.enter()
+    var settled = budget == null
+    try {
+      val response = exchange(chain, outgoing(original, path, scope != null, budget = budget), isTile = tile != null)
+      counters.allowed(tile?.z)
+      // Una tessera "arrivata" e' una risposta del server (anche vuota o 404); un errore del server o della rete non conta: si riprova.
+      if (budget != null) {
+        if (response.code == 200 || response.code == 304 || response.code == 404) budget.arrived() else budget.failed()
+        settled = true
+      }
+      return response.newBuilder().request(original).build()
+    } finally {
+      if (!settled) budget?.failed()
+      counters.exit()
+    }
+  }
+
+  /** Lo stile dello scaricamento di una regione, dal file [RegionStyleSource]: `GET https` e solo quel percorso, altrimenti rifiutato (`HOST`). Nessun DNS, nessun socket. */
+  private fun regionStyle(request: Request): Response {
+    val url = request.url
+    if (request.method != MapHost.METHOD || url.scheme != MapHost.SCHEME || url.encodedPath != RegionStyleSource.PATH || url.encodedQuery != null) throw refusal(RefuseReason.HOST)
+    return Response.Builder()
+      .request(request)
+      .protocol(okhttp3.Protocol.HTTP_1_1)
+      .code(200)
+      .message("OK")
+      .header("Content-Type", "application/json")
+      // Lunga, come le tessere del server vero: con una scadenza immediata MapLibre ricontrolla lo stile mentre scarica e rimette in coda le tessere (provato sul dispositivo: le prime richieste uscivano due volte).
+      .header("Cache-Control", "public, max-age=315360000")
+      .body(RegionStyleSource.JSON.toResponseBody(MEDIA_JSON))
+      .build()
   }
 
   /** Esce, segue i redirect ammessi, controlla la risposta. */
@@ -91,7 +128,7 @@ internal class MapGateInterceptor(
         val next = location?.let { request.url.resolve(it) }
         val verdict = next?.let { gate.decide(factsOf("GET", it), conditions(tileJson.version())) }
         if (verdict !is MapVerdict.Allow || ++hops > MAX_REDIRECTS) throw refusal(RefuseReason.REDIRECT)
-        request = outgoing(request, verdict.path, keepUserAgent = request.header(USER_AGENT))
+        request = outgoing(request, verdict.path, keepUserAgent = request.header(USER_AGENT), budget = request.tag(DownloadBudget::class.java))
         continue
       }
       return checked(response, isTile)
@@ -157,7 +194,7 @@ internal class MapGateInterceptor(
   }
 
   /** Chiede il TileJSON (una volta per tutte le richieste in coda) e ne ricorda la versione. Non lancia mai: senza versione, niente tessere. */
-  private fun refreshVersion(chain: Interceptor.Chain) {
+  private fun refreshVersion(chain: Interceptor.Chain, inDownload: Boolean) {
     synchronized(tileJsonLock) {
       if (!tileJson.wantsRefresh()) return
       tileJson.attempted()
@@ -169,7 +206,9 @@ internal class MapGateInterceptor(
       }
       counters.tileJsonFetch()
       try {
-        val request = Request.Builder().url(urlOf(verdict.path)).get().header(USER_AGENT, MapTileHeaders.USER_AGENT).build()
+        // Durante uno scaricamento anche il TileJSON porta lo User-Agent che identifica l'app (condizioni d'uso di OpenFreeMap).
+        val agent = if (inDownload) MapTileHeaders.USER_AGENT_DOWNLOAD else MapTileHeaders.USER_AGENT
+        val request = Request.Builder().url(urlOf(verdict.path)).get().header(USER_AGENT, agent).build()
         exchange(chain, request, isTile = false).use { response ->
           if (response.code != 200) return
           val text = response.body?.string() ?: return
@@ -185,14 +224,16 @@ internal class MapGateInterceptor(
   private fun refusal(reason: RefuseReason): IOException {
     counters.refused(reason)
     return when (reason) {
-      RefuseReason.OFF, RefuseReason.NETWORK, RefuseReason.COVERED -> MapRequestHeld(reason)
+      RefuseReason.OFF, RefuseReason.NETWORK, RefuseReason.COVERED, RefuseReason.LIMIT -> MapRequestHeld(reason)
       RefuseReason.HOST, RefuseReason.PATH, RefuseReason.REDIRECT, RefuseReason.CONTENT -> MapRequestRefused(reason)
     }
   }
 
   /** La richiesta che esce davvero: costruita da zero sull'unico host, con i soli header ammessi. */
-  private fun outgoing(from: Request, path: String, inDownload: Boolean = false, keepUserAgent: String? = null): Request {
+  private fun outgoing(from: Request, path: String, inDownload: Boolean = false, keepUserAgent: String? = null, budget: DownloadBudget? = null): Request {
     val builder = Request.Builder().url(urlOf(path)).get()
+    // Il conto dello scaricamento viaggia con la richiesta: l'intercettore di rete ci mette i byte veri sul filo ([MapWireGuard]).
+    if (budget != null) builder.tag(DownloadBudget::class.java, budget)
     builder.header(USER_AGENT, keepUserAgent ?: if (inDownload) MapTileHeaders.USER_AGENT_DOWNLOAD else MapTileHeaders.USER_AGENT)
     for (name in KEPT_REQUEST_HEADERS) {
       val value = from.header(name)?.takeIf { it.length <= MAX_HEADER_CHARS && it.all { c -> c in ' '..'~' } } ?: continue
@@ -205,6 +246,7 @@ internal class MapGateInterceptor(
     HttpUrl.Builder().scheme(MapHost.SCHEME).host(MapHost.TILES).port(MapHost.PORT).encodedPath(path).build()
 
   companion object {
+    private val MEDIA_JSON = "application/json".toMediaType()
     const val USER_AGENT = "User-Agent"
     const val MAX_REDIRECTS = 2
     const val MAX_DECODED_BYTES = 4 * MapResponseRules.MAX_BYTES

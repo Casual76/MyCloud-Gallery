@@ -10,6 +10,8 @@ import dev.pampa.mycloudgallery.core.map.contract.GeoIndexState
 import dev.pampa.mycloudgallery.core.map.contract.MapOnline
 import dev.pampa.mycloudgallery.core.map.contract.MapSettingsProblem
 import dev.pampa.mycloudgallery.core.map.contract.RefuseReason
+import dev.pampa.mycloudgallery.core.map.contract.RegionStatus
+import dev.pampa.mycloudgallery.core.map.contract.RegionStop
 import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
 import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCodes
 import dev.pampa.mycloudgallery.feature.map.map.MapLibreInit
@@ -33,11 +35,18 @@ class MapDiagnostics(
   override suspend fun collect(): List<DiagItem> {
     val items = ArrayList<DiagItem>()
     val online = map.settings.online.value
+    val regions = map.regions.regions.value
+    val partial = regions.filter { it.status == RegionStatus.PARTIAL }
     val state = mutableMapOf<String, ExportValue>(
       // "online" e' lo stato di adesso: fallisce chiusa, quindi "spenta" anche con un file illeggibile o rovinato (i codici sotto dicono perche').
       "online" to ExportValue.Flag(online is MapOnline.On),
       "available" to ExportValue.Flag(online !is MapOnline.Unavailable),
-      "regions" to ExportValue.Num(map.regions.regions.value.size.toLong()),
+      "regions" to ExportValue.Num(regions.size.toLong()),
+      // P5: le zone senza Internet, solo numeri: complete, parziali, byte, se una si sta scaricando. Mai quali zone, ne' dove.
+      "regionsReady" to ExportValue.Num(regions.count { it.status == RegionStatus.READY || it.status == RegionStatus.NEEDS_UPDATE }.toLong()),
+      "regionsPartial" to ExportValue.Num(partial.size.toLong()),
+      "regionsBytes" to ExportValue.Num(regions.sumOf { it.bytes }),
+      "downloading" to ExportValue.Flag(regions.any { it.status == RegionStatus.DOWNLOADING }),
     )
     (online as? MapOnline.On)?.let { state["byDefault"] = ExportValue.Flag(it.byDefault) }
     val index = map.indexIfOpened()
@@ -68,6 +77,14 @@ class MapDiagnostics(
       MapSettingsProblem.NONE -> Unit
     }
     if (cacheFailed()) items += item(DiagCodes.MAP_CACHE_UNMOVED, mapOf("failed" to ExportValue.Flag(true)))
+    // P5: una zona a meta' (numero, e quante si sono fermate ai limiti di OpenFreeMap) e, se lo spazio e' il motivo, lo spazio libero.
+    if (partial.isNotEmpty()) {
+      items += item(
+        DiagCodes.MAP_REGION_PARTIAL,
+        mapOf("regionsPartial" to ExportValue.Num(partial.size.toLong()), "regionsLimit" to ExportValue.Num(partial.count { it.stop?.terminal == true }.toLong())),
+      )
+    }
+    if (partial.any { it.stop == RegionStop.SPACE }) items += item(DiagCodes.MAP_REGION_SPACE, mapOf("freeBytes" to ExportValue.Num(map.freeSpaceBytes())))
     if (index == GeoIndexState.Failed) items += item(DiagCodes.MAP_INDEX_FAILED, mapOf("failed" to ExportValue.Flag(true)))
     counts()?.let { c ->
       items += item(
@@ -79,6 +96,8 @@ class MapDiagnostics(
           "paused" to ExportValue.Num(c.paused),
           "withoutVersion" to ExportValue.Num(c.withoutVersion),
           "tileJson" to ExportValue.Num(c.tileJsonFetches),
+          // Condizioni d'uso di OpenFreeMap: al piu' 4 richieste insieme verso l'host (il massimo visto in questo processo).
+          "peakInFlight" to ExportValue.Num(c.peakInFlight.toLong()),
         ),
       )
       val refused = c.refused.filterValues { it > 0 }

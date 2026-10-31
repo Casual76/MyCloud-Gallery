@@ -115,6 +115,29 @@ abstract class TilePolicyContract {
     assertThat(decide(tile(10, 2, 3), roaming)).isEqualTo(MapVerdict.Refuse(RefuseReason.NETWORK))
   }
 
+  /**
+   * P5, limiti di OpenFreeMap: con il conto dello scaricamento esaurito (3.000 tessere o 50 MB) le tessere della regione si rifiutano con `LIMIT` (anche a mappa accesa: non diventano
+   * richieste "normali"); il TileJSON non e' una tessera e passa; una tessera fuori dalla regione segue le regole di sempre; con posto nel conto tutto come prima.
+   */
+  @Test
+  fun ilTettoDelloScaricamento() {
+    val inRegion: (TileKey) -> Boolean = { it.x % 2 == 0 }
+    val full = DownloadBudget(maxTiles = 10, maxBytes = 1_000, startTiles = 0, startBytes = 1_000)
+    val state = state(online = true, covered = { false }, download = RegionDownloadScope(inRegion, mobileConfirmed = false, budget = full))
+    assertThat(decide(tile(10, 2, 3), state)).isEqualTo(MapVerdict.Refuse(RefuseReason.LIMIT))
+    assertThat(decide(tileJson, state)).isEqualTo(MapVerdict.Allow("/planet"))
+    assertThat(decide(tile(10, 3, 3), state)).isInstanceOf(MapVerdict.Allow::class.java)
+    val tilesFull = DownloadBudget(maxTiles = 2, startTiles = 2)
+    assertThat(decide(tile(10, 2, 3), state.copyWith(RegionDownloadScope(inRegion, false, tilesFull)))).isEqualTo(MapVerdict.Refuse(RefuseReason.LIMIT))
+    val roomy = DownloadBudget(maxTiles = 10, maxBytes = 1_000_000)
+    assertThat(decide(tile(10, 2, 3), state.copyWith(RegionDownloadScope(inRegion, false, roomy)))).isInstanceOf(MapVerdict.Allow::class.java)
+    // La rete resta il primo motivo: in roaming nemmeno a conto esaurito si dice "limite".
+    val roaming = state(online = true, network = MapNetwork.ROAMING, download = RegionDownloadScope(inRegion, mobileConfirmed = true, budget = full))
+    assertThat(decide(tile(10, 2, 3), roaming)).isEqualTo(MapVerdict.Refuse(RefuseReason.NETWORK))
+  }
+
+  private fun MapNetState.copyWith(scope: RegionDownloadScope) = MapNetState(online, network, mobileAllowed, covered, currentVersion, scope)
+
   /** La prova che conta (§5.5): richieste e stati a caso, ostili; ogni `Allow` rispetta **tutte** le regole. Mai un'eccezione. */
   @Test
   fun proprietaNessunaRichiestaEsceFuoriDalleRegole() {
@@ -144,7 +167,8 @@ abstract class TilePolicyContract {
         fragment = if (random.nextInt(20) == 0) "f" else null,
       )
       val coveredSet = random.nextInt(3) == 0
-      val scope = if (random.nextInt(6) == 0) RegionDownloadScope({ it.x % 2 == 0 }, random.nextBoolean()) else null
+      val budget = if (random.nextBoolean()) null else DownloadBudget(maxTiles = 5, maxBytes = 100, startTiles = random.nextInt(7), startBytes = random.nextInt(150).toLong())
+      val scope = if (random.nextInt(6) == 0) RegionDownloadScope({ it.x % 2 == 0 }, random.nextBoolean(), budget) else null
       val s = MapNetState(
         online = random.nextBoolean(),
         network = MapNetwork.entries[random.nextInt(MapNetwork.entries.size)],
@@ -174,6 +198,7 @@ abstract class TilePolicyContract {
           val inScope = s.download?.includes?.invoke(t) == true
           assertThat(s.online || inScope).isTrue()
           if (!inScope) assertThat(s.covered(t)).isFalse()
+          if (inScope) assertThat(s.download!!.budget?.exhausted).isNotEqualTo(true)
           if (s.network == MapNetwork.MOBILE) assertThat(if (inScope) s.download!!.mobileConfirmed else s.mobileAllowed).isTrue()
           assertThat(MapHost.VERSION.matches(s.currentVersion ?: "")).isTrue()
           assertThat(verdict.path).isEqualTo(MapHost.versionedPath(s.currentVersion!!, t))

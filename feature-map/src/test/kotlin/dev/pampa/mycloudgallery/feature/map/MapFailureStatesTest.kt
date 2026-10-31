@@ -226,7 +226,7 @@ internal abstract class MapFailureScenes(private val dark: Boolean) : MapScreenT
   @Test
   fun impostazioniConLaSceltaRovinata() = shoot(
     "impostazioni-rovinata", "Spenta: resta la carta semplice dentro l’app", "La scelta si era rovinata: la mappa dettagliata è spenta finché non la riaccendi.",
-    "Per non far sapere una zona, spegni la mappa dettagliata prima di aprirla.",
+    "Per non far sapere una zona, scaricala prima di aprirla, oppure spegni la mappa dettagliata.",
   ) { MapPrivacyScreen(MapPrivacyState.Shown(MapOnline.Off, true, MapPrivacyNote.VERSION, 0, damaged = true), NoMapPrivacyHandlers, Modifier.fillMaxSize()) }
 }
 

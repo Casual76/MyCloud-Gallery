@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.map.contract.MapNetworkState
 import dev.pampa.mycloudgallery.core.map.contract.MapPoints
 import dev.pampa.mycloudgallery.core.map.contract.MapRegions
 import dev.pampa.mycloudgallery.core.map.contract.MapSettings
+import dev.pampa.mycloudgallery.core.map.contract.PlaceSearch
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
 import dev.pampa.mycloudgallery.feature.map.contract.MapEngineStarter
 import dev.pampa.mycloudgallery.feature.map.contract.MapMediaPositions
@@ -56,6 +57,7 @@ object MapModule {
     ledger = { graph.trafficLedger },
     // P12: una variante di misura non accende mai la mappa dettagliata (nessun traffico verso OpenFreeMap): solo la carta di base offline.
     buildFlag = graph.flags.mapOnline && (hooks.orElse(null)?.mapOnlineAllowed ?: true),
+    placesData = { gallery.places.opened },
   ).also { map ->
     // L'azzeramento ferma la mappa per prima (§1.4, D37): niente si ricostruisce piu', la mini-mappa dimentica; poi si toglie `map/`.
     graph.mapStopper = GalleryStopper { map.stop() }
@@ -72,8 +74,11 @@ object MapModule {
 
   @Provides fun mapSettings(map: MapGraph): MapSettings = map.settings
 
-  /** P5 (regioni offline, in attesa della decisione dell'utente): oggi il null-object; il punto d'aggancio e' `MapGraph.regions`. */
+  /** P5: le regioni offline vere (`OfflineMapRegions` sopra `OfflineManager` di MapLibre), nate alla prima richiesta. */
   @Provides fun mapRegions(map: MapGraph): MapRegions = map.regions
+
+  /** P5: la ricerca di un luogo per nome (GeoNames sul telefono) per "la zona attorno a un luogo". */
+  @Provides fun placeSearch(map: MapGraph): PlaceSearch = map.placeFinder
 
   @Provides fun mapNetworkState(map: MapGraph): MapNetworkState = map.networkState
 

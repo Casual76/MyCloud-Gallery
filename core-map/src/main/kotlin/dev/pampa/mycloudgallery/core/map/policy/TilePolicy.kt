@@ -22,7 +22,8 @@ import dev.pampa.mycloudgallery.core.map.contract.TileKey
  *  2. **Cosa** ([RefuseReason.PATH]): nessuna query; il TileJSON `/planet` oppure una tessera dell'URL **stabile** `/planet/v/{z}/{x}/{y}.pbf` in
  *     forma canonica (cifre ASCII, niente zeri davanti, niente segni, niente barre o punti in piu'), `z` fino a 14, `x` e `y` dentro `0..2^z-1`;
  *  3. **Durante uno scaricamento confermato** (D26, [MapNetState.download]): il TileJSON e le tessere della regione passano anche a mappa online
- *     spenta e anche se coperte (aggiornare una regione), sul Wi-Fi o sui dati mobili con la seconda conferma; mai in roaming o senza rete;
+ *     spenta e anche se coperte (aggiornare una regione), sul Wi-Fi o sui dati mobili con la seconda conferma; mai in roaming o senza rete; e solo finche'
+ *     il conto dello scaricamento ([DownloadBudget]: 3.000 tessere, 50 MB) non e' esaurito: poi [RefuseReason.LIMIT] (P5);
  *  4. **Altrimenti**: [RefuseReason.OFF] a mappa online spenta; [RefuseReason.NETWORK] in roaming, senza rete o rete non validata, o sui dati
  *     mobili con "Solo sul Wi-Fi"; [RefuseReason.COVERED] per una tessera di una regione offline completa (MapLibre usa quella del database);
  *  5. il TileJSON esce cosi'; una tessera esce sul percorso della **versione corrente** del server (D22, E-MAP13: la cache e le regioni restano
@@ -51,6 +52,8 @@ object TilePolicy : MapRequestGate {
       else -> networkFor(state.network, mobileAllowed = state.mobileAllowed)
     }
     if (!network) return MapVerdict.Refuse(RefuseReason.NETWORK)
+    // P5: lo scaricamento ha esaurito il suo conto (3.000 tessere o 50 MB, condizioni d'uso di OpenFreeMap): le tessere della regione non escono piu'.
+    if (inDownload && tile != null && download!!.budget?.exhausted == true) return MapVerdict.Refuse(RefuseReason.LIMIT)
     if (!inDownload && tile != null && state.covered(tile)) return MapVerdict.Refuse(RefuseReason.COVERED)
 
     if (tile == null) return MapVerdict.Allow(MapHost.TILEJSON_PATH)

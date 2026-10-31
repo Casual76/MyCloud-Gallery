@@ -35,11 +35,15 @@ internal class MapPrivacyNoteTest : MapScreenTest() {
   }
 
   @Test
-  fun laNotaDelleZoneNonPromettePiuUnaDifesaCheNonCe() {
+  fun laNotaDelleZoneConsigliaLaZonaScaricataEDiceIlLimiteVero() {
     val zones = string(R.string.mappa_settings_zones_note)
-    assertThat(zones).isEqualTo("Per non far sapere una zona, spegni la mappa dettagliata prima di aprirla.")
-    assertThat(zones).doesNotContain("scaricala")
-    assertThat(zones).doesNotContain("non si chiedono più")
+    // P5: la frase dell'utente, e quello che e' vero oltre: sopra il livello scaricato (z12 per le regioni) le tessere piu' precise si chiedono ancora.
+    assertThat(zones).isEqualTo("Per non far sapere una zona, scaricala prima di aprirla, oppure spegni la mappa dettagliata. Una zona scaricata non si chiede più a OpenFreeMap, ma se ti avvicini oltre il suo dettaglio le tessere più precise sì.")
+    assertThat(zones).startsWith("Per non far sapere una zona, scaricala prima di aprirla, oppure spegni la mappa dettagliata.")
+    assertThat(zones).contains("non si chiede più a OpenFreeMap")
+    assertThat(zones).contains("oltre il suo dettaglio")
+    // La frase di prima (senza zone scaricate) non c'e' piu'.
+    assertThat(zones).doesNotContain("spegni la mappa dettagliata prima di aprirla")
   }
 
   @Test
@@ -51,7 +55,7 @@ internal class MapPrivacyNoteTest : MapScreenTest() {
   fun laPaginaMostraLaNotaGiustaEDiceDellaSceltaRovinataSoloQuandoServe() {
     val state = androidx.compose.runtime.mutableStateOf(MapPrivacyState.Shown(MapOnline.On(byDefault = true), true, MapPrivacyNote.VERSION, 0))
     showAll { MapPrivacyScreen(state.value, NoMapPrivacyHandlers, Modifier) }
-    assertShows("nota", "“Mostra sulla mappa”", "anche quella attorno a una foto", "spegni la mappa dettagliata prima di aprirla")
+    assertShows("nota", "“Mostra sulla mappa”", "anche quella attorno a una foto", "scaricala prima di aprirla, oppure spegni la mappa dettagliata")
     assertDoesNotShow("nota", "La scelta si era rovinata", "né la loro posizione")
     composeRule.runOnUiThread { state.value = state.value.copy(online = MapOnline.Off, damaged = true) }
     composeRule.waitForIdle()

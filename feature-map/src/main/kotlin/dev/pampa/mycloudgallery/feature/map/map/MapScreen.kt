@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Settings
@@ -106,6 +107,7 @@ internal fun MapScreen(
     ) {
       TopRow(handlers)
       NoticeRow(ui.screen, handlers)
+      ui.download?.let { percent -> MapChip(stringResource(R.string.mappa_download, percent), modifier = Modifier.widthIn(max = MapDimens.PageWidth), icon = Icons.Rounded.CloudDownload) }
     }
     Column(
       modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(MapDimens.Inset).fillMaxWidth(),

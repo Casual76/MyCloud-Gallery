@@ -43,6 +43,36 @@ class RealDatasetTest {
     assertThat(wrong).isEmpty()
   }
 
+  /** P5: "la zona attorno a un luogo" si sceglie per nome: sul dataset vero le citta' note si trovano, con il centro giusto, le piu' grandi prima, in poco tempo. */
+  @Test
+  fun laRicercaPerNomeTrovaLeCittaEIlLoroCentro() {
+    requireAsset()
+    fun first(query: String) = data.search(query, limit = 8).firstOrNull()
+    val bologna = first("bologna")!!
+    assertThat(PlacesAccuracy.normalize(bologna.name)).isEqualTo("bologna")
+    assertThat(bologna.latitude).isWithin(0.2).of(44.49)
+    assertThat(bologna.longitude).isWithin(0.2).of(11.34)
+    assertThat(bologna.population).isGreaterThan(100_000.0)
+    val sulmona = first("sulmona")!!
+    assertThat(sulmona.latitude).isWithin(0.2).of(42.05)
+    assertThat(sulmona.longitude).isWithin(0.2).of(13.93)
+    assertThat(first("firenze")!!.latitude).isWithin(0.2).of(43.77)
+    // Senza accenti e senza maiuscole; le piu' grandi prima (Roma prima dei piccoli luoghi che cominciano per "rom").
+    assertThat(PlacesAccuracy.normalize(first("ROM")!!.name)).isEqualTo("roma")
+    assertThat(PlacesAccuracy.normalize(first("citta del vaticano")?.name ?: "citta del vaticano")).isEqualTo("citta del vaticano")
+    // Il centro di un luogo trovato per id e' lo stesso.
+    val located = data.locate(bologna.id)!!
+    assertThat(located.latitude).isEqualTo(bologna.latitude)
+    // Al piu' [limit], e una ricerca sull'intero dataset non pesa: e' una ricerca "mentre si scrive" (con la calma fra due lettere).
+    assertThat(data.search("san", limit = 8).size).isAtMost(8)
+    data.search("sie") // si scalda
+    val start = System.nanoTime()
+    repeat(5) { data.search("sie", limit = 8) }
+    val ms = (System.nanoTime() - start) / 5 / 1_000_000
+    println("ricerca per nome sul dataset vero: $ms ms (${data.placeCount} luoghi)")
+    assertThat(ms).isLessThan(1_500)
+  }
+
   @Test
   fun dentroIMicroStatiRispondeLUnitaAmministrativa() {
     requireAsset()

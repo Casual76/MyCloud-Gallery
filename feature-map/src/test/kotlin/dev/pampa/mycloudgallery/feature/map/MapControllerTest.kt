@@ -9,12 +9,16 @@ import dev.pampa.mycloudgallery.core.map.contract.MapNetwork
 import dev.pampa.mycloudgallery.core.map.contract.MapOnline
 import dev.pampa.mycloudgallery.core.map.contract.MapPoint
 import dev.pampa.mycloudgallery.core.map.contract.MapPoints
+import dev.pampa.mycloudgallery.core.map.contract.MapRegions
 import dev.pampa.mycloudgallery.core.map.contract.MapSettings
 import dev.pampa.mycloudgallery.core.map.contract.RebuildReason
+import dev.pampa.mycloudgallery.core.map.contract.RegionDownloadConfirmation
 import dev.pampa.mycloudgallery.core.map.noop.NoMapRegions
 import dev.pampa.mycloudgallery.core.map.testing.FakeMapNetworkState
+import dev.pampa.mycloudgallery.core.map.testing.InMemoryMapRegions
 import dev.pampa.mycloudgallery.core.map.testing.InMemoryMapSettings
 import dev.pampa.mycloudgallery.core.map.testing.ReferenceClusterIndex
+import dev.pampa.mycloudgallery.core.map.testing.SampleRegions
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.map.contract.MapMediaPositions
 import dev.pampa.mycloudgallery.feature.map.contract.MapNotice
@@ -55,11 +59,40 @@ class MapControllerTest {
     network: MapNetwork = MapNetwork.WIFI,
     positions: MapMediaPositions = NoMapMediaPositions,
     focus: MediaId? = null,
+    regions: MapRegions = NoMapRegions,
   ) = MapController(
-    points = points, settings = settings, regions = NoMapRegions, network = FakeMapNetworkState(network), names = TestPlaceNames(),
+    points = points, settings = settings, regions = regions, network = FakeMapNetworkState(network), names = TestPlaceNames(),
     filter = FinalFilter(rig.visibility), positions = positions, snapshot = rig.visibility.snapshot, scope = backgroundScope, focus = focus,
     compute = UnconfinedTestDispatcher(testScheduler),
   )
+
+  /** P5: lo scaricamento di una zona senza Internet si vede sopra la mappa (la percentuale) finche' dura, e poi sparisce. */
+  @Test
+  fun loScaricamentoInCorsoSiVedeSullaMappaEPoiSparisce() = runTest {
+    val network = FakeMapNetworkState(MapNetwork.WIFI)
+    val regions = InMemoryMapRegions(network)
+    val controller = controller(FakeMapPoints(rig.ready), regions = regions)
+    runCurrent()
+    assertThat(controller.ui.value.download).isNull()
+    val spec = SampleRegions.NORTH
+    regions.download(spec, RegionDownloadConfirmation(spec.id, 1, false, 0))
+    runCurrent()
+    assertThat(controller.ui.value.download).isEqualTo(0)
+    val total = regions.regions.value.single().totalTiles
+    regions.advance(spec.id, total / 4)
+    runCurrent()
+    assertThat(controller.ui.value.download).isEqualTo(regions.regions.value.single().percent)
+    assertThat(controller.ui.value.download).isAtLeast(20)
+    regions.complete(spec.id)
+    runCurrent()
+    assertThat(controller.ui.value.download).isNull()
+    // Una zona interrotta non e' "in corso": nessuna riga.
+    val south = SampleRegions.SOUTH
+    regions.download(south, RegionDownloadConfirmation(south.id, 1, false, 0))
+    regions.interrupt(south.id)
+    runCurrent()
+    assertThat(controller.ui.value.download).isNull()
+  }
 
   private fun viewport(center: GeoE6, zoom: Double, box: GeoBox) = MapViewport(center, zoom, box, 412, 892)
 

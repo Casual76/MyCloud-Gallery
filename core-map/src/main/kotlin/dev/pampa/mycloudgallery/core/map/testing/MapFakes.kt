@@ -54,21 +54,35 @@ class InMemoryMapSettings(private val buildFlag: Boolean = true) : MapSettings {
   /** Le scelte ricevute (per le prove: la versione della nota). */
   val choices: MutableList<MapOnlineChoice> = mutableListOf()
 
+  /** Vero dopo [clear]: da li' le scritture non fanno piu' niente (l'azzeramento). */
+  var cleared: Boolean = false
+    private set
+
   override suspend fun enable(choice: MapOnlineChoice) {
+    if (cleared) return
     choices += choice
     if (buildFlag) onlineState.value = MapOnline.On(byDefault = false)
   }
 
   override suspend fun disable() {
+    if (cleared) return
     if (buildFlag) onlineState.value = MapOnline.Off
   }
 
   override suspend fun setWifiOnly(on: Boolean) {
-    wifi.value = on
+    if (!cleared) wifi.value = on
   }
 
   override suspend fun saveCamera(spot: CameraSpot?) {
-    camera.value = spot
+    if (!cleared) camera.value = spot
+  }
+
+  /** Come l'azzeramento vero: tutto torna ai valori di serie (la mappa online "spenta") e da qui in poi le scritture non fanno niente. */
+  override suspend fun clear() {
+    cleared = true
+    onlineState.value = if (buildFlag) MapOnline.Off else MapOnline.Unavailable
+    wifi.value = true
+    camera.value = null
   }
 }
 

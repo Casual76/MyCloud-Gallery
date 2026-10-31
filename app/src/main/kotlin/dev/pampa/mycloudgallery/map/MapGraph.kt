@@ -23,6 +23,8 @@ import dev.pampa.mycloudgallery.core.network.contract.NetworkSnapshot
 import dev.pampa.mycloudgallery.feature.map.contract.MapEngineStarter
 import dev.pampa.mycloudgallery.feature.map.contract.MapMediaPositions
 import dev.pampa.mycloudgallery.feature.map.contract.MapPlaceNames
+import dev.pampa.mycloudgallery.core.map.contract.RebuildReason
+import dev.pampa.mycloudgallery.feature.map.map.MapLibreInit
 import dev.pampa.mycloudgallery.feature.map.map.MapNetWiring
 import dev.pampa.mycloudgallery.feature.map.mini.MapLibreMiniMap
 import dev.pampa.mycloudgallery.feature.map.mini.MiniMapLook
@@ -37,6 +39,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 /**
  * LA MAPPA NELL'APP (Fase 9, P13; docs/fase9-progetto.md §1.4 `MapGraph`, §2.8, §2.10, D21-D31; "per P13" di P1, P3, P4). Nasce con il processo (Hilt) e
@@ -59,6 +62,8 @@ class MapGraph(
   private val network: () -> StateFlow<NetworkSnapshot>,
   private val ledger: () -> TrafficLedger,
   private val buildFlag: Boolean,
+  /** R5: svuota il database di MapLibre con l'API della libreria (se e' partita), prima che i file si tolgano. Le prove la sostituiscono (niente libreria nativa). */
+  private val eraseEngine: suspend () -> Boolean = { MapLibreInit.erase() },
 ) {
   private val job = SupervisorJob(parent.coroutineContext[Job])
   val scope: CoroutineScope = CoroutineScope(parent.coroutineContext + job)
@@ -68,15 +73,22 @@ class MapGraph(
   @Volatile
   var regions: MapRegions = NoMapRegions
 
+  private val settingsHolder = lazy {
+    DataStoreMapSettings.create(DataStoreMapSettings.file(context), scope, buildFlag).also {
+      // Nata dopo l'azzeramento (R5): nessuna scrittura, e la mappa dettagliata vale spenta.
+      if (stopped.get()) it.markStopped()
+    }
+  }
+
   /** Impostazioni -> Mappa (locali, mai sincronizzate): `noBackupFilesDir/map/settings/`, cosi' l'azzeramento di `map/` le toglie con la camera. */
-  val settings: MapSettings by lazy { DataStoreMapSettings.create(DataStoreMapSettings.file(context), scope, buildFlag) }
+  val settings: MapSettings get() = settingsHolder.value
 
   val networkState: MapNetworkState by lazy { AppMapNetworkState(network(), scope) }
 
   val traffic: MapTraffic by lazy { LedgerMapTraffic(ledger, { network().value }, scope) }
 
-  /** Il cancello di P1 con lo stato di adesso (mappa accesa, rete, regioni). */
-  fun wiring(): MapNetWiring = MapNetWiring(TilePolicy, buildFlag, settings, networkState, regions, traffic) { null }
+  /** Il cancello di P1 con lo stato di adesso (mappa accesa, rete, regioni). Le regioni si rileggono a ogni richiesta (I3): P5 puo' legare [regions] dopo l'avvio di MapLibre. */
+  fun wiring(): MapNetWiring = MapNetWiring(TilePolicy, buildFlag, settings, networkState, { regions }, traffic) { null }
 
   /** L'avvio pigro di MapLibre (mai all'avvio dell'app). */
   val starter: MapEngineStarter by lazy { AppMapEngineStarter(::wiring, scope) }
@@ -121,6 +133,12 @@ class MapGraph(
     }
   }
 
+  /** "Riprova" della sezione Luoghi (MA-1): rifa la lettura dei punti (`rebuild(OPEN)`), fuori dal thread principale. */
+  fun retryPoints() {
+    if (stopped.get()) return
+    scope.launch(Dispatchers.Default) { points.rebuild(RebuildReason.OPEN) }
+  }
+
   /** Un "Nascondi" o "Mostra" fatto qui: l'indice si rifa' subito e la mini-mappa dimentica le immagini. */
   fun onHiddenChanged() {
     if (stopped.get()) return
@@ -143,11 +161,28 @@ class MapGraph(
 
   private fun pointsIfBuilt(): WatchedMapPoints? = if (pointsHolder.isInitialized()) pointsHolder.value else null
 
-  /** L'azzeramento (D37), **per primo**: niente si ricostruisce piu', la mini-mappa dimentica, i collettori si fermano e si aspettano. */
+  /**
+   * L'azzeramento (D37), **per primo**: niente si ricostruisce piu', la mini-mappa dimentica, i collettori si fermano e si aspettano. Poi (R5), prima che l'eraser tolga
+   * la cartella: il database di MapLibre si svuota con l'API della libreria (se e' partita) e le impostazioni si svuotano **attraverso DataStore** (che non tollera che gli si
+   * tolga il file da sotto: la sua copia in memoria, con la vecchia camera, tornerebbe sul disco alla prima scrittura); da qui nessuna scrittura. Un guasto in uno di questi
+   * passi non ferma l'azzeramento: i file si tolgono comunque (anche quelli di serie di MapLibre) e nei log resta solo il tipo.
+   */
   suspend fun stop() {
     if (!stopped.compareAndSet(false, true)) return
     miniBuilt?.clear()
     job.cancelAndJoin()
+    guarded("database della mappa") { if (!eraseEngine()) GalleryLog.w(TAG) { "database della mappa non svuotato dalla libreria: lo tolgono i file" } }
+    if (settingsHolder.isInitialized()) guarded("impostazioni della mappa") { (settingsHolder.value as DataStoreMapSettings).clear() }
+  }
+
+  private suspend fun guarded(what: String, step: suspend () -> Unit) {
+    try {
+      step()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "azzeramento: $what non svuotato (${e.javaClass.simpleName})" }
+    }
   }
 
   companion object {

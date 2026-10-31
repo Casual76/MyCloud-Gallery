@@ -271,6 +271,7 @@ internal object RealMapProbes {
         if (state.withoutPosition != without) report.places.problems += "le foto senza posizione sono ${state.withoutPosition}, dovrebbero essere $without"
       }
       GeoIndexState.Building -> report.points.problems += "l'indice e' ancora in costruzione dopo la ricostruzione"
+      GeoIndexState.Failed -> report.points.problems += "l'indice e' in errore dopo la ricostruzione"
     }
   }
 

@@ -18,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import dev.pampa.mycloudgallery.feature.map.nav.mapGraph
 import dev.pampa.mycloudgallery.feature.map.nav.openMapSettings
 import dev.pampa.mycloudgallery.feature.map.nav.openPlacesEntry
+import dev.pampa.mycloudgallery.feature.map.places.PlacesEntryTarget
 import dev.pampa.mycloudgallery.feature.memories.nav.memoriesGraph
 import dev.pampa.mycloudgallery.feature.memories.nav.openMemoriesEntry
 import dev.pampa.mycloudgallery.feature.memories.nav.openMemoriesSettings
@@ -239,6 +240,7 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
               openViewer = openViewer,
               peopleActions = peopleActions,
               memoriesHost = memoriesHost,
+              mapHost = mapHost,
             )
           }
           // Fase 3 (P10): le pagine delle Raccolte sul telefono (griglie filtrate, Nascosti, Eliminati di recente).
@@ -435,6 +437,8 @@ private fun MainDestination(
   peopleActions: PeopleActions?,
   /** Fase 9 (P13): i ricordi (il giro `OPEN` all'apertura di Raccolte, le voci della sezione). */
   memoriesHost: MemoriesHostViewModel? = null,
+  /** Fase 9 (correzioni MA-1): la mappa (il "Riprova" della sezione Luoghi rifa la lettura dei punti). */
+  mapHost: MapHostViewModel? = null,
 ) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
   val library: LibraryViewModel = hiltViewModel()
@@ -512,7 +516,8 @@ private fun MainDestination(
             onNewAlbum = { newAlbum = true },
             onPeople = { target -> peopleActions?.let { actions -> nav.openPeopleEntry(target, actions) } },
             onMemories = { target -> nav.openMemoriesEntry(target) { code -> memoriesHost?.resolveEntry(code) } },
-            onPlaces = { target -> nav.openPlacesEntry(target) },
+            // MA-1: "Riprova" sotto "Non riesco a leggere le posizioni delle foto" non apre una pagina, rifa la lettura dei punti.
+            onPlaces = { target -> if (target == PlacesEntryTarget.Retry) mapHost?.map?.retryPoints() else nav.openPlacesEntry(target) },
           )
         },
         entryDetail = { entry -> CollectionEntryDetail(entry, nav, slot.contentPadding, nasOpener, openViewer) },

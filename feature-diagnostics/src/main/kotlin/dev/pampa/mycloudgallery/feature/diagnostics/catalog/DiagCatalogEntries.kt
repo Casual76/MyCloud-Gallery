@@ -369,6 +369,10 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.MAP_REGION_PARTIAL, DiagSection.MAP, DiagSeverity.INFO, R.string.diag_map_region_partial_title, R.string.diag_map_region_partial_guide, null),
     DiagEntry(DiagCodes.MAP_REGION_SPACE, DiagSection.MAP, DiagSeverity.WARNING, R.string.diag_map_region_space_title, R.string.diag_map_region_space_guide, null),
     DiagEntry(DiagCodes.MAP_INVALID_POINTS, DiagSection.MAP, DiagSeverity.INFO, R.string.diag_map_invalid_points_title, R.string.diag_map_invalid_points_guide, null),
+    DiagEntry(DiagCodes.MAP_SETTINGS_UNREADABLE, DiagSection.MAP, DiagSeverity.WARNING, R.string.diag_map_settings_unreadable_title, R.string.diag_map_settings_unreadable_guide, null),
+    DiagEntry(DiagCodes.MAP_SETTINGS_DAMAGED, DiagSection.MAP, DiagSeverity.WARNING, R.string.diag_map_settings_damaged_title, R.string.diag_map_settings_damaged_guide, null),
+    DiagEntry(DiagCodes.MAP_CACHE_UNMOVED, DiagSection.MAP, DiagSeverity.WARNING, R.string.diag_map_cache_unmoved_title, R.string.diag_map_cache_unmoved_guide, null),
+    DiagEntry(DiagCodes.MAP_INDEX_FAILED, DiagSection.MAP, DiagSeverity.WARNING, R.string.diag_map_index_failed_title, R.string.diag_map_index_failed_guide, null),
 
     // P11: i codici del §2.6 (modelli, motori, calcolo, dati AI dell'indice, indice di ricerca, ritaglio).
     DiagEntry(DiagCodes.AI_MODEL_MISSING, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_model_missing_title, R.string.diag_ai_model_missing_guide, null),

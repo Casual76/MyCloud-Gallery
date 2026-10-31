@@ -5,6 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material.icons.rounded.LocationOff
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.antigravity.fluidengine.ui.theme.FluidTone
@@ -57,11 +58,14 @@ data class MapSectionData(
  */
 class PlacesSectionSources(
   private val resources: Resources,
-  model: PlacesSectionModel,
+  private val model: PlacesSectionModel,
   scope: CoroutineScope,
 ) {
   /** Lo stato del §1.5 di adesso, o null finche' l'indice non e' pronto. */
   val sectionState: StateFlow<PlacesSectionState?> = model.state
+
+  /** La riga "Riprova" (MA-1, `PlacesEntryTarget.Retry`): rifa la lettura dei punti. */
+  fun retry() = model.retry()
 
   /** La sezione come dato. */
   val section: StateFlow<MapSectionData> = model.state.map { sectionOf(resources, it) }.stateIn(scope, SharingStarted.Lazily, sectionOf(resources, null))
@@ -85,10 +89,17 @@ class PlacesSectionSources(
           )
         }
       }
+      // MA-1: l'indice non si legge: dopo la riga "Mappa" (che lo dice) c'e' "Riprova"; non c'e' nessun conto da dare (non si sa quante sono senza posizione).
+      if (state is PlacesSectionState.Failed) {
+        entries += MapSectionEntry(
+          PlacesEntryTarget.RETRY, resources.getString(R.string.mappa_row_retry), resources.getString(R.string.mappa_row_retry_detail),
+          Icons.Rounded.Refresh, FluidTone.Info,
+        )
+      }
       val without = when (state) {
         is PlacesSectionState.Ready -> state.withoutPosition
         is PlacesSectionState.NoGps -> state.withoutPosition
-        null -> 0
+        PlacesSectionState.Failed, null -> 0
       }
       if (without > 0) {
         entries += MapSectionEntry(
@@ -105,6 +116,7 @@ class PlacesSectionSources(
         null -> resources.getString(R.string.mappa_row_map_detail)
         is PlacesSectionState.Ready -> MapText.withPosition(resources, state.withPosition)
         is PlacesSectionState.NoGps -> resources.getString(R.string.mappa_row_map_none)
+        PlacesSectionState.Failed -> resources.getString(R.string.mappa_row_map_failed)
       }
       return MapSectionEntry(PlacesEntryTarget.MAP, resources.getString(R.string.mappa_row_map), detail, Icons.Rounded.Map, FluidTone.Info)
     }

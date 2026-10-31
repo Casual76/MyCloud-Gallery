@@ -10,6 +10,10 @@
   <string name="mappa_loading">Cerco le foto con la posizione…</string>
   <string name="mappa_empty_title">Nessuna foto con la posizione</string>
   <string name="mappa_empty_detail">Le foto con la posizione compaiono qui, sulla carta.</string>
+  <!-- MA-1: la lettura dei punti e' fallita: non e' "nessuna foto con la posizione". -->
+  <string name="mappa_failed_title">Non riesco a leggere le posizioni delle foto</string>
+  <string name="mappa_failed_detail">Le foto non sono perse: riprova fra poco.</string>
+  <string name="mappa_retry">Riprova</string>
   <string name="mappa_zone_title">Questa zona</string>
   <string name="mappa_zone_empty_title">Nessuna foto qui</string>
   <string name="mappa_zone_empty_detail">Le foto di questa zona non ci sono più, oppure sono nascoste.</string>

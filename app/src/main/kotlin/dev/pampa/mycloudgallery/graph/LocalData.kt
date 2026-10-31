@@ -219,6 +219,9 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
           val target = File(context.noBackupFilesDir, name)
           if (target.exists() && !target.deleteRecursively()) steps.ok = false
         }
+        // Fase 9 (R5, seconda difesa): se MapLibre non ha potuto spostare il suo database in `map/` (o l'ha creato prima di spostarlo), le tessere viste (le zone guardate) stanno nelle
+        // cartelle di serie della libreria: `mbgl-offline.db` e i suoi `-journal`, `-wal`, `-shm`. L'azzeramento li toglie dovunque la libreria li metta.
+        if (!deleteMapLibreDatabases(listOf(context.filesDir, context.getExternalFilesDir(null), context.noBackupFilesDir, context.cacheDir, context.externalCacheDir))) steps.ok = false
       }
     }
   }
@@ -230,6 +233,20 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
 
   companion object {
     private const val TAG = "LocalDataEraser"
+
+    /**
+     * Toglie i file del database di MapLibre (`mbgl-offline.db*`) che stanno **direttamente** in [dirs] (le cartelle di serie della libreria: l'azzeramento non guarda nelle altre,
+     * mai la radice per intero). Vero se nessuno e' rimasto; una cartella assente o null non e' un errore.
+     */
+    internal fun deleteMapLibreDatabases(dirs: List<File?>): Boolean {
+      var ok = true
+      for (dir in dirs.filterNotNull().distinct()) {
+        for (file in dir.listFiles().orEmpty()) {
+          if (file.name.startsWith(dev.pampa.mycloudgallery.feature.map.map.MapLibreInit.DATABASE_PREFIX) && !file.deleteRecursively()) ok = false
+        }
+      }
+      return ok
+    }
 
     /**
      * Le cartelle dei dati della galleria in `noBackupFilesDir` (le riempiono le fasi 3-6). Mai la radice. Dalla 5B anche i file

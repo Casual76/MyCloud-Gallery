@@ -124,7 +124,9 @@ class MapSettingsAndPrivacyTest {
   fun unFileRovinatoOUnaCameraIllegibileTornanoAdI_Valori_DiSerie() {
     val file = tempFile().also { it.parentFile.mkdirs(); it.writeBytes(ByteArray(64) { b -> (b * 7 + 3).toByte() }) }
     withStore(file) { s ->
-      assertThat(s.online.value).isEqualTo(MapOnline.On(byDefault = true))
+      // Correzioni R2 (31/10): un file rovinato non torna "di serie" (accesa): la scelta "spenta" non si riaccende da sola, quindi vale "spenta" finche' non la riaccendi
+      // (le prove di questo caso, con i codici e le richieste, sono in `MapFailClosedTest`). La camera illeggibile resta "nessuna camera".
+      assertThat(s.online.value).isEqualTo(MapOnline.Off)
       assertThat(s.lastCamera.value).isNull()
     }
     for (bad in listOf("", "1,2", "a,b,c", "999999999,0,5", "0,0,5", "43000000,11000000,NaN", "43000000,11000000,99", "43000000,11000000,-1", "43000000,11000000,5,7")) {

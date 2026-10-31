@@ -22,7 +22,7 @@ import okio.Buffer
  * MapLibre usa: vede **ogni** richiesta prima che si apra un socket (anche prima del DNS) e la fa uscire solo se la decisione pura ([gate],
  * `TilePolicy` legata da :app) dice `Allow`. Con un `Allow`:
  *  - la richiesta che esce e' **ricostruita da zero**: `GET https://tiles.openfreemap.org` + il percorso deciso (la versione corrente al posto di
- *    `v`), senza query; degli header di MapLibre restano solo `If-None-Match` e `If-Modified-Since` (la cache), e il `User-Agent` e' fisso
+ *    `v`), senza query; degli header di MapLibre resta solo `If-Modified-Since` (la cache: una data, che non distingue i client; mai `If-None-Match`, che riporterebbe al server un valore che ha scelto lui), e il `User-Agent` e' fisso
  *    ([MapTileHeaders]); niente cookie, `Referer`, `Range`, `Authorization` o altro. OkHttp aggiunge poi solo `Host`, `Connection` e
  *    `Accept-Encoding: gzip` (e [MapWireGuard] lo ricontrolla prima che la richiesta parta);
  *  - un redirect si segue a mano solo se l'indirizzo nuovo passa la stessa decisione (al piu' [MAX_REDIRECTS]), altrimenti `REDIRECT`;
@@ -211,11 +211,14 @@ internal class MapGateInterceptor(
     const val MAX_HEADER_CHARS = 256
     val REDIRECT_CODES = setOf(301, 302, 303, 307, 308)
 
-    /** Gli header di MapLibre che possono uscire (validazione della cache). Il `User-Agent` lo mette il cancello. */
-    val KEPT_REQUEST_HEADERS = listOf("If-None-Match", "If-Modified-Since")
+    /**
+     * Gli header di MapLibre che possono uscire (validazione della cache): **solo la data** (correzioni I1, 31/10): un `ETag` e' un valore scelto dal server, diverso per ogni client
+     * se vuole, e rimandarlo con `If-None-Match` ad ogni convalida, anche da un altro indirizzo, sarebbe un identificativo (L13). Il `User-Agent` lo mette il cancello.
+     */
+    val KEPT_REQUEST_HEADERS = listOf("If-Modified-Since")
 
-    /** Gli header della risposta che MapLibre legge per la sua cache e per riprovare; tutto il resto (cookie compresi) si butta. */
-    val KEPT_RESPONSE_HEADERS = listOf("Content-Type", "ETag", "Last-Modified", "Cache-Control", "Expires", "Retry-After")
+    /** Gli header della risposta che MapLibre legge per la sua cache e per riprovare; tutto il resto (cookie e `ETag` compresi: senza `ETag` in cache non c'e' niente da rimandare) si butta. */
+    val KEPT_RESPONSE_HEADERS = listOf("Content-Type", "Last-Modified", "Cache-Control", "Expires", "Retry-After")
 
     /** I fatti di una richiesta per la decisione (l'host di `HttpUrl` e' gia' minuscolo e in ASCII; la porta e' quella effettiva). */
     fun factsOf(method: String, url: HttpUrl): MapRequestFacts {

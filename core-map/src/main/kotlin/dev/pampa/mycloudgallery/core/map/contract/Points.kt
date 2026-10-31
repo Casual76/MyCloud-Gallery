@@ -62,6 +62,12 @@ sealed interface GeoIndexState {
 
   /** Nessuna foto con la posizione (E-MAP5): la sezione dice quante sono senza. */
   data class Empty(val withoutPosition: Int) : GeoIndexState
+
+  /**
+   * La lettura dei punti e' fallita e **non c'e' un indice buono** da tenere (MA-1 della verifica funzionale della Fase 9): non e' "nessuna foto con la posizione". Le schermate
+   * dicono "Non riesco a leggere le posizioni delle foto" con "Riprova" (`rebuild(OPEN)`). Se un indice c'era, resta quello (mai `Failed` sopra un indice valido).
+   */
+  data object Failed : GeoIndexState
 }
 
 /** I punti della mappa (D27): l'indice di adesso e la sua ricostruzione (dopo 2 s di calma quando cambia l'istantanea, `mapIndexRebuild`). */

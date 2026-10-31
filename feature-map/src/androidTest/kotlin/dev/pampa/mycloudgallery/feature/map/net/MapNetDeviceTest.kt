@@ -137,7 +137,7 @@ class MapNetDeviceTest {
     for (request in seen) {
       assertWithMessage(request.url).that(request.url).startsWith("https://${MapHost.TILES}/planet")
       assertWithMessage(request.url).that(request.path == "/planet" || Regex("^/planet/$VERSION/\\d+/\\d+/\\d+\\.pbf$").matches(request.path)).isTrue()
-      assertThat(request.headerNames - setOf("user-agent", "if-none-match", "if-modified-since")).isEmpty()
+      assertThat(request.headerNames - setOf("user-agent", "if-modified-since")).isEmpty()
       assertThat(request.userAgent).isEqualTo(MapTileHeaders.USER_AGENT)
     }
     assertThat(sockets.get()).isEqualTo(0)

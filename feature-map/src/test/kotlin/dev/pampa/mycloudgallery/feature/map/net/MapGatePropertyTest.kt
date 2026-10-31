@@ -68,7 +68,7 @@ class MapGatePropertyTest {
       assertThat(url.query).isNull()
       assertWithMessage(seen.path).that(seen.path == "/planet" || versioned.matches(seen.path)).isTrue()
       versioned.matchEntire(seen.path)?.let { assertThat(it.groupValues[1].toInt()).isAtMost(14) }
-      assertThat(seen.headers.names().map { it.lowercase() }.toSet() - setOf("user-agent", "if-none-match", "if-modified-since")).isEmpty()
+      assertThat(seen.headers.names().map { it.lowercase() }.toSet() - setOf("user-agent", "if-modified-since")).isEmpty()
       assertThat(seen.headers["User-Agent"]).isAnyOf(MapTileHeaders.USER_AGENT, MapTileHeaders.USER_AGENT_DOWNLOAD)
     }
     assertThat(reached).isGreaterThan(300)

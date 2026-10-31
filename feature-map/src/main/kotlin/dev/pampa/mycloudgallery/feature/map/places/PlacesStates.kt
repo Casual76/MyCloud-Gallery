@@ -32,6 +32,8 @@ object PlacesStates {
     GeoIndexState.Building -> null
     is GeoIndexState.Empty -> PlacesSectionState.NoGps(index.withoutPosition)
     is GeoIndexState.Ready -> PlacesSectionState.Ready(index.index.size, topPlaces(index, names), index.withoutPosition)
+    // MA-1: un errore non e' "nessuna foto con la posizione".
+    GeoIndexState.Failed -> PlacesSectionState.Failed
   }
 
   /**
@@ -67,8 +69,8 @@ object PlacesStates {
 class PlacesSectionModel(
   private val points: MapPoints,
   private val names: MapPlaceNames,
-  scope: CoroutineScope,
-  compute: CoroutineDispatcher = Dispatchers.Default,
+  private val scope: CoroutineScope,
+  private val compute: CoroutineDispatcher = Dispatchers.Default,
 ) {
   val state: StateFlow<PlacesSectionState?> = flow {
     coroutineScope {
@@ -76,6 +78,11 @@ class PlacesSectionModel(
       points.index.map { PlacesStates.of(it, names) }.collect { emit(it) }
     }
   }.flowOn(compute).stateIn(scope, SharingStarted.Lazily, null)
+
+  /** "Riprova" dopo "Non riesco a leggere le posizioni delle foto" (MA-1): rifa `rebuild(OPEN)` fuori dal thread principale. */
+  fun retry() {
+    scope.launch(compute) { points.rebuild(RebuildReason.OPEN) }
+  }
 }
 
 /**
@@ -94,9 +101,13 @@ sealed interface PlacesEntryTarget {
   /** "N foto senza posizione": niente da aprire. */
   data object Inert : PlacesEntryTarget
 
+  /** MA-1, "Riprova" sotto "Non riesco a leggere le posizioni delle foto": non apre una pagina, rifa la lettura dei punti (lo serve `:app`, che ha il servizio). */
+  data object Retry : PlacesEntryTarget
+
   companion object {
     const val MAP: String = "map"
     const val NO_POSITION: String = "places_nogps"
+    const val RETRY: String = "places_retry"
     const val PLACE_PREFIX: String = "place_"
 
     fun codeOf(placeId: Int): String = PLACE_PREFIX + placeId
@@ -105,6 +116,7 @@ sealed interface PlacesEntryTarget {
     fun parse(code: String): PlacesEntryTarget? = when {
       code == MAP -> OpenMap
       code == NO_POSITION -> Inert
+      code == RETRY -> Retry
       code.startsWith(PLACE_PREFIX) -> code.removePrefix(PLACE_PREFIX).takeIf { it.all(Char::isDigit) }?.toIntOrNull()?.takeIf { it > 0 }?.let(::Place)
       else -> null
     }

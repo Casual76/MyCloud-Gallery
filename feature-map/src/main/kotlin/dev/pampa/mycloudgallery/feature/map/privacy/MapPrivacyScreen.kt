@@ -107,7 +107,9 @@ private fun LazyListScope.shown(state: MapPrivacyState.Shown, handlers: MapPriva
       }
     }
   }
-  // La nota breve (Q1 (c), `MapPrivacyNote`): cosa esce, a chi, e che vale solo su questo dispositivo.
+  // R2 (31/10): il file delle impostazioni si era rovinato e la scelta si e' persa: la mappa dettagliata e' spenta (fallisce chiusa) finche' l'utente non la riaccende. Una riga, sotto l'interruttore.
+  if (state.damaged) item(key = "damaged") { FluidSectionFootnote(text = stringResource(R.string.mappa_settings_damaged)) }
+  // La nota breve (Q1 (c), `MapPrivacyNote`): cosa esce, a chi (anche attorno a una foto aperta sulla mappa: R1) e che vale solo su questo dispositivo.
   item(key = "note") { FluidSectionFootnote(text = stringResource(R.string.mappa_settings_note)) }
   item(key = "header-zones") { FluidSectionHeader(title = stringResource(R.string.mappa_settings_zones_header)) }
   item(key = "zones") {

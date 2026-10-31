@@ -18,5 +18,14 @@
   <string name="diag_map_region_space_guide">Non c\'è abbastanza spazio sul telefono per scaricare la zona. Libera spazio e riprova.</string>
   <string name="diag_map_invalid_points_title">Posizioni scartate</string>
   <string name="diag_map_invalid_points_guide">Foto con una posizione impossibile (per esempio 0, 0): non compaiono sulla mappa. Solo il numero.</string>
+  <!-- Correzioni mappa e rete (31/10): la scelta «mappa dettagliata spenta» non si perde mai da sola. -->
+  <string name="diag_map_settings_unreadable_title">Impostazioni della mappa non lette</string>
+  <string name="diag_map_settings_unreadable_guide">Il telefono non è riuscito a leggere le impostazioni della mappa: per prudenza la mappa dettagliata resta spenta finché non chiudi e riapri l\'app, o finché non la riaccendi da Impostazioni, Mappa. Se succede spesso, esporta la Diagnostica e segnalalo.</string>
+  <string name="diag_map_settings_damaged_title">Scelta della mappa rovinata</string>
+  <string name="diag_map_settings_damaged_guide">Il file delle impostazioni della mappa si era rovinato e la scelta si è persa: la mappa dettagliata resta spenta finché non la riaccendi da Impostazioni, Mappa.</string>
+  <string name="diag_map_cache_unmoved_title">Archivio della mappa fuori posto</string>
+  <string name="diag_map_cache_unmoved_guide">La mappa non è riuscita a mettere il suo archivio nella cartella dell\'app: per prudenza resta la carta semplice e non esce niente verso Internet. Chiudi e riapri l\'app; se resta così, esporta la Diagnostica e segnalalo.</string>
+  <string name="diag_map_index_failed_title">Posizioni delle foto non lette</string>
+  <string name="diag_map_index_failed_guide">Il telefono non è riuscito a leggere le posizioni delle foto: la mappa e i Luoghi lo dicono e propongono di riprovare. Tocca Riprova; se continua, chiudi e riapri l\'app e, se serve, esporta la Diagnostica.</string>
   <string name="diagnostics_job_map_region">Zona senza Internet</string>
 </resources>

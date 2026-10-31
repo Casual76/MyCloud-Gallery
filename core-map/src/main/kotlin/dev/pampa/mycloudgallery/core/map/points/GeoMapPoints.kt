@@ -31,8 +31,9 @@ import kotlinx.coroutines.withContext
  *   mostra le copertine copre l'intervallo).
  * - **Un solo lavoro alla volta**: le ricostruzioni si mettono in fila; chi entra per ultimo controlla se l'indice e' gia' al passo.
  *   Una ricostruzione annullata non pubblica niente e non segna l'indice come al passo (la prossima `OPEN` lo rifa).
- * - **Errori**: una lettura che fallisce lascia l'indice che c'era (o, se non ce n'era, [GeoIndexState.Empty]: il contratto non ha uno stato
- *   d'errore) e **non** segna l'indice come al passo, cosi' la prossima richiesta ci riprova. Nel log solo numeri.
+ * - **Errori** (MA-1): una lettura che fallisce lascia l'indice che c'era (valido: l'utente continua a vederlo) o, se non ce n'era, vale [GeoIndexState.Failed]
+ *   (mai [GeoIndexState.Empty]: un database che non risponde non e' "nessuna foto con la posizione"); **non** segna l'indice come al passo, cosi' la prossima
+ *   richiesta (anche il "Riprova" delle schermate, `rebuild(OPEN)`) ci riprova. Nel log solo numeri.
  */
 class GeoMapPoints(
   private val source: MapPointSource,
@@ -66,6 +67,8 @@ class GeoMapPoints(
     lock.withLock {
       val target = requested.get()
       if (built == target) return
+      // Il "Riprova" dopo un errore: la schermata torna a "cerco le foto" finche' la lettura non finisce (se fallisce ancora, di nuovo `Failed`).
+      if (state.value is GeoIndexState.Failed) state.value = GeoIndexState.Building
       try {
         val next = read()
         state.value = next
@@ -73,10 +76,10 @@ class GeoMapPoints(
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
-        // Lo stato d'errore non esiste nel contratto: l'indice che c'era resta; senza, "nessuna foto con la posizione" e non una rotella eterna
-        // (salvo che il mondo sia cambiato durante la lettura, per esempio un media cancellato fra due pagine: allora la richiesta che l'ha
-        // portato ricostruisce subito dopo, e lo stato resta `Building`).
-        if (state.value is GeoIndexState.Building && requested.get() == target) state.value = GeoIndexState.Empty(0)
+        // L'indice che c'era resta (valido); senza, lo stato d'errore e non una rotella eterna ne' "nessuna foto con la posizione" (salvo che il mondo sia
+        // cambiato durante la lettura, per esempio un media cancellato fra due pagine: allora la richiesta che l'ha portato ricostruisce subito dopo, e lo
+        // stato resta `Building`). Un `Failed` che si ripete resta `Failed`.
+        if ((state.value is GeoIndexState.Building || state.value is GeoIndexState.Failed) && requested.get() == target) state.value = GeoIndexState.Failed
         // Del guasto solo il tipo: il messaggio di un errore del database potrebbe nominare dati.
         GalleryLog.w(TAG) { "ricostruzione dell'indice dei punti fallita (${e.javaClass.simpleName})" }
       }

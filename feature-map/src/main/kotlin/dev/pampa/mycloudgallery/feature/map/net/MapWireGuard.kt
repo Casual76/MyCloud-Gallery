@@ -120,6 +120,6 @@ internal class MapWireGuard(
 
   private companion object {
     /** Gli header che possono partire: quelli del cancello e i tre che OkHttp aggiunge da se'. Nessun cookie (il client non ne ha). */
-    val WIRE_HEADERS = setOf("user-agent", "if-none-match", "if-modified-since", "host", "connection", "accept-encoding")
+    val WIRE_HEADERS = setOf("user-agent", "if-modified-since", "host", "connection", "accept-encoding")
   }
 }

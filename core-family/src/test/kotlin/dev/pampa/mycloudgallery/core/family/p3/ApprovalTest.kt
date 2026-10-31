@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.family.registry.NasRegistryService
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.trust.Verdict
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultRefusal
 import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
 import dev.pampa.mycloudgallery.core.trust.data.DeviceStatusReport
 import dev.pampa.mycloudgallery.core.trust.data.DeviceStatusVerifier
@@ -118,9 +119,11 @@ class ApprovalTest {
     val tablet = world.join("Tablet di Mamma", "mamma")
 
     assertThat(member.service.approve(tablet.id, ApprovalProof.TypedCode(tablet.shownCode))).isEqualTo(AdminActionResult.NotAdmin)
-    // L'admin con il telefono senza blocco schermo sicuro non apre la cassaforte (M3).
+    // L'admin con il telefono senza blocco schermo sicuro non apre la cassaforte (M3): l'esito lo dice (Fase 10, M3).
     admin.vault.deviceSecure = false
-    assertThat(admin.service.approve(tablet.id, ApprovalProof.TypedCode(tablet.shownCode))).isEqualTo(AdminActionResult.NotAdmin)
+    assertThat(admin.service.approve(tablet.id, ApprovalProof.TypedCode(tablet.shownCode)))
+      .isEqualTo(AdminActionResult.KeyRefused(VaultRefusal.NO_SECURE_LOCK))
+    assertThat(admin.engine.state!!.registry.device(tablet.id)).isNull()
   }
 
   // --- Esiti di commit -----------------------------------------------------------------------------------

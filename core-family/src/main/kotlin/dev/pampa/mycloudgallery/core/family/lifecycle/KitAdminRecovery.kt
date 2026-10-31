@@ -24,11 +24,14 @@ import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.Verdict
 import dev.pampa.mycloudgallery.core.trust.acceptedOrNull
 import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
+import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyUse
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyVault
 import dev.pampa.mycloudgallery.core.trust.crypto.KeyProvider
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryCode
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryKit
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultRefusal
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultResult
 import dev.pampa.mycloudgallery.core.trust.nas.NasClock
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.NasRead
@@ -166,14 +169,16 @@ class KitAdminRecovery(
     }
     if (!state.acceptsRecoveredKey(familyKey.publicKey)) return RecoveryOutcome.Failed(OnboardingProblem.REGISTRY_UNTRUSTED)
 
-    // La chiave nella cassaforte (blocco schermo sicuro obbligatorio, M3).
-    try {
-      familyKeys.store(familyKey)
+    // La chiave nella cassaforte (blocco schermo sicuro obbligatorio e foglio dell'impronta o del PIN, M3). Annullato: niente e' firmato,
+    // il registro resta com'era e si riprova con il gesto.
+    val stored = try {
+      familyKeys.store(familyKey, FamilyKeyUse.SAVE)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       return RecoveryOutcome.Failed(OnboardingProblem.CREDENTIALS_NOT_SAVED)
     }
+    if (stored is VaultResult.Refused) return RecoveryOutcome.Failed(problemOf(stored.reason))
 
     val authority = FamilyAuthority(familyKey, nasClock)
     repeat(COMMIT_ATTEMPTS) {
@@ -309,6 +314,16 @@ internal fun problemOf(error: NasError): OnboardingProblem = when (error) {
   NasError.Timeout -> OnboardingProblem.NAS_NOT_FOUND
   NasError.NasFull, NasError.QuotaExceeded -> OnboardingProblem.NAS_FULL
   else -> OnboardingProblem.NAS_WRITE_FAILED
+}
+
+/**
+ * La cassaforte della chiave di famiglia non ha lavorato (Fase 10, M3): il problema da mostrare. Senza blocco schermo sicuro resta il
+ * problema di sempre ([OnboardingProblem.CREDENTIALS_NOT_SAVED]); una chiave del Keystore invalidata manda al kit o al secondo admin.
+ */
+internal fun problemOf(refusal: VaultRefusal): OnboardingProblem = when (refusal) {
+  VaultRefusal.CANCELLED, VaultRefusal.LOCKED_OUT, VaultRefusal.UNAVAILABLE -> OnboardingProblem.FAMILY_KEY_NOT_CONFIRMED
+  VaultRefusal.NO_SECURE_LOCK -> OnboardingProblem.CREDENTIALS_NOT_SAVED
+  VaultRefusal.INVALIDATED -> OnboardingProblem.FAMILY_KEY_INVALIDATED
 }
 
 /**

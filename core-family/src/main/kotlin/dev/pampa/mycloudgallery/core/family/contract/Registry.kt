@@ -2,9 +2,12 @@ package dev.pampa.mycloudgallery.core.family.contract
 
 import dev.pampa.mycloudgallery.core.nas.contract.NasError
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultRefusal
 import dev.pampa.mycloudgallery.core.trust.registry.ApprovalProof
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /** Perche' quello che si sa del registro potrebbe essere vecchio. */
 enum class StaleReason {
@@ -117,6 +120,13 @@ sealed interface AdminActionResult {
   /** Questo dispositivo non tiene la chiave di famiglia. */
   data object NotAdmin : AdminActionResult
 
+  /**
+   * Fase 10, M3 (decisione 2(a) del 31/10): la chiave di famiglia non si e' aperta per [reason] (foglio annullato, troppi tentativi,
+   * nessun foglio possibile adesso, chiave del Keystore invalidata: allora il kit di recupero o il secondo admin). **Niente e' stato
+   * firmato** ne' pubblicato; la pagina lo dice con un messaggio suo.
+   */
+  data class KeyRefused(val reason: VaultRefusal) : AdminActionResult
+
   /** Il NAS non ha risposto, o ha rifiutato la scrittura. */
   data class Failed(val error: NasError) : AdminActionResult
 }
@@ -182,4 +192,18 @@ interface RegistryService {
    * firma niente. **Non cambia la cartella del backup** (E-B7: si sceglie una volta sola).
    */
   suspend fun renameDevice(deviceId: String, name: String): AdminActionResult = AdminActionResult.NotAdmin
+
+  /**
+   * La versione fidata del registro e' stata sostituita con spazzatura sul NAS (revisione 1.4, N3) e questo dispositivo e' l'admin: va
+   * ripubblicato lo stesso contenuto con un numero nuovo ([reissue]). Fase 10, M3: non si fa piu' da solo durante un controllo (un
+   * controllo in background non apre mai la chiave di famiglia, e un foglio dell'impronta che compare senza un gesto insegna ad
+   * accettarlo): lo chiede la pagina dei dispositivi con un tasto.
+   */
+  val reissueDue: StateFlow<Boolean> get() = NO_REISSUE
+
+  /** "Ripubblica il registro" (N3): un gesto dell'admin, con il foglio dell'impronta o del PIN. */
+  suspend fun reissue(): AdminActionResult = AdminActionResult.NotAdmin
 }
+
+/** Nessuna ripubblicazione da chiedere (i registri che non la sanno fare). */
+private val NO_REISSUE: StateFlow<Boolean> = MutableStateFlow(false).asStateFlow()

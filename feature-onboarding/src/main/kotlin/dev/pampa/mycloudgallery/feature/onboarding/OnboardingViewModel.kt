@@ -642,7 +642,8 @@ class OnboardingViewModel @Inject constructor(
       val display = guard { coordinator.recoveryCode() }
       if (display == null || display.groups.isEmpty()) {
         display?.close()
-        state.update { it.copy(key = KeyUi(problem = OnboardingProblem.STEP_NOT_AVAILABLE)) }
+        // Fase 10, M3: il perche' dal coordinatore (foglio dell'impronta annullato, nessun blocco schermo...), se c'e'.
+        state.update { it.copy(key = KeyUi(problem = display?.problem ?: OnboardingProblem.STEP_NOT_AVAILABLE)) }
       } else {
         recoveryDisplay?.close()
         recoveryDisplay = display

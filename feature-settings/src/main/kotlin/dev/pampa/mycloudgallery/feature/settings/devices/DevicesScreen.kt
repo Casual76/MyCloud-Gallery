@@ -45,6 +45,7 @@ internal fun DevicesRoute(
     onOpenRequest = openRequest,
     onOpenDevice = openDevice,
     onConvertReports = viewModel::convertReports,
+    onReissue = viewModel::reissue,
   )
 }
 
@@ -62,6 +63,7 @@ internal fun DevicesScreen(
   onOpenRequest: (String) -> Unit,
   onOpenDevice: (String) -> Unit,
   onConvertReports: () -> Unit,
+  onReissue: () -> Unit = {},
 ) {
   FluidScreen(
     title = stringResource(R.string.devices_title),
@@ -115,6 +117,22 @@ internal fun DevicesScreen(
       }
     }
     state.feedback?.let { item { FeedbackNote(it) } }
+
+    // N3 (Fase 10, M3): la versione fidata e' stata sostituita sul NAS. La ripubblicazione non e' piu' automatica: un tasto, con il
+    // foglio dell'impronta o del PIN.
+    if (state.reissueDue) {
+      item {
+        FluidListGroup {
+          FluidListRow(
+            title = stringResource(R.string.devices_reissue),
+            subtitle = stringResource(R.string.devices_reissue_detail),
+            tone = FluidTone.Danger,
+            leading = { RowGlyph(Icons.Rounded.NotificationImportant) },
+            onClick = onReissue,
+          )
+        }
+      }
+    }
 
     if (state.requests.isNotEmpty()) {
       item {

@@ -28,12 +28,16 @@ import dev.pampa.mycloudgallery.core.family.trust.TrustEngine
 import dev.pampa.mycloudgallery.core.trust.Verdict
 import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
+import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyUse
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyVault
 import dev.pampa.mycloudgallery.core.trust.crypto.KeyProvider
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryCode
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryKit
 import dev.pampa.mycloudgallery.core.trust.crypto.Signer
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultCopy
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultRefusal
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultResult
 import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
 import dev.pampa.mycloudgallery.core.trust.nas.NasClock
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
@@ -87,19 +91,46 @@ class SoftwareKeys : KeyProvider {
   }
 }
 
-/** La cassaforte in memoria; senza blocco schermo sicuro rifiuta come quella vera (M3). */
+/**
+ * La cassaforte in memoria; senza blocco schermo sicuro rifiuta come quella vera (M3). Fase 10, M3: ogni uso passa da un foglio finto
+ * ([sheet]: null = l'admin conferma, altrimenti la risposta), contato in [sheets] con il suo motivo in [uses]; [touches] conta ogni
+ * chiamata, anche quelle che non arrivano al foglio (il lavoro in background deve lasciarlo a zero).
+ */
 class MemoryFamilyKeyVault(private val log: OperationLog? = null) : FamilyKeyVault {
   var key: FamilyKey? = null
   var deviceSecure: Boolean = true
+  var sheet: VaultRefusal? = null
 
-  override fun store(key: FamilyKey) {
-    check(deviceSecure) { "Il dispositivo admin deve avere un blocco schermo sicuro." }
+  /** La chiave del Keystore invalidata (impronte o blocco cambiati): niente si apre finche' una custodia nuova (il recupero) non la rifa'. */
+  var invalidated: Boolean = false
+  val uses = ArrayList<FamilyKeyUse>()
+  val sheets: Int get() = uses.size
+  var touches: Int = 0
+    private set
+
+  override suspend fun store(key: FamilyKey, use: FamilyKeyUse): VaultResult<Unit> {
+    touches++
+    if (!deviceSecure) return VaultResult.Refused(VaultRefusal.NO_SECURE_LOCK)
+    uses += use
+    sheet?.let { return VaultResult.Refused(it) }
     this.key = key
+    invalidated = false
+    return VaultResult.Done(Unit)
   }
 
-  override fun load(expected: EcPublicKey): FamilyKey? {
-    check(deviceSecure) { "Il dispositivo admin deve avere un blocco schermo sicuro." }
-    return key?.takeIf { it.publicKey == expected }
+  override suspend fun load(expected: EcPublicKey, use: FamilyKeyUse): VaultResult<FamilyKey> {
+    touches++
+    if (!deviceSecure) return VaultResult.Refused(VaultRefusal.NO_SECURE_LOCK)
+    val held = key?.takeIf { it.publicKey == expected } ?: return VaultResult.Absent
+    if (invalidated) return VaultResult.Refused(VaultRefusal.INVALIDATED)
+    uses += use
+    sheet?.let { return VaultResult.Refused(it) }
+    return VaultResult.Done(held)
+  }
+
+  override fun keep(): VaultCopy? {
+    val kept = key ?: return null
+    return VaultCopy { key = kept }
   }
 
   override fun destroy() {

@@ -147,6 +147,13 @@ internal fun OnboardingProblem.spec(): ProblemSpec = when (this) {
   OnboardingProblem.CREDENTIALS_NOT_SAVED -> ProblemSpec(
     Icons.Rounded.Key, NoticeTone.Danger, R.string.problem_credentials_title, R.string.problem_credentials_detail,
   )
+  // Fase 10, M3: la chiave di famiglia vuole l'impronta o il PIN a ogni uso. Il tasto della pagina (crea la chiave, verifica) riprova.
+  OnboardingProblem.FAMILY_KEY_NOT_CONFIRMED -> ProblemSpec(
+    Icons.Rounded.Key, NoticeTone.Caution, R.string.problem_family_key_not_confirmed_title, R.string.problem_family_key_not_confirmed_detail,
+  )
+  OnboardingProblem.FAMILY_KEY_INVALIDATED -> ProblemSpec(
+    Icons.Rounded.KeyOff, NoticeTone.Danger, R.string.problem_family_key_invalidated_title, R.string.problem_family_key_invalidated_detail,
+  )
   OnboardingProblem.NO_ACCESSIBLE_SHARE -> ProblemSpec(
     Icons.Rounded.FolderOff, NoticeTone.Caution, R.string.problem_no_share_title, R.string.problem_no_share_detail,
     listOf(ProblemAction.RETRY),

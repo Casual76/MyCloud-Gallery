@@ -102,6 +102,17 @@
   <string name="fb_mismatch">Il codice o il QR non sono quelli di questa richiesta. Controlla lo schermo del dispositivo nuovo: se non coincide, non approvare.</string>
   <string name="fb_not_admin_title">Solo l’admin può farlo</string>
   <string name="fb_not_admin">Questo dispositivo non tiene la chiave di famiglia.</string>
+  <!-- Fase 10, M3: la chiave di famiglia vuole l'impronta o il PIN a ogni uso. Ogni esito dice che niente e' stato firmato. -->
+  <string name="fb_key_cancelled_title">Annullato: niente firmato</string>
+  <string name="fb_key_cancelled">Per ogni azione dell’admin il telefono chiede l’impronta o il PIN. Senza conferma la modifica non è stata firmata né pubblicata: riprova quando vuoi.</string>
+  <string name="fb_key_locked_title">Troppi tentativi</string>
+  <string name="fb_key_locked">Android ha sospeso l’impronta e il PIN per un po’. Niente è stato firmato: riprova più tardi.</string>
+  <string name="fb_key_unavailable_title">Impronta o PIN non disponibili</string>
+  <string name="fb_key_unavailable">Il telefono non ha potuto chiedere l’impronta o il PIN in questo momento. Niente è stato firmato: riprova.</string>
+  <string name="fb_key_no_lock_title">Serve il blocco schermo</string>
+  <string name="fb_key_no_lock">La chiave di famiglia si usa solo su un telefono con PIN, sequenza o password (su Android 10 serve anche un’impronta). Niente è stato firmato.</string>
+  <string name="fb_key_invalidated_title">La chiave di famiglia non si apre più</string>
+  <string name="fb_key_invalidated">Le impronte o il blocco schermo di questo telefono sono cambiati e Android ha chiuso la cassaforte della chiave di famiglia. Niente è perso e niente è stato firmato: rimetti la chiave con il kit di recupero (Famiglia → Recupera l’admin) o fai l’azione dal secondo admin.</string>
   <string name="fb_failed_title">Non è andata</string>
   <string name="fb_auth_locked_title">Sblocco bloccato dal telefono</string>
   <string name="fb_auth_locked">Troppi tentativi sbagliati: è Android a bloccare lo sblocco per un po’. Riprova più tardi.</string>

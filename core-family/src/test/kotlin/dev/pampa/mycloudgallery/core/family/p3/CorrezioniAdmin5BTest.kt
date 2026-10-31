@@ -25,11 +25,11 @@ class CorrezioniAdmin5BTest {
 
     assertThat(tablet.service.updateCommonExclusions(setOf("Altro"))).isEqualTo(AdminActionResult.NotAdmin)
     assertThat(tablet.service.updateNasAddress("192.168.178.77")).isEqualTo(AdminActionResult.NotAdmin)
-    assertThat(tablet.writer.adminContext()).isNull()
+    assertThat(tablet.writer.adminBase()).isNull()
     assertThat(tablet.engine.state!!.registry.version).isEqualTo(version)
 
     // L'admin vero continua a firmare.
     assertThat(admin.service.updateCommonExclusions(setOf("Musica"))).isEqualTo(AdminActionResult.Done)
-    assertThat(admin.writer.adminContext()).isNotNull()
+    assertThat(admin.writer.adminContext()).isInstanceOf(dev.pampa.mycloudgallery.core.family.registry.AdminUnlock.Open::class.java)
   }
 }

@@ -24,6 +24,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.trust.Verdict
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryCode
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryKit
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultRefusal
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.NasRead
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
@@ -370,6 +371,32 @@ class FamilyKeyStepTest {
     val code = c.shownCode()
     assertThat(code).isNotEmpty()
     expectAdvanced(c.submit(StepInput.RecoveryCodeTyped(code.toCharArray())))
+  }
+
+  /**
+   * Fase 10, M3 (decisione 2(a)): "Crea la chiave" chiede l'impronta o il PIN per custodirla. Annullato: nessuna chiave, niente sul NAS,
+   * e la pagina riceve il perche' (non "passo non disponibile"); al tasto di nuovo si riprova.
+   */
+  @Test
+  fun ilFoglioAnnullatoNonCustodisceNiente_laPaginaSaPerche_eSiRiprova() = runTest(UnconfinedTestDispatcher()) {
+    val f = OnboardingFixture(this)
+    val c = f.atFamilyKey()
+    f.env.familyKeys.sheet = VaultRefusal.CANCELLED
+
+    val refused = c.recoveryCode()
+
+    assertThat(refused.groups).isEmpty()
+    assertThat(refused.problem).isEqualTo(OnboardingProblem.FAMILY_KEY_NOT_CONFIRMED)
+    assertThat(f.env.familyKeys.stored).isNull()
+    assertThat(c.submit(StepInput.RecoveryCodeTyped("ABCD-EFGH".toCharArray()))).isEqualTo(problem(OnboardingProblem.FAMILY_KEY_NOT_CONFIRMED))
+    assertThat(f.env.nas.calls.none { it.first == "alessio" }).isTrue()
+
+    f.env.familyKeys.sheet = null
+    val code = c.shownCode()
+    assertThat(code).isNotEmpty()
+    expectAdvanced(c.submit(StepInput.RecoveryCodeTyped(code.toCharArray())))
+    // Un foglio per tentativo di custodia; la fondazione firma con la chiave appena creata, ancora in memoria (nessun foglio in piu').
+    assertThat(f.env.familyKeys.sheets).isEqualTo(2)
   }
 
   @Test

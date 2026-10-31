@@ -117,6 +117,8 @@ internal data class DevicesUiState(
   val inactive: List<DeviceUi>,
   val refreshing: Boolean = false,
   val feedback: Feedback? = null,
+  /** Solo admin: la versione fidata del registro e' stata sostituita sul NAS (N3) e va ripubblicata con un gesto (M3). */
+  val reissueDue: Boolean = false,
 ) {
   val isAdmin: Boolean get() = trust.isAdmin()
 

@@ -107,8 +107,12 @@ class NasLostReporting(
     return AdminActionResult.Done
   }
 
+  /**
+   * Fase 10, M3: le segnalazioni si cercano **senza** aprire la chiave di famiglia; se ce ne sono di valide, un solo foglio
+   * dell'impronta o del PIN per tutto il gesto ([RegistryWriter.changeStatusAll]). Nessuna segnalazione: niente foglio.
+   */
   override suspend fun convertReports(): AdminActionResult {
-    val admin = writer.adminContext() ?: return AdminActionResult.NotAdmin
+    val admin = writer.adminBase() ?: return AdminActionResult.NotAdmin
     val state = admin.state
     val candidates = state.registry.devices.filter { it.status != DeviceStatus.LOST && it.id != admin.me }
     val now = engine.nasNow()
@@ -120,12 +124,7 @@ class NasLostReporting(
         is NasResult.Ok -> if (scan.value.found != null) valid += device.id
       }
     }
-    var result: AdminActionResult = AdminActionResult.Done
-    for (id in valid) {
-      result = writer.changeStatus(id, DeviceStatus.LOST)
-      if (result != AdminActionResult.Done) return result
-    }
-    return result
+    return writer.changeStatusAll(valid, DeviceStatus.LOST)
   }
 
   private companion object {

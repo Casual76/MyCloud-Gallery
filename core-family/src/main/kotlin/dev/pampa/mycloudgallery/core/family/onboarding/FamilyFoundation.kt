@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.family.onboarding
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.TrustSnapshot
+import dev.pampa.mycloudgallery.core.family.lifecycle.problemOf
 import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
@@ -10,9 +11,11 @@ import dev.pampa.mycloudgallery.core.trust.TrustViolation
 import dev.pampa.mycloudgallery.core.trust.Verdict
 import dev.pampa.mycloudgallery.core.trust.codec.TextRules
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
+import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyUse
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryCode
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryKit
 import dev.pampa.mycloudgallery.core.trust.crypto.TrustIds
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultResult
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.NasRead
 import dev.pampa.mycloudgallery.core.trust.nas.PublishResult
@@ -61,7 +64,7 @@ internal sealed interface FoundationStart {
 /**
  * Il passo 12 (`docs/fase2-progetto.md` §2.1), **nell'ordine fisso** che tiene al sicuro la chiave di famiglia:
  *
- * - (a) [begin]: genera la chiave e la conserva in `FamilyKeyVault.store` (cifrata dal Keystore);
+ * - (a) [begin]: genera la chiave e la conserva in `FamilyKeyVault.store` (cifrata dal Keystore, dopo l'impronta o il PIN: M3);
  * - (b) [begin]: genera il codice di recupero (mai scelto dall'utente) per mostrarlo con `FLAG_SECURE`;
  * - (c) [run]: l'utente lo **riscrive per intero**; se non coincide non si fa altro;
  * - (d) [run]: `RecoveryKit.seal` → `publishExclusive` nell'area privata → **rilettura e `open` con il codice
@@ -79,15 +82,24 @@ internal sealed interface FoundationStart {
  */
 internal class FamilyFoundation(private val ports: OnboardingPorts) {
 
-  /** (a) e (b). La chiave non si puo' conservare se il telefono non ha un blocco schermo sicuro: la cassaforte lo pretende. */
-  fun begin(): FoundationStart {
+  /**
+   * (a) e (b). La chiave non si puo' conservare se il telefono non ha un blocco schermo sicuro (la cassaforte lo pretende) ne' senza
+   * l'impronta o il PIN dell'admin sul foglio di sistema (Fase 10, M3): il tasto "Crea la chiave" e' il gesto che lo chiede.
+   */
+  suspend fun begin(): FoundationStart {
     val familyId = TrustIds.random(ports.random)
     val key = FamilyKey.generate(ports.random)
-    try {
-      ports.familyKeys.store(key)
-    } catch (e: IllegalStateException) {
+    val stored = try {
+      ports.familyKeys.store(key, FamilyKeyUse.SAVE)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
       GalleryLog.w(TAG) { "chiave di famiglia non conservata (${e.javaClass.simpleName})" }
       return FoundationStart.Blocked(OnboardingProblem.CREDENTIALS_NOT_SAVED)
+    }
+    if (stored is VaultResult.Refused) {
+      GalleryLog.w(TAG) { "chiave di famiglia non conservata (${stored.reason})" }
+      return FoundationStart.Blocked(problemOf(stored.reason))
     }
     return FoundationStart.Started(PendingFoundation(familyId, key, RecoveryCode.generate(ports.random), kitVerified = false))
   }

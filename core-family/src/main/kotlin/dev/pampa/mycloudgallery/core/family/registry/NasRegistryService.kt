@@ -58,26 +58,48 @@ class NasRegistryService(
   private val mutex = Mutex()
   private val _devices = MutableStateFlow<List<DeviceView>>(emptyList())
   private val _pending = MutableStateFlow<List<PendingRequestView>>(emptyList())
+  private val _reissueDue = MutableStateFlow(false)
 
   override val status: StateFlow<TrustStatus> = engine.status
   override val devices: StateFlow<List<DeviceView>> = _devices.asStateFlow()
   override val pendingRequests: StateFlow<List<PendingRequestView>> = _pending.asStateFlow()
+  override val reissueDue: StateFlow<Boolean> = _reissueDue.asStateFlow()
 
+  /**
+   * Rilegge il registro. **Non firma mai** (Fase 10, M3): la versione fidata sostituita (N3) accende solo [reissueDue] sul dispositivo
+   * admin, e la ripubblicazione la chiede l'admin ([reissue]); prima si faceva da sola "se la cassaforte si apre", anche da un
+   * controllo in background a telefono sbloccato.
+   */
   override suspend fun refresh(purpose: Purpose) = mutex.withLock {
     val outcome = engine.sync(purpose)
     if (outcome is SyncOutcome.Synced) {
       statuses.refresh(purpose)
       statuses.publishIfDue(purpose)
-      if (outcome.result.trustedVersionReplaced) writer.reissue() // N3: si fa da sola se la cassaforte si apre
+      _reissueDue.value = outcome.result.trustedVersionReplaced && writer.adminBase() != null
       refreshPending(purpose)
     }
     rebuildDevices()
   }
 
+  /** "Ripubblica il registro" (N3): il gesto dell'admin, con il foglio dell'impronta o del PIN. */
+  override suspend fun reissue(): AdminActionResult = mutex.withLock {
+    val result = writer.reissue()
+    if (result == AdminActionResult.Done) {
+      _reissueDue.value = false
+      rebuildDevices()
+    }
+    result
+  }
+
+  /**
+   * L'approvazione: richiesta riletta, finestra, prova (il codice digitato o la chiave scansionata) si controllano **prima** di aprire
+   * la chiave di famiglia, cosi' un codice sbagliato o una finestra scaduta non chiedono l'impronta (M3); poi il foglio, la firma, la
+   * pubblicazione.
+   */
   override suspend fun approve(requestId: String, proof: ApprovalProof): AdminActionResult = mutex.withLock {
-    val admin = writer.adminContext() ?: return@withLock AdminActionResult.NotAdmin
+    val base = writer.adminBase() ?: return@withLock AdminActionResult.NotAdmin
     val read = try {
-      sessions.onShare(admin.commonShare, Purpose.INTERACTIVE) { fs -> PendingRequests.readOne(fs, admin.state, requestId) }
+      sessions.onShare(base.commonShare, Purpose.INTERACTIVE) { fs -> PendingRequests.readOne(fs, base.state, requestId) }
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
@@ -87,11 +109,15 @@ class NasRegistryService(
       is NasResult.Err -> return@withLock AdminActionResult.Failed(read.error)
       is NasResult.Ok -> read.value?.acceptedOrNull() ?: return@withLock AdminActionResult.Failed(NasError.NotFound)
     }
-    if (admin.state.registry.device(request.deviceId) != null) return@withLock AdminActionResult.Done
+    if (base.state.registry.device(request.deviceId) != null) return@withLock AdminActionResult.Done
     val now = engine.nasNow()
     val firstSeen = sightings.observe(request.deviceId, now)
     if (!ApprovalWindow.isOpen(firstSeen, now)) return@withLock AdminActionResult.WindowExpired
     if (!proof.proves(request)) return@withLock AdminActionResult.ProofMismatch
+    val admin = when (val unlocked = writer.unlock(base)) {
+      is AdminUnlock.Open -> unlocked.admin
+      is AdminUnlock.Denied -> return@withLock unlocked.result
+    }
     val draft = try {
       admin.authority.approve(admin.state, request, proof, firstSeen)
     } catch (e: CancellationException) {
@@ -143,9 +169,12 @@ class NasRegistryService(
    * GUID e ULA dalla configurazione firmata, mai una password (C8). Apre la finestra d'invito di 24 h (ora del NAS).
    * Lancia se questo dispositivo non e' admin, se una rotazione e' a meta' (nessun QR con la chiave vecchia, N4)
    * o se la configurazione non ha il GUID del NAS.
+   *
+   * Non apre la chiave di famiglia (Fase 10, M3): l'invito non firma niente e porta solo dati del registro fidato, che ogni dispositivo
+   * della famiglia legge; quindi nessun foglio dell'impronta. La firma arriva con l'approvazione.
    */
   override suspend fun createInvite(params: InviteParams): FamilyInvite {
-    val admin = writer.adminContext() ?: throw IllegalStateException("solo l'admin crea un invito")
+    val admin = writer.adminBase() ?: throw IllegalStateException("solo l'admin crea un invito")
     val anchor = admin.state.toAnchor() ?: throw IllegalStateException("rotazione della chiave a meta': completarla prima")
     val config = admin.state.registry.config
     val guid = config.nasGuid ?: throw IllegalStateException("configurazione senza GUID del NAS")

@@ -15,7 +15,9 @@ import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.Verdict
 import dev.pampa.mycloudgallery.core.trust.acceptedOrNull
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
+import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyUse
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyVault
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultResult
 import dev.pampa.mycloudgallery.core.trust.crypto.KeyProvider
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryCode
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryKit
@@ -38,7 +40,8 @@ import kotlinx.coroutines.sync.withLock
  * Il reset della famiglia (`docs/formato-nas.md` §4.10, E-S13): chiave di famiglia persa senza kit o rubata, o
  * un ramo firmato che l'admin non riconosce. Dopo la doppia conferma, in quest'ordine:
  *
- * 1. chiave di famiglia **nuova** nella cassaforte (se poi qualcosa fallisce, si rimette quella vecchia);
+ * 1. chiave di famiglia **nuova** nella cassaforte, con il foglio dell'impronta o del PIN (se poi qualcosa fallisce, si rimette la
+ *    cassaforte di prima, ancora cifrata: [FamilyKeyVault.keep], nessun secondo foglio);
  * 2. **kit nuovo** con un codice nuovo nell'area privata dell'admin, riletto e aperto prima di andare avanti
  *    (come il passo 12(d) dell'onboarding);
  * 3. **id di famiglia nuovo** e fondazione nella stessa cartella del registro, dopo le versioni della famiglia
@@ -71,24 +74,27 @@ class NasFamilyReset(
     val old = engine.state ?: return@withLock ResetOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
     val profile = engine.profile() ?: return@withLock ResetOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
     val privateShare = profile.privateShare ?: return@withLock ResetOutcome.Failed(OnboardingProblem.STEP_NOT_AVAILABLE)
-    val oldKey = try {
-      familyKeys.load(old.trustedFamilyKey)
+    // La cassaforte com'e' adesso, ancora cifrata (Fase 10, M3): se il reset non finisce si rimette questa, senza aprire la chiave
+    // vecchia e senza un secondo foglio dell'impronta.
+    val before = try {
+      familyKeys.keep()
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       null
     }
 
-    // 1. Chiave nuova nella cassaforte (fallisce senza blocco schermo sicuro, M3).
+    // 1. Chiave nuova nella cassaforte (fallisce senza blocco schermo sicuro o se il foglio dell'impronta o del PIN e' annullato, M3).
     val newKey = FamilyKey.generate(random)
     val newFamilyId = TrustIds.random(random)
-    try {
-      familyKeys.store(newKey)
+    val stored = try {
+      familyKeys.store(newKey, FamilyKeyUse.SAVE)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       return@withLock ResetOutcome.Failed(OnboardingProblem.CREDENTIALS_NOT_SAVED)
     }
+    if (stored is VaultResult.Refused) return@withLock ResetOutcome.Failed(problemOf(stored.reason))
     val outcome = try {
       found(newKey, newFamilyId, privateShare, profile.commonShare, old.registry.version, old.registry.config, profile)
     } catch (e: CancellationException) {
@@ -97,9 +103,9 @@ class NasFamilyReset(
       GalleryLog.e(TAG, e) { "reset non riuscito" }
       ResetOutcome.Failed(OnboardingProblem.NAS_WRITE_FAILED)
     }
-    if (outcome is ResetOutcome.Failed && oldKey != null) {
+    if (outcome is ResetOutcome.Failed && before != null) {
       try {
-        familyKeys.store(oldKey) // si torna a poter amministrare la famiglia vecchia
+        before.putBack() // si torna a poter amministrare la famiglia vecchia
       } catch (e: Exception) {
         GalleryLog.e(TAG, e) { "chiave di famiglia vecchia non rimessa" }
       }

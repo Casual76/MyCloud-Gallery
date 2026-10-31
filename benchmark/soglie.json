@@ -1,6 +1,6 @@
 {
   "formato": 2,
-  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md par. 2.6, D21) e guardia della Fase 4A (docs/fase4-progetto.md par. 5.6, P10); dal 27/10 anche gli scenari album (Fase 7, par. 5.4) e volti (Fase 8, par. 5.4), promessi dai progetti e mancanti; dal 28/10 il primo disegno utile, l'avvio abituale e le pagine principali (Avvio istantaneo). Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione e la guardia si confrontano con il riferimento: docs/bench/riferimento-<dispositivo>.json se l'utente ne ha accettato uno, altrimenti le misure del 13/10 (riferimento-<dispositivo>-fase3.json). Una soglia assoluta che il riferimento violava gia' (lo scorrimento giustificato, il fotogramma piu' lungo dell'apertura) non fa fallire: vale la guardia, cioe' 'non peggiorare'. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica. 'mista': la prova deve girare sulla libreria mista di 100 mila righe con il 60% di media solo-NAS (metrica libraryNasShare).",
+  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md par. 2.6, D21) e guardia della Fase 4A (docs/fase4-progetto.md par. 5.6, P10); dal 27/10 anche gli scenari album (Fase 7, par. 5.4) e volti (Fase 8, par. 5.4), promessi dai progetti e mancanti; dal 28/10 il primo disegno utile, l'avvio abituale e le pagine principali (Avvio istantaneo); dal 31/10 gli scenari ricordi-* e mappa-* (Fase 9, par. 5.4, P12), sul dataset da 100 mila righe con il 60% di posizioni, gli anniversari di oggi e lo scaffale dei ricordi seminato, e con la mappa dettagliata sempre spenta (solo la carta di base offline). Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione e la guardia si confrontano con il riferimento: docs/bench/riferimento-<dispositivo>.json se l'utente ne ha accettato uno, altrimenti le misure del 13/10 (riferimento-<dispositivo>-fase3.json). Una soglia assoluta che il riferimento violava gia' (lo scorrimento giustificato, il fotogramma piu' lungo dell'apertura) non fa fallire: vale la guardia, cioe' 'non peggiorare'. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica. 'mista': la prova deve girare sulla libreria mista di 100 mila righe con il 60% di media solo-NAS (metrica libraryNasShare).",
   "dispositivi": {
     "s25": {
       "nome": "Galaxy S25",
@@ -186,7 +186,7 @@
       "classiDispositivo": ["tablet"],
       "assolute": [
         { "metrica": "processAlive", "statistica": "min", "minimo": 1, "spiega": "nessun OOM: il processo e' lo stesso dall'inizio alla fine di ogni iterazione" },
-        { "metrica": "pssPeakKb", "statistica": "max", "massimo": null, "calibrazione": { "margine": 0.10 }, "spiega": "PSS di picco sotto il tetto calibrato alla prima misura (compare.ps1 -Calibrate lo scrive qui, in KB)" }
+        { "metrica": "pssPeakKb", "statistica": "max", "massimo": null, "calibrazione": { "margine": 0.10, "passo": 1024 }, "spiega": "PSS di picco sotto il tetto calibrato alla prima misura (compare.ps1 -Calibrate lo scrive qui, in KB)" }
       ],
       "regressione": [
         { "metrica": "pssPeakKb", "statistica": "max", "aumentoMassimo": 0.15 }
@@ -387,6 +387,241 @@
       "validita": { "metrica": "facesComputing", "statistica": "min", "minimo": 1, "spiega": "il calcolo dei volti lavorava durante la misura (calcoloInCorso in bench-faces.json): altrimenti e' lo scorrimento di sempre" },
       "assolute": [
         { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: con il calcolo dei volti in corso la Libreria non peggiora; stessa guardia dello scorrimento, meno dell'1% di fotogrammi davvero in ritardo, media delle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "ricordi-apertura",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): apertura di un ricordo da Raccolte, dal tocco sulla riga alla prima cella della sua griglia, sullo scaffale dei ricordi seminato nel dataset da 100 mila righe, 12 iterazioni. Misurata da UiAutomator (comprende il ritardo di rilevamento dell'albero di accessibilita'). Senza lo scaffale seminato (o senza i ricordi montati) la prova si salta",
+      "prove": "^memoryOpen$",
+      "proveAttese": ["memoryOpen"],
+      "classi": ["MemoriesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "memoriesSeeded", "statistica": "min", "minimo": 1, "spiega": "lo scaffale dei ricordi seminato c'era (campo ricordiSeminati di bench-dataset.json): altrimenti non c'e' un ricordo da aprire" },
+      "assolute": [
+        { "metrica": "memoryOpenMs", "statistica": "p90", "massimo": 300.0, "spiega": "par. 5.4: apertura di un ricordo da Raccolte entro 300 ms (primo fotogramma della griglia), p90 sulle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "memoryOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "ricordi-presentazione",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): la presentazione di un ricordo per 30 s con il movimento, dal pulsante Riproduci: fotogrammi in ritardo (FrameJankMetric, come la Libreria) e fotogramma piu' lungo, 3 iterazioni",
+      "prove": "^memoryPlayer$",
+      "proveAttese": ["memoryPlayer"],
+      "classi": ["MemoriesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "memoriesSeeded", "statistica": "min", "minimo": 1, "spiega": "lo scaffale dei ricordi seminato c'era (campo ricordiSeminati di bench-dataset.json): altrimenti non c'e' un ricordo da aprire" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: meno dell'1% di fotogrammi davvero in ritardo a 120 Hz (App Deadline Missed o Dropped Frame di FrameTimeline sul totale), media delle iterazioni, come la Libreria" },
+        { "metrica": "maxFrameCpuMs", "statistica": "max", "massimo": 16.7, "spiega": "par. 5.4: il fotogramma piu' lungo di un passaggio entro 16,7 ms (due vsync a 120 Hz), il peggiore delle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "maxFrameCpuMs", "statistica": "max", "aumentoMassimo": 0.15 },
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }
+      ],
+      "guardia": [
+        { "metrica": "jankPercent", "statistica": "mean", "aumentoMassimo": 0.1, "pavimento": 0.15, "mantieniSotto": 1.0, "spiega": "par. 5.4: jank <= riferimento + 10% relativo (pavimento di 0,15 punti, circa un fotogramma su 700) e <= 1% dove gia' lo era" }
+      ]
+    },
+    {
+      "id": "ricordi-generazione",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): la generazione dei ricordi sulla libreria da 100 mila righe (con gli anniversari di oggi), da zero: il passo pieno con il budget notturno (sezione di traccia MCG:memories.generate) e il passo leggero (MCG:memories.generate.light), a ogni avvio con il pilota della variante di misura (BenchMemoriesDriver), 5 iterazioni",
+      "prove": "^memoriesGenerate$",
+      "proveAttese": ["memoriesGenerate"],
+      "classi": ["MemoriesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "memoriesSections", "statistica": "min", "minimo": 2, "spiega": "almeno le due sezioni (passo pieno e passo leggero) nella traccia di ogni iterazione: se mancano la sezione non e' emessa dall'app o il buffer di Perfetto ha perso pacchetti, e la misura non vale" },
+      "assolute": [
+        { "metrica": "memoriesGenerateMs", "statistica": "max", "massimo": 2000.0, "spiega": "par. 5.4: generazione notturna su 100 mila righe entro 2.000 ms; la peggiore delle iterazioni" },
+        { "metrica": "memoriesLightMs", "statistica": "max", "massimo": 300.0, "spiega": "par. 5.4: il passo leggero entro 300 ms; il peggiore delle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "memoriesGenerateMs", "statistica": "median", "aumentoMassimo": 0.15, "arrotondaSu": 1 },
+        { "metrica": "memoriesLightMs", "statistica": "median", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "ricordi-raccolte",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): lo scorrimento delle Raccolte con le sezioni Ricordi e Luoghi (fling avanti e indietro), con la stessa guardia della Libreria (FrameJankMetric e FrameTimingMetric), 8 iterazioni",
+      "prove": "^collectionsScroll$",
+      "proveAttese": ["collectionsScroll"],
+      "classi": ["MemoriesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "memoriesSeeded", "statistica": "min", "minimo": 1, "spiega": "lo scaffale dei ricordi seminato c'era (campo ricordiSeminati di bench-dataset.json): altrimenti non c'e' un ricordo da aprire" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: meno dell'1% di fotogrammi davvero in ritardo a 120 Hz (App Deadline Missed o Dropped Frame di FrameTimeline sul totale), media delle iterazioni, come la Libreria" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.1 }
+      ],
+      "guardia": [
+        { "metrica": "jankPercent", "statistica": "mean", "aumentoMassimo": 0.1, "pavimento": 0.15, "mantieniSotto": 1.0, "spiega": "par. 5.4: jank <= riferimento + 10% relativo (pavimento di 0,15 punti, circa un fotogramma su 700) e <= 1% dove gia' lo era" }
+      ]
+    },
+    {
+      "id": "ricordi-scroll-carico",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): la guardia di scorrimento della Libreria (livello Tutte, stile quadrato) con la generazione dei ricordi in corso (il pilota della variante di misura ripete i giri a bassa priorita'), 8 iterazioni: le guardie esistenti non devono peggiorare",
+      "prove": "^memoriesLoadedScroll$",
+      "proveAttese": ["memoriesLoadedScroll"],
+      "classi": ["MemoriesBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "memoriesComputing", "statistica": "min", "minimo": 1, "spiega": "la generazione lavorava durante la misura (calcoloInCorso in bench-memories.json): altrimenti e' lo scorrimento di sempre" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: meno dell'1% di fotogrammi davvero in ritardo a 120 Hz (App Deadline Missed o Dropped Frame di FrameTimeline sul totale), media delle iterazioni, come la Libreria" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "mappa-apertura-freddo",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): apertura della mappa dalla sezione Luoghi a freddo (processo nuovo, MapLibre e indice dei punti da avviare), dal tocco su Mappa alla prima bolla visibile, sul dataset da 100 mila righe con il 60% di posizioni, solo la carta di base offline, 12 iterazioni. Misurata da UiAutomator. Senza le posizioni nel dataset, o con la mappa che non parte, la prova si salta",
+      "prove": "^mapOpenCold$",
+      "proveAttese": ["mapOpenCold"],
+      "classi": ["MapBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "mapSeeded", "statistica": "min", "minimo": 1, "spiega": "le posizioni del dataset (il 60% delle righe, campo righePosizione di bench-dataset.json) c'erano: altrimenti la mappa non e' quella del par. 5.4" },
+      "assolute": [
+        { "metrica": "mapOpenMs", "statistica": "p90", "massimo": 800.0, "spiega": "par. 5.4: apertura della mappa a freddo con le bolle visibili entro 800 ms, p90 sulle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "mapOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "mappa-apertura-caldo",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): apertura della mappa a caldo (gia' aperta una volta nel processo: MapLibre e indice pronti), dal tocco su Mappa alla prima bolla visibile, 12 iterazioni",
+      "prove": "^mapOpenWarm$",
+      "proveAttese": ["mapOpenWarm"],
+      "classi": ["MapBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "mapSeeded", "statistica": "min", "minimo": 1, "spiega": "le posizioni del dataset (il 60% delle righe, campo righePosizione di bench-dataset.json) c'erano: altrimenti la mappa non e' quella del par. 5.4" },
+      "assolute": [
+        { "metrica": "mapOpenMs", "statistica": "p90", "massimo": 300.0, "spiega": "par. 5.4: apertura della mappa a caldo con le bolle visibili entro 300 ms, p90 sulle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "mapOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "mappa-gesti",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): spostamenti e pizzichi scriptati sulla mappa per 20 s: fotogrammi dell'interfaccia in ritardo (FrameJankMetric, come la Libreria), 5 iterazioni",
+      "prove": "^mapGestures$",
+      "proveAttese": ["mapGestures"],
+      "classi": ["MapBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "mapSeeded", "statistica": "min", "minimo": 1, "spiega": "le posizioni del dataset (il 60% delle righe, campo righePosizione di bench-dataset.json) c'erano: altrimenti la mappa non e' quella del par. 5.4" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: meno dell'1% di fotogrammi davvero in ritardo a 120 Hz (App Deadline Missed o Dropped Frame di FrameTimeline sul totale), media delle iterazioni, come la Libreria" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.1 }
+      ],
+      "guardia": [
+        { "metrica": "jankPercent", "statistica": "mean", "aumentoMassimo": 0.1, "pavimento": 0.15, "mantieniSotto": 1.0, "spiega": "par. 5.4: jank <= riferimento + 10% relativo (pavimento di 0,15 punti, circa un fotogramma su 700) e <= 1% dove gia' lo era" }
+      ]
+    },
+    {
+      "id": "mappa-disegno",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): il tempo di disegno di MapLibre per fotogramma (p95) durante gli spostamenti e i pizzichi scriptati: il contatore di traccia MCG:map.drawUs scritto dalla superficie della mappa a ogni fotogramma disegnato (il tempo che MapLibre misura), 5 iterazioni. Il tetto del progetto e' provvisorio (12 ms): resta null finche' non c'e' il primo riferimento dell'S25 (compare.ps1 -Calibrate lo scrive)",
+      "prove": "^mapDraw$",
+      "proveAttese": ["mapDraw"],
+      "classi": ["MapBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "mapDrawFrames", "statistica": "min", "minimo": 20, "spiega": "almeno 20 fotogrammi disegnati dalla mappa nella traccia di ogni iterazione: se mancano la mappa non si e' disegnata o MapLibre non da' i tempi, e il percentile non vale" },
+      "assolute": [
+        { "metrica": "mapDrawP95Ms", "statistica": "max", "massimo": null, "calibrazione": {"margine": 0.1, "passo": 0.5}, "spiega": "par. 5.4: p95 del disegno di MapLibre per fotogramma, provvisoriamente 12 ms, da calibrare in P12 sul primo riferimento (S25): finche' e' null la riga risulta CAL; la statistica e' la peggiore delle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "mapDrawP95Ms", "statistica": "median", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "mappa-bolle",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): l'aggiornamento delle bolle a camera ferma (sezione di traccia MCG:map.clusters, BubbleEngine.compute: celle dell'indice, le piu' grandi, copertine filtrate), dopo ogni spostamento della mappa, 8 iterazioni",
+      "prove": "^mapClusters$",
+      "proveAttese": ["mapClusters"],
+      "classi": ["MapBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "mapClustersSections", "statistica": "min", "minimo": 4, "spiega": "almeno 4 sezioni map.clusters nella traccia di ogni iterazione: se mancano la sezione non e' emessa dall'app o il buffer di Perfetto ha perso pacchetti, e il percentile non vale" },
+      "assolute": [
+        { "metrica": "mapClustersP95Ms", "statistica": "max", "massimo": 8.0, "spiega": "par. 5.4: aggiornamento delle bolle a camera ferma, p95 entro 8 ms; la peggiore delle iterazioni (ogni iterazione e' il p95 delle sue sezioni)" }
+      ],
+      "regressione": [
+        { "metrica": "mapClustersP95Ms", "statistica": "median", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "mappa-zona",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): apertura della griglia di una zona dalla mappa, dal tocco su una bolla alla prima cella (si tocca la piu' piccola e, se serve, ci si avvicina), 12 iterazioni. Misurata da UiAutomator",
+      "prove": "^mapZoneOpen$",
+      "proveAttese": ["mapZoneOpen"],
+      "classi": ["MapBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "mapSeeded", "statistica": "min", "minimo": 1, "spiega": "le posizioni del dataset (il 60% delle righe, campo righePosizione di bench-dataset.json) c'erano: altrimenti la mappa non e' quella del par. 5.4" },
+      "assolute": [
+        { "metrica": "zoneOpenMs", "statistica": "p90", "massimo": 150.0, "spiega": "par. 5.4: apertura della griglia di una zona entro 150 ms, p90 sulle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "zoneOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "mappa-viewer",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): apertura del viewer dalla griglia di una zona (sezione di traccia MCG:viewerOpen: la guardia del viewer), 12 iterazioni",
+      "prove": "^mapZoneViewer$",
+      "proveAttese": ["mapZoneViewer"],
+      "classi": ["MapBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "mapSeeded", "statistica": "min", "minimo": 1, "spiega": "le posizioni del dataset (il 60% delle righe, campo righePosizione di bench-dataset.json) c'erano: altrimenti la mappa non e' quella del par. 5.4" },
+      "assolute": [
+        { "metrica": "viewerOpenMs", "statistica": "p90", "massimo": 100.0, "spiega": "par. 5.4: il viewer dalla griglia della zona entro 100 ms (la guardia del viewer), p90 sulle iterazioni; la sezione la emette il viewer" }
+      ],
+      "regressione": [
+        { "metrica": "viewerOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "mappa-memoria",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): memoria dell'app (PSS, heap Java, nativo, grafica) a mappa aperta dopo qualche spostamento e un pizzico, 3 iterazioni. Nessun tetto assoluto: la prima corsa buona e' il riferimento",
+      "prove": "^mapMemory$",
+      "proveAttese": ["mapMemory"],
+      "classi": ["MapBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "mapSeeded", "statistica": "min", "minimo": 1, "spiega": "le posizioni del dataset (il 60% delle righe, campo righePosizione di bench-dataset.json) c'erano: altrimenti la mappa non e' quella del par. 5.4" },
+      "assolute": [],
+      "regressione": [
+        { "metrica": "mapPssKb", "statistica": "max", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "mappa-scroll-carico",
+      "descrizione": "NUOVA (Fase 9, par. 5.4, P12): la guardia di scorrimento della Libreria (livello Tutte, stile quadrato) dopo aver aperto la mappa (MapLibre, indice dei punti e bolle restano nel processo), 8 iterazioni: le guardie esistenti non devono peggiorare. La mappa e' una pagina a tutto schermo: 'in un'altra scheda' e' qui 'aperta e poi lasciata'",
+      "prove": "^mapLoadedScroll$",
+      "proveAttese": ["mapLoadedScroll"],
+      "classi": ["MapBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "mapWasOpened", "statistica": "min", "minimo": 1, "spiega": "la mappa si era aperta prima della misura: altrimenti e' lo scorrimento di sempre" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: meno dell'1% di fotogrammi davvero in ritardo a 120 Hz (App Deadline Missed o Dropped Frame di FrameTimeline sul totale), media delle iterazioni, come la Libreria" }
       ],
       "regressione": [
         { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }

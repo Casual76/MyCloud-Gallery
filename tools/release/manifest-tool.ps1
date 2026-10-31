@@ -25,10 +25,12 @@
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File tools\release\manifest-tool.ps1 sign --test-key --in release\manifest.json --out build\manifest-tool\prova.mcgr
 #>
-param(
-  [switch]$SkipBuild,
-  [Parameter(ValueFromRemainingArguments = $true)][string[]]$Rest
-)
+# Niente blocco param(): uno script "avanzato" prenderebbe --in e --out per i suoi parametri comuni (-InformationAction, -OutVariable).
+$SkipBuild = $false
+$Rest = @()
+foreach ($arg in $args) {
+  if ([string]$arg -eq "-SkipBuild") { $SkipBuild = $true } else { $Rest += [string]$arg }
+}
 
 $ErrorActionPreference = "Stop"
 $repo = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)

@@ -1,5 +1,7 @@
 # Verifica funzionale: Fase 8, Persone (commit `e9086269`, 30/10/2026)
 
+**Stato (31/10).** Tutte le 26 voci sono corrette nel codice dai pacchetti A-E (30/10; §7, "Stato dopo il pacchetto A/B/C/D/E"). Riconciliazione del 31/10 (Fase 10 P11): `docs/review/10-chiusura.md`. Lo stato che segue e' quello del 30/10 dopo A e B.
+
 **Stato (30/10, dopo i pacchetti A e B).** Il pacchetto A (`fase8/corr-a`, "cancellazione e stato locale") ha corretto nel codice **CE-1, CE-2, CE-3, CE-4 e CE-5**, e il pacchetto B (`fase8/corr-b`, "sezione Persone e prima apertura") **AT-1, AT-2, AT-3 e DR-1** (ognuna con un test: §7, "Stato dopo il pacchetto A" e "Stato dopo il pacchetto B"); le altre 17 voci restano aperte per i pacchetti C, D ed E. Alla stesura le 26 voci erano nuove: nessuna era corretta nel codice. Ne risultano 1 che blocca, 9 sbagliate e 16 minori; 18 sono confermate nel
 codice e 8 plausibili (serve il telefono o un test, descritto nella voce). La verifica dei fake (§3) ha trovato dieci divergenze, quattro delle quali
 nascondono voci di questo documento (CE-1 e CE-2, AT-1, CA-3 e CA-4, RI-1). I flussi del §4 sono da provare sul telefono (F131-F146), insieme a quelli di P13 non ancora fatti (F94-F110, con le

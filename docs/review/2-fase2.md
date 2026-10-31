@@ -7,6 +7,7 @@
 | **Tipo** | Revisione avversariale in sola lettura. Nessuna correzione al codice. |
 | **Data** | 13/10/2026 |
 | **Metodo** | Ho letto il codice delle superfici richieste, nell'ordine di priorità dato. Due aree autonome sono state analizzate in parallelo da due sotto-revisioni: `:app` (componenti, PendingIntent, notifiche, WorkManager, credenziali, log) ed esportazione della Diagnostica; i loro punti sono stati ricontrollati a campione nel codice. **1 test di prova temporaneo** (`core-family`, `ReviewPhase2ProbeTest`) è stato eseguito e poi cancellato. Alla fine `git status` è pulito. |
+| **Stato** | (31/10) Corretta o dichiarata (L19-L25, L4) in "Esito delle correzioni"; delle domande aperte la 1 e' chiusa (firma finale di SESSION_SETUP verificata, `NasIntegrationSuiteTest.t01`), la 3 e' L19, **la 2 resta per il campo** (S13 della seconda parte di P11). Riconciliazione del 31/10 (Fase 10 P11): `docs/review/10-chiusura.md`. |
 
 ## Riepilogo
 

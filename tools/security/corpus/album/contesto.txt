@@ -1,0 +1,3 @@
+album=29b1195e-df5c-28ba-de4e-5977a1c4234c
+device=39by9d3qxeb3aa7vnppa7zvbpr
+account=test

@@ -1,5 +1,7 @@
 # Verifica funzionale: Fasi 1–5A (commit `0d6b4c4`, 19/10/2026)
 
+**Stato (31/10).** Le 59 voci sono corrette nel codice (19/10, «Correzioni funzionali: onboarding e famiglia», «rete e VPN», «Libreria e NAS», «backup 5A» in `docs/decisioni.md`, ognuna con il suo "Stato"), tranne **GA-7**, non confermata e da guardare sul telefono (F15, P14). Riconciliazione del 31/10 (Fase 10 P11): `docs/review/10-chiusura.md`.
+
 **La domanda.** Ogni funzione promessa all'utente funziona davvero nell'app installata, da capo a fondo? Questa non è una
 revisione di sicurezza: quelle stanno negli altri file di `docs/review/`.
 

@@ -13839,3 +13839,131 @@ Tutte con PCAPdroid "solo questa app" (o `adb` + `dumpsys netstats`) sul Wi-Fi d
 ### Esito di `tools\check.ps1 -NoDaemon`
 **Verde**: "OK: tutto a posto." (uscita 0, 31/10, 32 minuti, dalle 10:55 alle 11:27), lanciato come chiede il brief: `tools\check.ps1 -NoDaemon` con `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, dentro un posto Gradle (`f9p5`), dopo aver cancellato `app\build\outputs\apk\release`. Tutti i passi sono OK (compilazione debug e release, `galleryTest`, `galleryLint`, i passi sul bytecode della release, compreso il 7h per OkHttp e MapLibre: "OkHttp solo da `feature/map/net/` e da MapLibre, MapLibre solo da `feature/map/`", client installato 1, MapLibre inizializzato 1, `libmaplibre.so` presente); solo `-Bench` non e' stato lanciato (il brief vieta di toccare `benchmark/**`). Una corsa precedente era fallita su `Phase9ArchitectureTest.niente_CoordinateNeCasa` perche' la prova del catalogo conteneva per intero il nome vietato: ora il nome si scrive a pezzi e la seconda corsa completa e' verde.
 Le relazioni XML delle prove unitarie dei moduli dicono 17.679 prove, 0 fallite, 28 saltate per assunzione (per modulo: `core-map` 159, `feature-map` 317, `app` 1.299, `feature-diagnostics` 331, `core-places` 142).
+
+## Fase 10 P11: revisione finale, prima parte (31/10)
+
+Il pacchetto P11 della Fase 10, prima parte (`docs/fase10-progetto.md` §4.4, riga P11; §2.11 con la tabella S1-S14 e "Le voci aperte delle
+revisioni"; D36; §4.3; §6; §11). Questa parte copre **S1-S9 ai livelli JVM e PC** e la **riconciliazione delle voci aperte delle revisioni**
+(promessa 18). Branch `fase10/p11` da `96eeed05`. **Nessun codice di produzione toccato** (`src/main` invariato), nessuna dipendenza, nessuna
+chiave vera (solo KT e chiavi generate nei test), nessun telefono, nessun emulatore, nessuno scaricamento.
+
+**Numerazione.** Nuove **C455** (i codec che leggono dal NAS sotto mutazione, dal corpus del repository) e **C456** (un firmatario canaglia non
+passa da nessuna porta); precisate **C2**, **C11** e **C447** (come si verificano); nuovi **L563** (1.4 B10: con la chiave di famiglia rubata un
+ramo alternativo si adotta senza allarme) e **L564** (le prove dal PC vedono solo `mcg-it/<giro>/` delle share di prova). C457, L565 e L566 non
+usati. Riga "Sigle", stato, checklist della Fase 10 e registro delle decisioni di `docs/sicurezza.md` aggiornati. F170-F181 non cambiano.
+
+### Cosa c'e', dove
+- **`tools/security/`**: `run-all.ps1 -Livello jvm|pc` (e `-Voce S1|S2|S3|S7|S8|S9`; `emulatore` e `s25` rispondono "seconda parte"), con il
+  resoconto di soli numeri in `build/security/<data>/jvm.txt` o `pc.txt` (classi, prove, fallite, saltate, secondi e le righe `MCG-SEC` che i
+  test stampano: etichette e numeri, mai nomi); `lib/security-common.ps1` (Gradle dietro il semaforo, `--rerun`, lettura degli XML);
+  `cross-account.ps1` (S1 (b)), `rogue-device.ps1` (S2), `hostile.ps1` (S3), `mass-change.ps1` (S9); `corpus/` (il corpus dei codec, binario).
+- **Test JVM nuovi** (sempre in `check.ps1`, con quantita' ridotte; piene con `MCG_SECURITY_FULL=1`):
+  `core-index/.../security/S1ProvenanceWorldsTest`, `core-trust/.../security/` (`S2RogueDeviceTest`, `S3CodecMutationTest`,
+  `S3CorpusGenerator` con `MCG_SECURITY_WRITE_CORPUS=1`, `SecurityCorpus`), `core-personal/.../security/S3PersonalMutationTest`,
+  `core-metadata/.../security/S3HostileImagesTest`, `core-models/.../security/S7aTamperedModelTest`,
+  `core-release/.../security/S7bManifestCasesTest`, `core-nas/.../security/S8ForeignNetworkTest`,
+  `core-nasmedia/.../security/S9MassChangeTest`.
+- **Prove dal PC** (`core-nas/src/test/.../integration/security/`): `SecurityArea` (il banco esistente), `SecurityProbes`
+  (`CrossAccountProbe`, `HostileSegmentsProbe`, `HostileImagesProbe`, `MassChangeProbe`), `SecurityNasIntegrationTest` (`@NasIntegration`,
+  solo con `-PnasIntegration` e il file delle credenziali) e `SecurityProbesFakeNasTest` (le stesse prove sul NAS finto, sempre).
+- **`docs/review/10-chiusura.md`** e le intestazioni allineate di nove documenti di revisione.
+
+### Scelte
+1. **Solo il banco esistente sul NAS.** Le prove dal PC stanno in `core-nas` (dove vivono `NasIntegration`, `TestAreaGuard`,
+   `TestAreaTransport` e `TestAreaSelfTest`) e usano dal codice dell'app solo cio' che `core-nas` vede (`core-trust`: segmenti, record, codec).
+   Quando serve un modulo piu' in alto (lo scanner di `core-nasmedia` per S9) la prova del NAS scrive un **elenco** (nomi, dimensioni, date e
+   `fileId` come li da' il NAS vero) e il test di quel modulo lo **rigioca** sul NAS finto con lo scanner vero (`MCG_S9_LISTING`): nessuna
+   guardia nuova, nessun modulo nuovo che parla con il NAS.
+2. **La pulizia toglie solo il giro della prova.** `TestAreaCleanup` della suite toglie anche i giri rimasti di altri (la suite "presuppone di
+   essere l'unica"): qui non si usa. `SecurityArea.cleanup` cancella `mcg-it/<giro>` con ogni account e toglie `mcg-it` solo se l'ha creata
+   la prova ed e' vuota; un giro di un altro resta (provato sul NAS finto). Attenzione per la seconda parte: se la suite di `core-nas`
+   (`NasIntegrationSuiteTest`) gira mentre una prova di sicurezza e' a meta', la sua pulizia toglie anche quel giro.
+3. **Al primo `AUTH_FAILED` ci si ferma**: una sola verifica per account prima di tutto (`SecurityArea.verify`); un login rifiutato lancia
+   `AuthStop`, la prova e' rossa con il motivo e le successive si saltano (`stopped`). L'interruttore della sessione non ritenta (provato sul NAS
+   finto: un solo `SESSION_SETUP`).
+4. **Le quantita'**: `check.ps1` non deve crescere di piu' di qualche minuto. S1 (a) 1.000 mondi (circa 23 s), S3 (a) 2.000 mutazioni per
+   codec (circa 3 s in tutto), S8 (a) 2.000 reti (meno di un secondo); con `MCG_SECURITY_FULL=1` (`run-all.ps1 -Livello jvm`) 10.000 mondi e
+   100.000 mutazioni per codec. Le variabili d'ambiente non sono ingressi del task: `run-all.ps1` passa sempre `--rerun`.
+5. **Il corpus nel repository**: un file valido per caso tipico di ogni codec, scritto dai codec dell'app (`S3CorpusGenerator`,
+   `S3PersonalMutationTest.scriveIlCorpus`); `.gitattributes` lo tiene binario. Le mutazioni ricalcolano l'impronta (come un dispositivo
+   approvato ma compromesso che elenca i byte nella sua testa) e la testa si rifirma con un dispositivo approvato: si arriva al contenuto.
+6. **Le buste del manifest e le immagini ostili per la seconda parte** si scrivono solo con `MCG_SECURITY_OUT` (`run-all.ps1 -Livello jvm`):
+   `manifest/` (le buste dei casi S7b firmate con la KT di prova, `MCG_SECURITY_VERSION_CODE` per la versione bloccata) e `ostili/` (le 13
+   immagini di S3 (c)).
+
+### Esito per voce e per livello
+Livello **JVM** con le quantita' piene (`run-all.ps1 -Livello jvm`, `build/security/20261031-133106/jvm.txt`) e in `check.ps1` (quantita' ridotte);
+livello **PC** sul NAS di prova (`run-all.ps1 -Livello pc`, 31/10 alle 13:30, `build/security/20261031-132511/pc.txt`: il NAS ha risposto, il
+file del banco aveva anche il secondo account; nessun `AUTH_FAILED`, nessun residuo dopo la pulizia). "Seconda parte" = emulatore e S25.
+
+| Voce | JVM | PC (NAS di prova) | Seconda parte |
+|---|---|---|---|
+| **S1** un account non legge i dati privati altrui tramite l'indice | (a) **10.000 mondi** in 164 s (1.000 in `check.ps1`, circa 23 s): 56.858 cambiamenti accettati, 98.162 rifiutati al chiamante "sbadato" (M3), 45.800 pubblicazioni, 58 MB di indice letti con 3,26 milioni di confronti, **0 segni**; nessun segno, percorso, impronta rapida o identita' di un file privato nei byte dell'indice comune, ogni record e blob dell'indice comune da un file comune | (b) `test` scrive 12 file (6 privati con il segno `MCG-PRIV-<casuale>` nei byte, nei nomi e nel "testo letto", il loro segmento `meta` vero con le impronte rapide; l'area comune con i suoi file e il suo indice): `test2` legge **tutto** cio' che puo' sotto il giro (5 file, 9.191 byte), **0 segni** su 13 cercati; l'area privata di `test` negata a `test2` (anche ai percorsi esatti) | (c) Cerca con `test2` sull'emulatore |
+| **S2** dati di dispositivi non approvati o revocati rifiutati | 7 tipi di dato x 9 firmatari = 63 casi: 7 accettati (il controllo positivo), 56 rifiutati con il motivo giusto (`SIGNER_NOT_APPROVED`, `SIGNER_REVOKED` anche per un dato firmato prima della revoca, `SIGNER_RETIRED`, firma canaglia sul contenuto di un approvato) | — | famiglia di prova ed emulatore |
+| **S3** un segmento ostile non fa danni | (a) 12 codec (11 in `core-trust`, `personal` in `core-personal`), **100.000 mutazioni ciascuno** (la testa 25.000: una firma vera per mutazione) dal corpus di 21 voci: **0 crolli**, al piu' 13 ms per decodifica, `meta` e `personal` sempre in forma canonica (2.000 per codec in `check.ps1`, circa 3 s); (c) 13 immagini malformate sul lettore dei metadati: nessun crollo, al piu' 62 ms e 4 MB | (b) 16 segmenti ostili (`..`, assoluti, unita', UNC, carattere nullo, inversione di direzione, `.`, vuoto, record oltre il tetto, UTF-8 rotto, conteggi e lunghezze enormi, tabella oltre la fine, impronta diversa, contenuto cambiato) scritti sul NAS, riletti uguali e passati a `IndexSegments.decode`: 16 rifiutati, 2 controlli accettati, 0 crolli; (c) le 13 immagini caricate in `mcg-it/<giro>/mcg-ostile/` e rilette uguali (151.900 byte) | decodifica e memoria sull'emulatore e sull'S25 |
+| **S4** dispositivo perso azzerato | — | — | tutta |
+| **S5** backup Android e Smart Switch | — (le regole di `data_extraction_rules.xml` le prova gia' `DataExtractionRulesTest`) | — | `bmgr`, "device transfer" |
+| **S6** nessun dato personale nei log di release | — (nessun `LogSink` nel dex: passo 7b di `check.ps1`) | — | tutta (release candidata) |
+| **S7a** modello manomesso | 4 casi (un byte cambiato in 4 posti sullo scaffale, un indirizzo aggiuntivo verso un file diverso e uno troncato): 12 sorgenti manomesse rifiutate e contate, 0 file non verificati, poi solo la sorgente buona entra; piu' `ModelChaosMutationTest` | — | emulatore |
+| **S7b** manifest manomesso | I casi nominati sullo stato vero: valido (sola lettura), firma rotta, altra app, troppo grande, `critical` ignoto, chiave sconosciuta, KT sulla release (rifiutati, stato e `seq` invariati), `seq` vecchio (`ROLLBACK`, il blocco resta), `ALL` = fermo; piu' `EnvelopeMutationTest` (10.000 buste mutate); 9 buste firmate con KT scritte per la seconda parte | — | emulatore e S25 (anche la release con KT) |
+| **S8** nessuna autenticazione SMB su una rete estranea | (a) 2.000 reti estranee (stessa sottorete, gateway e dominio, ULA diverso di un bit, `fc` per `fd`, nessun ULA, Ethernet, VPN di terzi o dell'amico, dati mobili): tutte negate, **0 connessioni, 0 `SESSION_SETUP`**; a casa una sola autenticazione, poi di nuovo fuori la sessione si chiude e non riparte | — | (b) `-tcpdump` sull'emulatore, (c) PCAPdroid sull'S25 |
+| **S9** modifica di massa e congelamento | 2.000 file, 150 rinominati, 150 cambiati, 150 cifrati: congelato al primo giro (spariti 300, cambiati 150, non media 150), nessuna assenza segnata, scongelato solo con il conteggio giusto | 2.000 file in `test-comune/mcg-it/<giro>/massa/`, 333 rinominati, 333 cambiati sul posto, 333 "cifrati" (`.locked` con byte casuali); il NAS conserva i 2.000 `fileId`; l'elenco **rigiocato dallo scanner vero congela al primo giro** (spariti 666, cambiati 333, non media 333) | l'app (avviso, "Ho controllato") |
+
+### Cosa resta alla seconda parte (dopo P3, P4, P6, P8 e P13 per S10-S14)
+Gli strumenti per l'emulatore e l'S25 **non sono scritti** in questa parte (il brief li permetteva, ma senza poterli lanciare non si provano):
+`run-all.ps1 -Livello emulatore|s25` risponde "seconda parte". Da fare, voce per voce:
+- **S1 (c)**: l'app sull'emulatore con `test2` cerca i segni di `test` in Cerca (zero risultati); i segni li scrive `CrossAccountProbe`.
+- **S2**: dispositivo canaglia e dispositivo revocato dall'admin della famiglia di prova che scrivono segmenti, dati personali e definizioni
+  d'album nelle share di prova; contatori di rifiuto in Diagnostica, nessuna voce nella Libreria.
+- **S3 (b)/(c) sull'app**: i segmenti di `HostileSegmentsProbe` messi dove la famiglia di prova li legge (non sotto `mcg-it/<giro>/`: serve
+  una regola della seconda parte che lo permetta solo nell'area della famiglia di prova), e le 13 immagini di `build/security/<data>/ostili/`
+  in `test-comune/mcg-ostile/` per la decodifica sull'emulatore e sull'S25 (`BlobDecoder`, viewer, miniature).
+- **S4** (dispositivo perso azzerato), **S5** (`bmgr` e "device transfer"), **S6** (log della release candidata con dati seminati),
+  **S7a/S7b** sull'emulatore e sull'S25 (le buste di `build/security/<data>/manifest/`, KT ignorata in release), **S8 (b)/(c)** (`-tcpdump` e
+  PCAPdroid), **S9** nell'app (congelamento, avviso, "Ho controllato"), `s25.ps1 -Mode security`.
+- **S10-S14** dopo P3, P4, P6, P8 e P13.
+
+**Comandi** (dalla cartella del progetto; ognuno prende da solo un posto del semaforo):
+- `powershell -ExecutionPolicy Bypass -File tools\security\run-all.ps1 -Livello jvm` (quantita' piene, circa 10 minuti; scrive anche
+  `manifest\` e `ostili\`; `-VersionCode <n>` per la versione da bloccare nelle buste);
+- `powershell -ExecutionPolicy Bypass -File tools\security\run-all.ps1 -Livello pc` (serve il file delle credenziali del banco; con
+  `user2`, `password2` e `share2` anche S1 (b); `-File 300` per un S9 piu' corto);
+- singole voci: `tools\security\cross-account.ps1`, `mass-change.ps1 -File 2000`, `hostile.ps1 -Livello pc`, `rogue-device.ps1`.
+
+### Le voci aperte delle revisioni (promessa 18)
+`docs/review/10-chiusura.md`: **59 righe** per le voci ancora aperte secondo i documenti delle revisioni delle Fasi 1-9 (sicurezza e
+funzionali): **6 chiuse** (correzione e test arrivati dopo l'ultima intestazione, per esempio 5B I9 con LA-5, LA-3 della verifica funzionale
+della 5B, 1.4 B8 e B9), **9 dichiarate** con un limite (L18, L19, L29, L145, L320, L360, L520 e il nuovo L563), **9 non un difetto** (con il
+motivo), **35 aperte**: **nessuna Alta, Critica o "Blocca"**; una **Media**, 1.4 M3 (la cassaforte della chiave di famiglia non chiede PIN o
+impronta a ogni uso: la **decisione 2** dell'utente della Fase 1 non e' mai stata registrata); una Bassa (1.4 B2, B5, B7 senza un limite
+scritto), due Minori o da provare sul telefono (GA-7, DR-1) e 31 informative, ognuna con chi la chiude (P14, la seconda parte di P11, la
+`security-review` di fine fase o l'utente). Intestazioni allineate: `1.4-core-trust.md`, `2-fase2.md`, `5b-fase5b.md` (diceva "aperta" con
+R1-R19 gia' corrette), `8-fase8.md`, `9-fase9.md`, `funzionale-fasi-1-5a.md`, `funzionale-5b.md`, `funzionale-8.md`, `funzionale-9.md`.
+
+**Domande per l'utente nate dalla riconciliazione** (le porta l'orchestratore):
+1. **1.4 M3, decisione 2 della Fase 1**: la chiave di famiglia dell'admin chiede PIN o impronta **a ogni uso** (approvare un dispositivo,
+   revocare, ruotare), oppure basta il telefono sbloccato con un blocco schermo sicuro (oggi)?
+2. **5A I5**: la copia privata dei file dell'area comune (il guardiano) parte anche se il backup non e' mai stato avviato (oggi si'): va bene
+   cosi', detto nella pagina del backup?
+
+### Difetti trovati
+**Nessun difetto di prodotto** dalle prove S1-S9 di questa parte: nessun crollo dei codec in 2.000 (check) e 100.000 (pieno) mutazioni per
+codec, nessun segno privato leggibile da un altro account, nessuna autenticazione da una rete estranea, il congelamento scatta al primo giro
+anche sui dati veri del NAS. Note, non difetti del prodotto:
+- **Il banco**: la pulizia di `NasIntegrationSuiteTest` toglie anche i giri di altri; se gira insieme a una prova di sicurezza le toglie il giro
+  (le prove di P11 non lo fanno: tolgono solo il proprio).
+- **Documenti di revisione** con l'intestazione indietro rispetto allo stato vero (sopra): allineati.
+- **Informative senza seguito** (31 righe "aperte" in `10-chiusura.md`, quasi tutte delle revisioni 4A, 4B, 5A e 5B): nessuna e' un difetto di
+  sicurezza vivo dimostrato, ma nessuna ha ancora una decisione; le prende la `security-review` di fine fase.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde al primo giro**: "OK: tutto a posto." (uscita 0, 31/10 dalle 13:36 alle 14:04), lanciato come chiede il brief (posto del semaforo,
+`GRADLE_OPTS=-Dorg.gradle.workers.max=2`, cartella `app\build\outputs\apk\release` cancellata prima, con il codice dei commit di questo pacchetto
+e i documenti in lavorazione): assembleDebug, assembleRelease, galleryTest e galleryLint in 25 minuti; **17.927 test in 47 moduli**, nessuno a
+zero e nessuno fallito (`core-trust` 324, `core-index` 185, `core-nas` 302, `core-nasmedia` 167, `core-personal` 285, `core-release` 71,
+`core-models` 300, `core-metadata` 283); passo 3b (nessuna chiave privata, corpus compreso) e i passi della release verdi. I test nuovi
+aggiungono circa 40 secondi. Nessuna classe rifatta con `--rerun`, nessun `hs_err_pid*.log`.
+
+### Commit (branch `fase10/p11`)
+`9f48b1f2` (i test JVM delle voci e il corpus), `05b3b61e` (le prove dal PC e `tools/security`), `8e539d74` e `78d9467c` (la riconciliazione
+e le intestazioni delle revisioni), `aaa3d85a` (il filtro delle classi di `run-all.ps1`) e quello dei documenti.

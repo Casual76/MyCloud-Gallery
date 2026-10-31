@@ -66,7 +66,7 @@ class RegionPlannerTest {
       assertWithMessage(entry.spec.id.code).that(plan.maxZoom).isIn(RegionLimits.MIN_OFFER_ZOOM..RegionLimits.CATALOG_TOP_ZOOM)
       if (plan.offered) {
         assertThat(RegionPlanner.fits(plan.tiles, plan.bytes)).isTrue()
-        assertThat(plan.tiles).isAtMost(OpenFreeMapLimits.MAX_TILES.toLong())
+        assertThat(plan.tiles).isAtMost(OpenFreeMapLimits.PLAN_MAX_TILES.toLong())
         assertThat(plan.bytes * OpenFreeMapLimits.ESTIMATE_SAFETY).isAtMost(OpenFreeMapLimits.MAX_BYTES.toDouble())
         if (plan.maxZoom < RegionLimits.CATALOG_TOP_ZOOM) {
           val above = RegionPlanner.estimate(entry.spec.box, entry.mix, plan.maxZoom + 1)
@@ -77,6 +77,16 @@ class RegionPlannerTest {
         assertThat(RegionPlanner.fits(plan.tiles, plan.bytes)).isFalse()
       }
     }
+  }
+
+  /** Il piano lascia 100 tessere di margine sul tetto di 3.000 (richieste doppie di MapLibre dopo una ripresa): 2.900 ci stanno, 2.901 no, e i MB sono quelli del fattore 1,3. */
+  @Test
+  fun ilPianoLasciaIlMargineSulleTessere() {
+    assertThat(RegionPlanner.fits(OpenFreeMapLimits.PLAN_MAX_TILES.toLong(), 1_000)).isTrue()
+    assertThat(RegionPlanner.fits(OpenFreeMapLimits.PLAN_MAX_TILES.toLong() + 1, 1_000)).isFalse()
+    assertThat(OpenFreeMapLimits.PLAN_MAX_TILES).isEqualTo(OpenFreeMapLimits.MAX_TILES - 100)
+    assertThat(RegionPlanner.fits(100, (OpenFreeMapLimits.MAX_BYTES / OpenFreeMapLimits.ESTIMATE_SAFETY).toLong())).isTrue()
+    assertThat(RegionPlanner.fits(100, (OpenFreeMapLimits.MAX_BYTES / OpenFreeMapLimits.ESTIMATE_SAFETY).toLong() + 1_000)).isFalse()
   }
 
   @Test
@@ -139,6 +149,20 @@ class RegionPlannerTest {
     File("build/regioni-catalogo.md").writeText(out.toString())
     println(out)
     assertThat(RegionCatalog.ENTRIES.any { RegionPlanner.plan(it.spec).offered }).isTrue()
+  }
+
+  /** Scrive la tabella di "la zona attorno a un luogo" (a 43 N, un luogo di campagna e uno di citta'; 15, 30 e 60 km) in `build/regioni-attorno.md`. */
+  @Test
+  fun laTabellaAttornoAUnLuogo() {
+    val out = StringBuilder("| Luogo | Raggio | Livello massimo | Tessere | MB stimati | Offerta |\n|---|---|---|---|---|---|\n")
+    for (urban in listOf(false, true)) for (radius in RegionRadius.entries) {
+      val spec = RegionSpec.AroundPlace(1, radius, GeoE6(43_000_000, 11_000_000), urban)
+      val plan = RegionPlanner.plan(spec)
+      out.append("| ${if (urban) "citta'" else "campagna"} | ${radius.km} km | ${if (plan.offered) "z${plan.maxZoom}" else "-"} | ${plan.tiles} | ${"%.1f".format(plan.bytes / 1e6)} | ${if (plan.offered) "si'" else "no"} |\n")
+    }
+    File("build").mkdirs()
+    File("build/regioni-attorno.md").writeText(out.toString())
+    println(out)
   }
 
   private fun e6(degrees: Double) = StrictMath.round(degrees * 1_000_000.0).toInt()

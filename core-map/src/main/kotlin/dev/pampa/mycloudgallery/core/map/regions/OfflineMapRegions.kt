@@ -36,6 +36,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -68,6 +69,11 @@ class OfflineMapRegions(
   private val scope: CoroutineScope,
   private val planOf: (RegionSpec) -> RegionEstimate = RegionPlanner::plan,
   private val catalog: List<RegionSpec> = RegionCatalog.specs(),
+  /**
+   * Dopo uno stop il cancello tiene lo scaricamento **chiuso** (rifiuta le tessere della regione) per questo tempo, finche' MapLibre si e' davvero fermata: le richieste gia' in coda non escono come richieste normali
+   * (provato sul dispositivo: dopo il tetto dei 50 MB ne uscivano ancora qualcuna). Non vale per rete e mappa spenta (le rifiuta il cancello da se'). Le prove sulla JVM lo mettono a zero.
+   */
+  private val stopGraceMs: Long = STOP_GRACE_MS,
 ) : MapRegions {
 
   /** Lo scaricamento in corso: la regione, il conto, l'ambito delle tessere per il cancello e chi guarda la rete. */
@@ -304,7 +310,7 @@ class OfflineMapRegions(
     override fun onFailure(failure: RegionEngineFailure) {
       if (active !== a) return
       val stop = if (failure == RegionEngineFailure.SERVER) RegionStop.SERVER else RegionStop.INTERRUPTED
-      scope.launch { stopActive(a, stop, clearScope = true) }
+      scope.launch { stopActive(a, stop, clearScope = false) }
     }
   }
 
@@ -315,9 +321,14 @@ class OfflineMapRegions(
     scope.launch { stopActive(a, stop, clearScope = false) }
   }
 
+  /**
+   * Ferma lo scaricamento [a]: il conto si chiude subito (il cancello rifiuta le tessere della regione), lo stato diventa "parziale" con il motivo, il motore si ferma. Con [clearScope] lo scaricamento esce subito dal
+   * cancello (rete o mappa spenta: li' rifiuta il cancello da se'); senza, resta [stopGraceMs] dopo lo stop del motore, chiuso, cosi' le richieste gia' in coda di MapLibre non escono come richieste normali.
+   */
   private suspend fun stopActive(a: Active, stop: RegionStop, clearScope: Boolean) {
     synchronized(lock) {
       if (active !== a) return
+      a.budget.close()
       if (clearScope) active = null
     }
     a.watcher?.cancel()
@@ -334,6 +345,7 @@ class OfflineMapRegions(
     save(force = true)
     try {
       engine.stop(a.id.code)
+      if (!clearScope && stopGraceMs > 0) delay(stopGraceMs)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
@@ -401,5 +413,8 @@ class OfflineMapRegions(
   private companion object {
     const val TAG = "MapRegions"
     const val SAVE_EVERY_MS = 1_000L
+
+    /** Quanto il cancello tiene chiuso uno scaricamento fermato (SERVER, SPACE, INTERRUPTED, tetti), dopo lo stop del motore. */
+    const val STOP_GRACE_MS = 3_000L
   }
 }

@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.map.contract.RegionEngineFailure
 import dev.pampa.mycloudgallery.core.map.contract.RegionEngineListener
 import dev.pampa.mycloudgallery.feature.map.contract.MapEngineStarter
 import dev.pampa.mycloudgallery.feature.map.map.MapLibreInit
+import dev.pampa.mycloudgallery.feature.map.net.RegionStyleSource
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.Dispatchers
@@ -26,8 +27,9 @@ import org.maplibre.android.offline.OfflineTilePyramidRegionDefinition
  * richiesta passa dal client delle tessere dietro il cancello (`feature-map/.../net/`), con lo scaricamento confermato in corso (`RegionDownloadScope` e il suo conto di 3.000 tessere e
  * 50 MB), al piu' 4 insieme, con lo User-Agent dello scaricamento.
  *
- *  - La regione si scarica con lo stile **`asset://map/style-regione.json`**: solo la sorgente delle tessere (lo stesso modello di URL degli stili veri, quindi le tessere nel database sono quelle
- *    che la mappa poi cerca), senza glifi, sprite ne' carta di base (arrivano dall'APK: niente da scaricare). Il gestore riconosce una regione dai suoi metadati (l'id, mai una zona).
+ *  - La regione si scarica con uno stile fatto di **sola sorgente delle tessere** ([RegionStyleSource]: lo stesso modello di URL degli stili veri, quindi le tessere nel database sono quelle che la mappa poi
+ *    cerca; senza glifi, sprite ne' carta di base, che arrivano dall'APK). `OfflineManager` lo chiede alla sua rete, non agli asset: l'indirizzo e' finto (`.invalid`) e **lo serve il cancello da se'**, mai la rete.
+ *    Il gestore riconosce una regione dai suoi metadati (l'id, mai una zona).
  *  - Prima di partire: MapLibre pronta con il nostro client ([MapEngineStarter], sul thread principale) e il database gia' spostato in `noBackupFilesDir/map/` ([MapLibreInit.awaitCacheReady]);
  *    senza, [RegionEngineFailure.NOT_READY] (si riprova all'apertura). A ogni cambio di stato si riallinea `MapLibre.setConnected` ([MapLibreInit.refreshConnectivity]).
  *  - Gli errori di rete di una tessera non sono guasti: MapLibre li riprova da se' (e il cancello tiene ferme le richieste quando lo scaricamento non e' piu' ammesso); solo una lunga serie
@@ -50,9 +52,11 @@ class MapLibreRegionEngine(
       val manager = OfflineManager.getInstance(context)
       val region = findOrCreate(manager, key, definition(box, minZoom, maxZoom))
       active[key] = Active(region)
+      // Prima di partire: lo scaricamento confermato e' gia' al cancello (il gestore l'ha pubblicato), quindi MapLibre si crede "in rete" anche a mappa spenta. **Prima** di attivare la regione e non dopo:
+      // un cambio di connessione con lo scaricamento gia' in corso fa rifare a MapLibre le richieste in volo (provato sul dispositivo: le prime tessere uscivano due volte).
+      MapLibreInit.refreshConnectivity()
       region.setObserver(observerOf(listener))
       region.setDownloadState(OfflineRegion.STATE_ACTIVE)
-      MapLibreInit.refreshConnectivity()
     }
   }
 
@@ -179,8 +183,8 @@ class MapLibreRegionEngine(
   class NotReady : IllegalStateException("scaricamento delle regioni: MapLibre non e' pronta")
 
   companion object {
-    /** Lo stile dello scaricamento: solo la sorgente delle tessere dell'URL stabile (`src/main/assets/map/style-regione.json`). */
-    const val STYLE_URL: String = "asset://map/style-regione.json"
+    /** Lo stile dello scaricamento: solo la sorgente delle tessere dell'URL stabile, servito dal cancello da se' (mai dalla rete: [RegionStyleSource]). */
+    const val STYLE_URL: String = RegionStyleSource.URL
     private const val MAX_ERRORS_WITHOUT_PROGRESS = 400
     private const val TAG = "RegionEngine"
   }

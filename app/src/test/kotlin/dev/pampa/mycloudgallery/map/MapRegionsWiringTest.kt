@@ -113,7 +113,7 @@ class MapRegionsWiringTest {
     val network = FakeMapNetworkState(MapNetwork.WIFI)
     val manager = OfflineMapRegions(
       engine = engine, store = MemoryRegionStateStore(), network = network, settings = InMemoryMapSettings(), places = map.placeFinder,
-      freeBytes = { 64L shl 30 }, nowMs = { 1_000 }, today = { 20261031 }, scope = scope,
+      freeBytes = { 64L shl 30 }, nowMs = { 1_000 }, today = { 20261031 }, scope = scope, stopGraceMs = 0,
     )
     map.regions = manager
     assertThat(map.wiring().activeDownload()).isNull()

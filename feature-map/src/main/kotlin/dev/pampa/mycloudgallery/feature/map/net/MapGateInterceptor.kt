@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.map.contract.RefuseReason
 import dev.pampa.mycloudgallery.core.map.contract.TileKey
 import java.io.IOException
 import okhttp3.Headers
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.HttpUrl
 import okhttp3.Interceptor
 import okhttp3.Request
@@ -45,6 +46,8 @@ internal class MapGateInterceptor(
 
   override fun intercept(chain: Interceptor.Chain): Response {
     val original = chain.request()
+    // P5: lo stile dello scaricamento di una regione lo serve il cancello da se' (un indirizzo `.invalid`, mai dalla rete): vedi [RegionStyleSource].
+    if (original.url.host == RegionStyleSource.HOST) return regionStyle(original)
     val facts = factsOf(original.method, original.url)
     val tile = stableTileOf(facts)
     var state = conditions(tileJson.version())
@@ -82,6 +85,22 @@ internal class MapGateInterceptor(
       if (!settled) budget?.failed()
       counters.exit()
     }
+  }
+
+  /** Lo stile dello scaricamento di una regione, dal file [RegionStyleSource]: `GET https` e solo quel percorso, altrimenti rifiutato (`HOST`). Nessun DNS, nessun socket. */
+  private fun regionStyle(request: Request): Response {
+    val url = request.url
+    if (request.method != MapHost.METHOD || url.scheme != MapHost.SCHEME || url.encodedPath != RegionStyleSource.PATH || url.encodedQuery != null) throw refusal(RefuseReason.HOST)
+    return Response.Builder()
+      .request(request)
+      .protocol(okhttp3.Protocol.HTTP_1_1)
+      .code(200)
+      .message("OK")
+      .header("Content-Type", "application/json")
+      // Lunga, come le tessere del server vero: con una scadenza immediata MapLibre ricontrolla lo stile mentre scarica e rimette in coda le tessere (provato sul dispositivo: le prime richieste uscivano due volte).
+      .header("Cache-Control", "public, max-age=315360000")
+      .body(RegionStyleSource.JSON.toResponseBody(MEDIA_JSON))
+      .build()
   }
 
   /** Esce, segue i redirect ammessi, controlla la risposta. */
@@ -227,6 +246,7 @@ internal class MapGateInterceptor(
     HttpUrl.Builder().scheme(MapHost.SCHEME).host(MapHost.TILES).port(MapHost.PORT).encodedPath(path).build()
 
   companion object {
+    private val MEDIA_JSON = "application/json".toMediaType()
     const val USER_AGENT = "User-Agent"
     const val MAX_REDIRECTS = 2
     const val MAX_DECODED_BYTES = 4 * MapResponseRules.MAX_BYTES

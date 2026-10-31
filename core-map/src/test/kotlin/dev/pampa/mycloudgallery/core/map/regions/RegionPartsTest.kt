@@ -65,6 +65,7 @@ class OfflineMapRegionsContractTest : MapRegionsContract() {
       today = { todayDate.year * 10_000 + todayDate.monthValue * 100 + todayDate.dayOfMonth },
       scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
       catalog = SampleRegions.CATALOG,
+      stopGraceMs = 0,
     )
 
     private var current: OfflineMapRegions = build()

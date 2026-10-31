@@ -50,6 +50,7 @@ class RegionsControllerTest {
     val regions = OfflineMapRegions(
       engine = engine, store = store, network = network, settings = settings, places = FakePlaceCenters(emptyMap()),
       freeBytes = { freeBytes }, nowMs = { nowMs }, today = { 20261031 }, scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
+      stopGraceMs = 0,
     )
     val places = listOf(
       PlaceHit(11, "Cittàdiprova", "Regione di prova, Italia", GeoE6(43_300_000, 11_300_000), urban = true),

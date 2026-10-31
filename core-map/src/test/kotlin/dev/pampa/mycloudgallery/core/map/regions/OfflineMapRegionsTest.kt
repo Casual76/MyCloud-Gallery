@@ -29,6 +29,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
 
@@ -53,6 +55,7 @@ internal class ManagerRig(
     nowMs = { nowMs },
     today = { today },
     scope = CoroutineScope(SupervisorJob() + Dispatchers.Unconfined),
+    stopGraceMs = 0,
   )
 
   val umbria: RegionSpec = RegionCatalog.entryOf(RegionId("it-umbria"))!!.spec
@@ -202,6 +205,35 @@ class OfflineMapRegionsTest {
     rig.engine.complete(rig.umbria.id)
     assertThat(rig.state(rig.umbria).status).isEqualTo(RegionStatus.READY)
     assertThat(rig.state(rig.umbria).stop).isNull()
+  }
+
+  /**
+   * Dopo uno stop (qui il tetto dei 50 MB) il conto resta **chiuso** al cancello per un po', finche' MapLibre si e' davvero fermata: le richieste gia' in coda non escono come richieste normali (provato sul dispositivo);
+   * poi lo scaricamento esce dal cancello. Tempo virtuale.
+   */
+  @Test
+  fun dopoLoStopIlCancelloTieneChiusoLoScaricamentoPerUnPo() = runTest {
+    val rig = ManagerRig()
+    val manager = OfflineMapRegions(
+      engine = rig.engine, store = rig.store, network = rig.network, settings = rig.settings, places = FakePlaceCenters(emptyMap()),
+      freeBytes = { rig.freeBytes }, nowMs = { rig.nowMs }, today = { rig.today },
+      scope = CoroutineScope(backgroundScope.coroutineContext + UnconfinedTestDispatcher(testScheduler)), stopGraceMs = 3_000,
+    )
+    manager.download(rig.umbria, rig.confirm(rig.umbria))
+    val budget = manager.downloadScope()!!.budget!!
+    budget.tryAdmit()
+    budget.received(50_000_001)
+    budget.arrived()
+    assertThat(manager.regions.value.single().stop).isEqualTo(RegionStop.LIMIT_BYTES)
+    assertThat(rig.engine.stops).containsExactly(rig.umbria.id.code)
+    // Il motore e' fermo, ma il cancello tiene ancora lo scaricamento: chiuso (nessuna tessera della regione passa).
+    assertThat(manager.downloadScope()).isNotNull()
+    assertThat(budget.exhausted).isTrue()
+    assertThat(budget.tryAdmit()).isFalse()
+    advanceTimeBy(2_999)
+    assertThat(manager.downloadScope()).isNotNull()
+    advanceTimeBy(2)
+    assertThat(manager.downloadScope()).isNull()
   }
 
   /** Mai spezzare una regione in scaricamenti piccoli per aggirare il limite: la ripresa riparte dal conto di prima (i byte si sommano). */

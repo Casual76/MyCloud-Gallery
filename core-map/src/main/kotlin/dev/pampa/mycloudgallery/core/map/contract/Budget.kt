@@ -15,6 +15,13 @@ object OpenFreeMapLimits {
   const val MAX_TILES: Int = 3_000
 
   /**
+   * Al piu' tante tessere nel **piano** di una zona: 100 meno del tetto, di margine. Provato sul dispositivo (31/10): dopo una ripresa MapLibre puo' chiedere due volte qualche tessera del primo gruppo
+   * (da 4 a 16 richieste doppie, con un server istantaneo); il conto dello scaricamento le conta per quel che sono, richieste arrivate, e senza margine una zona da 3.000 tessere si fermerebbe al tetto
+   * a poche tessere dalla fine. Lo scaricamento si ferma comunque a 3.000.
+   */
+  const val PLAN_MAX_TILES: Int = 2_900
+
+  /**
    * Al piu' tanti byte per scaricamento: "50 MB" letto in modo **stretto** (50.000.000 e non 52.428.800), cosi' le al piu' 4 tessere gia' in volo quando lo scaricamento si ferma
    * (qualche centinaio di KB, mai oltre 2 MiB l'una) restano dentro i 50 MiB anche nel caso peggiore. Sono i byte **sul filo** (compressi), misurati da `MapWireGuard`.
    */
@@ -56,10 +63,14 @@ class DownloadBudget(
   }
 
   private val done = AtomicInteger(startTiles)
+
+  /** Tessere arrivate piu' tessere in volo: **un solo numero**, cosi' il posto per una tessera nuova si prende con un solo passo atomico (due contatori letti uno dopo l'altro si contano doppio a meta' di un cambio). */
+  private val claimed = AtomicInteger(startTiles)
   private val flying = AtomicInteger(0)
   private val peak = AtomicInteger(0)
   private val received = AtomicLong(startBytes)
   private val fired = AtomicBoolean(false)
+  private val closedFlag = AtomicBoolean(false)
 
   /**
    * Chiamata **una volta sola**, da un thread della rete, quando uno dei due tetti e' raggiunto (il gestore delle regioni ferma allora lo scaricamento). Si imposta prima di
@@ -89,18 +100,26 @@ class DownloadBudget(
       else -> null
     }
 
-  /** Vero se non c'e' piu' posto per una tessera nuova (tessere arrivate o in volo oltre il tetto, o byte oltre il tetto). */
-  val exhausted: Boolean get() = received.get() >= maxBytes || done.get() + flying.get() >= maxTiles
+  /**
+   * Vero se non c'e' piu' posto per una tessera nuova (tessere arrivate o in volo oltre il tetto, o byte oltre il tetto) o se lo scaricamento e' stato **chiuso** ([close]): il cancello rifiuta le tessere della
+   * regione finche' MapLibre non si e' davvero fermata (provato sul dispositivo: dopo lo stop le ultime richieste gia' in coda uscivano come richieste normali).
+   */
+  val exhausted: Boolean get() = closedFlag.get() || received.get() >= maxBytes || claimed.get() >= maxTiles
+
+  /** Lo scaricamento e' finito o fermato: da qui [tryAdmit] dice no e [exhausted] e' vero. Non e' un tetto raggiunto ([limit] non cambia). */
+  fun close() {
+    closedFlag.set(true)
+  }
 
   /** Chiede posto per una tessera nuova: se c'e' la mette "in volo" e dice si'. Dopo, [arrived] o [failed]. */
   fun tryAdmit(): Boolean {
     while (true) {
-      if (received.get() >= maxBytes) return false
-      val inAir = flying.get()
-      val total = done.get()
-      if (total + inAir >= maxTiles) return false
-      if (flying.compareAndSet(inAir, inAir + 1)) {
-        peak.accumulateAndGet(inAir + 1) { a, b -> maxOf(a, b) }
+      if (closedFlag.get() || received.get() >= maxBytes) return false
+      val mine = claimed.get()
+      if (mine >= maxTiles) return false
+      if (claimed.compareAndSet(mine, mine + 1)) {
+        val now = flying.incrementAndGet()
+        peak.accumulateAndGet(now) { a, b -> maxOf(a, b) }
         return true
       }
     }
@@ -115,6 +134,7 @@ class DownloadBudget(
 
   /** La tessera in volo non e' arrivata (errore, rifiuto): non conta come scaricata, e si potra' richiedere. */
   fun failed() {
+    claimed.decrementAndGet()
     flying.decrementAndGet()
   }
 

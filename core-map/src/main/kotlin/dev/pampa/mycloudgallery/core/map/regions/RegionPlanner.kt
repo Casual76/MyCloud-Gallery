@@ -67,9 +67,9 @@ object RegionPlanner {
     is RegionSpec.AroundPlace -> if (spec.radius == RegionRadius.KM_60) RegionLimits.WIDE_AROUND_TOP_ZOOM else RegionLimits.MAX_ZOOM
   }
 
-  /** Se una zona di [tiles] tessere e [bytes] byte stimati sta nei limiti di OpenFreeMap: al piu' 3.000 tessere e, con il fattore di sicurezza, 50 MB. */
+  /** Se una zona di [tiles] tessere e [bytes] byte stimati sta nei limiti di OpenFreeMap: al piu' 2.900 tessere (3.000 meno il margine per le richieste doppie) e, con il fattore di sicurezza, 50 MB. */
   fun fits(tiles: Long, bytes: Long): Boolean =
-    tiles <= OpenFreeMapLimits.MAX_TILES && bytes * OpenFreeMapLimits.ESTIMATE_SAFETY <= OpenFreeMapLimits.MAX_BYTES
+    tiles <= OpenFreeMapLimits.PLAN_MAX_TILES && bytes * OpenFreeMapLimits.ESTIMATE_SAFETY <= OpenFreeMapLimits.MAX_BYTES
 
   /**
    * Il piano di [spec]: il livello piu' alto (da [topZoom] in giu', fino a z[RegionLimits.MIN_OFFER_ZOOM]) che sta nei limiti, con le sue tessere e la sua stima. Se nemmeno z10 ci

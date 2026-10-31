@@ -55,6 +55,30 @@ abstract class MapSettingsContract {
     assertThat(s.wifiOnly.value).isFalse()
     assertThat(MapCameraRules.FIRST_MAX_ZOOM).isEqualTo(5.0)
   }
+
+  /** R5, D37: l'azzeramento svuota tutto (la mappa online vale "spenta", mai piu' "accesa") e da li' nessuna scrittura rimette niente. */
+  @Test
+  fun lAzzeramentoSvuotaETutteLeScrittureDopoSonoIgnorate() = runTest {
+    val s = settings(buildFlag = true)
+    s.saveCamera(CameraSpot(GeoE6(45_000_000, 9_000_000), 11.0))
+    s.setWifiOnly(false)
+    s.clear()
+    assertThat(s.lastCamera.value).isNull()
+    assertThat(s.wifiOnly.value).isTrue()
+    assertThat(s.online.value).isEqualTo(MapOnline.Off)
+    s.saveCamera(CameraSpot(GeoE6(46_000_000, 10_000_000), 12.0))
+    s.setWifiOnly(false)
+    s.enable(MapOnlineChoice(MapPrivacyNote.VERSION, 2_000))
+    assertThat(s.lastCamera.value).isNull()
+    assertThat(s.wifiOnly.value).isTrue()
+    assertThat(s.online.value).isEqualTo(MapOnline.Off)
+  }
+
+  /** R2: di serie nessun problema col file (chi non ha un file, come il riferimento, non ne ha mai). */
+  @Test
+  fun diSerieNessunProblemaColFile() {
+    assertThat(settings(buildFlag = true).problem.value).isEqualTo(MapSettingsProblem.NONE)
+  }
 }
 
 class InMemoryMapSettingsContractTest : MapSettingsContract() {

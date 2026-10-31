@@ -104,4 +104,6 @@ object UnavailableMapSettings : MapSettings {
   override val lastCamera: StateFlow<CameraSpot?> = MutableStateFlow<CameraSpot?>(null).asStateFlow()
 
   override suspend fun saveCamera(spot: CameraSpot?) = Unit
+
+  override suspend fun clear() = Unit
 }

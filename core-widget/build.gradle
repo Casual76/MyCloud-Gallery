@@ -1,0 +1,34 @@
+// Il widget della Fase 10 (docs/fase10-progetto.md §1.1, §1.2 "core-widget", D3-D9, Q1-Q4): che cosa mostra ogni widget (plan/, P2), il
+// registro di cio' che ogni widget ha mostrato (ledger/, P2), quando ridisegnare e le ore di quiete (schedule/, P2), che cosa apre un tocco
+// (tap/, P2). Contratti, null-object, fake ed esecutori di riferimento (`ReferenceWidgetPlanner`, `InMemoryWidgetLedger`,
+// `ReferenceWidgetSchedule`, `ReferenceWidgetTaps`) di P0.
+//
+// **JVM puro** (D2): nessuna classe Android, nessuna rete, nessun NAS, nessun orologio del telefono (l'ora locale per le ore di quiete e il
+// monotono per i budget arrivano dalla porta `WidgetClock`). Non vede core-faces, core-search, core-albums, core-imaging, core-database (per
+// nome: li vede solo attraverso l'`api` di core-library), Glance ne' engine-widget: miniature locali, blocco dell'app, presenza sul telefono,
+// scaffale e preferenze arrivano da porte (contract/Ports.kt) legate da :app (P13). Mai un nome di persona nelle firme (D4).
+//
+// D2: core-library (visibilita', istantanea, `WidgetFeed`) e core-memories (contratti dello scaffale: `MemoryId`, `MemoryKind`) sono `api`
+// perche' compaiono nei contratti. Nessun Hilt (i core-* no).
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.widget'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  api project(':core-library')
+  api project(':core-memories')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

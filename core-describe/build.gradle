@@ -1,0 +1,31 @@
+// Le descrizioni dei media della Fase 10 (docs/fase10-progetto.md §1.1, §1.2 "core-describe", §2.6, D22; C438): una sola regola per tutte le
+// superfici (dentro l'app, Nascosti, widget, notifiche), dai fatti del media (`MediaFacts`), dai luoghi offline (`PlaceNames`) e, solo alle
+// condizioni di D22, dai nomi delle persone e dalle prime parole del testo letto (porte). Cosa entra per superficie e la ripulitura del testo
+// (rules/, P7). Contratti, null-object, fake ed esecutore di riferimento (`ReferenceDescriber`) di P0.
+//
+// **JVM puro** (D2): nessuna classe Android, nessuna rete, nessun NAS, nessun orologio. **Non esiste** una superficie "esportazione" o "log":
+// una descrizione non si salva, non si mette in cache oltre lo schermo e non esce dal telefono (Phase10ArchitectureTest). Non vede core-faces,
+// core-search, core-ai, core-nas, core-network, core-database (per nome: lo vede solo attraverso l'`api` di core-library): persone e testo
+// letto arrivano da porte che :app lega (P7, P13). Nessun Hilt.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.describe'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+  api project(':core-library')
+  api project(':core-places')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

@@ -102,6 +102,15 @@ include ':feature-memories'  // sezione Ricordi, pagina del ricordo, "Tutti i ri
 include ':core-map'          // punti, indice e raggruppamento, regioni offline, cancello di rete della mappa, impostazioni della mappa
 include ':feature-map'       // mappa (MapLibre), bolle, griglia di una zona, sezione Luoghi, Impostazioni -> Mappa, regioni, mini-mappa
 
+// Fase 10 (docs/fase10-progetto.md §1.1, P0): widget, rilascio, descrizioni. core-widget, core-release e core-describe sono JVM puri (nessuna
+// classe Android, nessuna rete, nessun NAS): miniature, blocco, scaffale, persone, testo letto, ora e manifest arrivano da porte che :app lega.
+// Glance ed engine-widget stanno SOLO in feature-widget (P3); il manifest firmato si legge solo dal NAS (Q8 (a)) e i suoi campi si leggono solo
+// attraverso ReleaseStatus ed ExtraModelSources (Phase10ArchitectureTest).
+include ':core-widget'       // che cosa mostra ogni widget, registro di cio' che ha mostrato, quando ridisegnare, che cosa apre un tocco
+include ':core-release'      // manifest di rilascio firmato: formato, verifica, blocchi solo piu' severi, indirizzi aggiuntivi dei modelli
+include ':core-describe'     // le descrizioni dei media per superficie (dentro l'app, Nascosti, widget, notifiche), dai fatti delle porte
+include ':feature-widget'    // il widget "MyCloud Gallery" (Glance sopra engine-widget, P3), ricevitore non esportato, ridisegno
+
 // --- fluid-engine (inizio) ---
 def engineDir = file('engine')
 if (engineDir.exists()) {

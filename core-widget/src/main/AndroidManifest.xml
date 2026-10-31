@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-widget: nessun permesso e nessun componente (Fase 10, P0; docs/fase10-progetto.md §6.4, D40). Il ricevitore del widget (non
+      esportato) e il lavoro periodico stanno in :feature-widget (P3). Nessuna rete. Un permesso o un componente nuovo si chiede
+      all'orchestratore: prima la riga in docs/sicurezza.md 4-bis, poi quella in releaseManifestPolicy.
+  -->
+
+</manifest>

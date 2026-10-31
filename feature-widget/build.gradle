@@ -1,0 +1,30 @@
+// Il widget "MyCloud Gallery" della Fase 10 (docs/fase10-progetto.md §1.1, §1.4, §1.5, D3-D11): i widget Glance sopra `engine-widget` nelle tre
+// misure, il ricevitore (**non esportato**), il lavoro periodico `widget-refresh`, il ridisegno (`WidgetRefresher`), le bitmap delle miniature
+// locali, il tocco (`tap/`: l'unico posto che costruisce un `PendingIntent` del widget) e l'anteprima disegnata. Tutto di P3.
+//
+// P0 consegna solo lo **stato sigillato** (`contract/WidgetUiState`, D38: l'aspetto e' della fase grafica), il null-object, gli esempi e i test
+// di guardia. **Glance ed engine-widget arrivano con P3** (scaricamento approvato, Q9 (a)) e stanno **solo qui** (Phase10ArchitectureTest,
+// `tools/check.ps1` sul dex). Cieca a core-nas, core-network, al codice interno di core-memories e agli altri feature-*: vede core-widget
+// (contratti), e da P3 core-imaging (miniature locali) e core-designsystem.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.feature.widget'
+}
+
+dependencies {
+  // api: il piano e i suoi tipi (WidgetPlan, WidgetMode, WidgetTitle) compaiono nello stato.
+  api project(':core-widget')
+
+  implementation project(':core-common')
+  implementation project(':core-model')
+
+  testImplementation appDeps.coroutinesTest
+}

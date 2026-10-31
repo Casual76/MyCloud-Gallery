@@ -17,12 +17,16 @@ import dev.pampa.mycloudgallery.feature.map.privacy.MapPrivacyController
 import dev.pampa.mycloudgallery.feature.map.settings.DataStoreMapSettings
 import java.io.File
 import java.nio.file.Files
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.plus
 import kotlinx.coroutines.runBlocking
@@ -55,11 +59,22 @@ class MapSettingsAndPrivacyTest {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     try {
       val settings = DataStoreMapSettings.create(file, scope, buildFlag, storeScope = scope)
-      withTimeout(TIMEOUT) { settings.loaded() }
+      withTimeout(TETTO) { settings.loaded() }
       block(settings)
     } finally {
       scope.coroutineContext[Job]!!.cancelAndJoin()
     }
+  }
+
+  /**
+   * Aspetta lo stato **preciso** di una `StateFlow` delle impostazioni, mai "il valore di adesso": `loaded()` dice che il DataStore ha letto il file, ma le `StateFlow` si
+   * aggiornano da un altro raccoglitore (`stateIn` su `Dispatchers.IO`) che sotto carico arriva dopo, e `.value` letto subito e' ancora quello di serie. Il tetto e' solo la
+   * rete: un file che non dice mai cio' che si aspetta fa fallire il test con la domanda, non lo lascia appeso.
+   */
+  private suspend fun <T> StateFlow<T>.until(what: String, predicate: (T) -> Boolean): T = try {
+    withTimeout(TETTO) { first(predicate) }
+  } catch (e: TimeoutCancellationException) {
+    throw AssertionError("Dopo $TETTO la impostazione non e' diventata: $what", e)
   }
 
   // --- La stessa suite del contratto, sul file vero ----------------------------------------------------------------------------------
@@ -76,14 +91,14 @@ class MapSettingsAndPrivacyTest {
     val file = tempFile()
     withStore(file) { s ->
       s.disable()
-      withTimeout(TIMEOUT) { s.online.first { it == MapOnline.Off } }
+      s.online.until("spenta") { it == MapOnline.Off }
       s.enable(MapOnlineChoice(MapPrivacyNote.VERSION, 1_000))
-      withTimeout(TIMEOUT) { s.online.first { it == MapOnline.On(byDefault = false) } }
+      s.online.until("riaccesa dall'utente") { it == MapOnline.On(byDefault = false) }
       s.disable()
-      withTimeout(TIMEOUT) { s.online.first { it == MapOnline.Off } }
+      s.online.until("spenta") { it == MapOnline.Off }
     }
     // Un altro processo (un altro DataStore sullo stesso file) la trova spenta.
-    withStore(file) { again -> assertThat(again.online.value).isEqualTo(MapOnline.Off) }
+    withStore(file) { again -> assertThat(again.online.until("spenta, come l'ha lasciata l'altro processo") { it == MapOnline.Off }).isEqualTo(MapOnline.Off) }
   }
 
   @Test
@@ -91,7 +106,7 @@ class MapSettingsAndPrivacyTest {
     val file = tempFile()
     withStore(file) { s ->
       s.disable()
-      withTimeout(TIMEOUT) { s.online.first { it == MapOnline.Off } }
+      s.online.until("spenta") { it == MapOnline.Off }
     }
     withStore(file, buildFlag = false) { s ->
       assertThat(s.online.value).isEqualTo(MapOnline.Unavailable)
@@ -107,15 +122,15 @@ class MapSettingsAndPrivacyTest {
     val spot = CameraSpot(GeoE6(45_464_200, 9_190_000), 11.5)
     withStore(file) { s ->
       s.saveCamera(spot)
-      withTimeout(TIMEOUT) { s.lastCamera.first { it == spot } }
+      s.lastCamera.until("l'ultima camera salvata") { it == spot }
       s.setWifiOnly(false)
-      withTimeout(TIMEOUT) { s.wifiOnly.first { !it } }
+      s.wifiOnly.until("solo sul Wi-Fi spento") { !it }
     }
     withStore(file) { again ->
-      assertThat(again.lastCamera.value).isEqualTo(spot)
-      assertThat(again.wifiOnly.value).isFalse()
+      assertThat(again.lastCamera.until("l'ultima camera, come l'ha lasciata l'altro processo") { it == spot }).isEqualTo(spot)
+      assertThat(again.wifiOnly.until("solo sul Wi-Fi spento, come l'ha lasciato l'altro processo") { !it }).isFalse()
       again.saveCamera(null)
-      withTimeout(TIMEOUT) { again.lastCamera.first { it == null } }
+      again.lastCamera.until("nessuna camera") { it == null }
     }
     assertThat(MapCameraRules.FIRST_MAX_ZOOM).isEqualTo(5.0)
   }
@@ -220,6 +235,7 @@ class MapSettingsAndPrivacyTest {
   }
 
   private companion object {
-    const val TIMEOUT = 10_000L
+    /** Il tetto di ogni attesa su un evento del DataStore vero: non misura la velocita', e' la rete contro un test appeso (con altre build sul PC un giro diventa molto piu' lento). */
+    val TETTO: Duration = 2.minutes
   }
 }

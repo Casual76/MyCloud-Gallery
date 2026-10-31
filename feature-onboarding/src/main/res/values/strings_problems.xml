@@ -55,6 +55,12 @@
   <string name="problem_credentials_title">Questo telefono non può custodire la password</string>
   <string name="problem_credentials_detail">Il NAS ti ha accettato, ma il telefono non ha un deposito sicuro per le password. Per non lasciarla in giro non la salvo, e la configurazione non può proseguire su questo dispositivo.</string>
 
+  <!-- Fase 10, M3: la chiave di famiglia vuole l'impronta o il PIN a ogni uso -->
+  <string name="problem_family_key_not_confirmed_title">Impronta o PIN non confermati</string>
+  <string name="problem_family_key_not_confirmed_detail">Per custodire e usare la chiave di famiglia il telefono chiede ogni volta l’impronta o il PIN. Senza conferma non ho salvato né firmato niente: tocca di nuovo il tasto quando sei pronto (se il telefono ha sospeso i tentativi, aspetta un po’).</string>
+  <string name="problem_family_key_invalidated_title">La chiave di famiglia non si apre più</string>
+  <string name="problem_family_key_invalidated_detail">Le impronte o il blocco schermo di questo telefono sono cambiati e Android ha chiuso la cassaforte della chiave di famiglia. Niente è perso: rimettila con il kit di recupero (il foglio con il codice) oppure dal secondo admin.</string>
+
   <!-- Passo 4: aree (E-O2, E-O3) -->
   <string name="problem_no_share_title">Nessuna cartella condivisa è accessibile</string>
   <string name="problem_no_share_detail">Questo account non può aprire nessuna cartella del NAS. Chiedi a chi gestisce il NAS di darti lettura e scrittura sulla cartella comune di famiglia e di creare la tua cartella personale. Poi aggiorna l’elenco.</string>

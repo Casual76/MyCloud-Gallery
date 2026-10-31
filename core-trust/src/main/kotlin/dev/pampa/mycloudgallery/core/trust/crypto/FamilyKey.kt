@@ -16,8 +16,9 @@ import java.security.spec.PKCS8EncodedKeySpec
  *
  * A differenza delle chiavi dei dispositivi e' ESTRAIBILE per costruzione: deve poter stare nel kit di
  * recupero ([RecoveryKit]) e su un secondo dispositivo admin. A riposo sul dispositivo admin e' cifrata da
- * una chiave AES non estraibile del Keystore ([AndroidKeystoreFamilyKeyVault]); in chiaro esiste solo in
- * memoria, durante un'operazione dell'admin.
+ * una chiave AES non estraibile del Keystore che si usa solo dopo l'impronta o il PIN del telefono, a ogni
+ * uso ([AndroidKeystoreFamilyKeyVault], revisione 1.4 M3, decisione 2(a)); in chiaro esiste solo in memoria,
+ * durante un'operazione dell'admin.
  */
 class FamilyKey private constructor(
   private val privateKey: PrivateKey,
@@ -62,17 +63,4 @@ class FamilyKey private constructor(
       return key
     }
   }
-}
-
-/**
- * Dove il dispositivo admin conserva la chiave di famiglia tra un'operazione e l'altra. Implementazione
- * reale: [AndroidKeystoreFamilyKeyVault].
- */
-interface FamilyKeyVault {
-  fun store(key: FamilyKey)
-
-  /** La chiave conservata, se coincide con [expected]; null se assente. */
-  fun load(expected: EcPublicKey): FamilyKey?
-
-  fun destroy()
 }

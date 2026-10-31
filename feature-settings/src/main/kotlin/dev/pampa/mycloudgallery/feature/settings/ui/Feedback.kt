@@ -7,6 +7,7 @@ import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.AdminActionResult
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultRefusal
 import dev.pampa.mycloudgallery.feature.settings.R
 
 /**
@@ -31,7 +32,17 @@ internal fun AdminActionResult.toFeedback(): Feedback = when (this) {
   AdminActionResult.WindowExpired -> Feedback(R.string.fb_expired_title, R.string.fb_expired, FluidTone.Warning)
   AdminActionResult.ProofMismatch -> Feedback(R.string.fb_mismatch_title, R.string.fb_mismatch, FluidTone.Danger)
   AdminActionResult.NotAdmin -> Feedback(R.string.fb_not_admin_title, R.string.fb_not_admin, FluidTone.Warning)
+  is AdminActionResult.KeyRefused -> reason.toFeedback()
   is AdminActionResult.Failed -> Feedback(R.string.fb_failed_title, error.messageRes(), FluidTone.Danger)
+}
+
+/** Fase 10, M3: la chiave di famiglia non si e' aperta (impronta o PIN a ogni uso). Ogni frase dice che niente e' stato firmato. */
+internal fun VaultRefusal.toFeedback(): Feedback = when (this) {
+  VaultRefusal.CANCELLED -> Feedback(R.string.fb_key_cancelled_title, R.string.fb_key_cancelled, FluidTone.Warning)
+  VaultRefusal.LOCKED_OUT -> Feedback(R.string.fb_key_locked_title, R.string.fb_key_locked, FluidTone.Warning)
+  VaultRefusal.UNAVAILABLE -> Feedback(R.string.fb_key_unavailable_title, R.string.fb_key_unavailable, FluidTone.Warning)
+  VaultRefusal.NO_SECURE_LOCK -> Feedback(R.string.fb_key_no_lock_title, R.string.fb_key_no_lock, FluidTone.Danger)
+  VaultRefusal.INVALIDATED -> Feedback(R.string.fb_key_invalidated_title, R.string.fb_key_invalidated, FluidTone.Danger)
 }
 
 /** Il feedback di un passo che non e' riuscito (recupero dell'admin, reset, ingresso...). */
@@ -54,6 +65,9 @@ internal fun OnboardingProblem.toFeedback(): Feedback = when (this) {
   OnboardingProblem.NEEDS_APP_UPDATE -> Feedback(R.string.fb_update_title, R.string.fb_update, FluidTone.Warning)
   OnboardingProblem.STEP_NOT_AVAILABLE -> Feedback(R.string.fb_failed_title, R.string.problem_not_available, FluidTone.Warning)
   OnboardingProblem.KEYS_NOT_REMOVED -> Feedback(R.string.fb_failed_title, R.string.problem_keys_not_removed, FluidTone.Warning)
+  // Fase 10, M3: recupero dell'admin e reset dalle Impostazioni con il foglio dell'impronta o del PIN.
+  OnboardingProblem.FAMILY_KEY_NOT_CONFIRMED -> Feedback(R.string.fb_key_cancelled_title, R.string.fb_key_cancelled, FluidTone.Warning)
+  OnboardingProblem.FAMILY_KEY_INVALIDATED -> Feedback(R.string.fb_key_invalidated_title, R.string.fb_key_invalidated, FluidTone.Danger)
   else -> Feedback(R.string.fb_failed_title, R.string.problem_generic, FluidTone.Danger)
 }
 

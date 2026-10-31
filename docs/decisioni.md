@@ -14185,3 +14185,118 @@ lo stesso percorso del gesto Indietro: chiude per primo il livello piu' alto). I
 
 ### Commit (branch `fase10/p4`)
 `2d5f60fc` (il blocco per processo), `e7b9691d` (due finestre, `singleInstancePerTask`, ingressi alla principale), `2f8e1867` (tastiera, mouse, selezione ripristinata) e `8b683778` (documenti); questa riga con l'esito, dopo.
+
+## Fase 10, correzione 1.4 M3: chiave di famiglia con autenticazione a ogni uso (31/10)
+
+Fonte: la decisione 2 di `docs/formato-nas.md` §13, risposta **(a)** dell'utente del 31/10 ("Decisioni dell'utente del 31/10 dopo la revisione finale, prima
+parte"), la voce M3 di `docs/review/1.4-core-trust.md` e la sua riga in `docs/review/10-chiusura.md`. Branch `fase10/m3` da `a7930f40`. **Nessuna dipendenza,
+permesso, host o costante di `FeatureFlags` nuovi** (androidx.biometric 1.1.0 c'era gia', per il blocco app); `core-security/.../lock/` **non** e' toccato: il foglio
+della chiave di famiglia e' una classe nuova di `:app` (`lock/FamilyKeyPrompt.kt`). Voci di `docs/sicurezza.md`: **C7 precisata**, nessuna voce nuova.
+
+**Cosa c'e', dove**
+| Pezzo | Dove | In breve |
+|---|---|---|
+| Contratto della cassaforte | `core-trust/.../crypto/FamilyKeyVault.kt` | `FamilyKeyVault` con `store`/`load` sospesi che rispondono `VaultResult` (`Done`, `Absent`, `Refused(VaultRefusal)`), `keep()` per tornare indietro; `VaultAuthenticator` (il foglio), `FamilyKeyUse` (`SAVE`, `SIGN`) |
+| Cassaforte | `core-trust/.../crypto/AndroidKeystore.kt` (`AndroidKeystoreFamilyKeyVault`, `WrappingPolicy`, `VaultKeystore`, `AndroidVaultKeystore`) | chiave AES nuova (`...family-key-wrap.v2`) con autenticazione a ogni uso, file versione 2, migrazione dalla versione 1 |
+| Foglio di sistema | `app/.../lock/FamilyKeyPrompt.kt` (`FamilyKeyPromptCodes`), `app/.../graph/AppPlatform.kt`, stringhe `family_key_prompt_*` | `BiometricPrompt` con `CryptoObject` sul `Cipher` della cassaforte, solo sopra l'activity in primo piano |
+| Punti d'uso | `core-family/.../registry/RegistryWriter.kt` (`adminBase`, `unlock`, `changeStatusAll`), `NasRegistryService.kt`, `lifecycle/NasLostReporting.kt`, `KitAdminRecovery.kt`, `NasFamilyReset.kt`, `onboarding/FamilyFoundation.kt`, `DefaultOnboardingCoordinator.kt` | un foglio per gesto, tutto il controllabile prima del foglio |
+| Contratti | `core-family/.../contract/Registry.kt` (`AdminActionResult.KeyRefused`, `RegistryService.reissueDue`/`reissue`), `Onboarding.kt` (`FAMILY_KEY_NOT_CONFIRMED`, `FAMILY_KEY_INVALIDATED`, `RecoveryCodeDisplay.problem`) | esiti che dicono "niente firmato" |
+| Schermate | `feature-settings/.../ui/Feedback.kt`, `devices/DevicesScreen.kt` e `DevicesViewModel.kt` (tasto "Ripubblica il registro"), `feature-onboarding/.../ui/ProblemPanel.kt`, `OnboardingViewModel.kt` | messaggi chiari per ogni rifiuto |
+
+**La politica della chiave (decisione 2(a))**
+- La chiave AES della cassaforte nasce con `setUserAuthenticationRequired(true)` e `setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG or AUTH_DEVICE_CREDENTIAL)`
+  (0 = a ogni uso), piu' `setUnlockedDeviceRequired(true)` (come prima), `setInvalidatedByBiometricEnrollment(true)` e StrongBox se c'e'.
+- **Android 10 (minSdk 29)**: `setUserAuthenticationParameters` e la credenziale con un `CryptoObject` esistono da Android 11. Su Android 10 la chiave e' "a ogni uso"
+  con `setUserAuthenticationValidityDurationSeconds(-1)`, cioe' **solo l'impronta forte**; senza impronte Android non crea la chiave e la cassaforte dice "serve il blocco
+  schermo (su Android 10 anche un'impronta)". Nessun ripiego con una durata di qualche secondo: sarebbe una finestra in cui chiunque nel processo usa la chiave.
+- **La chiave del dispositivo resta com'e'** (nessuna autenticazione, lavori notturni a telefono bloccato, L4): `AndroidKeystoreKeyProvider` non e' cambiato.
+
+**Ogni uso passa dal foglio**
+- `store` e `load` preparano il `Cipher` (init senza autenticazione), lo passano al foglio (`VaultAuthenticator`) e lo usano solo dopo; annullato, niente si cifra o decifra
+  e il file non cambia. Il Keystore vero rifiuta comunque l'operazione su un `Cipher` non autenticato: un foglio che mentisse non aprirebbe niente (provato sulla JVM con
+  il Keystore finto e sull'emulatore con il Keystore vero).
+- **Un foglio per gesto dell'admin**, non per firma: approvare, segnare perso o revocato, rinominare, cambiare indirizzo, impronta di casa o esclusioni, unire o rifiutare
+  rami, ripubblicare, e le segnalazioni "perso" convertite **insieme** (`changeStatusAll`: una versione per dispositivo, un solo foglio). La chiave in chiaro vive in memoria
+  per quel gesto e basta (§12.6 di `formato-nas.md`); il gesto dopo la chiede di nuovo.
+- **Prima del foglio si controlla tutto** il controllabile senza chiave (`RegistryWriter.adminBase`): dispositivo admin approvato, richiesta riletta, finestra di 15 minuti,
+  codice digitato, stessa configurazione o stesso nome (niente da firmare), nome valido, segnalazioni presenti. Un codice sbagliato o un'azione che non firma non
+  mostrano il foglio.
+- **L'invito non apre piu' la chiave** (`createInvite` con `adminBase`): non firma niente e porta solo dati del registro fidato. Scelta mia: un foglio senza una firma
+  insegnerebbe ad accettarlo.
+- **La cassaforte vuota o con un'altra chiave non chiede niente**: il file versione 2 porta in chiaro l'hash SHA-256 della chiave pubblica di famiglia (non e' un segreto,
+  e' legato al cifrato come dati associati), quindi "non e' questa la chiave" si risponde senza foglio.
+- Dove il foglio compare: Impostazioni → Dispositivi (approva, perso, revoca, dismetti, rinomina, segnalazioni, ripubblica), Indirizzo del NAS, Rete di casa (impronta),
+  Famiglia → Recupera l'admin e Reset; nell'onboarding al tasto "Crea la chiave" (passo 12, custodia) e alla ripresa dopo un riavvio fra (d) ed (e) (apertura); le
+  esclusioni del passo 5 riprese dopo la fondazione. La rotazione della chiave non ha chiamanti nell'app (M4): quando arrivera' passera' dalla stessa cassaforte.
+
+**Il lavoro in background non tocca mai la chiave di famiglia**
+- L'unico punto in cui un lavoro in background poteva arrivarci era la ripubblicazione automatica di N3 (`NasRegistryService.refresh` → `RegistryWriter.reissue`), che
+  il `TrustSyncWorker` dell'admin faceva "se la cassaforte si apre", cioe' a telefono sbloccato. Ora `refresh` **non firma mai**: accende `reissueDue` sul dispositivo admin,
+  e la pagina dei dispositivi mostra il tasto "Ripubblica il registro della famiglia" (con il foglio). Nemmeno un controllo interattivo (la pagina che si apre) firma da solo.
+- Il foglio si mostra solo sopra un'activity dell'app ripresa (`onResume`, riferimenti deboli): senza, `FamilyKeyPrompt` risponde "non disponibile" senza mostrare niente.
+- Prove: `ChiaveDiFamigliaOgniUsoTest.ilLavoroInBackgroundNonToccaMaiLaChiaveDiFamiglia_nemmenoConLaVersioneFidataSostituita` (controlli in background e interattivi,
+  guardia: zero chiamate alla cassaforte) e `AppIntegrationTest.ilControlloInBackgroundDellAdminNonToccaMaiLaChiaveDiFamiglia` (il `TrustSyncRun` vero dell'admin, con la
+  versione fidata sostituita, due giri: zero chiamate).
+
+**Migrazione delle cassaforti gia' create (scelta)**
+- Il file della versione 1 (chiave `...family-key-wrap.v1`, solo `setUnlockedDeviceRequired`) si migra **al primo uso interattivo**: prima il foglio sul `Cipher` della
+  chiave nuova (l'autenticazione viene prima di tutto), poi la decifrazione con la chiave vecchia, la ricifratura con il `Cipher` autenticato, la sostituzione atomica del
+  file (`StateFiles`) e solo allora la chiave vecchia tolta. **La chiave di famiglia non esce se la ricifratura non riesce**: la chiave vecchia non chiede autenticazione,
+  quindi la prova che l'admin c'e' e' la cifratura con la nuova, che il Keystore fa solo dopo il foglio vero.
+- Annullato o non riuscito: niente cambia (file e chiave vecchi al loro posto), si riprova al gesto dopo. Se la chiave vecchia non apre piu' il file: "La chiave di famiglia
+  non si apre piu'", con il kit di recupero o il secondo admin come via; il file non si cancella.
+- Perche' cosi' e non una migrazione all'avvio: all'avvio non c'e' un gesto dell'admin, e un foglio senza gesto e' quello che questa correzione toglie. Sul telefono di debug
+  dell'admin di prova la prima azione dell'admin dopo l'aggiornamento chiede l'impronta o il PIN una volta e migra.
+
+**Biometria o blocco cambiati (E-S9, E-H3)**
+- Un'impronta aggiunta o il blocco schermo tolto invalidano la chiave AES (`KeyPermanentlyInvalidatedException`): la cassaforte risponde `INVALIDATED` **senza foglio**, il
+  file resta, la pagina dice di rimettere la chiave con il kit (Famiglia → Recupera l'admin) o dal secondo admin. Il recupero con il kit custodisce di nuovo la chiave: la
+  cassaforte crea una chiave AES nuova al posto di quella invalidata (provato: `FamilyKeyVaultTest`, `ChiaveDiFamigliaOgniUsoTest`).
+- Il reset della famiglia non apre piu' la chiave vecchia per poterla rimettere: tiene la cassaforte cifrata (`keep()`) e la rimette se il reset non finisce. Un solo foglio.
+
+**Prove**
+- `core-trust`: `FamilyKeyVaultTest` (18; Keystore finto che, come quello vero, non opera con una chiave "con autenticazione" se il `Cipher` non e' sbloccato, e foglio finto
+  che conferma, annulla o mente): un foglio a ogni uso, nessuna chiave con un foglio che mente, annullare non cambia niente, nessun foglio senza chiave o con un'altra,
+  senza blocco schermo, chiave invalidata o sparita, cassaforte rovinata, migrazione riuscita, annullata, con un foglio che mente, impossibile, con un'altra chiave,
+  copia rimessa, distruzione, politica per Android 10 e da 11. `ReviewRound2Test.m3_...` aggiornato.
+- `core-family`: `ChiaveDiFamigliaOgniUsoTest` (8: background, annullare non firma, approvazione, nessun foglio senza firma, segnalazioni insieme, chiave invalidata e kit,
+  recupero e reset annullati), `FamilyKeyStepTest.ilFoglioAnnullatoNonCustodisceNiente_laPaginaSaPerche_eSiRiprova`; `ApprovalTest` e `CorrezioniAdmin5BTest` aggiornati
+  (senza blocco schermo l'esito e' `KeyRefused(NO_SECURE_LOCK)`, non piu' `NotAdmin`).
+- `:app`: `AppIntegrationTest.ilControlloInBackgroundDellAdminNonToccaMaiLaChiaveDiFamiglia`, `FamilyKeyPromptCodesTest` (autenticatori e codici di androidx.biometric).
+- Sul Keystore vero: `KeystoreDeviceTest` (androidTest di `core-trust`) sull'emulatore **`Medium_Phone`** (Android 17, API 37), acceso e spento da questa sessione
+  (`emulator.exe -avd Medium_Phone -no-window -no-audio -no-snapshot-save -memory 4096 -port 5584`, serial `emulator-5584`, alla fine `adb -s emulator-5584 emu kill`;
+  mai `RFCY61FZDHW`), con un PIN di prova (`locksettings set-pin`, tolto prima di spegnere; nessuna impronta registrata). **7 prove su 8 verdi**: la politica della
+  chiave (`KeyGenParameterSpec`), la chiave vera nata con l'autenticazione a ogni uso (`KeyInfo`: richiesta, durata 0, impronta forte o credenziale), l'operazione
+  senza autenticazione **rifiutata dal Keystore** (`IllegalBlockSizeException` da `KeyStoreException`), la cassaforte che con un foglio che mente non custodisce
+  niente, la cassaforte della versione 1 che con un foglio che mente non si migra e non da' la chiave (il file resta), piu' le tre prove di prima sulle firme.
+  L'ottava, `laChiaveDelDispositivoENonEstraibileEInHardware`, fallisce come prima di questa correzione e non c'entra: l'emulatore ha il Keystore in software
+  ("chiave in SOFTWARE"), la prova e' per l'S25. Due cose viste: sull'emulatore senza impronte `KeyInfo.isInvalidatedByBiometricEnrollment` e' falso (non c'era
+  un'impronta da legare: la politica la chiede comunque e la prova sulla JVM la controlla), e la chiave e' di livello software. Il giro positivo (foglio vero,
+  impronta o PIN, firma) non si fa senza un `BiometricPrompt` vero: e' fra le prove sul telefono.
+
+**Punti aperti**
+- **Il giro completo con l'impronta o il PIN veri** (foglio di sistema, `CryptoObject`, firma) non ha una prova automatica: serve un `BiometricPrompt` vero. Da fare sul
+  telefono (sotto, "Prove sul telefono").
+- **Android 10**: solo l'impronta; nessun dispositivo di famiglia su Android 10 e' admin oggi.
+- Le pagine **Indirizzo del NAS** e **Rete di casa** dicono per un foglio annullato il loro messaggio di sempre ("cambiato qui, non scritto nella configurazione firmata",
+  con "Riprova"): chiaro, ma non dice "annullato". Le altre pagine dicono il motivo esatto.
+- **Un foglio per gesto, non per firma** (scelta): un gesto che firma piu' versioni (le segnalazioni insieme, un `NewerExists` ripetuto nel recupero) chiede una volta.
+
+**Prove sul telefono (S25 dell'admin di prova, build di debug)**
+1. Prima azione dell'admin dopo l'aggiornamento (per esempio rinominare un dispositivo): compare il foglio "Chiave di famiglia", impronta o PIN, la modifica si firma; la
+   cassaforte e' migrata (la seconda azione chiede di nuovo il foglio e funziona).
+2. Annullare il foglio: la nota "Annullato: niente firmato", nessuna versione nuova del registro sul NAS.
+3. Approvare un dispositivo con un codice sbagliato: nessun foglio; con quello giusto: un foglio.
+4. Telefono bloccato con il controllo in background (lasciarlo una notte): nessun foglio e nessuna versione nuova del registro.
+5. Aggiungere un'impronta nelle impostazioni di Android: l'azione dopo dice "La chiave di famiglia non si apre piu'"; Famiglia → Recupera l'admin con il kit rimette tutto.
+   Se invece l'azione dopo funziona (chiave creata quando non c'erano impronte: Android lega allora solo il PIN), annotarlo: la chiave resta protetta dal PIN.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde al primo giro** ("OK: tutto a posto.", uscita 0, 31/10, dalle 18:25 alle 19:28) sul commit `12aee811`, lanciato come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`,
+`--no-daemon`, cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del semaforo (`f10m3`). `assembleDebug`, `assembleRelease`, `galleryTest` e
+`galleryLint` verdi, tutti i passi della release verdi; solo `-Bench` non lanciato. Le relazioni XML scritte da questa corsa dicono **16.819 prove in 45 moduli, 0 fallite,
+35 saltate per assunzione**. Nessuna classe rifatta con `--rerun`, nessun `hs_err_pid*.log`. Le corse intermedie (prove mirate, emulatore) sono in `build\m3-*.log`, fuori
+dal repository.
+
+### Commit (branch `fase10/m3`)
+`12aee811` (codice e prove: `core-trust`, `core-family`, `:app`, `feature-settings`, `feature-onboarding`) e quello dei documenti.

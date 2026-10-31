@@ -141,6 +141,32 @@ class AppIntegrationTest {
     assertThat(phone.graph.heartbeat.lastBeatAt()).isEqualTo(time.now())
   }
 
+  /**
+   * Fase 10, correzione 1.4 M3: il controllo in background del telefono dell'admin (`TrustSyncRun`, quello del `TrustSyncWorker`) non tocca
+   * mai la cassaforte della chiave di famiglia, nemmeno quando la versione fidata del registro e' stata sostituita con spazzatura (N3), che
+   * prima si ripubblicava da sola "se la cassaforte si apre". La ripubblicazione resta da fare con il tasto (e il foglio dell'impronta).
+   */
+  @Test
+  fun ilControlloInBackgroundDellAdminNonToccaMaiLaChiaveDiFamiglia() = runBlocking {
+    val phone = device("telefono")
+    phone.graph.start()
+    phone.graph.foundFamily()
+    phone.graph.awaitSetup { it is SetupState.Ready }
+    val touches = phone.platform.vault.touches.get()
+    val trusted = phone.graph.engine.state!!.registry.version
+    backend.delete(TestNas.COMMON, NasLayout.registryFile(trusted).value)
+    backend.put(TestNas.COMMON, NasLayout.registryFile(trusted).value, "spazzatura".toByteArray())
+
+    repeat(2) { assertThat(TrustSyncRun(phone.graph, notifications = null, notified = null).execute()).isEqualTo(TrustSyncOutcome.DONE) }
+    assertThat(phone.platform.vault.touches.get()).isEqualTo(touches)
+
+    // Nemmeno la pagina dei dispositivi che si apre (controllo interattivo) firma da sola: accende il tasto "Ripubblica".
+    phone.graph.registry.refresh(Purpose.INTERACTIVE)
+    assertThat(phone.platform.vault.touches.get()).isEqualTo(touches)
+    assertThat(phone.graph.registry.reissueDue.value).isTrue()
+    assertThat(backend.exists(TestNas.COMMON, NasLayout.registryFile(trusted + 1).value)).isFalse()
+  }
+
   // --- 3. NAS spento: "Continua piu' tardi" (E-O1) --------------------------------------------------------------------
 
   @Test

@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.family.contract.SavedNas
 import dev.pampa.mycloudgallery.core.family.contract.StepInput
 import dev.pampa.mycloudgallery.core.family.contract.StepResult
 import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
+import dev.pampa.mycloudgallery.core.family.lifecycle.problemOf
 import dev.pampa.mycloudgallery.core.family.setup.NasCredentialSlots
 import dev.pampa.mycloudgallery.core.nas.contract.ConnectionReport
 import dev.pampa.mycloudgallery.core.nas.contract.NasAccount
@@ -49,6 +50,8 @@ import dev.pampa.mycloudgallery.core.trust.TrustLimits
 import dev.pampa.mycloudgallery.core.trust.TrustViolation
 import dev.pampa.mycloudgallery.core.trust.codec.TextRules
 import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
+import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyUse
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultResult
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
 import dev.pampa.mycloudgallery.core.trust.nas.NasRead
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
@@ -465,8 +468,10 @@ class DefaultOnboardingCoordinator(
     AdminActionResult.NewerExists -> OnboardingProblem.NAS_WRITE_FAILED
     AdminActionResult.Fork, AdminActionResult.Blocked -> OnboardingProblem.REGISTRY_UNTRUSTED
     AdminActionResult.NeedsAppUpdate -> OnboardingProblem.NEEDS_APP_UPDATE
-    // Questo dispositivo non apre la chiave di famiglia (non e' admin, o il telefono non ha un blocco schermo sicuro).
+    // Questo dispositivo non tiene la chiave di famiglia.
     AdminActionResult.NotAdmin, AdminActionResult.WindowExpired, AdminActionResult.ProofMismatch -> OnboardingProblem.STEP_NOT_AVAILABLE
+    // La cassaforte non si e' aperta (foglio annullato, blocco schermo, chiave invalidata: M3). Niente firmato.
+    is AdminActionResult.KeyRefused -> problemOf(result.reason)
   }
 
   // --- Passi 6-11: locali --------------------------------------------------------------------------------
@@ -551,7 +556,8 @@ class DefaultOnboardingCoordinator(
       is FoundationStart.Started -> start.pending.also { pending = it }
       is FoundationStart.Blocked -> {
         foundationBlock = start.problem
-        return@withLock empty
+        // Fase 10, M3: la pagina dice perche' (foglio annullato, nessun blocco schermo...) e il tasto riprova.
+        return@withLock RecoveryCodeDisplay(emptyList(), problem = start.problem)
       }
     }
     foundationBlock = null
@@ -568,7 +574,11 @@ class DefaultOnboardingCoordinator(
     // Gia' fondata (riletto dopo un "indietro", o un tocco doppio): niente da rifare.
     if (snapshot.foundation?.stage == FamilyKeyStage.FOUNDED) return complete(OnboardingStep.FAMILY_KEY)
     foundationBlock?.let { return problem(it) }
-    val current = pending ?: resumeFoundation(snapshot) ?: return problem(OnboardingProblem.RECOVERY_CODE_MISMATCH)
+    val current = pending ?: when (val resumed = resumeFoundation(snapshot)) {
+      is Resumed.Ready -> resumed.pending
+      is Resumed.Refused -> return problem(resumed.problem)
+      null -> return problem(OnboardingProblem.RECOVERY_CODE_MISMATCH)
+    }
     val result = foundation.run(snapshot, current, input.code) {
       store.update {
         it.copy(foundation = FoundationRecord(FamilyKeyStage.KIT_VERIFIED, current.familyId, current.familyKey.publicKey.toText()))
@@ -585,17 +595,33 @@ class DefaultOnboardingCoordinator(
     }
   }
 
-  /** Dopo un riavvio fra (d) ed (e): la chiave si riprende dalla cassaforte, il codice non serve piu'. */
-  private fun resumeFoundation(snapshot: OnboardingSnapshot): PendingFoundation? {
+  private sealed interface Resumed {
+    class Ready(val pending: PendingFoundation) : Resumed
+
+    class Refused(val problem: OnboardingProblem) : Resumed
+  }
+
+  /**
+   * Dopo un riavvio fra (d) ed (e): la chiave si riprende dalla cassaforte (con il foglio dell'impronta o del PIN, M3), il codice non
+   * serve piu'. Null se non c'e' niente da riprendere; [Resumed.Refused] se la cassaforte non si e' aperta (la pagina dice perche').
+   */
+  private suspend fun resumeFoundation(snapshot: OnboardingSnapshot): Resumed? {
     val record = snapshot.foundation?.takeIf { it.stage == FamilyKeyStage.KIT_VERIFIED } ?: return null
-    val key = try {
-      ports.familyKeys.load(EcPublicKey.fromText(record.keyPublic))
+    val opened = try {
+      ports.familyKeys.load(EcPublicKey.fromText(record.keyPublic), FamilyKeyUse.SIGN)
+    } catch (e: CancellationException) {
+      throw e
     } catch (e: TrustViolation) {
       null
     } catch (e: RuntimeException) {
       null
-    } ?: return null
-    return PendingFoundation(record.familyId, key, code = null, kitVerified = true).also { pending = it }
+    }
+    val key = when (opened) {
+      is VaultResult.Done -> opened.value
+      is VaultResult.Refused -> return Resumed.Refused(problemOf(opened.reason))
+      VaultResult.Absent, null -> return null
+    }
+    return Resumed.Ready(PendingFoundation(record.familyId, key, code = null, kitVerified = true).also { pending = it })
   }
 
   // --- Ripresa e "ricomincia" ---------------------------------------------------------------------------------

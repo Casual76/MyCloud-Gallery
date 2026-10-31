@@ -74,4 +74,11 @@
   <string name="locked_open_security_settings">Apri le impostazioni di sicurezza</string>
   <string name="locked_temporarily_unavailable">Lo sblocco non è disponibile in questo momento. Riprova tra poco.</string>
   <string name="locked_locked_out">Troppi tentativi: il telefono ha sospeso lo sblocco. Riprova più tardi.</string>
+
+  <!-- Fase 10, M3: il foglio di sistema prima di ogni uso della chiave di famiglia (FamilyKeyPrompt). Nessun dato sensibile: lo vede chi ha il telefono in mano. -->
+  <string name="family_key_prompt_title">Chiave di famiglia</string>
+  <string name="family_key_prompt_sign">Conferma per firmare questa modifica della famiglia</string>
+  <string name="family_key_prompt_save">Conferma per custodire la chiave di famiglia su questo telefono</string>
+  <string name="family_key_prompt_detail">Senza la tua conferma non si firma e non si salva niente.</string>
+  <string name="family_key_prompt_cancel">Annulla</string>
 </resources>

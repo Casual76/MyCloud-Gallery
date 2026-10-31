@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.graph
 
+import android.app.Application
 import android.app.KeyguardManager
 import android.content.Context
 import android.content.res.Configuration
@@ -41,6 +42,8 @@ import dev.pampa.mycloudgallery.core.trust.crypto.AndroidKeystoreFamilyKeyVault
 import dev.pampa.mycloudgallery.core.trust.crypto.AndroidKeystoreKeyProvider
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyVault
 import dev.pampa.mycloudgallery.core.trust.crypto.KeyProvider
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultAuthenticator
+import dev.pampa.mycloudgallery.lock.FamilyKeyPrompt
 import java.io.File
 
 /**
@@ -140,6 +143,8 @@ class AndroidAppPlatform(context: Context) : AppPlatform {
   override val familyKeys: FamilyKeyVault = AndroidKeystoreFamilyKeyVault(
     file = File(app.noBackupFilesDir, FAMILY_KEY_FILE),
     isDeviceSecure = { app.getSystemService(KeyguardManager::class.java)?.isDeviceSecure == true },
+    // Fase 10, M3: impronta o PIN a ogni uso, con il foglio di sistema sopra la schermata in primo piano (mai da un lavoro in background).
+    authenticator = (app as? Application)?.let(::FamilyKeyPrompt) ?: VaultAuthenticator.NONE,
   )
   override val credentials: AppCredentialStore = VaultCredentialStore(CredentialVault.getInstance(app))
 

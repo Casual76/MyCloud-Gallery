@@ -6,6 +6,8 @@ import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryCode
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryKit
 import dev.pampa.mycloudgallery.core.trust.crypto.RecoveryKitFiles
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultRefusal
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultResult
 import dev.pampa.mycloudgallery.core.trust.envelope.DocType
 import dev.pampa.mycloudgallery.core.trust.envelope.Envelope
 import dev.pampa.mycloudgallery.core.trust.nas.NasLayout
@@ -20,7 +22,7 @@ import dev.pampa.mycloudgallery.core.trust.testing.FakeNasFileSystem
 import dev.pampa.mycloudgallery.core.trust.testing.TestFamily
 import dev.pampa.mycloudgallery.core.trust.testing.deviceId
 import dev.pampa.mycloudgallery.core.trust.testing.newSigner
-import org.junit.Assert.assertThrows
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import java.io.File
 
@@ -194,12 +196,16 @@ class ReviewRound2Test {
   // --- M3: cassaforte senza blocco schermo ------------------------------------------------------------------
 
   @Test
-  fun m3_laCassaforteNonLavoraSenzaBloccoSchermoSicuro() {
-    val vault = AndroidKeystoreFamilyKeyVault(File.createTempFile("vault", null).apply { deleteOnExit() }, isDeviceSecure = { false })
+  fun m3_laCassaforteNonLavoraSenzaBloccoSchermoSicuro() = runBlocking<Unit> {
+    // Fase 10, M3: il foglio non si mostra nemmeno (nessun autenticatore chiamato) e nessun Keystore si tocca.
+    val vault = AndroidKeystoreFamilyKeyVault(
+      File.createTempFile("vault", null).apply { deleteOnExit() },
+      isDeviceSecure = { false },
+      authenticator = { _, _ -> error("senza blocco schermo il foglio non si chiede") },
+    )
 
-    val stored = assertThrows(IllegalStateException::class.java) { vault.store(FamilyKey.generate()) }
-    assertThat(stored.message).contains("blocco schermo")
-    assertThrows(IllegalStateException::class.java) { vault.load(FamilyKey.generate().publicKey) }
+    assertThat(vault.store(FamilyKey.generate())).isEqualTo(VaultResult.Refused(VaultRefusal.NO_SECURE_LOCK))
+    assertThat(vault.load(FamilyKey.generate().publicKey)).isEqualTo(VaultResult.Refused(VaultRefusal.NO_SECURE_LOCK))
   }
 
   // --- M4: kit vecchi --------------------------------------------------------------------------------------

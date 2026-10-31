@@ -28,6 +28,9 @@
   <string name="devices_section_reports">Segnalazioni</string>
   <string name="devices_convert_reports">Controlla le segnalazioni di smarrimento</string>
   <string name="devices_convert_reports_detail">Un familiare può segnalare un proprio dispositivo: qui le confermi</string>
+  <!-- Fase 10, M3 (revisione 1.4, N3): la ripubblicazione del registro e' un gesto dell'admin, con l'impronta o il PIN. -->
+  <string name="devices_reissue">Ripubblica il registro della famiglia</string>
+  <string name="devices_reissue_detail">Sul NAS qualcuno ha sostituito l’ultima versione con un file non valido: ripubblicala, ti chiedo l’impronta o il PIN</string>
   <string name="devices_footnote">Lo stato dei dispositivi si legge dal registro firmato sul NAS: l’ultima attività la pubblica ogni dispositivo, al massimo una volta al giorno.</string>
 
   <!-- Riga di un dispositivo -->

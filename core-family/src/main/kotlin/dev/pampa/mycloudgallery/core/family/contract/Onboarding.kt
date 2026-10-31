@@ -203,6 +203,18 @@ enum class OnboardingProblem {
   /** Il telefono non ha un Keystore hardware: le credenziali non si salvano. */
   CREDENTIALS_NOT_SAVED,
 
+  /**
+   * Fase 10, M3 (decisione 2(a) del 31/10): l'impronta o il PIN del telefono non sono stati confermati (foglio annullato, troppi
+   * tentativi, foglio non disponibile adesso). La chiave di famiglia non e' stata usata: niente firmato, niente salvato. Si riprova.
+   */
+  FAMILY_KEY_NOT_CONFIRMED,
+
+  /**
+   * Fase 10, M3 (E-S9, E-H3): la cassaforte della chiave di famiglia su questo telefono non si apre piu' (impronte o blocco schermo
+   * cambiati: Android ha invalidato la sua chiave). Niente e' perso: la chiave si riprende con il kit di recupero o dal secondo admin.
+   */
+  FAMILY_KEY_INVALIDATED,
+
   /** E-O2: nessuna share accessibile. */
   NO_ACCESSIBLE_SHARE,
 
@@ -314,6 +326,11 @@ class RecoveryCodeDisplay(
    * mostrare.
    */
   val familyFingerprint: String? = null,
+  /**
+   * Fase 10, M3: perche' non c'e' niente da mostrare quando la chiave non si e' potuta custodire (foglio dell'impronta annullato,
+   * nessun blocco schermo sicuro, ...): la pagina lo dice invece di "passo non disponibile". Null negli altri casi.
+   */
+  val problem: OnboardingProblem? = null,
 ) : AutoCloseable {
   override fun close() = groups.forEach { it.fill('\u0000') }
 

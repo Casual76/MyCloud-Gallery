@@ -53,9 +53,13 @@ import dev.pampa.mycloudgallery.core.security.credentials.KeyProtectionLevel
 import dev.pampa.mycloudgallery.core.security.device.ScreenLockStatus
 import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
+import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyUse
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyVault
 import dev.pampa.mycloudgallery.core.trust.crypto.KeyProvider
 import dev.pampa.mycloudgallery.core.trust.crypto.Signer
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultCopy
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultRefusal
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultResult
 import dev.pampa.mycloudgallery.core.trust.nas.NasClock
 import dev.pampa.mycloudgallery.core.trust.nas.NasFileSystem
 import kotlin.time.Duration
@@ -229,13 +233,32 @@ class InMemoryFamilyKeyVault(var secure: Boolean = true) : FamilyKeyVault {
   var destroyAttempts: Int = 0
     private set
 
-  override fun store(key: FamilyKey) {
-    check(secure) { "Il dispositivo admin deve avere un blocco schermo sicuro." }
+  /** Fase 10, M3: la risposta del foglio dell'impronta o del PIN (null = l'admin conferma); [sheets] conta i fogli mostrati. */
+  var sheet: VaultRefusal? = null
+  var sheets: Int = 0
+    private set
+
+  override suspend fun store(key: FamilyKey, use: FamilyKeyUse): VaultResult<Unit> {
+    if (!secure) return VaultResult.Refused(VaultRefusal.NO_SECURE_LOCK)
+    sheets++
+    sheet?.let { return VaultResult.Refused(it) }
     stores++
     stored = key
+    return VaultResult.Done(Unit)
   }
 
-  override fun load(expected: EcPublicKey): FamilyKey? = stored?.takeIf { it.publicKey == expected }
+  override suspend fun load(expected: EcPublicKey, use: FamilyKeyUse): VaultResult<FamilyKey> {
+    if (!secure) return VaultResult.Refused(VaultRefusal.NO_SECURE_LOCK)
+    val key = stored?.takeIf { it.publicKey == expected } ?: return VaultResult.Absent
+    sheets++
+    sheet?.let { return VaultResult.Refused(it) }
+    return VaultResult.Done(key)
+  }
+
+  override fun keep(): VaultCopy? {
+    val kept = stored ?: return null
+    return VaultCopy { stored = kept }
+  }
 
   override fun destroy() {
     destroyAttempts++

@@ -49,9 +49,13 @@ import dev.pampa.mycloudgallery.core.security.faces.FacesKeys
 import dev.pampa.mycloudgallery.core.security.testing.FakeFacesKeys
 import dev.pampa.mycloudgallery.core.trust.crypto.EcPublicKey
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKey
+import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyUse
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyVault
 import dev.pampa.mycloudgallery.core.trust.crypto.KeyProvider
 import dev.pampa.mycloudgallery.core.trust.crypto.Signer
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultCopy
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultRefusal
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultResult
 import dev.pampa.mycloudgallery.graph.AppCredentialStore
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.AppPlatform
@@ -142,15 +146,33 @@ class SoftwareKeys : KeyProvider {
   }
 }
 
-/** La cassaforte della chiave di famiglia in memoria (telefono con blocco schermo). */
+/**
+ * La cassaforte della chiave di famiglia in memoria (telefono con blocco schermo). Fase 10, M3: ogni custodia e ogni apertura passano dal
+ * foglio finto ([sheet]: null = l'admin conferma); [touches] conta ogni chiamata, che il lavoro in background deve lasciare ferma.
+ */
 class MemoryFamilyVault : FamilyKeyVault {
   @Volatile var stored: FamilyKey? = null
+  @Volatile var sheet: VaultRefusal? = null
+  val touches = java.util.concurrent.atomic.AtomicInteger()
 
-  override fun store(key: FamilyKey) {
+  override suspend fun store(key: FamilyKey, use: FamilyKeyUse): VaultResult<Unit> {
+    touches.incrementAndGet()
+    sheet?.let { return VaultResult.Refused(it) }
     stored = key
+    return VaultResult.Done(Unit)
   }
 
-  override fun load(expected: EcPublicKey): FamilyKey? = stored?.takeIf { it.publicKey == expected }
+  override suspend fun load(expected: EcPublicKey, use: FamilyKeyUse): VaultResult<FamilyKey> {
+    touches.incrementAndGet()
+    val key = stored?.takeIf { it.publicKey == expected } ?: return VaultResult.Absent
+    sheet?.let { return VaultResult.Refused(it) }
+    return VaultResult.Done(key)
+  }
+
+  override fun keep(): VaultCopy? {
+    val kept = stored ?: return null
+    return VaultCopy { stored = kept }
+  }
 
   override fun destroy() {
     stored = null

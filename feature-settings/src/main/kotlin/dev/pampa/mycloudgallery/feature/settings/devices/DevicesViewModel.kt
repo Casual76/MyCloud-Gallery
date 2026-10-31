@@ -53,8 +53,8 @@ internal class DevicesViewModel @Inject constructor(
     initialValue = build(registry.status.value, registry.devices.value, registry.pendingRequests.value, sessions.state.value),
   )
 
-  val state: StateFlow<DevicesUiState> = combine(content, refreshing, feedback) { base, busy, note ->
-    base.copy(refreshing = busy, feedback = note)
+  val state: StateFlow<DevicesUiState> = combine(content, refreshing, feedback, registry.reissueDue) { base, busy, note, reissue ->
+    base.copy(refreshing = busy, feedback = note, reissueDue = reissue && base.isAdmin)
   }.stateIn(
     scope = viewModelScope,
     started = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
@@ -78,6 +78,16 @@ internal class DevicesViewModel @Inject constructor(
   fun convertReports() {
     viewModelScope.launch {
       feedback.value = lostReporting.convertReports().toFeedback()
+    }
+  }
+
+  /**
+   * Solo admin (revisione 1.4, N3; Fase 10, M3): la versione fidata del registro e' stata sostituita sul NAS e va ripubblicata. Prima si
+   * faceva da sola durante un controllo; ora e' questo gesto, con il foglio dell'impronta o del PIN.
+   */
+  fun reissue() {
+    viewModelScope.launch {
+      feedback.value = registry.reissue().toFeedback()
     }
   }
 

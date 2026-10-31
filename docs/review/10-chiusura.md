@@ -6,19 +6,19 @@
 | **Tipo** | Riconciliazione in sola lettura dei documenti (revisioni, `docs/decisioni.md`, `docs/sicurezza.md`) e del codice dove serviva per decidere. **Nessun difetto di prodotto corretto qui** (`docs/fase10-progetto.md` §2.11, D36; brief di P11). |
 | **Data** | 31/10/2026 |
 | **Regola** | Una riga per ogni voce **ancora aperta** secondo il documento della revisione (le voci chiuse nel documento con una correzione e un test non si ripetono). Ogni riga dice una sola cosa: **chiusa** da una correzione con il suo test, **dichiarata** con un limite `L<n>` di `docs/sicurezza.md` §6, **non un difetto** con il motivo, oppure **aperta** con il motivo e chi la chiude. Nessun rilascio con una voce "Alta" o "Blocca" aperta (§2.11). |
-| **Esito** | **Nessuna voce Alta, Critica o Blocca aperta.** Restano aperte 1 voce Media (1.4 M3, decisione 2 dell'utente mai registrata) e voci Basse, Minori e Informative, ognuna con chi la chiude (sotto). |
+| **Esito** | **Nessuna voce Alta, Critica o Blocca aperta.** Restano aperte voci Basse, Minori e Informative, ognuna con chi la chiude (sotto). La Media 1.4 M3 (decisione 2 dell'utente) e' chiusa dalla correzione M3 della Fase 10 (31/10, decisione 2(a)). |
 
 ## Conteggio per stato
 
 | Stato | Voci |
 |---|---|
-| Chiusa (con la correzione e il test, arrivata dopo l'ultima intestazione del documento) | 6 |
+| Chiusa (con la correzione e il test, arrivata dopo l'ultima intestazione del documento) | 7 (6 al 31/10 di P11, piu' 1.4 M3 con la correzione M3) |
 | Dichiarata con un limite `L<n>` | 9 |
 | Non un difetto | 9 |
-| Aperta | 35 (1 Media, 1 Bassa, 2 Minori o "da provare", 31 Informative; 7 sono prove sul campo gia' previste in P14 o nella seconda parte di P11) |
+| Aperta | 34 (1 Bassa, 2 Minori o "da provare", 31 Informative; 7 sono prove sul campo gia' previste in P14 o nella seconda parte di P11) |
 | **Totale righe** | **59** |
 
-Gravita' delle aperte: **0 Critiche, 0 Alte, 0 "Blocca"**; 1 Media (1.4 M3, ferma su una risposta dell'utente). Le intestazioni di `5b-fase5b.md`, `8-fase8.md`, `9-fase9.md`,
+Gravita' delle aperte: **0 Critiche, 0 Alte, 0 "Blocca", 0 Medie** (1.4 M3 chiusa il 31/10 dalla correzione M3, dopo la risposta dell'utente). Le intestazioni di `5b-fase5b.md`, `8-fase8.md`, `9-fase9.md`,
 `funzionale-5b.md`, `funzionale-8.md`, `funzionale-9.md`, `funzionale-fasi-1-5a.md`, `1.4-core-trust.md` e `2-fase2.md` sono state allineate a
 questo stato (31/10).
 
@@ -35,7 +35,7 @@ questo stato (31/10).
 | Voce | Gravita' | Stato | Dettaglio |
 |---|---|---|---|
 | A2 | Alta (residuo) | Dichiarata con **L18** | Il residuo dopo i tre giri (un dispositivo compromesso ritarda la propria revoca occupando nomi del registro finche' non gli si cambia la password del NAS) e' L18. |
-| M3 | Media | **Aperta, decisa** | **Decisione 2 dell'utente (31/10): (a), impronta o PIN a ogni uso della chiave di famiglia** (`docs/decisioni.md`, "Decisioni dell'utente del 31/10 dopo la revisione finale, prima parte"); la correzione e' un pacchetto della Fase 10 (`core-security`, dopo P4). Prima: la cassaforte della chiave di famiglia vuole un blocco schermo sicuro e `setUnlockedDeviceRequired`, ma **non** chiede PIN o impronta a ogni uso: dipendeva dalla **decisione 2** dell'utente ("PIN o impronta a ogni uso della chiave di famiglia", `docs/decisioni.md`, "Da confermare con l'utente a fine Fase 1"), mai registrata. Chi la chiude: **utente** (risposta) e orchestratore (la correzione in `core-security`, o un limite nuovo). Non blocca il rilascio (Media). |
+| M3 | Media | **Chiusa** | **Chiusa da `12aee811` con `FamilyKeyVaultTest`, `ChiaveDiFamigliaOgniUsoTest`, `AppIntegrationTest.ilControlloInBackgroundDellAdminNonToccaMaiLaChiaveDiFamiglia` e `KeystoreDeviceTest`** (Fase 10, correzione 1.4 M3, `docs/decisioni.md`, «Fase 10, correzione 1.4 M3: chiave di famiglia con autenticazione a ogni uso (31/10)»): la chiave AES della cassaforte vuole l'impronta o il PIN a ogni uso, ogni custodia e apertura passa dal foglio di sistema (`BiometricPrompt` con `CryptoObject`), annullare non firma niente e lo dice, il lavoro in background non tocca la chiave di famiglia, le cassaforti della versione 1 si migrano al primo uso dopo l'autenticazione. Restano le prove con l'impronta vera sul telefono (elencate nella sezione). Storia della voce: **Decisione 2 dell'utente (31/10): (a), impronta o PIN a ogni uso della chiave di famiglia** (`docs/decisioni.md`, "Decisioni dell'utente del 31/10 dopo la revisione finale, prima parte"); la correzione e' un pacchetto della Fase 10 (`core-security`, dopo P4). Prima: la cassaforte della chiave di famiglia vuole un blocco schermo sicuro e `setUnlockedDeviceRequired`, ma **non** chiede PIN o impronta a ogni uso: dipendeva dalla **decisione 2** dell'utente ("PIN o impronta a ogni uso della chiave di famiglia", `docs/decisioni.md`, "Da confermare con l'utente a fine Fase 1"), mai registrata. Chi la chiude: **utente** (risposta) e orchestratore (la correzione in `core-security`, o un limite nuovo). Non blocca il rilascio (Media). |
 | M4 | Media (parziale) | Non un difetto (oggi) | Il kit vecchio resterebbe sul NAS dopo una **rotazione** della chiave di famiglia, ma l'app non ruota mai la chiave: nessun chiamante di `rotate`/`rotateTo` fuori da `core-trust` (verificato il 31/10 in `core-family`, `feature-settings`, `:app`). `RecoveryKitFiles.obsolete` e' pronto per quando la rotazione arrivera'; allora la voce si riapre. |
 | M5 | Media (specifica) | Dichiarata con **L19** | L'identita' del NAS passa dalla sessione SMB 3.1.1 firmata (verificata dal banco: `NasIntegrationSuiteTest.t01`); "casa e NAS da dati non segreti" e' L19. |
 | B2, B5, B7 | Bassa (parziali, come dichiarato) | **Aperta** (Bassa) | Caratteri invisibili (ZWJ, selettori) ammessi nei nomi; spazzatura riletta a ogni sincronizzazione entro ~35 letture; cestino oltre 20 GiB non pulito. Il documento le dice "parzialmente chiuse come dichiarato", ma nessun limite di `docs/sicurezza.md` §6 le nomina. Chi la chiude: **security-review** (un limite o una correzione). |
@@ -153,6 +153,6 @@ coda»). Restano le informative (il documento le dice "tutte aperte").
 
 ## Cosa resta per il rilascio
 
-Nessuna voce Alta, Critica o "Blocca" e' aperta. Prima del rilascio servono: la **decisione 2** dell'utente per 1.4 M3; le prove sul campo
+Nessuna voce Alta, Critica o "Blocca" e' aperta. Prima del rilascio servono: ~~la **decisione 2** dell'utente per 1.4 M3~~ (risposta (a) del 31/10, chiusa dalla correzione M3; restano le sue prove con l'impronta vera sul telefono); le prove sul campo
 elencate (P14: F15, F119-F120, F151, 4A I3-I4); la seconda parte di P11 (S6 per 4A I5 in release, S13 per la domanda 2 della Fase 2, 5B I4,
 9 I2 e DR-1); la **security-review** di fine fase per le informative aperte (una correzione o un limite per ognuna).

@@ -11,7 +11,12 @@ import dev.pampa.mycloudgallery.core.nas.contract.NasResult
 import dev.pampa.mycloudgallery.core.nas.contract.NasSessionManager
 import dev.pampa.mycloudgallery.core.nas.contract.Purpose
 import dev.pampa.mycloudgallery.core.trust.TrustLimits
+import dev.pampa.mycloudgallery.core.trust.TrustViolation
+import dev.pampa.mycloudgallery.core.trust.codec.TextRules
+import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyUse
 import dev.pampa.mycloudgallery.core.trust.crypto.FamilyKeyVault
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultRefusal
+import dev.pampa.mycloudgallery.core.trust.crypto.VaultResult
 import dev.pampa.mycloudgallery.core.trust.nas.NasClock
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
 import dev.pampa.mycloudgallery.core.trust.registry.CommitResult
@@ -45,6 +50,20 @@ fun interface RetireHeads {
 class AdminContext(val state: RegistryState, val me: String, val authority: FamilyAuthority, val commonShare: String)
 
 /**
+ * L'admin **prima** di aprire la chiave di famiglia (Fase 10, M3): registro fidato, chi sono, l'area comune. Ogni azione controlla qui
+ * tutto quello che si puo' controllare senza la chiave (esiste? cambia qualcosa? il codice coincide?) e solo dopo chiede l'impronta o
+ * il PIN ([RegistryWriter.unlock]): un'azione che non firmerebbe niente non mostra il foglio.
+ */
+class AdminBase(val state: RegistryState, val me: String, val commonShare: String)
+
+/** La chiave di famiglia aperta per un'azione ([Open]) o perche' no ([Denied], con l'esito da restituire: niente firmato). */
+sealed interface AdminUnlock {
+  class Open(val admin: AdminContext) : AdminUnlock
+
+  class Denied(val result: AdminActionResult) : AdminUnlock
+}
+
+/**
  * Rami in conflitto trovati da una pubblicazione, in attesa della scelta dell'admin (schermata dedicata,
  * P7): [resolve] li unisce ([recognize] = vero) o li rifiuta, sulla **stessa** modifica.
  */
@@ -59,7 +78,11 @@ class PendingForks(internal val draft: RegistryDraft, val forks: List<RegistryFo
 /**
  * L'unico punto da cui `core-family` firma e pubblica il registro (`FamilyAuthority.commit`). Ogni chiamata
  * parte da un gesto locale dell'admin (E-S11); la chiave di famiglia si apre dalla cassaforte solo qui, per
- * il tempo dell'azione (a telefono sbloccato con blocco schermo sicuro: revisione M3).
+ * il tempo dell'azione (a telefono sbloccato con blocco schermo sicuro: revisione M3), e **ogni azione chiede
+ * l'impronta o il PIN** sul foglio di sistema (Fase 10, M3, decisione 2(a) del 31/10): un foglio per gesto,
+ * anche quando il gesto firma piu' versioni (le segnalazioni "perso" convertite insieme). Annullato:
+ * [AdminActionResult.KeyRefused], niente firmato. Nessun lavoro in background passa di qui (la ripubblicazione
+ * di N3 non e' piu' automatica: [reissue] e' un tasto).
  *
  * Esiti di `commit` → [AdminActionResult]: `Published` → `Done` (e lo stato nuovo diventa quello fidato);
  * `NewerExists` → si rilegge il registro e si restituisce `NewerExists` (l'interfaccia riprova sulla base
@@ -86,15 +109,21 @@ class RegistryWriter(
   val unverifiedBeyond: StateFlow<Boolean> = _unverifiedBeyond.asStateFlow()
 
   /**
-   * Il contesto dell'admin, o null se questo dispositivo non lo e': registro fidato caricato, dispositivo
-   * approvato **e segnato admin nel registro firmato**, chiave di famiglia nella cassaforte e uguale a quella che deve firmare
-   * la prossima versione.
+   * Il contesto dell'admin ([AdminUnlock.Open]) o perche' no: registro fidato caricato, dispositivo approvato **e segnato admin
+   * nel registro firmato** ([adminBase]), chiave di famiglia nella cassaforte, uguale a quella che deve firmare la prossima
+   * versione, e aperta con l'impronta o il PIN ([unlock], Fase 10, M3).
    *
    * Il segno admin (R19 della revisione 5B) non da' il potere, che e' la chiave: toglie quello che una chiave rimasta per
    * sbaglio nella cassaforte (una distruzione fallita in silenzio, un ex admin rientrato come familiare con un id nuovo) non
    * deve poter fare, cioe' firmare la configurazione della famiglia da un dispositivo che la famiglia non conosce come admin.
    */
-  suspend fun adminContext(): AdminContext? {
+  suspend fun adminContext(): AdminUnlock {
+    val base = adminBase() ?: return AdminUnlock.Denied(AdminActionResult.NotAdmin)
+    return unlock(base)
+  }
+
+  /** L'admin senza aprire la chiave (nessun foglio): null se questo dispositivo non e' un admin approvato del registro fidato. */
+  suspend fun adminBase(): AdminBase? {
     if (!engine.ensureLoaded()) return null
     val state = engine.state ?: return null
     val me = try {
@@ -108,17 +137,33 @@ class RegistryWriter(
     } ?: return null
     if (state.statusOf(me) != DeviceStatus.APPROVED) return null
     if (state.registry.device(me)?.admin != true) return null
-    val key = try {
-      familyKeys.load(state.trustedFamilyKey)
+    val share = engine.profile()?.commonShare ?: state.registry.config.commonShare
+    return AdminBase(state, me, share)
+  }
+
+  /**
+   * La chiave di famiglia per **questa** azione: la cassaforte chiede l'impronta o il PIN (M3). [AdminUnlock.Denied] con
+   * [AdminActionResult.NotAdmin] se la cassaforte non tiene la chiave che firma il registro fidato, con
+   * [AdminActionResult.KeyRefused] se il foglio e' annullato, il telefono non ha un blocco schermo sicuro o la chiave del Keystore e'
+   * invalidata (allora il kit di recupero).
+   */
+  suspend fun unlock(base: AdminBase): AdminUnlock {
+    val opened = try {
+      familyKeys.load(base.state.trustedFamilyKey, FamilyKeyUse.SIGN)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      // Telefono bloccato o senza blocco schermo sicuro: la cassaforte non si apre (M3).
-      GalleryLog.w(TAG) { "chiave di famiglia non disponibile" }
-      null
-    } ?: return null
-    val share = engine.profile()?.commonShare ?: state.registry.config.commonShare
-    return AdminContext(state, me, FamilyAuthority(key, nasClock), share)
+      GalleryLog.w(TAG) { "chiave di famiglia non disponibile (${e.javaClass.simpleName})" }
+      VaultResult.Refused(VaultRefusal.UNAVAILABLE)
+    }
+    return when (opened) {
+      is VaultResult.Done -> AdminUnlock.Open(AdminContext(base.state, base.me, FamilyAuthority(opened.value, nasClock), base.commonShare))
+      VaultResult.Absent -> AdminUnlock.Denied(AdminActionResult.NotAdmin)
+      is VaultResult.Refused -> {
+        GalleryLog.w(TAG) { "chiave di famiglia non aperta (${opened.reason})" }
+        AdminUnlock.Denied(AdminActionResult.KeyRefused(opened.reason))
+      }
+    }
   }
 
   suspend fun commit(admin: AdminContext, draft: RegistryDraft): AdminActionResult {
@@ -159,48 +204,79 @@ class RegistryWriter(
   }
 
   /** Cambia lo stato di un dispositivo (non il proprio): dismesso, revocato, perso. */
-  suspend fun changeStatus(deviceId: String, status: DeviceStatus): AdminActionResult {
-    val admin = adminContext() ?: return AdminActionResult.NotAdmin
-    val entry = admin.state.registry.device(deviceId) ?: return AdminActionResult.Failed(NasError.NotFound)
-    if (deviceId == admin.me || !entry.status.canBecome(status)) return AdminActionResult.Failed(NasError.PermissionDenied)
-    // La dismissione congela le teste gia' verificate su questo dispositivo (A7): R6, quelle degli album condivisi (cosi' un telefono dismesso
-    // non fa sparire a tutti i suoi contributi, la definizione dell'album compresa). Le teste dell'indice e dei dati personali non le dice ancora
-    // nessuno. Se chi le cerca sbaglia, la dismissione non parte (si riprova): dismettere senza di loro farebbe sparire i contributi.
-    val frozen = if (status != DeviceStatus.RETIRED) {
-      emptyList()
-    } else {
-      try {
-        retireHeads.headsOf(deviceId).distinct().take(TrustLimits.MAX_FROZEN_HEADS)
+  suspend fun changeStatus(deviceId: String, status: DeviceStatus): AdminActionResult = changeStatusAll(listOf(deviceId), status)
+
+  /**
+   * Lo stesso cambio di stato per piu' dispositivi, una versione per dispositivo, con **un solo** foglio dell'impronta o del PIN (un
+   * gesto dell'admin: le segnalazioni "perso" convertite insieme, M3). Tutto si controlla prima del foglio; alla prima versione non
+   * pubblicata ci si ferma e si restituisce il suo esito.
+   */
+  suspend fun changeStatusAll(deviceIds: List<String>, status: DeviceStatus): AdminActionResult {
+    val ids = deviceIds.distinct()
+    if (ids.isEmpty()) return AdminActionResult.Done
+    val base = adminBase() ?: return AdminActionResult.NotAdmin
+    val frozenOf = HashMap<String, List<String>>()
+    for (deviceId in ids) {
+      val entry = base.state.registry.device(deviceId) ?: return AdminActionResult.Failed(NasError.NotFound)
+      if (deviceId == base.me || !entry.status.canBecome(status)) return AdminActionResult.Failed(NasError.PermissionDenied)
+      // La dismissione congela le teste gia' verificate su questo dispositivo (A7): R6, quelle degli album condivisi (cosi' un telefono dismesso
+      // non fa sparire a tutti i suoi contributi, la definizione dell'album compresa). Le teste dell'indice e dei dati personali non le dice ancora
+      // nessuno. Se chi le cerca sbaglia, la dismissione non parte (si riprova): dismettere senza di loro farebbe sparire i contributi.
+      frozenOf[deviceId] = if (status != DeviceStatus.RETIRED) {
+        emptyList()
+      } else {
+        try {
+          retireHeads.headsOf(deviceId).distinct().take(TrustLimits.MAX_FROZEN_HEADS)
+        } catch (e: CancellationException) {
+          throw e
+        } catch (e: Exception) {
+          GalleryLog.w(TAG) { "teste da congelare non lette: ${e.javaClass.simpleName}" }
+          return AdminActionResult.Failed(UNEXPECTED)
+        }
+      }
+    }
+    var admin = when (val unlocked = unlock(base)) {
+      is AdminUnlock.Open -> unlocked.admin
+      is AdminUnlock.Denied -> return unlocked.result
+    }
+    for ((index, deviceId) in ids.withIndex()) {
+      // Dopo la prima versione la base e' quella appena pubblicata e adottata; la chiave aperta e' la stessa (un solo foglio per il gesto).
+      if (index > 0) admin = AdminContext(engine.state ?: return AdminActionResult.Failed(UNEXPECTED), admin.me, admin.authority, admin.commonShare)
+      val draft = try {
+        admin.authority.changeStatus(admin.state, deviceId, status, frozenOf.getValue(deviceId))
       } catch (e: CancellationException) {
         throw e
       } catch (e: Exception) {
-        GalleryLog.w(TAG) { "teste da congelare non lette: ${e.javaClass.simpleName}" }
-        return AdminActionResult.Failed(UNEXPECTED)
+        return AdminActionResult.Failed(NasError.PermissionDenied)
       }
+      val result = commit(admin, draft)
+      if (result != AdminActionResult.Done) return result
     }
-    val draft = try {
-      admin.authority.changeStatus(admin.state, deviceId, status, frozen)
-    } catch (e: CancellationException) {
-      throw e
-    } catch (e: Exception) {
-      return AdminActionResult.Failed(NasError.PermissionDenied)
-    }
-    return commit(admin, draft)
+    return AdminActionResult.Done
   }
 
   /**
    * Il nome da mostrare di un dispositivo approvato (F27, E-B7), nella voce firmata del registro: una versione nuova firmata dall'admin, come ogni
    * altra modifica, con la sua chiave e il suo account invariati (`FamilyAuthority.renameDevice`). Un nome che un altro dispositivo ha gia' (anche
    * "sembra uguale": `LookAlike`) e' rifiutato con `NasError.Exists`, uno non valido con `NasError.PermissionDenied` (la pagina lo controlla prima e non
-   * lo manda); lo stesso nome di prima non firma niente.
+   * lo manda); lo stesso nome di prima non firma niente (e non chiede l'impronta).
    */
   suspend fun renameDevice(deviceId: String, name: String): AdminActionResult {
-    val admin = adminContext() ?: return AdminActionResult.NotAdmin
-    val entry = admin.state.registry.device(deviceId) ?: return AdminActionResult.Failed(NasError.NotFound)
+    val base = adminBase() ?: return AdminActionResult.NotAdmin
+    val entry = base.state.registry.device(deviceId) ?: return AdminActionResult.Failed(NasError.NotFound)
     if (entry.status != DeviceStatus.APPROVED) return AdminActionResult.Failed(NasError.PermissionDenied)
     if (entry.name == name) return AdminActionResult.Done
     val key = LookAlike.key(name)
-    if (admin.state.registry.devices.any { it.id != deviceId && LookAlike.key(it.name) == key }) return AdminActionResult.Failed(NasError.Exists)
+    if (base.state.registry.devices.any { it.id != deviceId && LookAlike.key(it.name) == key }) return AdminActionResult.Failed(NasError.Exists)
+    try {
+      TextRules.displayText(name, TrustLimits.MAX_DISPLAY_TEXT_CHARS)
+    } catch (e: TrustViolation) {
+      return AdminActionResult.Failed(NasError.PermissionDenied)
+    }
+    val admin = when (val unlocked = unlock(base)) {
+      is AdminUnlock.Open -> unlocked.admin
+      is AdminUnlock.Denied -> return unlocked.result
+    }
     val draft = try {
       admin.authority.renameDevice(admin.state, deviceId, name)
     } catch (e: CancellationException) {
@@ -244,14 +320,25 @@ class RegistryWriter(
 
   /**
    * Una modifica alla configurazione firmata, con lo stesso controllo dell'admin di ogni azione (dispositivo approvato, chiave di
-   * famiglia nella cassaforte a telefono sbloccato, M3). La stessa configurazione di prima non firma niente.
+   * famiglia nella cassaforte a telefono sbloccato, impronta o PIN: M3). La stessa configurazione di prima non firma niente e non
+   * chiede l'impronta.
    */
   private suspend fun amendConfig(change: (FamilyConfig) -> FamilyConfig): AdminActionResult {
-    val admin = adminContext() ?: return AdminActionResult.NotAdmin
-    val config = admin.state.registry.config
+    val base = adminBase() ?: return AdminActionResult.NotAdmin
+    val config = base.state.registry.config
+    val changed = try {
+      change(config)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return AdminActionResult.Failed(NasError.PermissionDenied)
+    }
+    if (changed == config) return AdminActionResult.Done
+    val admin = when (val unlocked = unlock(base)) {
+      is AdminUnlock.Open -> unlocked.admin
+      is AdminUnlock.Denied -> return unlocked.result
+    }
     val draft = try {
-      val changed = change(config)
-      if (changed == config) return AdminActionResult.Done
       admin.authority.updateConfig(admin.state, changed)
     } catch (e: CancellationException) {
       throw e
@@ -265,10 +352,14 @@ class RegistryWriter(
   /** La scelta dell'admin sui rami in attesa: [recognize] li unisce, altrimenti li rifiuta (poi reset). */
   suspend fun resolveForks(recognize: Boolean): AdminActionResult {
     val pending = _pendingForks.value ?: return AdminActionResult.Done
-    val admin = adminContext() ?: return AdminActionResult.NotAdmin
-    if (admin.state.contentHash != pending.draft.base.contentHash) {
+    val base = adminBase() ?: return AdminActionResult.NotAdmin
+    if (base.state.contentHash != pending.draft.base.contentHash) {
       _pendingForks.value = null
       return AdminActionResult.NewerExists
+    }
+    val admin = when (val unlocked = unlock(base)) {
+      is AdminUnlock.Open -> unlocked.admin
+      is AdminUnlock.Denied -> return unlocked.result
     }
     val joined = try {
       if (recognize) admin.authority.mergeForks(pending.draft, pending.forks) else admin.authority.rejectForks(pending.draft, pending.forks)
@@ -281,11 +372,16 @@ class RegistryWriter(
   }
 
   /**
-   * La versione fidata e' stata sostituita con spazzatura sul NAS (revisione 1.4, N3): l'admin ripubblica lo
-   * stesso contenuto con un numero nuovo. Si fa da sola quando l'allarme compare e la cassaforte si apre.
+   * La versione fidata e' stata sostituita con spazzatura sul NAS (revisione 1.4, N3): l'admin ripubblica lo stesso contenuto con un
+   * numero nuovo. Fase 10, M3: **non** si fa piu' da sola durante un controllo del registro (un controllo in background non apre mai
+   * la chiave di famiglia); la chiede l'admin con il tasto della pagina dei dispositivi, con il foglio dell'impronta o del PIN.
    */
   suspend fun reissue(): AdminActionResult {
-    val admin = adminContext() ?: return AdminActionResult.NotAdmin
+    val base = adminBase() ?: return AdminActionResult.NotAdmin
+    val admin = when (val unlocked = unlock(base)) {
+      is AdminUnlock.Open -> unlocked.admin
+      is AdminUnlock.Denied -> return unlocked.result
+    }
     return commit(admin, admin.authority.reissue(admin.state))
   }
 

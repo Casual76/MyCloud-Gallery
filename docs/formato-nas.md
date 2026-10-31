@@ -328,8 +328,15 @@ chiave intera, non l'impronta (I7).
   **rifiuta di lavorare** se il dispositivo non ha PIN, sequenza o password (`isDeviceSecure`, verifica M3 e
   domanda 9), quindi **il dispositivo admin deve avere un blocco schermo sicuro** (l'onboarding lo chiede
   prima di creare la chiave di famiglia; per gli altri dispositivi resta l'avviso di E-S3). Il file sta nello
-  spazio privato dell'app, escluso da backup e trasferimenti. Chiedere in piu' l'impronta o il PIN a ogni uso
-  e' la decisione 2 del §13: protegge anche dal malware che agisce a telefono sbloccato.
+  spazio privato dell'app, escluso da backup e trasferimenti. **Impronta o PIN a ogni uso** (decisione 2(a)
+  del §13, scelta dall'utente il 31/10, Fase 10): la chiave AES vuole l'autenticazione per ogni operazione
+  (`setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG or AUTH_DEVICE_CREDENTIAL)`; su Android 10 solo
+  l'impronta forte), e ogni custodia o apertura passa dal foglio di sistema (`BiometricPrompt` con
+  `CryptoObject` sul `Cipher` della cassaforte), un foglio per gesto dell'admin: protegge anche dal malware
+  che agisce a telefono sbloccato. Il file della cassaforte (versione 2) porta in chiaro l'hash della chiave
+  pubblica di famiglia (non e' un segreto) e le cassaforti della versione 1 si migrano al primo uso dopo
+  l'autenticazione. Impronte o blocco schermo cambiati invalidano la chiave AES: si torna con il kit (§4.8) o
+  dal secondo admin (§4.9).
 - E' **estraibile per costruzione**: deve poter stare nel kit e su un secondo dispositivo admin. In chiaro
   esiste solo in memoria, durante un'operazione dell'admin.
 - Firma **solo** il registro di famiglia. Non firma dati dell'indice: per quelli il dispositivo admin usa la
@@ -1860,8 +1867,9 @@ eliminare su quel dispositivo. Un orologio all'indietro non fa eliminare nulla.
     segnala quelle che non riconosce) e' rimandato alla Fase 2.3 (B10).
 12. **I file nel cestino conservano i byte dei media** (§2.1, I6).
 13. **La protezione della cassaforte a telefono bloccato** e' verificata solo come politica della chiave
-    (non bloccando davvero il telefono nei test), e non protegge dal malware che agisce a telefono sbloccato
-    (decisione 2).
+    (non bloccando davvero il telefono nei test). Dalla Fase 10 (decisione 2(a)) l'impronta o il PIN si
+    chiedono a ogni uso: il malware a telefono sbloccato non apre la chiave di famiglia senza l'admin, ma la
+    chiave resta in chiaro in memoria per il gesto dell'admin che l'ha aperta (punto 6).
 
 ---
 
@@ -1878,8 +1886,9 @@ eliminare su quel dispositivo. Un orologio all'indietro non fa eliminare nulla.
 | 7 | Runner del test sul dispositivo | **(a)** aggiungere `androidx.test:runner` a `versions-app.gradle` (standard; tocca file fuori da questo modulo). (b) Tenere il runner minimo di `core-trust` (oggi; esegue l'elenco `TEST_CLASSES` e rispetta `-e class`). |
 
 **Applicate per default nella Fase 2 (P3)**, finche' l'utente non conferma: 1(a), 3(a) **con la prova di
-possesso dell'account** (§5.9), 4(a), 5(a). La 2 **non** e' applicata: la cassaforte chiede il telefono sbloccato
-con blocco schermo sicuro, non la credenziale a ogni uso (residuo M3, `docs/review/1.4-core-trust.md`).
+possesso dell'account** (§5.9), 4(a), 5(a). La 2 era rimasta senza risposta (residuo M3,
+`docs/review/1.4-core-trust.md`): l'utente ha scelto la **(a)** il 31/10 e la Fase 10 l'ha applicata (§4.2;
+`docs/decisioni.md`, «Fase 10, correzione 1.4 M3»).
 
 Nota per `docs/sicurezza.md` (fuori dal perimetro di questa fase): C7, C8 (codice), C9, C10 (lato formato)
 e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla chiusura della Fase 1.
@@ -1893,7 +1902,7 @@ e C23 hanno ora codice e test; L11 e i limiti del §12 vanno riportati li' alla 
 | §2.3, §9 | `nas/NasFileSystem.kt`, `nas/NasLayout.kt` | `TrustFormatTest` (nessuna operazione distruttiva, nessun orologio del dispositivo) |
 | §3.1 | `codec/Base32.kt` | `Base32AndTextTest` |
 | §3.2 | `codec/CanonicalJson.kt`, `codec/Fields.kt` | `CanonicalJsonTest` |
-| §4.1–4.3 | `crypto/Keys.kt` (`EcdsaDer`, `P256`), `crypto/FamilyKey.kt`, `crypto/AndroidKeystore.kt` | `EnvelopeTest`, `ReviewFixesTest` (A3, B3); sul dispositivo `KeystoreDeviceTest` (androidTest) |
+| §4.1–4.3 | `crypto/Keys.kt` (`EcdsaDer`, `P256`), `crypto/FamilyKey.kt`, `crypto/FamilyKeyVault.kt`, `crypto/AndroidKeystore.kt` | `EnvelopeTest`, `ReviewFixesTest` (A3, B3), `FamilyKeyVaultTest` (Fase 10, M3: autenticazione a ogni uso, migrazione); sul dispositivo `KeystoreDeviceTest` (androidTest) |
 | §4.4–4.7, §4.10 | `registry/*.kt` | `RegistryTest`, `ReviewFixesTest` (A1, A2, M1, M2, B4, B5, I9), `ReviewRound2Test` (N1–N5, M7), `ReviewRound3Test` (N2, R2, R3, R4), `Phase2FormatTest` (rifondazione) |
 | §5.3 (configurazione) | `registry/FamilyRegistry.kt` (`FamilyConfig`, `ConfigDefaults`), `registry/ConfigRules.kt`, `codec/TextRules.kt` (`ipLiteral`) | `Phase2FormatTest` |
 | §5.9 | `registry/LostReport.kt` (`LostReport`, `LostReports`) | `Phase2FormatTest`; in `core-family`: `NoFalseWipeTest`, `LifecycleTest` |

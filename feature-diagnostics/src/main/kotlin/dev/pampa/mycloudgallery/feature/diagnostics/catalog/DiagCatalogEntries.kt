@@ -357,6 +357,10 @@ internal object DiagCatalogEntries {
     // --- Ricordi e mappa (Fase 9, P0: le voci di stato; i codici del §2.12 li aggiunge P13) --------------------------------
     DiagEntry(DiagCodes.MEMORY_STATE, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_state_title, R.string.diag_memory_state_guide, null),
     DiagEntry(DiagCodes.MAP_STATE, DiagSection.MAP, DiagSeverity.INFO, R.string.diag_map_state_title, R.string.diag_map_state_guide, null),
+
+    // --- Widget e rilascio (Fase 10, P0: le voci di stato; i codici del §2.13 li aggiunge P13) -----------------------------
+    DiagEntry(DiagCodes.WIDGET_STATE, DiagSection.WIDGET, DiagSeverity.INFO, R.string.diag_widget_state_title, R.string.diag_widget_state_guide, null),
+    DiagEntry(DiagCodes.RELEASE_STATE, DiagSection.RELEASE, DiagSeverity.INFO, R.string.diag_release_state_title, R.string.diag_release_state_guide, null),
     // P13: i codici del §2.12. "Apri le impostazioni" per una notifica non partita (permesso, canale); un HOST o PATH rifiutato e' un difetto da segnalare.
     DiagEntry(DiagCodes.MEMORY_SHELF_RESET, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_shelf_reset_title, R.string.diag_memory_shelf_reset_guide, null),
     DiagEntry(DiagCodes.MEMORY_NO_VECTORS, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_no_vectors_title, R.string.diag_memory_no_vectors_guide, null),

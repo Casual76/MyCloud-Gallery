@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sezione «Widget» (Fase 10, docs/fase10-progetto.md §2.13, D39). Titolo e spiegazione della sezione e voce di stato (P0); le voci e i
+       codici del widget (WIDGET_*) li aggiunge P13. Solo numeri e codici nelle esportazioni: mai foto, titoli dei ricordi, luoghi o date. -->
+  <string name="diagnostics_section_widget">Widget</string>
+  <string name="diagnostics_hint_widget">Il widget sulla schermata Home: quanti ce ne sono, quando si sono aggiornati l\'ultima volta e perché qualche foto non compare.</string>
+  <string name="diag_widget_state_title">Stato del widget</string>
+  <string name="diag_widget_state_guide">Quanti widget ci sono, ogni quanto cambiano le foto e quando si sono aggiornati. Le foto mostrate e i titoli dei ricordi non escono mai nella Diagnostica.</string>
+</resources>

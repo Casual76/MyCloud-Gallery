@@ -108,6 +108,20 @@ enum class DiagSection {
    */
   MAP,
 
+  /**
+   * Il widget (Fase 10, `docs/fase10-progetto.md` §2.13, D39): widget attivi per misura, ultimo aggiornamento (minuti fa), frequenza scelta,
+   * media saltati per mancanza di miniatura locale o per il blocco dell'app, svuotamenti per causa, giri mancati. Solo codici e numeri: **mai**
+   * id di media o di ricordi, titoli, luoghi, date, descrizioni.
+   */
+  WIDGET,
+
+  /**
+   * Il rilascio (Fase 10, `docs/fase10-progetto.md` §2.13, D39): versione e canale, `seq` e giorni dal manifest firmato, stato (normale, sola
+   * lettura, fermata), rifiuti per motivo, indirizzi aggiuntivi in uso (solo il numero). **Mai** il contenuto del manifest oltre ai numeri, mai
+   * URL dei modelli.
+   */
+  RELEASE,
+
   /** I consumi del mese (TrafficLedger). */
   MONTHLY_TRAFFIC,
 

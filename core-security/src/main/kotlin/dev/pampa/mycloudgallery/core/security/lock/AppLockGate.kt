@@ -29,7 +29,7 @@ class LockedScreenState(
   val availability: AuthAvailability,
   /** L'esito dell'ultimo tentativo non riuscito, o `null` (nessun tentativo, o in corso). */
   val lastResult: AuthResult?,
-  /** La schermata di sistema e' aperta in questo momento. */
+  /** La schermata di sistema e' aperta in questo momento, **in questa finestra o nell'altra** (D17): il pulsante "Sblocca" non ne apre una seconda. */
   val isAuthenticating: Boolean,
   /** Riapre la schermata di sistema (pulsante "Sblocca"). */
   val onUnlock: () -> Unit,
@@ -39,25 +39,28 @@ class LockedScreenState(
 
 /**
  * Il cancello del blocco app (piano 1.5): mostra [content] solo con l'app sbloccata, altrimenti [lockedContent].
- * Si mette UNA volta alla radice dell'interfaccia, sopra la navigazione. Non e' ancora collegato all'app.
+ * Si mette UNA volta alla radice dell'interfaccia di **ogni finestra**, sopra la navigazione.
  *
  * - **Con l'app bloccata [content] non e' in composizione**: non solo coperto, proprio assente (niente
  *   disegno, niente TalkBack, niente foto in memoria della UI). Lo stato di `rememberSaveable` di [content]
  *   si conserva fra blocco e sblocco, cosi' si riprende dov'eri.
  * - **Sblocco automatico** una volta per ogni ritorno in primo piano; se l'utente annulla non si
  *   ripropone da solo (si usa [LockedScreenState.onUnlock]).
- * - **Ciclo di vita**: [AppLockController.onAppBackgrounded] su `ON_STOP` (non per la rotazione) e
- *   [AppLockController.onAppForegrounded] su `ON_START`.
- * - **Recenti**: finche' il blocco e' attivo, l'anteprima dell'app e' oscurata ([RecentsPrivacy]).
+ * - **Ciclo di vita**: ogni gate e' **una finestra** del processo ([AppLockController.newWindow]): `ON_START` la avvia
+ *   ([AppLockController.windowStarted]), `ON_STOP` la ferma ([AppLockController.windowStopped], con la ricreazione non conta come
+ *   uscita). L'app esce dal primo piano solo quando **l'ultima** finestra si ferma.
+ * - **Recenti**: finche' il blocco e' attivo, l'anteprima dell'app e' oscurata ([RecentsPrivacy]), per ogni finestra.
  * - **Nessun blocco schermo**: se il telefono non puo' autenticare, l'app RESTA chiusa e
  *   [LockedScreenState.availability] lo dice; non c'e' scorciatoia (fail closed).
  *
  * Le impostazioni arrivano al [controller] con [AppLockController.follow] (da un `LaunchedEffect` o dal
  * ViewModel). Finche' non ci sono ([AppLockState.LOADING]) non si disegna niente.
  *
- * Il [controller] e' unico per processo (singleton) e il gate presume UNA sola activity: con piu' activity
- * ogni passaggio dall'una all'altra conterebbe come uscita dall'app (con il timeout "subito" richiuderebbe).
- * Serve una `FragmentActivity` (la `MainActivity` dovra' estenderla) per `BiometricPrompt`.
+ * **Due finestre** (Fase 10, P4, D17, C434, E-T7): il [controller] e' unico per processo (singleton) e **ogni finestra ha il suo gate alla radice**. Lo
+ * stato e' uno solo: con il blocco attivo **ogni** finestra mostra la schermata di blocco (il contenuto non e' in composizione in nessuna), uno
+ * sblocco riuscito in una finestra le apre tutte, e il tempo concesso comincia quando si ferma l'**ultima**. Mentre una finestra sta chiedendo la
+ * credenziale, la schermata di blocco dell'altra lo sa ([LockedScreenState.isAuthenticating]) e non ne apre una seconda.
+ * Serve una `FragmentActivity` (la `MainActivity` la estende) per `BiometricPrompt`.
  */
 @Composable
 fun AppLockGate(
@@ -77,6 +80,9 @@ fun AppLockGate(
   val activity = remember(context) { context.findActivity() }
   val scope = rememberCoroutineScope()
   val saveableStateHolder = rememberSaveableStateHolder()
+  // D17: questo gate e' una finestra del processo (una maniglia per composizione, senza riferimenti all'activity).
+  val window = remember(controller, lifecycleOwner, activity) { controller.newWindow() }
+  val processAuthenticating by controller.authenticatingState.collectAsState()
 
   var availability by remember { mutableStateOf(authenticator.availability()) }
   var lastResult by remember { mutableStateOf<AuthResult?>(null) }
@@ -84,24 +90,30 @@ fun AppLockGate(
   var started by remember { mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) }
   val autoPrompt = remember { AutoPromptGuard() }
 
-  // Ciclo di vita -> controller.
-  DisposableEffect(lifecycleOwner, activity) {
+  // Ciclo di vita -> controller (D17: una finestra del processo; l'app esce solo quando si ferma l'ultima).
+  DisposableEffect(lifecycleOwner, activity, window) {
     val observer = LifecycleEventObserver { _, event ->
       when (event) {
         Lifecycle.Event.ON_START -> {
           started = true
-          controller.onAppForegrounded()
+          controller.windowStarted(window)
         }
         Lifecycle.Event.ON_RESUME -> availability = authenticator.availability()
         Lifecycle.Event.ON_STOP -> {
           started = false
-          if (activity?.isChangingConfigurations != true) controller.onAppBackgrounded()
+          controller.windowStopped(window, changingConfigurations = activity?.isChangingConfigurations == true)
         }
+        // La finestra non tornera' piu': fuori dal conteggio (una ricreazione non e' una fine: la finestra nuova prende il suo posto).
+        Lifecycle.Event.ON_DESTROY -> if (activity?.isChangingConfigurations != true) controller.windowClosed(window)
         else -> Unit
       }
     }
     lifecycleOwner.lifecycle.addObserver(observer)
-    onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    onDispose {
+      lifecycleOwner.lifecycle.removeObserver(observer)
+      // Un gate che esce dalla composizione non protegge piu' niente: la sua finestra non tiene l'app in primo piano.
+      if (activity?.isChangingConfigurations != true) controller.windowClosed(window)
+    }
   }
 
   // Anteprima dei recenti oscurata finche' il blocco e' attivo.
@@ -146,7 +158,7 @@ fun AppLockGate(
       LockedScreenState(
         availability = availability,
         lastResult = lastResult,
-        isAuthenticating = authenticating,
+        isAuthenticating = authenticating || processAuthenticating,
         onUnlock = unlock,
         onOpenSecuritySettings = {
           try {

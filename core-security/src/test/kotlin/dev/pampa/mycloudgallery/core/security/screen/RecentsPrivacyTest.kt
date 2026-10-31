@@ -46,6 +46,23 @@ class RecentsPrivacyTest {
     assertThat(activity.secure()).isFalse()
   }
 
+  /** Fase 10 (P4, D17): con il blocco attivo ogni finestra oscura i suoi recenti; chiusa una, l'altra resta oscurata. */
+  @Test
+  fun dueFinestre_ognunaOscuraIPropriRecenti_eIndipendentemente() {
+    val a = newActivity()
+    val b = newActivity()
+    val recents = RecentsPrivacy(sdkInt = 32)
+
+    recents.setHidden(a, true)
+    recents.setHidden(b, true)
+    assertThat(a.secure()).isTrue()
+    assertThat(b.secure()).isTrue()
+
+    recents.setHidden(a, false)
+    assertThat(a.secure()).isFalse()
+    assertThat(b.secure()).isTrue()
+  }
+
   @Test
   fun sottoAndroid13_nasconderePiuVolte_eUnaSolaVolta() {
     val activity = newActivity()

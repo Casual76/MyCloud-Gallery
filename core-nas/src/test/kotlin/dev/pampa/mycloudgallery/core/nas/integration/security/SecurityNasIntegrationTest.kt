@@ -20,8 +20,8 @@ import org.junit.runners.MethodSorters
  * (solo quello). Al **primo `AUTH_FAILED`** la prova e' rossa con il motivo e le successive si saltano: nessun nuovo tentativo. S1 (b)
  * chiede `user2`, `password2` e `share2` nel file: senza, si salta.
  *
- * Lo lancia `tools/security/run-all.ps1 -Livello pc`. `MCG_SECURITY_OUT`: dove vanno l'elenco di S9 (`s9-elenco.tsv`) e il resoconto di
- * soli numeri (`pc.txt`); `MCG_SECURITY_IMAGES`: la cartella delle immagini ostili di S3 (c) (scritte da core-metadata);
+ * Lo lancia `tools/security/run-all.ps1 -Livello pc`. `MCG_SECURITY_OUT`: dove vanno l'elenco di S9 (`s9-elenco.tsv`) e le righe di soli numeri
+ * di ogni prova (`pc-nas.txt`; il resoconto `pc.txt` lo scrive run-all.ps1); `MCG_SECURITY_IMAGES`: la cartella delle immagini ostili di S3 (c) (scritte da core-metadata);
  * `MCG_SECURITY_S9_FILES`: quanti file per S9 (di norma 2.000).
  */
 @NasIntegration
@@ -64,7 +64,7 @@ class SecurityNasIntegrationTest {
       throw down
     } finally {
       lines.forEach(::println)
-      File(out, "pc.txt").appendText(lines.joinToString("\n", postfix = "\n"))
+      File(out, "pc-nas.txt").appendText(lines.joinToString("\n", postfix = "\n"))
     }
   }
 

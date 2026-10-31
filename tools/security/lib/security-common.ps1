@@ -41,7 +41,7 @@ function Invoke-SecurityGradle {
 
 function ConvertTo-ClassRegex([string]$Pattern) {
   # Il filtro di Gradle puo' finire con il nome di un metodo (minuscolo): per l'XML conta la classe.
-  $cls = $Pattern -replace '\.[a-z][A-Za-z0-9_]*\*?$', ''
+  $cls = $Pattern -creplace '\.[a-z][A-Za-z0-9_]*\*?$', ''
   return '^' + ([regex]::Escape($cls) -replace '\\\*', '.*') + '$'
 }
 

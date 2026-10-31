@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.albums.page
 
+import java.time.ZoneId
+import dev.pampa.mycloudgallery.core.describe.rules.MediaDescribers
 import android.content.res.Resources
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -91,12 +93,8 @@ internal fun duration(ms: Long): String {
 
 /** La frase che TalkBack legge per una cella: tipo e giorno dello scatto, mai il nome del file; "copertina" se e' la copertina. */
 internal fun cellDescription(resources: Resources, snapshot: TimelineSnapshot, index: Int, cover: Boolean): String {
-  val day = AlbumText.dayOf(snapshot.localDayAt(index))
-  val base = if (day == null) {
-    resources.getString(R.string.album_cell_undated)
-  } else {
-    resources.getString(if (snapshot.kindAt(index) == MediaKind.VIDEO) R.string.album_cell_video else R.string.album_cell_photo, AlbumText.day(day))
-  }
+  // Fase 10 (P7, D22): la frase la scrive il descrittore unico (tipo, data, ora, stato; persone e testo letto solo se :app ha legato le porte).
+  val base = MediaDescribers.describeCell(MediaDescribers.shared(), snapshot, index, ZoneId.systemDefault()) ?: resources.getString(R.string.album_cell_undated)
   return if (cover) resources.getString(R.string.album_cell_cover_suffix, base) else base
 }
 

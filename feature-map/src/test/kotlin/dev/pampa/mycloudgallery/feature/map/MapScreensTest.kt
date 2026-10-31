@@ -283,7 +283,7 @@ internal class MapScreensTest : MapScreenTest() {
     composeRule.runOnUiThread { state.value = ZoneGridState.Ready(null, view) }
     composeRule.waitForIdle()
     assertShows("senza nome", "Questa zona", "7 foto")
-    assertThat(countDescribed("Foto del")).isAtLeast(1)
+    assertThat(countDescribed("Foto, ")).isAtLeast(1)
     composeRule.runOnUiThread { state.value = ZoneGridState.Empty }
     composeRule.waitForIdle()
     assertShows("vuota", "Nessuna foto qui", "Torna alla mappa")

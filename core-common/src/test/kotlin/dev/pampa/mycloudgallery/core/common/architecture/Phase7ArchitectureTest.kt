@@ -287,7 +287,7 @@ class Phase7ArchitectureTest {
     /** §1.1. core-library: le viste e la visibilita' (VisibleMedia, HiddenMask) dei contratti; le altre come dice il grafo. */
     val ALLOWED_DEPS: Map<String, Set<String>> = mapOf(
       ALBUMS to setOf("core-common", "core-model", "core-trust", "core-database", "core-personal", "core-places", "core-search", "core-library"),
-      FEATURE_ALBUMS to setOf(ALBUMS, "core-library", "core-imaging", "core-designsystem", "core-common", "core-model"),
+      FEATURE_ALBUMS to setOf(ALBUMS, "core-library", "core-imaging", "core-designsystem", "core-common", "core-model", "core-describe"),
     )
 
     /** Chi puo' dipendere dai moduli nuovi (elenco chiuso). */

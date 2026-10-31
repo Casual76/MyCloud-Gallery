@@ -159,7 +159,7 @@ class SearchScreenUiTest {
     rule.onNodeWithText("Recenti").assertIsDisplayed()
     rule.onNodeWithText("Pertinenti").performClick()
     assertThat(handlers.calls).containsExactly("order:relevant")
-    rule.onAllNodes(androidx.compose.ui.test.hasContentDescription("Foto del", substring = true)).onFirst().performClick()
+    rule.onAllNodes(androidx.compose.ui.test.hasContentDescription("Foto, ", substring = true)).onFirst().performClick()
     assertThat(handlers.calls.last()).startsWith("open:")
     assertThat(handlers.opened!!.size).isEqualTo(12)
   }

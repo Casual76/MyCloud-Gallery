@@ -385,9 +385,9 @@ class Phase9ArchitectureTest {
     /** §1.1. core-memories: le fondamenta, la Libreria e i dati personali (porta); core-map: le fondamenta (piu', se servira', Libreria e luoghi). */
     val ALLOWED_DEPS: Map<String, Set<String>> = mapOf(
       MEMORIES to setOf("core-common", "core-model", "core-library", "core-personal", "core-places"),
-      FEATURE_MEMORIES to setOf(MEMORIES, "core-library", "core-imaging", "core-designsystem", "core-common", "core-model"),
+      FEATURE_MEMORIES to setOf(MEMORIES, "core-library", "core-imaging", "core-designsystem", "core-common", "core-model", "core-describe"),
       MAP to setOf("core-common", "core-model", "core-library", "core-places"),
-      FEATURE_MAP to setOf(MAP, "core-library", "core-imaging", "core-places", "core-designsystem", "core-common", "core-model"),
+      FEATURE_MAP to setOf(MAP, "core-library", "core-imaging", "core-places", "core-designsystem", "core-common", "core-model", "core-describe"),
     )
 
     /** Chi puo' dipendere dai moduli nuovi (elenco chiuso). */

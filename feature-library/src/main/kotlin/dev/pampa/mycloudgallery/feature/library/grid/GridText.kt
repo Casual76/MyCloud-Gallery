@@ -5,17 +5,15 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import dev.pampa.mycloudgallery.core.describe.contract.DescribeStrings
+import dev.pampa.mycloudgallery.core.describe.rules.ItalianDescribeWords
+import dev.pampa.mycloudgallery.core.describe.rules.MediaDescribers
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.SectionInfo
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
-import dev.pampa.mycloudgallery.core.model.CellFlags
-import dev.pampa.mycloudgallery.core.model.MediaKind
-import dev.pampa.mycloudgallery.core.model.PresenceBadge
 import dev.pampa.mycloudgallery.core.places.contract.PlaceNames
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.core.library.text.GalleryDates
-import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
-import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
@@ -160,42 +158,22 @@ internal object GridText {
     places: PlaceNames,
     zone: ZoneId,
   ): String {
-    val kind = snapshot.kindAt(index)
-    val flags = snapshot.flagsAt(index)
-    val feminine = kind != MediaKind.VIDEO
-    val day = date(snapshot.localDayAt(index))
-    val parts = ArrayList<String>(8)
-    parts += when (kind) {
-      MediaKind.PHOTO -> strings.kindPhoto
-      MediaKind.VIDEO -> strings.kindVideo
-      MediaKind.MOTION_PHOTO -> strings.kindMotion
-      MediaKind.RAW_PHOTO -> strings.kindRaw
-      MediaKind.ANIMATED_IMAGE -> strings.kindAnimated
-    }
-    parts += GalleryDates.date(day)
-    val instant = Instant.ofEpochMilli(snapshot.sortTimeAt(index)).atZone(zone)
-    if (instant.toLocalDate() == day && !CellFlags.has(flags, CellFlags.DATE_ESTIMATED)) parts += GalleryDates.time(instant.toLocalDateTime())
-    places.labelOfId(snapshot.placeAt(index))?.let { parts += it }
-    if (kind == MediaKind.VIDEO) parts += strings.duration.format(duration(snapshot.durationMsAt(index)))
-    if (CellFlags.has(flags, CellFlags.FAVORITE)) parts += if (feminine) strings.favoriteFeminine else strings.favoriteMasculine
-    if (CellFlags.has(flags, CellFlags.EDITED)) parts += if (feminine) strings.editedFeminine else strings.editedMasculine
-    if (CellFlags.has(flags, CellFlags.DATE_ESTIMATED)) parts += strings.estimated
-    if (CellFlags.has(flags, CellFlags.UNREADABLE)) parts += strings.unreadable
-    val group = snapshot.groupSizeAt(index)
-    // Una pila di copie simili (D36) si dice "N copie simili", una raffica "N scatti": il bit distingue le due pile.
-    if (group > 1) {
-      parts += (if (CellFlags.has(flags, CellFlags.SIMILAR_COPIES)) strings.similarCopies else strings.group).format(GalleryNumbers.format(group))
-    }
-    when (snapshot.presenceAt(index)) {
-      PresenceBadge.PHONE_ONLY -> parts += strings.phoneOnly
-      PresenceBadge.NAS_ONLY -> parts += strings.nasOnly
-      PresenceBadge.BOTH -> parts += strings.both
-      PresenceBadge.SAFE -> parts += strings.safe
-      PresenceBadge.TO_VERIFY -> parts += strings.toVerify
-      // Fase 5 (D15): un problema del backup chiede l'utente e vince su "al sicuro"; il motivo preciso sta nel viewer e nella pagina Backup.
-      PresenceBadge.PROBLEM -> parts += strings.backupProblem
-      null -> Unit
-    }
-    return parts.joinToString(", ")
+    // Fase 10 (P7, D22): le parole sono sempre quelle di GridStrings, il testo lo scrive il descrittore unico (MediaDescriber): quello legato da
+    // :app con le porte vere (persone e testo letto, solo con uno strumento di accessibilita' attivo) o, in sua assenza, il ripiego senza porte.
+    // Per i fatti di oggi il testo e' identico a quello di prima (GridTextDescribeNonRegressionTest).
+    val describer = MediaDescribers.shared(places, strings.describeStrings())
+    return MediaDescribers.describeCell(describer, snapshot, index, zone) ?: strings.kindPhoto
+  }
+
+  /** Le parole della griglia nella forma del descrittore: quelle di oggi, piu' le quattro di D22 (persone e testo letto). */
+  private fun GridStrings.describeStrings(): DescribeStrings {
+    val words = ItalianDescribeWords.VALUE
+    return DescribeStrings(
+      kindPhoto = kindPhoto, kindVideo = kindVideo, kindMotion = kindMotion, kindRaw = kindRaw, kindAnimated = kindAnimated,
+      favoriteFeminine = favoriteFeminine, favoriteMasculine = favoriteMasculine, editedFeminine = editedFeminine,
+      editedMasculine = editedMasculine, unreadable = unreadable, estimated = estimated, duration = duration, group = group,
+      similarCopies = similarCopies, phoneOnly = phoneOnly, nasOnly = nasOnly, both = both, safe = safe, toVerify = toVerify,
+      backupProblem = backupProblem, withPeople = words.withPeople, and = words.and, others = words.others, withText = words.withText,
+    )
   }
 }

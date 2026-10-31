@@ -224,7 +224,8 @@ private fun Playing(
 /** La frase di TalkBack per una foto: "Foto del 12 marzo 2025, Oslo", e "con Anna" solo dentro l'app (§2.4). Mai il nome del file. */
 internal fun describe(resources: android.content.res.Resources, ui: PlayerUi, snapshot: TimelineSnapshot, at: Int): String {
   val base = if (at >= 0) cellDescription(resources, snapshot, at) else resources.getString(R.string.memorie_cell_undated)
-  val withPlace = ui.header?.placeNames?.firstOrNull()?.let { "$base, $it" } ?: base
+  // Con il descrittore legato da :app il luogo c'e' gia' nella frase: non si dice due volte.
+  val withPlace = ui.header?.placeNames?.firstOrNull()?.let { if (base.contains(it)) base else "$base, $it" } ?: base
   return ui.header?.personName?.let { resources.getString(R.string.memorie_player_photo_with, withPlace, it) } ?: withPlace
 }
 

@@ -264,12 +264,12 @@ internal class MemoriesScreensTest : MemoriesScreenTest() {
     val set = switching(scenes.playerTalkBack) { PlayerScreen(it, thumbs, NoPlayerImages, NoPlayerClipSurface, NoPlayerHandlers) }
     assertShows("talkback", "Indietro", "Avanti", "Chiudi")
     assertDoesNotShow("talkback", "Riproduci", "Pausa")
-    assertThat(countDescribed("Foto del")).isAtLeast(1)
+    assertThat(countDescribed("Foto, ")).isAtLeast(1)
     set(scenes.playerTalkBackIntro)
     assertShows("talkback con titolo", "Tocca per cominciare")
     // Le foto che si leggono dicono il periodo e, dentro l'app, il luogo.
     set(scenes.playerPhoto)
-    assertThat(countDescribed("Foto del") + countDescribed("Video del")).isAtLeast(1)
+    assertThat(countDescribed("Foto, ") + countDescribed("Video, ")).isAtLeast(1)
   }
 
   @Test

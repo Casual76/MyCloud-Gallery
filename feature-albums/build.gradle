@@ -53,6 +53,7 @@ dependencies {
 
   implementation project(':core-common')
   implementation project(':core-model')
+  implementation project(':core-describe')
 
   implementation appDeps.hiltAndroid
   ksp appDeps.hiltCompiler

@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.feature.viewer
 
+import java.time.ZoneId
+import dev.pampa.mycloudgallery.core.describe.rules.MediaDescribers
 import android.view.accessibility.AccessibilityManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.PredictiveBackHandler
@@ -590,7 +592,9 @@ private fun PagerLayer(
             ref = ref,
             kind = kind,
             aspect = snapshot.aspectMilliAt(index) / MILLI,
-            description = format.pageDescription(kind, snapshot.localDayAt(index), placeName),
+            // Fase 10 (P7, D22): la frase la scrive il descrittore unico; se il giorno e' rovinato resta quella di prima (tipo, giorno, luogo).
+            description = MediaDescribers.describeCell(MediaDescribers.shared(services.places), snapshot, index, ZoneId.systemDefault())
+              ?: format.pageDescription(kind, snapshot.localDayAt(index), placeName),
             thumbHash = snapshot.thumbHashAt(index),
             thumbKey = request.anchor.thumbKey(id),
           )

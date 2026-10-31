@@ -263,6 +263,9 @@ class Phase5BArchitectureTest {
   fun soloIQuattroComponentiApprovatiSonoNelManifestDiFeatureIntegrations() {
     for (module in modules) {
       if (module == "app" || module == FEATURE_INTEGRATIONS || module == "benchmark") continue
+      // Fase 10 (P0, docs/fase10-progetto.md D10, D40): il ricevitore del widget (P3) sta in feature-widget, NON esportato; la regola sua
+      // (solo ricevitori non esportati, nessun permesso) e' in Phase10ArchitectureTest.
+      if (module == "feature-widget") continue
       val manifestFile = File(root, "$module/src/main/AndroidManifest.xml")
       if (!manifestFile.isFile) continue
       assertWithMessage("$module dichiara componenti nel manifest").that(components(module)).isEmpty()

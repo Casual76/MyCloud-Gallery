@@ -12988,3 +12988,240 @@ Il pacchetto "mappa e rete" delle correzioni della Fase 9 (branch `fase9/corr-ma
 `feature-diagnostics` 331, `core-common` 157 con i test d'architettura); tutti i passi della release verdi, compreso il **7h** (OkHttp e MapLibre al loro posto: 3.035 chiamate a OkHttp, 125 da `net/`, 116
 chiamate nostre a MapLibre, client installato una volta). Solo `-Bench` saltato (senza il flag). **Un giro rosso prima, per cosa mia**: `NoFixedWaitsTest` di `:app` non vuole un tempo scritto a mano nelle
 prove (`TIMEOUT = 10_000L` in `MapEraseTest`): ora le attese usano `Attese.TETTO` (`integration/Attese.kt`).
+
+## Fase 10 P0: fondamenta e contratti (31/10)
+
+Il pacchetto P0 della Fase 10 (`docs/fase10-progetto.md` §4.4, riga P0; §0.3, §1.1-§1.5, §4.3, §5.2, §6, **§11**). Prima le **risposte
+dell'utente del 31/10** nel §11 del progetto (con decisioni, flussi, pacchetti e checklist aggiornati), poi i quattro moduli nuovi, i contratti
+del §1.2 con null-object, fake ed esecutori di riferimento, le suite di contratto, le firme nei moduli esistenti, i recinti
+(`Phase10ArchitectureTest`, due passi nuovi di `tools/check.ps1`) e i documenti del §0.3. **Nessuna dipendenza esterna nuova** (Glance e ATF
+li scaricano P3 e P8), nessuna chiave toccata, nessun permesso o componente Android nuovo, nessuna costante di `FeatureFlags` cambiata.
+Branch `fase10/p0` da `main` `acb1164e`. Commit: `16aafd90` (risposte nel §11), `9653b2e6` (firme nei moduli esistenti), `c58934bb` (moduli,
+contratti, esecutori, suite), `54ec4f4a` (recinti), `9763afa6` (Phase5B lascia a Phase10 il ricevitore del widget) e quello dei documenti.
+
+**Numerazione.** Il progetto riserva **C430-C459** e **L540-L569**. P0 ha usato **C430-C449** (come proposte nel §6.1) e **L540-L557, L559**
+(L540-L557 come nel §6.2; **L558 non serve** con Q8 (a) e non e' usato; **L559** e' nuovo: la firma con `pampa.jks`). Prove sul campo:
+F160-F189.
+
+**Risposte dell'utente (31/10) e cosa cambiano** (il dettaglio nel §11 del progetto)
+| # | Risposta | Cosa cambia |
+|---|---|---|
+| Q1 | (a) il ricordo del giorno quando c'e', altrimenti foto a caso | niente: D3, D4; `WidgetChoice.DEFAULT = MEMORY_THEN_PHOTOS` |
+| Q2 | (a) circa ogni 3 ore, mai di notte | niente: D6; `WidgetPeriod.DEFAULT = HOURS_3`, ore di quiete 23-7 (`WidgetScheduleRules`) |
+| Q3 | (c) con il blocco dell'app, solo le foto anche sul telefono | D8 **senza altre scelte** (la riga del §2.2 non offre piu' (a) e (b)); `WidgetMode.Locked`, nessun titolo |
+| Q4 | (a) mai sulla schermata di blocco | niente: D8, C432 |
+| Q5 | (a) Fase 10, poi la grafica, poi la famiglia | niente: D38 |
+| Q6 | **(b) tutto insieme, dopo le prove** (non la raccomandata) | **D35 riscritta, §2.10 riscritto, P10, §2.14**: le quattro recinzioni (D31, D12, D34, D30) si spengono **in un solo passo** dopo le prove della Fase 10 e con il si' dell'utente; restano la "Simulazione del passo" in sola lettura (ora per le quattro aree in un giro), la fotografia delle share prima e dopo (per area), i soli dispositivi dell'admin e il ritorno indietro con "Ferma le scritture sul NAS"; un solo consenso in `recinzioni.json`; un si' solo (circa 10 minuti) |
+| Q7 | **(a) prima l'utente per due settimane, poi tutta la famiglia insieme** (non la raccomandata) | **§2.9, §2.14, checklist di rilascio**: `beta` sui dispositivi dell'admin per almeno due settimane, poi `stable` per tutta la famiglia insieme; due voci nuove nella checklist (due settimane senza voci bloccanti; il giorno della famiglia) |
+| Q8 | (a) il manifest solo dal NAS | D29, D40: nessun host nuovo, nessuna classe di rete (`ManifestHttps` non esiste); `ManifestOrigin` ha solo `NAS`; L558 non serve |
+| Q9 | (a) approvati tutti gli scaricamenti | Glance 1.1.1 e transitivi per P3; ATF e `roborazzi-accessibility-check` 1.76.0 solo nei test per P8; **li scaricano P3 e P8, non P0** |
+| Q10 | esportare un album, poi un ricordo come video | D43: nel §10.6 "per il dopo", in quest'ordine; non si progettano ora |
+| D32 | **la firma resta `pampa.jks`** (domanda dell'orchestratore; niente chiave dedicata) | **D32 riscritta**: v2 e v3 (v1 solo se il publisher la pretende), rotazione v3 possibile in futuro; il rischio della chiave condivisa e' il **limite L559**; **C443** riscritta (impronta a ogni release, nessun `sharedUserId` ne' permesso definito dall'app: `Phase10ArchitectureTest`); **P12** senza chiave nuova (i controlli di `release.ps1` restano); **§8**: l'utente crea solo K1 e K2; §2.14 e §2.9 piu' corti |
+
+**Decisioni D1-D43** (rimando: `docs/fase10-progetto.md` §0.1, gia' corrette con le risposte)
+| # | In breve | Stato |
+|---|---|---|
+| D1 | Una fase, quattro tappe; nulla tocca i media ne' scrive sul NAS in modo nuovo; recinzioni accese per tutta la fase | Deciso (Q6 (b): si spengono in un passo dopo le prove) |
+| D2 | `core-widget`, `core-release`, `core-describe` JVM puri; Glance solo in `feature-widget` | Deciso (P0: moduli e `Phase10ArchitectureTest`) |
+| D3-D4 | Il widget in tre misure, il ricordo di oggi o foto a caso, mai `PERSON`, mai un nome | Deciso (Q1 (a); P0: `WidgetSize`, `WidgetChoice`, `WidgetTitle`, `WidgetMemoryPick`; P2, P3) |
+| D5 | Mai un nascosto, nemmeno per un istante: filtro finale, svuotamento prima del ridisegno | Deciso (P0: `WidgetRefresher`, `WidgetLedger.showing`, suite; P2, P3, P13) |
+| D6 | Aggiornamento parsimonioso: periodico ogni 3 ore, mai 23-7, ridisegni immediati per i nascosti | Deciso (Q2 (a); P0: `WidgetSchedule`, `WidgetScheduleRules`; P2, P3) |
+| D7 | Solo miniature locali, 384/512 px, al piu' 7 e 2 MB | Deciso (P0: `WidgetSize.thumbPx`, `WidgetRules`; P3) |
+| D8 | Mai sulla schermata di blocco; con il blocco dell'app solo media del telefono | Deciso (Q3 (c), Q4 (a); P0: `WidgetLock`, `WidgetMode.Locked`) |
+| D9 | Tocco con un'azione fissa e due numeri, validati sul registro | Deciso (P0: `WidgetTapUri`, `WidgetTaps`, `ReferenceWidgetTaps`; P2, P3) |
+| D10 | Glance 1.1.1 con `engine-widget`; piano B `RemoteViews` | Deciso (Q9 (a); P3) |
+| D11 | Widget per profilo | Deciso (P3) |
+| D12-D13 | Classi di finestra comuni (600, 840, 1200 dp) e pannelli | Deciso (P0: `adaptive/` con `GalleryWidth`, `GalleryWindow`, `GalleryPanes`; P5) |
+| D14-D16 | `configChanges`, DeX e finestre libere, fino a due finestre | Deciso (P4) |
+| D17-D18 | Blocco dell'app per processo; conferme legate al piano fra finestre | Deciso (P4) |
+| D19 | Due profili di prova sul tablet | Deciso (P14) |
+| D20-D21 | Trascinamento verso e da altre app | Deciso (P0: `Drag.kt`, `DragPort.kt`, `DragFlags`, `mediaDragSource` (firma); P6) |
+| D22 | Descrizioni dei media per superficie, a richiesta, mai salvate | Deciso (P0: `core-describe` con `ReferenceDescriber` e suite; P7) |
+| D23-D28 | TalkBack completo, solo strumenti veri, testo 200%, contrasto, bersagli, prove | Deciso (P8; Q9 (a) per ATF) |
+| D29-D31 | Manifest firmato P-256 con due chiavi, solo dal NAS, solo piu' severo | Deciso (Q8 (a); P0: `core-release` con `InMemoryReleaseState` e suite; P1) |
+| D32 | Firma dell'APK con `pampa.jks`, v2 e v3, rischio dichiarato | Deciso dall'utente (L559, C443; P12) |
+| D33-D34 | Versioni, canali (beta due settimane, poi tutta la famiglia), changelog, catena di pubblicazione | Deciso (Q7 (a); P12) |
+| D35 | Passaggio alle share vere in un passo dopo le prove | Deciso dall'utente (Q6 (b); P10, orchestratore) |
+| D36-D37 | Revisione 10.4 con prove pratiche; verifica complessiva in tre momenti | Deciso (P11, P14) |
+| D38 | Confine con la fase grafica; le prove di accessibilita' nel suo "Fatto quando" | Deciso (`docs/grafica-progetto.md` §12.16) |
+| D39 | Diagnostica `WIDGET` e `RELEASE`, solo numeri | Deciso (P0: `DiagSection`, voci di stato; P13) |
+| D40 | Nessun permesso nuovo; componenti non esportati; Glance e ATF le sole dipendenze nuove; nessun host nuovo | Deciso (Q8 (a), Q9 (a)) |
+| D41 | Nascosti su ogni superficie nuova | Deciso (P0: righe `DRAG` e `DESCRIPTIONS` in attesa nel registro; P3, P5, P6, P7) |
+| D42 | Azzeramento: widget svuotati prima, poi lavoro, registro, stato del manifest, copie | Deciso (P0: `WidgetRefresher.blankAll`, `WidgetLedger.clear`, `ReleaseState.clear`; P13) |
+| D43 | Idee per il dopo: esportare un album, poi un ricordo come video | Deciso (Q10) |
+
+**Moduli nuovi**
+- `core-widget` (`api` common, model, library, memories; JVM puro, niente Hilt): `contract/Widget.kt` (`WidgetSlot`, `WidgetSize` con celle e lato
+  delle miniature, `WidgetChoice` e `WidgetPeriod` con il `DEFAULT` delle risposte, `WidgetEmpty`, `WidgetTitle` senza persone, `WidgetCell`,
+  `WidgetMode`, `WidgetPlan`, `WidgetRules`), `Ports.kt` (`WidgetMemoryPick`, `WidgetMemories`, `WidgetThumbs`, `WidgetLock`, `WidgetPrefs`,
+  `WidgetClock`, `WidgetPlanner`), `Ledger.kt` (`WidgetCellRef`, `WidgetLedger`, `WidgetRefresher`), `Schedule.kt` (`WidgetScheduleRules`,
+  `WidgetSchedule`), `Tap.kt` (`WidgetTapRequest`, `WidgetTarget`, `WidgetTapUri`, `WidgetTaps`), `WidgetDiag.kt`; `noop/`; `testing/`
+  (`ReferenceWidgetPlanner`, `InMemoryWidgetLedger` con `SimulatedLedgerDisk`, `ReferenceWidgetSchedule`, `ReferenceWidgetTaps`,
+  `SyntheticWidgetWorld`, fake delle porte, `RecordingWidgetRefresher`). I pacchetti `plan/`, `ledger/`, `schedule/`, `tap/` sono di P2.
+- `core-release` (`api` common, model; JVM puro): `contract/Manifest.kt` (`BlockLevel` e `ReleaseMessage` con `ofCode` che non perde un
+  blocco, `VersionBlock`, `ModelHint`, `ReleaseManifest`, `ManifestLimits`), `Verify.kt` (`RejectReason`, `Verified`, `ManifestVerifier`,
+  `PinnedKey`, `ReleaseKeyIds` con K1 = 1, K2 = 2, KT = 250), `State.kt` (`ReleaseStatus` con la severita', `OfferResult`, `ReleaseDiag`,
+  `ReleaseState` con le sette regole nel KDoc), `Ports.kt` (`ManifestOrigin` solo `NAS`, `ManifestRead`, `ManifestSource`, `StoredRelease`,
+  `ReleaseStateStore`, `ReleaseClock`, `ReleaseChannel`, `AppVersion`); `noop/`; `testing/` (`InMemoryReleaseState`, `TableManifestVerifier`,
+  `InMemoryReleaseStateStore`, `FakeReleaseClock`, `FakeManifestSource`, `SyntheticManifests`). `codec/`, `keys/`, `state/` sono di P1.
+- `core-describe` (`api` common, model, library, places; JVM puro): `contract/Facts.kt` (`DescribeSurface` senza esportazione,
+  `DescribeFact`, `DescribeSurfaces` con la tabella del §2.6, `DescribeLimits`, `MediaFacts` con `of(snapshot, index, zone)` come
+  `GridText.describe`), `Describer.kt` (`MediaDescriber`, `DescribePeople`, `DescribeText`, `A11yActivity`, `DescribeStrings`); `noop/`;
+  `testing/` (`ReferenceDescriber`, `ItalianDescribeStrings`, fake delle porte e dei luoghi). `rules/` e' di P7.
+- `feature-widget` (`api` core-widget; niente Compose ne' Glance in P0): `contract/WidgetUiState.kt` (`WidgetUiCell`, `WidgetUiState` sigillato
+  con `Memory`, `Photos`, `Locked`, `Message`, `of(plan)` che per `NOT_READY` risponde null e `blank`), `noop/NotConfiguredWidgetUi`,
+  `testing/WidgetSamples` (ogni caso in ogni misura).
+- `settings.gradle` e `galleryModules`; `tools/check.ps1` li conta da solo.
+
+**Firme nei moduli esistenti** (commit `9653b2e6`)
+- `core-library`: `contract/Drag.kt` (tipi puri: `DragOrigin` senza i Nascosti, `DragRequest`, `DragRefusal`, `DragLimits`) e
+  `contract/DragPort.kt` (la porta `MediaDragHandler`, `DragPrepared.Ready` con il `ClipData` e i soli flag `DragFlags.ALLOWED`, `DragLease`);
+  `NoMediaDragHandler`, `FakeMediaDragHandler`.
+- `core-models`: `contract/ExtraModelSources` (solo `PinnedUrl`, per id e `Sha256` del catalogo) e `NoExtraModelSources`.
+- `core-designsystem`: `adaptive/GalleryWindow.kt` (`GalleryWidth`, `PointerKind`, `GalleryWindow`, `GalleryPanes`, `ProvideGalleryWindow`,
+  `rememberGalleryWindow` da `LocalWindowInfo.containerSize`) e `adaptive/MediaDragSource.kt` (solo la firma di `Modifier.mediaDragSource`).
+- `core-common`: `DiagSection.WIDGET` e `RELEASE`; `feature-diagnostics`: icona, titolo e spiegazione delle due sezioni, le voci di stato
+  `WIDGET_STATE` e `RELEASE_STATE` (gli altri codici del §2.13 li aggiunge P13), come la Fase 9 P0 aveva fatto per `MEMORIES` e `MAP`.
+- `app/src/test/.../hidden/HiddenSurfaces.kt`: righe `DRAG` (P6, marcatore `feature-integrations/.../drag`) e `DESCRIPTIONS` (P7, marcatore
+  `core-describe/.../rules`) **in attesa**; la riga `WIDGET` resta "di prova" fino a P3; `PANES` la aggiunge P5.
+
+**Contratti: scostamenti dalle firme indicative del §1.2** (i pacchetti dopo partono da quelle vere)
+- `WidgetMode` ha in piu' **`Locked`** (il blocco dell'app di Q3 (c): solo media del telefono, nessun titolo, nessun ricordo), che il §1.5 gia'
+  chiedeva come `WidgetUiState.Locked`; `WidgetEmpty` ha in piu' **`NO_MEMORY_TODAY`** ("Solo ricordi" senza ricordo) e **`NOT_READY`** (processo
+  freddo, E-W4: non si ridisegna, resta il contenuto gia' verificato; `WidgetUiState.of` risponde null).
+- `WidgetSize` porta anche **`thumbPx`** (384, 512 nella grande); `WidgetTitle.placeIds` e' una `List<Int>` (non `IntArray`, per l'uguaglianza
+  dei dati) e `tripLabel` ha un tetto di 80 caratteri.
+- `WidgetPlanner.plan` prende **`budgetMs: Long`** (monotono) invece di `Duration`; `WidgetClock` ha **`monotonicMs()`**.
+- `WidgetLedger` ha in piu' **`showingMemory(id)`** e **`slots()`**; `WidgetRefresher` ha in piu' **`memoryDropped(id)`** (scarto, "Mai",
+  ricordo potato: D5 punto 4). Nel registro la cella 0 di un piano `Memory` porta il ricordo (il tocco apre la sua pagina).
+- `WidgetSchedule` e `WidgetTap` non sono `object`: i contratti sono le interfacce **`WidgetSchedule`** e **`WidgetTaps`** con i riferimenti in
+  `testing/` e le suite; quelle vere sono di P2. `WidgetTaps.resolve` prende in piu' la **`HiddenMask`** (il media nascosto nel frattempo apre
+  la Libreria con l'avviso).
+- `WidgetPrefs` ha i setter; nessuna scelta per il blocco (Q3 (c)).
+- `ManifestVerifier` e' una **`fun interface`** (non una classe con `ReleaseKeys`): il verificatore vero di P1 si costruisce in core-release;
+  `ReleaseKeys` (K1, K2) e' di P1 in `keys/`; `PinnedKey` confronta i byte e ne copia il contenuto.
+- `ReleaseState` e' un'**interfaccia** con in piu' **`load()`**, **`clear()`** (D42) e **`diag`** (`ReleaseDiag` per la Diagnostica); `offer`
+  prende l'origine. `ManifestSource.read` risponde **`ManifestRead`** (`Absent`, `TooLarge`, `Unavailable`, `Found`) invece di `ByteArray?`.
+  `ReleaseStateStore` ha **`clear()`** e legge `null` per un file rovinato.
+- `ExtraModelSources.urls` prende uno **`Sha256`** (il tipo di core-model) invece di una stringa.
+- `MediaDescriber.warm` e' **`suspend`** (chi la chiama lancia la coroutine) e c'e' **`forget()`** (blocco dell'app, secondo piano);
+  `DescribeStrings` e' un **`data class`** di parole (le date le scrive `GalleryDates`, i numeri `GalleryNumbers`); `DescriptionRules` diventa
+  `DescribeSurfaces` (la tabella) e `DescribeLimits` (i tetti); la ripulitura del testo e' di P7 (`rules/`). `MediaFacts.placeId` e
+  `durationMs` sono null quando mancano.
+- La porta del trascinamento **`MediaDragHandler`** sta in `core-library` (`DragPort.kt`, l'unico file del contratto con una classe della
+  piattaforma: il `ClipData` che il gesto consegna ad Android), cosi' i feature la vedono senza vedere `feature-integrations`.
+
+**Esecutori di riferimento e fake fedeli** (in `testing/`, src/main: mai nella release, lo controlla `tools/check.ps1`)
+- `ReferenceWidgetPlanner`: forza bruta su tutta l'istantanea con tutti i controlli a ogni elemento, rotazione propria con il cursore
+  condiviso, `eligiblePhotos()` per la parita' con il pianificatore vero (stesso modo, stesso ricordo, stesso motivo, foto dentro l'insieme).
+- `InMemoryWidgetLedger` sopra `SimulatedLedgerDisk` (morte fra scrittura e rinomina, file rovinato).
+- `InMemoryReleaseState` con le regole di D30 (rigioco, `SAME`, scaduto solo piu' severo, salvataggio prima della pubblicazione e, se muore,
+  il blocco piu' severo vale comunque in memoria; aggiornamento dell'app che ricalcola dall'ultimo manifest); `TableManifestVerifier` sostituisce
+  codec e firma con una tabella di buste opache (nessuna crittografia in P0).
+- `ReferenceDescriber`: concatenazione diretta dei fatti nell'ordine di `GridText.describe`, persone e testo letto dopo la durata, LRU di 500 in
+  memoria solo con uno strumento attivo, "…" quando il testo letto ha piu' di 12 parole.
+
+**Suite di contratto** (le implementazioni vere le estendono): `WidgetPlannerContract` (9, con la proprieta' su 120 mondi casuali con nascosti
+dell'ultimo momento, copertina nascosta, blocco e le tre scelte), `WidgetLedgerContract` (5), `WidgetScheduleContract` (3, con 5.000 ore a caso),
+`WidgetTapContract` (3, con 20.000 stringhe a caso), `ReleaseStateContract` (8, con la proprieta' su 200 storie casuali), `MediaDescriberContract`
+(6, con 2.000 combinazioni di fatti e superfici), `DescribePortsContract` (2). Tutti gli esecutori di riferimento le passano: `core-widget` 26
+prove, `core-release` 16, `core-describe` 14, `feature-widget` 4, piu' `DragContractTypesTest` (3), `ExtraModelSourcesTest` (2),
+`GalleryWindowTest` (2) e `Phase10ArchitectureTest` (10).
+
+**Cosa trovano pronto i pacchetti P1-P14, e cosa devono collegare**
+- **P1** (manifest): tutto `core-release/contract/`, `InMemoryReleaseState` e `ReleaseStateContract` (lo stato vero di `state/` la deve
+  passare, con un deposito su file e la morte a ogni salvataggio), `SyntheticManifests` per le storie casuali, `ExtraModelSources` (da usare in
+  `RoutingModelFetcher`: NAS, fissati, aggiuntivi), `ManifestLimits` (busta, tetti, percorso sul NAS). Da fare: `codec/`, `keys/` con
+  `ReleaseKeys` (unico posto, con `testing/`, dove si costruisce `PinnedKey`), `state/`, `tools/release/ManifestTool`. **Vincoli dei recinti**:
+  :app non deve nominare `ManifestVerifier`, `ReleaseManifest`, `PinnedKey` (regola 3 di `Phase10ArchitectureTest`): serve una fabbrica in
+  core-release (per esempio `ReleaseStates.create(store, version, clock, extraKeys)`); **KT** va scritta in
+  `core-release/.../testing/ReleaseTestKeys.kt` con la chiave pubblica **come stringa** base64 o esadecimale (il passo 7i la cerca nel dex di
+  release) e la privata **solo** sotto `src/test/` (il passo 3b rifiuta un PKCS#8 o un PEM altrove) o generata nel test; `app/src/debug` puo'
+  passarla come chiave in piu'.
+- **P2** (politica del widget): i contratti, `ReferenceWidgetPlanner` (la parita' su 5.000 stati con `eligiblePhotos`),
+  `SyntheticWidgetWorld`, le suite `WidgetPlannerContract`, `WidgetLedgerContract`, `WidgetScheduleContract`, `WidgetTapContract`. Da fare:
+  `plan/DefaultWidgetPlanner` sopra `WidgetFeed` (attenzione: `WidgetFeed.MAX_SIZE` e' 16, il triplo della misura grande e' 21: piu' chiamate o
+  un tetto), `ledger/FileWidgetLedger`, `schedule/`, `tap/`.
+- **P3** (widget Glance): `WidgetUiState`, `WidgetSamples`, `WidgetRefresher`, `WidgetTapUri` (azione e URI), `WidgetRules`,
+  `WidgetScheduleRules.WORK_NAME`, `DiagSection.WIDGET`; il recinto di Glance e del `PendingIntent` (solo `feature-widget/.../tap/`) e il passo
+  7i con il controllo positivo; la regola del manifest di `feature-widget` (solo ricevitori non esportati) gia' pronta in Phase10 e Phase5B.
+  Da fare: `engine-widget` in `engine.properties` e `settings.gradle` (le dipendenze di `feature-widget` ammesse: core-widget, core-describe,
+  core-imaging, core-designsystem, core-common, core-model, engine-widget), Glance in `versions-app.gradle` e `verification-metadata.xml`, il
+  ricevitore, `releaseManifestPolicy`, l'azione in `MainActivity`, la riga `WIDGET` in produzione.
+- **P4** (finestre): `GalleryWindow`, `ProvideGalleryWindow` per i test; niente di `core-security` in P0.
+- **P5** (pannelli): `GalleryWidth` (soglie), `GalleryPanes`, `rememberGalleryWindow` (il puntatore e' sempre `TOUCH`: il mouse lo legge P5); la
+  riga `PANES` del registro.
+- **P6** (trascinamento): `DragRequest`, `DragOrigin`, `DragRefusal`, `DragLimits`, `MediaDragHandler`, `DragPrepared`, `DragFlags`,
+  `NoMediaDragHandler`, `FakeMediaDragHandler`, la firma di `mediaDragSource`; la riga `DRAG` in attesa (il registro fallira' appena nasce
+  `feature-integrations/.../drag/` finche' la sonda non c'e').
+- **P7** (descrizioni): `MediaFacts.of`, le superfici, `ReferenceDescriber` e `MediaDescriberContract` (stessi testi di oggi per i fatti di
+  oggi: `ItalianDescribeStrings` riporta le parole di `GridStrings`), `DescribePortsContract`; la riga `DESCRIPTIONS` in attesa (marcatore
+  `core-describe/.../rules`).
+- **P8**: nessun contratto in P0 oltre a `A11yActivity`; `A11yAssertions` di `core-designsystem` (`testing`) e' suo.
+- **P10**: niente di nuovo in P0; il §2.10 riscritto per Q6 (b) e la riga P10 aggiornata.
+- **P11**: i passi 3b e 7i di `tools/check.ps1`, `ManifestTool` e `ReleaseTestKeys` fra i resti di debug vietati.
+- **P12**: `AppVersion`, `ReleaseChannel`; D32 riscritta (nessuna chiave nuova), L559, C443 con il test dei manifest.
+- **P13**: i null-object di ogni porta (`NotConfiguredWidgetPlanner`, `ClosedWidgetLock`, `NoWidgetThumbs`, `NoWidgetMemories`,
+  `DefaultWidgetPrefs`, `NoWidgetRefresher`, `NoWidgetLedger`, `NormalReleaseState`, `NoManifestSource`, `RejectAllManifestVerifier`,
+  `NoReleaseStateStore`, `NoExtraModelSources`, `NoDescribePeople`, `NoDescribeText`, `NoA11yTool`, `NoMediaDragHandler`), `WidgetDiag`,
+  `ReleaseDiag`, `DiagSection.WIDGET` e `RELEASE` con le voci di stato.
+
+**Test d'architettura** (`Phase10ArchitectureTest`, 10 prove: le nove regole e il controllo che i test leggano davvero i moduli) **e la prova che
+falliscono**, reintroducendo le violazioni nel repository e togliendole subito dopo (sette giri; script `build/p0/violate.py` e `round.sh`,
+fuori dal repository; `:core-common:testDebugUnitTest --tests "*ArchitectureTest"`):
+1. *Giro 1*: `android.util.Log` in `core-widget` → regola 1; `core.faces` nominato da `core-widget` → regola 2; `java.net` in `core-release` →
+   regola 3 (e `Phase6ArchitectureTest.ilCodiceHttpsStaSoloNelPacchettoAmmesso`); una superficie `EXPORT` in `DescribeSurface` → regola 4;
+   `androidx.glance` in `feature-library` → regola 5; un `violationsExcept` in un test di `core-widget` → regola 6; `sharedUserId` nel manifest
+   di `feature-widget` → regola 7; `feature-widget` che dipende da `core-nas` → regola 8; `"ManifestTool"` tolto da `tools/check.ps1` → regola 9.
+   Rosse 10 prove.
+2. *Giro 2*: `core-release` con una libreria di produzione → regola 1; `val person: PersonId` in `core-widget` → regola 2 ("nomina una
+   persona"); `raw.githubusercontent` in `core-models` → regola 3 (Q8 (a)); un `PendingIntent` con `OPEN_WIDGET` in `:app` → regola 5; un
+   `<permission ... signature>` nel manifest di debug → regola 7; un ricevitore **esportato** in `feature-widget` → regola 8 (e
+   `Phase5BArchitectureTest`, che da qui lascia `feature-widget` a Phase10: commit `9763afa6`); `core.faces` in `core-describe` → regola 4.
+3. *Giro 3*: un `PinnedKey(` costruito in `core-release/.../state/` → regola 3; Glance nel `build.gradle` di `feature-library` → regola 5;
+   `core-search` che dipende da `core-release` → regola 8 (e la regola 9 della Fase 6); `core.memories.plan` nominato da `core-widget` → regola 2.
+4. *Giro 4*: `ManifestOrigin.GITHUB` → regola 3; un `PendingIntent` in `feature-widget/.../contract/` → regola 5; `feature-widget` senza
+   `NoWallClockSourcesTest` → regola 8; `core.describe` nominato da `feature-diagnostics` → regola 4; un parametro `names:` in `core-widget` →
+   regola 2.
+5. *Giro 5*: `ReleaseManifest` nominato in `:app` → regola 3 ("campi del manifest fuori da core-release").
+6. *Giro 6*: le cartelle `feature-integrations/.../drag` e `core-describe/.../rules` → `HiddenSurfacesRegistryTest` rosso sulla riga
+   `drag-out` (la prima che incontra; `descriptions` usa lo stesso meccanismo).
+7. *Giro 7*: un'intestazione PEM di chiave privata in `core-widget/src/main/.../testing/` e una in `core-release/src/test/` → il passo 3b di
+   `tools/check.ps1 -SkipGradle` fallisce **solo** sulla prima.
+Dopo ogni giro le modifiche sono state tolte (`git checkout` dei file toccati, file nuovi cancellati) e l'albero e' tornato pulito.
+`ilControlloVedeIModuliDellaFase10` e' il controllo positivo. Il passo 7i (Glance e KT nel dex) oggi passa a vuoto: Glance arriva con P3, KT con
+P1; una violazione nel bytecode richiederebbe una release costruita apposta.
+
+**`tools/check.ps1 -NoDaemon`**: **verde al primo giro** (31/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, cartella
+`app\build\outputs\apk\release` cancellata prima, dopo i sette giri e con i documenti): assembleDebug, assembleRelease, galleryTest e
+galleryLint in 52 minuti; **17.641 test in 47 moduli**, nessuno a zero (`core-widget` 26, `core-release` 16, `core-describe` 14,
+`feature-widget` 4, `core-common` 167 con `Phase10ArchitectureTest`); tutti i passi della release verdi, compresi i due nuovi: **3b** (4.748
+file letti, nessuna chiave privata) e **7i** ("widget non ancora nell'app (P3, P13): 0 chiamate a Glance; KT non ancora scritta (P1)", 9,1
+milioni di righe di dexdump). Nessuna classe rifatta con `--rerun`. I moduli nuovi li conta da solo (legge `settings.gradle`).
+
+**Modifiche ai contratti che i pacchetti dopo potrebbero chiedere** (le scoperte scrivendo fake ed esecutori di riferimento)
+- P2: `WidgetFeed.MAX_SIZE` (Fase 7) e' 16, ma il passo 3 del §2.1 chiede il triplo delle celle (21 nella misura grande): o piu' chiamate a
+  `next`, o un tetto piu' alto in `core-library` (contratto della Fase 7, da cambiare con la sua suite).
+- P2: `WidgetMemoryPick` porta gli id dei membri, non il loro tipo: il pianificatore li cerca nell'istantanea; un membro di un gruppo che non e'
+  la copertina non ha una cella e non si mostra.
+- P3: `WidgetUiCell` non porta l'id del media (lo stato e' disegnabile e basta): le miniature si caricano dalle celle del piano; se P3 vuole la
+  bitmap nello stato, la aggiunge in `feature-widget`.
+- P1: `StoredRelease` porta il manifest decodificato; se P1 preferisce salvare la busta e riverificarla alla lettura, aggiunge i byte e lo
+  dice. I conteggi dei rifiuti di `ReleaseDiag` vivono in memoria: se P13 li vuole persistenti (come C415), una porta in piu'.
+- P6: `DragPrepared.Ready` pretende esattamente `DragFlags.ALLOWED`; un flag in piu' (per esempio per l'ombra) si aggiunge li', motivato.
+- P7: `DescribeStrings` e' un `data class`; se P7 preferisce un'interfaccia sopra le risorse, la cambia con la suite.
+- P5: `rememberGalleryWindow` da' sempre `PointerKind.TOUCH`.
+
+**Punti aperti**
+- **L558** non e' usato (era il limite di Q8 (b)); il §7 "Limiti" del piano lo riporta l'orchestratore con L540-L557 e L559, insieme agli edge
+  case del §0.2 e alle sottofasi precisate (§0.3 "Piano").
+- La riga `PANES` del registro dei Nascosti la scrive P5 con la sua superficie (non c'e' ancora un marcatore del codice vero da mettere in
+  attesa); la riga `WIDGET` resta "di prova" fino a P3.
+- Fuori dal perimetro stretto di P0, come nella Fase 9 P0: `feature-diagnostics` (icona, titolo, spiegazione e voce di stato delle due sezioni
+  nuove, senza le quali non compila), `HiddenSurfaces.kt` (le righe in attesa, chieste dal §1.3) e `Phase5BArchitectureTest` (una riga: senza,
+  il ricevitore di P3 lo farebbe fallire).
+- `DragPort.kt` nomina il `ClipData` della piattaforma dentro `core-library` (il §1.1 voleva `Drag.kt` senza: i tipi puri restano li'); i tre
+  core nuovi non lo vedono.
+- Il passo 3b legge ogni file del repository (circa 7-35 s secondo il carico del PC).
+- `rememberGalleryWindow` e `mediaDragSource` sono firme: la prima funziona (larghezza e altezza della finestra), la seconda non aggancia
+  ancora il gesto (P6).

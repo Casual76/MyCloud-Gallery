@@ -107,6 +107,8 @@ scarica originali dal NAS**: un media senza anteprima aspetta, e la pagina lo di
 
 **Ricordi, notifiche e mappa (Fase 9, `docs/fase9-progetto.md` D4, D20, D26; P0).** Nessuna attivita' nuova (un'attivita' nuova romperebbe i `when` esaustivi e le stime): la **generazione dei ricordi** non usa rete ne' NAS, quindi la proposta 3 non la riguarda; gira **di notte dentro `LibraryMaintenanceWorker`** (in carica, dopo i viaggi, budget `memoriesNightlyBudget`), con un **passo leggero** all'ora della notifica o all'apertura dell'app se la notte non c'e' stata (budget `memoriesLightBudget`, niente misure dei pixel col risparmio energetico) e all'apertura di Raccolte se il giorno e' cambiato. La **notifica** e' un lavoro `OneTimeWork` unico (`memories-notify`) con il ritardo fino all'ora scelta, senza vincoli di rete ne' di carica, consegnato nella finestra `notifyWindow` (D20). Lo **scaricamento di una regione offline** e' contenuto chiesto dall'utente (un tocco sul foglio, come aprire una foto), nel processo dell'app, solo sul Wi-Fi o con la seconda conferma; il traffico della mappa online si conta come contenuto visibile (`MapTraffic`). Nessun lavoro in background per la mappa; l'indice dei punti si rifa' con `mapIndexRebuild`.
 
+**Widget e manifest di rilascio (Fase 10, `docs/fase10-progetto.md` D6, D29; P0).** Nessuna attivita' nuova. Il **ridisegno del widget** non e' un'attivita': e' un lavoro periodico leggero di WorkManager (`widget-refresh`, unico, solo se c'e' almeno un widget), **senza rete ne' NAS** (solo miniature locali), quindi la proposta 3 non lo riguarda; ogni `widgetRefreshPeriod` (Q2 (a): 3 ore di base), mai dentro le `widgetQuietHours`, con il vincolo "batteria non scarica" e il budget `widgetBudget`; il ridisegno per un nascosto, all'uscita dall'app, al cambio del ricordo, del tema o del blocco e' immediato e non passa dalle regole. La **lettura del manifest di rilascio** sta **dentro il giro di sincronizzazione esistente** (`INDEX_SYNC`, leggera): un file di al piu' 64 KiB dall'area comune, con la sessione gia' aperta, al piu' una volta ogni `manifestReadEvery`; nessun host nuovo (Q8 (a)). Il trascinamento fra app e' contenuto chiesto dall'utente (un gesto), nel processo dell'app, come aprire una foto.
+
 ---
 
 ## 3. Preset × attività
@@ -381,6 +383,15 @@ Costanti nuove (P0 le fissa nei contratti; [stima] i costi, misurati da P6 e P12
 * `memoriesLightBudget`: 5 s per il passo leggero (`RefreshBudgets.LIGHT_SECONDS`); atteso < 300 ms [stima].
 * `notifyWindow`: la consegna della notifica da H a H+2 h, in ritardo fino a H+3 h, oltre quel giorno si salta (`NotifyRules.WINDOW_MINUTES`, `SKIP_AFTER_MINUTES`); al piu' una al giorno e di base al piu' 3 in 7 giorni (Q4).
 * `mapIndexRebuild`: la ricostruzione dell'indice dei punti dopo 2 s di calma quando cambia l'istantanea (`MapPoints.REBUILD_QUIET_MS`); lettura di 100.000 punti < 1,5 s sull'S25 [stima], ~2,4 MB in memoria.
+
+### Widget e manifest (Fase 10, `docs/fase10-progetto.md` D6, D29, §2.15)
+
+Costanti nuove (P0 le fissa nei contratti; [stima] i costi, misurati da P3 e P9):
+* `widgetRefreshPeriod`: ogni 3 ore di base (Q2 (a); 6 ore o una volta al giorno a scelta), con 30 minuti di flessibilita' (`WidgetPeriod`, `WidgetScheduleRules.FLEX_MINUTES`); un giro < 400 ms di CPU sull'S25 [stima], ~6 giri periodici e ~5 all'uscita dall'app al giorno, circa 5 s di CPU [stima].
+* `widgetQuietHours`: dalle 23:00 alle 7:00 ora locale nessun giro periodico (`WidgetScheduleRules.QUIET_FROM`, `QUIET_UNTIL`).
+* `widgetBudget`: 2 s per un giro, 1,5 s per montare istantanea, maschera e scaffale in un processo freddo (`WidgetRules.BUDGET_MS`, `COLD_START_BUDGET_MS`); svuotamento dopo un "Nascondi" < 100 ms [stima] (`BLANK_TARGET_MS`); ridisegno all'uscita dall'app dopo 2 s di calma, al piu' una volta ogni 15 minuti.
+* `manifestReadEvery`: 24 ore (`ManifestLimits.READ_EVERY`), dentro il giro di sincronizzazione; una lettura di al piu' 64 KiB, verifica < 5 ms [stima].
+
 
 **Prima analisi** dell'archivio dell'utente (~15.000 foto e ~2.600 video, un indicizzatore, S25): ~25-35 minuti di calcolo, di notte in
 carica; PSS +80-150 MB col calcolo in corso. Le anteprime che mancano e vanno rifatte dall'originale costano come una preparazione.

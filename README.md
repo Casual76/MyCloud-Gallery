@@ -96,6 +96,10 @@ segnaposto e almeno un test.
 | `:feature-memories` | Fase 9: sezione Ricordi, pagina del ricordo, presentazione, fogli "Mostra meno", Impostazioni → Ricordi e notifiche. Stati e contratti, composable con i soli componenti G2 | memories (contratti), library, imaging, designsystem |
 | `:core-map` | Fase 9: Mappa, la parte pura. Punti con coordinate effettive, indice a celle (z-order), cancello delle richieste di rete (`MapRequestGate`), regioni offline, impostazioni della mappa. **JVM puro**, senza MapLibre ne' OkHttp | common, model |
 | `:feature-map` | Fase 9: la mappa (MapLibre), sezione Luoghi, regioni offline, mini-mappa del viewer. L'unico HTTP della mappa sta in `feature-map/.../net/` (OkHttp dietro il cancello) | map (contratti), library, imaging, places, designsystem |
+| `:core-widget` | Fase 10: il widget, la parte pura. Che cosa mostra ogni widget (il ricordo di oggi, altrimenti foto a caso: Q1 (a)), il registro di cio' che ha mostrato, le ore di quiete (23-7) e il tocco con due numeri. **JVM puro**, nessuna rete ne' NAS, mai una persona nelle firme | common, model, library (contratti), memories (contratti) |
+| `:core-release` | Fase 10: il manifest di rilascio firmato (P-256, due chiavi fissate), letto solo dal NAS (Q8 (a)); stato dei blocchi solo piu' severo, anti-rigioco, indirizzi aggiuntivi dei modelli. **JVM puro**, vede solo le fondamenta | common, model |
+| `:core-describe` | Fase 10: le descrizioni dei media per superficie (dentro l'app, Nascosti, widget, notifiche), mai salvate ne' esportate. **JVM puro** | common, model, library (contratti), places (contratti) |
+| `:feature-widget` | Fase 10: il widget "MyCloud Gallery" (Glance sopra `engine-widget`, P3), ricevitore non esportato, ridisegno; in P0 lo stato sigillato `WidgetUiState` | widget (contratti); da P3 imaging, designsystem, engine-widget |
 
 Nessun ciclo: `core-common` e `core-model` sono le foglie. I `feature-*` non si conoscono fra loro: ogni
 passaggio da una funzione all'altra e' una callback scritta da `:app` (`navigation/AppNavHost.kt`).
@@ -212,6 +216,30 @@ le suite di contratto che le implementazioni vere dei pacchetti dopo devono pass
 base per tutti (risposta Q1 (c) del 27/10, `FeatureFlags.mapOnline`), con l'interruttore per dispositivo in Impostazioni; il cancello di rete
 resta intero. Le aggiunte ai moduli esistenti (campi dei ricordi in `core-personal`, `TripMemories` in `core-albums`, `ViewerPlaceMap` in
 `feature-viewer`, sezione `places` delle Raccolte, `DiagSection.MEMORIES` e `MAP`) sono in `docs/decisioni.md` ("Fase 9 P0").
+
+**Fase 10: chi vede chi** (`docs/fase10-progetto.md` §1.1). Nascono `core-widget`, `core-release`, `core-describe` e `feature-widget` (P0 ne
+scrive i contratti, i null-object, i fake e gli esecutori di riferimento `ReferenceWidgetPlanner`, `InMemoryWidgetLedger`,
+`ReferenceWidgetSchedule`, `ReferenceWidgetTaps`, `InMemoryReleaseState`, `TableManifestVerifier`, `ReferenceDescriber`, con le suite di
+contratto). Le regole:
+- `core-widget`, `core-release` e `core-describe` sono **JVM puri**; `core-widget` non nomina mai una persona nelle firme e vede di
+  `core-memories` solo i contratti; `core-release` vede solo le fondamenta e i campi del manifest, le chiavi e il verificatore non escono da
+  lui (fuori si legge solo `ReleaseStatus`, e gli indirizzi aggiuntivi passano da `ExtraModelSources` di `core-models`); il manifest si legge
+  **solo dal NAS** (Q8 (a)): nessuna classe di rete nuova;
+- `core-describe` non ha una superficie per log, Diagnostica o esportazione;
+- Glance ed `engine-widget` solo in `feature-widget` (sorgenti, `build.gradle` e bytecode della release), il `PendingIntent` del widget solo in
+  `feature-widget/.../tap/`;
+- nessun `sharedUserId` e nessun permesso definito dall'app in nessun manifest: la firma resta `pampa.jks`, condivisa con le altre app Pampa
+  (decisione dell'utente del 31/10, limite L559 di `docs/sicurezza.md`).
+
+`Phase10ArchitectureTest` (`core-common`, P0) tiene queste regole; ogni violazione reintrodotta lo fa fallire. `tools/check.ps1` ha due passi
+nuovi: nessuna chiave privata nel contenuto dei file del repository (3b) e Glance al suo posto nel dex di release, senza la chiave di prova
+del manifest (7i). Le aggiunte ai moduli esistenti (`contract/Drag.kt` e `DragPort.kt` in `core-library`, `ExtraModelSources` in
+`core-models`, `adaptive/` in `core-designsystem`, `DiagSection.WIDGET` e `RELEASE`) sono in `docs/decisioni.md` ("Fase 10 P0").
+
+**In arrivo con i pacchetti della Fase 10**: `CHANGELOG.md` alla radice (le novita' di ogni versione in italiano semplice, la fonte del testo
+del Pampa Store e della pagina "Novita' di questa versione", P12); `tools/release/` (lo strumento delle chiavi e della firma del manifest
+`ManifestTool`, P1; `release.ps1` e `recinzioni.json`, P10 e P12); `tools/security/` (i generatori ostili della revisione finale 10.4, che
+scrivono solo nelle share di prova dentro `mcg-it/<giro>/`, P11).
 
 **Fase 9 in `:app` (P13).** `MemoriesModule` monta i ricordi (`MemoriesWiring.build` -> `MemoriesGraph`): nascono senza I/O e si montano dopo il
 primo disegno utile con la famiglia pronta, leggendo prima l'ultimo scaffale da file; le porte vere sono i viaggi di `CatalogTrips`, le persone

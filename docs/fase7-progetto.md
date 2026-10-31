@@ -658,6 +658,8 @@ per un file assente dall'area comune; nessuno spostamento senza un'operazione co
 | `ALBUM_PROJECTION_PENDING` | elementi personali non ancora risolti | conteggio |
 
 ### 2.9 Cosa serve dalla Fase 6 e cosa la Fase 7 predispone
+> Nota della Fase 10 (P0, 31/10): il widget vero (D3-D11) e il trascinamento fra app (D20, D21, anche "Aggiungi ad album" dal trascinamento) sono in `docs/fase10-progetto.md`; P0 ha scritto i contratti (`core-widget`, `contract/Drag.kt` di core-library).
+
 **Dalla Fase 6** (contratti già scritti da P0; implementazioni da P5 e P6)
 | Serve | Uso | Senza (oggi) |
 |---|---|---|
@@ -993,7 +995,7 @@ Le voci confermate si correggono prima della chiusura.
   strumenti di sviluppo la può leggere (come L48).
 - **L64. Gli album smart sbagliano**: "sicuro" vuol dire corretto almeno 98 volte su 100 sui viaggi misurati; per descrizione vale la
   precisione della ricerca (L50).
-- **L65. Il widget di prova** esiste solo nella build debug; il widget vero (Fase 10) userà lo stesso contratto e lo stesso registro.
+- **L65. Il widget di prova** esiste solo nella build debug; il widget vero (Fase 10) userà lo stesso contratto e lo stesso registro. *Nota della Fase 10 (P0, 31/10): il widget vero è di `docs/fase10-progetto.md` D3-D11 (`core-widget`, `feature-widget`); L65 è riscritta in `docs/sicurezza.md`.*
 - **L66. Un familiare che lascia un album lo nasconde solo a sé**: l'album e i suoi file restano per gli altri, e dal PC nella
   cartella.
 

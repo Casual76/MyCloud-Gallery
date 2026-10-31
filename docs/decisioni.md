@@ -14029,3 +14029,160 @@ Fonte: `docs/fase10-progetto.md` (riquadro P7 del §4.4, §2.6, D22, §1.2 `core
 ### Esito di `tools\check.ps1 -NoDaemon`
 **Verde**: "OK: tutto a posto." (uscita 0, 31/10, circa 22 minuti per il passo Gradle: 1.274 s), con `GRADLE_OPTS=-Dorg.gradle.workers.max=2` e `JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1`, dentro un posto Gradle (`f10p7`), dopo aver cancellato `app\build\outputs\apk\release`. Le relazioni XML delle prove unitarie dicono 17.930 prove, 0 fallite, 28 saltate per assunzione. Solo `-Bench` non è stato lanciato.
 Tre corse: la prima è caduta per due motivi che non erano della logica: la JVM del test di `:app` con `EXCEPTION_ACCESS_VIOLATION` (rilanciato con `TieredStopAtLevel=1`, come dice il brief) e tre test d'architettura delle Fasi 6, 7 e 9 in `core-common` che non conoscevano `core-describe` fra le dipendenze ammesse di `feature-search`, `feature-albums`, `feature-memories` (e `feature-map`): **ho aggiunto `core-describe` alle liste `ALLOWED_DEPS` di `Phase6`, `Phase7` e `Phase9ArchitectureTest`** (quattro righe, fuori dal perimetro del brief ma conseguenza diretta delle dipendenze che il brief permette). La seconda è caduta su `MapScreensTest` (cercava il prefisso "Foto del" della vecchia frase delle celle): aggiornate a "Foto, " anche le prove equivalenti di `MemoriesScreensTest` (due righe) e `SearchScreenUiTest`. La terza è verde.
+
+## Fase 10 P4: finestre, DeX e due finestre (31/10)
+
+Il pacchetto P4 della Fase 10 (`docs/fase10-progetto.md` §4.4 riga P4; §0.1 D14-D18, §1.5, §2.4, §4.3, §6, §11; edge case E-T1-E-T10, E-T19, E-P18). Branch `fase10/p4` da
+`96eeed05`. **Nessuna dipendenza, permesso, host, chiave o costante di `FeatureFlags` cambiati**; nessun metadato di DeX (D15: solo se verificati sul Tab S9, che non c'e'). Voci nuove
+di `docs/sicurezza.md`: **C452-C454, L562** (C434, C435, L545, L546 precisate). Prove strumentate solo su **`Medium_Phone` (Android 17, API 37.1, immagine x86_64 con pagine da 16 KB)**,
+acceso e spento da questa sessione (`emu kill`); telefono e tablet non toccati.
+
+**Cosa c'e', dove**
+| Pezzo | Dove | In breve |
+|---|---|---|
+| Blocco per processo | `core-security/.../lock/ProcessForeground.kt`, `AppLockController.kt`, `AppLockGate.kt` | D17, C434 (vedi sotto) |
+| Manifest | `app/src/main/AndroidManifest.xml` | `launchMode="singleInstancePerTask"`, `configChanges` di D14, `resizeableActivity="true"`, `<layout>` 320 x 400 dp, `taskAffinity=""` |
+| Controllo del manifest | `gradle/verify-release-manifest.gradle` (`mainActivityPolicy`, `verifyMainActivity`) | la release non si assembla se le impostazioni delle finestre cambiano |
+| Finestre | `app/.../window/`: `WindowRegistry`, `WindowLauncher`, `WindowStarts`, `WindowComposition` (`LocalWindowRole`, `ServesEntryRequests`, `WindowStartEffect`, `AppNewWindowPort`), `WindowHost` | D16, D18, C452, C453 |
+| `MainActivity` | `app/.../MainActivity.kt` | ammissione della finestra, terza rifiutata, ingressi alla principale, Esc = Indietro, punto per P3 in `entryOf` |
+| Porta per le schermate | `core-designsystem/.../adaptive/NewWindow.kt` (`NewWindowPort`, `LocalNewWindow`), `GalleryKeys.kt` | la voce "Apri in una nuova finestra" e la tabella dei tasti |
+| Stato salvato | `feature-library/.../grid/MediaGridState.kt` (`SavedSelection`), `library/LibraryParts.kt`, `LibraryScreen.kt` | selezione fino a 500 elementi (D14, E-T8) |
+| Tastiera e mouse | `feature-library/.../grid/GridKeyboard.kt`, `GridGestures.kt`, `MediaGrid.kt`; `feature-viewer/.../gesture/ViewerKeyboard.kt`, `ZoomableMedia.kt`, `ViewerOverlay.kt` | D15, C454 |
+
+**Il blocco dell'app per processo (D17, C434)**
+- `ProcessForeground` conta le finestre avviate con una **maniglia per `AppLockGate`** (nessun riferimento all'activity). `AppLockController.windowStarted/windowStopped/windowClosed` chiamano
+  `onAppForegrounded` solo alla **prima** finestra che parte e `onAppBackgrounded` solo all'**ultima** che si ferma: una finestra che si ferma mentre l'altra resta visibile non e' un'uscita
+  (prima ogni ON_STOP lo era: con "Subito" lo scambio fra due finestre avrebbe richiuso l'app). Uno sblocco riuscito in una finestra vale per tutte (lo stato e' uno); mentre una finestra
+  chiede la credenziale l'altra lo sa (`authenticatingState`, `LockedScreenState.isAuthenticating`) e non ne apre una seconda.
+- **Ricreazione** (densita', lingua, tema): uno stop con `isChangingConfigurations` non e' un'uscita; lascia un **segno** che la finestra nuova consuma con il suo `start`. Il segno **scade** dopo
+  10 s (orologio monotono) e un orologio che torna indietro lo fa scadere: se la finestra nuova non arriva, l'uscita conta, e **risale alla ricreazione** (`lastExitAtMillis`), non a quando ce ne
+  accorgiamo (altrimenti un'ora di ritardo sarebbe un'ora di sblocco). `isUnlockedNow` e `endEntryAuthentication` fanno prima `poll()`.
+- **Scelta: le activity d'ingresso (selettore, ricezione) non sono finestre.** D17 le nomina fra le activity contate; non lo faccio: hanno il loro cancello (`isUnlockedNow`, tolleranza di due
+  minuti, P14) e contarle farebbe cambiare il tempo concesso con codice fuori dal mio perimetro (`feature-integrations`) e senza modo di provarlo con le activity vere. **E' piu' severo**:
+  un selettore aperto non tiene l'app "dentro", quindi il conto del tempo comincia prima. `unaFinestraVisibile_tieneAperto_ilCancelloDegliIngressi` e `unoSbloccoDIngressoConUnaFinestraVisibile`
+  provano che una finestra visibile tiene aperto il cancello degli ingressi.
+- **Scelta: niente `ProcessLifecycleOwner`.** Il contatore delle nostre finestre e' la stessa informazione senza l'artefatto `lifecycle-process` (nessuna dipendenza nuova) e senza il ritardo di 700 ms.
+- `FLAG_SECURE` e recenti oscurati erano gia' per finestra (`WindowProtection.of(window)`, `RecentsPrivacy` per activity): provati con due finestre. I Nascosti aperti in una finestra non
+  proteggono l'altra (E-T19: `nascostiInUnaFinestra_nonCambianoLaProtezioneDellAltra`).
+
+**Le finestre (D16, C452, C453)**
+- Una finestra e' un **task** di `MainActivity` (`singleInstancePerTask`). `WindowRegistry` (processo, ordine di nascita) ammette al piu' due finestre; una ricreazione ha lo stesso task e non
+  occupa un posto. Il tetto sta in **`MainActivity.onCreate`**, non nell'intent: l'activity e' esportata e un'altra app puo' avviarne molte con `NEW_TASK | MULTIPLE_TASK`. La terza nasce, viene
+  rifiutata (`finishAndRemoveTask`: il suo task sparisce anche dai recenti), dice "Hai già due finestre di MyCloud Gallery aperte. Ti porto in quella che c'è." e porta davanti l'altra.
+  Sotto Android 12 il tetto e' una (L546).
+- Le finestre che ci sono sono quelle vive **piu' quelle che il sistema elenca ancora** (`ActivityManager.appTasks`, anche addormentate nei recenti dopo la morte del processo, con almeno una
+  activity): un posto che nessuno ha liberato si toglie, una finestra addormentata conta.
+- **La principale** e' la piu' vecchia ancora viva; se si chiude, l'altra prende il suo posto (`WindowRole`, `roleFlow`). **Notifiche e widget** (richieste del processo) le serve **solo la principale**
+  (`ServesEntryRequests`, usato da `MemoriesNotificationEffect`); se Android consegna l'intent alla seconda (`singleInstancePerTask` sceglie il task piu' recente), `onNewIntent` porta davanti la
+  principale e non fa altro. **L'icona** resta come prima: porta davanti il task che Android sceglie.
+- **"Apri in una nuova finestra"**: `WindowLauncher.open` avvia il task con **l'intent pulito del launcher** piu' `NEW_TASK | MULTIPLE_TASK | LAUNCH_ADJACENT`; **la pagina da cui parte e' un
+  evento interno** (`WindowStarts`: un posto, fresco 10 s, una volta sola; Libreria, album, ricordo, mappa), mai un dato nell'intent. Si offre solo da una finestra estesa (840 dp) o con piu'
+  finestre sullo schermo (`isInMultiWindowMode`: l'approssimazione di "in DeX", che Samsung non fa riconoscere in modo verificabile) e solo da Android 12 (`WindowPolicy.offersNewWindow`).
+  **La voce c'e' nel menu della Libreria**; per album, ricordo e mappa c'e' la porta (`LocalNewWindow.current?.openAlbum(id)` ecc.) e `WindowStartEffect` che apre la pagina: **le tre voci di
+  menu le aggiunge chi tocca quelle schermate (P5, P13)**.
+- **Oggetti del processo con un solo ospite** (`AppBackupActions.host`, `AppLibraryCommands.host`, che navigano e lanciano i permessi): con due finestre l'ospite era l'ultima composta e le azioni
+  della prima agivano nella seconda. `WindowHost` fa l'ospite **la finestra che ha il fuoco** (la prima si registra subito, cosi' con una finestra sola non cambia niente nemmeno mentre un dialogo
+  di sistema le toglie il fuoco). Tocca due file di P13 (`BackupHostEffect.kt`, `LibraryCommandHostEffect.kt`, una riga ciascuno).
+- **D42**: `WindowLauncher.closeOtherWindows(context, keep)` chiude le altre finestre (azzeramento, uscita dalla famiglia, "Configura di nuovo"): **P13 deve chiamarlo**; non e' provato con un test
+  (Robolectric non ha una `AppTask` vera): da vedere in F167.
+
+**Manifest e controllo di release (D14-D16)**: `configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation"`. **Non** ci sono `density`, `locale`,
+`layoutDirection`, `uiMode`, `fontScale`: devono ricreare l'activity, e sono quelli che lo stato salvato deve reggere. `verifyReleaseManifest` pretende `launchMode`
+(`singleInstancePerTask`; il piano B `singleTask` si dichiara cambiando la policy e questo documento), i `configChanges` richiesti **e nessuno dei vietati**, `resizeableActivity`, `<layout>` e
+`taskAffinity` vuota. La prima corsa ha trovato un mio errore (in Groovy `'' ?: x` scambia la stringa vuota per assente: l'affinita' vuota era rifiutata); corretto.
+
+**Stato salvato dopo una ricreazione vera (D14, E-T8, E-P18)**
+- Gia' c'erano: l'elemento ancorato della griglia (mai un indice), la pagina, il media del viewer e le barre, lo zoom (telephoto), la scheda, i fogli di creazione.
+- **Aggiunto: la selezione della Libreria** (`SavedSelection`, `selectionSaver`): fino a **500 id**; oltre, o con **tutta la vista** selezionata, si salva solo "tutti" e al ritorno si riseleziona la
+  vista di allora con il suo filtro (la Libreria lo ricorda a parte). **Mai una selezione troncata in silenzio**: con piu' di 500 elementi (non tutti) torna la sola modalita' selezione, senza scelte.
+  Si ripristina quando la vista ha degli elementi (`GridEffects` toglie dalla selezione chi non e' nella vista) e un elemento che non c'e' piu' non torna.
+- **Non fatto, di P5 e delle schermate della mappa**: camera della mappa, bolla aperta, pannello affiancato, selezione delle altre griglie (Raccolte, Nascosti, album: lo stesso schema
+  `SavedSelection` vale). `feature-map` e i pannelli non sono nel mio perimetro.
+
+**Tastiera e mouse (D15, C454)**: tabella unica in `GalleryKeys` (Invio, Ctrl o Cmd + A, Canc, frecce; nessun tasto si ripete se cambia qualcosa, tranne le frecce; un modificatore che non e' suo lo
+rende "non nostro"). **Griglia**: la cella sotto il mouse si evidenzia con la **pressione parziale** che le celle gia' disegnano (nessuna modifica a `GalleryGridCell`); Invio apre l'evidenziata o l'unica
+selezionata; Ctrl+A seleziona tutta la vista; **Canc apre il foglio di conferma** (quello della barra delle azioni) e non elimina niente (`GridKeyboardTest` controlla che vista e selezione restino
+intere); il **clic destro** entra in selezione con la cella (come la pressione prolungata), non apre e non trascina; la rotella e' lo scorrimento di sempre. La griglia prende il fuoco quando
+un puntatore la tocca (mai da sola: non ruba il fuoco a un campo di testo di un'altra scheda). **Viewer**: frecce sinistra e destra = la foto prima e dopo (solo a viewer a riposo, senza un foglio
+o una selezione del testo aperti); la **rotella ingrandisce** attorno al puntatore (un passo = 25%, al piu' quattro passi per evento). **Esc = Indietro** in tutta l'app (`MainActivity.onKeyDown`,
+lo stesso percorso del gesto Indietro: chiude per primo il livello piu' alto). Il clic destro nel viewer non ha una voce (la pressione prolungata li' e' la selezione del testo e del soggetto).
+
+**Prove**
+- *JVM e Robolectric (tutte verdi)*: `ProcessForegroundTest`, `AppLockTwoWindowsTest`, `AppLockGateTwoWindowsTest` (due `AppLockGate` con due cicli di vita: nessun contenuto in nessuna finestra
+  finche' si e' bloccati; sequenze a caso su tre semi con l'invariante "il contenuto c'e' se e solo se sbloccato, in tutte e due" controllata a ogni passo), `WindowProtectionTest`,
+  `RecentsPrivacyTest`, `WindowRegistryTest`, `WindowStartsTest`, `WindowLauncherTest`, `WindowCompositionTest`, `WindowHostTest`, `MainActivityWindowsManifestTest`, `EntryHardeningTest`,
+  `GalleryKeysTest`, `GridKeyboardTest`, `LibrarySelectionRestoreTest`, `LibraryWindowsMenuTest` (telefono: nessuna voce; tablet: la voce, e scegliendola apre la Libreria), `ViewerKeyboardTest`.
+- *Rosso senza la modifica* (modifiche fatte a mano nei sorgenti e tolte subito con `git checkout`; l'albero e' tornato pulito):
+  1. `AppLockGate` riportato al conteggio vecchio (`onAppBackgrounded` a ogni ON_STOP, `onAppForegrounded` a ogni ON_START): rossi `unaFinestraCheSiFermaMentreL_altraResta_nonRichiude_neppureConSubito`,
+     `unaFinestraChiusa_nonTieneAperta_L_app` e `lasciandoLaComposizioneConUnaFinestraAvviata_...`;
+  2. `ProcessForeground.stop` che ignora la ricreazione: rosse 6 prove di `ProcessForegroundTest` e `AppLockTwoWindowsTest.unaRicreazioneNonEUnUscita_neppureConSubito`;
+  3. il contenuto di `AppLockGate` lasciato in composizione anche da bloccati: rosse le tre prove di proprieta' con due finestre, `bloccato_ilContenutoNonEInComposizioneInNessunaDelleDueFinestre`,
+     `bloccaOra_richiudeTutteELeDueFinestre` e le prove di sempre di `AppLockGateTest` ("nessun contenuto con il blocco attivo");
+  4. `launchMode="singleTask"` nel manifest: `verifyReleaseManifest` fallisce con "android:launchMode deve essere singleInstancePerTask (trovato singleTask)".
+- *Emulatore `Medium_Phone`* (Android 17, API 37.1, `google/sdk_gphone16k_x86_64`; 4 GB, senza finestra; build `nonMinifiedRelease` con il dataset sintetico da 5.000 righe; script e log in `build\p4\`, fuori dal repository):
+  | Prova | Esito |
+  |---|---|
+  | `launchMode` visto dal sistema | `dumpsys activity`: `launchMode=4` (`singleInstancePerTask`), `minWidth=840 minHeight=1050` a 420 dpi (= 320 x 400 dp) |
+  | `singleInstancePerTask`: icona, notifica | un altro `am start` con l'app aperta: "its current task has been brought to the front" e "intent has been delivered to currently running top-most instance"; nessuna creazione, un task. **Verificato su Android 17 (API 37.1)**; non su Android 16 (nessuna immagine) ne' sull'S25 |
+  | Rotazione e ridimensionamento | schermo in orizzontale e ritorno; `wm size` 1800 x 2400, 2400 x 1200 e ritorno: **nessun** `wm_on_create_called` ne' `wm_on_destroy_called` (il registro degli eventi dal primo avvio ha solo gli avvii e la ricreazione per la densita') |
+  | Ricreazione vera | `wm density 330` e `reset`: l'activity si distrugge e si ricrea; **3 elementi selezionati ritrovati** ("3 selezionati", celle spuntate) |
+  | Morte del processo | in secondo piano `am kill` (processo 4693, poi nessuno, poi 5432): al ritorno, nello stesso task, selezione ritrovata; con un viewer aperto sul "49 di 5.000", dopo la morte e il ritorno e' ancora il "49 di 5.000" |
+  | Due finestre | con lo schermo a 1200 dp il menu della Libreria ha la voce "Apri in una nuova finestra"; scelta, nasce un secondo task accanto al primo (`LAUNCH_ADJACENT` mette le due finestre a schermo diviso, entrambe visibili) |
+  | La terza | dal menu della seconda: nessun task nuovo, il messaggio e l'altra davanti. Due `am start -f 0x18000000` (`NEW_TASK \| MULTIPLE_TASK`, come farebbe un'altra app): la nuova activity nasce e finisce, **i task restano due** e, con `finishAndRemoveTask`, **nessuna scheda vuota fra i recenti** (con `finish()` ne restavano: corretto) |
+  | Notifica alla principale | con la **seconda** in primo piano, `am start -a dev.pampa.mycloudgallery.action.OPEN_MEMORIES`: Android consegna l'intent alla seconda; la principale passa davanti e mostra "Tutti i ricordi", la seconda resta sulla Libreria |
+  | Blocco per processo | PIN di prova messo e tolto con `locksettings`, blocco "Subito": passare da una finestra all'altra (ognuna si ferma mentre l'altra e' visibile) **non richiude**; HOME e ritorno: la richiesta del PIN; sbloccata una finestra, l'altra si apre **senza una seconda richiesta** |
+  | Tastiera | Esc chiude il viewer e poi risale pagina per pagina; frecce destra e sinistra: 10, 11, 12, 11 su "N di 5.000"; Ctrl+A dopo un tocco sulla griglia: "5.000 selezionati"; **Canc: il foglio "Eliminare 2128 foto?"** con "Elimina dal telefono" e "Annulla", niente eliminato |
+  | **Non riprodotto** | la rotella (`input mouse scroll`) sul viewer: scorre la griglia ma la foto non si ingrandisce, mentre la prova JVM con il mouse finto la ingrandisce: da provare con un mouse vero (F166). Clic destro ed evidenziazione al passaggio del mouse: solo Robolectric (`input` non sa fare un clic destro ne' un passaggio). "Non conservare le attivita'" (`always_finish_activities`) non ha effetto da adb su questa immagine: sostituito dalla morte del processo |
+
+  Per installare l'APK (248 MB) su un'immagine al 90% di spazio ho **abbassato le soglie di spazio libero dell'emulatore** (`sys_storage_threshold_*`) e le ho **tolte** alla fine; ho **disinstallato l'APK di prova di
+  `feature-map`** (`dev.pampa.mycloudgallery.feature.map.test`, 146 MB, di questo progetto) e, alla fine, l'app di prova stessa. Rotazione, `wm size`, `wm density` e il PIN sono stati rimessi come prima; l'emulatore e' spento.
+- *Screenshot* (`docs/screenshots/10-P4/`): `libreria-menu-nuova-finestra-{chiaro,scuro}-{telefono,tablet}.png` (Roborazzi: sul telefono la voce non c'e', sul tablet si); dall'emulatore `emulatore-menu-nuova-finestra.png`,
+  `emulatore-seconda-finestra.png`, `emulatore-terza-finestra-rifiutata.png` (due finestre a schermo diviso e il messaggio) e `emulatore-canc-apre-il-foglio.png`.
+
+**Da provare sul telefono e sul tablet (nessuna fatta: dispositivi non disponibili)**
+- **F166, Tab S9 in DeX** (con mouse e tastiera): trascinare i bordi della finestra di continuo e portarla alla misura minima (320 x 400 dp: niente si sovrappone); entrare e uscire da DeX con la Libreria, il viewer
+  zoomato e la mappa aperti (E-T9: l'app puo' essere ricreata, lo stato torna; MapLibre e il video ripartono senza crash); clic destro su una cella (entra in selezione), rotella nel viewer (**ingrandisce?** e' il punto
+  non riprodotto sull'emulatore), frecce, Esc, Invio sulla cella sotto il mouse, Ctrl+A, **Canc (deve aprire il foglio, mai eliminare)**; passaggio del mouse sulle celle (si evidenziano). Se Samsung chiede i metadati di DeX per
+  non perdere il processo al cambio di modalita', **dirlo qui e valutarli**: oggi non ci sono.
+- **F167, tablet** (profilo "Prova 1"): "Apri in una nuova finestra" dal menu della Libreria (da album, ricordo e mappa quando P5 e P13 avranno aggiunto le voci); la terza richiesta dal menu e da un avvio esterno;
+  un media nascosto in una finestra sparisce subito nell'altra e i Nascosti aperti in una non oscurano l'altra (E-T19); **conferma di eliminazione aperta in una finestra mentre l'altra cambia gli stessi elementi**
+  (oggi la selezione si accorcia da sola e il foglio dice solo cio' che c'e' ancora: dire se basta o se serve "La selezione e' cambiata"); blocco con timeout "Subito": passaggio fra le due finestre senza richiudere, uscita
+  dall'app e ritorno: schermata di blocco in tutte e due, **uno sblocco per tutte**; tocco su una notifica con la seconda finestra davanti (apre la principale); la "nuova finestra" della barra di One UI e le finestre
+  a comparsa (contano nel tetto? L562).
+
+**Cosa serve a P3, P5 e P13**
+- **P3** (widget): in `MainActivity.entryOf` c'e' il **punto segnato** per `OPEN_WIDGET` (riconoscere l'azione per uguaglianza esatta **prima** di buttare l'intent, leggere i due numeri con `WidgetTaps.parse`,
+  metterli in `Entry` e in `Entry.needsPrimaryWindow`); l'evento interno lo serve **solo la principale** e **dopo il blocco app** (`ServesEntryRequests`, come `MemoriesNotificationEffect`). `onNewIntent` porta gia' davanti la
+  principale. `verifyReleaseManifest`: la mia policy e' una chiave a parte (`mainActivityPolicy`), le regole di Glance vanno vicino a `allowedExported`; `EntryHardeningTest` ha gia' `needsPrimaryWindow` da estendere.
+- **P5** (pannelli): le voci "Apri in una nuova finestra" di album, ricordo e mappa sono `LocalNewWindow.current?.openAlbum(id.value)`, `openMemory(id.value)`, `openMap()` (offerta con `isOffered(rememberGalleryWindow())`);
+  `WindowStartEffect` apre gia' le tre pagine. Stato salvato da fare: camera della mappa, bolla aperta, pannello affiancato (`rememberSaveable`), selezione delle altre griglie (`SavedSelection` e `selectionSaver` sono
+  in `feature-library`, `internal`: da rendere pubblici o ricopiare). Ogni `MediaGrid` ha gia' evidenziazione, Invio, Ctrl+A e il clic destro; **Canc** solo se la schermata passa `onDeleteKey`. `rememberGalleryWindow` non
+  legge ancora il mouse: la griglia legge i suoi eventi di puntatore da se'.
+- **P13** (integrazione): chiamare **`WindowLauncher.closeOtherWindows(context, keep)`** all'azzeramento, all'uscita dalla famiglia e in "Configura di nuovo" (D42); `WindowStartEffect` e `ServesEntryRequests` sono gia' agganciati
+  (`AppNavHost`, `AppMemoriesNavigation`: due righe fuori dal mio perimetro stretto); `WindowHost` va usato per ogni altro oggetto del processo con un solo ospite (cercare `.host =`); i codici `WINDOW_*` della Diagnostica
+  (§2.13) non ci sono; l'impronta del piano nel foglio di eliminazione della Libreria (C435) se F167 la chiede.
+
+**Modifiche fuori dal perimetro stretto** (tutte piccole): `AppNavHost.kt` (una riga: `WindowStartEffect(nav)`), `AppMemoriesNavigation.kt` (`ServesEntryRequests` attorno al servizio della notifica), `BackupHostEffect.kt` e
+`LibraryCommandHostEffect.kt` (una riga ciascuno: l'ospite per finestra), `MediaGrid.kt`, `GridGestures.kt`, `MediaGridState.kt`, `LibraryParts.kt`, `LibraryScreen.kt` (tastiera, mouse e selezione salvata: i pezzi "di base" della Libreria),
+`ViewerOverlay.kt`, `ZoomableMedia.kt` (tastiera e rotella), `core-designsystem/.../adaptive/` (due file nuovi), `strings_window.xml` e `strings_library_windows.xml` (file nuovi). **Non toccati**: `tools/security/**`,
+`docs/review/**`, `core-widget/**`, `core-release/**`, `feature-widget/**`, `benchmark/**`, `FeatureFlags`.
+
+**Punti aperti**
+- **La rotella sul viewer vero**: funziona con il mouse finto di Robolectric, non con gli eventi di `adb` sull'emulatore (la griglia li riceve); da provare con un mouse vero. Se non va, il sospetto e' l'ordine dei livelli di puntatore del viewer.
+- **D18, "La selezione e' cambiata"**: non c'e' un'impronta del piano nel foglio di eliminazione della Libreria; oggi il foglio legge la selezione viva (si accorcia da sola se l'altra finestra toglie elementi dalla vista) e il sistema chiede
+  comunque la sua conferma. Da decidere dopo F167.
+- **Gli ospiti degli oggetti del processo**: ne ho trovati e sistemati due (azioni del backup, comandi della Libreria). Altri oggetti del processo che presumono una sola UI non li ho cercati a fondo: F167 e P13.
+- **Le activity d'ingresso non sono finestre** (scelta, piu' severa: vedi sopra); se si vuole contarle come dice D17 va fatto in `feature-integrations` con il suo cancello.
+- **"Porta davanti" e' al meglio che il sistema permette**: con le due finestre a schermo diviso "davanti" non vuol dire molto, e l'avvio esterno rifiutato puo' lasciare la finestra sbagliata in primo piano; il tetto e il blocco non ne dipendono.
+- **DeX**: nessun metadato di Samsung (D15). `isInMultiWindowMode` e' l'approssimazione di "in DeX" per la voce di menu.
+- **Android sotto la 12**: il tetto e' una finestra (provato sulla JVM con `sdkInt`), mai su un dispositivo.
+- **`closeOtherWindows`** non ha una prova (Robolectric non ha una `AppTask` vera): F167.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde al primo giro** ("OK: tutto a posto.", uscita 0, 31/10, dalle 14:45 alle 15:44), lanciato come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del semaforo.
+`assembleDebug`, `assembleRelease` (con `verifyReleaseManifest` e la nuova `mainActivityPolicy`), `galleryTest` e `galleryLint` in 54 minuti; **18.033 prove in 47 moduli, 0 fallite, 28 saltate per assunzione**, nessun modulo a zero
+(`app` 1.348, `core-security` 218, `core-designsystem` 183, `core-common` 170, `feature-library` 997, `feature-viewer` 906); tutti i passi della release verdi (manifest, dex, R8, Glance al suo posto, nessun `KT`). Nessuna classe rifatta con
+`--rerun`, nessun `hs_err_pid*.log`. Le corse intermedie (prove mirate, mutazioni, Roborazzi) sono in `build\p4\*.log`, fuori dal repository.
+
+### Commit (branch `fase10/p4`)
+`2d5f60fc` (il blocco per processo), `e7b9691d` (due finestre, `singleInstancePerTask`, ingressi alla principale), `2f8e1867` (tastiera, mouse, selezione ripristinata) e `8b683778` (documenti); questa riga con l'esito, dopo.

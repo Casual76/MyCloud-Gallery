@@ -93,6 +93,40 @@ class WindowProtectionTest {
     assertThat(b.secure()).isFalse()
   }
 
+  /** Fase 10 (P4, D17): `FLAG_SECURE` e' per finestra e a contatore **per finestra**: con due finestre dell'app ognuna tiene i suoi permessi. */
+  @Test
+  fun dueFinestre_ognunaHaIlSuoContatoreDiFlagSecure() {
+    val a = newWindow()
+    val b = newWindow()
+    val aFirst = WindowProtection.of(a).acquireSecureContent()
+    val aSecond = WindowProtection.of(a).acquireSecureContent()
+    val bOnly = WindowProtection.of(b).acquireSecureContent()
+    assertThat(a.secure()).isTrue()
+    assertThat(b.secure()).isTrue()
+
+    // Chi chiude i Nascosti in B non toglie la protezione ad A, e viceversa.
+    bOnly.close()
+    assertThat(b.secure()).isFalse()
+    assertThat(a.secure()).isTrue()
+    aFirst.close()
+    assertThat(a.secure()).isTrue()
+    aSecond.close()
+    assertThat(a.secure()).isFalse()
+    assertThat(WindowProtection.of(a)).isNotSameInstanceAs(WindowProtection.of(b))
+  }
+
+  /** E-T19: i Nascosti aperti in una finestra proteggono quella finestra; l'altra non e' protetta solo perche' lo e' la prima. */
+  @Test
+  fun nascostiInUnaFinestra_nonCambianoLaProtezioneDellAltra() {
+    val hiddenWindow = newWindow()
+    val otherWindow = newWindow()
+    val handle = WindowProtection.of(hiddenWindow).acquireSecureContent()
+    assertThat(hiddenWindow.secure()).isTrue()
+    assertThat(otherWindow.secure()).isFalse()
+    handle.close()
+    assertThat(hiddenWindow.secure()).isFalse()
+  }
+
   @Test
   fun ofRestituisceLaStessaIstanzaPerLaStessaFinestra() {
     val window = newWindow()

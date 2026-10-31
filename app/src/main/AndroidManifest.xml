@@ -50,18 +50,31 @@
       tools:targetApi="33">
 
     <!--
-        L'unica activity e l'unico punto d'ingresso dell'utente (verifyReleaseManifest). singleTask: un
-        secondo avvio dall'icona, da una notifica o da un widget riporta in primo piano l'istanza viva
-        invece di impilarne una seconda con la sua navigazione. Il blocco app (AppLockGate) presume una
-        sola activity: con due, ogni passaggio conterebbe come uscita dall'app.
-        taskAffinity vuota (revisione 2, F13): nessun task di un'altra app con la nostra affinita' puo'
-        ospitare l'activity (StrandHogg, soprattutto su Android 10).
+        L'unica activity e l'unico punto d'ingresso dell'utente (verifyReleaseManifest). Una FINESTRA dell'app e' un task di questa activity (Fase 10, P4, D14-D18):
+
+        - launchMode="singleInstancePerTask" (Android 12+; era singleTask): un'istanza per task. Un secondo avvio dall'icona, da una notifica o da un widget
+          riporta in primo piano il task che c'e' invece di impilare un'altra navigazione, come prima; la seconda finestra e' un task nuovo che l'app avvia con
+          NEW_TASK | MULTIPLE_TASK | LAUNCH_ADJACENT (app/.../window/WindowLauncher). Il tetto di DUE finestre lo applica MainActivity.onCreate (WindowRegistry),
+          perche' l'activity e' esportata e un'altra app puo' avviarne molte. Sotto Android 12 il valore e' ignorato e l'app tiene una finestra sola (L546).
+        - configChanges: rotazione, ridimensionamento, tastiera e puntatore sono una RICOMPOSIZIONE, non una ricreazione: MapLibre, il video, lo zoom del viewer e lo
+          scorrimento restano. Densita', lingua e tema invece ricreano l'activity (ognuna salva il suo stato) e il blocco app non la conta come uscita.
+        - resizeableActivity="true" esplicito (dal target 37 non si potra' piu' disattivare sugli schermi da 600 dp) e <layout> con la misura minima di D15
+          (320 x 400 dp: sotto, Android non scende).
+        - I metadati di Samsung per DeX (tenere vivo il processo al cambio di modalita') NON ci sono: D15 li ammette solo se verificati sul Tab S9, che non c'e'.
+
+        taskAffinity vuota (revisione 2, F13): nessun task di un'altra app con la nostra affinita' puo' ospitare l'activity (StrandHogg, soprattutto su Android 10).
+        Il blocco app vale per il PROCESSO, non per la finestra: ogni finestra ha il suo AppLockGate (D17, C434).
     -->
     <activity
         android:name=".MainActivity"
+        android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation"
         android:exported="true"
-        android:launchMode="singleTask"
+        android:launchMode="singleInstancePerTask"
+        android:resizeableActivity="true"
         android:taskAffinity="">
+      <layout
+          android:minHeight="400dp"
+          android:minWidth="320dp" />
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LAUNCHER" />

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Le finestre dell'app (Fase 10, P4, D16): la voce di menu della Libreria. In un file proprio (docs/fase10-progetto.md §1.5). -->
+<resources>
+  <string name="library_open_new_window">Apri in una nuova finestra</string>
+</resources>

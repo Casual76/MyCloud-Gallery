@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CheckCircleOutline
 import androidx.compose.material.icons.rounded.FilterAlt
 import androidx.compose.material.icons.rounded.KeyboardDoubleArrowDown
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -57,6 +59,8 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTextButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryEdgeScrim
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryLegibility
 import dev.pampa.mycloudgallery.core.designsystem.design.galleryChromeTag
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.LocalNewWindow
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryFilterOption
 import dev.pampa.mycloudgallery.core.designsystem.grid.galleryFilterMenuEntries
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
@@ -121,6 +125,9 @@ internal fun LibraryScreen(
 
   val keeper = rememberSaveable(saver = positionSaver(grid)) { PositionKeeper(null) }
   SideEffect { keeper.restoreOnce(grid) }
+  // Fase 10 (P4, D14, E-T8): la selezione sopravvive a una ricreazione vera (densita', lingua, tema, processo morto), fino a 500 elementi; oltre, "tutti" o la sola modalita'.
+  val selectionKeeper = rememberSaveable(saver = selectionSaver(grid)) { SelectionKeeper(null) }
+  LaunchedEffect(grid, selectionKeeper) { selectionKeeper.restoreWhenReady(grid) }
 
   // GA-2: in selezione "Indietro" esce dalla selezione, non dall'app (come nelle Raccolte e negli Eliminati di recente).
   BackHandler(enabled = grid.selecting) { grid.stopSelecting() }
@@ -173,6 +180,8 @@ internal fun LibraryScreen(
           footer = { LibraryFooter(state, phone, status) },
           stickyTop = topChrome,
           onLevelChanged = { level -> scope.launch { state.preferences.setLevel(level) } },
+          // D15: Canc apre il foglio di conferma (lo stesso della barra delle azioni), mai un'eliminazione diretta.
+          onDeleteKey = { deleting = true },
         )
       }
       GridTopEdgeScrim(topChrome, Modifier.align(Alignment.TopCenter))
@@ -369,9 +378,20 @@ private fun libraryMenu(state: LibraryTabState, onOpenSettings: () -> Unit, scop
       GalleryFilterOption(label, selected = size == hooks.current) { hooks.select(size) }
     }
   }.orEmpty()
+  // Fase 10 (P4, D16, E-T6): "Apri in una nuova finestra" solo da una finestra estesa o in DeX (la porta dice se si offre); apre la Libreria in una seconda finestra.
+  val newWindow = LocalNewWindow.current
+  val window = rememberGalleryWindow()
+  val openNewWindow = if (newWindow != null && newWindow.isOffered(window)) {
+    GalleryMenuEntry.Item(label = stringResource(R.string.library_open_new_window), onClick = newWindow::openLibrary, icon = Icons.AutoMirrored.Rounded.OpenInNew)
+  } else {
+    null
+  }
   return galleryFilterMenuEntries(
     groups = listOf(levels, filters, styles, sizes),
-    trailing = listOf(GalleryMenuEntry.Item(label = stringResource(R.string.library_open_settings), onClick = onOpenSettings, icon = Icons.Rounded.Settings)),
+    trailing = listOfNotNull(
+      openNewWindow,
+      GalleryMenuEntry.Item(label = stringResource(R.string.library_open_settings), onClick = onOpenSettings, icon = Icons.Rounded.Settings),
+    ),
   )
 }
 

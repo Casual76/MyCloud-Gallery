@@ -106,6 +106,8 @@ import kotlinx.coroutines.withContext
  * @param onLevelChanged il livello si e' assestato dopo un pinch (per ricordarlo).
  * @param cellCornerScale quanto dell'angolo delle celle resta: di serie la parete di foto squadrata ([GalleryWall]).
  * @param gap la fessura fra le celle: di serie quella della parete (1 dp).
+ * @param onDeleteKey Canc (Fase 10, P4, D15): **apre il foglio di conferma** dell'eliminazione, mai un'eliminazione diretta. Null: questa griglia non elimina e Canc non fa niente.
+ *   Mouse e tastiera (evidenziazione, Invio, Ctrl+A) sono di ogni griglia ([gridKeyboard]).
  */
 @Composable
 fun MediaGrid(
@@ -118,6 +120,7 @@ fun MediaGrid(
   onLevelChanged: (GridLevel) -> Unit = {},
   cellCornerScale: Float = GalleryWall.CornerScale,
   gap: Dp = GalleryWall.Gap,
+  onDeleteKey: (() -> Unit)? = null,
 ) {
   BoxWithConstraints(
     modifier = modifier
@@ -131,6 +134,7 @@ fun MediaGrid(
     val scope = rememberCoroutineScope()
     val haptics = rememberFluidHaptics()
     val currentOnOpen by rememberUpdatedState(onOpen)
+    val currentOnDeleteKey by rememberUpdatedState(onDeleteKey)
     val currentOnLevelChanged by rememberUpdatedState(onLevelChanged)
     val currentReduced by rememberUpdatedState(reducedMotion)
 
@@ -185,7 +189,8 @@ fun MediaGrid(
       )
     }
 
-    Box(modifier = Modifier.fillMaxSize().gridGestures(state, scope, callbacks)) {
+    val keyCallbacks = remember(onDeleteKey != null) { GridKeyCallbacks(onOpen = { currentOnOpen(it) }, onDeleteSheet = onDeleteKey?.let { { currentOnDeleteKey?.invoke() } }) }
+    Box(modifier = Modifier.fillMaxSize().gridKeyboard(state, keyCallbacks).gridGestures(state, scope, callbacks)) {
       LazyColumn(
         state = state.listState,
         modifier = Modifier

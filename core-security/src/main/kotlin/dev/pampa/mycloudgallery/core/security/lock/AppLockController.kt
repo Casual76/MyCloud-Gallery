@@ -37,6 +37,12 @@ enum class AppLockState {
  * - durante lo sblocco la schermata di sistema porta l'app in secondo piano: in quel periodo non si
  *   ricorda nessuna uscita (altrimenti con "subito" lo sblocco riuscito si richiuderebbe da solo).
  *
+ * **Per processo, non per finestra** (Fase 10, P4, D17, C434): lo stato, il timeout e lo sblocco sono **uno solo** per tutte le finestre dell'app (due al
+ * massimo). Ogni finestra si apre con [newWindow] e lo dice con [windowStarted] e [windowStopped]: l'app **esce** ([onAppBackgrounded]) solo quando
+ * **l'ultima** finestra si ferma, e **torna** ([onAppForegrounded]) quando parte la prima; una finestra che si ferma mentre l'altra resta visibile non
+ * conta come uscita, e uno sblocco riuscito in una finestra vale per tutte (lo stato e' questo, le finestre lo leggono). Le activity d'ingresso (selettore,
+ * ricezione) non sono finestre: hanno il loro cancello ([isUnlockedNow], [endEntryAuthentication]) e **non** tengono l'app in primo piano.
+ *
  * I metodi vanno chiamati dal thread principale; sono comunque sincronizzati.
  */
 class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock) {
@@ -50,10 +56,20 @@ class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock
   /** Le impostazioni correnti, o `null` finche' non sono state lette. */
   val settings: StateFlow<AppLockSettings?> = _settings.asStateFlow()
 
-  private var backgroundedAt: Long? = null
-  private var authenticating = false
+  private val _authenticating = MutableStateFlow(false)
+  private val process = ProcessForeground(clock)
 
-  /** La `MainActivity` e' in primo piano (fra `ON_START` e `ON_STOP`). Le activity d'ingresso (selettore, ricezione) non lo cambiano. */
+  /** Vero mentre e' in corso uno sblocco, **in qualunque finestra**: la schermata di blocco delle altre finestre lo mostra (D17). */
+  val authenticatingState: StateFlow<Boolean> = _authenticating.asStateFlow()
+
+  private var backgroundedAt: Long? = null
+  private var authenticating: Boolean
+    get() = _authenticating.value
+    set(value) {
+      _authenticating.value = value
+    }
+
+  /** Almeno una finestra (`MainActivity`) e' in primo piano (fra `ON_START` e `ON_STOP`). Le activity d'ingresso (selettore, ricezione) non lo cambiano. */
   private var foreground = false
 
   /** P14: l'istante (monotono) dell'ultimo sblocco fatto da un'activity d'ingresso con la `MainActivity` fuori dal primo piano. */
@@ -95,14 +111,19 @@ class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock
     }
   }
 
-  /** L'app esce dal primo piano (non per un cambio di configurazione come la rotazione). */
+  /**
+   * L'app esce dal primo piano (non per un cambio di configurazione come la rotazione). Con piu' finestre lo dice [windowStopped] quando si ferma
+   * **l'ultima**: chi lo chiama a mano (i test del controller, un'unica finestra) deve volere proprio questo.
+   */
   @Synchronized
-  fun onAppBackgrounded() {
+  fun onAppBackgrounded() = backgrounded(at = clock.elapsedRealtimeMillis())
+
+  private fun backgrounded(at: Long) {
     foreground = false
     if (authenticating) return
     // Conta la PRIMA uscita: un secondo evento senza ritorno in mezzo non deve allungare il tempo concesso.
     if (_settings.value?.isEnabled == true && _state.value == AppLockState.UNLOCKED && backgroundedAt == null) {
-      backgroundedAt = clock.elapsedRealtimeMillis()
+      backgroundedAt = at
     }
   }
 
@@ -118,6 +139,41 @@ class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock
     if (!current.isEnabled || _state.value != AppLockState.UNLOCKED) return
     val elapsed = clock.elapsedRealtimeMillis() - since
     if (elapsed < 0 || elapsed >= current.timeout.millis) _state.value = AppLockState.LOCKED
+  }
+
+  /** Una finestra nuova dell'app (una per composizione del cancello). Opaca: si pilota con [windowStarted], [windowStopped] e [windowClosed]. */
+  fun newWindow(): ProcessForeground.Window = process.newWindow()
+
+  /** Quante finestre sono avviate adesso (per i test e la Diagnostica). */
+  val startedWindows: Int get() = process.startedWindows
+
+  /** La finestra e' avviata (`ON_START`): la prima fa tornare l'app in primo piano ([onAppForegrounded]); le altre non cambiano niente. */
+  @Synchronized
+  fun windowStarted(window: ProcessForeground.Window) {
+    apply(process.start(window))
+  }
+
+  /**
+   * La finestra si e' fermata (`ON_STOP`): **l'ultima** fa uscire l'app dal primo piano ([onAppBackgrounded]); se un'altra finestra e' ancora avviata
+   * non succede niente (D17, E-T7). Con [changingConfigurations] e' una ricreazione (densita', lingua, tema): non e' un'uscita.
+   */
+  @Synchronized
+  fun windowStopped(window: ProcessForeground.Window, changingConfigurations: Boolean) {
+    apply(process.stop(window, changingConfigurations))
+  }
+
+  /** La finestra e' finita per sempre (composizione chiusa, activity distrutta): come [windowStopped] e non torna piu'. */
+  @Synchronized
+  fun windowClosed(window: ProcessForeground.Window) {
+    apply(process.close(window))
+  }
+
+  private fun apply(change: ProcessForeground.Change) {
+    when (change) {
+      ProcessForeground.Change.ENTERED_FOREGROUND -> onAppForegrounded()
+      ProcessForeground.Change.LEFT_FOREGROUND -> backgrounded(at = process.lastExitAtMillis)
+      ProcessForeground.Change.NONE -> Unit
+    }
   }
 
   /** Inizia uno sblocco. Falso se non si e' bloccati o ce n'e' gia' uno in corso. */
@@ -151,6 +207,7 @@ class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock
    */
   @Synchronized
   fun isUnlockedNow(): Boolean {
+    apply(process.poll())
     val current = _settings.value ?: return false
     if (!current.isEnabled) return true
     if (_state.value != AppLockState.UNLOCKED) return false
@@ -172,6 +229,7 @@ class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock
    */
   @Synchronized
   fun endEntryAuthentication(success: Boolean) {
+    apply(process.poll())
     authenticating = false
     if (!success || _settings.value?.isEnabled != true) return
     _state.value = AppLockState.UNLOCKED

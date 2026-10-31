@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Le finestre dell'app (Fase 10, P4, D16, E-T6): il messaggio della terza finestra rifiutata. In un file proprio (docs/fase10-progetto.md §1.5). -->
+<resources>
+  <string name="window_too_many">Hai già due finestre di MyCloud Gallery aperte. Ti porto in quella che c\'è.</string>
+  <string name="window_unavailable">Non riesco ad aprire una nuova finestra.</string>
+</resources>

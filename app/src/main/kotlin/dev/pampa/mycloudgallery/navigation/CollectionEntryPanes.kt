@@ -117,44 +117,58 @@ private fun PaneNavHost(start: Any, modifier: Modifier = Modifier, graph: androi
 internal fun EntryPagePane(page: PanePage, panes: EntryPanes, outer: NavController, close: () -> Unit) {
   key(page) {
     when (page) {
-      is PanePage.Album -> {
-        val actions = panes.albumActions ?: return@key
-        val thumbnails = panes.albumThumbnails ?: return@key
-        PaneNavHost(AlbumPageDestination(page.id.value)) {
-          composable<AlbumPageDestination> {
-            AlbumPageRoute(
-              actions = actions,
-              thumbnails = thumbnails,
-              exits = AlbumPageExits(
-                onBack = close,
-                onBackToList = close,
-                onOpenAlbum = outer::openAlbum,
-                onOpenRules = outer::openRules,
-                onOpenSuggestions = outer::openSuggestions,
-              ),
-            )
-          }
-        }
-      }
-      is PanePage.Person -> {
-        val actions = panes.peopleActions ?: return@key
-        val thumbnails = panes.peopleThumbnails ?: return@key
-        val crops = panes.peopleCrops ?: return@key
-        PaneNavHost(PersonDestination(page.id.value)) {
-          composable<PersonDestination> {
-            PersonPageRoute(actions = actions, thumbnails = thumbnails, crops = crops, exits = PersonPageExits(onBack = close, onReview = outer::openReview))
-          }
-        }
-      }
-      is PanePage.Memory -> {
-        val actions = panes.memoriesActions ?: return@key
-        val thumbnails = panes.memoriesThumbnails ?: return@key
-        PaneNavHost(MemoryDestination(page.id.value)) {
-          composable<MemoryDestination> {
-            MemoryPageRoute(actions = actions, thumbnails = thumbnails, exits = MemoryPageExits(onBack = close, onPlay = outer::openMemoryPlayer))
-          }
-        }
-      }
+      is PanePage.Album -> AlbumPane(page, panes, outer, close)
+      is PanePage.Person -> PersonPane(page, panes, outer, close)
+      is PanePage.Memory -> MemoryPane(page, panes, outer, close)
+    }
+  }
+}
+
+// Tre funzioni e non un `return@key`: un ritorno non locale da una lambda di `key` in una composable produce un metodo che R8 non sa mettere nel dex.
+
+@Composable
+private fun AlbumPane(page: PanePage.Album, panes: EntryPanes, outer: NavController, close: () -> Unit) {
+  val actions = panes.albumActions
+  val thumbnails = panes.albumThumbnails
+  if (actions == null || thumbnails == null) return
+  PaneNavHost(AlbumPageDestination(page.id.value)) {
+    composable<AlbumPageDestination> {
+      AlbumPageRoute(
+        actions = actions,
+        thumbnails = thumbnails,
+        exits = AlbumPageExits(
+          onBack = close,
+          onBackToList = close,
+          onOpenAlbum = outer::openAlbum,
+          onOpenRules = outer::openRules,
+          onOpenSuggestions = outer::openSuggestions,
+        ),
+      )
+    }
+  }
+}
+
+@Composable
+private fun PersonPane(page: PanePage.Person, panes: EntryPanes, outer: NavController, close: () -> Unit) {
+  val actions = panes.peopleActions
+  val thumbnails = panes.peopleThumbnails
+  val crops = panes.peopleCrops
+  if (actions == null || thumbnails == null || crops == null) return
+  PaneNavHost(PersonDestination(page.id.value)) {
+    composable<PersonDestination> {
+      PersonPageRoute(actions = actions, thumbnails = thumbnails, crops = crops, exits = PersonPageExits(onBack = close, onReview = outer::openReview))
+    }
+  }
+}
+
+@Composable
+private fun MemoryPane(page: PanePage.Memory, panes: EntryPanes, outer: NavController, close: () -> Unit) {
+  val actions = panes.memoriesActions
+  val thumbnails = panes.memoriesThumbnails
+  if (actions == null || thumbnails == null) return
+  PaneNavHost(MemoryDestination(page.id.value)) {
+    composable<MemoryDestination> {
+      MemoryPageRoute(actions = actions, thumbnails = thumbnails, exits = MemoryPageExits(onBack = close, onPlay = outer::openMemoryPlayer))
     }
   }
 }

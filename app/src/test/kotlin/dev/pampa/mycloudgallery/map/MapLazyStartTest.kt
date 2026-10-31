@@ -10,6 +10,11 @@ import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.noop.NoVisibleMedia
 import dev.pampa.mycloudgallery.core.map.contract.RebuildReason
+import dev.pampa.mycloudgallery.core.map.noop.NoMapNetworkState
+import dev.pampa.mycloudgallery.core.map.noop.NoMapRegions
+import dev.pampa.mycloudgallery.core.map.noop.NoMapTraffic
+import dev.pampa.mycloudgallery.core.map.policy.TilePolicy
+import dev.pampa.mycloudgallery.core.map.testing.InMemoryMapSettings
 import dev.pampa.mycloudgallery.core.network.contract.NetworkSnapshot
 import dev.pampa.mycloudgallery.feature.map.contract.MapPlaceNames
 import dev.pampa.mycloudgallery.feature.map.map.MapLibreInit
@@ -65,6 +70,12 @@ class MapLazyStartTest {
 
   private val mapDir: File get() = File(context.noBackupFilesDir, MapLibreInit.MAP_DIR)
 
+  /**
+   * Il cancello con impostazioni in memoria: il DataStore vero tiene "attivo" il suo file finche' il suo scope vive (tutto il processo dei test), e un secondo
+   * DataStore sullo stesso file fallisce in un altro test. Qui si prova l'ordine della partenza, non le impostazioni.
+   */
+  private fun wiring() = MapNetWiring(TilePolicy, true, InMemoryMapSettings(), NoMapNetworkState, NoMapRegions, NoMapTraffic)
+
   @Test
   fun ilGrafoNasceSenzaFareNiente() {
     mapDir.deleteRecursively()
@@ -91,7 +102,7 @@ class MapLazyStartTest {
     val calls = mutableListOf<String>()
     var ready = false
     val starter = AppMapEngineStarter(
-      wiring = { calls += "wiring"; graph().wiring() },
+      wiring = { calls += "wiring"; wiring() },
       scope = scope,
       init = { _, _: MapNetWiring, _ -> calls += "ensure"; ready = true },
       ready = { ready },
@@ -103,7 +114,7 @@ class MapLazyStartTest {
 
     // Un avvio che fallisce non dice "pronta" (nessuna MapView) e non si riprova a ogni fotogramma.
     var attempts = 0
-    val broken = AppMapEngineStarter({ graph().wiring() }, scope, init = { _, _: MapNetWiring, _ -> attempts++; throw UnsatisfiedLinkError("niente libreria") }, ready = { false })
+    val broken = AppMapEngineStarter({ wiring() }, scope, init = { _, _: MapNetWiring, _ -> attempts++; throw UnsatisfiedLinkError("niente libreria") }, ready = { false })
     assertThat(broken.ensure(context)).isFalse()
     assertThat(broken.ensure(context)).isFalse()
     assertThat(attempts).isEqualTo(1)

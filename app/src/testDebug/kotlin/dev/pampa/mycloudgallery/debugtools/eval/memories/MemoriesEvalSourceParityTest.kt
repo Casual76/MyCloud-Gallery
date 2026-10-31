@@ -100,13 +100,17 @@ class MemoriesEvalSourceParityTest {
         .filter { f -> f.readText(Charsets.UTF_8).let { "debugtools.eval.memories" in it || "MemoriesEval" in it } }.toList()
       assertThat(offenders).isEmpty()
     }
-    // L'aggancio c'e' solo nel file di debug di DeveloperTools (e la release non ha il metodo in piu'); la porta la lega P13 (nessun file di debug la assegna ancora).
+    // L'aggancio c'e' solo nel file di debug di DeveloperTools; la release ha solo il gancio neutro di P13 (`installMemories(graph: Any)`, vuoto) e niente dello strumento.
+    // La porta la lega P13, in un posto solo: `DeveloperTools.installMemories` del debug.
     val debug = File(root, "debug/kotlin/dev/pampa/mycloudgallery/debugtools/DeveloperTools.kt").readText(Charsets.UTF_8)
     assertThat(debug).contains("debugtools.eval.memories.MemoriesEvalEntry")
-    assertThat(File(root, "release/kotlin/dev/pampa/mycloudgallery/debugtools/DeveloperTools.kt").readText(Charsets.UTF_8)).doesNotContain("Memories")
+    File(root, "release/kotlin/dev/pampa/mycloudgallery/debugtools/DeveloperTools.kt").readText(Charsets.UTF_8).let { release ->
+      assertThat(release).doesNotContain("MemoriesEval")
+      assertThat(release).doesNotContain("eval.memories")
+    }
     val binder = Regex("MemoriesEvalEnvironmentHolder\\.current\\s*=[^=]")
     val binders = File(root, "debug").walkTopDown().filter { it.isFile && it.name.endsWith(".kt") && code(it).any { line -> binder.containsMatchIn(line) } }.map { it.name }.toList()
-    assertThat(binders).isEmpty()
+    assertThat(binders).containsExactly("DeveloperTools.kt")
   }
 
   @Test

@@ -77,6 +77,8 @@ import dev.antigravity.fluidengine.ui.fluidphysics.FluidCornerRadii
 import dev.antigravity.fluidengine.ui.fluidphysics.FluidForm
 import dev.antigravity.fluidengine.ui.fluidphysics.fluidPhysicsClip
 import dev.antigravity.fluidengine.ui.fluidphysics.rememberFluidPhysicsState
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryDismissSpec
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryExpandSpec
@@ -221,6 +223,8 @@ private fun ViewerHost(
 
   val context = LocalContext.current
   val density = LocalDensity.current
+  val window = rememberGalleryWindow()
+  val dock = LocalViewerDock.current
   val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
   val scope = rememberCoroutineScope()
   val viewModel: ViewerViewModel = viewModel()
@@ -308,6 +312,14 @@ private fun ViewerHost(
   LaunchedEffect(view) {
     val index = view.viewIndexOf(state.currentId)
     if (index >= 0 && index != pager.currentPage && !pager.isScrollInProgress) pager.scrollToPage(index)
+  }
+  // Fase 10 (P5, D13 (5)): affiancato alla Libreria, un tocco su una cella della griglia a lato cambia la foto, senza animazione d'apertura; la griglia resta dov'e'.
+  val jump = dock?.jump
+  LaunchedEffect(jump) {
+    if (jump == null) return@LaunchedEffect
+    val page = ViewerJumps.pageOf(latestView, jump.media)
+    if (page != null && !controller.closing && page != pager.currentPage) pager.scrollToPage(page)
+    dock?.jumpHandled(jump)
   }
   // I preferiti toccati restano "in sospeso" finche' l'indice non conferma.
   LaunchedEffect(view.snapshot.seq) {
@@ -440,7 +452,8 @@ private fun ViewerHost(
   ) {
     val stagePx = Size(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
     val screen = IntSize(constraints.maxWidth, constraints.maxHeight)
-    val sidePanel = maxWidth >= SidePanelMinWidth
+    // Fase 10 (P5, D12): le informazioni in colonna da finestra estesa (840 dp, la soglia di sempre) secondo la finestra comune, che dentro un pannello e' quella del pannello.
+    val sidePanel = GalleryPaneRules.infoBeside(window)
     val sheetHeightDp = sheetHeight(maxHeight)
     val sheetPx = with(density) { sheetHeightDp.toPx() }
     val panelPx = with(density) { SidePanelWidth.toPx() }
@@ -829,6 +842,7 @@ private fun ViewerOverlays(
       onFind = { services.similarSearch.findSimilar(currentId) },
       onExplain = { state.message = ViewerMessage.SimilarUnavailable },
     ),
+    dock = LocalViewerDock.current.entry(secure = request.secure),
     albumActions = albumMenuEntries(
       resources,
       services.albums.menu(currentId),
@@ -1177,7 +1191,6 @@ private fun Modifier.shrinkEnd(end: () -> Int): Modifier = layout { measurable, 
   layout(constraints.maxWidth, placeable.height) { placeable.place(0, 0) }
 }
 
-private val SidePanelMinWidth: Dp = 840.dp
 private val SidePanelWidth: Dp = 380.dp
 private val PageSpacing: Dp = 16.dp
 private val NoticeBottomInset: Dp = GalleryViewerChromeDefaults.BottomMargin + 48.dp + 28.dp

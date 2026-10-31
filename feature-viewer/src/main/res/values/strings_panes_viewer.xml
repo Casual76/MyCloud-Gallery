@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 10 (P5, D13 (5)): il viewer affiancato alla Libreria, da finestra ampia. -->
+  <string name="viewer_action_dock">Affianca alla Libreria</string>
+  <string name="viewer_action_undock">Schermo intero</string>
+</resources>

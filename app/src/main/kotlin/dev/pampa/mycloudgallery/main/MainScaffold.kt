@@ -24,9 +24,11 @@ import androidx.compose.material.icons.rounded.SignalWifiOff
 import androidx.compose.material.icons.rounded.VpnKeyOff
 import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,6 +111,13 @@ fun MainScaffold(
   val ownViewer = if (rootViewer == null) remember { ViewerHostState(null) } else null
   val viewer = rootViewer ?: checkNotNull(ownViewer)
   val scope = rememberCoroutineScope()
+  // Fase 10 (P5, D13 (5)): "Affianca" si ricorda per profilo (le preferenze della Libreria stanno nei dati del profilo): il viewer la legge dall'ospite. Il viewer affiancato non
+  // sopravvive a una scheda diversa dalla Libreria ne' all'uscita da questa pagina (impostazioni, altre rotte): il suo posto e' accanto alla griglia.
+  val dockPreference by libraryState.preferences.viewerDocked.collectAsState()
+  LaunchedEffect(viewer, dockPreference) { viewer.dockChoice = dockPreference }
+  SideEffect { viewer.saveDockChoice = { docked -> scope.launch { libraryState.preferences.setViewerDocked(docked) } } }
+  LaunchedEffect(selectedTab) { if (selectedTab != GalleryTab.Library && viewer.docked) viewer.close() }
+  DisposableEffect(viewer) { onDispose { if (viewer.docked) viewer.close() } }
   // La piega della pillola allo scorrimento (G2, scelta 5 dell'utente): la Libreria attacca la connessione alla griglia. In
   // una griglia che si apre in fondo, "verso i piu' vecchi" e' il dito che scende: la pillola si ripiega li'
   // (`OnScrollUp`) e torna tornando verso i recenti.

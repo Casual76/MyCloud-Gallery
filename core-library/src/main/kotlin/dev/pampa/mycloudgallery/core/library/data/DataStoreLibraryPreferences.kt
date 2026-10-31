@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -49,6 +50,9 @@ class DataStoreLibraryPreferences(
   override val style: StateFlow<GridStyle> =
     data.map { GridStyle.fromCode(it[STYLE]) }.stateIn(scope, SharingStarted.Eagerly, GridStyle.SQUARE)
 
+  override val viewerDocked: StateFlow<Boolean> =
+    data.map { it[VIEWER_DOCKED] == true }.stateIn(scope, SharingStarted.Eagerly, false)
+
   /** Aspetta la prima lettura del file. */
   suspend fun ready() {
     data.first()
@@ -72,10 +76,15 @@ class DataStoreLibraryPreferences(
     store.edit { it[STYLE] = style.code }
   }
 
+  override suspend fun setViewerDocked(docked: Boolean) {
+    store.edit { it[VIEWER_DOCKED] = docked }
+  }
+
   companion object {
     private val FILTER = stringPreferencesKey("filter")
     private val LEVEL = stringPreferencesKey("level")
     private val STYLE = stringPreferencesKey("style")
+    private val VIEWER_DOCKED = booleanPreferencesKey("viewer_docked")
 
     /** Il file delle preferenze in `noBackupFilesDir`. */
     fun file(context: Context): File = File(context.noBackupFilesDir, "datastore/library.preferences_pb")

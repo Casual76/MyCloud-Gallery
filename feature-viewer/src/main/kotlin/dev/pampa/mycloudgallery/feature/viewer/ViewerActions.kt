@@ -13,6 +13,8 @@ import androidx.compose.material.icons.rounded.ContentCut
 import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Fullscreen
+import androidx.compose.material.icons.rounded.VerticalSplit
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.IosShare
@@ -107,6 +109,8 @@ internal fun viewerMenuEntries(
   onCutout: (() -> Unit)? = null,
   similarActions: List<GalleryMenuEntry> = emptyList(),
   albumActions: List<GalleryMenuEntry> = emptyList(),
+  /** Fase 10 (P5, D13 (5)): "Affianca alla Libreria" / "Schermo intero", solo da finestra ampia con il viewer aperto dalla Libreria. */
+  dock: ViewerDockEntry? = null,
 ): List<GalleryMenuEntry> {
   val groups = mutableListOf<List<GalleryMenuEntry>>()
   groups.add(buildList<GalleryMenuEntry> {
@@ -168,6 +172,15 @@ internal fun viewerMenuEntries(
     }
     addAll(nasDelete)
   })
+  // La voce dei pannelli non e' un'azione sulla foto: sta in un gruppo suo, dopo le azioni e prima di quelle distruttive.
+  if (dock != null) {
+    val entry = GalleryMenuEntry.Item(
+      label = resources.getString(if (dock.docked) R.string.viewer_action_undock else R.string.viewer_action_dock),
+      onClick = dock.onToggle,
+      icon = if (dock.docked) Icons.Rounded.Fullscreen else Icons.Rounded.VerticalSplit,
+    )
+    groups.add(groups.size - 1, listOf(entry))
+  }
   return groups.filter { it.isNotEmpty() }.flatMapIndexed { index, group ->
     if (index == 0) group else listOf(GalleryMenuEntry.GroupBreak) + group
   }

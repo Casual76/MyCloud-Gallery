@@ -57,15 +57,22 @@ class InMemoryLibraryPreferences(
   filter: LibraryFilter = LibraryFilter.ALL,
   level: GridLevel = GridLevel.DAYS,
   style: GridStyle = GridStyle.SQUARE,
+  viewerDocked: Boolean = false,
 ) : LibraryPreferences {
 
   private val filterFlow = MutableStateFlow(filter)
   private val levelFlow = MutableStateFlow(level)
   private val styleFlow = MutableStateFlow(style)
+  private val dockedFlow = MutableStateFlow(viewerDocked)
 
   override val filter: StateFlow<LibraryFilter> = filterFlow
   override val level: StateFlow<GridLevel> = levelFlow
   override val style: StateFlow<GridStyle> = styleFlow
+  override val viewerDocked: StateFlow<Boolean> = dockedFlow
+
+  override suspend fun setViewerDocked(docked: Boolean) {
+    dockedFlow.value = docked
+  }
 
   override suspend fun setFilter(filter: LibraryFilter) {
     filterFlow.value = filter

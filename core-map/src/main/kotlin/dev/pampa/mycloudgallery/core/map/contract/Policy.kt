@@ -37,8 +37,12 @@ data class MapRequestFacts(
   override fun toString(): String = "MapRequestFacts($method)"
 }
 
-/** Le tessere ammesse durante lo scaricamento **confermato** di una regione (D26): anche a mappa online spenta, solo quelle, solo per quell'operazione. */
-class RegionDownloadScope(val includes: (TileKey) -> Boolean, val mobileConfirmed: Boolean) {
+/**
+ * Le tessere ammesse durante lo scaricamento **confermato** di una regione (D26): anche a mappa online spenta, solo quelle, solo per quell'operazione. Il [budget] (P5) e' il conto
+ * dello scaricamento dentro i limiti di OpenFreeMap (3.000 tessere, 50 MB): finito quello, le tessere della regione si rifiutano con [RefuseReason.LIMIT]. Senza [budget] (le prove
+ * del cancello e chi non conta) non c'e' tetto.
+ */
+class RegionDownloadScope(val includes: (TileKey) -> Boolean, val mobileConfirmed: Boolean, val budget: DownloadBudget? = null) {
   override fun toString(): String = "RegionDownloadScope(mobile=$mobileConfirmed)"
 }
 
@@ -80,6 +84,9 @@ enum class RefuseReason(override val code: String) : StableCode {
 
   /** Tipo di contenuto inatteso o risposta oltre [MapResponseRules.MAX_BYTES] (E-MAP4): lo decide l'intercettore. */
   CONTENT("content"),
+
+  /** Lo scaricamento di una regione ha raggiunto il tetto di OpenFreeMap (3.000 tessere o 50 MB, [DownloadBudget]): la regione resta parziale e non riparte da sola (P5). */
+  LIMIT("limit"),
 }
 
 /** Il verdetto su una richiesta. */

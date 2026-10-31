@@ -105,8 +105,12 @@ class RecordingMapTraffic : MapTraffic {
   }
 }
 
-class FakePlaceCenters(private val centers: Map<Int, GeoE6>) : PlaceCenters {
+class FakePlaceCenters(private val centers: Map<Int, GeoE6>, private val urbanIds: Set<Int> = emptySet(), private val names: Map<Int, String> = emptyMap()) : PlaceCenters {
   override fun center(placeId: Int): GeoE6? = centers[placeId]
+
+  override fun urban(placeId: Int): Boolean = placeId in urbanIds
+
+  override fun name(placeId: Int): String? = names[placeId]
 }
 
 /**

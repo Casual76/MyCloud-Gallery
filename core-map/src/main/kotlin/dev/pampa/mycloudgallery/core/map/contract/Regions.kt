@@ -9,6 +9,10 @@ import kotlinx.coroutines.flow.StateFlow
 // che dice "il servizio delle mappe vedra' quale zona scarichi" ([RegionDownloadConfirmation], costruita SOLO dal foglio: Phase9ArchitectureTest),
 // solo sul Wi-Fi (sui dati mobili con la seconda conferma), da un **catalogo fisso**; "la zona attorno a un luogo" prende il centro dal luogo
 // GeoNames, **mai dalla casa** ne' dai punti delle foto (D29). Le tessere di una regione completa non si chiedono piu' online (`COVERED`).
+//
+// **Dentro i limiti di OpenFreeMap (decisione dell'utente del 31/10)**: ogni scaricamento al piu' 3.000 tessere e 50 MB, al piu' 4 richieste insieme ([OpenFreeMapLimits]).
+// Le regioni intere e i paesi si scaricano fino a z12 (o z11, z10 se non ci stanno; sotto z10 non si offrono); "la zona attorno a un luogo" fino a z14 (15 e 30 km) o z13 (60 km),
+// con lo stesso scalino in giu'. Il catalogo, la stima e il piano sono di `core.map.regions` (P5); qui il contratto.
 
 /** L'id stabile di una regione: `it-<regione>`, `country-<codice>`, `around-<placeId>-<raggio>`. Mai nei log (dice la zona). */
 @JvmInline
@@ -39,8 +43,8 @@ sealed interface RegionSpec {
   val kind: RegionKind
   val box: GeoBox
 
-  /** Una regione italiana o un paese vicino: riquadro fisso, arrotondato a 0,1 gradi (P5, da Natural Earth). */
-  data class Named(override val id: RegionId, override val kind: RegionKind, override val box: GeoBox) : RegionSpec {
+  /** Una regione italiana o un paese vicino: riquadro fisso, arrotondato a 0,1 gradi verso l'esterno (P5). [name] e' il nome per la pagina (mai nei log). */
+  data class Named(override val id: RegionId, override val kind: RegionKind, override val box: GeoBox, val name: String = "") : RegionSpec {
     init {
       require(kind != RegionKind.AROUND_PLACE) { "Una regione con nome e' del catalogo." }
     }
@@ -48,8 +52,17 @@ sealed interface RegionSpec {
     override fun toString(): String = "RegionSpec.Named(${kind.code})"
   }
 
-  /** La zona di [radius] attorno al luogo GeoNames [placeId], con il centro [center] **del luogo** ([PlaceCenters]). */
-  data class AroundPlace(val placeId: Int, val radius: RegionRadius, val center: GeoE6) : RegionSpec {
+  /**
+   * La zona di [radius] attorno al luogo GeoNames [placeId], con il centro [center] **del luogo** ([PlaceCenters]). [urban]: il luogo e' una citta' (la stima usa la
+   * densita' delle tessere di citta'); [name] il nome del luogo per la pagina (mai nei log).
+   */
+  data class AroundPlace(
+    val placeId: Int,
+    val radius: RegionRadius,
+    val center: GeoE6,
+    val urban: Boolean = false,
+    val name: String = "",
+  ) : RegionSpec {
     override val id: RegionId get() = RegionId("around-$placeId-${radius.km}")
     override val kind: RegionKind get() = RegionKind.AROUND_PLACE
     override val box: GeoBox get() = RegionBoxes.around(center, radius.km)
@@ -77,9 +90,13 @@ object RegionBoxes {
   }
 }
 
-/** La stima prima di scaricare (D26): tessere da z0 a z14 nel riquadro e peso dalla tabella di densita' (P5). */
-data class RegionEstimate(val tiles: Long, val bytes: Long) {
-  override fun toString(): String = "RegionEstimate($tiles, $bytes)"
+/**
+ * La stima prima di scaricare (D26, P5): le tessere da z0 a [maxZoom] nel riquadro e il peso dalla tabella di densita' calibrata su dati veri. [maxZoom] e' il livello piu' alto
+ * che sta nei limiti di OpenFreeMap; con [offered] falso nemmeno z[RegionLimits.MIN_OFFER_ZOOM] ci sta e la voce non si offre ("Questa zona e' troppo grande": [tiles] e [bytes]
+ * sono quelli di quel livello).
+ */
+data class RegionEstimate(val tiles: Long, val bytes: Long, val maxZoom: Int = RegionLimits.MAX_ZOOM, val offered: Boolean = true) {
+  override fun toString(): String = "RegionEstimate($tiles, $bytes, z$maxZoom, $offered)"
 }
 
 enum class RegionStatus(override val code: String) : StableCode {
@@ -93,7 +110,38 @@ enum class RegionStatus(override val code: String) : StableCode {
   NEEDS_UPDATE("needs_update"),
 }
 
-/** Una regione su questo dispositivo: stato, avanzamento, byte, giorno (`aaaammgg`) dell'ultimo scaricamento completo. */
+/** Perche' una regione e' "parziale" (P5): decide se riprende da sola all'apertura dell'app (E-MAP11) o solo con un tocco. */
+enum class RegionStop(override val code: String, val resumesAtOpen: Boolean) : StableCode {
+  /** Il processo e' morto a meta' (si vede alla riapertura): riprende da sola all'apertura. */
+  INTERRUPTED("interrupted", true),
+
+  /** Wi-Fi caduto, roaming, nessuna rete, dati mobili senza la conferma: riprende da sola all'apertura, se la rete lo permette. */
+  NETWORK("network", true),
+
+  /** La mappa dettagliata e' stata spenta durante lo scaricamento (E-MAP20): riprende solo con un tocco. */
+  MAP_OFF("map_off", false),
+
+  /** Il server ha risposto male a lungo (attesa crescente, E-MAP3): riprende solo con un tocco. */
+  SERVER("server", false),
+
+  /** Lo spazio e' sceso sotto la riserva durante lo scaricamento: riprende solo con un tocco. */
+  SPACE("space", false),
+
+  /** Raggiunte 3.000 tessere (limite di OpenFreeMap): non riparte da sola ne' con un tocco; si elimina e si sceglie una zona piu' piccola. */
+  LIMIT_TILES("limit_tiles", false),
+
+  /** Superati 50 MB sul filo (limite di OpenFreeMap): come sopra. */
+  LIMIT_BYTES("limit_bytes", false),
+  ;
+
+  /** Un tetto di OpenFreeMap: la regione non si riprende piu'. */
+  val terminal: Boolean get() = this == LIMIT_TILES || this == LIMIT_BYTES
+}
+
+/**
+ * Una regione su questo dispositivo: stato, avanzamento, byte, giorno (`aaaammgg`) dell'ultimo scaricamento completo; [maxZoom] il livello piu' alto scaricato (P5); [stop] il
+ * motivo dell'interruzione quando e' `PARTIAL`.
+ */
 data class RegionState(
   val spec: RegionSpec,
   val status: RegionStatus,
@@ -101,6 +149,8 @@ data class RegionState(
   val totalTiles: Long,
   val bytes: Long,
   val completedDay: Int?,
+  val maxZoom: Int = RegionLimits.MAX_ZOOM,
+  val stop: RegionStop? = null,
 ) {
   val percent: Int get() = if (totalTiles <= 0) 0 else ((completedTiles * 100) / totalTiles).toInt().coerceIn(0, 100)
 
@@ -135,20 +185,37 @@ sealed interface DownloadStart {
   /** Spazio insufficiente: serve [neededBytes] (dimensione + 1 GiB libero). */
   data class NoSpace(val neededBytes: Long) : DownloadStart
 
-  /** Oltre 1 GB per regione o 3 GB in tutto: "Scegli una zona piu' piccola". */
+  /** Oltre i limiti di OpenFreeMap (3.000 tessere o 50 MB) o il tetto totale: "Questa zona e' troppo grande: scegline una piu' piccola". */
   data object TooLarge : DownloadStart
+
+  /** Un'altra regione si sta gia' scaricando: mai due scaricamenti insieme (limiti di OpenFreeMap). */
+  data object Busy : DownloadStart
 
   /** La conferma e' scaduta o non e' di questa regione: si richiede. */
   data object Expired : DownloadStart
 }
 
-/** I tetti delle regioni (D26). */
+/**
+ * I tetti delle regioni (D26, adeguati il 31/10 ai limiti di OpenFreeMap): per regione quello di OpenFreeMap ([OpenFreeMapLimits.MAX_BYTES]), in tutto **1 GB** (proposta: con 50 MB
+ * a regione sono venti regioni), sempre **1 GiB libero** (E-MAP12).
+ */
 object RegionLimits {
-  const val PER_REGION_BYTES: Long = 1_000_000_000L
-  const val TOTAL_BYTES: Long = 3_000_000_000L
+  const val PER_REGION_BYTES: Long = OpenFreeMapLimits.MAX_BYTES
+  const val TOTAL_BYTES: Long = 1_000_000_000L
   const val FREE_RESERVE_BYTES: Long = 1L shl 30
   const val MIN_ZOOM: Int = 0
+
+  /** Il livello piu' alto che esiste (z14, quello dello stile): "la zona attorno a un luogo" di 15 e 30 km parte da qui. */
   const val MAX_ZOOM: Int = MapHost.MAX_ZOOM
+
+  /** Le regioni intere e i paesi partono da qui (strade principali, paesi, acqua, boschi; niente vie di quartiere). */
+  const val CATALOG_TOP_ZOOM: Int = 12
+
+  /** "La zona attorno a un luogo" di 60 km parte da qui. */
+  const val WIDE_AROUND_TOP_ZOOM: Int = 13
+
+  /** Sotto z10 la voce non si offre. */
+  const val MIN_OFFER_ZOOM: Int = 10
 
   /** Dopo tanti giorni la pagina propone "Aggiorna" (solo a mano: un aggiornamento automatico rivelerebbe la zona a ogni giro). */
   const val UPDATE_AFTER_DAYS: Long = 182
@@ -157,6 +224,27 @@ object RegionLimits {
 /** Il centro di un luogo GeoNames (per "la zona attorno a un luogo"): una porta verso core-places (P5 la scrive, P13 la lega). Mai la casa. */
 fun interface PlaceCenters {
   fun center(placeId: Int): GeoE6?
+
+  /** Il luogo e' una citta' (la stima usa la densita' delle tessere di citta'). Di serie no. */
+  fun urban(placeId: Int): Boolean = false
+
+  /** Il nome del luogo per la pagina, se si conosce. */
+  fun name(placeId: Int): String? = null
+}
+
+/** Un luogo trovato per nome nel dataset GeoNames del telefono: mai nei log. */
+data class PlaceHit(val placeId: Int, val name: String, val detail: String?, val center: GeoE6, val urban: Boolean) {
+  override fun toString(): String = "PlaceHit"
+}
+
+/** La ricerca di un luogo per nome (dataset GeoNames sul telefono, nessuna rete): per "la zona attorno a un luogo". Mai dalla casa ne' dai punti delle foto (D29). */
+fun interface PlaceSearch {
+  fun search(query: String, limit: Int): List<PlaceHit>
+}
+
+/** Nessuna ricerca (dataset non disponibile): nessun risultato. */
+object NoPlaceSearch : PlaceSearch {
+  override fun search(query: String, limit: Int): List<PlaceHit> = emptyList()
 }
 
 /** Le regioni offline di questo dispositivo (D26). */
@@ -177,8 +265,20 @@ interface MapRegions {
   /** Riprende una regione parziale (all'apertura dell'app, E-MAP11), con le stesse regole di rete. */
   suspend fun resume(id: RegionId): DownloadStart
 
-  /** Ferma gli scaricamenti in corso (mappa spenta, roaming: E-MAP20); restano parziali. */
+  /** Ferma gli scaricamenti in corso (mappa spenta, E-MAP20); restano parziali e riprendono solo con un tocco. */
   suspend fun pauseAll()
+
+  /**
+   * L'apertura dell'app (E-MAP11, nessun lavoro in background): le regioni interrotte (processo morto, Wi-Fi caduto) riprendono da sole se la rete lo permette, una alla volta.
+   * Non riprende quelle ferme dal limite, dalla mappa spenta, dal server o dallo spazio: quelle solo con un tocco. Mai chiamata prima del primo disegno.
+   */
+  suspend fun resumeInterrupted() = Unit
+
+  /** L'azzeramento (D37): ferma lo scaricamento, toglie tutte le regioni (dallo stato e dal database) e da qui **non scrive piu'** niente. */
+  suspend fun clear() = Unit
+
+  /** Lo scaricamento confermato in corso, per il cancello (`MapNetWiring.downloadScope`): null se nessuno. Con il suo conto ([DownloadBudget]). */
+  fun downloadScope(): RegionDownloadScope? = null
 
   suspend fun delete(id: RegionId)
 

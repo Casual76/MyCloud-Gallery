@@ -101,8 +101,10 @@ abstract class MapRegionsContract {
   fun coperturaRipresaEdEliminazione() = runTest {
     val rig = rig()
     val spec = SampleRegions.NORTH
-    val inside = TileMath.tileOf(44_500_000, 10_500_000, 14)
-    val outside = TileMath.tileOf(38_500_000, 15_500_000, 14)
+    // P5: una regione si scarica fino al livello che sta nei limiti di OpenFreeMap (z12 per le regioni di prova), non piu' fino a z14.
+    val top = rig.regions.estimate(spec).maxZoom
+    val inside = TileMath.tileOf(44_500_000, 10_500_000, top)
+    val outside = TileMath.tileOf(38_500_000, 15_500_000, top)
     rig.regions.download(spec, confirm(spec, rig))
     assertThat(rig.regions.covers(inside)).isFalse()
     rig.interrupt(spec.id)
@@ -116,7 +118,7 @@ abstract class MapRegionsContract {
     assertThat(rig.regions.covers(inside)).isTrue()
     assertThat(rig.regions.covers(TileKey(0, 0, 0))).isTrue()
     assertThat(rig.regions.covers(outside)).isFalse()
-    assertThat(rig.regions.covers(TileKey(15, inside.x * 2, inside.y * 2))).isFalse()
+    assertThat(rig.regions.covers(TileKey(top + 1, inside.x * 2, inside.y * 2))).isFalse()
     rig.regions.delete(spec.id)
     assertThat(rig.regions.covers(inside)).isFalse()
   }

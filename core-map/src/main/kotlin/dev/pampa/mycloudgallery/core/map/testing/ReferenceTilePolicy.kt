@@ -20,6 +20,7 @@ import dev.pampa.mycloudgallery.core.map.contract.TileKey
  *     dentro i limiti di z;
  *  3. durante uno scaricamento confermato ([MapNetState.download]): il TileJSON e le tessere della regione passano anche a mappa spenta e anche se
  *     coperte (aggiornare una regione), sul Wi-Fi o sui dati mobili con la seconda conferma; mai in roaming o senza rete (`NETWORK`);
+ *  3b. (P5) con il conto dello scaricamento esaurito (`DownloadBudget`): `LIMIT` per le tessere della regione;
  *  4. altrimenti `OFF` se la mappa online e' spenta; `NETWORK` in roaming, senza rete, o sui dati mobili con "Solo sul Wi-Fi"; `COVERED` se la
  *     tessera sta in una regione completa;
  *  5. il TileJSON esce cosi'; una tessera esce sul percorso della versione corrente, o `VersionFirst` se la versione non e' nota (o non e' una
@@ -49,6 +50,8 @@ class ReferenceTilePolicy : MapRequestGate {
         MapNetwork.MOBILE -> if (!download!!.mobileConfirmed) return MapVerdict.Refuse(RefuseReason.NETWORK)
         MapNetwork.ROAMING, MapNetwork.NONE -> return MapVerdict.Refuse(RefuseReason.NETWORK)
       }
+      // P5: il conto dello scaricamento (3.000 tessere o 50 MB) e' esaurito: le tessere della regione si rifiutano.
+      if (tile != null && download!!.budget?.exhausted == true) return MapVerdict.Refuse(RefuseReason.LIMIT)
     } else {
       if (!state.online) return MapVerdict.Refuse(RefuseReason.OFF)
       when (state.network) {

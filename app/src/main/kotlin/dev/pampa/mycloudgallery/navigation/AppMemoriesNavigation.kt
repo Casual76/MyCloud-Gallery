@@ -16,7 +16,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -103,9 +105,20 @@ class MemoriesHostViewModel @Inject constructor(
     secure = false,
   )
 
-  /** Q3: la canzone scelta con il selettore di sistema (il permesso persistito e' gia' stato preso). */
-  fun setOwnSong(uri: Uri) {
-    viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) { runCatching { memories.musicSettings.set(MusicChoice.OwnSong(uri.toString())) } }
+  /**
+   * Q3: la canzone scelta con il selettore di sistema (il permesso persistito e' gia' stato preso). Se la scelta non si salva, [onFailed] (MU-3: la pagina lo dice). Salvando,
+   * il permesso della canzone di prima si rilascia (I4, `PermissionReleasingMusicSettings`).
+   */
+  fun setOwnSong(uri: Uri, onFailed: () -> Unit) {
+    viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+      try {
+        memories.musicSettings.set(MusicChoice.OwnSong(uri.toString()))
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+      } catch (e: Exception) {
+        onFailed()
+      }
+    }
   }
 
   /** La voce `m_<16 caratteri>` della sezione Ricordi: il ricordo dello scaffale di adesso (null se e' uscito mentre si toccava). */
@@ -124,7 +137,7 @@ class AppMemoriesActions(
   private val services: () -> ViewerServices?,
   private val askPermission: () -> Unit,
   private val openChannel: () -> Unit,
-  private val pickSong: () -> Unit,
+  private val pickSong: (onFailed: () -> Unit) -> Unit,
 ) : MemoriesActions {
   override fun openViewer(view: OrderedTimelineView, start: MediaId) {
     val base = services() ?: return
@@ -141,7 +154,7 @@ class AppMemoriesActions(
 
   override fun openNotificationChannel() = openChannel()
 
-  override fun pickOwnSong() = pickSong()
+  override fun pickOwnSong(onFailed: () -> Unit) = pickSong(onFailed)
 }
 
 /**
@@ -155,10 +168,14 @@ internal fun rememberMemoriesActions(nav: NavController, viewer: ViewerHostState
   SideEffect { host.access.explain = { permission -> activity?.shouldShowRequestPermissionRationale(permission) } }
   val holder = remember { arrayOfNulls<dev.pampa.mycloudgallery.memories.MemoriesPermissionActions>(1) }
   val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { holder[0]?.onSystemAnswer() }
+  // MU-3: chi ha chiesto la canzone sa dire se la scelta non si e' conservata (il fornitore non concede il permesso persistente): lo tiene qui fino alla risposta.
+  val songFailure = remember { arrayOfNulls<() -> Unit>(1) }
   val song = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val onFailed = songFailure[0] ?: {}
+    songFailure[0] = null
     if (uri != null) {
       val kept = runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }.isSuccess
-      if (kept) host.setOwnSong(uri)
+      if (kept) host.setOwnSong(uri, onFailed) else onFailed()
     }
   }
   val flow = remember(host) {
@@ -172,14 +189,28 @@ internal fun rememberMemoriesActions(nav: NavController, viewer: ViewerHostState
       nav, viewer, host, services,
       askPermission = flow::requestNotificationPermission,
       openChannel = flow::openNotificationChannel,
-      pickSong = {
+      pickSong = { onFailed ->
+        songFailure[0] = onFailed
         try {
           song.launch(arrayOf("audio/*"))
         } catch (_: ActivityNotFoundException) {
           // Nessun selettore di documenti sul telefono: la scelta resta com'era.
+          songFailure[0] = null
         }
       },
     )
+  }
+}
+
+/**
+ * MO-3 (31/10): il giro "di oggi" dei ricordi anche quando l'app **torna in primo piano con Raccolte gia' aperta** (l'app viva da giorni) o e' ripristinata su Raccolte
+ * dopo la morte del processo: `onSelectTab` lo chiama solo al cambio di scheda, e in quei casi la scheda e' gia' quella. A ogni ripresa con Raccolte aperta; `OPEN` non rifa'
+ * niente se oggi il giro c'e' gia' stato, quindi chiamarlo spesso costa un controllo. Mai in un lavoro in background: qui c'e' solo la schermata.
+ */
+@Composable
+internal fun MemoriesForegroundRound(host: MemoriesHostViewModel, collectionsOpen: Boolean) {
+  LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+    if (collectionsOpen) host.memories.onCollectionsOpened()
   }
 }
 

@@ -59,7 +59,7 @@ import kotlinx.coroutines.flow.stateIn
  */
 object MemoriesWiring {
 
-  /** I file dei ricordi in `noBackupFilesDir` (scaffale, registro e preferenze delle notifiche, chi e' in tendina, musica, ritardi): l'azzeramento li toglie. */
+  /** I file dei ricordi in `noBackupFilesDir` (scaffale, registro e preferenze delle notifiche, chi e' in tendina, musica, ritardi, conti della Diagnostica): l'azzeramento li toglie. */
   const val DIR: String = "memories"
 
   /**
@@ -99,7 +99,7 @@ object MemoriesWiring {
     val dir = File(app.noBackupFilesDir, DIR)
     val visibility = visibility(gallery.visibleMedia, gallery.hiddenMask)
     val clock = AppMemoryClock(today)
-    val counters = MemoriesCounters(LateDeliveries(File(dir, LateDeliveries.FILE), clock::today))
+    val counters = MemoriesCounters(LateDeliveries(File(dir, LateDeliveries.FILE), clock::today), DayTally(File(dir, DayTally.FILE), clock::today))
     val nas = gallery.nas
     // I ricordi stanno nei dati personali (D10, D11): si montano con la galleria partita e i dati personali agganciati, come gli album.
     val ready: StateFlow<Boolean> = if (nas == null) {
@@ -111,7 +111,9 @@ object MemoriesWiring {
     val power = app.getSystemService(PowerManager::class.java)
     val graphRef = arrayOfNulls<MemoriesGraph>(1)
     val notifier = lazy {
-      MemoryNotifier(app, graphRef[0]!!.memories, visibility, dir, places = gallery.places::labelOfId, thumbnails = LocalNotifyThumbnails(thumbs), events = counters)
+      MemoryNotifier(
+        app, graphRef[0]!!.memories, visibility, dir, places = gallery.places::labelOfId, thumbnails = LocalNotifyThumbnails(thumbs), events = counters, today = clock::today,
+      )
     }
     val notifySettings = lazy { FileNotifySettings(dir) }
     val peopleChanged: Flow<Unit> = faces.live.flatMapLatest { live -> live?.people?.list ?: flowOf(null) }.drop(1).map { }
@@ -162,7 +164,8 @@ object MemoriesWiring {
       visibility = visibility,
       notifier = notifier,
       notifySettings = notifySettings,
-      musicSettings = lazy { FileMusicSettings(dir) },
+      // I4: a ogni cambio di canzone si rilascia il permesso persistito della vecchia.
+      musicSettings = lazy { PermissionReleasingMusicSettings(FileMusicSettings(dir)) { token -> MusicPermissions.release(app, token) } },
       slot = slot,
       afterFirstDraw = afterFirstDraw,
       counters = counters,

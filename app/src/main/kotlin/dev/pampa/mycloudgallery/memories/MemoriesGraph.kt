@@ -38,11 +38,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Cio' che i ricordi montano quando la famiglia e' pronta (Fase 9, P13): il motore con lo scaffale su file e le porte vere, le scelte (dati personali, con gli
@@ -73,7 +75,9 @@ class MemoriesLive(
  * "Nascondi" fatto qui, subito; uno arrivato da un altro dispositivo, dopo la calma dell'istantanea) lo scaffale si ripulisce e la notifica si rivaluta.
  *
  * I giri: [nightly] dalla manutenzione notturna (dopo i viaggi, 60 s), [onCollectionsOpened] all'apertura di Raccolte (`OPEN`: non rifa' niente se oggi il
- * giro c'e' gia' stato). [stop] e' il primo passo dell'azzeramento (D37). Nei log solo numeri e nomi di classi.
+ * giro c'e' gia' stato; MO-3: anche al ritorno in primo piano con Raccolte aperta, e di nuovo quando la Libreria cambia mentre oggi lo scaffale e' vuoto; mai nei lavori
+ * in background). [stop] e' il primo passo dell'azzeramento (D37): ferma anche la corsa delle notifiche in corso (AZ-1). Il lavoro delle notifiche in un processo nato
+ * per lui aspetta il montaggio con [awaitLive] senza il primo disegno (NT-1). Nei log solo numeri e nomi di classi.
  */
 class MemoriesGraph internal constructor(
   parent: CoroutineScope,
@@ -101,6 +105,8 @@ class MemoriesGraph internal constructor(
   val placeLabel: (Int) -> String? = { null },
   /** "Oggi" dei ricordi (la porta `Today`). */
   val today: () -> LocalDate = { LocalDate.now() },
+  /** La calma delle istantanee prima di ripulire lo scaffale e di rifare il giro di oggi (di serie [SNAPSHOT_QUIET]; le prove la accorciano). */
+  private val snapshotQuiet: Duration = SNAPSHOT_QUIET,
 ) {
   private val job = SupervisorJob(parent.coroutineContext[Job])
   private val scope = CoroutineScope(parent.coroutineContext + job)
@@ -130,12 +136,44 @@ class MemoriesGraph internal constructor(
   /** I ricordi per le schermate: quelli montati, e prima i null-object ("sto preparando"). */
   val memories: Memories = MemoriesFacade(this, scope)
 
+  /** Raccolte e' stata aperta in questo processo (MO-3): solo da allora i giri "di oggi" ripartono da soli; in un processo nato per un lavoro in background, mai. */
+  private val collectionsSeen = AtomicBoolean(false)
+
+  init {
+    // NT-1: il lavoro delle notifiche, in un processo nato per lui, aspetta il montaggio da qui (senza il primo disegno) e la Libreria letta.
+    slot.awaiter = { timeout -> awaitNotifyReady(timeout) }
+  }
+
   /** Parte con il processo: aspetta la famiglia pronta e il primo disegno utile, poi monta. */
   fun start() {
     scope.launch {
       afterFirstDraw()
       ready.first { it }
       ensureLive()
+    }
+  }
+
+  /**
+   * Il montaggio **senza aspettare il primo disegno** (NT-1): aspetta la famiglia pronta, al piu' [timeout], e monta. Per i lavori in un processo nato per loro, dove
+   * nessuno disegna e il primo disegno si apre da solo dopo un secondo e mezzo. Null se i ricordi qui non si monteranno mai (nessun NAS), se il tempo finisce prima, se
+   * la costruzione fallisce o dopo lo stop.
+   */
+  suspend fun awaitLive(timeout: Duration): MemoriesLive? = if (!canMount) null else withTimeoutOrNull(timeout) { awaitMounted() }
+
+  private suspend fun awaitMounted(): MemoriesLive? {
+    ready.first { it }
+    return ensureLive()
+  }
+
+  /**
+   * Per il lavoro delle notifiche (NT-1): i ricordi montati **e** l'istantanea della Libreria letta, al piu' [timeout] in tutto. Senza l'istantanea il motore non sa dire
+   * quali ricordi ci sono e la corsa trova "niente di bello oggi". Allo scadere si prosegue lo stesso: la corsa dice il suo "niente" e ripianifica.
+   */
+  suspend fun awaitNotifyReady(timeout: Duration) {
+    if (!canMount) return
+    withTimeoutOrNull(timeout) {
+      awaitMounted() ?: return@withTimeoutOrNull
+      visibility.snapshot.filterNotNull().first()
     }
   }
 
@@ -181,8 +219,14 @@ class MemoriesGraph internal constructor(
     live.scope.launch { peopleChanged.debounce(PEOPLE_QUIET).collect { quietly { live.janitor.sweep() } } }
     // Un nascosto arrivato da un altro dispositivo cambia l'istantanea visibile: dopo la calma, scaffale ripulito e notifica rivalutata.
     live.scope.launch {
-      visibility.snapshot.map { it?.seq }.distinctUntilChanged().drop(1).debounce(SNAPSHOT_QUIET).collect { quietly { pruneAndRevalidate(live) } }
+      visibility.snapshot.map { it?.seq }.distinctUntilChanged().drop(1).debounce(snapshotQuiet).collect { quietly { pruneAndRevalidate(live) } }
     }
+    // MO-3: la Libreria letta o cambiata mentre oggi lo scaffale e' vuoto rifa' il giro di oggi (un giro fatto con la Libreria ancora quasi vuota ha fissato "oggi" senza ricordi
+    // e `OPEN` non lo rifarebbe fino a domani); e se Raccolte era gia' aperta prima del montaggio, il suo giro parte adesso. Solo con Raccolte aperta in questo processo.
+    live.scope.launch {
+      visibility.snapshot.map { it?.seq }.filterNotNull().distinctUntilChanged().debounce(snapshotQuiet).collect { quietly { lightRoundIfEmpty(live) } }
+    }
+    if (collectionsSeen.get()) live.scope.launch { quietly { openRound(live) } }
   }
 
   /** Un "Nascondi" o "Mostra" fatto qui (P6: `prune()`; P10: `revalidate()`): subito, fuori dal thread principale. */
@@ -196,24 +240,50 @@ class MemoriesGraph internal constructor(
     notifier.revalidate()
   }
 
-  /** L'apertura di Raccolte (P9: `Memories.refresh(OPEN)`): il giro di oggi se non c'e' ancora stato, con il budget del passo leggero. */
+  /**
+   * L'apertura di Raccolte (P9: `Memories.refresh(OPEN)`): il giro di oggi se non c'e' ancora stato, con il budget del passo leggero. MO-3: lo chiama anche il ritorno in
+   * primo piano con Raccolte gia' aperta (o ripristinata dopo la morte del processo). Se i ricordi non sono ancora montati il giro parte al montaggio, non si perde.
+   */
   fun onCollectionsOpened() {
     if (stopped.get()) return
+    collectionsSeen.set(true)
     scope.launch {
       val live = ensureLive() ?: return@launch
-      quietly { counters.round(live.engine.refresh(RefreshReason.OPEN, RefreshBudgets.LIGHT_SECONDS.seconds)) }
+      quietly { openRound(live) }
     }
   }
 
-  /** La generazione notturna (dentro `LibraryMaintenanceWorker`, dopo i viaggi, §1.4): vero se il giro e' finito. */
+  private suspend fun openRound(live: MemoriesLive) {
+    counters.round(live.engine.refresh(RefreshReason.OPEN, RefreshBudgets.LIGHT_SECONDS.seconds))
+  }
+
+  /**
+   * MO-3: se oggi lo scaffale e' vuoto il giro si rifa' (`LIGHT`, che `OPEN` non e': `OPEN` salta il giorno gia' fatto), con lo stesso budget leggero. Solo con Raccolte
+   * aperta in questo processo (mai in un lavoro in background); con lo scaffale pieno non fa niente.
+   */
+  internal suspend fun lightRoundIfEmpty(live: MemoriesLive) {
+    if (!collectionsSeen.get() || stopped.get()) return
+    if (live.engine.shelf.value.items.isNotEmpty()) return
+    counters.round(live.engine.refresh(RefreshReason.LIGHT, RefreshBudgets.LIGHT_SECONDS.seconds))
+  }
+
+  /**
+   * La generazione notturna (dentro `LibraryMaintenanceWorker`, dopo i viaggi, §1.4): vero se il giro e' finito. **Mai un'eccezione** (MO-2, 31/10): un errore del motore
+   * (una lettura dei visibili che fallisce, il disco pieno) non deve far saltare le Utility che la manutenzione fa dopo; si conta in `roundErrors` (Diagnostica) e il
+   * giro vale "non finito": la notte dopo si riprova.
+   */
   suspend fun nightly(budget: Duration = RefreshBudgets.NIGHTLY_SECONDS.seconds): Boolean {
-    val live = ensureLive() ?: return false
-    val started = android.os.SystemClock.elapsedRealtime()
-    val report = live.engine.refresh(RefreshReason.NIGHTLY, budget)
-    counters.round(report, android.os.SystemClock.elapsedRealtime() - started)
+    var finished = false
+    quietly {
+      val live = ensureLive() ?: return@quietly
+      val started = android.os.SystemClock.elapsedRealtime()
+      val report = live.engine.refresh(RefreshReason.NIGHTLY, budget)
+      counters.round(report, android.os.SystemClock.elapsedRealtime() - started)
+      finished = !report.incomplete
+    }
     // Lo scaffale nuovo: la notifica in tendina si rivaluta (un ricordo uscito non resta in tendina).
-    quietly { notifier.revalidate() }
-    return !report.incomplete
+    if (liveFlow.value != null) quietly { notifier.revalidate() }
+    return finished
   }
 
   /** `onTrimMemory`: la tabella a colonne dell'istantanea si lascia (si rifa' al giro dopo, ~20 ms ogni 100 mila celle). */
@@ -227,8 +297,10 @@ class MemoriesGraph internal constructor(
    */
   suspend fun stop() {
     if (!stopped.compareAndSet(false, true)) return
-    building.withLock { liveFlow.value = null }
+    val live = building.withLock { liveFlow.value.also { liveFlow.value = null } }
     slot.runner = null
+    // AZ-1: una corsa delle notifiche in corso si annulla e si aspetta, e da qui nessuna corsa scrive il registro o pubblica: lavoro e notifica li toglie l'azzeramento dopo.
+    live?.run?.stop()
     job.cancelAndJoin()
   }
 

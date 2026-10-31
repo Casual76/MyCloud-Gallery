@@ -16,11 +16,13 @@ import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.library.testing.FakeVisibility
 import dev.pampa.mycloudgallery.core.memories.contract.NotifyPrefs
+import dev.pampa.mycloudgallery.core.memories.contract.NotifySkip
 import dev.pampa.mycloudgallery.core.memories.noop.NoMemories
 import dev.pampa.mycloudgallery.core.memories.notify.MemoriesOpened
 import dev.pampa.mycloudgallery.core.memories.notify.MemoryNotifyPolicy
 import dev.pampa.mycloudgallery.core.memories.notify.MemoryNotifyRun
 import dev.pampa.mycloudgallery.core.memories.notify.NotifyAccessState
+import dev.pampa.mycloudgallery.core.memories.notify.NotifyScheduler
 import dev.pampa.mycloudgallery.core.memories.shelf.MemoryVisibility
 import dev.pampa.mycloudgallery.core.memories.testing.FakeMemoryClock
 import dev.pampa.mycloudgallery.core.memories.testing.FakeNotifyAccess
@@ -36,6 +38,7 @@ import java.time.LocalTime
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -46,7 +49,8 @@ import org.robolectric.annotation.Config
 /**
  * Il lavoro unico delle notifiche dei ricordi su WorkManager (Fase 9, P10; docs/fase9-progetto.md D20; E-NT3, E-NT4, E-NT15): **un lavoro solo**, `memories-notify`, **senza
  * vincoli**, con il ritardo fino all'ora scelta calcolato nel fuso del telefono (ora legale compresa); un nuovo orario **sostituisce** quello in attesa; dall'interno del lavoro
- * si accoda a quello che gira; ricordi non montati = niente da fare. Nessun allarme esatto: il lavoro e' l'unico meccanismo.
+ * si accoda a quello che gira; in un processo nato per il lavoro (ricordi non montati) il lavoro aspetta il montaggio (NT-1, 31/10); famiglia mai pronta = niente da fare.
+ * Nessun allarme esatto: il lavoro e' l'unico meccanismo.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class)
@@ -132,12 +136,78 @@ class MemoriesWorkTest {
     })
     .build()
 
-  /** Ricordi non montati (P13 non ha ancora legato il giorno di una notifica): il lavoro finisce senza fare niente e senza ripianificare. */
+  /** Il giorno di una notifica con una Libreria che non c'e' ancora (le prove del lavoro guardano come si ripianifica, non cosa si pubblica). */
+  private fun run(scheduler: NotifyScheduler, events: RecordingNotifyEvents = RecordingNotifyEvents()): MemoryNotifyRun = MemoryNotifyRun(
+    MemoryNotifyPolicy(), InMemoryNotifySettings(NotifyPrefs()), InMemoryNotifyLedgerStore(), NoMemories, visibility(), MemoriesOpened { false },
+    FakeNotifyAccess(NotifyAccessState.GRANTED), FakeNotifyPublisher(), FakeMemoryClock(LocalDate.of(2026, 11, 3), LocalTime.of(19, 0)), scheduler, events,
+  )
+
+  /**
+   * NT-1 (31/10): **un processo nato per il lavoro**. WorkManager lancia il lavoro appena nato il processo, quando lo slot e' vuoto (i ricordi si montano dopo): prima il
+   * lavoro rispondeva `success` senza fare niente e senza ripianificare, ogni giorno (e il test lo dava per giusto). Ora aspetta il montaggio (qui: l'`awaiter` che lo
+   * simula, con il `replan` che il montaggio fa partire con `watch`), poi fa la sua corsa. Due cose da vedere:
+   *  - **`enterWorker` prima dell'attesa**: il `replan` del montaggio, a flag spento, sostituirebbe (cancellerebbe) il lavoro che sta aspettando; a flag acceso accoda;
+   *  - **un lavoro di domani solo**: il `replan` del montaggio e quello della corsa chiedono lo stesso orario, e la seconda richiesta non si accoda.
+   */
   @Test
-  fun senzaRicordiMontatiNonFaNiente() = runBlocking<Unit> {
-    val result = worker(MemoryNotifySlot()).doWork()
-    assertThat(result).isEqualTo(ListenableWorker.Result.success())
+  fun unProcessoNatoPerIlLavoroAspettaIRicordiEPoiFaLaCorsa() = runBlocking<Unit> {
+    val events = RecordingNotifyEvents()
+    val scheduler = WorkManagerNotifyScheduler(context) { ZoneId.of("Europe/Rome") }
+    val run = run(scheduler, events)
+    val slot = MemoryNotifySlot()
+    // Il lavoro che WorkManager sta eseguendo, in coda in WorkManager come nella realta' (qui il test lo chiama a mano).
+    MemoriesWorkScheduling.schedule(context, TimeUnit.HOURS.toMillis(1))
+    val standing = infos().single().id
+    var waited = false
+    slot.awaiter = { _ ->
+      yield()
+      // Il montaggio dei ricordi: ripianifica (`watch`) e mette il giorno di una notifica nello slot.
+      run.replan()
+      slot.runner = run
+      waited = true
+    }
+    assertThat(slot.runner).isNull()
+
+    assertThat(worker(slot).doWork()).isEqualTo(ListenableWorker.Result.success())
+
+    assertThat(waited).isTrue()
+    // La corsa e' partita dopo l'attesa: la Libreria non e' letta, "niente di bello oggi" (e la Diagnostica lo sa).
+    assertThat(events.skips).containsExactly(NotifySkip.NOTHING)
+    // Il lavoro che stava aspettando non e' stato cancellato dal `replan` del montaggio, e il lavoro di domani e' uno: in coda dietro a lui, non due.
+    val pending = infos()
+    assertThat(pending.map { it.id }).contains(standing)
+    assertThat(pending.map { it.state }).containsExactly(WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED)
+    // Il lavoro che finisce non lascia il flag acceso: dopo, un nuovo orario sostituisce di nuovo.
+    MemoriesWorkScheduling.schedule(context, TimeUnit.HOURS.toMillis(5))
+    assertThat(infos()).hasSize(1)
+  }
+
+  /** NT-1: la famiglia non diventa pronta nel tempo (nessun NAS, dispositivo non configurato): niente da fare, niente di ripianificato dal lavoro, nessun flag lasciato. */
+  @Test
+  fun seLaFamigliaNonEPronta_ilLavoroFinisceSenzaFareNiente() = runBlocking<Unit> {
+    val slot = MemoryNotifySlot()
+    var waits = 0
+    slot.awaiter = { _ -> waits++ }
+    assertThat(worker(slot).doWork()).isEqualTo(ListenableWorker.Result.success())
+    assertThat(waits).isEqualTo(1)
     assertThat(infos()).isEmpty()
+    // Senza grafo (nessun `awaiter`) lo stesso: nessun crollo.
+    assertThat(worker(MemoryNotifySlot()).doWork()).isEqualTo(ListenableWorker.Result.success())
+    MemoriesWorkScheduling.schedule(context, TimeUnit.HOURS.toMillis(1))
+    MemoriesWorkScheduling.schedule(context, TimeUnit.HOURS.toMillis(2))
+    assertThat(infos()).hasSize(1)
+  }
+
+  /** Il processo gia' vivo e montato: lo slot ha il giorno di una notifica, il grafo risponde subito (tutto pronto) e il lavoro fa la sua corsa. */
+  @Test
+  fun conIRicordiGiaMontatiNonAspettaNiente() = runBlocking<Unit> {
+    val scheduler = RecordingNotifyScheduler()
+    val slot = MemoryNotifySlot().apply { runner = run(scheduler) }
+    var asked = 0
+    slot.awaiter = { _ -> asked++ }
+    assertThat(worker(slot).doWork()).isEqualTo(ListenableWorker.Result.success())
+    assertThat(asked).isEqualTo(1)
+    assertThat(scheduler.scheduled).isEqualTo(1)
   }
 
   /** Con il giorno di una notifica montato: una corsa, l'esito sempre "riuscito", e il lavoro di domani e' rifatto (qui sul programmatore finto). */

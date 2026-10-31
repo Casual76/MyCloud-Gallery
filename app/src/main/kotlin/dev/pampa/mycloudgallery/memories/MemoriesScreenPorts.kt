@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
 import dev.pampa.mycloudgallery.feature.memories.contract.MemoryPlaceNames
+import dev.pampa.mycloudgallery.feature.memories.contract.NotificationAccess
 import dev.pampa.mycloudgallery.feature.memories.contract.NotifyPermission
 import dev.pampa.mycloudgallery.feature.memories.section.MemoriesSectionSources
 import dev.pampa.mycloudgallery.feature.memories.section.SectionData
@@ -88,13 +89,17 @@ class MemoryPeopleFacade(private val graph: MemoriesGraph) : MemoryPeople {
 
 /**
  * La voce "Ricordi e notifiche" di Impostazioni (P9, `MemoriesEntryStatus`): la frequenza scelta (o spente) e un pallino se le notifiche sono accese ma il
- * permesso o il canale di Android le bloccano (D18: la voce lo dice, non chiede niente). Il permesso si legge solo se le notifiche sono accese.
+ * permesso o il canale di Android le bloccano (D18: la voce lo dice, non chiede niente). Il permesso si legge solo se le notifiche sono accese. Finche' le preferenze non
+ * sono lette il valore e' `null` (IM-1): mai quello di serie.
  */
-class AppMemoriesEntryStatus(settings: () -> NotifySettings, access: AppNotificationAccess, scope: CoroutineScope) : MemoriesEntryStatus {
+class AppMemoriesEntryStatus(settings: () -> NotifySettings, access: NotificationAccess, scope: CoroutineScope) : MemoriesEntryStatus {
   // Pigra: preferenze e permesso si leggono alla prima riga che guarda (Impostazioni aperte), fuori dal thread principale; mai all'avvio.
-  override val summary: StateFlow<MemoriesEntrySummary> = flow {
+  // IM-1 (31/10): **nessun valore di serie**. Prima partiva da `NotifyPrefs()` con il permesso concesso, e per qualche fotogramma la riga diceva "2-3 a settimana" e niente
+  // pallino anche a chi aveva spento le notifiche o negato il permesso, per poi correggersi. Ora e' `null` ("non lo so ancora": la riga dice a cosa serve) finche' le
+  // preferenze non sono lette; poi l'ultimo valore letto resta in memoria quanto il processo (lo `StateFlow` e' dell'app), e le aperture dopo la prima partono da quello.
+  override val summary: StateFlow<MemoriesEntrySummary?> = flow {
     emitAll(combine(settings().prefs, access.state) { prefs, permission -> summaryOf(prefs, permission) })
-  }.flowOn(Dispatchers.IO).stateIn(scope, SharingStarted.Lazily, summaryOf(NotifyPrefs(), NotifyPermission.GRANTED))
+  }.flowOn(Dispatchers.IO).stateIn(scope, SharingStarted.Lazily, null)
 
   companion object {
     fun summaryOf(prefs: NotifyPrefs, permission: NotifyPermission): MemoriesEntrySummary {

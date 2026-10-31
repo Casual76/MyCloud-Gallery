@@ -165,7 +165,8 @@ internal object RealMapProbes {
     val stale = service.index.value as? GeoIndexState.Ready
     // La Libreria con pochi punti validi puo' non avere nessuna bolla: le sonde dicono comunque la verita' (niente da mostrare = niente di nascosto).
     val mask: HiddenMask = CatalogHiddenMask(world.db)
-    val filter = FinalFilter(if (finalFilter) mask else null)
+    // Senza il filtro finale (la mutazione che la prova deve vedere): la maschera che non nasconde niente, perche' `FinalFilter` non ne ammette l'assenza (R3).
+    val filter = FinalFilter(if (finalFilter) mask else HiddenMask { emptySet() })
     val victims = if (stale == null) emptySet() else hideSome(world, stale.index)
     MapProbeStats.worlds++
     MapProbeStats.victims += victims.size

@@ -152,10 +152,10 @@ class Phase9WiringTest {
     counters.round(RefreshReport(0, 0, 0, shelfReset = false, incomplete = true, withoutVectors = false, dropped = mapOf(DropReason.SCREENSHOT to 2)))
     counters.skipped(NotifySkip.PERMISSION)
     counters.revoked()
-    assertThat(counters.shelfResets.get()).isEqualTo(1)
-    assertThat(counters.withoutVectors.get()).isEqualTo(1)
+    assertThat(counters.shelfResets).isEqualTo(1)
+    assertThat(counters.withoutVectors).isEqualTo(1)
     assertThat(counters.droppedByReason()).containsExactly(DropReason.SCREENSHOT, 5)
     assertThat(counters.skippedByReason()).containsExactly(NotifySkip.PERMISSION, 1)
-    assertThat(counters.revoked.get()).isEqualTo(1)
+    assertThat(counters.revoked).isEqualTo(1)
   }
 }

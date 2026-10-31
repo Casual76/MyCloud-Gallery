@@ -455,6 +455,8 @@ private fun MainDestination(
   val searchHost: SearchHostViewModel = hiltViewModel()
   val searchActions = rememberSearchActions(nav, viewer, searchHost)
   LaunchedEffect(findSimilar) { if (findSimilar != null) tab = GalleryTab.Search }
+  // Fase 9 (MO-3): il giro dei ricordi di oggi anche al ritorno in primo piano con Raccolte gia' aperta (l'app viva da giorni, il ripristino dopo la morte del processo).
+  if (memoriesHost != null) MemoriesForegroundRound(memoriesHost, collectionsOpen = tab == GalleryTab.Collections)
 
   LibraryCommandHostEffect(state.commands, onAccessChanged = gallery::refreshAccess)
   ReportLibraryDrawn(state)

@@ -81,9 +81,12 @@ class MemoryNotifierTest {
     override suspend fun hiddenOrThrow(ids: Collection<MediaId>): Set<MediaId> = emptySet()
   }
 
+  /** "Oggi" del notificatore: quello della prova, cambia con [nowIs] (NT-2: il tocco apre solo il ricordo della notifica di oggi). */
+  private var nowIs: LocalDate = today
+
   private fun notifier(places: (Int) -> String? = { if (it == PLACE) "Oslo" else null }, bitmap: Bitmap? = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)): MemoryNotifier {
     val dir = Files.createTempDirectory("memories").toFile().also { dirs += it }
-    return MemoryNotifier(app, NoMemories, closedVisibility, dir, places, { id, _ -> bitmap.also { thumbnailCalls += id } })
+    return MemoryNotifier(app, NoMemories, closedVisibility, dir, places, { id, _ -> bitmap.also { thumbnailCalls += id } }, today = { nowIs })
   }
 
   private fun memory(key: MemoryKey, yearsAgo: Int? = 1, label: String? = null, person: PersonId? = null, month: YearMonth? = null): Memory {
@@ -330,6 +333,26 @@ class MemoryNotifierTest {
     assertThat(n.posted()).isNull()
     assertThat(n.openTarget()).isNull()
     assertThat(n.revalidate()).isFalse()
+  }
+
+  /**
+   * NT-2 (31/10): il tocco apre il ricordo della notifica **di oggi**. Con il registro di ieri (la tendina vuota, o un'azione mandata da un'altra app) apre la pagina Ricordi,
+   * non la pagina di ieri. Il tocco vero, che ha gia' tolto la notifica dalla tendina (`setAutoCancel`), apre ancora il suo ricordo: per questo `openTarget` non guarda la tendina.
+   */
+  @Test
+  fun ilTocco_apreSoloIlRicordoDiOggi() = runBlocking<Unit> {
+    val n = notifier()
+    val m = memory(MemoryKey.OnThisDay(today.minusYears(1)))
+    n.publish(notice(m, LockScreenMode.GENERIC))
+    // Il tocco ha tolto la notifica dalla tendina (autoCancel) prima che l'app legga il registro: il ricordo di oggi si apre lo stesso.
+    manager.cancel(AppNotifications.ID_MEMORY)
+    assertThat(n.openTarget()).isEqualTo(m.id)
+    // Il giorno dopo, con lo stesso registro e la tendina vuota: niente ricordo di ieri, si apre la pagina Ricordi.
+    nowIs = today.plusDays(1)
+    assertThat(n.openTarget()).isNull()
+    // E il giorno prima (un orologio rimesso indietro) non apre niente di un'altra data.
+    nowIs = today.minusDays(1)
+    assertThat(n.openTarget()).isNull()
   }
 
   /** Se l'utente ha gia' tolto la notifica (la tendina, o toccandola: `setAutoCancel`) non c'e' piu' niente da revocare e il ricordo di chi era si dimentica. */

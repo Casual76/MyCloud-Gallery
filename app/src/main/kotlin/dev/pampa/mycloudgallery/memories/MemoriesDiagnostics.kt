@@ -56,7 +56,8 @@ class LateDeliveries(private val file: File, private val today: () -> LocalDate)
 /**
  * La sezione "Ricordi" della Diagnostica (Fase 9, P13; docs/fase9-progetto.md §2.12, D33): lo stato (montati, ricordi sullo scaffale, nuovi, ultimo giro in
  * giorni, durata) e una voce per codice che ha qualcosa da dire. **Solo numeri, flag e codici**: mai titoli, luoghi, date, id dei ricordi, nomi o id di
- * persone, l'ora scelta per la notifica.
+ * persone, l'ora scelta per la notifica. I conti delle voci (esclusi, notifiche saltate, scaffali rigenerati, tolte, consegnate) sono degli **ultimi 14 giorni** e stanno su
+ * file (DG-1, DG-2, 31/10): non ripartono da zero a ogni avvio del processo.
  */
 class MemoriesDiagnostics(private val graph: MemoriesGraph, private val today: () -> LocalDate) : DiagnosticsContributor {
 
@@ -79,15 +80,21 @@ class MemoriesDiagnostics(private val graph: MemoriesGraph, private val today: (
     c.lastRoundMs?.let { state["roundMs"] = ExportValue.Dur(it) }
     if (c.mountFailed) state["failed"] = ExportValue.Flag(true)
     items += item(DiagCodes.MEMORY_STATE, state)
-    if (c.shelfResets.get() > 0) items += item(DiagCodes.MEMORY_SHELF_RESET, mapOf("count" to ExportValue.Num(c.shelfResets.get().toLong())))
-    if (c.withoutVectors.get() > 0) items += item(DiagCodes.MEMORY_NO_VECTORS, mapOf("count" to ExportValue.Num(c.withoutVectors.get().toLong())))
+    // DG-1: i conti stanno su file per gli ultimi 14 giorni (gli stessi di `late`): letti qui, una volta per raccolta.
+    val shelfResets = c.shelfResets
+    val withoutVectors = c.withoutVectors
+    val delivered = c.delivered
+    val revoked = c.revoked
+    if (shelfResets > 0) items += item(DiagCodes.MEMORY_SHELF_RESET, mapOf("count" to ExportValue.Num(shelfResets.toLong())))
+    if (withoutVectors > 0) items += item(DiagCodes.MEMORY_NO_VECTORS, mapOf("count" to ExportValue.Num(withoutVectors.toLong())))
     val dropped = c.droppedByReason().filterValues { it > 0 }
     if (dropped.isNotEmpty()) items += item(DiagCodes.MEMORY_DROPPED, dropped.entries.associate { (reason, n) -> "dropped.${reason.code}" to ExportValue.Num(n.toLong()) })
     val skipped = c.skippedByReason().filterValues { it > 0 }
     if (skipped.isNotEmpty()) items += item(DiagCodes.NOTIFY_SKIPPED, skipped.entries.associate { (reason, n) -> "skip.${reason.code}" to ExportValue.Num(n.toLong()) })
     val late = c.late?.count() ?: 0
-    if (late > 0) items += item(DiagCodes.NOTIFY_LATE, mapOf("late" to ExportValue.Num(late.toLong()), "delivered" to ExportValue.Num(c.delivered.get().toLong())))
-    if (c.revoked.get() > 0) items += item(DiagCodes.NOTIFY_REVOKED, mapOf("count" to ExportValue.Num(c.revoked.get().toLong())))
+    // DG-2: `late` e `delivered` hanno la stessa base (le consegne degli ultimi 14 giorni, su file): dopo un riavvio il rapporto del piano B di D20 si legge ancora.
+    if (late > 0) items += item(DiagCodes.NOTIFY_LATE, mapOf("late" to ExportValue.Num(late.toLong()), "delivered" to ExportValue.Num(delivered.toLong())))
+    if (revoked > 0) items += item(DiagCodes.NOTIFY_REVOKED, mapOf("count" to ExportValue.Num(revoked.toLong())))
     return items
   }
 

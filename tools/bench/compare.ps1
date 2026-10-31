@@ -31,7 +31,7 @@
 .PARAMETER RequireAll    Una prova attesa senza risultati e' un FAIL (chiusura della Fase 3).
 .PARAMETER Accept        Scrive docs\bench\riferimento-<dispositivo>.json con questi risultati (solo se nessuna soglia assoluta fallisce, salvo -Force).
                          Da una misura parziale le prove non misurate tengono i valori del riferimento in uso; -Origin ne dice la provenienza.
-.PARAMETER Calibrate     Scrive in soglie.json il tetto di PSS dello zoom a 200 MP (misura + margine), se e' ancora `null`.
+.PARAMETER Calibrate     Scrive in soglie.json i tetti ancora `null` che hanno una `calibrazione` (misura + margine, a multipli di `passo`): il picco di PSS dello zoom a 200 MP e il tempo di disegno di MapLibre (Fase 9, P12).
 .PARAMETER SummaryJson   Scrive un riassunto leggibile da macchina (una riga per verifica).
 .PARAMETER SelfTest      Prova la logica del confronto su file di esempio (tools\bench\samples): non serve un dispositivo.
 .PARAMETER NoGuard       Spegne la guardia della Fase 4A (par. 5.6): niente riferimento del 13/10, niente "NOTO", niente regole `guardia`.
@@ -547,6 +547,82 @@ if ($SelfTest) {
   $v5 = Invoke-Evaluation $thr @(New-Bench "facesLoadedScroll" @{ jankPercent = 0.2; facesComputing = 0; libraryNasShare = $mix }) "s25" $null @{} $false $true
   Assert-That (@($v5 | Where-Object { $_.Kind -eq "validita" -and $_.Status -eq "FAIL" }).Count -eq 1) "volti: senza il calcolo in corso lo scorrimento non vale come prova"
 
+  # Fase 9, P12 (par. 5.4): gli scenari ricordi-* e mappa-*. Apertura di un ricordo <= 300 ms (p90); generazione <= 2.000 ms e passo leggero <= 300 ms (il peggiore);
+  # presentazione: meno dell'1% di jank e fotogramma piu' lungo <= 16,7 ms; mappa a freddo <= 800 ms e a caldo <= 300 ms; bolle p95 <= 8 ms; zona <= 150 ms; viewer <= 100 ms;
+  # il tempo di disegno di MapLibre resta da calibrare (CAL, mai FAIL); senza scaffale o posizioni seminati la prova e' NON VALIDA; le guardie con il lavoro in corso
+  # valgono solo se il lavoro c'era.
+  function Count-Rows($rows, [string]$kind, [string]$status, [string]$metric = "") {
+    return @($rows | Where-Object { $_.Kind -eq $kind -and $_.Status -eq $status -and ((-not $metric) -or $_.Metric -eq $metric) }).Count
+  }
+  $r1 = Invoke-Evaluation $thr @(New-Bench "memoryOpen" @{ memoryOpenMs = 300; memoriesSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $r1 "assoluta" "OK") -eq 1) "ricordi: l'apertura di 300 ms sta nei 300 (<= 300)"
+  $r2 = Invoke-Evaluation $thr @(New-Bench "memoryOpen" @{ memoryOpenMs = 301; memoriesSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $r2 "assoluta" "FAIL") -eq 1) "ricordi: l'apertura di 301 ms fallisce i 300 ms"
+  $r3 = Invoke-Evaluation $thr @(New-Bench "memoryOpen" @{ memoryOpenMs = 100; memoriesSeeded = 0; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $r3 "validita" "FAIL") -eq 1) "ricordi: senza lo scaffale seminato la prova e' NON VALIDA"
+  Assert-That (@($r3 | Where-Object { $_.Kind -eq "assoluta" }).Count -eq 0) "ricordi: una prova non valida non si confronta con la soglia"
+  $r4 = Invoke-Evaluation $thr @(New-Bench "memoriesGenerate" @{ memoriesGenerateMs = 2000; memoriesLightMs = 300; memoriesSections = 2; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $r4 "assoluta" "OK") -eq 2) "ricordi: generazione di 2.000 ms e passo leggero di 300 ms stanno nelle soglie"
+  $r5 = Invoke-Evaluation $thr @(New-Bench "memoriesGenerate" @{ memoriesGenerateMs = 2001; memoriesLightMs = 301; memoriesSections = 2; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $r5 "assoluta" "FAIL") -eq 2) "ricordi: 2.001 ms e 301 ms falliscono tutte e due"
+  $r6 = Invoke-Evaluation $thr @(New-Bench "memoriesGenerate" @{ memoriesGenerateMs = 100; memoriesLightMs = 30; memoriesSections = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $r6 "validita" "FAIL") -eq 1) "ricordi: con una sola sezione di traccia la generazione e' NON VALIDA"
+  $r7 = Invoke-Evaluation $thr @(New-Bench "memoryPlayer" @{ jankPercent = 1.0; maxFrameCpuMs = 16.7; memoriesSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $r7 "assoluta" "OK") -eq 2) "ricordi: presentazione a 1% di jank e 16,7 ms di fotogramma piu' lungo sta nelle soglie"
+  $r8 = Invoke-Evaluation $thr @(New-Bench "memoryPlayer" @{ jankPercent = 1.1; maxFrameCpuMs = 16.8; memoriesSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $r8 "assoluta" "FAIL") -eq 2) "ricordi: presentazione oltre l'1% e oltre 16,7 ms fallisce tutte e due"
+  $playerRef = '{ "formato": 1, "dispositivo": "s25", "prove": { "memoryPlayer": { "jankPercent.mean": 0.40, "maxFrameCpuMs.max": 10 }, "memoryOpen": { "memoryOpenMs.p90": 200 }, "mapDraw": { "mapDrawP95Ms.median": 8 } } }' | ConvertFrom-Json
+  $r9 = Invoke-Evaluation $thr @(New-Bench "memoryPlayer" @{ jankPercent = 0.55; maxFrameCpuMs = 11; memoriesSeeded = 1; libraryNasShare = $mix }) "s25" $playerRef @{} $false $true
+  Assert-That ((Count-Rows $r9 "guardia" "OK") -eq 1) "ricordi: la presentazione a 0,55% su ref 0,40% sta nella guardia (pavimento di 0,15 punti)"
+  $r10 = Invoke-Evaluation $thr @(New-Bench "memoryPlayer" @{ jankPercent = 0.56; maxFrameCpuMs = 11.6; memoriesSeeded = 1; libraryNasShare = $mix }) "s25" $playerRef @{} $false $true
+  Assert-That ((Count-Rows $r10 "guardia" "FAIL") -eq 1) "ricordi: la presentazione a 0,56% su ref 0,40% peggiora"
+  Assert-That ((Count-Rows $r10 "regressione" "FAIL" "maxFrameCpuMs max") -eq 1) "ricordi: il fotogramma piu' lungo 11,6 ms su ref 10 e' fuori dal +15%"
+  $r11 = Invoke-Evaluation $thr @(New-Bench "memoriesLoadedScroll" @{ jankPercent = 0.4; memoriesComputing = 0; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $r11 "validita" "FAIL") -eq 1) "ricordi: lo scorrimento senza la generazione in corso non vale come guardia"
+  $r12 = Invoke-Evaluation $thr @(New-Bench "memoriesLoadedScroll" @{ jankPercent = 1.2; memoriesComputing = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $r12 "assoluta" "FAIL") -eq 1) "ricordi: lo scorrimento con la generazione in corso fallisce oltre l'1% di jank"
+  $m1 = Invoke-Evaluation $thr @(New-Bench "mapOpenCold" @{ mapOpenMs = 800; mapSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m1 "assoluta" "OK") -eq 1) "mappa: l'apertura a freddo di 800 ms sta nella soglia"
+  $m2 = Invoke-Evaluation $thr @(New-Bench "mapOpenCold" @{ mapOpenMs = 801; mapSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m2 "assoluta" "FAIL") -eq 1) "mappa: l'apertura a freddo di 801 ms fallisce"
+  $m3 = Invoke-Evaluation $thr @(New-Bench "mapOpenWarm" @{ mapOpenMs = 301; mapSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m3 "assoluta" "FAIL") -eq 1) "mappa: l'apertura a caldo di 301 ms fallisce i 300 ms"
+  $m4 = Invoke-Evaluation $thr @(New-Bench "mapOpenCold" @{ mapOpenMs = 100; mapSeeded = 0; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m4 "validita" "FAIL") -eq 1) "mappa: senza le posizioni nel dataset la prova e' NON VALIDA"
+  $m5 = Invoke-Evaluation $thr @(New-Bench "mapClusters" @{ mapClustersP95Ms = 8.0; mapClustersSections = 12; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m5 "assoluta" "OK") -eq 1) "mappa: bolle con p95 di 8 ms sta nella soglia"
+  $m6 = Invoke-Evaluation $thr @(New-Bench "mapClusters" @{ mapClustersP95Ms = 8.1; mapClustersSections = 12; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m6 "assoluta" "FAIL") -eq 1) "mappa: bolle con p95 di 8,1 ms falliscono"
+  $m7 = Invoke-Evaluation $thr @(New-Bench "mapClusters" @{ mapClustersP95Ms = 1.0; mapClustersSections = 3; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m7 "validita" "FAIL") -eq 1) "mappa: con 3 sezioni map.clusters la misura e' NON VALIDA"
+  $m8 = Invoke-Evaluation $thr @(New-Bench "mapDraw" @{ mapDrawP95Ms = 30; mapDrawFrames = 100; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m8 "assoluta" "CAL") -eq 1) "mappa: il tempo di disegno senza tetto calibrato risulta CAL, mai FAIL"
+  Assert-That (@($m8 | Where-Object { $_.Status -eq "FAIL" }).Count -eq 0) "mappa: il tempo di disegno senza riferimento non fallisce"
+  $m9 = Invoke-Evaluation $thr @(New-Bench "mapDraw" @{ mapDrawP95Ms = 9.2; mapDrawFrames = 100; libraryNasShare = $mix }) "s25" $playerRef @{} $false $true
+  Assert-That ((Count-Rows $m9 "regressione" "OK") -eq 1) "mappa: disegno 9,2 ms su ref 8 e' dentro il +15% (9,2)"
+  $m10 = Invoke-Evaluation $thr @(New-Bench "mapDraw" @{ mapDrawP95Ms = 9.3; mapDrawFrames = 100; libraryNasShare = $mix }) "s25" $playerRef @{} $false $true
+  Assert-That ((Count-Rows $m10 "regressione" "FAIL") -eq 1) "mappa: disegno 9,3 ms su ref 8 e' fuori dal +15%"
+  $m11 = Invoke-Evaluation $thr @(New-Bench "mapDraw" @{ mapDrawP95Ms = 5; mapDrawFrames = 10; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m11 "validita" "FAIL") -eq 1) "mappa: con 10 fotogrammi il tempo di disegno e' NON VALIDO"
+  $m12 = Invoke-Evaluation $thr @(New-Bench "mapZoneOpen" @{ zoneOpenMs = 151; mapSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m12 "assoluta" "FAIL") -eq 1) "mappa: la griglia di una zona a 151 ms fallisce i 150 ms"
+  $m13 = Invoke-Evaluation $thr @(New-Bench "mapZoneViewer" @{ viewerOpenMs = 100; mapSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m13 "assoluta" "OK") -eq 1) "mappa: il viewer dalla griglia a 100 ms sta nella guardia"
+  $m14 = Invoke-Evaluation $thr @(New-Bench "mapMemory" @{ mapPssKb = 300000; mapSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m14 "regressione" "NUOVO") -eq 1) "mappa: la memoria senza riferimento e' NUOVO"
+  Assert-That (@($m14 | Where-Object { $_.Kind -eq "assoluta" }).Count -eq 0) "mappa: la memoria non ha tetti assoluti"
+  $m15 = Invoke-Evaluation $thr @(New-Bench "mapLoadedScroll" @{ jankPercent = 0.2; mapWasOpened = 0; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m15 "validita" "FAIL") -eq 1) "mappa: lo scorrimento senza la mappa aperta non vale come guardia"
+  $m16 = Invoke-Evaluation $thr @(New-Bench "mapGestures" @{ jankPercent = 1.5; mapSeeded = 1; libraryNasShare = $mix }) "s25" $null @{} $false $true
+  Assert-That ((Count-Rows $m16 "assoluta" "FAIL") -eq 1) "mappa: i gesti sopra l'1% di jank falliscono"
+  # Ogni prova attesa dei due scenari c'e' in soglie.json e sta in uno scenario solo (il nome della prova e' la chiave).
+  foreach ($expected in @("memoryOpen", "memoryPlayer", "memoriesGenerate", "collectionsScroll", "memoriesLoadedScroll", "mapOpenCold", "mapOpenWarm", "mapGestures", "mapDraw", "mapClusters", "mapZoneOpen", "mapZoneViewer", "mapMemory", "mapLoadedScroll")) {
+    $found = @($thr.scenari | Where-Object { @($_.proveAttese) -contains $expected })
+    Assert-That ($found.Count -eq 1) "scenari della Fase 9: la prova $expected e' in uno scenario solo"
+  }
+  $draw = @($thr.scenari | Where-Object { $_.id -eq "mappa-disegno" })[0]
+  Assert-That ($draw -and $null -eq $draw.assolute[0].massimo -and $null -ne $draw.assolute[0].calibrazione) "mappa-disegno: il tetto e' null con la calibrazione (da calibrare sul primo riferimento)"
+
   # Il riferimento accettato si rilegge: stesso dispositivo, stesse prove.
   $text = Build-Reference $thr @($good.benchmarks) "s25" $good.context 120
   $parsed = $text | ConvertFrom-Json
@@ -696,29 +772,41 @@ if ($SummaryJson) {
 
 # --- Calibrazione e riferimento ---------------------------------------------------------------------------
 if ($Calibrate) {
-  $zoom = @($thr.scenari | Where-Object { $_.id -eq "zoom200" })
-  $rule = $null
-  if ($zoom.Count -gt 0) { $rule = @($zoom[0].assolute | Where-Object { $_.metrica -eq "pssPeakKb" })[0] }
-  $bench = @($benches | Where-Object { ([string]$_.name -replace '\[.*$', '') -eq "zoom200Mp" })[0]
-  if (-not $rule -or -not $bench) {
-    Write-Host "  -Calibrate: nessuna misura di zoom200Mp da cui calibrare" -ForegroundColor Yellow
-  } elseif ($null -ne $rule.massimo) {
-    Write-Host ("  -Calibrate: il tetto c'e' gia' ({0} KB): non lo cambio. Per ricalibrare rimetti `"massimo`": null in soglie.json." -f $rule.massimo) -ForegroundColor Yellow
-  } elseif ($smokeMode) {
-    Write-Host "  -Calibrate: non da un emulatore." -ForegroundColor Yellow
-  } else {
-    $peak = Get-StatValue $bench "pssPeakKb" "max"
-    $margin = [double]$rule.calibrazione.margine
-    $cap = [long]([math]::Ceiling($peak * (1.0 + $margin) / 1024.0) * 1024)
-    $text = [System.IO.File]::ReadAllText($Thresholds, (New-Object System.Text.UTF8Encoding($false)))
-    $pattern = '("metrica":\s*"pssPeakKb",\s*"statistica":\s*"max",\s*"massimo":\s*)null'
-    if ($text -notmatch $pattern) {
-      Write-Host "  -Calibrate: non trovo `"massimo`": null della PSS in soglie.json (formato cambiato?)" -ForegroundColor Red
-      exit 2
+  # Ogni regola assoluta con `calibrazione` e `"massimo": null` si calibra dalla misura della sua prova: tetto = misura + margine, arrotondato per eccesso al
+  # `passo` (di serie 1024: la PSS in KB, a multipli di 1 MB). Oggi: il picco di PSS dello zoom a 200 MP e il tempo di disegno di MapLibre (Fase 9, P12).
+  $calibrated = 0
+  foreach ($scenario in $thr.scenari) {
+    foreach ($rule in @($scenario.assolute)) {
+      if (-not (Has-Property $rule "calibrazione")) { continue }
+      $label = "$($scenario.id) / $($rule.metrica)"
+      $bench = @($benches | Where-Object { ([string]$_.name -replace '\[.*$', '') -match $scenario.prove })[0]
+      if (-not $bench) {
+        Write-Host "  -Calibrate ($label): nessuna misura da cui calibrare" -ForegroundColor Yellow
+      } elseif ($null -ne $rule.massimo) {
+        Write-Host ("  -Calibrate ({0}): il tetto c'e' gia' ({1}): non lo cambio. Per ricalibrare rimetti `"massimo`": null in soglie.json." -f $label, $rule.massimo) -ForegroundColor Yellow
+      } elseif ($smokeMode) {
+        Write-Host "  -Calibrate ($label): non da un emulatore." -ForegroundColor Yellow
+      } else {
+        $measured = Get-StatValue $bench $rule.metrica $rule.statistica
+        if ($null -eq $measured) {
+          Write-Host "  -Calibrate ($label): la misura non c'e' ($($rule.metrica) $($rule.statistica))" -ForegroundColor Yellow
+          continue
+        }
+        $margin = [double]$rule.calibrazione.margine
+        $step = if (Has-Property $rule.calibrazione "passo") { [double]$rule.calibrazione.passo } else { 1024.0 }
+        $cap = [math]::Ceiling($measured * (1.0 + $margin) / $step) * $step
+        $text = [System.IO.File]::ReadAllText($Thresholds, (New-Object System.Text.UTF8Encoding($false)))
+        $pattern = '("metrica":\s*"' + [regex]::Escape([string]$rule.metrica) + '",\s*"statistica":\s*"' + [regex]::Escape([string]$rule.statistica) + '",\s*"massimo":\s*)null'
+        if ($text -notmatch $pattern) {
+          Write-Host "  -Calibrate ($label): non trovo `"massimo`": null in soglie.json (formato cambiato?)" -ForegroundColor Red
+          exit 2
+        }
+        $text = [regex]::Replace($text, $pattern, ('${1}' + $cap.ToString("0.###", $inv)))
+        [System.IO.File]::WriteAllText($Thresholds, $text, (New-Object System.Text.UTF8Encoding($false)))
+        $calibrated++
+        Write-Host ("  -Calibrate ({0}): tetto scritto in soglie.json: {1} (misura {2} + {3}%, a multipli di {4})" -f $label, $cap.ToString("0.###", $inv), (Format-Number $measured "0.###"), (Format-Number ($margin * 100) "0"), (Format-Number $step "0.###")) -ForegroundColor Green
+      }
     }
-    $text = [regex]::Replace($text, $pattern, ('${1}' + $cap.ToString($inv)))
-    [System.IO.File]::WriteAllText($Thresholds, $text, (New-Object System.Text.UTF8Encoding($false)))
-    Write-Host ("  -Calibrate: tetto di PSS scritto in soglie.json: {0} KB (misura {1} KB + {2}%, a multipli di 1 MB)" -f $cap, (Format-Number $peak "0"), (Format-Number ($margin * 100) "0")) -ForegroundColor Green
   }
 }
 

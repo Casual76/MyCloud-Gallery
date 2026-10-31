@@ -40,8 +40,8 @@ questo stato (31/10).
 | M5 | Media (specifica) | Dichiarata con **L19** | L'identita' del NAS passa dalla sessione SMB 3.1.1 firmata (verificata dal banco: `NasIntegrationSuiteTest.t01`); "casa e NAS da dati non segreti" e' L19. |
 | B2, B5, B7 | Bassa (parziali, come dichiarato) | **Aperta** (Bassa) | Caratteri invisibili (ZWJ, selettori) ammessi nei nomi; spazzatura riletta a ogni sincronizzazione entro ~35 letture; cestino oltre 20 GiB non pulito. Il documento le dice "parzialmente chiuse come dichiarato", ma nessun limite di `docs/sicurezza.md` §6 le nomina. Chi la chiude: **security-review** (un limite o una correzione). |
 | B6 | Bassa | Non un difetto | L'account dichiarato da' potere solo dove serve scrivere nell'area privata di quell'account (segnalazioni "perso" e dati personali valgono solo se trovati li', L23, C19): la prova di possesso e' la password SMB dell'area. |
-| B8 | Bassa (specifica) | Chiusa | Ora del NAS solo da SMB 3.1.1 (C3): il trasporto rifiuta ogni altro dialetto (`SmbConnectionTester`, `NasIntegrationSuiteTest.t01`, che controlla `SMB_3_1_1`). |
-| B9 | Bassa (specifica) | Chiusa | Revisione 2, F3: senza QR di stato il recupero vuole l'impronta digitata (`AdminRecovery.recover(…, typedFingerprint)`, `AdminRecoveryViewModelTest.senzaLoStatoDellaFamigliaServeLImprontaDelFoglio`). |
+| B8 | Bassa (specifica) | Chiusa | Chiusa da `39912daf` (Fase 4A P1) con `NasIntegrationSuiteTest.t01`: ora del NAS solo da SMB 3.1.1 (C3), il trasporto rifiuta ogni altro dialetto e il test controlla `SMB_3_1_1` sul NAS vero. |
+| B9 | Bassa (specifica) | Chiusa | Chiusa da `95a6e68d` (revisione 2, F3) con `AdminRecoveryViewModelTest.senzaLoStatoDellaFamigliaServeLImprontaDelFoglio`: senza QR di stato il recupero vuole l'impronta digitata. |
 | B10 | Bassa | Dichiarata con **L563** (nuovo, P11) | Con la chiave di famiglia rubata un ramo alternativo del registro si adotta senza allarme. Chi ha quella chiave puo' fare di peggio (firmare qualunque registro): il rimedio e' l'azzeramento della famiglia; il rilevamento (l'app dell'admin ricorda le impronte delle versioni che ha firmato) resta un'idea per il dopo. |
 | N6 | Informativa (specifica) | **Aperta** | Il codice di approvazione deve venire dal testo digitato (campo vuoto, niente incolla dalla richiesta): scritto in `formato-nas.md` §4.5, ma non ho trovato un test dell'interfaccia che lo provi. Chi la chiude: **security-review** (un test in `feature-settings`) o P14 (F della approvazione). |
 
@@ -49,7 +49,7 @@ questo stato (31/10).
 
 | Voce | Gravita' | Stato | Dettaglio |
 |---|---|---|---|
-| Domanda 1 (smbj e la firma finale di SESSION_SETUP) | Informativa | Chiusa | `SmbjTransport` verifica la firma della risposta finale e rifiuta le risposte in chiaro dopo il login (revisione 4A, "Cose fatte bene"); sul NAS vero `NasIntegrationSuiteTest.t01`. |
+| Domanda 1 (smbj e la firma finale di SESSION_SETUP) | Informativa | Chiusa | Chiusa da `39912daf` (Fase 4A P1) con `NasIntegrationSuiteTest.t01` (sul NAS vero): `SmbjTransport` verifica la firma della risposta finale e rifiuta le risposte in chiaro dopo il login (revisione 4A, "Cose fatte bene"). |
 | Domanda 2 (Navigation e `deepLinkIds` con `adb`) | Informativa | **Aperta** (campo) | L'intent si ripulisce e le destinazioni sono per stato (`EntryHardeningTest`), ma la prova con `adb am start` sull'APK vero non e' registrata. Chi la chiude: **P11-2** (S13: `dumpsys package` e intent inventati sull'S25). |
 | Domanda 3 (quanto e' pubblico il GUID) | Informativa | Dichiarata con **L19** | Il GUID non e' un segreto per costruzione (L19); la difesa e' la password forte (C5). |
 
@@ -114,7 +114,7 @@ coda»). Restano le informative (il documento le dice "tutte aperte").
 | I6 (costo delle voci ostili di "Separa") | Informativa | **Aperta** | Un dispositivo dello stesso account (L29). Chi la chiude: **security-review** (un tetto o L29 estesa). |
 | I7 (nomi delle cartelle con soli nascosti) | Informativa | **Aperta** | Come 4B I8. Chi la chiude: **security-review**. |
 | I8 (la regola `mcg-` delle versioni vale anche in release) | Informativa | **Aperta** | Una cartella dell'utente `mcg-viaggio/` avrebbe la sua `Versioni/` interna. Chi la chiude: **security-review**. |
-| I9 (il cancello dei file in arrivo non provato nel bytecode di release) | Informativa | Chiusa | LA-5 della verifica funzionale (20/10): `tools/check.ps1`, passo "D12 e R2 nella release", legge `IncomingGate.stateOf` nel dex di release. |
+| I9 (il cancello dei file in arrivo non provato nel bytecode di release) | Informativa | Chiusa | Chiusa da `147cfa49` (LA-5 della verifica funzionale) con il passo "D12 e R2 nella release" di `tools/check.ps1`, che legge `IncomingGate.stateOf` nel dex di release. |
 | I10 (F3 senza `fileId`) | Informativa | **Aperta** | Il WD da' il `fileId` (misurato nella Fase 4); un NAS che non lo desse ricadrebbe su dimensione e data. Chi la chiude: **security-review** (un limite). |
 | I11 (le versioni toccano qualunque copia privata del media) | Informativa | **Aperta** | Chi la chiude: **security-review**. |
 | I12 (D13 in debug: due punti non recintati) | Informativa | **Aperta** | Solo debug. Chi la chiude: **security-review**. |
@@ -139,8 +139,8 @@ coda»). Restano le informative (il documento le dice "tutte aperte").
 | Documento | Voce | Gravita' | Stato | Dettaglio |
 |---|---|---|---|---|
 | `funzionale-fasi-1-5a.md` | GA-7 (miniature in Eliminati di recente) | Da provare | **Aperta** (campo) | Non confermata e non dimostrabile senza il MediaProvider; la cella resta sul segnaposto e "Ripristina" funziona. Chi la chiude: **P14** (F15). |
-| `funzionale-5b.md` | LA-3 (versioni di E-E7 aperte in debug) | Minore | Chiusa | Il documento dice "aperta, non corretta qui", ma la correzione e' arrivata lo stesso giorno: «Correzioni 5B: versioni e correzioni», `Correzioni5BVersioniAppTest.la3_*`. |
-| `funzionale-5b.md` | LA-3, scoperta collegata (una copia modificata in Galleria non fa partire un giro) | Minore | Chiusa | «Correzioni 5B: Libera spazio», punto 15: `BackupGraph.hasWork` e `nextAll` contano la copia. |
+| `funzionale-5b.md` | LA-3 (versioni di E-E7 aperte in debug) | Minore | Chiusa | Chiusa da `147cfa49` («Correzioni 5B: versioni e correzioni») con `Correzioni5BVersioniAppTest.la3_*`; il documento diceva ancora "aperta, non corretta qui". |
+| `funzionale-5b.md` | LA-3, scoperta collegata (una copia modificata in Galleria non fa partire un giro) | Minore | Chiusa | Chiusa da `6698c002` («Correzioni 5B: Libera spazio», punto 15): `BackupGraph.hasWork` e `nextAll` contano la copia, con i test del pacchetto. |
 | `funzionale-5b.md` | LA-4 (andirivieni fra i lavori) | Minore | Non un difetto (non confermato) | Riletti `BackupWork.kt` e `BackupGraph.nextAll`: un lavoro non puo' riaccodare se stesso e le attese vere non passano da li'; da contare sul telefono se capita (P14). |
 | `funzionale-6.md` | — | — | — | Tutte corrette (A, B, C; TS-4 con F il 27/10). Flussi F46-F71 sul telefono: P14. |
 | `funzionale-7.md` | — | — | — | 46 voci corrette, nessuna aperta. |

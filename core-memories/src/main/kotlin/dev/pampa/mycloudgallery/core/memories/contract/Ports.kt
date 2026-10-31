@@ -56,6 +56,13 @@ data class PersonDigest(val person: PersonId, val members: List<MediaId>) {
 interface MemoryPeople {
   val available: StateFlow<Boolean>
 
+  /**
+   * Vero se lo stato di Persone nell'account **non e' ancora noto** (all'avvio, prima che Persone sia montata, o con lo stato in aggiornamento): "non lo so", distinto
+   * da "no" ([available] falso). Finche' e' vero la pulizia dello scaffale **non toglie** i ricordi `PERSON` per cio' che dipende da Persone (non disponibile, persona
+   * non trovata): si potano solo con Persone spenta davvero o con una scelta esplicita dell'utente (MO-1, 31/10). Di serie falso (le porte senza stato).
+   */
+  val undecided: Boolean get() = false
+
   /** Le persone con un nome e i loro media visibili. */
   suspend fun named(): List<PersonDigest>
 

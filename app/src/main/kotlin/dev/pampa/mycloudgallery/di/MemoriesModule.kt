@@ -37,6 +37,7 @@ import dev.pampa.mycloudgallery.memories.MemoriesDiagnostics
 import dev.pampa.mycloudgallery.memories.MemoriesGraph
 import dev.pampa.mycloudgallery.memories.MemoriesWiring
 import dev.pampa.mycloudgallery.memories.MemoryPeopleFacade
+import dev.pampa.mycloudgallery.memories.MusicPermissions
 import dev.pampa.mycloudgallery.memories.memoriesSectionProvider
 import dev.pampa.mycloudgallery.utility.SearchShotVectors
 import dev.pampa.mycloudgallery.work.MemoryNotifySlot
@@ -83,6 +84,8 @@ object MemoriesModule {
     graph.memoriesStopper = GalleryStopper {
       memories.stop()
       if (memories.notifierBuilt) memories.notifier.cancel()
+      // I4: i permessi di lettura delle canzoni scelte (l'app non ne ha altri) si rilasciano tutti: il sistema li ricorderebbe anche dopo l'azzeramento.
+      MusicPermissions.releaseAll(context)
     }
     // P6 e P10: un "Nascondi" fatto qui ripulisce lo scaffale e rivaluta la notifica in tendina, subito.
     gallery.hiddenListeners += { memories.onHiddenChanged() }

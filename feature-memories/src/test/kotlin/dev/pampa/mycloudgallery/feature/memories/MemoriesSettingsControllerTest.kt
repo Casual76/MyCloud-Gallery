@@ -197,4 +197,19 @@ class MemoriesSettingsControllerTest {
     runCurrent()
     assertThat(r.controller.ui.value.message).isNull()
   }
+
+  /** MU-3 (31/10): la canzone scelta non si e' potuta conservare (il fornitore non concede il permesso persistente): la pagina lo dice, e la scelta resta com'era. */
+  @Test
+  fun laCanzoneCheNonSiConserva_laPaginaLoDice() = runTest {
+    val r = Rig(backgroundScope)
+    runCurrent()
+    assertThat(r.controller.ui.value.message).isNull()
+    r.controller.ownSongNotKept()
+    runCurrent()
+    assertThat(r.controller.ui.value.message).isEqualTo(MemoriesMessage.FAILED)
+    assertThat(r.controller.ui.value.state.music).isEqualTo(MusicChoice.None)
+    r.controller.dismissMessage()
+    runCurrent()
+    assertThat(r.controller.ui.value.message).isNull()
+  }
 }

@@ -165,6 +165,8 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     steps.run("notifica dei ricordi") {
       MemoriesWorkScheduling.cancel(context)
       NotificationManagerCompat.from(context).cancel(AppNotifications.ID_MEMORY)
+      // I4: i permessi di lettura delle canzoni anche qui (sempre): il passo "ricordi" non gira se la galleria non e' mai partita in questo processo.
+      dev.pampa.mycloudgallery.memories.MusicPermissions.releaseAll(context)
     }
     // Fase 8 (P13, §1.4, E-F35): le persone PER PRIME. Motori rilasciati, calcolo fermo, niente si apre piu' (il recinto), i database dei volti chiusi; poi le chiavi dei
     // volti (una per generazione) prima di qualunque dato, e i file. Anche per i soli dati di un account: le chiavi e i database dei volti sono del vecchio account.

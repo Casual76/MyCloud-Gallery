@@ -25,6 +25,9 @@ class PhaseGatedPeople(
 
   private val gone: Boolean get() = switch.phase.value.gone
 
+  /** MO-1: lo stato di Persone non e' ancora noto ([PeoplePhase.UNKNOWN]): lo scaffale non si pota per cio' che dipende da Persone. */
+  override val undecided: Boolean get() = switch.phase.value == PeoplePhase.UNKNOWN
+
   override val available: StateFlow<Boolean> = combine(inner.available, switch.phase) { available, phase -> available && !phase.gone }
     .stateIn(scope, SharingStarted.Eagerly, inner.available.value && !switch.phase.value.gone)
 

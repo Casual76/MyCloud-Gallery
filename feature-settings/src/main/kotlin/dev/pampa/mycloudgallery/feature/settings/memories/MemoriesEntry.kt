@@ -49,9 +49,12 @@ enum class MemoriesEntryState {
  */
 data class MemoriesEntrySummary(val state: MemoriesEntryState, val needsAttention: Boolean = false)
 
-/** Lo stato per la voce. `:app` lo lega a `NotifySettings` e al permesso. **Opzionale per Dagger** ([MemoriesEntryOptionalModule]). */
+/**
+ * Lo stato per la voce. `:app` lo lega a `NotifySettings` e al permesso. **Opzionale per Dagger** ([MemoriesEntryOptionalModule]). [summary] e' `null` finche' le
+ * preferenze non sono state lette (IM-1, 31/10): la riga dice a cosa serve la pagina, mai un valore di serie che poi si corregge.
+ */
 interface MemoriesEntryStatus {
-  val summary: StateFlow<MemoriesEntrySummary>
+  val summary: StateFlow<MemoriesEntrySummary?>
 }
 
 /** Il modulo Hilt delle porte opzionali della voce "Ricordi e notifiche". */

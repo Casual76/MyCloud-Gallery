@@ -2,6 +2,8 @@ package dev.pampa.mycloudgallery.integration
 
 import android.app.Application
 import android.app.NotificationManager
+import android.content.Intent
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.test.core.app.ApplicationProvider
@@ -67,7 +69,7 @@ class Phase9EraseTest {
     val map = File(noBackup, MapLibreInit.MAP_DIR)
     return listOf(
       File(memories, "shelf.bin"), File(memories, "notified"), File(memories, "notified-memory"), File(memories, "notify-prefs"), File(memories, "music"),
-      File(memories, "notify-late"), File(map, "mbgl-offline.db"), File(map, "tilejson-version"), File(map, "settings/map.preferences_pb"),
+      File(memories, "notify-late"), File(memories, "diag-counts"), File(map, "mbgl-offline.db"), File(map, "tilejson-version"), File(map, "settings/map.preferences_pb"),
     ).onEach { file ->
       file.parentFile!!.mkdirs()
       file.writeText("dati di prova")
@@ -94,6 +96,9 @@ class Phase9EraseTest {
     MemoriesWorkScheduling.schedule(app, TimeUnit.HOURS.toMillis(3))
     postMemoryNotification()
     assertThat(shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications).hasSize(1)
+    // I4: il permesso di lettura di una canzone scelta; l'azzeramento li rilascia tutti.
+    app.contentResolver.takePersistableUriPermission(Uri.parse("content://com.example.documenti/document/audio%3A1"), Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    assertThat(app.contentResolver.persistedUriPermissions).hasSize(1)
 
     val done = device.graph.eraser.eraseAll()
 
@@ -107,6 +112,7 @@ class Phase9EraseTest {
     assertThat(work.none { !it.state.isFinished }).isTrue()
     assertThat(work.map { it.state }).contains(WorkInfo.State.CANCELLED)
     assertThat(shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications).isEmpty()
+    assertThat(app.contentResolver.persistedUriPermissions).isEmpty()
   }
 
   @Test
@@ -114,6 +120,7 @@ class Phase9EraseTest {
     val device = device()
     val files = seed(device.context.noBackupFilesDir)
     MemoriesWorkScheduling.schedule(app, TimeUnit.HOURS.toMillis(3))
+    app.contentResolver.takePersistableUriPermission(Uri.parse("content://com.example.documenti/document/audio%3A2"), Intent.FLAG_GRANT_READ_URI_PERMISSION)
 
     // Una galleria mai partita (nessuno da fermare): i file, il lavoro e la notifica del vecchio account si tolgono lo stesso.
     val done = (device.graph.eraser as AppLocalDataEraser).eraseAccountData(stopGallery = false)
@@ -122,6 +129,8 @@ class Phase9EraseTest {
     for (file in files) assertWithMessage(file.path).that(file.exists()).isFalse()
     val work = WorkManager.getInstance(app).getWorkInfosForUniqueWork(MemoriesWorkScheduling.NOTIFY_WORK).get()
     assertThat(work.none { !it.state.isFinished }).isTrue()
+    // I4 anche senza la galleria viva (il passo "ricordi" non gira): i permessi delle canzoni si rilasciano nel passo che gira sempre.
+    assertThat(app.contentResolver.persistedUriPermissions).isEmpty()
   }
 
   @Test

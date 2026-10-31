@@ -21,10 +21,15 @@ object ChoiceRules {
    * Se il ricordo di una persona ([person], l'id con cui e' stato pubblicato) si puo' ancora mostrare: Persone disponibile qui, "Ricordi con le
    * persone" acceso, la persona esiste ancora ([resolved], l'alias dopo un'unione, null se e' nascosta, dimenticata o non c'e' piu') e ne' lei ne'
    * il suo alias hanno "Mostra meno" o "Mai" (E-MEM10).
+   *
+   * [undecided] (MO-1): lo stato di Persone non e' ancora noto (prima del montaggio di Persone): non si sa se Persone e' disponibile ne' chi e' la persona, e "non lo so"
+   * non toglie il ricordo; valgono solo le scelte esplicite dell'utente ("Ricordi con le persone" spento, "Mostra meno" o "Mai" sulla persona o sul suo alias).
    */
-  fun personStillShown(choices: MemoriesChoices, person: PersonId, peopleAvailable: Boolean, resolved: PersonId?): Boolean {
-    if (!peopleAvailable || !choices.peopleMemories) return false
-    if (resolved == null) return false
-    return choices.people[person] == null && choices.people[resolved] == null
+  fun personStillShown(choices: MemoriesChoices, person: PersonId, peopleAvailable: Boolean, resolved: PersonId?, undecided: Boolean = false): Boolean {
+    if (!choices.peopleMemories) return false
+    if (choices.people[person] != null) return false
+    if (undecided) return resolved == null || choices.people[resolved] == null
+    if (!peopleAvailable || resolved == null) return false
+    return choices.people[resolved] == null
   }
 }

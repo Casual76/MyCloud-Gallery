@@ -115,6 +115,11 @@ class MemoriesSettingsController(
 
   fun chooseNoMusic() = launch { musicSettings.set(MusicChoice.None) }
 
+  /** La canzone scelta con il selettore non si e' potuta conservare (il fornitore non concede il permesso persistente, MU-3): lo dice la pagina. */
+  fun ownSongNotKept() {
+    message.value = MemoriesMessage.FAILED
+  }
+
   /** Usa un brano del pacchetto, solo se e' installato (altrimenti non si puo'). */
   fun useTrack(trackId: String) = launch {
     if (library.tracks.value[trackId] == MusicTrackState.Ready && catalog.any { it.id == trackId }) musicSettings.set(MusicChoice.FreeTrack(trackId))

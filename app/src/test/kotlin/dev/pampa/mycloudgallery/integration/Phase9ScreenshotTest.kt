@@ -198,7 +198,7 @@ class Phase9ScreenshotTest(private val dark: Boolean) {
     val w = world()
     val card = w.stack.engine.shelf.value.items.first()
     val deps = MemoriesDependencies(
-      Optional.of(w.stack.engine), Optional.of(w.stack.people), Optional.of(MemoryPlaceNames { ids -> ids.mapNotNull { NAMES[it] } }), Optional.of(w.stack.mask),
+      Optional.of(w.stack.engine), Optional.of(w.stack.people), Optional.of(MemoryPlaceNames { ids -> ids.mapNotNull { NAMES[it] } }), w.stack.mask,
       Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
     )
     val viewModel = MemoryPageViewModel(SavedStateHandle(mapOf("id" to card.id.value)), deps)
@@ -216,7 +216,7 @@ class Phase9ScreenshotTest(private val dark: Boolean) {
     // Le impostazioni in memoria: il DataStore vero tiene il suo file "attivo" per tutto il processo dei test, e un secondo grafo sullo stesso file non lo legge.
     val deps = MapDependencies(
       Optional.of(w.map.points), Optional.of<MapSettings>(InMemoryMapSettings()), Optional.of(w.map.regions), Optional.of(w.map.networkState), Optional.of(w.map.places),
-      Optional.of(w.map.positions), Optional.of(w.stack.visible), Optional.of(w.stack.mask), Optional.of(w.map.starter), Optional.of(surface.content()),
+      Optional.of(w.map.positions), Optional.of(w.stack.visible), w.stack.mask, Optional.of(w.map.starter), Optional.of(surface.content()),
     )
     val viewModel = MapViewModel(SavedStateHandle(), deps)
     val thumbnails = MapThumbnails(loader, FakePlaceholderCache(), mapRefs)

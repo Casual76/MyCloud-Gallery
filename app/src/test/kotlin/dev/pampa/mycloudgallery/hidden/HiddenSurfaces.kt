@@ -430,7 +430,9 @@ internal object HiddenSurfaces {
     // `visibleOrThrow`, `HiddenMask.hiddenAmongOrThrow`) e la scelta delle foto con `VisiblePhotoPicker` (P7); `MemoriesScreenPorts` passa la maschera al filtro finale
     // della sezione Ricordi (superficie `memories-section`); `MapGraph` legge la posizione di un media solo se visibile (`viewer-minimap`) e passa la maschera al
     // filtro finale della mini-mappa. Le superfici sono le righe `MEMORIES`, `NOTIFICATIONS` e `MAP` qui sopra, provate sul motore e sulla catena dei punti veri;
-    // `AlbumsModule` (gia' sopra) lega anche `HiddenMask` per le porte opzionali di feature-albums, feature-memories e feature-map.
+    // `GalleryModule` lega `HiddenMask` per le schermate di feature-memories e feature-map, che la chiedono **senza `Optional`** (R3, 31/10: prima stava in `AlbumsModule`
+    // dietro tre `@BindsOptionalOf`, che compilano anche senza legame; `HiddenMaskWiringTest`).
+    "app/src/main/kotlin/dev/pampa/mycloudgallery/di/GalleryModule.kt",
     "app/src/main/kotlin/dev/pampa/mycloudgallery/memories/MemoriesWiring.kt",
     "app/src/main/kotlin/dev/pampa/mycloudgallery/memories/MemoriesScreenPorts.kt",
     "app/src/main/kotlin/dev/pampa/mycloudgallery/map/MapGraph.kt",

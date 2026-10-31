@@ -27,7 +27,8 @@ import dev.pampa.mycloudgallery.feature.memories.ui.MemoryNames
 import java.util.Optional
 import javax.inject.Inject
 
-// LE PORTE DELLE SCHERMATE DEI RICORDI PER DAGGER (Fase 9, P9; D7 della Fase 2: @HiltViewModel; docs/fase9-progetto.md §1.4). Tutte **opzionali**:
+// LE PORTE DELLE SCHERMATE DEI RICORDI PER DAGGER (Fase 9, P9; D7 della Fase 2: @HiltViewModel; docs/fase9-progetto.md §1.4). Tutte **opzionali**, tranne la maschera
+// dei Nascosti (R3, 31/10: il filtro finale non puo' tornare muto in silenzio, quindi la chiede senza `Optional` e Hilt la deve avere):
 // `:app` (P13, `MemoriesGraph`) lega i contratti veri (il motore dei ricordi, le persone, i nomi dei luoghi, i Nascosti, le preferenze, il lettore
 // audio); finche' non lo fa le schermate partono lo stesso con i null-object, che **non fanno niente di pericoloso** (nessun ricordo, nessuna
 // persona, nessun audio) e il grafo di `:app` compila. Le preferenze (notifiche e musica) senza legame stanno in memoria (`noop/SessionSettings.kt`, mai i
@@ -38,7 +39,8 @@ class MemoriesDependencies @Inject constructor(
   memories: Optional<Memories>,
   people: Optional<MemoryPeople>,
   places: Optional<MemoryPlaceNames>,
-  mask: Optional<HiddenMask>,
+  /** I Nascosti: **non opzionale** (R3, 31/10). La maschera la lega sempre `:app` (`GalleryModule`); senza, `:app` non compila. */
+  mask: HiddenMask,
   notify: Optional<NotifySettings>,
   access: Optional<NotificationAccess>,
   musicSettings: Optional<MusicSettings>,
@@ -50,8 +52,8 @@ class MemoriesDependencies @Inject constructor(
   val people: MemoryPeople? = people.orElse(null)
   val names: MemoryNames = MemoryNames(this.people, places.orElse(NoMemoryPlaceNames))
 
-  /** Il filtro finale dei Nascosti: senza la maschera (`:app` non l'ha legata) vale il solo filtro del servizio. */
-  val filter: FinalFilter = FinalFilter(mask.orElse(null))
+  /** Il filtro finale dei Nascosti: la maschera c'e' sempre (un legame che manca e' un errore di compilazione, non un filtro muto). */
+  val filter: FinalFilter = FinalFilter(mask)
   val notify: NotifySettings = notify.orElseGet { SessionNotifySettings() }
   val access: NotificationAccess = access.orElse(UnboundNotificationAccess)
   val musicSettings: MusicSettings = musicSettings.orElseGet { SessionMusicSettings() }
@@ -73,9 +75,6 @@ abstract class MemoriesPortsModule {
 
   @BindsOptionalOf
   abstract fun placeNames(): MemoryPlaceNames
-
-  @BindsOptionalOf
-  abstract fun hiddenMask(): HiddenMask
 
   @BindsOptionalOf
   abstract fun notifySettings(): NotifySettings

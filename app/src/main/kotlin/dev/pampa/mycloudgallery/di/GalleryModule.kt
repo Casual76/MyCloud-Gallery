@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
 import dev.pampa.mycloudgallery.core.imaging.contract.PlaceholderCache
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
 import dev.pampa.mycloudgallery.core.library.contract.GridLayoutEngine
+import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.LibraryPreferences
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.library.data.DataStoreLibraryPreferences
@@ -183,6 +184,13 @@ object GalleryModule {
   @Provides fun hiddenLibrary(gallery: GalleryGraph): HiddenLibrary = gallery.hiddenLibrary
 
   @Provides fun trashHiddenMask(gallery: GalleryGraph): TrashHiddenMask = gallery.trashMask
+
+  /**
+   * Il filtro finale dei Nascosti (D31) per le schermate dei ricordi e della mappa, che lo chiedono **senza `Optional`** (R3, 31/10): se questo legame manca, `:app` non
+   * compila. Sta qui, con il resto della galleria, e non in un modulo degli album: prima stava in `AlbumsModule` dietro tre `@BindsOptionalOf`, che compilano anche senza
+   * nessun legame e lasciavano il filtro finale muto senza che niente se ne accorgesse. Lo prova `HiddenMaskWiringTest`.
+   */
+  @Provides fun hiddenMask(gallery: GalleryGraph): HiddenMask = gallery.hiddenMask
 
   @Provides fun libraryStateSource(states: AppLibraryStates): LibraryStateSource = states
 

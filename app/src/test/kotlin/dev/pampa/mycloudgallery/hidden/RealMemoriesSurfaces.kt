@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.hidden
 
 import dev.pampa.mycloudgallery.core.database.entity.MediaPersonalEntity
+import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.memories.contract.Memory
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryCard
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryId
@@ -118,7 +119,8 @@ internal object RealMemoriesSurfaces {
     val never = foreverHidden(stack, victims)
     val scope = singleThreaded()
     val names = MemoryNames(stack.people, NoMemoryPlaceNames)
-    val filter = FinalFilter(if (finalFilter) stack.mask else null)
+    // Senza il filtro finale (la mutazione che la prova deve vedere): la maschera che non nasconde niente, perche' `FinalFilter` non ne ammette l'assenza (R3).
+    val filter = FinalFilter(if (finalFilter) stack.mask else HiddenMask { emptySet() })
     try {
       val expected = cards.associate { card -> card.id to membersOf(stack, card).filter { it !in never } }
 

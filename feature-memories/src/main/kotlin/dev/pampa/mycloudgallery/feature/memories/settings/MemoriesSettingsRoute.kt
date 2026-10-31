@@ -70,8 +70,8 @@ fun MemoriesSettingsRoute(
 
       override fun onNoMusic() = controller.chooseNoMusic()
 
-      // Il selettore di sistema per la canzone propria: la scelta la salva `:app` in `MusicSettings` e la pagina la vede da sola.
-      override fun onPickSong() = actions.pickOwnSong()
+      // Il selettore di sistema per la canzone propria: la scelta la salva `:app` in `MusicSettings` e la pagina la vede da sola; se non si conserva, la pagina lo dice (MU-3).
+      override fun onPickSong() = actions.pickOwnSong(onFailed = controller::ownSongNotKept)
 
       override fun onInstallTrack(trackId: String) = controller.installTrack(trackId)
 

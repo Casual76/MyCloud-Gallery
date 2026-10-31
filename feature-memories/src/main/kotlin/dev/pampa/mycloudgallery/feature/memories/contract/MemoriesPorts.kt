@@ -98,8 +98,12 @@ enum class MusicEvent(override val code: String) : StableCode {
 interface MusicPlayback {
   val events: Flow<MusicEvent>
 
-  /** Chiede il focus e parte. Se il file non si apre, emette [MusicEvent.MISSING]. */
-  fun start(source: MusicSource)
+  /**
+   * Chiede il focus, apre il brano **fuori dal thread principale** (un fornitore lento, Drive o una scheda SD, non deve fermare la presentazione: MU-1, 31/10) e parte.
+   * Torna **vero solo se un lettore e' partito**; falso se il sistema nega il focus audio (MU-2) o il file non si apre: per chi chiama vale "musica mancante" (muta, con
+   * l'avviso). Si annulla con la coroutine (l'uscita dalla presentazione): chi apriva rilascia quel che aveva preso.
+   */
+  suspend fun start(source: MusicSource): Boolean
 
   fun pause()
 
@@ -113,7 +117,7 @@ interface MusicPlayback {
 object NoMusicPlayback : MusicPlayback {
   override val events: Flow<MusicEvent> = emptyFlow()
 
-  override fun start(source: MusicSource) = Unit
+  override suspend fun start(source: MusicSource): Boolean = false
 
   override fun pause() = Unit
 

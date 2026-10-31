@@ -27,6 +27,7 @@ import dev.pampa.mycloudgallery.feature.memories.ui.FinalFilter
 import dev.pampa.mycloudgallery.feature.memories.ui.MemoryNames
 import java.time.LocalDate
 import java.time.LocalTime
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -50,14 +51,19 @@ class PlayerControllerTest {
     music: MusicChoice,
     songs: Set<String>,
     phoneVideos: Set<MediaId>,
+    slowStart: Boolean = false,
+    startOk: Boolean = true,
   ) {
     val images = RecordingPlayerImages()
-    val playback = FakeMusicPlayback()
+    val playback = FakeMusicPlayback().also {
+      if (slowStart) it.startGate = CompletableDeferred()
+      it.startResult = startOk
+    }
     val library = FakeMusicLibrary().also { it.availableSongs += songs }
     val settings = InMemoryMusicSettings(music)
     val clips = FakeMemoryClips().also { it.phoneVideos += phoneVideos }
     val player = PlayerController(
-      id, rig.memories, MemoryNames(rig.people, NoMemoryPlaceNames), FinalFilter(mask), clips, images, settings, library, playback, scope, environment,
+      id, rig.memories, MemoryNames(rig.people, NoMemoryPlaceNames), FinalFilter(mask ?: NothingHidden), clips, images, settings, library, playback, scope, environment,
     )
     val state: PlayerState get() = checkNotNull(player.ui.value.state)
     val index: Int get() = (state as? PlayerState.Playing)?.index ?: (state as PlayerState.Paused).index
@@ -70,10 +76,12 @@ class PlayerControllerTest {
     songs: Set<String> = emptySet(),
     phoneVideos: Set<MediaId> = emptySet(),
     rig: MemoriesRig? = null,
+    slowStart: Boolean = false,
+    startOk: Boolean = true,
   ): Setup {
     val rig = rig ?: MemoriesRig().also { it.refresh() }
     val id = rig.card(MemoryKind.ON_THIS_DAY, 1).id
-    return Setup(rig, id, backgroundScope, environment, if (mask) rig.lib.visibility else null, music, songs, phoneVideos).also { runCurrent() }
+    return Setup(rig, id, backgroundScope, environment, if (mask) rig.lib.visibility else null, music, songs, phoneVideos, slowStart, startOk).also { runCurrent() }
   }
 
   private companion object {
@@ -322,7 +330,7 @@ class PlayerControllerTest {
   fun senzaIlServizio_nonCrolla_nonCePiu() = runTest {
     val s = setup()
     val none = PlayerController(
-      s.id, NoMemories, MemoryNames(null, NoMemoryPlaceNames), FinalFilter(null), NoMemoryClips, s.images, s.settings, s.library, s.playback, backgroundScope,
+      s.id, NoMemories, MemoryNames(null, NoMemoryPlaceNames), FinalFilter(NothingHidden), NoMemoryClips, s.images, s.settings, s.library, s.playback, backgroundScope,
     )
     runCurrent()
     assertThat(none.ui.value.gone).isTrue()
@@ -470,5 +478,65 @@ class PlayerControllerTest {
     s.player.tap()
     runCurrent()
     assertThat(s.playback.calls.last()).isEqualTo("resume")
+  }
+
+  // --- MU-1, MU-2 (31/10): il brano si apre fuori dal thread principale; un focus negato e' "musica mancante" ---------------------------
+
+  /** MU-1: un fornitore lento (Drive, una scheda SD) non ferma la presentazione: il tempo corre, il brano parte quando e' pronto. */
+  @Test
+  fun unFornitoreLento_nonFermaLaPresentazione() = runTest {
+    val s = setup(music = OWN_SONG, songs = setOf(SONG), slowStart = true)
+    // Il brano si sta aprendo: ne' "in riproduzione" ne' "mancante", e la presentazione va avanti.
+    after(PlayerTimings.INTRO_MS + PlayerTimings.PHOTO_MS)
+    assertThat(s.index).isEqualTo(1)
+    assertThat((s.state as PlayerState.Playing).music).isEqualTo(PlayerMusic.MUTED)
+    assertThat(s.player.ui.value.musicMissing).isFalse()
+    s.playback.startGate!!.complete(Unit)
+    runCurrent()
+    assertThat((s.state as PlayerState.Playing).music).isEqualTo(PlayerMusic.PLAYING)
+    assertThat(s.playback.started).isTrue()
+  }
+
+  /** Uscire mentre il brano si apre lo annulla: non parte niente dopo, e nessun avviso a una presentazione che non c'e' piu'. */
+  @Test
+  fun uscireMentreIlBranoSiApre_nonLoFaPartire() = runTest {
+    val s = setup(music = OWN_SONG, songs = setOf(SONG), slowStart = true)
+    s.player.exit()
+    s.playback.startGate!!.complete(Unit)
+    runCurrent()
+    assertThat(s.playback.started).isFalse()
+    assertThat(s.player.ui.value.musicMissing).isFalse()
+    assertThat(s.playback.calls).containsExactly("start", "stop").inOrder()
+  }
+
+  /** La presentazione e' in pausa (l'utente) mentre il brano si apre: il brano non parte da solo. */
+  @Test
+  fun inPausaMentreIlBranoSiApre_ilBranoParteInPausa() = runTest {
+    val s = setup(music = OWN_SONG, songs = setOf(SONG), slowStart = true)
+    after(PlayerTimings.INTRO_MS)
+    s.player.tap()
+    assertThat(s.state).isInstanceOf(PlayerState.Paused::class.java)
+    s.playback.startGate!!.complete(Unit)
+    runCurrent()
+    // La pausa dell'utente (quando non c'era ancora un lettore) e quella di quando il brano e' pronto: l'ultima parola e' "in pausa".
+    assertThat(s.playback.calls).containsExactly("start", "pause", "pause").inOrder()
+  }
+
+  /**
+   * MU-2: il sistema nega l'audio (una chiamata in corso quando parte la presentazione): musica mancante (muta, con l'avviso), non "in riproduzione"; la presentazione non si
+   * ferma e il tocco non cerca un lettore che non c'e'.
+   */
+  @Test
+  fun unFocusNegato_valeMusicaMancante() = runTest {
+    val s = setup(music = OWN_SONG, songs = setOf(SONG), startOk = false)
+    assertThat((s.state as PlayerState.Playing).music).isEqualTo(PlayerMusic.MISSING)
+    assertThat(s.player.ui.value.musicMissing).isTrue()
+    after(PlayerTimings.INTRO_MS + PlayerTimings.PHOTO_MS)
+    assertThat(s.index).isEqualTo(1)
+    s.player.tap()
+    s.player.tap()
+    runCurrent()
+    assertThat(s.playback.calls).doesNotContain("resume")
+    assertThat((s.state as PlayerState.Playing).music).isEqualTo(PlayerMusic.MISSING)
   }
 }

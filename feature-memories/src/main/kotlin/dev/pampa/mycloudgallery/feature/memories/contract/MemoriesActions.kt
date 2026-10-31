@@ -26,6 +26,9 @@ interface MemoriesActions {
   /** Il canale "Ricordi" nelle impostazioni di Android (E-NT2). */
   fun openNotificationChannel()
 
-  /** Il selettore di sistema per la canzone propria (Q3: `ACTION_OPEN_DOCUMENT` sui file audio, permesso persistito). */
-  fun pickOwnSong()
+  /**
+   * Il selettore di sistema per la canzone propria (Q3: `ACTION_OPEN_DOCUMENT` sui file audio, permesso persistito). [onFailed] parte se la scelta non si conserva
+   * (il fornitore non concede il permesso persistente: MU-3, 31/10): la pagina lo dice invece di restare com'era senza una parola.
+   */
+  fun pickOwnSong(onFailed: () -> Unit)
 }

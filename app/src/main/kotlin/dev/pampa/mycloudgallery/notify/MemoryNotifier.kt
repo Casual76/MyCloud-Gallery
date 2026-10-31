@@ -25,6 +25,7 @@ import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.memories.contract.LockScreenMode
 import dev.pampa.mycloudgallery.core.memories.contract.Memories
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryId
+import dev.pampa.mycloudgallery.core.memories.contract.NotifyLedger
 import dev.pampa.mycloudgallery.core.memories.contract.NotifyRules
 import dev.pampa.mycloudgallery.core.memories.contract.NotifyTexts
 import dev.pampa.mycloudgallery.core.memories.contract.TextRef
@@ -40,6 +41,7 @@ import dev.pampa.mycloudgallery.core.memories.shelf.MemoryVisibility
 import dev.pampa.mycloudgallery.core.model.MediaId
 import java.io.File
 import java.io.IOException
+import java.time.LocalDate
 import java.time.Month
 import java.time.format.TextStyle
 import java.util.Locale
@@ -85,6 +87,8 @@ class MemoryNotifier(
   private val thumbnails: NotifyThumbnails = NoNotifyThumbnails,
   events: NotifyEvents = NoNotifyEvents,
   private val dispatcher: CoroutineDispatcher = Dispatchers.IO,
+  /** "Oggi" (la porta `Today` dei ricordi): il tocco sulla notifica apre solo il ricordo della notifica di oggi (NT-2). */
+  private val today: () -> LocalDate = LocalDate::now,
 ) : NotifyPublisher, MemoryNotifyAccess {
 
   private val app: Context = context.applicationContext ?: context
@@ -138,8 +142,18 @@ class MemoryNotifier(
     record
   }
 
-  /** Il ricordo che si apre dal tocco: quello della notifica in tendina (o, se non c'e' piu', null: si apre la pagina Ricordi, D17, E-NT8). */
-  suspend fun openTarget(): MemoryId? = withContext(dispatcher) { readPosted()?.memory }
+  /**
+   * Il ricordo che si apre dal tocco: quello dell'ultima notifica **se e' di oggi**; altrimenti null e si apre la pagina Ricordi (D17, E-NT8). NT-2 (31/10): il registro di
+   * ieri, con la tendina vuota, non porta piu' a un ricordo di ieri (l'azione la puo' mandare anche un'altra app).
+   *
+   * **Non** usa [posted]: il tocco stesso toglie la notifica dalla tendina (`setAutoCancel`) prima che l'app, magari appena nata, legga il registro, e [posted] la
+   * vedrebbe sempre "gia' tolta": ogni tocco vero finirebbe nella pagina Ricordi. Il giorno del registro dice se e' quella di oggi; la revoca (un nascosto, uno scarto)
+   * toglie il registro insieme alla notifica, e allora non c'e' niente da aprire.
+   */
+  suspend fun openTarget(): MemoryId? = withContext(dispatcher) {
+    val record = readPosted() ?: return@withContext null
+    record.memory.takeIf { record.day == NotifyLedger.dayOf(today()) }
+  }
 
   // --- La notifica ---------------------------------------------------------------------------------------------------------------------
 

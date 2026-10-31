@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.memories
 
 import android.content.Context
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
@@ -18,6 +19,7 @@ import dev.pampa.mycloudgallery.feature.memories.contract.MusicEvent
 import dev.pampa.mycloudgallery.feature.memories.contract.MusicPlayback
 import java.io.File
 import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
@@ -105,12 +107,24 @@ class AppMusicLibrary(private val persisted: (Uri) -> Boolean) : MusicLibrary {
 
 /**
  * Il lettore della musica (`MusicPlayback`, Q3, D13): un brano solo, in ripetizione, a volume moderato, con il **focus audio** (una chiamata o un messaggio
- * vocale fermano la musica e la presentazione; il focus perso per sempre la ferma). Un file che non si apre emette [MusicEvent.MISSING].
+ * vocale fermano la musica e la presentazione; il focus perso per sempre la ferma).
+ *
+ * **Il brano si apre fuori dal thread principale** (MU-1, 31/10): `setDataSource` e `prepare` su un documento remoto o lento (Drive, una scheda SD) bloccano chi li chiama,
+ * e prima giravano sul thread principale: la presentazione si fermava al titolo e il tocco non rispondeva (con un fornitore che non risponde, un ANR). Ora [start] e' una
+ * `suspend` che apre su `Dispatchers.IO`, si annulla con l'uscita dalla presentazione e, se nel frattempo e' arrivato uno [stop] o un altro [start], rilascia quello che
+ * aveva preso e non fa partire niente (`generation`).
+ *
+ * **Un focus negato non e' un lettore** (MU-2): [start] torna falso e chi chiama dice "musica mancante" (muta, con l'avviso); prima emetteva `FOCUS_LOST`, la presentazione si
+ * fermava e un tocco la faceva andare avanti muta con lo stato "in riproduzione".
  */
 class AndroidMusicPlayback(context: Context) : MusicPlayback {
   private val app = context.applicationContext
   private val audio = app.getSystemService(AudioManager::class.java)
   private val eventsFlow = MutableSharedFlow<MusicEvent>(extraBufferCapacity = 8, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+  private val lock = Any()
+
+  /** Una partenza per volta: ogni [start] e ogni [stop] la cambiano, cosi' un'apertura lenta che finisce dopo un'uscita non fa partire niente. */
+  private var generation = 0
   private var player: MediaPlayer? = null
   private var focus: AudioFocusRequest? = null
 
@@ -119,57 +133,92 @@ class AndroidMusicPlayback(context: Context) : MusicPlayback {
   private val listener = AudioManager.OnAudioFocusChangeListener { change ->
     when (change) {
       AudioManager.AUDIOFOCUS_LOSS -> {
-        stopPlayer()
+        synchronized(lock) { releasePlayerLocked() }
         eventsFlow.tryEmit(MusicEvent.FOCUS_LOST_FOR_GOOD)
       }
       AudioManager.AUDIOFOCUS_LOSS_TRANSIENT, AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-        player?.takeIf { it.isPlaying }?.pause()
+        synchronized(lock) { player?.takeIf { it.isPlaying }?.pause() }
         eventsFlow.tryEmit(MusicEvent.FOCUS_LOST)
       }
       AudioManager.AUDIOFOCUS_GAIN -> eventsFlow.tryEmit(MusicEvent.FOCUS_GAINED)
     }
   }
 
-  override fun start(source: MusicSource) {
-    stop()
+  override suspend fun start(source: MusicSource): Boolean {
+    val mine = synchronized(lock) {
+      stopLocked()
+      ++generation
+    }
     val attributes = AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build()
     val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN).setAudioAttributes(attributes).setOnAudioFocusChangeListener(listener).build()
-    if (audio?.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) {
-      eventsFlow.tryEmit(MusicEvent.FOCUS_LOST)
-      return
-    }
-    focus = request
-    try {
-      player = MediaPlayer().apply {
-        setAudioAttributes(attributes)
-        setDataSource(app, Uri.parse(source.token))
-        isLooping = true
-        setVolume(VOLUME, VOLUME)
-        prepare()
-        start()
+    // MU-2: il sistema nega l'audio (una chiamata in corso): niente lettore, e chi chiama lo sa.
+    if (audio?.requestAudioFocus(request) != AudioManager.AUDIOFOCUS_REQUEST_GRANTED) return false
+    val created = MediaPlayer()
+    val usable = synchronized(lock) {
+      if (generation == mine) {
+        focus = request
+        player = created
+        true
+      } else {
+        false
       }
+    }
+    if (!usable) {
+      runCatching { audio?.abandonAudioFocusRequest(request) }
+      created.release()
+      return false
+    }
+    return try {
+      created.setOnErrorListener { _, _, _ ->
+        eventsFlow.tryEmit(MusicEvent.MISSING)
+        true
+      }
+      // MU-1: l'apertura del documento e `prepare` (che aspettano il fornitore) fuori dal thread principale.
+      withContext(Dispatchers.IO) {
+        created.setAudioAttributes(attributes)
+        created.setDataSource(app, Uri.parse(source.token))
+        created.isLooping = true
+        created.setVolume(VOLUME, VOLUME)
+        created.prepare()
+      }
+      synchronized(lock) {
+        if (generation == mine) {
+          created.start()
+          true
+        } else {
+          false
+        }
+      }
+    } catch (e: CancellationException) {
+      synchronized(lock) { if (generation == mine) stopLocked() }
+      throw e
     } catch (e: Exception) {
       GalleryLog.w(TAG) { "musica non aperta: ${e.javaClass.simpleName}" }
-      stop()
-      eventsFlow.tryEmit(MusicEvent.MISSING)
+      synchronized(lock) { if (generation == mine) stopLocked() }
+      false
     }
   }
 
   override fun pause() {
-    player?.takeIf { it.isPlaying }?.pause()
+    synchronized(lock) { player?.takeIf { it.isPlaying }?.pause() }
   }
 
   override fun resume() {
-    player?.takeIf { !it.isPlaying }?.start()
+    synchronized(lock) { player?.takeIf { !it.isPlaying }?.start() }
   }
 
   override fun stop() {
-    stopPlayer()
-    focus?.let { audio?.abandonAudioFocusRequest(it) }
+    synchronized(lock) { stopLocked() }
+  }
+
+  private fun stopLocked() {
+    generation++
+    releasePlayerLocked()
+    focus?.let { runCatching { audio?.abandonAudioFocusRequest(it) } }
     focus = null
   }
 
-  private fun stopPlayer() {
+  private fun releasePlayerLocked() {
     val current = player ?: return
     player = null
     runCatching { current.stop() }
@@ -181,5 +230,57 @@ class AndroidMusicPlayback(context: Context) : MusicPlayback {
 
     /** Volume moderato (Q3): la musica accompagna, non copre. */
     const val VOLUME = 0.6f
+  }
+}
+
+/**
+ * I permessi di lettura persistiti delle canzoni scelte con il selettore di sistema (I4 della revisione di sicurezza, 31/10). Il permesso lo prende la pagina alla scelta
+ * (`takePersistableUriPermission`); prima non lo rilasciava nessuno, e l'app teneva il diritto di leggere ogni file audio mai scelto (il sistema ne ricorda gli URI anche
+ * dopo "dispositivo azzerato"). Ora si rilascia quello della canzone che si lascia ([PermissionReleasingMusicSettings]) e, all'azzeramento, **tutti** quelli dell'app.
+ */
+object MusicPermissions {
+
+  /** Rilascia il permesso di lettura persistito del documento [token] (un `content://`); un permesso che non c'e' (piu') non e' un errore. */
+  fun release(context: Context, token: String) {
+    try {
+      context.contentResolver.releasePersistableUriPermission(Uri.parse(token), Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    } catch (e: SecurityException) {
+      // Non c'era (piu'): niente da rilasciare.
+    } catch (e: IllegalArgumentException) {
+      GalleryLog.w("MemoriesMusic") { "permesso della canzone non rilasciato: ${e.javaClass.simpleName}" }
+    }
+  }
+
+  /** Rilascia **tutti** i permessi persistiti dell'app (l'azzeramento): quanti ne ha rilasciati. L'app non ne prende altri che quelli delle canzoni dei ricordi. */
+  fun releaseAll(context: Context): Int {
+    val resolver = context.contentResolver
+    var released = 0
+    // Una copia: rilasciare toglie dall'elenco del sistema, e un elenco vivo scorrerebbe saltando i permessi (come fanno le prove con Robolectric).
+    for (permission in resolver.persistedUriPermissions.toList()) {
+      val flags = (if (permission.isReadPermission) Intent.FLAG_GRANT_READ_URI_PERMISSION else 0) or
+        (if (permission.isWritePermission) Intent.FLAG_GRANT_WRITE_URI_PERMISSION else 0)
+      try {
+        resolver.releasePersistableUriPermission(permission.uri, flags)
+        released++
+      } catch (e: SecurityException) {
+        // Gia' tolto da altri: va bene cosi'.
+      }
+    }
+    return released
+  }
+}
+
+/**
+ * La scelta della musica che a ogni cambio di canzone **rilascia il permesso della vecchia** (I4, 31/10): scegliere un'altra canzone, "Nessuna" o un brano del pacchetto
+ * toglie il diritto di leggere il file che si lascia. Se la scelta nuova e' la stessa canzone (stesso documento) il permesso resta. [release] riceve il riferimento della
+ * canzone lasciata; si chiama solo a scrittura riuscita.
+ */
+class PermissionReleasingMusicSettings(private val inner: MusicSettings, private val release: (String) -> Unit) : MusicSettings {
+  override val choice: StateFlow<MusicChoice> get() = inner.choice
+
+  override suspend fun set(choice: MusicChoice) {
+    val old = inner.choice.value
+    inner.set(choice)
+    if (old is MusicChoice.OwnSong && old != choice) release(old.uriToken)
   }
 }

@@ -41,12 +41,13 @@ internal class PeopleRig(
   val register: MemoriesRegister = MemoriesRegister(),
   val store: MemoryShelfStore = InMemoryShelfStore(),
   production: Boolean = true,
+  /** Lo stato di Persone di partenza; di serie `ON`, come l'account dopo il montaggio di Persone (il vero parte da `UNKNOWN`, MO-1). */
+  val switch: FakePeopleSwitch = FakePeopleSwitch(),
 ) {
   val scope = CoroutineScope(Dispatchers.Unconfined + Job())
   val clock = FakeMemoryClock(today)
   val raw = InMemoryMemoriesPersonalSettings(register)
   val people = FakeMemoryPeople(available = true) { ids -> lib.visibility.visible(ids) }
-  val switch = FakePeopleSwitch()
 
   /** Le persone come le vede il motore: spente subito con lo stato di Persone (P13 le lega cosi'). */
   val gated = PhaseGatedPeople(people, switch, scope)

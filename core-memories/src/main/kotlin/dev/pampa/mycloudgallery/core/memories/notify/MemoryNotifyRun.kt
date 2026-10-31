@@ -25,13 +25,22 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import java.io.IOException
 import java.time.LocalDate
 import kotlin.time.Duration.Companion.seconds
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Com'e' andata una corsa del lavoro delle notifiche (solo codici e booleani: D33). */
 sealed interface NotifyOutcome {
@@ -63,6 +72,10 @@ sealed interface NotifyOutcome {
  *
  * La corsa **si ripianifica sempre** (D20: a ogni esecuzione, a ogni cambio di impostazioni, a ogni avvio): [replan] e [watch]. Nessun orologio
  * di sistema: l'ora arriva da [clock] (`MemoryClock`, legata da :app a `Today`), il tempo del passo leggero dal budget del motore.
+ *
+ * **Si ferma con il grafo** (AZ-1, 31/10): [stop] e' la fine ("l'azzeramento"). Una corsa in corso si **annulla e si aspetta**, ogni corsa dopo non fa niente, e anche
+ * una corsa che non si lascia annullare (una scrittura gia' partita) guarda [stopped] **prima di scrivere il registro** e **prima di pubblicare**: dopo [stop] nessun
+ * registro e nessuna notifica tornano al posto di cio' che l'azzeramento ha tolto. [replan] dopo lo stop non programma piu' niente.
  */
 class MemoryNotifyRun(
   private val policy: MemoryNotifyDecisions,
@@ -78,20 +91,52 @@ class MemoryNotifyRun(
   private val events: NotifyEvents = NoNotifyEvents,
 ) {
   private val lock = Mutex()
+  private val stopped = AtomicBoolean(false)
 
-  /** Una corsa del lavoro: decide, eventualmente pubblica, e rifa' sempre il lavoro unico per il prossimo orario. */
+  /** Le corse in corso (una per chiamata di [run]): [stop] le annulla e le aspetta. */
+  private val running = CopyOnWriteArrayList<Deferred<NotifyOutcome>>()
+
+  /** Una corsa del lavoro: decide, eventualmente pubblica, e rifa' sempre il lavoro unico per il prossimo orario (non dopo [stop]). */
   suspend fun run(): NotifyOutcome {
     try {
-      val outcome = lock.withLock { runLocked() }
-      if (outcome is NotifyOutcome.Skipped) events.skipped(outcome.reason)
+      if (stopped.get()) return NotifyOutcome.Skipped(NotifySkip.NOTHING)
+      val outcome = try {
+        coroutineScope {
+          // Figlia di chi chiama (stesso tempo, stesso dispatcher): [stop] la annulla da fuori senza annullare il lavoro che chiama.
+          val job = async { lock.withLock { runLocked() } }
+          running += job
+          try {
+            job.await()
+          } finally {
+            running -= job
+          }
+        }
+      } catch (e: CancellationException) {
+        // Annullata da [stop] e non da chi chiama: una corsa fermata dall'azzeramento non e' un errore ne' un giorno saltato.
+        if (stopped.get() && currentCoroutineContext().isActive) return NotifyOutcome.Skipped(NotifySkip.NOTHING)
+        throw e
+      }
+      if (outcome is NotifyOutcome.Skipped && !stopped.get()) events.skipped(outcome.reason)
       return outcome
     } finally {
       replan()
     }
   }
 
-  /** Rifa' il lavoro unico `memories-notify` per il prossimo orario (D20); con le notifiche spente lo toglie. */
+  /**
+   * La fine (l'azzeramento, AZ-1): da qui in poi nessuna corsa scrive il registro, pubblica o ripianifica. Una corsa in corso si annulla e **si aspetta**: al ritorno
+   * non c'e' piu' niente che possa scrivere. Si puo' chiamare piu' volte.
+   */
+  suspend fun stop() {
+    stopped.set(true)
+    for (job in running.toList()) job.cancelAndJoin()
+    // Una corsa che ha gia' il lucchetto ma non e' ancora nell'elenco: l'ultima parola e' del lucchetto.
+    lock.withLock { }
+  }
+
+  /** Rifa' il lavoro unico `memories-notify` per il prossimo orario (D20); con le notifiche spente lo toglie. Dopo [stop] non fa niente. */
   fun replan() {
+    if (stopped.get()) return
     val prefs = settings.prefs.value
     val now = clock.nowLocal()
     val next = policy.nextSlot(now, prefs)
@@ -104,12 +149,14 @@ class MemoryNotifyRun(
    */
   fun watch(scope: CoroutineScope): Job = scope.launch {
     settings.prefs.collect { prefs ->
+      if (stopped.get()) return@collect
       if (!prefs.enabled) publisher.cancel()
       replan()
     }
   }
 
   private suspend fun runLocked(): NotifyOutcome {
+    if (stopped.get()) return NotifyOutcome.Skipped(NotifySkip.NOTHING)
     val prefs = settings.prefs.value
     if (!prefs.enabled) return NotifyOutcome.Skipped(NotifySkip.DISABLED)
     val now = clock.nowLocal()
@@ -128,6 +175,10 @@ class MemoryNotifyRun(
     if (marks.notifiedOn(today)) return NotifyOutcome.Skipped(NotifySkip.ALREADY_TODAY)
     try {
       if (opened.openedOn(today)) return NotifyOutcome.Skipped(NotifySkip.ALREADY_OPENED)
+      // La Libreria non e' ancora stata letta: il motore non sa dire quali ricordi ci sono (sta zitto, RP-2): niente di bello oggi, e domani si riprova.
+      if (visibility.snapshot.value == null) return NotifyOutcome.Skipped(NotifySkip.NOTHING)
+      // Il passo leggero riscrive lo scaffale: dopo lo stop non deve rifarlo (AZ-1).
+      if (stopped.get()) return NotifyOutcome.Skipped(NotifySkip.NOTHING)
       lightPass(today)
       return choseAndPost(prefs.lockScreen, marks, today, late)
     } catch (e: CancellationException) {
@@ -187,8 +238,11 @@ class MemoryNotifyRun(
       }
       val special = NotifyRules.isSpecial(pick.memory)
       val notice = NotifyNotice(chosen, NotifyLedger.dayOf(today), mode, policy.content(ready, mode))
+      // AZ-1: se l'azzeramento ha fermato il grafo non si scrive il registro e non si pubblica niente al posto di cio' che ha appena tolto.
+      if (stopped.get()) return NotifyOutcome.Skipped(NotifySkip.NOTHING)
       // **Prima** il registro (E-NT5): se qui il processo muore, quel giorno non c'e' notifica; se va storto la scrittura, non parte niente.
       ledger.record(NotifyMark(notice.day, special), today)
+      if (stopped.get()) return NotifyOutcome.Skipped(NotifySkip.NOTHING)
       if (!publisher.publish(notice)) return NotifyOutcome.Skipped(NotifySkip.PERMISSION)
       events.delivered(late)
       return NotifyOutcome.Posted(special, late)
@@ -206,13 +260,19 @@ class MemoryNotifyRun(
     val out = ArrayList<NotifyCandidate>()
     for (card in memories.shelf.value.items) {
       if (card.publishedDay != todayDay) continue
-      val view = memories.memory(card.id).first() ?: continue
+      val view = viewOf(card.id) ?: continue
       val showable = showableOf(view, mode) ?: continue
       val person = view.memory.title.person
       out += NotifyCandidate(view.memory, view.seen, dismissed = false, visibleMembers = showable.size, lessPerson = person != null && person in lessPeople)
     }
     return out
   }
+
+  /**
+   * Il ricordo [id] dallo scaffale, con un tetto: il motore sta zitto finche' la Libreria non e' stata letta (RP-2), e una corsa che aspetta senza tetto non finirebbe mai.
+   * Nessuna risposta entro [VIEW_WAIT] vale "non c'e'" (quel ricordo non e' un candidato; domani si riprova).
+   */
+  private suspend fun viewOf(id: MemoryId): MemoryView? = withTimeoutOrNull(VIEW_WAIT) { memories.memory(id).first() }
 
   /** Gli elementi del ricordo che si possono mostrare **adesso** (mai un nascosto), o null se la copertina di "Titolo e foto" non c'e'. */
   private suspend fun showableOf(view: MemoryView, mode: LockScreenMode): List<MediaId>? {
@@ -227,7 +287,7 @@ class MemoryNotifyRun(
    * elementi visibili; null se non regge piu'.
    */
   private suspend fun recheck(id: MemoryId, mode: LockScreenMode): Memory? {
-    val view = memories.memory(id).first() ?: return null
+    val view = viewOf(id) ?: return null
     val showable = showableOf(view, mode) ?: return null
     if (showable.size < MemoryRules.NOTIFY_MIN_MEMBERS) return null
     val cover = if (view.cover in showable) view.cover else showable.first()
@@ -237,5 +297,8 @@ class MemoryNotifyRun(
   private companion object {
     /** Quante volte si ripesca se la scelta non regge al ricontrollo (un ricordo alla volta): un tetto per non girare a vuoto. */
     const val MAX_ROUNDS = 6
+
+    /** Quanto si aspetta la risposta del motore su un ricordo (la Libreria letta): oltre, quel ricordo non e' un candidato. */
+    val VIEW_WAIT = 5.seconds
   }
 }

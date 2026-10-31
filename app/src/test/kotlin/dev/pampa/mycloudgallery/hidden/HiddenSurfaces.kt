@@ -455,6 +455,11 @@ internal object HiddenSurfaces {
     "app/src/main/kotlin/dev/pampa/mycloudgallery/memories/MemoriesWiring.kt",
     "app/src/main/kotlin/dev/pampa/mycloudgallery/memories/MemoriesScreenPorts.kt",
     "app/src/main/kotlin/dev/pampa/mycloudgallery/map/MapGraph.kt",
+    // Fase 10 (P2): la politica del widget in core-widget. `DefaultWidgetPlanner` passa ogni cella da `VisibleMedia` e `HiddenMask` (filtro finale come
+    // ultimo passo) e `DefaultWidgetTaps` riverifica la visibilita' al tocco; non mostrano niente da soli. La superficie e' la riga `WIDGET`, che passa
+    // in produzione con P3 insieme alla sonda sul pianificatore vero (`DefaultWidgetPlannerBigWorldTest` e' la prova sulla JVM).
+    "core-widget/src/main/kotlin/dev/pampa/mycloudgallery/core/widget/plan/DefaultWidgetPlanner.kt",
+    "core-widget/src/main/kotlin/dev/pampa/mycloudgallery/core/widget/tap/DefaultWidgetTaps.kt",
   )
 
   /** I contratti da cui ogni superficie deve passare per i nascosti. */

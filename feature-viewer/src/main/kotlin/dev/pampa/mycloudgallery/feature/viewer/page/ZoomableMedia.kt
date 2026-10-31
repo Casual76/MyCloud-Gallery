@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import dev.pampa.mycloudgallery.feature.viewer.gesture.mouseWheelZoom
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ContentMapping
 import me.saket.telephoto.zoomable.DoubleClickToZoomListener
 import me.saket.telephoto.zoomable.ZoomSpec
@@ -65,6 +66,8 @@ internal fun ZoomableMedia(
   Box(
     modifier = modifier
       .fillMaxSize()
+      // La rotella del mouse ingrandisce (Fase 10, P4, D15): prima dei gesti di telephoto, che non la usano per questo.
+      .mouseWheelZoom(zoomable, gesturesEnabled)
       .zoomable(
         state = zoomable,
         enabled = gesturesEnabled,

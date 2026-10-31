@@ -62,6 +62,23 @@ import kotlinx.coroutines.flow.asStateFlow
 data class SavedGridPosition(val mediaId: String, val fy: Float, val screenFraction: Float, val atNewest: Boolean)
 
 /**
+ * La selezione di una griglia, come si salva per una ricreazione vera (densita', lingua, tema, processo morto in secondo piano: Fase 10, P4, D14, E-T8).
+ * **Mai una selezione troncata in silenzio**: fino a [MAX_IDS] elementi si salvano gli id; oltre, o se sono selezionati **tutti** gli elementi della vista
+ * (Ctrl+A, "Seleziona" su ogni giorno), si salva solo [all] e al ritorno si riseleziona la vista di allora con il suo filtro (che la Libreria ricorda a parte). Chi
+ * agisce sulla selezione ripristinata agisce quindi su cio' che vede, mai su un pezzo di quello che aveva scelto.
+ *
+ * @property ids gli id selezionati (i `MediaId.value`), vuoto se [all] o se erano piu' di [MAX_IDS].
+ * @property all erano selezionati tutti gli elementi della vista.
+ */
+@Immutable
+data class SavedSelection(val ids: List<String>, val all: Boolean) {
+  companion object {
+    /** Fino a quanti id si salvano (D14: 500). Il `Bundle` dello stato salvato ha un tetto di circa 1 MB; 500 id da 36 caratteri sono meno di 40 KB. */
+    const val MAX_IDS: Int = 500
+  }
+}
+
+/**
  * Lo stato della griglia: tutto cio' che [MediaGrid] disegna e ricorda, e solo quello. E' il contratto fra la griglia e
  * chi la usa: la Libreria, le Raccolte filtrate, i Nascosti e gli Eliminati di recente costruiscono ciascuno il proprio
  * [MediaGridState] e passano la stessa griglia (docs/fase3-progetto.md §1.2).
@@ -403,6 +420,43 @@ class MediaGridState(
     }
     val (row, offset) = restoreTarget(l, shownView, saved)
     listState.requestScrollToItem(row, offset)
+  }
+
+  /**
+   * La selezione di adesso per salvarla (Fase 10, P4, D14, E-T8). Null se non si sta selezionando. Con la modalita' selezione accesa e nessun elemento scelto si salva
+   * la sola modalita' (un elenco vuoto): l'utente torna dove era.
+   */
+  fun saveSelection(): SavedSelection? {
+    if (!selecting) return null
+    val ids = selection.selected.value.ids
+    // La selezione e' sempre dentro la vista (`retain` toglie chi esce): se ha la stessa misura della vista, ci sono tutti.
+    val all = ids.isNotEmpty() && ids.size == view.size
+    if (all || ids.size > SavedSelection.MAX_IDS) return SavedSelection(emptyList(), all = all)
+    return SavedSelection(ids.map { it.value }, all = false)
+  }
+
+  /** Ctrl+A (Fase 10, P4, D15): modalita' selezione con **tutta la vista** (con il suo filtro). La selezione resta dentro la vista: `GridEffects` toglie chi esce. */
+  internal fun selectAllInView() {
+    startSelecting()
+    val v = view
+    val all = LinkedHashSet<MediaId>(v.size)
+    for (i in 0 until v.size) all += v.snapshot.idAt(v.snapshotIndex(i))
+    selection.selectAll(all)
+  }
+
+  /**
+   * Rimette una selezione salvata (dopo una ricreazione): accende la modalita' selezione e sceglie gli elementi che sono ancora nella vista. Va chiamata quando la vista
+   * ha degli elementi (`GridEffects` toglie dalla selezione chi non e' nella vista, quindi con la vista ancora vuota non resterebbe niente).
+   */
+  fun restoreSelection(saved: SavedSelection) {
+    startSelecting()
+    val v = view
+    val ids: Collection<MediaId> = if (saved.all) {
+      (0 until v.size).mapTo(LinkedHashSet()) { v.snapshot.idAt(v.snapshotIndex(it)) }
+    } else {
+      saved.ids.mapNotNullTo(LinkedHashSet()) { raw -> runCatching { MediaId(raw) }.getOrNull()?.takeIf { v.viewIndexOf(it) >= 0 } }
+    }
+    selection.selectAll(ids)
   }
 
   // ------------------------------------------------------------------------------------------

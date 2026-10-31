@@ -97,6 +97,8 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.security.screen.SecureScreen
 import dev.pampa.mycloudgallery.feature.viewer.details.ViewerFormat
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadFailure
+import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerKeyCallbacks
+import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerKeyboard
 import dev.pampa.mycloudgallery.feature.viewer.menu.AlbumMenuResult
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupActionsController
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuHandlers
@@ -410,11 +412,25 @@ private fun ViewerHost(
     }
   }
 
+  // --- Tastiera (Fase 10, P4, D15, E-T10) --------------------------------------------------------------------------------
+
+  // Le frecce sinistra e destra spostano di una foto, solo a viewer a riposo e senza un foglio, una selezione del testo o un soggetto staccato aperti (come il pager, che in quei
+  // casi non scorre: E-V13). Esc e' il gesto Indietro, che `MainActivity` manda al gestore qui sopra; la rotella e' dello zoom (`ZoomableMedia`).
+  fun stepPage(delta: Int): Boolean {
+    if (!atRest || controller.closing || controller.sheet != null || controller.liveText.active || controller.cutout.active) return false
+    val target = pager.currentPage + delta
+    if (target !in 0 until pager.pageCount) return false
+    scope.launch { pager.animateScrollToPage(target) }
+    return true
+  }
+  val keyboard = Modifier.viewerKeyboard(ViewerKeyCallbacks(previous = { stepPage(-1) }, next = { stepPage(1) }))
+
   // --- Disegno ---------------------------------------------------------------------------------------------------------
 
   BoxWithConstraints(
     modifier = modifier
       .fillMaxSize()
+      .then(keyboard)
       .onGloballyPositioned {
         controller.windowOffset = it.positionInWindow()
         controller.positioned = true

@@ -9,6 +9,8 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.unit.Dp
@@ -64,6 +66,19 @@ internal fun Modifier.gridGestures(
     val start = down.position
     val hit = if (stoppedFling || state.pinching) -1 else state.positionAt(start)
     val hitId = if (hit >= 0) state.idAt(hit) else null
+    // Il clic destro del mouse (D15) fa quello che fa la pressione prolungata: entra in selezione con la cella (le azioni stanno nella barra). Non apre e non trascina.
+    if (hitId != null && down.type == PointerType.Mouse && currentEvent.buttons.isSecondaryPressed) {
+      callbacks.haptics.play(FluidHapticEvent.Threshold)
+      if (!state.selecting) state.startSelecting()
+      if (hitId !in state.selection.selected.value.ids) state.selection.toggle(hitId)
+      down.consume()
+      while (true) {
+        val event = awaitPointerEvent(PointerEventPass.Initial)
+        event.changes.forEach { it.consume() }
+        if (event.changes.none { it.pressed }) break
+      }
+      return@awaitEachGesture
+    }
     var mode = GestureMode.Undecided
     var pressJob: Job? = if (hitId != null) {
       scope.launch {

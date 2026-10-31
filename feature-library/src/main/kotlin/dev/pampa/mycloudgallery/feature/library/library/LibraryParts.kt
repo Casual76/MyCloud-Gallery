@@ -74,8 +74,10 @@ import dev.pampa.mycloudgallery.feature.library.familyNoticeAfterHide
 import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
 import dev.pampa.mycloudgallery.feature.library.grid.SavedGridPosition
+import dev.pampa.mycloudgallery.feature.library.grid.SavedSelection
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -198,6 +200,37 @@ internal class PositionKeeper(private var saved: SavedGridPosition?) {
     grid.restorePosition(position)
   }
 }
+
+/**
+ * Tiene la selezione salvata finche' la vista ha degli elementi, poi la consegna alla griglia una volta (Fase 10, P4, D14, E-T8). Aspetta la vista perche' `GridEffects` toglie dalla
+ * selezione chi non e' nella vista: rimessa a vista ancora vuota, sparirebbe subito.
+ */
+@Stable
+internal class SelectionKeeper(private var saved: SavedSelection?) {
+  suspend fun restoreWhenReady(grid: MediaGridState) {
+    val selection = saved ?: return
+    snapshotFlow { grid.view.size }.first { it > 0 }
+    saved = null
+    grid.restoreSelection(selection)
+  }
+}
+
+/**
+ * Il salvataggio della selezione (E-T8): la modalita' selezione e gli id, fino a [SavedSelection.MAX_IDS]; oltre, o con tutta la vista selezionata, il solo "tutti". Una prima
+ * voce booleana, poi gli id come testo.
+ */
+internal fun selectionSaver(grid: MediaGridState): Saver<SelectionKeeper, Any> = Saver(
+  save = { _ -> grid.saveSelection()?.let { saved -> ArrayList<Any>(saved.ids.size + 1).apply { add(saved.all); addAll(saved.ids) } } },
+  restore = { value ->
+    val list = value as? List<*>
+    val all = list?.getOrNull(0) as? Boolean
+    if (list == null || all == null) {
+      SelectionKeeper(null)
+    } else {
+      SelectionKeeper(SavedSelection(ids = list.drop(1).filterIsInstance<String>(), all = all))
+    }
+  },
+)
 
 /** Il salvataggio della posizione come elemento ancorato + scostamento (mai come indice). */
 internal fun positionSaver(grid: MediaGridState): Saver<PositionKeeper, Any> = Saver(

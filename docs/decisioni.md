@@ -13520,3 +13520,157 @@ Nessuna classe rifatta con `--rerun`, nessun `hs_err_pid*.log`.
 ### Commit (branch `fase10/p1`)
 `8ada0c5b` (core-release: codec, chiavi, stato, fabbrica, prove), `ca0b2e31` (core-models: indirizzi aggiuntivi), `37c26994` (ManifestTool e
 `release/manifest.json`), `65a5ab4b` (il lanciatore passa `--in` e `--out`) e quello dei documenti.
+
+## Fase 10 P2: politica del widget (31/10)
+
+Il pacchetto P2 della Fase 10 (`docs/fase10-progetto.md` §4.4 riga P2; §0.1 D3-D9, §1.2, §2.1, §2.2, §2.12, §4.3, §5.2, §6, §11; risposte
+Q1 (a), Q2 (a), Q3 (c), Q4 (a)): la **parte pura sulla JVM** del widget, tutta in `core-widget` (piu' i fake delle porte). Nessuna dipendenza,
+nessun permesso, componente, host o chiave; nessuna costante di `FeatureFlags`; **niente Glance e niente scaricamenti** (`feature-widget` e' di P3).
+Branch `fase10/p2` da `ab4c7c2c`. Nessuna voce nuova di `docs/sicurezza.md` (C453-C454 e L562 non usate): C430-C433 e C448 sono precisate.
+
+**Cosa c'e' (`core-widget`)**
+- `plan/DefaultWidgetPlanner`: il pianificatore sopra `WidgetFeed`. `plan/WidgetBudget`: i tetti di D7 come regole pure.
+- `ledger/FileWidgetLedger` (+ `FileLedgerStorage`, `WidgetLedgerStorage`): il registro su file con scrittura atomica.
+- `schedule/DefaultWidgetSchedule` (ore di quiete e periodi di Q2), `schedule/WidgetRunPolicy` (che cosa fa il lavoro periodico quando parte,
+  i numeri per WorkManager), `schedule/BackgroundRefreshGate` (il ridisegno all'uscita dall'app: 2 s di calma, 15 minuti fra due).
+- `tap/DefaultWidgetTaps` e `tap/WidgetTap` (l'`object` statico per `parse`, che `MainActivity` chiamera' senza grafo).
+- Fake: `SyntheticWidgetWorld` ha `addGroups` (gruppi con il nascosto contagioso) e il suo `hiddenNow` conta i compagni di gruppo;
+  `InMemoryWidgetLedger.epochOf`.
+
+**Scelte**
+1. **Il tetto di `WidgetFeed` (16) contro il triplo della misura grande (21).** Ne' un tetto piu' alto in `core-library` (e' il contratto della
+   Fase 7, con la sua suite) ne' una sola chiamata: le foto si chiedono **a giri**. Ogni giro chiede `min(mancanti x 3, 16) << (giro - 1, al piu' 4)`
+   media (la prima volta il triplo di quel che manca, poi il doppio a ogni giro, sempre al massimo 16) e tiene quelli che passano tipo, blocco e
+   miniature locali. Si va avanti finche' le celle sono piene, **oppure il feed ricomincia da capo** (un id gia' visto: la rotazione ha fatto il
+   giro intero, quindi non c'e' altro da trovare), **oppure** sono passati `MAX_ROUNDS` = 64 giri (circa mille celle guardate per piano, qualunque sia
+   la Libreria). Una misura piccola non spreca il feed (SMALL: una chiamata da 3); la misura grande ne fa una da 16 e, se le miniature sono poche,
+   altre. Il costo di un piano non cresce con la Libreria (100 mila: mediana 0,34 ms). Il cursore del feed resta condiviso: due widget, foto diverse.
+2. **Il ricordo di oggi** (D3, D4): stesse regole del riferimento ma a **blocchi di 32** (un ricordo di migliaia di elementi non costa migliaia di
+   letture): non `PERSON`, almeno 8 visibili fra i membri (E-W19), la copertina per prima, solo celle nell'istantanea (un membro di un gruppo che non e'
+   la copertina non ha una cella) e non escluse per tipo (screenshot, documenti, immagini animate), solo con la miniatura locale; se il filtro finale
+   toglie anche un solo elemento, il ricordo cade e si passa alle foto. Il titolo passa **com'e'** da `WidgetMemoryPick` (dati, mai una persona): un
+   ricordo `PERSON` non arriva mai al piano, quindi nemmeno la sua etichetta.
+3. **Il filtro finale** (D5, C430) e' l'ultimo passo, con `visibleOrThrow` e `hiddenAmongOrThrow`, **anche** sul ricordo; un errore di lettura o un
+   budget superato e' `Message(ERROR)`. Il feed vero (`RotatingWidgetFeed`) **fallisce chiuso e risponde "niente" a un errore**: prima di dire
+   `NO_MEDIA` con un'istantanea non vuota il piano rilegge **un** id con le letture che lanciano, cosi' un guasto del database e' `ERROR` e non
+   "Libreria vuota".
+4. **Il blocco che si accende durante il piano** (Q3 (c), C432): il piano legge `appLocked` all'inizio; se alla fine e' diventato vero e all'inizio
+   no, **decide da capo con il blocco** (niente titolo, niente media solo sul NAS). Il caso opposto da' un piano piu' severo del necessario e
+   `lockChanged()` lo rifa'.
+5. **Il budget** (D6, 2 s) vale in due modi: `withTimeoutOrNull` (il tempo virtuale dei test) **e** l'orologio monotono di `WidgetClock` dopo ogni
+   fase (una lettura che blocca senza punti di sospensione non si lascia interrompere dal timeout).
+6. **L'epoca** (cambio al contratto, nel perimetro di `core-widget`): `WidgetLedger.epochOf(slot)` (default 0). Il contatore del pianificatore
+   riparte da zero a ogni processo, il registro su file ha ancora l'epoca di prima e **ignora** i piani con un'epoca piu' vecchia: senza questo,
+   dopo la prima morte del processo ogni piano nuovo sarebbe scartato dal registro, un tocco aprirebbe la foto sbagliata e lo svuotamento di D5
+   non vedrebbe le foto nuove. `DefaultWidgetPlanner` riparte da `max(contatore, epochOf) + 1` (prova: `DefaultWidgetPlannerTest`). Per questo il
+   costruttore ha in piu' il **`ledger`** (non e' nelle firme indicative del §1.2).
+7. **D7: i numeri non stanno insieme.** "Al piu' 384 px (512 nella grande)" e "7 bitmap e 2 MiB in tutto" si contraddicono: sette miniature quadrate da
+   384 px sono 4,1 MiB (da 512, 7,3 MiB). Vale il tetto **in byte** (e' quello che Android controlla sui `RemoteViews`); il lato lungo e' un massimo:
+   `WidgetBudget.longSidePx(size, celle)` lo abbassa nel caso peggiore (miniature quadrate: sette celle 273 px, quattro 362 px, una 384),
+   `WidgetBudget.fitting(dimensioni)` dice quante celle stanno (un prefisso: la cella 0, la copertina, e' l'ultima a cadere) e
+   `WidgetBudget.trimmed(piano, n)` da' il piano ridotto da registrare e disegnare.
+8. **Il registro** (D9, D5, D42): un file `ledger.mcgw` (formato nel KDoc: `MCGW`, versione, lunghezza, contenuto, CRC-32; id di media come due `long`,
+   ricordo come 26 lettere), scritto con `StateFiles` (temporaneo accanto, `fsync`, `ATOMIC_MOVE`). Un file che non si legge, e' troppo grande
+   (128 KiB), e' troncato, ha un byte cambiato, un'altra versione, byte in piu', codici non validi o numeri fuori dai limiti (256 widget, 7 celle)
+   **e' un registro vuoto**, mai un crollo. Lo stato in memoria cambia **solo dopo** una scrittura riuscita; una scrittura che fallisce lancia
+   `IOException` (P3: senza registro niente disegno, §2.1 passo 7). `clear()` toglie il file e il suo temporaneo, e se non ci riesce lo riscrive
+   vuoto. Un lucchetto solo (`Mutex`), I/O su `Dispatchers.IO`.
+9. **Il tocco** (D9, C17, C433): `DefaultWidgetTaps.parse` legge **carattere per carattere** (niente espressioni regolari, niente `toInt`): solo cifre
+   ASCII, nessuno zero davanti, id 1..2³¹-1, cella 0..6, nessun carattere in piu', al massimo 32 caratteri. `resolve` **fallisce chiuso**: un errore
+   del registro o della visibilita' apre la Libreria **senza avviso**, mai un media. `WidgetTap` e' un `object` che delega a `DefaultWidgetTaps`.
+10. **Le ore** (D6, Q2): quiete 23:00 compresa - 7:00 esclusa, ora locale; il prossimo giro e' adesso piu' la frequenza, e se cade nella quiete slitta
+    alle 7:00 dopo quel momento; `DAILY` sempre alle 7:00 del primo mattino dopo adesso. `WidgetRunPolicy.decide`: senza widget `NO_WIDGETS` (il
+    lavoro si annulla), poi `POWER_SAVER` (E-P10: il periodico tace), poi `QUIET` (esce subito), altrimenti `RUN`; `workPlan` da' intervallo,
+    flessibilita' (30 minuti) e il primo giro al prossimo orario utile (un widget messo alle 22 parte alle 7). `BackgroundRefreshGate`: puro, con i
+    millisecondi monotoni che gli si danno; P3 aspetta `waitMs` e chiede `fire`.
+
+**Prove** (`core-widget`: **106 test**, 26 di P0 + 80 nuovi; tutto sulla JVM, nessun orologio di sistema)
+- Le **suite di contratto di P0** girano sulle implementazioni vere: `DefaultWidgetPlannerContractTest` (sopra `RotatingWidgetFeed`),
+  `FileWidgetLedgerContractTest` (file veri in una cartella temporanea, con un deposito che muore a meta' scrittura e un file rovinato),
+  `DefaultWidgetScheduleContractTest`, `DefaultWidgetTapsContractTest`.
+- **Parita'** (`DefaultWidgetPlannerParityTest`): 5.000 stati casuali (0-250 celle, nascosti fuori dall'istantanea e dell'ultimo momento, gruppi,
+  ricordi di ogni tipo con pochi o molti elementi, copertina nascosta o senza miniatura, miniature e presenza a percentuali casuali, blocco, tre
+  scelte, tre misure, due piani di fila): stesso modo, stesso ricordo e stesse celle, stesso motivo di un messaggio, ogni foto dentro
+  `ReferenceWidgetPlanner.eligiblePhotos()` e lo stesso numero di foto; il campione tocca ogni strada (soglie minime asserite: piu' di 300 ricordi,
+  1.000 foto a caso, 500 con il blocco, 300 messaggi).
+- **Mondo casuale da 100 mila** (`DefaultWidgetPlannerBigWorldTest`, `SyntheticLibrary` con composizione del §5.2, `NasMix.BUDGET`, 0,5% di nascosti
+  fuori dall'istantanea, gruppi, miniature locali per il telefono e il 20% del resto): 400 piani con blocco acceso (35%), le tre scelte, ricordi di
+  ogni tipo, **nascosti dell'ultimo momento** (visibili al feed e nascosti al filtro finale, anche la copertina): mai un nascosto (compresi i
+  compagni di gruppo), mai screenshot, documenti o animate, mai un media senza miniatura locale, con il blocco solo media del telefono e nessun
+  ricordo, mai un ricordo `PERSON`, mai un id di media nel `toString()` del piano. 60 ricordi `PERSON` e 80 piani con il blocco a parte.
+- **Misure** (JVM del PC di sviluppo, 600 piani misti dopo 40 di riscaldamento, tre misure, ricordo e blocco): un piano su 100 mila elementi
+  **mediana 0,34 ms, p95 0,59 ms, massimo 3,7 ms** contro i 50 ms del "Fatto quando" (l'asserzione e' sul p95: sotto carico un massimo isolato puo'
+  sforare per il GC).
+- **Registro** (`FileWidgetLedgerTest`, 17): formato fissato byte per byte; **troncato a ogni lunghezza** e **un byte cambiato in ogni posizione**
+  (tre maschere) = registro vuoto; CRC giusto ma contenuto impossibile (14 casi); temporaneo rimasto dopo la morte; scrittura che muore a meta'
+  corpo (il file di prima intero, nessun temporaneo); stato in memoria invariato dopo una scrittura fallita; 60 scritture insieme; tetto dei widget;
+  azzeramento. **Morte vera del processo** (`FileWidgetLedgerKillTest`): un processo figlio riscrive il registro di continuo e il padre lo uccide
+  (`destroyForcibly`) in un istante a caso, 14 volte di fila sulla stessa cartella: dopo ogni morte il registro si legge intero, le sette celle
+  sono della stessa epoca e l'epoca non torna mai indietro (14 su 14; nell'ultima corsa 10 uccisioni sono arrivate dentro una scrittura, col
+  temporaneo rimasto accanto).
+- **Tocco** (`DefaultWidgetTapsTest`, 7): i limiti esatti, 42 forme rifiutate, **200.000 stringhe vicine alla forma contro il riferimento**
+  (meta' composte a caso, meta' forme valide con un carattere cambiato, tolto o aggiunto) e 20.000 forme valide a caso; `resolve` con il registro,
+  la visibilita' o la maschera che lanciano: sempre la Libreria.
+- **Ore** (`DefaultWidgetScheduleTest`, 14 piu' i 3 di contratto con 5.000 ore a caso): ogni minuto della giornata, i giri di una giornata, la
+  notte, `HOURS_6`, `DAILY`, i cambi di mese, anno e febbraio bisestile, 20.000 ore a caso contro il riferimento; la politica del lavoro e il gate
+  dell'uscita dall'app.
+- **Le prove mordono** (mutazioni fatte e tolte, nessuna resta): senza il filtro finale rosse `DefaultWidgetPlannerBigWorldTest` e la suite di
+  contratto (`unErroreDiLetturaNonDaMaiFoto`); con la scrittura del registro non atomica (meta' dei byte, una pausa, il resto, direttamente sul file)
+  rossi `FileWidgetLedgerKillTest` e `FileWidgetLedgerTest`; senza il controllo dello zero davanti rossi i test del tocco; con la quiete spostata
+  di un'ora rossi i test delle ore.
+
+**`tools/check.ps1 -NoDaemon`** (31/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima):
+- **Primo giro, sul solo codice di P2: rosso** per **un** test, `HiddenSurfacesRegistryTest` in `:app` (1298 test dell'app, uno fallito): i due file di
+  produzione di `core-widget` che nominano `VisibleMedia` e `HiddenMask` non stanno nel registro dei Nascosti (vedi "Cosa serve a P3"). Gli altri
+  moduli, compreso `core-widget`, verdi. Nessuna classe rifatta con `--rerun`, nessun `hs_err_pid*.log`.
+- **Secondo giro, con i due percorsi aggiunti a `wiring` in `HiddenSurfaces.kt` solo nella copia di lavoro (tolti subito dopo, non committati,
+  perche' `app/**` non e' di P2): verde.** assembleDebug, assembleRelease, galleryTest e galleryLint in 17 minuti 53 s; **17.728 test in 47 moduli**,
+  nessuno a zero (`core-widget` 106, di cui 80 nuovi); tutti i passi della release verdi, compresi il 3b (nessuna chiave privata) e il 7i ("Glance al
+  suo posto nel bytecode della release e nessuna chiave di prova del manifest").
+
+**Cosa serve a P3** (`feature-widget`)
+- Un solo `DefaultWidgetPlanner` per processo (cursore del feed e contatore delle epoche sono dello stato del processo). Il giro: `plan` ->
+  se `NOT_READY` **non si ridisegna** (`WidgetUiState.of` risponde null) -> si decodificano le miniature locali al lato lungo di
+  `WidgetBudget.longSidePx(size, piano.cells.size)` -> se le bitmap sforano `WidgetBudget.fitting(dimensioni)`, si registra e si disegna
+  `WidgetBudget.trimmed(piano, n)` -> `ledger.record(...)` **prima** del disegno (se lancia `IOException`, niente immagini) -> disegno.
+- `WidgetTap.parse(uri)` nella pulizia dell'intent di `MainActivity` (null = Libreria); dopo il blocco dell'app `WidgetTaps.resolve(richiesta,
+  slot nostri da `AppWidgetManager`, registro, `VisibleMedia`, `HiddenMask`)`.
+- Il lavoro periodico: `WidgetRunPolicy.decide(nowLocal, numero di widget, risparmio energetico)` all'inizio (`NO_WIDGETS` = annulla il lavoro) e
+  `workPlan(adesso, periodo)` per `PeriodicWorkRequest` (cambiando il periodo si rimette in coda con `UPDATE`); `BackgroundRefreshGate` per
+  `appBackgrounded()` con `WidgetClock.monotonicMs`.
+- `hiddenChanged(ids)`: `ledger.showing(ids)` -> disegno senza immagini -> piano nuovo; `memoryDropped(id)` con `showingMemory(id)`;
+  `onDeleted` -> `ledger.forget(slot)`; azzeramento -> `blankAll(NOT_CONFIGURED)` e **poi** `ledger.clear()` (D42).
+- Il giro a freddo: monta solo istantanea, maschera e scaffale e passa `budgetMs = WidgetRules.COLD_START_BUDGET_MS` (1,5 s).
+- **Il registro dei Nascosti** (`app/src/test/.../hidden/HiddenSurfaces.kt`, fuori dal perimetro di P2): `DefaultWidgetPlanner.kt` e
+  `DefaultWidgetTaps.kt` nominano `VisibleMedia` e `HiddenMask` e non sono in `contract/`, `noop/` o `testing/`, quindi
+  `HiddenSurfacesRegistryTest.ognFileCheNominaIContrattiDeiNascostiEUnaSuperficieORiconosciuto` **resta rosso finche' qualcuno li elenca**. Va fatto
+  con la riga `WIDGET` in produzione (P3, §4.4): i due percorsi fra i `sources` della riga (o, per `DefaultWidgetTaps.kt`, in `wiring`) e come sonda
+  la proprieta' di `DefaultWidgetPlannerBigWorldTest` (mondo casuale, nascosti dell'ultimo momento, blocco), che e' pronta da trasportare. **Chi
+  integra P2 prima di P3 deve aggiungere subito i due percorsi a `wiring`** (con quella sola aggiunta `tools/check.ps1` e' verde: provato su
+  una copia di lavoro, non committata).
+
+**Cosa serve a P13** (`:app`)
+- Legare `DefaultWidgetPlanner(feed = RotatingWidgetFeed(visible, mask), memories, visible, mask, thumbs, lock, prefs, clock, ledger)`: `visible` e
+  `mask` sono quelli veri (la maschera **non** opzionale: `CatalogHidden`); `WidgetThumbs.local` dalle miniature di `core-imaging` (mai il NAS);
+  `WidgetLock.onPhone` dai flag `ON_PHONE` dell'istantanea e `appLocked` dal blocco dell'app; `WidgetMemories.today()` con le regole di D4
+  (pubblicato oggi, non scartato, mai `PERSON`, titolo come dati senza persone: il pianificatore ricontrolla tipo e nascosti, ma il titolo lo
+  porta cosi' com'e'); `WidgetPrefs` su DataStore locale; `FileWidgetLedger(File(noBackupFilesDir, "widget"))`.
+- Il pianificatore **assume la semantica di `RotatingWidgetFeed`** (una cella scartata non occupa un posto; lista vuota = giro intero senza niente
+  da mostrare): un altro `WidgetFeed` che restituisce meno del richiesto senza aver fatto il giro (come `FakeWidgetFeed`) farebbe fermare il piano
+  troppo presto.
+- La porta dei test di integrazione: due dispositivi finti che passano da `WidgetRefresher.hiddenChanged`.
+
+**Punti aperti**
+- **`tools/check.ps1` senza i due percorsi nel registro dei Nascosti e' rosso** (un solo test, `HiddenSurfacesRegistryTest`; vedi "Cosa serve a P3"):
+  il brief di P2 vieta `app/**`, quindi la riga non e' stata aggiunta. Tutto il resto di `check.ps1` e' verde.
+- **Il tetto di circa mille celle guardate** (`MAX_ROUNDS`): su una Libreria enorme in cui le miniature locali sono *rarissime* e lontane dal cursore
+  il piano puo' dire `NO_LOCAL_THUMBS` anche se una miniatura esiste oltre quel punto (il giro dopo parte da dove si era arrivati, quindi prima o
+  poi la trova). Con il 20% o piu' di miniature (la replica di base) non succede; con qualita' Risparmio e replica non scaricata e' il caso E-W5.
+- Il cursore del feed avanza anche sulle celle che il piano scarta (blocco, miniatura): la rotazione salta qualche foto. Non e' un errore, ma con
+  poche miniature la rotazione "gira" piu' veloce di quanto le foto mostrate suggeriscano.
+- D7 e' stato corretto per coerenza (punto 7 delle scelte): se l'utente vuole le miniature da 384/512 px anche con sette celle, il tetto in byte deve
+  salire (e con lui il rischio dei widget vuoti per le bitmap, causa nota).
+- La prova di parita' confronta con il riferimento solo cio' che il riferimento sa (insiemi, non ordine di rotazione); l'ordine di
+  `RotatingWidgetFeed` lo prova la Fase 7.
+- Il padre e il figlio della prova di morte condividono la cartella su Windows: se il padre legge nello stesso istante in cui il figlio rinomina, il
+  figlio riprova con l'epoca dopo (non e' un difetto del registro, che su Android ha la semantica POSIX).

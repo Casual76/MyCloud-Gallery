@@ -99,8 +99,25 @@ class SyntheticWidgetWorld(
     return chosen
   }
 
-  /** Tutti i nascosti adesso (quelli fuori dall'istantanea e quelli dell'ultimo momento). */
-  val hiddenNow: Set<MediaId> get() = visibility.hidden.toSet()
+  /**
+   * Fa [n] gruppi di 2-4 media dell'istantanea (raffiche): nella visibilita' il nascosto e' **contagioso** (un membro di un gruppo con un
+   * nascosto e' nascosto, F5-D36). Si chiama dopo la nascita del mondo: non sposta il flusso casuale di cio' che il mondo genera da solo.
+   */
+  fun addGroups(n: Int): List<Set<MediaId>> {
+    if (count == 0) return emptyList()
+    val made = List(n) { List(2 + random.nextInt(3)) { ids[random.nextInt(count)] }.toSet() }
+    visibility.groups += made
+    return made
+  }
+
+  /** Tutti i nascosti adesso: quelli fuori dall'istantanea, quelli dell'ultimo momento e i compagni di gruppo di un nascosto. */
+  val hiddenNow: Set<MediaId>
+    get() {
+      val hidden = visibility.hidden
+      val all = hidden.toMutableSet()
+      for (group in visibility.groups) if (group.any { it in hidden }) all += group
+      return all
+    }
 
   fun planner(): ReferenceWidgetPlanner = ReferenceWidgetPlanner(visibility, visibility, memories, thumbs, lock, prefs)
 }

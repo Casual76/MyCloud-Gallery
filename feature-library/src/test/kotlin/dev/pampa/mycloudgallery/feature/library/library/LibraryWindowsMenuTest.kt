@@ -141,7 +141,8 @@ internal class LibraryWindowsMenuPhoneTest(dark: Boolean) : LibraryWindowsMenuBa
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w1280dp-h800dp-xhdpi")
+// Alto abbastanza perche' il menu (lungo: livelli, filtri, stile, le due voci in coda) si veda per intero.
+@Config(application = Application::class, qualifiers = "w1280dp-h1100dp-xhdpi")
 internal class LibraryWindowsMenuTabletTest(dark: Boolean) : LibraryWindowsMenuBase(dark, "tablet", expected = true) {
   companion object {
     @JvmStatic

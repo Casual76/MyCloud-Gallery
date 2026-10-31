@@ -29,6 +29,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumContent
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberNewWindowEntry
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridInteractionState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
@@ -208,7 +209,11 @@ private fun ReadyPage(
     metrics = metrics,
     itemSpacing = GalleryWall.Gap,
     contentMaxWidth = AlbumDimens.PageWidth,
-    actions = { GalleryMenuButton(entries = pageMenu(ui.actions, handlers::onAction), contentDescription = stringResource(R.string.album_more)) },
+    actions = {
+      // Fase 10 (P5, D16): da finestra estesa il menu offre "Apri in una nuova finestra" su questo album.
+      val newWindow = rememberNewWindowEntry(stringResource(R.string.album_open_new_window)) { port -> port.openAlbum(album.id.value) }
+      GalleryMenuButton(entries = pageMenu(ui.actions, handlers::onAction, newWindow), contentDescription = stringResource(R.string.album_more))
+    },
   ) {
     header(ui, strips, handlers, page.permissions != null)
     if (content.items.size == 0) {

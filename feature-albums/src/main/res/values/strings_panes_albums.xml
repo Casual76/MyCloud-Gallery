@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 10 (P5, D16): "Apri in una nuova finestra" nel menu della pagina di un album, solo da finestra estesa o in DeX. -->
+  <string name="album_open_new_window">Apri in una nuova finestra</string>
+</resources>

@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -61,6 +62,8 @@ import dev.pampa.mycloudgallery.feature.library.grid.GridTopEdgeScrim
 import dev.pampa.mycloudgallery.feature.library.grid.gridTopChromeHeight
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGrid
 import dev.pampa.mycloudgallery.feature.library.grid.rememberMediaGridSection
+import dev.pampa.mycloudgallery.feature.library.library.SelectionKeeper
+import dev.pampa.mycloudgallery.feature.library.library.selectionSaver
 import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
 import kotlinx.coroutines.launch
 
@@ -123,6 +126,12 @@ internal fun CollectionGridPage(
   SideEffect { if (grid.view !== view) grid.view = view }
   val selected by grid.selection.selected.collectAsState()
   val selecting = grid.selecting
+  // Fase 10 (P5, D14, E-T8): la selezione sopravvive a una ricreazione vera e al passaggio fra pannello e pagina (fino a 500 elementi, oltre il solo "tutti"), come nella Libreria. Mai per i Nascosti
+  // (nessun id di nascosti nello stato salvato: ripartono chiusi e chiedono di nuovo la credenziale, E-H3) e mai nel selettore dei media (e' una scelta di un momento).
+  if (!secure && !pickMode) {
+    val selectionKeeper = rememberSaveable(saver = selectionSaver(grid)) { SelectionKeeper(null) }
+    LaunchedEffect(grid, selectionKeeper) { selectionKeeper.restoreWhenReady(grid) }
+  }
   if (pickMode) {
     // Il selettore e' una selezione: parte selezionando e, finita la selezione, si esce (niente griglia "normale" da cui aprire il viewer).
     var started by remember(grid) { mutableStateOf(false) }

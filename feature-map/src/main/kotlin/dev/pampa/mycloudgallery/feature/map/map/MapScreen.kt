@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.PhotoLibrary
@@ -32,6 +33,8 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.LocalNewWindow
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberAppWindow
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -125,6 +128,11 @@ private fun TopRow(handlers: MapHandlers) {
   Row(horizontalArrangement = Arrangement.spacedBy(MapDimens.TightGap), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
     MapControlButton(Icons.AutoMirrored.Rounded.ArrowBack, stringResource(R.string.mappa_back), handlers::onBack)
     MapChip(stringResource(R.string.mappa_title), modifier = Modifier.weight(1f), maxLines = 1)
+    // Fase 10 (P5, D16): da finestra estesa (o in DeX) la mappa si apre anche in una finestra nuova, un controllo da 48 dp accanto alle Impostazioni.
+    val newWindow = LocalNewWindow.current
+    if (newWindow != null && newWindow.isOffered(rememberAppWindow())) {
+      MapControlButton(Icons.AutoMirrored.Rounded.OpenInNew, stringResource(R.string.mappa_open_new_window), newWindow::openMap)
+    }
     MapControlButton(Icons.Rounded.Settings, stringResource(R.string.mappa_settings), handlers::onSettings)
   }
 }

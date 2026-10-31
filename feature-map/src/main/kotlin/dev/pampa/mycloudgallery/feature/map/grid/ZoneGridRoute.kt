@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.map.grid
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -11,6 +12,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import dev.pampa.mycloudgallery.core.map.contract.CellKey
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.map.contract.MapActions
@@ -31,7 +34,10 @@ internal fun cellOf(level: Int, prefix: Long): CellKey? = runCatching { CellKey(
 class ZoneGridViewModel @Inject constructor(savedStateHandle: SavedStateHandle, deps: MapDependencies) : ViewModel() {
   private val route = savedStateHandle.toRoute<ZoneDestination>()
 
-  val controller: ZoneGridController? = cellOf(route.level, route.prefix)?.let {
+  /** La cella di questa pagina (null = nessuna foto qui). */
+  internal val key: CellKey? = cellOf(route.level, route.prefix)
+
+  val controller: ZoneGridController? = key?.let {
     ZoneGridController(ZoneTarget.Cell(it), deps.points, deps.visible, deps.places, deps.filter, viewModelScope)
   }
 }
@@ -49,9 +55,19 @@ fun ZoneGridRoute(
   thumbnails: MapThumbnails,
   onBack: () -> Unit,
   modifier: Modifier = Modifier,
+  /**
+   * Fase 10 (P5, D13 (2)): chiamata quando la finestra, con questa pagina aperta, e' estesa: la zona torna accanto alla mappa. Null = la pagina resta pagina (non e' stata
+   * aperta dalla mappa). Riceve la cella della zona.
+   */
+  onWide: ((CellKey) -> Unit)? = null,
   viewModel: ZoneGridViewModel = hiltViewModel(),
 ) {
   val controller = viewModel.controller
+  val wide = GalleryPaneRules.twoPanes(rememberGalleryWindow())
+  LaunchedEffect(wide, viewModel) {
+    val key = viewModel.key
+    if (wide && onWide != null && key != null) onWide(key)
+  }
   if (controller == null) {
     ZoneGridScreen(ZoneGridState.Empty, thumbnails, backOnly(onBack), modifier)
     return
@@ -84,7 +100,7 @@ private fun backOnly(onBack: () -> Unit): ZoneGridHandlers = object : ZoneGridHa
 }
 
 /** Il tocco su una foto apre il viewer **su questa vista**, dalla foto toccata: scorrere nel viewer e' scorrere la griglia (anche per i media solo sul NAS, E-MAP6). */
-private fun handlersOf(controller: ZoneGridController, actions: MapActions, onBack: () -> Unit): ZoneGridHandlers = object : ZoneGridHandlers {
+internal fun handlersOf(controller: ZoneGridController, actions: MapActions, onBack: () -> Unit): ZoneGridHandlers = object : ZoneGridHandlers {
   override fun onBack() = onBack()
 
   override fun onOpenPhoto(media: MediaId) {

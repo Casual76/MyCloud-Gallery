@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.map.nav
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
+import androidx.navigation.NavDestination.Companion.hasRoute
 import dev.pampa.mycloudgallery.core.map.contract.CellKey
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.map.contract.MapActions
@@ -10,6 +11,7 @@ import dev.pampa.mycloudgallery.feature.map.contract.MapThumbnails
 import dev.pampa.mycloudgallery.feature.map.grid.PlaceGridRoute
 import dev.pampa.mycloudgallery.feature.map.grid.ZoneGridRoute
 import dev.pampa.mycloudgallery.feature.map.map.MapRoute
+import dev.pampa.mycloudgallery.feature.map.map.MapZoneState
 import dev.pampa.mycloudgallery.feature.map.places.PlacesEntryTarget
 import dev.pampa.mycloudgallery.feature.map.privacy.MapPrivacyRoute
 import dev.pampa.mycloudgallery.feature.map.regions.RegionsRoute
@@ -82,7 +84,21 @@ fun NavGraphBuilder.mapGraph(
   val back: () -> Unit = { nav.popBackStack() }
 
   composable<MapDestination> { MapRoute(actions = actions, thumbnails = thumbnails, onBack = back) }
-  composable<ZoneDestination> { ZoneGridRoute(actions = actions, thumbnails = thumbnails, onBack = back) }
+  composable<ZoneDestination> {
+    ZoneGridRoute(
+      actions = actions,
+      thumbnails = thumbnails,
+      onBack = back,
+      // Fase 10 (P5, D13 (2)): con la finestra diventata estesa la zona torna accanto alla mappa (solo se la pagina viene dalla mappa: la sua pagina la tiene).
+      onWide = { key ->
+        val map = nav.previousBackStackEntry?.takeIf { it.destination.hasRoute<MapDestination>() }
+        if (map != null) {
+          map.savedStateHandle[MapZoneState.KEY] = MapZoneState.encode(key)
+          nav.popBackStack()
+        }
+      },
+    )
+  }
   composable<PlaceDestination> { PlaceGridRoute(actions = actions, thumbnails = thumbnails, onBack = back) }
   composable<MapSettingsDestination> { MapPrivacyRoute(actions = actions, onBack = back) }
   composable<RegionsDestination> { RegionsRoute(onBack = back) }

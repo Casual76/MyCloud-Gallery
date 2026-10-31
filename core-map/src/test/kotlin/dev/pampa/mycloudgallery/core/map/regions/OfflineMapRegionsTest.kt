@@ -82,6 +82,21 @@ class OfflineMapRegionsTest {
     assertThat(rig.regions.download(rig.marche, rig.confirm(rig.marche))).isEqualTo(DownloadStart.Started)
   }
 
+  /** Una regione e' **uno** scaricamento: tutto il riquadro, da z0 al livello del piano, in una sola partenza del motore (mai spezzata in pezzi piccoli per aggirare il limite). */
+  @Test
+  fun unaRegioneEUnoScaricamentoSolo() = runTest {
+    val rig = ManagerRig()
+    rig.regions.download(rig.umbria, rig.confirm(rig.umbria))
+    val start = rig.engine.starts.single()
+    assertThat(start.box).isEqualTo(rig.umbria.box)
+    assertThat(start.minZoom).isEqualTo(0)
+    assertThat(start.maxZoom).isEqualTo(rig.regions.estimate(rig.umbria).maxZoom)
+    // Altri tocchi sulla stessa zona mentre scarica non fanno altre partenze.
+    assertThat(rig.regions.download(rig.umbria, rig.confirm(rig.umbria))).isEqualTo(DownloadStart.Busy)
+    assertThat(rig.engine.starts).hasSize(1)
+    assertThat(rig.regions.downloadScope()!!.budget!!.maxTiles).isEqualTo(OpenFreeMapLimits.MAX_TILES)
+  }
+
   /** Mai due scaricamenti in parallelo, nemmeno se due toccano insieme: da due thread, uno parte e l'altro trova "occupato". */
   @Test
   fun nemmenoDueTocchiInsieme() {

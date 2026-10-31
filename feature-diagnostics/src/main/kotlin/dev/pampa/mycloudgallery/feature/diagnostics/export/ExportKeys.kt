@@ -102,6 +102,8 @@ object ExportKeys {
     // La mappa (Fase 9, P13, `MapDiagnostics` di :app): solo numeri, flag e costanti; mai coordinate, riquadri, tessere, nomi delle regioni o dei luoghi, la camera.
     // I rifiutati per motivo usano la famiglia `reason.` (le costanti di `RefuseReason`). `allowed`, `bytes` e `available` sono gia' sopra.
     "online", "byDefault", "opened", "points", "withoutPosition", "invalid", "regions", "errors", "paused", "withoutVersion", "tileJson",
+    // Le zone senza Internet (Fase 9, P5): solo conti, byte e flag; mai quali zone ne' dove. `peakInFlight` e' il massimo di richieste insieme verso l'host delle tessere (al piu' 4).
+    "regionsReady", "regionsPartial", "regionsBytes", "regionsLimit", "downloading", "peakInFlight", "freeBytes",
   )
 
   /**

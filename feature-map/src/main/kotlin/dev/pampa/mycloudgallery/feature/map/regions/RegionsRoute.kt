@@ -21,9 +21,6 @@ import javax.inject.Inject
 @HiltViewModel
 class RegionsViewModel @Inject constructor(deps: MapDependencies) : ViewModel() {
   internal val controller: RegionsController = RegionsController(deps.regions, deps.placeSearch, viewModelScope)
-
-  /** Vero se la ricerca dei luoghi e' legata (altrimenti la pagina "attorno a un luogo" dice che l'elenco non c'e'). */
-  internal val placeSearchAvailable: Boolean = deps.hasPlaceSearch
 }
 
 @Composable
@@ -34,13 +31,12 @@ fun RegionsRoute(
 ) {
   val controller = viewModel.controller
   val ui by controller.ui.collectAsState()
-  val available = viewModel.placeSearchAvailable
-  val handlers = remember(controller, onBack, available) {
+  val handlers = remember(controller, onBack) {
     object : RegionsHandlers {
       override fun onBack() = onBack()
       override fun onCatalog(spec: RegionSpec) = controller.onCatalog(spec)
       override fun onDownloaded(id: RegionId) = controller.onDownloaded(id)
-      override fun onOpenAround() = controller.onOpenAround(available)
+      override fun onOpenAround() = controller.onOpenAround()
       override fun onCloseAround() = controller.onCloseAround()
       override fun onQuery(text: String) = controller.onQuery(text)
       override fun onPick(hit: PlaceHit) = controller.onPick(hit)

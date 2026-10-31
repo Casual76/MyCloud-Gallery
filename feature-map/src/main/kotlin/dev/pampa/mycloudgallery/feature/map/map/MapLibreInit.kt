@@ -106,6 +106,8 @@ data class MapNetCounts(
   val paused: Long,
   val withoutVersion: Long,
   val tileJsonFetches: Long,
+  /** Il massimo di richieste insieme visto in questo processo (condizioni d'uso di OpenFreeMap: al piu' 4 verso l'host). */
+  val peakInFlight: Int = 0,
 )
 
 /** Quando MapLibre deve credersi "in rete" (D23, verifica (7) del §2.7): con la mappa online permessa adesso, o con uno scaricamento confermato. */
@@ -323,6 +325,7 @@ object MapLibreInit {
       paused = snapshot.paused,
       withoutVersion = snapshot.noVersion,
       tileJsonFetches = snapshot.tileJsonFetches,
+      peakInFlight = snapshot.peakInFlight,
     )
   }
 

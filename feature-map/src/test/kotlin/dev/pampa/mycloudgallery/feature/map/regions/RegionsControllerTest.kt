@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.map.regions
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.map.contract.GeoE6
 import dev.pampa.mycloudgallery.core.map.contract.MapNetwork
+import dev.pampa.mycloudgallery.core.map.contract.NoPlaceSearch
 import dev.pampa.mycloudgallery.core.map.contract.PlaceHit
 import dev.pampa.mycloudgallery.core.map.contract.PlaceSearch
 import dev.pampa.mycloudgallery.core.map.contract.RegionId
@@ -38,6 +39,7 @@ import org.junit.Test
 class RegionsControllerTest {
 
   private class Rig(
+    val searchOverride: PlaceSearch? = null,
     val store: MemoryRegionStateStore = MemoryRegionStateStore(),
     val network: FakeMapNetworkState = FakeMapNetworkState(MapNetwork.WIFI),
     val settings: InMemoryMapSettings = InMemoryMapSettings(),
@@ -53,7 +55,7 @@ class RegionsControllerTest {
       PlaceHit(11, "Cittàdiprova", "Regione di prova, Italia", GeoE6(43_300_000, 11_300_000), urban = true),
       PlaceHit(12, "Paesediprova", "Regione di prova, Italia", GeoE6(42_900_000, 12_100_000), urban = false),
     )
-    val search = PlaceSearch { query, limit -> places.filter { it.name.startsWith(query, ignoreCase = true) }.take(limit) }
+    val search: PlaceSearch = searchOverride ?: PlaceSearch { query, limit -> places.filter { it.name.startsWith(query, ignoreCase = true) }.take(limit) }
   }
 
   /** Il controllore sul tempo virtuale del test, con un dispatcher "subito" (i flussi arrivano senza `runCurrent()`); `backgroundScope` lo ferma alla fine. */
@@ -236,7 +238,7 @@ class RegionsControllerTest {
   fun laZonaAttornoAUnLuogoSiCercaPerNomeEHaTreRaggi() = runTest {
     val rig = Rig()
     val c = controller(rig)
-    c.onOpenAround(available = true)
+    c.onOpenAround()
     assertThat(c.ui.value.around).isNotNull()
     c.onQuery("C")
     advanceTimeBy(1_000)
@@ -271,8 +273,8 @@ class RegionsControllerTest {
 
   @Test
   fun senzaIlDatasetDeiLuoghiLaPaginaLoDice() = runTest {
-    val c = controller(Rig())
-    c.onOpenAround(available = false)
+    val c = controller(Rig(searchOverride = NoPlaceSearch))
+    c.onOpenAround()
     assertThat(c.ui.value.around!!.available).isFalse()
   }
 }

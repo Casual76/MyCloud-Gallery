@@ -240,11 +240,16 @@ data class PlaceHit(val placeId: Int, val name: String, val detail: String?, val
 /** La ricerca di un luogo per nome (dataset GeoNames sul telefono, nessuna rete): per "la zona attorno a un luogo". Mai dalla casa ne' dai punti delle foto (D29). */
 fun interface PlaceSearch {
   fun search(query: String, limit: Int): List<PlaceHit>
+
+  /** Falso se il dataset dei luoghi non c'e' su questo telefono (la pagina lo dice invece di "nessun luogo trovato"). Di serie si'. */
+  val available: Boolean get() = true
 }
 
 /** Nessuna ricerca (dataset non disponibile): nessun risultato. */
 object NoPlaceSearch : PlaceSearch {
   override fun search(query: String, limit: Int): List<PlaceHit> = emptyList()
+
+  override val available: Boolean get() = false
 }
 
 /** Le regioni offline di questo dispositivo (D26). */

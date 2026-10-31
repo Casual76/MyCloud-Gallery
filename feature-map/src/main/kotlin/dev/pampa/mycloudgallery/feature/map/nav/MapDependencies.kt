@@ -63,9 +63,6 @@ class MapDependencies @Inject constructor(
   /** La ricerca dei luoghi per nome ([NoPlaceSearch] se non legata: nessun risultato). */
   val placeSearch: PlaceSearch = placeSearch.orElse(NoPlaceSearch)
 
-  /** Vero se `:app` ha legato la ricerca dei luoghi (altrimenti la pagina dice che non c'e'). */
-  val hasPlaceSearch: Boolean = placeSearch.isPresent
-
   /** Il filtro finale dei Nascosti: la maschera c'e' sempre (un legame che manca e' un errore di compilazione, non un filtro muto). */
   val filter: FinalFilter = FinalFilter(mask)
 

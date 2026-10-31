@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.places.dataset
 import dev.pampa.mycloudgallery.core.model.GeoPoint
 import dev.pampa.mycloudgallery.core.model.PlaceRef
 import dev.pampa.mycloudgallery.core.places.contract.Place
+import dev.pampa.mycloudgallery.core.places.contract.PlaceCandidate
 import dev.pampa.mycloudgallery.core.places.contract.PlaceId
 import dev.pampa.mycloudgallery.core.places.contract.PlaceMatch
 import dev.pampa.mycloudgallery.core.places.contract.PlaceNames
@@ -58,6 +59,10 @@ object PlacesLimits {
  */
 class PlacesData internal constructor(private val file: Mcgp1) : ReverseGeocoder, TimeZoneLookup, PlaceNames {
 
+  private companion object {
+    const val MIN_QUERY_LENGTH = 2
+  }
+
   override val dataset: Int get() = file.version
 
   /** Quanti luoghi ha il dataset (conteggio, nessun dato personale). */
@@ -112,6 +117,38 @@ class PlacesData internal constructor(private val file: Mcgp1) : ReverseGeocoder
       if (country >= 0) return countryPlace(country, zone = null)
     }
     return null
+  }
+
+  // ---- Ricerca per nome (Fase 9, P5) ---------------------------------------------------------------------------
+
+  /**
+   * I luoghi (da 1.000 abitanti o capoluoghi) il cui nome, o una parola del nome, comincia per [query] (senza maiuscole ne' accenti), **i piu' grandi prima**, al piu' [limit]. Per "la zona attorno a
+   * un luogo" delle regioni offline: il luogo si sceglie **per nome**, mai dalla casa ne' dalle foto. Tutto sul telefono. Nessun log: la ricerca e' del nome che l'utente scrive.
+   */
+  fun search(query: String, limit: Int = 8): List<PlaceCandidate> {
+    val folded = Mcgp1.fold(query)
+    if (folded.length < MIN_QUERY_LENGTH) return emptyList()
+    return file.searchNames(folded, limit).map { candidateOf(it.index, it.cell) }
+  }
+
+  /** Il luogo con questo id GeoNames, con le sue coordinate, o null (un id di regione o di paese non e' un luogo con un centro). */
+  fun locate(id: PlaceId): PlaceCandidate? {
+    val index = file.indexOfPlaceId(id.value)
+    if (index < 0) return null
+    return candidateOf(index, file.cellOfRecord(index))
+  }
+
+  private fun candidateOf(index: Int, cell: Int): PlaceCandidate {
+    val place = placeOfRecord(index, cell)
+    return PlaceCandidate(
+      id = place.id,
+      name = place.name,
+      admin1 = place.admin1,
+      countryName = place.countryName,
+      latitude = file.latitudeOf(index, cell),
+      longitude = file.longitudeOf(index, cell),
+      population = Mcgp1Format.populationOfBucket(file.populationBucketOf(index)),
+    )
   }
 
   // ---- TimeZoneLookup -------------------------------------------------------------------------------------------

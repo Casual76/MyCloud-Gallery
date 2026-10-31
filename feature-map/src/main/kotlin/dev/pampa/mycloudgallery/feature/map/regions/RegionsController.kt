@@ -182,8 +182,8 @@ internal class RegionsController(
 
   // --- la zona attorno a un luogo ---------------------------------------------------------------------------------------------
 
-  fun onOpenAround(available: Boolean = true) {
-    local.update { Local(it.estimates, null, null, AroundState(available = available)) }
+  fun onOpenAround() {
+    local.update { Local(it.estimates, null, null, AroundState(available = search.available)) }
   }
 
   fun onCloseAround() {

@@ -76,6 +76,9 @@ class LazyPlaces(
     }
   }
 
+  /** I dati dei luoghi se sono aperti (per la ricerca per nome delle zone senza Internet, P5: `AppPlaceFinder`), altrimenti null. */
+  val opened: PlacesData? get() = data
+
   private val geocoder: ReverseGeocoder get() = data ?: NoReverseGeocoder
   private val zones: TimeZoneLookup get() = data ?: NoTimeZoneLookup
   private val names: PlaceNames get() = data ?: NoPlaceNames

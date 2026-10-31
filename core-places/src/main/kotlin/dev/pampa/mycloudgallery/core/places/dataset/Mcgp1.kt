@@ -129,6 +129,76 @@ internal class Mcgp1 private constructor(
 
   fun colOfCell(cell: Int): Int = cellCol(cell)
 
+  // ---- Ricerca per nome (Fase 9, P5: "la zona attorno a un luogo") -------------------------------------------------
+
+  /** Un risultato della ricerca per nome: il luogo (indice del record e cella) e la sua popolazione (il centro del suo intervallo), per ordinare. */
+  class NameHit(val index: Int, val cell: Int, val population: Double, val startsName: Boolean)
+
+  /**
+   * I luoghi **qualificati** (classe >= 1: da 1.000 abitanti o capoluoghi) il cui nome comincia per [folded] (gia' senza maiuscole ne' accenti, come [fold]) o ha una parola che ci comincia, **piu'
+   * grandi prima** (prima i nomi che cominciano per la ricerca, poi quelli con una parola che comincia cosi'). Scorre tutti i nomi, senza copiarli: nessuna allocazione per luogo. Al piu' [limit].
+   * Nessun log, nessun conto dei risultati: la ricerca e' del nome che l'utente scrive, non di un punto.
+   */
+  fun searchNames(folded: String, limit: Int): List<NameHit> {
+    if (folded.isEmpty() || limit <= 0) return emptyList()
+    val best = ArrayList<NameHit>()
+
+    fun add(hit: NameHit) {
+      best += hit
+      best.sortWith(compareByDescending<NameHit> { it.startsName }.thenByDescending { it.population }.thenBy { it.index })
+      if (best.size > limit) best.removeAt(best.size - 1)
+    }
+
+    for (cell in 0 until cellCount) {
+      var offset = i32(offCellName + cell * 4)
+      val first = cellFirst(cell)
+      val end = if (cell + 1 < cellCount) cellFirst(cell + 1) else placeCount
+      for (j in first until end) {
+        val length = u8(recordAt(j) + 16)
+        val at = offNames + offset
+        offset += length
+        if (classOf(j) < 1) continue
+        val starts = nameStartsWith(at, length, folded, wordStart = false)
+        if (!starts && !nameStartsWith(at, length, folded, wordStart = true)) continue
+        val population = Mcgp1Format.populationOfBucket(populationBucketOf(j))
+        // Un candidato peggiore dell'ultimo, a lista piena, non entra (senza ordinare ogni volta).
+        if (best.size >= limit) {
+          val last = best.last()
+          if (!starts && last.startsName) continue
+          if (starts == last.startsName && population <= last.population) continue
+        }
+        add(NameHit(j, cell, population, starts))
+      }
+    }
+    return best
+  }
+
+  /** Il nome (in UTF-8, [length] byte da [at]) comincia per [folded]? Con [wordStart] anche una sua parola (dopo uno spazio, un trattino o un apostrofo). */
+  private fun nameStartsWith(at: Int, length: Int, folded: String, wordStart: Boolean): Boolean {
+    val text = text(at, length)
+    if (!wordStart) return foldedStartsWith(text, 0, folded)
+    for (i in 1 until text.length) {
+      val previous = text[i - 1]
+      if ((previous == ' ' || previous == '-' || previous == '\'' || previous == '’') && foldedStartsWith(text, i, folded)) return true
+    }
+    return false
+  }
+
+  private fun foldedStartsWith(text: String, from: Int, folded: String): Boolean {
+    if (text.length - from < folded.length) return false
+    for (k in folded.indices) if (fold(text[from + k]) != folded[k]) return false
+    return true
+  }
+
+  /** La latitudine e la longitudine (gradi) del luogo [index], che sta nella cella [cell]. */
+  fun latitudeOf(index: Int, cell: Int): Double = latUnitsOf(index, rowOfCell(cell)) / 100_000.0 - 90.0
+
+  fun longitudeOf(index: Int, cell: Int): Double {
+    var lon = lonUnitsOf(index, colOfCell(cell)) / 100_000.0 - 180.0
+    if (lon > 180.0) lon -= 360.0
+    return lon
+  }
+
   // ---- Tabelle ---------------------------------------------------------------------------------------------------
 
   fun regionId(regionIndex: Int): Int = i32(offRegions + regionIndex * Mcgp1Format.REGION_SIZE)
@@ -436,7 +506,37 @@ internal class Mcgp1 private constructor(
   }
 
   companion object {
-    /** Metri per unita' (1e-5 gradi) di meridiano. */
+    /** Una lettera senza maiuscole e senza accento (latino): "Citta'" e "citta" sono la stessa ricerca. */
+    fun fold(c: Char): Char {
+      val lower = c.lowercaseChar()
+      if (lower.code < 0x80) return lower
+      return when (lower) {
+        'à', 'á', 'â', 'ã', 'ä', 'å', 'ā', 'ă', 'ą' -> 'a'
+        'ç', 'ć', 'č', 'ĉ', 'ċ' -> 'c'
+        'ď', 'đ' -> 'd'
+        'è', 'é', 'ê', 'ë', 'ē', 'ĕ', 'ė', 'ę', 'ě' -> 'e'
+        'ĝ', 'ğ', 'ġ', 'ģ' -> 'g'
+        'ì', 'í', 'î', 'ï', 'ĩ', 'ī', 'ĭ', 'į', 'ı' -> 'i'
+        'ł', 'ĺ', 'ľ' -> 'l'
+        'ñ', 'ń', 'ň' -> 'n'
+        'ò', 'ó', 'ô', 'õ', 'ö', 'ø', 'ō', 'ŏ', 'ő' -> 'o'
+        'ŕ', 'ř' -> 'r'
+        'ś', 'š', 'ş', 'ŝ' -> 's'
+        'ť', 'ţ' -> 't'
+        'ù', 'ú', 'û', 'ü', 'ũ', 'ū', 'ŭ', 'ů', 'ű', 'ų' -> 'u'
+        'ý', 'ÿ' -> 'y'
+        'ź', 'ž', 'ż' -> 'z'
+        else -> lower
+      }
+    }
+
+    /** La ricerca [text] senza maiuscole, accenti e spazi ai bordi. */
+    fun fold(text: String): String {
+      val t = text.trim()
+      return String(CharArray(t.length) { fold(t[it]) })
+    }
+
+    /** Metri per unita'' (1e-5 gradi) di meridiano. */
     private const val METERS_PER_UNIT = Mcgp1Format.EARTH_RADIUS_M * Mcgp1Format.RAD_PER_UNIT
 
     /** Il valore di `onlyCountry` che vuol dire "tutti i paesi tranne i micro-stati". */

@@ -36,6 +36,22 @@ data class Place(
 )
 
 /**
+ * Un luogo trovato **per nome** (Fase 9, P5: "la zona attorno a un luogo"): l'id GeoNames, il nome, la regione e il paese, il centro in gradi e la popolazione (approssimata: il centro del suo intervallo).
+ * Mai nei log: dice un luogo. Niente a che fare con i punti delle foto ne' con la casa: si trova scrivendone il nome.
+ */
+class PlaceCandidate(
+  val id: PlaceId,
+  val name: String,
+  val admin1: String?,
+  val countryName: String,
+  val latitude: Double,
+  val longitude: Double,
+  val population: Double,
+) {
+  override fun toString(): String = "PlaceCandidate"
+}
+
+/**
  * Quanto il luogo trovato e' vicino al punto cercato. Decide cosa si puo' dire senza mentire: "Firenze" per una
  * foto scattata in centro, solo "Toscana" per una foto in mezzo ai monti.
  */

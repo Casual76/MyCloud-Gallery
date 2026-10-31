@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.navigation
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -30,6 +31,7 @@ import dev.pampa.mycloudgallery.feature.map.nav.openMap
 import dev.pampa.mycloudgallery.feature.map.nav.openMapAt
 import dev.pampa.mycloudgallery.feature.map.nav.openMapSettings
 import dev.pampa.mycloudgallery.feature.map.nav.openPlace
+import dev.pampa.mycloudgallery.feature.map.nav.openRegions
 import dev.pampa.mycloudgallery.feature.map.nav.openZone
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
@@ -68,7 +70,7 @@ class MapHostViewModel @Inject constructor(
   )
 }
 
-/** Le uscite delle schermate della mappa verso `:app` (P4, `MapActions`). "Zone senza Internet" e' di P5: finche' non c'e', il tocco non porta da nessuna parte. */
+/** Le uscite delle schermate della mappa verso `:app` (P4, `MapActions`), con "Zone senza Internet" (P5). */
 class AppMapActions(
   private val nav: NavController,
   private val viewer: ViewerHostState?,
@@ -90,8 +92,8 @@ class AppMapActions(
 
   override fun openMapSettings() = nav.openMapSettings()
 
-  /** P5 (regioni offline): il punto d'aggancio della pagina delle regioni. */
-  override fun openRegions() = Unit
+  /** "Zone senza Internet" (P5): la pagina delle regioni offline. */
+  override fun openRegions() = nav.openRegions()
 }
 
 /**
@@ -111,6 +113,8 @@ internal fun MapHostEffect(nav: NavController, viewer: ViewerHostState?, host: M
       nav.openMapAt(media)
     }
   }
+  // P5 (E-MAP11): all'apertura dell'app le zone interrotte riprendono da sole (sul Wi-Fi, dopo un attimo dal primo disegno); non c'e' nessun lavoro in background.
+  LaunchedEffect(host) { host.map.resumeRegions() }
   DisposableEffect(host) {
     onDispose {
       host.placeMap.onShow = {}

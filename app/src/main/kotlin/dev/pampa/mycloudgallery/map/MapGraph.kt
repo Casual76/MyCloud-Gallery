@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.map
 
 import android.content.ComponentCallbacks2
 import android.content.Context
+import android.os.SystemClock
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.database.GalleryDatabase
 import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
@@ -13,11 +14,13 @@ import dev.pampa.mycloudgallery.core.map.contract.MapPointValidity
 import dev.pampa.mycloudgallery.core.map.contract.MapRegions
 import dev.pampa.mycloudgallery.core.map.contract.MapSettings
 import dev.pampa.mycloudgallery.core.map.contract.MapTraffic
-import dev.pampa.mycloudgallery.core.map.noop.NoMapRegions
 import dev.pampa.mycloudgallery.core.map.points.GeoMapPoints
+import dev.pampa.mycloudgallery.core.map.regions.FileRegionStateStore
+import dev.pampa.mycloudgallery.core.map.regions.OfflineMapRegions
 import dev.pampa.mycloudgallery.core.map.points.PagedMapPointSource
 import dev.pampa.mycloudgallery.core.map.policy.TilePolicy
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.places.dataset.PlacesData
 import dev.pampa.mycloudgallery.core.rules.traffic.TrafficLedger
 import dev.pampa.mycloudgallery.core.network.contract.NetworkSnapshot
 import dev.pampa.mycloudgallery.feature.map.contract.MapEngineStarter
@@ -27,10 +30,12 @@ import dev.pampa.mycloudgallery.core.map.contract.RebuildReason
 import dev.pampa.mycloudgallery.feature.map.map.MapLibreInit
 import dev.pampa.mycloudgallery.feature.map.map.MapNetWiring
 import dev.pampa.mycloudgallery.feature.map.mini.MapLibreMiniMap
+import dev.pampa.mycloudgallery.feature.map.regions.MapLibreRegionEngine
 import dev.pampa.mycloudgallery.feature.map.mini.MiniMapLook
 import dev.pampa.mycloudgallery.feature.map.mini.MiniMapService
 import dev.pampa.mycloudgallery.feature.map.settings.DataStoreMapSettings
 import dev.pampa.mycloudgallery.feature.map.ui.FinalFilter
+import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -38,6 +43,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
@@ -64,14 +70,59 @@ class MapGraph(
   private val buildFlag: Boolean,
   /** R5: svuota il database di MapLibre con l'API della libreria (se e' partita), prima che i file si tolgano. Le prove la sostituiscono (niente libreria nativa). */
   private val eraseEngine: suspend () -> Boolean = { MapLibreInit.erase() },
+  /** P5: i dati dei luoghi (GeoNames sul telefono) per "la zona attorno a un luogo", solo per nome; null = non pronti o non nell'APK. */
+  private val placesData: () -> PlacesData? = { null },
+  /** P5: lo spazio libero dove stanno i dati (E-MAP12: mai sotto 1 GiB libero) e il giorno (`aaaammgg`) per "completata il" e i 6 mesi. */
+  private val freeBytes: () -> Long = { RegionsSystem.freeBytes(context.noBackupFilesDir) },
+  private val today: () -> Int = RegionsSystem::today,
+  /** P5: quanto aspettare, dopo l'apertura dell'app, prima di riprendere le zone interrotte (dopo il primo disegno: l'avvio resta istantaneo). */
+  private val resumeDelayMs: Long = RESUME_DELAY_MS,
 ) {
   private val job = SupervisorJob(parent.coroutineContext[Job])
   val scope: CoroutineScope = CoroutineScope(parent.coroutineContext + job)
   private val stopped = AtomicBoolean(false)
 
-  /** P5 (regioni offline, in attesa della decisione dell'utente): il punto d'aggancio. Oggi il null-object (nessuna regione, nessuno scaricamento). */
+  /** P5: la ricerca dei luoghi per nome e il loro centro (mai la casa, mai i punti delle foto: C156), sopra i dati dei luoghi che l'app ha gia'. */
+  val placeFinder: AppPlaceFinder = AppPlaceFinder(placesData)
+
+  /**
+   * Le regioni offline (P5; D26): nascono **alla prima richiesta** (il cancello le legge a ogni richiesta, I3; la pagina "Zone senza Internet"; la ripresa all'apertura), mai prima: leggono il piccolo file di stato in
+   * `noBackupFilesDir/map/` e basta, MapLibre parte solo quando uno scaricamento parte davvero. Le prove possono assegnarne altre (`regions = ...`).
+   */
+  private val regionsHolder = lazy { buildRegions() }
+
   @Volatile
-  var regions: MapRegions = NoMapRegions
+  private var regionsOverride: MapRegions? = null
+
+  var regions: MapRegions
+    get() = regionsOverride ?: regionsHolder.value
+    set(value) {
+      regionsOverride = value
+    }
+
+  private fun buildRegions(): MapRegions = OfflineMapRegions(
+    engine = MapLibreRegionEngine(context, starter),
+    store = FileRegionStateStore(File(File(context.noBackupFilesDir, MapLibreInit.MAP_DIR), FileRegionStateStore.FILE_NAME)),
+    network = networkState,
+    settings = settings,
+    places = placeFinder,
+    freeBytes = freeBytes,
+    nowMs = { SystemClock.elapsedRealtime() },
+    today = today,
+    scope = scope,
+  )
+
+  /** Lo spazio libero dove stanno i dati, per la Diagnostica (solo un numero). */
+  fun freeSpaceBytes(): Long = freeBytes()
+
+  /** All'apertura dell'app (E-MAP11, nessun lavoro in background): le zone interrotte riprendono da sole sul Wi-Fi, dopo un attimo dal primo disegno. Non fa niente senza zone interrotte. */
+  fun resumeRegions() {
+    if (stopped.get()) return
+    scope.launch {
+      delay(resumeDelayMs)
+      if (!stopped.get()) regions.resumeInterrupted()
+    }
+  }
 
   private val settingsHolder = lazy {
     DataStoreMapSettings.create(DataStoreMapSettings.file(context), scope, buildFlag).also {
@@ -88,7 +139,7 @@ class MapGraph(
   val traffic: MapTraffic by lazy { LedgerMapTraffic(ledger, { network().value }, scope) }
 
   /** Il cancello di P1 con lo stato di adesso (mappa accesa, rete, regioni). Le regioni si rileggono a ogni richiesta (I3): P5 puo' legare [regions] dopo l'avvio di MapLibre. */
-  fun wiring(): MapNetWiring = MapNetWiring(TilePolicy, buildFlag, settings, networkState, { regions }, traffic) { null }
+  fun wiring(): MapNetWiring = MapNetWiring(TilePolicy, buildFlag, settings, networkState, { regions }, traffic) { regions.downloadScope() }
 
   /** L'avvio pigro di MapLibre (mai all'avvio dell'app). */
   val starter: MapEngineStarter by lazy { AppMapEngineStarter(::wiring, scope) }
@@ -170,6 +221,8 @@ class MapGraph(
   suspend fun stop() {
     if (!stopped.compareAndSet(false, true)) return
     miniBuilt?.clear()
+    // P5: le regioni per prime (se sono nate in questo processo): lo scaricamento si ferma, le regioni si tolgono dal database e dallo stato, da qui nessuna scrittura. Poi il database intero e le impostazioni.
+    if (regionsHolder.isInitialized() || regionsOverride != null) guarded("regioni offline") { regions.clear() }
     job.cancelAndJoin()
     guarded("database della mappa") { if (!eraseEngine()) GalleryLog.w(TAG) { "database della mappa non svuotato dalla libreria: lo tolgono i file" } }
     if (settingsHolder.isInitialized()) guarded("impostazioni della mappa") { (settingsHolder.value as DataStoreMapSettings).clear() }
@@ -187,5 +240,8 @@ class MapGraph(
 
   companion object {
     private const val TAG = "MapGraph"
+
+    /** Dopo l'apertura dell'app, prima di riprendere le zone interrotte: l'avvio e le prime pagine restano istantanei (principio "Avvio e pagine istantanei"). */
+    const val RESUME_DELAY_MS: Long = 4_000
   }
 }

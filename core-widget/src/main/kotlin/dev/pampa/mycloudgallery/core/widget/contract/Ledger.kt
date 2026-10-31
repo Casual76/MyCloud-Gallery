@@ -32,6 +32,14 @@ interface WidgetLedger {
   /** Gli slot registrati. */
   suspend fun slots(): Set<WidgetSlot>
 
+  /**
+   * L'epoca del piano registrato per [slot], 0 se non ce n'e'. Chi pianifica riparte **da qui piu' uno** (`DefaultWidgetPlanner`): dopo la
+   * morte del processo il suo contatore riparte da zero, ma il registro su file ha ancora l'epoca di prima e **ignorerebbe** ogni piano
+   * nuovo (e allora un tocco aprirebbe la foto sbagliata e lo svuotamento di D5 non vedrebbe le foto nuove). Il default (0) e' per chi non
+   * ricorda niente (`NoWidgetLedger`).
+   */
+  suspend fun epochOf(slot: WidgetSlot): Long = 0L
+
   /** Il widget [slot] e' stato tolto dalla Home (`onDeleted`). */
   suspend fun forget(slot: WidgetSlot)
 

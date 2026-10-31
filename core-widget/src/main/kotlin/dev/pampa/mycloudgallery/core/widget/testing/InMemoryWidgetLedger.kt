@@ -77,6 +77,8 @@ class InMemoryWidgetLedger(private val disk: SimulatedLedgerDisk = SimulatedLedg
 
   override suspend fun slots(): Set<WidgetSlot> = rows.keys.toSet()
 
+  override suspend fun epochOf(slot: WidgetSlot): Long = rows[slot]?.epoch ?: 0L
+
   override suspend fun forget(slot: WidgetSlot) {
     if (slot in rows) commit(rows - slot)
   }

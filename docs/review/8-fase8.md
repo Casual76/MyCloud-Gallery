@@ -33,7 +33,7 @@
 | I5 | Corretta (formato) | Ogni eccezione presa nelle istantanee lette e nel custode, archivio aperto dentro il `try`, corpi che non si aprono contati (C237: `FacesFormatCorrectionsTest.i5_*`) |
 | I6 | Corretta (A) | `FacesStores.openExisting`: la lettura dei nomi non crea mai chiavi ne' database e non segnala `FACES_KEY_LOST` (C217: `RealStoreEraseTest.i6_*`) |
 | I7 | Corretta (formato) | Decisione dell'orchestratore: con il montaggio fallito i dati personali escono **senza** la voce dei volti (`PrePublish.ProceedWithout`), codice `FACES_MOUNT_FAILED`; la testa non vale come conferma e non dice di trattare una generazione (C238: `FacesSupportTest.i7_*`, `FacesPrePublishSyncTest.i7_*`, `MountFailedHeadTest`). L346 |
-| I8 | Aperta | Documento finale (C39 e il commento di `FacesStores`) |
+| I8 | Corretta (31/10, orchestratore) | C39 e il commento di `FacesStores.eraseLocked` dicono che la chiave rende illeggibili le colonne sigillate, mentre la struttura dei gruppi in chiaro (L111) la protegge la cifratura per file di Android |
 
 ---
 

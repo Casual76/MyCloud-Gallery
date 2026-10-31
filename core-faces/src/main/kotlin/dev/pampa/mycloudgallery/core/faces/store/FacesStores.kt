@@ -308,7 +308,9 @@ class FacesStores(
     val handle = opened.remove(generation)
     // 0. Da qui il negozio aperto lancia: nessuna scrittura nuova mentre si cancella (non e' ancora un passo sul Keystore).
     handle?.retire()
-    // 1. LA CHIAVE, per prima: ogni resto (pagine libere di SQLite, WAL, blocchi della flash) diventa illeggibile.
+    // 1. LA CHIAVE, per prima: nei resti (pagine libere di SQLite, WAL, blocchi della flash) le colonne sigillate (vettori, centroidi,
+    // nomi) diventano illeggibili. La struttura dei gruppi (chiavi di contenuto, riquadri, assegnazioni, correzioni) e' in chiaro per
+    // progetto (L111): dopo la cancellazione dei file la protegge la cifratura per file di Android, non la chiave dei volti (C39).
     val keyDestroyed = keys.destroy(generation)
     // 2. Il database: chiuso (e la chiave dati in memoria azzerata), poi i file, uno per uno, verificati.
     handle?.close()

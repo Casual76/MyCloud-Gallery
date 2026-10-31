@@ -70,7 +70,7 @@ class MapTileHttpTest {
     assertThat(counts.tileJsonFetches).isEqualTo(1)
   }
 
-  /** §2.8: degli header di MapLibre (e di chiunque) escono solo la validazione della cache; il `User-Agent` e' quello fisso. */
+  /** §2.8, I1: degli header di MapLibre (e di chiunque) esce solo la data della validazione della cache (mai `If-None-Match`); il `User-Agent` e' quello fisso. */
   @Test
   fun gliHeaderSonoRipuliti() {
     val rig = TileRig()
@@ -84,15 +84,16 @@ class MapTileHttpTest {
     ).getOrThrow().close()
     for (seen in rig.server.seen) {
       val names = seen.headers.names().map { it.lowercase() }.toSet()
-      assertWithMessage(seen.path).that(names - setOf("user-agent", "if-none-match", "if-modified-since")).isEmpty()
+      assertWithMessage(seen.path).that(names - setOf("user-agent", "if-modified-since")).isEmpty()
       assertThat(seen.headers["User-Agent"]).isEqualTo(MapTileHeaders.USER_AGENT)
     }
     val tile = rig.server.tiles().single()
-    assertThat(tile.headers["If-None-Match"]).isEqualTo("\"etag-1\"")
     assertThat(tile.headers["If-Modified-Since"]).isEqualTo("Wed, 21 Oct 2026 07:28:00 GMT")
-    // Un valore con caratteri di controllo o troppo lungo non esce nemmeno nella validazione della cache.
-    rig.tile(9, 272, 186, headers = mapOf("If-None-Match" to "x".repeat(300))).getOrThrow().close()
-    assertThat(rig.server.tiles().last().headers["If-None-Match"]).isNull()
+    // I1: un `If-None-Match` (un valore scelto dal server, che tornerebbe a ogni convalida) non esce mai, ne' con le tessere ne' con il TileJSON.
+    assertThat(rig.server.seen.none { it.headers["If-None-Match"] != null }).isTrue()
+    // Un valore troppo lungo non esce nemmeno nella validazione della cache.
+    rig.tile(9, 272, 186, headers = mapOf("If-Modified-Since" to "x".repeat(300))).getOrThrow().close()
+    assertThat(rig.server.tiles().last().headers["If-Modified-Since"]).isNull()
   }
 
   /** D26 e condizioni d'uso di OpenFreeMap: le tessere di uno scaricamento confermato escono con il `User-Agent` dello scaricamento. */
@@ -163,19 +164,19 @@ class MapTileHttpTest {
     assertThat(rig.http.snapshot().refused[RefuseReason.REDIRECT]).isEqualTo(4)
   }
 
-  /** E-MAP4: tipo inatteso o risposta enorme dopo la decompressione: buttata e contata; gli header della risposta sono solo quelli della cache. */
+  /** E-MAP4, I1: tipo inatteso o risposta enorme dopo la decompressione: buttata e contata; gli header della risposta sono solo quelli della cache, senza `ETag`. */
   @Test
   fun leRisposteSonoControllate() {
     val rig = TileRig()
     rig.server.answer("/planet/$v/4/0/0.pbf") { FakeTileServer.ok(it, "<html>", "text/html") }
     rig.server.answer("/planet/$v/4/0/1.pbf") { FakeTileServer.bytes(it, ByteArray(MapGateInterceptor.MAX_DECODED_BYTES.toInt() + 1), "application/x-protobuf") }
     rig.server.answer("/planet/$v/4/0/2.pbf") {
-      FakeTileServer.ok(it, "t", "application/x-protobuf", mapOf("Set-Cookie" to "a=b", "ETag" to "\"e\"", "X-Tracking" to "1", "Cache-Control" to "max-age=60"))
+      FakeTileServer.ok(it, "t", "application/x-protobuf", mapOf("Set-Cookie" to "a=b", "ETag" to "\"e\"", "Last-Modified" to "Wed, 21 Oct 2026 07:28:00 GMT", "X-Tracking" to "1", "Cache-Control" to "max-age=60"))
     }
     assertThat((rig.tile(4, 0, 0).exceptionOrNull() as MapRequestRefused).reason).isEqualTo(RefuseReason.CONTENT)
     assertThat((rig.tile(4, 0, 1).exceptionOrNull() as MapRequestRefused).reason).isEqualTo(RefuseReason.CONTENT)
     val ok = rig.tile(4, 0, 2).getOrThrow()
-    assertThat(ok.headers.names().map { it.lowercase() }.toSet()).containsExactly("content-type", "etag", "cache-control")
+    assertThat(ok.headers.names().map { it.lowercase() }.toSet()).containsExactly("content-type", "last-modified", "cache-control")
     assertThat(ok.body!!.string()).isEqualTo("t")
     // Un TileJSON che non e' JSON non si accetta come tessera e viceversa.
     rig.server.answer("/planet/$v/4/0/3.pbf") { FakeTileServer.ok(it, "{}", "application/json") }

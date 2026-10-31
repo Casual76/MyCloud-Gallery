@@ -40,10 +40,11 @@ class MapWireGuardTest {
   @Test
   fun laRichiestaParteSoloSeERimastaNelleRegole() {
     guard.checkOutgoing(
-      request(headers = mapOf("User-Agent" to MapTileHeaders.USER_AGENT, "Host" to MapHost.TILES, "Connection" to "Keep-Alive", "Accept-Encoding" to "gzip", "If-None-Match" to "\"e\"")),
+      request(headers = mapOf("User-Agent" to MapTileHeaders.USER_AGENT, "Host" to MapHost.TILES, "Connection" to "Keep-Alive", "Accept-Encoding" to "gzip", "If-Modified-Since" to "Wed, 21 Oct 2026 07:28:00 GMT")),
     )
     val bad = listOf(
-      request(headers = mapOf("Cookie" to "a=b")), request(headers = mapOf("Referer" to "https://x/")), request(headers = mapOf("X-Id" to "1")),
+      // I1: `If-None-Match` non e' piu' un header che puo' partire.
+      request(headers = mapOf("If-None-Match" to "\"e\"")), request(headers = mapOf("Cookie" to "a=b")), request(headers = mapOf("Referer" to "https://x/")), request(headers = mapOf("X-Id" to "1")),
       request(url = "https://other.example/planet"), request(url = "https://${MapHost.TILES}:8443/planet"),
       Request.Builder().url("https://${MapHost.TILES}/planet").head().build(),
     )

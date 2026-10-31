@@ -30,13 +30,21 @@ class FakeMusicPlayback : MusicPlayback {
   /** Cosa e' successo, nell'ordine: "start", "pause", "resume", "stop" (mai il brano). */
   val calls: MutableList<String> = ArrayList()
 
-  /** Vero tra uno "start" e uno "stop". */
+  /** Vero tra uno "start" riuscito e uno "stop". */
   var started: Boolean = false
     private set
 
-  override fun start(source: MusicSource) {
+  /** Come va il prossimo "start": vero = un lettore e' partito; falso = focus negato o file che non si apre (MU-2). */
+  var startResult: Boolean = true
+
+  /** Se non e' nullo, "start" aspetta questo (un fornitore lento: MU-1); si completa dal test. */
+  var startGate: kotlinx.coroutines.CompletableDeferred<Unit>? = null
+
+  override suspend fun start(source: MusicSource): Boolean {
     calls += "start"
-    started = true
+    startGate?.await()
+    started = startResult
+    return startResult
   }
 
   override fun pause() {

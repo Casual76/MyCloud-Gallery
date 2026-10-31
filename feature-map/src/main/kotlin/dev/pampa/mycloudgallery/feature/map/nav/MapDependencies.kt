@@ -27,7 +27,8 @@ import dev.pampa.mycloudgallery.feature.map.ui.FinalFilter
 import java.util.Optional
 import javax.inject.Inject
 
-// LE PORTE DELLE SCHERMATE DELLA MAPPA PER DAGGER (Fase 9, P4; D7 della Fase 2: @HiltViewModel; docs/fase9-progetto.md §1.4 `MapGraph`). Tutte **opzionali**: `:app` (P13, `MapGraph`) lega i contratti
+// LE PORTE DELLE SCHERMATE DELLA MAPPA PER DAGGER (Fase 9, P4; D7 della Fase 2: @HiltViewModel; docs/fase9-progetto.md §1.4 `MapGraph`). Tutte **opzionali**, tranne la maschera
+// dei Nascosti (R3, 31/10: il filtro finale non puo' tornare muto in silenzio, quindi la chiede senza `Optional` e Hilt la deve avere): `:app` (P13, `MapGraph`) lega i contratti
 // veri (i punti sopra `MapPointsQueries`, le impostazioni su DataStore, la rete in uso, le regioni, i nomi dei luoghi, la posizione di un media, i Nascosti, l'avvio di MapLibre); finche' non
 // lo fa le schermate partono lo stesso con i null-object, che **non fanno niente di pericoloso** (nessun punto, mappa dettagliata non disponibile, nessuna rete, nessuna mappa vera) e il
 // grafo di `:app` compila.
@@ -41,7 +42,8 @@ class MapDependencies @Inject constructor(
   places: Optional<MapPlaceNames>,
   positions: Optional<MapMediaPositions>,
   visible: Optional<VisibleMedia>,
-  mask: Optional<HiddenMask>,
+  /** I Nascosti: **non opzionale** (R3, 31/10). La maschera la lega sempre `:app` (`GalleryModule`); senza, `:app` non compila. */
+  mask: HiddenMask,
   engine: Optional<MapEngineStarter>,
   /** Fase 9 (P13): una superficie gia' pronta al posto di quella vera (solo le prove di `:app` la legano, con `FakeMapSurface`: MapLibre non si disegna in Robolectric). */
   surface: Optional<MapSurfaceContent>,
@@ -54,8 +56,8 @@ class MapDependencies @Inject constructor(
   val positions: MapMediaPositions = positions.orElse(NoMapMediaPositions)
   val visible: VisibleMedia = visible.orElse(NoVisibleMedia)
 
-  /** Il filtro finale dei Nascosti: senza la maschera (`:app` non l'ha legata) vale il solo filtro dei dati (la query dei punti e l'istantanea). */
-  val filter: FinalFilter = FinalFilter(mask.orElse(null))
+  /** Il filtro finale dei Nascosti: la maschera c'e' sempre (un legame che manca e' un errore di compilazione, non un filtro muto). */
+  val filter: FinalFilter = FinalFilter(mask)
 
   /** La mappa vera con MapLibre, che si avvia pigra con [engine] (senza legame: nessuna `MapView`). */
   val content: MapSurfaceContent = surface.orElseGet { MapLibreSurfaceContent(engine.orElse(UnboundMapEngine)) }
@@ -86,9 +88,6 @@ abstract class MapPortsModule {
 
   @BindsOptionalOf
   abstract fun visibleMedia(): VisibleMedia
-
-  @BindsOptionalOf
-  abstract fun hiddenMask(): HiddenMask
 
   @BindsOptionalOf
   abstract fun mapEngineStarter(): MapEngineStarter

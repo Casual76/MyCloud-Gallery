@@ -79,7 +79,10 @@ class PlayerPace(
  *    automatico, niente musica, comincia in [PlayerState.Paused] e i gesti scorrono le foto.
  *  - **Musica (Q3)**: muta di serie; la canzone propria o il brano libero partono con la presentazione; **focus audio**: una chiamata
  *    ([MusicEvent.FOCUS_LOST]) ferma presentazione e musica e al ritorno si riparte; il file sparito ([MusicEvent.MISSING], o il brano che non si
- *    apre) lascia la presentazione muta con un avviso ([PlayerUi.musicMissing]).
+ *    apre) lascia la presentazione muta con un avviso ([PlayerUi.musicMissing]). **Il brano si apre fuori dal thread principale** ([MusicPlayback.start] e' una
+ *    `suspend` che torna a brano aperto): un fornitore lento non ferma ne' il tempo ne' il tocco (MU-1); **un focus negato vale "musica mancante"** (muta, con
+ *    l'avviso) e [PlayerMusic.PLAYING] si imposta solo se un lettore e' partito (MU-2); se mentre il brano si apriva la presentazione e' stata messa in pausa, il brano
+ *    parte gia' in pausa.
  *  - **Visto**: la presentazione segna il ricordo come visto una volta, quando parte (D10).
  *
  * Si usa dal thread principale (i comandi e il tempo girano sullo stesso scope: nessuna corsa). Niente nei log: mai titoli, luoghi, id o nomi.
@@ -120,6 +123,9 @@ class PlayerController(
   private var musicMissing = false
   private var wanted: Triple<TimelineSnapshot, MediaId, List<MediaId>>? = null
   private var ticker: Job? = null
+
+  /** L'apertura del brano in corso (MU-1): si annulla all'uscita, a una nuova partenza e quando la presentazione finisce o sparisce. */
+  private var musicJob: Job? = null
   private val clipCache = HashMap<MediaId, ClipSource?>()
 
   private val talkBack: Boolean get() = environment.value.talkBack
@@ -200,7 +206,7 @@ class PlayerController(
     items = emptyList()
     ended = false
     loaded = false
-    playback.stop()
+    stopMusic()
     images.clear()
     wanted = null
     state.value = PlayerUi(gone = true)
@@ -264,7 +270,7 @@ class PlayerController(
     ticker?.cancel()
     ended = true
     controlsShown = true
-    playback.stop()
+    stopMusic()
     publish()
   }
 
@@ -354,7 +360,7 @@ class PlayerController(
   /** L'uscita (trascinamento in basso, indietro, la X): si ferma tutto, musica compresa. */
   fun exit() {
     ticker?.cancel()
-    playback.stop()
+    stopMusic()
     images.clear()
     wanted = null
   }
@@ -368,18 +374,19 @@ class PlayerController(
       ticker?.cancel()
       userPaused = true
       controlsShown = true
-      playback.stop()
+      stopMusic()
       music = PlayerMusic.MUTED
     }
     publish()
   }
 
   private fun startMusic() {
+    musicJob?.cancel()
     if (talkBack) {
       music = PlayerMusic.MUTED
       return
     }
-    scope.launch {
+    musicJob = scope.launch {
       val choice = musicSettings.choice.value
       if (choice == MusicChoice.None) {
         music = PlayerMusic.MUTED
@@ -387,16 +394,27 @@ class PlayerController(
         return@launch
       }
       val source = guardedValue { library.open(choice) }
-      if (source == null) {
-        music = PlayerMusic.MISSING
-        musicMissing = true
-      } else {
-        playback.start(source)
+      // MU-1: `start` apre il brano fuori dal thread principale e torna quando e' partito (o no): il tempo della presentazione e i tocchi corrono intanto.
+      // MU-2: "partito" e' il solo caso di `PLAYING`; focus negato o file che non si apre = musica mancante (muta, con l'avviso).
+      val started = source != null && guardedValue { playback.start(source) } == true
+      if (started) {
         music = PlayerMusic.PLAYING
         musicMissing = false
+        // La presentazione e' stata fermata (l'utente, una chiamata) mentre il brano si apriva: il brano non parte da solo.
+        if (isPaused()) playback.pause()
+      } else {
+        music = PlayerMusic.MISSING
+        musicMissing = true
       }
       publish()
     }
+  }
+
+  /** Ferma la musica: l'apertura in corso (se c'e') e il lettore, e lascia il focus. */
+  private fun stopMusic() {
+    musicJob?.cancel()
+    musicJob = null
+    playback.stop()
   }
 
   private fun onMusic(event: MusicEvent) {
@@ -421,7 +439,7 @@ class PlayerController(
         lostForGood = true
         focusPaused = true
         ticker?.cancel()
-        playback.stop()
+        stopMusic()
         music = PlayerMusic.MUTED
         controlsShown = true
         publish()

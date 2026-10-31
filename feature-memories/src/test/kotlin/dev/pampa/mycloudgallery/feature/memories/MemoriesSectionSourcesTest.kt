@@ -32,7 +32,7 @@ class MemoriesSectionSourcesTest {
   private val resources get() = ApplicationProvider.getApplicationContext<Application>().resources
 
   private fun sources(rig: MemoriesRig, scope: CoroutineScope, mask: Boolean = true) =
-    MemoriesSectionSources(resources, rig.memories, MemoryNames(rig.people, NoMemoryPlaceNames), FinalFilter(if (mask) rig.lib.visibility else null), scope)
+    MemoriesSectionSources(resources, rig.memories, MemoryNames(rig.people, NoMemoryPlaceNames), FinalFilter(if (mask) rig.lib.visibility else NothingHidden), scope)
 
   @Test
   fun siDisegnaSubitoDallUltimoScaffale_primaChePartaQualunqueLavoro() = runTest {

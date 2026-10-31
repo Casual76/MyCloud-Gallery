@@ -20,5 +20,5 @@ object NoMemoriesActions : MemoriesActions {
 
   override fun openNotificationChannel() = Unit
 
-  override fun pickOwnSong() = Unit
+  override fun pickOwnSong(onFailed: () -> Unit) = Unit
 }

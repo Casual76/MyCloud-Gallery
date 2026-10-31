@@ -54,7 +54,7 @@ class BubbleEngineTest {
     val ids = ArrayList<MediaId>()
     val points = around(Cities.FIRENZE, 40, place = 1, ids) + around(Cities.ROMA, 40, place = 2, ids) + around(Cities.OSLO, 5, place = 3, ids)
     val names = TestPlaceNames(special = mapOf(1 to "Casa", 2 to "Roma", 3 to "Oslo"))
-    val engine = BubbleEngine(names, FinalFilter(null))
+    val engine = BubbleEngine(names, FinalFilter(NothingHidden))
     val bubbles = engine.compute(ReferenceClusterIndex(points), viewport(zoom = 8.0))
     val labels = bubbles.mapNotNull { it.label }
     assertThat(labels).containsExactly("Roma")
@@ -88,7 +88,7 @@ class BubbleEngineTest {
     val points = around(Cities.ROMA, 10, place = 0, ids)
     val index = ReferenceClusterIndex(points)
     val cover = index.clusters(view, 8.0, BubbleEngine.CELL_DP).single().cover
-    val engine = BubbleEngine(TestPlaceNames(), FinalFilter(null))
+    val engine = BubbleEngine(TestPlaceNames(), FinalFilter(NothingHidden))
     val drawn = engine.compute(index, viewport(8.0)) { it != cover }.single()
     assertThat(drawn.bubble.cover).isNotEqualTo(cover)
     // Se nessun altro si puo' disegnare resta quella (segnaposto): la bolla non sparisce per questo.
@@ -99,7 +99,7 @@ class BubbleEngineTest {
   fun leBolleSonoDeterministicheEOrdinateDallaCella() = runTest {
     val ids = ArrayList<MediaId>()
     val points = around(Cities.OSLO, 20, 0, ids) + around(Cities.LISBONA, 20, 0, ids) + around(Cities.AUCKLAND, 20, 0, ids)
-    val engine = BubbleEngine(TestPlaceNames(), FinalFilter(null))
+    val engine = BubbleEngine(TestPlaceNames(), FinalFilter(NothingHidden))
     val first = engine.compute(ReferenceClusterIndex(points), viewport(6.0))
     val second = engine.compute(ReferenceClusterIndex(points.reversed()), viewport(6.0))
     assertThat(first.map { it.key }).isEqualTo(second.map { it.key })

@@ -176,7 +176,7 @@ class MapControllerTest {
     val many = List(400) { i ->
       MapPoint(MediaId.random(), 30_000_000 + (i / 20) * 500_000, -10_000_000 + (i % 20) * 500_000, 20_260_101, 0, 0)
     }
-    val engine = BubbleEngine(TestPlaceNames(), FinalFilter(null))
+    val engine = BubbleEngine(TestPlaceNames(), FinalFilter(NothingHidden))
     val index = ReferenceClusterIndex(many)
     val vp = viewport(GeoE6(35_000_000, -5_000_000), 9.0, GeoBox(-10_000_000, 30_000_000, 0, 50_000_000))
     assertThat(index.clusters(vp.box, vp.zoom, BubbleEngine.CELL_DP).size).isGreaterThan(60)

@@ -29,7 +29,7 @@ import org.junit.Test
 class MemoryPageControllerTest {
 
   private fun controller(rig: MemoriesRig, id: MemoryId, scope: CoroutineScope, mask: FakeVisibility? = rig.lib.visibility) =
-    MemoryPageController(id, rig.memories, MemoryNames(rig.people, NoMemoryPlaceNames), FinalFilter(mask), scope)
+    MemoryPageController(id, rig.memories, MemoryNames(rig.people, NoMemoryPlaceNames), FinalFilter(mask ?: NothingHidden), scope)
 
   @Test
   fun ilPrimoFotogrammaHaGiaIlTitoloEIlVistoSiSegnaSoloAprendoLaPagina() = runTest {
@@ -136,7 +136,7 @@ class MemoryPageControllerTest {
     runCurrent()
     assertThat(page.ui.value.page).isEqualTo(MemoryPageState.NotFound)
     // Senza il servizio (null-object) la pagina non crolla: non c'e'.
-    val none = MemoryPageController(ghost, NoMemories, MemoryNames(null, NoMemoryPlaceNames), FinalFilter(null), backgroundScope)
+    val none = MemoryPageController(ghost, NoMemories, MemoryNames(null, NoMemoryPlaceNames), FinalFilter(NothingHidden), backgroundScope)
     runCurrent()
     assertThat(none.ui.value.page).isEqualTo(MemoryPageState.NotFound)
   }

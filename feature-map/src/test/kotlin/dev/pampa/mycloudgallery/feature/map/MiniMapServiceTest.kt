@@ -55,7 +55,7 @@ class MiniMapServiceTest {
     // La seconda volta (la stessa larghezza e lo stesso tema) viene dalla memoria: nessun nuovo disegno. Cambiando tema si ridisegna.
     service.place(media, 640).toList()
     assertThat(renderer.calls).hasSize(1)
-    val darkService = MiniMapService(positions, FinalFilter(null), renderer) { MiniMapLook(true, 1, 2, 2f) }
+    val darkService = MiniMapService(positions, FinalFilter(NothingHidden), renderer) { MiniMapLook(true, 1, 2, 2f) }
     darkService.place(media, 640).toList()
     assertThat(renderer.calls).hasSize(2)
     service.clear()
@@ -78,7 +78,7 @@ class MiniMapServiceTest {
 
   @Test
   fun senzaDisegnatoreLaMiniMappaManca_ELaRigaResta() = runTest {
-    val service = MiniMapService(positions, FinalFilter(null), NoMiniMapRenderer) { look }
+    val service = MiniMapService(positions, FinalFilter(NothingHidden), NoMiniMapRenderer) { look }
     val last = service.place(media, 320).toList().last() as MiniMapState.Ready
     assertThat(last.bitmap).isNull()
     assertThat(last.toString()).isEqualTo("MiniMapState.Ready(false)")
@@ -86,7 +86,7 @@ class MiniMapServiceTest {
 
   @Test
   fun laLarghezzaDeveEssereValida() = runTest {
-    val service = MiniMapService(positions, FinalFilter(null), NoMiniMapRenderer) { look }
+    val service = MiniMapService(positions, FinalFilter(NothingHidden), NoMiniMapRenderer) { look }
     var failed = false
     try {
       service.place(media, 0).toList()

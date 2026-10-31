@@ -20,7 +20,7 @@ import org.junit.Test
 class AllMemoriesControllerTest {
 
   private fun controller(rig: MemoriesRig, scope: CoroutineScope, mask: Boolean = true) =
-    AllMemoriesController(rig.memories, MemoryNames(rig.people, NoMemoryPlaceNames), FinalFilter(if (mask) rig.lib.visibility else null), scope)
+    AllMemoriesController(rig.memories, MemoryNames(rig.people, NoMemoryPlaceNames), FinalFilter(if (mask) rig.lib.visibility else NothingHidden), scope)
 
   @Test
   fun ilPrimoFotogrammaELoScaffaleComeE_senzaCopertine_poiLeCopertine() = runTest {

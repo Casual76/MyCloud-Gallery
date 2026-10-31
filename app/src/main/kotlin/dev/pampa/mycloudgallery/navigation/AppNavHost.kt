@@ -15,6 +15,12 @@ import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import dev.pampa.mycloudgallery.feature.map.nav.mapGraph
+import dev.pampa.mycloudgallery.feature.map.nav.openMapSettings
+import dev.pampa.mycloudgallery.feature.map.nav.openPlacesEntry
+import dev.pampa.mycloudgallery.feature.memories.nav.memoriesGraph
+import dev.pampa.mycloudgallery.feature.memories.nav.openMemoriesEntry
+import dev.pampa.mycloudgallery.feature.memories.nav.openMemoriesSettings
 import dev.pampa.mycloudgallery.feature.nas.hub.nasGraph
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -202,6 +208,14 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
     SideEffect { peopleHost.opener.bind(nav, viewer) }
     PeopleNoticeEffect(nav, peopleHost)
   }
+  // Fase 9 (P13): i ricordi (uscite verso viewer, album e pagine di Android; il tocco sulla notifica servito qui, sotto il blocco app) e la mappa (uscite,
+  // "Mostra sulla mappa" dal viewer, tema della mini-mappa). I due ViewModel nascono con la schermata principale senza costruire niente di pesante.
+  val memoriesHost: MemoriesHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
+  val memoriesActions = memoriesHost?.let { host -> rememberMemoriesActions(nav, viewer, host) { gallery?.viewerServices } }
+  if (memoriesHost != null) MemoriesNotificationEffect(nav, memoriesHost)
+  val mapHost: MapHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
+  val mapActions = remember(nav, viewer, mapHost, gallery) { mapHost?.let { host -> AppMapActions(nav, viewer, host) { gallery?.viewerServices } } }
+  if (mapHost != null) MapHostEffect(nav, viewer, mapHost)
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),
@@ -224,6 +238,7 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
               onFindSimilarHandled = { findSimilar = null },
               openViewer = openViewer,
               peopleActions = peopleActions,
+              memoriesHost = memoriesHost,
             )
           }
           // Fase 3 (P10): le pagine delle Raccolte sul telefono (griglie filtrate, Nascosti, Eliminati di recente).
@@ -237,6 +252,10 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
           }
           // Fase 8 (P13): "Tutte le persone", "Altri volti", la pagina di una persona, la revisione, le nascoste; attivazione, avviso, Impostazioni -> Persone, "Disattiva e cancella".
           if (peopleHost != null && peopleActions != null) peopleScreens(nav = nav, actions = peopleActions, host = peopleHost)
+          // Fase 9 (P13): "Tutti i ricordi", la pagina di un ricordo, la presentazione, Impostazioni -> Ricordi e notifiche; la mappa, la griglia di una zona e di
+          // un luogo, Impostazioni -> Mappa. Le rotte dei benchmark di P12 sono queste (`MemoryDestination`, `MemoryPlayerDestination`, `MapDestination`).
+          if (memoriesHost != null && memoriesActions != null) memoriesGraph(nav = nav, actions = memoriesActions, thumbnails = memoriesHost.thumbnails)
+          if (mapHost != null && mapActions != null) mapGraph(nav = nav, actions = mapActions, thumbnails = mapHost.thumbnails)
           // Fase 4B (P16): Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso (rotte a schermo intero).
           nasGraph(nav = nav, onOpenFile = nasOpener::open, trashPage = GatedNasTrashPage)
           // Fase 5A (P7): la pagina Backup, le impostazioni, la cartella del dispositivo e il riepilogo del primo backup.
@@ -262,6 +281,9 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
             openHidden = { nav.openCollection(CollectionKind.HIDDEN) },
             // Fase 8 (P7, P13): Impostazioni -> Persone.
             openPeople = { nav.navigate(PeopleSettingsDestination) },
+            // Fase 9 (P9, P4, P13): Impostazioni -> Ricordi e notifiche (sezione "Libreria") e Impostazioni -> Mappa (sezione "Protezione").
+            openMemories = if (memoriesHost != null) ({ nav.openMemoriesSettings() }) else null,
+            openMap = if (mapHost != null) ({ nav.openMapSettings() }) else null,
           )
           // Fase 6 (P11): la pagina Ricerca e modelli e quella di attivazione della lettura del testo.
           searchActions?.let { searchGraph(nav, it) }
@@ -411,6 +433,8 @@ private fun MainDestination(
   openViewer: (ViewerRequest) -> Unit,
   /** Fase 8 (P13): le uscite delle persone (la sezione delle Raccolte apre le loro pagine). */
   peopleActions: PeopleActions?,
+  /** Fase 9 (P13): i ricordi (il giro `OPEN` all'apertura di Raccolte, le voci della sezione). */
+  memoriesHost: MemoriesHostViewModel? = null,
 ) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
   val library: LibraryViewModel = hiltViewModel()
@@ -443,7 +467,11 @@ private fun MainDestination(
       // Avvio istantaneo: l'apertura di Raccolte e di Cerca si misura dal tocco al primo fotogramma con l'ultimo stato o lo scheletro.
       if (selected != tab) {
         when (selected) {
-          GalleryTab.Collections -> AvvioTrace.pageOpened(AvvioTrace.PAGE_COLLECTIONS)
+          GalleryTab.Collections -> {
+            AvvioTrace.pageOpened(AvvioTrace.PAGE_COLLECTIONS)
+            // P9: all'apertura di Raccolte il giro dei ricordi di oggi, se non c'e' ancora stato (fuori dal thread principale, dopo il fotogramma).
+            memoriesHost?.memories?.onCollectionsOpened()
+          }
           GalleryTab.Search -> AvvioTrace.pageOpened(AvvioTrace.PAGE_SEARCH)
           else -> Unit
         }
@@ -481,6 +509,8 @@ private fun MainDestination(
             openFreeSpace = { gallery.fiveB?.openFreeSpace(null) },
             onNewAlbum = { newAlbum = true },
             onPeople = { target -> peopleActions?.let { actions -> nav.openPeopleEntry(target, actions) } },
+            onMemories = { target -> nav.openMemoriesEntry(target) { code -> memoriesHost?.resolveEntry(code) } },
+            onPlaces = { target -> nav.openPlacesEntry(target) },
           )
         },
         entryDetail = { entry -> CollectionEntryDetail(entry, nav, slot.contentPadding, nasOpener, openViewer) },

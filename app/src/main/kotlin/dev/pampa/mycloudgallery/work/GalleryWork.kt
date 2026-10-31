@@ -159,6 +159,8 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
   private val utility: dev.pampa.mycloudgallery.utility.UtilityGraph,
   /** Fase 7 (DG-2): gli esiti e gli errori della manutenzione nella Diagnostica ("Ultimi esiti ed errori"). */
   private val graph: dev.pampa.mycloudgallery.graph.AppGraph,
+  /** Fase 9 (P13, §1.4): la generazione notturna dei ricordi, dopo i viaggi. */
+  private val memories: dev.pampa.mycloudgallery.memories.MemoriesGraph,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
@@ -199,6 +201,9 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
     val places = gallery.runIfActive { core -> PlacesRecompute(core.catalog, gallery.places).run(PLACES_BUDGET) }
     // Fase 7 (P13): la rilevazione dei viaggi (la casa e i viaggi si ricalcolano di notte, D18, D19) e il ricalcolo di sicurezza degli smart.
     gallery.runIfActive { albums.nightly(ALBUMS_BUDGET) }
+    // Fase 9 (P13, §1.4, D4): i ricordi di oggi, **dopo** i viaggi (un viaggio appena trovato diventa un ricordo la notte stessa), con il budget di 60 s del
+    // motore. Tutto locale: nessuna rete, nessun NAS. Un budget finito lascia lo scaffale valido; il giro dopo (apertura di Raccolte, notifica) lo completa.
+    gallery.runIfActive { memories.nightly() }
     // Fase 8 (RG-1): il raggruppamento notturno delle persone non e' piu' qui: ha un lavoro suo (`FacesNightlyWorker`, dopo la tappa del calcolo e una volta al
     // giorno), con le regole di `AI_COMPUTE` e la sua finestra di Android. Qui, in coda a sette manutenzioni da 14 minuti di budget, non arrivava mai.
     // Fase 7 (P8): "Controlla di notte i video del NAS" applicato (la coda `FULL_HASH` la prende il lavoro di sicurezza del backup) e le firme

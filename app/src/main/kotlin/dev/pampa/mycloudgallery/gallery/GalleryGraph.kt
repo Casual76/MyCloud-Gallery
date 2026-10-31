@@ -519,6 +519,8 @@ class GalleryGraph(
         DeveloperTools.hiddenChanged(context)
         // Fase 7 (P13): copertine e conteggi degli album condivisi senza aspettare il giro dopo.
         onHiddenChanged()
+        // Fase 9 (P13): lo scaffale dei ricordi e la notifica in tendina (`prune`, `revalidate`), l'indice dei punti e la mini-mappa, subito.
+        for (listener in hiddenListeners) listener()
       }
 
       // Fase 7 (P9, E-H2): quanti degli elementi nascosti i familiari vedono ancora (area comune, album condivisi).
@@ -529,6 +531,9 @@ class GalleryGraph(
   /** Fase 7 (P13): dopo un "Nascondi" o "Mostra" fatto qui (lo lega `AlbumsModule`: gli album condivisi ricalcolano copertine e conteggi). */
   @Volatile
   var onHiddenChanged: () -> Unit = {}
+
+  /** Fase 9 (P13): gli altri che vogliono sapere di un "Nascondi" o "Mostra" fatto qui (ricordi e mappa, `MemoriesModule` e `MapModule`). */
+  val hiddenListeners: MutableList<() -> Unit> = java.util.concurrent.CopyOnWriteArrayList()
 
   /**
    * Fase 7 (P13, P10-10, D35): le richieste "Aggiungi ad album" (selezione della Libreria, viewer, Nascosti), che la radice mostra con `AddToAlbumHost`,
@@ -545,6 +550,13 @@ class GalleryGraph(
    */
   @Volatile
   var viewerPeople: dev.pampa.mycloudgallery.feature.viewer.people.ViewerPeople? = null
+
+  /**
+   * Fase 9 (P13, D30): la mini-mappa e "Mostra sulla mappa" nelle info del viewer. La lega `MapModule` con il processo (un adattatore pigro: MapLibre parte
+   * solo alla prima mini-mappa); di serie nessuna (il viewer non mostra la riga). Il viewer non la chiama mai per un media aperto dai Nascosti.
+   */
+  @Volatile
+  var viewerPlaceMap: dev.pampa.mycloudgallery.feature.viewer.place.ViewerPlaceMap? = null
 
   /** Una scrittura che tocca catalogo e istantanea: mai insieme a [shutdown], e mai dopo. */
   private suspend fun <T> writing(block: suspend () -> T): T = lifecycle.withLock {
@@ -702,6 +714,8 @@ class GalleryGraph(
       cutoutSaver = searchViewer?.cutoutSaver,
       // Fase 8 (P13): la riga "Persone" nelle info (solo con la porta legata).
       people = viewerPeople,
+      // Fase 9 (P13): la mini-mappa e "Mostra sulla mappa" nelle info (solo con la porta legata).
+      placeMap = viewerPlaceMap,
       // Fase 7 (P13): "Aggiungi ad album" dal viewer; le voci si leggono a ogni richiesta da [viewerAlbums] (gli album si legano dopo la galleria).
       albums = object : ViewerAlbumActions {
         override fun menu(id: MediaId) = viewerAlbums.menu(id)

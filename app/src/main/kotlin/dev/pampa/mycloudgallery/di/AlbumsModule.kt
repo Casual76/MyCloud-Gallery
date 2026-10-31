@@ -33,6 +33,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.SmartAlbumEngine
 import dev.pampa.mycloudgallery.core.albums.contract.SmartChoices
 import dev.pampa.mycloudgallery.core.albums.contract.SmartNameInterpreter
 import dev.pampa.mycloudgallery.core.albums.contract.Trips
+import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
 import dev.pampa.mycloudgallery.core.search.contract.SearchEngine
 import dev.pampa.mycloudgallery.core.search.contract.Today
@@ -141,4 +142,10 @@ object AlbumsModule {
 
   /** La vista senza nascosti della Libreria (D22): "Aggiungi ad album" offre solo questi. */
   @Provides fun visibleMedia(gallery: GalleryGraph): VisibleMedia = gallery.visibleMedia
+
+  /**
+   * Fase 9 (P13, D31): il filtro finale dei Nascosti per le porte opzionali di feature-albums, feature-memories e feature-map (i tre `@BindsOptionalOf`
+   * dello stesso tipo: duplicati ammessi da Dagger). Senza questo legame il filtro finale delle schermate dei ricordi e della mappa non faceva niente.
+   */
+  @Provides fun hiddenMask(gallery: GalleryGraph): HiddenMask = gallery.hiddenMask
 }

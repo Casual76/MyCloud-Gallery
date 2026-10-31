@@ -7,6 +7,8 @@ import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.feature.albums.nav.openEntry
 import dev.pampa.mycloudgallery.feature.albums.sections.AlbumEntryTarget
 import dev.pampa.mycloudgallery.feature.people.nav.PeopleEntryTarget
+import dev.pampa.mycloudgallery.feature.map.places.PlacesEntryTarget
+import dev.pampa.mycloudgallery.feature.memories.section.MemoriesEntryTarget
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.utility.UtilityPage
 import dev.pampa.mycloudgallery.feature.library.utility.UtilityPageRoute
@@ -16,7 +18,7 @@ import dev.pampa.mycloudgallery.feature.nas.hub.openNas
 
 // DOVE PORTA UNA VOCE DELLE RACCOLTE (Fase 7, P13; P11: "onOpenEntry ed entryDetail per i codici nuovi"). Le voci consegnate come dati hanno un codice
 // stabile (mai un dato dell'utente): `album/<id>`, `smart/<id>`, `albums/all`, `albums/new`, `trips/all`, `trip/<impronta>` (P10), `utility/<pagina>`
-// (P8), le rotte di `NasScreen` (4B) e `backup/free-space` (5B). Qui si riconoscono, una volta, per il telefono (la rotta) e per il tablet (il
+// (P8), le rotte di `NasScreen` (4B) e `backup/free-space` (5B); dalla Fase 9 `m_<16 caratteri>`, `memories_all` (Ricordi), `map` e `place_<id>` (Luoghi). Qui si riconoscono, una volta, per il telefono (la rotta) e per il tablet (il
 // pannello di dettaglio, dove la pagina c'e').
 
 /** Il bersaglio di una voce. */
@@ -32,6 +34,12 @@ internal sealed interface EntryTarget {
   /** Fase 8 (P13): la sezione Persone (le persone, "Tutte le persone", "Altri volti", l'attivazione, l'avviso, Impostazioni). */
   data class People(val target: PeopleEntryTarget) : EntryTarget
 
+  /** Fase 9 (P13): la sezione Ricordi (`m_<16 caratteri>` per un ricordo, `memories_all`, le righe di stato). */
+  data class Memories(val target: MemoriesEntryTarget) : EntryTarget
+
+  /** Fase 9 (P13): la sezione Luoghi (`map`, `place_<id GeoNames>`, la riga dei senza posizione). */
+  data class Places(val target: PlacesEntryTarget) : EntryTarget
+
   /** Un codice che questa versione non conosce (di una versione piu' nuova): non fa niente. */
   data object Unknown : EntryTarget
 
@@ -42,6 +50,8 @@ internal sealed interface EntryTarget {
         ?: nasScreenOf(code)?.let(::Nas)
         ?: AlbumEntryTarget.parse(code)?.let(::Album)
         ?: PeopleEntryTarget.parse(code)?.let(::People)
+        ?: MemoriesEntryTarget.parse(code)?.let(::Memories)
+        ?: PlacesEntryTarget.parse(code)?.let(::Places)
         ?: Unknown
     }
   }
@@ -53,7 +63,7 @@ internal sealed interface EntryTarget {
  */
 internal fun hasEntryDetail(code: String): Boolean = when (EntryTarget.of(code)) {
   EntryTarget.FreeSpace, is EntryTarget.Utility, is EntryTarget.Nas -> true
-  is EntryTarget.Album, is EntryTarget.People, EntryTarget.Unknown -> false
+  is EntryTarget.Album, is EntryTarget.People, is EntryTarget.Memories, is EntryTarget.Places, EntryTarget.Unknown -> false
 }
 
 /** Apre la voce [code] sul telefono (o, sul tablet, una voce senza dettaglio). */
@@ -63,6 +73,8 @@ internal fun openCollectionEntry(
   openFreeSpace: () -> Unit,
   onNewAlbum: () -> Unit,
   onPeople: (PeopleEntryTarget) -> Unit = {},
+  onMemories: (MemoriesEntryTarget) -> Unit = {},
+  onPlaces: (PlacesEntryTarget) -> Unit = {},
 ) {
   when (val target = EntryTarget.of(code)) {
     EntryTarget.FreeSpace -> openFreeSpace()
@@ -70,6 +82,8 @@ internal fun openCollectionEntry(
     is EntryTarget.Nas -> nav.openNas(target.screen)
     is EntryTarget.Album -> if (target.target == AlbumEntryTarget.NewAlbum) onNewAlbum() else nav.openEntry(target.target)
     is EntryTarget.People -> onPeople(target.target)
+    is EntryTarget.Memories -> onMemories(target.target)
+    is EntryTarget.Places -> onPlaces(target.target)
     EntryTarget.Unknown -> Unit
   }
 }
@@ -87,6 +101,6 @@ internal fun CollectionEntryDetail(
     EntryTarget.FreeSpace -> FreeSpaceEntryDetail(hostPadding)
     is EntryTarget.Utility -> UtilityPageRoute(page = target.page, onOpenViewer = onOpenViewer, contentPadding = hostPadding)
     is EntryTarget.Nas -> NasEntryDetail(entry, nav, hostPadding, opener)
-    is EntryTarget.Album, is EntryTarget.People, EntryTarget.Unknown -> Unit
+    is EntryTarget.Album, is EntryTarget.People, is EntryTarget.Memories, is EntryTarget.Places, EntryTarget.Unknown -> Unit
   }
 }

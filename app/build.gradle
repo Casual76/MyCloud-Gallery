@@ -266,9 +266,14 @@ dependencies {
   // schermate e i lavori. core-faces non vede core-nasops, core-search, core-albums ne' la rete (Phase8ArchitectureTest): le porte le lega solo `:app`.
   implementation project(':core-faces')
   implementation project(':feature-people')
-  // Fase 9 (docs/fase9-progetto.md §1.1, §1.4, P10): i ricordi. Qui, per ora, solo le notifiche (`MemoryNotifier`, `MemoryNotifyWorker`, l'azione `OPEN_MEMORIES`
-  // di `MainActivity`): le decisioni stanno in core-memories (JVM puro), il sistema (canale, notifica, lavoro unico) qui. Il montaggio di `MemoriesGraph` e' di P13.
+  // Fase 9 (docs/fase9-progetto.md §1.1, §1.4, P13): ricordi, notifiche e mappa. `:app` cabla `MemoriesGraph` (motore, scaffale, porte vere di viaggi,
+  // persone, vettori, pixel, notifica) e `MapGraph` (punti, impostazioni, rete, traffico, MapLibre pigra con il client delle tessere installato prima), le
+  // schermate, i lavori, la Diagnostica e l'azzeramento. MapLibre e OkHttp restano dentro feature-map (`MapLibreInit` e' l'unico ingresso, `:app` non nomina
+  // `net/`); da qui i passi 7e e 7h di `tools/check.ps1` pretendono `libmaplibre.so` e il client delle tessere nell'APK di release.
   implementation project(':core-memories')
+  implementation project(':feature-memories')
+  implementation project(':core-map')
+  implementation project(':feature-map')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')
@@ -317,20 +322,6 @@ dependencies {
   testImplementation appDeps.roborazzi
   testImplementation appDeps.roborazziCompose
   testImplementation appDeps.roborazziJunitRule
-
-  // Fase 9 (P9, D31): la riga `MEMORIES` del registro dei Nascosti (`HiddenSurfaces`) prova il motore vero dei ricordi (core-memories) e le
-  // schermate vere (feature-memories) sul mondo casuale. Solo nei test: `:app` li montera' in produzione con P13 (`MemoriesGraph`); qui non
-  // entrano nel codice dell'app, e la regola dei moduli di `Phase9ArchitectureTest` guarda solo le dipendenze di produzione.
-  testImplementation project(':core-memories')
-  testImplementation project(':feature-memories')
-
-  // Fase 9 (P4, D31): la riga `MAP` del registro dei Nascosti prova la catena vera dei punti (la query di core-database, `PagedMapPointSource`, `GeoMapPoints`) e le schermate vere della mappa
-  // (feature-map: bolle, griglia di una zona, sezione Luoghi, mini-mappa) sul mondo casuale. Solo nei test: `:app` le montera' in produzione con P13 (`MapGraph`); la regola dei moduli di
-  // `Phase9ArchitectureTest` guarda solo le dipendenze di produzione.
-  // I passi 7e e 7h di `tools/check.ps1` (`Test-AppUsesFeatureMap`) ignorano le configurazioni dei soli test: MapLibre e il client nell'APK di release
-  // si pretendono solo quando P13 collega `:feature-map` con `implementation`.
-  testImplementation project(':core-map')
-  testImplementation project(':feature-map')
 
   // Fase 6 (P0, D41): il test strumentato che prova, nel processo dell'app vera, che con la lettura del testo spenta ML Kit non si
   // inizializza (`MlKitOffAtStartupDeviceTest`). Solo l'APK di prova, mai l'app.

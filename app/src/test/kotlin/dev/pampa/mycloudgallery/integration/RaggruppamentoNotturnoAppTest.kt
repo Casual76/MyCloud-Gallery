@@ -182,11 +182,13 @@ class RaggruppamentoNotturnoAppTest {
       signatures = { null },
       fullHashOn = { null },
     )
+    // Fase 9 (P13): i ricordi come in `MemoriesModule` (la manutenzione li genera dopo i viaggi).
+    val memories = node.memoriesGraph()
     val worker = TestListenableWorkerBuilder<LibraryMaintenanceWorker>(node.device.context)
       .setWorkerFactory(
         object : WorkerFactory() {
           override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
-            LibraryMaintenanceWorker(appContext, workerParameters, gallery, node.mounted.stack.search, node.albums, utility, node.device.graph)
+            LibraryMaintenanceWorker(appContext, workerParameters, gallery, node.mounted.stack.search, node.albums, utility, node.device.graph, memories)
         },
       )
       .build()

@@ -46,6 +46,7 @@ import dev.pampa.mycloudgallery.core.memories.noop.NoMemoryPeople
 import dev.pampa.mycloudgallery.core.memories.noop.NoMemoryPixels
 import dev.pampa.mycloudgallery.core.memories.noop.NoMemoryTrips
 import dev.pampa.mycloudgallery.core.memories.noop.NoMemoryVectors
+import dev.pampa.mycloudgallery.core.memories.settings.ChoiceRules
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.personal.contract.MemoriesChoices
@@ -62,7 +63,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -115,14 +116,22 @@ class InMemoryMemories(
 
   override fun memory(id: MemoryId): Flow<MemoryView?> =
     combine(visible.snapshot, version, personal.choices) { snapshot, _, choices -> Triple(snapshot, file, choices) }
-      .map { (snapshot, shelfFile, choices) ->
-        val memory = shelfFile?.memories?.firstOrNull { it.id == id } ?: return@map null
-        if (snapshot == null || id.value in choices.dismissed) return@map null
+      .transform { (snapshot, shelfFile, choices) ->
+        // Come il motore (RP-2): senza l'istantanea "non lo so ancora", e non si dice niente.
+        if (snapshot == null) return@transform
+        val memory = shelfFile?.memories?.firstOrNull { it.id == id }
+        if (memory == null || id.value in choices.dismissed) {
+          emit(null)
+          return@transform
+        }
         val view = IndexOrderedTimelineView.of(snapshot, memory.members)
-        if (view.size < Memory.MIN_MEMBERS) return@map null
+        if (view.size < Memory.MIN_MEMBERS) {
+          emit(null)
+          return@transform
+        }
         val cover = (listOf(memory.cover) + memory.members).first { snapshot.indexOf(it) >= 0 }
         val name = memory.title.person?.let { person -> people.resolve(person)?.let { people.label(it) } }
-        MemoryView(memory, view, cover, id.value in choices.seen, name)
+        emit(MemoryView(memory, view, cover, id.value in choices.seen, name))
       }
 
   override suspend fun refresh(reason: RefreshReason, budget: Duration): RefreshReport = lock.withLock {
@@ -303,11 +312,8 @@ class InMemoryMemories(
     return Cleaned(shelfFile.copy(memories = out), trimmed, removed)
   }
 
-  private suspend fun personStillShown(person: PersonId, choices: MemoriesChoices, peopleOn: Boolean): Boolean {
-    if (!peopleOn || !choices.peopleMemories) return false
-    val now = people.resolve(person) ?: return false
-    return choices.people[person] == null && choices.people[now] == null
-  }
+  private suspend fun personStillShown(person: PersonId, choices: MemoriesChoices, peopleOn: Boolean): Boolean =
+    ChoiceRules.personStillShown(choices, person, peopleOn, if (peopleOn) people.resolve(person) else null, undecided = people.undecided)
 
   // --- Titolo e viste ------------------------------------------------------------------------------------------------------------------
 

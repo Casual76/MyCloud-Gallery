@@ -28,7 +28,9 @@ internal class Pruned(val file: ShelfFile, val trimmed: Int, val removed: Int) {
  *
  * Fa uscire un ricordo se: ha piu' di 30 giorni ([MemoryRules.SHELF_DAYS]), la data di pubblicazione non e' una data, gli restano meno di 3
  * elementi, o e' di una persona che non si mostra piu' (nascosta, dimenticata, "Mostra meno" o "Mai", Persone spenta qui o "Ricordi con le
- * persone" spento, E-MEM10).
+ * persone" spento, E-MEM10). Con lo stato di Persone **non ancora noto** ([MemoryPeople.undecided], MO-1) un ricordo di una persona non esce per
+ * "Persone non disponibile": uscirebbe ad ogni avvio finche' Persone non e' montata, e il giro di oggi non lo rimetterebbe; escono solo per una scelta
+ * esplicita dell'utente.
  *
  * **R17**: un guasto della lettura dei visibili o dei nascosti si propaga; lo scaffale resta com'era. Mai "non lo so" trattato come "e'
  * nascosto".
@@ -65,7 +67,8 @@ internal class ShelfPruner(private val library: MemoryVisibility, private val pe
       }
       val person = memory.title.person
       if (memory.kind == MemoryKind.PERSON) {
-        val shown = person != null && ChoiceRules.personStillShown(choices, person, peopleOn, if (peopleOn) people.resolve(person) else null)
+        val shown = person != null &&
+          ChoiceRules.personStillShown(choices, person, peopleOn, if (peopleOn) people.resolve(person) else null, undecided = people.undecided)
         if (!shown) {
           removed++
           continue

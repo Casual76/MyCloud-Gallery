@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.memories.contract.Memories
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryKind
 import dev.pampa.mycloudgallery.core.memories.contract.RefreshReport
 import dev.pampa.mycloudgallery.core.memories.plan.people.PeopleRig
+import dev.pampa.mycloudgallery.core.memories.testing.FakePeopleSwitch
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.core.personal.contract.MemoriesRecords
 import dev.pampa.mycloudgallery.core.personal.contract.MemoryLessLevel
@@ -103,24 +104,66 @@ class PeopleLessJanitorTest {
     assertThat(tombstones(tablet, marco)).isTrue()
   }
 
-  /** Senza una porta legata, o con lo stato ancora ignoto, il janitor non cancella niente (neppure con `available` falso). */
+  /**
+   * Senza una porta legata, o con lo stato ancora ignoto, il janitor non cancella niente (neppure con `available` falso) **e nemmeno i ricordi di persone** (MO-1,
+   * 31/10): "Persone non ancora montata" non e' "Persone spenta" e i ricordi non si potano finche' lo stato non e' noto. Prima il test diceva il contrario (E-MEM10 letto
+   * come "non disponibile = fuori"): era l'errore, non la regola.
+   */
   @Test
   fun conLoStatoIgnotoNonCancellaNiente() = runTest {
-    val rig = rig()
+    val rig = PeopleRig(switch = FakePeopleSwitch(PeoplePhase.UNKNOWN)).also { rigs += it }
     val (_, marco, sara) = worldWithPersonMemory(rig)
-    rig.switch.set(PeoplePhase.UNKNOWN)
     rig.people.available.value = false
     val writes = rig.register.writes()
+    val shelfBefore = rig.engine.current()
     val report = rig.janitor.sweep()
     assertThat(report.dropped).isEqualTo(0)
     assertThat(rig.register.writes()).isEqualTo(writes)
     assertThat(live(rig).keys).containsExactly(marco, sara)
-    // Ma i ricordi di persone escono: Persone non e' disponibile qui (E-MEM10).
-    assertThat(rig.personMemories()).isEmpty()
+    // I ricordi di persone restano, e lo scaffale non si e' riscritto (nessuna pulizia a vuoto): un riavvio a freddo prima di Persone non li butta.
+    assertThat(rig.personMemories()).hasSize(1)
+    assertThat(rig.engine.current()).isEqualTo(shelfBefore)
+    // Anche il giro che li rigenera (la notte, Raccolte) li lascia dov'erano.
+    rig.refresh()
+    assertThat(rig.personMemories()).hasSize(1)
     // E il null-object non fa niente di suo.
     val none = PeopleLessJanitor(rig.settings, rig.gated, NoPeopleSwitch, rig.engine)
     none.sweep()
     assertThat(live(rig).keys).containsExactly(marco, sara)
+    assertThat(rig.personMemories()).hasSize(1)
+  }
+
+  /**
+   * MO-1, il resto: con Persone **spenta davvero** (OFF o ERASING) i ricordi di persone escono; con lo stato ignoto escono solo per una scelta esplicita
+   * ("Ricordi con le persone" spento): non per cio' che dipende da Persone.
+   */
+  @Test
+  fun iRicordiDiPersoneEsconoSoloConPersoneSpentaOUnaSceltaEsplicita() = runTest {
+    val unknown = PeopleRig(switch = FakePeopleSwitch(PeoplePhase.UNKNOWN)).also { rigs += it }
+    worldWithPersonMemory(unknown)
+    unknown.people.available.value = false
+    unknown.engine.prune()
+    assertThat(unknown.personMemories()).hasSize(1)
+    // Una scelta esplicita vale anche con lo stato ignoto.
+    unknown.engine.setPeopleMemories(false)
+    assertThat(unknown.personMemories()).isEmpty()
+
+    // Lo stato diventa noto e spento: escono.
+    val off = PeopleRig(switch = FakePeopleSwitch(PeoplePhase.UNKNOWN)).also { rigs += it }
+    worldWithPersonMemory(off)
+    off.people.available.value = false
+    off.engine.prune()
+    assertThat(off.personMemories()).hasSize(1)
+    off.switch.set(PeoplePhase.OFF)
+    off.engine.prune()
+    assertThat(off.personMemories()).isEmpty()
+
+    // Con lo stato noto e acceso ("ON") ma Persone non disponibile qui, come prima: escono (E-MEM10).
+    val on = rig()
+    worldWithPersonMemory(on)
+    on.people.available.value = false
+    on.engine.prune()
+    assertThat(on.personMemories()).isEmpty()
   }
 
   /** E-MEM10: una persona unita a un'altra porta la scelta sull'id nuovo (la piu' forte), la vecchia diventa una lapide. */

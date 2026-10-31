@@ -124,7 +124,13 @@ interface Memories {
   /** Lo scaffale come lo mostra la sezione: mai scartati, mai nascosti noti all'ultimo giro. */
   val shelf: StateFlow<ShelfView>
 
-  /** Il ricordo [id] da mostrare, vivo sull'istantanea visibile; null se non c'e' (mai pubblicato, scartato, uscito o sotto 3 elementi). */
+  /**
+   * Il ricordo [id] da mostrare, vivo sull'istantanea visibile; null se non c'e' (mai pubblicato, scartato, uscito o sotto 3 elementi).
+   *
+   * **"Non lo so ancora" non e' "non c'e'"** (RP-1, RP-2 del 31/10): finche' la Libreria non ha l'istantanea (e, per la facciata di `:app`, finche' i ricordi
+   * non sono montati) il flusso **non emette niente**; `null` vuol dire solo "non c'e'", e solo a ricordi montati e Libreria letta. Chi lo legge deve saper
+   * aspettare (le schermate restano in caricamento) o mettere un tetto al suo attendere (la notifica).
+   */
   fun memory(id: MemoryId): Flow<MemoryView?>
 
   /**

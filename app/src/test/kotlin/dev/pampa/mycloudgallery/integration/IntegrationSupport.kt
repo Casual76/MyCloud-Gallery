@@ -284,7 +284,8 @@ class TestDevice(
   /** Dove vive il grafo: di solito i thread di `Dispatchers.Default`; D-7 lo mette su un thread solo per rendere la corsa ripetibile. */
   dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) {
-  val scope = CoroutineScope(SupervisorJob() + dispatcher)
+  private val tracked = TrackedDispatcher(dispatcher)
+  val scope = CoroutineScope(SupervisorJob() + tracked)
   val scheduler = RecordingScheduler()
   val workCancelled = AtomicLong(0)
   val context = DeviceContext(base, root)
@@ -300,15 +301,123 @@ class TestDevice(
     restart = restart,
   )
 
+  private val strayAtStart = StrayExceptions.count()
+
+  init {
+    openDevices += this
+  }
+
   /**
    * Ferma il dispositivo **e aspetta** che tutti i suoi lavori (DataStore, raccolte dei flussi) siano finiti: subito dopo
    * la `TemporaryFolder` cancella i suoi file. Solo `cancel()` lasciava letture di DataStore ancora in corso su un
    * dispositivo gia' chiuso, che trovavano il file sparito (`FileNotFoundException` su `nas_auth_breaker.preferences_pb`)
    * e lo segnalavano come eccezione non gestita **nel test successivo** (P11).
+   *
+   * **La rete (secondo giro, 31/10)**: l'eccezione di un lavoro sfuggito arriva a chi apre il primo `runTest` dopo di lui (`UncaughtExceptionsBeforeTest`),
+   * cioe' a una classe che non c'entra. Qui cade invece **la classe che il dispositivo l'ha lasciato**: dopo aver aspettato lo scope del dispositivo, controlla
+   *  1. che nessuna coroutine nata sul dispositivo (lo stesso dispatcher, anche da uno scope **non figlio** del suo: uno creato al volo con `scope.coroutineContext + SupervisorJob()`)
+   *     sia ancora attiva (la annulla e la aspetta, poi fa fallire il test) e che nessun lavoro sia ancora in corso sui suoi thread (lo aspetta);
+   *  2. che da quando il dispositivo e' nato nessuna coroutine del processo abbia perso un'eccezione ([StrayExceptions]).
+   * Prima di far fallire chiude gli altri dispositivi ancora aperti: un `devices.forEach { it.close() }` interrotto da un'eccezione ne lascerebbe di aperti, che e'
+   * esattamente il lavoro sfuggito che si vuole evitare.
    */
-  fun close() = closeScope(scope)
+  fun close() {
+    if (!closed.compareAndSet(false, true)) return
+    try {
+      closeScope(scope)
+      val problems = tracked.settle() + StrayExceptions.since(strayAtStart)
+      if (problems.isNotEmpty()) {
+        throw AssertionError("Il dispositivo ${context.noBackupFilesDir.parentFile?.name} lascia lavoro sfuggito alla chiusura:\n  " + problems.joinToString("\n  "))
+      }
+    } catch (e: Throwable) {
+      closeOthers()
+      throw e
+    } finally {
+      openDevices -= this
+    }
+  }
+
+  private val closed = java.util.concurrent.atomic.AtomicBoolean(false)
+
+  private companion object {
+    /** I dispositivi non ancora chiusi del processo dei test (in ordine di nascita). */
+    val openDevices: MutableSet<TestDevice> = java.util.Collections.synchronizedSet(LinkedHashSet())
+    val closingOthers = java.util.concurrent.atomic.AtomicBoolean(false)
+
+    /** Chiude quelli rimasti aperti, senza far fallire per loro (il guasto da dire e' quello del dispositivo che ha chiamato). */
+    fun closeOthers() {
+      if (!closingOthers.compareAndSet(false, true)) return
+      try {
+        synchronized(openDevices) { openDevices.toList() }.forEach { runCatching { it.close() } }
+      } finally {
+        closingOthers.set(false)
+      }
+    }
+  }
 }
 
+/**
+ * Le eccezioni che nessuna coroutine ha preso (un `launch` senza gestore: finiscono a tutti i `CoroutineExceptionHandler` del processo, e questo e' registrato come
+ * servizio in `META-INF/services/kotlinx.coroutines.CoroutineExceptionHandler`, accanto a quello di kotlinx-coroutines-test). Le ricorda con la loro traccia, cosi' che
+ * [TestDevice.close] possa dire **chi** le ha perse invece di lasciarle a chi apre dopo il primo `runTest`. Non cambia il comportamento degli altri gestori.
+ */
+class StrayExceptions : kotlin.coroutines.AbstractCoroutineContextElement(kotlinx.coroutines.CoroutineExceptionHandler), kotlinx.coroutines.CoroutineExceptionHandler {
+  override fun handleException(context: kotlin.coroutines.CoroutineContext, exception: Throwable) {
+    // Una cancellazione normale non arriva mai qui; il resto si tiene (con la traccia, che dice il percorso e il thread) e si scrive.
+    val text = "${Thread.currentThread().name}: ${exception.javaClass.simpleName}: ${exception.message}\n    " +
+      exception.stackTrace.take(MAX_FRAMES).joinToString("\n    ") + (exception.suppressed.firstOrNull()?.let { "\n    soppressa: $it" } ?: "")
+    synchronized(lost) { lost += text }
+    System.err.println("ECCEZIONE NON GESTITA di una coroutine: $text")
+  }
+
+  companion object {
+    private const val MAX_FRAMES = 12
+    private val lost = ArrayList<String>()
+
+    fun count(): Int = synchronized(lost) { lost.size }
+
+    fun since(start: Int): List<String> = synchronized(lost) { lost.drop(start).map { "eccezione non gestita di una coroutine: $it" } }
+  }
+}
+
+/**
+ * [inner] che si ricorda ogni `Job` che gli ha dato un lavoro e quanti lavori ha in corso ORA: serve a [TestDevice.close] per vedere il lavoro che lo scope del
+ * dispositivo non ha aspettato (un `Job` attivo che non e' un suo discendente, un lavoro in volo).
+ */
+internal class TrackedDispatcher(private val inner: CoroutineDispatcher) : CoroutineDispatcher() {
+  private val running = java.util.concurrent.atomic.AtomicInteger(0)
+  private val seen: MutableSet<Job> = java.util.Collections.newSetFromMap(java.util.WeakHashMap<Job, Boolean>())
+
+  override fun isDispatchNeeded(context: kotlin.coroutines.CoroutineContext): Boolean = inner.isDispatchNeeded(context)
+
+  override fun dispatch(context: kotlin.coroutines.CoroutineContext, block: Runnable) {
+    context[Job]?.let { job -> synchronized(seen) { seen += job } }
+    running.incrementAndGet()
+    inner.dispatch(context, Runnable { try { block.run() } finally { running.decrementAndGet() } })
+  }
+
+  /**
+   * Dopo la chiusura dello scope del dispositivo: annulla e aspetta le coroutine ancora attive che hanno usato questo dispatcher (orfane: non figlie dello scope), poi
+   * aspetta che nessun lavoro sia in corso sui thread. Ritorna cio' che ha trovato (vuoto = niente era sfuggito).
+   */
+  fun settle(): List<String> {
+    val problems = ArrayList<String>()
+    val orphans = synchronized(seen) { seen.filter { it.isActive } }
+    if (orphans.isNotEmpty()) {
+      problems += "${orphans.size} coroutine ancora attive dopo la chiusura, nate da uno scope che non e' figlio di quello del dispositivo: ${orphans.groupingBy { it.toString().substringBefore('{') }.eachCount()}"
+      runBlocking { withTimeout(Attese.TETTO) { orphans.forEach { it.cancelAndJoin() } } }
+    }
+    val deadline = System.nanoTime() + Attese.TETTO.inWholeNanoseconds
+    while (running.get() > 0) {
+      if (System.nanoTime() > deadline) {
+        problems += "${running.get()} lavori ancora in corso sui thread del dispositivo dopo ${Attese.TETTO}"
+        break
+      }
+      Thread.yield()
+    }
+    return problems
+  }
+}
 /** Annulla [scope] e ne aspetta la fine (con un tetto: un lavoro che non si ferma fa fallire il test, non lo blocca). */
 fun closeScope(scope: CoroutineScope) {
   val job = scope.coroutineContext[Job] ?: return scope.cancel()

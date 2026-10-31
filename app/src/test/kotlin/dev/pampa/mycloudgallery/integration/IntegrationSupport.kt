@@ -66,12 +66,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 
 // Il banco dei test d'integrazione dell'app (P9): il grafo VERO (`AppGraph`, lo stesso di produzione) con le sole parti
 // del telefono sostituite: il NAS e' il simulatore SMB di core-nas (semantica di Samba, nessun socket), la rete e' una
@@ -407,13 +409,11 @@ internal class TrackedDispatcher(private val inner: CoroutineDispatcher) : Corou
       problems += "${orphans.size} coroutine ancora attive dopo la chiusura, nate da uno scope che non e' figlio di quello del dispositivo: ${orphans.groupingBy { it.toString().substringBefore('{') }.eachCount()}"
       runBlocking { withTimeout(Attese.TETTO) { orphans.forEach { it.cancelAndJoin() } } }
     }
-    val deadline = System.nanoTime() + Attese.TETTO.inWholeNanoseconds
-    while (running.get() > 0) {
-      if (System.nanoTime() > deadline) {
-        problems += "${running.get()} lavori ancora in corso sui thread del dispositivo dopo ${Attese.TETTO}"
-        break
-      }
-      Thread.yield()
+    // Un lavoro appena finito decrementa il contatore un attimo dopo aver chiuso il suo `Job` (e dopo il `join` dello scope): si aspetta che arrivi a zero, con il tetto comune.
+    try {
+      runBlocking { withTimeout(Attese.TETTO) { while (running.get() > 0) yield() } }
+    } catch (e: TimeoutCancellationException) {
+      problems += "${running.get()} lavori ancora in corso sui thread del dispositivo dopo ${Attese.TETTO}"
     }
     return problems
   }

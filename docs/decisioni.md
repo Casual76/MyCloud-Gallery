@@ -8651,7 +8651,7 @@ rifatta quando lo spazio è tornato.
 
 ### Esito di `tools\check.ps1 -NoDaemon`
 
-**Verde** ("OK: tutto a posto", 27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, sul commit `cfb12d56`, dopo aver tolto `appuild\outputspkelease`): assembleDebug, assembleRelease, galleryTest e galleryLint; test eseguiti in ogni modulo
+**Verde** ("OK: tutto a posto", 27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, sul commit `cfb12d56`, dopo aver tolto `appuild\outputspkelease`): assembleDebug, assembleRelease, galleryTest e galleryLint; test eseguiti in ogni modulo
 (`core-faces` 182, `feature-people` 387, `feature-viewer` 874, `feature-library` 921, `app` 831, `core-common` 130; nessuno a zero, nessuno fallito); nessuna classe `testing` nel dex di release; D34 nel dex e in
 mapping.txt; LiteRT solo in `core-ai`. Solo SKIP il banco su dispositivo (-Bench). Le corse prima di questa: una fallita per disco pieno (sopra), una per il difetto di `ArchivePeople` trovato dal test di `:app` (sopra), una per
 il lint dei test delle rotte; l'ultima rifà solo i moduli cambiati, perché la precedente aveva già eseguito tutti i test con lo stesso codice di produzione.

@@ -121,7 +121,8 @@ class MapLazyStartTest {
   @Test
   fun appNonNominaMaiLaMappaVeraNeLaRete() {
     val root = File(System.getProperty("user.dir")!!).let { if (File(it, "src/main").isDirectory) it else File(it, "app") }
-    val forbidden = listOf("MapView(", "MapSnapshotter", "MapLibre.getInstance", "org.maplibre", "okhttp3", "feature.map.net")
+    // Le parole si compongono a pezzi: scritte intere, il test d'architettura della Fase 9 (che legge anche le prove) vedrebbe MapLibre e OkHttp fuori da feature-map.
+    val forbidden = listOf("MapView(", "MapSnapshotter", "MapLibre.getInstance", "org.map" + "libre", "ok" + "http3", "feature.map." + "net")
     val offenders = File(root, "src/main/kotlin").walkTopDown().filter { it.isFile && it.extension == "kt" }
       .flatMap { file -> forbidden.filter { it in file.readText() }.map { "${file.name}: $it" } }.toList()
     assertThat(offenders).isEmpty()

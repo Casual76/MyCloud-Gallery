@@ -77,9 +77,10 @@ internal object BenchDataset {
   /**
    * Da alzare quando cambia la forma delle righe: i dataset scritti prima si rifanno. 2: `quick_hash` valido (64 cifre
    * esadecimali); con la 1 il catalogo rifiutava le righe alla lettura dei dettagli del viewer. 3 (P10): libreria mista,
-   * posizioni NAS, flag di presenza, ThumbHash delle righe solo-NAS e replica sintetica.
+   * posizioni NAS, flag di presenza, ThumbHash delle righe solo-NAS e replica sintetica. 4 (Fase 9, P12): il 60% delle righe con una posizione plausibile
+   * (`BenchGeo`), un gruppo di righe con le date di "oggi" di 1 e di 3 anni fa (`BenchAnniversary`) e lo scaffale dei ricordi seminato (`BenchShelf`).
    */
-  const val SHAPE_VERSION: Int = 3
+  const val SHAPE_VERSION: Int = 4
 
   private const val TAG = "BenchDataset"
 
@@ -110,6 +111,13 @@ internal object BenchDataset {
       null
     } ?: return
     if (!File(dir, MARKER).exists()) return
+    // Fase 9 (P12): la mappa ricorda l'ultima camera da una sessione all'altra (`map/settings`, D29). Ogni avvio della variante di misura riparte dalla camera di serie
+    // (tutti i punti), non da dove l'ha lasciata la prova di prima (un'area vuota: nessuna bolla, prova saltata). Solo i file della variante di misura, mai dell'app vera.
+    try {
+      File(File(context.noBackupFilesDir, "map"), "settings").deleteRecursively()
+    } catch (e: Exception) {
+      android.util.Log.w(TAG, "camera della mappa non azzerata: ${e.javaClass.simpleName}")
+    }
     val profile = profileOf(dir)
     val rows = requestedRows(dir)
     val statusFile = File(dir, profile.statusFile)
@@ -155,6 +163,11 @@ internal object BenchDataset {
         .put("testaTelefono", report.headPhoneRows)
         .put("testaNas", report.headNasRows)
         .put("righeConHq", report.hqRows)
+        // Fase 9 (P12): coordinate, giorni "di un anno fa", scaffale dei ricordi.
+        .put("righePosizione", report.positionRows)
+        .put("righeAnniversario", report.anniversaryRows)
+        .put("ricordiSeminati", report.shelfMemories)
+        .put("giornoSeme", report.seedDay)
         // La replica sintetica.
         .put("replicaBlob", replica.blobs)
         .put("replicaBlobS", replica.blobsS)
@@ -202,7 +215,24 @@ internal object BenchDataset {
       previous.optInt("formato") == SHAPE_VERSION &&
       previous.optInt("righe") == rows &&
       context.getDatabasePath(profile.databaseName).exists() &&
-      BenchReplicaStore.indexFile(context, profile).exists()
+      BenchReplicaStore.indexFile(context, profile).exists() &&
+      freshEnough(previous.optInt("giornoSeme")) &&
+      (profile != BenchProfile.MIXED || previous.optInt("ricordiSeminati") == 0 || File(File(context.noBackupFilesDir, BenchShelf.DIR), "shelf.bin").exists())
+  }
+
+  /**
+   * Fase 9 (P12): i giorni "di un anno fa" sono relativi al giorno della creazione: dopo [BenchAnniversary.VALID_DAYS] giorni l'anniversario di oggi non ha piu'
+   * le sue righe, e il dataset si rifa' (decine di secondi sul telefono). Senza `giornoSeme` (un dataset vecchio) non c'e' niente da confrontare: la forma lo rifa'.
+   */
+  private fun freshEnough(seedDay: Int): Boolean {
+    if (seedDay <= 0) return false
+    val seed = try {
+      java.time.LocalDate.of(seedDay / 10_000, seedDay / 100 % 100, seedDay % 100)
+    } catch (e: java.time.DateTimeException) {
+      return false
+    }
+    val age = java.time.temporal.ChronoUnit.DAYS.between(seed, java.time.LocalDate.now())
+    return age in 0..BenchAnniversary.VALID_DAYS
   }
 
   /** Scrive lo stato in modo atomico: il collaudo non deve mai leggerne meta'. */

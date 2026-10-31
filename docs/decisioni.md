@@ -8020,8 +8020,7 @@ vera, E-SH20 col contratto di stato; P11 deposito, fornitori, voci, "Cartelle NA
     normale. Suggerimento per l'orchestratore: `--no-daemon` anche per i giri intermedi degli agenti.
 
 **Verifica**: `tools\check.ps1 -NoDaemon` **verde al primo giro** ("OK: tutto a posto", 27/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, struttura di build
-normale, `appuild\outputspk
-elease` cancellata prima, posto `f7-p13` preso e rilasciato attorno a ogni comando Gradle; ramo con `main` a `4174b830`):
+normale, `app\build\outputs\apk\release` cancellata prima, posto `f7-p13` preso e rilasciato attorno a ogni comando Gradle; ramo con `main` a `4174b830`):
 assemble di debug e release, test di tutti i moduli (`app` 869, `core-albums` 707, `feature-albums` 486, `feature-library` 922, `feature-diagnostics` 325,
 nessuno a zero, nessuno fallito; il passo di Gradle 1.612 s), lint, controlli del dex e del manifest di release (D30 compreso). **APK di release** (non
 firmato): 68.857.473 byte prima del pacchetto, **70.023.705** dopo (+1.166.232 byte, con dentro anche P12 e la Fase 8 P0 arrivati da `main`).
@@ -8183,8 +8182,7 @@ Scritti in `core-ai/src/androidTest/kotlin/dev/pampa/mycloudgallery/core/ai/face
 | `FaceMeasurementsDeviceTest` | 8 | solo l'ultima (verifica, avvio, YuNet, tasselli, SFace, allineamento, `forFaces`, foto al secondo) |
 
 ### `tools\check.ps1 -NoDaemon`
-**Verde, «OK: tutto a posto»** (28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `appuild\outputspk
-elease` cancellata prima, posto del semaforo `f8-p2`): `assembleDebug assembleRelease galleryTest galleryLint` in 40 minuti (PC condiviso); test eseguiti in 38 moduli, nessuno a zero e nessuno fallito
+**Verde, «OK: tutto a posto»** (28/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, posto del semaforo `f8-p2`): `assembleDebug assembleRelease galleryTest galleryLint` in 40 minuti (PC condiviso); test eseguiti in 38 moduli, nessuno a zero e nessuno fallito
 (`core-ai` 337, `core-rules` 355, `core-models` 294, `core-faces` 89, `feature-people` 7, `app` 828); passo «LiteRT solo in core-ai nel bytecode della release (volti solo da `FaceLiteRtSessions`)»: **60 chiamate nostre a LiteRT, tutte da `core-ai`** e, fra i volti, solo da `FaceLiteRtSessions` e dalle sue classi interne (con le due righe `-keep` di
 `consumer-rules.pro` le sessioni stanno nel dex di release anche prima che `:app` monti i motori e il passo le vede già; con il solo ritaglio erano 24); passo D39 dei modelli nell'APK verde; APK di release 88.417.449 B (+16.420 B sugli 88.401.029 B di P1: le classi delle sessioni e quel che toccano). Solo SKIP il banco su dispositivo (`-Bench`).
 Prima del giro finale, `:core-ai:lintDebug` e `:core-rules:lintDebug` e le prove di architettura (`*ArchitectureTest` di `core-common`) erano già verdi. I test strumentati compilano (`:core-ai:compileDebugAndroidTestKotlin`).
@@ -11351,8 +11349,7 @@ Il tetto dei volti del raggruppamento e' quello della memoria del processo (heap
 
 - **Rosso senza la correzione, verde con** (mutazione sul ramo gia' committato: uno script toglie le correzioni lasciando le API, si lanciano le prove nuove, poi i file tornano com'erano): `core-faces` 31 prove su 32 rosse (resta verde, come deve, `r3_unaDimenticataVeraResta`, la guardia che una "Dimentica" vera non torna); `core-trust` 3 su 6 (le altre tre sono guardie: un file non letto o di un altro non si toglie, una `seq` sotto il tetto vale); `NoRemoteDataToActionTest` rossa; `FacesPrePublishSyncTest.i7_*` e `FacesSupportTest.i7_*` rosse.
 - **Le garanzie che restano verdi**: `core-faces` intero (661 prove: il banco delle interruzioni e di "Disattiva e cancella" di P12, il banco del caos sul NAS finto e sul simulatore SMB, la determinazione e la mutazione del banco, i 200 giri con i guasti, l'isolamento, le prove di fiducia e ostili, il contratto del NAS dei volti), `core-trust`, `core-nasops`, `core-personal` e `core-database` interi.
-- **`tools\check.ps1 -NoDaemon` verde al primo giro** (30/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `appuild\outputspk
-elease` cancellata prima, posto `f8cf` preso e rilasciato attorno a ogni comando Gradle): "OK: tutto a posto", compresa la recinzione D34 nel dex e nel mapping della release.
+- **`tools\check.ps1 -NoDaemon` verde al primo giro** (30/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima, posto `f8cf` preso e rilasciato attorno a ogni comando Gradle): "OK: tutto a posto", compresa la recinzione D34 nel dex e nel mapping della release.
 - Prove esistenti adattate al comportamento nuovo (vedi sopra); `FacesSyncBenchTest.duecentoGiriConGuasti` ha mostrato che saltare **sempre** le copie a mio nome impediva a un dispositivo che ha perso il suo stato di riaverle (B-3).
 
 ### Punti aperti
@@ -12678,3 +12675,160 @@ resta di **P13**.
 verde in 1.069 s; 18.380 test in 44 moduli, nessuno rosso e nessun modulo a zero (`core-memories` 433, di cui 76 nuovi di P10; `app` 1.213); tutti i passi della release verdi, compreso `verifyReleaseManifest` (nessun permesso o componente nuovo). **Due giri rossi prima, per due cose mie**: il lint (`LocalContext.current.getString` nello screenshot della notifica:
 ora `stringResource`) e il passo "nessuna classe di un package `testing` nella release", che ha trovato `InMemoryNotifySettings` e `InMemoryMusicSettings` arrivati con la dipendenza di `:app` da `feature-memories` (le porte di serie di P9): la dipendenza e' stata tolta (vedi il punto 7).
 
+
+## Fase 9 P13: integrazione (31/10)
+
+Il pacchetto P13 della Fase 9 (`docs/fase9-progetto.md` §1.4, riga P13 del §4.4, §2.11, §2.12, §4.3, §11). Branch `fase9/p13`. Lega in `:app` cio' che P0-P4 e P6-P11
+hanno costruito dietro porte e null-object: i grafi e le porte vere dei ricordi e della mappa, la navigazione e le sezioni di Raccolte, i lavori, l'azzeramento, la
+Diagnostica e la memoria, **senza indebolire nessuna garanzia** (avvio istantaneo, Nascosti, rete in un pacchetto solo, casa mai, nessun permesso nuovo). `:app`
+dipende ora da `core-memories`, `feature-memories`, `core-map` e `feature-map` con `implementation`. Restano fuori **P5** (regioni offline: aspetta una decisione
+dell'utente; `MapRegions` e' il null-object e il punto d'aggancio e' `MapGraph.regions`) e **P12** (benchmark: le rotte `MemoryDestination`, `MemoryPlayerDestination`,
+`MapDestination` sono nel `NavHost`). Nessun contratto di P0-P11 e' cambiato.
+
+### Cosa c'e', dove
+- `app/.../memories/`: `MemoriesGraph.kt` (`MemoriesLive` e `MemoriesGraph`: montaggio, giri, segnali, stop), `MemoriesWiring.kt` (**l'unico punto** in cui si costruisce
+  tutto, con l'adattatore di `MemoryVisibility` e la scelta delle foto), `MemoriesPorts.kt` (orologio, viaggi, vettori, miniature locali, pixel, ritagli),
+  `MemoriesPeople.kt` (`IndexMemoryPeople`, `FacesPeopleSwitch`), `MemoriesMusic.kt` (`FileMusicSettings`, `AppMusicLibrary`, `AndroidMusicPlayback`),
+  `MemoriesPermission.kt` (`AppNotificationAccess`), `MemoriesFacades.kt` (`MemoriesFacade`, `MemoriesCounters`), `MemoriesScreenPorts.kt` (sezione delle
+  Raccolte, persone per le schermate, voce di Impostazioni), `MemoriesDiagnostics.kt` (`LateDeliveries`, `MemoriesDiagnostics`).
+- `app/.../map/`: `MapGraph.kt`, `MapLive.kt` (`WatchedMapPoints`, `AppViewerPlaceMap`), `MapPorts.kt` (pager della query, rete, traffico, avvio di MapLibre, voce di
+  Impostazioni), `MapScreenPorts.kt` (sezione Luoghi), `MapDiagnostics.kt`.
+- `app/.../di/MemoriesModule.kt`, `MapModule.kt`; `AlbumsModule` lega anche `HiddenMask`. `navigation/AppMemoriesNavigation.kt` (`MemoriesHostViewModel`,
+  `AppMemoriesActions`, il selettore della canzone, il permesso, il tocco sulla notifica), `navigation/AppMapNavigation.kt` (`MapHostViewModel`, `AppMapActions`,
+  "Mostra sulla mappa", il tema della mini-mappa).
+- Righe toccate fuori dai due pacchetti (solo gli agganci): `AppNavHost` (grafi, uscite, voci di Impostazioni, giro `OPEN` all'apertura di Raccolte),
+  `CollectionEntryRouting` (`m_...`, `memories_all`, `map`, `place_...`), `GalleryGraph` (`hiddenListeners`, `viewerPlaceMap`), `AppGraph` (`memoriesStopper`,
+  `mapStopper`), `LocalData.kt` (azzeramento), `GalleryWork.kt` (una chiamata), `MyCloudGalleryApp` (i due grafi pigri, `onTrimMemory`), `app/build.gradle`.
+- Debug: `app/src/debug/.../debugtools/AppMemoriesEvalEnvironment.kt` (la porta di P11, fuori da `eval/memories/`), installata da `DeveloperTools.installMemories`
+  (in release la funzione e' vuota).
+- `feature-diagnostics`: gli 11 codici del §2.12 che mancavano nel catalogo (`DiagCodes`, `DiagCatalogEntries`, `strings_memories.xml`, `strings_map.xml`), i lavori
+  `MEMORIES_GENERATE`, `MEMORIES_NOTIFY`, `MAP_REGION` in `DiagJob`, le chiavi e le famiglie `dropped.` e `skip.` in `ExportKeys`.
+- **Fuori dal perimetro, minime e dichiarate**: `feature-memories/.../noop/SessionSettings.kt` e `MemoriesDependencies` (punto 11 qui sotto); `feature-map/.../nav/MapDependencies.kt`
+  (una porta opzionale `MapSurfaceContent`, mai legata in produzione, per gli screenshot con `FakeMapSurface`); `feature-settings` (`AboutLibraries` con MapLibre,
+  GeoJSON e Turf, OkHttp, Timber e la licenza BSD a 2 clausole; la nota delle librerie dice che la mappa dettagliata chiede le zone a OpenFreeMap; `AboutScreenTest`
+  con la nota nuova); `feature-map/consumer-rules.pro` (le due classi di P4 che chiamano MapLibre fuori dalle fusioni di R8) e `MapLibreSurface.kt` (una riga:
+  `@NonRestartableComposable` su `MapViewLifecycle`, che non legge stato; la lambda di ripartenza con `MapView` nella firma R8 la fondeva con una lambda di
+  `:app` della stessa forma e il passo 7h la vedeva come "MapLibre chiamato fuori da feature/map/"); `MemoriesEvalSourceParityTest` di P11 (la porta ora e'
+  legata, in un posto solo).
+
+### Decisioni
+| # | Decisione | Perche' |
+|---|---|---|
+| P13-1 | **I ricordi si montano come gli album** (`MemoriesGraph`): pronti = galleria partita e dati personali agganciati (le scelte stanno li'), e **dopo il primo disegno utile** (`AfterFirstDraw.await`). Al montaggio il motore legge **per prima cosa** lo scaffale da file (`restore()`, fuori dal thread principale), poi: `MemoryNotifySlot.runner`, `MemoryNotifyRun.watch`, `MemoryNotifier.watch`, `PeopleLessJanitor.watch`. Prima del montaggio la facciata dice "Sto preparando i ricordi" (`ShelfState.Working`), senza famiglia "la Libreria non e' pronta" | §1.4 "nasce con la famiglia Ready"; principio dell'avvio istantaneo: nessun lavoro nuovo sul percorso dell'avvio (L490) |
+| P13-2 | **La mappa e' pigra in ogni pezzo** (`MapGraph`): le impostazioni (DataStore) alla prima pagina che le legge; l'indice dei punti alla prima `rebuild(OPEN)` (mappa o sezione Luoghi, che e' `Lazily`); **solo dopo** la prima apertura `WatchedMapPoints` segue l'istantanea (`SNAPSHOT_CHANGED` per l'ultima di una raffica, con la calma di 2 s) e i "Nascondi" fatti qui (`HIDDEN_CHANGED`, subito) | P3: "non lo chiami dall'avvio"; `GeoMapPoints` legge anche con `SNAPSHOT_CHANGED` |
+| P13-3 | **MapLibre parte solo da `AppMapEngineStarter`**, che chiama `MapLibreInit.ensure` (client delle tessere con il cancello installato prima di dirsi pronta) e risponde con `MapLibreInit.isReady`; un guasto (libreria nativa, `LinkageError`) vale "non pronta" e non si riprova; `:app` non nomina `MapView`, `MapSnapshotter`, `MapLibre.getInstance`, OkHttp ne' `feature.map.net` | P1: "nessuna `MapView` nasce senza il client" (`MapLazyStartTest`) |
+| P13-4 | **`HiddenMask` e' legato in Hilt** (`AlbumsModule`) per i tre `@BindsOptionalOf` (feature-albums, feature-memories, feature-map: duplicati ammessi, la compilazione di `:app` lo prova). **Trovato scrivendo il montaggio**: prima nessun modulo lo legava, quindi il filtro finale delle porte opzionali non faceva niente | P4: "senza la maschera il filtro finale non fa niente" (C381) |
+| P13-5 | **Il segnale dei nascosti**: un "Nascondi"/"Mostra" fatto qui chiama `GalleryGraph.hiddenListeners` (nuovo, accanto a `onHiddenChanged` degli album): ricordi `prune()` e `revalidate()` della notifica, mappa `HIDDEN_CHANGED` e mini-mappa svuotata. Un nascosto arrivato da un altro dispositivo cambia l'istantanea visibile: i ricordi rifanno `prune()` e `revalidate()` dopo 3 s di calma, la mappa con `SNAPSHOT_CHANGED` | P6 punto 5, P10, P3; le superfici filtrano comunque all'ultimo momento (D31) |
+| P13-6 | **Le persone nei ricordi** (`IndexMemoryPeople`): l'indice delle persone montato (`PeopleIndex`: nomi, alias) e la ricerca per persona del ponte (`PeopleLookup.cells` al livello sicuro: celle **mostrabili** con `PeopleVisibility`); `named()` si ricorda finche' non cambiano le persone o l'istantanea; catena `PhaseGatedPeople` -> `AliasFollowingSettings(SyncedMemoriesSettings)` -> `IndexedPlanner(people = PeoplePlanner())`; `sweep()` del janitor anche a ogni cambio dell'elenco delle persone (giro dei volti, nascondi, dimentica, unisci), dopo 2 s di calma | P8 punti 2-4 |
+| P13-7 | **`FacesPeopleSwitch`**: dalle persone montate; prima del montaggio `UNKNOWN`; `Off` vale `OFF` solo dopo un giro completo dei dati personali in questo processo (`fresh`, tenuto acceso), `Erasing` subito, `NeedsUpdate` `UNKNOWN` | P8: "con `UNKNOWN` il janitor non cancella niente"; un registro locale indietro non deve togliere le scelte a tutto l'account |
+| P13-8 | **Pixel e miniature solo dal telefono**: `LocalThumbs` sopra la sola sorgente del MediaStore (`ImagingPipeline.thumbnailSource` senza NAS) e `MediaCatalog.phoneRefs`; `LocalMemoryPixels` a 256 px con `PixelMeasure.probeArgb`, entro il budget, **muta con il risparmio energetico**; la miniatura della notifica dalla stessa sorgente. Nessuna cache su file delle misure (il raccoglitore di P7 ne chiede al piu' 200 per ricordo) | P7, P6 punto 4, P10; `modello-dati.md` §16 aggiornato |
+| P13-9 | **Vettori** dagli stessi `SearchShotVectors` dei Doppioni simili; **ritagli** con una query sulla cartella dei ritagli di adesso (`CatalogMemoryCutouts`); **somiglianza visiva** (`MemoryLookAlikes`), **album manuali** (`MemoryAlbumSignals`) e **clip dei video** (`MemoryClips`, `PlayerClipSurface`) restano i null-object | i primi due erano gia' pronti; gli altri chiedono porte nuove sopra la 5A e la 7 o Media3 in `:app` (L491) |
+| P13-10 | **Notifiche**: il `MemoryNotifier` e' uno per processo (pigro, sulla facciata dei ricordi), il giorno di una notifica (`MemoryNotifyRun`) nasce al montaggio; `NotificationAccess` = `AppNotificationAccess` sopra `NotificationPermissionAccess` (letto alla prima pagina, codici uguali per costruzione), le azioni da `rememberLauncherForActivityResult`; il tocco (`ServeOpenMemoriesRequests`) nel grafo della navigazione, che esiste solo con l'app sbloccata, apre il ricordo in tendina o "Tutti i ricordi" | P10, D17, D18 |
+| P13-11 | **Le porte di serie di feature-memories non portano piu' fake nella release**: `SessionNotifySettings` e `SessionMusicSettings` in `noop/` al posto di `InMemoryNotifySettings`/`InMemoryMusicSettings` di `core-memories/testing/` (P10 punto 7: con `:app` dipendente da feature-memories il passo "nessuna classe `testing`" di `check.ps1` era rosso) | C386 |
+| P13-12 | **Musica**: `FileMusicSettings` (`memories/music`, il riferimento `content://` del selettore), `AppMusicLibrary` (la canzone propria solo con il permesso persistito; il pacchetto libero e' vuoto, Q3), `AndroidMusicPlayback` con il `MediaPlayer` di Android e il focus audio, **non Media3** | Media3 sta solo in feature-viewer (D7, `versions-app.gradle`); nessuna dipendenza nuova in `:app` (L491) |
+| P13-13 | **Navigazione**: `memoriesGraph` e `mapGraph` nel `NavHost`; le voci delle due sezioni (`MemoriesEntryTarget`, `PlacesEntryTarget`) in `CollectionEntryRouting`, un ricordo si risolve dallo scaffale di adesso; `settingsGraph(openMemories, openMap)` con `MemoriesEntryStatus` (frequenza, e un pallino se permesso o canale bloccano) e `MapEntryStatus`; "Mostra sulla mappa" chiude il viewer e apre la mappa sul media; il colore del segno e il tema della mini-mappa dal tema dell'app; "Zone senza Internet" non porta da nessuna parte (P5) | P4, P9 |
+| P13-14 | **Lavori**: la generazione notturna dentro `LibraryMaintenanceWorker`, **dopo** i viaggi, con il budget di 60 s del motore (`MemoriesGraph.nightly`), e la notifica in tendina si rivaluta dopo il giro; nessun lavoro per la mappa | §1.4; E-P10 |
+| P13-15 | **Azzeramento**: ricordi e mappa **per primi** (se la galleria e' partita), poi lavoro `memories-notify` e notifica 1009 **sempre**, poi `memories/` e `map/` con il resto dei file (`LocalData.PHASE9_FILES`) | D37, E-NT15 (C382) |
+| P13-16 | **Diagnostica**: sezioni Ricordi (stato, scaffali rigenerati, doppioni senza vettori, esclusi per motivo, notifiche saltate per motivo, in ritardo, tolte) e Mappa (stato, richieste, rifiutate per motivo, posizioni scartate); i conteggi sono dal riavvio del processo, i ritardi su file per 14 giorni; un `HOST` o `PATH` rifiutato e' un avviso | §2.12, D33 (C383, L492) |
+| P13-17 | **Memoria**: `onTrimMemory` lascia la tabella a colonne del motore (`releaseCaches`, da `TRIM_MEMORY_BACKGROUND`) e le mini-mappe in memoria (da `UI_HIDDEN`, e al blocco dell'app); MapLibre si rilascia con il ciclo di vita della sua pagina; le immagini della presentazione sono al piu' tre e vivono con la presentazione (P9) | §1.4 "Memoria" |
+| P13-18 | **P3, memoria dell'indice e stato d'errore**: non cambiati. Riusare gli id dell'istantanea vuol dire cambiare `MapPoint`/`GeoClusterIndex` di P0 e l'indice di P3 (non "semplice"); uno stato d'errore cambierebbe `GeoIndexState` e gli stati di P4 | L494, L495 |
+
+### Gli agganci dei pacchetti, uno per uno
+Legato = c'e' in `:app`; "non legato" ha il perche' e il limite in `docs/sicurezza.md`.
+| Pacchetto | Aggancio | Stato |
+|---|---|---|
+| P0 | null-object di ogni porta (di serie finche' non si lega); `FeatureFlags.mapOnline` per il cancello e le impostazioni; `DiagSection.MEMORIES` e `MAP`; `Memories.prune` al cambio dei nascosti; `MemoryShelfStore.clear` (qui la cartella intera); `ViewerServices.placeMap`; `RefreshBudgets` per la notte | Legati |
+| P1 | `implementation project(':feature-map')`; `MapLibreInit.ensure(context, MapNetWiring(TilePolicy, flag, impostazioni, rete, regioni, traffico), scope)` pigra; `MapNetworkState` da core-network (rete validata, a consumo, roaming); `MapTraffic` nel registro come contenuto visibile; `MapLibreInit.counts()` in Diagnostica; `map/` all'azzeramento | Legati (C380) |
+| P2 | MapLibre, OkHttp e le librerie che porta in Informazioni e licenze | Legati |
+| P3 | `MapPointPager` sopra `MapPointsQueries` (`CatalogMapPointPager`), `PagedMapPointSource`, `GeoMapPoints` su `Dispatchers.Default`; `rebuild` come chiesto | Legati. Memoria e stato d'errore: L494, L495 |
+| P4 | `MapPoints` (con `HIDDEN_CHANGED`), `DataStoreMapSettings.create`, `MapRegions` (null-object), `MapNetworkState`, `MapPlaceNames` (`PlaceNames.labelOfId`), `MapMediaPositions` (solo visibili, riga `version_metadata`), `VisibleMedia` e `HiddenMask`, `MapEngineStarter`, `MapThumbnails`, `MapActions`; `mapGraph`, sezione Luoghi, `settingsGraph(openMap)`, `MapEntryStatus`; `ViewerServices.placeMap` con `MiniMapService` e `MapLibreMiniMap`; `MiniMapService.clear()` ai nascosti e al blocco | Legati. Il passo 7h ha chiesto due correzioni: `MapLibreSurface*` e `MapLibreMiniMap` in `consumer-rules.pro` (come aveva previsto P4) e `MapViewLifecycle` senza gruppo di ripartenza (sotto) |
+| P5 | `MapRegions`, la pagina delle regioni | **Non legato** (decisione dell'utente): `MapGraph.regions` e `AppMapActions.openRegions` sono il punto d'aggancio (L493) |
+| P6 | `MemoryVisibility` (in `wiring`), `MemoryEngine` con `FileShelfStore(memories/)`, `MemoryPhotoChoice(PickSignalsLoader(...), VisiblePhotoPicker(MemoryPhotoPicker(), hiddenMask))`, `restore()` al montaggio, `releaseCaches()` in `onTrimMemory`, `prune()` ai nascosti, pixel muti col risparmio energetico | Legati |
+| P7 | `MemoryPixels` (256 px, solo telefono), `MemoryVectors` (`SearchShotVectors`) | Legati. `MemoryLookAlikes`, `MemoryAlbumSignals`: non legati (L491) |
+| P8 | `MemoryTrips` = `CatalogTrips.past`; `PeopleSwitch` su `FacesSwitch`; `PhaseGatedPeople` -> `AliasFollowingSettings` -> `IndexedPlanner(PeoplePlanner())`; `PeopleLessJanitor.watch` e `sweep` ai cambi delle persone; `MemoryPeople` vera | Legati |
+| P9 | `MemoriesGraph` con tutte le porte di `MemoriesDependencies`; `PlayerPreviewSource` (solo telefono) in `MemoriesThumbnails`; `memoriesGraph`, sezione, voci, `SettingsLinks.openMemories`, `MemoriesEntryStatus`; selettore della canzone; `refresh(OPEN)` all'apertura di Raccolte | Legati. `MusicPlayback` con `MediaPlayer` invece di Media3, `PlayerClipSurface` non legato (L491) |
+| P10 | `MemoryNotifySlot.runner`, `run.watch` a ogni montaggio, `notifier.watch`, `NotificationAccess` sopra `NotificationPermissionAccess`, azioni del permesso da un tocco, `ServeOpenMemoriesRequests` sotto il blocco, `revalidate` ai nascosti e dopo la notte, azzeramento (lavoro, notifica, file), `NotifyEvents` in Diagnostica | Legati |
+| P11 | `MemoriesEvalEnvironmentHolder.current` = `AppMemoriesEvalEnvironment` (debug, sola lettura, motore suo con le porte vere, titoli senza nomi) | Legato |
+| P12 | rotte raggiungibili | Gia' nel `NavHost`; nessun aggancio di `:app` richiesto |
+
+### Sul percorso dell'avvio (non misurabile qui: scritto perche' P12 e il banco lo controllino)
+Nell'`onCreate` del processo si aggiungono solo due costruzioni **senza I/O**: `MemoriesGraph` (flussi `stateIn` sulla facciata, un `launch` che aspetta il primo
+disegno utile, un ascoltatore dei nascosti, in debug la porta di P11) e `MapGraph` (solo campi pigri e l'adattatore della mini-mappa per il viewer). Nella prima
+composizione della schermata principale nascono due ViewModel (`MemoriesHostViewModel`, `MapHostViewModel`) che non leggono file (la sorgente delle miniature
+del telefono e le preferenze sono pigre). Il montaggio dei ricordi, la lettura dello scaffale, le impostazioni della mappa, l'indice dei punti e MapLibre partono
+dopo il primo disegno o alla prima pagina che li guarda. Le guardie del benchmark d'avvio (`coldStart`, `AvvioTrace`) hanno due sezioni nuove,
+`MCG:app:ricordi` e `MCG:app:mappa`, da guardare nella prossima corsa sull'S25.
+
+### Prove
+- `MemoriesIntegrationTest` (**due dispositivi dello stesso account** sul grafo vero, con le persone vere e un nome inventato): lo scaffale del telefono si disegna
+  dal suo file, quello del tablet resta suo; "visto" (col giorno), "Non mostrare", "Mostra meno" per la persona e "Mai" per un periodo vanno dal telefono al tablet,
+  "Mai" per la persona e "Annulla" tornano indietro; la porta delle persone da' la persona con le sue celle e il nome solo al momento; **nessun nome** nelle voci dei
+  ricordi dei dati personali, nei file di `memories/` e nessun file dello scaffale sul NAS.
+- `Phase9EraseTest` (3): ordine "ferma, poi cancella", `memories/` e `map/` vuoti, lavoro annullato, notifica tolta; i soli dati di un account; un guasto che non
+  cancella niente.
+- `MapLazyStartTest` (5): il grafo nasce senza file, l'indice solo all'apertura, MapLibre una volta e mai dopo un guasto, MapLibre vera sulla JVM che non parte
+  (nessuna `MapView`), le sorgenti di `:app` senza MapLibre ne' rete.
+- `Phase9WiringTest` (8): i codici del §2.12 nel catalogo nella loro sezione, le chiavi nell'elenco chiuso, lo stato di Persone che non cancella "per non so",
+  rete e traffico della mappa, voci di Impostazioni, musica su file, ritardi delle notifiche, contatori.
+- `Phase9ScreenshotTest` (8, chiaro e scuro): le schermate qui sotto, disegnate dai grafi veri.
+- Toccati per i legami: `RaggruppamentoNotturnoAppTest` (la manutenzione riceve i ricordi), `HiddenSurfaces.wiring` (tre file nuovi).
+
+### Screenshot (`docs/screenshots/9-P13/`, telefono 412 dp, chiaro e scuro; `gradlew :app:recordRoborazziDebug --tests "*Phase9Screenshot*"`)
+Disegnati dai grafi veri sopra un catalogo vero (il mondo sintetico dei Nascosti: nessuna foto vera, coordinate di tre citta' pubbliche, persone e titoli
+inventati): `raccolte-ricordi-luoghi` (le sezioni Ricordi e Luoghi dai fornitori di `:app`, sopra il motore vero dopo un giro e l'indice dei punti vero),
+`ricordo` (la pagina di un ricordo dello scaffale vero), `mappa` (la mappa con `FakeMapSurface`: la carta e' finta, le bolle e i conti vengono dall'indice
+vero; MapLibre si guarda sul telefono), `impostazioni-ricordi-mappa` (le voci "Ricordi e notifiche" e "Mappa" con lo stato dalle porte di `:app`). Nelle
+prove della mappa le impostazioni sono in memoria: il DataStore vero tiene il suo file attivo per tutto il processo dei test.
+
+### Da provare sul telefono (S25 e emulatore con `test`; nessuna fatta qui)
+- **F126** (Diagnostica e log): con la Libreria di prova di P11 (titoli, luoghi e una persona di prova riconoscibili) una giornata intera (notte, apertura di Raccolte,
+  una notifica, la mappa aperta e spostata, la mini-mappa); poi l'esportazione della Diagnostica e `logcat`: nessun titolo, luogo, data, nome, coordinata, tessera o
+  ora scelta; le sezioni Ricordi e Mappa con soli numeri (`dropped.*`, `skip.*`, `reason.*`).
+- **F127** (azzeramento, build debug, account di prova): `run-as ... ls no_backup` non ha `memories` ne' `map`; `adb shell dumpsys notification` senza la 1009;
+  `adb shell dumpsys jobscheduler` (o lo strumento di debug dei lavori) senza `memories-notify`.
+- **F129** (due dispositivi, S25 ed emulatore con `test`): visti e scartati sull'S25, un giro dei dati personali sull'emulatore: uguali; gli scaffali possono differire;
+  l'ora delle notifiche e la mappa dettagliata spenta sull'S25 non arrivano all'emulatore.
+- Dai pacchetti precedenti, ora sul grafo legato: **F113** (nascosti in tutte le superfici dei ricordi, anche durante la presentazione), **F114** (le quattro scelte,
+  subito sull'S25 e dopo un giro sull'emulatore; dal PC nessun nome nei segmenti), **F115-F117** (la notifica all'ora, una al giorno, revocata per un nascosto,
+  generica a telefono bloccato, il tocco dopo lo sblocco e `am start -a ...OPEN_MEMORIES` con extra inventati), **F118** (presentazione; la canzone propria scelta
+  con il selettore, il focus audio con una chiamata finta), **F119** (zero traffico a mappa spenta, anche con la mini-mappa), **F120** (mappa accesa: solo
+  `tiles.openfreemap.org`), **F121** (regioni: non c'e' ancora, P5), **F122** (mappa con i media solo sul NAS e senza NAS), **F130** (ricordi con le persone e
+  "Disattiva e cancella").
+- In piu', da P13: la prima apertura di Raccolte dopo l'avvio dice "Sto preparando i ricordi" solo per un attimo (L490); "Mostra sulla mappa" dal viewer chiude il
+  viewer e apre la mappa centrata; le sezioni `MCG:app:ricordi` e `MCG:app:mappa` nella traccia dell'avvio a freddo (`coldStart`) costano pochi decimi di
+  millisecondo.
+
+### Punti aperti
+- **P5** (regioni offline): aspetta la decisione dell'utente sulle condizioni d'uso di OpenFreeMap (vedi "Fase 9 P1"); l'aggancio e' pronto (L493).
+- **P12** (benchmark): le rotte ci sono; le due sezioni nuove della traccia d'avvio vanno guardate nella prima corsa.
+- **Clip dei video, somiglianza visiva, album manuali** non legati (L491); la musica con `MediaPlayer` invece di Media3 (scelta per non portare Media3 in `:app`).
+- **Indice dei punti a 4,2 MB** e **nessuno stato d'errore** dei punti: invariati (L494, L495), decide l'orchestratore se cambiare i contratti.
+- Le notifiche e la Diagnostica contano dal riavvio del processo (L492).
+- Nessuna prova su dispositivo, emulatore, NAS o rete; nessun sotto-agente.
+
+### Misure
+- **Peso dell'APK di release** (non firmato, stesso albero prima e dopo; "prima" = la base di questo ramo senza `:feature-map` in `:app`): **91.051.057 B prima**,
+  **105.712.632 B dopo: +14.661.575 B (+14,0 MiB)**. Dove: `libmaplibre.so` arm64 11.042.072 B (non compressa: lo vuole l'allineamento a 16 KB), dex
+  +1.731.756 B (18.294.876 -> 20.026.632: MapLibre, OkHttp, le schermate di ricordi e mappa, i grafi), `assets/map/` 1.597.658 B compressi (4,77 MB: stili,
+  glifi, sprite, carta di base di P2), risorse e il resto circa +290 KB. P1 aveva misurato +12,1 MiB con la sola `MapLibreInit` raggiungibile; i 1,9 MiB in piu'
+  sono le schermate e la carta di base che ora entrano davvero. Sopra la stima del §2.14 (5-9 MB di MapLibre) per la libreria nativa non compressa, come P1.
+- **Avvio**: non misurato (niente telefono); cosa e' sul percorso dell'avvio e' scritto sopra. Prestazioni di generazione, presentazione e mappa: P12.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde** ("OK: tutto a posto", codice 0; 31/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `--no-daemon`, `app\build\outputs\apk\release` cancellata prima, dentro il posto
+Gradle `f9p13`, preso prima e rilasciato dopo ogni comando): `assembleDebug assembleRelease galleryTest galleryLint` in 870 s; 17.469 test in 43 moduli, nessuno a
+zero e nessuno rosso (`app` 1.264, `core-memories` 492, `feature-memories` 296, `core-map` 104, `feature-map` 222, `feature-settings` 606, `feature-diagnostics`
+331, `core-common` 157 con i test d'architettura delle Fasi 3-9); tutti i passi della release verdi, compreso il **7h con il controllo positivo** ("mappa
+nell'app": 3.035 chiamate a OkHttp, 125 da `net/` e le altre da OkHttp e MapLibre; 114 chiamate nostre a MapLibre, tutte da `feature/map/`; client installato una
+volta, MapLibre inizializzata una volta; `libmaplibre.so` presente e allineata), il 7e, il controllo dei package `testing` e dei resti di debug (valutazione dei
+ricordi compresa) e `verifyReleaseManifest` (nessun permesso o componente nuovo). Solo `-Bench` saltato (senza il flag). **Quattro giri rossi prima, tutti per
+cose mie**: (1) `MemoriesEvalSourceParityTest` di P11 voleva la porta ancora non legata (aggiornato: ora e' legata, in un posto solo) ed `EntryHardeningTest`
+cadeva per un'eccezione non presa lasciata da `MapLazyStartTest` (tre DataStore sullo stesso file: ora le impostazioni delle prove sono in memoria); nello stesso
+giro `MapSettingsAndPrivacyTest` di P4 e' caduto una volta sotto carico e da solo passa (11 su 11), e nei giri dopo e' stato verde; (2) `AboutScreenTest` con la
+nota vecchia delle librerie; (3) e (4) il passo 7h: due lambda della mappa vera fuse da R8 in lambda di `:app` (`PeopleBridge$bind$1`, poi
+`LockedScreenKt$$ExternalSyntheticLambda1`), chiuse con le regole di `consumer-rules.pro` e con `@NonRestartableComposable` su `MapViewLifecycle`.
+Il registro dei Nascosti (`HiddenSurfacesRegistryTest`, `HiddenSurfacesPropertyTest`) e' verde con i tre file nuovi nell'elenco `wiring`.
+
+### Commit (branch `fase9/p13`)
+Le porte di serie dei ricordi senza fake e la superficie della mappa opzionale; i codici della Diagnostica; MapLibre e OkHttp in Informazioni e licenze; ricordi e
+mappa legati in `:app`; prove d'integrazione, azzeramento, avvio pigro della mappa e screenshot; le correzioni dei giri rossi; i documenti.

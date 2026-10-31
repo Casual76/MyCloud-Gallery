@@ -1,0 +1,29 @@
+// Il manifest di rilascio firmato della Fase 10 (docs/fase10-progetto.md §1.1, §1.2 "core-release", §2.8, D29-D31; Q8 (a): si legge solo dal
+// NAS). Formato canonico e tetti (codec/, P1), firma P-256 con le due chiavi fissate (keys/, P1), stato dei blocchi solo piu' severo,
+// anti-rigioco, scadenza e indirizzi aggiuntivi dei modelli (state/, P1). Contratti, null-object, fake ed esecutori di riferimento
+// (`InMemoryReleaseState`, `TableManifestVerifier`, `InMemoryReleaseStateStore`, `FakeManifestSource`) di P0.
+//
+// **JVM puro** (D2): nessuna classe Android, **nessuna rete** (ne' java.net ne' client HTTP: il file arriva da `ManifestSource`, che :app lega
+// alla sessione del NAS), nessun NAS, nessun orologio del telefono (la scadenza si giudica con `ReleaseClock.bestNow`, l'ora del NAS quando
+// c'e'). Vede solo le fondamenta: non vede core-models (gli indirizzi aggiuntivi escono come testo e li valida :app con `PinnedUrl.of` e il
+// catalogo), ne' core-nas, ne' core-trust (le chiavi del manifest non sono quelle della famiglia: firme con `java.security`). Nessun Hilt.
+plugins {
+  id 'com.android.library'
+  id 'org.jetbrains.kotlin.android'
+}
+
+apply from: "${rootDir}/engine/versions.gradle"
+apply from: "${rootDir}/versions-app.gradle"
+apply from: "${rootDir}/gradle/android-conventions.gradle"
+
+android {
+  namespace = 'dev.pampa.mycloudgallery.core.release'
+}
+
+dependencies {
+  api project(':core-common')
+  api project(':core-model')
+
+  testImplementation appDeps.coroutinesTest
+  testImplementation appDeps.turbine
+}

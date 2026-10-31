@@ -1219,3 +1219,22 @@ oltre +-85 gradi si scartano e si contano (E-MAP7). Nessun indice nuovo: si legg
 **Azzeramento** (D37): `MemoriesGraph.stop()` e `MapGraph.stop()` per primi, poi `AppLocalDataEraser` toglie `memories/`, `map/`, `eval/memories/`
 e le preferenze; il lavoro `memories-notify` si annulla e la notifica si toglie (P13), **sempre**, anche quando si tolgono i soli dati di un account con
 la galleria mai partita in questo processo (`Phase9EraseTest`).
+
+## 17. Dati locali della Fase 10 (widget, manifest di rilascio, trascinamento)
+
+**Nessuna tabella nuova nel database della galleria, che resta alla v6** (`docs/fase10-progetto.md` §0.3, D30, D42). I dati della Fase 10
+sono **file locali** in `noBackupFilesDir` e in `cacheDir` (fuori dai backup, tolti dall'azzeramento **dopo** che i widget sono stati svuotati,
+D42) e scelte in DataStore locale. Niente di questo va sul NAS: sul NAS sta solo il manifest di rilascio, che **non** è un file della famiglia
+(`docs/formato-nas.md` §15).
+
+| Dato | Dove | Formato | Chi | Note |
+|---|---|---|---|---|
+| **Registro dei widget** | `noBackupFilesDir/widget/` | un file con versione e CRC, scrittura atomica (temporaneo, `fsync`, rinomina, come `StateFiles`); per ogni widget l'epoca del piano e le celle (id del media, ricordo della copertina) | `FileWidgetLedger` (P2) sopra il contratto `WidgetLedger` (P0) | serve al tocco (D9) e allo svuotamento (D5); un file rovinato = registro vuoto e ridisegno, mai un crollo |
+| **Scelte del widget** | DataStore locale | `WidgetChoice` (Q1 (a) di base) e `WidgetPeriod` (Q2 (a) di base) | P3 (`WidgetPrefs`) | per dispositivo e profilo, mai sincronizzate |
+| **Stato del manifest** | `noBackupFilesDir/release/` | file atomico con versione e CRC: il `seq` più alto accettato, l'ultimo manifest valido, la `versionCode` per cui vale lo stato e lo stato (`StoredRelease`) | P1 (`ReleaseStateStore`) | solo più severo per la stessa `versionCode` (D30); l'azzeramento lo cancella e la prima lettura successiva rimette il blocco |
+| **Copie temporanee del trascinamento** | `cacheDir/share/<token>/` (la cartella di `ShareCache` della Fase 5) | copie senza posizione, nomi casuali | P6 | vivono finché l'app è in primo piano più 10 minuti e comunque non oltre il prossimo avvio (D20) |
+| **Flussi in arrivo dal trascinamento** | `noBackupFilesDir/incoming/` (quella della ricezione, Fase 5) | come la condivisione in arrivo | P6 | stessi tetti e stesso foglio con la conferma (D21) |
+| **"Affianca" del viewer** | DataStore locale | un booleano per profilo | P5 | — |
+
+**Le tabelle della promessa 15** (`faces_head_mark`, `faces_outbox`, `docs/decisioni.md` Fase 8 P3): restano nel database dei volti finché P12
+non smette di leggerle; una migrazione nuova le toglie solo dopo la conferma con P4 e P8 della Fase 8, mai distruttiva per altro.

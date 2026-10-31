@@ -1922,3 +1922,22 @@ maiuscole (I3).
 
 Comandi: `gradlew.bat :core-trust:testDebugUnitTest :core-trust:lintDebug`; sul telefono
 `set ANDROID_SERIAL=<seriale>` e `gradlew.bat :core-trust:connectedDebugAndroidTest`.
+
+## 15. Manifest di rilascio (Fase 10)
+
+**Non è un file della famiglia.** Non lo firma la chiave di famiglia, non entra nel registro, non ha una testa né un dispositivo autore: lo
+firma l'admin sul PC con le **chiavi di pubblicazione** K1 (attiva) o K2 (di riserva), diverse dalla chiave di famiglia e da `pampa.jks`
+(`docs/fase10-progetto.md` D29-D31, §2.8; Q8 (a): si legge **solo dal NAS**). Le regole di questo documento sui file della famiglia (§5-§9)
+non valgono per lui; valgono le sue, qui sotto e in `core-release`.
+
+| Voce | Regola |
+|---|---|
+| **Posizione** | `<area comune>/.mycloudgallery/release/manifest.mcgr`, nome fisso (`ManifestLimits.NAS_PATH`). La famiglia di prova usa `test-comune`; la vera usa l'area comune della famiglia, **solo** con la release. L'admin lo copia dal PC sulla rete di casa con scrittura atomica (temporaneo e rinomina). |
+| **Busta** | `MCGR1` = intestazione fissa ‖ lunghezza ‖ JSON canonico (come il formato del NAS: chiavi in ordine, nessuno spazio, UTF-8 NFC) ‖ `keyId` (1 byte: 1 = K1, 2 = K2; 250 = KT, la chiave di prova, fidata solo nella build debug e nei test) ‖ firma DER ECDSA P-256 su SHA-256 dei byte prima della firma. |
+| **Tetti** | 64 KiB in tutto, 32 blocchi, 16 modelli, 4 indirizzi per modello, 2 KiB per indirizzo; letti **prima** del JSON (`ManifestLimits`). |
+| **Campi** | `schema` (1), `app` (`dev.pampa.mycloudgallery`), `seq` (intero che solo cresce), `issued`, `expires` (al più 180 giorni dopo `issued`), `minVersionCode` (facoltativo), `blocks` (intervalli di `versionCode` con il livello `writes` o `all` e un **codice** di messaggio del catalogo chiuso: `update`, `security`, `data`), `models` (per un id e uno SHA-256 **già nel catalogo dell'app**: indirizzi `https` aggiuntivi su host di `ModelHosts`). |
+| **Campi sconosciuti** | facoltativi: ignorati; marcati `critical`: la busta intera è rifiutata (`CRITICAL_FIELD`). Un codice di messaggio sconosciuto vale `update`, un livello sconosciuto vale `all`: un blocco non si perde e non si ammorbidisce per un campo nuovo. |
+| **Rigetto** | firma non valida, chiave sconosciuta (anche KT su una release), altra app, schema ignoto, troppo grande, malformato = **ignorato per intero** e contato (`RELEASE_MANIFEST_REJECTED`); resta l'ultimo valido. `seq` minore del già visto = rigioco, ignorato; uguale = niente. |
+| **Lettura** | ogni dispositivo, nel giro di sincronizzazione esistente, al più una volta ogni 24 ore (e all'avvio se è passato di più), con la sessione già aperta: nessuna connessione in più, nessun host nuovo. Assente = nessun effetto. |
+| **Effetti** | solo restrittivi (D29, D30): sotto `minVersionCode` o in un blocco `writes` sola lettura con "Aggiorna dal Pampa Store"; in un blocco `all` "Questa versione è stata fermata" (nessuna sessione del NAS, nessun lavoro); lo stato è **solo più severo** per la stessa `versionCode` finché un manifest con `seq` più alto non lo toglie o l'app si aggiorna. Scaduto (ora del NAS, E-REL9): gli indirizzi aggiuntivi decadono, i blocchi no. **Mai** cancellare dati, scaricare un file nuovo, aggiungere un host o un modello, mostrare testo libero, eseguire codice. |
+| **Chi lo può toccare** | chiunque scriva nell'area comune può **toglierlo** (nessun blocco nuovo arriva: L552), non falsificarlo (la firma). |

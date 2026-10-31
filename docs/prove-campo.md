@@ -1363,3 +1363,30 @@ powershell -ExecutionPolicy Bypass -File tools\fixtures\generate-ocr.ps1 -Resoco
 ```
 
 Le **etichette sono dati privati**: la cartella di arrivo è sotto `build\` (ignorata da git) e non vanno mai nel repository; per tenerle si copiano a mano in `%USERPROFILE%\.mycloudgallery\eval\`. I resoconti (`report-NN.txt`) hanno solo numeri e si possono copiare in `docs/decisioni.md`. `eval-push` ed `eval-pull` valgono solo con `-Mode ai` e la build di debug; da soli non toccano il Wi-Fi.
+
+## 10. Fase 10: F160-F189 e i tre momenti dell'utente
+
+Il copione completo (preparazione, prove, atteso) è in `docs/fase10-progetto.md` §5.5; gli scenari del §10 del piano e i tempi dell'utente nel
+§2.14. Le prove girano **da sole** sull'S25 (build debug e account `test`; la **release candidata** per le prove della release) e
+sull'emulatore (`test`, acceso solo per la prova); il verificatore dal PC controlla il NAS di prova. Gli agenti confermano solo i dialoghi della
+nostra app e usano Galleria Samsung e Archivio solo sui file di prova. Esiti in `docs/prove-campo-esiti.md` (P14).
+
+| # | Prova | Dove | Pacchetto |
+|---|---|---|---|
+| F160-F164 | Widget: tre misure, nascosti (anche da un altro dispositivo), 24 ore di aggiornamenti, blocco e tocco, azzeramento | S25, emulatore | P3, P13 |
+| F165-F169 | Tablet: pannelli e rotazione, DeX e finestre libere, due finestre e blocco, trascinamento in uscita e in arrivo | Tab S9 (momento A) | P4, P5, P6 |
+| F170-F181 | Revisione finale 10.4 (S1-S9, S13): account diversi, dispositivi canaglia, segmenti e immagini ostili, dispositivo perso, backup di Android, log della release, modello e manifest manomessi, rete estranea, cambio di massa, traffico e componenti | PC, emulatore, S25 | P11 |
+| F182-F185 | Accessibilità: TalkBack su ogni schermata, testo 2,0x e contrasto alto, movimento ridotto e tastiera, servizio non "strumento" | S25, Tab S9, emulatore | P8 |
+| F186-F187 | Release candidata (firmata con `pampa.jks`, D32): installazione e aggiornamento con la stessa firma, un APK con un'altra firma rifiutato; tutte le funzioni con R8 | S25 | P12, P13 |
+| F188 | Prestazioni della fase (§5.4 del progetto) | S25; Tab S9 nel momento A | P9 |
+| F189 | Gli otto scenari del §10 del piano | tutti | P14 |
+
+**I tre momenti dell'utente** (tutto il resto gira da solo, di notte o quando il telefono è libero):
+- **Momento A, tablet (circa 25 minuti, una volta)**: profili "Prova 1" (`test`) e "Prova 2" (`test2`), password, WireGuard di prova nel
+  profilo "Prova 1", tablet collegato al PC per la notte (F165-F169, F182-F184 sul tablet e i momenti con il tablet ancora in sospeso).
+- **Momento B, una sera (circa 5 minuti)**: tablet sulla rete "fuori casa", NAS spento; al mattino NAS riacceso (scenari 1 e 2).
+- **Momento C (circa 10 minuti)**: il codice del kit della famiglia di prova (scenario 6) e, se vuole, 5 minuti con TalkBack (F182).
+- **Prima delle prove**: le due chiavi del manifest K1 e K2 (circa 10 minuti) e la verifica della copia offline di `pampa.jks`; **nessuna
+  chiave dell'APK nuova** (D32).
+- **Dopo le prove**: un solo sì per il passaggio alle share vere (Q6 (b), circa 10 minuti con i numeri della simulazione); lo scenario 8 si
+  misura nella settimana dopo; al rilascio, `docs/sicurezza.md` §1 (15 minuti) e il giorno della famiglia (Q7 (a)).

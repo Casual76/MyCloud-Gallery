@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :core-describe: nessun permesso e nessun componente (Fase 10, P0; docs/fase10-progetto.md §6.4, D40). Le descrizioni si compongono a
+      richiesta in memoria; nessuna rete, nessun file. Un permesso o un componente nuovo si chiede all'orchestratore: prima la riga in
+      docs/sicurezza.md 4-bis, poi quella in releaseManifestPolicy.
+  -->
+
+</manifest>

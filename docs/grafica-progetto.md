@@ -718,3 +718,27 @@ contratti; la Fase 9 non modifica `core-designsystem`. Le voci da rifinire:
 
 Per le stesse voci la Fase 9 non aggiunge componenti al catalogo né cambia la chrome, il vetro, la pillola o la cella (D34). Screenshot di
 riferimento nelle cartelle `docs/screenshots/9-P*/` dei pacchetti (chiaro e scuro, telefono e tablet, testo a 1,3x).
+
+### 12.16 Dubbi grafici della Fase 10 (31/10): da rifinire più avanti
+
+La Fase 10 (`docs/fase10-progetto.md` D38, §1.5) consegna **stati sigillati e contratti** (`WidgetUiState` di `feature-widget/contract/`,
+`GalleryWindow` e `GalleryPanes` di `core-designsystem/.../adaptive/`, gli stati dei pannelli, delle finestre, del trascinamento e del
+rilascio) e schermate funzionali fatte **solo** con i componenti G2 e il kit Glance dell'engine (`engine-widget`); la Fase 10 aggiunge a
+`core-designsystem` **solo** file nuovi in `adaptive/`. Il filone grafico rifinisce **senza toccare la logica** né i contratti. **Ordine
+(Q5 (a))**: la fase grafica viene dopo la Fase 10 e prima che la famiglia riceva l'app.
+
+| Voce | Cosa fa la Fase 10 | Da rifinire |
+|---|---|---|
+| **Widget nelle tre misure** | piccola 2×2 (una foto o la copertina del ricordo con il titolo), larga 4×2 (copertina più tre foto, o quattro foto), grande 4×4 (copertina e sei foto); palette e superfici del kit, il segno "video", "Apri MyCloud Gallery" e "Configura MyCloud Gallery" come righe; anteprima disegnata nel selettore (D3, D10, E-W18) | proporzioni delle celle, angoli, titolo sopra la copertina, anteprima |
+| **Pannelli** | Raccolte, Impostazioni a elenco e dettaglio da 840 dp; mappa (60%) e griglia della zona (40%); Libreria e viewer affiancati da 1200 dp solo con "Affianca" (griglia 40%, viewer 60%) (D13) | proporzioni, divisore, passaggio animato fra uno e due pannelli |
+| **"Affianca" del viewer** | voce del menu del viewer, "Schermo intero", Esc e Indietro per tornare a finestra intera; la scelta si ricorda per profilo | dove sta la voce, come si vede lo stato affiancato |
+| **Superfici piene a contrasto alto o con meno trasparenza** | il vetro diventa una superficie piena quando il sistema chiede più contrasto o meno trasparenza, anche nel widget (D26, E-AC5) | colori delle superfici piene, bordi, ombre |
+| **Stati del rilascio** | "Questa versione è stata fermata" (pagina con Diagnostica ed esportazione) e l'avviso "Aggiorna MyCloud Gallery dal Pampa Store" con il messaggio del catalogo chiuso (D29, `ReleaseUiState`) | forma della pagina e dell'avviso |
+| **Elenco delle bolle per TalkBack** | "Elenco dei luoghi in vista" con le bolle in ordine di numero (D23) | aspetto dell'elenco quando è visibile |
+| **Fuoco visibile in DeX** | stato evidenziato al passaggio del puntatore, fuoco da tastiera su ogni elemento attivo (D15, D27) | anello del fuoco, stato evidenziato |
+| **Trascinamento** | ombra con la miniatura locale e il conteggio, "Preparo…" oltre 300 ms, destinazioni evidenziate (D20, D21) | ombra, conteggio, evidenziazione delle destinazioni |
+
+**La regola di D38**: le prove di accessibilità della Fase 10 (test sui nodi, controllo ATF sugli screenshot, testo 2,0x, contrasto AA nel
+caso peggiore con le superfici piene, bersagli da 48 dp, movimento ridotto) **entrano nel "Fatto quando" della fase grafica**: una rifinitura
+che le rompe non si chiude. Screenshot di riferimento nelle cartelle `docs/screenshots/10-P*/` dei pacchetti (chiaro e scuro, telefono e
+tablet, testo a 1,0, 1,3 e 2,0).

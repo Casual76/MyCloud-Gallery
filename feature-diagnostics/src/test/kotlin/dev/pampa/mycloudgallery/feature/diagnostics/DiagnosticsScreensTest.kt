@@ -371,6 +371,8 @@ class DiagnosticsScreensTest {
     DiagSection.PEOPLE -> R.string.diagnostics_section_people
     DiagSection.MEMORIES -> R.string.diagnostics_section_memories
     DiagSection.MAP -> R.string.diagnostics_section_map
+    DiagSection.WIDGET -> R.string.diagnostics_section_widget
+    DiagSection.RELEASE -> R.string.diagnostics_section_release
     DiagSection.STORAGE -> R.string.diagnostics_section_storage
     DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_section_traffic
     DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_section_android

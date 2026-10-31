@@ -14,6 +14,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.NetworkCheck
+import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.PhotoAlbum
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.Warning
+import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material.icons.rounded.Wifi
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -87,6 +89,8 @@ internal fun DiagSection.icon(): ImageVector = when (this) {
   DiagSection.PEOPLE -> Icons.Rounded.Face
   DiagSection.MEMORIES -> Icons.Rounded.AutoAwesome
   DiagSection.MAP -> Icons.Rounded.Map
+  DiagSection.WIDGET -> Icons.Rounded.Widgets
+  DiagSection.RELEASE -> Icons.Rounded.NewReleases
   DiagSection.STORAGE -> Icons.Rounded.Storage
   DiagSection.MONTHLY_TRAFFIC -> Icons.Rounded.DataUsage
   DiagSection.ANDROID_WARNINGS -> Icons.Rounded.PhoneAndroid
@@ -107,6 +111,8 @@ internal fun DiagSection.titleRes(): Int = when (this) {
   DiagSection.PEOPLE -> R.string.diagnostics_section_people
   DiagSection.MEMORIES -> R.string.diagnostics_section_memories
   DiagSection.MAP -> R.string.diagnostics_section_map
+  DiagSection.WIDGET -> R.string.diagnostics_section_widget
+  DiagSection.RELEASE -> R.string.diagnostics_section_release
   DiagSection.STORAGE -> R.string.diagnostics_section_storage
   DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_section_traffic
   DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_section_android
@@ -127,6 +133,8 @@ internal fun DiagSection.hintRes(): Int = when (this) {
   DiagSection.PEOPLE -> R.string.diagnostics_hint_people
   DiagSection.MEMORIES -> R.string.diagnostics_hint_memories
   DiagSection.MAP -> R.string.diagnostics_hint_map
+  DiagSection.WIDGET -> R.string.diagnostics_hint_widget
+  DiagSection.RELEASE -> R.string.diagnostics_hint_release
   DiagSection.STORAGE -> R.string.diagnostics_hint_storage
   DiagSection.MONTHLY_TRAFFIC -> R.string.diagnostics_hint_traffic
   DiagSection.ANDROID_WARNINGS -> R.string.diagnostics_hint_android

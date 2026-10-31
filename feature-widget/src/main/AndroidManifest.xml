@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+  <!--
+      :feature-widget (Fase 10, P0; docs/fase10-progetto.md §6.4, D8, D40). In P0 nessun permesso e nessun componente. P3 aggiunge QUI il solo
+      ricevitore del widget, NON esportato, con `widgetCategory="home_screen"` (mai la schermata di blocco, Q4 (a)) e `updatePeriodMillis="0"`
+      (D6); i componenti interni di Glance devono restare non esportati nel manifest fuso. Prima la riga in docs/sicurezza.md 4-bis, poi quella
+      in releaseManifestPolicy (gradle/verify-release-manifest.gradle).
+  -->
+
+</manifest>

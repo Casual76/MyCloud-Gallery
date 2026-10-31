@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Sezione «Versione e aggiornamenti» (Fase 10, docs/fase10-progetto.md §2.13, D39). Titolo e spiegazione della sezione e voce di stato
+       (P0); le voci e i codici del manifest di rilascio (RELEASE_*) li aggiunge P13. Solo numeri e codici nelle esportazioni: mai il contenuto
+       del manifest oltre ai numeri, mai indirizzi dei modelli. -->
+  <string name="diagnostics_section_release">Versione e aggiornamenti</string>
+  <string name="diagnostics_hint_release">Questa versione dell\'app, il suo canale e l\'avviso firmato che l\'admin può mettere sul NAS per chiedere di aggiornare o per fermare una versione difettosa.</string>
+  <string name="diag_release_state_title">Stato della versione</string>
+  <string name="diag_release_state_guide">La versione installata, se c\'è un avviso firmato dell\'admin e che cosa chiede: niente, aggiornare dal Pampa Store, oppure fermare questa versione.</string>
+</resources>

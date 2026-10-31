@@ -386,6 +386,14 @@ object DiagCodes {
   @JvmField val MEMORY_STATE = DiagCode("MEMORY_STATE")
   @JvmField val MAP_STATE = DiagCode("MAP_STATE")
 
+  // --- Widget e rilascio (Fase 10) -----------------------------------------------------------------------------------
+  // P0 aggiunge solo i due codici di stato che tengono vive le sezioni WIDGET e RELEASE (un test vuole almeno una voce per sezione), come
+  // MEMORY_STATE e MAP_STATE nella Fase 9. Gli altri codici del §2.13 di docs/fase10-progetto.md (WIDGET_*, RELEASE_*, DRAG_*, WINDOW_*:
+  // `WidgetDiagCodes` di core-widget e `ReleaseDiag` di core-release) li aggiunge P13, con le chiavi nell'elenco chiuso dell'esportazione. Mai id,
+  // titoli, nomi, descrizioni, URL dei modelli, contenuto del manifest oltre ai numeri, ne' se un servizio di accessibilita' e' attivo (D39).
+  @JvmField val WIDGET_STATE = DiagCode("WIDGET_STATE")
+  @JvmField val RELEASE_STATE = DiagCode("RELEASE_STATE")
+
   // P13: gli altri codici del §2.12 (stessi id di `MemoriesDiag` di core-memories e `MapDiag` di core-map, scritti come letterali perche' questo modulo
   // non vede i due core; `Phase9DiagCatalogTest` di :app verifica che ogni codice dei contratti sia qui). Solo conteggi per motivo.
   @JvmField val MEMORY_SHELF_RESET = DiagCode("MEMORY_SHELF_RESET")

@@ -8,6 +8,8 @@
     1. engine-doctor            l'engine e' quello che engine.properties dichiara (versione, tag, moduli)
     2. engine pulito            nessuna modifica locale dentro engine/ (sarebbe una variante silenziosa)
     3. repo senza segreti       nessun .jks/.keystore/local.properties tracciato o da tracciare
+    3b. nessuna chiave privata  (Fase 10, P0) nel CONTENUTO dei file del repository nessuna chiave PEM ne' l'inizio di un PKCS#8 EC P-256 o
+                                RSA (base64 o esadecimale), salvo chiavi di prova nelle cartelle dei test (D31, D32, C442)
     4. verifica checksum        gradle/verification-metadata.xml c'e' ed e' attiva; il wrapper e' fissato
     5. gradle                   assembleDebug assembleRelease galleryTest galleryLint
                                 (galleryTest/galleryLint = testDebugUnitTest/lintDebug dei soli moduli della
@@ -86,6 +88,10 @@
                                 `feature/map/net/`, il client installato in MapLibre, MapLibre inizializzato, `libmaplibre.so` nell'APK
                                 (anche nel passo 7e, con i 16 KB). Le classi di OkHttp, MapLibre e `net/` non si fondono con altre
                                 (feature-map/consumer-rules.pro): senza, R8 le mescola e il passo non prova niente. FALLISCE se non legge l'APK
+    7i. Glance e KT             (Fase 10, P0; docs/fase10-progetto.md D10, D31) nel bytecode della release (dexdump) ogni chiamata a Glance
+                                (`androidx.glance`) parte da Glance, dal kit dell'engine o da `feature/widget/` (P3; oggi passa a vuoto, con il
+                                controllo positivo quando :app dipende da :feature-widget con Glance); la chiave di prova del manifest (KT, le
+                                stringhe di `core-release/.../testing/ReleaseTestKeys.kt`, P1) e `ManifestTool` non sono nella release (anche 7b)
     7g. modelli dei volti       (Fase 8, P1; docs/fase8-progetto.md D39, §6.4) nell'APK di release `assets/faces/` ha YuNet e SFace con la
                                 dimensione e lo SHA-256 di `ModelCatalog.FACE_YUNET` e `FACE_SFACE` (letti dal sorgente), le due licenze
                                 (MIT, Apache-2.0) e il NOTICE che nomina le impronte, nessun altro modello nella cartella e nessun file
@@ -568,6 +574,42 @@ Step "repo senza segreti (chiavi di firma, local.properties)" {
   }
 }
 
+# Fase 10 (P0; docs/fase10-progetto.md par. 4.3 "Chiavi", D31, D32, C442): nessuna chiave privata nel CONTENUTO dei file del repository (il
+# passo 3 guarda solo i nomi). Una chiave PEM ("-----BEGIN ... PRIVATE KEY-----") o l'inizio di un PKCS#8 EC P-256 o RSA (in base64 o in
+# esadecimale) fa fallire il passo, salvo nelle cartelle dei test (`src/test/`, `src/testDebug/`), dove possono stare solo chiavi di prova
+# generate apposta (KT, keystore di prova). Le chiavi vere (pampa.jks, K1, K2) stanno solo sul PC dell'admin e nella copia offline.
+# I marcatori sono scritti a pezzi: questo file non contiene mai un marcatore intero, cosi' non si segnala da solo.
+$privateKeyMarkers = @(
+  ('-----BEGIN [A-Z0-9 ]*' + "PRIVATE KEY" + '-----'),
+  ('MIGHAgEAMBMGByqGSM49' + 'AgEGCCqGSM49AwEHBG0wawIBAQQg'),
+  ('MEECAQAwEwYHKoZIzj0C' + 'AQYIKoZIzj0DAQcEJzAlAgEBBCA'),
+  ('308187020100301306072a8648ce3d0201' + '06082a8648ce3d030107046d306b0201010420'),
+  ('3041020100301306072a8648ce3d0201' + '06082a8648ce3d030107042730250201010420'),
+  ('BgkqhkiG9w0BAQEF' + 'AASC')
+)
+Step "nessuna chiave privata nel contenuto dei file del repository (PEM, PKCS#8 EC e RSA; chiavi di prova solo nei test)" {
+  $files = Invoke-Native -File "git" -Arguments @("ls-files", "--cached", "--others", "--exclude-standard")
+  if ($files.Code -ne 0) { return "git ls-files non risponde" }
+  $pattern = [regex]::new(($privateKeyMarkers -join "|"), [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+  $binary = '\.(png|jpg|jpeg|webp|gif|heic|jar|aar|so|bin|tflite|onnx|litertlm|task|zip|gz|ttf|otf|pbf|mbtiles|db|keystore)$'
+  $latin1 = [System.Text.Encoding]::GetEncoding(28591)
+  $problems = @()
+  $read = 0
+  foreach ($path in @($files.Lines | Where-Object { $_.Trim().Length -gt 0 })) {
+    if ($path -match $binary) { continue }
+    $full = Join-Path $root $path
+    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
+    if ((Get-Item -LiteralPath $full).Length -gt 4MB) { continue }
+    $read++
+    $text = $latin1.GetString([System.IO.File]::ReadAllBytes($full))
+    if (-not $pattern.IsMatch($text)) { continue }
+    if ($path -match '(^|/)src/(test|testDebug)/') { continue }
+    $problems += $path
+  }
+  Write-Host ("        file letti: {0}" -f $read) -ForegroundColor DarkGray
+  if ($problems.Count -gt 0) { return "chiavi private (o il loro inizio) fuori dai test: " + ($problems -join ", ") }
+}
+
 # Fase 6 (P9, P11; docs/fase6-progetto.md par. 5.3): le etichette e le query del set privato della valutazione stanno solo sul telefono e
 # nella cartella dell'utente, MAI nel repository. Come `NoPrivateEvalDataInGitTest` di core-search: nomi, cartelle, intestazione del
 # formato dei file tracciati e regole del .gitignore.
@@ -793,9 +835,13 @@ $debugRemnants = @(
   # Fase 9 (P0 per P11, §5.3): lo strumento di valutazione dei ricordi (app/src/debug/.../debugtools/eval/memories): classi, porta e nome del file
   # dei giudizi (`ricordi.mcgmem`, intestazione MCGMEM01). Giudizi su ricordi veri: in release non deve esistere niente di tutto questo. P11
   # usa questi nomi (o aggiorna qui la riga).
-  "debugtools/eval/memories", "MemoriesEvalEnvironmentHolder", "MemoriesEvalSession", "MemoriesEvalEntry", "MemoriesEvalStore", "ricordi.mcgmem", "MCGMEM01"
+  "debugtools/eval/memories", "MemoriesEvalEnvironmentHolder", "MemoriesEvalSession", "MemoriesEvalEntry", "MemoriesEvalStore", "ricordi.mcgmem", "MCGMEM01",
+  # Fase 10 (P0 per P1 e P11; docs/fase10-progetto.md par. 2.8 "Le chiavi nell'app", par. 2.11 S14): la chiave di PROVA del manifest (KT, fidata
+  # solo in debug e nei test: P1 la scrive in `ReleaseTestKeys`) e lo strumento dell'admin che genera le chiavi e firma i manifest (`ManifestTool`,
+  # solo sul PC, in tools/release/). Nella release non deve esistere niente di tutto questo; le stringhe di KT le cerca il passo 7i.
+  "ReleaseTestKeys", "ManifestTool"
 )
-Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11, valutazione dei ricordi F9-P11)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11, valutazione dei ricordi F9-P11, chiave di prova del manifest e ManifestTool F10)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
@@ -1808,6 +1854,73 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
   }
   $state = if ($mapInApp) { "mappa nell'app" } else { "mappa non ancora nell'app (P13)" }
   Write-Host ("        bytecode ({0}): {1} chiamate a OkHttp ({2} da net/), {3} chiamate nostre a MapLibre, client installato {4}, MapLibre inizializzato {5}; libmaplibre.so: {6} ({7} righe di dexdump)" -f $state, $okCount, $okFromNet, $mapCount, $installs, $inits, $hasMapLibreLib, $facts.Lines) -ForegroundColor DarkGray
+  if ($problems.Count -gt 0) { return ($problems | Select-Object -First 20) -join "; " }
+}
+
+# Fase 10 (P0; docs/fase10-progetto.md par. 1.1, D10, D31, par. 2.8 "Le chiavi nell'app"): nel bytecode della release (dexdump) ogni chiamata a
+# Glance (`androidx.glance`) parte da Glance stesso, dal kit dell'engine (`fluidengine/widget`) o da `feature/widget/` (il widget, P3); in piu' la
+# chiave di PROVA del manifest (KT) non c'e': il suo nome di classe e' fra i resti di debug vietati (passo 7b) e, quando P1 la scrive in
+# `core-release/.../testing/ReleaseTestKeys.kt`, le sue stringhe lunghe (la chiave pubblica in base64 o in esadecimale) non devono comparire nel
+# dex di release. Oggi Glance non c'e' (arriva con P3) e KT nemmeno (P1): il passo passa a vuoto e lo dice; quando :app dipende da
+# :feature-widget e feature-widget porta Glance, il controllo positivo pretende almeno una chiamata da `feature/widget/`. FALLISCE se non legge l'APK.
+Step "Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del manifest (KT)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  Initialize-ApkInspect
+  $dexdump = Get-DexDump
+  if (-not $dexdump) { return "dexdump.exe non trovato accanto ad aapt2 (build-tools)" }
+  $glance = "Landroidx/glance/"
+  $glanceCallers = @("Landroidx/glance/", "Ldev/antigravity/fluidengine/widget/", "Ldev/pampa/mycloudgallery/feature/widget/")
+  $widgetPrefix = "Ldev/pampa/mycloudgallery/feature/widget/"
+  $widgetInApp = $false
+  foreach ($line in ((Read-TextFile (Join-Path $root "app\build.gradle")) -split '\r?\n')) {
+    $codeLine = ($line -replace '//.*$', '')
+    if ($codeLine -match '^\s*(test|androidTest)\w*\s*[\(\s]') { continue }
+    if ($codeLine -match "project\(\s*(path\s*:\s*)?['""]:feature-widget['""]") { $widgetInApp = $true }
+  }
+  $widgetGradle = Join-Path $root "feature-widget\build.gradle"
+  $glanceInWidget = (Test-Path -LiteralPath $widgetGradle) -and ((Read-TextFile $widgetGradle) -match 'glance')
+  $facts = New-Object DexCallFacts
+  Add-Type -AssemblyName System.IO.Compression.FileSystem
+  $temp = Join-Path ([System.IO.Path]::GetTempPath()) ("mcg-dex10-" + [guid]::NewGuid().ToString("N"))
+  New-Item -ItemType Directory -Path $temp | Out-Null
+  $zip = [System.IO.Compression.ZipFile]::OpenRead($apk.FullName)
+  try {
+    foreach ($entry in @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })) {
+      $target = Join-Path $temp $entry.FullName
+      [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+      [DexCallScanner]::Scan($dexdump, $target, [string[]]@($glance), $facts)
+    }
+  } finally {
+    $zip.Dispose()
+    Remove-Item -LiteralPath $temp -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  if ($facts.Lines -lt 1000 -or -not $facts.SawMainActivity) { return "lettura del bytecode non affidabile ($($facts.Lines) righe, MainActivity vista: $($facts.SawMainActivity))" }
+  $problems = @()
+  $glanceCount = 0
+  $fromWidget = 0
+  foreach ($call in $facts.Calls) {
+    $caller = ($call -split '\|', 2)[1]
+    $glanceCount++
+    if ($caller.StartsWith($widgetPrefix)) { $fromWidget++ }
+    if (@($glanceCallers | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { $problems += "Glance chiamato fuori da feature/widget/ e dal kit dell'engine: $caller" }
+  }
+  if ($widgetInApp -and $glanceInWidget -and $fromWidget -eq 0) { $problems += "nessuna chiamata a Glance da feature/widget/ nel dex: il widget non e' nell'APK (o la lettura non e' affidabile)" }
+  $ktFile = Join-Path $root "core-release\src\main\kotlin\dev\pampa\mycloudgallery\core\release\testing\ReleaseTestKeys.kt"
+  $ktState = "KT non ancora scritta (P1)"
+  if (Test-Path -LiteralPath $ktFile) {
+    $literals = @([regex]::Matches((Read-TextFile $ktFile), '"([A-Za-z0-9+/=]{64,})"') | ForEach-Object { $_.Groups[1].Value })
+    if ($literals.Count -eq 0) {
+      $problems += "ReleaseTestKeys.kt senza la chiave pubblica di KT come stringa (base64 o esadecimale): il passo non la puo' cercare"
+    } else {
+      $found = @(Get-DexClassesMatching $apk.FullName (($literals | ForEach-Object { [regex]::Escape($_) }) -join "|"))
+      if ($found.Count -gt 0) { $problems += "la chiave di prova KT e' nel dex di release" }
+      $ktState = "KT cercata ($($literals.Count) stringhe), assente"
+    }
+  }
+  $state = if ($widgetInApp) { "widget nell'app" } else { "widget non ancora nell'app (P3, P13)" }
+  Write-Host ("        bytecode ({0}): {1} chiamate a Glance ({2} da feature/widget/); {3} ({4} righe di dexdump)" -f $state, $glanceCount, $fromWidget, $ktState, $facts.Lines) -ForegroundColor DarkGray
   if ($problems.Count -gt 0) { return ($problems | Select-Object -First 20) -join "; " }
 }
 

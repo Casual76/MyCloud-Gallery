@@ -392,7 +392,9 @@ class Phase9ArchitectureTest {
 
     /** Chi puo' dipendere dai moduli nuovi (elenco chiuso). */
     val ALLOWED_DEPENDENTS: Map<String, Set<String>> = mapOf(
-      MEMORIES to setOf(FEATURE_MEMORIES, "app"),
+      // Fase 10 (P0, docs/fase10-progetto.md §1.1, D2, D4): core-widget usa i soli contratti dello scaffale (`MemoryId`, `MemoryKind`) per il
+      // ricordo di oggi sul widget; Phase10ArchitectureTest gli vieta il codice interno di core-memories.
+      MEMORIES to setOf(FEATURE_MEMORIES, "app", "core-widget"),
       FEATURE_MEMORIES to setOf("app"),
       MAP to setOf(FEATURE_MAP, "app"),
       FEATURE_MAP to setOf("app"),
@@ -400,7 +402,8 @@ class Phase9ArchitectureTest {
 
     /** Chi, oltre ad :app, puo' raggiungere i moduli nuovi (nemmeno per inferenza: viewer, impostazioni, Raccolte passano da porte). */
     val ALLOWED_REACHING: Map<String, Set<String>> = mapOf(
-      MEMORIES to setOf(FEATURE_MEMORIES),
+      // Fase 10 (P0): il widget vede i contratti dello scaffale (core-widget con `api`, quindi anche feature-widget); mai il codice interno.
+      MEMORIES to setOf(FEATURE_MEMORIES, "core-widget", "feature-widget"),
       FEATURE_MEMORIES to emptySet(),
       MAP to setOf(FEATURE_MAP),
       FEATURE_MAP to emptySet(),

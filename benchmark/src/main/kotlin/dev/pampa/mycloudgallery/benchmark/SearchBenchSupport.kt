@@ -140,7 +140,8 @@ object SearchUi {
   /** Apre la scheda Cerca e aspetta il campo; false se non c'e' (l'app non ha ancora la scheda collegata, P11). */
   fun open(device: UiDevice): Boolean {
     if (device.wait(Until.hasObject(FIELD), 500) == true) return true
-    device.findObject(TAB)?.click()
+    // La scheda ha il nome come testo (non come descrizione) nella pillola di adesso: prima la descrizione, poi il testo.
+    (device.findObject(TAB) ?: device.findObject(By.text("Cerca")))?.click()
     return device.wait(Until.hasObject(FIELD), SCREEN_TIMEOUT_MS) == true
   }
 

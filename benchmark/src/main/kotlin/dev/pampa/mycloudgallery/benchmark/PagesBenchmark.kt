@@ -106,7 +106,10 @@ object PagesUi {
   /** Tocca la scheda [label] della pillola. */
   fun tab(device: androidx.test.uiautomator.UiDevice, label: String) {
     BenchUi.ensureForeground(device)
-    val tab = device.wait(Until.findObject(byDesc(label)), TIMEOUT_MS) ?: device.findObject(By.pkg(BenchSession.targetPackage).text(label))
+    // Le schede della pillola hanno il nome come testo, non come descrizione: si cerca per testo (o per descrizione) subito, senza aspettare 8 s una descrizione che non
+    // c'e' (la misura comincia con il blocco: un'attesa a vuoto prima del tocco lasciava la traccia senza fotogrammi, "no expect/actual slices", sull'emulatore).
+    val tab = device.findObject(By.pkg(BenchSession.targetPackage).text(label)) ?: device.findObject(byDesc(label))
+      ?: device.wait(Until.findObject(By.pkg(BenchSession.targetPackage).text(label)), TIMEOUT_MS)
     checkNotNull(tab) { "La scheda '$label' non c'e'." }.click()
   }
 

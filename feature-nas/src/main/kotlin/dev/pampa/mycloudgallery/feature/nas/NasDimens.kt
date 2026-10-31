@@ -38,9 +38,6 @@ internal object NasDimens {
   /** La larghezza massima di una pagina "cruscotto" (Spazio NAS, Operazioni in corso) su uno schermo largo. */
   val DashboardMaxWidth: Dp = 640.dp
 
-  /** Da questa larghezza Cartelle NAS ha due pannelli: le aree e il percorso a sinistra, la cartella a destra. */
-  val TwoPaneMinWidth: Dp = 840.dp
-
   /** La larghezza del pannello di sinistra su due pannelli. */
   val SidebarWidth: Dp = 300.dp
 

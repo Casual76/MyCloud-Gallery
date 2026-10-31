@@ -97,9 +97,6 @@ internal object OnboardingDimens {
   /** La barra laterale dei passi su uno schermo largo. */
   val SidebarWidth: Dp = 332.dp
 
-  /** Da questa larghezza in su la barra laterale dei passi compare accanto alla pagina. */
-  val WideBreakpoint: Dp = 840.dp
-
   /** Il punto-passo nella barra laterale. */
   val StepDot: Dp = 28.dp
 

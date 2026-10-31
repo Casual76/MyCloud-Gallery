@@ -43,6 +43,8 @@ class MapDependencies @Inject constructor(
   visible: Optional<VisibleMedia>,
   mask: Optional<HiddenMask>,
   engine: Optional<MapEngineStarter>,
+  /** Fase 9 (P13): una superficie gia' pronta al posto di quella vera (solo le prove di `:app` la legano, con `FakeMapSurface`: MapLibre non si disegna in Robolectric). */
+  surface: Optional<MapSurfaceContent>,
 ) {
   val points: MapPoints = points.orElse(NoMapPoints)
   val settings: MapSettings = settings.orElse(NoMapSettings)
@@ -56,7 +58,7 @@ class MapDependencies @Inject constructor(
   val filter: FinalFilter = FinalFilter(mask.orElse(null))
 
   /** La mappa vera con MapLibre, che si avvia pigra con [engine] (senza legame: nessuna `MapView`). */
-  val content: MapSurfaceContent = MapLibreSurfaceContent(engine.orElse(UnboundMapEngine))
+  val content: MapSurfaceContent = surface.orElseGet { MapLibreSurfaceContent(engine.orElse(UnboundMapEngine)) }
 }
 
 /** Le porte della mappa, opzionali per Dagger: `:app` le lega ai contratti di core-map e di feature-map. */
@@ -90,4 +92,8 @@ abstract class MapPortsModule {
 
   @BindsOptionalOf
   abstract fun mapEngineStarter(): MapEngineStarter
+
+  /** Mai legata in produzione: la mappa e' sempre quella vera di MapLibre ([MapLibreSurfaceContent]). */
+  @BindsOptionalOf
+  abstract fun mapSurfaceContent(): MapSurfaceContent
 }

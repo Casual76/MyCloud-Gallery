@@ -14,14 +14,14 @@ import dev.pampa.mycloudgallery.core.memories.contract.NotifySettings
 import dev.pampa.mycloudgallery.core.memories.noop.NoMemories
 import dev.pampa.mycloudgallery.core.memories.noop.NoMemoryClips
 import dev.pampa.mycloudgallery.core.memories.noop.NoMusicLibrary
-import dev.pampa.mycloudgallery.core.memories.testing.InMemoryMusicSettings
-import dev.pampa.mycloudgallery.core.memories.testing.InMemoryNotifySettings
 import dev.pampa.mycloudgallery.feature.memories.contract.MemoryPlaceNames
 import dev.pampa.mycloudgallery.feature.memories.contract.MusicPlayback
 import dev.pampa.mycloudgallery.feature.memories.contract.NoMemoryPlaceNames
 import dev.pampa.mycloudgallery.feature.memories.contract.NoMusicPlayback
 import dev.pampa.mycloudgallery.feature.memories.contract.NotificationAccess
 import dev.pampa.mycloudgallery.feature.memories.contract.UnboundNotificationAccess
+import dev.pampa.mycloudgallery.feature.memories.noop.SessionMusicSettings
+import dev.pampa.mycloudgallery.feature.memories.noop.SessionNotifySettings
 import dev.pampa.mycloudgallery.feature.memories.ui.FinalFilter
 import dev.pampa.mycloudgallery.feature.memories.ui.MemoryNames
 import java.util.Optional
@@ -30,8 +30,8 @@ import javax.inject.Inject
 // LE PORTE DELLE SCHERMATE DEI RICORDI PER DAGGER (Fase 9, P9; D7 della Fase 2: @HiltViewModel; docs/fase9-progetto.md §1.4). Tutte **opzionali**:
 // `:app` (P13, `MemoriesGraph`) lega i contratti veri (il motore dei ricordi, le persone, i nomi dei luoghi, i Nascosti, le preferenze, il lettore
 // audio); finche' non lo fa le schermate partono lo stesso con i null-object, che **non fanno niente di pericoloso** (nessun ricordo, nessuna
-// persona, nessun audio) e il grafo di `:app` compila. Le preferenze (notifiche e musica) senza legame stanno in memoria: valgono finche' vive il
-// processo, e P13 le sostituisce con quelle vere su DataStore.
+// persona, nessun audio) e il grafo di `:app` compila. Le preferenze (notifiche e musica) senza legame stanno in memoria (`noop/SessionSettings.kt`, mai i
+// fake di `testing/`: P13 li ha tolti perche' entravano nel dex di release): valgono finche' vive il processo, e P13 lega quelle vere su file.
 
 /** I contratti con cui parlano le schermate dei ricordi, gia' risolti sui null-object quando `:app` non li ha legati. */
 class MemoriesDependencies @Inject constructor(
@@ -52,9 +52,9 @@ class MemoriesDependencies @Inject constructor(
 
   /** Il filtro finale dei Nascosti: senza la maschera (`:app` non l'ha legata) vale il solo filtro del servizio. */
   val filter: FinalFilter = FinalFilter(mask.orElse(null))
-  val notify: NotifySettings = notify.orElse(InMemoryNotifySettings())
+  val notify: NotifySettings = notify.orElseGet { SessionNotifySettings() }
   val access: NotificationAccess = access.orElse(UnboundNotificationAccess)
-  val musicSettings: MusicSettings = musicSettings.orElse(InMemoryMusicSettings())
+  val musicSettings: MusicSettings = musicSettings.orElseGet { SessionMusicSettings() }
   val musicLibrary: MusicLibrary = musicLibrary.orElse(NoMusicLibrary)
   val playback: MusicPlayback = playback.orElse(NoMusicPlayback)
   val clips: MemoryClips = clips.orElse(NoMemoryClips)

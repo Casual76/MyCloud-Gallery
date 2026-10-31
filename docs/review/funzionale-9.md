@@ -1,5 +1,7 @@
 # Verifica funzionale: Fase 9, Ricordi, notifiche e mappa (commit `f9aeef8c`, 31/10/2026)
 
+**Stato dopo le correzioni (31/10).** Corrette tutte le voci dai pacchetti "ricordi e notifiche" e "mappa e rete" (sezioni in fondo), tranne **DR-1** (la mappa con R8 in release: aperta finche' F151 e F119-F120 non sono fatte con la release, P14). Riconciliazione del 31/10 (Fase 10 P11): `docs/review/10-chiusura.md`.
+
 **Stato (31/10).** Alla stesura le 16 voci sono nuove: nessuna e' corretta nel codice. Ne risultano 1 che blocca, 5 sbagliate e 10 minori; 12 sono confermate nel codice
 e 4 plausibili (serve il telefono o un test, descritto nella voce). La verifica dei fake (§3) ha trovato sette divergenze, quattro delle quali nascondono voci di questo
 documento (NT-1, NT-2, RP-1, MO-1). I flussi del §4 sono da provare sul telefono (F113-F130 dalle decisioni di P13, piu' F147-F153 nuovi).

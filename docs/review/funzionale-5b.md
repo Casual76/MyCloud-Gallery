@@ -1,5 +1,7 @@
 # Verifica funzionale: Fase 5B (commit `eca476e`, 20/10/2026)
 
+**Stato (31/10).** Tutte le voci sono corrette nel codice (20/10, sezioni «Correzioni 5B: …» di `docs/decisioni.md`), compresa **LA-3** (sotto e' ancora scritta "aperta": la correzione e' in «Correzioni 5B: versioni e correzioni», `Correzioni5BVersioniAppTest.la3_*`); **LA-4** non confermata come ciclo. Riconciliazione del 31/10 (Fase 10 P11): `docs/review/10-chiusura.md`.
+
 **La domanda.** Ogni funzione della 5B promessa all'utente funziona davvero nell'app installata, da capo a fondo, in debug e in release? Questa non e' una
 revisione di sicurezza: quella sta in un altro file di `docs/review/`.
 

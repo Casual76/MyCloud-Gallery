@@ -22,6 +22,12 @@
 //     `allowedThirdPartyComponents` o e' esportato: una versione nuova di una libreria che aggiunge un componente (che potrebbe
 //     avviarsi da solo e mandare statistiche con la lettura del testo spenta, L49) fa fallire il build.
 //
+//   - (Fase 10, P4, D14-D17) la `MainActivity` non ha le impostazioni delle finestre (`mainActivityPolicy`): `launchMode`
+//     (`singleInstancePerTask`, o il piano B `singleTask` dichiarato in docs/decisioni.md), i `configChanges` di D14 (rotazione, ridimensionamento,
+//     tastiera, puntatore: ricomposizione, non ricreazione) e **nessuno di quelli che devono ricreare** (densita', lingua, tema: una ricreazione vera
+//     deve poter ricostruire lo stato, e il blocco app non la conta come uscita), `resizeableActivity="true"`, `<layout>` con la misura minima 320 x 400 dp,
+//     `taskAffinity` vuota (StrandHogg, F13).
+//
 // `assembleRelease` dipende dal controllo: un APK che non lo passa non si produce nemmeno.
 //
 // Per ammettere un nuovo componente esportato o un nuovo permesso NON basta aggiungere una riga qui:
@@ -171,6 +177,23 @@ ext.releaseManifestPolicy = [
     'com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService',
     'com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver',
   ],
+  // Fase 10 (P4, D14-D17, docs/sicurezza.md C434, L546): le finestre della `MainActivity`. I valori sono stringhe; gli elenchi si separano con `|` (come `configChanges`).
+  mainActivityPolicy: [
+    'name'                  : 'dev.pampa.mycloudgallery.MainActivity',
+    // Il piano B (docs/fase10-progetto.md D16, §7): se singleInstancePerTask non regge con notifiche, widget o la finestra nuova di One UI, `singleTask` (una finestra sola),
+    // dichiarato in docs/decisioni.md e in L. Oggi vale il primo.
+    'launchMode'            : 'singleInstancePerTask',
+    // Ricomposizione, non ricreazione: MapLibre, il video, lo zoom e lo scorrimento restano (D14).
+    'requiredConfigChanges' : 'orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden|navigation',
+    // Questi DEVONO ricreare l'activity (densita', lingua, tema, dimensione del testo): lo stato salvato si prova solo se la ricreazione succede davvero.
+    'forbiddenConfigChanges': 'density|locale|layoutDirection|uiMode|fontScale|colorMode|fontWeightAdjustment',
+    'resizeableActivity'    : 'true',
+    // StrandHogg (revisione 2, F13): vuota.
+    'taskAffinity'          : '',
+    // D15: la finestra minima (sotto, Android non scende).
+    'minWidth'              : '320dp',
+    'minHeight'             : '400dp',
+  ],
 ]
 
 // Fase 6 (P0): toglie dal manifest fuso le `uses-native-library` che non sono in `allowedNativeLibraries` e i doppioni. Il fusore dei
@@ -268,9 +291,52 @@ abstract class VerifyReleaseManifest extends DefaultTask {
   @Input
   abstract ListProperty<String> getAllowedThirdPartyComponents()
 
+  @Input
+  abstract MapProperty<String, String> getMainActivityPolicy()
+
   // Il manifest fuso usa sempre il prefisso `android:`, quindi si legge senza risolvere i namespace.
   static String attr(Object node, String name) {
     return node.attributes()['android:' + name]
+  }
+
+  // Fase 10 (P4): cio' che la `MainActivity` deve dichiarare per avere finestre che si ridimensionano, si ricreano e si contano (D14-D17). Statico e puro: lo prova il test
+  // `MainActivityWindowsManifestTest` di `:app` sul manifest dell'app, e `assembleRelease` sul manifest fuso.
+  static List<String> verifyMainActivity(Object application, Map<String, String> policy) {
+    def problems = []
+    String name = policy['name']
+    def main = application.activity.find { attr(it, 'name') == name }
+    if (main.size() == 0) {
+      problems << "manca l'activity ${name}".toString()
+      return problems
+    }
+    def allowedLaunch = policy['launchMode'].split('[|]') as List
+    String launch = attr(main, 'launchMode')
+    if (!(launch in allowedLaunch)) {
+      problems << "${name}: android:launchMode deve essere ${allowedLaunch.join(' o ')} (trovato ${launch})".toString()
+    }
+    def declared = (attr(main, 'configChanges') ?: '').split('[|]').collect { it.trim() }.findAll { !it.isEmpty() }
+    policy['requiredConfigChanges'].split('[|]').each { required ->
+      if (!(required in declared)) problems << "${name}: android:configChanges deve contenere ${required} (ricomposizione, non ricreazione: D14)".toString()
+    }
+    policy['forbiddenConfigChanges'].split('[|]').each { forbidden ->
+      if (forbidden in declared) problems << "${name}: android:configChanges NON deve contenere ${forbidden} (deve ricreare l'activity: D14)".toString()
+    }
+    if (attr(main, 'resizeableActivity') != policy['resizeableActivity']) {
+      problems << "${name}: android:resizeableActivity deve essere ${policy['resizeableActivity']} (D15)".toString()
+    }
+    // Attenzione: una stringa vuota e' "falsa" in Groovy, quindi niente `?:`: l'attributo c'e' ed e' vuoto, oppure non c'e'.
+    String affinity = attr(main, 'taskAffinity')
+    if (affinity == null || affinity != policy['taskAffinity']) {
+      problems << "${name}: android:taskAffinity deve essere vuota (StrandHogg, F13)".toString()
+    }
+    def layouts = main.layout
+    if (layouts.size() == 0) {
+      problems << "${name}: manca <layout> con la misura minima (D15)".toString()
+    } else {
+      if (attr(layouts[0], 'minWidth') != policy['minWidth']) problems << "${name}: <layout> android:minWidth deve essere ${policy['minWidth']} (D15)".toString()
+      if (attr(layouts[0], 'minHeight') != policy['minHeight']) problems << "${name}: <layout> android:minHeight deve essere ${policy['minHeight']} (D15)".toString()
+    }
+    return problems
   }
 
   @TaskAction
@@ -329,6 +395,9 @@ abstract class VerifyReleaseManifest extends DefaultTask {
           }
         }
       }
+
+      // Fase 10 (P4, D14-D17): le impostazioni delle finestre della MainActivity.
+      problems.addAll(verifyMainActivity(application, mainActivityPolicy.get()))
 
       // Fase 6 (D3, D38): solo le librerie native della GPU, facoltative.
       application.'uses-native-library'.each { library ->
@@ -391,6 +460,7 @@ ext.registerVerifyReleaseManifest = { variant, mergedManifestArtifact ->
     allowedNativeLibraries.set(releaseManifestPolicy.allowedNativeLibraries)
     thirdPartyComponentPrefixes.set(releaseManifestPolicy.thirdPartyComponentPrefixes)
     allowedThirdPartyComponents.set(releaseManifestPolicy.allowedThirdPartyComponents)
+    mainActivityPolicy.set(releaseManifestPolicy.mainActivityPolicy)
   }
   // Un APK che non passa il controllo non si produce nemmeno.
   tasks.configureEach { task ->

@@ -94,6 +94,7 @@ import dev.pampa.mycloudgallery.root.RootDestination
 import dev.pampa.mycloudgallery.root.WipedScreen
 import dev.pampa.mycloudgallery.status.GlobalStatus
 import dev.pampa.mycloudgallery.status.StatusAction
+import dev.pampa.mycloudgallery.window.WindowStartEffect
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -441,6 +442,8 @@ private fun MainDestination(
   mapHost: MapHostViewModel? = null,
 ) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
+  // Fase 10 (P4, D16): una finestra nuova parte dalla pagina scelta (album, ricordo, mappa), con un evento interno e solo dopo il blocco app.
+  WindowStartEffect(nav)
   val library: LibraryViewModel = hiltViewModel()
   val gallery: GalleryHostViewModel = hiltViewModel()
   val viewer = LocalViewerHost.current

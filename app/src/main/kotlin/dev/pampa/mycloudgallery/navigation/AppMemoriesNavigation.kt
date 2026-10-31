@@ -52,6 +52,7 @@ import dev.pampa.mycloudgallery.memories.AppNotificationAccess
 import dev.pampa.mycloudgallery.memories.MemoriesGraph
 import dev.pampa.mycloudgallery.notify.OpenMemoriesRequests
 import dev.pampa.mycloudgallery.notify.ServeOpenMemoriesRequests
+import dev.pampa.mycloudgallery.window.ServesEntryRequests
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -218,10 +219,13 @@ internal fun MemoriesForegroundRound(host: MemoriesHostViewModel, collectionsOpe
 @Composable
 internal fun MemoriesNotificationEffect(nav: NavController, host: MemoriesHostViewModel) {
   val scope = rememberCoroutineScope()
-  ServeOpenMemoriesRequests(host.requests) {
-    scope.launch {
-      val id = host.notifiedMemory()
-      if (id != null) nav.openMemory(id) else nav.openAllMemories()
+  // Fase 10 (P4, D16): con due finestre il tocco sulla notifica lo serve la sola finestra principale (l'evento e' del processo: lo prenderebbe la prima che arriva).
+  ServesEntryRequests {
+    ServeOpenMemoriesRequests(host.requests) {
+      scope.launch {
+        val id = host.notifiedMemory()
+        if (id != null) nav.openMemory(id) else nav.openAllMemories()
+      }
     }
   }
 }

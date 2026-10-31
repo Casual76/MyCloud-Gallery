@@ -15,7 +15,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -24,6 +23,7 @@ import androidx.core.content.ContextCompat
 import dev.pampa.mycloudgallery.feature.library.library.LibraryCommands
 import dev.pampa.mycloudgallery.gallery.AppLibraryCommands
 import dev.pampa.mycloudgallery.gallery.LibraryCommandHost
+import dev.pampa.mycloudgallery.window.WindowHost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -89,10 +89,8 @@ internal fun LibraryCommandHostEffect(commands: LibraryCommands, onAccessChanged
       }
     }
   }
-  DisposableEffect(app, host) {
-    app.host = host
-    onDispose { if (app.host === host) app.host = null }
-  }
+  // Fase 10 (P4, D18): con due finestre l'ospite e' quello della finestra che ha il fuoco (`WindowHost`), non dell'ultima composta.
+  WindowHost(host = host, key = app, current = { app.host }, set = { app.host = it })
 }
 
 /** I permessi di lettura dei media per questa versione di Android (gli stessi del passo 9 dell'onboarding). */

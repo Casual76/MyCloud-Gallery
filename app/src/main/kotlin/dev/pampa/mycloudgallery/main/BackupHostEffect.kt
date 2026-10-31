@@ -9,7 +9,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -36,6 +35,7 @@ import dev.pampa.mycloudgallery.feature.library.collections.openCollection
 import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
 import dev.pampa.mycloudgallery.feature.nas.hub.openNas
 import dev.pampa.mycloudgallery.feature.settings.SettingsPasswordRoute
+import dev.pampa.mycloudgallery.window.WindowHost
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -110,10 +110,8 @@ internal fun BackupHostEffect(actions: AppBackupActions?, nav: NavController, on
       }
     }
   }
-  DisposableEffect(actions, host) {
-    actions.host = host
-    onDispose { if (actions.host === host) actions.host = null }
-  }
+  // Fase 10 (P4, D18): con due finestre l'ospite e' quello della finestra che ha il fuoco (`WindowHost`), non dell'ultima composta.
+  WindowHost(host = host, key = actions, current = { actions.host }, set = { actions.host = it })
   BackupConfirmSheet(actions)
 }
 

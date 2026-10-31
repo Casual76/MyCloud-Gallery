@@ -186,6 +186,8 @@ class EntryHardeningTest {
     for (incoming in listOf(Intent(NotifyRules.OPEN_ACTION), hostile(NotifyRules.OPEN_ACTION))) {
       val entry = MainActivity.entryOf(app, incoming)
       assertThat(entry.opensMemories).isTrue()
+      // Fase 10 (P4, D16): la richiesta la serve la finestra principale; se l'intent e' arrivato alla seconda, si porta davanti la principale.
+      assertThat(entry.needsPrimaryWindow).isTrue()
       val clean = entry.clean
       assertThat(clean.action).isEqualTo(Intent.ACTION_MAIN)
       assertThat(clean.categories).containsExactly(Intent.CATEGORY_LAUNCHER)
@@ -207,6 +209,7 @@ class EntryHardeningTest {
     for (action in others) {
       val entry = MainActivity.entryOf(app, hostile(action))
       assertThat(entry.opensMemories).isFalse()
+      assertThat(entry.needsPrimaryWindow).isFalse()
       assertThat(entry.clean.extras).isNull()
       assertThat(entry.clean.data).isNull()
     }

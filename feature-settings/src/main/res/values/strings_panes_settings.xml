@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 10 (P5, D13 (4)): il pannello di destra delle Impostazioni, da finestra estesa, quando non c'e' niente di scelto. -->
+  <string name="settings_panes_empty_title">Scegli una voce</string>
+  <string name="settings_panes_empty_message">Qui compare la pagina che scegli a sinistra.</string>
+</resources>

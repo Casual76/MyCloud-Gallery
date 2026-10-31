@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.NonRestartableComposable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -187,7 +188,10 @@ class MapLibreSurfaceContent(private val starter: MapEngineStarter) : MapSurface
 }
 
 /** Il ciclo di vita della `MapView` segue quello della pagina (MapLibre lo vuole): creata, avviata, ripresa, e al contrario; e a ogni richiamo di memoria (app in secondo piano o memoria che manca) la libera (`onTrimMemory`, §1.4). */
+// Fase 9, P13: senza gruppo di ripartenza (non legge stato: due soli effetti). La lambda di ripartenza che Compose genera porterebbe `MapView` nella firma, e
+// R8 la fondeva con lambda di :app della stessa forma: il passo 7h di tools/check.ps1 vedeva "MapLibre chiamato da codice nostro fuori da feature/map/".
 @Composable
+@NonRestartableComposable
 private fun MapViewLifecycle(view: MapView) {
   val lifecycle = LocalLifecycleOwner.current.lifecycle
   val context = LocalContext.current

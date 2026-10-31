@@ -357,6 +357,18 @@ internal object DiagCatalogEntries {
     // --- Ricordi e mappa (Fase 9, P0: le voci di stato; i codici del §2.12 li aggiunge P13) --------------------------------
     DiagEntry(DiagCodes.MEMORY_STATE, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_state_title, R.string.diag_memory_state_guide, null),
     DiagEntry(DiagCodes.MAP_STATE, DiagSection.MAP, DiagSeverity.INFO, R.string.diag_map_state_title, R.string.diag_map_state_guide, null),
+    // P13: i codici del §2.12. "Apri le impostazioni" per una notifica non partita (permesso, canale); un HOST o PATH rifiutato e' un difetto da segnalare.
+    DiagEntry(DiagCodes.MEMORY_SHELF_RESET, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_shelf_reset_title, R.string.diag_memory_shelf_reset_guide, null),
+    DiagEntry(DiagCodes.MEMORY_NO_VECTORS, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_no_vectors_title, R.string.diag_memory_no_vectors_guide, null),
+    DiagEntry(DiagCodes.MEMORY_DROPPED, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_dropped_title, R.string.diag_memory_dropped_guide, null),
+    DiagEntry(DiagCodes.NOTIFY_SKIPPED, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_notify_skipped_title, R.string.diag_notify_skipped_guide, DiagAction.OPEN_NOTIFICATION_SETTINGS),
+    DiagEntry(DiagCodes.NOTIFY_LATE, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_notify_late_title, R.string.diag_notify_late_guide, null),
+    DiagEntry(DiagCodes.NOTIFY_REVOKED, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_notify_revoked_title, R.string.diag_notify_revoked_guide, null),
+    DiagEntry(DiagCodes.MAP_REQUESTS, DiagSection.MAP, DiagSeverity.INFO, R.string.diag_map_requests_title, R.string.diag_map_requests_guide, null),
+    DiagEntry(DiagCodes.MAP_REFUSED, DiagSection.MAP, DiagSeverity.INFO, R.string.diag_map_refused_title, R.string.diag_map_refused_guide, null),
+    DiagEntry(DiagCodes.MAP_REGION_PARTIAL, DiagSection.MAP, DiagSeverity.INFO, R.string.diag_map_region_partial_title, R.string.diag_map_region_partial_guide, null),
+    DiagEntry(DiagCodes.MAP_REGION_SPACE, DiagSection.MAP, DiagSeverity.WARNING, R.string.diag_map_region_space_title, R.string.diag_map_region_space_guide, null),
+    DiagEntry(DiagCodes.MAP_INVALID_POINTS, DiagSection.MAP, DiagSeverity.INFO, R.string.diag_map_invalid_points_title, R.string.diag_map_invalid_points_guide, null),
 
     // P11: i codici del §2.6 (modelli, motori, calcolo, dati AI dell'indice, indice di ricerca, ritaglio).
     DiagEntry(DiagCodes.AI_MODEL_MISSING, DiagSection.SEARCH, DiagSeverity.INFO, R.string.diag_ai_model_missing_title, R.string.diag_ai_model_missing_guide, null),

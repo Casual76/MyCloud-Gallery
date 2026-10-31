@@ -95,6 +95,13 @@ object ExportKeys {
     "headsAccepted", "holdActive", "eraseStep", "eraseLocal", "eraseNas", "eraseWaiting",
     // Correzioni E (C234): i segmenti in attesa (non sono rifiuti: `rejectedSegments` conta solo i veri rifiuti).
     "waitingSegments",
+    // I ricordi e le notifiche (Fase 9, P13, `MemoriesDiagnostics` di :app, §2.12, D33): solo numeri, flag e costanti; mai titoli, luoghi, date, id dei ricordi,
+    // nomi o id di persone, l'ora scelta. Gli esclusi e le notifiche saltate per motivo usano le famiglie `dropped.` e `skip.` qui sotto. `mounted`, `status`,
+    // `roundErrors`, `failed` e `count` sono gia' sopra.
+    "onShelf", "unseen", "lastRoundDays", "roundMs", "late", "delivered",
+    // La mappa (Fase 9, P13, `MapDiagnostics` di :app): solo numeri, flag e costanti; mai coordinate, riquadri, tessere, nomi delle regioni o dei luoghi, la camera.
+    // I rifiutati per motivo usano la famiglia `reason.` (le costanti di `RefuseReason`). `allowed`, `bytes` e `available` sono gia' sopra.
+    "online", "byDefault", "opened", "points", "withoutPosition", "invalid", "regions", "errors", "paused", "withoutVersion", "tileJson",
   )
 
   /**
@@ -111,6 +118,9 @@ object ExportKeys {
     Regex("reason\\.[A-Z][A-Z0-9_]{2,31}"),
     // I problemi del backup per codice (`problem.` + il codice di `BackupProblemCode`, in minuscolo): costanti del codice.
     Regex("problem\\.[a-z][a-z_]{2,31}"),
+    // Fase 9 (P13): gli esclusi dei ricordi per motivo (`dropped.` + il codice di `DropReason`) e le notifiche saltate (`skip.` + il codice di `NotifySkip`).
+    Regex("dropped\\.[a-z][a-z_]{2,31}"),
+    Regex("skip\\.[a-z][a-z_]{2,31}"),
   )
 
   fun isAllowed(key: String): Boolean = key in ALLOWED || FAMILIES.any { it.matches(key) }

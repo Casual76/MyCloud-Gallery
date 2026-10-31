@@ -12,6 +12,9 @@ internal enum class LibraryLicense(@StringRes val shortName: Int, @StringRes val
   MIT(R.string.about_license_mit, R.string.about_license_mit_full, R.string.about_license_mit_url),
   BOUNCY_CASTLE(R.string.about_license_bc, R.string.about_license_bc_full, R.string.about_license_bc_url),
   SIL_OFL(R.string.about_license_ofl, R.string.about_license_ofl_full, R.string.about_license_ofl_url),
+
+  /** Fase 9 (P13): MapLibre Native Android e le sue librerie dei gesti. */
+  BSD_2(R.string.about_license_bsd2, R.string.about_license_bsd2_full, R.string.about_license_bsd2_url),
 }
 
 /**
@@ -190,6 +193,35 @@ internal val ABOUT_LIBRARIES: List<AboutLibrary> = listOf(
     license = LibraryLicense.APACHE_2,
     versionKey = "zxing",
     version = "3.5.4",
+  ),
+  // --- Mappa (Fase 9, P13: da quando `:app` collega `:feature-map`; versioni da versions-app.gradle e dai POM, "Fase 9 P1" in docs/decisioni.md) ---------
+  AboutLibrary(
+    name = "MapLibre Native Android",
+    author = "Copyright (c) 2021 MapLibre contributors; (c) 2018-2021 MapTiler.com; (c) 2014-2020 Mapbox",
+    detail = "la mappa e la mini-mappa, con la libreria dei gesti 0.0.4, versione 13.7.1",
+    license = LibraryLicense.BSD_2,
+    versionKey = "maplibre",
+    version = "13.7.1",
+  ),
+  AboutLibrary(
+    name = "MapLibre GeoJSON e Turf",
+    author = "MapLibre contributors",
+    detail = "geometrie per la mappa, versione 6.0.1",
+    license = LibraryLicense.APACHE_2,
+  ),
+  AboutLibrary(
+    name = "OkHttp",
+    author = "Square, Inc.",
+    detail = "il client delle tessere della mappa dettagliata (un solo indirizzo, dietro il cancello dell'app), versione 4.12.0",
+    license = LibraryLicense.APACHE_2,
+    versionKey = "okhttp",
+    version = "4.12.0",
+  ),
+  AboutLibrary(
+    name = "Timber",
+    author = "Jake Wharton",
+    detail = "log di MapLibre, versione 5.0.1; l'app non pianta nessun albero, quindi non scrive niente",
+    license = LibraryLicense.APACHE_2,
   ),
   // --- Immagini --------------------------------------------------------------------------------------------------------
   AboutLibrary(

@@ -386,6 +386,20 @@ object DiagCodes {
   @JvmField val MEMORY_STATE = DiagCode("MEMORY_STATE")
   @JvmField val MAP_STATE = DiagCode("MAP_STATE")
 
+  // P13: gli altri codici del §2.12 (stessi id di `MemoriesDiag` di core-memories e `MapDiag` di core-map, scritti come letterali perche' questo modulo
+  // non vede i due core; `Phase9DiagCatalogTest` di :app verifica che ogni codice dei contratti sia qui). Solo conteggi per motivo.
+  @JvmField val MEMORY_SHELF_RESET = DiagCode("MEMORY_SHELF_RESET")
+  @JvmField val MEMORY_NO_VECTORS = DiagCode("MEMORY_NO_VECTORS", setOf("E-MEM16"))
+  @JvmField val MEMORY_DROPPED = DiagCode("MEMORY_DROPPED")
+  @JvmField val NOTIFY_SKIPPED = DiagCode("NOTIFY_SKIPPED", setOf("E-NT1", "E-NT2", "E-NT6"))
+  @JvmField val NOTIFY_LATE = DiagCode("NOTIFY_LATE", setOf("E-NT3"))
+  @JvmField val NOTIFY_REVOKED = DiagCode("NOTIFY_REVOKED", setOf("E-NT7", "E-H8"))
+  @JvmField val MAP_REQUESTS = DiagCode("MAP_REQUESTS")
+  @JvmField val MAP_REFUSED = DiagCode("MAP_REFUSED", setOf("E-MAP1", "E-MAP4"))
+  @JvmField val MAP_REGION_PARTIAL = DiagCode("MAP_REGION_PARTIAL")
+  @JvmField val MAP_REGION_SPACE = DiagCode("MAP_REGION_SPACE")
+  @JvmField val MAP_INVALID_POINTS = DiagCode("MAP_INVALID_POINTS", setOf("E-MAP7"))
+
   // P11: i codici del §2.6 (stessi id e stessi edge case di `ModelDiag`, `AiDiag`, `AiIndexDiag` e `SearchDiag`, scritti come letterali
   // perche' questo modulo non vede core-models, core-ai, core-index ne' core-search). `Phase6DiagCatalogTest` di :app verifica che ogni
   // codice dei contratti sia qui, con lo stesso id e gli stessi edge case.

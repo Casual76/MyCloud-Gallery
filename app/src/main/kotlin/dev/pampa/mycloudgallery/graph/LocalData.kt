@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.graph
 
+import androidx.core.app.NotificationManagerCompat
+import dev.pampa.mycloudgallery.notify.AppNotifications
+import dev.pampa.mycloudgallery.work.MemoriesWorkScheduling
 import android.content.Context
 import dev.pampa.mycloudgallery.ai.AiGraph
 import dev.pampa.mycloudgallery.ai.AiStageMark
@@ -151,6 +154,18 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
   }
 
   private suspend fun eraseGalleryData(steps: Steps, stopGallery: Boolean, allDatabases: Boolean) {
+    // Fase 9 (P13, §1.4, D37): ricordi e mappa PER PRIMI. Niente si monta o si ricostruisce piu', il lavoro `memories-notify` e la notifica in tendina si
+    // tolgono; poi, con il resto dei file, `memories/` (scaffale, registro e preferenze delle notifiche, chi e' in tendina, musica) e `map/` (database e cache
+    // di MapLibre, versione del TileJSON, impostazioni e camera). Anche per i soli dati di un account: lo scaffale e la camera sono del vecchio account.
+    val memoriesStopped = if (stopGallery) steps.run("ricordi") { graph.memoriesStopper?.stop() } else true
+    if (!memoriesStopped) return
+    val mapStopped = if (stopGallery) steps.run("mappa") { graph.mapStopper?.stop() } else true
+    if (!mapStopped) return
+    // Il lavoro unico delle notifiche e la notifica in tendina si tolgono sempre (E-NT15): possono venire da un processo di prima.
+    steps.run("notifica dei ricordi") {
+      MemoriesWorkScheduling.cancel(context)
+      NotificationManagerCompat.from(context).cancel(AppNotifications.ID_MEMORY)
+    }
     // Fase 8 (P13, §1.4, E-F35): le persone PER PRIME. Motori rilasciati, calcolo fermo, niente si apre piu' (il recinto), i database dei volti chiusi; poi le chiavi dei
     // volti (una per generazione) prima di qualunque dato, e i file. Anche per i soli dati di un account: le chiavi e i database dei volti sono del vecchio account.
     val facesStopped = if (stopGallery) steps.run("volti") { graph.facesStopper?.stop() } else true
@@ -198,7 +213,7 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
         // I11: in debug anche i dati dello strumento di valutazione della ricerca (`eval/`); in release non ce ne sono.
         // Fase 8 (P13): i database dei volti (`faces/faces-<G>.db` con `-wal`, `-shm`, `-journal`, anche con `allDatabases = false`), le chiavi avvolte, la memoria
         // locale (`faces-local`), il diario della cancellazione, il registro delle teste personali e il battito del calcolo.
-        for (name in NAS_FILES + AI_FILES + FACES_FILES + DeveloperTools.erasableDirs()) {
+        for (name in NAS_FILES + AI_FILES + FACES_FILES + PHASE9_FILES + DeveloperTools.erasableDirs()) {
           val target = File(context.noBackupFilesDir, name)
           if (target.exists() && !target.deleteRecursively()) steps.ok = false
         }
@@ -245,6 +260,15 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
 
     /** Fase 8 (P13): i file locali delle persone (database, chiavi avvolte, memoria locale, diario della cancellazione, teste personali, battito). */
     val FACES_FILES: List<String> = dev.pampa.mycloudgallery.faces.FacesWiring.FILES
+
+    /**
+     * Fase 9 (P13, D37): `memories/` (scaffale, registro e preferenze delle notifiche, chi e' in tendina, musica, ritardi) e `map/` (database e cache di MapLibre,
+     * versione del TileJSON, impostazioni della mappa e camera). I file della valutazione dei ricordi (`eval/`, solo debug) li toglie `DeveloperTools.erasableDirs`.
+     */
+    val PHASE9_FILES: List<String> = listOf(
+      dev.pampa.mycloudgallery.memories.MemoriesWiring.DIR,
+      dev.pampa.mycloudgallery.feature.map.map.MapLibreInit.MAP_DIR,
+    )
 
     /**
      * Fase 6 (P11): il buffer di analisi, l'indice di ricerca (vettori, registro delle origini, righe del testo letto, corpi propri), i

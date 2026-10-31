@@ -87,6 +87,16 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   @Inject
   lateinit var facesLazy: dagger.Lazy<dev.pampa.mycloudgallery.faces.FacesGraph>
 
+  /**
+   * Fase 9 (P13): i ricordi (`MemoriesModule`) e la mappa (`MapModule`). Nascono con il processo **senza I/O**: i ricordi si montano da soli dopo il primo
+   * disegno utile con la famiglia pronta (lo scaffale si legge allora, fuori dal thread principale); la mappa non fa niente finche' qualcuno non la guarda.
+   */
+  @Inject
+  lateinit var memoriesLazy: dagger.Lazy<dev.pampa.mycloudgallery.memories.MemoriesGraph>
+
+  @Inject
+  lateinit var mapLazy: dagger.Lazy<dev.pampa.mycloudgallery.map.MapGraph>
+
   private lateinit var graph: AppGraph
   private lateinit var gallery: GalleryGraph
   private lateinit var notifications: AppNotifications
@@ -95,6 +105,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   private lateinit var ai: AiStack
   private lateinit var albums: dev.pampa.mycloudgallery.albums.AlbumsGraph
   private lateinit var faces: dev.pampa.mycloudgallery.faces.FacesGraph
+  private lateinit var memories: dev.pampa.mycloudgallery.memories.MemoriesGraph
+  private lateinit var map: dev.pampa.mycloudgallery.map.MapGraph
 
   override val workManagerConfiguration: Configuration
     get() = Configuration.Builder()
@@ -127,6 +139,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     ai = AvvioTrace.section("MCG:app:ai") { aiLazy.get() }
     albums = AvvioTrace.section("MCG:app:album") { albumsLazy.get() }
     faces = AvvioTrace.section("MCG:app:persone") { facesLazy.get() }
+    memories = AvvioTrace.section("MCG:app:ricordi") { memoriesLazy.get() }
+    map = AvvioTrace.section("MCG:app:mappa") { mapLazy.get() }
     // Nella build release questa funzione e' vuota: vedi src/release/.../AppLogging.kt.
     installLogging()
     AvvioTrace.section("MCG:app:notifiche") { notifications.createChannels() }
@@ -169,6 +183,9 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     if (::ai.isInitialized) ai.onTrimMemory(level)
     // Fase 8 (P13, §2.2 "Rilascio"): rilevatore ed embedder si rilasciano a memoria bassa (si riaprono da soli), e le copertine in memoria si buttano.
     if (::faces.isInitialized) faces.onTrimMemory(level)
+    // Fase 9 (P13, §1.4 "Memoria"): la tabella a colonne dei ricordi e le mini-mappe in memoria si lasciano (si rifanno all'uso).
+    if (::memories.isInitialized) memories.onTrimMemory(level)
+    if (::map.isInitialized) map.onTrimMemory(level)
   }
 
   private fun galleryLifecycle(): GalleryLifecycle = object : GalleryLifecycle {

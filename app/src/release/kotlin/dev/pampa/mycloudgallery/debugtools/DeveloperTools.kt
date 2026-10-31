@@ -63,6 +63,10 @@ internal object DeveloperTools {
   @Suppress("UNUSED_PARAMETER")
   fun installPeople(graph: Any, people: Any) = Unit
 
+  /** Fase 9 (P13): lo strumento di valutazione dei ricordi esiste solo in debug. */
+  @Suppress("UNUSED_PARAMETER")
+  fun installMemories(graph: Any) = Unit
+
   /** Fase 8 (DR-2, F109): nessuna ricetta forzata; la ricetta dei volti e' sempre quella di serie. */
   @Suppress("UNUSED_PARAMETER")
   fun facesRecipe(context: Context): Int? = null

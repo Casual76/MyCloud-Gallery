@@ -52,6 +52,11 @@ enum class DiagJob {
 
   /** Fase 8 (correzioni E, RG-1): il raggruppamento notturno delle persone (`FacesNightlyWorker`, regole di `AI_COMPUTE`), un lavoro suo. */
   FACES_NIGHTLY,
+
+  /** Fase 9 (P13): la generazione notturna dei ricordi (dentro la manutenzione), il lavoro unico della notifica e lo scaricamento di una regione (P5). */
+  MEMORIES_GENERATE,
+  MEMORIES_NOTIFY,
+  MAP_REGION,
 }
 
 /** Com'e' finita una tappa di un lavoro (`StageOutcome` in parole fisse). */

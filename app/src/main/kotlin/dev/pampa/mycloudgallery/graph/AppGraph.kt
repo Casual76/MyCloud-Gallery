@@ -199,6 +199,17 @@ class AppGraph(
   var facesStopper: GalleryStopper? = null
 
   /**
+   * Fase 9 (P13, §1.4, D37): chi ferma i ricordi **per primi** all'azzeramento (niente si monta piu', il lavoro delle notifiche perde il suo giorno, poi
+   * lavoro e notifica tolti) e chi ferma la mappa (niente si ricostruisce piu', la mini-mappa dimentica), prima di togliere `memories/` e `map/`. Si
+   * registrano da soli (`MemoriesModule`, `MapModule`); nei test senza ricordi o senza mappa restano null.
+   */
+  @Volatile
+  var memoriesStopper: GalleryStopper? = null
+
+  @Volatile
+  var mapStopper: GalleryStopper? = null
+
+  /**
    * Fase 8 (P13, D14, E-F35): le chiavi dei volti (una chiave del Keystore per generazione, `mcg-faces-<G>`): **una sola** istanza per processo, quella
    * della piattaforma (nel telefono `FacesKeyStore`: va usata cosi' com'e', senza avvolgerla, o si perde `FacesKeyProbe`). La usano lo store dei volti e
    * l'azzeramento (`DeviceSelfWipe` le distrugge nella fase (3) con le credenziali, prima di qualunque dato).

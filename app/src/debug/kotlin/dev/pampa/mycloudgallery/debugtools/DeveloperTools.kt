@@ -122,6 +122,12 @@ internal object DeveloperTools {
     dev.pampa.mycloudgallery.debugtools.eval.faces.FacesEvalEnvironmentHolder.current = AppFacesEvalEnvironment(live, facade)
   }
 
+  /** Fase 9 (P13): la porta dello strumento di valutazione dei ricordi (P11) sopra i ricordi montati, in sola lettura. Solo debug. */
+  fun installMemories(graph: Any) {
+    val memories = graph as? dev.pampa.mycloudgallery.memories.MemoriesGraph ?: return
+    dev.pampa.mycloudgallery.debugtools.eval.memories.MemoriesEvalEnvironmentHolder.current = AppMemoriesEvalEnvironment(memories)
+  }
+
   /**
    * Fase 8 (DR-2, F109), SOLO debug, SOLO con il segno: la ricetta dei volti forzata dallo scenario `f109-recipe` (ricetta 2), letta quando si montano le persone.
    * Senza il segno la debug e' l'app vera. In release non esiste (tools/check.ps1 cerca i resti degli scenari nel dex).

@@ -200,8 +200,8 @@ class AboutScreenTest {
 
     scrollTo("Le librerie non inviano dati.", substring = true)
     rule.onNodeWithText(
-      "Le librerie non inviano dati. Per la galleria del telefono l’app non fa nessuna connessione di rete. " +
-        "Gli indirizzi qui sotto sono solo testo: non si aprono da soli.",
+      "Le librerie non inviano dati. Per la galleria del telefono l’app non fa nessuna connessione di rete; solo la mappa dettagliata, se è " +
+        "accesa, chiede le zone guardate a OpenFreeMap. Gli indirizzi qui sotto sono solo testo: non si aprono da soli.",
     ).assertIsDisplayed()
   }
 

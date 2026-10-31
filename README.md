@@ -213,6 +213,16 @@ base per tutti (risposta Q1 (c) del 27/10, `FeatureFlags.mapOnline`), con l'inte
 resta intero. Le aggiunte ai moduli esistenti (campi dei ricordi in `core-personal`, `TripMemories` in `core-albums`, `ViewerPlaceMap` in
 `feature-viewer`, sezione `places` delle Raccolte, `DiagSection.MEMORIES` e `MAP`) sono in `docs/decisioni.md` ("Fase 9 P0").
 
+**Fase 9 in `:app` (P13).** `MemoriesModule` monta i ricordi (`MemoriesWiring.build` -> `MemoriesGraph`): nascono senza I/O e si montano dopo il
+primo disegno utile con la famiglia pronta, leggendo prima l'ultimo scaffale da file; le porte vere sono i viaggi di `CatalogTrips`, le persone
+montate (solo con un nome, celle mostrabili, il nome mai salvato), i vettori della ricerca, le misure dei pixel dalle miniature del telefono, i
+ritagli; la notifica (`MemoryNotifier`, il lavoro unico `memories-notify` con il suo giorno in `MemoryNotifySlot`) e la musica (selettore di sistema,
+`MediaPlayer` con il focus audio). `MapModule` monta la mappa (`MapGraph`), pigra in ogni pezzo: impostazioni su DataStore, punti dalla query di P3
+alla prima apertura, rete e traffico da core-network e dal registro, MapLibre solo alla prima mappa o mini-mappa con il client delle tessere
+installato prima; le regioni offline (P5) sono ancora il null-object. Le sezioni Ricordi e Luoghi delle Raccolte, le rotte dei due feature,
+"Mostra sulla mappa" nel viewer, le voci di Impostazioni, la generazione notturna nella manutenzione, la Diagnostica e l'azzeramento (`memories/`,
+`map/`, lavoro e notifica) sono in `docs/decisioni.md` ("Fase 9 P13: integrazione").
+
 **Fase 6 in `:app` (P11).** `AiModule` monta tutto una volta per processo (`AiWiring.build`): `LocalModels` (cartella
 `noBackupFilesDir/models`, sorgenti di `ModelFetchers`, cancello di rete per l'HTTPS; la copia sul NAS resta spenta finche' `core-nas` non
 ha la scrittura a flusso), `SearchGraph` (`noBackupFilesDir/search`: indice locale, righe del testo letto, cronologia nel database),

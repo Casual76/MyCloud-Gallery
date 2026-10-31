@@ -118,6 +118,9 @@ class RecentEventsContributor(
       DiagJob.FACES_COMPUTE -> R.string.diagnostics_job_faces_compute
       DiagJob.FACES_ERASE -> R.string.diagnostics_job_faces_erase
       DiagJob.FACES_NIGHTLY -> R.string.diagnostics_job_faces_nightly
+      DiagJob.MEMORIES_GENERATE -> R.string.diagnostics_job_memories_generate
+      DiagJob.MEMORIES_NOTIFY -> R.string.diagnostics_job_memories_notify
+      DiagJob.MAP_REGION -> R.string.diagnostics_job_map_region
     }
 
     @StringRes

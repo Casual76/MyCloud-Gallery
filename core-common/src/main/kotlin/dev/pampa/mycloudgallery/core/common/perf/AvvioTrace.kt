@@ -42,6 +42,23 @@ object AvvioTrace {
   const val PAGE_SEARCH: String = "MCG:pagina:cerca"
 
   /**
+   * Fase 9 (P12, `docs/fase9-progetto.md` §5.4): il lavoro dei ricordi e della mappa che il benchmark misura. Sezioni asincrone (il lavoro sospende e puo'
+   * riprendere su un altro thread), nomi fissi, mai dati:
+   *  - [MEMORIES_GENERATE]: un giro del motore dei ricordi con budget notturno (il passo pieno: tabella a colonne, candidati, scelta delle foto, scaffale);
+   *  - [MEMORIES_GENERATE_LIGHT]: un giro con il budget del passo leggero (`LIGHT` e `OPEN`, 5 s);
+   *  - [MAP_CLUSTERS]: un aggiornamento delle bolle a camera ferma (`BubbleEngine.compute`: celle dell'indice, le piu' grandi, copertine filtrate).
+   */
+  const val MEMORIES_GENERATE: String = "MCG:memories.generate"
+  const val MEMORIES_GENERATE_LIGHT: String = "MCG:memories.generate.light"
+  const val MAP_CLUSTERS: String = "MCG:map.clusters"
+
+  /**
+   * Il tempo di disegno di un fotogramma di MapLibre, in microsecondi, come lo misura MapLibre stessa (un contatore di traccia, non una sezione: il disegno
+   * sta sul suo thread di rendering). Lo scrive la superficie della mappa a ogni fotogramma disegnato; nessun dato, solo il numero.
+   */
+  const val MAP_DRAW_US: String = "MCG:map.drawUs"
+
+  /**
    * Vero se `android.os.Trace` c'e' davvero: nei test sulla JVM senza Robolectric le classi di Android sono vuote e lancerebbero a ogni
    * chiamata; li' le sezioni non si scrivono e il codice misurato gira lo stesso.
    */
@@ -77,6 +94,12 @@ object AvvioTrace {
     } finally {
       Trace.endAsyncSection(name, cookie)
     }
+  }
+
+  /** Un valore sulla traccia (contatore): [name] e' un nome fisso, [value] un numero. Come le sezioni, costa un controllo di `atrace` quando nessuno registra. */
+  fun counter(name: String, value: Long) {
+    if (!available) return
+    Trace.setCounter(name, value)
   }
 
   /** Un segno di durata zero. */

@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.memories.plan
 
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.index.IndexOrderedTimelineView
 import dev.pampa.mycloudgallery.core.memories.contract.CellTable
@@ -174,8 +175,17 @@ class MemoryEngine(
         MemoryView(memory, view, cover, id.value in choices.seen, name)
       }
 
+  /**
+   * Il giro, **con la sezione di traccia** che il benchmark misura (Fase 9, P12, §5.4): `MCG:memories.generate` per il budget notturno, `MCG:memories.generate.light`
+   * per `LIGHT` e `OPEN`. La sezione comincia a lavoro iniziato (dopo l'attesa del blocco): misura il giro, non la coda. Nessun dato nel nome.
+   */
   override suspend fun refresh(reason: RefreshReason, budget: Duration): RefreshReport =
-    withContext(dispatcher) { lock.withLock { refreshLocked(reason, budget) } }
+    withContext(dispatcher) {
+      lock.withLock {
+        val section = if (reason == RefreshReason.NIGHTLY) AvvioTrace.MEMORIES_GENERATE else AvvioTrace.MEMORIES_GENERATE_LIGHT
+        AvvioTrace.asyncSection(section) { refreshLocked(reason, budget) }
+      }
+    }
 
   override suspend fun prune(): RefreshReport = withContext(dispatcher) { lock.withLock { pruneLocked() } }
 

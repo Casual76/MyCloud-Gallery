@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.map.map
 
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.map.contract.CameraSpot
 import dev.pampa.mycloudgallery.core.map.contract.CellKey
 import dev.pampa.mycloudgallery.core.map.contract.GeoClusterIndex
@@ -84,7 +85,11 @@ class BubbleEngine(
    * della cella; se nessuno e' visibile, la bolla non c'e'. Una copertina che la Libreria non sa disegnare ([drawable] falso: il membro di un gruppo che non ne e'
    * la copertina non ha una cella) cede il posto, se si puo', a un altro media della cella. Sospende solo per il filtro; mai sul thread principale.
    */
-  suspend fun compute(index: GeoClusterIndex, viewport: MapViewport, drawable: (MediaId) -> Boolean = { true }): List<PlacedBubble> {
+  suspend fun compute(index: GeoClusterIndex, viewport: MapViewport, drawable: (MediaId) -> Boolean = { true }): List<PlacedBubble> =
+    // Fase 9, P12 (§5.4): la sezione di traccia `MCG:map.clusters` e' l'aggiornamento delle bolle a camera ferma che il benchmark misura (p95 <= 8 ms). Nessun dato nel nome.
+    AvvioTrace.asyncSection(AvvioTrace.MAP_CLUSTERS) { computeBubbles(index, viewport, drawable) }
+
+  private suspend fun computeBubbles(index: GeoClusterIndex, viewport: MapViewport, drawable: (MediaId) -> Boolean): List<PlacedBubble> {
     val clusters = index.clusters(viewport.box, viewport.zoom, CELL_DP)
     if (clusters.isEmpty()) return emptyList()
     val biggest = clusters.sortedWith(compareByDescending<GeoCluster> { it.count }.thenBy { it.key.level }.thenBy { it.key.prefix })

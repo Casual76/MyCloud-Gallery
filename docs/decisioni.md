@@ -12988,3 +12988,168 @@ Il pacchetto "mappa e rete" delle correzioni della Fase 9 (branch `fase9/corr-ma
 `feature-diagnostics` 331, `core-common` 157 con i test d'architettura); tutti i passi della release verdi, compreso il **7h** (OkHttp e MapLibre al loro posto: 3.035 chiamate a OkHttp, 125 da `net/`, 116
 chiamate nostre a MapLibre, client installato una volta). Solo `-Bench` saltato (senza il flag). **Un giro rosso prima, per cosa mia**: `NoFixedWaitsTest` di `:app` non vuole un tempo scritto a mano nelle
 prove (`TIMEOUT = 10_000L` in `MapEraseTest`): ora le attese usano `Attese.TETTO` (`integration/Attese.kt`).
+
+## Fase 9 P5: regioni offline (31/10)
+
+Il pacchetto P5 della Fase 9 (`docs/fase9-progetto.md` §4.4 riga P5; §2.9, D26; E-MAP11, E-MAP12, E-MAP13, E-MAP20; prova sul campo F121). Branch `fase9/p5`, partito da `main` `acb1164e` (con la Fase 9 P0-P4, P6-P11 e P13 e i due pacchetti di correzione). Lo ha scritto un solo agente, senza sotto-agenti (regola dell'utente). Consegna le regioni offline della mappa **dentro i limiti di OpenFreeMap**: catalogo fisso, stima dei MB calibrata su tessere vere, controllo prima di partire e stop ai 50 MB veri, un solo scaricamento alla volta, ripresa all'apertura, pagina "Zone senza Internet", legame in `:app`.
+
+### La decisione dell'utente (31/10): restare dentro i limiti di OpenFreeMap
+Le condizioni d'uso di OpenFreeMap (lette il 30/10, "Fase 9 P1") ammettono gli scaricamenti offline solo se **ognuno è al più di 3.000 tessere e 50 MB** (vale il più stretto), con **al più 4 richieste insieme** e **un `User-Agent` che identifichi l'app**; oltre bisognerebbe scrivere a info@openfreemap.org, e **non lo facciamo**. Il catalogo di D26 cambia così (il resto di D26 resta com'è):
+- **regioni intere e paesi**: fino a **z12**; se una voce supera un limite si scende (z11, z10) finché ci sta; **sotto z10 non si offre**;
+- **"la zona attorno a un luogo"**: 15 e 30 km fino a **z14**, 60 km fino a **z13**, con lo stesso scalino in giù se i MB non ci stanno;
+- **tetti**: per regione quelli di OpenFreeMap (50 MB, 3.000 tessere); in tutto **1 GB** (proposta); **1 GiB libero sempre** (E-MAP12);
+- **controllo prima di partire** (tessere e MB stimati, rifiuto oltre: "Questa zona è troppo grande: scegline una più piccola") e **durante** (i byte veri sul filo: oltre 50 MB lo scaricamento si ferma, la regione resta "parziale" con il motivo e non riparte da sola);
+- **mai** una regione spezzata in tanti scaricamenti piccoli per aggirare il limite, **mai** due scaricamenti insieme; al più 4 richieste insieme; `User-Agent` `MyCloudGallery-offline/1`;
+- "Mostra sulla mappa" **non cambia** (decisione del 31/10); `mappa_settings_zones_note` torna a consigliare la zona scaricata.
+
+### Cosa è stato fatto
+- **`core-map/.../regions/`** (JVM puro): `RegionCatalog` (20 regioni, 6 paesi, riquadri nel codice a 0,1° verso l'esterno, con le quote di città, campagna e mare per la stima), `RegionDensity` (la tabella calibrata) e `RegionPlanner` (stima, piano, livello più alto che sta nei limiti), `OfflineMapRegions` (il gestore: un solo scaricamento alla volta, rete e spazio, tetti, stato su disco, ripresa, aggiornamento a mano, azzeramento), `RegionStateStore` (file `map/regions.state`, atomico).
+- **`core-map/.../contract/`**: `OpenFreeMapLimits` (3.000 tessere con il margine di piano a 2.900, 50.000.000 byte, 4 richieste, fattore 1,3), `DownloadBudget` (il conto di uno scaricamento, nel `RegionDownloadScope`), `RefuseReason.LIMIT`, `RegionEngine` (la porta verso `OfflineManager`), `RegionState.maxZoom` e `RegionStop` (il motivo di una zona parziale), `DownloadStart.Busy`, `PlaceSearch`/`PlaceHit`. `TilePolicy` (e il riferimento) rifiutano con `LIMIT` a conto esaurito.
+- **`feature-map/.../net/`**: il conto viaggia con la richiesta (tag) e lo alimenta l'intercettore di rete (`MapWireGuard`: i byte veri sul filo, man mano); il cancello ammette una tessera dello scaricamento solo se c'è posto nel conto; il picco di richieste insieme si conta (`peakInFlight`); il TileJSON chiesto per uno scaricamento porta lo stesso `User-Agent` dell'app; lo stile dello scaricamento lo serve il cancello da sé (`RegionStyleSource`).
+- **`feature-map/.../regions/`**: `MapLibreRegionEngine` (`OfflineManager`, stile con la sola sorgente delle tessere e lo stesso URL stabile degli stili veri, servito dal cancello; database già spostato in `map/` prima di partire; `setConnected` riallineato prima di attivare la regione), la pagina "Zone senza Internet" (catalogo con stima e livello, zone scaricate con avanzamento, zona attorno a un luogo con ricerca per nome e i tre raggi), i fogli (`RegionDownloadSheet.kt`: l'unico file che costruisce `RegionDownloadConfirmation`, dal tocco; seconda conferma sui dati mobili con la dimensione; gestione: riprendi, aggiorna a mano, elimina con conferma), la riga di avanzamento sopra la mappa, la rotta `RegionsDestination`.
+- **`:app`**: `MapGraph.regions` ora è `OfflineMapRegions` vero, nato alla prima richiesta (mai all'avvio), con il suo stato in `noBackupFilesDir/map/`; `downloadScope` legato al cancello; ripresa delle zone interrotte all'apertura (dopo 4 s dal primo disegno); l'azzeramento le toglie per prime; `AppPlaceFinder` (ricerca e centro dei luoghi sul dataset GeoNames che l'app ha già); Diagnostica (`regionsReady`, `regionsPartial`, `regionsBytes`, `regionsLimit`, `downloading`, `peakInFlight`, `MAP_REGION_PARTIAL`, `MAP_REGION_SPACE`).
+- **`core-places`** (fuori dal perimetro dichiarato, **solo aggiunte**: nessun altro modo di cercare un luogo per nome senza rete): `PlacesData.search` e `locate`, nomi senza maiuscole né accenti, i più grandi prima, solo luoghi da 1.000 abitanti.
+
+### I limiti di OpenFreeMap e dove si rispettano
+| Limite | Dove | Prova |
+|---|---|---|
+| al più 3.000 tessere | piano (**≤ 2.900 tessere**: 100 di margine per le richieste doppie di MapLibre, L537), conto (`tryAdmit` prende il posto con un solo passo atomico e conta anche le tessere in volo), stop a 3.000 con `LIMIT` | `RegionPlannerTest`, `DownloadBudgetTest`, `MapDownloadLimitsTest.alle3000TessereLoScaricamentoSiFerma`, `OfflineMapRegionsTest.ilTettoDelleTessereFermaLoScaricamento` |
+| al più 50 MB | piano (`stima × 1,3 ≤ 50 MB`), conto dei **byte veri sul filo** (`MapWireGuard`), stop e "parziale" | `MapDownloadLimitsTest.alibera50MBVeriSulFiloLoScaricamentoSiFerma`, `OfflineMapRegionsTest.ilTettoDeiByteVeriFermaLoScaricamentoENonRiparte`, `RegionDownloadDeviceTest` (MapLibre vero, tessere da 300 KB) |
+| al più 4 richieste insieme | `Dispatcher.maxRequestsPerHost = 4`, picco contato (`peakInFlight`, anche in Diagnostica) | `MapDownloadLimitsTest.alPiu4RichiesteInsiemeVersoLHost` (40 richieste, picco 4), `RegionDownloadDeviceTest` |
+| `User-Agent` che identifichi l'app | `MyCloudGallery-offline/1` (nome dell'app e versione del protocollo; mai dispositivo, sistema o id), anche per il TileJSON dello scaricamento | `MapDownloadLimitsTest.lUserAgentDelloScaricamentoIdentificaLAppENonIlDispositivo`, `MapTileHttpTest`, `RegionDownloadDeviceTest` |
+| mai spezzare, mai due insieme | una partenza del motore per regione (tutto il riquadro, da z0), un solo scaricamento (anche con due tocchi insieme da due thread), la ripresa riparte dal conto di prima | `OfflineMapRegionsTest.unaRegioneEUnoScaricamentoSolo`, `unSoloScaricamentoAllaVolta`, `nemmenoDueTocchiInsieme`, `laRipresaContinuaIlContoDiPrima` |
+
+### La calibrazione della stima (31/10, dal PC, alle condizioni d'uso)
+**Traffico fatto davvero**: tre campioni, **2.809 tessere e 72,5 MB (72.538.252 byte)** sul filo, più 4 richieste del TileJSON (1 di prova e 1 per campione), tutte verso `tiles.openfreemap.org`, **al più 4 richieste insieme** (uno script Python con 4 thread, una connessione per thread, in totale circa 22 secondi), `User-Agent: MyCloudGallery-dev (calibrazione)`, versione del server `20261025_080012_pt`, `Accept-Encoding: gzip` (le dimensioni sono i byte compressi, come MapLibre li riceve), nessun campione sopra i limiti (≤ 3.000 tessere e ≤ 50 MB: il più grande è 1.594 tessere e 31,2 MB). Zone di prova qualunque (una regione, una città e un paese di montagna), mai la casa dell'utente. Le tessere sono state scritte sotto `build/` (76 MB) e **cancellate alla fine**; nel repository vanno solo questi numeri. Lo script e i CSV stanno in `build/p5/` (non versionato).
+
+| Livello | Marche (z0-z12, 731 tessere) | 15 km attorno a Bologna (z0-z14, 484) | 30 km attorno a Sulmona (z0-z14, 1.594) |
+|---|---|---|---|
+| z0 | 1, 48,0 KB | 1, 48,0 KB | 1, 48,0 KB |
+| z1 | 1, 127,0 KB | 1, 127,0 KB | 1, 127,0 KB |
+| z2 | 1, 725,0 KB | 1, 725,0 KB | 1, 725,0 KB |
+| z3 | 1, 529,1 KB | 1, 529,1 KB | 1, 529,1 KB |
+| z4 | 1, 407,1 KB | 1, 407,1 KB | 1, 407,1 KB |
+| z5 | 1, 324,7 KB | 2, 316,4 KB | 1, 324,7 KB |
+| z6 | 1, 184,6 KB | 2, 176,2 KB | 1, 184,6 KB |
+| z7 | 2, 171,8 KB | 2, 181,1 KB | 2, 139,5 KB |
+| z8 | 4, 146,4 KB | 2, 204,3 KB | 4, 114,4 KB |
+| z9 | 9, 111,5 KB | 4, 214,1 KB | 4, 130,6 KB |
+| z10 | 36, 58,1 KB | 4, 129,4 KB | 9, 88,7 KB |
+| z11 | 144, 42,2 KB | 9, 71,8 KB | 25, 55,8 KB |
+| z12 | 529, 22,3 KB | 30, 41,7 KB | 81, 29,5 KB |
+| z13 | - | 100, 21,8 KB | 306, 17,2 KB |
+| z14 | - | 324, 24,8 KB | 1.156, 15,4 KB |
+| **Totale** | **24.260.866 B** | **17.092.420 B** | **31.184.966 B** |
+
+(tessere, media; le tessere sono grosse ai livelli bassi perché portano il mondo intero: z2 pesa 725 KB; z0-z6 sono comuni a tutti i campioni. Quelle sotto 3 KB a z10-z12 sono mare o vuote, circa 500 byte.)
+
+**Il modello** (`RegionDensity`): z0-z6 una tabella fissa (le tessere "del mondo" sopra l'Italia); da z7 a z14 la media delle tessere di **città** (il campione di Bologna) e di **campagna** (Marche e Sulmona, solo terra), con una voce **mare** da z10 (500 byte); una zona è fatta di una quota di città, di campagna e di mare (a occhio per le voci del catalogo; per un luogo: campagna al 100%, città 100% a 15 km, 50% a 30, 25% a 60, mare zero). Le tessere si contano come le conta lo scaricamento (`TileMath`, uguale per la copertura), e **sui tre campioni il conto coincide esattamente con una formula indipendente** (731, 484, 1.594).
+
+| Campione | Stima | Vero | Errore |
+|---|---|---|---|
+| Marche, z0-z12 | 25.064.007 B | 24.260.866 B | **+3,3%** |
+| 15 km attorno a Bologna, z0-z14 | 17.092.405 B | 17.092.420 B | **0,0%** |
+| 30 km attorno a Sulmona, z0-z14 | 30.671.380 B | 31.184.966 B | **−1,6%** |
+
+Dentro il 30% sui campioni, **ma la tabella è stata calibrata proprio su di loro**: controllo fuori campione (con i numeri veri, calcolato a parte): le Marche stimate con la sola tabella di Sulmona escono a **+13,1%**, e la parte z0-z12 di Sulmona con la tabella delle Marche a **−1,8%**. Per le altre voci è un'approssimazione (L532): per questo l'offerta usa un **fattore di sicurezza 1,3** e lo scaricamento si ferma comunque ai 50 MB veri.
+
+### Il catalogo: livello massimo, tessere, MB stimati, offerta
+Riquadri fissi (arrotondati a 0,1° verso l'esterno), stima con le quote di città, campagna e mare del catalogo. "Offerta" = sta nei limiti (≤ 2.900 tessere, cioè 3.000 meno il margine, e stima × 1,3 ≤ 50 MB al livello indicato). L'ultima colonna dice cosa sarebbe a z12.
+
+| Voce | Livello massimo | Tessere | MB stimati | Offerta | A z12 sarebbero |
+|---|---|---|---|---|---|
+| Abruzzo | z12 | 695 | 25,8 | sì | 695 tessere, 25,8 MB |
+| Basilicata | z12 | 587 | 24,7 | sì | 587 tessere, 24,7 MB |
+| Calabria | z12 | 928 | 27,8 | sì | 928 tessere, 27,8 MB |
+| Campania | z12 | 1.006 | 34,6 | sì | 1.006 tessere, 34,6 MB |
+| Emilia-Romagna | z11 | 401 | 28,6 | sì | 1.451 tessere, 59,0 MB |
+| Friuli-Venezia Giulia | z12 | 622 | 23,1 | sì | 622 tessere, 23,1 MB |
+| Lazio | z11 | 407 | 24,8 | sì | 1.457 tessere, 50,4 MB |
+| Liguria | z12 | 724 | 20,9 | sì | 724 tessere, 20,9 MB |
+| Lombardia | z11 | 454 | 33,0 | sì | 1.679 tessere, 71,0 MB |
+| Marche | z12 | 731 | 25,1 | sì | 731 tessere, 25,1 MB |
+| Molise | z12 | 308 | 13,3 | sì | 308 tessere, 13,3 MB |
+| Piemonte | z11 | 489 | 32,9 | sì | 1.791 tessere, 70,6 MB |
+| Puglia | z11 | 652 | 34,5 | sì | 2.415 tessere, 70,7 MB |
+| Sardegna | z11 | 350 | 22,0 | sì | 1.190 tessere, 40,9 MB |
+| Sicilia | z11 | 727 | 36,7 | sì | 2.619 tessere, 75,1 MB |
+| Toscana | z11 | 460 | 27,4 | sì | 1.681 tessere, 57,4 MB |
+| Trentino-Alto Adige | z12 | 878 | 34,8 | sì | 878 tessere, 34,8 MB |
+| Umbria | z12 | 528 | 22,2 | sì | 528 tessere, 22,2 MB |
+| Valle d'Aosta | z12 | 226 | 10,7 | sì | 226 tessere, 10,7 MB |
+| Veneto | z11 | 404 | 27,1 | sì | 1.458 tessere, 56,2 MB |
+| Francia | non si offre (sotto z10) | 2.511 (a z10) | 206,8 (a z10) | no | 38.112 tessere, 1207,6 MB |
+| Svizzera | z10 | 213 | 20,8 | sì | 2.689 tessere, 105,0 MB |
+| Austria | non si offre (sotto z10) | 425 (a z10) | 40,0 (a z10) | no | 5.837 tessere, 217,6 MB |
+| Slovenia | z11 | 376 | 24,7 | sì | 1.326 tessere, 51,5 MB |
+| San Marino | z12 | 30 | 3,7 | sì | 30 tessere, 3,7 MB |
+| Città del Vaticano | z12 | 23 | 3,7 | sì | 23 tessere, 3,7 MB |
+
+La Toscana a z12 sono 1.681 tessere con il nostro riquadro (9,6°-12,4° E, 42,2°-44,5° N; il riferimento del brief dava 1.557 con un riquadro un po' più stretto) e circa 57 MB: **non ci sta**, quindi si offre a z11 (460 tessere, 27 MB). Francia (2.511 tessere a z10, circa 207 MB) e Austria (425 tessere a z10, circa 40 MB, che con il fattore 1,3 fanno 52 MB) **non si offrono**.
+
+### "La zona attorno a un luogo" (a 43° N)
+| Luogo | Raggio | Livello massimo | Tessere | MB stimati | Offerta |
+|---|---|---|---|---|---|
+| campagna | 15 km | z14 | 470 | 11,2 | sì |
+| campagna | 30 km | z14 | 1.704 | 33,4 | sì |
+| campagna | 60 km | z12 | 456 | 19,5 | sì |
+| città | 15 km | z14 | 470 | 16,0 | sì |
+| città | 30 km | z13 | 479 | 17,0 | sì |
+| città | 60 km | z12 | 456 | 21,9 | sì |
+
+A parità di livello la città pesa di più della campagna (tessere più dense): 30 km attorno a una **città** scendono a z13 (a z14 non ci stanno nei 50 MB con il fattore 1,3), attorno a un paese restano a z14; **60 km scendono a z12** in tutti e due i casi (a z13 sarebbero circa 1.650 tessere, ma più di 50 MB con il fattore: "anche qui vale il controllo di MB", come chiedeva il brief). I conti di riferimento tornano: 30 km a z14 sono circa 1.780 tessere (1.704 con il nostro riquadro a 43° N: il livello z14 da solo), 60 km a z13 circa 1.650.
+
+### Altre scelte
+- **Una zona "completa" copre le sue tessere ai livelli che ha** (`covers`: z0 fino al livello scaricato, quelle che toccano il riquadro, la stessa funzione dello scaricamento): oltre il livello (z13-z14 in una regione scaricata a z12 o z11) le tessere si chiedono ancora con la mappa accesa (L530). L'alternativa (non chiedere mai nulla dentro la zona, la mappa resterebbe sfocata oltre il suo dettaglio) cambia il comportamento della mappa e **aspetta l'utente**. La nota di Impostazioni → Mappa lo dice: "Per non far sapere una zona, scaricala prima di aprirla, oppure spegni la mappa dettagliata. Una zona scaricata non si chiede più a OpenFreeMap, ma se ti avvicini oltre il suo dettaglio le tessere più precise sì." (`MapPrivacyNoteTest`).
+- **Lo stile dello scaricamento** (`RegionStyleSource`): `OfflineManager` parte da uno stile e lo chiede **alla sua rete** (`http` o `https`, non `asset://`: il motore degli scaricamenti non usa il file source degli asset). Lo stile è la sola sorgente `openmaptiles` con lo stesso URL stabile degli stili veri (le tessere nel database di MapLibre sono quelle che la mappa cerca: la chiave è il modello d'URL e le coordinate) e **niente glifi, sprite o carta di base** (arrivano dall'APK). Per non far uscire nemmeno questa richiesta lo stile sta in un file di `net/` e **lo serve il cancello da sé**, da un indirizzo che non esiste (`https://regione.mcg.invalid/stile.json`: `.invalid` è riservato, nessun DNS lo risolve): primo intercettore, nessun DNS, nessun socket; su quell'host si chiede solo lo stile (un'altra richiesta è rifiutata `HOST`). Se l'intercettore non lo servisse, morirebbe al DNS (`OnlyMapHostDns`). Prova: `RegionStyleTest`.
+- **Il database di MapLibre** si usa solo dopo che il suo spostamento in `noBackupFilesDir/map/` è riuscito (`MapLibreInit.awaitCacheReady`, al più 30 s): senza, lo scaricamento non parte (resta "interrotta" e riprende all'apertura) e nessuna regione finisce fuori dalla cartella che l'azzeramento toglie.
+- **Aggiornare** una zona la rifà da capo, a mano, con una nuova conferma; per un po' non è completa (L536). **Dopo 6 mesi** la pagina la segna "da aggiornare" (ancora coperta).
+- **Ripresa all'apertura**: `MapHostEffect` chiama `MapGraph.resumeRegions()` dopo il primo disegno (4 s); sul Wi-Fi, una zona alla volta; MapLibre parte solo se c'è una zona da riprendere.
+- Le **zone fermate dai limiti** si possono solo eliminare ("si è fermata ai limiti di OpenFreeMap: eliminala e scegli una zona più piccola").
+
+### Cosa ha mostrato l'emulatore (e cosa si è corretto)
+Le prove strumentate con MapLibre vero hanno trovato cinque cose che la JVM non poteva vedere:
+1. **`OfflineManager` chiede lo stile alla sua rete, non agli asset**: uno stile `asset://` non si può usare per creare una regione. Si è scelto di servire lo stile dal cancello, da un indirizzo che non esiste (`RegionStyleSource`, C426), invece di aprire un percorso verso il server per uno stile.
+2. **Le tessere già nel database si riusano**: togliere una regione lascia le sue tessere nella cache, e una regione nuova che le comprende finisce senza chiedere niente. Le prove strumentate partono da un database svuotato con l'API della libreria (`resetDatabase`); non è un difetto, ma spiega perché una "zona già vista online" si scarica in meno MB di quanto dica la stima.
+3. **Dopo uno stop uscivano ancora richieste** (5 tessere dopo i 50 MB): le richieste già in coda di MapLibre, a scaricamento tolto dal cancello, passavano come richieste normali. Ora il conto si chiude subito e il cancello tiene lo scaricamento chiuso per 3 s dopo lo stop del motore (C420).
+4. **Dopo una ripresa MapLibre può chiedere due volte qualche tessera** (da 4 a 16 del primo gruppo, con un server istantaneo): il piano lascia 100 tessere di margine (2.900) e il conto conta le tessere arrivate (L537). Le tessere diverse chieste sono **esattamente** quelle che mancano nel database (484 − 63 = 421 nella prova).
+5. **MapLibre non scrive subito le ultime tessere**: dopo un'interruzione brusca le tessere che il database ha sono quelle che MapLibre dice di aver completato a meno di quelle in volo (72 chieste, 63 nel database). Per questo la prova della ripresa confronta le richieste con le tessere che il database ha davvero (lo stato della regione ferma, `getStatus`), non con il conto salvato dal gestore; a una ripresa vera è MapLibre a sapere cosa manca.
+
+### Le prove
+- `core-map` (JVM): `RegionPlannerTest` (conto indipendente delle tessere, stima entro il 30% sui tre campioni, piano nei limiti su zone casuali, tabelle), `RegionCatalogTest`, **`RegionCoverageTest`** (proprietà sulle tessere: ogni punto del riquadro in una tessera coperta, coperte = scaricate, mai oltre il livello né per una regione non completa; riquadri con i bordi sui bordi delle tessere), `OfflineMapRegionsTest` (limiti, un solo scaricamento, rete, E-MAP20, morte del processo e ripresa dal conto di prima, aggiornamento a mano, azzeramento), `OfflineMapRegionsContractTest` (la stessa suite del riferimento `InMemoryMapRegions`), `DownloadBudgetTest`, `FileRegionStateStoreTest`, `TilePolicyContract` (il conto nel cancello, anche nelle 100.000 richieste casuali).
+- `feature-map` (JVM): `MapDownloadLimitsTest` (4 insieme, 50 MB veri, 3.000 tessere, `User-Agent`, **tessere coperte mai richieste: contatore a zero**), `RegionsControllerTest`, `RegionsScreenTest` (frasi, bersagli da 48 dp e nessuna sovrapposizione a testo normale e a 1,3x, tocchi), `RegionStyleTest`, `MapPrivacyNoteTest`; screenshot chiaro e scuro in `docs/screenshots/9-P5/`.
+- `core-places`: `PlaceSearchByNameTest` e, sul dataset vero, `RealDatasetTest.laRicercaPerNomeTrovaLeCittaEIlLoroCentro` (16 ms a ricerca su 161.650 luoghi).
+- `:app`: `MapRegionsWiringTest` (regioni nate alla prima richiesta, `COVERED` nel cancello vero, conto dello scaricamento al cancello, azzeramento, ricerca dei luoghi sul dataset vero).
+- **Strumentato** (`RegionDownloadDeviceTest`, emulatore `Medium_Phone`, MapLibre vero con `OfflineManager`, cancello vero, server finto dentro l'intercettore, DNS e socket che contano: **zero e zero**): cinque prove, tutte verdi (31/10, API 37, GPU software; l'emulatore l'ho avviato io con `emulator.exe -avd Medium_Phone -no-window -no-audio -no-snapshot-save -memory 4096 -port 5570`, serial `emulator-5570`, e spento alla fine con `adb -s emulator-5570 emu kill`; mai `RFCY61FZDHW`):
+  1. **una regione si scarica fino in fondo** (San Marino, z0-z12): le richieste al server finto sono **30, tante quante le tessere del piano**, tutte diverse, tutte dentro il riquadro e fino a z12, tutte con `User-Agent: MyCloudGallery-offline/1`, al più 1 TileJSON, **picco di 4 richieste insieme** (nel server finto e nei contatori del client), nessun rifiuto `HOST` o `PATH`, regione "completa" con 30 tessere su 30; poi una **`MapView` vera** con lo stile online dell'app aperta sulla zona a z9 e z11: **nessuna tessera coperta è stata chiesta** (le serve il database) e i dintorni, fuori dal riquadro, sì (la prova non è vuota); **zero socket e zero risoluzioni DNS** del client in tutta la prova;
+  2. **stop ai 50 MB veri** (zona di 15 km attorno a un luogo con tessere da 300 KB, molto più grosse della stima): la regione si ferma con `LIMIT_BYTES` a un conto tra 50.000.000 e 50.000.000 + 6 × 300 KB byte, le richieste al server finto non crescono più, né da sole né con `resume` (`TooLarge`) né con `resumeInterrupted`; il cancello rilascia lo scaricamento dopo i 3 s di chiusura; zero socket, zero DNS;
+  3. **ripresa dopo la morte del processo, nello stesso processo** (484 tessere, z0-z14): lo scaricamento si abbandona a 63 tessere nel database (72 chieste, 9 in volo) senza una pausa né un "completa"; un gestore nuovo legge lo stesso file di stato ("parziale", `INTERRUPTED`, 63 tessere) e `resumeInterrupted()` fa chiedere **421 tessere diverse = 484 − 63**, di quelle già chieste prima solo le 9 che erano in volo, fino a "completa"; al più 16 richieste doppie (L537);
+  4. e 5. **ripresa dopo la morte vera del processo**, due corse separate dello stesso APK (`-e mcg.kill 1 ... #fasePartenzaEMorte`, poi `-e mcg.resume 1 ... #faseRipresa`; senza gli argomenti le due prove si saltano): nella prima il processo si uccide (`Process.killProcess`) a oltre 60 tessere salvate (`INSTRUMENTATION_RESULT: shortMsg=Process crashed.`); nella seconda un processo nuovo trova lo stato su disco ("parziale", interrotta) e le tessere nel database di MapLibre (`noBackupFilesDir/map/`), `resumeInterrupted()` chiede solo le mancanti (tessere diverse = piano − quelle che il database aveva) e arriva a "completa".
+  Corsa intera dell'APK di prova sull'emulatore (ricostruito con l'ultimo codice): `OK (9 tests)` in 17 s, cioe' le quattro prove strumentate di P1 (`MapNetDeviceTest`), che restano verdi con il cancello condiviso (`MapDeviceRig`), le tre di P5 che girano da sole e le due della morte vera, che senza argomenti si saltano (assunzione); poi le due della morte vera lanciate a coppia come sopra: la prima chiude con `Process crashed.` come deve, la seconda `OK (1 test)`.
+
+### F121 aggiornata e prove nuove sul telefono
+Tutte con PCAPdroid "solo questa app" (o `adb` + `dumpsys netstats`) sul Wi-Fi di casa, build debug, luogo di prova **lontano dalla famiglia** (una città qualunque, mai la casa).
+- **F121 (aggiornata)**: "zona di 15 km attorno a" un luogo di prova, scelto **per nome** dalla ricerca, sul Wi-Fi: la stima è entro ±30% dei byte scaricati; **al più 50 MB e 3.000 tessere, al più 4 connessioni insieme, `User-Agent` `MyCloudGallery-offline/1`**; `kill -9` a metà e riapertura: riprende fino a "completa" senza richiedere le tessere già arrivate; poi spostamenti nella zona fino a z14 a mappa accesa e spenta: nessuna richiesta per le tessere coperte (contatore `COVERED` in Diagnostica), a mappa spenta la zona si vede.
+- **F154 (limiti sul filo)**: una regione piccola (San Marino) e una zona attorno a un luogo da 30 km: le richieste sono solo verso `tiles.openfreemap.org`, mai più di 4 connessioni TLS insieme, i byte totali ≤ 50 MB, le tessere = quelle della stima; `peakInFlight` in Diagnostica ≤ 4.
+- **F155 (troppo grande)**: la pagina non offre Francia e Austria ("Troppo grande per scaricarla"); se una zona sfora i 50 MB veri (difficile da provocare: una zona di città densa a z13-z14) lo scaricamento si ferma e dice "si è fermata ai limiti di OpenFreeMap"; non riparte da sola né con "Riprendi"; "Elimina" la toglie.
+- **F156 (dati mobili e roaming)**: sui dati mobili con "Solo sul Wi-Fi" acceso, "Scarica" dice che serve il Wi-Fi; con "Solo sul Wi-Fi" spento chiede la seconda conferma con la dimensione; in roaming (o in modalità aereo) non scarica; il Wi-Fi che cade a metà ferma e all'apertura sul Wi-Fi riprende.
+- **F157 (spazio)**: con poco spazio libero (riempire il telefono fino a meno di 1 GiB oltre la stima) "Serve più spazio sul telefono: liberane almeno N MB", nessuno scaricamento.
+- **F158 (mappa spenta durante lo scaricamento)**: spegnere la mappa dettagliata a metà: lo scaricamento si ferma (E-MAP20), "Riprendi" lo fa ripartire (con un tocco) e non riparte da solo all'apertura; con la mappa già spenta prima, lo scaricamento confermato parte lo stesso.
+- **F159 (zona scaricata e azzeramento)**: aprire la mappa dentro la zona scaricata, con la mappa accesa: nessuna richiesta per le tessere ai livelli scaricati e sì oltre il loro dettaglio (come dice la nota); in modo aereo la zona si vede; dopo l'azzeramento (D37, F127) nessun file in `map/` e `regions.state` assente, e nello stesso processo nessuna regione ricompare.
+
+### Da guardare sul telefono (oltre a F121 e F154-F159)
+- La pagina "Zone senza Internet" a mano: tocco sul catalogo, foglio, avanzamento, gestione (riprendi, aggiorna, elimina), ricerca del luogo (la tastiera con la lista), a testo grande e con TalkBack; lo screenshot non sostituisce il disegno vero.
+- Il tempo di una ricerca per nome sul telefono (16 ms sulla JVM) e l'apertura della pagina (la stima del catalogo si calcola fuori dal thread principale).
+- Il peso vero di una zona di città e di una di pianura (la campagna a z13-z14 è calibrata solo su una zona di montagna).
+
+### Punti aperti
+- **Oltre il livello scaricato le tessere si chiedono ancora** (L530): la nota lo dice; "non chiedere mai nulla dentro una zona scaricata" è una scelta dell'utente.
+- **La stima per le voci non misurate** è un'approssimazione (L532): se i messaggi dei familiari dicono che zone "troppo grandi" si offrono lo stesso (o il contrario), si ricalibra con un campione di pianura e uno di città a z12-z13; costa un altro scaricamento di prova dentro i limiti.
+- **I riquadri del catalogo** sono rettangoli a occhio (arrotondati a 0,1° verso l'esterno), non i poligoni di Natural Earth (la carta di base ha le linee dei confini, non i poligoni delle regioni): le zone possono includere un pezzo del vicino o del mare. Da rivedere con i poligoni, se serve.
+- **La ricerca dei luoghi** ha toccato `core-places` (L535).
+- **Il comportamento a catalogo quando OpenFreeMap cambiasse le condizioni**: i limiti sono tre costanti (`OpenFreeMapLimits`).
+- Con `FeatureFlags.mapOnline` spento (build senza mappa) la pagina c'è ma lo scaricamento non parte (il cancello rifiuta tutto); non provato sul telefono.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde**: "OK: tutto a posto." (uscita 0, 31/10, 32 minuti, dalle 10:55 alle 11:27), lanciato come chiede il brief: `tools\check.ps1 -NoDaemon` con `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, dentro un posto Gradle (`f9p5`), dopo aver cancellato `app\build\outputs\apk\release`. Tutti i passi sono OK (compilazione debug e release, `galleryTest`, `galleryLint`, i passi sul bytecode della release, compreso il 7h per OkHttp e MapLibre: "OkHttp solo da `feature/map/net/` e da MapLibre, MapLibre solo da `feature/map/`", client installato 1, MapLibre inizializzato 1, `libmaplibre.so` presente); solo `-Bench` non e' stato lanciato (il brief vieta di toccare `benchmark/**`). Una corsa precedente era fallita su `Phase9ArchitectureTest.niente_CoordinateNeCasa` perche' la prova del catalogo conteneva per intero il nome vietato: ora il nome si scrive a pezzi e la seconda corsa completa e' verde.
+Le relazioni XML delle prove unitarie dei moduli dicono 17.679 prove, 0 fallite, 28 saltate per assunzione (per modulo: `core-map` 159, `feature-map` 317, `app` 1.299, `feature-diagnostics` 331, `core-places` 142).

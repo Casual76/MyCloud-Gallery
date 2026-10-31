@@ -226,16 +226,45 @@ class GeoMapPointsTest {
     assertThat((points.index.value as GeoIndexState.Ready).index.size).isEqualTo(300)
   }
 
+  /** MA-1: una prima lettura che fallisce e' un errore ("non riesco a leggere"), mai "nessuna foto con la posizione" e mai una rotella eterna. */
   @Test
-  fun unaPrimaLetturaCheFallisceNonLasciaUnaRotellaEterna() = runTest {
+  fun unaPrimaLetturaCheFallisceDiventaUnErroreENonUnaRotellaEternaNeUnVuoto() = runTest {
+    val source = ScriptedSource(pts(300), withoutPosition = 12)
+    source.failure = IllegalStateException("guasto")
+    val points = service(source)
+    points.rebuild(RebuildReason.OPEN)
+    assertThat(points.index.value).isEqualTo(GeoIndexState.Failed)
+    assertThat(points.index.value).isNotInstanceOf(GeoIndexState.Empty::class.java)
+    // Un secondo errore resta un errore, e il "Riprova" (`rebuild(OPEN)`) rilegge davvero (la lettura non e' stata segnata "al passo").
+    points.rebuild(RebuildReason.OPEN)
+    assertThat(points.index.value).isEqualTo(GeoIndexState.Failed)
+    assertThat(source.reads).isEqualTo(2)
+    source.failure = null
+    points.rebuild(RebuildReason.OPEN)
+    assertThat((points.index.value as GeoIndexState.Ready).index.size).isEqualTo(300)
+  }
+
+  /** MA-1: durante il "Riprova" la schermata torna a "cerco le foto" (`Building`), poi pronta; se fallisce ancora, di nuovo l'errore. */
+  @Test
+  fun ilRiprovaDopoUnErroreMostraIlCaricamentoPoiIlRisultato() = runTest {
     val source = ScriptedSource(pts(300))
     source.failure = IllegalStateException("guasto")
     val points = service(source)
     points.rebuild(RebuildReason.OPEN)
-    assertThat(points.index.value).isEqualTo(GeoIndexState.Empty(0))
+    assertThat(points.index.value).isEqualTo(GeoIndexState.Failed)
     source.failure = null
-    points.rebuild(RebuildReason.OPEN)
+    source.gate = CompletableDeferred()
+    val retry = launch { points.rebuild(RebuildReason.OPEN) }
+    runCurrent()
+    assertThat(points.index.value).isEqualTo(GeoIndexState.Building)
+    source.gate!!.complete(Unit)
+    retry.join()
     assertThat((points.index.value as GeoIndexState.Ready).index.size).isEqualTo(300)
+    // Poi un'altra lettura fallisce con un indice buono in mano: l'indice che c'era resta valido, mai `Failed` sopra un indice.
+    val good = points.index.value
+    source.failure = IllegalStateException("guasto")
+    points.rebuild(RebuildReason.HIDDEN_CHANGED)
+    assertThat(points.index.value).isSameInstanceAs(good)
   }
 
   /** Un media cancellato fra due pagine fa fallire la lettura mentre l'istantanea e' gia' cambiata: niente "nessuna foto", la richiesta che segue ricostruisce. */

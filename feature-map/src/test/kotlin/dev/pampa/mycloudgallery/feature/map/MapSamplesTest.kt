@@ -20,6 +20,7 @@ class MapSamplesTest {
     MapScreenState.Loading -> "loading"
     is MapScreenState.Ready -> "ready"
     is MapScreenState.Empty -> "empty"
+    MapScreenState.Failed -> "failed"
   }
 
   private fun caseOf(state: MapBubble): String = when (state) {
@@ -30,11 +31,13 @@ class MapSamplesTest {
   private fun caseOf(state: ZoneGridState): String = when (state) {
     is ZoneGridState.Ready -> "ready"
     ZoneGridState.Empty -> "empty"
+    ZoneGridState.Failed -> "failed"
   }
 
   private fun caseOf(state: PlacesSectionState): String = when (state) {
     is PlacesSectionState.Ready -> "ready"
     is PlacesSectionState.NoGps -> "no_gps"
+    PlacesSectionState.Failed -> "failed"
   }
 
   private fun caseOf(state: MapPrivacyState): String = when (state) {

@@ -400,6 +400,13 @@ object DiagCodes {
   @JvmField val MAP_REGION_SPACE = DiagCode("MAP_REGION_SPACE")
   @JvmField val MAP_INVALID_POINTS = DiagCode("MAP_INVALID_POINTS", setOf("E-MAP7"))
 
+  // Correzioni mappa e rete (31/10): R2 (la scelta "mappa dettagliata spenta" fallisce chiusa), R5 (il database di MapLibre fuori da `map/`), MA-1 (l'indice dei punti non si legge).
+  // Stessi id di `MapDiag` di core-map (`Phase9WiringTest` di :app li incrocia).
+  @JvmField val MAP_SETTINGS_UNREADABLE = DiagCode("MAP_SETTINGS_UNREADABLE")
+  @JvmField val MAP_SETTINGS_DAMAGED = DiagCode("MAP_SETTINGS_DAMAGED")
+  @JvmField val MAP_CACHE_UNMOVED = DiagCode("MAP_CACHE_UNMOVED")
+  @JvmField val MAP_INDEX_FAILED = DiagCode("MAP_INDEX_FAILED")
+
   // P11: i codici del §2.6 (stessi id e stessi edge case di `ModelDiag`, `AiDiag`, `AiIndexDiag` e `SearchDiag`, scritti come letterali
   // perche' questo modulo non vede core-models, core-ai, core-index ne' core-search). `Phase6DiagCatalogTest` di :app verifica che ogni
   // codice dei contratti sia qui, con lo stesso id e gli stessi edge case.

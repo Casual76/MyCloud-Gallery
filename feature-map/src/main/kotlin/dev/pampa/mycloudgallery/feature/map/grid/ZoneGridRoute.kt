@@ -79,6 +79,8 @@ private fun backOnly(onBack: () -> Unit): ZoneGridHandlers = object : ZoneGridHa
   override fun onBack() = onBack()
 
   override fun onOpenPhoto(media: MediaId) = Unit
+
+  override fun onRetry() = Unit
 }
 
 /** Il tocco su una foto apre il viewer **su questa vista**, dalla foto toccata: scorrere nel viewer e' scorrere la griglia (anche per i media solo sul NAS, E-MAP6). */
@@ -89,4 +91,6 @@ private fun handlersOf(controller: ZoneGridController, actions: MapActions, onBa
     val ready = controller.state.value as? ZoneGridState.Ready ?: return
     actions.openViewer(ready.view, media)
   }
+
+  override fun onRetry() = controller.retry()
 }

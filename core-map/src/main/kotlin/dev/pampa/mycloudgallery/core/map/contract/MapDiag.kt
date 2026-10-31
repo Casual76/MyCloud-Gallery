@@ -19,5 +19,20 @@ object MapDiag {
   /** Coordinate scartate (E-MAP7). */
   const val MAP_INVALID_POINTS: String = "MAP_INVALID_POINTS"
 
-  val ALL: List<String> = listOf(MAP_STATE, MAP_REQUESTS, MAP_REFUSED, MAP_REGION_PARTIAL, MAP_REGION_SPACE, MAP_INVALID_POINTS)
+  /** Correzioni R2 (31/10): il file delle impostazioni non si e' letto (errore di I/O): la mappa dettagliata vale spenta per il processo e la lettura si riprova. */
+  const val MAP_SETTINGS_UNREADABLE: String = "MAP_SETTINGS_UNREADABLE"
+
+  /** Correzioni R2: il file delle impostazioni era rovinato: la mappa dettagliata resta spenta finche' l'utente non la riaccende. */
+  const val MAP_SETTINGS_DAMAGED: String = "MAP_SETTINGS_DAMAGED"
+
+  /** Correzioni R5: MapLibre non ha spostato il suo database in `noBackupFilesDir/map/`: la mappa resta sullo stile offline, senza richieste. */
+  const val MAP_CACHE_UNMOVED: String = "MAP_CACHE_UNMOVED"
+
+  /** Correzioni MA-1: l'indice dei punti non si e' potuto leggere (il database non ha risposto): la mappa lo dice e propone di riprovare. */
+  const val MAP_INDEX_FAILED: String = "MAP_INDEX_FAILED"
+
+  val ALL: List<String> = listOf(
+    MAP_STATE, MAP_REQUESTS, MAP_REFUSED, MAP_REGION_PARTIAL, MAP_REGION_SPACE, MAP_INVALID_POINTS,
+    MAP_SETTINGS_UNREADABLE, MAP_SETTINGS_DAMAGED, MAP_CACHE_UNMOVED, MAP_INDEX_FAILED,
+  )
 }

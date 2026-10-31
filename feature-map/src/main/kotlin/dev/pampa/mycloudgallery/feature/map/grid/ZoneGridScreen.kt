@@ -36,12 +36,17 @@ internal interface ZoneGridHandlers {
   fun onBack()
 
   fun onOpenPhoto(media: MediaId)
+
+  /** "Riprova" dopo "Non riesco a leggere le posizioni delle foto" (MA-1). */
+  fun onRetry()
 }
 
 internal object NoZoneGridHandlers : ZoneGridHandlers {
   override fun onBack() = Unit
 
   override fun onOpenPhoto(media: MediaId) = Unit
+
+  override fun onRetry() = Unit
 }
 
 private const val MAX_COLUMNS = 12
@@ -77,6 +82,22 @@ internal fun ZoneGridScreen(
         Column(verticalArrangement = Arrangement.spacedBy(MapDimens.BlockGap)) {
           FluidEmptyState(title = stringResource(R.string.mappa_zone_empty_title), detail = stringResource(R.string.mappa_zone_empty_detail))
           FluidButton(text = stringResource(R.string.mappa_zone_back), onClick = handlers::onBack, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
+        }
+      }
+    }
+    // MA-1: le posizioni non si sono lette, quindi non si sa cosa c'e' qui: non e' "nessuna foto qui". Si dice e si puo' riprovare.
+    ZoneGridState.Failed -> FluidScreen(
+      title = stringResource(R.string.mappa_zone_title),
+      modifier = modifier,
+      onBack = handlers::onBack,
+      listState = listState,
+      contentMaxWidth = MapDimens.SheetWidth,
+    ) {
+      item(key = "failed") {
+        Column(verticalArrangement = Arrangement.spacedBy(MapDimens.BlockGap)) {
+          FluidEmptyState(title = stringResource(R.string.mappa_failed_title), detail = stringResource(R.string.mappa_failed_detail))
+          FluidButton(text = stringResource(R.string.mappa_retry), onClick = handlers::onRetry, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, fillWidth = true)
+          FluidButton(text = stringResource(R.string.mappa_zone_back), onClick = handlers::onBack, style = FluidButtonStyle.Plain, size = FluidButtonSize.Large, fillWidth = true)
         }
       }
     }

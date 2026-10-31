@@ -39,6 +39,9 @@ sealed interface MapScreenState {
 
   /** "Nessuna foto con la posizione" e quante sono senza. */
   data class Empty(val withoutPosition: Int) : MapScreenState
+
+  /** MA-1: le posizioni non si sono potute leggere ("Non riesco a leggere le posizioni delle foto", con "Riprova"): mai "nessuna foto con la posizione". */
+  data object Failed : MapScreenState
 }
 
 /** Una bolla sopra la mappa (§1.5 `MapBubble`, D28, G3): al piu' 60, con la miniatura locale della copertina. Etichetta da `PlaceNames`, mai "Casa". */
@@ -63,6 +66,9 @@ sealed interface ZoneGridState {
   }
 
   data object Empty : ZoneGridState
+
+  /** MA-1: le posizioni non si sono potute leggere, quindi non si sa cosa c'e' in questa zona: "Non riesco a leggere le posizioni delle foto", con "Riprova". */
+  data object Failed : ZoneGridState
 }
 
 /** Un luogo della sezione Luoghi: id GeoNames, nome gia' risolto (mai "casa"), quante foto. */
@@ -86,15 +92,22 @@ sealed interface PlacesSectionState {
 
   /** Nessuna foto con la posizione: la riga dice quante sono senza. */
   data class NoGps(val withoutPosition: Int) : PlacesSectionState
+
+  /** MA-1: le posizioni non si sono potute leggere: la riga "Mappa" lo dice e c'e' una riga "Riprova" (non "nessuna foto con la posizione"). */
+  data object Failed : PlacesSectionState
 }
 
 /**
  * Impostazioni -> Mappa (§1.5 `MapPrivacyState`, adeguato a Q1 (c)): l'interruttore della mappa dettagliata con la nota breve (versione
- * [noteVersion]: "OpenFreeMap riceve la zona che guardi e l'indirizzo della connessione, mai le tue foto ne' la loro posizione"), "Solo sul
+ * [noteVersion]: "OpenFreeMap riceve la zona che guardi, anche quella attorno a una foto aperta sulla mappa, e l'indirizzo della connessione; mai le tue foto, le coordinate esatte ne' quante sono"), "Solo sul
  * Wi-Fi", la voce "Zone senza Internet".
  */
 sealed interface MapPrivacyState {
-  data class Shown(val online: MapOnline, val wifiOnly: Boolean, val noteVersion: Int, val regions: Int) : MapPrivacyState
+  /**
+   * [damaged]: il file delle impostazioni si era rovinato e la scelta si e' persa (R2): la mappa dettagliata e' spenta finche' l'utente non la riaccende, e la pagina lo dice
+   * ("La scelta si era rovinata: la mappa dettagliata e' spenta finche' non la riaccendi").
+   */
+  data class Shown(val online: MapOnline, val wifiOnly: Boolean, val noteVersion: Int, val regions: Int, val damaged: Boolean = false) : MapPrivacyState
 
   /** L'interruttore di build e' spento: la pagina dice che la mappa dettagliata non c'e' in questa versione. */
   data object Unavailable : MapPrivacyState

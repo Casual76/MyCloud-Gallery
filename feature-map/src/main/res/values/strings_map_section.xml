@@ -5,5 +5,9 @@
   <string name="mappa_row_map">Mappa</string>
   <string name="mappa_row_map_detail">Le tue foto sulla carta</string>
   <string name="mappa_row_map_none">Nessuna foto con la posizione</string>
+  <!-- MA-1: l'indice dei punti non si legge: la riga lo dice e una riga "Riprova" rifa la lettura. -->
+  <string name="mappa_row_map_failed">Non riesco a leggere le posizioni delle foto</string>
+  <string name="mappa_row_retry">Riprova</string>
+  <string name="mappa_row_retry_detail">Leggi di nuovo le posizioni delle foto</string>
   <string name="mappa_row_without_detail">Non compaiono sulla mappa</string>
 </resources>

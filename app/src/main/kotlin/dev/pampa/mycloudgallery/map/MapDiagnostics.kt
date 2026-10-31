@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
 import dev.pampa.mycloudgallery.core.common.diagnostics.ExportValue
 import dev.pampa.mycloudgallery.core.map.contract.GeoIndexState
 import dev.pampa.mycloudgallery.core.map.contract.MapOnline
+import dev.pampa.mycloudgallery.core.map.contract.MapSettingsProblem
 import dev.pampa.mycloudgallery.core.map.contract.RefuseReason
 import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
 import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCodes
@@ -23,6 +24,8 @@ import dev.pampa.mycloudgallery.feature.map.map.MapNetCounts
 class MapDiagnostics(
   private val map: MapGraph,
   private val counts: () -> MapNetCounts? = { if (MapLibreInit.isReady) MapLibreInit.counts() else null },
+  /** R5: MapLibre non ha potuto spostare il suo database in `map/` (la rete e' chiusa e la mappa resta sullo stile offline). */
+  private val cacheFailed: () -> Boolean = { MapLibreInit.cacheFailed.value },
 ) : DiagnosticsContributor {
 
   override val section: DiagSection = DiagSection.MAP
@@ -31,6 +34,7 @@ class MapDiagnostics(
     val items = ArrayList<DiagItem>()
     val online = map.settings.online.value
     val state = mutableMapOf<String, ExportValue>(
+      // "online" e' lo stato di adesso: fallisce chiusa, quindi "spenta" anche con un file illeggibile o rovinato (i codici sotto dicono perche').
       "online" to ExportValue.Flag(online is MapOnline.On),
       "available" to ExportValue.Flag(online !is MapOnline.Unavailable),
       "regions" to ExportValue.Num(map.regions.regions.value.size.toLong()),
@@ -49,9 +53,22 @@ class MapDiagnostics(
         state["points"] = ExportValue.Num(0)
         state["withoutPosition"] = ExportValue.Num(index.withoutPosition.toLong())
       }
+      // MA-1: l'indice non si legge (non e' "nessuna foto con la posizione"): un avviso con il suo codice.
+      GeoIndexState.Failed -> {
+        state["points"] = ExportValue.Num(0)
+        state["failed"] = ExportValue.Flag(true)
+      }
       GeoIndexState.Building, null -> Unit
     }
     items += item(DiagCodes.MAP_STATE, state)
+    // R2: la scelta "mappa dettagliata spenta" fallisce chiusa: un file illeggibile o rovinato vale "spenta" e lo si dice qui.
+    when (map.settings.problem.value) {
+      MapSettingsProblem.UNREADABLE -> items += item(DiagCodes.MAP_SETTINGS_UNREADABLE, mapOf("failed" to ExportValue.Flag(true)))
+      MapSettingsProblem.DAMAGED -> items += item(DiagCodes.MAP_SETTINGS_DAMAGED, mapOf("failed" to ExportValue.Flag(true)))
+      MapSettingsProblem.NONE -> Unit
+    }
+    if (cacheFailed()) items += item(DiagCodes.MAP_CACHE_UNMOVED, mapOf("failed" to ExportValue.Flag(true)))
+    if (index == GeoIndexState.Failed) items += item(DiagCodes.MAP_INDEX_FAILED, mapOf("failed" to ExportValue.Flag(true)))
     counts()?.let { c ->
       items += item(
         DiagCodes.MAP_REQUESTS,

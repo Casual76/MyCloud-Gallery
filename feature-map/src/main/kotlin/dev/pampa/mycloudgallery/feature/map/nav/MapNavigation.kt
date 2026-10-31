@@ -58,7 +58,8 @@ fun NavController.openPlacesEntry(target: PlacesEntryTarget) {
   when (target) {
     PlacesEntryTarget.OpenMap -> openMap()
     is PlacesEntryTarget.Place -> openPlace(target.placeId)
-    PlacesEntryTarget.Inert -> Unit
+    // "Riprova" (MA-1) non apre una pagina: la serve `:app` (AppNavHost), che ha il servizio dei punti.
+    PlacesEntryTarget.Inert, PlacesEntryTarget.Retry -> Unit
   }
 }
 

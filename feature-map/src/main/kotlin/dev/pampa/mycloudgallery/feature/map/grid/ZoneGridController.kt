@@ -48,8 +48,8 @@ class ZoneGridController(
   private val visible: VisibleMedia,
   private val names: MapPlaceNames,
   private val filter: FinalFilter,
-  scope: CoroutineScope,
-  compute: CoroutineDispatcher = Dispatchers.Default,
+  private val scope: CoroutineScope,
+  private val compute: CoroutineDispatcher = Dispatchers.Default,
 ) {
 
   /** La griglia, o null finche' non e' pronta (primo fotogramma: lo scheletro, subito). */
@@ -60,13 +60,23 @@ class ZoneGridController(
 
   init {
     // Aprendo la griglia senza essere passati dalla mappa (ripresa del processo) l'indice si costruisce qui, fuori dal thread principale.
-    if (target is ZoneTarget.Cell) scope.launch(compute) { points.rebuild(RebuildReason.OPEN) }
+    if (target is ZoneTarget.Cell) retry()
+  }
+
+  /** "Riprova" dopo "Non riesco a leggere le posizioni delle foto" (MA-1): rifa `rebuild(OPEN)` fuori dal thread principale. */
+  fun retry() {
+    scope.launch(compute) { points.rebuild(RebuildReason.OPEN) }
   }
 
   private suspend fun build(snapshot: TimelineSnapshot, index: GeoIndexState): ZoneGridState? {
     val candidates: List<MediaId> = when (target) {
       is ZoneTarget.Cell -> {
-        val ready = index as? GeoIndexState.Ready ?: return if (index is GeoIndexState.Empty) ZoneGridState.Empty else null
+        val ready = index as? GeoIndexState.Ready ?: return when (index) {
+          is GeoIndexState.Empty -> ZoneGridState.Empty
+          // MA-1: un errore non e' "nessuna foto qui".
+          GeoIndexState.Failed -> ZoneGridState.Failed
+          else -> null
+        }
         ready.index.members(target.key, MEMBER_LIMIT)
       }
       is ZoneTarget.Place -> idsOfPlace(snapshot, target.placeId)

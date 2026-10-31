@@ -30,6 +30,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
+import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.feature.map.R
@@ -58,6 +61,9 @@ internal interface MapHandlers {
   fun onNotice()
 
   fun onSettings()
+
+  /** "Riprova" dopo "Non riesco a leggere le posizioni delle foto" (MA-1). */
+  fun onRetry()
 }
 
 /** Nessuna azione: per le anteprime e gli screenshot. */
@@ -69,6 +75,8 @@ internal object NoMapHandlers : MapHandlers {
   override fun onNotice() = Unit
 
   override fun onSettings() = Unit
+
+  override fun onRetry() = Unit
 }
 
 /** La pagina per lo stato dato: nessun effetto, la usano la rotta, i test e gli screenshot. */
@@ -104,7 +112,7 @@ internal fun MapScreen(
       verticalArrangement = Arrangement.spacedBy(MapDimens.TightGap),
       horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-      StateRow(ui.screen)
+      StateRow(ui.screen, handlers)
       MapCredit(ui.style.attribution, Modifier.align(Alignment.Start))
     }
   }
@@ -135,7 +143,7 @@ private fun NoticeRow(screen: MapScreenState, handlers: MapHandlers) {
 
 /** In basso, sopra il credito: lo stato dell'indice. Le bolle compaiono da sole quando l'indice e' pronto (la pagina non aspetta). */
 @Composable
-private fun StateRow(screen: MapScreenState) {
+private fun StateRow(screen: MapScreenState, handlers: MapHandlers) {
   val resources = LocalContext.current.resources
   when (screen) {
     MapScreenState.Loading -> MapChip(stringResource(R.string.mappa_loading), icon = Icons.Rounded.PhotoLibrary, modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite })
@@ -150,6 +158,25 @@ private fun StateRow(screen: MapScreenState) {
       FluidEmptyState(
         title = stringResource(R.string.mappa_empty_title),
         detail = if (screen.withoutPosition > 0) MapText.withoutPosition(resources, screen.withoutPosition) else stringResource(R.string.mappa_empty_detail),
+      )
+    }
+    // MA-1: un errore di lettura non e' "nessuna foto con la posizione": lo dice e offre di riprovare (le foto non sono perse).
+    MapScreenState.Failed -> Column(
+      modifier = Modifier
+        .fillMaxWidth()
+        .widthIn(max = MapDimens.SheetWidth)
+        .background(MaterialTheme.colorScheme.surfaceContainerHigh, MaterialTheme.shapes.large)
+        .padding(MapDimens.Inset)
+        .semantics { liveRegion = LiveRegionMode.Polite },
+      verticalArrangement = Arrangement.spacedBy(MapDimens.BlockGap),
+    ) {
+      FluidEmptyState(title = stringResource(R.string.mappa_failed_title), detail = stringResource(R.string.mappa_failed_detail))
+      FluidButton(
+        text = stringResource(R.string.mappa_retry),
+        onClick = handlers::onRetry,
+        style = FluidButtonStyle.Tinted,
+        size = FluidButtonSize.Large,
+        fillWidth = true,
       )
     }
     is MapScreenState.Ready -> Unit

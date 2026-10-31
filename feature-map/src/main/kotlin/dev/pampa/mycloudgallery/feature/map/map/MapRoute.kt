@@ -48,6 +48,7 @@ class MapViewModel @Inject constructor(savedStateHandle: SavedStateHandle, deps:
     snapshot = deps.visible.snapshot,
     scope = viewModelScope,
     focus = parseFocus(savedStateHandle.toRoute<MapDestination>().focus),
+    cacheFailed = MapLibreInit.cacheFailed,
   ).also { surface.listener = it }
 
   override fun onCleared() {
@@ -85,6 +86,8 @@ fun MapRoute(
       override fun onNotice() = actions.openMapSettings()
 
       override fun onSettings() = actions.openMapSettings()
+
+      override fun onRetry() = controller.retry()
     }
   }
   MapScreen(ui = ui, surface = surface, content = viewModel.content, thumbnails = thumbnails, snapshot = snapshot, handlers = handlers, modifier = modifier)

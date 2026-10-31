@@ -6,6 +6,7 @@ import dev.pampa.mycloudgallery.core.map.contract.GeoE6
 import dev.pampa.mycloudgallery.core.map.contract.GeoGrid
 import dev.pampa.mycloudgallery.core.map.contract.GeoIndexState
 import dev.pampa.mycloudgallery.core.map.contract.MapNetworkState
+import dev.pampa.mycloudgallery.core.map.contract.MapOnline
 import dev.pampa.mycloudgallery.core.map.contract.MapPoints
 import dev.pampa.mycloudgallery.core.map.contract.MapRegions
 import dev.pampa.mycloudgallery.core.map.contract.MapSettings
@@ -75,6 +76,8 @@ class MapController(
   private val compute: CoroutineDispatcher = Dispatchers.Default,
   /** La calma prima di salvare l'ultima camera (tempo del `CoroutineScope`: virtuale nei test). */
   private val saveCalmMs: Long = SAVE_CALM_MS,
+  /** R5: vero se MapLibre non ha potuto spostare il suo database in `map/` (`MapLibreInit.cacheFailed`): la mappa resta sullo stile offline, qualunque cosa dica la scelta. */
+  private val cacheFailed: StateFlow<Boolean> = NEVER_FAILED,
 ) : MapSurfaceListener {
 
   private val engine = BubbleEngine(names, filter)
@@ -95,14 +98,20 @@ class MapController(
 
   private val hasRegions: StateFlow<Boolean> = regions.regions.map { it.isNotEmpty() }.stateIn(scope, SharingStarted.Eagerly, regions.regions.value.isNotEmpty())
 
-  private val chosenStyle: StateFlow<MapStyleChoice> = combine(settings.online, hasRegions, dark) { online, any, isDark -> MapStyles.choose(online, any, isDark) }
-    .stateIn(scope, SharingStarted.Eagerly, MapStyles.choose(settings.online.value, regions.regions.value.isNotEmpty(), dark = false))
+  /** La mappa online come la vede la pagina: con la cache fuori posto (R5) e' "spenta" (solo la carta semplice, nessuna richiesta). */
+  private val onlineNow: StateFlow<MapOnline> = combine(settings.online, cacheFailed) { online, failed -> effectiveOnline(online, failed) }
+    .stateIn(scope, SharingStarted.Eagerly, effectiveOnline(settings.online.value, cacheFailed.value))
 
-  private val screen: StateFlow<MapScreenState> = combine(points.index, settings.online, settings.wifiOnly, network.current) { index, online, wifiOnly, net ->
+  private val chosenStyle: StateFlow<MapStyleChoice> = combine(onlineNow, hasRegions, dark, cacheFailed) { online, any, isDark, failed -> MapStyles.choose(online, any && !failed, isDark) }
+    .stateIn(scope, SharingStarted.Eagerly, MapStyles.choose(onlineNow.value, regions.regions.value.isNotEmpty() && !cacheFailed.value, dark = false))
+
+  private val screen: StateFlow<MapScreenState> = combine(points.index, onlineNow, settings.wifiOnly, network.current) { index, online, wifiOnly, net ->
     when (index) {
       GeoIndexState.Building -> MapScreenState.Loading
       is GeoIndexState.Ready -> MapScreenState.Ready(online, MapNotices.of(online, wifiOnly, net), index.withoutPosition)
       is GeoIndexState.Empty -> MapScreenState.Empty(index.withoutPosition)
+      // MA-1: un errore non e' "nessuna foto con la posizione".
+      GeoIndexState.Failed -> MapScreenState.Failed
     }
   }.stateIn(scope, SharingStarted.Eagerly, MapScreenState.Loading)
 
@@ -126,6 +135,11 @@ class MapController(
     { true }
   } else {
     { id -> snap.indexOf(id) >= 0 }
+  }
+
+  /** "Riprova" dopo "Non riesco a leggere le posizioni delle foto" (MA-1): rifa `rebuild(OPEN)` fuori dal thread principale. */
+  fun retry() {
+    scope.launch(compute) { points.rebuild(RebuildReason.OPEN) }
   }
 
   /** Il tema scuro o chiaro dell'app, per scegliere lo stile. */
@@ -197,5 +211,10 @@ class MapController(
   companion object {
     /** La calma prima di salvare l'ultima camera. */
     const val SAVE_CALM_MS: Long = 1_000
+
+    private val NEVER_FAILED: StateFlow<Boolean> = MutableStateFlow(false)
+
+    /** Con la cache della mappa fuori posto la mappa online vale "spenta" (R5: fallisce chiusa); l'interruttore di build spento resta "non disponibile". */
+    internal fun effectiveOnline(online: MapOnline, cacheFailed: Boolean): MapOnline = if (cacheFailed && online is MapOnline.On) MapOnline.Off else online
   }
 }

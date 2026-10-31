@@ -208,6 +208,8 @@ internal class MapScreensTest : MapScreenTest() {
       override fun onNotice() { calls += "avviso" }
 
       override fun onSettings() { calls += "impostazioni" }
+
+      override fun onRetry() { calls += "riprova" }
     }
     showAll { Page(readyUi(notice = MapNotice.BASE_ONLY, online = MapOnline.Off), surface, surface.content(), handlers) }
     clickText("Carta semplice")
@@ -233,8 +235,8 @@ internal class MapScreensTest : MapScreenTest() {
     showAll { MapPrivacyScreen(state.value, handlers) }
     assertShows(
       "accesa", "Accesa su questo dispositivo", "Solo sul Wi-Fi", "Mai con i dati mobili",
-      "OpenFreeMap riceve l’indirizzo della tua connessione e la zona che stai guardando", "Non riceve le tue foto né la loro posizione", "La scelta vale solo su questo dispositivo",
-      "Zone senza Internet", "Nessuna zona scaricata", "le zone scaricate non si chiedono più a OpenFreeMap",
+      "OpenFreeMap riceve l’indirizzo della tua connessione e la zona che stai guardando", "Non riceve mai le tue foto, le coordinate esatte né quante sono", "La scelta vale solo su questo dispositivo",
+      "Zone senza Internet", "Nessuna zona scaricata", "Per non far sapere una zona, spegni la mappa dettagliata prima di aprirla",
     )
     clickText("Accesa su questo dispositivo")
     clickText("Mai con i dati mobili")

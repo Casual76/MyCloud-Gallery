@@ -14,6 +14,9 @@ import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.core.family.contract.FamilySetupRepository
 import dev.pampa.mycloudgallery.core.index.contract.ReplicaBlobs
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalStore
+import dev.pampa.mycloudgallery.core.personal.testing.InMemoryPersonalStore
+import dev.pampa.mycloudgallery.memories.MemoriesGraph
 import dev.pampa.mycloudgallery.di.MeasurementHooks
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -56,6 +59,18 @@ class BenchMeasurementHooks @Inject constructor(
 
   override val replicaBlobs: ReplicaBlobs?
     get() = if (BenchReplicaStore.indexFile(context, profile).exists()) lazyBlobs else null
+
+  /**
+   * Fase 9 (P12): la mappa dettagliata **mai accesa** in una variante di misura (nessun traffico verso OpenFreeMap: accenderla e' una scelta dell'utente, non del
+   * collaudo): la carta e' solo quella di base offline, e le impostazioni del dispositivo non si toccano.
+   */
+  override val mapOnlineAllowed: Boolean = false
+
+  /** Fase 9 (P12): i ricordi si montano senza NAS con le scelte in memoria (di questo processo, mai su disco ne' sul NAS). */
+  override val memoriesPersonalStore: PersonalStore = InMemoryPersonalStore(author = "bench")
+
+  /** Fase 9 (P12): il pilota della generazione (`BenchMemoriesDriver`): un thread che guarda i file accanto al marcatore, nient'altro sul percorso dell'avvio. */
+  override fun onMemoriesGraph(memories: MemoriesGraph) = BenchMemoriesDriver.install(context, memories)
 
   init {
     // La replica comincia ad aprirsi subito, su un thread suo: la prima miniatura solo-NAS la trova di solito gia' aperta.

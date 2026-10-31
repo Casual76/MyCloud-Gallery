@@ -114,6 +114,10 @@
                                 `album-ricalcolo`, `album-raccolte`, `volti` e `volti-scroll` in benchmark\soglie.json con le
                                 soglie dei progetti (300 ms, 2 s, 1%, +15%) e le prove che li misurano (`AlbumBenchmark`,
                                 `FacesBenchmark`) nel modulo
+    +  scenari ricordi e mappa  (Fase 9, P12: par. 5.4 e punto 12 del par. 0) gli scenari `ricordi-*` e `mappa-*` in benchmark\soglie.json
+                                con le soglie del progetto (300 ms, 2 s, 800/300 ms, 8 ms, 1%, +15%; il tempo di disegno di MapLibre
+                                `null` da calibrare) e le prove che li misurano (`MemoriesBenchmark`, `MapBenchmark`); le soglie JVM del
+                                par. 5.4 nei test di `galleryTest`; il collaudo non accende mai la mappa online
     +  -Bench                   (Fase 3, P9) le misure su dispositivo, SKIP senza dispositivo (vedi -Bench)
 
 .PARAMETER SkipGradle
@@ -2133,6 +2137,92 @@ Step "benchmark: scenari degli album e dei volti (album, album-scroll, album-ric
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
 }
 
+# Fase 9 (P12, docs/fase9-progetto.md par. 5.4 e §0 punto 12: "scenari promessi e mancanti"): gli scenari `ricordi-*` e `mappa-*` devono ESISTERE, non solo stare nei documenti.
+# Senza dispositivo si controlla che ci siano in soglie.json con le soglie del progetto (300 ms, 2 s, 300 ms, 800/300 ms, 8 ms, 150 ms, 100 ms, 1% di jank, 16,7 ms; il tempo di
+# disegno di MapLibre `null` da calibrare) e le regressioni (+15%, +10% dove la guardia e' quella della Libreria), che le prove che li misurano esistano nel modulo
+# (`MemoriesBenchmark`, `MapBenchmark`), che le soglie JVM del par. 5.4 stiano nei test che girano a ogni check (generazione su 100 mila < 1 s, scelta da 200 candidati < 50 ms,
+# indice della mappa < 800 ms e `clusters` < 4 ms p95, query dei punti < 400 ms senza TEMP B-TREE) e che il collaudo non accenda mai la mappa online. Le misure vere
+# vengono da -Bench sul telefono; lo smoke sull'emulatore dice se girano.
+Step "benchmark: scenari dei ricordi e della mappa (ricordi-*, mappa-*) in soglie.json e nel modulo; soglie JVM del par. 5.4 nei test" {
+  $soglie = Join-Path $root "benchmark\soglie.json"
+  if (-not (Test-Path -LiteralPath $soglie)) { return "manca benchmark\soglie.json" }
+  $json = (Read-TextFile $soglie) | ConvertFrom-Json
+  $byId = @{}
+  foreach ($s in @($json.scenari)) { $byId[[string]$s.id] = $s }
+  $sources = @(Get-ChildItem (Join-Path $root "benchmark\src") -Recurse -Filter "*.kt" -ErrorAction SilentlyContinue)
+  $wanted = @(
+    @{ Id = "ricordi-apertura";       Test = "memoryOpen";           Class = "MemoriesBenchmark"; Metric = "memoryOpenMs";        Max = 300.0;  Rise = 0.15 },
+    @{ Id = "ricordi-presentazione";  Test = "memoryPlayer";         Class = "MemoriesBenchmark"; Metric = "jankPercent";         Max = 1.0;    Rise = 0.15 },
+    @{ Id = "ricordi-presentazione";  Test = "memoryPlayer";         Class = "MemoriesBenchmark"; Metric = "maxFrameCpuMs";       Max = 16.7;   Rise = 0.15 },
+    @{ Id = "ricordi-generazione";    Test = "memoriesGenerate";     Class = "MemoriesBenchmark"; Metric = "memoriesGenerateMs";  Max = 2000.0; Rise = 0.15 },
+    @{ Id = "ricordi-generazione";    Test = "memoriesGenerate";     Class = "MemoriesBenchmark"; Metric = "memoriesLightMs";     Max = 300.0;  Rise = 0.15 },
+    @{ Id = "ricordi-raccolte";       Test = "collectionsScroll";    Class = "MemoriesBenchmark"; Metric = "jankPercent";         Max = 1.0;    Rise = 0.10 },
+    @{ Id = "ricordi-scroll-carico";  Test = "memoriesLoadedScroll"; Class = "MemoriesBenchmark"; Metric = "jankPercent";         Max = 1.0;    Rise = 0.15 },
+    @{ Id = "mappa-apertura-freddo";  Test = "mapOpenCold";          Class = "MapBenchmark";      Metric = "mapOpenMs";           Max = 800.0;  Rise = 0.15 },
+    @{ Id = "mappa-apertura-caldo";   Test = "mapOpenWarm";          Class = "MapBenchmark";      Metric = "mapOpenMs";           Max = 300.0;  Rise = 0.15 },
+    @{ Id = "mappa-gesti";            Test = "mapGestures";          Class = "MapBenchmark";      Metric = "jankPercent";         Max = 1.0;    Rise = 0.10 },
+    @{ Id = "mappa-disegno";          Test = "mapDraw";              Class = "MapBenchmark";      Metric = "mapDrawP95Ms";        Max = $null;  Rise = 0.15 },
+    @{ Id = "mappa-bolle";            Test = "mapClusters";          Class = "MapBenchmark";      Metric = "mapClustersP95Ms";    Max = 8.0;    Rise = 0.15 },
+    @{ Id = "mappa-zona";             Test = "mapZoneOpen";          Class = "MapBenchmark";      Metric = "zoneOpenMs";          Max = 150.0;  Rise = 0.15 },
+    @{ Id = "mappa-viewer";           Test = "mapZoneViewer";        Class = "MapBenchmark";      Metric = "viewerOpenMs";        Max = 100.0;  Rise = 0.15 },
+    @{ Id = "mappa-memoria";          Test = "mapMemory";            Class = "MapBenchmark";      Metric = $null;                 Max = $null;  Rise = 0.15 },
+    @{ Id = "mappa-scroll-carico";    Test = "mapLoadedScroll";      Class = "MapBenchmark";      Metric = "jankPercent";         Max = 1.0;    Rise = 0.15 }
+  )
+  $problems = @()
+  foreach ($w in $wanted) {
+    $scenario = $byId[$w.Id]
+    if (-not $scenario) { $problems += "scenario $($w.Id) assente"; continue }
+    if (@($scenario.proveAttese) -notcontains $w.Test) { $problems += "scenario $($w.Id): la prova attesa $($w.Test) manca" }
+    if (@($scenario.classi) -notcontains $w.Class) { $problems += "scenario $($w.Id): la classe $($w.Class) manca" }
+    $file = $sources | Where-Object { $_.Name -eq "$($w.Class).kt" } | Select-Object -First 1
+    if (-not $file) {
+      $problems += "manca benchmark/.../$($w.Class).kt"
+    } elseif ((Read-TextFile $file.FullName) -notmatch ("fun\s+" + $w.Test + "\s*\(")) {
+      $problems += "$($w.Class).kt non ha la prova $($w.Test)"
+    }
+    if ($w.Metric) {
+      $rule = @(@($scenario.assolute) | Where-Object { $_.metrica -eq $w.Metric }) | Select-Object -First 1
+      if (-not $rule) {
+        $problems += "scenario $($w.Id): manca la soglia assoluta di $($w.Metric)"
+      } elseif ($null -eq $w.Max) {
+        # Il tetto da calibrare resta `null` con la sua calibrazione: scriverci un numero a mano nasconderebbe che manca il primo riferimento.
+        if ($null -ne $rule.massimo -or $null -eq $rule.calibrazione) { $problems += "scenario $($w.Id): $($w.Metric) deve restare null con la calibrazione (da calibrare sul primo riferimento)" }
+      } elseif ([double]$rule.massimo -ne [double]$w.Max) {
+        $problems += "scenario $($w.Id): la soglia assoluta di $($w.Metric) non e' $($w.Max)"
+      }
+    } elseif (@($scenario.assolute).Count -gt 0) {
+      $problems += "scenario $($w.Id): il progetto non fissa una soglia assoluta"
+    }
+    $rise = @(@($scenario.regressione) | Where-Object { [math]::Abs([double]$_.aumentoMassimo - [double]$w.Rise) -lt 1e-9 })
+    if ($rise.Count -eq 0) { $problems += "scenario $($w.Id): manca la regressione +$([int]([double]$w.Rise * 100))%" }
+    if (-not $scenario.validita) { $problems += "scenario $($w.Id): manca la validita' (un falso verde senza dataset o senza il lavoro in corso)" }
+  }
+  # Le soglie JVM del par. 5.4 stanno nei test (a ogni `galleryTest`): se qualcuno le allenta o le toglie, il controllo lo dice.
+  $jvm = @(
+    @{ File = "core-memories\src\test\kotlin\dev\pampa\mycloudgallery\core\memories\plan\MemoryEnginePerformanceTest.kt"; Pattern = 'isLessThan\(1_000\.0\)'; What = "generazione su 100 mila < 1 s" },
+    @{ File = "core-memories\src\test\kotlin\dev\pampa\mycloudgallery\core\memories\pick\PickPerformanceTest.kt"; Pattern = 'LIMIT_MS\s*=\s*50\.0'; What = "scelta di un ricordo da 200 candidati < 50 ms" },
+    @{ File = "core-map\src\test\kotlin\dev\pampa\mycloudgallery\core\map\points\GeoPointIndexPerformanceTest.kt"; Pattern = 'isLessThan\(800\)'; What = "indice della mappa: costruzione < 800 ms" },
+    @{ File = "core-map\src\test\kotlin\dev\pampa\mycloudgallery\core\map\points\GeoPointIndexPerformanceTest.kt"; Pattern = 'isLessThan\(4\.0\)'; What = "indice della mappa: clusters p95 < 4 ms" },
+    @{ File = "core-database\src\test\kotlin\dev\pampa\mycloudgallery\core\database\MapPointsQueriesTest.kt"; Pattern = 'LIMIT_MS\s*=\s*400L'; What = "query dei punti su 100 mila righe < 400 ms" },
+    @{ File = "core-database\src\test\kotlin\dev\pampa\mycloudgallery\core\database\MapPointsQueriesTest.kt"; Pattern = 'doesNotContain\("TEMP B-TREE"\)'; What = "query dei punti senza TEMP B-TREE" }
+  )
+  foreach ($j in $jvm) {
+    $path = Join-Path $root $j.File
+    if (-not (Test-Path -LiteralPath $path)) { $problems += "soglia JVM '$($j.What)': manca $($j.File)"; continue }
+    if ((Read-TextFile $path) -notmatch $j.Pattern) { $problems += "soglia JVM '$($j.What)': non e' piu' nel test ($($j.File))" }
+  }
+  # Il collaudo non accende la mappa online (nessun traffico verso OpenFreeMap): la variante la spegne e le prove non la nominano.
+  $hooks = Get-ChildItem (Join-Path $root "app\src\benchmarkRelease") -Recurse -Filter "BenchMeasurementHooks.kt" -ErrorAction SilentlyContinue | Select-Object -First 1
+  if (-not $hooks -or (Read-TextFile $hooks.FullName) -notmatch 'mapOnlineAllowed\s*:\s*Boolean\s*=\s*false') { $problems += "BenchMeasurementHooks non spegne la mappa dettagliata (mapOnlineAllowed = false)" }
+  foreach ($file in $sources) {
+    # Solo il codice: i commenti spiegano proprio che la mappa online non si accende e la nominano.
+    $code = [regex]::Replace([regex]::Replace((Read-TextFile $file.FullName), '(?s)/\*.*?\*/', ''), '(?m)//.*$', '')
+    if ($code -match '(?i)MapOnlineChoice|MapOnline\.On|\.enable\(|openfreemap|https?://|mapOnline\s*=\s*true') { $problems += "benchmark/.../$($file.Name) nomina la mappa online nel codice: il collaudo non la accende mai" }
+  }
+  Write-Host ("        scenari verificati: {0}; soglie JVM: {1}" -f $wanted.Count, $jvm.Count) -ForegroundColor DarkGray
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+}
+
 # Avvio istantaneo (28/10, docs/decisioni.md "Avvio e pagine istantanei"): il primo disegno utile e l'apertura delle pagine principali. Senza
 # dispositivo si controlla che le soglie ci siano (primo disegno utile stretto, caricamento completo largo a 1500 ms, pagine) e che le prove e la
 # metrica esistano nel modulo. Le misure vere vengono da -Bench sul telefono.
@@ -2218,6 +2308,8 @@ Step "benchmark su dispositivo (-Bench): scenari del par. 2.6 contro benchmark\s
     "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.enabledRules=macrobenchmark"
   )
   if ($facts.Emulator) {
+    # Fase 9 (P12): la benchmarkRelease porta solo arm64-v8a; su un emulatore x86_64 si tiene anche x86_64 (solo in questa variante, solo per lo smoke).
+    $gradleArguments += "-PbenchKeepX86=true"
     $gradleArguments += "-Pandroid.testInstrumentationRunnerArguments.benchSmoke=true"
     $gradleArguments += "-Pandroid.testInstrumentationRunnerArguments.androidx.benchmark.suppressErrors=EMULATOR,LOW-BATTERY,NOT-PROFILEABLE"
   }
@@ -2247,7 +2339,7 @@ Step "benchmark su dispositivo (-Bench): scenari del par. 2.6 contro benchmark\s
       $hint = "la release firmata e' installata con un'altra firma: disinstallarla prima (docs/bench/README.md)"
     }
     if (@($run.Lines | Where-Object { $_ -match 'INSTALL_FAILED_NO_MATCHING_ABIS' }).Count -gt 0) {
-      $hint = "la benchmarkRelease porta solo arm64-v8a (Fase 6, P11, D3): sugli emulatori x86_64 non si installa, si misura su S25 e Tab S9"
+      $hint = "la benchmarkRelease porta solo arm64-v8a (Fase 6, P11, D3): sugli emulatori x86_64 si tiene anche x86_64 con -PbenchKeepX86=true (lo fa -Bench da solo sugli emulatori, Fase 9, P12); su un telefono vero e' un altro problema"
     }
     return "il benchmark e' fallito (codice $($run.Code)): $hint"
   }

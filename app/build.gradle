@@ -147,9 +147,14 @@ androidComponents {
 // Fase 6 (P11, decisione dell'orchestratore, modifica a D3): la release e la `benchmarkRelease` portano solo `arm64-v8a` (tutti i
 // dispositivi della famiglia sono arm64); `x86_64` (46 MB di librerie native) serve solo agli emulatori e resta nella debug e nella
 // `nonMinifiedRelease` (generazione del profilo, anche sull'emulatore). tools/check.ps1 (passo 7e) lo controlla sull'APK di release.
+//
+// Fase 9 (P12): `-PbenchKeepX86=true` (lo mette `tools/check.ps1 -Bench` da solo su un emulatore x86_64) tiene `x86_64` nella SOLA `benchmarkRelease`: e'
+// lo smoke sull'emulatore Medium_Phone (gli scenari girano, i numeri non valgono; docs/bench/README.md). Senza la proprieta' (la misura vera su S25 e Tab S9,
+// e ogni altra build) non cambia niente; la release non ha mai x86_64, con o senza proprieta' (`tools/check.ps1`, passo 7e).
+def benchKeepX86 = project.findProperty('benchKeepX86') == 'true'
 androidComponents {
   onVariants(selector().all()) { variant ->
-    if (variant.name in ['release', 'benchmarkRelease']) {
+    if (variant.name == 'release' || (variant.name == 'benchmarkRelease' && !benchKeepX86)) {
       variant.packaging.jniLibs.excludes.add('**/x86_64/**')
     }
   }

@@ -41,6 +41,7 @@ import dev.pampa.mycloudgallery.memories.MusicPermissions
 import dev.pampa.mycloudgallery.memories.memoriesSectionProvider
 import dev.pampa.mycloudgallery.utility.SearchShotVectors
 import dev.pampa.mycloudgallery.work.MemoryNotifySlot
+import java.util.Optional
 import javax.inject.Provider
 import javax.inject.Singleton
 
@@ -67,6 +68,7 @@ object MemoriesModule {
     search: Provider<SearchData>,
     today: Today,
     slot: MemoryNotifySlot,
+    hooks: @JvmSuppressWildcards Optional<MeasurementHooks>,
   ): MemoriesGraph = MemoriesWiring.build(
     context = context,
     scope = graph.scope,
@@ -79,6 +81,7 @@ object MemoriesModule {
     cutoutsFolder = ai.cutoutFence::folder,
     slot = slot,
     afterFirstDraw = { AfterFirstDraw.await() },
+    measuredStore = hooks.orElse(null)?.memoriesPersonalStore,
   ).also { memories ->
     // L'azzeramento ferma i ricordi per primi (§1.4, D37): niente si monta piu', il lavoro perde il suo giorno; poi lavoro, notifica e `memories/`.
     graph.memoriesStopper = GalleryStopper {
@@ -92,6 +95,8 @@ object MemoriesModule {
     // P11: lo strumento di valutazione dei ricordi (F125), solo debug e in sola lettura (in release la funzione e' vuota).
     DeveloperTools.installMemories(memories)
     memories.start()
+    // P12: solo una variante di misura (`MeasurementHooks`): il pilota della generazione dei ricordi per il benchmark. Niente altrove.
+    hooks.orElse(null)?.onMemoriesGraph(memories)
   }
 
   @Provides fun memories(graph: MemoriesGraph): Memories = graph.memories

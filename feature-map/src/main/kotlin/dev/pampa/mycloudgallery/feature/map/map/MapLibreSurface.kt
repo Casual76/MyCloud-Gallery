@@ -22,6 +22,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.map.contract.CameraSpot
 import dev.pampa.mycloudgallery.core.map.contract.GeoE6
 import dev.pampa.mycloudgallery.core.map.contract.GeoGrid
@@ -57,9 +58,20 @@ internal class MapLibreSurface : MapSurface() {
 
   override val viewport: MapViewport? get() = readViewport()
 
+  /**
+   * Il tempo di disegno di ogni fotogramma (Fase 9, P12, §5.4: "tempo di disegno di MapLibre, p95 per fotogramma"), come lo misura MapLibre: un contatore di traccia
+   * (`MCG:map.drawUs`, in microsecondi; MapLibre lo da' in secondi). Una classe anonima e non una lambda: fuori dalle fusioni di R8 con `MapLibreSurface*`.
+   */
+  private val drawStats = object : MapView.OnDidFinishRenderingFrameListener {
+    override fun onDidFinishRenderingFrame(fully: Boolean, frameEncodingTime: Double, frameRenderingTime: Double) {
+      AvvioTrace.counter(AvvioTrace.MAP_DRAW_US, (frameRenderingTime * MICROS_PER_SECOND).toLong())
+    }
+  }
+
   fun attach(map: MapLibreMap, view: MapView) {
     this.map = map
     this.view = view
+    view.addOnDidFinishRenderingFrameListener(drawStats)
     density = view.resources.displayMetrics.density
     map.addOnCameraMoveListener {
       tick()
@@ -80,6 +92,7 @@ internal class MapLibreSurface : MapSurface() {
   }
 
   fun detach() {
+    view?.removeOnDidFinishRenderingFrameListener(drawStats)
     map = null
     view = null
   }
@@ -134,6 +147,7 @@ internal class MapLibreSurface : MapSurface() {
     CameraPosition.Builder().target(LatLng(spot.center.latE6 / 1_000_000.0, spot.center.lonE6 / 1_000_000.0)).zoom(spot.zoom).build()
 
   private companion object {
+    const val MICROS_PER_SECOND = 1_000_000.0
     const val ANIMATION_MS = 450
     const val SELECTION_SOURCE = "mcg-selection"
     const val SELECTION_LAYER = "mcg-selection-layer"

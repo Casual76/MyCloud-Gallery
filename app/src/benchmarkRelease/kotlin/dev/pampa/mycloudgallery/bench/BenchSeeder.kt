@@ -67,6 +67,15 @@ internal class BenchSeedReport(
   val hqRows: Int,
   val profile: BenchProfile,
   val replica: BenchReplicaReport,
+  // --- Fase 9 (P12): coordinate, giorni "di un anno fa" e scaffale dei ricordi seminato ---------------------------------------
+  /** Righe con una posizione (latitudine e longitudine): il 60% della Libreria, quelle che hanno un luogo. */
+  val positionRows: Int = 0,
+  /** Righe che hanno preso una data attorno a "oggi" di 1 e di 3 anni fa (`BenchAnniversary`). */
+  val anniversaryRows: Int = 0,
+  /** Ricordi nello scaffale seminato. */
+  val shelfMemories: Int = 0,
+  /** "Oggi" alla creazione, `aaaammgg`: il dataset si rifa' quando e' troppo vecchio (`BenchAnniversary.VALID_DAYS`). */
+  val seedDay: Int = 0,
 )
 
 /**
@@ -116,13 +125,14 @@ internal object BenchSeeder {
     val index = BenchReplicaIndexWriter(rows)
     val sampleKeys = ArrayList<Long>(SAMPLE_KEYS)
     var hqRows = 0
+    val totals = WriteTotals()
 
     val db = GalleryDatabase.build(context, profile.databaseName)
     try {
       val sdb = db.openHelper.writableDatabase
       sdb.beginTransaction()
       try {
-        hqRows = writeAll(sdb, media, plan, templates, index, sampleKeys, rows, msVersion, now)
+        hqRows = writeAll(sdb, media, plan, templates, index, sampleKeys, rows, msVersion, now, totals)
         sdb.setTransactionSuccessful()
       } finally {
         sdb.endTransaction()
@@ -132,6 +142,14 @@ internal object BenchSeeder {
     }
     index.writeTo(BenchReplicaStore.indexFile(context, profile))
     val seedMs = (System.nanoTime() - startNs) / 1_000_000
+
+    // P12: lo scaffale dei ricordi seminato (solo il profilo misto: e' quello di tutti gli scenari che aprono Raccolte).
+    val anchor = java.time.Instant.ofEpochMilli(now).atZone(TimeZone.getDefault().toZoneId()).toLocalDate()
+    val shelfMemories = if (profile == BenchProfile.MIXED) {
+      BenchShelf.write(java.io.File(context.noBackupFilesDir, BenchShelf.DIR), anchor) { day -> shelfMembers(plan, rows, day) }
+    } else {
+      0
+    }
 
     val store = BenchReplicaStore.open(context, profile, templates.packFile)
     val check = if (store != null) BenchReplicaVerifier.check(store, sampleKeys.toLongArray()) else BenchReplicaCheck(sampleKeys.size, 0, 0.0, 0.0)
@@ -199,6 +217,10 @@ internal object BenchSeeder {
         hqRows = hqRows,
         profile = profile,
         replica = replica,
+        positionRows = totals.positionRows,
+        anniversaryRows = plan.anniversaryRows,
+        shelfMemories = shelfMemories,
+        seedDay = dayNumber(anchor),
       )
     } finally {
       reopened.close()
@@ -222,6 +244,27 @@ internal object BenchSeeder {
     val placeId = IntArray(rows)
     val presence = ByteArray(rows)
     val hq = BooleanArray(rows)
+
+    /** Il giorno locale (`aaaammgg`) delle righe che hanno preso una data di anniversario (P12), 0 per le altre. */
+    val anniversaryDay = IntArray(rows)
+    var anniversaryRows = 0
+  }
+
+  /** Quello che la scrittura conta per il rapporto. */
+  private class WriteTotals {
+    var positionRows = 0
+  }
+
+  private fun dayNumber(day: java.time.LocalDate): Int = day.year * 10_000 + day.monthValue * 100 + day.dayOfMonth
+
+  /** Gli id dei media del telefono (non solo-NAS: le loro miniature si disegnano davvero) che hanno preso la data [day] di anniversario. */
+  private fun shelfMembers(plan: Plan, rows: Int, day: java.time.LocalDate): List<String> {
+    val wanted = dayNumber(day)
+    val out = ArrayList<String>()
+    for (i in 0 until rows) {
+      if (plan.anniversaryDay[i] == wanted && plan.presence[i] != NAS_ONLY) out += uuid(MEDIA_TAG, i)
+    }
+    return out
   }
 
   private fun headSize(rows: Int, wanted: Int): Int = wanted.coerceAtMost(rows / 10)
@@ -268,6 +311,22 @@ internal object BenchSeeder {
       p.aspect[i] = aspect
       p.flags[i] = flags
       p.placeId[i] = placeId ?: 0
+    }
+
+    // Fase 9 (P12): un gruppo di righe, scelte da un passo fisso (mai dalla sequenza casuale di sopra), prende le date attorno a "oggi" di 1 e di 3 anni fa:
+    // i ricordi "N anni fa oggi" hanno cosi' i loro anniversari veri. Tutto il resto delle righe e' quello del 13/10.
+    val zoneId = zone.toZoneId()
+    val anchor = java.time.Instant.ofEpochMilli(now).atZone(zoneId).toLocalDate()
+    for (j in 0 until BenchAnniversary.total(rows)) {
+      val i = BenchAnniversary.row(rows, j)
+      if (i >= rows) break
+      val time = BenchAnniversary.timeMs(anchor, rows, j, zoneId)
+      val offset = zone.getOffset(time) / 60_000
+      p.sortTime[i] = time
+      p.offsetMin[i] = offset
+      p.localDay[i] = TimelineRules.localDay(time, offset)
+      p.anniversaryDay[i] = p.localDay[i]
+      p.anniversaryRows++
     }
 
     // Presenza: la testa (le righe piu' recenti per data, come le ordina l'indice: sort_time e poi media_id, dal piu'
@@ -323,6 +382,7 @@ internal object BenchSeeder {
     rows: Int,
     msVersion: String,
     now: Long,
+    totals: WriteTotals,
   ): Int {
     // La chiave di contenuto puo' stare in una colonna dello schema v3 (P2): se c'e' la si scrive, altrimenti la si ricava
     // da `quick_hash` e `size` (`ContentKey.of`), che e' quello che il dataset scrive comunque.
@@ -513,8 +573,11 @@ internal object BenchSeeder {
       tMeta.int("taken_offset_min", plan.offsetMin[i])
       tMeta.text("taken_confidence", "exact")
       tMeta.text("taken_source", "exif_offset")
-      tMeta.real("latitude", null)
-      tMeta.real("longitude", null)
+      // P12: il 60% delle righe (quelle che hanno un luogo) ha anche una posizione plausibile (`BenchGeo`).
+      val spot = BenchGeo.position(i, plan.placeId[i])
+      tMeta.real("latitude", spot?.latitude)
+      tMeta.real("longitude", spot?.longitude)
+      if (spot != null) totals.positionRows++
       tMeta.real("altitude", null)
       tMeta.long("updated_at", now)
       tMeta.commit()

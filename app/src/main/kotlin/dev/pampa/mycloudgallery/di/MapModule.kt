@@ -25,6 +25,7 @@ import dev.pampa.mycloudgallery.map.AppViewerPlaceMap
 import dev.pampa.mycloudgallery.map.MapDiagnostics
 import dev.pampa.mycloudgallery.map.MapGraph
 import dev.pampa.mycloudgallery.map.placesSectionProvider
+import java.util.Optional
 import javax.inject.Singleton
 
 /**
@@ -38,7 +39,12 @@ object MapModule {
 
   @Provides
   @Singleton
-  fun mapGraph(@ApplicationContext context: Context, graph: AppGraph, gallery: GalleryGraph): MapGraph = MapGraph(
+  fun mapGraph(
+    @ApplicationContext context: Context,
+    graph: AppGraph,
+    gallery: GalleryGraph,
+    hooks: @JvmSuppressWildcards Optional<MeasurementHooks>,
+  ): MapGraph = MapGraph(
     context = context.applicationContext,
     parent = graph.scope,
     database = gallery.database,
@@ -48,7 +54,8 @@ object MapModule {
     catalogVersion = { id -> gallery.coreIfReady()?.catalog?.media(id)?.currentVersion?.id?.value },
     network = { graph.environment.snapshot },
     ledger = { graph.trafficLedger },
-    buildFlag = graph.flags.mapOnline,
+    // P12: una variante di misura non accende mai la mappa dettagliata (nessun traffico verso OpenFreeMap): solo la carta di base offline.
+    buildFlag = graph.flags.mapOnline && (hooks.orElse(null)?.mapOnlineAllowed ?: true),
   ).also { map ->
     // L'azzeramento ferma la mappa per prima (§1.4, D37): niente si ricostruisce piu', la mini-mappa dimentica; poi si toglie `map/`.
     graph.mapStopper = GalleryStopper { map.stop() }

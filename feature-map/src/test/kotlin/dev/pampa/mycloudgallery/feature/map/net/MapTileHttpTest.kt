@@ -102,7 +102,8 @@ class MapTileHttpTest {
     val rig = TileRig().apply { online = false; download = RegionDownloadScope({ it.z == 8 }, mobileConfirmed = false) }
     rig.tile(8, 136, 93).getOrThrow().close()
     assertThat(rig.server.tiles().single().headers["User-Agent"]).isEqualTo(MapTileHeaders.USER_AGENT_DOWNLOAD)
-    assertThat(rig.server.tileJsonRequests().single().headers["User-Agent"]).isEqualTo(MapTileHeaders.USER_AGENT)
+    // P5: anche il TileJSON chiesto per quello scaricamento porta lo User-Agent che identifica l'app (le condizioni d'uso di OpenFreeMap lo chiedono per lo scaricamento).
+    assertThat(rig.server.tileJsonRequests().single().headers["User-Agent"]).isEqualTo(MapTileHeaders.USER_AGENT_DOWNLOAD)
     assertThat(rig.tile(9, 272, 186).exceptionOrNull()).isInstanceOf(MapRequestHeld::class.java)
   }
 

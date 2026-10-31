@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Zone senza Internet (Fase 9, P5; docs/fase9-progetto.md §2.9, D26; decisione dell'utente del 31/10: dentro i limiti di OpenFreeMap). Il testo dice sempre la verita': cosa si scarica, quanto, che il servizio vede la zona. -->
+<resources>
+  <string name="regions_title">Zone senza Internet</string>
+  <string name="regions_back">Indietro</string>
+  <string name="regions_intro">Scarica una zona per usarla senza Internet. Si scarica solo quando lo chiedi, una volta, e resta sul telefono. Una zona scaricata non si chiede più a OpenFreeMap.</string>
+
+  <string name="regions_header_downloaded">Scaricate</string>
+  <string name="regions_header_italian">Regioni italiane</string>
+  <string name="regions_header_countries">Paesi vicini</string>
+  <string name="regions_header_around">Attorno a un luogo</string>
+
+  <string name="regions_around_row">La zona attorno a un luogo</string>
+  <string name="regions_around_detail">Cerca un luogo per nome e scegli il raggio: 15, 30 o 60 km</string>
+
+  <!-- Righe del catalogo e delle zone scaricate. %1$s = dimensione ("27 MB"), %2$s = livello di dettaglio. -->
+  <string name="regions_size_approx">circa %1$s</string>
+  <string name="regions_mb">%1$d MB</string>
+  <string name="regions_gb">%1$s GB</string>
+  <string name="regions_row_offer">%1$s · %2$s</string>
+  <string name="regions_row_too_large">Troppo grande per scaricarla: scegli una zona più piccola</string>
+  <string name="regions_row_present">Già scaricata</string>
+  <string name="regions_row_ready">Completa · %1$s · %2$s</string>
+  <string name="regions_row_needs_update">Completa · %1$s · da aggiornare</string>
+  <string name="regions_row_downloading">Scarico: %1$d%%</string>
+  <string name="regions_row_partial">Interrotta al %1$d%% · %2$s</string>
+  <string name="regions_stop_interrupted">riprende quando apri l’app</string>
+  <string name="regions_stop_network">aspetta il Wi-Fi</string>
+  <string name="regions_stop_map_off">fermata perché hai spento la mappa dettagliata, tocca per riprendere</string>
+  <string name="regions_stop_server">il servizio non risponde, tocca per riprovare</string>
+  <string name="regions_stop_space">poco spazio sul telefono, tocca per riprovare</string>
+  <string name="regions_stop_limit">si è fermata ai limiti di OpenFreeMap: eliminala e scegli una zona più piccola</string>
+
+  <string name="regions_detail_low">paesi e strade principali</string>
+  <string name="regions_detail_medium">strade principali, paesi, acqua e boschi</string>
+  <string name="regions_detail_high">tutto il dettaglio, anche le vie</string>
+
+  <string name="regions_total">Le zone scaricate occupano %1$s (al massimo 1 GB in tutto).</string>
+
+  <!-- Il foglio di conferma: solo da un tocco (RegionDownloadConfirmation). -->
+  <string name="regions_sheet_title">Scarica «%1$s»?</string>
+  <string name="regions_sheet_message">%1$s, sul Wi-Fi. %2$s. OpenFreeMap vedrà quale zona scarichi, una volta.</string>
+  <string name="regions_sheet_update_title">Aggiorna «%1$s»?</string>
+  <string name="regions_sheet_update_message">Si scarica di nuovo da capo: circa %1$s, sul Wi-Fi. OpenFreeMap vedrà quale zona scarichi, una volta. Mentre si aggiorna la zona non è completa.</string>
+  <string name="regions_sheet_resume_title">Riprendi «%1$s»?</string>
+  <string name="regions_sheet_resume_message">Mancano circa %1$s. OpenFreeMap vedrà quale zona scarichi, una volta.</string>
+  <string name="regions_sheet_mobile_title">Stai usando i dati mobili</string>
+  <string name="regions_sheet_mobile_message">Lo scaricamento di «%1$s» userà circa %2$s dei tuoi dati mobili. Scaricare lo stesso?</string>
+  <string name="regions_sheet_download">Scarica</string>
+  <string name="regions_sheet_update">Aggiorna</string>
+  <string name="regions_sheet_resume">Riprendi</string>
+  <string name="regions_sheet_mobile_confirm">Scarica con i dati mobili</string>
+  <string name="regions_sheet_cancel">Annulla</string>
+  <string name="regions_sheet_pane">Scaricamento di una zona</string>
+
+  <!-- Gestire una zona scaricata. -->
+  <string name="regions_manage_title">%1$s</string>
+  <string name="regions_manage_ready">Completa, %1$s. Funziona senza Internet.</string>
+  <string name="regions_manage_needs_update">Completa da più di 6 mesi, %1$s. Funziona ancora senza Internet; aggiornarla è una tua scelta.</string>
+  <string name="regions_manage_partial">Interrotta al %1$d%%.</string>
+  <string name="regions_manage_downloading">Si sta scaricando: %1$d%%.</string>
+  <string name="regions_manage_delete">Elimina</string>
+  <string name="regions_manage_close">Chiudi</string>
+  <string name="regions_delete_title">Eliminare «%1$s»?</string>
+  <string name="regions_delete_message">Si liberano circa %1$s. Potrai scaricarla di nuovo.</string>
+  <string name="regions_delete_confirm">Elimina</string>
+
+  <!-- Avvisi sopra la pagina (esito di "Scarica"). -->
+  <string name="regions_msg_too_large">Questa zona è troppo grande: scegline una più piccola.</string>
+  <string name="regions_msg_needs_wifi">Per scaricare serve il Wi-Fi (mai in roaming). Sui dati mobili si può solo se spegni «Solo sul Wi-Fi» nelle impostazioni della mappa.</string>
+  <string name="regions_msg_no_space">Serve più spazio sul telefono: liberane almeno %1$s.</string>
+  <string name="regions_msg_busy">Si sta già scaricando un’altra zona: aspetta che finisca.</string>
+  <string name="regions_msg_expired">Riprova: la conferma era scaduta.</string>
+  <string name="regions_msg_dismiss">Chiudi l’avviso</string>
+
+  <!-- La zona attorno a un luogo. -->
+  <string name="regions_around_title">La zona attorno a un luogo</string>
+  <string name="regions_around_hint">Nome del luogo</string>
+  <string name="regions_around_note">Il luogo si sceglie per nome: la zona non parte mai dalla tua casa né dalle tue foto.</string>
+  <string name="regions_around_none">Nessun luogo trovato</string>
+  <string name="regions_around_unavailable">L’elenco dei luoghi non è disponibile su questo telefono.</string>
+  <string name="regions_around_radius_header">Raggio attorno a «%1$s»</string>
+  <string name="regions_around_radius">%1$d km</string>
+  <string name="regions_around_change">Cambia luogo</string>
+  <string name="regions_around_item">%1$s, %2$d km</string>
+
+  <!-- Nella mappa. -->
+  <string name="mappa_download">Scarico una zona senza Internet: %1$d%%</string>
+</resources>

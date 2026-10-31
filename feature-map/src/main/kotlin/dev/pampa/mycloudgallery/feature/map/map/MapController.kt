@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.map.contract.MapPoints
 import dev.pampa.mycloudgallery.core.map.contract.MapRegions
 import dev.pampa.mycloudgallery.core.map.contract.MapSettings
 import dev.pampa.mycloudgallery.core.map.contract.RebuildReason
+import dev.pampa.mycloudgallery.core.map.contract.RegionStatus
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.map.contract.MapMediaPositions
 import dev.pampa.mycloudgallery.feature.map.contract.MapPlaceNames
@@ -51,6 +52,8 @@ data class MapUi(
   val initial: MapInitial? = null,
   val bubbles: List<PlacedBubble> = emptyList(),
   val selection: GeoE6? = null,
+  /** P5: l'avanzamento (0..100) dello scaricamento di una zona senza Internet, o null se nessuno e' in corso: una riga discreta sopra la mappa. */
+  val download: Int? = null,
 ) {
   override fun toString(): String = "MapUi($screen, ${style.asset}, bolle=${bubbles.size})"
 }
@@ -115,9 +118,14 @@ class MapController(
     }
   }.stateIn(scope, SharingStarted.Eagerly, MapScreenState.Loading)
 
+  /** P5: lo scaricamento di una zona in corso (percentuale), per la riga sopra la mappa. */
+  private val downloading: StateFlow<Int?> = regions.regions.map { list -> list.firstOrNull { it.status == RegionStatus.DOWNLOADING }?.percent }
+    .stateIn(scope, SharingStarted.Eagerly, regions.regions.value.firstOrNull { it.status == RegionStatus.DOWNLOADING }?.percent)
+
   /** Lo stato di adesso. */
-  val ui: StateFlow<MapUi> = combine(screen, chosenStyle, initial, bubbles, selection) { s, st, start, b, sel -> MapUi(s, st, start, b, sel) }
-    .stateIn(scope, SharingStarted.Eagerly, MapUi(MapScreenState.Loading, chosenStyle.value))
+  val ui: StateFlow<MapUi> = combine(combine(screen, chosenStyle, initial, bubbles, selection) { s, st, start, b, sel -> MapUi(s, st, start, b, sel) }, downloading) { base, percent ->
+    base.copy(download = percent)
+  }.stateIn(scope, SharingStarted.Eagerly, MapUi(MapScreenState.Loading, chosenStyle.value, download = downloading.value))
 
   init {
     // L'indice si costruisce fuori dal thread principale e solo ora (mai all'avvio dell'app).

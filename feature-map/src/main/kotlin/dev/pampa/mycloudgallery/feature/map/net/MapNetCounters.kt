@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.map.contract.MapHost
 import dev.pampa.mycloudgallery.core.map.contract.RefuseReason
 import java.io.IOException
 import java.net.SocketException
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicLongArray
 
@@ -22,6 +23,8 @@ internal data class MapNetSnapshot(
   val paused: Long,
   val noVersion: Long,
   val tileJsonFetches: Long,
+  /** Al massimo quante richieste sono state in corso insieme (condizioni d'uso di OpenFreeMap: al piu' 4 verso l'host, `MapTileHttp.MAX_REQUESTS_PER_HOST`). */
+  val peakInFlight: Int = 0,
 )
 
 internal class MapNetCounters {
@@ -33,6 +36,8 @@ internal class MapNetCounters {
   private val paused = AtomicLong()
   private val noVersion = AtomicLong()
   private val tileJsonFetches = AtomicLong()
+  private val inFlight = AtomicInteger()
+  private val peakInFlight = AtomicInteger()
 
   /** Una richiesta uscita e tornata con una risposta del server ([zoom] null per il TileJSON). */
   fun allowed(zoom: Int?) {
@@ -63,6 +68,16 @@ internal class MapNetCounters {
     noVersion.incrementAndGet()
   }
 
+  /** Una richiesta entra nel client (dopo la decisione del cancello): conta quante sono insieme, e il massimo. */
+  fun enter() {
+    val now = inFlight.incrementAndGet()
+    peakInFlight.accumulateAndGet(now) { a, b -> maxOf(a, b) }
+  }
+
+  fun exit() {
+    inFlight.decrementAndGet()
+  }
+
   fun tileJsonFetch() {
     tileJsonFetches.incrementAndGet()
   }
@@ -76,6 +91,7 @@ internal class MapNetCounters {
     paused = paused.get(),
     noVersion = noVersion.get(),
     tileJsonFetches = tileJsonFetches.get(),
+    peakInFlight = peakInFlight.get(),
   )
 }
 

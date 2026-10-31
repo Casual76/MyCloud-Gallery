@@ -236,7 +236,7 @@ internal class MapScreensTest : MapScreenTest() {
     assertShows(
       "accesa", "Accesa su questo dispositivo", "Solo sul Wi-Fi", "Mai con i dati mobili",
       "OpenFreeMap riceve l’indirizzo della tua connessione e la zona che stai guardando", "Non riceve mai le tue foto, le coordinate esatte né quante sono", "La scelta vale solo su questo dispositivo",
-      "Zone senza Internet", "Nessuna zona scaricata", "Per non far sapere una zona, spegni la mappa dettagliata prima di aprirla",
+      "Zone senza Internet", "Nessuna zona scaricata", "Per non far sapere una zona, scaricala prima di aprirla, oppure spegni la mappa dettagliata",
     )
     clickText("Accesa su questo dispositivo")
     clickText("Mai con i dati mobili")

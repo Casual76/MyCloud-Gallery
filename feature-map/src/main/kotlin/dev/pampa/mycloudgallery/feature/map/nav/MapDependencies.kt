@@ -11,6 +11,8 @@ import dev.pampa.mycloudgallery.core.map.contract.MapNetworkState
 import dev.pampa.mycloudgallery.core.map.contract.MapPoints
 import dev.pampa.mycloudgallery.core.map.contract.MapRegions
 import dev.pampa.mycloudgallery.core.map.contract.MapSettings
+import dev.pampa.mycloudgallery.core.map.contract.NoPlaceSearch
+import dev.pampa.mycloudgallery.core.map.contract.PlaceSearch
 import dev.pampa.mycloudgallery.core.map.noop.NoMapNetworkState
 import dev.pampa.mycloudgallery.core.map.noop.NoMapPoints
 import dev.pampa.mycloudgallery.core.map.noop.NoMapRegions
@@ -47,6 +49,8 @@ class MapDependencies @Inject constructor(
   engine: Optional<MapEngineStarter>,
   /** Fase 9 (P13): una superficie gia' pronta al posto di quella vera (solo le prove di `:app` la legano, con `FakeMapSurface`: MapLibre non si disegna in Robolectric). */
   surface: Optional<MapSurfaceContent>,
+  /** Fase 9 (P5): la ricerca di un luogo per nome (dataset GeoNames sul telefono) per "la zona attorno a un luogo"; senza, la pagina dice che l'elenco dei luoghi non c'e'. */
+  placeSearch: Optional<PlaceSearch> = Optional.empty(),
 ) {
   val points: MapPoints = points.orElse(NoMapPoints)
   val settings: MapSettings = settings.orElse(NoMapSettings)
@@ -55,6 +59,12 @@ class MapDependencies @Inject constructor(
   val places: MapPlaceNames = places.orElse(NoMapPlaceNames)
   val positions: MapMediaPositions = positions.orElse(NoMapMediaPositions)
   val visible: VisibleMedia = visible.orElse(NoVisibleMedia)
+
+  /** La ricerca dei luoghi per nome ([NoPlaceSearch] se non legata: nessun risultato). */
+  val placeSearch: PlaceSearch = placeSearch.orElse(NoPlaceSearch)
+
+  /** Vero se `:app` ha legato la ricerca dei luoghi (altrimenti la pagina dice che non c'e'). */
+  val hasPlaceSearch: Boolean = placeSearch.isPresent
 
   /** Il filtro finale dei Nascosti: la maschera c'e' sempre (un legame che manca e' un errore di compilazione, non un filtro muto). */
   val filter: FinalFilter = FinalFilter(mask)
@@ -91,6 +101,9 @@ abstract class MapPortsModule {
 
   @BindsOptionalOf
   abstract fun mapEngineStarter(): MapEngineStarter
+
+  @BindsOptionalOf
+  abstract fun placeSearch(): PlaceSearch
 
   /** Mai legata in produzione: la mappa e' sempre quella vera di MapLibre ([MapLibreSurfaceContent]). */
   @BindsOptionalOf

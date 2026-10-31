@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.map.net
 
+import dev.pampa.mycloudgallery.core.map.contract.DownloadBudget
 import dev.pampa.mycloudgallery.core.map.contract.MapHost
 import dev.pampa.mycloudgallery.core.map.contract.MapNetwork
 import dev.pampa.mycloudgallery.core.map.contract.MapResponseRules
@@ -76,12 +77,14 @@ internal class MapWireGuard(
       response.close()
       throw MapRequestRefused(RefuseReason.CONTENT)
     }
-    return response.newBuilder().body(counted(body)).build()
+    return response.newBuilder().body(counted(response, body)).build()
   }
 
   /** Il corpo che si legge contando i byte sul filo: oltre il tetto e' un rifiuto; alla fine (o alla chiusura) i byte vanno registrati una volta. */
-  private fun counted(body: ResponseBody): ResponseBody {
+  private fun counted(response: Response, body: ResponseBody): ResponseBody {
     val recorded = AtomicBoolean(false)
+    // P5: se la richiesta e' di uno scaricamento di regione, i byte veri sul filo vanno anche nel suo conto (50 MB): man mano che arrivano, cosi' lo scaricamento si ferma subito.
+    val budget = response.request.tag(DownloadBudget::class.java)
     var total = 0L
     val net = network()
     fun record() {
@@ -98,6 +101,7 @@ internal class MapWireGuard(
           return read
         }
         total += read
+        budget?.received(read)
         if (total > MapResponseRules.MAX_BYTES) {
           record()
           throw MapRequestRefused(RefuseReason.CONTENT)

@@ -18,22 +18,38 @@ import java.time.Instant
 // Fase 10 (P0, §5.2): i fake del manifest. **Nessuna chiave vera e nessuna firma vera qui**: [TableManifestVerifier] sostituisce codec e
 // firma con una tabella (buste opache "firmate" dal test), cosi' lo stato si prova senza crittografia. Da P1 il fake della sorgente lavora
 // con il codec e il verificatore di produzione (KT): il fake sostituisce solo la lettura.
+// P1: [ReleaseSealer] e [FragileReleaseStore] sono le due capacita' che la suite `ReleaseStateContract` chiede al banco di prova, cosi' la
+// stessa suite gira sul riferimento (tabella e memoria) e sullo stato vero (firma vera con `ReleaseTestSigner` e deposito su file).
+
+/** Chi "firma" manifest per le prove: [seal] da' una busta accettata dal verificatore del banco, [tamper] la stessa con la firma che non torna. */
+interface ReleaseSealer {
+  fun seal(manifest: ReleaseManifest, keyId: Int = ReleaseKeyIds.K1): ByteArray
+
+  fun tamper(sealed: ByteArray): ByteArray
+}
+
+/** Un deposito che sa morire fra la scrittura del temporaneo e la rinomina ([dieDuringNextWrite]) e farsi trovare rovinato ([corrupt]). */
+interface FragileReleaseStore : ReleaseStateStore {
+  fun dieDuringNextWrite()
+
+  fun corrupt()
+}
 
 /**
  * Il verificatore a tabella: [seal] registra un manifest e da' una busta opaca; [verify] la riconosce. Le buste si possono [tamper] (firma non
  * valida), una chiave non fidata da' `UNKNOWN_KEY`, un'app diversa `WRONG_APP`, una busta sconosciuta `MALFORMED`, oltre il tetto `TOO_LARGE`.
  */
-class TableManifestVerifier(val trusted: Set<Int> = setOf(ReleaseKeyIds.K1, ReleaseKeyIds.K2, ReleaseKeyIds.KT)) : ManifestVerifier {
+class TableManifestVerifier(val trusted: Set<Int> = setOf(ReleaseKeyIds.K1, ReleaseKeyIds.K2, ReleaseKeyIds.KT)) : ManifestVerifier, ReleaseSealer {
 
   private class Entry(val manifest: ReleaseManifest, val keyId: Int, val tampered: Boolean)
 
   private val table = HashMap<String, Entry>()
   private var next = 0
 
-  fun seal(manifest: ReleaseManifest, keyId: Int = ReleaseKeyIds.K1): ByteArray = register(Entry(manifest, keyId, tampered = false))
+  override fun seal(manifest: ReleaseManifest, keyId: Int): ByteArray = register(Entry(manifest, keyId, tampered = false))
 
   /** La stessa busta con un byte cambiato: la firma non torna piu'. */
-  fun tamper(sealed: ByteArray): ByteArray {
+  override fun tamper(sealed: ByteArray): ByteArray {
     val entry = table[String(sealed, Charsets.US_ASCII)] ?: error("busta sconosciuta")
     return register(Entry(entry.manifest, entry.keyId, tampered = true))
   }
@@ -55,7 +71,7 @@ class TableManifestVerifier(val trusted: Set<Int> = setOf(ReleaseKeyIds.K1, Rele
 }
 
 /** Il deposito in memoria con la morte fra scrittura e rinomina ([dieDuringNextWrite]) e il file rovinato ([corrupt]: si legge come assente). */
-class InMemoryReleaseStateStore : ReleaseStateStore {
+class InMemoryReleaseStateStore : FragileReleaseStore {
   var saved: StoredRelease? = null
     private set
   var writes: Int = 0
@@ -63,11 +79,11 @@ class InMemoryReleaseStateStore : ReleaseStateStore {
   private var dieNext = false
   private var damaged = false
 
-  fun dieDuringNextWrite() {
+  override fun dieDuringNextWrite() {
     dieNext = true
   }
 
-  fun corrupt() {
+  override fun corrupt() {
     damaged = true
   }
 

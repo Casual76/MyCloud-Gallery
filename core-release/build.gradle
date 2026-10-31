@@ -18,6 +18,16 @@ apply from: "${rootDir}/gradle/android-conventions.gradle"
 
 android {
   namespace = 'dev.pampa.mycloudgallery.core.release'
+
+  // P1: lo strumento dell'admin (`tools/release/ManifestTool`, D31, §2.8) si compila con i TEST di questo modulo: usa lo stesso codec e lo
+  // stesso verificatore dell'app, la chiave di prova KT (privata solo in src/test/) e non entra mai in un APK (i test non ci vanno; in piu'
+  // `tools/check.ps1` passo 7b). Le sue prove girano con galleryTest.
+  sourceSets {
+    test {
+      java.srcDir "${rootDir}/tools/release/ManifestTool/src"
+      java.srcDir "${rootDir}/tools/release/ManifestTool/test"
+    }
+  }
 }
 
 dependencies {
@@ -26,4 +36,27 @@ dependencies {
 
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
+}
+
+// --- Lo strumento del manifest (P1; docs/decisioni.md, "Fase 10 P1") ------------------------------------------------------------------
+//
+//   gradlew :core-release:manifestToolClasspath     compila lo strumento e scrive il classpath in build/manifest-tool/classpath.txt
+//
+// Si lancia con `tools/release/manifest-tool.ps1 <comando>` (java diretto: la frase segreta si legge dalla console, che Gradle non da').
+// Non fa parte di nessun build normale e non scarica niente.
+afterEvaluate {
+  tasks.register('manifestToolClasspath') {
+    group = 'release'
+    description = 'Compila ManifestTool (tools/release) con i test di core-release e ne scrive il classpath.'
+    def unitTest = tasks.named('testDebugUnitTest').get()
+    dependsOn unitTest.classpath
+    def out = layout.buildDirectory.file('manifest-tool/classpath.txt')
+    outputs.file(out)
+    outputs.upToDateWhen { false }
+    doLast {
+      def file = out.get().asFile
+      file.parentFile.mkdirs()
+      file.text = unitTest.classpath.files.collect { it.absolutePath }.join(File.pathSeparator)
+    }
+  }
 }

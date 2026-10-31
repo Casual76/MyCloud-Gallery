@@ -3,8 +3,10 @@ package dev.pampa.mycloudgallery.core.release.contract
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.release.testing.FakeReleaseClock
+import dev.pampa.mycloudgallery.core.release.testing.FragileReleaseStore
 import dev.pampa.mycloudgallery.core.release.testing.InMemoryReleaseState
 import dev.pampa.mycloudgallery.core.release.testing.InMemoryReleaseStateStore
+import dev.pampa.mycloudgallery.core.release.testing.ReleaseSealer
 import dev.pampa.mycloudgallery.core.release.testing.SyntheticManifests
 import dev.pampa.mycloudgallery.core.release.testing.TableManifestVerifier
 import java.io.IOException
@@ -16,14 +18,15 @@ import org.junit.Test
 
 /**
  * La suite di contratto dello stato del manifest (Fase 10, P0; `docs/fase10-progetto.md` D29, D30, E-REL1-E-REL5, E-REL9, §5.2). Gira sul
- * riferimento in memoria e, da P1, sullo stato vero (deposito su file con la morte del processo a ogni salvataggio, verificatore a tabella
- * oppure codec e firma veri con KT).
+ * riferimento in memoria e, da P1, sullo stato vero due volte: con il verificatore a tabella e il deposito in memoria, e con la firma vera
+ * (`ReleaseTestSigner`, `SignedManifestVerifier`) e il deposito su file che muore fra il temporaneo e la rinomina
+ * (`DefaultReleaseStateContractTest`). P1 ha solo allargato il banco ([ReleaseSealer], [FragileReleaseStore]): le prove sono quelle di P0.
  */
 abstract class ReleaseStateContract {
 
   interface Rig {
-    val verifier: TableManifestVerifier
-    val store: InMemoryReleaseStateStore
+    val verifier: ReleaseSealer
+    val store: FragileReleaseStore
     val clock: FakeReleaseClock
 
     /** Lo stato per la versione [code] sopra lo stesso deposito (una "riapertura" dopo la morte o dopo un aggiornamento dell'app). */
@@ -148,6 +151,21 @@ abstract class ReleaseStateContract {
     val stricter = rig.verifier.seal(manifest(3, listOf(all)))
     assertThat(runCatching { broken.offer(stricter, ManifestOrigin.NAS) }.isSuccess).isFalse()
     assertWithMessage("piu' severo vale in memoria anche se il salvataggio muore").that(broken.status.value).isEqualTo(ReleaseStatus.Stopped(ReleaseMessage.DATA_RISK))
+  }
+
+  /** P1: "scaduto = solo piu' severo" vale rispetto allo stato in vigore, anche quello che vale solo in memoria dopo un salvataggio morto. */
+  @Test
+  fun unoScadutoDopoUnSalvataggioMortoNonAmmorbidisce() = runTest {
+    val rig = rig()
+    val state = rig.open().also { it.load() }
+    state.offer(rig.verifier.seal(manifest(1, listOf(writes))), ManifestOrigin.NAS)
+    rig.store.dieDuringNextWrite()
+    assertThat(runCatching { state.offer(rig.verifier.seal(manifest(2, listOf(all))), ManifestOrigin.NAS) }.isFailure).isTrue()
+    assertThat(state.status.value).isEqualTo(ReleaseStatus.Stopped(ReleaseMessage.DATA_RISK))
+    rig.clock.now = ISSUED.plus(Duration.ofDays(30))
+    assertThat(state.offer(rig.verifier.seal(manifest(3, days = 10)), ManifestOrigin.NAS)).isEqualTo(OfferResult.EXPIRED_KEPT_BLOCKS)
+    assertWithMessage("lo scaduto non toglie il blocco in vigore").that(state.status.value).isEqualTo(ReleaseStatus.Stopped(ReleaseMessage.DATA_RISK))
+    assertThat(rig.open().also { it.load() }.status.value).isEqualTo(ReleaseStatus.Stopped(ReleaseMessage.DATA_RISK))
   }
 
   @Test

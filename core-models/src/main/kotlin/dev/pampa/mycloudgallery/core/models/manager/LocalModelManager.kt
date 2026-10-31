@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.models.manager
 
 import dev.pampa.mycloudgallery.core.models.contract.EnsureResult
+import dev.pampa.mycloudgallery.core.models.contract.ExtraModelSources
 import dev.pampa.mycloudgallery.core.models.contract.FetchRefusal
 import dev.pampa.mycloudgallery.core.models.contract.FetchResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelFailCode
@@ -22,6 +23,8 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelState
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
 import dev.pampa.mycloudgallery.core.models.contract.ModelWait
 import dev.pampa.mycloudgallery.core.models.contract.ModelUsage
+import dev.pampa.mycloudgallery.core.models.contract.PinnedUrl
+import dev.pampa.mycloudgallery.core.models.noop.NoExtraModelSources
 import dev.pampa.mycloudgallery.core.models.store.ModelStore
 import dev.pampa.mycloudgallery.core.models.store.PartialWriter
 import dev.pampa.mycloudgallery.core.models.verify.ModelVerifier
@@ -55,6 +58,8 @@ import kotlinx.coroutines.withContext
 //  4. Tutto lo stato sta su disco (parziale, nota di provenienza, validatore): la morte del processo in qualunque punto lascia una
 //     cartella da cui `ensure` riprende senza rifare cio' che c'e' (E-A1).
 // Ordine delle sorgenti (D17): copie sul NAS dei dispositivi della famiglia, HTTPS, cartella dal PC; per il ritaglio solo l'APK.
+// Fase 10 (P1, D29): fra gli HTTPS, prima gli indirizzi fissati del catalogo, poi quelli aggiuntivi del manifest firmato ([ExtraModelSources],
+// gia' filtrati con il catalogo e `PinnedUrl.of`); `RoutingModelFetcher` ricontrolla ogni indirizzo prima di aprire la connessione.
 
 internal class LocalModelManager(
   private val store: ModelStore,
@@ -67,6 +72,7 @@ internal class LocalModelManager(
   private val strikes: SourceStrikes,
   private val io: CoroutineDispatcher,
   private val progressPoll: Duration,
+  private val extra: ExtraModelSources = NoExtraModelSources,
 ) : ModelManager {
 
   override val states get() = store.states
@@ -340,7 +346,7 @@ internal class LocalModelManager(
 
   // --- sorgenti -----------------------------------------------------------------------------------------------------------
 
-  /** D17: copie sul NAS, poi HTTPS, poi la cartella dal PC. Il ritaglio sta nell'APK e basta. */
+  /** D17: copie sul NAS, poi HTTPS (fissati, poi aggiuntivi del manifest: Fase 10 D29), poi la cartella dal PC. Il ritaglio sta nell'APK e basta. */
   private suspend fun sourcesFor(spec: ModelSpec): List<ModelSource> {
     spec.bundledAsset?.let { return listOf(ModelSource.Bundled(it)) }
     val share = try {
@@ -372,8 +378,16 @@ internal class LocalModelManager(
       }
     }
     spec.https.forEach { sources += ModelSource.Https(it) }
+    extraUrls(spec).forEach { sources += ModelSource.Https(it) }
     if (share != null) sources += ModelSource.PcFolder(share)
     return sources
+  }
+
+  /** Gli indirizzi aggiuntivi (Fase 10, D29) che non sono gia' fissati; un errore della porta vale "nessuno" (fallire chiusi). */
+  private fun extraUrls(spec: ModelSpec): List<PinnedUrl> = try {
+    extra.urls(spec.id, spec.sha256).filter { it !in spec.https }.distinct()
+  } catch (e: RuntimeException) {
+    emptyList()
   }
 
   /**

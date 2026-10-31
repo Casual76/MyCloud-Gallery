@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.models
 
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
+import dev.pampa.mycloudgallery.core.models.contract.ExtraModelSources
 import dev.pampa.mycloudgallery.core.models.contract.FileStatReader
 import dev.pampa.mycloudgallery.core.models.contract.ModelCounters
 import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
@@ -13,6 +14,7 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelShelf
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
 import dev.pampa.mycloudgallery.core.models.manager.LocalModelManager
 import dev.pampa.mycloudgallery.core.models.manager.SourceStrikes
+import dev.pampa.mycloudgallery.core.models.noop.NoExtraModelSources
 import dev.pampa.mycloudgallery.core.models.noop.NoModelShelf
 import dev.pampa.mycloudgallery.core.models.store.ModelStore
 import dev.pampa.mycloudgallery.core.models.verify.LocalModelFiles
@@ -40,6 +42,8 @@ import kotlinx.coroutines.Dispatchers
  * @param statReader lo `stat` del file preso durante la verifica (I1): `PATH_CHECKED` lo confronta con quello del percorso. Solo `:app` lo da'
  *   (`AndroidFileStatReader`); sulla JVM nessuno.
  * @param progressPoll ogni quanto lo stato legge l'avanzamento dal file parziale (zero = mai).
+ * @param extraSources Fase 10 (P1, D29): gli indirizzi HTTPS aggiuntivi del manifest firmato (`CatalogExtraModelSources`), provati dopo
+ *   quelli fissati del catalogo; di base nessuno. Lo stesso oggetto va passato a `ModelFetchers.create`, che ricontrolla ogni indirizzo.
  */
 class LocalModels(
   root: File,
@@ -55,6 +59,7 @@ class LocalModels(
   progressPoll: Duration = 500.milliseconds,
   val counters: ModelCounters = ModelCounters(),
   statReader: FileStatReader = FileStatReader.None,
+  extraSources: ExtraModelSources = NoExtraModelSources,
 ) {
   private val store = ModelStore(root, catalog, nanos, counters)
   private val verifier = ModelVerifier(store, statReader)
@@ -81,6 +86,7 @@ class LocalModels(
     ),
     io = io,
     progressPoll = progressPoll,
+    extra = extraSources,
   )
 
   val manager: ModelManager get() = local

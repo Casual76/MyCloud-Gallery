@@ -13345,3 +13345,178 @@ milioni di righe di dexdump). Nessuna classe rifatta con `--rerun`. I moduli nuo
 - Il passo 3b legge ogni file del repository (circa 7-35 s secondo il carico del PC).
 - `rememberGalleryWindow` e `mediaDragSource` sono firme: la prima funziona (larghezza e altezza della finestra), la seconda non aggancia
   ancora il gesto (P6).
+
+## Fase 10 P1: manifest firmato e chiavi (31/10)
+
+Il pacchetto P1 della Fase 10 (`docs/fase10-progetto.md` §4.4, riga P1; D29-D31, §2.8, §1.2 "core-release", §4.3, §5.2, §6, §11 con
+**Q8 (a)**: il manifest si legge solo dal NAS). Parte dal passaggio di consegne di P0 ("Cosa trovano pronto i pacchetti P1-P14"). Branch
+`fase10/p1` da `ab4c7c2c`. **Nessuna dipendenza nuova, nessuna classe di rete, nessun host nuovo, nessuna chiave vera** (K1 e K2 sono segnaposto
+senza chiave privata, KT e' la chiave di prova), nessun file di `:app`, `core-widget`, `core-map`, `feature-map` o `benchmark` toccato.
+
+**Numerazione.** Aggiornate C440, C441, C442; nuove **C450** (lo strumento) e **C451** (indirizzi aggiuntivi filtrati due volte), **L560** (K1 e K2
+segnaposto: niente kill switch finche' l'utente non le genera) e **L561** (l'anti-rigioco vale per cio' che il dispositivo ricorda); riga
+"Sigle", checklist della Fase 10 e registro delle decisioni di `docs/sicurezza.md` aggiornati; nuova **§5.6 "Impronte delle chiavi"** (bozza).
+
+### Cosa c'e', dove
+- `core-release/codec/`: `ReleaseJson` (JSON canonico come il formato del NAS: oggetti, array, stringhe UTF-8 in NFC, interi, booleani; chiavi in
+  ordine; letto e **riscritto byte per byte**; tetti di profondita' 5, 32 campi, 32 elementi, 2 KiB per stringa; una lettura "leggibile" con gli
+  spazi solo per lo strumento), `EcdsaP256` (firma DER minima con `s` basso, SPKI P-256 con il punto controllato da noi, SHA-256),
+  `ManifestCodec` (busta e JSON del manifest), `SignedManifestVerifier` (il verificatore vero).
+- `core-release/keys/`: `ReleaseKeys` (K1, K2 **segnaposto**, `PROVISIONAL = true`; l'unico posto, con `testing/`, dove si costruisce una
+  `PinnedKey`), `ReleaseTrust` (l'insieme fidato, opaco per :app; `forChannel` toglie KT a ogni canale che non sia `DEBUG`).
+- `core-release/state/`: `DefaultReleaseState` (lo stato vero, le sette regole del contratto), `FileReleaseStateStore` (file atomico
+  `release-state.mcgrs` con somma di controllo), `ReleaseRules`, `NasFirstReleaseClock` (E-REL9), `ReleaseStates` (la **fabbrica** per :app:
+  `create`, `fileStore`, e `offerRead` per una lettura della sorgente).
+- `core-release/testing/`: `ReleaseTestKeys` (KT pubblica **come stringa**, `DEBUG_TRUST`, `trustOf`), `ReleaseTestSigner` (firma vera con chiavi
+  generate nel test), le interfacce `ReleaseSealer` e `FragileReleaseStore` del banco della suite. `core-release/src/test/.../testkeys/
+  ReleaseTestPrivateKey` (KT privata, **solo** sotto `src/test/`).
+- `core-models`: `ExtraModelUrls` (la porta dei testi grezzi), `source/CatalogExtraModelSources` (il filtro con il catalogo e `PinnedUrl.of`),
+  l'ordine in `LocalModelManager` (NAS, fissati, aggiuntivi, cartella dal PC), il controllo in `RoutingModelFetcher`, i parametri con default
+  in `LocalModels` (`extraSources`) e `ModelFetchers.create` (`extra`).
+- `tools/release/ManifestTool/` (`src/` e `test/`, compilati con i test di core-release: `core-release/build.gradle`) e
+  `tools/release/manifest-tool.ps1` (il lanciatore: compila con `:core-release:manifestToolClasspath`, poi `java` diretto per la console).
+- `release/manifest.json`: il manifest leggibile di prova (nessun blocco, nessun indirizzo, una nota che non entra nella firma).
+
+### Scelte
+1. **La busta, byte per byte**: `MCGR1` (5 byte) ‖ lunghezza del JSON (4 byte, big-endian) ‖ JSON canonico ‖ `keyId` (1 byte) ‖ firma DER;
+   la firma copre tutti i byte prima di lei e arriva fino alla fine del file. **Una sola forma valida**: JSON canonico e firma con `s` basso (la
+   seconda firma `(r, n - s)`, che si ottiene senza chiave, e' rifiutata), come i file della famiglia (`docs/formato-nas.md` §4.1). Il codice
+   e' scritto in core-release e non preso da core-trust: core-release vede solo le fondamenta (D2, Phase10ArchitectureTest).
+2. **Ordine dei controlli**: tetto (64 KiB) → forma della busta → chiave conosciuta (`UNKNOWN_KEY`) → firma (`SIGNATURE`) → **solo allora** il
+   JSON: schema (`SCHEMA`), campi `critical` (`CRITICAL_FIELD`), app (`WRONG_APP`), campi e tetti (`MALFORMED`, `TOO_LARGE`). Un dato non
+   firmato non arriva mai al parser.
+3. **Il JSON**: `issued` ed `expires` in secondi dall'epoca; `blocks` e `models` sempre presenti (anche vuoti); `minVersionCode` facoltativo.
+   **`critical`** e' un array di nomi di campo, in ogni oggetto (manifest, blocco, modello): un nome che questa versione non conosce rifiuta la
+   busta; un campo sconosciuto non elencato si ignora. Livello sconosciuto = `all`, messaggio sconosciuto = `update` (le regole di P0).
+4. **K1 e K2 segnaposto** (L560): due punti della curva derivati con SHA-256 da una frase ("MyCloud Gallery, chiave di pubblicazione del
+   manifest K1, segnaposto senza chiave privata", il primo contatore con un punto, `y` pari), di cui nessuno conosce la privata; la derivazione
+   e' in `ReleaseKeysTest`, che la rifa finche' `PROVISIONAL` e' vero. Un'app con i segnaposto non accetta nessun manifest: e' sicuro (il
+   manifest puo' solo restringere), ma non c'e' il blocco a distanza finche' l'utente non genera le chiavi vere.
+5. **KT**: pubblica come stringa in `ReleaseTestKeys` (il passo 7i la cerca nel dex di release), privata in `core-release/src/test/` (il passo
+   3b la ammette solo li'). La fiducia passa da `ReleaseTrust`: :app non nomina mai `PinnedKey`, `ReleaseKeys` o il verificatore (regola 3);
+   `app/src/release` passera' `ReleaseTrust.RELEASE`, `app/src/debug` `ReleaseTestKeys.DEBUG_TRUST`, e la fabbrica toglie comunque KT a ogni
+   canale che non sia `DEBUG`.
+6. **Lo stato su file**: `MCGRS1` ‖ JSON dello stato (`seq`, `versionCode`, `status`, `message`, `keyId`) ‖ JSON del manifest ‖ CRC32. Si
+   salva il manifest **decodificato** (JSON canonico), non la busta: il file e' privato dell'app, e riverificare la busta a ogni avvio con
+   chiavi che un aggiornamento puo' ruotare farebbe perdere un blocco. Un file troncato, rovinato o di un'altra versione vale **assente** (la
+   regola di P0), e la prima lettura del manifest rimette il blocco (L561). Scrittura: temporaneo forzato su disco, rinomina atomica
+   (`StateFiles.replace`), con i punti di morte iniettabili per le prove (`SavePoint`, interni).
+7. **Precisazione del contratto (regola 3)**: "scaduto = solo piu' severo" vale rispetto allo stato **in vigore**, anche quello che vale solo
+   in memoria dopo un salvataggio morto (regola 4). Prima (anche nel riferimento di P0) si partiva dallo stato salvato, e la proprieta' sulle
+   storie casuali ha trovato il caso: salvataggio di un blocco `ALL` morto, poi uno scaduto che riportava a `WRITES`. Corretti lo stato vero e
+   `InMemoryReleaseState`, nuova prova nella suite (`unoScadutoDopoUnSalvataggioMortoNonAmmorbidisce`), KDoc di `ReleaseState` aggiornato.
+8. **La suite di P0 sullo stato vero**: il banco ora chiede le capacita' (`ReleaseSealer`, `FragileReleaseStore`) invece delle classi del
+   riferimento, cosi' la stessa suite gira tre volte: riferimento; stato vero con tabella e memoria; stato vero con **firma vera** e **file che
+   muore** fra il temporaneo e la rinomina. Le prove di P0 non sono cambiate.
+9. **La lettura nello stato** (`offerRead`): `Found` si offre; `TooLarge` (la sorgente non legge oltre il tetto) si conta come `TOO_LARGE`
+   offrendo una busta oltre il tetto; `Absent` e `Unavailable` non cambiano niente.
+10. **L'ora** (E-REL9): `NasFirstReleaseClock(nasNow, phoneNow)` da' l'ora del NAS quando c'e', altrimenti la piu' tarda fra l'ultima ora del NAS
+   vista nel processo e il telefono; le due letture le passa :app (core-release non legge mai l'orologio: `NoWallClockSourcesTest`).
+11. **Gli indirizzi aggiuntivi** (C451): `CatalogExtraModelSources` (al piu' 4 per modello, nell'ordine del manifest, dopo i fissati, mai per un
+   modello dentro l'APK, un errore della porta = nessuno) e il controllo in `RoutingModelFetcher` prima di ogni connessione (un indirizzo ne'
+   fissato ne' aggiuntivo **adesso** e' `Refused` senza rete: scaduto il manifest, decade). `PinnedUrl.of` e `ModelHosts` non cambiano.
+12. **Lo strumento** (C450): si compila con i test di core-release (stesso codec e verificatore dell'app, KT disponibile, mai nell'APK) e gira
+   con `java` diretto perche' Gradle non da' la console per la frase segreta. `seq`: maggiore dell'ultimo del registro
+   (`manifest-seq.txt` accanto alle chiavi; per KT `build/manifest-tool/kt-seq.txt`) **e** di quello della busta gia' scritta; un `seq` dato a
+   mano non piu' alto e' rifiutato. Prima di firmare con K1 o K2 controlla che la chiave del PKCS#12 sia quella fissata nell'app; dopo, la
+   **riverifica** con `SignedManifestVerifier` e le chiavi fissate, e solo allora scrive (registro, poi temporaneo e rinomina). Il PKCS#12 vuole
+   un certificato per ogni chiave privata: lo strumento ne scrive uno X.509 v1 autofirmato in DER (solo `java.security`). Il **foglio di K2** e'
+   lo scalare privato in 8 gruppi di 8 cifre piu' 8 cifre di controllo (SHA-256); `restore` lo rilegge senza mostrarlo e lo accetta solo se
+   corrisponde alla K2 fissata. Il manifest leggibile e' piu' severo dell'app (campi sconosciuti, livelli e messaggi fuori dal catalogo, indirizzi
+   non `https` di Hugging Face o con porta e parametri, validita' oltre 180 giorni: errori); la nota `nota` non entra nella firma.
+
+### Cosa deve fare P13 per legarlo all'app
+- **Il grafo** (`ReleaseGraph`): `val store = ReleaseStates.fileStore(File(context.noBackupFilesDir, "release"))`;
+  `val state = ReleaseStates.create(store, AppVersion(BuildConfig.VERSION_CODE, BuildConfig.VERSION_NAME, canale), clock, fiducia)` con
+  `clock = NasFirstReleaseClock(nasNow = { ora del NAS o null }, phoneNow = { Instant dell'orologio del telefono })` e `fiducia` da un file per
+  variante: `ReleaseTrust.RELEASE` in `app/src/release` (e nelle varianti di misura), `ReleaseTestKeys.DEBUG_TRUST` in `app/src/debug` con il
+  canale `DEBUG`. `state.load()` all'avvio, **prima** dei cancelli. :app non deve nominare `ManifestVerifier`, `ReleaseManifest`, `PinnedKey`,
+  `ReleaseKeys`, `ManifestCodec`, `VersionBlock`, `ModelHint` (regola 3 di `Phase10ArchitectureTest`): bastano `ReleaseStates`, `ReleaseState`,
+  `ReleaseStatus`, `ReleaseTrust`, `AppVersion`, `ReleaseChannel`, `NasFirstReleaseClock`, `ManifestSource`, `ManifestRead`, `ManifestOrigin`.
+- **La sorgente sul NAS** (`ManifestSource`, Q8 (a)): legge `<area comune>/` + `ManifestLimits.NAS_PATH` con la sessione gia' aperta, al piu'
+  `ManifestLimits.MAX_BYTES` (oltre: `TooLarge`, senza leggere il resto), nel giro di sincronizzazione esistente al piu' ogni
+  `ManifestLimits.READ_EVERY` (24 ore) e all'avvio se e' passato di piu'; poi `state.offerRead(sorgente.read(), ManifestOrigin.NAS)`. File
+  assente = `Absent`, NAS irraggiungibile = `Unavailable`: nessun effetto.
+- **I cancelli**: `state.status` in **ogni** cancello di scrittura esistente come causa in piu' di `WRITES_STOPPED` (`ReadOnly` e `Stopped`) e
+  alla radice della UI (`Stopped` = solo la pagina "Questa versione e' stata fermata", con Diagnostica ed esportazione; nessuna sessione del
+  NAS, nessun lavoro); i testi dei messaggi da `strings_release_*.xml` per i codici `update`, `security`, `data` (catalogo chiuso). E-REL13: una
+  conferma distruttiva aperta decade quando lo stato cambia.
+- **I modelli**: `val extra = CatalogExtraModelSources(ExtraModelUrls { id, sha -> state.extraUrls(id, sha) })`, lo **stesso** oggetto a
+  `LocalModels(..., extraSources = extra)` e a `ModelFetchers.create(..., extra = extra)` (in `AiWiring`).
+- **Diagnostica** (`DiagSection.RELEASE`, D39): `state.diag` da' `seq`, data di emissione, stato, quanti indirizzi aggiuntivi, rifiuti per motivo
+  (solo numeri; i conteggi vivono in memoria, se servono persistenti serve una porta in piu'); i codici `RELEASE_*` dall'`OfferResult`.
+- **Azzeramento** (D42): `state.clear()` (toglie il file e dimentica; la prima lettura dopo rimette il blocco).
+
+### Cosa serve a P12 e a P11
+- **P12**: `release.ps1` deve **rifiutare una release con `ReleaseKeys.PROVISIONAL = true`** (L560: senza K1 e K2 vere niente kill switch) e
+  aggiungere in `docs/sicurezza.md` §5.6 la riga di `pampa.jks` (gia' preparata con "da scrivere con P12"). Il nome `ReleaseTestKeys` e le
+  stringhe di KT restano fra i resti vietati nel dex di release (passi 7b e 7i).
+- **P11** (S7b, F177): manifest di prova firmati con KT da `tools\release\manifest-tool.ps1 sign --test-key --in <json> --out <mcgr>` (anche
+  `--issued <data>` per uno scaduto; il `seq` per KT sta in `build\manifest-tool\kt-seq.txt` o in `--ledger`), da manomettere a mano per i casi
+  ostili; nelle prove JVM `ReleaseTestSigner` (chiavi generate) e `ReleaseTestPrivateKey` (KT). Il lanciatore esegue Gradle: un agente prende
+  prima un posto (`gradle-slot.ps1`) o usa `-SkipBuild` dopo una compilazione.
+
+### Cosa deve fare l'utente per K1 e K2 (§8 del progetto; circa 10 minuti, sul PC, mai da un agente)
+1. In un terminale nella cartella del progetto: `powershell -ExecutionPolicy Bypass -File tools\release\manifest-tool.ps1 keys`. Chiede due
+   volte una **frase segreta** (almeno 12 caratteri: mettila nel gestore di password) e scrive `%USERPROFILE%\.mycloudgallery\release\
+   manifest-keys.p12` (K1 e K2).
+2. Lo strumento stampa quattro righe (`K1_SPKI`, `K1_FINGERPRINT`, `K2_SPKI`, `K2_FINGERPRINT`): vanno in
+   `core-release/src/main/kotlin/dev/pampa/mycloudgallery/core/release/keys/ReleaseKeys.kt` al posto dei segnaposto, con
+   `PROVISIONAL = false`; le due impronte vanno in `docs/sicurezza.md` §5.6, togliendo "segnaposto" dalle righe di K1 e K2. Sono dati
+   **pubblici**: puo' incollarli anche un agente, se l'utente gli passa le righe. `ReleaseKeysTest` controlla che codice e documento coincidano.
+3. **Il foglio di K2**: lo strumento stampa l'impronta di K2, 8 gruppi di 8 cifre e un codice di controllo. Scriverlo a mano (o stamparlo) e
+   tenerlo in un cassetto, lontano dal PC; poi chiudere il terminale. Copiare `manifest-keys.p12` su una chiavetta, nello stesso cassetto.
+4. Commit di `ReleaseKeys.kt` e `docs/sicurezza.md` (le private non entrano mai: `tools/check.ps1` passi 3 e 3b); la prima release con le chiavi
+   vere porta il kill switch.
+5. Quando serve un manifest: scrivere `release/manifest.json`, poi `manifest-tool.ps1 sign --in release\manifest.json --out
+   release\manifest.mcgr` (chiede la frase, mette il `seq`, riverifica), e copiare il file sul NAS in
+   `<area comune>\.mycloudgallery\release\manifest.mcgr` (prima con un altro nome, poi rinominare). Con K1 persa o rubata: `sign --key k2`, poi
+   un aggiornamento dell'app con una coppia nuova (D31); senza il PKCS#12, `manifest-tool.ps1 restore` ricostruisce K2 dal foglio.
+
+### Prove ("Fatto quando" della riga P1)
+| Voce | Prova | Esito |
+|---|---|---|
+| Solo una busta intatta e firmata da K1, K2 (o KT in debug) cambia lo stato | `EnvelopeMutationTest`: stato con un blocco `WRITES` gia' in vigore, 10.000 buste mutate (bit, byte, tagli, aggiunte, inserti, lunghezza, `keyId`, firme scambiate fra buste, firma `(r, n - s)`, stesso manifest firmato da chi non ha la chiave negli id di K1, K2 e KT, JSON cambiato e rifirmato), offerte a uno stato di release e a uno di debug | 20.000 offerte, tutte `REJECTED`; stato, `seq` e indirizzi invariati; poi le intatte: K2 applicata, KT rifiutata in release e applicata in debug (circa 13 s) |
+| Anti-rigioco | suite `ReleaseStateContract` (rigioco anche dopo la riapertura) sui tre banchi; proprieta' di P0 su 200 storie; `ManifestCodecTest` | verde |
+| Blocchi solo piu' severi per la stessa `versionCode` | `ReleaseStateHistoriesTest`: 2.000 storie casuali (nuovi, rigiocati, rotti, scaduti, ore che passano, aggiornamenti dell'app, salvataggi che muoiono, file rovinati, azzeramenti, riaperture) | stesso esito, stato, Diagnostica e indirizzi del riferimento a ogni passo; ogni ammorbidimento (piu' di 100) e' un `APPLIED`, un aggiornamento, un azzeramento, un file rovinato o la riapertura dopo un salvataggio morto |
+| Scadenza con l'ora del NAS | suite (`scadenzaConLOraDelNas`), `ReleaseStatesTest.laScadenzaSiGiudicaConLOraDelNas` (`NasFirstReleaseClock`: NAS avanti e telefono indietro, NAS assente, NAS indietro e telefono avanti, NAS che lancia) | verde |
+| Indirizzi aggiuntivi solo per id e SHA-256 del catalogo e host di `ModelHosts` | `ExtraModelSourcesTest` (core-models): 26 indirizzi ostili (host simili, IP v4 e v6 ed esadecimale, porte, query, frammento, utenti, `http`, maiuscole, spazi, `..`, altri host), impronta diversa, id sconosciuto, modello dentro l'APK, tetto di 4, porta rotta; ordine NAS, fissati, aggiuntivi; file sbagliato da un aggiuntivo rifiutato dall'impronta; `RoutingModelFetcher` che rifiuta senza rete e fa decadere un aggiuntivo | verde |
+| Catalogo chiuso dei messaggi | `ManifestCodecTest.ilCatalogoChiusoNonLasciaPassareTestoLibero` (testo libero → `update`, livello sconosciuto → `all`, nessun campo di testo nei tipi) | verde |
+| Lo strumento rifiuta un `seq` non crescente (e riverifica) | `ManifestToolTest` (registro, busta gia' scritta senza registro, `seq` a mano; riverifica con una chiave non fissata; PKCS#12 e frase sbagliata; chiave del PKCS#12 diversa da quella fissata: niente scritto; foglio di K2; manifest leggibile rigoroso e quello del repository valido); in piu' `manifest-tool.ps1` da capo a fondo con KT | verde; da capo a fondo: firma `seq` 1 e 2, `verify` con KT valido, con le chiavi di release `unknown_key`, `seq` 2/3, K1 senza console rifiutata |
+| KT assente dal dex di release | passo 7i di `tools/check.ps1` (le stringhe di `ReleaseTestKeys.kt`) e 7b (il nome); `ReleaseKeysTest` controlla che il passo trovi KT nel suo file e non fra le chiavi di release | vedi l'esito sotto (core-release non e' ancora in :app: il passo lo cerca davvero solo da P13) |
+| Morte del processo a ogni salvataggio dello stato | `FileReleaseStateStoreTest` (morte prima del temporaneo, a meta', prima e dopo la rinomina: si riapre lo stato di prima o quello nuovo; ogni troncamento, ogni bit cambiato e 2.000 file a caso = assente); `ReleaseStateHistoriesTest.laMorteDelProcessoAOgniSalvataggioDelloStato` (15 storie x 10 salvataggi x 4 punti = 600 morti con firma vera e file veri: in memoria il piu' severo, al riavvio lo stato salvato giusto, la lettura dopo lo rimette) | verde |
+
+**La suite di P0** gira su tre banchi (riferimento; stato vero con tabella e memoria; stato vero con firma vera e file che muore): 9 prove
+ciascuno (8 di P0 piu' quella della precisazione). **Giro delle violazioni** (script `build/p1/violate.py`, fuori dal repository; i file
+rimessi con `git checkout` subito dopo): firma ignorata, scaduto applicato come un valido, somma di controllo tolta, KT su ogni canale, `seq` non
+controllato dallo strumento, indirizzo non controllato dal routing: **18 prove rosse** (17 in core-release, 1 in core-models), ognuna sulla sua
+regola. **Test d'architettura** (`:core-common` `*ArchitectureTest`, con Phase10) verdi. core-release: 69 prove in 14 classi; core-models: 299.
+
+### Cosa non e' stato provato qui
+- Nulla sul telefono, sul NAS o con le chiavi vere (vietato): F177 e il legame con l'app sono di P13 e P14; la lettura dal NAS non esiste ancora.
+- Il passo 7i trova KT assente perche' core-release non e' ancora nell'APK: la ricerca nel dex diventa significativa quando P13 lo lega.
+
+### Punti aperti
+- **K1 e K2 sono segnaposto** (L560): finche' l'utente non le genera non c'e' kill switch; P12 deve far rifiutare a `release.ps1` una release con
+  `PROVISIONAL = true`.
+- `docs/formato-nas.md` §15 (non e' nel perimetro di P1; lo tiene P13) andrebbe precisato con il dettaglio di questo pacchetto: lunghezza su 4
+  byte big-endian, `issued` ed `expires` in secondi, `blocks` e `models` sempre presenti, `critical` come elenco di nomi in ogni oggetto, firma
+  con `s` basso.
+- Lo strumento controlla gli indirizzi con una copia della regola di `ModelHosts` (non vede core-models) e non conosce il catalogo dei modelli:
+  un id o un'impronta che il catalogo non ha si firmano e l'app li ignora in silenzio (decide l'app).
+- I rifiuti contati in `ReleaseDiag` vivono in memoria (come in P0); l'ultima ora del NAS vista da `NasFirstReleaseClock` pure.
+- Dopo la rinomina non si forza su disco la cartella (come `StateFiles` in tutta l'app): un'interruzione di corrente subito dopo puo' lasciare
+  lo stato di prima, mai uno rovinato.
+- Lo strumento si compila con Gradle: un agente prende un posto del semaforo prima di `manifest-tool.ps1` (o usa `-SkipBuild`).
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde al primo giro** (31/10, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, cartella `app\build\outputs\apk\release` cancellata prima, con il
+codice dei quattro commit e i documenti in lavorazione): 30 passi OK, nessuno fallito; assembleDebug, assembleRelease, galleryTest e galleryLint
+in 37 minuti; **17.704 test in 47 moduli**, nessuno a zero (`core-release` 69, `core-models` 299, `core-common` 170). Passo **3b**: 4.788 file
+letti, nessuna chiave privata fuori dai test (la privata di KT sta in `core-release/src/test/`). Passo **7i**: "KT cercata (2 stringhe),
+assente" su 9,1 milioni di righe di dexdump; passo 7b: 64 nomi cercati, nessuno nel dex (fra loro `ReleaseTestKeys` e `ManifestTool`).
+Nessuna classe rifatta con `--rerun`, nessun `hs_err_pid*.log`.
+
+### Commit (branch `fase10/p1`)
+`8ada0c5b` (core-release: codec, chiavi, stato, fabbrica, prove), `ca0b2e31` (core-models: indirizzi aggiuntivi), `37c26994` (ManifestTool e
+`release/manifest.json`), `65a5ab4b` (il lanciatore passa `--in` e `--out`) e quello dei documenti.

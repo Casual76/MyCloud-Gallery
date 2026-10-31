@@ -65,7 +65,8 @@ data class ReleaseDiag(
  * 1. [status] parte da cio' che e' salvato ([load]); senza nulla, `Normal` (E-REL1);
  * 2. [offer] verifica la busta; un rifiuto non cambia niente e si conta; `seq` minore = `ROLLBACK`, uguale = `SAME`;
  * 3. `seq` maggiore e non scaduto (con `ReleaseClock.bestNow`) = `APPLIED`: lo stato diventa quello del manifest per questa `versionCode`
- *    (anche meno severo: lo toglie un manifest **piu' nuovo**); scaduto = `EXPIRED_KEPT_BLOCKS`, solo piu' severo;
+ *    (anche meno severo: lo toglie un manifest **piu' nuovo**); scaduto = `EXPIRED_KEPT_BLOCKS`, solo piu' severo dello stato **in vigore**
+ *    (anche di quello che vale solo in memoria dopo un salvataggio morto, regola 4: precisazione di P1);
  * 4. lo stato si **salva prima** di essere pubblicato (file atomico); se il salvataggio muore, resta lo stato salvato di prima, ma un blocco
  *    piu' severo vale comunque in memoria finche' il processo vive;
  * 5. una `versionCode` diversa da quella salvata (l'app si e' aggiornata) ricalcola lo stato dall'ultimo manifest valido;

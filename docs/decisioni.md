@@ -14249,7 +14249,7 @@ Prove strumentate: nessuna (niente emulatore, niente telefono, niente tablet): t
 **Note per la fase grafica** (scelte dubbie, non risolte qui; la lista dell'utente `docs/grafica-segnalazioni-utente.md` non e' stata toccata)
 - **Nessun controllo sovrapposto**: provato nei test (60/40 e 40/60 senza sovrapposizioni, controlli della mappa a 48 dp e uno accanto all'altro a ogni larghezza); resta da guardare a occhio sul tablet la mappa al 60%: il credito e la riga dell'avviso stanno nel pannello
   della mappa e non nell'intera finestra.
-- **Il cambio di misura non e' animato**: affiancare il viewer (Libreria 100% -> 40%) e aprire la zona accanto alla mappa (mappa 100% -> 60%) cambiano misura di colpo; la griglia della zona entra scorrendo con `FluidMotion.intOffset`, ma la mappa no. Animare la
+- **Il cambio di misura non e' animato**: affiancare il viewer (Libreria 100% -> 40%) e aprire la zona accanto alla mappa (mappa 100% -> 60%) cambiano misura di colpo; la griglia compare di colpo (le schermate della mappa non hanno animazioni: lo vieta `NoHandWrittenStyleTest` di feature-map). Animare la
   misura a ogni fotogramma vorrebbe dire rimisurare la griglia della Libreria, il pager del viewer o la superficie di MapLibre a ogni fotogramma: lavoro pesante. Strada suggerita: per il viewer, tenerlo a 60% e animare solo un margine della Libreria; per la mappa,
   animare un margine della camera (`padding` di MapLibre) invece della misura della superficie.
 - **Nessuna riga evidenziata nell'elenco delle Impostazioni** (la pagina scelta non si distingue); le Raccolte l'hanno (`selected`).

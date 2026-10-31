@@ -7,4 +7,16 @@
   <string name="diagnostics_hint_map">La mappa su questo dispositivo: se la mappa dettagliata da Internet è accesa, quante richieste sono partite o sono state fermate, le zone scaricate e le foto senza posizione.</string>
   <string name="diag_map_state_title">Stato della mappa</string>
   <string name="diag_map_state_guide">Se la mappa dettagliata è accesa qui, le zone scaricate e quante foto hanno una posizione. Le posizioni delle foto e le zone guardate non escono mai nella Diagnostica.</string>
+  <!-- P13: i codici del §2.12. Solo conteggi e motivi, mai zone o posizioni. -->
+  <string name="diag_map_requests_title">Richieste della mappa</string>
+  <string name="diag_map_requests_guide">Quante parti della mappa dettagliata sono state chieste a Internet da quando l\'app è aperta, e quanti byte. Mai quali zone.</string>
+  <string name="diag_map_refused_title">Richieste della mappa fermate</string>
+  <string name="diag_map_refused_guide">Richieste della mappa che l\'app non ha lasciato uscire, per motivo: mappa spenta, rete non adatta, zona già scaricata. Se compaiono richieste fermate per indirizzo o per percorso è un difetto: esporta la Diagnostica e segnalalo.</string>
+  <string name="diag_map_region_partial_title">Zona senza Internet a metà</string>
+  <string name="diag_map_region_partial_guide">Lo scaricamento di una zona si è interrotto. Riprendilo da Impostazioni, Mappa, Zone senza Internet.</string>
+  <string name="diag_map_region_space_title">Spazio per le zone senza Internet</string>
+  <string name="diag_map_region_space_guide">Non c\'è abbastanza spazio sul telefono per scaricare la zona. Libera spazio e riprova.</string>
+  <string name="diag_map_invalid_points_title">Posizioni scartate</string>
+  <string name="diag_map_invalid_points_guide">Foto con una posizione impossibile (per esempio 0, 0): non compaiono sulla mappa. Solo il numero.</string>
+  <string name="diagnostics_job_map_region">Zona senza Internet</string>
 </resources>

@@ -7,4 +7,19 @@
   <string name="diagnostics_hint_memories">I ricordi preparati su questo dispositivo: quanti sono, quando sono stati preparati l\'ultima volta e perché una notifica non è arrivata.</string>
   <string name="diag_memory_state_title">Stato dei ricordi</string>
   <string name="diag_memory_state_guide">Quanti ricordi ci sono, quanti sono nuovi e quando sono stati preparati. Titoli, luoghi e date dei ricordi non escono mai dal telefono.</string>
+  <!-- P13: i codici del §2.12. Solo conteggi, mai che cosa. -->
+  <string name="diag_memory_shelf_reset_title">Ricordi preparati di nuovo</string>
+  <string name="diag_memory_shelf_reset_guide">L\'elenco dei ricordi salvato sul telefono non si leggeva più ed è stato preparato da capo. I ricordi già visti restano visti. Non serve fare niente.</string>
+  <string name="diag_memory_no_vectors_title">Doppioni cercati senza la ricerca</string>
+  <string name="diag_memory_no_vectors_guide">Le foto quasi uguali sono state riconosciute con un metodo più semplice, perché la ricerca per contenuto non è ancora pronta. Quando lo sarà, i ricordi avranno meno doppioni.</string>
+  <string name="diag_memory_dropped_title">Foto lasciate fuori dai ricordi</string>
+  <string name="diag_memory_dropped_guide">Quante foto non sono entrate nei ricordi e perché: screenshot, documenti, data incerta, periodi esclusi. Solo i numeri.</string>
+  <string name="diag_notify_skipped_title">Notifiche dei ricordi non mandate</string>
+  <string name="diag_notify_skipped_guide">Perché una notifica dei ricordi non è arrivata: notifiche spente, permesso o canale di Android, frequenza scelta, nessun ricordo adatto. Per permesso e canale apri le impostazioni.</string>
+  <string name="diag_notify_late_title">Notifiche dei ricordi in ritardo</string>
+  <string name="diag_notify_late_guide">Quante notifiche degli ultimi 14 giorni sono arrivate più di un\'ora dopo l\'ora scelta. Android decide quando far partire il lavoro: qualche ritardo è normale.</string>
+  <string name="diag_notify_revoked_title">Notifiche dei ricordi tolte</string>
+  <string name="diag_notify_revoked_guide">Notifiche ritirate perché il ricordo non si poteva più mostrare (una foto nascosta, un ricordo tolto). È voluto.</string>
+  <string name="diagnostics_job_memories_generate">Preparazione dei ricordi</string>
+  <string name="diagnostics_job_memories_notify">Notifica dei ricordi</string>
 </resources>

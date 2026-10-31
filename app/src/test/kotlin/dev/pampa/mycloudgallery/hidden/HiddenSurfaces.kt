@@ -42,6 +42,12 @@ internal enum class SpecRow(val label: String) {
 
   /** Fase 9 (P10, D19, D31): le notifiche dei ricordi -- la scelta del ricordo, il contenuto, la miniatura della copertina, la revoca. */
   NOTIFICATIONS("Notifiche dei ricordi: scelta, contenuto, miniatura, revoca"),
+
+  /** Fase 10 (P0 la riga, P6 la superficie; D20, D41, E-H11): il trascinamento verso un'altra app -- mai un nascosto, mai dai Nascosti. */
+  DRAG("Trascinamento verso un'altra app (sorgente, provider dei documenti)"),
+
+  /** Fase 10 (P0 la riga, P7 la superficie; D22, D41): le descrizioni -- mai una persona nascosta, mai la descrizione di un nascosto fuori dai Nascosti. */
+  DESCRIPTIONS("Descrizioni dei media per superficie"),
 }
 
 /** Con cosa e' provata una superficie. */
@@ -135,6 +141,8 @@ internal object HiddenSurfaces {
   private const val MEMORIES_CORE = "core-memories/src/main/kotlin/dev/pampa/mycloudgallery/core/memories"
   private const val FEATURE_MEMORIES = "feature-memories/src/main/kotlin/dev/pampa/mycloudgallery/feature/memories"
   private const val FEATURE_MAP = "feature-map/src/main/kotlin/dev/pampa/mycloudgallery/feature/map"
+  private const val INTEGRATIONS = "feature-integrations/src/main/kotlin/dev/pampa/mycloudgallery/feature/integrations"
+  private const val DESCRIBE = "core-describe/src/main/kotlin/dev/pampa/mycloudgallery/core/describe"
 
   /**
    * I file che fanno vivere la riga `MEMORIES`: il motore di P6 (la pulizia dello scaffale, le voci della sezione, il giro e la pubblicazione, la scelta delle foto), il
@@ -377,6 +385,17 @@ internal object HiddenSurfaces {
       sources = listOf("$MEMORIES_NOTIFY/MemoryNotifyRun.kt", "$MEMORIES_NOTIFY/MemoryNotifyRevocation.kt", "$MEMORIES_NOTIFY/MemoryNotifyPolicy.kt", "app/src/main/kotlin/dev/pampa/mycloudgallery/notify/MemoryNotifier.kt"),
       probe = RealNotifyProbes.notifications(), live = true,
       alsoProvedBy = listOf("HiddenNotifyMutationTest", "MemoryNotifyRunTest", "MemoryNotifyRevocationTest", "NotifyOncePerDayPropertyTest", "MemoryNotifierTest"),
+    ),
+    // --- Fase 10 (P0): le superfici nuove che arrivano con i pacchetti dopo (D41). La riga c'e' gia', in attesa: quando arriva il codice vero
+    // (il marcatore `landedWhen` esiste), il registro fallisce finche' il pacchetto non scrive la sonda e passa la riga a PRODUCTION. La riga
+    // WIDGET passa da "di prova" a produzione con P3; la riga PANES (pannelli e seconda finestra) la aggiunge P5 con la sua superficie.
+    SurfaceEntry(
+      id = "drag-out", title = "Trascinamento verso un'altra app: mai un nascosto, mai dai Nascosti (D20, E-H11)", row = SpecRow.DRAG, owner = "P6",
+      backing = Backing.PENDING, landedWhen = listOf("$INTEGRATIONS/drag"),
+    ),
+    SurfaceEntry(
+      id = "descriptions", title = "Descrizioni per superficie: mai una persona nascosta, mai un nascosto fuori dai Nascosti (D22)", row = SpecRow.DESCRIPTIONS,
+      owner = "P7", backing = Backing.PENDING, landedWhen = listOf("$DESCRIBE/rules"),
     ),
   )
 

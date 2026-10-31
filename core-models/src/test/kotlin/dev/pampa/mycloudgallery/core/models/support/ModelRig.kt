@@ -2,6 +2,8 @@ package dev.pampa.mycloudgallery.core.models.support
 
 import dev.pampa.mycloudgallery.core.model.Sha256
 import dev.pampa.mycloudgallery.core.models.LocalModels
+import dev.pampa.mycloudgallery.core.models.contract.ExtraModelSources
+import dev.pampa.mycloudgallery.core.models.noop.NoExtraModelSources
 import dev.pampa.mycloudgallery.core.models.contract.FetchResult
 import dev.pampa.mycloudgallery.core.models.contract.ModelFetcher
 import dev.pampa.mycloudgallery.core.models.contract.ModelNasArea
@@ -31,6 +33,7 @@ class ModelRig(
   fetcher: ModelFetcher? = null,
   val spec: ModelSpec = TestModels.spec(bytes),
   extra: List<ModelSpec> = emptyList(),
+  extraSources: ExtraModelSources = NoExtraModelSources,
 ) {
   val share = "test-comune"
   val device: String = TrustIds.random()
@@ -63,6 +66,7 @@ class ModelRig(
     io = Dispatchers.IO,
     nanos = { monotonic.get() },
     progressPoll = Duration.ZERO,
+    extraSources = extraSources,
   )
   val manager get() = models.manager
   val files get() = models.files

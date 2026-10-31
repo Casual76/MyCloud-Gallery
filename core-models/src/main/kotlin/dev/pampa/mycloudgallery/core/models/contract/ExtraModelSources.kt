@@ -15,3 +15,12 @@ import dev.pampa.mycloudgallery.core.model.Sha256
 fun interface ExtraModelSources {
   fun urls(id: ModelId, sha256: Sha256): List<PinnedUrl>
 }
+
+/**
+ * Gli indirizzi **grezzi** che il manifest firmato offre per un modello (Fase 10, P1): :app la lega a `ReleaseState.extraUrls` (core-release),
+ * che li da' solo da un manifest valido e non scaduto, per lo stesso id e la stessa impronta. Testo non ancora fidato: lo filtra
+ * `CatalogExtraModelSources` (catalogo, `PinnedUrl.of`). core-models non vede core-release: si parlano con stringhe.
+ */
+fun interface ExtraModelUrls {
+  fun urls(id: String, sha256: String): List<String>
+}

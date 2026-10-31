@@ -239,3 +239,19 @@ Delle voci "per ogni fase, sempre":
 - **R2**: con il file delle impostazioni rovinato, la mappa dettagliata resta **spenta** finche' l'utente non la riaccende (fallisce chiusa, consigliato) oppure torna **di serie** (accesa) con un avviso.
 - **R4**: **dichiarare** che le scelte sui ricordi dicono giorni e viaggi a chi legge la share privata (consigliato), oppure un pacchetto che nasconde gli id con un segreto dell'account.
 - **I1**: togliere `If-None-Match` ed `ETag` dalle richieste della mappa, oppure dichiararlo.
+
+
+---
+
+## Stato dopo il pacchetto ricordi e notifiche (31/10)
+
+Pacchetto "ricordi e notifiche" (branch `fase9/corr-ricordi`; dettaglio, decisioni e prove in `docs/decisioni.md`, "Fase 9, correzioni dopo le revisioni: ricordi e notifiche (31/10)"). Le tabelle sopra non sono riscritte.
+
+| Voce | Stato | Come |
+|---|---|---|
+| **R3** filtro finale muto senza il legame di `HiddenMask` | **Corretta** | `MemoriesDependencies` e `MapDependencies` chiedono la maschera senza `Optional`; `FinalFilter` non ammette una maschera nulla (nessun ripiego silenzioso); il legame e' in `GalleryModule` (C413); `HiddenMaskWiringTest` guarda il codice generato da Dagger e i sorgenti; P13-4 corretto in `docs/decisioni.md`. Nota: feature-albums non nomina la maschera (il "tre" di P13-4 era sbagliato). |
+| **R4** id con pochi valori e periodi "Mai" in chiaro nell'area privata | **Dichiarata** (decisione del 31/10) | Nessun cambio al codice. Limite nuovo L520; C150, la riga dei beni (§2) e la checklist riscritte senza "mai date". |
+| **I4** permesso della canzone mai rilasciato | **Corretta** | `PermissionReleasingMusicSettings` rilascia il permesso della vecchia a ogni cambio; l'azzeramento rilascia tutti i permessi persistiti, nel passo "ricordi" e nel passo che gira sempre (C414). |
+| **I5** il lavoro delle notifiche in un processo freddo | **Corretta** | Vedi NT-1 della verifica funzionale (C410): attesa del montaggio senza il primo disegno e della Libreria, al piu' 20 s. |
+
+Restano per l'altro pacchetto R1, R2, R5, I1 e I3; I2 e F119-F120 sul telefono.

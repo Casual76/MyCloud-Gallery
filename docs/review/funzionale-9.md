@@ -439,3 +439,28 @@ Nessuna voce e' corretta. Il pacchetto e' la proposta; ogni correzione porta un 
 **Decisioni per l'utente** (dettaglio in `REPORT.md`): (1) la notifica a processo morto: attendere il montaggio nel lavoro (proposto) o il piano B di D20; (2) quando rifare il giro dei ricordi di oggi; (3) conti di Diagnostica
 persistenti o dichiarati "dall'avvio"; (4) uno stato d'errore per i punti della mappa (L495); (5) i brani del pacchetto di musica libera (nessuna musica di serie fino ad allora).
 
+
+---
+
+## Stato dopo il pacchetto ricordi e notifiche (31/10)
+
+Pacchetto "ricordi e notifiche" (branch `fase9/corr-ricordi`; dettaglio, decisioni e prove in `docs/decisioni.md`, "Fase 9, correzioni dopo le revisioni: ricordi e notifiche (31/10)"). Le tabelle sopra non sono riscritte. Ogni voce ha un test rosso senza la correzione; **nessuna prova sul telefono** (F147-F153 restano da fare, aggiornate in fondo alla sezione di `docs/decisioni.md`).
+
+| Voce | Stato | Come |
+|---|---|---|
+| **NT-1** notifica a processo morto (Blocca) | **Corretta** | Il lavoro aspetta il montaggio senza il primo disegno (`MemoriesGraph.awaitLive`) e l'istantanea della Libreria, al piu' 20 s; `enterWorker()` prima dell'attesa; lo stesso orario non si accoda due volte; niente piano B (D20). `MemoriesWorkTest` sostituisce `senzaRicordiMontatiNonFaNiente` con il processo nato per il lavoro. |
+| **NT-2** `openTarget` con il registro vecchio | **Corretta, in modo diverso dalla proposta** | Apre il ricordo del registro solo se il giorno e' oggi, altrimenti la pagina Ricordi. **Non** usa `posted()`: il tocco ha gia' tolto la notifica (`setAutoCancel`) prima che l'app legga il registro, e ogni tocco vero finirebbe nella pagina Ricordi. |
+| **AZ-1** notifica in corso durante l'azzeramento | **Corretta** | `MemoriesGraph.stop` chiama `MemoryNotifyRun.stop`: una corsa in corso si annulla e si aspetta; `stopped` e' guardato prima del registro e prima di pubblicare; dopo lo stop niente si ripianifica. |
+| **RP-1** "Non trovo questo ricordo" prima del montaggio | **Corretta** | `Memories.memory` non emette niente prima del montaggio (facciata) e prima dell'istantanea (motore): pagina e presentazione restano in caricamento; `NotFound` e `Gone` solo a ricordi montati. |
+| **RP-2** sezione "vuota" con l'istantanea nulla | **Corretta** | `FinalFilter.refine` aspetta (nessun tetto che butta le voci); la sezione e "Tutti i ricordi" restano sull'ultimo scaffale; il filtro finale dei Nascosti resta (senza istantanea non si mostra niente di non filtrato). |
+| **MO-1** ricordi delle persone potati all'avvio | **Corretta** | `MemoryPeople.undecided` (stato di Persone `UNKNOWN`): il pruner non toglie i `PERSON` per cio' che dipende da Persone; escono con Persone spenta davvero e per le scelte esplicite. `PeopleLessJanitorTest` cambiato di conseguenza (`FakePeopleSwitch(UNKNOWN)`). |
+| **IM-1** riga di Impostazioni dai valori di serie | **Corretta** | `MemoriesEntryStatus.summary` e' `null` finche' le preferenze non sono lette; poi l'ultimo valore letto resta in memoria. |
+| **MO-2** errore notturno che salta le Utility | **Corretta** | `MemoriesGraph.nightly` dentro `quietly`: conta `roundErrors` (Diagnostica) e risponde "non finito". |
+| **MO-3** giro di oggi solo al cambio di scheda | **Corretta** | Il giro `OPEN` anche a ogni ripresa con Raccolte aperta (`MemoriesForegroundRound`) e al montaggio se Raccolte era gia' aperta; con Raccolte aperta e oggi lo scaffale vuoto, a ogni cambio di istantanea un giro `LIGHT`. Mai nei lavori in background. |
+| **MU-1** canzone preparata sul thread principale | **Corretta** | `MusicPlayback.start` e' una `suspend` che apre su `Dispatchers.IO` e si annulla con l'uscita. |
+| **MU-2** focus audio negato | **Corretta** | Un focus negato vale "musica mancante" (muta, con l'avviso); `PLAYING` solo se un lettore e' partito. |
+| **MU-3** permesso della canzone non conservato | **Corretta** | `MemoriesMessage.FAILED` dalla pagina delle impostazioni (anche se la scelta non si salva). |
+| **DG-1** conti per processo | **Corretta** (decisione del 31/10: si persistono) | `memories/diag-counts`: solo numeri, 14 giorni, scrittura atomica, tolto dall'azzeramento; L492 riscritta (resta per la mappa). |
+| **DG-2** `NOTIFY_LATE` con due basi | **Corretta** | `delivered` sullo stesso file e sulla stessa finestra di `late`. |
+
+Restano per l'altro pacchetto MA-1 e DR-1. Il piano B di D20 non si fa (decisione del 31/10): L522.

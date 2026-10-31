@@ -1,0 +1,7 @@
+{
+  "app": "dev.pampa.mycloudgallery",
+  "validDays": 90,
+  "blocks": [],
+  "models": [],
+  "nota": "Manifest di prova (Fase 10 P1): nessun blocco, nessuna versione minima, nessun indirizzo in piu'. Si firma con tools/release/manifest-tool.ps1 sign: gli agenti solo con KT (--test-key), per la famiglia di prova; l'admin con K1. Il seq e le date li mette lo strumento; questa nota non entra nel manifest firmato. Formato e regole: docs/decisioni.md, Fase 10 P1."
+}

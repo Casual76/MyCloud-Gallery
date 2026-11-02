@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.feature.integrations.provider
 
 import android.content.Context
 import android.provider.DocumentsContract
+import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
@@ -12,6 +13,7 @@ import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentReader
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentRoot
 import dev.pampa.mycloudgallery.feature.integrations.contract.MediaDocuments
 import dev.pampa.mycloudgallery.feature.integrations.share.ShareNames
+import kotlinx.coroutines.CancellationException
 
 // Fase 5B (P10, docs/fase5-progetto.md §2.7, D23, C17; E-H1, E-X1): i documenti del provider, sopra la Libreria per le altre app.
 // Implementa la porta `MediaDocuments` di P0-B (radice, cartelle, documenti, apertura) e ci aggiunge cio' che serve al selettore per
@@ -57,6 +59,13 @@ interface DocumentIssuer {
   /** Revoca [ids] (un annullamento a meta': E-X4). Da quel momento non aprono piu' niente. */
   fun revoke(ids: Collection<DocumentId>)
 
+  /**
+   * Revoca ogni id (consegnato o da sfoglio) dei media [ids] e toglie le loro copie senza posizione: un "Nascondi" fatto adesso non aspetta che la
+   * vista della Libreria si aggiorni (I4 della revisione di sicurezza della Fase 10). Un descrittore che un'altra app ha gia' aperto non si puo'
+   * richiamare: resta suo.
+   */
+  fun revokeMedia(ids: Collection<MediaId>)
+
   /** Revoca ogni id non fisso (azzeramento dell'app, famiglia che cambia). */
   fun revokeAll()
 }
@@ -71,6 +80,12 @@ class LibraryMediaDocuments(
    * qui; di serie ([NoPreparation]) l'impostazione non c'e' e si apre l'originale, come prima.
    */
   private val preparer: DeliveryPreparer = NoPreparation,
+  /**
+   * Il filtro finale dei nascosti (I4 della revisione di sicurezza della Fase 10): la vista della Libreria si aggiorna dopo la calma (2-3 secondi), quindi
+   * un media nascosto un attimo fa e' ancora nella vista; elenchi, descrizioni e aperture lo chiedono **anche** al catalogo (`:app` lo lega a
+   * `GalleryGraph.hiddenMask`, che conosce anche i gruppi e i nascosti arrivati da un altro dispositivo). Di serie non nasconde niente (le prove).
+   */
+  private val hiddenMask: HiddenMask = HiddenMask { emptySet() },
 ) : MediaDocuments, DocumentIssuer {
 
   /** Quando e' stata l'ultima ricerca di una cartella fra tutte quelle note (IN-2): non piu' di una ogni [REDISCOVER_GAP_MS]. */
@@ -148,6 +163,12 @@ class LibraryMediaDocuments(
     table.revoke(ids)
   }
 
+  override fun revokeMedia(ids: Collection<MediaId>) {
+    if (ids.isEmpty()) return
+    table.revokeMedia(ids)
+    preparer.release(ids)
+  }
+
   override fun revokeAll() {
     table.revokeAll()
     preparer.releaseAll()
@@ -186,7 +207,12 @@ class LibraryMediaDocuments(
   }
 
   /** Le voci di [ids] che il catalogo conosce, nell'ordine dato. Ogni id e' gia' nella vista: lo garantiscono i chiamanti. */
-  private suspend fun files(ids: List<MediaId>): List<DocumentEntry> {
+  private suspend fun files(candidates: List<MediaId>): List<DocumentEntry> {
+    if (candidates.isEmpty()) return emptyList()
+    // Il filtro finale: la vista puo' avere ancora un media nascosto un attimo fa (I4).
+    val hidden = hiddenNow(candidates)
+    if (hidden.isNotEmpty()) stopHidden(hidden)
+    val ids = candidates.filter { it !in hidden }
     if (ids.isEmpty()) return emptyList()
     val infos = library.fileInfos(ids)
     return ids.mapNotNull { id -> infos[id]?.let { file(table.idFor(DocumentTarget.Media(id)), id, it) } }
@@ -221,14 +247,36 @@ class LibraryMediaDocuments(
 
   private fun isVisible(id: MediaId): Boolean = view().viewIndexOf(id) >= 0
 
-  /** Vero se il media di [token] e' ancora nella vista; altrimenti lo conta, revoca il token e dice di no. */
-  private fun stillVisible(token: DocumentId, id: MediaId): Boolean {
-    if (isVisible(id)) return true
+  /**
+   * Vero se il media di [token] e' ancora nella vista **e** il filtro finale non lo dice nascosto adesso (I4); altrimenti lo conta, revoca il token e
+   * dice di no.
+   */
+  private suspend fun stillVisible(token: DocumentId, id: MediaId): Boolean {
+    if (isVisible(id) && hiddenNow(listOf(id)).isEmpty()) return true
     IntegrationCounters.add(IntegrationCounter.HIDDEN_STOPPED)
     table.revoke(listOf(token))
     // Un media nascosto non lascia nemmeno la sua copia senza posizione in cache.
     preparer.release(listOf(id))
     return false
+  }
+
+  /** Quali di [ids] sono nascosti **adesso** per il filtro finale. Un errore di lettura vale "tutti nascosti" (si fallisce chiusi). */
+  private suspend fun hiddenNow(ids: Collection<MediaId>): Set<MediaId> {
+    if (ids.isEmpty()) return emptySet()
+    return try {
+      hiddenMask.hiddenAmong(ids)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      ids.toSet()
+    }
+  }
+
+  /** I media [hidden] non escono: li conta e toglie ogni loro id e ogni loro copia. */
+  private fun stopHidden(hidden: Set<MediaId>) {
+    IntegrationCounters.add(IntegrationCounter.HIDDEN_STOPPED, hidden.size.toLong())
+    table.revokeMedia(hidden)
+    preparer.release(hidden)
   }
 
   private suspend fun found(id: DocumentId): DocumentResolution.Found? = when (val r = table.resolve(id)) {

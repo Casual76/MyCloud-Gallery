@@ -257,6 +257,8 @@ class IntegrationsGraph(
     DocumentLabels.from(context),
     DocumentIdTable(idKey = FileDocumentIdKey(File(File(context.noBackupFilesDir, "integrations"), "doc-id.key"))),
     preparer = preparedCopies,
+    // Fase 10 (I4 della revisione di sicurezza): la vista della Libreria si aggiorna dopo la calma; elenchi, descrizioni e aperture chiedono i nascosti anche al catalogo di adesso.
+    hiddenMask = gallery.hiddenMask,
   )
 
   /**
@@ -272,6 +274,8 @@ class IntegrationsGraph(
     gate = { entryGate.decide() },
     leases = dragLeases,
     preparer = preparedCopies,
+    // Fase 10 (I4): il filtro finale dei nascosti, all'inizio e subito prima di creare gli id (un "Nascondi" di un attimo fa, anche di un gruppo o arrivato da un altro dispositivo).
+    hiddenMask = gallery.hiddenMask,
   )
 
   private val editLock = Mutex()
@@ -331,6 +335,8 @@ class IntegrationsGraph(
     scope.launch { runCatching { lock.follow(lockSettings) } }
     wireIncomingMetadata()
     IntegrationPorts.install(entryGate, documents)
+    // Fase 10 (I4): un "Nascondi" revoca subito gli id gia' consegnati (selettore, provider, trascinamento) e le copie dei media nascosti, senza aspettare la vista.
+    gallery.hiddenIdListeners += { ids, hidden -> if (hidden && ids.isNotEmpty()) documents.revokeMedia(ids) }
     PickerPorts.install(library, unlock, preparedCopies)
     ReceivePorts.install(uploads, destinations, unlock, incomingAlbums)
     gallery.onShutdown { revokeAll() }

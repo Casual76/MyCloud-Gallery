@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.library.contract.DragPrepared
 import dev.pampa.mycloudgallery.core.library.contract.DragRefusal
 import dev.pampa.mycloudgallery.core.library.contract.DragRequest
+import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentId
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
@@ -54,12 +55,24 @@ class DocumentDragPayloadsTest {
     override fun elapsedMs(): Long = 1_000L
   }
   private val table = DocumentIdTable(clock, Random(5))
-  private val documents = LibraryMediaDocuments(library, DocumentLabels("MyCloud Gallery", "Recenti", "Cartelle NAS"), table, clock)
+
+  /** Il filtro finale dei nascosti (I4): di serie non nasconde niente; i test lo sostituiscono con "il catalogo adesso", davanti a una vista che non e' ancora stata aggiornata. */
+  private var liveMask: HiddenMask = HiddenMask { emptySet() }
+  private val nowHiddenInCatalog = HashSet<MediaId>()
+  private val documents = LibraryMediaDocuments(
+    library, DocumentLabels("MyCloud Gallery", "Recenti", "Cartelle NAS"), table, clock, hiddenMask = HiddenMask { ids -> liveMask.hiddenAmong(ids) },
+  )
   private val gate = FakeEntryGate(EntryDecision.ALLOWED)
 
   private fun TestScope.payloads(): DocumentDragPayloads {
     leases = DragLeases(this, graceMs = 600_000L)
-    return DocumentDragPayloads(library, documents, authority, gate::decide, leases, nasProbeDeadlineMs = 5_000L)
+    return DocumentDragPayloads(library, documents, authority, gate::decide, leases, nasProbeDeadlineMs = 5_000L, hiddenMask = HiddenMask { ids -> liveMask.hiddenAmong(ids) })
+  }
+
+  /** Il catalogo dice nascosti questi media da adesso; la vista della Libreria della prova resta com'era (si aggiorna dopo la calma). */
+  private fun catalogHidesNow(ids: Collection<MediaId>) {
+    nowHiddenInCatalog += ids
+    liveMask = HiddenMask { asked -> asked.filterTo(HashSet()) { it in nowHiddenInCatalog } }
   }
 
   private lateinit var leases: DragLeases
@@ -214,6 +227,70 @@ class DocumentDragPayloadsTest {
     // Durante la prova del NAS (una sospensione) un altro dispositivo nasconde un media: l'ultimo controllo lo ferma, e gli id gia' creati non restano.
     library.beforeNasReach = { library.hide(setOf(chosen.first())) }
     assertThat(payloads().prepare(request(chosen))).isEqualTo(DragPrepared.Refused(DragRefusal.HIDDEN))
+    assertThat(table.size).isEqualTo(0)
+    assertThat(leases.count).isEqualTo(0)
+  }
+
+  // --- Il filtro finale: un "Nascondi" non aspetta la vista (I4 della revisione di sicurezza) -----------------------------------
+
+  @Test
+  fun unNascondiConLaVistaAncoraVecchiaFermaTuttoIlTrascinamento() = runTest {
+    val chosen = phone.take(2) + nas.take(2)
+    catalogHidesNow(setOf(chosen[1]))
+    // La vista della Libreria ha ancora il media (si aggiorna dopo 2-3 secondi): a fermarlo e' il filtro finale, e non nasce nessun id.
+    assertThat(library.fileInfos(listOf(chosen[1]))).isNotEmpty()
+    assertThat(payloads().prepare(request(chosen))).isEqualTo(DragPrepared.Refused(DragRefusal.HIDDEN))
+    assertThat(table.size).isEqualTo(0)
+    assertThat(leases.count).isEqualTo(0)
+    assertThat(IntegrationCounters.get(IntegrationCounter.HIDDEN_STOPPED)).isAtLeast(1L)
+    assertThat(DragCounters.get(DragCounter.OUT_REFUSED_HIDDEN)).isEqualTo(1L)
+    // I compagni non nascosti escono come prima.
+    assertThat(payloads().prepare(request(listOf(chosen[0])))).isInstanceOf(DragPrepared.Ready::class.java)
+  }
+
+  @Test
+  fun ilGruppoNascostoNelCatalogoNonSiTrascinaDaiCompagniConLaVistaVecchia() = runTest {
+    // Il nascosto e' contagioso (D36): il filtro finale nasconde tutto il gruppo anche se la vista li ha ancora tutti.
+    val group = listOf(phone[0], phone[1], phone[2])
+    catalogHidesNow(group)
+    val handler = payloads()
+    for (id in group) assertThat(handler.prepare(request(listOf(id)))).isEqualTo(DragPrepared.Refused(DragRefusal.HIDDEN))
+    assertThat(table.size).isEqualTo(0)
+  }
+
+  @Test
+  fun unMediaNascostoNelCatalogoDurantePreparazioneConLaVistaVecchiaNonEsceNeLasciaId() = runTest {
+    val chosen = phone.take(2) + nas.take(1)
+    // Durante la prova del NAS (una sospensione) il catalogo nasconde un media (un "Nascondi" qui o l'arrivo da un altro dispositivo): la vista non se ne accorge
+    // ancora, l'ultimo sguardo al filtro finale prima di creare gli id lo ferma.
+    library.beforeNasReach = { catalogHidesNow(setOf(chosen.first())) }
+    assertThat(payloads().prepare(request(chosen))).isEqualTo(DragPrepared.Refused(DragRefusal.HIDDEN))
+    assertThat(table.size).isEqualTo(0)
+    assertThat(leases.count).isEqualTo(0)
+  }
+
+  @Test
+  fun unNascondiDopoGliIdConsegnatiNonLasciaApribileIlDocumento_EIlRevocaLasciaGliAltri() = runTest {
+    val chosen = phone.take(2) + nas.take(1)
+    val result = ready(payloads().prepare(request(chosen)))
+    val tokens = tokens(result.clip)
+    assertThat(documents.entry(tokens[0])).isNotNull()
+    // Il catalogo nasconde il primo media: il suo id consegnato non apre piu' niente (la vista e' ancora vecchia), gli altri si'.
+    catalogHidesNow(setOf(chosen[0]))
+    assertThat(documents.entry(tokens[0])).isNull()
+    assertThat(documents.open(tokens[0])).isNull()
+    assertThat(documents.isDelivered(tokens[0])).isFalse()
+    assertThat(documents.entry(tokens[1])).isNotNull()
+    // La revoca esplicita (il "Nascondi" di :app) toglie l'id subito, senza aspettare che qualcuno lo apra.
+    documents.revokeMedia(setOf(chosen[1]))
+    assertThat(documents.isDelivered(tokens[1])).isFalse()
+    assertThat(documents.isDelivered(tokens[2])).isTrue()
+  }
+
+  @Test
+  fun unErroreDelFiltroFinaleFermaIlTrascinamento_SiFallisceChiusi() = runTest {
+    liveMask = HiddenMask { error("lettura del catalogo fallita") }
+    assertThat(payloads().prepare(request(listOf(phone.first())))).isEqualTo(DragPrepared.Refused(DragRefusal.HIDDEN))
     assertThat(table.size).isEqualTo(0)
     assertThat(leases.count).isEqualTo(0)
   }

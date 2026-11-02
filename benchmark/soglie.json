@@ -1,6 +1,6 @@
 {
   "formato": 2,
-  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md par. 2.6, D21) e guardia della Fase 4A (docs/fase4-progetto.md par. 5.6, P10); dal 27/10 anche gli scenari album (Fase 7, par. 5.4) e volti (Fase 8, par. 5.4), promessi dai progetti e mancanti; dal 28/10 il primo disegno utile, l'avvio abituale e le pagine principali (Avvio istantaneo); dal 31/10 gli scenari ricordi-* e mappa-* (Fase 9, par. 5.4, P12), sul dataset da 100 mila righe con il 60% di posizioni, gli anniversari di oggi e lo scaffale dei ricordi seminato, e con la mappa dettagliata sempre spenta (solo la carta di base offline). Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione e la guardia si confrontano con il riferimento: docs/bench/riferimento-<dispositivo>.json se l'utente ne ha accettato uno, altrimenti le misure del 13/10 (riferimento-<dispositivo>-fase3.json). Una soglia assoluta che il riferimento violava gia' (lo scorrimento giustificato, il fotogramma piu' lungo dell'apertura) non fa fallire: vale la guardia, cioe' 'non peggiorare'. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica. 'mista': la prova deve girare sulla libreria mista di 100 mila righe con il 60% di media solo-NAS (metrica libraryNasShare).",
+  "descrizione": "Soglie della Fase 3 (docs/fase3-progetto.md par. 2.6, D21) e guardia della Fase 4A (docs/fase4-progetto.md par. 5.6, P10); dal 27/10 anche gli scenari album (Fase 7, par. 5.4) e volti (Fase 8, par. 5.4), promessi dai progetti e mancanti; dal 28/10 il primo disegno utile, l'avvio abituale e le pagine principali (Avvio istantaneo); dal 31/10 gli scenari ricordi-* e mappa-* (Fase 9, par. 5.4, P12), sul dataset da 100 mila righe con il 60% di posizioni, gli anniversari di oggi e lo scaffale dei ricordi seminato, e con la mappa dettagliata sempre spenta (solo la carta di base offline); dal 2/11 gli scenari widget*, pannelli-* e accessibilita-* (Fase 10, par. 5.4, P9): il widget grande sul seme della variante di misura (giro di aggiornamento e svuotamento dalle sezioni di traccia MCG:widget.*), i pannelli del tablet in una finestra di 1280 dp (sull'emulatore emulata con wm size), le due finestre, il servizio di accessibilita' di prova e il testo al 200%. Le legge tools/bench/compare.ps1. Una soglia assoluta vale sempre; la regressione e la guardia si confrontano con il riferimento: docs/bench/riferimento-<dispositivo>.json se l'utente ne ha accettato uno, altrimenti le misure del 13/10 (riferimento-<dispositivo>-fase3.json). Una soglia assoluta che il riferimento violava gia' (lo scorrimento giustificato, il fotogramma piu' lungo dell'apertura) non fa fallire: vale la guardia, cioe' 'non peggiorare'. I numeri valgono solo su S25 e Tab S9: sugli emulatori gli scenari girano per verificare che funzionino (compare.ps1 -Smoke) e nessuna soglia si applica. 'mista': la prova deve girare sulla libreria mista di 100 mila righe con il 60% di media solo-NAS (metrica libraryNasShare).",
   "dispositivi": {
     "s25": {
       "nome": "Galaxy S25",
@@ -625,6 +625,195 @@
       ],
       "regressione": [
         { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "widget",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): un giro di aggiornamento del widget grande (sezione di traccia MCG:widget.update: piano, decodifica, registro, composizione Glance, consegna ad AppWidgetManager) e lo svuotamento dopo un 'Nascondi' (MCG:widget.blank), sul seme del widget (BenchWidgetServices) sopra la Libreria da 100 mila righe, 8 iterazioni di 1 giro a freddo, 3 a caldo e 2 svuotamenti. Telefono: giro p90 <= 400 ms (il piu' lungo dei giri a caldo di ogni iterazione); il primo giro del processo (Glance si compone la prima volta) ha la sua misura e la sua regressione. Senza il pilota nella variante (o se il sistema non lega il widget) la prova si salta",
+      "prove": "^widgetUpdate$",
+      "proveAttese": ["widgetUpdate"],
+      "classi": ["WidgetBenchmark"],
+      "classiDispositivo": ["telefono"],
+      "mista": true,
+      "validita": { "metrica": "widgetValid", "statistica": "min", "minimo": 1, "spiega": "il widget era legato, i giri sono finiti e la traccia ha le sezioni MCG:widget.update (almeno 2) e MCG:widget.blank (almeno 1): altrimenti l'app non le emette, il pilota non e' nella variante o il buffer di Perfetto ha perso pacchetti" },
+      "assolute": [
+        { "metrica": "widgetUpdateMs", "statistica": "p90", "massimo": 400.0, "spiega": "par. 5.4: un giro di aggiornamento entro 400 ms (misura grande, processo caldo), p90 sulle iterazioni" },
+        { "metrica": "widgetBlankMs", "statistica": "p90", "massimo": 100.0, "spiega": "par. 5.4 e D5: lo svuotamento dopo un 'Nascondi' entro 100 ms, p90 sulle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "widgetUpdateMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 },
+        { "metrica": "widgetUpdateColdMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 },
+        { "metrica": "widgetBlankMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "widget-tablet",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): lo stesso giro del widget sul tablet (WidgetBenchmark.widgetUpdateTablet: le due prove hanno nomi diversi perche' una prova sta in uno scenario solo e il tetto dipende dalla classe del dispositivo), giro p90 <= 600 ms, svuotamento p90 <= 100 ms",
+      "prove": "^widgetUpdateTablet$",
+      "proveAttese": ["widgetUpdateTablet"],
+      "classi": ["WidgetBenchmark"],
+      "classiDispositivo": ["tablet"],
+      "mista": true,
+      "validita": { "metrica": "widgetValid", "statistica": "min", "minimo": 1, "spiega": "il widget era legato, i giri sono finiti e la traccia ha le sezioni MCG:widget.update (almeno 2) e MCG:widget.blank (almeno 1): altrimenti l'app non le emette, il pilota non e' nella variante o il buffer di Perfetto ha perso pacchetti" },
+      "assolute": [
+        { "metrica": "widgetUpdateMs", "statistica": "p90", "massimo": 600.0, "spiega": "par. 5.4: un giro di aggiornamento entro 600 ms sul Tab S9 (misura grande, processo caldo), p90 sulle iterazioni" },
+        { "metrica": "widgetBlankMs", "statistica": "p90", "massimo": 100.0, "spiega": "par. 5.4 e D5: lo svuotamento dopo un 'Nascondi' entro 100 ms, p90 sulle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "widgetUpdateMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 },
+        { "metrica": "widgetUpdateColdMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 },
+        { "metrica": "widgetBlankMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "widget-scroll-carico",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): la guardia di scorrimento della Libreria (livello Tutte, stile quadrato) con un aggiornamento del widget in corso (il pilota ripete i giri uno alla volta con una pausa), 8 iterazioni: le guardie esistenti non devono peggiorare",
+      "prove": "^widgetLoadedScroll$",
+      "proveAttese": ["widgetLoadedScroll"],
+      "classi": ["WidgetBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "widgetRefreshing", "statistica": "min", "minimo": 1, "spiega": "il widget si aggiornava durante la misura (LOAD_START del pilota): altrimenti e' lo scorrimento di sempre" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: meno dell'1% di fotogrammi davvero in ritardo (App Deadline Missed o Dropped Frame di FrameTimeline sul totale), media delle iterazioni, come la Libreria" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }
+      ],
+      "guardia": [
+        { "metrica": "jankPercent", "statistica": "mean", "aumentoMassimo": 0.1, "pavimento": 0.15, "mantieniSotto": 1.0, "spiega": "par. 5.4: jank <= riferimento + 10% relativo (pavimento di 0,15 punti, circa un fotogramma su 700) e <= 1% dove gia' lo era" }
+      ]
+    },
+    {
+      "id": "pannelli-scroll",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): lo scorrimento della griglia della Libreria con il viewer affiancato (finestra di 1280 dp), fling avanti e indietro, 8 iterazioni",
+      "prove": "^panesScroll$",
+      "proveAttese": ["panesScroll"],
+      "classi": ["PanesBenchmark"],
+      "classiDispositivo": ["tablet"],
+      "mista": true,
+      "validita": { "metrica": "panesDocked", "statistica": "min", "minimo": 1, "spiega": "il viewer era affiancato alla Libreria in una finestra larga (almeno 1200 dp): altrimenti e' lo scorrimento di una Libreria a schermo intero" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: meno dell'1% di fotogrammi davvero in ritardo (App Deadline Missed o Dropped Frame di FrameTimeline sul totale), media delle iterazioni, come la Libreria" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }
+      ],
+      "guardia": [
+        { "metrica": "jankPercent", "statistica": "mean", "aumentoMassimo": 0.1, "pavimento": 0.15, "mantieniSotto": 1.0, "spiega": "par. 5.4: jank <= riferimento + 10% relativo (pavimento di 0,15 punti, circa un fotogramma su 700) e <= 1% dove gia' lo era" }
+      ]
+    },
+    {
+      "id": "pannelli-foto",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): il cambio di foto nel viewer affiancato, dal tocco su una cella del pannello alla posizione nuova nel viewer (misurato da UiAutomator: comprende il suo ritardo di rilevamento), 12 iterazioni",
+      "prove": "^panesViewerSwap$",
+      "proveAttese": ["panesViewerSwap"],
+      "classi": ["PanesBenchmark"],
+      "classiDispositivo": ["tablet"],
+      "mista": true,
+      "validita": { "metrica": "panesDocked", "statistica": "min", "minimo": 1, "spiega": "il viewer era affiancato alla Libreria in una finestra larga (almeno 1200 dp): altrimenti e' lo scorrimento di una Libreria a schermo intero" },
+      "assolute": [
+        { "metrica": "viewerSwapMs", "statistica": "p90", "massimo": 100.0, "spiega": "par. 5.4: il cambio di foto nel viewer affiancato entro 100 ms, p90 sulle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "viewerSwapMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "pannelli-zona",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): l'apertura della griglia di una zona nel pannello accanto alla mappa (finestra di 1280 dp), dal tocco su una bolla alla prima cella (misurata da UiAutomator), 12 iterazioni",
+      "prove": "^panesZoneOpen$",
+      "proveAttese": ["panesZoneOpen"],
+      "classi": ["PanesBenchmark"],
+      "classiDispositivo": ["tablet"],
+      "mista": true,
+      "validita": { "metrica": "panesWide", "statistica": "min", "minimo": 1, "spiega": "la finestra era larga almeno 1200 dp (i pannelli ci sono da 840): altrimenti e' la pagina della zona del telefono" },
+      "assolute": [
+        { "metrica": "zoneOpenMs", "statistica": "p90", "massimo": 150.0, "spiega": "par. 5.4: l'apertura della griglia della zona nel pannello entro 150 ms, p90 sulle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "zoneOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
+      ]
+    },
+    {
+      "id": "pannelli-soglia",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): il ridimensionamento della finestra attraverso le soglie di 1200 e 840 dp con il viewer affiancato (1280, 960, 720 dp e ritorno), il fotogramma piu' lungo, 5 iterazioni. Solo sull'emulatore (wm size): sul tablet si ridimensiona a mano (F188)",
+      "prove": "^panesCrossing$",
+      "proveAttese": ["panesCrossing"],
+      "classi": ["PanesBenchmark"],
+      "classiDispositivo": ["tablet"],
+      "mista": true,
+      "validita": { "metrica": "panesDocked", "statistica": "min", "minimo": 1, "spiega": "il viewer era affiancato alla Libreria in una finestra larga (almeno 1200 dp): altrimenti e' lo scorrimento di una Libreria a schermo intero" },
+      "assolute": [
+        { "metrica": "maxFrameCpuMs", "statistica": "max", "massimo": 33.0, "spiega": "par. 5.4: il fotogramma piu' lungo attraversando una soglia entro 33 ms (due fotogrammi), il peggiore delle iterazioni" }
+      ],
+      "regressione": [
+        { "metrica": "maxFrameCpuMs", "statistica": "max", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "pannelli-memoria",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): memoria dell'app (PSS, heap Java, nativo, grafica) con due finestre (Libreria e Libreria: gli album non sono montati nella variante di misura), dopo qualche scorrimento, 3 iterazioni. Nessun tetto assoluto: la prima corsa buona e' il riferimento",
+      "prove": "^panesWindowsMemory$",
+      "proveAttese": ["panesWindowsMemory"],
+      "classi": ["PanesBenchmark"],
+      "classiDispositivo": ["tablet"],
+      "mista": true,
+      "validita": { "metrica": "panesWindows", "statistica": "min", "minimo": 2, "spiega": "le finestre dell'app erano due (due MainActivity in due task): altrimenti non e' la memoria di due finestre" },
+      "assolute": [],
+      "regressione": [
+        { "metrica": "windowsPssKb", "statistica": "max", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "accessibilita-scroll",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): lo scorrimento della Libreria (livello Tutte, stile quadrato) con il servizio di accessibilita' di prova acceso (BenchA11yService: strumento, legge l'albero a ogni scorrimento: simula TalkBack), 8 iterazioni",
+      "prove": "^a11yScroll$",
+      "proveAttese": ["a11yScroll"],
+      "classi": ["AccessibilityScrollBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "a11yValid", "statistica": "min", "minimo": 1, "spiega": "il servizio di prova era collegato e ha letto l'albero (almeno 5 letture durante il blocco misurato): altrimenti UiAutomation lo ha sospeso o non e' stato acceso, e la prova e' lo scorrimento di sempre" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: meno dell'1% di fotogrammi davvero in ritardo (App Deadline Missed o Dropped Frame di FrameTimeline sul totale), media delle iterazioni, come la Libreria" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }
+      ],
+      "guardia": [
+        { "metrica": "jankPercent", "statistica": "mean", "aumentoMassimo": 0.1, "pavimento": 0.15, "mantieniSotto": 1.0, "spiega": "par. 5.4: jank <= riferimento + 10% relativo (pavimento di 0,15 punti, circa un fotogramma su 700) e <= 1% dove gia' lo era" }
+      ]
+    },
+    {
+      "id": "accessibilita-testo",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): lo scorrimento della Libreria (livello Tutte, stile quadrato) con il testo al 200% (font_scale 2,0), 8 iterazioni",
+      "prove": "^a11yTextScroll$",
+      "proveAttese": ["a11yTextScroll"],
+      "classi": ["AccessibilityScrollBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "a11yFontScale", "statistica": "min", "minimo": 1.99, "spiega": "la scala del testo era al 200% (settings system font_scale 2.0): altrimenti e' lo scorrimento di sempre" },
+      "assolute": [
+        { "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "par. 5.4: meno dell'1% di fotogrammi davvero in ritardo (App Deadline Missed o Dropped Frame di FrameTimeline sul totale), media delle iterazioni, come la Libreria" }
+      ],
+      "regressione": [
+        { "metrica": "frameDurationCpuMs", "statistica": "P95", "aumentoMassimo": 0.15 }
+      ]
+    },
+    {
+      "id": "accessibilita-viewer",
+      "descrizione": "NUOVA (Fase 10, par. 5.4, P9): l'apertura del viewer con il servizio di prova acceso (la descrizione si costruisce quando il lettore chiede il nodo): la sezione MCG:viewerOpen, 12 iterazioni",
+      "prove": "^a11yViewerOpen$",
+      "proveAttese": ["a11yViewerOpen"],
+      "classi": ["AccessibilityScrollBenchmark"],
+      "classiDispositivo": ["telefono", "tablet"],
+      "mista": true,
+      "validita": { "metrica": "a11yValid", "statistica": "min", "minimo": 1, "spiega": "il servizio di prova era collegato e ha letto l'albero (almeno 5 letture durante il blocco misurato): altrimenti UiAutomation lo ha sospeso o non e' stato acceso, e la prova e' lo scorrimento di sempre" },
+      "assolute": [
+        { "metrica": "viewerOpenMs", "statistica": "p90", "massimo": 100.0, "spiega": "par. 5.4: l'apertura del viewer con il servizio di accessibilita' entro 100 ms (la guardia del viewer), p90 sulle iterazioni; la sezione la emette il viewer" }
+      ],
+      "regressione": [
+        { "metrica": "viewerOpenMs", "statistica": "p90", "aumentoMassimo": 0.15, "arrotondaSu": 1 }
       ]
     }
   ]

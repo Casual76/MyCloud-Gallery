@@ -3,7 +3,11 @@ package dev.pampa.mycloudgallery.feature.settings.ui
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -19,6 +23,7 @@ import dev.pampa.mycloudgallery.core.family.testing.FakeQrPayloadCodec
 import dev.pampa.mycloudgallery.core.family.testing.FakeRegistryService
 import dev.pampa.mycloudgallery.core.nas.testing.FakeNasSessionManager
 import dev.pampa.mycloudgallery.core.security.lock.AuthPromptText
+import dev.pampa.mycloudgallery.core.trust.registry.ApprovalProof
 import dev.pampa.mycloudgallery.feature.settings.devices.ApprovalActions
 import dev.pampa.mycloudgallery.feature.settings.devices.ApprovalScreen
 import dev.pampa.mycloudgallery.feature.settings.devices.ApprovalViewModel
@@ -108,6 +113,34 @@ class ApprovalFlowUiTest {
     assertThat(authenticator.prompts).isEqualTo(1)
     assertThat(registry.approvals).containsExactly(Samples.REQUEST_ID)
     rule.onNodeWithText("Il dispositivo fa parte della famiglia").assertExists()
+  }
+
+  /**
+   * Revisione 1.4, N6 (correzione D della Fase 10): il codice di approvazione viene **solo** da cio' che l'admin digita (`formato-nas.md` §4.5).
+   * Il campo parte vuoto (la richiesta non porta il codice: `PendingRequestView` non ha quel campo), senza codice non si approva, e la prova
+   * che arriva al registro e' esattamente il testo digitato, mai qualcosa copiato dalla richiesta.
+   */
+  @Test
+  fun n6_IlCampoDelCodiceParteVuotoELaProvaEIlTestoDigitato() {
+    show()
+    rule.onNodeWithText("L’account «nonna» è giusto").performScrollTo().performClick()
+    rule.onNodeWithText("Digita il codice").performScrollTo().performClick()
+    rule.waitForIdle()
+
+    rule.onNode(hasSetTextAction()).performScrollTo().assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
+    assertThat(viewModel.state.value.code).isEmpty()
+    rule.onNodeWithText("Approva questo dispositivo").performScrollTo().performClick()
+    rule.waitForIdle()
+    assertThat(registry.proofs).isEmpty()
+    assertThat(authenticator.prompts).isEqualTo(0)
+
+    rule.onNode(hasSetTextAction()).performScrollTo().performTextInput("k7qd2m9xfa4t1b8c")
+    rule.onNodeWithText("Approva questo dispositivo").performScrollTo().performClick()
+    rule.waitForIdle()
+
+    val proof = registry.proofs.single()
+    assertThat(proof).isInstanceOf(ApprovalProof.TypedCode::class.java)
+    assertThat((proof as ApprovalProof.TypedCode).text).isEqualTo("K7QD-2M9X-FA4T-1B8C")
   }
 
   @Test

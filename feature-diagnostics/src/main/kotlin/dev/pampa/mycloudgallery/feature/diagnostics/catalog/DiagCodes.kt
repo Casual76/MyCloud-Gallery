@@ -394,6 +394,19 @@ object DiagCodes {
   @JvmField val WIDGET_STATE = DiagCode("WIDGET_STATE")
   @JvmField val RELEASE_STATE = DiagCode("RELEASE_STATE")
 
+  // P13: gli altri codici del §2.13 (stessi id di `WidgetDiagCodes` di core-widget, scritti come letterali perche' questo modulo non vede core-widget ne'
+  // core-release; `Phase10DiagCatalogTest` di :app verifica che coincidano). Solo conteggi, codici e numeri; mai se un servizio di accessibilita' e' attivo (D39).
+  @JvmField val WIDGET_SKIPPED = DiagCode("WIDGET_SKIPPED", setOf("E-W5", "E-W6"))
+  @JvmField val WIDGET_BLANKED = DiagCode("WIDGET_BLANKED", setOf("E-W9"))
+  @JvmField val WIDGET_LATE = DiagCode("WIDGET_LATE")
+  @JvmField val WIDGET_ERROR = DiagCode("WIDGET_ERROR")
+  @JvmField val RELEASE_MANIFEST_REJECTED = DiagCode("RELEASE_MANIFEST_REJECTED", setOf("E-REL2"))
+  @JvmField val RELEASE_BLOCKED = DiagCode("RELEASE_BLOCKED", setOf("E-REL5", "E-REL6"))
+  @JvmField val DRAG_OUT = DiagCode("DRAG_OUT")
+  @JvmField val DRAG_IN = DiagCode("DRAG_IN")
+  @JvmField val DRAG_TEMP_CLEANED = DiagCode("DRAG_TEMP_CLEANED")
+  @JvmField val WINDOW_STATE = DiagCode("WINDOW_STATE")
+
   // P13: gli altri codici del §2.12 (stessi id di `MemoriesDiag` di core-memories e `MapDiag` di core-map, scritti come letterali perche' questo modulo
   // non vede i due core; `Phase9DiagCatalogTest` di :app verifica che ogni codice dei contratti sia qui). Solo conteggi per motivo.
   @JvmField val MEMORY_SHELF_RESET = DiagCode("MEMORY_SHELF_RESET")

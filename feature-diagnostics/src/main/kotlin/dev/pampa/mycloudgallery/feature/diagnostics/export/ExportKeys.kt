@@ -104,6 +104,19 @@ object ExportKeys {
     "online", "byDefault", "opened", "points", "withoutPosition", "invalid", "regions", "errors", "paused", "withoutVersion", "tileJson",
     // Le zone senza Internet (Fase 9, P5): solo conti, byte e flag; mai quali zone ne' dove. `peakInFlight` e' il massimo di richieste insieme verso l'host delle tessere (al piu' 4).
     "regionsReady", "regionsPartial", "regionsBytes", "regionsLimit", "downloading", "peakInFlight", "freeBytes",
+    // Il widget (Fase 10, P13, `WidgetDiagnostics` di :app, §2.13, D39): widget per misura, minuti dall'ultimo aggiornamento, frequenza scelta, foto saltate, svuotamenti per
+    // causa, giri in ritardo, l'ultimo errore (costante). Mai id di media o di ricordi, titoli, luoghi, date.
+    "widgetsSmall", "widgetsWide", "widgetsLarge", "minutesSinceUpdate", "period", "noThumb", "locked", "blankHidden", "blankMemory", "blankReset", "lateRuns",
+    "lastError",
+    // Il manifest firmato (Fase 10, P13, `ReleaseDiagnostics` di :app): versione, canale, `seq`, giorni dall'emissione, stato, indirizzi aggiuntivi (quanti), il messaggio
+    // del catalogo (costante). I rifiutati per motivo usano la famiglia `rejected.`, le offerte per esito `offer.`. Mai il contenuto del manifest, mai URL.
+    "versionCode", "channel", "seq", "issuedDays", "extraUrls", "loaded", "releaseMessage",
+    // Le finestre (Fase 10, P13, `WindowDiagnostics` di :app): quante (al piu' due) e la classe di larghezza della finestra dell'app.
+    "windows", "widthClass",
+    // Il trascinamento fra app (Fase 10, P6 e P13): i codici fissi di `DragCounter` (feature-integrations). Mai un nome, un id, un percorso.
+    "drag_out_ready", "drag_out_items", "drag_out_nas_only", "drag_out_stripped", "drag_out_discarded", "drag_out_released", "drag_out_refused_too_many",
+    "drag_out_refused_too_large", "drag_out_refused_hidden", "drag_out_refused_location", "drag_out_refused_nas", "drag_out_refused_locked",
+    "drag_out_refused_unavailable", "drag_in_dropped", "drag_in_refused", "drag_in_own_ignored", "drag_temp_cleaned",
   )
 
   /**
@@ -123,6 +136,8 @@ object ExportKeys {
     // Fase 9 (P13): gli esclusi dei ricordi per motivo (`dropped.` + il codice di `DropReason`) e le notifiche saltate (`skip.` + il codice di `NotifySkip`).
     Regex("dropped\\.[a-z][a-z_]{2,31}"),
     Regex("skip\\.[a-z][a-z_]{2,31}"),
+    // Fase 10 (P13): le offerte del manifest per esito (`offer.` + il codice di `OfferResult`), costanti del codice.
+    Regex("offer\\.[a-z][a-z_]{2,31}"),
   )
 
   fun isAllowed(key: String): Boolean = key in ALLOWED || FAMILIES.any { it.matches(key) }

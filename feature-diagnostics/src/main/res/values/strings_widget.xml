@@ -6,4 +6,13 @@
   <string name="diagnostics_hint_widget">Il widget sulla schermata Home: quanti ce ne sono, quando si sono aggiornati l\'ultima volta e perché qualche foto non compare.</string>
   <string name="diag_widget_state_title">Stato del widget</string>
   <string name="diag_widget_state_guide">Quanti widget ci sono, ogni quanto cambiano le foto e quando si sono aggiornati. Le foto mostrate e i titoli dei ricordi non escono mai nella Diagnostica.</string>
+  <!-- P13: i codici del §2.13 (solo conteggi). -->
+  <string name="diag_widget_skipped_title">Foto saltate dal widget</string>
+  <string name="diag_widget_skipped_guide">Quante foto il widget non ha potuto mostrare perché sul telefono non c\'è la loro miniatura, o perché con il blocco dell\'app mostra solo le foto che sono anche sul telefono. Se sono tante, scegli la qualità Standard delle anteprime del NAS.</string>
+  <string name="diag_widget_blanked_title">Widget svuotati</string>
+  <string name="diag_widget_blanked_guide">Quante volte un widget si è svuotato subito: per una foto nascosta, per un ricordo tolto o per l\'azzeramento. Poi si ridisegna da solo.</string>
+  <string name="diag_widget_late_title">Aggiornamenti del widget in ritardo</string>
+  <string name="diag_widget_late_guide">Quante volte negli ultimi 7 giorni il widget non si è aggiornato all\'ora prevista (di notte non si aggiorna mai). Di solito è il risparmio energetico di Android.</string>
+  <string name="diag_widget_error_title">Widget non aggiornato per un errore</string>
+  <string name="diag_widget_error_guide">L\'ultimo aggiornamento del widget non è riuscito: il widget invita ad aprire l\'app e riprova al giro dopo. Se resta così, esporta la Diagnostica e mandala all\'admin.</string>
 </resources>

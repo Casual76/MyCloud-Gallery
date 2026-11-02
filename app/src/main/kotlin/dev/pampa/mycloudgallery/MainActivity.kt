@@ -27,7 +27,11 @@ import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.memories.contract.NotifyRules
 import dev.pampa.mycloudgallery.core.security.lock.AppLockController
 import dev.pampa.mycloudgallery.core.security.lock.BiometricPromptAuthenticator
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetTapRequest
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetTapUri
+import dev.pampa.mycloudgallery.core.widget.tap.WidgetTap
 import dev.pampa.mycloudgallery.notify.OpenMemoriesRequests
+import dev.pampa.mycloudgallery.widget.OpenWidgetRequests
 import dev.pampa.mycloudgallery.window.AppNewWindowPort
 import dev.pampa.mycloudgallery.window.LocalWindowRole
 import dev.pampa.mycloudgallery.window.LocalWindowStart
@@ -53,9 +57,10 @@ import javax.inject.Inject
  * falso. L'app non ha deep link: prima di `setContent`, e a ogni `onNewIntent`, l'intent si sostituisce con uno pulito. Vale anche per la seconda finestra: parte con l'intent pulito
  * del launcher e la pagina da cui parte e' un **evento interno** ([WindowStarts]), mai un dato nell'intent.
  *
- * **Una sola azione e' nota** (Fase 9, P10, D17, C151): [NotifyRules.OPEN_ACTION], quella della notifica dei ricordi (con P3, D9, anche `OPEN_WIDGET`: il punto e' [entryOf]).
- * Mentre ripulisce, l'activity la riconosce e la trasforma in un evento interno ([OpenMemoriesRequests]: nessun id, nessun dato) che si serve **dopo il blocco app**; l'intent resta pulito
- * come prima, con extra, dati, categorie e flag buttati. Chi manda quell'azione da un'altra app puo' ottenere al piu' la pagina Ricordi, dietro il blocco.
+ * **Due azioni sono note** (Fase 9, P10, D17, C151; Fase 10, P3, D9, C433): [NotifyRules.OPEN_ACTION], quella della notifica dei ricordi, e [WidgetTapUri.ACTION], quella del widget.
+ * Mentre ripulisce, l'activity le riconosce e le trasforma in un evento interno ([OpenMemoriesRequests]: nessun id, nessun dato; [OpenWidgetRequests]: **solo i due numeri** del tocco, widget e cella)
+ * che si serve **dopo il blocco app**; l'intent resta pulito come prima, con extra, dati, categorie e flag buttati. Chi manda l'azione dei Ricordi da un'altra app puo' ottenere al piu' la pagina
+ * Ricordi, dietro il blocco; chi manda quella del widget al piu' una foto che il widget mostra gia' sulla Home (D9: i numeri si controllano sul registro locale), oppure la Libreria.
  * **Con due finestre la serve solo la principale** ([WindowRole.servesEntryRequests]): se Android ha consegnato l'intent alla seconda, questa porta davanti la principale
  * ([onNewIntent]) e non ne fa altro (D16: notifiche e widget riaprono la finestra principale).
  */
@@ -69,6 +74,10 @@ class MainActivity : FragmentActivity() {
   /** Fase 9 (P10, D17): la richiesta di aprire i Ricordi, che arriva dall'azione fissa della notifica e si serve dopo il blocco app. */
   @Inject
   lateinit var openMemories: OpenMemoriesRequests
+
+  /** Fase 10 (P3, D9): il tocco sul widget (i due numeri), che arriva dall'azione fissa del widget e si serve dopo il blocco app. */
+  @Inject
+  lateinit var openWidget: OpenWidgetRequests
 
   /** Fase 10 (P4, D16): le finestre vive del processo (al piu' due). */
   @Inject
@@ -102,6 +111,8 @@ class MainActivity : FragmentActivity() {
     }
     // Solo a un avvio vero: l'intent con cui il sistema ricrea l'activity (rotazione, processo morto e ripreso dai recenti) e' quello di prima, e non riapre i Ricordi.
     if (entry.opensMemories && savedInstanceState == null) openMemories.request()
+    // Il tocco sul widget (D9): lo stesso, solo a un avvio vero. Porta i due numeri, mai un id di media.
+    if (savedInstanceState == null) entry.widgetTap?.let(openWidget::request)
     // La pagina da cui parte una finestra nuova (D16): solo alla nascita vera, mai a una ricreazione (la pagina si ritrova dallo stato salvato).
     val start = WindowStartRequest(if (savedInstanceState == null) windowStarts.claim(SystemClock.elapsedRealtime()) else null)
     enableEdgeToEdge()
@@ -134,6 +145,7 @@ class MainActivity : FragmentActivity() {
     super.onNewIntent(entry.clean)
     setIntent(entry.clean)
     if (entry.opensMemories) openMemories.request()
+    entry.widgetTap?.let(openWidget::request)
     // D16: notifiche e widget riaprono la finestra principale. `singleInstancePerTask` consegna l'intent al task piu' recente, che puo' essere la seconda finestra: la richiesta e'
     // un evento del processo e la serve la principale (`LocalWindowRole`), quindi la si porta davanti. Un ingresso senza azione (l'icona) resta dove e' arrivato.
     if (entry.needsPrimaryWindow && windows.roleOf(taskId) == WindowRole.SECONDARY) {
@@ -173,21 +185,23 @@ class MainActivity : FragmentActivity() {
      * Cosa fa l'activity di un intent in arrivo: l'intent **ripulito** ([Entry.clean], sempre quello del launcher) e quale richiesta portava ([Entry.opensMemories]).
      * Si guarda **solo l'azione**, per uguaglianza esatta: extra, dati, categorie, flag e componenti non contano e non passano.
      *
-     * **PUNTO PER P3 (Fase 10, D9, C433)**: l'azione `OPEN_WIDGET` si aggiunge qui, **prima** che l'intent venga buttato: riconoscerla per uguaglianza esatta con
-     * `WidgetTapUri.ACTION`, leggere dall'URI (`mcg-widget:<id>/<cella>`) i soli due numeri con `WidgetTaps.parse` (rifiuta tutto il resto) e metterli in un campo di [Entry]
-     * (per esempio `widgetTap`), poi includerlo in [Entry.needsPrimaryWindow]. L'evento interno lo serve **dopo il blocco app** e **solo la finestra principale**
-     * (`LocalWindowRole.current.servesEntryRequests`, come `MemoriesNotificationEffect`); `onCreate` e `onNewIntent` lo lasciano come `openMemories` (solo a un avvio vero in `onCreate`).
+     * **Il tocco sul widget** (Fase 10, P3, D9, C433): l'azione [WidgetTapUri.ACTION] si riconosce **prima** che l'intent venga buttato, per uguaglianza esatta, e dall'URI
+     * (`mcg-widget:<id>/<cella>`) si leggono i soli due numeri con [WidgetTap.parse], che rifiuta tutto il resto (un intent inventato con quell'azione e un URI che non e'
+     * esattamente quella forma non porta nessuna richiesta: l'app si apre come dall'icona). L'evento interno ([Entry.widgetTap]) lo serve **dopo il blocco app** e **solo la
+     * finestra principale** (`LocalWindowRole.current.servesEntryRequests`, come `MemoriesNotificationEffect`); `onCreate` e `onNewIntent` lo trattano come `openMemories`
+     * (solo a un avvio vero in `onCreate`). Controllare i numeri sul registro e aprire il media e' di `WidgetTaps.resolve` (P13: serve il grafo).
      */
     fun entryOf(context: Context, incoming: Intent?): Entry =
-      Entry(launcherIntent(context), opensMemories = incoming?.action == NotifyRules.OPEN_ACTION)
+      Entry(launcherIntent(context), opensMemories = incoming?.action == NotifyRules.OPEN_ACTION, widgetTap = widgetTapOf(incoming))
+
+    /** I due numeri del tocco sul widget, se l'intent e' esattamente quello del widget; altrimenti null. Non legge nient'altro dell'intent. */
+    private fun widgetTapOf(incoming: Intent?): WidgetTapRequest? =
+      if (incoming?.action == WidgetTapUri.ACTION) WidgetTap.parse(incoming.dataString) else null
   }
 
-  /** L'intent pulito e se l'azione era quella dei Ricordi. */
-  internal class Entry(val clean: Intent, val opensMemories: Boolean) {
-    /**
-     * L'ingresso porta una richiesta (un evento interno da servire dopo il blocco), e la serve la finestra principale: oggi i Ricordi; con P3 anche il tocco sul widget
-     * (aggiungere qui `|| widgetTap != null`).
-     */
-    val needsPrimaryWindow: Boolean get() = opensMemories
+  /** L'intent pulito, se l'azione era quella dei Ricordi e il tocco sul widget (i soli due numeri) se era quella del widget con un URI valido. */
+  internal class Entry(val clean: Intent, val opensMemories: Boolean, val widgetTap: WidgetTapRequest? = null) {
+    /** L'ingresso porta una richiesta (un evento interno da servire dopo il blocco), e la serve la finestra principale: i Ricordi, o il tocco sul widget. */
+    val needsPrimaryWindow: Boolean get() = opensMemories || widgetTap != null
   }
 }

@@ -24,7 +24,7 @@ internal enum class SpecRow(val label: String) {
   UTILITY("Utility e Doppioni"),
   SEARCH("Ricerca, suggerimenti, Trova simili"),
   OTHER_APPS("Selettore per le altre app, provider di documenti"),
-  WIDGET("Widget di prova"),
+  WIDGET("Widget MyCloud Gallery (piano, svuotamento, ridisegno)"),
   NAS_FOLDERS("Cartelle NAS"),
   NAS_SPACE("Cartelle NAS · Spazio (i file piu' grandi, per nome)"),
   NAS_TRASH("Cartelle NAS · Cestino (nome e cartella di cio' che e' stato eliminato)"),
@@ -123,13 +123,19 @@ internal object HiddenSurfaces {
 
   private const val LIB = "core-library/src/main/kotlin/dev/pampa/mycloudgallery/core/library"
 
+  // Fase 10 (P3): il widget vero. Il pianificatore (`DefaultWidgetPlanner`, core-widget) e' la superficie: passa ogni cella da `VisibleMedia` e `HiddenMask` come ultimo passo;
+  // il motore, il fotogramma e il disegno di `feature-widget` ci stanno sopra e non nominano i contratti dei nascosti.
+  /** Il file del pianificatore del widget: la superficie, con il filtro finale dei nascosti. */
+  const val WIDGET_CONTENT_FILE: String = "core-widget/src/main/kotlin/dev/pampa/mycloudgallery/core/widget/plan/DefaultWidgetPlanner.kt"
+
   // I nomi del widget di prova sono scritti in due pezzi: `Phase5BArchitectureTest` vieta i nomi "Field" + "Probe" fuori da app/src/debug e testDebug,
-  // e questo file e' in app/src/test (il widget di prova sta solo in debug, qui lo si nomina soltanto).
-  /** Il file del contenuto del widget di prova (solo debug): e' la superficie. */
-  const val WIDGET_CONTENT_FILE: String = "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/widget/Field" + "ProbeWidgetContent.kt"
+  // e questo file e' in app/src/test (il widget di prova sta solo in debug, qui lo si nomina soltanto). Dalla Fase 10 e' uno strumento (non una superficie del prodotto).
+  /** Il file del contenuto del widget di prova (solo debug, Fase 7): uno strumento di collaudo, fra i file che legano i contratti (`wiring`). */
+  const val DEBUG_PROBE_WIDGET_FILE: String = "app/src/debug/kotlin/dev/pampa/mycloudgallery/debugtools/widget/Field" + "ProbeWidgetContent.kt"
 
   /** La classe di test del widget di prova (solo testDebug). */
   const val WIDGET_TEST: String = "Field" + "ProbeWidgetTest"
+  private const val FEATURE_WIDGET = "feature-widget/src/main/kotlin/dev/pampa/mycloudgallery/feature/widget"
   private const val ALBUMS = "core-albums/src/main/kotlin/dev/pampa/mycloudgallery/core/albums"
   private const val FEATURE_ALBUMS = "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums"
   private const val FACES_PEOPLE = "core-faces/src/main/kotlin/dev/pampa/mycloudgallery/core/faces/people"
@@ -186,10 +192,17 @@ internal object HiddenSurfaces {
       id = "other-apps", title = "Selettore per le altre app (E-X7) e provider dei documenti", row = SpecRow.OTHER_APPS, owner = "Fase 5B",
       backing = Backing.PRODUCTION, probe = HiddenProbes.picker, alsoProvedBy = listOf("HiddenNeverLeavesTest", "PickerDeliveryTest"),
     ),
+    // Fase 10 (P3, D3-D8, D41): il widget vero, in produzione. La sonda gira sul pianificatore vero sopra la Libreria vera del mondo casuale, con le porte fuori dalla Libreria finte e
+    // generose (ogni media ha la miniatura, un ricordo fatto di tutto il mondo con un nascosto per copertina, un ricordo di una persona, il blocco acceso e spento).
     SurfaceEntry(
-      id = "widget", title = "Widget di prova (WidgetFeed)", row = SpecRow.WIDGET, owner = "P9", backing = Backing.PRODUCTION,
-      sources = listOf("$LIB/visibility/RotatingWidgetFeed.kt", WIDGET_CONTENT_FILE),
-      probe = HiddenProbes.widget, live = true, alsoProvedBy = listOf("RotatingWidgetFeedTest", WIDGET_TEST),
+      id = "widget", title = "Widget MyCloud Gallery: mai un nascosto, mai un ricordo di una persona, con il blocco solo media del telefono (D5, D8, E-H1)", row = SpecRow.WIDGET,
+      owner = "P3", backing = Backing.PRODUCTION,
+      sources = listOf(
+        "$LIB/visibility/RotatingWidgetFeed.kt", WIDGET_CONTENT_FILE,
+        "$FEATURE_WIDGET/frame/WidgetPreparer.kt", "$FEATURE_WIDGET/refresh/WidgetEngine.kt", "$FEATURE_WIDGET/ui/GalleryWidgetContent.kt",
+      ),
+      probe = RealWidgetProbes.widget, live = true,
+      alsoProvedBy = listOf("RotatingWidgetFeedTest", "DefaultWidgetPlannerBigWorldTest", "WidgetEngineTest", "WidgetBlankTimingTest", "GalleryWidgetReceiverTest"),
     ),
     SurfaceEntry(
       id = "visible-media", title = "VisibleMedia: la vista del catalogo senza nascosti (album, copertine, viaggi, Utility, Doppioni)", row = SpecRow.ALBUMS,
@@ -388,7 +401,7 @@ internal object HiddenSurfaces {
     ),
     // --- Fase 10 (P0): le superfici nuove che arrivano con i pacchetti dopo (D41). La riga c'e' gia', in attesa: quando arriva il codice vero
     // (il marcatore `landedWhen` esiste), il registro fallisce finche' il pacchetto non scrive la sonda e passa la riga a PRODUCTION. La riga
-    // WIDGET passa da "di prova" a produzione con P3; la riga PANES (pannelli e seconda finestra) la aggiunge P5 con la sua superficie; DESCRIPTIONS e' passata a produzione con P7.
+    // WIDGET e' passata da "di prova" a produzione con P3; la riga PANES (pannelli e seconda finestra) la aggiunge P5 con la sua superficie; DESCRIPTIONS e' passata a produzione con P7.
     SurfaceEntry(
       id = "drag-out", title = "Trascinamento verso un'altra app: mai un nascosto, mai dai Nascosti (D20, E-H11)", row = SpecRow.DRAG, owner = "P6",
       backing = Backing.PENDING, landedWhen = listOf("$INTEGRATIONS/drag"),
@@ -460,11 +473,11 @@ internal object HiddenSurfaces {
     "app/src/main/kotlin/dev/pampa/mycloudgallery/memories/MemoriesWiring.kt",
     "app/src/main/kotlin/dev/pampa/mycloudgallery/memories/MemoriesScreenPorts.kt",
     "app/src/main/kotlin/dev/pampa/mycloudgallery/map/MapGraph.kt",
-    // Fase 10 (P2): la politica del widget in core-widget. `DefaultWidgetPlanner` passa ogni cella da `VisibleMedia` e `HiddenMask` (filtro finale come
-    // ultimo passo) e `DefaultWidgetTaps` riverifica la visibilita' al tocco; non mostrano niente da soli. La superficie e' la riga `WIDGET`, che passa
-    // in produzione con P3 insieme alla sonda sul pianificatore vero (`DefaultWidgetPlannerBigWorldTest` e' la prova sulla JVM).
-    "core-widget/src/main/kotlin/dev/pampa/mycloudgallery/core/widget/plan/DefaultWidgetPlanner.kt",
+    // Fase 10 (P2): la politica del widget in core-widget. `DefaultWidgetTaps` riverifica la visibilita' al tocco e non mostra niente da solo (il pianificatore, che passa ogni
+    // cella da `VisibleMedia` e `HiddenMask` come ultimo passo, e' la superficie della riga `WIDGET`, in produzione dalla Fase 10 P3).
     "core-widget/src/main/kotlin/dev/pampa/mycloudgallery/core/widget/tap/DefaultWidgetTaps.kt",
+    // Fase 10 (P3): il widget di prova dei Nascosti (solo debug, Fase 7, F73) resta come strumento di collaudo sopra `WidgetFeed`; la superficie del prodotto e' la riga `WIDGET`.
+    DEBUG_PROBE_WIDGET_FILE,
   )
 
   /** I contratti da cui ogni superficie deve passare per i nascosti. */

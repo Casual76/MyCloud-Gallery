@@ -88,6 +88,50 @@ $again = Invoke-Tool @("-Modo", "Foto", "-Privata", (Join-Path $base "privata"),
 Assert-That "uscita gia' esistente: rifiutata (codice 1)" ($again.Code -eq 1)
 $missing = Invoke-Tool @("-Modo", "Foto", "-Privata", (Join-Path $base "manca"), "-Comune", (Join-Path $base "comune"), "-Uscita", (Join-Path $work "x.snap"))
 Assert-That "radice che non esiste: rifiutata (codice 1)" ($missing.Code -eq 1)
+Assert-That "foto prima: avvisa che contiene i nomi dei file privati e dice dove tenerla e quando cancellarla (I6)" ($r.Text -match "AVVISO \(riservato\)" -and $r.Text -match "NOMI" -and $r.Text -match "SOLO su questo PC" -and $r.Text -match "cancellalo" -and $r.Text -match "7 giorni") $r.Text
+
+# 1b. I6: l'uscita solo su un disco fisso di questo PC, e si guarda il percorso VERO, non il testo.
+Write-Host "Uscita: solo su un disco locale, percorso vero"
+$rootsArgs = @("-Privata", (Join-Path $base "privata"), "-Comune", (Join-Path $base "comune"))
+$watch = [System.Diagnostics.Stopwatch]::StartNew()
+$unc = Invoke-Tool (@("-Modo", "Foto") + $rootsArgs + @("-Uscita", "\\127.0.0.1\mcg-prova\x.snap"))
+$uncSlash = Invoke-Tool (@("-Modo", "Foto") + $rootsArgs + @("-Uscita", "//127.0.0.1/mcg-prova/x.snap"))
+$watch.Stop()
+Assert-That "uscita su un percorso UNC (anche con le barre dritte): rifiutata (codice 1), subito e senza toccare la rete" ($unc.Code -eq 1 -and $unc.Text -match "UNC" -and $uncSlash.Code -eq 1 -and $uncSlash.Text -match "UNC" -and $watch.Elapsed.TotalSeconds -lt 20) ($unc.Text + "`n" + $uncSlash.Text + " (" + $watch.Elapsed.TotalSeconds + " s)")
+$noDir = Invoke-Tool (@("-Modo", "Foto") + $rootsArgs + @("-Uscita", (Join-Path $work "manca\x.snap")))
+Assert-That "uscita in una cartella che non esiste: rifiutata (codice 1)" ($noDir.Code -eq 1 -and $noDir.Text -match "non esiste") $noDir.Text
+$junction = Join-Path $work "giunzione"
+New-Item -ItemType Junction -Path $junction -Target (Join-Path $base "privata") | Out-Null
+try {
+  $viaJunction = Invoke-Tool (@("-Modo", "Foto") + $rootsArgs + @("-Uscita", (Join-Path $junction "foto.snap")))
+} finally {
+  [System.IO.Directory]::Delete($junction)   # solo il collegamento: Remove-Item -Recurse lo seguirebbe
+}
+Assert-That "uscita dentro una radice attraverso una giunzione (il testo non lo dice): rifiutata (codice 1), niente file nella radice" ($viaJunction.Code -eq 1 -and $viaJunction.Text -match "dentro una radice" -and -not (Test-Path -LiteralPath (Join-Path $base "privata\foto.snap"))) $viaJunction.Text
+Assert-That "la giunzione e' stata tolta e la radice e' ancora intera" (-not (Test-Path -LiteralPath $junction) -and (Test-Path -LiteralPath (Join-Path $base "privata\Foto\IMG_001.jpg")))
+$letter = @("Z", "Y", "X", "W", "V") | Where-Object { -not (Test-Path -LiteralPath ($_ + ":\")) } | Select-Object -First 1
+$substOk = $false
+if ($letter) {
+  & subst ($letter + ":") (Join-Path $base "privata") | Out-Null
+  $substOk = ($LASTEXITCODE -eq 0)
+}
+if ($substOk) {
+  try {
+    $viaSubst = Invoke-Tool (@("-Modo", "Foto") + $rootsArgs + @("-Uscita", ($letter + ":\foto.snap")))
+  } finally {
+    & subst ($letter + ":") /d | Out-Null
+  }
+  Assert-That "uscita su un'unita' assegnata con subst alla radice: rifiutata (codice 1), niente file nella radice" ($viaSubst.Code -eq 1 -and $viaSubst.Text -match "dentro una radice" -and -not (Test-Path -LiteralPath (Join-Path $base "privata\foto.snap"))) $viaSubst.Text
+} else {
+  Write-Host "  [--] subst non disponibile o nessuna lettera libera: prova dell'unita' assegnata saltata" -ForegroundColor DarkGray
+}
+$prima0 = Join-Path $work "prima0.snap"
+$ok0 = Invoke-Tool (@("-Modo", "Foto") + $rootsArgs + @("-Uscita", $prima0))
+Assert-That "uscita su un disco locale fuori dalle radici: accettata (codice 0)" ($ok0.Code -eq 0 -and (Test-Path -LiteralPath $prima0)) $ok0.Text
+$repUnc = Invoke-Tool @("-Modo", "Confronta", "-Prima", $prima0, "-Dopo", $prima0, "-Report", "\\127.0.0.1\mcg-prova\r.json")
+$repIn = Invoke-Tool @("-Modo", "Confronta", "-Prima", $prima0, "-Dopo", $prima0, "-Report", (Join-Path $base "privata\r.json"))
+$repOk = Invoke-Tool @("-Modo", "Confronta", "-Prima", $prima0, "-Dopo", $prima0, "-Report", (Join-Path $work "r0.json"))
+Assert-That "il resoconto ha le stesse regole: UNC e dentro una radice rifiutati, su disco locale accettato con l'avviso" ($repUnc.Code -eq 1 -and $repUnc.Text -match "UNC" -and $repIn.Code -eq 1 -and $repIn.Text -match "dentro una radice" -and -not (Test-Path -LiteralPath (Join-Path $base "privata\r.json")) -and $repOk.Code -eq 0 -and $repOk.Text -match "AVVISO \(riservato\)") ($repUnc.Text + "`n" + $repIn.Text + "`n" + $repOk.Text)
 
 function Invoke-Scenario([string]$name, [scriptblock]$mutate) {
   $dir = New-Scenario $name $mutate

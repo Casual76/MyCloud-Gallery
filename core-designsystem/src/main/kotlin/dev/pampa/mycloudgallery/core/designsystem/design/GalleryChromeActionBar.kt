@@ -15,7 +15,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
-import dev.antigravity.fluidengine.ui.fluid.LocalFluidPressImmediate
 import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
 
@@ -40,7 +39,7 @@ fun GalleryChromeActionBar(
   } else {
     Modifier.background(style.tint.fallback, FluidCapsuleShape)
   }
-  CompositionLocalProvider(LocalGalleryChromeInk provides style.ink, LocalFluidPressImmediate provides true) {
+  CompositionLocalProvider(LocalGalleryChromeInk provides style.ink) {
     Row(
       modifier = modifier
         .height(ActionBarHeight)

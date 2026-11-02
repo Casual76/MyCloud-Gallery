@@ -33,6 +33,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
@@ -204,6 +205,7 @@ private fun TrashSectionMessage(
         onClick = onAction,
         style = FluidButtonStyle.Tinted,
         modifier = Modifier.padding(horizontal = GalleryDimens.Gutter),
+        grip = FluidPressGrip.YieldsToScroll,
       )
     }
   }

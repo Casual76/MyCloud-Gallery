@@ -47,6 +47,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.IntSize
 import kotlin.math.abs
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -235,7 +236,7 @@ private fun TopBar(position: String, notice: Boolean, handlers: PlayerHandlers) 
   Column(verticalArrangement = Arrangement.spacedBy(MemoriesDimens.TightGap)) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
       FluidButton(
-        text = stringResource(R.string.memorie_player_close_short), onClick = handlers::onExit, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large,
+        text = stringResource(R.string.memorie_player_close_short), onClick = handlers::onExit, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, grip = FluidPressGrip.YieldsToScroll,
         leading = { Icon(imageVector = Icons.Rounded.Close, contentDescription = null) },
       )
       Text(text = position, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -249,6 +250,9 @@ private fun TopBar(position: String, notice: Boolean, handlers: PlayerHandlers) 
 /**
  * In basso: "Pausa" o "Riproduci" a tutta larghezza e, sotto, "Foto precedente" e "Foto successiva" una accanto all'altra (mai tre bottoni stretti in una riga: le
  * parole si spezzerebbero). Con TalkBack niente "Riproduci": non parte niente da solo.
+ *
+ * Fluid Engine 3.0: un pulsante tiene il dito di serie, e questi stanno sopra i gesti della presentazione (avanti e indietro di lato, esci in basso). Tutti i
+ * pulsanti della presentazione cedono il dito (`FluidPressGrip.YieldsToScroll`): un dito che parte su "Avanti" e scorre fa il gesto, e il pulsante non clicca.
  */
 @Composable
 private fun Controls(playing: Boolean, talkBack: Boolean, handlers: PlayerHandlers) {
@@ -257,7 +261,7 @@ private fun Controls(playing: Boolean, talkBack: Boolean, handlers: PlayerHandle
       FluidButton(
         text = stringResource(if (playing) R.string.memorie_player_pause else R.string.memorie_player_play),
         onClick = if (playing) handlers::onPause else handlers::onPlay,
-        size = FluidButtonSize.Large, fillWidth = true,
+        size = FluidButtonSize.Large, fillWidth = true, grip = FluidPressGrip.YieldsToScroll,
         leading = { Icon(imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, contentDescription = null) },
       )
     }
@@ -266,11 +270,11 @@ private fun Controls(playing: Boolean, talkBack: Boolean, handlers: PlayerHandle
       val previous = stringResource(R.string.memorie_player_previous)
       val next = stringResource(R.string.memorie_player_next)
       FluidButton(
-        text = stringResource(R.string.memorie_player_back), onClick = handlers::onPrevious, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large,
+        text = stringResource(R.string.memorie_player_back), onClick = handlers::onPrevious, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, grip = FluidPressGrip.YieldsToScroll,
         modifier = Modifier.weight(1f).semantics { contentDescription = previous }, leading = { Icon(imageVector = Icons.Rounded.NavigateBefore, contentDescription = null) },
       )
       FluidButton(
-        text = stringResource(R.string.memorie_player_forward), onClick = handlers::onNext, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large,
+        text = stringResource(R.string.memorie_player_forward), onClick = handlers::onNext, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, grip = FluidPressGrip.YieldsToScroll,
         modifier = Modifier.weight(1f).semantics { contentDescription = next }, leading = { Icon(imageVector = Icons.Rounded.NavigateNext, contentDescription = null) },
       )
     }

@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
@@ -179,6 +180,7 @@ private fun ClusterCard(view: ClusterView, actions: SimilarActions, loader: Thum
         text = stringResource(R.string.duplicates_cluster_reset),
         onClick = { actions.onReset(cluster.key) },
         style = FluidButtonStyle.Tinted,
+        grip = FluidPressGrip.YieldsToScroll,
         size = FluidButtonSize.Large,
       )
     }

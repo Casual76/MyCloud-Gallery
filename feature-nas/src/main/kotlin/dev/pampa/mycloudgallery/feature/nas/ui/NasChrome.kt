@@ -41,7 +41,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
-import dev.antigravity.fluidengine.ui.fluid.LocalFluidPressImmediate
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
@@ -195,7 +194,7 @@ internal fun NasActionCapsule(
   modifier: Modifier = Modifier,
   content: @Composable RowScope.() -> Unit,
 ) {
-  CompositionLocalProvider(LocalGalleryChromeInk provides style.ink, LocalFluidPressImmediate provides true) {
+  CompositionLocalProvider(LocalGalleryChromeInk provides style.ink) {
     Row(
       modifier = modifier
         .height(ActionBarHeight)

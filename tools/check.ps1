@@ -60,7 +60,16 @@
     7d-ter. D34 nella release   (Fase 8, P0) la recinzione "dati dei volti sul NAS solo sulle share di prova" (risposta Q5 (a))
                                 C'E' nell'APK di release: `FeatureFlags.facesSyncTestSharesOnly` e la decisione `facesSyncMayUse`
                                 nel dex e in mapping.txt (consumer-rules.pro di core-common); il cancello dei volti lo aggiunge P13
-    7e. motori on-device        (Fase 6, P0; docs/fase6-progetto.md D3, D33, D38, D41) sull'APK di release vero: librerie
+    7d-quater. recinzioni       (Fase 10, P10; docs/fase10-progetto.md par. 2.10, D35, Q6 (b), C446) le quattro recinzioni (F4-D31, F5-D12,
+                                F7-D30, F8-D34) si spengono in UN passo solo e il controllo ha due stati: con tutte accese e' verde come
+                                prima; con le quattro dichiarate spente in tools\release\recinzioni.json (con UN consenso: data e marcatore
+                                di una riga di docs\decisioni.md con i quattro id) accetta solo le decisioni che valgono "spenta"; uno
+                                stato misto solo con un ritorno indietro parziale dichiarato. Tre passi: lo stato dichiarato uguale a
+                                quello di FeatureFlags.kt (statico), uguale a quello del BYTECODE della release (getter, decisione e
+                                toString letti col dexdump), e le prove su copie temporanee sotto build\ (mai un commit che spegne una
+                                recinzione: FeatureFlags non si cambia) e sulle cartelle finte di share-snapshot.ps1; la "Simulazione del
+                                passo" (solo build debug) non deve avere resti nel dex di release (passo 7b)
+    7e. motori on-device       (Fase 6, P0; docs/fase6-progetto.md D3, D33, D38, D41) sull'APK di release vero: librerie
                                 native solo arm64-v8a (P11: x86_64 solo nella debug, per gli emulatori), non compresse,
                                 allineate a 16 KB nel file e nei segmenti LOAD;
                                 nel manifest niente `MlKitInitProvider`, i componenti di ML Kit e DataTransport esattamente
@@ -839,9 +848,13 @@ $debugRemnants = @(
   # Fase 10 (P0 per P1 e P11; docs/fase10-progetto.md par. 2.8 "Le chiavi nell'app", par. 2.11 S14): la chiave di PROVA del manifest (KT, fidata
   # solo in debug e nei test: P1 la scrive in `ReleaseTestKeys`) e lo strumento dell'admin che genera le chiavi e firma i manifest (`ManifestTool`,
   # solo sul PC, in tools/release/). Nella release non deve esistere niente di tutto questo; le stringhe di KT le cerca il passo 7i.
-  "ReleaseTestKeys", "ManifestTool"
+  "ReleaseTestKeys", "ManifestTool",
+  # Fase 10 (P10; docs/fase10-progetto.md par. 2.10): la "Simulazione del passo" (sola lettura, solo build debug dell'admin, Impostazioni -> Sviluppo): il giro
+  # e la schermata in feature-diagnostics (`diagnostics/release/Step*`), le fonti e il montaggio in `:app/.../release/` (`LiveStepSources`, `StepForecasts`,
+  # `StepNasSpace`), l'ingresso in app/src/debug. Nella release non deve esistere niente di tutto questo (la raggiunge solo `DeveloperTools` di debug).
+  "StepSimulation", "LiveStepSources", "StepForecasts", "StepNasSpace", "diagnostics/release/Step", "mycloudgallery/release/Step"
 )
-Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11, valutazione dei ricordi F9-P11, chiave di prova del manifest e ManifestTool F10)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11, valutazione dei ricordi F9-P11, chiave di prova del manifest e ManifestTool F10, simulazione del passo P10)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
@@ -1355,6 +1368,46 @@ Step "D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse 
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
   Write-Host ("        cancello D34 provato nel bytecode: AppFacesWriteGate.blockFor -> facesSyncMayUse -> TEST_SHARES_ONLY, istanziato da {0}; chiamato da {1} metodi di core/faces/sync; decisione chiamata da {2} metodi ({3} righe di dexdump)" -f
     (($gate.Instantiators | Select-Object -Unique) -join ", "), @($callers | Select-Object -Unique).Count, @($gate.DecisionCallers | Select-Object -Unique).Count, $gate.Lines) -ForegroundColor DarkGray
+}
+
+# --- Fase 10 (P10): le quattro recinzioni in UN passo (docs/fase10-progetto.md par. 2.10, D35, Q6 (b), C446) ------------------------------
+# Lo stato atteso di ogni recinzione (F4-D31, F5-D12, F7-D30, F8-D34) e il consenso unico del passo stanno in tools\release\recinzioni.json;
+# le funzioni in tools\release\recinzioni.ps1. Oggi sono tutte accese e il consenso e' vuoto: i passi sono verdi come prima. Il giorno del passo
+# l'orchestratore cambia FeatureFlags e recinzioni.json insieme, con il si' dell'utente, e il controllo accetta solo "spenta" dichiarata con la riga
+# del consenso in docs\decisioni.md. Lo stato misto passa solo con un ritorno indietro parziale dichiarato. Il bytecode (R8 ripiega le costanti di
+# FeatureFlags nei getter, nelle decisioni e nel toString) e' letto dal dex della release: se non si legge, il passo FALLISCE.
+. (Join-Path $root "tools\release\recinzioni.ps1")
+$recinzioniJson = Join-Path $root "tools\release\recinzioni.json"
+$recinzioniFlags = Join-Path $root "core-common\src\main\kotlin\dev\pampa\mycloudgallery\core\common\featureflags\FeatureFlags.kt"
+$recinzioniDecisioni = Join-Path $root "docs\decisioni.md"
+
+Step "recinzioni (P10, D35): lo stato dichiarato in recinzioni.json e' quello di FeatureFlags.kt; consenso unico e ritorno parziale in regola" {
+  $problems = @(Invoke-RecinzioniCheck $recinzioniJson $recinzioniFlags $recinzioniDecisioni $null (Get-Date))
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+  $config = Read-RecinzioniJson $recinzioniJson
+  Write-Host ("        " + (($config.recinzioni | ForEach-Object { "$($_.id) $($_.stato)" }) -join ", ") + "; consenso: " + $(if ($config.consenso.data) { $config.consenso.data } else { "nessuno" })) -ForegroundColor DarkGray
+}
+
+Step "recinzioni nel bytecode della release (P10, C446): lo stato di ognuna letto dal dex (getter, decisione, toString) e' quello dichiarato" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $dexdump = Get-DexDump
+  if (-not $dexdump) { return "dexdump.exe non trovato accanto ad aapt2 (build-tools): non posso leggere lo stato delle recinzioni nel dex di release" }
+  $classLines = Get-FlagsClassLines $dexdump $apk.FullName
+  if (-not $classLines -or $classLines.Count -lt 20) { return "la classe FeatureFlags non e' nel dex di release (lettura del bytecode non affidabile)" }
+  $dexStates = Get-FenceDexStates (Get-FlagsDexFacts $classLines)
+  $problems = @(Invoke-RecinzioniCheck $recinzioniJson $recinzioniFlags $recinzioniDecisioni $dexStates (Get-Date))
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
+  foreach ($id in $script:FenceIds) { Write-Host ("        {0} {1} nel bytecode ({2} prove: getter, decisione, toString)" -f $id, $dexStates[$id].Stato, $dexStates[$id].Prove) -ForegroundColor DarkGray }
+}
+
+Step "recinzioni e fotografia delle share (P10): prove su copie temporanee e su cartelle finte sotto build\ (mai sulle share del NAS)" {
+  foreach ($proof in @("recinzioni-prove.ps1", "share-snapshot-prove.ps1")) {
+    $r = Invoke-Native "powershell.exe" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $root ("tools\release\" + $proof)))
+    if ($r.Code -ne 0) { Show-Lines $r.Lines 40; return "$proof fallito (codice $($r.Code))" }
+    Write-Host ("        " + ($r.Lines | Select-Object -Last 1)) -ForegroundColor DarkGray
+  }
 }
 
 # --- Fase 6 (P0): i motori on-device nell'APK di release (docs/fase6-progetto.md D3, D33, D38, D41, L47, L49) -------------------------

@@ -1,0 +1,68 @@
+{
+  "versione": 1,
+  "descrizione": "Fase 10 P10, D35 e Q6 (b): lo stato atteso delle quattro recinzioni che si spengono in UN solo passo, con un solo consenso. Lo legge tools/check.ps1 (passi delle recinzioni) e tools/release/share-snapshot.ps1 (le aree). OGGI sono tutte accese e il consenso e' vuoto. Questo file lo cambia solo l'orchestratore, nello stesso commit che cambia FeatureFlags, con il si' dell'utente (docs/fase10-progetto.md par. 2.10).",
+  "recinzioni": [
+    { "id": "F4-D31", "area": "indice", "campo": "indexPublishTestSharesOnly", "stato": "accesa" },
+    { "id": "F5-D12", "area": "backup", "campo": "backupTestSharesOnly", "stato": "accesa" },
+    { "id": "F7-D30", "area": "album", "campo": "sharedAlbumsTestSharesOnly", "stato": "accesa" },
+    { "id": "F8-D34", "area": "volti", "campo": "facesSyncTestSharesOnly", "stato": "accesa" }
+  ],
+  "consenso": {
+    "data": "",
+    "marcatore": "",
+    "nota": "Con le quattro recinzioni spente: data (AAAA-MM-GG) e un marcatore che compare in UNA sola riga di docs/decisioni.md; quella riga porta la stessa data e i quattro id (un consenso solo, Q6 (b)). Con tutte accese deve restare vuoto."
+  },
+  "ritornoParziale": {
+    "dichiarato": false,
+    "data": "",
+    "marcatore": "",
+    "motivo": "",
+    "nota": "Solo se dopo il passo una o piu' recinzioni (non tutte) tornano accese, con un nuovo si' dell'utente (E-SV1, par. 2.10 Indietro): dichiarato true, data, marcatore di una riga di docs/decisioni.md e il motivo. Altrimenti uno stato misto fa fallire check.ps1."
+  },
+  "aree": [
+    {
+      "id": "indice",
+      "recinzione": "F4-D31",
+      "nome": "Indice e dati personali",
+      "soloAggiunte": false,
+      "spostaSorgenti": false,
+      "cartelleAttese": {
+        "privata": [ ".mycloudgallery/devices", ".mycloudgallery/leases", ".mycloudgallery/family", ".mycloudgallery/tmp" ],
+        "comune": [ ".mycloudgallery/devices", ".mycloudgallery/leases", ".mycloudgallery/family", ".mycloudgallery/tmp" ]
+      }
+    },
+    {
+      "id": "backup",
+      "recinzione": "F5-D12",
+      "nome": "Backup",
+      "soloAggiunte": true,
+      "spostaSorgenti": false,
+      "cartelleAttese": {
+        "privata": [ "Backup", "Versioni" ],
+        "comune": [ "Versioni" ]
+      }
+    },
+    {
+      "id": "volti",
+      "recinzione": "F8-D34",
+      "nome": "Dati dei volti",
+      "soloAggiunte": false,
+      "spostaSorgenti": false,
+      "cartelleAttese": {
+        "privata": [ ".mycloudgallery/faces" ],
+        "comune": []
+      }
+    },
+    {
+      "id": "album",
+      "recinzione": "F7-D30",
+      "nome": "Album condivisi",
+      "soloAggiunte": false,
+      "spostaSorgenti": true,
+      "cartelleAttese": {
+        "privata": [ ".mycloudgallery/trash" ],
+        "comune": [ ".mycloudgallery/albums", ".mycloudgallery/trash", "Album condivisi" ]
+      }
+    }
+  ]
+}

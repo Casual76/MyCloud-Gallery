@@ -1,0 +1,266 @@
+  Class descriptor  : 'Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;'
+  Access flags      : 0x0011 (PUBLIC FINAL)
+  Superclass        : 'Ljava/lang/Object;'
+  Interfaces        -
+  Static fields     -
+    #0              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'RELEASE'
+      type          : 'Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;'
+      access        : 0x0019 (PUBLIC STATIC FINAL)
+  Instance fields   -
+    #0              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'backupBlocksTestAccounts'
+      type          : 'Z'
+      access        : 0x0011 (PUBLIC FINAL)
+  Direct methods    -
+    #0              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : '<clinit>'
+      type          : '()V'
+      access        : 0x10008 (STATIC CONSTRUCTOR)
+      code          -
+      registers     : 2
+      ins           : 0
+      outs          : 2
+      insns size    : 9 16-bit code units
+1bd2e4:                                        |[1bd2e4] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.<clinit>:()V
+1bd2f4: 2200 9011                              |0000: new-instance v0, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags; // type@1190
+1bd2f8: 1211                                   |0002: const/4 v1, #int 1 // #1
+1bd2fa: 7020 4b46 1000                         |0003: invoke-direct {v0, v1}, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.<init>:(Z)V // method@464b
+1bd300: 6900 062f                              |0006: sput-object v0, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.RELEASE:Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags; // field@2f06
+1bd304: 0e00                                   |0008: return-void
+      catches       : (none)
+
+    #1              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : '<init>'
+      type          : '(Z)V'
+      access        : 0x10001 (PUBLIC CONSTRUCTOR)
+      code          -
+      registers     : 2
+      ins           : 2
+      outs          : 1
+      insns size    : 6 16-bit code units
+1bd308:                                        |[1bd308] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.<init>:(Z)V
+1bd318: 7010 4a5d 0000                         |0000: invoke-direct {v0}, Ljava/lang/Object;.<init>:()V // method@5d4a
+1bd31e: 5c01 072f                              |0003: iput-boolean v1, v0, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupBlocksTestAccounts:Z // field@2f07
+1bd322: 0e00                                   |0005: return-void
+      catches       : (none)
+
+  Virtual methods   -
+    #0              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'backupMayWriteAs'
+      type          : '(Ljava/lang/String;)Z'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 2
+      ins           : 2
+      outs          : 1
+      insns size    : 17 16-bit code units
+2fe70c:                                        |[2fe70c] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.backupMayWriteAs:(Ljava/lang/String;)Z
+2fe71c: 5500 072f                              |0000: iget-boolean v0, v0, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupBlocksTestAccounts:Z // field@2f07
+2fe720: 3800 0d00                              |0002: if-eqz v0, 000f // +000d
+2fe724: 3801 0900                              |0004: if-eqz v1, 000d // +0009
+2fe728: 7110 5846 0100                         |0006: invoke-static {v1}, Ldev/pampa/mycloudgallery/core/common/featureflags/TestShares;.isTestAccount:(Ljava/lang/String;)Z // method@4658
+2fe72e: 0a00                                   |0009: move-result v0
+2fe730: 3900 0300                              |000a: if-nez v0, 000d // +0003
+2fe734: 2803                                   |000c: goto 000f // +0003
+2fe736: 1200                                   |000d: const/4 v0, #int 0 // #0
+2fe738: 0f00                                   |000e: return v0
+2fe73a: 1210                                   |000f: const/4 v0, #int 1 // #1
+2fe73c: 0f00                                   |0010: return v0
+      catches       : (none)
+
+    #1              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'backupMayWriteTo'
+      type          : '(Ljava/lang/String;)Z'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 2
+      ins           : 2
+      outs          : 2
+      insns size    : 15 16-bit code units
+2fe740:                                        |[2fe740] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.backupMayWriteTo:(Ljava/lang/String;)Z
+2fe750: 1a00 1982                              |0000: const-string v0, "share" // string@8219
+2fe754: 7120 1064 1000                         |0002: invoke-static {v0, v1}, Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter:(Ljava/lang/String;Ljava/lang/Object;)V // method@6410
+2fe75a: 7110 5946 0100                         |0005: invoke-static {v1}, Ldev/pampa/mycloudgallery/core/common/featureflags/TestShares;.isTestShare:(Ljava/lang/String;)Z // method@4659
+2fe760: 0a00                                   |0008: move-result v0
+2fe762: 3800 0400                              |0009: if-eqz v0, 000d // +0004
+2fe766: 1210                                   |000b: const/4 v0, #int 1 // #1
+2fe768: 0f00                                   |000c: return v0
+2fe76a: 1200                                   |000d: const/4 v0, #int 0 // #0
+2fe76c: 0f00                                   |000e: return v0
+      catches       : (none)
+
+    #2              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'equals'
+      type          : '(Ljava/lang/Object;)Z'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 3
+      ins           : 2
+      outs          : 0
+      insns size    : 16 16-bit code units
+2fe770:                                        |[2fe770] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.equals:(Ljava/lang/Object;)Z
+2fe780: 2020 9011                              |0000: instance-of v0, v2, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags; // type@1190
+2fe784: 3800 0c00                              |0002: if-eqz v0, 000e // +000c
+2fe788: 1f02 9011                              |0004: check-cast v2, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags; // type@1190
+2fe78c: 5522 072f                              |0006: iget-boolean v2, v2, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupBlocksTestAccounts:Z // field@2f07
+2fe790: 5511 072f                              |0008: iget-boolean v1, v1, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupBlocksTestAccounts:Z // field@2f07
+2fe794: 3312 0400                              |000a: if-ne v2, v1, 000e // +0004
+2fe798: 1211                                   |000c: const/4 v1, #int 1 // #1
+2fe79a: 0f01                                   |000d: return v1
+2fe79c: 1201                                   |000e: const/4 v1, #int 0 // #0
+2fe79e: 0f01                                   |000f: return v1
+      catches       : (none)
+
+    #3              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'facesSyncMayUse'
+      type          : '(Ljava/lang/String;)Z'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 2
+      ins           : 2
+      outs          : 2
+      insns size    : 15 16-bit code units
+2fe7a0:                                        |[2fe7a0] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.facesSyncMayUse:(Ljava/lang/String;)Z
+2fe7b0: 1a00 1982                              |0000: const-string v0, "share" // string@8219
+2fe7b4: 7120 1064 1000                         |0002: invoke-static {v0, v1}, Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter:(Ljava/lang/String;Ljava/lang/Object;)V // method@6410
+2fe7ba: 7110 5946 0100                         |0005: invoke-static {v1}, Ldev/pampa/mycloudgallery/core/common/featureflags/TestShares;.isTestShare:(Ljava/lang/String;)Z // method@4659
+2fe7c0: 0a00                                   |0008: move-result v0
+2fe7c2: 3800 0400                              |0009: if-eqz v0, 000d // +0004
+2fe7c6: 1210                                   |000b: const/4 v0, #int 1 // #1
+2fe7c8: 0f00                                   |000c: return v0
+2fe7ca: 1200                                   |000d: const/4 v0, #int 0 // #0
+2fe7cc: 0f00                                   |000e: return v0
+      catches       : (none)
+
+    #4              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'getBackupBlocksTestAccounts'
+      type          : '()Z'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 1
+      ins           : 1
+      outs          : 0
+      insns size    : 3 16-bit code units
+2fe7d0:                                        |[2fe7d0] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.getBackupBlocksTestAccounts:()Z
+2fe7e0: 5500 072f                              |0000: iget-boolean v0, v0, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupBlocksTestAccounts:Z // field@2f07
+2fe7e4: 0f00                                   |0002: return v0
+      catches       : (none)
+
+    #5              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'getBackupTestSharesOnly'
+      type          : '()Z'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 1
+      ins           : 1
+      outs          : 0
+      insns size    : 2 16-bit code units
+2fe7e8:                                        |[2fe7e8] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.getBackupTestSharesOnly:()Z
+2fe7f8: 1210                                   |0000: const/4 v0, #int 1 // #1
+2fe7fa: 0f00                                   |0001: return v0
+      catches       : (none)
+
+    #6              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'getFacesSyncTestSharesOnly'
+      type          : '()Z'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 1
+      ins           : 1
+      outs          : 0
+      insns size    : 2 16-bit code units
+2fe7fc:                                        |[2fe7fc] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.getFacesSyncTestSharesOnly:()Z
+2fe80c: 1210                                   |0000: const/4 v0, #int 1 // #1
+2fe80e: 0f00                                   |0001: return v0
+      catches       : (none)
+
+    #7              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'getSharedAlbumsTestSharesOnly'
+      type          : '()Z'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 1
+      ins           : 1
+      outs          : 0
+      insns size    : 2 16-bit code units
+2fe810:                                        |[2fe810] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.getSharedAlbumsTestSharesOnly:()Z
+2fe820: 1210                                   |0000: const/4 v0, #int 1 // #1
+2fe822: 0f00                                   |0001: return v0
+      catches       : (none)
+
+    #8              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'hashCode'
+      type          : '()I'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 4
+      ins           : 1
+      outs          : 3
+      insns size    : 41 16-bit code units
+2fe854:                                        |[2fe854] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.hashCode:()I
+2fe864: 1200                                   |0000: const/4 v0, #int 0 // #0
+2fe866: 7110 8a5c 0000                         |0001: invoke-static {v0}, Ljava/lang/Boolean;.hashCode:(Z)I // method@5c8a
+2fe86c: 0a00                                   |0004: move-result v0
+2fe86e: 1301 1f00                              |0005: const/16 v1, #int 31 // #1f
+2fe872: b210                                   |0007: mul-int/2addr v0, v1
+2fe874: 1212                                   |0008: const/4 v2, #int 1 // #1
+2fe876: 7130 1808 2001                         |0009: invoke-static {v0, v2, v1}, Landroidx/camera/core/CameraSelector$$ExternalSyntheticOutline0;.m:(IZI)I // method@0818
+2fe87c: 0a00                                   |000c: move-result v0
+2fe87e: 7130 1808 2001                         |000d: invoke-static {v0, v2, v1}, Landroidx/camera/core/CameraSelector$$ExternalSyntheticOutline0;.m:(IZI)I // method@0818
+2fe884: 0a00                                   |0010: move-result v0
+2fe886: 7130 1808 2001                         |0011: invoke-static {v0, v2, v1}, Landroidx/camera/core/CameraSelector$$ExternalSyntheticOutline0;.m:(IZI)I // method@0818
+2fe88c: 0a00                                   |0014: move-result v0
+2fe88e: 5533 072f                              |0015: iget-boolean v3, v3, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupBlocksTestAccounts:Z // field@2f07
+2fe892: 7130 1808 3001                         |0017: invoke-static {v0, v3, v1}, Landroidx/camera/core/CameraSelector$$ExternalSyntheticOutline0;.m:(IZI)I // method@0818
+2fe898: 0a03                                   |001a: move-result v3
+2fe89a: 7130 1808 2301                         |001b: invoke-static {v3, v2, v1}, Landroidx/camera/core/CameraSelector$$ExternalSyntheticOutline0;.m:(IZI)I // method@0818
+2fe8a0: 0a03                                   |001e: move-result v3
+2fe8a2: 7130 1808 2301                         |001f: invoke-static {v3, v2, v1}, Landroidx/camera/core/CameraSelector$$ExternalSyntheticOutline0;.m:(IZI)I // method@0818
+2fe8a8: 0a03                                   |0022: move-result v3
+2fe8aa: 7110 8a5c 0200                         |0023: invoke-static {v2}, Ljava/lang/Boolean;.hashCode:(Z)I // method@5c8a
+2fe8b0: 0a00                                   |0026: move-result v0
+2fe8b2: b030                                   |0027: add-int/2addr v0, v3
+2fe8b4: 0f00                                   |0028: return v0
+      catches       : (none)
+
+    #9              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'sharedAlbumsMayUse'
+      type          : '(Ljava/lang/String;)Z'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 2
+      ins           : 2
+      outs          : 2
+      insns size    : 15 16-bit code units
+2fe824:                                        |[2fe824] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.sharedAlbumsMayUse:(Ljava/lang/String;)Z
+2fe834: 1a00 1982                              |0000: const-string v0, "share" // string@8219
+2fe838: 7120 1064 1000                         |0002: invoke-static {v0, v1}, Lkotlin/jvm/internal/Intrinsics;.checkNotNullParameter:(Ljava/lang/String;Ljava/lang/Object;)V // method@6410
+2fe83e: 7110 5946 0100                         |0005: invoke-static {v1}, Ldev/pampa/mycloudgallery/core/common/featureflags/TestShares;.isTestShare:(Ljava/lang/String;)Z // method@4659
+2fe844: 0a00                                   |0008: move-result v0
+2fe846: 3800 0400                              |0009: if-eqz v0, 000d // +0004
+2fe84a: 1210                                   |000b: const/4 v0, #int 1 // #1
+2fe84c: 0f00                                   |000c: return v0
+2fe84e: 1200                                   |000d: const/4 v0, #int 0 // #0
+2fe850: 0f00                                   |000e: return v0
+      catches       : (none)
+
+    #10              : (in Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;)
+      name          : 'toString'
+      type          : '()Ljava/lang/String;'
+      access        : 0x0011 (PUBLIC FINAL)
+      code          -
+      registers     : 3
+      ins           : 1
+      outs          : 3
+      insns size    : 11 16-bit code units
+2fe8b8:                                        |[2fe8b8] dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags.toString:()Ljava/lang/String;
+2fe8c8: 1a00 430f                              |0000: const-string v0, "FeatureFlags(wol=false, nasLibrary=true, indexPublishTestSharesOnly=true, backupTestSharesOnly=true, backupBlocksTestAccounts=" // string@0f43
+2fe8cc: 1a01 b205                              |0002: const-string v1, ", sharedAlbumsTestSharesOnly=true, facesSyncTestSharesOnly=true, mapOnline=true)" // string@05b2
+2fe8d0: 5522 072f                              |0004: iget-boolean v2, v2, Ldev/pampa/mycloudgallery/core/common/featureflags/FeatureFlags;.backupBlocksTestAccounts:Z // field@2f07
+2fe8d4: 7130 9c29 1002                         |0006: invoke-static {v0, v1, v2}, Landroidx/core/provider/FontRequest$$ExternalSyntheticOutline0;.m:(Ljava/lang/String;Ljava/lang/String;Z)Ljava/lang/String; // method@299c
+2fe8da: 0c02                                   |0009: move-result-object v2
+2fe8dc: 1102                                   |000a: return-object v2
+      catches       : (none)
+
+  source_file_idx   : 31057 (r8-map-id-be89efc306675930f9c78372efae4dca0a5e7a715828d1c22cf2f07f0d41516c)

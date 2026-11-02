@@ -87,6 +87,8 @@ internal object DeveloperTools {
     with(dev.pampa.mycloudgallery.debugtools.eval.faces.FacesEvalEntry) { destination(nav) }
     // Fase 9 (P11): lo strumento di valutazione dei ricordi (F125). La porta la lega P13 (MemoriesEvalEnvironmentHolder.current).
     with(dev.pampa.mycloudgallery.debugtools.eval.memories.MemoriesEvalEntry) { destination(nav) }
+    // Fase 10 (P10): la "Simulazione del passo" (sola lettura) prima di spegnere le quattro recinzioni.
+    with(StepSimulationEntry) { destination(nav) }
   }
 
   /**
@@ -98,6 +100,8 @@ internal object DeveloperTools {
 
   /** Fase 6 (P11): la porta dello strumento di valutazione della ricerca (P9) sopra il grafo della ricerca vero. Solo debug. */
   fun installSearch(stack: dev.pampa.mycloudgallery.ai.AiStack, gallery: dev.pampa.mycloudgallery.gallery.GalleryGraph, context: Context) {
+    // Fase 10 (P10): "Simula il passo" legge dalla galleria (backup, catalogo, NAS) solo quando l'admin la apre, in sola lettura.
+    dev.pampa.mycloudgallery.release.StepSimulationHolder.gallery = gallery
     dev.pampa.mycloudgallery.debugtools.eval.EvalEnvironmentHolder.current =
       dev.pampa.mycloudgallery.debugtools.eval.AppEvalEnvironment(stack, gallery, context.noBackupFilesDir)
     // Fase 7 (P12): la porta dello strumento di valutazione degli album e dei viaggi, sopra la stessa Libreria (sola lettura). P13: la cartella
@@ -119,6 +123,8 @@ internal object DeveloperTools {
   fun installPeople(graph: Any, people: Any) {
     val live = graph as? dev.pampa.mycloudgallery.faces.FacesGraph ?: return
     val facade = people as? dev.pampa.mycloudgallery.faces.FacesPeopleFacade ?: return
+    // Fase 10 (P10): la simulazione del passo chiede a Persone se e' attiva qui (sola lettura).
+    dev.pampa.mycloudgallery.release.StepSimulationHolder.faces = live
     dev.pampa.mycloudgallery.debugtools.eval.faces.FacesEvalEnvironmentHolder.current = AppFacesEvalEnvironment(live, facade)
   }
 
@@ -173,6 +179,8 @@ internal object DeveloperTools {
       dev.pampa.mycloudgallery.debugtools.eval.faces.FacesEvalEntry.row(nav)
       FluidListDivider()
       dev.pampa.mycloudgallery.debugtools.eval.memories.MemoriesEvalEntry.row(nav)
+      FluidListDivider()
+      StepSimulationEntry.row(nav)
     }
   }
 

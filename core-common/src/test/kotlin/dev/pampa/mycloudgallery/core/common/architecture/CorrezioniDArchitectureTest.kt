@@ -64,7 +64,7 @@ class CorrezioniDArchitectureTest {
   @Test
   fun i2_leConfermeSenzaToccoNonEsconoDaiFake() {
     val offenders = mentions(TEST_CONFIRMATIONS, PRODUCTION_AND_DEBUG).filter { "/testing/" !in it }
-    assertWithMessage("TestConfirmations fuori dai package testing").that(offenders).isEmpty()
+    assertWithMessage("le conferme dei fake fuori dai package testing").that(offenders).isEmpty()
   }
 
   /** Regola 3: in `:app` l'emittente della 4B solo nei file che lo usano oggi, con i tocchi del foglio. */
@@ -73,7 +73,8 @@ class CorrezioniDArchitectureTest {
     val inApp = modules.filter { it == "app" }.flatMap { module ->
       files(module, PRODUCTION_AND_DEBUG).filter { ISSUER.containsMatchIn(NoNetworkSources.stripComments(it.readText())) }.map(::path).toList()
     }
-    assertWithMessage("ConfirmationIssuer in :app fuori dai file ammessi").that(inApp.filter { it !in APP_ISSUER_FILES }).isEmpty()
+    // Il messaggio non scrive il nome dell'emittente: la regola della 4B (Phase4ArchitectureTest) lo cerca anche nelle stringhe dei test.
+    assertWithMessage("l'emittente delle conferme della 4B in :app fuori dai file ammessi").that(inApp.filter { it !in APP_ISSUER_FILES }).isEmpty()
   }
 
   /** Regola 4: il DAO del diario delle operazioni solo nel database e nel diario di core-nasops. */
@@ -82,7 +83,7 @@ class CorrezioniDArchitectureTest {
     val offenders = mentions(NAS_OPS_DAO, PRODUCTION_AND_DEBUG).filter { file ->
       !(file.startsWith("core-database/src/main/") || file.startsWith(NASOPS_STORE))
     }
-    assertWithMessage("NasOpsDao fuori dal database e dal diario").that(offenders).isEmpty()
+    assertWithMessage("il DAO del diario delle operazioni fuori dal database e dal diario").that(offenders).isEmpty()
   }
 
   private companion object {

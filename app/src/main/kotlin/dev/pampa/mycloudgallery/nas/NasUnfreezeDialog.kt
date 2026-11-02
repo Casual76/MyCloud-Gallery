@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -20,6 +19,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.pampa.mycloudgallery.R
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryAlertDialog
 import dev.pampa.mycloudgallery.core.nasmedia.contract.headlineCount
 import dev.pampa.mycloudgallery.main.GalleryHostViewModel
 
@@ -39,7 +39,8 @@ fun NasUnfreezeDialog(host: GalleryHostViewModel, onDismiss: () -> Unit) {
     onDismiss()
     return
   }
-  AlertDialog(
+  // I3 della revisione di sicurezza della Fase 10: un dialogo e' una finestra a se', che il tema non marca; `GalleryAlertDialog` marca la sua vista per l'accessibilita' (C439).
+  GalleryAlertDialog(
     onDismissRequest = onDismiss,
     title = { Text(stringResource(R.string.nas_unfreeze_title)) },
     text = {

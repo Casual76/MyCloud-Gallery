@@ -124,6 +124,8 @@ object GalleryModule {
       ai = { graph.aiHooks },
       // Avvio istantaneo: NAS, backup e lettura del telefono dopo il primo disegno utile (o al piu' 1,5 s dall'avvio del processo).
       afterFirstDraw = { AfterFirstDraw.await() },
+      // CA-4 (revisione funzionale della Fase 10): con la versione fermata dal manifest la lettura del telefono in primo piano non parte.
+      releaseStopped = { graph.release?.stoppedAfterLoad() == true },
     )
 
   private fun galleryGraph(context: Context, graph: AppGraph, setup: FamilySetupRepository, parts: GalleryParts): GalleryGraph =

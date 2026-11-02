@@ -149,7 +149,7 @@ class SearchGraph(
   )
 
   /** Il testo letto di un media per il viewer (`ViewerTextSource`, D43): le righe dell'origine che vince nell'indice (revisione A, R4). */
-  val mediaText: MediaText = StoredMediaText(catalog, index)
+  val mediaText: StoredMediaText = StoredMediaText(catalog, index)
 
   /**
    * Le ricerche aspettano [open]. Se la ricerca e' ferma (azzeramento) o l'indice non si apre, **lanciano un errore vero**, non una

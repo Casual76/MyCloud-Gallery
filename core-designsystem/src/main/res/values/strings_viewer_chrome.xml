@@ -11,6 +11,7 @@
   <string name="videobar_mute">Disattiva l\'audio</string>
   <string name="videobar_unmute">Attiva l\'audio</string>
   <string name="videobar_time_description">%1$s di %2$s</string>
+  <string name="videobar_seek">Posizione nel video</string>
 
   <!-- Pannello informazioni -->
   <string name="info_close">Chiudi le informazioni</string>

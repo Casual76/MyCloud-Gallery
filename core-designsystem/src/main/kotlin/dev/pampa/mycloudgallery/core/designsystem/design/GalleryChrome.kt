@@ -55,7 +55,9 @@ import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.GlassTint
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidPressImmediate
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.LocalGalleryAccessibility
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
+import dev.pampa.mycloudgallery.core.designsystem.a11y.gallerySolidSurface
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuPanel
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
@@ -220,7 +222,9 @@ fun chromeRowHeight(): Dp = maxOf(GalleryChromeDefaults.TopRowHeight, chromePiec
 @Composable
 private fun Modifier.chromeGlass(style: GalleryChromeStyle, backdrop: GlassBackdropState?): Modifier =
   if (backdrop != null) {
-    glassSurface(state = backdrop, tint = style.tint, shape = FluidCapsuleShape, role = GlassRole.Floating)
+    galleryGlass(state = backdrop, tint = style.tint, shape = FluidCapsuleShape, role = GlassRole.Floating)
+  } else if (LocalGalleryAccessibility.current.solidSurfaces) {
+    gallerySolidSurface(tint = style.tint, shape = FluidCapsuleShape)
   } else {
     background(style.tint.fallback, FluidCapsuleShape)
   }
@@ -378,7 +382,10 @@ private fun menuVeil(): Color {
   val scheme = MaterialTheme.colorScheme
   val film = GlassDefaults.modalTint().overlay
   val dark = GlassDefaults.isDarkSurface()
-  return remember(scheme, film, dark) {
+  // Fase 10 P8: con le superfici piene (piu' contrasto, meno trasparenza) il velo e' pieno: il pop-up non lascia vedere niente.
+  val solid = LocalGalleryAccessibility.current.solidSurfaces
+  return remember(scheme, film, dark, solid) {
+    if (solid) return@remember scheme.surface.copy(alpha = 1f)
     val scrim = scheme.scrim.copy(alpha = if (dark) ModalScrimDark else ModalScrimLight)
     val under = listOf(GalleryOnPhoto.Content, scheme.scrim).map { film.compositeOver(scrim.compositeOver(it)) }
     val alpha = GalleryLegibility.minimalFilmAlpha(scheme.onSurface, scheme.surface, ContentRange(under), GalleryChromeDefaults.MeasuredTarget, 0f, MenuVeilCeiling)

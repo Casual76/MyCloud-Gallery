@@ -132,6 +132,24 @@
           android:resource="@xml/field_probe_widget_info" />
     </receiver>
 
+    <!--
+        Fase 10 (P8, D24, E-AC10, F185): il servizio di accessibilita' di prova che NON e' uno strumento di accessibilita' (isAccessibilityTool falso
+        nel suo file di configurazione): prova che con accessibilityDataSensitive un servizio qualunque non legge niente. Solo numeri in logcat. Si
+        accende a mano; Android lo lega con BIND_ACCESSIBILITY_SERVICE, nessun'altra app puo'. Solo in questo manifest: la release non lo ha.
+    -->
+    <service
+        android:name="dev.pampa.mycloudgallery.debugtools.probes.FieldProbeA11yService"
+        android:exported="true"
+        android:label="@string/probe_a11y_label"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+      </intent-filter>
+      <meta-data
+          android:name="android.accessibilityservice"
+          android:resource="@xml/field_probe_a11y_service" />
+    </service>
+
     <!-- T-14: i file di prova che il selettore consegna (forme "a richiesta" e "copia in cache"). NON esportato. -->
     <provider
         android:name="dev.pampa.mycloudgallery.debugtools.probes.FieldProbeFilesProvider"

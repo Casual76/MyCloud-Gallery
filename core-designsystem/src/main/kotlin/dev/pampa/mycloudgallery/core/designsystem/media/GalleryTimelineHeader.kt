@@ -24,7 +24,7 @@ import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassEdge
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 
 /** A che livello della timeline sta l'intestazione: decide quanto e' grande il titolo. */
@@ -57,7 +57,7 @@ fun GalleryTimelineHeader(
   val scheme = MaterialTheme.colorScheme
   val background: Modifier = when {
     !stuck -> Modifier
-    backdrop != null -> Modifier.glassSurface(
+    backdrop != null -> Modifier.galleryGlass(
       state = backdrop,
       tint = GlassDefaults.barTint(),
       edge = GlassEdge.Bottom,

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  SOLO build debug (Fase 10, P8, D24, E-AC10, F185): la configurazione del servizio di accessibilita' di prova. NON e' uno strumento di
+  accessibilita' (isAccessibilityTool="false"): serve a provare che con accessibilityDataSensitive sulla finestra dell'app un servizio
+  qualunque non legge i contenuti. La nostra app (debug) e, **come controllo**, l'app Impostazioni di Android (che non e' marcata: deve
+  risultare leggibile, altrimenti il servizio non prova niente). Solo numeri in logcat.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeWindowContentChanged|typeWindowStateChanged"
+    android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds|flagRetrieveInteractiveWindows"
+    android:canRetrieveWindowContent="true"
+    android:isAccessibilityTool="false"
+    android:notificationTimeout="500"
+    android:packageNames="dev.pampa.mycloudgallery.debug,com.android.settings"
+    android:description="@string/probe_a11y_description" />

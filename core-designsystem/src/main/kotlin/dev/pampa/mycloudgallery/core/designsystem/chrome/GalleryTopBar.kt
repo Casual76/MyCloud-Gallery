@@ -44,7 +44,7 @@ import dev.antigravity.fluidengine.ui.fluid.GlassFalloff
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.GlassTint
 import dev.antigravity.fluidengine.ui.fluid.LocalGlassBackdrop
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.antigravity.fluidengine.ui.fluid.rememberCombinedGlassBackdrop
 import dev.antigravity.fluidengine.ui.fluid.currentGlassBackdrop
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
@@ -184,7 +184,7 @@ fun GalleryTopBar(
     Box(
       modifier = Modifier
         .matchParentSize()
-        .glassSurface(
+        .galleryGlass(
           state = backdrop,
           tint = tint,
           falloff = GlassFalloff.FadeDown,

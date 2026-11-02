@@ -3,6 +3,10 @@ package dev.pampa.mycloudgallery.core.designsystem.theme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import dev.antigravity.fluidengine.foundation.EngineSettings
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryAccessibilityDataSensitive
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryAccessibilityPrefs
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryAccessibilityScope
+import dev.pampa.mycloudgallery.core.designsystem.a11y.rememberGalleryAccessibilityPrefs
 import dev.antigravity.fluidengine.ui.theme.AccentPoles
 import dev.antigravity.fluidengine.ui.theme.AccentPreset
 import dev.antigravity.fluidengine.ui.theme.FluidTheme
@@ -59,12 +63,21 @@ object GalleryAccent {
 @Composable
 fun MyCloudGalleryTheme(
   settings: EngineSettings = EngineSettings(),
+  // Fase 10 P8 (D26): "piu' contrasto" e "meno trasparenza" del sistema. Di norma si leggono dal sistema e si aggiornano da
+  // sole; i test e gli screenshot le passano. Con "piu' contrasto" lo schema e' a contrasto alto, e con una delle due il
+  // vetro della galleria diventa una superficie piena (`galleryGlass`).
+  accessibility: GalleryAccessibilityPrefs = rememberGalleryAccessibilityPrefs(),
+  // Fase 10 P8 (D24, E-AC10): la finestra si marca "dati sensibili per l'accessibilita'" (Android 14+): la leggono solo gli strumenti
+  // veri (TalkBack, Switch Access, Voice Access), non un servizio di accessibilita' qualunque. Si spegne solo nelle anteprime.
+  protectAccessibilityData: Boolean = true,
   content: @Composable () -> Unit,
 ) {
+  GalleryAccessibilityDataSensitive(enabled = protectAccessibilityData)
   FluidTheme(
     settings = settings,
     brand = GalleryAccent.Amethyst,
     presets = GalleryAccent.presets,
-    content = content,
-  )
+  ) {
+    GalleryAccessibilityScope(prefs = accessibility, content = content)
+  }
 }

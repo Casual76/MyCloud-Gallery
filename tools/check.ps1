@@ -89,8 +89,9 @@
                                 (anche nel passo 7e, con i 16 KB). Le classi di OkHttp, MapLibre e `net/` non si fondono con altre
                                 (feature-map/consumer-rules.pro): senza, R8 le mescola e il passo non prova niente. FALLISCE se non legge l'APK
     7i. Glance e KT             (Fase 10, P0; docs/fase10-progetto.md D10, D31) nel bytecode della release (dexdump) ogni chiamata a Glance
-                                (`androidx.glance`) parte da Glance, dal kit dell'engine o da `feature/widget/` (P3; oggi passa a vuoto, con il
-                                controllo positivo quando :app dipende da :feature-widget con Glance); la chiave di prova del manifest (KT, le
+                                (`androidx.glance`) parte da Glance, dal kit dell'engine o da `feature/widget/`; con :app che dipende da :feature-widget
+                                (dalla Fase 10 P3) il controllo positivo pretende almeno una chiamata da `feature/widget/` (le classi di Glance, del kit
+                                e del widget non si fondono con altre: feature-widget/consumer-rules.pro); la chiave di prova del manifest (KT, le
                                 stringhe di `core-release/.../testing/ReleaseTestKeys.kt`, P1) e `ManifestTool` non sono nella release (anche 7b)
     7g. modelli dei volti       (Fase 8, P1; docs/fase8-progetto.md D39, §6.4) nell'APK di release `assets/faces/` ha YuNet e SFace con la
                                 dimensione e lo SHA-256 di `ModelCatalog.FACE_YUNET` e `FACE_SFACE` (letti dal sorgente), le due licenze
@@ -1861,8 +1862,9 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
 # Glance (`androidx.glance`) parte da Glance stesso, dal kit dell'engine (`fluidengine/widget`) o da `feature/widget/` (il widget, P3); in piu' la
 # chiave di PROVA del manifest (KT) non c'e': il suo nome di classe e' fra i resti di debug vietati (passo 7b) e, quando P1 la scrive in
 # `core-release/.../testing/ReleaseTestKeys.kt`, le sue stringhe lunghe (la chiave pubblica in base64 o in esadecimale) non devono comparire nel
-# dex di release. Oggi Glance non c'e' (arriva con P3) e KT nemmeno (P1): il passo passa a vuoto e lo dice; quando :app dipende da
-# :feature-widget e feature-widget porta Glance, il controllo positivo pretende almeno una chiamata da `feature/widget/`. FALLISCE se non legge l'APK.
+# dex di release. Dalla Fase 10 P3 Glance c'e' (:app dipende da :feature-widget, che porta Glance): il controllo positivo pretende almeno una chiamata da
+# `feature/widget/` (R8 non deve fondere le classi del widget con altre: feature-widget/consumer-rules.pro). KT arriva con P1: finche' non c'e' il passo lo dice.
+# FALLISCE se non legge l'APK.
 Step "Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del manifest (KT)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
     Sort-Object LastWriteTime -Descending | Select-Object -First 1

@@ -332,9 +332,13 @@ Cinque categorie nuove (prefissi non usati finora, controllati il 31/10): **E-W*
 - **E-REL3**: manifest vecchio rigiocato (`seq` minore di quello già visto): ignorato; un blocco non si toglie così.
 - **E-REL4**: manifest scaduto: gli indirizzi aggiuntivi dei modelli decadono; i blocchi e la versione minima restano.
 - **E-REL5**: questa versione è bloccata con `WRITES` o è sotto la versione minima: sola lettura con l'avviso "Aggiorna dal Pampa Store";
-  ciò che era in corso si ferma al punto di ripresa, niente si perde.
+  ciò che era in corso si ferma al punto di ripresa, niente si perde. *Correzioni A (02/11)*: la sola lettura ferma le scritture dei **contenuti** (come
+  "Ferma le scritture"), non quelle dello strato della famiglia (stato del dispositivo, registro, segnalazioni, kit, pulizia dei temporanei: L570);
+  "Salva sul NAS" non si offre e le schermate dicono la causa ("questa versione va aggiornata", C460, L571).
 - **E-REL6**: questa versione è bloccata con `ALL`: solo la pagina "Questa versione è stata fermata"; nessuna sessione del NAS, nessun
-  lavoro; Diagnostica ed esportazione restano.
+  lavoro; Diagnostica ed esportazione restano. *Correzioni A (02/11)*: anche fuori dalla pagina: selettore, provider dei documenti, ricezione e
+  rilascio del trascinamento si chiudono con il motivo; notifica dei ricordi, lettura del telefono e manutenzione della Libreria non partono (C460);
+  il widget si svuota (pacchetto B).
 - **E-REL7**: indirizzo aggiuntivo per un modello che l'app non conosce, con un'impronta diversa o su un host fuori da `ModelHosts`:
   ignorato (il file resta comunque verificato dall'impronta fissata).
 - **E-REL8**: chiave di pubblicazione persa o rubata: K2 di riserva e un aggiornamento dell'app con chiavi nuove (D31).

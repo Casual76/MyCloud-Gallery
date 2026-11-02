@@ -15095,7 +15095,8 @@ NAS o emulatore. Voci di `docs/sicurezza.md`: **L566** nuovo (una versione ferma
 3. **Fallire chiusi all'avvio.** Finche' lo stato salvato non e' letto (`ReleaseGraph.load`, lanciato da `GraphModule` appena nasce il grafo, qualche
    millisecondo) i cancelli sono fermi e la sessione non si apre: un blocco salvato da un processo di prima non si perde nella finestra d'avvio. Un errore di
    lettura vale "niente salvato" (regola di P1).
-4. **La lettura del manifest** sta in `NasStages.sync` (il giro della sincronizzazione dell'indice, finito), con la sessione di quel giro: al piu' una volta ogni
+4. *(Corretta dalle correzioni della Fase 10, pacchetto A, R2: il manifest si legge anche dopo una tappa lasciata a meta' e all'apertura dell'app, come chiede D29;
+   vedi la sezione in fondo.)* **La lettura del manifest** sta in `NasStages.sync` (il giro della sincronizzazione dell'indice, finito), con la sessione di quel giro: al piu' una volta ogni
    24 ore, l'ora dell'ultima lettura **con una risposta** in `noBackupFilesDir/release/last-read` (ora del telefono: e' solo il ritmo, la scadenza resta all'ora del
    NAS). Un NAS che non risponde non segna l'ora (si riprova al giro dopo). Canale: `debug` nella build di sviluppo, `beta` se la `versionName` ha `-beta`,
    altrimenti `stable` (senza toccare `app/build.gradle` di P12).
@@ -15242,3 +15243,92 @@ Fonte: prove sul campo F182-F185 (branch `campo/f10-a11y`), esiti in `docs/prove
 - **Nessuna modifica al codice:** e' gia' la prima di `REDUCE_TRANSPARENCY_KEYS` e `GalleryAccessibilityReader.read` guarda anche `Settings.Global`; l'osservatore registra gli indirizzi dei tre spazi. Le altre tre candidate (`reduce_transparency`, `reduce_transparency_and_blur`, `accessibility_reduce_transparency_blur`) non esistono sul telefono: restano come ripiego per altri produttori. Resta da aggiornare (a chi tocca `core-designsystem` per P13) il commento di `GalleryAccessibility.kt` e il passo "da confermare" di P8: ora e' confermata.
 - **Provato nell'app:** la Libreria con la chiave a 1 disegna la capsula di vetro in alto a destra come superficie piena con bordo; a 0 torna il vetro; il cambio arriva entro circa 2 secondi senza riaprire l'app (`docs/screenshots/10-campo-a11y/riduci-trasparenza-barra-libreria.png`). Le altre schermate e il resto di F182-F185 sono rimandati.
 - **Per chi rifa' F182 sul telefono:** accendere TalkBack scrivendo il suo servizio (`com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService`) in `enabled_accessibility_services` **svuota** `accessibility_button_targets`, `accessibility_direct_access_target_service` e `accessibility_gesture_targets` (qui puntavano a un servizio dell'utente): salvarle e rimetterle. I gesti di TalkBack iniettati con `adb shell input` (e la scorciatoia Alt+freccia) non muovono il suo fuoco su questo telefono; un `input tap` sembra attivare l'elemento invece di spostare solo il fuoco (visto una volta). Servono UI Automator con TalkBack acceso (come F113) o l'utente.
+
+## Correzioni della Fase 10, pacchetto A: il blocco del manifest nel cuore e il blocco dell'app (02/11)
+
+Fonte: `docs/review/10-fase10.md` (sicurezza: R1, R2, R3, I1, I5) e `docs/review/funzionale-10.md` (funzionale: CA-1, CA-2, CA-3, CA-4, RL-1), con le scelte
+dell'orchestratore (le proposte consigliate dei due revisori; l'utente le puo' cambiare). Branch `fase10/corr-a` da `b8a2e282`. Il widget e' del pacchetto B: qui
+non si tocca (ne' `WidgetGraph` ne' il suo legame in `Phase10Module`).
+
+### Le scelte
+1. **R3, il blocco dell'app per processo.** `ProcessForeground.start` guarda prima di contare la finestra se il processo e' gia' uscito senza che nessuno se ne
+   accorgesse (nessuna finestra avviata, nessun segno di ricreazione vivo: il segno e' scaduto e nessuno ha chiamato `poll`). Allora risponde un valore nuovo,
+   `REENTERED_FOREGROUND`, e `AppLockController` conta l'uscita all'ora del segno (`lastExitAtMillis`) e poi il ritorno: il tempo concesso si controlla. Un
+   valore nuovo e non `ENTERED_FOREGROUND` perche' il controller deve sapere che c'e' stata un'uscita che non ha visto (con il solo `ENTERED` non avrebbe avuto
+   l'ora d'uscita). Niente timer: l'uscita si scopre al primo evento, e l'ora e' comunque quella del segno.
+2. **CA-2 e R1, gli ingressi con `ALL`.** `EntryDecision` ha un valore nuovo, `STOPPED` ("questa versione e' stata fermata"), e `AppEntryGate` legge il manifest
+   (tre ingressi nuovi con un default: stato non letto, fermata, cambi). Finche' lo stato salvato non e' letto risponde `LOADING` (le superfici aspettano gia'
+   `LOADING` con `decideAfterLoading`): mai "fermata" per una corsa. `STOPPED` viene **prima** del blocco dell'app (non si chiede lo sblocco per poi non dare
+   niente). Selettore e ricezione mostrano "Questa versione e' stata fermata" con "aggiorna dal Pampa Store"; il provider non ha radici e rifiuta ogni documento,
+   **anche** quelli gia' consegnati dal selettore (con il solo blocco dell'app quelli si servono ancora: qui no, il blocco e' per un difetto); il rilascio di un
+   trascinamento non apre il foglio e dice di aggiornare. Le radici si notificano a ogni cambio del manifest (`ReleaseGraph.changes`). Il trascinamento in uscita
+   con `STOPPED` vale "non disponibile" (la Libreria con `ALL` non c'e', quindi non si arriva a trascinare). Gli id gia' consegnati non si revocano uno a uno: il
+   provider li rifiuta a ogni apertura, che e' lo stesso effetto.
+3. **CA-2, la sola lettura e "Salva sul NAS".** Una porta nuova di `IncomingDestinations`, `savingBlockedByRelease`: con `ReadOnly` la ricezione lo dice **prima di
+   copiare** (schermata `READ_ONLY_VERSION`, come per il backup in prova) e niente entra in coda. In piu' la coda (`AppIncomingQueue.blockOf`, che vale anche per
+   "Riprova" di "Ricevuti in coda") rifiuta con il manifest (`ReceivedStatus.FROZEN`, con la frase neutra del punto 6); con l'emergenza dell'utente la coda resta
+   com'era (si mette in coda e si aspetta che l'utente riaccenda). La causa la porta `BackupGateInputs.releaseHoldsWrites`, senza toccare il cancello.
+4. **CA-4, i lavori locali con `ALL`** (lettura letterale di E-REL6): la notifica dei ricordi (`MemoryNotifyWorker`), la lettura del telefono in background
+   (`PhoneSyncWorker`, che non si riaccoda: all'aggiornamento l'avvio la rimette) e la manutenzione della Libreria finiscono subito; la lettura del telefono
+   agganciata al primo piano non parte (`GalleryParts.releaseStopped`). La sola lettura non li tocca (sono locali e la Libreria si vede).
+5. **CA-3 e R2, quando si legge e quando si decide.** `ReleaseGraph.stoppedAfterLoad` aspetta lo stato salvato al piu' 2 s (`LOAD_WAIT`) e poi vale il fallire
+   chiusi di sempre; lo usano le regole delle tappe, il cancello dei modelli e i lavori del punto 4 (che altrimenti nei primi millisecondi di un processo nato per
+   loro si sarebbero persi il giro). I cancelli delle scritture restano fermi nei primi millisecondi (non aspettano: sono funzioni pure, e fermi e' giusto).
+   La lettura (`ManifestReads`, in `ReleaseWiring.kt`): dopo una tappa della sincronizzazione dell'indice **finita o lasciata a meta'** (`Yielded`: la sessione
+   si e' usata); non dopo una tappa fermata o non partita per le regole (la rete o la fascia non lo permettevano). E **all'apertura dell'app** (avvio e ritorno
+   in primo piano, `MyCloudGalleryApp.onForeground`), dopo il primo disegno (avvio istantaneo), quando la galleria e' partita (famiglia pronta, al piu' 20 s di
+   attesa) e l'area comune e' nota: senza, una lettura "assente" segnerebbe l'ora per 24 ore. Il ritmo resta quello di D29: al piu' una lettura **con risposta**
+   ogni 24 ore, anche all'apertura (D29: "all'avvio se l'ultima lettura ha piu' di 24 ore"); un NAS che non risponde si riprova alla volta dopo.
+6. **CA-1, le parole.** Una `CompositionLocal` del design system, `LocalWritesHeldByRelease`, che la radice (`ReleaseRoot`) mette a vero con la sola lettura:
+   nessun enum nuovo nei core. Frasi proprie, con la causa ("questa versione va aggiornata") e cosa fare, per la pagina Backup, il piede della Libreria, la
+   condivisione degli album in pausa e il messaggio "non si puo' scrivere" degli album; in Diagnostica la voce `BACKUP_WRITES_STOPPED` dice la causa nel dettaglio
+   e **non** offre "Riattiva le scritture" (`DiagnosticsActions.NO_ACTION`: un'azione senza etichetta non ha tasto) quando a fermare e' solo il manifest. Frase
+   **neutra** (congelamento, interruttore o versione da aggiornare, "la Diagnostica dice perche'"; niente "riprova piu' tardi" ne' "riparte quando le riaccendi")
+   per cestino e doppioni del NAS, operazioni sui file, viewer, cancellazione dei volti e "Ricevuti in coda" (L571).
+7. **RL-1, la radice.** `ReleaseRoot` ha una struttura sola per `Normal` e `UpdateBanner` (il contenuto nello stesso posto, l'avviso sopra solo se serve, la
+   `CompositionLocal` intorno): lo stato salvato letto dopo il primo disegno o un blocco `WRITES` a meta' sessione non buttano piu' la navigazione. Solo `Stopped`
+   la toglie, apposta. Il `ViewModel` non cambia: con la struttura stabile lo stato "non ancora letto" (`Normal`) non costa niente.
+8. **I5, le chiavi.** `ReleaseKeysTest`: con `PROVISIONAL = false` K1 e K2 devono essere diverse dai segnaposto derivati, da KT e fra loro (una funzione di
+   controllo provata anche su chiavi generate nel test, cosi' la prova non passa a vuoto finche' la costante e' vera). `release.ps1` la esegue con `check.ps1`.
+9. **I1, dichiarata.** La sola lettura riguarda i contenuti; lo strato della famiglia (stato del dispositivo, registro, segnalazioni, kit, pulizia dei temporanei)
+   resta permesso come con "Ferma le scritture": L570, C441, E-REL5.
+
+### Documenti
+`docs/sicurezza.md`: C434 (R3), C441 (rimandi, I1), C442 (I5), L566 (le superfici) precisate; **C460** (la versione fermata fuori dalla sua finestra), **C461**
+(lettura del manifest e stato salvato), **C462** (chiavi vere), **L570** (sola lettura e strato della famiglia), **L571** (frasi neutre), **L572** (documenti gia'
+consegnati); "Sigle" e "Stato". `docs/fase10-progetto.md`: E-REL5 ed E-REL6. Qui: la scelta 4 di P13 rimanda a questa sezione (R2). Revisioni: le voci R1, R2,
+R3, I1, I5 di `docs/review/10-fase10.md` e la tabella del §7 di `docs/review/funzionale-10.md`.
+
+### Prove (ognuna vista rossa senza la correzione)
+Le correzioni tolte per un momento dal codice (non dalle prove: `build\unfix.py`, fuori dal repository) e le prove lanciate: **rosse**; rimesse: **verdi**.
+- **R3**: `AppLockTwoWindowsTest` (`r3_unaFinestraCheRiparteDopoUnSegnoScadutoSenzaPoll_chiedeLoSblocco` e `r3_conUnTimeoutLungoIlTempoContaDalSegno...`: "UNLOCKED"
+  invece di "LOCKED"); `ProcessForegroundTest` (il caso esplicito e la proprieta' con passi di tempo senza `poll`).
+- **I5**: `ReleaseKeysTest` con `PROVISIONAL = false` e la parola "segnaposto" tolta da §5.6 (una prova a mano, non committata): le prove di prima verdi, la
+  nuova rossa ("K1 e' ancora un segnaposto, K2 e' ancora un segnaposto").
+- **R2**: `ManifestReadsTest` (tappa `Yielded` e apertura dell'app: nessuna lettura prima).
+- **CA-3**: `ReleaseLoadWindowTest` (tre prove a tempo virtuale: regole e modelli rispondevano "fermo" subito).
+- **CA-4**: `MemoriesWorkTest` (la notifica aspettava i ricordi e partiva), `Correzioni8CLavoriAppTest` (la lettura del telefono si riaccodava),
+  `GalleryIntegrationTest` (si agganciava al primo piano).
+- **CA-2 e R1**: `AppEntryGateTest` (il cancello diceva `ALLOWED`), `ReceivedGatesTest` ("Riprova" rimetteva in coda); in piu' le prove dei moduli per le quattro
+  superfici con `STOPPED` (`PickerViewModelTest`, `ReceiveViewModelTest`, `MediaDocumentsProviderTest`, `IncomingDropsTest`) e `ReleaseGatesAppTest` con il
+  manifest firmato (il cancello d'ingresso `STOPPED` con `ALL`, "Salva sul NAS" non offerto con `WRITES`).
+- **CA-1**: `WritesHeldTextsTest` (le frasi neutre), `ReleaseGatesAppTest` (la voce del backup in Diagnostica), `BackupMessagesTest`, `BackupFooterProblemsTest`,
+  `RevisioneBAlbumPageTest`.
+- **RL-1**: `ReleaseRootTest` (un valore salvato nel contenuto si perdeva all'arrivo della sola lettura).
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde** ("OK: tutto a posto.", uscita 0, 2/11, dalle 21:21 alle 23:03 sotto il carico degli altri pacchetti), al primo giro, come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `--no-daemon`, cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del semaforo (`corr10a`), sull'albero con tutte le correzioni e questi documenti. `assembleDebug`, `assembleRelease`, `galleryTest` e `galleryLint` verdi; **18.634 prove rieseguite in 45 moduli, 0 fallite, 35 saltate per assunzione** (`app` 1.435; `core-security` e `core-release` non rieseguite perche' gia' aggiornate dai giri mirati, verdi anche quelle); tutti i passi della release verdi (nessuna chiave privata nei file, resti di debug assenti, le quattro recinzioni accese nel bytecode e nel sorgente); solo `-Bench` saltato. Nessun `hs_err_pid*.log`. Le corse intermedie (prove mirate, prove rosse senza le correzioni) sono in `build\*.log`, fuori dal repository. `FeatureFlags` e `tools/release/recinzioni.json` non toccati.
+
+### Cosa resta (e per le prove sul campo)
+- **Il widget** (CA-3 "il widget con `release.stopped`" e lo svuotamento con `ALL` di R1): pacchetto B (il legame e' in `Phase10Module`, che qui non si tocca).
+- **R2, punto 2** (la Diagnostica che dice da quanti giorni il manifest non si legge, con un avviso oltre 3 giorni): non fatto.
+- **F177** (debug, manifest firmato con KT): con `WRITES` le frasi di Backup, album, piede della Libreria, Diagnostica e cestino; "Condividi verso MyCloud
+  Gallery" che dice "sola lettura" senza copiare; con `ALL` il selettore aperto da un'altra app, le radici nel selettore di sistema, "Condividi", un rilascio
+  da un'altra app (tablet), nessuna notifica dei ricordi il mattino dopo. **F177b**: avvio a freddo con `WRITES` salvato (la radice non ricompone; il viewer
+  aperto resta all'arrivo di un blocco). Lettura del manifest con un giro dell'indice che non finisce (prima sincronizzazione lunga): il blocco arriva
+  all'apertura dell'app.
+- **F166, F167**: uscita da DeX con il telefono bloccato e il blocco a "Subito"; sbloccato il telefono dopo qualche minuto, l'app chiede lo sblocco (R3).
+- **K1 e K2**: restano segnaposto (azione dell'utente, L560); la prova di I5 si accende quando `PROVISIONAL` diventa falso.
+
+### Commit (branch `fase10/corr-a`)
+`f2217f31` (R3), `9d439d03` (I5), `59ef6c07` (R2, CA-3, CA-4), `98e51adf` (CA-2, R1), `63d6a508` (CA-1, RL-1) e quello dei documenti.

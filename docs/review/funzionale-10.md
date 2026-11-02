@@ -296,11 +296,11 @@ Nessuna voce e' corretta. Il pacchetto e' la proposta; ogni correzione porta un 
 
 | Voce | Gravita' | Stato | Pacchetto |
 |---|---|---|---|
-| CA-1 Blocco del manifest detto con le parole dell'emergenza | Sbagliata | confermato | A |
-| CA-2 Ingressi aperti con `ALL`; coda che non parte con `ReadOnly` | Sbagliata | confermato | A |
-| CA-3 Finestra "stato non letto" | Minore | plausibile | A |
-| CA-4 `ALL` e i lavori locali | Minore | confermato | A (decisione 3) |
-| RL-1 Radice ricostruita al cambio di stato | Minore | confermato | C |
+| CA-1 Blocco del manifest detto con le parole dell'emergenza | Sbagliata | confermato; **Corretta (A, 02/11)** | A |
+| CA-2 Ingressi aperti con `ALL`; coda che non parte con `ReadOnly` | Sbagliata | confermato; **Corretta (A, 02/11)** | A |
+| CA-3 Finestra "stato non letto" | Minore | plausibile; **Corretta (A, 02/11)** (il widget: B) | A |
+| CA-4 `ALL` e i lavori locali | Minore | confermato; **Corretta (A, 02/11)** | A (decisione 3) |
+| RL-1 Radice ricostruita al cambio di stato | Minore | confermato; **Corretta (A, 02/11)** | C |
 | RL-2 "Nessun luogo" sul widget | Minore | confermato | B (decisione 4) |
 | WG-1 Lavoro periodico dopo l'azzeramento; widget fermo dopo un cambio di account | Sbagliata | confermato | B |
 | WG-2 Frequenza scelta persa | Minore | confermato | B |

@@ -17,6 +17,7 @@ object WidgetDiagCodes {
 enum class WidgetBlankCause(val code: String) {
   HIDDEN("hidden"),
   MEMORY_DROPPED("memory_dropped"),
+  /** Svuotati tutti insieme: azzeramento, versione fermata dal manifest (R1) o registro perso con un widget sconosciuto (R4). */
   RESET("reset"),
 }
 

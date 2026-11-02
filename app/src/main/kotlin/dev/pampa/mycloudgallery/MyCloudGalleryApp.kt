@@ -236,6 +236,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   private fun galleryLifecycle(): GalleryLifecycle = object : GalleryLifecycle {
     override fun start() {
       gallery.startWhenReady {
+        // WG-1: la galleria parte (anche con una configurazione nuova, nello stesso processo dopo un azzeramento): il widget fermo dall'azzeramento torna a rispondere.
+        if (::widget.isInitialized) widget.resume()
         // D15: accendere Indicizzatore chiede subito il modello del calcolo (lavoro accelerato). Iscritti subito: un cambio non va perso.
         graph.scope.launch {
           ai.ai.indexer.drop(1).collect { on ->

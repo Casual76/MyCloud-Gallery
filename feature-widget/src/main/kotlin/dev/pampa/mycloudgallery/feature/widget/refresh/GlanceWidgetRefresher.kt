@@ -120,8 +120,9 @@ class GlanceWidgetRefresher internal constructor(
   }
 
   /**
-   * Programma il lavoro periodico per la frequenza scelta (Q2): alla scelta nuova nelle Impostazioni e quando nasce il primo widget. Senza le porte (processo freddo) il
-   * primo giro e' fra un periodo intero.
+   * Programma il lavoro periodico per la frequenza scelta (Q2) **sostituendo** quello che c'e' (`UPDATE`): alla scelta nuova nelle Impostazioni. Quando nasce il primo widget lo
+   * programma il ricevitore (`KEEP`, con la frequenza scelta di `WidgetHost.period()`, WG-2) e, dopo un azzeramento, `WidgetWiring.publishAtStart` (WG-1). Senza le porte
+   * (processo freddo) il primo giro e' fra un periodo intero.
    */
   fun reschedulePeriodic() {
     scope.launchSafely("lavoro periodico") {

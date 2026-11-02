@@ -15,6 +15,10 @@ data class WidgetCellRef(val media: MediaId, val memory: MemoryId?) {
  * Il registro locale di cio' che ogni widget mostra (D9): serve al tocco (la cella esiste?) e allo svuotamento (D5: quali widget mostrano un
  * media appena nascosto). [record] si chiama **prima** di consegnare il disegno (§2.1, passo 7). Un file rovinato = registro vuoto e ridisegno,
  * mai un crollo; una morte fra scrittura e rinomina lascia il registro di prima (§4.3 "Stabilita'").
+ *
+ * **Un registro vuoto non dice "nessun widget mostra niente"** (R4 della revisione di sicurezza della Fase 10): un file perso o rovinato riparte vuoto mentre la Home mostra ancora
+ * le foto di prima. Chi usa [slots], [showing] e [showingMemory] per sapere chi svuotare confronta con i widget **veri** sulla Home: uno che il registro non conosce vale
+ * "non so cosa mostra" e si svuota (`WidgetEngine.affectedBy`, `WidgetGraph.watch`).
  */
 interface WidgetLedger {
   /** Registra [plan] per il suo slot (sostituisce il precedente). Un piano con un'epoca piu' vecchia di quella registrata si ignora. */
@@ -29,7 +33,7 @@ interface WidgetLedger {
   /** I widget che mostrano il ricordo [id] ("Non mostrare", "Mai nei ricordi", ricordo potato: D5, punto 4). */
   suspend fun showingMemory(id: MemoryId): Set<WidgetSlot>
 
-  /** Gli slot registrati. */
+  /** Gli slot registrati: i widget di cui il registro sa cosa mostrano (non i widget sulla Home: un registro perso e' vuoto, R4). */
   suspend fun slots(): Set<WidgetSlot>
 
   /**

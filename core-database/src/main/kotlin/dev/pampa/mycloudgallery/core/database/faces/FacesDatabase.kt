@@ -9,9 +9,7 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import dev.pampa.mycloudgallery.core.database.faces.dao.FaceBodyDao
 import dev.pampa.mycloudgallery.core.database.faces.dao.FaceGroupingDao
-import dev.pampa.mycloudgallery.core.database.faces.dao.FacesHeadMarkDao
 import dev.pampa.mycloudgallery.core.database.faces.dao.FacesMetaDao
-import dev.pampa.mycloudgallery.core.database.faces.dao.FacesOutboxDao
 import dev.pampa.mycloudgallery.core.database.faces.dao.FacesSyncDao
 import dev.pampa.mycloudgallery.core.database.faces.dao.FacesUnitDao
 import dev.pampa.mycloudgallery.core.database.faces.dao.PeopleRecordDao
@@ -19,9 +17,7 @@ import dev.pampa.mycloudgallery.core.database.faces.entity.FaceBodyEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FaceEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FaceUnsupportedEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesChunkEntity
-import dev.pampa.mycloudgallery.core.database.faces.entity.FacesHeadMarkEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesMetaEntity
-import dev.pampa.mycloudgallery.core.database.faces.entity.FacesOutboxEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesUnitDoneEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.GroupAssignmentEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.GroupExemplarEntity
@@ -43,7 +39,7 @@ import java.io.File
  * Il database dei volti di UNA generazione (Fase 8, P6; `docs/fase8-progetto.md` D14, D15; `docs/modello-dati.md` §15): un file a parte
  * (`faces-<G>.db`), con un suo schema esportato in `schemas/dev.pampa.mycloudgallery.core.database.faces.FacesDatabase/`: **v1** della Fase 8,
  * **v2** delle correzioni della Fase 8 (provenienza delle voci `people`, attese dei segmenti della replica, indice dei corpi per autore:
- * [FacesMigrations]).
+ * [FacesMigrations]), **v3** del pacchetto P12 della Fase 10 (tolte le tabelle ridondanti `faces_head_mark` e `faces_outbox`, promessa 15: [FacesMigrations]).
  * **Non** e' il database della galleria (`GalleryDatabase` resta v6, nessuna tabella condivisa): si cancella come un file e si verifica che
  * non ci sia piu' ("Disattiva e cancella", D29), e chi non attiva Persone non lo crea nemmeno (nessuna migrazione sul campo).
  *
@@ -63,8 +59,6 @@ import java.io.File
     GroupExemplarEntity::class,
     GroupAssignmentEntity::class,
     PeopleRecordEntity::class,
-    FacesHeadMarkEntity::class,
-    FacesOutboxEntity::class,
     FacesUnitDoneEntity::class,
     FacesMetaEntity::class,
     ReplicaDeviceEntity::class,
@@ -88,10 +82,6 @@ abstract class FacesDatabase : RoomDatabase() {
 
   abstract fun peopleDao(): PeopleRecordDao
 
-  abstract fun headMarkDao(): FacesHeadMarkDao
-
-  abstract fun outboxDao(): FacesOutboxDao
-
   abstract fun unitDao(): FacesUnitDao
 
   abstract fun metaDao(): FacesMetaDao
@@ -100,7 +90,7 @@ abstract class FacesDatabase : RoomDatabase() {
 
   companion object {
     /** Versione dello schema. Alzarla richiede una migrazione vera (mai distruttiva, in [FacesMigrations]) e il suo schema esportato. */
-    const val VERSION: Int = 2
+    const val VERSION: Int = 3
 
     /**
      * Il database nel file [file] (le cartelle che mancano si creano). Il giornale e' WAL: accanto al file ci sono `-wal` e `-shm`, che la

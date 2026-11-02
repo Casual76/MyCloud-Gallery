@@ -18,7 +18,7 @@ apply from: "${rootDir}/versions-app.gradle"
 apply from: "${rootDir}/gradle/android-conventions.gradle"
 apply from: "${rootDir}/gradle/verify-release-manifest.gradle"
 
-// Firma di release (pampa.jks, condivisa con le altre app Pampa). Le quattro chiavi pampa.* stanno in
+// Firma di release (pampa.jks, condivisa con le altre app Pampa; Fase 10, D32: nessuna chiave nuova). Le quattro chiavi pampa.* stanno in
 // local.properties, fuori da git; NON vanno copiate da nessun altro progetto e non vanno mai nel repo:
 //   pampa.storeFile=C:/percorso/pampa.jks
 //   pampa.keyAlias=pampa
@@ -26,14 +26,44 @@ apply from: "${rootDir}/gradle/verify-release-manifest.gradle"
 //   pampa.keyPassword=...
 // Senza, la release si compila lo stesso ma resta NON FIRMATA (nessun errore, nessun avviso rumoroso):
 // e' la build di verifica di tools/check.ps1, non qualcosa che si installa o si pubblica.
+//
+// Fase 10 (P12): le stesse quattro voci si possono dare anche come proprieta' di Gradle (`-Ppampa.storeFile=...`): vincono su
+// local.properties. Serve SOLO a `tools/release/release.ps1 -TestKeystore` e alle sue prove, che firmano con un keystore di prova generato
+// sotto build\ (mai con pampa.jks); la release vera non passa mai niente da qui.
 def localProperties = new Properties()
 def localPropertiesFile = rootProject.file('local.properties')
 if (localPropertiesFile.exists()) {
   localPropertiesFile.withInputStream { localProperties.load(it) }
 }
-def releaseStoreFile = (localProperties.getProperty('pampa.storeFile') ?: '').trim()
-def releaseStorePassword = (localProperties.getProperty('pampa.storePassword') ?: '').trim()
+def signingProperty = { String key, String fallback = '' ->
+  def given = project.findProperty(key)
+  def value = (given != null ? given.toString() : localProperties.getProperty(key))
+  return (value ?: fallback).trim()
+}
+def releaseStoreFile = signingProperty('pampa.storeFile')
+def releaseStorePassword = signingProperty('pampa.storePassword')
 def hasReleaseKey = !releaseStoreFile.isEmpty() && !releaseStorePassword.isEmpty()
+// Gli schemi di firma (D32): v2 e v3 sempre; la v1 (JAR) resta accesa perche' il publisher del Pampa Store la cerca per dire "firmato" (commento
+// storico qui sotto) e con minSdk 29 e' innocua. `-Pmcg.signV1=false` la spegne se la prova a secco del publisher dice che non serve
+// (docs/decisioni.md, "Fase 10 P12"): `release.ps1` pretende v2 e v3 e riporta se la v1 c'e'.
+def signV1 = project.findProperty('mcg.signV1') != 'false'
+
+// Versione dell'app: l'ULTIMA riga dati di release/versions.txt (D33; docs/decisioni.md, "Fase 10 P12"). Una sola fonte per `versionName`,
+// `versionCode`, il controllo "mai riusato" di release.ps1 e il registro di cio' che e' stato pubblicato. Formato di una riga, colonne separate da
+// spazi: `<versionName> <versionCode> <stato> <canale> <data> <sha256 dell'APK>`; qui servono le prime due.
+def releaseVersion = {
+  def file = rootProject.file('release/versions.txt')
+  if (!file.exists()) {
+    throw new GradleException("Manca release/versions.txt: da li' vengono versionName e versionCode (docs/decisioni.md, Fase 10 P12).")
+  }
+  def rows = file.readLines('UTF-8').collect { it.trim() }.findAll { it && !it.startsWith('#') }
+  if (rows.isEmpty()) throw new GradleException("release/versions.txt non ha nessuna riga di versione.")
+  def columns = rows.last().split(/\s+/)
+  if (columns.length < 2 || !(columns[0] ==~ /\d+\.\d+\.\d+(-beta\.\d+)?/) || !(columns[1] ==~ /[1-9]\d{0,8}/)) {
+    throw new GradleException("Ultima riga di release/versions.txt non valida: servono '<versione> <versionCode>' (per esempio '1.0.0 1').")
+  }
+  return [name: columns[0], code: columns[1] as int]
+}.call()
 
 android {
   namespace = 'dev.pampa.mycloudgallery'
@@ -43,8 +73,8 @@ android {
     // minSdk e compileSdk vengono da android-conventions.gradle (engine.minSdk = 29, engine.compileSdk = 36).
     // Il target e' una decisione di prodotto e non segue il compileSdk dell'engine: vedi versions-app.gradle.
     targetSdk = appSdk.targetSdk
-    versionCode = 1
-    versionName = '0.1.0'
+    versionCode = releaseVersion.code
+    versionName = releaseVersion.name
 
     // Fase 6 (P0, docs/fase6-progetto.md D3): le librerie native dei motori on-device (LiteRT-LM, LiteRT, ML Kit) solo per
     // arm64-v8a (S25, Tab S9) e x86_64 (gli emulatori dei test strumentati). `liblitertlm_jni.so` esiste solo per queste due;
@@ -60,12 +90,14 @@ android {
       release {
         storeFile = file(releaseStoreFile)
         storePassword = releaseStorePassword
-        keyAlias = localProperties.getProperty('pampa.keyAlias', 'pampa')
-        keyPassword = (localProperties.getProperty('pampa.keyPassword') ?: releaseStorePassword)
-        // Anche la firma v1 (JAR): il publisher del Pampa Store la cerca per dire "firmato".
-        // Da Android 7.0 in su conta comunque la v2.
-        enableV1Signing = true
+        keyAlias = signingProperty('pampa.keyAlias', 'pampa')
+        keyPassword = (signingProperty('pampa.keyPassword') ?: releaseStorePassword)
+        // Anche la firma v1 (JAR): il publisher del Pampa Store la cerca per dire "firmato" (vedi `signV1`).
+        // Da Android 7.0 in su conta la v2; la v3 (Android 9+, il minSdk e' 29) porta la discendenza per ruotare la chiave un giorno
+        // (`apksigner rotate`, D32) senza reinstallare. `tools/release/release.ps1` controlla che v2 e v3 ci siano e dice se c'e' la v1.
+        enableV1Signing = signV1
         enableV2Signing = true
+        enableV3Signing = true
       }
     }
   }

@@ -21,7 +21,7 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 
 /**
- * Lo schema del database dei volti, v1 e v2 (Fase 8, P6, e le correzioni del pacchetto "formato e replica dei volti"; `docs/fase8-progetto.md` D15, riga P6 del §4.4; `docs/modello-dati.md` §15).
+ * Lo schema del database dei volti, v1, v2 e v3 (Fase 8, P6, le correzioni del pacchetto "formato e replica dei volti" e, per la v3, il pacchetto P12 della Fase 10, promessa 15; `docs/fase8-progetto.md` D15, riga P6 del §4.4; `docs/modello-dati.md` §15).
  *
  * - Lo schema **esportato** (`schemas/<FacesDatabase>/1.json`, sotto controllo di versione) e' quello che Room crea oggi, e un database creato
  *   **dal JSON** (come lo avrebbe creato quella versione dell'app) con dati si apre con il codice di oggi.
@@ -60,10 +60,10 @@ class FacesSchemaTest {
   }
 
   @Test
-  fun gliSchemiV1EV2SonoEsportatiENonCeNientAltro() {
-    assertThat(FacesDatabase.VERSION).isEqualTo(2)
-    assertThat(exportedVersions(schemaDir)).containsExactly(1, 2).inOrder()
-    for (version in 1..2) {
+  fun gliSchemiV1V2EV3SonoEsportatiENonCeNientAltro() {
+    assertThat(FacesDatabase.VERSION).isEqualTo(3)
+    assertThat(exportedVersions(schemaDir)).containsExactly(1, 2, 3).inOrder()
+    for (version in 1..3) {
       val schema = JSONObject(File(schemaDir, "$version.json").readText()).getJSONObject("database")
       assertThat(schema.getInt("version")).isEqualTo(version)
     }
@@ -76,6 +76,9 @@ class FacesSchemaTest {
       "replica_device", "replica_segment", "replica_segment_state", "replica_revoked", "faces_chunk", "publish_state", "publish_key",
       "publish_segment", "publish_diary",
     )
+    // La v3 (promessa 15) toglie le due tabelle ridondanti e nient'altro.
+    assertThat(tablesOf(File(schemaDir, "2.json")) - tablesOf(File(schemaDir, "3.json"))).containsExactly("faces_head_mark", "faces_outbox")
+    assertThat(tablesOf(File(schemaDir, "3.json")) - tablesOf(File(schemaDir, "2.json"))).isEmpty()
   }
 
   @Test
@@ -140,8 +143,8 @@ class FacesSchemaTest {
       database.openHelper.readableDatabase.query("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'index_face_body_author'").use {
         assertThat(it.count).isEqualTo(1)
       }
-      assertThat(database.headMarkDao().get("dev-a")!!.version).isEqualTo(3)
-      assertThat(database.outboxDao().count()).isEqualTo(1)
+      // v2 -> v3 (promessa 15): le due tabelle ridondanti non ci sono piu', con tutto cio' che avevano dentro.
+      assertThat(tablesInFile(database)).containsNoneOf("faces_head_mark", "faces_outbox")
       assertThat(database.unitDao().get("priv", "2025-03", 0)!!.recipe).isEqualTo(1)
       assertThat(database.metaDao().get("key_check")).isNotNull()
       val sync = database.syncDao()
@@ -159,6 +162,55 @@ class FacesSchemaTest {
       database.close()
     }
   }
+
+  @Test
+  fun laMigrazioneDallaV2ToglieSoloLeDueTabelleRidondantiENonToccaIDati() = runBlocking<Unit> {
+    // Un database com'era alla v2 (creato dal JSON), con una riga in ogni tabella, comprese le due che la v3 toglie.
+    val file = SchemaFiles.create(context, schemaDir, 2, "faces-v2-con-dati.db") { db ->
+      val k = "a".repeat(64)
+      val p = "11111111-1111-4111-8111-111111111111"
+      db.execSQL("INSERT INTO face_body VALUES ('$k', 'dev-a', 1, 'sface_2021dec_v1', 'yunet_2023mar', 1, 'analysis', 7, 1, x'0102')")
+      db.execSQL("INSERT INTO face VALUES ('$k', 'dev-a', 0, 0, 1, 2, 3, 4, 200, 'core', 0, 120, 0, 100)")
+      db.execSQL("INSERT INTO group_person VALUES ('$p', 'active', NULL, 1, 5)")
+      db.execSQL("INSERT INTO people_record VALUES ('$p', 'hidden', 'true', NULL, 1, 'dev-a', 'dev-a')")
+      db.execSQL("INSERT INTO faces_head_mark VALUES ('dev-a', 3, 'h', 2, 9)")
+      db.execSQL("INSERT INTO faces_outbox (kind, ref) VALUES ('faces', '$k')")
+      db.execSQL("INSERT INTO faces_outbox (kind, ref) VALUES ('people', '')")
+      db.execSQL("INSERT INTO faces_unit_done VALUES ('priv', '2025-03', 0, 1, NULL)")
+      db.execSQL("INSERT INTO faces_meta VALUES ('key_check', x'00')")
+      db.execSQL("INSERT INTO replica_device VALUES ('dev-a', 3, 'h3', 2, 1, 3, 'h3', 2, 1, 3, 'h3')")
+      db.execSQL("INSERT INTO publish_key VALUES ('$k')")
+    }
+    SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+      db.rawQuery("SELECT (SELECT COUNT(*) FROM faces_head_mark), (SELECT COUNT(*) FROM faces_outbox)", null).use {
+        it.moveToFirst()
+        assertThat(it.getInt(0) to it.getInt(1)).isEqualTo(1 to 2)
+      }
+    }
+    val database = FacesDatabase.build(context, file)
+    try {
+      database.openNow()
+      assertThat(tablesInFile(database)).containsNoneOf("faces_head_mark", "faces_outbox")
+      // Tutto il resto e' dov'era, con i suoi dati: la migrazione non e' distruttiva per altro.
+      assertThat(database.bodyDao().bodyCount()).isEqualTo(1)
+      assertThat(database.bodyDao().faceCount()).isEqualTo(1)
+      assertThat(database.groupingDao().persons()).hasSize(1)
+      assertThat(database.peopleDao().all()).hasSize(1)
+      assertThat(database.unitDao().get("priv", "2025-03", 0)!!.recipe).isEqualTo(1)
+      assertThat(database.metaDao().get("key_check")).isNotNull()
+      assertThat(database.syncDao().replicaDevices().single().markVersion).isEqualTo(3)
+      assertThat(database.syncDao().publishKeys()).hasSize(1)
+      database.openHelper.writableDatabase.query("PRAGMA integrity_check").use { assertThat(it.moveToFirst() && it.getString(0) == "ok").isTrue() }
+      assertThat(FacesDatabaseFiles.versionOf(file)).isEqualTo(3)
+    } finally {
+      database.close()
+    }
+  }
+
+  private fun tablesInFile(database: FacesDatabase): List<String> =
+    database.openHelper.readableDatabase.query("SELECT name FROM sqlite_master WHERE type = 'table'").use { cursor ->
+      buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
+    }
 
   @Test
   fun unDatabaseDiUnaVersioneFuturaNonSiApreENonVieneMaiCancellato() {

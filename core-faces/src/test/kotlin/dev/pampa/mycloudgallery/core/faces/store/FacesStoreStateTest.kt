@@ -4,7 +4,6 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.faces.contract.AreaKind
 import dev.pampa.mycloudgallery.core.faces.contract.AssignOrigin
-import dev.pampa.mycloudgallery.core.faces.contract.FacesChange
 import dev.pampa.mycloudgallery.core.faces.contract.FacesResource
 import dev.pampa.mycloudgallery.core.faces.contract.GroupAssignment
 import dev.pampa.mycloudgallery.core.faces.contract.GroupPerson
@@ -283,61 +282,7 @@ class FacesStoreStateTest {
     store.close()
   }
 
-  // --- segni delle teste, outbox, unita' fatte ------------------------------------------------------------------------------
-
-  @Test
-  fun iSegniDelleTesteNonSiAbbassanoMai() = runBlocking<Unit> {
-    val store = world.ready(generation)
-    val marks = store.headMarks
-    assertThat(marks.get("dev-a")).isNull()
-    assertThat(marks.record(HeadMark("dev-a", 5, "h5", 3, 1_000))).isTrue()
-    assertThat(marks.record(HeadMark("dev-a", 4, "h4", 3, 900))).isFalse() // anti-rollback
-    assertThat(marks.get("dev-a")!!.version).isEqualTo(5)
-    assertThat(marks.record(HeadMark("dev-a", 5, "h5", 4, 1_100))).isTrue() // stesso numero: lo decide chi sincronizza (equivocazione)
-    assertThat(marks.record(HeadMark("dev-a", 6, "h6", 4, 1_200))).isTrue()
-    assertThat(marks.record(HeadMark("dev-b", 1, "b1", 4, 1_300))).isTrue()
-    assertThat(marks.all().map { it.deviceId }).containsExactly("dev-a", "dev-b").inOrder()
-    marks.forget("dev-a")
-    assertThat(marks.all().map { it.deviceId }).containsExactly("dev-b")
-    assertThat(marks.get("dev-b").toString()).doesNotContain("dev-b")
-    store.close()
-    // Sopravvivono alla chiusura.
-    assertThat(world.ready(generation).headMarks.get("dev-b")!!.contentHash).isEqualTo("b1")
-  }
-
-  @Test
-  fun lOutboxERimessaInCodaSenzaDuplicatiEAcknowledgeTogliSoloCioCheHaLetto() = runBlocking<Unit> {
-    val store = world.ready(generation)
-    val outbox = store.outbox
-    outbox.stage(FacesChange.Faces(FaceFixtures.key(1)))
-    outbox.stage(FacesChange.Faces(FaceFixtures.key(2)))
-    outbox.stage(FacesChange.Faces(FaceFixtures.key(1))) // la stessa cosa due volte: una voce sola
-    outbox.stage(FacesChange.Snapshot(7))
-    outbox.stage(FacesChange.People(listOf(PeopleEdit.Hidden(person(1), true))))
-    outbox.stage(FacesChange.People(emptyList()))
-    assertThat(outbox.count()).isEqualTo(4)
-    val read = outbox.pending()
-    // In ordine di messa in coda; la voce rimessa in coda ha preso il posto in fondo (id nuovo).
-    assertThat(read.map { it.kind to it.ref }).containsExactly(
-      OutboxKind.FACES to FaceFixtures.key(2).hex,
-      OutboxKind.FACES to FaceFixtures.key(1).hex,
-      OutboxKind.SNAPSHOT to "7",
-      OutboxKind.PEOPLE to "",
-    ).inOrder()
-    assertThat(outbox.pending(limit = 2)).hasSize(2)
-    // Mentre chi pubblica lavora, la chiave 1 viene rimessa in coda: la sua voce nuova resta.
-    outbox.stageFaces(FaceFixtures.key(1))
-    outbox.acknowledge(read)
-    assertThat(outbox.pending().map { it.kind to it.ref }).containsExactly(OutboxKind.FACES to FaceFixtures.key(1).hex)
-    outbox.acknowledge(emptyList())
-    assertThat(outbox.count()).isEqualTo(1)
-    // Un tipo sconosciuto (scritto da un'app piu' nuova) resta in coda ma non si legge.
-    store.database.openHelper.writableDatabase.execSQL("INSERT INTO faces_outbox (kind, ref) VALUES ('futuro', 'x')")
-    assertThat(outbox.pending()).hasSize(1)
-    assertThat(outbox.count()).isEqualTo(2)
-    store.close()
-    assertThat(world.ready(generation).outbox.count()).isEqualTo(2)
-  }
+  // --- unita' fatte ------------------------------------------------------------------------------
 
   @Test
   fun leUnitaFatteNonSiAbbassanoEUnaRicettaNuovaLeRifa() = runBlocking<Unit> {
@@ -364,7 +309,5 @@ class FacesStoreStateTest {
   fun unaChiaveDiContenutoNonSiTrovaNeiLogNeNelleStringheDeiTipi() {
     val ref = FaceRef(ContentKey("ab".repeat(32)), 0, 0, 1)
     assertThat(ref.toString()).doesNotContain("ab")
-    assertThat(OutboxEntry(OutboxKind.FACES, "ab".repeat(32), 1).toString()).doesNotContain("ab")
-    assertThat(HeadMark("dev-secret", 1, "hash-secret", 1, 1).toString()).doesNotContain("secret")
   }
 }

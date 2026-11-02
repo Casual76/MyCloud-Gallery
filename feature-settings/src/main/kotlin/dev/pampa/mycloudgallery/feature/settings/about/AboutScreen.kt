@@ -3,14 +3,20 @@ package dev.pampa.mycloudgallery.feature.settings.about
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Description
 import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.foundation.EngineBuild
@@ -38,15 +44,24 @@ import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 fun AboutRoute(onBack: () -> Unit) {
   val context = LocalContext.current
   val versionName = remember(context) { appVersionName(context) }
-  AboutScreen(versionName = versionName, onBack = onBack)
+  // Fase 10 (P12, D33): "Novita' di questa versione" e' una pagina di Informazioni e licenze. Resta dentro questa rotta (uno stato salvato, il
+  // tasto Indietro torna qui) cosi' la navigazione delle Impostazioni non cambia.
+  var showNews by rememberSaveable { mutableStateOf(false) }
+  if (showNews) {
+    BackHandler { showNews = false }
+    WhatsNewRoute(versionName = versionName, onBack = { showNews = false })
+  } else {
+    AboutScreen(versionName = versionName, onBack = onBack, onOpenNews = { showNews = true })
+  }
 }
 
 /**
  * La pagina vera, senza stato: [versionName] e' la versione dell'app, o null se il sistema non la dice (allora la
- * riga non compare). La usano `AboutRoute` e i test.
+ * riga non compare). [onOpenNews] apre "Novita' di questa versione" (Fase 10, P12): senza, la riga non compare. La usano
+ * `AboutRoute` e i test.
  */
 @Composable
-internal fun AboutScreen(versionName: String?, onBack: () -> Unit) {
+internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (() -> Unit)? = null) {
   FluidScreen(title = stringResource(R.string.about_title), onBack = onBack) {
     // --- L'app -----------------------------------------------------------------------------------------------
     item { FluidSectionHeader(title = stringResource(R.string.about_section_app)) }
@@ -60,6 +75,21 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit) {
             tone = FluidTone.Primary,
             leading = { RowGlyph(Icons.Rounded.Info) },
             disclosure = false,
+          )
+        }
+      }
+    }
+
+    // --- Novita' di questa versione (Fase 10, P12, D33) ------------------------------------------------------------
+    if (onOpenNews != null) {
+      item {
+        FluidListGroup {
+          FluidListRow(
+            title = stringResource(R.string.whatsnew_row),
+            subtitle = stringResource(R.string.whatsnew_row_detail),
+            tone = FluidTone.Primary,
+            leading = { RowGlyph(Icons.Rounded.AutoAwesome) },
+            onClick = onOpenNews,
           )
         }
       }

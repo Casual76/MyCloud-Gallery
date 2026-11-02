@@ -2,8 +2,6 @@ package dev.pampa.mycloudgallery.core.database.faces.entity
 
 import androidx.room.ColumnInfo
 import androidx.room.Entity
-import androidx.room.Index
-import androidx.room.PrimaryKey
 
 // Database dei volti, schema v1: le voci `people` (nomi e correzioni, §2.4, D23, D24) e il lavoro di sincronizzazione che appartiene a
 // questa generazione (segni anti-rollback, outbox, unita' fatte). Regole comuni: vedi `FaceBodyEntities.kt`.
@@ -29,36 +27,6 @@ class PeopleRecordEntity(
   @ColumnInfo(name = "via") val via: String? = null,
 ) {
   override fun toString(): String = "PeopleRecordEntity"
-}
-
-/**
- * L'ultima testa accettata di un dispositivo dell'account in questa generazione (`HeadMark`, §2.4): l'anti-rollback (una testa con un
- * numero minore non si accetta) e l'equivocazione (stesso numero, altra impronta). [contentHash] e' l'impronta della testa accettata.
- */
-@Entity(tableName = "faces_head_mark", primaryKeys = ["device_id"])
-class FacesHeadMarkEntity(
-  @ColumnInfo(name = "device_id") val deviceId: String,
-  @ColumnInfo(name = "version") val version: Long,
-  @ColumnInfo(name = "content_hash") val contentHash: String,
-  @ColumnInfo(name = "registry_version") val registryVersion: Long,
-  @ColumnInfo(name = "created_at") val createdAt: Long,
-) {
-  override fun toString(): String = "FacesHeadMarkEntity"
-}
-
-/**
- * Cosa c'e' da pubblicare (outbox, durevole: sopravvive alla morte del processo). Una riga per ([kind], [ref]): la stessa modifica due
- * volte e' una voce sola. [entryId] cresce a ogni inserimento (anche di una voce rimessa in coda): chi pubblica toglie solo cio' che ha
- * letto, per id, e una voce rimessa in coda nel frattempo resta. `kind` = `faces` (ref = chiave di contenuto), `snapshot` (ref = `seq`)
- * o `people` (ref vuoto: si ripubblica lo stato unito, come F4-D26).
- */
-@Entity(tableName = "faces_outbox", indices = [Index(value = ["kind", "ref"], unique = true)])
-class FacesOutboxEntity(
-  @PrimaryKey(autoGenerate = true) @ColumnInfo(name = "entry_id") val entryId: Long = 0,
-  @ColumnInfo(name = "kind") val kind: String,
-  @ColumnInfo(name = "ref") val ref: String,
-) {
-  override fun toString(): String = "FacesOutboxEntity($kind)"
 }
 
 /**

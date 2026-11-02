@@ -1,13 +1,9 @@
 package dev.pampa.mycloudgallery.core.database.faces.dao
 
 import androidx.room.Dao
-import androidx.room.Insert
-import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Upsert
-import dev.pampa.mycloudgallery.core.database.faces.entity.FacesHeadMarkEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesMetaEntity
-import dev.pampa.mycloudgallery.core.database.faces.entity.FacesOutboxEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesUnitDoneEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.PeopleRecordEntity
 
@@ -48,45 +44,6 @@ interface PeopleRecordDao {
   /** R3: le voci arrivate dal loro autore (scelte fatte qui, o lette dalla testa di chi le ha scritte): le sole che si ripubblicano. */
   @Query("SELECT * FROM people_record WHERE via IS NULL OR via = author ORDER BY subject, field")
   suspend fun direct(): List<PeopleRecordEntity>
-}
-
-/** Gli anti-rollback delle teste dei dispositivi (`HeadMark`, §2.4): l'ultima testa accettata per dispositivo. */
-@Dao
-interface FacesHeadMarkDao {
-
-  @Query("SELECT * FROM faces_head_mark WHERE device_id = :deviceId")
-  suspend fun get(deviceId: String): FacesHeadMarkEntity?
-
-  @Query("SELECT * FROM faces_head_mark ORDER BY device_id")
-  suspend fun all(): List<FacesHeadMarkEntity>
-
-  @Upsert
-  suspend fun upsert(mark: FacesHeadMarkEntity)
-
-  @Query("DELETE FROM faces_head_mark WHERE device_id = :deviceId")
-  suspend fun remove(deviceId: String)
-}
-
-/** L'outbox della pubblicazione: una voce per ([FacesOutboxEntity.kind], [FacesOutboxEntity.ref]); rimettere in coda dà un id nuovo. */
-@Dao
-interface FacesOutboxDao {
-
-  /** Mette in coda; una voce uguale gia' presente viene sostituita (id nuovo: chi aveva letto quella vecchia non la toglie). */
-  @Insert(onConflict = OnConflictStrategy.REPLACE)
-  suspend fun stage(entry: FacesOutboxEntity): Long
-
-  @Query("SELECT * FROM faces_outbox ORDER BY entry_id LIMIT :limit")
-  suspend fun pending(limit: Int): List<FacesOutboxEntity>
-
-  @Query("SELECT COUNT(*) FROM faces_outbox")
-  suspend fun count(): Int
-
-  /** Toglie le voci lette (al piu' [FaceBodyDao.IN_LIMIT] id per volta). */
-  @Query("DELETE FROM faces_outbox WHERE entry_id IN (:ids)")
-  suspend fun remove(ids: List<Long>)
-
-  @Query("DELETE FROM faces_outbox")
-  suspend fun clear()
 }
 
 /** Le unita' di lavoro finite. */

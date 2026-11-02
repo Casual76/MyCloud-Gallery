@@ -12,7 +12,6 @@ import dev.pampa.mycloudgallery.core.database.faces.dao.ChunkRef
 import dev.pampa.mycloudgallery.core.database.faces.dao.PublishWrite
 import dev.pampa.mycloudgallery.core.database.faces.dao.ReplicaWrite
 import dev.pampa.mycloudgallery.core.database.faces.entity.FacesChunkEntity
-import dev.pampa.mycloudgallery.core.database.faces.entity.FacesOutboxEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.PublishDiaryEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.PublishStateEntity
 import dev.pampa.mycloudgallery.core.database.faces.entity.ReplicaDeviceEntity
@@ -36,7 +35,7 @@ import org.junit.runner.RunWith
 /**
  * I DAO del database dei volti (Fase 8, P6; `docs/modello-dati.md` §15), senza la cifratura (che e' di `store/` in core-faces): i blocchi
  * sigillati qui sono byte qualunque. Il vincitore fra gli autori si rifa' nella stessa transazione che scrive il corpo; il "non supportato"
- * non si abbassa; l'istantanea si sostituisce intera o per niente; l'outbox rimette in coda con un id nuovo. E le query per chiave su
+ * non si abbassa; l'istantanea si sostituisce intera o per niente. E le query per chiave su
  * **20.000 volti** in meno di 50 ms, con i piani che dicono che usano gli indici e non ordinano in memoria.
  */
 @RunWith(AndroidJUnit4::class)
@@ -280,7 +279,7 @@ class FacesDaoTest {
     assertThat(dao.assignments()).isEmpty()
   }
 
-  // --- voci people, outbox ------------------------------------------------------------------------------------------------------
+  // --- voci people ------------------------------------------------------------------------------------------------------
 
   @Test
   fun leVociPeopleStannoPerChiaveEIlNomeESoloUnBlocco() = runBlocking<Unit> {
@@ -299,23 +298,6 @@ class FacesDaoTest {
     assertThat(name.atNas).isEqualTo(20)
     assertThat(dao.get(person(1), "hidden")!!.atNas).isNull()
     assertThat(dao.get(person(2), "name")).isNull()
-  }
-
-  @Test
-  fun lOutboxRimetteInCodaConUnIdNuovoESenzaDuplicati() = runBlocking<Unit> {
-    val dao = db.outboxDao()
-    val a = dao.stage(FacesOutboxEntity(kind = "faces", ref = "a"))
-    val b = dao.stage(FacesOutboxEntity(kind = "faces", ref = "b"))
-    val a2 = dao.stage(FacesOutboxEntity(kind = "faces", ref = "a"))
-    assertThat(a2).isGreaterThan(b)
-    assertThat(b).isGreaterThan(a)
-    assertThat(dao.count()).isEqualTo(2)
-    assertThat(dao.pending(10).map { it.ref }).containsExactly("b", "a").inOrder()
-    dao.remove(listOf(a, b)) // la `a` letta all'inizio non c'e' piu': non toglie quella rimessa in coda
-    assertThat(dao.pending(10).map { it.entryId }).containsExactly(a2)
-    // Gli id non si riusano mai (AUTOINCREMENT), nemmeno dopo aver svuotato.
-    dao.clear()
-    assertThat(dao.stage(FacesOutboxEntity(kind = "faces", ref = "z"))).isGreaterThan(a2)
   }
 
   // --- 20.000 volti ------------------------------------------------------------------------------------------------------------

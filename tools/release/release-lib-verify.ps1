@@ -67,7 +67,7 @@ function Test-ReleaseApk([string]$Apk, [string]$ExpectedFingerprint, $Tools) {
       $facts.Package = $Matches[1]; $facts.VersionCode = [int]$Matches[2]; $facts.VersionName = $Matches[3]
     }
     foreach ($line in $badging.Lines) {
-      if ($line -match "^sdkVersion:'(\d+)'") { $facts.MinSdk = $Matches[1] }
+      if ($line -match "^(?:minSdkVersion|sdkVersion):'(\d+)'") { $facts.MinSdk = $Matches[1] }
       if ($line -match "^targetSdkVersion:'(\d+)'") { $facts.TargetSdk = $Matches[1] }
     }
     if ($facts.Package -and $facts.Package -ne $script:AppId) { $problems.Add("l'id dell'APK e' '$($facts.Package)', non $($script:AppId): e' una build di debug o di misura, non la release") }

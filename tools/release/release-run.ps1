@@ -104,7 +104,8 @@ Step "4. build: assembleRelease firmata con pampa.jks" -Skip:(-not $building) -S
   if ($NoDaemon) { $arguments += "--no-daemon" }
   $arguments += $GradleArgs
   if ($isTest) {
-    $arguments += @("-Ppampa.storeFile=" + $testKeystorePath.Replace("\", "/"), "-Ppampa.keyAlias=$TestKeyAlias", "-Ppampa.storePassword=$TestStorePassword")
+    # Attenzione: la virgola lega piu' del +, quindi il primo elemento va fra parentesi (altrimenti diventa un argomento solo).
+    $arguments += @(("-Ppampa.storeFile=" + $testKeystorePath.Replace("\", "/")), "-Ppampa.keyAlias=$TestKeyAlias", "-Ppampa.storePassword=$TestStorePassword")
   }
   $arguments += ":app:assembleRelease"
   Write-Host "        (puo' volerci diversi minuti; log in build\release-work\gradle.log)" -ForegroundColor DarkGray

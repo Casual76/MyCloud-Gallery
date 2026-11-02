@@ -31,6 +31,18 @@
   -TestOverlay (file del repository sostituiti: sicurezza.md, recinzioni.json, ReleaseKeys.kt, versions.txt, CHANGELOG.md...), -ApkPath (un APK gia'
   firmato invece della build), -SkipTree e -SkipChecks. Il resoconto va in build\release-test\ e dice "PROVA": non si pubblica.
 
+.PARAMETER NoDaemon
+  Gradle (e check.ps1) con --no-daemon: nessun processo che resta residente a fine release.
+
+.PARAMETER BenchSerial
+  Il numero di serie dell'S25 (`adb devices`) quando i dispositivi collegati sono piu' d'uno (passo 3).
+
+.PARAMETER BenchMaxAgeDays
+  Quanto puo' essere vecchio il riferimento S25 di docs\bench (passo 3). Di base 7 giorni.
+
+.PARAMETER GradleArgs
+  Argomenti in piu' per Gradle nel passo 4 (per esempio --max-workers=2).
+
 .EXAMPLE
   powershell -ExecutionPolicy Bypass -File tools\release\release.ps1 -Impronta -Scrivi
   powershell -ExecutionPolicy Bypass -File tools\release\release.ps1 -Prepara -Version 1.0.0 -Channel beta

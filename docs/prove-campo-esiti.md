@@ -1075,3 +1075,82 @@ Altro lasciato sul telefono: l'app `dev.pampa.mycloudgallery.debug` aggiornata a
 ## Cosa resta (telefono e tablet)
 - **S25:** F183 sulle schermate (testo 2,0x e contrasto alto con la chiave già nota), F182, F184 e F185 come da brief, con la nota di Android 17 e il salvataggio delle tre chiavi di sopra.
 - **Tablet:** quello che il piano gli assegna (F182–F184 sul tablet, tastiera e Switch Access in DeX).
+
+
+## Fase 10: release candidata sull'S25 (F186, F187; 02/11)
+
+| | |
+|---|---|
+| **Quando** | 02/11/2026, installazione 18:47, ingresso dell'utente fra le 19:05 e le 19:12 (dai log la prima lettura del NAS parte alle 19:12:03), prove in release dalle 19:21 alle 20:10, disinstallazione alle 20:12 |
+| **Telefono** | Samsung S25 (`RFCY61FZDHW`, Android SDK 37), cavo USB. Il telefono è sparito da adb fra le 19:05 e le 19:12 (`offline`, poi di nuovo `device`): ho aspettato e ripreso; la cattura del registro ha un buco di circa un minuto (19:03:02-19:04:00), il resto è continuo |
+| **APK** | `build/rc/app-release.apk` (107.991.664 byte), pacchetto `dev.pampa.mycloudgallery` (senza `.debug`), `versionName` 1.0.0, `versionCode` 1, `minSdk` 29, `targetSdk` 36, R8 acceso. Firmato con la chiave di prova usa e getta `build/rc/prova-rc.jks` (solo schema v3), **non** con `pampa.jks`: la firma vera resta da controllare con `release.ps1` alla beta |
+| **Cambio di regole in corsa** | L'utente è entrato nell'app release con il suo **account vero**, non con `test`. Per decisione del coordinatore tutte le prove sono **solo in lettura**: niente backup di una foto di prova (nessun `adb push`), niente "Fai ora", niente condivisioni, niente "Libera spazio", nessuna creazione/modifica/eliminazione, niente ricerca di dati personali nei log (punto 5 saltato) |
+| **Esito in breve** | **Nessun crollo e nessun difetto di R8 in circa 85 minuti di registro** (0 `FATAL EXCEPTION`, 0 `ClassNotFoundException`, 0 `NoSuchMethodError`/`NoSuchFieldError`, 0 errori di serializzazione, 0 ANR). Le funzioni del cuore che si possono provare in lettura si comportano come nella debug, **mappa compresa (DR-1 chiuso: la mappa funziona con R8)**. F186: l'APK con un'altra firma è rifiutato, l'aggiornamento con l'APK originale tiene i dati. Non provati: backup, condivisione, pinch a due dita |
+
+### 1. Installazione (F186, prima parte)
+
+- Prima: `pm list packages` mostrava solo `dev.pampa.mycloudgallery.debug` (nessuna release): installazione consentita.
+- `adb install build/rc/app-release.apk`: `Success` in 6,9 s, **accanto** alla debug (la debug non è stata toccata).
+- `dumpsys package`: `versionName=1.0.0`, `versionCode=1`, `flags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]`: **non `DEBUGGABLE`**; firma v3 della chiave di prova. Al momento dell'installazione Android avverte (`NativeLibraryHelper: Failed to punch uncompressed elf file`) per `libLiteRt.so`, `liblitertlm_jni.so`, `liblitert_jni.so`: innocuo (librerie native non compresse dentro l'APK), ma segnalo che ci sono.
+
+### 2. Ingresso
+
+L'ha fatto l'utente (onboarding, account, approvazione): non ho toccato nessuna schermata di onboarding, nessuna password. Ho aspettato sulla schermata di benvenuto (controllo ogni 30 s con `uiautomator dump`). La Libreria è comparsa dopo circa 20-25 minuti dall'installazione (entro le 19:12); nessun tasto di backup è stato premuto (il backup risulta **"in prova"**: `BACKUP_TEST_ONLY`, "si scrive solo nelle share di prova", quindi con l'account vero non scrive nulla).
+
+### 3. Le funzioni del cuore in release (F187)
+
+Il confronto con la debug è sui **gesti** e sugli **esiti**: la debug del telefono ha dati di prova (file sintetici da poche centinaia di byte), la release ha la libreria vera, quindi i numeri e le immagini non sono confrontabili.
+
+| Funzione | Gesti fatti in release | Esito |
+|---|---|---|
+| **Libreria: scorrimento** | 6 lanci veloci all'indietro di fila, altri 40 in una ricerca, trascinamento del cursore della timeline | **Uguale alla debug.** Nessun rallentamento visibile, nessun crollo. La Libreria si apre sulle foto più recenti in basso (timeline dal più vecchio al più recente), il tasto "Torna ai più recenti" compare e funziona |
+| **Libreria: livelli** | Menu "Vista": Anni, Mesi, Giorni, Tutte, e di nuovo Giorni | **Uguale alla debug.** Ogni livello ridisegna la griglia (Mesi 60 celle, Anni 112, Tutte 24, Giorni 25) |
+| **Libreria: pinch** | `adb input` non ha il multitocco; `sendevent` sul touchscreen è negato (`Permission denied`) | **Non provato** (non si può fare in modo affidabile via adb). Il cambio di livello è provato dal menu "Vista" |
+| **Libreria: filtro rapido** | Video, Preferiti, di nuovo Tutto | **Uguale alla debug.** Video: 14 celle; Preferiti: la pagina vuota "Nessun preferito" con "Mostra tutto"; Tutto ripristinato |
+| **Libreria: apertura di una foto e ritorno** | Tocco su una foto, viewer, "Chiudi" | **Uguale alla debug per l'apertura.** Al ritorno la Libreria mostra la foto appena guardata (circa a metà schermo), non l'inizio. Nella debug il confronto del ritorno è sporco da un mio tocco sbagliato (vedi "Errori miei"): **non confermato lì** |
+| **Viewer: scorrimento** | 3 scorrimenti a sinistra e a destra | **Uguale alla debug.** Il contatore cambia (da "657" a "659", e il totale cresce mentre la scansione del NAS aggiunge media) |
+| **Viewer: zoom** | Doppio tocco (zoom), doppio tocco (torna intero) | **Uguale alla debug.** Lo zoom si vede nello screenshot (testo ingrandito di un documento fotografato) |
+| **Viewer: pannello info** | Tocco su "Informazioni" | **Funziona.** Mostra data (e se è stimata), stato del backup ("Solo sul telefono, il backup non è attivo"), tipo e peso del file, percorso sul telefono |
+| **Viewer: un video** | Video da 0:53 dal filtro Video | **Funziona.** Si apre il viewer con il fotogramma, la barra del lettore, la durata 0:53 e il tasto del volume; nessun crollo nel registro. Non ho misurato che l'immagine scorra (solo due fotogrammi a distanza di qualche secondo) |
+| **Viewer: foto solo sul NAS** | Foto "solo sul NAS" aperta dalla Libreria e da "Cartelle NAS" | **Funziona.** Il viewer scarica e mostra l'immagine dal NAS (SMB), con swipe; il menu "Altre azioni" si apre (12 voci, nessuna toccata). "Trova simili" l'ho toccato (è in lettura): il menu si chiude, nessun errore; il risultato non l'ho visto, **non verificato** |
+| **Backup** | Nessuna | **Non provato**, per la regola del coordinatore (account vero). Visto solo che la Diagnostica lo dice "in prova" e che Impostazioni → Backup dice "In prova: si scrive solo nelle share di prova" |
+| **Ricerca** | Tre query generiche: un oggetto, una parola e un anno | **Funziona (nessun crollo, esiti coerenti).** La prima senza risultati sicuri ma con l'offerta "Mostra anche risultati meno probabili"; la seconda con pochissimi risultati e l'avviso che la ricerca per contenuto copre solo circa 310 media su 13 mila (l'analisi per contenuto era ancora in corso); l'anno diventa un filtro data ("Filtro data") con centinaia di risultati. Il campo di ricerca nella debug: stesso comportamento (una query senza risultati con il suo messaggio). Le ricerche recenti si ricordano |
+| **Raccolte** | Pagina Raccolte e scorrimento, "Viaggi" (proposte), Ricordi, Luoghi | **Funziona.** La pagina mostra le sezioni di sempre (Album, Viaggi, Persone, Ricordi, Luoghi, Cartelle NAS, Utility, Telefono, Nascosti) con i conteggi. **Album: 0** (non c'era un album da aprire): ho aperto solo l'elenco "Viaggi" (con "Crea album" e "Non mi interessa", **non toccati**). "Nascosti", "Doppioni", "Eliminati di recente", "Libera spazio": non aperti |
+| **Ricordi** | "Tutti i ricordi", un ricordo, "Riproduci" | **Funziona.** Un ricordo ("Il meglio di ottobre"), 30 foto, la griglia e la riproduzione "4 di 30" con il tasto "Chiudi" |
+| **Mappa** | Apertura, attesa, doppio tocco ×2 sui grappoli, ritorno, riapertura con attesa di 12 s | **Funziona come nella debug: DR-1 chiuso.** Si carica `libmaplibre.so` (nel registro, `nativeloader`), la base vettoriale online arriva (confini, nomi dei paesi, scritta OpenStreetMap/OpenMapTiles/OpenFreeMap), i grappoli hanno miniatura e numero e si ingrandiscono con il doppio tocco; riaprendola la mappa ricorda dove era. Piccola differenza nel primo fotogramma: un grappolo senza miniatura è comparso in release senza il numero e nella debug con il "3"; nelle riaperture della release non l'ho più visto (rimasto dentro la stessa zona): **non determinabile**, probabilmente tempo di caricamento |
+| **Cartelle NAS** | "Cartelle NAS", "La mia area" (5 cartelle), una cartella con file, apertura di una foto, "Spazio NAS" | **Funziona** (solo guardare). Nessun tasto "Nuova cartella", "Seleziona", "Aggiorna" toccato |
+| **Condivisione** | Nessuna | **Non provata**, per la regola del coordinatore (account vero, nessuna condivisione verso l'app di prova). Annoto che nella debug l'app di prova che riceve il "Condividi" si chiama **"MCG prova (T-15)"** (`FieldProbeShareActivity`); "MCG prova (riceve)" è quella del **trascinamento** e non ha filtri di condivisione |
+| **Impostazioni** | Pagina principale, Rete e VPN, Anteprime del NAS, Quando lavora l'app, Persone (finita lì da un mio tocco: "spenta", **non attivata**), Informazioni e licenze, **"Novità di questa versione"** | **Funziona.** Nessun interruttore cambiato. "Novità": "Versione 1.0.0" con 7 punti. Rete e VPN: "Sei sulla rete di casa" |
+| **Diagnostica** | Pagina principale, Rete e NAS, Ultimi esiti ed errori, NAS nella Libreria, Backup | **Funziona.** Prima: "Tutto a posto". Dopo la scansione del NAS: "2 voci richiedono attenzione", di cui ho aperto **una**: `NAS_SCAN_SKIPPED_NAMES` ("Nomi di file non gestibili: sono stati saltati", previsto per i nomi con caratteri non sicuri); la seconda non l'ho aperta. In "Rete e NAS" "WireGuard non è installato" è una semplice informazione. Gli esiti dei lavori sono "Info": "Verifica del NAS: finito", "Analisi delle foto per la ricerca: fatto in parte, riprende", "fermato: il telefono è troppo caldo", "Manutenzione notturna: finito". Nessun errore strano |
+
+**Il registro (`adb logcat -v threadtime`, due file in `build/campo/`, 247 MB, dalle 18:47 alle 20:12).**
+- **Difetti di R8: nessuno.** 0 `FATAL EXCEPTION`, 0 `ClassNotFoundException`, 0 `NoSuchMethodError`, 0 `NoSuchFieldError`, 0 `SerializationException`/`MissingFieldException`, 0 `IllegalAccessException`, 0 `ANR`. Il processo della release non è mai morto da solo (il solo cambio di processo è quello dell'aggiornamento del punto 4). L'indice del NAS (JSON), Room, WorkManager, SMB, MapLibre, Media3, Compose e LiteRT-LM (`liblitertlm_jni.so` caricata, vedi sotto) sono passati.
+- **833 stack trace `W System.err`** con `UnreadableRecords: Troppi byte letti per un solo rilevamento.` da `NasMediaBytes.fetch`, `AndroidPreviewDecoder.decode` e `BitmapFactory.decodeStream`. È **il tetto per file** di `ReadLimitExceededException` (`core-nasmedia`, "quasi sempre un decodificatore che legge tutto"), voluto: il file resta da rilevare e la data resta "stimata". Non è un difetto di R8, **ma** (a) sono tracce rumorose, 833 in 35 minuti di scansione del NAS, che sporcano il registro e probabilmente sono le stesse anche nella debug; (b) R8 ha dato a quella classe un nome che non c'entra, `dev.pampa.mycloudgallery.albums.UnreadableRecords`: chi legge un registro della release deve avere `mapping.txt` (D34). Non ho potuto confrontare con la debug (la debug non ha rifatto la scansione del NAS nello stesso periodo).
+- **Una sola riga `E`** che sembra di R8 e non lo è: `No implementation found for void com.google.ai.edge.litertlm.NativeLibraryLoader.nativeCheckLoaded()`. È la sonda di LiteRT-LM (ART segnala il metodo nativo non ancora collegato) e **10 ms dopo** parte il caricamento di `liblitertlm_jni.so` (`nativeloader: Load ... liblitertlm_jni.so`): atteso. Il nome della classe non è offuscato, quindi le regole di `consumer-rules.pro` la tengono.
+- Rumore di sistema, uguale per altre app: 254 `Failed to query component interface for required system resources: 6`, 41 `perf_hint: Session ID too large`, 4 `Error decoding gainmap` (foto HDR), `libpenguin.so` non trovata (Samsung).
+- **14 `WM-EnqueueRunnable: Prerequisite ... doesn't exist; not enqueuing`** (12 nel primo processo, 2 nel secondo): WorkManager scarta un lavoro a catena perché il precedente non c'è più. Non attribuibile a R8 (API pubblica di WorkManager), **da guardare** con la debug, non l'ho fatto.
+
+### 4. Aggiornamento con un'altra firma (F186, seconda parte)
+
+- Chiave di prova generata da me, diversa da `prova-rc.jks`: `build/campo/prova-altra.jks` (`CN=MCG prova altra firma`, SHA-256 `74f3ce57...7ba5`); stesso APK firmato con `apksigner` (`build/campo/app-altra-firma.apk`).
+- `adb install -r app-altra-firma.apk`: **rifiutato**, `INSTALL_FAILED_UPDATE_INCOMPATIBLE: Existing package dev.pampa.mycloudgallery signatures do not match newer version; ignoring!`. Il pacchetto installato non è cambiato (stessa firma `3815828`, stesso `lastUpdateTime`).
+- `adb install -r build/rc/app-release.apk` (l'originale): **`Success`**. `firstInstallTime` resta 18:47:07, `lastUpdateTime` passa a 19:54:24, il processo ricomincia, e **l'app si apre direttamente sulla Libreria**, senza onboarding e con la posizione di prima: i dati restano.
+- **Limite della prova:** è lo **stesso** APK sopra se stesso (`versionCode` 1), non un aggiornamento da una beta più vecchia: quel caso (versione precedente con la stessa chiave) non si può provare finché non esiste una beta precedente.
+
+### 5. Log senza dati personali (parte di S6)
+
+**Saltato** per decisione del coordinatore (account vero: non si cercano nomi o dati dell'utente nel registro).
+
+### 6. Fine
+
+- `adb uninstall dev.pampa.mycloudgallery`: `Success` (20:12:06). `pm list packages` ora mostra solo `dev.pampa.mycloudgallery.debug`, **intatta** (mai disinstallata, dati non toccati).
+- **Il dispositivo della release resta nel registro della famiglia vera** (Impostazioni dell'app mostrava "3 dispositivi" a prova in corso): l'utente lo **revocherà da Impostazioni → Dispositivi**; io non l'ho toccato.
+- Nessuna impostazione del telefono è stata cambiata. Nessun file messo sul telefono (nessun `adb push`), nessuna eliminazione, spostamento, rinomina o creazione sul NAS, nessun backup, nessuna condivisione.
+
+### Errori miei e altre note (per onestà)
+
+- **Tocchi sbagliati, senza effetti:** nella debug un tocco su "Torna ai più recenti" invece che su una cella, e due volte il viewer aperto da un tocco alla cieca sulla barra delle schede (nascosta quando la Libreria scorre verso il passato: riappare scorrendo verso il più recente). Nella release un tocco sulla riga "Persone" in Impostazioni (la pagina dice "Persone è spenta" e non ho premuto "Attiva riconoscimento dei volti"). Nulla è stato scritto.
+- **Tracce lasciate nella debug:** nel campo di ricerca della debug ho cercato due parole (restano nelle sue "ricerche recenti"). Nessun altro dato della debug è stato toccato.
+- **KeyVoice:** sul telefono c'è `com.keyvoice.app`, un servizio di accessibilità dell'utente che **detta testo in ogni campo che prende il focus** ("Grazie per la visione!", la trascrizione del silenzio) e mostra le sue bolle ("Aggancio KeyVoice", "Registrazione KeyVoice") sopra la nostra app. Ha sporcato i campi di ricerca (le query vanno scritte e inviate in un solo comando adb, subito) e compare in alcuni screenshot. Non è un difetto della nostra app e non l'ho toccato.
+- **Screenshot:** non ne ho messi nei documenti né nel commit (mostrerebbero foto e nomi veri): restano solo sotto `build/campo/` (ignorata da git); uno che mostrava una schermata di conto è stato cancellato subito.
+- **Strumenti e file di prova** (tutti sotto `build/campo/`, non nel commit): script `*.ps1`, i due registri, `prova-altra.jks` e `app-altra-firma.apk`, un'immagine sintetica `mcg_rc_prova_0211.jpg` **mai** messa sul telefono.

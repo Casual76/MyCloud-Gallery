@@ -1,0 +1,113 @@
+package dev.pampa.mycloudgallery.feature.settings
+
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import androidx.navigation.NavController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
+import dev.antigravity.fluidengine.ui.fluid.FluidDetailPlaceholder
+import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.FluidPaneSizes
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
+import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
+import kotlinx.serialization.Serializable
+
+// LE IMPOSTAZIONI A DUE PANNELLI (Fase 10, P5, D13 (4); docs/fase10-progetto.md §2.3): da finestra estesa (840 dp) l'elenco delle Impostazioni sta a sinistra e la pagina scelta a destra; sotto, l'elenco e poi
+// la pagina, come prima. La pagina scelta si ricorda (`rememberSaveable`) e passando sotto la soglia e tornando non si perde. Le pagine sono quelle di sempre, ognuna con il suo ViewModel: nel pannello vivono
+// in una navigazione propria (un `NavHost` per pagina scelta), cosi' le loro rotte, i loro argomenti e i loro "Indietro" funzionano senza una riga di codice diversa; l'"Indietro" della prima pagina
+// del pannello la chiude (torna "Scegli una voce"). Le voci che portano fuori dalle Impostazioni (Diagnostica, Backup, Ricerca, Nascosti, Persone, Ricordi, Mappa) restano pagine a finestra intera.
+
+/** Una pagina delle Impostazioni che puo' stare nel pannello di destra: un codice stabile (salvato) e la rotta. */
+internal enum class SettingsPage(val code: String, val route: Any) {
+  DEVICES("devices", SettingsDevicesRoute),
+  FAMILY("family", SettingsFamilyRoute),
+  ACCOUNT("account", SettingsAccountRoute),
+  NETWORK("network", SettingsNetworkRoute),
+  SECURITY("security", SettingsSecurityRoute),
+  BACKUP_NOTICE("backup_notice", SettingsBackupRoute),
+  QUALITY("quality", SettingsQualityRoute),
+  RULES("rules", SettingsRulesRoute),
+  SHARING("sharing", SettingsSharingRoute),
+  ABOUT("about", SettingsAboutRoute),
+  ;
+
+  companion object {
+    /** La pagina di un codice salvato; null per un codice che questa versione non conosce. */
+    fun fromCode(code: String?): SettingsPage? = entries.firstOrNull { it.code == code }
+  }
+}
+
+/** Il pannello di destra quando non c'e' niente di scelto. */
+@Serializable
+internal data object SettingsPaneEmptyRoute
+
+/**
+ * Il guscio a due pannelli delle Impostazioni, senza Hilt (lo provano i test): [list] riceve se c'e' il pannello accanto e come **scegliere** una pagina; [detail] disegna la pagina scelta (o niente) e come
+ * chiuderla. La scelta sta qui, salvata; sotto la soglia [list] non la usa (le pagine si aprono come prima) e la scelta resta per quando la finestra torna estesa.
+ */
+@Composable
+internal fun SettingsPanes(
+  list: @Composable (twoPane: Boolean, choose: (SettingsPage) -> Unit) -> Unit,
+  detail: @Composable (page: SettingsPage?, close: () -> Unit) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  val window = rememberGalleryWindow()
+  var code by rememberSaveable { mutableStateOf<String?>(null) }
+  val page = SettingsPage.fromCode(code)
+  FluidListDetailScaffold(
+    ambient = null,
+    modifier = modifier,
+    sizes = FluidPaneSizes.listDetail(window),
+    list = { twoPane -> list(twoPane) { chosen -> code = chosen.code } },
+    detail = {
+      FluidDetailContent(item = page, key = { it?.code }, order = { it?.ordinal }) { shown -> detail(shown) { code = null } }
+    },
+  )
+}
+
+/**
+ * La pagina scelta nel pannello di destra: una navigazione propria che parte dalla rotta della pagina (le pagine delle Impostazioni vivono tutte in [settingsPages]); [resumeStep] riapre un passo
+ * dell'onboarding (e' una pagina a finestra intera, come la Diagnostica). Cambiare pagina ricomincia da capo: un `NavHost` per pagina scelta.
+ */
+@Composable
+internal fun SettingsPaneHost(
+  page: SettingsPage?,
+  close: () -> Unit,
+  resumeStep: (OnboardingStep) -> Unit,
+  modifier: Modifier = Modifier,
+) {
+  key(page) {
+    val paneNav = rememberNavController()
+    NavHost(
+      navController = paneNav,
+      startDestination = page?.route ?: SettingsPaneEmptyRoute,
+      modifier = modifier,
+      // Il cambio fra due pagine lo fa `FluidDetailContent` (movimento fra pari): dentro il pannello nessun movimento in piu'.
+      enterTransition = { EnterTransition.None },
+      exitTransition = { ExitTransition.None },
+      popEnterTransition = { EnterTransition.None },
+      popExitTransition = { ExitTransition.None },
+    ) {
+      composable<SettingsPaneEmptyRoute> {
+        FluidDetailPlaceholder(
+          title = stringResource(R.string.settings_panes_empty_title),
+          message = stringResource(R.string.settings_panes_empty_message),
+          icon = Icons.Rounded.Settings,
+        )
+      }
+      settingsPages(nav = paneNav, back = { if (!paneNav.popBackStack()) close() }, resumeStep = resumeStep)
+    }
+  }
+}

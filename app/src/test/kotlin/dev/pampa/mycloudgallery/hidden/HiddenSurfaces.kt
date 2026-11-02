@@ -48,6 +48,9 @@ internal enum class SpecRow(val label: String) {
 
   /** Fase 10 (P0 la riga, P7 la superficie; D22, D41): le descrizioni -- mai una persona nascosta, mai la descrizione di un nascosto fuori dai Nascosti. */
   DESCRIPTIONS("Descrizioni dei media per superficie"),
+
+  /** Fase 10 (P5, D13, D41): i pannelli affiancati -- il viewer a lato della Libreria, la griglia della zona a lato della mappa, le pagine nel dettaglio delle Raccolte: stesse viste vive, nessuna copia. */
+  PANES("Pannelli affiancati e seconda finestra (viewer a lato della Libreria, zona a lato della mappa)"),
 }
 
 /** Con cosa e' provata una superficie. */
@@ -401,6 +404,13 @@ internal object HiddenSurfaces {
       sources = listOf("$DESCRIBE/rules/DefaultMediaDescriber.kt", "$DESCRIBE/rules/MediaDescribers.kt"),
       probe = RealDescriptionProbes.descriptions,
       alsoProvedBy = listOf("DefaultMediaDescriberTest", "MediaDescribersTest", "GridTextDescribeNonRegressionTest", "RealDescriptionsProbeTest"),
+    ),
+    SurfaceEntry(
+      id = "panes", title = "Pannelli: il viewer a lato della Libreria scorre la vista viva (un salto non arriva a un nascosto), la zona a lato della mappa e' la griglia viva della pagina (D13, D41)",
+      row = SpecRow.PANES, owner = "P5", backing = Backing.PRODUCTION,
+      sources = listOf("feature-viewer/src/main/kotlin/dev/pampa/mycloudgallery/feature/viewer/ViewerDock.kt", "$FEATURE_MAP/map/MapZoneState.kt"),
+      probe = RealPanesProbes.docked,
+      alsoProvedBy = listOf("ViewerDockOverlayTest", "ViewerHostDockTest", "MapZoneStateTest"),
     ),
   )
 

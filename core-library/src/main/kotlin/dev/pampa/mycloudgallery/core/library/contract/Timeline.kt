@@ -207,11 +207,22 @@ interface TimelineRepository {
   fun view(f: LibraryFilter): StateFlow<TimelineView>
 }
 
-/** Le preferenze della Libreria, ricordate in `noBackupFilesDir` (DataStore): filtro, livello e stile. */
+/**
+ * Le preferenze della Libreria, ricordate in `noBackupFilesDir` (DataStore): filtro, livello, stile e, dalla Fase 10, "Affianca". Il file sta nella cartella dei dati
+ * **del profilo** (un profilo del tablet e' un utente Android con la sua copia dell'app: C19), quindi la scelta e' per profilo.
+ */
 interface LibraryPreferences {
   val filter: StateFlow<LibraryFilter>
   val level: StateFlow<GridLevel>
   val style: StateFlow<GridStyle>
+
+  /**
+   * Fase 10 (P5, D13 (5)): il viewer **affiancato** alla Libreria (griglia a sinistra al 40%, viewer a destra) invece che a finestra intera; vale solo da finestra ampia
+   * (>= 1200 dp). Di base falso: il viewer resta a finestra intera, come in Apple Foto. Chi non lo implementa resta sul default (mai affiancato, la scelta non si salva).
+   */
+  val viewerDocked: StateFlow<Boolean> get() = NeverDocked
+
+  suspend fun setViewerDocked(docked: Boolean) = Unit
 
   suspend fun setFilter(filter: LibraryFilter)
 
@@ -247,3 +258,6 @@ data class SelectionSet(val ids: Set<MediaId> = emptySet()) {
 
   operator fun contains(id: MediaId): Boolean = id in ids
 }
+
+/** Il valore di [LibraryPreferences.viewerDocked] per chi non lo ricorda. */
+private val NeverDocked: StateFlow<Boolean> = kotlinx.coroutines.flow.MutableStateFlow(false)

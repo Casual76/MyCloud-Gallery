@@ -60,7 +60,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryEdgeScrim
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryLegibility
 import dev.pampa.mycloudgallery.core.designsystem.design.galleryChromeTag
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.LocalNewWindow
-import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberAppWindow
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryFilterOption
 import dev.pampa.mycloudgallery.core.designsystem.grid.galleryFilterMenuEntries
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
@@ -380,7 +380,8 @@ private fun libraryMenu(state: LibraryTabState, onOpenSettings: () -> Unit, scop
   }.orEmpty()
   // Fase 10 (P4, D16, E-T6): "Apri in una nuova finestra" solo da una finestra estesa o in DeX (la porta dice se si offre); apre la Libreria in una seconda finestra.
   val newWindow = LocalNewWindow.current
-  val window = rememberGalleryWindow()
+  // La finestra dell'app, non quella del pannello: con il viewer affiancato la Libreria e' un pannello stretto e la voce deve restare dov'era (Fase 10, P5).
+  val window = rememberAppWindow()
   val openNewWindow = if (newWindow != null && newWindow.isOffered(window)) {
     GalleryMenuEntry.Item(label = stringResource(R.string.library_open_new_window), onClick = newWindow::openLibrary, icon = Icons.AutoMirrored.Rounded.OpenInNew)
   } else {

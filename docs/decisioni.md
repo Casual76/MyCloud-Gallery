@@ -14300,3 +14300,120 @@ dal repository.
 
 ### Commit (branch `fase10/m3`)
 `12aee811` (codice e prove: `core-trust`, `core-family`, `:app`, `feature-settings`, `feature-onboarding`) e quello dei documenti.
+
+## Fase 10 P5: i pannelli del tablet (31/10)
+
+Il pacchetto P5 della Fase 10 (`docs/fase10-progetto.md` §4.4 riga P5; §0.1 D12, D13; §1.2 `adaptive`, §1.5; §2.3; §2.12; E-T2, E-T3, E-H11). Branch `fase10/p5` da `a7930f40`. **Nessuna dipendenza, permesso, host, chiave
+o costante di `FeatureFlags` cambiati**; nessuna voce nuova di `docs/sicurezza.md` (C458 e L566 non servono: i pannelli non aprono strade nuove ai media, usano le stesse viste vive). Il Fluid Engine resta alla 2.13.1: solo
+`FluidListDetailScaffold`, `FluidDetailContent`, `FluidDetailPlaceholder`, `FluidMotion`, `FluidScreen`; niente di quello che la 3.0 offrira' (menu al tocco, taglie dei tasti di vetro, foglio di conferma, scorrimento rapido).
+Prove strumentate: nessuna (niente emulatore, niente telefono, niente tablet): tutto Robolectric e Roborazzi alle larghezze del riquadro.
+
+**Cosa c'e', dove**
+| Pezzo | Dove | In breve |
+|---|---|---|
+| Classi di finestra e puntatore | `core-designsystem/.../adaptive/GalleryWindow.kt`, `Pointer.kt` | `rememberGalleryWindow` (finestra del pannello se c'e', altrimenti dell'app) e `rememberAppWindow` (sempre quella dell'app); il mouse si legge dai dispositivi d'ingresso |
+| Regole dei pannelli | `adaptive/GalleryPaneRules.kt`, `FluidPaneSizes.kt` | una tabella pura: quanti pannelli ha ogni schermata in ogni finestra; le misure per `FluidListDetailScaffold` |
+| "Apri in una nuova finestra" | `adaptive/NewWindowEntry.kt` | `rememberNewWindowEntry`: la voce di menu per album, ricordo e (con un controllo) mappa |
+| Libreria e viewer affiancati | `app/.../main/GalleryRoot.kt` (`GalleryPanesLayout`, `ViewerHostState` come `ViewerDock`), `MainScaffold.kt`, `feature-viewer/.../ViewerDock.kt`, `ViewerActions.kt`, `ViewerOverlay.kt`, `core-library` (`LibraryPreferences.viewerDocked`) | D13 (5) |
+| Mappa e griglia della zona | `feature-map/.../map/MapZoneState.kt`, `MapPanesLayout.kt`, `MapRoute.kt`, `grid/ZoneGridRoute.kt`, `nav/MapNavigation.kt` | D13 (2) |
+| Impostazioni a due pannelli | `feature-settings/.../SettingsPanes.kt`, `SettingsNavigation.kt` | D13 (4) |
+| Dettaglio di album, Persone e Ricordi nelle Raccolte | `app/.../navigation/CollectionEntryPanes.kt`, `CollectionEntryRouting.kt`, `AppNavHost.kt`; `feature-library/.../collections/CollectionsTab.kt` (`LocalCollectionDetailClose`) | D13 (1), (3) |
+| Schermate passate alla finestra comune | `CollectionsTab.kt`, `ViewerOverlay.kt`, `OnboardingHost.kt`, `NasFoldersScreen.kt` | stessa soglia di prima (840 dp); tolte `OnboardingDimens.WideBreakpoint` e `NasDimens.TwoPaneMinWidth` |
+| Registro dei Nascosti | `app/src/test/.../hidden/HiddenSurfaces.kt` (solo la riga `PANES`), `RealPanesProbes.kt` | la sonda del viewer affiancato |
+
+**Scelte**
+- **Due finestre, non una.** Il pannello e' una finestra piu' stretta: dentro il viewer affiancato (60% di 1280 dp = 768 dp, media) le informazioni stanno in un foglio e non in colonna, la Libreria (40% = 512 dp) e' una finestra compatta.
+  `ProvidePaneWindow` mette la finestra del pannello in un `CompositionLocal` **a parte** da quello dei test (`ProvideGalleryWindow`); `rememberGalleryWindow` legge prima il pannello, `rememberAppWindow` solo la finestra dell'app. Chi decide per l'intera
+  finestra usa la seconda: "Apri in una nuova finestra" si offre da una finestra estesa anche quando il viewer affiancato stringe la Libreria a 512 dp (altrimenti la voce sparirebbe affiancando).
+- **Il mouse** si legge dall'elenco dei dispositivi d'ingresso (`InputManager`), si rilegge solo quando il sistema annuncia un dispositivo nuovo o tolto, ignora i virtuali (il touchpad di DeX sul telefono): nessun lavoro a ogni fotogramma,
+  nessun evento di puntatore da guardare. `GalleryWindow.pointer` e' `MOUSE` con un mouse vero; oggi nessuna schermata lo usa per cambiare layout (la griglia legge i suoi eventi da se', P4).
+- **Le soglie non cambiano.** Raccolte e Impostazioni passano `FluidPaneSizes.listDetail(window)` all'engine: due pannelli (nessun minimo del dettaglio, l'elenco prende il suo 40% fra 360 e 500 dp) da estesa, uno solo (dettaglio che non sta mai) sotto.
+  L'engine non decide piu' da solo: decide `GalleryPaneRules`, la stessa regola di tutte le schermate e dei test.
+- **Libreria e viewer affiancati (D13 (5)).** Solo da ampia (1200 dp), solo con il viewer **della Libreria** aperto (mai i Nascosti, mai le altre griglie: la vista del viewer e' quella della Libreria) e solo con "Affianca" scelto. `GalleryRoot` ha due
+  `Box` sempre nello stesso posto (la navigazione intera e il viewer): affiancando cambiano solo i modificatori (40% e 60%) e la finestra che i due pannelli vedono; niente si ricrea (provato: la Libreria si compone una volta sola). La voce
+  "Affianca alla Libreria" / "Schermo intero" e' nel menu del viewer (un gruppo suo, prima del cestino); si **ricorda per profilo** in `LibraryPreferences.viewerDocked` (il DataStore sta nei dati del profilo, C19; l'interfaccia ha un default che non
+  salva, quindi nessun altro implementatore cambia). Un tocco su una cella della griglia a lato fa `ViewerHostState.open`, che con il viewer affiancato non riapre ma emette un `ViewerJump` (media + numero): il viewer fa `scrollToPage` **senza animazione
+  d'apertura**, e se la vista non ha quel media (nascosto, sparito) scarta il salto. Indietro ed Esc chiudono il viewer (la Libreria torna a tutta la finestra, la scelta resta); "Schermo intero" lo lascia aperto a finestra intera e ricorda la scelta.
+  **Cambiare scheda o uscire dalla pagina chiude il viewer affiancato** (il suo posto e' accanto alla griglia): `MainScaffold` lo chiude quando la scheda non e' la Libreria e quando esce dalla composizione (Impostazioni, altre rotte).
+- **Mappa e griglia della zona (D13 (2)).** `MapZoneState` tiene la zona aperta nel `SavedStateHandle` della pagina (livello e prefisso della chiave di Morton, mai una coordinata chiara): sopravvive alla ricreazione e alla morte del processo.
+  Da estesa un tocco su una bolla apre la zona a destra (`ZoneGridController`, **lo stesso della pagina singola**: stessa vista viva, stesso filtro finale dei Nascosti, un controllore solo alla volta con il suo lavoro che si ferma); sotto 840 dp e'
+  la pagina di sempre. **Passaggio fra pannello e pagina**: la finestra si stringe con una zona aperta, `MapRoute` chiude il pannello e apre la pagina (`actions.openZone`); la finestra si allarga con la pagina aperta, `ZoneGridRoute.onWide` scrive la zona
+  nel `SavedStateHandle` della mappa (la voce precedente della navigazione, solo se e' la mappa) e torna indietro. Il viewer dalla griglia della zona resta a finestra intera (F9-D38). L'"Indietro" della griglia nel pannello la chiude.
+- **Impostazioni a due pannelli (D13 (4)).** Le pagine non cambiano: `settingsGraph` registra l'elenco e `settingsPages` (nuova, `internal`) tutte le altre; il pannello di destra e' un `NavHost` **per pagina scelta** che parte dalla rotta della pagina
+  (`SettingsPaneHost`), cosi' ViewModel, argomenti e "Indietro" sono quelli di sempre (l'"Indietro" della prima pagina del pannello la chiude: "Scegli una voce"). La pagina scelta si ricorda (`rememberSaveable`); le voci che portano fuori dalle
+  Impostazioni (Diagnostica, Backup, Ricerca, Nascosti, Persone, Ricordi, Mappa) restano a pagina intera. Il cambio fra due pagine e' il movimento fra pari di `FluidDetailContent`, dentro il pannello nessun movimento in piu'.
+- **Dettaglio nelle Raccolte (D13 (1), (3)).** La pagina di un album (manuale o smart), di una persona e di un ricordo sta nel pannello di destra con lo stesso schema (`EntryPagePane`: un `NavHost` per pagina scelta, la stessa rotta e lo stesso ViewModel);
+  cio' che esce dalla pagina (un altro album, l'editor delle regole, la revisione dei volti, la presentazione) usa la navigazione dell'app. Il "Indietro" e' `LocalCollectionDetailClose`: chiude la pagina e torna alla raccolta di prima. Le liste
+  ("Tutti gli album", "Tutte le persone", "Tutti i ricordi"), i viaggi e i Luoghi restano pagine. Una funzione non legata (persone o ricordi spenti) non ha il pannello e la voce si apre come sul telefono (`EntryPanes.pageOf`).
+- **"Apri in una nuova finestra" (P4, D16).** La voce c'e' ora nel menu ⋮ di album e ricordo (un gruppo suo, prima dell'azione che cancella o toglie) e come controllo da 48 dp accanto alle Impostazioni nella mappa; si offre secondo la finestra **dell'app**.
+- **Stato salvato (D14, E-T8).** Bolla aperta (`MapZoneState`) e pannello affiancato (preferenza) ora si salvano. **Camera della mappa**: non serviva codice nuovo: `MapController.onIdle` la salva in locale dopo 1 s di calma e `flushCamera` all'uscita, e
+  `MapViewModel` (con la superficie) sopravvive alla ricreazione. **Selezione delle altre griglie**: `CollectionGridPage` (Raccolte, Utility, selettore dei media) usa `SelectionKeeper`/`selectionSaver` della Libreria (fino a 500 id, oltre il solo "tutti");
+  **mai per i Nascosti** (nessun id di nascosti nello stato salvato: ripartono chiusi e chiedono di nuovo la credenziale, E-H3) e mai nel selettore dei media.
+- **Il pannello vuoto e le liste che restano pagine** sono scelte di perimetro, non di tecnica: nessuna delle due toglie nulla.
+
+**Prove**
+- *JVM e Robolectric*: `GalleryPaneRulesTest` (regole alle quattro larghezze e ai bordi, somma dei pannelli, mouse e dispositivi virtuali, finestra del pannello, soglia attraversata senza ricreare), `ViewerHostDockTest` (quando il viewer e' affiancato, il salto, la scelta ricordata,
+  Nascosti e altre griglie mai), `GalleryPanesLayoutTest` (40% e 60% senza sovrapposizioni a 1200, 1280, 1920 dp; sotto la soglia tutto a finestra intera; affiancare e togliere non perde lo stato), `ViewerDockMenuTest` e `ViewerDockOverlayTest` (la voce giusta, il salto
+  senza riaprire, il salto verso un media che la vista non ha), `MapZoneStateTest` (la zona nel `SavedStateHandle`, dati vecchi o ostili, una griglia viva per zona), `MapPanesLayoutTest` (60% e 40% senza sovrapposizioni a 840 e 1280; mappa intera sotto o a zona chiusa;
+  attraversare la soglia non ricrea la mappa), `CollectionsPanesTest`, `SettingsPanesTest` (una pagina sotto 840 dp, due sopra senza sovrapposizioni, la scelta resta passando la soglia; ogni pagina del pannello ha la sua rotta).
+- *"Affianca" per profilo*: `SelectionAndPreferencesTest.affiancaSiRicordaPerProfilo_...` (DataStore vero su due file = due profili: di base falso, si salva, si ritrova riaprendo, l'altro profilo non la vede, le altre preferenze non cambiano, "Schermo intero" si ricorda) e
+  `MainScaffoldDockTest` (la scelta salvata arriva all'ospite del viewer, quella fatta dal menu si salva nelle preferenze del profilo, un altro profilo parte da finestra intera, cambiare scheda chiude il viewer affiancato e non quello normale); il viewer vero attraversa
+  768 -> 1200 -> 600 -> 1280 dp senza perdere la foto e senza chiudersi (`ViewerDockOverlayTest`).
+- *Rosso senza la modifica* (modifiche fatte a mano nei sorgenti e tolte subito con `git checkout`): (1) `setViewerDocked` che scrive sempre falso: rosso `affiancaSiRicordaPerProfilo_...`; (2) `ViewerHostState.open` che non emette il salto con il viewer affiancato: rosse
+  `unTocco_conIlViewerAffiancato_cambiaLaFotoSenzaRiaprire` e `laSceltaSiRicordaEChiudereTogliIlSalto`.
+- *Lezioni di compilazione*: un `return@key` dentro `key { }` di una composable compila ma R8/D8 non sa metterlo nel dex (`dexBuilderDebug` falliva con "Method name '<anonymous>' in class '$$$$$NON_LOCAL_RETURN$$$$$'"): ora tre composable piccole (`AlbumPane`, `PersonPane`, `MemoryPane`).
+  `NoHandWrittenStyleTest` di feature-map vieta `AnimatedVisibility`: la zona accanto alla mappa compare senza animazione.
+- *Registro dei Nascosti*: riga `PANES` con la sonda `RealPanesProbes.docked` (su ogni filtro e su ogni media del mondo casuale: un salto del viewer affiancato arriva a una pagina se e solo se il media e' una cella della Libreria, mai a un nascosto, e la
+  pagina e' proprio quella foto); la griglia della zona e' `ZoneGridController`, gia' provata dalla riga `map-zone`. `HiddenSurfacesRegistryTest` e `HiddenSurfacesPropertyTest` verdi.
+- *Screenshot* (`docs/screenshots/10-P5/`, chiaro e scuro, 360, 600, 840 e 1280 dp, Roborazzi): `libreria-*`, `raccolte-*` (una pagina sola a 360 e 600, elenco e dettaglio a 840 e 1280), `viewer-*` e `viewer-informazioni-*` (a 840 le informazioni in colonna), `viewer-affiancato-1280dp`,
+  `mappa-zona-chiusa-*` e `mappa-zona-aperta-*` (la carta e' quella finta di Robolectric, come nella Fase 9), `impostazioni-*` e `impostazioni-pagina-*` (da 840 dp, con la pagina Condivisioni nel pannello). Le immagini principali sono state guardate (viewer affiancato, Raccolte, mappa 60/40, Impostazioni, Libreria, informazioni del viewer a 840 dp).
+
+**Note per la fase grafica** (scelte dubbie, non risolte qui; la lista dell'utente `docs/grafica-segnalazioni-utente.md` non e' stata toccata)
+- **Nessun controllo sovrapposto**: provato nei test (60/40 e 40/60 senza sovrapposizioni, controlli della mappa a 48 dp e uno accanto all'altro a ogni larghezza); resta da guardare a occhio sul tablet la mappa al 60%: il credito e la riga dell'avviso stanno nel pannello
+  della mappa e non nell'intera finestra.
+- **Il cambio di misura non e' animato**: affiancare il viewer (Libreria 100% -> 40%) e aprire la zona accanto alla mappa (mappa 100% -> 60%) cambiano misura di colpo; la griglia compare di colpo (le schermate della mappa non hanno animazioni: lo vieta `NoHandWrittenStyleTest` di feature-map). Animare la
+  misura a ogni fotogramma vorrebbe dire rimisurare la griglia della Libreria, il pager del viewer o la superficie di MapLibre a ogni fotogramma: lavoro pesante. Strada suggerita: per il viewer, tenerlo a 60% e animare solo un margine della Libreria; per la mappa,
+  animare un margine della camera (`padding` di MapLibre) invece della misura della superficie.
+- **Nessuna riga evidenziata nell'elenco delle Impostazioni** (la pagina scelta non si distingue); le Raccolte l'hanno (`selected`).
+- **Il divisore** fra i due pannelli non c'e' (le Raccolte hanno il fondale unico dell'engine; la mappa e il viewer no): fra mappa e griglia della zona e fra Libreria e viewer il bordo e' netto, senza ombra.
+- **La Libreria al 40% e' una finestra compatta** (512 dp a 1280): griglia a colonne da telefono largo e barre di vetro da telefono; il viewer al 60% e' una finestra media (768 dp), con le informazioni in un foglio.
+- **La pillola** (le tre schede) sta nel pannello della Libreria, centrata sotto la griglia, non sotto l'intera finestra.
+- **Il pannello vuoto** ("Scegli una voce") usa il segnaposto dell'engine; testo e icona sono provvisori.
+- **Due frecce di "Indietro"** nelle Impostazioni a due pannelli (e nel dettaglio di album, persona e ricordo): quella dell'elenco esce dalle Impostazioni, quella della pagina nel pannello la chiude; in un pannello potrebbe non servire (si vede in `impostazioni-pagina-*`).
+- **MapLibre non si disegna in Robolectric**: gli screenshot della mappa hanno la carta finta (come nella Fase 9).
+
+**Cosa serve a P6 e P13**
+- **P6** (trascinamento): `mediaDragSource` va sulle griglie dentro i pannelli (Libreria al 40%, griglia della zona, dettaglio delle Raccolte) e sul viewer affiancato: dentro un pannello le schermate leggono la finestra del pannello, quindi non decidere niente dalla larghezza
+  letta li' (per "e' un tablet" usa `rememberAppWindow`). Il viewer affiancato e' un viewer come gli altri (stessa porta `ViewerServices`, stessa vista della Libreria); la sorgente del trascinamento dal viewer vale anche affiancato.
+- **P13** (integrazione): (1) `GalleryRoot` e `MainScaffold` portano ora il layout dei pannelli e la preferenza "Affianca": tenerli se si riscrivono; (2) `EntryPanes` e `CollectionEntryPanes.kt` sono in `app/.../navigation/`: se nascono altre pagine con una rotta e un
+  `SavedStateHandle` (nuovi tipi di voce nelle Raccolte) basta aggiungere un caso a `EntryPanes.pageOf` e a `EntryPagePane`; (3) `settingsPages` (feature-settings) e `SettingsPage` devono elencare ogni **nuova pagina delle Impostazioni** (P3 aggiunge "Widget": una voce in
+  `SettingsPage`, la rotta in `settingsPages` e il link in `settingsGraph`; `SettingsPanesTest.ogniPaginaDelPannelloHaLaSuaRotta` fallisce se una pagina di `SettingsPage` non ha rotta); (4) `WindowLauncher.closeOtherWindows` resta di P13 (D42, vedi P4); (5) niente di nuovo da
+  mettere nei codici di Diagnostica `WINDOW_*` dai pannelli: nessun errore nuovo da contare.
+
+**Da provare sul tablet** (F165, profilo "Prova 1"; nessuna prova e' stata fatta su un dispositivo)
+- Libreria e viewer: a 1280 dp o piu' (DeX, orizzontale) nel menu del viewer "Affianca alla Libreria"; la Libreria a sinistra continua a scorrere, un tocco su una cella cambia la foto senza riaprire il viewer, Esc e Indietro chiudono il viewer, "Schermo intero" lo lascia aperto a finestra
+  intera; riaprire un viewer dopo aver scelto "Affianca" lo apre gia' affiancato; il lavoro del "Seleziona" della Libreria resta mentre si affianca; cambiare scheda con il viewer affiancato lo chiude.
+- Ruotare e ridimensionare una finestra libera attraverso 840 e 1200 dp con: Raccolte (la raccolta scelta resta), una pagina di album, di persona e di ricordo nel dettaglio, Impostazioni (la pagina scelta resta), la mappa con una bolla aperta (la zona resta: pannello in
+  orizzontale, pagina in verticale, e tornando in orizzontale torna il pannello), il viewer affiancato (si espande a finestra intera sotto 1200 dp senza chiudersi).
+- Con un mouse: la voce "Apri in una nuova finestra" nel menu di un album, di un ricordo e nel controllo della mappa; l'evidenziazione al passaggio e le frecce sul viewer affiancato.
+- **Punti di cui non si sa**: la **rotazione con la mappa** (la superficie di MapLibre ridimensionata di colpo) e **il peso della Libreria a 512 dp** accanto al viewer; **Cartelle NAS** e **Onboarding** passati alla finestra comune non hanno prove nuove sul tablet (stessa soglia di prima).
+
+**Punti aperti**
+- **La riga Cerca del §2.3** (filtri in colonna da estesa): non fatta, `feature-search` non e' nel perimetro del brief di P5.
+- **Lo scorrimento** della griglia della zona e le pagine aperte *dentro* il pannello (per esempio Famiglia -> Invito nelle Impostazioni) non passano fra pannello e pagina: si salvano la zona aperta e la pagina scelta, non cio' che si e' fatto dentro. Una finestra che si stringe e
+  torna larga ripropone la pagina scelta dall'inizio.
+- **Screenshot di album, persona e ricordo nel dettaglio delle Raccolte**: non ci sono; le tre pagine hanno un ViewModel Hilt e un `NavHost` per pannello e i test di composizione senza Hilt non le montano. Le pagine singole hanno gli screenshot delle loro fasi; il dettaglio e' provato
+  da `EntryPanesTest` (quali voci hanno il pannello: album, album smart, persona, ricordo si'; liste, viaggi, "Nuovo album", voci di stato no; funzione non legata o ricordo uscito dallo scaffale no) e dal fatto che e' la stessa rotta; da vedere sul tablet.
+- **Altre pagine che escono dalle Impostazioni** (Backup, Ricerca, Nascosti, Persone, Ricordi, Mappa) restano a finestra intera anche da estesa (sono di altre funzioni).
+- **Il viewer affiancato non e' offerto dalle altre griglie** (album, ricordi, ricerca, zona): la loro vista non e' quella della Libreria; solo la Libreria.
+- **`SettingsNavigation.kt` e' stata riorganizzata** (le pagine sono in `settingsPages`): P3, che aggiunge la pagina Widget in quel file, trovera' le pagine in un'altra funzione.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde** ("OK: tutto a posto.", uscita 0, 2/11), lanciato come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del semaforo. `assembleDebug`, `assembleRelease` (con `verifyReleaseManifest`),
+`galleryTest` e `galleryLint` in circa 16 minuti (molti risultati dalla cache dopo un giro `galleryTest galleryLint --continue` identico); **18.206 prove in 47 moduli, 0 fallite, 35 saltate per assunzione**; tutti i passi della release verdi. Nessuna classe rifatta con `--rerun`, nessun
+`hs_err_pid*.log`. Le prime due corse di `check.ps1` erano rosse per due errori **miei**, corretti e descritti sopra: `dexBuilderDebug` ("Method name '<anonymous>' in class '$$$$$NON_LOCAL_RETURN$$$$$'", dal `return@key`) e `NoHandWrittenStyleTest` di feature-map (`AnimatedVisibility`).
+Le corse intermedie (prove mirate, mutazioni, screenshot) sono in `build\p5\*.log`, fuori dal repository.
+
+### Commit (branch `fase10/p5`)
+`9fca7bdf` (adaptive: finestra, regole, mouse, nuova finestra; Onboarding e Cartelle NAS), `d18d81a6` (viewer affiancato), `e2dafd9c` (mappa e zona), `0f43576c` (Impostazioni), `0a4fd021` (dettaglio nelle Raccolte, selezione salvata, nuova finestra), `1ef97611` (riga `PANES`),
+`067a55b1` (screenshot e documenti), `6dd7be58` (senza `return@key`), `7a37282d` (zona senza animazione), `2ec79989` ("Affianca" per profilo, provato), `48388361` (`EntryPanesTest`); questa riga con l'esito, dopo.

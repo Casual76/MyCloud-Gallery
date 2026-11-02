@@ -218,6 +218,23 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   val mapHost: MapHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
   val mapActions = remember(nav, viewer, mapHost, gallery) { mapHost?.let { host -> AppMapActions(nav, viewer, host) { gallery?.viewerServices } } }
   if (mapHost != null) MapHostEffect(nav, viewer, mapHost)
+  // Fase 10 (P5, D13): le pagine di album, persone e ricordi nel pannello di dettaglio delle Raccolte (da finestra estesa): le stesse uscite e miniature delle loro rotte.
+  val entryPanes = remember(albumActions, albumsHost, peopleActions, peopleHost, memoriesActions, memoriesHost) {
+    if (destination != RootDestination.Main) {
+      null
+    } else {
+      EntryPanes(
+        albumActions = albumActions,
+        albumThumbnails = albumsHost?.thumbnails,
+        peopleActions = peopleActions,
+        peopleThumbnails = peopleHost?.thumbnails,
+        peopleCrops = peopleHost?.crops,
+        memoriesActions = memoriesActions,
+        memoriesThumbnails = memoriesHost?.thumbnails,
+        resolveMemory = { code -> memoriesHost?.resolveEntry(code) },
+      )
+    }
+  }
   NavHost(
     navController = nav,
     startDestination = startRoute(destination),
@@ -242,6 +259,7 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
               peopleActions = peopleActions,
               memoriesHost = memoriesHost,
               mapHost = mapHost,
+              entryPanes = entryPanes,
             )
           }
           // Fase 3 (P10): le pagine delle Raccolte sul telefono (griglie filtrate, Nascosti, Eliminati di recente).
@@ -440,6 +458,8 @@ private fun MainDestination(
   memoriesHost: MemoriesHostViewModel? = null,
   /** Fase 9 (correzioni MA-1): la mappa (il "Riprova" della sezione Luoghi rifa la lettura dei punti). */
   mapHost: MapHostViewModel? = null,
+  /** Fase 10 (P5): le pagine di album, persone e ricordi nel pannello di dettaglio delle Raccolte. */
+  entryPanes: EntryPanes? = null,
 ) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
   // Fase 10 (P4, D16): una finestra nuova parte dalla pagina scelta (album, ricordo, mappa), con un evento interno e solo dopo il blocco app.
@@ -523,8 +543,8 @@ private fun MainDestination(
             onPlaces = { target -> if (target == PlacesEntryTarget.Retry) mapHost?.map?.retryPoints() else nav.openPlacesEntry(target) },
           )
         },
-        entryDetail = { entry -> CollectionEntryDetail(entry, nav, slot.contentPadding, nasOpener, openViewer) },
-        entryHasDetail = { entry -> hasEntryDetail(entry.code) },
+        entryDetail = { entry -> CollectionEntryDetail(entry, nav, slot.contentPadding, nasOpener, openViewer, entryPanes) },
+        entryHasDetail = { entry -> hasEntryDetail(entry.code, entryPanes) },
       )
     },
     search = { slot -> SearchTab(slot, searchActions, searchHost, findSimilar, onFindSimilarHandled) },

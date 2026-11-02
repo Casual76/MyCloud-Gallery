@@ -649,6 +649,12 @@ fatte solo con i componenti G2 e del kit dell'engine.
   finestra intera; ruotando in verticale la griglia diventa una pagina e lo stato (bolla aperta, scorrimento) resta.
 - Nessuna schermata misura lo schermo: tutte leggono `GalleryWindow` (D12); una finestra libera che attraversa una soglia cambia pannelli
   **senza** ricreare la pagina (E-T2).
+- **Esito di P5 (31/10, `docs/decisioni.md` "Fase 10 P5")**: fatto come in tabella. Scostamenti: (1) le schermate dentro un pannello leggono la **finestra del
+  pannello** (`rememberGalleryWindow`), chi decide per l'intera finestra (la voce "Apri in una nuova finestra") la **finestra dell'app** (`rememberAppWindow`);
+  (2) l'elenco di Raccolte e Impostazioni lo decide `GalleryPaneRules` (`FluidPaneSizes`), non l'engine; (3) nel pannello le pagine di Impostazioni, album,
+  persona e ricordo vivono in una navigazione propria (un `NavHost` per pagina scelta): "Indietro" ne chiude il pannello; (4) scorrimento della griglia della zona
+  e pagine aperte dentro il pannello **non** passano fra pannello e pagina (si salva la zona aperta, non lo scorrimento); (5) la riga **Cerca** della tabella
+  (filtri in colonna da estesa) **non** e' fatta: `feature-search` era fuori dal perimetro di P5.
 
 ### 2.4 Rotazione, finestre libere, DeX, due finestre (D14–D18; P4)
 | Momento | Comportamento | Dettagli |

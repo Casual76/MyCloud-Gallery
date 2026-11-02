@@ -28,6 +28,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberNewWindowEntry
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridInteractionState
@@ -157,7 +158,11 @@ private fun ReadyPage(
     metrics = metrics,
     itemSpacing = GalleryWall.Gap,
     contentMaxWidth = MemoriesDimens.PageWidth,
-    actions = { GalleryMenuButton(entries = menuEntries(header, page.actions, handlers), contentDescription = stringResource(R.string.memorie_more)) },
+    actions = {
+      // Fase 10 (P5, D16): da finestra estesa il menu offre "Apri in una nuova finestra" su questo ricordo.
+      val newWindow = rememberNewWindowEntry(stringResource(R.string.memorie_open_new_window)) { port -> port.openMemory(header.id.value) }
+      GalleryMenuButton(entries = menuEntries(header, page.actions, handlers, newWindow), contentDescription = stringResource(R.string.memorie_more))
+    },
   ) {
     ui.message?.let { message -> item(key = "message") { MemoriesMessageBlock(message, handlers::onDismissMessage) } }
     ui.undo?.let { offer -> item(key = "undo") { UndoBar(offer, handlers::onUndo) } }
@@ -194,9 +199,16 @@ private val MenuSpecs = listOf(
 
 /** Il menu ⋮: "Riproduci" e' il bottone grande, qui le altre azioni nell'ordine d'uso; "Non mostrare questo ricordo" in fondo, dopo un'interruzione. */
 @Composable
-private fun menuEntries(header: MemoryHeader, actions: Set<MemoryAction>, handlers: MemoryPageHandlers): List<GalleryMenuEntry> {
+private fun menuEntries(header: MemoryHeader, actions: Set<MemoryAction>, handlers: MemoryPageHandlers, newWindow: GalleryMenuEntry.Item? = null): List<GalleryMenuEntry> {
   val entries = ArrayList<GalleryMenuEntry>()
+  var windowPlaced = newWindow == null
   for (spec in MenuSpecs.filter { it.action in actions }) {
+    // "Apri in una nuova finestra" non e' un'azione sul ricordo: sta da sola, prima di "Non mostrare questo ricordo" (che resta l'ultima voce).
+    if (spec.destructive && !windowPlaced) {
+      if (entries.isNotEmpty()) entries += GalleryMenuEntry.GroupBreak
+      entries += checkNotNull(newWindow)
+      windowPlaced = true
+    }
     if (spec.destructive) entries += GalleryMenuEntry.GroupBreak
     val label = when (spec.action) {
       MemoryAction.LESS_PERSON ->
@@ -207,6 +219,10 @@ private fun menuEntries(header: MemoryHeader, actions: Set<MemoryAction>, handle
       MemoryAction.PLAY -> stringResource(R.string.memorie_play)
     }
     entries += GalleryMenuEntry.Item(label = label, onClick = { handlers.onAction(spec.action) }, icon = spec.icon, destructive = spec.destructive)
+  }
+  if (!windowPlaced) {
+    if (entries.isNotEmpty()) entries += GalleryMenuEntry.GroupBreak
+    entries += checkNotNull(newWindow)
   }
   return entries
 }

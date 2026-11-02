@@ -2,7 +2,12 @@ package dev.pampa.mycloudgallery.main
 
 import android.os.Trace
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -21,10 +26,18 @@ import dev.antigravity.fluidengine.ui.fluid.fluidGlassModalObscured
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPanes
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.PaneWindows
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.ProvidePaneWindow
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import dev.pampa.mycloudgallery.core.designsystem.sheet.LocalConfirmSheetShield
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.security.screen.OverlayShield
+import dev.pampa.mycloudgallery.feature.viewer.LocalViewerDock
+import dev.pampa.mycloudgallery.feature.viewer.ViewerDock
+import dev.pampa.mycloudgallery.feature.viewer.ViewerJump
 import dev.pampa.mycloudgallery.feature.viewer.ViewerOverlay
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 
@@ -42,7 +55,7 @@ import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
  * con il viewer, che parte gia' con la bitmap della miniatura (opaco dal primo fotogramma).
  */
 @Stable
-class ViewerHostState internal constructor(restoreLibraryId: String?) {
+class ViewerHostState internal constructor(restoreLibraryId: String?) : ViewerDock {
 
   var request: ViewerRequest? by mutableStateOf(null)
     private set
@@ -52,7 +65,41 @@ class ViewerHostState internal constructor(restoreLibraryId: String?) {
 
   /** L'elemento guardato nel viewer aperto dalla Libreria (per E-V8); null se il viewer e' chiuso o viene da altrove. */
   private var libraryCurrent: String? = null
-  private var fromLibrary = false
+  private var fromLibrary by mutableStateOf(false)
+
+  // --- Il viewer affiancato alla Libreria (Fase 10, P5, D13 (5)) ---------------------------------------------------------------------------------------------
+
+  /** La finestra e' ampia (>= 1200 dp): la scrive [GalleryRoot] a ogni disegno. */
+  var canDock: Boolean by mutableStateOf(false)
+    internal set
+
+  /** La scelta "Affianca" del profilo: la Libreria la scrive dalle sue preferenze ([chooseDocked] la cambia subito, le preferenze la ricordano). */
+  var dockChoice: Boolean by mutableStateOf(false)
+    internal set
+
+  /** Chi ricorda la scelta (le preferenze della Libreria): la scrive la Libreria. */
+  internal var saveDockChoice: ((Boolean) -> Unit)? = null
+
+  /** Il viewer aperto e' quello della Libreria (mai i Nascosti, mai una griglia delle Raccolte). */
+  val isLibraryViewer: Boolean get() = request != null && fromLibrary
+
+  override val offered: Boolean get() = isLibraryViewer && canDock
+
+  override val docked: Boolean get() = offered && dockChoice
+
+  override fun chooseDocked(docked: Boolean) {
+    dockChoice = docked
+    saveDockChoice?.invoke(docked)
+  }
+
+  override var jump: ViewerJump? by mutableStateOf(null)
+    private set
+
+  private var jumpSerial = 0L
+
+  override fun jumpHandled(jump: ViewerJump) {
+    if (this.jump == jump) this.jump = null
+  }
 
   /** Dopo una ricreazione: l'elemento da cui riaprire il viewer della Libreria. Lo consuma la Libreria. */
   var pendingLibraryRestore: String? by mutableStateOf(restoreLibraryId)
@@ -63,7 +110,11 @@ class ViewerHostState internal constructor(restoreLibraryId: String?) {
 
   /** Apre il viewer (se non e' gia' aperto) con [services]. [fromLibrary] = la richiesta viene dalla scheda Libreria. */
   fun open(request: ViewerRequest, services: ViewerServices, fromLibrary: Boolean = false) {
-    if (this.request != null) return
+    if (this.request != null) {
+      // Affiancato (D13 (5)): un tocco su una cella della griglia a lato cambia la foto del viewer, senza animazione d'apertura; la griglia non si muove.
+      if (docked && fromLibrary && !request.secure) jump = ViewerJump(request.start, ++jumpSerial)
+      return
+    }
     traceCookie++
     Trace.beginAsyncSection(TRACE_VIEWER_OPEN, traceCookie)
     tracing = true
@@ -85,6 +136,7 @@ class ViewerHostState internal constructor(restoreLibraryId: String?) {
 
   fun close() {
     request = null
+    jump = null
     libraryCurrent = null
     fromLibrary = false
     if (tracing) onFirstFrame()
@@ -122,10 +174,17 @@ fun GalleryRoot(content: @Composable () -> Unit) {
   val viewer = rememberSaveable(saver = ViewerHostState.Saver) { ViewerHostState(null) }
   val modal = rememberFluidGlassModalHostState()
   val backdrop = rememberGlassBackdrop()
+  // Fase 10 (P5, D13 (5)): da finestra ampia, con "Affianca" scelto, la Libreria sta a sinistra (40%) e il viewer a destra (60%): ogni pannello e' una finestra piu' stretta
+  // per le schermate dentro. Il posto di `content` e del viewer nell'albero e' sempre lo stesso: cambiare pannelli non ricrea niente (E-T2).
+  val window = rememberGalleryWindow()
+  SideEffect { viewer.canDock = GalleryPaneRules.canDock(window) }
+  val panes = GalleryPaneRules.libraryViewer(window, viewerOpen = viewer.isLibraryViewer, wantsDock = viewer.dockChoice)
+  val split = remember(window, panes) { (panes as? GalleryPanes.Docked)?.let { GalleryPaneRules.split(window, it) } }
   // R7 (revisione 4B): i fogli di conferma nascondono le sovrapposizioni delle altre app mentre sono aperti (L34).
   CompositionLocalProvider(
     LocalFluidGlassModalHostState provides modal,
     LocalViewerHost provides viewer,
+    LocalViewerDock provides viewer,
     LocalConfirmSheetShield provides ConfirmSheetShield,
   ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -137,10 +196,37 @@ fun GalleryRoot(content: @Composable () -> Unit) {
       // nello stesso fotogramma questa radice si ricompone con il fondale, che si registra prima che il vetro lo legga.
       val rootSource = if (modal.isOnScreen) Modifier.glassBackdropSource(backdrop) else Modifier
       Box(modifier = Modifier.fillMaxSize().then(rootSource).fluidGlassModalObscured()) {
-        content()
-        ViewerLayer(viewer)
+        GalleryPanesLayout(panes = panes, split = split, library = content, viewer = { ViewerLayer(viewer) })
       }
       FluidGlassModalHost(state = modal, backdrop = backdrop)
+    }
+  }
+}
+
+/**
+ * I due pannelli della galleria: la Libreria (con tutta la navigazione) e il viewer. A finestra intera (default) il contenuto riempie tutto e il viewer gli sta sopra; affiancati, la
+ * Libreria prende la sua frazione a sinistra e il viewer il resto a destra. Solo i modificatori cambiano: i due `Box` e quello che c'e' dentro restano dove sono.
+ */
+@Composable
+internal fun GalleryPanesLayout(
+  panes: GalleryPanes,
+  split: PaneWindows?,
+  library: @Composable () -> Unit,
+  viewer: @Composable () -> Unit,
+) {
+  val docked = panes as? GalleryPanes.Docked
+  Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = if (docked != null) Modifier.fillMaxHeight().fillMaxWidth(docked.gridFraction) else Modifier.fillMaxSize()) {
+      ProvidePaneWindow(split?.grid, library)
+    }
+    Box(
+      modifier = if (docked != null) {
+        Modifier.align(Alignment.CenterEnd).fillMaxHeight().fillMaxWidth(1f - docked.gridFraction)
+      } else {
+        Modifier.fillMaxSize()
+      },
+    ) {
+      ProvidePaneWindow(split?.other, viewer)
     }
   }
 }

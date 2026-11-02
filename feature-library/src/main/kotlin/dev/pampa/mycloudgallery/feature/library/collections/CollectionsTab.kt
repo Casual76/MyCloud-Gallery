@@ -10,7 +10,9 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,11 +28,18 @@ import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.FluidPaneSizes
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenRoute
 import dev.pampa.mycloudgallery.feature.library.trash.RecentlyDeletedRoute
+
+/**
+ * Fase 10 (P5, D13 (3)): chiude la pagina di una voce nel pannello di dettaglio (il suo "Indietro"): torna alla raccolta scelta prima. Fuori da un pannello (o sul telefono) non fa niente.
+ */
+val LocalCollectionDetailClose = staticCompositionLocalOf<() -> Unit> { {} }
 
 /**
  * La scheda **Raccolte** (D17, D33): le sezioni, una sotto l'altra, nell'ordine che l'utente ha scelto e senza quelle che ha nascosto.
@@ -45,7 +54,7 @@ import dev.pampa.mycloudgallery.feature.library.trash.RecentlyDeletedRoute
  *   dell'utente ([CollectionsLayoutStore]); una sezione nuova va in coda (E-L14).
  * - **Telefono**: l'elenco e basta; una voce toccata chiama [onOpenCollection] (`:app` la porta alla rotta giusta con
  *   `NavController.openCollection`) o, per le voci consegnate come dati, [onOpenEntry].
- * - **Tablet** (da 840 dp: `FluidListDetailScaffold`): l'elenco delle sezioni a sinistra, la raccolta scelta a destra, nello stesso
+ * - **Tablet** (da 840 dp, secondo la finestra comune `GalleryWindow`: `FluidListDetailScaffold`): l'elenco delle sezioni a sinistra, la raccolta scelta a destra, nello stesso
  *   ordine del telefono. Le voci selezionano e basta, nessuna navigazione; per una voce di `:app` il dettaglio e' [entryDetail].
  *
  * @param contentPadding lo spazio che la pillola delle schede occupa in basso (il contenuto scorre sotto, rifratto).
@@ -143,9 +152,12 @@ internal fun CollectionsScreen(
     else -> CollectionsSelection.None
   }
 
+  // Fase 10 (P5, D12): uno o due pannelli lo decide la finestra comune (da 840 dp, la soglia di sempre), non una misura propria.
+  val window = rememberGalleryWindow()
   FluidListDetailScaffold(
     ambient = null,
     modifier = modifier,
+    sizes = FluidPaneSizes.listDetail(window),
     list = { twoPane ->
       CollectionsList(
         state = state,
@@ -175,7 +187,8 @@ internal fun CollectionsScreen(
       FluidDetailContent(item = selection, key = { it.key }, order = { it.order(state) }) { chosen ->
         when (chosen) {
           is CollectionsSelection.Kind -> detail(chosen.kind)
-          is CollectionsSelection.Entry -> entryDetail?.invoke(chosen.entry)
+          // Il "Indietro" di una pagina nel pannello (album, persona, ricordo) la chiude e torna alla raccolta di prima (Fase 10, P5).
+          is CollectionsSelection.Entry -> CompositionLocalProvider(LocalCollectionDetailClose provides { savedEntry = null }) { entryDetail?.invoke(chosen.entry) }
           CollectionsSelection.None -> FluidDetailPlaceholder(
             title = stringResource(R.string.collections_detail_empty_title),
             message = stringResource(R.string.collections_detail_empty_message),

@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.feature.people.nav.PeopleEntryTarget
 import dev.pampa.mycloudgallery.feature.map.places.PlacesEntryTarget
 import dev.pampa.mycloudgallery.feature.memories.section.MemoriesEntryTarget
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
+import dev.pampa.mycloudgallery.feature.library.collections.LocalCollectionDetailClose
 import dev.pampa.mycloudgallery.feature.library.utility.UtilityPage
 import dev.pampa.mycloudgallery.feature.library.utility.UtilityPageRoute
 import dev.pampa.mycloudgallery.feature.library.utility.openUtility
@@ -58,12 +59,14 @@ internal sealed interface EntryTarget {
 }
 
 /**
- * Se la voce ha una pagina nel pannello di dettaglio del tablet: le pagine dell'Utility, della 4B e "Libera spazio" si', le pagine degli album no (sono
- * rotte con la loro barra, e "Nuovo album" e' un foglio): si aprono come sul telefono.
+ * Se la voce ha una pagina nel pannello di dettaglio del tablet: le pagine dell'Utility, della 4B e "Libera spazio" si'; dalla Fase 10 (P5) anche la pagina di un album, di una persona e di un ricordo
+ * ([panes]); le liste, "Nuovo album" (un foglio), i viaggi e i Luoghi si aprono come sul telefono.
  */
-internal fun hasEntryDetail(code: String): Boolean = when (EntryTarget.of(code)) {
+internal fun hasEntryDetail(code: String, panes: EntryPanes? = null): Boolean = when (val target = EntryTarget.of(code)) {
   EntryTarget.FreeSpace, is EntryTarget.Utility, is EntryTarget.Nas -> true
-  is EntryTarget.Album, is EntryTarget.People, is EntryTarget.Memories, is EntryTarget.Places, EntryTarget.Unknown -> false
+  // Fase 10 (P5, D13): la pagina di un album, di una persona o di un ricordo sta nel pannello (da estesa) se la sua funzione e' legata; le liste e i viaggi restano pagine.
+  is EntryTarget.Album, is EntryTarget.People, is EntryTarget.Memories -> panes?.pageOf(target) != null
+  is EntryTarget.Places, EntryTarget.Unknown -> false
 }
 
 /** Apre la voce [code] sul telefono (o, sul tablet, una voce senza dettaglio). */
@@ -96,11 +99,16 @@ internal fun CollectionEntryDetail(
   hostPadding: PaddingValues,
   opener: NasFileOpener,
   onOpenViewer: (ViewerRequest) -> Unit,
+  panes: EntryPanes? = null,
 ) {
   when (val target = EntryTarget.of(entry.code)) {
     EntryTarget.FreeSpace -> FreeSpaceEntryDetail(hostPadding)
     is EntryTarget.Utility -> UtilityPageRoute(page = target.page, onOpenViewer = onOpenViewer, contentPadding = hostPadding)
     is EntryTarget.Nas -> NasEntryDetail(entry, nav, hostPadding, opener)
-    is EntryTarget.Album, is EntryTarget.People, is EntryTarget.Memories, is EntryTarget.Places, EntryTarget.Unknown -> Unit
+    is EntryTarget.Album, is EntryTarget.People, is EntryTarget.Memories -> {
+      val page = panes?.pageOf(target)
+      if (page != null && panes != null) EntryPagePane(page = page, panes = panes, outer = nav, close = LocalCollectionDetailClose.current)
+    }
+    is EntryTarget.Places, EntryTarget.Unknown -> Unit
   }
 }

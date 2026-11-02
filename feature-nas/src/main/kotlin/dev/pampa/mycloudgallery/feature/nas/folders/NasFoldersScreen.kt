@@ -4,7 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.BoxWithConstraints
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -233,8 +234,10 @@ internal fun NasFoldersScreen(
       }
     },
   ) { insets ->
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-      if (maxWidth >= NasDimens.TwoPaneMinWidth) {
+    // Fase 10 (P5, D12): elenco delle cartelle e cartella da finestra estesa (840 dp, la soglia di sempre) secondo la finestra comune.
+    val window = rememberGalleryWindow()
+    Box(modifier = Modifier.fillMaxSize()) {
+      if (GalleryPaneRules.twoPanes(window)) {
         Row(modifier = Modifier.fillMaxSize()) {
           Sidebar(state, actions, insets, modifier = Modifier.width(NasDimens.SidebarWidth).fillMaxHeight())
           FolderPane(state, actions, insets, modifier = Modifier.weight(1f).fillMaxHeight())

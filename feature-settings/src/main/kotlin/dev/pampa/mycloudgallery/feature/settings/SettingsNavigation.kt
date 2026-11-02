@@ -146,122 +146,137 @@ fun NavGraphBuilder.settingsGraph(
   navigation<SettingsGraphRoute>(startDestination = SettingsHomeRoute) {
     composable<SettingsHomeRoute> {
       SettingsHost {
-        SettingsRoute(
-          onBack = back,
-          links = SettingsLinks(
-            openDevices = { nav.navigate(SettingsDevicesRoute) },
-            openFamily = { nav.navigate(SettingsFamilyRoute) },
-            openNasAccount = { nav.navigate(SettingsAccountRoute) },
-            openNetwork = { nav.navigate(SettingsNetworkRoute) },
-            openSecurity = { nav.navigate(SettingsSecurityRoute) },
-            openBackupNotice = { nav.navigate(SettingsBackupRoute) },
-            openAbout = { nav.navigate(SettingsAboutRoute) },
-            openQuality = { nav.navigate(SettingsQualityRoute) },
-            openRules = { nav.navigate(SettingsRulesRoute) },
-            openBackup = openBackup,
-            openSharing = { nav.navigate(SettingsSharingRoute) },
-            openSearch = openSearch,
-            openHidden = openHidden,
-            openPeople = openPeople,
-            openMemories = openMemories,
-            openMap = openMap,
-          ),
-          openDiagnostics = openDiagnostics,
-          resumeStep = resumeStep,
-          developerSection = developerSection,
+        // Fase 10 (P5, D13 (4)): da finestra estesa l'elenco sta a sinistra e la pagina scelta a destra; sotto, l'elenco e poi la pagina come prima.
+        SettingsPanes(
+          list = { twoPane, choose ->
+            // Le pagine delle Impostazioni si scelgono nel pannello di destra o si aprono a pagina intera; quelle di altre funzioni (Diagnostica, Backup, Ricerca...) sempre a pagina intera.
+            val open: (SettingsPage) -> Unit = { page -> if (twoPane) choose(page) else nav.navigate(page.route) }
+            SettingsRoute(
+              onBack = back,
+              links = SettingsLinks(
+                openDevices = { open(SettingsPage.DEVICES) },
+                openFamily = { open(SettingsPage.FAMILY) },
+                openNasAccount = { open(SettingsPage.ACCOUNT) },
+                openNetwork = { open(SettingsPage.NETWORK) },
+                openSecurity = { open(SettingsPage.SECURITY) },
+                openBackupNotice = { open(SettingsPage.BACKUP_NOTICE) },
+                openAbout = { open(SettingsPage.ABOUT) },
+                openQuality = { open(SettingsPage.QUALITY) },
+                openRules = { open(SettingsPage.RULES) },
+                openBackup = openBackup,
+                openSharing = { open(SettingsPage.SHARING) },
+                openSearch = openSearch,
+                openHidden = openHidden,
+                openPeople = openPeople,
+                openMemories = openMemories,
+                openMap = openMap,
+              ),
+              openDiagnostics = openDiagnostics,
+              resumeStep = resumeStep,
+              developerSection = developerSection,
+            )
+          },
+          detail = { page, close -> SettingsPaneHost(page = page, close = close, resumeStep = resumeStep) },
         )
       }
     }
-
-    // --- Dispositivi ---
-    composable<SettingsDevicesRoute> {
-      SettingsHost {
-        DevicesRoute(
-          onBack = back,
-          openRequest = { nav.navigate(SettingsApprovalRoute(it)) },
-          openDevice = { nav.navigate(SettingsDeviceRoute(it)) },
-        )
-      }
-    }
-    composable<SettingsDeviceRoute> { SettingsHost { DeviceDetailRoute(onBack = back) } }
-    composable<SettingsApprovalRoute> { SettingsHost { ApprovalRoute(onBack = back) } }
-
-    // --- Famiglia ---
-    composable<SettingsFamilyRoute> {
-      SettingsHost {
-        FamilyRoute(
-          links = FamilyLinks(
-            onBack = back,
-            openInvite = { nav.navigate(SettingsInviteRoute) },
-            openRecoveryKit = { nav.navigate(SettingsKitRoute) },
-            openFamilyState = { nav.navigate(SettingsFamilyStateRoute) },
-            openSecondAdmin = { nav.navigate(SettingsAdminRecoveryRoute(replace = false)) },
-            openReplaceAdmin = { nav.navigate(SettingsAdminRecoveryRoute(replace = true)) },
-            openReset = { nav.navigate(SettingsResetRoute) },
-            openRejoin = { nav.navigate(SettingsRejoinRoute) },
-            openStartOverGuide = { nav.navigate(SettingsStartOverRoute) },
-          ),
-        )
-      }
-    }
-    composable<SettingsInviteRoute> { SettingsHost { InviteRoute(onBack = back) } }
-    composable<SettingsKitRoute> {
-      SettingsHost {
-        KitRoute(
-          onBack = back,
-          onSecondAdmin = { nav.navigate(SettingsAdminRecoveryRoute(replace = false)) },
-          onReplaceAdmin = { nav.navigate(SettingsAdminRecoveryRoute(replace = true)) },
-        )
-      }
-    }
-    composable<SettingsAdminRecoveryRoute> {
-      SettingsHost { AdminRecoveryRoute(onBack = back, openStartOverGuide = { nav.navigate(SettingsStartOverRoute) }) }
-    }
-    composable<SettingsRejoinRoute> { SettingsHost { FamilyRejoinRoute(onBack = back) } }
-    composable<SettingsStartOverRoute> { SettingsHost { StartOverGuideRoute(onBack = back) } }
-    composable<SettingsFamilyStateRoute> { SettingsHost { FamilyStateRoute(onBack = back) } }
-    composable<SettingsResetRoute> {
-      SettingsHost { FamilyResetRoute(onBack = back, onInvite = { nav.navigate(SettingsInviteRoute) }) }
-    }
-
-    // --- Account del NAS ---
-    composable<SettingsAccountRoute> {
-      SettingsHost {
-        NasAccountRoute(
-          links = NasAccountLinks(
-            onBack = back,
-            openPassword = { nav.navigate(SettingsPasswordRoute) },
-            openAddress = { nav.navigate(SettingsAddressRoute) },
-          ),
-        )
-      }
-    }
-    composable<SettingsPasswordRoute> { SettingsHost { PasswordRoute(onBack = back) } }
-    composable<SettingsAddressRoute> { SettingsHost { AddressRoute(onBack = back) } }
-
-    // --- Rete, sicurezza, backup ---
-    composable<SettingsNetworkRoute> {
-      SettingsHost { NetworkRoute(onBack = back, configureVpn = { resumeStep(OnboardingStep.VPN) }) }
-    }
-    composable<SettingsSecurityRoute> {
-      SettingsHost { SecurityRoute(onBack = back, openBackupNotice = { nav.navigate(SettingsBackupRoute) }) }
-    }
-    composable<SettingsBackupRoute> {
-      SettingsHost {
-        BackupNoticeRoute(onBack = back, onReviewChecklist = { resumeStep(OnboardingStep.SECURITY_NOTICE) })
-      }
-    }
-
-    // --- Anteprime del NAS (Fase 4A) ---
-    composable<SettingsQualityRoute> { SettingsHost { PreviewQualityRoute(onBack = back) } }
-
-    // --- Quando lavora l'app (verifica funzionale, RE-8) ---
-    composable<SettingsRulesRoute> { SettingsHost { RulesRoute(onBack = back) } }
-
-    // --- Condivisioni senza posizione (Fase 5B) ---
-    composable<SettingsSharingRoute> { SettingsHost { SharingRoute(onBack = back) } }
-
-    // --- Informazioni e licenze ---
-    composable<SettingsAboutRoute> { SettingsHost { AboutRoute(onBack = back) } }
+    settingsPages(nav = nav, back = back, resumeStep = resumeStep)
   }
+}
+
+/**
+ * Le pagine delle Impostazioni (tutte tranne l'elenco), registrate in una navigazione: quella dell'app (a pagina intera) o quella del pannello di destra delle Impostazioni a due pannelli ([SettingsPaneHost]):
+ * ogni pagina e' la stessa nei due posti. [back] e' l'"Indietro" della pagina nella navigazione che la ospita.
+ */
+internal fun NavGraphBuilder.settingsPages(nav: NavController, back: () -> Unit, resumeStep: (OnboardingStep) -> Unit) {
+  // --- Dispositivi ---
+  composable<SettingsDevicesRoute> {
+    SettingsHost {
+      DevicesRoute(
+        onBack = back,
+        openRequest = { nav.navigate(SettingsApprovalRoute(it)) },
+        openDevice = { nav.navigate(SettingsDeviceRoute(it)) },
+      )
+    }
+  }
+  composable<SettingsDeviceRoute> { SettingsHost { DeviceDetailRoute(onBack = back) } }
+  composable<SettingsApprovalRoute> { SettingsHost { ApprovalRoute(onBack = back) } }
+
+  // --- Famiglia ---
+  composable<SettingsFamilyRoute> {
+    SettingsHost {
+      FamilyRoute(
+        links = FamilyLinks(
+          onBack = back,
+          openInvite = { nav.navigate(SettingsInviteRoute) },
+          openRecoveryKit = { nav.navigate(SettingsKitRoute) },
+          openFamilyState = { nav.navigate(SettingsFamilyStateRoute) },
+          openSecondAdmin = { nav.navigate(SettingsAdminRecoveryRoute(replace = false)) },
+          openReplaceAdmin = { nav.navigate(SettingsAdminRecoveryRoute(replace = true)) },
+          openReset = { nav.navigate(SettingsResetRoute) },
+          openRejoin = { nav.navigate(SettingsRejoinRoute) },
+          openStartOverGuide = { nav.navigate(SettingsStartOverRoute) },
+        ),
+      )
+    }
+  }
+  composable<SettingsInviteRoute> { SettingsHost { InviteRoute(onBack = back) } }
+  composable<SettingsKitRoute> {
+    SettingsHost {
+      KitRoute(
+        onBack = back,
+        onSecondAdmin = { nav.navigate(SettingsAdminRecoveryRoute(replace = false)) },
+        onReplaceAdmin = { nav.navigate(SettingsAdminRecoveryRoute(replace = true)) },
+      )
+    }
+  }
+  composable<SettingsAdminRecoveryRoute> {
+    SettingsHost { AdminRecoveryRoute(onBack = back, openStartOverGuide = { nav.navigate(SettingsStartOverRoute) }) }
+  }
+  composable<SettingsRejoinRoute> { SettingsHost { FamilyRejoinRoute(onBack = back) } }
+  composable<SettingsStartOverRoute> { SettingsHost { StartOverGuideRoute(onBack = back) } }
+  composable<SettingsFamilyStateRoute> { SettingsHost { FamilyStateRoute(onBack = back) } }
+  composable<SettingsResetRoute> {
+    SettingsHost { FamilyResetRoute(onBack = back, onInvite = { nav.navigate(SettingsInviteRoute) }) }
+  }
+
+  // --- Account del NAS ---
+  composable<SettingsAccountRoute> {
+    SettingsHost {
+      NasAccountRoute(
+        links = NasAccountLinks(
+          onBack = back,
+          openPassword = { nav.navigate(SettingsPasswordRoute) },
+          openAddress = { nav.navigate(SettingsAddressRoute) },
+        ),
+      )
+    }
+  }
+  composable<SettingsPasswordRoute> { SettingsHost { PasswordRoute(onBack = back) } }
+  composable<SettingsAddressRoute> { SettingsHost { AddressRoute(onBack = back) } }
+
+  // --- Rete, sicurezza, backup ---
+  composable<SettingsNetworkRoute> {
+    SettingsHost { NetworkRoute(onBack = back, configureVpn = { resumeStep(OnboardingStep.VPN) }) }
+  }
+  composable<SettingsSecurityRoute> {
+    SettingsHost { SecurityRoute(onBack = back, openBackupNotice = { nav.navigate(SettingsBackupRoute) }) }
+  }
+  composable<SettingsBackupRoute> {
+    SettingsHost {
+      BackupNoticeRoute(onBack = back, onReviewChecklist = { resumeStep(OnboardingStep.SECURITY_NOTICE) })
+    }
+  }
+
+  // --- Anteprime del NAS (Fase 4A) ---
+  composable<SettingsQualityRoute> { SettingsHost { PreviewQualityRoute(onBack = back) } }
+
+  // --- Quando lavora l'app (verifica funzionale, RE-8) ---
+  composable<SettingsRulesRoute> { SettingsHost { RulesRoute(onBack = back) } }
+
+  // --- Condivisioni senza posizione (Fase 5B) ---
+  composable<SettingsSharingRoute> { SettingsHost { SharingRoute(onBack = back) } }
+
+  // --- Informazioni e licenze ---
+  composable<SettingsAboutRoute> { SettingsHost { AboutRoute(onBack = back) } }
 }

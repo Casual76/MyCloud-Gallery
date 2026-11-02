@@ -48,14 +48,29 @@ private val Specs: Map<AlbumAction, MenuItemSpec> = mapOf(
 
 /** Le voci del menu ⋮ per [actions] (nell'ordine dei gruppi), una banda fra un gruppo e l'altro. Il livello ([AlbumAction.CHANGE_LEVEL]) non e' una voce. */
 @Composable
-internal fun pageMenu(actions: List<AlbumAction>, onAction: (AlbumAction) -> Unit): List<GalleryMenuEntry> {
+internal fun pageMenu(actions: List<AlbumAction>, onAction: (AlbumAction) -> Unit, newWindow: GalleryMenuEntry.Item? = null): List<GalleryMenuEntry> {
   val items = actions.mapNotNull { action -> Specs[action]?.let { action to it } }.sortedBy { (_, spec) -> spec.group }
   val out = ArrayList<GalleryMenuEntry>()
   var lastGroup = -1
+  var windowPlaced = newWindow == null
   for ((action, spec) in items) {
+    // Fase 10 (P5, D16): "Apri in una nuova finestra" non e' un'azione sull'album: sta da sola, prima di chi chiude o toglie (l'ultima voce resta quella che cancella).
+    if (!windowPlaced && spec.group == LAST_GROUP) {
+      if (lastGroup >= 0) out += GalleryMenuEntry.GroupBreak
+      out += checkNotNull(newWindow)
+      windowPlaced = true
+      lastGroup = LAST_GROUP - 1
+    }
     if (lastGroup >= 0 && spec.group != lastGroup) out += GalleryMenuEntry.GroupBreak
     lastGroup = spec.group
     out += GalleryMenuEntry.Item(label = stringResource(spec.label), onClick = { onAction(action) }, icon = spec.icon, destructive = spec.destructive)
   }
+  if (!windowPlaced) {
+    if (out.isNotEmpty()) out += GalleryMenuEntry.GroupBreak
+    out += checkNotNull(newWindow)
+  }
   return out
 }
+
+/** Il gruppo di chi chiude o toglie, in fondo al menu. */
+private const val LAST_GROUP = 3

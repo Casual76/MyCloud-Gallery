@@ -13,7 +13,8 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -191,7 +192,7 @@ internal fun OnboardingHost(
 
 /**
  * La cornice di ogni pagina. Su un telefono e' la pagina e basta (con la barra del cammino in testa); su uno schermo
- * largo ([OnboardingDimens.WideBreakpoint]) sono due pannelli, la barra laterale dei passi e la pagina, **sopra un
+ * largo ([GalleryPaneRules.twoPanes]: da 840 dp) sono due pannelli, la barra laterale dei passi e la pagina, **sopra un
  * fondale solo** per l'intera finestra. [wide] a null decide dalla larghezza; i test lo forzano.
  */
 @Composable
@@ -203,8 +204,10 @@ internal fun OnboardingFrame(
   wide: Boolean? = null,
   content: @Composable () -> Unit,
 ) {
-  BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-    val twoPanes = wide ?: (maxWidth >= OnboardingDimens.WideBreakpoint)
+  // Fase 10 (P5, D12): la barra laterale dei passi compare da finestra estesa (840 dp, la soglia di sempre) secondo la finestra comune, non una misura propria.
+  val window = rememberGalleryWindow()
+  Box(modifier = modifier.fillMaxSize()) {
+    val twoPanes = wide ?: GalleryPaneRules.twoPanes(window)
     if (twoPanes) {
       FluidAmbientSurface(ambient = stepAmbient(ambientStep)) {
         Row(modifier = Modifier.fillMaxSize()) {

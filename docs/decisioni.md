@@ -14300,3 +14300,134 @@ dal repository.
 
 ### Commit (branch `fase10/m3`)
 `12aee811` (codice e prove: `core-trust`, `core-family`, `:app`, `feature-settings`, `feature-onboarding`) e quello dei documenti.
+
+## Fase 10 P12: catena di rilascio (02/11)
+
+Il pacchetto P12 della Fase 10 (`docs/fase10-progetto.md` §4.4, riga P12; D32-D34, §2.9, §4.3, §6, §11 con **D32** e **Q7 (a)**; e le richieste di P1: `release.ps1` rifiuta
+`ReleaseKeys.PROVISIONAL = true`, l'impronta di `pampa.jks` va nella riga di §5.6). Branch `fase10/p12` da `ce47e36b`. Lo ha scritto un solo agente, senza sotto-agenti (regola dell'utente).
+**Nessuna dipendenza nuova, nessuna rete, nessun host nuovo, nessun NAS, nessun telefono, nessuna chiave vera toccata** (mai `pampa.jks`, K1 o K2: tutto e' provato con un keystore di prova
+generato con `keytool` sotto `build\`, che non entra mai nei commit: `build/` e `*.jks` sono in `.gitignore` e `check.ps1` passo 3 li cercherebbe). Nessun file di `core-widget`, `core-trust`,
+`core-release`, `tools/security`, `benchmark`, `FeatureFlags`, `tools/check.ps1`, `tools/release/recinzioni.json` e `share-snapshot.ps1` (di P10) toccato.
+
+**Numerazione.** Precisate **C443** (firma dell'APK controllata) e **C444** (catena di pubblicazione); nuovo **L569** (il controllo dell'impronta dice "e' la chiave scritta nel documento", non
+"e' la chiave giusta"); riga "Sigle", intestazione, checklist della Fase 10, registro delle decisioni e §5.6 di `docs/sicurezza.md` aggiornati; **§1 riscritto per la famiglia**.
+
+### Cosa c'e', dove
+- `app/build.gradle`: `versionCode` e `versionName` dall'**ultima riga** di `release/versions.txt`; firma con le voci `pampa.*` di oggi (`local.properties`; si possono dare anche come proprieta' di
+  Gradle `-Ppampa.*`, **solo** per le prove con un keystore di prova), schemi **v2 e v3** sempre, **v1 accesa** (vedi scelta 2).
+- `release/versions.txt`: il registro delle versioni (una riga per APK pubblicato, in fondo quella che si prepara). `CHANGELOG.md` (italiano semplice) e la sua copia dentro l'app,
+  `feature-settings/src/main/res/raw/changelog.md`.
+- `feature-settings/.../about/`: `ReleaseNotes.kt` (il lettore del changelog), `WhatsNewScreen.kt` (la pagina "Novita' di questa versione"), la riga in `AboutScreen.kt`; stringhe in
+  `strings_whatsnew.xml`; prove `ReleaseNotesTest` (8) e `WhatsNewScreenTest` (6).
+- `tools/release/release.ps1` (l'ingresso) con `release-run.ps1` (il giro dei passi) e le librerie `release-lib-core.ps1` (versioni, impronta, strumenti dell'SDK), `release-lib-apk.ps1` (letture dell'APK),
+  `release-lib-check.ps1` (passi 0-3 e 6), `release-lib-verify.ps1` (passo 5), `release-lib-report.ps1` (resoconto, checklist, `-Prepara`, `-SegnaPubblicata`). La prova: `test-release.ps1`,
+  `test-release-lib.ps1` (costruisce keystore e APK di prova), `test-release-parts.ps1`.
+- `core-database` e `core-faces`: la **promessa 15** (le due tabelle ridondanti dei volti, scelta 12). `docs/sicurezza.md`, `docs/modello-dati.md`.
+
+### Scelte
+1. **Versioni e canali (D33)**. `release/versions.txt`: righe `<versione> <versionCode> <stato> <canale> <data> <sha256>`, stato `pubblicata` o `prevista` (una sola, l'ultima). Regole che `release.ps1` pretende
+   (passo 4): versione `1.0.0` o `1.1.0-beta.N`; un `stable` non puo' essere una `-beta.N`; il `versionCode` **cresce sempre** e non si riusa. **Una risoluzione di D33**: il progetto dice insieme
+   "cresce di 1 a ogni APK pubblicato, mai riusato" e (Q7 (a)) "`stable` con la stessa `versionCode` o una piu' alta". Si tengono insieme cosi': lo **stesso numero** puo' stare su due righe **solo** per la
+   stessa versione e per lo **stesso identico APK** (stessa impronta SHA-256, scritta in `versions.txt` alla pubblicazione); un APK diverso vuole un numero maggiore. La prova: l'APK di una beta
+   passa a stable con lo stesso numero (`release.ps1` riusa il file del resoconto della beta, **senza ricostruirlo**: e' l'APK provato per due settimane); uno diverso con lo stesso numero fa fallire.
+   Dopo la build l'APK deve dire lo stesso `versionCode` e `versionName` della riga. Il `-Prepara` (versionCode = massimo + 1, o lo stesso numero da beta a stable) e il `-SegnaPubblicata` scrivono il file;
+   `app/build.gradle` prende solo le prime due colonne dell'ultima riga e fallisce se la riga non e' valida.
+2. **Firma (D32)**: `pampa.jks`, nessuna chiave nuova, v2 e v3 (v3 = discendenza per ruotare la chiave un giorno con `apksigner rotate`, minSdk 29 la regge). **La v1 resta accesa**: il commento storico di
+   `app/build.gradle` dice che "il publisher del Pampa Store la cerca per dire firmato", e non l'ho potuta verificare (il publisher sta fuori da questa cartella: divieto del brief). Con minSdk 29 la v1 non
+   serve ad Android e non costa niente. **Se la prova a secco dice che il publisher non la vuole**, `-Pmcg.signV1=false` la spegne (una riga). `release.ps1` pretende v2 e v3 e riporta la v1.
+   **Scoperta utile**: `apksigner verify` con il minSdk dell'app (29) verifica **solo la v3** quando c'e' (riporta "v2: false" senza dire che manca); `release.ps1` lo lancia con `--min-sdk-version 24`
+   (verifica v2 **e** v3) e la v1 la guarda a parte (file `META-INF/*.SF`, e se c'e' la verifica con minSdk 23).
+3. **Impronta di `pampa.jks`** (§5.6): la riga `pampa.jks` ha l'impronta SHA-256 del **certificato**. La scrive l'utente, oppure `release.ps1 -Impronta -Scrivi` la calcola: legge `pampa.storeFile`, `pampa.keyAlias`
+   e la password da `local.properties` (solo sul PC dell'utente, mai da un agente), la password passa a `keytool` da una **variabile d'ambiente** (`-storepass:env`: mai sulla riga di comando, mai nell'uscita), esporta
+   il certificato (dato pubblico) e ne fa lo SHA-256. Senza impronta nel documento `release.ps1` rifiuta la release. Il limite e' **L569**.
+4. **`release.ps1`, i passi**: 0 chiavi del manifest non provvisorie (`ReleaseKeys.PROVISIONAL`, commenti ignorati); 1 albero (`git status` pulito, tag `v<versione>` esistente, su `main`, `engine` pulito e `engine-doctor`;
+   **HEAD sul tag, oppure su un commit dopo il tag che cambia SOLO `release/versions.txt`**: serve a segnare la pubblicata e al passaggio da beta a stable, che altrimenti non potrebbero avere il tag); 2 recinzioni
+   (scelta 6); 3 prove (scelta 5); 4 versioni e build (`assembleRelease` con le voci `pampa.*` lette da Gradle: lo script **non legge mai** le password); 5 APK (scelta 7); 6 changelog (scelta 8);
+   7 resoconto (scelta 9); 8 prova a secco (scelta 10). Un controllo che fallisce non ferma gli altri **a buon mercato** (si vedono tutti i problemi insieme), ma la prova di 35 minuti e la build **non partono** se prima
+   qualcosa e' fallito (non si spreca mezz'ora). Il codice di uscita e' 0 solo con tutto a posto. Un file caricato con il punto non porta `exit` al processo (limite di PowerShell 5.1): il codice lo da' `release.ps1`.
+5. **Passo 3**: `tools\check.ps1 -Bench -BenchStrict` (con `-NoDaemon` e `-BenchSerial` se passati) e **tre condizioni**: nessun FAIL nel riepilogo; il **benchmark su dispositivo deve essere `OK`, non `SKIP`** (senza l'S25
+   `check.ps1` lo salta in silenzio: per una release e' un errore); e il **riferimento S25 piu' recente** di `docs/bench/riferimento-s25*.json` (campo `data`) di **al piu' 7 giorni** (`-BenchMaxAgeDays`),
+   non nel futuro. Oggi `docs/bench/riferimento-s25-fase3.json` e' del 13/10: prima della release l'utente (o P14) deve rifare le misure sull'S25.
+6. **Passo 2**: `tools\release\recinzioni.json` lo scrive **P10**; qui si controlla che il file ci sia (altrimenti **"manca recinzioni.json"** e la release fallisce), che sia un JSON oggetto non vuoto e si mostrano i campi
+   dichiarati. **Il confronto con il bytecode e' di `check.ps1`** (passo 3 di questo script, ed e' di P10). Non ho assunto nessun nome di campo: il formato lo decide P10.
+7. **Passo 5, l'APK firmato** (`Test-ReleaseApk`): firma v2 e v3 verificate, **un solo certificato**, impronta = quella di §5.6; l'id e' `dev.pampa.mycloudgallery` (mai `.debug` ne' `.bench`), non debuggable
+   (`aapt2 badging` e manifest); `allowBackup=false`; componenti esportati **solo** quelli di `allowedExported` di `gradle/verify-release-manifest.gradle` (con il permesso quando serve), la launcher esportata;
+   nessun `sharedUserId` e nessun permesso definito da app o librerie (tranne quello di androidx.core: C443); permessi nell'elenco chiuso **e** documentati in §4-bis; nel dex nessun resto di debug (l'elenco
+   `$debugRemnants` di `check.ps1`, **letto dal file a ogni giro**: se non si legge, il passo fallisce), nessuna classe di misura, nessun package `testing`, nessuna stringa di **KT** (le stesse di `ReleaseTestKeys.kt`);
+   librerie native: almeno una, solo `arm64-v8a`, **non compresse**, allineate a 16 KB nel file e nei segmenti LOAD. Non si ripetono i controlli di bytecode (chiamate a OkHttp, Glance, LiteRT...): sono di
+   `check.ps1`, passo 3, sullo stesso APK.
+8. **Passo 6, il changelog**: la sezione `## <versione>` di `CHANGELOG.md` con le quattro voci **in ordine** (Novita', Correzioni, Sicurezza, Da sapere) e almeno una frase ciascuna; e **dentro l'APK** una risorsa con la
+   **sezione intera** (si cerca il testo, non il percorso: R8 puo' cambiarlo). La copia `res/raw/changelog.md` e' tenuta uguale al file da `ReleaseNotesTest` (come le copie di `eval/` della Fase 7). Un test controlla anche
+   che l'ultima riga di `versions.txt` abbia la sua sezione completa e che il testo non contenga sigle o parole da tecnici.
+9. **Passo 7, il resoconto** in `build\release\<versione>\` (fuori da git): l'APK (`MyCloudGallery-<versione>.apk`) con il suo `.sha256`, `rapporto.txt` (versione, id, dimensione, SHA-256, certificato, schemi, componenti,
+   permessi, librerie native, controlli passati), `dipendenze.txt` (tutti i componenti di `gradle/verification-metadata.xml` con le impronte: **e' un insieme che contiene quello dell'APK**, non l'elenco esatto), `mapping\mapping.txt`
+   di R8 (**resta sul PC**, mai pubblicato), `changelog-store.txt` (il testo per il Pampa Store dalla stessa sezione), `pampa-store.json` (i dati per la prova a secco), `checklist.txt`. Nessun segreto: solo impronte e numeri pubblici.
+10. **Passo 8, la prova a secco: NON la fa `release.ps1`** (il publisher sta fuori dal repository e userebbe rete e credenziali dell'utente). Lo script stampa cosa dare all'orchestratore (`pampa-store.json`, l'APK, il
+    testo, la frase "prova a secco del publisher con --dry-run, senza caricare niente"). **Non so i flag del publisher** (non l'ho letto): li conosce la skill `pampa-store-publish-direct`. Se la prova a secco
+    dice che la v1 non serve: scelta 2.
+11. **Le prove di `release.ps1` con un keystore di prova** (`-TestKeystore`): firma e controlla con un keystore sotto `build\` (rifiutato se sta fuori da `build\` o si chiama `pampa*`); **solo cosi'** valgono `-TestOverlay` (file
+    del repository sostituiti: sicurezza.md, recinzioni.json, ReleaseKeys.kt, versions.txt, CHANGELOG.md), `-ApkPath` (un APK gia' firmato al posto della build), `-SkipTree` e `-SkipChecks`; senza `-TestKeystore` sono rifiutate
+    ("una release vera non salta nessun controllo"). Il resoconto di una prova va in `build\release-test\` e dice "PROVA" in ogni file e nel JSON.
+12. **Promessa 15** (`faces_head_mark` e `faces_outbox`). Il progetto dice: "P12: si smette di leggerle; una migrazione nuova le toglie solo dopo la conferma con P4 e P8 della Fase 8 (mai distruttiva per altro)". **Conferma**
+    letta nel codice: nessun codice di produzione usa `FacesStore.headMarks` ne' `FacesStore.outbox` (il calcolo di P4 accoda con `FacesPublisher.stage`, sulle tabelle `publish_*`; "Disattiva e cancella" di P8 toglie il file;
+    la replica di P3 ha il suo stato in `replica_device`); le sole chiamate erano nelle loro prove. **Fatto**: tolti `FacesHeadMarks`, `FacesOutbox` (e `OutboxKind`, `OutboxEntry`, `HeadMark`), le due entita' e i due DAO;
+    `FacesDatabase` passa alla **v3** con `MIGRATION_2_3` (due `DROP TABLE`, niente altro; **mai distruttiva per altro**), schema `3.json` esportato. Prove: `FacesSchemaTest` (10) ha la migrazione da un database v2 con una
+    riga in ogni tabella, comprese le due tolte: le altre tabelle restano con i loro dati e `integrity_check` e' `ok`; la v1 con dati migra fino alla v3; `FacesDaoTest` (11) e `FacesStoreStateTest` (10) senza le prove delle due tabelle.
+    **Nota**: la checklist del progetto dice "database delle release alla v6"; `GalleryDatabase` e' alla **v7** (correzione D della Fase 8), con le migrazioni 1 -> 7 non distruttive e nessuna tabella nuova in questa fase.
+13. **La pagina "Novita' di questa versione"** (D33): Impostazioni -> Informazioni e licenze -> la riga con questo nome (compare solo con il gancio `onOpenNews`, quindi le schermate e gli screenshot di prima non cambiano). La pagina
+    resta **dentro la rotta di Informazioni** (uno stato salvato e `BackHandler`: la navigazione delle Impostazioni, che P3 e P5 toccano, **non cambia**). Componenti di tutte le altre pagine (`FluidScreen`, `FluidSectionHeader`,
+    `FluidListGroup`, `FluidListRow`): **nessuna grafica nuova**; un titolo per ogni voce, una riga per frase, testo selezionabile. Legge `res/raw/changelog.md` (nessuna rete); la sezione e' quella della versione dell'app (il
+    suffisso `-debug` si toglie); se manca dice **l'ultima versione scritta nel file** e quale versione e' l'app (mai una versione scambiata di nascosto); se la risorsa non si legge dice che non si legge. Il lettore ha dei tetti
+    (8 voci, 40 frasi, 600 caratteri, 64 KiB).
+14. **`docs/sicurezza.md`**: il §1 e' riscritto in parole semplici (senza RAID, Keystore, SMB, sigle: "NAS" e' spiegato in testa; resta la tabella delle cinque azioni per la rete di casa con "importanza" al posto di "livello"); §5.6 ha
+    l'introduzione su `pampa.jks` e la riga "da scrivere"; C443, C444, L559 (rimando a L569), L569 nuovo, "Sigle", intestazione, checklist, registro.
+15. **Non toccati, per i conflitti con gli altri**: `README.md` (lo descrive P13: `CHANGELOG.md`, `release/versions.txt`, `tools/release/release.ps1` e le sue opzioni), `docs/fase10-progetto.md` (lo riporta l'orchestratore).
+
+### I comandi che l'utente usera' (dalla cartella del progetto, in un terminale PowerShell, mai da un agente)
+1. **Una volta, l'impronta** (apre `pampa.jks` sul tuo PC con le voci di `local.properties`; non stampa la password; confrontala con la copia offline):
+   `powershell -ExecutionPolicy Bypass -File tools\release\release.ps1 -Impronta -Scrivi`, poi commit di `docs/sicurezza.md`. Solo guardarla: senza `-Scrivi`.
+2. **K1 e K2** (da P1): `tools\release\manifest-tool.ps1 keys`, righe in `ReleaseKeys.kt` con `PROVISIONAL = false` e in §5.6. Senza, `release.ps1` rifiuta (passo 0).
+3. **Preparare la versione**: `release.ps1 -Prepara -Version 1.0.0 -Channel beta` (oggi la riga `1.0.0 1 prevista beta` c'e' gia'); rivedere `CHANGELOG.md` **e la sua copia** `feature-settings\src\main\res\raw\changelog.md`
+   (`ReleaseNotesTest` le confronta); commit, fusione su `main`, `git tag v1.0.0`.
+4. **La release**: `powershell -ExecutionPolicy Bypass -File tools\release\release.ps1 -Version 1.0.0 -Channel beta -NoDaemon` (l'S25 collegato e con le misure fresche; `-BenchSerial <numero>` se i dispositivi sono due).
+   Resoconto in `build\release\1.0.0\`.
+5. **La prova a secco**: all'orchestratore, con `build\release\1.0.0\pampa-store.json` (skill `pampa-store-publish-direct`, `--dry-run`).
+6. **Dopo la pubblicazione sul Pampa Store**: `release.ps1 -SegnaPubblicata -Version 1.0.0 -Channel beta` e commit di `release/versions.txt`.
+7. **Dopo le due settimane di beta, la stable**: `release.ps1 -Prepara -Version 1.0.0 -Channel stable` (stesso numero), commit di `versions.txt`, poi `release.ps1 -Version 1.0.0 -Channel stable -NoDaemon`: riusa l'APK
+   della beta (stessa impronta); poi `-SegnaPubblicata ... -Channel stable`.
+
+### Prove
+| Voce | Prova | Esito |
+|---|---|---|
+| Tutti i controlli del §2.9, su un keystore di prova | `tools\release\test-release.ps1` (nessun Gradle, nessuna rete): lancia `release.ps1` per davvero su APK piccoli costruiti con `javac`, `d8`, `aapt2`, `jar`, `zipalign` e `apksigner` | **80 prove, tutte come dovevano** (circa 8 minuti) |
+| Un APK con un'altra chiave, senza v3, debuggable, con l'id di debug, con un resto di debug, di misura, di KT o un package testing, con le librerie a 4 KB / non allineate / assenti, con un componente esportato o un permesso fuori elenco o `sharedUserId` fa fallire | casi del test con il messaggio atteso | tutti falliscono con il messaggio giusto |
+| Un `versionCode` riusato, piu' basso o diverso da `versions.txt`; due righe previste; `versions.txt` rotto; stable di una beta | casi del test | falliscono |
+| Un changelog mancante (nel file, senza le quattro voci, o nell'APK, o quello di un'altra versione) | casi del test | falliscono |
+| `ReleaseKeys.PROVISIONAL = true` (e non un `true` in un commento) | casi del test | fallisce / passa |
+| `recinzioni.json` mancante o rotto; impronta non scritta | casi del test | falliscono |
+| Albero, tag, ramo, HEAD avanti; riferimento S25; riepilogo di `check.ps1` (FAIL, benchmark saltato, log interrotto); `-Prepara`, `-SegnaPubblicata`, `-Impronta -Scrivi` (senza stampare la password) | prove sulle funzioni (un repository git di prova sotto `build\`) | verdi |
+| Le opzioni di prova senza `-TestKeystore`; un keystore fuori da `build\` o chiamato `pampa*` | casi del test | rifiutati |
+| Il passaggio da beta a stable con lo stesso APK | casi del test | passa; un APK diverso con lo stesso numero fallisce |
+| La build vera con la firma v2 e v3 | `release.ps1 -TestKeystore ... -TestOverlay ...` **con Gradle** (`:app:assembleRelease` con `-Ppampa.*` del keystore di prova), senza `-ApkPath` | passi 0, 2, 4, 5, 6, 7 verdi su un APK vero da 106.223.537 byte: v1, v2 e v3 verificate, un firmatario (RSA 2048 di prova), 9 librerie native a 16 KB, 19 componenti con i 5 esportati dell'elenco chiuso, permessi dell'elenco chiuso e documentati, nessun resto di debug, changelog dentro l'APK, 1.138 componenti nell'elenco delle dipendenze, mapping di R8 copiato. Il primo giro (567 s) aveva trovato un errore mio: la virgola lega piu' del `+`, quindi le tre proprieta' `pampa.*` diventavano un argomento solo e l'APK restava non firmato (il passo 4 lo diceva); corretto, secondo giro 237 s. Lo stesso controllo del passo 5 sull'APK non firmato di quel giro: l'unico problema era la firma |
+| La pagina e il lettore | `ReleaseNotesTest` (8), `WhatsNewScreenTest` (6), `AboutScreenTest` (15), `SettingsAboutRowTest` (3), `AboutMapSectionTest` (3) | 35 prove verdi (WhatsNewScreenTest rifatto dopo aver cambiato `onNodeWithText` in `onAllNodesWithText().onFirst()`: il titolo della pagina compare due volte, grande e raccolto) | |
+| La promessa 15 | `FacesSchemaTest` (10), `FacesDaoTest` (11), `FacesStoreStateTest` (10) | verdi |
+
+### Cosa non e' stato provato qui
+- **Il passo 8** (la prova a secco del publisher) e **il flag della v1**: non ho letto il publisher (vietato).
+- **La build con `pampa.jks`** e **l'impronta vera**: nessuna chiave vera toccata. La build di release e' provata con un keystore di prova (tabella sopra).
+- **I passi 1 e 3 interi su un albero vero** (tag su `main`, `check.ps1 -Bench` con l'S25): provati sulle funzioni e con un repository di prova, non da capo a fondo su questo ramo (non e' su `main` e non ha un tag).
+- **Il formato di `recinzioni.json`**: lo scrive P10.
+
+### Punti aperti
+- **Dopo il merge di P10**: controllare che `recinzioni.json` sia un oggetto JSON (il passo 2 non assume niente di piu') e che l'uscita di `check.ps1` abbia ancora il riepilogo con le righe `OK|FAIL|SKIP` (il passo 3 le legge).
+- **La v1**: se la prova a secco dice che il publisher non la vuole, `-Pmcg.signV1=false` e un commento; se dice che la pretende, resta com'e'.
+- **Le misure S25**: il riferimento di `docs/bench` e' del 13/10 (passo 3: massimo 7 giorni); vanno rifatte prima della release.
+- **K1 e K2** vere e l'impronta di `pampa.jks`: all'utente (L560, L569).
+- **README**: P13 (descrivere `release.ps1`, `release/versions.txt`, `CHANGELOG.md`).
+- **`docs/fase10-progetto.md`**: la checklist dice "database alla v6": e' la v7 (scelta 12).
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde al primo giro** (02/11, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, cartella `app\build\outputs\apk\release` cancellata prima, con il codice dei commit qui sotto): 30 passi OK, nessuno fallito; assembleDebug, assembleRelease, galleryTest e galleryLint in 51 minuti; **18.137 test in 47 moduli**, nessuno a zero (`feature-settings` 620, `core-database` 286, `core-faces` 697, `core-release` 71, `:app` 1.357). Il benchmark su dispositivo e' SKIP (senza `-Bench`: e' il passo 3 di `release.ps1`, con l'S25). Passo 3b: 4.921 file letti, nessuna chiave privata fuori dai test: il keystore di prova sta sotto `build\` (ignorato) e non e' mai stato nei commit. Nessuna classe rifatta con `--rerun`, nessun `hs_err_pid*.log`.
+
+### Commit (branch `fase10/p12`)
+`0d15c9c8` (la promessa 15: tabelle dei volti tolte, migrazione 2 -> 3, `3.json`), `64322541` (versioni, firma v2 e v3, `CHANGELOG.md`), `229814dc` (`release.ps1` e la sua prova), `d3861b29` (la pagina "Novita' di questa versione"), `697f6fc6` (correzioni dalla build vera), `e22ee219` (`sicurezza.md`) e quello di questa sezione.

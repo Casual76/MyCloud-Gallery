@@ -1,13 +1,18 @@
 package dev.pampa.mycloudgallery.feature.viewer
 
 import android.app.Application
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryWindow
@@ -167,6 +172,33 @@ class ViewerDockOverlayTest : ViewerTestBase() {
     val dock = FakeViewerDock(docked = false, offered = false)
     showDocked(dock, window = GalleryWindow.of(900, 800))
     composeRule.onNodeWithContentDescription("5 di 50").assertExists()
+  }
+
+  @Test
+  fun attraversareLaSogliaFraPannelloEFinestraInteraNonPerdeLaFotoEIlViewerRestaAperto() {
+    val dock = FakeViewerDock(docked = true)
+    var widthDp by mutableStateOf(768)
+    val request = fixture.request()
+    val services = services()
+    composeRule.setContent {
+      ViewerTestHost(dark = true) {
+        CompositionLocalProvider(LocalViewerDock provides dock) {
+          ProvidePaneWindow(GalleryWindow.of(widthDp, 800)) {
+            Box(Modifier.requiredWidth(widthDp.dp).fillMaxHeight()) { ViewerOverlay(request = request, onClosed = { closed++ }, services = services) }
+          }
+        }
+      }
+    }
+    composeRule.waitForIdle()
+    dock.jump = ViewerJump(fixture.idAt(11), serial = 1)
+    composeRule.waitUntil(TIMEOUT) { composeRule.onAllNodesWithContentDescription("12 di 50").fetchSemanticsNodes().isNotEmpty() }
+    // Il viewer affiancato (768 dp, media) che passa a finestra intera (1200 dp, ampia) e a una finestra stretta (600 dp): la foto e' la stessa, il viewer non si chiude (E-T2).
+    for (dp in listOf(1200, 600, 768, 1280)) {
+      widthDp = dp
+      composeRule.waitForIdle()
+      composeRule.onNodeWithContentDescription("12 di 50").assertExists()
+    }
+    assertThat(closed).isEqualTo(0)
   }
 
   companion object {

@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.prepare.video
 import android.graphics.Bitmap
 import android.media.MediaDataSource
 import android.media.MediaMetadataRetriever
+import dev.pampa.mycloudgallery.core.metadata.extract.QuietMediaDataSource
 import dev.pampa.mycloudgallery.core.metadata.extract.VideoMetadataParsing
 import java.io.File
 import kotlin.math.max
@@ -49,7 +50,8 @@ object MediaMetadataFrameGrabbers : VideoFrameGrabberFactory {
     val retriever = MediaMetadataRetriever()
     try {
       when (input) {
-        is VideoInput.Source -> retriever.setDataSource(input.dataSource)
+        // Mai un'eccezione verso il codice nativo (stack trace su System.err in release): la sorgente non lancia.
+        is VideoInput.Source -> retriever.setDataSource(QuietMediaDataSource(input.dataSource))
         is VideoInput.LocalFile -> retriever.setDataSource(input.file.path)
       }
       return RetrieverGrabber(retriever)

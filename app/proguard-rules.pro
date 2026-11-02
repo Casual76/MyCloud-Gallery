@@ -23,6 +23,13 @@
     public static boolean isLoggable(...) return false;
 }
 
+# Prova sul campo di Fase 10 (release candidata): 833 stack trace su System.err in 85 minuti. In release i log hanno solo numeri e codici (C21, S6). Il codice nostro non
+# chiama mai `printStackTrace()` (lo vieta Phase10LogsArchitectureTest) e il caso visto veniva dal codice nativo (QuietMediaDataSource); questa riga toglie dal bytecode anche
+# quelle delle librerie. Solo la forma senza argomenti, che scrive su System.err: quelle con un PrintWriter servono a chi costruisce un testo.
+-assumenosideeffects class java.lang.Throwable {
+    public void printStackTrace();
+}
+
 # --- Fase 5A (P7, D12): il cancello del backup ----------------------------------------------------------------------
 # "Backup solo sulle share di prova" e' la regola piu' importante del backup: il cancello (`AppBackupGate.stateOf`) chiama sempre la
 # decisione per share (`FeatureFlags.backupMayWriteTo`) e risponde `TEST_ONLY` se la share non e' di prova. R8 non deve ne' togliere il

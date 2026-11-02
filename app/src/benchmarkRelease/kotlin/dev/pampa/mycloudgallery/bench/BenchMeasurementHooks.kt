@@ -69,12 +69,8 @@ class BenchMeasurementHooks @Inject constructor(
   /** Fase 9 (P12): i ricordi si montano senza NAS con le scelte in memoria (di questo processo, mai su disco ne' sul NAS). */
   override val memoriesPersonalStore: PersonalStore = InMemoryPersonalStore(author = "bench")
 
-  /** Fase 9 (P12): il pilota della generazione (`BenchMemoriesDriver`): un thread che guarda i file accanto al marcatore, nient'altro sul percorso dell'avvio. Fase 10 (P9): e il pilota del widget. */
-  override fun onMemoriesGraph(memories: MemoriesGraph) {
-    BenchMemoriesDriver.install(context, memories)
-    // Fase 10 (P9): il pilota del widget si limita a ricordarsi il grafo (nessun I/O, nessun thread): parte dal primo comando del collaudo.
-    BenchWidgetDriver.attach(memories)
-  }
+  /** Fase 9 (P12): il pilota della generazione (`BenchMemoriesDriver`): un thread che guarda i file accanto al marcatore, nient'altro sul percorso dell'avvio. */
+  override fun onMemoriesGraph(memories: MemoriesGraph) = BenchMemoriesDriver.install(context, memories)
 
   init {
     // La replica comincia ad aprirsi subito, su un thread suo: la prima miniatura solo-NAS la trova di solito gia' aperta.

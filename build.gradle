@@ -48,6 +48,24 @@ if (engineValue('agp') != pluginAgp || engineValue('kotlin') != pluginKotlin) {
   )
 }
 
+// --- Fluid Engine 3.0: navigation-compose dentro engine-ui -----------------------------------------------
+// Dalla 3.0 `engine-ui` porta `navigation-compose` (engine.navigation, 2.9.8) come `api`, per `FluidNavHost`. Quella chiede
+// `lifecycle-viewmodel-compose` 2.9.0, che l'allineamento delle librerie lifecycle porta comunque alla 2.10.0 (engine.lifecycle,
+// quella che l'app risolve gia' e di cui `gradle/verification-metadata.xml` ha le impronte). Nei moduli che vedono solo l'engine
+// (engine-ui, core-map, ...) Gradle visitava pero' la 2.9.0 prima di allinearla, cioe' ne voleva i metadati: un file da
+// scaricare e senza impronta. Qui la richiesta va diretta alla versione dell'engine: niente da scaricare, niente impronte nuove,
+// stesse versioni risolte di prima. Quando l'engine cambia navigation la regola non trova piu' la 2.9.0 e non fa niente.
+allprojects {
+  configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+      if (details.requested.group == 'androidx.lifecycle' && details.requested.name == 'lifecycle-viewmodel-compose' && details.requested.version == '2.9.0') {
+        details.useVersion(engineValue('lifecycle'))
+        details.because('navigation-compose dell\'engine 3.0: allineata alle altre librerie lifecycle dell\'engine')
+      }
+    }
+  }
+}
+
 // --- Comandi aggregati sui soli moduli della galleria ---------------------------------------------------
 // `gradlew testDebugUnitTest` e `lintDebug` alla radice girerebbero anche sui moduli dell'engine, che
 // hanno la loro CI nel loro repo e le loro regole di lint. Questi due coprono quello che e' nostro.

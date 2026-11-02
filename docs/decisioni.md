@@ -15399,4 +15399,4 @@ registro di `docs/sicurezza.md` aggiornati; in `docs/prove-campo.md` il "dove" d
   controlla e sarà rossa finché non c'è la correzione. **Bassa** (rumore e nomi di classe nel registro, nessun dato personale visto).
 
 ### Commit (branch `fase10/p11b`)
-`78fb9c8c` (gli strumenti sui dispositivi, i copioni, l'adb e l'emulatore finti, il copione della prossima finestra), `5bfbb49e` (la guardia dell'area della famiglia di prova e i passi dal PC, con i test) e quello dei documenti.
+`78fb9c8c` (gli strumenti sui dispositivi, i copioni, l'adb e l'emulatore finti, il copione della prossima finestra), `5bfbb49e` (la guardia dell'area della famiglia di prova e i passi dal PC, con i test), `87e460b5` (i documenti) e uno piccolo dopo `check.ps1`: lo stato dei giri di `FamilyAreaFakeNasTest` (chiavi di prova) in una `TemporaryFolder` di JUnit invece che in %TEMP%, dove restava (la classe rifatta da sola: 5 prove verdi, nessuna cartella rimasta).

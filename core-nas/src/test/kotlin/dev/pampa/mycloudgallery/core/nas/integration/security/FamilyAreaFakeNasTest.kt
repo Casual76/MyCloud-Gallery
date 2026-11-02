@@ -21,10 +21,11 @@ import dev.pampa.mycloudgallery.core.trust.registry.FamilyAuthority
 import dev.pampa.mycloudgallery.core.trust.registry.FamilyConfig
 import dev.pampa.mycloudgallery.core.trust.registry.RegistrationRequest
 import java.io.File
-import java.nio.file.Files
 import java.util.Properties
 import org.junit.Assert.assertThrows
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 
 /**
  * La regola nuova della seconda parte di P11 (C470, decisione 2 dell'utente del 02/11) e gli strumenti dell'area della famiglia di prova,
@@ -35,6 +36,9 @@ import org.junit.Test
  * prima torna com'era); la guardia rifiuta ogni altro percorso prima della chiamata.
  */
 class FamilyAreaFakeNasTest {
+
+  /** Lo stato dei giri (chiavi di prova generate qui) sta in una cartella temporanea che JUnit toglie alla fine di ogni prova. */
+  @get:Rule val temp = TemporaryFolder()
 
   private val password = "Prova-Famiglia-P11b-1"
   private val nasNow = 1_793_000_000_000L
@@ -68,7 +72,7 @@ class FamilyAreaFakeNasTest {
     ),
   )
 
-  private fun state(): FamilyRunState = FamilyRunState.loadOrCreate(Files.createTempDirectory("mcg-famiglia-").toFile()) { SecurityArea.newRunId() }
+  private fun state(): FamilyRunState = FamilyRunState.loadOrCreate(temp.newFolder()) { SecurityArea.newRunId() }
 
   private fun open(backend: InMemorySmbBackend, state: FamilyRunState) = FamilyArea.open(credentials(), backend, backend.binding("wifi-casa"), backend.serverGuid, state)
 

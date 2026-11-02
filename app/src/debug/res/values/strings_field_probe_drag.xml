@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- SOLO build debug (Fase 10, P6; F168 e F169): l'app di prova del trascinamento fra app. Solo numeri nel resoconto, mai un nome ne' un id. -->
+  <string name="probe_drag_label">MCG prova (riceve)</string>
+  <string name="probe_drag_title">MCG prova: trascinamento fra app</string>
+  <string name="probe_drag_zone">Rilascia qui foto e video trascinati da MyCloud Gallery</string>
+  <string name="probe_drag_source">Tieni premuto qui per trascinare fino a tre foto di mcg-prova verso MyCloud Gallery</string>
+  <string name="probe_drag_empty">Niente ricevuto ancora. A schermo diviso, tieni premuta una foto della Libreria (o una selezione) e portala nel riquadro.</string>
+  <string name="probe_drag_no_rows">Nessuna foto in mcg-prova (o permesso mancante): semina le cartelle e riprova.</string>
+</resources>

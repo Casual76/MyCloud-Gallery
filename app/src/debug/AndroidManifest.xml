@@ -87,6 +87,20 @@
     </activity>
 
     <!--
+        Fase 10 (P6, F168 e F169): l'app di prova del trascinamento fra app, "MCG prova (riceve)". Riceve i trascinamenti da MyCloud Gallery (misura e scrive solo numeri) e trascina foto di
+        mcg-prova verso MyCloud Gallery. Esportata (si avvia da adb: am start -n dev.pampa.mycloudgallery.debug/dev.pampa.mycloudgallery.debugtools.probes.FieldProbeDragReceiverActivity), ma **senza filtri e senza icona del
+        launcher**: con due attivita' del launcher `getLaunchIntentForPackage` (usato da "Apri in una nuova finestra") potrebbe scegliere questa invece di MyCloud Gallery.
+        Solo in questo manifest: la release non ha niente di tutto questo (verifyReleaseManifest e tools/check.ps1 lo controllano, `FieldProbe`).
+    -->
+    <activity
+        android:name="dev.pampa.mycloudgallery.debugtools.probes.FieldProbeDragReceiverActivity"
+        android:exported="true"
+        android:label="@string/probe_drag_label"
+        android:resizeableActivity="true"
+        android:taskAffinity="dev.pampa.mycloudgallery.debug.dragprobe"
+        android:theme="@style/Theme.MyCloudGallery.Integrations" />
+
+    <!--
         Gruppo B, punto 9: "Fai ora i lavori periodici" da `adb shell am broadcast` con l'azione dev.pampa.mycloudgallery.debug.PERIODIC_NOW, il
         pacchetto dev.pampa.mycloudgallery.debug e l'extra stringa jobs (all, oppure trash,hq,prep,sync,scan,backup). Esportato ma protetto da
         DUMP: lo ha la shell di adb, non un'app normale. (Un commento XML non puo' contenere due trattini di fila: niente flag qui.)

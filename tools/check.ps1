@@ -839,7 +839,10 @@ $debugRemnants = @(
   # Fase 10 (P0 per P1 e P11; docs/fase10-progetto.md par. 2.8 "Le chiavi nell'app", par. 2.11 S14): la chiave di PROVA del manifest (KT, fidata
   # solo in debug e nei test: P1 la scrive in `ReleaseTestKeys`) e lo strumento dell'admin che genera le chiavi e firma i manifest (`ManifestTool`,
   # solo sul PC, in tools/release/). Nella release non deve esistere niente di tutto questo; le stringhe di KT le cerca il passo 7i.
-  "ReleaseTestKeys", "ManifestTool"
+  "ReleaseTestKeys", "ManifestTool",
+  # Fase 10 (P6, F168 e F169): l'app di prova del trascinamento fra app, "MCG prova (riceve)" (app/src/debug/.../probes): l'activity e il suo attributo di task nel manifest di debug.
+  # Gia' coperta dal prefisso `FieldProbe`, ma nominata: in release non deve esistere niente di tutto questo ("l'app di prova e' assente dal dex di release").
+  "FieldProbeDragReceiver", "debug.dragprobe"
 )
 Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11, valutazione dei ricordi F9-P11, chiave di prova del manifest e ManifestTool F10)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |

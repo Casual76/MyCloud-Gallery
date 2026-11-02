@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.Application
 import android.content.Context
 import android.os.Bundle
+import android.os.SystemClock
 import android.provider.DocumentsContract
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.backup.IncomingStates
@@ -21,6 +22,8 @@ import dev.pampa.mycloudgallery.core.common.diagnostics.DiagSeverity
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
 import dev.pampa.mycloudgallery.core.common.diagnostics.ExportValue
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.MediaDragPorts
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.MediaDropPorts
 import dev.pampa.mycloudgallery.core.imaging.ImagingPipeline
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncReason
@@ -37,6 +40,14 @@ import dev.pampa.mycloudgallery.core.security.lock.AppLockController
 import dev.pampa.mycloudgallery.core.security.lock.AppLockSettings
 import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
 import dev.pampa.mycloudgallery.feature.integrations.contract.IntegrationPorts
+import dev.pampa.mycloudgallery.feature.integrations.drag.DocumentDragPayloads
+import dev.pampa.mycloudgallery.feature.integrations.drag.DragCounters
+import dev.pampa.mycloudgallery.feature.integrations.drag.DragLeases
+import dev.pampa.mycloudgallery.feature.integrations.drag.DropHandoff
+import dev.pampa.mycloudgallery.feature.integrations.drag.ForegroundTracker
+import dev.pampa.mycloudgallery.feature.integrations.drag.HandlerDragPort
+import dev.pampa.mycloudgallery.feature.integrations.drag.IncomingDrops
+import dev.pampa.mycloudgallery.feature.integrations.drag.ToastDragNotices
 import dev.pampa.mycloudgallery.feature.integrations.edit.DefaultEditSessions
 import dev.pampa.mycloudgallery.feature.integrations.picker.PickerPorts
 import dev.pampa.mycloudgallery.feature.integrations.provider.DocumentIdTable
@@ -248,6 +259,21 @@ class IntegrationsGraph(
     preparer = preparedCopies,
   )
 
+  /**
+   * Fase 10 (P6, D20, C436): il trascinamento verso altre app. Gli URI sono quelli del provider dei documenti ([documents], id opachi consegnati), la copia senza posizione e' quella del selettore
+   * ([preparedCopies]), il cancello e' quello d'ingresso. I prestiti ([dragLeases]) tengono id e copie finche' l'app e' in primo piano piu' 10 minuti, e non oltre il prossimo avvio.
+   */
+  val dragLeases: DragLeases = DragLeases(scope)
+
+  val dragPayloads: DocumentDragPayloads = DocumentDragPayloads(
+    library = library,
+    issuer = documents,
+    authority = DocumentsAuthority.of(context),
+    gate = { entryGate.decide() },
+    leases = dragLeases,
+    preparer = preparedCopies,
+  )
+
   private val editLock = Mutex()
   private var editImpl: DefaultEditSessions? = null
 
@@ -309,6 +335,10 @@ class IntegrationsGraph(
     ReceivePorts.install(uploads, destinations, unlock, incomingAlbums)
     gallery.onShutdown { revokeAll() }
     followActivities()
+    // Fase 10 (P6): il trascinamento da e verso altre app. Le schermate lo leggono da `MediaDragPorts` e `MediaDropPorts`; senza queste righe niente si trascina e niente si riceve (fallire chiusi).
+    (context.applicationContext as? Application)?.let { ForegroundTracker(dragLeases).attach(it) }
+    MediaDragPorts.install(HandlerDragPort(dragPayloads, ToastDragNotices(context)))
+    MediaDropPorts.install(IncomingDrops(context, { entryGate.decide() }, { SystemClock.elapsedRealtime() }))
     // IN-2: le radici si notificano al sistema quando cambia cio' che la radice dice (l'app diventa pronta, il blocco cambia): DocumentsUI le tiene
     // nella cache di sistema finche' nessuno gliene dice una nuova, e a freddo la prima risposta puo' essere stata "non pronta".
     scope.launch { runCatching { entryGate.decisions().collect { notifyRoots() } } }
@@ -377,6 +407,12 @@ class IntegrationsGraph(
     // IN-2: gli id della radice sono cambiati (la chiave e' ruotata): DocumentsUI li rilegge.
     notifyRoots()
     runCatching { shares.releaseAll() }
+    // Fase 10 (P6): i prestiti del trascinamento (copie e id) si tolgono, le porte tornano chiuse.
+    runCatching { dragLeases.releaseAll() }
+    MediaDragPorts.reset()
+    MediaDropPorts.reset()
+    DropHandoff.reset()
+    DragCounters.reset()
     IntegrationPorts.reset()
     PickerPorts.reset()
     ReceivePorts.reset()

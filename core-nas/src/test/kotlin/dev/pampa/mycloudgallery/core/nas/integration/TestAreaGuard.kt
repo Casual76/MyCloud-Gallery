@@ -43,6 +43,22 @@ import kotlin.time.Duration
 class TestAreaViolation(message: String) : RuntimeException(message)
 
 /**
+ * Cio' che il trasporto recintato ([TestAreaTransport]) chiede a una guardia, **prima** di ogni chiamata: account, share e percorso
+ * con l'operazione. Due guardie: [TestAreaGuard] (solo `mcg-it/<giro>/`, D30) e, dalla Fase 10 P11 seconda parte, `FamilyAreaGuard`
+ * (l'area della famiglia di prova e `test-comune/mcg-ostile/`, con il registro di cio' che la prova ha creato). [created] arriva
+ * **dopo** una creazione, una cartella nuova o una rinomina riuscite: la guardia ne tiene il conto, se le serve.
+ */
+internal interface SmbAreaGuard {
+  fun checkAccount(user: String)
+
+  fun checkShare(share: String): String
+
+  fun checkSmb(share: String, raw: String, op: SmbAccess)
+
+  fun created(share: String, raw: String, op: SmbAccess) = Unit
+}
+
+/**
  * Il recinto di un giro della suite. Si costruisce solo con [of], che valida la configurazione; poi [checkShare],
  * [checkPath] (interfacce) e [checkSmb] (trasporto) rifiutano tutto cio' che non sta sotto `mcg-it/<giro>/`.
  */
@@ -52,7 +68,7 @@ internal class TestAreaGuard private constructor(
   val shares: Set<String>,
   /** Gli account ammessi, in minuscolo. */
   val accounts: Set<String>,
-) {
+) : SmbAreaGuard {
   /** La radice del giro vista dalle interfacce: `mcg-it/<giro>`. */
   val root: SharePath = SharePath.of(ROOT, runId)
 
@@ -65,11 +81,11 @@ internal class TestAreaGuard private constructor(
   /** La pulizia finale ha il permesso di togliere `mcg-it` se e' vuota anche se c'era gia' ([allowRootRemoval]). */
   @Volatile private var rootRemovable: Boolean = false
 
-  fun checkAccount(user: String) {
+  override fun checkAccount(user: String) {
     if (fold(user) in FORBIDDEN_ACCOUNTS || user.lowercase(Locale.ROOT) !in accounts) throw TestAreaViolation("account non di prova")
   }
 
-  fun checkShare(share: String): String {
+  override fun checkShare(share: String): String {
     if (!TestShares.isTestShare(share) || share.lowercase(Locale.ROOT) !in shares) throw TestAreaViolation("share fuori dall'area di prova")
     return share
   }
@@ -99,7 +115,7 @@ internal class TestAreaGuard private constructor(
    * crearla, elencarla (pulizia dei giri vecchi), guardarla o toglierla se vuota e creata da noi (o dopo
    * [allowRootRemoval]); sotto un giro vecchio approvato ([approveStale]) solo elenco, stato e cancellazione.
    */
-  fun checkSmb(share: String, raw: String, op: SmbAccess) {
+  override fun checkSmb(share: String, raw: String, op: SmbAccess) {
     checkShare(share)
     val parts = split(raw) ?: throw TestAreaViolation("percorso non valido")
     val ok = when {
@@ -112,6 +128,11 @@ internal class TestAreaGuard private constructor(
       else -> false
     }
     if (!ok) throw TestAreaViolation("percorso fuori dall'area di prova ($op)")
+  }
+
+  /** La cartella `mcg-it` creata da questo giro: allora, se vuota, la pulizia la toglie. */
+  override fun created(share: String, raw: String, op: SmbAccess) {
+    if (op == SmbAccess.MKDIR && raw.equals(ROOT, ignoreCase = true)) createdRoot = true
   }
 
   /**
@@ -188,7 +209,7 @@ internal enum class SmbAccess { OPEN_READ, CREATE, MKDIR, LIST, ADD_FILE, STAT, 
  * trasporto vero; [delegateCalls] conta le chiamate arrivate davvero (l'autotest le vuole a zero per ogni rifiuto).
  * Vede anche cio' che le interfacce non mostrano: temporanei, cartelle create al volo, pulizie.
  */
-internal class TestAreaTransport(private val delegate: SmbTransport, private val guard: TestAreaGuard) : SmbTransport {
+internal class TestAreaTransport(private val delegate: SmbTransport, private val guard: SmbAreaGuard) : SmbTransport {
 
   val delegateCalls = AtomicInteger(0)
 
@@ -239,13 +260,15 @@ internal class TestAreaTransport(private val delegate: SmbTransport, private val
 
     override fun createExclusive(path: String, shareMode: SmbOpenMode): SmbWriteFile {
       check(path, SmbAccess.CREATE)
-      return WriteFile(call { inner.createExclusive(path, shareMode) })
+      val file = WriteFile(call { inner.createExclusive(path, shareMode) })
+      guard.created(name, path, SmbAccess.CREATE)
+      return file
     }
 
     override fun mkdir(path: String) {
       check(path, SmbAccess.MKDIR)
       call { inner.mkdir(path) }
-      if (path.equals(TestAreaGuard.ROOT, ignoreCase = true)) guard.createdRoot = true
+      guard.created(name, path, SmbAccess.MKDIR)
     }
 
     override fun openDirectory(path: String, access: DirAccess): SmbDirectory {
@@ -274,7 +297,7 @@ internal class TestAreaTransport(private val delegate: SmbTransport, private val
     // di partenza e quello d'arrivo passano entrambi dalla guardia prima della chiamata.
     override fun openForChange(path: String, exclusive: Boolean): SmbChangeHandle {
       check(path, SmbAccess.CHANGE)
-      return ChangeHandle(call { inner.openForChange(path, exclusive) })
+      return ChangeHandle(path, call { inner.openForChange(path, exclusive) })
     }
 
     // Fase 5A (D5): la riapertura del proprio temporaneo del backup scrive come una creazione: stessa guardia di CREATE.
@@ -285,19 +308,26 @@ internal class TestAreaTransport(private val delegate: SmbTransport, private val
 
     override fun close() = inner.close()
 
-    private inner class ChangeHandle(private val handle: SmbChangeHandle) : SmbChangeHandle by handle {
+    // Fase 10 P11 (seconda parte): anche la cancellazione dallo handle passa dalla guardia, come DELETE sul percorso aperto (per
+    // TestAreaGuard non cambia niente: CHANGE e DELETE valgono negli stessi posti).
+    private inner class ChangeHandle(private val path: String, private val handle: SmbChangeHandle) : SmbChangeHandle by handle {
       override fun renameNoReplace(newPath: String) {
         check(newPath, SmbAccess.RENAME)
         call { handle.renameNoReplace(newPath) }
+        guard.created(name, newPath, SmbAccess.RENAME)
       }
 
-      override fun deleteOnClose() = call { handle.deleteOnClose() }
+      override fun deleteOnClose() {
+        check(path, SmbAccess.DELETE)
+        call { handle.deleteOnClose() }
+      }
     }
 
     private inner class WriteFile(private val file: SmbWriteFile) : SmbWriteFile by file {
       override fun renameNoReplace(newPath: String) {
         check(newPath, SmbAccess.RENAME)
         call { file.renameNoReplace(newPath) }
+        guard.created(name, newPath, SmbAccess.RENAME)
       }
 
       override fun copyChunks(resumeKey: ByteArray, chunks: List<SmbCopyChunk>): Long = call { file.copyChunks(resumeKey, chunks) }

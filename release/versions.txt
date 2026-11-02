@@ -1,0 +1,20 @@
+# Le versioni di MyCloud Gallery (Fase 10, D33; docs/decisioni.md, "Fase 10 P12: catena di rilascio").
+#
+# Una riga per ogni APK pubblicato e, in fondo, quella della versione che si sta preparando. La build prende
+# versionName e versionCode dall'ULTIMA riga (app/build.gradle); tools/release/release.ps1 controlla questo file.
+#
+# Colonne, separate da spazi:
+#   versione   versionName: 1.0.0, oppure 1.1.0-beta.2 per una beta che poi non diventa la stabile
+#   codice     versionCode: cresce SEMPRE (di 1 a ogni APK pubblicato), mai riusato. Lo stesso numero puo' stare su due righe solo
+#              per lo stesso identico APK passato da beta a stable (stessa impronta SHA-256, ultima colonna)
+#   stato      pubblicata | prevista
+#   canale     beta | stable
+#   data       AAAA-MM-GG della pubblicazione, oppure - se e' ancora prevista
+#   sha256     impronta SHA-256 dell'APK pubblicato (la scrive release.ps1 nel resoconto), oppure - se e' ancora prevista
+#
+# Il flusso di una release, per intero, e' in docs/decisioni.md. In breve: si aggiunge la riga `prevista` (o lo fa
+# `release.ps1 -Prepara`), si scrive la sezione di CHANGELOG.md, si fa il commit e il tag v<versione>, si lancia
+# `release.ps1`; dopo la pubblicazione sul Pampa Store la riga diventa `pubblicata` con data e impronta (`release.ps1 -SegnaPubblicata`).
+#
+# versione  codice  stato     canale  data  sha256
+1.0.0       1       prevista  beta    -     -

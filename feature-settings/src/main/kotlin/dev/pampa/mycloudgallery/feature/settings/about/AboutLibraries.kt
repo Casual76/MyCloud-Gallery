@@ -15,6 +15,12 @@ internal enum class LibraryLicense(@StringRes val shortName: Int, @StringRes val
 
   /** Fase 9 (P13): MapLibre Native Android e le sue librerie dei gesti. */
   BSD_2(R.string.about_license_bsd2, R.string.about_license_bsd2_full, R.string.about_license_bsd2_url),
+
+  /**
+   * Adozione del Fluid Engine 3.0 (03/11): la licenza **dell'app**. L'engine 3.0 porta codice GPL-3.0 di LibrePods (i pulsanti
+   * e le pagine), quindi l'app intera si distribuisce sotto GPL-3.0, con i sorgenti a chi riceve l'APK (file `LICENSE` alla radice).
+   */
+  GPL_3(R.string.about_license_gpl3, R.string.about_license_gpl3_full, R.string.about_license_gpl3_url),
 }
 
 /**
@@ -246,6 +252,11 @@ internal val ABOUT_LIBRARIES: List<AboutLibrary> = listOf(
   ),
 )
 
-/** Le licenze usate dall'elenco, nell'ordine dell'enum: la sezione "Licenze" scrive nome e indirizzo di ciascuna una volta. */
+/**
+ * Le licenze usate dall'elenco, nell'ordine dell'enum: la sezione "Licenze" scrive nome e indirizzo di ciascuna una volta. Oltre alle librerie: la SIL OFL
+ * (il font Inter, dentro l'engine) e la GPL-3.0 (la licenza dell'app stessa e di LibrePods, dentro l'engine dalla 3.0).
+ */
 internal val ABOUT_LICENSES_IN_USE: List<LibraryLicense> =
-  LibraryLicense.entries.filter { license -> ABOUT_LIBRARIES.any { it.license == license } || license == LibraryLicense.SIL_OFL }
+  LibraryLicense.entries.filter { license ->
+    ABOUT_LIBRARIES.any { it.license == license } || license == LibraryLicense.SIL_OFL || license == LibraryLicense.GPL_3
+  }

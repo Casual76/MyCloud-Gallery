@@ -589,3 +589,10 @@ l'SDK 36 richiede Java 21.
 - Prove di Fase 0 (codice usa e getta): `spike/`.
 - Regole del design system Fluid: skill `fluid-engine` (`references/regole.md`): nessun colore, testo o
   raggio scritto a mano; liste raggruppate; una pagina in arrivo non sfuma mai.
+
+## Licenza
+
+MyCloud Gallery e' software libero: si distribuisce con la **GNU General Public License, versione 3**
+(file `LICENSE`), e chi riceve l'APK ha diritto ai sorgenti completi, con la stessa licenza. Viene dal
+Fluid Engine 3.0, che contiene codice GPL-3.0 di LibrePods (`engine/LICENSES/LibrePods.md`); le licenze
+delle librerie e delle opere dentro l'engine sono nella pagina Impostazioni -> Informazioni e licenze.

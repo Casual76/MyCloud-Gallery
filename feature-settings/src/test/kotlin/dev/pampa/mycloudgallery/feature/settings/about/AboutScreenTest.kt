@@ -174,15 +174,38 @@ class AboutScreenTest {
       rule.onNode(hasText("${work.author} · ${work.licence}", substring = true)).assertExists().assertHasNoClickAction()
       rule.onNode(hasText(work.url, substring = true)).assertExists().assertHasNoClickAction()
     }
-    // Inter e il vetro sono nell'APK: l'avviso c'e'.
-    assertThat(FluidEngineLicenses.map { it.name }).containsAtLeast("AndroidLiquidGlass (backdrop)", "Inter")
+    // Inter e il vetro sono nell'APK: l'avviso c'e'. Dalla 3.0 anche LibrePods, GPL-3.0 (il suo codice e' dentro l'engine).
+    assertThat(FluidEngineLicenses.map { it.name }).containsAtLeast("AndroidLiquidGlass (backdrop)", "Inter", "LibrePods")
+    assertThat(FluidEngineLicenses.first { it.name == "LibrePods" }.licence).isEqualTo("GPL-3.0")
+  }
+
+  /**
+   * Adozione del Fluid Engine 3.0: l'app e' GPL-3.0 (l'engine porta codice di LibrePods) e la pagina lo dice con le "informazioni legali" che la GPL chiede a
+   * un'interfaccia: la licenza, il diritto ai sorgenti e a ridistribuire, nessuna garanzia, dove si legge il testo. Testo, mai un collegamento.
+   */
+  @Test
+  fun diceCheLAppEGpl3_conISorgentiENessunaGaranzia() {
+    show()
+
+    rule.onNodeWithText("Software libero, GPL-3.0").assertIsDisplayed().assertHasNoClickAction()
+    val detail = string(R.string.about_app_license_detail)
+    for (part in listOf("GNU General Public License, versione 3", "ridistribuirla e modificarla", "sorgenti completi", "senza alcuna garanzia", "LibrePods", "LICENSE")) {
+      assertWithMessage("la frase della licenza non dice: $part").that(detail).contains(part)
+    }
+    rule.onNodeWithText(detail).assertIsDisplayed().assertHasNoClickAction()
+    // Il testo breve della GPL-3.0 sta con le altre licenze, con il suo indirizzo come testo.
+    assertThat(string(LibraryLicense.GPL_3.url)).isEqualTo("https://www.gnu.org/licenses/gpl-3.0.html")
+    // Il file LICENSE alla radice dei sorgenti e' la GPL-3.0.
+    val license = File("../LICENSE")
+    assertThat(license.isFile).isTrue()
+    assertThat(license.readText().replace("\r\n", "\n")).startsWith("                    GNU GENERAL PUBLIC LICENSE\n                       Version 3, 29 June 2007")
   }
 
   @Test
   fun scriveNomeEIndirizzoDiOgniLicenzaComeTestoSenzaTocco() {
     show()
 
-    assertThat(ABOUT_LICENSES_IN_USE).containsAtLeast(LibraryLicense.APACHE_2, LibraryLicense.MIT, LibraryLicense.BOUNCY_CASTLE, LibraryLicense.SIL_OFL)
+    assertThat(ABOUT_LICENSES_IN_USE).containsAtLeast(LibraryLicense.APACHE_2, LibraryLicense.MIT, LibraryLicense.BOUNCY_CASTLE, LibraryLicense.SIL_OFL, LibraryLicense.GPL_3)
     for (license in ABOUT_LICENSES_IN_USE) {
       val name = string(license.fullName)
       val url = string(license.url)

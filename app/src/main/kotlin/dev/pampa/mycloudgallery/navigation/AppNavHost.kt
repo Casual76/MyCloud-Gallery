@@ -215,6 +215,9 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   val memoriesHost: MemoriesHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
   val memoriesActions = memoriesHost?.let { host -> rememberMemoriesActions(nav, viewer, host) { gallery?.viewerServices } }
   if (memoriesHost != null) MemoriesNotificationEffect(nav, memoriesHost)
+  // Fase 10 (P13, §2.2, D9): il tocco sul widget, servito qui (sotto il blocco app, solo dalla finestra principale): viewer, pagina del ricordo o Libreria.
+  val widgetHost: WidgetHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
+  if (widgetHost != null) WidgetTapEffect(nav, viewer, widgetHost, openViewer)
   val mapHost: MapHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
   val mapActions = remember(nav, viewer, mapHost, gallery) { mapHost?.let { host -> AppMapActions(nav, viewer, host) { gallery?.viewerServices } } }
   if (mapHost != null) MapHostEffect(nav, viewer, mapHost)

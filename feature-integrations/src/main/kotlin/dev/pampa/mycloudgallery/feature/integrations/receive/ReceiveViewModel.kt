@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.NasDestination
 import dev.pampa.mycloudgallery.core.backup.contract.PhoneConfirmationSheet
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
 import dev.pampa.mycloudgallery.feature.integrations.contract.EntryGate
+import dev.pampa.mycloudgallery.feature.integrations.drag.DropHint
 import dev.pampa.mycloudgallery.feature.integrations.picker.UnlockFailure
 import dev.pampa.mycloudgallery.feature.integrations.share.FlowCounters
 import dev.pampa.mycloudgallery.feature.integrations.share.ReceiveCounter
@@ -214,6 +215,8 @@ class ReceiveViewModel(
   scope: CoroutineScope? = null,
   /** "Aggiungi ad album" (Fase 7, P10, D35): di serie nessun album, quindi nessuna voce. */
   private val albums: IncomingAlbums = NoIncomingAlbums,
+  /** Fase 10 (P6, D21): il trascinamento in arrivo dice da dove comincia il foglio (un album, una cartella). Mai dall'intento: lo porta `DropHandoff`. */
+  hint: DropHint? = null,
 ) : ViewModel() {
 
   private val scope: CoroutineScope = scope ?: viewModelScope
@@ -241,6 +244,12 @@ class ReceiveViewModel(
   private var savingJob: Job? = null
   private var albumsJob: Job? = null
   private var loadingJob: Job? = null
+
+  /** Fase 10 (P6): dove il rilascio vuole che il foglio cominci; si usa una volta, appena la copia e' fatta ([applyHint]). */
+  private var hint: DropHint? = hint
+
+  /** L'album del rilascio, se l'elenco degli album non lo conosceva ancora: lo si sceglie appena compare (AA-1). */
+  private var albumHint: String? = null
 
   /** Una condivisione nuova arrivata mentre c'era gia' lavoro in corso (CA-2): parte appena la copia o il salvataggio di prima finiscono. */
   private class Request(val streams: suspend () -> List<IncomingStream>, val overflow: Int)
@@ -414,7 +423,60 @@ class ReceiveViewModel(
         newAlbumProblem = null,
       )
     }
+    applyHint()
     followAlbums()
+  }
+
+  /** Un altro rilascio mentre il foglio e' aperto (`onNewIntent`): la sua destinazione vale per la copia che parte adesso ([replaceRequest]). */
+  fun hintForNext(value: DropHint?) {
+    synchronized(this) { hint = value }
+  }
+
+  /**
+   * Fase 10 (P6, D21, E-T16): la destinazione del rilascio come **scelta iniziale** del foglio, che l'utente cambia come vuole; mai un salvataggio.
+   *  - un album: se e' fra quelli dove si puo' aggiungere, "Aggiungi ad album" si apre con lui scelto (altrimenti il foglio di sempre: un album dove "guardano" soltanto non si offre);
+   *  - una cartella: se sta nell'albero delle cartelle dove "Salva sul NAS" scrive, la scelta parte da li'; fuori da quell'albero il foglio di sempre.
+   */
+  private suspend fun applyHint() {
+    val given = synchronized(this) { hint.also { hint = null } } ?: return
+    when (given) {
+      DropHint.Library -> Unit
+      is DropHint.Album -> {
+        val known = core().albums.firstOrNull { it.id == given.albumId }
+        if (known == null) {
+          albumHint = given.albumId
+        } else {
+          mutate { if (it.screen == ReceiveScreenState.READY) it.copy(albumPick = true, selectedAlbum = known) else it }
+        }
+      }
+      is DropHint.Folder -> {
+        val place = try {
+          resolveFolder(given)
+        } catch (e: CancellationException) {
+          throw e
+        } catch (_: Exception) {
+          null
+        } ?: return
+        mutate { if (it.screen == ReceiveScreenState.READY) it.copy(trail = place.trail, choices = place.choices, selected = place.selected, noSubfolders = false) else it }
+      }
+    }
+  }
+
+  private class FolderPlace(val trail: List<DestinationChoice>, val choices: List<DestinationChoice>, val selected: DestinationChoice)
+
+  /** La cartella [hint] dentro l'albero delle destinazioni: scende dalle cartelle di partenza di una cartella alla volta. Null se non ci sta. */
+  private suspend fun resolveFolder(hint: DropHint.Folder): FolderPlace? {
+    var choices = destinations.roots()
+    var trail = emptyList<DestinationChoice>()
+    repeat(MAX_HINT_DEPTH) {
+      choices.firstOrNull { it.destination.share == hint.share && it.destination.folder.value == hint.path }?.let { return FolderPlace(trail, choices, it) }
+      val next = choices.firstOrNull {
+        it.destination.share == hint.share && hint.path.startsWith(it.destination.folder.value + "/")
+      } ?: return null
+      choices = destinations.children(next).ifEmpty { return null }
+      trail = trail + next
+    }
+    return null
   }
 
   /**
@@ -431,7 +493,13 @@ class ReceiveViewModel(
               ui
             } else {
               val keep = ui.selectedAlbum?.takeIf { it in offered }
-              ui.copy(albums = offered, selectedAlbum = keep ?: if (ui.albumPick) offered.firstOrNull() else null)
+              val wanted = albumHint?.let { id -> offered.firstOrNull { it.id == id } }
+              if (wanted != null && ui.screen == ReceiveScreenState.READY) {
+                albumHint = null
+                ui.copy(albums = offered, albumPick = true, selectedAlbum = wanted)
+              } else {
+                ui.copy(albums = offered, selectedAlbum = keep ?: if (ui.albumPick) offered.firstOrNull() else null)
+              }
             }
           }
         }
@@ -734,5 +802,8 @@ class ReceiveViewModel(
 
   private companion object {
     val DETACHED = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** Quante cartelle al piu' si scendono per trovare quella del rilascio. */
+    const val MAX_HINT_DEPTH = 16
   }
 }

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 10 (P6): il trascinamento verso un'altra app e da un'altra app. Frasi brevi, una per motivo; mai un nome, un id o un percorso. -->
+
+  <string name="integrations_drag_preparing">Preparo…</string>
+  <string name="integrations_drag_too_many">Si possono trascinare al massimo 100 elementi alla volta.</string>
+  <string name="integrations_drag_too_large">Sono troppo grandi per un solo trascinamento (al massimo 2 GB).</string>
+  <string name="integrations_drag_hidden">Qualcosa non è più disponibile: scegli di nuovo cosa trascinare.</string>
+  <string name="integrations_drag_location">Non riesco a togliere la posizione da una di queste foto: non le trascino.</string>
+  <string name="integrations_drag_nas">Il NAS non risponde: non posso trascinare ciò che è solo lì.</string>
+  <string name="integrations_drag_locked">Sblocca l’app per trascinare.</string>
+  <string name="integrations_drag_unavailable">Il trascinamento non è disponibile adesso.</string>
+
+  <!-- Trascinamento in arrivo: il foglio della ricezione si apre con il conteggio; niente parte senza un tocco. -->
+  <string name="integrations_drag_in_refused">Non posso ricevere questo trascinamento: trascina foto o video da un’altra app.</string>
+</resources>

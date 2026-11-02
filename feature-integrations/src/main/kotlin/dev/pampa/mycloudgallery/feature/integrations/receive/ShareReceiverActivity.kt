@@ -18,6 +18,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.feature.integrations.contract.IntegrationPorts
+import dev.pampa.mycloudgallery.feature.integrations.drag.DropHandoff
 import dev.pampa.mycloudgallery.feature.integrations.picker.OverlayShield
 import dev.pampa.mycloudgallery.feature.integrations.picker.UnlockFailure
 import dev.pampa.mycloudgallery.feature.integrations.share.FlowCounters
@@ -70,6 +71,8 @@ class ShareReceiverActivity : FragmentActivity() {
     val uploads = ReceivePorts.uploads
     val destinations = ReceivePorts.destinations
     val albums = ReceivePorts.albums
+    // Fase 10 (P6, D21): se il foglio lo apre un rilascio dentro l'app, da dove comincia (un album, una cartella); un evento interno, mai l'intento.
+    val hint = DropHandoff.take(SystemClock.elapsedRealtime())
     val model = ViewModelProvider(
       this,
       viewModelFactory {
@@ -82,6 +85,7 @@ class ShareReceiverActivity : FragmentActivity() {
             destinations = destinations,
             monotonicMs = { SystemClock.elapsedRealtime() },
             albums = albums,
+            hint = hint,
           )
         }
       },
@@ -159,6 +163,8 @@ class ShareReceiverActivity : FragmentActivity() {
     val model = viewModel ?: return
     val resolver = applicationContext.contentResolver
     val ownPackage = packageName
+    // Un altro rilascio sullo stesso foglio: la sua destinazione vale per la copia che parte adesso.
+    model.hintForNext(DropHandoff.take(SystemClock.elapsedRealtime()))
     model.replaceRequest({ IncomingStreams.of(resolver, ownPackage, request) }, request.overflow)
   }
 

@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.integrations
 
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.feature.integrations.drag.DragCounter
 import dev.pampa.mycloudgallery.feature.integrations.share.CounterCode
 import dev.pampa.mycloudgallery.feature.integrations.share.EditCounter
 import dev.pampa.mycloudgallery.feature.integrations.share.ReceiveCounter
@@ -19,7 +20,8 @@ import org.junit.Test
 class FlowHygieneTest {
 
   private val base = "src/main/kotlin/dev/pampa/mycloudgallery/feature/integrations"
-  private val roots = listOf("$base/receive", "$base/edit", "$base/share")
+  // Fase 10 (P6): anche `drag/` (il trascinamento da e verso altre app) segue le stesse regole: nessun log, nessun colore a mano, nessuna frase nel codice, eccezioni a frase fissa.
+  private val roots = listOf("$base/receive", "$base/edit", "$base/share", "$base/drag")
 
   private fun sources(): List<File> = roots.flatMap { root ->
     File(root).also { check(it.isDirectory) { "Non trovo i sorgenti: $root" } }.walkTopDown().filter { it.isFile && it.extension == "kt" }.toList()
@@ -79,7 +81,7 @@ class FlowHygieneTest {
     val colors = Regex("""\bColor\s*\(\s*0x|\bColor\s*\.\s*(Red|Green|Blue|White|Black|Gray|Grey|Yellow|Cyan|Magenta|Transparent|parseColor)\b|"#[0-9a-fA-F]{3,8}"|\bargb\s*\(""")
     // I fake di prova costruiscono bitmap di prova con i colori di `Color`: non sono schermate.
     assertThat(violations(colors, "colore scritto a mano (usa il tema)") { it.path.replace('\\', '/').contains("/testing/") }).isEmpty()
-    for (name in listOf("receive", "share")) {
+    for (name in listOf("receive", "share", "drag")) {
       val resource = File("src/main/res/values/strings_integrations_$name.xml")
       assertThat(resource.isFile).isTrue()
       assertThat(Regex("""<color\b|#[0-9a-fA-F]{6,8}\b""").containsMatchIn(resource.readText().replace(Regex("""<!--[\s\S]*?-->"""), ""))).isFalse()
@@ -109,7 +111,7 @@ class FlowHygieneTest {
 
   @Test
   fun iContatoriSonoCodiciFissi() {
-    val all: List<CounterCode> = ReceiveCounter.entries + EditCounter.entries + ShareCounter.entries
+    val all: List<CounterCode> = ReceiveCounter.entries + EditCounter.entries + ShareCounter.entries + DragCounter.entries
     assertThat(all.map { it.code }.toSet()).hasSize(all.size)
     for (counter in all) assertThat(counter.code).matches("[a-z]+(_[a-z]+)*")
   }

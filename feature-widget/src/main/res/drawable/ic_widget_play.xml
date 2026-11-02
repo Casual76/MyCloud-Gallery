@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Il segno "video" sulla cella di un video (Fase 10, P3, E-W17). Il kit lo tinge con il tono della palette (`EngineWidgetIconTile`): il colore qui e' solo la maschera da tingere, non
+  si vede mai com'e'. A tratto, come le altre icone del kit (a fianco di un testo un glifo pieno pesa troppo).
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+  <path
+      android:fillColor="#00000000"
+      android:pathData="M8,5.5v13l11,-6.5z"
+      android:strokeColor="#FF000000"
+      android:strokeLineCap="round"
+      android:strokeLineJoin="round"
+      android:strokeWidth="2" />
+</vector>

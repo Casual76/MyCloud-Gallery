@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Il widget "MyCloud Gallery" (Fase 10, P3, docs/fase10-progetto.md D3-D9, §2.2). Parole del widget sulla Home, in italiano semplice. Mai un nome, mai un luogo
+  fra le parole fisse: i luoghi e i titoli dei ricordi arrivano come dati e si compongono in `WidgetTitleTexts` (stessi testi della notifica "Titolo e foto").
+-->
+<resources>
+  <!-- Il nome nel selettore dei widget. -->
+  <string name="widget_label">MyCloud Gallery</string>
+  <string name="widget_picker_description">Le tue foto e i ricordi di famiglia sulla Home. Le foto nascoste non si vedono mai.</string>
+
+  <!-- Nessuna foto da mostrare (E-W1, E-W5, E-W6, E-W9): una riga, non un errore. -->
+  <string name="widget_message_open">Apri MyCloud Gallery</string>
+  <string name="widget_message_configure">Configura MyCloud Gallery</string>
+
+  <!-- Il titolo del ricordo (D4): come "Titolo e foto" delle notifiche. -->
+  <string name="widget_title_years_one">Un anno fa</string>
+  <string name="widget_title_years_many">%1$d anni fa</string>
+  <string name="widget_title_years_place_one">Un anno fa · %1$s</string>
+  <string name="widget_title_years_place_many">%1$d anni fa · %2$s</string>
+  <string name="widget_title_trip_one">Un anno fa · %1$s</string>
+  <string name="widget_title_trip_many">%1$d anni fa · %2$s</string>
+  <string name="widget_title_trip_plain">%1$s</string>
+  <string name="widget_title_month">Il meglio di %1$s</string>
+  <string name="widget_title_generic">Un ricordo per te</string>
+
+  <!-- La descrizione di una cella se il giorno non e' una data vera (la superficie WIDGET dice solo tipo e data). -->
+  <string name="widget_cell_photo">Foto</string>
+  <string name="widget_cell_video">Video</string>
+</resources>

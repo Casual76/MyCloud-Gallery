@@ -51,6 +51,9 @@ dependencies {
   implementation appDeps.lifecycleRuntimeCompose
   implementation appDeps.serializationCore
 
+  // Fase 10 (P3): i codici delle scelte del widget coincidono con quelli di `core-widget` (`WidgetSettingsScreenTest`). Solo nei test: in produzione le Impostazioni non vedono `core-widget`.
+  testImplementation project(':core-widget')
+
   testImplementation appDeps.coroutinesTest
   testImplementation appDeps.turbine
   testImplementation appDeps.robolectric

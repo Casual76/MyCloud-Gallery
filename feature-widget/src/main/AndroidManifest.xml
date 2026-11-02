@@ -2,10 +2,26 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
   <!--
-      :feature-widget (Fase 10, P0; docs/fase10-progetto.md §6.4, D8, D40). In P0 nessun permesso e nessun componente. P3 aggiunge QUI il solo
-      ricevitore del widget, NON esportato, con `widgetCategory="home_screen"` (mai la schermata di blocco, Q4 (a)) e `updatePeriodMillis="0"`
-      (D6); i componenti interni di Glance devono restare non esportati nel manifest fuso. Prima la riga in docs/sicurezza.md 4-bis, poi quella
-      in releaseManifestPolicy (gradle/verify-release-manifest.gradle).
+      :feature-widget (Fase 10, P3; docs/fase10-progetto.md §6.4, D6, D8, D10, D40). Nessun permesso. **Il solo componente nostro e' il ricevitore del widget, NON esportato**: la
+      manda il sistema dei widget (uid di sistema), nessun'altra app; dichiara `widgetCategory="home_screen"` e `updatePeriodMillis="0"` nel suo file `xml/gallery_widget_info.xml`
+      (mai la schermata di blocco, Q4 (a); nessuna sveglia di Android, il ridisegno e' del lavoro periodico e degli eventi). Glance porta nel manifest fuso i suoi componenti
+      interni, tutti non esportati tranne `GlanceRemoteViewsService` (per le liste, che il widget non usa): `verifyReleaseManifest` lo toglie dal manifest fuso e pretende
+      l'elenco chiuso dei componenti di Glance, non esportati (`gradle/verify-release-manifest.gradle`; riga in docs/sicurezza.md 4-bis).
   -->
+  <application>
+
+    <receiver
+        android:name="dev.pampa.mycloudgallery.feature.widget.glance.GalleryWidgetReceiver"
+        android:exported="false"
+        android:label="@string/widget_label">
+      <intent-filter>
+        <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+      </intent-filter>
+      <meta-data
+          android:name="android.appwidget.provider"
+          android:resource="@xml/gallery_widget_info" />
+    </receiver>
+
+  </application>
 
 </manifest>

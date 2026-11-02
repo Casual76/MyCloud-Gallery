@@ -166,7 +166,8 @@ class Phase6ArchitectureTest {
   /** I3: il controllo vede i moduli dell'engine (un controllo che non li legge non prova niente su di loro). */
   @Test
   fun ilControlloHttpsVedeAncheLEngine() {
-    assertThat(engineModules).containsExactly("engine/engine-foundation", "engine/engine-ui")
+    // Fase 10 (P3): con il widget entra anche `engine-widget` (engine.properties e settings.gradle); come gli altri, e' codice dell'engine letto dal controllo, non rete.
+    assertThat(engineModules).containsExactly("engine/engine-foundation", "engine/engine-ui", "engine/engine-widget")
     for (module in engineModules) {
       assertWithMessage("$module senza sorgenti").that(sources(module, PRODUCTION_SETS).count()).isGreaterThan(0)
     }

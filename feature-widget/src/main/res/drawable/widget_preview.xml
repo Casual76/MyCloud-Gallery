@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  L'anteprima del widget nel selettore dei widget (Fase 10, P3, docs/fase10-progetto.md E-W18): un **disegno fisso** del widget largo (4x2) con il titolo di un ricordo e quattro
+  foto, fatto di forme. **Mai una foto dell'utente, mai un dato.** I colori sono quelli di un'immagine (`colors_widget_preview.xml`, chiari e scuri), non di un'interfaccia: il
+  widget vero prende i suoi dalla palette del kit di `engine-widget`, che segue il tema e l'accento dell'app.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="320dp"
+    android:height="160dp"
+    android:viewportWidth="320"
+    android:viewportHeight="160">
+  <!-- Il fondo del widget. -->
+  <path
+      android:fillColor="@color/widget_preview_background"
+      android:pathData="M24,0h272a24,24 0,0 1,24 24v112a24,24 0,0 1,-24 24H24A24,24 0,0 1,0 136V24A24,24 0,0 1,24 0z" />
+  <!-- Il titolo del ricordo. -->
+  <path
+      android:fillColor="@color/widget_preview_title"
+      android:pathData="M21,14h86a5,5 0,0 1,5 5v0a5,5 0,0 1,-5 5H21a5,5 0,0 1,-5 -5v0a5,5 0,0 1,5 -5z" />
+  <!-- La copertina e le tre foto. -->
+  <path
+      android:fillColor="@color/widget_preview_photo_1"
+      android:pathData="M25,36h48a9,9 0,0 1,9 9v90a9,9 0,0 1,-9 9H25a9,9 0,0 1,-9 -9V45a9,9 0,0 1,9 -9z" />
+  <path
+      android:fillColor="@color/widget_preview_photo_2"
+      android:pathData="M99,36h48a9,9 0,0 1,9 9v90a9,9 0,0 1,-9 9H99a9,9 0,0 1,-9 -9V45a9,9 0,0 1,9 -9z" />
+  <path
+      android:fillColor="@color/widget_preview_photo_3"
+      android:pathData="M173,36h48a9,9 0,0 1,9 9v90a9,9 0,0 1,-9 9H173a9,9 0,0 1,-9 -9V45a9,9 0,0 1,9 -9z" />
+  <path
+      android:fillColor="@color/widget_preview_photo_4"
+      android:pathData="M247,36h48a9,9 0,0 1,9 9v90a9,9 0,0 1,-9 9H247a9,9 0,0 1,-9 -9V45a9,9 0,0 1,9 -9z" />
+</vector>

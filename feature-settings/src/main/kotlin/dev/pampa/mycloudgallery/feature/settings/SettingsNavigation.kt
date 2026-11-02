@@ -29,6 +29,7 @@ import dev.pampa.mycloudgallery.feature.settings.rules.RulesRoute
 import dev.pampa.mycloudgallery.feature.settings.security.BackupNoticeRoute
 import dev.pampa.mycloudgallery.feature.settings.security.SecurityRoute
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharingRoute
+import dev.pampa.mycloudgallery.feature.settings.widget.WidgetSettingsRoute
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsHost
 import kotlinx.serialization.Serializable
 
@@ -105,6 +106,10 @@ data object SettingsQualityRoute
 @Serializable
 data object SettingsSharingRoute
 
+/** Il widget "MyCloud Gallery": cosa mostra e ogni quanto cambia (Fase 10, P3). */
+@Serializable
+data object SettingsWidgetRoute
+
 /** "Quando lavora l'app": preset, tetto dei dati mobili e roaming (verifica funzionale, RE-8). */
 @Serializable
 data object SettingsRulesRoute
@@ -170,6 +175,7 @@ fun NavGraphBuilder.settingsGraph(
                 openPeople = openPeople,
                 openMemories = openMemories,
                 openMap = openMap,
+                openWidget = { open(SettingsPage.WIDGET) },
               ),
               openDiagnostics = openDiagnostics,
               resumeStep = resumeStep,
@@ -276,6 +282,7 @@ internal fun NavGraphBuilder.settingsPages(nav: NavController, back: () -> Unit,
 
   // --- Condivisioni senza posizione (Fase 5B) ---
   composable<SettingsSharingRoute> { SettingsHost { SharingRoute(onBack = back) } }
+  composable<SettingsWidgetRoute> { SettingsHost { WidgetSettingsRoute(onBack = back) } }
 
   // --- Informazioni e licenze ---
   composable<SettingsAboutRoute> { SettingsHost { AboutRoute(onBack = back) } }

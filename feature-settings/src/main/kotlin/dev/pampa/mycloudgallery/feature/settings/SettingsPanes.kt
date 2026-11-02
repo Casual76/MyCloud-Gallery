@@ -40,6 +40,7 @@ internal enum class SettingsPage(val code: String, val route: Any) {
   QUALITY("quality", SettingsQualityRoute),
   RULES("rules", SettingsRulesRoute),
   SHARING("sharing", SettingsSharingRoute),
+  WIDGET("widget", SettingsWidgetRoute),
   ABOUT("about", SettingsAboutRoute),
   ;
 

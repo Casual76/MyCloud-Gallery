@@ -28,6 +28,11 @@
 //     deve poter ricostruire lo stato, e il blocco app non la conta come uscita), `resizeableActivity="true"`, `<layout>` con la misura minima 320 x 400 dp,
 //     `taskAffinity` vuota (StrandHogg, F13).
 //
+//   - (Fase 10, P3, D6, D8, D10, D40, Q4 (a)) il widget: il ricevitore (`widgetPolicy`) e' uno solo, non esportato, e i suoi file `appwidget-provider`
+//     dichiarano **solo la Home** (`widgetCategory="home_screen"`, mai `keyguard`) e `updatePeriodMillis="0"`; i componenti di Glance (`androidx.glance.`) sono
+//     l'elenco chiuso `allowedThirdPartyComponents`, tutti non esportati: l'unico che Glance dichiara esportato, `GlanceRemoteViewsService` (le liste, che il
+//     widget non usa), si **toglie** dal manifest fuso (`droppedLibraryComponents`) prima di questo controllo.
+//
 // `assembleRelease` dipende dal controllo: un APK che non lo passa non si produce nemmeno.
 //
 // Per ammettere un nuovo componente esportato o un nuovo permesso NON basta aggiungere una riga qui:
@@ -165,6 +170,8 @@ ext.releaseManifestPolicy = [
     'com.google.firebase.',
     'com.google.android.play.',
     'com.google.ai.edge.',
+    // Fase 10 (P3, D10, D40): Glance (il widget). Elenco chiuso come per ML Kit: una versione nuova che porta un componente in piu' fa fallire il controllo.
+    'androidx.glance.',
   ],
   allowedThirdPartyComponents: [
     // ML Kit: il registro dei suoi componenti interni (Firebase Components). Lo legge MlKitContext quando ML Kit si inizializza.
@@ -176,6 +183,29 @@ ext.releaseManifestPolicy = [
     'com.google.android.datatransport.runtime.backends.TransportBackendDiscovery',
     'com.google.android.datatransport.runtime.scheduling.jobscheduling.JobInfoSchedulerService',
     'com.google.android.datatransport.runtime.scheduling.jobscheduling.AlarmManagerSchedulerBroadcastReceiver',
+    // Fase 10 (P3, D10, D40; Glance 1.1.1, `glance-appwidget`): i componenti interni di Glance, tutti **non esportati** (lo dichiara il suo manifest). Nessuno parte da solo:
+    // le due activity trampolino servono alle azioni con una lambda (il widget usa solo azioni di avvio di un'activity, nessuna lambda), i ricevitori alle sessioni di Glance
+    // (il widget non ne apre: `GalleryWidgetReceiver` e' un `AppWidgetProvider` e usa Glance solo per comporre i `RemoteViews`). `GlanceRemoteViewsService` non c'e': vedi
+    // `droppedLibraryComponents`.
+    'androidx.glance.appwidget.action.ActionTrampolineActivity',
+    'androidx.glance.appwidget.action.InvisibleActionTrampolineActivity',
+    'androidx.glance.appwidget.action.ActionCallbackBroadcastReceiver',
+    'androidx.glance.appwidget.UnmanagedSessionReceiver',
+    'androidx.glance.appwidget.MyPackageReplacedReceiver',
+  ],
+  // Fase 10 (P3, D10, D40; docs/sicurezza.md 4-bis): i componenti che una libreria dichiara e che l'app NON vuole, tolti dal manifest fuso di ogni variante da
+  // `filter<Variante>NativeLibraries` (sotto) prima di `verifyReleaseManifest`. Glance 1.1.1 dichiara **un** componente esportato, `GlanceRemoteViewsService` (con
+  // `BIND_REMOTEVIEWS`, che puo' avere solo il sistema): serve alle liste (`LazyColumn`), che il widget non usa; un componente esportato che non serve non si tiene.
+  droppedLibraryComponents: [
+    'androidx.glance.appwidget.GlanceRemoteViewsService': 'Glance: il servizio delle liste del widget (esportato, BIND_REMOTEVIEWS); il widget non ha liste',
+  ],
+  // Fase 10 (P3, D6, D8, D10, Q4 (a)): il widget. Il ricevitore e' **uno solo** nel manifest fuso, non esportato; i file `appwidget-provider` (percorsi dalla radice, separati da `|`)
+  // dichiarano solo la Home e nessuna sveglia. `widgetCategory` non e' nel manifest ma nel file `xml/` a cui rimanda, quindi si legge il sorgente.
+  widgetPolicy: [
+    'receiver'      : 'dev.pampa.mycloudgallery.feature.widget.glance.GalleryWidgetReceiver',
+    'category'      : 'home_screen',
+    'updatePeriod'  : '0',
+    'providerFiles' : 'feature-widget/src/main/res/xml/gallery_widget_info.xml|feature-widget/src/main/res/xml-v31/gallery_widget_info.xml',
   ],
   // Fase 10 (P4, D14-D17, docs/sicurezza.md C434, L546): le finestre della `MainActivity`. I valori sono stringhe; gli elenchi si separano con `|` (come `configChanges`).
   mainActivityPolicy: [
@@ -218,6 +248,9 @@ abstract class FilterNativeLibraries extends DefaultTask {
   @Input
   abstract ListProperty<String> getDroppedPermissions()
 
+  @Input
+  abstract ListProperty<String> getDroppedComponents()
+
   @TaskAction
   void filter() {
     String text = mergedManifest.get().asFile.getText('UTF-8')
@@ -232,6 +265,11 @@ abstract class FilterNativeLibraries extends DefaultTask {
     out = out.replaceAll(permission) { String match ->
       def name = (match =~ /android:name\s*=\s*"([^"]*)"/)
       (name.find() && name.group(1) in droppedPermissions.get()) ? '' : match
+    }
+    // Fase 10 (P3, D10, D40): i componenti che una libreria porta e l'app non vuole (`droppedLibraryComponents`): l'elemento intero, qualunque sia il tipo.
+    droppedComponents.get().each { String name ->
+      def component = ~/(?s)[ \t]*<(?:service|receiver|activity|provider)\b[^>]*?android:name\s*=\s*"${java.util.regex.Pattern.quote(name)}"[^>]*?\/>[ \t]*\r?\n?/
+      out = out.replaceAll(component, '')
     }
     updatedManifest.get().asFile.setText(out, 'UTF-8')
   }
@@ -252,6 +290,7 @@ ext.registerNativeLibraryFilter = { variant ->
     description = "Tiene nel manifest fuso di ${variant.name} solo le uses-native-library ammesse (Fase 6, D38) e toglie i permessi non voluti delle librerie (Fase 9, D35)."
     allowed.set(releaseManifestPolicy.allowedNativeLibraries)
     droppedPermissions.set(releaseManifestPolicy.droppedLibraryPermissions.keySet().toList())
+    droppedComponents.set(releaseManifestPolicy.droppedLibraryComponents.keySet().toList())
   }
 }
 
@@ -294,6 +333,14 @@ abstract class VerifyReleaseManifest extends DefaultTask {
   @Input
   abstract MapProperty<String, String> getMainActivityPolicy()
 
+  // Fase 10 (P3): la politica del widget e i suoi file `appwidget-provider` (il sorgente: `widgetCategory` non e' nel manifest, e' nel file a cui il ricevitore rimanda).
+  @Input
+  abstract MapProperty<String, String> getWidgetPolicy()
+
+  @InputFiles
+  @PathSensitive(PathSensitivity.NONE)
+  abstract ConfigurableFileCollection getWidgetProviderFiles()
+
   // Il manifest fuso usa sempre il prefisso `android:`, quindi si legge senza risolvere i namespace.
   static String attr(Object node, String name) {
     return node.attributes()['android:' + name]
@@ -335,6 +382,36 @@ abstract class VerifyReleaseManifest extends DefaultTask {
     } else {
       if (attr(layouts[0], 'minWidth') != policy['minWidth']) problems << "${name}: <layout> android:minWidth deve essere ${policy['minWidth']} (D15)".toString()
       if (attr(layouts[0], 'minHeight') != policy['minHeight']) problems << "${name}: <layout> android:minHeight deve essere ${policy['minHeight']} (D15)".toString()
+    }
+    return problems
+  }
+
+  // Fase 10 (P3, D6, D8, D10, Q4 (a), C432): il widget "MyCloud Gallery". Il ricevitore e' uno solo fra quelli che dichiarano `android.appwidget.provider`, non esportato; i file
+  // `appwidget-provider` dichiarano solo la Home e nessuna sveglia. Statico e puro: lo prova `WidgetManifestTest` di `:feature-widget` sui sorgenti e `assembleRelease` sul manifest fuso.
+  static List<String> verifyWidget(Object application, Map<String, String> policy, List<String> providerTexts) {
+    def problems = []
+    String name = policy['receiver']
+    def providers = application.receiver.findAll { r -> r.'meta-data'.any { attr(it, 'name') == 'android.appwidget.provider' } }
+    def names = providers.collect { attr(it, 'name') }
+    if (names != [name]) {
+      problems << "i ricevitori di widget devono essere solo ${name} (trovati ${names})".toString()
+    }
+    def ours = providers.find { attr(it, 'name') == name }
+    if (ours != null && attr(ours, 'exported') != 'false') {
+      problems << "il ricevitore del widget ${name} deve essere esplicitamente NON esportato (android:exported=\"false\")".toString()
+    }
+    if (providerTexts.isEmpty()) problems << "nessun file appwidget-provider da controllare (widgetProviderFiles e' vuoto)"
+    providerTexts.each { text ->
+      def category = (text =~ /android:widgetCategory\s*=\s*"([^"]*)"/)
+      String found = category.find() ? category.group(1) : null
+      if (found != policy['category']) {
+        problems << "il widget deve dichiarare solo la Home: android:widgetCategory=\"${policy['category']}\" (trovato ${found}): mai sulla schermata di blocco (Q4 (a))".toString()
+      }
+      def period = (text =~ /android:updatePeriodMillis\s*=\s*"([^"]*)"/)
+      String foundPeriod = period.find() ? period.group(1) : null
+      if (foundPeriod != policy['updatePeriod']) {
+        problems << "il widget deve avere android:updatePeriodMillis=\"${policy['updatePeriod']}\" (trovato ${foundPeriod}): nessuna sveglia di Android (D6)".toString()
+      }
     }
     return problems
   }
@@ -399,6 +476,9 @@ abstract class VerifyReleaseManifest extends DefaultTask {
       // Fase 10 (P4, D14-D17): le impostazioni delle finestre della MainActivity.
       problems.addAll(verifyMainActivity(application, mainActivityPolicy.get()))
 
+      // Fase 10 (P3, D6, D8, D10): il widget, solo Home, e il suo ricevitore non esportato.
+      problems.addAll(verifyWidget(application, widgetPolicy.get(), widgetProviderFiles.files.collect { it.getText('UTF-8') }))
+
       // Fase 6 (D3, D38): solo le librerie native della GPU, facoltative.
       application.'uses-native-library'.each { library ->
         String name = attr(library, 'name')
@@ -461,6 +541,8 @@ ext.registerVerifyReleaseManifest = { variant, mergedManifestArtifact ->
     thirdPartyComponentPrefixes.set(releaseManifestPolicy.thirdPartyComponentPrefixes)
     allowedThirdPartyComponents.set(releaseManifestPolicy.allowedThirdPartyComponents)
     mainActivityPolicy.set(releaseManifestPolicy.mainActivityPolicy)
+    widgetPolicy.set(releaseManifestPolicy.widgetPolicy)
+    widgetProviderFiles.from(releaseManifestPolicy.widgetPolicy['providerFiles'].split('[|]').collect { rootProject.file(it) })
   }
   // Un APK che non passa il controllo non si produce nemmeno.
   tasks.configureEach { task ->

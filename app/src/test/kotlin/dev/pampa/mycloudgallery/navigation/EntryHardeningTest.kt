@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.navigation.NavHostController
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.MainActivity
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.family.contract.BlockReason
@@ -28,6 +29,8 @@ import dev.pampa.mycloudgallery.core.security.lock.AuthAvailability
 import dev.pampa.mycloudgallery.core.security.lock.AuthPromptText
 import dev.pampa.mycloudgallery.core.security.lock.AuthResult
 import dev.pampa.mycloudgallery.core.security.lock.SystemCredentialAuthenticator
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetTapRequest
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetTapUri
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
 import dev.pampa.mycloudgallery.feature.nas.contract.NasScreen
 import dev.pampa.mycloudgallery.feature.onboarding.OnboardingCurrentStepRoute
@@ -39,6 +42,8 @@ import dev.pampa.mycloudgallery.notify.OpenMemoriesRequests
 import dev.pampa.mycloudgallery.notify.ServeOpenMemoriesRequests
 import dev.pampa.mycloudgallery.root.RootDestination
 import dev.pampa.mycloudgallery.status.GlobalStatus
+import dev.pampa.mycloudgallery.widget.OpenWidgetRequests
+import dev.pampa.mycloudgallery.widget.ServeOpenWidgetRequests
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.emptyFlow
 import org.junit.Assert.assertThrows
@@ -300,5 +305,134 @@ class EntryHardeningTest {
     assertThat(opened).isEqualTo(1)
     compose.waitForIdle()
     assertThat(opened).isEqualTo(1)
+  }
+
+  // --- Fase 10, P3 (D9, C17, C433, E-W7): il tocco sul widget, un'azione fissa e due numeri, apertura dopo il blocco app -------------------------------------------------
+
+  /** Un intent costruito da un'altra app: l'azione e l'URI scelti, con in piu' extra, categorie, flag e un componente altrui. */
+  private fun widgetIntent(action: String?, uri: String?): Intent = hostile(action).apply {
+    setData(if (uri == null) null else Uri.parse(uri))
+    putExtra("appWidgetId", 7)
+    putExtra("mediaId", "0123456789abcdefghjkmnpqrs")
+  }
+
+  private fun assertClean(clean: Intent) {
+    assertThat(clean.action).isEqualTo(Intent.ACTION_MAIN)
+    assertThat(clean.categories).containsExactly(Intent.CATEGORY_LAUNCHER)
+    assertThat(clean.component?.className).isEqualTo(MainActivity::class.java.name)
+    assertThat(clean.extras).isNull()
+    assertThat(clean.data).isNull()
+    assertThat(clean.type).isNull()
+    assertThat(clean.flags).isEqualTo(0)
+  }
+
+  /** L'azione del widget e l'URI `mcg-widget:<id>/<cella>`: la `MainActivity` legge i soli due numeri e l'intent resta pulito, anche se l'altra app ci ha messo di tutto. */
+  @Test
+  fun ilToccoSulWidgetPortaSoloIDueNumeriEIntentRestaPulito() {
+    assertThat(WidgetTapUri.ACTION).isEqualTo("dev.pampa.mycloudgallery.action.OPEN_WIDGET")
+    val real = Intent(WidgetTapUri.ACTION).setData(Uri.parse(WidgetTapUri.format(WidgetTapRequest(12, 3))))
+    for (incoming in listOf(real, widgetIntent(WidgetTapUri.ACTION, "mcg-widget:12/3"))) {
+      val entry = MainActivity.entryOf(app, incoming)
+      assertThat(entry.widgetTap).isEqualTo(WidgetTapRequest(12, 3))
+      assertThat(entry.opensMemories).isFalse()
+      // D16: lo serve la finestra principale; se l'intent e' arrivato alla seconda, si porta davanti la principale.
+      assertThat(entry.needsPrimaryWindow).isTrue()
+      assertClean(entry.clean)
+    }
+    // Gli estremi che il widget puo' mandare: la prima e l'ultima cella, il primo e l'ultimo id.
+    for ((id, cell) in listOf(1 to 0, 1 to 6, Int.MAX_VALUE to 0, Int.MAX_VALUE to 6)) {
+      val tap = MainActivity.entryOf(app, Intent(WidgetTapUri.ACTION).setData(Uri.parse("mcg-widget:$id/$cell"))).widgetTap
+      assertThat(tap).isEqualTo(WidgetTapRequest(id, cell))
+    }
+  }
+
+  /**
+   * Un intent inventato: l'azione del widget con un URI che non e' **esattamente** `mcg-widget:<int>/<int>` nei limiti non porta nessuna richiesta (l'app si apre come dall'icona:
+   * al piu' la Libreria). Numeri fuori dai limiti, zeri davanti, segni, parti in piu', parametri, frammenti, un altro schema, un URI gerarchico, spazi, maiuscole, niente URI.
+   */
+  @Test
+  fun unIntentInventatoDelWidgetNonPortaUnTocco() {
+    val forged = listOf(
+      null, "", "mcg-widget:", "mcg-widget:1", "mcg-widget:1/", "mcg-widget:/1", "mcg-widget:0/1", "mcg-widget:1/7", "mcg-widget:1/-1", "mcg-widget:-1/2", "mcg-widget:+1/2",
+      "mcg-widget:01/2", "mcg-widget:1/02", "mcg-widget:1/2/3", "mcg-widget:1/2?x=1", "mcg-widget:1/2#f", "mcg-widget:1/2 ", "mcg-widget: 1/2", "mcg-widget:2147483648/0",
+      "mcg-widget:99999999999999999999/0", "mcg-widget://1/2", "mcg-widget:1/2,3", "mcg-widget:1.0/2", "mcg-widget:0x1/2", "MCG-WIDGET:1/2", "mcg-widget1/2",
+      "mycloudgallery://widget/1/2", "https://evil.example/1/2", "content://dev.pampa.mycloudgallery.docs/document/12", "file:///data/data/x",
+    )
+    for (uri in forged) {
+      val entry = MainActivity.entryOf(app, widgetIntent(WidgetTapUri.ACTION, uri))
+      assertWithMessage("un URI inventato ($uri) non deve portare un tocco").that(entry.widgetTap).isNull()
+      assertThat(entry.needsPrimaryWindow).isFalse()
+      assertClean(entry.clean)
+    }
+  }
+
+  /** Il tocco si riconosce solo con l'azione del widget, per uguaglianza esatta: nessun'altra azione (nemmeno parente o quella dei Ricordi) lo porta, qualunque URI abbia. */
+  @Test
+  fun soloLAzioneDelWidgetPortaUnTocco() {
+    val others = listOf(
+      null, Intent.ACTION_MAIN, Intent.ACTION_VIEW, Intent.ACTION_SEND, NotifyRules.OPEN_ACTION, "dev.pampa.mycloudgallery.action.OPEN_WIDGETS", "dev.pampa.mycloudgallery.action.OPEN_WIDGE",
+      WidgetTapUri.ACTION + " ", WidgetTapUri.ACTION.lowercase(), WidgetTapUri.ACTION + ".x", "com.altra.app.action.OPEN_WIDGET", "", WidgetTapUri.ACTION.uppercase(),
+    )
+    for (action in others) {
+      val entry = MainActivity.entryOf(app, widgetIntent(action, "mcg-widget:12/3"))
+      assertWithMessage("l'azione $action non deve portare un tocco").that(entry.widgetTap).isNull()
+      assertClean(entry.clean)
+    }
+    assertThat(MainActivity.entryOf(app, null).widgetTap).isNull()
+    assertThat(MainActivity.entryOf(app, MainActivity.launcherIntent(app)).widgetTap).isNull()
+    // L'azione dei Ricordi con un URI del widget apre i Ricordi e non porta il tocco: le due richieste non si mescolano.
+    val memories = MainActivity.entryOf(app, widgetIntent(NotifyRules.OPEN_ACTION, "mcg-widget:12/3"))
+    assertThat(memories.opensMemories).isTrue()
+    assertThat(memories.widgetTap).isNull()
+  }
+
+  /** L'evento interno porta i due numeri e basta; un tocco nuovo sostituisce quello ancora in attesa; si prende una volta sola; da qui non si apre altro. */
+  @Test
+  fun ilToccoEUnEventoInternoConISoliDueNumeri() {
+    val requests = OpenWidgetRequests()
+    assertThat(requests.pending.value).isNull()
+    assertThat(requests.take()).isNull()
+    requests.request(WidgetTapRequest(12, 3))
+    requests.request(WidgetTapRequest(12, 4))
+    assertThat(requests.pending.value).isEqualTo(WidgetTapRequest(12, 4))
+    assertThat(requests.take()).isEqualTo(WidgetTapRequest(12, 4))
+    assertThat(requests.take()).isNull()
+    // Un'altra app che manda i numeri di un widget altrui ottiene solo questo: un evento con due interi, da validare sul registro.
+    val entry = MainActivity.entryOf(app, widgetIntent(WidgetTapUri.ACTION, "mcg-widget:999/0"))
+    entry.widgetTap?.let(requests::request)
+    assertThat(requests.take()).isEqualTo(WidgetTapRequest(999, 0))
+    val nav = show(RootDestination.AwaitingApproval("ABCD-EFGH-JKMN-PQRS"))
+    assertUnreachable(nav, MainRoute, SettingsGraphRoute, DiagnosticsGraphRoute, OnboardingGraphRoute)
+  }
+
+  /** E-W7: con il blocco app attivo il tocco sul widget non apre niente finche' l'app e' bloccata; allo sblocco si serve, una volta sola. */
+  @Test
+  fun ilToccoSulWidgetSiServeSoloDopoIlBloccoApp() {
+    val controller = AppLockController()
+    controller.updateSettings(AppLockSettings(AppLockMode.SYSTEM_CREDENTIAL, AppLockTimeout.AFTER_1_MINUTE))
+    assertThat(controller.state.value).isEqualTo(AppLockState.LOCKED)
+    val requests = OpenWidgetRequests()
+    val authenticator = GatedAuthenticator()
+    val opened = mutableListOf<WidgetTapRequest>()
+    compose.setContent {
+      MyCloudGalleryTheme {
+        AppLockGate(controller = controller, authenticator = authenticator, lockedContent = { Text("bloccata") }) {
+          Text("sbloccata")
+          ServeOpenWidgetRequests(requests) { opened += it }
+        }
+      }
+    }
+    requests.request(WidgetTapRequest(12, 3))
+    compose.waitForIdle()
+    assertThat(opened).isEmpty()
+    assertThat(requests.pending.value).isEqualTo(WidgetTapRequest(12, 3))
+    assertThat(compose.onAllNodesWithText("sbloccata").fetchSemanticsNodes()).isEmpty()
+    authenticator.result.complete(AuthResult.Success)
+    compose.waitForIdle()
+    assertThat(controller.state.value).isEqualTo(AppLockState.UNLOCKED)
+    assertThat(opened).containsExactly(WidgetTapRequest(12, 3))
+    assertThat(requests.pending.value).isNull()
+    compose.waitForIdle()
+    assertThat(opened).hasSize(1)
   }
 }

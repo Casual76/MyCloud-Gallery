@@ -361,6 +361,17 @@ internal object DiagCatalogEntries {
     // --- Widget e rilascio (Fase 10, P0: le voci di stato; i codici del §2.13 li aggiunge P13) -----------------------------
     DiagEntry(DiagCodes.WIDGET_STATE, DiagSection.WIDGET, DiagSeverity.INFO, R.string.diag_widget_state_title, R.string.diag_widget_state_guide, null),
     DiagEntry(DiagCodes.RELEASE_STATE, DiagSection.RELEASE, DiagSeverity.INFO, R.string.diag_release_state_title, R.string.diag_release_state_guide, null),
+    // P13: i codici del §2.13. Un rifiuto per firma o chiave sconosciuta e' un avviso ("Segnala all'admin"); un blocco in vigore dice di aggiornare.
+    DiagEntry(DiagCodes.WIDGET_SKIPPED, DiagSection.WIDGET, DiagSeverity.INFO, R.string.diag_widget_skipped_title, R.string.diag_widget_skipped_guide, null),
+    DiagEntry(DiagCodes.WIDGET_BLANKED, DiagSection.WIDGET, DiagSeverity.INFO, R.string.diag_widget_blanked_title, R.string.diag_widget_blanked_guide, null),
+    DiagEntry(DiagCodes.WIDGET_LATE, DiagSection.WIDGET, DiagSeverity.INFO, R.string.diag_widget_late_title, R.string.diag_widget_late_guide, null),
+    DiagEntry(DiagCodes.WIDGET_ERROR, DiagSection.WIDGET, DiagSeverity.WARNING, R.string.diag_widget_error_title, R.string.diag_widget_error_guide, null),
+    DiagEntry(DiagCodes.RELEASE_MANIFEST_REJECTED, DiagSection.RELEASE, DiagSeverity.INFO, R.string.diag_release_rejected_title, R.string.diag_release_rejected_guide, null),
+    DiagEntry(DiagCodes.RELEASE_BLOCKED, DiagSection.RELEASE, DiagSeverity.WARNING, R.string.diag_release_blocked_title, R.string.diag_release_blocked_guide, null),
+    DiagEntry(DiagCodes.DRAG_OUT, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_drag_out_title, R.string.diag_drag_out_guide, null),
+    DiagEntry(DiagCodes.DRAG_IN, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_drag_in_title, R.string.diag_drag_in_guide, null),
+    DiagEntry(DiagCodes.DRAG_TEMP_CLEANED, DiagSection.BACKUP, DiagSeverity.INFO, R.string.diag_drag_temp_cleaned_title, R.string.diag_drag_temp_cleaned_guide, null),
+    DiagEntry(DiagCodes.WINDOW_STATE, DiagSection.PROFILES, DiagSeverity.INFO, R.string.diag_window_state_title, R.string.diag_window_state_guide, null),
     // P13: i codici del §2.12. "Apri le impostazioni" per una notifica non partita (permesso, canale); un HOST o PATH rifiutato e' un difetto da segnalare.
     DiagEntry(DiagCodes.MEMORY_SHELF_RESET, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_shelf_reset_title, R.string.diag_memory_shelf_reset_guide, null),
     DiagEntry(DiagCodes.MEMORY_NO_VECTORS, DiagSection.MEMORIES, DiagSeverity.INFO, R.string.diag_memory_no_vectors_title, R.string.diag_memory_no_vectors_guide, null),

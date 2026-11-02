@@ -9,15 +9,14 @@
 -keep,allowshrinking class androidx.glance.** { *; }
 -keep,allowshrinking class dev.antigravity.fluidengine.widget.** { *; }
 #
-# **Finche' P13 non lega le porte, le classi del widget sono radici** (`-keep` senza `allowshrinking`). `WidgetServices` e `WidgetServicesProvider` non hanno nessuna implementazione
-# nell'APK (le scrive `:app`, P13): R8 lo vede, dichiara morta ogni chiamata alle loro porte e toglie il piano, la decodifica e la composizione con Glance, cioe' il disegno
-# vero del widget (provato il 2/11: il passo 7i non vedeva nessuna chiamata a Glance da feature/widget/, ne' con `allowshrinking` ne' tenendo solo `WidgetHost`). Il widget deve
-# stare nell'APK com'e' scritto, e P13 potra' tornare a `allowshrinking` quando le implementazioni ci saranno.
-# Non `testing/` (gli esempi per gli screenshot non entrano nella release: lo pretende `tools/check.ps1`).
--keep class dev.pampa.mycloudgallery.feature.widget.frame.** { *; }
--keep class dev.pampa.mycloudgallery.feature.widget.glance.** { *; }
--keep class dev.pampa.mycloudgallery.feature.widget.host.** { *; }
--keep class dev.pampa.mycloudgallery.feature.widget.refresh.** { *; }
--keep class dev.pampa.mycloudgallery.feature.widget.tap.** { *; }
--keep class dev.pampa.mycloudgallery.feature.widget.ui.** { *; }
--keep class dev.pampa.mycloudgallery.feature.widget.work.** { *; }
+# Le classi di produzione del widget (Fase 10, P13: le porte ci sono). Fino a P13 erano radici (`-keep` senza `allowshrinking`): `WidgetServices` e `WidgetServicesProvider` non
+# avevano un'implementazione nell'APK e R8 toglieva il disegno vero. Da P13 `:app` le implementa (`WidgetGraph`, `WidgetPorts`) e le installa in `WidgetHost` all'avvio: il
+# disegno e' raggiungibile, quindi le classi restano quello che sono (niente fusioni) ma quelle che nessuno usa si tolgono (`allowshrinking`). Il passo 7i dice se il disegno
+# resta nel dex (chiamate a Glance da `feature/widget/`). Non `testing/` (gli esempi per gli screenshot non entrano nella release: lo pretende `tools/check.ps1`).
+-keep,allowshrinking class dev.pampa.mycloudgallery.feature.widget.frame.** { *; }
+-keep,allowshrinking class dev.pampa.mycloudgallery.feature.widget.glance.** { *; }
+-keep,allowshrinking class dev.pampa.mycloudgallery.feature.widget.host.** { *; }
+-keep,allowshrinking class dev.pampa.mycloudgallery.feature.widget.refresh.** { *; }
+-keep,allowshrinking class dev.pampa.mycloudgallery.feature.widget.tap.** { *; }
+-keep,allowshrinking class dev.pampa.mycloudgallery.feature.widget.ui.** { *; }
+-keep,allowshrinking class dev.pampa.mycloudgallery.feature.widget.work.** { *; }

@@ -307,6 +307,8 @@ class TestDevice(
   restart: ProcessRestart = ProcessRestart {},
   /** Dove vive il grafo: di solito i thread di `Dispatchers.Default`; D-7 lo mette su un thread solo per rendere la corsa ripetibile. */
   dispatcher: CoroutineDispatcher = Dispatchers.Default,
+  /** Fase 10 (P13): il manifest firmato del dispositivo (sessione e cancelli lo leggono); di solito nessuno. */
+  release: dev.pampa.mycloudgallery.release.ReleaseGraph? = null,
 ) {
   private val tracked = TrackedDispatcher(dispatcher)
   val scope = CoroutineScope(SupervisorJob() + tracked)
@@ -323,6 +325,7 @@ class TestDevice(
     work = WorkCanceller { workCancelled.incrementAndGet() },
     diagnostics = diagnostics,
     restart = restart,
+    release = release,
   )
 
   private val strayAtStart = StrayExceptions.count()

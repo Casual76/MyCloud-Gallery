@@ -77,6 +77,10 @@
   <string name="backup_device_folder_title">Cartella del dispositivo</string>
   <string name="backup_device_folder_chosen">Le copie vanno in «%1$s».</string>
   <string name="backup_device_folder_not_chosen">Si sceglie prima del primo backup.</string>
+  <!-- Fase 10 (P13): 5A I5, decisione del 31/10 (sempre): la copia privata dei file propri che stanno solo nella cartella comune si fa
+       sempre, anche se il backup non e mai stato avviato. -->
+  <string name="backup_common_copy_title">Copia privata dell’area comune</string>
+  <string name="backup_common_copy_detail">Le tue foto e i tuoi video che sono solo nell’area comune hanno sempre una copia nella tua area privata, in «Backup/Area comune», anche se il backup non è mai partito.</string>
   <string name="backup_settings_title">Impostazioni del backup</string>
   <string name="backup_settings_detail">Cosa salvare, dove e quando.</string>
 </resources>

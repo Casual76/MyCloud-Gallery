@@ -55,6 +55,12 @@ class NasInputs(
   val freezeSignal: MutableNasFreezeSignal,
   val lastDiskTouchAt: StateFlow<Long?>,
   val meteredChanges: Flow<Boolean> = emptyFlow(),
+  /**
+   * Fase 10 (P13, §1.4, §2.8): il manifest firmato ferma le scritture (`ReleaseStatus.ReadOnly` o `Stopped`, o lo stato non ancora letto). Entra in **ogni** cancello
+   * come l'emergenza "Ferma le scritture sul NAS": indice, album, volti, dati personali e modelli (`NasGraph.writeGate`), operazioni sui file (`opsGate`), backup e
+   * file in arrivo (`BackupGraph`). Di serie mai (i test che non lo provano).
+   */
+  val releaseWritesStopped: () -> Boolean = { false },
 ) {
   /** Lo stato di un dispositivo nel registro accettato (E-I15): i dati di revocati, persi e sconosciuti spariscono. */
   fun standing(deviceId: String): DeviceStanding = when (registry()?.registry?.device(deviceId)?.status) {

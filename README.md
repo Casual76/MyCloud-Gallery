@@ -502,6 +502,57 @@ engine-ui,engine-storage` (e rigenerare i checksum).
 - **Log**: `GalleryLog` non scrive nulla in release perche' l'unico sink su logcat esiste solo in
   `app/src/debug`. Per dati sensibili da mostrare comunque in un messaggio: `Redacted`.
 
+## Rilascio: versioni, changelog, `release.ps1`
+
+La catena di rilascio della Fase 10 (P12; `docs/fase10-progetto.md` §2.9, D32-D34; `docs/decisioni.md`, "Fase 10 P12"). Tutto dal PC, niente
+rete: la pubblicazione sul Pampa Store la fa poi l'orchestratore con la skill del Pampa Store, e solo con il sì dell'utente.
+
+- **`release/versions.txt`**: il registro delle versioni, una riga per APK pubblicato e in fondo quella che si prepara:
+  `<versione> <versionCode> <stato> <canale> <data> <sha256>`, stato `pubblicata` o `prevista` (una sola, l'ultima), canale `beta` o `stable`.
+  `app/build.gradle` prende `versionName` e `versionCode` dalle prime due colonne dell'**ultima** riga (e fallisce se non e' valida). Il
+  `versionCode` cresce sempre e non si riusa: lo stesso numero puo' stare su due righe solo per la stessa versione e lo **stesso APK** (il passaggio
+  da beta a stable, con la stessa impronta).
+- **`CHANGELOG.md`**: le novita' in italiano semplice, una sezione `## <versione>` con quattro voci in quest'ordine (Novita', Correzioni,
+  Sicurezza, Da sapere). La copia dentro l'app e' `feature-settings/src/main/res/raw/changelog.md` (Impostazioni -> Informazioni e licenze ->
+  "Novita' di questa versione"): `ReleaseNotesTest` le tiene uguali, quindi si cambiano insieme.
+- **`tools\release\release.ps1`**: i passi della release, con tutti i controlli (codice di uscita 0 solo se tutto e' a posto):
+
+  | Passo | Cosa controlla |
+  |---|---|
+  | 0 chiavi del manifest | `ReleaseKeys.PROVISIONAL` falso: K1 e K2 vere (senza, nessun blocco a distanza, L560) |
+  | 1 albero | `git status` pulito, HEAD sul tag `v<versione>` di `main` (o un commit dopo che cambia solo `versions.txt`), engine pulito |
+  | 2 recinzioni | `tools\release\recinzioni.json` c'e' ed e' leggibile (il confronto con il bytecode e' di `check.ps1`) |
+  | 3 prove | `tools\check.ps1 -Bench -BenchStrict` verde con l'S25 collegato, riferimento S25 di al piu' 7 giorni |
+  | 4 build | la riga di `versions.txt` e `assembleRelease` firmata con `pampa.jks` (le voci `pampa.*` le legge Gradle, lo script mai) |
+  | 5 APK | firma v2 e v3 con l'impronta di `docs/sicurezza.md` §5.6, non debuggable, manifest e permessi dell'elenco chiuso, nessun resto di debug o di KT, librerie a 16 KB |
+  | 6 changelog | la sezione della versione in `CHANGELOG.md` e dentro l'APK |
+  | 7 resoconto | `build\release\<versione>\`: APK, SHA-256, rapporto, dipendenze, mapping di R8 (resta sul PC), testo per lo store, checklist |
+  | 8 prova a secco | non la fa lo script: stampa cosa dare all'orchestratore (`--dry-run` del publisher) |
+
+  Le opzioni:
+
+  | Opzione | Cosa fa |
+  |---|---|
+  | `-Version <x.y.z[-beta.N]> -Channel beta\|stable` | la release di quella versione (passi 0-8) |
+  | `-Prepara` (con `-Version`, `-Channel`) | aggiunge la riga `prevista` a `versions.txt` (versionCode = massimo + 1; lo stesso da beta a stable) |
+  | `-SegnaPubblicata` (con `-Version`, `-Channel`) | dopo la pubblicazione: la riga diventa `pubblicata` con la data e l'impronta dell'APK |
+  | `-Impronta [-Scrivi]` | l'impronta SHA-256 del certificato di `pampa.jks` (la password passa da una variabile d'ambiente, mai stampata); `-Scrivi` la mette in §5.6 |
+  | `-Checklist` | stampa la checklist di rilascio |
+  | `-NoDaemon`, `-BenchSerial <seriale>`, `-BenchMaxAgeDays <n>`, `-GradleArgs` | Gradle senza demone, l'S25 fra piu' dispositivi, l'eta' massima del riferimento, argomenti per Gradle |
+  | `-TestKeystore <file sotto build\>` (`-TestStorePassword`, `-TestKeyAlias`) | **solo prove**: firma con un keystore di prova; solo cosi' valgono `-TestOverlay`, `-ApkPath`, `-SkipTree`, `-SkipChecks`, e il resoconto va in `build\release-test\` con scritto "PROVA" |
+
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File tools\release\release.ps1 -Impronta -Scrivi                 # una volta, l'utente
+  powershell -ExecutionPolicy Bypass -File tools\release\release.ps1 -Prepara -Version 1.0.0 -Channel beta
+  powershell -ExecutionPolicy Bypass -File tools\release\release.ps1 -Version 1.0.0 -Channel beta -NoDaemon
+  powershell -ExecutionPolicy Bypass -File tools\release\release.ps1 -SegnaPubblicata -Version 1.0.0 -Channel beta
+  ```
+
+  La prova dello script e' `tools\release\test-release.ps1` (APK piccoli costruiti con gli strumenti dell'SDK e un keystore di prova, nessuna rete).
+- **Il manifest firmato** (D29-D31): `release/manifest.json` (leggibile, senza segreti) si firma con `tools\release\manifest-tool.ps1 sign` e si copia
+  sul NAS in `<area comune>\.mycloudgallery\release\manifest.mcgr` (`docs/formato-nas.md` §15). L'app lo legge nel giro della sincronizzazione al
+  piu' una volta al giorno: puo' solo mettere questa versione in sola lettura (avviso "Aggiorna") o fermarla, mai cancellare o aprire qualcosa.
+
 ## Comandi utili
 
 ```powershell

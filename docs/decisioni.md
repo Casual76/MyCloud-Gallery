@@ -15056,3 +15056,180 @@ Ognuna e' una **forma stretta**, non un "salta tutto": un elemento fuori da quel
 
 ### Commit (branch `fase10/p8`)
 `fdc40025` (ATF e roborazzi-accessibility-check, impronte), `7fb8a899` (design system e servizio di prova), `1927244a` (Libreria, viewer, mappa), `f8f69a49` (le altre schermate, `GallerySectionHeader`), `586f563e` (documenti e screenshot); questa riga con l'esito, dopo.
+
+## Fase 10 P13: integrazione (02/11)
+
+Il pacchetto P13 della Fase 10 (`docs/fase10-progetto.md` §4.4 riga P13; §1.4 "Cosa resta in `:app`", §2.1, §2.2, §2.8, §2.12, §2.13, D39, D42, §4.3) e le
+richieste "Cosa serve a P13" / "Cosa deve fare P13" delle sezioni della Fase 10 qui sopra. Branch `fase10/p13` da `7a729db2` (P0-P7, P10, P11 prima parte, P12,
+la correzione M3). Lo ha scritto un solo agente, senza sotto-agenti (regola dell'utente). **Nessuna dipendenza, permesso, host o chiave nuovi; nessuna
+costante di `FeatureFlags` cambiata** (`tools/release/recinzioni.json` intatto: le quattro recinzioni restano accese); nessun file di `core-widget`, `core-release`,
+`core-trust`, `core-describe`, `tools/security`, `tools/release`, `benchmark` toccato; di `feature-widget` solo `consumer-rules.pro`. Nessun telefono, tablet,
+NAS o emulatore. Voci di `docs/sicurezza.md`: **L566** nuovo (una versione fermata si sblocca solo aggiornando l'app); C430, C433, C438, C441, C449 precisate.
+**C458 non usato**; L567 per i limiti del Fluid Engine trovati da P8 (richiesta di P8).
+
+### I legami, uno per uno
+| Legame | Dove | In breve |
+|---|---|---|
+| Manifest (`ReleaseGraph`) | `app/.../release/` (`ReleaseGraph`, `ReleaseWiring`, `NasManifestSource`, `ReleaseGates`, `ReleaseRootUi`), `GraphModule`, `AppGraph`, `NasInputs` | lo stato vero di core-release in `noBackupFilesDir/release/`, letto all'avvio; fiducia e canale dalla variante (`DeveloperTools`); lettura nel giro dell'indice |
+| Cancelli | `NasGraph.writeGate` e `opsGate`, `BackupGraph` (backup e arrivi), `AppGraph.session`, `AppGraph.stageRules`, `AiWiring` | `ReleaseStatus` come l'emergenza "Ferma le scritture"; con `Stopped` nessuna sessione, nessun lavoro a tappe, nessuno scaricamento |
+| Radice della UI | `AppRoot` + `ReleaseRoot` | `Stopped`: solo "Questa versione e' stata fermata" con la Diagnostica (un `NavHost` suo); `ReadOnly`: l'avviso "Aggiorna" in alto ("Ho capito") |
+| Modelli | `AiWiring` | `CatalogExtraModelSources(ExtraModelUrls { state.extraUrls })`, lo stesso oggetto a `LocalModels` e `ModelFetchers.create` |
+| Widget (`WidgetGraph`) | `app/.../widget/` (`WidgetGraph`, `WidgetPorts`, `WidgetWiring`, `WidgetCounters`, `WidgetDiagnostics`), `Phase10Module`, `MyCloudGalleryApp` | le porte vere in `WidgetHost` all'avvio, il ridisegno da ogni causa, il tocco, i contatori |
+| Tocco sul widget | `navigation/AppWidgetNavigation.kt`, `AppNavHost` (una riga) | dopo lo sblocco e dalla sola finestra principale: `WidgetTaps.resolve` sul registro |
+| Descrittore | `app/.../describe/DescribeWiring.kt`, `search/TextLayouts.kt` (`texts`), `Phase10Module` | un `DefaultMediaDescriber` in `MediaDescribers.install`; `forget` al blocco e in secondo piano |
+| Trascinamento | `IntegrationsGraph` (le righe di P6 restano) | voci `DRAG_OUT`, `DRAG_IN`, `DRAG_TEMP_CLEANED`; le copie tolte all'avvio contate |
+| Azzeramento (D42) | `LocalData` (`AppLocalDataEraser`), `RootViewModel`, `AppGraph` (`widgetStopper`, `windowsCloser`) | widget per primi, finestre, registro, manifest |
+| Diagnostica | `feature-diagnostics` (codici, voci, stringhe, `ExportKeys`), `WidgetDiagnostics`, `ReleaseDiagnostics`, `WindowDiagnostics` | solo numeri e costanti |
+| Backup (5A I5) | `feature-backup/.../page/BackupPageScreen.kt`, `strings_backup_page.xml` | una riga informativa: la copia privata dell'area comune si fa sempre |
+
+### Scelte
+1. **Il manifest nei cancelli senza toccare i core.** `ReleaseStatus` entra in `NasInputs.releaseWritesStopped` (di serie `false`: i test che non lo provano non
+   cambiano) e da li' nei tre cancelli che tutte le scritture sul NAS gia' attraversano: `NasGraph.writeGate` (indice, e attraverso di lui `AppAlbumWriteGate`,
+   `AppFacesWriteGate`, `IndexWriteRules` dei dati personali e `RulesModelShelfGate` dei modelli), `opsGate` (operazioni sui file, cestino, cartelle) e
+   `BackupGateInputs.writesStopped` (backup e file in arrivo). Il motivo e' quello dell'emergenza (`EMERGENCY_STOP`, `WRITES_STOPPED`): nessun enum nuovo nei
+   contratti delle fasi passate, e ogni schermata che sa dire "scritture ferme" lo dice gia'. La Diagnostica distingue le due cause (`NAS_WRITES_STOPPED` per
+   l'utente, `RELEASE_BLOCKED` per il manifest).
+2. **`ALL` = nessuna sessione.** La sessione SMB riceve un account nullo con la versione fermata (`NotAllowedHere(NOT_CONFIGURED)` prima di qualunque socket);
+   le regole delle tappe dicono `Stop` (`ReleaseStageRules`) e il cancello di rete dei modelli `Refused` (`ReleaseModelNetworkGate`). Conseguenza dichiarata
+   (**L566**): una versione fermata non legge piu' il manifest, quindi si sblocca solo con un aggiornamento dell'app.
+3. **Fallire chiusi all'avvio.** Finche' lo stato salvato non e' letto (`ReleaseGraph.load`, lanciato da `GraphModule` appena nasce il grafo, qualche
+   millisecondo) i cancelli sono fermi e la sessione non si apre: un blocco salvato da un processo di prima non si perde nella finestra d'avvio. Un errore di
+   lettura vale "niente salvato" (regola di P1).
+4. **La lettura del manifest** sta in `NasStages.sync` (il giro della sincronizzazione dell'indice, finito), con la sessione di quel giro: al piu' una volta ogni
+   24 ore, l'ora dell'ultima lettura **con una risposta** in `noBackupFilesDir/release/last-read` (ora del telefono: e' solo il ritmo, la scadenza resta all'ora del
+   NAS). Un NAS che non risponde non segna l'ora (si riprova al giro dopo). Canale: `debug` nella build di sviluppo, `beta` se la `versionName` ha `-beta`,
+   altrimenti `stable` (senza toccare `app/build.gradle` di P12).
+5. **Il widget e il giro dei dati personali.** Il nascosto arrivato da un altro dispositivo non porta un elenco di id fino a `:app` (la proiezione dei dati
+   personali e' in core-personal); il legame guarda **cio' che il widget mostra** (dal registro: al piu' 7 celle per widget) e chiede alla visibilita' di adesso
+   quali sono nascosti o spariti (`WidgetGraph.watch`), alla fine di ogni giro della sincronizzazione personale (`NasOrganizer.lastPersonal`) e a ogni istantanea
+   nuova dopo 1 s di calma. Un errore di lettura = tutti quelli mostrati (fallire chiusi). Il "Nascondi" fatto qui passa gli id direttamente
+   (`GalleryGraph.hiddenIdListeners`, nuovo).
+6. **Il fornitore delle porte** (`WidgetHost`) risponde null senza istantanea (entro il budget), dopo l'azzeramento o con la versione fermata; lo scaffale si monta
+   nel tempo che resta (`MemoriesGraph.awaitLive`, la strada di NT-1), altrimenti il pianificatore passa alle foto. Il ricordo di oggi ha le regole di D4: pubblicato
+   oggi, mai `PERSON`, mai un titolo con una persona, **mai una copertina con una persona a cui si e' detto "Mostra meno" o "Mai"**; priorita' come la notifica.
+7. **Il blocco per il widget** e' l'impostazione del blocco app (acceso = solo media del telefono, Q3 (c)), non lo stato di adesso; finche' le impostazioni non
+   si leggono vale acceso. Le miniature "locali" sono quelle del MediaStore e quelle della replica (`canUpgrade`, in memoria); la decodifica passa con
+   `ThumbContext.Ahead`, quindi la sorgente del NAS non legge mai l'originale.
+8. **L'aspetto**: l'app usa il tema di serie (`MyCloudGalleryTheme()` senza impostazioni), quindi `WidgetAppearance` da' `EngineSettings()` e `appearanceChanged`
+   segue la modalita' scura del sistema (`ComponentCallbacks`). Quando la fase grafica dara' le impostazioni d'aspetto, vanno lette li'.
+9. **Le preferenze del widget** (`SharedPrefsWidgetSettings` di feature-settings, un file) si aprono alla prima lettura, in sottofondo: mai sul thread principale
+   all'avvio (principio dell'avvio istantaneo).
+10. **I contatori del widget** stanno in `:app` attorno alle porte (il motore di feature-widget non si tocca): saltati per miniatura e per blocco (le porte),
+    svuotamenti per causa (`CountingWidgetRefresher`, dal registro **prima** di passare la causa al motore), l'ultimo errore (`CountingWidgetPlanner`). In memoria
+    come quelli delle integrazioni; l'ultimo aggiornamento e' l'ora del file del registro e i giri in ritardo si contano dagli orari del lavoro periodico
+    (`DefaultWidgetSchedule`, mai 23-7, 30 minuti di flessibilita') fra l'ultimo aggiornamento e adesso, in 7 giorni.
+11. **Il descrittore**: `DescribePeople` sopra `IndexMemoryPeople` (la stessa porta dei ricordi, senza il cancello della fase dei ricordi: basta `available`, cioe'
+    Persone attiva qui), con il filtro di `VisibleMedia` e `HiddenMask` **prima** di chiedere i nomi; nomi in ordine alfabetico. `DescribeText` con una lettura del
+    catalogo per giro (`StoredMediaText.texts`, nuovo) e l'indice locale per chiave. Le parole restano `ItalianDescribeWords` (l'app e' solo in italiano).
+12. **Due finestre**: oltre a `closeOtherWindows`, i due effetti alla radice che consumano una richiesta del processo ("Condividi", "Modifica con") la lanciano
+    una volta sola (l'altra finestra la trova gia' presa). E' il punto aperto di P4 ("altri oggetti del processo con un solo ospite"): `WindowHost` resta per
+    backup e comandi della Libreria, non ne ho trovati altri.
+13. **Azzeramento**: `AppLocalDataEraser.eraseAll` comincia da `widgetStopper` (svuota, poi lavoro, registro, contatori) e `windowsCloser` (tiene la principale);
+    `eraseGalleryData` (anche per i soli dati di un account) richiama il widget, che non fa niente se e' gia' fermo; lo stato del manifest lo toglie solo
+    l'azzeramento completo. "Configura di nuovo" chiude le altre finestre prima di riavviare.
+
+### Prove
+| Voce del "Fatto quando" | Prova | Esito |
+|---|---|---|
+| `ReleaseStatus` in ogni cancello; `ALL` non apre la sessione | `ReleaseGatesAppTest` (grafo vero, NAS finto, manifest firmato con chiavi generate nel test): prima tutto aperto; `WRITES` dal NAS = indice, operazioni sui file, backup, album, volti, dati personali, modelli fermi, la sessione resta per leggere; `ALL` = una lettura dell'area comune fallisce, **0 operazioni** arrivano al NAS, le tappe dicono `Stop` | verde (5 s) |
+| Widget ridisegnato dal giro dei dati personali (due dispositivi) | `WidgetPersonalRoundAppTest`: telefono e tablet dello stesso account, il widget del tablet mostra sei foto, sul telefono "Nascondi" su una; dopo i giri dei dati personali il legame dice al ridisegno **esattamente** quella foto | verde (4 s) |
+| Azzeramento completo | `Phase10ResetAppTest`: widget vuoti per primi (con il registro ancora intero), registro tolto, altre finestre chiuse, galleria ferma dopo, manifest tolto (memoria e cartella); i soli dati di un account non toccano il manifest | verde |
+| Widget in `:app` | `WidgetGraphTest` (7): fornitore che fallisce chiuso, `watch` solo sui mostrati, azzeramento nell'ordine, contatori, giri in ritardo, scelte e blocco che falliscono chiusi | verde |
+| Descrittore | `DescribeWiringTest` (4): le prove di `DescribePortsContract` sugli adattatori veri, mai un nome per un nascosto, errori = niente, il legato e' quello delle schermate | verde |
+| Diagnostica e `ExportKeys` | `Phase10DiagnosticsTest` (5): ogni codice nel catalogo e nella sua sezione, ogni chiave nell'elenco, nessuna chiave sull'accessibilita', firma o chiave sconosciuta = avviso, ogni contatore del trascinamento ha la sua chiave | verde |
+| Registro dei Nascosti | `HiddenSurfacesRegistryTest` (12) con `WidgetGraph.kt` nella riga `WIDGET` e `DescribeWiring.kt` nella riga `DESCRIPTIONS`; le quattro righe della Fase 10 (`WIDGET`, `DRAG`, `DESCRIPTIONS`, `PANES`) in produzione con la sonda | verde |
+
+**Le prove mordono** (mutazioni fatte a mano e tolte subito, file rimessi dalla copia): senza il manifest in `writeGate` rossa `ReleaseGatesAppTest`; senza la
+chiamata al ridisegno in `watch` rosse `WidgetPersonalRoundAppTest` e `WidgetGraphTest.ilGiroDeiDatiPersonali...`; con il registro tolto prima dello svuotamento
+rosse `Phase10ResetAppTest` e `WidgetGraphTest.lAzzeramento...`; senza `release.clear()` all'azzeramento rossa `Phase10ResetAppTest` (5 rosse su 11).
+
+### Chiesto da ... -> fatto / non fatto
+| Chi | Richiesta | Esito |
+|---|---|---|
+| P0 | null-object di ogni porta come default | fatto: `NoWidgetRefresher` finche' il widget non e' montato, ripiego a porte null del descrittore, `releaseWritesStopped` di serie falso nei test |
+| P0 | codici della Diagnostica oltre `WIDGET_STATE` e `RELEASE_STATE` | fatto (10 codici, §2.13) |
+| P0 | `blankAll`, `WidgetLedger.clear`, `ReleaseState.clear` all'azzeramento | fatto |
+| P1 | `ReleaseGraph` con la fabbrica, fiducia per variante, `load` prima dei cancelli | fatto |
+| P1 | lettura dal NAS, 64 KiB, 24 ore, `offerRead` | fatto (nel giro dell'indice) |
+| P1 | `ReleaseStatus` in ogni cancello e nella radice; testi dal catalogo | fatto, con il test |
+| P1 | E-REL13: una conferma distruttiva aperta decade quando lo stato cambia | **non fatto come tale**: la conferma resta aperta, ma l'operazione confermata passa dal cancello all'esecuzione e si ferma (`opsGate`, backup). Da rivedere con F177 |
+| P1 | `ExtraModelSources` dal `ReleaseState` | fatto |
+| P1 | rifiuti contati per motivo; persistenti con una porta in piu' | contati (in memoria, come in core-release); **persistenza non fatta** (servirebbe una porta in core-release, fuori dal mio perimetro) |
+| P1 | `docs/formato-nas.md` §15 precisato | fatto |
+| P1 | KT assente dal dex di release con core-release nell'APK | vedi l'esito di `check.ps1` (passo 7i) |
+| P2 | il pianificatore sopra `RotatingWidgetFeed`, porte vere, `FileWidgetLedger`, porta per i due dispositivi | fatto |
+| P3 | `WidgetHost.install` all'avvio, `clock` subito, `await` che monta istantanea, maschera e scaffale | fatto |
+| P3 | un solo `GlanceWidgetRefresher` a nascosti, dati personali, scaffale, tema, blocco, secondo piano, scelte | fatto (tema = modalita' scura del sistema, scelta 8) |
+| P3 | `WidgetPrefs` da Impostazioni -> Widget con `shelfChanged()` e `reschedulePeriodic()` | fatto (`reschedulePeriodic` solo con almeno un widget) |
+| P3 | tocco: `WidgetTaps.resolve` dopo lo sblocco | fatto |
+| P3 | contatori di `WidgetDiag` | fatto in `:app` (scelta 10) |
+| P3 | pubblicazione all'avvio dopo il montaggio delle porte | fatto: un giro dei widget che ci sono dopo il primo disegno (compone anche lo svuotamento in anticipo) |
+| P3 | `consumer-rules.pro` di nuovo `-keep,allowshrinking` e peso | fatto; peso e passo 7i nell'esito di `check.ps1` |
+| P4 | `closeOtherWindows` ad azzeramento, uscita dalla famiglia, "Configura di nuovo" | fatto (l'uscita dalla famiglia passa dall'azzeramento); senza una prova con `AppTask` vere (Robolectric non le ha): F167 |
+| P4 | "Apri in una nuova finestra" per album, ricordo, mappa | gia' fatto da P5 |
+| P4 | altri oggetti del processo con un solo ospite | due effetti resi a lancio unico (scelta 12) |
+| P4 | codici `WINDOW_*` | `WINDOW_STATE` (finestre, classe di larghezza) |
+| P5 | tenere `GalleryRoot`, `MainScaffold`; pagine nuove in `SettingsPage` | non toccati; nessuna pagina nuova delle Impostazioni |
+| P6 | tenere le righe di `IntegrationsGraph`; contatori nell'export; `TEMP_CLEANED` | fatto (voci `DRAG_*` separate invece di unirle a `INTEGRATIONS_COUNTERS`: le chiavi sono le stesse) |
+| P7 | descrittore legato con porte che rispondono da memoria o con una query per giro | fatto (scelta 11) |
+| P7 | `forget` al blocco e in secondo piano | fatto |
+| P7 | parole in `strings_describe_*.xml` | non fatto (facoltativo: `ItalianDescribeWords` basta, l'app e' solo in italiano) |
+| P7 | togliere il `testImplementation` di core-describe | fatto |
+| P8 | intestazioni con `GallerySectionHeader` nelle schermate nuove dei `feature-*` | nessuna schermata nuova nei `feature-*` (la pagina del backup ha solo una riga in piu', senza intestazioni); la pagina "Questa versione e' stata fermata" in `:app` non ha intestazioni di sezione |
+| P8 | `GalleryAccessibilityDataSensitive()` in ogni activity nuova senza `MyCloudGalleryTheme` | nessuna activity nuova |
+| P8 | il legame del descrittore (`MediaDescribers.install` con le porte vere) | fatto (sopra) |
+| P8 | "Riduci trasparenza" di One UI (`REDUCE_TRANSPARENCY_KEYS`) | di P14 (F183) |
+| P8 | numeri: C458, L566, L567 liberi; L567 per i limiti del Fluid Engine trovati da P8 | L566 al manifest fermato, L567 ai limiti del Fluid Engine di P8 |
+| P8 | `git merge main` quando l'unione di P8 e' su `main` | fatto (`21fa102c`), vedi "Unione con P8" |
+| §1.4 | `setAccessibilityDataSensitive` sulla radice di ogni finestra, dopo la prova di P8 | fatto da P8 nel tema (C439) |
+| P10 | niente di obbligatorio | la "Simulazione del passo" resta solo debug |
+| P11 / utente 31/10 | 5A I5 "sempre" detto nella pagina del backup | fatto |
+| P12 | `README.md` (`release.ps1` e opzioni, `versions.txt`, `CHANGELOG.md`) | fatto |
+| P12 | `docs/modello-dati.md` con il database dei volti alla v3 | gia' fatto da P12 (§ dei volti, `MIGRATION_2_3`) |
+| brief | riga Cerca del §2.3 (filtri in colonna da estesa) | **non fatta** (facoltativa; P8 lavora sulle schermate di feature-search) |
+
+### Modifiche fuori dal perimetro stretto (piccole)
+`feature-widget/consumer-rules.pro` (le regole, come chiesto da P3); `feature-backup` (una riga informativa e due stringhe nella pagina del backup, 5A I5);
+`AppNavHost.kt` (tre righe: il tocco sul widget); `IntegrationsGraph.kt` (le righe di P6 restano; il conteggio di `TEMP_CLEANED` e le voci `DRAG_*`);
+`ShareHostEffect.kt` e `FiveBHostEffect.kt` (una guardia ciascuno); due prove di altri pacchetti allineate ai legami: `StepSimulationReadOnlyTest` (P10: la regola
+"nessuna scrittura" vale per i file della simulazione, nella cartella `release/` ora c'e' anche il manifest) e `Fase5ACatalogTest` (le voci `DRAG_*` nella sezione
+del backup).
+
+### Unione con P8
+P8 e' arrivato su `main` (`6b7a7d30`) mentre P13 era in corso; `git merge main` nel branch (`21fa102c`): conflitti solo in `docs/sicurezza.md` (C438 con la
+precisazione di P8 e quella di P13, L549 di P8 piu' L566 di P13). Il descrittore che P8 chiede (punto 3) e' quello legato qui; nessuna schermata nuova nei
+`feature-*` (punto 1: nessun `FluidSectionHeader`), nessuna activity nuova (punto 2). **L567** dichiara, come chiesto da P8, i limiti del Fluid Engine 2.13.1
+trovati da P8 (righe senza ruolo, campo di testo, bottoni ad altezza fissa, titoli di pagina, griglie senza `collectionInfo`). La finestra marcata per i servizi
+di accessibilita' non "strumento" (`setAccessibilityDataSensitive`, §1.4) l'ha messa P8 nel tema (`GalleryAccessibilityDataSensitive`, C439): niente da fare qui.
+
+### Cosa resta a P14 (prove sul campo) e alla seconda parte di P11
+- **P14**: F160-F164 (widget sulla Home con le porte vere: le tre misure, il ricordo di oggi, il blocco, il tocco su foto e titolo, `am start` con numeri inventati,
+  lo svuotamento dopo un nascondi fatto qui **e da un altro dispositivo**, l'azzeramento); F177 (un manifest firmato con KT sulla debug: "Aggiorna", poi
+  "fermata"; con la release KT ignorata); F167 (`closeOtherWindows` all'azzeramento e a "Configura di nuovo" con due finestre vere; "Condividi" con due
+  finestre: un solo foglio); F182-F185 con il descrittore legato (nomi e testo letto con TalkBack); la Diagnostica esportata con le voci nuove; F164, F186, F187.
+- **P11 seconda parte (S10-S14)**, che aspettavano P13: **S10** il widget con le porte vere (nascosti dell'ultimo momento e da un altro dispositivo sulla Home,
+  intent `OPEN_WIDGET` inventati, mai sulla schermata di blocco: la parte JVM c'e', `WidgetPersonalRoundAppTest` compreso); **S11** il trascinamento con l'app di
+  prova (P6); **S12** il servizio di prova non "strumento" (dopo P8); **S13** traffico e componenti della release candidata (con il manifest e il widget ora
+  nell'APK); **S14** `check.ps1` sul bytecode della release (il passo 7i ora cerca KT con core-release dentro l'APK). Piu' S7b sull'app vera con le buste di
+  `build/security/<data>/manifest/`.
+
+### Peso dell'APK di release e passo 7i
+`feature-widget/consumer-rules.pro` e' tornato a `-keep,allowshrinking` per i pacchetti di produzione del widget (scelta 8a di P3): con le porte legate il disegno
+e' raggiungibile e **resta nel dex**: il passo 7i conta **76 chiamate a Glance da `feature/widget/`** (60 con le radici `-keep` di P3) e **KT assente** (2 stringhe
+cercate) ora che core-release e' davvero nell'APK. APK di release non firmato: **107.816.967 byte** con P8 dentro (107.766.479 prima dell'unione con P8). Per
+confronto, P3 misurava 107.508.352 byte con le radici `-keep` e 106.456.308 con `allowshrinking` senza porte, su una base senza P4-P12: i numeri non si sottraggono
+uno dall'altro, ma il widget vero (porte, manifest, descrittore, Diagnostica) sta sotto il peso che P3 aveva con il widget tenuto vivo a forza.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde** ("OK: tutto a posto.", uscita 0, 2/11, chiuso alle 18:22), lanciato come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `--no-daemon`, cartella
+`app\build\outputs\apk\release` cancellata prima, dentro il posto del semaforo (`f10p13`), **dopo l'unione con P8**. `assembleDebug`, `assembleRelease`, `galleryTest`
+e `galleryLint` in 25 minuti; **19.488 prove in 47 moduli, 0 fallite, 35 saltate per assunzione** (`app` 1.420); tutti i passi della release verdi (resti di debug:
+72 nomi cercati, nessuno; recinzioni accese nel bytecode; Glance e KT come sopra); solo `-Bench` saltato. Due giri prima, sul codice di P13 senza P8: il primo rosso
+per due prove di altri pacchetti che il legame cambiava (`StepSimulationReadOnlyTest` di P10 e `Fase5ACatalogTest`, allineate: vedi sopra); il secondo rosso per
+`AlbumsShareBenchAppTest` ("il NAS non parte" al giro 4, 128 s sotto carico: non c'entra con P13, che nei test senza manifest non cambia niente) e verde nel giro
+dopo. Nessun `hs_err_pid*.log`. Le corse intermedie (compilazioni, prove mirate, mutazioni) sono in `build\p13\*.log`, fuori dal repository.
+
+### Commit (branch `fase10/p13`)
+`74a509bc` (rilascio), `6f38bdcc` (widget), `875a8b52` (descrittore e montaggio), `6bef0c70` (Diagnostica), `4b46414e` (trascinamento e due finestre), `f07bf660`
+(azzeramento e pagina del backup), `48244d90` (prove dei pacchetti allineate), `6a52c130` (README, formato del NAS, sicurezza), `21fa102c` (unione con `main`, P8) e
+quello di questa sezione.

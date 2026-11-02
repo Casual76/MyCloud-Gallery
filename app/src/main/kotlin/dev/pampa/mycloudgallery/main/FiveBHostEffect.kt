@@ -56,6 +56,8 @@ internal fun FiveBHostEffect(ui: FiveBUi?, nav: NavController) {
   val launch by ui.launches.collectAsStateWithLifecycle()
   LaunchedEffect(launch) {
     val request = launch ?: return@LaunchedEffect
+    // Fase 10 (P13, D18): con due finestre la richiesta la lancia una sola (la prima che la prende; l'altra la trova gia' presa).
+    if (ui.launches.value !== request) return@LaunchedEffect
     // "Condividi" non passa piu' di qui: lo lancia `ShareHostEffect`, che c'e' anche senza backup (correzioni 5B, R4).
     val ok = when (request) {
       is FiveBLaunch.Edit -> EditIntents.launch(context, request.intent)

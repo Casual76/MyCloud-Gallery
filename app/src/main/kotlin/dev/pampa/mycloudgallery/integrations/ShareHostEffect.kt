@@ -19,6 +19,9 @@ internal fun ShareHostEffect(shares: AppShares?) {
   val launch by shares.launches.collectAsStateWithLifecycle()
   LaunchedEffect(launch) {
     val request = launch ?: return@LaunchedEffect
+    // Fase 10 (P13, D18, punto aperto di P4): con due finestre composte ognuna ha questo effetto; la prima che arriva lancia e lo segna, l'altra trova la richiesta gia'
+    // presa e non lancia un secondo foglio (gli effetti girano uno dopo l'altro sul thread principale).
+    if (shares.launches.value !== request) return@LaunchedEffect
     shares.launched(request, EditIntents.launch(context, request.intent))
   }
 }

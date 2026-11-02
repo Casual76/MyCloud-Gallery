@@ -1950,3 +1950,17 @@ non valgono per lui; valgono le sue, qui sotto e in `core-release`.
 | **Lettura** | ogni dispositivo, nel giro di sincronizzazione esistente, al più una volta ogni 24 ore (e all'avvio se è passato di più), con la sessione già aperta: nessuna connessione in più, nessun host nuovo. Assente = nessun effetto. |
 | **Effetti** | solo restrittivi (D29, D30): sotto `minVersionCode` o in un blocco `writes` sola lettura con "Aggiorna dal Pampa Store"; in un blocco `all` "Questa versione è stata fermata" (nessuna sessione del NAS, nessun lavoro); lo stato è **solo più severo** per la stessa `versionCode` finché un manifest con `seq` più alto non lo toglie o l'app si aggiorna. Scaduto (ora del NAS, E-REL9): gli indirizzi aggiuntivi decadono, i blocchi no. **Mai** cancellare dati, scaricare un file nuovo, aggiungere un host o un modello, mostrare testo libero, eseguire codice. |
 | **Chi lo può toccare** | chiunque scriva nell'area comune può **toglierlo** (nessun blocco nuovo arriva: L552), non falsificarlo (la firma). |
+
+**I dettagli della busta e del JSON** (Fase 10 P1, precisati da P13; il codice e' `core-release/codec/`, le prove `ManifestCodecTest` ed `EnvelopeMutationTest`):
+
+| Voce | Regola |
+|---|---|
+| **Byte della busta** | `MCGR1` (5 byte ASCII) ‖ lunghezza del JSON su **4 byte big-endian** ‖ JSON canonico ‖ `keyId` (1 byte) ‖ firma DER fino alla fine del file. La firma copre tutti i byte prima di lei. |
+| **Una sola forma valida** | JSON canonico (riscritto byte per byte uguale) e firma con **`s` basso**: la seconda firma `(r, n - s)`, che si ottiene senza chiave, e' rifiutata (`SIGNATURE`), come per i file della famiglia (§4.1). |
+| **Ordine dei controlli** | tetto (64 KiB) → forma della busta → chiave conosciuta (`UNKNOWN_KEY`) → firma (`SIGNATURE`) → solo allora il JSON: schema, campi `critical`, app, campi e tetti. Un dato non firmato non arriva mai al parser. |
+| **Date** | `issued` ed `expires` in **secondi dall'epoca** (interi). |
+| **Campi sempre presenti** | `blocks` e `models` ci sono sempre, anche vuoti; `minVersionCode` e' facoltativo. |
+| **`critical`** | un **array di nomi di campo**, in ogni oggetto (manifest, blocco, modello): un nome che la versione dell'app non conosce rifiuta la busta intera; un campo sconosciuto non elencato si ignora. |
+| **Lettura nell'app** | nel giro della sincronizzazione dell'indice (`NasStages.sync`, finito), con la sessione di quel giro: un file, al piu' 64 KiB (oltre: `TooLarge`, contato come `TOO_LARGE` senza leggere il resto). Assente o NAS che non risponde: nessun effetto; solo una lettura con una risposta segna l'ora (`noBackupFilesDir/release/last-read`) per il ritmo di 24 ore. |
+| **Stato sul telefono** | `noBackupFilesDir/release/release-state.mcgrs` (core-release: `MCGRS1` ‖ stato ‖ manifest canonico ‖ CRC32, temporaneo e rinomina): un file rovinato vale assente. L'azzeramento lo toglie (D42); la prima lettura dopo rimette il blocco (L561). |
+| **Dove agisce** | `ReleaseStatus` e' l'unica cosa del manifest che `:app` vede: entra in ogni cancello di scrittura come l'emergenza "Ferma le scritture" (indice, album, volti, dati personali, modelli sullo scaffale, operazioni sui file, backup e file in arrivo); con `Stopped` la sessione del NAS non si apre e nessun lavoro a tappe parte. Gli indirizzi aggiuntivi passano solo da `CatalogExtraModelSources` e `PinnedUrl.of`. |

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Trascinamento fra app e finestre (Fase 10, P13, docs/fase10-progetto.md §2.13, D39). Solo conteggi e codici: mai nomi, id o percorsi. -->
+  <string name="diag_drag_out_title">Foto trascinate verso altre app</string>
+  <string name="diag_drag_out_guide">Quanti trascinamenti sono partiti verso un\'altra app, quante foto hanno portato e quanti sono stati rifiutati, per motivo (troppe foto, troppo grandi, posizione da togliere, NAS non raggiungibile, app bloccata).</string>
+  <string name="diag_drag_in_title">Foto trascinate dentro l\'app</string>
+  <string name="diag_drag_in_guide">Quanti trascinamenti da un\'altra app hanno aperto il foglio della ricezione, e quanti sono stati rifiutati prima.</string>
+  <string name="diag_drag_temp_cleaned_title">Copie temporanee tolte</string>
+  <string name="diag_drag_temp_cleaned_guide">Le copie preparate per un trascinamento o una condivisione e rimaste da un avvio precedente, tolte all\'apertura dell\'app.</string>
+  <string name="diag_window_state_title">Finestre dell\'app</string>
+  <string name="diag_window_state_guide">Quante finestre di MyCloud Gallery sono aperte (al massimo due) e quanto è larga quella principale.</string>
+</resources>

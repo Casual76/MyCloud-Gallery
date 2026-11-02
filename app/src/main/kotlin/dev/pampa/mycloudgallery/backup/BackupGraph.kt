@@ -178,7 +178,8 @@ class BackupGraph(
     familyReady = { familyReady() && nasInputs.trust.writePermit() != null },
     privateShare = ::privateShare,
     account = { nasInputs.account() },
-    writesStopped = { nas.emergency.stopped },
+    // Fase 10 (P13): l'emergenza dell'utente o il manifest firmato (`ReadOnly`, `Stopped`): backup e file in arrivo si fermano allo stesso modo.
+    writesStopped = { nas.emergency.stopped || nasInputs.releaseWritesStopped() },
     frozen = { share -> nas.frozen.value.containsKey(share.lowercase(Locale.ROOT)) },
     readOnly = { share -> share.lowercase(Locale.ROOT) in readOnlyShares },
     paused = memory::isPaused,

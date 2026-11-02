@@ -88,6 +88,8 @@ dependencies {
   testImplementation appDeps.roborazzi
   testImplementation appDeps.roborazziCompose
   testImplementation appDeps.roborazziJunitRule
+  // Fase 10 P8 (D28): il controllo ATF sugli screenshot, solo nei test (mai nel dex).
+  testImplementation appDeps.roborazziAccessibilityCheck
 
   // P1 (§5.5, riga "Strumentato"): la mappa vera sull'emulatore con un client che conta socket e risoluzioni DNS e un server finto dentro
   // l'intercettore (mai Internet). Solo l'APK di prova, mai l'app.

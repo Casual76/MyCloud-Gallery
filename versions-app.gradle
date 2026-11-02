@@ -224,6 +224,9 @@ ext.appDeps = [
   roborazzi                : "io.github.takahirom.roborazzi:roborazzi:${appVersions.roborazzi}",
   roborazziCompose         : "io.github.takahirom.roborazzi:roborazzi-compose:${appVersions.roborazzi}",
   roborazziJunitRule       : "io.github.takahirom.roborazzi:roborazzi-junit-rule:${appVersions.roborazzi}",
+  // Fase 10 P8 (D28, Q9 (a)): il controllo automatico dell'accessibilita' sugli screenshot. SOLO testImplementation:
+  // porta l'Accessibility Test Framework (ATF) come dipendenza transitiva; mai nel dex (lo vede `tools/check.ps1`).
+  roborazziAccessibilityCheck : "io.github.takahirom.roborazzi:roborazzi-accessibility-check:${appVersions.roborazzi}",
   // Compose UI test: versione dal BOM dell'engine (platform), qui solo le coordinate senza versione.
   composeUiTestJunit4      : "androidx.compose.ui:ui-test-junit4",
   composeUiTestManifest    : "androidx.compose.ui:ui-test-manifest",

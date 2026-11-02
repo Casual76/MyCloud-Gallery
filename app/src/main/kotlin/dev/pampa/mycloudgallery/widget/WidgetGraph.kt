@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.widget.contract.WidgetClock
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetEmpty
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetLedger
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetMemories
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetPeriod
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetPlanner
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetPrefs
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetRefresher
@@ -39,7 +40,9 @@ import dev.pampa.mycloudgallery.feature.widget.work.WidgetWork
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.cancellation.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
@@ -66,7 +69,8 @@ class WidgetPorts(
  * blocco dell'app.
  *
  * **Fallire chiusi** (D5, E-W4): finche' l'istantanea della Libreria non c'e', o dopo l'azzeramento, o con la versione fermata dal manifest (`Stopped`, E-REL6), il
- * fornitore risponde null e il widget non disegna niente di nuovo (resta quello che il launcher ha: era verificato, o gia' svuotato).
+ * fornitore risponde null e il widget non disegna niente di nuovo (resta quello che il launcher ha: era verificato, o gia' svuotato). Con la versione fermata il widget **si
+ * svuota** ("Apri MyCloud Gallery", [releaseChanged], R1) e torna normale quando lo stato torna normale.
  */
 class WidgetGraph(
   private val context: Context,
@@ -83,6 +87,8 @@ class WidgetGraph(
   private val stoppedByRelease: () -> Boolean,
   val counters: WidgetCounters,
   val clock: WidgetClock = SystemWidgetClock,
+  /** Vero finche' la versione e' fermata dal manifest (`ALL`, R1): `WidgetWiring.install` lo segue e svuota o ridisegna i widget a ogni cambio. */
+  val releaseStopped: Flow<Boolean> = emptyFlow(),
 ) {
   private val stopped = AtomicBoolean(false)
 
@@ -105,6 +111,9 @@ class WidgetGraph(
   /** Il fornitore del processo (§2.1 passo 2): l'orologio subito, le porte quando l'istantanea c'e' (al piu' [budgetMs]). */
   val provider: WidgetServicesProvider = object : WidgetServicesProvider {
     override val clock: WidgetClock get() = this@WidgetGraph.clock
+
+    // WG-2: la frequenza scelta senza montare le porte (le preferenze, non l'istantanea): il ricevitore la usa per programmare il lavoro periodico.
+    override val period: WidgetPeriod get() = prefs.period.value
 
     override suspend fun await(budgetMs: Long): WidgetServices? = awaitServices(budgetMs)
   }
@@ -174,9 +183,25 @@ class WidgetGraph(
    * widget: costa poco, e si puo' chiamare a ogni cambio dell'istantanea e a ogni giro della sincronizzazione personale.
    */
   suspend fun watch(): Set<MediaId> {
-    if (stopped.get()) return emptySet()
+    if (stopped.get() || stoppedByRelease()) return emptySet()
+    val registered = try {
+      ledger.slots()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      // Il registro non si legge: non si sa cosa mostra nessun widget (fallire chiusi).
+      emptySet()
+    }
+    // R4: un widget sulla Home che il registro non conosce (registro illeggibile o rovinato, riparte vuoto) puo' mostrare **qualsiasi cosa** del disegno di prima, e da qui non si
+    // possono nominare i suoi media: si svuotano tutti i widget e si ridisegnano (il registro si rifa' con i piani nuovi). Succede solo con un registro perso o per un widget appena
+    // aggiunto e non ancora disegnato (uno svuotamento in piu', subito seguito dal ridisegno).
+    if (slots().any { it !in registered }) {
+      refresher.blankAll(WidgetEmpty.NO_MEDIA)
+      refresher.shelfChanged()
+      return emptySet()
+    }
     val shown = LinkedHashSet<MediaId>()
-    for (slot in ledger.slots()) {
+    for (slot in registered) {
       for (index in 0 until WidgetRules.MAX_IMAGES) ledger.cell(slot, index)?.let { shown += it.media }
     }
     if (shown.isEmpty()) return emptySet()
@@ -228,18 +253,56 @@ class WidgetGraph(
   }
 
   /**
-   * L'azzeramento (D42), **per primo**: tutti i widget a "Configura MyCloud Gallery" senza immagini (il disegno e' consegnato quando ritorna), poi il lavoro periodico
-   * annullato, il registro tolto e i contatori a zero. Da qui il fornitore risponde null: niente si ridisegna piu' in questo processo.
+   * L'azzeramento (D42), **per primo**: il widget si dice **fermo prima** di svuotare (R5: da qui il fornitore risponde null, quindi un ridisegno gia' partito non puo' piu'
+   * montare un piano ne' consegnare foto mentre si svuota e dopo), poi tutti i widget a "Configura MyCloud Gallery" senza immagini (il disegno e' consegnato quando ritorna), il
+   * lavoro periodico annullato, il registro tolto e i contatori a zero. Il fermo vale finche' la galleria non riparte per una configurazione nuova ([resume]).
    */
   suspend fun stop() {
-    if (stopped.get()) return
+    if (!stopped.compareAndSet(false, true)) return
     try {
       refresher.blankAll(WidgetEmpty.NOT_CONFIGURED)
     } finally {
-      stopped.set(true)
       runCatching { WidgetWork.cancel(context) }
       ledger.clear()
       counters.reset()
+    }
+  }
+
+  /**
+   * La galleria riparte con una configurazione nuova (WG-1: dopo l'azzeramento o dopo i soli dati di un account, **nello stesso processo**): il fornitore torna a rispondere.
+   * Il lavoro periodico e il primo giro li rimette [WidgetWiring.publishAtStart]. Non fa niente se il widget non e' fermo.
+   */
+  fun resume() {
+    stopped.set(false)
+  }
+
+  /**
+   * Il lavoro periodico `widget-refresh` c'e' (WG-1): alla frequenza **scelta** (WG-2), senza spostare un lavoro che c'e' gia' (`KEEP`). Mai un'eccezione: senza WorkManager il
+   * widget si ridisegna lo stesso agli eventi.
+   */
+  fun ensureWork() {
+    try {
+      WidgetWork.schedule(context, prefs.period.value, clock.nowLocal(), replace = false)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      GalleryLog.w(TAG) { "lavoro periodico del widget non programmato (${e.javaClass.simpleName})" }
+    }
+  }
+
+  /**
+   * Il manifest firmato ha fermato (o non ferma piu') la versione (R1, parte del widget; scelta dell'orchestratore del 02/11). Con `ALL` ([stoppedNow]) tutti i widget si
+   * svuotano e dicono "Apri MyCloud Gallery" (non "Configura": la versione e' fermata, non da configurare) e il registro si dimentica ogni cella; il fornitore risponde gia'
+   * null (`stoppedByRelease`), quindi niente si ridisegna finche' dura. Quando lo stato torna normale (o a sola lettura) un giro intero rimette le foto.
+   */
+  suspend fun releaseChanged(stoppedNow: Boolean) {
+    if (stopped.get()) return
+    if (stoppedNow) {
+      refresher.blankAll(WidgetEmpty.NO_MEDIA)
+      // `blankAll` non tocca il registro senza le porte (il fornitore e' null): si toglie qui, come per l'azzeramento. Un widget svuotato non ha celle da toccare.
+      ledger.clear()
+    } else {
+      refresher.shelfChanged()
     }
   }
 
@@ -267,10 +330,11 @@ class WidgetGraph(
       counters: WidgetCounters,
       clock: WidgetClock = SystemWidgetClock,
       ledger: WidgetLedger = FileWidgetLedger(File(context.noBackupFilesDir, DIR)),
+      releaseStopped: Flow<Boolean> = emptyFlow(),
     ): WidgetGraph {
       val planner = CountingWidgetPlanner(DefaultWidgetPlanner(feed, memories, visible, mask, thumbs, lock, prefs, clock, ledger), counters)
       return WidgetGraph(
-        context.applicationContext, ledger, planner, thumbs, prefs, lock, visible.snapshot, visible, mask, places, awaitShelf, stoppedByRelease, counters, clock,
+        context.applicationContext, ledger, planner, thumbs, prefs, lock, visible.snapshot, visible, mask, places, awaitShelf, stoppedByRelease, counters, clock, releaseStopped,
       )
     }
   }

@@ -183,6 +183,13 @@ object WidgetRules {
   const val BUDGET_MS: Long = 2_000
   const val COLD_START_BUDGET_MS: Long = 1_500
 
+  /**
+   * L'attesa delle porte del **lavoro periodico** in un processo nato per lui (WG-5): non ha fretta (WorkManager gli da' minuti) e su un archivio grande 1,5 s dalla nascita del
+   * processo non bastano a montare la Libreria, quindi il widget non si aggiornerebbe che all'apertura dell'app. Il ricevitore e lo svuotamento per un nascosto restano a
+   * [COLD_START_BUDGET_MS].
+   */
+  const val PERIODIC_COLD_START_BUDGET_MS: Long = 10_000
+
   /** Svuotamento dopo un "Nascondi" (D5): un disegno senza immagini, nessuna decodifica [stima < 100 ms]. */
   const val BLANK_TARGET_MS: Long = 100
 }

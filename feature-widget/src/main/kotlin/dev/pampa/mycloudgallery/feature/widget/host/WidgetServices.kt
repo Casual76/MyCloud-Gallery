@@ -5,6 +5,7 @@ import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetClock
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetLedger
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetPeriod
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetPlanner
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetPrefs
 
@@ -64,6 +65,13 @@ interface WidgetServicesProvider {
    * calcolo del prossimo giro. E' lo stesso che finisce in [WidgetServices.clock].
    */
   val clock: WidgetClock
+
+  /**
+   * La frequenza scelta in Impostazioni -> Widget (WG-2), **senza montare le porte**: il ricevitore la usa quando programma il lavoro periodico (un widget che nasce dopo
+   * che l'ultimo e' stato tolto, o una Home che si ridisegna): senza, il lavoro ripartirebbe sempre dalla frequenza di serie. Di serie [WidgetPeriod.DEFAULT]. Puo' aprire
+   * un file di preferenze: non va chiamata dal thread principale.
+   */
+  val period: WidgetPeriod get() = WidgetPeriod.DEFAULT
 
   suspend fun await(budgetMs: Long): WidgetServices?
 }

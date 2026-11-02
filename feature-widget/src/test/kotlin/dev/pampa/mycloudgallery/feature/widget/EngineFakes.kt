@@ -61,7 +61,7 @@ internal class RecordingComposer(private val context: Context, val events: Mutab
 }
 
 /** Un registro che scrive negli [events] cio' che gli si chiede, e che puo' fallire come un disco pieno ([failWrites]). */
-internal class OrderedLedger(private val inner: InMemoryWidgetLedger, private val events: MutableList<String>) : WidgetLedger by inner {
+internal class OrderedLedger(private val inner: WidgetLedger, private val events: MutableList<String>) : WidgetLedger by inner {
   var failWrites = false
   var failReads = false
 

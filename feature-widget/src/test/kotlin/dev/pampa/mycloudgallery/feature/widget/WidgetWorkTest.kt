@@ -13,6 +13,7 @@ import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetClock
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetPeriod
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetRules
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetScheduleRules
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetSlot
 import dev.pampa.mycloudgallery.core.widget.testing.FakeWidgetClock
@@ -152,6 +153,21 @@ class WidgetWorkTest {
     assertThat(r.run.run()).isEqualTo(PeriodicOutcome.NOT_MOUNTED)
     assertThat(r.cancelled[0]).isEqualTo(0)
     assertThat(r.engineCalls).isEmpty()
+  }
+
+  /** WG-5: la tappa del lavoro periodico aspetta le porte piu' a lungo del ricevitore (10 s invece di 1,5), una volta sola per il giro. */
+  @Test
+  fun laTappaAspettaLePorteIlTempoDelLavoroPeriodico() = runBlocking<Unit> {
+    val events = mutableListOf<String>()
+    val targets = RecordingTargets(mutableMapOf(WidgetSlot(1) to (160 to 160), WidgetSlot(2) to (160 to 160)), events)
+    val services = FakeServices(ScriptedPlanner(events) { s, size, _ -> photoPlan(s, size, 1) }, InMemoryWidgetLedger(), WidgetThumbnails { _, _ -> thumb() })
+    val budgets = mutableListOf<Long>()
+    val engine = WidgetEngine({ budget -> budgets += budget; services }, targets, RecordingComposer(context, events), { context.resources })
+    val run = WidgetPeriodicRun(targets, { engine }, { FakeWidgetClock() }, { false }, {})
+    assertThat(run.run()).isEqualTo(PeriodicOutcome.RAN)
+    assertThat(budgets.first()).isEqualTo(WidgetRules.PERIODIC_COLD_START_BUDGET_MS)
+    assertThat(budgets.count { it > WidgetRules.COLD_START_BUDGET_MS }).isEqualTo(1)
+    assertThat(targets.pushed).containsExactly(WidgetSlot(1), WidgetSlot(2))
   }
 
   // --- Il lavoro vero (WorkManager di prova) -------------------------------------------------------------------------------------------

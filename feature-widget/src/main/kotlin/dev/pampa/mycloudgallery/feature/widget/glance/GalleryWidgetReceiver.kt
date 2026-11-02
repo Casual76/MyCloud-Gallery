@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.os.Bundle
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
-import dev.pampa.mycloudgallery.core.widget.contract.WidgetPeriod
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetSlot
 import dev.pampa.mycloudgallery.feature.widget.host.WidgetHost
 import dev.pampa.mycloudgallery.feature.widget.refresh.WidgetEngines
@@ -36,14 +35,14 @@ import kotlinx.coroutines.withTimeoutOrNull
 class GalleryWidgetReceiver : AppWidgetProvider() {
 
   override fun onEnabled(context: Context) {
-    reschedule(context)
+    inBackground("lavoro programmato") { reschedule(context) }
   }
 
   override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
     val slots = slotsOf(appWidgetIds)
-    // Un widget nuovo (o un riavvio): il lavoro periodico c'e' (un aggiornamento dell'app lo conserva, ma e' economico verificarlo).
-    reschedule(context)
     inBackground("aggiornamento") {
+      // Un widget nuovo (o un riavvio): il lavoro periodico c'e' (un aggiornamento dell'app lo conserva, ma e' economico verificarlo).
+      reschedule(context)
       val engine = WidgetEngines.of(context)
       for (slot in slots) engine.refresh(slot)
     }
@@ -66,9 +65,12 @@ class GalleryWidgetReceiver : AppWidgetProvider() {
 
   private fun slotsOf(ids: IntArray): List<WidgetSlot> = ids.filter { it > 0 }.map { WidgetSlot(it) }
 
-  /** Il lavoro periodico alla frequenza scelta (o di base, se le porte non ci sono ancora: un processo freddo non sa ancora le preferenze). */
+  /**
+   * Il lavoro periodico alla frequenza **scelta** (WG-2: `WidgetHost.period()`, che non monta le porte; quella di serie solo se non c'e' un fornitore), senza spostare un
+   * lavoro che c'e' gia' (`KEEP`). Gira fuori dal thread del ricevitore: la scelta sta in un file di preferenze.
+   */
   private fun reschedule(context: Context) {
-    guarded("lavoro programmato") { WidgetWork.schedule(context, WidgetPeriod.DEFAULT, WidgetHost.clock()?.nowLocal(), replace = false) }
+    guarded("lavoro programmato") { WidgetWork.schedule(context, WidgetHost.period(), WidgetHost.clock()?.nowLocal(), replace = false) }
   }
 
   /** Un ricevitore che lancia fa cadere il processo: WorkManager non pronto o un orologio che cade non devono mai uscire da qui (nel log solo il tipo, D39). */

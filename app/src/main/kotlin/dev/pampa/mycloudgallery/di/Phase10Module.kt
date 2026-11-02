@@ -30,6 +30,7 @@ import dev.pampa.mycloudgallery.widget.WidgetWiring
 import dev.pampa.mycloudgallery.window.WindowDiagnostics
 import dev.pampa.mycloudgallery.window.WindowRegistry
 import javax.inject.Singleton
+import kotlinx.coroutines.flow.map
 
 /**
  * Le parti della **Fase 10** legate in `:app` (docs/fase10-progetto.md §1.4, P13): il widget (`WidgetGraph`), il descrittore dei media (`MediaDescribers.install` con le porte
@@ -49,7 +50,9 @@ object Phase10Module {
     lock: AppLockController,
     settings: dagger.Lazy<WidgetSettings>,
     release: ReleaseGraph,
-  ): WidgetGraph = WidgetWiring.build(context, gallery, memories, lock, { settings.get() }) { release.status.value is ReleaseStatus.Stopped }
+  ): WidgetGraph = WidgetWiring.build(
+    context, gallery, memories, lock, { settings.get() }, { release.status.value is ReleaseStatus.Stopped }, release.status.map { it is ReleaseStatus.Stopped },
+  )
 
   /**
    * Il descrittore del processo (P7, D22), legato in `MediaDescribers` qui: le persone dalle persone montate (la mappa da persone a celle si ricalcola solo quando cambiano

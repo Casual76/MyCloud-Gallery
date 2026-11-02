@@ -15,9 +15,11 @@ import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -35,6 +37,7 @@ object WidgetWiring {
     lock: AppLockController,
     settings: () -> WidgetSettings,
     stoppedByRelease: () -> Boolean,
+    releaseStopped: Flow<Boolean> = emptyFlow(),
   ): WidgetGraph {
     val counters = WidgetCounters()
     return WidgetGraph.create(
@@ -50,6 +53,7 @@ object WidgetWiring {
       awaitShelf = { budgetMs -> memories.awaitLive(budgetMs.coerceAtLeast(1).milliseconds) },
       stoppedByRelease = stoppedByRelease,
       counters = counters,
+      releaseStopped = releaseStopped,
     )
   }
 
@@ -93,6 +97,25 @@ object WidgetWiring {
     scope.launch { quietly { settings().content.drop(1).collect { widget.contentChanged() } } }
     scope.launch { quietly { settings().period.drop(1).collect { if (widget.slots().isNotEmpty()) glance.reschedulePeriodic() } } }
     widget.followAppearance(app.applicationContext)
+    followRelease(widget, scope)
+  }
+
+  /**
+   * La versione fermata dal manifest (`ALL`, R1): all'ingresso nello stato i widget si svuotano ("Apri MyCloud Gallery"), all'uscita (stato normale o sola lettura) si
+   * ridisegnano. Si agisce solo a un **cambio** di stato: il valore di partenza "non fermata" non fa fare un giro in piu' all'avvio.
+   */
+  fun followRelease(widget: WidgetGraph, scope: CoroutineScope) {
+    scope.launch {
+      quietly {
+        var before = false
+        widget.releaseStopped.distinctUntilChanged().collect { now ->
+          if (now != before) {
+            before = now
+            widget.releaseChanged(now)
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -107,9 +130,15 @@ object WidgetWiring {
     gallery.nas?.organizer?.let { organizer -> scope.launch { quietly { organizer.lastPersonal.drop(1).collect { widget.watch() } } } }
   }
 
-  /** Dopo il primo disegno utile: un giro dei widget che ci sono (pubblica il contenuto vero e compone in anticipo lo svuotamento, nota di P3). */
+  /**
+   * Dopo il primo disegno utile: se ci sono widget sulla Home, il lavoro periodico c'e' (WG-1: l'azzeramento lo cancella e il ricevitore non rinasce se i widget restano; WG-2: alla
+   * frequenza scelta, `KEEP`) e un giro li ridisegna (pubblica il contenuto vero e compone in anticipo lo svuotamento, nota di P3). Con il widget fermo (un azzeramento partito
+   * dopo l'avvio della galleria) non fa niente: il lavoro non deve rinascere sotto i dati che si cancellano.
+   */
   fun publishAtStart(widget: WidgetGraph) {
-    if (widget.slots().isNotEmpty()) widget.refresher.shelfChanged()
+    if (widget.isStopped || widget.slots().isEmpty()) return
+    widget.ensureWork()
+    widget.refresher.shelfChanged()
   }
 
   private suspend fun quietly(block: suspend () -> Unit) {

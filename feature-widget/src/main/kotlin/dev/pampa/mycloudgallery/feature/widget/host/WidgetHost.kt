@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.feature.widget.host
 
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetClock
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetPeriod
 import kotlin.coroutines.cancellation.CancellationException
 
 // IL POSTO DEL WIDGET NEL PROCESSO (Fase 10, P3, docs/fase10-progetto.md §1.4, §2.1). Un `GlanceAppWidgetReceiver` e un `Worker` non si iniettano con Hilt come
@@ -30,6 +31,17 @@ object WidgetHost {
 
   /** L'orologio del fornitore (senza montare le porte), o null se non c'e' un fornitore. */
   fun clock(): WidgetClock? = provider?.clock
+
+  /**
+   * La frequenza scelta (WG-2), senza montare le porte: quella di serie se non c'e' un fornitore o se la lettura non riesce (mai un'eccezione verso il sistema dei widget).
+   * Puo' aprire un file di preferenze: va chiamata fuori dal thread principale.
+   */
+  fun period(): WidgetPeriod = try {
+    provider?.period
+  } catch (e: Exception) {
+    GalleryLog.w(TAG) { "Frequenza del widget non letta (${e.javaClass.simpleName}): quella di serie." }
+    null
+  } ?: WidgetPeriod.DEFAULT
 
   /** C'e' un fornitore installato (non vuol dire che le porte siano pronte). */
   val isInstalled: Boolean get() = provider != null

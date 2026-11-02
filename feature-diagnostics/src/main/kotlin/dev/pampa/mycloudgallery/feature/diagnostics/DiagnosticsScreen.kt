@@ -8,7 +8,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -44,7 +44,7 @@ fun DiagnosticsScreen(
     onRefresh = onRefresh,
   ) {
     item { Summary(state) }
-    item { FluidSectionHeader(title = stringResource(R.string.diagnostics_section_overview)) }
+    item { GallerySectionHeader(title = stringResource(R.string.diagnostics_section_overview)) }
     item {
       FluidListGroup {
         DiagSection.entries.forEachIndexed { index, section ->
@@ -53,7 +53,7 @@ fun DiagnosticsScreen(
         }
       }
     }
-    item { FluidSectionHeader(title = stringResource(R.string.diagnostics_export_section_share)) }
+    item { GallerySectionHeader(title = stringResource(R.string.diagnostics_export_section_share)) }
     item {
       FluidListGroup {
         FluidListRow(

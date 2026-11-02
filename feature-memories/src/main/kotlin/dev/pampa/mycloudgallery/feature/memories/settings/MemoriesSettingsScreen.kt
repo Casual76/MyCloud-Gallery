@@ -20,7 +20,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -125,7 +125,7 @@ private fun RadioRow(title: String, subtitle: String, selected: Boolean, onClick
 }
 
 private fun LazyListScope.peopleSection(on: Boolean, handlers: MemoriesSettingsHandlers) {
-  item(key = "header-memories") { FluidSectionHeader(title = stringResource(R.string.memorie_settings_memories_header)) }
+  item(key = "header-memories") { GallerySectionHeader(title = stringResource(R.string.memorie_settings_memories_header)) }
   item(key = "people") {
     FluidListGroup {
       SwitchRow(stringResource(R.string.memorie_settings_people), stringResource(R.string.memorie_settings_people_detail), on, handlers::onSetPeople)
@@ -135,7 +135,7 @@ private fun LazyListScope.peopleSection(on: Boolean, handlers: MemoriesSettingsH
 
 private fun LazyListScope.notifySection(ui: MemoriesSettingsUi, handlers: MemoriesSettingsHandlers) {
   val prefs = ui.state.notify
-  item(key = "header-notify") { FluidSectionHeader(title = stringResource(R.string.memorie_settings_notify_header)) }
+  item(key = "header-notify") { GallerySectionHeader(title = stringResource(R.string.memorie_settings_notify_header)) }
   item(key = "notify") {
     FluidListGroup {
       SwitchRow(stringResource(R.string.memorie_settings_notify_enabled), stringResource(R.string.memorie_settings_notify_enabled_detail), prefs.enabled, handlers::onSetNotify)
@@ -192,7 +192,7 @@ private fun PermissionBlock(permission: NotifyPermission, handlers: MemoriesSett
 }
 
 private fun LazyListScope.frequencySection(current: NotifyFrequency, handlers: MemoriesSettingsHandlers) {
-  item(key = "header-frequency") { FluidSectionHeader(title = stringResource(R.string.memorie_settings_frequency_header)) }
+  item(key = "header-frequency") { GallerySectionHeader(title = stringResource(R.string.memorie_settings_frequency_header)) }
   item(key = "frequency") {
     FluidListGroup {
       RadioRow(stringResource(R.string.memorie_settings_freq_few), stringResource(R.string.memorie_settings_freq_few_detail), current == NotifyFrequency.FEW_PER_WEEK) {
@@ -211,7 +211,7 @@ private fun LazyListScope.frequencySection(current: NotifyFrequency, handlers: M
 }
 
 private fun LazyListScope.lockSection(current: LockScreenMode, handlers: MemoriesSettingsHandlers) {
-  item(key = "header-lock") { FluidSectionHeader(title = stringResource(R.string.memorie_settings_lock_header)) }
+  item(key = "header-lock") { GallerySectionHeader(title = stringResource(R.string.memorie_settings_lock_header)) }
   item(key = "lock") {
     FluidListGroup {
       RadioRow(stringResource(R.string.memorie_settings_lock_generic), stringResource(R.string.memorie_settings_lock_generic_detail), current == LockScreenMode.GENERIC) {
@@ -227,7 +227,7 @@ private fun LazyListScope.lockSection(current: LockScreenMode, handlers: Memorie
 
 /** "Persone e periodi nascosti dai ricordi": una riga per scelta con "Togli". Con Persone spenta le persone sono "Una persona (N)": mai un nome inventato. */
 private fun LazyListScope.hiddenSection(choices: List<LessChoice>, handlers: MemoriesSettingsHandlers) {
-  item(key = "header-hidden") { FluidSectionHeader(title = stringResource(R.string.memorie_settings_hidden_header)) }
+  item(key = "header-hidden") { GallerySectionHeader(title = stringResource(R.string.memorie_settings_hidden_header)) }
   if (choices.isEmpty()) {
     item(key = "hidden-empty") { FluidSectionFootnote(text = stringResource(R.string.memorie_settings_hidden_empty)) }
     return
@@ -265,7 +265,7 @@ internal fun lessTitle(resources: Resources, choice: LessChoice, anonymousIndex:
 
 private fun LazyListScope.musicSection(ui: MemoriesSettingsUi, handlers: MemoriesSettingsHandlers) {
   val music = ui.state.music
-  item(key = "header-music") { FluidSectionHeader(title = stringResource(R.string.memorie_settings_music_header)) }
+  item(key = "header-music") { GallerySectionHeader(title = stringResource(R.string.memorie_settings_music_header)) }
   item(key = "music") {
     FluidListGroup {
       RadioRow(stringResource(R.string.memorie_settings_music_none), stringResource(R.string.memorie_settings_music_none_detail), music == MusicChoice.None, handlers::onNoMusic)
@@ -292,7 +292,7 @@ private fun LazyListScope.musicSection(ui: MemoriesSettingsUi, handlers: Memorie
       )
     }
   }
-  item(key = "header-free") { FluidSectionHeader(title = stringResource(R.string.memorie_settings_music_free)) }
+  item(key = "header-free") { GallerySectionHeader(title = stringResource(R.string.memorie_settings_music_free)) }
   if (ui.tracks.isEmpty()) {
     // Q3: il pacchetto di musica libera non c'e' finche' l'utente non approva fonti e brani: la pagina lo dice con chiarezza.
     item(key = "free-empty") {

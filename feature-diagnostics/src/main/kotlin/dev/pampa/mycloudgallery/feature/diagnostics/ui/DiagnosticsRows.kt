@@ -242,7 +242,8 @@ private fun ColumnScope.DiagItemRow(item: DiagItem, actions: DiagActionPolicy, o
     FluidListDivider()
     FluidListRow(
       title = stringResource(DiagnosticsActions.labelRes(action)),
-      subtitle = "",
+      // Fase 10 P8: l'azione che ferma o fa ripartire il lavoro sul NAS dice la sua conseguenza (e TalkBack la legge insieme al nome).
+      subtitle = DiagnosticsActions.consequenceRes(action).let { if (it != 0) stringResource(it) else "" },
       tone = FluidTone.Primary,
       leading = { Icon(imageVector = Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null) },
       onClick = { onAction(action) },

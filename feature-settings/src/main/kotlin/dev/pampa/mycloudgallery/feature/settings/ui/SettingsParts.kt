@@ -10,8 +10,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Density
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
@@ -136,11 +138,16 @@ internal fun RowGlyph(icon: ImageVector) {
 /** Un numero dentro la piastrella di una riga (i passi di una guida). */
 @Composable
 internal fun RowNumber(number: Int) {
-  Text(
-    text = number.toString(),
-    style = MaterialTheme.typography.labelLarge,
-    fontWeight = FontWeight.Bold,
-  )
+  // Fase 10 P8 (D25): la cifra sta nella piastrella di misura fissa della riga (e' dell'engine) e fa da icona: a testo 2,0 uscirebbe dalla
+  // piastrella e verrebbe tagliata. Non scala con il testo (resta a 14 sp); il passo si legge comunque per intero dal testo della riga.
+  val density = LocalDensity.current
+  CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale = 1f)) {
+    Text(
+      text = number.toString(),
+      style = MaterialTheme.typography.labelLarge,
+      fontWeight = FontWeight.Bold,
+    )
+  }
 }
 
 /** L'etichetta di stato di una riga: pillola colorata, mai il colore dell'intera riga. */

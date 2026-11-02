@@ -15,7 +15,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -62,7 +62,7 @@ internal fun RulesScreen(state: RulesUiState?, actions: RulesActions) {
     if (state == null) return@FluidScreen
 
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.rules_section_preset),
         detail = stringResource(R.string.rules_section_preset_detail),
       )
@@ -86,7 +86,7 @@ internal fun RulesScreen(state: RulesUiState?, actions: RulesActions) {
     }
 
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.rules_section_mobile),
         detail = stringResource(R.string.rules_section_mobile_detail),
       )
@@ -120,7 +120,7 @@ internal fun RulesScreen(state: RulesUiState?, actions: RulesActions) {
     }
     item { FluidSectionFootnote(text = stringResource(R.string.rules_cap_footnote)) }
 
-    item { FluidSectionHeader(title = stringResource(R.string.rules_section_roaming)) }
+    item { GallerySectionHeader(title = stringResource(R.string.rules_section_roaming)) }
     item {
       FluidListGroup {
         FluidListRow(

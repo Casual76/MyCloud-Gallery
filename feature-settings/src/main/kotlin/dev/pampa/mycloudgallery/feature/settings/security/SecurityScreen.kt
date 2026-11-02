@@ -40,7 +40,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -249,7 +249,7 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
     }
     state.feedback?.let { item { FeedbackNote(it) } }
 
-    item { FluidSectionHeader(title = stringResource(R.string.security_section_lock)) }
+    item { GallerySectionHeader(title = stringResource(R.string.security_section_lock)) }
     item {
       FluidListGroup {
         FluidListRow(
@@ -280,7 +280,7 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
 
     if (enabled) {
       item {
-        FluidSectionHeader(
+        GallerySectionHeader(
           title = stringResource(R.string.security_section_timeout),
           detail = stringResource(R.string.security_section_timeout_detail),
         )
@@ -307,7 +307,7 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
       }
     }
 
-    item { FluidSectionHeader(title = stringResource(R.string.security_section_protects)) }
+    item { GallerySectionHeader(title = stringResource(R.string.security_section_protects)) }
     item {
       FluidListGroup {
         FluidListRow(
@@ -328,7 +328,7 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
       }
     }
 
-    item { FluidSectionHeader(title = stringResource(R.string.security_section_backup)) }
+    item { GallerySectionHeader(title = stringResource(R.string.security_section_backup)) }
     item {
       FluidListGroup {
         FluidListRow(

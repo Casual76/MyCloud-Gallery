@@ -20,7 +20,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.pampa.mycloudgallery.core.family.contract.ExclusionReason
@@ -128,7 +128,7 @@ internal fun FoldersScreen(
       }
       else -> {
         item(key = "header") {
-          FluidSectionHeader(
+          GallerySectionHeader(
             title = stringResource(R.string.folders_section),
             detail = stringResource(R.string.folders_section_detail),
           )

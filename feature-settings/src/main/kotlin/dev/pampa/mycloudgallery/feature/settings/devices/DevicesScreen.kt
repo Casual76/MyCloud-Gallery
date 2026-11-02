@@ -16,7 +16,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -136,7 +136,7 @@ internal fun DevicesScreen(
 
     if (state.requests.isNotEmpty()) {
       item {
-        FluidSectionHeader(
+        GallerySectionHeader(
           title = stringResource(R.string.devices_section_requests),
           detail = stringResource(R.string.devices_section_requests_detail),
         )
@@ -152,12 +152,12 @@ internal fun DevicesScreen(
     }
 
     state.thisDevice?.let { device ->
-      item { FluidSectionHeader(title = stringResource(R.string.devices_section_this)) }
+      item { GallerySectionHeader(title = stringResource(R.string.devices_section_this)) }
       item { FluidListGroup { DeviceRow(device = device, onClick = { onOpenDevice(device.id) }) } }
     }
 
     if (state.others.isNotEmpty()) {
-      item { FluidSectionHeader(title = stringResource(R.string.devices_section_others)) }
+      item { GallerySectionHeader(title = stringResource(R.string.devices_section_others)) }
       item {
         FluidListGroup {
           state.others.forEachIndexed { index, device ->
@@ -170,7 +170,7 @@ internal fun DevicesScreen(
 
     if (state.inactive.isNotEmpty()) {
       item {
-        FluidSectionHeader(
+        GallerySectionHeader(
           title = stringResource(R.string.devices_section_inactive),
           detail = stringResource(R.string.devices_section_inactive_detail),
         )
@@ -186,7 +186,7 @@ internal fun DevicesScreen(
     }
 
     if (state.isAdmin) {
-      item { FluidSectionHeader(title = stringResource(R.string.devices_section_reports)) }
+      item { GallerySectionHeader(title = stringResource(R.string.devices_section_reports)) }
       item {
         FluidListGroup {
           FluidListRow(

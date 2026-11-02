@@ -13,7 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -99,7 +99,7 @@ internal fun PermissionsScreen(
       loading = ui.submitting,
     ),
   ) {
-    item(key = "header") { FluidSectionHeader(title = stringResource(R.string.permissions_section)) }
+    item(key = "header") { GallerySectionHeader(title = stringResource(R.string.permissions_section)) }
     item(key = "list") {
       FluidListGroup {
         kinds.forEachIndexed { index, kind ->

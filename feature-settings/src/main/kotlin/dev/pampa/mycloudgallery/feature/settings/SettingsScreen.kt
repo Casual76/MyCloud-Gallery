@@ -27,7 +27,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -200,7 +200,7 @@ fun SettingsScreen(
       )
     }
 
-    item { FluidSectionHeader(title = stringResource(R.string.settings_section_family)) }
+    item { GallerySectionHeader(title = stringResource(R.string.settings_section_family)) }
     item {
       FluidListGroup {
         FluidListRow(
@@ -226,7 +226,7 @@ fun SettingsScreen(
       }
     }
 
-    item { FluidSectionHeader(title = stringResource(R.string.settings_section_connection)) }
+    item { GallerySectionHeader(title = stringResource(R.string.settings_section_connection)) }
     item {
       FluidListGroup {
         FluidListRow(
@@ -280,12 +280,12 @@ fun SettingsScreen(
 
     // Fase 6 (P14, D50, Q16 (b)): "Animazione delle foto in movimento", impostazione personale sincronizzata. Null = `:app` non l'ha collegata: niente sezione.
     if (motionAnimation != null) {
-      item { FluidSectionHeader(title = stringResource(R.string.settings_section_library)) }
+      item { GallerySectionHeader(title = stringResource(R.string.settings_section_library)) }
       item { FluidListGroup { MotionAnimationRow(on = motionAnimation, onToggle = onMotionAnimation) } }
       item { FluidSectionFootnote(text = stringResource(R.string.library_motion_animation_footnote)) }
     }
 
-    item { FluidSectionHeader(title = stringResource(R.string.settings_section_protection)) }
+    item { GallerySectionHeader(title = stringResource(R.string.settings_section_protection)) }
     item {
       FluidListGroup {
         FluidListRow(
@@ -333,7 +333,7 @@ fun SettingsScreen(
     }
 
     if (state.pendingSteps.isNotEmpty()) {
-      item { FluidSectionHeader(title = stringResource(R.string.settings_section_pending)) }
+      item { GallerySectionHeader(title = stringResource(R.string.settings_section_pending)) }
       item {
         FluidListGroup {
           state.pendingSteps.forEachIndexed { index, step ->
@@ -345,7 +345,7 @@ fun SettingsScreen(
       item { FluidSectionFootnote(text = stringResource(R.string.settings_pending_footnote)) }
     }
 
-    item { FluidSectionHeader(title = stringResource(R.string.settings_section_support)) }
+    item { GallerySectionHeader(title = stringResource(R.string.settings_section_support)) }
     item {
       FluidListGroup {
         FluidListRow(
@@ -367,7 +367,7 @@ fun SettingsScreen(
     }
 
     if (developerSection != null) {
-      item { FluidSectionHeader(title = stringResource(R.string.settings_section_developer)) }
+      item { GallerySectionHeader(title = stringResource(R.string.settings_section_developer)) }
       item { developerSection() }
     }
   }

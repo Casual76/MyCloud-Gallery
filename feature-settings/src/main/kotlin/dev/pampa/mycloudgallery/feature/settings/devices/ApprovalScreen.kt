@@ -31,7 +31,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -193,7 +193,7 @@ internal fun ApprovalScreen(state: ApprovalUiState, actions: ApprovalActions) {
 
     // 1. L'account dichiarato.
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.approve_step_account),
         detail = stringResource(R.string.approve_step_account_detail),
       )
@@ -218,7 +218,7 @@ internal fun ApprovalScreen(state: ApprovalUiState, actions: ApprovalActions) {
 
     // 2. La prova.
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.approve_step_proof),
         detail = stringResource(R.string.approve_step_proof_detail),
       )

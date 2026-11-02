@@ -50,7 +50,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -151,7 +151,7 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
 
     if (state.lostStage == LostStage.GUIDE) {
       item { LostGuideHero(done = state.guideDone, deviceName = device.name) }
-      item { FluidSectionHeader(title = stringResource(R.string.guide_section)) }
+      item { GallerySectionHeader(title = stringResource(R.string.guide_section)) }
       item {
         LostGuideSteps(
           done = state.guideDone,
@@ -186,12 +186,12 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
       }
     }
 
-    item { FluidSectionHeader(title = stringResource(R.string.device_info_section)) }
+    item { GallerySectionHeader(title = stringResource(R.string.device_info_section)) }
     item { FluidListGroup { DeviceInfoRows(device) } }
 
     // F27: il nome di questo dispositivo lo cambia l'admin (e' nella voce firmata del registro); la cartella del backup non cambia (E-B7).
     if (state.canRename) {
-      item { FluidSectionHeader(title = stringResource(R.string.device_actions_section)) }
+      item { GallerySectionHeader(title = stringResource(R.string.device_actions_section)) }
       item {
         FluidListGroup {
           FluidListRow(
@@ -207,7 +207,7 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
 
     val canAct = state.canManage || state.canReportOwn
     if (canAct) {
-      item { FluidSectionHeader(title = stringResource(R.string.device_actions_section)) }
+      item { GallerySectionHeader(title = stringResource(R.string.device_actions_section)) }
       item {
         FluidListGroup {
           if (state.canManage) {
@@ -241,7 +241,7 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
     } else if (device.isThisDevice) {
       item { FluidSectionFootnote(text = stringResource(R.string.device_this_footnote)) }
     } else if (device.status == DeviceStatus.LOST && state.lostStage != LostStage.GUIDE) {
-      item { FluidSectionHeader(title = stringResource(R.string.guide_section)) }
+      item { GallerySectionHeader(title = stringResource(R.string.guide_section)) }
       item {
         FluidListGroup {
           FluidListRow(

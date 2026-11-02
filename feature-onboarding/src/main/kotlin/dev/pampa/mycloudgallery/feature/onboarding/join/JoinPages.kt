@@ -37,7 +37,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -153,13 +153,13 @@ internal fun JoinManualPage(
     }
     ui.home?.let { home ->
       item(key = "home-header") {
-        FluidSectionHeader(title = stringResource(R.string.manual_home_section), detail = stringResource(R.string.manual_home_section_detail))
+        GallerySectionHeader(title = stringResource(R.string.manual_home_section), detail = stringResource(R.string.manual_home_section_detail))
       }
       item(key = "home") {
         HomeSection(home = home, onConfirm = actions.onConfirmHome, onRefresh = actions.onRefreshHome, onProblemAction = actions.onProblemAction)
       }
     }
-    item(key = "fields-header") { FluidSectionHeader(title = stringResource(R.string.manual_section)) }
+    item(key = "fields-header") { GallerySectionHeader(title = stringResource(R.string.manual_section)) }
     item(key = "fields") {
       Column(verticalArrangement = Arrangement.spacedBy(OnboardingDimens.CardGap)) {
         FluidTextField(
@@ -249,7 +249,7 @@ internal fun JoinManualPage(
       }
     }
     item(key = "state-header") {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.manual_state_section),
         detail = stringResource(R.string.manual_state_section_detail),
       )
@@ -344,7 +344,7 @@ internal fun JoinSummaryPage(
         }
       }
       item(key = "fingerprint-header") {
-        FluidSectionHeader(
+        GallerySectionHeader(
           title = stringResource(R.string.summary_invite_fingerprint),
           detail = stringResource(R.string.summary_invite_fingerprint_detail),
         )

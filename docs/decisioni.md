@@ -14292,3 +14292,13 @@ Prove strumentate: nessuna (niente emulatore, niente telefono, niente tablet): t
 - **Altre pagine che escono dalle Impostazioni** (Backup, Ricerca, Nascosti, Persone, Ricordi, Mappa) restano a finestra intera anche da estesa (sono di altre funzioni).
 - **Il viewer affiancato non e' offerto dalle altre griglie** (album, ricordi, ricerca, zona): la loro vista non e' quella della Libreria; solo la Libreria.
 - **`SettingsNavigation.kt` e' stata riorganizzata** (le pagine sono in `settingsPages`): P3, che aggiunge la pagina Widget in quel file, trovera' le pagine in un'altra funzione.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde** ("OK: tutto a posto.", uscita 0, 2/11), lanciato come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del semaforo. `assembleDebug`, `assembleRelease` (con `verifyReleaseManifest`),
+`galleryTest` e `galleryLint` in circa 16 minuti (molti risultati dalla cache dopo un giro `galleryTest galleryLint --continue` identico); **18.206 prove in 47 moduli, 0 fallite, 35 saltate per assunzione**; tutti i passi della release verdi. Nessuna classe rifatta con `--rerun`, nessun
+`hs_err_pid*.log`. Le prime due corse di `check.ps1` erano rosse per due errori **miei**, corretti e descritti sopra: `dexBuilderDebug` ("Method name '<anonymous>' in class '$$$$$NON_LOCAL_RETURN$$$$$'", dal `return@key`) e `NoHandWrittenStyleTest` di feature-map (`AnimatedVisibility`).
+Le corse intermedie (prove mirate, mutazioni, screenshot) sono in `build\p5\*.log`, fuori dal repository.
+
+### Commit (branch `fase10/p5`)
+`9fca7bdf` (adaptive: finestra, regole, mouse, nuova finestra; Onboarding e Cartelle NAS), `d18d81a6` (viewer affiancato), `e2dafd9c` (mappa e zona), `0f43576c` (Impostazioni), `0a4fd021` (dettaglio nelle Raccolte, selezione salvata, nuova finestra), `1ef97611` (riga `PANES`),
+`067a55b1` (screenshot e documenti), `6dd7be58` (senza `return@key`), `7a37282d` (zona senza animazione), `2ec79989` ("Affianca" per profilo, provato), `48388361` (`EntryPanesTest`); questa riga con l'esito, dopo.

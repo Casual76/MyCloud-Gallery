@@ -59,6 +59,9 @@
   <string name="backup_footer_frozen_detail">Controlla nella Diagnostica.</string>
   <string name="backup_footer_writes_stopped_label">Scritture sul NAS ferme</string>
   <string name="backup_footer_writes_stopped_detail">Apri la Diagnostica.</string>
+  <!-- CA-1 (Fase 10): le scritture ferme per il manifest firmato (questa versione e' in sola lettura). -->
+  <string name="backup_footer_release_read_only">Versione da aggiornare</string>
+  <string name="backup_footer_release_read_only_hint">Il backup è fermo: aggiorna dal Pampa Store.</string>
   <string name="backup_footer_test_only_label">Backup in prova</string>
   <string name="backup_footer_test_only_detail">Si scrive solo nelle share di prova.</string>
   <string name="backup_footer_lost_before_backup_label">Cancellati prima del backup</string>

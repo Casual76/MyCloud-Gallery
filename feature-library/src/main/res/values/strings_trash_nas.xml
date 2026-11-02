@@ -64,6 +64,6 @@
   <string name="trash_notice_restore_partial">Ripristino avviato per una parte: le altre voci non si possono ripristinare adesso (senza i dati per rimetterle al loro posto, o il NAS non si può scrivere). Restano nel cestino.</string>
   <string name="trash_notice_purge_started">Eliminazione avviata: lo segui in Operazioni in corso.</string>
   <string name="trash_notice_rejected">Il NAS non ha accettato l\'operazione: le voci sono cambiate, non si possono ripristinare (senza i dati per rimetterle al loro posto) o la share è in sola lettura. Riprova dopo aver riaperto la pagina.</string>
-  <string name="trash_notice_blocked">Le scritture sul NAS sono ferme adesso (congelamento, emergenza o ora del NAS). Riprova più tardi.</string>
+  <string name="trash_notice_blocked">Le scritture sul NAS sono ferme adesso (congelamento, interruttore di emergenza, ora del NAS o una versione dell’app da aggiornare): la Diagnostica dice perché.</string>
   <string name="trash_notice_failed">Non è riuscito. Riprova fra poco.</string>
 </resources>

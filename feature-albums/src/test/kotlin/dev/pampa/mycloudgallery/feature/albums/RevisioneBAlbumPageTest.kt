@@ -149,6 +149,26 @@ class RevisioneBAlbumPageTest {
     assertThat(detail(catalog)).isNotEqualTo(detail(started))
   }
 
+  /**
+   * CA-1 della revisione funzionale della Fase 10: la condivisione in pausa per le scritture ferme, quando a fermarle e' il manifest firmato, dice "questa versione va
+   * aggiornata" invece di "Riprendo da sola" (che non diventerebbe mai vero); lo stesso il messaggio "non si puo' scrivere". Con l'emergenza dell'utente resta la frase
+   * di sempre.
+   */
+  @Test
+  fun ca1_conIlManifestLeScrittureFermeDiconoDiAggiornareENonDiAspettare() {
+    val album = scenes.osloShared
+    val paused = ShareOpState.Paused(ShareOpId("op-b"), album, SharePlanKind.SHARE, ShareWait.WRITES_BLOCKED, 0, 3)
+    fun detail(held: Boolean) = AlbumStrips.of(
+      resources, readyWith(paused), dev.pampa.mycloudgallery.feature.albums.contract.SuggestionsState.None, null, heldByRelease = held,
+    ).single { it.id == "sharing" }.detail
+    assertThat(detail(held = false)).contains("Riprendo da sola")
+    assertThat(detail(held = true)).contains("Pampa Store")
+    assertThat(detail(held = true)).doesNotContain("Riprendo")
+    val blocked = resources.getString(dev.pampa.mycloudgallery.feature.albums.ui.AlbumText.blocked(dev.pampa.mycloudgallery.feature.albums.contract.WhyBlocked.WRITES_PAUSED, true))
+    assertThat(blocked).contains("Pampa Store")
+    assertThat(blocked).doesNotContain("Riprovo")
+  }
+
   private fun readyWith(state: ShareOpState): AlbumPageState.Ready = scenes.pageUi(scenes.osloShared, banners = listOf(AlbumBanner.Sharing(state))).page as AlbumPageState.Ready
 
   // --- SC-1 ---------------------------------------------------------------------------------------------------------------------------

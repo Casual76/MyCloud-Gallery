@@ -229,7 +229,8 @@ private fun StoppedCard(status: BackupStatus.Stopped, actions: BackupPageActions
  */
 @Composable
 internal fun ProblemCard(code: BackupProblemCode, count: Int, actions: BackupPageActions, modifier: Modifier = Modifier) {
-  val text = BackupProblemTexts.of(code)
+  // CA-1 (Fase 10): le scritture ferme dal manifest firmato hanno la loro frase (la causa e cosa fare).
+  val text = BackupProblemTexts.of(code, dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease.current)
   val countPlural = text.titleCount
   val title = if (countPlural != null && count > 0) {
     pluralStringResource(countPlural, count, GalleryNumbers.format(count))

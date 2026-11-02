@@ -47,6 +47,12 @@ object DiagnosticsActions {
    */
   val OPEN_INDEXER_ROLE = DiagAction("open_indexer_role")
 
+  /**
+   * CA-1 della revisione funzionale della Fase 10: una voce che **non** offre il tasto del catalogo (un'azione senza etichetta si mostra senza tasto). Per
+   * `BACKUP_WRITES_STOPPED` quando le scritture le ferma il manifest firmato: "Riattiva le scritture" non riattiverebbe niente.
+   */
+  val NO_ACTION = DiagAction("none")
+
   /** Le azioni che questo modulo esegue da solo con un intent verso Android. */
   val INTENT_ACTIONS: Set<DiagAction> = setOf(
     DiagAction.OPEN_BATTERY_SETTINGS,

@@ -56,6 +56,22 @@ class BackupMessagesTest {
     }
   }
 
+  /**
+   * CA-1 della revisione funzionale della Fase 10: con le scritture ferme dal manifest firmato la pagina Backup dice la causa e cosa fare, mai "il backup riprende
+   * quando le riattivi" (l'utente non ha niente da riattivare). Gli altri problemi non cambiano.
+   */
+  @Test
+  fun ca1_conIlManifestLeScrittureFermeDiconoLaCausaENonPromettonoDiRiprendere() {
+    val text = BackupProblemTexts.of(BackupProblemCode.WRITES_STOPPED, heldByRelease = true)
+    assertThat(text).isSameInstanceAs(BackupProblemTexts.releaseReadOnly)
+    val detail = normalized(context.getString(checkNotNull(text.detail)))
+    assertThat(detail).contains("pampa store")
+    assertThat(detail).doesNotContain("riprende")
+    assertThat(detail).doesNotContain("riattiv")
+    assertThat(BackupProblemTexts.of(BackupProblemCode.WRITES_STOPPED)).isNotSameInstanceAs(BackupProblemTexts.releaseReadOnly)
+    assertThat(BackupProblemTexts.of(BackupProblemCode.NAS_FULL, heldByRelease = true)).isSameInstanceAs(BackupProblemTexts.of(BackupProblemCode.NAS_FULL))
+  }
+
   @Test
   fun ogniAzioneDelContrattoHaUnTesto() {
     for (action in BackupAction.entries) {

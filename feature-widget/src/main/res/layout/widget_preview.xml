@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  L'anteprima del widget nel selettore dei widget di Android 12+ (Fase 10, P3, E-W18): il **disegno fisso** `widget_preview` (la stessa immagine dell'anteprima di Android 11
+  e prima), mai una foto dell'utente e mai un dato. Una sola vista: i RemoteViews accettano solo alcune classi.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+  <ImageView
+      android:layout_width="match_parent"
+      android:layout_height="match_parent"
+      android:contentDescription="@string/widget_picker_description"
+      android:scaleType="fitCenter"
+      android:src="@drawable/widget_preview" />
+</FrameLayout>

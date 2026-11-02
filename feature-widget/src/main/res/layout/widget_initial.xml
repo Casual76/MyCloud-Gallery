@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cio' che il launcher mostra **prima** del primo disegno del widget (Fase 10, P3, E-W4): "Apri MyCloud Gallery", senza foto. E' anche cio' che resta finche' il grafo dell'app non
+  e' pronto in un processo freddo: mai un contenuto non verificato. Solo attributi del tema (nessun colore scritto qui), solo classi che i RemoteViews accettano.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:attr/colorBackground"
+    android:padding="12dp">
+
+  <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:layout_gravity="center"
+      android:gravity="center"
+      android:maxLines="2"
+      android:text="@string/widget_message_open"
+      android:textColor="?android:attr/textColorPrimary"
+      android:textSize="15sp"
+      android:textStyle="bold" />
+</FrameLayout>

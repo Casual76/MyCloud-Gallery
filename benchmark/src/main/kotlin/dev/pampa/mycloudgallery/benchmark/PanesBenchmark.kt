@@ -111,7 +111,7 @@ class PanesBenchmark {
         openMap()
       },
       measureBlock = {
-        val opened = MapUi.openZone(device)
+        val opened = PanesUi.openZone(device)
         // Una zona che non si apre non ha misurato niente: si dice perche' (le bolle viste) invece di consegnare un "mancante".
         Phase9BenchState.zoneOpenMs = checkNotNull(opened) { "La griglia della zona non si apre dalle bolle (bolle: ${PanesUi.describeBubbles(device)})." }
         device.waitForIdle()

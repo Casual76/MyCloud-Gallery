@@ -234,8 +234,39 @@ object PanesUi {
     lastTapped = target
     val start = System.nanoTime()
     device.click(target.first, target.second)
-    val changed = device.wait(Until.hasObject(By.pkg(pkg).desc(java.util.regex.Pattern.compile("^(?!${java.util.regex.Pattern.quote(before)}$)[0-9.]+ di [0-9.]+$"))), SWAP_TIMEOUT_MS) == true
+    // Si rilegge l'albero a ogni giro (`awaitFresh`): la posizione del viewer cambia senza un evento che la cache di UiAutomation veda.
+    val other = By.pkg(pkg).desc(java.util.regex.Pattern.compile("^(?!${java.util.regex.Pattern.quote(before)}$)[0-9.]+ di [0-9.]+$"))
+    val changed = BenchUi.awaitFresh(device, other, SWAP_TIMEOUT_MS)
     return if (changed) (System.nanoTime() - start) / NANOS_PER_MILLI else null
+  }
+
+  /**
+   * Apre la griglia di una zona nella finestra larga: come `MapUi.openZone` (la bolla piu' piccola; se e' un gruppo grande ci si avvicina), ma la cella della zona si aspetta
+   * **rileggendo l'albero** (`awaitFresh`): il pannello a destra compare senza un evento che la cache di UiAutomation veda (nella finestra stretta la zona e' una pagina nuova
+   * e l'evento c'e'). Restituisce i millisecondi dall'ultimo tocco alla prima cella; `null` se non si apre.
+   */
+  fun openZone(device: UiDevice): Double? {
+    repeat(MAX_ZOOM_TAPS) {
+      BenchUi.ensureForeground(device)
+      BenchUi.refreshAccessibilityTree()
+      val target = MapUi.bubbles(device).minByOrNull { MapUi.countOf(it).let { count -> if (count <= 0) Int.MAX_VALUE else count } } ?: return null
+      val opensGrid = MapUi.countOf(target) in 1..GRID_BELOW
+      val start = System.nanoTime()
+      try {
+        target.click()
+      } catch (e: StaleObjectException) {
+        return@repeat
+      }
+      if (opensGrid) {
+        val shown = BenchUi.awaitFresh(device, MapUi.ZONE_CELL, ZONE_TIMEOUT_MS)
+        return if (shown) (System.nanoTime() - start) / NANOS_PER_MILLI else null
+      }
+      // Un gruppo grande: la mappa si avvicina e le bolle si rifanno; si riprova dopo l'assestamento.
+      MapUi.settle(device)
+      BenchUi.refreshAccessibilityTree()
+      if (device.hasObject(MapUi.ZONE_CELL)) return (System.nanoTime() - start) / NANOS_PER_MILLI
+    }
+    return null
   }
 
   /** Il centro dell'ultima cella toccata (quella che il viewer mostra): la prossima e' un'altra. */
@@ -263,6 +294,11 @@ object PanesUi {
   }
 
   private const val PANE_CENTER_MAX = 0.45
+
+  /** Come `MapUi`: quante foto al piu' ha una bolla che apre la griglia (D28), al piu' quanti tocchi per arrivarci, quanto si aspetta la prima cella. */
+  private const val GRID_BELOW = 30
+  private const val MAX_ZOOM_TAPS = 8
+  private const val ZONE_TIMEOUT_MS = 8_000L
 
   /** Il viewer affiancato comincia al 40% della finestra: sopra il 30% sta a destra. */
   private const val DOCKED_LEFT_MIN = 0.30

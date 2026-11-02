@@ -14185,3 +14185,115 @@ lo stesso percorso del gesto Indietro: chiude per primo il livello piu' alto). I
 
 ### Commit (branch `fase10/p4`)
 `2d5f60fc` (il blocco per processo), `e7b9691d` (due finestre, `singleInstancePerTask`, ingressi alla principale), `2f8e1867` (tastiera, mouse, selezione ripristinata) e `8b683778` (documenti); questa riga con l'esito, dopo.
+
+
+## Fase 10 P10: strumenti per le share vere (31/10)
+
+Il pacchetto P10 della Fase 10 (`docs/fase10-progetto.md`: riquadro P10 del §4.4, §2.10 per intero con Q6 (b), D35, E-SV1-E-SV7 del §0.2, §4.3, §11) e la sezione "Fase 10 P0" di questo file. Branch `fase10/p10` da `a7930f40`. **Il pacchetto non spegne nessuna recinzione**: `FeatureFlags.kt` e' identico a quello di `a7930f40`, `tools/release/recinzioni.json` dice "accesa" per tutte e quattro e il consenso e' vuoto. Gli stati "spenti" sono stati provati solo su copie temporanee sotto `build\` e su una release vera costruita apposta con i quattro valori cambiati **nella cartella di lavoro, mai in un commit** (poi `git checkout` del file). Nessun NAS, nessun telefono, nessuna rete, nessun sotto-agente.
+
+**Numerazione.** Voci nuove: **C459** e **L568**. Precisate: **C445**, **C446**, **L557** (`docs/sicurezza.md`: righe di §4 e §6, riga "Sigle", stato, checklist della Fase 10 e registro delle decisioni aggiornati).
+
+### Che cosa c'e'
+| Parte | Dove | Che cosa fa |
+|---|---|---|
+| Stato atteso e consenso | `tools/release/recinzioni.json` | quattro recinzioni (`F4-D31` indice e dati personali, `F5-D12` backup, `F7-D30` album condivisi, `F8-D34` volti) con campo di `FeatureFlags`, area e stato; **un solo** `consenso` (data + marcatore di una riga di questo file); `ritornoParziale` per il ritorno indietro; `aree` con le cartelle attese per radice (privata, comune) che usa anche la fotografia |
+| Controllo | `tools/release/recinzioni.ps1` | legge `recinzioni.json`, `FeatureFlags.kt`, il dex della release e questo file; ritorna i problemi; nessuna scrittura |
+| Passi | `tools/check.ps1` | tre passi nuovi dopo D34 (statico, bytecode, prove) e la simulazione fra i resti di debug vietati nel dex (passo 7b) |
+| Prove del controllo | `tools/release/recinzioni-prove.ps1`, `tools/release/fixtures/` | 45 prove su copie temporanee sotto `build\prova-recinzioni\` e su due dump veri di `dexdump` della classe `FeatureFlags` (release accesa e release con le quattro spente) |
+| Fotografia | `tools/release/share-snapshot.ps1` | sola lettura: fotografia per area e confronto prima e dopo |
+| Prove della fotografia | `tools/release/share-snapshot-prove.ps1` | 22 prove su cartelle finte sotto `build\prova-share\` |
+| Simulazione, giro e schermata | `feature-diagnostics/.../diagnostics/release/` | `StepSimulation` (le quattro aree in un giro), `StepSimulationText`, `StepSimulationScreen` e `StepSimulationModel` |
+| Simulazione, fonti | `app/src/main/.../release/` (cartella nuova) | `LiveStepSources`, `StepForecasts` (le regole di stima), `StepSimulationWiring` |
+| Ingresso | `app/src/debug/.../debugtools/StepSimulationEntry.kt` | la riga in Impostazioni -> Sviluppo e la rotta; due righe in `DeveloperTools` di debug per le porte |
+
+### Il controllo a due stati
+`recinzioni.json` e' l'unico posto che dice lo stato **atteso**; il controllo lo confronta con quello **osservato** nel sorgente e nel bytecode della release.
+| Stato dichiarato | Che cosa accetta il controllo |
+|---|---|
+| tutte accese, consenso vuoto | come oggi: verde. Un consenso scritto con tutte accese e' un problema (un ritorno indietro completo lo svuota; la storia resta in questo file e in git) |
+| tutte spente | solo con **un** consenso: data `AAAA-MM-GG` non nel futuro e un marcatore che compare in **una sola** riga di questo file, che porta la stessa data e i quattro id; sorgente e bytecode devono dire "spenta" per ognuna |
+| stato misto | solo con `ritornoParziale.dichiarato = true`, data non anteriore al consenso, motivo, marcatore di una riga di questo file con la data e gli id delle recinzioni tornate accese; il consenso del passo resta valido |
+| una recinzione che il sorgente o il bytecode hanno diversa da come e' dichiarata | **fallisce**, per ogni recinzione (una spenta di nascosto non passa) |
+| sorgente o bytecode che non si leggono | **fallisce** (mai passare a vuoto) |
+
+I tre passi di `check.ps1`: (1) statico (anche con `-SkipGradle`): lo stato dichiarato e' quello del `RELEASE` di `FeatureFlags.kt` (segue le costanti `private const val`); (2) bytecode (dopo la build): lo stato letto dal dex; (3) le prove di `recinzioni-prove.ps1` e `share-snapshot-prove.ps1`.
+
+**Come si legge lo stato nel bytecode** (calibrato su due release vere, `assembleRelease` con R8, 31/10): R8 ripiega le costanti di `FeatureFlags` e le mette in tre posti, tutti letti da `dexdump -d` (lo streaming si ferma alla fine della classe: circa 2 secondi).
+| Prova | Recinzione accesa | Recinzione spenta |
+|---|---|---|
+| getter tenuto da `consumer-rules.pro` (`getBackupTestSharesOnly`, `getSharedAlbumsTestSharesOnly`, `getFacesSyncTestSharesOnly`) | `const/4 v0, #int 1; return v0` | `const/4 v0, #int 0; return v0` |
+| decisione per share (`backupMayWriteTo`, `sharedAlbumsMayUse`, `facesSyncMayUse`) | chiama `TestShares.isTestShare` | non lo chiama e risponde `const 1` |
+| `toString()` (la sola prova per **F4-D31**: il suo getter non e' tenuto) | `... indexPublishTestSharesOnly=true, backupTestSharesOnly=true ...` | `...=false` |
+Le prove di una recinzione devono concordare (altrimenti "prove discordanti" e il passo fallisce). Due dump veri, uno per stato, stanno in `tools/release/fixtures/` (tolte posizioni e variabili locali: 250 righe ognuno) e servono alle prove anche senza APK.
+
+**Prova con una release vera con le quattro spente** (non committata): costruita con i quattro valori a `false` (`BACKUP_TEST_SHARES_ONLY`, `SHARED_ALBUMS_TEST_SHARES_ONLY`, `FACES_SYNC_TEST_SHARES_ONLY` e `indexPublishTestSharesOnly` nel `RELEASE`), 4 minuti e 34. Una copia di lavoro di `check.ps1` sotto `build\lavoro\` (con `recinzioni.json` e `decisioni.md` temporanei: tutte spente, consenso `2026-11-02`, una riga col marcatore di prova) ha dato: **D12, D30 e D34 verdi** (il cancello c'e' e chiama la decisione anche con la recinzione spenta: la forma del codice non cambia, cambia il valore), **il passo statico verde, il passo del bytecode verde con "spenta" per tutte e quattro** (F4-D31 con 1 prova, le altre con 3). Con lo stesso APK e `recinzioni.json` di oggi ("accesa"): 8 problemi (sorgente e bytecode, per ognuna). Poi `FeatureFlags.kt` e' tornato com'era.
+
+### La fotografia: `tools/release/share-snapshot.ps1`
+Sola lettura, PowerShell 5.1 con un piccolo lettore C#. Apre solo elenchi; rifiuta un'uscita (o un resoconto) dentro una radice e un'uscita che esiste gia'; **mai sulle share del NAS nelle prove** (solo cartelle finte sotto `build\`).
+- `-Modo Foto -Privata <radice> -Comune <radice> -Uscita <file>`: un file `MCGSNAP1` (una riga di intestazione, una riga JSON per file con ruolo, percorso, dimensione, data e area, una riga di riepilogo). Stampa per radice: file, byte, cartelle non leggibili e file ignorati, e i numeri **per area** (e quelli "fuori da ogni area").
+- `-Modo Confronta -Prima <file> -Dopo <file> [-Report <json>] [-Massimo n]`: per area aggiunti, cambiati, tolti (con i byte); l'elenco di quelli **fuori dalle cartelle attese di ogni area** (aggiunti, cambiati, tolti); codice di uscita **0** tutto dentro, **3** da fermare (E-SV2), **1** errore.
+- Regole: un file e' "dentro" un'area se il suo percorso comincia con una delle cartelle attese di quell'area (la prima area che lo contiene lo prende); **il backup puo' solo aggiungere** (`soloAggiunte`: un file cambiato o tolto in `Backup/` o `Versioni/` e' un'anomalia); **le sorgenti di un album** (`spostaSorgenti`) tolte da fuori si abbinano per dimensione ai file aggiunti in `Album condivisi/` e i conteggi devono essere uguali ("conteggi uguali" del §2.10); le due fotografie devono avere le stesse aree (`areeHash`); tolleranza sulle date 2 secondi (SMB); ignorati `Thumbs.db`, `desktop.ini`, `.DS_Store` e le cartelle di servizio del NAS (`@eaDir`, `.wdmc`, `.plex`, `.twonkymedia`, `@appstore`, ...); le cartelle non leggibili sono contate (cambiate fra prima e dopo = da fermare).
+- Cartelle attese per area (`recinzioni.json`, "aree"): indice = `.mycloudgallery/devices`, `leases`, `family`, `tmp` (privata e comune); backup = `Backup` e `Versioni` (privata), `Versioni` (comune); volti = `.mycloudgallery/faces` (privata); album = `.mycloudgallery/trash` (privata), `.mycloudgallery/albums`, `trash` e `Album condivisi` (comune).
+
+### La "Simulazione del passo"
+**Dove**: Impostazioni -> Sviluppo -> "Simula il passo", **solo nella build debug** (in release `DeveloperTools` non ha la riga e la rotta; i nomi della simulazione sono fra i resti vietati nel dex, passo 7b). **Sola lettura**, le quattro aree **in un giro solo** (`StepSimulation.run`), un tocco su "Simula adesso", poi "Copia il resoconto". Dice numeri, aree e cartelle di primo livello **del formato** (`.mycloudgallery`, `Backup`, `Versioni`, `Album condivisi`): mai un nome di file, di dispositivo o di album (i tipi di `StepReport` non hanno un campo di testo libero).
+| Area | Che cosa dice | Da dove |
+|---|---|---|
+| Backup (F5-D12) | **contati**: file e byte da caricare in `Backup/` dell'area privata (stima finche' il confronto con le copie esistenti non e' chiuso) | `BackupSummary.toUpload` del piano del backup, dal catalogo locale |
+| Indice e dati personali (F4-D31) | **stima**: segmenti e teste in `.mycloudgallery` dell'area privata e dell'area comune | media del NAS nel catalogo per area (`countPresentNas`), byte per voce dalla stima della replica (il livello piu' grande; senza stima 32 KiB), segmenti da 12 MiB o 4.096 voci piu' una testa |
+| Volti (F8-D34) | niente se Persone non e' attiva qui; altrimenti **stima** in `.mycloudgallery` dell'area privata | media della Libreria x 1,5 volti x 700 byte, segmenti da 4.096 voci piu' una testa |
+| Album condivisi (F7-D30) | "scrive solo quando condividi un album" | nessun numero: la prima volta sono 3 foto di prova |
+| Spazio | libero per l'account sul NAS (il minore fra area privata e comune) e **dopo il passo intero** | `NasSpace` (la pagina "Spazio NAS"): una interrogazione |
+**Che cosa ferma il passo** (E-SV1, `StepAttention`): un'area senza numeri, lo spazio non letto, lo spazio che dopo il passo scenderebbe sotto 1 GB (come il margine del NAS); le stime sono solo segnalate. Decide sempre l'utente con i numeri davanti.
+**Prove** (37, tutte verdi: 11 + 7 + 5 + 11 + 3): `StepSimulationTest` (giro, totali, spazio, guasti, cancellazione, modello), `StepSimulationPrivacyTest` (nessun campo di testo libero nei tipi, solo righe del vocabolario fisso, solo le cartelle del formato, nessuna API di scrittura nei sorgenti), `StepSimulationScreenTest` (Robolectric), `StepSimulationSourcesTest` (le regole di stima e il **NAS finto**: motore di produzione di `core-nasops` con le due share in sola lettura e 50 GiB liberi; dopo il giro i file, i loro byte e il diario delle operazioni sono quelli di prima e l'unico contatto con il NAS sono due interrogazioni di spazio) e `StepSimulationReadOnlyTest` (le fonti non nominano scritture e nessun file della release nomina la simulazione).
+
+### Il testo per l'utente (§2.10): il sì unico
+> **Il passaggio alle share vere, in un passo solo.** Finora l'app ha scritto solo nelle share di prova (`test`, `test2`, `test-comune`). Con il passo, **quattro cose insieme** cominciano a scrivere anche sulle tue cartelle vere del NAS, solo sui tuoi dispositivi (l'S25 e il suo profilo del tablet):
+> 1. **l'indice e i dati personali**: file nascosti nella cartella `.mycloudgallery` della tua area e dell'area comune;
+> 2. **il backup**: le copie delle foto e dei video del telefono in `Backup/<telefono>/AAAA/MM/` (e le versioni in `Versioni/`), di notte e a tappe;
+> 3. **i dati dei volti**: solo se usi Persone, nella tua area privata;
+> 4. **gli album condivisi**: solo quando condividi un album; il primo e' un album di 3 tue foto di prova, che si spostano nell'area comune (le originali vanno nel cestino del NAS per 30 giorni).
+>
+> Non cambia nessuna regola dell'app (limiti, congelamento per cambi di massa, "Ferma le scritture sul NAS"): toglie solo il limite "solo share di prova".
+> **Prima del sì** hai davanti: i numeri della simulazione per ognuna delle quattro aree (quanti file e quanti GB, in quali cartelle, quanto spazio resta sul NAS) e la fotografia "prima" delle tue share, fatta dal PC in sola lettura. Se un numero non ti torna, il passo non parte: puoi rinviarlo o tornare, con un nuovo sì, a un'area alla volta.
+> **Dopo**: fotografia "dopo" e confronto, area per area; se trova file cambiati fuori dalle cartelle attese si ferma tutto e si torna indietro. Due settimane di uso normale sui tuoi dispositivi, poi la famiglia.
+> **Per tornare indietro**: subito "Ferma le scritture sul NAS", poi una build con le recinzioni di nuovo accese. Quello che e' stato scritto resta (sono copie e indici, non cancellano niente): le copie del backup; l'indice, nascosto in `.mycloudgallery` (si toglie dal PC, solo quella cartella); i dati dei volti ("Disattiva e cancella" li toglie anche dal NAS); i file degli album, nell'area comune finche' non li riporti ("Smetti di condividere" -> "Riporta nelle mie cartelle").
+> **Il sì (circa 10 minuti, con i numeri davanti):** «Sì, spegni le quattro recinzioni insieme sui miei dispositivi.»
+
+### I comandi del giorno del passo
+Chi li fa fra parentesi. Le due fotografie e la simulazione sono in sola lettura; le credenziali di Windows sono quelle dell'utente.
+1. **(Orchestratore)** Controllare le condizioni del §2.10 "Prima del passo": prove sul campo delle quattro aree sulle share di prova e voci delle revisioni chiuse o dichiarate.
+2. **(Utente, S25 con la build debug dell'admin e l'account vero)** Impostazioni -> Sviluppo -> "Simula il passo" -> "Simula adesso" -> "Copia il resoconto" e incollarlo in chat. Numeri inattesi per un'area o una cosa "Da controllare" = il passo non parte (E-SV1).
+3. **(Utente, PC)** Fotografia "prima":
+   `powershell -ExecutionPolicy Bypass -File tools\release\share-snapshot.ps1 -Modo Foto -Privata \\<NAS>\alessio -Comune \\<NAS>\<area comune> -Uscita C:\Temp\mcg-prima.snap`
+4. **(Utente)** Il sì unico, con il testo qui sopra e i numeri della simulazione davanti.
+5. **(Orchestratore)** Un commit solo, sul ramo del passo: i quattro valori di `FeatureFlags.kt` a `false` (`BACKUP_TEST_SHARES_ONLY`, `SHARED_ALBUMS_TEST_SHARES_ONLY`, `FACES_SYNC_TEST_SHARES_ONLY` e `indexPublishTestSharesOnly` nel `RELEASE`, con i commenti), `tools/release/recinzioni.json` con le quattro recinzioni `"stato": "spenta"` e `consenso` (`data` e un `marcatore` nuovo, per esempio `PASSO-UNICO-AAAA-MM-GG` con la data vera), **una riga** di questo file con quel marcatore, la stessa data e i quattro id (`F4-D31 F5-D12 F7-D30 F8-D34`), e i test che oggi dicono "acceso" (`FeatureFlagsTest`, `AlbumWriteGateTest`, `AppFacesWriteGateTest`; da verificare con un giro mirato: ogni test che aspetta `TEST_ONLY` o `LOCAL_ONLY` su una share vera).
+6. **(Orchestratore)** `tools\check.ps1 -NoDaemon` con `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, dopo aver cancellato `app\build\outputs\apk\release`: i tre passi delle recinzioni devono essere verdi con "spenta" per tutte e quattro e con il consenso.
+7. **(Orchestratore)** Installare **solo** sui dispositivi dell'admin (S25 e il suo profilo del tablet).
+8. **(Utente, PC)** Dopo il primo giro e dopo il primo backup a tappe, fotografia "dopo" e confronto:
+   `powershell -ExecutionPolicy Bypass -File tools\release\share-snapshot.ps1 -Modo Foto -Privata \\<NAS>\alessio -Comune \\<NAS>\<area comune> -Uscita C:\Temp\mcg-dopo.snap`
+   `powershell -ExecutionPolicy Bypass -File tools\release\share-snapshot.ps1 -Modo Confronta -Prima C:\Temp\mcg-prima.snap -Dopo C:\Temp\mcg-dopo.snap -Report C:\Temp\mcg-confronto.json`
+   Codice 0 = tutto dentro le cartelle attese; **3 = E-SV2: "Ferma le scritture sul NAS" e ritorno indietro**; il resoconto dice quale area ha scritto dove.
+9. **Indietro (orchestratore, con un nuovo sì per un ritorno parziale)**: "Ferma le scritture sul NAS" subito; poi un commit con i valori di nuovo `true` e `recinzioni.json` tutto "accesa" **e il consenso svuotato** (ritorno completo), oppure, per una sola area, quella in `"stato": "accesa"` con `ritornoParziale` (`dichiarato: true`, `data`, `marcatore`, `motivo`) e una nuova riga di questo file con il nuovo sì.
+Per rifare le prove degli strumenti: `powershell -ExecutionPolicy Bypass -File tools\release\recinzioni-prove.ps1` e `... tools\release\share-snapshot-prove.ps1` (il secondo crea cartelle finte sotto `build\prova-share\`).
+
+### Edge case
+| Caso | Come lo coprono gli strumenti |
+|---|---|
+| E-SV1 numeri inattesi | la simulazione segnala area senza numeri, spazio non letto o sotto il margine; le stime sono dichiarate; decide l'utente |
+| E-SV2 file cambiati fuori dalle cartelle attese | il confronto, codice 3, con aree e percorsi (e un resoconto JSON) |
+| E-SV3 primo backup grande | lo spazio dopo il passo intero e il margine di 1 GB nella simulazione; le tappe di notte sono le regole del backup (invariate) |
+| E-SV4 congelamento per cambi di massa | invariato (C11): non e' toccato dal passo |
+| E-SV5 un'installazione a mano prima della fine | vale la recinzione della sua build: `recinzioni.json` e `check.ps1` descrivono e provano **la build del repository**, non quella di un telefono |
+| E-SV6 ritorno indietro | `ritornoParziale` e il ritorno completo in `recinzioni.json`; che cosa e' stato scritto lo dice la fotografia per area; L557 precisata |
+| E-SV7 account di prova dopo il rilascio | invariato: `backupBlocksTestAccounts` non e' una delle quattro e il passo non lo tocca |
+
+### Scelte e punti aperti
+- **"Diagnostica -> Sviluppo"**: nel codice la sezione "Sviluppo" e' in **Impostazioni** (`DeveloperTools` di debug). La riga e' li', non nella pagina Diagnostica.
+- **"Solo nella build dell'admin e in debug"** (brief) contro "con la release candidata sull'S25" (§2.10, punto 2): ho seguito il brief. La simulazione esiste **solo nella build debug**, che oggi e' installata solo sui dispositivi dell'admin; non c'e' un controllo "sono admin" dentro la schermata. Se si vuole che giri sulla release candidata (account vero, build firmata) va aggiunta una variante, con le sue prove nel dex: **da decidere con l'orchestratore**.
+- **Il passo cambia anche il comportamento della build debug?** Solo per D12, D30 e D34 (costanti); `indexPublishTestSharesOnly` in debug passa da `forBuild(...)` con un parametro (di serie `true`): per l'indice la build debug resta recintata finche' non lo si chiede. Il passo vale per la **release**; da tenere presente se la prova si fa con la debug.
+- **Stime**: indice e volti sono stime (L568); il numero vero lo dice la prima scrittura e poi la fotografia "dopo". Il backup e' contato.
+- **R8**: il controllo del bytecode dipende dalla forma che R8 da' alle costanti di `FeatureFlags` (L568); se cambia, il passo fallisce e il lettore si ricalibra con due release vere.
+- Il passo 3b legge ogni file del repository; i nuovi file di `tools/release/` e le due fixture non contengono chiavi.
+- `core-common/consumer-rules.pro` non e' stato toccato: per F4-D31 basta il `toString()`. Un getter tenuto anche per l'indice darebbe una seconda prova (richiede un cambio fuori dal perimetro di P10).
+- Nessuna superficie nuova per i Nascosti: la simulazione mostra solo numeri, nessun media.

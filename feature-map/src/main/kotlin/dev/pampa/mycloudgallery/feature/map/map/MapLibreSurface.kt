@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.map.map
 
+import android.animation.ValueAnimator
 import android.content.ComponentCallbacks2
 import android.content.res.Configuration
 import androidx.compose.foundation.background
@@ -120,6 +121,11 @@ internal class MapLibreSurface : MapSurface() {
   }
 
   override fun animateTo(spot: CameraSpot) {
+    // Fase 10 P8 (D27, E-AC6): con le animazioni rimosse (scala dei tempi a zero) la camera salta, non vola.
+    if (!ValueAnimator.areAnimatorsEnabled()) {
+      map?.moveCamera(CameraUpdateFactory.newCameraPosition(positionOf(spot)))
+      return
+    }
     map?.animateCamera(CameraUpdateFactory.newCameraPosition(positionOf(spot)), ANIMATION_MS)
   }
 

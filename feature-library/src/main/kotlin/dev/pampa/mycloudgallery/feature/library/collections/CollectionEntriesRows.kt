@@ -4,7 +4,7 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -28,7 +28,7 @@ fun LazyListScope.collectionEntryItems(
   onSelect: (CollectionEntry) -> Unit,
 ) {
   CollectionEntries.visible(groups).forEachIndexed { index, group ->
-    item(key = "entries-header-$index") { FluidSectionHeader(title = group.title) }
+    item(key = "entries-header-$index") { GallerySectionHeader(title = group.title) }
     item(key = "entries-group-$index") { CollectionEntryRows(group, selectedCode, twoPane, onSelect) }
   }
 }

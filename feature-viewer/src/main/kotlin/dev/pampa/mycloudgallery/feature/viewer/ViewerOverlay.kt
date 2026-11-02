@@ -57,7 +57,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
@@ -550,6 +552,12 @@ private fun PagerLayer(
   val stage = controller.stage
   val positionText = stringResource(R.string.viewer_position, GalleryNumbers.format(pager.currentPage + 1), GalleryNumbers.format(view.size))
   val zoomedText = stringResource(R.string.viewer_zoomed)
+  val nextText = stringResource(R.string.viewer_action_next)
+  val previousText = stringResource(R.string.viewer_action_previous)
+  val infoText = stringResource(R.string.viewer_action_info)
+  val favoriteText = stringResource(R.string.viewer_action_favorite)
+  val unfavoriteText = stringResource(R.string.viewer_action_unfavorite)
+  val scope = rememberCoroutineScope()
 
   // Le pagine vicine entrano a meta' dell'espansione, non nel suo primo fotogramma: durante l'espansione il pager e'
   // trasparente e non scorre (si vede la foto che cresce), e comporre tre pagine insieme nel fotogramma del tocco era
@@ -595,6 +603,19 @@ private fun PagerLayer(
       .semantics {
         contentDescription = positionText
         if (state.zoomed) stateDescription = zoomedText
+        // Fase 10 P8 (D23, E-AC7, E-AC9): si va avanti e indietro, si apre Informazioni e si sceglie il preferito senza gesti
+        // (con lo scorrimento a due dita o con queste azioni; il pizzico non serve). Condividi ed Elimina (con il foglio) sono i
+        // tasti della barra, che i lettori di schermo raggiungono.
+        customActions = buildList {
+          val page = pager.currentPage
+          if (page + 1 < view.size) add(CustomAccessibilityAction(nextText) { scope.launch { pager.animateScrollToPage(page + 1) }; true })
+          if (page > 0) add(CustomAccessibilityAction(previousText) { scope.launch { pager.animateScrollToPage(page - 1) }; true })
+          add(CustomAccessibilityAction(infoText) { controller.toggleInfo(); true })
+          if (services.actions != null) {
+            val label = if (controller.isFavorite(state.currentId)) unfavoriteText else favoriteText
+            add(CustomAccessibilityAction(label) { controller.toggleFavorite(); true })
+          }
+        }
       },
   ) {
     HorizontalPager(

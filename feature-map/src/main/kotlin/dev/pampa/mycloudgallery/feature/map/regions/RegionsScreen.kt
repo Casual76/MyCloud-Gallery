@@ -24,7 +24,7 @@ import androidx.compose.ui.semantics.semantics
 import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -105,7 +105,7 @@ private fun LazyListScope.catalogPage(ui: RegionsUi, handlers: RegionsHandlers) 
   ui.message?.let { message -> item(key = "message") { MessageRow(message, handlers) } }
   item(key = "intro") { FluidSectionFootnote(text = stringResource(R.string.regions_intro)) }
   if (ui.downloaded.isNotEmpty()) {
-    item(key = "header-downloaded") { FluidSectionHeader(title = stringResource(R.string.regions_header_downloaded)) }
+    item(key = "header-downloaded") { GallerySectionHeader(title = stringResource(R.string.regions_header_downloaded)) }
     item(key = "downloaded") {
       FluidListGroup {
         ui.downloaded.forEachIndexed { index, state ->
@@ -118,7 +118,7 @@ private fun LazyListScope.catalogPage(ui: RegionsUi, handlers: RegionsHandlers) 
     if (running != null) item(key = "progress") { DownloadProgress(running) }
     item(key = "total") { Total(ui.usedBytes) }
   }
-  item(key = "header-around") { FluidSectionHeader(title = stringResource(R.string.regions_header_around)) }
+  item(key = "header-around") { GallerySectionHeader(title = stringResource(R.string.regions_header_around)) }
   item(key = "around") {
     FluidListGroup {
       FluidListRow(
@@ -130,9 +130,9 @@ private fun LazyListScope.catalogPage(ui: RegionsUi, handlers: RegionsHandlers) 
       )
     }
   }
-  item(key = "header-italian") { FluidSectionHeader(title = stringResource(R.string.regions_header_italian)) }
+  item(key = "header-italian") { GallerySectionHeader(title = stringResource(R.string.regions_header_italian)) }
   item(key = "italian") { OfferGroup(ui.italian, handlers) }
-  item(key = "header-countries") { FluidSectionHeader(title = stringResource(R.string.regions_header_countries)) }
+  item(key = "header-countries") { GallerySectionHeader(title = stringResource(R.string.regions_header_countries)) }
   item(key = "countries") { OfferGroup(ui.countries, handlers) }
   item(key = "bottom") { Box(Modifier.padding(bottom = MapDimens.ListBottom)) }
 }
@@ -272,7 +272,7 @@ private fun LazyListScope.aroundPage(around: AroundState, handlers: RegionsHandl
         )
       }
     }
-    item(key = "header-radius") { FluidSectionHeader(title = stringResource(R.string.regions_around_radius_header, picked.name)) }
+    item(key = "header-radius") { GallerySectionHeader(title = stringResource(R.string.regions_around_radius_header, picked.name)) }
     item(key = "radii") {
       val resources = LocalContext.current.resources
       FluidListGroup {

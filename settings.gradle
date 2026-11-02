@@ -116,7 +116,8 @@ def engineDir = file('engine')
 if (engineDir.exists()) {
   [
    'engine-foundation',
-   'engine-ui'
+   'engine-ui',
+   'engine-widget'
   ].each { name ->
     include ":$name"
     project(":$name").projectDir = new File(engineDir, name)

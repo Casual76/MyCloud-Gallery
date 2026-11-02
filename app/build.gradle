@@ -279,6 +279,12 @@ dependencies {
   implementation project(':feature-memories')
   implementation project(':core-map')
   implementation project(':feature-map')
+  // Fase 10 (docs/fase10-progetto.md §1.1, §1.4, P3): il widget. `:app` vede i contratti del tocco (`WidgetTap`, che `MainActivity` chiama senza grafo) e porta nell'APK
+  // il widget Glance con il suo ricevitore (non esportato) e i componenti interni di Glance (tutti non esportati: `verifyReleaseManifest`). Glance ed `engine-widget` restano
+  // dentro feature-widget (`:app` non li nomina). Il legame del pianificatore e delle porte vere (`WidgetGraph`) e' di P13: finche' non c'e', `WidgetHost` e' vuoto e il
+  // widget non disegna niente di nuovo (fallire chiusi).
+  implementation project(':core-widget')
+  implementation project(':feature-widget')
 
   // --- Il design system (engine-ui porta Compose, Material 3, activity-compose e lifecycle) ----------
   implementation project(':engine-ui')

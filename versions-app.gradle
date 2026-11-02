@@ -136,6 +136,12 @@ ext.appVersions = [
   // OkHttp: la STESSA versione che MapLibre chiede a runtime, dichiarata perche' `feature-map/.../net/` (il solo codice che la nomina)
   // la vede a compilazione: il client con il cancello che MapLibre usa (`HttpRequestUtil.setOkHttpClient`). Nessuna versione in piu'.
   okhttp                 : '4.12.0',
+
+  // --- Fase 10 (P3, docs/fase10-progetto.md D10, §8; righe in docs/sicurezza.md §8) -------------------------------------------------
+  // SOLO :feature-widget (Phase10ArchitectureTest: nessun altro build.gradle nomina Glance ne' `engine-widget`). Approvato dall'utente il 31/10 (Q9 (a)):
+  // Glance 1.1.1 e le sue dipendenze transitive. E' la versione stessa dell'engine (`engine.glance`, che `engine-widget` porta come `api`): un solo
+  // numero, mai due Glance nello stesso grafo. Versione stabile e fissata. Le impronte sono in `gradle/verification-metadata.xml`.
+  glance                 : engine.glance,
 ]
 
 ext.appSdk = [
@@ -212,6 +218,10 @@ ext.appDeps = [
   // --- Fase 9: la mappa (SOLO :feature-map, Phase9ArchitectureTest; OkHttp nominato solo da feature-map/.../net/) ------------------
   maplibreAndroid          : "org.maplibre.gl:android-sdk-opengl:${appVersions.maplibre}",
   okhttp                   : "com.squareup.okhttp3:okhttp:${appVersions.okhttp}",
+
+  // --- Fase 10: il widget (SOLO :feature-widget, Phase10ArchitectureTest) ------------------------------------------------------
+  glance                   : "androidx.glance:glance:${appVersions.glance}",
+  glanceAppwidget          : "androidx.glance:glance-appwidget:${appVersions.glance}",
 
   // --- Test ---------------------------------------------------------------------------------------
   junit                    : "junit:junit:${engine.junit}",

@@ -70,4 +70,11 @@ internal object DeveloperTools {
   /** Fase 8 (DR-2, F109): nessuna ricetta forzata; la ricetta dei volti e' sempre quella di serie. */
   @Suppress("UNUSED_PARAMETER")
   fun facesRecipe(context: Context): Int? = null
+
+  /** Fase 10 (P13, D31): la release (e le varianti di misura) si fida solo delle due chiavi di pubblicazione del manifest. */
+  fun releaseTrust(): dev.pampa.mycloudgallery.core.release.keys.ReleaseTrust = dev.pampa.mycloudgallery.core.release.keys.ReleaseTrust.RELEASE
+
+  /** Fase 10 (P13, D33): il canale dalla versione (`1.1.0-beta.N` = beta, il resto stabile); mai `DEBUG` fuori dalla build di sviluppo. */
+  fun releaseChannel(versionName: String): dev.pampa.mycloudgallery.core.release.contract.ReleaseChannel =
+    if ("-beta" in versionName) dev.pampa.mycloudgallery.core.release.contract.ReleaseChannel.BETA else dev.pampa.mycloudgallery.core.release.contract.ReleaseChannel.STABLE
 }

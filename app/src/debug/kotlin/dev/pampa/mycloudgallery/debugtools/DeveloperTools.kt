@@ -218,6 +218,17 @@ internal object DeveloperTools {
     dev.pampa.mycloudgallery.debugtools.widget.FieldProbeHiddenWidgetProvider.refreshAll(context)
   }
 
+  /**
+   * Fase 10 (P13, D31, §2.8 "Le chiavi nell'app"): la build debug si fida anche della chiave di prova del manifest (KT), per le prove con i manifest firmati da
+   * `manifest-tool.ps1 sign --test-key`. Solo qui: la release non la nomina (tools/check.ps1, passi 7b e 7i), e la fabbrica la toglie a ogni canale che non sia `DEBUG`.
+   */
+  fun releaseTrust(): dev.pampa.mycloudgallery.core.release.keys.ReleaseTrust = dev.pampa.mycloudgallery.core.release.testing.ReleaseTestKeys.DEBUG_TRUST
+
+  /** Fase 10 (P13, D33): la build di sviluppo e' sempre del canale `DEBUG`. */
+  @Suppress("UNUSED_PARAMETER")
+  fun releaseChannel(versionName: String): dev.pampa.mycloudgallery.core.release.contract.ReleaseChannel =
+    dev.pampa.mycloudgallery.core.release.contract.ReleaseChannel.DEBUG
+
   /** Il nome del marcatore della famiglia pronta (lo scrive solo `adb`). */
   const val FAMILY_READY_MARKER: String = "debug-family-ready.marker"
 

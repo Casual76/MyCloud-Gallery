@@ -14288,7 +14288,7 @@ Prove strumentate: nessuna (niente emulatore, niente telefono, niente tablet): t
 - **Lo scorrimento** della griglia della zona e le pagine aperte *dentro* il pannello (per esempio Famiglia -> Invito nelle Impostazioni) non passano fra pannello e pagina: si salvano la zona aperta e la pagina scelta, non cio' che si e' fatto dentro. Una finestra che si stringe e
   torna larga ripropone la pagina scelta dall'inizio.
 - **Screenshot di album, persona e ricordo nel dettaglio delle Raccolte**: non ci sono; le tre pagine hanno un ViewModel Hilt e un `NavHost` per pannello e i test di composizione senza Hilt non le montano. Le pagine singole hanno gli screenshot delle loro fasi; il dettaglio e' provato
-  da `EntryPanes` (quali voci hanno il pannello) e dal fatto che e' la stessa rotta; da vedere sul tablet.
+  da `EntryPanesTest` (quali voci hanno il pannello: album, album smart, persona, ricordo si'; liste, viaggi, "Nuovo album", voci di stato no; funzione non legata o ricordo uscito dallo scaffale no) e dal fatto che e' la stessa rotta; da vedere sul tablet.
 - **Altre pagine che escono dalle Impostazioni** (Backup, Ricerca, Nascosti, Persone, Ricordi, Mappa) restano a finestra intera anche da estesa (sono di altre funzioni).
 - **Il viewer affiancato non e' offerto dalle altre griglie** (album, ricordi, ricerca, zona): la loro vista non e' quella della Libreria; solo la Libreria.
 - **`SettingsNavigation.kt` e' stata riorganizzata** (le pagine sono in `settingsPages`): P3, che aggiunge la pagina Widget in quel file, trovera' le pagine in un'altra funzione.

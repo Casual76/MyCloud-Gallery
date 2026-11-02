@@ -21,6 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragPointer
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragSubject
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDragSource
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCell
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellActions
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellBadges
@@ -31,6 +34,7 @@ import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
+import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
@@ -139,6 +143,8 @@ internal fun LazyListScope.albumGrid(
   actions: GalleryGridCellActions,
   onTap: (MediaId) -> Unit,
   onLong: ((MediaId) -> Unit)?,
+  /** Fase 10 (P6, D20): da dove parte un trascinamento verso un'altra app (la pagina dell'album); null = questa griglia non trascina (le suggerite). */
+  dragOrigin: DragOrigin? = null,
 ) {
   val rows = gridRowCount(view.size, columns)
   items(rows, key = { "$keyPrefix-$it" }) { row ->
@@ -146,7 +152,7 @@ internal fun LazyListScope.albumGrid(
       for (column in 0 until columns) {
         val at = row * columns + column
         if (at < view.size) {
-          AlbumCell(view, at, thumbnails, style, interaction, actions, onTap, onLong, Modifier.weight(1f).aspectRatio(1f))
+          AlbumCell(view, at, thumbnails, style, interaction, actions, onTap, onLong, dragOrigin, Modifier.weight(1f).aspectRatio(1f))
         } else {
           Spacer(Modifier.weight(1f).aspectRatio(1f))
         }
@@ -169,6 +175,7 @@ private fun AlbumCell(
   actions: GalleryGridCellActions,
   onTap: (MediaId) -> Unit,
   onLong: ((MediaId) -> Unit)?,
+  dragOrigin: DragOrigin?,
   modifier: Modifier,
 ) {
   val snapshot = view.snapshot
@@ -184,9 +191,14 @@ private fun AlbumCell(
     style = style,
     interaction = interaction,
     actions = actions,
-    modifier = modifier.pointerInput(media, onLong != null) {
-      detectTapGestures(onTap = { onTap(media) }, onLongPress = if (onLong != null) ({ onLong(media) }) else null)
-    },
+    modifier = modifier
+      .pointerInput(media, onLong != null) {
+        detectTapGestures(onTap = { onTap(media) }, onLongPress = if (onLong != null) ({ onLong(media) }) else null)
+      }
+      // Fase 10 (P6, D20): la foto dell'album verso un'altra app. La pressione lunga della cella e' il suo menu: col tocco si trascina solo se non c'e' (scelta della copertina); il mouse trascina sempre.
+      .mediaDragSource(enabled = dragOrigin != null, origin = dragOrigin?.code.orEmpty()) { touch ->
+        if (touch.pointer == DragPointer.MOUSE || onLong == null) DragSubject(listOf(media.value), request?.let { thumbnails.loader.peek(it.key) }) else null
+      },
     placeholder = placeholder,
   )
 }

@@ -49,6 +49,8 @@ import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DropTarget
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDropTarget
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
 import dev.pampa.mycloudgallery.core.designsystem.design.ActionBarHeight
 import dev.pampa.mycloudgallery.core.designsystem.design.ContentRange
@@ -65,6 +67,7 @@ import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryFilterOption
 import dev.pampa.mycloudgallery.core.designsystem.grid.galleryFilterMenuEntries
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
+import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.GridStyle
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
@@ -152,7 +155,8 @@ internal fun LibraryScreen(
   }
 
   // I tag della chrome come id di risorsa: gli strumenti di misura sull'emulatore (uiautomator) la trovano per nome.
-  Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).semantics { testTagsAsResourceId = true }) {
+  // Fase 10 (P6, D21): la Libreria e' una destinazione per le foto trascinate da un'altra app ("Salva sul NAS": si apre il foglio della ricezione, niente parte senza un tocco).
+  Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).semantics { testTagsAsResourceId = true }.mediaDropTarget(DropTarget.Library)) {
     // Il fondale della pagina: la griglia e le sfumature di bordo. Tutto il vetro (chrome, pillola, scrubber) lo rifrange.
     Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
       when {
@@ -182,6 +186,8 @@ internal fun LibraryScreen(
           onLevelChanged = { level -> scope.launch { state.preferences.setLevel(level) } },
           // D15: Canc apre il foglio di conferma (lo stesso della barra delle azioni), mai un'eliminazione diretta.
           onDeleteKey = { deleting = true },
+          // Fase 10 (P6, D20): le foto della Libreria (o la selezione) si trascinano verso un'altra app.
+          dragOrigin = DragOrigin.LIBRARY,
         )
       }
       GridTopEdgeScrim(topChrome, Modifier.align(Alignment.TopCenter))

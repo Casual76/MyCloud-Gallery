@@ -12,6 +12,9 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.gestures.detectTapGestures
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragSubject
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDragSource
+import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCell
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellActions
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellBadges
@@ -120,7 +123,10 @@ internal fun SearchResultCell(
     style = style,
     interaction = interaction,
     actions = actions,
-    modifier = modifier.pointerInput(snapshot, index) { detectTapGestures(onTap = { onOpen() }) },
+    modifier = modifier
+      .pointerInput(snapshot, index) { detectTapGestures(onTap = { onOpen() }) }
+      // Fase 10 (P6, D20): la foto del risultato verso un'altra app (pressione lunga col tocco, trascinamento col mouse). Il tocco lungo non ha altro da fare qui.
+      .mediaDragSource(enabled = true, origin = DragOrigin.SEARCH.code) { DragSubject(listOf(snapshot.idAt(index).value), request?.let { thumbnails.loader.peek(it.key) }) },
     placeholder = placeholder,
   )
 }

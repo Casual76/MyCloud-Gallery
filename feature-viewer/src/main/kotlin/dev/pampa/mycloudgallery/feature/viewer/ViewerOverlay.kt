@@ -642,6 +642,8 @@ private fun PagerLayer(
           onPlayMotion = if (controller.motionAvailable(id)) controller::playMotion else null,
           liveText = controller.liveText,
           cutout = controller.cutout,
+          // Fase 10 (P6, D20, E-T18): la foto si trascina verso un'altra app, mai dai Nascosti.
+          dragEnabled = !request.secure,
         )
       }
     }

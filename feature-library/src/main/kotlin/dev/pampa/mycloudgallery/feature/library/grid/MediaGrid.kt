@@ -39,6 +39,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.haptics.rememberFluidHaptics
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragPointer
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragTouch
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDragSource
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCell
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellActions
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellBadges
@@ -55,6 +58,7 @@ import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryGridLevels
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
+import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.library.contract.GridLayout
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.RowKind
@@ -106,6 +110,7 @@ import kotlinx.coroutines.withContext
  * @param onLevelChanged il livello si e' assestato dopo un pinch (per ricordarlo).
  * @param cellCornerScale quanto dell'angolo delle celle resta: di serie la parete di foto squadrata ([GalleryWall]).
  * @param gap la fessura fra le celle: di serie quella della parete (1 dp).
+ * @param dragOrigin Fase 10 (P6, D20): da dove parte un trascinamento verso un'altra app (la Libreria); null = questa griglia non trascina (i Nascosti, gli Eliminati di recente: mai, E-T18). Cosa si trascina lo decide [gridDragSubject].
  * @param onDeleteKey Canc (Fase 10, P4, D15): **apre il foglio di conferma** dell'eliminazione, mai un'eliminazione diretta. Null: questa griglia non elimina e Canc non fa niente.
  *   Mouse e tastiera (evidenziazione, Invio, Ctrl+A) sono di ogni griglia ([gridKeyboard]).
  */
@@ -121,6 +126,7 @@ fun MediaGrid(
   cellCornerScale: Float = GalleryWall.CornerScale,
   gap: Dp = GalleryWall.Gap,
   onDeleteKey: (() -> Unit)? = null,
+  dragOrigin: DragOrigin? = null,
 ) {
   BoxWithConstraints(
     modifier = modifier
@@ -136,6 +142,7 @@ fun MediaGrid(
     val currentOnOpen by rememberUpdatedState(onOpen)
     val currentOnDeleteKey by rememberUpdatedState(onDeleteKey)
     val currentOnLevelChanged by rememberUpdatedState(onLevelChanged)
+    val currentDragOrigin by rememberUpdatedState(dragOrigin)
     val currentReduced by rememberUpdatedState(reducedMotion)
 
     // --- I layout -----------------------------------------------------------------------------
@@ -186,11 +193,22 @@ fun MediaGrid(
         reducedMotion = { currentReduced },
         haptics = haptics,
         onLevelSettled = { currentOnLevelChanged(state.level) },
+        // La pressione lunga di una cella che comincia un trascinamento verso un'altra app non e' una selezione (P6): la stessa scelta della sorgente.
+        ownsLongPress = { point, mouse ->
+          currentDragOrigin != null && gridDragSubject(state, DragTouch(point, if (mouse) DragPointer.MOUSE else DragPointer.TOUCH)) != null
+        },
       )
     }
 
     val keyCallbacks = remember(onDeleteKey != null) { GridKeyCallbacks(onOpen = { currentOnOpen(it) }, onDeleteSheet = onDeleteKey?.let { { currentOnDeleteKey?.invoke() } }) }
-    Box(modifier = Modifier.fillMaxSize().gridKeyboard(state, keyCallbacks).gridGestures(state, scope, callbacks)) {
+    Box(
+      modifier = Modifier
+        .fillMaxSize()
+        .gridKeyboard(state, keyCallbacks)
+        .gridGestures(state, scope, callbacks)
+        // Fase 10 (P6, D20): trascinare le foto (o la selezione) verso un'altra app. Senza origine, o senza porta installata, non fa niente.
+        .mediaDragSource(enabled = dragOrigin != null, origin = dragOrigin?.code.orEmpty()) { touch -> gridDragSubject(state, touch) },
+    ) {
       LazyColumn(
         state = state.listState,
         modifier = Modifier

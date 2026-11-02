@@ -7,6 +7,7 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerType
@@ -33,6 +34,11 @@ internal class GridGestureCallbacks(
   val haptics: FluidHaptics,
   /** Il livello si e' assestato dopo un pinch (per ricordarlo). */
   val onLevelSettled: () -> Unit,
+  /**
+   * Fase 10 (P6, D20): questo tocco comincia un **trascinamento verso un'altra app** (`mediaDragSource`)? Se si', la pressione lunga e' sua e la griglia non entra in selezione ne' tratta il
+   * rilascio come un tocco. Il dito (o il mouse) sulla cella: [Offset] e se e' un mouse. Di serie no.
+   */
+  val ownsLongPress: (Offset, Boolean) -> Boolean = { _, _ -> false },
 )
 
 private enum class GestureMode { Undecided, Scroll, DragSelect, Pinch }
@@ -79,6 +85,9 @@ internal fun Modifier.gridGestures(
       }
       return@awaitEachGesture
     }
+    // Fase 10 (P6): se la pressione lunga e' del trascinamento verso un'altra app (la cella e' gia' selezionata, o e' un mouse), la griglia non seleziona e il rilascio non e' un tocco.
+    val mouse = down.type == PointerType.Mouse
+    val dragOwned = hitId != null && callbacks.ownsLongPress(start, mouse)
     var mode = GestureMode.Undecided
     var pressJob: Job? = if (hitId != null) {
       scope.launch {
@@ -128,7 +137,7 @@ internal fun Modifier.gridGestures(
 
     try {
       while (true) {
-        val waitForLongPress = mode == GestureMode.Undecided && hit >= 0
+        val waitForLongPress = mode == GestureMode.Undecided && hit >= 0 && !dragOwned
         val event = if (waitForLongPress) {
           val remaining = longPressAt - currentEvent.changes.first().uptimeMillis
           withTimeoutOrNull(remaining.coerceAtLeast(0L)) { awaitPointerEvent(PointerEventPass.Initial) }
@@ -168,7 +177,7 @@ internal fun Modifier.gridGestures(
         }
         val change = event.changes.firstOrNull { it.id == down.id } ?: break
         if (!change.pressed) {
-          if (mode == GestureMode.Undecided && hitId != null) {
+          if (mode == GestureMode.Undecided && hitId != null && !(dragOwned && gestureLongEnough(down.uptimeMillis, change.uptimeMillis, viewConfiguration.longPressTimeoutMillis))) {
             tapped = true
             tap(state, scope, callbacks, hitId, pressJob)
           }
@@ -179,7 +188,8 @@ internal fun Modifier.gridGestures(
           val delta = change.position - start
           if (delta.getDistance() > slop) {
             val horizontal = abs(delta.y) <= abs(delta.x) * Tan30
-            if (state.selecting && horizontal && hit >= 0) {
+            // Il mouse che trascina una cella (o la selezione) la porta verso un'altra app: non e' una selezione a trascinamento (P6).
+            if (state.selecting && horizontal && hit >= 0 && !(dragOwned && mouse)) {
               beginDragSelect(hit)
             } else {
               mode = GestureMode.Scroll
@@ -225,6 +235,9 @@ private fun tap(state: MediaGridState, scope: CoroutineScope, callbacks: GridGes
     callbacks.onOpen(id)
   }
 }
+
+/** Il dito e' rimasto giu' almeno quanto la pressione lunga: il gesto era un trascinamento verso un'altra app (anche se non e' partito), non un tocco. */
+private fun gestureLongEnough(downAt: Long, upAt: Long, longPressMillis: Long): Boolean = upAt - downAt >= longPressMillis
 
 /** La velocita' dello scorrimento automatico per un dito a [y]: proporzionale a quanto e' dentro la fascia del bordo. */
 internal fun autoScrollSpeed(y: Float, viewport: GridViewport, edge: Float, maxSpeed: Float): Float {

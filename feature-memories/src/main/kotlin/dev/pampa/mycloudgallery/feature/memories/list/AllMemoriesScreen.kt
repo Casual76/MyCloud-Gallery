@@ -11,7 +11,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -77,7 +77,7 @@ internal fun AllMemoriesScreen(
       }
       is MemoriesListState.Ready -> {
         for (month in state.byMonth) {
-          item(key = "header-${month.month}") { FluidSectionHeader(title = GalleryDates.monthYear(month.month)) }
+          item(key = "header-${month.month}") { GallerySectionHeader(title = GalleryDates.monthYear(month.month)) }
           item(key = "month-${month.month}") {
             FluidListGroup {
               month.cards.forEachIndexed { index, card ->

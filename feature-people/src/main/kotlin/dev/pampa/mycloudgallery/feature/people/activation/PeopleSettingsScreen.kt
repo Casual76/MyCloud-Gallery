@@ -30,7 +30,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -156,7 +156,7 @@ private fun LazyListScope.stateAction(state: PeopleSettingsState, handlers: Peop
 
 /** Chi analizza le foto e a che punto e'. */
 private fun LazyListScope.workSection(state: PeopleSettingsState, handlers: PeopleSettingsHandlers) {
-  item(key = "work-header") { FluidSectionHeader(title = stringResource(R.string.faces_settings_section_work)) }
+  item(key = "work-header") { GallerySectionHeader(title = stringResource(R.string.faces_settings_section_work)) }
   item(key = "work") {
     FluidListGroup {
       if (state.devices.isEmpty()) {
@@ -252,7 +252,7 @@ private fun LazyListScope.deviceSection(
   val excluded = state.shown == PeopleSwitchShown.EXCLUDED_HERE
   val canExclude = state.shown == PeopleSwitchShown.ON || state.shown == PeopleSwitchShown.LOCAL_ONLY || state.shown == PeopleSwitchShown.AWAITING_NOTICE
   if (!excluded && !canExclude) return
-  item(key = "device-header") { FluidSectionHeader(title = stringResource(R.string.faces_settings_section_device)) }
+  item(key = "device-header") { GallerySectionHeader(title = stringResource(R.string.faces_settings_section_device)) }
   if (excluded) {
     item(key = "device-include") {
       FluidListGroup {
@@ -333,7 +333,7 @@ private fun LazyListScope.hiddenSection(count: Int, onOpen: () -> Unit) {
 
 /** I modelli sono dentro l'app (Q1): nome, versione e licenza, e il rimando a Informazioni e licenze. */
 private fun LazyListScope.modelsSection(state: PeopleSettingsState, handlers: PeopleSettingsHandlers) {
-  item(key = "models-header") { FluidSectionHeader(title = stringResource(R.string.faces_settings_section_models)) }
+  item(key = "models-header") { GallerySectionHeader(title = stringResource(R.string.faces_settings_section_models)) }
   item(key = "models") {
     FluidListGroup {
       state.models.forEach { model ->
@@ -360,7 +360,7 @@ private fun LazyListScope.modelsSection(state: PeopleSettingsState, handlers: Pe
 
 /** "Disattiva e cancella": la riga porta al foglio di P8 ([onErase] null = non si offre); qui l'avanzamento, se c'e' (anche mentre la cancellazione e' in corso). */
 private fun LazyListScope.eraseSection(state: PeopleSettingsState, onErase: (() -> Unit)?) {
-  item(key = "erase-header") { FluidSectionHeader(title = stringResource(R.string.faces_settings_section_erase)) }
+  item(key = "erase-header") { GallerySectionHeader(title = stringResource(R.string.faces_settings_section_erase)) }
   if (onErase != null) {
     item(key = "erase") {
       FluidListGroup {

@@ -10,12 +10,14 @@ import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Science
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
@@ -58,8 +60,24 @@ internal fun LibraryStatusBlock(
     statusFooter()
     if (note != null) GalleryFooterEntry(note = note, onClick = onNasClick)
     if (backupNote != null) GalleryFooterEntry(note = backupNote, onClick = onBackupClick)
+    StatusAnnouncer(listOf(note, backupNote))
   }
 }
+
+/**
+ * Fase 10 P8 (D23 (6), E-AC9): lo stato che cambia da solo si **annuncia una volta**, con una regione viva educata, e **non a ogni numero**: "312 in
+ * coda", "311 in coda"... sono lo stesso stato. Si annuncia quando cambia il *tipo* di stato (la frase senza le cifre) e il testo detto e' quello del
+ * momento del cambio. Gli stati tranquilli (tutto al sicuro, collegato) non sono una notizia e non si annunciano.
+ */
+@Composable
+internal fun StatusAnnouncer(notes: List<GalleryFooterNote?>) {
+  val news = notes.filterNotNull().filter { it.tone != GalleryFooterTone.Calm }
+  val kind = news.joinToString("|") { it.label.replace(Digits, "#") }
+  val spoken = remember(kind) { news.joinToString(". ") { listOfNotNull(it.label, it.detail).joinToString(", ") } }
+  if (kind.isNotEmpty()) GalleryLiveAnnouncement(spoken)
+}
+
+private val Digits = Regex("[0-9.,]+")
 
 /**
  * Che cosa il piede dice del backup (Fase 5A, §2.6), o null se non c'e' niente da dire (backup non configurato). Le frasi brevi e i

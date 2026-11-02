@@ -22,7 +22,7 @@ import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 
 /** Un'azione della barra azioni: un'icona con la sua descrizione. */
@@ -57,7 +57,7 @@ fun GalleryActionBar(
   val tint = if (onPhoto) galleryTintOnPhoto(floating = true) else GlassDefaults.floatingTint()
   Row(
     modifier = modifier
-      .glassSurface(
+      .galleryGlass(
         state = backdrop,
         tint = tint,
         shape = FluidCapsuleShape,

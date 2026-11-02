@@ -33,7 +33,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -152,7 +152,7 @@ internal fun KeyIntroPage(chrome: StepChrome, ui: KeyUi, actions: KeyActions, mo
           )
         }
       }
-      item(key = "plan-header") { FluidSectionHeader(title = stringResource(R.string.key_plan_section)) }
+      item(key = "plan-header") { GallerySectionHeader(title = stringResource(R.string.key_plan_section)) }
       item(key = "plan") {
         FluidListGroup {
           PlanRow(Icons.Rounded.Key, R.string.key_plan_generate)

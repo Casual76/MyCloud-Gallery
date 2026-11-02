@@ -61,6 +61,12 @@ internal interface MapHandlers {
 
   fun onBubble(bubble: PlacedBubble)
 
+  /** Fase 10 P8 (D23): "Avvicina" come azione di TalkBack (anche dove il tocco aprirebbe la zona); al livello massimo non fa niente. */
+  fun onBubbleZoom(bubble: PlacedBubble) = Unit
+
+  /** Fase 10 P8 (D23): "Apri la zona" come azione di TalkBack (anche dove il tocco si avvicinerebbe). */
+  fun onBubbleZone(bubble: PlacedBubble) = Unit
+
   /** L'avviso discreto: apre Impostazioni -> Mappa. */
   fun onNotice()
 
@@ -103,7 +109,7 @@ internal fun MapScreen(
   Box(modifier = modifier.fillMaxSize().background(scheme.surfaceContainer)) {
     // La carta nasce solo quando la camera e' decisa (ultima posizione locale, o tutte le foto con lo zoom <= 5): mai una carta in un posto sbagliato per un attimo.
     if (request != null) content.Content(surface, request, Modifier.fillMaxSize())
-    if (request != null) BubbleLayer(ui.bubbles, surface, thumbnails, snapshot, handlers::onBubble, Modifier.fillMaxSize(), probe)
+    if (request != null) BubbleLayer(ui.bubbles, surface, thumbnails, snapshot, handlers::onBubble, Modifier.fillMaxSize(), probe, onZoom = handlers::onBubbleZoom, onZone = handlers::onBubbleZone)
     Column(
       modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(MapDimens.Inset).fillMaxWidth(),
       verticalArrangement = Arrangement.spacedBy(MapDimens.TightGap),

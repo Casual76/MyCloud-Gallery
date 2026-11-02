@@ -1273,7 +1273,7 @@ Le voci confermate si correggono prima della chiusura.
   copie temporanee tolte (D20).
 - **C437. Trascinamento in arrivo dal flusso di ricezione**, con conferma (D21).
 - **C438. Descrizioni per superficie**, a richiesta, mai salvate né esportate (D22).
-- **C439. Solo gli strumenti di accessibilità leggono i contenuti** (Android 14+, D24).
+- **C439. Solo gli strumenti di accessibilità leggono i contenuti** (Android 14+, D24). **P8 (02/11): provato sull'emulatore** (la marcatura sulla radice copre i nodi di Compose; il piano B non serve): `docs/sicurezza.md` C439.
 - **C440. Manifest firmato**: P-256, due chiavi fissate, anti-rigioco, tetti, campi critici, rifiuto totale di una busta non valida (D29, D31).
 - **C441. Effetti del manifest solo restrittivi**: sola lettura o fermo, mai cancellare, scaricare file nuovi, aggiungere host o mostrare testo
   libero (D29, D30).
@@ -1373,8 +1373,8 @@ Le voci confermate si correggono prima della chiusura.
 | `configChanges` rompe risorse che dipendono dalla configurazione | layout sbagliato dopo una rotazione | test di composizione a ogni soglia; risorse lette dalla composizione, non dall'activity | togliere `configChanges` e contare solo sullo stato salvato (MapLibre e video ripartono) |
 | Il blocco per processo ha un buco (una finestra che resta aperta) | contenuti visibili con il blocco attivo | test con due finestre finte e strumentati; revisione opus mirata | tornare a una finestra sola finché non è provato |
 | Le app che ricevono un trascinamento non accettano un descrittore a richiesta (vogliono un file con la posizione) | trascinamento che fallisce verso alcune app | prova con le app di Samsung e con l'app di prova | copia temporanea sempre per i media solo sul NAS (come con "Rimuovi la posizione") |
-| `accessibilityDataSensitive` sulla radice non copre i nodi di Compose | protezione parziale | prova con il servizio di prova in P8 | marcatura solo su Nascosti, password e QR; limite riscritto |
-| ATF segnala falsi positivi sul vetro sopra le foto | prove rosse senza un difetto vero | avvisi motivati per iscritto, contrasto misurato con `GalleryLegibility` | ATF solo per etichette e bersagli; contrasto solo con le nostre misure |
+| `accessibilityDataSensitive` sulla radice non copre i nodi di Compose | protezione parziale | prova con il servizio di prova in P8 | marcatura solo su Nascosti, password e QR; limite riscritto. **Esito P8 (02/11): la radice li copre (emulatore API 37), il piano B non serve** |
+| ATF segnala falsi positivi sul vetro sopra le foto | prove rosse senza un difetto vero | avvisi motivati per iscritto, contrasto misurato con `GalleryLegibility` | ATF solo per etichette e bersagli; contrasto solo con le nostre misure. **Esito P8 (02/11): nessun errore in 272 prove; a livello avviso 10 `TextContrastCheck` dell'Onboarding, motivati in `docs/decisioni.md`** |
 | TalkBack rallenta la griglia da 100 mila | scorrimento a scatti per chi usa TalkBack | descrizioni a richiesta, `warm` solo delle celle in vista | descrizioni senza nomi né testo letto nella griglia, complete nel viewer |
 | Il manifest sul NAS non arriva a chi viaggia senza VPN | blocco in ritardo per quel dispositivo | L552 dichiarato; il blocco serve soprattutto contro i danni al NAS, che senza NAS non si fanno | solo con una nuova risposta dell'utente (Q8 (b): anche da GitHub, con il suo limite) |
 | L'admin perde `pampa.jks` | nessun aggiornamento possibile per **tutte** le app Pampa (L556) | copia offline **aperta e provata** nella checklist | reinstallazione su ogni dispositivo con una chiave nuova e nuova approvazione |

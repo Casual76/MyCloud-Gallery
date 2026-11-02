@@ -99,4 +99,7 @@
   <string name="probe_report_reset">Azzera i numeri</string>
   <string name="probe_report_copied">Resoconto copiato.</string>
   <string name="probe_report_saved">Salvato in field-probe-report.txt, nella cartella files dell’app (adb pull).</string>
+  <!-- Fase 10 (P8, D24): il servizio di accessibilità di prova che non è uno strumento di accessibilità (solo numeri in logcat). -->
+  <string name="probe_a11y_label">MCG prova (accessibilità)</string>
+  <string name="probe_a11y_description">Prova di sicurezza: conta quanti nodi della finestra dell’app riesce a leggere. Non è uno strumento di accessibilità.</string>
 </resources>

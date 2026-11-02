@@ -20,7 +20,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidScreenDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidGroupSegment
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -70,7 +70,7 @@ fun DiagnosticsExportScreen(
       document == null -> item { FluidLoadingBlock() }
       else -> {
         item { SaveBar(saveResult, onSave) }
-        item { FluidSectionHeader(title = stringResource(R.string.diagnostics_export_preview)) }
+        item { GallerySectionHeader(title = stringResource(R.string.diagnostics_export_preview)) }
         val chunks = document.lines.chunked(LINES_PER_GROUP)
         chunks.forEachIndexed { index, lines ->
           item(key = "preview-$index") {

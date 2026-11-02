@@ -28,7 +28,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.pampa.mycloudgallery.core.designsystem.R
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocation
@@ -90,7 +90,7 @@ private fun SheetStage(content: @Composable ColumnScope.() -> Unit) {
         .fillMaxWidth()
         .padding(top = PageVisible)
         .heightIn(max = GallerySheetDefaults.MaxHeight)
-        .glassSurface(
+        .galleryGlass(
           state = backdrop,
           tint = GlassDefaults.modalTint(),
           shape = sheetShape,

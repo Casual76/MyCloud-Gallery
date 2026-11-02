@@ -28,7 +28,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -133,7 +133,7 @@ internal fun SecurityNoticeScreen(
         body = stringResource(R.string.notice_raid_detail),
       )
     }
-    item(key = "backup-header") { FluidSectionHeader(title = stringResource(R.string.notice_backup_section)) }
+    item(key = "backup-header") { GallerySectionHeader(title = stringResource(R.string.notice_backup_section)) }
     item(key = "backup") {
       FluidListGroup {
         ToggleRow(
@@ -146,7 +146,7 @@ internal fun SecurityNoticeScreen(
       }
     }
     item(key = "router-header") {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.notice_router_section),
         detail = stringResource(R.string.notice_router_section_detail),
       )
@@ -243,7 +243,7 @@ internal fun SummaryScreen(
       }
     }
     if (done.isNotEmpty()) {
-      item(key = "done-header") { FluidSectionHeader(title = stringResource(R.string.summary_section_done)) }
+      item(key = "done-header") { GallerySectionHeader(title = stringResource(R.string.summary_section_done)) }
       item(key = "done") {
         FluidListGroup {
           done.forEachIndexed { index, step ->
@@ -261,7 +261,7 @@ internal fun SummaryScreen(
     }
     if (pending.isNotEmpty()) {
       item(key = "pending-header") {
-        FluidSectionHeader(
+        GallerySectionHeader(
           title = stringResource(R.string.summary_section_pending),
           detail = stringResource(R.string.summary_section_pending_detail),
         )

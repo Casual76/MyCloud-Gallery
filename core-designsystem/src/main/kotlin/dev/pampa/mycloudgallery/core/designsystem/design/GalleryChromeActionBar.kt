@@ -16,7 +16,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidPressImmediate
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
 
 /**
@@ -36,7 +36,7 @@ fun GalleryChromeActionBar(
   modifier: Modifier = Modifier,
 ) {
   val surface = if (backdrop != null) {
-    Modifier.glassSurface(state = backdrop, tint = style.tint, shape = FluidCapsuleShape, role = GlassRole.Floating)
+    Modifier.galleryGlass(state = backdrop, tint = style.tint, shape = FluidCapsuleShape, role = GlassRole.Floating)
   } else {
     Modifier.background(style.tint.fallback, FluidCapsuleShape)
   }

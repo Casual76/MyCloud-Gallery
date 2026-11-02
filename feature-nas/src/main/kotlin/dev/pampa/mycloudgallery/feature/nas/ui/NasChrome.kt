@@ -44,7 +44,7 @@ import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidPressImmediate
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.pampa.mycloudgallery.core.designsystem.design.ActionBarHeight
 import dev.pampa.mycloudgallery.core.designsystem.design.ContentRange
@@ -199,7 +199,7 @@ internal fun NasActionCapsule(
     Row(
       modifier = modifier
         .height(ActionBarHeight)
-        .glassSurface(state = backdrop, tint = style.tint, shape = FluidCapsuleShape, role = GlassRole.Floating)
+        .galleryGlass(state = backdrop, tint = style.tint, shape = FluidCapsuleShape, role = GlassRole.Floating)
         .padding(horizontal = NasDimens.BarButtonGap),
       horizontalArrangement = Arrangement.spacedBy(NasDimens.BarButtonGap),
       verticalAlignment = Alignment.CenterVertically,

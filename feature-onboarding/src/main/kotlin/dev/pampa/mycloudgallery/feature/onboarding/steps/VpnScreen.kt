@@ -25,7 +25,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -113,7 +113,7 @@ internal fun VpnScreen(
         body = stringResource(R.string.vpn_why_detail),
       )
     }
-    item(key = "guide-header") { FluidSectionHeader(title = stringResource(R.string.vpn_guide_section)) }
+    item(key = "guide-header") { GallerySectionHeader(title = stringResource(R.string.vpn_guide_section)) }
     item(key = "guide") {
       FluidListGroup {
         GuideRow(Icons.Rounded.Router, R.string.vpn_guide_peer, R.string.vpn_guide_peer_detail)
@@ -136,7 +136,7 @@ internal fun VpnScreen(
       }
     }
     item(key = "control-header") {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.vpn_control_section),
         detail = stringResource(R.string.vpn_control_section_detail),
       )

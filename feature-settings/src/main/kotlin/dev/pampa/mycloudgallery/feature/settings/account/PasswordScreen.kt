@@ -25,7 +25,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -141,7 +141,7 @@ internal fun PasswordScreen(state: PasswordUiState, actions: PasswordActions) {
     state.feedback?.let { item { FeedbackNote(it) } }
     if (state.stages.isNotEmpty()) item { StageResults(state.stages) }
 
-    item { FluidSectionHeader(title = stringResource(R.string.password_section_new)) }
+    item { GallerySectionHeader(title = stringResource(R.string.password_section_new)) }
     item {
       FluidCard {
         FluidTextField(

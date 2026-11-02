@@ -34,7 +34,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -135,7 +135,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.inviteForm(state: Inv
   }
   state.feedback?.let { item { FeedbackNote(it) } }
 
-  item { FluidSectionHeader(title = stringResource(R.string.invite_section_who)) }
+  item { GallerySectionHeader(title = stringResource(R.string.invite_section_who)) }
   item {
     FluidCard {
       FluidTextField(
@@ -180,7 +180,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.inviteForm(state: Inv
   }
 
   item {
-    FluidSectionHeader(
+    GallerySectionHeader(
       title = stringResource(R.string.invite_section_preset),
       detail = stringResource(R.string.invite_section_preset_detail),
     )
@@ -263,7 +263,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.inviteShown(state: In
     }
   }
   if (summary != null) {
-    item { FluidSectionHeader(title = stringResource(R.string.invite_shown_section)) }
+    item { GallerySectionHeader(title = stringResource(R.string.invite_shown_section)) }
     item {
       FluidListGroup {
         FluidListRow(
@@ -303,7 +303,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.inviteShown(state: In
   // Per chi entra senza QR (ON-1): i dati da leggere a voce, uno per riga.
   if (summary != null && summary.familyId.isNotEmpty()) {
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.invite_manual_section),
         detail = stringResource(R.string.invite_manual_section_detail),
       )

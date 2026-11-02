@@ -38,7 +38,7 @@ import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -146,11 +146,11 @@ fun AlbumListScreen(
         notices(state, handlers)
         if (ui.reorderable) item(key = "hint-reorder") { SectionNote(stringResource(R.string.albums_reorder_hint)) }
         if (state.mineAndShared.isNotEmpty()) {
-          item(key = "header-mine") { FluidSectionHeader(title = stringResource(R.string.albums_header_mine)) }
+          item(key = "header-mine") { GallerySectionHeader(title = stringResource(R.string.albums_header_mine)) }
           albumCards("mine", state.mineAndShared, columns, thumbnails, people, ui.reorderable, handlers)
         }
         if (state.smart.isNotEmpty()) {
-          item(key = "header-smart") { FluidSectionHeader(title = stringResource(R.string.albums_header_smart)) }
+          item(key = "header-smart") { GallerySectionHeader(title = stringResource(R.string.albums_header_smart)) }
           albumCards("smart", state.smart, columns, thumbnails, people, ui.reorderable, handlers)
         }
         leftAlbums(ui.left, handlers)
@@ -293,7 +293,7 @@ private fun AlbumCard(
 
 private fun LazyListScope.leftAlbums(left: List<Album.Shared>, handlers: AlbumListHandlers) {
   if (left.isEmpty()) return
-  item(key = "header-left") { FluidSectionHeader(title = stringResource(R.string.albums_header_left), detail = stringResource(R.string.albums_left_detail)) }
+  item(key = "header-left") { GallerySectionHeader(title = stringResource(R.string.albums_header_left), detail = stringResource(R.string.albums_left_detail)) }
   item(key = "left") {
     FluidListGroup {
       left.forEachIndexed { index, album ->

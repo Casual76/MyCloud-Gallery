@@ -27,7 +27,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -107,16 +107,16 @@ internal fun NasAddressScreen(
       loading = ui.checking,
     ),
   ) {
-    item(key = "home-header") { FluidSectionHeader(title = stringResource(R.string.address_section_home)) }
+    item(key = "home-header") { GallerySectionHeader(title = stringResource(R.string.address_section_home)) }
     item(key = "home") { HomeSection(home = ui.home, onConfirm = actions.onConfirmHome, onRefresh = actions.onRefreshHome, onProblemAction = actions.onProblemAction) }
 
     if (confirmed) {
-      item(key = "found-header") { FluidSectionHeader(title = stringResource(R.string.address_section_found)) }
+      item(key = "found-header") { GallerySectionHeader(title = stringResource(R.string.address_section_found)) }
       item(key = "found") {
         FoundSection(ui = ui, form = form)
       }
       item(key = "manual-header") {
-        FluidSectionHeader(
+        GallerySectionHeader(
           title = stringResource(R.string.address_section_manual),
           detail = stringResource(R.string.address_section_manual_detail),
         )

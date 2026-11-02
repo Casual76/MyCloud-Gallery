@@ -19,7 +19,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -113,7 +113,7 @@ fun PreviewQualityScreen(
       item { FluidSectionFootnote(text = stringResource(R.string.quality_not_active)) }
       return@FluidScreen
     }
-    item { FluidSectionHeader(title = stringResource(R.string.quality_section_level)) }
+    item { GallerySectionHeader(title = stringResource(R.string.quality_section_level)) }
     item {
       FluidListGroup {
         PreviewLevel.entries.forEachIndexed { index, level ->
@@ -141,7 +141,7 @@ fun PreviewQualityScreen(
         },
       )
     }
-    item { FluidSectionHeader(title = stringResource(R.string.quality_section_covers)) }
+    item { GallerySectionHeader(title = stringResource(R.string.quality_section_covers)) }
     item {
       FluidListGroup {
         FluidListRow(

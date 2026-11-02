@@ -23,7 +23,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -160,7 +160,7 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
 
     item { AccountHero(state = state, onPassword = links.openPassword) }
 
-    item { FluidSectionHeader(title = stringResource(R.string.account_section_account)) }
+    item { GallerySectionHeader(title = stringResource(R.string.account_section_account)) }
     item {
       FluidListGroup {
         ValueRow(R.string.account_user, account.user, Icons.Rounded.Person)
@@ -173,7 +173,7 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
       }
     }
 
-    item { FluidSectionHeader(title = stringResource(R.string.account_section_change)) }
+    item { GallerySectionHeader(title = stringResource(R.string.account_section_change)) }
     item {
       FluidListGroup {
         FluidListRow(
@@ -202,7 +202,7 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
     }
 
     (state.connection as? NasConnState.Ready)?.let { ready ->
-      item { FluidSectionHeader(title = stringResource(R.string.account_section_link)) }
+      item { GallerySectionHeader(title = stringResource(R.string.account_section_link)) }
       item {
         FluidListGroup {
           ValueRow(

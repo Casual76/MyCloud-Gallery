@@ -24,7 +24,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -146,7 +146,7 @@ internal fun AreasScreen(
           }
         }
         item(key = "common-header") {
-          FluidSectionHeader(
+          GallerySectionHeader(
             title = stringResource(R.string.areas_section_common),
             detail = stringResource(R.string.areas_section_common_detail),
           )
@@ -162,7 +162,7 @@ internal fun AreasScreen(
           )
         }
         item(key = "private-header") {
-          FluidSectionHeader(
+          GallerySectionHeader(
             title = stringResource(R.string.areas_section_private),
             detail = stringResource(R.string.areas_section_private_detail),
           )

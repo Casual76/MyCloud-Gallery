@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 10 P8 (D23, E-AC8): l'elenco delle bolle e le azioni al posto del tocco, per TalkBack e Switch Access. -->
+  <string name="mappa_bubbles_list">Elenco dei luoghi in vista</string>
+  <string name="mappa_bubble_zoom">Avvicina</string>
+  <string name="mappa_bubble_zone">Apri la zona</string>
+</resources>

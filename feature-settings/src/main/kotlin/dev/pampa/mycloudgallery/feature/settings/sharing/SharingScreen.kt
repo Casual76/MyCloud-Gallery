@@ -21,7 +21,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -61,7 +61,7 @@ fun SharingScreen(removeLocation: Boolean, onBack: () -> Unit, onToggle: (Boolea
   val switchTitle = stringResource(R.string.sharing_remove_location)
   val switchDetail = stringResource(R.string.sharing_remove_location_detail)
   FluidScreen(title = stringResource(R.string.sharing_title), onBack = onBack) {
-    item { FluidSectionHeader(title = stringResource(R.string.sharing_section_location)) }
+    item { GallerySectionHeader(title = stringResource(R.string.sharing_section_location)) }
     item {
       FluidListGroup {
         FluidListRow(

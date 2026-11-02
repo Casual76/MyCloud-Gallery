@@ -30,6 +30,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalContext
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
+import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
@@ -156,10 +159,16 @@ private fun ResultsHeader(
   handlers: SearchHandlers,
 ) {
   val notices = remember(results, readiness, queryModel) { SearchNoticeItems.of(results.notices, results.coverage, readiness, queryModel) }
-  Column(verticalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
-    SearchChipBar(results.chips, results.confident.snapshot, thumbnails, handlers)
-    SearchOrderSelector(results.order, handlers::onSetOrder)
-    SearchNotices(notices, handlers)
+  // Fase 10 P8 (D23 (6), §2.7 "Cerca"): il conteggio dei risultati si annuncia **una volta** a ogni ricerca (regione viva educata), non a ogni cella.
+  val count = results.confident.size
+  val spoken = LocalContext.current.resources.getQuantityString(R.plurals.search_results_count, count, GalleryNumbers.format(count))
+  Box {
+    Column(verticalArrangement = Arrangement.spacedBy(SearchDimens.BlockGap)) {
+      SearchChipBar(results.chips, results.confident.snapshot, thumbnails, handlers)
+      SearchOrderSelector(results.order, handlers::onSetOrder)
+      SearchNotices(notices, handlers)
+    }
+    GalleryLiveAnnouncement(spoken)
   }
 }
 

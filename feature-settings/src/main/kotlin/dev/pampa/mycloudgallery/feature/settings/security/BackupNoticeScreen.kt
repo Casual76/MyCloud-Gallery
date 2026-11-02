@@ -20,7 +20,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -95,7 +95,7 @@ internal fun BackupNoticeScreen(onBack: () -> Unit, onReviewChecklist: (() -> Un
     }
 
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.backup_section_checklist),
         detail = stringResource(R.string.backup_section_checklist_detail),
       )

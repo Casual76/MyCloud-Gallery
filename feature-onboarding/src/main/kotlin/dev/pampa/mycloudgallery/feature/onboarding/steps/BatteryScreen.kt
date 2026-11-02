@@ -16,7 +16,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -151,7 +151,7 @@ internal fun BatteryScreen(
         body = stringResource(R.string.battery_why_detail),
       )
     }
-    item(key = "header") { FluidSectionHeader(title = stringResource(R.string.battery_section)) }
+    item(key = "header") { GallerySectionHeader(title = stringResource(R.string.battery_section)) }
     item(key = "list") {
       FluidListGroup {
         BatteryAction.entries.forEachIndexed { index, action ->
@@ -168,7 +168,7 @@ internal fun BatteryScreen(
     val manual = BatteryAction.entries.filter { ui.health.verification(it).let { v -> v == Verification.UNKNOWN || v == Verification.TODO && it == BatteryAction.NEVER_SLEEP } }
     if (manual.isNotEmpty()) {
       item(key = "manual-header") {
-        FluidSectionHeader(
+        GallerySectionHeader(
           title = stringResource(R.string.battery_manual_section),
           detail = stringResource(R.string.battery_manual_section_detail),
         )

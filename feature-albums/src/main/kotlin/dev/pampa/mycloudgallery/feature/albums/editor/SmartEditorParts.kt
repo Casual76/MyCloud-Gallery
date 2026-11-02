@@ -34,7 +34,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSlider
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
@@ -74,7 +74,7 @@ import kotlin.math.roundToInt
 internal fun PeriodSection(period: SmartPeriod?, series: List<LocalDayRange>, handlers: SmartEditorHandlers, onEditDates: () -> Unit) {
   val resources = LocalContext.current.resources
   Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.TightGap)) {
-    FluidSectionHeader(title = stringResource(R.string.editor_period))
+    GallerySectionHeader(title = stringResource(R.string.editor_period))
     FluidListGroup {
       when (period) {
         null -> FluidListRow(
@@ -134,7 +134,7 @@ private fun rangeText(range: LocalDayRange): String =
 internal fun PlaceSection(place: PlaceRule?, alternatives: List<PlaceAlternative>, handlers: SmartEditorHandlers) {
   val resources = LocalContext.current.resources
   Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.TightGap)) {
-    FluidSectionHeader(title = stringResource(R.string.editor_place))
+    GallerySectionHeader(title = stringResource(R.string.editor_place))
     FluidListGroup {
       if (place == null) {
         FluidListRow(
@@ -184,7 +184,7 @@ internal fun PlaceSection(place: PlaceRule?, alternatives: List<PlaceAlternative
 @Composable
 internal fun TextSection(text: String, noSearch: Boolean, handlers: SmartEditorHandlers) {
   Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.TightGap)) {
-    FluidSectionHeader(title = stringResource(R.string.editor_text))
+    GallerySectionHeader(title = stringResource(R.string.editor_text))
     FluidTextField(value = text, onValueChange = handlers::onText, placeholder = stringResource(R.string.editor_text_hint), modifier = Modifier.fillMaxWidth())
     // E-AL9, D15: senza il motore di ricerca la descrizione non agisce. Lo dice qui, dove si scrive, e le altre regole lavorano lo stesso.
     if (noSearch) SectionNote(stringResource(R.string.editor_text_no_search))
@@ -195,7 +195,7 @@ internal fun TextSection(text: String, noSearch: Boolean, handlers: SmartEditorH
 internal fun ExamplesSection(examples: List<MediaId>, thumbnails: AlbumThumbnails, handlers: SmartEditorHandlers) {
   val resources = LocalContext.current.resources
   Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.TightGap)) {
-    FluidSectionHeader(title = stringResource(R.string.editor_examples))
+    GallerySectionHeader(title = stringResource(R.string.editor_examples))
     FluidListGroup {
       if (examples.isNotEmpty()) {
         LazyRow(
@@ -233,7 +233,7 @@ internal fun ExamplesSection(examples: List<MediaId>, thumbnails: AlbumThumbnail
 @Composable
 internal fun SourcesSection(sources: Set<SmartSource>, handlers: SmartEditorHandlers) {
   Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.TightGap)) {
-    FluidSectionHeader(title = stringResource(R.string.editor_sources))
+    GallerySectionHeader(title = stringResource(R.string.editor_sources))
     FluidListGroup {
       val rows = listOf(
         SmartSource.MY_PHONE to R.string.editor_source_phone, SmartSource.MY_PRIVATE to R.string.editor_source_private,
@@ -250,7 +250,7 @@ internal fun SourcesSection(sources: Set<SmartSource>, handlers: SmartEditorHand
 @Composable
 internal fun TypesSection(types: Set<SmartMediaType>, handlers: SmartEditorHandlers) {
   Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.TightGap)) {
-    FluidSectionHeader(title = stringResource(R.string.editor_types))
+    GallerySectionHeader(title = stringResource(R.string.editor_types))
     FluidListGroup {
       SwitchRow(stringResource(R.string.editor_type_photo), SmartMediaType.PHOTO in types) { handlers.onType(SmartMediaType.PHOTO) }
       FluidListDivider()
@@ -275,7 +275,7 @@ private fun SwitchRow(title: String, checked: Boolean, onToggle: () -> Unit) {
 internal fun PreviewSection(ui: SmartEditorUi, thumbnails: AlbumThumbnails) {
   val preview = ui.preview
   Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.TightGap)) {
-    FluidSectionHeader(title = stringResource(R.string.editor_preview))
+    GallerySectionHeader(title = stringResource(R.string.editor_preview))
     FluidListGroup {
       if (preview == null || ui.previewing) {
         SectionNote(stringResource(R.string.editor_preview_working))

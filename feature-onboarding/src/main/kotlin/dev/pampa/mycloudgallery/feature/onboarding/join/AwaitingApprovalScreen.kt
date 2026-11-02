@@ -18,7 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -78,7 +78,7 @@ fun AwaitingApprovalScreen(
     primary = onContinue?.let { DockAction(label = stringResource(R.string.awaiting_continue), onClick = it) },
   ) {
     item(key = "code-header") {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.awaiting_code_section),
         detail = stringResource(R.string.awaiting_code_section_detail),
       )
@@ -93,7 +93,7 @@ fun AwaitingApprovalScreen(
     }
     if (deviceKeyQr != null) {
       item(key = "qr-header") {
-        FluidSectionHeader(
+        GallerySectionHeader(
           title = stringResource(R.string.awaiting_qr_section),
           detail = stringResource(R.string.awaiting_qr_section_detail),
         )
@@ -109,7 +109,7 @@ fun AwaitingApprovalScreen(
         }
       }
     }
-    item(key = "steps-header") { FluidSectionHeader(title = stringResource(R.string.awaiting_steps_section)) }
+    item(key = "steps-header") { GallerySectionHeader(title = stringResource(R.string.awaiting_steps_section)) }
     item(key = "steps") {
       FluidListGroup {
         FluidListRow(

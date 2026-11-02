@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 10 P8 (D23): accessibilita'. Le azioni al posto dei gesti e gli annunci della Libreria. -->
+  <string name="grid_level_next">Livello successivo</string>
+  <string name="grid_level_previous">Livello precedente</string>
+  <string name="cell_action_favorite">Aggiungi ai preferiti</string>
+  <string name="cell_action_unfavorite">Togli dai preferiti</string>
+  <string name="cell_action_share">Condividi</string>
+  <string name="cell_action_hide">Nascondi</string>
+  <string name="cell_action_delete">Elimina dal telefono</string>
+</resources>

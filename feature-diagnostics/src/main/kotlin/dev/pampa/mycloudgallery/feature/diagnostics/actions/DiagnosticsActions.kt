@@ -86,6 +86,19 @@ object DiagnosticsActions {
   }
 
   /**
+   * Fase 10 P8 (D23, §2.7 "Backup, NAS, Diagnostica"): la **conseguenza** di un'azione che cambia cosa fa l'app sul NAS, o 0 se il nome basta.
+   * Sta nella riga (sotto il nome), quindi anche nel nome che TalkBack legge: "Ferma le scritture sul NAS. Il backup e le operazioni sul NAS si
+   * fermano...". Un tasto che ferma o fa ripartire il lavoro non puo' dire solo cosa e', deve dire cosa succede.
+   */
+  @StringRes
+  fun consequenceRes(action: DiagAction): Int = when (action) {
+    NAS_STOP_WRITES -> R.string.diagnostics_action_nas_stop_writes_effect
+    NAS_RESUME_WRITES -> R.string.diagnostics_action_nas_resume_writes_effect
+    NAS_RELEASE_FREEZE -> R.string.diagnostics_action_nas_release_freeze_effect
+    else -> 0
+  }
+
+  /**
    * L'azione si puo' proporre: la esegue questo modulo oppure `:app` ha dichiarato di eseguirla ([appActions]).
    * Un tasto che non fa niente e' peggio di nessun tasto.
    */

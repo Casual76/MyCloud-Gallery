@@ -32,7 +32,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -196,7 +196,7 @@ private fun ChoiceRow(choice: PeopleAlbumsChoice, selected: PeopleAlbumsChoice?,
 }
 
 private fun LazyListScope.devices(devices: List<DeviceAck>, footnote: Boolean, onOpenDevices: (() -> Unit)?) {
-  item(key = "devices-header") { FluidSectionHeader(title = stringResource(R.string.faces_erase_section_devices)) }
+  item(key = "devices-header") { GallerySectionHeader(title = stringResource(R.string.faces_erase_section_devices)) }
   item(key = "devices") {
     FluidListGroup {
       devices.forEachIndexed { index, device ->
@@ -269,7 +269,7 @@ private fun LazyListScope.expired(onReload: () -> Unit, onClose: () -> Unit) {
 }
 
 private fun LazyListScope.progress(state: EraseSheetState.Progress, onClose: () -> Unit, onOpenDevices: (() -> Unit)?) {
-  item(key = "progress-header") { FluidSectionHeader(title = stringResource(R.string.faces_erase_section_progress)) }
+  item(key = "progress-header") { GallerySectionHeader(title = stringResource(R.string.faces_erase_section_progress)) }
   item(key = "progress") {
     FluidListGroup(modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
       StepRow(R.string.faces_erase_row_local, state.local, Icons.Rounded.PhoneAndroid)

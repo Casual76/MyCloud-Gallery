@@ -24,7 +24,7 @@ import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.albums.contract.LocalDayRange
@@ -244,5 +244,5 @@ private fun SaveBar(ui: SmartEditorUi, handlers: SmartEditorHandlers) {
 
 @Composable
 internal fun SectionTitle(title: String) {
-  FluidSectionHeader(title = title)
+  GallerySectionHeader(title = title)
 }

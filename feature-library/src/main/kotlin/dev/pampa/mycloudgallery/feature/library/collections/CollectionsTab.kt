@@ -26,7 +26,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
 import dev.antigravity.fluidengine.ui.fluid.FluidDetailPlaceholder
 import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.FluidPaneSizes
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
@@ -289,7 +289,7 @@ private fun CollectionsList(
       }
     }
     for (section in state.visible) {
-      item(key = "header-${section.code}") { FluidSectionHeader(title = section.title.resolve()) }
+      item(key = "header-${section.code}") { GallerySectionHeader(title = section.title.resolve()) }
       item(key = "section-${section.code}") {
         SectionGroup(section, selectedKind, selectedEntry, twoPane, onSelectKind, onSelectEntry)
       }

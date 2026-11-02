@@ -28,7 +28,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -67,17 +67,17 @@ fun SearchSettingsScreen(
   val resources = LocalContext.current.resources
   FluidScreen(title = stringResource(R.string.models_title), subtitle = stringResource(R.string.models_subtitle), onBack = onBack) {
     if (hasIndexer) {
-      item(key = "indexer-header") { FluidSectionHeader(title = stringResource(R.string.models_section_indexer)) }
+      item(key = "indexer-header") { GallerySectionHeader(title = stringResource(R.string.models_section_indexer)) }
       item(key = "indexer") { IndexerBlock(state, measuring, handlers) }
     }
     if (hasTextReading) {
-      item(key = "reading-header") { FluidSectionHeader(title = stringResource(R.string.models_section_reading)) }
+      item(key = "reading-header") { GallerySectionHeader(title = stringResource(R.string.models_section_reading)) }
       item(key = "reading") { ReadingBlock(state, handlers) }
     }
-    item(key = "coverage-header") { FluidSectionHeader(title = stringResource(R.string.models_section_coverage)) }
+    item(key = "coverage-header") { GallerySectionHeader(title = stringResource(R.string.models_section_coverage)) }
     item(key = "coverage") { CoverageBlock(state, resources) }
     if (state.indexer.areasWithoutIndexer.isNotEmpty()) {
-      item(key = "areas-header") { FluidSectionHeader(title = stringResource(R.string.models_section_areas)) }
+      item(key = "areas-header") { GallerySectionHeader(title = stringResource(R.string.models_section_areas)) }
       item(key = "areas") {
         FluidListGroup {
           state.indexer.areasWithoutIndexer.forEachIndexed { index, area ->
@@ -94,7 +94,7 @@ fun SearchSettingsScreen(
       }
     }
     if (hasModels) modelsSection(state.models, handlers)
-    item(key = "history-header") { FluidSectionHeader(title = stringResource(R.string.models_section_history)) }
+    item(key = "history-header") { GallerySectionHeader(title = stringResource(R.string.models_section_history)) }
     item(key = "history") { HistoryBlock(state.historyCount, handlers) }
   }
 }

@@ -17,7 +17,7 @@ import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -87,7 +87,7 @@ internal fun MapPrivacyScreen(state: MapPrivacyState, handlers: MapPrivacyHandle
 
 private fun LazyListScope.shown(state: MapPrivacyState.Shown, handlers: MapPrivacyHandlers) {
   val on = state.online is MapOnline.On
-  item(key = "header-online") { FluidSectionHeader(title = stringResource(R.string.mappa_settings_online_header)) }
+  item(key = "header-online") { GallerySectionHeader(title = stringResource(R.string.mappa_settings_online_header)) }
   item(key = "online") {
     FluidListGroup {
       SwitchRow(
@@ -111,7 +111,7 @@ private fun LazyListScope.shown(state: MapPrivacyState.Shown, handlers: MapPriva
   if (state.damaged) item(key = "damaged") { FluidSectionFootnote(text = stringResource(R.string.mappa_settings_damaged)) }
   // La nota breve (Q1 (c), `MapPrivacyNote`): cosa esce, a chi (anche attorno a una foto aperta sulla mappa: R1) e che vale solo su questo dispositivo.
   item(key = "note") { FluidSectionFootnote(text = stringResource(R.string.mappa_settings_note)) }
-  item(key = "header-zones") { FluidSectionHeader(title = stringResource(R.string.mappa_settings_zones_header)) }
+  item(key = "header-zones") { GallerySectionHeader(title = stringResource(R.string.mappa_settings_zones_header)) }
   item(key = "zones") {
     FluidListGroup {
       FluidListRow(

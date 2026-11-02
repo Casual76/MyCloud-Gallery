@@ -22,12 +22,12 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 import javax.inject.Inject
@@ -71,7 +71,7 @@ fun WidgetSettingsScreen(
   onPeriod: (WidgetRefresh) -> Unit,
 ) {
   FluidScreen(title = stringResource(R.string.widget_title), onBack = onBack) {
-    item { FluidSectionHeader(title = stringResource(R.string.widget_section_content)) }
+    item { GallerySectionHeader(title = stringResource(R.string.widget_section_content)) }
     item {
       FluidListGroup {
         WidgetContent.entries.forEachIndexed { index, option ->
@@ -88,7 +88,7 @@ fun WidgetSettingsScreen(
     }
     item { FluidSectionFootnote(text = stringResource(R.string.widget_content_footnote)) }
 
-    item { FluidSectionHeader(title = stringResource(R.string.widget_section_period)) }
+    item { GallerySectionHeader(title = stringResource(R.string.widget_section_period)) }
     item {
       FluidListGroup {
         WidgetRefresh.entries.forEachIndexed { index, option ->
@@ -105,11 +105,11 @@ fun WidgetSettingsScreen(
     }
     item { FluidSectionFootnote(text = stringResource(R.string.widget_period_footnote)) }
 
-    item { FluidSectionHeader(title = stringResource(R.string.widget_section_privacy)) }
+    item { GallerySectionHeader(title = stringResource(R.string.widget_section_privacy)) }
     item { FluidSectionFootnote(text = stringResource(R.string.widget_privacy_hidden)) }
     item { FluidSectionFootnote(text = stringResource(R.string.widget_privacy_lock)) }
     item { FluidSectionFootnote(text = stringResource(R.string.widget_privacy_home)) }
-    item { FluidSectionHeader(title = stringResource(R.string.widget_section_add)) }
+    item { GallerySectionHeader(title = stringResource(R.string.widget_section_add)) }
     item { FluidSectionFootnote(text = stringResource(R.string.widget_add_how)) }
   }
 }

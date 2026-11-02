@@ -39,7 +39,9 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -124,6 +126,7 @@ internal fun LibraryScreen(
 
   var deleting by remember { mutableStateOf(false) }
   var hidingGroups by remember { mutableStateOf(false) }
+  val cellLabels = rememberLibraryCellLabels()
   var noticesHeightPx by remember { mutableIntStateOf(0) }
 
   val keeper = rememberSaveable(saver = positionSaver(grid)) { PositionKeeper(null) }
@@ -156,7 +159,7 @@ internal fun LibraryScreen(
 
   // I tag della chrome come id di risorsa: gli strumenti di misura sull'emulatore (uiautomator) la trovano per nome.
   // Fase 10 (P6, D21): la Libreria e' una destinazione per le foto trascinate da un'altra app ("Salva sul NAS": si apre il foglio della ricezione, niente parte senza un tocco).
-  Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).semantics { testTagsAsResourceId = true }.mediaDropTarget(DropTarget.Library)) {
+  Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).semantics { testTagsAsResourceId = true; isTraversalGroup = true }.mediaDropTarget(DropTarget.Library)) {
     // Il fondale della pagina: la griglia e le sfumature di bordo. Tutto il vetro (chrome, pillola, scrubber) lo rifrange.
     Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
       when {
@@ -188,6 +191,8 @@ internal fun LibraryScreen(
           onDeleteKey = { deleting = true },
           // Fase 10 (P6, D20): le foto della Libreria (o la selezione) si trascinano verso un'altra app.
           dragOrigin = DragOrigin.LIBRARY,
+          // Fase 10 P8 (D23): Preferito, Condividi, Nascondi, Elimina come azioni della cella, per TalkBack e Switch Access.
+          cellActions = { id -> libraryCellActions(state, id, cellLabels, scope, onDelete = { deleting = true }, onHideGroups = { hidingGroups = true }) },
         )
       }
       GridTopEdgeScrim(topChrome, Modifier.align(Alignment.TopCenter))
@@ -206,6 +211,8 @@ internal fun LibraryScreen(
           .align(Alignment.TopCenter)
           .padding(top = topChrome + GalleryChromeDefaults.Gap, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter)
           .onSizeChanged { noticesHeightPx = it.height }
+          // Fase 10 P8 (D23 (3)): gli avvisi si leggono dopo la barra di vetro e prima della griglia.
+          .semantics { traversalIndex = -1f }
           .galleryChromeTag("avvisi"),
       )
     }
@@ -217,7 +224,8 @@ internal fun LibraryScreen(
       showCommands = !showPermission,
       empty = empty,
       onOpenSettings = onOpenSettings,
-      modifier = Modifier.align(Alignment.TopStart),
+      // Fase 10 P8 (D23 (3)): la barra di vetro in alto si legge **prima** del contenuto, come si vede.
+      modifier = Modifier.align(Alignment.TopStart).semantics { traversalIndex = -2f },
     )
 
     // Lo scrubber fra la chrome in alto e il posto della pillola: la maniglia non arriva mai sotto un altro controllo.
@@ -234,11 +242,15 @@ internal fun LibraryScreen(
       visible = grid.selecting && !showPermission && !empty,
       grid = grid,
       backdrop = backdrop,
-      modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = slotBottom),
+      // La barra delle azioni, in fondo, si legge dopo la griglia (D23 (3)).
+      modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = slotBottom).semantics { traversalIndex = 1f },
       veilAlpha = pillVeil,
     ) {
       selectionActions(state, onDelete = { deleting = true }, onHideGroups = { hidingGroups = true })
     }
+
+    // Fase 10 P8 (D23 (6)): "12 selezionati" detto una volta a ogni cambio, mai ripetuto da altro.
+    SelectionAnnouncer(grid)
 
     LibraryDeleteSheet(visible = deleting, state = state, onDismiss = { deleting = false })
     LibraryHideGroupSheet(visible = hidingGroups, state = state, onDismiss = { hidingGroups = false })

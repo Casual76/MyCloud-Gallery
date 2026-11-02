@@ -38,7 +38,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -251,7 +251,7 @@ private fun LazyListScope.header(page: PersonPageState.Ready, crops: PeopleCrops
 /** "Forse e' anche…": una riga per proposta, con il volto dell'altra persona; un tocco apre il foglio con i due volti e "Si'" / "No". */
 private fun LazyListScope.proposals(list: List<MergeProposal>, crops: PeopleCrops, handlers: PersonPageHandlers) {
   if (list.isEmpty()) return
-  item(key = "header-maybe") { FluidSectionHeader(title = stringResource(R.string.persone_maybe_header), detail = stringResource(R.string.persone_maybe_detail)) }
+  item(key = "header-maybe") { GallerySectionHeader(title = stringResource(R.string.persone_maybe_header), detail = stringResource(R.string.persone_maybe_detail)) }
   item(key = "maybe") {
     FluidListGroup {
       list.forEachIndexed { index, proposal ->

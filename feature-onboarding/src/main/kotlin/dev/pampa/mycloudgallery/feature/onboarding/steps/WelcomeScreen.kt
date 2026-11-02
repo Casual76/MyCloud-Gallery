@@ -20,7 +20,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -95,7 +95,7 @@ internal fun WelcomeScreen(
     if (problem != null) {
       item(key = "problem") { ProblemPanel(problem = problem, onAction = onProblemAction) }
     }
-    item(key = "header-start") { FluidSectionHeader(title = stringResource(R.string.welcome_section_start)) }
+    item(key = "header-start") { GallerySectionHeader(title = stringResource(R.string.welcome_section_start)) }
     item(key = "found") {
       FluidListGroup {
         FluidListRow(
@@ -107,7 +107,7 @@ internal fun WelcomeScreen(
         )
       }
     }
-    item(key = "header-join") { FluidSectionHeader(title = stringResource(R.string.welcome_section_join)) }
+    item(key = "header-join") { GallerySectionHeader(title = stringResource(R.string.welcome_section_join)) }
     item(key = "join") {
       FluidListGroup {
         FluidListRow(
@@ -127,7 +127,7 @@ internal fun WelcomeScreen(
         )
       }
     }
-    item(key = "header-admin") { FluidSectionHeader(title = stringResource(R.string.welcome_section_admin)) }
+    item(key = "header-admin") { GallerySectionHeader(title = stringResource(R.string.welcome_section_admin)) }
     item(key = "admin") {
       FluidListGroup {
         FluidListRow(

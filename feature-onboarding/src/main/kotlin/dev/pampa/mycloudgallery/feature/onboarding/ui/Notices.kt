@@ -22,7 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingWarning
 import dev.pampa.mycloudgallery.feature.onboarding.R
@@ -86,7 +86,7 @@ internal fun LazyListScope.chromeItems(chrome: StepChrome) {
  */
 internal fun LazyListScope.warningItems(chrome: StepChrome) {
   if (chrome.warnings.isEmpty()) return
-  item(key = "warnings-header") { FluidSectionHeader(title = stringResource(R.string.warnings_section)) }
+  item(key = "warnings-header") { GallerySectionHeader(title = stringResource(R.string.warnings_section)) }
   chrome.warnings.forEach { warning ->
     item(key = "warning-${warning.name}") {
       val spec = warning.spec()

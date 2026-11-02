@@ -73,4 +73,6 @@ dependencies {
   testImplementation appDeps.roborazzi
   testImplementation appDeps.roborazziCompose
   testImplementation appDeps.roborazziJunitRule
+  // Fase 10 P8 (D28): il controllo ATF sugli screenshot, solo nei test (mai nel dex).
+  testImplementation appDeps.roborazziAccessibilityCheck
 }

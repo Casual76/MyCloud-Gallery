@@ -27,7 +27,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -114,7 +114,7 @@ internal fun StartOverGuideScreen(familyFolder: String?, onBack: () -> Unit) {
         tone = FluidTone.Info,
       )
     }
-    item { FluidSectionHeader(title = stringResource(R.string.family_startover_steps_section)) }
+    item { GallerySectionHeader(title = stringResource(R.string.family_startover_steps_section)) }
     item {
       FluidCard {
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(SettingsDimens.CardGap)) {

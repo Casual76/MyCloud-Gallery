@@ -27,7 +27,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
@@ -118,7 +118,7 @@ private fun stateLabel(state: ModelState): String = stringResource(
 
 /** La sezione "Modelli": un gruppo per modello, con il suo avanzamento e le sue azioni, e la riga dello spazio. */
 fun LazyListScope.modelsSection(models: ModelsState, handlers: SearchSettingsHandlers) {
-  item(key = "models-header") { FluidSectionHeader(title = stringResource(R.string.models_section_models)) }
+  item(key = "models-header") { GallerySectionHeader(title = stringResource(R.string.models_section_models)) }
   models.models.forEach { row -> item(key = "model-${row.id.value}") { ModelBlock(row, handlers) } }
   item(key = "models-space") { SpaceNote(models) }
 }

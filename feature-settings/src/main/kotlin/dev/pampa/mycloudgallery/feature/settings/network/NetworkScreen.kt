@@ -43,7 +43,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -191,7 +191,7 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
     }
 
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.network_section_home),
         detail = stringResource(R.string.network_section_home_detail),
       )
@@ -250,7 +250,7 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
     item { CaptureStatus(state.capture, actions) }
 
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.network_section_vpn),
         detail = stringResource(R.string.network_section_vpn_detail),
       )

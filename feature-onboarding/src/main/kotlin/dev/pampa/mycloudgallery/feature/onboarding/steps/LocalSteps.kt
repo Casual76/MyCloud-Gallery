@@ -27,7 +27,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidSegmentedControl
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -89,7 +89,7 @@ internal fun BackupSourcesScreen(
       loading = ui.submitting,
     ),
   ) {
-    item(key = "header") { FluidSectionHeader(title = stringResource(R.string.sources_section)) }
+    item(key = "header") { GallerySectionHeader(title = stringResource(R.string.sources_section)) }
     item(key = "list") {
       FluidListGroup {
         ToggleRow(
@@ -179,7 +179,7 @@ internal fun RolesScreen(
       loading = ui.submitting,
     ),
   ) {
-    item(key = "header") { FluidSectionHeader(title = stringResource(R.string.roles_section)) }
+    item(key = "header") { GallerySectionHeader(title = stringResource(R.string.roles_section)) }
     item(key = "list") {
       FluidListGroup {
         RoleRow(
@@ -295,7 +295,7 @@ internal fun PresetScreen(
       loading = ui.submitting,
     ),
   ) {
-    item(key = "header") { FluidSectionHeader(title = stringResource(R.string.preset_section)) }
+    item(key = "header") { GallerySectionHeader(title = stringResource(R.string.preset_section)) }
     item(key = "list") {
       FluidListGroup {
         PresetEstimates.choices.forEachIndexed { index, preset ->
@@ -312,7 +312,7 @@ internal fun PresetScreen(
       }
     }
     item(key = "estimates-header") {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.preset_estimates),
         detail = stringResource(R.string.preset_estimates_detail),
       )
@@ -344,7 +344,7 @@ internal fun PresetScreen(
       }
     }
     item(key = "quality-header") {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.preset_quality_section),
         detail = stringResource(R.string.preset_quality_section_detail),
       )

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase 10 P8 (D23, E-AC7): le azioni del viewer al posto dei gesti, per TalkBack e Switch Access. -->
+  <string name="viewer_action_next">Foto successiva</string>
+  <string name="viewer_action_previous">Foto precedente</string>
+</resources>

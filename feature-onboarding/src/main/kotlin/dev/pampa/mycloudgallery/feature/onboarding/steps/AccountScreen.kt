@@ -21,7 +21,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.VisualTransformation
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -150,7 +150,7 @@ internal fun AccountScreen(
         body = stringResource(R.string.account_one_attempt_detail),
       )
     }
-    item(key = "header") { FluidSectionHeader(title = stringResource(R.string.account_section)) }
+    item(key = "header") { GallerySectionHeader(title = stringResource(R.string.account_section)) }
     item(key = "fields") {
       Column(verticalArrangement = Arrangement.spacedBy(OnboardingDimens.CardGap)) {
         val userError = issue == UserIssue.ADMIN || (issue == UserIssue.INVALID)

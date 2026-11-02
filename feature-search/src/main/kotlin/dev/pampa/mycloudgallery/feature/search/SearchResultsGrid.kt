@@ -20,6 +20,8 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
@@ -117,7 +119,11 @@ private fun SectionTitle(entry: GridEntry.Title) {
   val title = stringResource(if (entry.section == ResultSection.CONFIDENT) R.string.search_results_title else R.string.search_likely_title)
   val count = LocalContext.current.resources.getQuantityString(R.plurals.search_results_count, entry.count, GalleryNumbers.format(entry.count))
   Row(
-    modifier = Modifier.fillMaxWidth().padding(horizontal = GalleryDimens.Gutter, vertical = SearchDimens.TightGap),
+    modifier = Modifier
+      .fillMaxWidth()
+      // Fase 10 P8 (D23 (2)): il titolo di una sezione dei risultati e' un'intestazione (e dice anche quanti sono).
+      .semantics(mergeDescendants = true) { heading() }
+      .padding(horizontal = GalleryDimens.Gutter, vertical = SearchDimens.TightGap),
     horizontalArrangement = Arrangement.SpaceBetween,
     verticalAlignment = Alignment.CenterVertically,
   ) {

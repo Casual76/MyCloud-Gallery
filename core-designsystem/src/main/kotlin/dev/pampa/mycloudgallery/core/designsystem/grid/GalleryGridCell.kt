@@ -63,9 +63,13 @@ import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
@@ -248,7 +252,23 @@ interface GalleryGridCellActions {
   /** Le etichette delle due azioni ("Apri", "Seleziona"). */
   val clickLabel: String?
   val longClickLabel: String?
+
+  /**
+   * Fase 10 P8 (D23): le azioni **personalizzate** della cella per i lettori di schermo e per Switch Access ("Preferito",
+   * "Condividi", "Nascondi", "Elimina"), costruite **solo quando il lettore chiede il nodo**. Vuote di serie. Ogni azione fa quello
+   * che farebbe il gesto equivalente e ritorna vero se l'ha eseguita.
+   */
+  fun customActions(key: Any): List<GalleryCellCustomAction> = emptyList()
+
+  /**
+   * Fase 10 P8 (D23): il posto della cella nella raccolta (0 = il primo elemento), per dire "elemento 12 di 500"; -1 se la
+   * griglia non lo sa. La raccolta la dichiara chi posa la griglia (`collectionInfo` sulla lista).
+   */
+  fun place(key: Any): Int = -1
 }
+
+/** Un'azione personalizzata di una cella: l'etichetta che il lettore pronuncia e cio' che fa. */
+class GalleryCellCustomAction(val label: String, val run: () -> Boolean)
 
 /**
  * Le misure, i colori, i glifi e il testo delle celle di una griglia, **risolti una volta** dal tema: ogni cella li
@@ -596,6 +616,12 @@ private class GalleryGridCellNode(
       actions.longClick(key)
       true
     }
+    // Fase 10 P8: il posto nella raccolta e le azioni al posto dei gesti. Si costruiscono qui, cioe' solo quando il lettore di
+    // schermo (o un test) chiede i nodi: senza, nessun costo per cella.
+    val place = actions.place(key)
+    if (place >= 0) collectionItemInfo = CollectionItemInfo(rowIndex = place, rowSpan = 1, columnIndex = 0, columnSpan = 1)
+    val extra = actions.customActions(key)
+    if (extra.isNotEmpty()) customActions = extra.map { CustomAccessibilityAction(it.label, it.run) }
   }
 
   private fun CacheDrawScope.buildDraw(): DrawResult {

@@ -77,4 +77,8 @@
   <string name="diagnostics_action_nas_stop_writes">Ferma le scritture sul NAS</string>
   <string name="diagnostics_action_nas_resume_writes">Riattiva le scritture</string>
   <string name="diagnostics_action_nas_release_freeze">Ho controllato, continua</string>
+  <!-- Fase 10 P8 (D23): la conseguenza di ognuna, nella riga e quindi nel nome che TalkBack legge. -->
+  <string name="diagnostics_action_nas_stop_writes_effect">Niente viene più scritto sul NAS: il backup e le operazioni si fermano. La Libreria e il viewer continuano a funzionare.</string>
+  <string name="diagnostics_action_nas_resume_writes_effect">Il backup e le operazioni sul NAS ripartono da dove si erano fermati.</string>
+  <string name="diagnostics_action_nas_release_freeze_effect">Il lavoro sul NAS riprende dopo la verifica che hai fatto.</string>
 </resources>

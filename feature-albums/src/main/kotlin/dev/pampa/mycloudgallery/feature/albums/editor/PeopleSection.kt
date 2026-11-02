@@ -18,7 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -43,7 +43,7 @@ internal fun showsPeopleSection(ui: SmartEditorUi, rule: PeopleRule?): Boolean =
 internal fun PeopleSection(ui: SmartEditorUi, rule: PeopleRule?, handlers: SmartEditorHandlers, onPick: () -> Unit) {
   val resources = LocalContext.current.resources
   Column(verticalArrangement = Arrangement.spacedBy(AlbumDimens.TightGap)) {
-    FluidSectionHeader(title = stringResource(R.string.editor_people))
+    GallerySectionHeader(title = stringResource(R.string.editor_people))
     FluidListGroup {
       if (rule == null) {
         FluidListRow(

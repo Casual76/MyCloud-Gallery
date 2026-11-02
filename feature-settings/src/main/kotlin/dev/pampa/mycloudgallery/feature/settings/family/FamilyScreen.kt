@@ -23,7 +23,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -172,7 +172,7 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
     }
 
     if (state.isAdmin) {
-      item { FluidSectionHeader(title = stringResource(R.string.family_section_invite)) }
+      item { GallerySectionHeader(title = stringResource(R.string.family_section_invite)) }
       item {
         FluidListGroup {
           FluidListRow(
@@ -186,7 +186,7 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
       }
     }
 
-    item { FluidSectionHeader(title = stringResource(R.string.family_section_protect)) }
+    item { GallerySectionHeader(title = stringResource(R.string.family_section_protect)) }
     item {
       FluidListGroup {
         FluidListRow(
@@ -208,7 +208,7 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
     }
 
     if (!state.isAdmin) {
-      item { FluidSectionHeader(title = stringResource(R.string.family_section_admin)) }
+      item { GallerySectionHeader(title = stringResource(R.string.family_section_admin)) }
       item {
         FluidListGroup {
           FluidListRow(
@@ -241,7 +241,7 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
     }
 
     if (state.isAdmin) {
-      item { FluidSectionHeader(title = stringResource(R.string.family_section_danger)) }
+      item { GallerySectionHeader(title = stringResource(R.string.family_section_danger)) }
       item {
         FluidListGroup {
           FluidListRow(
@@ -262,7 +262,7 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
 
 /** "Rientra con un QR nuovo" (ON-5): dopo un reset, o per passare a un'altra famiglia. */
 private fun androidx.compose.foundation.lazy.LazyListScope.rejoinSection(links: FamilyLinks) {
-  item { FluidSectionHeader(title = stringResource(R.string.family_section_rejoin)) }
+  item { GallerySectionHeader(title = stringResource(R.string.family_section_rejoin)) }
   item {
     FluidListGroup {
       FluidListRow(

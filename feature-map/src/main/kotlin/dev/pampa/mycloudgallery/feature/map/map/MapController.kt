@@ -207,6 +207,14 @@ class MapController(
     return BubbleTap.of(bubble, zoom, chosenStyle.value.maxZoom)
   }
 
+  /** Fase 10 P8 (D23): l'avvicinamento a [bubble] come azione di TalkBack, o null se la mappa e' gia' al livello massimo. */
+  fun zoomOf(bubble: PlacedBubble): BubbleTap.ZoomTo? {
+    val zoom = lastIdle?.zoom ?: MapCameraPolicy.WORLD.zoom
+    val max = chosenStyle.value.maxZoom
+    if (zoom >= max - BubbleTap.AT_MAX_MARGIN) return null
+    return BubbleTap.ZoomTo(CameraSpot(bubble.at, minOf(max, zoom + BubbleTap.ZOOM_STEP)))
+  }
+
   /** Salva subito l'ultima posizione (uscendo dalla pagina): solo in locale (D29). Parte subito, senza aspettare la calma. */
   fun flushCamera() {
     val viewport = lastIdle ?: return

@@ -27,7 +27,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -241,7 +241,7 @@ internal fun FamilyResetScreen(
           icon = Icons.Rounded.RestartAlt,
         )
       }
-      item { FluidSectionHeader(title = stringResource(R.string.reset_done_next)) }
+      item { GallerySectionHeader(title = stringResource(R.string.reset_done_next)) }
       item {
         FluidListGroup {
           FluidListRow(
@@ -276,7 +276,7 @@ internal fun FamilyResetScreen(
       )
     }
 
-    item { FluidSectionHeader(title = stringResource(R.string.reset_section_happens)) }
+    item { GallerySectionHeader(title = stringResource(R.string.reset_section_happens)) }
     item {
       FluidListGroup {
         FluidListRow(
@@ -309,7 +309,7 @@ internal fun FamilyResetScreen(
 
     if (state.stage == ResetStage.TYPE_WORD || state.stage == ResetStage.WORKING) {
       item {
-        FluidSectionHeader(
+        GallerySectionHeader(
           title = stringResource(R.string.reset_section_word),
           detail = stringResource(R.string.reset_section_word_detail, ResetUiState.CONFIRM_WORD),
         )
@@ -386,7 +386,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.newKitCode(
   onConfirmCode: () -> Unit,
 ) {
   item {
-    FluidSectionHeader(
+    GallerySectionHeader(
       title = stringResource(R.string.reset_code_section),
       detail = stringResource(R.string.reset_code_section_detail),
     )

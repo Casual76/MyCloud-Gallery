@@ -36,7 +36,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -171,7 +171,7 @@ internal fun RecoveryKitsPage(
       }
       else -> {
         item(key = "header") {
-          FluidSectionHeader(
+          GallerySectionHeader(
             title = stringResource(R.string.recovery_kits_section),
             detail = stringResource(R.string.recovery_kits_section_detail),
           )
@@ -231,7 +231,7 @@ internal fun RecoveryFatePage(
       enabled = fate != null,
     ),
   ) {
-    item(key = "header") { FluidSectionHeader(title = stringResource(R.string.recovery_fate_section)) }
+    item(key = "header") { GallerySectionHeader(title = stringResource(R.string.recovery_fate_section)) }
     item(key = "options") {
       FluidListGroup {
         ChoiceRow(
@@ -331,7 +331,7 @@ internal fun RecoveryCodePage(
       }
     }
     item(key = "state-header") {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.manual_state_section),
         detail = stringResource(R.string.recovery_state_detail),
       )

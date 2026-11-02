@@ -51,7 +51,7 @@ import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.GlassTint
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.antigravity.fluidengine.ui.haptics.FluidHapticEvent
 import dev.antigravity.fluidengine.ui.haptics.rememberFluidHaptics
 import kotlin.math.roundToInt
@@ -110,8 +110,11 @@ object GalleryScrubberDefaults {
   /** Quanto la maniglia sta lontana dal bordo destro. */
   val EdgeInset: Dp = 4.dp
 
-  /** La striscia di accessibilita' lungo il bordo (TalkBack la trova anche quando la maniglia non si vede). */
-  val TrackWidth: Dp = 24.dp
+  /**
+   * La striscia di accessibilita' lungo il bordo (TalkBack la trova anche quando la maniglia non si vede). Fase 10 P8 (D27): larga **48 dp**, il
+   * bersaglio minimo; non disegna niente e non ha tocchi propri (passano alla griglia sotto), quindi allargarla non cambia ne' la grafica ne' i gesti.
+   */
+  val TrackWidth: Dp = 48.dp
 }
 
 /**
@@ -277,7 +280,7 @@ fun GalleryScrubber(
 /** La maniglia e la bolla: vetro, con la pellicola data o quella della famiglia. */
 @Composable
 private fun Modifier.scrubberMaterial(backdrop: GlassBackdropState, tint: GlassTint): Modifier =
-  glassSurface(state = backdrop, tint = tint, shape = FluidCapsuleShape, role = GlassRole.Floating)
+  galleryGlass(state = backdrop, tint = tint, shape = FluidCapsuleShape, role = GlassRole.Floating)
 
 /** La griglia ha superato una schermata intera di scorrimento in un gesto: e' uno scorrimento "veloce". */
 fun galleryScrubberShouldShow(scrolledPx: Float, viewportPx: Float): Boolean =

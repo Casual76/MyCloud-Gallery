@@ -13,11 +13,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 
@@ -43,18 +43,18 @@ internal fun WhatsNewRoute(versionName: String?, onBack: () -> Unit) {
 internal fun WhatsNewScreen(notes: ReleaseNotes?, matchesVersion: Boolean, versionName: String?, onBack: () -> Unit) {
   FluidScreen(title = stringResource(R.string.whatsnew_title), onBack = onBack) {
     if (notes == null) {
-      item { FluidSectionHeader(title = stringResource(R.string.whatsnew_empty_title)) }
+      item { GallerySectionHeader(title = stringResource(R.string.whatsnew_empty_title)) }
       item { FluidSectionFootnote(text = stringResource(R.string.whatsnew_empty)) }
       return@FluidScreen
     }
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.whatsnew_version, notes.version),
         detail = if (matchesVersion) null else stringResource(R.string.whatsnew_other_version, versionName ?: "?"),
       )
     }
     notes.sections.forEach { section ->
-      item { FluidSectionHeader(title = section.title) }
+      item { GallerySectionHeader(title = section.title) }
       item {
         SelectionContainer {
           FluidListGroup {

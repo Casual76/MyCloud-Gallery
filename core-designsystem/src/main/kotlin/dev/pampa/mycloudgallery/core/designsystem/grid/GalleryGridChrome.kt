@@ -35,7 +35,7 @@ import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 
 // La chrome della griglia: i pezzi di vetro che galleggiano sopra le foto della Libreria. Pochi e piccoli, perche' ogni
@@ -59,7 +59,7 @@ fun GalleryGridLevelBar(
     modifier = modifier
       .widthIn(max = LevelBarMaxWidth)
       .fillMaxWidth()
-      .glassSurface(state = backdrop, tint = GlassDefaults.floatingTint(), shape = FluidCapsuleShape, role = GlassRole.Floating)
+      .galleryGlass(state = backdrop, tint = GlassDefaults.floatingTint(), shape = FluidCapsuleShape, role = GlassRole.Floating)
       .padding(LevelBarPadding),
   ) {
     FluidSegmentedControl(
@@ -92,7 +92,7 @@ fun GalleryGridNotice(
     modifier = modifier
       .widthIn(max = NoticeMaxWidth)
       .fillMaxWidth()
-      .glassSurface(state = backdrop, tint = GlassDefaults.floatingTint(), shape = shape, role = GlassRole.Floating)
+      .galleryGlass(state = backdrop, tint = GlassDefaults.floatingTint(), shape = shape, role = GlassRole.Floating)
       .padding(NoticePadding),
     horizontalArrangement = Arrangement.spacedBy(NoticeGap),
     verticalAlignment = Alignment.Top,
@@ -147,7 +147,7 @@ fun GalleryGridJumpButton(
     Row(
       modifier = Modifier
         .height(JumpHeight)
-        .glassSurface(state = backdrop, tint = GlassDefaults.floatingTint(), shape = FluidCapsuleShape, role = GlassRole.Floating)
+        .galleryGlass(state = backdrop, tint = GlassDefaults.floatingTint(), shape = FluidCapsuleShape, role = GlassRole.Floating)
         .padding(horizontal = JumpPadding),
       horizontalArrangement = Arrangement.spacedBy(JumpGap),
       verticalAlignment = Alignment.CenterVertically,

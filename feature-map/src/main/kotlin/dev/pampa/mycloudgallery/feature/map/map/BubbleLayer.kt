@@ -26,10 +26,19 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CollectionItemInfo
+import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.collectionItemInfo
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.traversalIndex
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
@@ -37,6 +46,7 @@ import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
+import dev.pampa.mycloudgallery.feature.map.R
 import dev.pampa.mycloudgallery.feature.map.contract.MapThumbnails
 import dev.pampa.mycloudgallery.feature.map.ui.MapDimens
 import dev.pampa.mycloudgallery.feature.map.ui.MapText
@@ -67,14 +77,29 @@ internal fun BubbleLayer(
   onTap: (PlacedBubble) -> Unit,
   modifier: Modifier = Modifier,
   probe: LayoutProbe? = null,
+  onZoom: ((PlacedBubble) -> Unit)? = null,
+  onZone: ((PlacedBubble) -> Unit)? = null,
 ) {
   // Le miniature si chiedono quando cambia l'insieme delle bolle (a camera ferma o al cambio di mezzo livello): una finestra sola, senza "in arrivo".
   LaunchedEffect(bubbles, snapshot, thumbnails) {
     val requests = bubbles.mapNotNull { coverRequest(thumbnails, snapshot, it.bubble.cover, ThumbBucket.S) }
     thumbnails.loader.window(requests, emptyList())
   }
-  Box(modifier = modifier.fillMaxSize()) {
-    for (placed in bubbles) key(placed.key) { BubbleView(placed, surface, thumbnails, snapshot, onTap, probe) }
+  // Fase 10 P8 (D23, E-AC8): le bolle in vista sono anche un **elenco** ("Elenco dei luoghi in vista"), letto in ordine di numero (la piu'
+  // grande per prima, a parita' la chiave minore) e non in ordine di posizione sullo schermo; ognuna dice "12 foto, Firenze".
+  val order = remember(bubbles) { bubbles.sortedWith(compareByDescending<PlacedBubble> { it.count }.thenBy { it.key.level }.thenBy { it.key.prefix }) }
+  val rank = remember(order) { order.withIndex().associate { (i, b) -> b.key to i } }
+  val listText = stringResource(R.string.mappa_bubbles_list)
+  Box(
+    modifier = modifier.fillMaxSize().semantics {
+      isTraversalGroup = true
+      if (bubbles.isNotEmpty()) {
+        contentDescription = listText
+        collectionInfo = CollectionInfo(rowCount = bubbles.size, columnCount = 1)
+      }
+    },
+  ) {
+    for (placed in bubbles) key(placed.key) { BubbleView(placed, surface, thumbnails, snapshot, onTap, probe, rank[placed.key] ?: 0, onZoom, onZone) }
   }
 }
 
@@ -86,9 +111,14 @@ private fun BubbleView(
   snapshot: TimelineSnapshot?,
   onTap: (PlacedBubble) -> Unit,
   probe: LayoutProbe?,
+  rank: Int,
+  onZoom: ((PlacedBubble) -> Unit)?,
+  onZone: ((PlacedBubble) -> Unit)?,
 ) {
   val resources = LocalContext.current.resources
   val description = MapText.bubble(resources, placed.count, placed.label)
+  val zoomText = stringResource(R.string.mappa_bubble_zoom)
+  val zoneText = stringResource(R.string.mappa_bubble_zone)
   val bubbleSize = MapDimens.Bubble
   Column(
     modifier = Modifier
@@ -108,6 +138,13 @@ private fun BubbleView(
       .semantics(mergeDescendants = true) {
         contentDescription = description
         role = Role.Button
+        // Fase 10 P8: l'ordine di lettura e' quello dell'elenco (per numero), il posto nell'elenco e le due azioni del tocco.
+        traversalIndex = rank.toFloat()
+        collectionItemInfo = CollectionItemInfo(rowIndex = rank, rowSpan = 1, columnIndex = 0, columnSpan = 1)
+        customActions = listOfNotNull(
+          onZoom?.let { run -> CustomAccessibilityAction(zoomText) { run(placed); true } },
+          onZone?.let { run -> CustomAccessibilityAction(zoneText) { run(placed); true } },
+        )
       }
       .fluidPressable(onClick = { onTap(placed) }, role = Role.Button),
     horizontalAlignment = Alignment.CenterHorizontally,

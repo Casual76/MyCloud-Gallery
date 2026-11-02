@@ -10,7 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -102,7 +102,7 @@ private fun RemovedContent(
         ),
       )
     }
-    item(key = "again-header") { FluidSectionHeader(title = stringResource(R.string.removed_again_section)) }
+    item(key = "again-header") { GallerySectionHeader(title = stringResource(R.string.removed_again_section)) }
     item(key = "again") {
       FluidListGroup {
         FluidListRow(

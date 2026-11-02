@@ -49,7 +49,8 @@ import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.currentGlassBackdrop
 import dev.antigravity.fluidengine.ui.fluid.fluidRowPressable
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
+import dev.pampa.mycloudgallery.core.designsystem.a11y.gallerySolidFill
 import dev.pampa.mycloudgallery.core.designsystem.R
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 
@@ -171,7 +172,7 @@ fun GalleryMenuSurface(
   val shape = ContinuousCornerShape(FluidRadius.Group)
   Box(
     modifier = modifier
-      .glassSurface(
+      .galleryGlass(
         state = backdrop,
         tint = GlassDefaults.modalTint(),
         shape = shape,
@@ -212,7 +213,7 @@ fun GalleryMenuButton(
     presentation = FluidGlassModalPresentation.Popover,
     paneTitle = contentDescription,
   ) {
-    GalleryMenuPanel(entries = entries, onItemSelected = { open = false })
+    Box(modifier = Modifier.gallerySolidFill()) { GalleryMenuPanel(entries = entries, onItemSelected = { open = false }) }
   }
 }
 

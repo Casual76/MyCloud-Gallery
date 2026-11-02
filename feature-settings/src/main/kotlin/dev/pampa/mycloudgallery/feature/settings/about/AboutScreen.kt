@@ -23,7 +23,7 @@ import dev.antigravity.fluidengine.foundation.EngineBuild
 import dev.antigravity.fluidengine.ui.fluid.FluidEngineLicenses
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -64,7 +64,7 @@ fun AboutRoute(onBack: () -> Unit) {
 internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (() -> Unit)? = null) {
   FluidScreen(title = stringResource(R.string.about_title), onBack = onBack) {
     // --- L'app -----------------------------------------------------------------------------------------------
-    item { FluidSectionHeader(title = stringResource(R.string.about_section_app)) }
+    item { GallerySectionHeader(title = stringResource(R.string.about_section_app)) }
     item {
       SelectionContainer {
         FluidListGroup {
@@ -97,7 +97,7 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
 
     // --- Luoghi offline: GeoNames, CC BY 4.0 -------------------------------------------------------------------
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.about_section_places),
         detail = stringResource(R.string.about_section_places_detail),
       )
@@ -128,7 +128,7 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
 
     // --- La mappa (Fase 9, P2): OpenStreetMap e OpenMapTiles (online), Natural Earth e GeoNames (carta di base), stile e caratteri ---------
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.about_section_map),
         detail = stringResource(R.string.about_section_map_detail),
       )
@@ -175,7 +175,7 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
 
     // --- Librerie (tutte quelle dell'APK di release) -----------------------------------------------------------------
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.about_section_libraries),
         detail = stringResource(R.string.about_section_libraries_detail),
       )
@@ -201,7 +201,7 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
 
     // --- Il Fluid Engine: le opere di altri che porta con se' -------------------------------------------------------------
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.about_section_engine),
         detail = stringResource(R.string.about_section_engine_detail, EngineBuild.VERSION),
       )
@@ -226,7 +226,7 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
     }
 
     // --- Il testo breve delle licenze --------------------------------------------------------------------------------------
-    item { FluidSectionHeader(title = stringResource(R.string.about_section_licenses)) }
+    item { GallerySectionHeader(title = stringResource(R.string.about_section_licenses)) }
     item {
       SelectionContainer {
         FluidListGroup {

@@ -31,7 +31,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.pampa.mycloudgallery.core.security.input.SecureInput
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -191,7 +191,7 @@ internal fun AdminRecoveryScreen(state: RecoveryUiState, actions: RecoveryAction
 
 private fun androidx.compose.foundation.lazy.LazyListScope.recoverySearch(state: RecoveryUiState, actions: RecoveryActions) {
   item {
-    FluidSectionHeader(
+    GallerySectionHeader(
       title = stringResource(R.string.recovery_section_where),
       detail = stringResource(R.string.recovery_section_where_detail),
     )
@@ -243,7 +243,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recoverySearch(state:
 
 private fun androidx.compose.foundation.lazy.LazyListScope.recoveryPick(state: RecoveryUiState, actions: RecoveryActions) {
   item {
-    FluidSectionHeader(
+    GallerySectionHeader(
       title = stringResource(R.string.recovery_section_kits),
       detail = stringResource(R.string.recovery_section_kits_detail),
     )
@@ -275,7 +275,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recoveryPick(state: R
 
 private fun androidx.compose.foundation.lazy.LazyListScope.recoveryCode(state: RecoveryUiState, actions: RecoveryActions) {
   item {
-    FluidSectionHeader(
+    GallerySectionHeader(
       title = stringResource(R.string.recovery_section_code),
       detail = stringResource(R.string.recovery_section_code_detail),
     )
@@ -314,7 +314,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recoveryCode(state: R
 
   if (state.mode == RecoveryMode.REPLACE_ADMIN) {
     item {
-      FluidSectionHeader(
+      GallerySectionHeader(
         title = stringResource(R.string.recovery_section_old),
         detail = stringResource(R.string.recovery_section_old_detail),
       )

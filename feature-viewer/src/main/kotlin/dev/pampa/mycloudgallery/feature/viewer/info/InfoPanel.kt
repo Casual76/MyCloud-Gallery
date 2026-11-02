@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryInfoHeader
@@ -125,7 +125,7 @@ internal fun InfoSections(sections: List<InfoSectionModel>, modifier: Modifier =
         GalleryInfoSection(rows = section.rows, header = section.header)
       } else {
         Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(CustomSectionGap)) {
-          section.header?.let { FluidSectionHeader(title = it) }
+          section.header?.let { GallerySectionHeader(title = it) }
           custom()
         }
       }

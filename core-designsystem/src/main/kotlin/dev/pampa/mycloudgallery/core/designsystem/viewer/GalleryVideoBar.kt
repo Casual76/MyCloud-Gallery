@@ -36,7 +36,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSlider
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.R
 import dev.pampa.mycloudgallery.core.designsystem.chrome.galleryTintOnPhoto
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
@@ -99,7 +99,7 @@ fun GalleryVideoBar(
       .padding(horizontal = GalleryVideoBarDefaults.SideMargin)
       .widthIn(max = GalleryVideoBarDefaults.MaxWidth)
       .fillMaxWidth()
-      .glassSurface(
+      .galleryGlass(
         state = backdrop,
         tint = galleryTintOnPhoto(floating = true),
         shape = FluidCapsuleShape,
@@ -147,6 +147,9 @@ fun GalleryVideoBar(
       },
       modifier = Modifier.weight(1f),
       enabled = duration > 0L,
+      // Fase 10 P8 (D23, §2.7 "Viewer": controlli del video con stato): la barra dice cos'e' e a che punto siamo ("0:07 di 2:14").
+      contentDescription = stringResource(R.string.videobar_seek),
+      stateDescription = timeDescription,
     )
     Text(
       text = durationText,

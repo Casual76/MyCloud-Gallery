@@ -6,12 +6,12 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -81,7 +81,7 @@ fun StepSimulationScreen(
       StepSimulationState.Running -> item { FluidLoadingBlock() }
       is StepSimulationState.Done -> {
         val report = state.report
-        item { FluidSectionHeader(title = StepSimulationText.TOTAL_TITLE) }
+        item { GallerySectionHeader(title = StepSimulationText.TOTAL_TITLE) }
         item {
           FluidListGroup {
             report.forecasts.forEachIndexed { index, forecast ->

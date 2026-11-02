@@ -31,7 +31,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.chrome.galleryTintOnPhoto
 
 /** Come il viewer mostra l'avanzamento di un caricamento che puo' non finire subito. */
@@ -72,7 +72,7 @@ fun GalleryViewerNotice(
       .padding(horizontal = NoticeSideMargin)
       .widthIn(max = NoticeMaxWidth)
       .fillMaxWidth()
-      .glassSurface(
+      .galleryGlass(
         state = backdrop,
         tint = galleryTintOnPhoto(floating = true),
         shape = ContinuousCornerShape(FluidRadius.Group),

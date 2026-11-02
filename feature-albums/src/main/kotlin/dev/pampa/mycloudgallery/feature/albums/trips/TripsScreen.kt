@@ -24,7 +24,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidCard
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidInlineMessage
@@ -103,7 +103,7 @@ fun TripsScreen(
         item(key = "no-gps") {
           FluidInlineMessage(message = stringResource(R.string.trips_no_gps_detail), title = stringResource(R.string.trips_no_gps_title), tone = FluidTone.Info)
         }
-        item(key = "events-header") { FluidSectionHeader(title = stringResource(R.string.trips_events_header)) }
+        item(key = "events-header") { GallerySectionHeader(title = stringResource(R.string.trips_events_header)) }
         if (state.events.isEmpty()) {
           item(key = "events-empty") { Text(stringResource(R.string.trips_events_empty), color = MaterialTheme.colorScheme.onSurfaceVariant) }
         } else {

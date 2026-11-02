@@ -26,6 +26,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPresentation
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.currentGlassBackdrop
+import dev.pampa.mycloudgallery.core.designsystem.a11y.gallerySolidFill
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuPanel
@@ -86,7 +87,9 @@ fun GalleryFilterMenu(
     presentation = FluidGlassModalPresentation.Popover,
     paneTitle = contentDescription,
   ) {
-    GalleryMenuPanel(entries = galleryFilterMenuEntries(groups, trailing), onItemSelected = { open = false })
+    Box(modifier = Modifier.gallerySolidFill()) {
+      GalleryMenuPanel(entries = galleryFilterMenuEntries(groups, trailing), onItemSelected = { open = false })
+    }
   }
 }
 

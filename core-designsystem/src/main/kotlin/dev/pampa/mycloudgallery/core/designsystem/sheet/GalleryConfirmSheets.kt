@@ -32,6 +32,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
@@ -58,6 +59,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.a11y.gallerySolidFill
 import dev.pampa.mycloudgallery.core.designsystem.R
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import androidx.compose.ui.unit.Dp
@@ -109,8 +111,10 @@ fun GalleryConfirmSheet(
     onDismissRequest = onDismissRequest,
     presentation = FluidGlassModalPresentation.Sheet,
     paneTitle = paneTitle,
-    content = content,
-  )
+  ) {
+    // Fase 10 P8: con le superfici piene il foglio sta su un fondo pieno (il vetro dell'engine non si vede).
+    Column(modifier = Modifier.gallerySolidFill()) { content() }
+  }
 }
 
 /**
@@ -183,7 +187,8 @@ fun GallerySheetScaffold(
       }
       Text(
         text = title,
-        modifier = Modifier.weight(1f),
+        // Fase 10 P8 (D23 (2)): il titolo del foglio e' un'intestazione: TalkBack lo legge per primo e dice cosa succede e quanto.
+        modifier = Modifier.weight(1f).semantics { heading() },
         style = MaterialTheme.typography.titleLarge,
         color = s.onSurface,
       )

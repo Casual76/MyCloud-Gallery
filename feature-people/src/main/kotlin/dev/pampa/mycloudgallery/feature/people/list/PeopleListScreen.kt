@@ -26,7 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -133,7 +133,7 @@ internal fun PeopleListScreen(
         if (!ui.selecting && state.othersCount > 0) othersRow(state.othersCount, handlers)
         if (state.named.isNotEmpty()) grid("named", state.named, columns, ui, crops, handlers)
         if (state.unnamed.isNotEmpty()) {
-          item(key = "header-unnamed") { FluidSectionHeader(title = stringResource(R.string.persone_header_unnamed)) }
+          item(key = "header-unnamed") { GallerySectionHeader(title = stringResource(R.string.persone_header_unnamed)) }
           grid("unnamed", state.unnamed, columns, ui, crops, handlers)
         }
         if (state.named.isEmpty() && state.unnamed.isEmpty()) {
@@ -166,7 +166,7 @@ private const val PERCENT = 100f
 private fun LazyListScope.proposals(list: List<MergeProposal>, crops: PeopleCrops, handlers: PeopleListHandlers) {
   if (list.isEmpty()) return
   item(key = "header-proposals") {
-    FluidSectionHeader(title = stringResource(R.string.persone_proposals_header), detail = stringResource(R.string.persone_proposals_detail))
+    GallerySectionHeader(title = stringResource(R.string.persone_proposals_header), detail = stringResource(R.string.persone_proposals_detail))
   }
   item(key = "proposals") {
     FluidListGroup {

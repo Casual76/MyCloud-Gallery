@@ -19,7 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -77,7 +77,7 @@ internal fun RecoveryStartOverPage(
         compact = true,
       )
     }
-    item(key = "steps-header") { FluidSectionHeader(title = stringResource(R.string.startover_steps_section)) }
+    item(key = "steps-header") { GallerySectionHeader(title = stringResource(R.string.startover_steps_section)) }
     item(key = "open") {
       Column(verticalArrangement = Arrangement.spacedBy(OnboardingDimens.TextGap), modifier = Modifier.fillMaxWidth()) {
         Text(text = stringResource(R.string.startover_step_open), style = MaterialTheme.typography.titleSmall)

@@ -34,6 +34,12 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CollectionInfo
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.collectionInfo
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -42,6 +48,8 @@ import dev.antigravity.fluidengine.ui.haptics.rememberFluidHaptics
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragPointer
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragTouch
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDragSource
+import dev.pampa.mycloudgallery.core.describe.rules.MediaDescribers
+import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryCellCustomAction
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCell
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellActions
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellBadges
@@ -67,10 +75,12 @@ import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.PresenceBadge
+import dev.pampa.mycloudgallery.feature.library.R
 import java.time.LocalDate
 import java.time.ZoneId
 import kotlin.math.max
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
@@ -111,6 +121,8 @@ import kotlinx.coroutines.withContext
  * @param cellCornerScale quanto dell'angolo delle celle resta: di serie la parete di foto squadrata ([GalleryWall]).
  * @param gap la fessura fra le celle: di serie quella della parete (1 dp).
  * @param dragOrigin Fase 10 (P6, D20): da dove parte un trascinamento verso un'altra app (la Libreria); null = questa griglia non trascina (i Nascosti, gli Eliminati di recente: mai, E-T18). Cosa si trascina lo decide [gridDragSubject].
+ * @param cellActions Fase 10 P8 (D23): le azioni personalizzate di una cella per TalkBack e Switch Access (Preferito, Condividi, Nascondi,
+ *   Elimina...), chieste **solo quando il lettore chiede il nodo**. Null: la griglia non ne offre.
  * @param onDeleteKey Canc (Fase 10, P4, D15): **apre il foglio di conferma** dell'eliminazione, mai un'eliminazione diretta. Null: questa griglia non elimina e Canc non fa niente.
  *   Mouse e tastiera (evidenziazione, Invio, Ctrl+A) sono di ogni griglia ([gridKeyboard]).
  */
@@ -127,6 +139,7 @@ fun MediaGrid(
   gap: Dp = GalleryWall.Gap,
   onDeleteKey: (() -> Unit)? = null,
   dragOrigin: DragOrigin? = null,
+  cellActions: ((MediaId) -> List<GalleryCellCustomAction>)? = null,
 ) {
   BoxWithConstraints(
     modifier = modifier
@@ -178,9 +191,12 @@ fun MediaGrid(
 
     GridEffects(state, reducedMotion)
 
+    val levelNext = stringResource(R.string.grid_level_next)
+    val levelPrevious = stringResource(R.string.grid_level_previous)
     val style = rememberGalleryGridCellStyle(cellCornerScale)
     val strings = rememberGridStrings()
-    val actions = remember(state, strings) { GridCellActions(state, strings) { currentOnOpen(it) } }
+    val currentCellActions by rememberUpdatedState(cellActions)
+    val actions = remember(state, strings) { GridCellActions(state, strings, { currentOnOpen(it) }, { id -> currentCellActions?.invoke(id).orEmpty() }) }
     val today = remember(state) { state.today() }
     val stickyTopPx = with(density) { stickyTop.roundToPx() }
     val handOverPx = with(density) { HeaderHandOver.toPx() }
@@ -215,7 +231,8 @@ fun MediaGrid(
           .fillMaxSize()
           // Avvio istantaneo: la prima finestra delle miniature parte appena la lista e' misurata, nello stesso fotogramma.
           .onPlaced { state.sendFirstWindow() }
-          .pinchLayer(state),
+          .pinchLayer(state)
+          .gridCollectionSemantics(state, levelNext, levelPrevious) { target -> scope.launch { state.selectLevel(target, currentReduced) } },
         contentPadding = PaddingValues(top = topPad, bottom = bottomPad),
         userScrollEnabled = !state.pinching,
       ) {
@@ -256,6 +273,17 @@ private fun GridEffects(state: MediaGridState, reducedMotion: Boolean) {
         state.updateVisibleIds(plan.visibleIds)
         if (state.watchingUseful) state.updateVisibleThumbs(plan.visible.map { it.key })
       }
+  }
+
+  // Fase 10 P8 (D22, E-AC1): con uno strumento di accessibilita' attivo il descrittore precarica nomi e prime parole delle celle in vista (solo
+  // memoria, LRU di 500); senza, `warm` non fa niente (lo controlla il descrittore). Una pausa breve: lo scorrimento veloce non interroga le porte
+  // a ogni riga, solo dove si ferma.
+  LaunchedEffect(state) {
+    state.visibleIds.collectLatest { ids ->
+      if (ids.isEmpty()) return@collectLatest
+      delay(WarmDelayMs)
+      MediaDescribers.shared(state.placeNames).warm(ids)
+    }
   }
 
   // Avvio istantaneo: il primo disegno utile della Libreria (ogni miniatura in vista arrivata), una volta per processo; poi non si segue piu'.
@@ -364,6 +392,27 @@ private fun rowKey(l: GridLayout, row: Int): Long =
 
 private const val LevelKeyShift = 40
 private const val StyleKeyShift = 32
+
+/**
+ * Fase 10 P8 (D23, E-AC7, E-AC9): la griglia e' una **raccolta** di tanti elementi quanti i media della vista ("elenco, 500 elementi";
+ * ogni cella dice il suo posto), e il pizzico ha le sue azioni: **Livello successivo** e **Livello precedente**. Il modificatore sta
+ * fuori da quello della lista (che dichiara le sue righe, intestazioni comprese): vince la raccolta dei media. Si valuta solo quando
+ * il lettore di schermo chiede i nodi.
+ */
+private fun Modifier.gridCollectionSemantics(
+  state: MediaGridState,
+  levelNext: String,
+  levelPrevious: String,
+  select: (GridLevel) -> Unit,
+): Modifier = semantics {
+  collectionInfo = CollectionInfo(rowCount = state.view.size, columnCount = 1)
+  val current = state.level.ordinal
+  val levels = GridLevel.entries
+  customActions = buildList {
+    if (current + 1 < levels.size) add(CustomAccessibilityAction(levelNext) { select(levels[current + 1]); true })
+    if (current - 1 >= 0) add(CustomAccessibilityAction(levelPrevious) { select(levels[current - 1]); true })
+  }
+}
 
 /** Una riga alta esattamente [heightPx] (la riga piu' lo spazio sotto): le posizioni della lista sono quelle del layout. */
 private fun Modifier.exactHeight(heightPx: Int): Modifier = layout { measurable, constraints ->
@@ -565,6 +614,7 @@ private class GridCellActions(
   private val state: MediaGridState,
   private val strings: GridStrings,
   private val open: (MediaId) -> Unit,
+  private val extra: (MediaId) -> List<GalleryCellCustomAction>,
 ) : GalleryGridCellActions {
 
   private val zone: ZoneId = ZoneId.systemDefault()
@@ -587,12 +637,26 @@ private class GridCellActions(
     if (id !in state.selection.selected.value) state.selection.toggle(id)
   }
 
+  /** Fase 10 P8 (D23): il posto nella vista ("elemento 12 di 500": la lista dichiara il numero degli elementi). */
+  override fun place(key: Any): Int {
+    val id = key as? MediaId ?: return -1
+    return state.shownView.viewIndexOf(id)
+  }
+
+  override fun customActions(key: Any): List<GalleryCellCustomAction> {
+    val id = key as? MediaId ?: return emptyList()
+    return extra(id)
+  }
+
   override val clickLabel: String get() = if (state.selecting) strings.select else strings.open
   override val longClickLabel: String get() = strings.select
 }
 
 /** La miniatura di una cella senza copia leggibile: nessuna, per sempre. */
 private val NoImage: State<ImageBitmap?> = mutableStateOf(null)
+
+/** La pausa prima di riscaldare le descrizioni delle celle in vista (solo con uno strumento di accessibilita' attivo). */
+private const val WarmDelayMs = 150L
 
 private const val FooterKey = "footer"
 

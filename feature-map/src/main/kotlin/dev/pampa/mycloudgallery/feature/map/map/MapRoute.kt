@@ -103,6 +103,14 @@ fun MapRoute(
         }
       }
 
+      override fun onBubbleZoom(bubble: PlacedBubble) {
+        controller.zoomOf(bubble)?.let { surface.animateTo(it.spot) }
+      }
+
+      override fun onBubbleZone(bubble: PlacedBubble) {
+        if (GalleryPaneRules.twoPanes(windowNow)) viewModel.zonePane.open(bubble.key) else actions.openZone(bubble.key)
+      }
+
       override fun onNotice() = actions.openMapSettings()
 
       override fun onSettings() = actions.openMapSettings()

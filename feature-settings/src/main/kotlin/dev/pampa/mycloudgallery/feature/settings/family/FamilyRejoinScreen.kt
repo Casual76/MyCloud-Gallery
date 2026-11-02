@@ -24,7 +24,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidLoadingBlock
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
@@ -142,7 +142,7 @@ internal fun FamilyRejoinScreen(
         Note(title = stringResource(R.string.rejoin_admin_title), message = stringResource(R.string.rejoin_admin_message), tone = FluidTone.Danger)
       }
     }
-    item { FluidSectionHeader(title = stringResource(R.string.rejoin_section)) }
+    item { GallerySectionHeader(title = stringResource(R.string.rejoin_section)) }
     item {
       FluidListGroup {
         FluidListRow(

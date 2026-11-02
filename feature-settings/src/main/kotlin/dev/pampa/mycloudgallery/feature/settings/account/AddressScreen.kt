@@ -26,7 +26,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.fluid.FluidTextField
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -354,7 +354,7 @@ internal fun AddressScreen(state: AddressUiState, actions: AddressActions) {
       }
     } else {
       state.feedback?.let { item { FeedbackNote(it) } }
-      item { FluidSectionHeader(title = stringResource(R.string.address_section_new)) }
+      item { GallerySectionHeader(title = stringResource(R.string.address_section_new)) }
       item {
         FluidCard {
           FluidTextField(

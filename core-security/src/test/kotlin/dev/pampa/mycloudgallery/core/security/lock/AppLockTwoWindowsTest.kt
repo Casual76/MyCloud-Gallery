@@ -49,6 +49,39 @@ class AppLockTwoWindowsTest {
     assertThat(controller.startedWindows).isEqualTo(2)
   }
 
+  /**
+   * R3 (revisione di sicurezza della Fase 10): l'uscita da DeX con il telefono bloccato. La finestra si ferma per una ricreazione (cambio di densita') e quella
+   * nuova non parte; nessuno chiede (nessuna porta d'ingresso, nessun'altra finestra). Ore dopo la finestra riparte: deve chiedere lo sblocco. Prima la
+   * finestra entrava senza il controllo del tempo (il segno scaduto non diventava mai un'uscita).
+   */
+  @Test
+  fun r3_unaFinestraCheRiparteDopoUnSegnoScadutoSenzaPoll_chiedeLoSblocco() {
+    startUnlocked(AppLockTimeout.IMMEDIATELY, both = false)
+
+    controller.windowStopped(a, changingConfigurations = true)
+    clock.now += 3 * 3_600_000L
+    val recreated = controller.newWindow()
+    controller.windowStarted(recreated)
+    assertThat(controller.state.value).isEqualTo(AppLockState.LOCKED)
+  }
+
+  @Test
+  fun r3_conUnTimeoutLungoIlTempoContaDalSegno_nonDaQuandoCeNeAccorgiamo() {
+    startUnlocked(AppLockTimeout.AFTER_5_MINUTES, both = false)
+
+    controller.windowStopped(a, changingConfigurations = true)
+    // Quattro minuti dopo il segno la finestra riparte: dentro il tempo concesso, resta sbloccata.
+    clock.now += 4 * 60_000L
+    val first = controller.newWindow()
+    controller.windowStarted(first)
+    assertThat(controller.state.value).isEqualTo(AppLockState.UNLOCKED)
+    // Una ricreazione nuova, e la finestra che riparte sei minuti dopo: chiusa.
+    controller.windowStopped(first, changingConfigurations = true)
+    clock.now += 6 * 60_000L
+    controller.windowStarted(controller.newWindow())
+    assertThat(controller.state.value).isEqualTo(AppLockState.LOCKED)
+  }
+
   @Test
   fun siBloccaQuandoSiFermaL_UltimaFinestra() {
     startUnlocked(AppLockTimeout.IMMEDIATELY)

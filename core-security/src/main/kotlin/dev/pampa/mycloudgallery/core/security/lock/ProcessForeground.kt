@@ -30,6 +30,13 @@ class ProcessForeground(private val clock: MonotonicClock = SystemMonotonicClock
 
     /** E' ferma l'**ultima** finestra: l'app esce dal primo piano. */
     LEFT_FOREGROUND,
+
+    /**
+     * R3 della revisione di sicurezza della Fase 10: il processo era **gia' uscito** senza che nessuno se ne accorgesse (un segno di ricreazione scaduto
+     * senza un [poll] ne' una fermata in mezzo: la finestra nuova di una ricreazione non e' partita in tempo, per esempio uscendo da DeX con il telefono
+     * bloccato) e questa finestra lo riporta in primo piano. Per il blocco e' un'uscita all'ora del segno ([lastExitAtMillis]) seguita da un ritorno.
+     */
+    REENTERED_FOREGROUND,
   }
 
   /** Una finestra dell'app, vista dal blocco. Opaca: la si apre con [newWindow] e si pilota con [start], [stop], [close]. */
@@ -54,16 +61,22 @@ class ProcessForeground(private val clock: MonotonicClock = SystemMonotonicClock
   /** Una finestra nuova, non ancora avviata. */
   fun newWindow(): Window = Window()
 
-  /** La finestra e' avviata (`ON_START`). Ripetuta o dopo [close]: nessun effetto. */
+  /**
+   * La finestra e' avviata (`ON_START`). Ripetuta o dopo [close]: nessun effetto. Prima di contarla si guarda se il processo, nel frattempo, e' uscito
+   * (R3: un segno scaduto che nessuno ha guardato): allora la risposta e' [Change.REENTERED_FOREGROUND], mai [Change.NONE].
+   */
   @Synchronized
   fun start(window: Window): Change {
-    if (window.closed || !started.add(window)) return Change.NONE
+    if (window.closed || window in started) return Change.NONE
     purge()
+    // R3: nessuna finestra avviata e nessun segno vivo, ma ancora "in primo piano": l'uscita c'e' stata, all'ora del segno scaduto (gia' in latestExitMs).
+    val exitedSilently = evaluate() == Change.LEFT_FOREGROUND
+    started.add(window)
     // Questa e' la finestra nuova di una ricreazione, se ce n'e' una in corso: ne prende il posto.
     recreations.removeFirstOrNull()
     if (foreground) return Change.NONE
     foreground = true
-    return Change.ENTERED_FOREGROUND
+    return if (exitedSilently) Change.REENTERED_FOREGROUND else Change.ENTERED_FOREGROUND
   }
 
   /**

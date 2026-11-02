@@ -185,11 +185,46 @@ class ProcessForegroundTest {
     assertThat(process.lastExitAtMillis).isEqualTo(3_000_000L)
   }
 
+  /**
+   * R3 (revisione di sicurezza della Fase 10): il segno scade e **nessuno chiede** (niente `poll`, nessuna fermata): la finestra che arriva ore dopo non e' "ancora
+   * in primo piano", e' un ritorno dopo un'uscita all'ora del segno. Prima `start` rispondeva `NONE` e il blocco non controllava il tempo (uscita da DeX con il
+   * telefono bloccato).
+   */
+  @Test
+  fun r3_unSegnoScadutoSenzaPoll_poiUnAvvio_eUnRitornoDopoL_uscitaAllOraDelSegno() {
+    val old = process.newWindow()
+    process.start(old)
+    clock.now = 5_000_000L
+    process.stop(old, changingConfigurations = true)
+
+    clock.now = 5_000_000L + 3 * 3_600_000L
+    assertThat(process.start(process.newWindow())).isEqualTo(Change.REENTERED_FOREGROUND)
+    assertThat(process.lastExitAtMillis).isEqualTo(5_000_000L)
+    assertThat(process.startedWindows).isEqualTo(1)
+    // Il ritorno si dice una volta: la seconda finestra non cambia niente, e l'uscita dopo e' normale.
+    val second = process.newWindow()
+    assertThat(process.start(second)).isEqualTo(Change.NONE)
+    process.stop(second, false)
+    assertThat(process.poll()).isEqualTo(Change.NONE)
+  }
+
+  @Test
+  fun r3_unSegnoAncoraVivoSenzaPoll_eUnaRicreazioneNonUnRitorno() {
+    val old = process.newWindow()
+    process.start(old)
+    process.stop(old, changingConfigurations = true)
+
+    clock.now += ProcessForeground.RECREATION_GRACE_MS - 1
+    assertThat(process.start(process.newWindow())).isEqualTo(Change.NONE)
+  }
+
   // --- proprieta' contro un modello --------------------------------------------------------------------------
 
   /**
    * Sequenze a caso di avvii, fermate, chiusure, ricreazioni e tempo su quattro finestre, contro un modello scritto in modo diverso (insiemi e un elenco di
    * istanti): il processo e' in primo piano **esattamente** quando una finestra e' avviata o c'e' una ricreazione non scaduta, e ogni cambiamento si dice una volta sola.
+   * R3: il tempo passa anche **senza** un `poll` subito dopo (azione 6); un avvio dopo un segno scaduto che nessuno ha guardato e' un ritorno
+   * ([Change.REENTERED_FOREGROUND]), con l'uscita all'ora del segno piu' tardo fra quelli scaduti.
    */
   @Test
   fun proprietaSuSequenzeACaso() {
@@ -221,44 +256,63 @@ class ProcessForegroundTest {
         assertThat(local.startedWindows).isEqualTo(started.size)
       }
 
+      /** Un evento senza effetto (finestra chiusa, gia' avviata o non avviata): non guarda il tempo e non cambia niente, nemmeno con un segno scaduto. */
+      fun noEffect(change: Change) {
+        assertThat(change).isEqualTo(Change.NONE)
+        assertThat(local.startedWindows).isEqualTo(started.size)
+      }
+
       repeat(40) {
         val i = random.nextInt(4)
-        when (random.nextInt(6)) {
+        when (random.nextInt(7)) {
           0 -> {
             val change = local.start(windows[i])
-            if (i !in closed && started.add(i)) {
+            if (i in closed || i in started) return@repeat noEffect(change)
+            run {
+              val now = localClock.now
+              val expired = marks.filter { now - it < 0 || now - it >= ProcessForeground.RECREATION_GRACE_MS }
               expire()
+              // R3: in primo piano per il modello, ma nessuna finestra e nessun segno vivo: l'uscita c'e' stata senza che nessuno la chiedesse.
+              val silent = foreground && started.isEmpty() && marks.isEmpty()
+              started.add(i)
               if (marks.isNotEmpty()) marks.removeAt(0)
+              if (silent) {
+                assertThat(change).isEqualTo(Change.REENTERED_FOREGROUND)
+                assertThat(local.lastExitAtMillis).isAtLeast(expired.maxOfOrNull { minOf(it, now) } ?: 0L)
+                assertThat(local.startedWindows).isEqualTo(started.size)
+                return@repeat
+              }
             }
             check(change)
           }
           1 -> {
             val change = local.stop(windows[i], changingConfigurations = false)
-            started.remove(i)
+            if (!started.remove(i)) return@repeat noEffect(change)
             check(change)
           }
           2 -> {
             val change = local.stop(windows[i], changingConfigurations = true)
-            if (started.remove(i)) {
-              expire()
-              marks.add(localClock.now)
-            }
+            if (!started.remove(i)) return@repeat noEffect(change)
+            expire()
+            marks.add(localClock.now)
             check(change)
           }
           3 -> {
             val change = local.close(windows[i])
             closed.add(i)
-            started.remove(i)
+            if (!started.remove(i)) return@repeat noEffect(change)
             check(change)
           }
           4 -> {
             localClock.now += random.nextLong(0, ProcessForeground.RECREATION_GRACE_MS / 2)
             check(local.poll())
           }
-          else -> {
+          5 -> {
             localClock.now += ProcessForeground.RECREATION_GRACE_MS
             check(local.poll())
           }
+          // R3: il tempo passa e nessuno chiede (nessun poll): il modello non cambia finche' un evento non lo guarda.
+          else -> localClock.now += random.nextLong(0, 2 * ProcessForeground.RECREATION_GRACE_MS)
         }
       }
     }

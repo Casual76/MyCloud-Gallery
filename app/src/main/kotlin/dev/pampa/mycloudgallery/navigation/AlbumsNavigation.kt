@@ -16,7 +16,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
+import dev.antigravity.fluidengine.ui.page.FluidBackSwipe
 import androidx.navigation.toRoute
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pampa.mycloudgallery.R
@@ -139,7 +140,7 @@ class AppAlbumActions(
 
 /** Il selettore dei media nel grafo (P13): la pagina di feature-library, la risposta a chi l'ha aperta, poi indietro. */
 fun NavGraphBuilder.mediaPickerGraph(nav: NavController, host: AlbumsHostViewModel) {
-  composable<MediaPickerDestination> { entry ->
+  composable<MediaPickerDestination>(backSwipe = FluidBackSwipe.EdgeOnly) { entry ->
     val route = entry.toRoute<MediaPickerDestination>()
     val title = stringResource(if (route.forAlbum != null) R.string.albums_picker_add_title else R.string.albums_picker_examples_title)
     val context = LocalContext.current

@@ -6,7 +6,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import dev.pampa.mycloudgallery.backup.FreeSpaceRequest
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
 import dev.pampa.mycloudgallery.feature.backup.free.FreeSpaceRoute
 import dev.pampa.mycloudgallery.feature.backup.received.ReceivedRoute

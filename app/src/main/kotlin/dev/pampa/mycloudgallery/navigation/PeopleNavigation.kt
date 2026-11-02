@@ -12,7 +12,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.pampa.mycloudgallery.albums.AlbumViewerAnchor
 import dev.pampa.mycloudgallery.albums.AlbumViewerItems

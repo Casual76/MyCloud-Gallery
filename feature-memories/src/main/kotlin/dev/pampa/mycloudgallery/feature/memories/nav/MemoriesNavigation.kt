@@ -2,7 +2,8 @@ package dev.pampa.mycloudgallery.feature.memories.nav
 
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
+import dev.antigravity.fluidengine.ui.page.FluidBackSwipe
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryId
 import dev.pampa.mycloudgallery.feature.memories.contract.MemoriesActions
 import dev.pampa.mycloudgallery.feature.memories.contract.MemoriesThumbnails
@@ -80,6 +81,6 @@ fun NavGraphBuilder.memoriesGraph(
   composable<MemoryDestination> {
     MemoryPageRoute(actions = actions, thumbnails = thumbnails, exits = MemoryPageExits(onBack = back, onPlay = nav::openMemoryPlayer))
   }
-  composable<MemoryPlayerDestination> { MemoryPlayerRoute(thumbnails = thumbnails, onExit = back, clips = clips) }
+  composable<MemoryPlayerDestination>(backSwipe = FluidBackSwipe.Off) { MemoryPlayerRoute(thumbnails = thumbnails, onExit = back, clips = clips) }
   composable<MemoriesSettingsDestination> { MemoriesSettingsRoute(actions = actions, onBack = back) }
 }

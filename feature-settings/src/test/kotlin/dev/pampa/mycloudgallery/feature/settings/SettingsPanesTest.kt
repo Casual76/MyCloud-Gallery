@@ -19,8 +19,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.ComposeNavigator
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.FluidPageNavigator
+import dev.antigravity.fluidengine.ui.navigation.composable
 import androidx.navigation.createGraph
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
@@ -133,7 +133,8 @@ class SettingsPanesTest {
   @Test
   fun ogniPaginaDelPannelloHaLaSuaRotta_eILoCodiceSiRilegge() {
     val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
-    val controller = NavHostController(context).apply { navigatorProvider.addNavigator(ComposeNavigator()) }
+    // Fluid Engine 3.0: le pagine delle Impostazioni sono pagine Fluid, quindi il grafo vuole il navigator delle pagine dell'engine.
+    val controller = NavHostController(context).apply { navigatorProvider.addNavigator(FluidPageNavigator()) }
     controller.graph = controller.createGraph(startDestination = SettingsPaneEmptyRoute) {
       composable<SettingsPaneEmptyRoute> {}
       settingsPages(nav = controller, back = {}, resumeStep = {})

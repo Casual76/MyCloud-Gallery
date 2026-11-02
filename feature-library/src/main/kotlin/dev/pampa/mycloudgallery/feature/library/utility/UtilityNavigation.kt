@@ -4,7 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
+import dev.antigravity.fluidengine.ui.page.FluidBackSwipe
 import androidx.navigation.toRoute
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.feature.library.collections.RecentlyDeletedDestination
@@ -38,7 +39,7 @@ fun NavController.openUtility(page: UtilityPage) {
 fun NavGraphBuilder.utilityGraph(nav: NavController, onOpenViewer: (ViewerRequest) -> Unit) {
   val back: () -> Unit = { nav.popBackStack() }
 
-  composable<UtilityFilterDestination> { entry ->
+  composable<UtilityFilterDestination>(backSwipe = FluidBackSwipe.EdgeOnly) { entry ->
     val page = UtilityPage.fromCode(entry.toRoute<UtilityFilterDestination>().code)?.takeIf { it.isFilter }
     if (page == null) {
       // Una rotta salvata da una versione piu' nuova (o un codice sbagliato): meglio tornare indietro che una pagina vuota.

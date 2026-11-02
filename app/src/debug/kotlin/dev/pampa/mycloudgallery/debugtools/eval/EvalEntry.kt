@@ -3,7 +3,7 @@ package dev.pampa.mycloudgallery.debugtools.eval
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 
 /**

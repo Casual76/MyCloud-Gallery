@@ -2,7 +2,8 @@ package dev.pampa.mycloudgallery.feature.map.nav
 
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
+import dev.antigravity.fluidengine.ui.page.FluidBackSwipe
 import androidx.navigation.NavDestination.Companion.hasRoute
 import dev.pampa.mycloudgallery.core.map.contract.CellKey
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -83,7 +84,7 @@ fun NavGraphBuilder.mapGraph(
 ) {
   val back: () -> Unit = { nav.popBackStack() }
 
-  composable<MapDestination> { MapRoute(actions = actions, thumbnails = thumbnails, onBack = back) }
+  composable<MapDestination>(backSwipe = FluidBackSwipe.EdgeOnly) { MapRoute(actions = actions, thumbnails = thumbnails, onBack = back) }
   composable<ZoneDestination> {
     ZoneGridRoute(
       actions = actions,

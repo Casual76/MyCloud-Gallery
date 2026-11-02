@@ -20,8 +20,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
+import dev.antigravity.fluidengine.ui.navigation.composable
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
@@ -98,11 +98,11 @@ fun ReleaseRoot(ui: ReleaseUi, content: @Composable () -> Unit) {
 @Serializable
 internal data object ReleaseStoppedRoute
 
-/** La versione fermata: la sua pagina e la Diagnostica (con l'esportazione), nient'altro. */
+/** La versione fermata: la sua pagina e la Diagnostica (con l'esportazione), nient'altro. Pagine del Fluid Engine 3.0 (la Diagnostica e' un grafo di pagine Fluid). */
 @Composable
 private fun ReleaseStoppedHost(message: ReleaseMessage) {
   val nav = rememberNavController()
-  NavHost(navController = nav, startDestination = ReleaseStoppedRoute) {
+  FluidNavHost(navController = nav, startDestination = ReleaseStoppedRoute) {
     composable<ReleaseStoppedRoute> { ReleaseStoppedScreen(message, onDiagnostics = { nav.navigate(DiagnosticsGraphRoute) }) }
     diagnosticsGraph(nav = nav)
   }

@@ -1,10 +1,5 @@
 package dev.pampa.mycloudgallery.navigation
 
-import androidx.compose.animation.AnimatedContentTransitionScope
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.activity.compose.ReportDrawnAfter
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -35,13 +30,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavHostController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
+import dev.antigravity.fluidengine.ui.navigation.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.theme.FluidScreenSurface
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagAction
@@ -131,8 +124,8 @@ data class BlockedRoute(val reasonName: String) {
  *
  * I tre `feature-*` non si conoscono: ogni passaggio fra loro e' una callback scritta qui.
  *
- * Le transizioni sono opache e laterali (regola 3 di Fluid: una pagina in arrivo non sfuma mai), con le
- * molle di `FluidMotion`.
+ * Le pagine sono quelle del Fluid Engine 3.0 (`FluidNavHost`): opache e laterali (regola 3 di Fluid: una pagina in
+ * arrivo non sfuma mai), con il back che segue il dito. Prima erano le transizioni di `NavHost` scritte qui.
  */
 @Composable
 fun AppNavHost(
@@ -238,13 +231,12 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
       )
     }
   }
-  NavHost(
+  // Fluid Engine 3.0: le pagine sono dell'engine (`FluidNavHost`): si aprono da destra con la pagina sotto che arretra di un terzo, e il back col
+  // dito tiene la pagina sotto il dito (da qualunque punto, salvo le pagine con gesti orizzontali propri, che lo chiedono dal bordo o mai). Il
+  // back passa dai `BackHandler` delle pagine (selezione, cartelle, Novita'), registrati dopo l'host.
+  FluidNavHost(
     navController = nav,
     startDestination = startRoute(destination),
-    enterTransition = { enter() },
-    exitTransition = { exit() },
-    popEnterTransition = { popEnter() },
-    popExitTransition = { popExit() },
   ) {
       // Revisione 2, F5: per ogni stato si registrano solo le destinazioni raggiungibili da li'. Una richiesta di
       // navigazione arrivata da fuori (oltre all'intent ripulito da MainActivity) non trova le altre.
@@ -616,15 +608,3 @@ internal fun startRoute(destination: RootDestination): Any = when (destination) 
   RootDestination.Wiped -> WipedRoute
   is RootDestination.Blocked -> BlockedRoute(destination.reason.name)
 }
-
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.enter(): EnterTransition =
-  slideInHorizontally(FluidMotion.intOffset()) { width -> width }
-
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.exit(): ExitTransition =
-  slideOutHorizontally(FluidMotion.intOffset()) { width -> -(width * FluidMotion.PeerSlideFraction).toInt() }
-
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.popEnter(): EnterTransition =
-  slideInHorizontally(FluidMotion.intOffset()) { width -> -(width * FluidMotion.PeerSlideFraction).toInt() }
-
-private fun AnimatedContentTransitionScope<NavBackStackEntry>.popExit(): ExitTransition =
-  slideOutHorizontally(FluidMotion.intOffset()) { width -> width }

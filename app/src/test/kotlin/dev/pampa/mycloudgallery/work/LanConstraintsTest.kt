@@ -24,6 +24,7 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 
 /**
  * Con un router senza internet i lavori non giravano (verifica funzionale, RE-11): `NetworkType.CONNECTED` di WorkManager e
@@ -127,6 +128,42 @@ class LanConstraintsTest {
       assertWithMessage("lavoro $name").that(infos).isNotEmpty()
       infos.forEach { assertNoInternetRequired(it.constraints.requiredNetworkRequest, name) }
     }
+  }
+
+  private fun prerequisiteLines(): List<String> =
+    ShadowLog.getLogsForTag("WM-EnqueueRunnable").filter { it.msg.contains("doesn't exist; not enqueuing") }.map { it.msg }
+
+  /**
+   * "WM-EnqueueRunnable: Prerequisite ... doesn't exist; not enqueuing" (prova sul campo di Fase 10, 14 righe in 85 minuti): `scanNow` e' l'**unica catena** dell'app (verifica del NAS, poi
+   * sincronizzazione dell'indice, poi dati personali: `beginUniqueWork(KEEP).then().then()`). Con la catena gia' in coda (l'app si apre o torna in primo piano, un'operazione sui file finisce) `KEEP` non
+   * inserisce la verifica nuova, e WorkManager scrive un errore per ognuno dei due lavori che le vanno dietro e che non ha dove agganciare. Nessuna catena si rompe: quella in coda resta intera, con gli
+   * stessi tre lavori, e non ne nasce un'altra (e' proprio cio' che `KEEP` deve fare: "senza spostare un giro gia' in coda"). Qui si prova entrambe le cose: la prima chiamata non scrive niente, la seconda
+   * lascia la catena identica e scrive esattamente quelle due righe.
+   */
+  @Test
+  fun scanNowConLaCatenaGiaInCodaLaLasciaIntera_ELeDueRigheDiWorkManagerSonoQuelle() {
+    ShadowLog.clear()
+    NasWorkScheduling.scanNow(context)
+    val first = workManager.getWorkInfosForUniqueWork(NasWorkScheduling.SCAN_NOW_WORK).get()
+    assertThat(first).hasSize(3)
+    assertThat(first.map { it.state }).containsExactly(WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED, WorkInfo.State.BLOCKED)
+    assertThat(prerequisiteLines()).isEmpty()
+
+    NasWorkScheduling.scanNow(context)
+    val second = workManager.getWorkInfosForUniqueWork(NasWorkScheduling.SCAN_NOW_WORK).get()
+    assertThat(second.map { it.id }.toSet()).isEqualTo(first.map { it.id }.toSet())
+    assertThat(second.map { it.state }).containsExactly(WorkInfo.State.ENQUEUED, WorkInfo.State.BLOCKED, WorkInfo.State.BLOCKED)
+    assertThat(prerequisiteLines()).hasSize(2)
+
+    // Chiusa la catena (qui annullata: tutti e tre finiti), una chiamata nuova ne accoda una nuova, intera e senza righe d'errore.
+    ShadowLog.clear()
+    val ids = first.map { it.id }
+    workManager.cancelUniqueWork(NasWorkScheduling.SCAN_NOW_WORK).result.get()
+    NasWorkScheduling.scanNow(context)
+    val again = workManager.getWorkInfosForUniqueWork(NasWorkScheduling.SCAN_NOW_WORK).get().filter { !it.state.isFinished }
+    assertThat(again).hasSize(3)
+    assertThat(again.map { it.id }.toSet()).containsNoneIn(ids)
+    assertThat(prerequisiteLines()).isEmpty()
   }
 
   /** I lavori dell'utente (UIDT): `setRequiredNetworkType(NETWORK_TYPE_ANY)` chiede una rete validata, `setRequiredNetwork(LanConstraints.request())` no. */

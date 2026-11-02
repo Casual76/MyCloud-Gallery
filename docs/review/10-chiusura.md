@@ -6,7 +6,7 @@
 | **Tipo** | Riconciliazione in sola lettura dei documenti (revisioni, `docs/decisioni.md`, `docs/sicurezza.md`) e del codice dove serviva per decidere. **Nessun difetto di prodotto corretto qui** (`docs/fase10-progetto.md` §2.11, D36; brief di P11). |
 | **Data** | 31/10/2026 |
 | **Regola** | Una riga per ogni voce **ancora aperta** secondo il documento della revisione (le voci chiuse nel documento con una correzione e un test non si ripetono). Ogni riga dice una sola cosa: **chiusa** da una correzione con il suo test, **dichiarata** con un limite `L<n>` di `docs/sicurezza.md` §6, **non un difetto** con il motivo, oppure **aperta** con il motivo e chi la chiude. Nessun rilascio con una voce "Alta" o "Blocca" aperta (§2.11). |
-| **Esito** | **Nessuna voce Alta, Critica o Blocca aperta.** Restano aperte voci Basse, Minori e Informative, ognuna con chi la chiude (sotto). La Media 1.4 M3 (decisione 2 dell'utente) e' chiusa dalla correzione M3 della Fase 10 (31/10, decisione 2(a)). |
+| **Esito** | **Nessuna voce Alta, Critica o Blocca aperta.** Restano aperte voci Basse, Minori e Informative, ognuna con chi la chiude (sotto). *Dopo la correzione D (02/11): nessuna Bassa aperta; le informative della "security-review" hanno tutte una decisione; restano prove sul campo, 5A I5 (la pagina del backup) e la scelta dell'utente su 5B I3.* La Media 1.4 M3 (decisione 2 dell'utente) e' chiusa dalla correzione M3 della Fase 10 (31/10, decisione 2(a)). |
 
 ## Conteggio per stato
 

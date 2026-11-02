@@ -336,6 +336,15 @@ private fun LazyListScope.deviceSection(state: BackupPageUi, actions: BackupPage
         onClick = if (folder == null && state.status is BackupStatus.FirstBackupReady) actions.openSheet else null,
       )
       FluidListDivider()
+      // Fase 10 (P13, 5A I5, decisione dell'utente del 31/10): il guardiano fa la copia privata dei media propri che stanno solo nell'area comune **sempre**, anche
+      // senza backup avviato (D9). La pagina lo dice: una riga informativa, senza azione.
+      FluidListRow(
+        title = stringResource(R.string.backup_common_copy_title),
+        subtitle = stringResource(R.string.backup_common_copy_detail),
+        tone = FluidTone.Info,
+        leading = { Icon(imageVector = Icons.Rounded.Folder, contentDescription = null) },
+      )
+      FluidListDivider()
       FluidListRow(
         title = stringResource(R.string.backup_settings_title),
         subtitle = stringResource(R.string.backup_settings_detail),

@@ -115,6 +115,9 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
 
   override suspend fun eraseAll(): Boolean {
     val steps = Steps()
+    // Fase 10 (P13, D42): PER PRIMI i widget, vuoti sulla Home prima di cancellare qualunque cosa (poi lavoro annullato e registro tolto), e le altre finestre chiuse.
+    steps.run("widget") { graph.widgetStopper?.stop() }
+    steps.run("finestre") { graph.windowsCloser?.invoke() }
     steps.run("onboarding") { graph.onboardingStore.clear() }
     steps.run("account") { graph.accountStore.clear() }
     steps.run("casa") { graph.homeStore.clear() }
@@ -128,6 +131,14 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       withContext(Dispatchers.IO) {
         val models = File(context.noBackupFilesDir, AiGraph.MODELS_DIR)
         if (models.exists() && !models.deleteRecursively()) steps.ok = false
+      }
+    }
+    // Fase 10 (P13, D42): lo stato del manifest firmato e l'ora della sua ultima lettura (la prima lettura dopo la riconfigurazione rimette un blocco, L561).
+    steps.run("manifest") {
+      graph.release?.clear()
+      withContext(Dispatchers.IO) {
+        val release = File(context.noBackupFilesDir, dev.pampa.mycloudgallery.release.ReleaseGraph.DIR)
+        if (release.exists() && !release.deleteRecursively()) steps.ok = false
       }
     }
     return steps.ok
@@ -154,6 +165,8 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
   }
 
   private suspend fun eraseGalleryData(steps: Steps, stopGallery: Boolean, allDatabases: Boolean) {
+    // Fase 10 (P13, D42): i widget per primi anche per i soli dati di un account (le foto sulla Home sono del vecchio account). Non fa niente se gia' fermi.
+    steps.run("widget") { graph.widgetStopper?.stop() }
     // Fase 9 (P13, §1.4, D37): ricordi e mappa PER PRIMI. Niente si monta o si ricostruisce piu', il lavoro `memories-notify` e la notifica in tendina si
     // tolgono; poi, con il resto dei file, `memories/` (scaffale, registro e preferenze delle notifiche, chi e' in tendina, musica) e `map/` (database e cache
     // di MapLibre, versione del TileJSON, impostazioni e camera). Anche per i soli dati di un account: lo scaffale e la camera sono del vecchio account.
@@ -215,7 +228,7 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
         // I11: in debug anche i dati dello strumento di valutazione della ricerca (`eval/`); in release non ce ne sono.
         // Fase 8 (P13): i database dei volti (`faces/faces-<G>.db` con `-wal`, `-shm`, `-journal`, anche con `allDatabases = false`), le chiavi avvolte, la memoria
         // locale (`faces-local`), il diario della cancellazione, il registro delle teste personali e il battito del calcolo.
-        for (name in NAS_FILES + AI_FILES + FACES_FILES + PHASE9_FILES + DeveloperTools.erasableDirs()) {
+        for (name in NAS_FILES + AI_FILES + FACES_FILES + PHASE9_FILES + PHASE10_FILES + DeveloperTools.erasableDirs()) {
           val target = File(context.noBackupFilesDir, name)
           if (target.exists() && !target.deleteRecursively()) steps.ok = false
         }
@@ -288,6 +301,9 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       dev.pampa.mycloudgallery.memories.MemoriesWiring.DIR,
       dev.pampa.mycloudgallery.feature.map.map.MapLibreInit.MAP_DIR,
     )
+
+    /** Fase 10 (P13, D42): il registro del widget (`widget/`). Lo stato del manifest (`release/`) lo toglie solo l'azzeramento completo ([eraseAll]). */
+    val PHASE10_FILES: List<String> = listOf(dev.pampa.mycloudgallery.widget.WidgetGraph.DIR)
 
     /**
      * Fase 6 (P11): il buffer di analisi, l'indice di ricerca (vettori, registro delle origini, righe del testo letto, corpi propri), i

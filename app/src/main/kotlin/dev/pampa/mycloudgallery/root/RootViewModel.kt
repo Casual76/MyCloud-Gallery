@@ -135,6 +135,8 @@ class GraphRootPorts(private val graph: AppGraph, private val restart: ProcessRe
   override fun watchApproval(): Flow<TrustStatus> = graph.approvalWatcher.watch()
 
   override suspend fun reconfigureAfterWipe() {
+    // Fase 10 (P13, D42): "Configura di nuovo" lascia una finestra sola (la principale).
+    runCatching { graph.windowsCloser?.invoke() }
     // L'azzeramento ha fermato galleria e NAS di questo processo per sempre: si riparte da un processo nuovo (ON-11).
     if (graph.forgetCompletedWipe()) restart.restart()
   }
@@ -147,7 +149,11 @@ class GraphRootPorts(private val graph: AppGraph, private val restart: ProcessRe
 
   override suspend fun holdsFamilyKey(): Boolean = graph.coordinator.holdsFamilyKey()
 
-  override suspend fun startOver(): StepResult = graph.coordinator.startOver()
+  override suspend fun startOver(): StepResult {
+    // Fase 10 (P13, D42): anche "Configura di nuovo" dalla pagina del Keystore lascia una finestra sola.
+    runCatching { graph.windowsCloser?.invoke() }
+    return graph.coordinator.startOver()
+  }
 }
 
 /**

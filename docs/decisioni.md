@@ -14417,3 +14417,109 @@ Le corse intermedie (prove mirate, mutazioni, screenshot) sono in `build\p5\*.lo
 ### Commit (branch `fase10/p5`)
 `9fca7bdf` (adaptive: finestra, regole, mouse, nuova finestra; Onboarding e Cartelle NAS), `d18d81a6` (viewer affiancato), `e2dafd9c` (mappa e zona), `0f43576c` (Impostazioni), `0a4fd021` (dettaglio nelle Raccolte, selezione salvata, nuova finestra), `1ef97611` (riga `PANES`),
 `067a55b1` (screenshot e documenti), `6dd7be58` (senza `return@key`), `7a37282d` (zona senza animazione), `2ec79989` ("Affianca" per profilo, provato), `48388361` (`EntryPanesTest`); questa riga con l'esito, dopo.
+
+## Fase 10 P6: trascinamento fra app (02/11)
+
+Il pacchetto P6 della Fase 10 (`docs/fase10-progetto.md` §4.4 riga P6; §0.1 D20, D21, D41; §2.5, §2.12; E-T11-E-T18; E-X5-E-X7, E-H11). Branch `fase10/p6` da `86744944`. **Nessuna dipendenza, permesso, host, chiave o costante di
+`FeatureFlags` cambiati**; nessun componente nuovo nella release (un'activity di prova solo in debug). Nessuna voce nuova di `docs/sicurezza.md` (C436, C437, L547 e L548 di P0 precisate dal codice). Nessuna prova su telefono o tablet: tutto JVM,
+Robolectric e Roborazzi, piu' l'emulatore dove indicato.
+
+**Cosa c'e', dove**
+| Pezzo | Dove | In breve |
+|---|---|---|
+| Il gesto | `core-designsystem/.../adaptive/MediaDragSource.kt`, `MediaDragPort.kt`, `MediaDragShadow.kt` | `Modifier.mediaDragSource(enabled, origin, subject)`; la porta per le schermate `MediaDragPort` (id come stringhe, come `NewWindowPort`); l'ombra e l'avvio vero (`View.startDragAndDrop`) |
+| Le destinazioni | `core-designsystem/.../adaptive/MediaDropTarget.kt` | `Modifier.mediaDropTarget(DropTarget, enabled)`, `MediaDropPort`, evidenziazione (filo quando un trascinamento ricevibile e' in corso, piu' marcato sopra) |
+| I dati del trascinamento | `feature-integrations/.../drag/DocumentDragPayloads.kt` | `MediaDragHandler` sopra `IntegrationLibrary`, `DocumentIssuer` e `DeliveryPreparer` del selettore (P10, P11 della 5B) |
+| I prestiti | `drag/DragLeases.kt` | id e copie in prestito: app in primo piano piu' 10 minuti, al piu' quattro insieme, non oltre il prossimo avvio; `ForegroundTracker` |
+| La porta delle schermate | `drag/HandlerDragPort.kt`, `strings_integrations_drag.xml` | `MediaDragPort` sopra `MediaDragHandler`; "Preparo..." dopo 300 ms; una frase per motivo di rifiuto (`Toast`) |
+| In arrivo | `drag/IncomingDrops.kt`; `receive/ReceiveViewModel.kt`, `ShareReceiverActivity.kt` (solo la scelta iniziale) | rilascio -> foglio della ricezione; `DropHint`, `DropHandoff` |
+| Contatori | `drag/DragCounters.kt` | `DragCounter`: soli codici fissi (non ancora nell'export: vedi P13) |
+| Superfici | `MediaGrid` (Libreria), `ViewerPage`, `AlbumGrid`, `SearchResultCell`, `MemoryGrid`, `ZoneGrid`; destinazioni `LibraryScreen`, `AlbumPageScreen`, `NasFoldersScreen` | solo il modificatore e la porta; piu' poche righe in `GridGestures.kt` |
+| Legame nell'app | `app/.../integrations/IntegrationsGraph.kt` | poche righe in `install()` e `revokeAll()`: **da tenere in P13** |
+| Registro dei Nascosti | `app/src/test/.../hidden/HiddenSurfaces.kt` (riga `DRAG` in produzione), `RealDragProbes.kt`, `DragSourcesScopeTest.kt` | sonda sul gestore vero, mondo casuale con nascosti |
+| App di prova | `app/src/debug/.../probes/FieldProbeDragReceiverActivity.kt`, manifest e stringhe di debug | "MCG prova (riceve)": **solo debug** |
+
+**Scelte**
+- **Un solo posto da cui esce un media: la vista di adesso.** `DocumentDragPayloads` controlla ogni id contro la vista della Libreria (non contro la porta, che puo' sbagliare) e **rifiuta tutto** il trascinamento se uno solo e' fuori (`HIDDEN`): un trascinamento
+  che porta meno di cio' che l'utente vede selezionato sarebbe una sorpresa. La vista si rilegge anche subito prima di creare gli id. Dai Nascosti non si trascina per costruzione (nessuna origine li nomina, le loro griglie non passano `dragOrigin`, il viewer
+  aperto da loro e' `secure`).
+- **URI solo del provider, anche per il telefono.** Un media del telefono esce come `content://<pacchetto>.integrations.documents/document/<token>` (id consegnato) e il provider lo legge dal telefono come per il selettore; non e' mai un indirizzo del MediaStore.
+  Cosi' vale una regola sola (`CallerGuard`, sola lettura sul singolo URI) e nessun `FileProvider` nuovo.
+- **La preparazione e' dopo la pressione lunga e prima del sistema.** La porta sospende; il gesto tiene il dito (consuma il resto del gesto, la lista non scorre) e il trascinamento **parte quando e' pronto** (`View.startDragAndDrop` serve il dito ancora giu'). Un dito
+  alzato annulla la preparazione (le copie fatte si tolgono). Se il sistema rifiuta il gesto, `MediaDrag.discard` toglie subito copie e id. Il sistema che trascina e' un'interfaccia (`MediaDragStarter`): Robolectric non lo ha, i test ne danno uno che registra.
+- **Come parte, per ogni superficie.** Il gesto e' mio e **non consuma finche' non scatta** (le griglie e il viewer hanno i loro gesti), e chiede alla superficie *al tocco* cosa si trascinerebbe: cosi' la selezione e' quella di quel momento. Tocco e penna: pressione
+  lunga ferma; mouse: tasto principale e trascinamento oltre la soglia (o tenuto fermo), mai il clic destro. **Libreria:** la pressione lunga su una cella **gia' selezionata** trascina la selezione (come la Galleria di Samsung: si seleziona, poi si tiene premuto);
+  su una cella non selezionata resta la selezione di sempre. Per non far fare alla griglia due cose insieme la sua pressione lunga si ferma quando e' del trascinamento (`ownsLongPress`, poche righe in `GridGestures.kt`; col mouse su una cella gia' selezionata la griglia non comincia nemmeno la selezione a trascinamento): non entra in selezione, non deseleziona,
+  e il rilascio di un dito rimasto giu' a lungo non e' un tocco. Col mouse si porta via la cella (da sola, senza entrare in selezione) o la selezione. **Ricerca, ricordo, zona:** pressione lunga (non avevano altro). **Album:** la pressione lunga e' il menu della
+  cella, quindi col tocco non si trascina (solo col mouse). **Viewer:** il mouse trascina la foto a viewer non ingrandito; col tocco la pressione lunga e' dell'arbitro (testo letto, ritaglio) e li' non si trascina.
+- **"Rimuovi la posizione" e' una sola impostazione** (quella che il provider legge quando l'altra app apre): il gestore la legge dal preparatore; una richiesta che la chiede con l'impostazione spenta si rifiuta (il provider servirebbe l'originale). Le schermate
+  passano sempre `removeLocation = false`. Con la copia da fare, ogni elemento passa da `PreparedCopies` (lo stripper di "Condividi"): se una sola non si fa, **niente parte e niente resta**.
+- **Durata (D20, L547).** `DragLeases`: gli id (revocati) e le copie (tolte) escono quando l'app e' stata in secondo piano 10 minuti (`ForegroundTracker`: conta le activity avviate, una ricreazione non e' un'uscita, due finestre non sono un'uscita), subito se il
+  trascinamento non parte, all'azzeramento (`releaseAll`), e comunque all'avvio dopo (`ShareCache.sweepAtStart` svuota `cacheDir/share/`). Al piu' quattro trascinamenti insieme (le copie hanno un tetto di 2 GiB).
+- **In arrivo: nessuna strada nuova.** `IncomingDrops` non copia ne' salva: chiede il permesso di lettura e apre `ShareReceiverActivity` con gli indirizzi (stesso filtro dell'intento, `ReceiveRequest.from`); da li' vale il flusso di P11 (`IncomingStager`: tetti di C18, tipo dai byte,
+  rifiuto di `file://` e dei nostri provider) e la conferma che nasce solo dal tocco. Un trascinamento partito da noi non si riceve (`MediaDragLocalState`). La destinazione e' una **scelta iniziale** (`DropHint`: un album dove si puo' aggiungere, una cartella dell'albero
+  di "Salva sul NAS") portata da un evento interno fresco e una volta sola (`DropHandoff`), mai dall'intento: un'altra app non puo' guidare il foglio. Un album dove "guardano" soltanto non e' una destinazione (E-T16: la pagina non e' un bersaglio); una cartella fuori
+  dall'albero delle destinazioni, o di un'altra share, lascia il foglio di sempre.
+- **Una porta per processo, come `IntegrationPorts`.** `MediaDragPorts` e `MediaDropPorts` (design system) le installa `IntegrationsGraph.install()`; le schermate leggono prima quella della composizione (test, anteprime) poi quella del processo; senza porta il gesto non
+  fa niente (fallire chiusi). Cosi' P13 non deve toccare le schermate ne' la radice.
+
+**Prove** (tutte verdi; JVM e Robolectric, nessun dispositivo)
+- *JVM e Robolectric*: `DocumentDragPayloadsTest` (21; URI solo del provider e solo lettura, tipi del clip, tetti di 100 elementi e 2 GiB esatti e oltre, un nascosto ferma tutto con una porta che sbaglia, nascosto a meta' preparazione, gruppo con un nascosto,
+  accesso parziale, **proprieta' su 300 richieste casuali con nascosti dell'ultimo momento**, NAS non raggiungibile e prova del NAS a tempo, blocco prima e durante, annullamento in ogni sospensione, prestito); `DragLocationFreeTest` (10; con lo stripper vero: JPEG, HEIC diventato
+  JPEG, MP4 senza posizione verificati dal controllo indipendente; fallimento di una sola copia = niente parte e niente resta; GIF; NAS; nascosto o blocco dopo le copie; impostazione spenta = originali e solo-NAS col descrittore, nessuna copia; **le copie spariscono al riavvio**);
+  `DragLeasesTest` (9; 10 minuti esatti, ritorno in primo piano, ricreazione, due finestre, tetto di quattro, rilascio una volta sola); `HandlerDragPortTest` (7; "Preparo..." solo oltre 300 ms, una frase per motivo, id non validi, annullamento); `IncomingDropsTest` (9;
+  cosa si offre, trascinamento nostro ignorato, rilascio = solo il foglio, permessi di sola lettura, blocco, evento interno fresco); `DropHintReceiveTest` (10; cartella a piu' livelli, fuori albero, area comune, album offerto o no, album che compare dopo, niente in coda senza tocco,
+  un altro rilascio sullo stesso foglio); `DragSourcesScopeTest` (4; il modificatore solo nei file elencati, mai nei Nascosti, negli Eliminati di recente, nei Doppioni; `dragOrigin` alla griglia condivisa solo dalla Libreria; il viewer dai Nascosti non trascina);
+  `MediaDragSourceTest` (10; gesto: pressione lunga, scorrimento, alzato prima, sorgente nulla, preparazione lunga e dito alzato = annullata, rifiuto, mouse e clic destro, senza porta, porta del processo); `GridDragTest` (7; la selezione nell'ordine della vista, il tocco rapido, l'ombra e'
+  la miniatura della cella, mouse, senza origine); `ViewerDragTest` (3: il mouse trascina la foto corrente, dai Nascosti mai, con lo zoom no); riga `DRAG` del registro con la sonda `RealDragProbes` sul gestore vero (mondo casuale con nascosti e gruppi: un media esce da solo se e solo se e' una cella, una raffica con un non-cella e' rifiutata per intero,
+  URI solo del provider e ognuno porta al suo media, nessun id dopo il rilascio); `FlowHygieneTest` esteso a `drag/` (nessun log, nessun colore a mano, nessuna frase nel codice, contatori a codice fisso).
+- *Screenshot* (`docs/screenshots/10-P6/`): `ombra-e-destinazioni-{chiaro,scuro}.png` (l'ombra con una foto, con dodici, senza miniatura; le destinazioni a riposo, offerta, con il dito sopra), `rilascio-{cartella,album}-{chiaro,scuro}-telefono.png` (il foglio della ricezione come lo apre un rilascio).
+
+**Emulatore.** `Medium_Phone` era gia' acceso da un altro agente (`emulator-5554`): non l'ho toccato (nemmeno con `-read-only`) e non ho provato il trascinamento vero. Cio' che resta **non provato dal sistema** e' `View.startDragAndDrop` (Robolectric non ha il
+sistema che porta il trascinamento: il gesto, la porta, i dati e l'ombra sono provati con un avvio finto; la chiamata e' la stessa che fa `dragAndDropSource` di Compose). Comandi per chi puo' (emulatore o tablet, build debug; foto sintetiche a gradiente in `DCIM/Camera`):
+```
+emulator.exe -avd Medium_Phone -no-window -no-audio -no-snapshot-save -memory 4096
+adb install -r app\build\outputs\apk\debug\app-debug.apk
+adb shell pm grant dev.pampa.mycloudgallery.debug android.permission.READ_MEDIA_IMAGES
+adb shell "mkdir -p /sdcard/Android/data/dev.pampa.mycloudgallery.debug/files && touch /sdcard/Android/data/dev.pampa.mycloudgallery.debug/files/debug-family-ready.marker"
+adb push <foto>.jpg /sdcard/DCIM/Camera/   (poi: adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/DCIM/Camera/<foto>.jpg)
+adb shell am start -n dev.pampa.mycloudgallery.debug/dev.pampa.mycloudgallery.MainActivity
+adb shell am start -n dev.pampa.mycloudgallery.debug/dev.pampa.mycloudgallery.debugtools.probes.FieldProbeDragReceiverActivity   (a schermo diviso con l'app)
+adb shell input draganddrop <x1> <y1> <x2> <y2> 1500        (dalla Libreria al riquadro: serve una cella gia' selezionata)
+adb shell run-as dev.pampa.mycloudgallery.debug cat no_backup/field-probe/drag-report.txt
+adb emu kill        (alla fine, solo se l'emulatore e' il tuo)
+```
+
+**Cosa serve a P13**
+- **Tenere** le quattro righe di `IntegrationsGraph` (`dragLeases`, `dragPayloads`, `ForegroundTracker`, `MediaDragPorts.install`, `MediaDropPorts.install`, e i reset in `revokeAll`): senza, niente si trascina e niente si riceve.
+- **Diagnostica** (`DRAG_OUT`, `DRAG_IN`, `DRAG_TEMP_CLEANED`, §2.13): `DragCounters.snapshot()` da unire a `FlowCounters.snapshot()` in `IntegrationsGraph.counterExport` **con le chiavi nuove in `ExportKeys`** (`drag_out_*`, `drag_in_*`, `drag_temp_cleaned`); `IntegrationsCountersExportTest` fallira' se si uniscono
+  senza. Le copie tolte all'avvio (`DragCounter.TEMP_CLEANED`) non sono contate: `ShareCache.sweepAtStart` non dice quante ne toglie.
+- **Azzeramento** (D42): `revokeAll()` rilascia gia' i prestiti e rimette le porte ai null-object; `closeOtherWindows` resta di P13 (P4).
+- **`MediaDragPort` e `MediaDropPort`** sono nel design system: se P13 costruisce una radice nuova non serve altro, ma una finestra senza `IntegrationsGraph` non trascina.
+- Altre griglie con media visibili (`CollectionGridPage`: Raccolte filtrate, Utility, selettore dei media; `feature-people`) **non** hanno il trascinamento: non erano nel perimetro. Si aggiunge passando `dragOrigin` (griglia condivisa) o il modificatore (celle proprie).
+
+**Da provare sul tablet e sul telefono** (F168 e F169; nessuna fatta su un dispositivo)
+- **F168** (a schermo diviso o in una finestra libera, con "MCG prova (riceve)": `am start -n dev.pampa.mycloudgallery.debug/dev.pampa.mycloudgallery.debugtools.probes.FieldProbeDragReceiverActivity`): tenere premuta una foto selezionata della Libreria e portarla nel riquadro;
+  il resoconto dice schema e autorita' del provider, lettura riuscita con i byte e l'impronta (da confrontare con l'originale), **scrittura negata**, **permesso persistente rifiutato**; una selezione di 3, di 100 e di 101 (rifiuto "al massimo 100"); un video grande solo sul NAS
+  (con il NAS spento: il messaggio, nessuna attesa; acceso, il file arriva a pezzi); con "Rimuovi la posizione" acceso una foto con GPS arriva senza (`exiftool`) e un GIF fa dire "non le trascino"; **uscire dall'app 10 minuti e riprovare a leggere dal riquadro**: errore; riavviare l'app: `cacheDir/share/` vuota;
+  col mouse in DeX (trascinare senza premere a lungo); dal viewer con il mouse; da album (solo mouse), ricerca, ricordo e zona (tocco lungo); **con Gmail, Google Messaggi, WhatsApp, OneDrive e Samsung Galleria come ricevitori veri** (il riquadro di prova e' nello stesso processo dell'app: non prova l'isolamento fra due app).
+- **F169**: dal riquadro di prova (tenere premuto "trascina fino a tre foto di mcg-prova") su la Libreria, su un album dove si puo' aggiungere (e su uno dove "guardano" soltanto: non si evidenzia), su una cartella di Cartelle NAS dentro "Ricevute": il filo, il foglio con il conteggio e la destinazione scelta,
+  nessun caricamento senza il tocco; da Archivio e dalla Galleria di Samsung; con il blocco dell'app attivo (il rilascio non porta niente); un'immagine finta o un `file://` (il foglio li rifiuta).
+- **Punti di cui non si sa**: se `View.startDragAndDrop` accetta il gesto quando la preparazione dura piu' di un secondo con il dito fermo (Samsung One UI, DeX); se la pressione lunga della cella selezionata e la selezione a trascinamento della griglia si sentono insieme al polpastrello; il rendimento
+  dei descrittori a richiesta con le app vere (T-14 della 5B); l'ombra sul display del tablet.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde** (uscita 0, 02/11), lanciato come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del semaforo; 44 minuti. `assembleDebug`, `assembleRelease` (con `verifyReleaseManifest`), `galleryTest` e `galleryLint`;
+**18.335 prove in 47 moduli, 0 fallite, 35 saltate per assunzione**, nessun modulo a zero (`feature-integrations` 645, `core-designsystem` 203, `feature-library` 1.025, `feature-viewer` 934, `app` 1.378). Il passo dei resti di debug nel dex di release cerca ora anche `FieldProbeDragReceiver`:
+l'app di prova e' assente dal dex di release. Nessuna classe rifatta con `--rerun`, nessun `hs_err_pid*.log`. (L'uscita di `check.ps1` e' stata letta dal codice di uscita: il mio programma di lancio non ne ha salvato il testo, solo i risultati dei test sotto `build\`.) Le corse intermedie sono in `build\p6\*.log`, fuori dal repository.
+Le due prime corse di prova erano rosse per due errori **miei** nei test (un `vararg` di un tipo `value class`; `waitForIdle` con il dito giu' mentre la griglia fa il ciclo dei fotogrammi della selezione), corretti.
+
+### Commit (branch `fase10/p6`)
+`71966e4e` (gesto e destinazioni nel design system), `e86a04f8` (dati del trascinamento, prestiti, rilascio in arrivo), `68b44ae5` (griglie, viewer, destinazioni nelle pagine), `32390c08` (legame nell'app, riga `DRAG`, app di prova, `check.ps1`), `fa93ef94` (screenshot); questa sezione e `docs/sicurezza.md`, dopo.
+
+**Punti aperti**
+- **Dall'album col tocco non si trascina** (la pressione lunga e' il menu della cella); dal viewer col tocco neppure quando il testo letto o il ritaglio prendono la pressione lunga. Alternativa possibile: "Trascina..." nel menu, o un tocco-e-trascina sulla foto con due dita; non fatto.
+- **Nessun avviso a video durante il trascinamento** oltre ai `Toast`: l'ombra non dice cosa e' (la miniatura) e il conteggio e' un cerchio; il testo di "Preparo..." e dei rifiuti e' provvisorio (fase grafica).
+- **L'app di prova e' nello stesso processo** dell'app (un processo a parte farebbe nascere una seconda `Application`): non prova l'isolamento fra due app diverse; `CallerGuard` con un chiamante estraneo e' provato dalla JVM (`MediaDocumentsProviderTest`) e il provider serve gli stessi URI al selettore.
+- **Le cartelle di Cartelle NAS fuori dall'albero di "Salva sul NAS"** non sono una destinazione del foglio (la politica D12/D13 non e' cambiata): il rilascio apre il foglio di sempre.
+- **`DragCounter.TEMP_CLEANED`** non e' contato (vedi P13).

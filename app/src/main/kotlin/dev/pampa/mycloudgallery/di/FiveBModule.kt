@@ -133,6 +133,8 @@ object FiveBModule {
     // IN-3: a processo freddo lo stato si sta ancora leggendo; il cancello d'ingresso aspetta invece di dire "non pronta".
     familyLoading = { setup.state.value is SetupState.Loading },
     familyChanges = setup.state.map { },
+    // CA-2, R1 (Fase 10): il manifest firmato chiude gli ingressi con la versione fermata e "Salva sul NAS" con la sola lettura.
+    release = graph.release,
   )
 
   @Provides

@@ -57,6 +57,15 @@ enum class ReceiveScreenState {
   /** L'app non e' pronta (onboarding, famiglia, dispositivo): non si offre niente. */
   NOT_READY,
 
+  /** CA-2 (Fase 10): questa versione e' stata fermata dal manifest: niente si copia, si dice di aggiornare. */
+  STOPPED,
+
+  /**
+   * CA-2 (Fase 10): questa versione e' in **sola lettura** per il manifest (`ReadOnly`): "Salva sul NAS" non si offre e niente si copia (in coda non partirebbe
+   * fino all'aggiornamento). Si dice **prima di copiare**, come per il backup in prova.
+   */
+  READ_ONLY_VERSION,
+
   /** I file si stanno copiando. */
   STAGING,
 
@@ -291,6 +300,7 @@ class ReceiveViewModel(
       }
       EntryDecision.NEEDS_UNLOCK -> cover(ReceiveScreenState.LOCKED, ReceiveCounter.LOCKED)
       EntryDecision.NOT_READY -> cover(ReceiveScreenState.NOT_READY, ReceiveCounter.NOT_READY)
+      EntryDecision.STOPPED -> cover(ReceiveScreenState.STOPPED, ReceiveCounter.NOT_READY)
       EntryDecision.LOADING -> awaitLoaded()
     }
   }
@@ -370,6 +380,11 @@ class ReceiveViewModel(
     // IN-6: il backup in prova non scrive sul NAS: si dice subito, senza copiare niente (prima: fino a 4 GiB copiati, poi un messaggio sbagliato).
     if (blockedByTrial()) {
       mutate { it.copy(screen = ReceiveScreenState.TEST_ONLY) }
+      return
+    }
+    // CA-2 (Fase 10): una versione in sola lettura per il manifest non offre "Salva sul NAS": niente si copia e niente entra in una coda che non partirebbe.
+    if (blockedByRelease()) {
+      mutate { it.copy(screen = ReceiveScreenState.READ_ONLY_VERSION) }
       return
     }
     val stage = try {
@@ -721,6 +736,15 @@ class ReceiveViewModel(
   /** La promessa "questi file andranno in [album]": falso se la porta non risponde o rifiuta (i file sono comunque in coda). */
   private suspend fun registerAlbum(stage: IncomingStage, album: IncomingAlbumChoice): Boolean = try {
     albums.willAdd(stage.id, album)
+  } catch (e: CancellationException) {
+    throw e
+  } catch (_: Exception) {
+    false
+  }
+
+  /** CA-2 (Fase 10): la versione in sola lettura per il manifest; un errore della porta non lo dice (il cancello degli arrivi ferma comunque la coda). */
+  private suspend fun blockedByRelease(): Boolean = try {
+    destinations.savingBlockedByRelease()
   } catch (e: CancellationException) {
     throw e
   } catch (_: Exception) {

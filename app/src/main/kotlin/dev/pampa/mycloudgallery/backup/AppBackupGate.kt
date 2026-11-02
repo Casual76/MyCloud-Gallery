@@ -25,6 +25,11 @@ class BackupGateInputs(
   val frozen: (String) -> Boolean,
   val readOnly: (String) -> Boolean,
   val paused: () -> Boolean,
+  /**
+   * CA-2 (revisione funzionale della Fase 10): la parte di [writesStopped] che viene dal **manifest firmato** (`ReleaseStatus.ReadOnly` o `Stopped`). Non cambia il
+   * cancello: serve a chi deve dire la causa o non mettere in coda cio' che non partirebbe fino all'aggiornamento (la coda dei file in arrivo). Di serie mai.
+   */
+  val releaseHoldsWrites: () -> Boolean = { false },
 )
 
 /**

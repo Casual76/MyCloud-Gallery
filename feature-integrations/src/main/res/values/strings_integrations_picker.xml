@@ -41,6 +41,10 @@
   <string name="integrations_picker_unlock_failed">Non sono riuscito a sbloccare. Riprova.</string>
   <string name="integrations_picker_unlock_no_screen_lock">Il telefono non ha un blocco schermo: impostalo nelle impostazioni del telefono, oppure apri MyCloud Gallery e spegni il suo blocco.</string>
 
+  <!-- CA-2 (Fase 10): la versione fermata dal manifest firmato (il titolo e' comune al selettore e alla ricezione). -->
+  <string name="integrations_stopped_title">Questa versione è stata fermata</string>
+  <string name="integrations_picker_stopped_detail">Aggiorna MyCloud Gallery dal Pampa Store: finché non la aggiorni non do foto e video alle altre app.</string>
+
   <string name="integrations_picker_not_ready_title">Prima configura MyCloud Gallery</string>
   <string name="integrations_picker_not_ready_detail">Apri l’app e completa la configurazione, poi torna a scegliere foto e video.</string>
 

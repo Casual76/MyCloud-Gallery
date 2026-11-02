@@ -168,7 +168,7 @@ class DocumentDragPayloads(
   private fun gateRefusal(): DragPrepared? = when (gate()) {
     EntryDecision.ALLOWED -> null
     EntryDecision.NEEDS_UNLOCK -> refused(DragRefusal.LOCKED)
-    EntryDecision.NOT_READY, EntryDecision.LOADING -> refused(DragRefusal.UNAVAILABLE)
+    EntryDecision.NOT_READY, EntryDecision.LOADING, EntryDecision.STOPPED -> refused(DragRefusal.UNAVAILABLE)
   }
 
   private fun refused(reason: DragRefusal): DragPrepared {

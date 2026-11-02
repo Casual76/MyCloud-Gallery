@@ -205,6 +205,7 @@ class FiveBGraph(
     fenceRoot = ::fenceRoot,
     clock = clock,
     onQueued = onIncomingQueued,
+    releaseHoldsWrites = gateInputs.releaseHoldsWrites,
   )
 
   /**

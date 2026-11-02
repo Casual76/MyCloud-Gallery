@@ -180,12 +180,16 @@ class BackupGraph(
     account = { nasInputs.account() },
     // Fase 10 (P13): l'emergenza dell'utente o il manifest firmato (`ReadOnly`, `Stopped`): backup e file in arrivo si fermano allo stesso modo.
     writesStopped = { nas.emergency.stopped || nasInputs.releaseWritesStopped() },
+    releaseHoldsWrites = { nasInputs.releaseWritesStopped() },
     frozen = { share -> nas.frozen.value.containsKey(share.lowercase(Locale.ROOT)) },
     readOnly = { share -> share.lowercase(Locale.ROOT) in readOnlyShares },
     paused = memory::isPaused,
   )
 
   val gate: BackupGate = AppBackupGate(gateInputs)
+
+  /** CA-1 (revisione funzionale della Fase 10): le scritture le ferma **solo** il manifest firmato (non l'emergenza dell'utente): la Diagnostica lo dice con la sua frase. */
+  val writesHeldOnlyByRelease: Boolean get() = gateInputs.releaseHoldsWrites() && !nas.emergency.stopped
 
   /** Il telefono come lo legge il backup: righe e byte del MediaStore, con la recinzione di D13. */
   val phone: PhoneBytes = MediaStorePhoneBytes(

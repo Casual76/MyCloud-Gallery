@@ -30,6 +30,12 @@ enum class EntryDecision {
    * Gallery" o "chiusa" per una corsa). Non si mostra niente; chi decide aspetta ([EntryGate.decideAfterLoading]).
    */
   LOADING,
+
+  /**
+   * CA-2 e R1 delle revisioni della Fase 10 (E-REL6): **questa versione dell'app e' stata fermata** dal manifest firmato (blocco `ALL`). Selettore, provider dei
+   * documenti, ricezione e rilasci si chiudono e lo dicono ("aggiorna l'app"); niente si mostra, niente si consegna, nemmeno un documento gia' consegnato.
+   */
+  STOPPED,
 }
 
 /**

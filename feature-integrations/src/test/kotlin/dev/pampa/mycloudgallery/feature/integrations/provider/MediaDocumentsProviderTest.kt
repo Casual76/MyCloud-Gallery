@@ -333,6 +333,21 @@ class MediaDocumentsProviderTest {
     assertThrows(FileNotFoundException::class.java) { provider.openDocument("aaaaaaaaaaaaaaaaaaaaaaaa", "r", null) }
   }
 
+  /**
+   * CA-2 e R1 delle revisioni della Fase 10: con la versione fermata dal manifest il provider non offre radici e non da' niente, **nemmeno** un documento gia' consegnato
+   * dal selettore (che con il solo blocco dell'app si serve ancora). Prima rispondeva come sempre alle altre app.
+   */
+  @Test
+  fun ca2_conLaVersioneFermataNienteEsiste_nemmenoUnDocumentoGiaConsegnato() {
+    val provider = provider()
+    val delivered = documents.issue(library.nasOnlyIds().first())!!
+    gate.decision = EntryDecision.STOPPED
+    roots(provider).use { assertThat(it.count).isEqualTo(0) }
+    assertThrows(FileNotFoundException::class.java) { provider.queryDocument(delivered.value, null) }
+    assertThrows(FileNotFoundException::class.java) { provider.openDocument(delivered.value, "r", null) }
+    assertThrows(FileNotFoundException::class.java) { provider.openDocument("aaaaaaaaaaaaaaaaaaaaaaaa", "r", null) }
+  }
+
   @Test
   fun appBloccata_LaRadiceCEMaLoSfoglioChiedeLoSblocco() {
     val provider = provider()

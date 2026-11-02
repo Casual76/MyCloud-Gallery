@@ -113,6 +113,11 @@ class AppIncomingQueue(
   private val clock: BackupClock,
   /** Dopo una messa in coda: il lavoro che carica (avviato dall'utente se grande, D24). */
   private val onQueued: (userInitiated: Boolean) -> Unit,
+  /**
+   * CA-2 (revisione funzionale della Fase 10): il manifest firmato tiene ferme le scritture di questa versione. Con l'emergenza dell'utente un file si mette in coda e
+   * aspetta (l'utente riaccende); con il manifest no: non partirebbe fino all'aggiornamento dell'app. Di serie mai.
+   */
+  private val releaseHoldsWrites: () -> Boolean = { false },
 ) : IncomingQueue {
 
   /** IN-8: la lettura dei metadati dei file in arrivo. La mette `IntegrationsGraph` (ha l'estrattore); null = il media nasce senza. */
@@ -131,6 +136,8 @@ class AppIncomingQueue(
       DestinationArea.COMMON -> commonShare()
     } ?: return ReceivedStatus.UNAVAILABLE
     if (!share.equals(dest.share, ignoreCase = true)) return ReceivedStatus.FOLDER_LOCKED
+    // CA-2: "scritture ferme" (la frase e' neutra: congelamento, interruttore o versione da aggiornare), e niente in coda.
+    if (releaseHoldsWrites()) return ReceivedStatus.FROZEN
     when (gate.stateOf(dest.share)) {
       BackupGateState.OPEN, BackupGateState.PAUSED, BackupGateState.FROZEN, BackupGateState.WRITES_STOPPED -> Unit
       BackupGateState.TEST_ONLY -> return ReceivedStatus.TRIAL

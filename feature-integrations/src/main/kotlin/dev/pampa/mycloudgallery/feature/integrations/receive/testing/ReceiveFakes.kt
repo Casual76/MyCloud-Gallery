@@ -73,6 +73,11 @@ class FakeIncomingDestinations(
 
   override suspend fun savingBlockedByTrial(): Boolean = trialOnly
 
+  /** CA-2 (Fase 10): la versione in sola lettura per il manifest firmato: "Salva sul NAS" non si offre, e si dice prima di copiare. */
+  var readOnlyVersion: Boolean = false
+
+  override suspend fun savingBlockedByRelease(): Boolean = readOnlyVersion
+
   companion object {
     fun choice(name: String, area: DestinationArea = DestinationArea.PRIVATE, folder: String = name): DestinationChoice =
       DestinationChoice(NasDestination("alessio", SharePath.parse(folder), area), name)

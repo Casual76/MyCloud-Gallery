@@ -148,6 +148,14 @@ internal fun PickerScreen(
           action = stringResource(R.string.integrations_picker_close),
           onAction = actions.onCancel,
         )
+        PickerScreenState.STOPPED -> PickerMessage(
+          icon = Icons.Rounded.Settings,
+          tone = GalleryIllustrationTone.Caution,
+          title = stringResource(R.string.integrations_stopped_title),
+          detail = stringResource(R.string.integrations_picker_stopped_detail),
+          action = stringResource(R.string.integrations_picker_close),
+          onAction = actions.onCancel,
+        )
         PickerScreenState.DELIVERING -> PickerBusy(ui.progress, actions.onCancelDelivery)
         PickerScreenState.GRID -> PickerBody(ui, request, env, actions)
       }

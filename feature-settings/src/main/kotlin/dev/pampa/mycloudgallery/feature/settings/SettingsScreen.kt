@@ -52,6 +52,11 @@ import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntrySummary
 import dev.pampa.mycloudgallery.feature.settings.people.PeopleEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharingEntryRow
 import dev.pampa.mycloudgallery.feature.settings.sharing.SharingEntryViewModel
+import dev.pampa.mycloudgallery.feature.settings.widget.WidgetContent
+import dev.pampa.mycloudgallery.feature.settings.widget.WidgetEntryRow
+import dev.pampa.mycloudgallery.feature.settings.widget.WidgetEntrySummary
+import dev.pampa.mycloudgallery.feature.settings.widget.WidgetEntryViewModel
+import dev.pampa.mycloudgallery.feature.settings.widget.WidgetRefresh
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import androidx.compose.runtime.getValue
@@ -107,6 +112,8 @@ class SettingsLinks(
    * `:app`). Null = la voce non c'e'.
    */
   val openMap: (() -> Unit)? = null,
+  /** Fase 10 (P3, D3, D6): la voce "Widget" (cosa mostra, ogni quanto cambia). La pagina e' delle Impostazioni stesse, quindi `settingsGraph` la scrive sempre; null = la voce non c'e'. */
+  val openWidget: (() -> Unit)? = null,
 ) {
   companion object {
     val None = SettingsLinks()
@@ -135,6 +142,9 @@ internal fun SettingsRoute(
   val peopleSummary by peopleViewModel.summary.collectAsStateWithLifecycle()
   val memoriesViewModel: MemoriesEntryViewModel = hiltViewModel()
   val memoriesSummary by memoriesViewModel.summary.collectAsStateWithLifecycle()
+  val widgetViewModel: WidgetEntryViewModel = hiltViewModel()
+  val widgetContent by widgetViewModel.content.collectAsStateWithLifecycle()
+  val widgetPeriod by widgetViewModel.period.collectAsStateWithLifecycle()
   val mapViewModel: MapEntryViewModel = hiltViewModel()
   val mapSummary by mapViewModel.summary.collectAsStateWithLifecycle()
   SettingsScreen(
@@ -152,6 +162,7 @@ internal fun SettingsRoute(
     peopleSummary = peopleSummary,
     memoriesSummary = memoriesSummary,
     mapSummary = mapSummary,
+    widgetSummary = WidgetEntrySummary(widgetContent, widgetPeriod),
   )
 }
 
@@ -179,6 +190,7 @@ fun SettingsScreen(
   peopleSummary: PeopleEntrySummary? = null,
   memoriesSummary: MemoriesEntrySummary? = null,
   mapSummary: MapEntrySummary? = null,
+  widgetSummary: WidgetEntrySummary = WidgetEntrySummary(WidgetContent.DEFAULT, WidgetRefresh.DEFAULT),
 ) {
   val family = familyHero(state)
   FluidScreen(
@@ -274,6 +286,11 @@ fun SettingsScreen(
         links.openMemories?.let { openMemories ->
           FluidListDivider()
           MemoriesEntryRow(summary = memoriesSummary, onClick = openMemories)
+        }
+        // Fase 10 (P3, D3, D6): "Widget" (cosa mostra e ogni quanto cambia), solo se la pagina c'e' (`settingsGraph` la scrive sempre).
+        links.openWidget?.let { openWidget ->
+          FluidListDivider()
+          WidgetEntryRow(summary = widgetSummary, onClick = openWidget)
         }
       }
     }

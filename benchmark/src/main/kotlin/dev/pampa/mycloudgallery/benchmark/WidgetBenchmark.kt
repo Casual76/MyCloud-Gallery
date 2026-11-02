@@ -126,6 +126,7 @@ class WidgetBenchmark {
     const val WARM_UPDATES = 3
     const val BLANKS = 2
     const val FLINGS = 6
-    const val LIBRARY_TIMEOUT_MS = 20_000L
+    /** Un emulatore a 2560x1600 con il disegno in software avvia l'app in decine di secondi: nello smoke si aspetta il triplo. */
+    val LIBRARY_TIMEOUT_MS: Long get() = if (BenchConfig.smoke) 60_000L else 20_000L
   }
 }

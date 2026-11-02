@@ -240,7 +240,8 @@ class PanesBenchmark {
     const val MEMORY_ITERATIONS = 3
     const val FLINGS = 6
     const val MEMORY_FLINGS = 3
-    const val LIBRARY_TIMEOUT_MS = 20_000L
+    /** Un emulatore a 2560x1600 con il disegno in software avvia l'app in decine di secondi: nello smoke si aspetta il triplo. */
+    val LIBRARY_TIMEOUT_MS: Long get() = if (BenchConfig.smoke) 60_000L else 20_000L
     const val SETTLE_MS = 500L
     const val RESIZE_SETTLE_MS = 700L
     const val SECOND_WINDOW_MS = 2_500L

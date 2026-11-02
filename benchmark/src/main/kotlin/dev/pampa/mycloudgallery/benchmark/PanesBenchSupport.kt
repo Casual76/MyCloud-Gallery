@@ -249,7 +249,9 @@ object PanesUi {
     repeat(MAX_ZOOM_TAPS) {
       BenchUi.ensureForeground(device)
       BenchUi.refreshAccessibilityTree()
-      val target = MapUi.bubbles(device).minByOrNull { MapUi.countOf(it).let { count -> if (count <= 0) Int.MAX_VALUE else count } } ?: return null
+      // La bolla piu' piccola **di almeno due foto**: una bolla di una foto sola non apre una griglia di zona (sulla finestra larga non si e' vista aprire niente).
+      val bubbles = MapUi.bubbles(device)
+      val target = bubbles.filter { MapUi.countOf(it) >= 2 }.minByOrNull { MapUi.countOf(it) } ?: bubbles.minByOrNull { MapUi.countOf(it).let { count -> if (count <= 0) Int.MAX_VALUE else count } } ?: return null
       val opensGrid = MapUi.countOf(target) in 1..GRID_BELOW
       val start = System.nanoTime()
       try {

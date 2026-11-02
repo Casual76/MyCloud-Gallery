@@ -59,6 +59,15 @@ object AvvioTrace {
   const val MAP_DRAW_US: String = "MCG:map.drawUs"
 
   /**
+   * Fase 10 (P9, `docs/fase10-progetto.md` §5.4): il lavoro del widget che il benchmark misura. Sezioni asincrone (il giro sospende e riprende su altri thread), nomi
+   * fissi, mai dati:
+   *  - [WIDGET_UPDATE]: un giro di aggiornamento di un widget, dal piano alla consegna ad `AppWidgetManager` (piano, decodifica delle miniature, registro, composizione);
+   *  - [WIDGET_BLANK]: lo svuotamento dopo un "Nascondi" (registro dei widget che mostrano l'id, disegno senza immagini, consegna); non comprende il giro che segue.
+   */
+  const val WIDGET_UPDATE: String = "MCG:widget.update"
+  const val WIDGET_BLANK: String = "MCG:widget.blank"
+
+  /**
    * Vero se `android.os.Trace` c'e' davvero: nei test sulla JVM senza Robolectric le classi di Android sono vuote e lancerebbero a ogni
    * chiamata; li' le sezioni non si scrivono e il codice misurato gira lo stesso.
    */

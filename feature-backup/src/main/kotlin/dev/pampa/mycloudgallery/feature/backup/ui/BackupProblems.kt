@@ -83,7 +83,16 @@ internal object BackupProblemTexts {
   /** Vero se il codice ha il suo messaggio (e non il generico). */
   fun knows(code: BackupProblemCode): Boolean = code.code in byCode
 
-  fun of(code: BackupProblemCode): ProblemText = byCode[code.code] ?: generic
+  /**
+   * Il messaggio di [code]. CA-1 (revisione funzionale della Fase 10): con [heldByRelease] (le scritture le ferma il manifest firmato, non l'utente) "scritture
+   * ferme" ha la sua frase: la causa ("questa versione va aggiornata") e cosa fare, mai "il backup riprende quando le riattivi".
+   */
+  fun of(code: BackupProblemCode, heldByRelease: Boolean = false): ProblemText =
+    if (heldByRelease && code == BackupProblemCode.WRITES_STOPPED) releaseReadOnly else byCode[code.code] ?: generic
+
+  /** CA-1: "scritture ferme" perche' questa versione e' in sola lettura per il manifest firmato. */
+  val releaseReadOnly: ProblemText =
+    ProblemText(BackupTone.Attention, Icons.Rounded.Warning, R.string.backup_problem_release_read_only_title, R.string.backup_problem_release_read_only_detail)
 
   private val byCode: Map<String, ProblemText> = mapOf(
     "nas_unreachable" to ProblemText(BackupTone.Attention, Icons.Rounded.CloudOff, R.string.backup_problem_nas_unreachable_title, R.string.backup_problem_nas_unreachable_detail),

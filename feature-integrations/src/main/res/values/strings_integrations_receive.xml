@@ -16,6 +16,11 @@
   <string name="integrations_receive_trial_title">Backup in prova</string>
   <string name="integrations_receive_trial_detail">Il backup è ancora in prova: per ora sul NAS non salvo i file ricevuti. Non ho copiato niente.</string>
 
+  <!-- CA-2 (Fase 10): la versione fermata o in sola lettura per il manifest firmato. -->
+  <string name="integrations_receive_stopped_detail">Aggiorna MyCloud Gallery dal Pampa Store: finché non la aggiorni non ricevo file. Non ho copiato niente.</string>
+  <string name="integrations_receive_read_only_title">Questa versione è in sola lettura</string>
+  <string name="integrations_receive_read_only_detail">Questa versione di MyCloud Gallery non scrive sul NAS: aggiornala dal Pampa Store per salvare i file ricevuti. Non ho copiato niente.</string>
+
   <string name="integrations_receive_not_ready_title">Prima configura MyCloud Gallery</string>
   <string name="integrations_receive_not_ready_detail">Apri l’app e completa la configurazione, poi condividi di nuovo i file.</string>
 

@@ -23,6 +23,7 @@ import dev.pampa.mycloudgallery.gallery.LibraryInstant
 import dev.pampa.mycloudgallery.integrations.IntegrationsGraph
 import java.util.Optional
 import dev.pampa.mycloudgallery.graph.AppGraph
+import dev.pampa.mycloudgallery.graph.snapshotOrNull
 import dev.pampa.mycloudgallery.notify.AppNotifications
 import dev.pampa.mycloudgallery.process.GalleryLifecycle
 import dev.pampa.mycloudgallery.process.ProcessWatcher
@@ -218,6 +219,9 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   private companion object {
     /** Nessuna finestra principale conosciuta: si chiudono tutte le altre (il task -1 non esiste). */
     const val NO_TASK = -1
+
+    /** R2: quanto aspetta la galleria partita (famiglia pronta) la lettura del manifest all'apertura; dopo, si rinuncia fino alla prossima apertura. */
+    const val START_WAIT_MS = 20_000L
   }
 
   /** `onTrimMemory` verso la cache delle miniature (nota di P6) e l'istantanea della timeline. */
@@ -291,6 +295,13 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
       // All'apertura: una verifica del NAS se l'ultima ha piu' di 15 minuti (§1.4), poi la sincronizzazione dell'indice. Dopo il primo disegno.
       AfterFirstDraw.launchAfter(graph.scope) {
         if (gallery.backgroundWorkAllowed && gallery.nas?.verifyDue() == true) NasWorkScheduling.scanNow(this@MyCloudGalleryApp)
+      }
+      // R2 (revisione di sicurezza della Fase 10, D29): il manifest anche all'apertura, se l'ultima lettura ha piu' di 24 ore, dopo il primo disegno (avvio istantaneo),
+      // con la famiglia pronta e l'area comune nota; non aspetta il giro dell'indice, che puo' non finire mai.
+      AfterFirstDraw.launchAfter(graph.scope) {
+        val started = gallery.backgroundWorkAllowed && kotlinx.coroutines.withTimeoutOrNull(START_WAIT_MS) { gallery.started.first { it } } == true
+        val ready = started && graph.onboardingStore.snapshotOrNull()?.commonShare != null
+        dev.pampa.mycloudgallery.release.ReleaseWiring.reads(graph).atAppStart(ready)
       }
     }
 

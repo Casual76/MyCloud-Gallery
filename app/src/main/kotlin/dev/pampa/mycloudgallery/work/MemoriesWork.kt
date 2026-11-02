@@ -140,9 +140,13 @@ class MemoryNotifyWorker @AssistedInject constructor(
   @Assisted appContext: Context,
   @Assisted params: WorkerParameters,
   private val slot: MemoryNotifySlot,
+  /** CA-4 (revisione funzionale della Fase 10, E-REL6): con la versione fermata dal manifest nessuna notifica (il tocco aprirebbe solo la pagina "fermata"). */
+  private val release: dev.pampa.mycloudgallery.release.ReleaseGraph,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
+    // CA-4: prima di tutto, dopo lo stato del manifest letto (al piu' 2 s). Il lavoro finisce "riuscito" senza ripianificare: si ripianifica all'aggiornamento dell'app.
+    if (release.stoppedAfterLoad()) return Result.success()
     // NT-1: PRIMA dell'attesa, perche' il montaggio che segue ripianifica con questo flag (accoda invece di sostituire il lavoro che sta aspettando).
     MemoriesWorkScheduling.enterWorker()
     try {

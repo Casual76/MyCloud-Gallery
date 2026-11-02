@@ -111,6 +111,18 @@ class IncomingDropsTest {
     assertThat(DragCounters.get(DragCounter.IN_DROPPED)).isEqualTo(1L)
   }
 
+  /** CA-2 delle revisioni della Fase 10: con la versione fermata dal manifest un rilascio non apre il foglio e dice perche' ("aggiorna l'app"). */
+  @Test
+  fun ca2_conLaVersioneFermataIlRilascioNonPortaNienteEDiceDiAggiornare() {
+    decision = EntryDecision.STOPPED
+
+    assertThat(drops().drop(DropTarget.Library, drag(clipOf(foreign)), null)).isFalse()
+
+    assertThat(launched).isEmpty()
+    assertThat(DropHandoff.take(now)).isNull()
+    assertThat(notices).containsExactly(dev.pampa.mycloudgallery.feature.integrations.R.string.integrations_drag_in_stopped)
+  }
+
   @Test
   fun conIlBloccoAttivoIlRilascioNonPortaNiente_E_X7() {
     decision = EntryDecision.NEEDS_UNLOCK

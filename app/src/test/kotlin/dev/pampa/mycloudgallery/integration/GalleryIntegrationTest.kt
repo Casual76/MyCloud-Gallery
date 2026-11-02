@@ -200,6 +200,61 @@ class GalleryIntegrationTest {
     gallery.onBackground()
   }
 
+  // --- CA-4 (Fase 10): la versione fermata dal manifest -------------------------------------------------------
+
+  /**
+   * CA-4 della revisione funzionale della Fase 10 (E-REL6): con la versione fermata la Libreria non si mostra, e la lettura del telefono agganciata al primo piano non
+   * parte. La sincronizzazione qui registra gli agganci; [GalleryParts.releaseStopped] dice ogni volta che cosa ha risposto.
+   */
+  @Test
+  fun ca4_conLaVersioneFermataLaLetturaDelTelefonoNonSiAgganciaAlPrimoPiano() = runBlocking<Unit> {
+    var stopped = true
+    val asked = kotlinx.coroutines.channels.Channel<Boolean>(kotlinx.coroutines.channels.Channel.UNLIMITED)
+    val attached = java.util.concurrent.atomic.AtomicInteger()
+    val recorder = object : dev.pampa.mycloudgallery.core.mediastore.contract.PhoneLibrarySync {
+      override val status: StateFlow<SyncStatus> = dev.pampa.mycloudgallery.core.mediastore.noop.NoPhoneLibrarySync.status
+
+      override suspend fun syncNow(reason: SyncReason) = dev.pampa.mycloudgallery.core.mediastore.noop.NoPhoneLibrarySync.syncNow(reason)
+
+      override fun attach(scope: CoroutineScope) {
+        attached.incrementAndGet()
+      }
+
+      override fun detach() = Unit
+    }
+    val stoppable = GalleryGraph(
+      context = app,
+      scope = scope,
+      parts = GalleryParts(
+        databaseName = null,
+        replicaDir = temp.newFolder("replica-ca4"),
+        preferencesFile = File(temp.root, "library-ca4.preferences_pb"),
+        access = access,
+        intents = FakePhoneMediaIntents(),
+        recentlyDeleted = FakeRecentlyDeletedSource(),
+        phone = ::fakePhone,
+        benchSync = recorder,
+        releaseStopped = { stopped.also { asked.trySend(it) } },
+      ),
+      setup = ready,
+      ownerAccount = { AccountId.of("test") },
+      clock = { NOW },
+    )
+    stoppable.startWhenReady()
+    withTimeout(TIMEOUT_MS) { stoppable.started.first { it } }
+
+    stoppable.onForeground()
+    assertThat(withTimeout(TIMEOUT_MS) { asked.receive() }).isTrue()
+    // Il controllo che la prova non passi a vuoto: con la versione normale, al ritorno in primo piano, si aggancia (una volta: prima non si era agganciata).
+    stoppable.onBackground()
+    stopped = false
+    stoppable.onForeground()
+    assertThat(withTimeout(TIMEOUT_MS) { asked.receive() }).isFalse()
+    until("la lettura del telefono agganciata") { attached.get() >= 1 }
+    assertThat(attached.get()).isEqualTo(1)
+    stoppable.shutdown()
+  }
+
   // --- Il viewer si apre --------------------------------------------------------------------------------------
 
   @Test

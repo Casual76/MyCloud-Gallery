@@ -83,14 +83,20 @@ class Correzioni8CLavoriAppTest {
     }
   }
 
-  private fun phoneSyncWorker(phone: Phone): PhoneSyncWorker = TestListenableWorkerBuilder<PhoneSyncWorker>(phone.node.device.context)
-    .setWorkerFactory(
-      object : WorkerFactory() {
-        override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
-          PhoneSyncWorker(appContext, workerParameters, phone.node.mounted.gallery)
-      },
-    )
-    .build()
+  private fun phoneSyncWorker(
+    phone: Phone,
+    status: dev.pampa.mycloudgallery.core.release.contract.ReleaseStatus = dev.pampa.mycloudgallery.core.release.contract.ReleaseStatus.Normal,
+  ): PhoneSyncWorker {
+    val release = runBlocking { dev.pampa.mycloudgallery.release.loadedRelease(temp.newFolder(), status) }
+    return TestListenableWorkerBuilder<PhoneSyncWorker>(phone.node.device.context)
+      .setWorkerFactory(
+        object : WorkerFactory() {
+          override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
+            PhoneSyncWorker(appContext, workerParameters, phone.node.mounted.gallery, release)
+        },
+      )
+      .build()
+  }
 
   private fun shareWorker(phone: Phone): ShareWorker = TestListenableWorkerBuilder<ShareWorker>(phone.node.device.context)
     .setWorkerFactory(
@@ -145,6 +151,25 @@ class Correzioni8CLavoriAppTest {
     assertThat(result).isEqualTo(ListenableWorker.Result.success())
     assertThat(queued(phone.node.device.context, GalleryWorkScheduling.PHONE_SYNC_WORK)).hasSize(1)
     phone.setup.override.value = null
+  }
+
+  /**
+   * CA-4 della revisione funzionale della Fase 10 (E-REL6): con la versione fermata dal manifest la lettura del telefono in background non parte (la Libreria non si vede)
+   * e non si riaccoda: all'aggiornamento dell'app l'avvio rimette il lavoro. Prima leggeva e si riaccodava come sempre.
+   */
+  @Test
+  fun ca4_conLaVersioneFermataLaLetturaDelTelefonoNonParteENonSiRiaccoda() = runBlocking<Unit> {
+    val phone = phone()
+    WorkManagerTestInitHelper.initializeTestWorkManager(phone.node.device.context)
+
+    val stopped = dev.pampa.mycloudgallery.core.release.contract.ReleaseStatus.Stopped(dev.pampa.mycloudgallery.core.release.contract.ReleaseMessage.SECURITY)
+    val result = withTimeout(Attese.TETTO) { phoneSyncWorker(phone, stopped).doWork() }
+
+    assertThat(result).isEqualTo(ListenableWorker.Result.success())
+    assertThat(queued(phone.node.device.context, GalleryWorkScheduling.PHONE_SYNC_WORK)).isEmpty()
+    // Il controllo che la prova non passi a vuoto: con la versione normale si riaccoda.
+    withTimeout(Attese.TETTO) { phoneSyncWorker(phone).doWork() }
+    assertThat(queued(phone.node.device.context, GalleryWorkScheduling.PHONE_SYNC_WORK)).hasSize(1)
   }
 
   private companion object {

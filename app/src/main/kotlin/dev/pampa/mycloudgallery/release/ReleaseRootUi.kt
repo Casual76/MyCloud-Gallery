@@ -11,6 +11,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.NewReleases
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,6 +34,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
+import dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease
 import dev.pampa.mycloudgallery.core.release.contract.ReleaseMessage
 import dev.pampa.mycloudgallery.core.release.contract.ReleaseStatus
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
@@ -73,25 +75,29 @@ class ReleaseRootViewModel @Inject constructor(release: ReleaseGraph) : ViewMode
 /**
  * La radice sotto il blocco dell'app: con la versione fermata **al posto** della navigazione (nessuna Libreria in composizione, nessuna foto in memoria), con la sola lettura
  * la navigazione di sempre con l'avviso in alto (si chiude per questa volta con "Ho capito"; torna a ogni avvio finche' l'app non si aggiorna).
+ *
+ * RL-1 (revisione funzionale della Fase 10): `Normal` e `UpdateBanner` hanno la **stessa struttura** (una sola chiamata di [content] nello stesso posto, l'avviso sopra
+ * solo se serve): l'arrivo di un blocco `WRITES` a meta' sessione, o lo stato salvato letto un attimo dopo il primo disegno, non butta e non ricompone la navigazione
+ * (pagina aperta, viewer, pila). Solo `Stopped` la toglie, apposta. CA-1: in sola lettura le schermate sanno che a fermare le scritture e' il manifest
+ * (`LocalWritesHeldByRelease`).
  */
 @Composable
 fun ReleaseRoot(ui: ReleaseUi, content: @Composable () -> Unit) {
-  when (ui) {
-    is ReleaseUi.Stopped -> ReleaseStoppedHost(ui.message)
-    is ReleaseUi.UpdateBanner -> {
-      var dismissed by rememberSaveable(ui.message) { mutableStateOf(false) }
-      Box(modifier = Modifier.fillMaxSize()) {
-        content()
-        if (!dismissed) {
-          ReleaseUpdateBanner(
-            message = ui.message,
-            onDismiss = { dismissed = true },
-            modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
-          )
-        }
-      }
+  if (ui is ReleaseUi.Stopped) {
+    ReleaseStoppedHost(ui.message)
+    return
+  }
+  val banner = (ui as? ReleaseUi.UpdateBanner)?.message
+  var dismissed by rememberSaveable(banner) { mutableStateOf(false) }
+  Box(modifier = Modifier.fillMaxSize()) {
+    CompositionLocalProvider(LocalWritesHeldByRelease provides (banner != null)) { content() }
+    if (banner != null && !dismissed) {
+      ReleaseUpdateBanner(
+        message = banner,
+        onDismiss = { dismissed = true },
+        modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
+      )
     }
-    ReleaseUi.Normal -> content()
   }
 }
 

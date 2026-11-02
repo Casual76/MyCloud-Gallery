@@ -106,7 +106,7 @@
   <string name="nas_ops_pause_catalog">La copia è già nella destinazione: aspetto che l’app la riconosca come la stessa foto. Riprende da sola, al più per un giorno; l’originale resta al suo posto.</string>
   <string name="nas_ops_pause_frozen">Questa area è ferma per cambiamenti anomali: serve un tuo controllo in Diagnostica.</string>
   <string name="nas_ops_pause_clock_jump">L\'ora del NAS è cambiata di colpo: aspetto che si stabilizzi.</string>
-  <string name="nas_ops_pause_writes_stopped">Le scritture sul NAS sono ferme (interruttore di emergenza in Diagnostica).</string>
+  <string name="nas_ops_pause_writes_stopped">Le scritture sul NAS sono ferme (interruttore di emergenza o una versione dell\'app da aggiornare): la Diagnostica dice perché.</string>
   <string name="nas_ops_pause_user">Hai chiesto di annullare il resto: mi fermo prima del prossimo elemento.</string>
 
   <!-- "Annulla il resto" (prima "Ferma"): per il progetto (R9 della 4B) fermare un'operazione sul NAS la annulla, non la mette in pausa e non c'è un "Riprendi". -->

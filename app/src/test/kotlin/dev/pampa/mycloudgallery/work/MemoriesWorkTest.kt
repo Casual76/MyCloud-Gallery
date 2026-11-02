@@ -32,6 +32,11 @@ import dev.pampa.mycloudgallery.core.memories.testing.InMemoryNotifySettings
 import dev.pampa.mycloudgallery.core.memories.testing.RecordingNotifyEvents
 import dev.pampa.mycloudgallery.core.memories.testing.RecordingNotifyScheduler
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.release.contract.ReleaseMessage
+import dev.pampa.mycloudgallery.core.release.contract.ReleaseStatus
+import dev.pampa.mycloudgallery.release.ReleaseGraph
+import dev.pampa.mycloudgallery.release.loadedRelease
+import java.nio.file.Files
 import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -129,12 +134,33 @@ class MemoriesWorkTest {
 
   // --- Il lavoro ---------------------------------------------------------------------------------------------------------------------
 
-  private fun worker(slot: MemoryNotifySlot): MemoryNotifyWorker = TestListenableWorkerBuilder<MemoryNotifyWorker>(context)
+  /** Il manifest di questo processo: di serie letto e `Normal` (le prove che non lo guardano). */
+  private fun release(status: ReleaseStatus = ReleaseStatus.Normal): ReleaseGraph =
+    runBlocking { loadedRelease(Files.createTempDirectory("release").toFile(), status) }
+
+  private fun worker(slot: MemoryNotifySlot, release: ReleaseGraph = release()): MemoryNotifyWorker = TestListenableWorkerBuilder<MemoryNotifyWorker>(context)
     .setWorkerFactory(object : WorkerFactory() {
       override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters): ListenableWorker =
-        MemoryNotifyWorker(appContext, workerParameters, slot)
+        MemoryNotifyWorker(appContext, workerParameters, slot, release)
     })
     .build()
+
+  /**
+   * CA-4 della revisione funzionale della Fase 10 (E-REL6: "nessun lavoro"): con la versione fermata dal manifest la notifica dei ricordi non esce (il tocco aprirebbe
+   * solo la pagina "fermata"). Il lavoro finisce subito: niente attesa dei ricordi, nessuna corsa, niente di ripianificato. Prima usciva ogni giorno.
+   */
+  @Test
+  fun ca4_conLaVersioneFermataNessunaNotificaENessunaAttesa() = runBlocking<Unit> {
+    val slot = MemoryNotifySlot()
+    var waits = 0
+    slot.awaiter = { _ -> waits++ }
+    assertThat(worker(slot, release(ReleaseStatus.Stopped(ReleaseMessage.SECURITY))).doWork()).isEqualTo(ListenableWorker.Result.success())
+    assertThat(waits).isEqualTo(0)
+    assertThat(infos()).isEmpty()
+    // In sola lettura (`WRITES`) la notifica resta: e' locale e la Libreria si vede.
+    assertThat(worker(slot, release(ReleaseStatus.ReadOnly(ReleaseMessage.SECURITY))).doWork()).isEqualTo(ListenableWorker.Result.success())
+    assertThat(waits).isEqualTo(1)
+  }
 
   /** Il giorno di una notifica con una Libreria che non c'e' ancora (le prove del lavoro guardano come si ripianifica, non cosa si pubblica). */
   private fun run(scheduler: NotifyScheduler, events: RecordingNotifyEvents = RecordingNotifyEvents()): MemoryNotifyRun = MemoryNotifyRun(

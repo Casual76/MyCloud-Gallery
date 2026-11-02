@@ -72,7 +72,7 @@ class ReceivedScreenTest : ComposeBackupTallTest() {
       ReceivedStatus.NAS_FULL to "NAS pieno: libera spazio e poi riprova.",
       ReceivedStatus.QUOTA to "Quota esaurita: chiedi all’admin del NAS.",
       ReceivedStatus.PASSWORD to "Serve la password del NAS.",
-      ReceivedStatus.FROZEN to "Scritture ferme per cambiamenti anomali: controlla la Diagnostica.",
+      ReceivedStatus.FROZEN to "Scritture sul NAS ferme (cambiamenti anomali, interruttore di emergenza o una versione da aggiornare): la Diagnostica dice perché.",
       ReceivedStatus.PAUSED to "Backup in pausa: riprende con “Riprendi”.",
       ReceivedStatus.UNAVAILABLE to "L’app non è pronta a scrivere sul NAS.",
       ReceivedStatus.UPLOADING to "Lo sto caricando sul NAS.",

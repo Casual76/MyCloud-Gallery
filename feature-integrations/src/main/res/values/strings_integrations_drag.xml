@@ -13,4 +13,5 @@
 
   <!-- Trascinamento in arrivo: il foglio della ricezione si apre con il conteggio; niente parte senza un tocco. -->
   <string name="integrations_drag_in_refused">Non posso ricevere questo trascinamento: trascina foto o video da un’altra app.</string>
+  <string name="integrations_drag_in_stopped">Questa versione di MyCloud Gallery è stata fermata: aggiornala dal Pampa Store per ricevere file.</string>
 </resources>

@@ -41,7 +41,7 @@
   <string name="backup_received_status_nas_full">NAS pieno: libera spazio e poi riprova.</string>
   <string name="backup_received_status_quota">Quota esaurita: chiedi all’admin del NAS.</string>
   <string name="backup_received_status_password">Serve la password del NAS.</string>
-  <string name="backup_received_status_frozen">Scritture ferme per cambiamenti anomali: controlla la Diagnostica.</string>
+  <string name="backup_received_status_frozen">Scritture sul NAS ferme (cambiamenti anomali, interruttore di emergenza o una versione da aggiornare): la Diagnostica dice perché.</string>
   <string name="backup_received_status_paused">Backup in pausa: riprende con “Riprendi”.</string>
   <string name="backup_received_status_unavailable">L’app non è pronta a scrivere sul NAS.</string>
   <string name="backup_received_status_uploading">Lo sto caricando sul NAS.</string>

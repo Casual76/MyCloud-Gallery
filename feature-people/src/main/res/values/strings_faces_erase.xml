@@ -58,7 +58,7 @@
   <string name="faces_erase_wait_frozen">La tua area privata sul NAS è congelata: la cancellazione aspetta che venga sbloccata.</string>
   <string name="faces_erase_wait_clock_jump">L’ora del NAS è saltata: aspetto che torni stabile.</string>
   <string name="faces_erase_wait_read_only">La tua area privata sul NAS è in sola lettura: serve il permesso di scrittura.</string>
-  <string name="faces_erase_wait_emergency_stop">Le scritture sul NAS sono ferme (Diagnostica): la cancellazione riparte quando le riaccendi.</string>
+  <string name="faces_erase_wait_emergency_stop">Le scritture sul NAS sono ferme (interruttore di emergenza o una versione dell’app da aggiornare, vedi la Diagnostica): la cancellazione continua appena ripartono.</string>
   <string name="faces_erase_wait_not_trusted">Questo dispositivo non è ancora approvato nella famiglia: il NAS aspetta.</string>
   <string name="faces_erase_wait_devices">Manca la conferma di qualche dispositivo.</string>
   <string name="faces_erase_wait_recycle_bin">Il NAS ne tiene una copia nel suo cestino: svuotalo dal pannello del NAS.</string>

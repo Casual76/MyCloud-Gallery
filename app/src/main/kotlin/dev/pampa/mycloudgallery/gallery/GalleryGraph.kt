@@ -182,6 +182,11 @@ class GalleryParts(
    * copie simili e la lettura del telefono partono dopo, cosi' non rubano la CPU al primo fotogramma. Di serie nessuna attesa (test).
    */
   val afterFirstDraw: suspend () -> Unit = {},
+  /**
+   * CA-4 (revisione funzionale della Fase 10, E-REL6): la versione e' fermata dal manifest (`ReleaseGraph.stoppedAfterLoad`): la Libreria non si mostra, quindi la lettura
+   * del telefono agganciata al primo piano non parte. Di serie mai (i test che non lo provano).
+   */
+  val releaseStopped: suspend () -> Boolean = { false },
 )
 
 /** Il catalogo e la lettura del telefono: esistono solo quando l'account del dispositivo e' noto (vedi [GalleryGraph]). */
@@ -893,12 +898,13 @@ class GalleryGraph(
    */
   private fun attachSyncWhenUseful() {
     if (access.state.value.media != dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess.FULL) {
-      attachSync()
+      // CA-4: subito come prima (senza sospendere, se lo stato del manifest e' gia' letto), ma non con la versione fermata.
+      galleryScope.launch(start = kotlinx.coroutines.CoroutineStart.UNDISPATCHED) { if (!parts.releaseStopped()) attachSync() }
       return
     }
     galleryScope.launch {
       parts.afterFirstDraw()
-      if (foreground && !retired) attachSync()
+      if (foreground && !retired && !parts.releaseStopped()) attachSync()
     }
   }
 

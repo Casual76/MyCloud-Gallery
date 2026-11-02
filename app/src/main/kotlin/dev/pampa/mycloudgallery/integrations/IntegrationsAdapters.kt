@@ -113,19 +113,32 @@ import kotlinx.coroutines.withTimeoutOrNull
  * `onCreate`). Prima il cancello rispondeva "non pronta" (la schermata diceva "Prima configura MyCloud Gallery") o "chiusa" per una corsa, e
  * nessuno lo ricontrollava. Adesso risponde [EntryDecision.LOADING] finche' non sa, e [decideAfterLoading] aspetta che lo sappia.
  *
+ * CA-2 e R1 delle revisioni della Fase 10: il cancello conosce anche il **manifest firmato**. Con la versione fermata (`ReleaseStatus.Stopped`, blocco `ALL`) risponde
+ * [EntryDecision.STOPPED]: selettore, provider dei documenti, ricezione e rilasci si chiudono con il motivo (prima continuavano a servire foto alle altre app). Finche' lo
+ * stato salvato del manifest non e' letto risponde [EntryDecision.LOADING] (millisecondi, a processo freddo), mai "fermata" per sbaglio.
+ *
  * @param familyLoading la configurazione salvata si sta ancora leggendo (`SetupState.Loading`).
  * @param familyChanges emette quando lo stato della famiglia cambia (per aspettare il caricamento e per notificare le radici).
+ * @param releaseLoading lo stato salvato del manifest non e' ancora letto (`!ReleaseGraph.isLoaded`).
+ * @param releaseStopped la versione e' fermata dal manifest (`ReleaseStatus.Stopped`).
+ * @param releaseChanges emette quando lo stato del manifest e' letto o cambia (`ReleaseGraph.changes`).
  */
 class AppEntryGate(
   private val lock: AppLockController,
   private val familyReady: () -> Boolean,
   private val familyLoading: () -> Boolean = { false },
   private val familyChanges: Flow<Unit> = emptyFlow(),
+  private val releaseLoading: () -> Boolean = { false },
+  private val releaseStopped: () -> Boolean = { false },
+  private val releaseChanges: Flow<Unit> = emptyFlow(),
 ) : EntryGate {
 
   override fun decide(): EntryDecision = when {
     familyLoading() -> EntryDecision.LOADING
     !familyReady() -> EntryDecision.NOT_READY
+    // CA-2: prima del blocco dell'app (una versione fermata non chiede lo sblocco per poi non dare niente).
+    releaseLoading() -> EntryDecision.LOADING
+    releaseStopped() -> EntryDecision.STOPPED
     // Le impostazioni del blocco non sono ancora lette: non si sa se l'app e' bloccata (prima: "chiusa", quindi una richiesta di sblocco che
     // non poteva partire). Se non si leggono mai, [decideAfterLoading] finisce e chi chiama non offre niente (fallire chiusi).
     lock.settings.value == null -> EntryDecision.LOADING
@@ -136,14 +149,14 @@ class AppEntryGate(
   override suspend fun decideAfterLoading(timeoutMs: Long): EntryDecision {
     if (decide() != EntryDecision.LOADING) return decide()
     withTimeoutOrNull(timeoutMs) {
-      combine(familyChanges.onStart { emit(Unit) }, lock.settings) { _, _ -> Unit }.first { decide() != EntryDecision.LOADING }
+      combine(familyChanges.onStart { emit(Unit) }, lock.settings, releaseChanges.onStart { emit(Unit) }) { _, _, _ -> Unit }.first { decide() != EntryDecision.LOADING }
     }
     return decide()
   }
 
   /** Le decisioni di adesso e ogni volta che cambiano lo stato della famiglia o il blocco: le radici del provider dei documenti si notificano da qui. */
   fun decisions(): Flow<EntryDecision> =
-    combine(familyChanges.onStart { emit(Unit) }, lock.state, lock.settings) { _, _, _ -> decide() }.distinctUntilChanged()
+    combine(familyChanges.onStart { emit(Unit) }, lock.state, lock.settings, releaseChanges.onStart { emit(Unit) }) { _, _, _, _ -> decide() }.distinctUntilChanged()
 }
 
 /**
@@ -505,6 +518,8 @@ class AppIncomingDestinations(
   private val reach: suspend () -> NasReach,
   /** IN-6: il cancello degli arrivi per una share: `TEST_ONLY` (D12, R2) vuol dire che in questa versione non si scrive. Null senza backup. */
   private val gate: BackupGate? = null,
+  /** CA-2 (Fase 10): il manifest firmato tiene ferme le scritture di questa versione (`ReleaseStatus.ReadOnly` o `Stopped`). Di serie mai. */
+  private val releaseHoldsWrites: () -> Boolean = { false },
 ) : IncomingDestinations {
 
   override suspend fun roots(): List<DestinationChoice> {
@@ -533,6 +548,9 @@ class AppIncomingDestinations(
     is NasReach.Unreachable -> if (r.reason == NasUnreachableReason.METERED) NasWait.METERED else NasWait.OFFLINE
     null -> NasWait.OFFLINE
   }
+
+  /** CA-2 (Fase 10): "Salva sul NAS" non si offre con la versione in sola lettura per il manifest (in coda non partirebbe fino all'aggiornamento). */
+  override suspend fun savingBlockedByRelease(): Boolean = releaseHoldsWrites()
 
   /**
    * IN-6 della verifica funzionale 5B: in release D12 e R2 chiudono ogni scrittura della 5B sulle share vere (il cancello degli arrivi risponde

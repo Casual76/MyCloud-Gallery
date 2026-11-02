@@ -122,6 +122,36 @@ class ReceiveViewModelTest {
     assertThat(stageDirs()).isEmpty()
   }
 
+  /** CA-2 delle revisioni della Fase 10: con la versione fermata dal manifest la ricezione lo dice e non copia niente. */
+  @Test
+  fun ca2_conLaVersioneFermataNienteSiCopiaELaSchermataLoDice() {
+    gate.decision = EntryDecision.STOPPED
+    val model = model()
+
+    model.refreshGate()
+
+    assertThat(model.ui.value.screen).isEqualTo(ReceiveScreenState.STOPPED)
+    assertThat(asked).isEqualTo(0)
+    assertThat(stageDirs()).isEmpty()
+  }
+
+  /**
+   * CA-2: con la versione in sola lettura per il manifest "Salva sul NAS" non si offre: si dice **prima di copiare**, e niente entra in una coda che non partirebbe fino
+   * all'aggiornamento. Prima si copiava, si offriva "Salva sul NAS" e il file restava in coda per sempre ("congelato").
+   */
+  @Test
+  fun ca2_conLaVersioneInSolaLetturaNonSiOffreSalvaSulNasENonSiCopia() {
+    destinations.readOnlyVersion = true
+    val model = model()
+
+    model.refreshGate()
+    waitFor(model, ReceiveScreenState.READ_ONLY_VERSION)
+
+    assertThat(asked).isEqualTo(0)
+    assertThat(stageDirs()).isEmpty()
+    assertThat(queue.enqueued).isEmpty()
+  }
+
   @Test
   fun seIlBloccoSiRichiudeMentreSiScegliePerSchermaTornaASoloLoSbloccoENonSiSalva() {
     val model = model()

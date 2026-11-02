@@ -181,7 +181,7 @@ class DocumentDragPayloads(
   private fun gateRefusal(): DragPrepared? = when (gate()) {
     EntryDecision.ALLOWED -> null
     EntryDecision.NEEDS_UNLOCK -> refused(DragRefusal.LOCKED)
-    EntryDecision.NOT_READY, EntryDecision.LOADING -> refused(DragRefusal.UNAVAILABLE)
+    EntryDecision.NOT_READY, EntryDecision.LOADING, EntryDecision.STOPPED -> refused(DragRefusal.UNAVAILABLE)
   }
 
   /** Vero se il filtro finale dice nascosto anche uno solo di [ids]. Un errore di lettura vale "nascosto" (si fallisce chiusi). */

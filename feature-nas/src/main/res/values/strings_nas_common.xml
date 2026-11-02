@@ -80,7 +80,7 @@
   <string name="nas_reject_path_not_allowed">Questo posto è dell\'app e non si tocca.</string>
   <string name="nas_reject_too_many_items">Sono troppi elementi in una volta: dividili in gruppi più piccoli.</string>
   <string name="nas_reject_not_enough_space">Sulla destinazione non c\'è abbastanza spazio (serve anche 1 GB di margine).</string>
-  <string name="nas_reject_writes_blocked">Le scritture sul NAS sono ferme adesso. Riprova più tardi.</string>
+  <string name="nas_reject_writes_blocked">Le scritture sul NAS sono ferme adesso (interruttore di emergenza o una versione dell\'app da aggiornare): la Diagnostica dice perché.</string>
   <string name="nas_reject_nas_unreachable">Il NAS non risponde: riprova quando è raggiungibile.</string>
   <string name="nas_reject_not_mine">Puoi eliminare subito solo ciò che hai eliminato da questo dispositivo.</string>
   <string name="nas_reject_shared_album_item">Non è riuscito: fa parte di un album condiviso in cui non puoi eliminarlo, spostarlo o rinominarlo. Può farlo chi ha creato l’album o, a “Gli altri aggiungono”, chi l’ha aggiunto.</string>
@@ -95,7 +95,7 @@
   <string name="nas_confirmation_expired">La conferma è scaduta: ricomincia.</string>
   <string name="nas_confirmation_wrong">Nel frattempo è cambiato qualcosa: ricomincia dall\'inizio.</string>
   <string name="nas_plan_invalid">Questa operazione non è consentita.</string>
-  <string name="nas_writes_blocked">Le scritture sul NAS sono ferme adesso (cambiamenti anomali o interruttore di emergenza). Riprova più tardi.</string>
+  <string name="nas_writes_blocked">Le scritture sul NAS sono ferme adesso (cambiamenti anomali, interruttore di emergenza o una versione dell\'app da aggiornare): la Diagnostica dice perché.</string>
   <string name="nas_open_operations">Vedi</string>
   <string name="nas_notice_dismiss">Nascondi</string>
 </resources>

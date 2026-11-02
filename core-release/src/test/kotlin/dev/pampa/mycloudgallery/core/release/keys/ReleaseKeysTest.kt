@@ -73,6 +73,50 @@ class ReleaseKeysTest {
     }
   }
 
+  /**
+   * I5 (revisione di sicurezza della Fase 10): perche' le chiavi fissate [k1] e [k2] **non** vanno bene per una release vera; vuoto = vanno bene. Una chiave
+   * ancora uguale a un segnaposto (nessun kill switch), uguale a KT (un kill switch che chiunque puo' firmare: la privata di KT e' nel repository) o K1
+   * uguale a K2 (nessuna riserva).
+   */
+  private fun problemiDelleChiaviVere(k1: ByteArray, k2: ByteArray): List<String> {
+    val placeholders = listOf("K1", "K2").map { placeholder("MyCloud Gallery, chiave di pubblicazione del manifest $it, segnaposto senza chiave privata") }
+    val problems = mutableListOf<String>()
+    for ((name, key) in listOf("K1" to k1, "K2" to k2)) {
+      if (placeholders.any { it.contentEquals(key) }) problems += "$name e' ancora un segnaposto"
+      if (ReleaseTestKeys.KT.spki.contentEquals(key)) problems += "$name e' la chiave di prova KT"
+    }
+    if (k1.contentEquals(k2)) problems += "K1 e K2 sono la stessa chiave"
+    return problems
+  }
+
+  /**
+   * I5: con [ReleaseKeys.PROVISIONAL] falso K1 e K2 devono essere chiavi vere: diverse dai segnaposto, da KT e fra loro. Prima la costante sola bastava (la prova
+   * dei segnaposto usciva subito e il passo 0 di `release.ps1` legge solo lei): una release con i segnaposto, o con KT, sarebbe passata.
+   */
+  @Test
+  fun i5_senzaSegnapostoLeChiaviSonoVere_nonSegnapostoNeKtNeUguali() {
+    if (ReleaseKeys.PROVISIONAL) return
+    assertWithMessage("chiavi fissate con PROVISIONAL = false").that(problemiDelleChiaviVere(ReleaseKeys.K1.spki, ReleaseKeys.K2.spki)).isEmpty()
+  }
+
+  /** Una chiave pubblica P-256 nuova (SPKI), generata nel test: come una K1 o una K2 vera, di cui pero' nessuno tiene la privata. */
+  private fun freshSpki(): ByteArray = java.security.KeyPairGenerator.getInstance("EC").run {
+    initialize(java.security.spec.ECGenParameterSpec("secp256r1"))
+    generateKeyPair().public.encoded
+  }
+
+  /** I5: la regola qui sopra trova davvero ogni caso (la prova non passa a vuoto finche' [ReleaseKeys.PROVISIONAL] e' vero). */
+  @Test
+  fun i5_laRegolaTrovaSegnapostoKtEChiaviUguali() {
+    val real = freshSpki()
+    val other = freshSpki()
+    assertThat(problemiDelleChiaviVere(real, other)).isEmpty()
+    assertThat(problemiDelleChiaviVere(ReleaseKeys.K1.spki, other)).containsExactly("K1 e' ancora un segnaposto")
+    assertThat(problemiDelleChiaviVere(real, ReleaseKeys.K1.spki)).containsExactly("K2 e' ancora un segnaposto")
+    assertThat(problemiDelleChiaviVere(ReleaseTestKeys.KT.spki, other)).containsExactly("K1 e' la chiave di prova KT")
+    assertThat(problemiDelleChiaviVere(real, real.copyOf())).containsExactly("K1 e K2 sono la stessa chiave")
+  }
+
   @Test
   fun ktPubblicaEPrivataSonoUnaCoppia() {
     val message = "MCGR1 prova".toByteArray()

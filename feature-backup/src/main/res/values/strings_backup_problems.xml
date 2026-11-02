@@ -27,6 +27,9 @@
   <string name="backup_problem_frozen_detail">Finché non controlli, sul NAS non si scrive e non si cancella niente.</string>
   <string name="backup_problem_writes_stopped_title">Scritture sul NAS ferme</string>
   <string name="backup_problem_writes_stopped_detail">Hai fermato le scritture sul NAS: il backup riprende quando le riattivi.</string>
+  <!-- CA-1 (Fase 10): le scritture ferme per il manifest firmato (questa versione e' in sola lettura), non per l'interruttore dell'utente. -->
+  <string name="backup_problem_release_read_only_title">Questa versione va aggiornata</string>
+  <string name="backup_problem_release_read_only_detail">Questa versione di MyCloud Gallery è in sola lettura: il backup non scrive sul NAS finché non la aggiorni dal Pampa Store. Le foto restano sul telefono.</string>
   <string name="backup_problem_test_only_title">Backup in prova</string>
   <string name="backup_problem_test_only_detail">Si scrive solo nelle share di prova: le foto vere non si toccano.</string>
   <string name="backup_problem_lost_before_backup_title">Foto cancellate prima del backup</string>

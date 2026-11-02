@@ -976,8 +976,13 @@ class SafeUploadEngine(
     val buffer = config.chunkBytes.toLong()
     try {
       while (offset < item.size) {
-        if (!round.mayContinue()) {
-          // "Ferma", fine della tappa o regole: un punto di ripresa dove si e' arrivati (se lo scrittore lo conferma), poi si esce.
+        // Revisione 5A, I4 (correzione D della Fase 10): il cancello si riguarda anche dentro il file, non solo fra un passo e l'altro.
+        // "Ferma le scritture sul NAS", il blocco del manifest, la pausa e la famiglia non pronta fermano il giro qui, a meta' del file; un
+        // arrivo diretto a una share chiusa aspetta da solo (R5 della 5B), come fra i passi.
+        val gateNow = gateOf(item)
+        if (!gateNow.open && !waitsAlone(item, gateNow)) round.stopForGate(gateNow)
+        if (!gateNow.open || !round.mayContinue()) {
+          // "Ferma", fine della tappa, regole o cancello: un punto di ripresa dove si e' arrivati (se lo scrittore lo conferma), poi si esce.
           if (offset > lastPoint) {
             val cp = writer.checkpoint()
             if (cp is NasResult.Ok && cp.value.length == offset) {

@@ -54,15 +54,20 @@ val LocalGalleryAccessibility = staticCompositionLocalOf { GalleryAccessibilityP
  * - il contrasto: `UiModeManager.getContrast()` (0 standard, 0,5 medio, 1 alto), da Android 14; piu' `high_text_contrast_enabled`
  *   di `Settings.Secure` ("testo ad alto contrasto");
  * - la trasparenza: [REDUCE_TRANSPARENCY_KEYS], le chiavi con cui i produttori espongono "Riduci trasparenza e sfocatura", cercate in
- *   `Settings.Secure`, `Global` e `System`. **Nessuna e' documentata da Android**: sull'emulatore AOSP non esiste, la chiave di
- *   One UI va confermata sul telefono (F182-F185). Una chiave che non c'e' vale 0, mai un errore.
+ *   `Settings.Secure`, `Global` e `System`. **Nessuna e' documentata da Android** (sull'emulatore AOSP non esiste), ma quella di One UI
+ *   e' **confermata sull'S25** (AC-1 della verifica funzionale della Fase 10, prova F183 del 02/11): `Settings.Global`,
+ *   `accessibility_reduce_transparency`, la prima dell'elenco. Le altre tre restano per altri produttori o altre versioni di One UI.
+ *   Una chiave che non c'e' vale 0, mai un errore.
  */
 object GalleryAccessibilityReader {
 
   /** "testo ad alto contrasto" (`Settings.Secure.ACCESSIBILITY_HIGH_TEXT_CONTRAST_ENABLED`, nascosta). */
   const val HIGH_TEXT_CONTRAST_KEY: String = "high_text_contrast_enabled"
 
-  /** Le chiavi candidate per "meno trasparenza", da confermare sul telefono (vedi sopra). */
+  /**
+   * Le chiavi di "meno trasparenza". La prima e' quella di One UI, **confermata sull'S25** in `Settings.Global` (AC-1, F183); le altre tre sono candidate per altri produttori
+   * e non sono confermate da nessun telefono che abbiamo.
+   */
   val REDUCE_TRANSPARENCY_KEYS: List<String> = listOf(
     "accessibility_reduce_transparency",
     "reduce_transparency",

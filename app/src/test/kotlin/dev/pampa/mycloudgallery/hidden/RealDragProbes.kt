@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
 import dev.pampa.mycloudgallery.core.library.index.FilteredTimelineView
+import dev.pampa.mycloudgallery.core.library.visibility.CatalogHiddenMask
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentId
@@ -41,7 +42,9 @@ import kotlinx.coroutines.flow.StateFlow
 //  - una richiesta con **anche un solo** non-cella e' rifiutata per intero (`HIDDEN`) e non nasce nessun id;
 //  - una richiesta di sole celle esce con un URI per elemento, nell'ordine chiesto, tutti del provider (mai un `file://`, mai il MediaStore) e ognuno porta proprio a quel media;
 //  - i permessi sono sempre e solo `DragFlags.ALLOWED`;
-//  - chiuso il prestito non resta nessun id.
+//  - chiuso il prestito non resta nessun id;
+//  - **i nascosti dell'ultimo momento** (I4 della revisione di sicurezza, riga `live`): la vista della Libreria della sonda e' l'istantanea, che li ha ancora; il filtro finale (`CatalogHiddenMask` sul
+//    catalogo, che li conosce anche con i loro gruppi) li ferma: il trascinamento li rifiuta per intero, e il provider non descrive ne' apre un id consegnato di un media nascosto dopo la sua nascita.
 // Dai Nascosti non si trascina: nessuna origine li nomina (`DragOrigin`), e le loro celle non hanno il modificatore (lo prova `HiddenGridsHaveNoDragTest`).
 
 /** La Libreria per le altre app costruita sul mondo: la vista e' quella del mondo, tutto il resto sa di tutti i media (anche dei nascosti) e non dice mai di no. */
@@ -74,12 +77,14 @@ internal object RealDragProbes {
   val drag = SurfaceProbe { w ->
     val library = WorldDragLibrary(w)
     val table = DocumentIdTable()
-    val documents = LibraryMediaDocuments(library, DocumentLabels("MyCloud Gallery", "Recenti", "Cartelle NAS"), table)
+    val mask = CatalogHiddenMask(w.db)
+    val documents = LibraryMediaDocuments(library, DocumentLabels("MyCloud Gallery", "Recenti", "Cartelle NAS"), table, hiddenMask = mask)
     val scope = CoroutineScope(Dispatchers.Unconfined)
     try {
       val leases = DragLeases(scope)
-      val handler = DocumentDragPayloads(library, documents, AUTHORITY, { EntryDecision.ALLOWED }, leases)
-      val cells = w.libraryCells
+      val handler = DocumentDragPayloads(library, documents, AUTHORITY, { EntryDecision.ALLOWED }, leases, hiddenMask = mask)
+      // Le celle dell'istantanea meno gli ultimi nascosti e i loro gruppi: il filtro finale li toglie (la vista della sonda e' l'istantanea).
+      val cells = w.liveLibraryCells
       val problems = ArrayList<String>()
       val shown = LinkedHashSet<MediaId>()
 
@@ -129,6 +134,15 @@ internal object RealDragProbes {
           }
         }
         if (table.size != 0) problems += "dopo una raffica restano id"
+      }
+
+      // 3. Il provider: un id consegnato (nato dalla vista, che ha ancora l'ultimo nascosto) non descrive ne' apre un media che il catalogo dice nascosto adesso.
+      val providerTable = DocumentIdTable()
+      val provider = LibraryMediaDocuments(library, DocumentLabels("MyCloud Gallery", "Recenti", "Cartelle NAS"), providerTable, hiddenMask = mask)
+      for (id in w.libraryCells) {
+        val token = provider.issue(id) ?: continue
+        val described = provider.entry(token) != null
+        if (described != (id in cells)) problems += if (described) "il provider descrive un media nascosto dell'ultimo momento" else "il provider non descrive un media che si vede"
       }
       Probed(shown = shown, expected = cells, problems = problems.distinct())
     } finally {

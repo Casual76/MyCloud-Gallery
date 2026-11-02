@@ -68,6 +68,12 @@ import dev.pampa.mycloudgallery.core.backup.contract.FreeSpaceRunState
 import dev.pampa.mycloudgallery.core.backup.contract.TrashOutcome
 import dev.pampa.mycloudgallery.core.backup.testing.TestConfirmations
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.MediaDragPorts
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.MediaDropPorts
+import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
+import dev.pampa.mycloudgallery.core.library.contract.DragPrepared
+import dev.pampa.mycloudgallery.core.library.contract.DragRefusal
+import dev.pampa.mycloudgallery.core.library.contract.DragRequest
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.mediastore.testing.FakeMediaStore
 import dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaIntents
@@ -365,6 +371,45 @@ class FiveBIntegrationTest {
     // L'azzeramento revoca ogni id: dopo, niente si apre.
     graph.revokeAll()
     assertThat(docs.open(files.single().id)).isNull()
+  }
+
+  /**
+   * I4 della revisione di sicurezza della Fase 10, sul grafo vero: due foto solo sul NAS, tutte e due con un id consegnato. Un "Nascondi" fatto qui revoca **subito** l'id della nascosta (e non quello
+   * dell'altra), senza aspettare che la vista della Libreria si aggiorni (2-3 secondi), e il trascinamento vero la rifiuta (`HIDDEN`, prima di sentire il NAS), con la vista com'e' e anche dopo.
+   */
+  @Test
+  fun unNascondiRevocaSubitoGliIdGiaConsegnati_EIlTrascinamentoLaRifiuta() = runBlocking {
+    val backend = TestNas.backend(time)
+    backend.put(TestNas.ADMIN_USER, "Archivio/prima.jpg", BackupRig.jpeg(tone = 70), lastWriteMs = time.now() - 2 * DAY)
+    backend.put(TestNas.ADMIN_USER, "Archivio/seconda.jpg", BackupRig.jpeg(tone = 140), lastWriteMs = time.now() - 2 * DAY)
+    val (rig, _) = phoneWithSafePhotos(backend, count = 1)
+    val first = mediaAt(rig, "Archivio/prima.jpg")
+    val second = mediaAt(rig, "Archivio/seconda.jpg")
+    withTimeout(Attese.TETTO_MS) { rig.gallery.repository.view(LibraryFilter.ALL).first { it.snapshot.indexOf(first) >= 0 && it.snapshot.indexOf(second) >= 0 } }
+
+    val graph = integrations(rig)
+    graph.install()
+    try {
+      assertThat(graph.entryGate.decide()).isEqualTo(EntryDecision.ALLOWED)
+      val docs = graph.documents
+      val tokenFirst = checkNotNull(docs.issue(first))
+      val tokenSecond = checkNotNull(docs.issue(second))
+      rig.gallery.actions.setHidden(setOf(first), true)
+      // Subito: l'id consegnato della nascosta non vale piu', quello dell'altra si'.
+      assertThat(docs.isDelivered(tokenFirst)).isFalse()
+      assertThat(docs.isDelivered(tokenSecond)).isTrue()
+      assertThat(docs.open(tokenFirst)).isNull()
+      assertThat(graph.dragPayloads.prepare(DragRequest(DragOrigin.LIBRARY, listOf(first), removeLocation = false)))
+        .isEqualTo(DragPrepared.Refused(DragRefusal.HIDDEN))
+      assertThat(graph.dragPayloads.prepare(DragRequest(DragOrigin.LIBRARY, listOf(first, second), removeLocation = false)))
+        .isEqualTo(DragPrepared.Refused(DragRefusal.HIDDEN))
+    } finally {
+      graph.revokeAll()
+      PickerPorts.reset()
+      IntegrationPorts.reset()
+      MediaDragPorts.reset()
+      MediaDropPorts.reset()
+    }
   }
 
   // --- "Modifica con…" di un solo-NAS ------------------------------------------------------------------------------------------

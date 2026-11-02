@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.library.contract.DragLimits
 import dev.pampa.mycloudgallery.core.library.contract.DragPrepared
 import dev.pampa.mycloudgallery.core.library.contract.DragRefusal
 import dev.pampa.mycloudgallery.core.library.contract.DragRequest
+import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.library.contract.MediaDragHandler
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
@@ -27,6 +28,7 @@ import dev.pampa.mycloudgallery.feature.integrations.provider.NasReach
 import dev.pampa.mycloudgallery.feature.integrations.provider.NoPreparation
 import dev.pampa.mycloudgallery.feature.integrations.provider.PreparedBatch
 import dev.pampa.mycloudgallery.feature.integrations.share.ShareStop
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 
 // I DATI DEL TRASCINAMENTO VERSO UN'ALTRA APP (Fase 10, P6, D20, C436, E-T11-E-T13, E-T17, E-T18, E-X5-E-X7; docs/fase10-progetto.md §2.5). La porta `MediaDragHandler` di
@@ -36,6 +38,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 // Le regole, tutte provate da `DocumentDragPayloadsTest`:
 //  - **la vista di adesso decide** (E-H11, E-T18): un id che non e' nella vista della Libreria in questo momento (nascosto, sparito, non concesso) ferma **tutto il trascinamento**
 //    (`HIDDEN`), qualunque cosa dica la porta; dai Nascosti non si trascina (nessuna origine li nomina). La vista si ricontrolla anche subito prima di creare gli id;
+//  - **il filtro finale decide per ultimo** (I4 della revisione di sicurezza): la vista si aggiorna dopo la calma (2-3 secondi) e un media nascosto un attimo fa e' ancora li'. Il
+//    [HiddenMask] (il catalogo adesso, anche i gruppi e i nascosti arrivati da un altro dispositivo) si chiede **due volte**: all'inizio e di nuovo dopo l'ultima attesa (NAS, copie), subito
+//    prima di creare gli id; un "Nascondi" dopo gli id consegnati li revoca ([DocumentIssuer.revokeMedia]) e il provider ricontrolla a ogni apertura;
 //  - **URI solo del provider** (C436): ogni elemento, anche uno del telefono, esce come `content://<pacchetto>.integrations.documents/document/<token>` con un id opaco **consegnato**;
 //    il provider legge un media del telefono dal telefono (come il selettore) e uno solo sul NAS con il **descrittore a richiesta** (a pezzi, nessun file intero). Mai `file://`, mai un
 //    `FileProvider` nuovo, mai un URI del MediaStore;
@@ -60,6 +65,8 @@ class DocumentDragPayloads(
   private val leases: DragLeases,
   private val preparer: DeliveryPreparer = NoPreparation,
   private val nasProbeDeadlineMs: Long = DocumentPolicy.NAS_PROBE_DEADLINE_MS,
+  /** Il filtro finale dei nascosti (I4): di serie non nasconde niente (le prove); `:app` lo lega a `GalleryGraph.hiddenMask`. */
+  private val hiddenMask: HiddenMask = HiddenMask { emptySet() },
 ) : MediaDragHandler {
 
   override suspend fun prepare(request: DragRequest): DragPrepared {
@@ -85,6 +92,8 @@ class DocumentDragPayloads(
         is MediaRef.Synthetic, null -> return refused(DragRefusal.UNAVAILABLE)
       }
     }
+    // Il filtro finale (I4): un media nascosto un attimo fa e' ancora nella vista.
+    if (anyHiddenNow(ids)) return refusedHidden()
 
     // 2. Il peso, dal catalogo (senza aprire i file): il tetto di byte, detto prima di cominciare (E-T12).
     val infos = library.fileInfos(ids)
@@ -109,7 +118,11 @@ class DocumentDragPayloads(
       }
     }
 
-    // 5. Da qui non si sospende piu': il cancello e la vista dell'ultimo istante, poi gli id e il ClipData.
+    // 5. Un ultimo sguardo ai nascosti dopo le attese (il NAS, le copie), poi da qui non si sospende piu': il cancello e la vista dell'ultimo istante, gli id e il ClipData.
+    if (anyHiddenNow(ids)) {
+      if (removing) preparer.release(ids)
+      return refusedHidden()
+    }
     return commit(ids, infos, nasOnly, removing)
   }
 
@@ -169,6 +182,20 @@ class DocumentDragPayloads(
     EntryDecision.ALLOWED -> null
     EntryDecision.NEEDS_UNLOCK -> refused(DragRefusal.LOCKED)
     EntryDecision.NOT_READY, EntryDecision.LOADING -> refused(DragRefusal.UNAVAILABLE)
+  }
+
+  /** Vero se il filtro finale dice nascosto anche uno solo di [ids]. Un errore di lettura vale "nascosto" (si fallisce chiusi). */
+  private suspend fun anyHiddenNow(ids: List<MediaId>): Boolean = try {
+    hiddenMask.hiddenAmong(ids).isNotEmpty()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: Exception) {
+    true
+  }
+
+  private fun refusedHidden(): DragPrepared {
+    IntegrationCounters.add(IntegrationCounter.HIDDEN_STOPPED)
+    return refused(DragRefusal.HIDDEN)
   }
 
   private fun refused(reason: DragRefusal): DragPrepared {

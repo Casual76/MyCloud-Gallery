@@ -2,9 +2,11 @@ package dev.pampa.mycloudgallery.feature.integrations.provider
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.library.contract.HiddenMask
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentEntry
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentId
+import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentReader
 import dev.pampa.mycloudgallery.feature.integrations.contract.DocumentIds
 import dev.pampa.mycloudgallery.feature.integrations.provider.testing.FakeIntegrationLibrary
 import kotlinx.coroutines.runBlocking
@@ -233,6 +235,106 @@ class LibraryMediaDocumentsTest {
     val hidden = library.hiddenIds.first()
     assertThat(documents.issue(hidden)).isNull()
     assertThat(IntegrationCounters.get(IntegrationCounter.HIDDEN_STOPPED)).isEqualTo(1L)
+  }
+
+  // --- Il filtro finale: un "Nascondi" non aspetta la vista (I4 della revisione di sicurezza della Fase 10) ---------------------
+
+  /** Il catalogo adesso: i nascosti dell'ultimo momento, che la vista della Libreria (aggiornata dopo la calma) non ha ancora tolto. */
+  private class LiveHidden : HiddenMask {
+    val hidden = HashSet<MediaId>()
+    var failing = false
+
+    override suspend fun hiddenAmong(ids: Collection<MediaId>): Set<MediaId> {
+      if (failing) error("lettura del catalogo fallita")
+      return ids.filterTo(HashSet()) { it in hidden }
+    }
+  }
+
+  private class RecordingPreparer : DeliveryPreparer {
+    val released = ArrayList<MediaId>()
+
+    override fun removeLocation(): Boolean = false
+
+    override suspend fun prepare(ids: List<MediaId>, delivered: Boolean, onItem: (Int, Int) -> Unit, onBytes: (Long, Long) -> Unit): PreparedBatch =
+      PreparedBatch.Refused(dev.pampa.mycloudgallery.feature.integrations.share.ShareStop.FAILED, null)
+
+    override fun infoOf(id: MediaId): PreparedInfo? = null
+
+    override fun open(id: MediaId): DocumentReader? = null
+
+    override fun release(ids: Collection<MediaId>) {
+      released += ids
+    }
+
+    override fun releaseAll() = Unit
+  }
+
+  private fun liveDocuments(live: HiddenMask, preparer: DeliveryPreparer = NoPreparation) = LibraryMediaDocuments(library, labels, preparer = preparer, hiddenMask = live)
+
+  private fun recentOf(docs: LibraryMediaDocuments, limit: Int): List<DocumentEntry> = run {
+    val root = docs.roots().single().rootDocument
+    docs.children(docs.children(root, 10).first { it.displayName == labels.recent }.id, limit)
+  }
+
+  @Test
+  fun unIdConsegnatoNonSiApreDopoUnNascondi_AncheSeLaVistaNonEAncoraAggiornata() {
+    val live = LiveHidden()
+    val docs = liveDocuments(live)
+    val media = library.phoneIds().first()
+    val token = docs.issue(media)!!
+    assertThat(run { docs.entry(token) }).isNotNull()
+    live.hidden += media
+    // La vista della Libreria ha ancora il media: lo ferma il filtro finale, e l'id si revoca.
+    assertThat(run { docs.entry(token) }).isNull()
+    assertThat(run { docs.open(token) }).isNull()
+    assertThat(docs.isDelivered(token)).isFalse()
+    assertThat(library.phoneReaders).isEmpty()
+    assertThat(IntegrationCounters.get(IntegrationCounter.HIDDEN_STOPPED)).isAtLeast(1L)
+  }
+
+  @Test
+  fun iRecentiNonHannoUnNascostoDellUltimoMomento() {
+    val live = LiveHidden()
+    val docs = liveDocuments(live)
+    val first = library.visibleIds.take(3)
+    live.hidden += first
+    val names = recentOf(docs, 5).map { it.displayName }
+    assertThat(names).hasSize(2)
+    for (n in 0 until 3) assertThat(names.any { it.startsWith("IMG_%05d.".format(n)) }).isFalse()
+    // Senza il nascosto dell'ultimo momento la vista da' i primi cinque (la differenza e' solo il filtro finale).
+    assertThat(recentOf(liveDocuments(LiveHidden()), 5)).hasSize(5)
+    assertThat(IntegrationCounters.get(IntegrationCounter.HIDDEN_STOPPED)).isAtLeast(3L)
+  }
+
+  @Test
+  fun unErroreDelFiltroFinaleNonMostraNienteENonApreNiente_SiFallisceChiusi() {
+    val live = LiveHidden()
+    val docs = liveDocuments(live)
+    val token = docs.issue(library.phoneIds().first())!!
+    live.failing = true
+    assertThat(recentOf(docs, 20)).isEmpty()
+    assertThat(run { docs.entry(token) }).isNull()
+    assertThat(run { docs.open(token) }).isNull()
+    assertThat(library.phoneReaders).isEmpty()
+  }
+
+  @Test
+  fun revokeMedia_TogliGliIdDeiMediaELeLoroCopie_NonQuelliDegliAltri() {
+    val preparer = RecordingPreparer()
+    val docs = liveDocuments(HiddenMask { emptySet() }, preparer)
+    val (a, b) = library.phoneIds().take(2)
+    val tokenA = docs.issue(a)!!
+    val tokenB = docs.issue(b)!!
+    // Lo stesso media nei recenti ha lo stesso id (consegnato): la revoca lo toglie ovunque.
+    assertThat(recentOf(docs, 400).map { it.id }).contains(tokenA)
+    docs.revokeMedia(setOf(a, MediaId.random()))
+    assertThat(docs.isDelivered(tokenA)).isFalse()
+    assertThat(docs.isDelivered(tokenB)).isTrue()
+    assertThat(run { docs.entry(tokenA) }).isNull()
+    assertThat(run { docs.entry(tokenB) }).isNotNull()
+    assertThat(preparer.released).contains(a)
+    assertThat(preparer.released).doesNotContain(b)
+    docs.revokeMedia(emptySet())
   }
 
   // --- Apertura ---------------------------------------------------------------------------------------------------------

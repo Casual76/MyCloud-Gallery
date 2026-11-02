@@ -116,10 +116,17 @@ class AndroidPreviewDecoder : PreviewDecoder {
 /**
  * Un [InputStream] sopra una `MediaDataSource`: legge a blocchi con `readAt`, senza mai caricare il file. Non chiude la sorgente:
  * la chiude il suo `MediaBytes` (contratto di `MediaBytes.dataSource()`), e la si riapre per la seconda passata.
+ *
+ * **Non lancia mai**: lo legge `BitmapFactory`, e un'eccezione che esce da qui attraversa il codice nativo, che la scrive su `System.err` con tutto lo stack trace (833 volte in 85
+ * minuti nella prova sul campo di Fase 10); un errore di lettura (il tetto per file, il NAS) vale "fine dei dati", come per [QuietMediaDataSource].
  */
 internal class MediaDataSourceInputStream(private val source: MediaDataSource) : InputStream() {
   private var position = 0L
-  private val total = source.size
+  private val total = try {
+    source.size
+  } catch (_: Exception) {
+    -1L
+  }
 
   override fun read(): Int {
     val one = ByteArray(1)
@@ -129,7 +136,11 @@ internal class MediaDataSourceInputStream(private val source: MediaDataSource) :
   override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
     if (length == 0) return 0
     if (total in 0..position) return -1
-    val n = source.readAt(position, buffer, offset, length)
+    val n = try {
+      source.readAt(position, buffer, offset, length)
+    } catch (_: Exception) {
+      -1
+    }
     if (n <= 0) return -1
     position += n
     return n

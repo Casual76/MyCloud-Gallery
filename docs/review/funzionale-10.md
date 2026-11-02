@@ -205,6 +205,7 @@ Funziona 23, Sbagliata 8, Blocca 0 (su 31 flussi; cinque dei "Funziona" sono "pl
 - **Gravita':** Minore. **Stato:** plausibile (serve un test Compose; nessuna prova copre l'"Indietro" nel pannello).
 - **Percorso:** `SettingsPaneHost` passa `back = { if (!paneNav.popBackStack()) close() }` (`feature-settings/.../SettingsPanes.kt:111`) a pagine che nel pannello sono la **prima e unica** destinazione. Il codice conta sul fatto che `popBackStack()` risponda falso quando non c'e' altro; ma toglie comunque la destinazione (il pannello resta vuoto) e, se risponde vero, `close()` non parte e la pagina resta "scelta" (`code` non cambia, quindi riscegliere la stessa non la rimette). `SettingsPanesTest.kt` prova la scelta, la soglia e le rotte, non l'"Indietro".
 - **Correzione proposta:** `if (paneNav.previousBackStackEntry == null) close() else paneNav.popBackStack()`: l'ultima non si toglie mai. Prova: Compose con `TestNavHostController`, "Indietro" dalla prima pagina e da una seconda.
+- **Esito (02/11): Corretta** (pacchetto C). `paneBack(nav, close)` in `SettingsPanes.kt` fa esattamente quella scelta, e `SettingsPaneHost` ha un parametro `pages` per provarlo con pagine finte (le vere vogliono Hilt). **Il difetto descritto non si riproduce** con Navigation 2.9: `popBackStack()` sull'unica destinazione risponde falso e non la toglie, quindi la prova nel pannello vero (`SettingsPanesTest.indietroNelPannello_...`, "Indietro" dalla prima pagina e da una seconda) passava anche con il codice di prima. La correzione e' una difesa: `paneBack_DallaPrimaPaginaChiudeESenzaToglierla_AncheSeLaLibreriaRispondeVero` usa un controller che risponderebbe vero e non toglie niente. F165 sul tablet resta da fare.
 
 ### 2.5 Accessibilita' (AC)
 
@@ -212,6 +213,7 @@ Funziona 23, Sbagliata 8, Blocca 0 (su 31 flussi; cinque dei "Funziona" sono "pl
 - **Gravita':** Sbagliata. **Stato:** plausibile (serve il telefono, F183).
 - **Percorso:** `GalleryAccessibilityReader.REDUCE_TRANSPARENCY_KEYS` (`core-designsystem/.../a11y/GalleryAccessibility.kt:66-71`) sono quattro nomi "candidati" (`accessibility_reduce_transparency`, `reduce_transparency`, ...), nessuno documentato da Android, cercati in `Secure`, `Global` e `System`; il commento stesso dice che "la chiave di One UI va confermata sul telefono". Se nessuna combacia, "Riduci trasparenza e sfocatura" di One UI non cambia niente e il vetro resta trasparente: la superficie su cui l'utente ha gia' segnalato di leggere male. Il contrasto alto ha strade documentate (`UiModeManager.getContrast` da Android 14, `high_text_contrast_enabled`). P8 lo ha rinviato a P14 (F183).
 - **Correzione proposta:** confermare la chiave sull'S25 (`adb shell settings list secure|global|system` con l'opzione accesa e spenta) e fissarla; in ogni caso, per non dipendere da una chiave del produttore, un interruttore dell'app "Superfici piene" (fase grafica) che l'utente trova in Impostazioni.
+- **Esito (02/11): Corretta** (pacchetto C). La chiave One UI e' **confermata sull'S25** sul telefono, come chiedeva F183 (`Settings.Global`, `accessibility_reduce_transparency`, gia' la prima di `REDUCE_TRANSPARENCY_KEYS`): il codice di lettura non cambia; il commento di `GalleryAccessibility.kt` non dice piu' "da confermare" e distingue la chiave confermata dalle tre candidate per altri produttori. Resta l'interruttore "Superfici piene" dell'app, nella fase grafica (decisione 5).
 
 ---
 
@@ -307,14 +309,14 @@ Nessuna voce e' corretta. Il pacchetto e' la proposta; ogni correzione porta un 
 | WG-3 Tocco con un viewer aperto | Sbagliata | confermato | B |
 | WG-4 Tocco a freddo: "non c'e' piu'" | Sbagliata | plausibile | B |
 | WG-5 Lavoro periodico a freddo: 1,5 s | Minore | plausibile | B (solo dopo F162) |
-| FI-1 "Indietro" del pannello | Minore | plausibile | C |
-| AC-1 "Meno trasparenza" da chiavi indovinate | Sbagliata | plausibile | D (solo dopo F183) |
+| FI-1 "Indietro" del pannello | Minore | **Corretta** (C, 02/11): difesa, il difetto non si riproduce con Navigation 2.9 | C |
+| AC-1 "Meno trasparenza" da chiavi indovinate | Sbagliata | **Corretta** (C, 02/11): chiave confermata sull'S25, commento aggiornato; resta l'interruttore "Superfici piene" della fase grafica | C |
 
 **Pacchetti:**
 - **A, "il blocco del manifest nel cuore":** CA-1 (causa leggibile e testi), CA-2 (`AppEntryGate` con il manifest, motivo dedicato per la coda), CA-3 (`awaitLoaded` nelle regole e nel cancello dei modelli, il widget con `release.stopped`), CA-4 (dopo la decisione). Per primo: e' il cuore, e CA-2 e' l'unica voce che apre una porta a un'altra app. Sonnet (lavoro ordinario di legami e stringhe); i test sono quelli di §3.
 - **B, "widget: ciclo di vita e tocco":** WG-1 (`stop()` con `resume`, `publishAtStart` che programma il lavoro), WG-2 (frequenza ricordata), WG-3 (`viewer.close()`), WG-4 (`viewerOf` che aspetta), RL-2 (testo), WG-5 solo se F162 la conferma. Tutte con test su WorkManager e Compose.
 - **C, "radice e pannelli":** RL-1 (struttura stabile di `ReleaseRoot`), FI-1 (`previousBackStackEntry`).
-- **D, "trasparenza":** AC-1: prima F183 sull'S25 per la chiave, poi la correzione e, nella fase grafica, l'interruttore "Superfici piene".
+- **D, "trasparenza":** AC-1: prima F183 sull'S25 per la chiave, poi la correzione e, nella fase grafica, l'interruttore "Superfici piene". **Esito (02/11):** la chiave e' confermata e il commento aggiornato dal pacchetto C; resta l'interruttore.
 
 **Decisioni per l'utente:**
 1. **Le chiavi K1 e K2 (azione tua).** Finche' `ReleaseKeys.PROVISIONAL` e' vero nessun manifest vero e' accettato e `release.ps1` si rifiuta di pubblicare: va fatto `manifest-tool.ps1 keys`, incollate le due righe e aggiornate le impronte in `docs/sicurezza.md` §5.6. Senza, la versione 1.0.0 non ha il blocco a distanza.

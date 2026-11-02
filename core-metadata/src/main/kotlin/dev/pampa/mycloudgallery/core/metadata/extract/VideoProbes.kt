@@ -25,7 +25,8 @@ class MediaMetadataVideoProbe : VideoProbe {
   override fun probe(bytes: MediaBytes): VideoFacts? {
     val retriever = MediaMetadataRetriever()
     return try {
-      retriever.setDataSource(bytes.dataSource())
+      // Mai un'eccezione verso il codice nativo (stack trace su System.err in release): la sorgente non lancia ([QuietMediaDataSource]).
+      retriever.setDataSource(QuietMediaDataSource(bytes.dataSource()))
       val duration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
       val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
       val utc = VideoMetadataParsing.parseCreationDate(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE))

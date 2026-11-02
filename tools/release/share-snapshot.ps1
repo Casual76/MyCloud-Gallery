@@ -9,8 +9,18 @@
   di ogni area (recinzioni.json, "aree"): e' E-SV2, il passo si ferma e si torna indietro.
 
   Le radici sono cartelle (di solito `\\NAS\alessio` e la share dell'area comune, con le credenziali di Windows dell'utente). Lo
-  script non scrive, non sposta e non cancella niente nelle radici: apre solo gli elenchi. Rifiuta una -Uscita (o un -Report) che
-  stia dentro una radice. Lo si prova SOLO su cartelle finte sotto build\ (tools\release\share-snapshot-prove.ps1).
+  script non scrive, non sposta e non cancella niente nelle radici: apre solo gli elenchi. Lo si prova SOLO su cartelle finte sotto build\
+  (tools\release\share-snapshot-prove.ps1).
+
+  RISERVATEZZA (I6 della revisione di sicurezza della Fase 10). La fotografia elenca OGNI file dell'area privata con nome, dimensione e
+  data: letta da chi non deve (scritta per sbaglio nell'area comune, per esempio), mostrerebbe a tutta la famiglia i nomi dei file di una
+  persona. Per questo:
+    - la -Uscita (e il -Report) si scrivono SOLO su un disco FISSO di questo PC: niente percorsi UNC (\\server\share, \\indirizzo\share),
+      niente unita' di rete, niente chiavette; e si guarda il percorso VERO (collegamenti, giunzioni, unita' assegnate con subst), non il
+      testo: un'uscita che finisce dentro una radice e' rifiutata anche se il suo testo non lo dice;
+    - a fine lavoro lo script lo ricorda: tienila solo su questo PC e cancellala (anche dal cestino) quando il confronto e' stato letto e
+      il passo e' chiuso, non oltre 7 giorni.
+  Limite dichiarato: non si vede un'unita' di rete che sia la share di una cartella di questo stesso PC.
 
   Comuni a tutte le aree, non contano: Thumbs.db, desktop.ini, .DS_Store e le cartelle di servizio del NAS (@eaDir, .wdmc, .plex,
   .twonkymedia, @appstore, ...): sono ignorati e contati a parte.
@@ -77,7 +87,30 @@ Add-Type -Language CSharp -TypeDefinition @'
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
+using Microsoft.Win32.SafeHandles;
+
+// Il percorso VERO di una cartella (I6): segue collegamenti simbolici, giunzioni, unita' assegnate con subst e unita' di rete.
+public static class RealPath {
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  static extern SafeFileHandle CreateFileW(string name, uint access, uint share, IntPtr security, uint disposition, uint flags, IntPtr template);
+
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  static extern uint GetFinalPathNameByHandleW(SafeFileHandle handle, StringBuilder buffer, uint size, uint flags);
+
+  public static string OfDirectory(string dir) {
+    // accesso 0 (nessuna lettura), condivisione totale, apri esistente, FILE_FLAG_BACKUP_SEMANTICS (serve per aprire una cartella)
+    using (SafeFileHandle h = CreateFileW(dir, 0, 7, IntPtr.Zero, 3, 0x02000000, IntPtr.Zero)) {
+      if (h.IsInvalid) throw new IOException("non riesco a risolvere la cartella " + dir + " (errore " + Marshal.GetLastWin32Error() + ")");
+      var sb = new StringBuilder(1024);
+      uint n = GetFinalPathNameByHandleW(h, sb, (uint)sb.Capacity, 0);
+      if (n >= sb.Capacity) { sb = new StringBuilder((int)n + 1); n = GetFinalPathNameByHandleW(h, sb, (uint)sb.Capacity, 0); }
+      if (n == 0) throw new IOException("non riesco a leggere il percorso vero di " + dir + " (errore " + Marshal.GetLastWin32Error() + ")");
+      return sb.ToString();
+    }
+  }
+}
 
 public class SnapEntry {
   public string Role; public string Path; public long Size; public long Mtime; public string Area;
@@ -248,6 +281,59 @@ function Test-InsideRoot([string]$file, [string[]]$roots) {
   return $false
 }
 
+# I6 (revisione di sicurezza della Fase 10). La fotografia e il resoconto si scrivono SOLO su un disco FISSO di questo PC, e si guarda il
+# percorso VERO, non il testo: niente percorsi di rete (\\server\share, \\indirizzo\share), niente unita' di rete collegate, niente
+# collegamenti o giunzioni o unita' assegnate con subst che portino dentro una radice. I controlli sul testo di un percorso di rete non
+# toccano mai la rete. Non si vede (limite dichiarato): una unita' di rete che e' la share di una cartella di questo stesso PC.
+function Get-FullPath([string]$path) { return $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($path) }
+
+# "Unc" per \\... (di rete o di dispositivo), altrimenti il tipo dell'unita' (Fixed, Network, Removable, ...).
+function Get-DriveKind([string]$full) {
+  if ($full.StartsWith("\\") -or $full.StartsWith("//")) { return "Unc" }
+  $driveRoot = [System.IO.Path]::GetPathRoot($full)
+  if (-not $driveRoot) { return "Ignota" }
+  try { return [string](New-Object System.IO.DriveInfo($driveRoot)).DriveType } catch { return "Ignota" }
+}
+
+function Convert-FinalPath([string]$final) {
+  if ($final.StartsWith("\\?\UNC\")) { return "\\" + $final.Substring(8) }
+  if ($final.StartsWith("\\?\")) { return $final.Substring(4) }
+  return $final
+}
+
+function Get-RealDirectory([string]$dir) { return (Convert-FinalPath ([RealPath]::OfDirectory($dir))) }
+
+function Assert-LocalOutput([string]$path, [string[]]$roots, [string]$what) {
+  $full = Get-FullPath $path
+  $kind = Get-DriveKind $full
+  if ($kind -eq "Unc") { Stop-Con "$what e' un percorso UNC ($full): questo file non esce mai verso una share. Salvalo su un disco fisso di questo PC (per esempio C:\Temp)" }
+  if ($kind -ne "Fixed") { Stop-Con "$what sta su un'unita' di tipo $kind ($full), non su un disco fisso di questo PC: questo file non esce mai verso una share o una chiavetta" }
+  $dir = Split-Path -Parent $full
+  if (-not (Test-Path -LiteralPath $dir -PathType Container)) { Stop-Con "la cartella di $what non esiste: $dir" }
+  $real = Join-Path (Get-RealDirectory $dir) (Split-Path -Leaf $full)
+  $realKind = Get-DriveKind $real
+  if ($realKind -ne "Fixed") { Stop-Con "$what, risolto il percorso vero ($real), sta su un'unita' di tipo $realKind e non su un disco fisso di questo PC" }
+  $forms = @($full, $real)
+  $rootForms = @()
+  foreach ($r in @($roots | Where-Object { $_ })) {
+    $rootFull = Get-FullPath $r
+    $rootForms += $rootFull
+    # il percorso vero di una radice si cerca solo se e' su un disco fisso (le radici di rete non si toccano: l'uscita e' sicuramente altrove)
+    if ((Get-DriveKind $rootFull) -eq "Fixed" -and (Test-Path -LiteralPath $rootFull -PathType Container)) { $rootForms += (Get-RealDirectory $rootFull) }
+  }
+  foreach ($form in $forms) {
+    if (Test-InsideRoot $form $rootForms) { Stop-Con "$what sta dentro una radice (percorso vero: $real): lo script non scrive mai nelle share" }
+  }
+}
+
+# L'avviso sulla riservatezza (I6): la fotografia elenca i NOMI di tutti i file dell'area privata.
+function Show-PrivacyNotice([string]$what) {
+  Write-Host ""
+  Write-Host "AVVISO (riservato): $what contiene i NOMI, le dimensioni e le date di tutti i file dell'area privata di chi ha l'account" -ForegroundColor Yellow
+  Write-Host "  - e' un dato personale: tienilo SOLO su questo PC (disco fisso), mai in una share, nel cloud, in un messaggio o su una chiavetta;" -ForegroundColor Yellow
+  Write-Host "  - cancellalo, anche dal cestino, quando il confronto e' stato letto e il passo e' chiuso (non tenerlo oltre 7 giorni)." -ForegroundColor Yellow
+}
+
 function Format-Bytes([long]$b) {
   if ($b -ge 1GB) { return ("{0:N2} GB" -f ($b / 1GB)) }
   if ($b -ge 1MB) { return ("{0:N1} MB" -f ($b / 1MB)) }
@@ -263,8 +349,8 @@ function Invoke-Foto {
   foreach ($r in @($Privata, $Comune)) {
     if (-not (Test-Path -LiteralPath $r -PathType Container)) { Stop-Con "la radice non esiste o non e' una cartella: $r" }
   }
-  if (Test-InsideRoot $Uscita @($Privata, $Comune)) { Stop-Con "l'uscita sta dentro una radice: lo script non scrive mai nelle share" }
-  if (Test-Path -LiteralPath $Uscita) { Stop-Con "l'uscita esiste gia': non si sovrascrive una fotografia ($Uscita)" }
+  Assert-LocalOutput $Uscita @($Privata, $Comune) "l'uscita"
+  if ((Test-Path -LiteralPath $Uscita) -or (Get-Item -LiteralPath $Uscita -Force -ErrorAction SilentlyContinue)) { Stop-Con "l'uscita esiste gia' (anche un collegamento): non si sovrascrive una fotografia ($Uscita)" }
   $aree = Read-Aree $Aree
   $areas = New-Object 'string[][]' $aree.Count
   for ($i = 0; $i -lt $aree.Count; $i++) { $areas[$i] = [string[]]@($aree[$i].id, ($aree[$i].privata -join "|"), ($aree[$i].comune -join "|")) }
@@ -297,6 +383,7 @@ function Invoke-Foto {
     $writer.Dispose()
   }
   Write-Host ("Fotografia scritta in {0}" -f $Uscita) -ForegroundColor Green
+  Show-PrivacyNotice "la fotografia"
   exit 0
 }
 
@@ -330,7 +417,8 @@ function Invoke-Confronta {
   $after = Read-Foto $Dopo
   $roots = @($after.Header.radici.privata, $after.Header.radici.comune, $before.Header.radici.privata, $before.Header.radici.comune)
   if ($before.Header.areeHash -ne $after.Header.areeHash) { Stop-Con "le due fotografie hanno aree diverse (areeHash): non si confrontano" }
-  if ($Report -and (Test-Path -LiteralPath $Report)) { Stop-Con "il resoconto esiste gia': $Report" }
+  if ($Report -and ((Test-Path -LiteralPath $Report) -or (Get-Item -LiteralPath $Report -Force -ErrorAction SilentlyContinue))) { Stop-Con "il resoconto esiste gia': $Report" }
+  if ($Report) { Assert-LocalOutput $Report $roots "il resoconto" }
   $aree = @($before.Header.aree)
   $diff = [SnapTool]::Diff($before.Map, $after.Map, 2)
   $totals = @{}
@@ -393,7 +481,6 @@ function Invoke-Confronta {
   Show-List "Cambiati o tolti dove si puo' solo aggiungere" $nonAdditive $Massimo
 
   if ($Report) {
-    if (Test-InsideRoot $Report $roots) { Stop-Con "il resoconto sta dentro una radice" }
     $out = [ordered]@{
       prima = $before.Header.creata; dopo = $after.Header.creata; spostati = $moved; problemi = @($problems)
       perArea = @($aree | ForEach-Object { $t = $totals[$_.id]; [ordered]@{ id = $_.id; aggiunti = $(if ($t) { $t.aggiunti[0] } else { 0 }); cambiati = $(if ($t) { $t.cambiati[0] } else { 0 }); tolti = $(if ($t) { $t.tolti[0] } else { 0 }) } })
@@ -403,6 +490,7 @@ function Invoke-Confronta {
       }
     }
     [System.IO.File]::WriteAllText($Report, ($out | ConvertTo-Json -Depth 5), (New-Object System.Text.UTF8Encoding($false)))
+    Show-PrivacyNotice "il resoconto"
   }
   if ($problems.Count -gt 0) {
     Write-Host "DA FERMARE (E-SV2):" -ForegroundColor Red

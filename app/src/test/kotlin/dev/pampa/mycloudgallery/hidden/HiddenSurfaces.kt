@@ -400,6 +400,17 @@ internal object HiddenSurfaces {
       id = "viewer-minimap", title = "Viewer: la riga Mostra sulla mappa e la mini-mappa (mai per un media dei Nascosti)", row = SpecRow.MAP, owner = "P4",
       backing = Backing.PRODUCTION, sources = listOf("$FEATURE_MAP/ui/FinalFilter.kt"), probe = RealMapProbes.minimap, live = true, alsoProvedBy = listOf("MiniMapServiceTest", "ViewerPlaceMapInfoTest"),
     ),
+    // --- Fase 10 (P6, correzioni C): il trascinamento verso un'altra app e il provider dei documenti. La riga e' PRIMA delle notifiche dei ricordi perche' la sonda delle notifiche nasconde nel catalogo di quel mondo la copertina
+    // "un attimo fa" (la revoca): una sonda `live` che gira dopo vedrebbe un nascosto in piu' di quelli della descrizione del mondo ---------------------------------
+    SurfaceEntry(
+      id = "drag-out", title = "Trascinamento verso un'altra app: mai un nascosto, mai dai Nascosti (D20, E-H11)", row = SpecRow.DRAG, owner = "P6",
+      backing = Backing.PRODUCTION,
+      // Il gestore del trascinamento sul provider dei documenti: la vista di adesso decide e il filtro finale (`HiddenMask`, I4 della revisione di sicurezza) decide per ultimo, all'inizio e
+      // subito prima di creare gli id; il provider lo chiede a ogni elenco e apertura.
+      sources = listOf("$INTEGRATIONS/drag/DocumentDragPayloads.kt", "$INTEGRATIONS/provider/LibraryMediaDocuments.kt"),
+      probe = RealDragProbes.drag, live = true,
+      alsoProvedBy = listOf("DocumentDragPayloadsTest", "DragLocationFreeTest", "DragSourcesScopeTest", "LibraryMediaDocumentsTest"),
+    ),
     // --- Il codice vero di P10 (notifiche dei ricordi): la scelta passa dallo scaffale e da `MemoryVisibility` (il filtro finale dei nascosti, D19) subito prima di pubblicare; la revoca a ogni cambio ---
     SurfaceEntry(
       id = "memories-notify", title = "Notifiche dei ricordi: scelta, contenuto, miniatura della copertina e revoca (D19, F116): mai un nascosto, mai una copertina nascosta in tendina",
@@ -411,14 +422,6 @@ internal object HiddenSurfaces {
     // --- Fase 10 (P0): le superfici nuove che arrivano con i pacchetti dopo (D41). La riga c'e' gia', in attesa: quando arriva il codice vero
     // (il marcatore `landedWhen` esiste), il registro fallisce finche' il pacchetto non scrive la sonda e passa la riga a PRODUCTION. La riga
     // WIDGET e' passata da "di prova" a produzione con P3; la riga PANES (pannelli e seconda finestra) la aggiunge P5 con la sua superficie; DESCRIPTIONS e' passata a produzione con P7.
-    SurfaceEntry(
-      id = "drag-out", title = "Trascinamento verso un'altra app: mai un nascosto, mai dai Nascosti (D20, E-H11)", row = SpecRow.DRAG, owner = "P6",
-      backing = Backing.PRODUCTION,
-      // Il gestore del trascinamento sul provider dei documenti: la vista di adesso e' l'unico elenco (non nomina `VisibleMedia` ne' `HiddenMask`: usa la vista della Libreria che gli da' `:app`).
-      sources = listOf("$INTEGRATIONS/drag/DocumentDragPayloads.kt"),
-      probe = RealDragProbes.drag,
-      alsoProvedBy = listOf("DocumentDragPayloadsTest", "DragLocationFreeTest", "DragSourcesScopeTest"),
-    ),
     SurfaceEntry(
       id = "descriptions", title = "Descrizioni per superficie: mai una persona nascosta, mai un nascosto fuori dai Nascosti (D22)", row = SpecRow.DESCRIPTIONS,
       owner = "P7", backing = Backing.PRODUCTION,

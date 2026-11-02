@@ -15519,3 +15519,161 @@ Metodo: la stessa suite contro la logica vecchia rimessa a mano nei soli punti t
 - **F163**: (1) viewer aperto su una foto, Home, tocco su una foto del widget: si apre la foto toccata; (2) `am force-stop`, tocco: si apre la foto toccata e mai "Questa foto non c'e' piu'"; con un archivio molto grande il tocco cade nella Libreria senza avviso (3 s).
 - **F161**: registro del widget rovinato a mano (debug, `run-as`), "Nascondi" su una foto del widget: tutti i widget si svuotano (R4); azzeramento subito dopo aver fatto partire `widget-refresh`: la Home resta a "Configura MyCloud Gallery" (R5).
 - **F177 (widget con `ALL`)**: manifest firmato con `ALL` per la versione: il widget dice "Apri MyCloud Gallery" e, tolto il blocco, torna normale (R1; serve KT, quindi un build di debug).
+
+## Fase 10 P11, seconda parte A: strumenti per l'emulatore e l'S25 (02/11)
+
+Il pacchetto P11 della Fase 10, seconda parte A (`docs/fase10-progetto.md` §2.11, D36, §5.5; F170-F181, F185): gli strumenti per le voci S1-S13
+sull'emulatore e sull'S25 e la procedura di reset della famiglia di prova, **preparati e provati contro adb, emulatore e NAS finti**, non
+eseguiti (stanotte niente telefono, niente emulatore, nessuna scrittura sul NAS vero). Branch `fase10/p11b` da `b8a2e282`. **Nessun codice di
+produzione toccato** (`src/main` invariato), nessuna sonda nuova in `app/src/debug/`, nessuna dipendenza, nessuna chiave vera.
+
+**Le decisioni dell'utente del 02/11 applicate**: (1) la famiglia di prova `test` si rifà da capo, solo sulle share di prova, con la procedura
+dell'app e chiave e kit nuovi; l'utente scrive una volta la password di `test`, il kit nuovo va in
+`C:\VibeCoded Projects\MyCloud-Gallery-2-note-agenti\famiglia-di-prova\kit.txt` (fuori da git); (2) i file ostili anche in
+`test-comune/mcg-ostile/` e nell'area della famiglia di prova, solo su `test` e `test-comune`, con la pulizia verificata dal PC (regola nuova
+nella guardia, C470); (3) PCAPdroid no: S8 (c) e la parte "host" di S13 dichiarate, S8 (b) con `-tcpdump`, S13 con `netstats` per UID;
+(4) widget e accessibilità secondari: S10 e S12 in fondo all'ordine.
+
+**Numerazione.** Nuove **C470** (i file ostili delle prove nell'area della famiglia di prova, con la guardia e il suo registro) e **C471** (le
+prove sui dispositivi non scrivono password, confermano solo i dialoghi dell'app, riportano solo numeri); nuovi **L600** (l'emulatore non è
+casa), **L601** (i fogli della chiave sull'S25 li fa l'utente; i dispositivi di prova restano nel registro), **L602** (cosa non vedono
+UI Automator e adb), **L603** (il verificatore del reset non legge le share di famiglia). Riga "Sigle", stato, checklist della Fase 10 e
+registro di `docs/sicurezza.md` aggiornati; in `docs/prove-campo.md` il "dove" di F170-F181 e una nota su F170-F181 e F185.
+
+### Cosa c'è, dove
+- **La regola nuova (C470)**: `core-nas/src/test/.../integration/security/FamilyAreaGuard.kt`, sullo stesso trasporto recintato della suite
+  (`TestAreaTransport`, che ora prende un'interfaccia `SmbAreaGuard`: `TestAreaGuard` la implementa senza cambiare comportamento; in più la
+  cancellazione dallo handle passa dalla guardia come `DELETE`). Ammessi: `test-comune/mcg-ostile/**`; in `.mycloudgallery/` di `test` e
+  `test-comune` solo `devices/<id di prova>/**`, `albums/<uuid>/<id di prova>/**`, `family/requests/<id di prova>`, `release/manifest.mcgr`
+  (con quello che c'era messo da parte in `manifest-prima-<giro>.mcgr` e rimesso) e la rinomina di `family` in `family-vecchia-<giro>`;
+  letture: elenchi ovunque sulle due share, contenuto solo sotto `.mycloudgallery/` e `mcg-ostile/`. Mai `test2`, `NAS`, `Public`, `alessio`.
+  Si crea solo in esclusiva; si cancella solo ciò che il **registro** del giro (salvato sul PC) dice creato.
+- **Gli strumenti dal PC sull'area della famiglia**: `FamilyArea.kt` (sessione con solo `test`, stato del giro sul PC: id, tre dispositivi
+  di prova con chiavi P-256 software "approvato", "revocato", "canaglia", registro), `FamilyAreaProbes.kt` (lettura della famiglia dal kit e
+  dal registro firmato, archivio di `family`, richieste di ingresso con i codici di approvazione, semina di S1 (c), S2, S3 (b), S3 (c), S7a e
+  S7, S9 in due tempi nel giro di `mcg-it`, pulizia, confronto delle fotografie), `FamilyAreaNasIntegrationTest.kt` (`@NasIntegration`, un passo
+  per comando scelto da `MCG_FAMIGLIA_PASSO`), `FamilyAreaFakeNasTest.kt` (il NAS finto, sempre in `check.ps1`).
+- **Gli strumenti sui dispositivi** (`tools/security/`): `run-all.ps1 -Livello emulatore|s25` (con `-Piano`, `-Passo`, `-Release`,
+  `-Test2Serial`, `-ReleaseApk`), `famiglia-di-prova.ps1`, e in `lib/` le guardie e UI Automator (`dispositivo.ps1`), il motore dei copioni
+  (`copioni.ps1`), il copione del reset (`copione-famiglia.ps1`), Diagnostica dall'anteprima, Cerca, approvazione, revoca e scongelamento
+  (`copioni-app.ps1`), le letture esterne (`analisi.ps1`: pcap, logcat, `dumpsys package`, `netstats`, `bmgr`, il servizio di accessibilità di
+  prova), le voci (`voci.ps1`, `voci-sistema.ps1`), il reset e la pulizia (`famiglia.ps1`), l'ordine con i tempi (`livelli.ps1`). In
+  `tools/chaos/s25.ps1` il modo `security` (e `-Release`) passa a `run-all.ps1 -Livello s25`. L'adb finto ha le aggiunte in
+  `tools/chaos/fake-adb/fake-adb-sicurezza.ps1` (caricate prima dei comandi di sempre, che restano invariati) e un emulatore finto
+  (`emulator.cmd`, `fake-emulator.ps1`). La prova a secco: `tools/security/sicurezza-finto.ps1` (con `fake/`: schermate, catture, passi del
+  PC finti). Il copione della prossima finestra: `tools/security/PROSSIMA-FINESTRA.md`.
+
+### Scelte
+1. **L'emulatore non è casa (L600), quindi le voci sull'app che leggono il NAS vanno sull'S25.** L'onboarding dell'admin conferma "casa"
+   solo con un ULA nel Wi-Fi (`DefaultOnboardingCoordinator.confirmHome`: `NO_ULA`), e dopo la rete vale casa solo con quell'ULA
+   (`docs/rete-casa-vpn.md` §3); il Wi-Fi in NAT dell'emulatore non ne ha (lo dice già `docs/fase4-progetto.md`: "l'emulatore non è casa").
+   Il brief metteva S1 (c), S2, S3 e S9 sull'emulatore: lì non possono girare contro il NAS di prova. Il livello `s25` le fa con la debug e
+   `test`; il livello `emulatore` fa ciò che non vuole il NAS (S8 (b), che anzi vuole una rete estranea, S5, S6, S11, S12, S13) e prova S4 e
+   S7 sulla release solo se il `preflight` trova un ULA nel Wi-Fi (`casa_possibile`); altrimenti le dichiara **bloccate**. Nessun aggiramento
+   del cancello di rete in debug: sarebbe la porta che S8 prova chiusa.
+2. **Il reset è "Ricominciare da zero", non "Reimposta la famiglia".** `NasFamilyReset` (Impostazioni, Famiglia, "Reimposta la famiglia")
+   vuole un admin con la sua chiave: l'utente non ha più né chiave né kit. Quindi la procedura della guida per "senza admin, senza kit e senza
+   codice" (`docs/famiglia-dispositivi.md` §5): dal PC `family` messa da parte (rinominata, mai cancellata), poi sull'S25 "Rientra con un QR
+   nuovo" (tiene foto, nascosti, preferiti e miniature) e "Crea la famiglia" con `test`. Se l'S25 risultasse ancora **admin** della famiglia di
+   prima, il copione si ferma: uscire cancellerebbe quella chiave, e la scelta è dell'utente.
+3. **Un solo momento dell'utente, ma con quattro fogli della chiave (L601).** Dopo la correzione M3 (decisione 2 (a) del 31/10) ogni gesto
+   dell'admin chiede impronta o PIN: "Genera chiave e codice", l'approvazione dei due dispositivi di prova e la revoca di "revocato". Per
+   tenerli in un momento solo, le richieste e le approvazioni si fanno **subito dopo l'onboarding**, prima delle verifiche dal PC: l'utente
+   scrive la password e appoggia il dito quattro volte nei primi venti minuti, poi il livello `s25` va da solo (circa 3 ore). Gli agenti non
+   scrivono password e non toccano i fogli di sistema; sull'emulatore il foglio lo passa lo script con un PIN di prova suo.
+4. **I dispositivi di prova del PC.** Per arrivare ai codec dell'app (S3 (b)) serve una testa firmata da un dispositivo **approvato**:
+   "approvato" la firma; "revocato" (approvato e poi revocato) e "canaglia" (mai approvato) danno S2. Le chiavi sono software, solo sul PC
+   (`build\security\famiglia-di-prova\stato.txt`, mai nel repository) e si tolgono alla pulizia: "approvato" resta approvato nel registro di
+   prova ma nessuno può più firmare come lui.
+5. **S1 (c) con i segni nell'indice privato di `test`**, non con `CrossAccountProbe`: quella prova scrive in `mcg-it/<giro>/` e pulisce subito,
+   e l'app non indicizza i file finti di un altro. Qui "approvato" (account `test`) pubblica l'indice dell'area privata `test` con tre voci
+   `MCG-PRIV-<casuale>`: Cerca con `test` le trova (il controllo), con `test2` no. `test2` vuole un dispositivo a casa con `test2` (il profilo
+   "Prova 2" del tablet, `-Test2Serial`): senza, S1 (c) resta **dichiarata** con il solo controllo.
+6. **La Diagnostica si legge dall'anteprima dell'esportazione**, scorrendo, e non si salva (niente selettore di sistema): funziona uguale
+   sulla debug e sulla release, che non ha sonde. Rifiuti contati come differenza prima/dopo (la famiglia vecchia lascia i suoi rifiuti).
+7. **S6 cerca anche gli stack trace**: blocchi `at dev.pampa...` del pid dell'app o di `W System.err`, più `ReadLimitExceeded` e il nome che
+   R8 dà alla classe (`UnreadableRecords`); oggi la release ne scrive (833 stanotte sull'S25): la voce sarà rossa finché il pacchetto C non le
+   toglie, ed è giusto così.
+8. **Ogni passo sul NAS è un comando Gradle dal PC** (`FamilyAreaNasIntegrationTest`, `-PnasIntegration`, il file delle credenziali letto dal
+   banco), dietro il semaforo: circa 2 minuti a passo, contati nei tempi del piano. Un passo per comando tiene lo stato sul PC e lascia
+   l'app libera fra un passo e l'altro.
+
+### Voce per voce (pronto / provato contro i finti / dichiarato)
+| Voce | Strumento | Dove | Stato |
+|---|---|---|---|
+| reset della famiglia di prova | `famiglia-di-prova.ps1 -Passo tutto`, passo `famiglia` di `-Livello s25` (fotografia, archivio di `family`, copione fino alla password, kit nel suo file, dispositivi di prova, confronto) | S25 | **pronto, provato contro i finti**: copione fino al riepilogo con l'attesa dell'utente, dialogo di sistema chiuso con Indietro, i quattro fogli; casi fermi: admin della famiglia di prima, codice illeggibile, `AUTH_FAILED` (un solo passo del PC) |
+| S1 (c) | passo `S1c`: segni nell'indice privato di `test`, Cerca con `test` (controllo) e con `test2` (`-Test2Serial`) | S25 (+ un dispositivo a casa con `test2`) | pronto, provato contro i finti; **dichiarata** senza un dispositivo con `test2` (L602) |
+| S2 | passo `S2`: canaglia e revocato (teste `index` e `personal`, testa d'album); rifiuti in Diagnostica (differenza), Cerca "mcg-s2" | S25 | **pronto, provato contro i finti** |
+| S3 (b)/(c) sull'app | passo `S3`: 16 segmenti ostili e 1 di controllo dell'"approvato"; le 13 immagini in `test-comune/mcg-ostile/`; processo vivo, nessun `FATAL`/ANR, PSS sotto 1,5 GB, rifiuti | S25 | **pronto, provato contro i finti** |
+| S4 | passo `S4`: dopo l'azzeramento niente in `files/`, `no_backup/`, `databases/`, nessuna notifica | solo emulatore | pronto; **bloccata** finché l'emulatore non è casa (L600) |
+| S5 | passo `S5`: `allowBackup`, `bmgr backupnow` con il trasporto locale (rimesso quello di prima) | solo emulatore | **pronto, provato contro i finti**; "device transfer" **dichiarato** (L602) |
+| S6 | passo `S6`: semi `MCG-PRIV-...` (nome di file in `mcg-prova`, il segno di S1, la parola cercata), `logcat -d -b all` e l'anteprima della Diagnostica, stack trace dell'app | emulatore (release candidata); S25 con `-Release` | **pronto, provato contro i finti** (verde e rosso) |
+| S7b | passo `S7` (debug, KT valida) e `S7rel` (release, KT ignorata): le buste di `manifest\` una per volta; blocco e rifiuti in Diagnostica | S25; release: emulatore (bloccata se non è casa) o S25 `-Release` | **pronto, provato contro i finti**; la cattura SMB durante `WRITES` dichiarata (nessuna cattura sull'S25) |
+| S7a | passo `S7a`: copie manomesse dei modelli del catalogo sullo scaffale | S25 | pronto, provato contro i finti; **dichiarata** se l'app non deve scaricare un modello |
+| S8 (b) | passo `S8b`: `-tcpdump`, nessuna `SESSION_SETUP`/NTLMSSP, destinazioni e nomi DNS fuori elenco contati | emulatore | **pronto, provato contro i finti** (verde e rosso); (c) **dichiarata** (PCAPdroid no) |
+| S9 nell'app | passo `S9`: 2.000 file nel giro, un giro, il cambio, `NAS_SCAN_FROZEN`, notifica, numero sbagliato rifiutato, "Ho controllato", pulizia del giro | S25 | **pronto, provato contro i finti** |
+| S10 | passo `S10`: `OPEN_WIDGET` con numeri, percorsi e dati inventati aprono la Libreria, nessun crollo | S25 (secondaria) | pronto, provato contro i finti; la schermata di blocco dichiarata (Q4) |
+| S11 | passo `S11`: la sonda solo nella debug, mai nella release | S25, emulatore | **dichiarata** (stesso UID, I2) |
+| S12 | passo `S12`: `FieldProbeA11yService` acceso con `settings`, la finestra dell'app non letta, le Impostazioni sì (controllo); impostazioni rimesse, comprese le tre chiavi che l'accensione svuota | emulatore (secondaria; `Pampa_Tablet`, Android 15) | **pronto, provato contro i finti** (verde e rosso) |
+| S13 | passo `S13`: `dumpsys package` contro l'elenco chiuso di `verify-release-manifest.gradle`, permessi, non `DEBUGGABLE`; `netstats` per UID | emulatore; S25 `-Release` | **pronto, provato contro i finti** (verde e rosso); host **dichiarati** (L602) |
+| `run-all.ps1 -Livello emulatore\|s25` | l'ordine, i tempi, un solo punto dell'utente (s25: il passo `famiglia`) | — | **pronto, provato contro i finti** |
+
+### Come è provato (stanotte, senza dispositivi)
+- **NAS finto** (`FamilyAreaFakeNasTest`, core-nas, sempre in `check.ps1`, 5 prove, verdi al primo giro, meno di un secondo): la guardia rifiuta 32 percorsi e 5 account prima della
+  chiamata (altre share in ogni forma, `test2`, fuori dalle zone, un id di dispositivo che non è del giro, il registro, i kit, `family`
+  cancellata o rinominata in un altro nome, il manifest di prima cancellato, un file che c'era in `mcg-ostile/`, `..`, `.`, componenti vuoti, il
+  carattere nullo) e ammette i 7 casi della regola; dal trasporto vero la cancellazione di `family` dallo handle non passa; la semina di S1 (c),
+  S2 (6 teste), S3 (b) (16 segmenti ostili e uno buono), S3 (c), S7a e S7 (due buste di fila) scrive **solo** nelle zone della regola e la
+  pulizia, in un comando dopo, riporta `test` e `test-comune` byte per byte come prima (il manifest di prima compreso) con il registro vuoto;
+  `NAS`, `Public`, `alessio` e `test2` restano identiche; il reset mette da parte `family`, la famiglia nuova (registro firmato e kit veri,
+  scritti come li scrive l'app) si legge, e il confronto delle fotografie è pulito, mentre una foto aggiunta e una tolta fuori da
+  `.mycloudgallery/` si vedono; S9 in due tempi resta nel giro e pulisce solo quello; il primo `AUTH_FAILED` ferma tutto con un solo tentativo.
+  Il refactoring della guardia della suite è provato da `TestAreaGuardTest`, `TestAreaSelfTest`, `TestAreaCleanupTest` e
+  `SecurityProbesFakeNasTest`, invariati e verdi.
+- **adb, emulatore e passi del PC finti** (`tools/security/sicurezza-finto.ps1`, circa 30 minuti, fuori da `check.ps1`): **72 controlli, tutti verdi** controlli. Le letture (pcap pulita e
+  sporca con SYN verso 445, `SESSION_SETUP` e NTLMSSP; nomi DNS fuori elenco; stack trace con `ReadLimitExceeded`; semi contati senza
+  stamparli; `netstats`, `bmgr`); le guardie (mai `emulator-5554`, nemmeno con l'adb finto; senza l'adb finto solo `emulator-5580` e
+  `RFCY61FZDHW`; solo la nostra app; `input text` rifiuta tutto ciò che non è testo semplice; il resoconto rifiuta un testo libero); il reset
+  sull'S25 finto dalla Libreria al riepilogo e alla Libreria, con l'attesa dell'utente alla password e ai quattro fogli, il dialogo di sistema
+  chiuso con Indietro e mai confermato, il kit nel suo file, la riscrittura, i due codici di approvazione digitati, i passi del PC nell'ordine
+  giusto; i casi fermi (admin della famiglia di prima: niente "Esci e rientra"; codice illeggibile: niente kit; `AUTH_FAILED`: un solo passo del
+  PC e l'app non toccata); `run-all.ps1 -Livello s25 -Piano` con un solo punto dell'utente; i passi S2, S3, S7, S7a, S9, S10, S11 e pulizia
+  sull'app finta (Diagnostica letta dall'anteprima, cinque buste con due blocchi e due rifiuti, congelamento e "Ho controllato" con il numero
+  sbagliato rifiutato); `run-all.ps1 -Livello emulatore` con l'emulatore finto acceso e spento dallo script, la release installata e tolta, S8 (b),
+  S5, S6, S13, S11, S12 (impostazioni rimesse, comprese le tre chiavi svuotate dall'accensione) verdi, S4 e S7 sulla release bloccate senza ULA;
+  poi i casi rossi (seme in logcat, servizio che legge l'app, backup riuscito, `SESSION_SETUP` nella cattura, componente fuori elenco) tutti
+  rossi; `s25.ps1 -Mode security` (anche `-Release`) e i rifiuti di `emulator-5554`. Le prove finte di prima (`s25-ai-finto.ps1`) restano verdi
+  con l'adb finto allargato.
+- **Non provato**: niente sul NAS vero (nemmeno in lettura: non serviva, e la prima fotografia del PC alla prossima finestra è in sola
+  lettura e si ferma al primo `AUTH_FAILED`), niente su un dispositivo. I testi dei copioni sono quelli delle risorse dell'app, ma le schermate
+  vere possono avere un nodo diverso: una schermata che il copione non conosce si salva sotto `build\security\<data>\schermate\` e ferma la prova.
+
+### Il copione della prossima finestra (`tools/security/PROSSIMA-FINESTRA.md`)
+1. Prima del dispositivo (agente, circa 15 minuti): `sicurezza-finto.ps1` verde; la `versionCode` della debug sull'S25, poi
+   `run-all.ps1 -Livello jvm -Voce S7 -VersionCode <n>` e `-Voce S3 -Breve` (buste e immagini); per l'emulatore `:app:assembleDebug` e una
+   release candidata firmata con una chiave di prova generata sotto `build\`.
+2. **S25** (circa 3 ore): `run-all.ps1 -Livello s25 -Serial RFCY61FZDHW` (o `s25.ps1 -Mode security`). **L'unico intervento dell'utente**,
+   nei primi 20 minuti: al segnale scrive la password di `test` sull'S25 e tocca "Accedi al NAS", poi appoggia il dito ai quattro fogli della
+   chiave ("Genera chiave e codice", due approvazioni, una revoca). Poi: S1 (c), S2, S3, S7, S7a, S9, S11, S10, pulizia.
+3. **Emulatore** (circa 45 minuti, senza utente): `run-all.ps1 -Livello emulatore -ReleaseApk <apk di prova>`.
+4. **Alla fine si pulisce da solo**: nell'area della famiglia di prova tutto ciò che il registro dice creato dal giro (con il manifest di prima
+   rimesso), il giro di S9 in `mcg-it/`, il seme in `mcg-prova` dell'emulatore, la release dall'emulatore, l'emulatore se l'ha acceso lo script,
+   le chiavi dei dispositivi di prova. **Resta**: `family-vecchia-<giro>` e i kit vecchi (li toglie l'utente), i due dispositivi di prova nel
+   registro di prova, il file del kit nuovo, l'S25 admin della famiglia nuova.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde al primo giro**: "OK: tutto a posto." (uscita 0, 02/11 dalle 23:03 alle 23:33), lanciato come chiede il brief (posto del semaforo, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima), con il codice dei due commit di questo pacchetto e i documenti in lavorazione: assembleDebug, assembleRelease, galleryTest e galleryLint in 25 minuti; **19.494 test in 47 moduli** (risultati riscritti nel giro), nessuno fallito; nessuna classe rifatta con `--rerun`, nessun `hs_err_pid*.log`. I test nuovi (`FamilyAreaFakeNasTest`, 5 prove) aggiungono meno di un secondo. Prima, a parte: `:core-nas:testDebugUnitTest` sulle classi della guardia e dell'area (`FamilyArea*`, `TestAreaGuardTest`, `TestAreaCleanupTest`, `SecurityProbesFakeNasTest`) verde al primo giro; `tools\chaos\s25-ai-finto.ps1` (54 controlli) e `s25.ps1 -SelfTest` (modo di base e modi ai, share, faces) verdi con l'adb finto allargato.
+
+### Difetti trovati
+**Nessun difetto di sicurezza nel codice di produzione.** Note per l'orchestratore:
+- **Il piano e il brief mettono sull'emulatore voci che leggono il NAS (S1 (c), S2, S3, S4, S7, S9), ma l'emulatore non può essere "casa"**
+  (`NO_ULA` all'onboarding; `docs/fase4-progetto.md` lo diceva già): non è un difetto dell'app (è la regola giusta, C2 ed E-S10), è un
+  presupposto sbagliato del §5.5. Spostate sull'S25 (L600); S4 resta bloccata finché non c'è un emulatore che sia casa, e nessuno strumento
+  deve aggirare il cancello di rete. Gravità per il rilascio: **Media** sul piano delle prove (F173 non si può fare come scritta).
+- **Il "solo intervento dell'utente" non può essere la sola password**: con M3 ogni gesto dell'admin chiede il dito sull'S25, quindi quattro
+  fogli nello stesso momento (L601). Informativa.
+- **Stack trace in release** (833 stanotte, `ReadLimitExceededException` come `UnreadableRecords` dopo R8): già del pacchetto C; S6 lo
+  controlla e sarà rossa finché non c'è la correzione. **Bassa** (rumore e nomi di classe nel registro, nessun dato personale visto).
+
+### Commit (branch `fase10/p11b`)
+`78fb9c8c` (gli strumenti sui dispositivi, i copioni, l'adb e l'emulatore finti, il copione della prossima finestra), `5bfbb49e` (la guardia dell'area della famiglia di prova e i passi dal PC, con i test), `87e460b5` (i documenti) e uno piccolo dopo `check.ps1`: lo stato dei giri di `FamilyAreaFakeNasTest` (chiavi di prova) in una `TemporaryFolder` di JUnit invece che in %TEMP%, dove restava (la classe rifatta da sola: 5 prove verdi, nessuna cartella rimasta).

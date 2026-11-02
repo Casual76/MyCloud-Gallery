@@ -119,7 +119,7 @@
   (ANDROID_SERIAL=none vale "nessun dispositivo": solo -DryRun e -SelfTest); il Wi-Fi viene SEMPRE riacceso, anche se lo script e' interrotto.
   Funziona sulla build debug (run-as) con gli account di prova (par. 5.7); il modo backup rifiuta un pacchetto che non sia di debug.
 
-.PARAMETER Mode                move | backup | ai | share | faces (default move).
+.PARAMETER Mode                move | backup | ai | share | faces | security (default move). security: Fase 10 P11, seconda parte (run-all.ps1 -Livello s25).
 .PARAMETER Step                Per backup: seed | edit | interrupt | verify | clean (default interrupt). Per ai: interrupt | verify | eval-push | eval-pull.
                                Per share e faces: seed | interrupt | verify | clean.
 .PARAMETER Serial              Numero di serie del telefono (`adb devices`). Default: ANDROID_SERIAL.
@@ -164,6 +164,7 @@
 .PARAMETER PortraitsDir        Per faces/seed: la cartella dei ritratti e delle composizioni di pubblico dominio (default tools\fixtures\faces\portraits; da 10 a 200 file).
 .PARAMETER DeviceId            Per faces/seed: l'id di questo telefono nel registro (26 caratteri); senza, il manifesto non ha la riga deviceid=.
 .PARAMETER OtherDeviceId       Per faces/seed: gli id di altri dispositivi dell'account che possono avere la loro cartella sul NAS (l'emulatore, nel momento del secondo dispositivo).
+.PARAMETER Release             Per security: le voci della release candidata (S6, S7 con KT ignorata, S13, S11) invece di quelle della build debug.
 .PARAMETER SelfTest            Prova la conversione dell'uscita di sha256sum nel manifesto, su un testo finto (nessun adb); con -Mode ai prova anche il
                                verificatore dei dati (file dei vettori, catalogo dei modelli) e le guardie.
 
@@ -189,7 +190,7 @@
 #>
 [CmdletBinding()]
 param(
-  [ValidateSet("move", "backup", "ai", "share", "faces")][string]$Mode = "move",
+  [ValidateSet("move", "backup", "ai", "share", "faces", "security")][string]$Mode = "move",
   [ValidateSet("seed", "edit", "interrupt", "verify", "clean", "eval-push", "eval-pull")][string]$Step = "interrupt",
   [string]$Serial = $env:ANDROID_SERIAL,
   [string]$Package = "dev.pampa.mycloudgallery.debug",
@@ -229,7 +230,8 @@ param(
   [string]$DeviceId,
   [string[]]$OtherDeviceId,
   [switch]$DryRun,
-  [switch]$SelfTest
+  [switch]$SelfTest,
+  [switch]$Release
 )
 
 $ErrorActionPreference = "Stop"
@@ -238,6 +240,19 @@ $isBackup = ($Mode -eq "backup")
 $isAi = ($Mode -eq "ai")
 $isShare = ($Mode -eq "share")
 $isFaces = ($Mode -eq "faces")
+
+# --- Modo security (Fase 10 P11, seconda parte): la revisione finale sull'S25, con tools\security\run-all.ps1 -Livello s25. Build debug con
+# `test` (reset della famiglia di prova, S1 (c), S2, S3, S7, S9, S10, S11, pulizia) o, con -Release, la release candidata (S6, S7 con KT
+# ignorata, S13, S11). Le guardie sul telefono (solo RFCY61FZDHW, mai emulator-5554) sono quelle di tools\security\lib\dispositivo.ps1.
+# Con -DryRun stampa il piano (ordine, tempi, il momento dell'utente) e non tocca niente.
+if ($Mode -eq "security") {
+  $securityArgs = @{ Livello = "s25" }
+  if ($Serial) { $securityArgs.Serial = $Serial }
+  if ($Release) { $securityArgs.Release = $true }
+  if ($DryRun) { $securityArgs.Piano = $true }
+  & (Join-Path $root "tools\security\run-all.ps1") @securityArgs
+  exit $LASTEXITCODE
+}
 
 function Fail([string]$message, [int]$code = 1) {
   Write-Host $message -ForegroundColor Red

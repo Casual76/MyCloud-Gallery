@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- "Novità di questa versione" (Fase 10, P12, D33): la riga in Informazioni e licenze e la pagina. Il testo delle novità non sta qui:
+       è la sezione della versione di CHANGELOG.md, impacchettata come risorsa raw (res/raw/changelog.md, uguale al file alla radice). -->
+  <string name="whatsnew_row">Novità di questa versione</string>
+  <string name="whatsnew_row_detail">Cosa cambia rispetto alla versione di prima</string>
+  <string name="whatsnew_title">Novità di questa versione</string>
+  <string name="whatsnew_version">Versione %1$s</string>
+  <string name="whatsnew_other_version">Qui sotto ci sono le novità dell’ultima versione scritta nel file. Questa app è la versione %1$s.</string>
+  <string name="whatsnew_footnote">Il testo è dentro l’app: per leggerlo non serve internet.</string>
+  <string name="whatsnew_empty_title">Nessuna novità da mostrare</string>
+  <string name="whatsnew_empty">Le novità di questa versione non si riescono a leggere. L’app funziona lo stesso.</string>
+</resources>

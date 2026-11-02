@@ -10,7 +10,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
  */
 object FacesMigrations {
 
-  val ALL: Array<Migration> get() = arrayOf(MIGRATION_1_2)
+  val ALL: Array<Migration> get() = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
 
   /**
    * v1 -> v2 (correzioni della Fase 8, pacchetto "formato e replica dei volti"):
@@ -26,6 +26,20 @@ object FacesMigrations {
       db.execSQL("ALTER TABLE `replica_segment_state` ADD COLUMN `attempts` INTEGER NOT NULL DEFAULT 0")
       db.execSQL("ALTER TABLE `replica_segment_state` ADD COLUMN `retry_at` INTEGER")
       db.execSQL("CREATE INDEX IF NOT EXISTS `index_face_body_author` ON `face_body` (`author`)")
+    }
+  }
+
+  /**
+   * v2 -> v3 (Fase 10, P12, promessa 15 di `docs/fase10-progetto.md`): si tolgono `faces_head_mark` e `faces_outbox`, le due tabelle della P6
+   * originale che nessun codice di produzione ha mai letto (l'anti-rollback delle teste e l'outbox vivono nello stato di P3: `replica_device.mark_*`,
+   * le chiavi e il diario del pubblicatore). Niente altro cambia: le altre tabelle, con i loro dati, restano come sono (la migrazione NON e'
+   * distruttiva per altro: `FacesSchemaTest` la prova con un database v2 pieno). Le due tabelle erano comunque vuote sul campo: le scriveva solo
+   * codice che nessuno chiamava.
+   */
+  val MIGRATION_2_3: Migration = object : Migration(2, 3) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+      db.execSQL("DROP TABLE IF EXISTS `faces_head_mark`")
+      db.execSQL("DROP TABLE IF EXISTS `faces_outbox`")
     }
   }
 }

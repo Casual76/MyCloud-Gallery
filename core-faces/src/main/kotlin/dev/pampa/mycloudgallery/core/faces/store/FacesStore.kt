@@ -11,7 +11,7 @@ import dev.pampa.mycloudgallery.core.model.StableCode
 import dev.pampa.mycloudgallery.core.security.faces.FacesDataKey
 
 // IL NEGOZIO DEI VOLTI DI UNA GENERAZIONE (docs/fase8-progetto.md D14, D15, §2.8 "Disattiva e cancella", E-F19). Un database aperto con la sua
-// chiave dati e quattro viste: l'archivio dei volti (contratto di P0), i segni anti-rollback, l'outbox e le unita' fatte. Si apre da
+// chiave dati e due viste: l'archivio dei volti (contratto di P0) e le unita' fatte (i segni delle teste e l'outbox della P6 originale si sono tolti in P12: promessa 15). Si apre da
 // [FacesStores.open], che sa cosa fare se la chiave e' sparita (E-F19) o il file e' danneggiato. Mai valori nei log (D37).
 
 /**
@@ -27,10 +27,6 @@ class FacesStore internal constructor(
 
   /** L'archivio cifrato (`FacesArchive`, la suite di contratto di P0). */
   val archive: FacesArchive get() = databaseArchive
-
-  val headMarks: FacesHeadMarks = DatabaseHeadMarks(db.headMarkDao())
-
-  val outbox: FacesOutbox = DatabaseOutbox(db.outboxDao())
 
   val units: FacesUnitsDone = DatabaseUnitsDone(db.unitDao())
 

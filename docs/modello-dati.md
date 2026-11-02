@@ -1004,8 +1004,6 @@ BLOB sigillate (§15.3).
 | `group_exemplar` | `person_id`, `position` | `content_key`, `frame`, `face_index`, `body_digest` | al piu' 16 esemplari per persona, riferimenti a volti. Cascata sulla persona |
 | `group_assignment` | `content_key`, `frame`, `face_index`, `body_digest` | `loc_key`, `loc_frame` (NULL = quelli del riferimento), `x0..y1`, `person_id`, `score` (REAL), `origin` | le assegnazioni. Indice su `person_id`. Cascata sulla persona |
 | `people_record` | `subject`, `field` | `value`, **`sealed_value`**, `at_nas`, `author` | le voci `people` (nomi e correzioni, §2.4): l'ultima scrittura per chiave. Il campo `name` ha il testo **solo** in `sealed_value`; gli altri campi in `value`; `value` e `sealed_value` entrambi NULL = lapide. `at_nas` NULL = "da datare" |
-| `faces_head_mark` | `device_id` | `version`, `content_hash`, `registry_version`, `created_at` | l'anti-rollback e l'equivocazione delle teste (`HeadMark`, §2.4) per dispositivo |
-| `faces_outbox` | `entry_id` (AUTOINCREMENT), unico (`kind`, `ref`) | `kind` (`faces`, `snapshot`, `people`), `ref` | cosa c'e' da pubblicare: durevole, una voce sola per la stessa cosa |
 | `faces_unit_done` | `area`, `month`, `part` | `recipe`, `done_at_nas` | le unita' di lavoro finite (§2.3) |
 | `faces_meta` | `name` | `data` (BLOB) | valori di servizio; oggi `key_check` (§15.3) |
 | `replica_device` | `device_id` | `mark_version`, `mark_hash`, `snapshot_seq`, `snapshot_base`, `snapshot_head_version`, `snapshot_head_hash`, `snap_seq`, `snap_base`, `checked_version`, `checked_hash` | quello che la replica ricorda di un dispositivo dell'account (`DeviceReplica`, P3): l'ultima testa accettata (anti-rollback ed equivocazione), l'istantanea che dichiara, la testa da cui viene l'ultima istantanea valida (e la sua `seq`), la testa gia' giudicata. NULL = non c'e' |
@@ -1089,14 +1087,12 @@ L'azzeramento distrugge **tutte** le chiavi prima di toccare un file.
 `publishStore()` (gli stati di §15.6, con il negozio che si apre da solo; un negozio che non si apre da' uno stato vuoto in lettura e `IllegalStateException` in scrittura) e il
 parametro `onRecovered` del costruttore (chiamato quando un negozio e' stato rifatto da capo: la Diagnostica conta `FACES_KEY_LOST`).
 
-### 15.6 Segni, outbox e unita' fatte
+### 15.6 Unita' fatte (e le due tabelle tolte in P12)
 
-Tre piccoli magazzini nello stesso database, per P3 (pubblicazione e replica) e P4 (calcolo); spariscono con la generazione (§2.8: "la sua outbox sparisce con il database").
+Un piccolo magazzino nello stesso database, per P4 (calcolo); sparisce con la generazione (§2.8). **Fase 10, P12 (promessa 15):** qui c'erano anche i segni delle teste (`faces_head_mark`) e l'outbox (`faces_outbox`) della P6 originale: ridondanti con lo stato di P3 (`replica_device.mark_*`, `publish_*`) e mai usati da codice di produzione (confermato leggendo il codice di P4, il calcolo, che accoda con `FacesPublisher.stage`, e di P8, "Disattiva e cancella", che toglie il file). Si sono tolti con la **migrazione 2 -> 3** (`FacesMigrations.MIGRATION_2_3`: due `DROP TABLE`, niente altro; `FacesSchemaTest` la prova con un database v2 pieno, e le altre tabelle restano con i loro dati). Schema esportato: `3.json`.
 
 | Magazzino | API (`store/`) | Regole |
 |---|---|---|
-| Segni delle teste | `FacesHeadMarks.get/all/record/forget` | `record` non abbassa mai il numero (risponde falso); uguale o piu' nuovo si'. L'equivocazione (stesso numero, altra impronta) la decide chi sincronizza |
-| Outbox | `FacesOutbox.stage/pending/count/acknowledge`, `stage(FacesChange)` | una voce per (`kind`, `ref`); rimettere in coda da' un id nuovo; `acknowledge` toglie solo cio' che e' stato letto (per id), una voce rimessa in coda nel frattempo resta; un `kind` sconosciuto resta e non si legge |
 | Unita' fatte | `FacesUnitsDone.markDone/isDone/done` | per `FacesResource.WorkUnit` e ricetta; una ricetta piu' vecchia non abbassa quella che c'e'; una ricetta nuova le rifa' |
 
 **Lo stato della sincronizzazione** (P3 + P6). La replica (`NasFacesSync`) e il pubblicatore (`NasFacesPublisher`) tengono il loro stato dietro due porte, `FacesReplicaStore` e
@@ -1186,7 +1182,7 @@ database contro ~2,5 s in memoria.
 | Lo stato della sincronizzazione sul database con una **differenza** e un'immagine in memoria | Riscrivere lo stato intero a ogni `save` (P4 ne fa uno per media: O(n) righe per salvataggio, O(n^2) in tutto); un blob unico per stato (un salvataggio riscrive anche l'istantanea da 12 MB per cambiare un numero); decodificare a ogni `load` (P5 lo chiede a ogni giro) |
 | Le voci `cluster` come **segmenti del formato** sigillati | Una colonna per voce (decine di migliaia di righe con un vettore ciascuna, e un'altra tabella da tenere in pari con il codec); una forma binaria nostra (un secondo codec da provare contro il materiale ostile: quello di P3 rifiuta gia' tutto cio' che e' fuori dai tetti) |
 | Una sola tabella di blocchi (`faces_chunk`) per replica e pubblicatore | Una tabella per ambito (tre tabelle uguali, con chiavi esterne: la cascata non serve, i blocchi si tolgono per nome nella stessa transazione) |
-| `faces_head_mark`, `faces_outbox` e `faces_unit_done` di prima restano | Toglierli: `FacesHeadMarks` e `FacesOutbox` sono ridondanti con lo stato di P3 (`replica_device.mark_*`, `publish_*`) e nessun codice di produzione li usa oggi; restano finche' P4 non conferma che non li vuole, e si tolgono prima del rilascio della v1 |
+| `faces_head_mark`, `faces_outbox` e `faces_unit_done` di prima restano | Toglierli: `FacesHeadMarks` e `FacesOutbox` sono ridondanti con lo stato di P3 (`replica_device.mark_*`, `publish_*`) e nessun codice di produzione li usa oggi; restavano finche' P4 non confermava che non li voleva. **Fase 10, P12: tolti** `faces_head_mark` e `faces_outbox` (migrazione 2 -> 3, §15.6); `faces_unit_done` resta |
 
 ## 16. Dati locali della Fase 9 (ricordi, notifiche, mappa)
 
@@ -1236,5 +1232,4 @@ D42) e scelte in DataStore locale. Niente di questo va sul NAS: sul NAS sta solo
 | **Flussi in arrivo dal trascinamento** | `noBackupFilesDir/incoming/` (quella della ricezione, Fase 5) | come la condivisione in arrivo | P6 | stessi tetti e stesso foglio con la conferma (D21) |
 | **"Affianca" del viewer** | DataStore locale | un booleano per profilo | P5 | — |
 
-**Le tabelle della promessa 15** (`faces_head_mark`, `faces_outbox`, `docs/decisioni.md` Fase 8 P3): restano nel database dei volti finché P12
-non smette di leggerle; una migrazione nuova le toglie solo dopo la conferma con P4 e P8 della Fase 8, mai distruttiva per altro.
+**Le tabelle della promessa 15** (`faces_head_mark`, `faces_outbox`, `docs/decisioni.md` Fase 8 P3): **tolte da P12** (02/11) con la migrazione 2 -> 3 del database dei volti (§15.6, `FacesMigrations.MIGRATION_2_3`), mai distruttiva per altro; il database della galleria non cambia (alla v7: `docs/fase10-progetto.md` diceva v6, e' la v7 della correzione D della Fase 8, con le migrazioni 1 -> 7 tutte non distruttive).

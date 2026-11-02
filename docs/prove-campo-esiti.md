@@ -1017,3 +1017,61 @@ Il telefono è tornato mio alle 02:24 (batteria 79%, Wi-Fi acceso, preset "Massi
 **In sospeso.** F27 (come rinominare il dispositivo); la verifica dal NAS di F16 (nessun verificatore di sola lettura per quel layout); il verificatore del NAS per i manifesti con righe `edit=` (D-14), anche per le 16 "originali in Versioni/" di B-S2; la pulizia finale dell'utente (NAS di prova: `test/mcg-campo/F15`, `F16`, `F9`, `campioni`, `mille-rinominata`, `Prova-A`, `coda-na1`, `Ricevute`, `prova-4b-rinominata`, `sotto`, `Backup/Area comune`; `test-comune/mcg-campo/*` compreso `Z16`; le oltre 2.000 voci del cestino del NAS; sul telefono `mcg-prova` e le 6 esportazioni in Download); il preset e il Wi-Fi di Android lasciati come all'inizio.
 
 **Nota finale su "Salva sul NAS" a NAS non raggiungibile (05:23-05:38).** Prova ripetuta con la morte del processo: Wi-Fi spento da `s25.ps1`, `IMG_mcg_0109.jpg` messa in coda alle 05:23:35 (`IncomingUploadWorker: Wait`), `kill -9` dell'app alle 05:23:39, Wi-Fi tornato alle 05:25:30 (quindi il taglio è durato circa 2 minuti). Il file e la riga `queued` **sono rimasti** dopo la morte del processo e il file è salito alle **05:38:36**: 15 minuti dopo il salvataggio, 13 dopo il ritorno della rete (lo stesso ritardo di 15 minuti di prima). Quindi con `kill -9` **non si perde niente**: il caso di `IMG_mcg_0106.jpg` (02:31, file e riga spariti) resta unico e non spiegato; lo declasso da "alta" a "da indagare" (media) nel quadro qui sopra.
+
+# Fase 10: F182–F185 sull'S25 (02/11)
+
+Branch `campo/f10-a11y` (partito da `main` `6b7a7d30`, Fase 10 fino a P8). Telefono: S25 `SM-S931B` (serie `RFCY61FZDHW`), **Android 17** (`ro.build.version.release` = 17, One UI 9: il piano diceva Android 16 per F185), account di sempre. APK: build debug di questa cartella (`:app:assembleDebug`, 4 min 42 s), installato con `adb install -r` sopra quella che c'era (dati tenuti, mai disinstallata). L'emulatore `emulator-5554` non è stato toccato.
+
+**Cambio di priorità (l'utente, a metà serata):** l'accessibilità è secondaria rispetto al cuore dell'app; il coordinatore ha chiesto di chiudere in fretta, rimettere il telefono com'era e consegnare quello che c'era. Quindi quasi tutto è **non provato: rimandato per priorità**. Quello che c'è è sotto.
+
+## Esiti
+
+| Prova | Esito |
+|---|---|
+| F183, chiave di "Riduci trasparenza e sfocatura" di One UI | **Trovata e provata.** Vedi sotto. |
+| F183, superfici piene nell'app con quella voce | **Passata** sulla Libreria (barra di vetro in alto: da vetro a superficie piena con bordo, e torna al vetro spegnendo la chiave, senza riaprire l'app). Le altre schermate: **non provata: rimandata per priorità**. |
+| F183, testo al 200% e contrasto alto, schermata per schermata (Libreria, viewer con info, Raccolte, album, Cerca, Ricordi, Mappa, Impostazioni e due sottopagine, Diagnostica) | **non provata: rimandata per priorità** (`font_scale` e `high_text_contrast_enabled` mai cambiati). |
+| F182, TalkBack su ogni schermata | **non provata: rimandata per priorità.** TalkBack acceso solo per qualche minuto per capire come guidarlo da adb; non si è riusciti a farlo muovere (vedi sotto). Nessun nome, nessuna azione, nessun annuncio, nessun ritorno del fuoco verificato con TalkBack. |
+| F184, movimento ridotto (tre scale a 0) | **non provata: rimandata per priorità** (le tre scale mai cambiate). |
+| F185, servizio non "strumento" (`FieldProbeA11yService`) | **non provata: rimandata per priorità** (il servizio di prova non è mai stato acceso sul telefono). Nota per quando si farà: il telefono è su **Android 17**, non 16. |
+
+## La chiave di "Riduci trasparenza e sfocatura" (F183)
+- Voce: Impostazioni → Accessibilità → **Ausili visivi** → "Riduci trasparenza e sfocatura" (nella stessa pagina ci sono anche "Caratteri a contr. elevato", "Tema a contrasto elevato" e "Riduci animazioni").
+- Prima e dopo averla accesa dalla voce, `settings list system`, `secure` e `global` a confronto: l'**unica** differenza di valore è **`Settings.Global` `accessibility_reduce_transparency` = 1** (con la voce spenta la chiave **non esiste**). In più il sistema annota la modifica in `settings_change_history` (system, `toggle_reduce_transparency`) e aggiorna `wallpaper_finish_drawing`: rumore.
+- **È già la prima di `REDUCE_TRANSPARENCY_KEYS`** (`core-designsystem/.../a11y/GalleryAccessibility.kt`) e il lettore guarda anche `Settings.Global`: **nessuna modifica al codice** e nessun test nuovo. Le altre tre candidate non esistono sul telefono (lette `null` in tutti e tre gli spazi) e restano innocue.
+- Prova nell'app: Libreria con la chiave a 1, poi a 0, poi a 1 (`adb shell settings put global accessibility_reduce_transparency ...`, la stessa chiave della voce): a 1 la capsula in alto a destra ("Seleziona", "Vista") è una superficie **piena** con il bordo; a 0 è di nuovo vetro (trasparente, con l'ombra); il cambio si vede entro circa 2 secondi **senza riaprire l'app** (l'osservatore dei contenuti funziona). Lo scatto è in `docs/screenshots/10-campo-a11y/riduci-trasparenza-barra-libreria.png` (a sinistra vetro, a destra superficie piena; ritagliato sulla capsula perché l'intera Libreria mostra foto vere); la voce di sistema è in `riduci-trasparenza-impostazioni-oneui.png`.
+
+## TalkBack da adb: cosa si è visto (per chi rifà F182)
+- Il servizio di TalkBack di Google (17.1) è `com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService`. Acceso aggiungendolo in coda a `enabled_accessibility_services` (che sul telefono ha già altri quattro servizi dell'utente: vanno **tenuti**); spento rimettendo la stringa di prima.
+- **Effetto collaterale trovato e riparato:** accendere e spegnere TalkBack così ha **svuotato tre chiavi di Secure** che puntavano a un servizio dell'utente: `accessibility_button_targets`, `accessibility_direct_access_target_service`, `accessibility_gesture_targets`. Rimesse come prima (verificato con il confronto completo di `settings list secure`). **Chi rifà F182 deve salvare anche queste tre chiavi** (e rimetterle).
+- Al primo avvio TalkBack apre il tutorial ("Ti diamo il benvenuto in TalkBack") e poi chiede il permesso di notifiche ("Accessibilità di Android"): chiusi entrambi con Indietro, nessun permesso concesso.
+- **I gesti iniettati non muovono il fuoco di TalkBack su questo telefono:** `input swipe` e `input touchscreen swipe` verso destra (più volte, nell'app e in Impostazioni), la scorciatoia da tastiera `input keycombination KEYCODE_ALT_LEFT KEYCODE_DPAD_RIGHT`: il riquadro blu è rimasto fermo. Un `input tap` ha invece **aperto la riga** (attivato) invece di spostare solo il fuoco: i tocchi iniettati sembrano passare sotto l'esplorazione al tocco. `sendevent` su `/dev/input/event7` è negato alla shell (`Permission denied`). Quindi la guida di TalkBack "con i gesti via adb" qui **non è affidabile**; resta l'altra strada del piano (UI Automator con TalkBack acceso, come F113, che legge testo e descrizioni) oppure l'utente con le sue dita.
+- TalkBack non scrive le frasi dette in logcat di serie (solo errori, per esempio `windowContentChanged: error, node is null` ripetuto all'avvio, non indagato). Per leggerle servirebbero le impostazioni per sviluppatori di TalkBack ("Livello del log" o "Mostra l'output vocale"): sono sue impostazioni, da salvare e rimettere come le altre.
+- **Osservazione secondaria** (UI Automator, TalkBack spento, sull'app che era già installata prima del mio aggiornamento, quindi non sulla build di questa cartella): le celle della Libreria hanno già le descrizioni di D22 nella forma "Foto, <data>, <ora>, <luogo>, solo sul telefono" e "Video, <data>, durata 0:09, data stimata, solo sul telefono"; nessun nome di file né id nelle celle. Non è la prova F182 (manca TalkBack vero).
+
+## Difetti
+- **Nuovi:** nessuno confermato (si è provata una sola cosa, la chiave).
+- **Limiti noti di Fluid Engine:** nessuno rivisto (non si è arrivati ai testi a 2,0x).
+
+## Impostazioni del telefono: tornate come prima (sì)
+Salvate prima in `build/campo-a11y/impostazioni-prima.txt` (più i tre dump `lista-*-prima.txt`), verificate dopo con un secondo `settings get` e con il confronto completo di `settings list system|secure|global`: **uguali** su tutte le chiavi, salvo `settings_change_history` e `wallpaper_finish_drawing` di `system` (annotazioni del sistema, non impostazioni).
+
+| Chiave | Prima | Dopo |
+|---|---|---|
+| `secure enabled_accessibility_services` | i quattro servizi dell'utente (KineStop, Collegamento a Windows, KeyVoice, Game Booster +) | uguale, carattere per carattere |
+| `secure accessibility_enabled` | 1 | 1 |
+| `secure touch_exploration_enabled` | 0 | 0 |
+| `system font_scale` | 1.0 | 1.0 |
+| `secure high_text_contrast_enabled` | non esiste | non esiste |
+| `secure contrast_level` | 0.0 | 0.0 |
+| `global animator_duration_scale` | 1 | 1 |
+| `global transition_animation_scale` | 1.0 | 1.0 |
+| `global window_animation_scale` | 1.0 | 1.0 |
+| `global accessibility_reduce_transparency` | non esiste | non esiste (tolta con `settings delete`, dopo la prova) |
+| `secure accessibility_button_targets`, `accessibility_direct_access_target_service`, `accessibility_gesture_targets` | il servizio KeyVoice | il servizio KeyVoice (svuotate dall'accensione di TalkBack, rimesse) |
+
+Altro lasciato sul telefono: l'app `dev.pampa.mycloudgallery.debug` aggiornata alla build di questa cartella (stessa firma, dati intatti); nessun'altra impostazione toccata (niente Wi-Fi, schermo, opzioni sviluppatore). Gli screenshot con foto vere e i dump di `settings list` sono solo sotto `build/campo-a11y/` (non nel commit).
+
+## Cosa resta (telefono e tablet)
+- **S25:** F183 sulle schermate (testo 2,0x e contrasto alto con la chiave già nota), F182, F184 e F185 come da brief, con la nota di Android 17 e il salvataggio delle tre chiavi di sopra.
+- **Tablet:** quello che il piano gli assegna (F182–F184 sul tablet, tastiera e Switch Access in DeX).

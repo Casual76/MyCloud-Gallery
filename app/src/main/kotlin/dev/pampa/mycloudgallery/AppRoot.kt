@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery
 
+import dev.pampa.mycloudgallery.release.ReleaseRoot
+import dev.pampa.mycloudgallery.release.ReleaseRootViewModel
+import dev.pampa.mycloudgallery.release.ReleaseUi
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -36,6 +39,7 @@ internal fun AppRoot(
   lockController: AppLockController,
   authenticator: SystemCredentialAuthenticator,
   rootViewModel: RootViewModel = hiltViewModel(),
+  releaseViewModel: ReleaseRootViewModel = hiltViewModel(),
 ) {
   AppLockGate(
     controller = lockController,
@@ -83,7 +87,11 @@ internal fun AppRoot(
         ),
       )
     }
-    AppNavHost(destination = destination, status = status, actions = actions)
+    // Fase 10 (P13, §2.8, E-REL5, E-REL6): il manifest firmato alla radice. Con la versione fermata solo la sua pagina e la Diagnostica; in sola lettura l'avviso "Aggiorna".
+    val release by releaseViewModel.status.collectAsStateWithLifecycle()
+    ReleaseRoot(ReleaseUi.of(release)) {
+      AppNavHost(destination = destination, status = status, actions = actions)
+    }
   }
 }
 

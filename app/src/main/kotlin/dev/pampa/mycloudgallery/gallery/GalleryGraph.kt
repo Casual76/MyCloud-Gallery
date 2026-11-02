@@ -521,6 +521,8 @@ class GalleryGraph(
         onHiddenChanged()
         // Fase 9 (P13): lo scaffale dei ricordi e la notifica in tendina (`prune`, `revalidate`), l'indice dei punti e la mini-mappa, subito.
         for (listener in hiddenListeners) listener()
+        // Fase 10 (P13, D5): chi deve sapere **quali** media (il widget li svuota subito dalla Home, poi ridisegna).
+        for (listener in hiddenIdListeners) listener(ids, on)
       }
 
       // Fase 7 (P9, E-H2): quanti degli elementi nascosti i familiari vedono ancora (area comune, album condivisi).
@@ -534,6 +536,9 @@ class GalleryGraph(
 
   /** Fase 9 (P13): gli altri che vogliono sapere di un "Nascondi" o "Mostra" fatto qui (ricordi e mappa, `MemoriesModule` e `MapModule`). */
   val hiddenListeners: MutableList<() -> Unit> = java.util.concurrent.CopyOnWriteArrayList()
+
+  /** Fase 10 (P13): chi vuole sapere **quali** media sono stati nascosti o mostrati qui (il widget, `WidgetWiring`). Gli id restano in memoria, mai nei log. */
+  val hiddenIdListeners: MutableList<(Set<MediaId>, Boolean) -> Unit> = java.util.concurrent.CopyOnWriteArrayList()
 
   /**
    * Fase 7 (P13, P10-10, D35): le richieste "Aggiungi ad album" (selezione della Libreria, viewer, Nascosti), che la radice mostra con `AddToAlbumHost`,

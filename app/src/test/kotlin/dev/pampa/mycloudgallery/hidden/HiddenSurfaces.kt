@@ -203,9 +203,15 @@ internal object HiddenSurfaces {
       sources = listOf(
         "$LIB/visibility/RotatingWidgetFeed.kt", WIDGET_CONTENT_FILE,
         "$FEATURE_WIDGET/frame/WidgetPreparer.kt", "$FEATURE_WIDGET/refresh/WidgetEngine.kt", "$FEATURE_WIDGET/ui/GalleryWidgetContent.kt",
+        // Fase 10 (P13): il grafo del widget in :app. Lega la Libreria vera al pianificatore e, nel giro dei dati personali, confronta i media **mostrati** con i nascosti
+        // di adesso per svuotare la Home (D5). Lo provano `WidgetGraphTest` e, con due dispositivi finti sul grafo vero, `WidgetPersonalRoundAppTest`.
+        "app/src/main/kotlin/dev/pampa/mycloudgallery/widget/WidgetGraph.kt",
       ),
       probe = RealWidgetProbes.widget, live = true,
-      alsoProvedBy = listOf("RotatingWidgetFeedTest", "DefaultWidgetPlannerBigWorldTest", "WidgetEngineTest", "WidgetBlankTimingTest", "GalleryWidgetReceiverTest"),
+      alsoProvedBy = listOf(
+        "RotatingWidgetFeedTest", "DefaultWidgetPlannerBigWorldTest", "WidgetEngineTest", "WidgetBlankTimingTest", "GalleryWidgetReceiverTest", "WidgetGraphTest",
+        "WidgetPersonalRoundAppTest",
+      ),
     ),
     SurfaceEntry(
       id = "visible-media", title = "VisibleMedia: la vista del catalogo senza nascosti (album, copertine, viaggi, Utility, Doppioni)", row = SpecRow.ALBUMS,
@@ -418,9 +424,14 @@ internal object HiddenSurfaces {
       owner = "P7", backing = Backing.PRODUCTION,
       // Il descrittore vero e la sua porta d'ingresso per gli schermi (nessuno dei due nomina `VisibleMedia` o `HiddenMask`: descrivono solo le celle che
       // le schermate gli danno, e le schermate le prendono dall'istantanea gia' filtrata; la sonda lo prova sulle celle della Libreria vera).
-      sources = listOf("$DESCRIBE/rules/DefaultMediaDescriber.kt", "$DESCRIBE/rules/MediaDescribers.kt"),
+      sources = listOf(
+        "$DESCRIBE/rules/DefaultMediaDescriber.kt", "$DESCRIBE/rules/MediaDescribers.kt",
+        // Fase 10 (P13): le porte vere del descrittore in :app. I nomi delle persone passano dal filtro di `VisibleMedia` e `HiddenMask` (mai il nome di una persona per un
+        // media nascosto o non visibile adesso), prova `DescribeWiringTest`.
+        "app/src/main/kotlin/dev/pampa/mycloudgallery/describe/DescribeWiring.kt",
+      ),
       probe = RealDescriptionProbes.descriptions,
-      alsoProvedBy = listOf("DefaultMediaDescriberTest", "MediaDescribersTest", "GridTextDescribeNonRegressionTest", "RealDescriptionsProbeTest"),
+      alsoProvedBy = listOf("DefaultMediaDescriberTest", "MediaDescribersTest", "GridTextDescribeNonRegressionTest", "RealDescriptionsProbeTest", "DescribeWiringTest"),
     ),
     SurfaceEntry(
       id = "panes", title = "Pannelli: il viewer a lato della Libreria scorre la vista viva (un salto non arriva a un nascosto), la zona a lato della mappa e' la griglia viva della pagina (D13, D41)",

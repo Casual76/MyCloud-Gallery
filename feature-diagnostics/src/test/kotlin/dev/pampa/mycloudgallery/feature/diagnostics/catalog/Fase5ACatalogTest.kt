@@ -37,7 +37,8 @@ class Fase5ACatalogTest {
   fun nessunCodiceDelBackupStaFuoriDallaTabella() {
     val rows = problemRows().keys.map { "BACKUP_$it" }.toSet()
     // P14: nella stessa sezione anche i contatori delle integrazioni della 5B (selettore, documenti, ricevuti, modifica, condivisioni).
-    val stateCodes = setOf("BACKUP_STATE", "BACKUP_LAST_ROUND", "BACKUP_SIMILAR_COPIES", "INTEGRATIONS_COUNTERS")
+    // Fase 10 (P13): e accanto a loro quelli del trascinamento fra app (P6, par. 2.13 di docs/fase10-progetto.md).
+    val stateCodes = setOf("BACKUP_STATE", "BACKUP_LAST_ROUND", "BACKUP_SIMILAR_COPIES", "INTEGRATIONS_COUNTERS", "DRAG_OUT", "DRAG_IN", "DRAG_TEMP_CLEANED")
     val inCatalog = DiagCatalog.entriesOf(DiagSection.BACKUP).map { it.code.id }.toSet()
     assertThat(inCatalog - rows - stateCodes).isEmpty()
     assertThat(inCatalog).containsAtLeastElementsIn(rows + stateCodes)

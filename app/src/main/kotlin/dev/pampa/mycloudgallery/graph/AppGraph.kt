@@ -148,6 +148,11 @@ class AppGraph(
    * nuovo" se in questo processo la galleria e' gia' partita (R6): non riparte, e il catalogo avrebbe ancora il proprietario di prima.
    */
   private val restart: ProcessRestart = ProcessRestart {},
+  /**
+   * Fase 10 (P13, §1.4 "ReleaseGraph", §2.8): lo stato del manifest firmato. Con `Stopped` la sessione del NAS non si apre (nessun lavoro, nessun traffico); con
+   * `ReadOnly` o `Stopped` ogni cancello di scrittura e' fermo ([NasInputs.releaseWritesStopped]). Null nei test che non lo provano: nessun effetto.
+   */
+  val release: dev.pampa.mycloudgallery.release.ReleaseGraph? = null,
 ) {
 
   /** Chi scrive nell'anello della Diagnostica: lavori, sessione NAS, backup, VPN (solo codici e numeri). */
@@ -210,6 +215,21 @@ class AppGraph(
   var mapStopper: GalleryStopper? = null
 
   /**
+   * Fase 10 (P13, D42): l'azzeramento comincia dal widget: tutti i widget a "Configura MyCloud Gallery" **senza immagini** (il disegno e' consegnato quando ritorna), poi il
+   * lavoro `widget-refresh` annullato e il registro tolto. Anche per i soli dati di un account (le foto sulla Home sono del vecchio account). Si registra da solo
+   * (`MyCloudGalleryApp`); nei test senza widget resta null.
+   */
+  @Volatile
+  var widgetStopper: GalleryStopper? = null
+
+  /**
+   * Fase 10 (P13, D42, D16): chi chiude le altre finestre dell'app (tiene la principale) all'azzeramento, all'uscita dalla famiglia e in "Configura di nuovo"
+   * (`WindowLauncher.closeOtherWindows`). Nei test null.
+   */
+  @Volatile
+  var windowsCloser: (() -> Unit)? = null
+
+  /**
    * Fase 8 (P13, D14, E-F35): le chiavi dei volti (una chiave del Keystore per generazione, `mcg-faces-<G>`): **una sola** istanza per processo, quella
    * della piattaforma (nel telefono `FacesKeyStore`: va usata cosi' com'e', senza avvolgerla, o si perde `FacesKeyProbe`). La usano lo store dei volti e
    * l'azzeramento (`DeviceSelfWipe` le distrugge nella fase (3) con le credenziali, prima di qualunque dato).
@@ -261,7 +281,8 @@ class AppGraph(
   val credentialSource: NasCredentialSource = VaultNasCredentialSource { slot -> credentials.load(slot) }
   val breakers = AuthBreakerRegistry(DataStoreBreakerStore.create(context, scope), scope, platform.deviceNow)
   val session: SmbNasSessionManager = SmbNasSessionManager(
-    account = { account.value },
+    // Fase 10 (P13, E-REL6): una versione fermata dal manifest non apre nessuna sessione (come senza account: nessun socket, nessun traffico).
+    account = { if (release?.stopped == true) null else account.value },
     routeGate = routeGate,
     credentials = credentialSource,
     breakers = breakers,
@@ -444,7 +465,9 @@ class AppGraph(
    * Le regole di una tappa di un lavoro (`StagedRun`): il motore vero, preceduto dall'attesa della rete (RE-3). **Un punto solo** per i
    * lavori del NAS e del backup, cosi' nessuno valuta le regole alla cieca in un processo appena avviato.
    */
-  fun stageRules(): StageRules = settled(EngineStageRules(rulesEngine, stateProvider))
+  fun stageRules(): StageRules =
+    // Fase 10 (P13, E-REL6): con la versione fermata dal manifest nessun lavoro a tappe parte (le regole di sempre non bastano a dire "si'").
+    settled(dev.pampa.mycloudgallery.release.ReleaseStageRules(EngineStageRules(rulesEngine, stateProvider)) { release?.stopped == true })
 
   /** Le [rules] date, con l'attesa della rete prima della prima valutazione e l'ora del NAS pronta prima del primo lotto (D-2). */
   fun settled(rules: StageRules): StageRules = SettledStageRules(rules, settle = { networkSettler.settle() }, ready = { readyNasClock() })
@@ -494,6 +517,7 @@ class AppGraph(
       meteredChanges = environment.snapshot.map { it.underlying?.metered == true },
       freezeSignal = nasFreeze,
       lastDiskTouchAt = session.lastDiskTouchAt,
+      releaseWritesStopped = { release?.writesStopped == true },
     )
   }
   val vpnAutomation = DefaultVpnAutomation(environment, wireGuard, vpnConfigStore, appContext, sessionActivity)

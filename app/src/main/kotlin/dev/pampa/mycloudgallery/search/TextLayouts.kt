@@ -36,6 +36,26 @@ class StoredMediaText(
     return null
   }
 
+  /**
+   * Fase 10 (P13, D22, "Cosa deve fare P13" di P7): il testo letto di **piu'** media con **una** lettura del catalogo (le chiavi di tutti insieme), poi l'indice
+   * locale per chiave, con la stessa scelta di [layout]. Per il descrittore (`DescribeText`), che lo chiede per le celle in vista a ogni giro di TalkBack. Le righe
+   * unite da uno spazio; un media mai letto non c'e'. Mai nei log.
+   */
+  suspend fun texts(media: Collection<MediaId>): Map<MediaId, String> {
+    if (media.isEmpty()) return emptyMap()
+    val cat = catalog() ?: return emptyMap()
+    val out = HashMap<MediaId, String>()
+    for (cell in cat.mediaContentKeysOf(media.toList())) {
+      if (cell.mediaId in out) continue
+      for (key in cell.own) {
+        val body = index.textBody(key) ?: continue
+        out[cell.mediaId] = body.lines.joinToString(" ") { it.text }
+        break
+      }
+    }
+    return out
+  }
+
   companion object {
     private const val UNIT = AiLimits.UNIT.toFloat()
 

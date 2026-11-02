@@ -25,6 +25,8 @@ import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
 import dev.pampa.mycloudgallery.core.rules.NetworkClass
 import dev.pampa.mycloudgallery.core.rules.Pace
 import dev.pampa.mycloudgallery.core.rules.WorkRequest
+import dev.pampa.mycloudgallery.release.NasManifestSource
+import dev.pampa.mycloudgallery.graph.snapshotOrNull
 import dev.pampa.mycloudgallery.core.rules.run.BatchResult
 import dev.pampa.mycloudgallery.core.rules.run.CheckpointStore
 import dev.pampa.mycloudgallery.core.rules.run.DetectionCap
@@ -203,7 +205,11 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
       scope.record(report.bytesDownloaded)
       BatchResult(hasMore = !report.complete)
     })
-    if (outcome is StageOutcome.Finished) syncBeat.beat(graph.platform.deviceNow())
+    if (outcome is StageOutcome.Finished) {
+      syncBeat.beat(graph.platform.deviceNow())
+      // Fase 10 (P13, §2.8 "Lettura", Q8 (a)): il manifest firmato, con la sessione di questo giro, al piu' una volta ogni 24 ore (un file, 64 KiB al piu').
+      graph.release?.readIfDue(NasManifestSource(graph.session) { graph.onboardingStore.snapshotOrNull()?.commonShare })
+    }
     return outcome
   }
 

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Il tocco sul widget dentro l'app (Fase 10, P13, docs/fase10-progetto.md §2.2, E-W8). In un file proprio (§1.5). -->
+<resources>
+  <string name="widget_tap_gone">Questa foto non c\'è più nella Libreria.</string>
+</resources>

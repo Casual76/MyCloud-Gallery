@@ -20,7 +20,8 @@ class StepSimulationReadOnlyTest {
 
   @Test
   fun ilCodiceDiReleaseNonNominaScritture() {
-    val files = kotlinFiles("src/main/kotlin/dev/pampa/mycloudgallery/release")
+    // Fase 10 (P13): nella stessa cartella c'e' anche il manifest firmato (`ReleaseGraph`, che scrive il suo stato locale): la regola vale per la simulazione.
+    val files = kotlinFiles("src/main/kotlin/dev/pampa/mycloudgallery/release").filter { it.name.startsWith("StepSimulation") }
     assertThat(files.map { it.name }).containsAtLeast("StepSimulationSources.kt", "StepSimulationWiring.kt")
     val forbidden = Regex(
       // I nomi delle primitive di scrittura si scrivono a pezzi: le barriere di core-common (Phase4 e Phase5) li cercano in ogni sorgente, anche nei test.

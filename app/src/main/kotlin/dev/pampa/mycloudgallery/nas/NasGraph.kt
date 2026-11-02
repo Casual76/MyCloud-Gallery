@@ -355,11 +355,11 @@ class NasGraph(
 
   /**
    * Il cancello delle scritture sull'indice (P3, `IndexWriteGate`): D31 lo applica `IndexWriteRules` prima di questo.
-   * Ordine: emergenza, dispositivo non piu' fidato, congelamento della share (D10), salto dell'ora del NAS (D32).
+   * Ordine: emergenza (anche quella del manifest firmato, Fase 10), dispositivo non piu' fidato, congelamento della share (D10), salto dell'ora del NAS (D32).
    */
   val writeGate: IndexWriteGate = IndexWriteGate { share ->
     when {
-      emergency.stopped -> WriteBlock.EMERGENCY_STOP
+      emergency.stopped || inputs.releaseWritesStopped() -> WriteBlock.EMERGENCY_STOP
       inputs.trust.writePermit() == null -> WriteBlock.NOT_TRUSTED
       frozenShares.value.containsKey(share.lowercase(Locale.ROOT)) -> WriteBlock.FROZEN
       clockGuard.blocked -> WriteBlock.CLOCK_JUMP
@@ -410,7 +410,8 @@ class NasGraph(
    */
   val opsGate: OpsGate = OpsGate { share ->
     NasOpsGates.statusOf(
-      emergency = emergency.stopped,
+      // Fase 10 (P13): il manifest firmato ferma anche le operazioni sui file (sposta, rinomina, cestino, cartelle).
+      emergency = emergency.stopped || inputs.releaseWritesStopped(),
       frozen = frozenShares.value.containsKey(share.lowercase(Locale.ROOT)),
       clockJump = clockGuard.blocked,
     )

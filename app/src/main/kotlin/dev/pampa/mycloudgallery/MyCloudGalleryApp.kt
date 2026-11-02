@@ -97,6 +97,25 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   @Inject
   lateinit var mapLazy: dagger.Lazy<dev.pampa.mycloudgallery.map.MapGraph>
 
+  /**
+   * Fase 10 (P13): il widget (`Phase10Module`: porte vere, fornitore in `WidgetHost`, ridisegno), il descrittore dei media (legato in `MediaDescribers` alla nascita) e cio'
+   * che serve per legarli (blocco dell'app, scelte del widget, finestre). Nessun I/O: si montano qui, dopo i ricordi.
+   */
+  @Inject
+  lateinit var widgetLazy: dagger.Lazy<dev.pampa.mycloudgallery.widget.WidgetGraph>
+
+  @Inject
+  lateinit var describerLazy: dagger.Lazy<dev.pampa.mycloudgallery.core.describe.contract.MediaDescriber>
+
+  @Inject
+  lateinit var lockController: dev.pampa.mycloudgallery.core.security.lock.AppLockController
+
+  @Inject
+  lateinit var widgetSettingsLazy: dagger.Lazy<dev.pampa.mycloudgallery.feature.settings.widget.WidgetSettings>
+
+  @Inject
+  lateinit var windowRegistry: dev.pampa.mycloudgallery.window.WindowRegistry
+
   private lateinit var graph: AppGraph
   private lateinit var gallery: GalleryGraph
   private lateinit var notifications: AppNotifications
@@ -107,6 +126,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
   private lateinit var faces: dev.pampa.mycloudgallery.faces.FacesGraph
   private lateinit var memories: dev.pampa.mycloudgallery.memories.MemoriesGraph
   private lateinit var map: dev.pampa.mycloudgallery.map.MapGraph
+  private lateinit var widget: dev.pampa.mycloudgallery.widget.WidgetGraph
+  private lateinit var describer: dev.pampa.mycloudgallery.core.describe.contract.MediaDescriber
 
   override val workManagerConfiguration: Configuration
     get() = Configuration.Builder()
@@ -141,6 +162,7 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     faces = AvvioTrace.section("MCG:app:persone") { facesLazy.get() }
     memories = AvvioTrace.section("MCG:app:ricordi") { memoriesLazy.get() }
     map = AvvioTrace.section("MCG:app:mappa") { mapLazy.get() }
+    AvvioTrace.section("MCG:app:fase10") { installPhase10() }
     // Nella build release questa funzione e' vuota: vedi src/release/.../AppLogging.kt.
     installLogging()
     AvvioTrace.section("MCG:app:notifiche") { notifications.createChannels() }
@@ -168,11 +190,34 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     }
   }
 
+  /**
+   * Fase 10 (P13, docs/fase10-progetto.md §1.4): il descrittore (prima di qualunque schermata), il widget (il fornitore in `WidgetHost` prima che un ricevitore o un lavoro lo
+   * chiedano, poi le iscrizioni), e i ganci dell'azzeramento (D42: widget per primi, altre finestre chiuse). Il manifest e' gia' nato con il grafo e legge il suo stato.
+   */
+  private fun installPhase10() {
+    describer = describerLazy.get()
+    widget = widgetLazy.get()
+    dev.pampa.mycloudgallery.widget.WidgetWiring.install(this, widget, gallery, memories, lockController, { widgetSettingsLazy.get() }, graph.scope)
+    graph.widgetStopper = dev.pampa.mycloudgallery.graph.GalleryStopper { widget.stop() }
+    graph.windowsCloser = {
+      dev.pampa.mycloudgallery.window.WindowLauncher.closeOtherWindows(this, windowRegistry.primary ?: NO_TASK)
+    }
+    // D22 (P7, "Cosa deve fare P13" punto 5): al blocco dell'app la cache dei nomi e del testo letto si vuota (anche in secondo piano: `onBackground` qui sotto).
+    graph.scope.launch {
+      lockController.state.collect { if (it == dev.pampa.mycloudgallery.core.security.lock.AppLockState.LOCKED) describer.forget() }
+    }
+  }
+
   /** Il processo nasce per mostrare un'activity (il sistema lo tiene in primo piano mentre la lancia), non per un lavoro in background. */
   private fun startedForUi(): Boolean {
     val info = android.app.ActivityManager.RunningAppProcessInfo()
     android.app.ActivityManager.getMyMemoryState(info)
     return info.importance <= android.app.ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+  }
+
+  private companion object {
+    /** Nessuna finestra principale conosciuta: si chiudono tutte le altre (il task -1 non esiste). */
+    const val NO_TASK = -1
   }
 
   /** `onTrimMemory` verso la cache delle miniature (nota di P6) e l'istantanea della timeline. */
@@ -229,6 +274,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
         // P13: una riga in attesa lasciata da un "Salva come nuova foto" interrotto dalla morte del processo si toglie (IS_PENDING).
         AvvioTrace.asyncSection("MCG:ai:ritagli") { runCatching { ai.cutoutPhotos.purgeOrphans() } }
       }
+      // Fase 10 (P13, nota di P3): i widget che ci sono si ridisegnano con le porte appena montate (e compongono in anticipo lo svuotamento di D5).
+      if (::widget.isInitialized) dev.pampa.mycloudgallery.widget.WidgetWiring.publishAtStart(widget)
       // P13 (D47): le installazioni di prima dei ritagli ricevono, una volta sola, la sorgente "Ritagli" del backup (con la recinzione di D13 in debug).
       graph.scope.launch {
         runCatching {
@@ -240,13 +287,19 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
 
     override fun onForeground() {
       gallery.onForeground()
+      if (::widget.isInitialized) widget.appForegrounded()
       // All'apertura: una verifica del NAS se l'ultima ha piu' di 15 minuti (§1.4), poi la sincronizzazione dell'indice. Dopo il primo disegno.
       AfterFirstDraw.launchAfter(graph.scope) {
         if (gallery.backgroundWorkAllowed && gallery.nas?.verifyDue() == true) NasWorkScheduling.scanNow(this@MyCloudGalleryApp)
       }
     }
 
-    override fun onBackground() = gallery.onBackground()
+    override fun onBackground() {
+      gallery.onBackground()
+      // Fase 10 (P13): l'ultima finestra si e' fermata. Il widget fa un giro dopo la calma (la Home torna visibile, §2.1); il descrittore dimentica nomi e testo (D22).
+      if (::widget.isInitialized) widget.appBackgrounded()
+      if (::describer.isInitialized) describer.forget()
+    }
 
     override fun onResume() = gallery.refreshAccess()
   }

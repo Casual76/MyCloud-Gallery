@@ -10,6 +10,8 @@ import dagger.hilt.components.SingletonComponent
 import dagger.multibindings.IntoSet
 import dagger.multibindings.Multibinds
 import dev.pampa.mycloudgallery.BuildConfig
+import dev.pampa.mycloudgallery.release.ReleaseGraph
+import dev.pampa.mycloudgallery.release.ReleaseWiring
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsLog
 import dev.pampa.mycloudgallery.core.common.featureflags.FeatureFlags
@@ -75,6 +77,7 @@ import dev.pampa.mycloudgallery.work.WorkManagerTrustSyncScheduler
 import java.io.File
 import java.util.Optional
 import javax.inject.Singleton
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -102,6 +105,9 @@ object GraphModule {
     // D33 per tutto il processo (R11 della revisione 4A): anche il test di connessione dell'onboarding e la sessione
     // "estranea" del kit di recupero, che aprono una share con una connessione loro, passano dalla recinzione.
     ShareFences.install(DeveloperTools.shareGuard())
+    // Fase 10 (P13, §1.4 "ReleaseGraph"): il manifest firmato nasce prima del grafo (la sessione e i cancelli lo leggono); l'ora del NAS gliela da' il grafo appena c'e'.
+    var built: AppGraph? = null
+    val release = ReleaseWiring.create(context) { built?.nasClock?.nowMillisOrNull()?.let(java.time.Instant::ofEpochMilli) }
     return AppGraph(
       context = context,
       // La vita del processo: niente la cancella. Un errore in un figlio non ferma gli altri.
@@ -119,8 +125,17 @@ object GraphModule {
       diagnostics = diagnostics,
       // R6: "Configura di nuovo" riavvia il processo se la galleria era gia' partita (come dopo un azzeramento, ON-11).
       restart = AndroidProcessRestart(context),
-    )
+      release = release,
+    ).also { graph ->
+      built = graph
+      // Lo stato salvato si legge subito, fuori dal thread principale: finche' non c'e', i cancelli sono fermi (fallire chiusi, millisecondi).
+      graph.scope.launch { release.load() }
+    }
   }
+
+  /** Fase 10 (P13): il manifest firmato del processo (Diagnostica, radice della UI, azzeramento). */
+  @Provides
+  fun releaseGraph(graph: AppGraph): ReleaseGraph = checkNotNull(graph.release) { "Il grafo del manifest nasce con AppGraph." }
 
   @Provides
   @Singleton

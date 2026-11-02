@@ -390,7 +390,14 @@ class IntegrationsGraph(
   suspend fun atStart() {
     try {
       val keepEdit = editSessions()?.expireStale().orEmpty()
-      withContext(Dispatchers.IO) { shareCache.sweepAtStart(keepEdit) }
+      // Fase 10 (P13, §2.13 `DRAG_TEMP_CLEANED`): quante copie temporanee (trascinamento e condivisione, `cacheDir/share/`) toglie la pulizia dell'avvio. La pulizia
+      // non lo dice: si contano le cartelle prima e dopo (solo un numero).
+      withContext(Dispatchers.IO) {
+        val before = shareCopies()
+        shareCache.sweepAtStart(keepEdit)
+        val cleaned = (before - shareCopies()).coerceAtLeast(0)
+        if (cleaned > 0) DragCounters.add(dev.pampa.mycloudgallery.feature.integrations.drag.DragCounter.TEMP_CLEANED, cleaned.toLong())
+      }
       val keepIncoming = runCatching { gallery.database.incomingDao().stagesInStates(IncomingStates.KEEP) }.getOrNull()
       // Senza poter leggere chi e' citato non si toglie niente (fail closed).
       if (keepIncoming != null) withContext(Dispatchers.IO) { stager.sweep(keepIncoming.toSet()) }
@@ -400,6 +407,9 @@ class IntegrationsGraph(
       GalleryLog.w(TAG) { "pulizia delle integrazioni non riuscita (${e.javaClass.simpleName})" }
     }
   }
+
+  /** Le copie temporanee in `cacheDir/share/` (una cartella per condivisione o trascinamento). */
+  private fun shareCopies(): Int = shareCache.shareRoot.listFiles()?.size ?: 0
 
   /** Azzeramento dell'app o famiglia che cambia: nessun id dei documenti vale piu', le porte tornano ai null-object. */
   fun revokeAll() {
@@ -429,12 +439,29 @@ class IntegrationsGraph(
         entryAllowed = entryGate.decide() == dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision.ALLOWED,
         receiveReady = uploads != null,
       )
-      return listOf(DiagItem(COUNTERS, section, DiagSeverity.INFO, DiagCatalog.titleOf(COUNTERS), null, null, export))
+      return listOf(DiagItem(COUNTERS, section, DiagSeverity.INFO, DiagCatalog.titleOf(COUNTERS), null, null, export)) + dragItems(section)
     }
   }
 
   companion object {
     private const val TAG = "Integrazioni"
+
+    /**
+     * Fase 10 (P6, P13, §2.13): `DRAG_OUT` (pronti, elementi, solo-NAS, copie senza posizione, non partiti, prestiti finiti, rifiuti per motivo), `DRAG_IN` (rilasci presi,
+     * rifiutati, nostri ignorati) e `DRAG_TEMP_CLEANED`: i codici fissi di `DragCounter`, tutti nell'elenco chiuso di `ExportKeys`. Solo numeri.
+     */
+    internal fun dragItems(section: DiagSection): List<DiagItem> {
+      val all = DragCounters.snapshot()
+      fun item(code: DiagCode, prefix: String) = DiagItem(
+        code, section, DiagSeverity.INFO, DiagCatalog.titleOf(code), null, null,
+        all.filterKeys { it.startsWith(prefix) }.toSortedMap().mapValues { (_, n) -> ExportValue.Num(n) },
+      )
+      return listOf(
+        item(dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCodes.DRAG_OUT, "drag_out_"),
+        item(dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCodes.DRAG_IN, "drag_in_"),
+        item(dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCodes.DRAG_TEMP_CLEANED, "drag_temp_"),
+      )
+    }
     private const val PROBE_TIMEOUT_MS: Long = 5_000L
 
     /** La voce della Diagnostica con i contatori delle integrazioni (P10, P11). */

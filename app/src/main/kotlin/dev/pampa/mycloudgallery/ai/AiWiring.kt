@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.ai
 
+import dev.pampa.mycloudgallery.core.models.source.CatalogExtraModelSources
+import dev.pampa.mycloudgallery.core.models.contract.ExtraModelUrls
+import dev.pampa.mycloudgallery.release.ReleaseModelNetworkGate
 import android.content.ComponentCallbacks2
 import android.content.Context
 import dev.pampa.mycloudgallery.backup.CutoutFence
@@ -191,6 +194,9 @@ object AiWiring {
   ): AiStack {
     val scope = graph.scope
     val noBackup = context.noBackupFilesDir
+    // Fase 10 (P13, D29, C451): gli indirizzi HTTPS aggiuntivi del manifest firmato, gli stessi per lo scaffale e per lo scaricamento (filtrati dal catalogo e
+    // da `PinnedUrl.of`; decadono con il manifest scaduto). Senza il manifest nessuno.
+    val extra = CatalogExtraModelSources(ExtraModelUrls { id, sha -> graph.release?.extraUrls(id, sha).orEmpty() })
     val realFetcher by lazy {
       fetcher ?: ModelFetchers.create(
         nas = graph.session.mediaReader(),
@@ -198,6 +204,7 @@ object AiWiring {
         traffic = LedgerModelTraffic(graph.trafficLedger) { trafficNetworkOf(graph.environment.snapshot.value) },
         // R12: HTTPS esce dalla rete che il cancello ha giudicato (la stessa su cui si registra il traffico), non da quella predefinita.
         httpsRoute = AppModelHttpsRoute({ graph.environment.snapshot.value }, graph.platform.networkLookup),
+        extra = extra,
       )
     }
     // Lo scaffale dei modelli sul NAS (MO-4, D18, I5): copie solo di dispositivi approvati e non dismessi, scrittura a flusso nella propria
@@ -207,7 +214,9 @@ object AiWiring {
     val models = LocalModels(
       root = File(noBackup, AiGraph.MODELS_DIR),
       fetcher = ModelFetcher { spec, source, partial, budget -> realFetcher.fetch(spec, source, partial, budget) },
-      networkGate = AppModelNetworkGate { graph.environment.snapshot.value },
+      // Fase 10 (P13, E-REL6): con la versione fermata dal manifest nessuno scaricamento (nessun traffico).
+      networkGate = ReleaseModelNetworkGate(AppModelNetworkGate { graph.environment.snapshot.value }) { graph.release?.stopped == true },
+      extraSources = extra,
       shelfFor = { files ->
         AppModelShelf(
           files = files,

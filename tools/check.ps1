@@ -1467,6 +1467,8 @@ public class DexCallFacts {
   public int Lines;
   // "bersaglio|classe.metodo" del chiamante, per ogni invocazione di un bersaglio.
   public List<string> Calls = new List<string>();
+  // Fase 10 (P3): per ogni voce di Calls, in parallelo, il testo dell'istruzione dopo il codice operativo (registri, metodo chiamato con la sua firma).
+  public List<string> Insns = new List<string>();
   // I2 (revisione di Fase 6): i descrittori delle classi che cominciano con uno dei [ClassPrefixes] (es. i descrittori `dynamite` dei moduli
   // consegnati da Google Play services): chi li guarda sa quali moduli di Play services sono nell'APK.
   public string[] ClassPrefixes = new string[0];
@@ -1502,7 +1504,7 @@ public static class DexCallScanner {
         if (!insn.Success || !insn.Groups[1].Value.StartsWith("invoke")) continue;
         string rest = insn.Groups[2].Value;
         foreach (var target in targets) {
-          if (rest.Contains(target)) facts.Calls.Add(target + "|" + cls + "." + method);
+          if (rest.Contains(target)) { facts.Calls.Add(target + "|" + cls + "." + method); facts.Insns.Add(rest); }
         }
       }
       process.WaitForExit();
@@ -1512,6 +1514,21 @@ public static class DexCallScanner {
 }
 '@
   $script:apkInspectLoaded = $true
+}
+
+# Fase 10 (P3): R8 FONDE le lambda sintetiche (`...$$ExternalSyntheticLambdaN`, quelle di Kotlin desugarate) di classi diverse in un'unica classe che porta il nome
+# di una qualunque di loro (con -dontobfuscate il nome resta: `AlertDialogKt$$ExternalSyntheticLambda5` puo' contenere anche lambda del widget). Il corpo di quelle lambda
+# resta nella classe che le ha scritte, dietro un ponte `$r8$lambda$...` statico: la classe fusa non fa che chiamarlo, e la firma del ponte nomina i tipi della libreria
+# (`Landroidx/glance/...`, `Lorg/maplibre/...`) che il passo cerca. Chiamare il ponte di una classe ammessa NON e' chiamare la libreria: i passi 7h e 7i lo accettano
+# SOLO se il chiamante e' una classe `$$ExternalSyntheticLambdaN` e il metodo chiamato e' un ponte `$r8$lambda$` di una classe ammessa. Ogni altra chiamata (di una
+# classe nostra qualunque, di una lambda sintetica che chiama la libreria direttamente o un ponte di una classe non ammessa) resta un problema. I tentativi di tenere
+# ferme le fusioni con le regole di R8 non reggono (le lambda sintetiche non hanno un nome da nominare in una regola, e il risultato cambia a ogni modifica del codice).
+function Test-R8LambdaBridgeCall([string]$Caller, [string]$Insn, [string[]]$AllowedCalleePrefixes) {
+  if ($Caller -notmatch '\$\$ExternalSyntheticLambda\d+;\.') { return $false }
+  $m = [regex]::Match($Insn, '\}\s*,\s*(L[^;\s]+;)\.(\$r8\$lambda\$[^:\s]+):')
+  if (-not $m.Success) { return $false }
+  $callee = $m.Groups[1].Value
+  return (@($AllowedCalleePrefixes | Where-Object { $callee.StartsWith($_) }).Count -gt 0)
 }
 
 # Le uses-native-library e i componenti (nome, esportato) del manifest DENTRO l'APK.
@@ -1779,7 +1796,8 @@ Step "LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/f
 # Le dipendenze sono in `:feature-map` da P1, ma nell'APK entrano quando `:app` dipende da `:feature-map` (P13): da quel momento il passo
 # pretende di vederle (controllo positivo: almeno una chiamata a OkHttp da `net/`, il client installato, MapLibre inizializzato,
 # `libmaplibre.so` nell'APK); prima conta zero e lo dice. feature-map/consumer-rules.pro tiene OkHttp, MapLibre e `net/` fuori dalle fusioni di
-# classi di R8 (provato il 30/10: senza, metodi dell'app e di Compose finiscono in classi di OkHttp e il passo segnalerebbe mezza app).
+# classi di R8 (provato il 30/10: senza, metodi dell'app e di Compose finiscono in classi di OkHttp e il passo segnalerebbe mezza app). Fase 10 (P3): le lambda
+# sintetiche fuse da R8 che chiamano il ponte `$r8$lambda$` di `feature/map/` (o di una classe ammessa) non contano come chiamate (Test-R8LambdaBridgeCall).
 # Senza dexdump o senza vedere la MainActivity il passo FALLISCE (non salta).
 Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
@@ -1822,10 +1840,14 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
   $okFromNet = 0
   $installs = 0
   $inits = 0
-  foreach ($call in $facts.Calls) {
-    $parts = $call -split '\|', 2
+  $bridged = 0
+  for ($callIndex = 0; $callIndex -lt $facts.Calls.Count; $callIndex++) {
+    $parts = $facts.Calls[$callIndex] -split '\|', 2
     $caller = $parts[1]
     $ours = @($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -gt 0
+    # Una lambda sintetica fusa da R8 che chiama il ponte di una classe ammessa (vedi Test-R8LambdaBridgeCall) non chiama OkHttp ne' MapLibre.
+    if ($parts[0] -eq $okhttp -and (Test-R8LambdaBridgeCall $caller $facts.Insns[$callIndex] $okhttpCallers)) { $bridged++; continue }
+    if (@($mapLibre) -contains $parts[0] -and (Test-R8LambdaBridgeCall $caller $facts.Insns[$callIndex] @($mapPrefix))) { $bridged++; continue }
     if ($parts[0] -eq $setClient) {
       # Il client delle tessere in MapLibre: solo il nostro, solo da MapTileHttp (nessun altro codice cambia il client di MapLibre).
       if ($caller.StartsWith("$installer;") -or $caller.StartsWith("$installer`$")) { $installs++ }
@@ -1854,7 +1876,7 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
     if (-not $hasMapLibreLib) { $problems += "lib/arm64-v8a/libmaplibre.so non e' nell'APK di release" }
   }
   $state = if ($mapInApp) { "mappa nell'app" } else { "mappa non ancora nell'app (P13)" }
-  Write-Host ("        bytecode ({0}): {1} chiamate a OkHttp ({2} da net/), {3} chiamate nostre a MapLibre, client installato {4}, MapLibre inizializzato {5}; libmaplibre.so: {6} ({7} righe di dexdump)" -f $state, $okCount, $okFromNet, $mapCount, $installs, $inits, $hasMapLibreLib, $facts.Lines) -ForegroundColor DarkGray
+  Write-Host ("        bytecode ({0}): {1} chiamate a OkHttp ({2} da net/), {3} chiamate nostre a MapLibre, client installato {4}, MapLibre inizializzato {5}; libmaplibre.so: {6} ({7} righe di dexdump); {8} chiamate di lambda fuse da R8 a ponti ammessi" -f $state, $okCount, $okFromNet, $mapCount, $installs, $inits, $hasMapLibreLib, $facts.Lines, $bridged) -ForegroundColor DarkGray
   if ($problems.Count -gt 0) { return ($problems | Select-Object -First 20) -join "; " }
 }
 
@@ -1863,7 +1885,8 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
 # chiave di PROVA del manifest (KT) non c'e': il suo nome di classe e' fra i resti di debug vietati (passo 7b) e, quando P1 la scrive in
 # `core-release/.../testing/ReleaseTestKeys.kt`, le sue stringhe lunghe (la chiave pubblica in base64 o in esadecimale) non devono comparire nel
 # dex di release. Dalla Fase 10 P3 Glance c'e' (:app dipende da :feature-widget, che porta Glance): il controllo positivo pretende almeno una chiamata da
-# `feature/widget/` (R8 non deve fondere le classi del widget con altre: feature-widget/consumer-rules.pro). KT arriva con P1: finche' non c'e' il passo lo dice.
+# `feature/widget/` (le classi del widget sono radici di R8: feature-widget/consumer-rules.pro; le lambda sintetiche che R8 fonde in classi con altri nomi si
+# riconoscono dal ponte `$r8$lambda$` che chiamano: Test-R8LambdaBridgeCall). KT arriva con P1: finche' non c'e' il passo lo dice.
 # FALLISCE se non legge l'APK.
 Step "Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del manifest (KT)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
@@ -1902,8 +1925,11 @@ Step "Glance al suo posto nel bytecode della release (solo da feature/widget/) e
   $problems = @()
   $glanceCount = 0
   $fromWidget = 0
-  foreach ($call in $facts.Calls) {
-    $caller = ($call -split '\|', 2)[1]
+  $bridged = 0
+  for ($callIndex = 0; $callIndex -lt $facts.Calls.Count; $callIndex++) {
+    $caller = ($facts.Calls[$callIndex] -split '\|', 2)[1]
+    # Una lambda sintetica fusa da R8 che chiama il ponte di una classe ammessa (vedi Test-R8LambdaBridgeCall) non chiama Glance: il ponte ne nomina solo i tipi.
+    if (Test-R8LambdaBridgeCall $caller $facts.Insns[$callIndex] $glanceCallers) { $bridged++; continue }
     $glanceCount++
     if ($caller.StartsWith($widgetPrefix)) { $fromWidget++ }
     if (@($glanceCallers | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { $problems += "Glance chiamato fuori da feature/widget/ e dal kit dell'engine: $caller" }
@@ -1922,7 +1948,7 @@ Step "Glance al suo posto nel bytecode della release (solo da feature/widget/) e
     }
   }
   $state = if ($widgetInApp) { "widget nell'app" } else { "widget non ancora nell'app (P3, P13)" }
-  Write-Host ("        bytecode ({0}): {1} chiamate a Glance ({2} da feature/widget/); {3} ({4} righe di dexdump)" -f $state, $glanceCount, $fromWidget, $ktState, $facts.Lines) -ForegroundColor DarkGray
+  Write-Host ("        bytecode ({0}): {1} chiamate a Glance ({2} da feature/widget/); {3} ({4} righe di dexdump); {5} chiamate di lambda fuse da R8 a ponti ammessi" -f $state, $glanceCount, $fromWidget, $ktState, $facts.Lines, $bridged) -ForegroundColor DarkGray
   if ($problems.Count -gt 0) { return ($problems | Select-Object -First 20) -join "; " }
 }
 

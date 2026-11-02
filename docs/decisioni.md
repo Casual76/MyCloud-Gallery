@@ -15242,3 +15242,146 @@ Fonte: prove sul campo F182-F185 (branch `campo/f10-a11y`), esiti in `docs/prove
 - **Nessuna modifica al codice:** e' gia' la prima di `REDUCE_TRANSPARENCY_KEYS` e `GalleryAccessibilityReader.read` guarda anche `Settings.Global`; l'osservatore registra gli indirizzi dei tre spazi. Le altre tre candidate (`reduce_transparency`, `reduce_transparency_and_blur`, `accessibility_reduce_transparency_blur`) non esistono sul telefono: restano come ripiego per altri produttori. Resta da aggiornare (a chi tocca `core-designsystem` per P13) il commento di `GalleryAccessibility.kt` e il passo "da confermare" di P8: ora e' confermata.
 - **Provato nell'app:** la Libreria con la chiave a 1 disegna la capsula di vetro in alto a destra come superficie piena con bordo; a 0 torna il vetro; il cambio arriva entro circa 2 secondi senza riaprire l'app (`docs/screenshots/10-campo-a11y/riduci-trasparenza-barra-libreria.png`). Le altre schermate e il resto di F182-F185 sono rimandati.
 - **Per chi rifa' F182 sul telefono:** accendere TalkBack scrivendo il suo servizio (`com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService`) in `enabled_accessibility_services` **svuota** `accessibility_button_targets`, `accessibility_direct_access_target_service` e `accessibility_gesture_targets` (qui puntavano a un servizio dell'utente): salvarle e rimetterle. I gesti di TalkBack iniettati con `adb shell input` (e la scorciatoia Alt+freccia) non muovono il suo fuoco su questo telefono; un `input tap` sembra attivare l'elemento invece di spostare solo il fuoco (visto una volta). Servono UI Automator con TalkBack acceso (come F113) o l'utente.
+
+## Correzioni della Fase 10, pacchetto C: controlli e prove (02/11)
+
+Fonte: le voci R6, I2, I3, I4, I6 di `docs/review/10-fase10.md` (sicurezza) e FI-1, AC-1 di `docs/review/funzionale-10.md` (funzionale), piu' due voci arrivate dall'orchestratore dalla prova della
+release candidata sull'S25 (stack trace nel log della release; righe di WorkManager). Branch `fase10/corr-c`, da `b8a2e282`. Le scelte "gia' fatte" dall'orchestratore (versione fermata, sola lettura, testi del blocco)
+sono dei pacchetti A e B e non si toccano qui; qui valgono I2 (F168 e S11 provano solo la lettura) e AC-1 (la chiave One UI e' confermata).
+
+### R6. Il passo 3b riconosce le chiavi private in ogni forma di Java (`tools/release/chiavi-private.ps1`, `chiavi-prove.ps1`)
+- **Il difetto era piu' largo del previsto.** Il marcatore base64 della forma corta finiva con un carattere che dipende dal primo byte della chiave (47 caratteri invece di 46): una chiave su quattro
+  nella forma di `getEncoded()` di Java (KT compresa, fuori da `src/test/`) passava. Mancavano anche la SEC1 di OpenSSL, l'esadecimale con i separatori, il decimale di `Arrays.toString`, il DER grezzo (un `.der`,
+  e `.bin` era fra i formati saltati), i file UTF-16 che scrive il reindirizzamento di Windows PowerShell 5.1, e qualunque allineamento del base64 (una chiave dentro un blob piu' grande).
+- **Come e' fatto adesso.** Gli inizi DER (PKCS#8 EC P-256 corta e lunga, SEC1 con e senza la pubblica, PKCS#8 RSA) si **compongono a pezzi** a ogni esecuzione (il file non contiene mai un marcatore intero, quindi
+  non si segnala da solo) e se ne ricavano i testi: in base64 per i tre allineamenti, con **i soli caratteri che l'inizio determina per intero** (`Get-Base64Markers`: 46 per la forma corta); in esadecimale (anche con
+  `:`, spazi, `0x`, `.toByte()`); in decimale (con e senza segno); in byte grezzi. Per velocita' (5.100 file letti) i testi fissi si cercano con `IndexOf` e le espressioni regolari sono tre (PEM, esadecimale, decimale):
+  il passo costa meno della prima versione (una sola espressione compilata: 160 secondi contro i 34 del vecchio, misurati a macchina libera); nel giro finale, con altri agenti che compilavano, il passo 3b e' durato 92 secondi.
+- **La prova ha le chiavi vere.** `chiavi-prove.ps1` (un passo di `check.ps1`, dopo il 3b) scrive un sorgente Java sotto `build\`, lo lancia e genera **8 chiavi vere** (EC P-256 nelle quattro classi del primo byte, la forma
+  lunga, due SEC1, RSA 2048) in **14 forme ciascuna** (DER, base64 in una riga, MIME, a 64 colonne, con 1 o 2 byte davanti, PEM, esadecimale minuscolo/maiuscolo/con i due punti, decimale con e senza segno, array alla
+  Kotlin, UTF-16): 112 file che il passo deve **trovare tutti** fuori da `src/test/`; la copia della vera KT (`core-release/src/test/.../ReleaseTestPrivateKey.kt`) messa fuori dai test; le stesse chiavi sotto `src/test/` e
+  `src/testDebug/` (viste, non un problema); e i neutri (chiavi pubbliche, byte casuali, un "quasi uguale" con un byte sbagliato) che **non** devono essere segnalati. La forma lunga si rilegge con `KeyFactory` (e' la
+  stessa chiave); la forma SEC1 e la lunga coincidono, byte per byte negli inizi, con quelle di OpenSSL (controllato una volta a mano).
+- **Il passo fallisce davvero.** Con un file `tools/zz-prova-kt.txt` (copia di KT, non tracciato) `check.ps1 -SkipGradle` dice `FAIL ... tools/zz-prova-kt.txt (PKCS#8 EC P-256 (forma corta...))` e il codice di
+  uscita e' diverso da zero; tolto il file il passo e' verde. Col **marcatore di P0** (`-Libreria` con il vecchio `Find-PrivateKeyFiles`) la stessa prova e' **rossa**: 85 file su 112 non riconosciuti, KT compresa.
+- `Phase10ArchitectureTest` cercava `"PRIVATE KEY"` in `check.ps1`: il marcatore e' passato nel file nuovo e il test legge entrambi (`Find-PrivateKeyFiles`, `chiavi-prove.ps1` in `check.ps1`; `"PRIVATE KEY"`, `Get-Base64Markers`,
+  `Find-PrivateKeyFiles` e la cartella dei test in `chiavi-private.ps1`). I due passaggi di `docs/review/10-fase10.md` che citavano la forma SEC1 per intero sono stati scritti a pezzi (il passo li segnalava).
+- **Non vede** (C442): base64 o esadecimale spezzati su piu' righe o piu' stringhe, file compressi o cifrati, i formati binari saltati (immagini, archivi, modelli), chiavi di altre curve e RSA in PKCS#1 che non sia PEM.
+
+### I6. La fotografia delle share esce solo su un disco locale, e dice cosa contiene (`tools/release/share-snapshot.ps1`)
+- **Percorso vero, non testo.** `Assert-LocalOutput` (per `-Uscita` e `-Report`): un percorso UNC (anche con le barre dritte) e' rifiutato **prima di toccare la rete**; l'unita' deve essere un disco fisso; la cartella
+  dell'uscita deve esistere; il percorso si **risolve** (`GetFinalPathNameByHandle` da C# nello stesso `Add-Type` dello script: collegamenti simbolici, giunzioni, unita' assegnate con `subst`, unita' di rete) e il risultato
+  deve stare ancora su un disco fisso e fuori da ogni radice (anche la radice si risolve, se e' su un disco fisso). Un'uscita che esiste o che e' un collegamento (anche pendente) e' rifiutata.
+- **Avviso.** A fine lavoro (fotografia e resoconto) lo script scrive: contiene i nomi, le dimensioni e le date di tutti i file dell'area privata; tienila solo su questo PC, su un disco fisso, mai in una share, nel cloud,
+  in un messaggio o su una chiavetta; cancellala (anche dal cestino) a confronto letto e passo chiuso, non oltre 7 giorni. Lo stesso nel `.DESCRIPTION`, in `docs/fase10-progetto.md` §2.10 e in `docs/sicurezza.md` (C459, L576).
+  "Non oltre 7 giorni" e' una scelta di questo pacchetto (le prove del passo durano due settimane, ma la fotografia serve solo al confronto).
+- **Prove** (`share-snapshot-prove.ps1`, da 22 a 30 prove): UNC e barre dritte (rifiutati in meno di 20 s senza rete: l'script vecchio ci provava e finiva in un errore di rete), cartella che non esiste, **uscita dentro
+  la radice attraverso una giunzione** e **su un'unita' `subst` verso la radice** (con l'script vecchio la fotografia veniva scritta dentro l'area privata: la giunzione si toglie con `Directory.Delete`, mai con
+  `Remove-Item -Recurse`, che la seguirebbe), uscita su disco locale accettata, il resoconto con le stesse regole. Con lo script di prima 10 prove su 30 sono rosse.
+- **Limite** (L576): un'unita' di rete che e' la share di una cartella dello stesso PC non si distingue da una cartella locale; una vera unita' di rete collegata non si e' potuta provare senza una share (il controllo del tipo
+  dell'unita' e' provato solo dal percorso UNC).
+
+### I3. I dialoghi marcano la vista per l'accessibilita' (`core-designsystem/.../a11y/GalleryDialog.kt`)
+- **Verificato sul codice dell'engine** (che nel worktree c'e', a differenza di quanto diceva la revisione): `FluidGlassModalPortal` "vive dentro la composizione dell'app" (`FluidGlassModal.kt`), quindi i fogli di conferma
+  (`GalleryConfirmSheet`), il menu del Nascondi e il menu dei filtri stanno nella **stessa finestra** gia' marcata dal tema: nessun involucro serve. Le finestre a se' dell'engine, `FluidSheet` (un `ModalBottomSheet`) e
+  `FluidAlert` (un `Dialog`), non si usano in nessun file della galleria.
+- L'unica finestra a se' dell'app era `NasUnfreezeDialog` (un `AlertDialog` di Material 3, con il numero dei file cambiati e il campo in cui si riscrive). `GalleryDialog` e `GalleryAlertDialog` mettono
+  `GalleryAccessibilityDataSensitive()` **dentro** il dialogo (dove `LocalView` e' la vista del dialogo; nell'`AlertDialog` sta nello slot del tasto di conferma, che c'e' sempre e non disegna niente); `NasUnfreezeDialog`
+  usa il secondo, nessuno stile cambia (l'aspetto e' del filone grafico).
+- **Prove.** `GalleryDialogTest` (Robolectric): un `Dialog` semplice sotto il tema che marca **non** e' marcato (il problema c'e' davvero; se un giorno lo fosse, l'involucro non servirebbe piu'); `GalleryDialog` e
+  `GalleryAlertDialog` marcano la vista del dialogo anche con il tema che non marca (la prova non dipende dalla radice), in ogni slot, anche senza titolo e testo; la marcatura sparisce chiudendo il dialogo. `DialogsUseTest`
+  (nello stile di `HeadingsUseTest`): in tutti i moduli di `settings.gradle` (main, debug, release, benchmarkRelease) nessun `Dialog`, `Popup`, `AlertDialog`, `BasicAlertDialog`, menu a discesa, `ModalBottomSheet`,
+  `DatePickerDialog`, `PopupWindow`, `FluidSheet`, `FluidAlert` fuori da `GalleryDialog.kt` (import, nome intero o uso), con le forme vietate e quelle ammesse provate su frasi.
+- **Resta** F185 sul telefono con TalkBack, con un foglio e il dialogo dello scongelamento aperti.
+
+### I4. Un "Nascondi" non aspetta la vista (`feature-integrations`, `:app`)
+- **Il filtro finale decide per ultimo.** La vista della Libreria si aggiorna dopo la calma; un media nascosto un attimo fa e' ancora li'. `DocumentDragPayloads` chiede `HiddenMask` (il catalogo di adesso: anche i gruppi di
+  copie simili e i nascosti arrivati da un altro dispositivo, che la sola revoca per id non avrebbe visto) **due volte**: all'inizio e di nuovo dopo l'ultima attesa (NAS, copie), subito prima di creare gli id (`commit` non
+  sospende piu'). `LibraryMediaDocuments` lo chiede a ogni elenco (un'unica porta, `files`), descrizione e apertura: un media nascosto revoca l'id e toglie le copie senza posizione. Un errore del filtro vale "nascosto".
+- **E la revoca immediata.** `DocumentIdTable.revokeMedia` e `DocumentIssuer.revokeMedia` tolgono gli id (da sfoglio e consegnati) dei media e le loro copie; `IntegrationsGraph.install` li lega a
+  `GalleryGraph.hiddenIdListeners` ("Nascondi" qui). `IntegrationsGraph` passa `gallery.hiddenMask` a `LibraryMediaDocuments` e a `DocumentDragPayloads`.
+- **Il registro.** La riga `drag-out` di `HiddenSurfaces` e' `live = true`: la sonda (`RealDragProbes`) usa `CatalogHiddenMask` sul catalogo del mondo e prova che il trascinamento escluda gli ultimi nascosti con i
+  loro gruppi, e che il provider non descriva un id nato dalla vista che ha ancora l'ultimo nascosto. **La riga e' stata spostata prima di `memories-notify`**: la sonda delle notifiche nasconde nel catalogo di quel mondo la
+  copertina "un attimo fa" (per provare la revoca), e una sonda `live` che gira dopo vede un nascosto in piu' di quelli della descrizione del mondo (la prima corsa lo ha mostrato: un media in piu' non trascinabile in
+  tutti i mondi).
+- **Prove.** `DocumentDragPayloadsTest` (la vista resta vecchia e il catalogo dice nascosto: rifiuto per intero, gruppo intero, nascosto durante la preparazione, id consegnati revocati, errore del filtro = nascosto),
+  `LibraryMediaDocumentsTest` (id consegnato non si apre piu' ne' si descrive, recenti senza gli ultimi nascosti, errore = niente, `revokeMedia` con le copie), `DocumentIdTableTest`, e sul **grafo vero**
+  `FiveBIntegrationTest.unNascondiRevocaSubitoGliIdGiaConsegnati_EIlTrascinamentoLaRifiuta`: due foto solo sul NAS con un id ciascuna, `setHidden` vero, l'id della nascosta non vale piu' (e quello dell'altra si')
+  senza aspettare la vista, il trascinamento vero risponde `HIDDEN`.
+- **Limite** (L576): un descrittore gia' aperto da un'altra app resta suo finche' lo chiude.
+
+### I2. F168 e S11 provano solo la lettura (dichiarata)
+Come ha deciso l'orchestratore: nessuna seconda app di prova. `FieldProbeDragReceiverActivity` ha lo stesso UID dell'app, quindi `CallerGuard` le risponde sempre "sei il nostro processo" e "scrittura negata" e
+"permesso persistente rifiutato" escono uguali comunque vadano i permessi. Scritto in `docs/fase10-progetto.md` (S11 e F168) e in `docs/sicurezza.md` (L575): la prova sul campo dice che l'URI trascinato si legge e che la
+consegna funziona; i permessi sono provati sulla JVM (`DragFlags.isAllowed`, `DragPrepared.Ready`, `MediaDocumentsProviderTest` con un chiamante estraneo) e, con un'app vera, con `adb shell dumpsys activity permissions`.
+
+### FI-1. L'"Indietro" del pannello delle Impostazioni (`SettingsPanes.kt`)
+`paneBack(nav, close)`: dalla prima pagina (`previousBackStackEntry == null`) chiude e non toglie niente; da una seconda toglie e non chiude. `SettingsPaneHost` ha un parametro `pages` (di serie `settingsPages`) per provare il
+pannello con pagine finte (le vere vogliono Hilt). **Onesta': il difetto descritto non si riproduce** con Navigation 2.9: `popBackStack()` sull'unica destinazione risponde falso e non la toglie, quindi la prova nel
+pannello vero (`SettingsPanesTest.indietroNelPannello_...`) passava **anche con il codice di prima**. La correzione e' una difesa; `paneBack_DallaPrimaPaginaChiudeESenzaToglierla_AncheSeLaLibreriaRispondeVero` usa un
+controller che risponderebbe vero e diventa rossa se `paneBack` torna a `if (!popBackStack()) close()`. F165 sul tablet resta.
+
+### AC-1. La chiave di "Riduci trasparenza" e' confermata (`GalleryAccessibility.kt`)
+Solo il commento: la chiave One UI e' `Settings.Global` `accessibility_reduce_transparency` (confermata sull'S25 dalle prove F182-F185, sezione "Fase 10 campo: accessibilita' sull'S25 (02/11)" di questo file), gia' la prima di
+`REDUCE_TRANSPARENCY_KEYS`; le altre tre restano candidate per altri produttori. Nessun cambio al codice. Resta l'interruttore "Superfici piene" della fase grafica (decisione 5 di `funzionale-10.md`).
+
+### Voce nuova 1. Nessuno stack trace nel log della release (C466)
+- **Chi li scriveva.** Non il nostro codice: nessun `printStackTrace()`, `System.err` o `println` nei sorgenti di produzione (controllato su tutti i moduli), e `GalleryLog` in release non ha un sink. Li scrive il sistema: un'eccezione
+  che esce da `MediaDataSource.readAt` (o da un `InputStream` letto da `BitmapFactory`) attraversa il codice nativo, che la descrive (`ExceptionDescribe`, cioe' `printStackTrace()` su `System.err`) prima di ripulirla e di
+  leggere "errore di lettura". **E' una diagnosi dal codice e dal tipo di eccezione (un `IOException` col tetto per file), non riprodotta sul telefono**: e' l'unica strada per cui un'eccezione nostra arriva su `System.err` senza che
+  nessun sorgente nostro lo scriva. `NasMediaBytes.dataSource()` lancia `ReadLimitExceededException` (il tetto di lettura per file, voluto) e `ReadCapReachedException` e `NasIoException`; i loro messaggi sono **fissi** (niente percorsi o nomi: lo
+  dice anche `NasIoException`), ma ogni lancio costava uno stack trace su `System.err`. 833 in 85 minuti.
+- **La correzione.** Chi passa una sorgente al sistema la rende muta: `QuietMediaDataSource` (`core-metadata/.../extract/`, un errore vale `-1`, "fine dei dati", come lo vedeva comunque il sistema) per
+  `MediaMetadataRetriever` (`MediaMetadataVideoProbe`, `MediaMetadataFrameGrabbers` di core-prepare), e `MediaDataSourceInputStream` (il flusso di `BitmapFactory`) cattura da se' gli errori di `readAt` e di `size`. Il
+  **perche'** non si perde: chi rileva guarda `failure`, `capHit` e `limitHit` di `NasMediaBytes`, che si scrivono prima che l'eccezione parta.
+- **Perche' non basta un controllo sui sorgenti.** Il test di architettura vieta i modi di scrivere, ma qui scriveva il sistema: la prova e' la sorgente muta (`QuietMediaDataSourceTest`: una sorgente che lancia vale `-1`, il
+  flusso non lancia mai, il decodificatore vero con una sorgente che lancia da' null senza eccezioni e con una che funziona decodifica; col codice di prima la sorgente lanciava).
+- **Il controllo.** `Phase10LogsArchitectureTest` (core-common): in tutti i sorgenti di produzione (main, debug, release, benchmarkRelease) niente `printStackTrace`, `System.out`, `System.err`, `print`, `println`; l'unica
+  eccezione nominata e' `BuildPlacesDataset` (strumento a riga di comando). Le forme vietate e quelle ammesse sono provate su frasi.
+- **R8.** `app/proguard-rules.pro`: `-assumenosideeffects class java.lang.Throwable { public void printStackTrace(); }` toglie dal bytecode anche le chiamate delle librerie (solo la forma senza argomenti; quelle con un
+  `PrintWriter` servono a chi costruisce un testo). Non c'e' un passo di `check.ps1` che legga il dex per questa riga: la controlla solo la compilazione della release. **Da fare sul telefono**: ripetere la prova di
+  85 minuti e contare le righe `System.err` (devono essere zero).
+
+### Voce nuova 2. WorkManager: "Prerequisite ... doesn't exist; not enqueuing"
+- **Quale catena.** L'unica catena dell'app: `NasWorkScheduling.scanNow` (`app/work/NasWork.kt`): `beginUniqueWork(SCAN_NOW_WORK, KEEP, scan).then(sync).then(personal)` = verifica del NAS, poi sincronizzazione dell'indice,
+  poi dati personali. Tutti gli altri accodamenti sono un solo lavoro per nome (`enqueueUniqueWork`, anche con `APPEND_OR_REPLACE`, che non crea prerequisiti espliciti). `scanNow` lo chiamano l'apertura dell'app,
+  il ritorno in primo piano (se la verifica e' scaduta) e la fine di un'operazione sui file.
+- **Cosa succede.** Con la catena **gia' in coda** (o in corso) `KEEP` non inserisce la verifica nuova ("senza spostare un giro gia' in coda", com'e' voluto); i due lavori che le vanno dietro hanno come prerequisito la
+  verifica nuova, che non esiste, e WorkManager scrive un errore per ognuno e non li accoda: **due righe per ogni chiamata** (14 righe = 7 chiamate in 85 minuti). Nessun lavoro si perde: la catena in coda resta intera
+  con i suoi tre lavori, e non ne nasce una seconda.
+- **Provato** (`LanConstraintsTest.scanNowConLaCatenaGiaInCodaLaLasciaIntera_ELeDueRigheDiWorkManagerSonoQuelle`, WorkManager 2.11.2 con il driver di prova): la prima chiamata accoda tre lavori (uno `ENQUEUED`, due
+  `BLOCKED`) e non scrive niente; la seconda lascia gli **stessi tre id** e scrive **esattamente due righe** `doesn't exist; not enqueuing`; chiusa la catena, una chiamata nuova ne accoda una intera e senza righe. I tre
+  lavori di quella catena rispondono sempre `Result.success()` (gli errori si catturano e si registrano), quindi neanche un fallimento li rompe a meta'.
+- **Nessun difetto, nessuna modifica al codice.** Le righe sono rumore a livello di errore di WorkManager (solo identificatori, niente nomi). Se dessero fastidio basterebbe non chiamare `beginUniqueWork` con la catena in
+  coda (una lettura asincrona dello stato prima), ma non e' nel perimetro e si perderebbe l'atomicita' di `KEEP`.
+
+### Prove viste fallire (mutazioni, 02/11)
+Con le correzioni neutralizzate **tutte insieme** (gli originali copiati in `build/mut-backup`, poi rimessi: l'albero e' tornato identico) e rilanciate le sole classi interessate (`build/g-runB.log`):
+- **FI-1:** `paneBack_DallaPrimaPaginaChiude...` rossa ("expected: 1 but was: 0", con `paneBack` tornato a `if (!popBackStack()) close()`); le altre quattro prove del pannello restano verdi (come detto, la prova nel pannello vero non cambia).
+- **I3:** `GalleryDialogTest` 4 su 5 rosse (il dialogo non e' piu' marcato; resta verde quella del `Dialog` semplice, che documenta il problema) e `DialogsUseTest` 2 su 2 rosse (`NasUnfreezeDialog` tornato al
+  `AlertDialog` di Material 3; l'involucro senza la marcatura).
+- **I4:** `DocumentDragPayloadsTest` 5 rosse, `LibraryMediaDocumentsTest` 4 rosse, `HiddenSurfacesPropertyTest` 3 su 3 rosse (la riga `drag-out`, ora `live`: "mostra N media che non deve mostrare mai") e
+  `FiveBIntegrationTest.unNascondiRevoca...` rossa (tolto il legame in `IntegrationsGraph`: "expected to be false").
+- **C466:** `QuietMediaDataSourceTest` 2 su 4 rosse (`IOException: Troppi byte letti per un solo rilevamento.`); le altre due, una lettura riuscita che passa invariata e il decodificatore vero con `BitmapFactory`, restano verdi:
+  sotto Robolectric `BitmapFactory.decodeStream` non si lamenta di un'eccezione che esce dal flusso (la stampa il codice nativo, che sulla JVM scrive sul flusso C e non su `System.err`), quindi quella e' una prova che
+  non si rompe, non una che morde. `Phase10LogsArchitectureTest.nessunSorgente...` rossa con un `printStackTrace()` messo in un file di core-common.
+- **R6 e I6:** provate nel loro passo: col marcatore di P0 la prova delle chiavi e' rossa (85 file su 112), con lo script di prima 10 prove su 30 della fotografia.
+- **WorkManager:** non e' una correzione ma una prova di cio' che fa `KEEP` (la catena in coda resta intera): passa subito.
+
+
+### Cosa resta per le prove sul campo
+- **F185** (I3): TalkBack vero con un foglio di conferma e il dialogo dello scongelamento aperti.
+- **F168** (I4): trascinare una foto, nasconderla, riprovare subito (la vista e' ancora vecchia): deve rifiutarsi; l'id gia' consegnato non deve piu' aprirsi. I permessi restano alla JVM (I2, L575).
+- **F165** (FI-1) sul tablet: "Indietro" dalla prima pagina e da una seconda del pannello delle Impostazioni.
+- **Stack trace** (C466): la stessa prova di 85 minuti con la release, contando le righe `System.err`: zero.
+- **Fotografia** (I6): la prima fotografia vera dal PC dell'admin, con l'avviso a video e salvata su un disco fisso; cancellata a passo chiuso.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde** ("OK: tutto a posto.", uscita 0, 2/11), lanciato come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `--no-daemon`, cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del
+semaforo (`corr10c`). `assembleDebug`, `assembleRelease`, `galleryTest` e `galleryLint` in 4.908 secondi (i posti erano contesi: la compilazione vera e' molto meno); **19.515 prove in 47 moduli, 0 fallite, 35 saltate per
+assunzione** (P13: 19.488; le nuove sono 27); i passi nuovi, il 3b (5.129 file letti, una sola chiave di prova, sotto `src/test`) e la sua prova con le chiavi vere (112 file), verdi; tutti i passi della release verdi (recinzioni
+accese nel bytecode, Glance e KT, resti di debug, permessi); solo `-Bench` saltato. Nessun `hs_err_pid*.log`, nessuna prova rilanciata. Le corse intermedie (compilazioni, prove mirate, le mutazioni) sono in `build/g-*.log`,
+fuori dal repository. Cartelle e file di lavoro (script, mutazioni, log) sotto `build\`.
+
+### Commit (branch `fase10/corr-c`)
+`8574761c` e `6858f6d6` (R6), `c58e9330` (I6), `4a6fd3c0` (I3), `b8fed057` (I4), `a5d8e85e` (FI-1), `813c7958` (AC-1), `686d0e30` (stack trace), `30fc0f8a` (WorkManager) e quello di questa sezione (documenti).

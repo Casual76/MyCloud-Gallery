@@ -70,6 +70,10 @@ import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutOverlay
 import dev.pampa.mycloudgallery.feature.viewer.gesture.onTouchDown
 import dev.pampa.mycloudgallery.feature.viewer.gesture.touchMovement
 import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerLongPress
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragPointer
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragSubject
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDragSource
+import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextController
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextOverlay
 import dev.pampa.mycloudgallery.feature.viewer.video.ViewerPlayback
@@ -136,6 +140,8 @@ internal fun ViewerPage(
   onPlayMotion: (() -> Unit)? = null,
   liveText: LiveTextController? = null,
   cutout: CutoutController? = null,
+  /** Fase 10 (P6, D20): la foto si puo' trascinare verso un'altra app. Falso dai Nascosti (`ViewerRequest.secure`, E-T18) e di serie. */
+  dragEnabled: Boolean = false,
 ) {
   val id = spec.id
   val image = state.images[id] ?: PageImage()
@@ -285,7 +291,17 @@ internal fun ViewerPage(
             liveText.onLongPress(id, drawAspect, mapping.screenToImage(position), mapping.pxToImageHeights(TEXT_TOUCH_DP * density))
           }
         },
-      ),
+      )
+      // Fase 10 (P6, D20): la foto del viewer verso un'altra app. Il mouse la porta via trascinando (da ferma: con lo zoom il trascinamento e' la panoramica); col tocco e la penna
+      // serve la pressione lunga, che e' dell'arbitro (testo letto, ritaglio) quando sa cosa farne: li' non si trascina.
+      .mediaDragSource(enabled = dragEnabled && isCurrent, origin = DragOrigin.VIEWER.code) { touch ->
+        val arbiterOwnsLongPress = liveText != null && liveText.wantsLongPress(id) && cutout?.active != true
+        when {
+          touch.pointer == DragPointer.MOUSE -> if (zoom.isZoomed) null else DragSubject(listOf(id.value), best)
+          arbiterOwnsLongPress -> null
+          else -> DragSubject(listOf(id.value), best)
+        }
+      },
   ) {
     if (motionActive && motionPlayer != null) {
       VideoSurface(player = motionPlayer, aspect = motionUi.aspect ?: drawAspect)

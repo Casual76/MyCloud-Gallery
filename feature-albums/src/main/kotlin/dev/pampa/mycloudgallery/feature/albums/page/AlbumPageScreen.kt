@@ -34,6 +34,9 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridInteractionState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
 import dev.pampa.mycloudgallery.core.designsystem.grid.rememberGalleryGridCellStyle
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DropTarget
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDropTarget
+import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -203,7 +206,9 @@ private fun ReadyPage(
   FluidScreen(
     title = album.title,
     subtitle = facts(album, content, page, ui.creatorName),
-    modifier = modifier,
+    // Fase 10 (P6, D21, E-T16): una foto trascinata da un'altra app su questa pagina apre il foglio della ricezione con "Aggiungi ad album"; solo dove l'utente puo' aggiungere (un album
+    // condiviso dove "guardano" soltanto non e' una destinazione).
+    modifier = modifier.mediaDropTarget(DropTarget.Album(album.id.value), enabled = AlbumAction.ADD_MEDIA in ui.actions),
     onBack = handlers::onBack,
     listState = listState,
     metrics = metrics,
@@ -223,6 +228,7 @@ private fun ReadyPage(
         keyPrefix = "items", view = content.items, columns = columns, thumbnails = thumbnails, style = style, interaction = interaction, actions = actions,
         onTap = { media -> if (ui.pickingCover) handlers.onPickCover(media) else handlers.onOpenItem(media) },
         onLong = if (ui.pickingCover) null else handlers::onItemMenu,
+        dragOrigin = DragOrigin.ALBUM,
       )
     }
   }

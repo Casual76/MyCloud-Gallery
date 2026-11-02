@@ -853,7 +853,10 @@ $debugRemnants = @(
   # Fase 10 (P10; docs/fase10-progetto.md par. 2.10): la "Simulazione del passo" (sola lettura, solo build debug dell'admin, Impostazioni -> Sviluppo): il giro
   # e la schermata in feature-diagnostics (`diagnostics/release/Step*`), le fonti e il montaggio in `:app/.../release/` (`LiveStepSources`, `StepForecasts`,
   # `StepNasSpace`), l'ingresso in app/src/debug. Nella release non deve esistere niente di tutto questo (la raggiunge solo `DeveloperTools` di debug).
-  "StepSimulation", "LiveStepSources", "StepForecasts", "StepNasSpace", "diagnostics/release/Step", "mycloudgallery/release/Step"
+  "StepSimulation", "LiveStepSources", "StepForecasts", "StepNasSpace", "diagnostics/release/Step", "mycloudgallery/release/Step",
+  # Fase 10 (P6, F168 e F169): l'app di prova del trascinamento fra app, "MCG prova (riceve)" (app/src/debug/.../probes): l'activity e il suo attributo di task nel manifest di debug.
+  # Gia' coperta dal prefisso `FieldProbe`, ma nominata: in release non deve esistere niente di tutto questo ("l'app di prova e' assente dal dex di release").
+  "FieldProbeDragReceiver", "debug.dragprobe"
 )
 Step "nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11, valutazione dei ricordi F9-P11, chiave di prova del manifest e ManifestTool F10, simulazione del passo P10)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
   $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |

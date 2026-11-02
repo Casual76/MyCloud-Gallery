@@ -21,6 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragSubject
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDragSource
+import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCell
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellActions
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellBadges
@@ -172,7 +175,10 @@ private fun ZoneCell(
     style = style,
     interaction = interaction,
     actions = actions,
-    modifier = modifier.pointerInput(media) { detectTapGestures(onTap = { onTap(media) }) },
+    modifier = modifier
+      .pointerInput(media) { detectTapGestures(onTap = { onTap(media) }) }
+      // Fase 10 (P6, D20): la foto della zona verso un'altra app (pressione lunga col tocco, trascinamento col mouse).
+      .mediaDragSource(enabled = true, origin = DragOrigin.MAP_ZONE.code) { DragSubject(listOf(media.value), request?.let { thumbnails.loader.peek(it.key) }) },
     placeholder = placeholder,
   )
 }

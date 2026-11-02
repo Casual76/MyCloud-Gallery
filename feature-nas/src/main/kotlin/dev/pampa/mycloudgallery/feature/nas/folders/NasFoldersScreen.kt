@@ -4,6 +4,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DropTarget
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDropTarget
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import androidx.compose.foundation.layout.PaddingValues
@@ -367,7 +369,10 @@ private fun selectionActions(state: FoldersUiState, actions: FoldersActions): Li
 @Composable
 private fun FolderPane(state: FoldersUiState, actions: FoldersActions, insets: NasInsets, modifier: Modifier) {
   val where = state.where
-  Box(modifier = modifier, contentAlignment = Alignment.TopCenter) {
+  // Fase 10 (P6, D21): una foto trascinata da un'altra app su una cartella apre il foglio della ricezione ("Salva sul NAS") cominciando da questa cartella; non dall'elenco delle aree
+  // e non mentre si sceglie dove spostare dei file. Niente parte da solo: dove si puo' scrivere e quando si salva lo decide il foglio, con il suo tocco.
+  val dropTarget = where?.dir?.let { DropTarget.NasFolder(where.share, it.value) }
+  Box(modifier = modifier.mediaDropTarget(dropTarget ?: DropTarget.Library, enabled = dropTarget != null && !state.picking), contentAlignment = Alignment.TopCenter) {
     when {
       where == null -> AreaList(state, actions, insets)
       else -> when (val listing = state.listing) {

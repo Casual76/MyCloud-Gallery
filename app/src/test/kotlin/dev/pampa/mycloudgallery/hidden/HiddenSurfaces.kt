@@ -407,7 +407,11 @@ internal object HiddenSurfaces {
     // WIDGET e' passata da "di prova" a produzione con P3; la riga PANES (pannelli e seconda finestra) la aggiunge P5 con la sua superficie; DESCRIPTIONS e' passata a produzione con P7.
     SurfaceEntry(
       id = "drag-out", title = "Trascinamento verso un'altra app: mai un nascosto, mai dai Nascosti (D20, E-H11)", row = SpecRow.DRAG, owner = "P6",
-      backing = Backing.PENDING, landedWhen = listOf("$INTEGRATIONS/drag"),
+      backing = Backing.PRODUCTION,
+      // Il gestore del trascinamento sul provider dei documenti: la vista di adesso e' l'unico elenco (non nomina `VisibleMedia` ne' `HiddenMask`: usa la vista della Libreria che gli da' `:app`).
+      sources = listOf("$INTEGRATIONS/drag/DocumentDragPayloads.kt"),
+      probe = RealDragProbes.drag,
+      alsoProvedBy = listOf("DocumentDragPayloadsTest", "DragLocationFreeTest", "DragSourcesScopeTest"),
     ),
     SurfaceEntry(
       id = "descriptions", title = "Descrizioni per superficie: mai una persona nascosta, mai un nascosto fuori dai Nascosti (D22)", row = SpecRow.DESCRIPTIONS,

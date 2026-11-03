@@ -328,7 +328,7 @@ class NasFacesPublisher(
 
   /**
    * La ripresa dopo la perdita dello stato locale (o al primo uso): la mia testa piu' recente sul NAS dice il numero, l'ora, le chiavi dei
-   * corpi gia' pubblicati e l'istantanea, cosi' la testa nuova li ripubblica invece di farli sparire per tutti. Null = il NAS non risponde
+   * corpi gia' pubblicati e l'istantanea, e le mie voci `people` tornano nell'archivio, cosi' la testa nuova li ripubblica invece di farli sparire per tutti. Null = il NAS non risponde
    * adesso (si riprova). Senza una mia testa valida si parte da zero.
    */
   private suspend fun adoptOwnHead(open: FacesGate.Open, archive: FacesArchive, state: FacesPublishState, nasNow: Long): FacesPublishState? {
@@ -360,6 +360,14 @@ class NasFacesPublisher(
           for (entry in content.entries) {
             if (entry.contentKey !in present) archive.saveBody(FacesWire.body(entry.contentKey, identity.deviceId, entry.body, entry.digest))
           }
+        }
+        content is FacesSegmentContent.People -> {
+          // Le voci `people` della mia testa tornano nell'archivio prima della prossima testa, come i corpi: la testa nuova sostituisce la vecchia e gli altri
+          // non ripubblicano le voci portate da un altro (R3), quindi una mia voce rimasta solo nella testa vecchia (la ripresa pubblica prima che un giro
+          // l'abbia riletta) sparirebbe per tutti. Come nel giro (`NasFacesSync`): solo le voci valide, e per ogni chiave vince l'ultima scrittura di sempre.
+          val rules = PeopleRules(open.registry, open.account, nasNow)
+          val valid = content.entries.filter { rules.verdict(it.author, it.at) == PeopleVerdict.VALID }.map { FacesWire.record(it) }
+          if (valid.isNotEmpty()) archive.addPeopleFrom(identity.deviceId, valid, own = identity.deviceId)
         }
         content is FacesSegmentContent.Cluster -> cluster += content.entries
         content == null && segment.cls == SegmentClass.CLUSTER -> clusterComplete = false

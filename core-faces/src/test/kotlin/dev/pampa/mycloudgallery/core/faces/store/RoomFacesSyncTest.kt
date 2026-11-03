@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.faces.store
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import dev.pampa.mycloudgallery.core.faces.sync.FacesIsolationTest
+import dev.pampa.mycloudgallery.core.faces.sync.FacesLostStateTest
 import dev.pampa.mycloudgallery.core.faces.sync.FacesPublishStore
 import dev.pampa.mycloudgallery.core.faces.sync.FacesPublishStoreContract
 import dev.pampa.mycloudgallery.core.faces.sync.FacesPublisherTest
@@ -94,6 +95,18 @@ class RoomFacesPublisherTest : FacesPublisherTest() {
 
 @RunWith(AndroidJUnit4::class)
 class RoomFacesIsolationTest : FacesIsolationTest() {
+  @get:Rule
+  val folder = TemporaryFolder()
+  private val storages = mutableListOf<RoomSyncStorage>()
+
+  override fun newWorld(): FacesSyncWorld = FacesSyncWorld(storage = RoomSyncStorage(File(folder.root, "w${storages.size}")).also { storages += it })
+
+  @After
+  fun chiude() = storages.forEach { it.closeAll() }
+}
+
+@RunWith(AndroidJUnit4::class)
+class RoomFacesLostStateTest : FacesLostStateTest() {
   @get:Rule
   val folder = TemporaryFolder()
   private val storages = mutableListOf<RoomSyncStorage>()

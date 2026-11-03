@@ -82,7 +82,6 @@ class BenchReadiness(
 object BenchSession {
 
   private const val TAG = "MCG-Bench"
-  private const val DATASET_TIMEOUT_MS = 240_000L
   private const val LIBRARY_TIMEOUT_MS = 25_000L
   private const val NO_STATUS_TIMEOUT_MS = 20_000L
 
@@ -206,7 +205,7 @@ object BenchSession {
   private fun awaitDataset(profile: BenchLibraryProfile): BenchDatasetStatus? {
     val start = System.currentTimeMillis()
     var last: BenchDatasetStatus? = null
-    while (System.currentTimeMillis() - start < DATASET_TIMEOUT_MS) {
+    while (System.currentTimeMillis() - start < BenchConfig.datasetTimeoutMs) {
       last = datasetStatus(profile)
       if (last != null && (last.state == "pronto" || last.state == "errore")) return last
       // L'inizializzatore scrive `in_corso` subito: se dopo qualche secondo non c'e' niente, la variante non ce l'ha.

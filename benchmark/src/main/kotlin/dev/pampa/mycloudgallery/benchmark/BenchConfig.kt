@@ -13,6 +13,7 @@ import androidx.test.platform.app.InstrumentationRegistry
  * |---|---|---|
  * | `benchSmoke` | `true` | Poche iterazioni e un solo ciclo: serve a vedere che gli scenari girano, i numeri non valgono. Lo imposta `check.ps1 -Bench` sugli emulatori |
  * | `benchCompilation` | `require` (default), `useIfAvailable`, `full`, `none` | `CompilationMode` degli scenari: `Partial(BaselineProfileMode.Require)` e' quello del §2.6 |
+ * | `benchDatasetTimeoutS` | secondi (default 240) | Quanto aspettare che il dataset sintetico sia pronto: il Tab S9 ci mette piu' dei 4 minuti dell'S25 (03/11) |
  */
 object BenchConfig {
 
@@ -23,6 +24,9 @@ object BenchConfig {
 
   /** Le iterazioni di uno scenario: quelle del §2.6, ridotte a 2 nello smoke. */
   fun iterations(normal: Int): Int = if (smoke) minOf(normal, SMOKE_ITERATIONS) else normal
+
+  /** L'attesa del dataset sintetico in millisecondi: 240 s di serie (l'S25), di piu' sui dispositivi lenti (`benchDatasetTimeoutS`). */
+  val datasetTimeoutMs: Long get() = (args.getString("benchDatasetTimeoutS")?.toLongOrNull()?.coerceAtLeast(1L) ?: 240L) * 1_000L
 
   /** Quante volte ripetere il gesto dentro una iterazione (cicli di zoom, coppie di pinch): 1 nello smoke. */
   fun repeats(normal: Int): Int = if (smoke) 1 else normal

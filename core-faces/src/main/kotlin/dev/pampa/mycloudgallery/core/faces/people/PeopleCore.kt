@@ -43,27 +43,53 @@ internal class PeopleCore(
   private val epoch = AtomicLong(0)
 
   /**
-   * R11 (correzioni A): butta cio' che si e' letto (voci `people` con i nomi, raggruppamento). Non prende nessun lucchetto (la cancellazione locale lo chiama
+   * Sale a ogni [replace] (un'azione ha scritto le sue voci): una lettura iniziata prima ha le voci di prima, e non deve rimpiazzare quelle appena scritte
+   * (un "No" a una proposta, un nome, "Nascondi" varrebbero ancora **subito**, ma la lettura dopo li vedrebbe spariti fino alla prossima [reload]).
+   */
+  private val writes = AtomicLong(0)
+
+  /** Tiene insieme "controllo e metto" di [reload] con [release] e [replace]: fra il controllo e il `set` non puo' passare un'azione o una cancellazione. */
+  private val swap = Any()
+
+  /**
+   * R11 (correzioni A): butta cio' che si e' letto (voci `people` con i nomi, raggruppamento). Non prende nessun lucchetto di coroutine (la cancellazione locale lo chiama
    * mentre tiene il recinto, e una lettura che aspetta il recinto tiene il suo): la lettura dopo, se c'e' ancora un archivio, rilegge da capo.
    */
-  fun release() {
+  fun release() = synchronized(swap) {
     epoch.incrementAndGet()
     loaded.set(null)
   }
 
-  /** Rilegge l'archivio. Null se non c'e' un archivio della generazione corrente o si e' chiuso mentre lo leggevamo. */
+  /**
+   * Rilegge l'archivio. Null se non c'e' un archivio della generazione corrente o si e' chiuso mentre lo leggevamo. Se mentre leggeva un'azione ha scritto le sue
+   * voci ([replace]), la lettura ha le voci di prima: non si mette in memoria e si rilegge (l'archivio ha gia' le voci nuove), senza perdere un'istantanea
+   * arrivata nel frattempo. Dopo [MAX_READS] letture sempre superate da un'azione resta in memoria quello che l'azione ha messo.
+   */
   suspend fun reload(): Loaded? {
-    val start = epoch.get()
-    val archive = archives.current()
-    if (archive == null) {
-      loaded.set(null)
-      return null
-    }
-    return try {
-      Loaded(archive, archive.grouping(), archive.people()).also { if (epoch.get() == start) loaded.set(it) }
-    } catch (_: IllegalStateException) {
-      loaded.set(null)
-      null
+    var reads = 0
+    while (true) {
+      val start = epoch.get()
+      val before = writes.get()
+      val archive = archives.current()
+      if (archive == null) {
+        loaded.set(null)
+        return null
+      }
+      val read = try {
+        Loaded(archive, archive.grouping(), archive.people())
+      } catch (_: IllegalStateException) {
+        loaded.set(null)
+        return null
+      }
+      val outcome = synchronized(swap) {
+        when {
+          epoch.get() != start -> read
+          writes.get() == before -> read.also { loaded.set(it) }
+          ++reads >= MAX_READS -> loaded.get() ?: read
+          else -> null
+        }
+      }
+      if (outcome != null) return outcome
     }
   }
 
@@ -77,7 +103,10 @@ internal class PeopleCore(
     return if (have != null && have.archive === now) have else reload()
   }
 
-  fun replace(old: Loaded, records: Map<PeopleKey, PeopleRecord>): Loaded = old.withRecords(records).also { loaded.set(it) }
+  fun replace(old: Loaded, records: Map<PeopleKey, PeopleRecord>): Loaded = synchronized(swap) {
+    writes.incrementAndGet()
+    old.withRecords(records).also { loaded.set(it) }
+  }
 
   /** Una persona come si mostra: le sue celle mostrabili, la copertina, e per ogni volto la prima cella che lo mostra. */
   class Shown(
@@ -136,4 +165,9 @@ internal class PeopleCore(
   }
 
   private fun area(face: FaceLocator): Long = (face.box.x1 - face.box.x0).toLong() * (face.box.y1 - face.box.y0).toLong()
+
+  private companion object {
+    /** Quante volte [reload] rilegge se un'azione scrive mentre legge (le azioni sono una per volta: la seconda lettura e' quasi sempre quella buona). */
+    const val MAX_READS = 3
+  }
 }

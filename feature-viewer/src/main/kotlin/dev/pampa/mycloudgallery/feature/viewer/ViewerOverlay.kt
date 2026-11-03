@@ -39,6 +39,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -205,6 +206,11 @@ fun ViewerOverlay(
 
 private const val FullyOpen = 0.999f
 
+/** Fotogrammi fra il riposo e il fondale di vetro, fra il fondale e la barra in alto, fra questa e quella in basso (l'arrivo a riposo a passi). */
+private const val BackdropDelayFrames = 1
+private const val ChromeDelayFrames = 1
+private const val BottomBarDelayFrames = 3
+
 @Composable
 private fun ViewerHost(
   request: ViewerRequest,
@@ -352,12 +358,21 @@ private fun ViewerHost(
   val currentKind = controller.kindOf(currentId)
   val atRest by remember { derivedStateOf { transition.progress.value >= FullyOpen && !transition.dragging && !transition.progress.isRunning } }
   var resumeAfterRest by remember { mutableStateOf(false) }
-  // Il fondale di vetro delle barre: dal primo riposo in poi (vedi il disegno qui sotto).
+  // Il fondale di vetro delle barre: dal primo riposo in poi (vedi il disegno qui sotto). **A passi**, non tutto nel fotogramma del riposo: il fondale (un layer a schermo
+  // intero), la barra in alto e quella in basso compaiono a un fotogramma di distanza l'uno dall'altro (la barra in basso a tre). Sul Tab S9 (03/11) l'arrivo a riposo
+  // era il fotogramma piu' lungo dell'apertura, 34 ms con le sue 47 passate di vetro in piu': a passi, 28 ms (il vetro delle barre cambia di un fotogramma, non d'aspetto).
   var chromeBackdrop by remember { mutableStateOf(state.restored) }
+  var chromeAllowed by remember { mutableStateOf(state.restored) }
+  var bottomAllowed by remember { mutableStateOf(state.restored) }
   LaunchedEffect(Unit) {
     if (!chromeBackdrop) {
       snapshotFlow { atRest }.first { it }
+      repeat(BackdropDelayFrames) { withFrameNanos { } }
       chromeBackdrop = true
+      repeat(ChromeDelayFrames) { withFrameNanos { } }
+      chromeAllowed = true
+      repeat(BottomBarDelayFrames) { withFrameNanos { } }
+      bottomAllowed = true
     }
   }
   LaunchedEffect(currentId) {
@@ -525,6 +540,8 @@ private fun ViewerHost(
         format = format,
         backdrop = backdrop,
         atRest = atRest,
+        chromeBackdropReady = chromeAllowed,
+        bottomReady = bottomAllowed,
         touchExploration = touchExploration,
         sidePanel = sidePanel,
         sheetHeight = sheetHeightDp,
@@ -730,6 +747,8 @@ private fun ViewerOverlays(
   format: ViewerFormat,
   backdrop: dev.antigravity.fluidengine.ui.fluid.GlassBackdropState,
   atRest: Boolean,
+  chromeBackdropReady: Boolean,
+  bottomReady: Boolean,
   touchExploration: Boolean,
   sidePanel: Boolean,
   sheetHeight: Dp,
@@ -932,7 +951,7 @@ private fun ViewerOverlays(
   }
 
   // Con il soggetto staccato i controlli sono i suoi (la barra del ritaglio): niente chrome sotto, niente controlli uno sopra l'altro.
-  val chromeShown = atRest && !controller.closing && !controller.cutout.active && (state.chromeVisible || touchExploration)
+  val chromeShown = atRest && chromeBackdropReady && !controller.closing && !controller.cutout.active && (state.chromeVisible || touchExploration)
   val infoClosed by remember { derivedStateOf { info.progress.value < INFO_CLOSED } }
   val chromeModifier = if (sidePanel) Modifier.shrinkEnd { (panelPx * info.progress.value).roundToInt() } else Modifier
 
@@ -942,7 +961,7 @@ private fun ViewerOverlays(
     subtitle = subtitle,
     backdrop = backdrop,
     onClose = controller::close,
-    bottomVisible = chromeShown && (sidePanel || infoClosed),
+    bottomVisible = chromeShown && bottomReady && (sidePanel || infoClosed),
     topActions = {
       // Il badge "Movimento" (D51): visibile con le barre, accanto al menu ⋮. Funziona sempre, anche con l'interruttore spento.
       if (controller.motionAvailable(currentId)) {

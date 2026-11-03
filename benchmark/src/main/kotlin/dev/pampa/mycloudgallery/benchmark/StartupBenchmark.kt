@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.benchmark
 
+import androidx.benchmark.macro.Metric
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.StartupTimingMetric
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
@@ -46,7 +47,8 @@ class StartupBenchmark {
   fun coldStart() {
     rule.measureRepeated(
       packageName = BenchSession.targetPackage,
-      metrics = listOf(StartupTimingMetric(), LibraryUsefulMetric(), LibraryShownMetric(), LibraryMixMetric()),
+      // Non `StartupTimingMetric`: nell'avvio COLD sul Tab S9 non trovava il fotogramma dopo reportFullyDrawn (vedi [StartupDisplayMetric]).
+      metrics = listOf<Metric>(StartupDisplayMetric(), LibraryUsefulMetric(), LibraryShownMetric(), LibraryMixMetric()),
       compilationMode = BenchConfig.compilationMode,
       startupMode = StartupMode.COLD,
       iterations = BenchConfig.iterations(ITERATIONS),

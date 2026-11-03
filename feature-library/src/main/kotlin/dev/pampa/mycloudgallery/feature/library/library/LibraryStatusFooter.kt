@@ -121,7 +121,11 @@ internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? =
     total = status.total,
     etaMillis = status.etaMillis,
   )
-  is LibraryBackupStatus.Problem -> footerNote(BackupFooterProblems.of(status.code), status.count)
+  // CA-1 (Fase 10): le scritture ferme dal manifest firmato dicono la loro causa.
+  is LibraryBackupStatus.Problem -> footerNote(
+    BackupFooterProblems.of(status.code, dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease.current),
+    status.count,
+  )
 }
 
 /** Un lavoro del backup in corso: l'anello nella capsula e la barra sotto se il totale e' noto, il tempo che manca se si sa stimare. */

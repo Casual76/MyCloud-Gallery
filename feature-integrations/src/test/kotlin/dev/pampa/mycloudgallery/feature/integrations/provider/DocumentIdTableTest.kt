@@ -261,6 +261,28 @@ class DocumentIdTableTest {
   }
 
   @Test
+  fun revokeMedia_togliGliIdDaSfoglioEConsegnatiDiQuei_MediaELasciaGliAltri() {
+    val table = table()
+    val a = media()
+    val b = media()
+    val c = media()
+    val browseA = table.idFor(a)
+    val deliveredB = table.idFor(b, delivered = true)
+    val keptC = table.idFor(c, delivered = true)
+    val root = table.idFor(DocumentTarget.Root)
+    table.revokeMedia(listOf((a as DocumentTarget.Media).id, (b as DocumentTarget.Media).id, MediaId.random()))
+    assertThat(table.resolve(browseA)).isEqualTo(DocumentResolution.Unknown)
+    assertThat(table.resolve(deliveredB)).isEqualTo(DocumentResolution.Unknown)
+    assertThat(table.isDelivered(deliveredB)).isFalse()
+    assertThat(table.resolve(keptC)).isInstanceOf(DocumentResolution.Found::class.java)
+    assertThat(table.resolve(root)).isInstanceOf(DocumentResolution.Found::class.java)
+    // Dopo la revoca lo stesso media riceve un id nuovo, diverso: il vecchio non torna a valere.
+    val again = table.idFor(a)
+    assertThat(again).isNotEqualTo(browseA)
+    assertThat(table.resolve(browseA)).isEqualTo(DocumentResolution.Unknown)
+  }
+
+  @Test
   fun leEtichetteDelleCartelleNonEntranoNellId() {
     val table = table()
     val id = table.idFor(DocumentTarget.Folder(NasFolderKey("tmp/privato/alessio")), label = "Vacanze 2025")

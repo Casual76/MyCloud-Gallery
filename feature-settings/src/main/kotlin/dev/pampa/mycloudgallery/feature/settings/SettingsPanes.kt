@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavController
+import androidx.navigation.NavGraphBuilder
 import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
 import dev.antigravity.fluidengine.ui.navigation.composable
 import androidx.navigation.compose.rememberNavController
@@ -79,6 +80,15 @@ internal fun SettingsPanes(
 }
 
 /**
+ * L'"Indietro" di una pagina nel pannello (FI-1 della verifica funzionale della Fase 10): dalla **prima** pagina (l'unica con cui il pannello nasce) non si toglie mai niente, si chiude il
+ * pannello ([close]: chi sceglie torna a "Scegli una voce" e la stessa voce si puo' riscegliere); da una seconda si torna alla prima. Prima contava sul fatto che `popBackStack()` rispondesse
+ * falso quando non c'e' altro, e sul resto lasciava alla libreria la scelta di togliere o no l'ultima destinazione.
+ */
+internal fun paneBack(nav: NavController, close: () -> Unit) {
+  if (nav.previousBackStackEntry == null) close() else nav.popBackStack()
+}
+
+/**
  * La pagina scelta nel pannello di destra: una navigazione propria che parte dalla rotta della pagina (le pagine delle Impostazioni vivono tutte in [settingsPages]); [resumeStep] riapre un passo
  * dell'onboarding (e' una pagina a finestra intera, come la Diagnostica). Cambiare pagina ricomincia da capo: un `NavHost` per pagina scelta.
  */
@@ -88,6 +98,7 @@ internal fun SettingsPaneHost(
   close: () -> Unit,
   resumeStep: (OnboardingStep) -> Unit,
   modifier: Modifier = Modifier,
+  pages: NavGraphBuilder.(nav: NavController, back: () -> Unit) -> Unit = { nav, back -> settingsPages(nav = nav, back = back, resumeStep = resumeStep, backSwipe = FluidBackSwipe.EdgeOnly) },
 ) {
   key(page) {
     val paneNav = rememberNavController()
@@ -109,7 +120,7 @@ internal fun SettingsPaneHost(
           icon = Icons.Rounded.Settings,
         )
       }
-      settingsPages(nav = paneNav, back = { if (!paneNav.popBackStack()) close() }, resumeStep = resumeStep, backSwipe = FluidBackSwipe.EdgeOnly)
+      pages(paneNav) { paneBack(paneNav, close) }
     }
   }
 }

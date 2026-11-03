@@ -215,7 +215,7 @@ object AiWiring {
       root = File(noBackup, AiGraph.MODELS_DIR),
       fetcher = ModelFetcher { spec, source, partial, budget -> realFetcher.fetch(spec, source, partial, budget) },
       // Fase 10 (P13, E-REL6): con la versione fermata dal manifest nessuno scaricamento (nessun traffico).
-      networkGate = ReleaseModelNetworkGate(AppModelNetworkGate { graph.environment.snapshot.value }) { graph.release?.stopped == true },
+      networkGate = ReleaseModelNetworkGate(AppModelNetworkGate { graph.environment.snapshot.value }) { graph.release },
       extraSources = extra,
       shelfFor = { files ->
         AppModelShelf(

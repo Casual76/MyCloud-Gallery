@@ -251,8 +251,13 @@ class Phase10ArchitectureTest {
   @Test
   fun iPassiDellaFase10NelCheck() {
     val check = File(root, "tools/check.ps1").readText().lineSequence().joinToString("\n") { it.substringBefore('#') }
-    for (marker in listOf("\"Landroidx/glance/\"", "\"Ldev/pampa/mycloudgallery/feature/widget/\"", "\"ReleaseTestKeys\"", "\"ManifestTool\"", "\"PRIVATE KEY\"")) {
+    for (marker in listOf("\"Landroidx/glance/\"", "\"Ldev/pampa/mycloudgallery/feature/widget/\"", "\"ReleaseTestKeys\"", "\"ManifestTool\"", "Find-PrivateKeyFiles", "chiavi-prove.ps1")) {
       assertWithMessage("tools/check.ps1 senza $marker").that(check).contains(marker)
+    }
+    // R6 della revisione di sicurezza: il riconoscimento delle chiavi private sta in un file a parte, che il passo carica e prova con chiavi vere di Java.
+    val keys = File(root, "tools/release/chiavi-private.ps1").readText().lineSequence().joinToString("\n") { it.substringBefore('#') }
+    for (marker in listOf("\"PRIVATE KEY\"", "Get-Base64Markers", "function Find-PrivateKeyFiles", "src/(test|testDebug)/")) {
+      assertWithMessage("tools/release/chiavi-private.ps1 senza $marker").that(keys).contains(marker)
     }
   }
 

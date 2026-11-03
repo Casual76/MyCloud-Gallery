@@ -101,8 +101,22 @@ internal object BackupFooterProblems {
     detail = R.string.backup_footer_problem_generic_detail,
   )
 
-  /** Il testo per [code]; un codice sconosciuto non lascia il piede muto: [generic]. */
-  fun of(code: String): FooterProblem = byCode[code] ?: generic
+  /**
+   * Il testo per [code]; un codice sconosciuto non lascia il piede muto: [generic]. CA-1 (revisione funzionale della Fase 10): con [heldByRelease] (le scritture le ferma il
+   * manifest firmato) "scritture ferme" dice la causa, "versione da aggiornare", invece di mandare a cercare un interruttore in Diagnostica.
+   */
+  fun of(code: String, heldByRelease: Boolean = false): FooterProblem = if (heldByRelease && code == WRITES_STOPPED) releaseReadOnly else byCode[code] ?: generic
+
+  /** CA-1: il piede con la versione in sola lettura per il manifest firmato. */
+  val releaseReadOnly: FooterProblem = FooterProblem(
+    code = WRITES_STOPPED,
+    tone = GalleryFooterTone.Attention,
+    glyph = Icons.Rounded.Warning,
+    label = R.string.backup_footer_release_read_only,
+    detail = R.string.backup_footer_release_read_only_hint,
+  )
+
+  private const val WRITES_STOPPED = "writes_stopped"
 
   private fun problem(
     code: String,

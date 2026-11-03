@@ -56,7 +56,7 @@
 
   <!-- Dopo la conferma -->
   <string name="viewer_nas_done_started">Operazione avviata. La trovi in Operazioni in corso.</string>
-  <string name="viewer_nas_done_blocked">Le scritture sul NAS sono ferme adesso. Riprova più tardi.</string>
+  <string name="viewer_nas_done_blocked">Le scritture sul NAS sono ferme adesso (interruttore di emergenza o una versione dell’app da aggiornare): la Diagnostica dice perché.</string>
   <string name="viewer_nas_done_expired">La conferma è scaduta: ricomincia.</string>
   <string name="viewer_nas_done_refused">Questa operazione non si può fare adesso.</string>
   <string name="viewer_nas_reject_read_only">Quest\'area è in sola lettura per te.</string>

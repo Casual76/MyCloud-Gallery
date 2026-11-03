@@ -33,6 +33,21 @@ class BackupFooterProblemsTest {
     assertThat(BackupFooterProblems.all.map { it.code }).containsNoDuplicates()
   }
 
+  /**
+   * CA-1 della revisione funzionale della Fase 10: con le scritture ferme dal manifest firmato il piede dice la causa ("versione da aggiornare") invece di mandare a
+   * cercare in Diagnostica un interruttore che l'utente non ha toccato. Gli altri problemi non cambiano.
+   */
+  @Test
+  fun ca1_conIlManifestLeScrittureFermeDiconoLaCausa() {
+    assertThat(BackupFooterProblems.of("writes_stopped", heldByRelease = true)).isSameInstanceAs(BackupFooterProblems.releaseReadOnly)
+    assertThat(BackupFooterProblems.of("writes_stopped")).isNotSameInstanceAs(BackupFooterProblems.releaseReadOnly)
+    assertThat(BackupFooterProblems.of("nas_full", heldByRelease = true).code).isEqualTo("nas_full")
+    val label = Regex("""<string name="backup_footer_release_read_only">([^<]*)<""").find(xml)?.groupValues?.get(1).orEmpty()
+    val hint = Regex("""<string name="backup_footer_release_read_only_hint">([^<]*)<""").find(xml)?.groupValues?.get(1).orEmpty()
+    assertThat(label.lowercase()).contains("aggiornare")
+    assertThat(hint).contains("Pampa Store")
+  }
+
   @Test
   fun unCodiceNuovoNonLasciaIlPiedeMuto() {
     assertThat(BackupFooterProblems.of("un_codice_che_non_esiste")).isSameInstanceAs(BackupFooterProblems.generic)

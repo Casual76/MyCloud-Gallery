@@ -11,6 +11,7 @@ import androidx.work.WorkManager
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetClock
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetPeriod
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetScheduleRules
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetSlot
 import dev.pampa.mycloudgallery.core.widget.testing.FakeWidgetClock
@@ -23,6 +24,7 @@ import dev.pampa.mycloudgallery.feature.widget.host.WidgetThumbnails
 import dev.pampa.mycloudgallery.feature.widget.refresh.WidgetEngine
 import dev.pampa.mycloudgallery.feature.widget.refresh.WidgetEngines
 import dev.pampa.mycloudgallery.feature.widget.refresh.WidgetTargets
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -153,6 +155,45 @@ class GalleryWidgetReceiverTest {
     assertThat(works().single().state).isEqualTo(WorkInfo.State.ENQUEUED)
     receiver.onDisabled(context)
     assertThat(works().all { it.state == WorkInfo.State.CANCELLED }).isTrue()
+  }
+
+  /** WG-2: un widget che nasce dopo che l'ultimo e' stato tolto riprogramma il lavoro alla frequenza **scelta**, non a quella di serie. */
+  @Test
+  fun unWidgetCheNasceProgrammaIlLavoroAllaFrequenzaScelta() {
+    WidgetHost.install(object : WidgetServicesProvider {
+      override val clock: WidgetClock = FakeWidgetClock()
+
+      override val period: WidgetPeriod = WidgetPeriod.DAILY
+
+      override suspend fun await(budgetMs: Long): WidgetServices? = null
+    })
+    val receiver = GalleryWidgetReceiver()
+    receiver.onEnabled(context)
+    assertThat(works().single().periodicityInfo?.repeatIntervalMillis).isEqualTo(TimeUnit.HOURS.toMillis(24))
+    // L'ultimo widget tolto e uno rimesso: ancora 24 ore (prima: 3).
+    receiver.onDisabled(context)
+    assertThat(works().all { it.state == WorkInfo.State.CANCELLED }).isTrue()
+    receiver.onEnabled(context)
+    assertThat(works().single { it.state == WorkInfo.State.ENQUEUED }.periodicityInfo?.repeatIntervalMillis).isEqualTo(TimeUnit.HOURS.toMillis(24))
+    // Anche `onUpdate` (un riavvio del telefono, un aggiornamento dell'app) non sposta il lavoro e non ne cambia la frequenza.
+    receiver.onUpdate(context, manager, intArrayOf(addWidget()))
+    assertThat(works().single { it.state == WorkInfo.State.ENQUEUED }.periodicityInfo?.repeatIntervalMillis).isEqualTo(TimeUnit.HOURS.toMillis(24))
+  }
+
+  /** Senza un fornitore (un processo che non ha ancora legato `:app`) o con una lettura che lancia, la frequenza di serie: mai un'eccezione verso il sistema dei widget. */
+  @Test
+  fun senzaIlFornitoreOConUnaLetturaCheLanciaVaLaFrequenzaDiSerie() {
+    assertThat(WidgetHost.period()).isEqualTo(WidgetPeriod.DEFAULT)
+    WidgetHost.install(object : WidgetServicesProvider {
+      override val clock: WidgetClock = FakeWidgetClock()
+
+      override val period: WidgetPeriod get() = throw IllegalStateException("preferenze")
+
+      override suspend fun await(budgetMs: Long): WidgetServices? = null
+    })
+    assertThat(WidgetHost.period()).isEqualTo(WidgetPeriod.DEFAULT)
+    GalleryWidgetReceiver().onEnabled(context)
+    assertThat(works().single().periodicityInfo?.repeatIntervalMillis).isEqualTo(TimeUnit.HOURS.toMillis(WidgetPeriod.DEFAULT.hours.toLong()))
   }
 
   @Test

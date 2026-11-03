@@ -20,12 +20,19 @@ import java.time.Instant
 import java.util.EnumMap
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.cancellation.CancellationException
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 // IL MANIFEST FIRMATO NELL'APP (Fase 10, P13; docs/fase10-progetto.md §1.4 "ReleaseGraph", §2.8, D29-D31, E-REL1-E-REL13; "Cosa deve fare P13" di P1 in
 // docs/decisioni.md). :app vede solo lo **stato** (`ReleaseStatus`), gli indirizzi aggiuntivi gia' filtrati e i numeri della Diagnostica: il verificatore, le chiavi e i
@@ -49,9 +56,12 @@ class ReleaseGraph(
   val state: ReleaseState,
   /** L'ora del telefono per il ritmo delle letture (non per la scadenza: quella e' dell'ora del NAS, E-REL9). */
   private val wallNowMs: () -> Long = { System.currentTimeMillis() },
+  /** Dove si leggono e si scrivono i file (lo stato e l'ora dell'ultima lettura); le prove passano il loro, cosi' le attese girano sul tempo virtuale. */
+  private val io: CoroutineDispatcher = Dispatchers.IO,
 ) {
 
   private val loaded = CompletableDeferred<Unit>()
+  private val loadedFlow = MutableStateFlow(false)
   private val reading = Mutex()
 
   /** Le offerte di questo processo per esito (Diagnostica: `RELEASE_STATE`), solo numeri. */
@@ -64,6 +74,9 @@ class ReleaseGraph(
   /** Lo stato salvato e' stato letto (anche se il file non c'era o era rovinato: allora vale `Normal`, E-REL1). */
   val isLoaded: Boolean get() = loaded.isCompleted
 
+  /** CA-2: emette quando lo stato salvato e' letto e a ogni cambio di stato (le porte d'ingresso per le altre app si ricalcolano e le radici si notificano). */
+  val changes: Flow<Unit> get() = combine(loadedFlow, status) { _, _ -> }
+
   /** Le scritture sono ferme: `ReadOnly`, `Stopped`, o lo stato non ancora letto. */
   val writesStopped: Boolean get() = !isLoaded || status.value !is ReleaseStatus.Normal
 
@@ -74,18 +87,28 @@ class ReleaseGraph(
   suspend fun load() {
     if (isLoaded) return
     try {
-      withContext(Dispatchers.IO) { state.load() }
+      withContext(io) { state.load() }
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
       GalleryLog.w(TAG) { "stato del manifest non letto (${e.javaClass.simpleName}): vale quello di serie" }
     } finally {
       loaded.complete(Unit)
+      loadedFlow.value = true
     }
   }
 
   /** Aspetta [load] (le prove, e chi deve decidere su uno stato certo). */
   suspend fun awaitLoaded() = loaded.await()
+
+  /**
+   * CA-3 della revisione funzionale della Fase 10: chi decide nei primi millisecondi del processo (la prima tappa di un lavoro nato con lui, un lavoro locale) aspetta
+   * lo stato salvato, al piu' [LOAD_WAIT], invece di leggere "non ancora letto = fermo" e perdere il giro. Passato il tempo resta il fallire chiusi di [stopped].
+   */
+  suspend fun stoppedAfterLoad(): Boolean {
+    if (!isLoaded) withTimeoutOrNull(LOAD_WAIT) { loaded.await() }
+    return stopped
+  }
 
   /** Gli indirizzi aggiuntivi di un modello (D29): solo da un manifest valido e non scaduto, per lo stesso id e la stessa impronta. `CatalogExtraModelSources` filtra ancora. */
   fun extraUrls(id: String, sha256: String): List<String> = try {
@@ -128,13 +151,13 @@ class ReleaseGraph(
   /** L'azzeramento (D42): lo stato torna `Normal` e il file sparisce (la prima lettura dopo rimette il blocco); anche l'ora dell'ultima lettura. */
   suspend fun clear() {
     state.clear()
-    withContext(Dispatchers.IO) { readMark.delete() }
+    withContext(io) { readMark.delete() }
     offers.values.forEach { it.set(0) }
   }
 
   private val readMark = File(dir, READ_MARK)
 
-  private suspend fun due(): Boolean = withContext(Dispatchers.IO) {
+  private suspend fun due(): Boolean = withContext(io) {
     val last = try {
       readMark.takeIf { it.isFile }?.readText(Charsets.US_ASCII)?.trim()?.toLongOrNull()
     } catch (e: IOException) {
@@ -145,7 +168,7 @@ class ReleaseGraph(
     now < last || now - last >= ManifestLimits.READ_EVERY.toMillis()
   }
 
-  private suspend fun markRead() = withContext(Dispatchers.IO) {
+  private suspend fun markRead() = withContext(io) {
     try {
       dir.mkdirs()
       val tmp = File(dir, "$READ_MARK.tmp")
@@ -176,5 +199,8 @@ class ReleaseGraph(
 
     /** L'ora (del telefono, millisecondi) dell'ultima lettura del NAS che ha avuto una risposta. */
     const val READ_MARK = "last-read"
+
+    /** CA-3: quanto si aspetta lo stato salvato prima di decidere (un file piccolo: di solito millisecondi). Dopo, "fermo" (fallire chiusi). */
+    val LOAD_WAIT: Duration = 2.seconds
   }
 }

@@ -163,6 +163,12 @@ class DocumentIdTable(
     for (id in ids) (delivered[id.value] ?: browse[id.value])?.let { remove(it) }
   }
 
+  /** Revoca ogni id (consegnato o da sfoglio) dei media [ids]: un "Nascondi" non aspetta la scadenza (I4 della revisione di sicurezza della Fase 10). */
+  @Synchronized
+  fun revokeMedia(ids: Collection<MediaId>) {
+    for (id in ids) byTarget[DocumentTarget.Media(id)]?.let { remove(it) }
+  }
+
   /**
    * Revoca ogni id: quelli dei media escono dalla tabella, e la chiave degli id stabili **ruota** (azzeramento dell'app, famiglia che cambia): la
    * radice e le cartelle di prima non valgono piu'. Chi lo chiama notifica le radici al sistema (`IntegrationsGraph`).

@@ -88,10 +88,14 @@ class PhoneSyncWorker @AssistedInject constructor(
   @Assisted appContext: Context,
   @Assisted params: WorkerParameters,
   private val gallery: GalleryGraph,
+  /** CA-4 (revisione funzionale della Fase 10, E-REL6): con la versione fermata dal manifest la Libreria non si vede, e la lettura del telefono non serve. */
+  private val release: dev.pampa.mycloudgallery.release.ReleaseGraph,
 ) : CoroutineWorker(appContext, params) {
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
+    // CA-4: dopo lo stato del manifest letto (al piu' 2 s). Non si riaccoda: all'aggiornamento dell'app l'avvio rimette il lavoro (`GalleryWorkScheduling.ensure`).
+    if (release.stoppedAfterLoad()) return Result.success()
     // L372 (correzioni C, come RG-1 e D-7): in un processo nato per questo lavoro lo stato "non configurato" dura un attimo; senza aspettare la famiglia pronta
     // `runIfActive` rispondeva null e il giro andava perso (e, peggio, la catena a trigger di contenuto non si riaccodava).
     gallery.awaitReady(COLD_START_WAIT)
@@ -165,6 +169,8 @@ class LibraryMaintenanceWorker @AssistedInject constructor(
 
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
+    // CA-4 (revisione funzionale della Fase 10, E-REL6): con la versione fermata dal manifest nessun lavoro, nemmeno locale (dopo lo stato letto, al piu' 2 s).
+    if (graph.release?.stoppedAfterLoad() == true) return Result.success()
     // RG-1 (e VG-1 della Fase 7): un lavoro nato in un processo nuovo aspetta la famiglia **pronta**, come tutti gli altri (D-7). Senza questa attesa `runIfActive`
     // rispondeva null (lo stato "non configurato" dura un attimo all'avvio): la manutenzione finiva in qualche decimo di secondo con `success`, senza viaggi, smart
     // ne' Utility, e riprovava solo la notte dopo. Dopo il tempo, un dispositivo davvero non pronto non fa niente (come gli altri lavori).

@@ -332,9 +332,13 @@ Cinque categorie nuove (prefissi non usati finora, controllati il 31/10): **E-W*
 - **E-REL3**: manifest vecchio rigiocato (`seq` minore di quello già visto): ignorato; un blocco non si toglie così.
 - **E-REL4**: manifest scaduto: gli indirizzi aggiuntivi dei modelli decadono; i blocchi e la versione minima restano.
 - **E-REL5**: questa versione è bloccata con `WRITES` o è sotto la versione minima: sola lettura con l'avviso "Aggiorna dal Pampa Store";
-  ciò che era in corso si ferma al punto di ripresa, niente si perde.
+  ciò che era in corso si ferma al punto di ripresa, niente si perde. *Correzioni A (02/11)*: la sola lettura ferma le scritture dei **contenuti** (come
+  "Ferma le scritture"), non quelle dello strato della famiglia (stato del dispositivo, registro, segnalazioni, kit, pulizia dei temporanei: L570);
+  "Salva sul NAS" non si offre e le schermate dicono la causa ("questa versione va aggiornata", C460, L571).
 - **E-REL6**: questa versione è bloccata con `ALL`: solo la pagina "Questa versione è stata fermata"; nessuna sessione del NAS, nessun
-  lavoro; Diagnostica ed esportazione restano.
+  lavoro; Diagnostica ed esportazione restano. *Correzioni A (02/11)*: anche fuori dalla pagina: selettore, provider dei documenti, ricezione e
+  rilascio del trascinamento si chiudono con il motivo; notifica dei ricordi, lettura del telefono e manutenzione della Libreria non partono (C460);
+  il widget si svuota (pacchetto B).
 - **E-REL7**: indirizzo aggiuntivo per un modello che l'app non conosce, con un'impronta diversa o su un host fuori da `ModelHosts`:
   ignorato (il file resta comunque verificato dall'impronta fissata).
 - **E-REL8**: chiave di pubblicazione persa o rubata: K2 di riserva e un aggiornamento dell'app con chiavi nuove (D31).
@@ -832,7 +836,10 @@ fase grafica (Q5 (a), D38), sui soli dispositivi dell'admin. La famiglia riceve 
    file e byte, **in quali cartelle**, e lo spazio libero del NAS dopo il passo intero; nessun nome di file nell'esportazione (solo numeri e
    cartelle di primo livello del formato).
 3. **Fotografia "prima"** dal PC (`tools/release/share-snapshot.ps1`, sola lettura, con le credenziali di Windows dell'utente): elenco dei
-   file di **tutte** le share vere toccate (`alessio`, l'area comune) con dimensione e data.
+   file di **tutte** le share vere toccate (`alessio`, l'area comune) con dimensione e data. **La fotografia contiene i NOMI di tutti i file
+   dell'area privata** (correzioni C, I6, 02/11): resta sul PC dell'admin, su un disco fisso (lo script rifiuta un'uscita su un percorso di rete,
+   su un'unita' di rete o su una chiavetta, e guarda il percorso vero), mai in una share, nel cloud o in un messaggio, e si cancella (anche dal
+   cestino) a confronto letto e passo chiuso, non oltre 7 giorni; lo stesso vale per il resoconto del confronto. Lo script lo ricorda a fine lavoro (L576).
 4. **Il sì dell'utente** al passo intero (Q6 (b)), con i numeri della simulazione davanti; numeri inattesi per un'area = il passo non parte
    (E-SV1): l'utente decide se rinviarlo o tornare, con un nuovo sì, a un'area alla volta.
 5. Una build con **le quattro costanti** cambiate in `FeatureFlags`, `recinzioni.json` aggiornato con **un solo consenso** (data e rimando
@@ -848,7 +855,7 @@ fase grafica (Q5 (a), D38), sui soli dispositivi dell'admin. La famiglia riceve 
 
 **Dopo il passo**
 - **Fotografia "dopo"** dal PC e confronto con la "prima": file aggiunti, cambiati e tolti, **per area**, fuori dalle cartelle attese di
-  ciascuna = E-SV2 (si ferma tutto e si torna indietro).
+  ciascuna = E-SV2 (si ferma tutto e si torna indietro). Le due fotografie e il resoconto si cancellano a passo chiuso (punto 3 sopra).
 - **Due settimane** d'uso normale dei dispositivi dell'admin (sono anche le due settimane di `beta` di Q7 (a) quando la release candidata è
   quella finale) con il riepilogo giornaliero pulito (nessun congelamento, nessun errore di scrittura); lo scenario 8 del §2.14 si misura qui.
 - **Gli account di prova** restano utili fino alla fine delle prove; poi la checklist (§2.9).
@@ -889,7 +896,7 @@ aggiornato; ciò che è stato scritto resta (colonna "Che cosa resta").
 | S8 | Su una rete estranea non parte nessuna autenticazione SMB | (a) JVM su C2; (b) l'emulatore (rete non di casa: altro gateway, nessun prefisso del FRITZ!Box) con `-tcpdump`, l'app configurata e il NAS raggiungibile via NAT; (c) l'S25 su un'altra rete con PCAPdroid | JVM, emulatore, S25 | nessun `SESSION_SETUP` SMB2 (nessun NTLMSSP) verso nessuno; stato "Rete non riconosciuta" | F178 |
 | S9 | Una modifica di massa simulata fa scattare il congelamento | `tools/security/mass-change.ps1` in `test-comune/mcg-it/<giro>/`: 2.000 file di prova, poi ne rinomina, cambia o "cifra" (`.locked`) oltre la soglia max(50, 5%) | PC, emulatore | congelamento al primo giro (C11), nessuna scrittura automatica, avviso; "Ho controllato" scongela solo con la doppia conferma | F179 |
 | S10 | (Fase 10) Il widget non mostra nascosti e non apre altro | proprietà JVM (mondi casuali, nascosti dell'ultimo momento, da un altro dispositivo); intent `OPEN_WIDGET` inventati; widget sulla schermata di blocco | JVM, S25, emulatore | §2.1–§2.2 | F161, F163 |
-| S11 | (Fase 10) Il trascinamento non apre più del dovuto | un'app di prova (solo debug) che riceve un trascinamento e prova a leggere un **altro** documento, a scrivere, a tenere il permesso | emulatore, tablet | un URI letto, nessun altro; nessuna scrittura; copie tolte al riavvio | F168 |
+| S11 | (Fase 10) Il trascinamento non apre più del dovuto | un'app di prova (solo debug) che riceve un trascinamento e prova a leggere un **altro** documento, a scrivere, a tenere il permesso **(correzioni C, I2 della revisione di sicurezza, 02/11: l'app di prova ha lo stesso UID dell'app, quindi prova solo la lettura e la consegna, non i permessi: vedi L575)** | emulatore, tablet | un URI letto, nessun altro; nessuna scrittura; copie tolte al riavvio | F168 |
 | S12 | (Fase 10) Solo gli strumenti di accessibilità leggono | un servizio di accessibilità di prova **non** "strumento" (solo debug, installato con adb) legge l'albero della finestra | emulatore | nessun testo né descrizione letti (Android 14+) | F185 |
 | S13 | (Fase 10) Traffico e componenti della release | cattura di 24 ore della release candidata (PCAPdroid se c'è; altrimenti `netstats` per UID); `dumpsys package` per i componenti esportati e i permessi | S25 | host solo fra NAS, `tiles.openfreemap.org` (mappa accesa), host dei modelli (solo se si scarica), Google (solo con la lettura del testo accesa); nessun host per il manifest (Q8 (a)); componenti = elenco chiuso | F180, F181 |
 | S14 | (Fase 10) Recinzioni e resti di debug | `check.ps1` sul bytecode della release: recinzioni come `recinzioni.json`, nessun `KT`, nessuno strumento di debug, nessun `ManifestTool` | PC | — | — |
@@ -1190,7 +1197,7 @@ prova messo e tolto dallo script. L'emulatore si accende solo per la prova e si 
 | F165 | Pannelli e rotazione (tablet, profilo "Prova 1"): ogni schermata del §2.3 in orizzontale e verticale; "Affianca"; mappa e griglia | pannelli alle soglie; nessuna perdita di stato ruotando (pagina, elemento, zoom, bolla); screenshot |
 | F166 | DeX e finestre libere (tablet in DeX): ridimensionamenti continui, finestra minima, mouse e tastiera, entrata e uscita da DeX | E-T2, E-T3, E-T9, E-T10; nessun crollo di MapLibre o del video |
 | F167 | Due finestre e blocco (tablet): "Apri in una nuova finestra"; un nascosto in una; conferma aperta in una e selezione cambiata nell'altra; terza finestra; blocco con timeout "subito" | E-T4–E-T7; stessi dati; conferma decaduta; uno sblocco per tutte |
-| F168 | Trascinamento in uscita (tablet, l'app di prova di debug a fianco): una foto del telefono, una solo sul NAS, dieci selezionate, una con "Rimuovi la posizione", 150 elementi; poi l'app di prova prova a leggere un altro documento | byte uguali (SHA-256) o senza GPS; rifiuto oltre i tetti; un URI letto e nessun altro; copie tolte al riavvio |
+| F168 | Trascinamento in uscita (tablet, l'app di prova di debug a fianco): una foto del telefono, una solo sul NAS, dieci selezionate, una con "Rimuovi la posizione", 150 elementi; poi l'app di prova prova a leggere un altro documento **(solo lettura e consegna: l'app di prova ha lo stesso UID, quindi "scrittura negata" e "permesso persistente rifiutato" non provano i permessi; questi sono provati sulla JVM e, con un'app vera, con `adb shell dumpsys activity permissions`: L575, correzioni C, I2)** | byte uguali (SHA-256) o senza GPS; rifiuto oltre i tetti; un URI letto e nessun altro; copie tolte al riavvio |
 | F169 | Trascinamento in arrivo (tablet): da Archivio (file di prova) verso la Libreria e verso un album; un file finto ostile | foglio con il conteggio; niente senza il tocco; rifiuto del file ostile |
 | F170 | Account diversi (autonoma, PC + emulatore con `test2`): S1 | zero segni di `test` leggibili da `test2` |
 | F171 | Dispositivo non approvato e revocato (autonoma): S2 | nessun dato accettato |

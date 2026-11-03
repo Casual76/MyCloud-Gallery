@@ -1944,7 +1944,10 @@ dimostrabile fuori dal telefono, vedi sotto).
 - *Operazioni sul NAS (NA-1)*: `ConfirmationGate.accept` e `PlanRules.firstViolation` restano prima di tutto, identici; il diario nasce
   solo da `OpsStore.create(AcceptedPlan)`, come prima. Cambia solo **quando** si prende il lucchetto dell'esecuzione (dopo la
   registrazione). Un'operazione in coda non tocca niente sul NAS; quando parte ogni elemento ricontrolla il cancello (congelata, scritture
-  ferme, salto dell'ora) e i timbri come sempre (E-D13), quindi un congelamento o una conferma scaduta nell'attesa fermano l'esecuzione.
+  ferme, salto dell'ora) e i timbri come sempre (E-D13), quindi un congelamento nell'attesa ferma l'esecuzione. *Correzione del testo
+  (revisione 5B, I5; correzione D della Fase 10, 02/11):* la conferma invece si controlla solo alla registrazione e **non scade
+  nell'attesa**: un'operazione confermata ore prima parte quando il lucchetto si libera, protetta dal cancello e dai timbri di ogni
+  elemento (`docs/sicurezza.md`, L591).
   Se l'utente la ferma mentre aspetta (R9) non si esegue; la stessa richiesta toccata due volte non ne fa partire due. Il lucchetto
   dell'esecuzione resta uno solo, condiviso con le pulizie: due esecuzioni non si sovrappongono.
 - *Congelamento (NA-4, NA-7)*: la conferma resta il numero riscritto uguale a quello mostrato (doppia conferma); **non vale più di prima,
@@ -15095,7 +15098,8 @@ NAS o emulatore. Voci di `docs/sicurezza.md`: **L566** nuovo (una versione ferma
 3. **Fallire chiusi all'avvio.** Finche' lo stato salvato non e' letto (`ReleaseGraph.load`, lanciato da `GraphModule` appena nasce il grafo, qualche
    millisecondo) i cancelli sono fermi e la sessione non si apre: un blocco salvato da un processo di prima non si perde nella finestra d'avvio. Un errore di
    lettura vale "niente salvato" (regola di P1).
-4. **La lettura del manifest** sta in `NasStages.sync` (il giro della sincronizzazione dell'indice, finito), con la sessione di quel giro: al piu' una volta ogni
+4. *(Corretta dalle correzioni della Fase 10, pacchetto A, R2: il manifest si legge anche dopo una tappa lasciata a meta' e all'apertura dell'app, come chiede D29;
+   vedi la sezione in fondo.)* **La lettura del manifest** sta in `NasStages.sync` (il giro della sincronizzazione dell'indice, finito), con la sessione di quel giro: al piu' una volta ogni
    24 ore, l'ora dell'ultima lettura **con una risposta** in `noBackupFilesDir/release/last-read` (ora del telefono: e' solo il ritmo, la scadenza resta all'ora del
    NAS). Un NAS che non risponde non segna l'ora (si riprova al giro dopo). Canale: `debug` nella build di sviluppo, `beta` se la `versionName` ha `-beta`,
    altrimenti `stable` (senza toccare `app/build.gradle` di P12).
@@ -15242,6 +15246,505 @@ Fonte: prove sul campo F182-F185 (branch `campo/f10-a11y`), esiti in `docs/prove
 - **Nessuna modifica al codice:** e' gia' la prima di `REDUCE_TRANSPARENCY_KEYS` e `GalleryAccessibilityReader.read` guarda anche `Settings.Global`; l'osservatore registra gli indirizzi dei tre spazi. Le altre tre candidate (`reduce_transparency`, `reduce_transparency_and_blur`, `accessibility_reduce_transparency_blur`) non esistono sul telefono: restano come ripiego per altri produttori. Resta da aggiornare (a chi tocca `core-designsystem` per P13) il commento di `GalleryAccessibility.kt` e il passo "da confermare" di P8: ora e' confermata.
 - **Provato nell'app:** la Libreria con la chiave a 1 disegna la capsula di vetro in alto a destra come superficie piena con bordo; a 0 torna il vetro; il cambio arriva entro circa 2 secondi senza riaprire l'app (`docs/screenshots/10-campo-a11y/riduci-trasparenza-barra-libreria.png`). Le altre schermate e il resto di F182-F185 sono rimandati.
 - **Per chi rifa' F182 sul telefono:** accendere TalkBack scrivendo il suo servizio (`com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService`) in `enabled_accessibility_services` **svuota** `accessibility_button_targets`, `accessibility_direct_access_target_service` e `accessibility_gesture_targets` (qui puntavano a un servizio dell'utente): salvarle e rimetterle. I gesti di TalkBack iniettati con `adb shell input` (e la scorciatoia Alt+freccia) non muovono il suo fuoco su questo telefono; un `input tap` sembra attivare l'elemento invece di spostare solo il fuoco (visto una volta). Servono UI Automator con TalkBack acceso (come F113) o l'utente.
+
+## Correzioni della Fase 10, pacchetto C: controlli e prove (02/11)
+
+Fonte: le voci R6, I2, I3, I4, I6 di `docs/review/10-fase10.md` (sicurezza) e FI-1, AC-1 di `docs/review/funzionale-10.md` (funzionale), piu' due voci arrivate dall'orchestratore dalla prova della
+release candidata sull'S25 (stack trace nel log della release; righe di WorkManager). Branch `fase10/corr-c`, da `b8a2e282`. Le scelte "gia' fatte" dall'orchestratore (versione fermata, sola lettura, testi del blocco)
+sono dei pacchetti A e B e non si toccano qui; qui valgono I2 (F168 e S11 provano solo la lettura) e AC-1 (la chiave One UI e' confermata).
+
+### R6. Il passo 3b riconosce le chiavi private in ogni forma di Java (`tools/release/chiavi-private.ps1`, `chiavi-prove.ps1`)
+- **Il difetto era piu' largo del previsto.** Il marcatore base64 della forma corta finiva con un carattere che dipende dal primo byte della chiave (47 caratteri invece di 46): una chiave su quattro
+  nella forma di `getEncoded()` di Java (KT compresa, fuori da `src/test/`) passava. Mancavano anche la SEC1 di OpenSSL, l'esadecimale con i separatori, il decimale di `Arrays.toString`, il DER grezzo (un `.der`,
+  e `.bin` era fra i formati saltati), i file UTF-16 che scrive il reindirizzamento di Windows PowerShell 5.1, e qualunque allineamento del base64 (una chiave dentro un blob piu' grande).
+- **Come e' fatto adesso.** Gli inizi DER (PKCS#8 EC P-256 corta e lunga, SEC1 con e senza la pubblica, PKCS#8 RSA) si **compongono a pezzi** a ogni esecuzione (il file non contiene mai un marcatore intero, quindi
+  non si segnala da solo) e se ne ricavano i testi: in base64 per i tre allineamenti, con **i soli caratteri che l'inizio determina per intero** (`Get-Base64Markers`: 46 per la forma corta); in esadecimale (anche con
+  `:`, spazi, `0x`, `.toByte()`); in decimale (con e senza segno); in byte grezzi. Per velocita' (5.100 file letti) i testi fissi si cercano con `IndexOf` e le espressioni regolari sono tre (PEM, esadecimale, decimale):
+  il passo costa meno della prima versione (una sola espressione compilata: 160 secondi contro i 34 del vecchio, misurati a macchina libera); nel giro finale, con altri agenti che compilavano, il passo 3b e' durato 92 secondi.
+- **La prova ha le chiavi vere.** `chiavi-prove.ps1` (un passo di `check.ps1`, dopo il 3b) scrive un sorgente Java sotto `build\`, lo lancia e genera **8 chiavi vere** (EC P-256 nelle quattro classi del primo byte, la forma
+  lunga, due SEC1, RSA 2048) in **14 forme ciascuna** (DER, base64 in una riga, MIME, a 64 colonne, con 1 o 2 byte davanti, PEM, esadecimale minuscolo/maiuscolo/con i due punti, decimale con e senza segno, array alla
+  Kotlin, UTF-16): 112 file che il passo deve **trovare tutti** fuori da `src/test/`; la copia della vera KT (`core-release/src/test/.../ReleaseTestPrivateKey.kt`) messa fuori dai test; le stesse chiavi sotto `src/test/` e
+  `src/testDebug/` (viste, non un problema); e i neutri (chiavi pubbliche, byte casuali, un "quasi uguale" con un byte sbagliato) che **non** devono essere segnalati. La forma lunga si rilegge con `KeyFactory` (e' la
+  stessa chiave); la forma SEC1 e la lunga coincidono, byte per byte negli inizi, con quelle di OpenSSL (controllato una volta a mano).
+- **Il passo fallisce davvero.** Con un file `tools/zz-prova-kt.txt` (copia di KT, non tracciato) `check.ps1 -SkipGradle` dice `FAIL ... tools/zz-prova-kt.txt (PKCS#8 EC P-256 (forma corta...))` e il codice di
+  uscita e' diverso da zero; tolto il file il passo e' verde. Col **marcatore di P0** (`-Libreria` con il vecchio `Find-PrivateKeyFiles`) la stessa prova e' **rossa**: 85 file su 112 non riconosciuti, KT compresa.
+- `Phase10ArchitectureTest` cercava `"PRIVATE KEY"` in `check.ps1`: il marcatore e' passato nel file nuovo e il test legge entrambi (`Find-PrivateKeyFiles`, `chiavi-prove.ps1` in `check.ps1`; `"PRIVATE KEY"`, `Get-Base64Markers`,
+  `Find-PrivateKeyFiles` e la cartella dei test in `chiavi-private.ps1`). I due passaggi di `docs/review/10-fase10.md` che citavano la forma SEC1 per intero sono stati scritti a pezzi (il passo li segnalava).
+- **Non vede** (C442): base64 o esadecimale spezzati su piu' righe o piu' stringhe, file compressi o cifrati, i formati binari saltati (immagini, archivi, modelli), chiavi di altre curve e RSA in PKCS#1 che non sia PEM.
+
+### I6. La fotografia delle share esce solo su un disco locale, e dice cosa contiene (`tools/release/share-snapshot.ps1`)
+- **Percorso vero, non testo.** `Assert-LocalOutput` (per `-Uscita` e `-Report`): un percorso UNC (anche con le barre dritte) e' rifiutato **prima di toccare la rete**; l'unita' deve essere un disco fisso; la cartella
+  dell'uscita deve esistere; il percorso si **risolve** (`GetFinalPathNameByHandle` da C# nello stesso `Add-Type` dello script: collegamenti simbolici, giunzioni, unita' assegnate con `subst`, unita' di rete) e il risultato
+  deve stare ancora su un disco fisso e fuori da ogni radice (anche la radice si risolve, se e' su un disco fisso). Un'uscita che esiste o che e' un collegamento (anche pendente) e' rifiutata.
+- **Avviso.** A fine lavoro (fotografia e resoconto) lo script scrive: contiene i nomi, le dimensioni e le date di tutti i file dell'area privata; tienila solo su questo PC, su un disco fisso, mai in una share, nel cloud,
+  in un messaggio o su una chiavetta; cancellala (anche dal cestino) a confronto letto e passo chiuso, non oltre 7 giorni. Lo stesso nel `.DESCRIPTION`, in `docs/fase10-progetto.md` §2.10 e in `docs/sicurezza.md` (C459, L576).
+  "Non oltre 7 giorni" e' una scelta di questo pacchetto (le prove del passo durano due settimane, ma la fotografia serve solo al confronto).
+- **Prove** (`share-snapshot-prove.ps1`, da 22 a 30 prove): UNC e barre dritte (rifiutati in meno di 20 s senza rete: l'script vecchio ci provava e finiva in un errore di rete), cartella che non esiste, **uscita dentro
+  la radice attraverso una giunzione** e **su un'unita' `subst` verso la radice** (con l'script vecchio la fotografia veniva scritta dentro l'area privata: la giunzione si toglie con `Directory.Delete`, mai con
+  `Remove-Item -Recurse`, che la seguirebbe), uscita su disco locale accettata, il resoconto con le stesse regole. Con lo script di prima 10 prove su 30 sono rosse.
+- **Limite** (L576): un'unita' di rete che e' la share di una cartella dello stesso PC non si distingue da una cartella locale; una vera unita' di rete collegata non si e' potuta provare senza una share (il controllo del tipo
+  dell'unita' e' provato solo dal percorso UNC).
+
+### I3. I dialoghi marcano la vista per l'accessibilita' (`core-designsystem/.../a11y/GalleryDialog.kt`)
+- **Verificato sul codice dell'engine** (che nel worktree c'e', a differenza di quanto diceva la revisione): `FluidGlassModalPortal` "vive dentro la composizione dell'app" (`FluidGlassModal.kt`), quindi i fogli di conferma
+  (`GalleryConfirmSheet`), il menu del Nascondi e il menu dei filtri stanno nella **stessa finestra** gia' marcata dal tema: nessun involucro serve. Le finestre a se' dell'engine, `FluidSheet` (un `ModalBottomSheet`) e
+  `FluidAlert` (un `Dialog`), non si usano in nessun file della galleria.
+- L'unica finestra a se' dell'app era `NasUnfreezeDialog` (un `AlertDialog` di Material 3, con il numero dei file cambiati e il campo in cui si riscrive). `GalleryDialog` e `GalleryAlertDialog` mettono
+  `GalleryAccessibilityDataSensitive()` **dentro** il dialogo (dove `LocalView` e' la vista del dialogo; nell'`AlertDialog` sta nello slot del tasto di conferma, che c'e' sempre e non disegna niente); `NasUnfreezeDialog`
+  usa il secondo, nessuno stile cambia (l'aspetto e' del filone grafico).
+- **Prove.** `GalleryDialogTest` (Robolectric): un `Dialog` semplice sotto il tema che marca **non** e' marcato (il problema c'e' davvero; se un giorno lo fosse, l'involucro non servirebbe piu'); `GalleryDialog` e
+  `GalleryAlertDialog` marcano la vista del dialogo anche con il tema che non marca (la prova non dipende dalla radice), in ogni slot, anche senza titolo e testo; la marcatura sparisce chiudendo il dialogo. `DialogsUseTest`
+  (nello stile di `HeadingsUseTest`): in tutti i moduli di `settings.gradle` (main, debug, release, benchmarkRelease) nessun `Dialog`, `Popup`, `AlertDialog`, `BasicAlertDialog`, menu a discesa, `ModalBottomSheet`,
+  `DatePickerDialog`, `PopupWindow`, `FluidSheet`, `FluidAlert` fuori da `GalleryDialog.kt` (import, nome intero o uso), con le forme vietate e quelle ammesse provate su frasi.
+- **Resta** F185 sul telefono con TalkBack, con un foglio e il dialogo dello scongelamento aperti.
+
+### I4. Un "Nascondi" non aspetta la vista (`feature-integrations`, `:app`)
+- **Il filtro finale decide per ultimo.** La vista della Libreria si aggiorna dopo la calma; un media nascosto un attimo fa e' ancora li'. `DocumentDragPayloads` chiede `HiddenMask` (il catalogo di adesso: anche i gruppi di
+  copie simili e i nascosti arrivati da un altro dispositivo, che la sola revoca per id non avrebbe visto) **due volte**: all'inizio e di nuovo dopo l'ultima attesa (NAS, copie), subito prima di creare gli id (`commit` non
+  sospende piu'). `LibraryMediaDocuments` lo chiede a ogni elenco (un'unica porta, `files`), descrizione e apertura: un media nascosto revoca l'id e toglie le copie senza posizione. Un errore del filtro vale "nascosto".
+- **E la revoca immediata.** `DocumentIdTable.revokeMedia` e `DocumentIssuer.revokeMedia` tolgono gli id (da sfoglio e consegnati) dei media e le loro copie; `IntegrationsGraph.install` li lega a
+  `GalleryGraph.hiddenIdListeners` ("Nascondi" qui). `IntegrationsGraph` passa `gallery.hiddenMask` a `LibraryMediaDocuments` e a `DocumentDragPayloads`.
+- **Il registro.** La riga `drag-out` di `HiddenSurfaces` e' `live = true`: la sonda (`RealDragProbes`) usa `CatalogHiddenMask` sul catalogo del mondo e prova che il trascinamento escluda gli ultimi nascosti con i
+  loro gruppi, e che il provider non descriva un id nato dalla vista che ha ancora l'ultimo nascosto. **La riga e' stata spostata prima di `memories-notify`**: la sonda delle notifiche nasconde nel catalogo di quel mondo la
+  copertina "un attimo fa" (per provare la revoca), e una sonda `live` che gira dopo vede un nascosto in piu' di quelli della descrizione del mondo (la prima corsa lo ha mostrato: un media in piu' non trascinabile in
+  tutti i mondi).
+- **Prove.** `DocumentDragPayloadsTest` (la vista resta vecchia e il catalogo dice nascosto: rifiuto per intero, gruppo intero, nascosto durante la preparazione, id consegnati revocati, errore del filtro = nascosto),
+  `LibraryMediaDocumentsTest` (id consegnato non si apre piu' ne' si descrive, recenti senza gli ultimi nascosti, errore = niente, `revokeMedia` con le copie), `DocumentIdTableTest`, e sul **grafo vero**
+  `FiveBIntegrationTest.unNascondiRevocaSubitoGliIdGiaConsegnati_EIlTrascinamentoLaRifiuta`: due foto solo sul NAS con un id ciascuna, `setHidden` vero, l'id della nascosta non vale piu' (e quello dell'altra si')
+  senza aspettare la vista, il trascinamento vero risponde `HIDDEN`.
+- **Limite** (L576): un descrittore gia' aperto da un'altra app resta suo finche' lo chiude.
+
+### I2. F168 e S11 provano solo la lettura (dichiarata)
+Come ha deciso l'orchestratore: nessuna seconda app di prova. `FieldProbeDragReceiverActivity` ha lo stesso UID dell'app, quindi `CallerGuard` le risponde sempre "sei il nostro processo" e "scrittura negata" e
+"permesso persistente rifiutato" escono uguali comunque vadano i permessi. Scritto in `docs/fase10-progetto.md` (S11 e F168) e in `docs/sicurezza.md` (L575): la prova sul campo dice che l'URI trascinato si legge e che la
+consegna funziona; i permessi sono provati sulla JVM (`DragFlags.isAllowed`, `DragPrepared.Ready`, `MediaDocumentsProviderTest` con un chiamante estraneo) e, con un'app vera, con `adb shell dumpsys activity permissions`.
+
+### FI-1. L'"Indietro" del pannello delle Impostazioni (`SettingsPanes.kt`)
+`paneBack(nav, close)`: dalla prima pagina (`previousBackStackEntry == null`) chiude e non toglie niente; da una seconda toglie e non chiude. `SettingsPaneHost` ha un parametro `pages` (di serie `settingsPages`) per provare il
+pannello con pagine finte (le vere vogliono Hilt). **Onesta': il difetto descritto non si riproduce** con Navigation 2.9: `popBackStack()` sull'unica destinazione risponde falso e non la toglie, quindi la prova nel
+pannello vero (`SettingsPanesTest.indietroNelPannello_...`) passava **anche con il codice di prima**. La correzione e' una difesa; `paneBack_DallaPrimaPaginaChiudeESenzaToglierla_AncheSeLaLibreriaRispondeVero` usa un
+controller che risponderebbe vero e diventa rossa se `paneBack` torna a `if (!popBackStack()) close()`. F165 sul tablet resta.
+
+### AC-1. La chiave di "Riduci trasparenza" e' confermata (`GalleryAccessibility.kt`)
+Solo il commento: la chiave One UI e' `Settings.Global` `accessibility_reduce_transparency` (confermata sull'S25 dalle prove F182-F185, sezione "Fase 10 campo: accessibilita' sull'S25 (02/11)" di questo file), gia' la prima di
+`REDUCE_TRANSPARENCY_KEYS`; le altre tre restano candidate per altri produttori. Nessun cambio al codice. Resta l'interruttore "Superfici piene" della fase grafica (decisione 5 di `funzionale-10.md`).
+
+### Voce nuova 1. Nessuno stack trace nel log della release (C466)
+- **Chi li scriveva.** Non il nostro codice: nessun `printStackTrace()`, `System.err` o `println` nei sorgenti di produzione (controllato su tutti i moduli), e `GalleryLog` in release non ha un sink. Li scrive il sistema: un'eccezione
+  che esce da `MediaDataSource.readAt` (o da un `InputStream` letto da `BitmapFactory`) attraversa il codice nativo, che la descrive (`ExceptionDescribe`, cioe' `printStackTrace()` su `System.err`) prima di ripulirla e di
+  leggere "errore di lettura". **E' una diagnosi dal codice e dal tipo di eccezione (un `IOException` col tetto per file), non riprodotta sul telefono**: e' l'unica strada per cui un'eccezione nostra arriva su `System.err` senza che
+  nessun sorgente nostro lo scriva. `NasMediaBytes.dataSource()` lancia `ReadLimitExceededException` (il tetto di lettura per file, voluto) e `ReadCapReachedException` e `NasIoException`; i loro messaggi sono **fissi** (niente percorsi o nomi: lo
+  dice anche `NasIoException`), ma ogni lancio costava uno stack trace su `System.err`. 833 in 85 minuti.
+- **La correzione.** Chi passa una sorgente al sistema la rende muta: `QuietMediaDataSource` (`core-metadata/.../extract/`, un errore vale `-1`, "fine dei dati", come lo vedeva comunque il sistema) per
+  `MediaMetadataRetriever` (`MediaMetadataVideoProbe`, `MediaMetadataFrameGrabbers` di core-prepare), e `MediaDataSourceInputStream` (il flusso di `BitmapFactory`) cattura da se' gli errori di `readAt` e di `size`. Il
+  **perche'** non si perde: chi rileva guarda `failure`, `capHit` e `limitHit` di `NasMediaBytes`, che si scrivono prima che l'eccezione parta.
+- **Perche' non basta un controllo sui sorgenti.** Il test di architettura vieta i modi di scrivere, ma qui scriveva il sistema: la prova e' la sorgente muta (`QuietMediaDataSourceTest`: una sorgente che lancia vale `-1`, il
+  flusso non lancia mai, il decodificatore vero con una sorgente che lancia da' null senza eccezioni e con una che funziona decodifica; col codice di prima la sorgente lanciava).
+- **Il controllo.** `Phase10LogsArchitectureTest` (core-common): in tutti i sorgenti di produzione (main, debug, release, benchmarkRelease) niente `printStackTrace`, `System.out`, `System.err`, `print`, `println`; l'unica
+  eccezione nominata e' `BuildPlacesDataset` (strumento a riga di comando). Le forme vietate e quelle ammesse sono provate su frasi.
+- **R8.** `app/proguard-rules.pro`: `-assumenosideeffects class java.lang.Throwable { public void printStackTrace(); }` toglie dal bytecode anche le chiamate delle librerie (solo la forma senza argomenti; quelle con un
+  `PrintWriter` servono a chi costruisce un testo). Non c'e' un passo di `check.ps1` che legga il dex per questa riga: la controlla solo la compilazione della release. **Da fare sul telefono**: ripetere la prova di
+  85 minuti e contare le righe `System.err` (devono essere zero).
+
+### Voce nuova 2. WorkManager: "Prerequisite ... doesn't exist; not enqueuing"
+- **Quale catena.** L'unica catena dell'app: `NasWorkScheduling.scanNow` (`app/work/NasWork.kt`): `beginUniqueWork(SCAN_NOW_WORK, KEEP, scan).then(sync).then(personal)` = verifica del NAS, poi sincronizzazione dell'indice,
+  poi dati personali. Tutti gli altri accodamenti sono un solo lavoro per nome (`enqueueUniqueWork`, anche con `APPEND_OR_REPLACE`, che non crea prerequisiti espliciti). `scanNow` lo chiamano l'apertura dell'app,
+  il ritorno in primo piano (se la verifica e' scaduta) e la fine di un'operazione sui file.
+- **Cosa succede.** Con la catena **gia' in coda** (o in corso) `KEEP` non inserisce la verifica nuova ("senza spostare un giro gia' in coda", com'e' voluto); i due lavori che le vanno dietro hanno come prerequisito la
+  verifica nuova, che non esiste, e WorkManager scrive un errore per ognuno e non li accoda: **due righe per ogni chiamata** (14 righe = 7 chiamate in 85 minuti). Nessun lavoro si perde: la catena in coda resta intera
+  con i suoi tre lavori, e non ne nasce una seconda.
+- **Provato** (`LanConstraintsTest.scanNowConLaCatenaGiaInCodaLaLasciaIntera_ELeDueRigheDiWorkManagerSonoQuelle`, WorkManager 2.11.2 con il driver di prova): la prima chiamata accoda tre lavori (uno `ENQUEUED`, due
+  `BLOCKED`) e non scrive niente; la seconda lascia gli **stessi tre id** e scrive **esattamente due righe** `doesn't exist; not enqueuing`; chiusa la catena, una chiamata nuova ne accoda una intera e senza righe. I tre
+  lavori di quella catena rispondono sempre `Result.success()` (gli errori si catturano e si registrano), quindi neanche un fallimento li rompe a meta'.
+- **Nessun difetto, nessuna modifica al codice.** Le righe sono rumore a livello di errore di WorkManager (solo identificatori, niente nomi). Se dessero fastidio basterebbe non chiamare `beginUniqueWork` con la catena in
+  coda (una lettura asincrona dello stato prima), ma non e' nel perimetro e si perderebbe l'atomicita' di `KEEP`.
+
+### Prove viste fallire (mutazioni, 02/11)
+Con le correzioni neutralizzate **tutte insieme** (gli originali copiati in `build/mut-backup`, poi rimessi: l'albero e' tornato identico) e rilanciate le sole classi interessate (`build/g-runB.log`):
+- **FI-1:** `paneBack_DallaPrimaPaginaChiude...` rossa ("expected: 1 but was: 0", con `paneBack` tornato a `if (!popBackStack()) close()`); le altre quattro prove del pannello restano verdi (come detto, la prova nel pannello vero non cambia).
+- **I3:** `GalleryDialogTest` 4 su 5 rosse (il dialogo non e' piu' marcato; resta verde quella del `Dialog` semplice, che documenta il problema) e `DialogsUseTest` 2 su 2 rosse (`NasUnfreezeDialog` tornato al
+  `AlertDialog` di Material 3; l'involucro senza la marcatura).
+- **I4:** `DocumentDragPayloadsTest` 5 rosse, `LibraryMediaDocumentsTest` 4 rosse, `HiddenSurfacesPropertyTest` 3 su 3 rosse (la riga `drag-out`, ora `live`: "mostra N media che non deve mostrare mai") e
+  `FiveBIntegrationTest.unNascondiRevoca...` rossa (tolto il legame in `IntegrationsGraph`: "expected to be false").
+- **C466:** `QuietMediaDataSourceTest` 2 su 4 rosse (`IOException: Troppi byte letti per un solo rilevamento.`); le altre due, una lettura riuscita che passa invariata e il decodificatore vero con `BitmapFactory`, restano verdi:
+  sotto Robolectric `BitmapFactory.decodeStream` non si lamenta di un'eccezione che esce dal flusso (la stampa il codice nativo, che sulla JVM scrive sul flusso C e non su `System.err`), quindi quella e' una prova che
+  non si rompe, non una che morde. `Phase10LogsArchitectureTest.nessunSorgente...` rossa con un `printStackTrace()` messo in un file di core-common.
+- **R6 e I6:** provate nel loro passo: col marcatore di P0 la prova delle chiavi e' rossa (85 file su 112), con lo script di prima 10 prove su 30 della fotografia.
+- **WorkManager:** non e' una correzione ma una prova di cio' che fa `KEEP` (la catena in coda resta intera): passa subito.
+
+
+### Cosa resta per le prove sul campo
+- **F185** (I3): TalkBack vero con un foglio di conferma e il dialogo dello scongelamento aperti.
+- **F168** (I4): trascinare una foto, nasconderla, riprovare subito (la vista e' ancora vecchia): deve rifiutarsi; l'id gia' consegnato non deve piu' aprirsi. I permessi restano alla JVM (I2, L575).
+- **F165** (FI-1) sul tablet: "Indietro" dalla prima pagina e da una seconda del pannello delle Impostazioni.
+- **Stack trace** (C466): la stessa prova di 85 minuti con la release, contando le righe `System.err`: zero.
+- **Fotografia** (I6): la prima fotografia vera dal PC dell'admin, con l'avviso a video e salvata su un disco fisso; cancellata a passo chiuso.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde** ("OK: tutto a posto.", uscita 0, 2/11), lanciato come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `--no-daemon`, cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del
+semaforo (`corr10c`). `assembleDebug`, `assembleRelease`, `galleryTest` e `galleryLint` in 4.908 secondi (i posti erano contesi: la compilazione vera e' molto meno); **19.515 prove in 47 moduli, 0 fallite, 35 saltate per
+assunzione** (P13: 19.488; le nuove sono 27); i passi nuovi, il 3b (5.129 file letti, una sola chiave di prova, sotto `src/test`) e la sua prova con le chiavi vere (112 file), verdi; tutti i passi della release verdi (recinzioni
+accese nel bytecode, Glance e KT, resti di debug, permessi); solo `-Bench` saltato. Nessun `hs_err_pid*.log`, nessuna prova rilanciata. Le corse intermedie (compilazioni, prove mirate, le mutazioni) sono in `build/g-*.log`,
+fuori dal repository. Cartelle e file di lavoro (script, mutazioni, log) sotto `build\`.
+
+### Commit (branch `fase10/corr-c`)
+`8574761c` e `6858f6d6` (R6), `c58e9330` (I6), `4a6fd3c0` (I3), `b8fed057` (I4), `a5d8e85e` (FI-1), `813c7958` (AC-1), `686d0e30` (stack trace), `30fc0f8a` (WorkManager) e quello di questa sezione (documenti).
+
+## Correzioni della Fase 10, pacchetto A: il blocco del manifest nel cuore e il blocco dell'app (02/11)
+
+Fonte: `docs/review/10-fase10.md` (sicurezza: R1, R2, R3, I1, I5) e `docs/review/funzionale-10.md` (funzionale: CA-1, CA-2, CA-3, CA-4, RL-1), con le scelte
+dell'orchestratore (le proposte consigliate dei due revisori; l'utente le puo' cambiare). Branch `fase10/corr-a` da `b8a2e282`. Il widget e' del pacchetto B: qui
+non si tocca (ne' `WidgetGraph` ne' il suo legame in `Phase10Module`).
+
+### Le scelte
+1. **R3, il blocco dell'app per processo.** `ProcessForeground.start` guarda prima di contare la finestra se il processo e' gia' uscito senza che nessuno se ne
+   accorgesse (nessuna finestra avviata, nessun segno di ricreazione vivo: il segno e' scaduto e nessuno ha chiamato `poll`). Allora risponde un valore nuovo,
+   `REENTERED_FOREGROUND`, e `AppLockController` conta l'uscita all'ora del segno (`lastExitAtMillis`) e poi il ritorno: il tempo concesso si controlla. Un
+   valore nuovo e non `ENTERED_FOREGROUND` perche' il controller deve sapere che c'e' stata un'uscita che non ha visto (con il solo `ENTERED` non avrebbe avuto
+   l'ora d'uscita). Niente timer: l'uscita si scopre al primo evento, e l'ora e' comunque quella del segno.
+2. **CA-2 e R1, gli ingressi con `ALL`.** `EntryDecision` ha un valore nuovo, `STOPPED` ("questa versione e' stata fermata"), e `AppEntryGate` legge il manifest
+   (tre ingressi nuovi con un default: stato non letto, fermata, cambi). Finche' lo stato salvato non e' letto risponde `LOADING` (le superfici aspettano gia'
+   `LOADING` con `decideAfterLoading`): mai "fermata" per una corsa. `STOPPED` viene **prima** del blocco dell'app (non si chiede lo sblocco per poi non dare
+   niente). Selettore e ricezione mostrano "Questa versione e' stata fermata" con "aggiorna dal Pampa Store"; il provider non ha radici e rifiuta ogni documento,
+   **anche** quelli gia' consegnati dal selettore (con il solo blocco dell'app quelli si servono ancora: qui no, il blocco e' per un difetto); il rilascio di un
+   trascinamento non apre il foglio e dice di aggiornare. Le radici si notificano a ogni cambio del manifest (`ReleaseGraph.changes`). Il trascinamento in uscita
+   con `STOPPED` vale "non disponibile" (la Libreria con `ALL` non c'e', quindi non si arriva a trascinare). Gli id gia' consegnati non si revocano uno a uno: il
+   provider li rifiuta a ogni apertura, che e' lo stesso effetto.
+3. **CA-2, la sola lettura e "Salva sul NAS".** Una porta nuova di `IncomingDestinations`, `savingBlockedByRelease`: con `ReadOnly` la ricezione lo dice **prima di
+   copiare** (schermata `READ_ONLY_VERSION`, come per il backup in prova) e niente entra in coda. In piu' la coda (`AppIncomingQueue.blockOf`, che vale anche per
+   "Riprova" di "Ricevuti in coda") rifiuta con il manifest (`ReceivedStatus.FROZEN`, con la frase neutra del punto 6); con l'emergenza dell'utente la coda resta
+   com'era (si mette in coda e si aspetta che l'utente riaccenda). La causa la porta `BackupGateInputs.releaseHoldsWrites`, senza toccare il cancello.
+4. **CA-4, i lavori locali con `ALL`** (lettura letterale di E-REL6): la notifica dei ricordi (`MemoryNotifyWorker`), la lettura del telefono in background
+   (`PhoneSyncWorker`, che non si riaccoda: all'aggiornamento l'avvio la rimette) e la manutenzione della Libreria finiscono subito; la lettura del telefono
+   agganciata al primo piano non parte (`GalleryParts.releaseStopped`). La sola lettura non li tocca (sono locali e la Libreria si vede).
+5. **CA-3 e R2, quando si legge e quando si decide.** `ReleaseGraph.stoppedAfterLoad` aspetta lo stato salvato al piu' 2 s (`LOAD_WAIT`) e poi vale il fallire
+   chiusi di sempre; lo usano le regole delle tappe, il cancello dei modelli e i lavori del punto 4 (che altrimenti nei primi millisecondi di un processo nato per
+   loro si sarebbero persi il giro). I cancelli delle scritture restano fermi nei primi millisecondi (non aspettano: sono funzioni pure, e fermi e' giusto).
+   La lettura (`ManifestReads`, in `ReleaseWiring.kt`): dopo una tappa della sincronizzazione dell'indice **finita o lasciata a meta'** (`Yielded`: la sessione
+   si e' usata); non dopo una tappa fermata o non partita per le regole (la rete o la fascia non lo permettevano). E **all'apertura dell'app** (avvio e ritorno
+   in primo piano, `MyCloudGalleryApp.onForeground`), dopo il primo disegno (avvio istantaneo), quando la galleria e' partita (famiglia pronta, al piu' 20 s di
+   attesa) e l'area comune e' nota: senza, una lettura "assente" segnerebbe l'ora per 24 ore. Il ritmo resta quello di D29: al piu' una lettura **con risposta**
+   ogni 24 ore, anche all'apertura (D29: "all'avvio se l'ultima lettura ha piu' di 24 ore"); un NAS che non risponde si riprova alla volta dopo.
+6. **CA-1, le parole.** Una `CompositionLocal` del design system, `LocalWritesHeldByRelease`, che la radice (`ReleaseRoot`) mette a vero con la sola lettura:
+   nessun enum nuovo nei core. Frasi proprie, con la causa ("questa versione va aggiornata") e cosa fare, per la pagina Backup, il piede della Libreria, la
+   condivisione degli album in pausa e il messaggio "non si puo' scrivere" degli album; in Diagnostica la voce `BACKUP_WRITES_STOPPED` dice la causa nel dettaglio
+   e **non** offre "Riattiva le scritture" (`DiagnosticsActions.NO_ACTION`: un'azione senza etichetta non ha tasto) quando a fermare e' solo il manifest. Frase
+   **neutra** (congelamento, interruttore o versione da aggiornare, "la Diagnostica dice perche'"; niente "riprova piu' tardi" ne' "riparte quando le riaccendi")
+   per cestino e doppioni del NAS, operazioni sui file, viewer, cancellazione dei volti e "Ricevuti in coda" (L571).
+7. **RL-1, la radice.** `ReleaseRoot` ha una struttura sola per `Normal` e `UpdateBanner` (il contenuto nello stesso posto, l'avviso sopra solo se serve, la
+   `CompositionLocal` intorno): lo stato salvato letto dopo il primo disegno o un blocco `WRITES` a meta' sessione non buttano piu' la navigazione. Solo `Stopped`
+   la toglie, apposta. Il `ViewModel` non cambia: con la struttura stabile lo stato "non ancora letto" (`Normal`) non costa niente.
+8. **I5, le chiavi.** `ReleaseKeysTest`: con `PROVISIONAL = false` K1 e K2 devono essere diverse dai segnaposto derivati, da KT e fra loro (una funzione di
+   controllo provata anche su chiavi generate nel test, cosi' la prova non passa a vuoto finche' la costante e' vera). `release.ps1` la esegue con `check.ps1`.
+9. **I1, dichiarata.** La sola lettura riguarda i contenuti; lo strato della famiglia (stato del dispositivo, registro, segnalazioni, kit, pulizia dei temporanei)
+   resta permesso come con "Ferma le scritture": L570, C441, E-REL5.
+
+### Documenti
+`docs/sicurezza.md`: C434 (R3), C441 (rimandi, I1), C442 (I5), L566 (le superfici) precisate; **C460** (la versione fermata fuori dalla sua finestra), **C461**
+(lettura del manifest e stato salvato), **C462** (chiavi vere), **L570** (sola lettura e strato della famiglia), **L571** (frasi neutre), **L572** (documenti gia'
+consegnati); "Sigle" e "Stato". `docs/fase10-progetto.md`: E-REL5 ed E-REL6. Qui: la scelta 4 di P13 rimanda a questa sezione (R2). Revisioni: le voci R1, R2,
+R3, I1, I5 di `docs/review/10-fase10.md` e la tabella del §7 di `docs/review/funzionale-10.md`.
+
+### Prove (ognuna vista rossa senza la correzione)
+Le correzioni tolte per un momento dal codice (non dalle prove: `build\unfix.py`, fuori dal repository) e le prove lanciate: **rosse**; rimesse: **verdi**.
+- **R3**: `AppLockTwoWindowsTest` (`r3_unaFinestraCheRiparteDopoUnSegnoScadutoSenzaPoll_chiedeLoSblocco` e `r3_conUnTimeoutLungoIlTempoContaDalSegno...`: "UNLOCKED"
+  invece di "LOCKED"); `ProcessForegroundTest` (il caso esplicito e la proprieta' con passi di tempo senza `poll`).
+- **I5**: `ReleaseKeysTest` con `PROVISIONAL = false` e la parola "segnaposto" tolta da §5.6 (una prova a mano, non committata): le prove di prima verdi, la
+  nuova rossa ("K1 e' ancora un segnaposto, K2 e' ancora un segnaposto").
+- **R2**: `ManifestReadsTest` (tappa `Yielded` e apertura dell'app: nessuna lettura prima).
+- **CA-3**: `ReleaseLoadWindowTest` (tre prove a tempo virtuale: regole e modelli rispondevano "fermo" subito).
+- **CA-4**: `MemoriesWorkTest` (la notifica aspettava i ricordi e partiva), `Correzioni8CLavoriAppTest` (la lettura del telefono si riaccodava),
+  `GalleryIntegrationTest` (si agganciava al primo piano).
+- **CA-2 e R1**: `AppEntryGateTest` (il cancello diceva `ALLOWED`), `ReceivedGatesTest` ("Riprova" rimetteva in coda); in piu' le prove dei moduli per le quattro
+  superfici con `STOPPED` (`PickerViewModelTest`, `ReceiveViewModelTest`, `MediaDocumentsProviderTest`, `IncomingDropsTest`) e `ReleaseGatesAppTest` con il
+  manifest firmato (il cancello d'ingresso `STOPPED` con `ALL`, "Salva sul NAS" non offerto con `WRITES`).
+- **CA-1**: `WritesHeldTextsTest` (le frasi neutre), `ReleaseGatesAppTest` (la voce del backup in Diagnostica), `BackupMessagesTest`, `BackupFooterProblemsTest`,
+  `RevisioneBAlbumPageTest`.
+- **RL-1**: `ReleaseRootTest` (un valore salvato nel contenuto si perdeva all'arrivo della sola lettura).
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde** ("OK: tutto a posto.", uscita 0, 2/11, dalle 21:21 alle 23:03 sotto il carico degli altri pacchetti), al primo giro, come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `--no-daemon`, cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del semaforo (`corr10a`), sull'albero con tutte le correzioni e questi documenti. `assembleDebug`, `assembleRelease`, `galleryTest` e `galleryLint` verdi; **18.634 prove rieseguite in 45 moduli, 0 fallite, 35 saltate per assunzione** (`app` 1.435; `core-security` e `core-release` non rieseguite perche' gia' aggiornate dai giri mirati, verdi anche quelle); tutti i passi della release verdi (nessuna chiave privata nei file, resti di debug assenti, le quattro recinzioni accese nel bytecode e nel sorgente); solo `-Bench` saltato. Nessun `hs_err_pid*.log`. Le corse intermedie (prove mirate, prove rosse senza le correzioni) sono in `build\*.log`, fuori dal repository. `FeatureFlags` e `tools/release/recinzioni.json` non toccati.
+
+### Cosa resta (e per le prove sul campo)
+- **Il widget** (CA-3 "il widget con `release.stopped`" e lo svuotamento con `ALL` di R1): pacchetto B (il legame e' in `Phase10Module`, che qui non si tocca).
+- **R2, punto 2** (la Diagnostica che dice da quanti giorni il manifest non si legge, con un avviso oltre 3 giorni): non fatto.
+- **F177** (debug, manifest firmato con KT): con `WRITES` le frasi di Backup, album, piede della Libreria, Diagnostica e cestino; "Condividi verso MyCloud
+  Gallery" che dice "sola lettura" senza copiare; con `ALL` il selettore aperto da un'altra app, le radici nel selettore di sistema, "Condividi", un rilascio
+  da un'altra app (tablet), nessuna notifica dei ricordi il mattino dopo. **F177b**: avvio a freddo con `WRITES` salvato (la radice non ricompone; il viewer
+  aperto resta all'arrivo di un blocco). Lettura del manifest con un giro dell'indice che non finisce (prima sincronizzazione lunga): il blocco arriva
+  all'apertura dell'app.
+- **F166, F167**: uscita da DeX con il telefono bloccato e il blocco a "Subito"; sbloccato il telefono dopo qualche minuto, l'app chiede lo sblocco (R3).
+- **K1 e K2**: restano segnaposto (azione dell'utente, L560); la prova di I5 si accende quando `PROVISIONAL` diventa falso.
+
+### Commit (branch `fase10/corr-a`)
+`f2217f31` (R3), `9d439d03` (I5), `59ef6c07` (R2, CA-3, CA-4), `98e51adf` (CA-2, R1), `63d6a508` (CA-1, RL-1) e quello dei documenti.
+
+## Correzioni della Fase 10, pacchetto B: il widget (02/11)
+
+Fonte: `docs/review/funzionale-10.md` (WG-1, WG-2, WG-3, WG-4, WG-5, RL-2) e `docs/review/10-fase10.md` (R1 per la parte del widget, R4, R5). Branch `fase10/corr-b`, partito da `b8a2e282`. Scelte gia' fatte dall'orchestratore (le proposte consigliate dei due revisori, l'utente le puo' cambiare): con la versione fermata il widget si **svuota** e dice "Apri MyCloud Gallery"; RL-2 si corregge nel **testo**, non nel widget. Non toccati `FeatureFlags` e `tools/release/recinzioni.json`.
+
+### Le correzioni, voce per voce
+
+- **R5 (azzeramento, un ridisegno gia' partito non rimette foto).** Due difese. (1) `WidgetGraph.stop` si segna fermo **prima** di `blankAll` (`compareAndSet`): mentre lo svuotamento lavora il fornitore risponde gia' null, quindi un giro che ricomincia perche' la generazione e' cambiata non ottiene le porte. (2) Dentro il cancello del motore, subito prima di registrare e consegnare, `WidgetEngine.refresh` richiede le porte **senza aspettare** (`services(0)`): se non ci sono il giro non consegna, anche quando nessuna causa ha spostato la generazione (la finestra stretta fra "ho le porte" e "ho letto la generazione"). Nessuno stato nuovo nel motore: la chiusura e' quella del fornitore, quindi `resume` (WG-1) la riapre senza altro. Prove: `WidgetGraphTest.lAzzeramentoSiDiceFermoPrimaDiSvuotare` (il fornitore e' null dentro `blankAll`), `WidgetEngineTest.unGiroGiaPartitoNonConsegnaSeLePorteSonoTolte` e `.dopoLoSvuotamentoDiUnAzzeramentoNonArrivaPiuUnaFoto` (giro sospeso nella decodifica, porte tolte, il giro riprende: nessuna registrazione, nessuna consegna dopo lo svuotamento).
+- **R4 (registro perso, "Nascondi" muto).** Il registro illeggibile o rovinato riparte vuoto e resta cosi' (e **non** lo si fa lanciare: anche una scrittura a meta' dopo la perdita avrebbe lasciato un registro valido ma incompleto, che al riavvio non si distinguerebbe da uno buono). Si cambia chi lo legge: un widget sulla Home che il registro non conosce vale "non so cosa mostra". `WidgetEngine.affectedBy` aggiunge ai widget che mostrano il media (o il ricordo) **tutti quelli di `targets.slots()` non registrati**; `WidgetGraph.watch` (il nascosto arrivato da un altro dispositivo) confronta i widget di `AppWidgetManager` con quelli del registro e, se ce n'e' uno sconosciuto, fa `blankAll(NO_MEDIA)` e `shelfChanged()` (non puo' nominare i media: svuota tutto e ridisegna). In uso normale uno sconosciuto e' solo un widget appena aggiunto e non ancora disegnato: costa uno svuotamento in piu' (L573). Con la versione fermata o l'azzeramento `watch` non fa niente. Prove: `WidgetEngineTest.conIlRegistroRovinatoSuDiscoUnNascostoSvuotaTuttiIWidget` (registro vero su file con un byte cambiato e poi con byte inutili, `hiddenChanged` e `memoryDropped`), `.unWidgetCheIlRegistroNonConoscePerUnNascostoSiSvuotaComunque`, `WidgetGraphTest.conIlRegistroPersoIlGiroDeiDatiPersonaliSvuotaTuttiIWidget`, `.conIlRegistroCheConosceTuttiNonSvuotaNiente` (nessuno svuotamento a ogni istantanea) e `.unRegistroCheLanciaSvuotaTuttiEUnaVersioneFermataNonFaNiente`. Due prove esistenti (`unNascostoCheNessunWidgetMostraNonCambiaNiente`, `unRicordoScartatoSvuotaIWidgetCheLoMostrano`) disegnano prima tutti i widget: la loro frase e' "un id che nessun widget **registrato** mostra non cambia niente".
+- **WG-1 (dopo l'azzeramento il lavoro periodico non riparte; widget fermo per il processo).** `WidgetGraph.resume()` toglie il fermo, e lo chiama `MyCloudGalleryApp` all'inizio di `gallery.startWhenReady` (la galleria parte, anche con una configurazione nuova **nello stesso processo**: `eraseAccountData(stopGallery = false)`); `WidgetWiring.publishAtStart` (dopo il primo disegno) ora, se il widget non e' fermo e ci sono widget sulla Home, programma il lavoro con `WidgetGraph.ensureWork()` (`KEEP`, alla frequenza scelta) **e** fa il giro. Un azzeramento partito fra l'avvio e il primo disegno non rimette il lavoro (il widget e' fermo). Dopo "Configura di nuovo" o l'azzeramento completo il processo si riavvia (`AppGraph`): il lavoro riparte al primo avvio con la galleria pronta (`publishAtStart`), non al primo `onUpdate` del launcher. Prove: `WidgetGraphTest.dopoLAzzeramentoLaNuovaConfigurazioneRimetteIlLavoro` (WorkManager di prova: lavoro presente, azzeramento lo toglie, avvio tardivo a widget fermo no, `resume` + avvio lo rimettono a 24 ore, di nuovo azzerabile) e `.senzaWidgetLAvvioNonProgrammaIlLavoro`.
+- **WG-2 (la frequenza scelta si perde).** `WidgetServicesProvider.period` (di serie `HOURS_3`) e `WidgetHost.period()` danno la frequenza scelta **senza montare le porte** (il fornitore di `WidgetGraph` la legge dalle preferenze); il ricevitore programma `WidgetWork.schedule(.., WidgetHost.period(), .., replace = false)` e lo fa **in `inBackground`** (le preferenze si aprono dal disco: non sul thread principale; `onUpdate` programma e ridisegna nella stessa coroutine, un solo `goAsync`). Una lettura che lancia o nessun fornitore = la frequenza di serie. Prove: `GalleryWidgetReceiverTest.unWidgetCheNasceProgrammaIlLavoroAllaFrequenzaScelta` (24 ore, ultimo widget tolto e rimesso, `onUpdate` non cambia), `.senzaIlFornitoreOConUnaLetturaCheLanciaVaLaFrequenzaDiSerie`, `WidgetGraphTest.ilFornitoreDiceLaFrequenzaSceltaSenzaMontareLePorte`.
+- **WG-3 (tocco con un viewer gia' aperto).** `showWidgetViewer` chiude il viewer prima di tornare alla radice e aprire la richiesta (`ViewerHostState.open` con una richiesta gia' aperta esce subito). Prove: `WidgetTapNavigationTest.unViewerGiaApertoSiCambiaConLaFotoToccata` e `.senzaViewerApertoSiApreLaFotoToccata`.
+- **WG-4 (tocco a freddo: "Questa foto non c'e' piu'" per una foto che c'e').** `WidgetHostViewModel.viewerOf` e' ora sospensiva e usa `lookupTappedMedia`: se l'istantanea non c'e' **aspetta** (al piu' 3 s, `TAP_SNAPSHOT_WAIT_MS`; il caricamento intero costa circa 1,3 s) e distingue tre esiti: `Open`, `Gone` (istantanea in mano, media assente: Libreria **con** l'avviso), `NotReady` (l'istantanea non e' arrivata: Libreria **senza** avviso). Il tetto e' mio (il revisore proponeva 2 s: su un archivio grande a freddo e' stretto e l'attesa non costa niente, l'utente vede la Libreria che si carica). Prove (tempo virtuale): `WidgetTapNavigationTest.aFreddoSiAspettaLIstantaneaEConLaFotoLaSiApre` (istantanea dopo 200 ms), `.unaFotoCheNonCEPiuEGone`, `.seLIstantaneaNonArrivaNelTempoNonEPronta` (esattamente al tetto, non prima).
+- **WG-5 (budget a freddo del lavoro periodico).** `WidgetRules.PERIODIC_COLD_START_BUDGET_MS` = 10 s; `WidgetEngine.refresh` ha un `coldBudgetMs` e `refreshAll(budget, coldBudgetMs)` aspetta le porte **una volta sola** per tutto il giro (se non arrivano il giro finisce subito, non una attesa per widget); `WidgetPeriodicRun` lo passa. Il ricevitore e lo svuotamento per un nascosto restano a 1,5 s. Non c'e' un `awaitLive` della Libreria in piu': le porte aspettano gia' l'istantanea e lo scaffale per il tempo dato. Prove: `WidgetEngineTest.ilGiroPeriodicoAspettaLePorteUnaVoltaSolaEPiuALungo`, `.ilGiroPeriodicoSenzaPorteNonAspettaUnaVoltaPerWidget`, `WidgetWorkTest.laTappaAspettaLePorteIlTempoDelLavoroPeriodico`.
+- **R1, parte del widget (versione fermata `ALL`).** `WidgetGraph.releaseChanged(stoppedNow)`: con `ALL` `blankAll(NO_MEDIA)` (testo "Apri MyCloud Gallery", **non** "Configura": la versione e' fermata, non da configurare) e il registro si svuota (senza porte `blankAll` non lo tocca); al ritorno a normale o a sola lettura `shelfChanged()` ridisegna tutto. `WidgetWiring.followRelease` segue il flusso `release.status` (`Phase10Module`) e agisce solo a un **cambio** (il valore di partenza "non fermata" non fa un giro in piu'); un azzeramento in corso ha la precedenza. `watch` non fa niente con la versione fermata. Prove: `WidgetGraphTest.conLaVersioneFermataIWidgetSiSvuotanoETornanoNormaliAlloStatoNormale` e `.dopoLAzzeramentoIlManifestNonRimetteIWidget`. Il resto di R1 (selettore, provider, ricezione, notifiche) e' del pacchetto A.
+- **RL-2 (la frase sui luoghi).** `CHANGELOG.md` e `feature-settings/src/main/res/raw/changelog.md` (uguali, lo prova `ReleaseNotesTest`) dicevano "il widget non mostra nomi di persone ne' luoghi": ora "il widget non mostra mai nomi di persone. Il titolo di un ricordo puo' dire dove e' stato." La stessa frase falsa era in `docs/sicurezza.md` (§ "Cosa fa l'app", il widget): corretta. La pagina Impostazioni → Widget dice solo "ne' i nomi delle persone": e' gia' vera, non cambia. Il widget non cambia (il luogo nel titolo e' D4).
+
+### Registro, documenti, numeri
+
+- `docs/sicurezza.md`: **C463** (il widget fallisce chiuso con un registro perso e durante l'azzeramento: R4, R5), **C464** (versione fermata: il widget si svuota), **L573** (un registro perso costa uno svuotamento in piu' e la Home non si pulisce da sola fino alla prima causa), **L574** (con la versione fermata il widget non dice perche'; si svuota solo quando l'app legge il manifest, R2). Riga "Sigle" aggiornata.
+- `docs/review/10-fase10.md` e `docs/review/funzionale-10.md`: stato "Corretta (pacchetto B, 02/11)" per R4, R5, R1 (parte del widget), WG-1...WG-5, RL-2.
+- Il registro dei Nascosti (`HiddenSurfaces`): la riga `WIDGET` resta in produzione con le sue sonde; il motore e il grafo, che sono fra le sue fonti, restano elencati.
+
+### Prove viste fallire prima, passare dopo
+
+Metodo: la stessa suite contro la logica vecchia rimessa a mano nei soli punti toccati (poi tolta), poi contro quella nuova.
+
+- **feature-widget** (45 prove, 7 fallite prima): `WidgetEngineTest.unGiroGiaPartitoNonConsegnaSeLePorteSonoTolte` (R5), `.conIlRegistroRovinatoSuDiscoUnNascostoSvuotaTuttiIWidget` e `.unWidgetCheIlRegistroNonConoscePerUnNascostoSiSvuotaComunque` (R4), `.ilGiroPeriodicoAspettaLePorteUnaVoltaSolaEPiuALungo` e `.ilGiroPeriodicoSenzaPorteNonAspettaUnaVoltaPerWidget` (WG-5), `WidgetWorkTest.laTappaAspettaLePorteIlTempoDelLavoroPeriodico` (WG-5), `GalleryWidgetReceiverTest.unWidgetCheNasceProgrammaIlLavoroAllaFrequenzaScelta` (WG-2).
+- **app, `WidgetGraphTest`** (6 prove nuove fallite prima): `lAzzeramentoSiDiceFermoPrimaDiSvuotare` (R5), `conIlRegistroPersoIlGiroDeiDatiPersonaliSvuotaTuttiIWidget` e `unRegistroCheLanciaSvuotaTuttiEUnaVersioneFermataNonFaNiente` (R4), `dopoLAzzeramentoLaNuovaConfigurazioneRimetteIlLavoro` (WG-1), `ilFornitoreDiceLaFrequenzaSceltaSenzaMontareLePorte` (WG-2), `conLaVersioneFermataIWidgetSiSvuotanoETornanoNormaliAlloStatoNormale` (R1).
+- **app, `WidgetTapNavigationTest`**: `unViewerGiaApertoSiCambiaConLaFotoToccata` (WG-3), `aFreddoSiAspettaLIstantaneaEConLaFotoLaSiApre`, `unaFotoCheNonCEPiuEGone` e `seLIstantaneaNonArrivaNelTempoNonEPronta` (WG-4).
+- **Passano anche prima, sono guardie**: `WidgetEngineTest.dopoLoSvuotamentoDiUnAzzeramentoNonArrivaPiuUnaFoto` (con il fornitore che risponde null dopo lo svuotamento il secondo tentativo del giro e' gia' fermato: il buco e' nella finestra stretta o nell'ordine di `stop`, provati dalle due prove sopra), `WidgetGraphTest.senzaWidgetLAvvioNonProgrammaIlLavoro`, `.conIlRegistroCheConosceTuttiNonSvuotaNiente`, `.dopoLAzzeramentoIlManifestNonRimetteIWidget`, `GalleryWidgetReceiverTest.senzaIlFornitoreOConUnaLetturaCheLanciaVaLaFrequenzaDiSerie`, `WidgetTapNavigationTest.senzaViewerApertoSiApreLaFotoToccata`.
+- **Effetto collaterale di R4 sulle prove esistenti**: cinque prove contavano su "registro vuoto = nessun widget". `unNascostoCheNessunWidgetMostraNonCambiaNiente`, `unRicordoScartatoSvuotaIWidgetCheLoMostrano`, `unNascostoCheArrivaAMetaGiroScartaIlGiroInCorso`, `unGiroCheTrovaSempreUnaCausaNuovaSiFermaEDiceKept` (motore) e `WidgetRefresherTest.unErroreNonEsceMai` ora registrano prima i widget (o dicono che i widget sconosciuti si svuotano). Due di queste facevano chiamare `hiddenChanged` **dentro** un giro (dal pianificatore o con il giro in attesa): con un widget sconosciuto `hiddenChanged` ora ridisegna e aspetta il turno del giro in corso, quindi la prova si bloccava (nel codice vero `hiddenChanged` parte da un'altra coroutine e aspetta solo il giro).
+
+### Esito di `tools\check.ps1 -NoDaemon` (02/11, branch `fase10/corr-b`)
+
+`OK: tutto a posto.` (33 passi `OK`, uno `SKIP`: il benchmark su dispositivo, `-Bench`): `assembleDebug assembleRelease galleryTest galleryLint`, test eseguiti in ogni modulo (nessuno a zero, nessuno fallito), APK di release (manifest, esposizione, nessun resto di debug, recinzioni, Glance al suo posto), permessi in `docs/sicurezza.md` §4-bis.
+
+### Cosa resta per le prove sul campo
+
+- **F164**: azzeramento o "Configura di nuovo" con un widget sulla Home, poi configurare di nuovo (stesso NAS e un altro): `dumpsys jobscheduler` deve mostrare `widget-refresh` e il widget tornare a ridisegnarsi; verificare che il lavoro riparta senza aspettare un `onUpdate` del launcher.
+- **F162**: frequenza 6 ore o 24 ore, ultimo widget tolto e rimesso: il lavoro riprende con la frequenza scelta; con un archivio grande, `lateRuns7d` in Diagnostica (WG-5: 10 s invece di 1,5).
+- **F163**: (1) viewer aperto su una foto, Home, tocco su una foto del widget: si apre la foto toccata; (2) `am force-stop`, tocco: si apre la foto toccata e mai "Questa foto non c'e' piu'"; con un archivio molto grande il tocco cade nella Libreria senza avviso (3 s).
+- **F161**: registro del widget rovinato a mano (debug, `run-as`), "Nascondi" su una foto del widget: tutti i widget si svuotano (R4); azzeramento subito dopo aver fatto partire `widget-refresh`: la Home resta a "Configura MyCloud Gallery" (R5).
+- **F177 (widget con `ALL`)**: manifest firmato con `ALL` per la versione: il widget dice "Apri MyCloud Gallery" e, tolto il blocco, torna normale (R1; serve KT, quindi un build di debug).
+
+## Fase 10 P11, seconda parte A: strumenti per l'emulatore e l'S25 (02/11)
+
+Il pacchetto P11 della Fase 10, seconda parte A (`docs/fase10-progetto.md` §2.11, D36, §5.5; F170-F181, F185): gli strumenti per le voci S1-S13
+sull'emulatore e sull'S25 e la procedura di reset della famiglia di prova, **preparati e provati contro adb, emulatore e NAS finti**, non
+eseguiti (stanotte niente telefono, niente emulatore, nessuna scrittura sul NAS vero). Branch `fase10/p11b` da `b8a2e282`. **Nessun codice di
+produzione toccato** (`src/main` invariato), nessuna sonda nuova in `app/src/debug/`, nessuna dipendenza, nessuna chiave vera.
+
+**Le decisioni dell'utente del 02/11 applicate**: (1) la famiglia di prova `test` si rifà da capo, solo sulle share di prova, con la procedura
+dell'app e chiave e kit nuovi; l'utente scrive una volta la password di `test`, il kit nuovo va in
+`C:\VibeCoded Projects\MyCloud-Gallery-2-note-agenti\famiglia-di-prova\kit.txt` (fuori da git); (2) i file ostili anche in
+`test-comune/mcg-ostile/` e nell'area della famiglia di prova, solo su `test` e `test-comune`, con la pulizia verificata dal PC (regola nuova
+nella guardia, C470); (3) PCAPdroid no: S8 (c) e la parte "host" di S13 dichiarate, S8 (b) con `-tcpdump`, S13 con `netstats` per UID;
+(4) widget e accessibilità secondari: S10 e S12 in fondo all'ordine.
+
+**Numerazione.** Nuove **C470** (i file ostili delle prove nell'area della famiglia di prova, con la guardia e il suo registro) e **C471** (le
+prove sui dispositivi non scrivono password, confermano solo i dialoghi dell'app, riportano solo numeri); nuovi **L600** (l'emulatore non è
+casa), **L601** (i fogli della chiave sull'S25 li fa l'utente; i dispositivi di prova restano nel registro), **L602** (cosa non vedono
+UI Automator e adb), **L603** (il verificatore del reset non legge le share di famiglia). Riga "Sigle", stato, checklist della Fase 10 e
+registro di `docs/sicurezza.md` aggiornati; in `docs/prove-campo.md` il "dove" di F170-F181 e una nota su F170-F181 e F185.
+
+### Cosa c'è, dove
+- **La regola nuova (C470)**: `core-nas/src/test/.../integration/security/FamilyAreaGuard.kt`, sullo stesso trasporto recintato della suite
+  (`TestAreaTransport`, che ora prende un'interfaccia `SmbAreaGuard`: `TestAreaGuard` la implementa senza cambiare comportamento; in più la
+  cancellazione dallo handle passa dalla guardia come `DELETE`). Ammessi: `test-comune/mcg-ostile/**`; in `.mycloudgallery/` di `test` e
+  `test-comune` solo `devices/<id di prova>/**`, `albums/<uuid>/<id di prova>/**`, `family/requests/<id di prova>`, `release/manifest.mcgr`
+  (con quello che c'era messo da parte in `manifest-prima-<giro>.mcgr` e rimesso) e la rinomina di `family` in `family-vecchia-<giro>`;
+  letture: elenchi ovunque sulle due share, contenuto solo sotto `.mycloudgallery/` e `mcg-ostile/`. Mai `test2`, `NAS`, `Public`, `alessio`.
+  Si crea solo in esclusiva; si cancella solo ciò che il **registro** del giro (salvato sul PC) dice creato.
+- **Gli strumenti dal PC sull'area della famiglia**: `FamilyArea.kt` (sessione con solo `test`, stato del giro sul PC: id, tre dispositivi
+  di prova con chiavi P-256 software "approvato", "revocato", "canaglia", registro), `FamilyAreaProbes.kt` (lettura della famiglia dal kit e
+  dal registro firmato, archivio di `family`, richieste di ingresso con i codici di approvazione, semina di S1 (c), S2, S3 (b), S3 (c), S7a e
+  S7, S9 in due tempi nel giro di `mcg-it`, pulizia, confronto delle fotografie), `FamilyAreaNasIntegrationTest.kt` (`@NasIntegration`, un passo
+  per comando scelto da `MCG_FAMIGLIA_PASSO`), `FamilyAreaFakeNasTest.kt` (il NAS finto, sempre in `check.ps1`).
+- **Gli strumenti sui dispositivi** (`tools/security/`): `run-all.ps1 -Livello emulatore|s25` (con `-Piano`, `-Passo`, `-Release`,
+  `-Test2Serial`, `-ReleaseApk`), `famiglia-di-prova.ps1`, e in `lib/` le guardie e UI Automator (`dispositivo.ps1`), il motore dei copioni
+  (`copioni.ps1`), il copione del reset (`copione-famiglia.ps1`), Diagnostica dall'anteprima, Cerca, approvazione, revoca e scongelamento
+  (`copioni-app.ps1`), le letture esterne (`analisi.ps1`: pcap, logcat, `dumpsys package`, `netstats`, `bmgr`, il servizio di accessibilità di
+  prova), le voci (`voci.ps1`, `voci-sistema.ps1`), il reset e la pulizia (`famiglia.ps1`), l'ordine con i tempi (`livelli.ps1`). In
+  `tools/chaos/s25.ps1` il modo `security` (e `-Release`) passa a `run-all.ps1 -Livello s25`. L'adb finto ha le aggiunte in
+  `tools/chaos/fake-adb/fake-adb-sicurezza.ps1` (caricate prima dei comandi di sempre, che restano invariati) e un emulatore finto
+  (`emulator.cmd`, `fake-emulator.ps1`). La prova a secco: `tools/security/sicurezza-finto.ps1` (con `fake/`: schermate, catture, passi del
+  PC finti). Il copione della prossima finestra: `tools/security/PROSSIMA-FINESTRA.md`.
+
+### Scelte
+1. **L'emulatore non è casa (L600), quindi le voci sull'app che leggono il NAS vanno sull'S25.** L'onboarding dell'admin conferma "casa"
+   solo con un ULA nel Wi-Fi (`DefaultOnboardingCoordinator.confirmHome`: `NO_ULA`), e dopo la rete vale casa solo con quell'ULA
+   (`docs/rete-casa-vpn.md` §3); il Wi-Fi in NAT dell'emulatore non ne ha (lo dice già `docs/fase4-progetto.md`: "l'emulatore non è casa").
+   Il brief metteva S1 (c), S2, S3 e S9 sull'emulatore: lì non possono girare contro il NAS di prova. Il livello `s25` le fa con la debug e
+   `test`; il livello `emulatore` fa ciò che non vuole il NAS (S8 (b), che anzi vuole una rete estranea, S5, S6, S11, S12, S13) e prova S4 e
+   S7 sulla release solo se il `preflight` trova un ULA nel Wi-Fi (`casa_possibile`); altrimenti le dichiara **bloccate**. Nessun aggiramento
+   del cancello di rete in debug: sarebbe la porta che S8 prova chiusa.
+2. **Il reset è "Ricominciare da zero", non "Reimposta la famiglia".** `NasFamilyReset` (Impostazioni, Famiglia, "Reimposta la famiglia")
+   vuole un admin con la sua chiave: l'utente non ha più né chiave né kit. Quindi la procedura della guida per "senza admin, senza kit e senza
+   codice" (`docs/famiglia-dispositivi.md` §5): dal PC `family` messa da parte (rinominata, mai cancellata), poi sull'S25 "Rientra con un QR
+   nuovo" (tiene foto, nascosti, preferiti e miniature) e "Crea la famiglia" con `test`. Se l'S25 risultasse ancora **admin** della famiglia di
+   prima, il copione si ferma: uscire cancellerebbe quella chiave, e la scelta è dell'utente.
+3. **Un solo momento dell'utente, ma con quattro fogli della chiave (L601).** Dopo la correzione M3 (decisione 2 (a) del 31/10) ogni gesto
+   dell'admin chiede impronta o PIN: "Genera chiave e codice", l'approvazione dei due dispositivi di prova e la revoca di "revocato". Per
+   tenerli in un momento solo, le richieste e le approvazioni si fanno **subito dopo l'onboarding**, prima delle verifiche dal PC: l'utente
+   scrive la password e appoggia il dito quattro volte nei primi venti minuti, poi il livello `s25` va da solo (circa 3 ore). Gli agenti non
+   scrivono password e non toccano i fogli di sistema; sull'emulatore il foglio lo passa lo script con un PIN di prova suo.
+4. **I dispositivi di prova del PC.** Per arrivare ai codec dell'app (S3 (b)) serve una testa firmata da un dispositivo **approvato**:
+   "approvato" la firma; "revocato" (approvato e poi revocato) e "canaglia" (mai approvato) danno S2. Le chiavi sono software, solo sul PC
+   (`build\security\famiglia-di-prova\stato.txt`, mai nel repository) e si tolgono alla pulizia: "approvato" resta approvato nel registro di
+   prova ma nessuno può più firmare come lui.
+5. **S1 (c) con i segni nell'indice privato di `test`**, non con `CrossAccountProbe`: quella prova scrive in `mcg-it/<giro>/` e pulisce subito,
+   e l'app non indicizza i file finti di un altro. Qui "approvato" (account `test`) pubblica l'indice dell'area privata `test` con tre voci
+   `MCG-PRIV-<casuale>`: Cerca con `test` le trova (il controllo), con `test2` no. `test2` vuole un dispositivo a casa con `test2` (il profilo
+   "Prova 2" del tablet, `-Test2Serial`): senza, S1 (c) resta **dichiarata** con il solo controllo.
+6. **La Diagnostica si legge dall'anteprima dell'esportazione**, scorrendo, e non si salva (niente selettore di sistema): funziona uguale
+   sulla debug e sulla release, che non ha sonde. Rifiuti contati come differenza prima/dopo (la famiglia vecchia lascia i suoi rifiuti).
+7. **S6 cerca anche gli stack trace**: blocchi `at dev.pampa...` del pid dell'app o di `W System.err`, più `ReadLimitExceeded` e il nome che
+   R8 dà alla classe (`UnreadableRecords`); oggi la release ne scrive (833 stanotte sull'S25): la voce sarà rossa finché il pacchetto C non le
+   toglie, ed è giusto così.
+8. **Ogni passo sul NAS è un comando Gradle dal PC** (`FamilyAreaNasIntegrationTest`, `-PnasIntegration`, il file delle credenziali letto dal
+   banco), dietro il semaforo: circa 2 minuti a passo, contati nei tempi del piano. Un passo per comando tiene lo stato sul PC e lascia
+   l'app libera fra un passo e l'altro.
+
+### Voce per voce (pronto / provato contro i finti / dichiarato)
+| Voce | Strumento | Dove | Stato |
+|---|---|---|---|
+| reset della famiglia di prova | `famiglia-di-prova.ps1 -Passo tutto`, passo `famiglia` di `-Livello s25` (fotografia, archivio di `family`, copione fino alla password, kit nel suo file, dispositivi di prova, confronto) | S25 | **pronto, provato contro i finti**: copione fino al riepilogo con l'attesa dell'utente, dialogo di sistema chiuso con Indietro, i quattro fogli; casi fermi: admin della famiglia di prima, codice illeggibile, `AUTH_FAILED` (un solo passo del PC) |
+| S1 (c) | passo `S1c`: segni nell'indice privato di `test`, Cerca con `test` (controllo) e con `test2` (`-Test2Serial`) | S25 (+ un dispositivo a casa con `test2`) | pronto, provato contro i finti; **dichiarata** senza un dispositivo con `test2` (L602) |
+| S2 | passo `S2`: canaglia e revocato (teste `index` e `personal`, testa d'album); rifiuti in Diagnostica (differenza), Cerca "mcg-s2" | S25 | **pronto, provato contro i finti** |
+| S3 (b)/(c) sull'app | passo `S3`: 16 segmenti ostili e 1 di controllo dell'"approvato"; le 13 immagini in `test-comune/mcg-ostile/`; processo vivo, nessun `FATAL`/ANR, PSS sotto 1,5 GB, rifiuti | S25 | **pronto, provato contro i finti** |
+| S4 | passo `S4`: dopo l'azzeramento niente in `files/`, `no_backup/`, `databases/`, nessuna notifica | solo emulatore | pronto; **bloccata** finché l'emulatore non è casa (L600) |
+| S5 | passo `S5`: `allowBackup`, `bmgr backupnow` con il trasporto locale (rimesso quello di prima) | solo emulatore | **pronto, provato contro i finti**; "device transfer" **dichiarato** (L602) |
+| S6 | passo `S6`: semi `MCG-PRIV-...` (nome di file in `mcg-prova`, il segno di S1, la parola cercata), `logcat -d -b all` e l'anteprima della Diagnostica, stack trace dell'app | emulatore (release candidata); S25 con `-Release` | **pronto, provato contro i finti** (verde e rosso) |
+| S7b | passo `S7` (debug, KT valida) e `S7rel` (release, KT ignorata): le buste di `manifest\` una per volta; blocco e rifiuti in Diagnostica | S25; release: emulatore (bloccata se non è casa) o S25 `-Release` | **pronto, provato contro i finti**; la cattura SMB durante `WRITES` dichiarata (nessuna cattura sull'S25) |
+| S7a | passo `S7a`: copie manomesse dei modelli del catalogo sullo scaffale | S25 | pronto, provato contro i finti; **dichiarata** se l'app non deve scaricare un modello |
+| S8 (b) | passo `S8b`: `-tcpdump`, nessuna `SESSION_SETUP`/NTLMSSP, destinazioni e nomi DNS fuori elenco contati | emulatore | **pronto, provato contro i finti** (verde e rosso); (c) **dichiarata** (PCAPdroid no) |
+| S9 nell'app | passo `S9`: 2.000 file nel giro, un giro, il cambio, `NAS_SCAN_FROZEN`, notifica, numero sbagliato rifiutato, "Ho controllato", pulizia del giro | S25 | **pronto, provato contro i finti** |
+| S10 | passo `S10`: `OPEN_WIDGET` con numeri, percorsi e dati inventati aprono la Libreria, nessun crollo | S25 (secondaria) | pronto, provato contro i finti; la schermata di blocco dichiarata (Q4) |
+| S11 | passo `S11`: la sonda solo nella debug, mai nella release | S25, emulatore | **dichiarata** (stesso UID, I2) |
+| S12 | passo `S12`: `FieldProbeA11yService` acceso con `settings`, la finestra dell'app non letta, le Impostazioni sì (controllo); impostazioni rimesse, comprese le tre chiavi che l'accensione svuota | emulatore (secondaria; `Pampa_Tablet`, Android 15) | **pronto, provato contro i finti** (verde e rosso) |
+| S13 | passo `S13`: `dumpsys package` contro l'elenco chiuso di `verify-release-manifest.gradle`, permessi, non `DEBUGGABLE`; `netstats` per UID | emulatore; S25 `-Release` | **pronto, provato contro i finti** (verde e rosso); host **dichiarati** (L602) |
+| `run-all.ps1 -Livello emulatore\|s25` | l'ordine, i tempi, un solo punto dell'utente (s25: il passo `famiglia`) | — | **pronto, provato contro i finti** |
+
+### Come è provato (stanotte, senza dispositivi)
+- **NAS finto** (`FamilyAreaFakeNasTest`, core-nas, sempre in `check.ps1`, 5 prove, verdi al primo giro, meno di un secondo): la guardia rifiuta 32 percorsi e 5 account prima della
+  chiamata (altre share in ogni forma, `test2`, fuori dalle zone, un id di dispositivo che non è del giro, il registro, i kit, `family`
+  cancellata o rinominata in un altro nome, il manifest di prima cancellato, un file che c'era in `mcg-ostile/`, `..`, `.`, componenti vuoti, il
+  carattere nullo) e ammette i 7 casi della regola; dal trasporto vero la cancellazione di `family` dallo handle non passa; la semina di S1 (c),
+  S2 (6 teste), S3 (b) (16 segmenti ostili e uno buono), S3 (c), S7a e S7 (due buste di fila) scrive **solo** nelle zone della regola e la
+  pulizia, in un comando dopo, riporta `test` e `test-comune` byte per byte come prima (il manifest di prima compreso) con il registro vuoto;
+  `NAS`, `Public`, `alessio` e `test2` restano identiche; il reset mette da parte `family`, la famiglia nuova (registro firmato e kit veri,
+  scritti come li scrive l'app) si legge, e il confronto delle fotografie è pulito, mentre una foto aggiunta e una tolta fuori da
+  `.mycloudgallery/` si vedono; S9 in due tempi resta nel giro e pulisce solo quello; il primo `AUTH_FAILED` ferma tutto con un solo tentativo.
+  Il refactoring della guardia della suite è provato da `TestAreaGuardTest`, `TestAreaSelfTest`, `TestAreaCleanupTest` e
+  `SecurityProbesFakeNasTest`, invariati e verdi.
+- **adb, emulatore e passi del PC finti** (`tools/security/sicurezza-finto.ps1`, circa 30 minuti, fuori da `check.ps1`): **72 controlli, tutti verdi** controlli. Le letture (pcap pulita e
+  sporca con SYN verso 445, `SESSION_SETUP` e NTLMSSP; nomi DNS fuori elenco; stack trace con `ReadLimitExceeded`; semi contati senza
+  stamparli; `netstats`, `bmgr`); le guardie (mai `emulator-5554`, nemmeno con l'adb finto; senza l'adb finto solo `emulator-5580` e
+  `RFCY61FZDHW`; solo la nostra app; `input text` rifiuta tutto ciò che non è testo semplice; il resoconto rifiuta un testo libero); il reset
+  sull'S25 finto dalla Libreria al riepilogo e alla Libreria, con l'attesa dell'utente alla password e ai quattro fogli, il dialogo di sistema
+  chiuso con Indietro e mai confermato, il kit nel suo file, la riscrittura, i due codici di approvazione digitati, i passi del PC nell'ordine
+  giusto; i casi fermi (admin della famiglia di prima: niente "Esci e rientra"; codice illeggibile: niente kit; `AUTH_FAILED`: un solo passo del
+  PC e l'app non toccata); `run-all.ps1 -Livello s25 -Piano` con un solo punto dell'utente; i passi S2, S3, S7, S7a, S9, S10, S11 e pulizia
+  sull'app finta (Diagnostica letta dall'anteprima, cinque buste con due blocchi e due rifiuti, congelamento e "Ho controllato" con il numero
+  sbagliato rifiutato); `run-all.ps1 -Livello emulatore` con l'emulatore finto acceso e spento dallo script, la release installata e tolta, S8 (b),
+  S5, S6, S13, S11, S12 (impostazioni rimesse, comprese le tre chiavi svuotate dall'accensione) verdi, S4 e S7 sulla release bloccate senza ULA;
+  poi i casi rossi (seme in logcat, servizio che legge l'app, backup riuscito, `SESSION_SETUP` nella cattura, componente fuori elenco) tutti
+  rossi; `s25.ps1 -Mode security` (anche `-Release`) e i rifiuti di `emulator-5554`. Le prove finte di prima (`s25-ai-finto.ps1`) restano verdi
+  con l'adb finto allargato.
+- **Non provato**: niente sul NAS vero (nemmeno in lettura: non serviva, e la prima fotografia del PC alla prossima finestra è in sola
+  lettura e si ferma al primo `AUTH_FAILED`), niente su un dispositivo. I testi dei copioni sono quelli delle risorse dell'app, ma le schermate
+  vere possono avere un nodo diverso: una schermata che il copione non conosce si salva sotto `build\security\<data>\schermate\` e ferma la prova.
+
+### Il copione della prossima finestra (`tools/security/PROSSIMA-FINESTRA.md`)
+1. Prima del dispositivo (agente, circa 15 minuti): `sicurezza-finto.ps1` verde; la `versionCode` della debug sull'S25, poi
+   `run-all.ps1 -Livello jvm -Voce S7 -VersionCode <n>` e `-Voce S3 -Breve` (buste e immagini); per l'emulatore `:app:assembleDebug` e una
+   release candidata firmata con una chiave di prova generata sotto `build\`.
+2. **S25** (circa 3 ore): `run-all.ps1 -Livello s25 -Serial RFCY61FZDHW` (o `s25.ps1 -Mode security`). **L'unico intervento dell'utente**,
+   nei primi 20 minuti: al segnale scrive la password di `test` sull'S25 e tocca "Accedi al NAS", poi appoggia il dito ai quattro fogli della
+   chiave ("Genera chiave e codice", due approvazioni, una revoca). Poi: S1 (c), S2, S3, S7, S7a, S9, S11, S10, pulizia.
+3. **Emulatore** (circa 45 minuti, senza utente): `run-all.ps1 -Livello emulatore -ReleaseApk <apk di prova>`.
+4. **Alla fine si pulisce da solo**: nell'area della famiglia di prova tutto ciò che il registro dice creato dal giro (con il manifest di prima
+   rimesso), il giro di S9 in `mcg-it/`, il seme in `mcg-prova` dell'emulatore, la release dall'emulatore, l'emulatore se l'ha acceso lo script,
+   le chiavi dei dispositivi di prova. **Resta**: `family-vecchia-<giro>` e i kit vecchi (li toglie l'utente), i due dispositivi di prova nel
+   registro di prova, il file del kit nuovo, l'S25 admin della famiglia nuova.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+**Verde al primo giro**: "OK: tutto a posto." (uscita 0, 02/11 dalle 23:03 alle 23:33), lanciato come chiede il brief (posto del semaforo, `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `app\build\outputs\apk\release` cancellata prima), con il codice dei due commit di questo pacchetto e i documenti in lavorazione: assembleDebug, assembleRelease, galleryTest e galleryLint in 25 minuti; **19.494 test in 47 moduli** (risultati riscritti nel giro), nessuno fallito; nessuna classe rifatta con `--rerun`, nessun `hs_err_pid*.log`. I test nuovi (`FamilyAreaFakeNasTest`, 5 prove) aggiungono meno di un secondo. Prima, a parte: `:core-nas:testDebugUnitTest` sulle classi della guardia e dell'area (`FamilyArea*`, `TestAreaGuardTest`, `TestAreaCleanupTest`, `SecurityProbesFakeNasTest`) verde al primo giro; `tools\chaos\s25-ai-finto.ps1` (54 controlli) e `s25.ps1 -SelfTest` (modo di base e modi ai, share, faces) verdi con l'adb finto allargato.
+
+### Difetti trovati
+**Nessun difetto di sicurezza nel codice di produzione.** Note per l'orchestratore:
+- **Il piano e il brief mettono sull'emulatore voci che leggono il NAS (S1 (c), S2, S3, S4, S7, S9), ma l'emulatore non può essere "casa"**
+  (`NO_ULA` all'onboarding; `docs/fase4-progetto.md` lo diceva già): non è un difetto dell'app (è la regola giusta, C2 ed E-S10), è un
+  presupposto sbagliato del §5.5. Spostate sull'S25 (L600); S4 resta bloccata finché non c'è un emulatore che sia casa, e nessuno strumento
+  deve aggirare il cancello di rete. Gravità per il rilascio: **Media** sul piano delle prove (F173 non si può fare come scritta).
+- **Il "solo intervento dell'utente" non può essere la sola password**: con M3 ogni gesto dell'admin chiede il dito sull'S25, quindi quattro
+  fogli nello stesso momento (L601). Informativa.
+- **Stack trace in release** (833 stanotte, `ReadLimitExceededException` come `UnreadableRecords` dopo R8): già del pacchetto C; S6 lo
+  controlla e sarà rossa finché non c'è la correzione. **Bassa** (rumore e nomi di classe nel registro, nessun dato personale visto).
+
+### Commit (branch `fase10/p11b`)
+`78fb9c8c` (gli strumenti sui dispositivi, i copioni, l'adb e l'emulatore finti, il copione della prossima finestra), `5bfbb49e` (la guardia dell'area della famiglia di prova e i passi dal PC, con i test), `87e460b5` (i documenti) e uno piccolo dopo `check.ps1`: lo stato dei giri di `FamilyAreaFakeNasTest` (chiavi di prova) in una `TemporaryFolder` di JUnit invece che in %TEMP%, dove restava (la classe rifatta da sola: 5 prove verdi, nessuna cartella rimasta).
+
+## Correzioni della Fase 10, pacchetto D: le informative delle Fasi 1-9 (02/11)
+
+Fonte: `docs/review/10-chiusura.md` (le 25 righe con "Chi la chiude: **security-review**", circa 27 voci contando 1.4 B2, B5 e B7), che la
+revisione di sicurezza di fine Fase 10 non ha ripreso (`docs/review/10-fase10.md`, I7). Branch `fase10/corr-d` da `b8a2e282`. Regola: per ogni
+voce si ricontrolla il codice di oggi; se il problema c'e' e la correzione e' piccola e sicura, si corregge con un test che fallisce prima e passa
+dopo; altrimenti si dichiara un limite in parole semplici. Nessuna voce resta senza decisione. Niente telefono, NAS, rete o emulatore; non
+toccati `FeatureFlags`, `tools/release/recinzioni.json`, cancelli del manifest, `AppEntryGate`, radice, widget, `tools/check.ps1`, il
+trascinamento (pacchetti A, B, C).
+
+**Corrette, con il test.**
+1. **4A I5, log di debug con le eccezioni di smbj** (C467). Invece di cambiare una per una le chiamate `GalleryLog.e(TAG, e)` (sono decine, in
+   `:app` e nei moduli), si e' corretto l'unico posto che scrive: il sink di logcat della build debug (`app/src/debug/.../AppLogging.kt`) non usa
+   piu' `Log.getStackTraceString` (che copia i messaggi, dove smbj mette percorsi e nomi di file) e scrive di un'eccezione solo la classe di ogni
+   eccezione della catena e i punti del codice (al piu' 8 cause e 40 punti ciascuna; una catena circolare una volta sola). La release non ha
+   sink, come prima. Test: `AppLoggingTest` (testDebug di `:app`, Robolectric con `ShadowLog`), **rosso prima**: lo stack arrivava con i
+   messaggi (`Caused by: ...` con il percorso del file), e la catena circolare **non finiva** (`Log.getStackTraceString` scorre le cause
+   cercando `UnknownHostException` senza fermarsi su un ciclo: il thread che scriveva il log in debug restava bloccato; il test ha ora un
+   tetto di tempo).
+2. **4B I2, porte di servizio delle conferme** (C468). `CorrezioniDArchitectureTest` (core-common) con quattro regole: nessun file di
+   `src/main` fuori da un package `testing` nomina un package `testing` (oggi nessuno lo fa: la regola lo tiene cosi'); `TestConfirmations`
+   (core-nasops e core-backup) non esce dai package `testing`, nemmeno in `src/debug` o `src/benchmarkRelease`; in `:app` `ConfirmationIssuer`
+   solo in `utility/UtilityPorts.kt` e `albums/AlbumTransferPorts.kt` (che lo chiamano con i tocchi del foglio); `NasOpsDao` solo in
+   `core-database` e in `core-nasops/.../store/`. Un controllo positivo dice che i file cercati ci sono. **Le quattro regole viste rosse** con un
+   file di violazione temporaneo in `app/src/main/.../work/` (poi tolto).
+3. **5A I4, l'emergenza non fermava il file in corso** (C469). In `SafeUploadEngine.pump` il cancello dell'elemento (`gateOf`) si riguarda
+   prima di ogni pezzo, insieme a `mayContinue`: emergenza, blocco del manifest, pausa, famiglia non pronta fermano il giro (`stopForGate`) e il
+   file si ferma al pezzo dopo con il punto di ripresa dove e' arrivato (lo stesso ramo del tasto "Ferma"); un file in arrivo diretto a una
+   share chiusa aspetta da solo (`waitsAlone`, R5 della 5B), senza fermare il giro. Si scrive sempre e solo nel proprio temporaneo. Test:
+   `CancelloNelFileTest` (core-backup): l'emergenza che arriva dopo il primo dei dieci pezzi ferma il file a **una** scrittura (**rosso prima**:
+   dieci), il giro finisce con `WRITES_STOPPED`, niente pubblicato, punto di ripresa a un pezzo; tolta l'emergenza il file arriva intero; la
+   pausa a meta' file ferma come "Ferma". La copia lato server del guardiano non si divide: L586.
+4. **1.4 N6, il codice di approvazione solo dal testo digitato.** Nessun difetto: `PendingRequestView` non porta il codice e
+   `ApprovalViewModel` costruisce `TypedCode` solo da cio' che si digita. Mancava la prova dell'interfaccia: `ApprovalFlowUiTest.n6_*`
+   (feature-settings) controlla che il campo parta vuoto, che senza codice non si approvi e che la prova che arriva al registro sia il testo
+   digitato (`FakeRegistryService.proofs`, nuovo nel finto). Test di guardia: **rosso** con un codice precompilato nel ViewModel (tolto subito).
+
+**Gia' chiuse da fasi successive.** 1.4 B7 (il primo file del giorno passa oltre il tetto: `Trash.kt:150-152`, `NasTrashService.kt:246-252`,
+L36; cancellazione sullo stesso handle con il timbro del diario: `OwnTrashPurger.kt:72-82`; la voce del diario si costruisce solo dal diario
+locale). 4B I8 (Fase 7 P9, D23: Cartelle NAS non elenca per nome i nascosti; `NasHiddenFilesTest`). Il testo di 5B I3 e' chiuso da D-B1.
+
+**Dichiarate con un limite** (`docs/sicurezza.md` §6, in parole semplici, con lo scenario e perche' e' accettabile): 1.4 B2 (L577), B5
+(L578); 4A I1 (L579), I2 (L580); 4B I5 (L581), I7 (L582), I9 (L583); 5A I1 (L584: la proposta delle radici nella vista di `core-nas` non e' piu'
+applicabile, perche' dalla 5B le versioni pubblicano al solito percorso di ogni copia privata), I3 (L585), I4 per la copia del guardiano
+(L586), I6 (L587), I9 (L588); 5B I1 (L589), I2 (L590), I5 (L591, e corretto il testo di «Correzioni funzionali: Libreria e NAS» che diceva
+che una conferma scaduta nell'attesa ferma l'esecuzione), I6 (L592), I7 e la parte "cartelle" di 4B I8 (L593), I8 (L594), I10 (L595), I11
+(L596), I12 (L597). L37, L39 e L43 rimandano ai limiti nuovi. Perche' non corrette: ognuna toccherebbe un formato, una regola condivisa fra
+debug e release, il catalogo o le chiavi delle cartelle gia' date a DocumentsUI (5B I7), oppure riguarda un caso raro di disponibilita' o solo
+la build di debug: nessuna e' una correzione di poche righe con un rischio basso.
+
+**Scelta dell'utente (non decisa qui): 5B I3.** Il foglio "Elimina dal telefono" della selezione della Libreria manda al cestino di Android
+senza l'azione "Prima mettilo al sicuro" del foglio della 5B (D22); dal 22/10 (D-B1) almeno dice il vero su quali media sono al sicuro.
+**Proposta:** con il backup legato, la selezione della Libreria passa per lo stesso foglio della 5B usato dal viewer ("Elimina solo dal
+telefono", con "Prima mettilo al sicuro" per i media non al sicuro); senza backup resta il foglio di oggi. Cambia cio' che l'utente vede: va
+nel filone grafico, se l'utente la vuole.
+
+**Prove.** Rosse prima (viste): `AppLoggingTest` (il primo rosso, il secondo bloccato fino al tetto di 20 minuti del task),
+`CancelloNelFileTest` (2 su 2: 10 e 6 scritture invece di una), le quattro regole di `CorrezioniDArchitectureTest` (con la violazione),
+`ApprovalFlowUiTest.n6_*` (con il codice precompilato: `EditableText = 'K7QD-2M9X-FA4T-1B8C'`). Verdi dopo, e
+`tools\check.ps1 -NoDaemon` (esito nel resoconto del pacchetto).
+
+**Per le prove sul campo.** Nessuna prova obbligatoria nuova: C469 si vede toccando "Ferma le scritture sul NAS" mentre sale un video grande
+(il temporaneo nell'area privata smette di crescere entro un pezzo, 1 MiB, e il video riparte dal punto di ripresa quando le scritture
+tornano); C467 con un errore SMB sulla build debug
+(`adb logcat -s MyCloud/*`: la classe e le righe del codice, nessun percorso).
 
 ## Adozione del Fluid Engine 3.0.0 (03/11; cominciata sulla 3.0.0-rc.1)
 

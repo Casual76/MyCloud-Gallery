@@ -56,11 +56,20 @@ internal object AlbumStrips {
 
   /**
    * Le strisce di una pagina pronta. [canAdopt] e [canBringBack] dicono se la porta ha dei media da proporre (altrimenti la striscia e' solo
-   * un'informazione); [creatorName] il nome di chi ha creato l'album (per la riga dei permessi).
+   * un'informazione); [creatorName] il nome di chi ha creato l'album (per la riga dei permessi). [heldByRelease] (CA-1 della revisione funzionale della Fase 10): le
+   * scritture le ferma il manifest firmato, e la condivisione in pausa dice "questa versione va aggiornata" invece di "riprendo da sola".
    */
-  fun of(resources: Resources, ready: AlbumPageState.Ready, suggested: SuggestionsState, creatorName: String?, canAdopt: Boolean = true, canBringBack: Boolean = true): List<Strip> =
+  fun of(
+    resources: Resources,
+    ready: AlbumPageState.Ready,
+    suggested: SuggestionsState,
+    creatorName: String?,
+    canAdopt: Boolean = true,
+    canBringBack: Boolean = true,
+    heldByRelease: Boolean = false,
+  ): List<Strip> =
     buildList {
-      for (banner in ready.banners) add(of(resources, banner, canAdopt, canBringBack))
+      for (banner in ready.banners) add(of(resources, banner, canAdopt, canBringBack, heldByRelease))
       (suggested as? SuggestionsState.Some)?.let {
         add(
           Strip(
@@ -77,8 +86,8 @@ internal object AlbumStrips {
       }
     }
 
-  private fun of(resources: Resources, banner: AlbumBanner, canAdopt: Boolean, canBringBack: Boolean): Strip = when (banner) {
-    is AlbumBanner.Sharing -> sharing(resources, banner.progress)
+  private fun of(resources: Resources, banner: AlbumBanner, canAdopt: Boolean, canBringBack: Boolean, heldByRelease: Boolean): Strip = when (banner) {
+    is AlbumBanner.Sharing -> sharing(resources, banner.progress, heldByRelease)
     is AlbumBanner.Incoming -> Strip(
       "incoming", Icons.Rounded.CloudSync, FluidTone.Info, resources.getQuantityString(R.plurals.album_banner_incoming, banner.count, banner.count),
       resources.getString(R.string.album_banner_incoming_detail),
@@ -124,7 +133,7 @@ internal object AlbumStrips {
     )
   }
 
-  private fun sharing(resources: Resources, progress: ShareOpState): Strip = when (progress) {
+  private fun sharing(resources: Resources, progress: ShareOpState, heldByRelease: Boolean): Strip = when (progress) {
     is ShareOpState.Running -> Strip(
       "sharing", Icons.Rounded.CloudUpload, FluidTone.Primary, progressTitle(resources, progress.kind, progress.done, progress.total),
       resources.getString(R.string.album_banner_sharing_running_detail),
@@ -133,7 +142,7 @@ internal object AlbumStrips {
       val why = resources.getString(
         when (progress.reason) {
           ShareWait.NO_SPACE -> R.string.album_banner_paused_space
-          ShareWait.WRITES_BLOCKED -> R.string.album_banner_paused_blocked
+          ShareWait.WRITES_BLOCKED -> if (heldByRelease) R.string.album_banner_paused_release else R.string.album_banner_paused_blocked
           ShareWait.LOCKED -> R.string.album_banner_paused_locked
           ShareWait.NAS_UNREACHABLE -> R.string.album_banner_paused_nas
           ShareWait.RULES -> R.string.album_banner_paused_rules

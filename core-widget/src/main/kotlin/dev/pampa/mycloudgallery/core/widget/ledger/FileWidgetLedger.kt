@@ -60,7 +60,8 @@ class FileLedgerStorage(private val file: File) : WidgetLedgerStorage {
  * - **Scrittura atomica**: temporaneo accanto al file, `fsync`, rinomina con `ATOMIC_MOVE` ([StateFiles]). Chi muore **prima** della rinomina
  *   lascia il registro di prima, intero (un temporaneo a meta' non si legge mai); chi muore dopo, quello nuovo.
  * - **Un file rovinato e' un registro vuoto**, mai un crollo: formato sbagliato, versione che non conosco, troncato, un byte cambiato (CRC),
- *   codici non validi, numeri fuori dai limiti, byte in piu'. Il widget si ridisegna e il registro si rifa' con il piano nuovo.
+ *   codici non validi, numeri fuori dai limiti, byte in piu'. Il widget si ridisegna e il registro si rifa' con il piano nuovo. **Vuoto non vuol dire "nessuna foto sulla
+ *   Home"** (R4): chi svuota per un nascosto tratta ogni widget che il registro non conosce come da svuotare (`WidgetEngine.affectedBy`, `WidgetGraph.watch`).
  * - **Tutto o niente anche in memoria**: lo stato in memoria cambia solo se la scrittura e' riuscita; una scrittura fallita lancia
  *   `IOException` e chi chiama lo sa (P3: il disegno non si consegna senza registro, §2.1 passo 7).
  * - Un lucchetto solo (`Mutex`): le chiamate si accodano; la lettura e la scrittura girano su [io].

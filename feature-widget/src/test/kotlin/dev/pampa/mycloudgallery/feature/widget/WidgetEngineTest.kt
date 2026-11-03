@@ -5,22 +5,30 @@ import android.widget.RemoteViews
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetEmpty
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetLedger
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetMode
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetPlan
+import dev.pampa.mycloudgallery.core.widget.contract.WidgetRules
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetSize
 import dev.pampa.mycloudgallery.core.widget.contract.WidgetSlot
+import dev.pampa.mycloudgallery.core.widget.ledger.FileLedgerStorage
+import dev.pampa.mycloudgallery.core.widget.ledger.FileWidgetLedger
 import dev.pampa.mycloudgallery.core.widget.testing.InMemoryWidgetLedger
 import dev.pampa.mycloudgallery.feature.widget.contract.WidgetUiState
 import dev.pampa.mycloudgallery.feature.widget.glance.WidgetComposer
 import dev.pampa.mycloudgallery.feature.widget.host.WidgetThumbnails
 import dev.pampa.mycloudgallery.feature.widget.refresh.RefreshResult
 import dev.pampa.mycloudgallery.feature.widget.refresh.WidgetEngine
+import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
@@ -32,6 +40,9 @@ import org.robolectric.RobolectricTestRunner
 class WidgetEngineTest {
 
   private val context: Application get() = ApplicationProvider.getApplicationContext()
+
+  @get:Rule
+  val folder = TemporaryFolder()
 
   private val small = WidgetSlot(7)
   private val wide = WidgetSlot(8)
@@ -53,11 +64,12 @@ class WidgetEngineTest {
     thumbnails: WidgetThumbnails = WidgetThumbnails { _, _ -> thumb() },
     gate: CompletableDeferred<Unit>? = null,
     plan: (suspend (WidgetSlot, WidgetSize, Int) -> WidgetPlan)? = null,
+    backing: WidgetLedger = InMemoryWidgetLedger(),
   ): Rig {
     val events = mutableListOf<String>()
     val targets = RecordingTargets(mutableMapOf(small to (160 to 160), wide to (320 to 160)), events)
     val composer = RecordingComposer(context, events)
-    val ledger = OrderedLedger(InMemoryWidgetLedger(), events)
+    val ledger = OrderedLedger(backing, events)
     // Come il pianificatore vero: l'epoca di un piano riparte da quella registrata (uno svuotamento ne alza una, e un piano piu' vecchio il registro lo ignorerebbe).
     val planner = ScriptedPlanner(events, gate, plan ?: { slot, size, _ -> photoPlan(slot, size, size.cells, epoch = ledger.epochOf(slot) + 1) })
     val services = FakeServices(planner, ledger, thumbnails)
@@ -241,7 +253,9 @@ class WidgetEngineTest {
   @Test
   fun unNascostoCheNessunWidgetMostraNonCambiaNiente() = runBlocking {
     val r = rig()
+    // Tutti e due i widget sono stati disegnati (il registro li conosce): un widget non registrato si svuoterebbe comunque (R4).
     r.engine.refresh(small)
+    r.engine.refresh(wide)
     r.events.clear()
     r.composer.frames.clear()
     r.engine.hiddenChanged(setOf(mediaId(99)))
@@ -252,6 +266,8 @@ class WidgetEngineTest {
   fun unRicordoScartatoSvuotaIWidgetCheLoMostrano() = runBlocking {
     val memory = memoryId(3)
     val r = rig(plan = { slot, size, _ -> photoPlan(slot, size, size.cells, epoch = 1, mode = WidgetMode.Memory(memory, WidgetTestKit.memoryTitle)) })
+    // Un solo widget sulla Home (un secondo non registrato si svuoterebbe comunque, R4).
+    r.targets.dims.remove(wide)
     r.engine.refresh(small)
     r.events.clear()
     r.composer.frames.clear()
@@ -268,6 +284,10 @@ class WidgetEngineTest {
   fun unNascostoCheArrivaAMetaGiroScartaIlGiroInCorso() = runBlocking {
     val gate = CompletableDeferred<Unit>()
     val r = rig(gate = gate, plan = { slot, size, call -> photoPlan(slot, size, size.cells, epoch = call.toLong(), from = if (call == 1) 0 else 50) })
+    // I due widget sono gia' nel registro (con altre foto): il nascosto non ne tocca nessuno e non ridisegna niente mentre il giro in corso tiene il suo turno.
+    r.ledger.record(photoPlan(small, WidgetSize.SMALL, 1, epoch = 0, from = 90))
+    r.ledger.record(photoPlan(wide, WidgetSize.WIDE, 1, epoch = 0, from = 90))
+    r.events.clear()
     val running = async { r.engine.refresh(small) }
     withTimeout(5_000) { while (r.planner.calls == 0) yield() }
     // Il primo piano (con mediaId(0)) e' fermo nella lettura; arriva il nascosto di mediaId(0).
@@ -292,7 +312,10 @@ class WidgetEngineTest {
       engine.hiddenChanged(emptySet())
       photoPlan(slot, size, size.cells, epoch = 1)
     }
-    val services = FakeServices(planner, OrderedLedger(InMemoryWidgetLedger(), events), WidgetThumbnails { _, _ -> thumb() })
+    val ledger = OrderedLedger(InMemoryWidgetLedger(), events)
+    // Il widget e' gia' registrato: la causa nuova (che sposta solo la generazione) non ha un widget "sconosciuto" da svuotare e ridisegnare dentro il giro (R4).
+    ledger.record(photoPlan(small, WidgetSize.SMALL, 1, epoch = 0))
+    val services = FakeServices(planner, ledger, WidgetThumbnails { _, _ -> thumb() })
     engine = WidgetEngine({ services }, targets, composer, { context.resources })
     assertThat(engine.refresh(small)).isEqualTo(RefreshResult.KEPT)
     assertThat(planner.calls).isEqualTo(WidgetEngine.MAX_ATTEMPTS)
@@ -348,5 +371,159 @@ class WidgetEngineTest {
     val services = FakeServices(planner, InMemoryWidgetLedger(), WidgetThumbnails { _, _ -> thumb() })
     WidgetEngine({ services }, targets, composer, { context.resources }).refreshAll()
     assertThat(targets.pushed).containsExactly(wide)
+  }
+
+  // --- Correzioni della Fase 10, pacchetto B: R5 (azzeramento) --------------------------------------------------------------------------
+
+  /**
+   * R5: il widget si dice fermo (il fornitore risponde null) mentre un giro e' nella decodifica, **senza** che nessuna causa sposti la generazione: il giro riprende, trova le porte
+   * tolte nel cancello e non registra ne' consegna niente (prima rimetteva le foto sulla Home dopo lo svuotamento).
+   */
+  @Test
+  fun unGiroGiaPartitoNonConsegnaSeLePorteSonoTolte() = runBlocking<Unit> {
+    val open = AtomicBoolean(true)
+    val gate = CompletableDeferred<Unit>()
+    val events = mutableListOf<String>()
+    val targets = RecordingTargets(mutableMapOf(small to (160 to 160)), events)
+    val composer = RecordingComposer(context, events)
+    val ledger = OrderedLedger(InMemoryWidgetLedger(), events)
+    val planner = ScriptedPlanner(events, gate) { slot, size, _ -> photoPlan(slot, size, size.cells) }
+    val services = FakeServices(planner, ledger, WidgetThumbnails { _, _ -> thumb() })
+    val engine = WidgetEngine({ if (open.get()) services else null }, targets, composer, { context.resources })
+    val running = async { engine.refresh(small) }
+    withTimeout(5_000) { while (planner.calls == 0) yield() }
+    // Il giro e' fermo nel piano; il processo toglie le porte (azzeramento: il widget si dice fermo prima di svuotare).
+    open.set(false)
+    gate.complete(Unit)
+    assertThat(withTimeout(5_000) { running.await() }).isEqualTo(RefreshResult.KEPT)
+    assertThat(targets.pushed).isEmpty()
+    assertThat(events.none { it.startsWith("record:") || it.startsWith("compose:") }).isTrue()
+  }
+
+  /** R5, il caso intero: giro sospeso nella decodifica, il widget si dice fermo, `blankAll`, il giro riprende: dopo lo svuotamento non arriva nessuna foto. */
+  @Test
+  fun dopoLoSvuotamentoDiUnAzzeramentoNonArrivaPiuUnaFoto() = runBlocking<Unit> {
+    val open = AtomicBoolean(true)
+    val gate = CompletableDeferred<Unit>()
+    val events = mutableListOf<String>()
+    val targets = RecordingTargets(mutableMapOf(small to (160 to 160), wide to (320 to 160)), events)
+    val composer = RecordingComposer(context, events)
+    val ledger = OrderedLedger(InMemoryWidgetLedger(), events)
+    val planner = ScriptedPlanner(events, gate) { slot, size, _ -> photoPlan(slot, size, size.cells) }
+    val services = FakeServices(planner, ledger, WidgetThumbnails { _, _ -> thumb() })
+    val engine = WidgetEngine({ if (open.get()) services else null }, targets, composer, { context.resources })
+    val running = async { engine.refresh(small) }
+    withTimeout(5_000) { while (planner.calls == 0) yield() }
+    open.set(false)
+    engine.blankAll(WidgetEmpty.NOT_CONFIGURED)
+    val blanksDone = events.size
+    gate.complete(Unit)
+    assertThat(withTimeout(5_000) { running.await() }).isEqualTo(RefreshResult.KEPT)
+    assertThat(composer.frames.map { it.state.javaClass.simpleName }.toSet()).containsExactly("Message")
+    assertThat(events.drop(blanksDone).none { it.startsWith("push:") || it.startsWith("record:") }).isTrue()
+    assertThat(targets.pushed).containsExactly(small, wide)
+  }
+
+  // --- R4: un registro perso non dice "nessuno" ------------------------------------------------------------------------------------------
+
+  /** R4, sul registro vero: un file rovinato riparte vuoto, ma i widget sulla Home mostrano ancora le foto di prima: un nascosto li svuota **tutti** (prima: nessuno). */
+  @Test
+  fun conIlRegistroRovinatoSuDiscoUnNascostoSvuotaTuttiIWidget() = runBlocking<Unit> {
+    val dir = folder.newFolder("widget")
+    val before = FileWidgetLedger(dir)
+    before.record(photoPlan(small, WidgetSize.SMALL, 1, epoch = 1))
+    before.record(photoPlan(wide, WidgetSize.WIDE, 4, epoch = 1))
+    val file = File(dir, FileLedgerStorage.FILE_NAME)
+    val bytes = file.readBytes()
+    bytes[bytes.size / 2] = (bytes[bytes.size / 2].toInt() xor 0x5A).toByte()
+    file.writeBytes(bytes)
+
+    val r = rig(backing = FileWidgetLedger(dir))
+    r.engine.hiddenChanged(setOf(mediaId(0)))
+    val blanks = r.composer.frames.takeWhile { it.state is WidgetUiState.Message }
+    assertThat(blanks.map { it.slot }).containsExactly(small, wide)
+    assertThat(blanks.all { it.cells.isEmpty() }).isTrue()
+
+    // Anche per un ricordo scartato, con un file che non si legge per niente.
+    file.writeBytes(ByteArray(40) { 0x7F })
+    val again = rig(backing = FileWidgetLedger(dir))
+    again.engine.memoryDropped(memoryId(2))
+    assertThat(again.targets.pushed.take(2)).containsExactly(small, wide)
+  }
+
+  /** R4: il registro conosce due widget e un terzo sta sulla Home senza esserci: un nascosto svuota chi lo mostra **e** chi non e' registrato, e non il resto. */
+  @Test
+  fun unWidgetCheIlRegistroNonConoscePerUnNascostoSiSvuotaComunque() = runBlocking<Unit> {
+    val third = WidgetSlot(9)
+    val r = rig()
+    r.engine.refresh(small)
+    r.engine.refresh(wide)
+    r.targets.dims[third] = 160 to 160
+    r.events.clear()
+    r.composer.frames.clear()
+    r.targets.pushed.clear()
+    // Un nascosto che nessuno mostra: solo il widget non registrato si svuota (e si ridisegna, ora il registro lo conosce).
+    r.engine.hiddenChanged(setOf(mediaId(99)))
+    assertThat(r.targets.pushed.first()).isEqualTo(third)
+    assertThat(r.composer.frames.first().slot).isEqualTo(third)
+    assertThat(r.composer.frames.first().state).isInstanceOf(WidgetUiState.Message::class.java)
+    assertThat(r.targets.pushed.filter { it != third }).isEmpty()
+    // Un nascosto che due widget mostrano: loro due, e il terzo ora e' registrato.
+    r.targets.pushed.clear()
+    r.engine.hiddenChanged(setOf(mediaId(0)))
+    assertThat(r.targets.pushed.take(3)).containsExactly(small, wide, third)
+  }
+
+  // --- WG-5: il budget a freddo ----------------------------------------------------------------------------------------------------------
+
+  /** WG-5: il lavoro periodico aspetta le porte piu' del ricevitore, **una volta sola** per tutto il giro; il ricevitore e il nascosto restano al tetto di serie. */
+  @Test
+  fun ilGiroPeriodicoAspettaLePorteUnaVoltaSolaEPiuALungo() = runBlocking<Unit> {
+    val budgets = mutableListOf<Long>()
+    val events = mutableListOf<String>()
+    val targets = RecordingTargets(mutableMapOf(small to (160 to 160), wide to (320 to 160)), events)
+    val planner = ScriptedPlanner(events) { slot, size, _ -> photoPlan(slot, size, size.cells) }
+    val services = FakeServices(planner, OrderedLedger(InMemoryWidgetLedger(), events), WidgetThumbnails { _, _ -> thumb() })
+    // Un processo freddo che monta le porte in 5 s: chi aspetta meno non le ha, chi aspetta di piu' le trova (e poi restano montate).
+    var mounted = false
+    val engine = WidgetEngine(
+      services = { budget ->
+        budgets += budget
+        if (budget >= 5_000) mounted = true
+        if (mounted) services else null
+      },
+      targets = targets,
+      composer = RecordingComposer(context, events),
+      resources = { context.resources },
+    )
+    // Il ricevitore (e `refresh` da solo): 1,5 s, le porte non ci sono.
+    assertThat(engine.refresh(small)).isEqualTo(RefreshResult.KEPT)
+    assertThat(budgets).containsExactly(WidgetRules.COLD_START_BUDGET_MS)
+    budgets.clear()
+    // Il lavoro periodico: un'attesa lunga per il giro, poi i due widget con il tetto di serie.
+    engine.refreshAll(WidgetRules.BUDGET_MS, WidgetRules.PERIODIC_COLD_START_BUDGET_MS)
+    assertThat(budgets.first()).isEqualTo(WidgetRules.PERIODIC_COLD_START_BUDGET_MS)
+    assertThat(budgets.count { it > WidgetRules.COLD_START_BUDGET_MS }).isEqualTo(1)
+    assertThat(targets.pushed).containsExactly(small, wide)
+  }
+
+  /** WG-5: se le porte non arrivano nemmeno nell'attesa lunga il giro finisce subito (un'attesa sola, non una per widget). */
+  @Test
+  fun ilGiroPeriodicoSenzaPorteNonAspettaUnaVoltaPerWidget() = runBlocking<Unit> {
+    val budgets = mutableListOf<Long>()
+    val events = mutableListOf<String>()
+    val targets = RecordingTargets(mutableMapOf(small to (160 to 160), wide to (320 to 160)), events)
+    val engine = WidgetEngine(
+      services = { budget ->
+        budgets += budget
+        null
+      },
+      targets = targets,
+      composer = RecordingComposer(context, events),
+      resources = { context.resources },
+    )
+    engine.refreshAll(WidgetRules.BUDGET_MS, WidgetRules.PERIODIC_COLD_START_BUDGET_MS)
+    assertThat(budgets).containsExactly(WidgetRules.PERIODIC_COLD_START_BUDGET_MS)
+    assertThat(targets.pushed).isEmpty()
   }
 }

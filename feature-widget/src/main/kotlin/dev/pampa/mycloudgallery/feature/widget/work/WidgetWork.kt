@@ -119,7 +119,8 @@ internal class WidgetPeriodicRun(
       WidgetRunDecision.POWER_SAVER -> PeriodicOutcome.POWER_SAVER
       WidgetRunDecision.QUIET -> PeriodicOutcome.QUIET
       WidgetRunDecision.RUN -> {
-        engine().refreshAll(WidgetRules.BUDGET_MS)
+        // WG-5: il lavoro periodico non ha fretta, aspetta le porte piu' del ricevitore (una volta sola per tutto il giro).
+        engine().refreshAll(WidgetRules.BUDGET_MS, WidgetRules.PERIODIC_COLD_START_BUDGET_MS)
         PeriodicOutcome.RAN
       }
     }

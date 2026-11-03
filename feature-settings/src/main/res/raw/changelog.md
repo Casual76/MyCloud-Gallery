@@ -29,7 +29,7 @@ Come si scrive (per chi prepara una versione):
 ### Sicurezza
 - Gli aggiornamenti arrivano solo dal Pampa Store, e Android li installa solo se hanno la stessa firma dell'app che hai già.
 - Chi amministra può fermare una versione che dà problemi: l'app smette di scrivere sul NAS finché non la aggiorni, ma le tue foto restano dove sono.
-- Le foto nascoste non compaiono mai nel widget, e il widget non mostra nomi di persone né luoghi.
+- Le foto nascoste non compaiono mai nel widget, e il widget non mostra mai nomi di persone. Il titolo di un ricordo può dire dove è stato.
 - Con il blocco dell'app acceso, il widget mostra solo le foto che sono anche nel telefono.
 
 ### Da sapere

@@ -246,6 +246,24 @@ class PickerViewModelTest {
     assertThat(r.ui.screen).isEqualTo(PickerScreenState.LOCKED)
   }
 
+  /** CA-2 delle revisioni della Fase 10: con la versione fermata dal manifest il selettore lo dice e non offre niente (prima mostrava la Libreria e consegnava). */
+  @Test
+  fun ca2_conLaVersioneFermataIlSelettoreLoDiceENonOffreNiente() = runTest {
+    val r = rig(decision = EntryDecision.STOPPED)
+    r.open(this)
+    assertThat(r.ui.screen).isEqualTo(PickerScreenState.STOPPED)
+    assertThat(r.ui.items.size).isEqualTo(0)
+    // Fermata a meta' (il manifest arriva con il selettore aperto): la griglia e la selezione spariscono.
+    val open = rig()
+    open.open(this)
+    open.vm.onTap(open.library.phoneIds()[0])
+    open.gate.decision = EntryDecision.STOPPED
+    open.vm.refreshGate()
+    assertThat(open.ui.screen).isEqualTo(PickerScreenState.STOPPED)
+    assertThat(open.ui.selected).isEmpty()
+    assertThat(open.ui.items.size).isEqualTo(0)
+  }
+
   @Test
   fun appNonPronta_NonSiOffreNiente() = runTest {
     val r = rig(decision = EntryDecision.NOT_READY)

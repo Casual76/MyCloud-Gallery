@@ -54,6 +54,12 @@ internal enum class RefreshResult {
  *
  * I giri interi sono **in fila** ([refreshLock]): il piano di ogni giro ha un'epoca piu' alta del precedente e il registro e il disegno restano d'accordo (un tocco apre
  * sempre il media che si vede).
+ *
+ * Due garanzie delle correzioni della Fase 10 (pacchetto B):
+ * - **R5, mai una foto dopo lo svuotamento di un azzeramento**: dentro [gate], subito prima di registrare e consegnare, le porte si richiedono **senza aspettare**
+ *   (`services(0)`): se il processo le ha tolte (il widget si dice fermo **prima** di svuotare) il giro non consegna, anche se nessuna causa ha spostato [generation];
+ * - **R4, un registro perso non e' un registro che dice "nessuno"**: un widget sulla Home che il registro non conosce (registro illeggibile, rovinato, scritto a meta' da un
+ *   altro processo) puo' mostrare **qualsiasi cosa** del disegno di prima: uno svuotamento per un nascosto lo tocca sempre, insieme a chi mostra il nascosto.
  */
 internal class WidgetEngine(
   private val services: suspend (budgetMs: Long) -> WidgetServices?,
@@ -85,11 +91,18 @@ internal class WidgetEngine(
     synchronized(blankCache) { blankCache.clear() }
   }
 
-  /** Ridisegna [slot]. Un giro che trova una causa nuova a meta' ricomincia (D5); non piu' di [MAX_ATTEMPTS] volte. */
-  suspend fun refresh(slot: WidgetSlot, budgetMs: Long = WidgetRules.BUDGET_MS): RefreshResult = refreshLock.withLock refreshing@{
+  /**
+   * Ridisegna [slot]. Un giro che trova una causa nuova a meta' ricomincia (D5); non piu' di [MAX_ATTEMPTS] volte. [coldBudgetMs] e' l'attesa delle porte in un processo
+   * freddo (WG-5): 1,5 s per il ricevitore e per un nascosto, di piu' per il lavoro periodico, che non ha fretta ([refreshAll]).
+   */
+  suspend fun refresh(
+    slot: WidgetSlot,
+    budgetMs: Long = WidgetRules.BUDGET_MS,
+    coldBudgetMs: Long = WidgetRules.COLD_START_BUDGET_MS,
+  ): RefreshResult = refreshLock.withLock refreshing@{
     var attempts = 0
     while (attempts++ < MAX_ATTEMPTS) {
-      val ports = services(WidgetRules.COLD_START_BUDGET_MS) ?: return@refreshing RefreshResult.KEPT
+      val ports = services(coldBudgetMs) ?: return@refreshing RefreshResult.KEPT
       val started = generation.get()
       val (width, height) = dimsOf(slot)
       val size = WidgetSizing.classify(width, height)
@@ -100,6 +113,8 @@ internal class WidgetEngine(
       gate.withLock committing@{
         // D5: una causa e' arrivata mentre decodificavo: questo piano puo' contenere un nascosto. Non si consegna.
         if (generation.get() != started) return@committing
+        // R5: le porte non ci sono piu' (azzeramento in corso o finito, versione fermata): un giro gia' partito non rimette foto sulla Home dopo lo svuotamento.
+        if (services(0) == null) return@committing
         // §2.1 passo 7: il registro **prima** del disegno. Se non scrive, niente foto (E-W7: un tocco non troverebbe il media giusto).
         val recorded = try {
           ports.ledger.record(prepared.plan)
@@ -122,8 +137,13 @@ internal class WidgetEngine(
     RefreshResult.KEPT
   }
 
-  /** Ridisegna ogni widget, uno dopo l'altro (il cursore delle foto e' condiviso: due widget, foto diverse). */
-  suspend fun refreshAll(budgetMs: Long = WidgetRules.BUDGET_MS) {
+  /**
+   * Ridisegna ogni widget, uno dopo l'altro (il cursore delle foto e' condiviso: due widget, foto diverse). Con un [coldBudgetMs] piu' lungo di quello di serie (il lavoro
+   * periodico, WG-5) le porte si aspettano **una volta sola** per tutto il giro: se non arrivano il giro finisce subito (il contenuto di prima era verificato e il giro dopo
+   * riprova), e se arrivano ogni widget le trova gia' montate.
+   */
+  suspend fun refreshAll(budgetMs: Long = WidgetRules.BUDGET_MS, coldBudgetMs: Long = WidgetRules.COLD_START_BUDGET_MS) {
+    if (coldBudgetMs > WidgetRules.COLD_START_BUDGET_MS && targets.slots().isNotEmpty() && services(coldBudgetMs) == null) return
     for (slot in targets.slots()) {
       try {
         refresh(slot, budgetMs)
@@ -159,11 +179,17 @@ internal class WidgetEngine(
   /**
    * I widget che una causa tocca, dal registro. **Fallire chiusi** (D5, punto 5): senza le porte o se il registro non si legge non si sa cosa mostra ogni widget, quindi si
    * considerano toccati **tutti** (un widget svuotato in piu' si ridisegna subito dopo; un nascosto rimasto sulla Home no).
+   *
+   * **R4**: un registro illeggibile o rovinato non lancia, riparte **vuoto**, e "vuoto" non vuol dire "nessun widget mostra niente" ma "non so cosa mostrano": ogni widget
+   * sulla Home che il registro non conosce (non e' fra i suoi [WidgetLedger.slots][dev.pampa.mycloudgallery.core.widget.contract.WidgetLedger.slots]) si considera toccato
+   * insieme a chi mostra davvero il media. In uso normale un widget non registrato e' solo uno appena aggiunto e non ancora disegnato: costa uno svuotamento in piu'.
    */
   private suspend fun affectedBy(ports: WidgetServices?, lookup: suspend (WidgetServices) -> Set<WidgetSlot>): List<WidgetSlot> {
     if (ports == null) return targets.slots()
     return try {
-      lookup(ports).toList()
+      val showing = lookup(ports)
+      val registered = ports.ledger.slots()
+      showing.toList() + targets.slots().filter { it !in registered && it !in showing }
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {

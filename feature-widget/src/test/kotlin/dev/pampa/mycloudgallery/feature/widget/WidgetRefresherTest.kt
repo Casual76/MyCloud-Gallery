@@ -143,8 +143,10 @@ class WidgetRefresherTest {
     s.refresher.hiddenChanged(setOf(mediaId(0)))
     s.refresher.appBackgrounded()
     advanceUntilIdle()
-    // Nessuna eccezione e nessun disegno (il piano e' caduto: il registro non si scrive, il widget resta com'e').
-    assertThat(s.targets.pushed).isEmpty()
+    // Nessuna eccezione e **nessuna foto** (il piano e' caduto: il registro non si scrive). L'unico disegno e' lo svuotamento per il nascosto: i due widget non sono nel
+    // registro, quindi non si sa cosa mostrano e si svuotano (R4).
+    assertThat(s.events.filter { it.startsWith("compose:") }.all { it.endsWith(":Message") }).isTrue()
+    assertThat(s.events.none { it.startsWith("record:") && it.contains("Photos") }).isTrue()
   }
 
   // --- Il posto del widget nel processo -------------------------------------------------------------------------------------------------

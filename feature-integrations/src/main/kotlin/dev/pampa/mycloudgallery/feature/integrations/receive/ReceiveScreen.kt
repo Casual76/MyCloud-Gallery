@@ -133,6 +133,22 @@ internal fun ReceiveScreen(ui: ReceiveUi, actions: ReceiveActions, modifier: Mod
           action = stringResource(R.string.integrations_receive_close),
           onAction = actions.onCancel,
         )
+        ReceiveScreenState.STOPPED -> ReceiveMessage(
+          icon = Icons.Rounded.Settings,
+          tone = GalleryIllustrationTone.Caution,
+          title = stringResource(R.string.integrations_stopped_title),
+          detail = stringResource(R.string.integrations_receive_stopped_detail),
+          action = stringResource(R.string.integrations_receive_close),
+          onAction = actions.onCancel,
+        )
+        ReceiveScreenState.READ_ONLY_VERSION -> ReceiveMessage(
+          icon = Icons.Rounded.Settings,
+          tone = GalleryIllustrationTone.Caution,
+          title = stringResource(R.string.integrations_receive_read_only_title),
+          detail = stringResource(R.string.integrations_receive_read_only_detail),
+          action = stringResource(R.string.integrations_receive_close),
+          onAction = actions.onCancel,
+        )
         ReceiveScreenState.NOTHING -> ReceiveMessage(
           icon = Icons.Rounded.PhotoLibrary,
           tone = GalleryIllustrationTone.Caution,

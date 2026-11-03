@@ -59,7 +59,8 @@ class MediaDocumentsProvider : DocumentsProvider() {
     env.guard.requireSystem()
     IntegrationCounters.add(IntegrationCounter.PROVIDER_QUERIES)
     val locked = when (decision()) {
-      EntryDecision.NOT_READY, EntryDecision.LOADING -> return DocumentRows.roots(projection, emptyList(), "", null, 0)
+      // CA-2 (Fase 10): con la versione fermata nessuna radice, come con l'app non pronta.
+      EntryDecision.NOT_READY, EntryDecision.LOADING, EntryDecision.STOPPED -> return DocumentRows.roots(projection, emptyList(), "", null, 0)
       EntryDecision.NEEDS_UNLOCK -> true
       EntryDecision.ALLOWED -> false
     }
@@ -188,7 +189,8 @@ class MediaDocumentsProvider : DocumentsProvider() {
   private fun authorize(id: DocumentId, listing: Boolean) {
     when (decision()) {
       EntryDecision.ALLOWED -> Unit
-      EntryDecision.NOT_READY, EntryDecision.LOADING -> {
+      // CA-2 (Fase 10): con la versione fermata niente, nemmeno un documento gia' consegnato.
+      EntryDecision.NOT_READY, EntryDecision.LOADING, EntryDecision.STOPPED -> {
         IntegrationCounters.add(IntegrationCounter.PROVIDER_OPEN_REFUSED)
         throw FileNotFoundException("Non disponibile.")
       }

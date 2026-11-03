@@ -50,6 +50,12 @@ interface IncomingDestinations {
    * dice di no (i test e le varianti senza cancello).
    */
   suspend fun savingBlockedByTrial(): Boolean = false
+
+  /**
+   * CA-2 delle revisioni della Fase 10: questa versione dell'app e' in **sola lettura** per il manifest firmato (`ReadOnly`) e "Salva sul NAS" non partirebbe fino
+   * all'aggiornamento? Si chiede **prima di copiare**. Il default dice di no.
+   */
+  suspend fun savingBlockedByRelease(): Boolean = false
 }
 
 /** Nessuna cartella: la schermata dice che l'app non e' pronta. */

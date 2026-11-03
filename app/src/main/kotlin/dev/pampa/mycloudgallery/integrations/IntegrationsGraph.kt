@@ -117,6 +117,11 @@ class IntegrationsGraph(
   private val familyLoading: () -> Boolean = { false },
   /** IN-3, IN-2: emette quando lo stato della famiglia cambia (per aspettare il caricamento e per notificare le radici ai selettori di documenti). */
   private val familyChanges: Flow<Unit> = emptyFlow(),
+  /**
+   * CA-2, R1 (revisioni della Fase 10): il manifest firmato di questo processo. Con la versione fermata il cancello d'ingresso risponde `STOPPED` (selettore, provider,
+   * ricezione, rilasci chiusi); in sola lettura "Salva sul NAS" non si offre. Null = nessun manifest (i test che non lo provano).
+   */
+  private val release: dev.pampa.mycloudgallery.release.ReleaseGraph? = null,
 ) {
 
   private val nasInputs = gallery.parts.nas
@@ -143,7 +148,15 @@ class IntegrationsGraph(
 
   // --- Ingresso ---------------------------------------------------------------------------------------------------------------------
 
-  val entryGate: AppEntryGate = AppEntryGate(lock, familyReady, familyLoading, familyChanges)
+  val entryGate: AppEntryGate = AppEntryGate(
+    lock = lock,
+    familyReady = familyReady,
+    familyLoading = familyLoading,
+    familyChanges = familyChanges,
+    releaseLoading = { release?.isLoaded == false },
+    releaseStopped = { release?.status?.value is dev.pampa.mycloudgallery.core.release.contract.ReleaseStatus.Stopped },
+    releaseChanges = release?.changes ?: emptyFlow(),
+  )
 
   val unlock: AppEntryUnlock = AppEntryUnlock(lock)
 
@@ -197,6 +210,7 @@ class IntegrationsGraph(
     labels = labels,
     reach = ::nasReach,
     gate = backup?.fiveB?.incomingGate,
+    releaseHoldsWrites = { release?.writesStopped == true },
   )
 
   // --- Condividere e modificare (D25, D26) ----------------------------------------------------------------------------------------
@@ -257,6 +271,8 @@ class IntegrationsGraph(
     DocumentLabels.from(context),
     DocumentIdTable(idKey = FileDocumentIdKey(File(File(context.noBackupFilesDir, "integrations"), "doc-id.key"))),
     preparer = preparedCopies,
+    // Fase 10 (I4 della revisione di sicurezza): la vista della Libreria si aggiorna dopo la calma; elenchi, descrizioni e aperture chiedono i nascosti anche al catalogo di adesso.
+    hiddenMask = gallery.hiddenMask,
   )
 
   /**
@@ -272,6 +288,8 @@ class IntegrationsGraph(
     gate = { entryGate.decide() },
     leases = dragLeases,
     preparer = preparedCopies,
+    // Fase 10 (I4): il filtro finale dei nascosti, all'inizio e subito prima di creare gli id (un "Nascondi" di un attimo fa, anche di un gruppo o arrivato da un altro dispositivo).
+    hiddenMask = gallery.hiddenMask,
   )
 
   private val editLock = Mutex()
@@ -331,6 +349,8 @@ class IntegrationsGraph(
     scope.launch { runCatching { lock.follow(lockSettings) } }
     wireIncomingMetadata()
     IntegrationPorts.install(entryGate, documents)
+    // Fase 10 (I4): un "Nascondi" revoca subito gli id gia' consegnati (selettore, provider, trascinamento) e le copie dei media nascosti, senza aspettare la vista.
+    gallery.hiddenIdListeners += { ids, hidden -> if (hidden && ids.isNotEmpty()) documents.revokeMedia(ids) }
     PickerPorts.install(library, unlock, preparedCopies)
     ReceivePorts.install(uploads, destinations, unlock, incomingAlbums)
     gallery.onShutdown { revokeAll() }

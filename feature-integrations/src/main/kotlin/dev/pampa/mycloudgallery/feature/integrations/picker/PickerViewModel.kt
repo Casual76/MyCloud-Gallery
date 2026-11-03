@@ -51,6 +51,9 @@ enum class PickerScreenState {
   /** L'app non e' pronta (onboarding, famiglia, dispositivo): non si offre niente. */
   NOT_READY,
 
+  /** CA-2 (Fase 10): questa versione e' stata fermata dal manifest: non si offre niente e si dice di aggiornare. */
+  STOPPED,
+
   /** La griglia. */
   GRID,
 
@@ -136,6 +139,7 @@ class PickerViewModel(
       EntryDecision.ALLOWED -> enterGrid()
       EntryDecision.NEEDS_UNLOCK -> enter(PickerScreenState.LOCKED)
       EntryDecision.NOT_READY -> enter(PickerScreenState.NOT_READY)
+      EntryDecision.STOPPED -> enter(PickerScreenState.STOPPED)
       EntryDecision.LOADING -> awaitLoaded()
     }
   }

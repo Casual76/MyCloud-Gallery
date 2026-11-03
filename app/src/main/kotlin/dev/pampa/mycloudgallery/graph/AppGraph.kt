@@ -467,7 +467,7 @@ class AppGraph(
    */
   fun stageRules(): StageRules =
     // Fase 10 (P13, E-REL6): con la versione fermata dal manifest nessun lavoro a tappe parte (le regole di sempre non bastano a dire "si'").
-    settled(dev.pampa.mycloudgallery.release.ReleaseStageRules(EngineStageRules(rulesEngine, stateProvider)) { release?.stopped == true })
+    settled(dev.pampa.mycloudgallery.release.ReleaseStageRules(EngineStageRules(rulesEngine, stateProvider)) { release })
 
   /** Le [rules] date, con l'attesa della rete prima della prima valutazione e l'ora del NAS pronta prima del primo lotto (D-2). */
   fun settled(rules: StageRules): StageRules = SettledStageRules(rules, settle = { networkSettler.settle() }, ready = { readyNasClock() })

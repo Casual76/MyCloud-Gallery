@@ -172,6 +172,11 @@ class AppLockController(private val clock: MonotonicClock = SystemMonotonicClock
     when (change) {
       ProcessForeground.Change.ENTERED_FOREGROUND -> onAppForegrounded()
       ProcessForeground.Change.LEFT_FOREGROUND -> backgrounded(at = process.lastExitAtMillis)
+      // R3 (revisione di sicurezza della Fase 10): un'uscita che nessuno ha visto (segno di ricreazione scaduto) conta all'ora del segno, poi il ritorno.
+      ProcessForeground.Change.REENTERED_FOREGROUND -> {
+        backgrounded(at = process.lastExitAtMillis)
+        onAppForegrounded()
+      }
       ProcessForeground.Change.NONE -> Unit
     }
   }

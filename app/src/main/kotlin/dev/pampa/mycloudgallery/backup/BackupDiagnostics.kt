@@ -7,8 +7,10 @@ import dev.pampa.mycloudgallery.core.common.diagnostics.DiagCode
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagItem
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagSection
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagSeverity
+import dev.pampa.mycloudgallery.core.common.diagnostics.DiagText
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
 import dev.pampa.mycloudgallery.core.common.diagnostics.ExportValue
+import dev.pampa.mycloudgallery.feature.diagnostics.actions.DiagnosticsActions
 import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
 
 /**
@@ -89,7 +91,16 @@ class BackupDiagnostics(private val backup: BackupGraph, private val similar: Si
     problems.entries.sortedBy { it.key.ordinal }.forEach { (code, count) ->
       val diagCode = BackupDiagCodes.of(code)
       val severity = DiagCatalog.entry(diagCode)?.severity ?: DiagSeverity.WARNING
-      items += item(diagCode, severity, mapOf("count" to ExportValue.Num(count.toLong())))
+      val export = mapOf("count" to ExportValue.Num(count.toLong()))
+      items += if (code == BackupProblemCode.WRITES_STOPPED && backup.writesHeldOnlyByRelease) {
+        // CA-1 (revisione funzionale della Fase 10): le ferma il manifest firmato, non l'interruttore: la causa ("aggiorna l'app") e nessun "Riattiva le scritture".
+        DiagItem(
+          diagCode, section, severity, DiagCatalog.titleOf(diagCode),
+          DiagText(dev.pampa.mycloudgallery.feature.diagnostics.R.string.diag_backup_writes_held_by_release), DiagnosticsActions.NO_ACTION, export,
+        )
+      } else {
+        item(diagCode, severity, export)
+      }
     }
 
     // L'ultimo giro.

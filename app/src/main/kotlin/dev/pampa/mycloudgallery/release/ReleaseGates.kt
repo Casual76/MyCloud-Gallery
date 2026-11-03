@@ -14,16 +14,20 @@ import dev.pampa.mycloudgallery.core.rules.WorkRequest
 // `NasInputs.releaseWritesStopped` (indice, album, volti, dati personali, modelli sullo scaffale, operazioni sui file, backup); la sessione la ferma `AppGraph` (nessun
 // account); qui i lavori a tappe e lo scaricamento dei modelli da Internet. Solo restrittivo: con `Normal` le regole di sempre, senza un passo in piu'.
 
-/** Le regole di una tappa con la versione fermata: ogni lavoro a tappe si ferma (`Stop`), qualunque cosa dicano le regole. */
-class ReleaseStageRules(private val inner: StageRules, private val stopped: () -> Boolean) : StageRules {
+/**
+ * Le regole di una tappa con la versione fermata: ogni lavoro a tappe si ferma (`Stop`), qualunque cosa dicano le regole. CA-3 (revisione funzionale della Fase 10):
+ * [stopped] si guarda solo dopo lo stato salvato letto ([ReleaseGraph.stoppedAfterLoad], al piu' 2 s): la prima tappa di un lavoro nato con il processo non legge piu'
+ * "non ancora letto = fermo" (`TrustSyncRun` lo prendeva per "niente da fare" e il giro del giorno si perdeva).
+ */
+class ReleaseStageRules(private val inner: StageRules, private val release: () -> ReleaseGraph?) : StageRules {
   override suspend fun decide(request: WorkRequest, running: Boolean): RuleDecision =
-    if (stopped()) RuleDecision.Stop(WaitReason.ActivityDisabled) else inner.decide(request, running)
+    if (release()?.stoppedAfterLoad() == true) RuleDecision.Stop(WaitReason.ActivityDisabled) else inner.decide(request, running)
 
   override suspend fun isPluggedIn(): Boolean = inner.isPluggedIn()
 }
 
-/** Lo scaricamento dei modelli con la versione fermata: nessun traffico (come senza rete). */
-class ReleaseModelNetworkGate(private val inner: ModelNetworkGate, private val stopped: () -> Boolean) : ModelNetworkGate {
+/** Lo scaricamento dei modelli con la versione fermata: nessun traffico (come senza rete). CA-3: come [ReleaseStageRules], dopo lo stato salvato letto. */
+class ReleaseModelNetworkGate(private val inner: ModelNetworkGate, private val release: () -> ReleaseGraph?) : ModelNetworkGate {
   override suspend fun verdict(trigger: ModelTrigger, bytes: Long, source: ModelSourceKind): ModelNetworkVerdict =
-    if (stopped()) ModelNetworkVerdict.Refused(ModelGateReason.OFFLINE) else inner.verdict(trigger, bytes, source)
+    if (release()?.stoppedAfterLoad() == true) ModelNetworkVerdict.Refused(ModelGateReason.OFFLINE) else inner.verdict(trigger, bytes, source)
 }

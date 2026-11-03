@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.res.Resources
 import android.text.format.Formatter
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.ReadOnlyComposable
 import dev.pampa.mycloudgallery.core.albums.contract.ShareExclusion
 import dev.pampa.mycloudgallery.core.albums.contract.SharePlan
 import dev.pampa.mycloudgallery.core.albums.contract.SharePlanKind
@@ -51,11 +53,20 @@ internal object AlbumText {
     }
   }
 
+  /**
+   * Perche' non si puo' scrivere. CA-1 (revisione funzionale della Fase 10): "scritture ferme" con il manifest firmato (`LocalWritesHeldByRelease`) dice "questa
+   * versione va aggiornata", non "riprovo da sola appena si puo'".
+   */
+  @Composable
+  @ReadOnlyComposable
   @StringRes
-  fun blocked(why: WhyBlocked): Int = when (why) {
+  fun blocked(why: WhyBlocked): Int = blocked(why, dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease.current)
+
+  @StringRes
+  fun blocked(why: WhyBlocked, heldByRelease: Boolean): Int = when (why) {
     WhyBlocked.AFTER_TESTS -> R.string.album_blocked_after_tests
     WhyBlocked.READ_ONLY -> R.string.album_blocked_read_only
-    WhyBlocked.WRITES_PAUSED -> R.string.album_blocked_paused
+    WhyBlocked.WRITES_PAUSED -> if (heldByRelease) R.string.album_blocked_release else R.string.album_blocked_paused
     WhyBlocked.NO_NAS -> R.string.album_blocked_no_nas
     WhyBlocked.TOO_MANY_ITEMS -> R.string.album_blocked_too_many
     WhyBlocked.NOT_ACTIVE -> R.string.album_blocked_not_active

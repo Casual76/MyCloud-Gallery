@@ -18,6 +18,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import androidx.navigation.NavBackStackEntry
+import androidx.navigation.NavController
 import androidx.navigation.NavHostController
 import dev.antigravity.fluidengine.ui.navigation.FluidPageNavigator
 import dev.antigravity.fluidengine.ui.navigation.composable
@@ -147,6 +149,80 @@ class SettingsPanesTest {
     assertThat(SettingsPage.fromCode(null)).isNull()
     // I codici sono tutti diversi (si salvano).
     assertThat(SettingsPage.entries.map { it.code }.toSet()).hasSize(SettingsPage.entries.size)
+  }
+
+  /**
+   * FI-1: l'"Indietro" del pannello. Dalla **prima** pagina non toglie niente: chiama `close` (chi sceglie la riporta a "Scegli una voce") e la pagina resta dov'e' (altrimenti il pannello
+   * resterebbe vuoto, o `close` non partirebbe e la stessa voce non si potrebbe riscegliere); da una **seconda** torna alla prima e non chiude.
+   */
+  @Test
+  fun indietroNelPannello_laPrimaPaginaSiChiudeSenzaTogliersi_laSecondaTornaAllaPrima() {
+    var closed = 0
+    rule.setContent {
+      MyCloudGalleryTheme {
+        SettingsPaneHost(
+          page = SettingsPage.DEVICES,
+          close = { closed++ },
+          resumeStep = {},
+          pages = { nav, back ->
+            composable<SettingsDevicesRoute> {
+              Column {
+                Text("prima pagina")
+                Text("Avanti", Modifier.clickable { nav.navigate(SettingsFamilyRoute) })
+                Text("Indietro dalla prima", Modifier.clickable { back() })
+              }
+            }
+            composable<SettingsFamilyRoute> {
+              Column {
+                Text("seconda pagina")
+                Text("Indietro dalla seconda", Modifier.clickable { back() })
+              }
+            }
+          },
+        )
+      }
+    }
+    rule.waitForIdle()
+    rule.onNodeWithText("prima pagina").assertExists()
+
+    rule.onNodeWithText("Avanti").performClick()
+    rule.waitForIdle()
+    rule.onNodeWithText("seconda pagina").assertExists()
+    rule.onNodeWithText("Indietro dalla seconda").performClick()
+    rule.waitForIdle()
+    rule.onNodeWithText("prima pagina").assertExists()
+    assertThat(closed).isEqualTo(0)
+
+    rule.onNodeWithText("Indietro dalla prima").performClick()
+    rule.waitForIdle()
+    assertThat(closed).isEqualTo(1)
+    rule.onNodeWithText("prima pagina").assertExists()
+    // Un secondo "Indietro" chiude ancora: la pagina non e' mai stata tolta.
+    rule.onNodeWithText("Indietro dalla prima").performClick()
+    rule.waitForIdle()
+    assertThat(closed).isEqualTo(2)
+  }
+
+  /**
+   * FI-1, la logica sola: dalla prima pagina `paneBack` chiude e non chiama mai `popBackStack`, **anche se la libreria rispondesse vero** togliendo l'ultima destinazione (con Navigation 2.9 risponde
+   * falso e la prova qui sopra passava anche col codice di prima: la correzione non dipende piu' da come la libreria tratta l'ultima destinazione). Da una seconda pagina toglie e non chiude.
+   */
+  @Test
+  fun paneBack_DallaPrimaPaginaChiudeESenzaToglierla_AncheSeLaLibreriaRispondeVero() {
+    val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Context>()
+    var popped = 0
+    val onlyOne = object : NavController(context) {
+      override val previousBackStackEntry: NavBackStackEntry? get() = null
+
+      override fun popBackStack(): Boolean {
+        popped++
+        return true
+      }
+    }
+    var closed = 0
+    paneBack(onlyOne) { closed++ }
+    assertThat(closed).isEqualTo(1)
+    assertThat(popped).isEqualTo(0)
   }
 
   private fun assertWithMessage(message: String) = com.google.common.truth.Truth.assertWithMessage(message)

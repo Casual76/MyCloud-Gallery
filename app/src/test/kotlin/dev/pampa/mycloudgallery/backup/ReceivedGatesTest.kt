@@ -91,7 +91,11 @@ class ReceivedGatesTest {
     fenceRoot = { fence },
     clock = MonotonicOnlyBackupClock,
     onQueued = { jobs += it },
+    releaseHoldsWrites = { releaseHolds },
   )
+
+  /** CA-2 (Fase 10): il manifest firmato tiene ferme le scritture di questa versione. */
+  private var releaseHolds = false
 
   private fun received(queue: AppIncomingQueue = queue()): AppReceivedQueue = AppReceivedQueue(
     database = db,
@@ -173,6 +177,26 @@ class ReceivedGatesTest {
       // Un lavoro dell'utente come "Salva sul NAS": chiesto una volta, e un file piccolo non e' un lavoro UIDT.
       assertThat(jobs).containsExactly(false)
     }
+  }
+
+  /**
+   * CA-2 della revisione funzionale della Fase 10: con le scritture ferme dal **manifest firmato** (la versione e' in sola lettura) "Riprova" non rimette in coda un
+   * file che non partirebbe fino all'aggiornamento, e lo dice con la frase delle scritture ferme. Con l'emergenza dell'utente (lo stesso stato del cancello) si', come
+   * prima: l'utente la riaccende. Prima anche con il manifest il file tornava in coda e restava "congelato".
+   */
+  @Test
+  fun ca2_conLaVersioneInSolaLetturaRiprovaNonRimetteInCoda() = runBlocking<Unit> {
+    gateOf = { BackupGateState.WRITES_STOPPED }
+    releaseHolds = true
+    val failed = row("failed")
+    val before = backupItems()
+
+    val outcome = received().retry(ReceivedId(failed.incomingId))
+
+    assertThat(outcome).isEqualTo(ReceivedRetry.Blocked(ReceivedStatus.FROZEN))
+    assertThat(checkNotNull(db.incomingDao().get(failed.incomingId)).state).isEqualTo(IncomingStates.FAILED)
+    assertThat(backupItems()).isEqualTo(before)
+    assertThat(jobs).isEmpty()
   }
 
   /** Chi vieta: niente cambia (ne' la riga, ne' il diario) e nessun lavoro si chiede; l'utente sa quale cancello. */

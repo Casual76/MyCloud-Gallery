@@ -158,14 +158,14 @@ Funziona 23, Sbagliata 8, Blocca 0 (su 31 flussi; cinque dei "Funziona" sono "pl
 - **Correzione proposta:** struttura stabile, la stessa chiamata per `Normal` e `UpdateBanner` (`Box { content(); if (banner) Banner }`) e `Stopped` come unico ramo diverso; e `ReleaseRootViewModel.status` che non cambia il contenuto per un valore "non ancora letto" (per `Stopped` il fail-closed dei cancelli basta per i millisecondi). Prova: un test Compose che cambia `ReleaseUi` e verifica che un `rememberSaveable` dentro `content` resti.
 
 #### RL-2 – Il testo delle novita' promette "nessun luogo" sul widget, il widget li mostra
-- **Gravita':** Minore. **Stato:** confermato.
+- **Gravita':** Minore. **Stato:** **Corretta (pacchetto B, 02/11)** (era: confermato; la frase, in entrambe le copie del changelog e in `docs/sicurezza.md`; `docs/decisioni.md`, «Correzioni della Fase 10, pacchetto B: il widget (02/11)»).
 - **Percorso:** `CHANGELOG.md:32` e la copia che l'app mostra in "Novita' di questa versione" (`feature-settings/src/main/res/raw/changelog.md:32`) dicono "il widget non mostra nomi di persone ne' luoghi". Il titolo del ricordo sul widget compone il primo luogo ("Un anno fa · Oslo") o l'etichetta del viaggio ("Oslo, marzo 2025"): `feature-widget/.../frame/WidgetTexts.kt:30-52`, con `places.name(id)` a `:41`. D4 ammette il luogo e vieta solo le persone.
 - **Correzione proposta:** la frase vera in entrambe le copie (un test le tiene uguali): "Il widget non mostra mai nomi di persone; un ricordo puo' dire dove e' stato." Oppure togliere il luogo dal titolo (decisione, §7).
 
 ### 2.3 Widget (WG)
 
 #### WG-1 – Dopo l'azzeramento il lavoro periodico non riparte; dopo un cambio di account il widget resta fermo per il processo
-- **Gravita':** Sbagliata. **Stato:** confermato.
+- **Gravita':** Sbagliata. **Stato:** **Corretta (pacchetto B, 02/11)** (era: confermato; `resume`, `ensureWork` e `publishAtStart`; `docs/decisioni.md`, «Correzioni della Fase 10, pacchetto B: il widget (02/11)»).
 - **Flusso:** "Configura di nuovo" o azzeramento con un widget sulla Home (F164); oppure fine di un onboarding fatto con un altro account o NAS.
 - **Percorso:**
   - l'azzeramento chiama `widgetStopper.stop()` per primo (`app/graph/LocalData.kt:119`) e di nuovo per i soli dati di un account (`:169`, `eraseAccountData`);
@@ -178,24 +178,24 @@ Funziona 23, Sbagliata 8, Blocca 0 (su 31 flussi; cinque dei "Funziona" sono "pl
   - Prova: con `WorkManagerTestInitHelper`, azzeramento → avvio del processo dopo → il lavoro c'e' con i widget; `eraseAccountData(false)` e poi un giro del widget riesce.
 
 #### WG-2 – La frequenza scelta (6 o 24 ore) si perde togliendo e rimettendo il widget
-- **Gravita':** Minore. **Stato:** confermato.
+- **Gravita':** Minore. **Stato:** **Corretta (pacchetto B, 02/11)** (era: confermato; `WidgetHost.period()` nel ricevitore; `docs/decisioni.md`, «Correzioni della Fase 10, pacchetto B: il widget (02/11)»).
 - **Percorso:** `onEnabled` e `onUpdate` programmano sempre `WidgetPeriod.DEFAULT` con `KEEP` (`feature-widget/.../glance/GalleryWidgetReceiver.kt:70-72`); la scelta arriva da `settings().period.drop(1)` (`app/widget/WidgetWiring.kt:94`), cioe' solo a un cambio. Si toglie l'ultimo widget (`onDisabled` cancella il lavoro, `:62-65`) e se ne rimette uno: il lavoro gira ogni 3 ore con la pagina che dice 24. Lo stesso dopo WG-1.
 - **Correzione proposta:** ricordare la frequenza fuori dalle porte (un numero in un file del widget, o letta da `SettingsWidgetPrefs`) e usarla nel ricevitore; oppure, dopo il primo disegno, `WidgetWiring` ripianifica con `UPDATE` se la frequenza scelta differisce da quella di serie. Prova: scelta 24 ore, ultimo widget tolto e rimesso, il lavoro ha l'intervallo di 24 ore.
 
 #### WG-3 – Il tocco sul widget con un viewer gia' aperto non cambia foto
-- **Gravita':** Sbagliata. **Stato:** confermato.
+- **Gravita':** Sbagliata. **Stato:** **Corretta (pacchetto B, 02/11)** (era: confermato; `showWidgetViewer`; `docs/decisioni.md`, «Correzioni della Fase 10, pacchetto B: il widget (02/11)»).
 - **Flusso:** l'utente guarda una foto nel viewer, va alla Home e tocca una foto del widget (F163).
 - **Percorso:** `WidgetTapEffect` risolve `WidgetTarget.Viewer` e fa `nav.popBackStack<MainRoute>` e `openViewer(request)` (`app/navigation/AppWidgetNavigation.kt:69-77`) **senza** chiudere il viewer; `ViewerHostState.open` con una richiesta gia' aperta esce subito (`app/main/GalleryRoot.kt:112-118`: solo affiancato e `fromLibrary` fa un salto, e il tocco del widget non e' dalla Libreria). I rami `MemoryPage` e `Library` il viewer lo chiudono (`:79`, `:91`): solo questo ramo no. L'app torna alla foto di prima.
 - **Correzione proposta:** `viewer?.close()` prima di `openViewer` nel ramo `Viewer`. Prova: test Compose con un viewer aperto e un tocco sul widget.
 
 #### WG-4 – Il tocco a freddo puo' dire "Questa foto non c'e' piu'" a una foto che c'e'
-- **Gravita':** Sbagliata. **Stato:** plausibile (corsa fra l'istantanea e il primo disegno; F163 con processo morto).
+- **Gravita':** Sbagliata. **Stato:** **Corretta (pacchetto B, 02/11)** (era: plausibile; `lookupTappedMedia` aspetta l'istantanea, `docs/decisioni.md`, «Correzioni della Fase 10, pacchetto B: il widget (02/11)»); era: plausibile (corsa fra l'istantanea e il primo disegno; F163 con processo morto).
 - **Flusso:** l'app non gira, l'utente tocca una foto del widget (il caso normale); l'app parte e, dopo lo sblocco, serve il tocco.
 - **Percorso:** `WidgetTap.resolve` legge la visibilita' dal catalogo (Room, `core-library/.../visibility/CatalogVisibility.kt:78`) e risponde `Viewer`; poi `WidgetHostViewModel.viewerOf` risponde null se l'istantanea della timeline non e' ancora arrivata (`app/navigation/AppWidgetNavigation.kt:48`) o non contiene il media (`:50`), e il ramo `else` apre la Libreria con il messaggio "Questa foto non c'e' piu'" (`:75`, E-W8). Il messaggio e' per la foto sparita o nascosta, non per quella che non e' ancora in istantanea.
 - **Correzione proposta:** `viewerOf` aspetta l'istantanea (`filterNotNull().first()`, tetto 2 s) e distingue "non e' piu' li'" da "non e' ancora pronta" (in quel caso, Libreria senza messaggio). Prova: istantanea nulla che arriva dopo 200 ms.
 
 #### WG-5 – Il lavoro periodico in un processo nato per lui puo' non avere le porte in 1,5 s
-- **Gravita':** Minore. **Stato:** plausibile (si vede con F162 e con `lateRuns7d` in Diagnostica).
+- **Gravita':** Minore. **Stato:** **Corretta (pacchetto B, 02/11)** (era: plausibile; attesa di 10 s per il lavoro periodico, `docs/decisioni.md`, «Correzioni della Fase 10, pacchetto B: il widget (02/11)»; da provare con F162); era: plausibile (si vede con F162 e con `lateRuns7d` in Diagnostica).
 - **Percorso:** il lavoro aspetta le porte al piu' `COLD_START_BUDGET_MS` = 1,5 s (`app/widget/WidgetGraph.kt:112-131`: `snapshot.filterNotNull().first()` dentro il tempo) e, se non ci sono, finisce "riuscito" senza ridisegnare (`feature-widget/.../work/WidgetWork.kt:77-86,109-126`). La notifica dei ricordi ha avuto bisogno di 20 secondi e del montaggio senza il primo disegno (NT-1, `app/work/MemoriesWork.kt`). L'istantanea parte con la famiglia pronta, ma su un archivio grande 1,5 s dalla nascita del processo possono non bastare: il widget si aggiornerebbe solo all'apertura dell'app (`appBackgrounded`).
 - **Correzione proposta (se F162 la conferma):** per il lavoro periodico (che non ha fretta) un budget a freddo di 8-10 s e, come per le notifiche, un `awaitLive` della Libreria. Il ricevitore e il ridisegno per un nascosto restano a 1,5 s.
 
@@ -205,6 +205,7 @@ Funziona 23, Sbagliata 8, Blocca 0 (su 31 flussi; cinque dei "Funziona" sono "pl
 - **Gravita':** Minore. **Stato:** plausibile (serve un test Compose; nessuna prova copre l'"Indietro" nel pannello).
 - **Percorso:** `SettingsPaneHost` passa `back = { if (!paneNav.popBackStack()) close() }` (`feature-settings/.../SettingsPanes.kt:111`) a pagine che nel pannello sono la **prima e unica** destinazione. Il codice conta sul fatto che `popBackStack()` risponda falso quando non c'e' altro; ma toglie comunque la destinazione (il pannello resta vuoto) e, se risponde vero, `close()` non parte e la pagina resta "scelta" (`code` non cambia, quindi riscegliere la stessa non la rimette). `SettingsPanesTest.kt` prova la scelta, la soglia e le rotte, non l'"Indietro".
 - **Correzione proposta:** `if (paneNav.previousBackStackEntry == null) close() else paneNav.popBackStack()`: l'ultima non si toglie mai. Prova: Compose con `TestNavHostController`, "Indietro" dalla prima pagina e da una seconda.
+- **Esito (02/11): Corretta** (pacchetto C). `paneBack(nav, close)` in `SettingsPanes.kt` fa esattamente quella scelta, e `SettingsPaneHost` ha un parametro `pages` per provarlo con pagine finte (le vere vogliono Hilt). **Il difetto descritto non si riproduce** con Navigation 2.9: `popBackStack()` sull'unica destinazione risponde falso e non la toglie, quindi la prova nel pannello vero (`SettingsPanesTest.indietroNelPannello_...`, "Indietro" dalla prima pagina e da una seconda) passava anche con il codice di prima. La correzione e' una difesa: `paneBack_DallaPrimaPaginaChiudeESenzaToglierla_AncheSeLaLibreriaRispondeVero` usa un controller che risponderebbe vero e non toglie niente. F165 sul tablet resta da fare.
 
 ### 2.5 Accessibilita' (AC)
 
@@ -212,6 +213,7 @@ Funziona 23, Sbagliata 8, Blocca 0 (su 31 flussi; cinque dei "Funziona" sono "pl
 - **Gravita':** Sbagliata. **Stato:** plausibile (serve il telefono, F183).
 - **Percorso:** `GalleryAccessibilityReader.REDUCE_TRANSPARENCY_KEYS` (`core-designsystem/.../a11y/GalleryAccessibility.kt:66-71`) sono quattro nomi "candidati" (`accessibility_reduce_transparency`, `reduce_transparency`, ...), nessuno documentato da Android, cercati in `Secure`, `Global` e `System`; il commento stesso dice che "la chiave di One UI va confermata sul telefono". Se nessuna combacia, "Riduci trasparenza e sfocatura" di One UI non cambia niente e il vetro resta trasparente: la superficie su cui l'utente ha gia' segnalato di leggere male. Il contrasto alto ha strade documentate (`UiModeManager.getContrast` da Android 14, `high_text_contrast_enabled`). P8 lo ha rinviato a P14 (F183).
 - **Correzione proposta:** confermare la chiave sull'S25 (`adb shell settings list secure|global|system` con l'opzione accesa e spenta) e fissarla; in ogni caso, per non dipendere da una chiave del produttore, un interruttore dell'app "Superfici piene" (fase grafica) che l'utente trova in Impostazioni.
+- **Esito (02/11): Corretta** (pacchetto C). La chiave One UI e' **confermata sull'S25** sul telefono, come chiedeva F183 (`Settings.Global`, `accessibility_reduce_transparency`, gia' la prima di `REDUCE_TRANSPARENCY_KEYS`): il codice di lettura non cambia; il commento di `GalleryAccessibility.kt` non dice piu' "da confermare" e distingue la chiave confermata dalle tre candidate per altri produttori. Resta l'interruttore "Superfici piene" dell'app, nella fase grafica (decisione 5).
 
 ---
 
@@ -296,25 +298,25 @@ Nessuna voce e' corretta. Il pacchetto e' la proposta; ogni correzione porta un 
 
 | Voce | Gravita' | Stato | Pacchetto |
 |---|---|---|---|
-| CA-1 Blocco del manifest detto con le parole dell'emergenza | Sbagliata | confermato | A |
-| CA-2 Ingressi aperti con `ALL`; coda che non parte con `ReadOnly` | Sbagliata | confermato | A |
-| CA-3 Finestra "stato non letto" | Minore | plausibile | A |
-| CA-4 `ALL` e i lavori locali | Minore | confermato | A (decisione 3) |
-| RL-1 Radice ricostruita al cambio di stato | Minore | confermato | C |
-| RL-2 "Nessun luogo" sul widget | Minore | confermato | B (decisione 4) |
-| WG-1 Lavoro periodico dopo l'azzeramento; widget fermo dopo un cambio di account | Sbagliata | confermato | B |
-| WG-2 Frequenza scelta persa | Minore | confermato | B |
-| WG-3 Tocco con un viewer aperto | Sbagliata | confermato | B |
-| WG-4 Tocco a freddo: "non c'e' piu'" | Sbagliata | plausibile | B |
-| WG-5 Lavoro periodico a freddo: 1,5 s | Minore | plausibile | B (solo dopo F162) |
-| FI-1 "Indietro" del pannello | Minore | plausibile | C |
-| AC-1 "Meno trasparenza" da chiavi indovinate | Sbagliata | plausibile | D (solo dopo F183) |
+| CA-1 Blocco del manifest detto con le parole dell'emergenza | Sbagliata | confermato; **Corretta (A, 02/11)** | A |
+| CA-2 Ingressi aperti con `ALL`; coda che non parte con `ReadOnly` | Sbagliata | confermato; **Corretta (A, 02/11)** | A |
+| CA-3 Finestra "stato non letto" | Minore | plausibile; **Corretta (A, 02/11)** (il widget: B) | A |
+| CA-4 `ALL` e i lavori locali | Minore | confermato; **Corretta (A, 02/11)** | A (decisione 3) |
+| RL-1 Radice ricostruita al cambio di stato | Minore | confermato; **Corretta (A, 02/11)** | C |
+| RL-2 "Nessun luogo" sul widget | Minore | **Corretta (pacchetto B, 02/11)** (la frase) | B (decisione 4) |
+| WG-1 Lavoro periodico dopo l'azzeramento; widget fermo dopo un cambio di account | Sbagliata | **Corretta (pacchetto B, 02/11)** | B |
+| WG-2 Frequenza scelta persa | Minore | **Corretta (pacchetto B, 02/11)** | B |
+| WG-3 Tocco con un viewer aperto | Sbagliata | **Corretta (pacchetto B, 02/11)** | B |
+| WG-4 Tocco a freddo: "non c'e' piu'" | Sbagliata | **Corretta (pacchetto B, 02/11)** | B |
+| WG-5 Lavoro periodico a freddo: 1,5 s | Minore | **Corretta (pacchetto B, 02/11)**, da provare con F162 | B |
+| FI-1 "Indietro" del pannello | Minore | **Corretta** (C, 02/11): difesa, il difetto non si riproduce con Navigation 2.9 | C |
+| AC-1 "Meno trasparenza" da chiavi indovinate | Sbagliata | **Corretta** (C, 02/11): chiave confermata sull'S25, commento aggiornato; resta l'interruttore "Superfici piene" della fase grafica | C |
 
 **Pacchetti:**
 - **A, "il blocco del manifest nel cuore":** CA-1 (causa leggibile e testi), CA-2 (`AppEntryGate` con il manifest, motivo dedicato per la coda), CA-3 (`awaitLoaded` nelle regole e nel cancello dei modelli, il widget con `release.stopped`), CA-4 (dopo la decisione). Per primo: e' il cuore, e CA-2 e' l'unica voce che apre una porta a un'altra app. Sonnet (lavoro ordinario di legami e stringhe); i test sono quelli di §3.
 - **B, "widget: ciclo di vita e tocco":** WG-1 (`stop()` con `resume`, `publishAtStart` che programma il lavoro), WG-2 (frequenza ricordata), WG-3 (`viewer.close()`), WG-4 (`viewerOf` che aspetta), RL-2 (testo), WG-5 solo se F162 la conferma. Tutte con test su WorkManager e Compose.
 - **C, "radice e pannelli":** RL-1 (struttura stabile di `ReleaseRoot`), FI-1 (`previousBackStackEntry`).
-- **D, "trasparenza":** AC-1: prima F183 sull'S25 per la chiave, poi la correzione e, nella fase grafica, l'interruttore "Superfici piene".
+- **D, "trasparenza":** AC-1: prima F183 sull'S25 per la chiave, poi la correzione e, nella fase grafica, l'interruttore "Superfici piene". **Esito (02/11):** la chiave e' confermata e il commento aggiornato dal pacchetto C; resta l'interruttore.
 
 **Decisioni per l'utente:**
 1. **Le chiavi K1 e K2 (azione tua).** Finche' `ReleaseKeys.PROVISIONAL` e' vero nessun manifest vero e' accettato e `release.ps1` si rifiuta di pubblicare: va fatto `manifest-tool.ps1 keys`, incollate le due righe e aggiornate le impronte in `docs/sicurezza.md` §5.6. Senza, la versione 1.0.0 non ha il blocco a distanza.

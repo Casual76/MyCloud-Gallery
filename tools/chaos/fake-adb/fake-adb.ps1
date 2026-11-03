@@ -100,6 +100,13 @@ if ($all.Count -ge 2 -and $all[0] -eq "-s") { $i = 2 }
 $cmd = $all[$i]
 $rest = @($all | Select-Object -Skip ($i + 1))
 
+# Fase 10 P11, seconda parte: i comandi nuovi delle prove di sicurezza (schermo per UI Automator, logcat, dumpsys, bmgr, settings, emulatore).
+# Rispondono solo a cio' che i comandi di sempre non conoscono; il resto passa oltre, invariato.
+. (Join-Path $PSScriptRoot "fake-adb-sicurezza.ps1")
+$script:FakeSecCode = $null
+Invoke-FakeSecurityCommand $cmd $rest
+if ($null -ne $script:FakeSecCode) { exit $script:FakeSecCode }
+
 switch ($cmd) {
   "get-state" { Write-Output "device"; exit 0 }
   "push" {

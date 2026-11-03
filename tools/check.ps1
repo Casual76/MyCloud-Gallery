@@ -8,8 +8,10 @@
     1. engine-doctor            l'engine e' quello che engine.properties dichiara (versione, tag, moduli)
     2. engine pulito            nessuna modifica locale dentro engine/ (sarebbe una variante silenziosa)
     3. repo senza segreti       nessun .jks/.keystore/local.properties tracciato o da tracciare
-    3b. nessuna chiave privata  (Fase 10, P0) nel CONTENUTO dei file del repository nessuna chiave PEM ne' l'inizio di un PKCS#8 EC P-256 o
-                                RSA (base64 o esadecimale), salvo chiavi di prova nelle cartelle dei test (D31, D32, C442)
+    3b. nessuna chiave privata  (Fase 10, P0; R6 della revisione) nel CONTENUTO dei file del repository nessuna chiave PEM ne' l'inizio di un
+                                PKCS#8 EC P-256 (forma corta e lunga), di una SEC1 o di un PKCS#8 RSA (base64, esadecimale, decimale, byte
+                                grezzi, UTF-16), salvo chiavi di prova nelle cartelle dei test (D31, D32, C442); e la sua prova: chiavi VERE
+                                generate da Java sotto build\ in ogni forma (tools\release\chiavi-prove.ps1), tutte riconosciute
     4. verifica checksum        gradle/verification-metadata.xml c'e' ed e' attiva; il wrapper e' fissato
     5. gradle                   assembleDebug assembleRelease galleryTest galleryLint
                                 (galleryTest/galleryLint = testDebugUnitTest/lintDebug dei soli moduli della
@@ -585,39 +587,24 @@ Step "repo senza segreti (chiavi di firma, local.properties)" {
 }
 
 # Fase 10 (P0; docs/fase10-progetto.md par. 4.3 "Chiavi", D31, D32, C442): nessuna chiave privata nel CONTENUTO dei file del repository (il
-# passo 3 guarda solo i nomi). Una chiave PEM ("-----BEGIN ... PRIVATE KEY-----") o l'inizio di un PKCS#8 EC P-256 o RSA (in base64 o in
-# esadecimale) fa fallire il passo, salvo nelle cartelle dei test (`src/test/`, `src/testDebug/`), dove possono stare solo chiavi di prova
-# generate apposta (KT, keystore di prova). Le chiavi vere (pampa.jks, K1, K2) stanno solo sul PC dell'admin e nella copia offline.
-# I marcatori sono scritti a pezzi: questo file non contiene mai un marcatore intero, cosi' non si segnala da solo.
-$privateKeyMarkers = @(
-  ('-----BEGIN [A-Z0-9 ]*' + "PRIVATE KEY" + '-----'),
-  ('MIGHAgEAMBMGByqGSM49' + 'AgEGCCqGSM49AwEHBG0wawIBAQQg'),
-  ('MEECAQAwEwYHKoZIzj0C' + 'AQYIKoZIzj0DAQcEJzAlAgEBBCA'),
-  ('308187020100301306072a8648ce3d0201' + '06082a8648ce3d030107046d306b0201010420'),
-  ('3041020100301306072a8648ce3d0201' + '06082a8648ce3d030107042730250201010420'),
-  ('BgkqhkiG9w0BAQEF' + 'AASC')
-)
-Step "nessuna chiave privata nel contenuto dei file del repository (PEM, PKCS#8 EC e RSA; chiavi di prova solo nei test)" {
+# passo 3 guarda solo i nomi). Una chiave PEM o l'inizio di un PKCS#8 EC P-256 (forma corta e lunga) o RSA, di una chiave SEC1, in base64, in
+# esadecimale, in decimale o in byte grezzi, fa fallire il passo, salvo nelle cartelle dei test (`src/test/`, `src/testDebug/`), dove possono
+# stare solo chiavi di prova generate apposta (KT, keystore di prova). Le chiavi vere (pampa.jks, K1, K2) stanno solo sul PC dell'admin e nella
+# copia offline. Le forme e il riconoscimento stanno in tools\release\chiavi-private.ps1 (R6 della revisione di sicurezza della Fase 10: il
+# marcatore di P0 vedeva una chiave su quattro nella forma di Java); la prova con chiavi vere di Java e' il passo qui sotto.
+. (Join-Path $root "tools\release\chiavi-private.ps1")
+Step "nessuna chiave privata nel contenuto dei file del repository (PEM, PKCS#8 EC e RSA, SEC1; base64, esadecimale, decimale; chiavi di prova solo nei test)" {
   $files = Invoke-Native -File "git" -Arguments @("ls-files", "--cached", "--others", "--exclude-standard")
   if ($files.Code -ne 0) { return "git ls-files non risponde" }
-  $pattern = [regex]::new(($privateKeyMarkers -join "|"), [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
-  $binary = '\.(png|jpg|jpeg|webp|gif|heic|jar|aar|so|bin|tflite|onnx|litertlm|task|zip|gz|ttf|otf|pbf|mbtiles|db|keystore)$'
-  $latin1 = [System.Text.Encoding]::GetEncoding(28591)
-  $problems = @()
-  $read = 0
-  foreach ($path in @($files.Lines | Where-Object { $_.Trim().Length -gt 0 })) {
-    if ($path -match $binary) { continue }
-    $full = Join-Path $root $path
-    if (-not (Test-Path -LiteralPath $full -PathType Leaf)) { continue }
-    if ((Get-Item -LiteralPath $full).Length -gt 4MB) { continue }
-    $read++
-    $text = $latin1.GetString([System.IO.File]::ReadAllBytes($full))
-    if (-not $pattern.IsMatch($text)) { continue }
-    if ($path -match '(^|/)src/(test|testDebug)/') { continue }
-    $problems += $path
-  }
-  Write-Host ("        file letti: {0}" -f $read) -ForegroundColor DarkGray
-  if ($problems.Count -gt 0) { return "chiavi private (o il loro inizio) fuori dai test: " + ($problems -join ", ") }
+  $scan = Find-PrivateKeyFiles -Root $root -Paths $files.Lines
+  Write-Host ("        file letti: {0}  (chiavi di prova sotto src/test: {1})" -f $scan.Read, $scan.InTests.Count) -ForegroundColor DarkGray
+  if ($scan.Problems.Count -gt 0) { return "chiavi private (o il loro inizio) fuori dai test: " + ($scan.Problems -join ", ") }
+}
+
+Step "prova del passo 3b: chiavi vere generate da Java sotto build\ in ogni forma, tutte riconosciute (R6)" {
+  $r = Invoke-Native "powershell.exe" @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", (Join-Path $root "tools\release\chiavi-prove.ps1"))
+  if ($r.Code -ne 0) { Show-Lines $r.Lines 40; return "chiavi-prove.ps1 fallito (codice $($r.Code))" }
+  Write-Host ("        " + ($r.Lines | Select-Object -Last 1)) -ForegroundColor DarkGray
 }
 
 # Fase 6 (P9, P11; docs/fase6-progetto.md par. 5.3): le etichette e le query del set privato della valutazione stanno solo sul telefono e

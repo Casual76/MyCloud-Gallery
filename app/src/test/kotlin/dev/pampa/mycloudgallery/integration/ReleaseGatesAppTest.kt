@@ -35,6 +35,16 @@ import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
 import dev.pampa.mycloudgallery.faces.AppFacesWriteGate
 import dev.pampa.mycloudgallery.release.NasManifestSource
 import dev.pampa.mycloudgallery.release.ReleaseGraph
+import dev.pampa.mycloudgallery.backup.BackupDiagnostics
+import dev.pampa.mycloudgallery.core.backup.contract.DestinationArea
+import dev.pampa.mycloudgallery.core.backup.contract.NasDestination
+import dev.pampa.mycloudgallery.core.security.lock.AppLockController
+import dev.pampa.mycloudgallery.core.security.lock.AppLockSettings
+import dev.pampa.mycloudgallery.feature.diagnostics.actions.DiagnosticsActions
+import dev.pampa.mycloudgallery.feature.diagnostics.catalog.DiagCatalog
+import dev.pampa.mycloudgallery.feature.integrations.contract.EntryDecision
+import dev.pampa.mycloudgallery.integrations.IntegrationsGraph
+import kotlinx.coroutines.flow.flowOf
 import java.io.File
 import java.time.Duration
 import java.time.Instant
@@ -131,8 +141,17 @@ class ReleaseGatesAppTest {
     assertWithMessage("volti").that(faces.blockFor(share)).isEqualTo(FacesWriteBlock.EMERGENCY_STOP)
     assertWithMessage("dati personali").that(personal.blockFor(share)).isEqualTo(WriteBlock.EMERGENCY_STOP)
     assertWithMessage("modelli sullo scaffale").that(models.blockFor(share)).isEqualTo(WriteBlock.EMERGENCY_STOP.name)
+    // CA-1 (revisione funzionale della Fase 10): la Diagnostica del backup dice la causa (la versione va aggiornata) e non offre "Riattiva le scritture".
+    val stoppedItem = BackupDiagnostics(rig.backup, null).collect().single { it.code.id == "BACKUP_WRITES_STOPPED" }
+    assertThat(stoppedItem.detail?.resId).isEqualTo(dev.pampa.mycloudgallery.feature.diagnostics.R.string.diag_backup_writes_held_by_release)
+    assertThat(DiagnosticsActions.labelRes(checkNotNull(DiagCatalog.actionFor(stoppedItem)))).isEqualTo(0)
+    // CA-2: con la sola lettura gli ingressi restano (si legge), ma "Salva sul NAS" non si offre e la coda degli arrivi non prende niente.
+    val integrations = integrations(rig, release)
+    assertThat(integrations.entryGate.decide()).isEqualTo(EntryDecision.ALLOWED)
+    assertThat(integrations.destinations.savingBlockedByRelease()).isTrue()
+    val received = NasDestination(share, SharePath.of("Ricevute"), DestinationArea.PRIVATE)
+    assertThat(rig.backup.fiveB.incomingQueue.destinationAllowed(received)).isFalse()
     // La lettura si fa al piu' ogni 24 ore: subito dopo non si rilegge.
-    assertThat(release.readIfDue(source)).isNull()
     // In sola lettura la sessione resta (si legge, non si scrive).
     assertThat(listCommon(phone).isSuccess).isTrue()
 
@@ -150,7 +169,21 @@ class ReleaseGatesAppTest {
     assertThat(decision).isInstanceOf(RuleDecision.Stop::class.java)
     assertWithMessage("indice con la versione fermata").that(rig.nas.writeGate.blockFor(share)).isEqualTo(WriteBlock.EMERGENCY_STOP)
     assertWithMessage("backup con la versione fermata").that(rig.backup.gate.stateOf(share)).isEqualTo(BackupGateState.WRITES_STOPPED)
+    // CA-2 e R1: selettore, provider dei documenti, ricezione e rilasci si chiudono con il motivo (il cancello d'ingresso come lo lega l'app).
+    assertWithMessage("ingressi per le altre app con la versione fermata").that(integrations.entryGate.decide()).isEqualTo(EntryDecision.STOPPED)
   }
+
+  /** Le integrazioni come le monta l'app (`FiveBModule`), con il manifest firmato di questo dispositivo. */
+  private fun integrations(rig: BackupRig, release: ReleaseGraph): IntegrationsGraph = IntegrationsGraph(
+    context = rig.device.context,
+    gallery = rig.gallery,
+    scope = rig.device.scope,
+    lock = AppLockController().apply { updateSettings(AppLockSettings()) },
+    lockSettings = flowOf(AppLockSettings()),
+    familyReady = { true },
+    shareProbe = rig.device.graph.shareProbe,
+    release = release,
+  )
 
   /** Una lettura qualunque dell'area comune con la sessione del dispositivo (passa dall'apertura della sessione). */
   private suspend fun listCommon(device: TestDevice): Result<Any> = withContext(Dispatchers.IO) {

@@ -125,7 +125,12 @@ class IncomingDrops(
   override fun drop(target: DropTarget, drag: IncomingDrag, activity: Activity?): Boolean {
     if (drag.own) return false
     // Il blocco dell'app (E-X7): con il cancello chiuso il rilascio non porta niente al foglio (l'app non mostrerebbe nemmeno la destinazione).
-    if (gate() != EntryDecision.ALLOWED) return refuse()
+    // CA-2 (Fase 10): con la versione fermata dal manifest il motivo e' detto ("aggiorna l'app"), non "trascina foto o video".
+    when (gate()) {
+      EntryDecision.ALLOWED -> Unit
+      EntryDecision.STOPPED -> return refuse(R.string.integrations_drag_in_stopped)
+      else -> return refuse()
+    }
     val clip = drag.clip ?: return refuse()
     // Il permesso di lettura del trascinamento vale per l'activity (per l'app, finche' vive): serve alla copia, che parte appena il foglio e' su.
     drag.grantAccess()
@@ -145,9 +150,9 @@ class IncomingDrops(
     return true
   }
 
-  private fun refuse(): Boolean {
+  private fun refuse(text: Int = R.string.integrations_drag_in_refused): Boolean {
     DragCounters.add(DragCounter.IN_REFUSED)
-    notice(R.string.integrations_drag_in_refused)
+    notice(text)
     return false
   }
 }

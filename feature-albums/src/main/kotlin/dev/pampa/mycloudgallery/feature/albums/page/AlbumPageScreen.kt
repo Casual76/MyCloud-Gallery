@@ -192,7 +192,9 @@ private fun ReadyPage(
   val columns = metrics.columns(minColumn = AlbumDimens.CellMin, spacing = GalleryWall.Gap, maxColumns = MaxColumns)
   val style = rememberGalleryGridCellStyle(cornerScale = GalleryWall.CornerScale)
   val interaction = remember { GalleryGridInteractionState() }
-  val strips = remember(page, ui.suggested, ui.creatorName) { AlbumStrips.of(resources, page, ui.suggested, ui.creatorName) }
+  // CA-1 (Fase 10): le scritture ferme dal manifest firmato hanno la loro frase nella striscia della condivisione.
+  val heldByRelease = dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease.current
+  val strips = remember(page, ui.suggested, ui.creatorName, heldByRelease) { AlbumStrips.of(resources, page, ui.suggested, ui.creatorName, heldByRelease = heldByRelease) }
   val cover = album.cover.media
   val actions = rememberCellActions(
     view = content.items,

@@ -39,8 +39,11 @@ class NasHiddenChoiceTest : ComposeNasTest() {
   private val allText = "Sposta tutto (2 nascosti diventano visibili ai familiari)"
   private val moveText = "Sposta nell'area comune"
 
-  /** La riga di una scelta: il nodo che dice di essere un radio (scelto o no) e che contiene il testo; il testo da solo sta nel suo figlio. */
-  private fun radio(text: String) = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton) and hasAnyDescendant(hasText(text))
+  /**
+   * La riga di una scelta: il nodo che dice di essere un radio (scelto o no) e che contiene il testo. Fino al Fluid Engine 2.13 il testo stava in un figlio;
+   * dalla 3.0 `FluidListRow` e' un nodo solo (il modificatore sta sul `ListItem`) e il testo e' nel nodo stesso: il cercatore accetta le due forme.
+   */
+  private fun radio(text: String) = SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton) and (hasText(text) or hasAnyDescendant(hasText(text)))
 
   private fun showSheet(plan: OpPlan = everything, hidden: Int = 2, leavePlan: OpPlan? = leaving) {
     show {

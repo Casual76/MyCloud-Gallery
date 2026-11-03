@@ -15242,3 +15242,264 @@ Fonte: prove sul campo F182-F185 (branch `campo/f10-a11y`), esiti in `docs/prove
 - **Nessuna modifica al codice:** e' gia' la prima di `REDUCE_TRANSPARENCY_KEYS` e `GalleryAccessibilityReader.read` guarda anche `Settings.Global`; l'osservatore registra gli indirizzi dei tre spazi. Le altre tre candidate (`reduce_transparency`, `reduce_transparency_and_blur`, `accessibility_reduce_transparency_blur`) non esistono sul telefono: restano come ripiego per altri produttori. Resta da aggiornare (a chi tocca `core-designsystem` per P13) il commento di `GalleryAccessibility.kt` e il passo "da confermare" di P8: ora e' confermata.
 - **Provato nell'app:** la Libreria con la chiave a 1 disegna la capsula di vetro in alto a destra come superficie piena con bordo; a 0 torna il vetro; il cambio arriva entro circa 2 secondi senza riaprire l'app (`docs/screenshots/10-campo-a11y/riduci-trasparenza-barra-libreria.png`). Le altre schermate e il resto di F182-F185 sono rimandati.
 - **Per chi rifa' F182 sul telefono:** accendere TalkBack scrivendo il suo servizio (`com.google.android.marvin.talkback/com.google.android.marvin.talkback.TalkBackService`) in `enabled_accessibility_services` **svuota** `accessibility_button_targets`, `accessibility_direct_access_target_service` e `accessibility_gesture_targets` (qui puntavano a un servizio dell'utente): salvarle e rimetterle. I gesti di TalkBack iniettati con `adb shell input` (e la scorciatoia Alt+freccia) non muovono il suo fuoco su questo telefono; un `input tap` sembra attivare l'elemento invece di spostare solo il fuoco (visto una volta). Servono UI Automator con TalkBack acceso (come F113) o l'utente.
+
+## Adozione del Fluid Engine 3.0.0 (03/11; cominciata sulla 3.0.0-rc.1)
+
+Fonte: `BRIEF.md` del pacchetto (fuori dal repository), il `CHANGELOG.md` dell'engine (sezione "3.0.0", voci **BREAKING** e **Cambia a vista**), `ADOZIONE.md`
+("Migrare alla 3.0"), `skill/fluid-engine/references/regole.md` e `design-system.md`, la ricognizione `artifacts/design/migrazione-3.0.md` (scheda di MyCloud
+Gallery, fotografia di `6b7a7d30`). Branch `grafica/engine3`, partito da `b8a2e282`. **E' un'adozione tecnica, non la fase grafica**: l'app compila, si comporta
+come prima dove la 3.0 non cambia volutamente l'aspetto, e resta verde; nessun nostro componente e' stato sostituito con i pezzi nuovi dell'engine (tabella
+sotto, per la fase grafica). **Nessuna dipendenza nuova** (le versioni risolte sono quelle di prima: una sola regola di risoluzione, sotto), **nessun permesso,
+host, chiave o costante di `FeatureFlags` cambiati**; `tools/release/recinzioni.json` non toccato;
+`engine/` non modificato a mano (il sotto-modulo e' agganciato pulito al tag).
+
+**Licenza GPL-3.0 confermata dall'utente il 02/11** (riferito dall'orchestratore): l'app diventa GPL-3.0 con l'engine 3.0.
+
+### L'aggiornamento
+`engine\tools\engine-update.ps1 -AppRoot . -Version 3.0.0-rc.1`. Il sotto-modulo di questo worktree prende i tag dalla copia dell'engine dentro il repository
+principale (`.git/modules/engine`), che il tag della 3.0 non l'aveva ancora: il tag `engine-3.0.0-rc.1` (commit `0a00984f`) e' stato preso **dal repository
+locale dell'engine** (`git fetch` di quel solo tag dalla cartella `fluid-engine`, nessuna rete, nessun `git remote`), poi lo script ha agganciato il tag e
+riscritto `engine.properties` (3.0.0-rc.1, 2026-11-02). `engine-doctor`: verde ("Tutto a posto": versione, `ENGINE_VERSION`, `EngineBuild.VERSION`, nessuna
+modifica locale, agganciato al tag, moduli `engine-foundation, engine-ui, engine-widget`). `engine.channel` resta `stable` (lo script non lo cambia; una rc su
+`stable` non e' un problema per il doctor). `navigation` 2.9.8 e `navigationevent` erano gia' nel build e nelle impronte.
+**Una dipendenza che la ricognizione non aveva visto.** Dalla 3.0 `engine-ui` porta `navigation-compose` 2.9.8 come `api`; quella chiede
+`lifecycle-viewmodel-compose` **2.9.0**, che l'allineamento delle librerie lifecycle porta alla 2.10.0 (quella che l'app risolve gia'). Nei moduli che vedono solo
+l'engine (`engine-ui`, `core-map`) Gradle visitava la 2.9.0 prima di allinearla: alla prima compilazione **ha scaricato da solo due file di metadati**
+(`lifecycle-viewmodel-compose-2.9.0.pom` e `.module`, alle 22:57, dal repository Google gia' configurato) e la verifica delle impronte li ha **rifiutati**
+(nessuna impronta in `gradle/verification-metadata.xml`): il build e' fallito senza usarli. E' il solo scaricamento fuori da `engine-update.ps1`, non voluto (il
+brief non ne permette altri). Correzione, senza impronte nuove: in `build.gradle` (radice) una regola di risoluzione manda la richiesta di
+`lifecycle-viewmodel-compose:2.9.0` direttamente alla versione lifecycle dell'engine (2.10.0); le versioni risolte restano quelle di prima. Da qui ogni corsa di
+Gradle del pacchetto e' stata `--offline` (tranne `check.ps1`, che l'opzione non la passa: vedi l'esito), cosi' un altro file mancante avrebbe fermato il build
+invece di scaricarlo.
+**Versione usata: 3.0.0 (finale).** Il lavoro e' cominciato sulla 3.0.0-rc.1 (commit "aggiornamento a 3.0.0-rc.1"); durante il pacchetto sono uscite la
+rc.2 e poi la **3.0.0**, che rispetto alla rc.1 cambiano solo `engine-ai` ed `engine-ai-bridge` (non li usiamo): nei moduli che l'app include
+(`engine-foundation`, `engine-ui`, `engine-widget`, `versions.gradle`) l'unica differenza fra `engine-3.0.0-rc.1` e `engine-3.0.0` e' il numero in
+`EngineVersion.kt` (controllato con `git diff --stat`). Rilanciato `engine-update.ps1 -AppRoot . -Version 3.0.0` (tag `engine-3.0.0`, commit `cda2d14e`, preso
+anche lui dal repository locale dell'engine), `engine-doctor` verde; tutte le prove e gli screenshot "dopo" di questa sezione sono sulla 3.0.0.
+
+### Le BREAKING, una per una
+**1. Licenza (commit a se', "Adozione engine 3.0: licenza GPL-3.0").** L'engine porta codice GPL-3.0 di LibrePods (pulsanti e pagine): l'app si distribuisce
+sotto GPL-3.0, con i sorgenti a chi riceve l'APK. Fatto: `LibraryLicense.GPL_3` (nome breve, nome intero, indirizzo `https://www.gnu.org/licenses/gpl-3.0.html`)
+e `ABOUT_LICENSES_IN_USE` che la elenca sempre (e' la licenza dell'app, non di una libreria); in **Informazioni e licenze**, nel gruppo "L'app", la riga
+"Licenza · Software libero, GPL-3.0" con la frase che la GPL chiede a un'interfaccia (la licenza, ridistribuire e modificare alle sue condizioni, i sorgenti
+completi a chi riceve l'app, nessuna garanzia, il testo nel file `LICENSE` e all'indirizzo della sezione Licenze); la voce LibrePods compare da sola fra le
+opere dell'engine (`FluidEngineLicenses`). `LICENSE` alla radice con il testo della GPL-3.0 (674 righe, 35.149 byte); paragrafo "Licenza" in fondo al
+`README.md`. Prove: `AboutScreenTest` (`diceCheLAppEGpl3_conISorgentiENessunaGaranzia`, LibrePods GPL-3.0 fra le opere dell'engine, la GPL-3.0 fra le licenze
+con il suo indirizzo come testo, il file `LICENSE` che comincia con l'intestazione della GPL-3.0). **Il testo di `LICENSE` e' stato scritto senza rete** (il
+brief permette solo l'aggiornamento dell'engine): va confrontato byte per byte con `https://www.gnu.org/licenses/gpl-3.0.txt` prima di pubblicare un APK
+(SHA-256 del file scritto: `E73DA98853FA07C24F994107F6EA963FE356A1F27274D497DCA2D8A3814AD93C`).
+
+**2. Le pagine: `FluidNavHost`.** Tutti gli host sono `FluidNavHost` e tutte le destinazioni il `composable` dell'engine (l'import cambia in 25 file, i
+grafi annidati `navigation<>`, `toRoute`, `popBackStack<MainRoute>` e il `NavController` restano quelli). Gli host:
+| Host | Dove | Come |
+|---|---|---|
+| Quello dell'app | `app/.../navigation/AppNavHost.kt` | `FluidNavHost(nav, startRoute(destination))`; via le quattro transizioni e i loro aiuti (`slideIn/OutHorizontally` con `FluidMotion.intOffset()`); `key(destination)` e `rememberNavController()` restano (il navigator delle pagine lo aggiunge l'host) |
+| Il pannello delle Impostazioni | `feature-settings/.../SettingsPanes.kt` (`SettingsPaneHost`) | `FluidNavHost` con `pageColor = Color.Unspecified` (l'host non dipinge: il fondo e' del pannello, come prima); il segnaposto "Scegli una voce" senza back col dito; le pagine con `settingsPages(..., backSwipe = EdgeOnly)` |
+| Il dettaglio delle Raccolte | `app/.../navigation/CollectionEntryPanes.kt` (`PaneNavHost`) | `FluidNavHost` con `pageColor = Color.Unspecified`; una pagina sola per host (album, persona, ricordo), `backSwipe = Off` |
+| La versione fermata | `app/.../release/ReleaseRootUi.kt` | `FluidNavHost` (la Diagnostica e' un grafo condiviso, quindi di pagine Fluid) |
+**La trappola di `settingsPages`** (P5): la funzione registra le stesse pagine nel grafo dell'app e nel `NavHost` interno del pannello. Con l'import dell'engine
+le destinazioni sono pagine Fluid in tutti e due i posti, quindi anche il pannello e' un `FluidNavHost` (un `NavHost` di navigation-compose non le saprebbe
+disegnare, e con l'import vecchio non si vedrebbero nel `FluidNavHost` dell'app). `settingsPages` prende `backSwipe` (di serie `Anywhere`): a pagina intera
+da qualunque punto, nel pannello solo dai 20 dp del bordo del pannello. Dentro il pannello una pagina aperta da un'altra (Famiglia -> Invito) ora arriva da
+destra (prima nessun movimento: l'engine non ha un passaggio "senza movimento"); il cambio fra due voci scelte resta il movimento fra pari di `FluidDetailContent`.
+**Il back col dito** (`FluidBackSwipe`), da qualunque punto di serie; dal bordo (`EdgeOnly`) o mai (`Off`) dove la pagina ha gesti orizzontali propri:
+| Pagina | `backSwipe` | Perche' |
+|---|---|---|
+| Presentazione dei ricordi (`MemoryPlayerDestination`) | `Off` | di lato si cambia foto; si esce con "Chiudi", trascinando in basso o con il back di sistema |
+| Mappa (`MapDestination`) | `EdgeOnly` | il dito sposta la carta (la `MapView` di MapLibre) |
+| Griglie con la selezione a trascinamento: Raccolte filtrate, Nascosti, Eliminati di recente, pagine-filtro dell'Utility, selettore dei media, Cartelle e Eliminati del NAS | `EdgeOnly` | in selezione un trascinamento di lato da una cella seleziona; partendo fra le celle diventerebbe un back (e chiuderebbe la selezione, vedi sotto) |
+| Pagine delle Impostazioni nel pannello | `EdgeOnly` | dai 20 dp del bordo del pannello si torna alla pagina di prima del pannello; da un altro punto il trascinamento e' il back della pagina delle Impostazioni intera (l'host dell'app), come a pagina singola: **da guardare in mano sul tablet** |
+| Pagine nel dettaglio delle Raccolte, segnaposto del pannello | `Off` | una pagina sola: non c'e' niente sotto |
+| Tutte le altre | `Anywhere` | la regola dell'engine |
+`backSwipe` e' per destinazione (non cambia con la selezione), per questo le griglie lo hanno sempre dal bordo. Il viewer non e' una rotta (D12): sta sopra
+tutta la navigazione in `GalleryRoot`, quindi il back col dito delle pagine sotto non lo vede (il tocco lo prende il viewer, che e' sopra) e il pager resta suo.
+**I `BackHandler` dopo l'host.** Il back col dito oltre la soglia manda al dispatcher lo stesso "indietro" del sistema: con un `BackHandler` abilitato della
+pagina la pagina torna sotto il dito e il gestore decide. Guardati i nostri: selezione di `CollectionGridPage`, `RecentlyDeletedScreen`, `NasFoldersScreen`
+(cartella sopra, selezione, scelta) e `NasTrashScreen` (con `EdgeOnly`, solo dal bordo: chiude la selezione o sale di cartella invece di uscire);
+`OnboardingHost` (il passo prima), `AboutRoute` ("Novita'" torna alle Informazioni): giusto cosi', e' quello che la 3.0 vuole. La Libreria (`LibraryScreen`,
+selezione) e' la radice: niente back col dito. Il viewer (`PredictiveBackHandler` di chiusura e del foglio informazioni, testo dal vivo, ritaglio) e i fogli
+dell'host dei modali sono composti dopo l'host delle pagine, quindi il back di sistema arriva prima a loro, come prima. `PickerActivity` e
+`ShareReceiverActivity` hanno un `OnBackPressedCallback` e non un `FluidNavHost`: nessun cambio.
+Prove: `FluidPagesSourcesTest` (`:app`, nuova: nessun import di `androidx.navigation.compose.composable` o `NavHost` nei sorgenti main e debug di tutti i moduli,
+e il back col dito dal bordo o mai sulle pagine della tabella), `SettingsPanesTest` (il grafo del pannello con il navigator delle pagine dell'engine: ogni
+pagina di `SettingsPage` ha la sua rotta), `EntryHardeningTest` e i test che compongono `AppNavHost` (in debug l'engine ferma l'app se nel grafo resta una
+destinazione di navigation-compose), gli screenshot delle Impostazioni a due pannelli.
+
+**3. Il pulsante tiene il dito.** Dalla 3.0 un dito che scende su un pulsante e' suo fino al sollevamento (`FluidPressGrip.HoldsFinger`, di serie): la lista, il
+pager e il back sotto non partono. Quasi tutti i nostri `FluidButton` stanno da soli in una pagina o fuori dal corpo che scorre dei fogli (si scorre partendo
+fuori dal pulsante): restano come sono. Cedono il dito (`grip = FluidPressGrip.YieldsToScroll`) solo quelli che stanno **sopra un gesto proprio** o che si
+**ripetono su ogni riga** di una lista che scorre:
+| Dove | Pulsanti | Perche' |
+|---|---|---|
+| `feature-memories/.../player/PlayerScreen.kt` (il caso delicato) | "Chiudi", "Pausa"/"Riproduci", "Indietro", "Avanti" (`FluidButton` Large) | stanno sopra i gesti della presentazione (`detectDragGestures` sul fondo: di lato avanti e indietro, in basso esci) |
+| `core-designsystem/.../viewer/GalleryViewerNotice.kt` | l'azione dell'avviso | sta sopra il pager delle foto |
+| `feature-library/.../utility/IdenticalSection.kt`, `SimilarSection.kt` | "Rivedi"/"Fatto", "Ripristina" | uno per gruppo di doppioni |
+| `feature-nas/.../operations/NasOperationsScreen.kt` | "Ferma" | uno per operazione |
+| `feature-search/.../models/ModelsSection.kt` | "Scarica", "Rimuovi", conferma dei dati mobili, l'azione dell'errore | uno per modello |
+| `feature-library/.../trash/NasTrashRows.kt` | l'azione del messaggio di sezione | dentro la griglia che scorre |
+Un pulsante che cede risponde al tocco come prima (il click e' di `clickable`), e appena il gesto sotto prende il dito si scioglie e non clicca. I chip
+(`FluidChip`, 7 usi sotto la ricerca) cedono gia' di serie nella 3.0. **`LocalFluidPressImmediate`** non fa piu' niente: tolto il provider dalle capsule
+(`GalleryChrome.kt`, `GalleryChromeActionBar.kt`, `NasChrome.kt`), nessuna differenza (dentro ci sono `fluidPressable` che cedono). Prova nuova:
+`MemoriesScreensTest.iGestiDellaPresentazionePartonoAncheDaiPulsanti` (un tocco vero su "Avanti" clicca; un dito che parte su "Indietro" e scorre a sinistra
+va avanti e "Indietro" non clicca; uno che parte su "Chiudi" e scende esce): con il pulsante che tiene il dito i due gesti non farebbero niente.
+**Cambia al tatto** (non a vista): ogni `FluidButton` fa tre colpi (`PressDown`, `PressRelease`, `PressClick`), la grana sul dito che corre. Da sentire in mano.
+
+**4. Fluid-physics e' una goccia.** L'API e' intatta. Il viewer apre e chiude con `fluidPhysicsClip` + `driveExternally` (`ViewerOverlay.kt`): la goccia
+(contorno di 48 punti su molle) la accende solo `fluidPhysicsSurface` (`liquidAllowed`, `FluidPhysicsSurface.kt:149`), non `fluidPhysicsClip`: **la sagoma del
+viewer resta il lerp geometrico di sempre** fra la cella e lo schermo, guidato dal nostro orologio (`GalleryViewerTransitionState`). Unico cambio della 3.0 su
+questa strada: oltre l'1 (`progress > 1`, l'oltrepasso della molla d'apertura) `driveExternally` senza gonfiore **si ferma sul traguardo** invece di estrapolare;
+il traguardo e' lo schermo intero, quindi l'estrapolazione di prima cadeva comunque fuori dallo schermo. I test del viewer che ci sono (apertura, congedo col dito,
+ritorno alla miniatura, salto del viewer affiancato, `ViewerDockOverlayTest`, gli screenshot) sono verdi. I nostri **menu** invece passano dalla goccia: i
+pop-up dell'engine (`FluidGlassModalPortal` con `Popover` e un'origine: `GalleryMenuButton`, `GalleryChromeMenuAnchor`) viaggiano ora come una goccia dal tasto
+al pannello, con l'ombra e il bordo del pannello (**cambia a vista**, da guardare in mano).
+
+**5. Contrasto, rimisurato.** La 3.0 cambia l'ottica dei pannelli (un materiale solo, `panelOptics`), le ombre (`glassShadow`, l'ombra dei pannelli in viaggio)
+e il bordo (scuro e sottile sul chiaro per Fluid-physics), ma **non le pellicole**: confrontate riga per riga in `GlassMaterial.kt` fra `engine-2.13.1` e
+`engine-3.0.0-rc.1`, `modalTint` (50%/54% della pellicola di vetro), `floatingTint` (48%/52%), `darkFloatingTint` (nero al 48%), `barTint`, `contentTint`,
+`controlTint` hanno gli stessi numeri a contrasto standard; cambia solo che passano tutte da `forSystemContrast()`. Il pop-up usa `panelTint()`, che senza colore
+e' proprio `modalTint()`, e il suo scrim e' ancora nero al 12% (chiaro) e al 20% (scuro) (`FluidGlassModal.kt`). Quindi:
+- `menuVeil` (`GalleryChrome.kt`) resta com'e': si calcola gia' da `GlassDefaults.modalTint()` in composizione, con la 3.0 dentro; commento aggiornato.
+- `GalleryLegibilityTest` (costanti della 2.13: `darkFloatingTint` al 48%, la pellicola della pillola) e `GalleryContrastTest` (scrim sulle foto, spunte,
+  badge, piastrelle dei fogli): stessi numeri, verdi senza toccare una soglia; il commento della costante dice ora che e' rimisurata sulla 3.0.
+- `GalleryGlassTest` misura **i pixel** con il renderer della 3.0 (la scritta su una capsula >= 4,5:1 con contrasto alto e meno trasparenza, superfici piene
+  opache, nessun `glassSurface` fuori da `GalleryGlass.kt`): verde.
+- Le prove ATF di P8 (`checkRoboAccessibility`, livello errore, sulle schermate principali e su ogni voce dei cataloghi di Impostazioni e Onboarding) girano
+  in `check.ps1`: vedi l'esito.
+**`LocalFluidSystemContrast` contro `galleryGlass`.** Cosa copre l'engine: da Android 14 legge `UiModeManager.getContrast()` e alza le pellicole di
+`GlassDefaults` verso il pieno (medio: 40% della strada che manca; alto: 85%) e fa il bordo piu' netto; segue il cambio dal vivo; a contrasto standard niente.
+Cosa **non** copre e `galleryGlass` (P8) si': (1) "testo ad alto contrasto" (`high_text_contrast_enabled`), che vale anche sotto Android 14; (2) "Riduci
+trasparenza e sfocatura" (la chiave di One UI confermata sul campo, `accessibility_reduce_transparency`); (3) la superficie **piena** (pellicola opaca, nessuna
+rifrazione, bordo da 1 o 2 dp): l'engine arriva all'85% della pellicola, non a un pezzo opaco; (4) il fondo pieno dentro i pop-up e i fogli dell'engine
+(`gallerySolidFill`) e il velo pieno del menu; (5) lo schema a contrasto alto con gli accenti a 7:1 (`highContrastScheme`). Le due cose non litigano: con il
+contrasto di sistema medio o alto `galleryGlass` disegna gia' la superficie piena (non chiama `glassSurface`), e il vetro che resta dell'engine (barra della
+pagina, pillola, pop-up, fogli) prende la pellicola piu' densa da solo. **Il nostro doppione non si toglie**: l'engine copre una parte di una sola delle due
+richieste. Da riguardare quando l'engine leggera' anche "meno trasparenza" e il testo ad alto contrasto.
+
+### Cio' che resta nostro (l'engine non ce l'ha) e continua a funzionare
+| Pezzo | Dove | Prova |
+|---|---|---|
+| Difesa dal tapjacking nei fogli di conferma (`filterTouchesWhenObscured` e sovrapposizioni nascoste mentre il foglio e' aperto) | `GalleryConfirmSheets.kt` (`GalleryConfirmSheet`, `OverlayShield`, `LocalConfirmSheetShield`) | i test dei fogli e dello scudo in `core-designsystem` e nei moduli, in `check.ps1` |
+| "Metti un host dei modali se manca" (7 copie) | `SettingsParts.kt`, `SearchHost.kt`, `PeopleHost.kt`, `MemoriesHost.kt`, `AlbumHost.kt`, `StartOverSheet.kt`, `LibraryTab.kt` | i test delle schermate che aprono fogli senza host alla radice |
+| Zoom fino a 40x (telephoto, tasselli, doppio tocco che riempie, rotella) | `feature-viewer/.../page/ZoomableMedia.kt` | i test del viewer |
+| Pizzico della griglia fra i livelli, selezione a trascinamento | `feature-library/.../grid/GridGestures.kt`, `GalleryMotion.kt` | i test della griglia; il trascinamento consuma nel passaggio `Initial`, quindi vince anche sul back col dito |
+| Riordino con maniglia | `feature-library/.../collections/CollectionsReorder.kt` | i test delle Raccolte |
+| Avviso di vetro sopra la griglia e sopra la foto | `GalleryGridChrome.kt` (`GalleryGridNotice`), `GalleryViewerNotice.kt` | i test delle schermate; l'azione dell'avviso del viewer ora cede il dito al pager |
+
+### Cambia a vista (e al tatto)
+Le voci **Cambia a vista** del `CHANGELOG.md` dell'engine che toccano la nostra app (le altre riguardano pezzi che non usiamo: `FluidAlert`, menu
+contestuali delle righe, `FluidSectionIndex`, `FluidCoachMark`, `FluidTabRail`, l'interfaccia dell'assistente):
+- **Le pagine**: si aprono da destra con la pagina sotto che arretra di un terzo (prima scivolava del 13%, la frazione fra pari); mentre si muove la pagina ha gli
+  angoli del telefono e un'ombra da 36 dp; il back col dito la tiene sotto il dito (1:1, molla critica alla fine, mai un rimbalzo). Fra due schede niente cambia
+  (le nostre schede sono un `when` dentro `MainRoute`, non destinazioni).
+- **La barra ancorata**: dentro `FluidNavHost` la barra di `FluidScreen` (67 pagine) e' una per host e sta ferma; il titolo grande viaggia con la sua pagina, il
+  tasto indietro e' uno. Le pagine con una chrome propria (Libreria e griglie, Backup, NAS) non sono `FluidScreen` e la loro barra viaggia con la pagina.
+- **I pulsanti**: premuti al contatto, crescono come quelli di LibrePods (con testo +10%, a tutta larghezza +5%, il tasto tondo indietro della barra +50%),
+  seguono il dito molto di piu' e vibrano tre volte; un dito che parte da un pulsante non fa scorrere la pagina.
+- **I menu** (pop-up dei tasti ⋮ e del menu della Libreria): si aprono come una goccia dal tasto, con il materiale unico dei pannelli, l'ombra del vetro e, sul
+  chiaro, un bordo scuro e sottile; la velatura sotto le voci (`menuVeil`) e' la stessa.
+- **La pillola** (`FluidFloatingTabBar`): la banda accessoria diventa il vetro della barra, niente increspatura di Material, il tocco su una scheda dice `Tap`.
+- **`FluidSegmentedControl`** (Approvazione dei dispositivi, passi del backup locale): pista di vetro e goccia, un `Tick` per segmento.
+- **`FluidProgressBar`** (11 usi): il riempimento fa almeno 3:1 sulla pista, gli accenti chiari si scuriscono del minimo.
+- **`FluidTextField`**: lo slot a destra e' da 24 dp (prima 18): le icone a destra dei campi un po' piu' grandi.
+- **`FluidListRow(onClick)`**: un nodo solo per TalkBack, con nome, `Role.Button` e stato.
+- **Contrasto di sistema** medio o alto (Android 14+): il vetro dell'engine piu' denso (il nostro e' gia' pieno in quei casi, vedi sopra).
+- **Informazioni e licenze**: la riga di LibrePods fra le opere dell'engine e la nostra riga della licenza dell'app.
+
+### Screenshot prima e dopo (`docs/screenshots/engine3/`)
+Registrati con i test Roborazzi che ci sono (`LibraryPanesShots`, `ViewerPanesShots`, `MapPanesShots`, `SettingsPanesShots` a 360 e 1280 dp; `ListAndPage*`,
+`Sheets*`, `Search*` e `Memories*ScreenshotTest` a 412 e 1280 dp), chiaro e scuro: **dopo** sul branch con la 3.0.0, **prima** sul codice di `b8a2e282` con la
+2.13.1 (il worktree staccato su quel commit per la sola corsa, poi riportato sul branch). Nomi `<schermata>-<chiaro|scuro>-<telefono|tablet>.png`: `libreria`,
+`viewer`, `viewer-informazioni`, `raccolte`, `album` (la pagina di un album manuale), `cerca` e `cerca-risultati`, `ricordo` (la pagina) e
+`ricordo-presentazione` (in pausa, con i pulsanti), `mappa`, `impostazioni` e `impostazioni-pagina` (tablet: una pagina nel pannello), `foglio-di-conferma`
+("Smetti di condividere"). Script e corse in `build\engine3\` (fuori dal repository).
+**A pagina ferma la 3.0 non cambia niente che si veda.** 42 coppie su 50 sono **identiche byte per byte** (in `prima/` non ci sono: il prima e' il file del dopo);
+le altre 8 (`impostazioni` chiaro e scuro su telefono e tablet, `impostazioni-pagina`, `viewer` sul telefono) cambiano di **un livello su 255** su 80-1.200
+pixel, tutti nei tasti tondi di vetro in alto (indietro, azioni del viewer): arrotondamenti del vetro nuovo dei tasti, invisibili. L'unico cambio a vista in
+un fotogramma fermo fra quelli registrati dai test e' la **barra di avanzamento** (`FluidProgressBar`) che si scurisce del minimo per stare a 3:1 sulla pista:
+`avanzamento-album-chiaro-telefono.png` (fino a 7 livelli sulla parte piena; il prima e' lo screenshot della Fase 7 in `main`, registrato sulla 2.13); lo stesso
+negli avanzamenti delle impostazioni dei ricordi (brani, musica). **Il resto della 3.0 e' movimento e tatto** (pagine, back sotto il dito, pulsanti che
+crescono e vibrano, menu a goccia): si giudica in mano, non sugli screenshot (Robolectric registra un fotogramma a riposo).
+
+
+### I pezzi nuovi della 3.0 per la fase grafica (nessuno adottato qui)
+Nessuna BREAKING ha imposto una sostituzione. Righe e file dalla ricognizione dell'engine (`migrazione-3.0.md`, fotografia di `6b7a7d30`), ricontrollati a grandi
+linee su questo branch.
+| Pezzo nuovo | Nostra copia | File | Beneficio | Rischio |
+|---|---|---|---|---|
+| `FluidToggleRow` | `ToggleRow`, `SwitchRow`, `SourceSwitchRow` e ~24 righe `FluidListRow` + `FluidSwitch(onCheckedChange = null)` | onboarding `ui/Components.kt`, backup `versions/CorrectionSheet.kt`, `MemoriesSettingsScreen.kt`, `SmartEditorParts.kt`, `MapPrivacyScreen.kt`, `BackupSettingsScreen.kt`, Impostazioni (`SecurityScreen`, `SharingScreen`, ...) | un bersaglio, una vibrazione, `Role.Switch`, un nodo per TalkBack | niente `titleMaxLines` (49 usi a testo 2,0), `meta`, `labels`, `badge` |
+| `FluidChoiceRow` | `ChoiceRow`, `RadioMark`, `OptionRow`, `BackupChoiceRow`, `SheetRadio`/`DeleteScopeRow`, e 4 interruttori usati come radio | onboarding `Components.kt`, `MemoriesParts.kt`, `AlbumParts.kt`, `NasConfirm.kt`, `FacesEraseSheet.kt`, `PeopleParts.kt`, backup `free/ChoiceRow.kt`, `GalleryConfirmSheets.kt`, `PreviewQuality.kt`, `RulesScreen.kt`, `WidgetSettingsScreen.kt` | la spunta a destra di iOS, `Role.RadioButton`, spazio della spunta riservato | cambia a vista (spunta al posto del cerchio); niente `labels` |
+| `FluidSheetScaffold` | `GallerySheetScaffold` (69 chiamate) | `core-designsystem/.../sheet/GalleryConfirmSheets.kt` | testata, corpo che scorre e tasti fermi misurati dall'engine; cambio in un posto solo (adattatore) | i toni (Brand/Destructive/Caution -> Primary/Danger/Warning) |
+| `FluidConfirmSheet` | `GalleryConfirmSheet` (53), `ConfirmSheet` delle Impostazioni | `GalleryConfirmSheets.kt`, `feature-settings/.../ui/SettingsParts.kt` | parole congelate all'uscita, un tasto che dice cosa fa | **niente difesa dal tapjacking**: non migrare finche' l'engine non ce l'ha |
+| `FluidPromptAlert` | `NasUnfreezeDialog` (l'unico `AlertDialog` Material), i fogli "dai un nome" | `app/.../nas/NasUnfreezeDialog.kt`, `NameAndForgetSheets.kt`, `NasNameSheet.kt` | vetro vero nell'host, il tasto e' la validazione | niente filtro "solo cifre", niente conferma asincrona che rifiuta |
+| `FluidMorphMenuButton(opensOnTap)` + `FluidMorphMenuHost` | `GalleryMenuButton` (5 usi), `GalleryChromeMenuAnchor` (menu della Libreria) | `chrome/GalleryMenu.kt`, `design/GalleryChrome.kt` | il tasto diventa il menu, scelta col dito, sezioni (`startsSection`), aptica giusta | `menuVeil` e superficie piena da rifare; il menu della Libreria e' piu' alto dello schermo |
+| `FluidFloatingCapsule` + `FluidCapsuleAction` | `GalleryActionBar` (viewer), `GalleryChromeActionBar` (selezione), `GalleryChromeCapsule` + `GalleryChromeIconButton` + `GalleryChromeTextButton` | `chrome/GalleryActionBar.kt`, `design/GalleryChromeActionBar.kt`, `design/GalleryChrome.kt` | `ReplacingTabBar` occupa lo spazio della pillola, entrata e uscita animate, tocchi trattenuti fra le icone | la pellicola adattiva (`GalleryChromeStyle`, leggibilita' sulle foto) e la superficie piena di P8 |
+| `FluidGlassIconButton(size)` | `GalleryBarButton` (24 usi) | `chrome/GalleryTopBar.kt` | bersaglio da 48 dp ora nell'engine, stesso tasto del back della barra (che dalla 3.0 cresce del 50%) | cresce molto di piu' dei nostri; vetro fuori da `galleryGlass` |
+| `FluidScrubber` | lo slider della barra del video | `viewer/GalleryVideoBar.kt` | posizione in tre tempi, `buffered` per i video del NAS, TalkBack "1:05 di 3:20" | la ricerca al fotogramma chiave durante il trascinamento da rimappare |
+| `FluidFastScroller` | `GalleryScrubber` (timeline) | `grid/GalleryScrubber.kt` | maniglia a goccia, bolla di vetro compatta, `Tick` per etichetta | la griglia e' una `LazyColumn` di righe con intestazioni; comparsa dopo 0,75 schermate; `GestureEnd` |
+| `FluidSelectionMark` | `GallerySelectionIndicator` | `media/GalleryMediaCell.kt` | un nodo, molla `fluid`, spunta disegnata | il segno dentro la cella della griglia resta (disegno, prestazioni) |
+| `rememberFluidReorderState` + `fluidReorderable` | `CollectionsReorder.kt` + `CollectionsEditList.kt` | `feature-library/.../collections/` | goccia sollevata, vicini che scorrono, azioni TalkBack | parte col tenuto premuto (la nostra maniglia parte subito); righe in un solo `FluidListGroup` |
+| `FluidTextField(secret = true)` | `RevealToggle`, `SecretFieldLabel`, l'`IconButton` di Password | onboarding `Components.kt`, `PasswordScreen.kt` | occhio dell'engine, parte nascosto | passare `SecureInput.keyboardOptions()` |
+| `FluidStepProgress`, `FluidToneTile`, `FluidInlineMessage(onClick, action)`, `FluidEmptyState(illustration)` | `StepProgressHeader`, `GlyphTile`, `NoticeCard`/`BackupCard`, `GalleryStateView` + `GalleryIllustration` | onboarding `Components.kt`, `BackupParts.kt`, `state/GalleryStateView.kt` | 1:1 | `BackupCard` ha avanzamento e miniatura |
+| `FluidSkeleton*` | `InstantSkeleton` | `instant/InstantSkeleton.kt` | disegno dell'engine | l'engine respira sempre, noi lo vogliamo fermo (un fotogramma ogni 8 ms in meno) |
+| `FluidSearchField` (si apre da un cerchio) | il campo di Cerca (`FluidTextField`) | `feature-search/.../SearchScreen.kt` | il tasto di ricerca separato dalla pillola (lista dell'utente) | Cerca oggi e' una scheda, non un campo sopra la Libreria |
+| `FluidSyncIndicator` (capsula di vetro col tono) | il piede della Libreria con gli stati di NAS, anteprime, backup | `feature-library` (piede), `GalleryTopChrome.kt` | la "nuvolina" nel blocco di vetro in alto a destra (lista dell'utente) | il pop-up con spazio, ultima sincronizzazione, "Libera spazio" e' nostro |
+| `fluidGridItems` | `albumCards` (righe `chunked` a mano) | `AlbumListScreen.kt` | 1:1 | il riordino degli album resta un foglio |
+| `FluidSpinner`, `FluidProgressBar` | 3 `CircularProgressIndicator`/`LinearProgressIndicator` Material | `CutoutOverlay.kt`, `MotionBadge.kt`, `PickerScreen.kt` | 1:1 | nessuno |
+| `FluidPageChrome` | le chrome proprie che non sono `FluidScreen` (`GridTopChrome` x6, `BackupChrome`, `NasChrome`, `GalleryTopChrome`) | Libreria, Nascosti, Eliminati, Doppioni, Backup, NAS | la barra ancorata anche li': passando da una pagina `FluidScreen` a una di queste oggi i due tasti indietro si vedono diversi | sono chrome adattive sulle foto |
+
+### La lista dell'utente (`docs/grafica-segnalazioni-utente.md`) e la 3.0
+Nessuna voce e' risolta **da sola** dall'aggiornamento; alcune diventano facili con i pezzi nuovi.
+| Voce della lista | Con la 3.0 |
+|---|---|
+| Lag alla prima apertura | no: e' il lavoro di fondo dell'app dopo il primo disegno, non l'engine |
+| Il vetro cambia misura o forma di colpo (data in alto, "torna in fondo", selezione) | **facile**: `FluidFloatingCapsule` entra ed esce con i token di `FluidMotion`; un pezzo di vetro che cambia sagoma puo' viaggiare con `fluidPhysicsSurface` + `morphTo` (dalla 3.0 una goccia, `morphTo(spec = null)` una molla sola); i menu si aprono gia' dalla goccia del tasto |
+| Pillola: la ricerca separata e gli album al suo posto (come Foto di Apple) | **piu' facile**: `FluidSearchField` chiuso e' un cerchio di vetro che si apre (il tasto accanto alla pillola), `FluidFloatingCapsule(placement = AboveTabBar/Free)` e `fluidCapsuleInsets` per posarlo; la riorganizzazione delle schede resta nostra |
+| Viewer: le foto piu' vecchie a sinistra | no (ordine del pager, nostro) |
+| Viewer: il vetro del tasto ⋮ diverso da quello di chiusura, senza animazioni fluide | **facile**: `FluidGlassIconButton` per tutti e due (stesso materiale, campiona da solo) e `FluidMorphMenuButton(opensOnTap)` per il menu, che si apre dalla goccia del tasto |
+| Zoom dei video | no (lo zoom e' nostro, telephoto; `fluidZoomable` non arriva a 40x) |
+| Pizzico in chiusura per chiudere la foto | no (`FluidImageViewer` chiude solo trascinando in basso) |
+| Lo sfondo che sfuma alla chiusura e la foto che torna alla cella | no (il viewer e' nostro; `FluidImageViewer` ha lo scrim fisso e nessun ritorno alla miniatura) |
+| Pannello informazioni come Galleria Samsung | no |
+| Il vetro del viewer a zoom minimo | no (il fondale del viewer e' nostro) |
+| Filtro "scattate con questo dispositivo" | no (dominio) |
+| La nuvola di stato nel blocco in alto a destra, con il pop-up | **facile**: `FluidSyncIndicator` (capsula di vetro col tono nel materiale, la pressione dei tasti) e il pop-up col materiale unico dei pannelli |
+| Trascinare in basso dal fondo per aggiornare | no |
+Dalla "Revisione grafica della Libreria" (13/10): **pulsanti che si compenetrano** (barra delle azioni sopra la pillola) -> `FluidFloatingCapsule(ReplacingTabBar)`
+prende proprio lo spazio della pillola; **le scritte sotto il vetro** -> la 3.0 alza le pellicole solo con il contrasto di sistema; il vetro adattivo resta nostro.
+Dalle note di P8 per la 3.0: **`FluidListRow(onClick)` e' ora un nodo solo con `Role.Button`** (fix della 3.0): l'eccezione `allowRolelessRows` di
+`A11yAssertions` si puo' stringere nella fase grafica; **non** arrivati: `heading()` in `FluidSectionHeader` e `FluidCollapsingTitle` (resta `GallerySectionHeader`),
+nome e ruolo del tasto che svuota `FluidTextField`, l'altezza minima di `FluidButton` (restano le tre eccezioni scritte).
+
+### Difetti e lacune dell'engine trovati (per la sessione dell'engine; `engine/` non toccato)
+1. **`engine-update.ps1` in un `git worktree`**: il sotto-modulo di un worktree prende i tag da `.git/modules/engine` del repository principale, non dal
+   repository dell'engine, e un tag appena fatto "non esiste" (`engine/tools/engine-update.ps1`, il `fetch --tags` e poi `rev-parse refs/tags/engine-3.0.0-rc.1`).
+   Si riproduce: un worktree dell'app, `engine-update.ps1 -Version <tag nuovo>`. Qui risolto con un `git fetch` del solo tag dalla cartella dell'engine. Lo
+   script potrebbe dire da dove prende i tag, o accettare una sorgente.
+2. **`LocalFluidPressImmediate` non e' `@Deprecated`** (`engine-ui/.../ui/fluid/FluidPress.kt:610`): il KDoc dice che non fa niente e se ne andra', ma il
+   compilatore non lo dice a chi lo usa (qui tre file). Basta `@Deprecated("Non fa piu' niente dalla 3.0")`.
+3. **`FluidSectionHeader` e `FluidCollapsingTitle` senza `heading()`** (`FluidContent.kt:27`, `FluidCollapsingHeader.kt:217`): TalkBack non li trova con il
+   rotore delle intestazioni (P8, ancora vero nella 3.0; l'app ha il suo `GallerySectionHeader`, i titoli di pagina restano senza).
+4. **Il tasto che svuota `FluidTextField` senza nome ne' ruolo** (`FluidTextField.kt:354`, `FluidClearButton`): il nuovo occhio del campo segreto li ha, la
+   crocetta no.
+5. **`FluidButton` ad altezza fissa** (`FluidControls.kt:205`, `.height(FluidButtonDefaults.height(size))`): a testo 2,0x un'etichetta lunga va su due righe e
+   la seconda esce dal tasto (P8).
+
+### Punti aperti
+- **`LICENSE`** scritto senza rete: confrontarlo con il testo ufficiale della GPL-3.0 prima di pubblicare un APK (SHA-256 sopra).
+- **Da guardare in mano** (telefono e Tab S9): il back col dito su ogni pagina (sotto il dito, la conferma al 35%, la spinta), dentro e fuori dalla selezione delle
+  griglie (dal bordo); le Impostazioni a due pannelli (un trascinamento in mezzo al pannello chiude le Impostazioni intere, dal bordo del pannello solo la
+  pagina interna); la presentazione dei ricordi con i pulsanti visibili (gesti che partono dai pulsanti); i menu che si aprono a goccia; i tre colpi di ogni
+  pulsante e la grana; il vetro dei tasti tondi che cresce del 50%.
+- **Le griglie con la selezione** hanno il back col dito solo dal bordo anche fuori dalla selezione (`backSwipe` e' per destinazione); se in mano "da
+  qualunque punto" fuori dalla selezione piace di piu', serve all'engine un `backSwipe` che cambia con lo stato.
+- **`A11yAssertions`**: con la 3.0 `FluidListRow(onClick)` ha `Role.Button`; l'eccezione `allowRolelessRows` si puo' stringere (non fatto: non e' una BREAKING).
+- **Lo scaricamento non voluto** dei due file di metadati di `lifecycle-viewmodel-compose` 2.9.0 (sopra): rifiutati dalla verifica, mai usati; sono nella cache
+  di Gradle del PC.
+
+### Esito di `tools\check.ps1 -NoDaemon`
+In corso.
+
+### Commit (branch `grafica/engine3`)
+`5c0c0ad7` (aggiornamento a 3.0.0-rc.1), `9812875f` (**licenza GPL-3.0**, commit a se'), `1155a215` (aggiornamento alla 3.0.0 finale), `c706b2b2`
+(`lifecycle-viewmodel-compose` allineata senza scaricare), `d63be695` (pagine con `FluidNavHost`), `52bfab12` (il pulsante tiene il dito), `fdaef26c`
+(contrasto rimisurato), `cf8f4fc4` (screenshot prima e dopo) e quello di questa sezione.

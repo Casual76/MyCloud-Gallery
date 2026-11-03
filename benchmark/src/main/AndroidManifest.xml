@@ -5,6 +5,27 @@
       :benchmark: modulo di sola misura (Macrobenchmark, UiAutomator). Non entra mai nell'APK dell'app: niente da
       fondere nel manifest di release: i permessi che le librerie di misura dichiarassero riguardano solo l'APK di
       test, non quello dell'app.
+
+      Fase 10 (P9): il servizio di accessibilita' di prova (BenchA11yService) che simula TalkBack nello scenario `accessibilita`.
+      Sta qui, nell'APK di collaudo, e non nell'app: l'app non ha nessun servizio di accessibilita' (solo il servizio di prova di
+      debug di P8, `FieldProbeA11yService`, nel manifest `debug`). Lo accende solo la prova (`settings put secure`) e lo rimette
+      com'era; senza la prova resta installato ma spento. `isAccessibilityTool` e' nel suo file di configurazione.
   -->
+  <application>
+
+    <service
+        android:name=".BenchA11yService"
+        android:exported="true"
+        android:label="@string/bench_a11y_label"
+        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService" />
+      </intent-filter>
+      <meta-data
+          android:name="android.accessibilityservice"
+          android:resource="@xml/bench_a11y_service" />
+    </service>
+
+  </application>
 
 </manifest>

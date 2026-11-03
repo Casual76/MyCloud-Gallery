@@ -42,5 +42,15 @@
         android:authorities="${applicationId}.bench"
         android:exported="false"
         android:initOrder="100" />
+
+    <!--
+        SOLO la variante di misura (Fase 10, P9): i comandi del collaudo al widget (BenchWidgetDriver): lega un widget grande, chiede un giro di aggiornamento o uno
+        svuotamento, li ripete di continuo. Esportato ma protetto dal solo permesso DUMP, come il ProfileInstallReceiver qui sopra: lo manda solo `adb shell am broadcast`.
+        Senza un comando non fa niente e all'avvio non gira nulla. Non esiste nella release: `check.ps1` cerca nel dex di release qualunque classe `Bench*`.
+    -->
+    <receiver
+        android:name="dev.pampa.mycloudgallery.bench.BenchWidgetReceiver"
+        android:exported="true"
+        android:permission="android.permission.DUMP" />
   </application>
 </manifest>

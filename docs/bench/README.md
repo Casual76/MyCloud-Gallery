@@ -175,8 +175,8 @@ continua a valere per tutte; `-Origin "<testo>"` scrive da dove vengono i numeri
 **Guardia della Fase 4A.** Con la libreria mista e i riferimenti del 13/10 (§2-ter) il comando è lo stesso: `check.ps1 -Bench` stampa anche le righe `guardia` e `NOTO`. Per rifare il riferimento del 13/10 dai JSON grezzi (fuori dal repository):
 
 ```powershell
-$base = "$env:USERPROFILE\.mycloudgalleryench"
-.	oolsench\compare.ps1 -ExtractReference @("$base\s25-2026-10-13-final-startup", "$base\s25-2026-10-13-final") `
+$base = "$env:USERPROFILE\.mycloudgallery\bench"
+.\tools\bench\compare.ps1 -ExtractReference @("$base\s25-2026-10-13-final-startup", "$base\s25-2026-10-13-final") `
   -RefreshHz 120 -ReferenceDate 2026-10-13 -Origin "Galaxy S25, misure del 13/10/2026 ..."
 ``` La chiusura della fase richiede `riferimento-s25.json` e `riferimento-tab-s9.json` (e la nota con la tabella di `compare.ps1` incollata in `docs/bench/misure-<dispositivo>-<data>.md`).
 
@@ -470,3 +470,42 @@ Le altre classi con i ricordi montati anche nella variante di misura (le guardie
 - **F124** (prestazioni dei ricordi): `MemoriesBenchmark` e i tempi di generazione sulla Libreria da 100 mila righe.
 - **F111, F112** (le guardie delle Fasi 3-8 con la mappa aperta e con la generazione in corso): `memoriesLoadedScroll` e `mapLoadedScroll`, da leggere insieme alle prove di scorrimento di sempre sullo stesso riferimento.
 - Il confronto delle due sezioni nuove della traccia d'avvio (`MCG:app:ricordi`, `MCG:app:mappa`, P13) nella prossima corsa di `coldStart`: ora, con i ricordi montati anche nella variante di misura, lo scaffale si legge (`restore()`) dopo il primo disegno in ogni scenario, come nell'app vera.
+
+## 11. Widget, pannelli e accessibilità (Fase 10, P9)
+
+Gli scenari `widget`, `pannelli` e `accessibilita` (`docs/fase10-progetto.md` §5.4, riquadro P9 del §4.4) **esistono e girano**: `WidgetBenchmark` (3 prove), `PanesBenchmark` (5) e `AccessibilityScrollBenchmark` (3) in `benchmark/src/main/kotlin/.../benchmark/`, 11 scenari nuovi in `benchmark/soglie.json` (48 in tutto) e le soglie JVM del §5.4. Costruiti come `MemoriesBenchmark` e `MapBenchmark` (`BenchSession`, `BenchConfig`, `BenchUi`): una prova che non può girare si **salta con il motivo** (`Assume`), mai un falso verde; ogni scenario ha la sua **validità** (`widgetValid`, `panesDocked`, `panesWide`, `panesWindows`, `a11yValid`, `a11yFontScale`, `widgetRefreshing`) e `compare.ps1` dice `NON VALIDA` se la prova non ha misurato quello che doveva.
+
+| Prova (classe) | Scenario (`soglie.json`) | Cosa fa | Metrica e soglia (S25 e Tab S9, 120 Hz) | Regressione |
+|---|---|---|---|---|
+| `widgetUpdate` (`WidgetBenchmark`, telefono) | `widget` | Avvio a freddo, widget grande legato dal collaudo; 1 giro a freddo, 3 a caldo e 2 «Nascondi» di prova; 8 iterazioni | sezione `MCG:widget.update`: `widgetUpdateMs` (il più lungo dei giri **dopo il primo**) p90 ≤ 400 ms; sezione `MCG:widget.blank`: `widgetBlankMs` p90 ≤ 100 ms | p90 +15% (anche `widgetUpdateColdMs`, il primo giro del processo) |
+| `widgetUpdateTablet` | `widget-tablet` | La stessa prova su un tablet (≥ 600 dp di larghezza minima) | `widgetUpdateMs` p90 ≤ 600 ms; `widgetBlankMs` p90 ≤ 100 ms | p90 +15% |
+| `widgetLoadedScroll` | `widget-scroll-carico` | `scroll_all_square` con l'aggiornamento del widget **in corso** (i giri di continuo, uno alla volta con una pausa); 8 iterazioni | `jankPercent` medio ≤ 1% | `frameDurationCpuMs` P95 +15%; guardia: riferimento +10%, pavimento 0,15 punti |
+| `panesScroll` (`PanesBenchmark`) | `pannelli-scroll` | Finestra di 1280 dp, viewer affiancato, fling avanti e indietro nella griglia a sinistra; 8 iterazioni | `jankPercent` medio ≤ 1% | guardia +10% (pavimento 0,15); `frameDurationCpuMs` P95 +15% |
+| `panesViewerSwap` | `pannelli-foto` | Tocco su una cella del pannello: dalla posizione del viewer prima a quella dopo (UiAutomator); 12 iterazioni | `viewerSwapMs` p90 ≤ 100 ms | p90 +15% |
+| `panesZoneOpen` | `pannelli-zona` | La mappa nella finestra larga, tocco sulla bolla piccola: dalla bolla alla prima cella della griglia **nel pannello**; 12 iterazioni | `zoneOpenMs` p90 ≤ 150 ms | p90 +15% |
+| `panesCrossing` | `pannelli-soglia` | Il viewer affiancato e la finestra ridimensionata attraverso 1280, 960, 720 dp e ritorno (`wm size`); 5 iterazioni | `maxFrameCpuMs` (il fotogramma più lungo) max ≤ 33 ms | max +15% |
+| `panesWindowsMemory` | `pannelli-memoria` | Due finestre (la seconda con `am start` `NEW_TASK \| MULTIPLE_TASK \| LAUNCH_ADJACENT`), qualche scorrimento, PSS; 3 iterazioni | `windowsPssKb` max: nessun tetto, la prima corsa buona è il riferimento | +15% |
+| `a11yScroll` (`AccessibilityScrollBenchmark`) | `accessibilita-scroll` | `scroll_all_square` con il servizio di prova acceso (strumento, legge l'albero a ogni scorrimento); 8 iterazioni | `jankPercent` medio ≤ 1% | guardia +10% (pavimento 0,15); `frameDurationCpuMs` P95 +15% |
+| `a11yTextScroll` | `accessibilita-testo` | `scroll_all_square` con `font_scale` 2,0 | `jankPercent` medio ≤ 1% | `frameDurationCpuMs` P95 +15% |
+| `a11yViewerOpen` | `accessibilita-viewer` | Apertura del viewer con il servizio acceso; 12 iterazioni | `viewerOpenMs` (sezione `MCG:viewerOpen`) p90 ≤ 100 ms | p90 +15% |
+
+**Il widget: pilota sulle porte vere** (`app/src/benchmarkRelease/`; con P13 su `main` `WidgetGraph` lega le porte vere in `Application.onCreate` e il widget vero disegna: lo scenario misura quello, non un seme di prova).
+- **Sezioni di traccia** (`AvvioTrace.WIDGET_UPDATE`, `WIDGET_BLANK`, dentro `WidgetEngine`): `MCG:widget.update` comincia quando il giro ha il suo turno e finisce alla consegna ad `AppWidgetManager`; `MCG:widget.blank` copre lo svuotamento (registro, disegno senza immagini, consegna) e **non** il giro che segue. Sono l'unica modifica al codice di produzione del pacchetto (sezioni asincrone, nomi fissi, mai dati: `AvvioTraceFase10Test`).
+- **Le porte** sono quelle vere di `WidgetGraph` sulla Libreria del dataset di misura (pianificatore sopra la fonte dei nascosti del catalogo, registro su file, miniature locali, scaffale dei ricordi seminato `BenchShelf`): nessun seme di prova. Il pilota le aspetta con `WidgetHost.services` (a processo nuovo il fornitore le monta e le da' appena sono pronte). Prima della fusione con P13 c'era un seme (`BenchWidgetServices`: pianificatore vero, miniature WebP di prova); e' stato tolto.
+- **Il pilota** (`BenchWidgetDriver`, `BenchWidgetReceiver`, esportato e protetto dal solo `DUMP` come il `ProfileInstallReceiver`): niente gira all'avvio; il collaudo manda `am broadcast -n <id>/dev.pampa.mycloudgallery.bench.BenchWidgetReceiver -a dev.pampa.mycloudgallery.bench.WIDGET_<COMANDO>` (`PREPARE`, `UPDATE`, `BLANK`, `LOAD_START`, `LOAD_STOP`, `CLEANUP`) e legge `bench-widget.json` accanto al marcatore (solo numeri). Il widget lo lega **il collaudo**, non l'app (legare un widget vuole `BIND_APPWIDGET`, che un'app non ha, e `cmd appwidget` non ha comandi su questa piattaforma): `WidgetDriver.bindWidget`, nel processo di prova, adotta l'identità della shell per quel solo permesso (`UiAutomation.adoptShellPermissionIdentity`), alloca l'id con un `AppWidgetHost` suo e lo lega al ricevitore dell'app con la misura grande (250 x 250 dp); a fine prova lo toglie. **Nessun launcher**: il disegno arriva ad `AppWidgetManager` (il lavoro del launcher che lo mostra è in un altro processo e non fa parte della misura).
+
+**I pannelli e le due finestre.** Sull'emulatore la finestra larga si emula con `wm size 2560x1600` e `wm density 320` (1280 x 800 dp, come il Tab S9 in orizzontale) e si rimette a fine prova; sul tablet vero non si cambia lo schermo (serve la larghezza: orizzontale o DeX; `benchAllowScreen=true` lo permette, per `pannelli-soglia`); su un telefono vero la classe si salta. Il viewer si affianca dal suo menu («Altre azioni», «Affianca alla Libreria») e a fine prova si rimette a schermo intero (la scelta si ricorda per profilo). **Le due finestre sono Libreria e Libreria**: il §5.4 dice «Libreria e un album», ma gli album non sono montati nella variante di misura (L287).
+
+**Il servizio di accessibilità di prova** (`BenchA11yService`, nel solo APK di collaudo `:benchmark`): un servizio vero, `isAccessibilityTool="true"` come TalkBack (la finestra dell'app gli dà l'albero, P8), che a ogni scorrimento o cambio di contenuto, al più ogni 100 ms, percorre tutto l'albero della finestra attiva (più severo di TalkBack, che legge il nodo a fuoco e i vicini). Si accende con `settings put secure enabled_accessibility_services` e si rimette com'era (`BenchSettings`: ogni impostazione cambiata è ricordata e rimessa, anche da una corsa morta a metà). **UiAutomation sospende gli altri servizi** quando si collega senza `FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES`: la prova imposta il flag e controlla che il servizio abbia letto davvero (`a11yWalks`, `a11yConnected`); se no, `NON VALIDA`. Il `warm` delle descrizioni parte con il descrittore legato da P13 (`A11yActivity` sopra `AccessibilityManager`): il servizio di prova e' uno strumento, quindi lo accende, e queste prove misurano il lettore dell'albero, gli eventi **e** il `warm`.
+
+**Le guardie esistenti con il servizio acceso.** Una corsa di tutti gli scenari di sempre con il servizio acceso per tutta la durata (`BenchServiceListener`, argomento `benchWithService=true`): vedi i comandi per l'S25 sotto. **Mai `-Accept` su quella corsa**: il riferimento è quello senza.
+
+**Soglie JVM del §5.4** (a ogni `check.ps1`, dentro `galleryTest`):
+
+| Soglia | Dove sta |
+|---|---|
+| piano del widget < 50 ms (p95, Libreria da 100 mila) | `core-widget/.../plan/DefaultWidgetPlannerBigWorldTest.kt` (`isLessThan(50_000)` microsecondi) |
+| verifica di un manifest firmato < 5 ms (mediana, manifest al limite) | `core-release/.../codec/SignedManifestVerifierPerformanceTest.kt` (nuova, P9) |
+| descrizione < 1 ms a cache calda | `core-describe/.../rules/DefaultMediaDescriberTest.kt` (`isLessThan(1_000_000L)` ns) |
+| `warm` di 60 celle < 20 ms (mediana) | `core-describe/.../rules/DefaultMediaDescriberWarmPerformanceTest.kt` (nuova, P9) |
+| svuotamento del widget < 100 ms dopo `hiddenChanged` | `feature-widget/.../WidgetBlankTimingTest.kt` (P3: 19-31 ms) |

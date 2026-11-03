@@ -6,6 +6,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
+import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import dev.pampa.mycloudgallery.core.describe.contract.MediaDescriber
 import dev.pampa.mycloudgallery.core.describe.rules.MediaDescribers
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryId
@@ -93,21 +94,26 @@ internal class WidgetEngine(
 
   /**
    * Ridisegna [slot]. Un giro che trova una causa nuova a meta' ricomincia (D5); non piu' di [MAX_ATTEMPTS] volte. [coldBudgetMs] e' l'attesa delle porte in un processo
-   * freddo (WG-5): 1,5 s per il ricevitore e per un nascosto, di piu' per il lavoro periodico, che non ha fretta ([refreshAll]).
+   * freddo (WG-5): 1,5 s per il ricevitore e per un nascosto, di piu' per il lavoro periodico, che non ha fretta ([refreshAll]). **La sezione di traccia `MCG:widget.update`**
+   * (Fase 10, P9, §5.4) comincia quando il giro ha il suo turno (non conta l'attesa degli altri giri) e finisce alla consegna: e' la misura del benchmark `widget`.
    */
   suspend fun refresh(
     slot: WidgetSlot,
     budgetMs: Long = WidgetRules.BUDGET_MS,
     coldBudgetMs: Long = WidgetRules.COLD_START_BUDGET_MS,
-  ): RefreshResult = refreshLock.withLock refreshing@{
+  ): RefreshResult = refreshLock.withLock {
+    AvvioTrace.asyncSection(AvvioTrace.WIDGET_UPDATE) { refreshTurn(slot, budgetMs, coldBudgetMs) }
+  }
+
+  private suspend fun refreshTurn(slot: WidgetSlot, budgetMs: Long, coldBudgetMs: Long): RefreshResult {
     var attempts = 0
     while (attempts++ < MAX_ATTEMPTS) {
-      val ports = services(coldBudgetMs) ?: return@refreshing RefreshResult.KEPT
+      val ports = services(coldBudgetMs) ?: return RefreshResult.KEPT
       val started = generation.get()
       val (width, height) = dimsOf(slot)
       val size = WidgetSizing.classify(width, height)
       val preparer = WidgetPreparer(ports)
-      val prepared = preparer.prepare(slot, size, budgetMs) ?: return@refreshing RefreshResult.KEPT
+      val prepared = preparer.prepare(slot, size, budgetMs) ?: return RefreshResult.KEPT
       val texts = WidgetTexts(resources(), ports.places)
       var result: RefreshResult? = null
       gate.withLock committing@{
@@ -132,9 +138,9 @@ internal class WidgetEngine(
         result = if (recorded) RefreshResult.DRAWN else RefreshResult.BLANKED
       }
       if (result == RefreshResult.DRAWN && prewarmBlanks) warmBlank(slot, size, width, height, texts, ports.appearance.settings())
-      result?.let { return@refreshing it }
+      result?.let { return it }
     }
-    RefreshResult.KEPT
+    return RefreshResult.KEPT
   }
 
   /**
@@ -161,18 +167,21 @@ internal class WidgetEngine(
    */
   suspend fun hiddenChanged(ids: Set<MediaId>) {
     generation.incrementAndGet()
-    val ports = services(0)
-    val affected = affectedBy(ports) { it.ledger.showing(ids) }
-    blank(affected, ports, WidgetEmpty.NO_MEDIA)
+    // La sezione `MCG:widget.blank` (P9, §5.4) copre lo svuotamento, non il giro che segue: e' la misura dei 100 ms di D5.
+    val affected = AvvioTrace.asyncSection(AvvioTrace.WIDGET_BLANK) {
+      val ports = services(0)
+      affectedBy(ports) { it.ledger.showing(ids) }.also { blank(it, ports, WidgetEmpty.NO_MEDIA) }
+    }
     for (slot in affected) refresh(slot)
   }
 
   /** Un ricordo scartato, escluso con "Mai" o potato (E-W19): come [hiddenChanged], per i widget che mostrano quel ricordo. */
   suspend fun memoryDropped(id: MemoryId) {
     generation.incrementAndGet()
-    val ports = services(0)
-    val affected = affectedBy(ports) { it.ledger.showingMemory(id) }
-    blank(affected, ports, WidgetEmpty.NO_MEDIA)
+    val affected = AvvioTrace.asyncSection(AvvioTrace.WIDGET_BLANK) {
+      val ports = services(0)
+      affectedBy(ports) { it.ledger.showingMemory(id) }.also { blank(it, ports, WidgetEmpty.NO_MEDIA) }
+    }
     for (slot in affected) refresh(slot)
   }
 

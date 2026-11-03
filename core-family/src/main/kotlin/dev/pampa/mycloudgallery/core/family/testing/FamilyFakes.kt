@@ -426,6 +426,9 @@ class FakeRegistryService(
   var invite: FamilyInvite? = null
   val refreshes: MutableList<Purpose> = mutableListOf()
   val approvals: MutableList<String> = mutableListOf()
+
+  /** Le prove ricevute da [approve], in ordine (revisione 1.4, N6: il codice dev'essere quello digitato, mai copiato dalla richiesta). */
+  val proofs: MutableList<ApprovalProof> = mutableListOf()
   val statusChanges: MutableList<Pair<String, DeviceStatus>> = mutableListOf()
 
   /** Gli stati che il registro riletto dara', uno per [refresh]; vuoto = lo stato non cambia. */
@@ -443,6 +446,7 @@ class FakeRegistryService(
   }
 
   override suspend fun approve(requestId: String, proof: ApprovalProof): AdminActionResult {
+    proofs += proof
     val now = nasNow
     val firstSeen = pendingRequests.value.firstOrNull { it.id == requestId }?.firstSeenAt
     if (now != null && firstSeen != null && !ApprovalWindow.isOpen(firstSeen, now)) return AdminActionResult.WindowExpired

@@ -1944,7 +1944,10 @@ dimostrabile fuori dal telefono, vedi sotto).
 - *Operazioni sul NAS (NA-1)*: `ConfirmationGate.accept` e `PlanRules.firstViolation` restano prima di tutto, identici; il diario nasce
   solo da `OpsStore.create(AcceptedPlan)`, come prima. Cambia solo **quando** si prende il lucchetto dell'esecuzione (dopo la
   registrazione). Un'operazione in coda non tocca niente sul NAS; quando parte ogni elemento ricontrolla il cancello (congelata, scritture
-  ferme, salto dell'ora) e i timbri come sempre (E-D13), quindi un congelamento o una conferma scaduta nell'attesa fermano l'esecuzione.
+  ferme, salto dell'ora) e i timbri come sempre (E-D13), quindi un congelamento nell'attesa ferma l'esecuzione. *Correzione del testo
+  (revisione 5B, I5; correzione D della Fase 10, 02/11):* la conferma invece si controlla solo alla registrazione e **non scade
+  nell'attesa**: un'operazione confermata ore prima parte quando il lucchetto si libera, protetta dal cancello e dai timbri di ogni
+  elemento (`docs/sicurezza.md`, L591).
   Se l'utente la ferma mentre aspetta (R9) non si esegue; la stessa richiesta toccata due volte non ne fa partire due. Il lucchetto
   dell'esecuzione resta uno solo, condiviso con le pulizie: due esecuzioni non si sovrappongono.
 - *Congelamento (NA-4, NA-7)*: la conferma resta il numero riscritto uguale a quello mostrato (doppia conferma); **non vale più di prima,
@@ -15677,3 +15680,68 @@ registro di `docs/sicurezza.md` aggiornati; in `docs/prove-campo.md` il "dove" d
 
 ### Commit (branch `fase10/p11b`)
 `78fb9c8c` (gli strumenti sui dispositivi, i copioni, l'adb e l'emulatore finti, il copione della prossima finestra), `5bfbb49e` (la guardia dell'area della famiglia di prova e i passi dal PC, con i test), `87e460b5` (i documenti) e uno piccolo dopo `check.ps1`: lo stato dei giri di `FamilyAreaFakeNasTest` (chiavi di prova) in una `TemporaryFolder` di JUnit invece che in %TEMP%, dove restava (la classe rifatta da sola: 5 prove verdi, nessuna cartella rimasta).
+
+## Correzioni della Fase 10, pacchetto D: le informative delle Fasi 1-9 (02/11)
+
+Fonte: `docs/review/10-chiusura.md` (le 25 righe con "Chi la chiude: **security-review**", circa 27 voci contando 1.4 B2, B5 e B7), che la
+revisione di sicurezza di fine Fase 10 non ha ripreso (`docs/review/10-fase10.md`, I7). Branch `fase10/corr-d` da `b8a2e282`. Regola: per ogni
+voce si ricontrolla il codice di oggi; se il problema c'e' e la correzione e' piccola e sicura, si corregge con un test che fallisce prima e passa
+dopo; altrimenti si dichiara un limite in parole semplici. Nessuna voce resta senza decisione. Niente telefono, NAS, rete o emulatore; non
+toccati `FeatureFlags`, `tools/release/recinzioni.json`, cancelli del manifest, `AppEntryGate`, radice, widget, `tools/check.ps1`, il
+trascinamento (pacchetti A, B, C).
+
+**Corrette, con il test.**
+1. **4A I5, log di debug con le eccezioni di smbj** (C467). Invece di cambiare una per una le chiamate `GalleryLog.e(TAG, e)` (sono decine, in
+   `:app` e nei moduli), si e' corretto l'unico posto che scrive: il sink di logcat della build debug (`app/src/debug/.../AppLogging.kt`) non usa
+   piu' `Log.getStackTraceString` (che copia i messaggi, dove smbj mette percorsi e nomi di file) e scrive di un'eccezione solo la classe di ogni
+   eccezione della catena e i punti del codice (al piu' 8 cause e 40 punti ciascuna; una catena circolare una volta sola). La release non ha
+   sink, come prima. Test: `AppLoggingTest` (testDebug di `:app`, Robolectric con `ShadowLog`), **rosso prima**: lo stack arrivava con i
+   messaggi (`Caused by: ...` con il percorso del file), e la catena circolare **non finiva** (`Log.getStackTraceString` scorre le cause
+   cercando `UnknownHostException` senza fermarsi su un ciclo: il thread che scriveva il log in debug restava bloccato; il test ha ora un
+   tetto di tempo).
+2. **4B I2, porte di servizio delle conferme** (C468). `CorrezioniDArchitectureTest` (core-common) con quattro regole: nessun file di
+   `src/main` fuori da un package `testing` nomina un package `testing` (oggi nessuno lo fa: la regola lo tiene cosi'); `TestConfirmations`
+   (core-nasops e core-backup) non esce dai package `testing`, nemmeno in `src/debug` o `src/benchmarkRelease`; in `:app` `ConfirmationIssuer`
+   solo in `utility/UtilityPorts.kt` e `albums/AlbumTransferPorts.kt` (che lo chiamano con i tocchi del foglio); `NasOpsDao` solo in
+   `core-database` e in `core-nasops/.../store/`. Un controllo positivo dice che i file cercati ci sono. **Le quattro regole viste rosse** con un
+   file di violazione temporaneo in `app/src/main/.../work/` (poi tolto).
+3. **5A I4, l'emergenza non fermava il file in corso** (C469). In `SafeUploadEngine.pump` il cancello dell'elemento (`gateOf`) si riguarda
+   prima di ogni pezzo, insieme a `mayContinue`: emergenza, blocco del manifest, pausa, famiglia non pronta fermano il giro (`stopForGate`) e il
+   file si ferma al pezzo dopo con il punto di ripresa dove e' arrivato (lo stesso ramo del tasto "Ferma"); un file in arrivo diretto a una
+   share chiusa aspetta da solo (`waitsAlone`, R5 della 5B), senza fermare il giro. Si scrive sempre e solo nel proprio temporaneo. Test:
+   `CancelloNelFileTest` (core-backup): l'emergenza che arriva dopo il primo dei dieci pezzi ferma il file a **una** scrittura (**rosso prima**:
+   dieci), il giro finisce con `WRITES_STOPPED`, niente pubblicato, punto di ripresa a un pezzo; tolta l'emergenza il file arriva intero; la
+   pausa a meta' file ferma come "Ferma". La copia lato server del guardiano non si divide: L586.
+4. **1.4 N6, il codice di approvazione solo dal testo digitato.** Nessun difetto: `PendingRequestView` non porta il codice e
+   `ApprovalViewModel` costruisce `TypedCode` solo da cio' che si digita. Mancava la prova dell'interfaccia: `ApprovalFlowUiTest.n6_*`
+   (feature-settings) controlla che il campo parta vuoto, che senza codice non si approvi e che la prova che arriva al registro sia il testo
+   digitato (`FakeRegistryService.proofs`, nuovo nel finto). Test di guardia: **rosso** con un codice precompilato nel ViewModel (tolto subito).
+
+**Gia' chiuse da fasi successive.** 1.4 B7 (il primo file del giorno passa oltre il tetto: `Trash.kt:150-152`, `NasTrashService.kt:246-252`,
+L36; cancellazione sullo stesso handle con il timbro del diario: `OwnTrashPurger.kt:72-82`; la voce del diario si costruisce solo dal diario
+locale). 4B I8 (Fase 7 P9, D23: Cartelle NAS non elenca per nome i nascosti; `NasHiddenFilesTest`). Il testo di 5B I3 e' chiuso da D-B1.
+
+**Dichiarate con un limite** (`docs/sicurezza.md` §6, in parole semplici, con lo scenario e perche' e' accettabile): 1.4 B2 (L577), B5
+(L578); 4A I1 (L579), I2 (L580); 4B I5 (L581), I7 (L582), I9 (L583); 5A I1 (L584: la proposta delle radici nella vista di `core-nas` non e' piu'
+applicabile, perche' dalla 5B le versioni pubblicano al solito percorso di ogni copia privata), I3 (L585), I4 per la copia del guardiano
+(L586), I6 (L587), I9 (L588); 5B I1 (L589), I2 (L590), I5 (L591, e corretto il testo di «Correzioni funzionali: Libreria e NAS» che diceva
+che una conferma scaduta nell'attesa ferma l'esecuzione), I6 (L592), I7 e la parte "cartelle" di 4B I8 (L593), I8 (L594), I10 (L595), I11
+(L596), I12 (L597). L37, L39 e L43 rimandano ai limiti nuovi. Perche' non corrette: ognuna toccherebbe un formato, una regola condivisa fra
+debug e release, il catalogo o le chiavi delle cartelle gia' date a DocumentsUI (5B I7), oppure riguarda un caso raro di disponibilita' o solo
+la build di debug: nessuna e' una correzione di poche righe con un rischio basso.
+
+**Scelta dell'utente (non decisa qui): 5B I3.** Il foglio "Elimina dal telefono" della selezione della Libreria manda al cestino di Android
+senza l'azione "Prima mettilo al sicuro" del foglio della 5B (D22); dal 22/10 (D-B1) almeno dice il vero su quali media sono al sicuro.
+**Proposta:** con il backup legato, la selezione della Libreria passa per lo stesso foglio della 5B usato dal viewer ("Elimina solo dal
+telefono", con "Prima mettilo al sicuro" per i media non al sicuro); senza backup resta il foglio di oggi. Cambia cio' che l'utente vede: va
+nel filone grafico, se l'utente la vuole.
+
+**Prove.** Rosse prima (viste): `AppLoggingTest` (il primo rosso, il secondo bloccato fino al tetto di 20 minuti del task),
+`CancelloNelFileTest` (2 su 2: 10 e 6 scritture invece di una), le quattro regole di `CorrezioniDArchitectureTest` (con la violazione),
+`ApprovalFlowUiTest.n6_*` (con il codice precompilato: `EditableText = 'K7QD-2M9X-FA4T-1B8C'`). Verdi dopo, e
+`tools\check.ps1 -NoDaemon` (esito nel resoconto del pacchetto).
+
+**Per le prove sul campo.** Nessuna prova obbligatoria nuova: C469 si vede toccando "Ferma le scritture sul NAS" mentre sale un video grande
+(il temporaneo nell'area privata smette di crescere entro un pezzo, 1 MiB, e il video riparte dal punto di ripresa quando le scritture
+tornano); C467 con un errore SMB sulla build debug
+(`adb logcat -s MyCloud/*`: la classe e le righe del codice, nessun percorso).

@@ -29,6 +29,11 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,6 +103,12 @@ fun GalleryConfirmSheet(
   paneTitle: String,
   content: @Composable ColumnScope.() -> Unit,
 ) {
+  // Un foglio **mai aperto non si compone**: il viewer ne tiene otto chiusi (elimina, mappe, testo, copie, persone, NAS, backup...) e comporre otto portali invisibili nel
+  // fotogramma dell'apertura costava ~27 ms e 59 passate di disegno in piu' (Tab S9, 03/11: il fotogramma piu' lungo dell'apertura da 47 a 22 ms). Appena si apre una
+  // volta resta composto, cosi' l'uscita si anima come prima; solo la prima apertura compone il portale (nello stesso fotogramma in cui il foglio compare).
+  var armed by remember { mutableStateOf(visible) }
+  LaunchedEffect(visible) { if (visible) armed = true }
+  if (!armed && !visible) return
   val view = LocalView.current
   DisposableEffect(view, visible) {
     val previous = view.filterTouchesWhenObscured

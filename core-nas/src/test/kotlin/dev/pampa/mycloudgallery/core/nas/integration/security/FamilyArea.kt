@@ -111,6 +111,11 @@ internal class FamilyRunState private constructor(val dir: File, val runId: Stri
         val devices = ROLES.map { PcDevice.generate(it) }
         file.writeText("# stato del giro della famiglia di prova (chiavi SOLO di prova, mai nel repository)\nrun=${newRunId()}\n" + devices.joinToString("") { "device=${it.export()}\n" })
       }
+      // Un dispositivo di prova tolto dallo stato (per rifare la sua richiesta con un id nuovo: l'app ricorda da quando vede un id) si rigenera;
+      // gli altri restano (la chiave di "approvato" e' gia' approvata nel registro).
+      val present = file.readLines().filter { it.startsWith("device=") }.map { it.removePrefix("device=").substringBefore(':') }.toSet()
+      val missing = ROLES.filter { it !in present }
+      if (present.isNotEmpty() && missing.isNotEmpty()) file.appendText(missing.joinToString("") { "device=${PcDevice.generate(it).export()}\n" })
       val lines = file.readLines()
       val run = lines.first { it.startsWith("run=") }.removePrefix("run=")
       val devices = lines.filter { it.startsWith("device=") }.map { PcDevice.restore(it.removePrefix("device=")) }.associateBy { it.role }

@@ -213,8 +213,15 @@ function Invoke-SecTypeChunks([string]$Serial, [string]$Text, [int]$Size = 4, [i
 # caratteri, per via del servizio di accessibilita' che detta testo nei campi; un solo comando lascia loro il tempo minimo). Solo A-Z, 0-9, trattino.
 function Invoke-SecTypeKeys([string]$Serial, [string]$Text) {
   if ($Text -notmatch '^[A-Za-z0-9-]{1,64}$') { throw "Testo non ammesso (solo lettere, cifre, trattino)." }
-  $codes = @("KEYCODE_MOVE_END") + @(1..30 | ForEach-Object { "KEYCODE_DEL" }) + @($Text.ToUpperInvariant().ToCharArray() | Where-Object { $_ -ne '-' } | ForEach-Object { "KEYCODE_$_" })
-  [void](Invoke-SecShell $Serial (@("input", "keyevent") + $codes))
+  [void](Invoke-SecShell $Serial (@("input", "keyevent", "KEYCODE_MOVE_END") + @(1..30 | ForEach-Object { "KEYCODE_DEL" })))
+  Start-Sleep -Milliseconds 400
+  # Un tasto per comando adb: il campo del codice (Compose, aggiunge i trattini a ogni carattere) perde i tasti in raffica, anche non doppi
+  # (visto sul campo il 03/11: "0B" arrivato "0", "JJ" arrivato "J"). Il chiamante rilegge il campo e riprova.
+  foreach ($c in $Text.ToUpperInvariant().ToCharArray()) {
+    if ($c -eq '-') { continue }
+    [void](Invoke-SecShell $Serial @("input", "keyevent", "KEYCODE_$c"))
+    Start-Sleep -Milliseconds 80
+  }
 }
 
 function Invoke-SecKey([string]$Serial, [string]$Key) {

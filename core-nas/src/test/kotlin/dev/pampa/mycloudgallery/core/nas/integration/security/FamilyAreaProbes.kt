@@ -79,9 +79,8 @@ internal object FamilyAreaProbes {
     return true
   }
 
-  /** Le richieste di `approvato` e `revocato` in `family/requests/`; i codici di approvazione in [codes] (file dello stato). */
-  suspend fun requests(area: FamilyArea, info: FamilyInfo, now: Long, codes: File): Int {
-    val roles = listOf("approvato", "revocato")
+  /** Le richieste di `approvato` e `revocato` (o dei soli [roles], se un foglio dell'impronta e' scaduto) in `family/requests/`; i codici di approvazione in [codes] (file dello stato). */
+  suspend fun requests(area: FamilyArea, info: FamilyInfo, now: Long, codes: File, roles: List<String> = listOf("approvato", "revocato")): Int {
     val lines = ArrayList<String>()
     for (role in roles) {
       val device = area.state.device(role)

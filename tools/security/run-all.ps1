@@ -42,6 +42,9 @@
 .PARAMETER Test2Serial s25: un dispositivo a casa con la debug e l'account test2 (il profilo "Prova 2" del tablet) per S1 (c).
 .PARAMETER NasIp     s25: l'indirizzo del NAS per l'onboarding (di norma 192.168.178.58, docs/sicurezza.md par. 5.1).
 .PARAMETER KitFile   s25: dove va il codice del kit nuovo della famiglia di prova (fuori da git).
+.PARAMETER SenzaReset s25: la famiglia di prova resta com'e' (decisione dell'utente del 03/11: l'S25 e' admin con la sua chiave): il passo
+                     'famiglia' fa solo la fotografia 'prima', la lettura della famiglia e i dispositivi di prova (approvato, revocato), mai la rinomina di
+                     `family`, "Esci e rientra" o "Crea la famiglia".
 .PARAMETER Release   s25: le voci della release candidata sull'S25 (S6, S7 con KT ignorata, S13, S11), gia' installata e configurata
                      dall'utente: nessuno strumento di debug, i controlli sono esterni all'app.
 .PARAMETER StatoDir  s25: la cartella dello stato del giro sul PC (di norma build\security\famiglia-di-prova).
@@ -72,7 +75,8 @@ param(
   [int]$SettleSeconds = 90,
   [int]$MemoryCapMb = 1536,
   [int]$PollSeconds = 3,
-  [switch]$Release
+  [switch]$Release,
+  [switch]$SenzaReset
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
@@ -84,7 +88,7 @@ $slot = "C:\VibeCoded Projects\gradle-slot.ps1"
 if ($Livello -eq "emulatore" -or $Livello -eq "s25") {
   & (Join-Path $PSScriptRoot "lib\dispositivi-main.ps1") -Root $root -OutDir $outDir -Livello $Livello -Serial $Serial -Passo $Passo -Piano:$Piano `
     -Preparati $Preparati -ReleaseApk $ReleaseApk -DebugApk $DebugApk -Test2Serial $Test2Serial -NasIp $NasIp -KitFile $KitFile -StatoDir $StatoDir `
-    -SettleSeconds $SettleSeconds -MemoryCapMb $MemoryCapMb -MassFiles $File -PollSeconds $PollSeconds -Release:$Release
+    -SettleSeconds $SettleSeconds -MemoryCapMb $MemoryCapMb -MassFiles $File -PollSeconds $PollSeconds -Release:$Release -SenzaReset:$SenzaReset
   exit $LASTEXITCODE
 }
 

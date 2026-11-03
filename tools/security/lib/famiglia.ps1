@@ -55,6 +55,34 @@ function Invoke-SecFamilyReset([switch]$SkipArchive, [switch]$WithDevices) {
   return New-SecResult "famiglia" $(if ($ok) { "verde" } else { "rosso" }) $values
 }
 
+# La famiglia di prova TENUTA COM'E' (decisione dell'utente del 03/11: l'S25 e' admin con la sua chiave, niente reset, niente rinomina di `family`,
+# niente "Esci e rientra", niente "Crea la famiglia"): PC, sola lettura, fotografia "prima" e lettura della famiglia di adesso (kit nell'area
+# privata + registro firmato); poi i dispositivi di prova ("approvato" e "revocato" chiedono di entrare, l'S25 li approva col codice digitato e
+# revoca "revocato": il dito dell'utente ai fogli) e la fotografia "dopo". Nessun confronto "pulito": con la famiglia che resta, il registro cambia.
+function Invoke-SecFamilyKeep {
+  $ctx = $script:SecCtx
+  $values = [ordered]@{ fotografia_prima = 0; famiglia_trovata = 0; registro_versione = -1; dispositivi_nel_registro = -1; dispositivi_approvati = 0; dispositivi_revocati = 0; approvato_ok = 0; revocato_ok = 0; fotografia_dopo = 0 }
+  $before = Invoke-SecPcStep "fotografia" @{ MCG_FAMIGLIA_ETICHETTA = "prima" }
+  if ($before.Stopped -or $before.Code -ne 0) { return New-SecResult "famiglia" "rosso" $values }
+  $values.fotografia_prima = 1
+  $read = Invoke-SecPcStep "leggi"
+  $values.famiglia_trovata = [int](Get-SecPcValue $read "trovata")
+  $version = Get-SecPcValue $read "versione_registro"; if ($null -ne $version) { $values.registro_versione = $version }
+  $count = Get-SecPcValue $read "dispositivi"; if ($null -ne $count) { $values.dispositivi_nel_registro = $count }
+  if ($values.famiglia_trovata -ne 1) { return New-SecResult "famiglia" "rosso" $values }
+  Start-SecApp $ctx.Serial $ctx.Package
+  Wait-SecSettle 5
+  $devices = Invoke-SecTestDevices
+  $values.dispositivi_approvati = $devices.Valori.approvati
+  $values.dispositivi_revocati = $devices.Valori.revocati
+  $values.approvato_ok = $devices.Valori.approvato_ok
+  $values.revocato_ok = $devices.Valori.revocato_ok
+  $after = Invoke-SecPcStep "fotografia" @{ MCG_FAMIGLIA_ETICHETTA = "dopo" }
+  $values.fotografia_dopo = [int]($after.Code -eq 0)
+  $ok = ($values.approvato_ok -eq 1 -and $values.revocato_ok -eq 1 -and $values.fotografia_dopo -eq 1)
+  return New-SecResult "famiglia" $(if ($ok) { "verde" } else { "rosso" }) $values
+}
+
 # I dispositivi di prova del PC entrano nella famiglia nuova: richieste di "approvato" e "revocato", l'admin (lo stesso dispositivo, subito
 # dopo il reset: stesso momento dell'utente) approva entrambi con il codice digitato dallo script, poi revoca "revocato". Il foglio dello
 # sblocco, uno per gesto (M3), e' dell'utente sull'S25 (sull'emulatore il PIN di prova).
@@ -92,6 +120,12 @@ function Invoke-SecFamilyCleanup {
   $end = Invoke-SecPcStep "fotografia" @{ MCG_FAMIGLIA_ETICHETTA = "fine" }
   $residue = Get-SecPcValue $clean "residui"
   $values = [ordered]@{ residui = $(if ($null -eq $residue) { -1 } else { $residue }); fotografia_fine = [int]($end.Code -eq 0); chiavi_tolte = 0 }
+  if ($ctx.SenzaReset -and $end.Code -eq 0) {
+    # Famiglia tenuta com'e': la fotografia "fine" contro la "prima". Fuori da .mycloudgallery niente deve essere cambiato; dentro cambia solo cio'
+    # che fa l'app admin (registro, indici) e la famiglia stessa: i numeri vanno nel resoconto, l'elenco nel file fotografia-confronto.txt.
+    $diff = Compare-SecSnapshots (Join-Path $ctx.StateDir "fotografia-prima.tsv") (Join-Path $ctx.StateDir "fotografia-fine.tsv") (Join-Path $ctx.StateDir "fotografia-confronto.txt")
+    if ($diff) { foreach ($k in $diff.Keys) { $values[$k] = $diff[$k] } }
+  }
   $state = Join-Path $ctx.StateDir "stato.txt"
   if ($clean.Code -eq 0 -and $residue -eq 0 -and (Test-Path -LiteralPath $state)) {
     (Get-Content -LiteralPath $state | Where-Object { $_ -notmatch '^device=' }) | Set-Content -LiteralPath (Join-Path $ctx.StateDir "stato-senza-chiavi.txt")
@@ -99,4 +133,37 @@ function Invoke-SecFamilyCleanup {
     $values.chiavi_tolte = 1
   }
   return New-SecResult "pulizia" $(if ($values.residui -eq 0) { "verde" } else { "rosso" }) $values
+}
+
+# Il confronto di due fotografie (TSV: share, percorso, byte, data ms, cartella) fatto dal PC senza NAS: aggiunte, tolte e cambiate, dentro e
+# fuori da .mycloudgallery (mcg-ostile e mcg-it ignorate). L'elenco dei percorsi va in [Out] (sul PC, sotto build\); i numeri tornano.
+function Compare-SecSnapshots([string]$Before, [string]$After, [string]$Out) {
+  if (-not (Test-Path -LiteralPath $Before) -or -not (Test-Path -LiteralPath $After)) { return $null }
+  function Read-Snap([string]$Path) {
+    $map = @{}
+    foreach ($line in Get-Content -LiteralPath $Path) {
+      if ($line.StartsWith("#") -or -not $line.Trim()) { continue }
+      $f = $line -split "`t"
+      if ($f.Count -lt 5) { continue }
+      $map[($f[0] + "|" + $f[1].ToLowerInvariant())] = [pscustomobject]@{ Share = $f[0]; Path = $f[1]; Bytes = $f[2]; Dir = $f[4] }
+    }
+    return $map
+  }
+  $a = Read-Snap $Before; $b = Read-Snap $After
+  $inside = { param($e) $p = $e.Path.ToLowerInvariant(); ($p -eq ".mycloudgallery") -or $p.StartsWith(".mycloudgallery/") }
+  $ignored = { param($e) $p = $e.Path.ToLowerInvariant(); ($p -eq "mcg-ostile") -or $p.StartsWith("mcg-ostile/") -or ($p -eq "mcg-it") -or $p.StartsWith("mcg-it/") }
+  $lines = @()
+  $n = [ordered]@{ fuori_aggiunti = 0; fuori_tolti = 0; fuori_cambiati = 0; dentro_aggiunti = 0; dentro_tolti = 0; dentro_cambiati = 0 }
+  foreach ($k in $b.Keys) {
+    $e = $b[$k]; if (& $ignored $e) { continue }
+    $where = if (& $inside $e) { "dentro" } else { "fuori" }
+    if (-not $a.ContainsKey($k)) { $n["${where}_aggiunti"]++; $lines += "+ $where $($e.Share)/$($e.Path)" }
+    elseif ($a[$k].Bytes -ne $e.Bytes -and $e.Dir -ne "1" -and $e.Dir -ne "true") { $n["${where}_cambiati"]++; $lines += "~ $where $($e.Share)/$($e.Path)" }
+  }
+  foreach ($k in $a.Keys) {
+    $e = $a[$k]; if (& $ignored $e) { continue }
+    if (-not $b.ContainsKey($k)) { $where = if (& $inside $e) { "dentro" } else { "fuori" }; $n["${where}_tolti"]++; $lines += "- $where $($e.Share)/$($e.Path)" }
+  }
+  Set-Content -LiteralPath $Out -Encoding UTF8 -Value $lines
+  return $n
 }

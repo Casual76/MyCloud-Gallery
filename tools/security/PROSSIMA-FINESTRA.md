@@ -38,6 +38,12 @@ Ogni passo sul NAS e' un comando Gradle dal PC (circa 2 minuti, dietro il semafo
 | 165 | S11, S10 | sonda del trascinamento (dichiarata); intent `OPEN_WIDGET` inventati | agente |
 | 169 | pulizia | l'area della famiglia di prova torna com'era (solo il registro della guardia), fotografia finale | agente |
 
+**Se la famiglia di prova si tiene com'e' (decisione dell'utente del 03/11: l'S25 e' admin con la sua chiave)**: `run-all.ps1 -Livello s25 -Serial RFCY61FZDHW -SenzaReset`
+salta il reset (niente rinomina di `family`, niente "Esci e rientra", niente "Crea la famiglia"): il passo `famiglia` fa la fotografia "prima", legge la famiglia
+e fa i dispositivi di prova (tre fogli dell'impronta, **tutti entro 15 minuti dalla prima volta che l'app vede le richieste**); la pulizia confronta "fine" con "prima".
+**KeyVoice** (`com.keyvoice.app`, servizio di accessibilita' dell'utente) va spento durante la prova: riscrive "Grazie per la visione" nel campo del codice e lo rende illeggibile.
+Prima dei passi sull'app: `run-all.ps1 -Livello jvm -Voce S7 -VersionCode 1` e `-Voce S3 -Breve` (e le due cartelle `manifest\` e `ostili\` nella stessa cartella di `build\security\`).
+
 **Il reset della famiglia di prova** (decisione 1 del 02/11; anche da solo: `tools\security\famiglia-di-prova.ps1 -Passo tutto`): (1) fotografia di `test` e `test-comune` dal PC, in sola lettura; (2) `test-comune/.mycloudgallery/family` diventa
 `family-vecchia-<giro>` (niente si cancella); (3) sull'app: Impostazioni, Famiglia, "Rientra con un QR nuovo", "Esci e rientra", "Crea la
 famiglia", casa, NAS `192.168.178.58`, nome utente `test`, **password dell'utente**, aree `test` e `test-comune`, niente backup automatico,

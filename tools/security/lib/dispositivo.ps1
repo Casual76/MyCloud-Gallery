@@ -123,6 +123,8 @@ function Clear-SecTestPin([string]$Serial) {
 # Lo schermo come elenco di nodi: testo, descrizione, id, se e' un campo password, se e' cliccabile, centro e rettangolo.
 function Get-SecUi([string]$Serial) {
   $remote = "/sdcard/mcg-sec-ui.xml"
+  # Lo schermo dell'S25 si spegne in fretta (campo, 03/11): un tasto di risveglio prima di ogni lettura (niente impostazioni cambiate).
+  if (-not $env:MCG_ADB) { [void](Invoke-SecShell $Serial @("input", "keyevent", "KEYCODE_WAKEUP")) }
   [void](Invoke-SecShell $Serial @("uiautomator", "dump", $remote))
   $cat = Invoke-SecShell $Serial @("cat", $remote)
   $xmlText = ($cat.Lines -join "`n")
@@ -135,6 +137,10 @@ function Get-SecUi([string]$Serial) {
     $b = [regex]::Match([string]$n.bounds, '\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]')
     if (-not $b.Success) { continue }
     $x1 = [int]$b.Groups[1].Value; $y1 = [int]$b.Groups[2].Value; $x2 = [int]$b.Groups[3].Value; $y2 = [int]$b.Groups[4].Value
+    # Una spunta di Compose e' sul contenitore (checkable), non sul testo: la si prende dall'antenato piu' vicino.
+    $isChecked = $isChecked
+    $anc = $n.ParentNode
+    while ($anc -and $anc.Name -eq "node") { if ([string]$anc.checkable -eq "true") { $isChecked = ([string]$anc.checked -eq "true"); break }; $anc = $anc.ParentNode }
     $nodes += [pscustomobject]@{
       Text = [string]$n.text; Desc = [string]$n.'content-desc'; Id = [string]$n.'resource-id'; Package = [string]$n.package
       Password = ([string]$n.password -eq "true"); Clickable = ([string]$n.clickable -eq "true"); Checked = ([string]$n.checked -eq "true")
@@ -190,6 +196,25 @@ function Invoke-SecTapLabel([string]$Serial, [string]$Label, [switch]$Contains, 
 function Invoke-SecType([string]$Serial, [string]$Text) {
   if ($Text -notmatch '^[A-Za-z0-9._-]{1,64}$') { throw "Testo non ammesso per input text (solo lettere, cifre, . _ -)." }
   [void](Invoke-SecShell $Serial @("input", "text", $Text))
+}
+
+# La tastiera sullo schermo e' su? (sull'S25 copre il fondo della pagina: il tasto dietro non si tocca)
+function Test-SecImeShown([string]$Serial) { return ((Invoke-SecShell $Serial @("dumpsys", "input_method")).Text -match 'mInputShown=true') }
+
+# Come Invoke-SecType, ma a pezzi di 4 con una pausa: sull'S25 `input text` lungo perde qualche carattere (visto sul campo il 03/11).
+function Invoke-SecTypeChunks([string]$Serial, [string]$Text, [int]$Size = 4, [int]$PauseMs = 600) {
+  for ($i = 0; $i -lt $Text.Length; $i += $Size) {
+    Invoke-SecType $Serial $Text.Substring($i, [math]::Min($Size, $Text.Length - $i))
+    Start-Sleep -Milliseconds $PauseMs
+  }
+}
+
+# Svuota il campo e scrive lettere e cifre come tasti, tutti in UN comando adb (visto sul campo il 03/11: sull'S25 `input text` perde e aggiunge
+# caratteri, per via del servizio di accessibilita' che detta testo nei campi; un solo comando lascia loro il tempo minimo). Solo A-Z, 0-9, trattino.
+function Invoke-SecTypeKeys([string]$Serial, [string]$Text) {
+  if ($Text -notmatch '^[A-Za-z0-9-]{1,64}$') { throw "Testo non ammesso (solo lettere, cifre, trattino)." }
+  $codes = @("KEYCODE_MOVE_END") + @(1..30 | ForEach-Object { "KEYCODE_DEL" }) + @($Text.ToUpperInvariant().ToCharArray() | Where-Object { $_ -ne '-' } | ForEach-Object { "KEYCODE_$_" })
+  [void](Invoke-SecShell $Serial (@("input", "keyevent") + $codes))
 }
 
 function Invoke-SecKey([string]$Serial, [string]$Key) {

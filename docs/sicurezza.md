@@ -505,7 +505,7 @@ assente). **Le impronte vere le scrive l'utente** quando genera K1 e K2 con `too
 | **K1** | firma ogni manifest (chiave attiva, D31) | segnaposto di P1, senza chiave privata: da sostituire | `c1d4f6308984503d52d8d0929d4aebb3e430356ff85e47de60f3e3bf42b68fdf` |
 | **K2** | riserva offline, solo se K1 è persa o rubata (D31, E-REL8) | segnaposto di P1, senza chiave privata: da sostituire | `375ec283667d649173a9f731370939b58f3faa274c2d9cac2a9c9d413b64587d` |
 | **KT** | chiave di **prova** del manifest: fidata solo nella build debug e nei test, mai nella release (`tools/check.ps1`, passi 7b e 7i); la privata sta solo in `core-release/src/test/` | di prova, pubblica per natura | `d25e790837fef69cf64149a11778e5dae54d6e95a926ea02db285e1b6bf20d04` |
-| `pampa.jks` | firma dell'APK (D32, L559) | **da scrivere** (dall'utente o con `release.ps1 -Impronta -Scrivi`); senza, `release.ps1` rifiuta la release | — |
+| `pampa.jks` | firma dell'APK (D32, L559) | scritta il 2026-11-03 con `release.ps1 -Impronta -Scrivi`; `release.ps1` la confronta a ogni release | `825738500ce9605429ffba3c4019228f992f2c37d1b70a2230a7ce2c25637e43` |
 
 ---
 

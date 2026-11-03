@@ -15746,7 +15746,7 @@ nel filone grafico, se l'utente la vuole.
 tornano); C467 con un errore SMB sulla build debug
 (`adb logcat -s MyCloud/*`: la classe e le righe del codice, nessun percorso).
 
-## Adozione del Fluid Engine 3.0.0 (03/11; cominciata sulla 3.0.0-rc.1)
+## Adozione del Fluid Engine 3.0.1 (03/11; cominciata sulla 3.0.0-rc.1)
 
 Fonte: `BRIEF.md` del pacchetto (fuori dal repository), il `CHANGELOG.md` dell'engine (sezione "3.0.0", voci **BREAKING** e **Cambia a vista**), `ADOZIONE.md`
 ("Migrare alla 3.0"), `skill/fluid-engine/references/regole.md` e `design-system.md`, la ricognizione `artifacts/design/migrazione-3.0.md` (scheda di MyCloud
@@ -15778,7 +15778,16 @@ invece di scaricarlo.
 rc.2 e poi la **3.0.0**, che rispetto alla rc.1 cambiano solo `engine-ai` ed `engine-ai-bridge` (non li usiamo): nei moduli che l'app include
 (`engine-foundation`, `engine-ui`, `engine-widget`, `versions.gradle`) l'unica differenza fra `engine-3.0.0-rc.1` e `engine-3.0.0` e' il numero in
 `EngineVersion.kt` (controllato con `git diff --stat`). Rilanciato `engine-update.ps1 -AppRoot . -Version 3.0.0` (tag `engine-3.0.0`, commit `cda2d14e`, preso
-anche lui dal repository locale dell'engine), `engine-doctor` verde; tutte le prove e gli screenshot "dopo" di questa sezione sono sulla 3.0.0.
+anche lui dal repository locale dell'engine), `engine-doctor` verde. **Poi la 3.0.1** (03/11, compatibile con la 3.0.0, nessuna dipendenza nuova: le
+correzioni trovate migrando le app, vedi sotto): `engine-update.ps1 -AppRoot . -Version 3.0.1` (tag `engine-3.0.1`, commit `5c6e6c99`, dal repository locale
+dell'engine), `engine-doctor` verde. **L'app resta sulla 3.0.1**; le prove finali, `check.ps1` e gli screenshot "dopo" sono sulla 3.0.1.
+**La 3.0.1 e le nostre toppe** (`ADOZIONE.md`, "Migrare alla 3.0", punto 8): dei rimedi che la 3.0.1 rende inutili l'app ne ha **uno solo**,
+`LaunchedEffect(selectedTab) { tabBarScroll.expand() }` in `app/.../main/MainScaffold.kt` (la pillola che si riapre cambiando scheda): la 3.0.1 riapre la
+barra "a ogni cambio di pagina o di scheda", ma le nostre schede non sono pagine dell'host (sono un `when` dentro `MainRoute`) e non c'e' una prova che il
+cambio arrivi all'engine anche cosi': **resta**, ed e' innocuo (un'apertura in piu'); da togliere nella fase grafica guardandolo in mano. Nessun
+`LocalContentColor` a mano attorno ai pop-up, nessun `imePadding` dentro i pop-up, nessun canvas passato a mano, nessun `CompositionLocal` per il menu, nessun
+`EdgeOnly` messo per il segmentato (i nostri `EdgeOnly` sono per gesti propri: mappa e griglie in selezione), le schede non sono rotte (niente
+`navigateToPeer`), l'app e' solo in italiano (niente `LocalFluidLabels`).
 
 ### Le BREAKING, una per una
 **1. Licenza (commit a se', "Adozione engine 3.0: licenza GPL-3.0").** L'engine porta codice GPL-3.0 di LibrePods (pulsanti e pagine): l'app si distribuisce
@@ -15788,9 +15797,10 @@ e `ABOUT_LICENSES_IN_USE` che la elenca sempre (e' la licenza dell'app, non di u
 completi a chi riceve l'app, nessuna garanzia, il testo nel file `LICENSE` e all'indirizzo della sezione Licenze); la voce LibrePods compare da sola fra le
 opere dell'engine (`FluidEngineLicenses`). `LICENSE` alla radice con il testo della GPL-3.0 (674 righe, 35.149 byte); paragrafo "Licenza" in fondo al
 `README.md`. Prove: `AboutScreenTest` (`diceCheLAppEGpl3_conISorgentiENessunaGaranzia`, LibrePods GPL-3.0 fra le opere dell'engine, la GPL-3.0 fra le licenze
-con il suo indirizzo come testo, il file `LICENSE` che comincia con l'intestazione della GPL-3.0). **Il testo di `LICENSE` e' stato scritto senza rete** (il
-brief permette solo l'aggiornamento dell'engine): va confrontato byte per byte con `https://www.gnu.org/licenses/gpl-3.0.txt` prima di pubblicare un APK
-(SHA-256 del file scritto: `E73DA98853FA07C24F994107F6EA963FE356A1F27274D497DCA2D8A3814AD93C`).
+con il suo indirizzo come testo, il file `LICENSE` che comincia con l'intestazione della GPL-3.0). **Il testo di `LICENSE`**: nel commit della licenza era
+scritto senza rete e, confrontato poi con il modello che la 3.0.1 porta (`engine/templates/LICENSE-GPL-3.0.txt`), aveva tre differenze nelle ultime righe
+("and"/"&", "License", l'indirizzo di why-not-lgpl). Ora `LICENSE` **e' quel modello** (commit "il testo ufficiale della GPL-3.0 in LICENSE"): con i fine riga LF
+ha lo SHA-256 `3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986`, quello del testo della FSF.
 
 **2. Le pagine: `FluidNavHost`.** Tutti gli host sono `FluidNavHost` e tutte le destinazioni il `composable` dell'engine (l'import cambia in 25 file, i
 grafi annidati `navigation<>`, `toRoute`, `popBackStack<MainRoute>` e il `NavController` restano quelli). Gli host:
@@ -15907,10 +15917,15 @@ contestuali delle righe, `FluidSectionIndex`, `FluidCoachMark`, `FluidTabRail`, 
 - **`FluidListRow(onClick)`**: un nodo solo per TalkBack, con nome, `Role.Button` e stato.
 - **Contrasto di sistema** medio o alto (Android 14+): il vetro dell'engine piu' denso (il nostro e' gia' pieno in quei casi, vedi sopra).
 - **Informazioni e licenze**: la riga di LibrePods fra le opere dell'engine e la nostra riga della licenza dell'app.
+- **Con la 3.0.1**: il testo dentro i pop-up, i fogli, la pagina intera, gli avvisi e i menu ha il colore del suo fondo (era nero sul nero col tema scuro dove
+  un `Text` non diceva il colore); `FluidSegmentedControl` tiene il dito anche dal segmento scelto; la pillola si ripiega solo se il contenuto scorre davvero e
+  si riapre a ogni cambio di pagina; il pop-up sale sopra la tastiera; i menu si allargano fino alla voce piu' lunga (al piu' 340 dp); il titolo agganciato
+  della barra si ferma prima delle azioni.
 
 ### Screenshot prima e dopo (`docs/screenshots/engine3/`)
 Registrati con i test Roborazzi che ci sono (`LibraryPanesShots`, `ViewerPanesShots`, `MapPanesShots`, `SettingsPanesShots` a 360 e 1280 dp; `ListAndPage*`,
-`Sheets*`, `Search*` e `Memories*ScreenshotTest` a 412 e 1280 dp), chiaro e scuro: **dopo** sul branch con la 3.0.0, **prima** sul codice di `b8a2e282` con la
+`Sheets*`, `Search*` e `Memories*ScreenshotTest` a 412 e 1280 dp), chiaro e scuro: **dopo** sul branch con la 3.0.0 (e rifatti con la 3.0.1 dopo l'unione
+con `main` `a05ba8e2`: identici byte per byte, tutti e 50), **prima** sul codice di `b8a2e282` con la
 2.13.1 (il worktree staccato su quel commit per la sola corsa, poi riportato sul branch). Nomi `<schermata>-<chiaro|scuro>-<telefono|tablet>.png`: `libreria`,
 `viewer`, `viewer-informazioni`, `raccolte`, `album` (la pagina di un album manuale), `cerca` e `cerca-risultati`, `ricordo` (la pagina) e
 `ricordo-presentazione` (in pausa, con i pulsanti), `mappa`, `impostazioni` e `impostazioni-pagina` (tablet: una pagina nel pannello), `foglio-di-conferma`
@@ -15988,7 +16003,8 @@ nome e ruolo del tasto che svuota `FluidTextField`, l'altezza minima di `FluidBu
    la seconda esce dal tasto (P8).
 
 ### Punti aperti
-- **`LICENSE`** scritto senza rete: confrontarlo con il testo ufficiale della GPL-3.0 prima di pubblicare un APK (SHA-256 sopra).
+- **La toppa della pillola** (`tabBarScroll.expand()` a ogni cambio di scheda, `MainScaffold.kt`): la 3.0.1 la rende probabilmente inutile; da togliere
+  guardando in mano che la pillola si riapra cambiando scheda.
 - **Da guardare in mano** (telefono e Tab S9): il back col dito su ogni pagina (sotto il dito, la conferma al 35%, la spinta), dentro e fuori dalla selezione delle
   griglie (dal bordo); le Impostazioni a due pannelli (un trascinamento in mezzo al pannello chiude le Impostazioni intere, dal bordo del pannello solo la
   pagina interna); la presentazione dei ricordi con i pulsanti visibili (gesti che partono dai pulsanti); i menu che si aprono a goccia; i tre colpi di ogni

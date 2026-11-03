@@ -35,7 +35,8 @@ import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
  * "Informazioni e licenze" (Fase 3, P11; docs/fase3-progetto.md §1.3): cos'e' l'app, da dove vengono i nomi dei luoghi
  * (GeoNames, CC BY 4.0: l'attribuzione e' un obbligo della licenza), **tutte** le librerie di altri autori incluse
  * nell'APK di release con la loro licenza ([ABOUT_LIBRARIES], dalle dipendenze di runtime), le opere dentro il Fluid Engine
- * (`FluidEngineLicenses`) e il testo breve di ogni licenza con il suo indirizzo (revisione di sicurezza, I6).
+ * (`FluidEngineLicenses`) e il testo breve di ogni licenza con il suo indirizzo (revisione di sicurezza, I6). Dal Fluid Engine 3.0 la riga dell'app dice
+ * anche la sua licenza, la GPL-3.0 (l'engine porta codice GPL-3.0 di LibrePods): sorgenti a chi riceve l'APK, nessuna garanzia, il testo nel file `LICENSE`.
  *
  * E' una pagina di sola lettura, senza ViewModel. Gli indirizzi delle licenze sono **testo selezionabile, mai un
  * collegamento**: la Fase 3 non fa traffico di rete e nessun tocco qui apre un browser (D18, D24).
@@ -74,6 +75,16 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
             meta = versionName?.let { stringResource(R.string.about_app_version, it) },
             tone = FluidTone.Primary,
             leading = { RowGlyph(Icons.Rounded.Info) },
+            disclosure = false,
+          )
+          // Adozione del Fluid Engine 3.0: l'app e' GPL-3.0 (l'engine porta codice di LibrePods). Testo da leggere, nessun tocco.
+          FluidListDivider()
+          FluidListRow(
+            eyebrow = stringResource(R.string.about_license_label),
+            title = stringResource(R.string.about_app_license_title),
+            subtitle = stringResource(R.string.about_app_license_detail),
+            tone = FluidTone.Neutral,
+            leading = { RowGlyph(Icons.Rounded.Description) },
             disclosure = false,
           )
         }

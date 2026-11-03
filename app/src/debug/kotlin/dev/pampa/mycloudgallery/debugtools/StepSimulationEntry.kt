@@ -12,7 +12,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.pampa.mycloudgallery.feature.diagnostics.release.StepSimulation
 import dev.pampa.mycloudgallery.feature.diagnostics.release.StepSimulationModel

@@ -3,7 +3,8 @@ package dev.pampa.mycloudgallery.feature.settings
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
+import dev.antigravity.fluidengine.ui.page.FluidBackSwipe
 import androidx.navigation.navigation
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.feature.settings.about.AboutRoute
@@ -193,10 +194,18 @@ fun NavGraphBuilder.settingsGraph(
 /**
  * Le pagine delle Impostazioni (tutte tranne l'elenco), registrate in una navigazione: quella dell'app (a pagina intera) o quella del pannello di destra delle Impostazioni a due pannelli ([SettingsPaneHost]):
  * ogni pagina e' la stessa nei due posti. [back] e' l'"Indietro" della pagina nella navigazione che la ospita.
+ *
+ * Fluid Engine 3.0: sono pagine Fluid (`composable` dell'engine) in tutti e due i posti, quindi i due host sono `FluidNavHost`. [backSwipe] e' da dove si
+ * tira indietro una pagina col dito: da qualunque punto a pagina intera, solo dal bordo del pannello nel pannello di destra.
  */
-internal fun NavGraphBuilder.settingsPages(nav: NavController, back: () -> Unit, resumeStep: (OnboardingStep) -> Unit) {
+internal fun NavGraphBuilder.settingsPages(
+  nav: NavController,
+  back: () -> Unit,
+  resumeStep: (OnboardingStep) -> Unit,
+  backSwipe: FluidBackSwipe = FluidBackSwipe.Anywhere,
+) {
   // --- Dispositivi ---
-  composable<SettingsDevicesRoute> {
+  composable<SettingsDevicesRoute>(backSwipe = backSwipe) {
     SettingsHost {
       DevicesRoute(
         onBack = back,
@@ -205,11 +214,11 @@ internal fun NavGraphBuilder.settingsPages(nav: NavController, back: () -> Unit,
       )
     }
   }
-  composable<SettingsDeviceRoute> { SettingsHost { DeviceDetailRoute(onBack = back) } }
-  composable<SettingsApprovalRoute> { SettingsHost { ApprovalRoute(onBack = back) } }
+  composable<SettingsDeviceRoute>(backSwipe = backSwipe) { SettingsHost { DeviceDetailRoute(onBack = back) } }
+  composable<SettingsApprovalRoute>(backSwipe = backSwipe) { SettingsHost { ApprovalRoute(onBack = back) } }
 
   // --- Famiglia ---
-  composable<SettingsFamilyRoute> {
+  composable<SettingsFamilyRoute>(backSwipe = backSwipe) {
     SettingsHost {
       FamilyRoute(
         links = FamilyLinks(
@@ -226,8 +235,8 @@ internal fun NavGraphBuilder.settingsPages(nav: NavController, back: () -> Unit,
       )
     }
   }
-  composable<SettingsInviteRoute> { SettingsHost { InviteRoute(onBack = back) } }
-  composable<SettingsKitRoute> {
+  composable<SettingsInviteRoute>(backSwipe = backSwipe) { SettingsHost { InviteRoute(onBack = back) } }
+  composable<SettingsKitRoute>(backSwipe = backSwipe) {
     SettingsHost {
       KitRoute(
         onBack = back,
@@ -236,18 +245,18 @@ internal fun NavGraphBuilder.settingsPages(nav: NavController, back: () -> Unit,
       )
     }
   }
-  composable<SettingsAdminRecoveryRoute> {
+  composable<SettingsAdminRecoveryRoute>(backSwipe = backSwipe) {
     SettingsHost { AdminRecoveryRoute(onBack = back, openStartOverGuide = { nav.navigate(SettingsStartOverRoute) }) }
   }
-  composable<SettingsRejoinRoute> { SettingsHost { FamilyRejoinRoute(onBack = back) } }
-  composable<SettingsStartOverRoute> { SettingsHost { StartOverGuideRoute(onBack = back) } }
-  composable<SettingsFamilyStateRoute> { SettingsHost { FamilyStateRoute(onBack = back) } }
-  composable<SettingsResetRoute> {
+  composable<SettingsRejoinRoute>(backSwipe = backSwipe) { SettingsHost { FamilyRejoinRoute(onBack = back) } }
+  composable<SettingsStartOverRoute>(backSwipe = backSwipe) { SettingsHost { StartOverGuideRoute(onBack = back) } }
+  composable<SettingsFamilyStateRoute>(backSwipe = backSwipe) { SettingsHost { FamilyStateRoute(onBack = back) } }
+  composable<SettingsResetRoute>(backSwipe = backSwipe) {
     SettingsHost { FamilyResetRoute(onBack = back, onInvite = { nav.navigate(SettingsInviteRoute) }) }
   }
 
   // --- Account del NAS ---
-  composable<SettingsAccountRoute> {
+  composable<SettingsAccountRoute>(backSwipe = backSwipe) {
     SettingsHost {
       NasAccountRoute(
         links = NasAccountLinks(
@@ -258,32 +267,32 @@ internal fun NavGraphBuilder.settingsPages(nav: NavController, back: () -> Unit,
       )
     }
   }
-  composable<SettingsPasswordRoute> { SettingsHost { PasswordRoute(onBack = back) } }
-  composable<SettingsAddressRoute> { SettingsHost { AddressRoute(onBack = back) } }
+  composable<SettingsPasswordRoute>(backSwipe = backSwipe) { SettingsHost { PasswordRoute(onBack = back) } }
+  composable<SettingsAddressRoute>(backSwipe = backSwipe) { SettingsHost { AddressRoute(onBack = back) } }
 
   // --- Rete, sicurezza, backup ---
-  composable<SettingsNetworkRoute> {
+  composable<SettingsNetworkRoute>(backSwipe = backSwipe) {
     SettingsHost { NetworkRoute(onBack = back, configureVpn = { resumeStep(OnboardingStep.VPN) }) }
   }
-  composable<SettingsSecurityRoute> {
+  composable<SettingsSecurityRoute>(backSwipe = backSwipe) {
     SettingsHost { SecurityRoute(onBack = back, openBackupNotice = { nav.navigate(SettingsBackupRoute) }) }
   }
-  composable<SettingsBackupRoute> {
+  composable<SettingsBackupRoute>(backSwipe = backSwipe) {
     SettingsHost {
       BackupNoticeRoute(onBack = back, onReviewChecklist = { resumeStep(OnboardingStep.SECURITY_NOTICE) })
     }
   }
 
   // --- Anteprime del NAS (Fase 4A) ---
-  composable<SettingsQualityRoute> { SettingsHost { PreviewQualityRoute(onBack = back) } }
+  composable<SettingsQualityRoute>(backSwipe = backSwipe) { SettingsHost { PreviewQualityRoute(onBack = back) } }
 
   // --- Quando lavora l'app (verifica funzionale, RE-8) ---
-  composable<SettingsRulesRoute> { SettingsHost { RulesRoute(onBack = back) } }
+  composable<SettingsRulesRoute>(backSwipe = backSwipe) { SettingsHost { RulesRoute(onBack = back) } }
 
   // --- Condivisioni senza posizione (Fase 5B) ---
-  composable<SettingsSharingRoute> { SettingsHost { SharingRoute(onBack = back) } }
-  composable<SettingsWidgetRoute> { SettingsHost { WidgetSettingsRoute(onBack = back) } }
+  composable<SettingsSharingRoute>(backSwipe = backSwipe) { SettingsHost { SharingRoute(onBack = back) } }
+  composable<SettingsWidgetRoute>(backSwipe = backSwipe) { SettingsHost { WidgetSettingsRoute(onBack = back) } }
 
   // --- Informazioni e licenze ---
-  composable<SettingsAboutRoute> { SettingsHost { AboutRoute(onBack = back) } }
+  composable<SettingsAboutRoute>(backSwipe = backSwipe) { SettingsHost { AboutRoute(onBack = back) } }
 }

@@ -53,7 +53,6 @@ import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.GlassTint
-import dev.antigravity.fluidengine.ui.fluid.LocalFluidPressImmediate
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.designsystem.a11y.LocalGalleryAccessibility
 import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
@@ -153,7 +152,7 @@ object GalleryChromeStyles {
  * Una **capsula di chrome**: un solo pezzo di vetro con dentro uno o piu' tasti. Alta [GalleryChromeDefaults.PieceHeight],
  * piu' del bersaglio di tocco: i tasti dentro non escono mai dai bordi, quindi due capsule vicine non si compenetrano.
  *
- * Dentro, la pressione e' immediata (`LocalFluidPressImmediate`): una capsula non sta dentro qualcosa che scorre.
+ * Dal Fluid Engine 3.0 ogni pulsante e' premuto al contatto (la capsula non chiede piu' `LocalFluidPressImmediate`, che non fa niente).
  */
 @Composable
 fun GalleryChromeCapsule(
@@ -162,7 +161,7 @@ fun GalleryChromeCapsule(
   modifier: Modifier = Modifier,
   content: @Composable RowScope.() -> Unit,
 ) {
-  CompositionLocalProvider(LocalGalleryChromeInk provides style.ink, LocalFluidPressImmediate provides true) {
+  CompositionLocalProvider(LocalGalleryChromeInk provides style.ink) {
     Row(
       modifier = modifier
         .height(chromePieceHeight())
@@ -376,6 +375,9 @@ fun GalleryChromeMenuAnchor(
  * Il velo minimo sotto le voci di un pop-up perche' `onSurface` regga 4,5:1 sopra il bianco e il nero pieni, contando la
  * pellicola dei modali (`GlassDefaults.modalTint`) e lo scrim che l'engine stende sotto (nero al 12% in chiaro, al 20% in
  * scuro, i valori della 2.13.0). La sfocatura del pop-up media il fondo e aiuta: qui non la si conta, per stare larghi.
+ * Rimisurato con il Fluid Engine 3.0.0: il pop-up prende `GlassDefaults.panelTint()`, che senza colore e' proprio `modalTint()` (pellicola al 50% sullo
+ * scuro e al 54% sul chiaro, come nella 2.13), e lo scrim del pop-up e' ancora nero al 12% e al 20% (`FluidGlassModal.kt`). Con il contrasto di sistema medio o
+ * alto (Android 14+) `modalTint()` sale da sola verso il pieno (`forSystemContrast`): il velo, calcolato da lei, scende di conseguenza.
  */
 @Composable
 private fun menuVeil(): Color {

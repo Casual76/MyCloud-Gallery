@@ -4,7 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
+import dev.antigravity.fluidengine.ui.page.FluidBackSwipe
 import androidx.navigation.toRoute
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenRoute
@@ -44,7 +45,7 @@ fun NavController.openCollection(kind: CollectionKind) {
 fun NavGraphBuilder.collectionsGraph(nav: NavController, onOpenViewer: (ViewerRequest) -> Unit) {
   val back: () -> Unit = { nav.popBackStack() }
 
-  composable<CollectionGridDestination> { entry ->
+  composable<CollectionGridDestination>(backSwipe = FluidBackSwipe.EdgeOnly) { entry ->
     val kind = CollectionKind.fromCode(entry.toRoute<CollectionGridDestination>().kind)?.takeIf { it.isFilter }
     if (kind == null) {
       // Una rotta salvata da una versione piu' nuova (o un codice sbagliato): meglio tornare indietro che una pagina vuota.
@@ -53,8 +54,8 @@ fun NavGraphBuilder.collectionsGraph(nav: NavController, onOpenViewer: (ViewerRe
       CollectionGridRoute(kind = kind, onOpenViewer = onOpenViewer, onBack = back)
     }
   }
-  composable<HiddenDestination> { HiddenRoute(onOpenViewer = onOpenViewer, onBack = back) }
-  composable<RecentlyDeletedDestination> { RecentlyDeletedRoute(onBack = back) }
+  composable<HiddenDestination>(backSwipe = FluidBackSwipe.EdgeOnly) { HiddenRoute(onOpenViewer = onOpenViewer, onBack = back) }
+  composable<RecentlyDeletedDestination>(backSwipe = FluidBackSwipe.EdgeOnly) { RecentlyDeletedRoute(onBack = back) }
 }
 
 @Composable

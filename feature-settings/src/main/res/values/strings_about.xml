@@ -12,6 +12,10 @@
   <string name="about_app_name">MyCloud Gallery</string>
   <string name="about_app_detail">Le foto e i video della famiglia, sul telefono e sul NAS di casa.</string>
   <string name="about_app_version">Versione %1$s</string>
+  <!-- Adozione del Fluid Engine 3.0 (03/11): l'app e' GPL-3.0 (l'engine porta codice GPL-3.0 di LibrePods). Le "informazioni legali" che la GPL chiede a
+       un'interfaccia: la licenza, che si puo' ridistribuire alle sue condizioni, che non c'e' garanzia e dove si legge il testo. -->
+  <string name="about_app_license_title">Software libero, GPL-3.0</string>
+  <string name="about_app_license_detail">MyCloud Gallery si distribuisce con la GNU General Public License, versione 3: puoi ridistribuirla e modificarla alle sue condizioni, e chi riceve l’app ha diritto ai sorgenti completi, con la stessa licenza. Viene senza alcuna garanzia. La licenza viene dal Fluid Engine, che contiene codice GPL-3.0 di LibrePods; il testo completo è nel file LICENSE dei sorgenti e all’indirizzo qui sotto.</string>
 
   <string name="about_section_places">Luoghi offline</string>
   <string name="about_section_places_detail">I nomi dei luoghi si ricavano dal telefono, senza internet.</string>
@@ -56,6 +60,9 @@
   <string name="about_license_bsd2">BSD 2-Clause</string>
   <string name="about_license_bsd2_full">Licenza BSD a 2 clausole</string>
   <string name="about_license_bsd2_url">https://opensource.org/license/bsd-2-clause</string>
+  <string name="about_license_gpl3">GPL-3.0</string>
+  <string name="about_license_gpl3_full">GNU General Public License, versione 3</string>
+  <string name="about_license_gpl3_url">https://www.gnu.org/licenses/gpl-3.0.html</string>
   <string name="about_libraries_footnote">Le librerie non inviano dati. Per la galleria del telefono l’app non fa nessuna connessione di rete; solo la mappa dettagliata, se è accesa, chiede le zone guardate a OpenFreeMap. Gli indirizzi qui sotto sono solo testo: non si aprono da soli.</string>
   <string name="about_licenses_footnote">Il testo completo di ogni licenza e gli avvisi di copyright sono nei progetti delle librerie, agli indirizzi indicati.</string>
 </resources>

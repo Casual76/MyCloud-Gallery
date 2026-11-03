@@ -1,15 +1,15 @@
 package dev.pampa.mycloudgallery.navigation
 
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.navigation.NavController
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
+import dev.antigravity.fluidengine.ui.navigation.composable
+import dev.antigravity.fluidengine.ui.page.FluidBackSwipe
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryId
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.PersonId
@@ -93,18 +93,19 @@ internal class EntryPanes(
   }
 }
 
-/** Una navigazione del pannello senza movimento proprio: il cambio fra due pagine lo fa `FluidDetailContent` (movimento fra pari). */
+/**
+ * Una navigazione del pannello senza movimento proprio: il cambio fra due pagine lo fa `FluidDetailContent` (movimento fra pari). Dal Fluid Engine 3.0 e' un
+ * `FluidNavHost` (le rotte sono pagine Fluid); ha una pagina sola, quindi niente back col dito (`FluidBackSwipe.Off` sulle voci, per chiarezza), e la pagina
+ * non dipinge un fondo suo (`pageColor` non specificato: l'host non dipinge): sotto c'e' il fondale unico delle Raccolte a due pannelli, come prima.
+ */
 @Composable
 private fun PaneNavHost(start: Any, modifier: Modifier = Modifier, graph: androidx.navigation.NavGraphBuilder.() -> Unit) {
   val paneNav = rememberNavController()
-  NavHost(
+  FluidNavHost(
     navController = paneNav,
     startDestination = start,
     modifier = modifier,
-    enterTransition = { EnterTransition.None },
-    exitTransition = { ExitTransition.None },
-    popEnterTransition = { EnterTransition.None },
-    popExitTransition = { ExitTransition.None },
+    pageColor = Color.Unspecified,
     builder = graph,
   )
 }
@@ -132,7 +133,7 @@ private fun AlbumPane(page: PanePage.Album, panes: EntryPanes, outer: NavControl
   val thumbnails = panes.albumThumbnails
   if (actions == null || thumbnails == null) return
   PaneNavHost(AlbumPageDestination(page.id.value)) {
-    composable<AlbumPageDestination> {
+    composable<AlbumPageDestination>(backSwipe = FluidBackSwipe.Off) {
       AlbumPageRoute(
         actions = actions,
         thumbnails = thumbnails,
@@ -155,7 +156,7 @@ private fun PersonPane(page: PanePage.Person, panes: EntryPanes, outer: NavContr
   val crops = panes.peopleCrops
   if (actions == null || thumbnails == null || crops == null) return
   PaneNavHost(PersonDestination(page.id.value)) {
-    composable<PersonDestination> {
+    composable<PersonDestination>(backSwipe = FluidBackSwipe.Off) {
       PersonPageRoute(actions = actions, thumbnails = thumbnails, crops = crops, exits = PersonPageExits(onBack = close, onReview = outer::openReview))
     }
   }
@@ -167,7 +168,7 @@ private fun MemoryPane(page: PanePage.Memory, panes: EntryPanes, outer: NavContr
   val thumbnails = panes.memoriesThumbnails
   if (actions == null || thumbnails == null) return
   PaneNavHost(MemoryDestination(page.id.value)) {
-    composable<MemoryDestination> {
+    composable<MemoryDestination>(backSwipe = FluidBackSwipe.Off) {
       MemoryPageRoute(actions = actions, thumbnails = thumbnails, exits = MemoryPageExits(onBack = close, onPlay = outer::openMemoryPlayer))
     }
   }

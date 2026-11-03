@@ -106,7 +106,7 @@ class GalleryLegibilityTest {
   }
 
   private companion object {
-    /** L'opacita' di `GlassDefaults.darkFloatingTint()` dell'engine 2.13.0. */
+    /** L'opacita' di `GlassDefaults.darkFloatingTint()` dell'engine 2.13.0, invariata nella 3.0.0 (rimisurata: le pellicole di `GlassMaterial.kt` non cambiano a contrasto standard). */
     const val DarkFloatingFilm = 0.48f
 
     /** L'opacita' di un `Color` ha 8 bit: un passo e' 1/255. */

@@ -3,7 +3,7 @@ package dev.pampa.mycloudgallery.feature.people.nav
 import dev.pampa.mycloudgallery.core.common.perf.AvvioTrace
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleActions
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleCrops

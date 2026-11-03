@@ -5,7 +5,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.toRoute
 import androidx.navigation.NavDestination.Companion.hasRoute
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumActions

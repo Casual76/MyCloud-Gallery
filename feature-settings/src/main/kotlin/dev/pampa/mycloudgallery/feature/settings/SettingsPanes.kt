@@ -1,7 +1,5 @@
 package dev.pampa.mycloudgallery.feature.settings
 
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.runtime.Composable
@@ -11,12 +9,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.NavHost
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.FluidNavHost
+import dev.antigravity.fluidengine.ui.navigation.composable
 import androidx.navigation.compose.rememberNavController
+import dev.antigravity.fluidengine.ui.page.FluidBackSwipe
 import dev.antigravity.fluidengine.ui.fluid.FluidDetailContent
 import dev.antigravity.fluidengine.ui.fluid.FluidDetailPlaceholder
 import dev.antigravity.fluidengine.ui.fluid.FluidListDetailScaffold
@@ -98,21 +98,22 @@ internal fun SettingsPaneHost(
   close: () -> Unit,
   resumeStep: (OnboardingStep) -> Unit,
   modifier: Modifier = Modifier,
-  pages: NavGraphBuilder.(nav: NavController, back: () -> Unit) -> Unit = { nav, back -> settingsPages(nav = nav, back = back, resumeStep = resumeStep) },
+  pages: NavGraphBuilder.(nav: NavController, back: () -> Unit) -> Unit = { nav, back -> settingsPages(nav = nav, back = back, resumeStep = resumeStep, backSwipe = FluidBackSwipe.EdgeOnly) },
 ) {
   key(page) {
     val paneNav = rememberNavController()
-    NavHost(
+    // Fluid Engine 3.0: le pagine di `settingsPages` sono pagine Fluid anche qui (un `FluidNavHost` del pannello, come quello dell'app). Il cambio fra due
+    // pagine scelte lo fa ancora `FluidDetailContent`; dentro il pannello una pagina aperta da un'altra (Famiglia -> Invito) arriva da destra, come nella
+    // 3.0 (l'engine non ha un passaggio "senza movimento"). Il fondo resta quello del pannello (`pageColor` non specificato: l'host non dipinge) e il back col dito parte solo
+    // dal bordo del pannello (`EdgeOnly`): in mezzo al pannello un trascinamento di lato non chiude la pagina interna, resta il back della pagina delle
+    // Impostazioni intera (l'host dell'app, `Anywhere`), come a pagina singola.
+    FluidNavHost(
       navController = paneNav,
       startDestination = page?.route ?: SettingsPaneEmptyRoute,
       modifier = modifier,
-      // Il cambio fra due pagine lo fa `FluidDetailContent` (movimento fra pari): dentro il pannello nessun movimento in piu'.
-      enterTransition = { EnterTransition.None },
-      exitTransition = { ExitTransition.None },
-      popEnterTransition = { EnterTransition.None },
-      popExitTransition = { ExitTransition.None },
+      pageColor = Color.Unspecified,
     ) {
-      composable<SettingsPaneEmptyRoute> {
+      composable<SettingsPaneEmptyRoute>(backSwipe = FluidBackSwipe.Off) {
         FluidDetailPlaceholder(
           title = stringResource(R.string.settings_panes_empty_title),
           message = stringResource(R.string.settings_panes_empty_message),

@@ -21,6 +21,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.theme.FluidCard
@@ -220,6 +221,7 @@ private fun GroupCard(
         text = stringResource(if (expanded) R.string.duplicates_review_done else R.string.duplicates_review),
         onClick = { actions.onToggleReview(key) },
         style = FluidButtonStyle.Tinted,
+        grip = FluidPressGrip.YieldsToScroll,
         size = FluidButtonSize.Large,
       )
     }
@@ -267,5 +269,6 @@ private fun ReviewRows(proposal: GroupProposal, actions: IdenticalActions, famil
     text = stringResource(R.string.duplicates_review_reset),
     onClick = { actions.onReset(key) },
     style = FluidButtonStyle.Tinted,
+    grip = FluidPressGrip.YieldsToScroll,
   )
 }

@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
@@ -163,6 +164,7 @@ private fun ModelBlock(row: ModelRow, handlers: SearchSettingsHandlers) {
             text = stringResource(R.string.models_confirm_action),
             onClick = { handlers.onConfirmMobileDownload(row.id) },
             style = FluidButtonStyle.Tinted,
+            grip = FluidPressGrip.YieldsToScroll,
             size = FluidButtonSize.Large,
           )
         }
@@ -195,6 +197,7 @@ private fun FailureNote(id: ModelId, code: DiagCode, fail: ModelFailCode, size: 
         },
         style = FluidButtonStyle.Tinted,
         size = FluidButtonSize.Large,
+        grip = FluidPressGrip.YieldsToScroll,
       )
     }
   }
@@ -210,12 +213,12 @@ private fun ActionRow(content: @Composable () -> Unit) {
 
 @Composable
 private fun Download(id: ModelId, handlers: SearchSettingsHandlers) {
-  FluidButton(text = stringResource(R.string.models_download_now), onClick = { handlers.onDownloadModel(id) }, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
+  FluidButton(text = stringResource(R.string.models_download_now), onClick = { handlers.onDownloadModel(id) }, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, grip = FluidPressGrip.YieldsToScroll)
 }
 
 @Composable
 private fun Remove(onClick: () -> Unit) {
-  FluidButton(text = stringResource(R.string.models_remove), onClick = onClick, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
+  FluidButton(text = stringResource(R.string.models_remove), onClick = onClick, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large, grip = FluidPressGrip.YieldsToScroll)
 }
 
 /** "Rimuovi" dice la conseguenza prima di farlo (D20). */

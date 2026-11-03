@@ -91,11 +91,13 @@ abstract class CollectionsEditScreenBase : ComposeScreenTest() {
   }
 
   /**
-   * La riga di una sezione com'e' per TalkBack: il nodo che ha le azioni (interruttore, "Sposta su" e "Sposta giu'"), il cui figlio porta il
-   * testo ("Viaggi, Mostrata"). Un nodo che unisce i suoi figli non si fonde in un altro che lo fa: sono due nodi, uno dentro l'altro.
+   * La riga di una sezione com'e' per TalkBack: il nodo che ha le azioni (interruttore, "Sposta su" e "Sposta giu'") e il testo ("Viaggi, Mostrata").
+   * Fino al Fluid Engine 2.13 erano due nodi, uno dentro l'altro (il `ListItem` di Material fondeva da se' e Compose non fonde un nodo che fonde dentro
+   * un altro): le azioni sopra, il testo nel figlio. Dalla 3.0 `FluidListRow` mette il suo modificatore sul `ListItem` stesso e la riga e' **un nodo
+   * solo**, con le azioni e il testo insieme (fix della 3.0, "cambia per chi cerca"). Il cercatore accetta le due forme.
    */
   protected fun row(title: String) =
-    composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions) and hasAnyChild(hasText(title)))
+    composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsActions.CustomActions) and (hasText(title) or hasAnyChild(hasText(title))))
 
   /** Le azioni di accessibilita' della riga di una sezione, per etichetta. */
   protected fun customActions(title: String): List<String> =

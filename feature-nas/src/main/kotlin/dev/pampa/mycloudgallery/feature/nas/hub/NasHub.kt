@@ -19,7 +19,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
-import androidx.navigation.compose.composable
+import dev.antigravity.fluidengine.ui.navigation.composable
+import dev.antigravity.fluidengine.ui.page.FluidBackSwipe
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.theme.FluidTone
@@ -169,7 +170,8 @@ fun NavGraphBuilder.nasGraph(
 ) {
   val back: () -> Unit = { nav.popBackStack() }
   for (screen in NasScreen.entries) {
-    composable(screen.route) {
+    // Fluid Engine 3.0: Cartelle e Eliminati del NAS hanno la selezione a trascinamento: il back col dito parte solo dal bordo.
+    composable(screen.route, backSwipe = if (screen == NasScreen.FOLDERS || screen == NasScreen.TRASH) FluidBackSwipe.EdgeOnly else FluidBackSwipe.Anywhere) {
       NasScreenContent(screen = screen, onNavigate = nav::openNas, onBack = back, onOpenFile = onOpenFile, trashPage = trashPage)
     }
   }

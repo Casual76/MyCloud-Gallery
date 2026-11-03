@@ -4,9 +4,13 @@ import android.app.Application
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import com.google.common.truth.Truth.assertThat
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionHeader
@@ -286,6 +290,32 @@ internal class MemoriesScreensTest : MemoriesScreenTest() {
     assertThat(log.calls.last()).isEqualTo("restart")
   }
 
+  /**
+   * Fluid Engine 3.0: un pulsante tiene il dito di serie, e quelli della presentazione stanno sopra i suoi gesti. Cedono il dito (`YieldsToScroll`): un tocco
+   * vero su "Avanti" clicca ancora, un dito che parte su "Indietro" e scorre a sinistra fa il gesto (avanti, e "Indietro" non clicca), uno che parte su
+   * "Chiudi" e scende esce. Con il pulsante che tiene il dito i due gesti non farebbero niente.
+   */
+  @Test
+  fun iGestiDellaPresentazionePartonoAncheDaiPulsanti() {
+    val log = PlayerLog()
+    switching(scenes.playerPaused) { PlayerScreen(it, thumbs, NoPlayerImages, NoPlayerClipSurface, log) }
+    composeRule.onNodeWithText("Avanti").performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Indietro").performTouchInput {
+      down(center)
+      repeat(STEPS) { moveBy(Offset(-STEP_DP.dp.toPx(), 0f)) }
+      up()
+    }
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Chiudi").performTouchInput {
+      down(center)
+      repeat(STEPS * 3) { moveBy(Offset(0f, STEP_DP.dp.toPx())) }
+      up()
+    }
+    composeRule.waitForIdle()
+    assertThat(log.calls).containsExactly("next", "next", "exit").inOrder()
+  }
+
   // --- Le impostazioni --------------------------------------------------------------------------------------------------------------
 
   private class SettingsLog : MemoriesSettingsHandlers by NoMemoriesSettingsHandlers {
@@ -398,5 +428,11 @@ internal class MemoriesScreensTest : MemoriesScreenTest() {
       assertThat(text).doesNotContain(id.value)
       assertThat(text).doesNotContain(media.value)
     }
+  }
+
+  private companion object {
+    /** Il dito dei gesti dai pulsanti: passi da 20 dp (10 passi = 200 dp di lato, 30 = 600 dp in basso, oltre la soglia d'uscita della pagina alta 2600 dp). */
+    const val STEPS = 10
+    const val STEP_DP = 20
   }
 }

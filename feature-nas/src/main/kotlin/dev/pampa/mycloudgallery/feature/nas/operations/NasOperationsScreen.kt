@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
@@ -237,6 +238,7 @@ private fun ActiveCard(op: NasOperationState, onStop: (OpId) -> Unit) {
         text = stringResource(R.string.nas_ops_stop),
         onClick = { onStop(op.id) },
         style = FluidButtonStyle.Tinted,
+        grip = FluidPressGrip.YieldsToScroll,
         size = FluidButtonSize.Large,
         fillWidth = true,
         modifier = Modifier.semantics { contentDescription = stopDescription },

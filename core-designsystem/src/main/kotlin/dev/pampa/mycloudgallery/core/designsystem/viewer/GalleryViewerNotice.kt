@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
+import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidIndeterminateBar
@@ -115,6 +116,8 @@ fun GalleryViewerNotice(
         style = FluidButtonStyle.Tinted,
         size = FluidButtonSize.Large,
         fillWidth = true,
+        // Sta sopra il pager delle foto: un dito che parte qui e scorre di lato deve poter cambiare foto.
+        grip = FluidPressGrip.YieldsToScroll,
       )
     }
   }

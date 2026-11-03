@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Il servizio di prova del benchmark (Fase 10, P9). `isAccessibilityTool="true"`: come TalkBack e' uno strumento, quindi la finestra dell'app (marcata
+  `accessibilityDataSensitive` da P8) gli da' l'albero. Legge il contenuto della finestra (`canRetrieveWindowContent`), anche i nodi non importanti e le finestre interattive,
+  come un lettore di schermo; nessun gesto, nessun filtro dei tasti.
+-->
+<accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+    android:accessibilityEventTypes="typeAllMask"
+    android:accessibilityFeedbackType="feedbackSpoken"
+    android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews|flagRetrieveInteractiveWindows|flagReportViewIds"
+    android:canRetrieveWindowContent="true"
+    android:description="@string/bench_a11y_description"
+    android:isAccessibilityTool="true"
+    android:notificationTimeout="50" />

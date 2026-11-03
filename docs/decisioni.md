@@ -16029,7 +16029,9 @@ contestuali delle righe, `FluidSectionIndex`, `FluidCoachMark`, `FluidTabRail`, 
 - **`FluidSegmentedControl`** (Approvazione dei dispositivi, passi del backup locale): pista di vetro e goccia, un `Tick` per segmento.
 - **`FluidProgressBar`** (11 usi): il riempimento fa almeno 3:1 sulla pista, gli accenti chiari si scuriscono del minimo.
 - **`FluidTextField`**: lo slot a destra e' da 24 dp (prima 18): le icone a destra dei campi un po' piu' grandi.
-- **`FluidListRow(onClick)`**: un nodo solo per TalkBack, con nome, `Role.Button` e stato.
+- **`FluidListRow(onClick)`**: un nodo solo per TalkBack, con nome, `Role.Button` e stato. Anche le righe con le nostre azioni o il nostro ruolo (riordino
+  delle Raccolte, scelte del foglio del NAS) sono ora un nodo solo con il testo dentro: due prove cercavano il testo in un figlio e sono state adattate
+  (`CollectionsEditScreenTest.row`, `NasHiddenChoiceTest.radio`: il testo nel nodo stesso o in un figlio).
 - **Contrasto di sistema** medio o alto (Android 14+): il vetro dell'engine piu' denso (il nostro e' gia' pieno in quei casi, vedi sopra).
 - **Informazioni e licenze**: la riga di LibrePods fra le opere dell'engine e la nostra riga della licenza dell'app.
 - **Con la 3.0.1**: il testo dentro i pop-up, i fogli, la pagina intera, gli avvisi e i menu ha il colore del suo fondo (era nero sul nero col tema scuro dove
@@ -16131,9 +16133,22 @@ nome e ruolo del tasto che svuota `FluidTextField`, l'altezza minima di `FluidBu
   di Gradle del PC.
 
 ### Esito di `tools\check.ps1 -NoDaemon`
-In corso.
+**Verde** ("OK: tutto a posto.", uscita 0, 03/11, chiuso alle 05:47), lanciato come chiede il brief: `GRADLE_OPTS=-Dorg.gradle.workers.max=2`, `--no-daemon`,
+cartella `app\build\outputs\apk\release` cancellata prima, dentro il posto del semaforo (`engine3`), **dopo l'unione con `main` `d9de249e` (P9) e sulla 3.0.1**.
+`assembleDebug`, `assembleRelease`, `galleryTest` e `galleryLint` in 1.641 s; **19.594 prove in 47 moduli, 0 fallite, 36 saltate per assunzione**; verdi anche
+`engine-doctor`, "engine senza modifiche locali", i `NoHandWrittenStyleTest`, i resti di debug e le recinzioni nel bytecode della release. Nessuna classe rifatta
+con `--rerun`, nessun `hs_err_pid*.log` della corsa finale. Durante la corsa nella cache di Gradle del PC sono comparsi file di altre versioni (Robolectric 4.16,
+Roborazzi 1.46.1, `room-testing` 2.8.4: non sono del nostro build, che usa 4.17, 1.76.0 e 2.8.5 e non li ha nelle impronte), cioe' di altri build sullo stesso PC.
+**Le corse prima**, tutte fuori dal codice tranne una: (1) prima dell'unione, un `EXCEPTION_ACCESS_VIOLATION` del compilatore C2 nella JVM dei test di `:app`
+(`hs_err` spostato in `build\engine3\`); (2) con `JAVA_TOOL_OPTIONS=-XX:TieredStopAtLevel=1` (il rimedio del brief) cadevano le prove di tempo di
+`core-albums` (`SmartRoomTest`, `SmartScaleTest`) e il tempo massimo di 20 minuti dei test di `:app`, quindi si e' tornati alla JVM di serie; (3) fermata da me
+per unire P9; (4) dopo l'unione, **rossa per il codice**: `CollectionsEditScreenTest` e `NasHiddenChoiceTest` cercavano il testo di una riga in un figlio, e
+dalla 3.0 la riga e' un nodo solo (sopra, "Cambia a vista"): cercatori adattati, poi una corsa `--continue --offline` di tutto (`assembleRelease galleryTest
+galleryLint`) senza altri rossi, e la corsa finale verde. Prove mirate e corse intermedie in `build\engine3\*.log`, fuori dal repository.
 
 ### Commit (branch `grafica/engine3`)
 `5c0c0ad7` (aggiornamento a 3.0.0-rc.1), `9812875f` (**licenza GPL-3.0**, commit a se'), `1155a215` (aggiornamento alla 3.0.0 finale), `c706b2b2`
 (`lifecycle-viewmodel-compose` allineata senza scaricare), `d63be695` (pagine con `FluidNavHost`), `52bfab12` (il pulsante tiene il dito), `fdaef26c`
-(contrasto rimisurato), `cf8f4fc4` (screenshot prima e dopo) e quello di questa sezione.
+(contrasto rimisurato), `cf8f4fc4` (screenshot prima e dopo), `234a28f1` (documenti), `dbbbb5a9` (unione con `main` `a05ba8e2`), `cbec18a6` (aggiornamento
+alla 3.0.1), `1f1b1b39` (il testo ufficiale della GPL-3.0 in `LICENSE`), `f5bc6503` (documenti sulla 3.0.1), `e51ca71c` (unione con `main` `d9de249e`, P9),
+`230fb424` (le righe sono un nodo solo nei test) e quello di questa riga con l'esito.

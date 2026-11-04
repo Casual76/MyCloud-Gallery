@@ -7,8 +7,12 @@ function Open-SecSettingsRow([string]$Serial, [string]$Row) {
   for ($i = 0; $i -lt 6; $i++) {
     $ui = Get-SecUi $Serial
     if ((Test-SecUiHas $ui "Impostazioni") -and (Test-SecUiHas $ui $Row)) { if (Invoke-SecTapLabel $Serial $Row) { return $true } }
+    # La pagina Impostazioni e' lunga (campo, 03/11): se si e' li' e la riga non si vede, si scorre fino a trovarla.
+    if ((Test-SecUiHas $ui "Impostazioni") -and (Test-SecUiHas $ui "Dispositivi") -and -not (Test-SecUiHas $ui $Row)) { if (Invoke-SecTapLabel $Serial $Row -Scroll 8) { return $true } }
     $settings = Find-SecNode $ui "Impostazioni"
-    if ($settings) { Invoke-SecTap $Serial $settings } else { Invoke-SecKey $Serial "KEYCODE_BACK" }
+    # Nella Libreria il pulsante Impostazioni non c'e': sta nell'intestazione di Raccolte (corretto sul campo il 03/11).
+    $tab = if (-not $settings -and (Test-SecUiHas $ui "Libreria") -and (Test-SecUiHas $ui "Raccolte")) { Find-SecNode $ui "Raccolte" } else { $null }
+    if ($settings) { Invoke-SecTap $Serial $settings } elseif ($tab) { Invoke-SecTap $Serial $tab } else { Invoke-SecKey $Serial "KEYCODE_BACK" }
     Start-Sleep -Seconds 2
   }
   return $false
@@ -80,28 +84,72 @@ function Invoke-SecSearch([string]$Serial, [string]$Query) {
 
 # Approva la richiesta del dispositivo di prova [Name] con il codice [Code] (Impostazioni, Dispositivi); il foglio dello sblocco e' dell'utente.
 function Get-SecCopioneApprova([string]$Name, [string]$Code) {
-  $script:SecApprove = @{ Name = $Name; Code = $Code; Typed = $false }
+  $script:SecApprove = @{ Name = $Name; Code = $Code; Typed = $false; Confirmed = $false; Mode = $false; Tapped = $false; Attempts = 0; Retap = 0 }
   $steps = @()
   $steps += New-SecStep "sblocco" { param($ui) Test-SecUnlockSheet $ui } { param($ui) if ($script:SecCtx.Emulator) { Invoke-SecType $script:SecCtx.Serial $SecEmulatorTestPin; Invoke-SecKey $script:SecCtx.Serial "KEYCODE_ENTER"; "avanti" } else { "attendi-utente" } } "sull'S25 conferma con il dito (o il tuo PIN) l'approvazione del dispositivo di prova."
-  $steps += New-SecStep "fatto" { param($ui) (Test-SecUiHas $ui "Fatto") -and (Test-SecUiHas $ui $script:SecApprove.Name -Contains) } { param($ui) Invoke-SecKey $script:SecCtx.Serial "KEYCODE_BACK"; "fine" }
-  $steps += New-SecStep "approva" { param($ui) Test-SecUiHas $ui "Approva questo dispositivo" } {
+  # Dopo l'approvazione l'app mostra "FATTO / Approvato / Il dispositivo fa parte della famiglia" (senza il nome; corretto sul campo il 03/11).
+  $steps += New-SecStep "fatto" { param($ui) ((Test-SecUiHas $ui "FATTO") -and (Test-SecUiHas $ui "Approvato")) -or ((Test-SecUiHas $ui "Fatto") -and (Test-SecUiHas $ui $script:SecApprove.Name -Contains)) } { param($ui) Invoke-SecKey $script:SecCtx.Serial "KEYCODE_BACK"; "fine" }
+  # La pagina "Nuovo dispositivo" (corretta sul campo il 03/11): il pulsante sta sotto la piega, la spunta dell'account e' sul contenitore, la
+  # tastiera copre il pulsante, `input text` lungo perde caratteri. Un'azione per giro: spunta, "Digita il codice", codice letto e verificato,
+  # tastiera chiusa, "Approva questo dispositivo"; poi il foglio dello sblocco (passo "sblocco", dell'utente).
+  $steps += New-SecStep "approva" { param($ui) (Test-SecUiHas $ui "Nuovo dispositivo") -and ((Test-SecUiHas $ui "Digita il codice") -or (Test-SecUiHas $ui "Approva questo dispositivo")) } {
     param($ui)
     $s = $script:SecCtx.Serial
-    $confirm = Find-SecNode $ui "giusto" -Contains
-    if ($confirm -and -not $confirm.Checked) { Invoke-SecTap $s $confirm }
-    $mode = Find-SecNode $ui "Digita il codice"
-    if ($mode) { Invoke-SecTap $s $mode }
-    if (-not $script:SecApprove.Typed) {
-      $field = Find-SecNode (Get-SecUi $s) "Codice del dispositivo"
-      if ($field) { Invoke-SecTap $s $field }
-      Invoke-SecType $s $script:SecApprove.Code
-      $script:SecApprove.Typed = $true
+    $a = $script:SecApprove
+    # Una pagina di una richiesta scaduta (15 minuti da quando l'app l'ha vista) non serve: si torna all'elenco, dove c'e' quella nuova.
+    if (Test-SecUiHas $ui "Richiesta scaduta") { Invoke-SecKey $s "KEYCODE_BACK"; Start-Sleep -Seconds 2; return "attendi" }
+    if (@($ui | Where-Object { $_.Text -like "MCG prova *" }).Count -gt 0 -and -not (Test-SecUiHas $ui $a.Name)) { return "fermo:la richiesta aperta non e' '$($a.Name)'" }
+    if ($a.Tapped) { $a.Tapped = $false; $a.Retap++ ; if ($a.Retap -gt 3) { return "fermo:il foglio dello sblocco non e' comparso" } }
+    if (-not $a.Confirmed) {
+      $confirm = Find-SecNode $ui (U '\u00e8 giusto') -Contains   # la spunta, non la frase "...quello giusto" sopra
+      if (-not $confirm) { [void](Invoke-SecShell $s @("input", "swipe", "500", "1500", "500", "900", "300")); return "attendi" }
+      if (-not $confirm.Checked) { Invoke-SecTap $s $confirm }
+      $a.Confirmed = $true; Start-Sleep -Seconds 1; return "attendi"
     }
-    [void](Invoke-SecTapLabel $s "Approva questo dispositivo" -Scroll 3); "avanti"
+    if (-not $a.Mode) {
+      $mode = Find-SecNode $ui "Digita il codice"
+      if ($mode) { Invoke-SecTap $s $mode; $a.Mode = $true; Start-Sleep -Seconds 1 } else { [void](Invoke-SecShell $s @("input", "swipe", "500", "1500", "500", "900", "300")) }
+      return "attendi"
+    }
+    $want = ($a.Code -replace '-', '')
+    $shown = @($ui | Where-Object { $_.Text -match '^[A-Z0-9]{2,4}(-[A-Z0-9]{1,4}){0,3}$' -and $_.Text -ne "AAAA-BBBB-CCCC-DDDD" } | ForEach-Object { $_.Text -replace '-', '' })
+    if (-not $a.Typed -or (-not $env:MCG_ADB -and ($shown -notcontains $want))) {   # sull'adb finto il campo non mostra il testo: niente verifica
+      if ($a.Attempts -ge 4) { return "fermo:il codice non si scrive giusto" }
+      $field = Find-SecNode $ui "AAAA-BBBB-CCCC-DDDD"
+      if (-not $field) { $field = Find-SecNode $ui "Codice del dispositivo" }
+      if (-not $field -and $shown.Count -gt 0) { $field = $ui | Where-Object { $_.Text -match '^[A-Z0-9]{2,4}(-[A-Z0-9]{1,4}){0,3}$' } | Select-Object -First 1 }
+      if (-not $field) { [void](Invoke-SecShell $s @("input", "swipe", "500", "1500", "500", "900", "300")); return "attendi" }
+      Invoke-SecTap $s $field
+      Start-Sleep -Milliseconds 800
+      if ($env:MCG_ADB) { Invoke-SecType $s $a.Code } else { Invoke-SecTypeKeys $s $a.Code }
+      $a.Typed = $true; $a.Attempts++
+      Start-Sleep -Seconds 1
+      return "attendi"
+    }
+    if (Test-SecImeShown $s) { Invoke-SecKey $s "KEYCODE_BACK"; Start-Sleep -Seconds 1; return "attendi" }
+    $button = Find-SecNode $ui "Approva questo dispositivo"
+    if (-not $button) { [void](Invoke-SecShell $s @("input", "swipe", "500", "1500", "500", "900", "300")); return "attendi" }
+    Invoke-SecTap $s $button
+    $a.Tapped = $true
+    Start-Sleep -Seconds 2
+    return "avanti"
   }
   $steps += New-SecStep "elenco" { param($ui) (Test-SecUiHas $ui "Dispositivi") -and (Test-SecUiHas $ui $script:SecApprove.Name -Contains) } { param($ui) [void](Invoke-SecTapLabel $script:SecCtx.Serial $script:SecApprove.Name -Contains); "avanti" }
+  # La pagina Dispositivi legge le richieste solo quando si apre (corretto sul campo il 03/11): se non c'e' il nome, si esce e si rientra.
+  $steps += New-SecStep "elenco-vecchio" { param($ui) (Test-SecUiHas $ui "Dispositivi che scrivono sul NAS") -and (-not (Test-SecUiHas $ui "$($script:SecApprove.Name)" -Contains)) } {
+    param($ui) Invoke-SecKey $script:SecCtx.Serial "KEYCODE_BACK"; Start-Sleep -Seconds 6; "attendi"
+  }
+  # La pagina Dispositivi legge le richieste solo quando si apre (corretto sul campo il 03/11): se non c'e' il nome, si esce e si rientra.
+  $steps += New-SecStep "elenco-vecchio" { param($ui) (Test-SecUiHas $ui "Dispositivi che scrivono sul NAS") -and (-not (Test-SecUiHas $ui "$($script:SecRevoke.Name)" -Contains)) } {
+    param($ui) Invoke-SecKey $script:SecCtx.Serial "KEYCODE_BACK"; Start-Sleep -Seconds 6; "attendi"
+  }
+  # Impostazioni scorsa in fondo (dopo un'altra voce): si torna in cima prima di cercare "Dispositivi".
+  $steps += New-SecStep "scorri-su" { param($ui) (Test-SecUiHas $ui "Consumi del mese") -and -not (Test-SecUiHas $ui "Dispositivi") } {
+    param($ui) for ($k = 0; $k -lt 4; $k++) { [void](Invoke-SecShell $script:SecCtx.Serial @("input", "swipe", "500", "700", "500", "1800", "250")) }; "attendi"
+  }
   $steps += New-SecStep "impostazioni" { param($ui) (Test-SecUiHas $ui "Impostazioni") -and (Test-SecUiHas $ui "Dispositivi") } { param($ui) [void](Invoke-SecTapLabel $script:SecCtx.Serial "Dispositivi"); "avanti" }
   $steps += New-SecStep "altrove" { param($ui) Test-SecUiHas $ui "Impostazioni" } { param($ui) Invoke-SecTap $script:SecCtx.Serial (Find-SecNode $ui "Impostazioni"); "avanti" }
+  $steps += New-SecStep "libreria" { param($ui) (Test-SecUiHas $ui "Libreria") -and (Test-SecUiHas $ui "Raccolte") } { param($ui) Invoke-SecTap $script:SecCtx.Serial (Find-SecNode $ui "Raccolte"); "avanti" }
   return $steps
 }
 
@@ -114,8 +162,13 @@ function Get-SecCopioneRevoca([string]$Name) {
   $steps += New-SecStep "foglio" { param($ui) (Test-SecUiHas $ui "Revoca") -and (Test-SecUiHas $ui "Revocare" -Contains) } { param($ui) Invoke-SecTap $script:SecCtx.Serial (Find-SecNode $ui "Revoca"); "avanti" }
   $steps += New-SecStep "pagina" { param($ui) Test-SecUiHas $ui (U 'Revoca l\u2019accesso') } { param($ui) [void](Invoke-SecTapLabel $script:SecCtx.Serial (U 'Revoca l\u2019accesso')); "avanti" }
   $steps += New-SecStep "elenco" { param($ui) (Test-SecUiHas $ui "Dispositivi") -and (Test-SecUiHas $ui $script:SecRevoke.Name -Contains) } { param($ui) [void](Invoke-SecTapLabel $script:SecCtx.Serial $script:SecRevoke.Name -Contains); "avanti" }
+  # Impostazioni scorsa in fondo (dopo un'altra voce): si torna in cima prima di cercare "Dispositivi".
+  $steps += New-SecStep "scorri-su" { param($ui) (Test-SecUiHas $ui "Consumi del mese") -and -not (Test-SecUiHas $ui "Dispositivi") } {
+    param($ui) for ($k = 0; $k -lt 4; $k++) { [void](Invoke-SecShell $script:SecCtx.Serial @("input", "swipe", "500", "700", "500", "1800", "250")) }; "attendi"
+  }
   $steps += New-SecStep "impostazioni" { param($ui) (Test-SecUiHas $ui "Impostazioni") -and (Test-SecUiHas $ui "Dispositivi") } { param($ui) [void](Invoke-SecTapLabel $script:SecCtx.Serial "Dispositivi"); "avanti" }
   $steps += New-SecStep "altrove" { param($ui) Test-SecUiHas $ui "Impostazioni" } { param($ui) Invoke-SecTap $script:SecCtx.Serial (Find-SecNode $ui "Impostazioni"); "avanti" }
+  $steps += New-SecStep "libreria" { param($ui) (Test-SecUiHas $ui "Libreria") -and (Test-SecUiHas $ui "Raccolte") } { param($ui) Invoke-SecTap $script:SecCtx.Serial (Find-SecNode $ui "Raccolte"); "avanti" }
   return $steps
 }
 

@@ -3,7 +3,7 @@
 # Ogni passo scrive una riga di soli numeri nel resoconto; un passo rosso non ferma i successivi, salvo il reset della famiglia (senza la
 # famiglia nuova le voci sull'app non hanno senso) e un AUTH_FAILED (nessun nuovo tentativo).
 
-function Get-SecPlan([string]$Livello) {
+function Get-SecPlan([string]$Livello, [switch]$SenzaReset) {
   if ($Livello -eq "s25-release") {
     return @(
       [pscustomobject]@{ Id = "preflight"; Minuti = 1; Utente = $false; Titolo = "S25 e release candidata installata (la configura l'utente, mai lo script)" }
@@ -16,7 +16,11 @@ function Get-SecPlan([string]$Livello) {
   if ($Livello -eq "s25") {
     return @(
       [pscustomobject]@{ Id = "preparazione"; Minuti = 3; Utente = $false; Titolo = "dispositivo, app debug, permessi di Android dati con pm grant" }
-      [pscustomobject]@{ Id = "famiglia"; Minuti = 32; Utente = $true; Titolo = "reset della famiglia di prova (fotografia, archivio di family, Crea la famiglia, kit nuovo), dispositivi di prova approvato e revocato, confronto" }
+      $(if ($SenzaReset) {
+        [pscustomobject]@{ Id = "famiglia"; Minuti = 12; Utente = $true; Titolo = "famiglia di prova tenuta com'e' (S25 admin): fotografia prima, lettura, dispositivi di prova approvato e revocato (il dito 3 volte)" }
+      } else {
+        [pscustomobject]@{ Id = "famiglia"; Minuti = 32; Utente = $true; Titolo = "reset della famiglia di prova (fotografia, archivio di family, Crea la famiglia, kit nuovo), dispositivi di prova approvato e revocato, confronto" }
+      })
       [pscustomobject]@{ Id = "S1c"; Minuti = 8; Utente = $false; Titolo = "S1 (c): segni di test in Cerca (controllo con test; test2 se c'e' un dispositivo)" }
       [pscustomobject]@{ Id = "S2"; Minuti = 12; Utente = $false; Titolo = "S2: canaglia e revocato nell'area della famiglia" }
       [pscustomobject]@{ Id = "S3"; Minuti = 19; Utente = $false; Titolo = "S3 (b)/(c) nell'app: segmenti ostili, immagini in test-comune/mcg-ostile" }
@@ -64,7 +68,7 @@ function Invoke-SecStep([string]$Id) {
       return Invoke-SecPreflight
     }
     "preflight" { return Invoke-SecPreflight }
-    "famiglia" { return Invoke-SecFamilyReset -WithDevices }
+    "famiglia" { if ($ctx.SenzaReset) { return Invoke-SecFamilyKeep }; return Invoke-SecFamilyReset -WithDevices }
     "dispositivi" { return Invoke-SecTestDevices }
     "S1c" { return Invoke-SecS1c }
     "S2" { return Invoke-SecS2 }
@@ -102,7 +106,7 @@ function Invoke-SecStep([string]$Id) {
 
 # Esegue il piano (o la sola voce [Only]) e scrive il resoconto. Restituisce 0 se nessun passo e' rosso.
 function Invoke-SecLivello([string]$Livello, [string[]]$Only, [string]$Report) {
-  $plan = @(Get-SecPlan $Livello)
+  $plan = @(Get-SecPlan $Livello -SenzaReset:([bool]$script:SecCtx.SenzaReset))
   if ($Only -and $Only.Count -gt 0) { $plan = @($plan | Where-Object { $_.Id -in $Only -or $_.Id -in @("accensione", "spegnimento", "disinstalla", "preflight", "preparazione") }) }
   Show-SecPlan $Livello $plan
   Add-SecReport $Report @("# Revisione finale di sicurezza (Fase 10 P11, seconda parte), livello $Livello, $(Get-Date -Format 'yyyy-MM-dd HH:mm')")

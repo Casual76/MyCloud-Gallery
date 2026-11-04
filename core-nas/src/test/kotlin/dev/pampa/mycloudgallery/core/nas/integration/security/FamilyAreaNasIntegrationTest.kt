@@ -101,7 +101,9 @@ class FamilyAreaNasIntegrationTest {
       "leggi" -> listOf(FamilyAreaProbes.readFamily(area)?.line() ?: "MCG-SEC famiglia trovata=0")
       "richieste" -> {
         val info = checkNotNull(FamilyAreaProbes.readFamily(area)) { "famiglia di prova non trovata" }
-        listOf("MCG-SEC famiglia richieste=${FamilyAreaProbes.requests(area, info, now, File(dir, "codici.txt"))}", info.line())
+        // MCG_FAMIGLIA_RUOLI (facoltativo): solo questi dispositivi di prova rifanno la richiesta (un foglio dell'impronta scaduto).
+        val roles = System.getenv("MCG_FAMIGLIA_RUOLI").orEmpty().split(',').map { it.trim() }.filter { it in listOf("approvato", "revocato") }.ifEmpty { listOf("approvato", "revocato") }
+        listOf("MCG-SEC famiglia richieste=${FamilyAreaProbes.requests(area, info, now, File(dir, "codici.txt"), roles)}", info.line())
       }
       "semina-s2" -> {
         val info = checkNotNull(FamilyAreaProbes.readFamily(area)) { "famiglia di prova non trovata" }

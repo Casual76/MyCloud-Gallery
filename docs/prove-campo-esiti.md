@@ -1154,3 +1154,40 @@ Il confronto con la debug è sui **gesti** e sugli **esiti**: la debug del telef
 - **KeyVoice:** sul telefono c'è `com.keyvoice.app`, un servizio di accessibilità dell'utente che **detta testo in ogni campo che prende il focus** ("Grazie per la visione!", la trascrizione del silenzio) e mostra le sue bolle ("Aggancio KeyVoice", "Registrazione KeyVoice") sopra la nostra app. Ha sporcato i campi di ricerca (le query vanno scritte e inviate in un solo comando adb, subito) e compare in alcuni screenshot. Non è un difetto della nostra app e non l'ho toccato.
 - **Screenshot:** non ne ho messi nei documenti né nel commit (mostrerebbero foto e nomi veri): restano solo sotto `build/campo/` (ignorata da git); uno che mostrava una schermata di conto è stato cancellato subito.
 - **Strumenti e file di prova** (tutti sotto `build/campo/`, non nel commit): script `*.ps1`, i due registri, `prova-altra.jks` e `app-altra-firma.apk`, un'immagine sintetica `mcg_rc_prova_0211.jpg` **mai** messa sul telefono.
+
+## Fase 10: revisione 10.4 sull'S25 (03/11)
+
+Seconda parte della revisione di sicurezza sull'S25 (`RFCY61FZDHW`, debug `dev.pampa.mycloudgallery.debug`, versionCode 1), branch `campo/s25-sicurezza`, dalle 17:36 alle 20:40. Il tablet e gli emulatori non sono stati toccati. Nessuna impostazione del telefono cambiata da me (KeyVoice l'ha spento l'utente).
+
+**Verifica prima del reset (sola lettura, UI Automator):** l'app debug e' con l'account `test` (192.168.178.58, "In casa") ed e' l'**unico admin** di una famiglia di 1 dispositivo. Per il copione e' "admin della famiglia di prima": il reset avrebbe cancellato la sua chiave. **Decisione dell'utente: famiglia di prova tenuta com'e', niente reset**; il kit non e' stato rigenerato. Nuovo `run-all.ps1 -Livello s25 -SenzaReset`: il passo `famiglia` fa fotografia "prima", lettura della famiglia (kit + registro firmato) e dispositivi di prova; la pulizia confronta "fine" con "prima" (`Compare-SecSnapshots`).
+
+### Esito delle voci
+
+| Voce | Esito | Numeri |
+|---|---|---|
+| Dispositivi di prova | **fatti** (alla seconda ripresa, KeyVoice spento) | "approvato" approvato (19:17), "revocato" approvato e **revocato** (20:21 e 20:22); il registro della famiglia da versione 1 a 4, `approvato_stato=approved`, `revocato_stato=revoked` |
+| S3 (b)/(c) nell'app | **robustezza passata, rifiuti non verificabili** (rosso per il copione) | 17 segmenti scritti (16 ostili + 1 di controllo, dell'"approvato") e 13 immagini ostili in `test-comune/mcg-ostile/`; processo vivo, **0 crolli, 0 ANR**, PSS 432 MB (tetto 1.536); `rifiuti_nuovi=0` |
+| S7 (buste del manifest) | **inconcludente** (rosso per il copione) | 9 buste una per volta; `blocchi_applicati=0`, `rifiutate=0`, `inattese=8`: il lettore non vede ne' il blocco ne' i rifiuti |
+| S2 (canaglia e revocato) | **parziale** (rosso per il copione) | 6 teste scritte (canaglia e revocato: `index`, `personal`, album); **0 voci in Libreria** (la proprieta' che conta regge); `revocato_nel_registro=1`; rifiuti in Diagnostica 32 prima e 32 dopo (`rifiuti_nuovi=0`) |
+| S1 (c) | **dichiarata** | il controllo con `test` non ha trovato celle (`controllo_celle=0`); nessun dispositivo con `test2` (`-Test2Serial`) |
+| S9 nell'app | **inconcludente** (rosso per il copione) | con 300 file (non 2.000): 150 cambiati, nessun congelamento, nessuna notifica, il dialogo "Ho controllato" non provato; pulizia del giro residui 0 |
+| S7a, S10, S11 | **non fatte** | tempo; S11 resta dichiarata (stesso UID) |
+| Reset della famiglia | **non fatto** per decisione | |
+
+**Perche' il rosso non vale come difetto.** S3, S7 e S2 giudicano i rifiuti dalla Diagnostica, ma l'anteprima dell'esportazione mostra solo una finestra di eventi (50 voci, quasi tutte `EVT_JOB_RESULT`): i contatori di rifiuto a volte ci sono (S2 ne vede 32) ma non cambiano, e il blocco `RELEASE_BLOCKED` non compare. Il lettore non e' un controllo affidabile finche' non legge tutto (o una voce dedicata ai rifiuti). In logcat la debug non scrive niente sul manifest. S9 non ha congelato con 300 file: non e' provato che l'app scansioni `mcg-it/<giro>/massa` ne' che la soglia valga a 300 file; da rifare con 2.000. Il resoconto di soli numeri e' in `build\security\<data>\s25.txt`.
+
+**Difetti di prodotto:** nessuno dimostrato. Da guardare: S7 (se l'app applica davvero `WRITES`/`ALL` dal manifest della debug; ne' blocco ne' rifiuto visti) e S9 (nessun congelamento a 300 file), una volta che il lettore e' affidabile. Nota di usabilita': nella pagina "Nuovo dispositivo" il pulsante "Approva questo dispositivo" sta sotto la piega e la tastiera lo copre; la pagina Dispositivi legge le richieste solo quando si apre; una richiesta vale 15 minuti da quando l'app **vede quell'identificativo** (un identificativo gia' scaduto non riparte: serve un dispositivo di prova nuovo).
+
+### Difetti dei copioni, corretti sul campo (mai girati su un dispositivo vero)
+- Dalla Libreria Impostazioni sta nell'intestazione di Raccolte; la pagina Impostazioni e' lunga (la riga "Diagnostica" va cercata scorrendo); il copione premeva Indietro e usciva dall'app.
+- Pagina "Nuovo dispositivo": pulsante sotto la piega, spunta sul contenitore (e la frase "...quello giusto" la confondeva), tastiera sopra il pulsante, "Richiesta scaduta", conferma finale "FATTO / Approvato" senza il nome; la pagina Dispositivi va chiusa e riaperta per vedere le richieste nuove.
+- Lo schermo dell'S25 si spegne in pochi minuti: tasto di risveglio prima di ogni lettura.
+- **KeyVoice** (`com.keyvoice.app`, accessibilita' dell'utente) riscrive "Grazie per la visione" nel campo del codice e lo riscrive appena si svuota: va spento durante la prova (spento dall'utente alle 19:05). Anche senza KeyVoice il campo perde i tasti in raffica (una lettera doppia, una "B" dopo lo zero): ora un tasto per comando adb, con rilettura e nuovi tentativi.
+- Il passo `richieste` accetta `MCG_FAMIGLIA_RUOLI` (solo alcuni dispositivi di prova rifanno la richiesta) e lo stato rigenera un dispositivo tolto dal file (`FamilyRunState.loadOrCreate`), perche' un'identita' scaduta non rinasce.
+- S7 mette sul NAS una busta che blocca le scritture: se il copione si ferma a meta' (e' successo per la riga "Diagnostica"), il manifest va rimesso subito con il passo `pulizia` (lo fa).
+
+### Pulizia e cosa resta
+- `run-all.ps1 -Livello s25 -SenzaReset -Passo pulizia` (20:39): **residui 0** (richieste, teste, segmenti e immagini del giro, buste del manifest con il manifest di prima rimesso, giro di S9 in `mcg-it`; le chiavi dei dispositivi di prova tolte dallo stato del PC). Fotografia "fine" contro "prima": **fuori da `.mycloudgallery` nessuna differenza**; dentro 889 file aggiunti, nessuno tolto o cambiato: 886 `leases/` scritti dall'app (le sincronizzazioni che ho fatto partire) e 3 file di `family/` (le versioni 2, 3 e 4 del registro: due approvazioni e una revoca).
+- **Resta:** nel registro della famiglia "approvato" (approvato, senza chiave) e "revocato" (revocato); il kit e la famiglia invariati; l'S25 admin con la sua chiave. Nessuna `family-vecchia-*`.
+- **L'utente deve riaccendere KeyVoice** (Impostazioni, Accessibilita').
+- Da rifare: un lettore della Diagnostica che legga tutti i rifiuti, poi S3, S7, S2 e S9 (2.000 file); S7a, S10, S11; S1 (c) con un dispositivo `test2`.

@@ -21,7 +21,8 @@ param(
   [int]$MemoryCapMb = 1536,
   [int]$MassFiles = 2000,
   [int]$PollSeconds = 3,
-  [switch]$Release
+  [switch]$Release,
+  [switch]$SenzaReset
 )
 $ErrorActionPreference = "Stop"
 foreach ($lib in @("security-common", "dispositivo", "copioni", "copione-famiglia", "copioni-app", "analisi", "voci", "voci-sistema", "famiglia", "livelli")) {
@@ -31,7 +32,7 @@ foreach ($lib in @("security-common", "dispositivo", "copioni", "copione-famigli
 # -Passo S2,S3 arriva come una stringa sola da powershell -File: si divide qui.
 $Passo = @($Passo | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 $planLevel = if ($Release -and $Livello -eq "s25") { "s25-release" } else { $Livello }
-$plan = Get-SecPlan $planLevel
+$plan = Get-SecPlan $planLevel -SenzaReset:$SenzaReset
 if ($Piano) { Show-SecPlan $planLevel $plan; exit 0 }
 
 if (-not $Serial) { $Serial = if ($Livello -eq "emulatore") { $SecEmulatorSerial } else { $SecPhoneSerial } }
@@ -55,7 +56,7 @@ $script:SecCtx = [pscustomobject]@{
   ReleaseSerial = $(if ($Livello -eq "emulatore" -or $Release) { $Serial } else { $null }); ReleasePackage = $SecReleasePackage; ReleaseReady = $false; ReleaseInstalled = $false
   StateDir = $StatoDir; OutDir = $OutDir; LogDir = (Join-Path $OutDir "schermate"); Test2Serial = $Test2Serial
   NasIp = $NasIp; KitFile = $KitFile; SettleSeconds = $SettleSeconds; MemoryCapMb = $MemoryCapMb; MassFiles = $MassFiles; PollSeconds = $PollSeconds
-  UserWaitMinutes = 30; HomePossible = ($Livello -eq "s25")
+  UserWaitMinutes = 30; SenzaReset = [bool]$SenzaReset; HomePossible = ($Livello -eq "s25")
   ManifestDir = $(if ($Preparati) { Join-Path $Preparati "manifest" } else { $null }); ImagesDir = $(if ($Preparati) { Join-Path $Preparati "ostili" } else { $null })
   Pcap = $(if ($Livello -eq "emulatore") { Join-Path $OutDir "s8b-emulatore.pcap" } else { $null })
 }

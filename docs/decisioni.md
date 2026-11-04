@@ -16225,3 +16225,52 @@ Corsa unica sul Tab S9 dopo l'integrazione (`ViewerBenchmark`, `LibraryPinchBenc
 - `panesZoneOpen` non passa ancora ("la griglia della zona non si apre dalle bolle"); `widgetUpdateTablet` resta fuori dalla corsa (pilota che a volte non risponde).
 
 **Riferimento del tablet** (`docs/bench/riferimento-tab-s9.json`) accettato con `-Force` da questa corsa, con i fuori soglia noti: serve da guardia di regressione (riferimento + 10/15%) per la fase grafica e per le prossime modifiche, senza allentare le soglie assolute (che li mostrano come gia' fuori nel riferimento). Le soglie del tablet proposte sopra **non** sono applicate: dopo questa misura il viewer (33,4 ms) e gli scorrimenti a Mesi e Anni (2%) non le rispetterebbero, quindi si decidono con l'utente insieme al lavoro sul livello Anni e sul vetro (fase grafica). Le soglie dell'S25 non cambiano.
+
+### Livello Anni sul Tab S9 (04/11)
+
+Branch `perf/tablet-anni` (da `main` `489bdeea`, engine 3.0.4), un solo agente, sul Tab S9 (`R52X50DKRBW`, 2560x1600, 120 Hz, orizzontale), variante `benchmarkRelease` con il dataset da 100 mila righe. Le misure sono fatte con **`am instrument` sugli stessi APK** di Gradle (cosi' si confronta prima e dopo sullo stesso dataset), 8 iterazioni, `jankPercent` come media delle iterazioni; le tracce di Perfetto sono state tenute sul tablet e interrogate li' con `trace_processor_shell_aarch64` (e' fra gli asset del modulo `benchmark`: ~10 s per una traccia da 300 MB). Niente rete, niente NAS, telefono mai toccato; a fine lavoro i file di prova sul tablet sono tolti.
+
+#### Prima e dopo (`jankPercent`, media delle 8 iterazioni)
+| Scenario | Corsa pulita 04/11 (Gradle, `main`) | Prima (stesso metodo del dopo) | Dopo |
+|---|---|---|---|
+| `scroll_years_square` | 12,12% | 15,3% (11,9-16,9) | **8,9%** (7,9-10,3) |
+| `scroll_months_square` | 4,10% | 3,3% (3,0-3,8) | 3,6% (3,4-4,0) e, in una seconda corsa, 3,7% (3,2-4,5) |
+| `scroll_all_square` | 1,93% | non misurato | 1,9% (1,4-2,2): non peggiora |
+| `scroll_years_justified` | 8,82% | non misurato | non misurato (tempo) |
+| Viewer | ~41 ms il fotogramma piu' lungo, ~98 ms la prima apertura | non toccato | non toccato |
+
+Lo "prima" di questa tabella e' l'APK degli esperimenti (con le marcature di traccia nella cella e gli interruttori, tutti spenti): e' piu' pesante di `main` e dava 15,3% a Anni contro il 12,1% della corsa pulita di Gradle. Il guadagno vero sta quindi fra i **3 e i 6 punti** (12,1 -> 8,9 sul numero pulito, 15,3 -> 8,9 sullo stesso APK). A Mesi **non e' migliorato**: 3,6% e 3,7% dopo (due corse) contro 3,3% prima, con 4,10% nella corsa pulita del 04/11: la variazione fra corse e' dello stesso ordine, ma non si puo' escludere un +0,3/0,4 punti dal nodo in piu' per riga a celle piu' grandi (meno dischi da unire). Il riferimento del tablet non e' aggiornato.
+
+#### Dove va il tempo (traccia di una corsa di Anni, 2.172 fotogrammi)
+- **Il collo di bottiglia e' il RenderThread, non il thread principale.** Per fotogramma: RenderThread 8,1 ms in media (i 120 Hz ne danno 8,3), thread principale 5,8 ms di cui 2,9 fermo ad aspettare il RenderThread (`postAndWait`). Dentro il RenderThread un solo passaggio (lo strato fuori schermo della pagina: la griglia) costa ~4,7 ms (`onPrepare` 1,8 + `onExecute` 2,9) per **~1.000 disegni** a fotogramma: ~520 `FillRectOp` (foto e segnaposto, una trama diversa a testa), ~300 `CircleOp`, ~35 `TextureOp`, ~20 testi. Gli altri ~22 passaggi del fotogramma sono il vetro della chrome (engine) e costano poco ciascuno.
+- **La composizione delle celle non e' il costo.** Marcature temporanee: ~50 us a cella nel composable (chiave, riferimento, stato dell'immagine, ripiego, segnaposto, segni), +10 us l'aggancio, +9 l'aggiornamento, +13 `buildDraw`: ~1,3 ms a riga di 16 celle. I picchi del thread principale (14-20 ms) sono le righe nuove che il prefetch non ha preparato: ~6 ms di `Compose:applyChanges` per riga (creazione dei nodi), 31 volte in 287 fotogrammi.
+- **Il disco della presenza e' il pezzo piu' grosso.** A 80 dp le celle del tablet a Anni hanno i segni (il lato minimo e' 64 dp; sul telefono a Anni, 58 dp, no) e nel dataset misto quasi ogni cella ha il suo disco: 3 disegni a cella (fondo, filo, glifo) subito dopo la sua foto. Foto e dischi si alternano, e la GPU non puo' unire i dischi fra loro (ogni foto sta in mezzo e li copre): ~282 `CircleOp` a fotogramma.
+
+Esperimenti con interruttori temporanei (file `perf-<nome>` nella cartella dell'app di misura, mai committati), misura rapida con `input swipe` e `dumpsys gfxinfo` (14-16 fling, rumore +-1,5 punti), jank a Anni:
+
+| Interruttore | Jank | Note |
+|---|---|---|
+| nessuno (base) | 10,4-12,0% | |
+| senza segni (`nobadge`) | 8,0% | da solo il piu' grosso: -2,5/-4 punti; RenderThread da 7,8 a 6,1 ms (`Drawing`), niente `CircleOp` |
+| senza segnaposto (`noph`) | 9,0% | -1,5 punti |
+| senza layer per cella (`nolayer`) | 9,4% | -1 punto (sposta lavoro sul thread principale: non adottato); un layer per riga (`rowlayer`): 10,8%, niente |
+| senza dissolvenza (`nofade`) | 11,3% | nessun guadagno |
+| fondale di vetro fermo mentre si scorre (`frozen`, opzione dell'engine) | 10,9% | **nessun guadagno**: il vetro in movimento non e' la causa |
+| senza miniature (`nothumb`) | 9,8% | -1 punto |
+| senza miniature, segnaposto e segni | 6,0% | quello che resta e' la griglia nuda + vetro |
+
+#### Correzione (commit `a0a0f4be`)
+`GalleryGridRowPresence`: **la riga** disegna i dischi di presenza di tutte le sue celle, dopo le foto (un nodo per riga, ultimo figlio, con il suo layer), in tre passate (prima i fondi, poi i fili, poi i glifi), e le celle della Libreria (`MediaGrid`) si disegnano senza il disco. Disegni uguali uno dopo l'altro la GPU li unisce: `CircleOp` da ~282 a ~20 a fotogramma, RenderThread (`Drawing`) da 7,8 a 6,8 ms. Cio' che si vede e' identico: stesse misure (`badgeSlots`), stesso ordine sopra la foto, i dischi non si sovrappongono fra loro, e la cella premuta rimpicciolisce ancora il suo disco; prova nuova `GalleryRowPresenceTest` (la stessa riga disegnata nei due modi, a riposo e con una cella premuta: **zero pixel diversi**). Gli altri schermi (Album, Mappa, Ricordi, Persone, Cerca) usano ancora il disco della cella. Test unitari: `:core-designsystem:testDebugUnitTest` 251 prove, `:feature-library:testDebugUnitTest` 1.052 prove, tutte verdi.
+
+**Rischi per l'S25** (non misurato: non c'e'): le stesse righe girano li'; a Anni (58 dp) la riga non aggiunge nessun nodo (sotto il lato minimo dei segni, `drawsAt`); da Mesi in su i dischi si disegnano come prima (pixel identici) con meno disegni per la GPU e un nodo in piu' per riga (4 piccoli array per riga, ricordati per layout e vista). Rischio basso; da guardare con la prossima corsa sull'S25 (`scroll_months_square`, `scroll_days_square`, `scroll_all_square`).
+
+#### Cosa resta (non e' una correzione, non provato)
+- **~440 `FillRectOp` a fotogramma** (foto e segnaposto): a Anni a 5.000 dp/s servirebbero ~1.000 miniature al secondo, il caricatore (4 lavori insieme, richieste in ordine di riga, circa il 40% delle righe passa dal MediaProvider) non ci arriva: la cella entra sul segnaposto e la foto arriva dopo, in dissolvenza, quindi per un po' si disegnano **due** rettangoli per cella. Da provare: ordine delle richieste dal bordo da cui entrano le celle, piu' lavori insieme ai livelli densi, finestra "avanti" piu' lunga a velocita' alta. I numeri sopra dicono che vale ~1-1,5 punti.
+- **Il vetro e lo strato fuori schermo della pagina** (~22 passaggi a fotogramma, engine): non e' il vetro in movimento (`frozen` non cambia niente) ma il costo fisso del materiale; lavoro della fase grafica.
+- **Righe nuove**: ~6 ms di creazione dei nodi per riga a Anni (16 celle): per scendere serve la riga in un solo nodo (con la semantica delle celle da rivedere).
+- **Mesi** (3,3-3,7%) ha lo stesso profilo con meno celle: per arrivare al 2% valgono gli stessi punti. Da provare: la riga dei dischi solo dove le celle sono piccole (Anni), lasciando il disco alla cella da Mesi in su, se una corsa di confronto dice che il nodo in piu' costa.
+- **Viewer**: non toccato (nessuna correzione economica cercata in questo giro).
+
+#### Difetti trovati fuori dal pacchetto
+- **La preparazione del dataset dopo un'installazione pulita cade ancora** (terza volta: il 03/11 `no such table: search_history`; oggi, in due tentativi di fila, ancora quella e poi `SQLiteDatabaseLockedException: database is locked` in `syncTriggers` di Room da `AppIndexerControl`): la sonda aspetta tutti i 1.200 s e salta le prove. Aggirato avviando a mano l'app di misura (il marcatore c'era gia') e riprovando alla morte del processo: la preparazione vera dura 53 s. Va corretto nel seeder / nel provider della variante di misura.
+- **`benchDiag` con le tracce di Anni va in timeout** (`SocketTimeoutException` del processore di tracce al terzo giro di `scroll_years_square`, tracce da ~300 MB): le interrogazioni con sottointerrogazioni correlate di `FrameDiagMetric` (`JANK`, `TL`, `RTJ`) sono troppo lente; la prova fallisce e non salva i numeri. Per Anni serve un'altra diagnosi (o le tracce interrogate a parte, come qui).

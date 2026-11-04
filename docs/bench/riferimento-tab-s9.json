@@ -1,0 +1,30 @@
+{
+  "formato": 1,
+  "dispositivo": "tab-s9",
+  "modello": "SM-X710",
+  "sdk": 36,
+  "frequenzaHz": 120,
+  "data": "2026-11-04",
+  "origine": "Tab S9, 04/11 (main dd05068e), fuori soglia noti",
+  "variante": "benchmarkRelease",
+  "prove": {
+    "scroll_all_justified": { "jankPercent.mean": 1.784, "frameDurationCpuMs.P95": 12.7056 },
+    "scroll_days_square": { "jankPercent.mean": 1.9646, "frameDurationCpuMs.P95": 13.5748 },
+    "scroll_years_justified": { "jankPercent.mean": 8.8182, "frameDurationCpuMs.P95": 19.9492 },
+    "scroll_days_justified": { "jankPercent.mean": 2.1572, "frameDurationCpuMs.P95": 13.4316 },
+    "scroll_months_square": { "jankPercent.mean": 4.0976, "frameDurationCpuMs.P95": 16.5956 },
+    "scroll_years_square": { "jankPercent.mean": 12.1233, "frameDurationCpuMs.P95": 21.7532 },
+    "scroll_all_square": { "jankPercent.mean": 1.9329, "frameDurationCpuMs.P95": 12.8937 },
+    "scroll_months_justified": { "jankPercent.mean": 3.4775, "frameDurationCpuMs.P95": 14.9814 },
+    "pinch": { "jankPercent.mean": 5.4662, "frameDurationCpuMs.P95": 18.1595 },
+    "coldStart": { "libraryUsefulMs.p90": 1070.6722, "timeToFullDisplayMs.p90": 1070.6722 },
+    "coldStartUsual": { "libraryUsefulMs.p90": 696.9186, "timeToFullDisplayMs.p90": 897.7807 },
+    "viewerOpen": { "viewerOpenMs.p90": 26.7193, "viewerOpenMaxFrameMs.max": 98.0194 },
+    "memoriesGenerate": { "memoriesGenerateMs.max": 2750.7696, "memoriesLightMs.max": 83.1189, "memoriesGenerateMs.median": 2282.3765, "memoriesLightMs.median": 31.0382 },
+    "collectionsScroll": { "jankPercent.mean": 1.4518, "frameDurationCpuMs.P95": 12.3473 },
+    "memoriesLoadedScroll": { "jankPercent.mean": 1.3976, "frameDurationCpuMs.P95": 12.0696 },
+    "panesScroll": { "jankPercent.mean": 1.7916, "frameDurationCpuMs.P95": 12.9471 },
+    "panesViewerSwap": { "viewerSwapMs.p90": 337.6682 },
+    "panesWindowsMemory": { "windowsPssKb.max": 716944 }
+  }
+}

@@ -16202,3 +16202,26 @@ Branch `perf/tablet` (da `main` `6c4b9309`, engine 3.0.4), un solo agente. Misur
 
 ### Cosa resta da fare
 Rimisurare con una corsa pulita (Gradle, una classe per volta, `benchDatasetTimeoutS=1200`) `ViewerBenchmark`, `LibraryPinchBenchmark`, `LibraryScrollBenchmark` (le quattro quadrate), `PanesBenchmark`, `MemoriesBenchmark`, `StartupBenchmark`, poi `compare.ps1 -RefreshHz 120` e, se buona, `compare.ps1 -Accept -RefreshHz 120 -Origin "Tab S9, 03/11"`; applicare le soglie sopra; `tools\check.ps1 -NoDaemon`. La modifica `badges != this.badges` della cella (non compilata nell'ultimo APK, banale) e' nel commit `67719c28`.
+
+### Misura pulita del 04/11 (main `dd05068e`, una corsa Gradle con le sei classi) e riferimento del tablet
+Corsa unica sul Tab S9 dopo l'integrazione (`ViewerBenchmark`, `LibraryPinchBenchmark`, `LibraryScrollBenchmark`, `PanesBenchmark`, `MemoriesBenchmark`, `StartupBenchmark`; `benchDatasetTimeoutS=1200`), 2 h 34 min. Numeri, contro il 03/11:
+
+| Scenario | 03/11 | 04/11 |
+|---|---|---|
+| `viewerOpen` `viewerOpenMaxFrameMs` | 110 la prima iterazione, poi 40-54 (mediana 50) | **98** la prima, poi 31-48 (mediana ~41) |
+| `viewerOpen` `viewerOpenMs` p90 | 32,6 | 26,7 |
+| `pinch` `jankPercent` | 6,35% | 5,47% |
+| `scroll_all_square` / `scroll_days_square` | 2,01% / 2,22% | 1,93% / 1,97% |
+| `scroll_months_square` / `scroll_years_square` | 2,18% / 2,19% | **4,10% / 12,12%** |
+| `scroll_*_justified` (all, days, months, years) | non girate | 1,78% / 2,16% / 3,48% / 8,82% |
+| `coldStartUsual` `libraryUsefulMs` p90 | 603 | 697 |
+| `coldStart` `libraryUsefulMs` p90 | non girava | 1.071 |
+| `collectionsScroll` / `panesScroll` | 1,43% / 1,56% | 1,45% / 1,79% |
+| `panesViewerSwap` p90 | 348 ms | 338 ms |
+| `memoriesGenerate` max | 2,5 s | 2,75 s |
+
+- **Il viewer** scende meno di quanto misurato il 03/11 sullo stesso APK (28 ms): in una corsa pulita il fotogramma piu' lungo tipico e' ~41 ms (era ~50) e la prima apertura dopo l'installazione resta ~100 ms per la compilazione dei programmi grafici (la cache di Android li tiene fra un avvio e l'altro: lo si paga una volta per aggiornamento).
+- **Mesi e Anni con ogni probabilita' non sono peggiorati: il 03/11 non si misuravano.** Il menu della vista sul tablet scorre e la vecchia guida non trovava le voci; le quattro prove "quadrate" del 03/11 hanno numeri quasi uguali (2,0-2,2%), segno che giravano tutte allo stesso livello. Con la guida corretta (`13e5509b`) il livello Anni e' misurato per la prima volta: 16 colonne di celle minuscole, `frameDurationCpuMs` P50 13 ms contro gli 8,3 ms dei 120 Hz. E' il problema piu' grosso rimasto sul tablet.
+- `panesZoneOpen` non passa ancora ("la griglia della zona non si apre dalle bolle"); `widgetUpdateTablet` resta fuori dalla corsa (pilota che a volte non risponde).
+
+**Riferimento del tablet** (`docs/bench/riferimento-tab-s9.json`) accettato con `-Force` da questa corsa, con i fuori soglia noti: serve da guardia di regressione (riferimento + 10/15%) per la fase grafica e per le prossime modifiche, senza allentare le soglie assolute (che li mostrano come gia' fuori nel riferimento). Le soglie del tablet proposte sopra **non** sono applicate: dopo questa misura il viewer (33,4 ms) e gli scorrimenti a Mesi e Anni (2%) non le rispetterebbero, quindi si decidono con l'utente insieme al lavoro sul livello Anni e sul vetro (fase grafica). Le soglie dell'S25 non cambiano.

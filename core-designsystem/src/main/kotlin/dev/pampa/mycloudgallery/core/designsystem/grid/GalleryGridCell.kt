@@ -346,6 +346,12 @@ class GalleryGridCellStyle internal constructor(
   }
 
   internal fun capsule(size: Size): Outline = FluidCapsuleShape.createOutline(size, layoutDirection, density)
+
+  private val prominentDisc: Outline by lazy(LazyThreadSafetyMode.NONE) { capsule(Size(metrics.presenceDisc, metrics.presenceDisc)) }
+  private val quietDisc: Outline by lazy(LazyThreadSafetyMode.NONE) { capsule(Size(metrics.quietDisc, metrics.quietDisc)) }
+
+  /** La sagoma del disco di presenza (intero per gli stati che dicono "guarda", piccolo per gli altri): una per stile, per le righe che lo disegnano ([GalleryGridRowPresence]). */
+  internal fun presenceOutline(prominent: Boolean): Outline = if (prominent) prominentDisc else quietDisc
 }
 
 /**

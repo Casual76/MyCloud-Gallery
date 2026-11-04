@@ -55,6 +55,8 @@ import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellActions
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellBadges
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellStyle
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryPresence
+import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridRowPresence
+import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryRowPresence
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
 import dev.pampa.mycloudgallery.core.designsystem.grid.forWidth
 import dev.pampa.mycloudgallery.core.designsystem.grid.galleryScrubberShouldShow
@@ -497,17 +499,48 @@ private fun CellsRow(context: GridRenderContext, layout: GridLayout, row: Int) {
   val count = layout.itemCountIn(row)
   val rowHeight = layout.rowHeight(row)
   Layout(
-    content = { for (position in first until first + count) GridCell(context, layout, position, rowHeight) },
+    content = {
+      for (position in first until first + count) GridCell(context, layout, position, rowHeight)
+      // L'ultimo figlio, se c'e': i dischi di presenza di tutta la riga, sopra le celle (vedi `GalleryGridRowPresence`).
+      RowPresence(context, layout, first, count, rowHeight)
+    },
     modifier = Modifier.fillMaxWidth(),
   ) { measurables, constraints ->
     val placeables = measurables.mapIndexed { i, measurable ->
-      measurable.measure(Constraints.fixed(layout.itemWidth(first + i).coerceAtLeast(1), rowHeight))
+      if (i < count) {
+        measurable.measure(Constraints.fixed(layout.itemWidth(first + i).coerceAtLeast(1), rowHeight))
+      } else {
+        measurable.measure(Constraints.fixed(constraints.maxWidth, rowHeight))
+      }
     }
     layout(constraints.maxWidth, rowHeight + context.gapPx) {
       // Ogni cella sul suo layer: una cella che si ridisegna (una miniatura arrivata) non ridisegna le vicine.
-      placeables.forEachIndexed { i, placeable -> placeable.placeWithLayer(layout.itemLeft(first + i), 0) }
+      placeables.forEachIndexed { i, placeable ->
+        if (i < count) placeable.placeWithLayer(layout.itemLeft(first + i), 0) else placeable.place(0, 0)
+      }
     }
   }
+}
+
+/**
+ * I dischi di presenza delle celle della riga, disegnati insieme dopo le foto (`GalleryGridRowPresence`): le celle non li disegnano piu'
+ * ([GridCell] le da' senza presenza). Una riga senza nessun disco (niente NAS, la Libreria del telefono sola) non aggiunge niente.
+ */
+@Composable
+private fun RowPresence(context: GridRenderContext, layout: GridLayout, first: Int, count: Int, rowHeight: Int) {
+  val view = context.view
+  val presence = remember(view, layout, first, count, rowHeight) {
+    val snapshot = view.snapshot
+    val indices = IntArray(count) { i -> view.snapshotIndex(layout.viewIndexAt(first + i)) }
+    GalleryRowPresence(
+      kinds = Array(count) { i -> snapshot.presenceAt(indices[i])?.toGallery() },
+      lefts = IntArray(count) { i -> layout.itemLeft(first + i) },
+      widths = IntArray(count) { i -> layout.itemWidth(first + i).coerceAtLeast(1) },
+      height = rowHeight,
+      keys = Array<Any>(count) { i -> snapshot.idAt(indices[i]) },
+    )
+  }
+  if (presence.any) GalleryGridRowPresence(presence, context.style, context.state.interaction)
 }
 
 @Composable
@@ -529,7 +562,8 @@ private fun GridCell(context: GridRenderContext, layout: GridLayout, position: I
   GalleryGridCell(
     key = id,
     image = image,
-    badges = badgesOf(snapshot.kindAt(index), snapshot.flagsAt(index), snapshot.presenceAt(index), { snapshot.durationMsAt(index) }, { snapshot.groupSizeAt(index) }),
+    // La presenza la disegna la riga ([RowPresence]): la cella porta gli altri segni.
+    badges = badgesOf(snapshot.kindAt(index), snapshot.flagsAt(index), null, { snapshot.durationMsAt(index) }, { snapshot.groupSizeAt(index) }),
     style = context.style,
     interaction = state.interaction,
     actions = context.actions,

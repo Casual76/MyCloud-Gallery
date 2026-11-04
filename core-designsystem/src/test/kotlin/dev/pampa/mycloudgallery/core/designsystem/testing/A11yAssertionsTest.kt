@@ -119,17 +119,18 @@ class A11yAssertionsTest {
   }
 
   @Test
-  fun unaEtichettaLungaInUnFluidButtonAHeightFissaSiLasciaPassareSoloInAltezza() {
+  fun unaEtichettaLungaInUnFluidButtonVaACapoSenzaUscireDalBottone() {
     show {
       val density = androidx.compose.ui.platform.LocalDensity.current
       CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, 2f)) {
-        // 50 dp di altezza fissa, 150 dp di larghezza: a testo 2,0 l'etichetta va a capo e le righe in piu' escono dal bottone.
+        // 150 dp di larghezza a testo 2,0: l'etichetta va a capo. Fino all'engine 3.0.3 il bottone aveva l'altezza fissa e le righe
+        // in piu' uscivano; dalla 3.0.4 il bottone cresce, quindi niente CLIPPED neanche senza il limite ammesso.
         FluidButton(text = "Apri il cestino di Galleria", onClick = {}, modifier = Modifier.width(150.dp), size = FluidButtonSize.Large)
       }
     }
     assertThat(rules()).doesNotContain("CLIPPED")
     val strict = A11yConfig(density = composeRule.density, allowRolelessRows = false, allowEngineButtonLabels = false)
-    assertThat(A11yAssertions.check(root(), strict).map { it.rule }).contains("CLIPPED")
+    assertThat(A11yAssertions.check(root(), strict).map { it.rule }).doesNotContain("CLIPPED")
   }
 
   @Test

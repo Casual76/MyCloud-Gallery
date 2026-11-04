@@ -186,6 +186,23 @@ function Test-Absolute($rule, $value) {
   return "OK"
 }
 
+# Una regola assoluta puo' avere un tetto **diverso per un dispositivo** (`perDispositivo`, con la chiave di `dispositivi` di soglie.json): il Tab S9
+# (decisione dell'utente del 03/11) ha soglie un po' piu' larghe di quelle del telefono, che non si allentano mai. Senza voce per il dispositivo la
+# regola e' quella di sempre. Restituisce una copia con `massimo` / `massimoEsclusivo` / `minimo` del dispositivo al posto di quelli generali.
+function Resolve-DeviceRule($rule, [string]$deviceKey) {
+  if (-not (Has-Property $rule "perDispositivo") -or -not (Has-Property $rule.perDispositivo $deviceKey)) { return $rule }
+  $over = $rule.perDispositivo.$deviceKey
+  $limits = @("massimo", "massimoEsclusivo", "minimo")
+  $copy = [pscustomobject]@{}
+  foreach ($prop in $rule.PSObject.Properties) {
+    if ($prop.Name -ne "perDispositivo" -and -not (($limits -contains $prop.Name) -and ($limits | Where-Object { Has-Property $over $_ }))) {
+      $copy | Add-Member -NotePropertyName $prop.Name -NotePropertyValue $prop.Value
+    }
+  }
+  foreach ($name in $limits) { if (Has-Property $over $name) { $copy | Add-Member -NotePropertyName $name -NotePropertyValue $over.$name } }
+  return $copy
+}
+
 # I motivi delle prove saltate, dai rapporti JUnit di AGP: nome della prova -> messaggio dell'Assume.
 function Read-SkippedTests([string]$dir) {
   $skipped = @{}
@@ -281,7 +298,8 @@ function Invoke-Evaluation($thr, $benches, [string]$deviceKey, $reference, $skip
         }
       }
       if (-not $valid) { continue }
-      foreach ($rule in @($scenario.assolute)) {
+      foreach ($generalRule in @($scenario.assolute)) {
+        $rule = Resolve-DeviceRule $generalRule $deviceKey
         $value = Get-StatValue $bench $rule.metrica $rule.statistica
         $label = "$($rule.metrica) $($rule.statistica)"
         if ($null -eq $value) {
@@ -423,6 +441,13 @@ if ($SelfTest) {
   Assert-That ((Get-Percentile @(1, 2, 3, 4, 5, 6, 7, 8, 9, 10) 90) -eq 9) "p90 di 1..10 deve essere 9"
   Assert-That ((Get-Percentile @(5) 99) -eq 5) "p99 di un solo valore"
   Assert-That ($null -eq (Get-Percentile @() 50)) "percentile di una lista vuota"
+
+  # Soglie per dispositivo: il tetto del Tab S9 e' piu' largo, quello del telefono resta com'e'.
+  $ruleOver = '{ "metrica": "jankPercent", "statistica": "mean", "massimo": 1.0, "spiega": "x", "perDispositivo": { "tab-s9": { "massimo": 3.0 } } }' | ConvertFrom-Json
+  Assert-That ((Test-Absolute (Resolve-DeviceRule $ruleOver "tab-s9") 2.5) -eq "OK") "soglia per dispositivo: 2,5 passa sul Tab S9 (tetto 3)"
+  Assert-That ((Test-Absolute (Resolve-DeviceRule $ruleOver "s25") 2.5) -eq "FAIL") "soglia per dispositivo: 2,5 non passa sull'S25 (tetto 1)"
+  Assert-That ((Get-LimitText (Resolve-DeviceRule $ruleOver "tab-s9")) -eq "<= 3") "soglia per dispositivo: il limite scritto e' quello del Tab S9"
+  Assert-That ((Resolve-DeviceRule $ruleOver "tab-s9").spiega -eq "x") "soglia per dispositivo: la copia tiene gli altri campi"
 
   $good = Read-Json (Join-Path $samples "s25-buono.json")
   $bad = Read-Json (Join-Path $samples "s25-regressione.json")

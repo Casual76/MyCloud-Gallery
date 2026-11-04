@@ -49,6 +49,41 @@ class LibraryUsefulMetric : TraceMetric() {
 }
 
 /**
+ * Il **tempo al primo e al pieno disegno**, letti dalla traccia con le stesse regole di `StartupTimingMetric` ma **senza** associare il fotogramma
+ * dell'interfaccia a quello del RenderThread per id di vsync: sul Tab S9 (03/11), nell'avvio `StartupMode.COLD` (pipeline grafiche buttate, primi
+ * fotogrammi lunghi e "resynced"), quell'associazione non trovava il fotogramma dopo `reportFullyDrawn` e la prova cadeva con "No RT frame slice
+ * associated with UI thread frame slice ends after reportFullyDrawn" prima di misurare. Qui il fotogramma "dopo" e' il primo `DrawFrames` del
+ * RenderThread che comincia dopo il segno.
+ *
+ * - `timeToInitialDisplayMs`: la durata della sezione `launching: <pacchetto>` (dal lancio alla prima schermata mostrata);
+ * - `timeToFullDisplayMs`: dal lancio alla fine del primo fotogramma dopo `reportFullyDrawn` (se l'app non lo chiama, la misura manca).
+ */
+@OptIn(ExperimentalMetricApi::class)
+class StartupDisplayMetric : TraceMetric() {
+
+  override fun getMeasurements(captureInfo: Metric.CaptureInfo, traceSession: TraceProcessor.Session): List<Metric.Measurement> {
+    val pkg = captureInfo.targetPackageName
+    val launch = traceSession
+      .query("SELECT ts, dur FROM slice WHERE name = 'launching: $pkg' ORDER BY ts LIMIT 1")
+      .map { it.long("ts") to it.long("dur") }
+      .firstOrNull()
+      ?: return emptyList()
+    val (start, dur) = launch
+    val out = ArrayList<Metric.Measurement>()
+    if (dur > 0) out += Metric.Measurement("timeToInitialDisplayMs", dur / FrameQueries.NANOS_PER_MILLI)
+    val fully = traceSession
+      .query("SELECT ts FROM slice WHERE name GLOB 'reportFullyDrawn*' AND ts >= $start ORDER BY ts LIMIT 1")
+      .map { it.long("ts") }
+      .firstOrNull()
+    if (fully != null) {
+      val end = AvvioQueries.frameEndAfter(traceSession, pkg, fully) ?: fully
+      out += Metric.Measurement("timeToFullDisplayMs", (end - start) / FrameQueries.NANOS_PER_MILLI)
+    }
+    return out
+  }
+}
+
+/**
  * L'apertura di una pagina principale (Raccolte, un album, Persone, Cerca a riposo): la durata della sezione asincrona
  * [section] che l'app apre al tocco e chiude al primo fotogramma con l'ultimo stato o lo scheletro, piu' il fotogramma del
  * RenderThread che la segue. Una sola apertura per iterazione. Senza la sezione: `<nome>Missing` = 1.

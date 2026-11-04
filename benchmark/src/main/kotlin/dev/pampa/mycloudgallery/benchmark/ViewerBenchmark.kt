@@ -38,7 +38,7 @@ class ViewerBenchmark {
   fun viewerOpen() {
     rule.measureRepeated(
       packageName = BenchSession.targetPackage,
-      metrics = listOf(ViewerOpenMetric(), FrameTimingMetric(), LibraryMixMetric()),
+      metrics = listOf(ViewerOpenMetric(), FrameTimingMetric(), LibraryMixMetric(), FrameDiagMetric(openingWindowNs = 500_000_000L)),
       compilationMode = BenchConfig.compilationMode,
       iterations = BenchConfig.iterations(ITERATIONS),
       setupBlock = {

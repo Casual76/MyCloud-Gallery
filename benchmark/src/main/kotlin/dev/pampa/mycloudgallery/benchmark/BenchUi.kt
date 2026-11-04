@@ -240,7 +240,7 @@ object BenchUi {
         Thread.sleep(LEVEL_SETTLE_MS)
         return awaitGrid(device) != null
       }
-      if (!device.hasObject(GRID_IN_APP)) {
+      if (device.hasObject(MENU_ENTRIES) || !device.hasObject(GRID_IN_APP)) {
         // Il menu e' aperto ma la voce non c'e': lo si chiude.
         back(device)
         device.wait(Until.hasObject(GRID_IN_APP), MENU_TIMEOUT_MS)
@@ -272,7 +272,7 @@ object BenchUi {
         device.waitForIdle()
         return awaitGrid(device) != null
       }
-      if (!device.hasObject(GRID_IN_APP)) {
+      if (device.hasObject(MENU_ENTRIES) || !device.hasObject(GRID_IN_APP)) {
         // Il menu e' aperto (la pagina sotto e' nascosta) ma la voce non c'e': lo si chiude.
         back(device)
         device.wait(Until.hasObject(GRID_IN_APP), MENU_TIMEOUT_MS)
@@ -284,14 +284,31 @@ object BenchUi {
   /**
    * La voce [label] del menu appena toccato: si aspetta finche' compare o finche' la griglia torna visibile senza che
    * [menuIsOpen] dica che il menu si sta aprendo (il tocco non l'ha aperto).
+   *
+   * Sul Tab S9 in orizzontale (03/11, engine 3.0: menu a goccia) il menu e' piu' alto dello schermo e **scorre**: le voci dello stile
+   * stanno sotto il bordo e UiAutomator non le vede finche' non si scorre; inoltre il menu scorrevole combacia con [GRID_IN_APP]
+   * (e' "scorrevole" anche lui), quindi la griglia non si distingue piu' dal menu. Il menu si riconosce dalle sue voci
+   * ([MENU_ENTRIES]); se la voce non si vede ma il menu c'e', si scorre il menu (in giu', poi in su) e si riprova.
    */
   private fun awaitMenuItem(device: UiDevice, label: String, menuIsOpen: () -> Boolean): UiObject2? {
     val start = System.currentTimeMillis()
+    var scrolls = 0
     while (System.currentTimeMillis() - start < MENU_OPEN_TIMEOUT_MS) {
       refreshAccessibilityTree()
       device.wait(Until.findObject(By.text(label)), MENU_POLL_MS)?.let { return it }
+      val open = menuIsOpen() || device.hasObject(MENU_ENTRIES)
+      if (open) {
+        // Il menu c'e' ma la voce no: sta sotto (o sopra) il bordo. Due scorrimenti in giu', due in su, poi di nuovo.
+        val menu = device.findObject(By.pkg(BenchSession.targetPackage).scrollable(true))
+        if (menu != null) {
+          val direction = if ((scrolls / MENU_SCROLLS_PER_WAY) % 2 == 0) Direction.DOWN else Direction.UP
+          runCatching { menu.scroll(direction, MENU_SCROLL_PERCENT) }
+          scrolls++
+        }
+        continue
+      }
       // Griglia ancora visibile e nessuna voce dopo un po': il tocco non ha aperto il menu.
-      val notOpening = device.hasObject(GRID_IN_APP) && !menuIsOpen()
+      val notOpening = device.hasObject(GRID_IN_APP)
       if (notOpening && System.currentTimeMillis() - start > MENU_GRACE_MS) return null
     }
     return null
@@ -387,9 +404,16 @@ object BenchUi {
   private const val MENU_OPEN_TIMEOUT_MS = 8_000L
   private const val MENU_POLL_MS = 500L
   private const val MENU_GRACE_MS = 3_000L
+  private const val MENU_SCROLLS_PER_WAY = 2
+  private const val MENU_SCROLL_PERCENT = 0.8f
 
   /** La lista dell'app sotto misura: nascosta all'accessibilita' mentre un pop-up e' aperto. */
   private val GRID_IN_APP: BySelector get() = By.pkg(BenchSession.targetPackage).scrollable(true)
+
+  /** Le voci dei livelli e dello stile: ci sono solo nel menu della vista (i livelli non hanno piu' i segmenti), quindi dicono se il menu e' aperto. */
+  private val MENU_ENTRIES: BySelector get() = By.pkg(BenchSession.targetPackage).text(
+    Pattern.compile("^(" + (BenchLevel.entries.map { it.label } + BenchStyle.entries.map { it.label }).joinToString("|") { Pattern.quote(it) } + ")$"),
+  )
 
   /** Le due voci dello stile: ci sono solo nel menu della vista, quindi dicono se il menu e' aperto. */
   private val STYLE_ITEMS: BySelector = By.text(Pattern.compile("^(${BenchStyle.SQUARE.label}|${BenchStyle.JUSTIFIED.label})$"))

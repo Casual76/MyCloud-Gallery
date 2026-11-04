@@ -56,7 +56,7 @@ class LibraryScrollBenchmark {
     }
     rule.measureRepeated(
       packageName = BenchSession.targetPackage,
-      metrics = listOf(FrameTimingMetric(), FrameJankMetric(), LibraryMixMetric()),
+      metrics = listOf(FrameTimingMetric(), FrameJankMetric(), LibraryMixMetric(), FrameDiagMetric()),
       compilationMode = BenchConfig.compilationMode,
       iterations = BenchConfig.iterations(ITERATIONS),
       setupBlock = {

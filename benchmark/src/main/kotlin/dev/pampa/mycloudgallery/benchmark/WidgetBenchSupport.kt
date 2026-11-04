@@ -193,6 +193,7 @@ class WidgetSectionsMetric : TraceMetric() {
     if (blanks.isNotEmpty()) out += Metric.Measurement("widgetBlankMs", blanks.max())
     val valid = WidgetBenchState.bound && WidgetBenchState.allRoundsFinished && updates.size >= MIN_UPDATES && blanks.size >= MIN_BLANKS
     out += Metric.Measurement("widgetValid", if (valid) 1.0 else 0.0)
+    android.util.Log.i("MCG-Bench", "widget: aggiornamenti=${updates.size} svuotamenti=${blanks.size} misure=" + out.joinToString { it.name + "=" + it.data })
     return out
   }
 

@@ -526,6 +526,10 @@ private class GalleryGridCellNode(
     actions: GalleryGridCellActions,
   ) {
     val newItem = key != this.key || image !== this.image
+    // Cio' che il lettore di schermo legge cambia con un'altra cella, con i segni (preferito, presenza, illeggibile...) e con la miniatura (o il ripiego) che c'e' o non
+    // c'e': per il resto (la stessa cella che si ridisegna) la semantica non si invalida. Ogni invalidazione costa una chiamata al sistema se un servizio di
+    // accessibilita' (o UiAutomation) e' acceso: sul Tab S9 erano ~0,13 ms a cella, 98 celle in un cambio di livello.
+    val semanticsChanged = newItem || badges != this.badges || (fallback == null) != (this.fallback == null)
     this.key = key
     this.image = image
     this.fallback = fallback
@@ -542,7 +546,7 @@ private class GalleryGridCellNode(
     }
     if (isAttached) observe(initial = newItem)
     cache.invalidateDrawCache()
-    invalidateSemantics()
+    if (semanticsChanged) invalidateSemantics()
   }
 
   private fun observe(initial: Boolean) {
@@ -567,12 +571,14 @@ private class GalleryGridCellNode(
           imageAlpha.snapTo(0f)
           imageAlpha.animateTo(1f, FluidMotion.fadeIn())
         }
-      } else {
+      } else if (imageAlpha.value != 1f || imageAlpha.isRunning) {
+        // Una coroutine per cella (e il suo `CoroutineScope`) costava ~0,13 ms: si lancia solo se c'e' davvero da riportare l'alfa a 1.
         coroutineScope.launch { imageAlpha.snapTo(1f) }
       }
       cache.invalidateDrawCache()
-      // "In caricamento" vale finche' la miniatura non c'e': si aggiorna solo quando arriva o se ne va.
-      if (loadedChanged || initial) invalidateSemantics()
+      // "In caricamento" vale finche' la miniatura non c'e': si aggiorna solo quando arriva o se ne va. A un nodo appena agganciato (`initial`) la semantica
+      // la invalida gia' l'aggancio al `LayoutNode`, e a uno riusato `update`: qui non si ripete.
+      if (loadedChanged && !initial) invalidateSemantics()
     }
     if (newPressed != isPressed) {
       isPressed = newPressed
@@ -591,7 +597,8 @@ private class GalleryGridCellNode(
       }
       invalidateSemantics()
     } else if (initial) {
-      coroutineScope.launch { selectedProgress.snapTo(if (newSelected) 1f else 0f) }
+      val target = if (newSelected) 1f else 0f
+      if (selectedProgress.value != target || selectedProgress.isRunning) coroutineScope.launch { selectedProgress.snapTo(target) }
     }
   }
 

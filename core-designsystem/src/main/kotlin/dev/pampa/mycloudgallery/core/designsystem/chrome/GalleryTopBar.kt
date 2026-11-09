@@ -172,6 +172,11 @@ fun GalleryTopBar(
   onPhoto: Boolean = false,
   onNavigate: (() -> Unit)? = null,
   navigationIcon: GalleryNavigationIcon = GalleryNavigationIcon.Back,
+  /**
+   * Il tasto di navigazione e' il tasto di vetro dell'engine ([GalleryGlassIconButton]) e non [GalleryBarButton]: e' quello del viewer, che con le azioni a destra ha lo stesso vetro.
+   * Di serie no: il resto dell'app tiene il suo tasto.
+   */
+  fluidButtons: Boolean = false,
   actions: @Composable RowScope.() -> Unit = {},
 ) {
   val scheme = MaterialTheme.colorScheme
@@ -234,7 +239,7 @@ fun GalleryTopBar(
             verticalAlignment = Alignment.CenterVertically,
           ) {
             if (onNavigate != null) {
-              NavigationButton(onNavigate, navigationIcon)
+              NavigationButton(onNavigate, navigationIcon, fluidButtons)
             } else {
               Spacer(Modifier.width(FluidScreenDefaults.HorizontalPadding))
             }
@@ -255,21 +260,22 @@ fun GalleryTopBar(
 }
 
 @Composable
-private fun NavigationButton(onNavigate: () -> Unit, icon: GalleryNavigationIcon) {
-  GalleryBarButton(
-    icon = when (icon) {
-      GalleryNavigationIcon.Back -> Icons.AutoMirrored.Rounded.ArrowBackIos
-      GalleryNavigationIcon.Close -> Icons.Rounded.Close
+private fun NavigationButton(onNavigate: () -> Unit, icon: GalleryNavigationIcon, fluid: Boolean) {
+  val vector = when (icon) {
+    GalleryNavigationIcon.Back -> Icons.AutoMirrored.Rounded.ArrowBackIos
+    GalleryNavigationIcon.Close -> Icons.Rounded.Close
+  }
+  val description = stringResource(
+    when (icon) {
+      GalleryNavigationIcon.Back -> R.string.topbar_back
+      GalleryNavigationIcon.Close -> R.string.topbar_close
     },
-    contentDescription = stringResource(
-      when (icon) {
-        GalleryNavigationIcon.Back -> R.string.topbar_back
-        GalleryNavigationIcon.Close -> R.string.topbar_close
-      },
-    ),
-    onClick = onNavigate,
-    modifier = Modifier.padding(start = ActionEndInset),
   )
+  if (fluid) {
+    GalleryGlassIconButton(icon = vector, contentDescription = description, onClick = onNavigate, modifier = Modifier.padding(start = ActionEndInset))
+  } else {
+    GalleryBarButton(icon = vector, contentDescription = description, onClick = onNavigate, modifier = Modifier.padding(start = ActionEndInset))
+  }
 }
 
 private val ActionSpacing = 2.dp

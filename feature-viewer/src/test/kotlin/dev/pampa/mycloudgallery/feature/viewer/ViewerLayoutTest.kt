@@ -13,7 +13,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
@@ -36,9 +35,9 @@ class ViewerLayoutTest : ViewerTestBase() {
     val services = services()
     tester.setContent { ViewerTestHost { ViewerOverlay(request = request, onClosed = { closed++ }, services = services) } }
     composeRule.waitForIdle()
-    pager().performTouchInput { swipeLeft() }
+    pager().performTouchInput { swipeToNext() }
     composeRule.waitForIdle()
-    pager().performTouchInput { swipeLeft() }
+    pager().performTouchInput { swipeToNext() }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription("7 di 50").assertExists()
     pager().performTouchInput { click(center) }
@@ -108,7 +107,7 @@ class ViewerLayoutTest : ViewerTestBase() {
     composeRule.onNode(zoomedMatcher()).assertExists()
     var swipes = 0
     while (swipes < 12 && composeRule.onAllNodesWithContentDescription("6 di 50").fetchSemanticsNodes().isEmpty()) {
-      pager().performTouchInput { swipeLeft() }
+      pager().performTouchInput { swipeToNext() }
       composeRule.waitForIdle()
       swipes++
     }

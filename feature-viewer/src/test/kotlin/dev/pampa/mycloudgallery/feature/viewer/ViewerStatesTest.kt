@@ -8,7 +8,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.imaging.contract.ImageFailure
 import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
@@ -111,7 +110,7 @@ class ViewerStatesTest : ViewerTestBase() {
     show(services = services(imageSource = source))
     composeRule.mainClock.autoAdvance = false
     repeat(14) {
-      pager().performTouchInput { swipeLeft(durationMillis = 60) }
+      pager().performTouchInput { swipeToNext(durationMillis = 60) }
       composeRule.mainClock.advanceTimeBy(120)
     }
     composeRule.mainClock.advanceTimeBy(400)

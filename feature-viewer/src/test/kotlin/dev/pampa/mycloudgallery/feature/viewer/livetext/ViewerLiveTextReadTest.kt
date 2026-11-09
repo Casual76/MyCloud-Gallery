@@ -10,12 +10,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
-import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.unit.dp
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeViewerTextReader
 import org.junit.Test
+import dev.pampa.mycloudgallery.feature.viewer.swipeToNext
+import dev.pampa.mycloudgallery.feature.viewer.swipeToPrevious
 
 /**
  * La lettura del testo e i punti d'ingresso del testo dal vivo sul viewer vero (Fase 6, P12; D41, D42, D46; E-V9, E-H1): con la lettura
@@ -198,12 +198,12 @@ class ViewerLiveTextReadTest : LiveTextViewerBase() {
     longPress(at(text, 0, 1))
     composeRule.onNodeWithContentDescription("Copia").performClick()
     composeRule.waitForIdle()
-    pager().performTouchInput { swipeLeft() }
+    pager().performTouchInput { swipeToNext() }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription("${startIndex + 2} di ${fixture.library.count}").assertExists()
     assertThat(hasNode("Testo nella foto")).isFalse()
     assertThat(hasTalkBackAction()).isFalse()
-    pager().performTouchInput { swipeRight() }
+    pager().performTouchInput { swipeToPrevious() }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription(pageLabel).assertExists()
     assertThat(hasNode("Testo nella foto")).isTrue()

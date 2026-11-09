@@ -196,16 +196,28 @@ fun GalleryMenuButton(
   modifier: Modifier = Modifier,
   contentDescription: String = stringResource(R.string.topbar_more),
   backdrop: GlassBackdropState = currentGlassBackdrop(),
+  /** Il tasto e' quello di vetro dell'engine ([GalleryGlassIconButton]), come il tasto di chiusura del viewer, e non [GalleryBarButton]. Solo il viewer lo chiede. */
+  glassButton: Boolean = false,
 ) {
   var open by remember { mutableStateOf(false) }
   var bounds by remember { mutableStateOf<Rect?>(null) }
-  GalleryBarButton(
-    icon = Icons.Rounded.MoreVert,
-    contentDescription = contentDescription,
-    onClick = { open = true },
-    modifier = modifier.onGloballyPositioned { bounds = it.boundsInRoot() },
-    backdrop = backdrop,
-  )
+  if (glassButton) {
+    GalleryGlassIconButton(
+      icon = Icons.Rounded.MoreVert,
+      contentDescription = contentDescription,
+      onClick = { open = true },
+      modifier = modifier.onGloballyPositioned { bounds = it.boundsInRoot() },
+      backdrop = backdrop,
+    )
+  } else {
+    GalleryBarButton(
+      icon = Icons.Rounded.MoreVert,
+      contentDescription = contentDescription,
+      onClick = { open = true },
+      modifier = modifier.onGloballyPositioned { bounds = it.boundsInRoot() },
+      backdrop = backdrop,
+    )
+  }
   FluidGlassModalPortal(
     visible = open,
     onDismissRequest = { open = false },

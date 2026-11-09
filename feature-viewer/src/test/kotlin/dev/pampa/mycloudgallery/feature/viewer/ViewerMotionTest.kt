@@ -20,7 +20,6 @@ import androidx.compose.ui.test.centerY
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipeDown
-import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.up
@@ -252,7 +251,7 @@ class ViewerMotionTest : ViewerTestBase() {
     settle()
     assertThat(player.loads).hasSize(1)
     repeat(3) {
-      pager().performTouchInput { swipeLeft() }
+      pager().performTouchInput { swipeToNext() }
       composeRule.waitForIdle()
     }
     assertThat(player.calls).contains(PlayerCall.Stop)

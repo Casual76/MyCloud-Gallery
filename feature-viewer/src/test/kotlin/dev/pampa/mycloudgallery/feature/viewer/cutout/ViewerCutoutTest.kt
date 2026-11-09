@@ -15,12 +15,12 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
-import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.unit.dp
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextTestLines
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeCutoutSaver
 import org.junit.Test
+import dev.pampa.mycloudgallery.feature.viewer.swipeToNext
 
 /**
  * Il ritaglio del soggetto sul viewer vero (Fase 6, P13; D44, D45, D47; E-V10, E-V11, E-V13): la pressione prolungata sul soggetto lo stacca e
@@ -186,7 +186,7 @@ class ViewerCutoutTest : CutoutViewerBase() {
   fun conIlSoggettoStaccatoIlPagerEIlTrascinamentoVersoIlBassoSonoFermi() {
     showCutout()
     pressRobot()
-    pager().performTouchInput { swipeLeft() }
+    pager().performTouchInput { swipeToNext() }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription(pageLabel).assertExists()
     pager().performTouchInput { swipeDown() }
@@ -215,7 +215,7 @@ class ViewerCutoutTest : CutoutViewerBase() {
     composeRule.waitForIdle()
     assertThat(hasNode(COPY)).isFalse()
     composeRule.onNodeWithContentDescription("Chiudi").assertExists()
-    pager().performTouchInput { swipeLeft() }
+    pager().performTouchInput { swipeToNext() }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription("${startIndex + 2} di ${fixture.library.count}").assertExists()
   }

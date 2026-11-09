@@ -29,15 +29,16 @@ class ViewerKeyboardTest : ViewerTestBase() {
   }
 
   @Test
-  fun laFrecciaDestraVaAllaFotoDopo_laSinistraAQuellaPrima() {
+  fun laFrecciaSinistraVaAllaFotoPiuVecchia_laDestraAQuellaPiuRecente() {
+    // B5: nella Libreria la posizione 0 e' la piu' recente e le piu' vecchie stanno a sinistra: la freccia sinistra va a sinistra, cioe' alla posizione dopo.
     show()
     composeRule.onNodeWithContentDescription("5 di 50").assertExists()
 
-    press(Key.DirectionRight)
-    composeRule.onNodeWithContentDescription("6 di 50").assertExists()
-    press(Key.DirectionRight)
-    composeRule.onNodeWithContentDescription("7 di 50").assertExists()
     press(Key.DirectionLeft)
+    composeRule.onNodeWithContentDescription("6 di 50").assertExists()
+    press(Key.DirectionLeft)
+    composeRule.onNodeWithContentDescription("7 di 50").assertExists()
+    press(Key.DirectionRight)
     composeRule.onNodeWithContentDescription("6 di 50").assertExists()
   }
 

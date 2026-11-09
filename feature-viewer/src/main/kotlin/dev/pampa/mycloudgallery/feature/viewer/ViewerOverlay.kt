@@ -10,6 +10,7 @@ import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -55,6 +56,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -66,6 +68,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
 import androidx.lifecycle.Lifecycle
@@ -78,13 +81,17 @@ import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.antigravity.fluidengine.ui.fluidphysics.FluidCornerRadii
 import dev.antigravity.fluidengine.ui.fluidphysics.FluidForm
+import dev.antigravity.fluidengine.ui.fluidphysics.FluidMorphMenuHost
 import dev.antigravity.fluidengine.ui.fluidphysics.fluidPhysicsClip
+import dev.antigravity.fluidengine.ui.fluidphysics.rememberFluidMorphMenuState
 import dev.antigravity.fluidengine.ui.fluidphysics.rememberFluidPhysicsState
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryViewerMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryDismissSpec
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryExpandSpec
+import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryGlassGrowth
+import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryGlassMotion
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryViewerTransitionState
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryVideoBar
 import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryViewerChrome
@@ -254,6 +261,12 @@ private fun ViewerHost(
     view.viewIndexOf(state.currentId).takeIf { it >= 0 } ?: view.viewIndexOf(request.start).coerceAtLeast(0)
   }
   val pager = rememberPagerState(initialPage = startPage) { view.size }
+  // B5 (G3): le foto piu' vecchie a sinistra di quella aperta. Si decide una volta, all'apertura, dall'ordine della vista (vedi `ViewerPaging`): l'indice, gli id salvati, il ritorno alla
+  // cella e il precarico non cambiano, cambia da che parte sta ogni pagina; le frecce della tastiera vanno dove si vede, le azioni di TalkBack seguono la numerazione.
+  val layoutRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
+  val pagerOrder = remember(request) { ViewerPaging.orderOf(view) }
+  val reversePager = ViewerPaging.reverseLayout(pagerOrder, layoutRtl)
+  val leftDelta = ViewerPaging.leftPageDelta(reversePager, layoutRtl)
   val playback = remember(services.player, services.nasVideo) {
     ViewerPlayback(services.player ?: ViewerPlayerFactory { Media3ViewerPlayer(context, services.nasVideo) })
   }
@@ -445,7 +458,7 @@ private fun ViewerHost(
 
   // --- Tastiera (Fase 10, P4, D15, E-T10) --------------------------------------------------------------------------------
 
-  // Le frecce sinistra e destra spostano di una foto, solo a viewer a riposo e senza un foglio, una selezione del testo o un soggetto staccato aperti (come il pager, che in quei
+  // Le frecce sinistra e destra spostano di una foto (la sinistra va alla pagina che sta a sinistra, quale sia: B5), solo a viewer a riposo e senza un foglio, una selezione del testo o un soggetto staccato aperti (come il pager, che in quei
   // casi non scorre: E-V13). Esc e' il gesto Indietro, che `MainActivity` manda al gestore qui sopra; la rotella e' dello zoom (`ZoomableMedia`).
   fun stepPage(delta: Int): Boolean {
     if (!atRest || controller.closing || controller.sheet != null || controller.liveText.active || controller.cutout.active) return false
@@ -454,7 +467,7 @@ private fun ViewerHost(
     scope.launch { pager.animateScrollToPage(target) }
     return true
   }
-  val keyboard = Modifier.viewerKeyboard(ViewerKeyCallbacks(previous = { stepPage(-1) }, next = { stepPage(1) }))
+  val keyboard = Modifier.viewerKeyboard(ViewerKeyCallbacks(previous = { stepPage(leftDelta) }, next = { stepPage(-leftDelta) }))
 
   // --- Disegno ---------------------------------------------------------------------------------------------------------
 
@@ -523,6 +536,7 @@ private fun ViewerHost(
               panelPx = panelPx,
               atRest = { atRest },
               format = format,
+              reverseLayout = reversePager,
             )
             if (!atRest) {
               TransitionPhoto(controller = controller, services = services, origin = originRect)
@@ -561,6 +575,7 @@ private fun PagerLayer(
   panelPx: Float,
   atRest: () -> Boolean,
   format: ViewerFormat,
+  reverseLayout: Boolean,
 ) {
   val state = controller.state
   val pager = controller.pager
@@ -625,6 +640,8 @@ private fun PagerLayer(
         // tasti della barra, che i lettori di schermo raggiungono.
         customActions = buildList {
           val page = pager.currentPage
+          // B5: "successiva" e "precedente" seguono la numerazione ("5 di 50" -> "6 di 50") e lo scorrimento in avanti di TalkBack, non la direzione sullo schermo: chi non vede
+          // le pagine sentirebbe "foto successiva" portare al numero piu' basso. La freccia sinistra della tastiera, invece, va a sinistra (sopra).
           if (page + 1 < view.size) add(CustomAccessibilityAction(nextText) { scope.launch { pager.animateScrollToPage(page + 1) }; true })
           if (page > 0) add(CustomAccessibilityAction(previousText) { scope.launch { pager.animateScrollToPage(page - 1) }; true })
           add(CustomAccessibilityAction(infoText) { controller.toggleInfo(); true })
@@ -639,6 +656,7 @@ private fun PagerLayer(
       state = pager,
       modifier = Modifier.fillMaxSize().testTag(ViewerTags.Pager),
       pageSpacing = PageSpacing,
+      reverseLayout = reverseLayout,
       beyondViewportPageCount = if (neighbors) 1 else 0,
       // ... e con una selezione o un soggetto staccato aperti il pager non scorre: si chiude prima (E-V13).
       userScrollEnabled = atRest() && !controller.closing && !controller.liveText.active && !controller.cutout.active,
@@ -762,6 +780,9 @@ private fun ViewerOverlays(
   val resources = LocalResources.current
   val scope = rememberCoroutineScope()
   val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
+  // B4: il menu ⋮ si apre dalla goccia del tasto. Lo stato e' di questo viewer, e il suo host sta in fondo a `ViewerOverlays` (sopra tutto il resto, cosi' anche il suo Indietro
+  // vince su quelli del pannello informazioni): senza host il tasto non apre niente.
+  val morphMenu = rememberFluidMorphMenuState()
   val currentId = state.currentId
   val snapshot = view.snapshot
   val currentIndex = snapshot.indexOf(currentId)
@@ -963,17 +984,22 @@ private fun ViewerOverlays(
     onClose = controller::close,
     bottomVisible = chromeShown && bottomReady && (sidePanel || infoClosed),
     topActions = {
-      // Il badge "Movimento" (D51): visibile con le barre, accanto al menu ⋮. Funziona sempre, anche con l'interruttore spento.
-      if (controller.motionAvailable(currentId)) {
+      // Il badge "Movimento" (D51): visibile con le barre, accanto al menu ⋮. Funziona sempre, anche con l'interruttore spento. Senza un fondale suo: prende quello della barra, come
+      // il tasto di chiusura e il ⋮ (B4). Compare e sparisce con i token di FluidMotion al cambio di foto, invece di farsi posto di colpo.
+      AnimatedVisibility(
+        visible = controller.motionAvailable(currentId),
+        enter = GalleryGlassMotion.enter(GalleryGlassGrowth.Width),
+        exit = GalleryGlassMotion.exit(GalleryGlassGrowth.Width),
+      ) {
         MotionBadge(
           playing = playback.motionFor == currentId && playback.motionMode == MotionMode.FULL,
           unavailable = controller.motion.state.isUnavailable(currentId),
           onClick = controller::playMotion,
-          backdrop = backdrop,
           loading = controller.motion.state.isLoading(currentId),
         )
       }
-      if (menu.isNotEmpty()) GalleryMenuButton(entries = menu, backdrop = backdrop)
+      // B4: lo stesso vetro del tasto di chiusura (il fondale lo da' la barra) e il menu dalla goccia del tasto.
+      if (menu.isNotEmpty()) GalleryViewerMenuButton(entries = menu, morph = morphMenu)
     },
     bottomActions = barActions,
     bottomContent = videoBar,
@@ -1000,90 +1026,67 @@ private fun ViewerOverlays(
         else -> pageNotice
       }
     }
-    if (noticeKind != null) {
-      val confirmMobileData: (() -> Unit)? = when {
-        services.onConfirmMobileData == null || currentRef == null -> null
-        downloadState is DownloadState.NeedsMobileData && nasRef != null -> ({ controller.confirmMobileDataForDownload(nasRef) })
-        else -> ({ controller.confirmMobileData(currentRef) })
-      }
-      Box(
-        Modifier
-          .align(Alignment.BottomCenter)
-          .navigationBarsPadding()
-          .padding(bottom = if (videoBar != null) NoticeBottomInset + VideoBarExtra else NoticeBottomInset),
-      ) {
-        PageNotice(
-          kind = noticeKind,
-          backdrop = backdrop,
-          onConfirmMobileData = confirmMobileData,
-          onRetry = if (nasRef != null) controller::retry else null,
-          onCancelDownload = if (downloadState is DownloadState.Queued || downloadState is DownloadState.Running) controller::cancelDownload else null,
-        )
-      }
+    val confirmMobileData: (() -> Unit)? = when {
+      services.onConfirmMobileData == null || currentRef == null -> null
+      downloadState is DownloadState.NeedsMobileData && nasRef != null -> ({ controller.confirmMobileDataForDownload(nasRef) })
+      else -> ({ controller.confirmMobileData(currentRef) })
+    }
+    // Le note, come gli avvisi qui sotto, entrano e escono sfumando con i token di FluidMotion (B4): prima comparivano di colpo a ogni cambio di foto o di rete.
+    ViewerGlassPresence(
+      value = noticeKind,
+      modifier = Modifier
+        .align(Alignment.BottomCenter)
+        .navigationBarsPadding()
+        .padding(bottom = if (videoBar != null) NoticeBottomInset + VideoBarExtra else NoticeBottomInset),
+    ) { kind ->
+      PageNotice(
+        kind = kind,
+        backdrop = backdrop,
+        onConfirmMobileData = confirmMobileData,
+        onRetry = if (nasRef != null) controller::retry else null,
+        onCancelDownload = if (downloadState is DownloadState.Queued || downloadState is DownloadState.Running) controller::cancelDownload else null,
+      )
     }
     // Foto in movimento del NAS (E-V15, D51): i dati mobili da confermare, o "non disponibile ora".
     val motionNotice = controller.motion.state.notice
     if (motionNotice != null && atRest) {
-      val noticeId = when (motionNotice) {
-        is MotionNotice.NeedsMobileData -> motionNotice.id
-        is MotionNotice.Unavailable -> motionNotice.id
-      }
       LaunchedEffect(motionNotice) {
         delay(MessageMillis)
         if (controller.motion.state.notice == motionNotice) controller.motion.state.notice = null
       }
-      Box(Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = NoticeBottomInset)) {
-        MotionNoticeView(
-          notice = motionNotice,
-          backdrop = backdrop,
-          onConfirmMobileData = if (services.onConfirmMobileData != null) ({ controller.confirmMotionMobileData(noticeId) }) else null,
-        )
-      }
     }
-    // Un avviso breve (E-V6, nascosto, copiato) in alto, sotto la barra.
+    ViewerGlassPresence(
+      value = motionNotice.takeIf { atRest },
+      modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = NoticeBottomInset),
+    ) { notice ->
+      val noticeId = when (notice) {
+        is MotionNotice.NeedsMobileData -> notice.id
+        is MotionNotice.Unavailable -> notice.id
+      }
+      MotionNoticeView(
+        notice = notice,
+        backdrop = backdrop,
+        onConfirmMobileData = if (services.onConfirmMobileData != null) ({ controller.confirmMotionMobileData(noticeId) }) else null,
+      )
+    }
+    // Un avviso breve (E-V6, nascosto, copiato) in alto, sotto la barra: uno alla volta (l'avviso, poi la lettura, poi quelli del NAS e del backup), che sfuma in entrata e in uscita (B4).
     val message = state.message
-    if (message == null && liveText.state is LiveTextState.ReadingNow && liveText.owner == currentId) {
-      Box(Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = MessageTopInset)) {
-        LiveTextReadingNotice(backdrop = backdrop)
-      }
+    val topNotice: TopNotice? = when {
+      message != null -> TopNotice(key = message) { MessageNotice(message = message, backdrop = backdrop) }
+      liveText.state is LiveTextState.ReadingNow && liveText.owner == currentId -> TopNotice(key = ReadingKey) { LiveTextReadingNotice(backdrop = backdrop) }
+      nasNotice != null -> TopNotice(key = nasNotice) { NasNoticeView(notice = nasNotice, backdrop = backdrop) }
+      backupController != null && (backupShare is BackupShareUi.Preparing || backupShare is BackupShareUi.Ready) ->
+        TopNotice(key = backupShare) { BackupShareNotice(share = backupShare, backdrop = backdrop, onCancel = backupController::dismissShare) }
+      backupNotice != null -> TopNotice(key = backupNotice) { BackupNoticeView(notice = backupNotice, backdrop = backdrop) }
+      else -> null
     }
-    if (message != null) {
-      Box(
-        Modifier
-          .align(Alignment.TopCenter)
-          .statusBarsPadding()
-          .padding(top = MessageTopInset),
-      ) {
-        MessageNotice(message = message, backdrop = backdrop)
-      }
-    } else if (nasNotice != null) {
-      Box(
-        Modifier
-          .align(Alignment.TopCenter)
-          .statusBarsPadding()
-          .padding(top = MessageTopInset),
-      ) {
-        NasNoticeView(notice = nasNotice, backdrop = backdrop)
-      }
-    } else if (backupController != null && (backupShare is BackupShareUi.Preparing || backupShare is BackupShareUi.Ready)) {
-      Box(
-        Modifier
-          .align(Alignment.TopCenter)
-          .statusBarsPadding()
-          .padding(top = MessageTopInset),
-      ) {
-        BackupShareNotice(share = backupShare, backdrop = backdrop, onCancel = backupController::dismissShare)
-      }
-    } else if (backupNotice != null) {
-      Box(
-        Modifier
-          .align(Alignment.TopCenter)
-          .statusBarsPadding()
-          .padding(top = MessageTopInset),
-      ) {
-        BackupNoticeView(notice = backupNotice, backdrop = backdrop)
-      }
-    }
+    ViewerGlassPresence(
+      value = topNotice,
+      modifier = Modifier
+        .align(Alignment.TopCenter)
+        .statusBarsPadding()
+        .padding(top = MessageTopInset),
+    ) { notice -> notice.content() }
   }
 
   // Le informazioni: foglio a meta' sul telefono, colonna laterale da 840 dp.
@@ -1214,8 +1217,12 @@ private fun ViewerOverlays(
       onDismiss = backupController::dismissShare,
     )
   }
-  // L'altra copia di un gruppo che non sta nell'indice: per ultima, sopra tutto il resto.
+  // L'altra copia di un gruppo che non sta nell'indice: sopra tutto il resto.
   outsideCopy?.let { copyId -> OutsideCopyLayer(id = copyId, services = services, playback = playback, onClose = { outsideCopy = null }) }
+
+  // Il menu ⋮ (B4): l'host di quello che si apre dalla goccia del tasto, per ultimo: sopra tutto il resto, e il suo Indietro (registrato per ultimo) vince su quello del pannello
+  // informazioni. A riposo e' un nodo vuoto, senza gesti. Il fondale e' la foto; il vetro del tasto, quello della barra, lo da' la barra.
+  FluidMorphMenuHost(state = morphMenu, backdrop = backdrop)
 }
 
 /** La sezione "N copie" va subito dopo quella del file (prima di "Telefono"); se il file non c'e', in fondo. */
@@ -1250,6 +1257,15 @@ private const val MIN_SHIFT_SCALE = 0.4f
 
 /** A che punto dell'espansione entrano le pagine vicine (vedi `PagerLayer`): lontano dal primo fotogramma, prima della fine. */
 private const val NeighborsAtProgress = 0.5f
+
+/** Un avviso in alto: [key] dice quale (cambia l'avviso, non il suo disegno), [content] lo disegna. */
+private class TopNotice(val key: Any, val content: @Composable () -> Unit) {
+  override fun equals(other: Any?): Boolean = other is TopNotice && other.key == key
+
+  override fun hashCode(): Int = key.hashCode()
+}
+
+private val ReadingKey = Any()
 
 /** Nessun download: la mappa vuota di un viewer senza `PhoneDownload`. */
 private val NoDownloads: Map<Long, DownloadState> = emptyMap()

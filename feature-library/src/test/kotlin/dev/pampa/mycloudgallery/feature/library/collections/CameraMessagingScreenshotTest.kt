@@ -31,9 +31,10 @@ abstract class CameraMessagingShots(private val dark: Boolean, private val devic
   private val environment = fakeGridEnvironment(loader = fakeThumbnailLoader())
   private val look: String get() = if (dark) "scuro" else "chiaro"
 
-  private fun shoot(name: String, title: String, content: @Composable () -> Unit) {
+  /** [title] null: la griglia si apre in fondo, sui piu' recenti, e il titolo grande e' fuori vista (la barra dice la data). */
+  private fun shoot(name: String, title: String?, content: @Composable () -> Unit) {
     show(dark = dark, content = content)
-    composeRule.onNodeWithText(title).assertExists()
+    if (title != null) composeRule.onNodeWithText(title).assertExists()
     composeRule.onRoot().captureRoboImage("../docs/screenshots/beta-grafica/G2b/$name-$look-$device.png")
   }
 
@@ -47,14 +48,14 @@ abstract class CameraMessagingShots(private val dark: Boolean, private val devic
     val view = world.source.items(LibraryFilter.CAMERA).view.value
     assertThat(view.size).isGreaterThan(0)
     assertThat((0 until view.size).all { view.snapshot.sourceAt(view.snapshotIndex(it)) == MediaSource.CAMERA }).isTrue()
-    shoot("griglia-fotocamera", "Fotocamera", grid(CollectionKind.CAMERA))
+    shoot("griglia-fotocamera", title = null, content = grid(CollectionKind.CAMERA))
   }
 
   @Test
   fun fotocameraVuota() = shoot("griglia-fotocamera-vuota", "Nessuna foto della fotocamera", grid(CollectionKind.CAMERA, EmptyViewerItems))
 
   @Test
-  fun messaggistica() = shoot("griglia-messaggistica", "Messaggistica", grid(CollectionKind.WHATSAPP))
+  fun messaggistica() = shoot("griglia-messaggistica", title = null, content = grid(CollectionKind.WHATSAPP))
 
   companion object {
     fun looks(): List<Array<Any>> = listOf(arrayOf<Any>(false), arrayOf<Any>(true))

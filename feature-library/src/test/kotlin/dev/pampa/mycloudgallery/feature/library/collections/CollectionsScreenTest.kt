@@ -87,7 +87,8 @@ class CollectionsListPhoneTest : ComposeScreenTest() {
       )
     }
 
-    composeRule.onAllNodesWithText("Nessun elemento").assertCountEquals(4)
+    // G2b: cinque raccolte-filtro (la Fotocamera e' nuova).
+    composeRule.onAllNodesWithText("Nessun elemento").assertCountEquals(5)
   }
 
   @Test

@@ -16274,3 +16274,72 @@ Esperimenti con interruttori temporanei (file `perf-<nome>` nella cartella dell'
 #### Difetti trovati fuori dal pacchetto
 - **La preparazione del dataset dopo un'installazione pulita cade ancora** (terza volta: il 03/11 `no such table: search_history`; oggi, in due tentativi di fila, ancora quella e poi `SQLiteDatabaseLockedException: database is locked` in `syncTriggers` di Room da `AppIndexerControl`): la sonda aspetta tutti i 1.200 s e salta le prove. Aggirato avviando a mano l'app di misura (il marcatore c'era gia') e riprovando alla morte del processo: la preparazione vera dura 53 s. Va corretto nel seeder / nel provider della variante di misura.
 - **`benchDiag` con le tracce di Anni va in timeout** (`SocketTimeoutException` del processore di tracce al terzo giro di `scroll_years_square`, tracce da ~300 MB): le interrogazioni con sottointerrogazioni correlate di `FrameDiagMetric` (`JANK`, `TL`, `RTJ`) sono troppo lente; la prova fallisce e non salva i numeri. Per Anni serve un'altra diagnosi (o le tracce interrogate a parte, come qui).
+
+## G2b: la scheda Album in stile Galleria Samsung (09/11, fase grafica della beta)
+
+Pacchetto G2b (branch `grafica/g2b-album`). Il contenuto della nuova scheda **Album** della pillola (Libreria · Album · Raccolte: la pillola e l'ospite sono di
+G2): una griglia di copertine tutte uguali (foto quadrata con l'angolo continuo, sotto il nome e il numero), come la vuole l'utente. Il punto d'ingresso e'
+`AlbumsTabRoute` (feature-albums, `tab/`); in `:app` lo ospita `AppAlbumsTab(nav, contentPadding, backdropOut)` (`navigation/AlbumsTabWiring.kt`).
+
+### Scelte
+- **Ordine** (`AlbumsTabOrder`): Preferiti (sempre: vuoti dicono "Tocca il cuore di una foto"), Fotocamera e Video (se non sono vuoti); poi tutti gli altri
+  insieme, cioe' i miei album, i condivisi, gli smart (segno dell'IA sulla copertina), Screenshot e Messaggistica (questi due se non sono vuoti): prima gli
+  aperti, dal piu' recente; poi i mai aperti, dal giorno del media piu' recente (a pari giorno l'album aggiornato piu' di recente, poi la chiave). Un album
+  vuoto dell'utente resta (in fondo); una voce speciale vuota si nasconde. I fissi aperti non si spostano.
+- **Ultima apertura: dato locale del profilo, non sincronizzato** (`DataStoreAlbumOpenings`, `noBackupFilesDir/datastore/album_openings`). E' un numero che
+  cresce a ogni apertura, non un'ora (nessun orologio nelle schermate). Sincronizzarla vorrebbe un campo nuovo nei dati personali, con il suo formato da
+  tenere compatibile fra versioni, per un ordine che e' di chi tiene in mano quel dispositivo: adesso non vale il costo. Un album si registra dalla sua
+  pagina (`AlbumPageViewModel`, da qualunque parte ci si arrivi), una voce speciale dalla scheda; sempre 700 ms dopo il tocco (la scheda, che resta sotto la
+  pagina che entra, non si rimescola durante la transizione; un'apertura chiusa subito non conta). Finche' il file non e' letto la scheda mostra i fissi e le
+  copertine ferme dello scheletro: mai un ordine provvisorio che salta.
+- **Fotocamera** (`LibraryFilter.CAMERA`, codice `camera`; raccolta `CollectionKind.CAMERA`): la cella dice `MediaSource.CAMERA`, che nasce solo da un file in
+  `DCIM/Camera/` e che il catalogo fissa alla creazione del media e **tiene** quando il media resta solo sul NAS dopo "Libera spazio". Il backup scrive la
+  fotocamera in `Backup/<dispositivo>/AAAA/MM/`, senza `DCIM/Camera` nel percorso: per il catalogo i backup degli altri dispositivi sono `OTHER` e non entrano.
+  Il caso che la cella non sa (un file del NAS in una cartella `DCIM/Camera/` copiata a mano, o un media `camera` di un altro dispositivo mio) lo toglie
+  `CatalogFilterMembership` dal **dispositivo d'origine** del catalogo (`media.origin_device`, par. 14.3 del modello dei dati): restano solo `phone` e
+  `backup:<la cartella del backup di questo dispositivo>`. **Limite dichiarato:** senza la cartella del backup di questo dispositivo (backup mai
+  configurato) un media `camera` rimasto solo sul NAS non si puo' attribuire e resta fuori. Nella build di debug la recinzione di prova scrive sotto un'altra
+  radice: li' i media liberati non hanno un dispositivo e non si vedono in Fotocamera.
+- **Messaggistica** (`LibraryFilter.MESSAGING`, codice `messaging`; la raccolta resta `CollectionKind.WHATSAPP` con il codice `whatsapp` e cambia solo il nome,
+  perche' il codice sta nello stato salvato, nelle rotte e nell'ordine sincronizzato delle Raccolte): WhatsApp dalla cella (`MediaSource.WHATSAPP`), Telegram e
+  Signal dalle cartelle (`MessagingFolders`: `Pictures|Movies|DCIM|Download/Telegram`, la cartella storica `Telegram/`, `Android/media/<pacchetto>` di
+  Telegram, Telegram Web, Plus e Telegram X; `Pictures|Movies|Download/Signal`, `Signal/`, `Android/media/org.thoughtcrime.securesms`; e le loro copie nel
+  backup, `Backup/<dispositivo>/[microSD/]Telegram|Telegram Images|Telegram Video|Signal/...`; gli adesivi restano fuori). **Nessun codice nuovo di
+  `MediaSource`**: i segmenti dell'indice sincronizzati (`IndexSegment`) rifiutano un codice di sorgente sconosciuto, quindi un `telegram` scritto da questa
+  versione romperebbe la lettura alle versioni vecchie della famiglia; e la sorgente si decide solo alla creazione del media, quindi i file di Telegram gia'
+  nel catalogo resterebbero fuori. Le cartelle si leggono invece dalle posizioni del catalogo, che le hanno tutte.
+- **Come le correzioni arrivano alla vista**: `FilterMembership` (contratto in core-library) da' per un filtro le identita' da aggiungere (`plus`) e da togliere
+  (`minus`); `MembershipTimeline` le applica sopra la vista filtrata dell'indice (`AdjustedTimelineView`, nell'ordine dell'indice) **solo** per Fotocamera e
+  Messaggistica, sotto l'accesso parziale (`PartialAccessTimeline` in `GalleryGraph`: una riga cambiata). Le letture sono SQL di sola lettura su `media`,
+  `media_version` e `media_location` (nessuna colonna, nessuna migrazione), fuori dal thread principale, la prima subito e poi **al piu' una ogni 2,5 s**
+  mentre l'indice cambia, e solo per le viste che qualcuno ha chiesto. Un id corretto vale solo se e' nell'indice: un nascosto non entra mai (E-H1).
+- **Copertine**: quella che l'app ha gia' (`CoverRef`: la scelta dall'utente con "Copertina", altrimenti l'automatica: l'ultimo aggiunto per un manuale, la
+  migliore del giorno piu' pieno per uno smart); per una voce speciale il media piu' recente della sua vista. Le miniature sono quelle della Libreria (mai i
+  nascosti), in una finestra sola di al piu' 48 copertine.
+- **Segni sulla copertina**: l'IA (`AutoAwesome`) per uno smart, il gruppo per un condiviso, in una pillola di scrim come i badge delle celle
+  (`GalleryOnPhoto`): mai vetro sopra la griglia.
+- **Colonne**: 3 sul telefono (copertina minima 104 dp), 2 col testo grande, sul tablet fino a 7 (la scheda e' larga al piu' 1.120 dp). Una griglia sola anche
+  sul tablet: l'utente vuole "una sorta di album alla vista", e le pagine degli album sono gia' rotte anche li'.
+- **Comandi di prima**: "Nuovo album" (+) nella barra della scheda, e il menu con "Tutti gli album" (l'elenco di sempre, con l'ordine, il riordino e gli
+  album che non si mostrano piu'). Gli avvisi una volta sola degli album condivisi chiusi compaiono anche in testa alla scheda.
+- **Raccolte**: la riga "WhatsApp" diventa "Messaggistica", e c'e' la riga nuova "Fotocamera" dopo i Preferiti (cosa resta nelle Raccolte lo decide G2).
+  Nella Libreria i due filtri nuovi **non** sono chip (`QuickFilters` li lascia fuori; il chip "WhatsApp" resta).
+
+### Rischi per le prestazioni
+- Al primo ingresso nella scheda il controllore legge subito le cinque viste speciali (le loro mappe, se nessuno le aveva gia' costruite: ~1 ms per 100 mila
+  elementi l'una, sul thread principale, come `countsNow` delle Raccolte), per disegnare il primo fotogramma con le voci vere.
+- La lettura di Messaggistica scorre `media_location` con `LIKE` (decine o centinaia di migliaia di righe): stimata 50-100 ms su IO, al piu' ogni 2,5 s
+  durante una sincronizzazione lunga, solo dopo che qualcuno ha aperto la scheda o le Raccolte. Da misurare con un catalogo grande.
+- Nessun vetro nuovo, nessuna animazione nuova; la griglia e' fatta di righe di `LazyColumn` come l'elenco degli album. La Libreria non usa le viste corrette.
+
+### Da provare sul telefono
+- S25: ordine (Preferiti, Fotocamera, Video, poi il resto); aprire un album e tornare: e' il primo dopo i fissi, senza rimescolarsi durante la transizione;
+  Fotocamera contiene le foto di `DCIM/Camera` e quelle liberate con "Libera spazio", non i backup del tablet; Messaggistica contiene Telegram e Signal se ci
+  sono; i segni dell'IA e del gruppo; "Tutti gli album" e "Nuovo album".
+- Tab S9 (profilo senza fotocamera): Fotocamera e Messaggistica nascoste, Preferiti vuoti che spiegano; fino a 7 colonne in orizzontale.
+- Prima apertura della scheda dopo un avvio a freddo: niente salti (fissi e copertine ferme, poi gli album al loro posto).
+- Benchmark: la scheda non e' nei percorsi misurati; i `scroll_*` della Libreria non devono cambiare.
+
+### Cosa resta
+- "Tutti gli album" ha ancora la grafica di prima (copertine a 2 colonne): si puo' allineare alla scheda dopo la beta.
+- Il segno dell'IA e' solo sulla copertina; per gli altri familiari uno smart condiviso e' un condiviso normale (le regole restano del creatore, D17).

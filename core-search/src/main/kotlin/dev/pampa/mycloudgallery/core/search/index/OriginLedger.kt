@@ -19,7 +19,7 @@ import java.util.zip.CRC32
 // tolgono solo le **loro** origini: un vettore o un testo calcolato qui dai propri byte non lo tocca mai nessun altro.
 //
 // Un giornale in sola aggiunta (`search/ledger.log`): ogni scrittura e' una o piu' cornici con lunghezza e CRC32, salvate con `force` prima
-// di dire "fatto" (e' il punto di conferma: file dei vettori prima, poi il testo nel database, poi il registro). Una cornice a meta' in
+// di dire "fatto" (e' il punto di conferma: file dei vettori prima, poi il registro, infine la proiezione SQL del testo). Una cornice a meta' in
 // coda (morte del processo) si scarta; una cornice rovinata in mezzo ferma la rilettura e si chiede di riavere tutto.
 //
 // Revisione A (R2, R4, R5): una scrittura grande si divide in cornici da al piu' [FRAME_TARGET] byte (mai oltre il tetto di chi rilegge);

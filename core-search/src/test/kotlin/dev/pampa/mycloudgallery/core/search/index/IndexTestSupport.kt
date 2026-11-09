@@ -64,6 +64,10 @@ internal class InMemoryTextRows : TextRowStore {
     return true
   }
 
+  override suspend fun replace(records: List<AiTextRecord>) {
+    records.forEach { rows[it.contentKey] = it }
+  }
+
   override suspend fun remove(keys: Collection<ContentKey>) {
     keys.forEach { rows.remove(it) }
   }

@@ -109,6 +109,49 @@ class AiIndexCatalogTest : CatalogTestBase() {
   // --- Testo e FTS4 ----------------------------------------------------------------------------------------------------
 
   @Test
+  fun laSostituzioneDellOrigineVincenteEAtomicaPrimaEDopoDeleteEInsert() = runBlocking<Unit> {
+    val before = text(1, "scontrino farmacia", recipe = 2)
+    val after = text(1, "ricevuta bar", recipe = 1)
+    for (phase in listOf("BEFORE DELETE", "AFTER DELETE", "BEFORE INSERT", "AFTER INSERT")) {
+      ai.putText(before)
+      db.openHelper.writableDatabase.execSQL("CREATE TEMP TRIGGER rg_a_fault $phase ON ai_text BEGIN SELECT RAISE(ABORT, 'guasto'); END")
+      try {
+        assertWithMessage(phase).that(runCatching { ai.replaceText(after) }.isFailure).isTrue()
+      } finally {
+        db.openHelper.writableDatabase.execSQL("DROP TRIGGER rg_a_fault")
+      }
+      assertWithMessage(phase).that(ai.text(key(1))!!.text).isEqualTo(before.text)
+      assertThat(ai.text(key(1))!!.recipe).isEqualTo(2)
+      assertThat(ai.textMatches(listOf(listOf("farmacia"))).all).containsExactly(key(1))
+      assertThat(ai.textMatches(listOf(listOf("bar"))).all).isEmpty()
+      assertThat(ai.wordCounts(listOf("scontrino", "farmacia", "ricevuta", "bar"))).containsExactly("scontrino", 1, "farmacia", 1)
+    }
+    // Ritirata l'origine con ricetta 2: ora vince davvero la 1. Non deve essere rifiutata da putText.
+    ai.replaceText(after)
+    assertThat(ai.text(key(1))!!.recipe).isEqualTo(1)
+    assertThat(ai.textMatches(listOf(listOf("bar"))).all).containsExactly(key(1))
+    assertThat(ai.textMatches(listOf(listOf("farmacia"))).all).isEmpty()
+    assertThat(ai.wordCounts(listOf("farmacia", "ricevuta", "bar"))).containsExactly("ricevuta", 1, "bar", 1)
+    ai.replaceText(after)
+    assertThat(ai.wordCounts(listOf("ricevuta", "bar"))).containsExactly("ricevuta", 1, "bar", 1)
+  }
+
+  @Test
+  fun riconciliareUnaRigaIdenticaNonRiscriveFtsEVocabolario() = runBlocking<Unit> {
+    val record = text(1, "testo invariato")
+    ai.putText(record)
+    val id = db.aiIndexDao().textOf(key(1).hex)!!.textId
+    db.openHelper.writableDatabase.execSQL("CREATE TEMP TRIGGER rg_a_no_delete BEFORE DELETE ON ai_text BEGIN SELECT RAISE(ABORT, 'scrittura inutile'); END")
+    try {
+      ai.replaceTexts(listOf(record))
+      assertThat(db.aiIndexDao().textOf(key(1).hex)!!.textId).isEqualTo(id)
+      assertThat(ai.wordCounts(listOf("testo", "invariato"))).containsExactly("testo", 1, "invariato", 1)
+    } finally {
+      db.openHelper.writableDatabase.execSQL("DROP TRIGGER rg_a_no_delete")
+    }
+  }
+
+  @Test
   fun ilTestoNormalizzatoSiCercaConLFts4_ParolaEFrase() = runBlocking<Unit> {
     ai.putText(text(1, "scontrino esselunga totale 12 euro"))
     ai.putText(text(2, "ricevuta farmacia totale 8 euro"))

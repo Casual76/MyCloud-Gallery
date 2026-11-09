@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import java.io.IOException
 
 // Le PORTE del motore di ricerca (P6, `core-search/.../index/IndexPorts.kt`, `history/`) sopra il catalogo (P1: `MediaCatalog` e
 // `MediaCatalog.aiIndex`), una riga ciascuna (Fase 6, P11). Il catalogo nasce con la famiglia pronta (`GalleryGraph.core`): finche' non
@@ -35,8 +36,14 @@ import kotlinx.coroutines.flow.flow
 class CatalogTextRowStore(private val catalog: suspend () -> MediaCatalog?) : TextRowStore {
   override suspend fun put(record: AiTextRecord): Boolean = catalog()?.aiIndex?.putText(record) ?: false
 
+  override suspend fun replace(records: List<AiTextRecord>) {
+    val index = catalog()?.aiIndex ?: throw IOException("Catalogo del testo non disponibile.")
+    index.replaceTexts(records)
+  }
+
   override suspend fun remove(keys: Collection<ContentKey>) {
-    catalog()?.aiIndex?.removeTexts(keys)
+    val index = catalog()?.aiIndex ?: throw IOException("Catalogo del testo non disponibile.")
+    index.removeTexts(keys)
   }
 
   override suspend fun matches(terms: List<List<String>>): TextMatchCounts =

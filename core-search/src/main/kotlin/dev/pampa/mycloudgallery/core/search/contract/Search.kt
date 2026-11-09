@@ -152,13 +152,8 @@ interface SearchEngine {
    * (la media normalizzata dei vettori di ognuno, ognuno con lo stesso peso): una passata sola sull'indice, le soglie di "Trova simili". Esclusi dai risultati tutti
    * i media scelti; mai dai Nascosti (un media nascosto non entra nella query ne' nel chip); i media senza vettore sono lasciati fuori e
    * [SearchNotice.SimilarWithoutVectors] lo dice. Con un media solo e' [similar]. Al piu' [SimilarSelection.MAX] media: i primi.
-   *
-   * Di serie (un motore che non lo sa) vale per il primo media: gli esecutori veri lo ridefiniscono tutti.
    */
-  suspend fun similarToAll(media: List<MediaId>, order: ResultOrder = ResultOrder.RECENT): SearchResults {
-    require(media.isNotEmpty()) { "Nessun media da cui cercare i simili." }
-    return similar(media.first(), order)
-  }
+  suspend fun similarToAll(media: List<MediaId>, order: ResultOrder = ResultOrder.RECENT): SearchResults
 
   val coverage: StateFlow<SearchCoverage>
 

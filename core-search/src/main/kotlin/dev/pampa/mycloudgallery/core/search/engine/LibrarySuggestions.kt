@@ -24,11 +24,11 @@ import kotlin.coroutines.cancellation.CancellationException
 /**
  * IL DIZIONARIO DEI LUOGHI della Libreria (§2.5) per l'analizzatore e i suggerimenti: **solo dalle celle dell'istantanea**, che non
  * contiene mai nascosti (D29: un luogo presente solo in media nascosti non si propone). Il luogo, la sua regione e il paese, con
- * quanti media visibili li hanno (fra omonimi vince il piu' frequente). Calcolato una volta per istantanea.
+ * quanti media visibili li hanno (fra omonimi vince il piu' frequente). I nomi si ricostruiscono solo se cambiano i conteggi dei luoghi.
  */
 class LibraryPlaces(private val lookup: PlaceLookup) {
 
-  private class Built(val snapshot: TimelineSnapshot, val dictionary: PlaceDictionary, val top: List<PlaceOption>)
+  private class Built(val snapshot: TimelineSnapshot, val counts: Map<Int, Int>, val dictionary: PlaceDictionary, val top: List<PlaceOption>)
 
   @Volatile private var built: Built? = null
 
@@ -37,12 +37,17 @@ class LibraryPlaces(private val lookup: PlaceLookup) {
   /** I luoghi piu' frequenti (per Cerca a riposo). */
   fun top(snapshot: TimelineSnapshot, limit: Int = MAX_IDLE_PLACES): List<PlaceOption> = buildFor(snapshot).top.take(limit)
 
+  @Synchronized
   private fun buildFor(snapshot: TimelineSnapshot): Built {
-    built?.takeIf { it.snapshot === snapshot }?.let { return it }
+    val previous = built
+    previous?.takeIf { it.snapshot === snapshot }?.let { return it }
     val counts = HashMap<Int, Int>()
     for (i in 0 until snapshot.size) {
       val id = snapshot.placeAt(i)
       if (id != 0) counts[id] = (counts[id] ?: 0) + 1
+    }
+    if (previous != null && previous.counts == counts) {
+      return Built(snapshot, counts, previous.dictionary, previous.top).also { built = it }
     }
     val entries = ArrayList<PlaceEntry>()
     val regions = LinkedHashMap<String, Pair<String, MutableMap<Int, Int>>>()
@@ -58,7 +63,7 @@ class LibraryPlaces(private val lookup: PlaceLookup) {
     for ((key, v) in countries) entries += PlaceEntry(key, PlaceOption(v.second.keys, v.first, PlaceLevel.COUNTRY), v.second.values.sum())
     val top = entries.filter { it.option.level == PlaceLevel.PLACE }.sortedWith(compareByDescending<PlaceEntry> { it.mediaCount }.thenBy { it.name })
       .map { it.option }
-    return Built(snapshot, PlaceDictionary(entries), top).also { built = it }
+    return Built(snapshot, counts, PlaceDictionary(entries), top).also { built = it }
   }
 
   companion object {

@@ -101,6 +101,8 @@ class SmartSearchParityTest {
   private class NoTexts : TextRowStore {
     override suspend fun put(record: AiTextRecord): Boolean = true
 
+    override suspend fun replace(records: List<AiTextRecord>) = Unit
+
     override suspend fun remove(keys: Collection<ContentKey>) = Unit
 
     override suspend fun matches(terms: List<List<String>>): TextMatchCounts = TextMatchCounts(terms.size, emptyMap())

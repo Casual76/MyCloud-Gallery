@@ -15,11 +15,17 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Il testo letto in `ai_text`, con l'FTS4 e il vocabolario (P1, `AiIndexCatalog`): [put] = `putText`, [remove] = `removeTexts`,
- * [matches] = `textMatches`, [wordCounts], [vocabularyPage]. Il vocabolario contiene **anche le parole dei nascosti**: il motore lo
+ * [replace] = `replaceTexts` per l'origine scelta dal registro, [matches] = `textMatches`, [wordCounts], [vocabularyPage]. Il vocabolario contiene **anche le parole dei nascosti**: il motore lo
  * usa solo per correggere i refusi, mai per proporre parole (D29).
  */
 interface TextRowStore {
   suspend fun put(record: AiTextRecord): Boolean
+
+  /**
+   * Sostituisce atomicamente le righe con quelle scelte dal registro (anche con ricetta inferiore).
+   * Riga, FTS e vocabolario cambiano insieme; una riga identica non si riscrive. Il catalogo assente e' un errore.
+   */
+  suspend fun replace(records: List<AiTextRecord>)
 
   suspend fun remove(keys: Collection<ContentKey>)
 

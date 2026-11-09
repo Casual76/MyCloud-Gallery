@@ -93,7 +93,7 @@ class ApprovalFlowUiTest {
     show()
 
     // Senza account confermato e senza codice il tasto non fa niente.
-    rule.onNodeWithText("Approva questo dispositivo").performScrollTo().performClick()
+    rule.onNodeWithText("Approva questo dispositivo").performClick()
     rule.waitForIdle()
     assertThat(registry.approvals).isEmpty()
     assertThat(authenticator.prompts).isEqualTo(0)
@@ -107,7 +107,7 @@ class ApprovalFlowUiTest {
     rule.waitForIdle()
     rule.onNodeWithText("K7QD-2M9X-FA4T-1B8C").assertExists()
 
-    rule.onNodeWithText("Approva questo dispositivo").performScrollTo().performClick()
+    rule.onNodeWithText("Approva questo dispositivo").performClick()
     rule.waitForIdle()
 
     assertThat(authenticator.prompts).isEqualTo(1)
@@ -129,13 +129,13 @@ class ApprovalFlowUiTest {
 
     rule.onNode(hasSetTextAction()).performScrollTo().assert(SemanticsMatcher.expectValue(SemanticsProperties.EditableText, AnnotatedString("")))
     assertThat(viewModel.state.value.code).isEmpty()
-    rule.onNodeWithText("Approva questo dispositivo").performScrollTo().performClick()
+    rule.onNodeWithText("Approva questo dispositivo").performClick()
     rule.waitForIdle()
     assertThat(registry.proofs).isEmpty()
     assertThat(authenticator.prompts).isEqualTo(0)
 
     rule.onNode(hasSetTextAction()).performScrollTo().performTextInput("k7qd2m9xfa4t1b8c")
-    rule.onNodeWithText("Approva questo dispositivo").performScrollTo().performClick()
+    rule.onNodeWithText("Approva questo dispositivo").performClick()
     rule.waitForIdle()
 
     val proof = registry.proofs.single()
@@ -157,7 +157,7 @@ class ApprovalFlowUiTest {
     rule.onNodeWithText("QR di questo dispositivo").assertExists()
 
     rule.onNodeWithText("L’account «nonna» è giusto").performScrollTo().performClick()
-    rule.onNodeWithText("Approva questo dispositivo").performScrollTo().performClick()
+    rule.onNodeWithText("Approva questo dispositivo").performClick()
     rule.waitForIdle()
 
     assertThat(authenticator.prompts).isEqualTo(1)
@@ -176,7 +176,7 @@ class ApprovalFlowUiTest {
     rule.onNodeWithText("QR di un altro dispositivo").assertExists()
 
     rule.onNodeWithText("L’account «nonna» è giusto").performScrollTo().performClick()
-    rule.onNodeWithText("Approva questo dispositivo").performScrollTo().performClick()
+    rule.onNodeWithText("Approva questo dispositivo").performClick()
     rule.waitForIdle()
     assertThat(registry.approvals).isEmpty()
     assertThat(authenticator.prompts).isEqualTo(0)

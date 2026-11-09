@@ -47,6 +47,7 @@ import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.CodeField
 import dev.pampa.mycloudgallery.feature.settings.ui.CodeFormat
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
+import dev.pampa.mycloudgallery.feature.settings.ui.PinnedActionDock
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
@@ -113,8 +114,34 @@ internal fun ApprovalRoute(onBack: () -> Unit) {
 internal fun ApprovalScreen(state: ApprovalUiState, actions: ApprovalActions) {
   SensitiveScreen()
   val request = state.request
+  // B6 (G3): "Approva" sta **fermo in fondo**, sopra la tastiera, e la pagina gli scorre sotto: prima era l'ultimo elemento della lista, sotto la piega, e la tastiera lo copriva. Solo
+  // la pagina del modulo di approvazione ha la barra (non quella dell'esito, ne' quella di una richiesta che non c'e': li' il tasto e' uno e la pagina e' corta).
+  val hasDock = state.phase != ApprovalPhase.DONE && request != null
+  PinnedActionDock(
+    actions = if (hasDock) {
+      {
+        FluidButton(
+          text = stringResource(R.string.approve_action),
+          onClick = actions.onApprove,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+          enabled = state.canSubmit,
+          loading = state.phase == ApprovalPhase.SUBMITTING,
+        )
+      }
+    } else {
+      null
+    },
+  ) { pageModifier -> ApprovalPage(state = state, actions = actions, modifier = pageModifier) }
+}
+
+/** La pagina di approvazione: il modulo che scorre. [modifier] la fa finire sopra la barra dei tasti ([PinnedActionDock]). */
+@Composable
+private fun ApprovalPage(state: ApprovalUiState, actions: ApprovalActions, modifier: Modifier) {
+  val request = state.request
   FluidScreen(
     title = stringResource(R.string.approve_title),
+    modifier = modifier,
     onBack = actions.onBack,
     ambient = FluidAmbient(tone = FluidHeroTone.TertiaryToPrimary, motif = FluidHeroMotif.Glow),
   ) {
@@ -242,16 +269,7 @@ internal fun ApprovalScreen(state: ApprovalUiState, actions: ApprovalActions) {
 
     state.feedback?.let { item { FeedbackNote(it) } }
 
-    item {
-      FluidButton(
-        text = stringResource(R.string.approve_action),
-        onClick = actions.onApprove,
-        size = FluidButtonSize.Large,
-        fillWidth = true,
-        enabled = state.canSubmit,
-        loading = state.phase == ApprovalPhase.SUBMITTING,
-      )
-    }
+    // Il tasto "Approva" e' nella barra ferma in fondo (sopra): la lista finisce dove comincia la barra, qui resta la nota.
     item { FluidSectionFootnote(text = stringResource(R.string.approve_footnote)) }
   }
 }

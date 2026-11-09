@@ -12,11 +12,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
-import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.up
 import androidx.compose.ui.unit.dp
 import com.google.common.truth.Truth.assertThat
 import org.junit.Test
+import dev.pampa.mycloudgallery.feature.viewer.swipeToNext
 
 /**
  * Il testo dal vivo sul viewer vero (Fase 6, P12; D43, D45; E-V13): la pressione prolungata seleziona la parola, le maniglie e la barra
@@ -138,7 +138,7 @@ class ViewerLiveTextTest : LiveTextViewerBase() {
   @Test
   fun e_V13_ilPagerNonScorreConLaSelezioneAperta() {
     selectWord(0, 1)
-    pager().performTouchInput { swipeLeft() }
+    pager().performTouchInput { swipeToNext() }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription(pageLabel).assertExists()
     assertThat(hasNode(START)).isTrue()
@@ -198,7 +198,7 @@ class ViewerLiveTextTest : LiveTextViewerBase() {
     composeRule.mainClock.advanceTimeBy(1_000)
     composeRule.waitForIdle()
     assertThat(hasNode(START)).isFalse()
-    pager().performTouchInput { swipeLeft() }
+    pager().performTouchInput { swipeToNext() }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription("${startIndex + 2} di ${fixture.library.count}").assertExists()
   }

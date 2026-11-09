@@ -16,7 +16,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.up
 import com.google.common.truth.Truth.assertThat
@@ -70,7 +69,7 @@ class ViewerMediaTest : ViewerTestBase() {
     val second = videos.first { it > first }
     show(request = fixture.request(startIndex = first))
     repeat(second - first) {
-      pager().performTouchInput { swipeLeft() }
+      pager().performTouchInput { swipeToNext() }
       composeRule.waitForIdle()
     }
     // Il primo video si e' fermato e il secondo e' partito, con lo stesso lettore.
@@ -162,7 +161,7 @@ class ViewerMediaTest : ViewerTestBase() {
     )
     composeRule.waitForIdle()
     assertThat(drawable.running).isTrue()
-    pager().performTouchInput { swipeLeft() }
+    pager().performTouchInput { swipeToNext() }
     composeRule.waitForIdle()
     assertThat(drawable.running).isFalse()
   }

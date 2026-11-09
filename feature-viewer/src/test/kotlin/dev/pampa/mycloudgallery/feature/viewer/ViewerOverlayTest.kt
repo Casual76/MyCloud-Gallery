@@ -13,8 +13,6 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeDown
-import androidx.compose.ui.test.swipeLeft
-import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.center
 import androidx.compose.ui.test.down
@@ -61,10 +59,10 @@ class ViewerOverlayTest : ViewerTestBase() {
   @Test
   fun scorrendoSiPassaAllaPaginaSuccessivaEPrecaricaSoloLeVicine() {
     show()
-    pager().performTouchInput { swipeLeft() }
+    pager().performTouchInput { swipeToNext() }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription("6 di 50").assertExists()
-    pager().performTouchInput { swipeRight() }
+    pager().performTouchInput { swipeToPrevious() }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription("5 di 50").assertExists()
     // Precarico di una pagina per lato: mai piu' di tre decodifiche insieme.
@@ -74,7 +72,7 @@ class ViewerOverlayTest : ViewerTestBase() {
   @Test
   fun chiudendoDopoAverScorsoLaLibreriaSegueIlViewer() {
     show()
-    pager().performTouchInput { swipeLeft() }
+    pager().performTouchInput { swipeToNext() }
     composeRule.waitForIdle()
     // La cella di cio' che si guarda e' portata in vista mentre si scorre, cosi' la chiusura e' gia' pronta.
     assertThat(fixture.anchor.revealed.last()).isEqualTo(fixture.idAt(5))

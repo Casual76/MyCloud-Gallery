@@ -1,17 +1,20 @@
 package dev.pampa.mycloudgallery.core.designsystem.viewer
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
@@ -24,6 +27,8 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryActionBar
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryNavigationIcon
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTopBar
+import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryGlassGrowth
+import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryGlassMotion
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
 
 /** Le misure del chrome del viewer. */
@@ -91,12 +96,18 @@ fun GalleryViewerChrome(
         onPhoto = true,
         onNavigate = onClose,
         navigationIcon = navigationIcon,
+        // Il tasto di chiusura e il ⋮ sono lo stesso vetro (B4): il tasto di vetro dell'engine, che prende da solo il fondale della barra.
+        fluidButtons = true,
         actions = topActions,
         modifier = Modifier
           .align(Alignment.TopCenter)
           .graphicsLayer { alpha = topAlpha },
       )
     }
+    // Il pezzo sopra la barra azioni (la barra del video) compare e sparisce con i token di FluidMotion invece di farsi spazio di colpo: la barra azioni che aveva sotto non salta.
+    // Mentre esce il suo contenuto non c'e' piu' (null): si tiene l'ultimo, solo per il tempo dell'uscita.
+    val lastBottomContent = remember { LastContent() }
+    if (bottomContent != null) lastBottomContent.content = bottomContent
     val hasBottom = bottomActions.isNotEmpty() || bottomContent != null
     if (hasBottom && bottomAlpha > GalleryViewerChromeDefaults.InvisibleBelow) {
       Column(
@@ -106,15 +117,28 @@ fun GalleryViewerChrome(
           .padding(bottom = GalleryViewerChromeDefaults.BottomMargin)
           .graphicsLayer { alpha = bottomAlpha },
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(GalleryViewerChromeDefaults.BarGap),
       ) {
-        bottomContent?.invoke(this)
+        AnimatedVisibility(
+          visible = bottomContent != null,
+          enter = GalleryGlassMotion.enter(GalleryGlassGrowth.Height),
+          exit = GalleryGlassMotion.exit(GalleryGlassGrowth.Height),
+        ) {
+          Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            lastBottomContent.content?.invoke(this)
+            Spacer(Modifier.height(GalleryViewerChromeDefaults.BarGap))
+          }
+        }
         if (bottomActions.isNotEmpty()) {
           GalleryActionBar(actions = bottomActions, backdrop = backdrop, onPhoto = true)
         }
       }
     }
   }
+}
+
+/** L'ultimo pezzo mostrato sopra la barra azioni: un contenitore semplice (scriverlo in composizione non invalida niente), per il tempo dell'uscita. */
+private class LastContent {
+  var content: (@Composable ColumnScope.() -> Unit)? = null
 }
 
 private fun chromeSpec(appearing: Boolean, reducedMotion: Boolean) = when {

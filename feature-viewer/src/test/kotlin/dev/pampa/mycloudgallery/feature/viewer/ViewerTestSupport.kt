@@ -8,6 +8,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.TouchInjectionScope
+import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeRight
 import androidx.test.core.app.ApplicationProvider
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
@@ -107,3 +110,12 @@ internal class WithoutView(private val base: TimelineView, removed: Set<MediaId>
     return if (found >= 0) found else -1
   }
 }
+
+/**
+ * Il gesto per andare alla pagina con la posizione **dopo** nella vista della Libreria, cioe' alla foto piu' vecchia: dalla beta le piu' vecchie stanno a sinistra di quella aperta
+ * (B5), quindi e' uno swipe verso destra. Le prove dicono "alla foto dopo" e non "a sinistra": se l'ordine cambia, cambia qui.
+ */
+internal fun TouchInjectionScope.swipeToNext(durationMillis: Long = 200) = swipeRight(durationMillis = durationMillis)
+
+/** Il gesto contrario di [swipeToNext]: alla foto con la posizione prima (la piu' recente), uno swipe verso sinistra. */
+internal fun TouchInjectionScope.swipeToPrevious(durationMillis: Long = 200) = swipeLeft(durationMillis = durationMillis)

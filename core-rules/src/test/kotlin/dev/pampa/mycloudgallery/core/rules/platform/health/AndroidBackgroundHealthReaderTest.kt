@@ -15,6 +15,11 @@ import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashCause
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashKind
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashLogStore
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashRecord
+import dev.pampa.mycloudgallery.core.rules.platform.crash.ThreadKind
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.test.runTest
@@ -326,6 +331,49 @@ class AndroidBackgroundHealthReaderTest {
 
     assertThat(health.standbyBucket).isEqualTo(StandbyBucket.UNKNOWN)
     assertThat(health.ignoringBatteryOpt).isTrue()
+  }
+
+  // --- Dove si e' rotta l'app (registro locale dei crash, C472) -----------------------------------------------------
+
+  private fun crashAt(at: Long) = CrashRecord(
+    CrashKind.CRASH, at, versionCode = 7, thread = ThreadKind.MAIN, mainProcess = true,
+    chain = listOf(CrashCause("java.lang.IllegalStateException", listOf("dev.pampa.mycloudgallery.Foo.bar(Foo.kt:1)"))),
+  )
+
+  @Test
+  fun iCrashRecentiSiLeggonoDalRegistroLocale_DalPiuRecente() = runTest {
+    val dir = java.nio.file.Files.createTempDirectory("health-crash").toFile()
+    try {
+      val store = CrashLogStore(java.io.File(dir, "crashes.log"))
+      store.record(crashAt(1_000))
+      store.record(crashAt(2_000))
+
+      val health = AndroidBackgroundHealthReader(context, Unconfined, SDK_UNDER_TEST, 200, crashLogStore = store).read()
+
+      assertThat(health.recentCrashes.map { it.atMillis }).containsExactly(2_000L, 1_000L).inOrder()
+      assertThat(health.recentCrashes.first().where).isEqualTo("dev.pampa.mycloudgallery.Foo.bar(Foo.kt:1)")
+    } finally {
+      dir.deleteRecursively()
+    }
+  }
+
+  @Test
+  fun senzaRegistroNonCeNiente_EUnRegistroRovinatoNonPortaViaLeAltreLetture() = runTest {
+    val dir = java.nio.file.Files.createTempDirectory("health-crash").toFile()
+    try {
+      val file = java.io.File(dir, "crashes.log")
+      shadowOf(service(PowerManager::class.java)).setIgnoringBatteryOptimizations(context.packageName, true)
+      val reader = AndroidBackgroundHealthReader(context, Unconfined, SDK_UNDER_TEST, 200, crashLogStore = CrashLogStore(file))
+      assertThat(reader.read().recentCrashes).isEmpty()
+
+      file.writeText("non e' il nostro formato")
+      val health = reader.read()
+
+      assertThat(health.recentCrashes).isEmpty()
+      assertThat(health.ignoringBatteryOpt).isTrue()
+    } finally {
+      dir.deleteRecursively()
+    }
   }
 
   private companion object {

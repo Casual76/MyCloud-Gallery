@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.core.rules.platform.health
 
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashRecord
+
 /**
  * La salute del lavoro in background su questo telefono, come la vede Android (Fase 2: contratto P0,
  * implementazione P8; docs/fase2-progetto.md §2.6 "Avvisi Android" e passo 10 dell'onboarding).
@@ -21,6 +23,8 @@ package dev.pampa.mycloudgallery.core.rules.platform.health
  * @property bootCount `Settings.Global.BOOT_COUNT`: un riavvio si riconosce dal numero che cresce.
  * @property lastExitReasons le ultime uscite del processo (`ApplicationExitInfo`), dalla piu' recente.
  * @property isSystemUser l'app gira nel profilo principale (falso in un profilo secondario del tablet, E-P19).
+ * @property recentCrashes i crash e gli ANR recenti con **dove** si sono rotti (C472, OA-2 / OB-7): il registro locale dei crash piu' le tracce degli ANR che Android
+ *   conserva, dal piu' recente. Solo classi e cornici del nostro codice, mai un messaggio. Vuota se non c'e' niente o se non si e' potuto leggere.
  */
 data class BackgroundHealth(
   val ignoringBatteryOpt: Boolean?,
@@ -32,6 +36,7 @@ data class BackgroundHealth(
   val bootCount: Int?,
   val lastExitReasons: List<ExitRecord>,
   val isSystemUser: Boolean,
+  val recentCrashes: List<CrashRecord> = emptyList(),
 ) {
   companion object {
     /** Niente di letto: il valore di partenza e quello del null-object. */

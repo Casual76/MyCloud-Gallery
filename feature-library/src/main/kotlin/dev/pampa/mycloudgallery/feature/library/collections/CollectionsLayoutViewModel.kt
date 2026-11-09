@@ -57,8 +57,9 @@ class CollectionsLayoutController(
   sharing: SharingStarted = SharingStarted.WhileSubscribed(STOP_TIMEOUT_MS),
 ) {
 
+  // G2: i fornitori delle sezioni passate alla scheda Album (album, smart) non si ascoltano: le Raccolte non le mostrano.
   private val providers: List<CollectionsSectionProvider> =
-    providers.filter { CollectionSections.isValidCode(it.code) }.distinctBy { it.code }
+    providers.filter { CollectionSections.isValidCode(it.code) && it.code !in CollectionSections.inAlbumsTab }.distinctBy { it.code }
 
   private val editing = MutableStateFlow(false)
   private val failed = MutableStateFlow(false)
@@ -106,7 +107,9 @@ class CollectionsLayoutController(
     for (p in provided) {
       if (p.section == null) byCode.remove(p.code) else byCode[p.code] = p.section
     }
-    return byCode.values.toList()
+    // G2: le sezioni passate alla scheda Album (Album, Album smart, Telefono) non sono delle Raccolte: ne' nell'elenco ne' in "Modifica Raccolte".
+    // I loro codici restano negli ordini salvati (`CollectionSections.inAlbumsTab`).
+    return byCode.values.filter { it.code !in CollectionSections.inAlbumsTab }
   }
 
   private fun initialInputs(): CollectionsInputs {
@@ -172,6 +175,8 @@ class CollectionsLayoutController(
 
 /** Le sezioni che la scheda fa da sola, dalle raccolte che c'erano gia': Telefono, Da tenere al sicuro (il cestino) e Nascosti. */
 internal fun builtinSections(state: CollectionsUiState): List<CollectionsSection> = listOfNotNull(
+  // G2: Telefono va nella scheda Album; si costruisce ancora (il codice e le righe restano quelli di sempre), ma le Raccolte non la mostrano
+  // (`CollectionsLayoutController.merged` toglie le sezioni di `CollectionSections.inAlbumsTab`).
   CollectionsSection(
     code = CollectionSections.PHONE,
     title = SectionText.Res(R.string.collections_section_phone),

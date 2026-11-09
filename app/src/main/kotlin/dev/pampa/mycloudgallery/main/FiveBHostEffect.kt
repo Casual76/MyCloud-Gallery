@@ -131,8 +131,9 @@ internal fun FiveBHostEffect(ui: FiveBUi?, nav: NavController) {
       ui.dismissSheet()
       ui.openFreeSpace(filter.selection)
     },
-    // LS-1 ("Elimina con avviso"): dal viewer, un media che non risulta al sicuro sul NAS va nel cestino di Android dopo l'avviso del foglio.
-    onTrash = if (phoneOnly?.fromViewer == true) ui::trashFromPhone else null,
+    // LS-1 ("Elimina con avviso"): dal viewer e (5B I3) dalla selezione della Libreria, un media che non risulta al sicuro sul NAS va nel cestino
+    // di Android dopo l'avviso del foglio.
+    onTrash = if (phoneOnly?.offerTrash == true) ui::trashFromPhone else null,
     isVideo = phoneOnly?.isVideo == true,
   )
 

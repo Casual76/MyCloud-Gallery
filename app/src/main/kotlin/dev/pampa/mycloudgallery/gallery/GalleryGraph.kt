@@ -379,7 +379,15 @@ class GalleryGraph(
    * Fase 5B (P14): cio' che le schermate della 5B danno alla galleria (le voci del backup nel viewer, "Libera spazio" sulla selezione della
    * Libreria). Nascono dopo la galleria (dipendono da lei): le lega l'applicazione all'avvio, prima di qualunque schermata.
    */
-  class FiveBHooks(val mediaActions: dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions, val freeSpace: (Set<MediaId>) -> Unit)
+  class FiveBHooks(
+    val mediaActions: dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions,
+    /** 5B I3 (G2): il backup e' attivo, e "Elimina dal telefono" della selezione passa dal foglio "Prima mettilo al sicuro". Letto al tocco. */
+    val backupActive: () -> Boolean = { false },
+    /** 5B I3: apre il foglio "Prima mettilo al sicuro" per i media della selezione con una copia sul telefono. */
+    val deleteFromPhoneSafely: (Set<MediaId>) -> Unit = {},
+    // Ultimo, come prima: chi lo passa come lambda finale non cambia.
+    val freeSpace: (Set<MediaId>) -> Unit,
+  )
 
   @Volatile
   var fiveB: FiveBHooks? = null

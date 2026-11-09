@@ -16274,3 +16274,85 @@ Esperimenti con interruttori temporanei (file `perf-<nome>` nella cartella dell'
 #### Difetti trovati fuori dal pacchetto
 - **La preparazione del dataset dopo un'installazione pulita cade ancora** (terza volta: il 03/11 `no such table: search_history`; oggi, in due tentativi di fila, ancora quella e poi `SQLiteDatabaseLockedException: database is locked` in `syncTriggers` di Room da `AppIndexerControl`): la sonda aspetta tutti i 1.200 s e salta le prove. Aggirato avviando a mano l'app di misura (il marcatore c'era gia') e riprovando alla morte del processo: la preparazione vera dura 53 s. Va corretto nel seeder / nel provider della variante di misura.
 - **`benchDiag` con le tracce di Anni va in timeout** (`SocketTimeoutException` del processore di tracce al terzo giro di `scroll_years_square`, tracce da ~300 MB): le interrogazioni con sottointerrogazioni correlate di `FrameDiagMetric` (`JANK`, `TL`, `RTJ`) sono troppo lente; la prova fallisce e non salva i numeri. Per Anni serve un'altra diagnosi (o le tracce interrogate a parte, come qui).
+
+## Fase grafica, pacchetto G2: la pillola come in Foto di Apple, la barra della selezione, "Elimina dal telefono" dalla selezione (09/11)
+Branch `grafica/g2-pillola` (base `29ca7fa4`). Requisiti: `docs/grafica-segnalazioni-utente.md` (terzo punto), B3 di `docs/fase-grafica-e-rilascio.md` §2, 5B I3
+(sopra, "Scelta dell'utente (non decisa qui): 5B I3", decisa dall'utente: si'). Nessuna dipendenza nuova, `engine/` non toccato.
+
+### Scelte
+1. **La pillola e' Libreria · Album · Raccolte** (`GalleryTab`). **Cerca e' il cerchio della pillola** (`standaloneTab` di `FluidFloatingTabBar` a DSL), non un
+   `FluidSearchField` chiuso posato accanto: il cerchio e' della barra, che lo mette alla destra del gruppo centrato, gli lascia lo spazio quando stringe le
+   schede e, **ripiegata** dallo scorrimento della Libreria, mostra la scheda scelta e il cerchio (stesso vetro, stessa aptica, stessa trasformazione). Un
+   campo posato da fuori avrebbe dovuto misurare la pillola e seguirne la piega a mano. Il cerchio si colora d'accento con la ricerca aperta e dice
+   "selezionato" a TalkBack; il nome resta "Cerca" (lo cercano anche i benchmark, `SearchUi`). Raccolte ha un'icona nuova (`AutoAwesomeMosaic`, un mosaico):
+   con tre schede quella di prima (`Collections`, una pila di foto) era quasi uguale a quella della Libreria.
+2. **Cerca e' una sovrapposizione dentro la schermata principale, non una rotta.** Aperta dal cerchio prende il posto della scheda; la pillola resta sulla
+   scheda di prima; **Indietro** (un `BackHandler` dello scaffold, che le pagine della scheda possono scavalcare) o un tocco su una scheda la chiudono e si
+   torna li'. Perche' non una rotta: lo stato della ricerca resta com'era fra un'apertura e l'altra (il `SearchViewModel` resta quello della rotta principale,
+   come quando era una scheda), la pillola resta in vista con il cerchio, il tablet a due pannelli non cambia (e' una scheda come le altre), e una pagina
+   che entra da destra non e' "il cerchio che si apre". **Il campo e' pronto a scrivere** (fuoco e tastiera, `SearchScreen(focusField)`) solo dal cerchio:
+   "Trova simili" (dal viewer, TS-2/TS-3, e dalla selezione, TS-4) apre Cerca senza tastiera, che coprirebbe i risultati. Le altre entrate verso la vecchia
+   scheda: nessuna (il manifest non ha scorciatoie ne' intent di ricerca, il widget apre viewer, ricordo o Libreria; verificato nel codice). La misura
+   `MCG:pagina:cerca` parte dal tocco sul cerchio.
+3. **La scheda Album** ospita per ora l'elenco degli album di sempre (`AlbumListRoute`, senza indietro) in `app/.../main/AlbumsTabHost.kt`, dentro una cornice
+   (`AlbumsTabFrame`) che da' alla `FluidScreen` dell'elenco lo spazio della pillola e il registro dei fondali dell'engine (`ProvideFluidChrome`): il
+   contenuto scorre sotto la pillola e la pillola rifrange la pagina. **G2b collega il suo schermo li'**, lo scaffold non cambia.
+4. **Le Raccolte alleggerite.** `CollectionSections.inAlbumsTab` = `albums`, `smart`, `phone`: il controllore delle Raccolte le toglie (`merged`), nell'elenco
+   e in "Modifica Raccolte", e non ascolta nemmeno i fornitori di Album e Album smart. Restano Viaggi, Persone, Ricordi, Luoghi, Cartelle NAS, Da tenere al
+   sicuro, Utility, Nascosti. **I codici e l'ordine predefinito non cambiano**: un ordine salvato che li contiene si legge come prima (i codici che oggi non
+   ci sono si saltano), e riordinando li si tiene al loro posto (`toSave`): una versione vecchia, che li mostra ancora nelle Raccolte, li ritrova dove erano.
+   **Il vincolo di Album "mai nascosto"** resta in `neverHidden` (e in `SyncedCollectionsSettings.DEFAULT_NEVER_HIDDEN`, non toccato): qui non protegge piu'
+   niente (agli album si arriva dalla loro scheda), ma per una versione vecchia la sezione Album delle Raccolte e' l'unico modo di arrivare agli album, e con il
+   codice nell'elenco nessuna versione scrive `collections_hidden:albums`. Una voce `collections_hidden:phone` o `:smart` scritta da una versione vecchia e'
+   innocua. Sul tablet, senza le raccolte-filtro del Telefono, il pannello di dettaglio parte da "scegli una raccolta" (il caso che c'era gia' con il Telefono
+   nascosto). I sorgenti delle sezioni (`FixedCollectionsSection`, i fornitori in `:app`) restano: servono a G2b.
+5. **B3, la barra della selezione al posto della pillola.** In fondo c'e' un posto solo (`GalleryTabBarSlot`, `TakeGalleryTabBarSlot`,
+   `GalleryTabBarSlotVisibility` in `core-designsystem/.../chrome`): la pillola (con il cerchio) e la barra delle azioni entrano ed escono con
+   `FluidFloatingCapsuleDefaults.enter/exit` (molla del chrome, uscita piu' svelta, solo dissolvenza con le animazioni ridotte) e i margini di
+   `fluidCapsuleInsets(ReplacingTabBar)` dentro l'animazione. Una griglia dentro una scheda (il pannello delle Raccolte sul tablet: raccolte-filtro, Nascosti,
+   Eliminati di recente con "Ripristina") **prende il posto** finche' mostra la barra, invece di posarla sopra la pillola: era il caso dei comandi che si
+   compenetravano. `GalleryChromeActionBar` **tiene i tocchi** fra le icone (come la capsula). **Non** `FluidFloatingCapsule` diretta: la sua pellicola e' fissa
+   (`floatingTint`, `floatingTintOnPhoto`) e non accetta lo stile adattivo (`GalleryChromeStyle`, il contrasto sulle foto chiare); se ne usano i pezzi pubblici.
+   Vale per tutte le griglie che usano `GridSelectionBar` (Libreria, raccolte-filtro, Nascosti, Utility, il selettore dei media degli album) e per le pagine
+   NAS che usano `GalleryChromeActionBar` (solo la tenuta dei tocchi).
+6. **5B I3.** Con il backup attivo (`FiveBUi.backupActive`: configurato, anche "in prova" come il viewer in release) e il cestino di sistema, "Elimina dal
+   telefono" della selezione della Libreria apre **il foglio del viewer** (`FiveBSheet.PhoneOnly`, ora con `offerTrash` al posto di `fromViewer`) per i soli media
+   con una copia sul telefono: con piu' elementi dice quanti si possono togliere e quanti non sono ancora al sicuro, con "Prima mettilo al sicuro"
+   preselezionata o "Togli solo quelli gia' al sicuro"; se nessuno e' al sicuro, l'avviso "Non sono sul NAS" con "Metti al sicuro" e il cestino di Android.
+   Vale per tutte le entrate (barra, tasto Canc, azione della cella per TalkBack: `requestPhoneDelete`). La selezione si chiude come per "Libera spazio" (il
+   seguito e' del foglio, alla radice). Backup spento o non legato: il foglio di sempre (D14, D-B1).
+
+### Prove
+`G2PillolaTest` (`:app`: schede e cerchio, Indietro, una scheda chiude la ricerca, selezione e posto preso da una griglia), `G2RaccolteAlleggeriteTest`
+(controllore vero, ordini e voci nascoste con i codici spariti), `G2EliminaDallaSelezioneTest` (Libreria: selezione mista con il backup attivo, solo i media
+del telefono, backup spento), `G2SelezioneLibreriaTest` (feature-backup: il foglio con la selezione mista e senza nessuno al sicuro). Aggiornati i test che
+descrivevano il comportamento di prima (vedi il resoconto del pacchetto). Screenshot in `docs/screenshots/beta-grafica/G2/`.
+
+### Da provare sul telefono (S25, poi Tab S9)
+- La pillola: tre schede e il cerchio, la piega scorrendo la Libreria verso i piu' vecchi (scheda e cerchio), la riapertura; un tocco sul cerchio con la pillola
+  ripiegata apre Cerca.
+- Il cerchio: Cerca si apre con la tastiera e il cursore nel campo; Indietro (anche il gesto dal bordo) la chiude e torna alla scheda di prima; un tocco su una
+  scheda la chiude, **anche sulla scheda di partenza, che ha sopra la lente della pillola** (nella prova su JVM il tocco simulato lo prende la lente: provato
+  con l'azione di clic di TalkBack; se sul telefono il tocco non arriva, e' un limite della barra dell'engine da segnalare); "Trova simili" dal viewer e dalla selezione apre Cerca senza tastiera; un risultato apre il viewer e Indietro torna ai risultati.
+- La scheda Album: l'elenco scorre sotto la pillola, il vetro della pillola rifrange l'elenco, un album si apre e Indietro torna alla scheda.
+- Le Raccolte senza Album, Album smart e Telefono; "Modifica Raccolte" senza di loro; sul tablet il pannello vuoto all'apertura.
+- In selezione (Libreria; sul tablet nel pannello delle Raccolte: Nascosti, Eliminati di recente): la pillola scende mentre la barra sale, senza un fotogramma
+  con le due sovrapposte a lungo; un tocco fra due icone non apre la foto sotto; lo scorrimento che parte dalla barra scorre.
+- "Elimina dal telefono" dalla selezione con il backup attivo: selezione mista, tutti al sicuro, nessuno al sicuro; "Continua" apre "Libera spazio" con i soli
+  al sicuro; il cestino di Android dopo l'avviso. Con il backup spento: il foglio di sempre.
+- Prestazioni: `scroll_*` della Libreria (la piega della pillola e' la stessa; la barra della selezione ora sale invece di sfumare), apertura di Raccolte e Cerca
+  (`PagesBenchmark`, `SearchBenchmark`), gli album (`AlbumBenchmark` ora tocca la scheda Album: `collectionsOpenMs` misura dal tocco sulla scheda Album
+  alla riga dell'album).
+
+### Cosa resta
+- Il tasto **"Cerca" nella barra** come in Foto (il cerchio che si allunga in un campo nella pillola, `searchMode` della barra): l'engine non ha un campo "nudo"
+  per lo slot (lacuna gia' annotata nella scheda delle barre); per ora il campo resta in cima alla schermata di Cerca.
+- **Da decidere con l'utente:** con Cerca aperta la lente della pillola resta sulla scheda di partenza (Indietro riporta li') e il cerchio e' d'accento:
+  due cose evidenziate insieme. In alternativa la lente si puo' spegnere mentre si cerca (serve una scheda "nessuna" che l'engine non ha: un
+  `selectedTabKey` che non corrisponde a nessuna scheda lascia la lente dov'era).
+- Il cerchio non ha `Role.Button` (la barra costruisce il nodo da se' e un ruolo messo su un discendente non sale; lo stesso per `Role.Tab` delle schede): da
+  chiedere all'engine. Ha nome, stato "selezionato" e bersaglio da 48 dp.
+- Toccare di nuovo "Album" o "Raccolte" non riporta in cima (lo fa solo "Libreria"): il bus `FluidScrollToTopBus` della cornice degli Album e' pronto ma non
+  e' collegato alla pillola.
+- In selezione la barra e la pillola fanno la stessa strada in versi opposti per ~150 ms: va guardato in mano; se si vede una sovrapposizione, l'uscita della
+  pillola si puo' far partire un fotogramma prima.

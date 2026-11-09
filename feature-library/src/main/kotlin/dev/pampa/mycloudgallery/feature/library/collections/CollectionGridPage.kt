@@ -150,9 +150,9 @@ internal fun CollectionGridPage(
   val scope = rememberCoroutineScope()
 
   val topChrome = gridTopChromeHeight()
-  val slotBottom = collectionActionSlot(contentPadding)
-  // Lo spazio in fondo e' lo stesso dentro e fuori dalla selezione: la griglia non si sposta quando arriva la barra.
-  val gridBottom = slotBottom + ActionBarHeight + GalleryChromeDefaults.Gap
+  // Lo spazio in fondo e' lo stesso dentro e fuori dalla selezione: la griglia non si sposta quando arriva la barra (G2: nel pannello del
+  // tablet la barra prende il posto della pillola, quindi basta lo spazio di una delle due).
+  val gridBottom = collectionGridBottom(contentPadding)
   // Una raccolta-filtro ha al piu' qualche decina di migliaia di elementi: il conteggio costa meno di un fotogramma.
   val summary = remember(view) { photoAndVideoCounts(view) }
   val section = rememberMediaGridSection(grid, topChrome)
@@ -237,7 +237,7 @@ internal fun CollectionGridPage(
       visible = specs.isNotEmpty(),
       grid = grid,
       backdrop = backdrop,
-      modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = slotBottom),
+      modifier = Modifier.align(Alignment.BottomCenter),
     ) {
       shown.value.map { spec ->
         GalleryBarAction(
@@ -255,14 +255,22 @@ internal fun CollectionGridPage(
 }
 
 /**
- * Dove sta la barra delle azioni (o "Ripristina") in fondo: nel posto della pillola se la pagina non ne ha una sotto (la
- * rotta a schermo intero del telefono), sopra la pillola se c'e' ([contentPadding], il pannello di dettaglio del tablet).
+ * Dove sta la barra delle azioni (o "Ripristina") in fondo: **sempre nel posto della pillola** (G2, B3). Nella rotta a schermo intero del
+ * telefono la pillola non c'e'; nel pannello di dettaglio del tablet la barra prende il suo posto e la pillola esce
+ * (`TakeGalleryTabBarSlot`). Prima, nel pannello, stava sopra la pillola e i comandi si compenetravano.
  */
 @Composable
-internal fun collectionActionSlot(contentPadding: PaddingValues): Dp {
+internal fun collectionActionSlot(): Dp =
+  WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() + FluidFloatingTabBarDefaults.BottomMargin
+
+/**
+ * Lo spazio in fondo alla griglia: quello della barra delle azioni nel posto della pillola, o quello che chiede chi la ospita ([contentPadding],
+ * la pillola nel pannello del tablet) se e' di piu'; piu' l'aria fra l'ultima riga e il vetro.
+ */
+@Composable
+internal fun collectionGridBottom(contentPadding: PaddingValues): Dp {
   val navigation = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-  val pill = contentPadding.calculateBottomPadding()
-  return if (pill > CollectionsDimens.None) navigation + pill + GalleryChromeDefaults.Gap else navigation + FluidFloatingTabBarDefaults.BottomMargin
+  return maxOf(collectionActionSlot() + ActionBarHeight, navigation + contentPadding.calculateBottomPadding()) + GalleryChromeDefaults.Gap
 }
 
 /** Il riepilogo "N foto, M video" e, se c'e', la nota in fondo alla griglia (o allo stato vuoto). */

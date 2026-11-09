@@ -583,6 +583,29 @@ internal fun selectionActions(
 }
 
 /**
+ * "Elimina dal telefono" sulla selezione di adesso, da qualunque parte arrivi (la barra delle azioni, il tasto Canc, l'azione della cella per
+ * TalkBack). 5B I3 (decisione dell'utente, G2): con il backup attivo ([LibraryCommands.deletesThroughSafeSheet]) passa dal foglio della 5B
+ * "Prima mettilo al sicuro", lo stesso del viewer, per i soli media con una copia sul telefono; la selezione si chiude come per "Libera
+ * spazio" (il foglio sta alla radice, e il seguito, "Continua" o il cestino dopo l'avviso, e' suo). Altrimenti [openSheet] apre il foglio
+ * di sempre ([LibraryDeleteSheet]).
+ */
+internal fun requestPhoneDelete(state: LibraryTabState, openSheet: () -> Unit) {
+  val commands = state.commands
+  if (!commands.deletesThroughSafeSheet) {
+    openSheet()
+    return
+  }
+  val grid = state.grid
+  val onPhone = commands.onPhone(grid.selection.selected.value.ids)
+  if (onPhone.isEmpty()) {
+    state.notice = ActionNotice.DeleteNasOnly
+    return
+  }
+  commands.deleteFromPhoneSafely(onPhone)
+  grid.stopSelecting()
+}
+
+/**
  * Il foglio "Elimina dal telefono" (D14): un posto solo, il telefono, e l'avviso che sul NAS non c'e' ancora una copia **solo per i media che
  * non sono al sicuro** (D-B1: prima l'avviso era fisso e diceva il falso per foto gia' al sicuro). Con una selezione mista lo dice con i numeri.
  */

@@ -37,8 +37,7 @@ import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.antigravity.fluidengine.ui.theme.FluidLoading
-import dev.pampa.mycloudgallery.core.designsystem.design.ActionBarHeight
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeDefaults
+import dev.pampa.mycloudgallery.core.designsystem.chrome.TakeGalleryTabBarSlot
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTextButton
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
@@ -50,6 +49,7 @@ import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEmptyState
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsDimens
 import dev.pampa.mycloudgallery.feature.library.collections.collectionActionSlot
+import dev.pampa.mycloudgallery.feature.library.collections.collectionGridBottom
 import dev.pampa.mycloudgallery.feature.library.countText
 import dev.pampa.mycloudgallery.feature.library.grid.ChromeLabelText
 import dev.pampa.mycloudgallery.feature.library.grid.GridTopChrome
@@ -231,11 +231,13 @@ internal fun RecentlyDeletedScreen(
   if (backdropOut != null) SideEffect { backdropOut(backdrop) }
   val barHeight = gridTopChromeHeight()
   val bottomPadding = contentPadding.calculateBottomPadding()
-  // "Ripristina" sta nel posto della barra delle azioni delle altre griglie, e la griglia non si sposta quando arriva.
-  val slotBottom = collectionActionSlot(contentPadding)
-  val gridBottom = slotBottom + ActionBarHeight + GalleryChromeDefaults.Gap
+  // "Ripristina" sta nel posto della barra delle azioni delle altre griglie, e la griglia non si sposta quando arriva. G2 (B3): e' il posto
+  // della pillola anche nel pannello del tablet, dove la pillola esce finche' c'e' una selezione.
+  val slotBottom = collectionActionSlot()
+  val gridBottom = collectionGridBottom(contentPadding)
   val loaded = state as? TrashUiState.Loaded
   val selecting = selection.isNotEmpty()
+  TakeGalleryTabBarSlot(active = selecting)
 
   Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop)) {

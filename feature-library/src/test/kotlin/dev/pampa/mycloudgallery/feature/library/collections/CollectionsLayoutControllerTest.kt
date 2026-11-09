@@ -19,6 +19,10 @@ import org.junit.Test
  * Le sezioni come dati e le scelte dell'utente (Fase 7, P11, D33): dei fornitori registrati dagli altri pacchetti, un ordine e una
  * visibilita' salvati nelle voci sincronizzate, una sezione nuova in coda (E-L14). Sul controllore vero, con il deposito in memoria e un
  * deposito che fallisce; i fornitori sono i finti di `testing/`.
+ *
+ * G2 (fase grafica): Album, Album smart e Telefono stanno nella scheda Album della pillola, non piu' nelle Raccolte (`CollectionSections.inAlbumsTab`):
+ * le prove che li usavano come sezioni qualunque usano adesso Viaggi, Persone, Cartelle NAS, Da tenere al sicuro e Nascosti. Le prove dedicate ai
+ * codici spariti sono in `G2RaccolteAlleggeriteTest`.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class CollectionsLayoutControllerTest {
@@ -66,21 +70,19 @@ class CollectionsLayoutControllerTest {
     val c = controller()
     val state = c.layout()
 
-    assertThat(state.sections.map { it.code }).containsExactly("phone", "safe", "hidden").inOrder()
+    // G2: il Telefono (Preferiti, Video, Screenshot, WhatsApp) e' nella scheda Album.
+    assertThat(state.sections.map { it.code }).containsExactly("safe", "hidden").inOrder()
     val rows = state.visibleRows.map { (it as SectionRow.Kind).row.kind }
-    assertThat(rows).containsExactly(
-      CollectionKind.FAVORITES, CollectionKind.VIDEOS, CollectionKind.SCREENSHOTS, CollectionKind.WHATSAPP,
-      CollectionKind.RECENTLY_DELETED, CollectionKind.HIDDEN,
-    ).inOrder()
+    assertThat(rows).containsExactly(CollectionKind.RECENTLY_DELETED, CollectionKind.HIDDEN).inOrder()
     assertThat(state.editing).isFalse()
-    assertThat(state.firstFilter).isEqualTo(CollectionKind.FAVORITES)
+    assertThat(state.firstFilter).isNull()
   }
 
   @Test
   fun senzaIlCestinoDiSistemaLaSezioneDaTenereAlSicuroNonCe() = runTest(UnconfinedTestDispatcher()) {
     val c = controller(canTrash = false)
 
-    assertThat(c.codes()).containsExactly("phone", "hidden").inOrder()
+    assertThat(c.codes()).containsExactly("hidden").inOrder()
     assertThat(CollectionKind.RECENTLY_DELETED in c.layout()).isFalse()
   }
 
@@ -99,8 +101,8 @@ class CollectionsLayoutControllerTest {
     val providers = CollectionsSectionSamples.all() + NoCollectionsSection("memories")
     val c = controller(providers)
 
-    assertThat(c.codes()).containsExactly("albums", "smart", "trips", "people", "nas", "phone", "safe", "utility", "hidden").inOrder()
-    assertThat(c.layout().sections.first { it.code == "albums" }.hideable).isFalse()
+    // G2: senza Album, Album smart e Telefono (scheda Album).
+    assertThat(c.codes()).containsExactly("trips", "people", "nas", "safe", "utility", "hidden").inOrder()
   }
 
   @Test
@@ -127,7 +129,7 @@ class CollectionsLayoutControllerTest {
 
     trips.set(group("trips/a"))
     assertThat(c.codes()).contains("trips")
-    assertThat(c.codes().indexOf("trips")).isLessThan(c.codes().indexOf("phone"))
+    assertThat(c.codes().indexOf("trips")).isLessThan(c.codes().indexOf("safe"))
 
     trips.set(group())
     assertThat(c.codes()).doesNotContain("trips")
@@ -142,7 +144,7 @@ class CollectionsLayoutControllerTest {
     assertThat(hidden.rows.map { (it as SectionRow.Entry).entry.code }).containsExactly("hidden/own")
     assertThat((hidden.title as SectionText.Raw).text).isEqualTo("Nascosti di P9")
     // Le altre sezioni della scheda restano.
-    assertThat(c.codes()).containsAtLeast("phone", "safe")
+    assertThat(c.codes()).contains("safe")
   }
 
   @Test
@@ -158,26 +160,28 @@ class CollectionsLayoutControllerTest {
     val trips = c.layout().sections.filter { it.code == "trips" }
     assertThat(trips).hasSize(1)
     assertThat((trips.single().rows.single() as SectionRow.Entry).entry.code).isEqualTo("trips/primo")
-    assertThat(c.codes()).containsExactly("trips", "phone", "safe", "hidden").inOrder()
+    assertThat(c.codes()).containsExactly("trips", "safe", "hidden").inOrder()
   }
 
   @Test
   fun iGruppiDiAppDiPrimaDiP13SonoSezioniEUnFornitoreLiSostituisce() = runTest(UnconfinedTestDispatcher()) {
     val nas = group("nas/folders", "nas/space", title = "Sul NAS")
     val c = controller()
-    assertThat(c.layout(listOf(nas)).sections.map { it.code }).containsExactly("nas", "phone", "safe", "hidden").inOrder()
+    assertThat(c.layout(listOf(nas)).sections.map { it.code }).containsExactly("nas", "safe", "hidden").inOrder()
 
     val withProvider = controller(listOf(FixedCollectionsSection("nas", group("nas/nuovo", title = "Cartelle NAS"))))
     val section = withProvider.layout(listOf(nas)).sections.first { it.code == "nas" }
     assertThat(section.rows.map { (it as SectionRow.Entry).entry.code }).containsExactly("nas/nuovo")
   }
 
+  /**
+   * G2: i conteggi dal vivo erano quelli del Telefono (Preferiti, Video...), che adesso sta nella scheda Album. Un preferito in piu' cambia i
+   * conteggi della sorgente ma non rimette il Telefono nelle Raccolte.
+   */
   @Test
-  fun iConteggiDelleRaccolteSiAggiornanoDalVivo() = runTest(UnconfinedTestDispatcher()) {
+  fun unPreferitoInPiuNonRimetteIlTelefonoNelleRaccolte() = runTest(UnconfinedTestDispatcher()) {
     val c = controller()
-    fun favorites(): Int? =
-      (c.layout().sections.first { it.code == "phone" }.rows.first() as SectionRow.Kind).row.count
-    val before = favorites()
+    val before = c.codes()
     val plain = world.visibleIds.first { id ->
       val view = world.source.items(dev.pampa.mycloudgallery.core.library.contract.LibraryFilter.FAVORITES).view.value
       view.viewIndexOf(id) < 0
@@ -185,7 +189,8 @@ class CollectionsLayoutControllerTest {
 
     world.actions.setFavorite(setOf(plain), true)
 
-    assertThat(favorites()).isEqualTo(before!! + 1)
+    assertThat(c.codes()).isEqualTo(before)
+    assertThat(c.codes()).doesNotContain("phone")
   }
 
   // --- Ordine e visibilita' ----------------------------------------------------------------------------------------------------------------
@@ -195,12 +200,13 @@ class CollectionsLayoutControllerTest {
     val store = MemoryCollectionsLayoutStore()
     val c = controller(CollectionsSectionSamples.all(), store)
     val before = c.codes()
-    assertThat(before.take(3)).containsExactly("albums", "smart", "trips").inOrder()
+    assertThat(before.take(3)).containsExactly("trips", "people", "nas").inOrder()
 
-    c.reorder(listOf("trips", "albums") + before.filter { it != "trips" && it != "albums" })
+    c.reorder(listOf("nas", "trips") + before.filter { it != "nas" && it != "trips" })
 
-    assertThat(c.codes().take(3)).containsExactly("trips", "albums", "smart").inOrder()
-    assertThat(store.order.value.take(3)).containsExactly("trips", "albums", "smart").inOrder()
+    assertThat(c.codes().take(3)).containsExactly("nas", "trips", "people").inOrder()
+    // G2: i codici della scheda Album restano nell'ordine salvato, al loro posto (le versioni vecchie li mostrano ancora).
+    assertThat(store.order.value.filter { it !in CollectionSections.inAlbumsTab }.take(3)).containsExactly("nas", "trips", "people").inOrder()
     // Le sezioni di fase futura non erano nell'elenco: Persone c'e' (il fornitore finto la da') e ha il suo posto scelto.
     assertThat(store.order.value).containsAtLeastElementsIn(c.codes())
   }
@@ -209,11 +215,12 @@ class CollectionsLayoutControllerTest {
   fun leSezioniCheOggiNonCiSonoTenganoIlPostoQuandoSiRiordina() = runTest(UnconfinedTestDispatcher()) {
     val store = MemoryCollectionsLayoutStore(order = listOf("nas", "phone", "safe", "hidden"))
     val c = controller(emptyList(), store)
-    assertThat(c.codes()).containsExactly("phone", "safe", "hidden").inOrder()
+    assertThat(c.codes()).containsExactly("safe", "hidden").inOrder()
 
-    c.reorder(listOf("hidden", "phone", "safe"))
+    c.reorder(listOf("hidden", "safe"))
 
-    assertThat(store.order.value).containsExactly("nas", "hidden", "phone", "safe").inOrder()
+    // Cartelle NAS (oggi assente) e Telefono (nella scheda Album, G2) tengono il loro posto.
+    assertThat(store.order.value).containsExactly("nas", "phone", "hidden", "safe").inOrder()
   }
 
   @Test
@@ -221,11 +228,11 @@ class CollectionsLayoutControllerTest {
     val store = MemoryCollectionsLayoutStore(order = listOf("hidden", "phone", "safe"))
     val people = FixedCollectionsSection("people", null)
     val c = controller(listOf(people), store)
-    assertThat(c.codes()).containsExactly("hidden", "phone", "safe").inOrder()
+    assertThat(c.codes()).containsExactly("hidden", "safe").inOrder()
 
     people.set(CollectionsSectionSamples.people().group.value)
 
-    assertThat(c.codes()).containsExactly("hidden", "phone", "safe", "people").inOrder()
+    assertThat(c.codes()).containsExactly("hidden", "safe", "people").inOrder()
     // L'ordine salvato non e' stato toccato: nessuna scrittura per una sezione che arriva.
     assertThat(store.order.value).containsExactly("hidden", "phone", "safe").inOrder()
   }
@@ -255,7 +262,8 @@ class CollectionsLayoutControllerTest {
     c.setShown("", false)
 
     assertThat(store.hiddenWrites).isEqualTo(0)
-    assertThat(c.layout().visible.map { it.code }).contains("albums")
+    // G2: Album non e' piu' nelle Raccolte (scheda Album); il vincolo resta per le versioni vecchie (nessuna voce scritta).
+    assertThat(c.layout().visible.map { it.code }).doesNotContain("albums")
   }
 
   @Test
@@ -263,12 +271,12 @@ class CollectionsLayoutControllerTest {
     val store = MemoryCollectionsLayoutStore()
     val c = controller(CollectionsSectionSamples.all(), store)
 
-    // Sul tablet l'utente ha nascosto Viaggi e messo Telefono per primo: arriva con la sincronizzazione.
+    // Sul tablet l'utente ha nascosto Viaggi e messo Utility e Cartelle NAS per prime: arriva con la sincronizzazione (anche con i codici della scheda Album in mezzo).
     store.setHidden("trips", true)
-    store.setOrder(listOf("phone", "albums"))
+    store.setOrder(listOf("utility", "phone", "nas", "albums"))
 
     assertThat(c.layout().visible.map { it.code }).doesNotContain("trips")
-    assertThat(c.codes().take(2)).containsExactly("phone", "albums").inOrder()
+    assertThat(c.codes().take(2)).containsExactly("utility", "nas").inOrder()
   }
 
   @Test
@@ -277,12 +285,12 @@ class CollectionsLayoutControllerTest {
     val c = controller(CollectionsSectionSamples.all(), store)
     val start = c.codes()
 
-    // "Sposta giu'" di Album due volte: la seconda parte da dove ha lasciato la prima, come fa TalkBack senza aspettare la scheda.
-    c.reorder(CollectionsLayout.moved(c.codes(), "albums", +1)!!)
-    c.reorder(CollectionsLayout.moved(c.codes(), "albums", +1)!!)
+    // "Sposta giu'" di Viaggi due volte: la seconda parte da dove ha lasciato la prima, come fa TalkBack senza aspettare la scheda.
+    c.reorder(CollectionsLayout.moved(c.codes(), "trips", +1)!!)
+    c.reorder(CollectionsLayout.moved(c.codes(), "trips", +1)!!)
 
-    assertThat(c.codes().indexOf("albums")).isEqualTo(2)
-    assertThat(c.codes() - "albums").containsExactlyElementsIn(start - "albums").inOrder()
+    assertThat(c.codes().indexOf("trips")).isEqualTo(2)
+    assertThat(c.codes() - "trips").containsExactlyElementsIn(start - "trips").inOrder()
   }
 
   // --- Il salvataggio che non riesce ---------------------------------------------------------------------------------------------------------
@@ -298,14 +306,14 @@ class CollectionsLayoutControllerTest {
     assertThat(c.codes()).isEqualTo(before)
     assertThat(c.inputs.value.saveFailed).isTrue()
 
-    c.setShown("smart", false)
-    assertThat(c.layout().visible.map { it.code }).contains("smart")
+    c.setShown("people", false)
+    assertThat(c.layout().visible.map { it.code }).contains("people")
     assertThat(c.inputs.value.saveFailed).isTrue()
 
     // La volta dopo riesce: l'avviso sparisce.
     store.failing = false
-    c.setShown("smart", false)
-    assertThat(c.layout().visible.map { it.code }).doesNotContain("smart")
+    c.setShown("people", false)
+    assertThat(c.layout().visible.map { it.code }).doesNotContain("people")
     assertThat(c.inputs.value.saveFailed).isFalse()
   }
 

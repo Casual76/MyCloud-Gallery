@@ -173,7 +173,15 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
     AvvioTrace.section("MCG:app:installaIntegrazioni") { integrations.install() }
     // Correzioni 5B (R4, MC-2): "Condividi" con l'impostazione per il viewer (anche senza backup) e per la selezione della Libreria.
     gallery.shares = integrations.shares
-    fiveB.ifPresent { ui -> gallery.fiveB = GalleryGraph.FiveBHooks(ui.mediaActions) { ids -> ui.openFreeSpace(ids) } }
+    fiveB.ifPresent { ui ->
+      gallery.fiveB = GalleryGraph.FiveBHooks(
+        mediaActions = ui.mediaActions,
+        freeSpace = { ids -> ui.openFreeSpace(ids) },
+        // 5B I3 (G2): "Elimina dal telefono" della selezione della Libreria passa dal foglio "Prima mettilo al sicuro" quando il backup e' attivo.
+        backupActive = { ui.backupActive },
+        deleteFromPhoneSafely = ui::deleteFromPhoneSafely,
+      )
+    }
     // Fase 6 (P11): testo dal vivo, "Trova simili" e foto in movimento nel viewer, prima di qualunque schermata.
     gallery.searchViewer = AvvioTrace.section("MCG:app:viewerAi") {
       ai.viewerHooks(graph, gallery, CutoutShareEnv(integrations.shareCache, integrations.uris, integrations.shareHolder, integrations.revoker))

@@ -50,6 +50,8 @@ import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.albums.nav.albumsGraph
+import dev.pampa.mycloudgallery.feature.albums.nav.openAlbum
+import dev.pampa.mycloudgallery.feature.albums.nav.openSmartEditor
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleActions
 import dev.pampa.mycloudgallery.feature.people.nav.openPeopleEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionKind
@@ -72,6 +74,7 @@ import dev.pampa.mycloudgallery.feature.settings.SettingsPasswordRoute
 import dev.pampa.mycloudgallery.feature.settings.settingsGraph
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.main.GalleryHostViewModel
+import dev.pampa.mycloudgallery.main.AlbumsTabHost
 import dev.pampa.mycloudgallery.main.GalleryRoot
 import dev.pampa.mycloudgallery.main.BackupHostEffect
 import dev.pampa.mycloudgallery.main.FiveBHostEffect
@@ -255,6 +258,7 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
               memoriesHost = memoriesHost,
               mapHost = mapHost,
               entryPanes = entryPanes,
+              albumsHost = albumsHost,
             )
           }
           // Fase 3 (P10): le pagine delle Raccolte sul telefono (griglie filtrate, Nascosti, Eliminati di recente).
@@ -455,8 +459,14 @@ private fun MainDestination(
   mapHost: MapHostViewModel? = null,
   /** Fase 10 (P5): le pagine di album, persone e ricordi nel pannello di dettaglio delle Raccolte. */
   entryPanes: EntryPanes? = null,
+  /** G2: la scheda Album della pillola (l'elenco degli album, le sue miniature e le sue rotte). */
+  albumsHost: AlbumsHostViewModel? = null,
 ) {
   var tab by rememberSaveable { mutableStateOf(GalleryTab.Library) }
+  // G2: Cerca e' il cerchio accanto alla pillola, aperto sopra la scheda [tab] (Indietro la chiude e torna li'). [searchFocus]: aperta dal
+  // cerchio il campo e' pronto a scrivere; aperta da "Trova simili" no.
+  var searchOpen by rememberSaveable { mutableStateOf(false) }
+  var searchFocus by rememberSaveable { mutableStateOf(false) }
   // Fase 10 (P4, D16): una finestra nuova parte dalla pagina scelta (album, ricordo, mappa), con un evento interno e solo dopo il blocco app.
   WindowStartEffect(nav)
   val library: LibraryViewModel = hiltViewModel()
@@ -476,9 +486,16 @@ private fun MainDestination(
   // Fase 6 (P11): la scheda Cerca e "Trova simili" dal viewer (la richiesta chiude il viewer e porta a Cerca con il chip "Simili a").
   val searchHost: SearchHostViewModel = hiltViewModel()
   val searchActions = rememberSearchActions(nav, viewer, searchHost)
-  LaunchedEffect(findSimilar) { if (findSimilar != null) tab = GalleryTab.Search }
+  // "Trova simili" (dal viewer, TS-2/TS-3, o dalla selezione della Libreria, TS-4) apre Cerca sopra la scheda di adesso, senza tastiera.
+  LaunchedEffect(findSimilar) {
+    if (findSimilar != null) {
+      searchFocus = false
+      if (!searchOpen) AvvioTrace.pageOpened(AvvioTrace.PAGE_SEARCH)
+      searchOpen = true
+    }
+  }
   // Fase 9 (MO-3): il giro dei ricordi di oggi anche al ritorno in primo piano con Raccolte gia' aperta (l'app viva da giorni, il ripristino dopo la morte del processo).
-  if (memoriesHost != null) MemoriesForegroundRound(memoriesHost, collectionsOpen = tab == GalleryTab.Collections)
+  if (memoriesHost != null) MemoriesForegroundRound(memoriesHost, collectionsOpen = tab == GalleryTab.Collections && !searchOpen)
 
   LibraryCommandHostEffect(state.commands, onAccessChanged = gallery::refreshAccess)
   ReportLibraryDrawn(state)
@@ -488,19 +505,29 @@ private fun MainDestination(
     status = status,
     selectedTab = tab,
     onSelectTab = { selected ->
-      // Avvio istantaneo: l'apertura di Raccolte e di Cerca si misura dal tocco al primo fotogramma con l'ultimo stato o lo scheletro.
-      if (selected != tab) {
+      // Avvio istantaneo: l'apertura di Raccolte si misura dal tocco al primo fotogramma con l'ultimo stato o lo scheletro.
+      if (selected != tab || searchOpen) {
         when (selected) {
           GalleryTab.Collections -> {
             AvvioTrace.pageOpened(AvvioTrace.PAGE_COLLECTIONS)
             // P9: all'apertura di Raccolte il giro dei ricordi di oggi, se non c'e' ancora stato (fuori dal thread principale, dopo il fotogramma).
             memoriesHost?.memories?.onCollectionsOpened()
           }
-          GalleryTab.Search -> AvvioTrace.pageOpened(AvvioTrace.PAGE_SEARCH)
           else -> Unit
         }
       }
       tab = selected
+    },
+    searchOpen = searchOpen,
+    onOpenSearch = {
+      // Avvio istantaneo: l'apertura di Cerca si misura dal tocco sul cerchio al primo fotogramma con l'ultimo stato o lo scheletro.
+      if (!searchOpen) AvvioTrace.pageOpened(AvvioTrace.PAGE_SEARCH)
+      searchFocus = true
+      searchOpen = true
+    },
+    onCloseSearch = {
+      searchOpen = false
+      searchFocus = false
     },
     onStatusClick = {
       when (status.action) {
@@ -542,7 +569,15 @@ private fun MainDestination(
         entryHasDetail = { entry -> hasEntryDetail(entry.code, entryPanes) },
       )
     },
-    search = { slot -> SearchTab(slot, searchActions, searchHost, findSimilar, onFindSimilarHandled) },
+    search = { slot ->
+      SearchTab(slot, searchActions, searchHost, findSimilar, onFindSimilarHandled, focusField = searchFocus, onFieldFocused = { searchFocus = false })
+    },
+    // G2: la scheda Album (per ora l'elenco degli album di sempre; il pacchetto G2b ne collega il contenuto nuovo in `AlbumsTabHost`).
+    albums = if (albumsHost != null) {
+      { slot -> AlbumsTabHost(slot = slot, thumbnails = albumsHost.thumbnails, onOpenAlbum = nav::openAlbum, onNewSmart = nav::openSmartEditor) }
+    } else {
+      null
+    },
   )
 }
 

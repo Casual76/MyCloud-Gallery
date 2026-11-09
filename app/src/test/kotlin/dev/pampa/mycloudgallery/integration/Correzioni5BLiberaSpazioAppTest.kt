@@ -164,7 +164,7 @@ class Correzioni5BLiberaSpazioAppTest {
     // Il viewer apre il foglio: dice che puo' offrire il cestino.
     ui.mediaActions.perform(BackupMenuAction.PHONE_ONLY_DELETE, id)
     val sheet = withTimeout(Attese.TETTO_MS) { ui.sheet.first { it != null } } as FiveBSheet.PhoneOnly
-    assertThat(sheet.fromViewer).isTrue()
+    assertThat(sheet.offerTrash).isTrue()
     // Il tocco su "Elimina dal telefono": il dialogo del sistema per il cestino (30 giorni), con la riga del telefono.
     ui.trashFromPhone(setOf(id))
     withTimeout(Attese.TETTO_MS) { while (intents.trashRequests.isEmpty()) kotlinx.coroutines.delay(20) }

@@ -14,10 +14,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * Una sezione nuova di una fase futura prende un codice nuovo e nessun altro cambia.
  */
 object CollectionSections {
-  /** Album, i miei e i condivisi insieme (P3, P10): non si nasconde mai. */
+  /** Album, i miei e i condivisi insieme (P3, P10): non si nasconde mai. Dalla G2 sta nella scheda Album, non nelle Raccolte ([inAlbumsTab]). */
   const val ALBUMS: String = "albums"
 
-  /** Album smart (P6): separati dagli altri perche' si comportano diversamente ("Suggerite"). */
+  /** Album smart (P6): separati dagli altri perche' si comportano diversamente ("Suggerite"). Dalla G2 nella scheda Album ([inAlbumsTab]). */
   const val SMART: String = "smart"
 
   /** Viaggi ed eventi proposti (P7). */
@@ -38,7 +38,7 @@ object CollectionSections {
   /** Cartelle NAS (oggi "Sul NAS", da `:app`). */
   const val NAS: String = "nas"
 
-  /** Telefono (oggi "Dal telefono"): Preferiti, Video, Screenshot, WhatsApp. */
+  /** Telefono (oggi "Dal telefono"): Preferiti, Video, Screenshot, WhatsApp. Dalla G2 nella scheda Album ([inAlbumsTab]). */
   const val PHONE: String = "phone"
 
   /** Da tenere al sicuro: gli Eliminati di recente di Android, dove il cestino di sistema esiste. */
@@ -50,8 +50,20 @@ object CollectionSections {
   /** Nascosti (P9): nascosta dalle Raccolte resta raggiungibile da Impostazioni → Privacy → Nascosti. */
   const val HIDDEN: String = "hidden"
 
-  /** L'ordine predefinito del §2.7: vale finche' l'utente non ne salva uno. */
+  /**
+   * L'ordine predefinito del §2.7: vale finche' l'utente non ne salva uno. Comprende ancora Album, Album smart e Telefono, che dalla G2 non
+   * stanno piu' nelle Raccolte ([inAlbumsTab]): qui non si mostrano, ma un ordine salvato da questa versione li tiene al loro posto, e una
+   * versione vecchia che lo legge (la sincronizzazione fra i dispositivi) li ritrova dove li aveva.
+   */
   val defaultOrder: List<String> = listOf(ALBUMS, SMART, TRIPS, PEOPLE, MEMORIES, PLACES, NAS, PHONE, SAFE, UTILITY, HIDDEN)
+
+  /**
+   * G2 (lista dell'utente, terzo punto): le sezioni che **escono dalle Raccolte** perche' vanno nella scheda Album della pillola. I codici
+   * non cambiano e non spariscono dalle voci sincronizzate: un ordine salvato che li contiene (qui o su un dispositivo con la versione
+   * vecchia) resta valido, le Raccolte li saltano come una sezione che oggi non c'e', e salvando un ordine nuovo restano al loro posto
+   * ([CollectionsLayout.toSave]). Un fornitore con uno di questi codici non si ascolta nemmeno: niente lavoro per una sezione che non si vede.
+   */
+  val inAlbumsTab: Set<String> = setOf(ALBUMS, SMART, PHONE)
 
   /**
    * Le sezioni che oggi non esistono e che una fase futura aggiunge (Persone, Ricordi, Luoghi): salvando un ordine non le si tiene da parte,
@@ -60,7 +72,14 @@ object CollectionSections {
    */
   val reservedForLater: Set<String> = setOf(PEOPLE, MEMORIES, PLACES)
 
-  /** Le sezioni che non si nascondono mai (D33): lo stesso elenco di `SyncedCollectionsSettings.DEFAULT_NEVER_HIDDEN` di core-personal. */
+  /**
+   * Le sezioni che non si nascondono mai (D33): lo stesso elenco di `SyncedCollectionsSettings.DEFAULT_NEVER_HIDDEN` di core-personal.
+   *
+   * G2: Album non e' piu' una sezione delle Raccolte (si arriva agli album dalla loro scheda), quindi qui il vincolo non ha piu' niente da
+   * proteggere; **resta** perche' e' scritto anche nelle voci sincronizzate: una versione vecchia mostra ancora Album nelle Raccolte, e li'
+   * e' l'unico modo di arrivare agli album. Con il codice in questo elenco nessuna versione scrive `collections_hidden:albums`, e una voce
+   * scritta da altri si ignora ovunque.
+   */
   val neverHidden: Set<String> = setOf(ALBUMS)
 
   /** Il massimo di sezioni che si ricordano nell'ordine salvato, e la lunghezza di un codice: gli stessi di `CollectionsSettingsCodec`. */

@@ -206,9 +206,13 @@
   <string name="diag_and_recent_reboot_title">Telefono riavviato da poco</string>
   <string name="diag_and_recent_reboot_guide">I lavori interrotti riprendono da soli.</string>
   <string name="diag_and_exit_crash_title">L\'app si è chiusa per un errore</string>
-  <string name="diag_and_exit_crash_guide">Succede di rado. Se si ripete, esporta la diagnostica e mandala a chi mantiene l\'app.</string>
+  <string name="diag_and_exit_crash_guide">Succede di rado. Nella voce «Errore registrato» c\'è il punto del codice dove si è rotta. Se si ripete, esporta la diagnostica (lo contiene) e mandala a chi mantiene l\'app.</string>
   <string name="diag_and_exit_anr_title">L\'app si è bloccata</string>
   <string name="diag_and_exit_anr_guide">Android l\'ha chiusa perché non rispondeva. Se si ripete, esporta la diagnostica.</string>
+  <string name="diag_and_crash_recorded_title">Errore registrato</string>
+  <string name="diag_and_crash_recorded_guide">L\'app ha salvato sul telefono il punto del codice dove si è rotta: niente messaggi, niente nomi di file, nessun invio automatico. Esporta la diagnostica e mandala a chi mantiene l\'app: lo contiene.</string>
+  <string name="diag_and_anr_recorded_title">Blocco registrato</string>
+  <string name="diag_and_anr_recorded_guide">Android ha chiuso l\'app perché non rispondeva. Il punto del codice dove era ferma è qui: niente nomi di file, nessun invio automatico. Esporta la diagnostica e mandala a chi mantiene l\'app.</string>
   <string name="diag_and_exit_memory_title">App chiusa per poca memoria</string>
   <string name="diag_and_exit_memory_guide">Chiudi qualche app o libera memoria: con poca memoria il lavoro in background si interrompe.</string>
   <string name="diag_and_exit_force_stop_title">Arresto forzato</string>

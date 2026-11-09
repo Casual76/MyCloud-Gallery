@@ -67,6 +67,9 @@
   <string name="diagnostics_uptime_hours">Ore dall\'accensione: %1$d</string>
   <string name="diagnostics_heartbeat_hours">Ore dall\'ultimo lavoro: %1$d</string>
   <string name="diagnostics_exit_count">Uscite registrate di recente: %1$d</string>
+  <string name="diagnostics_crash_detail_minutes">%1$d min fa · %2$s</string>
+  <string name="diagnostics_crash_detail_hours">%1$d h fa · %2$s</string>
+  <string name="diagnostics_crash_detail_days">%1$d giorni fa · %2$s</string>
   <string name="diagnostics_storage_detail">Database %1$s · cache %2$s · dati dell\'app %3$s</string>
   <string name="diagnostics_storage_detail_ai">Database %1$s · cache %2$s · dati dell\'app %3$s (modelli %4$s, indice di ricerca %5$s, buffer dell\'analisi %6$s)</string>
   <string name="diagnostics_storage_free">Liberi %1$s su %2$s</string>
@@ -159,7 +162,7 @@
   <string name="diagnostics_export_section_share">Condividi</string>
   <string name="diagnostics_export_title">Esporta la diagnostica</string>
   <string name="diagnostics_export_contents_title">Cosa contiene</string>
-  <string name="diagnostics_export_contents_message">Solo numeri, sì/no, nomi di costanti dell\'app e impronte che non si possono invertire. Non contiene nomi, indirizzi IP, utenti del NAS, percorsi o password.</string>
+  <string name="diagnostics_export_contents_message">Solo numeri, sì/no, nomi di costanti dell\'app e impronte che non si possono invertire. Se l\'app si è chiusa per un errore ci sono anche i nomi delle sue classi e il punto del codice dove si è rotta. Non contiene messaggi di errore, nomi, indirizzi IP, utenti del NAS, percorsi o password.</string>
   <string name="diagnostics_export_preview">Anteprima</string>
   <string name="diagnostics_export_preview_footnote">Il file è esattamente questo testo. Lo salvi tu, dove vuoi: l\'app non lo invia a nessuno.</string>
   <string name="diagnostics_export_save">Salva il file…</string>

@@ -30,12 +30,13 @@ class ExportEnvironment(val sdkInt: Int? = null)
  *     esce come [UNKNOWN_CODE], senza valori: `DiagCode` ha un costruttore pubblico e un codice costruito da un dato
  *     avrebbe la forma giusta), e un valore solo se la sua chiave e' in [ExportKeys].
  *  1. **Il tipo.** Dalle voci si legge solo il codice (scritto nel sorgente), la sezione, la gravita' e la mappa
- *     `export`, fatta di [ExportValue]: numeri, si'/no, durate, nomi di costanti di un enum dell'app e impronte
- *     HMAC. [ExportValue] non ha un caso «stringa»: un dato personale non ha un posto dove stare. Il testo che
- *     compare a schermo (`DiagItem.detail`, `DiagText`) non viene **mai letto** da qui.
+ *     `export`, fatta di [ExportValue]: numeri, si'/no, durate, nomi di costanti di un enum dell'app, impronte
+ *     HMAC e, solo per il registro dei crash (C472), elenchi di identificativi del codice ([ExportValue.Trace]: classi e
+ *     `classe.metodo(File.kt:riga)`, mai un messaggio). [ExportValue] non ha un caso «stringa»: un dato personale non ha un
+ *     posto dove stare. Il testo che compare a schermo (`DiagItem.detail`, `DiagText`) non viene **mai letto** da qui.
  *  2. **La grammatica.** Il file e' prodotto riga per riga da forme fisse, e [conforms] lo rilegge con le stesse
  *     forme: ogni riga deve essere una di quelle, ogni valore un numero, un si'/no, una durata (`250ms`), una
- *     costante (`Tipo.COSTANTE`) o un'impronta (`#` e 12 cifre esadecimali): nessun'altra stringa. Una riga fuori
+ *     costante (`Tipo.COSTANTE`), un'impronta (`#` e 12 cifre esadecimali) o un elenco di identificativi del codice: nessun'altra stringa. Una riga fuori
  *     dalla grammatica (un bug di domani) fa rifiutare l'esportazione invece di finire in un file mandato a
  *     qualcuno.
  *  3. **L'anteprima.** L'utente vede il file prima di salvarlo (`ACTION_CREATE_DOCUMENT`, nessun FileProvider), e
@@ -109,6 +110,13 @@ object DiagnosticsExporter {
     is ExportValue.Enum ->
       if (ENUM_TYPE.matches(value.type) && ENUM_CONSTANT.matches(value.constant)) "\"${value.type}.${value.constant}\"" else null
     is ExportValue.Hashed -> if (HASH.matches(value.hex)) "\"#${value.hex}\"" else null
+    // Il registro dei crash (C472): una lista di identificativi del codice, mai messaggi. Anche qui si ricontrolla la forma di ogni voce.
+    is ExportValue.Trace ->
+      if (value.entries.size <= ExportValue.Trace.MAX_ENTRIES && value.entries.all { ExportValue.Trace.isEntry(it) }) {
+        value.entries.joinToString(", ", prefix = "[", postfix = "]") { "\"$it\"" }
+      } else {
+        null
+      }
   }
 
   // --- La grammatica -------------------------------------------------------------------------------------------
@@ -121,8 +129,14 @@ object DiagnosticsExporter {
 
   /** I soli quattro modi in cui un valore compare: numero, si'/no, durata, costante di un enum, impronta. */
   private const val WORD = "(?:[0-9]{1,15}ms|$ENUM_TYPE_PATTERN\\.$ENUM_CONSTANT_PATTERN|#[0-9a-f]{12})"
-  private const val VALUE = "(?:-?[0-9]{1,19}|true|false|\"$WORD\")"
-  private const val PAIR = "\"[a-z][A-Za-z0-9_.]{0,47}\": $VALUE"
+
+  /**
+   * Un elenco di identificativi del codice (C472, il registro dei crash): la stessa forma di `ExportValue.Trace.ENTRY`, che e' la sua unica definizione. Una voce che non
+   * ha quella forma (uno spazio, una barra, una cifra iniziale) non e' una riga ammessa.
+   */
+  private val TRACE = "\\[(?:\"${ExportValue.Trace.ENTRY.pattern}\"(?:, \"${ExportValue.Trace.ENTRY.pattern}\"){0,${ExportValue.Trace.MAX_ENTRIES - 1}})?\\]"
+  private val VALUE = "(?:-?[0-9]{1,19}|true|false|\"$WORD\"|$TRACE)"
+  private val PAIR = "\"[a-z][A-Za-z0-9_.]{0,47}\": $VALUE"
 
   private val LINES = listOf(
     Regex("\\{"),

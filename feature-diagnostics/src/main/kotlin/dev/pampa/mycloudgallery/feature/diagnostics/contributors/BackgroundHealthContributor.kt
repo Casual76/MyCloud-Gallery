@@ -9,6 +9,8 @@ import dev.pampa.mycloudgallery.core.common.diagnostics.DiagSeverity
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagText
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
 import dev.pampa.mycloudgallery.core.common.diagnostics.ExportValue
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashKind
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashRecord
 import dev.pampa.mycloudgallery.core.rules.platform.health.BackgroundHealth
 import dev.pampa.mycloudgallery.core.rules.platform.health.BackgroundHealthReader
 import dev.pampa.mycloudgallery.core.rules.platform.health.ExitReasonKind
@@ -85,6 +87,7 @@ class BackgroundHealthContributor(
       addAll(permissionItems(health))
       addAll(systemItems(health))
       addAll(exitItems(health, now))
+      addAll(crashItems(health, now))
       addAll(stalledItems(health, beatAgeMs))
       addAll(profileItems(health, beatAgeMs))
     }
@@ -197,6 +200,63 @@ class BackgroundHealthContributor(
     }
   }
 
+  // --- Dove si e' rotta l'app (registro locale dei crash, C472) --------------------------------------------------------
+
+  /**
+   * I crash e gli ANR recenti **con il punto del codice** (OA-2 / OB-7): una voce per ognuno, dal piu' recente, al piu' [MAX_CRASH_ITEMS], entro [EXIT_WINDOW].
+   * A schermo: quanto tempo fa e dove (la prima cornice nostra). Nell'esportazione: l'eta', la famiglia del thread, la versione, la catena delle classi e le cornici nostre di ogni
+   * eccezione, come elenchi di identificativi del codice (`ExportValue.Trace`). **Mai un messaggio**: non e' nei dati, quindi non puo' uscire.
+   */
+  private fun crashItems(health: BackgroundHealth, now: Long): List<DiagItem> =
+    health.recentCrashes
+      .filter { now - it.atMillis in 0..EXIT_WINDOW.inWholeMilliseconds }
+      .sortedByDescending { it.atMillis }
+      .take(MAX_CRASH_ITEMS)
+      .map { crashItem(it, now) }
+
+  private fun crashItem(record: CrashRecord, now: Long): DiagItem {
+    val age = (now - record.atMillis).coerceAtLeast(0L)
+    val values = LinkedHashMap<String, ExportValue>()
+    values["crashAge"] = ExportValue.Dur(age)
+    values["crashThread"] = ExportValue.Enum.of(record.thread)
+    if (record.versionCode > 0) values["crashVersion"] = ExportValue.Num(record.versionCode)
+    values["crashMainProcess"] = ExportValue.Flag(record.mainProcess)
+    ExportValue.Trace.of(record.chain.map { it.className })?.let { values["crashChain"] = it }
+    record.chain.forEachIndexed { index, cause ->
+      ExportValue.Trace.of(cause.frames)?.let { values["crashFrames$index"] = it }
+    }
+    val code = if (record.kind == CrashKind.ANR) DiagCodes.AND_ANR_RECORDED else DiagCodes.AND_CRASH_RECORDED
+    return DiagItem(
+      code = code,
+      section = DiagSection.ANDROID_WARNINGS,
+      severity = DiagSeverity.ERROR,
+      titleRes = DiagCatalog.titleOf(code),
+      detail = crashDetail(age, record.where),
+      export = values,
+    )
+  }
+
+  /** «3 h fa · LibraryViewModel.load (LibraryViewModel.kt:120)»: quando e dove, solo sullo schermo. */
+  private fun crashDetail(ageMs: Long, where: String?): DiagText {
+    val place = where?.let { shortPlace(it) } ?: NO_PLACE
+    val minutes = ageMs / MINUTE_MS
+    return when {
+      minutes < 60 -> DiagText(R.string.diagnostics_crash_detail_minutes, listOf(minutes, place))
+      ageMs < 48 * HOUR_MS -> DiagText(R.string.diagnostics_crash_detail_hours, listOf(ageMs / HOUR_MS, place))
+      else -> DiagText(R.string.diagnostics_crash_detail_days, listOf(ageMs / (24 * HOUR_MS), place))
+    }
+  }
+
+  /** `dev.pampa.x.Foo$bar$1.run(Foo.kt:12)` diventa `Foo$bar$1.run (Foo.kt:12)`: il nome breve della classe, il metodo, il file e la riga. */
+  private fun shortPlace(frame: String): String {
+    val location = frame.substringAfter('(', "").removeSuffix(")")
+    val callee = frame.substringBefore('(')
+    val method = callee.substringAfterLast('.')
+    val className = callee.substringBeforeLast('.', "").substringAfterLast('.')
+    val name = if (className.isEmpty()) method else "$className.$method"
+    return if (location.isEmpty()) name else "$name ($location)"
+  }
+
   // --- Battito e profili ----------------------------------------------------------------------------------------------
 
   /** Il lavoro in background fermo da giorni su un profilo principale (E-P15). */
@@ -258,6 +318,13 @@ class BackgroundHealthContributor(
 
   private companion object {
     const val HOUR_MS = 3_600_000L
+    const val MINUTE_MS = 60_000L
+
+    /** Quante voci di crash si mostrano (il registro ne tiene dieci): una serie di crash non riempie la pagina. */
+    const val MAX_CRASH_ITEMS = 5
+
+    /** Quando la prima cornice nostra non c'e' (tutte le cornici sono di librerie): un trattino al posto del punto. */
+    const val NO_PLACE = "—"
 
     /** Un riavvio entro un giorno spiega ancora i ritardi (E-P13). */
     val RECENT_REBOOT_WINDOW: Duration = 24.hours

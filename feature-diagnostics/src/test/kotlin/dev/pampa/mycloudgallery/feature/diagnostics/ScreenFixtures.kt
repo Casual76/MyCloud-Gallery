@@ -22,6 +22,10 @@ import dev.pampa.mycloudgallery.core.rules.RuleDecision
 import dev.pampa.mycloudgallery.core.rules.RunScope
 import dev.pampa.mycloudgallery.core.rules.TimeWindow
 import dev.pampa.mycloudgallery.core.rules.WaitReason
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashCause
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashKind
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashRecord
+import dev.pampa.mycloudgallery.core.rules.platform.crash.ThreadKind
 import dev.pampa.mycloudgallery.core.rules.platform.health.ExitReasonKind
 import dev.pampa.mycloudgallery.core.rules.platform.health.ExitRecord
 import dev.pampa.mycloudgallery.core.rules.platform.health.HealthPermission
@@ -46,6 +50,7 @@ import dev.pampa.mycloudgallery.feature.diagnostics.contributors.StorageContribu
 import dev.pampa.mycloudgallery.feature.diagnostics.contributors.StorageSnapshot
 import dev.pampa.mycloudgallery.feature.diagnostics.contributors.TrafficContributor
 import dev.pampa.mycloudgallery.feature.diagnostics.export.DiagnosticsExporter
+import dev.pampa.mycloudgallery.feature.diagnostics.export.ExportDocument
 import dev.pampa.mycloudgallery.feature.diagnostics.export.ExportEnvironment
 import java.time.LocalDateTime
 import java.time.LocalTime
@@ -196,6 +201,60 @@ internal object ScreenFixtures {
     val sections = runBlocking { collect(contributors(unhealthyHealth())) }.toMutableMap()
     if (testOutcome != null) sections[DiagSection.CONNECTION_TEST] = testOutcome.toItems()
     return state(sections.toSortedMap(), loading, testOutcome)
+  }
+
+  /**
+   * Una giornata con due errori registrati (RG-B, C472): un crash con la catena delle eccezioni e il punto del codice, e un blocco (ANR). Serve a vedere come la Diagnostica
+   * dice **dove** si e' rotta l'app, nella sezione degli avvisi di Android e nell'anteprima dell'esportazione.
+   */
+  fun crashRecordedState(): DiagnosticsUiState {
+    val base = unhealthyHealth()
+    val health = base.copy(
+      lastExitReasons = base.lastExitReasons + listOf(
+        ExitRecord(ExitReasonKind.CRASH, NOW - 3.hours.inWholeMilliseconds),
+        ExitRecord(ExitReasonKind.ANR, NOW - 30.hours.inWholeMilliseconds),
+      ),
+      recentCrashes = listOf(
+        CrashRecord(
+          kind = CrashKind.CRASH,
+          atMillis = NOW - 3.hours.inWholeMilliseconds,
+          versionCode = 42,
+          thread = ThreadKind.COROUTINE,
+          mainProcess = true,
+          chain = listOf(
+            CrashCause(
+              "java.lang.IllegalStateException",
+              listOf(
+                "dev.pampa.mycloudgallery.feature.library.LibraryViewModel\$load\$1.invokeSuspend(LibraryViewModel.kt:120)",
+                "dev.pampa.mycloudgallery.core.library.data.TimelineRepository.read(TimelineRepository.kt:88)",
+              ),
+            ),
+            CrashCause("java.io.IOException", listOf("dev.pampa.mycloudgallery.core.nasmedia.NasMediaReader.open(NasMediaReader.kt:77)")),
+          ),
+        ),
+        CrashRecord(
+          kind = CrashKind.ANR,
+          atMillis = NOW - 30.hours.inWholeMilliseconds,
+          versionCode = 0,
+          thread = ThreadKind.MAIN,
+          mainProcess = true,
+          chain = listOf(CrashCause("android.app.ApplicationNotResponding", listOf("dev.pampa.mycloudgallery.AppRoot.draw(AppRoot.kt:45)"))),
+        ),
+      ),
+    )
+    val sections = runBlocking { collect(contributors(health)) }
+    return state(sections.toSortedMap(), loading = false, testOutcome = null)
+  }
+
+  /**
+   * Il file dell'esportazione di [crashRecordedState] **ridotto alle sole voci degli errori registrati**: nel file vero vengono dopo le altre sezioni, e l'anteprima di uno
+   * screenshot mostra solo le prime righe. Serve a vedere cosa contiene l'esportazione per un crash (classi e cornici nostre, nessun messaggio).
+   */
+  fun crashRecordedExport(): ExportDocument {
+    val crashItems = crashRecordedState().sections[DiagSection.ANDROID_WARNINGS].orEmpty()
+      .filter { it.code == DiagCodes.AND_CRASH_RECORDED || it.code == DiagCodes.AND_ANR_RECORDED }
+    val snapshot = dev.pampa.mycloudgallery.feature.diagnostics.aggregate.DiagnosticsSnapshot(mapOf(DiagSection.ANDROID_WARNINGS to crashItems), recentEvents = 0)
+    return DiagnosticsExporter.render(snapshot, ExportEnvironment(sdkInt = 36))
   }
 
   /** Una giornata buona: tutto verde. */

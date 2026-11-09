@@ -40,8 +40,11 @@ import org.robolectric.annotation.Config
 
 /**
  * "Modifica Raccolte" (Fase 7, P11, D33, §2.7): la scheda con le sezioni dei fornitori finti e un controllore vero sopra un deposito in
- * memoria. Si entra con il tasto in alto, ogni sezione ha un interruttore "Mostra" (Album no), si riordina trascinando dalla maniglia o
- * con le azioni di TalkBack "Sposta su" e "Sposta giu'", i bersagli sono da 48 dp.
+ * memoria. Si entra con il tasto in alto, ogni sezione ha un interruttore "Mostra", si riordina trascinando dalla maniglia o con le azioni
+ * di TalkBack "Sposta su" e "Sposta giu'", i bersagli sono da 48 dp.
+ *
+ * G2 (fase grafica): Album, Album smart e Telefono stanno nella scheda Album della pillola e non ci sono piu' (ne' nell'elenco ne' qui); sul
+ * tablet, senza le raccolte-filtro del Telefono, il pannello di dettaglio parte da "Scegli una raccolta".
  */
 abstract class CollectionsEditScreenBase : ComposeScreenTest() {
 
@@ -139,11 +142,13 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
     show { Host() }
     edit()
 
-    for (title in listOf("Album", "Album smart", "Viaggi", "Persone", "Cartelle NAS", "Telefono", "Da tenere al sicuro", "Utility", "Nascosti")) {
+    for (title in listOf("Viaggi", "Persone", "Cartelle NAS", "Da tenere al sicuro", "Utility", "Nascosti")) {
       composeRule.onNodeWithText(title).assertExists()
     }
-    // Una sezione mostrata si vede dall'interruttore: niente frase sotto il nome. Album dice perche' non ha l'interruttore.
-    composeRule.onNodeWithText("Sempre visibile").assertExists()
+    // G2: le sezioni della scheda Album non ci sono.
+    for (title in listOf("Album", "Album smart", "Telefono")) composeRule.onAllNodesWithText(title).assertCountEquals(0)
+    // Una sezione mostrata si vede dall'interruttore: niente frase sotto il nome. Nessuna sezione e' "sempre visibile" (lo era Album).
+    composeRule.onAllNodesWithText("Sempre visibile").assertCountEquals(0)
     composeRule.onAllNodesWithText("Mostrata", substring = true).assertCountEquals(0)
     composeRule.onAllNodesWithText("Nascosta", substring = true).assertCountEquals(0)
     // Nascosta, dice dove si ritrova (Nascosti resta in Impostazioni → Privacy).
@@ -178,18 +183,15 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
     assertThat(store.hidden.value).isEmpty()
   }
 
+  /** G2: Album (che non si nascondeva mai), Album smart e Telefono non sono piu' in "Modifica Raccolte": stanno nella scheda Album. */
   @Test
-  fun albumNonHaLInterruttoreENonSiNasconde() {
+  fun albumAlbumSmartETelefonoNonSonoPiuNellaModifica() {
     show { Host() }
     edit()
 
-    val album = row("Album").fetchSemanticsNode()
-    assertThat(album.config.contains(SemanticsProperties.Role)).isFalse()
-    assertThat(album.config.contains(SemanticsProperties.ToggleableState)).isFalse()
-    composeRule.onNodeWithText("Album").performClick()
-    composeRule.waitForIdle()
+    for (title in listOf("Album", "Album smart", "Telefono")) composeRule.onAllNodesWithText(title).assertCountEquals(0)
+    assertThat(codes()).containsNoneOf("albums", "smart", "phone")
     assertThat(store.hidden.value).isEmpty()
-    composeRule.onNodeWithText("Sempre visibile").assertExists()
   }
 
   @Test
@@ -198,22 +200,23 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
     edit()
 
     // La prima riga non puo' salire, l'ultima non puo' scendere: l'azione non si offre.
-    assertThat(customActions("Album")).containsExactly("Sposta giù")
-    assertThat(customActions("Nascosti")).containsExactly("Sposta su")
-    assertThat(customActions("Viaggi")).containsExactly("Sposta su", "Sposta giù").inOrder()
-
-    perform("Viaggi", "Sposta su")
-
-    assertThat(codes().take(3)).containsExactly("albums", "trips", "smart").inOrder()
-    assertThat(store.order.value.take(3)).containsExactly("albums", "trips", "smart").inOrder()
-    assertThat(customActions("Viaggi")).containsExactly("Sposta su", "Sposta giù").inOrder()
-
-    perform("Viaggi", "Sposta su")
-    assertThat(codes().take(2)).containsExactly("trips", "albums").inOrder()
     assertThat(customActions("Viaggi")).containsExactly("Sposta giù")
-    perform("Viaggi", "Sposta giù")
-    perform("Viaggi", "Sposta giù")
-    assertThat(codes().take(4)).containsExactly("albums", "smart", "trips", "people").inOrder()
+    assertThat(customActions("Nascosti")).containsExactly("Sposta su")
+    assertThat(customActions("Cartelle NAS")).containsExactly("Sposta su", "Sposta giù").inOrder()
+
+    perform("Cartelle NAS", "Sposta su")
+
+    assertThat(codes().take(3)).containsExactly("trips", "nas", "people").inOrder()
+    // G2: i codici della scheda Album restano nell'ordine salvato, al loro posto (le versioni vecchie li mostrano ancora).
+    assertThat(store.order.value.filter { it !in CollectionSections.inAlbumsTab }.take(3)).containsExactly("trips", "nas", "people").inOrder()
+    assertThat(customActions("Cartelle NAS")).containsExactly("Sposta su", "Sposta giù").inOrder()
+
+    perform("Cartelle NAS", "Sposta su")
+    assertThat(codes().take(2)).containsExactly("nas", "trips").inOrder()
+    assertThat(customActions("Cartelle NAS")).containsExactly("Sposta giù")
+    perform("Cartelle NAS", "Sposta giù")
+    perform("Cartelle NAS", "Sposta giù")
+    assertThat(codes().take(4)).containsExactly("trips", "people", "nas", "safe").inOrder()
   }
 
   @Test
@@ -221,8 +224,8 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
     show { Host() }
     edit()
 
-    val node = row("Viaggi").fetchSemanticsNode()
-    assertThat(node.config[SemanticsProperties.StateDescription]).isEqualTo("Mostrata, posizione 3 di 9")
+    val node = row("Persone").fetchSemanticsNode()
+    assertThat(node.config[SemanticsProperties.StateDescription]).isEqualTo("Mostrata, posizione 2 di 6")
     assertThat(node.config[SemanticsProperties.Role].toString()).isEqualTo("Switch")
   }
 
@@ -230,17 +233,17 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
   fun trascinareDallaManigliaCambiaLOrdineESiSalva() {
     show { Host() }
     edit()
-    val rowHeight = composeRule.onNodeWithText("Viaggi").fetchSemanticsNode().size.height.toFloat()
+    val rowHeight = composeRule.onNodeWithText("Persone").fetchSemanticsNode().size.height.toFloat()
 
-    composeRule.onNodeWithTag(handleTag("trips"), useUnmergedTree = true).performTouchInput {
+    composeRule.onNodeWithTag(handleTag("people"), useUnmergedTree = true).performTouchInput {
       down(center)
       repeat(12) { moveBy(Offset(0f, -rowHeight * 1.3f / 12)) }
       up()
     }
     composeRule.waitForIdle()
 
-    assertThat(codes().take(3)).containsExactly("albums", "trips", "smart").inOrder()
-    assertThat(store.order.value.take(3)).containsExactly("albums", "trips", "smart").inOrder()
+    assertThat(codes().take(3)).containsExactly("people", "trips", "nas").inOrder()
+    assertThat(store.order.value.filter { it !in CollectionSections.inAlbumsTab }.take(3)).containsExactly("people", "trips", "nas").inOrder()
   }
 
   @Test
@@ -263,7 +266,7 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
     val handle = composeRule.onNodeWithTag(handleTag("trips"), useUnmergedTree = true).fetchSemanticsNode()
     assertThat(handle.size.width.toFloat()).isAtLeast(dp48)
     assertThat(handle.size.height.toFloat()).isAtLeast(dp48)
-    for (title in listOf("Album", "Viaggi", "Nascosti")) {
+    for (title in listOf("Viaggi", "Persone", "Nascosti")) {
       assertThat(composeRule.onNodeWithText(title).fetchSemanticsNode().size.height.toFloat()).isAtLeast(dp48)
     }
     // E il tasto "Fine" della barra.
@@ -277,14 +280,14 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
     edit()
     composeRule.runOnUiThread {
       kotlinx.coroutines.runBlocking {
-        store.setHidden("smart", true)
-        store.setOrder(listOf("phone", "albums"))
+        store.setHidden("people", true)
+        store.setOrder(listOf("utility", "phone", "albums", "nas"))
       }
     }
     composeRule.waitForIdle()
 
-    row("Album smart").assertIsOff()
-    assertThat(codes().take(2)).containsExactly("phone", "albums").inOrder()
+    row("Persone").assertIsOff()
+    assertThat(codes().take(2)).containsExactly("utility", "nas").inOrder()
   }
 
   @Test
@@ -318,7 +321,7 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
 
   @Test
   fun senzaNessunaSezioneDaMostrareLaSchedaLoDiceEPortaAllaModifica() {
-    val hidden = MemoryCollectionsLayoutStore(hidden = setOf("phone", "safe", "hidden"))
+    val hidden = MemoryCollectionsLayoutStore(hidden = setOf("safe", "hidden"))
     val c = CollectionsLayoutController(world.source, true, emptyList(), hidden, CoroutineScope(Dispatchers.Unconfined + Job()), SharingStarted.Eagerly)
     show {
       val inputs by c.inputs.collectAsState()
@@ -330,7 +333,7 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
     composeRule.onNodeWithText("Modifica Raccolte").performClick()
     composeRule.waitForIdle()
     assertThat(c.inputs.value.editing).isTrue()
-    row("Telefono").assertIsOff()
+    row("Nascosti").assertIsOff()
   }
 
   @Test
@@ -342,12 +345,15 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
     }
     show { Host() }
 
-    // "Persone" non e' nell'ordine salvato (arriva con la Fase 8): e' l'ultima.
-    assertThat(codes()).containsExactly("hidden", "phone", "safe", "albums", "smart", "trips", "nas", "utility", "people").inOrder()
+    // "Persone" non e' nell'ordine salvato (arriva con la Fase 8): e' l'ultima. G2: i codici della scheda Album si saltano.
+    assertThat(codes()).containsExactly("hidden", "safe", "trips", "nas", "utility", "people").inOrder()
     composeRule.onNodeWithText("Nascosti").assertExists()
-    composeRule.onNodeWithText("Preferiti").assertExists()
+    composeRule.onAllNodesWithText("Preferiti").assertCountEquals(0)
   }
 }
+
+/** Il sottotitolo della riga "Eliminati di recente" di Da tenere al sicuro: la distingue dalla voce con lo stesso nome di Utility. */
+private const val TRASH_ROW = "Il cestino di Android"
 
 /** Sul tablet l'elenco delle sezioni ha il dettaglio accanto, nello stesso ordine del telefono; la modifica prende il posto dell'elenco. */
 @Config(qualifiers = TABLET_QUALIFIERS)
@@ -357,43 +363,58 @@ class CollectionsEditScreenTabletTest : CollectionsEditScreenBase() {
   fun suDuePannelliL_ElencoStaAccantoAlDettaglioENelloStessoOrdine() {
     show { Host() }
 
-    composeRule.onNodeWithText("dettaglio favorites").assertExists()
+    // G2: senza le raccolte-filtro del Telefono (scheda Album) il dettaglio parte da "Scegli una raccolta".
+    composeRule.onNodeWithText("Scegli una raccolta").assertExists()
     // Le due colonne: l'elenco a sinistra, il dettaglio a destra; le sezioni nello stesso ordine del telefono.
-    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("Preferiti"))
-    // Ricordi e Luoghi (Fase 9) non hanno ancora un fornitore negli esempi: non ci sono.
-    assertThat(codes()).isEqualTo(CollectionSections.defaultOrder.filter { it != "memories" && it != "places" })
-    val list = composeRule.onNodeWithText("Preferiti").fetchSemanticsNode().boundsInRoot
-    val detail = composeRule.onNodeWithText("dettaglio favorites").fetchSemanticsNode().boundsInRoot
+    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText(TRASH_ROW, substring = true))
+    // Ricordi e Luoghi (Fase 9) non hanno ancora un fornitore negli esempi: non ci sono; Album, Album smart e Telefono sono nella scheda Album.
+    assertThat(codes()).isEqualTo(
+      CollectionSections.defaultOrder.filter { it != "memories" && it != "places" && it !in CollectionSections.inAlbumsTab },
+    )
+    composeRule.onNodeWithText(TRASH_ROW, substring = true).performClick()
+    composeRule.waitForIdle()
+    val list = composeRule.onNodeWithText(TRASH_ROW, substring = true).fetchSemanticsNode().boundsInRoot
+    val detail = composeRule.onNodeWithText("dettaglio recently_deleted").fetchSemanticsNode().boundsInRoot
     assertThat(detail.left).isAtLeast(list.right)
+  }
+
+  /** La riga "Eliminati di recente" di Da tenere al sicuro (Utility ha una voce con lo stesso nome, "Telefono e NAS insieme"). */
+  private fun openRecentlyDeleted() {
+    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText(TRASH_ROW, substring = true))
+    composeRule.onNodeWithText(TRASH_ROW, substring = true).performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("dettaglio recently_deleted").assertExists()
   }
 
   @Test
   fun laModificaPrendeIlPostoDellElencoEIlDettaglioRestaDovEra() {
     show { Host() }
+    openRecentlyDeleted()
 
     edit()
 
     row("Viaggi").assertIsOn()
-    composeRule.onNodeWithText("dettaglio favorites").assertExists()
+    composeRule.onNodeWithText("dettaglio recently_deleted").assertExists()
     composeRule.onNodeWithText("Viaggi").performClick()
     composeRule.waitForIdle()
     row("Viaggi").assertIsOff()
     composeRule.onNodeWithContentDescription("Fine").performClick()
     composeRule.waitForIdle()
-    composeRule.onNodeWithText("dettaglio favorites").assertExists()
+    composeRule.onNodeWithText("dettaglio recently_deleted").assertExists()
   }
 
   @Test
-  fun nascondereTelefonoDaTabletNonLasciaUnDettaglioVuoto() {
+  fun nascondereLaSezioneDelDettaglioDaTabletNonLasciaUnDettaglioVuoto() {
     show { Host() }
+    openRecentlyDeleted()
     edit()
-    composeRule.onNodeWithText("Telefono").performClick()
+    composeRule.onNodeWithText("Da tenere al sicuro").performClick()
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription("Fine").performClick()
     composeRule.waitForIdle()
 
-    // La prima raccolta-filtro che si vede non c'e' piu': il pannello dice di sceglierne una, non resta sul dettaglio di Preferiti.
-    composeRule.onAllNodesWithText("dettaglio favorites").assertCountEquals(0)
+    // La raccolta aperta non si vede piu': il pannello dice di sceglierne una, non resta sul suo dettaglio.
+    composeRule.onAllNodesWithText("dettaglio recently_deleted").assertCountEquals(0)
     composeRule.onNodeWithText("Scegli una raccolta").assertExists()
   }
 
@@ -410,10 +431,10 @@ class CollectionsEditScreenTabletTest : CollectionsEditScreenBase() {
       )
     }
 
-    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("Oslo 2026"))
-    composeRule.onNodeWithText("Oslo 2026").performClick()
+    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText("Toscana, agosto 2025"))
+    composeRule.onNodeWithText("Toscana, agosto 2025").performClick()
     composeRule.waitForIdle()
-    composeRule.onNodeWithText("pagina smart/s1").assertExists()
+    composeRule.onNodeWithText("pagina trips/t1").assertExists()
     assertThat(picked).isEmpty()
   }
 }

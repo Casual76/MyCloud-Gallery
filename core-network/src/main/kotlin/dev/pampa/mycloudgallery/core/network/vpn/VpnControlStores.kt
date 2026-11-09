@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfig
 import dev.pampa.mycloudgallery.core.network.contract.VpnControlConfigStore
 import dev.pampa.mycloudgallery.core.network.contract.VpnSuspendReason
@@ -50,22 +51,27 @@ class DataStoreVpnControlConfigStore(
 
   override suspend fun save(config: VpnControlConfig) {
     val clean = clean(config)
-    dataStore.edit { prefs ->
-      prefs[ENABLED] = clean.enabled
-      clean.tunnelName?.let { prefs[TUNNEL] = it } ?: prefs.remove(TUNNEL)
-      prefs.remove(SUSPENSION)
+    // OB-4 (review generale): la scelta dell'utente con la memoria piena non si salva e non fa cadere l'app (`QuietWrites`): lo stato non cambia, l'interruttore resta dov'era.
+    val written = QuietWrites.attempt("automazione della VPN") {
+      dataStore.edit { prefs ->
+        prefs[ENABLED] = clean.enabled
+        clean.tunnelName?.let { prefs[TUNNEL] = it } ?: prefs.remove(TUNNEL)
+        prefs.remove(SUSPENSION)
+      }
     }
+    if (!written) return
     configState.value = clean
     suspensionState.value = null
   }
 
   override suspend fun suspendBecause(reason: VpnSuspendReason) {
-    dataStore.edit { it[SUSPENSION] = reason.name }
+    // La sospensione e' dell'automazione, non una scelta: se non si scrive vale in memoria per questo processo.
+    QuietWrites.attempt("sospensione della VPN") { dataStore.edit { it[SUSPENSION] = reason.name } }
     suspensionState.value = reason
   }
 
   override suspend fun clearSuspension() {
-    dataStore.edit { it.remove(SUSPENSION) }
+    QuietWrites.attempt("sospensione della VPN") { dataStore.edit { it.remove(SUSPENSION) } }
     suspensionState.value = null
   }
 

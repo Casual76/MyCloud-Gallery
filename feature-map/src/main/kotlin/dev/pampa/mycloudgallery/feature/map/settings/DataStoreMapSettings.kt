@@ -6,9 +6,11 @@ import androidx.datastore.core.handlers.ReplaceFileCorruptionHandler
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.map.contract.CameraSpot
 import dev.pampa.mycloudgallery.core.map.contract.GeoE6
@@ -141,11 +143,11 @@ class DataStoreMapSettings(
 
   override suspend fun enable(choice: MapOnlineChoice) {
     if (!buildFlag || stopped.get()) return
-    val saved = store.edit {
-      if (stopped.get()) return@edit
+    val saved = quietEdit("mappa online") {
+      if (stopped.get()) return@quietEdit
       it[ONLINE] = ON
       it.remove(DAMAGED)
-    }
+    } ?: return
     // Un tocco dell'utente: da qui la scelta e' sua, il guasto di prima non conta piu'.
     unreadable = false
     apply(saved)
@@ -153,29 +155,39 @@ class DataStoreMapSettings(
 
   override suspend fun disable() {
     if (!buildFlag || stopped.get()) return
-    val saved = store.edit {
-      if (stopped.get()) return@edit
+    val saved = quietEdit("mappa online") {
+      if (stopped.get()) return@quietEdit
       it[ONLINE] = OFF
       it.remove(DAMAGED)
-    }
+    } ?: return
     unreadable = false
     apply(saved)
   }
 
   override suspend fun setWifiOnly(on: Boolean) {
     if (stopped.get()) return
-    store.edit {
-      if (stopped.get()) return@edit
+    quietEdit("mappa solo con il Wi-Fi") {
+      if (stopped.get()) return@quietEdit
       it[WIFI_ONLY] = on
     }
   }
 
   override suspend fun saveCamera(spot: CameraSpot?) {
     if (stopped.get()) return
-    store.edit { prefs ->
-      if (stopped.get()) return@edit
+    quietEdit("ultima vista della mappa") { prefs ->
+      if (stopped.get()) return@quietEdit
       if (spot == null) prefs.remove(CAMERA) else prefs[CAMERA] = "${spot.center.latE6},${spot.center.lonE6},${spot.zoom}"
     }
+  }
+
+  /**
+   * OB-4 (review generale): con la memoria piena `DataStore.edit` lancia `IOException`, e chiamata da un tocco dell'utente (un interruttore della mappa) chiudeva l'app. Qui la scrittura
+   * che non riesce non salva e non lancia: restituisce null e lo stato in memoria non cambia (l'interruttore resta dov'era). Il risultato e' lo stato salvato quando e' riuscita.
+   */
+  private suspend fun quietEdit(label: String, transform: (MutablePreferences) -> Unit): Preferences? {
+    var saved: Preferences? = null
+    QuietWrites.attempt(label) { saved = store.edit { transform(it) } }
+    return saved
   }
 
   /**

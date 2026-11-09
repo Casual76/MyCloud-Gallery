@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.rules.ActivityRule
 import dev.pampa.mycloudgallery.core.rules.AllowedNetwork
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
@@ -113,12 +114,14 @@ class DataStoreRuleSettingsStore(private val dataStore: DataStore<Preferences>) 
 
   override suspend fun current(): RuleSettings = read(dataStore.data.first())
 
+  // OB-4 (review generale): con la memoria piena `DataStore.edit` lancia `IOException`, e chiamata dal `viewModelScope` delle Impostazioni chiudeva l'app. Ora la scrittura che non
+  // riesce non salva e non lancia (`QuietWrites`): `observe()` segue il file, quindi la scelta resta quella di prima.
   override suspend fun save(settings: RuleSettings) {
-    dataStore.edit { write(it, settings) }
+    QuietWrites.attempt("regole delle attivita'") { dataStore.edit { write(it, settings) } }
   }
 
   override suspend fun update(transform: (RuleSettings) -> RuleSettings) {
-    dataStore.edit { prefs -> write(prefs, transform(read(prefs))) }
+    QuietWrites.attempt("regole delle attivita'") { dataStore.edit { prefs -> write(prefs, transform(read(prefs))) } }
   }
 
   private fun read(prefs: Preferences): RuleSettings {

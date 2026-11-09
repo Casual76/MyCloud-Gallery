@@ -8,6 +8,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.preferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.common.log.GalleryLog
 import dev.pampa.mycloudgallery.core.security.AppLockMode
 import java.io.File
@@ -40,7 +41,11 @@ class AppLockSettingsStore internal constructor(private val store: DataStore<Pre
       }
     }
 
-  suspend fun update(settings: AppLockSettings) {
+  /**
+   * Salva [settings]. **Vero** se e' stato scritto; **falso** se non si e' riusciti (memoria piena, cartella non scrivibile: `IOException` di DataStore, OB-4 della review
+   * generale): il blocco resta com'era, l'app non si chiude e chi chiama puo' dirlo all'utente (l'interruttore che torna indietro).
+   */
+  suspend fun update(settings: AppLockSettings): Boolean = QuietWrites.attempt("impostazioni del blocco") {
     store.edit {
       it[MODE] = settings.mode.name
       it[TIMEOUT] = settings.timeout.name

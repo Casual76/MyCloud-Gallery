@@ -61,9 +61,14 @@ internal class FakeAppLockPreferences(initial: AppLockSettings = AppLockSettings
 
   val updates: MutableList<AppLockSettings> = mutableListOf()
 
-  override suspend fun update(settings: AppLockSettings) {
+  /** Vero: la scrittura non riesce (memoria piena), come `DataStore.edit` che lancia `IOException`: `update` dice falso e niente cambia. */
+  var failWrites: Boolean = false
+
+  override suspend fun update(settings: AppLockSettings): Boolean {
+    if (failWrites) return false
     updates += settings
     flow.value = settings
+    return true
   }
 }
 

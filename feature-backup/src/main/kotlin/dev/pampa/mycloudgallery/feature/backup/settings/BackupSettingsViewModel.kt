@@ -55,6 +55,8 @@ internal data class SettingsUi(
   val rulesAvailable: Boolean,
   /** `:app` ha legato le impostazioni: senza, niente si puo' scegliere. */
   val editable: Boolean,
+  /** L'ultima scelta non si e' salvata (memoria piena, OB-4 della review generale): l'interruttore e' tornato com'era e la nota sotto le sorgenti lo dice. */
+  val saveFailed: Boolean = false,
 ) {
   /**
    * Le righe delle sorgenti nell'ordine in cui si mostrano: fotocamera, screenshot, poi le cartelle aggiuntive dalla piu' grande. Una
@@ -86,6 +88,7 @@ class BackupSettingsViewModel @Inject constructor(
   private val acts: BackupActions = actions.orElse(NoBackupActions)
 
   private val foldersState = MutableStateFlow<FoldersState>(FoldersState.Loading)
+  private val saveFailed = MutableStateFlow(false)
   private val noSources: StateFlow<BackupSources> = MutableStateFlow(BackupSources.NONE)
   private val noFolder: StateFlow<DeviceFolder?> = MutableStateFlow<DeviceFolder?>(null)
 
@@ -94,7 +97,8 @@ class BackupSettingsViewModel @Inject constructor(
     port?.sources ?: noSources,
     port?.deviceFolder ?: noFolder,
     rulesOrNone.protectNewPhotos,
-  ) { found, chosen, deviceFolder, protect ->
+    saveFailed,
+  ) { found, chosen, deviceFolder, protect, failed ->
     SettingsUi(
       folders = found,
       chosen = chosen,
@@ -102,6 +106,7 @@ class BackupSettingsViewModel @Inject constructor(
       protectNewPhotos = protect,
       rulesAvailable = rulesPort != null,
       editable = port != null,
+      saveFailed = failed,
     )
   }.stateIn(
     scope = viewModelScope,
@@ -140,7 +145,13 @@ class BackupSettingsViewModel @Inject constructor(
     val current = settings.sources.value.sources
     val next = if (on) current + source else current - source
     if (next == current) return
-    viewModelScope.launch { settings.setSources(BackupSources(next)) }
+    viewModelScope.launch {
+      saveFailed.value = false
+      settings.setSources(BackupSources(next))
+      // OB-4 (review generale): con la memoria piena la scelta non si salva (l'archivio non lancia piu': restituisce il valore di prima) e lo stato resta com'era, quindi
+      // l'interruttore torna indietro. La nota sotto le sorgenti dice perche', con i componenti che ci sono.
+      saveFailed.value = settings.sources.value.sources != next
+    }
   }
 
   /** D34: "Proteggi subito le foto nuove". */

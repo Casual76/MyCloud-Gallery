@@ -122,7 +122,7 @@ internal class SecurityViewModel @Inject constructor(
       return
     }
     feedback.value = null
-    viewModelScope.launch { preferences.update(preferences.settings.first().copy(mode = AppLockMode.SYSTEM_CREDENTIAL)) }
+    viewModelScope.launch { save(preferences.settings.first().copy(mode = AppLockMode.SYSTEM_CREDENTIAL)) }
   }
 
   /** Spegne il blocco, **solo dopo** la credenziale del telefono ([authenticate] la chiede la pagina). */
@@ -130,7 +130,7 @@ internal class SecurityViewModel @Inject constructor(
     when (authenticate()) {
       AuthResult.Success -> {
         feedback.value = null
-        preferences.update(preferences.settings.first().copy(mode = AppLockMode.OFF))
+        save(preferences.settings.first().copy(mode = AppLockMode.OFF))
       }
       AuthResult.Cancelled, AuthResult.Interrupted -> Unit
       else -> feedback.value = Feedback(R.string.security_auth_failed_title, R.string.security_auth_failed, FluidTone.Warning)
@@ -138,7 +138,17 @@ internal class SecurityViewModel @Inject constructor(
   }
 
   fun setTimeout(timeout: AppLockTimeout) {
-    viewModelScope.launch { preferences.update(preferences.settings.first().copy(timeout = timeout)) }
+    viewModelScope.launch { save(preferences.settings.first().copy(timeout = timeout)) }
+  }
+
+  /**
+   * OB-4 (review generale): con la memoria piena salvare non riesce. Prima l'eccezione di DataStore chiudeva l'app; ora il blocco resta com'era (l'interruttore torna indietro) e
+   * la pagina lo dice con lo stesso avviso degli altri esiti, con il perche' e cosa fare.
+   */
+  private suspend fun save(settings: AppLockSettings) {
+    if (!preferences.update(settings)) {
+      feedback.value = Feedback(R.string.security_not_saved_title, R.string.security_not_saved, FluidTone.Warning)
+    }
   }
 
   /** "Blocca ora": richiude subito (senza effetto se il blocco e' spento). */

@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.GridStyle
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
@@ -64,20 +65,22 @@ class DataStoreLibraryPreferences(
     return Triple(LibraryFilter.fromCode(prefs[FILTER]), GridLevel.fromCode(prefs[LEVEL]), GridStyle.fromCode(prefs[STYLE]))
   }
 
+  // OB-4 (review generale): con la memoria piena `DataStore.edit` lancia `IOException`, e chiamata da un `viewModelScope` o da un `rememberCoroutineScope` chiudeva l'app.
+  // Qui la preferenza non si salva e basta: le `StateFlow` seguono il file, quindi il valore resta quello di prima (e il filtro o il livello "non scattano"). I chiamanti non cambiano.
   override suspend fun setFilter(filter: LibraryFilter) {
-    store.edit { it[FILTER] = filter.code }
+    QuietWrites.attempt("filtro della Libreria") { store.edit { it[FILTER] = filter.code } }
   }
 
   override suspend fun setLevel(level: GridLevel) {
-    store.edit { it[LEVEL] = level.code }
+    QuietWrites.attempt("livello della Libreria") { store.edit { it[LEVEL] = level.code } }
   }
 
   override suspend fun setStyle(style: GridStyle) {
-    store.edit { it[STYLE] = style.code }
+    QuietWrites.attempt("stile della Libreria") { store.edit { it[STYLE] = style.code } }
   }
 
   override suspend fun setViewerDocked(docked: Boolean) {
-    store.edit { it[VIEWER_DOCKED] = docked }
+    QuietWrites.attempt("viewer agganciato") { store.edit { it[VIEWER_DOCKED] = docked } }
   }
 
   companion object {

@@ -49,7 +49,11 @@ fun interface SettingsClock {
 interface AppLockPreferences {
   val settings: Flow<AppLockSettings>
 
-  suspend fun update(settings: AppLockSettings)
+  /**
+   * Salva [settings]. **Vero** se e' stato scritto; **falso** se non si e' riusciti (memoria piena): il blocco resta com'era e chi chiama lo dice all'utente. Non lancia per un
+   * errore di scrittura (OB-4 della review generale: chiudeva l'app).
+   */
+  suspend fun update(settings: AppLockSettings): Boolean
 }
 
 /** Il telefono ha un blocco schermo vero? (`ScreenLockCheck`), dietro un'interfaccia per i test. */

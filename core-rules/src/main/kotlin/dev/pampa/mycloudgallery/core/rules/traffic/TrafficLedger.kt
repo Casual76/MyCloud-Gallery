@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.rules.SystemClockFollowingZone
 import java.time.Clock
 import java.time.LocalDate
@@ -59,9 +60,12 @@ class DataStoreTrafficLedger(
     if (bytes <= 0L) return
     val cycle = currentCycle()
     val key = longPreferencesKey(keyName(cycle.id, source, network))
-    dataStore.edit { prefs ->
-      prefs[key] = saturatingAdd(prefs[key] ?: 0L, bytes)
-      prune(prefs, cycle)
+    // OB-4 (review generale): contare i byte non puo' far cadere un trasferimento ne' l'app. Con la memoria piena il conteggio di questo trasferimento si perde (`QuietWrites`).
+    QuietWrites.attempt("consumi del mese") {
+      dataStore.edit { prefs ->
+        prefs[key] = saturatingAdd(prefs[key] ?: 0L, bytes)
+        prune(prefs, cycle)
+      }
     }
   }
 

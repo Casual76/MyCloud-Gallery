@@ -119,6 +119,13 @@ enum class WaitReason(override val code: String) : StableCode {
 
   /** D-13: il NAS tiene ancora occupato un file del backup (`RunStop.BUSY`): si riprova tra poco, da soli. */
   NAS_BUSY("nas_busy"),
+
+  /**
+   * FAB-4 (review RG-D): il risparmio energetico di Android e' acceso e l'interruttore "Metti in pausa con il risparmio energetico" (`pauseOnPowerSaver`)
+   * e' attivo. Prima finiva in [BATTERY] e la pagina diceva "Aspetta che la batteria sia piu' carica": falso (la batteria puo' essere piena) e senza
+   * la via d'uscita, che e' spegnere il risparmio energetico o l'interruttore.
+   */
+  POWER_SAVER("power_saver"),
 }
 
 /** Che cosa manca per poter fare il backup (`BackupStatus.NotConfigured`). */

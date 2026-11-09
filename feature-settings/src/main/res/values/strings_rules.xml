@@ -22,5 +22,10 @@
   <string name="rules_roaming">Consenti il roaming</string>
   <string name="rules_roaming_detail">All’estero i dati possono costare molto. Spento, ogni attività in background resta ferma.</string>
 
+  <!-- FAB-4: l'interruttore `pauseOnPowerSaver`, che la pagina non mostrava. -->
+  <string name="rules_section_power_saver">Risparmio energetico</string>
+  <string name="rules_power_saver">Metti in pausa con il risparmio energetico</string>
+  <string name="rules_power_saver_detail">Con il risparmio energetico di Android acceso il lavoro in background aspetta, anche in carica. Spento, lavora lo stesso.</string>
+
   <string name="rules_footnote">Le scelte valgono subito, senza riavviare niente. Il lavoro pesante, come i video, resta sul Wi-Fi di casa con ogni preset tranne «Massimo».</string>
 </resources>

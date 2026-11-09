@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.settings.rules
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AllInclusive
 import androidx.compose.material.icons.rounded.Balance
+import androidx.compose.material.icons.rounded.BatterySaver
 import androidx.compose.material.icons.rounded.DataUsage
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Nightlight
@@ -32,9 +33,10 @@ internal class RulesActions(
   val onPreset: (Preset) -> Unit,
   val onCap: (CapChoice) -> Unit,
   val onRoaming: (Boolean) -> Unit,
+  val onPauseOnPowerSaver: (Boolean) -> Unit,
 ) {
   companion object {
-    val None = RulesActions({}, {}, {}, {})
+    val None = RulesActions({}, {}, {}, {}, {})
   }
 }
 
@@ -48,6 +50,7 @@ internal fun RulesRoute(onBack: () -> Unit, viewModel: RulesViewModel = hiltView
       onPreset = viewModel::choosePreset,
       onCap = viewModel::chooseMobileCap,
       onRoaming = viewModel::setRoaming,
+      onPauseOnPowerSaver = viewModel::setPauseOnPowerSaver,
     ),
   )
 }
@@ -130,6 +133,21 @@ internal fun RulesScreen(state: RulesUiState?, actions: RulesActions) {
           leading = { RowGlyph(Icons.Rounded.Language) },
           badge = { FluidSwitch(checked = state.allowRoaming, onCheckedChange = null) },
           onClick = { actions.onRoaming(!state.allowRoaming) },
+        )
+      }
+    }
+
+    // FAB-4: l'interruttore previsto da docs/regole-attivita.md (§6, punto 7), legato a `pauseOnPowerSaver`: prima non compariva in nessuna schermata.
+    item { GallerySectionHeader(title = stringResource(R.string.rules_section_power_saver)) }
+    item {
+      FluidListGroup {
+        FluidListRow(
+          title = stringResource(R.string.rules_power_saver),
+          subtitle = stringResource(R.string.rules_power_saver_detail),
+          tone = if (state.pauseOnPowerSaver) FluidTone.Primary else FluidTone.Neutral,
+          leading = { RowGlyph(Icons.Rounded.BatterySaver) },
+          badge = { FluidSwitch(checked = state.pauseOnPowerSaver, onCheckedChange = null) },
+          onClick = { actions.onPauseOnPowerSaver(!state.pauseOnPowerSaver) },
         )
       }
     }

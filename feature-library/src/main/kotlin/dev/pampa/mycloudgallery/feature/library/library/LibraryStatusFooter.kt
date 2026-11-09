@@ -141,6 +141,7 @@ private fun waitRes(wait: LibraryBackupWait): Int = when (wait) {
   LibraryBackupWait.HOME_WIFI -> R.string.backup_footer_wait_home_wifi
   LibraryBackupWait.NIGHT_WINDOW -> R.string.backup_footer_wait_night_window
   LibraryBackupWait.BATTERY -> R.string.backup_footer_wait_battery
+  LibraryBackupWait.POWER_SAVER -> R.string.backup_footer_wait_power_saver
   LibraryBackupWait.NAS -> R.string.backup_footer_wait_nas
   LibraryBackupWait.NEXT_RUN -> R.string.backup_footer_wait_next_run
   LibraryBackupWait.NAS_BUSY -> R.string.backup_footer_wait_nas_busy

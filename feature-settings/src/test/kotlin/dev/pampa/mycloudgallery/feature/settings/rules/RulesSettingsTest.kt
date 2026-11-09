@@ -88,6 +88,24 @@ class RulesSettingsTest {
     assertThat(on.copy(allowRoaming = false)).isEqualTo(off)
   }
 
+  /** FAB-4: «Metti in pausa con il risparmio energetico» cambia solo `pauseOnPowerSaver`, e il motore lo rilegge (`toRuleSet`). */
+  @Test
+  fun ilRisparmioEnergeticoSiCambiaENonTocaIlResto() {
+    val base = RuleSettings()
+    assertThat(base.pauseOnPowerSaver).isTrue()
+
+    val off = RulesChoices.withPauseOnPowerSaver(base, pause = false)
+    assertThat(off.pauseOnPowerSaver).isFalse()
+    assertThat(off.toRuleSet().pauseOnPowerSaver).isFalse()
+    assertThat(off.copy(pauseOnPowerSaver = true)).isEqualTo(base)
+
+    val on = RulesChoices.withPauseOnPowerSaver(off, pause = true)
+    assertThat(on).isEqualTo(base)
+    assertThat(on.toRuleSet().pauseOnPowerSaver).isTrue()
+    // Cambiare preset non ripristina la scelta fatta dall'utente.
+    assertThat(RulesChoices.withPreset(off, Preset.MAXIMUM).pauseOnPowerSaver).isFalse()
+  }
+
   @Test
   fun ilViewModelScriveNelleImpostazioniDelMotore_eLaPaginaSiAggiorna() = runTest {
     val store = InMemoryRuleStore()
@@ -98,15 +116,18 @@ class RulesSettingsTest {
     vm.choosePreset(Preset.WIFI_ALWAYS)
     vm.chooseMobileCap(CapChoice.Limit(500_000_000L))
     vm.setRoaming(true)
+    vm.setPauseOnPowerSaver(false)
 
     val saved = store.current()
     assertThat(saved.preset).isEqualTo(Preset.WIFI_ALWAYS)
     assertThat(saved.capsOverride?.mobileBytes).isEqualTo(500_000_000L)
     assertThat(saved.allowRoaming).isTrue()
+    assertThat(saved.pauseOnPowerSaver).isFalse()
     val ui = vm.state.value!!
     assertThat(ui.preset).isEqualTo(Preset.WIFI_ALWAYS)
     assertThat(ui.cap).isEqualTo(CapChoice.Limit(500_000_000L))
     assertThat(ui.allowRoaming).isTrue()
+    assertThat(ui.pauseOnPowerSaver).isFalse()
     assertThat(ui.presetCapBytes).isEqualTo(PresetCatalog.DEFAULT_MOBILE_CAP_BYTES)
   }
 }

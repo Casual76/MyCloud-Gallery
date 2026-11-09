@@ -21,6 +21,8 @@
   <string name="backup_footer_wait_home_wifi">Attesa Wi-Fi di casa</string>
   <string name="backup_footer_wait_night_window">Attesa della notte</string>
   <string name="backup_footer_wait_battery">Attesa batteria</string>
+  <!-- FAB-4: nella nuvola, sotto «N in coda»: il risparmio energetico di Android e' acceso (non la batteria bassa). -->
+  <string name="backup_footer_wait_power_saver">Risparmio energetico acceso: riprende quando lo spegni</string>
   <string name="backup_footer_wait_nas">Attesa NAS</string>
   <string name="backup_footer_wait_next_run">Al prossimo giro</string>
   <!-- D-13: il NAS tiene ancora occupato un file del backup (una connessione caduta che il NAS non ha ancora chiuso): si riprova da soli. -->
@@ -32,7 +34,8 @@
 
   <!-- Un problema che il piede non conosce ancora (un codice nuovo): mai un testo vuoto. -->
   <string name="backup_footer_problem_generic">Problema con il backup</string>
-  <string name="backup_footer_problem_generic_detail">Tocca per i dettagli.</string>
+  <!-- Nel pop-up della nuvola il tasto "Apri Backup" sta sotto la frase: la frase rimanda alla pagina, non a un tocco sulla riga (FAB, 3-bis). -->
+  <string name="backup_footer_problem_generic_detail">I dettagli sono nella pagina Backup.</string>
 
   <!-- Un problema per codice (§2.6): la frase breve e, sotto, cosa fare. -->
   <string name="backup_footer_nas_unreachable_label">Il NAS non risponde</string>

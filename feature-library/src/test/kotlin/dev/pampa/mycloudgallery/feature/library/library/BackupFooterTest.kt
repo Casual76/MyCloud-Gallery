@@ -146,6 +146,8 @@ class BackupFooterTest {
       LibraryBackupWait.HOME_WIFI to "Attesa Wi-Fi di casa",
       LibraryBackupWait.NIGHT_WINDOW to "Attesa della notte",
       LibraryBackupWait.BATTERY to "Attesa batteria",
+      // FAB-4: il risparmio energetico non e' la batteria bassa e ha la sua frase.
+      LibraryBackupWait.POWER_SAVER to "Risparmio energetico acceso: riprende quando lo spegni",
       LibraryBackupWait.NAS to "Attesa NAS",
       LibraryBackupWait.NEXT_RUN to "Al prossimo giro",
       LibraryBackupWait.NAS_BUSY to "File occupato sul NAS, riprovo tra poco",

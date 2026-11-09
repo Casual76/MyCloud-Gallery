@@ -69,7 +69,7 @@ class CollectionsLayoutControllerTest {
     assertThat(state.sections.map { it.code }).containsExactly("phone", "safe", "hidden").inOrder()
     val rows = state.visibleRows.map { (it as SectionRow.Kind).row.kind }
     assertThat(rows).containsExactly(
-      CollectionKind.FAVORITES, CollectionKind.VIDEOS, CollectionKind.SCREENSHOTS, CollectionKind.WHATSAPP,
+      CollectionKind.FAVORITES, CollectionKind.CAMERA, CollectionKind.VIDEOS, CollectionKind.SCREENSHOTS, CollectionKind.WHATSAPP,
       CollectionKind.RECENTLY_DELETED, CollectionKind.HIDDEN,
     ).inOrder()
     assertThat(state.editing).isFalse()

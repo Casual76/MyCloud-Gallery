@@ -629,8 +629,10 @@ class GalleryGraph(
   /**
    * La Libreria con l'accesso parziale: solo cio' che e' accessibile adesso (E-P1). **Fail closed** (R5): con l'accesso
    * parziale, o senza accesso, e finche' la prima lettura non ha detto cosa e' accessibile, la vista e' vuota.
+   * G2b: sotto, le correzioni del catalogo di Fotocamera e Messaggistica (`FilterMembershipWiring.kt`); gli altri filtri non cambiano.
    */
-  val visibleTimeline: TimelineRepository = PartialAccessTimeline(repository, partialSelection, viewAccess, scope)
+  val visibleTimeline: TimelineRepository =
+    PartialAccessTimeline(filterMembershipTimeline(repository, database, backup, scope), partialSelection, viewAccess, scope)
 
   // --- Porte delle Raccolte, dei Nascosti e del cestino (P10) ---------------------------------------------------------
 

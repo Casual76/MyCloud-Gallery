@@ -22,8 +22,9 @@ class QuickFiltersTest {
 
   @Test
   fun ilMenuProponeOgniFiltroCompresoDocumenti() {
-    // Fase 7 (P0, D24): "Modificate" e' una pagina dell'Utility, non un chip della Libreria.
-    assertThat(QuickFilters).containsExactlyElementsIn(LibraryFilter.entries - LibraryFilter.EDITED)
+    // Fase 7 (P0, D24): "Modificate" e' una pagina dell'Utility, non un chip della Libreria. G2b: Fotocamera e Messaggistica sono voci della
+    // scheda Album e delle Raccolte, non chip (il chip "WhatsApp" resta).
+    assertThat(QuickFilters).containsExactlyElementsIn(LibraryFilter.entries - LibraryFilter.EDITED - LibraryFilter.CAMERA - LibraryFilter.MESSAGING)
     assertThat(QuickFilters).contains(LibraryFilter.DOCUMENTS)
     assertThat(QuickFilters.first()).isEqualTo(LibraryFilter.ALL)
   }

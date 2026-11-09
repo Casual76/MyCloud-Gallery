@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase grafica (G2b): i filtri Fotocamera e Messaggistica. Sono voci della scheda Album e delle Raccolte, non chip della Libreria. -->
+  <string name="library_filter_camera">Fotocamera</string>
+  <string name="library_filter_messaging">Messaggistica</string>
+  <string name="library_filter_empty_camera">Nessuna foto della fotocamera</string>
+  <string name="library_filter_empty_messaging">Niente dalle app di messaggi</string>
+
+  <!-- Le raccolte-filtro. "Messaggistica" sostituisce "WhatsApp" (stesso codice salvato, "whatsapp"). -->
+  <string name="collection_camera">Fotocamera</string>
+  <string name="collection_messaging">Messaggistica</string>
+  <string name="collection_empty_camera_title">Nessuna foto della fotocamera</string>
+  <string name="collection_empty_camera_detail">Le foto e i video scattati con questo dispositivo compaiono qui.</string>
+  <string name="collection_empty_messaging_title">Niente dalle app di messaggi</string>
+  <string name="collection_empty_messaging_detail">Le foto e i video ricevuti con WhatsApp, Telegram e Signal compaiono qui.</string>
+</resources>

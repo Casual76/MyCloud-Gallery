@@ -253,9 +253,11 @@ internal fun positionSaver(grid: MediaGridState): Saver<PositionKeeper, Any> = S
 
 /**
  * I filtri rapidi del menu della vista, nell'ordine in cui compaiono: tutti, "Documenti" compreso (Fase 6, P8, D34). Fase 7 (P0, D24):
- * "Modificate" ([LibraryFilter.EDITED]) e' una pagina dell'Utility, non un chip della Libreria: resta fuori (lo decide P8).
+ * "Modificate" ([LibraryFilter.EDITED]) e' una pagina dell'Utility, non un chip della Libreria: resta fuori (lo decide P8). Fase grafica (G2b):
+ * Fotocamera e Messaggistica sono voci della scheda Album e delle Raccolte, non chip: restano fuori anche loro (il chip "WhatsApp" resta).
  */
-internal val QuickFilters: List<LibraryFilter> = LibraryFilter.entries.filter { it != LibraryFilter.EDITED }
+internal val QuickFilters: List<LibraryFilter> =
+  LibraryFilter.entries.filter { it != LibraryFilter.EDITED && it != LibraryFilter.CAMERA && it != LibraryFilter.MESSAGING }
 
 @Composable
 internal fun filterLabel(filter: LibraryFilter): String = stringResource(
@@ -268,6 +270,8 @@ internal fun filterLabel(filter: LibraryFilter): String = stringResource(
     LibraryFilter.FAVORITES -> R.string.library_filter_favorites
     LibraryFilter.DOCUMENTS -> R.string.library_filter_documents
     LibraryFilter.EDITED -> R.string.library_filter_edited
+    LibraryFilter.CAMERA -> R.string.library_filter_camera
+    LibraryFilter.MESSAGING -> R.string.library_filter_messaging
   },
 )
 
@@ -332,6 +336,8 @@ internal fun LibraryFilterEmptyState(filter: LibraryFilter, onShowAll: () -> Uni
       LibraryFilter.FAVORITES -> R.string.library_filter_empty_favorites
       LibraryFilter.DOCUMENTS -> R.string.library_filter_empty_documents
       LibraryFilter.EDITED -> R.string.library_filter_empty_edited
+      LibraryFilter.CAMERA -> R.string.library_filter_empty_camera
+      LibraryFilter.MESSAGING -> R.string.library_filter_empty_messaging
       LibraryFilter.WITHOUT_SCREENSHOTS_AND_WHATSAPP, LibraryFilter.ALL -> R.string.library_filter_empty_no_screenshots_whatsapp
     },
   )

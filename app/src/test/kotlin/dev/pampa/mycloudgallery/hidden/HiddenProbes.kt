@@ -78,6 +78,9 @@ internal object HiddenProbes {
     LibraryFilter.VIDEOS -> cellsWhere(w) { it.kind == MediaKind.VIDEO }
     LibraryFilter.FAVORITES -> cellsWhere(w) { it.index in w.spec.favorites }
     LibraryFilter.DOCUMENTS, LibraryFilter.EDITED -> emptySet()
+    // G2b: quello che la cella sa (le correzioni del catalogo non passano da qui: FilteredTimelineView e' la sola cella).
+    LibraryFilter.CAMERA -> cellsWhere(w) { it.source == MediaSource.CAMERA }
+    LibraryFilter.MESSAGING -> cellsWhere(w) { it.source == MediaSource.WHATSAPP }
   }
 
   private fun filterProbe(filters: List<LibraryFilter>) = SurfaceProbe { w ->

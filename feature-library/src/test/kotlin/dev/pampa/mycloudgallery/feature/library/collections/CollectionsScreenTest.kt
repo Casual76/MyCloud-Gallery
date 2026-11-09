@@ -46,10 +46,11 @@ class CollectionsListPhoneTest : ComposeScreenTest() {
   }
 
   @Test
-  fun mostraLeSeiRaccolteEIlLoroNome() {
+  fun mostraLeRaccolteEIlLoroNome() {
     showList()
 
-    listOf("Preferiti", "Video", "Screenshot", "WhatsApp", "Nascosti", "Eliminati di recente").forEach {
+    // G2b: "WhatsApp" e' diventata "Messaggistica" (WhatsApp, Telegram e Signal); la Fotocamera e' nuova.
+    listOf("Preferiti", "Fotocamera", "Video", "Screenshot", "Messaggistica", "Nascosti", "Eliminati di recente").forEach {
       composeRule.onNodeWithText(it).assertExists()
     }
     composeRule.onNodeWithText("Stato globale").assertExists()
@@ -226,7 +227,8 @@ class CollectionGridScreenTest : ComposeScreenTest() {
       CollectionKind.FAVORITES to "Nessun preferito",
       CollectionKind.VIDEOS to "Nessun video",
       CollectionKind.SCREENSHOTS to "Nessuno screenshot",
-      CollectionKind.WHATSAPP to "Niente da WhatsApp",
+      CollectionKind.WHATSAPP to "Niente dalle app di messaggi",
+      CollectionKind.CAMERA to "Nessuna foto della fotocamera",
     )
     var current by mutableStateOf(CollectionKind.FAVORITES)
     show { CollectionGridScreen(current, EmptyViewerItems, environment, { _, _ -> }, {}, {}) }

@@ -163,6 +163,15 @@ android {
       }).withPropertyName('galleryModuleSources')
     }
   }
+
+  // Correzione del primo avvio (C1): i sorgenti della variante di misura si compilano anche nei test unitari di debug, cosi' la preparazione del
+  // dataset (`BenchSeeder`, `BenchDatabaseFiles`) ha un test nel repository (`BenchFirstStartTest`). Le varianti di misura non hanno test unitari
+  // propri. Solo nei test: l'APK di debug e la release non ricevono nessuna classe `Bench*` (`tools/check.ps1` continua a cercarle nel dex di release).
+  sourceSets {
+    testDebug {
+      kotlin.srcDir('src/benchmarkRelease/kotlin')
+    }
+  }
 }
 
 // Fase 6 (P0, D38): nel manifest fuso di OGNI variante restano solo le `uses-native-library` ammesse (le due della GPU): litert-api

@@ -96,7 +96,8 @@ internal class BenchSeedReport(
  *   e i blob S e M nell'indice della replica ([BenchReplicaStore]); un'alta quota ha anche l'HQ.
  * - La riga piu' recente punta all'immagine piu' grande (se l'ha il dispositivo): la Libreria si apre in fondo (D1), quindi
  *   il test di zoom a 200 MP la trova nell'ultima cella senza cercarla.
- * - Mai il database vero (`gallery.db`): il nome e' [BenchProfile.databaseName].
+ * - Mai il database vero (`gallery.db`): il nome e' [BenchProfile.databaseName]. E mai nemmeno quel file direttamente (C1): l'app lo ha aperto in questo
+ *   stesso processo. Si scrive il file del seminatore e lo scambio avviene al prossimo avvio ([BenchDatabaseFiles]).
  * - Nessuna riga nascosta e nessun gruppo: la timeline le contiene tutte, come in una Libreria "normale".
  */
 internal object BenchSeeder {
@@ -111,7 +112,10 @@ internal object BenchSeeder {
     profile: BenchProfile,
     smoke: Boolean,
   ): BenchSeedReport {
-    context.deleteDatabase(profile.databaseName)
+    // C1: mai il file dell'app (`profile.databaseName`), che in questo processo e' gia' aperto dal grafo. Il dataset nasce in un file solo del
+    // seminatore e diventa quello dell'app al prossimo avvio (`BenchDatabaseFiles`).
+    BenchDatabaseFiles.discardBuilding(context, profile)
+    val building = BenchDatabaseFiles.buildingName(profile)
     val hasReal = real.isNotEmpty()
     val media = if (hasReal) real else FALLBACK_MEDIA
     val zoomIndex = media.indices.maxByOrNull { index -> if (media[index].video) -1.0 else media[index].megapixels } ?: 0
@@ -127,7 +131,7 @@ internal object BenchSeeder {
     var hqRows = 0
     val totals = WriteTotals()
 
-    val db = GalleryDatabase.build(context, profile.databaseName)
+    val db = GalleryDatabase.build(context, building)
     try {
       val sdb = db.openHelper.writableDatabase
       sdb.beginTransaction()
@@ -169,8 +173,8 @@ internal object BenchSeeder {
     )
 
     // Rilettura con un'istanza nuova, come fara' l'app: stesso file, stesso schema, le query vere di P1.
-    val reopened = GalleryDatabase.build(context, profile.databaseName)
-    try {
+    val reopened = GalleryDatabase.build(context, building)
+    val report = try {
       val dao = reopened.timelineIndexDao()
       val readStart = System.nanoTime()
       val phoneIds = ArrayList<String>(CHECK_IDS)
@@ -197,7 +201,9 @@ internal object BenchSeeder {
       val readMs = (System.nanoTime() - readStart) / 1_000_000
       // Una sola volta, su un thread di collaudo: la funzione di P1 e' `suspend`.
       val resolved = runBlocking { dao.phoneRefs(phoneIds).map { it.mediaId }.toSet().size }
-      return BenchSeedReport(
+      // Tutto nel file principale prima di chiudere: il dataset pronto e' un file solo.
+      BenchDatabaseFiles.checkpoint(reopened.openHelper.writableDatabase)
+      BenchSeedReport(
         rows = rows,
         realMedia = if (hasReal) real.size else 0,
         realImages = if (hasReal) real.count { !it.video } else 0,
@@ -225,6 +231,9 @@ internal object BenchSeeder {
     } finally {
       reopened.close()
     }
+    // L'ultimo passo, una rinomina: da qui il dataset aspetta il prossimo avvio. Il file dell'app non e' stato toccato.
+    BenchDatabaseFiles.publish(context, profile)
+    return report
   }
 
   // --- Il piano: una passata sola, con la stessa sequenza di numeri casuali del 13/10 --------------------------------------

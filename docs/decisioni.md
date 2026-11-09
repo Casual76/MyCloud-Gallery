@@ -16426,7 +16426,7 @@ G2): una griglia di copertine tutte uguali (foto quadrata con l'angolo continuo,
 - "Tutti gli album" ha ancora la grafica di prima (copertine a 2 colonne): si puo' allineare alla scheda dopo la beta.
 - Il segno dell'IA e' solo sulla copertina; per gli altri familiari uno smart condiviso e' un condiviso normale (le regole restano del creatore, D17).
 
-### RG-A - Ricerca e indice: OB-1, OB-2, SOL-1 (09/11/2026)
+## RG-A - Ricerca e indice: OB-1, OB-2, SOL-1 (09/11/2026)
 
 - **OB-1:** `SearchEngine.similarToAll` e' obbligatorio, senza ripiego sulla prima foto. Sia il ponte con il ciclo di vita di `SearchGraph` sia `OffMainSearchEngine` inoltrano l'intera selezione; il calcolo gira sul dispatcher dedicato. Gli altri adattatori `by inner`/`by delegate` di `:app` (`ConvergingPreviewQuality`, `CatalogCheckedReader`, `LiveSizeBytes`) non hanno metodi di serie da recuperare; controllato anche `SizeFilteredCatalog`, nessuna correzione aggiuntiva.
 - **OB-2:** suggerimenti a riposo e completamenti sul dispatcher di calcolo. Il dizionario dei luoghi riusa nomi normalizzati e graduatoria quando i conteggi dei luoghi visibili non cambiano, anche con un'istantanea nuova; nascondere l'ultima foto di un luogo invalida la cache.

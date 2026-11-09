@@ -3,8 +3,6 @@ package dev.pampa.mycloudgallery.feature.library.library
 import android.app.Application
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -17,6 +15,8 @@ import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasClickAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
@@ -29,6 +29,7 @@ import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupWait
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.model.FreezeReason
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import dev.pampa.mycloudgallery.feature.library.grid.showThemed
 import org.junit.Rule
@@ -40,10 +41,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * La terza voce del piede, il backup (Fase 5A, `docs/fase5-progetto.md` §1.5, §2.6, D16; G2, `docs/grafica-progetto.md` §12.5): ogni
- * caso di `LibraryBackupStatus` dice la sua frase breve e il suo dettaglio, toccarla apre la pagina Backup, TalkBack la legge intera,
- * e (il **test dei bordi del piede**) su telefono, a 1,3x e sul tablet le tre voci non si toccano e ogni capsula e' un bersaglio da
- * almeno 48 dp. I contrasti dei toni sono in `GalleryFooterStatusTest` (core-designsystem): qui i toni sono quelli e basta.
+ * Lo stato del backup (Fase 5A, `docs/fase5-progetto.md` §1.5, §2.6, D16; G2 §12.5) e, dalla beta (B2), **il pop-up della nuvola**: ogni
+ * caso di `LibraryBackupStatus` dice la sua frase breve e il suo dettaglio (le stesse del piede di prima); un problema ha il tasto che
+ * porta dove si risolve ("Apri Backup"), un lavoro si tocca e porta alla pagina Backup; senza problemi il pop-up mostra lo spazio del
+ * NAS, l'ultima sincronizzazione e "Libera spazio"; con un problema no. E (il **test dei bordi del pop-up**) su telefono, a 1,3x e sul
+ * tablet i bersagli sono di almeno 48 dp, dentro lo schermo e non si toccano. I contrasti dei toni sono in `GalleryFooterStatusTest`.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -58,27 +60,49 @@ class BackupFooterTest {
   // setContent si chiama una volta sola per prova: gli stati cambiano dallo stato, non rimostrando la scena.
   private val backupState = mutableStateOf<LibraryBackupStatus>(LibraryBackupStatus.Idle)
   private val nasState = mutableStateOf<LibraryNasStatus>(LibraryNasStatus.Idle)
+  private val networkState = mutableStateOf<LibraryNetworkStatus?>(null)
   private val fontScaleState = mutableFloatStateOf(1f)
   private var backupClicks = 0
+  private var networkClicks = 0
+  private var closes = 0
   private var started = false
+  private val commands = SpaceCommands()
 
-  private fun show(backup: LibraryBackupStatus, nas: LibraryNasStatus = LibraryNasStatus.Idle, fontScale: Float = 1f) {
+  /** I comandi della prova: lo spazio del NAS (3,6 TB, 1,2 usati), "Libera spazio" disponibile e contato. */
+  private class SpaceCommands(var space: LibraryNasSpace? = LibraryNasSpace.Ready(usedBytes = 1_250_000_000_000L, totalBytes = 3_600_000_000_000L)) : LibraryCommands {
+    val freed = mutableListOf<Set<MediaId>>()
+    override val canFreeSpace: Boolean get() = true
+    override fun freeSpace(ids: Set<MediaId>) {
+      freed += ids
+    }
+    override suspend fun nasSpace(): LibraryNasSpace? = space
+  }
+
+  private fun show(
+    backup: LibraryBackupStatus,
+    nas: LibraryNasStatus = LibraryNasStatus.Idle,
+    network: LibraryNetworkStatus? = null,
+    fontScale: Float = 1f,
+    lastSync: Long? = null,
+  ) {
     if (!started) {
       started = true
       backupState.value = backup
       nasState.value = nas
+      networkState.value = network
       fontScaleState.floatValue = fontScale
       composeRule.showThemed {
         val density = LocalDensity.current
         CompositionLocalProvider(LocalDensity provides Density(density.density, fontScaleState.floatValue)) {
-          Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
-            Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-              LibraryStatusBlock(
-                nas = nasState.value,
-                statusFooter = { Text("Rete non riconosciuta") },
-                onNasClick = {},
-                backup = backupState.value,
-                onBackupClick = { backupClicks++ },
+          Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopEnd) {
+            val cloud = libraryCloud(networkState.value, nasState.value, backupState.value)
+            if (cloud != null) {
+              LibraryCloudPanel(
+                cloud = cloud,
+                lastSyncNasMillis = lastSync,
+                commands = commands,
+                actions = LibraryCloudActions(onNetwork = { networkClicks++ }, onNas = {}, onBackup = { backupClicks++ }),
+                close = { closes++ },
               )
             }
           }
@@ -88,21 +112,20 @@ class BackupFooterTest {
       composeRule.runOnIdle {
         backupState.value = backup
         nasState.value = nas
+        networkState.value = network
         fontScaleState.floatValue = fontScale
       }
-      composeRule.waitForIdle()
     }
+    composeRule.waitForIdle()
   }
 
   @Test
-  fun senzaBackupIlPiedeNonDiceNiente() {
-    show(LibraryBackupStatus.Idle)
-    composeRule.onNodeWithText("Rete non riconosciuta").assertExists()
-    assertThat(composeRule.onAllNodesWithText("backup", substring = true, ignoreCase = true).fetchSemanticsNodes()).isEmpty()
+  fun senzaBackupNeNasLaNuvolaNonDiceNiente() {
+    assertThat(libraryCloud(null, LibraryNasStatus.Idle, LibraryBackupStatus.Idle)).isNull()
   }
 
   @Test
-  fun tuttoAlSicuroDiceQuandoE() {
+  fun tuttoAlSicuroEIlTitoloDelPopUp() {
     show(LibraryBackupStatus.AllSafe(atNasMillis = null))
     composeRule.onNodeWithText("Tutto al sicuro").assertExists()
   }
@@ -112,6 +135,7 @@ class BackupFooterTest {
     show(LibraryBackupStatus.Queued(items = 312, wait = LibraryBackupWait.CHARGING))
     composeRule.onNodeWithText("312 in coda").assertExists()
     composeRule.onNodeWithText("Attesa carica").assertExists()
+    composeRule.onNodeWithText("In attesa").assertExists()
   }
 
   @Test
@@ -142,9 +166,11 @@ class BackupFooterTest {
   }
 
   @Test
-  fun unGiroNormaleDiceQuantiNeHaFatti() {
+  fun unGiroNormaleDiceQuantiNeHaFattiESiTocca() {
     show(LibraryBackupStatus.Running(done = 12, total = 40, etaMillis = null))
-    composeRule.onNodeWithText("Backup in corso: 12 di 40").assertExists()
+    composeRule.onNodeWithText("Backup in corso: 12 di 40").assertExists().performClick()
+    assertThat(backupClicks).isEqualTo(1)
+    assertThat(closes).isEqualTo(1)
   }
 
   @Test
@@ -163,10 +189,13 @@ class BackupFooterTest {
   }
 
   @Test
-  fun unProblemaDiceLaFraseBreveECosaFare() {
+  fun unProblemaDiceLaFraseBreveECosaFareEIlTastoPortaAlBackup() {
     show(LibraryBackupStatus.Problem(code = "quota", count = 0))
     composeRule.onNodeWithText("Quota esaurita").assertExists()
     composeRule.onNodeWithText("Chiedi all’admin del NAS.").assertExists()
+    composeRule.onNodeWithText("Apri Backup").performClick()
+    assertThat(backupClicks).isEqualTo(1)
+    assertThat(closes).isEqualTo(1)
   }
 
   @Test
@@ -177,16 +206,13 @@ class BackupFooterTest {
     composeRule.onNodeWithText("1 cancellato prima del backup").assertExists()
   }
 
-  /**
-   * IN-7 (correzioni 5B): i file che un'altra app ha condiviso e che non si sono salvati sul NAS lo dicono nel piede (la frase breve con il numero e cosa
-   * fare), e il tocco porta alla pagina Backup, dove sta "Ricevuti in coda" con "Riprova" e "Scarta".
-   */
+  /** IN-7 (correzioni 5B): i file ricevuti non salvati lo dicono, con il numero, e il tasto porta alla pagina Backup. */
   @Test
-  fun iFileRicevutiNonSalvatiLoDiconoEIlToccoPortaAllaPagina() {
+  fun iFileRicevutiNonSalvatiLoDiconoEIlTastoPortaAllaPagina() {
     show(LibraryBackupStatus.Problem(code = "incoming_failed", count = 2))
     composeRule.onNodeWithText("2 file ricevuti non salvati").assertExists()
     composeRule.onNodeWithText("Riprova o scartali da Backup.").assertExists()
-    composeRule.onNodeWithText("2 file ricevuti non salvati").performClick()
+    composeRule.onNodeWithText("Apri Backup").performClick()
     assertThat(backupClicks).isEqualTo(1)
     show(LibraryBackupStatus.Problem(code = "incoming_failed", count = 1))
     composeRule.onNodeWithText("1 file ricevuto non salvato").assertExists()
@@ -198,22 +224,69 @@ class BackupFooterTest {
   @Test
   fun unCodiceCheNonConoscePortaComunqueAllaPagina() {
     show(LibraryBackupStatus.Problem(code = "un_problema_futuro", count = 0))
-    composeRule.onNodeWithText("Problema con il backup").assertExists().performClick()
+    composeRule.onNodeWithText("Problema con il backup").assertExists()
+    composeRule.onNodeWithText("Apri Backup").performClick()
     assertThat(backupClicks).isEqualTo(1)
   }
 
+  /** La rete con un problema: la sua frase, divisa al punto, e il tasto con la sua azione (WireGuard). */
   @Test
-  fun toccareLaCapsulaApreLaPaginaBackup() {
+  fun laReteConUnProblemaHaLaSuaAzione() {
+    val network = LibraryNetworkStatus(
+      severity = LibraryNetworkSeverity.Attention,
+      label = "VPN spenta",
+      detail = "Apri WireGuard",
+      action = LibraryNetworkAction.WIREGUARD,
+    )
+    show(LibraryBackupStatus.AllSafe(null), network = network)
+    composeRule.onNodeWithText("VPN spenta").assertExists()
+    composeRule.onNode(hasText("Apri WireGuard") and hasClickAction()).performClick()
+    assertThat(networkClicks).isEqualTo(1)
+  }
+
+  /** Senza problemi: lo spazio usato sul totale (letto all'apertura), l'ultima sincronizzazione e "Libera spazio" su tutto il sicuro. */
+  @Test
+  fun senzaProblemiLoSpazioLUltimaSincronizzazioneELiberaSpazio() {
+    show(LibraryBackupStatus.AllSafe(null), nas = LibraryNasStatus.UpToDate(atNasMillis = 0L), lastSync = System.currentTimeMillis())
+    composeRule.onNodeWithText("Spazio sul NAS").assertExists()
+    composeRule.onNodeWithText("1,2 TB usati di 3,6 TB").assertExists()
+    composeRule.onNodeWithText("Ultima sincronizzazione").assertExists()
+    composeRule.onNodeWithText("Oggi alle", substring = true).assertExists()
+    composeRule.onNodeWithText("Libera spazio").performClick()
+    assertThat(commands.freed).containsExactly(emptySet<MediaId>())
+    assertThat(closes).isEqualTo(1)
+  }
+
+  @Test
+  fun loSpazioCheNonSiLeggeLoDice() {
+    commands.space = LibraryNasSpace.Unavailable
     show(LibraryBackupStatus.AllSafe(null))
-    composeRule.onNodeWithText("Tutto al sicuro").performClick()
-    assertThat(backupClicks).isEqualTo(1)
+    composeRule.onNodeWithText("Lo spazio non si legge adesso.").assertExists()
   }
 
   @Test
-  fun tuttiEDueGliStatiConvivonoConLaRete() {
+  fun senzaNasLoSpazioNonCe() {
+    commands.space = null
+    show(LibraryBackupStatus.AllSafe(null))
+    assertThat(composeRule.onAllNodesWithText("Spazio sul NAS").fetchSemanticsNodes()).isEmpty()
+  }
+
+  /** Con un problema il pop-up dice il problema e basta: niente spazio, niente "Libera spazio" (la richiesta dell'utente). */
+  @Test
+  fun conUnProblemaNienteSpazioNeLiberaSpazio() {
+    show(LibraryBackupStatus.Problem(code = "nas_full", count = 0), lastSync = System.currentTimeMillis())
+    composeRule.onNodeWithText("Il NAS è pieno").assertExists()
+    for (phrase in listOf("Spazio sul NAS", "Ultima sincronizzazione", "Libera spazio")) {
+      assertThat(composeRule.onAllNodesWithText(phrase).fetchSemanticsNodes()).isEmpty()
+    }
+  }
+
+  @Test
+  fun tuttiGliStatiConvivono() {
     show(
       backup = LibraryBackupStatus.Queued(items = 312, wait = LibraryBackupWait.CHARGING),
       nas = LibraryNasStatus.Frozen(FreezeReason.VANISHED, sinceNasMillis = 0L),
+      network = LibraryNetworkStatus(severity = LibraryNetworkSeverity.Attention, label = "Rete non riconosciuta"),
     )
     composeRule.onNodeWithText("Rete non riconosciuta").assertExists()
     composeRule.onNodeWithText("Lavori fermi: cambiamenti anomali").assertExists()
@@ -229,9 +302,8 @@ class BackupFooterTest {
     assertThat(spoken).contains("Quota esaurita. Chiedi all’admin del NAS.")
   }
 
-  // --- I bordi del piede ------------------------------------------------------------------------------------------------------
+  // --- I bordi del pop-up -----------------------------------------------------------------------------------------------------
 
-  /** Le capsule toccabili del piede e il resto dei suoi nodi, per i test dei bordi. */
   private fun clickable(): List<SemanticsNode> =
     composeRule.onAllNodes(SemanticsMatcher("toccabile") { it.config.contains(SemanticsActions.OnClick) }).fetchSemanticsNodes()
 
@@ -248,33 +320,32 @@ class BackupFooterTest {
     "in prova" to LibraryBackupStatus.TestOnly,
   )
 
-  private fun assertBounds(where: String, widthDp: Float) {
-    val density = composeRule.density
-    val min = with(density) { GalleryDimens.MinTouchTarget.toPx() }
+  private fun assertBounds(where: String) {
+    val min = with(composeRule.density) { GalleryDimens.MinTouchTarget.toPx() }
     val root = composeRule.onAllNodes(SemanticsMatcher("radice") { it.isRoot }).fetchSemanticsNodes().first().boundsInRoot
     val buttons = clickable()
-    assertWithMessage("$where: le capsule toccabili (NAS e backup)").that(buttons.size).isAtLeast(2)
+    assertWithMessage("$where: i bersagli del pop-up").that(buttons.size).isAtLeast(1)
     for (button in buttons) {
       val b = button.boundsInRoot
-      assertWithMessage("$where: capsula $b alta almeno 48 dp").that(b.height).isAtLeast(min - 1f)
-      assertWithMessage("$where: capsula $b larga almeno 48 dp").that(b.width).isAtLeast(min - 1f)
-      assertWithMessage("$where: capsula $b dentro lo schermo ($root)").that(b.left >= root.left - 1f && b.right <= root.right + 1f).isTrue()
+      assertWithMessage("$where: bersaglio $b alto almeno 48 dp").that(b.height).isAtLeast(min - 1f)
+      assertWithMessage("$where: bersaglio $b largo almeno 48 dp").that(b.width).isAtLeast(min - 1f)
+      assertWithMessage("$where: bersaglio $b dentro lo schermo ($root)").that(b.left >= root.left - 1f && b.right <= root.right + 1f).isTrue()
     }
-    // Una sotto l'altra, mai sovrapposte: la voce del NAS sopra, quella del backup sotto.
     val ordered = buttons.sortedBy { it.boundsInRoot.top }
     for (i in 0 until ordered.size - 1) {
       assertWithMessage("$where: ${ordered[i].boundsInRoot} e ${ordered[i + 1].boundsInRoot}")
         .that(ordered[i].boundsInRoot.overlaps(ordered[i + 1].boundsInRoot)).isFalse()
     }
-    assertThat(widthDp).isGreaterThan(0f)
   }
 
   @Test
-  fun iBordiDelPiedeSuTelefonoAUnoEATreDecimi() {
+  fun iBordiDelPopUpSuTelefonoAUnoEATreDecimi() {
     for (fontScale in listOf(1f, 1.3f)) {
       for ((name, status) in boundaryCases) {
         show(status, nas = LibraryNasStatus.Frozen(FreezeReason.CHANGED, sinceNasMillis = 0L), fontScale = fontScale)
-        assertBounds("telefono ${fontScale}x, $name", widthDp = 412f)
+        assertBounds("telefono ${fontScale}x, $name, con i lavori fermi")
+        show(status, nas = LibraryNasStatus.UpToDate(atNasMillis = 0L), fontScale = fontScale, lastSync = 0L)
+        assertBounds("telefono ${fontScale}x, $name, senza problemi del NAS")
       }
     }
   }
@@ -292,7 +363,7 @@ class BackupFooterTabletTest {
   val rules: RuleChain = RuleChain.outerRule(RegisterComponentActivity()).around(composeRule)
 
   @Test
-  fun iBordiDelPiedeSulTablet() {
+  fun iBordiDelPopUpSulTablet() {
     val min = with(composeRule.density) { GalleryDimens.MinTouchTarget.toPx() }
     val cases = listOf<LibraryBackupStatus>(
       LibraryBackupStatus.FirstBackup(done = 1, total = 6_658, etaMillis = null),
@@ -300,21 +371,18 @@ class BackupFooterTabletTest {
     )
     val backup = mutableStateOf(cases.first())
     composeRule.showThemed {
-      LibraryStatusBlock(
-        nas = LibraryNasStatus.Frozen(FreezeReason.CHANGED, sinceNasMillis = 0L),
-        statusFooter = { Text("Rete non riconosciuta") },
-        onNasClick = {},
-        backup = backup.value,
-        onBackupClick = {},
-      )
+      val cloud = libraryCloud(null, LibraryNasStatus.Frozen(FreezeReason.CHANGED, sinceNasMillis = 0L), backup.value)
+      if (cloud != null) {
+        LibraryCloudPanel(cloud = cloud, lastSyncNasMillis = null, commands = NoLibraryCommands, actions = LibraryCloudActions({}, {}, {}), close = {})
+      }
     }
     for (case in cases) {
       composeRule.runOnIdle { backup.value = case }
       composeRule.waitForIdle()
       val buttons = composeRule.onAllNodes(SemanticsMatcher("toccabile") { it.config.contains(SemanticsActions.OnClick) }).fetchSemanticsNodes()
-      assertThat(buttons.size).isAtLeast(2)
+      assertThat(buttons.size).isAtLeast(1)
       for (button in buttons) {
-        assertWithMessage("capsula ${button.boundsInRoot}").that(button.boundsInRoot.height).isAtLeast(min - 1f)
+        assertWithMessage("bersaglio ${button.boundsInRoot}").that(button.boundsInRoot.height).isAtLeast(min - 1f)
       }
     }
   }

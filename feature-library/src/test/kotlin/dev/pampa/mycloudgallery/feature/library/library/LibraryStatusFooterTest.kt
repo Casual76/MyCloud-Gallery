@@ -2,7 +2,7 @@ package dev.pampa.mycloudgallery.feature.library.library
 
 import android.app.Application
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.material3.Text
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.testing.NasMix
 import dev.pampa.mycloudgallery.core.model.FreezeReason
@@ -26,9 +27,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Il piede della Libreria e i segni di presenza per TalkBack (G2, `docs/grafica-progetto.md` §12; Fase 4 §1.5): lo stato
- * del NAS (`LibraryTabState.nas`) diventa la capsula accanto a quella della rete, con il dettaglio sotto; toccarla apre
- * i dettagli. Ogni cella dice dove sta il media.
+ * Lo stato del NAS e i segni di presenza per TalkBack (G2, `docs/grafica-progetto.md` §12; Fase 4 §1.5). Dalla beta (B2) lo stato del
+ * NAS non e' piu' una voce in fondo alla Libreria: lo dice il pop-up della nuvola in alto, con le stesse frasi; "Apri la Diagnostica"
+ * porta ai dettagli ("Ho controllato, continua"). Ogni cella dice dove sta il media.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -40,51 +41,96 @@ class LibraryStatusFooterTest {
   @get:Rule
   val rules: RuleChain = RuleChain.outerRule(RegisterComponentActivity()).around(composeRule)
 
-  private fun showFooter(nas: LibraryNasStatus, onNasClick: () -> Unit = {}) {
-    composeRule.showThemed { LibraryStatusBlock(nas = nas, statusFooter = { Text("Rete non riconosciuta") }, onNasClick = onNasClick) }
+  private val nasState = mutableStateOf<LibraryNasStatus>(LibraryNasStatus.Idle)
+  private var nasClicks = 0
+  private var started = false
+
+  private fun showPanel(nas: LibraryNasStatus) {
+    if (!started) {
+      started = true
+      nasState.value = nas
+      composeRule.showThemed {
+        val cloud = libraryCloud(null, nasState.value, LibraryBackupStatus.Idle)
+        if (cloud != null) {
+          LibraryCloudPanel(
+            cloud = cloud,
+            lastSyncNasMillis = null,
+            commands = NoLibraryCommands,
+            actions = LibraryCloudActions(onNetwork = {}, onNas = { nasClicks++ }, onBackup = {}),
+            close = {},
+          )
+        }
+      }
+    } else {
+      composeRule.runOnIdle { nasState.value = nas }
+    }
     composeRule.waitForIdle()
   }
 
   @Test
   fun laPrimaScansioneDiceAChePuntoE() {
-    showFooter(LibraryNasStatus.FirstScan(done = 7_412, total = 20_000, etaMillis = 4 * 60_000L))
+    showPanel(LibraryNasStatus.FirstScan(done = 7_412, total = 20_000, etaMillis = 4 * 60_000L))
     composeRule.onNodeWithText("Sto leggendo il NAS…").assertExists()
     composeRule.onNodeWithText("7.412 di 20.000 · circa 4 min").assertExists()
-    composeRule.onNodeWithText("Rete non riconosciuta").assertExists()
+    composeRule.onNodeWithText("Sincronizzazione in corso").assertExists()
   }
 
   @Test
   fun senzaTotaleDiceQuantiNeHaLetti() {
-    showFooter(LibraryNasStatus.FirstScan(done = 1, total = null, etaMillis = null))
+    showPanel(LibraryNasStatus.FirstScan(done = 1, total = null, etaMillis = null))
     composeRule.onNodeWithText("1 file letto finora").assertExists()
   }
 
   @Test
   fun iLavoriFermiSiDiconoESiAprono() {
-    var opened = 0
-    showFooter(LibraryNasStatus.Frozen(FreezeReason.VANISHED, sinceNasMillis = 0L)) { opened++ }
-    composeRule.onNodeWithText("Lavori fermi: cambiamenti anomali").assertExists().performClick()
+    showPanel(LibraryNasStatus.Frozen(FreezeReason.VANISHED, sinceNasMillis = 0L))
+    composeRule.onNodeWithText("Lavori fermi: cambiamenti anomali").assertExists()
     composeRule.onNodeWithText("spariti molti file", substring = true).assertExists()
-    assertThat(opened).isEqualTo(1)
+    composeRule.onNodeWithText("Serve il tuo intervento").assertExists()
+    composeRule.onNodeWithText("Apri la Diagnostica").performClick()
+    assertThat(nasClicks).isEqualTo(1)
   }
 
   @Test
   fun leAreeNonRaggiungibiliDiconoCheCosaSiVede() {
-    showFooter(LibraryNasStatus.AreasUnavailable(setOf(NasArea.COMMON)))
+    showPanel(LibraryNasStatus.AreasUnavailable(setOf(NasArea.COMMON)))
     composeRule.onNodeWithText("Area comune non raggiungibile").assertExists()
+    composeRule.onNodeWithText("C’è qualcosa da guardare").assertExists()
   }
 
   @Test
   fun lAllineamentoDiceIByte() {
-    showFooter(LibraryNasStatus.Aligning(bytesDone = 640_000_000L, bytesTotal = 1_200_000_000L, etaMillis = null))
+    showPanel(LibraryNasStatus.Aligning(bytesDone = 640_000_000L, bytesTotal = 1_200_000_000L, etaMillis = null))
     composeRule.onNodeWithText("640 MB di 1,2 GB").assertExists()
   }
 
   @Test
-  fun senzaNasIlPiedeDiceSoloLaRete() {
-    showFooter(LibraryNasStatus.Idle)
-    composeRule.onNodeWithText("Rete non riconosciuta").assertExists()
-    composeRule.onAllNodesWithText("NAS", substring = true).assertCountEqualsZero()
+  fun ilNasAggiornatoNonEUnaVoceMaIlTitolo() {
+    showPanel(LibraryNasStatus.UpToDate(atNasMillis = 0L))
+    composeRule.onNodeWithText("NAS aggiornato").assertExists()
+    assertThat(composeRule.onAllNodesWithText("Apri la Diagnostica").fetchSemanticsNodes()).isEmpty()
+  }
+
+  /** B2: in fondo alla Libreria le tre scritte (la rete, il NAS, il backup) non ci sono piu', qualunque cosa dicano. */
+  @Test
+  fun inFondoAllaLibreriaNonCiSonoPiuLeTreScritte() {
+    val state = syntheticLibraryState(
+      count = 60,
+      nas = LibraryNasStatus.Frozen(FreezeReason.VANISHED, sinceNasMillis = 0L),
+      backup = LibraryBackupStatus.AllSafe(atNasMillis = null),
+    )
+    val network = LibraryNetworkStatus(severity = LibraryNetworkSeverity.Attention, label = "Rete non riconosciuta")
+    composeRule.showThemed {
+      LibraryTab(contentPadding = PaddingValues(bottom = 96.dp), backdropOut = {}, onOpenViewer = {}, onOpenSettings = {}, state = state, network = network)
+    }
+    composeRule.waitForIdle()
+    for (phrase in listOf("Lavori fermi: cambiamenti anomali", "Tutto al sicuro", "Rete non riconosciuta")) {
+      assertThat(composeRule.onAllNodesWithText(phrase).fetchSemanticsNodes()).isEmpty()
+    }
+    // La nuvola le dice, con il problema per TalkBack.
+    composeRule.onAllNodesWithContentDescription("Stato della sincronizzazione: Serve il tuo intervento", substring = true).fetchSemanticsNodes().let {
+      assertThat(it).hasSize(1)
+    }
   }
 
   /** Nella Libreria mista ogni cella dice a TalkBack dove sta il media, dopo il resto della descrizione. */
@@ -92,15 +138,11 @@ class LibraryStatusFooterTest {
   fun leCelleDiconoDoveStaIlMedia() {
     val state = syntheticLibraryState(count = 400, mix = NasMix.BUDGET)
     composeRule.showThemed {
-      LibraryTab(contentPadding = PaddingValues(bottom = 96.dp), backdropOut = {}, onOpenViewer = {}, onOpenSettings = {}, statusFooter = {}, state = state)
+      LibraryTab(contentPadding = PaddingValues(bottom = 96.dp), backdropOut = {}, onOpenViewer = {}, onOpenSettings = {}, state = state)
     }
     composeRule.waitForIdle()
     val phrases = listOf("solo sul telefono", "solo sul NAS", "sul telefono e sul NAS", "al sicuro sul NAS")
     val described = phrases.count { composeRule.onAllNodesWithContentDescription(", $it", substring = true).fetchSemanticsNodes().isNotEmpty() }
     assertThat(described).isAtLeast(2)
-  }
-
-  private fun androidx.compose.ui.test.SemanticsNodeInteractionCollection.assertCountEqualsZero() {
-    assertThat(fetchSemanticsNodes()).isEmpty()
   }
 }

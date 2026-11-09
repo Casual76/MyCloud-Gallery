@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -30,7 +31,8 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * NA-9 (verifica funzionale): la capsula del NAS nel piede della Libreria ("Lavori fermi") portava l'azione della rete (WireGuard o la
- * password) invece dei dettagli del NAS. Adesso ogni capsula fa la sua cosa: la rete la sua azione, il NAS la Diagnostica.
+ * password) invece dei dettagli del NAS. Adesso ogni voce fa la sua cosa: la rete la sua azione, il NAS la Diagnostica. Dalla beta
+ * (B2) le voci stanno nel pop-up della nuvola in alto: lo stesso controllo, sui tasti del pop-up.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -88,7 +90,11 @@ class NasStatusCapsuleTest {
     }
     composeRule.waitForIdle()
 
-    composeRule.onNodeWithText("Lavori fermi: cambiamenti anomali", substring = true).performClick()
+    // La nuvola dice il problema piu' grave e apre il pop-up; i lavori fermi non sono piu' una voce in fondo alla griglia.
+    composeRule.onAllNodesWithContentDescription("Stato della sincronizzazione", substring = true)[0].performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Lavori fermi: cambiamenti anomali", substring = true).assertExists()
+    composeRule.onNodeWithText("Apri la Diagnostica").performClick()
 
     assertThat(nas).isEqualTo(1)
     assertThat(network).isEqualTo(0)

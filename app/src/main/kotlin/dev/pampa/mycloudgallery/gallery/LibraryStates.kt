@@ -135,6 +135,16 @@ class AppLibraryCommands(
   /** Il tetto di una richiesta di cestino di sistema (Android 11+). */
   override val deleteLimit: Int get() = DELETE_LIMIT
 
+  // 5B I3 (decisione dell'utente, G2): con il backup attivo (e i dialoghi di sistema, Android 11+) "Elimina dal telefono" della selezione passa
+  // dal foglio "Prima mettilo al sicuro" della 5B, lo stesso del viewer. Backup spento o non legato: il foglio di sempre della Libreria.
+  override val deletesThroughSafeSheet: Boolean get() = gallery.intents.canTrash && gallery.fiveB?.backupActive?.invoke() == true
+
+  override fun deleteFromPhoneSafely(ids: Set<MediaId>) {
+    // Difesa in profondita': solo i media con una copia sul telefono (GA-8), come il foglio di sempre.
+    val onPhone = onPhone(ids)
+    if (onPhone.isNotEmpty()) gallery.fiveB?.deleteFromPhoneSafely?.invoke(onPhone)
+  }
+
   override fun deleteFromPhone(ids: Set<MediaId>): Boolean {
     if (ids.size > DELETE_LIMIT) return false
     val refs = phoneRefs(ids)

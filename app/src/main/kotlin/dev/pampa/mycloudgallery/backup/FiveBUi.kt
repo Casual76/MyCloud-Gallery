@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.core.model.ExifOrientation
 import dev.pampa.mycloudgallery.core.model.Location
 import dev.pampa.mycloudgallery.core.model.LocationState
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.VersionId
@@ -61,10 +62,10 @@ sealed interface FiveBSheet {
   class Correction(val subject: CorrectionSubject, val mode: CorrectionMode) : FiveBSheet
 
   /**
-   * "Elimina solo dal telefono". [fromViewer] (correzioni 5B, LS-1): dal viewer, per un media che non risulta al sicuro sul NAS il foglio offre il
-   * cestino di Android dopo l'avviso; [isVideo] sceglie le parole.
+   * "Elimina solo dal telefono". [offerTrash] (correzioni 5B, LS-1): dal viewer e (5B I3, G2) dalla selezione della Libreria, per i media che non
+   * risultano al sicuro sul NAS il foglio offre il cestino di Android dopo l'avviso; [isVideo] sceglie le parole (un media solo).
    */
-  data class PhoneOnly(val ids: Set<MediaId>, val fromViewer: Boolean = false, val isVideo: Boolean = false) : FiveBSheet
+  data class PhoneOnly(val ids: Set<MediaId>, val offerTrash: Boolean = false, val isVideo: Boolean = false) : FiveBSheet
 }
 
 /**
@@ -185,6 +186,26 @@ class FiveBUi(
 
   fun dismissSheet() {
     sheetFlow.value = null
+  }
+
+  /**
+   * 5B I3 (decisione dell'utente, G2): il backup e' attivo su questo telefono, cioe' configurato (anche "in prova", D12). Con il backup attivo
+   * "Elimina dal telefono" della selezione della Libreria passa dal foglio "Prima mettilo al sicuro" ([deleteFromPhoneSafely]); senza, la
+   * Libreria tiene il suo foglio di sempre. Si legge al tocco, non a ogni fotogramma.
+   */
+  val backupActive: Boolean get() = backup.status.value !is BackupStatus.NotConfigured
+
+  /**
+   * 5B I3: "Elimina dal telefono" della selezione della Libreria apre lo stesso foglio del viewer per [ids] (i media con una copia sul telefono):
+   * quanti non sono ancora al sicuro, "Prima mettilo al sicuro" (preselezionata, E-D14) o "Togli solo quelli gia' al sicuro" (che apre "Libera
+   * spazio" con quelli), e per i media che non sono sul NAS il cestino di Android dopo l'avviso (LS-1). Niente si toglie da qui.
+   */
+  fun deleteFromPhoneSafely(ids: Set<MediaId>) {
+    if (ids.isEmpty()) return
+    scope.launch {
+      val video = ids.size == 1 && catalog()?.media(ids.first())?.kind == MediaKind.VIDEO
+      sheetFlow.value = FiveBSheet.PhoneOnly(ids, offerTrash = true, isVideo = video)
+    }
   }
 
   /** "Libera spazio" con una selezione (dalla Libreria o da "Elimina solo dal telefono"): la pagina la legge entrando. */
@@ -466,7 +487,7 @@ class FiveBUi(
         // LS-1: dal viewer il foglio sa offrire il cestino di Android per un media che non risulta al sicuro sul NAS.
         BackupMenuAction.PHONE_ONLY_DELETE -> scope.launch {
           val video = catalog()?.media(id)?.kind == MediaKind.VIDEO
-          sheetFlow.value = FiveBSheet.PhoneOnly(setOf(id), fromViewer = true, isVideo = video)
+          sheetFlow.value = FiveBSheet.PhoneOnly(setOf(id), offerTrash = true, isVideo = video)
         }
         // Non dichiarata (`viewOriginal = false`): il viewer non la mostra.
         BackupMenuAction.VIEW_ORIGINAL -> Unit

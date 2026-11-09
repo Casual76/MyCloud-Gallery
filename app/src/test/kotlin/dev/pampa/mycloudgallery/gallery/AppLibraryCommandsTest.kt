@@ -12,6 +12,9 @@ import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
+import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions
+import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuAction
+import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuCapabilities
 import dev.pampa.mycloudgallery.integration.GalleryRig
 import java.io.File
 import org.junit.After
@@ -232,5 +235,40 @@ class AppLibraryCommandsTest {
     val commands = commands()
 
     assertThat(commands.deleteFromPhone(ids(5))).isFalse()
+  }
+
+  // --- 5B I3 (G2): con il backup attivo "Elimina dal telefono" della selezione passa dal foglio "Prima mettilo al sicuro" ------------
+
+  private val safely = mutableListOf<Set<MediaId>>()
+
+  private fun withFiveB(commands: AppLibraryCommands, active: Boolean): AppLibraryCommands = commands.also {
+    rigs.last().gallery.fiveB = GalleryGraph.FiveBHooks(
+      mediaActions = object : BackupMediaActions {
+        override val capabilities = BackupMenuCapabilities(phoneOnlyDelete = true)
+
+        override fun perform(action: BackupMenuAction, id: MediaId) = Unit
+      },
+      freeSpace = {},
+      backupActive = { active },
+      deleteFromPhoneSafely = { ids -> safely += ids },
+    )
+  }
+
+  @Test
+  fun i3_conIlBackupAttivoLaSelezionePassaDalFoglioDellaQuintaB_soloIMediaSulTelefono() {
+    val commands = withFiveB(mixed(), active = true)
+
+    assertThat(commands.deletesThroughSafeSheet).isTrue()
+    commands.deleteFromPhoneSafely(ids(4))
+
+    // Solo i media con una copia sul telefono (i dispari); niente cestino diretto.
+    assertThat(safely.single().map { it.value.takeLast(12).toLong() }).containsExactly(1L, 3L)
+    assertThat(intents.trashed).isEmpty()
+  }
+
+  @Test
+  fun i3_conIlBackupSpentoONonLegatoRestaIlFoglioDiSempre() {
+    assertThat(commands().deletesThroughSafeSheet).isFalse()
+    assertThat(withFiveB(commands(), active = false).deletesThroughSafeSheet).isFalse()
   }
 }

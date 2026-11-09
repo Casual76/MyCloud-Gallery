@@ -188,11 +188,11 @@ internal fun LibraryScreen(
           stickyTop = topChrome,
           onLevelChanged = { level -> scope.launch { state.preferences.setLevel(level) } },
           // D15: Canc apre il foglio di conferma (lo stesso della barra delle azioni), mai un'eliminazione diretta.
-          onDeleteKey = { deleting = true },
+          onDeleteKey = { requestPhoneDelete(state) { deleting = true } },
           // Fase 10 (P6, D20): le foto della Libreria (o la selezione) si trascinano verso un'altra app.
           dragOrigin = DragOrigin.LIBRARY,
           // Fase 10 P8 (D23): Preferito, Condividi, Nascondi, Elimina come azioni della cella, per TalkBack e Switch Access.
-          cellActions = { id -> libraryCellActions(state, id, cellLabels, scope, onDelete = { deleting = true }, onHideGroups = { hidingGroups = true }) },
+          cellActions = { id -> libraryCellActions(state, id, cellLabels, scope, onDelete = { requestPhoneDelete(state) { deleting = true } }, onHideGroups = { hidingGroups = true }) },
         )
       }
       GridTopEdgeScrim(topChrome, Modifier.align(Alignment.TopCenter))
@@ -237,16 +237,17 @@ internal fun LibraryScreen(
       )
     }
 
-    // In selezione la barra delle azioni sta al posto della pillola (che `:app` nasconde), mai sopra di lei.
+    // In selezione la barra delle azioni sta al posto della pillola (che `:app` nasconde), mai sopra di lei. G2: i margini del posto (barra di
+    // sistema compresa) li mette la barra, che entra ed esce come la capsula `ReplacingTabBar` dell'engine.
     GridSelectionBar(
       visible = grid.selecting && !showPermission && !empty,
       grid = grid,
       backdrop = backdrop,
       // La barra delle azioni, in fondo, si legge dopo la griglia (D23 (3)).
-      modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = slotBottom).semantics { traversalIndex = 1f },
+      modifier = Modifier.align(Alignment.BottomCenter).semantics { traversalIndex = 1f },
       veilAlpha = pillVeil,
     ) {
-      selectionActions(state, onDelete = { deleting = true }, onHideGroups = { hidingGroups = true })
+      selectionActions(state, onDelete = { requestPhoneDelete(state) { deleting = true } }, onHideGroups = { hidingGroups = true })
     }
 
     // Fase 10 P8 (D23 (6)): "12 selezionati" detto una volta a ogni cambio, mai ripetuto da altro.

@@ -105,6 +105,20 @@ interface LibraryCommands {
   /** Il massimo di elementi che una richiesta di eliminazione accetta (limite di Android). Oltre, la Libreria avvisa. */
   val deleteLimit: Int get() = Int.MAX_VALUE
 
+  /**
+   * 5B I3 (decisione dell'utente, fase grafica G2): con il backup attivo "Elimina dal telefono" della selezione passa dal foglio della 5B
+   * ("Prima mettilo al sicuro"), lo stesso del viewer, invece del foglio della 4B che porta dritto al cestino di Android. Falso (backup
+   * spento, non legato, o senza i dialoghi di sistema): resta il foglio di sempre.
+   */
+  val deletesThroughSafeSheet: Boolean get() = false
+
+  /**
+   * Apre il foglio della 5B per [ids] (media con una copia sul telefono): dice quanti non sono ancora al sicuro e offre la stessa scelta del
+   * viewer ("Prima mettilo al sicuro" o "Togli solo quelli gia' al sicuro"; per quelli che non sono sul NAS il cestino di Android, dopo
+   * l'avviso). Il foglio lo mostra `:app` alla radice; non elimina niente da solo.
+   */
+  fun deleteFromPhoneSafely(ids: Set<MediaId>) {}
+
   /** Fase 5B (P14, D21): "Libera spazio" sulla selezione c'e' (il backup e' legato). Senza, l'azione non compare. */
   val canFreeSpace: Boolean get() = false
 

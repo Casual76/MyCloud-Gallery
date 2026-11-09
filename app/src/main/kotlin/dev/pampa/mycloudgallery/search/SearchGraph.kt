@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.search.contract.MediaText
+import dev.pampa.mycloudgallery.core.search.contract.IdleSuggestions
 import dev.pampa.mycloudgallery.core.search.contract.PlaceLookup
 import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.search.contract.SearchCoverage
@@ -17,6 +18,7 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchReadiness
 import dev.pampa.mycloudgallery.core.search.contract.SearchRequest
 import dev.pampa.mycloudgallery.core.search.contract.SearchResults
 import dev.pampa.mycloudgallery.core.search.contract.Suggestions
+import dev.pampa.mycloudgallery.core.search.contract.Suggestion
 import dev.pampa.mycloudgallery.core.search.contract.Today
 import dev.pampa.mycloudgallery.core.search.coverage.CoverageNotices
 import dev.pampa.mycloudgallery.core.search.coverage.CoverageReasons
@@ -103,7 +105,7 @@ class SearchGraph(
   private val libraryPlaces = LibraryPlaces(places)
   // CE-10: la cronologia aspetta che l'indice si apra con il catalogo (dopo l'onboarding, nello stesso processo) invece di restare vuota per sempre.
   val history: SearchHistory = LocalSearchHistory(CatalogHistoryStore(catalog) { opened.await() }, graphScope)
-  val suggestions: Suggestions = LibrarySuggestions(base, libraryPlaces, history, people)
+  val suggestions: Suggestions = OffMainSuggestions(LibrarySuggestions(base, libraryPlaces, history, people), compute)
 
   private val local =
     LocalSearchEngine(base, index, keys, texts, embedding, today, libraryPlaces, coverageTracker = coverage, coverageNotices = coverageNotices, people = people)
@@ -125,6 +127,11 @@ class SearchGraph(
       override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults {
         ready()
         return local.similar(media, order)
+      }
+
+      override suspend fun similarToAll(media: List<MediaId>, order: ResultOrder): SearchResults {
+        ready()
+        return local.similarToAll(media, order)
       }
 
       override val coverage: StateFlow<SearchCoverage> get() = local.coverage
@@ -168,7 +175,7 @@ class SearchGraph(
     // Revisione A (R4, R5): le righe del testo e i corpi propri stanno ora nell'indice; i file per chiave di prima non servono piu'.
     for (legacy in listOf(LAYOUT_DIR, LEGACY_LOCAL_BODIES_DIR)) runCatching { File(dir, legacy).deleteRecursively() }
     val ok = try {
-      index.open()
+      withContext(compute) { index.open() }
       true
     } catch (e: CancellationException) {
       throw e
@@ -278,4 +285,13 @@ class OffMainSearchEngine(private val inner: SearchEngine, private val dispatche
   override suspend fun search(request: SearchRequest): SearchResults = withContext(dispatcher) { inner.search(request) }
 
   override suspend fun similar(media: MediaId, order: ResultOrder): SearchResults = withContext(dispatcher) { inner.similar(media, order) }
+
+  override suspend fun similarToAll(media: List<MediaId>, order: ResultOrder): SearchResults = withContext(dispatcher) { inner.similarToAll(media, order) }
+}
+
+/** Anche dizionari, normalizzazione e ordinamento dei suggerimenti lavorano sul dispatcher di calcolo (RG-A, OB-2). */
+class OffMainSuggestions(private val inner: Suggestions, private val dispatcher: CoroutineDispatcher) : Suggestions {
+  override suspend fun idle(): IdleSuggestions = withContext(dispatcher) { inner.idle() }
+
+  override suspend fun complete(prefix: String): List<Suggestion> = withContext(dispatcher) { inner.complete(prefix) }
 }

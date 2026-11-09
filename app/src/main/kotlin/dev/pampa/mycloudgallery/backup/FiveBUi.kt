@@ -50,8 +50,11 @@ import java.time.Instant
 import java.time.ZoneOffset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
@@ -65,7 +68,13 @@ sealed interface FiveBSheet {
    * "Elimina solo dal telefono". [offerTrash] (correzioni 5B, LS-1): dal viewer e (5B I3, G2) dalla selezione della Libreria, per i media che non
    * risultano al sicuro sul NAS il foglio offre il cestino di Android dopo l'avviso; [isVideo] sceglie le parole (un media solo).
    */
-  data class PhoneOnly(val ids: Set<MediaId>, val offerTrash: Boolean = false, val isVideo: Boolean = false) : FiveBSheet
+  data class PhoneOnly(
+    val ids: Set<MediaId>,
+    val offerTrash: Boolean = false,
+    val isVideo: Boolean = false,
+    /** FAB-7: il foglio e' stato aperto dalla selezione della Libreria: chi la tiene aperta aspetta di sapere se l'utente e' andato avanti. */
+    val fromSelection: Boolean = false,
+  ) : FiveBSheet
 }
 
 /**
@@ -204,8 +213,21 @@ class FiveBUi(
     if (ids.isEmpty()) return
     scope.launch {
       val video = ids.size == 1 && catalog()?.media(ids.first())?.kind == MediaKind.VIDEO
-      sheetFlow.value = FiveBSheet.PhoneOnly(ids, offerTrash = true, isVideo = video)
+      sheetFlow.value = FiveBSheet.PhoneOnly(ids, offerTrash = true, isVideo = video, fromSelection = true)
     }
+  }
+
+  private val phoneSheetProceededFlow = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+  /**
+   * FAB-7: l'utente e' **andato avanti** dal foglio "Prima mettilo al sicuro" aperto dalla selezione della Libreria ("Continua" verso "Libera spazio",
+   * o il cestino di Android dopo l'avviso). Non emette se preme "Chiudi": la Libreria chiude la sua selezione solo alla risposta, come la pagina dei
+   * Doppioni, cosi' chi chiude il foglio la ritrova com'era.
+   */
+  val phoneSheetProceeded: SharedFlow<Unit> = phoneSheetProceededFlow.asSharedFlow()
+
+  fun phoneSheetContinued() {
+    phoneSheetProceededFlow.tryEmit(Unit)
   }
 
   /** "Libera spazio" con una selezione (dalla Libreria o da "Elimina solo dal telefono"): la pagina la legge entrando. */

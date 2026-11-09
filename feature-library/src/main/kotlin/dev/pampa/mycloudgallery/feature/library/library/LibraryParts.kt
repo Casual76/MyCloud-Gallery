@@ -143,6 +143,9 @@ internal fun LibraryEffects(state: LibraryTabState) {
     launch { state.preferences.level.collect { level -> if (!grid.pinching && level != grid.level) grid.level = level } }
     launch { state.preferences.style.collect { style -> grid.style = style } }
     launch { state.preferences.filter.collect { filter -> state.filter = filter } }
+    // FAB-7: la selezione si chiude quando l'eliminazione e' andata avanti (risposta positiva del dialogo di sistema, o il foglio "Prima mettilo al
+    // sicuro" che porta altrove), non quando si apre il dialogo: se l'utente annulla o preme "Chiudi" la selezione resta.
+    launch { state.commands.selectionSettled.collect { grid.stopSelecting() } }
   }
   // Il filtro sceglie la vista dalla timeline: le viste con lo stesso filtro condividono il lavoro del repository.
   val timeline = state.timeline
@@ -590,9 +593,9 @@ internal fun selectionActions(
 /**
  * "Elimina dal telefono" sulla selezione di adesso, da qualunque parte arrivi (la barra delle azioni, il tasto Canc, l'azione della cella per
  * TalkBack). 5B I3 (decisione dell'utente, G2): con il backup attivo ([LibraryCommands.deletesThroughSafeSheet]) passa dal foglio della 5B
- * "Prima mettilo al sicuro", lo stesso del viewer, per i soli media con una copia sul telefono; la selezione si chiude come per "Libera
- * spazio" (il foglio sta alla radice, e il seguito, "Continua" o il cestino dopo l'avviso, e' suo). Altrimenti [openSheet] apre il foglio
- * di sempre ([LibraryDeleteSheet]).
+ * "Prima mettilo al sicuro", lo stesso del viewer, per i soli media con una copia sul telefono. FAB-7: la selezione **resta** finche' l'utente non
+ * va avanti dal foglio ("Continua" o il cestino dopo l'avviso: [LibraryCommands.selectionSettled]); se preme "Chiudi" la ritrova com'era. Il foglio
+ * sta alla radice, e il seguito e' suo. Altrimenti [openSheet] apre il foglio di sempre ([LibraryDeleteSheet]).
  */
 internal fun requestPhoneDelete(state: LibraryTabState, openSheet: () -> Unit) {
   val commands = state.commands
@@ -607,7 +610,6 @@ internal fun requestPhoneDelete(state: LibraryTabState, openSheet: () -> Unit) {
     return
   }
   commands.deleteFromPhoneSafely(onPhone)
-  grid.stopSelecting()
 }
 
 /**
@@ -640,10 +642,11 @@ internal fun LibraryDeleteSheet(visible: Boolean, state: LibraryTabState, onDism
       ),
     ),
     onConfirm = {
-      // Se la richiesta di sistema non parte la selezione resta aperta e lo si dice (I8).
+      // Se la richiesta di sistema non parte la selezione resta aperta e lo si dice (I8). FAB-7: se parte, la selezione resta fino alla risposta
+      // positiva del dialogo ([LibraryCommands.selectionSettled]): annullando li' non si perde la scelta.
       val started = onPhone.isNotEmpty() && state.commands.deleteFromPhone(onPhone)
       onDismiss()
-      if (started) grid.stopSelecting() else state.notice = ActionNotice.DeleteFailed
+      if (!started) state.notice = ActionNotice.DeleteFailed
     },
     onDismissRequest = onDismiss,
     scopes = listOf(GalleryDeleteScope.PhoneOnly),
@@ -658,7 +661,7 @@ internal fun LibraryDeleteSheet(visible: Boolean, state: LibraryTabState, onDism
 internal fun MediaGridState.unsafeAmong(ids: Set<MediaId>): Int {
   val snapshot = view.snapshot
   return ids.count { id ->
-    val index = indexOf(id).takeIf { it in 0 until snapshot.size } ?: snapshot.indexOf(id)
+    val index = snapshot.indexOf(id)
     index < 0 || !CellFlags.has(snapshot.flagsAt(index), CellFlags.SAFE)
   }
 }
@@ -721,7 +724,7 @@ internal fun LibraryHideGroupSheet(visible: Boolean, state: LibraryTabState, onD
 internal fun MediaGridState.hiddenWithGroups(ids: Set<MediaId>): Int {
   val snapshot = view.snapshot
   return ids.sumOf { id ->
-    val index = indexOf(id).takeIf { it in 0 until snapshot.size } ?: snapshot.indexOf(id)
+    val index = snapshot.indexOf(id)
     if (index >= 0) snapshot.groupSizeAt(index).coerceAtLeast(1) else 1
   }
 }
@@ -729,8 +732,10 @@ internal fun MediaGridState.hiddenWithGroups(ids: Set<MediaId>): Int {
 /** Se [id] e' un preferito (dai flag dell'indice). */
 internal fun MediaGridState.isFavorite(id: MediaId): Boolean {
   // L'indice piu' recente (la vista corrente): un preferito appena cambiato ripubblica l'indice con lo stesso ordine.
+  // La posizione si cerca **in questo indice** (FAB-2): `indexOf` della griglia risponde per l'indice mostrato, che con una foto arrivata in
+  // cima durante la selezione e' scalato di una riga rispetto a questo, e si leggerebbero i flag della foto accanto.
   val snapshot = view.snapshot
-  val index = indexOf(id).takeIf { it in 0 until snapshot.size } ?: snapshot.indexOf(id)
+  val index = snapshot.indexOf(id)
   return index >= 0 && CellFlags.has(snapshot.flagsAt(index), CellFlags.FAVORITE)
 }
 

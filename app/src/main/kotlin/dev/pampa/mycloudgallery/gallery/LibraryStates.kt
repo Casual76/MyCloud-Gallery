@@ -26,9 +26,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.launch
 
 /**
@@ -156,6 +160,19 @@ class AppLibraryCommands(
     val sender = gallery.intents.trashRequest(refs, trash = true) ?: return false
     return host?.launchTrashRequest(sender) ?: false
   }
+
+  private val trashConfirmed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+  /**
+   * FAB-7: la risposta del dialogo di sistema del cestino (la riceve `LibraryCommandHostEffect`). Solo quella positiva fa chiudere la selezione:
+   * annullando, la selezione resta com'era.
+   */
+  fun onTrashResult(confirmed: Boolean) {
+    if (confirmed) trashConfirmed.tryEmit(Unit)
+  }
+
+  /** FAB-7: la risposta positiva del cestino di sistema, oppure l'utente che va avanti dal foglio "Prima mettilo al sicuro" (non "Chiudi"). */
+  override val selectionSettled: Flow<Unit> get() = merge(trashConfirmed, gallery.fiveB?.phoneSheetProceeded ?: emptyFlow())
 
   private fun phoneRefs(ids: Set<MediaId>): List<MediaRef.Phone> = ids.mapNotNull { refOf(it) as? MediaRef.Phone }
 

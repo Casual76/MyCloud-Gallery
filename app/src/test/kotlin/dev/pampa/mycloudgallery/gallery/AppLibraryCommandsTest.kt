@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.IntentSender
 import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
+import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
@@ -17,6 +18,10 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuAction
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuCapabilities
 import dev.pampa.mycloudgallery.integration.GalleryRig
 import java.io.File
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Rule
 import org.junit.Test
@@ -241,7 +246,11 @@ class AppLibraryCommandsTest {
 
   private val safely = mutableListOf<Set<MediaId>>()
 
-  private fun withFiveB(commands: AppLibraryCommands, active: Boolean): AppLibraryCommands = commands.also {
+  private fun withFiveB(
+    commands: AppLibraryCommands,
+    active: Boolean,
+    proceeded: Flow<Unit> = emptyFlow(),
+  ): AppLibraryCommands = commands.also {
     rigs.last().gallery.fiveB = GalleryGraph.FiveBHooks(
       mediaActions = object : BackupMediaActions {
         override val capabilities = BackupMenuCapabilities(phoneOnlyDelete = true)
@@ -251,6 +260,7 @@ class AppLibraryCommandsTest {
       freeSpace = {},
       backupActive = { active },
       deleteFromPhoneSafely = { ids -> safely += ids },
+      phoneSheetProceeded = proceeded,
     )
   }
 
@@ -270,5 +280,36 @@ class AppLibraryCommandsTest {
   fun i3_conIlBackupSpentoONonLegatoRestaIlFoglioDiSempre() {
     assertThat(commands().deletesThroughSafeSheet).isFalse()
     assertThat(withFiveB(commands(), active = false).deletesThroughSafeSheet).isFalse()
+  }
+
+  // --- FAB-7: la selezione si chiude alla risposta positiva, non quando si apre il dialogo o il foglio --------------------------
+
+  @Test
+  fun fab7_soloLaRispostaPositivaDelCestinoChiudeLaSelezione() = runBlocking {
+    val commands = commands()
+    commands.selectionSettled.test {
+      // Annullato nel dialogo di sistema: la selezione resta, niente da dire.
+      commands.onTrashResult(confirmed = false)
+      expectNoEvents()
+      // Confermato: la Libreria chiude la selezione.
+      commands.onTrashResult(confirmed = true)
+      assertThat(awaitItem()).isEqualTo(Unit)
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
+  @Test
+  fun fab7_ilFoglioDellaQuintaBChiudeLaSelezioneSoloSeSiVaAvanti() = runBlocking {
+    val proceeded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val commands = withFiveB(commands(), active = true, proceeded = proceeded)
+    commands.selectionSettled.test {
+      // Il foglio si apre ("Elimina dal telefono" dalla selezione): niente si chiude. Se l'utente preme "Chiudi" non arriva niente.
+      commands.deleteFromPhoneSafely(ids(2))
+      expectNoEvents()
+      // "Continua" (o il cestino dopo l'avviso): `:app` lo dice e la selezione si chiude.
+      proceeded.tryEmit(Unit)
+      assertThat(awaitItem()).isEqualTo(Unit)
+      cancelAndIgnoreRemainingEvents()
+    }
   }
 }

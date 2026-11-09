@@ -13,11 +13,12 @@ import org.junit.Test
 class CollectionsStateTest {
 
   @Test
-  fun leRaccolteSonoQuattroFiltriPoiINascostiEGliEliminatiDiRecente() {
+  fun leRaccolteSonoCinqueFiltriPoiINascostiEGliEliminatiDiRecente() {
     val state = collectionsUiState(mapOf(CollectionKind.FAVORITES to 3, CollectionKind.VIDEOS to 12), canTrash = true)
 
+    // G2b: la Fotocamera dopo i Preferiti (come nella scheda Album); WHATSAPP e' la Messaggistica.
     assertThat(state.media.map { it.kind }).containsExactly(
-      CollectionKind.FAVORITES, CollectionKind.VIDEOS, CollectionKind.SCREENSHOTS, CollectionKind.WHATSAPP,
+      CollectionKind.FAVORITES, CollectionKind.CAMERA, CollectionKind.VIDEOS, CollectionKind.SCREENSHOTS, CollectionKind.WHATSAPP,
     ).inOrder()
     assertThat(state.protectedRows.map { it.kind }).containsExactly(CollectionKind.HIDDEN, CollectionKind.RECENTLY_DELETED).inOrder()
     // Un conteggio mancante e' zero, non un errore.
@@ -42,9 +43,10 @@ class CollectionsStateTest {
   }
 
   @Test
-  fun soloLeQuattroRaccolteFiltroHannoUnFiltroDellaLibreria() {
+  fun soloLeRaccolteFiltroHannoUnFiltroDellaLibreria() {
+    // G2b: la raccolta "whatsapp" mostra la Messaggistica (WhatsApp, Telegram e Signal); la Fotocamera e' nuova.
     assertThat(CollectionKind.filters.map { it.filter }).containsExactly(
-      LibraryFilter.FAVORITES, LibraryFilter.VIDEOS, LibraryFilter.SCREENSHOTS, LibraryFilter.WHATSAPP,
+      LibraryFilter.FAVORITES, LibraryFilter.CAMERA, LibraryFilter.VIDEOS, LibraryFilter.SCREENSHOTS, LibraryFilter.MESSAGING,
     ).inOrder()
     assertThat(CollectionKind.HIDDEN.filter).isNull()
     assertThat(CollectionKind.RECENTLY_DELETED.filter).isNull()
@@ -52,10 +54,12 @@ class CollectionsStateTest {
 
   @Test
   fun iCodiciSonoStabiliEUnCodiceSconosciutoNonEUnaRaccolta() {
+    // I codici di prima non cambiano (stanno nello stato salvato e nell'ordine sincronizzato delle Raccolte); "camera" e' nuovo.
     assertThat(CollectionKind.entries.map { it.code }).containsExactly(
-      "favorites", "videos", "screenshots", "whatsapp", "hidden", "recently_deleted",
+      "favorites", "camera", "videos", "screenshots", "whatsapp", "hidden", "recently_deleted",
     ).inOrder()
     assertThat(CollectionKind.fromCode("whatsapp")).isEqualTo(CollectionKind.WHATSAPP)
+    assertThat(CollectionKind.fromCode("camera")).isEqualTo(CollectionKind.CAMERA)
     assertThat(CollectionKind.fromCode("album")).isNull()
     assertThat(CollectionKind.fromCode(null)).isNull()
   }

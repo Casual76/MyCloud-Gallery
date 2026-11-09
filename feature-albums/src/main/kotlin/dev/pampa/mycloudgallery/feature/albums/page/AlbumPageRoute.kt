@@ -47,14 +47,32 @@ import dev.pampa.mycloudgallery.core.albums.contract.HiddenChoice
 import dev.pampa.mycloudgallery.core.model.ShareLevel
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumHost
 import javax.inject.Inject
+import kotlinx.coroutines.launch
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumsTabKeys
+import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabController
+import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabDependencies
+import kotlinx.coroutines.delay
 
 // LA ROTTA DELLA PAGINA DI UN ALBUM (Fase 7, P10): lega il controllore, i fogli (condivisione, chiusura, permessi, ordine, nome, conferme) e le uscite
 // verso `:app` (viewer, selettore dei media, editor delle regole, pagina dei dubbi). Nessuna logica sua: quello che la pagina offre lo decide
 // `AlbumPageController`, e cio' che e' permesso la tabella.
 
 @HiltViewModel
-class AlbumPageViewModel @Inject constructor(savedStateHandle: SavedStateHandle, ports: AlbumDependencies) : ViewModel() {
+class AlbumPageViewModel @Inject constructor(
+  savedStateHandle: SavedStateHandle,
+  ports: AlbumDependencies,
+  tab: AlbumsTabDependencies = AlbumsTabDependencies.NONE,
+) : ViewModel() {
   val id: AlbumId = AlbumId(savedStateHandle.toRoute<AlbumPageDestination>().id)
+
+  init {
+    // G2b: l'ultima apertura per l'ordine della scheda Album, da qualunque parte si arrivi (scheda, Raccolte, Cerca, "Tutti gli album"). Dopo la
+    // transizione della pagina: la scheda sotto non si rimescola mentre la pagina entra, e un'apertura chiusa subito non conta.
+    viewModelScope.launch {
+      delay(AlbumsTabController.OPEN_SETTLE_MS)
+      tab.openings.opened(AlbumsTabKeys.album(id))
+    }
+  }
 
   val controller: AlbumPageController = AlbumPageController(
     id, ports.albums, ports.shared, ports.choices, ports.runner, ports.people, ports.members, ports.pending, ports.clock, viewModelScope, ports.peopleChoices,

@@ -50,8 +50,6 @@ import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.albums.nav.albumsGraph
-import dev.pampa.mycloudgallery.feature.albums.nav.openAlbum
-import dev.pampa.mycloudgallery.feature.albums.nav.openSmartEditor
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleActions
 import dev.pampa.mycloudgallery.feature.people.nav.openPeopleEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionKind
@@ -572,9 +570,9 @@ private fun MainDestination(
     search = { slot ->
       SearchTab(slot, searchActions, searchHost, findSimilar, onFindSimilarHandled, focusField = searchFocus, onFieldFocused = { searchFocus = false })
     },
-    // G2: la scheda Album (per ora l'elenco degli album di sempre; il pacchetto G2b ne collega il contenuto nuovo in `AlbumsTabHost`).
+    // G2 + G2b: la scheda Album (la griglia di copertine di G2b, ospitata da `AlbumsTabHost`).
     albums = if (albumsHost != null) {
-      { slot -> AlbumsTabHost(slot = slot, thumbnails = albumsHost.thumbnails, onOpenAlbum = nav::openAlbum, onNewSmart = nav::openSmartEditor) }
+      { slot -> AlbumsTabHost(slot = slot, nav = nav) }
     } else {
       null
     },

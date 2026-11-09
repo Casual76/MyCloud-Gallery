@@ -130,11 +130,30 @@ enum class LibraryFilter(val code: String) {
    * pagina dell'Utility e' di P8. Non e' un chip del filtro rapido della Libreria (`QuickFilters` lo lascia fuori): e' una pagina.
    */
   EDITED("edited"),
+
+  /**
+   * Fase grafica (G2b): **Fotocamera**, le foto e i video scattati con questo dispositivo (l'album "Camera" di Galleria Samsung). La cella
+   * dice la sorgente: `CAMERA` nasce solo da un file in `DCIM/Camera/` (il catalogo la fissa alla creazione del media e la tiene anche quando
+   * il media resta solo sul NAS dopo "Libera spazio"; le copie del backup stanno in `Backup/<dispositivo>/AAAA/MM/`, senza `DCIM/Camera`,
+   * quindi i backup degli altri dispositivi non sono `CAMERA`). Quello che la cella non sa, cioe' un file del NAS in una cartella
+   * `DCIM/Camera/` messa li' a mano, lo toglie [FilterMembership] dal dispositivo d'origine del catalogo (`media.origin_device`).
+   * Non e' un chip della Libreria: e' una voce della scheda Album e delle Raccolte.
+   */
+  CAMERA("camera"),
+
+  /**
+   * Fase grafica (G2b): **Messaggistica**, WhatsApp piu' Telegram e Signal. La cella sa solo WhatsApp (`MediaSource.WHATSAPP`): Telegram e
+   * Signal non hanno un codice di sorgente, perche' i segmenti dell'indice sincronizzati rifiutano un codice che una versione vecchia non
+   * conosce (`IndexSegment`, "codice sconosciuto"). Li aggiunge [FilterMembership] dalle cartelle delle loro posizioni nel catalogo
+   * (`MessagingFolders`). Non e' un chip della Libreria (li' resta "WhatsApp").
+   */
+  MESSAGING("messaging"),
   ;
 
   /**
    * Se una cella con questi attributi passa il filtro. E' la definizione di ogni filtro (e' qui perche' la
-   * leggono sia l'indice sia la Raccolta filtrata con lo stesso significato).
+   * leggono sia l'indice sia la Raccolta filtrata con lo stesso significato). Per [CAMERA] e [MESSAGING] e' la parte che la cella sa dire:
+   * il resto lo corregge [FilterMembership].
    */
   fun accepts(kind: MediaKind, source: MediaSource, flags: Int): Boolean = when (this) {
     ALL -> true
@@ -145,7 +164,12 @@ enum class LibraryFilter(val code: String) {
     FAVORITES -> CellFlags.has(flags, CellFlags.FAVORITE)
     DOCUMENTS -> CellFlags.has(flags, CellFlags.DOCUMENT)
     EDITED -> CellFlags.has(flags, CellFlags.EDITED)
+    CAMERA -> source == MediaSource.CAMERA
+    MESSAGING -> source == MediaSource.WHATSAPP
   }
+
+  /** Vero per i filtri che [FilterMembership] completa con il catalogo (la cella da sola non basta). */
+  val needsMembership: Boolean get() = this == CAMERA || this == MESSAGING
 
   companion object {
     /** Il filtro per codice salvato; sconosciuto = [ALL] (una versione piu' nuova dell'app ne ha altri). */

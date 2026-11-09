@@ -5,30 +5,21 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import dev.antigravity.fluidengine.ui.fluid.FluidScrollToTopBus
 import dev.antigravity.fluidengine.ui.fluid.ProvideFluidChrome
+import androidx.navigation.NavController
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidChromeController
-import dev.pampa.mycloudgallery.core.model.AlbumId
-import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
-import dev.pampa.mycloudgallery.feature.albums.list.AlbumListRoute
+import dev.pampa.mycloudgallery.navigation.AppAlbumsTab
 
 /**
- * La scheda **Album** della pillola (G2, lista dell'utente: "come Foto di Apple, gli album al posto di Cerca"). Per ora ospita l'elenco degli
- * album che c'era gia' (`AlbumListRoute` di feature-albums, la stessa pagina di "Tutti gli album"), senza il tasto indietro: e' una scheda,
- * non una pagina aperta da un'altra. Il pacchetto G2b ridisegna il contenuto (copertine, Preferiti, Fotocamera e Video in testa, gli album
- * smart con l'icona IA): all'integrazione il suo schermo si collega **qui**, dentro [AlbumsTabFrame], e lo scaffold non cambia.
+ * La scheda **Album** della pillola (G2, lista dell'utente: "come Foto di Apple, gli album al posto di Cerca"), con il contenuto di G2b: la
+ * griglia di copertine in stile Galleria Samsung (Preferiti, Fotocamera e Video in testa, poi album, album smart con l'icona IA, Screenshot e
+ * Messaggistica per ultima apertura). La scheda disegna da se' il titolo con "+" e "⋮" e consegna il suo fondale alla pillola
+ * ([CollectionsSlot.backdropOut]): l'ospite non aggiunge una barra. L'elenco di sempre ("Tutti gli album") si apre dal menu "⋮".
  *
- * @param onOpenAlbum apre la pagina di un album (la sua rotta, sopra la schermata principale).
- * @param onNewSmart "Nuovo album" smart: l'editor delle regole parte dal nome.
+ * @param nav la navigazione dell'app: le uscite della scheda verso le pagine degli album e delle raccolte-filtro ([AppAlbumsTab]).
  */
 @Composable
-fun AlbumsTabHost(
-  slot: CollectionsSlot,
-  thumbnails: AlbumThumbnails,
-  onOpenAlbum: (AlbumId) -> Unit,
-  onNewSmart: (title: String) -> Unit,
-) {
-  AlbumsTabFrame(slot) {
-    AlbumListRoute(thumbnails = thumbnails, onOpenAlbum = onOpenAlbum, onNewSmart = onNewSmart)
-  }
+fun AlbumsTabHost(slot: CollectionsSlot, nav: NavController) {
+  AppAlbumsTab(nav = nav, contentPadding = slot.contentPadding, backdropOut = slot.backdropOut)
 }
 
 /**

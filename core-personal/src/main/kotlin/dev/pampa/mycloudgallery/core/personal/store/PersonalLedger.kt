@@ -48,6 +48,11 @@ interface PersonalLedger {
   /** L'ultima istantanea salvata, o [LedgerSnapshot.EMPTY] se non c'e' o non si legge (mai un'eccezione per un file rovinato). */
   suspend fun load(): LedgerSnapshot
 
+  /**
+   * Salva l'istantanea. Lancia `IOException` se non riesce a scrivere (memoria piena, cartella non scrivibile): il file di prima e' intatto. R-1 della review generale: chi
+   * chiama da un ambito di interfaccia (`AddToAlbumController`) la traduce in un messaggio invece di lasciarla arrivare al gestore dei crash.
+   */
+  @Throws(IOException::class)
   suspend fun save(snapshot: LedgerSnapshot)
 }
 

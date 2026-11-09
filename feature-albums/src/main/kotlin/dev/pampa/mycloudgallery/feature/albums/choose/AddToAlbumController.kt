@@ -20,6 +20,8 @@ import dev.pampa.mycloudgallery.feature.albums.contract.AlbumMessage
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumScreensClock
 import dev.pampa.mycloudgallery.feature.albums.contract.WhyBlocked
 import dev.pampa.mycloudgallery.feature.albums.share.ShareSheetController
+import java.io.IOException
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -117,7 +119,16 @@ class AddToAlbumController(
     if (media.isEmpty() || local.value.busy) return
     local.update { it.copy(busy = true, message = null) }
     scope.launch {
-      val out = albums.add(album.id, media)
+      // R-1 (review generale): l'aggiunta scrive il registro dei dati personali (`FilePersonalLedger.save`), che con la memoria piena lancia `IOException`; da questo ambito
+      // chiudeva l'app e lasciava "occupato" per sempre. Ora e' un messaggio dell'album ("Non ci sono riuscito"), e niente e' cambiato.
+      val out = try {
+        albums.add(album.id, media)
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: IOException) {
+        local.update { it.copy(busy = false, message = AlbumMessage.NotDone) }
+        return@launch
+      }
       local.update { it.copy(busy = false) }
       when (out) {
         is AddOutcome.Added -> local.update { it.copy(result = AddResult.Added(album.id, out.added, out.alreadyThere)) }
@@ -135,15 +146,22 @@ class AddToAlbumController(
     if (media.isEmpty() || local.value.busy) return
     local.update { it.copy(busy = true, message = null, titleProblem = null) }
     scope.launch {
-      when (val created = albums.create(title, AlbumKind.MANUAL, null)) {
-        is CreateOutcome.Created -> {
-          val out = albums.add(created.id, media)
-          local.update {
-            it.copy(busy = false, result = if (out is AddOutcome.Added) AddResult.Added(created.id, out.added, out.alreadyThere) else it.result)
+      try {
+        when (val created = albums.create(title, AlbumKind.MANUAL, null)) {
+          is CreateOutcome.Created -> {
+            val out = albums.add(created.id, media)
+            local.update {
+              it.copy(busy = false, result = if (out is AddOutcome.Added) AddResult.Added(created.id, out.added, out.alreadyThere) else it.result)
+            }
           }
+          is CreateOutcome.Invalid -> local.update { it.copy(busy = false, titleProblem = created.problem) }
+          CreateOutcome.RulesTooLong, CreateOutcome.Unavailable -> local.update { it.copy(busy = false, message = AlbumMessage.Blocked(WhyBlocked.NO_NAS)) }
         }
-        is CreateOutcome.Invalid -> local.update { it.copy(busy = false, titleProblem = created.problem) }
-        CreateOutcome.RulesTooLong, CreateOutcome.Unavailable -> local.update { it.copy(busy = false, message = AlbumMessage.Blocked(WhyBlocked.NO_NAS)) }
+      } catch (e: CancellationException) {
+        throw e
+      } catch (e: IOException) {
+        // R-1: stessa causa dell'aggiunta (memoria piena nel registro dei dati personali): un messaggio, mai la chiusura dell'app.
+        local.update { it.copy(busy = false, message = AlbumMessage.NotDone) }
       }
     }
   }

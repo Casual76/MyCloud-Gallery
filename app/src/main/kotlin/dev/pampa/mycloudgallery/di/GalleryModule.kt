@@ -140,6 +140,7 @@ object GalleryModule {
     ).also { gallery ->
       // L'azzeramento (fase 5) ferma la galleria viva prima di cancellare i file (R7).
       graph.galleryStopper = GalleryStopper { gallery.shutdown() }
+      graph.idleGalleryStopper = GalleryStopper { gallery.shutdown(closeUnusedDatabase = true) }
     }
 
   /**

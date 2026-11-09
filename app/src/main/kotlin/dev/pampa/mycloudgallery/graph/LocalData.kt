@@ -153,8 +153,8 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
    * restano aperti.
    *
    * [stopGallery]: ferma la galleria viva prima (R7). Serve solo se in questo processo la famiglia e' stata pronta
-   * ([AppGraph.galleryMayRun]): una galleria mai partita non ha niente da fermare, e `GalleryGraph.shutdown` toglierebbe le porte
-   * delle integrazioni per il resto del processo. Una galleria fermata non riparte nello stesso processo.
+   * ([AppGraph.galleryMayRun]). Se non e' mai partita, [AppGraph.idleGalleryStopper] ferma comunque le query del backup e
+   * chiude Room prima della cancellazione. Una galleria fermata non riparte nello stesso processo.
    *
    * Vero se e' andato tutto bene; un errore lascia la fine dell'onboarding ferma e si riprova (e' idempotente).
    */
@@ -200,7 +200,9 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
     // personali in sospeso) si dimentica ora, prima dei file: il prossimo account nello stesso processo non eredita niente.
     steps.run("memoria dell'AI") { graph.aiForgetter?.stop() }
     // R7: la galleria viva si ferma (e si aspetta) PRIMA di toccare i suoi file; se non si ferma, i file restano.
-    val stopped = if (stopGallery) steps.run("galleria") { graph.galleryStopper?.stop() } else true
+    val stopped = steps.run("galleria") {
+      if (stopGallery) graph.galleryStopper?.stop() else graph.idleGalleryStopper?.stop()
+    }
     if (!stopped) return
     // Fase 5A (P7): il backup si e' gia' fermato per primo (`GalleryGraph.shutdown`); le sue impostazioni (cartella del dispositivo,
     // sorgenti scelte) appartengono alla famiglia che si lascia.
@@ -330,16 +332,17 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
  * I dati del vecchio account, tolti alla fine di un onboarding fatto con un altro account o un altro NAS (R6 della revisione 5B):
  * l'azzeramento dei dati locali senza le parti che toccano l'onboarding in corso (`AppLocalDataEraser.eraseAccountData`).
  *
- * "Configura di nuovo" ha gia' riavviato il processo se la galleria era partita (`AppGraph`), quindi qui di norma non c'e' niente da
- * fermare. Se c'e' (il riavvio non e' riuscito) si ferma la galleria, si tolgono i dati e il processo si riavvia subito dopo:
- * una galleria fermata non riparte, e la Libreria resterebbe vuota fino al prossimo avvio.
+ * "Configura di nuovo" ha gia' riavviato il processo se la galleria era partita (`AppGraph`). Anche nel nuovo processo il backup
+ * puo' aprire Room prima della famiglia pronta: se c'e' il grafo si ferma, si tolgono i dati e il processo si riavvia subito dopo.
+ * Una galleria fermata non riparte, e la Libreria resterebbe vuota fino al prossimo avvio.
  */
 class AppPreviousAccountData(private val eraser: AppLocalDataEraser, private val graph: AppGraph) : PreviousAccountData {
 
   override suspend fun erase(): Boolean {
     val running = graph.galleryMayRun()
+    val needsRestart = running || graph.idleGalleryStopper != null
     val erased = eraser.eraseAccountData(stopGallery = running)
-    if (erased && running) graph.restartSoon()
+    if (erased && needsRestart) graph.restartSoon()
     return erased
   }
 }

@@ -19,6 +19,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
+import androidx.compose.ui.unit.Dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
@@ -47,6 +48,7 @@ import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.CodeField
 import dev.pampa.mycloudgallery.feature.settings.ui.CodeFormat
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
+import dev.pampa.mycloudgallery.feature.settings.ui.PinnedActionDock
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
@@ -113,9 +115,35 @@ internal fun ApprovalRoute(onBack: () -> Unit) {
 internal fun ApprovalScreen(state: ApprovalUiState, actions: ApprovalActions) {
   SensitiveScreen()
   val request = state.request
+  // B6 (G3): "Approva" sta **fermo in fondo**, sopra la tastiera, e la pagina gli scorre sotto: prima era l'ultimo elemento della lista, sotto la piega, e la tastiera lo copriva. Solo
+  // la pagina del modulo di approvazione ha la barra (non quella dell'esito, ne' quella di una richiesta che non c'e': li' il tasto e' uno e la pagina e' corta).
+  val hasDock = state.phase != ApprovalPhase.DONE && request != null
+  PinnedActionDock(
+    actions = if (hasDock) {
+      {
+        FluidButton(
+          text = stringResource(R.string.approve_action),
+          onClick = actions.onApprove,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+          enabled = state.canSubmit,
+          loading = state.phase == ApprovalPhase.SUBMITTING,
+        )
+      }
+    } else {
+      null
+    },
+  ) { bottomPadding -> ApprovalPage(state = state, actions = actions, bottomPadding = bottomPadding) }
+}
+
+/** La pagina di approvazione: il modulo che scorre, con in fondo il margine che la barra dei tasti ([bottomPadding]) non copra. */
+@Composable
+private fun ApprovalPage(state: ApprovalUiState, actions: ApprovalActions, bottomPadding: Dp) {
+  val request = state.request
   FluidScreen(
     title = stringResource(R.string.approve_title),
     onBack = actions.onBack,
+    extraBottomPadding = bottomPadding,
     ambient = FluidAmbient(tone = FluidHeroTone.TertiaryToPrimary, motif = FluidHeroMotif.Glow),
   ) {
     if (state.phase == ApprovalPhase.DONE) {
@@ -242,16 +270,7 @@ internal fun ApprovalScreen(state: ApprovalUiState, actions: ApprovalActions) {
 
     state.feedback?.let { item { FeedbackNote(it) } }
 
-    item {
-      FluidButton(
-        text = stringResource(R.string.approve_action),
-        onClick = actions.onApprove,
-        size = FluidButtonSize.Large,
-        fillWidth = true,
-        enabled = state.canSubmit,
-        loading = state.phase == ApprovalPhase.SUBMITTING,
-      )
-    }
+    // Il tasto "Approva" e' nella barra ferma in fondo (sopra): qui resta la nota, che il tasto non copre perche' la lista ha il margine della barra.
     item { FluidSectionFootnote(text = stringResource(R.string.approve_footnote)) }
   }
 }

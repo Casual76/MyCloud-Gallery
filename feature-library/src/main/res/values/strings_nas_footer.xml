@@ -21,7 +21,8 @@
   <string name="nas_footer_up_to_date_day">%1$s alle %2$s</string>
 
   <string name="nas_footer_frozen">Lavori fermi: cambiamenti anomali</string>
-  <string name="nas_footer_frozen_detail">%1$s Finché non controlli, sul NAS non si scrive e non si cancella niente. Tocca per i dettagli.</string>
+  <!-- Nel pop-up della nuvola sotto la frase c'e' il tasto "Apri la Diagnostica": «Tocca per i dettagli.» non ha piu' niente da toccare (FAB, 3-bis). -->
+  <string name="nas_footer_frozen_detail">%1$s Finché non controlli, sul NAS non si scrive e non si cancella niente.</string>
   <string name="nas_footer_frozen_vanished">Sul NAS sono spariti molti file insieme.</string>
   <string name="nas_footer_frozen_changed">Sul NAS sono cambiati molti file insieme.</string>
   <string name="nas_footer_frozen_not_media">Sul NAS sono comparsi molti file che non sono foto né video.</string>

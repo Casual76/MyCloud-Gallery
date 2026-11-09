@@ -94,15 +94,25 @@ class BackupWorkTest {
     val now = LocalDateTime.of(2026, 10, 16, 12, 0)
     val window = TimeWindow(LocalTime.of(23, 0), LocalTime.of(7, 0))
     val start = LocalDateTime.of(2026, 10, 16, 23, 0)
-    val delay = BackupWorkScheduling.delayFor(WaitReason.OutsideWindow(window, start), now)
+    // La regola e' una sola per tutti i lavori (`RuleWaits`, FAB-3): il backup la usa com'e'.
+    val delay = RuleWaits.followUpOf(WaitReason.OutsideWindow(window, start), now)!!.delay.inWholeMilliseconds
     // 11 ore alla fascia, piu' un minuto di margine.
     assertThat(delay).isEqualTo(11L * 3_600_000 + 60_000)
     // Una fascia gia' iniziata (orologi che non coincidono): non si va indietro nel tempo.
-    assertThat(BackupWorkScheduling.delayFor(WaitReason.OutsideWindow(window, now.minusHours(1)), now)).isEqualTo(60_000L)
-    assertThat(BackupWorkScheduling.delayFor(WaitReason.NeedsPower, now)).isEqualTo(0L)
+    assertThat(RuleWaits.followUpOf(WaitReason.OutsideWindow(window, now.minusHours(1)), now)!!.delay.inWholeMilliseconds).isEqualTo(60_000L)
+    // FAB-3: nemmeno la carica rimette in coda senza ritardo (prima 0: un vincolo soddisfatto con le regole che dicono ancora "aspetta" era un ciclo).
+    assertThat(RuleWaits.followUpOf(WaitReason.NeedsPower, now)!!.delay.inWholeMilliseconds).isEqualTo(60_000L)
+    assertThat(RuleWaits.followUpOf(WaitReason.BatteryLow(17, 20), now)!!.delay.inWholeMilliseconds).isEqualTo(60_000L)
+    assertThat(RuleWaits.followUpOf(WaitReason.PowerSaver, now)!!.delay.inWholeMilliseconds).isEqualTo(15 * 60_000L)
     // Niente polling: la rete, il roaming, il profilo, il congelamento non programmano un altro lavoro.
     for (wait in listOf(WaitReason.Offline, WaitReason.NasUnreachable, WaitReason.Roaming, WaitReason.ProfileInactive, WaitReason.HeavyNeedsHomeWifi, WaitReason.NetworkNotAllowed(NetworkClass.MOBILE))) {
-      assertThat(BackupWorkScheduling.delayFor(wait, now)).isNull()
+      assertThat(RuleWaits.followUpOf(wait, now)).isNull()
+    }
+    // Le foto appena scattate e i file ricevuti riprovano al piu' ogni quarto d'ora; gli altri lavori al piu' ogni ora.
+    assertThat(BackupWorkScheduling.waitCapFor(BackupWorkScheduling.Kind.QUICK)).isEqualTo(RuleWaits.PROMPT_CAP)
+    assertThat(BackupWorkScheduling.waitCapFor(BackupWorkScheduling.Kind.INCOMING)).isEqualTo(RuleWaits.PROMPT_CAP)
+    for (kind in listOf(BackupWorkScheduling.Kind.PHOTOS, BackupWorkScheduling.Kind.VIDEOS, BackupWorkScheduling.Kind.SAFETY)) {
+      assertThat(BackupWorkScheduling.waitCapFor(kind)).isEqualTo(RuleWaits.MAX_RETRY)
     }
   }
 

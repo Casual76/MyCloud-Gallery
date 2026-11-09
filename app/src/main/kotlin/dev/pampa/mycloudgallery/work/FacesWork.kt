@@ -111,14 +111,21 @@ object FacesWorkScheduling {
     enqueue(context, NIGHTLY_NEXT_WORK, ExistingWorkPolicy.KEEP, nightlyRequest())
   }
 
-  /** RG-1: un'attesa delle regole riprogramma anche il raggruppamento notturno (come il calcolo): con il vincolo o il ritardo esatti. */
-  fun nightlyAfterWait(context: Context, wait: WaitReason) {
-    val follow = AiWorkScheduling.followUpOf(wait, java.time.LocalDateTime.now()) ?: return
-    enqueue(context, NIGHTLY_NEXT_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE, nightlyRequest(follow.delay.inWholeMilliseconds, follow.constraints()))
+  /**
+   * RG-1: un'attesa delle regole riprogramma anche il raggruppamento notturno (come il calcolo), con la regola unica di [RuleWaits]: il vincolo o il
+   * ritardo esatti dove ci sono, altrimenti un ritardo che cresce (FAB-5; [attempt] dagli input del lavoro).
+   */
+  fun nightlyAfterWait(context: Context, wait: WaitReason, attempt: Int = 0) {
+    val follow = RuleWaits.followUpOf(wait, java.time.LocalDateTime.now(), attempt) ?: return
+    enqueue(
+      context, NIGHTLY_NEXT_WORK, ExistingWorkPolicy.APPEND_OR_REPLACE,
+      nightlyRequest(follow.delay.inWholeMilliseconds, follow.constraints(), follow.attempt),
+    )
   }
 
-  private fun nightlyRequest(delayMs: Long = 0, constraints: Constraints = Constraints.NONE): OneTimeWorkRequest =
+  private fun nightlyRequest(delayMs: Long = 0, constraints: Constraints = Constraints.NONE, attempt: Int = 0): OneTimeWorkRequest =
     OneTimeWorkRequestBuilder<FacesNightlyWorker>()
+      .setInputData(workDataOf(RuleWaits.KEY_ATTEMPT to attempt))
       .setConstraints(constraints)
       .apply { if (delayMs > 0) setInitialDelay(delayMs, TimeUnit.MILLISECONDS) }
       .addTag(TAG)
@@ -175,15 +182,18 @@ object FacesWorkScheduling {
   }
 
   /** La tappa dopo (IX-1): il nome della catena, accodata a quella che gira. */
-  fun continueCompute(context: Context, user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE) {
+  fun continueCompute(context: Context, user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE, attempt: Int = 0) {
     val name = if (user) COMPUTE_NOW_WORK else COMPUTE_NEXT_WORK
-    enqueue(context, name, ExistingWorkPolicy.APPEND_OR_REPLACE, request(user, delayMs, constraints))
+    enqueue(context, name, ExistingWorkPolicy.APPEND_OR_REPLACE, request(user, delayMs, constraints, attempt))
   }
 
-  /** Un'attesa delle regole riprogramma (come il calcolo AI): il lavoro dopo con il vincolo o il ritardo esatti. */
-  fun afterWait(context: Context, user: Boolean, wait: WaitReason) {
-    val follow = AiWorkScheduling.followUpOf(wait, java.time.LocalDateTime.now()) ?: return
-    continueCompute(context, user, follow.delay.inWholeMilliseconds, follow.constraints())
+  /**
+   * Un'attesa delle regole riprogramma (come il calcolo AI e il backup, con la stessa regola: [RuleWaits.followUpOf]): il lavoro dopo con il vincolo o
+   * il ritardo esatti dove ci sono, altrimenti con un ritardo che cresce (FAB-5: niente risvegli al minuto col risparmio energetico acceso).
+   */
+  fun afterWait(context: Context, user: Boolean, wait: WaitReason, attempt: Int = 0) {
+    val follow = RuleWaits.followUpOf(wait, java.time.LocalDateTime.now(), attempt) ?: return
+    continueCompute(context, user, follow.delay.inWholeMilliseconds, follow.constraints(), follow.attempt)
   }
 
   /** Riprende la cancellazione adesso (unico, `KEEP`: se ce n'e' gia' uno resta quello). */
@@ -198,9 +208,9 @@ object FacesWorkScheduling {
     enqueue(context, ERASE_WORK, policy, request)
   }
 
-  private fun request(user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE): OneTimeWorkRequest =
+  private fun request(user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE, attempt: Int = 0): OneTimeWorkRequest =
     OneTimeWorkRequestBuilder<FacesComputeWorker>()
-      .setInputData(workDataOf(KEY_USER to user))
+      .setInputData(workDataOf(KEY_USER to user, RuleWaits.KEY_ATTEMPT to attempt))
       .setConstraints(constraints)
       .apply { if (delayMs > 0) setInitialDelay(delayMs, TimeUnit.MILLISECONDS) }
       .addTag(TAG)
@@ -329,6 +339,7 @@ class FacesComputeWorker @AssistedInject constructor(
     if (!gallery.backgroundWorkAllowed) return Result.success()
     gallery.awaitReady(COLD_START_WAIT)
     val user = inputData.getBoolean(FacesWorkScheduling.KEY_USER, false)
+    val attempt = inputData.getInt(RuleWaits.KEY_ATTEMPT, 0)
     val stages = FacesStages(graph, faces, applicationContext.noBackupFilesDir)
     val outcome = try {
       gallery.runIfActive {
@@ -346,8 +357,8 @@ class FacesComputeWorker @AssistedInject constructor(
     outcome?.let { graph.events.stage(DiagJob.FACES_COMPUTE, it) }
     when (outcome) {
       is StageOutcome.Yielded -> FacesWorkScheduling.continueCompute(applicationContext, user)
-      is StageOutcome.Waiting -> FacesWorkScheduling.afterWait(applicationContext, user, outcome.reason)
-      is StageOutcome.Stopped -> FacesWorkScheduling.afterWait(applicationContext, user, outcome.reason)
+      is StageOutcome.Waiting -> FacesWorkScheduling.afterWait(applicationContext, user, outcome.reason, attempt)
+      is StageOutcome.Stopped -> FacesWorkScheduling.afterWait(applicationContext, user, outcome.reason, attempt)
       // RG-1: il calcolo e' finito e ha analizzato qualcosa: il raggruppamento notturno segue, nella stessa notte (nascite sotto soglia, unioni, esemplari), in una
       // finestra di Android tutta sua e con le sue regole.
       is StageOutcome.Finished -> if (stages.lastAnalyzed > 0) FacesWorkScheduling.nightlyAfterCompute(applicationContext)
@@ -379,6 +390,7 @@ class FacesNightlyWorker @AssistedInject constructor(
   override suspend fun doWork(): Result {
     if (!gallery.backgroundWorkAllowed) return Result.success()
     gallery.awaitReady(FacesComputeWorker.COLD_START_WAIT)
+    val attempt = inputData.getInt(RuleWaits.KEY_ATTEMPT, 0)
     val outcome = try {
       gallery.runIfActive {
         gallery.nas?.start()
@@ -394,8 +406,8 @@ class FacesNightlyWorker @AssistedInject constructor(
     }
     outcome?.let { graph.events.stage(DiagJob.FACES_NIGHTLY, it) }
     when (outcome) {
-      is StageOutcome.Waiting -> FacesWorkScheduling.nightlyAfterWait(applicationContext, outcome.reason)
-      is StageOutcome.Stopped -> FacesWorkScheduling.nightlyAfterWait(applicationContext, outcome.reason)
+      is StageOutcome.Waiting -> FacesWorkScheduling.nightlyAfterWait(applicationContext, outcome.reason, attempt)
+      is StageOutcome.Stopped -> FacesWorkScheduling.nightlyAfterWait(applicationContext, outcome.reason, attempt)
       else -> Unit
     }
     return Result.success()

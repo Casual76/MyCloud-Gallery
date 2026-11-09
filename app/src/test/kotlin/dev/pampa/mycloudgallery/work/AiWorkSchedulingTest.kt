@@ -127,32 +127,64 @@ class AiWorkSchedulingTest {
 
   @Test
   fun ix1_fuoriDallaFasciaIlLavoroRipartiAllInizioDellaFascia() {
-    val follow = AiWorkScheduling.followUpOf(WaitReason.OutsideWindow(TimeWindow(LocalTime.MIDNIGHT, LocalTime.of(7, 0)), night.plusHours(10)), night)!!
+    val follow = RuleWaits.followUpOf(WaitReason.OutsideWindow(TimeWindow(LocalTime.MIDNIGHT, LocalTime.of(7, 0)), night.plusHours(10)), night)!!
     // Dieci ore piu' il margine: la fascia comincia alle 00:00.
-    assertThat(follow.delay).isEqualTo((10 * 60).minutes + AiWorkScheduling.MIN_RETRY)
+    assertThat(follow.delay).isEqualTo((10 * 60).minutes + RuleWaits.MIN_RETRY)
     assertThat(follow.charging).isFalse()
   }
 
   @Test
   fun ix1_senzaCaricaIlLavoroAspettaLaCaricaSenzaPolling() {
-    val follow = AiWorkScheduling.followUpOf(WaitReason.NeedsPower, night)!!
+    val follow = RuleWaits.followUpOf(WaitReason.NeedsPower, night)!!
     assertThat(follow.charging).isTrue()
-    assertThat(follow.delay).isEqualTo(AiWorkScheduling.MIN_RETRY)
-    val batt = AiWorkScheduling.followUpOf(WaitReason.BatteryLow(10, 20), night)!!
-    assertThat(batt.batteryNotLow).isTrue()
-    assertThat(AiWorkScheduling.followUpOf(WaitReason.PowerSaver, night)!!.batteryNotLow).isTrue()
+    assertThat(follow.delay).isEqualTo(RuleWaits.MIN_RETRY)
+    // FAB-5: anche la batteria sotto soglia aspetta la carica (la regola vale solo a batteria, e la batteria risale solo in carica). Prima chiedeva
+    // "batteria non scarica", che per Android e' gia' vero fra il 16% e il 19%: un risveglio al minuto.
+    val batt = RuleWaits.followUpOf(WaitReason.BatteryLow(17, 20), night)!!
+    assertThat(batt.charging).isTrue()
+    assertThat(batt.constraints().requiresBatteryNotLow()).isFalse()
+  }
+
+  /**
+   * FAB-5 della review: col risparmio energetico acceso il calcolo chiedeva il vincolo "batteria non scarica" (gia' soddisfatto) e un minuto di ritardo:
+   * un risveglio al minuto, per ore. Adesso nessun vincolo finto e un ritardo che cresce fino a un'ora, con il numero del tentativo negli input del lavoro.
+   */
+  @Test
+  fun fab5_colRisparmioEnergeticoIlCalcoloNonSiSvegliaOgniMinuto_IlRitardoCresce() {
+    var attempt = 0
+    val delays = ArrayList<Long>()
+    repeat(4) {
+      workManager.cancelAllWork().result.get()
+      AiWorkScheduling.afterWait(context, user = false, wait = WaitReason.PowerSaver, attempt = attempt)
+      val queued = workManager.getWorkInfosForUniqueWork(AiWorkScheduling.COMPUTE_NEXT_WORK).get().single { it.state == WorkInfo.State.ENQUEUED }
+      assertThat(queued.constraints.requiresBatteryNotLow()).isFalse()
+      assertThat(queued.constraints.requiresCharging()).isFalse()
+      delays += queued.initialDelayMillis
+      attempt = RuleWaits.followUpOf(WaitReason.PowerSaver, night, attempt)!!.attempt
+    }
+    assertThat(delays).containsExactly(15 * 60_000L, 30 * 60_000L, 60 * 60_000L, 60 * 60_000L).inOrder()
+  }
+
+  /** FAB-5: il lavoro vero rilegge il numero del tentativo dai suoi input e lo passa alla regola: la catena delle attese cresce da sola. */
+  @Test
+  fun fab5_ilNumeroDelTentativoViaggiaNegliInputDelLavoro() {
+    AiWorkScheduling.afterWait(context, user = false, wait = WaitReason.PowerSaver, attempt = 2)
+    val queued = workManager.getWorkInfosForUniqueWork(AiWorkScheduling.COMPUTE_NEXT_WORK).get().single()
+    assertThat(queued.initialDelayMillis).isEqualTo(60 * 60_000L)
+    // Con la carica (un vincolo esatto) il contatore torna a zero: la prossima attesa senza vincolo riparte dal primo ritardo.
+    assertThat(RuleWaits.followUpOf(WaitReason.NeedsPower, night, attempt = 3)!!.attempt).isEqualTo(0)
   }
 
   @Test
   fun ix1_colCaldoSiRiprovaDopoCinqueMinuti() {
-    val follow = AiWorkScheduling.followUpOf(WaitReason.Thermal(ThermalStatus.SEVERE), night)!!
+    val follow = RuleWaits.followUpOf(WaitReason.Thermal(ThermalStatus.SEVERE), night)!!
     assertThat(follow.delay).isEqualTo(5.minutes)
   }
 
   @Test
   fun ix1_ilNasSpentoIlProfiloInattivoEIlResto_NonProgrammanoNiente() {
     for (wait in listOf(WaitReason.NasUnreachable, WaitReason.ProfileInactive, WaitReason.ActivityDisabled, WaitReason.Offline)) {
-      assertWithMessage("$wait").that(AiWorkScheduling.followUpOf(wait, night)).isNull()
+      assertWithMessage("$wait").that(RuleWaits.followUpOf(wait, night)).isNull()
     }
   }
 
@@ -164,7 +196,7 @@ class AiWorkSchedulingTest {
     val queued = workManager.getWorkInfosForUniqueWork(AiWorkScheduling.COMPUTE_NEXT_WORK).get().single()
     assertThat(queued.state).isEqualTo(WorkInfo.State.ENQUEUED)
     assertThat(queued.constraints.requiresCharging()).isTrue()
-    assertThat(queued.initialDelayMillis).isAtLeast(AiWorkScheduling.MIN_RETRY.inWholeMilliseconds)
+    assertThat(queued.initialDelayMillis).isAtLeast(RuleWaits.MIN_RETRY.inWholeMilliseconds)
   }
 
   // --- MO-1/R11/MO-9: lo scaricamento accelerato ------------------------------------------------------------------------------------

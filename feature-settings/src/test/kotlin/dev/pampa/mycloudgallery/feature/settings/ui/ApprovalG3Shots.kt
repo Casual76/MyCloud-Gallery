@@ -10,9 +10,10 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -74,7 +75,7 @@ abstract class ApprovalG3Shots(private val device: String, private val keyboardD
       rule.runOnUiThread { rule.activity.openKeyboard(px) }
       rule.waitForIdle()
       // Chi scrive il codice ha il campo in vista: il campo preso dal fuoco si porta sopra la tastiera (qui lo si fa a mano, senza una tastiera vera).
-      rule.onNode(hasSetTextAction()).performScrollTo()
+      rule.onNode(hasScrollAction()).performScrollToNode(hasSetTextAction())
       rule.waitForIdle()
     }
     val state = if (keyboard) "con-tastiera" else "senza-tastiera"

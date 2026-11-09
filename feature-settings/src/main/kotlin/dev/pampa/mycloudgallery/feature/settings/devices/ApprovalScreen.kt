@@ -19,7 +19,6 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.toggleableState
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.unit.Dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidAmbient
@@ -133,17 +132,17 @@ internal fun ApprovalScreen(state: ApprovalUiState, actions: ApprovalActions) {
     } else {
       null
     },
-  ) { bottomPadding -> ApprovalPage(state = state, actions = actions, bottomPadding = bottomPadding) }
+  ) { pageModifier -> ApprovalPage(state = state, actions = actions, modifier = pageModifier) }
 }
 
-/** La pagina di approvazione: il modulo che scorre, con in fondo il margine che la barra dei tasti ([bottomPadding]) non copra. */
+/** La pagina di approvazione: il modulo che scorre. [modifier] la fa finire sopra la barra dei tasti ([PinnedActionDock]). */
 @Composable
-private fun ApprovalPage(state: ApprovalUiState, actions: ApprovalActions, bottomPadding: Dp) {
+private fun ApprovalPage(state: ApprovalUiState, actions: ApprovalActions, modifier: Modifier) {
   val request = state.request
   FluidScreen(
     title = stringResource(R.string.approve_title),
+    modifier = modifier,
     onBack = actions.onBack,
-    extraBottomPadding = bottomPadding,
     ambient = FluidAmbient(tone = FluidHeroTone.TertiaryToPrimary, motif = FluidHeroMotif.Glow),
   ) {
     if (state.phase == ApprovalPhase.DONE) {
@@ -270,7 +269,7 @@ private fun ApprovalPage(state: ApprovalUiState, actions: ApprovalActions, botto
 
     state.feedback?.let { item { FeedbackNote(it) } }
 
-    // Il tasto "Approva" e' nella barra ferma in fondo (sopra): qui resta la nota, che il tasto non copre perche' la lista ha il margine della barra.
+    // Il tasto "Approva" e' nella barra ferma in fondo (sopra): la lista finisce dove comincia la barra, qui resta la nota.
     item { FluidSectionFootnote(text = stringResource(R.string.approve_footnote)) }
   }
 }

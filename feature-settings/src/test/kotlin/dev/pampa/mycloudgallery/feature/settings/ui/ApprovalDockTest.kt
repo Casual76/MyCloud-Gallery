@@ -4,6 +4,8 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -100,6 +102,16 @@ class ApprovalDockTest {
     // Si e' alzato di quanto la tastiera sale (meno la barra di sistema, che qui non c'e').
     assertThat(closedBounds.top - open.top).isAtLeast(keyboardDp * rule.density.density - 2f)
     approve.assertIsDisplayed()
+  }
+
+  @Test
+  fun inFondoALlaPaginaLUltimaNotaStaSopraIlTasto() {
+    // La lista finisce dove comincia la barra: scorsa fino in fondo, l'ultima riga non resta sotto il tasto.
+    show()
+    rule.onNode(hasScrollAction()).performScrollToNode(hasText("Prima di approvare", substring = true))
+    rule.waitForIdle()
+    val note = rule.onNodeWithText("Prima di approvare", substring = true).fetchSemanticsNode().boundsInRoot
+    assertThat(note.bottom).isAtMost(approveBounds().top)
   }
 
   @Test

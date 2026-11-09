@@ -36,7 +36,7 @@ internal object SettingsDimens {
   val PillGap: Dp = 6.dp
 
   /** La sfumatura sopra una barra di tasti fermi in fondo a una pagina ([PinnedActionDock]): da qui il contenuto che scorre sotto sparisce nel fondo. */
-  val DockFade: Dp = 28.dp
+  val DockFade: Dp = 16.dp
 
   /** Il respiro sotto i tasti di quella barra, sopra la barra di navigazione di sistema. */
   val DockPadding: Dp = 16.dp

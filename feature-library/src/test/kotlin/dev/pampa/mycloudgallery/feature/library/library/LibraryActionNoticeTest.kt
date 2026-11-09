@@ -509,7 +509,7 @@ class LibraryActionNoticeTest {
     val state = state()
     state.photoCount = 92_019
     state.videoCount = 7_981
-    composeRule.showThemed { LibraryFooter(state, LibraryPhoneStatus(), status = {}) }
+    composeRule.showThemed { LibraryFooter(state, LibraryPhoneStatus()) }
 
     composeRule.onNodeWithText("92.019 foto, 7.981 video").assertExists()
   }

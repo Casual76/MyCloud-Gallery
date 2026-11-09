@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -493,12 +494,18 @@ class LibraryTabTest {
       bottom = label.boundsInRoot.bottom
       val line = state.grid.viewport.padTop.toFloat()
       assertWithMessage("$case, passo $step: l'etichetta sta sopra la linea della griglia").that(bottom).isAtMost(line + Tolerance)
-      (listOf(label) + label.children).flatMap { it.config.getOrNull(SemanticsProperties.Text).orEmpty() }.firstOrNull()?.let { titles += it.text }
+      // B1 della beta: fra l'etichetta e il suo testo ci sono i contenitori dell'animazione (la molla e la dissolvenza): si cerca nei
+      // discendenti, non solo nei figli.
+      label.texts().firstOrNull()?.let { titles += it }
     }
     // Piu' titoli = almeno un cambio di sezione attraversato.
     assertWithMessage("$case: sezioni dette dall'etichetta $titles").that(titles.size).isAtLeast(2)
     return bottom
   }
+
+  /** I testi di un nodo e dei suoi discendenti, in ordine. */
+  private fun SemanticsNode.texts(): List<String> =
+    config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text } + children.flatMap { it.texts() }
 
   private var current: LibraryTabState? by mutableStateOf(null)
 
@@ -510,7 +517,8 @@ class LibraryTabTest {
   fun laSchedaVuotaDicePercheEVuotaEMostraLoStato() {
     show(emptyLibraryTabState())
     composeRule.onNodeWithText("La Libreria è vuota").assertExists()
-    composeRule.onNodeWithText("stato").assertExists()
+    // B2 della beta: lo stato non sta piu' sotto lo stato vuoto (lo dice la nuvola in alto); il vecchio slot non si mostra.
+    assertThat(composeRule.onAllNodesWithText("stato").fetchSemanticsNodes()).isEmpty()
     assertThat(SyntheticLibrary.DEFAULT_COUNT).isGreaterThan(0)
   }
 

@@ -16461,3 +16461,128 @@ G2): una griglia di copertine tutte uguali (foto quadrata con l'angolo continuo,
 - `StartupBenchmark`: l'avvio paga due `stat` in piu' sul thread principale nella sola variante di misura; atteso nel rumore, da confermare.
 - Chi usa la variante di misura a mano deve riavviare l'app dopo `pronto`: nel processo che ha preparato il dataset la Libreria resta quella di prima (vuota al primo giro).
 - Il punto di `eraseAccountData` qui sopra.
+
+## G1 della beta: la chrome in alto della Libreria (09/11)
+
+Branch `grafica/g1-libreria` (da `29ca7fa4`), un solo agente, senza dispositivo. Voci B1, B2 e B7 di `docs/fase-grafica-e-rilascio.md` §2.
+
+### B1, il vetro che cambia misura o forma si muove
+- **L'etichetta in alto** (`GalleryChromeLabel`, vale per tutte le griglie e per le pagine della 4B): quando il testo cambia, la capsula
+  va alla larghezza nuova con la molla di `FluidMotion` (`animateContentSize` con `FluidMotion.intSize()`, che continua con la sua
+  velocita' se un cambio arriva a meta' strada) e il testo passa in dissolvenza incrociata (180/120 ms). Scorrendo veloce non trema, per
+  due regole: **un ritmo** (`rememberChromePaced`: il primo cambio subito, poi al piu' uno ogni 200 ms, sempre l'ultimo; l'attesa si
+  conta in fotogrammi, cosi' i test e TalkBack la vedono finire) e **una soglia** (durante una raffica la capsula cresce se serve ma non
+  si stringe; si stringe sul testo solo dopo 600 ms di testo fermo).
+- **La capsula dei comandi**: "torna in fondo", la nuvola e "seleziona" compaiono e scompaiono aprendo e chiudendo il loro posto
+  (`GalleryChromeSlot`: `expandHorizontally`/`shrinkHorizontally` con la molla, piu' la dissolvenza). Entrando e uscendo dalla
+  selezione i comandi diventano "Fine" in dissolvenza mentre la capsula cambia larghezza (`GalleryChromeSwap`: `SizeTransform` con la
+  molla, allineata a destra, senza ritaglio, perche' un tasto premuto cresce oltre il suo bersaglio). Il vetro sta sul contenitore,
+  quindi si muove con i tasti. "Torna in fondo" ha un'isteresi: compare oltre 2 schermate dai piu' recenti e sparisce sotto 1,5.
+- **Perche' non `fluidPhysicsSurface` + `morphTo` ne' `FluidFloatingCapsule`**: tutti e due portano un vetro loro (la pellicola fissa
+  dell'engine, oppure un secondo renderer con il corpo elastico che lavora a ogni fotogramma del viaggio). La chrome della Libreria ha
+  invece la **pellicola adattiva** (B7) e la superficie piena di P8. Cambiare la misura del nodo che porta `galleryGlass` da' il
+  movimento continuo con lo stesso materiale, senza layer in piu' sopra la griglia. Con le animazioni ridotte tutto cambia di colpo.
+- I limiti dei pezzi che si animano (etichetta e capsula) aggiornano lo stile adattivo solo quando un bordo si sposta di piu' di 8 dp
+  (`settle` in `GalleryTopChrome.kt`): la molla non ricompone la riga a ogni fotogramma.
+
+### B2, la nuvola di stato
+- **Le tre scritte in fondo alla Libreria non ci sono piu'** (rete, NAS, backup), nemmeno sotto gli stati vuoti, la prima lettura e il
+  permesso negato. In fondo restano il riepilogo "N foto, N video" e l'avanzamento della prima lettura.
+- **La nuvola** sta nella capsula in alto a destra, fra "torna in fondo" e "seleziona" (`GalleryChromeCloudButton`, core-designsystem).
+  Stati e glifi:
+  - tutto salvato: la nuvola con la spunta;
+  - in corso: la nuvola con la freccia (`CloudUpload`; `CloudSync` a 22 dp era confuso negli screenshot);
+  - in attesa: la nuvola vuota;
+  - senza rete: la nuvola barrata;
+  - da guardare e serve l'utente: la nuvola vuota con il segno del tono (attenzione o errore).
+
+  Niente animazioni infinite: durante un backup lungo la nuvola sta ferma. TalkBack dice "Stato della sincronizzazione: <stato>" e,
+  se c'e', il problema.
+- **La mappa** (`libraryCloud`, pura, provata in `LibraryCloudTest`):
+  - la rete a posto non dice niente;
+  - "in corso": il NAS che si sveglia, la lettura del NAS, l'allineamento, il confronto e i giri del backup;
+  - "in attesa": la coda, la prova (D12, D31) e i problemi che ripartono da soli;
+  - "salvato": NAS aggiornato e "tutto al sicuro";
+  - "da guardare": le aree non raggiungibili, la rete non riconosciuta, la VPN spenta, il roaming con le attivita' ferme, i problemi
+    d'attenzione del backup;
+  - "serve l'utente": i lavori fermi, la password, la rete locale negata, i problemi d'allarme del backup (NAS pieno, quota...);
+  - "senza rete": la rete assente.
+
+  Vince il piu' grave: allarme, senza rete, attenzione, in corso, in attesa, salvato. Senza NAS ne' backup, e con la rete a posto, la
+  nuvola non c'e'.
+- **`FluidSyncIndicator` non e' usato**: e' un cerchio di 26 dp con un punto, un cerchio che gira o un "!" (nessuna nuvola), parla con
+  le frasi dell'engine, e "il tono nel materiale" sarebbe un secondo vetro dentro la capsula. La nuvola e' invece un tasto piatto della
+  capsula, con l'inchiostro adattivo e il tono in un segno sul glifo: un anello dell'inchiostro con dentro il tono pieno.
+- **Il pop-up a tendina** (`GalleryChromePopoverAnchor`: lo stesso materiale e lo stesso velo del menu della vista, che ora lo usa). In
+  cima, lo stato in una frase. Poi:
+  - **con un problema**: ogni problema con la sua capsula tonale, cosa succede e il tasto che porta dove si risolve. Per la rete
+    WireGuard, la password o la Diagnostica, come il tocco sull'indicatore; per il NAS "Apri la Diagnostica"; per il backup "Apri
+    Backup". Sotto, i lavori in corso;
+  - **senza problemi**: i lavori in corso o in attesa (toccabili, come le voci del piede di prima), **lo spazio usato sul totale del
+    NAS** (la stessa fonte della pagina "Spazio NAS", `NasSpace` sull'area privata, letta solo all'apertura del pop-up), **l'ultima
+    sincronizzazione** (la piu' recente fra "NAS aggiornato" e "tutto al sicuro", ricordata anche durante un giro) e **"Libera
+    spazio"** (il flusso di feature-backup su tutto il sicuro, come la voce delle Raccolte).
+
+  Le frasi sono quelle del piede di prima.
+- Il portale del pop-up (anche quello del menu della vista) **si compone dalla prima apertura**, come i fogli di conferma dal 03/11.
+- In `:app`:
+  - `LibraryCloudNetwork.kt`: da `GlobalStatus` al dato della Libreria (peso, glifo, azione);
+  - `LibraryCloudSpace.kt`: lo spazio da `NasSpace`;
+  - `AppLibraryCommands.nasSpace()`.
+
+  In `MainScaffold.kt` cambiano solo le due righe che passavano la voce della rete al piede. `LibraryTab(statusFooter)` resta come
+  parametro ignorato, perche' i branch paralleli che lo passano compilino: da togliere dopo l'integrazione.
+
+### B7, le scritte sotto il vetro
+- L'inchiostro e la pellicola della chrome restano quelli adattivi di G2 (4,5:1 sul caso peggiore del contenuto).
+- Il segno del tono della nuvola e' un **anello dell'inchiostro** (4,5:1 sopra la pellicola, come il glifo e il testo) con dentro il
+  **tono pieno dello schema** (l'errore; il terziario per l'attenzione, come le capsule "da guardare" del piede) e il punto
+  esclamativo nel polo che ci si legge sopra (almeno 4,5:1). Una prima versione portava il colore del tono verso l'inchiostro fino a
+  3:1 sul nero e sul bianco pieni: negli screenshot, in scuro, errore e attenzione diventavano tutti e due quasi bianchi e il tono non
+  si vedeva piu'. L'anello tiene la leggibilita', il colore resta riconoscibile.
+- `GalleryChromeCloudTest` verifica il segno su ogni accento, in chiaro e in scuro, su foto bianche, quasi bianche, nere, grigie e
+  sature. Verifica anche che sopra una foto quasi bianca la chrome scelga l'inchiostro scuro con la pellicola minima.
+- Il testo del pop-up e' `onSurface` pieno, anche i dettagli (nel piede erano `onSurfaceVariant` sulla pagina): il velo del pop-up e'
+  calcolato per lui.
+
+### Rischi per le prestazioni
+- La molla dell'etichetta e della capsula cambia la misura di un nodo di vetro per circa 0,4 s: in quei fotogrammi il vetro
+  ri-registra bordo e ombra sulla misura nuova. Succede solo quando il testo cambia (al piu' cinque volte al secondo scorrendo, e con
+  la soglia quasi mai per stringersi) e quando un tasto compare. Da guardare sull'S25 e sul Tab S9: scorrimento veloce e pinch
+  (l'etichetta cambia sezione a ogni livello).
+- Il ritmo dell'etichetta chiede fotogrammi per 200 ms dopo un cambio (durante uno scorrimento ci sono comunque).
+- Gli stati del NAS e del backup si leggono nella riga in alto come `State`, e la riga ricompone solo quando cambia lo stato della
+  nuvola. Prima li leggeva l'intera `LibraryScreen`: ogni file contato da un backup la ricomponeva tutta.
+- Nessun vetro e nessun fondale in piu': la nuvola e' un tasto piatto nella capsula che c'era gia'.
+
+### Da provare sul telefono
+1. Scorrimento veloce verso l'alto: la data cambia a ritmo, la capsula cresce senza tremare e si stringe solo a scorrimento fermo;
+   "torna in fondo" compare e sparisce allargando e stringendo la capsula.
+2. Entrare e uscire dalla selezione: i comandi diventano "Fine" e l'etichetta "Seleziona elementi"/"N selezionati" con un movimento
+   continuo; con le animazioni di sistema a zero, di colpo.
+3. La nuvola in ogni stato reale (backup in corso, tutto al sicuro, NAS spento, senza rete, VPN spenta fuori casa): glifo, segno del
+   tono sopra foto chiare e scure, descrizione di TalkBack.
+4. Il pop-up: lo spazio del NAS (con il WD vero), l'ultima sincronizzazione, "Libera spazio" che apre la pagina giusta, i tasti dei
+   problemi.
+5. Benchmark: `scroll_*`, `pinch` e `coldStartUsual` sull'S25 e sul Tab S9 contro i riferimenti.
+
+### Verifiche (09/11, semaforo Gradle, senza dispositivo)
+- `:core-designsystem:testDebugUnitTest` 261 prove e `:feature-library:testDebugUnitTest` 1.126 prove, tutte verdi; `lintDebug` dei due
+  moduli verde; `:app:compileDebugKotlin` verde.
+- In `:app` mirati: `LibraryCloudNetworkTest` (4), `NasStatusCapsuleTest` (1, NA-9 ora sui tasti del pop-up), `MainScaffoldDockTest` (4) e
+  gli screenshot dello scaffold (`ScaffoldPhone/TabletScreenshotTest`, `LibraryScaffoldPhone/TabletScreenshotTest`: 80), verdi.
+- Prove nuove: `LibraryCloudTest` (la mappa, caso per caso, ogni codice di problema del backup), `GalleryChromeMotionTest` (molla, ritmo,
+  soglia, movimento ridotto, fotogramma per fotogramma), `GalleryChromeCloudTest` (contrasti), `LibraryCloudNetworkTest`.
+- Prove adattate al comportamento nuovo: `LibraryStatusFooterTest` e `BackupFooterTest` provavano le voci del piede, ora il pannello del
+  pop-up (stesse frasi; i tasti dei problemi; lo spazio; i bordi); la Libreria vuota non mostra piu' lo stato sotto (`LibraryStubTest`,
+  `LibraryTabTest`); `lEtichettaInAltoDiceLaSezioneEStaNellaRigaMisurata` cerca il testo nei discendenti dell'etichetta (ci sono i
+  contenitori dell'animazione); `BackupLibraryScreenshotTest` disegna il pannello con nomi di file nuovi (i PNG del piede restano).
+- Screenshot: `docs/screenshots/beta-grafica/G1/` (64 PNG, `LibraryCloudScreenshotTest`). Robolectric non sfoca e registra un
+  fotogramma a riposo: il vetro vero e il movimento si giudicano sul telefono.
+
+### Decisioni aperte per l'utente
+- Il tono "da guardare" della nuvola e' il terziario dell'accento (rosa con l'Ametista), lo stesso delle capsule "da guardare" del
+  piede di prima; l'arancione classico dell'avviso non e' un ruolo del tema. Se si preferisce l'arancione serve un token nuovo.
+- La nuvola sta fra "torna in fondo" e "seleziona": la capsula ha quattro tasti e sul telefono l'etichetta ha meno spazio (le date
+  lunghe si troncano prima, soprattutto a 1,3x).
+- La frase dei lavori fermi dice ancora "Tocca per i dettagli." (stringa del piede): nel pop-up c'e' il tasto "Apri la Diagnostica".

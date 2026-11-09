@@ -66,6 +66,8 @@ const val WindowedLoaderAbove: Int = 5_000
  *   cella con `BACKUP_PROBLEM` o `SIMILAR_COPIES`); le posizioni restano quelle della Libreria sintetica.
  * @param mix se non e' null, la libreria e' mista telefono + NAS (`NasMix`): le celle hanno i segni di presenza (G2).
  * @param engine il motore di layout: quello vero di P5 (`TimelineLayoutEngine`).
+ * @param commands le richieste della Libreria; di serie quelle sintetiche (eliminare "si puo'"). Gli screenshot della nuvola (B2 della
+ *   beta) passano comandi con lo spazio del NAS e "Libera spazio".
  */
 fun syntheticLibraryState(
   count: Int = SyntheticLibrary.DEFAULT_COUNT,
@@ -82,6 +84,7 @@ fun syntheticLibraryState(
   engine: GridLayoutEngine = TimelineLayoutEngine(),
   layoutDispatcher: CoroutineDispatcher = Dispatchers.Default,
   today: LocalDate = SyntheticToday,
+  commands: LibraryCommands = SyntheticCommands,
 ): LibraryTabState {
   val holder = SyntheticHolder(SyntheticLibrary(seed = seed, count = count, placeIds = FakePlaceData.IDS, mix = mix))
   val repository = FakeTimelineRepository(edit(holder.library.snapshot))
@@ -129,7 +132,7 @@ fun syntheticLibraryState(
     preferences = preferences,
     actions = SyntheticLocalActions(holder, repository),
     phone = MutableStateFlow(phone),
-    commands = SyntheticCommands,
+    commands = commands,
     debug = debug,
     nas = MutableStateFlow(nas),
     backup = MutableStateFlow(backup),

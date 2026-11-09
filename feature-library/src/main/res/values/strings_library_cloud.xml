@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- La nuvola di stato nella capsula in alto a destra della Libreria (B2 della beta, lista dell'utente del 31/10) e il suo pop-up.
+       Prende il posto delle tre voci che stavano in fondo alla Libreria (rete, NAS, backup): le frasi dei problemi e dei lavori in
+       corso restano quelle del piede (strings_nas_footer.xml, strings_backup_footer.xml). Solo numeri: mai nomi di file o di share. -->
+  <string name="library_cloud_pane">Stato della sincronizzazione</string>
+  <string name="library_cloud_button">Stato della sincronizzazione: %1$s</string>
+  <string name="library_cloud_button_problem">Stato della sincronizzazione: %1$s. %2$s</string>
+
+  <!-- Il titolo del pop-up, uno per stato della nuvola (Tutto salvato usa "Tutto al sicuro" o "NAS aggiornato" del piede). -->
+  <string name="library_cloud_title_syncing">Sincronizzazione in corso</string>
+  <string name="library_cloud_title_waiting">In attesa</string>
+  <string name="library_cloud_title_offline">Nessuna connessione</string>
+  <string name="library_cloud_title_attention">C’è qualcosa da guardare</string>
+  <string name="library_cloud_title_alarm">Serve il tuo intervento</string>
+
+  <!-- Senza problemi: lo spazio del NAS (la stessa misura della pagina Spazio NAS), l'ultima sincronizzazione e Libera spazio. -->
+  <string name="library_cloud_space_title">Spazio sul NAS</string>
+  <string name="library_cloud_space_used">%1$s usati di %2$s</string>
+  <string name="library_cloud_space_loading">Calcolo lo spazio…</string>
+  <string name="library_cloud_space_unavailable">Lo spazio non si legge adesso.</string>
+  <string name="library_cloud_terabytes">%1$s TB</string>
+  <string name="library_cloud_last_sync">Ultima sincronizzazione</string>
+  <string name="library_cloud_free_space">Libera spazio</string>
+  <string name="library_cloud_free_space_detail">Toglie dal telefono le foto già al sicuro sul NAS.</string>
+
+  <!-- Il tasto sotto un problema: le stesse uscite delle voci del piede di prima. -->
+  <string name="library_cloud_action_diagnostics">Apri la Diagnostica</string>
+  <string name="library_cloud_action_wireguard">Apri WireGuard</string>
+  <string name="library_cloud_action_password">Inserisci la password</string>
+  <string name="library_cloud_action_backup">Apri Backup</string>
+</resources>

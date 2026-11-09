@@ -33,6 +33,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import androidx.compose.ui.test.onAllNodesWithText
 
 /**
  * Gli stub di P0 di `feature-library` su Robolectric: la griglia disegna le celle della Libreria sintetica e un tocco apre
@@ -98,7 +99,8 @@ class LibraryStubTest {
     }
     composeRule.onNodeWithText("La Libreria è vuota").assertExists()
     composeRule.onNodeWithText("Libreria").assertExists()
-    composeRule.onNodeWithText("stato").assertExists()
+    // B2 della beta: lo stato non sta piu' sotto lo stato vuoto (lo dice la nuvola in alto); il vecchio slot non si mostra.
+    assertThat(composeRule.onAllNodesWithText("stato").fetchSemanticsNodes()).isEmpty()
   }
 
   @Test

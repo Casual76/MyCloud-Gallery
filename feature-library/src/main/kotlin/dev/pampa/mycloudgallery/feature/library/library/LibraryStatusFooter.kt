@@ -1,7 +1,5 @@
 package dev.pampa.mycloudgallery.feature.library.library
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
@@ -10,13 +8,11 @@ import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Science
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
@@ -33,35 +29,21 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
-// Il piede della Libreria (G2, docs/grafica-progetto.md §12; Fase 4 §1.5; Fase 5A §1.5, D16): sotto i piu' recenti, sulla pagina, la
-// rete (l'indicatore globale di :app, `statusFooter`), il NAS (`LibraryTabState.nas`) e il backup (`LibraryTabState.backup`) come
-// tre voci sorelle, una sotto l'altra: una capsula tonale con la frase breve e, sotto, il dettaglio (avanzamento, quando, perche').
-// Cosa dire lo decide il contratto (`LibraryNasStatus`, la regola e' `LibraryNasStatusComposer`; `LibraryBackupStatus`, che `:app`
-// riduce da `BackupStatus`); qui solo come, con i componenti del design system: nessuno stile nuovo (D30).
+// Le frasi dello stato del NAS e del backup (G2, docs/grafica-progetto.md §12; Fase 4 §1.5; Fase 5A §1.5, D16). Fino alla beta erano
+// tre voci sorelle in fondo alla Libreria (la rete, il NAS, il backup); **dalla beta (B2) le tre voci non ci sono piu'**: lo stato lo
+// dice la nuvola nella capsula in alto a destra e le frasi stanno nel suo pop-up (`LibraryCloud.kt`). Cosa dire lo decide il
+// contratto (`LibraryNasStatus`, la regola e' `LibraryNasStatusComposer`; `LibraryBackupStatus`, che `:app` riduce da `BackupStatus`);
+// qui solo come, con i componenti del design system: nessuno stile nuovo (D30).
 
 /**
- * La voce della rete ([statusFooter], da `:app`), sotto quella del NAS e sotto ancora quella del backup, centrate, ognuna con il suo
- * dettaglio. Toccare la capsula del NAS apre i dettagli ([onNasClick]: la Diagnostica, dove sta anche "Ho controllato, continua" dei
- * lavori fermi); toccare quella del backup apre la pagina Backup ([onBackupClick]). Una sotto l'altra e non affiancate: una frase
- * lunga ("Rete non riconosciuta") non tronca l'altra.
+ * L'annuncio per TalkBack dello stato del NAS e del backup ([StatusAnnouncer]): era nel piede, ora vive accanto alla nuvola e si
+ * annuncia ovunque si stia guardando la Libreria. Legge gli stati qui dentro, cosi' un avanzamento che cambia ricompone solo lui.
  */
 @Composable
-internal fun LibraryStatusBlock(
-  nas: LibraryNasStatus,
-  statusFooter: @Composable () -> Unit,
-  onNasClick: () -> Unit,
-  modifier: Modifier = Modifier,
-  backup: LibraryBackupStatus = LibraryBackupStatus.Idle,
-  onBackupClick: () -> Unit = {},
-) {
-  val note = nasFooterNote(nas)
-  val backupNote = backupFooterNote(backup)
-  Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(GroupGap)) {
-    statusFooter()
-    if (note != null) GalleryFooterEntry(note = note, onClick = onNasClick)
-    if (backupNote != null) GalleryFooterEntry(note = backupNote, onClick = onBackupClick)
-    StatusAnnouncer(listOf(note, backupNote))
-  }
+internal fun LibraryCloudAnnouncer(state: LibraryTabState) {
+  val nas by state.nas.collectAsState()
+  val backup by state.backup.collectAsState()
+  StatusAnnouncer(listOf(nasFooterNote(nas), backupFooterNote(backup)))
 }
 
 /**
@@ -289,4 +271,3 @@ private const val MegaByte = 1_000_000L
 private const val GigaByte = 1_000_000_000L
 private const val TenthsPerUnit = 10
 private const val DecimalComma = ","
-private val GroupGap = 10.dp

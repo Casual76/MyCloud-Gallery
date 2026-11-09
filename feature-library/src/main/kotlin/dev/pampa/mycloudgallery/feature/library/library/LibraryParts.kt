@@ -275,31 +275,32 @@ internal fun filterLabel(filter: LibraryFilter): String = stringResource(
   },
 )
 
-/** Nessun permesso: perche' la Libreria e' vuota e il tasto che lo risolve (la richiesta parte solo da un tocco). */
+/**
+ * Nessun permesso: perche' la Libreria e' vuota e il tasto che lo risolve (la richiesta parte solo da un tocco). Lo stato del NAS e
+ * del backup non sta piu' qui sotto (B2 della beta): lo dice la nuvola in alto.
+ */
 @Composable
-internal fun LibraryPermissionState(onAllow: () -> Unit, modifier: Modifier = Modifier, footer: @Composable () -> Unit) {
+internal fun LibraryPermissionState(onAllow: () -> Unit, modifier: Modifier = Modifier) {
   CenteredState(modifier) {
     GalleryStateView(
       kind = GalleryStateKind.PermissionDenied,
       actionLabel = stringResource(R.string.library_permission_action),
       onAction = onAllow,
     )
-    footer()
   }
 }
 
 /** La Libreria vuota (accesso completo, niente da mostrare). */
 @Composable
-internal fun LibraryEmptyState(modifier: Modifier = Modifier, footer: @Composable () -> Unit) {
+internal fun LibraryEmptyState(modifier: Modifier = Modifier) {
   CenteredState(modifier) {
     GalleryStateView(kind = GalleryStateKind.LibraryEmpty)
-    footer()
   }
 }
 
 /** La prima lettura con la Libreria ancora vuota: cosa succede e a che punto si e'. */
 @Composable
-internal fun LibraryFirstReadState(progress: SyncStatus.Scanning?, modifier: Modifier = Modifier, footer: @Composable () -> Unit) {
+internal fun LibraryFirstReadState(progress: SyncStatus.Scanning?, modifier: Modifier = Modifier) {
   CenteredState(modifier) {
     Column(
       modifier = Modifier.widthIn(max = StateTextMaxWidth).padding(horizontal = GalleryDimens.Gutter),
@@ -321,7 +322,6 @@ internal fun LibraryFirstReadState(progress: SyncStatus.Scanning?, modifier: Mod
       )
       progress?.let { FirstReadProgress(it) }
     }
-    footer()
   }
 }
 
@@ -395,11 +395,11 @@ private fun FirstReadProgress(scanning: SyncStatus.Scanning) {
 }
 
 /**
- * In fondo alla lista, sotto i piu' recenti: il riepilogo, l'avanzamento della prima lettura, e lo stato della rete e del
- * NAS ([status], `LibraryStatusBlock`).
+ * In fondo alla lista, sotto i piu' recenti: il riepilogo e l'avanzamento della prima lettura. Le tre voci di stato (la rete, il NAS,
+ * il backup) che stavano qui sotto **non ci sono piu'** (B2 della beta, lista dell'utente del 31/10): le dice la nuvola in alto.
  */
 @Composable
-internal fun LibraryFooter(state: LibraryTabState, phone: LibraryPhoneStatus, status: @Composable () -> Unit) {
+internal fun LibraryFooter(state: LibraryTabState, phone: LibraryPhoneStatus) {
   Column(
     modifier = Modifier.fillMaxWidth().padding(horizontal = GalleryDimens.Gutter, vertical = FooterPadding),
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -411,7 +411,6 @@ internal fun LibraryFooter(state: LibraryTabState, phone: LibraryPhoneStatus, st
       color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     phone.firstRead?.let { Column(modifier = Modifier.widthIn(max = StateTextMaxWidth)) { FirstReadProgress(it) } }
-    status()
   }
 }
 

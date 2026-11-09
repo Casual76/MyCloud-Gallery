@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.feature.viewer
 
 import android.app.Application
 import androidx.activity.ComponentActivity
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider
 import dev.pampa.mycloudgallery.core.imaging.testing.FakePlaceholderCache
@@ -54,7 +55,17 @@ internal object ImmediateDispatchers : DispatcherProvider {
 @Config(application = Application::class, qualifiers = PHONE)
 abstract class ViewerTestBase {
 
-  val composeRule = createAndroidComposeRule<ComponentActivity>()
+  /**
+   * La scala delle animazioni del sistema ("Rimuovi animazioni" = 0f), com'e' per la composizione di un telefono vero: sta nel contesto delle coroutine della composizione
+   * (`MotionDurationScale`), da dove `rememberFluidMotionPolicy` la legge sotto il tema vero. Di serie 1f; un test la mette a zero prima di montare il viewer.
+   */
+  var systemAnimatorScale: Float = 1f
+
+  private val systemMotionScale = object : MotionDurationScale {
+    override val scaleFactor: Float get() = systemAnimatorScale
+  }
+
+  val composeRule = createAndroidComposeRule<ComponentActivity>(effectContext = systemMotionScale)
 
   @get:Rule
   val rules: RuleChain = RuleChain.outerRule(RegisterComponentActivity()).around(composeRule)

@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryAccessibilityDataS
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryAccessibilityPrefs
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryAccessibilityScope
 import dev.pampa.mycloudgallery.core.designsystem.a11y.rememberGalleryAccessibilityPrefs
+import dev.antigravity.fluidengine.ui.fluid.FluidMotionPolicyProvider
 import dev.antigravity.fluidengine.ui.theme.AccentPoles
 import dev.antigravity.fluidengine.ui.theme.AccentPreset
 import dev.antigravity.fluidengine.ui.theme.FluidTheme
@@ -78,6 +79,11 @@ fun MyCloudGalleryTheme(
     brand = GalleryAccent.Amethyst,
     presets = GalleryAccent.presets,
   ) {
-    GalleryAccessibilityScope(prefs = accessibility, content = content)
+    // SOL-2 (review generale): "Rimuovi animazioni" del sistema (scala delle animazioni a zero) deve arrivare a chi guarda `LocalFluidMotionPolicy`: il viewer (le foto in
+    // movimento non partono, il pannello delle info scatta) e i componenti dell'engine. `FluidTheme` non lo installa da solo: prima il valore restava quello di serie
+    // (`durationScale = 1f`) e `reducedMotion` non era mai vero. Si legge la scala dal contesto della composizione (come Compose per le sue animazioni).
+    FluidMotionPolicyProvider {
+      GalleryAccessibilityScope(prefs = accessibility, content = content)
+    }
   }
 }

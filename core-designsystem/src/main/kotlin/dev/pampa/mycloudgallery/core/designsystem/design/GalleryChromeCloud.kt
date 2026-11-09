@@ -11,12 +11,13 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.CloudQueue
-import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material.icons.rounded.CloudUpload
 import androidx.compose.material.icons.rounded.PriorityHigh
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
@@ -46,14 +47,15 @@ import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 // Perche' non `FluidSyncIndicator` dell'engine: e' un cerchio di 26 dp con un punto, un cerchio che gira o un "!" (nessuna nuvola), le
 // sue frasi sono quelle dell'engine, e "il tono nel materiale" vuol dire un secondo vetro dentro la capsula (un layer in piu' sopra la
 // griglia che scorre). Qui il tasto e' piatto dentro la capsula, come gli altri (il vetro sta sul contenitore), il glifo e' una nuvola
-// con l'inchiostro adattivo della capsula, e il tono sta in un segno sul glifo, portato a 3:1 sopra la pellicola di quel momento.
+// con l'inchiostro adattivo della capsula, e il tono sta in un segno sul glifo: un disco del colore del tono dentro un anello
+// dell'inchiostro (l'anello si legge sopra qualunque foto come il resto della chrome, il colore resta riconoscibile).
 
 /** Che cosa dice la nuvola: lo stato di sincronizzazione e backup, ridotto a una forma. */
 enum class GalleryCloudState {
   /** Tutto salvato: la nuvola con la spunta. */
   Saved,
 
-  /** Sincronizzazione o backup in corso: la nuvola con le frecce. */
+  /** Sincronizzazione o backup in corso: la nuvola con la freccia. */
   Syncing,
 
   /** In attesa per una ragione normale (in coda, in prova, al prossimo giro): la nuvola vuota. */
@@ -116,27 +118,29 @@ fun GalleryChromeCloudButton(
     ) { shown ->
       Box(modifier = Modifier.size(GalleryChromeDefaults.Glyph), contentAlignment = Alignment.Center) {
         Icon(imageVector = shown.glyph(), contentDescription = null, tint = ink, modifier = Modifier.size(GalleryChromeDefaults.Glyph))
-        val fill = when (shown) {
-          GalleryCloudState.Attention -> marks?.attention ?: scheme.tertiary
-          GalleryCloudState.Alarm -> marks?.alarm ?: scheme.error
-          else -> null
-        }
-        if (fill != null) {
-          val mark = if (shown == GalleryCloudState.Alarm) marks?.onAlarm else marks?.onAttention
-          ToneMark(fill = fill, glyph = mark ?: scheme.surface)
+        val m = marks ?: GalleryCloudMarks.of(ink, scheme)
+        when (shown) {
+          GalleryCloudState.Attention -> ToneMark(ring = m.ring, fill = m.attention, glyph = m.onAttention)
+          GalleryCloudState.Alarm -> ToneMark(ring = m.ring, fill = m.alarm, glyph = m.onAlarm)
+          else -> Unit
         }
       }
     }
   }
 }
 
-/** Il segno del tono: un disco pieno in basso a destra del glifo, con il punto esclamativo. */
+/**
+ * Il segno del tono: in basso a destra del glifo, un anello dell'inchiostro della chrome (che si legge sopra qualunque foto, come il
+ * glifo) e dentro un disco del colore del tono con il punto esclamativo.
+ */
 @Composable
-private fun ToneMark(fill: Color, glyph: Color) {
+private fun ToneMark(ring: Color, fill: Color, glyph: Color) {
   Box(
     modifier = Modifier
       .offset(x = MarkOffset, y = MarkOffset)
       .size(MarkSize)
+      .background(ring, FluidCapsuleShape)
+      .padding(MarkRing)
       .background(fill, FluidCapsuleShape),
     contentAlignment = Alignment.Center,
   ) {
@@ -147,33 +151,36 @@ private fun ToneMark(fill: Color, glyph: Color) {
 /** Il glifo di uno stato. Per un problema la nuvola e' vuota: il segno del tono ci si legge sopra. */
 fun GalleryCloudState.glyph(): ImageVector = when (this) {
   GalleryCloudState.Saved -> Icons.Rounded.CloudDone
-  GalleryCloudState.Syncing -> Icons.Rounded.CloudSync
+  GalleryCloudState.Syncing -> Icons.Rounded.CloudUpload
   GalleryCloudState.Waiting, GalleryCloudState.Attention, GalleryCloudState.Alarm -> Icons.Rounded.CloudQueue
   GalleryCloudState.Offline -> Icons.Rounded.CloudOff
 }
 
 /**
- * I colori dei segni della nuvola dentro un pezzo di chrome di stile [GalleryChromeStyle] (B7 della beta: anche la nuvola si legge
- * sopra le foto chiare): l'errore e l'attenzione dello schema portati a 3:1 sopra la pellicola ([GalleryChromeStyles.toneInk]), e il
- * punto esclamativo nel polo che si legge meglio sopra ciascuno. Funzione pura: i contrasti si verificano senza comporre.
+ * I colori dei segni della nuvola dentro un pezzo di chrome (B7 della beta: anche la nuvola si legge sopra le foto chiare): l'anello e'
+ * l'**inchiostro** della chrome, che regge 4,5:1 sopra la pellicola adattiva come il glifo e il testo; dentro, i toni pieni dello
+ * schema (l'errore; il terziario per l'attenzione, come le capsule "da guardare" del piede), riconoscibili, e il punto esclamativo
+ * nel polo che si legge meglio sopra ciascuno (almeno 4,5:1: c'e' sempre, fra il nero e il bianco). Una prima versione portava il
+ * colore del tono verso l'inchiostro fino a 3:1 sul nero e sul bianco pieni: in scuro l'errore e l'attenzione diventavano tutti e due
+ * quasi bianchi, e il tono non si vedeva piu' (screenshot del 09/11). Funzione pura: i contrasti si verificano senza comporre.
  */
 @Immutable
-data class GalleryCloudMarks(val alarm: Color, val onAlarm: Color, val attention: Color, val onAttention: Color) {
+data class GalleryCloudMarks(val ring: Color, val alarm: Color, val onAlarm: Color, val attention: Color, val onAttention: Color) {
   companion object {
-    fun of(style: GalleryChromeStyle, scheme: ColorScheme): GalleryCloudMarks {
-      val alarm = GalleryChromeStyles.toneInk(scheme.error, style, scheme.scrim)
-      val attention = GalleryChromeStyles.toneInk(scheme.tertiary, style, scheme.scrim)
-      return GalleryCloudMarks(
-        alarm = alarm,
-        onAlarm = GalleryChromeStyles.onTone(alarm, scheme.scrim),
-        attention = attention,
-        onAttention = GalleryChromeStyles.onTone(attention, scheme.scrim),
-      )
-    }
+    fun of(style: GalleryChromeStyle, scheme: ColorScheme): GalleryCloudMarks = of(style.ink, scheme)
+
+    fun of(ink: Color, scheme: ColorScheme): GalleryCloudMarks = GalleryCloudMarks(
+      ring = ink,
+      alarm = scheme.error,
+      onAlarm = GalleryChromeStyles.onTone(scheme.error, scheme.scrim),
+      attention = scheme.tertiary,
+      onAttention = GalleryChromeStyles.onTone(scheme.tertiary, scheme.scrim),
+    )
   }
 }
 
-private val MarkSize: Dp = 12.dp
+private val MarkSize: Dp = 14.dp
+private val MarkRing: Dp = 1.5.dp
 private val MarkGlyph: Dp = 10.dp
 private val MarkOffset: Dp = 6.dp
 private const val GlyphEnterScale = 0.6f

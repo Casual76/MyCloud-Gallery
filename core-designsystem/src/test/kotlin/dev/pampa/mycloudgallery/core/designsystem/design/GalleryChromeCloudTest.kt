@@ -12,9 +12,9 @@ import org.junit.Test
 
 /**
  * La nuvola di stato della chrome (B2 della beta) e la leggibilita' sotto il vetro (B7): sopra le foto chiare (e scure) il segno del
- * tono della nuvola (errore, attenzione) regge 3:1 sopra la pellicola adattiva, il punto esclamativo regge 3:1 sopra il segno, e
- * l'inchiostro della chrome (data, contatori, "Fine", la nuvola stessa) resta a 4,5:1. Su **ogni** accento, chiaro e scuro, e sui
- * contenuti peggiori: foto bianche, quasi bianche, nere, grigie, sature.
+ * tono della nuvola (errore, attenzione) ha l'anello dell'inchiostro, che regge 4,5:1 sopra la pellicola adattiva come il resto della
+ * chrome (data, contatori, "Fine", la nuvola stessa); dentro il tono pieno, riconoscibile, e il punto esclamativo a 4,5:1 sopra di
+ * lui. Su **ogni** accento, chiaro e scuro, e sui contenuti peggiori: foto bianche, quasi bianche, nere, grigie, sature.
  */
 class GalleryChromeCloudTest {
 
@@ -46,9 +46,6 @@ class GalleryChromeCloudTest {
     listOf(Color(0xFF0000FF), Color(0xFF333333)),
   ).map { ContentRange(it) }
 
-  /** Gli estremi assoluti: la pellicola deve reggere anche se sotto passa il nero o il bianco pieni che il ThumbHash non ha visto. */
-  private val extremes = ContentRange(listOf(black, white))
-
   private fun stylesFor(scheme: ColorScheme): List<Pair<ContentRange, GalleryChromeStyle>> {
     val palette = GalleryChromeStyles.adaptivePaletteFor(scheme.scrim)
     return ranges.map { range ->
@@ -57,28 +54,31 @@ class GalleryChromeCloudTest {
   }
 
   @Test
-  fun ilSegnoDelTonoReggeTreAUnoSopraLaPellicolaSuQualunqueFoto() {
+  fun lAnelloDelSegnoELInchiostroEReggeSopraLaPellicola() {
     for (case in cases) {
       for ((range, style) in stylesFor(case.scheme)) {
         val marks = GalleryCloudMarks.of(style, case.scheme)
-        val film = style.tint.overlay
-        for ((name, fill) in listOf("errore" to marks.alarm, "attenzione" to marks.attention)) {
-          val worst = GalleryLegibility.worstContrast(fill, film, extremes)
-          assertWithMessage("${case.name}, ${range.samples}: segno di $name sulla pellicola ($worst)").that(worst).isAtLeast(GalleryLegibility.LargeContrast)
-        }
+        assertThat(marks.ring).isEqualTo(style.ink)
+        val worst = GalleryLegibility.worstContrast(marks.ring, style.tint.overlay, range)
+        assertWithMessage("${case.name}, ${range.samples}: anello del segno ($worst)").that(worst).isAtLeast(GalleryLegibility.TextContrast)
       }
     }
   }
 
   @Test
-  fun ilPuntoEsclamativoSiLeggeSulSegno() {
+  fun ilPuntoEsclamativoSiLeggeSulSegnoEIlTonoSiRiconosce() {
     for (case in cases) {
       for ((range, style) in stylesFor(case.scheme)) {
         val marks = GalleryCloudMarks.of(style, case.scheme)
         val alarm = GalleryLegibility.contrast(marks.onAlarm, marks.alarm)
         val attention = GalleryLegibility.contrast(marks.onAttention, marks.attention)
-        assertWithMessage("${case.name}, ${range.samples}: ! sull'errore ($alarm)").that(alarm).isAtLeast(GalleryLegibility.LargeContrast)
-        assertWithMessage("${case.name}, ${range.samples}: ! sull'attenzione ($attention)").that(attention).isAtLeast(GalleryLegibility.LargeContrast)
+        assertWithMessage("${case.name}, ${range.samples}: ! sull'errore ($alarm)").that(alarm).isAtLeast(GalleryLegibility.TextContrast)
+        assertWithMessage("${case.name}, ${range.samples}: ! sull'attenzione ($attention)").that(attention).isAtLeast(GalleryLegibility.TextContrast)
+        // Il tono resta il colore dello schema: errore e attenzione non si confondono fra loro ne' con l'anello.
+        assertThat(marks.alarm).isEqualTo(case.scheme.error)
+        assertThat(marks.attention).isEqualTo(case.scheme.tertiary)
+        assertThat(marks.alarm).isNotEqualTo(marks.attention)
+        assertThat(marks.alarm).isNotEqualTo(marks.ring)
       }
     }
   }
@@ -108,7 +108,7 @@ class GalleryChromeCloudTest {
   @Test
   fun ogniStatoHaIlSuoGlifoEIProblemiSonoTre() {
     val glyphs = GalleryCloudState.entries.map { it.glyph() }
-    // Waiting, Attention e Alarm condividono la nuvola vuota: li distingue il segno del tono.
+    // In attesa, da guardare e serve l'utente condividono la nuvola vuota: li distingue il segno del tono.
     assertThat(glyphs.toSet().size).isEqualTo(GalleryCloudState.entries.size - 2)
     assertThat(GalleryCloudState.entries.filter { it.isProblem })
       .containsExactly(GalleryCloudState.Offline, GalleryCloudState.Attention, GalleryCloudState.Alarm)

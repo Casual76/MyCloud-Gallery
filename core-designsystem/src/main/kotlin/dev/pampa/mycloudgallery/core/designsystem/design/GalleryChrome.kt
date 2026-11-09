@@ -164,19 +164,6 @@ object GalleryChromeStyles {
     return lerp(color, pole, high)
   }
 
-  /**
-   * Il colore di un **tono** (l'errore, l'attenzione) dentro un pezzo di chrome di stile [style] (B2, la nuvola di stato; B7, la
-   * leggibilita'): portato verso l'inchiostro del pezzo quanto basta per 3:1 (la soglia delle icone) sopra la sua pellicola, sul caso
-   * peggiore **assoluto** (il nero e il bianco pieni sotto la pellicola). Piu' severo di [GalleryChromeStyle.destructiveInk], che guarda
-   * solo l'estremo della polarita': un tono e' un colore medio, e un colore medio puo' cadere su tutti e due i lati. La ricerca finisce
-   * sempre: l'inchiostro stesso regge 3:1 su tutti e due gli estremi gia' alla pellicola minima (0,45, G2 §12.3). [scrim] e' il ruolo
-   * `scrim` dello schema (il nero).
-   */
-  fun toneInk(tone: Color, style: GalleryChromeStyle, scrim: Color): Color {
-    val worst = ContentRange(listOf(scrim.copy(alpha = 1f), GalleryOnPhoto.Content))
-    return legibleTowards(tone, style.ink, style.tint.overlay, worst, GalleryLegibility.LargeContrast)
-  }
-
   /** Il colore che si legge meglio sopra [fill] fra i due poli della chrome (il nero di [scrim] e il bianco delle foto). */
   fun onTone(fill: Color, scrim: Color): Color {
     val dark = scrim.copy(alpha = 1f)

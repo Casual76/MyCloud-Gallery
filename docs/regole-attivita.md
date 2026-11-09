@@ -53,10 +53,15 @@ Verifica: `gradlew.bat :core-rules:testDebugUnitTest :core-rules:lintDebug`.
 3. Dopo ogni trasferimento: `ledger.record(sorgente, rete, byte)` con la rete **effettivamente usata**
    dal socket (E-R12), in tempo reale: se il processo muore, il traffico già passato conta.
 4. `RuleDecision.Run.scope == LOCAL_BUFFER_ONLY`: elabora solo ciò che hai già in locale, poi fermati con
-   lo stato "solo buffer" (E-A6). `Run.pace == REDUCED`: pause fra i lotti (telefono caldo).
-   `Run.remainingBytes`: quanti byte restano nel tetto della rete in uso.
+   lo stato "solo buffer" (E-A6). `Run.pace.slow`: lotti piccoli e pause fra i lotti (`REDUCED` = telefono caldo,
+   `APP_IN_USE` = app in primo piano: vedi "Ritmo" al §4). `Run.remainingBytes`: quanti byte restano nel tetto
+   della rete in uso.
 5. "Fai ora": `WorkRequest.UserInitiated(attività, byteStimati)`. Se torna `NeedsConfirmation` si mostra
    `message` (con la stima) e si rilancia con `confirmed = true`.
+6. Dopo un `Wait` o uno `Stop`: se e come rimettersi in coda lo dice **una funzione sola**, `RuleWaits.followUpOf`
+   (`:app`, `work/RuleWaits.kt`): vedi "Dopo un'attesa" al §4. Mai una coda senza ritardo.
+7. Il lavoro pesante a CPU (calcolo AI, volti, preparazione) gira dentro `AppGraph.quietly { ... }`
+   (`work/QuietWork.kt`, `YieldToApp` di `core-rules`): con l'app in primo piano i suoi thread scendono di priorità.
 
 ---
 
@@ -67,8 +72,8 @@ Verifica: `gradlew.bat :core-rules:testDebugUnitTest :core-rules:lintDebug`.
 | Backup foto (`PHOTO_BACKUP`) | leggera | - | `dataSync` | |
 | Backup video (`VIDEO_BACKUP`) | **pesante** | - | `dataSync` | regole proprie (piano §2) |
 | Sync indice (`INDEX_SYNC`) | leggera | - | `dataSync` | in primo piano è sempre consentita |
-| Preparazione (`PREPARATION`) | **pesante** | Preparatore | `mediaProcessing` | a CPU: ritmo ridotto col caldo |
-| Calcolo AI (`AI_COMPUTE`) | **pesante** | Indicizzatore | `mediaProcessing` | a CPU; **senza NAS lavora sul buffer locale** |
+| Preparazione (`PREPARATION`) | **pesante** | Preparatore | `mediaProcessing` | a CPU: ritmo ridotto col caldo e con l'app in primo piano |
+| Calcolo AI (`AI_COMPUTE`) | **pesante** | Indicizzatore | `mediaProcessing` | a CPU (ritmo ridotto col caldo e con l'app in primo piano); **senza NAS lavora sul buffer locale** |
 | Anteprime HQ (`HQ_PREVIEWS`) | **pesante** | - | `dataSync` | si spegne se la qualità non è "Alta" (`disabledActivities`) |
 
 "Pesante" significa: con `heavyOnlyAtHome` (proposta 1) gira solo sul Wi-Fi di casa.
@@ -159,7 +164,7 @@ permettere il giorno (E-R5). La fascia derivata si salva in `RuleSettings.nightW
 
 | Richiesta | Regole applicate |
 |---|---|
-| `Background(attività)` | tutte (sotto). Eccezione: `INDEX_SYNC` con l'app in primo piano = come `VisibleContent` |
+| `Background(attività)` | tutte (sotto). Eccezione: `INDEX_SYNC` con l'app in primo piano = come `VisibleContent`. Le attività a CPU con l'app in primo piano girano, ma a ritmo `APP_IN_USE` |
 | `VisibleContent` (miniature/anteprime sullo schermo, solo app aperta) | profilo, roaming, rete, **tetti**, NAS, sicurezza termica CRITICAL. Niente fascia/carica/batteria/risparmio/reti ammesse/pesante/limiti Android |
 | `UserInitiated` ("Fai ora") | scavalca fascia, alimentazione, soglia, risparmio energetico, reti ammesse, quote Android. Restano: ruolo, rete utilizzabile, NAS, sicurezza termica CRITICAL. Chiede **conferma** su dati mobili, roaming, tetto superato o che la stima supererebbe |
 
@@ -210,6 +215,31 @@ non è utilizzabile (non avrebbe senso).
 * **Termica**: `SEVERE` o headroom >= 0,95 sospende il background; `LIGHT`/`MODERATE` o headroom >= 0,85
   = ritmo ridotto per le attività a CPU; dopo uno stato severo si riparte solo dopo 5 minuti (isteresi,
   `timeSinceThermalSevere`); `CRITICAL` o peggio ferma tutto, anche "Fai ora" e contenuto visibile.
+* **Ritmo** (`Run.pace`, solo per le attività a CPU: `PREPARATION` e `AI_COMPUTE`, che comprende i volti):
+
+  | Ritmo | Quando | Che cosa fa chi lavora |
+  |---|---|---|
+  | `NORMAL` | app in secondo piano, telefono non caldo | ritmo pieno |
+  | `REDUCED` | telefono caldo (`LIGHT`/`MODERATE`, headroom >= 0,85) | lotti piccoli e pause (`Pace.slow`) |
+  | `APP_IN_USE` | app in primo piano (review generale, OB-3) | come `REDUCED`: lotti piccoli e pause (`Pace.slow`) |
+
+  I due ritmi lenti si eseguono allo stesso modo (calcolo AI e volti: lotti da 5 invece di 20 e 2 s di pausa;
+  preparazione: un media per volta con la pausa; `StagedRun`: 2 s fra un lotto e l'altro). Sono due valori
+  perché il motivo è diverso: la Diagnostica dice "il telefono è caldo" solo per `REDUCED`. Se valgono tutti
+  e due, il verdetto è `REDUCED`. Il ritmo si rilegge a ogni rivalutazione (al più ogni 5 s): quando l'app
+  torna in secondo piano il lavoro riprende il ritmo pieno da solo. **Si rallenta, non ci si ferma**: chi usa
+  molto l'app deve comunque vedere finire l'indicizzazione. "Fai ora" (`UserInitiated`: "Indicizza ora",
+  "Analizza ora") resta a `NORMAL`: l'ha chiesto l'utente.
+* **Priorità e thread con l'app in primo piano** (OB-3, `core-rules/.../run/YieldToApp.kt`): calcolo AI, volti
+  e preparazione sono `CoroutineWorker` nello stesso processo dell'interfaccia. Il lavoro gira dentro
+  `AppGraph.quietly { ... }`, che mette nel contesto della coroutine l'elemento `YieldToApp`: finché l'app è in
+  primo piano, ogni thread su cui il lavoro riprende (quelli di `Dispatchers.Default` e `IO`, i thread dei
+  motori) scende a `THREAD_PRIORITY_BACKGROUND` e torna com'era quando il lavoro lo lascia; il thread
+  principale non si tocca mai. Vale anche per "Fai ora". I motori dei volti (LiteRT su CPU) si aprono con 2
+  thread invece di 4 e si riaprono, una volta, quando lo stato dell'app cambia a metà tappa (i thread di un
+  interprete non si cambiano dopo l'apertura). L'embedder delle immagini (LiteRT-LM, GPU sull'S25) non cambia
+  i suoi thread: si decidono alla creazione del motore, che costa da 2 a 5 s e centinaia di MB. In secondo
+  piano niente di tutto questo vale.
 * **Falsi distacchi**: un lavoro in corso tollera un'alimentazione scollegata da meno di 15 s (visto
   sull'S25: ~5 s, `android.md` 2.2 bis); per partire serve l'alimentazione stabile.
 * **Rete scadente** (E-R4, `NetworkState.poor`): ferma solo il lavoro automatico. Contenuto visibile, sync
@@ -221,6 +251,35 @@ non è utilizzabile (non avrebbe senso).
   roaming no: resta `Wait` (nessuna attività automatica in roaming, proposta 2).
 * **Limiti di Android** (`AndroidLimits`): `dataSync` per backup, sync indice, anteprime HQ; `mediaProcessing`
   per preparazione e calcolo AI; la quota dei job ferma tutto.
+
+### Dopo un'attesa: `RuleWaits.followUpOf` (FAB-3 e FAB-5 della review)
+
+Un lavoro che le regole hanno fermato (`Wait` o `Stop`) chiede a **una funzione sola** se e come rimettersi in
+coda (`:app`, `work/RuleWaits.kt`; la usano il backup, il calcolo AI, i volti e il raggruppamento notturno).
+Prima la regola era scritta due volte (`BackupWorkScheduling.delayFor`/`constraintsFor` e
+`AiWorkScheduling.followUpOf`) e le due copie erano diverse. Due principi:
+
+* **un'attesa che non cambia non si rimette mai in coda senza ritardo** (almeno `MIN_RETRY`, 1 minuto);
+* un vincolo di WorkManager si usa **solo se misura la causa dell'attesa**. "Batteria non scarica" non la
+  misurava: per Android la batteria è scarica sotto il 15%, per le regole sotto il 20%, e il risparmio
+  energetico non c'entra con la carica. Con il risparmio energetico acceso, o fra il 16% e il 19%, il vincolo
+  era già soddisfatto: il lavoro del backup ripartiva subito a ciclo continuo, calcolo AI e volti ogni minuto.
+
+| Attesa | Che cosa si chiede a WorkManager | Perché |
+|---|---|---|
+| `OutsideWindow` | il ritardo fino all'inizio della fascia, più 1 minuto | esatto: l'ora si sa |
+| `NeedsPower` | il vincolo della carica, dopo 1 minuto | esatto: WorkManager avvisa quando si collega l'alimentazione |
+| `BatteryLow` | il vincolo della carica, dopo 1 minuto | esatto: la regola vale solo a batteria, e la batteria risale solo in carica |
+| `PowerSaver` | un ritardo che cresce: 15, 30, 60 minuti (tetto 1 ora) | nessun vincolo di WorkManager misura il risparmio energetico |
+| `Thermal` | un ritardo che cresce: 5, 10, 20, 40, 60 minuti (tetto 1 ora) | il telefono si raffredda da solo |
+| le altre (rete, NAS, profilo, congelamento, ruolo, tetti, limiti di Android) | niente | nessun polling: giro periodico, lettura del telefono, apertura dell'app |
+
+Il numero del tentativo viaggia negli input del lavoro (`wait_attempt`): il lavoro che aspetta di nuovo lo passa
+alla funzione e il ritardo cresce; un lavoro chiesto da un evento vero (una foto nuova, il giro periodico)
+riparte da zero. Per ciò che l'utente aspetta presto (le foto di "Proteggi subito", i file di "Salva sul NAS")
+il tetto è un quarto d'ora (`RuleWaits.PROMPT_CAP`): spento il risparmio energetico, il backup rapido riparte
+entro 15 minuti. Le riprese per la rete di "Proteggi subito", dei file ricevuti e del lavoro dell'utente (BK-2,
+IN-5, D-6: una rete non a consumo, un quarto d'ora) non passano da qui: restano in `BackupWorkScheduling`.
 
 ### Classificazione della rete (`NetworkClassifier`)
 

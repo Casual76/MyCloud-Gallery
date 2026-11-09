@@ -9,7 +9,9 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
 import dev.pampa.mycloudgallery.core.models.contract.VerifiedModel
+import dev.pampa.mycloudgallery.core.rules.run.YieldToApp
 import java.nio.ByteBuffer
+import kotlinx.coroutines.currentCoroutineContext
 
 // COME SI APRONO I MODELLI DEI VOLTI (docs/fase8-progetto.md D6, D16, §2.2 "Nel telefono"): `ModelFiles.open` verifica dimensione e SHA-256
 // del file in `models/<sha256>` **a ogni apertura**, il descrittore verificato si mappa in memoria (`ModelBytes.map`, come MagicTouch) e
@@ -23,6 +25,9 @@ object FaceEnginesFactory {
   /**
    * YuNet e SFace veri sopra i file verificati di [files], con [FaceAligner] e [FaceQuality]. Nessun modello si apre qui: ogni motore apre il
    * suo alla prima richiesta e lo rilascia con `release()` (a fine tappa, a `onTrimMemory`, allo stop).
+   *
+   * [threads] sono i thread di inferenza a ritmo pieno. Review generale, OB-3: dentro un lavoro di fondo che si fa da parte (`YieldToApp` nel
+   * contesto di chi chiama, l'app in uso) ogni apertura ne usa al piu' `YieldToApp.YIELDING_INFERENCE_THREADS`.
    */
   fun create(
     files: ModelFiles,
@@ -52,7 +57,7 @@ internal object FaceModelOpeners {
   ): DetectorOpener = DetectorOpener {
     val model = files.open(spec.id) ?: throw AiEngineException(AiEngineError.MODEL_UNAVAILABLE)
     try {
-      OwnedDetector(sessionOf(bytesOf(model), threads), model)
+      OwnedDetector(sessionOf(bytesOf(model), threadsNow(threads)), model)
     } catch (t: Throwable) {
       runCatching { model.close() }
       throw t
@@ -68,13 +73,19 @@ internal object FaceModelOpeners {
   ): EmbedderOpener = EmbedderOpener {
     val model = files.open(spec.id) ?: throw AiEngineException(AiEngineError.MODEL_UNAVAILABLE)
     try {
-      OwnedEmbedder(sessionOf(bytesOf(model), threads), model)
+      OwnedEmbedder(sessionOf(bytesOf(model), threadsNow(threads)), model)
     } catch (t: Throwable) {
       runCatching { model.close() }
       throw t
     }
   }
 }
+
+/**
+ * I thread di inferenza per una sessione che si apre adesso: [full] di norma; meno dentro un lavoro di fondo che si fa da parte (`YieldToApp`
+ * nel contesto, l'app in uso). Si legge all'apertura perche' un interprete LiteRT non cambia thread dopo (`Interpreter.Options.setNumThreads`).
+ */
+private suspend fun threadsNow(full: Int): Int = YieldToApp.inferenceThreads(YieldToApp.yielding(currentCoroutineContext()), full)
 
 /** Una sessione che chiude con se' il modello verificato (per ultimo). */
 private class OwnedDetector(private val inner: DetectorSession, private val model: VerifiedModel) : DetectorSession by inner {

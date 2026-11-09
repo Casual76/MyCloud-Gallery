@@ -17,7 +17,8 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalStore
 import dev.pampa.mycloudgallery.core.personal.settings.PersonalAlbumState
 import dev.pampa.mycloudgallery.core.personal.settings.PersonalAlbums
-import kotlinx.coroutines.yield
+import dev.pampa.mycloudgallery.core.personal.settings.PersonalChoice
+import dev.pampa.mycloudgallery.core.personal.settings.PersonalItem
 
 // LE MODIFICHE AGLI ALBUM PERSONALI, COME VOCI (docs/fase7-progetto.md D3, D4, D16, D21, D39). Ogni modifica e' una o piu' voci dei dati
 // personali (`PersonalAlbums`), mai un file spostato o tolto: "togliere non e' eliminare" (D39). Qui sta la regola delle voci; la
@@ -27,6 +28,11 @@ import kotlinx.coroutines.yield
 // un id assorbito da un'unione lo riscrive sul sopravvissuto, con la stessa impronta; chi toglie spegne **tutte** le voci vive che qui
 // indicano quel media (un id vecchio e uno nuovo), cosi' nessun altro dispositivo lo vede tornare. Una modifica fatta senza ora del NAS
 // vale subito (`PersonalStore.effective`) e prende l'ora alla prima sincronizzazione.
+//
+// **Una modifica, un salvataggio** (review generale, OA-1): le voci di una stessa modifica (le foto aggiunte o tolte, gli elementi di
+// "Congela", le regole di uno smart) si scrivono in un lotto solo (`PersonalAlbums.batch`). Il registro dei dati personali si riscrive per
+// intero a ogni salvataggio: una voce alla volta, 2.000 foto in un album erano 2.000 riscritture. E il lotto c'e' tutto o non c'e': un album
+// non resta mai "congelato a meta'" o creato senza le sue regole se il processo muore in mezzo.
 //
 // Mai un'eccezione per un caso previsto: gli esiti sono quelli del contratto (`EditOutcome`, `AddOutcome`, `CreateOutcome`).
 
@@ -56,11 +62,14 @@ internal class AlbumEditor(
     // Una regola che non sta in una voce non si scrive a meta': l'editor la deve restringere (SmartRulesText.encode lo dice prima).
     if (encoded != null && !encoded.ok) return CreateOutcome.RulesTooLong
     val id = AlbumId.derived(account, nonce).value
-    // La definizione per ultima: un altro dispositivo vede l'album quando ha gia' tutte le sue regole.
-    if (kind == AlbumKind.SMART) albums.setKind(id, kind)
-    encoded?.fields?.forEach { (field, text) -> if (text != null) albums.setSmart(id, field, text) }
-    rules?.examples?.forEach { media -> catalog.resolve(media)?.let { albums.setExample(id, it.value, true) } }
-    albums.define(id, AlbumTitles.normalized(title))
+    val examples = rules?.examples?.mapNotNull { catalog.resolve(it) }.orEmpty()
+    albums.batch {
+      // La definizione per ultima: un altro dispositivo vede l'album quando ha gia' tutte le sue regole.
+      if (kind == AlbumKind.SMART) setKind(id, kind)
+      encoded?.fields?.forEach { (field, text) -> if (text != null) setSmart(id, field, text) }
+      for (media in examples) setExample(id, media.value, true)
+      define(id, AlbumTitles.normalized(title))
+    }
     return CreateOutcome.Created(AlbumId(id))
   }
 
@@ -90,21 +99,24 @@ internal class AlbumEditor(
     if (fresh.isEmpty()) return AddOutcome.Added(0, already)
     val smart = kindOf(state) == AlbumKind.SMART
     val resolution = if (smart) resolver.resolve(AlbumDerivation.refsOf(state)) else MediaResolution.NONE
-    if (liveSmart(state)) {
-      // D14: in uno smart non congelato un media a mano e' un suggerito accettato; un'esclusione precedente si toglie.
-      for (m in fresh) {
-        albums.accept(id.value, m.value, on = true)
-        clearExclusions(state, resolution, m)
-      }
-    } else {
-      write(id, AlbumPositions.append(manualPositions(rows), fresh.map { it.value }))
-      if (smart) {
+    val excluded = if (smart) liveBy(state.excluded, resolution) else emptyMap()
+    albums.batch {
+      if (liveSmart(state)) {
+        // D14: in uno smart non congelato un media a mano e' un suggerito accettato; un'esclusione precedente si toglie.
         for (m in fresh) {
-          // AS-10: uno smart congelato mostra gli elementi a mano (`item:`, le stesse voci che scrive "Congela"). "Scongela" le toglie tutte: senza una
-          // voce `accept:` anche la foto che l'utente ha aggiunto da congelato sparirebbe con il resto. Con l'accettazione resta (D16: "tenendo
-          // esclusioni e accettazioni").
-          albums.accept(id.value, m.value, on = true)
-          clearExclusions(state, resolution, m)
+          accept(id.value, m.value, on = true)
+          clearExclusions(state, excluded, m)
+        }
+      } else {
+        place(id, AlbumPositions.append(manualPositions(rows), fresh.map { it.value }))
+        if (smart) {
+          for (m in fresh) {
+            // AS-10: uno smart congelato mostra gli elementi a mano (`item:`, le stesse voci che scrive "Congela"). "Scongela" le toglie tutte: senza una
+            // voce `accept:` anche la foto che l'utente ha aggiunto da congelato sparirebbe con il resto. Con l'accettazione resta (D16: "tenendo
+            // esclusioni e accettazioni").
+            accept(id.value, m.value, on = true)
+            clearExclusions(state, excluded, m)
+          }
         }
       }
     }
@@ -115,20 +127,24 @@ internal class AlbumEditor(
     val state = definedState(id) ?: return EditOutcome.NotFound
     val resolution = resolver.resolve(AlbumDerivation.refsOf(state))
     val smart = kindOf(state) == AlbumKind.SMART
-    for (m in media.distinct()) {
-      val real = catalog.resolve(m) ?: continue
-      for (item in state.items) {
-        if (item.live && resolution.of(item.mediaId, item.fingerprint) == real) albums.removeItem(id.value, item.mediaId, item.fingerprint)
+    // Le voci vive per il media che qui indicano, una volta sola: togliere duemila foto da un album di duemila non e' quattro milioni di confronti.
+    val items = HashMap<MediaId, MutableList<PersonalItem>>()
+    for (item in state.items) {
+      if (!item.live) continue
+      val real = resolution.of(item.mediaId, item.fingerprint) ?: continue
+      items.getOrPut(real) { ArrayList() } += item
+    }
+    val accepted = liveBy(state.accepted, resolution)
+    val cover = state.cover?.let { resolution.of(it.mediaId, it.fingerprint) }
+    val reals = media.distinct().mapNotNull { catalog.resolve(it) }.distinct()
+    albums.batch {
+      for (real in reals) {
+        for (item in items[real].orEmpty()) removeItem(id.value, item.mediaId, item.fingerprint)
+        for (choice in accepted[real].orEmpty()) accept(id.value, choice.mediaId, on = false, fingerprint = choice.fingerprint)
+        // Su uno smart togliere un elemento automatico e' un'esclusione per sempre (E-AL5).
+        if (smart) exclude(id.value, real.value, on = true)
+        if (cover != null && cover == real) setCover(id.value, null)
       }
-      for (accepted in state.accepted) {
-        if (accepted.on && resolution.of(accepted.mediaId, accepted.fingerprint) == real) {
-          albums.accept(id.value, accepted.mediaId, on = false, fingerprint = accepted.fingerprint)
-        }
-      }
-      // Su uno smart togliere un elemento automatico e' un'esclusione per sempre (E-AL5).
-      if (smart) albums.exclude(id.value, real.value, on = true)
-      val cover = state.cover
-      if (cover != null && resolution.of(cover.mediaId, cover.fingerprint) == real) albums.setCover(id.value, null)
     }
     return EditOutcome.Done
   }
@@ -154,7 +170,7 @@ internal class AlbumEditor(
     return EditOutcome.Done
   }
 
-  /** [moved] subito dopo [after] (null = in testa): una voce sola se c'e' posto fra i vicini, altrimenti si ricompatta a lotti (D21). */
+  /** [moved] subito dopo [after] (null = in testa): una voce sola se c'e' posto fra i vicini, altrimenti si ricompatta, in un lotto solo (D21). */
   suspend fun reorder(id: AlbumId, moved: MediaId, after: MediaId?): EditOutcome {
     definedState(id) ?: return EditOutcome.NotFound
     val realMoved = catalog.resolve(moved) ?: return EditOutcome.Invalid(null)
@@ -162,7 +178,8 @@ internal class AlbumEditor(
     val current = manualPositions(database.albumDao().items(id.value))
     if (current.none { it.media == realMoved.value } || realAfter == realMoved) return EditOutcome.Invalid(null)
     if (realAfter != null && current.none { it.media == realAfter.value }) return EditOutcome.Invalid(null)
-    write(id, AlbumPositions.insertAfter(current, realMoved.value, realAfter?.value))
+    val plan = AlbumPositions.insertAfter(current, realMoved.value, realAfter?.value)
+    albums.batch { place(id, plan) }
     return EditOutcome.Done
   }
 
@@ -176,26 +193,28 @@ internal class AlbumEditor(
   /**
    * Cambia le regole di uno smart (D13, E-AL13): una voce per regola, quindi le esclusioni e le accettazioni restano come sono e due
    * modifiche di due regole su due dispositivi si fondono. Le foto d'esempio si aggiornano per differenza. Nessuna regola si scrive a meta':
-   * se una non sta in una voce non cambia niente.
+   * se una non sta in una voce non cambia niente, e le voci che cambiano si scrivono insieme.
    */
   suspend fun setRules(id: AlbumId, rules: SmartRules): EditOutcome {
     val (state, refusal) = smartState(id)
     refusal?.let { return it }
     val encoded = SmartRulesText.encode(rules)
     if (!encoded.ok) return EditOutcome.Invalid(TitleProblem.TOO_LONG)
-    for ((field, text) in encoded.fields) {
-      // Una regola che non c'e' e non si vuole non lascia una lapide.
-      if (text != null || state!!.smart[field] != null) albums.setSmart(id.value, field, text)
-    }
     val resolution = resolver.resolve(AlbumDerivation.refsOf(state!!))
     val wanted = rules.examples.mapNotNull { catalog.resolve(it) }.toSet()
-    for (example in state.examples) {
-      if (example.on && resolution.of(example.mediaId, example.fingerprint) !in wanted) {
-        albums.setExample(id.value, example.mediaId, on = false, fingerprint = example.fingerprint)
-      }
-    }
     val present = state.examples.filter { it.on }.mapNotNullTo(HashSet()) { resolution.of(it.mediaId, it.fingerprint) }
-    for (media in wanted) if (media !in present) albums.setExample(id.value, media.value, on = true)
+    albums.batch {
+      for ((field, text) in encoded.fields) {
+        // Una regola che non c'e' e non si vuole non lascia una lapide.
+        if (text != null || state.smart[field] != null) setSmart(id.value, field, text)
+      }
+      for (example in state.examples) {
+        if (example.on && resolution.of(example.mediaId, example.fingerprint) !in wanted) {
+          setExample(id.value, example.mediaId, on = false, fingerprint = example.fingerprint)
+        }
+      }
+      for (media in wanted) if (media !in present) setExample(id.value, media.value, on = true)
+    }
     return EditOutcome.Done
   }
 
@@ -203,10 +222,14 @@ internal class AlbumEditor(
     val (state, refusal) = smartState(id)
     refusal?.let { return it }
     val resolution = resolver.resolve(AlbumDerivation.refsOf(state!!))
-    for (m in media.distinct()) {
-      val real = catalog.resolve(m) ?: continue
-      albums.exclude(id.value, real.value, on = true)
-      clearAcceptances(state, resolution, real)
+    val accepted = liveBy(state.accepted, resolution)
+    val reals = media.distinct().mapNotNull { catalog.resolve(it) }
+    albums.batch {
+      for (real in reals) {
+        exclude(id.value, real.value, on = true)
+        // Come le esclusioni in [add]: tutte le accettazioni vive che qui indicano quel media (un id vecchio e uno nuovo dello stesso file).
+        for (choice in accepted[real].orEmpty()) accept(state.id, choice.mediaId, on = false, fingerprint = choice.fingerprint)
+      }
     }
     return EditOutcome.Done
   }
@@ -215,15 +238,21 @@ internal class AlbumEditor(
     val (state, refusal) = smartState(id)
     refusal?.let { return it }
     val resolution = resolver.resolve(AlbumDerivation.refsOf(state!!))
-    for (m in media.distinct()) {
-      val real = catalog.resolve(m) ?: continue
-      albums.accept(id.value, real.value, on = true)
-      clearExclusions(state, resolution, real)
+    val excluded = liveBy(state.excluded, resolution)
+    val reals = media.distinct().mapNotNull { catalog.resolve(it) }
+    albums.batch {
+      for (real in reals) {
+        accept(id.value, real.value, on = true)
+        clearExclusions(state, excluded, real)
+      }
     }
     return EditOutcome.Done
   }
 
-  /** "Congela": gli elementi di quel momento diventano elementi a mano, con impronta, e le regole smettono di agire (D16). */
+  /**
+   * "Congela": gli elementi di quel momento diventano elementi a mano, con impronta, e le regole smettono di agire (D16). Gli elementi e il
+   * segno "congelato" si scrivono insieme: un album non resta con le righe del congelamento e le regole ancora attive.
+   */
   suspend fun freeze(id: AlbumId): EditOutcome {
     val (state, refusal) = smartState(id)
     refusal?.let { return it }
@@ -232,46 +261,50 @@ internal class AlbumEditor(
     val manual = manualPositions(rows)
     val manualMedia = manual.mapTo(HashSet()) { it.media }
     val others = AlbumPositions.sorted(rows.filter { it.mediaId !in manualMedia }.map { PositionedItem(it.mediaId, it.position, it.fp.orEmpty()) }).map { it.media }
-    write(id, AlbumPositions.append(manual, others))
-    albums.setFrozen(id.value, true)
+    val plan = AlbumPositions.append(manual, others)
+    albums.batch {
+      place(id, plan)
+      setFrozen(id.value, true)
+    }
     return EditOutcome.Done
   }
 
-  /** "Scongela": le regole tornano ad agire, esclusioni e accettazioni restano; gli elementi del congelamento si tolgono (D16). */
+  /** "Scongela": le regole tornano ad agire, esclusioni e accettazioni restano; gli elementi del congelamento si tolgono (D16), insieme al segno. */
   suspend fun unfreeze(id: AlbumId): EditOutcome {
     val (state, refusal) = smartState(id)
     refusal?.let { return it }
     if (!state!!.frozen) return EditOutcome.Done
-    for (item in state.items) if (item.live) albums.removeItem(id.value, item.mediaId, item.fingerprint)
-    albums.setFrozen(id.value, false)
+    albums.batch {
+      for (item in state.items) if (item.live) removeItem(id.value, item.mediaId, item.fingerprint)
+      setFrozen(id.value, false)
+    }
     return EditOutcome.Done
   }
 
   // --- Interni ------------------------------------------------------------------------------------------------------------
 
-  /** Spegne **tutte** le esclusioni vive che qui indicano [real] (un id vecchio e uno nuovo dello stesso file): nessuna resta a vietarlo. */
-  private suspend fun clearExclusions(state: PersonalAlbumState, resolution: MediaResolution, real: MediaId) {
-    for (c in state.excluded) {
-      if (c.on && resolution.of(c.mediaId, c.fingerprint) == real) albums.exclude(state.id, c.mediaId, on = false, fingerprint = c.fingerprint)
+  /** Le scelte accese di [choices] per il media che qui indicano (un id vecchio e uno nuovo dello stesso file stanno insieme). */
+  private fun liveBy(choices: List<PersonalChoice>, resolution: MediaResolution): Map<MediaId, List<PersonalChoice>> {
+    val out = HashMap<MediaId, MutableList<PersonalChoice>>()
+    for (c in choices) {
+      if (!c.on) continue
+      val real = resolution.of(c.mediaId, c.fingerprint) ?: continue
+      out.getOrPut(real) { ArrayList() } += c
     }
+    return out
   }
 
-  /** Come [clearExclusions] per gli accettati. */
-  private suspend fun clearAcceptances(state: PersonalAlbumState, resolution: MediaResolution, real: MediaId) {
-    for (c in state.accepted) {
-      if (c.on && resolution.of(c.mediaId, c.fingerprint) == real) albums.accept(state.id, c.mediaId, on = false, fingerprint = c.fingerprint)
-    }
+  /** Spegne **tutte** le esclusioni vive che qui indicano [real] (un id vecchio e uno nuovo dello stesso file): nessuna resta a vietarlo. */
+  private suspend fun PersonalAlbums.Batch.clearExclusions(state: PersonalAlbumState, excluded: Map<MediaId, List<PersonalChoice>>, real: MediaId) {
+    for (c in excluded[real].orEmpty()) exclude(state.id, c.mediaId, on = false, fingerprint = c.fingerprint)
   }
 
   /** Gli elementi a mano con il loro posto (le righe `accepted` e `auto` non hanno una voce `item:`: non si riordinano). */
   private fun manualPositions(rows: List<AlbumItemEntity>): List<PositionedItem> =
     rows.filter { it.origin == "manual" }.map { PositionedItem(it.mediaId, it.position, it.fp.orEmpty()) }
 
-  /** Scrive le posizioni di un piano: una voce, o la ricompattazione a lotti con un passo di cortesia fra l'uno e l'altro. */
-  private suspend fun write(id: AlbumId, plan: PositionPlan) {
-    for (batch in plan.changes.chunked(AlbumPositions.BATCH)) {
-      for (change in batch) albums.addItem(id.value, change.media, change.position)
-      if (plan.recompacted) yield()
-    }
+  /** Le posizioni di un piano: una voce, o tutte quelle di una ricompattazione. Si scrivono con il resto del lotto, in un salvataggio solo. */
+  private suspend fun PersonalAlbums.Batch.place(id: AlbumId, plan: PositionPlan) {
+    for (change in plan.changes) addItem(id.value, change.media, change.position)
   }
 }

@@ -47,7 +47,6 @@ import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.graph.HeartbeatStore
 import java.io.File
-import java.time.Duration as JavaDuration
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration
@@ -55,8 +54,6 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.nanoseconds
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.DurationUnit
-import kotlin.time.toDuration
 
 /**
  * I lavori della Fase 6 (docs/fase6-progetto.md §1.4, §2.7, D17, D22), tutti dentro `GalleryGraph.runIfActive` (l'azzeramento li ferma e
@@ -67,7 +64,8 @@ import kotlin.time.toDuration
  *   di ruolo (lavoro di WorkManager, D17: nessun servizio nuovo);
  * - [AiComputeWorker]: `AI_COMPUTE` a tappe da 8 minuti (`StagedRun`, `writesToNas`: prenotazioni e teste `ai`); dopo la sincronizzazione e la
  *   preparazione (lavoro unico) e periodico; "Indicizza ora" e' una richiesta dell'utente. **Le tappe si concatenano** (IX-1): la tappa dopo
- *   ha un nome suo e si accoda a quella in corso, un'attesa delle regole riprogramma il lavoro.
+ *   ha un nome suo e si accoda a quella in corso, un'attesa delle regole riprogramma il lavoro con la regola unica di [RuleWaits] (FAB-5: col
+ *   risparmio energetico acceso il ritardo cresce fino a un'ora, non un risveglio al minuto).
  */
 object AiWorkScheduling {
   const val FETCH_WORK = "ai-model-fetch"
@@ -89,11 +87,6 @@ object AiWorkScheduling {
 
   val PERIOD: Duration = 6.hours
 
-  /** Nessuna attesa breve di un'attesa delle regole e' un ciclo continuo: almeno questo prima di riprovare (la carica e la batteria sono vincoli). */
-  val MIN_RETRY: Duration = 1.minutes
-
-  /** Col telefono troppo caldo si riprova dopo 5 minuti (E-A5). */
-  val THERMAL_RETRY: Duration = 5.minutes
 
   fun ensure(context: Context) {
     val wm = WorkManager.getInstance(context.applicationContext)
@@ -144,42 +137,28 @@ object AiWorkScheduling {
    * della sua catena (la richiesta dell'utente continua come richiesta dell'utente) e la politica e' `APPEND_OR_REPLACE`, che si accoda a chi sta
    * girando. Con `KEEP` WorkManager la buttava, perche' il lavoro in corso e' "non finito": "Indicizza ora" analizzava circa 1.300 foto e si fermava.
    */
-  fun continueCompute(context: Context, user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE) {
+  fun continueCompute(context: Context, user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE, attempt: Int = 0) {
     val name = if (user) COMPUTE_NOW_WORK else COMPUTE_NEXT_WORK
     WorkManager.getInstance(context.applicationContext)
-      .enqueueUniqueWork(name, ExistingWorkPolicy.APPEND_OR_REPLACE, computeRequest(user, delayMs, constraints))
+      .enqueueUniqueWork(name, ExistingWorkPolicy.APPEND_OR_REPLACE, computeRequest(user, delayMs, constraints, attempt))
   }
 
   /**
-   * **Un'attesa delle regole riprogramma** (IX-1), come il backup: il lavoro dopo con il vincolo o il ritardo esatti ([followUpOf]). Prima il
-   * calcolo ripartiva solo quando il periodico (ogni 6 ore) o una novita' cadevano per caso dentro la fascia e in carica.
+   * **Un'attesa delle regole riprogramma** (IX-1), come il backup e con la stessa regola ([RuleWaits.followUpOf], una sola per tutti i lavori): il
+   * lavoro dopo con il vincolo o il ritardo esatti dove ci sono (l'inizio della fascia, la carica), altrimenti con un ritardo che cresce. Niente
+   * polling per il NAS spento, il profilo inattivo, il congelamento, i limiti di Android: aspettano il giro periodico o una novita'.
+   *
+   * FAB-5: prima il risparmio energetico e la batteria fra il 16% e il 19% chiedevano il vincolo "batteria non scarica", che Android da' subito per
+   * soddisfatto: il lavoro si svegliava ogni minuto per ore. [attempt] e' il numero del tentativo dagli input del lavoro ([RuleWaits.KEY_ATTEMPT]).
    */
-  fun afterWait(context: Context, user: Boolean, wait: WaitReason, now: LocalDateTime = LocalDateTime.now()) {
-    val follow = followUpOf(wait, now) ?: return
-    continueCompute(context, user, follow.delay.inWholeMilliseconds, follow.constraints())
+  fun afterWait(context: Context, user: Boolean, wait: WaitReason, attempt: Int = 0, now: LocalDateTime = LocalDateTime.now()) {
+    val follow = RuleWaits.followUpOf(wait, now, attempt) ?: return
+    continueCompute(context, user, follow.delay.inWholeMilliseconds, follow.constraints(), follow.attempt)
   }
 
-  /** Cosa chiedere a WorkManager dopo un'attesa: quanto aspettare e quali vincoli. */
-  data class FollowUp(val delay: Duration, val charging: Boolean = false, val batteryNotLow: Boolean = false) {
-    fun constraints(): Constraints = Constraints.Builder().setRequiresCharging(charging).setRequiresBatteryNotLow(batteryNotLow).build()
-  }
-
-  /**
-   * Il lavoro dopo per un'attesa delle regole, o null se non serve programmare niente (niente polling: il NAS spento, il profilo inattivo, il
-   * congelamento, i limiti di Android aspettano il giro periodico o una novita'). Esatto dove si puo' (l'inizio della fascia, la carica, la
-   * batteria), con almeno [MIN_RETRY] di ritardo perche' un'attesa che non cambia non diventi un ciclo continuo. Pura, provata su JVM.
-   */
-  fun followUpOf(wait: WaitReason, now: LocalDateTime): FollowUp? = when (wait) {
-    is WaitReason.OutsideWindow -> FollowUp(delay = maxOf(JavaDuration.between(now, wait.nextStart).toMillis(), 0L).toDuration(DurationUnit.MILLISECONDS) + MIN_RETRY)
-    WaitReason.NeedsPower -> FollowUp(delay = MIN_RETRY, charging = true)
-    is WaitReason.BatteryLow, WaitReason.PowerSaver -> FollowUp(delay = MIN_RETRY, batteryNotLow = true)
-    is WaitReason.Thermal -> FollowUp(delay = THERMAL_RETRY)
-    else -> null
-  }
-
-  private fun computeRequest(user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE): OneTimeWorkRequest =
+  private fun computeRequest(user: Boolean, delayMs: Long = 0, constraints: Constraints = Constraints.NONE, attempt: Int = 0): OneTimeWorkRequest =
     OneTimeWorkRequestBuilder<AiComputeWorker>()
-      .setInputData(workDataOf(KEY_USER to user))
+      .setInputData(workDataOf(KEY_USER to user, RuleWaits.KEY_ATTEMPT to attempt))
       .setConstraints(constraints)
       .apply { if (delayMs > 0) setInitialDelay(delayMs, TimeUnit.MILLISECONDS) }
       .addTag(TAG)
@@ -205,7 +184,8 @@ class AiStages(private val graph: AppGraph, private val ai: AiGraph, noBackup: F
     reportInterruptedStage()
     mark.begin(graph.platform.deviceNow())
     val outcome = try {
-      stage(user)
+      // OB-3: con l'app in uso i thread del calcolo scendono di priorita' (anche per «Indicizza ora», che non riduce il ritmo).
+      graph.quietly { stage(user) }
     } finally {
       mark.end()
     }
@@ -270,6 +250,8 @@ class AiComputeWorker @AssistedInject constructor(
     if (!gallery.backgroundWorkAllowed) return Result.success()
     gallery.awaitReady(COLD_START_WAIT)
     val user = inputData.getBoolean(AiWorkScheduling.KEY_USER, false)
+    // FAB-5: quante attese di fila senza un vincolo esatto ha gia' fatto questa catena: il ritardo della prossima cresce.
+    val attempt = inputData.getInt(RuleWaits.KEY_ATTEMPT, 0)
     val outcome = try {
       gallery.runIfActive {
         gallery.nas?.start()
@@ -287,8 +269,8 @@ class AiComputeWorker @AssistedInject constructor(
     // IX-1: la tappa dopo si accoda a questo lavoro (nome della sua catena, APPEND_OR_REPLACE), e un'attesa delle regole riprogramma.
     when (outcome) {
       is StageOutcome.Yielded -> AiWorkScheduling.continueCompute(applicationContext, user)
-      is StageOutcome.Waiting -> AiWorkScheduling.afterWait(applicationContext, user, outcome.reason)
-      is StageOutcome.Stopped -> AiWorkScheduling.afterWait(applicationContext, user, outcome.reason)
+      is StageOutcome.Waiting -> AiWorkScheduling.afterWait(applicationContext, user, outcome.reason, attempt)
+      is StageOutcome.Stopped -> AiWorkScheduling.afterWait(applicationContext, user, outcome.reason, attempt)
       else -> Unit
     }
     return Result.success()

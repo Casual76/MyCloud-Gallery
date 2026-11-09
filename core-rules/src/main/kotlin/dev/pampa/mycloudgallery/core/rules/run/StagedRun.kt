@@ -49,7 +49,7 @@ data class StageConfig(
   val stageDuration: Duration = DEFAULT_STAGE_DURATION,
   /** Ogni quanto [StageScope.proceed] rivaluta davvero le regole (rilettura di impostazioni, contatori e stato). */
   val recheckEvery: Duration = 5.seconds,
-  /** La pausa fra due lotti quando il telefono e' caldo ([Pace.REDUCED]). */
+  /** La pausa fra due lotti quando si va piano ([Pace.slow]: telefono caldo, o app in uso). */
   val reducedPaceDelay: Duration = 2.seconds,
 ) {
   init {
@@ -128,7 +128,7 @@ interface StageScope<C : Any> {
   /** [RunScope.LOCAL_BUFFER_ONLY]: niente rete, solo cio' che c'e' gia' in locale. */
   val runScope: RunScope get() = run.scope
 
-  /** [Pace.REDUCED]: telefono caldo, pause fra i lotti. */
+  /** [Pace.REDUCED] (telefono caldo) o [Pace.APP_IN_USE] (app in primo piano): pause fra i lotti ([Pace.slow]). */
   val pace: Pace get() = run.pace
 
   /**
@@ -297,7 +297,7 @@ class StagedRun<C : Any>(
       }
       // Dopo ogni lotto: evaluate(running = true), tempo e tetti (anche se il lotto non ha mai chiamato proceed()).
       if (!scope.check(force = true)) return scope.outcome(batches, resumed = saved != null)
-      if (scope.pace == Pace.REDUCED && config.reducedPaceDelay.isPositive()) delay(config.reducedPaceDelay)
+      if (scope.pace.slow && config.reducedPaceDelay.isPositive()) delay(config.reducedPaceDelay)
     }
   }
 

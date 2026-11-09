@@ -16651,3 +16651,109 @@ Nessuno visto: il gestore all'avvio e' un oggetto e una lettura del gestore di p
 - **Regressione:** `ConfiguraDiNuovoDatabaseTest` usa `GalleryModule.gallery`, aspetta l'apertura automatica del backup e chiama `AppPreviousAccountData.erase`. Sul codice originale (base `057b80f4` piu' il solo test) fallisce alla cancellazione: `Room aperto al momento della cancellazione / expected to be false`. Su Windows si verifica l'ordine chiusura-cancellazione, senza fingere il sintomo del file scollegato su Android. Dopo la correzione verifica anche il catalogo nuovo leggibile/scrivibile, l'assenza delle vecchie righe, gli altri database ancora aperti, il caso non ancora aperto e il fallimento della fermata.
 - **Verifiche:** batch rosso `mcg-c2-rosso-20261109`, `:app:testDebugUnitTest --tests '*ConfiguraDiNuovoDatabaseTest'`, 1 test fallito come previsto, 5m15s, posto rilasciato. Batch `mcg-c2-verde-20261109`: fermato prima dei test (15 s), argomento della strategia Kotlin spezzato da PowerShell, posto rilasciato. Quoting corretto nel batch `mcg-c2-verde-b-20261109`: `:app:testDebugUnitTest` filtrato su `ConfiguraDiNuovoDatabaseTest`, `CorrezioniConfigurazione5BAppTest`, `LocalDataEraserTest`, `GalleryShutdownTest`, `GalleryIntegrationTest`, `AiEraseTest`, `Phase9EraseTest`, `MapEraseTest`, `AppIntegrationTest`: **45 test, 0 fallimenti/errori/saltati**, 4m38s, posto rilasciato. Batch `mcg-c2-ripetizioni-20261109`: quattro esecuzioni forzate di `:app:testDebugUnitTest --rerun --tests '*ConfiguraDiNuovoDatabaseTest'`, ciascuna con **3 test, 0 fallimenti/errori/saltati**, circa 4 minuti in totale, posto rilasciato. Con la suite iniziale, ciascuna delle tre nuove regressioni passa **5 volte su 5**. XML e log archiviati nel worktree in `build/c2-verifiche/`; nessun processo Java del worktree rimasto dopo i batch. Tutti i comandi passano dal semaforo e usano `--offline --no-daemon --no-watch-fs --max-workers=2`.
 - **Limiti e telefono:** nessun dispositivo/emulatore usato, nessuno screenshot (nessuna modifica visiva). Provare su S25/Tab S9: riavvio a freddo fuori famiglia, "Configura di nuovo" con account/NAS diverso, fine onboarding e Libreria corretta dopo il riavvio; stesso account sullo stesso NAS conserva i dati; azzeramento completo. Nessun lavoro nuovo all'avvio o per fotogramma: il costo nuovo e' solo la fermata e il riavvio al cambio account, con I/O sul dispatcher esistente. Benchmark non misurati senza dispositivo. Nessuna decisione di prodotto aperta.
+
+## Beta, pacchetto RG-C: il lavoro di fondo che non disturba, il registro personale a lotti, le attese che non diventano un ciclo (09/11)
+
+Quattro difetti della review generale, corretti sul branch `fix/rg-fondo` con test che falliscono prima e passano dopo. Niente dispositivo: le
+prove sul telefono sono in fondo. `docs/regole-attivita.md` (§1 "Come lo usa chi esegue i lavori", §4 "Ritmo", "Priorità e thread", "Dopo
+un'attesa") e' aggiornato.
+
+### 1. OB-3: calcolo AI, volti e preparazione si fanno da parte quando l'app e' in uso
+Tre pezzi, ognuno al suo posto:
+- **Il ritmo** lo decidono le regole. `Pace` ha un valore nuovo, `APP_IN_USE`: `RuleEvaluator` lo da' alle attivita' `cpuIntensive`
+  (`PREPARATION`, `AI_COMPUTE`, che comprende i volti) quando `SystemState.appInForeground`; in secondo piano torna `NORMAL` alla prima
+  rivalutazione (al piu' 5 s). Chi lavora guarda `Pace.slow` (vero per `REDUCED` e `APP_IN_USE`): lotti da 5 invece di 20 e 2 s di pausa per
+  calcolo AI e volti, un media per volta per la preparazione, 2 s fra i lotti in `StagedRun`. **Perche' un valore nuovo e non `REDUCED`**: la
+  Diagnostica scrive "Ritmo ridotto: il telefono e' caldo" per `REDUCED`, e la pagina della Diagnostica si guarda per forza con l'app aperta:
+  l'avrebbe scritto sempre. Con `APP_IN_USE` la voce resta "Puo' girare adesso" e l'esportazione porta `pace=APP_IN_USE`. Se il telefono e'
+  anche caldo il verdetto e' `REDUCED`.
+- **La priorita' dei thread** e' `YieldToApp` (`core-rules/.../run/YieldToApp.kt`), un `ThreadContextElement`: finche' l'app e' in primo
+  piano, ogni thread su cui la coroutine del lavoro (e le sue figlie: `withContext`, `async`, i thread dei motori) riprende scende a
+  `THREAD_PRIORITY_BACKGROUND` e torna com'era quando il lavoro lo lascia (i thread di `Dispatchers.Default` e `IO` sono di tutta l'app). Il
+  thread principale non si tocca mai. In secondo piano non fa niente (una lettura in memoria per ripresa). `:app` lo mette con
+  `AppGraph.quietly { ... }` (`work/QuietWork.kt`) intorno alla tappa del calcolo AI, a quella dei volti, al raggruppamento notturno e alla
+  preparazione. Un elemento del contesto e non un dispatcher dedicato perche' il lavoro passa per molti dispatcher (Default, IO, i thread dei
+  motori) e nessun modulo sotto ha dovuto cambiare.
+- **I thread di inferenza.** I motori dei volti (YuNet e SFace, LiteRT classico su CPU) si aprono con 2 thread invece di 4 dentro un lavoro
+  che si fa da parte, e **si riaprono una volta** quando lo stato dell'app cambia a meta' tappa: i thread di un interprete si fissano
+  all'apertura (`Interpreter.Options.setNumThreads`; l'AAR 2.3.0 non ha un `setNumThreads` sull'interprete aperto), i modelli sono piccoli
+  (240 KB e 19 MB), e il pool nativo dell'interprete nasce con la priorita' del thread che lo apre. **Non cambiati**: l'embedder delle
+  immagini (LiteRT-LM: i thread sono in `Backend.CPU(threadCount)`, cioe' nella configurazione del motore; cambiarli vuol dire ricreare il
+  motore, 2,2-5,1 s e circa 800 MB su GPU, e sull'S25 gira comunque su GPU); il ritaglio del soggetto (`MagicTouchCutter`, 4 thread: lo
+  chiede l'utente con un tocco e lo aspetta); l'OCR di ML Kit (thread suoi, non raggiungibili).
+- **"Indicizza ora" e "Analizza ora"** (`UserInitiated`) restano a ritmo `NORMAL`: li ha chiesti l'utente. La priorita' dei thread e i 2
+  thread dei volti valgono anche per loro. **Decisione aperta per l'utente**: se anche "Fai ora" deve rallentare con l'app aperta.
+
+### 2. OA-1: il registro personale a lotti
+- `PersonalStore.setAll(changes: List<PersonalChange>)` (di serie una `set` per modifica: gli store in memoria e i fake non cambiano).
+  `LedgerPersonalStore` lo applica in memoria e **salva una volta**: sul registro il lotto c'e' tutto o non c'e'. Lo stato che ne esce e'
+  quello delle stesse modifiche fatte una alla volta (provato con 200 sequenze casuali: stato pubblicato, ore, modifiche da datare, effetto
+  sul catalogo, chiavi "da portare nel catalogo"). `set` e `setAll` passano dallo stesso codice. Un lotto che non cambia niente non riscrive
+  il registro (a meno che l'ultimo salvataggio fosse fallito); `set` salva sempre, come prima.
+- `PersonalAlbums.batch { ... }`: le stesse funzioni di `PersonalAlbums` (`addItem`, `removeItem`, `accept`, `exclude`, `setFrozen`,
+  `setCover`, `define`...), scritte insieme alla fine. Lo usano `AlbumEditor` (creare, aggiungere, togliere, riordinare, regole, escludere,
+  accettare, "Congela", "Scongela"), `CatalogAlbums.moveInList`, `PersonalAlbumCopies.keep`; `PersonalKeptCopyStore` ha `addItems` e
+  definisce la copia in un lotto. In piu': "Congela" e la creazione di uno smart ora sono atomici (elementi e segno insieme).
+- La sincronizzazione vede lo stesso stato: chi legge lo store legge `entries`/`effectiveEntries` (`StateFlow`, gia' conflati) o
+  `state()`; con un lotto vede un cambio solo. Un'ora del NAS sola per tutto il lotto.
+- **API nuova per chi tocca `core-personal` (G2b)**: `PersonalChange`, `PersonalStore.setAll`, `PersonalAlbums.batch` e
+  `PersonalAlbums.Batch`, `KeptCopyStore.addItems`. Tutto aggiunto, niente tolto; un dato nuovo degli album ("ultima apertura") e' una
+  funzione in piu' in `PersonalAlbums` (e, se serve nei lotti, in `Batch`).
+
+Misure sul PC (JVM dei test, registro su file con fsync):
+
+| Prova | Prima | Dopo |
+|---|---|---|
+| Store, registro di 20.000 voci (4,6 MB), 2.000 foto aggiunte (`PersonalLedgerScaleTest`) | 2.000 salvataggi, 7,5 GiB, 44 s (misura del critico) | 1 salvataggio, 4,58 MB scritti (una volta il registro), 31 ms |
+| Lo stesso, 2.000 foto tolte | come sopra | 1 salvataggio, 4,56 MB, 37 ms |
+| Album veri (Room, proiezione sulle tabelle), 20.000 voci, 2.000 foto aggiunte (`AlbumLedgerScaleTest`) | la prova si ferma al quinto salvataggio: 13,6 MB, oltre il tetto di 11,2 MB | 1 salvataggio, 3,14 MB, 1,7 s |
+| Lo stesso, 2.000 foto tolte | come sopra | 1 salvataggio, 3,12 MB, 0,55 s |
+
+### 3. FAB-3 e 4. FAB-5: le attese delle regole non diventano un ciclo
+- **Una regola sola**: `RuleWaits.followUpOf` (`app/.../work/RuleWaits.kt`) al posto di `BackupWorkScheduling.delayFor`/`constraintsFor` e
+  di `AiWorkScheduling.followUpOf`. La usano backup, calcolo AI, volti e raggruppamento notturno. La tabella e' in
+  `docs/regole-attivita.md` §4 "Dopo un'attesa".
+- **Mai senza ritardo**: almeno 1 minuto, per ogni attesa (prima la carica, la batteria e il risparmio energetico del backup avevano 0).
+- **`BatteryLow` aspetta la carica**, non "batteria non scarica": la regola vale solo a batteria e la batteria risale solo in carica, quindi
+  il vincolo della carica misura la causa. "Batteria non scarica" per Android e' il 15%, per le regole il 20%.
+- **`PowerSaver` non ha un vincolo**: un ritardo che cresce (15, 30, 60 minuti, poi sempre 60), con il numero del tentativo negli input del
+  lavoro (`wait_attempt`). Per le foto di "Proteggi subito" e i file di "Salva sul NAS" il tetto e' 15 minuti: spento il risparmio
+  energetico ripartono entro un quarto d'ora. Scelto il ritardo e non l'ascolto di `ACTION_POWER_SAVE_MODE_CHANGED`: quell'avviso arriva
+  solo a un processo vivo, e col processo morto servirebbe comunque un ritardo di riserva; cosi' il meccanismo e' uno.
+- **Cambia anche per il backup**: col telefono troppo caldo (`Thermal`) i lavori del backup ora riprovano (5, 10, 20, 40, 60 minuti),
+  come gia' facevano calcolo AI e volti; prima aspettavano il giro periodico. E' la conseguenza di avere una regola sola.
+- **Nomi cambiati** (per il pacchetto dell'interfaccia, FAB-4): spariti `BackupWorkScheduling.delayFor`, `AiWorkScheduling.followUpOf`,
+  `AiWorkScheduling.FollowUp`, `AiWorkScheduling.MIN_RETRY`, `AiWorkScheduling.THERMAL_RETRY`; `BackupWorkScheduling.constraintsFor` ora
+  prende un `RuleWaits.FollowUp?`. `WaitReason` e i suoi testi non sono cambiati.
+
+### File fuori dal perimetro toccati
+- `app/.../faces/FacesPorts.kt`: una riga, `scope.pace == Pace.REDUCED` diventa `scope.pace.slow` (il permesso dei volti e' li').
+- `app/.../graph/StageSupport.kt`: un nome in un commento (`BackupWorkScheduling.delayFor` non c'e' piu').
+
+### Cosa resta e rischi
+- **Non misurato su un telefono** (nessun dispositivo): tutto il comportamento con l'app in primo piano.
+- `THREAD_PRIORITY_BACKGROUND` sposta i thread nel gruppo di scheduling di fondo: con l'app in primo piano e' quello che si vuole. Se
+  l'utente chiude l'app a meta' tappa, il pool nativo dell'embedder delle immagini (nato con l'app aperta) resta a priorita' bassa fino a
+  fine tappa (al piu' 8 minuti); i volti si riaprono subito.
+- La GPU e' una sola: l'embedder delle immagini su GPU con l'app aperta puo' ancora farsi sentire nei fotogrammi anche con la CPU libera.
+  Qui lavora solo il ritmo (lotti da 5 e 2 s di pausa). Da misurare.
+- Altri lavori di fondo a CPU non toccati (fuori dal brief): il confronto delle copie simili, la manutenzione notturna della Libreria
+  (viaggi, ricordi), l'OCR.
+- Le impostazioni personali che scrivono piu' voci in fila (`SyncedPersonalSettings` per le esclusioni, `SyncedMemoriesSettings` per
+  l'azzeramento delle scelte, `SimilarCopiesChoices`) usano ancora una `set` per voce: poche voci, non toccate. Possono passare a `setAll`.
+
+### Da provare sul telefono
+1. S25, app in primo piano, calcolo AI in corso ("Indicizza ora" e un giro di fondo): scorrere la Libreria e misurare il jank
+   (`benchmark`, soglie di `benchmark/soglie.json`); stesso giro con i volti ("Analizza ora") e con la preparazione.
+2. S25, app in secondo piano, in carica: le immagini al secondo dell'indicizzatore (riferimento 5,6-5,9 su GPU) e le foto al secondo dei
+   volti (riferimento 8,8) **non devono calare**.
+3. Aprire e chiudere l'app a meta' tappa: in `adb shell top -H` i thread `mcg-*` e quelli del lavoro passano a nice 10 con l'app aperta e
+   tornano a 0 chiusa; nessun thread di `Dispatchers.Default` resta a nice 10 a lavoro finito; i volti continuano dopo la riapertura dei motori.
+4. Tab S9: lo stesso del punto 1 (riferimento `docs/bench/riferimento-tab-s9.json`).
+5. Album: aggiungere e togliere 2.000 foto con un registro grande (la risposta dell'interfaccia e il tempo); "Congela" e "Scongela" di uno
+   smart grande; una copia di un album condiviso chiuso con molti elementi.
+6. Risparmio energetico acceso, a casa sul Wi-Fi, una foto nuova: un solo giro di `QuickPhotoWorker` nella Diagnostica, poi uno ogni quarto
+   d'ora; spento il risparmio energetico la foto sale entro 15 minuti. Lo stesso con la batteria al 17% non in carica: un giro, poi niente
+   fino al collegamento dell'alimentazione.
+7. Risparmio energetico acceso per un'ora con calcolo AI e volti in attesa: `dumpsys jobscheduler` mostra i ritardi 15, 30, 60 minuti e
+   non un lavoro al minuto.

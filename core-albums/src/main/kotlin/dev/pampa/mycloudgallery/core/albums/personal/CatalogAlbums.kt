@@ -346,7 +346,8 @@ class CatalogAlbums(
       PositionPlan(AlbumPositions.compact(order), recompacted = true)
     }
     // Il posto di un album sta nella sua voce `order`, anche per quelli condivisi (la voce non ha definizione: e' solo un posto, D21).
-    for (change in plan.changes) albums.setOrder(change.media, change.position)
+    // In un lotto solo (review generale, OA-1): la prima volta ogni album prende un posto, e ogni voce da sola riscriverebbe il registro intero.
+    albums.batch { for (change in plan.changes) setOrder(change.media, change.position) }
     settle()
     EditOutcome.Done
   }

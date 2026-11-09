@@ -52,12 +52,16 @@ class PersonalAlbumCopies(private val store: PersonalStore, private val catalog:
     // I nuovi vengono dopo gli esistenti, nell'ordine dell'album condiviso (a intervalli, D21).
     val existing = state?.items?.filter { it.live }?.map { PositionedItem(it.mediaId, it.position!!) }.orEmpty()
     val plan = AlbumPositions.append(existing, fresh.map { it.value })
-    for (change in plan.changes) albums.addItem(copy.value, change.media, change.position)
-    if (definition == null) {
-      albums.setCopyOf(copy.value, shared.value)
-      albums.define(copy.value, title)
-      return Result.CREATED
+    // Review generale, OA-1: gli elementi e la definizione in un lotto solo (una copia puo' avere migliaia di elementi, e una voce alla volta
+    // riscriveva il registro intero per ognuna). La definizione resta per ultima; il lotto c'e' tutto o non c'e'.
+    albums.batch {
+      for (change in plan.changes) addItem(copy.value, change.media, change.position)
+      if (definition == null) {
+        setCopyOf(copy.value, shared.value)
+        define(copy.value, title)
+      }
     }
+    if (definition == null) return Result.CREATED
     return if (plan.changes.isEmpty()) Result.UNCHANGED else Result.UPDATED
   }
 

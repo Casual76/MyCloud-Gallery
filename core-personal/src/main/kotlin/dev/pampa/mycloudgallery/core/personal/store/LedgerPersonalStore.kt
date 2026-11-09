@@ -2,6 +2,7 @@ package dev.pampa.mycloudgallery.core.personal.store
 
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalApplyResult
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalChange
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFingerprint
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKey
@@ -35,6 +36,10 @@ import kotlinx.coroutines.sync.withLock
  * entra in `unprojected`: se il processo muore a meta', al giro dopo si rifa'. Mai la voce di un altro sopra una modifica locale
  * ancora da datare (l'utente ha appena nascosto una foto: non deve riapparire per una voce piu' vecchia).
  *
+ * **A lotti** (review generale, OA-1). Il registro e' un'istantanea sola, riscritta per intero a ogni salvataggio: chi cambia molte voci
+ * insieme (le foto aggiunte a un album, una copia di un album condiviso chiuso) usa [setAll], che applica tutto in memoria e salva
+ * **una volta**. Una [set] per voce riscriveva il registro per ogni voce: con 20.000 voci, 2.000 foto erano 7,5 GiB e 44 secondi.
+ *
  * Tutte le operazioni sono serializzate. Il primo uso legge il registro; [open] lo fa prima, per chi legge [entries] subito.
  */
 class LedgerPersonalStore(
@@ -54,6 +59,9 @@ class LedgerPersonalStore(
   private val marks = HashMap<String, HeadMark>()
   private var published: PersonalPublication? = null
 
+  /** L'ultimo salvataggio non e' riuscito: in memoria c'e' qualcosa che il registro non ha (lo porta il salvataggio dopo). Sotto [lock]. */
+  private var unsaved = false
+
   private val state = MutableStateFlow<Map<PersonalKey, PersonalEntry>>(emptyMap())
   override val entries: StateFlow<Map<PersonalKey, PersonalEntry>> = state
 
@@ -72,39 +80,85 @@ class LedgerPersonalStore(
   }
 
   override suspend fun set(key: PersonalKey, value: PersonalValue, fingerprint: PersonalFingerprint?) {
-    require(!key.kind.reserved) { "Tipo di voce riservato." }
+    // Una modifica sola salva sempre, anche se il valore non cambia: chi riprova dopo un guasto del disco porta sul registro cio' che mancava.
+    write(listOf(PersonalChange(key, value, fingerprint)), always = true)
+  }
+
+  /**
+   * Il lotto si applica in memoria nell'ordine dato e si salva **una volta sola**: sul registro c'e' tutto o non c'e' niente (mai un lotto
+   * a meta' dopo la morte del processo). Lo stato che ne esce e' quello delle stesse modifiche fatte una alla volta con [set] nello stesso
+   * istante del NAS (una chiave ripetuta: vale l'ultima, con l'ora dopo la precedente). Un lotto che non cambia niente non riscrive il
+   * registro, a meno che l'ultimo salvataggio fosse fallito. I preferiti e i nascosti del lotto si portano nel catalogo dopo il salvataggio,
+   * come per [set] (un secondo salvataggio toglie dalle chiavi "da portare" quelle arrivate: due in tutto, mai uno per voce).
+   */
+  override suspend fun setAll(changes: List<PersonalChange>) {
+    if (changes.isEmpty()) return
+    write(changes, always = false)
+  }
+
+  /** L'effetto di un flag sul catalogo: l'ultimo valore che il lotto da' alla chiave. */
+  private class FlagEffect(val value: PersonalValue, val fingerprint: PersonalFingerprint?)
+
+  private suspend fun write(changes: List<PersonalChange>, always: Boolean) {
+    for (change in changes) require(!change.key.kind.reserved) { "Tipo di voce riservato." }
     lock.withLock {
       ensureLoaded()
-      val known = current[key]
-      val effective = pending[key]?.value ?: known?.value
-      val fp = fingerprint ?: known?.fingerprint ?: projection.fingerprintOf(key)
-      if (value != effective) {
-        val at = nasNow()
-        if (at == null) {
-          // Senza ora del NAS: se si torna al valore che lo stato gia' ha, non c'e' piu' niente da datare.
-          if (known?.value == value) pending.remove(key) else pending[key] = PendingChange(value, fp)
-          emitEffective()
-        } else {
-          pending.remove(key)
-          val next = HashMap(current)
-          next[key] = PersonalEntry(key, causalTime(at, known), author, value, fp)
-          publishState(next)
-        }
+      // 1. Le impronte che ne' il lotto ne' lo stato hanno si chiedono al catalogo PRIMA di toccare qualcosa: se il catalogo cade, niente e' cambiato.
+      val fromCatalog = HashMap<PersonalKey, PersonalFingerprint?>()
+      for (change in changes) {
+        val key = change.key
+        if (change.fingerprint != null || key in fromCatalog || current[key]?.fingerprint != null) continue
+        fromCatalog[key] = projection.fingerprintOf(key)
       }
-      // L'effetto locale e' subito, anche se la modifica resta da datare. Prima si salva (con la chiave "da portare nel catalogo"), poi
-      // si applica: se il processo muore o il catalogo fallisce in mezzo, al giro dopo `reproject` rifa' il passo.
-      val project = key.kind == PersonalKind.MEDIA_FLAG
-      if (project) unprojected += key
-      persist()
-      if (project) {
-        val effect = PersonalEntry(key, current[key]?.atNas ?: 0L, author, value, fp)
-        if (projection.apply(effect, effectiveNow()) != ProjectionResult.UNRESOLVED) {
-          unprojected -= key
-          persist()
+
+      // 2. In memoria, tutto insieme: da qui al salvataggio niente sospende e niente puo' fallire. Una sola ora del NAS per il lotto.
+      val at = nasNow()
+      var next: HashMap<PersonalKey, PersonalEntry>? = null
+      var pendingChanged = false
+      val flags = LinkedHashMap<PersonalKey, FlagEffect>()
+      val others = ArrayList<PersonalEntry>()
+      for (change in changes) {
+        val key = change.key
+        val value = change.value
+        val known = (next ?: current)[key]
+        val effective = pending[key]?.value ?: known?.value
+        val fp = change.fingerprint ?: known?.fingerprint ?: fromCatalog[key]
+        if (value != effective) {
+          if (at == null) {
+            // Senza ora del NAS: se si torna al valore che lo stato gia' ha, non c'e' piu' niente da datare.
+            if (known?.value == value) pending.remove(key) else pending[key] = PendingChange(value, fp)
+            pendingChanged = true
+          } else {
+            pending.remove(key)
+            val map = next ?: HashMap(current).also { next = it }
+            map[key] = PersonalEntry(key, causalTime(at, known), author, value, fp)
+          }
         }
-      } else {
-        projection.apply(PersonalEntry(key, known?.atNas ?: 0L, author, value, fp))
+        if (key.kind == PersonalKind.MEDIA_FLAG) flags[key] = FlagEffect(value, fp) else others += PersonalEntry(key, known?.atNas ?: 0L, author, value, fp)
       }
+      val changed = next != null || pendingChanged
+      val dated = next
+      if (dated != null) publishState(dated) else if (pendingChanged) emitEffective()
+
+      // 3. Un salvataggio. L'effetto locale e' subito, anche se la modifica resta da datare: prima si salva (con le chiavi "da portare nel
+      // catalogo"), poi si applica: se il processo muore o il catalogo fallisce in mezzo, al giro dopo `reproject` rifa' il passo.
+      unprojected += flags.keys
+      if (always || changed || flags.isNotEmpty() || unsaved) persist()
+
+      // 4. Il catalogo.
+      if (flags.isNotEmpty()) {
+        val now = effectiveNow()
+        var resolved = false
+        for ((key, effect) in flags) {
+          val entry = PersonalEntry(key, current[key]?.atNas ?: 0L, author, effect.value, effect.fingerprint)
+          if (projection.apply(entry, now) != ProjectionResult.UNRESOLVED) {
+            unprojected -= key
+            resolved = true
+          }
+        }
+        if (resolved) persist()
+      }
+      for (entry in others) projection.apply(entry)
     }
   }
 
@@ -289,7 +343,9 @@ class LedgerPersonalStore(
   }
 
   private suspend fun persist() {
+    unsaved = true
     ledger.save(LedgerSnapshot(current, LinkedHashMap(pending), LinkedHashSet(unprojected), HashMap(marks), published))
+    unsaved = false
   }
 
   /** L'ora di una modifica: quella del NAS, ma mai prima di cio' che si sapeva di quella chiave. */

@@ -28,7 +28,6 @@ import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJob
 import dev.pampa.mycloudgallery.graph.AppGraph
 import dev.pampa.mycloudgallery.core.network.contract.NasRoute
 import dev.pampa.mycloudgallery.core.network.contract.ProbeResult
-import java.time.Duration as JavaDuration
 import java.time.LocalDateTime
 import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.seconds
@@ -51,7 +50,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * **Trigger, nessun polling**: a fine giro di `PhoneSyncWorker`, [QuickPhotoWorker] o [PhotoBackupWorker] ([BackupWorkScheduling.afterPhoneRead])
  * si chiede il lavoro del tipo giusto (lavoro unico, `KEEP`) se ci sono media nuovi in una sorgente; il guardiano dopo la lettura del
  * telefono (E-B13) e di notte. Come per i lavori del NAS, un'attesa per la rete non ne programma un'altra: il giro periodico, la lettura
- * del telefono e l'apertura dell'app bastano; solo carica, batteria e fascia notturna hanno un vincolo (o un ritardo) esatto di WorkManager.
+ * del telefono e l'apertura dell'app bastano; la carica, la batteria, la fascia notturna, il risparmio energetico e il caldo seguono la regola
+ * unica di [RuleWaits] (un vincolo o un ritardo esatti dove ci sono, altrimenti un ritardo che cresce: mai una coda senza ritardo, FAB-3).
  * I punti di ripresa stanno nel diario (`backup_item`): le tappe non ne hanno uno proprio.
  */
 object BackupWorkScheduling {
@@ -84,9 +84,6 @@ object BackupWorkScheduling {
 
   /** Le verifiche e il guardiano: una volta al giorno (la rotazione e' calibrata su 365 giri l'anno, Q10). */
   val SAFETY_PERIOD: kotlin.time.Duration = NasWorkScheduling.DAILY_PERIOD
-
-  /** Il margine dopo l'inizio della fascia: l'ora del telefono e quella di WorkManager non sono mai identiche. */
-  private const val WINDOW_MARGIN_MS = 60_000L
 
   private const val BACKOFF_MS = 60_000L
 
@@ -132,28 +129,19 @@ object BackupWorkScheduling {
   }
 
   /**
-   * I vincoli per un'attesa delle regole: la carica e la batteria si dicono a WorkManager, che avvisa quando cambiano (nessun polling).
-   * Per tutte le altre attese: solo la rete. Pura, provata su JVM.
+   * I vincoli di un lavoro del backup: sempre la rete (RE-11), piu' quelli che la regola unica delle attese chiede per [follow]
+   * ([RuleWaits.followUpOf]: la carica, per `NeedsPower` e `BatteryLow`). Senza attesa: solo la rete.
    */
-  fun constraintsFor(wait: WaitReason?): Constraints {
-    val builder = LanConstraints.builder()
-    when (wait) {
-      WaitReason.NeedsPower -> builder.setRequiresCharging(true)
-      is WaitReason.BatteryLow, WaitReason.PowerSaver -> builder.setRequiresBatteryNotLow(true)
-      else -> Unit
-    }
-    return builder.build()
-  }
+  fun constraintsFor(follow: RuleWaits.FollowUp?): Constraints =
+    follow?.constraints(LanConstraints.builder()) ?: LanConstraints.builder().build()
 
   /**
-   * Fra quanto riprovare per un'attesa delle regole, o null se non serve programmare niente. Solo quello che e' esatto: l'inizio della
-   * fascia notturna (`OutsideWindow`); la carica e la batteria sono vincoli ([constraintsFor]) e ripartono subito. Le attese per la rete,
-   * il profilo, il roaming, il congelamento o l'attivita' spenta non ne programmano un'altra (niente polling). Pura, provata su JVM.
+   * Il tetto dei ritardi che crescono per [kind] (risparmio energetico, caldo): un quarto d'ora per cio' che l'utente aspetta presto (le foto
+   * appena scattate, i file di "Salva sul NAS"), un'ora per gli altri. FAB-3: spento il risparmio energetico il backup rapido non aspetta ore.
    */
-  fun delayFor(wait: WaitReason, now: LocalDateTime): Long? = when (wait) {
-    is WaitReason.OutsideWindow -> JavaDuration.between(now, wait.nextStart).toMillis().coerceAtLeast(0L) + WINDOW_MARGIN_MS
-    WaitReason.NeedsPower, is WaitReason.BatteryLow, WaitReason.PowerSaver -> 0L
-    else -> null
+  fun waitCapFor(kind: Kind): kotlin.time.Duration = when (kind) {
+    Kind.QUICK, Kind.INCOMING, Kind.INCOMING_RETRY -> RuleWaits.PROMPT_CAP
+    else -> RuleWaits.MAX_RETRY
   }
 
   /**
@@ -163,7 +151,17 @@ object BackupWorkScheduling {
   fun waitsForHomeNetwork(wait: WaitReason): Boolean =
     wait == WaitReason.Offline || wait is WaitReason.NetworkNotAllowed || wait == WaitReason.NetworkNotTrusted || wait == WaitReason.Roaming
 
-  fun request(kind: Kind, wait: WaitReason? = null, delayMs: Long = 0L, onWifi: Boolean = false, resumed: Boolean = false): OneTimeWorkRequest {
+  /**
+   * La richiesta di un lavoro. [follow] e' cio' che la regola delle attese chiede (vincoli, ritardo, numero del tentativo negli input); [delayMs] e
+   * [onWifi] sono delle riprese per la rete (BK-2, IN-5), che non passano dalla regola delle attese.
+   */
+  fun request(
+    kind: Kind,
+    follow: RuleWaits.FollowUp? = null,
+    delayMs: Long = follow?.delay?.inWholeMilliseconds ?: 0L,
+    onWifi: Boolean = false,
+    resumed: Boolean = false,
+  ): OneTimeWorkRequest {
     val builder = when (kind) {
       Kind.PHOTOS -> OneTimeWorkRequestBuilder<PhotoBackupWorker>()
       Kind.VIDEOS -> OneTimeWorkRequestBuilder<VideoBackupWorker>()
@@ -172,20 +170,34 @@ object BackupWorkScheduling {
       Kind.INCOMING, Kind.INCOMING_RETRY -> OneTimeWorkRequestBuilder<IncomingUploadWorker>()
       Kind.USER_RESUME -> OneTimeWorkRequestBuilder<UserResumeWorker>()
     }
+    val attempt = follow?.attempt ?: 0
     return builder
-      .setConstraints(if (onWifi) LanConstraints.unmetered() else constraintsFor(wait))
+      .setConstraints(if (onWifi) LanConstraints.unmetered() else constraintsFor(follow))
       .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, BACKOFF_MS, TimeUnit.MILLISECONDS)
       .apply { if (delayMs > 0L) setInitialDelay(delayMs, TimeUnit.MILLISECONDS) }
-      .apply { if (resumed) setInputData(Data.Builder().putBoolean(INPUT_RESUMED, true).build()) }
+      .apply {
+        if (resumed || attempt > 0) {
+          val data = Data.Builder()
+          if (resumed) data.putBoolean(INPUT_RESUMED, true)
+          if (attempt > 0) data.putInt(RuleWaits.KEY_ATTEMPT, attempt)
+          setInputData(data.build())
+        }
+      }
       .addTag(TAG)
       .build()
   }
 
-  /** Il lavoro dopo un'attesa delle regole, se c'e' un vincolo esatto ([delayFor]); chiamato dal lavoro stesso, quindi in coda dopo di lui. */
-  fun afterWait(context: Context, kind: Kind, wait: WaitReason, now: LocalDateTime = LocalDateTime.now()) {
-    val delay = delayFor(wait, now)
-    if (delay != null) {
-      enqueue(context, request(kind, wait, delay), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
+  /**
+   * Il lavoro dopo un'attesa delle regole, se la regola unica ne chiede uno ([RuleWaits.followUpOf]); chiamato dal lavoro stesso, quindi in coda
+   * dopo di lui. **Mai senza ritardo** (FAB-3): prima la carica, la batteria e il risparmio energetico rimettevano il lavoro in coda subito, con un
+   * vincolo ("batteria non scarica") che Android da' per soddisfatto anche col risparmio energetico acceso e fra il 16% e il 19%: il lavoro
+   * ripartiva, le regole dicevano di nuovo "aspetta", a ciclo continuo. [attempt] e' il numero del tentativo dagli input del lavoro
+   * ([RuleWaits.KEY_ATTEMPT]): il ritardo del risparmio energetico e del caldo cresce.
+   */
+  fun afterWait(context: Context, kind: Kind, wait: WaitReason, attempt: Int = 0, now: LocalDateTime = LocalDateTime.now()) {
+    val follow = RuleWaits.followUpOf(wait, now, attempt, waitCapFor(kind))
+    if (follow != null) {
+      enqueue(context, request(kind, follow), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
       return
     }
     // BK-2: la foto scattata fuori casa. "Proteggi subito" aspetta il Wi-Fi di casa e nessun altro evento lo avrebbe fatto ripartire al rientro
@@ -193,9 +205,9 @@ object BackupWorkScheduling {
     // una rete non a consumo, e WorkManager lo avvia quando il Wi-Fi c'e'. Per gli altri lavori le attese per la rete restano senza lavoro dopo.
     // IN-5: lo stesso per i file ricevuti ("Salva sul NAS" e' un gesto dell'utente): fuori casa, o col NAS spento, il file aspetta e riparte da solo.
     if (kind == Kind.QUICK && waitsForHomeNetwork(wait)) {
-      enqueue(context, request(kind, wait, HOME_RETRY_MS, onWifi = true), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
+      enqueue(context, request(kind, delayMs = HOME_RETRY_MS, onWifi = true), kind, ExistingWorkPolicy.APPEND_OR_REPLACE)
     } else if (kind == Kind.INCOMING || kind == Kind.INCOMING_RETRY) {
-      incomingAfterWait(context, wait, resumed = kind == Kind.INCOMING_RETRY)
+      incomingAfterWait(context, wait, resumed = kind == Kind.INCOMING_RETRY, attempt = attempt, now = now)
     }
   }
 
@@ -205,20 +217,21 @@ object BackupWorkScheduling {
    * come la ripresa del lavoro dell'utente (D-6, D-12): la prima attesa mette in coda una ripresa **senza ritardo** su una rete non a consumo, che
    * WorkManager avvia appena il Wi-Fi c'e', e la ripresa aspetta al piu' 30 s il percorso, il NAS e la sessione ([awaitNasReady]); solo se anche la
    * ripresa trova il NAS che non risponde (a casa col NAS spento, o un Wi-Fi che non e' casa) si riprova dopo un quarto d'ora (niente polling). Un nome
-   * suo ([INCOMING_RETRY_WORK]): i file salvati dopo partono subito con il loro lavoro. Le altre attese seguono [afterWait] (fascia, carica: vincoli
-   * esatti; congelamento e il resto: niente). Mai i dati mobili senza la conferma.
+   * suo ([INCOMING_RETRY_WORK]): i file salvati dopo partono subito con il loro lavoro. Le altre attese seguono la regola unica ([RuleWaits]: fascia e
+   * carica con il loro vincolo esatto, risparmio energetico e caldo con un ritardo che cresce; congelamento e il resto: niente). Mai i dati mobili
+   * senza la conferma.
    */
-  fun incomingAfterWait(context: Context, wait: WaitReason, resumed: Boolean, now: LocalDateTime = LocalDateTime.now()) {
+  fun incomingAfterWait(context: Context, wait: WaitReason, resumed: Boolean, attempt: Int = 0, now: LocalDateTime = LocalDateTime.now()) {
     if (waitsForHomeNetwork(wait) || wait == WaitReason.NasUnreachable || wait == WaitReason.PoorNetwork) {
       if (resumed) {
-        enqueue(context, request(Kind.INCOMING_RETRY, wait, HOME_RETRY_MS, onWifi = true, resumed = true), Kind.INCOMING_RETRY, ExistingWorkPolicy.APPEND_OR_REPLACE)
+        enqueue(context, request(Kind.INCOMING_RETRY, delayMs = HOME_RETRY_MS, onWifi = true, resumed = true), Kind.INCOMING_RETRY, ExistingWorkPolicy.APPEND_OR_REPLACE)
       } else {
-        enqueue(context, request(Kind.INCOMING_RETRY, wait, onWifi = true, resumed = true), Kind.INCOMING_RETRY, ExistingWorkPolicy.REPLACE)
+        enqueue(context, request(Kind.INCOMING_RETRY, onWifi = true, resumed = true), Kind.INCOMING_RETRY, ExistingWorkPolicy.REPLACE)
       }
       return
     }
-    val delay = delayFor(wait, now) ?: return
-    enqueue(context, request(Kind.INCOMING, wait, delay), Kind.INCOMING, ExistingWorkPolicy.APPEND_OR_REPLACE)
+    val follow = RuleWaits.followUpOf(wait, now, attempt, waitCapFor(Kind.INCOMING)) ?: return
+    enqueue(context, request(Kind.INCOMING, follow), Kind.INCOMING, ExistingWorkPolicy.APPEND_OR_REPLACE)
   }
 
   /**
@@ -319,7 +332,7 @@ sealed interface BackupFollowUp {
   /** Altro lavoro da fare: la tappa dopo (WorkManager decide quando, secondo il bucket dell'app). */
   data object Continue : BackupFollowUp
 
-  /** Le regole non lasciano partire: il motivo, per programmare un vincolo esatto se c'e'. */
+  /** Le regole non lasciano partire: il motivo, per programmare il lavoro dopo se la regola delle attese ne chiede uno ([RuleWaits]). */
   data class Wait(val reason: WaitReason) : BackupFollowUp
 
   /** Un errore del NAS: si riprova con l'attesa crescente di WorkManager. */
@@ -413,8 +426,11 @@ abstract class BackupWorker(
   /** Il lavoro dopo, per una tappa che ha lasciato altro da fare. */
   protected open fun continueLater() = BackupWorkScheduling.continueLater(applicationContext, kind)
 
+  /** FAB-3: quante attese di fila senza un vincolo esatto ha gia' fatto questa catena (dagli input del lavoro): il ritardo della prossima cresce. */
+  protected val waitAttempt: Int get() = inputData.getInt(RuleWaits.KEY_ATTEMPT, 0)
+
   /** Il lavoro dopo un'attesa delle regole, se serve ([BackupWorkScheduling.afterWait]). */
-  protected open fun afterWait(reason: WaitReason) = BackupWorkScheduling.afterWait(applicationContext, kind, reason)
+  protected open fun afterWait(reason: WaitReason) = BackupWorkScheduling.afterWait(applicationContext, kind, reason, waitAttempt)
 
   final override suspend fun doWork(): Result {
     val backup = gallery.backup ?: return Result.success()
@@ -528,7 +544,7 @@ class IncomingUploadWorker @AssistedInject constructor(
   /** Campo, gruppo A (D5): questo lavoro e' la ripresa dopo un'attesa della rete ([BackupWorkScheduling.incomingAfterWait]). */
   private val resumed: Boolean get() = inputData.getBoolean(BackupWorkScheduling.INPUT_RESUMED, false)
 
-  override fun afterWait(reason: WaitReason) = BackupWorkScheduling.incomingAfterWait(applicationContext, reason, resumed)
+  override fun afterWait(reason: WaitReason) = BackupWorkScheduling.incomingAfterWait(applicationContext, reason, resumed, waitAttempt)
 
   override suspend fun stage(stages: BackupStages): BackupFollowUp? {
     // D5 (come D-12): la ripresa parte appena WorkManager vede un Wi-Fi, prima che il percorso verso il NAS e la sessione siano pronti: si aspettano.

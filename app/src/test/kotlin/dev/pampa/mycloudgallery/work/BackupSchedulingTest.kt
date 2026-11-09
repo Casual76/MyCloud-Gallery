@@ -1,11 +1,15 @@
 package dev.pampa.mycloudgallery.work
 
 import android.app.Application
+import android.content.Context
 import android.net.NetworkCapabilities
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.Configuration
+import androidx.work.CoroutineWorker
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.work.WorkerFactory
+import androidx.work.WorkerParameters
 import androidx.work.testing.SynchronousExecutor
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.google.common.truth.Truth.assertThat
@@ -15,7 +19,11 @@ import dev.pampa.mycloudgallery.core.model.FreezeReason
 import dev.pampa.mycloudgallery.core.rules.ConfirmationKind
 import dev.pampa.mycloudgallery.core.rules.NetworkClass
 import dev.pampa.mycloudgallery.core.rules.ThermalStatus
+import dev.pampa.mycloudgallery.core.rules.TimeWindow
 import dev.pampa.mycloudgallery.core.rules.WaitReason
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -35,9 +43,130 @@ class BackupSchedulingTest {
   private val context: Application = ApplicationProvider.getApplicationContext()
   private val workManager: WorkManager get() = WorkManager.getInstance(context)
 
+  /** La sonda di FAB-3: che cosa trovano le regole a ogni giro del lavoro rapido, e quanti giri ha fatto. */
+  private object Probe {
+    const val CAP = 25
+    val runs = AtomicInteger()
+
+    /** La sonda prende il posto di `QuickPhotoWorker` (gli altri test della classe non fanno girare niente). */
+    @Volatile var active: Boolean = false
+
+    /** Che cosa dicono le regole a ogni giro: un'attesa, o null = "puoi andare" (la causa e' sparita). */
+    @Volatile var wait: WaitReason? = null
+
+    fun start(reason: WaitReason?) {
+      runs.set(0)
+      wait = reason
+      active = true
+    }
+  }
+
+  /**
+   * Il lavoro di prova al posto di `QuickPhotoWorker`: come `BackupWorker.doWork` davanti a `BackupFollowUp.Wait`, chiama l'`afterWait` **vero** con il
+   * numero del tentativo dei suoi input e finisce con successo. Oltre [Probe.CAP] giri si ferma (la prova non gira all'infinito per dire di no).
+   */
+  private class WaitProbeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result {
+      val n = Probe.runs.incrementAndGet()
+      val wait = Probe.wait
+      if (wait != null && n < Probe.CAP) {
+        BackupWorkScheduling.afterWait(applicationContext, BackupWorkScheduling.Kind.QUICK, wait, attempt = inputData.getInt(RuleWaits.KEY_ATTEMPT, 0))
+      }
+      return Result.success()
+    }
+  }
+
   @Before
   fun setUp() {
-    WorkManagerTestInitHelper.initializeTestWorkManager(context, Configuration.Builder().setExecutor(SynchronousExecutor()).build())
+    val factory = object : WorkerFactory() {
+      override fun createWorker(appContext: Context, workerClassName: String, workerParameters: WorkerParameters) =
+        if (workerClassName == QuickPhotoWorker::class.java.name && Probe.active) WaitProbeWorker(appContext, workerParameters) else null
+    }
+    Probe.active = false
+    WorkManagerTestInitHelper.initializeTestWorkManager(
+      context,
+      Configuration.Builder().setExecutor(SynchronousExecutor()).setWorkerFactory(factory).build(),
+    )
+  }
+
+  /**
+   * Android, per la sonda: a casa sul Wi-Fi, **non in carica**, con la batteria che per Android non e' scarica (sopra il 15%). Ogni lavoro in coda i cui
+   * vincoli sono soddisfatti in quella situazione (la rete, "batteria non scarica"; non la carica) parte; il tempo non passa (un ritardo non scade).
+   * Si ripete finche' qualcosa parte. Rende quanti lavori restano in coda ad aspettare.
+   */
+  private fun letAndroidRunWhatItCan(): List<WorkInfo> {
+    val driver = checkNotNull(WorkManagerTestInitHelper.getTestDriver(context))
+    repeat(Probe.CAP * 2) {
+      val before = Probe.runs.get()
+      for (work in waiting(BackupWorkScheduling.QUICK_WORK)) {
+        if (!work.constraints.requiresCharging()) driver.setAllConstraintsMet(work.id)
+      }
+      if (Probe.runs.get() == before) return waiting(BackupWorkScheduling.QUICK_WORK)
+    }
+    return waiting(BackupWorkScheduling.QUICK_WORK)
+  }
+
+  /**
+   * **FAB-3** della review (maggiore), la sonda del critico: con il risparmio energetico acceso, o con la batteria fra il 16% e il 19%, il lavoro rapido
+   * si rimetteva in coda **senza ritardo** con il solo vincolo "batteria non scarica", che Android da' per soddisfatto: ripartiva subito, le regole
+   * dicevano di nuovo "aspetta", e cosi' a ciclo continuo (25 giri su 25 nella sonda). Adesso: **un giro solo**, e il lavoro dopo aspetta davvero
+   * (un ritardo, o la carica).
+   */
+  @Test
+  fun fab3_unAttesaCheNonCambiaFaUnGiroSolo_NonUnCicloContinuo() {
+    val now = LocalDateTime.now()
+    val waits = listOf(
+      WaitReason.PowerSaver,
+      WaitReason.BatteryLow(17, 20),
+      WaitReason.BatteryLow(19, 20),
+      WaitReason.NeedsPower,
+      WaitReason.Thermal(ThermalStatus.SEVERE),
+      WaitReason.OutsideWindow(TimeWindow(LocalTime.of(23, 0), LocalTime.of(7, 0)), now.plusHours(5)),
+    )
+    for (wait in waits) {
+      workManager.cancelAllWork().result.get()
+      Probe.start(wait)
+
+      BackupWorkScheduling.quickWork(context)
+      val left = letAndroidRunWhatItCan()
+
+      assertWithMessage("$wait: giri del lavoro").that(Probe.runs.get()).isEqualTo(1)
+      // Il lavoro dopo c'e' (le foto ripartono quando la causa sparisce) e aspetta davvero: un ritardo, e la carica dove e' lei la causa.
+      val next = left.single()
+      assertWithMessage("$wait: un ritardo").that(next.initialDelayMillis).isAtLeast(RuleWaits.MIN_RETRY.inWholeMilliseconds)
+      assertWithMessage("$wait: mai il vincolo che Android da' gia' per soddisfatto").that(next.constraints.requiresBatteryNotLow()).isFalse()
+      val wantsPower = wait == WaitReason.NeedsPower || wait is WaitReason.BatteryLow
+      assertWithMessage("$wait: la carica").that(next.constraints.requiresCharging()).isEqualTo(wantsPower)
+    }
+  }
+
+  /**
+   * FAB-3: e quando il ritardo scade con la causa ancora li' (il risparmio energetico resta acceso per ore)? Un giro per scadenza, con il ritardo delle foto
+   * appena scattate fermo a un quarto d'ora: mai due giri di fila, e spento il risparmio energetico le foto partono entro un quarto d'ora.
+   */
+  @Test
+  fun fab3_aOgniScadenzaUnGiroSolo_EIlBackupRapidoRiprovaOgniQuartoDOra() {
+    Probe.start(WaitReason.PowerSaver)
+    val driver = checkNotNull(WorkManagerTestInitHelper.getTestDriver(context))
+    BackupWorkScheduling.quickWork(context)
+    letAndroidRunWhatItCan()
+
+    for (round in 2..5) {
+      val next = waiting(BackupWorkScheduling.QUICK_WORK).single()
+      assertWithMessage("giro $round: ritardo").that(next.initialDelayMillis).isEqualTo(RuleWaits.PROMPT_CAP.inWholeMilliseconds)
+      // Il quarto d'ora passa: il lavoro gira una volta, trova ancora il risparmio energetico e si rimette ad aspettare.
+      driver.setInitialDelayMet(next.id)
+      letAndroidRunWhatItCan()
+      assertWithMessage("giro $round").that(Probe.runs.get()).isEqualTo(round)
+    }
+
+    // La causa sparisce: al giro dopo le regole lasciano passare e non resta niente in coda.
+    val last = waiting(BackupWorkScheduling.QUICK_WORK).single()
+    Probe.wait = null
+    driver.setInitialDelayMet(last.id)
+    letAndroidRunWhatItCan()
+    assertThat(Probe.runs.get()).isEqualTo(6)
+    assertThat(waiting(BackupWorkScheduling.QUICK_WORK)).isEmpty()
   }
 
   private fun waiting(name: String) = workManager.getWorkInfosForUniqueWork(name).get().filter { it.state == WorkInfo.State.ENQUEUED }
@@ -184,5 +313,25 @@ class BackupSchedulingTest {
     BackupWorkScheduling.afterWait(context, BackupWorkScheduling.Kind.QUICK, WaitReason.NeedsPower)
     val work = waiting(BackupWorkScheduling.QUICK_WORK).single()
     assertThat(work.constraints.requiresCharging()).isTrue()
+    // FAB-3: mai senza ritardo (prima 0).
+    assertThat(work.initialDelayMillis).isAtLeast(RuleWaits.MIN_RETRY.inWholeMilliseconds)
+  }
+
+  /** FAB-3: gli altri lavori del backup (foto, video, verifiche) col risparmio energetico acceso: il ritardo cresce fino a un'ora, con il tentativo negli input. */
+  @Test
+  fun fab3_gliAltriLavoriDelBackupColRisparmioEnergeticoRiprovanoSemprePiuDiRado() {
+    for (kind in listOf(BackupWorkScheduling.Kind.PHOTOS, BackupWorkScheduling.Kind.VIDEOS, BackupWorkScheduling.Kind.SAFETY)) {
+      val delays = ArrayList<Long>()
+      var attempt = 0
+      repeat(4) {
+        workManager.cancelAllWork().result.get()
+        BackupWorkScheduling.afterWait(context, kind, WaitReason.PowerSaver, attempt)
+        val work = waiting(kind.workName).single()
+        assertWithMessage("$kind").that(work.constraints.requiresBatteryNotLow()).isFalse()
+        delays += work.initialDelayMillis
+        attempt = RuleWaits.followUpOf(WaitReason.PowerSaver, LocalDateTime.now(), attempt)!!.attempt
+      }
+      assertWithMessage("$kind").that(delays).containsExactly(15 * 60_000L, 30 * 60_000L, 60 * 60_000L, 60 * 60_000L).inOrder()
+    }
   }
 }

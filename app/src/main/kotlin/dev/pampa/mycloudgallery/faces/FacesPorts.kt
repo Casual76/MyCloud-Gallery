@@ -21,7 +21,6 @@ import dev.pampa.mycloudgallery.core.index.contract.WriteBlock
 import dev.pampa.mycloudgallery.core.model.NasArea
 import dev.pampa.mycloudgallery.core.nas.session.ShareGuard
 import dev.pampa.mycloudgallery.core.nasops.contract.FacesEraseStop
-import dev.pampa.mycloudgallery.core.rules.Pace
 import dev.pampa.mycloudgallery.core.rules.RunScope
 import dev.pampa.mycloudgallery.core.rules.run.StageHalt
 import dev.pampa.mycloudgallery.core.rules.run.StageScope
@@ -190,6 +189,7 @@ class StageFacesControl : FacesRunControl {
   override suspend fun permit(): FacesPermit {
     val scope = current ?: return FacesPermit.Stop(FacesStop.RULES)
     if (!scope.proceed()) return FacesPermit.Stop(if (scope.halt is StageHalt.Rules) FacesStop.RULES else FacesStop.BUDGET)
-    return FacesPermit.Go(reducedPace = scope.pace == Pace.REDUCED)
+    // Piano col telefono caldo e (review generale, OB-3) con l'app in uso: lotti piccoli e pause.
+    return FacesPermit.Go(reducedPace = scope.pace.slow)
   }
 }

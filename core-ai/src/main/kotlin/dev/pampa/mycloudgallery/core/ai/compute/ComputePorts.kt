@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 /** Cosa dicono adesso regole e tempo della tappa (`StagedRun`, D22), riletto fra un lotto e l'altro. */
 sealed interface AiPace {
   /**
-   * Si continua. [reduced]: telefono caldo (`Pace.REDUCED`, E-A5): lotti piccoli e pause. [localOnly]: `Run(LOCAL_BUFFER_ONLY)`
+   * Si continua. [reduced]: telefono caldo (`Pace.REDUCED`, E-A5) o app in uso (`Pace.APP_IN_USE`, review generale OB-3): lotti piccoli e pause. [localOnly]: `Run(LOCAL_BUFFER_ONLY)`
    * (E-A6): niente NAS, solo cio' che sta gia' nel buffer o sul telefono.
    */
   data class Go(val reduced: Boolean = false, val localOnly: Boolean = false) : AiPace

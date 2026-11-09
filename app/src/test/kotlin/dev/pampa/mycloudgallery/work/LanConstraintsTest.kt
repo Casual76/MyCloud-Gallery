@@ -17,6 +17,7 @@ import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.rules.WaitReason
 import java.io.File
+import java.time.LocalDateTime
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -80,15 +81,21 @@ class LanConstraintsTest {
 
   @Test
   fun iLavoriDelBackupConservanoLeAltreCondizioniEPerdonoSoloInternet() {
-    // La carica e la batteria si dicono a WorkManager (che avvisa quando cambiano); le altre attese non programmano niente.
+    // La carica si dice a WorkManager (che avvisa quando cambia); le altre attese non hanno un vincolo. FAB-3: il vincolo "batteria non scarica" non
+    // c'e' piu' (non misurava ne' la soglia delle regole, 20% contro il 15% di Android, ne' il risparmio energetico: era sempre gia' soddisfatto).
+    val now = LocalDateTime.of(2026, 10, 16, 12, 0)
+    fun constraintsAfter(wait: WaitReason) = BackupWorkScheduling.constraintsFor(RuleWaits.followUpOf(wait, now))
     val plain = BackupWorkScheduling.constraintsFor(null)
     assertNoInternetRequired(plain.requiredNetworkRequest, "backup")
     assertThat(plain.requiresCharging()).isFalse()
-    assertThat(BackupWorkScheduling.constraintsFor(WaitReason.NeedsPower).requiresCharging()).isTrue()
-    assertThat(BackupWorkScheduling.constraintsFor(WaitReason.BatteryLow(15, 20)).requiresBatteryNotLow()).isTrue()
-    assertThat(BackupWorkScheduling.constraintsFor(WaitReason.PowerSaver).requiresBatteryNotLow()).isTrue()
-    assertThat(BackupWorkScheduling.constraintsFor(WaitReason.Offline).requiresCharging()).isFalse()
-    assertNoInternetRequired(BackupWorkScheduling.constraintsFor(WaitReason.NeedsPower).requiredNetworkRequest, "backup, carica")
+    assertThat(constraintsAfter(WaitReason.NeedsPower).requiresCharging()).isTrue()
+    assertThat(constraintsAfter(WaitReason.BatteryLow(17, 20)).requiresCharging()).isTrue()
+    assertThat(constraintsAfter(WaitReason.BatteryLow(17, 20)).requiresBatteryNotLow()).isFalse()
+    assertThat(constraintsAfter(WaitReason.PowerSaver).requiresBatteryNotLow()).isFalse()
+    assertThat(constraintsAfter(WaitReason.PowerSaver).requiresCharging()).isFalse()
+    assertThat(constraintsAfter(WaitReason.Offline).requiresCharging()).isFalse()
+    assertNoInternetRequired(constraintsAfter(WaitReason.NeedsPower).requiredNetworkRequest, "backup, carica")
+    assertNoInternetRequired(constraintsAfter(WaitReason.PowerSaver).requiredNetworkRequest, "backup, risparmio energetico")
   }
 
   /** Tutti i lavori periodici veri, come li pianifica l'app: nessuno chiede internet. */

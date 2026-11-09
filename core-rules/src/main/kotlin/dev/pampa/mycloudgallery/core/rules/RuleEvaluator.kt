@@ -175,7 +175,7 @@ class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
     }
     if (usesNetwork && !state.nasReachable) blockers += WaitReason.NasUnreachable
 
-    val pace = paceFor(activity, power)
+    val pace = paceFor(activity, power, state.appInForeground)
     return when {
       blockers.isEmpty() ->
         RuleDecision.Run(RunScope.FULL, pace, network, remaining(cap))
@@ -306,11 +306,21 @@ class RuleEvaluator(private val config: EvaluatorConfig = EvaluatorConfig()) {
     return if (config.isSevere(power) || cooling) WaitReason.Thermal(power.thermalStatus) else null
   }
 
-  /** Con il telefono caldo (LIGHT/MODERATE o headroom alto) le attivita' a CPU vanno piano. */
-  private fun paceFor(activity: BackgroundActivity, power: PowerState): Pace {
+  /**
+   * Le attivita' a CPU vanno piano con il telefono caldo (LIGHT/MODERATE o headroom alto: [Pace.REDUCED]) e, review generale OB-3, con
+   * l'app in primo piano ([Pace.APP_IN_USE]): calcolo AI, volti e preparazione girano nello stesso processo dell'interfaccia e non devono
+   * farsi sentire mentre l'utente la usa. Si rallenta, non ci si ferma (chi usa molto l'app deve vedere finire l'indicizzazione), e in
+   * secondo piano si torna al ritmo pieno alla prima rivalutazione. Il caldo vince sul motivo: e' quello che l'utente deve leggere.
+   */
+  private fun paceFor(activity: BackgroundActivity, power: PowerState, appInForeground: Boolean): Pace {
+    if (!activity.cpuIntensive) return Pace.NORMAL
     val warm =
       power.thermalStatus >= ThermalStatus.LIGHT || (power.thermalHeadroom ?: 0f) >= config.headroomReduce
-    return if (activity.cpuIntensive && warm) Pace.REDUCED else Pace.NORMAL
+    return when {
+      warm -> Pace.REDUCED
+      appInForeground -> Pace.APP_IN_USE
+      else -> Pace.NORMAL
+    }
   }
 
   private fun NetworkClass.isMobileLike() = this == NetworkClass.MOBILE || this == NetworkClass.ROAMING

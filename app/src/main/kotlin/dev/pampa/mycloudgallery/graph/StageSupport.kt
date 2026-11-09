@@ -17,7 +17,7 @@ import kotlinx.coroutines.withTimeoutOrNull
  * "Aspetta che la rete si veda" (verifica funzionale, RE-3). In un processo appena avviato da WorkManager (la notte, per un lavoro
  * periodico) le reti arrivano dai callback di Android un attimo **dopo** l'avvio: la prima valutazione delle regole vedrebbe "offline"
  * o "NAS irraggiungibile" solo perche' nessuno ha ancora guardato, il giro finirebbe subito senza fare niente e il prossimo sarebbe
- * dopo sei ore (un'attesa per la rete non programma niente, `BackupWorkScheduling.delayFor`).
+ * dopo sei ore (un'attesa per la rete non programma niente, `RuleWaits.followUpOf`).
  *
  * Si aspetta al massimo [timeout] che l'ambiente di rete veda qualcosa che non sia "nessuna rete" e, se il percorso verso il NAS e'
  * consentito e non si sa ancora se risponde (o [alwaysProbe]), si fa la sonda TCP alla 445: solo una connessione, non sveglia i dischi

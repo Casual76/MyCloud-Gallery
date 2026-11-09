@@ -19,6 +19,7 @@ import dev.pampa.mycloudgallery.backup.FiveBLaunch
 import dev.pampa.mycloudgallery.backup.FiveBSheet
 import dev.pampa.mycloudgallery.backup.FiveBUi
 import dev.pampa.mycloudgallery.backup.VersionDeleteRequest
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
 import dev.pampa.mycloudgallery.feature.backup.free.PhoneOnlySheetHost
@@ -124,16 +125,26 @@ internal fun FiveBHostEffect(ui: FiveBUi?, nav: NavController) {
     mode = (current as? FiveBSheet.Correction)?.mode ?: CorrectionMode.ALL,
   )
   val phoneOnly = current as? FiveBSheet.PhoneOnly
+  val fromSelection = phoneOnly?.fromSelection == true
   PhoneOnlySheetHost(
     ids = phoneOnly?.ids,
     onDismiss = ui::dismissSheet,
     onFree = { filter ->
       ui.dismissSheet()
       ui.openFreeSpace(filter.selection)
+      // FAB-7: l'utente e' andato avanti (non ha chiuso il foglio): la selezione della Libreria, se e' lei che l'ha aperto, si chiude.
+      if (fromSelection) ui.phoneSheetContinued()
     },
     // LS-1 ("Elimina con avviso"): dal viewer e (5B I3) dalla selezione della Libreria, un media che non risulta al sicuro sul NAS va nel cestino
     // di Android dopo l'avviso del foglio.
-    onTrash = if (phoneOnly?.offerTrash == true) ui::trashFromPhone else null,
+    onTrash = if (phoneOnly?.offerTrash == true) {
+      { ids: Set<MediaId> ->
+        ui.trashFromPhone(ids)
+        if (fromSelection) ui.phoneSheetContinued()
+      }
+    } else {
+      null
+    },
     isVideo = phoneOnly?.isVideo == true,
   )
 

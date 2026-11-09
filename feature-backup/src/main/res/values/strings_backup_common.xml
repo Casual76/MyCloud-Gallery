@@ -26,6 +26,8 @@
   <string name="backup_wait_home_wifi">Aspetta il Wi-Fi di casa.</string>
   <string name="backup_wait_night_window">Aspetta la notte, la fascia scelta nelle attività.</string>
   <string name="backup_wait_battery">Aspetta che la batteria sia più carica.</string>
+  <!-- FAB-4: il risparmio energetico di Android e' acceso (e l'interruttore in "Quando lavora l'app" lo rispetta): non e' la batteria bassa. -->
+  <string name="backup_wait_power_saver">Risparmio energetico acceso: riprende quando lo spegni.</string>
   <string name="backup_wait_thermal">Aspetta che il telefono si raffreddi.</string>
   <string name="backup_wait_data_cap">Aspetta il prossimo periodo dei dati.</string>
   <string name="backup_wait_nas">Aspetta che il NAS risponda.</string>

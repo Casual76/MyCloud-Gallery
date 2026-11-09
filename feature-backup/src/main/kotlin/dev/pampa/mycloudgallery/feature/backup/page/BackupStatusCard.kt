@@ -158,6 +158,7 @@ private fun waitRes(reason: WaitReason): Int = when (reason) {
   WaitReason.HOME_WIFI -> R.string.backup_wait_home_wifi
   WaitReason.NIGHT_WINDOW -> R.string.backup_wait_night_window
   WaitReason.BATTERY -> R.string.backup_wait_battery
+  WaitReason.POWER_SAVER -> R.string.backup_wait_power_saver
   WaitReason.THERMAL -> R.string.backup_wait_thermal
   WaitReason.DATA_CAP -> R.string.backup_wait_data_cap
   WaitReason.NAS -> R.string.backup_wait_nas

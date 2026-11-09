@@ -16794,3 +16794,79 @@ Tutti i comandi dentro il semaforo condiviso, un posto alla volta, `--no-daemon 
 - `g3-batch4` (`:app:testDebugUnitTest` mirato: `DragSourcesScopeTest`, `GalleryIntegrationTest`, `MainScaffoldDockTest`, `ViewerHostDockTest`, `WidgetTapNavigationTest`, `SearchViewerSimilarTest`, `ViewerServicesAlbumsTest`, `CutoutClipboardTest`, `CutoutIntegrationTest`, `FiveBButtonsTest`, `AlbumsOutsideScreensTest`, cioe' le prove dell'app che aprono il viewer): **verde**.
 - `g3-batch5`, `g3-batch6`: prove di `feature-settings` (Approval*, `NoHandWrittenStyleTest`, `SecureWindowTest`, `SettingsAccessibilityTest`) verdi e screenshot (`recordRoborazziDebug --tests "*ApprovalG3Shots*"` e `"*ViewerG3Shots*"`).
 - **Non lanciati** (regola del brief): `tools\check.ps1` intero, i test degli altri moduli (`feature-library`, `feature-albums`, `feature-search`...), i benchmark. `GalleryTopBar`, `GalleryMenuButton` e `GalleryViewerChrome` hanno un parametro in piu' con il valore di serie di prima, quindi i loro altri usi non cambiano.
+
+## RG-D: correzioni della review generale, Libreria e messaggi (09/11)
+
+Pacchetto sul ramo `fix/rg-libreria` (base `integra/beta-grafica`, `b8736bef`). Le correzioni dei rilievi FAB del critico, con prove che
+fallivano prima: FAB-1 e FAB-2 sono state provate con il codice vecchio rimesso (7 prove su 8 rosse, la ottava e' una guardia che passa
+prima e dopo); FAB-4, FAB-7 e FAB-8 hanno prove nuove; FAB-6 e la frase del pop-up hanno prove sulle parole. Screenshot in
+`docs/screenshots/beta-grafica/RG-D/`.
+
+### Scelte fatte
+- **FAB-2, l'avviso del foglio "Elimina dal telefono".** `unsafeAmong`, `hiddenWithGroups` e `isFavorite` (`LibraryParts.kt`) chiedevano la
+  posizione del media a `MediaGridState.indexOf` (l'indice mostrato, o la memoria delle celle composte) e leggevano i flag dell'indice nuovo.
+  Ora cercano la posizione **nell'indice che leggono** (`view.snapshot.indexOf(id)`, una tabella hash: nessun costo in piu'). `indexOf` della
+  griglia resta com'e' per il descrittore di TalkBack, che legge l'indice mostrato. Controllato anche il foglio "Prima mettilo al sicuro"
+  dalla selezione: **non ha il difetto**, conta per id sul catalogo (`SafeFreeSpace.assessPhoneOnly(ids)`), non per posizione nell'indice.
+  Le azioni di TalkBack della cella (`LibraryCellActions.kt`) usano `isFavorite` e `hiddenWithGroups`, quindi sono corrette insieme.
+- **FAB-1, "Oggi" e "Ieri".** "Oggi" e' uno stato di `MediaGridState` (`currentDay`, `refreshDay()`): si rilegge quando la finestra torna in
+  primo piano (`LifecycleEventEffect(ON_START)` in `GridEffects`) e a ogni vista nuova (nel setter di `view`). Le intestazioni
+  (`GridRenderContext`) e l'etichetta di vetro in alto (`rememberMediaGridSection`) leggono lo stesso valore. Cambia una volta al giorno: la
+  griglia si ricompone una volta al giorno, mai per fotogramma (prova: con lo stesso giorno nessuna riga si ricompone). Resta scoperto, per
+  scelta, il caso della mezzanotte **con l'app davanti e ferma**: "Oggi" si corregge alla prossima vista nuova o al ritorno in primo piano;
+  un timer alla mezzanotte e' possibile ma non l'ho aggiunto (un lavoro in piu' per un caso quasi mai visto).
+- **FAB-4, risparmio energetico.** `WaitReason.POWER_SAVER` (core-backup) e `LibraryBackupWait.POWER_SAVER` (core-library) sono voci nuove;
+  `BackupStatusReducers.waitReasonOf` manda `PowerSaver` li' invece che a `BATTERY`. Frasi: pagina Backup e viewer «Risparmio energetico
+  acceso: riprende quando lo spegni.», nuvola (sotto «N in coda») la stessa senza il punto. In **Impostazioni, Quando lavora l'app** c'e' la
+  sezione "Risparmio energetico" con l'interruttore «Metti in pausa con il risparmio energetico», legato a `pauseOnPowerSaver` (acceso di
+  serie), come prevede `docs/regole-attivita.md` §6 punto 7. Cambiare preset non lo ripristina.
+- **3-bis, il pop-up della nuvola.** Tolto «Tocca per i dettagli.» da `nas_footer_frozen_detail` (resta «... sul NAS non si scrive e non si
+  cancella niente.»; sotto c'e' "Apri la Diagnostica") e dalla frase generica del backup, ora «I dettagli sono nella pagina Backup.» (sotto
+  c'e' "Apri Backup"). Controllate le altre frasi del pop-up: nessun altro «Tocca».
+- **FAB-6.** Il foglio dice sempre «Eliminare N foto?»: il dettaglio e' al femminile («Hanno tutte una copia al sicuro», «Prima mettile al
+  sicuro», «Prima mettila al sicuro»). Prove di `LibraryDeleteSafetyTest` aggiornate alle parole nuove.
+- **FAB-7, la selezione si chiude alla risposta.** `LibraryCommands.selectionSettled` (un `Flow<Unit>`, vuoto di serie): la Libreria chiude la
+  selezione quando arriva, non quando apre il dialogo o il foglio. `:app` lo emette in due casi: la risposta **positiva** del dialogo di
+  sistema del cestino (`LibraryCommandHostEffect` -> `AppLibraryCommands.onTrashResult`) e l'utente che **va avanti** dal foglio "Prima
+  mettilo al sicuro" aperto dalla selezione ("Continua" verso Libera spazio, o il cestino dopo l'avviso: `FiveBUi.phoneSheetContinued`,
+  solo se il foglio e' stato aperto dalla selezione, `FiveBSheet.PhoneOnly.fromSelection`). Se l'utente annulla nel dialogo o preme "Chiudi"
+  la selezione resta com'era.
+- **FAB-8.** `OnboardingViewModel.addShare` controlla il doppione dopo il `trim()` («Foto » dopo «Foto» non entra due volte).
+
+### File fuori dal perimetro (modifiche piccole, necessarie)
+- `core-backup/.../contract/BackupStatus.kt` e `core-library/.../contract/BackupStatus.kt`: una voce nuova in due enum (FAB-4).
+- `feature-backup/.../page/BackupStatusCard.kt` + `strings_backup_common.xml`, `feature-viewer/.../info/BackupInfo.kt` +
+  `strings_backup_viewer.xml`: la `when` sulla ragione d'attesa e' esaustiva, la voce nuova ha la sua frase (una riga e una stringa).
+- `app/.../gallery/LibraryStates.kt`, `GalleryGraph.kt`, `MyCloudGalleryApp.kt`, `backup/FiveBUi.kt`, `main/FiveBHostEffect.kt`,
+  `main/LibraryCommandHostEffect.kt`: il filo di FAB-7 (il dialogo e il foglio che dicono alla Libreria che si e' andati avanti).
+  Non ho toccato `app/.../work/*` ne' `core-rules`.
+- `AiWaitReason` (la coda dell'AI) non ha la voce del risparmio energetico: la sua mappa sta con la pianificazione dei lavori (RG-C).
+
+### Prove
+- `LibraryIndexShiftTest` (5, FAB-2: funzioni, azioni di TalkBack, foglio e barra veri con una foto che arriva in cima), `GridTodayTest` (3,
+  FAB-1: Oggi -> Ieri con la finestra che torna davanti, vista nuova, nessuna ricomposizione a giorno uguale), `G2EliminaDallaSelezioneTest`
+  (+1 e una prova cambiata), `AppLibraryCommandsTest` (+2, FAB-7), `BackupPiecesTest` (riduzioni FAB-4), `BackupFooterTest` (la frase nuova),
+  `LibraryCloudPopupWordsTest` (pop-up: niente «Tocca per i dettagli», frase del risparmio), `RulesSettingsTest` (+1 e il ViewModel),
+  `RulesScreenTest` (3), `BackupPowerSaverScreenshotTest`, `OnboardingViewModelTest` (FAB-8).
+- Prova cambiata perche' il requisito cambia il comportamento: `G2EliminaDallaSelezioneTest.i3_backupAttivo_selezioneMista...` provava che la
+  selezione si chiude subito all'apertura del foglio; ora prova che resta e che si chiude quando `:app` dice di andare avanti.
+
+### Rischi per le prestazioni
+- FAB-1: una lettura dell'orologio per vista nuova e per ritorno in primo piano; la griglia si ricompone solo se il giorno cambia. Nessun
+  lavoro all'avvio.
+- FAB-2: `snapshot.indexOf` e' una ricerca in una tabella hash; le funzioni girano al tocco su una selezione e nei `remember` del foglio, come prima.
+- Nessun vetro ne' fondale in piu'; la pagina "Quando lavora l'app" ha una riga in piu'.
+
+### Da provare sul telefono
+1. Libreria viva dalla sera: la mattina "Ieri" e "Oggi" giusti dopo aver riaperto l'app (e l'etichetta in alto uguale).
+2. Selezione aperta, scatta una foto con l'altra mano: "Elimina dal telefono" e "Preferito" parlano delle foto scelte.
+3. "Elimina dal telefono" dalla selezione: annulla il dialogo di sistema e la selezione c'e' ancora; confermalo e si chiude. Con il backup
+   attivo: "Chiudi" nel foglio "Prima mettilo al sicuro" lascia la selezione; "Continua" la chiude.
+4. Risparmio energetico di Android acceso con la batteria carica: nella nuvola «Risparmio energetico acceso: riprende quando lo spegni», e lo
+   stesso nella pagina Backup. Spegni l'interruttore in Quando lavora l'app: il backup riparte.
+5. Il pop-up dei lavori fermi (se capita) senza «Tocca per i dettagli».
+
+### Decisioni aperte per l'utente
+- Con una selezione di soli video il titolo del foglio dice comunque «Eliminare N foto?» (e' del design system, non cambiato qui).
+- Alcuni dettagli dei problemi del backup nel pop-up dicono «Riprova o apri la Diagnostica» mentre il tasto sotto e' "Apri Backup": non e' il
+  residuo «Tocca», non l'ho toccato; la frase della rete «VPN spenta · Apri WireGuard» ripete il tasto (stringa di `:app`).

@@ -184,6 +184,8 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
         // 5B I3 (G2): "Elimina dal telefono" della selezione della Libreria passa dal foglio "Prima mettilo al sicuro" quando il backup e' attivo.
         backupActive = { ui.backupActive },
         deleteFromPhoneSafely = ui::deleteFromPhoneSafely,
+        // FAB-7: la selezione della Libreria si chiude quando l'utente va avanti dal foglio, non quando lo apre.
+        phoneSheetProceeded = ui.phoneSheetProceeded,
       )
     }
     // Fase 6 (P11): testo dal vivo, "Trova simili" e foto in movimento nel viewer, prima di qualunque schermata.

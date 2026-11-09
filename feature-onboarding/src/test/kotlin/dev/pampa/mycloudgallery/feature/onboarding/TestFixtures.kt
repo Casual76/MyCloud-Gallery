@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import dev.pampa.mycloudgallery.core.family.contract.FamilyInvite
 import dev.pampa.mycloudgallery.core.family.contract.FamilyStateQr
+import dev.pampa.mycloudgallery.core.family.contract.OnboardingCoordinator
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProgress
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.family.testing.FakeAdminRecovery
@@ -51,7 +52,8 @@ internal class TestEnv(
   val vpnConfig = InMemoryVpnControlConfigStore()
   val platform = FakeOnboardingPlatform()
 
-  fun viewModel(): OnboardingViewModel = OnboardingViewModel(
+  /** [coordinator] da' un decoratore del finto (per registrare cio' che il ViewModel chiede), di serie il finto stesso. */
+  fun viewModel(coordinator: OnboardingCoordinator = this.coordinator): OnboardingViewModel = OnboardingViewModel(
     coordinator = coordinator,
     joinFlow = join,
     adminRecovery = recovery,

@@ -27,6 +27,8 @@ import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -55,6 +57,11 @@ class G2EliminaDallaSelezioneTest {
   private class Commands(private val safeSheet: Boolean, private val nasOnly: Set<MediaId> = emptySet()) : LibraryCommands {
     val safely = ArrayList<Set<MediaId>>()
     val trashed = ArrayList<Set<MediaId>>()
+
+    /** FAB-7: la risposta positiva del cestino di sistema, o l'utente che va avanti dal foglio della 5B: lo emette il test, come farebbe `:app`. */
+    val settled = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    override val selectionSettled: Flow<Unit> get() = settled
 
     override val canDeleteFromPhone: Boolean get() = true
 
@@ -143,6 +150,39 @@ class G2EliminaDallaSelezioneTest {
     assertThat(commands.trashed).isEmpty()
     // Il foglio della 4B non si apre: il seguito e' del foglio della 5B, alla radice.
     assertNotShown("Eliminare 5 foto?")
+    // FAB-7: la selezione resta finche' l'utente non va avanti dal foglio. Se preme "Chiudi" la ritrova com'era (prima si chiudeva subito).
+    composeRule.runOnIdle {
+      assertThat(state.grid.selecting).isTrue()
+      assertThat(state.grid.selection.selected.value.size).isEqualTo(5)
+    }
+    // "Continua" (o il cestino dopo l'avviso): `:app` lo dice e la selezione si chiude.
+    composeRule.runOnIdle { assertThat(commands.settled.tryEmit(Unit)).isTrue() }
+    composeRule.waitForIdle()
+    composeRule.runOnIdle { assertThat(state.grid.selecting).isFalse() }
+  }
+
+  /**
+   * FAB-7: confermato il foglio di sempre, la selezione resta finche' il dialogo di sistema del cestino non ha la risposta positiva. Se l'utente annulla
+   * li' (nessuna risposta) la scelta non e' persa; prima la selezione si chiudeva appena il dialogo si apriva.
+   */
+  @Test
+  fun fab7_confermatoIlFoglioLaSelezioneRestaFinoAllaRispostaPositivaDelDialogo() {
+    val commands = Commands(safeSheet = false)
+    val state = state(safe = 3, commands = commands)
+    selectAndDelete(state, idsOf(state, 2))
+
+    composeRule.onAllNodesWithText("Elimina dal telefono").onFirst().performClick()
+    composeRule.waitForIdle()
+
+    assertThat(commands.trashed).hasSize(1)
+    // Il dialogo di sistema e' aperto (l'utente puo' annullare): la selezione e' ancora tutta li'.
+    composeRule.runOnIdle {
+      assertThat(state.grid.selecting).isTrue()
+      assertThat(state.grid.selection.selected.value.size).isEqualTo(2)
+    }
+    // Risposta positiva: ora la selezione si chiude.
+    composeRule.runOnIdle { assertThat(commands.settled.tryEmit(Unit)).isTrue() }
+    composeRule.waitForIdle()
     composeRule.runOnIdle { assertThat(state.grid.selecting).isFalse() }
   }
 

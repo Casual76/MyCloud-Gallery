@@ -498,7 +498,7 @@ I segnali "rete di casa", "NAS raggiungibile" e "rete scadente" sono interfacce 
    roaming chiede conferma.
 5. **Rete non riconosciuta** (né casa né VPN): il NAS non si contatta, nemmeno con "Fai ora".
 6. **Wi-Fi a consumo** = dati mobili solo se non è la rete di casa.
-7. **Risparmio energetico** ferma il background anche in carica (c'è l'interruttore `pauseOnPowerSaver`, da
+7. **Risparmio energetico** ferma il background anche in carica (c'è l'interruttore `pauseOnPowerSaver`, ora in Impostazioni → «Quando lavora l'app», da
    usare se T-22 mostra che il risparmio Samsung resta acceso in carica).
 8. **Termica**: `SEVERE` sospende il background ma "Fai ora" può scavalcarlo; `CRITICAL` ferma tutto. Ripartenza
    dopo 5 minuti.

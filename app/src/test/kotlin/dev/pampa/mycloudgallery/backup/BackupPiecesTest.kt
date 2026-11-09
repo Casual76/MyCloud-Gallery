@@ -43,6 +43,9 @@ class BackupPiecesTest {
       .isEqualTo(LibraryBackupStatus.Queued(2, dev.pampa.mycloudgallery.core.library.contract.LibraryBackupWait.NAS_BUSY))
     assertThat(BackupStatusReducers.footer(BackupStatus.Waiting(312, 1L, BackupWait.CHARGING), 0))
       .isEqualTo(LibraryBackupStatus.Queued(312, LibraryBackupWait.CHARGING))
+    // FAB-4: il risparmio energetico arriva alla nuvola con la sua voce, non come "Attesa batteria".
+    assertThat(BackupStatusReducers.footer(BackupStatus.Waiting(312, 1L, BackupWait.POWER_SAVER), 0))
+      .isEqualTo(LibraryBackupStatus.Queued(312, LibraryBackupWait.POWER_SAVER))
     assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(dev.pampa.mycloudgallery.core.backup.contract.StopBy.USER), 0))
       .isEqualTo(LibraryBackupStatus.Idle)
     assertThat(BackupStatusReducers.footer(BackupStatus.Problem(BackupProblemCode.QUOTA, 0), 0))
@@ -69,6 +72,10 @@ class BackupPiecesTest {
     fun wait(reason: WaitReason) = BackupStatusReducers.waitReasonOf(RuleDecision.Wait(reason))
     assertThat(wait(WaitReason.NeedsPower)).isEqualTo(BackupWait.CHARGING)
     assertThat(wait(WaitReason.BatteryLow(10, 20))).isEqualTo(BackupWait.BATTERY)
+    // FAB-4: il risparmio energetico non e' la batteria bassa (diceva "Aspetta che la batteria sia piu' carica" anche con la batteria piena).
+    assertThat(wait(WaitReason.PowerSaver)).isEqualTo(BackupWait.POWER_SAVER)
+    assertThat(wait(WaitReason.PowerSaver)).isNotEqualTo(BackupWait.BATTERY)
+    assertThat(RuleDecision.Stop(WaitReason.PowerSaver).let(BackupStatusReducers::waitReasonOf)).isEqualTo(BackupWait.POWER_SAVER)
     assertThat(wait(WaitReason.HeavyNeedsHomeWifi)).isEqualTo(BackupWait.HOME_WIFI)
     assertThat(wait(WaitReason.NetworkNotAllowed(NetworkClass.MOBILE))).isEqualTo(BackupWait.WIFI)
     assertThat(wait(WaitReason.NetworkNotAllowed(NetworkClass.EXTERNAL_WIFI))).isEqualTo(BackupWait.HOME_WIFI)

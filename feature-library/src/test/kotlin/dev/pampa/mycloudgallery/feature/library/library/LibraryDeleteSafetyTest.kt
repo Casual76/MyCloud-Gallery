@@ -117,7 +117,7 @@ class LibraryDeleteSafetyTest {
     open(state(safe = 5), howMany = 3)
 
     assertShown("Eliminare 3 foto?")
-    assertShown("Hanno tutti una copia al sicuro sul NAS")
+    assertShown("Hanno tutte una copia al sicuro sul NAS")
     assertNotShown("Non c’è ancora una copia")
     assertNotShown("Non hanno ancora una copia")
     assertNotShown("non hanno ancora una copia")
@@ -129,8 +129,8 @@ class LibraryDeleteSafetyTest {
 
     assertShown("Eliminare 3 foto?")
     assertShown("Non hanno ancora una copia sul NAS")
-    assertShown("Prima mettili al sicuro")
-    assertNotShown("Hanno tutti una copia al sicuro")
+    assertShown("Prima mettile al sicuro")
+    assertNotShown("Hanno tutte una copia al sicuro")
     // Tutti e tre senza copia: niente "x di y" (sarebbe un conteggio parziale).
     assertNotShown(" di 3 ")
   }
@@ -140,7 +140,7 @@ class LibraryDeleteSafetyTest {
     open(state(safe = 0), howMany = 1)
 
     assertShown("Non c’è ancora una copia sul NAS")
-    assertShown("Prima mettilo al sicuro")
+    assertShown("Prima mettila al sicuro")
   }
 
   @Test
@@ -150,8 +150,8 @@ class LibraryDeleteSafetyTest {
 
     assertShown("Eliminare 5 foto?")
     assertShown("2 di 5 non hanno ancora una copia sul NAS")
-    assertShown("Prima mettili al sicuro")
-    assertNotShown("Hanno tutti una copia al sicuro")
+    assertShown("Prima mettile al sicuro")
+    assertNotShown("Hanno tutte una copia al sicuro")
   }
 
   @Test
@@ -159,7 +159,7 @@ class LibraryDeleteSafetyTest {
     open(state(safe = 4), howMany = 5)
 
     assertShown("1 di 5 non ha ancora una copia sul NAS")
-    assertShown("Prima mettilo al sicuro")
+    assertShown("Prima mettila al sicuro")
   }
 
   @Test

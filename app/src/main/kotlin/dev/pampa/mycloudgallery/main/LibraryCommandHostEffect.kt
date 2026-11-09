@@ -49,7 +49,9 @@ internal fun LibraryCommandHostEffect(commands: LibraryCommands, onAccessChanged
   val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
     latestOnAccessChanged.value()
   }
-  val trash = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) {
+  val trash = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+    // FAB-7: la selezione si chiude solo alla risposta positiva del dialogo; annullando resta com'era.
+    app.onTrashResult(result.resultCode == Activity.RESULT_OK)
     latestOnAccessChanged.value()
   }
   val host = remember(context) {

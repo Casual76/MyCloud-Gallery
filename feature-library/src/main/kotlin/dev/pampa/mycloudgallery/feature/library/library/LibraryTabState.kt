@@ -30,8 +30,10 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.places.noop.NoPlaceNames
 import dev.pampa.mycloudgallery.feature.library.ActionNotice
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.emptyFlow
 
 /**
  * Lo stato del telefono che la Libreria racconta (§2.4, "Stati"): l'accesso ai media, la lettura in corso e le foto in
@@ -104,6 +106,14 @@ interface LibraryCommands {
 
   /** Il massimo di elementi che una richiesta di eliminazione accetta (limite di Android). Oltre, la Libreria avvisa. */
   val deleteLimit: Int get() = Int.MAX_VALUE
+
+  /**
+   * FAB-7: l'azione chiesta per la selezione e' **andata avanti**: il dialogo del cestino di sistema ha avuto la risposta positiva, oppure il foglio
+   * "Prima mettilo al sicuro" ha portato l'utente a un'altra pagina o al cestino. La Libreria chiude la selezione **qui** e non quando apre il dialogo o il
+   * foglio: se l'utente annulla, o preme "Chiudi", la selezione resta com'era e si puo' riprovare (come la pagina dei Doppioni con `onPhoneResult`).
+   * Senza un legame con il telefono (anteprime, test) non emette mai.
+   */
+  val selectionSettled: Flow<Unit> get() = emptyFlow()
 
   /**
    * 5B I3 (decisione dell'utente, fase grafica G2): con il backup attivo "Elimina dal telefono" della selezione passa dal foglio della 5B

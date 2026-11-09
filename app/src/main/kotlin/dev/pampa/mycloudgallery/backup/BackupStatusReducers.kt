@@ -66,6 +66,7 @@ object BackupStatusReducers {
     WaitReason.NAS -> LibraryBackupWait.NAS
     WaitReason.NEXT_RUN -> LibraryBackupWait.NEXT_RUN
     WaitReason.NAS_BUSY -> LibraryBackupWait.NAS_BUSY
+    WaitReason.POWER_SAVER -> LibraryBackupWait.POWER_SAVER
     WaitReason.THERMAL, WaitReason.DATA_CAP, WaitReason.COMPARING -> LibraryBackupWait.OTHER
   }
 
@@ -82,7 +83,9 @@ object BackupStatusReducers {
     return when (reason) {
       RulesWait.NeedsPower -> WaitReason.CHARGING
       is RulesWait.OutsideWindow -> WaitReason.NIGHT_WINDOW
-      is RulesWait.BatteryLow, RulesWait.PowerSaver -> WaitReason.BATTERY
+      is RulesWait.BatteryLow -> WaitReason.BATTERY
+      // FAB-4: il risparmio energetico ha la sua attesa (prima: "Aspetta che la batteria sia piu' carica", anche con la batteria piena).
+      RulesWait.PowerSaver -> WaitReason.POWER_SAVER
       is RulesWait.Thermal -> WaitReason.THERMAL
       is RulesWait.CapReached -> WaitReason.DATA_CAP
       RulesWait.HeavyNeedsHomeWifi -> WaitReason.HOME_WIFI

@@ -62,6 +62,12 @@ object RulesChoices {
 
   fun withRoaming(settings: RuleSettings, allow: Boolean): RuleSettings = settings.copy(allowRoaming = allow)
 
+  /**
+   * FAB-4: "Metti in pausa con il risparmio energetico" (`pauseOnPowerSaver`, docs/regole-attivita.md §6, punto 7): acceso, con il risparmio
+   * energetico di Android il lavoro in background sta fermo anche in carica; spento, lavora lo stesso (per chi ha il risparmio Samsung sempre acceso).
+   */
+  fun withPauseOnPowerSaver(settings: RuleSettings, pause: Boolean): RuleSettings = settings.copy(pauseOnPowerSaver = pause)
+
   /** I tetti che il motore applica adesso: quelli scelti dall'utente, altrimenti quelli del preset. */
   fun effectiveCaps(settings: RuleSettings): MonthlyCaps =
     settings.capsOverride ?: PresetCatalog.ruleSet(settings.preset, settings.nightWindow).caps
@@ -80,6 +86,8 @@ internal data class RulesUiState(
   /** Il tetto del preset di adesso, per dire cosa vuol dire "come il preset". */
   val presetCapBytes: Long?,
   val allowRoaming: Boolean,
+  /** FAB-4: con il risparmio energetico acceso il lavoro in background sta fermo. */
+  val pauseOnPowerSaver: Boolean,
 )
 
 internal fun RuleSettings.toUi(): RulesUiState = RulesUiState(
@@ -87,6 +95,7 @@ internal fun RuleSettings.toUi(): RulesUiState = RulesUiState(
   cap = RulesChoices.choiceOf(this),
   presetCapBytes = PresetCatalog.ruleSet(preset, nightWindow).caps.mobileBytes,
   allowRoaming = allowRoaming,
+  pauseOnPowerSaver = pauseOnPowerSaver,
 )
 
 @HiltViewModel
@@ -108,6 +117,10 @@ internal class RulesViewModel @Inject constructor(
 
   fun setRoaming(allow: Boolean) {
     viewModelScope.launch { store.update { RulesChoices.withRoaming(it, allow) } }
+  }
+
+  fun setPauseOnPowerSaver(pause: Boolean) {
+    viewModelScope.launch { store.update { RulesChoices.withPauseOnPowerSaver(it, pause) } }
   }
 
   private companion object {

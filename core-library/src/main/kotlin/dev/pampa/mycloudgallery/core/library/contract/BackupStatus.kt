@@ -80,6 +80,9 @@ enum class LibraryBackupWait {
   /** D-13: il NAS tiene ancora occupato un file del backup; si riprova tra poco, da soli. */
   NAS_BUSY,
 
+  /** FAB-4: il risparmio energetico di Android e' acceso e l'impostazione lo rispetta: riprende quando lo si spegne. */
+  POWER_SAVER,
+
   /** Un altro motivo del motore delle regole (Diagnostica → Attivita' lo dice per esteso). */
   OTHER,
 }

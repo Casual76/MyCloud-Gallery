@@ -43,6 +43,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.haptics.rememberFluidHaptics
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragPointer
@@ -199,7 +201,8 @@ fun MediaGrid(
     val strings = rememberGridStrings()
     val currentCellActions by rememberUpdatedState(cellActions)
     val actions = remember(state, strings) { GridCellActions(state, strings, { currentOnOpen(it) }, { id -> currentCellActions?.invoke(id).orEmpty() }) }
-    val today = remember(state) { state.today() }
+    // FAB-1: "oggi" e' uno stato della griglia (cambia una volta al giorno), non una lettura fatta alla prima composizione. Chiave del contesto delle righe.
+    val today = state.currentDay
     val stickyTopPx = with(density) { stickyTop.roundToPx() }
     val handOverPx = with(density) { HeaderHandOver.toPx() }
     val context = remember(state, renderView, style, actions, strings, today, gapPx, stickyTopPx, handOverPx) {
@@ -255,6 +258,9 @@ fun MediaGrid(
 private fun GridEffects(state: MediaGridState, reducedMotion: Boolean) {
   val currentReduced by rememberUpdatedState(reducedMotion)
   val scope = rememberCoroutineScope()
+
+  // FAB-1: con l'app rimasta viva dalla sera, "Oggi" e "Ieri" si rileggono quando la finestra torna in primo piano (e a ogni vista nuova, in `view`).
+  LifecycleEventEffect(Lifecycle.Event.ON_START) { state.refreshDay() }
 
   // Le miniature: una richiesta al caricatore per cambio di riga (non per fotogramma, non per cella).
   LaunchedEffect(state) {

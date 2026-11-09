@@ -117,6 +117,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
@@ -385,6 +386,8 @@ class GalleryGraph(
     val backupActive: () -> Boolean = { false },
     /** 5B I3: apre il foglio "Prima mettilo al sicuro" per i media della selezione con una copia sul telefono. */
     val deleteFromPhoneSafely: (Set<MediaId>) -> Unit = {},
+    /** FAB-7: l'utente e' andato avanti dal foglio aperto dalla selezione ("Continua", il cestino), non l'ha chiuso: la Libreria chiude la selezione. */
+    val phoneSheetProceeded: Flow<Unit> = emptyFlow(),
     // Ultimo, come prima: chi lo passa come lambda finale non cambia.
     val freeSpace: (Set<MediaId>) -> Unit,
   )

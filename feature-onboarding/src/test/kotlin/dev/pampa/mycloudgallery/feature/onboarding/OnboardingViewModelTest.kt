@@ -8,6 +8,7 @@ import dev.pampa.mycloudgallery.core.family.contract.ExclusionReason
 import dev.pampa.mycloudgallery.core.family.contract.FolderProposal
 import dev.pampa.mycloudgallery.core.family.contract.JoinStep
 import dev.pampa.mycloudgallery.core.family.contract.OldAdminFate
+import dev.pampa.mycloudgallery.core.family.contract.OnboardingCoordinator
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingPath
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProblem
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingProgress
@@ -325,6 +326,29 @@ class OnboardingViewModelTest {
     vm.addShare("   ")
     assertThat(env.coordinator.areas).isEmpty()
     assertThat(vm.ui.value.areas.loading).isFalse()
+  }
+
+  /** FAB-8: «Foto » (con lo spazio) dopo «Foto» e' lo stesso nome: il doppione si controlla dopo il `trim()`, e la share entra una volta sola. */
+  @Test
+  fun unaShareConGliSpaziNonEntraDueVolte() = runTest {
+    val env = TestEnv()
+    val asked = mutableListOf<List<String>>()
+    val recording = object : OnboardingCoordinator by env.coordinator {
+      override suspend fun proposeAreas(extra: List<String>): List<AreaCandidate> {
+        asked += extra
+        return env.coordinator.proposeAreas(extra)
+      }
+    }
+    val vm = env.viewModel(recording)
+
+    vm.addShare("Foto")
+    vm.addShare("Foto ")
+    vm.addShare("  Foto")
+    vm.addShare("Musica ")
+
+    // Una prova per share nuova: la seconda e la terza «Foto» non rifanno niente. L'ultima chiamata ha ciascun nome una volta, senza spazi.
+    assertThat(asked).hasSize(2)
+    assertThat(asked.last()).containsExactly("Foto", "Musica").inOrder()
   }
 
   @Test

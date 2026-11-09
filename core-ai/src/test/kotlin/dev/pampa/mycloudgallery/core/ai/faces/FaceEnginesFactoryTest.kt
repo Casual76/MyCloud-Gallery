@@ -18,14 +18,18 @@ import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
 import dev.pampa.mycloudgallery.core.models.contract.VerifiedModel
 import dev.pampa.mycloudgallery.core.models.noop.ClosedModelNetworkGate
 import dev.pampa.mycloudgallery.core.models.source.BundledModelFetcher
+import dev.pampa.mycloudgallery.core.rules.run.ThreadPriorities
+import dev.pampa.mycloudgallery.core.rules.run.YieldToApp
 import java.io.File
 import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.channels.FileChannel
 import java.nio.file.Files
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Test
 
 /**
@@ -118,6 +122,54 @@ class FaceEnginesFactoryTest {
       // Una seconda apertura verifica di nuovo.
       opener.open().close()
       assertThat(opened).hasSize(2)
+    } finally {
+      root.deleteRecursively()
+    }
+  }
+
+  private class NoEmbed : EmbedderSession {
+    override fun run(rgb: FloatArray): FloatArray = FloatArray(FaceSpaceCode.CURRENT.dimension)
+
+    override fun close() = Unit
+  }
+
+  @Test
+  fun dentroUnLavoroDiFondoConLAppInUso_IMotoriSiApronoConDueThread_AltrimentiConQuattro() = runTest {
+    // Review generale, OB-3: i thread di un interprete si scelgono all'apertura. Dentro un lavoro di fondo che si fa da parte (`YieldToApp`,
+    // l'app in uso) sono 2; in secondo piano, e per cio' che l'utente aspetta (nessun elemento nel contesto), restano i 4 di sempre.
+    val root = Files.createTempDirectory("mcg-faces-factory").toFile()
+    try {
+      val models = models(root)
+      for (spec in ModelCatalog.FACES) assertThat(models.manager.ensure(spec.id, ModelTrigger.USER_NOW, 60.seconds)).isEqualTo(EnsureResult.Ready)
+      val threads = ArrayList<Int>()
+      val detector = FaceModelOpeners.detector(models.files, ModelCatalog.FACE_YUNET, FaceEngineLimits.CPU_THREADS, mapFile) { _, t ->
+        threads += t
+        NoRun()
+      }
+      val embedder = FaceModelOpeners.embedder(models.files, ModelCatalog.FACE_SFACE, FaceEngineLimits.CPU_THREADS, mapFile) { _, t ->
+        threads += t
+        NoEmbed()
+      }
+      val inUse = AtomicBoolean(true)
+      val untouched = object : ThreadPriorities {
+        override fun current(): Int? = null
+
+        override fun set(priority: Int) = Unit
+      }
+      val work = YieldToApp({ inUse.get() }, untouched)
+      withContext(work) {
+        detector.open().close()
+        embedder.open().close()
+      }
+      inUse.set(false)
+      withContext(work) {
+        detector.open().close()
+        embedder.open().close()
+      }
+      inUse.set(true)
+      detector.open().close()
+      assertThat(threads).containsExactly(2, 2, 4, 4, 4).inOrder()
+      assertThat(YieldToApp.YIELDING_INFERENCE_THREADS).isEqualTo(2)
     } finally {
       root.deleteRecursively()
     }

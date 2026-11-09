@@ -164,8 +164,27 @@ enum class RunScope {
   LOCAL_BUFFER_ONLY,
 }
 
-/** Il ritmo: con il telefono caldo (LIGHT/MODERATE) le attivita' a CPU vanno piano. */
-enum class Pace { NORMAL, REDUCED }
+/**
+ * Il ritmo delle attivita' a CPU (`BackgroundActivity.cpuIntensive`). Chi lavora guarda [slow]: i due ritmi lenti si eseguono allo stesso
+ * modo (lotti piccoli e pause); sono due valori perche' il motivo e' diverso, e chi lo mostra (Diagnostica) non deve dire "il telefono e'
+ * caldo" quando e' solo l'app aperta.
+ */
+enum class Pace {
+  NORMAL,
+
+  /** Telefono caldo (LIGHT/MODERATE, o headroom alto): piano, finche' si raffredda (E-A5). */
+  REDUCED,
+
+  /**
+   * L'app e' in primo piano (review generale, OB-3): il lavoro pesante di fondo si fa da parte per non rubare CPU all'interfaccia, ma
+   * continua ad avanzare. In secondo piano torna [NORMAL]. Se il telefono e' anche caldo vale [REDUCED].
+   */
+  APP_IN_USE,
+  ;
+
+  /** Si va piano: lotti piccoli e pause fra un lotto e l'altro. */
+  val slow: Boolean get() = this != NORMAL
+}
 
 /** La stima del traffico di un "Fai ora", mostrata nella conferma. */
 data class TrafficEstimate(

@@ -466,6 +466,63 @@ class RuleEvaluatorTest {
     assertThat(evaluator.background(AI_COMPUTE, notte, state(thermal = ThermalStatus.NONE))).isEqualTo(run())
   }
 
+  // --- App in uso: il lavoro pesante di fondo si fa da parte (review generale, OB-3) -----------------------
+
+  @Test
+  fun appInPrimoPiano_leAttivitaACpuRallentanoMaNonSiFermano() {
+    val open = state(foreground = true)
+
+    for (activity in listOf(AI_COMPUTE, PREPARATION)) {
+      val decision = evaluator.background(activity, notte, open)
+      assertWithMessage("$activity con l'app aperta").that(decision.isRun).isTrue()
+      assertWithMessage("$activity con l'app aperta").that((decision as RuleDecision.Run).pace).isNotEqualTo(Pace.NORMAL)
+      // Anche a lavoro gia' partito: il ritmo cambia alla prima rivalutazione, il lavoro non si ferma.
+      val running = evaluator.background(activity, notte, open, running = true)
+      assertWithMessage("$activity in corso con l'app aperta").that((running as RuleDecision.Run).pace).isNotEqualTo(Pace.NORMAL)
+    }
+  }
+
+  @Test
+  fun appInSecondoPiano_leAttivitaACpuTornanoARitmoPieno() {
+    for (activity in listOf(AI_COMPUTE, PREPARATION)) {
+      assertThat(evaluator.background(activity, notte, state(foreground = false))).isEqualTo(run())
+      assertThat(evaluator.background(activity, notte, state(foreground = false), running = true)).isEqualTo(run())
+    }
+  }
+
+  @Test
+  fun appInPrimoPiano_ilRitmoEQuelloDellAppInUso_SoloPerLeAttivitaACpu() {
+    val open = state(foreground = true)
+
+    assertThat(evaluator.background(AI_COMPUTE, notte, open)).isEqualTo(RuleDecision.Run(RunScope.FULL, Pace.APP_IN_USE, NetworkClass.HOME_WIFI))
+    assertThat(evaluator.background(PREPARATION, notte, open)).isEqualTo(RuleDecision.Run(RunScope.FULL, Pace.APP_IN_USE, NetworkClass.HOME_WIFI))
+    // Backup e anteprime HQ sono rete e disco, non CPU: restano come sono.
+    for (activity in listOf(PHOTO_BACKUP, VIDEO_BACKUP, HQ_PREVIEWS)) {
+      assertWithMessage("$activity").that(evaluator.background(activity, notte, open)).isEqualTo(run())
+    }
+    assertThat(evaluator.background(INDEX_SYNC, notte, open)).isEqualTo(run())
+    // Solo sul buffer locale (NAS spento) con l'app aperta: piano anche li'.
+    assertThat(evaluator.background(AI_COMPUTE, notte, state(foreground = true, nas = false)))
+      .isEqualTo(RuleDecision.Run(RunScope.LOCAL_BUFFER_ONLY, Pace.APP_IN_USE, NetworkClass.HOME_WIFI))
+  }
+
+  @Test
+  fun appInPrimoPianoETelefonoCaldo_ilMotivoEIlCaldo() {
+    // I due ritmi lenti si eseguono allo stesso modo; il motivo che si mostra e' il caldo (la Diagnostica dice "il telefono e' caldo").
+    val hotAndOpen = state(thermal = ThermalStatus.LIGHT, foreground = true)
+    assertThat((evaluator.background(AI_COMPUTE, notte, hotAndOpen) as RuleDecision.Run).pace).isEqualTo(Pace.REDUCED)
+    assertThat(Pace.REDUCED.slow).isTrue()
+    assertThat(Pace.APP_IN_USE.slow).isTrue()
+    assertThat(Pace.NORMAL.slow).isFalse()
+  }
+
+  @Test
+  fun appInPrimoPiano_faiOraNonRiduceIlRitmo() {
+    // "Indicizza ora" e "Analizza ora" li ha chiesti l'utente: il ritmo resta pieno (la priorita' dei thread scende comunque: `YieldToApp`).
+    val decision = evaluator.evaluate(WorkRequest.UserInitiated(AI_COMPUTE, confirmed = true), notte, state(foreground = true), usage())
+    assertThat(decision).isEqualTo(run())
+  }
+
   // --- Profilo, ruoli, NAS, attivita' spente --------------------------------------------------------------
 
   @Test

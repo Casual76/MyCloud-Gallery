@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.model.FaceSpaceCode
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
+import dev.pampa.mycloudgallery.core.rules.run.YieldToApp
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -29,6 +30,9 @@ import kotlinx.coroutines.withContext
 // (memoria finita, libreria che non carica, [MAX_CONSECUTIVE_FAILURES] corse di fila che lanciano) e' una [AiEngineException] per tutta la
 // richiesta e la sessione si chiude: la prossima richiesta la riapre. Una richiesta alla volta (le chiamate si mettono in fila), thread
 // suo, rilascio idempotente, riapertura da sola. Mai un pixel, un vettore o un messaggio di libreria nei log (D37).
+//
+// Review generale, OB-3 (come `YuNetDetector`): dentro un lavoro di fondo che si fa da parte (`YieldToApp`, l'app in uso) la sessione si apre
+// con meno thread e a priorita' di fondo, e si riapre una volta quando lo stato dell'app cambia a meta' tappa.
 
 class SFaceEmbedder internal constructor(
   private val opener: EmbedderOpener,
@@ -41,6 +45,9 @@ class SFaceEmbedder internal constructor(
   private var session: EmbedderSession? = null
   private var input: FloatArray? = null
   private var failuresInARow = 0
+
+  /** La sessione aperta e' nata mentre il lavoro si faceva da parte (meno thread, priorita' di fondo). */
+  private var sessionYielding = false
 
   /** Quante sessioni si sono aperte (le prove del rilascio e della riapertura). */
   @Volatile
@@ -65,12 +72,16 @@ class SFaceEmbedder internal constructor(
     return gate.withLock {
       var opening = false
       try {
+        // OB-3: lo stato dell'app e' cambiato da quando la sessione e' nata: si riapre (con i thread e la priorita' di adesso).
+        val yielding = YieldToApp.yielding(currentCoroutineContext())
+        if (session != null && sessionYielding != yielding) closeEngine()
         val engine = thread ?: EngineThread(THREAD_NAME).also { thread = it }
         withContext(engine.dispatcher) {
           val current = session ?: run {
             opening = true
             opener.open().also {
               session = it
+              sessionYielding = yielding
               opened++
             }
           }

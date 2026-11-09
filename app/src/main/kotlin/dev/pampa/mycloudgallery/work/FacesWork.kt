@@ -269,7 +269,8 @@ class FacesStages(private val graph: AppGraph, private val faces: FacesGraph, no
 
   suspend fun compute(user: Boolean): StageOutcome {
     lastAnalyzed = 0
-    return watch.around { stage(user) }
+    // OB-3: con l'app in uso i thread dei volti scendono di priorita' e i motori si aprono con meno thread (anche per «Analizza ora»).
+    return watch.around { graph.quietly { stage(user) } }
   }
 
   private suspend fun stage(user: Boolean): StageOutcome {
@@ -297,7 +298,8 @@ class FacesStages(private val graph: AppGraph, private val faces: FacesGraph, no
     val request = WorkRequest.Background(BackgroundActivity.AI_COMPUTE, writesToNas = true)
     val outcome = StagedRun(request = request, rules = graph.stageRules(), ledger = graph.trafficLedger, checkpoints = NoCheckpoints)
       .run({ _, _ ->
-        faces.nightly(FACES_NIGHTLY_BUDGET)
+        // OB-3: il raggruppamento e' CPU pura; se l'utente apre l'app mentre gira, si fa da parte.
+        graph.quietly { faces.nightly(FACES_NIGHTLY_BUDGET) }
         BatchResult(hasMore = false)
       })
     if (outcome is StageOutcome.Finished) nightlyBeat.beat(graph.platform.deviceNow())

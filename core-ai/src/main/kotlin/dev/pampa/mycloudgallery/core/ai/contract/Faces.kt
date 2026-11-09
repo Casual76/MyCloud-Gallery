@@ -206,7 +206,10 @@ object FaceEngineLimits {
   const val CORE_MAX_YAW: Int = 35
   const val WEAK_MAX_YAW: Int = 60
 
-  /** I thread di LiteRT sulla CPU (D6). */
+  /**
+   * I thread di LiteRT sulla CPU (D6), a ritmo pieno. Dentro un lavoro di fondo con l'app in uso le sessioni si aprono con meno thread
+   * (`YieldToApp.YIELDING_INFERENCE_THREADS`, review generale OB-3): vedi `FaceEnginesFactory`.
+   */
   const val CPU_THREADS: Int = 4
 
   /** La tolleranza della norma di un vettore (A6: 1 +- 0,01). */

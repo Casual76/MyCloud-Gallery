@@ -23,7 +23,6 @@ import dev.pampa.mycloudgallery.core.prepare.contract.PrepVerdict
 import dev.pampa.mycloudgallery.feature.diagnostics.recording.DiagJob
 import dev.pampa.mycloudgallery.core.rules.BackgroundActivity
 import dev.pampa.mycloudgallery.core.rules.NetworkClass
-import dev.pampa.mycloudgallery.core.rules.Pace
 import dev.pampa.mycloudgallery.core.rules.WorkRequest
 import dev.pampa.mycloudgallery.release.ReleaseWiring
 import dev.pampa.mycloudgallery.core.rules.run.BatchResult
@@ -221,11 +220,13 @@ class NasStages(private val graph: AppGraph, private val nas: NasGraph, private 
       val control = PrepControl {
         when {
           !scope.proceed() -> PrepVerdict.Stop()
-          scope.pace == Pace.REDUCED -> PrepVerdict.Slow
+          // Piano col telefono caldo e (OB-3) con l'app in uso: un media per volta e una pausa fra l'uno e l'altro.
+          scope.pace.slow -> PrepVerdict.Slow
           else -> PrepVerdict.Continue
         }
       }
-      val result = nas.prepare(SLICE, control, priority) ?: return@run BatchResult(hasMore = false)
+      // OB-3: con l'app in uso i thread della preparazione (decodifica, riduzione, impronte) scendono di priorita'.
+      val result = graph.quietly { nas.prepare(SLICE, control, priority) } ?: return@run BatchResult(hasMore = false)
       scope.record(result.bytesRead)
       nas.flushOutbox()
       BatchResult(hasMore = result.stoppedBy == dev.pampa.mycloudgallery.core.prepare.contract.PrepStop.BUDGET)

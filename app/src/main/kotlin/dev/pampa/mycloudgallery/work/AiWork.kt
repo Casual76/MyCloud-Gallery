@@ -205,7 +205,8 @@ class AiStages(private val graph: AppGraph, private val ai: AiGraph, noBackup: F
     reportInterruptedStage()
     mark.begin(graph.platform.deviceNow())
     val outcome = try {
-      stage(user)
+      // OB-3: con l'app in uso i thread del calcolo scendono di priorita' (anche per «Indicizza ora», che non riduce il ritmo).
+      graph.quietly { stage(user) }
     } finally {
       mark.end()
     }

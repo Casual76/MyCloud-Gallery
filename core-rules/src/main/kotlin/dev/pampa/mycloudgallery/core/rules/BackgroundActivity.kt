@@ -27,7 +27,7 @@ enum class DeviceRole { INDEXER, PREPARER }
  *    E-A6); tutte le altre attivita' hanno bisogno del NAS.
  *
  * @property requiredRole ruolo che il dispositivo deve avere, o null se non ne serve nessuno.
- * @property cpuIntensive con il telefono caldo (LIGHT/MODERATE) va al ritmo ridotto.
+ * @property cpuIntensive va al ritmo ridotto con il telefono caldo (LIGHT/MODERATE) e con l'app in primo piano ([Pace]).
  * @property budget quota di Android che consuma quando gira come servizio in primo piano.
  */
 enum class BackgroundActivity(

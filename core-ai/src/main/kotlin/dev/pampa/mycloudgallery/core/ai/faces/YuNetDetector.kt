@@ -11,6 +11,7 @@ import dev.pampa.mycloudgallery.core.ai.runtime.EngineThread
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFiles
 import dev.pampa.mycloudgallery.core.models.contract.ModelSpec
+import dev.pampa.mycloudgallery.core.rules.run.YieldToApp
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -23,6 +24,11 @@ import kotlinx.coroutines.withContext
 // fisso 1024x1024 con bordi. La politica: una richiesta alla volta (le chiamate si mettono in fila), un thread suo per il motore, errori
 // come codici (`AiEngineException`: mai il messaggio di una libreria nei log, D37), rilascio idempotente, riapertura da sola dopo il
 // rilascio o dopo un guasto. Provata sulla JVM con sessioni finte (`DetectorSession`); la sessione vera e' `FaceLiteRtSessions.kt`.
+//
+// Review generale, OB-3: dentro un lavoro di fondo che si fa da parte (`YieldToApp` nel contesto, l'app in uso) la sessione si apre con meno
+// thread e, aperta dal thread del motore gia' abbassato, il suo pool nativo nasce a priorita' di fondo. I thread di un interprete non si
+// cambiano dopo l'apertura: quando lo stato dell'app cambia a meta' tappa la sessione si chiude e si riapre (240 KB: pochi millisecondi), una
+// volta per cambio. Fuori da un lavoro di fondo (nessun elemento nel contesto) non cambia niente.
 //
 // PREVIEW: l'immagine intera nel quadro (ridotta o ingrandita a lato lungo 1024). HQ_TILES: i tasselli di `FaceTiling` (fino a quattro,
 // 128 px di sovrapposizione), ognuno nel quadro con la sua scala; i rilevamenti tornano alle coordinate dell'immagine intera, quelli tagliati
@@ -40,6 +46,9 @@ class YuNetDetector internal constructor(
   private var thread: EngineThread? = null
   private var session: DetectorSession? = null
   private var builder: FrameBuilder? = null
+
+  /** La sessione aperta e' nata mentre il lavoro si faceva da parte (meno thread, priorita' di fondo): vedi la nota in cima. */
+  private var sessionYielding = false
 
   /** Quante sessioni si sono aperte (le prove del rilascio e della riapertura). */
   @Volatile
@@ -59,12 +68,16 @@ class YuNetDetector internal constructor(
   override suspend fun detect(image: FaceImage, pass: DetectPass): List<DetectedFace> = gate.withLock {
     var opening = false
     try {
+      // OB-3: lo stato dell'app e' cambiato da quando la sessione e' nata (l'utente ha aperto o chiuso l'app a meta' tappa): si riapre.
+      val yielding = YieldToApp.yielding(currentCoroutineContext())
+      if (session != null && sessionYielding != yielding) closeEngine()
       val engine = thread ?: EngineThread(THREAD_NAME).also { thread = it }
       withContext(engine.dispatcher) {
         val current = session ?: run {
           opening = true
           opener.open().also {
             session = it
+            sessionYielding = yielding
             opened++
           }
         }

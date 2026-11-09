@@ -3,7 +3,6 @@ package dev.pampa.mycloudgallery.core.ai.compute
 import dev.pampa.mycloudgallery.core.ai.contract.AiRunResult
 import dev.pampa.mycloudgallery.core.ai.contract.AiScope
 import dev.pampa.mycloudgallery.core.ai.contract.AiStop
-import dev.pampa.mycloudgallery.core.rules.Pace
 import dev.pampa.mycloudgallery.core.rules.RunScope
 import dev.pampa.mycloudgallery.core.rules.run.BatchResult
 import dev.pampa.mycloudgallery.core.rules.run.StageBatch
@@ -13,13 +12,14 @@ import kotlin.time.Duration
 
 /**
  * Le regole di una tappa (`StageScope` di `StagedRun`, D22) come le vede il calcolo: [check] chiede `proceed()` (tempo della tappa,
- * tetti, rivalutazione delle regole con `running = true`) e legge ritmo (`Pace.REDUCED`, E-A5) e ambito (`LOCAL_BUFFER_ONLY`, E-A6);
+ * tetti, rivalutazione delle regole con `running = true`) e legge ritmo (`Pace.slow`: telefono caldo, E-A5, o app in uso, review generale OB-3)
+ * e ambito (`LOCAL_BUFFER_ONLY`, E-A6);
  * [checkpoint] salva il punto di ripresa con `commit`.
  */
 class StageScopeControl(private val scope: StageScope<AiCheckpoint>) : AiRunControl {
   override suspend fun check(): AiPace {
     if (!scope.proceed()) return AiPace.Halt(if (scope.halt is StageHalt.Rules) AiStop.RULES else AiStop.BUDGET)
-    return AiPace.Go(reduced = scope.pace == Pace.REDUCED, localOnly = scope.runScope == RunScope.LOCAL_BUFFER_ONLY)
+    return AiPace.Go(reduced = scope.pace.slow, localOnly = scope.runScope == RunScope.LOCAL_BUFFER_ONLY)
   }
 
   override suspend fun checkpoint(point: AiCheckpoint) = scope.commit(point)

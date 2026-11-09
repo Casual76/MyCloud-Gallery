@@ -379,6 +379,23 @@ class StagedRunTest {
     assertThat(testScheduler.currentTime).isEqualTo(4_000L) // due pause: dopo il primo e dopo il secondo lotto, non dopo l'ultimo
   }
 
+  @Test
+  fun conLAppInUso_cePausaFraUnLottoEL_altro_eInSecondoPianoNo() = runTest {
+    // Review generale, OB-3: `Pace.APP_IN_USE` si esegue come il ritmo ridotto; quando l'app torna in secondo piano la pausa sparisce.
+    var inUse = true
+    val rules = ScriptedStageRules { runOn(pace = if (inUse) Pace.APP_IN_USE else Pace.NORMAL) }
+    val work = Work(total = 8, perBatch = 2)
+
+    val batch = work.batch()
+    val outcome = staged(rules, config = StageConfig(recheckEvery = Duration.ZERO, reducedPaceDelay = 2.seconds))
+      .run({ scope, from -> batch.run(scope, from).also { if (work.batches == 2) inUse = false } })
+
+    assertThat(outcome).isInstanceOf(StageOutcome.Finished::class.java)
+    assertThat(work.batches).isEqualTo(4)
+    // Una pausa dopo il primo lotto (app in uso); dal secondo in poi l'app e' in secondo piano: nessuna pausa.
+    assertThat(testScheduler.currentTime).isEqualTo(2_000L)
+  }
+
   // --- Tetto mensile (E-B10) ----------------------------------------------------------------------------------------
 
   @Test

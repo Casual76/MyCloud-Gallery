@@ -16274,3 +16274,31 @@ Esperimenti con interruttori temporanei (file `perf-<nome>` nella cartella dell'
 #### Difetti trovati fuori dal pacchetto
 - **La preparazione del dataset dopo un'installazione pulita cade ancora** (terza volta: il 03/11 `no such table: search_history`; oggi, in due tentativi di fila, ancora quella e poi `SQLiteDatabaseLockedException: database is locked` in `syncTriggers` di Room da `AppIndexerControl`): la sonda aspetta tutti i 1.200 s e salta le prove. Aggirato avviando a mano l'app di misura (il marcatore c'era gia') e riprovando alla morte del processo: la preparazione vera dura 53 s. Va corretto nel seeder / nel provider della variante di misura.
 - **`benchDiag` con le tracce di Anni va in timeout** (`SocketTimeoutException` del processore di tracce al terzo giro di `scroll_years_square`, tracce da ~300 MB): le interrogazioni con sottointerrogazioni correlate di `FrameDiagMetric` (`JANK`, `TL`, `RTJ`) sono troppo lente; la prova fallisce e non salva i numeri. Per Anni serve un'altra diagnosi (o le tracce interrogate a parte, come qui).
+
+## Pacchetto C1: il difetto del primo avvio (09/11)
+
+### La causa
+- La tabella `search_history` sta nel catalogo (`GalleryDatabase`, dallo schema v5): la crea Room con tutte le altre, dentro la prima apertura del file. Non nasce dopo e non la crea nessun callback.
+- Nella variante di misura l'app (`GalleryGraph`) apre `gallery-bench.db` e, **nello stesso processo**, il seminatore (`BenchSeeder`, thread `bench-dataset`) cancellava quel file e lo riscriveva con una seconda istanza di Room. L'indizio del brief era giusto nella sostanza; il file non e' `gallery.db` ma quello del profilo.
+- Dopo un'installazione pulita la finestra e' lunga: fra la cancellazione e la riscrittura il seminatore genera i modelli delle miniature (decine di secondi). In quel tempo al percorso non c'e' niente, e la prima connessione nuova dell'app crea un file vuoto: `no such table: search_history` (il flusso della cronologia di Cerca e' fra i primi a leggere). Poi il seminatore tiene una transazione di scrittura per quasi un minuto e la prima scrittura dell'app scade: `database is locked` (`syncTriggers` di Room). Con il dataset gia' pronto il seminatore non parte, e infatti non succedeva.
+
+### L'app vera
+- **Al primo avvio dopo un'installazione pulita non e' esposta.** Un solo processo (nessun `android:process`), una sola istanza di `GalleryDatabase` su `gallery.db` (la costruisce solo `GalleryGraph`; lavori di fondo e widget passano dal grafo), nessuna tabella creata in ritardo. `FirstOpenTest` (core-database) lo tiene fermo: sei primi accessi insieme su un file nuovo trovano tutti lo schema intero.
+- **Un punto con lo stesso schema c'e', e non e' corretto qui** (decisione dell'orchestratore). `AppLocalDataEraser.eraseAccountData(stopGallery = false)` cancella `gallery.db` senza chiudere l'istanza di Room quando in questo processo la famiglia non e' mai stata pronta (`AppPreviousAccountData.erase`: fine di un «Configura di nuovo» con un altro account o un altro NAS). `GalleryGraph.shutdown` in quel caso esce subito e lascia la galleria utilizzabile. Se prima di quel momento qualcosa ha gia' letto il catalogo (`hiddenMask` dice di non aspettare la famiglia pronta; `NasGraph`, `BackupGraph` e `BackupUi` ricevono il database alla nascita), la Libreria riparte su un file cancellato: stesse eccezioni, oppure righe scritte in un file che sparisce alla chiusura del processo. **Non ho provato che il catalogo si apra davvero prima della famiglia pronta**: va verificato. Correzione proposta: considerare «partita» la galleria anche quando `database.isOpen`, chiudere il database in `shutdown` anche in quel caso e riavviare il processo come gia' si fa con la galleria partita.
+- Stessa forma, solo strumenti di sviluppo: `SyntheticLibraryStack` (`gallery-synthetic.db`) e `SyntheticNasKit` (`gallery-nas-synthetic.db`, solo debug) chiudono il database in modo asincrono e chi li riapre subito puo' cancellare il file prima della chiusura. Non toccati.
+
+### La correzione
+- **Un file di database ha un solo padrone per processo** (`BenchDatabaseFiles`). Il seminatore scrive `<nome>.building`, lo rilegge, porta il WAL nel file principale, lo chiude e lo rinomina in `<nome>.ready`. Il file dell'app non lo apre e non lo cancella piu'.
+- Lo scambio avviene all'avvio successivo, in `BenchDatasetProvider.onCreate` (prima di `Application.onCreate`, quindi prima del grafo): se un `.ready` aspetta, prende il posto del database dell'app. `BenchSession` ferma e riavvia gia' l'app dopo lo stato `pronto`.
+- `isReusable` non considera pronto un dataset il cui `.ready` aspetta ancora (scambio non riuscito): si rifa'.
+- I sorgenti di `src/benchmarkRelease` si compilano anche nei test unitari di debug (`app/build.gradle`, `sourceSets.testDebug`): solo nei test, nessuna classe `Bench*` entra negli APK.
+
+### I test
+- `BenchFirstStartTest` (`app/src/testDebug`): l'app apre per prima il database, scrive e rilegge la cronologia di continuo mentre il seminatore vero prepara 5.000 righe; poi lo scambio del «prossimo avvio». Senza la correzione fallisce (`expected: 0, but was: 5000`: il seminatore ha scritto nel file dell'app); con la correzione passa, 10 volte su 10.
+- Su Windows la cancellazione di un file aperto non riesce, quindi il test sul PC non puo' riprodurre il file che sparisce (`no such table`): prova la regola (il file dell'app non si tocca), non il sintomo.
+
+### Cosa resta e cosa va provato sul dispositivo
+- Una corsa dei benchmark dopo un'installazione pulita (o `pm clear`) su S25 e Tab S9: la preparazione deve arrivare a `pronto` al primo tentativo e la Libreria deve mostrare il dataset dopo il riavvio della sonda.
+- `StartupBenchmark`: l'avvio paga due `stat` in piu' sul thread principale nella sola variante di misura; atteso nel rumore, da confermare.
+- Chi usa la variante di misura a mano deve riavviare l'app dopo `pronto`: nel processo che ha preparato il dataset la Libreria resta quella di prima (vuota al primo giro).
+- Il punto di `eraseAccountData` qui sopra.

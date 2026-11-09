@@ -14,13 +14,18 @@ import android.net.Uri
  * prima del grafo Hilt, e perche' il manifest lo conserva da R8 senza regole in piu'. Fa una cosa sola: se il marcatore
  * [BenchDataset.MARKER] sta in `getExternalFilesDir`, avvia su un thread proprio la creazione del database sintetico
  * ([BenchDataset]). Senza marcatore non fa niente: la variante si comporta come la release. Sul thread principale non
- * legge nemmeno il marcatore: non sposta l'avvio a freddo che la stessa variante serve a misurare.
+ * legge nemmeno il marcatore: non sposta l'avvio a freddo che la stessa variante serve a misurare. L'unico lavoro sul thread
+ * principale e' guardare se un dataset finito aspetta lo scambio (C1, [BenchDatabaseFiles.promoteReady]): due `stat`.
  */
 class BenchDatasetProvider : ContentProvider() {
 
   override fun onCreate(): Boolean {
     val context = context ?: return false
-    BenchDataset.onProcessStart(context.applicationContext ?: context)
+    val app = context.applicationContext ?: context
+    // C1: un dataset finito dall'avvio di prima prende il posto del database dell'app ORA, prima di `Application.onCreate`: e' il solo momento in
+    // cui nessuno ha quel file aperto. Senza niente che aspetta sono due `stat` (`BenchDatabaseFiles.promoteReady`).
+    BenchDatabaseFiles.promoteReady(app)
+    BenchDataset.onProcessStart(app)
     return true
   }
 

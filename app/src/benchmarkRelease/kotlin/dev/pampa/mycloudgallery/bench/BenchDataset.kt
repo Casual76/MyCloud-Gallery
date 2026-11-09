@@ -37,7 +37,11 @@ internal enum class BenchProfile(val code: String, val databaseName: String, val
  * **Idempotente.** Con uno stato `pronto` della stessa [SHAPE_VERSION], con lo stesso numero di righe richiesto e con il
  * database e l'indice della replica presenti, un avvio successivo non rifa niente: gli avvii a freddo misurati non pagano il dataset.
  *
- * **Mai il database vero.** Si scrive [BenchProfile.databaseName] (`gallery-bench*.db`), non `gallery.db`.
+ * **Mai il database vero.** Il dataset e' [BenchProfile.databaseName] (`gallery-bench*.db`), non `gallery.db`.
+ *
+ * **Mai il file che l'app ha aperto (C1).** La preparazione gira mentre l'app e' accesa sullo stesso file: il seminatore scrive un file suo
+ * e lo stato `pronto` vuol dire "pronto dal prossimo avvio", quando [BenchDatabaseFiles.promoteReady] lo mette al posto di quello dell'app.
+ * Il collaudo ferma e riavvia sempre l'app dopo `pronto` (`BenchSession`): chi legge lo stato deve fare lo stesso.
  *
  * Il collegamento con la UI (famiglia "pronta", database della Libreria, sincronizzazione spenta, replica) e' descritto in
  * `docs/bench/README.md` ("Collegamento con l'app"): da qui si vedono solo [BenchFamilySetupRepository] e
@@ -215,6 +219,8 @@ internal object BenchDataset {
       previous.optInt("formato") == SHAPE_VERSION &&
       previous.optInt("righe") == rows &&
       context.getDatabasePath(profile.databaseName).exists() &&
+      // C1: un dataset finito che aspetta ancora vuol dire che lo scambio di questo avvio non e' riuscito: il file dell'app non e' il dataset.
+      !BenchDatabaseFiles.hasReady(context, profile) &&
       BenchReplicaStore.indexFile(context, profile).exists() &&
       freshEnough(previous.optInt("giornoSeme")) &&
       (profile != BenchProfile.MIXED || previous.optInt("ricordiSeminati") == 0 || File(File(context.noBackupFilesDir, BenchShelf.DIR), "shelf.bin").exists())

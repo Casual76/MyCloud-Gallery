@@ -84,6 +84,38 @@ class AppLockSettingsStoreTest {
     assertThat(runBlocking { AppLockSettingsStore(broken).settings.first() }).isEqualTo(AppLockSettings.FAIL_CLOSED)
   }
 
+  /** OB-4 della review generale: con la memoria piena `DataStore.edit` lancia `IOException`; da un `viewModelScope` chiudeva l'app. Ora `update` dice "non salvato" e basta. */
+  @Test
+  fun unaScritturaCheNonRiesce_restituisceFalso_NonLanciaEIlBloccoResta() {
+    val full = object : DataStore<Preferences> {
+      override val data: Flow<Preferences> = flow { emit(emptyPreferences()) }
+      override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences = throw IOException("No space left on device")
+    }
+    val store = AppLockSettingsStore(full)
+
+    val saved = runBlocking { store.update(AppLockSettings(AppLockMode.SYSTEM_CREDENTIAL, AppLockTimeout.IMMEDIATELY)) }
+
+    assertThat(saved).isFalse()
+    assertThat(runBlocking { store.settings.first() }.mode).isEqualTo(AppLockMode.OFF)
+  }
+
+  @Test
+  fun unaScritturaCheRiesce_restituisceVero() {
+    val store = AppLockSettingsStore(realStore())
+
+    assertThat(runBlocking { store.update(AppLockSettings(AppLockMode.SYSTEM_CREDENTIAL, AppLockTimeout.AFTER_5_MINUTES)) }).isTrue()
+  }
+
+  @Test
+  fun unErroreDiProgrammazioneInScrittura_nonVieneNascosto() {
+    val broken = object : DataStore<Preferences> {
+      override val data: Flow<Preferences> = flow { emit(emptyPreferences()) }
+      override suspend fun updateData(transform: suspend (t: Preferences) -> Preferences): Preferences = throw IllegalStateException("bug")
+    }
+    val result = runCatching { runBlocking { AppLockSettingsStore(broken).update(AppLockSettings()) } }
+    assertThat(result.exceptionOrNull()).isInstanceOf(IllegalStateException::class.java)
+  }
+
   @Test
   fun unErroreCheNonEDiI_O_nonVieneNascosto() {
     val broken = object : DataStore<Preferences> {

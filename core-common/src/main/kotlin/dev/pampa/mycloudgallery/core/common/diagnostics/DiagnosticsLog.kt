@@ -177,7 +177,7 @@ class FileDiagnosticsLogStore(
 
 /**
  * Una riga: `at|CODICE|GRAVITA|chiave=valore;chiave=valore`. Valori: `n123`, `f1`/`f0`, `d250`,
- * `eTipo.COSTANTE`, `h0123456789ab`. Le chiavi e i nomi sono identificatori validati, quindi i separatori
+ * `eTipo.COSTANTE`, `h0123456789ab`, `tClasse,Classe.metodo(File.kt:1)`. Le chiavi e i nomi sono identificatori validati, quindi i separatori
  * non possono comparire dentro un campo.
  */
 internal object DiagEventCodec {
@@ -211,6 +211,8 @@ internal object DiagEventCodec {
     is ExportValue.Dur -> "d${value.millis}"
     is ExportValue.Enum -> "e${value.type}.${value.constant}"
     is ExportValue.Hashed -> "h${value.hex}"
+    // Gli identificativi del codice hanno solo lettere, cifre e . $ < > - ( ) : e mai una virgola: la virgola li separa.
+    is ExportValue.Trace -> "t" + value.entries.joinToString(",")
   }
 
   private fun decodeValue(raw: String): ExportValue? {
@@ -226,6 +228,7 @@ internal object DiagEventCodec {
       'd' -> body.toLongOrNull()?.let { ExportValue.Dur(it) }
       'e' -> ExportValue.Enum.restore(body.substringBefore('.'), body.substringAfter('.', missingDelimiterValue = ""))
       'h' -> if (ExportValue.Hashed.HEX.matches(body)) ExportValue.Hashed(body) else null
+      't' -> ExportValue.Trace.of(if (body.isEmpty()) emptyList() else body.split(','))
       else -> null
     }
   }

@@ -198,7 +198,7 @@
   <string name="album_message_not_allowed">Questo album non lo permette a te: lo decide il creatore.</string>
   <string name="album_message_not_found">L’album non c’è più.</string>
   <string name="album_message_not_in_album">Quella foto non è in questo album.</string>
-  <string name="album_message_not_done">Non ci sono riuscito: qualcosa non torna (per esempio una cartella che l’album non può usare). Non è cambiato niente.</string>
+  <string name="album_message_not_done">Non ci sono riuscito: qualcosa non torna (una cartella che l’album non può usare) oppure sul telefono manca spazio. Non è cambiato niente.</string>
   <string name="album_message_rules_too_long">Le regole sono troppo lunghe per essere salvate. Accorciale.</string>
   <string name="album_message_nothing_to_add">Non c’è niente da aggiungere: %1$s</string>
   <string name="album_message_dismiss">Chiudi il messaggio</string>

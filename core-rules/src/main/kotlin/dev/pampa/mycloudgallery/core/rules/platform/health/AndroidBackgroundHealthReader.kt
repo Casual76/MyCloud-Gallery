@@ -15,6 +15,12 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.PackageManagerCompat
 import dev.pampa.mycloudgallery.core.common.coroutines.DefaultDispatcherProvider
 import dev.pampa.mycloudgallery.core.common.coroutines.DispatcherProvider
+import dev.pampa.mycloudgallery.core.rules.platform.crash.AnrTrace
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashCause
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashKind
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashLogStore
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashRecord
+import dev.pampa.mycloudgallery.core.rules.platform.crash.ThreadKind
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runInterruptible
@@ -35,6 +41,7 @@ import kotlinx.coroutines.withContext
  * | `bootCount` | `Settings.Global.BOOT_COUNT` | 24 |
  * | `lastExitReasons` | `ActivityManager.getHistoricalProcessExitReasons` | 30 |
  * | `isSystemUser` | `UserManager.isSystemUser` | 23 |
+ * | `recentCrashes` | il registro locale dei crash (`CrashLogStore`) e `ApplicationExitInfo.getTraceInputStream()` per gli ANR | 30 per gli ANR |
  *
  * **Niente permessi speciali e niente supposizioni.** Se Android non risponde (servizio assente, eccezione,
  * API che sul telefono non esiste) il campo resta `null`/`UNKNOWN`/vuoto: un avviso sbagliato insegna a
@@ -53,10 +60,14 @@ class AndroidBackgroundHealthReader(
   private val sdkInt: Int = Build.VERSION.SDK_INT,
   private val restrictionsTimeoutMillis: Long = RESTRICTIONS_TIMEOUT_MILLIS,
   private val maxExitRecords: Int = MAX_EXIT_RECORDS,
+  crashLogStore: CrashLogStore? = null,
 ) : BackgroundHealthReader {
 
   private val app: Context = context.applicationContext ?: context
   private val packageName: String = app.packageName
+
+  /** Il registro dei crash (C472): la cartella si apre alla prima lettura, mai alla costruzione (il grafo si costruisce sul thread principale all'avvio). */
+  private val crashLog: CrashLogStore by lazy(LazyThreadSafetyMode.NONE) { crashLogStore ?: CrashLogStore.inNoBackupDir(app) }
 
   override suspend fun read(): BackgroundHealth = withContext(dispatchers.io) {
     BackgroundHealth(
@@ -69,6 +80,7 @@ class AndroidBackgroundHealthReader(
       bootCount = readBootCount(),
       lastExitReasons = readExitReasons(),
       isSystemUser = readIsSystemUser(),
+      recentCrashes = readRecentCrashes(),
     )
   }
 
@@ -188,6 +200,39 @@ class AndroidBackgroundHealthReader(
     } ?: emptyList()
   }
 
+  /**
+   * I crash e gli ANR recenti con il punto del codice (C472): il registro locale dei crash e, da Android 11, la traccia dell'ANR che il sistema conserva (solo le cornici
+   * nostre del thread principale, [AnrTrace]). Mai un messaggio, mai un percorso. Dal piu' recente, al piu' [MAX_CRASH_RECORDS].
+   */
+  internal fun readRecentCrashes(): List<CrashRecord> {
+    val crashes = safe { crashLog.read() } ?: emptyList()
+    return (crashes + readAnrRecords()).sortedByDescending { it.atMillis }.take(MAX_CRASH_RECORDS)
+  }
+
+  // getTraceInputStream esiste dall'API 30 (minSdk 29): la guardia e' `sdkInt`, che lint non vede.
+  @SuppressLint("NewApi")
+  private fun readAnrRecords(): List<CrashRecord> {
+    if (sdkInt < Build.VERSION_CODES.R) return emptyList()
+    return safe {
+      app.getSystemService(ActivityManager::class.java)
+        ?.getHistoricalProcessExitReasons(packageName, 0, maxExitRecords)
+        ?.filter { it.reason == android.app.ApplicationExitInfo.REASON_ANR }
+        ?.take(MAX_ANR_TRACES)
+        ?.mapNotNull { info ->
+          val frames = safe { info.traceInputStream?.let { AnrTrace.mainThreadFrames(it) } } ?: return@mapNotNull null
+          CrashRecord(
+            kind = CrashKind.ANR,
+            atMillis = info.timestamp,
+            // La versione dell'ANR non si conosce (il sistema non la da'): 0 vuol dire "non nota".
+            versionCode = 0L,
+            thread = ThreadKind.MAIN,
+            mainProcess = true,
+            chain = listOf(CrashCause(ANR_CLASS, frames)),
+          )
+        }
+    } ?: emptyList()
+  }
+
   /** Il profilo principale. Senza risposta si presume di si': l'avviso sul profilo secondario non si inventa. */
   internal fun readIsSystemUser(): Boolean =
     safe { app.getSystemService(UserManager::class.java)?.isSystemUser } ?: true
@@ -210,5 +255,14 @@ class AndroidBackgroundHealthReader(
 
     /** Quante uscite del processo si leggono: bastano a vedere una serie di crash o di arresti forzati. */
     const val MAX_EXIT_RECORDS: Int = 8
+
+    /** Quanti crash e ANR si riportano alla Diagnostica (il registro ne tiene dieci). */
+    const val MAX_CRASH_RECORDS: Int = 10
+
+    /** Le tracce di ANR che si leggono (ognuna e' un testo di molti thread): le piu' recenti bastano a capire se si ripete. */
+    private const val MAX_ANR_TRACES = 3
+
+    /** La "classe" che descrive un ANR: non c'e' un'eccezione, c'e' il thread principale fermo. */
+    private const val ANR_CLASS = "android.app.ApplicationNotResponding"
   }
 }

@@ -1,20 +1,25 @@
 package dev.pampa.mycloudgallery.feature.albums
 
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.core.albums.contract.AddOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.Album
+import dev.pampa.mycloudgallery.core.albums.contract.Albums
 import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.SmartRules
 import dev.pampa.mycloudgallery.core.albums.testing.SmartMembership
 import dev.pampa.mycloudgallery.core.model.AccountId
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumKind
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.ShareLevel
 import dev.pampa.mycloudgallery.feature.albums.choose.AddResult
 import dev.pampa.mycloudgallery.feature.albums.choose.AddToAlbumController
 import dev.pampa.mycloudgallery.feature.albums.contract.AddToAlbumRequest
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumMessage
 import dev.pampa.mycloudgallery.feature.albums.contract.ShareSheetState
 import dev.pampa.mycloudgallery.feature.albums.page.SuggestionKind
 import dev.pampa.mycloudgallery.feature.albums.page.SuggestionsController
+import java.io.IOException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -73,6 +78,51 @@ class AddToAlbumAndSuggestionsTest {
     val second = c.ui.value.result as AddResult.Added
     assertThat(second.added).isEqualTo(0)
     assertThat(second.alreadyThere).isEqualTo(2)
+  }
+
+  /**
+   * R-1 della review generale: `FilePersonalLedger.save` con la memoria piena lancia `IOException`, che attraversa `Albums.add` fino al `scope.launch` del controller e chiudeva
+   * l'app (e lasciava "occupato" per sempre). Ora e' il messaggio "Non ci sono riuscito", niente e' cambiato e si puo' riprovare.
+   */
+  @Test
+  fun conLaMemoriaPienaL_AggiuntaDiceCheNonEStataFattaENonFaCadereNiente() = runTest(UnconfinedTestDispatcher()) {
+    val world = AlbumsTestWorld()
+    seed(world)
+    val album = (world.albums.create("Mio", AlbumKind.MANUAL) as CreateOutcome.Created).id
+    var full = true
+    val failing = object : Albums by world.albums {
+      override suspend fun add(id: AlbumId, media: List<MediaId>): AddOutcome =
+        if (full) throw IOException("No space left on device") else world.albums.add(id, media)
+    }
+    val c = AddToAlbumController(AddToAlbumRequest(all), failing, world.sharedAlbums, world.library, world.runner, world.screens, backgroundScope).also { it.start() }
+
+    c.add(world.albums.all.value.byId(album)!!)
+
+    assertThat(c.ui.value.message).isEqualTo(AlbumMessage.NotDone)
+    assertThat(c.ui.value.busy).isFalse()
+    assertThat(c.ui.value.result).isNull()
+    assertThat(world.albums.all.value.byId(album)?.count).isEqualTo(0)
+
+    // Liberata un po' di memoria si riprova, e funziona.
+    full = false
+    c.dismissMessage()
+    c.add(world.albums.all.value.byId(album)!!)
+    assertThat((c.ui.value.result as AddResult.Added).added).isEqualTo(2)
+  }
+
+  @Test
+  fun conLaMemoriaPienaIlNuovoAlbumDiceCheNonEStatoFatto() = runTest(UnconfinedTestDispatcher()) {
+    val world = AlbumsTestWorld()
+    seed(world)
+    val failing = object : Albums by world.albums {
+      override suspend fun create(title: String, kind: AlbumKind, rules: SmartRules?): CreateOutcome = throw IOException("No space left on device")
+    }
+    val c = AddToAlbumController(AddToAlbumRequest(all), failing, world.sharedAlbums, world.library, world.runner, world.screens, backgroundScope).also { it.start() }
+
+    c.addToNewAlbum("Nuovo")
+
+    assertThat(c.ui.value.message).isEqualTo(AlbumMessage.NotDone)
+    assertThat(c.ui.value.busy).isFalse()
   }
 
   @Test

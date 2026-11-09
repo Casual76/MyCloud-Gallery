@@ -60,5 +60,5 @@ internal class StoreAppLockPreferences(context: Context) : AppLockPreferences {
 
   override val settings: Flow<AppLockSettings> get() = store.settings
 
-  override suspend fun update(settings: AppLockSettings) = store.update(settings)
+  override suspend fun update(settings: AppLockSettings): Boolean = store.update(settings)
 }

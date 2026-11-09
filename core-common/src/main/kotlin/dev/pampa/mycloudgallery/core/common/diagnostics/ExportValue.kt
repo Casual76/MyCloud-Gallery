@@ -71,6 +71,43 @@ sealed interface ExportValue {
   }
 
   /**
+   * Un elenco di **identificativi del codice** dell'app: nomi di classe e punti `classe.metodo(File.kt:riga)`. Serve a una sola cosa, il registro
+   * locale dei crash (C472): dice dove si e' rotto, mai perche' (il messaggio di un'eccezione puo' portare un percorso, un nome di file, un indirizzo).
+   *
+   * **Niente testo libero neanche qui.** Il costruttore e' privato e l'unico ingresso, [of], accetta solo voci che hanno la forma di un identificativo
+   * ([ENTRY]: segmenti che cominciano con una lettera, separati da punti, con in coda l'eventuale `(File.kt:riga)`): niente spazi, barre, virgolette,
+   * virgole, cifre iniziali (un indirizzo IP o un numero non passano), e un tetto di lunghezza e di voci. Una voce che non ha la forma fa rifiutare
+   * tutto l'elenco: meglio un campo in meno che un campo con un dato.
+   */
+  class Trace private constructor(val entries: List<String>) : ExportValue {
+
+    override fun equals(other: Any?): Boolean = other is Trace && other.entries == entries
+
+    override fun hashCode(): Int = entries.hashCode()
+
+    override fun toString(): String = "Trace(${entries.size} voci)"
+
+    companion object {
+      /** Le voci di un elenco: bastano le prime cornici nostre e la catena delle classi. */
+      const val MAX_ENTRIES = 40
+
+      /** Una cornice nostra e' lunga di solito meno di 120 caratteri. */
+      const val MAX_ENTRY_LENGTH = 220
+
+      private const val SEGMENT = "[A-Za-z_$<][A-Za-z0-9_$<>-]*"
+
+      /** Una classe (`java.io.IOException`), un punto (`dev.pampa.Foo\$bar\$1.invokeSuspend`) o un punto con file e riga (`...(Foo.kt:12)`). */
+      val ENTRY = Regex("$SEGMENT(?:\\.$SEGMENT)*(?:\\([A-Za-z0-9_$]{1,80}\\.(?:kt|java):[0-9]{1,6}\\))?")
+
+      /** L'elenco, o null se una voce non ha la forma di un identificativo del codice o se sono troppe. */
+      fun of(entries: List<String>): Trace? =
+        if (entries.size <= MAX_ENTRIES && entries.all { isEntry(it) }) Trace(entries.toList()) else null
+
+      fun isEntry(text: String): Boolean = text.length <= MAX_ENTRY_LENGTH && ENTRY.matches(text)
+    }
+  }
+
+  /**
    * Un'impronta (12 cifre esadecimali, 48 bit di HMAC-SHA256). Il costruttore e' interno: solo [DiagHasher]
    * (e la rilettura dell'anello) ne creano.
    */

@@ -147,6 +147,10 @@ object DiagCodes {
   @JvmField val AND_RECENT_REBOOT = DiagCode("AND_RECENT_REBOOT", setOf("E-P13", "E-P4"))
   @JvmField val AND_EXIT_CRASH = DiagCode("AND_EXIT_CRASH")
   @JvmField val AND_EXIT_ANR = DiagCode("AND_EXIT_ANR")
+
+  // Il registro locale dei crash (OA-2 / OB-7, C472): dove si e' rotta l'app, per ogni crash o ANR recente.
+  @JvmField val AND_CRASH_RECORDED = DiagCode("AND_CRASH_RECORDED", setOf("C472"))
+  @JvmField val AND_ANR_RECORDED = DiagCode("AND_ANR_RECORDED", setOf("C472"))
   @JvmField val AND_EXIT_MEMORY = DiagCode("AND_EXIT_MEMORY", setOf("E-P3"))
   @JvmField val AND_EXIT_FORCE_STOP = DiagCode("AND_EXIT_FORCE_STOP", setOf("E-P2"))
   @JvmField val AND_EXIT_FREEZER = DiagCode("AND_EXIT_FREEZER")

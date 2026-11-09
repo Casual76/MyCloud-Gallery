@@ -139,6 +139,8 @@ internal object DiagCatalogEntries {
     DiagEntry(DiagCodes.AND_RECENT_REBOOT, DiagSection.ANDROID_WARNINGS, DiagSeverity.INFO, R.string.diag_and_recent_reboot_title, R.string.diag_and_recent_reboot_guide, null),
     DiagEntry(DiagCodes.AND_EXIT_CRASH, DiagSection.ANDROID_WARNINGS, DiagSeverity.ERROR, R.string.diag_and_exit_crash_title, R.string.diag_and_exit_crash_guide, null),
     DiagEntry(DiagCodes.AND_EXIT_ANR, DiagSection.ANDROID_WARNINGS, DiagSeverity.ERROR, R.string.diag_and_exit_anr_title, R.string.diag_and_exit_anr_guide, null),
+    DiagEntry(DiagCodes.AND_CRASH_RECORDED, DiagSection.ANDROID_WARNINGS, DiagSeverity.ERROR, R.string.diag_and_crash_recorded_title, R.string.diag_and_crash_recorded_guide, null),
+    DiagEntry(DiagCodes.AND_ANR_RECORDED, DiagSection.ANDROID_WARNINGS, DiagSeverity.ERROR, R.string.diag_and_anr_recorded_title, R.string.diag_and_anr_recorded_guide, null),
     DiagEntry(DiagCodes.AND_EXIT_MEMORY, DiagSection.ANDROID_WARNINGS, DiagSeverity.WARNING, R.string.diag_and_exit_memory_title, R.string.diag_and_exit_memory_guide, null),
     DiagEntry(DiagCodes.AND_EXIT_FORCE_STOP, DiagSection.ANDROID_WARNINGS, DiagSeverity.WARNING, R.string.diag_and_exit_force_stop_title, R.string.diag_and_exit_force_stop_guide, null),
     DiagEntry(DiagCodes.AND_EXIT_FREEZER, DiagSection.ANDROID_WARNINGS, DiagSeverity.INFO, R.string.diag_and_exit_freezer_title, 0, null),

@@ -14,6 +14,7 @@ import dev.pampa.mycloudgallery.core.common.perf.InstantShapes
 import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShapeMemory
 import dev.pampa.mycloudgallery.core.library.store.SnapshotStore
 import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
+import dev.pampa.mycloudgallery.core.rules.platform.crash.CrashLogHandler
 import dev.pampa.mycloudgallery.work.AiWorkScheduling
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
@@ -138,6 +139,9 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
       .build()
 
   override fun onCreate() {
+    // OA-2 / OB-7 (C472): il registro locale dei crash, PRIMA di tutto (anche di Hilt e della lettura del testo): un'eccezione non gestita lascia nel telefono dove si e' rotta
+    // (classi e cornici nostre, mai un messaggio), e la Diagnostica la mostra e la esporta. Incatenato al gestore di sistema, non fa I/O finche' non cade qualcosa.
+    CrashLogHandler.install(this, BuildConfig.VERSION_CODE.toLong())
     // Fase 6 (D41): PRIMA di ogni altra cosa, anche dell'iniezione di Hilt: con la lettura del testo non attiva qui si annullano i lavori
     // di DataTransport e se ne tolgono coda e identificativo. Nessuna classe di ML Kit si carica (MlKitOffAtStartupDeviceTest).
     AvvioTrace.section("MCG:app:letturaTesto") { TextReadingStartup.run(this) }

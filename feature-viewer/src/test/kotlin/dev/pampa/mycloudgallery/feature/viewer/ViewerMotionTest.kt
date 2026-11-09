@@ -80,6 +80,22 @@ class ViewerMotionTest : ViewerTestBase() {
     return index
   }
 
+  /**
+   * Come [showMotion] ma **senza** il `CompositionLocalProvider` del test: la politica di movimento arriva dal tema vero (`MyCloudGalleryTheme`, dentro `ViewerTestHost`), che la
+   * legge dalla scala delle animazioni del sistema ([systemAnimatorScale]). E' la strada di un telefono con "Rimuovi animazioni" acceso (SOL-2 della review generale).
+   */
+  private fun showMotionUnderRealTheme(systemScale: Float): Int {
+    systemAnimatorScale = systemScale
+    val index = motions.first()
+    val services = motionServices(index, animation = true, power = false)
+    val request = fixture.request(startIndex = index)
+    composeRule.setContent {
+      ViewerTestHost { ViewerOverlay(request = request, onClosed = { closed++ }, services = services) }
+    }
+    composeRule.waitForIdle()
+    return index
+  }
+
   /** Fa passare il tempo del pager fermo e della ricerca del video. */
   private fun settle() {
     composeRule.mainClock.advanceTimeBy(1_000)
@@ -282,6 +298,27 @@ class ViewerMotionTest : ViewerTestBase() {
     settle()
     assertThat(player.calls).isEmpty()
     assertThat(playersCreated).isEqualTo(0)
+  }
+
+  /**
+   * SOL-2 della review generale: `GalleryTheme` non installava `FluidMotionPolicyProvider`, quindi sotto il tema vero `reducedMotion` non era mai vero e le foto in movimento
+   * partivano anche con le animazioni di sistema spente. Il test di sopra (`conRimuoviAnimazioni_...`) non lo vedeva: dava la politica a mano.
+   */
+  @Test
+  fun conLeAnimazioniDiSistemaSpente_SottoIlTemaVero_NonCEUnaChiamataAlLettore() {
+    showMotionUnderRealTheme(systemScale = 0f)
+    settle()
+    assertThat(player.calls).isEmpty()
+    assertThat(playersCreated).isEqualTo(0)
+  }
+
+  /** Il controllo: stessa strada, animazioni di sistema accese, e l'animazione d'apertura parte (se no il test di sopra non proverebbe niente). */
+  @Test
+  fun conLeAnimazioniDiSistemaAccese_SottoIlTemaVero_LAnimazioneParte() {
+    showMotionUnderRealTheme(systemScale = 1f)
+    settle()
+    assertThat(player.loads).hasSize(1)
+    assertThat(playersCreated).isEqualTo(1)
   }
 
   @Test

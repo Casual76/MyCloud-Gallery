@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.security.lock.AppLockState
 import dev.pampa.mycloudgallery.core.security.lock.AppLockTimeout
 import dev.pampa.mycloudgallery.core.security.lock.AuthAvailability
 import dev.pampa.mycloudgallery.core.security.lock.AuthResult
+import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.support.FakeAppLockPreferences
 import dev.pampa.mycloudgallery.feature.settings.support.FakeScreenLockProbe
 import dev.pampa.mycloudgallery.feature.settings.support.MainDispatcherRule
@@ -35,6 +36,34 @@ class SecurityViewModelTest {
     vm.enable()
     assertThat(prefs.updates.last().mode).isEqualTo(AppLockMode.SYSTEM_CREDENTIAL)
     assertThat(vm.state.value.lockEnabled).isTrue()
+  }
+
+  /** OB-4 della review generale: con la memoria piena la scrittura non riesce; l'interruttore torna dov'era e la pagina dice perche' (prima l'eccezione chiudeva l'app). */
+  @Test
+  fun conLaMemoriaPienaIlBloccoNonSiAccende_EDiceCheNonESalvato() = runTest {
+    val prefs = FakeAppLockPreferences().also { it.failWrites = true }
+    val (vm, _) = viewModel(prefs = prefs)
+    keepAlive(vm.state)
+
+    vm.enable()
+
+    assertThat(vm.state.value.lockEnabled).isFalse()
+    assertThat(vm.state.value.feedback).isNotNull()
+    assertThat(vm.state.value.feedback!!.title).isEqualTo(R.string.security_not_saved_title)
+  }
+
+  @Test
+  fun conLaMemoriaPienaIlBloccoNonSiSpegneENonCambiaIlTimeout_EDiceCheNonESalvato() = runTest {
+    val prefs = FakeAppLockPreferences(AppLockSettings(AppLockMode.SYSTEM_CREDENTIAL, AppLockTimeout.AFTER_5_MINUTES)).also { it.failWrites = true }
+    val (vm, _) = viewModel(prefs = prefs)
+    keepAlive(vm.state)
+
+    vm.disable { AuthResult.Success }
+    assertThat(vm.state.value.lockEnabled).isTrue()
+    assertThat(vm.state.value.feedback!!.title).isEqualTo(R.string.security_not_saved_title)
+
+    vm.setTimeout(AppLockTimeout.IMMEDIATELY)
+    assertThat(vm.state.value.settings.timeout).isEqualTo(AppLockTimeout.AFTER_5_MINUTES)
   }
 
   @Test

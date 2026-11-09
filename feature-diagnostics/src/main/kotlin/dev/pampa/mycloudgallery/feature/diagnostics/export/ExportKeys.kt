@@ -29,6 +29,9 @@ object ExportKeys {
     "ignoringBatteryOpt", "backgroundRestricted", "standbyBucket", "unusedAppRestrictions", "screenLock", "notifications",
     "mediaImages", "mediaVideo", "mediaPartial", "mediaLocation", "camera", "userUnlocked", "isSystemUser", "uptime",
     "bootCount", "exitCount", "lastExitAge", "heartbeatAge",
+    // Il registro locale dei crash (C472, BackgroundHealthContributor): l'eta', la famiglia del thread, la versione, se e' il processo principale e, come elenchi di
+    // identificativi del codice (`ExportValue.Trace`), la catena delle classi e le cornici nostre di ogni eccezione. Mai un messaggio di eccezione.
+    "crashAge", "crashThread", "crashVersion", "crashMainProcess", "crashChain", "crashFrames0", "crashFrames1", "crashFrames2", "crashFrames3",
     // Spazio (StorageContributor) e consumi (TrafficContributor)
     "databaseBytes", "cacheBytes", "noBackupBytes", "filesBytes", "freeBytes", "totalBytes", "source", "mobileBytes",
     "wifiBytes", "roamingBytes",

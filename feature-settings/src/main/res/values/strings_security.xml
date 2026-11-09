@@ -39,6 +39,8 @@
   <string name="security_footnote">Se sbagli lo sblocco più volte è Android a metterti in attesa. L’app non conta i tentativi e non cancella niente.</string>
   <string name="security_auth_failed_title">Blocco non cambiato</string>
   <string name="security_auth_failed">Per spegnere il blocco serve la credenziale del telefono, e non è stata confermata.</string>
+  <string name="security_not_saved_title">Impostazione non salvata</string>
+  <string name="security_not_saved">Sul telefono non c’è abbastanza spazio per salvarla: il blocco è rimasto com’era. Libera un po’ di memoria e riprova.</string>
   <string name="security_disable_prompt_title">Spegnere il blocco dell’app?</string>
   <string name="security_disable_prompt_subtitle">Conferma con la credenziale del telefono</string>
 

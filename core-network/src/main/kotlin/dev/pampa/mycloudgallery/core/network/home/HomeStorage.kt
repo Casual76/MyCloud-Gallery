@@ -10,6 +10,7 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.network.contract.HomeCandidate
 import dev.pampa.mycloudgallery.core.network.contract.HomeCapture
 import dev.pampa.mycloudgallery.core.network.contract.HomeFingerprint
@@ -55,17 +56,20 @@ class DataStoreHomeFingerprintStore(
       clear()
       return
     }
-    dataStore.edit { prefs ->
-      prefs[ULA] = clean.ulaPrefixes
-      clean.gatewayV4?.let { prefs[GATEWAY] = it } ?: prefs.remove(GATEWAY)
-      clean.dnsDomain?.let { prefs[DOMAIN] = it } ?: prefs.remove(DOMAIN)
-      prefs[CAPTURED_AT] = clean.capturedAt
+    // OB-4 (review generale): con la memoria piena la scrittura non lancia piu' (`QuietWrites`). L'impronta resta valida in memoria per questo processo e si riscrive alla prossima cattura.
+    QuietWrites.attempt("impronta della rete di casa") {
+      dataStore.edit { prefs ->
+        prefs[ULA] = clean.ulaPrefixes
+        clean.gatewayV4?.let { prefs[GATEWAY] = it } ?: prefs.remove(GATEWAY)
+        clean.dnsDomain?.let { prefs[DOMAIN] = it } ?: prefs.remove(DOMAIN)
+        prefs[CAPTURED_AT] = clean.capturedAt
+      }
     }
     state.value = clean
   }
 
   override suspend fun clear() {
-    dataStore.edit { it.clear() }
+    QuietWrites.attempt("impronta della rete di casa") { dataStore.edit { it.clear() } }
     state.value = null
   }
 

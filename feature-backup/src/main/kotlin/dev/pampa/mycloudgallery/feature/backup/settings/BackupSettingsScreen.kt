@@ -134,6 +134,7 @@ private fun LazyListScope.sourcesSection(state: SettingsUi, actions: SettingsAct
     BackupNote(
       stringResource(
         when {
+          state.saveFailed -> R.string.backup_settings_save_failed
           state.folders is FoldersState.Unavailable -> R.string.backup_settings_folders_unavailable
           !state.editable -> R.string.backup_settings_not_ready
           else -> R.string.backup_settings_sources_note

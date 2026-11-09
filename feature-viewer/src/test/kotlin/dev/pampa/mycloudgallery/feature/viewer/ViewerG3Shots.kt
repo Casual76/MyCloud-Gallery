@@ -14,6 +14,11 @@ import androidx.compose.ui.test.performClick
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.pampa.mycloudgallery.core.imaging.contract.ViewerImageState
 import dev.pampa.mycloudgallery.core.imaging.testing.FakeViewerImageSource
+import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
+import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
+import dev.pampa.mycloudgallery.core.library.contract.TimelineView
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaRef
 import org.junit.Test
 import org.robolectric.annotation.Config
 
@@ -26,23 +31,47 @@ abstract class ViewerG3Shots(private val device: String, private val portrait: B
 
   private fun path(name: String, dark: Boolean) = "../docs/screenshots/beta-grafica/g3-viewer/viewer-$name-${if (dark) "scuro" else "chiaro"}-$device.png"
 
-  /** La foto piu' alta dell'indice di prova: riempie lo schermo del telefono e arriva sotto la barra, dove sta il vetro dei tasti. */
-  private val tallest get() = (0 until fixture.library.count).minByOrNull { fixture.library.snapshot.aspectMilliAt(it) } ?: 0
+  /**
+   * La Libreria di prova ha foto tutte larghe: qui il catalogo dice che ogni foto riempie lo schermo (0,46 sul telefono, 1,6 sul tablet), cosi' la foto arriva sotto la barra, dove sta il
+   * vetro dei tasti, come una foto verticale vera sul telefono.
+   */
+  private fun fullScreenView(): TimelineView {
+    val base = fixture.library.view()
+    val milli = if (portrait) 460 else 1600
+    val snapshot = object : TimelineSnapshot by base.snapshot {
+      override fun aspectMilliAt(i: Int): Int = milli
+    }
+    return object : TimelineView {
+      override val snapshot: TimelineSnapshot = snapshot
+      override val filter: LibraryFilter = base.filter
+      override val size: Int = base.size
+
+      override fun snapshotIndex(viewIndex: Int): Int = base.snapshotIndex(viewIndex)
+
+      override fun viewIndexOf(id: MediaId): Int = base.viewIndexOf(id)
+    }
+  }
 
   private fun photoServices(light: Boolean): ViewerServices {
     val bitmap = (if (light) lightPhoto(portrait) else darkPhoto(portrait)).asImageBitmap()
-    val source = PhoneAwareImages(delegate = FakeViewerImageSource(forced = ViewerImageState.Sharp(bitmap, hdr = false, colorSpace = null)))
+    // La foto dichiara le sue proporzioni (e' da li' che il viewer la dispone a schermo intero): quelle della sua bitmap.
+    val source = PhoneAwareImages(
+      delegate = FakeViewerImageSource(forced = ViewerImageState.Sharp(bitmap, hdr = false, colorSpace = null)),
+      mapper = { MediaRef.Synthetic(seed = it.mediaStoreId, width = bitmap.width, height = bitmap.height) },
+    )
     return services(imageSource = source)
   }
 
   private fun buttons(photoLight: Boolean, dark: Boolean) {
-    show(request = fixture.request(startIndex = tallest), services = photoServices(light = photoLight), dark = dark)
+    fixture.items.publish(fullScreenView())
+    show(services = photoServices(light = photoLight), dark = dark)
     composeRule.mainClock.advanceTimeBy(600)
     composeRule.onRoot().captureRoboImage(path("tasti-foto-${if (photoLight) "chiara" else "scura"}", dark))
   }
 
   private fun menu(dark: Boolean) {
-    show(request = fixture.request(startIndex = tallest), services = photoServices(light = false), dark = dark)
+    fixture.items.publish(fullScreenView())
+    show(services = photoServices(light = false), dark = dark)
     composeRule.mainClock.advanceTimeBy(600)
     composeRule.mainClock.autoAdvance = false
     composeRule.onNodeWithContentDescription("Altre azioni").performClick()

@@ -1,5 +1,16 @@
 package dev.pampa.mycloudgallery.core.designsystem.design
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -13,6 +24,8 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -24,6 +37,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -49,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPortal
 import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalPresentation
+import dev.antigravity.fluidengine.ui.fluid.FluidMotion
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
@@ -61,6 +82,7 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuPanel
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
+import kotlinx.coroutines.delay
 
 // La chrome delle griglie della galleria, "vetro adattivo" (direzione C scelta dall'utente, G2, docs/grafica-progetto.md
 // §4, §11, §12): pochi pezzi, tutti parametrizzati da uno stile (pellicola + inchiostro) che chi li posa sceglie dal
@@ -83,13 +105,21 @@ data class GalleryChromeStyle(
 /** L'inchiostro della chrome in cui ci si trova (i tasti dentro una capsula lo leggono da qui). */
 val LocalGalleryChromeInk = compositionLocalOf<Color?> { null }
 
+/**
+ * Lo stile intero della capsula in cui ci si trova (B2, beta): la nuvola di stato ci legge la pellicola per portare il colore del suo
+ * tono a 3:1 sopra qualunque foto. Null fuori da una [GalleryChromeCapsule].
+ */
+val LocalGalleryChromeStyle = compositionLocalOf<GalleryChromeStyle?> { null }
+
 /** Lo stile del vetro adattivo e la sua tavolozza. */
 object GalleryChromeStyles {
 
   /** Pellicola e inchiostro scelti da [GalleryLegibility.adapt] per il contenuto che c'e' sotto. */
   @Composable
-  fun adaptive(choice: AdaptiveInk): GalleryChromeStyle {
-    val scheme = MaterialTheme.colorScheme
+  fun adaptive(choice: AdaptiveInk): GalleryChromeStyle = adaptiveFor(choice, MaterialTheme.colorScheme)
+
+  /** [adaptive] fuori dalla composizione, da uno schema: per i test dei contrasti (la nuvola, B7 della beta) e per chi calcola. */
+  fun adaptiveFor(choice: AdaptiveInk, scheme: ColorScheme): GalleryChromeStyle {
     val worst = ContentRange(listOf(if (choice.darkInk) scheme.scrim else GalleryOnPhoto.Content))
     return GalleryChromeStyle(
       tint = GlassTint(
@@ -134,6 +164,25 @@ object GalleryChromeStyles {
     return lerp(color, pole, high)
   }
 
+  /**
+   * Il colore di un **tono** (l'errore, l'attenzione) dentro un pezzo di chrome di stile [style] (B2, la nuvola di stato; B7, la
+   * leggibilita'): portato verso l'inchiostro del pezzo quanto basta per 3:1 (la soglia delle icone) sopra la sua pellicola, sul caso
+   * peggiore **assoluto** (il nero e il bianco pieni sotto la pellicola). Piu' severo di [GalleryChromeStyle.destructiveInk], che guarda
+   * solo l'estremo della polarita': un tono e' un colore medio, e un colore medio puo' cadere su tutti e due i lati. La ricerca finisce
+   * sempre: l'inchiostro stesso regge 3:1 su tutti e due gli estremi gia' alla pellicola minima (0,45, G2 §12.3). [scrim] e' il ruolo
+   * `scrim` dello schema (il nero).
+   */
+  fun toneInk(tone: Color, style: GalleryChromeStyle, scrim: Color): Color {
+    val worst = ContentRange(listOf(scrim.copy(alpha = 1f), GalleryOnPhoto.Content))
+    return legibleTowards(tone, style.ink, style.tint.overlay, worst, GalleryLegibility.LargeContrast)
+  }
+
+  /** Il colore che si legge meglio sopra [fill] fra i due poli della chrome (il nero di [scrim] e il bianco delle foto). */
+  fun onTone(fill: Color, scrim: Color): Color {
+    val dark = scrim.copy(alpha = 1f)
+    return if (GalleryLegibility.contrast(dark, fill) >= GalleryLegibility.contrast(GalleryOnPhoto.Content, fill)) dark else GalleryOnPhoto.Content
+  }
+
   private const val FallbackAlpha = 0.94f
   private const val AdaptiveHairline = 0.16f
   private const val DarkInkLift = 0.08f
@@ -161,7 +210,7 @@ fun GalleryChromeCapsule(
   modifier: Modifier = Modifier,
   content: @Composable RowScope.() -> Unit,
 ) {
-  CompositionLocalProvider(LocalGalleryChromeInk provides style.ink) {
+  CompositionLocalProvider(LocalGalleryChromeInk provides style.ink, LocalGalleryChromeStyle provides style) {
     Row(
       modifier = modifier
         .height(chromePieceHeight())
@@ -179,6 +228,16 @@ fun GalleryChromeCapsule(
  * il nome della pagina) e sotto, piu' piccolo, il luogo o il riepilogo. Non si tocca: e' un'intestazione per TalkBack.
  * Cresce con il testo di sistema (nessuna altezza fissa), le righe si troncano: chi la posa le da' un peso nella riga,
  * cosi' non arriva mai sotto i tasti.
+ *
+ * **Il vetro si muove, non salta** (B1 della beta, lista dell'utente del 31/10): quando il testo cambia (la data scorrendo,
+ * "3 selezionati" entrando in selezione) la capsula cambia larghezza con la molla di `FluidMotion` e il testo passa in
+ * dissolvenza incrociata. Scorrendo veloce non trema, per due regole:
+ *  - **un ritmo**: il testo nuovo si mostra subito, ma poi al piu' uno ogni [GalleryChromeDefaults.LabelPaceMillis] (sempre
+ *    l'ultimo arrivato): una data che cambia venti volte al secondo non si legge comunque, e venti dissolvenze sovrapposte sono
+ *    solo rumore e lavoro;
+ *  - **una soglia**: durante una raffica di cambi la capsula cresce se serve ma non si stringe; si stringe sul testo vero solo
+ *    quando il testo e' fermo da [GalleryChromeDefaults.LabelSettleMillis].
+ * Con le animazioni ridotte il testo cambia di colpo e la capsula prende subito la sua misura.
  */
 @Composable
 fun GalleryChromeLabel(
@@ -188,6 +247,7 @@ fun GalleryChromeLabel(
   backdrop: GlassBackdropState?,
   modifier: Modifier = Modifier,
 ) {
+  val shown = rememberChromePaced(ChromeLabelLines(title, subtitle), GalleryChromeDefaults.LabelPaceMillis)
   Box(
     modifier = modifier
       .height(chromePieceHeight())
@@ -195,7 +255,131 @@ fun GalleryChromeLabel(
       .padding(horizontal = GalleryChromeDefaults.LabelPaddingH),
     contentAlignment = Alignment.CenterStart,
   ) {
-    GalleryChromeTitle(title = title, subtitle = subtitle, ink = style.ink)
+    if (LocalFluidMotionPolicy.current.reducedMotion) {
+      GalleryChromeTitle(title = shown.title, subtitle = shown.subtitle, ink = style.ink)
+    } else {
+      MovingChromeTitle(shown, style.ink)
+    }
+  }
+}
+
+/** Le due righe dell'etichetta: il titolo e il luogo (o il riepilogo). */
+@Immutable
+private data class ChromeLabelLines(val title: String, val subtitle: String?)
+
+/**
+ * Il testo dell'etichetta che cambia con la dissolvenza incrociata, dentro un contenitore la cui larghezza segue la molla (il vetro
+ * che lo porta cresce e si stringe con lui) e che durante una raffica non si stringe (la soglia di [GalleryChromeLabel]).
+ *
+ * Il contenitore e' largo almeno [ChromeWidthHold.held]: alla prima riga di una raffica la tenuta prende la larghezza che il testo
+ * aveva (durante la dissolvenza ci sono il vecchio e il nuovo, quindi la piu' larga delle due), a ogni cambio successivo la piu'
+ * larga vista finora; a testo fermo torna a zero e la molla porta la capsula sulla misura del testo.
+ */
+@Composable
+private fun MovingChromeTitle(lines: ChromeLabelLines, ink: Color) {
+  val hold = remember { ChromeWidthHold() }
+  LaunchedEffect(lines) {
+    hold.held = maxOf(hold.held, hold.natural)
+    delay(GalleryChromeDefaults.LabelSettleMillis)
+    hold.held = 0
+  }
+  val held = with(LocalDensity.current) { hold.held.toDp() }
+  Box(
+    modifier = Modifier
+      .animateContentSize(animationSpec = FluidMotion.intSize(), alignment = Alignment.CenterStart)
+      .widthIn(min = held),
+    contentAlignment = Alignment.CenterStart,
+  ) {
+    AnimatedContent(
+      targetState = lines,
+      transitionSpec = {
+        // Niente animazione della misura qui: la fa il contenitore, che continua la molla con la sua velocita' anche quando un
+        // cambio arriva a meta' strada (un'animazione che ricomincia a ogni cambio e' il tremolio che la beta toglie).
+        (fadeIn(FluidMotion.fadeIn(LabelFadeInMillis)) togetherWith fadeOut(FluidMotion.fadeOut(LabelFadeOutMillis))).using(null)
+      },
+      contentAlignment = Alignment.CenterStart,
+      modifier = Modifier.onSizeChanged { hold.natural = it.width },
+      label = "etichetta della chrome",
+    ) { shown ->
+      GalleryChromeTitle(title = shown.title, subtitle = shown.subtitle, ink = ink)
+    }
+  }
+}
+
+/** La tenuta della larghezza dell'etichetta durante una raffica di cambi (pixel). [natural] e' la misura del testo, letta al layout. */
+private class ChromeWidthHold {
+  var held: Int by mutableIntStateOf(0)
+  var natural: Int = 0
+}
+
+/**
+ * [value], ma **a ritmo**: un valore nuovo si mostra subito, poi per [intervalMillis] si aspetta e alla fine si mostra l'ultimo
+ * arrivato (quelli in mezzo si saltano). L'attesa si conta in fotogrammi, non con un timer: chi la aspetta (un test, un lettore di
+ * schermo) la vede finire, e durante uno scorrimento i fotogrammi ci sono comunque.
+ */
+@Composable
+internal fun <T> rememberChromePaced(value: T, intervalMillis: Long): T {
+  val latest = rememberUpdatedState(value)
+  var shown by remember { mutableStateOf(value) }
+  LaunchedEffect(intervalMillis) {
+    snapshotFlow { latest.value }.collect { next ->
+      if (next != shown) {
+        shown = next
+        val start = withFrameMillis { it }
+        while (withFrameMillis { it } - start < intervalMillis) {
+          // Il ritmo: i cambi che arrivano adesso aspettano il prossimo giro (snapshotFlow tiene solo l'ultimo).
+        }
+      }
+    }
+  }
+  return shown
+}
+
+private const val LabelFadeInMillis = 180
+private const val LabelFadeOutMillis = 120
+
+/**
+ * Un tasto (o un gruppo) della capsula dei comandi che **compare e scompare allargando e stringendo la capsula** (B1 della beta: il
+ * tasto "torna in fondo" che compare scorrendo, la nuvola): si apre dal suo bordo con la molla di `FluidMotion` e sfuma, e il vetro
+ * della capsula, che lo avvolge, si muove con lui. Con le animazioni ridotte compare e scompare di colpo.
+ */
+@Composable
+fun RowScope.GalleryChromeSlot(visible: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+  val reduced = LocalFluidMotionPolicy.current.reducedMotion
+  AnimatedVisibility(
+    visible = visible,
+    modifier = modifier,
+    enter = if (reduced) EnterTransition.None else expandHorizontally(FluidMotion.intSize(), Alignment.End) + fadeIn(FluidMotion.fadeIn()),
+    exit = if (reduced) ExitTransition.None else shrinkHorizontally(FluidMotion.intSize(), Alignment.End) + fadeOut(FluidMotion.fadeOut()),
+    label = "tasto della capsula",
+  ) { content() }
+}
+
+/**
+ * Il contenuto della capsula dei comandi che **cambia forma** (B1 della beta: entrando in selezione i comandi diventano "Fine"): i
+ * tasti di [state] passano in dissolvenza incrociata e la capsula va dalla larghezza vecchia alla nuova con la molla di
+ * `FluidMotion`, allineata a destra (il bordo che sta fermo, contro il margine dello schermo). Senza ritaglio: un tasto premuto cresce
+ * oltre il suo bersaglio, e un ritaglio lo taglierebbe. Con le animazioni ridotte cambia di colpo.
+ */
+@Composable
+fun <S> GalleryChromeSwap(state: S, modifier: Modifier = Modifier, content: @Composable RowScope.(S) -> Unit) {
+  val reduced = LocalFluidMotionPolicy.current.reducedMotion
+  AnimatedContent(
+    targetState = state,
+    modifier = modifier,
+    transitionSpec = {
+      if (reduced) {
+        (EnterTransition.None togetherWith ExitTransition.None).using(null)
+      } else {
+        (fadeIn(FluidMotion.fadeIn()) togetherWith fadeOut(FluidMotion.fadeOut())).using(SizeTransform(clip = false) { _, _ -> FluidMotion.intSize() })
+      }
+    },
+    contentAlignment = Alignment.CenterEnd,
+    label = "comandi della capsula",
+  ) { shown ->
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(GalleryChromeDefaults.CapsuleGap)) {
+      content(shown)
+    }
   }
 }
 
@@ -352,10 +536,41 @@ fun GalleryChromeMenuAnchor(
   entries: @Composable () -> List<GalleryMenuEntry>,
   trigger: @Composable (open: () -> Unit) -> Unit,
 ) {
+  // Il menu della vista e' lungo (i livelli, i filtri, lo stile, le Impostazioni; in debug le librerie di prova): se il pop-up non
+  // ci sta, le voci scorrono invece di restare tagliate sotto il bordo (G2, visto sull'emulatore). Lo fa il pop-up della chrome.
+  GalleryChromePopoverAnchor(paneTitle = paneTitle, modifier = modifier, trigger = trigger) { close ->
+    GalleryMenuPanel(entries = entries(), onItemSelected = close)
+  }
+}
+
+/**
+ * Un **pop-up a tendina** della chrome (B2 della beta: la nuvola di stato apre il suo pannello da qui; il menu della vista e' lo
+ * stesso pop-up con le voci): [trigger] riceve l'azione che apre il pop-up dell'engine **sul tasto stesso** (cresce dal suo
+ * rettangolo), con dentro [panel] sul materiale unico dei pannelli dell'app (il vetro dei modali dell'engine e, sotto, il velo
+ * del colore della pagina calcolato da [menuVeil] per 4,5:1 sul caso peggiore). Se il pannello non ci sta, scorre. [panel] riceve
+ * l'azione che chiude il pop-up. Senza un `FluidGlassModalHost` nello scope il tocco non apre niente.
+ *
+ * Il portale **si compone dalla prima apertura** e poi resta composto (cosi' l'uscita si anima): un pop-up mai aperto non costa
+ * niente nel primo fotogramma della pagina, come i fogli di conferma (Tab S9, 03/11: otto portali chiusi costavano ~27 ms).
+ */
+@Composable
+fun GalleryChromePopoverAnchor(
+  paneTitle: String,
+  modifier: Modifier = Modifier,
+  trigger: @Composable (open: () -> Unit) -> Unit,
+  panel: @Composable (close: () -> Unit) -> Unit,
+) {
   var open by remember { mutableStateOf(false) }
+  var armed by remember { mutableStateOf(false) }
   var bounds by remember { mutableStateOf<Rect?>(null) }
+  Box(modifier = modifier.onGloballyPositioned { bounds = it.boundsInRoot() }) {
+    trigger {
+      armed = true
+      open = true
+    }
+  }
+  if (!armed) return
   val veil = menuVeil()
-  Box(modifier = modifier.onGloballyPositioned { bounds = it.boundsInRoot() }) { trigger { open = true } }
   FluidGlassModalPortal(
     visible = open,
     onDismissRequest = { open = false },
@@ -363,10 +578,8 @@ fun GalleryChromeMenuAnchor(
     presentation = FluidGlassModalPresentation.Popover,
     paneTitle = paneTitle,
   ) {
-    // Il menu della vista e' lungo (i livelli, i filtri, lo stile, le Impostazioni; in debug le librerie di prova): se il
-    // pop-up non ci sta, le voci scorrono invece di restare tagliate sotto il bordo (G2, visto sull'emulatore).
     Box(modifier = Modifier.background(veil).verticalScroll(rememberScrollState())) {
-      GalleryMenuPanel(entries = entries(), onItemSelected = { open = false })
+      panel { open = false }
     }
   }
 }
@@ -433,6 +646,15 @@ object GalleryChromeDefaults {
 
   /** Fra due pezzi di chrome vicini. */
   val Gap: Dp = 8.dp
+
+  /**
+   * Il ritmo dell'etichetta (B1 della beta): dopo un cambio di testo il prossimo si mostra non prima di tanto. 200 ms sono cinque
+   * date al secondo scorrendo veloce: si leggono ancora, e la dissolvenza (180 ms) fa in tempo a finire.
+   */
+  const val LabelPaceMillis: Long = 200L
+
+  /** La soglia dell'etichetta (B1): la capsula si stringe sul testo solo dopo che il testo e' fermo da tanto. */
+  const val LabelSettleMillis: Long = 600L
 
   /**
    * La soglia con cui si calcolano i veli sotto il vetro **dell'engine** (pop-up, pillola): 4,5 piu' un margine di 1.

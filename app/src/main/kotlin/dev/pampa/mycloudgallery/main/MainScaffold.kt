@@ -147,8 +147,9 @@ fun MainScaffold(
         backdropOut = { backdrop = it },
         onOpenViewer = { viewer.open(it, services, fromLibrary = true) },
         onOpenSettings = onOpenSettings,
-        // Nel piede della Libreria la rete e il NAS sono due capsule sorelle (G2): la rete con lo stesso linguaggio.
-        statusFooter = { NetworkStatusEntry(status = status, onClick = onStatusClick) },
+        // B2 (beta): la rete non e' piu' una voce in fondo alla Libreria, e' uno degli stati della nuvola in alto (LibraryCloudNetwork.kt).
+        network = libraryNetworkOf(status),
+        onNetworkClick = onStatusClick,
         state = libraryState,
         tabBarScroll = tabBarScroll,
         // I dettagli del NAS (e "Ho controllato, continua" dei lavori fermi) stanno in Diagnostica, come quelli della rete.

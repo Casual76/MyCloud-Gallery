@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBackIos
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -41,6 +42,7 @@ import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.R
+import kotlin.math.abs
 
 // La chrome in alto delle pagine della galleria (G2, docs/grafica-progetto.md §12): la direzione C, "vetro adattivo". Nata per la
 // Libreria e le griglie delle Raccolte (`GridTopChrome` di feature-library), sta qui dalla Fase 4B (P16) perche' la usano anche le
@@ -161,13 +163,17 @@ fun GalleryTopChrome(
   val page = MaterialTheme.colorScheme.background
   val density = LocalDensity.current
   var backBounds by remember { mutableStateOf<Rect?>(null) }
-  var labelBounds by remember { mutableStateOf<Rect?>(null) }
-  var capsuleBounds by remember { mutableStateOf<Rect?>(null) }
+  // L'etichetta e la capsula cambiano larghezza con una molla (B1 della beta): i loro limiti, che scelgono lo stile adattivo, si
+  // aggiornano solo quando si spostano di almeno [BoundsSlack] (o cambiano quota), non a ogni fotogramma della molla. Lo stile si
+  // ricalcola comunque solo quando sotto entra o esce una riga di celle, larghe piu' di quella tolleranza.
+  val labelBounds = remember { mutableStateOf<Rect?>(null) }
+  val capsuleBounds = remember { mutableStateOf<Rect?>(null) }
+  val slack = with(density) { BoundsSlack.toPx() }
   val stops = galleryTopEdgeStops(statusBar, topChrome)
   // Il velo sotto un pezzo di chrome: la sfumatura della pagina alla sua opacita' piu' bassa (il bordo basso del pezzo).
   fun veilAt(bounds: Rect?): Color? = bounds?.let { page.copy(alpha = galleryEdgeAlphaAt(stops, with(density) { it.bottom.toDp() })) }
-  val labelStyle = rememberAdaptiveChromeStyle(content, labelBounds, veilAt(labelBounds))
-  val capsuleStyle = rememberAdaptiveChromeStyle(content, capsuleBounds, veilAt(capsuleBounds))
+  val labelStyle = rememberAdaptiveChromeStyle(content, labelBounds.value, veilAt(labelBounds.value))
+  val capsuleStyle = rememberAdaptiveChromeStyle(content, capsuleBounds.value, veilAt(capsuleBounds.value))
   val backStyle = if (onBack != null) rememberAdaptiveChromeStyle(content, backBounds, veilAt(backBounds)) else null
   Row(
     modifier = modifier
@@ -193,7 +199,7 @@ fun GalleryTopChrome(
         subtitle = subtitle,
         style = labelStyle,
         backdrop = backdrop,
-        modifier = Modifier.onGloballyPositioned { labelBounds = it.inChromeContent(content) }.galleryChromeTag("titolo"),
+        modifier = Modifier.onGloballyPositioned { labelBounds.settle(it.inChromeContent(content), slack) }.galleryChromeTag("titolo"),
       )
     }
     if (showCommands) {
@@ -201,7 +207,7 @@ fun GalleryTopChrome(
       GalleryChromeCapsule(
         style = capsuleStyle,
         backdrop = backdrop,
-        modifier = Modifier.onGloballyPositioned { capsuleBounds = it.inChromeContent(content) }.galleryChromeTag("comandi"),
+        modifier = Modifier.onGloballyPositioned { capsuleBounds.settle(it.inChromeContent(content), slack) }.galleryChromeTag("comandi"),
         content = commands,
       )
     }
@@ -237,6 +243,17 @@ fun galleryEdgeAlphaAt(stops: List<Pair<Dp, Float>>, y: Dp): Float {
   return stops.last().second
 }
 
+/**
+ * Aggiorna i limiti di un pezzo di chrome solo se sono cambiati davvero: un bordo laterale spostato di piu' di [slackPx] (la larghezza
+ * che anima), o la quota. Il primo valore passa sempre.
+ */
+internal fun MutableState<Rect?>.settle(next: Rect, slackPx: Float) {
+  val now = value
+  if (now == null || abs(now.left - next.left) > slackPx || abs(now.right - next.right) > slackPx || now.top != next.top || now.bottom != next.bottom) {
+    value = next
+  }
+}
+
 /** I limiti di un nodo nei pixel del contenuto (che parte da [GalleryChromeContent.chromeOriginInWindow]); senza, della finestra. */
 fun LayoutCoordinates.inChromeContent(content: GalleryChromeContent?): Rect =
   boundsInWindow().let { b -> if (content == null) b else b.translate(-content.chromeOriginInWindow) }
@@ -248,3 +265,6 @@ private const val EdgeTop = 0.85f
 private const val EdgeStatus = 0.55f
 private const val EdgeRow = 0.15f
 private val EdgeFade = 44.dp
+
+/** La tolleranza dei limiti di un pezzo che cambia larghezza: meno di un settimo della cella piu' piccola della griglia (58 dp). */
+private val BoundsSlack = 8.dp

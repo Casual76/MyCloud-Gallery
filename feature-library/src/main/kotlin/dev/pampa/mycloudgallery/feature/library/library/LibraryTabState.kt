@@ -108,8 +108,18 @@ interface LibraryCommands {
   /** Fase 5B (P14, D21): "Libera spazio" sulla selezione c'e' (il backup e' legato). Senza, l'azione non compare. */
   val canFreeSpace: Boolean get() = false
 
-  /** Fase 5B (P14): apre "Libera spazio" per [ids] (la pagina di feature-backup verifica e chiede la conferma; qui niente si toglie). */
+  /**
+   * Fase 5B (P14): apre "Libera spazio" per [ids] (la pagina di feature-backup verifica e chiede la conferma; qui niente si toglie).
+   * Con [ids] vuoto (il tasto del pop-up della nuvola, B2 della beta) apre "Libera spazio" su tutto cio' che e' al sicuro, come la voce
+   * delle Raccolte.
+   */
   fun freeSpace(ids: Set<MediaId>) {}
+
+  /**
+   * B2 della beta: lo spazio del NAS per il pop-up della nuvola, la stessa misura della pagina "Spazio NAS". Si chiama solo quando
+   * l'utente apre il pop-up (mai in background); deve poter girare sul thread principale. Null = nessun NAS (la sezione non c'e').
+   */
+  suspend fun nasSpace(): LibraryNasSpace? = null
 
   /** Fase 7 (P10, P13, D35): "Aggiungi ad album" sulla selezione c'e' (gli album sono legati). Senza, l'azione non compare. */
   val canAddToAlbum: Boolean get() = false
@@ -176,11 +186,11 @@ class LibraryDebugHooks(
  *   griglia resta quella che e' (niente filtro).
  * @property preferences filtro, livello e stile **ricordati** (DataStore in `noBackupFilesDir`).
  * @property phone lo stato del telefono (permessi, lettura, in attesa).
- * @property nas lo stato del NAS per il piede della Libreria (Fase 4, §1.5, `LibraryNasStatus`): la capsula del NAS e il
- *   suo dettaglio (G2, `LibraryStatusBlock`). Di default [LibraryNasStatus.Idle] (nessun NAS: il piede non dice niente).
- * @property backup lo stato del backup per il piede (Fase 5A, §1.5, D16, `LibraryBackupStatus`): la terza voce, sotto la rete e il
- *   NAS, con gli stessi componenti. Di default [LibraryBackupStatus.Idle] (backup non configurato: il piede non dice niente). Lo
- *   riduce `:app` da `BackupStatus` di core-backup, che la Libreria non vede.
+ * @property nas lo stato del NAS (Fase 4, §1.5, `LibraryNasStatus`). Dalla beta (B2) lo dice la nuvola nella capsula in alto, non
+ *   piu' una voce in fondo alla griglia (`LibraryCloud.kt`). Di default [LibraryNasStatus.Idle] (nessun NAS: non dice niente).
+ * @property backup lo stato del backup (Fase 5A, §1.5, D16, `LibraryBackupStatus`), anche lui nella nuvola. Di default
+ *   [LibraryBackupStatus.Idle] (backup non configurato: non dice niente). Lo riduce `:app` da `BackupStatus` di core-backup, che la
+ *   Libreria non vede.
  */
 @Stable
 class LibraryTabState(

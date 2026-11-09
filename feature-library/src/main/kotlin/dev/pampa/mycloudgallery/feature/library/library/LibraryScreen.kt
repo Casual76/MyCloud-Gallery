@@ -59,6 +59,8 @@ import dev.pampa.mycloudgallery.core.designsystem.design.ContentRange
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeDefaults
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeMenuAnchor
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeSlot
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeSwap
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTextButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryEdgeScrim
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryLegibility
@@ -94,8 +96,10 @@ import kotlinx.coroutines.launch
 // La Libreria, "vetro adattivo" (direzione C, G2: docs/grafica-progetto.md §4, §11, §12). La struttura:
 //
 //  - in alto UNA riga di chrome sotto la barra di stato (`GridTopChrome`): a sinistra l'etichetta con la data della sezione
-//    in vista (e' l'intestazione agganciata: nessuna seconda fascia di vetro), a destra la capsula con "oggi", "seleziona"
-//    e il menu della vista, che porta anche i livelli (niente segmenti: il pinch e' il gesto, il menu la via esplicita);
+//    in vista (e' l'intestazione agganciata: nessuna seconda fascia di vetro), a destra la capsula con "oggi", la nuvola di
+//    stato (B2 della beta: la rete, il NAS e il backup, con il pop-up dei dettagli), "seleziona" e il menu della vista, che
+//    porta anche i livelli (niente segmenti: il pinch e' il gesto, il menu la via esplicita). Etichetta e capsula cambiano
+//    misura e forma con la molla (B1 della beta), mai di colpo;
 //  - in basso SOLO la pillola, che si ripiega scorrendo verso i piu' vecchi; in selezione la barra delle azioni prende il
 //    suo posto, alla stessa altezza e nella stessa posizione, e la griglia non si sposta (lo spazio in fondo e' lo stesso);
 //  - un fondale di vetro solo, quello della pagina: lo scrubber e' disegnato fuori, la griglia non ne registra un secondo;
@@ -107,16 +111,13 @@ internal fun LibraryScreen(
   backdropOut: (GlassBackdropState) -> Unit,
   onOpenViewer: (ViewerRequest) -> Unit,
   onOpenSettings: () -> Unit,
-  statusFooter: @Composable () -> Unit,
   state: LibraryTabState,
   tabBarScroll: NestedScrollConnection?,
-  onNasStatusClick: () -> Unit,
-  onBackupStatusClick: () -> Unit = {},
+  network: LibraryNetworkStatus?,
+  cloudActions: LibraryCloudActions,
 ) {
   val grid = state.grid
   val phone by state.phone.collectAsState()
-  val nas by state.nas.collectAsState()
-  val backup by state.backup.collectAsState()
   // Correzioni 5B (R4, MC-2): la condivisione senza posizione della selezione (avanzamento, rifiuto).
   val share by state.commands.shareProgress.collectAsState()
   val backdrop = rememberGlassBackdrop()
@@ -153,9 +154,6 @@ internal fun LibraryScreen(
   val bottomPadding = maxOf(slotBottom + ActionBarHeight + GalleryChromeDefaults.Gap, contentPadding.calculateBottomPadding())
   val empty = grid.view.size == 0
   val pillVeil = rememberPillVeil()
-  val status: @Composable () -> Unit = {
-    LibraryStatusBlock(nas = nas, statusFooter = statusFooter, onNasClick = onNasStatusClick, backup = backup, onBackupClick = onBackupStatusClick)
-  }
 
   // I tag della chrome come id di risorsa: gli strumenti di misura sull'emulatore (uiautomator) la trovano per nome.
   // Fase 10 (P6, D21): la Libreria e' una destinazione per le foto trascinate da un'altra app ("Salva sul NAS": si apre il foglio della ricezione, niente parte senza un tocco).
@@ -166,25 +164,23 @@ internal fun LibraryScreen(
         showPermission -> LibraryPermissionState(
           onAllow = { state.commands.requestMediaAccess() },
           modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
-          footer = status,
         )
         empty && (phone.firstRead != null || phone.selectionPending) -> LibraryFirstReadState(
           progress = phone.firstRead,
           modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
-          footer = status,
         )
         empty && state.filter != LibraryFilter.ALL -> LibraryFilterEmptyState(
           filter = state.filter,
           onShowAll = { scope.launch { state.chooseFilter(LibraryFilter.ALL) } },
           modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
         )
-        empty -> LibraryEmptyState(modifier = Modifier.padding(top = topChrome, bottom = bottomPadding), footer = status)
+        empty -> LibraryEmptyState(modifier = Modifier.padding(top = topChrome, bottom = bottomPadding))
         else -> MediaGrid(
           state = grid,
           modifier = if (tabBarScroll != null) Modifier.nestedScroll(tabBarScroll) else Modifier,
           contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
           onOpen = { id -> onOpenViewer(ViewerRequest(items = state.viewerItems, start = id, anchor = grid.viewerAnchor, secure = false)) },
-          footer = { LibraryFooter(state, phone, status) },
+          footer = { LibraryFooter(state, phone) },
           stickyTop = topChrome,
           onLevelChanged = { level -> scope.launch { state.preferences.setLevel(level) } },
           // D15: Canc apre il foglio di conferma (lo stesso della barra delle azioni), mai un'eliminazione diretta.
@@ -221,12 +217,17 @@ internal fun LibraryScreen(
       state = state,
       backdrop = backdrop,
       topChrome = topChrome,
-      showCommands = !showPermission,
+      permission = showPermission,
       empty = empty,
       onOpenSettings = onOpenSettings,
+      network = network,
+      cloudActions = cloudActions,
       // Fase 10 P8 (D23 (3)): la barra di vetro in alto si legge **prima** del contenuto, come si vede.
       modifier = Modifier.align(Alignment.TopStart).semantics { traversalIndex = -2f },
     )
+
+    // Lo stato del NAS e del backup che cambia da solo si annuncia una volta (era nel piede; B2: ora accanto alla nuvola).
+    LibraryCloudAnnouncer(state)
 
     // Lo scrubber fra la chrome in alto e il posto della pillola: la maniglia non arriva mai sotto un altro controllo.
     if (!showPermission && !empty) {
@@ -263,41 +264,81 @@ internal fun LibraryScreen(
 }
 
 /**
- * La riga di chrome in alto della Libreria: l'etichetta con la sezione in vista e la capsula dei comandi.
+ * La riga di chrome in alto della Libreria: l'etichetta con la sezione in vista e la capsula dei comandi (con la nuvola di stato).
  *
  * Sta in una funzione sua perche' **legge la sezione** sotto la riga, che cambia scorrendo e a ogni livello attraversato
  * da un pinch: cosi' quei cambi ricompongono questa riga e basta, non tutta la Libreria (griglia, avvisi, scrubber, barra
  * delle azioni, fogli). Sull'S25 (15/10, `docs/bench/misure-s25-2026-10-15.md`) i fotogrammi dei cambi di livello del
- * pinch erano i piu' lunghi del thread principale anche per questo.
+ * pinch erano i piu' lunghi del thread principale anche per questo. Per lo stesso motivo gli stati del NAS e del backup si
+ * leggono qui come `State` e la riga ricompone solo quando cambia **lo stato della nuvola** (non a ogni file contato).
+ *
+ * Senza il permesso dei media la capsula porta solo la nuvola (se c'e' qualcosa da dire): seleziona e la vista non servono.
  */
 @Composable
 private fun LibraryTopChrome(
   state: LibraryTabState,
   backdrop: GlassBackdropState,
   topChrome: Dp,
-  showCommands: Boolean,
+  permission: Boolean,
   empty: Boolean,
   onOpenSettings: () -> Unit,
+  network: LibraryNetworkStatus?,
+  cloudActions: LibraryCloudActions,
   modifier: Modifier = Modifier,
 ) {
   val grid = state.grid
   val section = rememberMediaGridSection(grid, topChrome)
-  val farFromToday by remember(grid) { derivedStateOf { grid.screensFromNewest() > TodayAfterScreens } }
+  // B1: "torna in fondo" con un'isteresi (compare oltre 2 schermate dai piu' recenti, sparisce sotto 1,5): vicino alla soglia la
+  // capsula non si allarga e si stringe a ogni riga.
+  val todayShown = remember(grid) { mutableStateOf(false) }
+  val farFromToday by remember(grid) {
+    derivedStateOf { grid.screensFromNewest() > if (todayShown.value) TodayHideBelowScreens else TodayAfterScreens }
+  }
+  SideEffect { todayShown.value = farFromToday }
+  val nas = state.nas.collectAsState()
+  val backup = state.backup.collectAsState()
+  val cloudState by remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value)?.state } }
+  val lastSync = rememberLastSync(nas, backup)
+  val cloud = cloudState
   GridTopChrome(
     grid = grid,
     backdrop = backdrop,
     label = libraryLabel(state, section),
     topChrome = topChrome,
     modifier = modifier,
-    showCommands = showCommands,
+    showCommands = !permission || cloud != null,
   ) {
     LibraryCommandsContent(
       state = state,
+      permission = permission,
       showSelect = !empty,
-      showToday = farFromToday && !grid.selecting && !empty,
+      showToday = farFromToday && !empty,
       onOpenSettings = onOpenSettings,
-    )
+      showCloud = cloud != null,
+    ) { cloudModifier ->
+      val shown = rememberLastNonNull(cloud)
+      if (shown != null) {
+        LibraryCloudButton(
+          state = shown,
+          network = network,
+          nas = nas,
+          backup = backup,
+          lastSync = lastSync,
+          commands = state.commands,
+          actions = cloudActions,
+          modifier = cloudModifier,
+        )
+      }
+    }
   }
+}
+
+/** L'ultimo valore non nullo: la nuvola che sparisce si vede ancora mentre il suo posto si chiude. */
+@Composable
+private fun <T : Any> rememberLastNonNull(value: T?): T? {
+  val last = remember { mutableStateOf(value) }
+  if (value != null && value != last.value) SideEffect { last.value = value }
+  return value ?: last.value
 }
 
 /**
@@ -321,31 +362,57 @@ private fun libraryLabel(state: LibraryTabState, section: MediaGridSection?): Ch
   }
 }
 
-/** Dentro la capsula dei comandi: oggi (se lontani), seleziona, la vista; in selezione solo "Fine". */
+/**
+ * Dentro la capsula dei comandi: oggi (se lontani), la nuvola, seleziona, la vista; in selezione solo "Fine". Senza il permesso dei
+ * media solo la nuvola.
+ *
+ * B1 della beta: la capsula **non cambia misura di colpo**. "Oggi", la nuvola e "seleziona" compaiono e scompaiono aprendo e
+ * chiudendo il loro posto ([GalleryChromeSlot]); entrando e uscendo dalla selezione i comandi diventano "Fine" (e viceversa) in
+ * dissolvenza mentre la capsula va dalla larghezza vecchia alla nuova ([GalleryChromeSwap]). Il vetro avvolge i tasti, quindi si
+ * muove con loro.
+ */
 @Composable
-private fun LibraryCommandsContent(state: LibraryTabState, showSelect: Boolean, showToday: Boolean, onOpenSettings: () -> Unit) {
+private fun LibraryCommandsContent(
+  state: LibraryTabState,
+  permission: Boolean,
+  showSelect: Boolean,
+  showToday: Boolean,
+  onOpenSettings: () -> Unit,
+  showCloud: Boolean,
+  cloud: @Composable (Modifier) -> Unit,
+) {
   val grid = state.grid
   val scope = rememberCoroutineScope()
-  if (grid.selecting) {
-    GalleryChromeTextButton(label = stringResource(R.string.library_done), onClick = { grid.stopSelecting() }, modifier = Modifier.galleryChromeTag("fine"))
-    return
+  GalleryChromeSwap(state = grid.selecting && !permission) { selecting ->
+    if (selecting) {
+      GalleryChromeTextButton(label = stringResource(R.string.library_done), onClick = { grid.stopSelecting() }, modifier = Modifier.galleryChromeTag("fine"))
+    } else {
+      GalleryChromeSlot(visible = showToday && !permission) {
+        GalleryChromeIconButton(
+          icon = Icons.Rounded.KeyboardDoubleArrowDown,
+          contentDescription = stringResource(R.string.library_jump_today_description),
+          onClick = { scope.launch { grid.scrollToNewest() } },
+          modifier = Modifier.galleryChromeTag("oggi"),
+        )
+      }
+      GalleryChromeSlot(visible = showCloud) { cloud(Modifier.galleryChromeTag("nuvola")) }
+      GalleryChromeSlot(visible = showSelect && !permission) {
+        GalleryChromeIconButton(
+          icon = Icons.Rounded.CheckCircleOutline,
+          contentDescription = stringResource(R.string.library_select),
+          onClick = { grid.startSelecting() },
+          modifier = Modifier.galleryChromeTag("seleziona"),
+        )
+      }
+      if (!permission) LibraryViewMenu(state, onOpenSettings)
+    }
   }
-  if (showToday) {
-    GalleryChromeIconButton(
-      icon = Icons.Rounded.KeyboardDoubleArrowDown,
-      contentDescription = stringResource(R.string.library_jump_today_description),
-      onClick = { scope.launch { grid.scrollToNewest() } },
-      modifier = Modifier.galleryChromeTag("oggi"),
-    )
-  }
-  if (showSelect) {
-    GalleryChromeIconButton(
-      icon = Icons.Rounded.CheckCircleOutline,
-      contentDescription = stringResource(R.string.library_select),
-      onClick = { grid.startSelecting() },
-      modifier = Modifier.galleryChromeTag("seleziona"),
-    )
-  }
+}
+
+/** Il tasto del menu della vista: i tre puntini, o il filtro se un filtro e' attivo. */
+@Composable
+private fun LibraryViewMenu(state: LibraryTabState, onOpenSettings: () -> Unit) {
+  val scope = rememberCoroutineScope()
   val description = stringResource(R.string.library_view_menu)
   val filterActive = state.filter != LibraryFilter.ALL
   val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
@@ -464,3 +531,6 @@ private const val BottomVeilAtEdge = 0.90f
 
 /** Da quante schermate di distanza dai piu' recenti compare "vai a oggi". */
 private const val TodayAfterScreens = 2f
+
+/** Sotto quante schermate sparisce di nuovo (l'isteresi di "vai a oggi"). */
+private const val TodayHideBelowScreens = 1.5f

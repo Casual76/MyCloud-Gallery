@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.debugtools.DeveloperTools
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
 import dev.pampa.mycloudgallery.feature.library.library.LibraryCommands
 import dev.pampa.mycloudgallery.feature.library.library.LibraryDebugHooks
+import dev.pampa.mycloudgallery.feature.library.library.LibraryNasSpace
 import dev.pampa.mycloudgallery.feature.library.library.LibraryShare
 import dev.pampa.mycloudgallery.feature.library.library.LibraryStateSource
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
@@ -113,6 +114,9 @@ class AppLibraryCommands(
   override fun freeSpace(ids: Set<MediaId>) {
     gallery.fiveB?.freeSpace?.invoke(ids)
   }
+
+  // B2 (beta): lo spazio del NAS nel pop-up della nuvola, dalla fonte della pagina "Spazio NAS" (LibraryCloudSpace.kt).
+  override suspend fun nasSpace(): LibraryNasSpace? = gallery.libraryNasSpace()
 
   // Fase 7 (P13, D35): "Aggiungi ad album" sulla selezione, con gli album (che vivono nei dati personali del NAS, D3): la scelta la mostra la radice.
   override val canAddToAlbum: Boolean get() = gallery.nas != null

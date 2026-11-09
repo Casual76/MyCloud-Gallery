@@ -90,6 +90,12 @@ interface PersonalSync {
 /** L'esito dell'applicazione di voci arrivate da altri dispositivi. */
 data class PersonalApplyResult(val applied: Int, val ignored: Int)
 
+/** Una modifica dell'utente dentro un lotto ([PersonalStore.setAll]): gli stessi tre argomenti di [PersonalStore.set]. */
+data class PersonalChange(val key: PersonalKey, val value: PersonalValue, val fingerprint: PersonalFingerprint? = null) {
+  /** Mai il soggetto o il valore nei log (l'id di un media o di un album dell'utente). */
+  override fun toString(): String = "PersonalChange(${key.kind.code})"
+}
+
 /**
  * Lo stato locale dei dati personali: la porta sul catalogo (che ha gia' i `*_changed_at` dello schema v2) e sulle impostazioni. Una
  * modifica locale prende l'ora del NAS se c'e', altrimenti resta "da datare" e la prende alla prima sincronizzazione (§2.9).
@@ -110,6 +116,19 @@ interface PersonalStore {
 
   /** Una modifica dell'utente su questo dispositivo. */
   suspend fun set(key: PersonalKey, value: PersonalValue, fingerprint: PersonalFingerprint? = null)
+
+  /**
+   * Piu' modifiche dell'utente **insieme**, nell'ordine dato (una chiave ripetuta: vale l'ultima). Lo stato che ne esce e' quello delle stesse
+   * modifiche fatte con [set] una dopo l'altra; cambia il costo e la tenuta: lo store che salva su disco (`LedgerPersonalStore`) applica il
+   * lotto in memoria e salva **una volta sola**, e sul disco il lotto c'e' tutto o non c'e'. Chi cambia molte voci in una volta (le foto
+   * aggiunte o tolte da un album, la copia di un album condiviso chiuso) deve passare da qui: una [set] per voce riscrive il registro intero
+   * per ogni voce (review generale, OA-1). Chi legge [entries] o [effectiveEntries] vede un cambio solo, con il lotto intero.
+   *
+   * Di serie una [set] per modifica: giusto per gli store in memoria e per quelli che non salvano niente.
+   */
+  suspend fun setAll(changes: List<PersonalChange>) {
+    for (change in changes) set(change.key, change.value, change.fingerprint)
+  }
 
   /** Applica voci gia' giudicate valide ([PersonalValidity]): per ogni chiave resta la piu' recente ([PersonalMerge]). */
   suspend fun applyRemote(entries: List<PersonalEntry>): PersonalApplyResult

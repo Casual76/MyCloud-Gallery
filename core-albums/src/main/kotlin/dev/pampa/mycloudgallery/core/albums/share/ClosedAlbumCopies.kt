@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.albums.shared.SharedAlbumCopy
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalChange
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKey
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKind
@@ -27,6 +28,14 @@ interface KeptCopyStore {
 
   suspend fun addItem(copy: AlbumId, media: MediaId, position: Long)
 
+  /**
+   * Piu' elementi insieme (il media e la sua posizione), in un salvataggio solo: una copia puo' avere migliaia di elementi (review generale, OA-1).
+   * Di serie uno alla volta con [addItem].
+   */
+  suspend fun addItems(copy: AlbumId, items: List<Pair<MediaId, Long>>) {
+    for ((media, position) in items) addItem(copy, media, position)
+  }
+
   /** L'album personale da cui e' nato l'album condiviso [shared] (voce `shared`, D4): per il creatore e' lui l'album dopo "Smetti". */
   suspend fun personalSharedAs(shared: AlbumId): AlbumId?
 }
@@ -46,16 +55,25 @@ class PersonalKeptCopyStore(private val store: PersonalStore) : KeptCopyStore {
   }
 
   override suspend fun defineCopy(copy: AlbumId, title: String, copyOf: AlbumId) {
-    store.set(key(copy, PersonalFields.ALBUM_KIND), PersonalValue.Text(AlbumKind.MANUAL.code))
-    store.set(key(copy, PersonalFields.ALBUM_COPY_OF), PersonalValue.Text(copyOf.value))
-    // La definizione per ultima: finche' non c'e', l'album non si vede (e una ripresa rifa' tutto da capo, idempotente).
-    store.set(key(copy, PersonalFields.ALBUM_DEFINITION), PersonalValue.Text(title))
+    // Le tre voci insieme (un salvataggio, tutto o niente), la definizione per ultima: finche' non c'e', l'album non si vede (e una ripresa
+    // rifa' tutto da capo, idempotente).
+    store.setAll(
+      listOf(
+        PersonalChange(key(copy, PersonalFields.ALBUM_KIND), PersonalValue.Text(AlbumKind.MANUAL.code)),
+        PersonalChange(key(copy, PersonalFields.ALBUM_COPY_OF), PersonalValue.Text(copyOf.value)),
+        PersonalChange(key(copy, PersonalFields.ALBUM_DEFINITION), PersonalValue.Text(title)),
+      ),
+    )
   }
 
   override suspend fun itemKnown(copy: AlbumId, media: MediaId): Boolean = store.get(key(copy, PersonalFields.albumItem(media.value))) != null
 
   override suspend fun addItem(copy: AlbumId, media: MediaId, position: Long) =
     store.set(key(copy, PersonalFields.albumItem(media.value)), PersonalValue.Number(position))
+
+  /** OA-1: gli elementi di una copia in un lotto solo. Una voce alla volta riscriveva il registro intero per ognuno dei (fino a 20.000) elementi. */
+  override suspend fun addItems(copy: AlbumId, items: List<Pair<MediaId, Long>>) =
+    store.setAll(items.map { (media, position) -> PersonalChange(key(copy, PersonalFields.albumItem(media.value)), PersonalValue.Number(position)) })
 
   override suspend fun personalSharedAs(shared: AlbumId): AlbumId? = store.entries.value.values.firstOrNull { entry ->
     entry.key.kind == PersonalKind.ALBUM && entry.key.field == PersonalFields.ALBUM_SHARED && (entry.value as? PersonalValue.Text)?.text == shared.value
@@ -89,11 +107,16 @@ class ClosedAlbumCopies(
         }
         KeptCopyState.LIVE -> Unit
       }
+      // Gli elementi che mancano, tutti insieme: un salvataggio dei dati personali per copia, non uno per elemento (review generale, OA-1).
+      val missing = ArrayList<Pair<MediaId, Long>>()
+      val listed = HashSet<MediaId>()
       copy.items.forEachIndexed { index, media ->
-        if (!store.itemKnown(target, media)) {
-          store.addItem(target, media, (index + 1L) * ShareRules.POSITION_STEP)
-          written++
-        }
+        // Un media ripetuto nell'elenco vale la prima volta (come quando si scriveva una voce alla volta: la seconda lo trovava gia').
+        if (listed.add(media) && !store.itemKnown(target, media)) missing += media to (index + 1L) * ShareRules.POSITION_STEP
+      }
+      if (missing.isNotEmpty()) {
+        store.addItems(target, missing)
+        written += missing.size
       }
     }
     return written

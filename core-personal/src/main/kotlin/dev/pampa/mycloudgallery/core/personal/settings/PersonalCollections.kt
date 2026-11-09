@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.core.personal.settings
 import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.core.model.AlbumSort
 import dev.pampa.mycloudgallery.core.personal.contract.MemoriesRecords
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalChange
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFingerprint
@@ -173,6 +174,98 @@ class PersonalAlbums(private val store: PersonalStore) {
       store.set(key, PersonalValue.Flag(true), fingerprint ?: store.fingerprintOfMedia(mediaId))
     } else if ((store.effective()[key]?.value as? PersonalValue.Flag)?.on == true) {
       store.set(key, PersonalValue.Removed, fingerprint ?: store.fingerprintOfMedia(mediaId))
+    }
+  }
+
+  // --- Review generale, OA-1: piu' modifiche in un salvataggio solo -------------------------------------------------------------------
+
+  /**
+   * Piu' modifiche agli album **in un lotto solo**: [block] dice le modifiche (gli stessi nomi e gli stessi argomenti delle funzioni qui sopra),
+   * che si scrivono tutte insieme alla fine con `PersonalStore.setAll`: un salvataggio del registro, non uno per voce, e il lotto c'e' tutto o
+   * non c'e'. Se [block] lancia non si scrive niente. Le voci sono le stesse che scriverebbero le funzioni una alla volta (chiavi, valori,
+   * impronte, nessuna lapide per una scelta mai fatta). Da usare per ogni modifica che tocca piu' di una voce: aggiungere o togliere foto,
+   * "Congela" e "Scongela", le regole di uno smart, le copie degli album condivisi chiusi.
+   */
+  suspend fun batch(block: suspend Batch.() -> Unit) {
+    val batch = Batch()
+    batch.block()
+    store.setAll(batch.changes)
+  }
+
+  /** Le modifiche di un lotto ([batch]), nell'ordine in cui sono state dette. Non si tiene oltre il blocco. */
+  inner class Batch internal constructor() {
+    internal val changes = ArrayList<PersonalChange>()
+
+    /** Il valore che il lotto ha gia' dato a una chiave: una scelta accesa e poi spenta nello stesso lotto si spegne con la lapide. */
+    private val staged = HashMap<PersonalKey, PersonalValue>()
+
+    /** Lo stato che l'utente vede adesso, letto una volta sola e solo se serve (per spegnere una scelta bisogna sapere se c'e'). */
+    private var seen: Map<PersonalKey, PersonalEntry>? = null
+
+    private fun put(key: PersonalKey, value: PersonalValue, fingerprint: PersonalFingerprint? = null) {
+      changes += PersonalChange(key, value, fingerprint)
+      staged[key] = value
+    }
+
+    private suspend fun fingerprintOf(mediaId: String, given: PersonalFingerprint?): PersonalFingerprint? = given ?: store.fingerprintOfMedia(mediaId)
+
+    fun define(albumId: String, title: String) = put(key(albumId, PersonalFields.ALBUM_DEFINITION), PersonalValue.Text(title))
+
+    fun delete(albumId: String) = put(key(albumId, PersonalFields.ALBUM_DEFINITION), PersonalValue.Removed)
+
+    fun setOrder(albumId: String, order: Long) = put(key(albumId, PersonalFields.ALBUM_ORDER), PersonalValue.Number(order))
+
+    suspend fun setCover(albumId: String, mediaId: String?, fingerprint: PersonalFingerprint? = null) {
+      if (mediaId == null) {
+        put(key(albumId, PersonalFields.ALBUM_COVER), PersonalValue.Removed)
+      } else {
+        put(key(albumId, PersonalFields.ALBUM_COVER), PersonalValue.Text(mediaId), fingerprintOf(mediaId, fingerprint))
+      }
+    }
+
+    suspend fun addItem(albumId: String, mediaId: String, position: Long, fingerprint: PersonalFingerprint? = null) =
+      put(key(albumId, PersonalFields.albumItem(mediaId)), PersonalValue.Number(position), fingerprintOf(mediaId, fingerprint))
+
+    suspend fun removeItem(albumId: String, mediaId: String, fingerprint: PersonalFingerprint? = null) =
+      put(key(albumId, PersonalFields.albumItem(mediaId)), PersonalValue.Removed, fingerprintOf(mediaId, fingerprint))
+
+    fun setKind(albumId: String, kind: AlbumKind) = put(key(albumId, PersonalFields.ALBUM_KIND), PersonalValue.Text(kind.code))
+
+    fun setSort(albumId: String, sort: AlbumSort?) =
+      put(key(albumId, PersonalFields.ALBUM_SORT), if (sort == null) PersonalValue.Removed else PersonalValue.Text(sort.code))
+
+    fun setFrozen(albumId: String, frozen: Boolean) = put(key(albumId, PersonalFields.ALBUM_FROZEN), PersonalValue.Flag(frozen))
+
+    fun setShared(albumId: String, sharedId: String?) = setText(albumId, PersonalFields.ALBUM_SHARED, sharedId)
+
+    fun setCopyOf(albumId: String, sharedId: String?) = setText(albumId, PersonalFields.ALBUM_COPY_OF, sharedId)
+
+    fun setSmart(albumId: String, field: String, text: String?) {
+      require(field in PersonalFields.SMART_RULE_FIELDS) { "Non e' un campo delle regole." }
+      setText(albumId, field, text)
+    }
+
+    suspend fun setExample(albumId: String, mediaId: String, on: Boolean, fingerprint: PersonalFingerprint? = null) =
+      setChoice(albumId, PersonalFields.smartExample(mediaId), mediaId, on, fingerprint)
+
+    suspend fun exclude(albumId: String, mediaId: String, on: Boolean = true, fingerprint: PersonalFingerprint? = null) =
+      setChoice(albumId, PersonalFields.albumExclude(mediaId), mediaId, on, fingerprint)
+
+    suspend fun accept(albumId: String, mediaId: String, on: Boolean = true, fingerprint: PersonalFingerprint? = null) =
+      setChoice(albumId, PersonalFields.albumAccept(mediaId), mediaId, on, fingerprint)
+
+    private fun setText(albumId: String, field: String, text: String?) =
+      put(key(albumId, field), if (text == null) PersonalValue.Removed else PersonalValue.Text(text))
+
+    /** Accende la scelta, o la spegne con la lapide solo se c'e' (nello stato, o accesa prima in questo stesso lotto). */
+    private suspend fun setChoice(albumId: String, field: String, mediaId: String, on: Boolean, fingerprint: PersonalFingerprint?) {
+      val key = key(albumId, field)
+      if (on) {
+        put(key, PersonalValue.Flag(true), fingerprintOf(mediaId, fingerprint))
+      } else {
+        val now = if (key in staged) staged[key] else (seen ?: store.effective().also { seen = it })[key]?.value
+        if ((now as? PersonalValue.Flag)?.on == true) put(key, PersonalValue.Removed, fingerprintOf(mediaId, fingerprint))
+      }
     }
   }
 

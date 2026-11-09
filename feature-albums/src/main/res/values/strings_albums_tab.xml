@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <!-- Fase grafica (G2b): la scheda Album, in stile Galleria Samsung. Prima i Preferiti, la Fotocamera e i Video, poi il resto per ultima apertura. -->
+  <string name="albums_tab_favorites">Preferiti</string>
+  <string name="albums_tab_camera">Fotocamera</string>
+  <string name="albums_tab_videos">Video</string>
+  <string name="albums_tab_screenshots">Screenshot</string>
+  <string name="albums_tab_messaging">Messaggistica</string>
+
+  <!-- I Preferiti vuoti restano e dicono come si riempiono. -->
+  <string name="albums_tab_favorites_empty">Tocca il cuore di una foto</string>
+
+  <!-- Il menu della barra: l'elenco di sempre, con l'ordine e il riordino. -->
+  <string name="albums_tab_more">Altre azioni sugli album</string>
+
+  <!-- Detto da TalkBack sulle copertine: il segno sulla copertina di uno smart e di un condiviso. -->
+  <string name="albums_tab_smart_spoken">album smart</string>
+  <string name="albums_tab_shared_spoken">condiviso</string>
+
+  <!-- Nessun album ancora: sotto le voci speciali. -->
+  <string name="albums_tab_none_title">Ancora nessun album</string>
+</resources>

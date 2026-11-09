@@ -42,7 +42,9 @@
 
   <!-- Barra delle schede -->
   <string name="tab_library">Libreria</string>
+  <string name="tab_albums">Album</string>
   <string name="tab_collections">Raccolte</string>
+  <!-- G2: Cerca non e' piu' una scheda ma il cerchio accanto alla pillola (il nome resta quello letto da TalkBack e dai benchmark). -->
   <string name="tab_search">Cerca</string>
 
   <!-- Indicatore di stato globale -->

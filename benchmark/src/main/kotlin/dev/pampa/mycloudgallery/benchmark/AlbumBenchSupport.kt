@@ -171,8 +171,8 @@ class AlbumSeedMetric : TraceMetric() {
  */
 object AlbumUi {
 
-  /** La scheda "Raccolte" della barra (`tab_collections`). */
-  private val TAB: BySelector get() = By.pkg(BenchSession.targetPackage).desc("Raccolte")
+  /** La scheda "Album" della pillola (`tab_albums`, G2): l'elenco degli album sta li', non piu' nelle Raccolte. */
+  private val TAB: BySelector get() = By.pkg(BenchSession.targetPackage).desc("Album")
 
   /** "Tutti gli album" (`albums_all`): l'elenco intero, se la riga non sta nella sezione breve delle Raccolte. */
   private val ALL_ALBUMS: BySelector get() = By.pkg(BenchSession.targetPackage).textContains("Tutti gli album")
@@ -182,10 +182,10 @@ object AlbumUi {
   private const val PAGE_TIMEOUT_MS = 8_000L
   private const val ROW_SEARCH_SCROLLS = 10
 
-  /** Apre le Raccolte e restituisce i millisecondi fino alla riga di [title] (o `null` se la scheda o la riga non compaiono). */
+  /** Apre la scheda Album (G2) e restituisce i millisecondi fino alla riga di [title] (o `null` se la scheda o la riga non compaiono). */
   fun openCollections(device: UiDevice, title: String): Double? {
     BenchUi.ensureForeground(device)
-    val tab = device.findObject(TAB) ?: device.findObject(By.pkg(BenchSession.targetPackage).text("Raccolte")) ?: return null
+    val tab = device.findObject(TAB) ?: device.findObject(By.pkg(BenchSession.targetPackage).text("Album")) ?: return null
     val start = System.nanoTime()
     tab.click()
     device.wait(Until.findObject(rowOf(title)), TAB_TIMEOUT_MS) ?: return null
@@ -210,7 +210,8 @@ object AlbumUi {
   /** La riga di [title]: fra quelle visibili, poi nell'elenco intero scorrendo. */
   private fun findRow(device: UiDevice, title: String): UiObject2? {
     device.wait(Until.findObject(rowOf(title)), ROW_TIMEOUT_MS)?.let { return it }
-    device.findObject(ALL_ALBUMS)?.click() ?: return null
+    // G2: la scheda Album e' gia' l'elenco intero; "Tutti gli album" c'e' solo dove l'elenco e' breve.
+    device.findObject(ALL_ALBUMS)?.click()
     device.waitForIdle()
     repeat(ROW_SEARCH_SCROLLS) {
       device.findObject(rowOf(title))?.let { return it }

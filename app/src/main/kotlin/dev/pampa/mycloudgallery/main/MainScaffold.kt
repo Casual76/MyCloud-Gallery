@@ -1,16 +1,12 @@
 package dev.pampa.mycloudgallery.main
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBars
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -24,6 +20,7 @@ import androidx.compose.material.icons.rounded.SignalWifiOff
 import androidx.compose.material.icons.rounded.VpnKeyOff
 import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -40,7 +37,6 @@ import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarInlineBehavior
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidFloatingTabBarScrollConnection
-import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
@@ -50,6 +46,9 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBar
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarDefaults
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarSlot
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarSlotVisibility
+import dev.pampa.mycloudgallery.core.designsystem.chrome.LocalGalleryTabBarSlot
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
@@ -60,7 +59,7 @@ import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.status.GlobalStatus
 import kotlinx.coroutines.launch
 
-/** Cio' che lo scaffold passa alla scheda Raccolte: lo spazio della pillola, il fondale da rifrangere, l'indicatore. */
+/** Cio' che lo scaffold passa alle schede Album e Raccolte e a Cerca: lo spazio della pillola, il fondale da rifrangere, l'indicatore. */
 @Immutable
 class CollectionsSlot(
   val contentPadding: PaddingValues,
@@ -69,17 +68,23 @@ class CollectionsSlot(
 )
 
 /**
- * Lo scaffold della galleria: le tre schede **Libreria · Raccolte · Cerca** nella pillola di vetro del design system,
- * l'indicatore di stato globale e l'accesso alle Impostazioni.
+ * Lo scaffold della galleria (G2, come in Foto di Apple): le tre schede **Libreria · Album · Raccolte** nella pillola di vetro del design
+ * system, il **cerchio di Cerca** accanto alla pillola, l'indicatore di stato globale e l'accesso alle Impostazioni.
  *
  * **Fase 3: la Libreria e' a tutto schermo e il viewer sta sopra la pillola** (docs/fase3-progetto.md §1.4, D12).
  * - La scheda Libreria non usa `FluidScreen`: la griglia e' la sua lista, con la propria chrome di vetro adattivo (G2,
- *   docs/grafica-progetto.md §12) e lo stato della rete e del NAS in fondo. La pillola si ripiega scorrendo la Libreria. Le Raccolte ([collections], P10) sono un `FluidScreen` (o le due colonne sul tablet); Cerca
- *   ([search], Fase 6, P11) e' la schermata di feature-search (senza Hilt, negli screenshot, resta il segnaposto).
+ *   docs/grafica-progetto.md §12) e lo stato della rete e del NAS in fondo. La pillola si ripiega scorrendo la Libreria. Gli Album
+ *   ([albums], `AlbumsTabHost`) e le Raccolte ([collections], P10) sono pagine `FluidScreen` (le Raccolte, sul tablet, due colonne).
+ * - **Cerca** (Fase 6, P11; G2) non e' piu' una scheda: e' il cerchio di vetro della pillola. Toccato, la ricerca ([search], la schermata di
+ *   feature-search) prende il posto della scheda con il campo pronto a scrivere; la pillola resta sulla scheda di prima, Indietro (o un tocco
+ *   su una scheda) chiude la ricerca e torna li'. E' una sovrapposizione dentro la schermata principale, non una rotta: vale uguale sul
+ *   tablet a due pannelli e con la pillola ripiegata (il cerchio e' della pillola), e lo stato della ricerca resta com'era fra un'apertura e
+ *   l'altra, come quando era una scheda.
  * - La pillola e' **una sola** e sta fuori dalle schede, cosi' la lente che scivola sotto la scheda scelta non si
  *   ricrea passando dalla Libreria alle altre. Il fondale che rifrange arriva dalla scheda in primo piano.
- * - **In selezione la pillola si nasconde** (nota di P7, §2.4: "barra delle azioni in vetro al posto della pillola") e
- *   la barra delle azioni scende al suo posto.
+ * - **In selezione la barra delle azioni prende il posto della pillola** (B3 della fase grafica): la pillola e il cerchio escono come la
+ *   capsula `ReplacingTabBar` dell'engine e la barra entra nello stesso posto. Vale per la Libreria e per ogni griglia dentro una scheda (il
+ *   pannello delle Raccolte sul tablet), che lo chiede con `TakeGalleryTabBarSlot`.
  * - Il viewer (`ViewerOverlay`) e' una sovrapposizione: lo ospita [GalleryRoot] sopra la navigazione (con l'host dei
  *   pop-up); senza (i test della sola scheda) lo scaffold ne ospita uno suo. Toccare di nuovo "Libreria" riporta in
  *   fondo, sui piu' recenti (D1).
@@ -87,6 +92,9 @@ class CollectionsSlot(
  * @param libraryState cio' che la Libreria mostra: dal `LibraryViewModel` (grafo vero, P11); nei test i fake.
  * @param libraryViewer i servizi del viewer per la Libreria (dettagli, azioni, intent); null = solo i pixel dello stato.
  * @param collections la scheda Raccolte; null = il segnaposto (gli screenshot dello scaffold, senza Hilt).
+ * @param albums la scheda Album (`AlbumsTabHost`); null = il segnaposto.
+ * @param search la ricerca aperta dal cerchio; null = il segnaposto.
+ * @param searchOpen Cerca e' aperta sopra [selectedTab]; [onOpenSearch] e [onCloseSearch] la aprono (il cerchio) e la chiudono (Indietro, una scheda).
  *
  * Una navigazione sola su ogni formato (telefono e tablet): lo spazio in piu' del tablet si usa dentro le pagine.
  */
@@ -103,8 +111,13 @@ fun MainScaffold(
   libraryState: LibraryTabState = rememberEmptyLibraryTabState(),
   libraryViewer: ViewerServices? = null,
   collections: (@Composable (CollectionsSlot) -> Unit)? = null,
-  /** Fase 6 (P11): la scheda Cerca; null = il segnaposto (gli screenshot dello scaffold, senza Hilt). */
+  /** G2: la scheda Album (`AlbumsTabHost`); null = il segnaposto (gli screenshot dello scaffold, senza Hilt). */
+  albums: (@Composable (CollectionsSlot) -> Unit)? = null,
+  /** Fase 6 (P11), G2: la ricerca aperta dal cerchio; null = il segnaposto (gli screenshot dello scaffold, senza Hilt). */
   search: (@Composable (CollectionsSlot) -> Unit)? = null,
+  searchOpen: Boolean = false,
+  onOpenSearch: () -> Unit = {},
+  onCloseSearch: () -> Unit = {},
 ) {
   var backdrop by remember { mutableStateOf<GlassBackdropState?>(null) }
   val rootViewer = LocalViewerHost.current
@@ -112,20 +125,24 @@ fun MainScaffold(
   val viewer = rootViewer ?: checkNotNull(ownViewer)
   val scope = rememberCoroutineScope()
   // Fase 10 (P5, D13 (5)): "Affianca" si ricorda per profilo (le preferenze della Libreria stanno nei dati del profilo): il viewer la legge dall'ospite. Il viewer affiancato non
-  // sopravvive a una scheda diversa dalla Libreria ne' all'uscita da questa pagina (impostazioni, altre rotte): il suo posto e' accanto alla griglia.
+  // sopravvive a una scheda diversa dalla Libreria (ne' a Cerca, che la copre) ne' all'uscita da questa pagina (impostazioni, altre rotte): il suo posto e' accanto alla griglia.
   val dockPreference by libraryState.preferences.viewerDocked.collectAsState()
   LaunchedEffect(viewer, dockPreference) { viewer.dockChoice = dockPreference }
   SideEffect { viewer.saveDockChoice = { docked -> scope.launch { libraryState.preferences.setViewerDocked(docked) } } }
-  LaunchedEffect(selectedTab) { if (selectedTab != GalleryTab.Library && viewer.docked) viewer.close() }
+  LaunchedEffect(selectedTab, searchOpen) { if ((selectedTab != GalleryTab.Library || searchOpen) && viewer.docked) viewer.close() }
   DisposableEffect(viewer) { onDispose { if (viewer.docked) viewer.close() } }
   // La piega della pillola allo scorrimento (G2, scelta 5 dell'utente): la Libreria attacca la connessione alla griglia. In
   // una griglia che si apre in fondo, "verso i piu' vecchi" e' il dito che scende: la pillola si ripiega li'
   // (`OnScrollUp`) e torna tornando verso i recenti.
   val tabBarScroll = rememberFluidFloatingTabBarScrollConnection(inlineBehavior = FluidFloatingTabBarInlineBehavior.OnScrollUp)
-  LaunchedEffect(selectedTab) { tabBarScroll.expand() }
+  LaunchedEffect(selectedTab, searchOpen) { tabBarScroll.expand() }
+  // G2: con Cerca aperta Indietro la chiude e torna alla scheda di prima (registrato prima delle schede: i loro BackHandler, se ci sono, vincono).
+  BackHandler(enabled = searchOpen) { onCloseSearch() }
 
+  // Il posto della pillola (B3): lo prende chi, dentro una scheda, mostra la barra delle azioni di una selezione.
+  val tabBarSlot = remember { GalleryTabBarSlot() }
   val navigationBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-  val selecting = selectedTab == GalleryTab.Library && libraryState.selectionActive
+  val selecting = selectedTab == GalleryTab.Library && !searchOpen && libraryState.selectionActive
   // Lo spazio della pillola, che sta sopra la barra di navigazione; in selezione la pillola non c'e' e la barra delle
   // azioni prende il suo posto.
   val pillPadding = PaddingValues(
@@ -139,57 +156,74 @@ fun MainScaffold(
       places = libraryState.grid.placeNames,
     )
   }
+  // Ricordato: lo scaffold si ricompone quando entra o esce una selezione (la pillola), e le schede non devono ricomporsi con lui.
+  val pageSlot = remember(status, onStatusClick) {
+    CollectionsSlot(
+      contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
+      backdropOut = { backdrop = it },
+      // Lo stesso stato della rete, nello stesso linguaggio, come prima riga dell'elenco (G2).
+      statusHeader = { NetworkStatusEntry(status = status, onClick = onStatusClick, alignment = Alignment.Start) },
+    )
+  }
 
   Box(modifier = Modifier.fillMaxSize()) {
-    when {
-      selectedTab == GalleryTab.Library -> LibraryTab(
-        contentPadding = pillPadding,
-        backdropOut = { backdrop = it },
-        onOpenViewer = { viewer.open(it, services, fromLibrary = true) },
-        onOpenSettings = onOpenSettings,
-        // Nel piede della Libreria la rete e il NAS sono due capsule sorelle (G2): la rete con lo stesso linguaggio.
-        statusFooter = { NetworkStatusEntry(status = status, onClick = onStatusClick) },
-        state = libraryState,
-        tabBarScroll = tabBarScroll,
-        // I dettagli del NAS (e "Ho controllato, continua" dei lavori fermi) stanno in Diagnostica, come quelli della rete.
-        onNasStatusClick = onNasStatusClick,
-        // Fase 5A (D16): la terza voce del piede apre la pagina Backup.
-        onBackupStatusClick = onBackupStatusClick,
-      )
-      selectedTab == GalleryTab.Collections && collections != null -> collections(
-        CollectionsSlot(
-          contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
+    CompositionLocalProvider(LocalGalleryTabBarSlot provides tabBarSlot) {
+      when {
+        searchOpen && search != null -> search(pageSlot)
+        searchOpen -> PlaceholderTab(
+          key = GalleryTabBarDefaults.SearchKey,
+          title = stringResource(R.string.main_search_title),
+          status = status,
+          onStatusClick = onStatusClick,
+          onOpenSettings = onOpenSettings,
           backdropOut = { backdrop = it },
-          // Lo stesso stato della rete, nello stesso linguaggio, come prima riga dell'elenco (G2).
-          statusHeader = { NetworkStatusEntry(status = status, onClick = onStatusClick, alignment = Alignment.Start) },
-        ),
-      )
-      selectedTab == GalleryTab.Search && search != null -> search(
-        CollectionsSlot(
-          contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
+        ) {
+          FluidEmptyState(title = stringResource(R.string.main_search_empty_title), detail = stringResource(R.string.main_search_empty_detail))
+        }
+        selectedTab == GalleryTab.Library -> LibraryTab(
+          contentPadding = pillPadding,
           backdropOut = { backdrop = it },
-          statusHeader = { NetworkStatusEntry(status = status, onClick = onStatusClick, alignment = Alignment.Start) },
-        ),
-      )
-      else -> PlaceholderTab(selectedTab, status, onStatusClick, onOpenSettings) { backdrop = it }
+          onOpenViewer = { viewer.open(it, services, fromLibrary = true) },
+          onOpenSettings = onOpenSettings,
+          // Nel piede della Libreria la rete e il NAS sono due capsule sorelle (G2): la rete con lo stesso linguaggio.
+          statusFooter = { NetworkStatusEntry(status = status, onClick = onStatusClick) },
+          state = libraryState,
+          tabBarScroll = tabBarScroll,
+          // I dettagli del NAS (e "Ho controllato, continua" dei lavori fermi) stanno in Diagnostica, come quelli della rete.
+          onNasStatusClick = onNasStatusClick,
+          // Fase 5A (D16): la terza voce del piede apre la pagina Backup.
+          onBackupStatusClick = onBackupStatusClick,
+        )
+        selectedTab == GalleryTab.Albums && albums != null -> albums(pageSlot)
+        selectedTab == GalleryTab.Collections && collections != null -> collections(pageSlot)
+        else -> PlaceholderTab(
+          key = selectedTab.route,
+          title = stringResource(selectedTab.label),
+          status = status,
+          onStatusClick = onStatusClick,
+          onOpenSettings = onOpenSettings,
+          backdropOut = { backdrop = it },
+        ) {
+          TabPlaceholder(selectedTab)
+        }
+      }
     }
 
-    AnimatedVisibility(
-      visible = !selecting,
-      enter = fadeIn(FluidMotion.fadeIn()),
-      exit = fadeOut(FluidMotion.fadeOut()),
-      modifier = Modifier
-        .align(Alignment.BottomCenter)
-        .navigationBarsPadding()
-        .padding(horizontal = FluidFloatingTabBarDefaults.HorizontalMargin)
-        .padding(bottom = FluidFloatingTabBarDefaults.BottomMargin),
-    ) {
+    // La pillola e il cerchio di Cerca; in selezione escono e la barra delle azioni entra nello stesso posto (stessa animazione, quella della
+    // capsula `ReplacingTabBar` dell'engine).
+    GalleryTabBarSlotVisibility(visible = !selecting && !tabBarSlot.taken, modifier = Modifier.align(Alignment.BottomCenter)) {
       GalleryTabBar(
         selected = selectedTab,
-        onSelect = onSelectTab,
+        onSelect = { tab ->
+          // Con Cerca aperta un tocco su una scheda (anche quella sotto la ricerca) chiude la ricerca e porta li'.
+          if (searchOpen) onCloseSearch()
+          onSelectTab(tab)
+        },
         backdrop = backdrop,
         onReselect = { tab -> if (tab == GalleryTab.Library) scope.launch { libraryState.grid.scrollToNewest() } },
         scrollConnection = tabBarScroll,
+        searchOpen = searchOpen,
+        onOpenSearch = onOpenSearch,
       )
     }
 
@@ -248,14 +282,16 @@ private fun NetworkStatusEntry(status: GlobalStatus, onClick: () -> Unit, alignm
 
 @Composable
 private fun PlaceholderTab(
-  tab: GalleryTab,
+  key: String,
+  title: String,
   status: GlobalStatus,
   onStatusClick: () -> Unit,
   onOpenSettings: () -> Unit,
   backdropOut: (GlassBackdropState) -> Unit,
+  body: @Composable () -> Unit,
 ) {
   FluidScreen(
-    title = stringResource(tab.label),
+    title = title,
     actions = {
       GalleryBarButton(
         icon = Icons.Rounded.Settings,
@@ -268,7 +304,7 @@ private fun PlaceholderTab(
     overlay = { pageBackdrop -> SideEffect { backdropOut(pageBackdrop) } },
   ) {
     item(key = "status") { NetworkStatusEntry(status = status, onClick = onStatusClick, alignment = Alignment.Start) }
-    item(key = "tab-${tab.route}") { TabPlaceholder(tab) }
+    item(key = "tab-$key") { body() }
   }
 }
 
@@ -277,14 +313,14 @@ private fun TabPlaceholder(tab: GalleryTab) {
   when (tab) {
     // La Libreria non e' un segnaposto (Fase 3): non passa di qui.
     GalleryTab.Library -> Unit
-    // Senza la scheda vera (gli screenshot dello scaffold) le Raccolte restano il segnaposto della Fase 2.
+    // Senza la scheda vera (gli screenshot dello scaffold) gli Album e le Raccolte restano un segnaposto.
+    GalleryTab.Albums -> FluidEmptyState(
+      title = stringResource(R.string.main_albums_empty_title),
+      detail = stringResource(R.string.main_albums_empty_detail),
+    )
     GalleryTab.Collections -> FluidEmptyState(
       title = stringResource(R.string.main_collections_empty_title),
       detail = stringResource(R.string.main_collections_empty_detail),
-    )
-    GalleryTab.Search -> FluidEmptyState(
-      title = stringResource(R.string.main_search_empty_title),
-      detail = stringResource(R.string.main_search_empty_detail),
     )
   }
 }

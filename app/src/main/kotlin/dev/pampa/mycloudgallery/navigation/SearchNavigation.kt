@@ -129,7 +129,10 @@ class AppSearchActions(
   override fun openFreeSpace() = host.openFreeSpace()
 }
 
-/** La scheda Cerca nello scaffold (al posto del segnaposto): consegna alla pillola il suo fondale, come le altre schede. */
+/**
+ * Cerca nello scaffold (al posto del segnaposto), aperta dal cerchio accanto alla pillola (G2): consegna alla pillola il suo fondale, come le
+ * schede. [focusField]: aperta dal cerchio il campo e' pronto a scrivere; da "Trova simili" no (la tastiera coprirebbe i risultati).
+ */
 @Composable
 fun SearchTab(
   slot: CollectionsSlot,
@@ -137,11 +140,20 @@ fun SearchTab(
   host: SearchHostViewModel,
   findSimilar: List<MediaId>?,
   onFindSimilarHandled: () -> Unit,
+  focusField: Boolean = false,
+  onFieldFocused: () -> Unit = {},
 ) {
   val backdrop = rememberGlassBackdrop()
   SideEffect { slot.backdropOut(backdrop) }
   Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop).padding(slot.contentPadding)) {
-    SearchRoute(actions = actions, thumbnails = host.thumbnails, findSimilar = findSimilar, onFindSimilarHandled = onFindSimilarHandled)
+    SearchRoute(
+      actions = actions,
+      thumbnails = host.thumbnails,
+      findSimilar = findSimilar,
+      onFindSimilarHandled = onFindSimilarHandled,
+      focusField = focusField,
+      onFieldFocused = onFieldFocused,
+    )
   }
 }
 

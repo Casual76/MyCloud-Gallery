@@ -116,9 +116,10 @@ internal abstract class ScaffoldScreenshotBase(private val dark: Boolean, privat
     MainScaffold(GlobalStatus.VPN_OFF, GalleryTab.Collections, onSelectTab = {}, onStatusClick = {}, onOpenSettings = {})
   }
 
+  /** G2: Cerca non e' piu' una scheda ma il cerchio accanto alla pillola; aperta, sta sopra la scheda di prima. */
   @Test
   fun cerca() = shoot("main-cerca-password") {
-    MainScaffold(GlobalStatus.NEEDS_PASSWORD, GalleryTab.Search, onSelectTab = {}, onStatusClick = {}, onOpenSettings = {})
+    MainScaffold(GlobalStatus.NEEDS_PASSWORD, GalleryTab.Library, onSelectTab = {}, onStatusClick = {}, onOpenSettings = {}, searchOpen = true)
   }
 
   @Test

@@ -21,7 +21,10 @@
   <!-- Scaffold principale (schede segnaposto: Libreria, Raccolte e Cerca arrivano con le fasi 3, 4, 6 e 7) -->
   <string name="main_open_settings">Impostazioni</string>
   <string name="main_collections_empty_title">Le raccolte arriveranno qui</string>
-  <string name="main_collections_empty_detail">Album, preferiti e ricordi, del telefono e del NAS, in un posto solo.</string>
+  <string name="main_collections_empty_detail">Viaggi, persone e ricordi, del telefono e del NAS, in un posto solo.</string>
+  <string name="main_albums_empty_title">Gli album arriveranno qui</string>
+  <string name="main_albums_empty_detail">I tuoi album, i preferiti e i video, del telefono e del NAS.</string>
+  <string name="main_search_title">Cerca</string>
   <string name="main_search_empty_title">La ricerca arriverà qui</string>
   <string name="main_search_empty_detail">Cercherai per parole, luoghi e date. La ricerca avverrà sul telefono.</string>
 

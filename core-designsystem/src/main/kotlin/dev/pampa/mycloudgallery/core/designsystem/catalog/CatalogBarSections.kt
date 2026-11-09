@@ -93,17 +93,20 @@ private fun ViewerBarStage(scene: SampleScene) {
 private fun TabBars() {
   Column(verticalArrangement = Arrangement.spacedBy(StageGap)) {
     TabBarStage(GalleryTab.Library)
-    TabBarStage(GalleryTab.Search)
+    // G2: Cerca aperta (il cerchio accanto alla pillola, colorato d'accento), sopra la scheda Album.
+    TabBarStage(GalleryTab.Albums, searchOpen = true)
   }
 }
 
 @Composable
-private fun TabBarStage(selected: GalleryTab) {
+private fun TabBarStage(selected: GalleryTab, searchOpen: Boolean = false) {
   CatalogPhotoStage(scene = SampleScene.Meadow, height = TabStageHeight, photo = { GridPage() }) { backdrop ->
     GalleryTabBar(
       selected = selected,
       onSelect = {},
       backdrop = backdrop,
+      searchOpen = searchOpen,
+      onOpenSearch = {},
       modifier = Modifier
         .align(Alignment.BottomCenter)
         .padding(horizontal = FluidFloatingTabBarDefaults.HorizontalMargin)

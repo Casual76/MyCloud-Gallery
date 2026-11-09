@@ -29,6 +29,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.platform.LocalContext
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
@@ -74,6 +76,8 @@ fun SearchScreen(
   handlers: SearchHandlers,
   modifier: Modifier = Modifier,
   gridState: LazyGridState = rememberLazyGridState(),
+  focusField: Boolean = false,
+  onFieldFocused: () -> Unit = {},
 ) {
   // Lo sfondo e' della schermata (non di chi la ospita): chiaro e scuro si vedono uguali nella scheda, nei test e negli screenshot.
   // Avvio istantaneo: l'apertura di Cerca si chiude al primo fotogramma della schermata, in qualunque stato (a riposo: recenti o scheletro).
@@ -83,7 +87,7 @@ fun SearchScreen(
     contentColor = MaterialTheme.colorScheme.onBackground,
   ) {
     Column(modifier = Modifier.fillMaxSize().statusBarsPadding()) {
-      SearchField(query = query, handlers = handlers)
+      SearchField(query = query, handlers = handlers, focus = focusField, onFocused = onFieldFocused)
       Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
         when (state) {
           is SearchScreenState.Idle -> SearchIdleContent(state, readiness, queryModel, handlers)
@@ -110,8 +114,21 @@ fun SearchScreen(
   }
 }
 
+/**
+ * Il campo di Cerca. [focus] (G2): aperta dal cerchio accanto alla pillola, la ricerca e' pronta a scrivere, con il fuoco e la tastiera,
+ * come in Foto di Apple. Aperta da "Trova simili" no: la tastiera coprirebbe i risultati. E' una richiesta di una volta: [onFocused] la
+ * consuma, cosi' tornando da un'altra pagina la tastiera non risale da sola.
+ */
 @Composable
-private fun SearchField(query: String, handlers: SearchHandlers) {
+private fun SearchField(query: String, handlers: SearchHandlers, focus: Boolean, onFocused: () -> Unit) {
+  val requester = remember { FocusRequester() }
+  // Il nodo del fuoco puo' non essere ancora collegato al primo istante (come in `FluidSearchField`): nel dubbio non succede niente.
+  LaunchedEffect(focus) {
+    if (focus) {
+      runCatching { requester.requestFocus() }
+      onFocused()
+    }
+  }
   Row(
     modifier = Modifier.fillMaxWidth().padding(horizontal = GalleryDimens.Gutter, vertical = SearchDimens.TightGap),
     verticalAlignment = Alignment.CenterVertically,
@@ -119,7 +136,7 @@ private fun SearchField(query: String, handlers: SearchHandlers) {
     FluidTextField(
       value = query,
       onValueChange = handlers::onQueryChange,
-      modifier = Modifier.weight(1f),
+      modifier = Modifier.weight(1f).focusRequester(requester),
       placeholder = stringResource(R.string.search_field_hint),
       minHeight = GalleryDimens.MinTouchTarget,
       keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -241,6 +258,10 @@ fun SearchRoute(
   modifier: Modifier = Modifier,
   findSimilar: List<MediaId>? = null,
   onFindSimilarHandled: () -> Unit = {},
+  /** G2: aperta dal cerchio di Cerca, il campo prende il fuoco e la tastiera sale (pronta a scrivere); da "Trova simili" no (lo decide chi la apre). */
+  focusField: Boolean = false,
+  /** La richiesta del fuoco e' stata servita: chi la tiene la toglie (una volta sola). */
+  onFieldFocused: () -> Unit = {},
   viewModel: SearchViewModel = hiltViewModel(),
 ) {
   val controller = viewModel.controller
@@ -262,6 +283,8 @@ fun SearchRoute(
       thumbnails = thumbnails,
       handlers = handlers,
       modifier = modifier,
+      focusField = focusField,
+      onFieldFocused = onFieldFocused,
     )
   }
 }

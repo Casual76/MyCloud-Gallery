@@ -169,6 +169,14 @@ class AppGraph(
   var galleryStopper: GalleryStopper? = null
 
   /**
+   * Chiude anche il catalogo della galleria mai partita, prima di cancellare i dati di un altro account. Room puo' gia'
+   * essere aperto (stato del backup), o avere una prima query in coda: non basta campionare `database.isOpen`.
+   * Se registrato, il cambio account ritira quel grafo e richiede il riavvio, anche senza famiglia mai pronta.
+   */
+  @Volatile
+  var idleGalleryStopper: GalleryStopper? = null
+
+  /**
    * Fase 6 (P11): chi ferma `AiGraph` e `SearchGraph` **per primi** all'azzeramento (§1.4), e la parte `ai` dell'indice per il NAS. Nascono
    * dopo la galleria (dipendono da lei): si registrano da soli (`AiModule`). Nei test senza AI restano null.
    */
@@ -409,7 +417,7 @@ class AppGraph(
    */
   fun galleryMayRun(): Boolean = readyOnce.get()
 
-  /** Riavvia il processo fra poco: il tempo di salvare cio' che la funzione in corso sta finendo (R6, solo se il riavvio di "Configura di nuovo" non c'e' stato). */
+  /** Riavvia fra poco, dopo la chiusura del grafo del vecchio account: lascia finire i salvataggi dell'onboarding (R6). */
   fun restartSoon() {
     scope.launch {
       delay(RESTART_DELAY_MS)

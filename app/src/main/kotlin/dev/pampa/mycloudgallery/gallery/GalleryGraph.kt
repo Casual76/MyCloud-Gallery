@@ -960,13 +960,15 @@ class GalleryGraph(
    *
    * Se la galleria non e' mai partita (nessun catalogo costruito: dispositivo mai pronto in questo processo) non c'e'
    * niente da fermare e resta utilizzabile, cosi' una configurazione fatta dopo l'azzeramento nello stesso processo funziona.
+   * [closeUnusedDatabase]: al cambio account si ritira anche in quel caso: il backup puo' avere gia' aperto Room, o avere
+   * una query in coda. I suoi lavori si aspettano prima della chiusura, poi serve riavviare il processo.
    */
-  suspend fun shutdown() {
+  suspend fun shutdown(closeUnusedDatabase: Boolean = false) {
     lifecycle.withLock {
-      if (retired) return
+      if (retired && !closeUnusedDatabase) return
       // Fase 5B (P14): le integrazioni revocano subito gli id dei documenti e tornano ai null-object (anche se la galleria non e' mai partita).
       shutdownHooks.forEach { hook -> runCatching { hook() } }
-      if (coreFlow.value == null && !coreDeferred.isActive) return
+      if (coreFlow.value == null && !coreDeferred.isActive && !closeUnusedDatabase) return
       val running = synchronized(workLock) {
         retired = true
         runningWork.toList()
@@ -986,6 +988,7 @@ class GalleryGraph(
         try {
           database.close()
         } catch (e: Exception) {
+          if (closeUnusedDatabase) throw e
           GalleryLog.w(TAG) { "database non chiuso: ${e.javaClass.simpleName}" }
         }
       }

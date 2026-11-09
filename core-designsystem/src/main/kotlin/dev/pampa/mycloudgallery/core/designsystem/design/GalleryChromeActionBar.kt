@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.core.designsystem.design
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.height
@@ -9,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
@@ -26,6 +28,11 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
  *
  * Lo stile e' il vetro adattivo della chrome (pellicola e inchiostro dal contenuto che passa sotto). L'azione distruttiva
  * usa [GalleryChromeStyle.destructiveInk], gia' portata a 3:1 sulla pellicola.
+ *
+ * G2 (B3): come la `FluidFloatingCapsule` dell'engine **tiene i tocchi** che nessuna azione prende (un tocco fra due icone
+ * non apre la foto sotto) e lascia passare i trascinamenti (la griglia parte a scorrere anche da qui). Il posto e
+ * l'animazione sono quelli della capsula `ReplacingTabBar` ([dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarSlotVisibility]);
+ * la pellicola resta la nostra, adattiva: quella della capsula dell'engine e' fissa e sulle foto chiare non regge il contrasto.
  */
 @Composable
 fun GalleryChromeActionBar(
@@ -43,6 +50,8 @@ fun GalleryChromeActionBar(
     Row(
       modifier = modifier
         .height(ActionBarHeight)
+        // Tiene i tocchi che nessuna azione ha preso, senza toccare i trascinamenti (come la capsula dell'engine).
+        .pointerInput(Unit) { detectTapGestures { } }
         .then(surface)
         .padding(horizontal = ActionBarPadding),
       horizontalArrangement = Arrangement.spacedBy(ActionGap),

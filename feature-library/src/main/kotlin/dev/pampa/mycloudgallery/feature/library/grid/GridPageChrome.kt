@@ -1,8 +1,5 @@
 package dev.pampa.mycloudgallery.feature.library.grid
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -18,9 +15,10 @@ import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
-import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarSlotVisibility
+import dev.pampa.mycloudgallery.core.designsystem.chrome.TakeGalleryTabBarSlot
 import dev.pampa.mycloudgallery.core.designsystem.design.ContentRange
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeActionBar
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeContent
@@ -44,7 +42,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.rememberAnyContentChrom
 //    sfumatura del colore della pagina (lo "scroll edge effect"), dentro il fondale: il vetro la vede;
 //  - ogni pezzo sceglie da se' pellicola e inchiostro dal contenuto che gli passa sotto (i ThumbHash delle celle, mai i
 //    pixel), con l'opacita' minima che tiene 4,5:1 sul caso peggiore;
-//  - in basso, in selezione, la barra delle azioni nel posto della pillola, alla stessa altezza; la griglia non si sposta;
+//  - in basso, in selezione, la barra delle azioni nel posto della pillola, alla stessa altezza (G2: la pillola esce); la griglia non si sposta;
 //  - un fondale di vetro solo, quello della pagina: lo scrubber e' disegnato fuori, la griglia non ne registra un secondo.
 //
 // Fase 4B (P16): la riga in alto, la sfumatura e lo stile adattivo stanno in core-designsystem (`GalleryTopChrome`), cosi' le pagine
@@ -122,9 +120,11 @@ internal fun GridTopChrome(
 internal fun GridTopEdgeScrim(topChrome: Dp, modifier: Modifier = Modifier) = GalleryTopEdgeScrim(topChrome, modifier)
 
 /**
- * La barra delle azioni della selezione, adattiva come la chrome in alto, nel posto della pillola: compare e scompare
- * sfumando (e' chrome, non una pagina). [veilAlpha] e' la sfumatura della pagina che le sta sotto (quella della pillola
- * nella Libreria; zero dove sotto c'e' solo la griglia). [actions] si legge solo mentre la barra si vede.
+ * La barra delle azioni della selezione, adattiva come la chrome in alto, **nel posto della pillola** (G2, B3): entra ed esce come la
+ * capsula `ReplacingTabBar` dell'engine (sale da sotto il bordo con la molla del chrome, scende piu' svelta) e, dentro una scheda, prende
+ * il posto della pillola finche' si vede ([TakeGalleryTabBarSlot]): la pillola e il cerchio di Cerca escono, niente si posa sopra di loro.
+ * I margini (barra di sistema, lati, fondo) li mette lei: il chiamante la allinea in basso e basta. [veilAlpha] e' la sfumatura della pagina
+ * che le sta sotto (quella della pillola nella Libreria; zero dove sotto c'e' solo la griglia). [actions] si legge solo mentre la barra si vede.
  */
 @Composable
 internal fun GridSelectionBar(
@@ -135,7 +135,8 @@ internal fun GridSelectionBar(
   veilAlpha: Float = 0f,
   actions: @Composable () -> List<GalleryBarAction>,
 ) {
-  AnimatedVisibility(visible = visible, enter = fadeIn(FluidMotion.fadeIn()), exit = fadeOut(FluidMotion.fadeOut()), modifier = modifier) {
+  TakeGalleryTabBarSlot(active = visible)
+  GalleryTabBarSlotVisibility(visible = visible, modifier = modifier) {
     val page = MaterialTheme.colorScheme.background
     var bounds by remember { mutableStateOf<Rect?>(null) }
     val style = rememberAdaptiveChromeStyle(grid, bounds, bounds?.let { page.copy(alpha = veilAlpha) })

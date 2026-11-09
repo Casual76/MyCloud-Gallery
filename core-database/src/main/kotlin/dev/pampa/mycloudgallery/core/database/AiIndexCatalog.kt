@@ -107,6 +107,33 @@ class AiIndexCatalog internal constructor(private val database: GalleryDatabase)
     true
   }
 
+  /**
+   * La riga scelta dal registro delle origini: puo' avere una ricetta inferiore se l'origine migliore e' stata ritirata.
+   * DELETE, INSERT, FTS4 e vocabolario sono un'unica transazione: un guasto non lascia mai la chiave senza testo (RG-A, SOL-1).
+   */
+  suspend fun replaceText(record: AiTextRecord) = replaceTexts(listOf(record))
+
+  /** Riconcilia un lotto dal registro. Le righe gia' identiche non si riscrivono (apertura dell'indice). */
+  suspend fun replaceTexts(records: List<AiTextRecord>) {
+    if (records.isEmpty()) return
+    database.withTransaction {
+      for (chunk in records.distinctBy { it.contentKey }.chunked(AiIndexDao.MAX_KEYS)) {
+        val existing = dao.textsOf(chunk.map { it.contentKey.hex }).associateBy { it.contentKey }
+        for (record in chunk) {
+          val key = record.contentKey.hex
+          val before = existing[key]
+          val after = record.toEntity()
+          if (before != null && before.recipe == after.recipe && before.engine == after.engine && before.source == after.source &&
+            before.text == after.text && before.lines == after.lines && before.chars == after.chars &&
+            before.createdAt == after.createdAt && before.layout.contentEquals(after.layout)) continue
+          if (before != null) dao.deleteText(key)
+          dao.insertText(after)
+          adjustVocabulary(before?.text.orEmpty(), record.text)
+        }
+      }
+    }
+  }
+
   /** Toglie il testo di [keys] (e le sue parole dal vocabolario). Quanti ne ha tolti. */
   suspend fun removeTexts(keys: Collection<ContentKey>): Int = database.withTransaction {
     var removed = 0

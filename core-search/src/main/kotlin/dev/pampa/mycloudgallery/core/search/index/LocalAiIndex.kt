@@ -98,6 +98,9 @@ class LocalAiIndex(
   internal val dimension: Int = space.space.dimension
   internal val lock = ReentrantReadWriteLock()
   private val writes = Mutex()
+
+  /** Chiavi confermate nel registro ma non ancora riconciliate in SQL (SOL-1). */
+  private val pendingTexts = HashSet<ContentKey>()
   private val ledger = OriginLedger(File(dir, LEDGER))
   private var vectorFile: VectorFile? = null
 
@@ -139,7 +142,7 @@ class LocalAiIndex(
   private class VecPut(val origin: AiOrigin, val key: ContentKey, val records: List<VectorRecord>, val source: Int)
 
   /**
-   * Apre l'indice: rilegge il registro, la prima passata dal suo file (o la ricostruisce) e ripete le rimozioni lasciate a meta'. Se
+   * Apre l'indice: rilegge il registro, la prima passata dal suo file (o la ricostruisce) e riconcilia le righe SQL, anche mancanti. Se
    * l'apertura fallisce (R1: file illeggibile, memoria), l'indice si **ricostruisce vuoto** e chiede di riavere tutto (la replica
    * riconsegna, il calcolo rifa'): mai una ricerca ferma per tutto il processo.
    */
@@ -147,6 +150,9 @@ class LocalAiIndex(
     try {
       openLocked()
     } catch (e: CancellationException) {
+      throw e
+    } catch (e: TextRowsUnavailable) {
+      // Un guasto SQL non e' un registro rovinato: conservarlo per il prossimo tentativo.
       throw e
     } catch (e: Exception) {
       resetLocked()
@@ -262,6 +268,7 @@ class LocalAiIndex(
    * vettori nota, corpo `ocr` presente): una voce di prima della revisione A si ricalcola una volta.
    */
   suspend fun savedFor(key: ContentKey, recipe: Int, share: String?): Set<AiClass> = writes.withLock {
+    syncTexts()
     buildSet {
       if (usable(ledger.vectors[key], share).any { it.recipe >= recipe && it.source != 0 }) add(AiClass.VEC)
       if (usable(ledger.texts[key], share).any { it.recipe >= recipe && it.text?.hasBody == true }) add(AiClass.OCR)
@@ -402,6 +409,7 @@ class LocalAiIndex(
    * si riscrive solo lui. Salva comunque i codici della prima passata.
    */
   suspend fun maintain(force: Boolean = false): Boolean = writes.withLock {
+    syncTexts()
     val total = file.length / file.recordSize
     val live = liveRecords()
     if (force || (total > 0L && (total - live) * 5 > total)) {
@@ -530,9 +538,12 @@ class LocalAiIndex(
     }
     deleteOtherGenerations()
     if (bad.isNotEmpty()) ledger.commit(bad)
-    // Le rimozioni dal database lasciate a meta' da una morte del processo (idempotenti).
-    val gone = ledger.dropped.filter { !ledger.texts.containsKey(it) }
-    if (gone.isNotEmpty()) texts.remove(gone)
+    // Il registro e' la fonte durevole: ripara righe mancanti, obsolete e rimozioni interrotte.
+    // Vale anche per l'incidente delle versioni precedenti (DELETE riuscito, INSERT fallito).
+    pendingTexts.clear()
+    pendingTexts.addAll(ledger.texts.keys)
+    pendingTexts.addAll(ledger.dropped)
+    syncTexts()
     val rebuilt = coarseDirty && (coarse == null || coarse.size < slotCount / 2)
     if (coarseDirty) writeCoarse()
     if (report.lost) repair.redeliverAll()
@@ -544,6 +555,7 @@ class LocalAiIndex(
   }
 
   private suspend fun changeLocked(drops: List<LedgerOp>, vecs: List<VecPut>, txts: List<LedgerOp.PutText>) {
+    syncTexts()
     // Idempotenza: lo stesso dato della stessa origine (una replica che ripete dopo una morte) non si riscrive.
     val newVecs = vecs.filter { p -> ledger.vectors[p.key]?.get(p.origin)?.let { !sameVectors(it, p) } ?: true }
     val newTexts = txts.filter { op -> ledger.texts[op.key]?.get(op.origin)?.let { !sameText(it, op) } ?: true }
@@ -561,9 +573,9 @@ class LocalAiIndex(
       }
     }
     val ops = drops + vecOps + newTexts
-    syncTexts(ops)
+    // Prima il commit durevole, poi la proiezione SQL: ogni interruzione si ripara dal registro.
     ledger.commit(ops)
-    textListener?.let { listen -> newTexts.forEach { listen(it.text) } }
+    pendingTexts.addAll(ops.filter { it is LedgerOp.PutText || (it is LedgerOp.Drop && it.cls == AiClass.OCR) }.map { keyOf(it) })
     lock.write {
       ops.filter { it is LedgerOp.PutVectors || (it is LedgerOp.Drop && it.cls == AiClass.VEC) }.map { keyOf(it) }.toSet()
         .forEach { setVectorChoice(it, fresh) }
@@ -573,33 +585,40 @@ class LocalAiIndex(
       }
       changes.value++
     }
+    syncTexts()
     compactIfNeededLocked()
   }
 
-  /** Il testo nel database **prima** del registro: per ogni chiave toccata, il testo dell'origine che vincera' (o niente). */
-  private suspend fun syncTexts(ops: List<LedgerOp>) {
-    val touched = ops.filter { it is LedgerOp.PutText || (it is LedgerOp.Drop && it.cls == AiClass.OCR) }.groupBy { keyOf(it) }
-    val order = preferenceOf<Any>(AiClass.OCR) { recipeOf(it) }
-    for ((key, keyOps) in touched) {
-      val before = ledger.texts[key]?.let { best(it, AiClass.OCR) }
-      val after = HashMap<AiOrigin, Any>(ledger.texts[key].orEmpty())
-      for (op in keyOps) when (op) {
-        is LedgerOp.Drop -> after.remove(op.origin)
-        is LedgerOp.PutText -> after[op.origin] = op
-        else -> Unit
+  /**
+   * Proiezione idempotente del registro in SQL. Le chiavi restano pendenti fino alla conferma di tutte le scritture del lotto;
+   * un retry nello stesso processo (anche `savedFor`) riprende il lavoro. Alla riapertura il registro ricostruisce l'intero elenco.
+   */
+  private suspend fun syncTexts() {
+    if (pendingTexts.isEmpty()) return
+    try {
+      for (chunk in pendingTexts.toList().chunked(TEXT_BATCH)) {
+        val records = chunk.mapNotNull { key ->
+          val holding = ledger.texts[key]?.let { best(it, AiClass.OCR) }?.second ?: return@mapNotNull null
+          val ref = holding.text ?: return@mapNotNull null
+          val text = ledger.readText(ref) ?: throw IOException("Corpo del testo non leggibile.")
+          textRecord(key, holding.recipe, ref.engine, ref.source, ref.lines, ref.chars, text)
+        }
+        if (records.isNotEmpty()) texts.replace(records)
+        val present = records.mapTo(HashSet()) { it.contentKey }
+        val gone = chunk.filter { it !in present }
+        if (gone.isNotEmpty()) texts.remove(gone)
+        textListener?.let { listen -> records.forEach { listen(it.text) } }
+        pendingTexts.removeAll(chunk.toSet())
       }
-      val winner = after.entries.minWithOrNull(order)
-      if (winner != null && before != null && winner.value === before.second) continue
-      texts.remove(listOf(key))
-      val record = when (val v = winner?.value) {
-        null -> null
-        is LedgerOp.PutText -> textRecord(key, v.recipe, v.engine, v.source, v.lines, v.chars, v.text)
-        is Holding -> v.text?.let { t -> ledger.readText(t)?.let { textRecord(key, v.recipe, t.engine, t.source, t.lines, t.chars, it) } }
-        else -> null
-      }
-      if (record != null) texts.put(record)
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      throw TextRowsUnavailable(e)
     }
   }
+
+  /** Distinta dal registro illeggibile: `open` non deve cancellare i corpi durevoli per un errore SQL. */
+  private class TextRowsUnavailable(cause: Exception) : IOException("Riconciliazione del testo non riuscita.", cause)
 
   private fun setVectorChoice(key: ContentKey, fresh: Map<Long, ShortArray>?) {
     val old = chosenVectors[key]
@@ -772,12 +791,6 @@ class LocalAiIndex(
     is LedgerOp.Generation -> throw IllegalArgumentException()
   }
 
-  private fun recipeOf(v: Any): Int = when (v) {
-    is Holding -> v.recipe
-    is LedgerOp.PutText -> v.recipe
-    else -> 0
-  }
-
   /** R16: la preferenza fra le origini di una chiave: ricetta piu' alta **fino a quella nota**, poi [originOrder]. */
   private fun <T> preferenceOf(cls: AiClass, recipe: (T) -> Int): Comparator<Map.Entry<AiOrigin, T>> {
     val known = knownRecipe(cls)
@@ -799,6 +812,8 @@ class LocalAiIndex(
   }
 
   private companion object {
+    private const val TEXT_BATCH = 500
+
     const val LEDGER = "ledger.log"
 
     /** Prima questo dispositivo, poi i calcoli su anteprime altrui, poi la replica; poi share e dispositivo in ordine (deterministico). */

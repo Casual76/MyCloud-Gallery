@@ -52,6 +52,6 @@
   </plurals>
   <plurals name="notify_summary_backup_common_lost">
     <item quantity="one">Una foto o un video aveva l\'unica copia nell\'area comune ed è sparita: cerca nel cestino del NAS.</item>
-    <item quantity="other">%1$d foto o video avevano l\'unica copia nell\'area comune ed è sparita: cerca nel cestino del NAS.</item>
+    <item quantity="other">%1$d foto o video avevano una sola copia, nell\'area comune, e quelle copie sono sparite: cerca nel cestino del NAS.</item>
   </plurals>
 </resources>

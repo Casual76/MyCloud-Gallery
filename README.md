@@ -4,7 +4,7 @@ Galleria Android privata per una famiglia di soli adulti, complementare a Samsun
 telefono e del NAS WD My Cloud EX2 Ultra in una sola libreria, backup automatico, ricerca sul
 dispositivo, nessun cloud di terzi e nessuna telemetria. Telefono e tablet.
 
-Stato: **Fase 4A integrata (P11, M1); Fase 4B integrata (P16)**, in attesa delle prove sul campo e della revisione di sicurezza. Oltre alla Fase 2 (rete e casa, sessione SMB verso il NAS, famiglia, QR, Impostazioni e
+Stato: **Fasi 0-10 complete; beta in preparazione** (fase grafica ridotta e rilascio: `docs/fase-grafica-e-rilascio.md`; le decisioni sono in `docs/decisioni.md`, la sicurezza in `docs/sicurezza.md`). Cosa fa l'app, per fasi: oltre alla Fase 2 (rete e casa, sessione SMB verso il NAS, famiglia, QR, Impostazioni e
 Diagnostica) l'app mostra la **galleria del telefono**: Libreria (griglia della timeline su anni, mesi, giorni e tutte, con
 selezione, preferiti, nascosti ed eliminazione dal telefono), viewer (zoom, video, foto in movimento, informazioni) e Raccolte
 (Preferiti, Video, Screenshot, WhatsApp, Nascosti ed Eliminati di recente dietro lo sblocco). Tutto sul telefono, senza rete:
@@ -47,8 +47,7 @@ Esegue, in ordine, e finisce con un riepilogo OK/FAIL (codice di uscita 0 solo s
 ## Moduli
 
 Package base `dev.pampa.mycloudgallery`, namespace `dev.pampa.mycloudgallery.<modulo>` (es.
-`dev.pampa.mycloudgallery.core.trust`). Tutti i moduli sono librerie Android (Groovy DSL) con una classe
-segnaposto e almeno un test.
+`dev.pampa.mycloudgallery.core.trust`). Tutti i moduli sono librerie Android (Groovy DSL) con almeno un test.
 
 | Modulo | Cosa contiene | Vede |
 |---|---|---|

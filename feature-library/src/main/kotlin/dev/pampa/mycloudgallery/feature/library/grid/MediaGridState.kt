@@ -122,12 +122,30 @@ class MediaGridState(
   private val viewFlow = MutableStateFlow(view)
   private var viewState: TimelineView by mutableStateOf(view)
 
+  /**
+   * Il giorno di oggi come lo vede la griglia (FAB-1): da qui le intestazioni e l'etichetta in alto scelgono "Oggi" e "Ieri". E' uno stato, non
+   * una lettura fatta una volta: con l'app rimasta viva dalla sera, la mattina "Oggi" sarebbe ancora ieri. Si aggiorna con [refreshDay] (la
+   * finestra che torna in primo piano) e a ogni vista nuova; cambia una volta al giorno, quindi chi lo legge si ricompone una volta al giorno.
+   */
+  private var dayState: LocalDate by mutableStateOf(today())
+
+  /** Il giorno di oggi per "Oggi" e "Ieri": letto da chi disegna le intestazioni, aggiornato da [refreshDay]. */
+  val currentDay: LocalDate get() = dayState
+
+  /** Rilegge l'orologio: se il giorno e' cambiato, "Oggi" e "Ieri" si spostano. Non scrive niente se il giorno e' lo stesso. */
+  fun refreshDay() {
+    val now = today()
+    if (now != dayState) dayState = now
+  }
+
   /** La vista che la griglia deve mostrare (con il suo filtro). Cambiarla rimette la griglia sullo stesso elemento. */
   var view: TimelineView
     get() = viewState
     set(value) {
       viewState = value
       viewFlow.value = value
+      // Una vista nuova e' un buon momento per rileggere il giorno: costa una lettura dell'orologio.
+      refreshDay()
     }
 
   /** Lo stile delle celle (D4). Cambiarlo resta ancorato. */

@@ -45,7 +45,8 @@ fun rememberMediaGridSection(state: MediaGridState, line: Dp): MediaGridSection?
   // Si legge dove l'intestazione della lista e' gia' sparita (`handOverLine`): l'etichetta la sostituisce, non la ripete.
   val linePx = with(LocalDensity.current) { handOverLine(line).roundToPx() }
   val strings = rememberGridStrings()
-  val today = remember(state) { state.today() }
+  // FAB-1: lo stesso "oggi" delle intestazioni (uno stato della griglia): l'etichetta di vetro in alto passa a "Ieri" insieme a loro.
+  val today = state.currentDay
   val section by remember(state, linePx, strings, today) {
     val key = derivedStateOf { sectionKeyAt(state, linePx) }
     derivedStateOf(structuralEqualityPolicy()) { key.value?.let { sectionOf(state, it, strings, today) } }

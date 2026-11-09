@@ -492,8 +492,10 @@ class OnboardingViewModel @Inject constructor(
 
   /** Aggiunge una share digitata all'elenco e la prova. */
   fun addShare(name: String) {
-    if (name.isBlank() || name in extraShares) return
-    extraShares = extraShares + name.trim()
+    // FAB-8: il doppione si controlla dopo il `trim()`: «Foto » dopo «Foto» entrava due volte (si confrontava il testo con gli spazi).
+    val share = name.trim()
+    if (share.isEmpty() || share in extraShares) return
+    extraShares = extraShares + share
     loadAreas()
   }
 

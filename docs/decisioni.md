@@ -17284,3 +17284,83 @@ di `NotDone`), `Correzioni5BSoloDalTelefonoTest.ls1_conIlBackupNonAttivo...` (la
 - Il titolo del foglio di eliminazione con soli video (sopra).
 - Con la memoria piena le schermate senza un posto per un messaggio (riordino dell'elenco degli album, interruttori delle impostazioni) mostrano solo il valore che torna: se si vuole una
   riga di avviso anche li' serve un posto nei loro stati.
+
+
+## K4: l'app sul telefono dell'utente (360 dp), difetti gia' visti e giro dei moduli che mancavano
+
+Branch `fix/k4-360dp` (base `integra/beta-grafica`, `b5c48737`). Il telefono e' 360 x 780 dp; fino a ieri le immagini di molti moduli erano a 411-412 dp. Qui: tre difetti gia' visti,
+il giro dei moduli che mancavano (classi che registrano il telefono portate a `w360dp-h780dp`, immagini guardate), un titolo rimasto indietro. Nessun ridisegno.
+
+### I tre difetti gia' visti
+- **Ricevuti in coda** (`feature-backup/.../received/ReceivedScreen.kt`): "Riprova" e "Scarta" erano due tasti `weight(1f)` in una `Row`, nella colonna di ~200 dp accanto alla miniatura:
+  "Riprov/a". Ora sono un `FlowRow` di tasti alla larghezza naturale (`BackupButton(fillWidth = false)`, `weight(1f)`): affiancati se entrano interi, uno sotto l'altro se no (a 360 dp
+  sono sempre uno sotto l'altro). Prova: `ReceivedButtonsFitTest` (360 dp, testo normale e 1,3x: ogni etichetta su una riga, nessun tasto sovrapposto).
+- **Impostazioni, voce Backup** ("Backu/p" con il testo grande): la pillola di stato ("Da controllare", "Primo backup") era nel `badge` di `FluidListRow`, che prende la larghezza per primo;
+  ora e' in `labels` (sotto il titolo se ruberebbe la riga, come gia' Ricordi e notifiche e Persone). Stessa correzione nelle altre voci con una pillola in `badge`: Cerca, Dispositivi
+  (conteggio richieste), Avviso backup, Cambia password. Prova: `BackupEntryFitTest`. Immagini: `5-P5/impostazioni-voce-backup-*-telefono-testo-grande.png`.
+- **Capsula in alto delle raccolte** (Fotocamera, Messaggistica): **gia' risolta da K2**, le griglie passano da `GalleryChromeLabel` con le forme corte ("Mer 8 ott 2025"). Riregistrate e
+  guardate (`G2b/griglia-fotocamera-*`, `griglia-messaggistica-*`, poi ripristinate: sono dell'orchestratore): la data e' intera, il luogo si tronca ("Fotocamera · New York e F…"). I
+  "Ricevuti" non sono una raccolta della Libreria: e' la pagina di `feature-backup`, la cui capsula ha un riepilogo lungo (vedi "Difetti lasciati").
+
+### Il titolo del foglio di eliminazione
+`LibraryDeleteSheet` (`feature-library/.../library/LibraryParts.kt`): se fra i media sul telefono della selezione c'e' almeno un video il titolo e' «Eliminare N elementi?» (uno solo:
+«Eliminare questo elemento?»); le tre frasi del dettaglio (copia al sicuro, nessuna copia, alcuni senza copia) hanno la variante al maschile (`library_delete_phone_*_items`), perche'
+prima parlavano al femminile ("mettile") per il titolo "foto". I video si contano **solo a foglio aperto** (`hasVideoAmong`), cosi' non c'e' un giro in piu' sulla selezione a ogni tocco;
+a foglio che si chiude resta l'ultima risposta (il titolo non cambia mentre esce). Gli altri usi di `GalleryDeleteSheet` non cambiano. Prove: 4 nuove in `LibraryDeleteSafetyTest`
+(soli video, un video, misti, sole foto); le 5 vecchie (`LibraryDeleteSafetyTest`, `G2EliminaDallaSelezioneTest`) scelgono foto in modo esplicito: la loro selezione (le prime celle della
+Libreria sintetica) conteneva un video. Il foglio del viewer ("Eliminare questa foto?") non e' toccato (un media alla volta; da decidere se dire "video").
+
+### Difetti trovati guardando le immagini a 360 dp (e corretti)
+| Dove | Difetto | Correzione | Immagini |
+|---|---|---|---|
+| Cerca > Ricerca e modelli (`feature-search/.../models/`) | tre righe di tasti in `Row`: "Non su questo dispositivo" -> "disposit/ivo" accanto a "Scopri e attiva" (anche a testo normale); a 1,3x "Libera spazi/o", "Diagnostic/a" | `FlowRow` alla larghezza naturale (ReadingBlock, IndexerBlock, ActionRow dei modelli): affiancati se entrano, a capo interi se no | `6-P8/ricerca-e-modelli*` |
+| Persone > Disattiva e cancella; Impostazioni Persone | pillola ("Fatto", "In attesa", conteggio nascosti) nel `badge`: a testo grande la frase restava in una colonna di una parola per riga | pillola in `labels` | `8-P8/dispositivi-mancanti*`, `avanzamento-*`, `cestino-di-rete*` |
+| Design system > foglio "Condividere con la famiglia?" | `Permessi` -> "Perm/essi" (nel catalogo una lettera per riga) | il valore sta sotto l'etichetta (subtitle); prova `GalleryShareSheetFitTest` | `1.2/foglio-vero-condividi-*`, `7-P10/foglio-condividi-*` |
+| Libreria > avviso "I familiari continuano a vedere N di questi elementi" | a 1,3x il banner dell'engine (3 righe) tagliava "...album condi…" e perdeva "lo vedono tutti" | frase piu' corta ("Nascosti protegge solo dentro l'app: l'area comune e gli album condivisi li vedono tutti."; l'inizio che le prove cercano non cambia) | `7-P9/nascondi-familiari-vedono-*` |
+
+### Il giro: classi portate a 360 dp
+Le immagini sono guardate in fogli di controllo (ritagliati e affiancati, 6 per foglio): **chiaro e testo grande** per le scene (il testo grande e' il caso peggiore: se non si spezza li', non si
+spezza a testo normale), **scuro a campione** (e' la stessa pagina con altri colori). Le immagini del tablet non cambiano e non sono state riregistrate.
+| Modulo | Classi portate a 360 dp | Difetti | Esito |
+|---|---|---|---|
+| feature-search | `SearchPhoneScreenshotTest`, `SearchPagesPhoneScreenshotTest`, `PeopleSearchPhoneScreenshotTest` | tasti di Ricerca e modelli | corretto |
+| feature-map | `MapPhoneScreenshotTest`, `MapFailureScreenshotTest`, `RegionsScreenshotTest` (carta finta a 360 x 780) | nessuno | - |
+| feature-memories | `MemoriesPhoneScreenshotTest` | nessuno (le righe "Ricordi" della scheda Raccolte hanno il sottotitolo stretto da "Nuovo": e' la scheda Raccolte, vedi sotto) | - |
+| feature-people | `PeoplePhoneScreenshotTest`, `PeopleCorrB/C/D`, `EraseScreenshotPhoneTest`, `EraseScreenshotTallPhoneTest`, `ActivationPhoneScreenshotTest`, `ActivationPagesPhoneScreenshotTest` | pillole nel `badge` | corretto |
+| feature-nas | `NasPhoneScreenshotTest`, `NasHiddenPhoneScreenshotTest` | nessuno | - |
+| feature-onboarding | `PhoneShotTest` (360 x 780), `PhoneTallShotTest` (360 x 2300), PNG a mezza risoluzione | nome del NAS "WDMyCloudEX2Ultra" (una parola) spezzato a 1,3x nella scelta dei NAS trovati | lasciato |
+| feature-integrations | `ReceivePhoneScreenshotTest`, `ReceiveAlbumPhoneScreenshotTest`, `DropReceiveScreenshotTest`, `PickerPhoneScreenshotTest` | nessuno | - |
+| feature-viewer | `ViewerScreenshotTest`, `ViewerMotionScreenshotTest`, `ViewerNasScreenshotTest`, `ViewerBackupInfoTest`, `MotionBadgeScreenshotTest`, le quattro del ritaglio e del testo dal vivo, `ViewerPlaceMapInfoTest`, `ViewerPeopleInfoTest`, `SimilarCopiesPanelTest`, `NasActionsPhoneScreenshotTest`, `BackupActionsPhoneScreenshotTest` | nessuno (tutte le prove di quelle classi passano a 360 dp) | - |
+| feature-library | `LibraryPhoneScreenshotTest`, `BackupLibraryPhoneScreenshotTest`, `HiddenFamilyPhoneScreenshotTest`, `UtilityPhoneScreenshotTest`, `LibraryWindowsMenuPhoneTest` | banner "I familiari continuano a vedere" | corretto |
+| feature-albums | `SheetsPhoneScreenshotTest`, `PeopleEditorPhoneScreenshotTest`, `ListAndPagePhoneScreenshotTest`, `EditorSuggestionsTripsPhoneScreenshotTest` | (il foglio Condividi e' del design system, sopra) | corretto |
+| core-designsystem | `ViewerCatalogPhoneScreenshotTest`, `GridCatalogPhoneScreenshotTest`, `RealSheetScreenshotTest`, `RealMenuScreenshotTest`, `CatalogShellPhoneScreenshotTest`, `CatalogGroupPhoneScreenshotTest`, `DragScreenshotTest` | foglio Condividi | corretto |
+| core-qr | `QrPhoneScreenshotTest`, `QrPhoneLargeTextScreenshotTest`, `ScannerPhoneScreenshotTest`, `ScannerPhoneLargeTextScreenshotTest` | nessuno | - |
+| feature-widget | `WidgetScreenshotTest` (360 x 780; le immagini non cambiano) | nessuno | - |
+
+### Difetti lasciati
+- **Onboarding, scelta dei NAS trovati, testo grande**: "WDMyCloudEX2Ultr/a" (il nome del NAS di casa e' una sola parola piu' larga della colonna a 1,3x). Servirebbe una scelta di disegno (puntini che
+  perdono "ra", o un titolo che scala): `2-P6/02c-indirizzo-scelta-del-nas-*` e il passo 2 di 10 ("Il NAS di famiglia").
+- **Pagina del backup, capsula in alto** ("Ricevuti in coda"): il riepilogo ("4 file ricevuti non sono ancora sul N…") si tronca a 360 dp. E' la chrome (`core-designsystem/.../design/*`,
+  fuori perimetro): `5-IN7/elenco-*-telefono.png`.
+- **Scheda Raccolte, sezione Ricordi** a testo grande: il sottotitolo ("30 foto · 1 ottobre 2026 – 31 ottobre 2026") e' stretto dal "Nuovo" a destra e va su cinque righe:
+  `9-P9/sezione-pronta-chiaro-telefono-testo-grande.png`. Non e' una parola spezzata; la riga e' della scheda Raccolte.
+- **Banner dell'engine**: il corpo e' limitato a 3 righe (qui evitato accorciando una frase): ogni banner con un corpo lungo a 1,3x puo' tagliarsi. Da dire all'engine.
+- Classi lasciate a 412 dp (e perche'): `LibraryAccessibilityTest` e `ViewerAccessibilityTest` (prove di accessibilita' che scrivono tre immagini, non classi di immagini), i test di layout e
+  funzionali di tutti i moduli (`PHONE_QUALIFIERS`: misurano altro), `ViewerPanesShots*` e `LibraryPanesShots*` e `ViewerG3Shots*` (gia' a 360 dp).
+
+### Rischi per le prestazioni
+- `FlowRow` al posto di `Row` in tre righe di tasti (Ricevuti in coda, Ricerca e modelli): pagine con pochi tasti, nessuno stato letto per fotogramma.
+- `labels` al posto di `badge`: l'engine misura titolo ed etichette insieme una volta per riga; nessun costo per fotogramma.
+- `hasVideoAmong`: solo a foglio aperto, `remember(onPhone, view)`; nessun giro sulla selezione mentre si scorre o si seleziona.
+- Nessun vetro nuovo, nessun lavoro all'avvio.
+
+### Da provare sul telefono
+1. S25, Ricevuti in coda con un file in problema: "Riprova" e "Scarta" interi, uno sotto l'altro; Impostazioni > Backup con un problema (pillola "Da controllare") e testo grande.
+2. Impostazioni > Cerca > Ricerca e modelli: "Non su questo dispositivo" intero; con testo grande "Libera spazio" e "Diagnostica".
+3. Libreria: seleziona un video (e poi una foto e un video) -> "Elimina dal telefono": titolo «Eliminare N elementi?» e la frase al maschile; con sole foto resta «Eliminare N foto?».
+4. Un album condiviso, "Condividi con la famiglia": "Permessi" e "Album" interi.
+5. Nascondi una foto dell'area comune: il banner con testo grande dice "li vedono tutti".
+
+### Decisioni aperte per l'utente
+- Il nome del NAS a testo grande (sopra): puntini o scala del titolo.
+- Il foglio di eliminazione del viewer dice «Eliminare questa foto?» anche per un video: lo cambiamo come nella Libreria?

@@ -44,7 +44,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Gli screenshot di P14 (Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso e i fogli di conferma):
- * chiaro e scuro, telefono (412 dp) e tablet (1280 dp, due pannelli dove la pagina li ha), piu' il testo grande. Sui fake: i dati di
+ * chiaro e scuro, telefono (360 dp) e tablet (1280 dp, due pannelli dove la pagina li ha), piu' il testo grande. Sui fake: i dati di
  * [NasFixtures] (un NAS di famiglia) e le aree `test` / `test-comune`.
  *
  * `gradlew :feature-nas:recordRoborazziDebug --tests "*NasScreenshot*"` scrive i PNG in `docs/screenshots/4-P14/`. Nei normali
@@ -358,7 +358,7 @@ abstract class NasScreenshotBase(private val dark: Boolean, private val device: 
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class NasPhoneScreenshotTest(dark: Boolean) : NasScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

@@ -29,6 +29,10 @@ import org.robolectric.Shadows.shadowOf
 internal object Devices {
   const val PHONE = "w412dp-h915dp-xhdpi"
   const val PHONE_TALL = "w412dp-h2300dp-xhdpi"
+
+  /** Il telefono degli screenshot per l'utente (K4): il suo Galaxy S25, 360 x 780 dp. Non 412 dp, dove entrano piu' cose che sul suo schermo. */
+  const val SHOT_PHONE = "w360dp-h780dp-xhdpi"
+  const val SHOT_PHONE_TALL = "w360dp-h2300dp-xhdpi"
   const val TABLET = "w1280dp-h800dp-land-xhdpi"
   const val LARGE_TEXT = 1.3f
 }

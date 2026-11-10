@@ -19,7 +19,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Gli screenshot di P9 (Fase 7, I8 della 4B): la riga "N elementi nascosti" di Cartelle NAS, senza nessun nome, e lo stato "non riesco a controllare".
- * Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo grande. Sui fake di [NasFixtures]; i due file nascosti sono i nomi che nella
+ * Chiaro e scuro, telefono (360 dp) e tablet (1280 dp), piu' il testo grande. Sui fake di [NasFixtures]; i due file nascosti sono i nomi che nella
  * pagina **non** compaiono.
  *
  * `gradlew :feature-nas:recordRoborazziDebug --tests "*NasHidden*Screenshot*"` scrive i PNG in `docs/screenshots/7-P9/`. Nei normali
@@ -74,7 +74,7 @@ abstract class NasHiddenScreenshotBase(private val dark: Boolean, private val de
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class NasHiddenPhoneScreenshotTest(dark: Boolean) : NasHiddenScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

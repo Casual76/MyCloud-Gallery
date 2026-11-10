@@ -405,6 +405,7 @@ class PersonalMemories(private val store: PersonalStore) {
     val value = MemoriesRecords.seenValue(day)
     val now = seenDay(memoryId)
     if (now != null && now >= day) return
+    // Resta silenziosa (K5): il "visto" lo scrive la pagina da sola, non e' un gesto dell'utente; se non si salva si riscrive alla prossima apertura.
     QuietWrites.attempt("ricordo visto") { store.set(key, value) }
   }
 
@@ -414,9 +415,9 @@ class PersonalMemories(private val store: PersonalStore) {
     return MemoriesRecords.read(mapOf(entry.key to entry)).seen[memoryId]
   }
 
-  /** "Non mostrare questo ricordo" ([dismissed] vero) o "Annulla" (falso: la lapide, D10). */
+  /** "Non mostrare questo ricordo" ([dismissed] vero) o "Annulla" (falso: la lapide, D10). Lancia `IOException` se il registro non si scrive (niente e' cambiato). */
   suspend fun dismiss(memoryId: String, dismissed: Boolean = true) {
-    QuietWrites.attempt("ricordo scartato") { store.set(MemoriesRecords.dismissedKey(memoryId), if (dismissed) PersonalValue.Flag(true) else PersonalValue.Removed) }
+    store.set(MemoriesRecords.dismissedKey(memoryId), if (dismissed) PersonalValue.Flag(true) else PersonalValue.Removed)
   }
 
   /** Se [memoryId] e' scartato ("Non mostrare"): non torna su nessun dispositivo dell'account, nemmeno fra un anno (E-MEM9). */

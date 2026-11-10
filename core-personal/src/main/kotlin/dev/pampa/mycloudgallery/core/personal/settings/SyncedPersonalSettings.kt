@@ -43,6 +43,7 @@ class SyncedPersonalSettings(
     .stateIn(scope, SharingStarted.Eagerly, coversOf(store.entries.value))
 
   override suspend fun setShowAlbumCovers(show: Boolean) {
+    // Resta silenziosa (K5): chi la chiama (`NasOrganizer`) non guarda l'esito e non ha dove dirlo; l'interruttore segue il suo specchio locale.
     QuietWrites.attempt("copertine degli album") { store.set(COVERS, PersonalValue.Flag(show)) }
   }
 
@@ -62,7 +63,8 @@ class SyncedPersonalSettings(
     for (field in current.keys) {
       if (field !in wanted) changes += PersonalChange(exclusionKey(field), PersonalValue.Removed)
     }
-    QuietWrites.attempt("cartelle escluse dell'area privata") { store.setAll(changes) }
+    // K5: se il registro non si scrive lancia `IOException` (niente e' cambiato): `NasOrganizer.setPrivateAreaExclusions` la traduce in "non salvate" e la pagina lo dice.
+    store.setAll(changes)
   }
 
   private fun coversOf(entries: Map<PersonalKey, PersonalEntry>): Boolean =

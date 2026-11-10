@@ -44,8 +44,12 @@ class SyncedSearchSettings(
     .distinctUntilChanged()
     .stateIn(scope, SharingStarted.Eagerly, readingOf(store.effectiveEntries.value))
 
+  /**
+   * K5: se il registro non si scrive lancia `IOException` e niente e' cambiato. Chi consegna la scelta (`AppTextReadingSwitch.deliver`) la tiene "da consegnare" e riprova:
+   * con un successo muto la crederebbe consegnata, e uno spegnimento della lettura del testo non arriverebbe mai agli altri dispositivi.
+   */
   override suspend fun setTextReading(choice: TextReadingChoice) {
-    QuietWrites.attempt("lettura del testo nelle foto") { store.set(READING, TextReadingChoice.toValue(choice)) }
+    store.set(READING, TextReadingChoice.toValue(choice))
   }
 
   override val searchOrder: StateFlow<SearchOrderSetting> = store.effectiveEntries
@@ -53,6 +57,7 @@ class SyncedSearchSettings(
     .distinctUntilChanged()
     .stateIn(scope, SharingStarted.Eagerly, orderOf(store.effectiveEntries.value))
 
+  /** Resta silenziosa (K5): `PersonalSettingsHub` non riprova e Cerca non ha dove dirlo; l'ordine torna quello del registro. */
   override suspend fun setSearchOrder(order: SearchOrderSetting) {
     QuietWrites.attempt("ordine della ricerca") { store.set(ORDER, PersonalValue.Text(order.code)) }
   }

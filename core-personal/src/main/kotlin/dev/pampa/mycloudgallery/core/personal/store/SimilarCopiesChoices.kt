@@ -1,6 +1,5 @@
 package dev.pampa.mycloudgallery.core.personal.store
 
-import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalChange
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
@@ -71,13 +70,16 @@ class SimilarCopiesChoices(
    */
   suspend fun saveCover(chosen: MediaId, others: Collection<MediaId>) {
     val wanted = others.toSet() - chosen
-    // Un lotto solo (K3b): la copia principale cambia tutta insieme o non cambia; con la memoria piena non si scrive niente e non si dice che e' cambiato qualcosa.
+    // Un lotto solo (K3b): la copia principale cambia tutta insieme o non cambia. Con la memoria piena `setAll` lancia `IOException` (K5) e non si avvisa chi sincronizza:
+    // `CatalogSimilarCopies` salva qui **prima** di toccare il catalogo, e con un successo muto il catalogo cambierebbe senza la scelta salvata (al giro dopo tornerebbe com'era).
+    // Il confine e' nel viewer (`SimilarCopiesViewModel.act`), che rilegge il gruppo com'e'.
     val changes = ArrayList<PersonalChange>()
     for ((media, entry) in coverEntries(onlyOn = true)) {
       if (media in wanted) changes += PersonalChange(entry.key, PersonalValue.Flag(false))
     }
     changes += PersonalChange(SimilarCopiesRecords.cover(chosen.value), PersonalValue.Flag(true))
-    if (QuietWrites.attempt("copia principale") { store.setAll(changes) }) onSaved()
+    store.setAll(changes)
+    onSaved()
   }
 
   /**
@@ -93,7 +95,9 @@ class SimilarCopiesChoices(
       val (_, high) = checkNotNull(SimilarCopiesRecords.separatedPair(key))
       changes += PersonalChange(key, SimilarCopiesRecords.apart(store.fingerprintOfMedia(high)))
     }
-    if (changes.isNotEmpty() && QuietWrites.attempt("copie separate") { store.setAll(changes) }) onSaved()
+    if (changes.isEmpty()) return
+    store.setAll(changes)
+    onSaved()
   }
 
   /**
@@ -111,7 +115,9 @@ class SimilarCopiesChoices(
       if (pair != wanted) continue
       changes += PersonalChange(key, PersonalValue.Removed)
     }
-    if (changes.isNotEmpty() && QuietWrites.attempt("copie di nuovo unibili") { store.setAll(changes) }) onSaved()
+    if (changes.isEmpty()) return
+    store.setAll(changes)
+    onSaved()
   }
 
   /**

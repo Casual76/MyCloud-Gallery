@@ -1,6 +1,5 @@
 package dev.pampa.mycloudgallery.core.personal.settings
 
-import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.personal.contract.FullHashPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
@@ -36,8 +35,9 @@ class SyncedFullHashSettings(
     .distinctUntilChanged()
     .stateIn(scope, SharingStarted.Eagerly, nightlyOf(store.effectiveEntries.value))
 
+  /** K5: se il registro non si scrive lancia `IOException` e niente e' cambiato: la pagina dei doppioni dice "non salvato" e il giro dell'impronta non parte. */
   override suspend fun setFullHashNightly(on: Boolean) {
-    QuietWrites.attempt("impronta completa di notte") { store.set(KEY, PersonalValue.Flag(on)) }
+    store.set(KEY, PersonalValue.Flag(on))
   }
 
   private fun nightlyOf(entries: Map<PersonalKey, PersonalEntry>): Boolean =

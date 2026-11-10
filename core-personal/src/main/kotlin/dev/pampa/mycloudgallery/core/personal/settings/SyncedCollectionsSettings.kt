@@ -1,12 +1,12 @@
 package dev.pampa.mycloudgallery.core.personal.settings
 
-import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKey
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKind
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalStore
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalValue
+import java.io.IOException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -61,23 +61,26 @@ class SyncedCollectionsSettings(
    * Salva [codes] come ordine delle sezioni. Un elenco senza codici validi toglie l'ordine salvato (si torna al predefinito).
    * I codici non validi e i doppioni si scartano come in lettura: cio' che si scrive e' cio' che si rilegge.
    */
+  @Throws(IOException::class)
   suspend fun setOrder(codes: List<String>) {
-    QuietWrites.attempt("ordine delle sezioni") { store.set(ORDER, CollectionsSettingsCodec.encodeOrder(codes)) }
+    store.set(ORDER, CollectionsSettingsCodec.encodeOrder(codes))
   }
 
   /** Torna all'ordine predefinito (la lapide della voce). */
+  @Throws(IOException::class)
   suspend fun resetOrder() {
-    QuietWrites.attempt("ordine delle sezioni") { store.set(ORDER, PersonalValue.Removed) }
+    store.set(ORDER, PersonalValue.Removed)
   }
 
   /**
    * Nasconde o mostra la sezione [code]. Un codice non scrivibile e le sezioni di `neverHidden` (Album) non scrivono niente: la
    * schermata non offre l'interruttore, e se arrivasse qui comunque la voce non nascerebbe.
    */
+  @Throws(IOException::class)
   suspend fun setHidden(code: String, hidden: Boolean) {
     if (!CollectionsSettingsCodec.isValidCode(code)) return
     if (code in neverHidden) return
-    QuietWrites.attempt("sezione nascosta") { store.set(hiddenKey(code), PersonalValue.Flag(hidden)) }
+    store.set(hiddenKey(code), PersonalValue.Flag(hidden))
   }
 
   private fun orderOf(entries: Map<PersonalKey, PersonalEntry>): List<String> =

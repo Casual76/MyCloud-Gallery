@@ -1,7 +1,8 @@
 package dev.pampa.mycloudgallery.feature.search.models
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.TextFields
@@ -35,6 +36,7 @@ import dev.pampa.mycloudgallery.feature.search.ui.SearchDimens
 // attivazione (l'unica che puo' dare il consenso); attiva per l'account con "Non su questo dispositivo" e "Spegni". Se il testo della spiegazione e'
 // cambiato, la funzione si richiede (la versione del testo e' salvata col consenso).
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ReadingBlock(state: SearchSettingsState, handlers: SearchSettingsHandlers) {
   val reading = state.textReading
@@ -60,9 +62,11 @@ internal fun ReadingBlock(state: SearchSettingsState, handlers: SearchSettingsHa
       )
     }
   }
-  Row(
+  // K4: i tasti vanno a capo interi se non entrano affiancati ("Non su questo dispositivo" si spezzava in "disposit/ivo" a 360 dp).
+  FlowRow(
     modifier = Modifier.padding(top = SearchDimens.TightGap, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter),
     horizontalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
+    verticalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
   ) {
     when (val s = reading.state) {
       TextReadingState.Off -> {

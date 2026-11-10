@@ -2,7 +2,8 @@ package dev.pampa.mycloudgallery.feature.search.models
 
 import android.content.res.Resources
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AutoAwesome
@@ -99,6 +100,7 @@ fun SearchSettingsScreen(
   }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handlers: SearchSettingsHandlers) {
   val indexer = state.indexer
@@ -131,7 +133,12 @@ private fun IndexerBlock(state: SearchSettingsState, measuring: Boolean, handler
   if (state.offerRemoveIndexModel) RemoveIndexModelSheet(handlers)
   if (indexer.indexer) {
     val problem = (indexer.status as? AiStatus.Problem)?.code
-    Row(modifier = Modifier.padding(top = SearchDimens.TightGap, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter), horizontalArrangement = Arrangement.spacedBy(SearchDimens.TightGap)) {
+    // K4: i tasti vanno a capo interi se non entrano affiancati ("Libera spazio" a testo grande si spezzava in "Libera spazi/o").
+    FlowRow(
+      modifier = Modifier.padding(top = SearchDimens.TightGap, start = GalleryDimens.Gutter, end = GalleryDimens.Gutter),
+      horizontalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
+      verticalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
+    ) {
       FluidButton(text = stringResource(R.string.models_index_now), onClick = handlers::onIndexNow, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Large)
       if (problem != null) {
         for (action in SearchCodes.actions(problem)) {

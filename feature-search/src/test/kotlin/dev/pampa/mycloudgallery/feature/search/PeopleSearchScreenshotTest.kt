@@ -187,7 +187,7 @@ internal abstract class PeopleSearchScreenshotBase(
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "it-w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = "it-w360dp-h780dp-xhdpi")
 internal class PeopleSearchPhoneScreenshotTest(scene: PeopleScene, dark: Boolean, scale: Float?) : PeopleSearchScreenshotBase(scene, dark, scale, "telefono") {
   companion object {
     @JvmStatic

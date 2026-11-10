@@ -99,7 +99,7 @@ internal abstract class EraseScreenshotBase(private val scene: EraseScene, priva
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "it-w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = "it-w360dp-h780dp-xhdpi")
 internal class EraseScreenshotPhoneTest(scene: EraseScene, dark: Boolean, scale: Float?) : EraseScreenshotBase(scene, dark, scale, "telefono") {
   companion object {
     @JvmStatic
@@ -121,7 +121,7 @@ internal class EraseScreenshotTabletTest(scene: EraseScene, dark: Boolean, scale
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "it-w412dp-h2200dp-xhdpi")
+@Config(application = Application::class, qualifiers = "it-w360dp-h2200dp-xhdpi")
 internal class EraseScreenshotTallPhoneTest(scene: EraseScene, dark: Boolean, scale: Float?) : EraseScreenshotBase(scene, dark, scale, "telefono") {
   companion object {
     @JvmStatic

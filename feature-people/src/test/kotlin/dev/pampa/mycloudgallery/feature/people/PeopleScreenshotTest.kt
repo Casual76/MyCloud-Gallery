@@ -45,7 +45,7 @@ import org.robolectric.annotation.GraphicsMode
  * Gli screenshot delle persone (Fase 8, P9): **ogni stato del §1.5** -- la sezione delle Raccolte (spenta, avviso, esclusa, primo calcolo, pronta, solo su questo
  * dispositivo, i tre "non disponibile"), "Tutte le persone" (pronta, Q2 a, selezione, vuota, in calcolo, i fogli di unione e le proposte), "Altri volti", la pagina di una
  * persona (con nome, senza nome, nascosta, dimenticata, non trovata, in caricamento, i fogli del nome, di "Dimentica", della copertina e dell'unione), "Controlla le foto",
- * "Dividi" e "Persone nascoste". Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo a 1,3x sul telefono. **Nessun volto vero**: i ritagli sono sagome
+ * "Dividi" e "Persone nascoste". Chiaro e scuro, telefono (360 dp) e tablet (1280 dp), piu' il testo a 1,3x sul telefono. **Nessun volto vero**: i ritagli sono sagome
  * astratte, i nomi inventati.
  *
  * `gradlew :feature-people:recordRoborazziDebug --tests "*PeopleScreenshot*"` scrive i PNG in `docs/screenshots/8-P9/`. Nei normali `testDebugUnitTest` si verifica solo
@@ -250,7 +250,7 @@ abstract class PeopleShots(private val dark: Boolean, private val device: String
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class PeoplePhoneScreenshotTest(dark: Boolean) : PeopleShots(dark, "telefono") {
   companion object {
     @JvmStatic

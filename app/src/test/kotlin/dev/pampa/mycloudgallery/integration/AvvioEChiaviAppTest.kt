@@ -154,7 +154,9 @@ class AvvioEChiaviAppTest {
     assertThat(platform.vault.stored).isNotNull()
     assertThat(g.selfWipe.progress.value).isNull()
     assertThat(g.onboardingStore.snapshotOrNull()!!.finished).isTrue()
-    assertThat(g.account.value).isNotNull()
+    // L'account si legge dal suo file dopo la nascita del grafo (`stateIn(..., null)`): si aspetta che ci sia, non si legge `.value` al volo.
+    // Se qualcosa l'avesse tolto, l'attesa scade e la prova cade lo stesso.
+    assertThat(g.account.await { it != null }).isNotNull()
   }
 
   @Test
@@ -193,7 +195,8 @@ class AvvioEChiaviAppTest {
 
     assertThat(platform.vault.stored).isNotNull()
     assertThat(g.onboardingStore.snapshotOrNull()!!.finished).isTrue()
-    assertThat(g.account.value).isNotNull()
+    // Come sopra: l'account arriva dal suo file dopo la nascita del grafo; sotto carico `.value` puo' essere ancora null (caduta nel check del 10/11).
+    assertThat(g.account.await { it != null }).isNotNull()
     platform.keys.broken = false
     assertThat(platform.keys.hasDeviceKey()).isTrue()
     assertThat(g.setup.state.value).isEqualTo(SetupState.Blocked(BlockReason.KEYSTORE_UNAVAILABLE))

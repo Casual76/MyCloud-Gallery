@@ -106,7 +106,7 @@ class StepSimulationPrivacyTest {
 
   @Test
   fun ilCodiceDellaSimulazioneNonNominaLeScritture() {
-    val files = File("src/main/kotlin/dev/pampa/mycloudgallery/feature/diagnostics/release").listFiles { f -> f.extension == "kt" }.orEmpty()
+    val files = File("src/debug/kotlin/dev/pampa/mycloudgallery/feature/diagnostics/release").listFiles { f -> f.extension == "kt" }.orEmpty()
     assertThat(files).isNotEmpty()
     // I nomi delle primitive di scrittura si scrivono a pezzi: le barriere di core-common (Phase4 e Phase5) li cercano in ogni sorgente, anche nei test.
     val forbidden = Regex(

@@ -40,7 +40,6 @@ import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarInlineBehavior
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidFloatingTabBarScrollConnection
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
-import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.R
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
@@ -92,10 +91,10 @@ class CollectionsSlot(
  *
  * @param libraryState cio' che la Libreria mostra: dal `LibraryViewModel` (grafo vero, P11); nei test i fake.
  * @param libraryViewer i servizi del viewer per la Libreria (dettagli, azioni, intent); null = solo i pixel dello stato.
- * @param collections la scheda Raccolte; null = il segnaposto (solo le prove che non guardano le schede: gli screenshot passano dallo scaffold
- *   delle prove, `GalleryScaffold`, con le schede vere).
- * @param albums la scheda Album (`AlbumsTabHost`); null = il segnaposto.
- * @param search la ricerca aperta dal cerchio; null = il segnaposto.
+ * @param collections la scheda Raccolte; null = una pagina vuota con il titolo (solo le prove che non guardano le schede: gli screenshot passano
+ *   dallo scaffold delle prove, `GalleryScaffold`, con le schede vere; in produzione `AppNavHost` le passa sempre).
+ * @param albums la scheda Album (`AlbumsTabHost`); null = una pagina vuota con il titolo.
+ * @param search la ricerca aperta dal cerchio; null = una pagina vuota con il titolo.
  * @param searchOpen Cerca e' aperta sopra [selectedTab]; [onOpenSearch] e [onCloseSearch] la aprono (il cerchio) e la chiudono (Indietro, una scheda).
  *
  * Una navigazione sola su ogni formato (telefono e tablet): lo spazio in piu' del tablet si usa dentro le pagine.
@@ -113,9 +112,9 @@ fun MainScaffold(
   libraryState: LibraryTabState = rememberEmptyLibraryTabState(),
   libraryViewer: ViewerServices? = null,
   collections: (@Composable (CollectionsSlot) -> Unit)? = null,
-  /** G2: la scheda Album (`AlbumsTabHost`); null = il segnaposto (le prove senza le schede). */
+  /** G2: la scheda Album (`AlbumsTabHost`); null = una pagina vuota (le prove senza le schede). */
   albums: (@Composable (CollectionsSlot) -> Unit)? = null,
-  /** Fase 6 (P11), G2: la ricerca aperta dal cerchio; null = il segnaposto (le prove senza le schede). */
+  /** Fase 6 (P11), G2: la ricerca aperta dal cerchio; null = una pagina vuota (le prove senza le schede). */
   search: (@Composable (CollectionsSlot) -> Unit)? = null,
   searchOpen: Boolean = false,
   onOpenSearch: () -> Unit = {},
@@ -180,16 +179,13 @@ fun MainScaffold(
       pageStates.SaveableStateProvider(pageKey) {
         when {
           searchOpen && search != null -> search(pageSlot)
-          searchOpen -> PlaceholderTab(
-            key = GalleryTabBarDefaults.SearchKey,
+          searchOpen -> EmptyTab(
             title = stringResource(R.string.main_search_title),
             status = status,
             onStatusClick = onStatusClick,
             onOpenSettings = onOpenSettings,
             backdropOut = { backdrop = it },
-          ) {
-            FluidEmptyState(title = stringResource(R.string.main_search_empty_title), detail = stringResource(R.string.main_search_empty_detail))
-          }
+          )
           selectedTab == GalleryTab.Library -> LibraryTab(
             contentPadding = pillPadding,
             backdropOut = { backdrop = it },
@@ -207,16 +203,13 @@ fun MainScaffold(
           )
           selectedTab == GalleryTab.Albums && albums != null -> albums(pageSlot)
           selectedTab == GalleryTab.Collections && collections != null -> collections(pageSlot)
-          else -> PlaceholderTab(
-            key = selectedTab.route,
+          else -> EmptyTab(
             title = stringResource(selectedTab.label),
             status = status,
             onStatusClick = onStatusClick,
             onOpenSettings = onOpenSettings,
             backdropOut = { backdrop = it },
-          ) {
-            TabPlaceholder(selectedTab)
-          }
+          )
         }
       }
     }
@@ -292,15 +285,17 @@ private fun NetworkStatusEntry(status: GlobalStatus, onClick: () -> Unit, alignm
   )
 }
 
+/**
+ * La pagina di una scheda che lo scaffold non ha ricevuto (solo nelle prove che non passano le schede vere): il titolo, la riga della rete e
+ * nient'altro. In produzione non si vede mai: `AppNavHost` passa sempre Raccolte, Album e Cerca. Z1 (10/11): prima diceva "… arriveranno qui".
+ */
 @Composable
-private fun PlaceholderTab(
-  key: String,
+private fun EmptyTab(
   title: String,
   status: GlobalStatus,
   onStatusClick: () -> Unit,
   onOpenSettings: () -> Unit,
   backdropOut: (GlassBackdropState) -> Unit,
-  body: @Composable () -> Unit,
 ) {
   FluidScreen(
     title = title,
@@ -316,24 +311,6 @@ private fun PlaceholderTab(
     overlay = { pageBackdrop -> SideEffect { backdropOut(pageBackdrop) } },
   ) {
     item(key = "status") { NetworkStatusEntry(status = status, onClick = onStatusClick, alignment = Alignment.Start) }
-    item(key = "tab-$key") { body() }
-  }
-}
-
-@Composable
-private fun TabPlaceholder(tab: GalleryTab) {
-  when (tab) {
-    // La Libreria non e' un segnaposto (Fase 3): non passa di qui.
-    GalleryTab.Library -> Unit
-    // Senza la scheda vera (le prove che non la passano) gli Album e le Raccolte restano un segnaposto.
-    GalleryTab.Albums -> FluidEmptyState(
-      title = stringResource(R.string.main_albums_empty_title),
-      detail = stringResource(R.string.main_albums_empty_detail),
-    )
-    GalleryTab.Collections -> FluidEmptyState(
-      title = stringResource(R.string.main_collections_empty_title),
-      detail = stringResource(R.string.main_collections_empty_detail),
-    )
   }
 }
 

@@ -33,5 +33,5 @@
   <string name="nas_footer_unavailable_detail">Il NAS non risponde: vedi le anteprime salvate, e le foto che sono solo lì si aprono quando torna.</string>
 
   <string name="nas_footer_local_only">Indice condiviso in prova</string>
-  <string name="nas_footer_local_only_detail">Finché la Fase 4A non è chiusa, l’indice si pubblica solo sulle share di prova.</string>
+  <string name="nas_footer_local_only_detail">Finché la fase di prova non è chiusa, l’indice si pubblica solo sulle share di prova.</string>
 </resources>

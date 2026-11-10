@@ -16,6 +16,7 @@ import dev.pampa.mycloudgallery.core.library.contract.VisibleMedia
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryPeople
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.places.contract.PlaceNames
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.flow.StateFlow
 
@@ -87,18 +88,111 @@ class IndexDescribeText(
  * (TalkBack). I servizi che non sono strumenti non contano. Letto al momento, mai salvato, **mai in Diagnostica** (D39: e' un dato sulla salute di una persona).
  */
 class SystemA11yActivity(context: Context) : A11yActivity {
-  private val manager = context.applicationContext.getSystemService(AccessibilityManager::class.java)
+  private val remembered = RememberedA11yTool(AndroidA11ySystem(context.applicationContext.getSystemService(AccessibilityManager::class.java)))
+
+  override fun toolEnabled(): Boolean = remembered.toolEnabled()
+}
+
+/**
+ * Cio' che [SystemA11yActivity] chiede al sistema. Una porta, cosi' la memoria della risposta ([RememberedA11yTool]) si prova senza Android.
+ */
+internal interface A11ySystem {
+
+  /** Un servizio di accessibilita' qualunque e' acceso (`AccessibilityManager.isEnabled`: un campo locale, nessuna chiamata fuori dal processo). */
+  val anyServiceEnabled: Boolean
+
+  /** Fra i servizi accesi c'e' uno strumento (`isAccessibilityTool`; sotto Android 12 l'esplorazione al tocco). E' **una chiamata a `system_server`**. */
+  fun toolAmongEnabled(): Boolean
+
+  /**
+   * Chiede al sistema di chiamare [onChange] quando l'elenco dei servizi accesi cambia. Falso = il sistema non avvisa (sotto Android 13): la
+   * risposta non si puo' ricordare e si rilegge ogni volta, come prima.
+   */
+  fun watchServices(onChange: () -> Unit): Boolean
+}
+
+/**
+ * La risposta di [A11ySystem.toolAmongEnabled] **ricordata in memoria** (P1 e P2, prestazioni sull'S25, 10/11).
+ *
+ * L'elenco dei servizi accesi e' una chiamata a `system_server` (55 µs), e il descrittore la fa per **ogni cella composta** quando un servizio di
+ * accessibilita' qualunque e' acceso: nel pinch 1.500 chiamate in 8 s sul thread principale, 2 ms per cambio di livello. Dove il sistema avvisa dei
+ * cambi (Android 13+) la risposta si tiene finche' non avvisa: [generation] cresce a ogni avviso, e una risposta vale solo per la generazione in cui e'
+ * stata letta (un avviso arrivato mentre si leggeva la butta via).
+ *
+ * Che cosa **non** cambia: senza nessun servizio acceso la risposta e' "no" senza chiamate e senza memoria; sotto Android 13 si rilegge ogni volta; un
+ * errore del sistema e' "no" (e non si ricorda). Mai su disco, mai nei log, mai in Diagnostica (D39): un campo in memoria, perso con il processo.
+ */
+internal class RememberedA11yTool(private val system: A11ySystem) : A11yActivity {
+
+  private class Answer(val generation: Int, val tool: Boolean)
+
+  private val generation = AtomicInteger()
+
+  @Volatile
+  private var answer: Answer? = null
+
+  /** Null = non ancora chiesto al sistema; poi se avvisa o no. */
+  @Volatile
+  private var watched: Boolean? = null
 
   override fun toolEnabled(): Boolean = try {
-    val m = manager
-    when {
-      m == null || !m.isEnabled -> false
-      Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-        m.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK).any { it.isAccessibilityTool }
-      else -> m.isTouchExplorationEnabled
+    if (!system.anyServiceEnabled) {
+      // Niente di acceso: niente da ricordare. Quando qualcosa si riaccende si rilegge comunque, anche se l'avviso del sistema tardasse.
+      answer = null
+      false
+    } else if (!watching()) {
+      system.toolAmongEnabled()
+    } else {
+      val now = generation.get()
+      val known = answer
+      if (known != null && known.generation == now) {
+        known.tool
+      } else {
+        val tool = system.toolAmongEnabled()
+        answer = Answer(now, tool)
+        tool
+      }
     }
   } catch (e: RuntimeException) {
     false
+  }
+
+  /** Chiede gli avvisi al sistema una volta sola. Se la richiesta fallisce si resta al comportamento di prima (si rilegge ogni volta). */
+  private fun watching(): Boolean {
+    watched?.let { return it }
+    return synchronized(this) {
+      watched ?: run {
+        val avvisa = try {
+          system.watchServices { generation.incrementAndGet() }
+        } catch (e: RuntimeException) {
+          false
+        }
+        watched = avvisa
+        avvisa
+      }
+    }
+  }
+}
+
+/** Il sistema vero: `AccessibilityManager`. */
+private class AndroidA11ySystem(private val manager: AccessibilityManager?) : A11ySystem {
+
+  override val anyServiceEnabled: Boolean get() = manager?.isEnabled == true
+
+  override fun toolAmongEnabled(): Boolean {
+    val m = manager ?: return false
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+      m.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK).any { it.isAccessibilityTool }
+    } else {
+      m.isTouchExplorationEnabled
+    }
+  }
+
+  override fun watchServices(onChange: () -> Unit): Boolean {
+    val m = manager ?: return false
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return false
+    m.addAccessibilityServicesStateChangeListener(AccessibilityManager.AccessibilityServicesStateChangeListener { onChange() })
+    return true
   }
 }
 

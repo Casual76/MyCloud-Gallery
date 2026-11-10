@@ -92,7 +92,8 @@ class CollectionsSlot(
  *
  * @param libraryState cio' che la Libreria mostra: dal `LibraryViewModel` (grafo vero, P11); nei test i fake.
  * @param libraryViewer i servizi del viewer per la Libreria (dettagli, azioni, intent); null = solo i pixel dello stato.
- * @param collections la scheda Raccolte; null = il segnaposto (gli screenshot dello scaffold, senza Hilt).
+ * @param collections la scheda Raccolte; null = il segnaposto (solo le prove che non guardano le schede: gli screenshot passano dallo scaffold
+ *   delle prove, `GalleryScaffold`, con le schede vere).
  * @param albums la scheda Album (`AlbumsTabHost`); null = il segnaposto.
  * @param search la ricerca aperta dal cerchio; null = il segnaposto.
  * @param searchOpen Cerca e' aperta sopra [selectedTab]; [onOpenSearch] e [onCloseSearch] la aprono (il cerchio) e la chiudono (Indietro, una scheda).
@@ -112,9 +113,9 @@ fun MainScaffold(
   libraryState: LibraryTabState = rememberEmptyLibraryTabState(),
   libraryViewer: ViewerServices? = null,
   collections: (@Composable (CollectionsSlot) -> Unit)? = null,
-  /** G2: la scheda Album (`AlbumsTabHost`); null = il segnaposto (gli screenshot dello scaffold, senza Hilt). */
+  /** G2: la scheda Album (`AlbumsTabHost`); null = il segnaposto (le prove senza le schede). */
   albums: (@Composable (CollectionsSlot) -> Unit)? = null,
-  /** Fase 6 (P11), G2: la ricerca aperta dal cerchio; null = il segnaposto (gli screenshot dello scaffold, senza Hilt). */
+  /** Fase 6 (P11), G2: la ricerca aperta dal cerchio; null = il segnaposto (le prove senza le schede). */
   search: (@Composable (CollectionsSlot) -> Unit)? = null,
   searchOpen: Boolean = false,
   onOpenSearch: () -> Unit = {},
@@ -323,7 +324,7 @@ private fun TabPlaceholder(tab: GalleryTab) {
   when (tab) {
     // La Libreria non e' un segnaposto (Fase 3): non passa di qui.
     GalleryTab.Library -> Unit
-    // Senza la scheda vera (gli screenshot dello scaffold) gli Album e le Raccolte restano un segnaposto.
+    // Senza la scheda vera (le prove che non la passano) gli Album e le Raccolte restano un segnaposto.
     GalleryTab.Albums -> FluidEmptyState(
       title = stringResource(R.string.main_albums_empty_title),
       detail = stringResource(R.string.main_albums_empty_detail),

@@ -50,6 +50,8 @@ fun AlbumListRoute(
   var creating by remember { mutableStateOf(false) }
   var problem by remember { mutableStateOf<TitleProblem?>(null) }
   var unavailable by remember { mutableStateOf(false) }
+  var notSaved by remember { mutableStateOf(false) }
+  val saving by controller.creating.collectAsState()
   var moving by remember { mutableStateOf<AlbumId?>(null) }
   val scope = rememberCoroutineScope()
   val handlers = remember(controller) {
@@ -59,6 +61,7 @@ fun AlbumListRoute(
       override fun onCreate() {
         problem = null
         unavailable = false
+        notSaved = false
         creating = true
       }
 
@@ -89,7 +92,7 @@ fun AlbumListRoute(
       onDismiss = { moving = null },
     )
     CreateAlbumSheet(
-      visible = creating, problem = problem, unavailable = unavailable,
+      visible = creating, problem = problem, unavailable = unavailable, notSaved = notSaved, saving = saving,
       onCreate = { title, kind ->
         if (kind == AlbumKind.SMART) {
           // L'editor parte dal nome: il titolo si controlla li' quando si crea (stesse regole), qui basta non lasciarlo vuoto.
@@ -97,18 +100,30 @@ fun AlbumListRoute(
           onNewSmart(title.trim())
         } else {
           scope.launch {
+            // Un invio alla volta (SOL-11): un altro tocco mentre il primo salva torna `Busy` e non cambia niente.
             when (val result = controller.createManual(title)) {
               is CreateAlbumResult.Created -> {
                 creating = false
                 onOpenAlbum(result.id)
               }
-              is CreateAlbumResult.InvalidTitle -> problem = result.problem
-              CreateAlbumResult.Unavailable -> unavailable = true
+              is CreateAlbumResult.InvalidTitle -> {
+                problem = result.problem
+                notSaved = false
+              }
+              CreateAlbumResult.Unavailable -> {
+                unavailable = true
+                notSaved = false
+              }
+              CreateAlbumResult.NotSaved -> {
+                unavailable = false
+                notSaved = true
+              }
+              CreateAlbumResult.Busy -> Unit
             }
           }
         }
       },
-      onDismiss = { creating = false },
+      onDismiss = { if (!saving) creating = false },
     )
   }
 }

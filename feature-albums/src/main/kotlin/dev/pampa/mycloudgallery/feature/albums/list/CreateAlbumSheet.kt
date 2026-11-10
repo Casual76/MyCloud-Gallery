@@ -36,15 +36,25 @@ fun CreateAlbumSheet(
   unavailable: Boolean,
   onCreate: (title: String, kind: AlbumKind) -> Unit,
   onDismiss: () -> Unit,
+  /** K3b (SOL-10): l'ultimo tentativo non si e' potuto salvare (memoria piena): il nome resta e si puo' riprovare. */
+  notSaved: Boolean = false,
+  /** K3b (SOL-11): una creazione e' in corso: "Crea" e' spento finche' non torna, cosi' due tocchi non fanno due album. */
+  saving: Boolean = false,
+  /** Il nome con cui il foglio si apre (di serie vuoto): per gli screenshot dello stato "Non salvato", dove il nome c'e' gia'. */
+  initialTitle: String = "",
 ) {
   GalleryConfirmSheet(visible = visible, onDismissRequest = onDismiss, paneTitle = stringResource(R.string.albums_create_title)) {
-    var title by rememberSaveable { mutableStateOf("") }
+    var title by rememberSaveable { mutableStateOf(initialTitle) }
     var kind by rememberSaveable { mutableStateOf(AlbumKind.MANUAL) }
     GallerySheetScaffold(
       icon = Icons.Rounded.PhotoAlbum,
       tone = GallerySheetTone.Brand,
       title = stringResource(R.string.albums_create_title),
-      message = if (unavailable) stringResource(R.string.albums_create_unavailable) else null,
+      message = when {
+        notSaved -> stringResource(R.string.albums_create_not_saved)
+        unavailable -> stringResource(R.string.albums_create_unavailable)
+        else -> null
+      },
       body = {
         FluidTextField(
           value = title, onValueChange = { title = it }, placeholder = stringResource(R.string.albums_create_name), modifier = Modifier.fillMaxWidth(),
@@ -65,7 +75,7 @@ fun CreateAlbumSheet(
       actions = {
         FluidButton(
           text = stringResource(if (kind == AlbumKind.SMART) R.string.albums_create_next else R.string.albums_create_confirm),
-          onClick = { onCreate(title, kind) }, enabled = title.isNotBlank(), size = FluidButtonSize.Large, fillWidth = true,
+          onClick = { onCreate(title, kind) }, enabled = title.isNotBlank() && !saving, size = FluidButtonSize.Large, fillWidth = true,
         )
         CancelButton(onDismiss, label = stringResource(R.string.albums_create_cancel))
       },

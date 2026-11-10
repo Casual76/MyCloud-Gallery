@@ -103,6 +103,7 @@
   <string name="editor_problem_blocked">Adesso non si può salvare. Riprova fra poco.</string>
   <string name="editor_problem_preview_failed">Non sono riuscito a mostrarti l’anteprima. Puoi salvare lo stesso: le foto compaiono dopo.</string>
   <string name="editor_problem_unavailable">Adesso non posso creare album: l’app non è ancora pronta.</string>
+  <string name="editor_problem_not_saved">Non salvato: la memoria del telefono è piena. Libera spazio e riprova.</string>
   <string name="editor_no_rules">Aggiungi almeno una regola: un periodo, un luogo, una persona o una descrizione.</string>
   <string name="editor_back">Indietro</string>
 

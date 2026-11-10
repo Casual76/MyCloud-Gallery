@@ -67,6 +67,8 @@ fun AlbumsTabRoute(
   var creating by remember { mutableStateOf(false) }
   var problem by remember { mutableStateOf<TitleProblem?>(null) }
   var unavailable by remember { mutableStateOf(false) }
+  var notSaved by remember { mutableStateOf(false) }
+  val saving by controller.creating.collectAsState()
   val scope = rememberCoroutineScope()
   val handlers = remember(controller, exits) {
     object : AlbumsTabHandlers {
@@ -81,6 +83,7 @@ fun AlbumsTabRoute(
       override fun onCreate() {
         problem = null
         unavailable = false
+        notSaved = false
         creating = true
       }
 
@@ -104,6 +107,8 @@ fun AlbumsTabRoute(
       visible = creating,
       problem = problem,
       unavailable = unavailable,
+      notSaved = notSaved,
+      saving = saving,
       onCreate = { title, kind ->
         if (kind == AlbumKind.SMART) {
           // L'editor parte dal nome: il titolo si controlla li' quando si crea (stesse regole dell'elenco).
@@ -111,18 +116,31 @@ fun AlbumsTabRoute(
           exits.onNewSmart(title.trim())
         } else {
           scope.launch {
+            // Un invio alla volta (SOL-11): un altro tocco mentre il primo salva torna `Busy` e non cambia niente.
             when (val result = controller.createManual(title)) {
               is CreateAlbumResult.Created -> {
                 creating = false
                 exits.onOpenAlbum(result.id)
               }
-              is CreateAlbumResult.InvalidTitle -> problem = result.problem
-              CreateAlbumResult.Unavailable -> unavailable = true
+              is CreateAlbumResult.InvalidTitle -> {
+                problem = result.problem
+                notSaved = false
+              }
+              CreateAlbumResult.Unavailable -> {
+                unavailable = true
+                notSaved = false
+              }
+              CreateAlbumResult.NotSaved -> {
+                unavailable = false
+                notSaved = true
+              }
+              CreateAlbumResult.Busy -> Unit
             }
           }
         }
       },
-      onDismiss = { creating = false },
+      // Mentre salva il foglio non si chiude: la creazione finirebbe aprendo l'album sotto un foglio che l'utente ha gia' mandato via.
+      onDismiss = { if (!saving) creating = false },
     )
   }
 }

@@ -1,16 +1,16 @@
 package dev.pampa.mycloudgallery.feature.albums.tab
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumList
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus
-import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbums
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumOpenings
 import dev.pampa.mycloudgallery.feature.albums.contract.SpecialAlbum
 import dev.pampa.mycloudgallery.feature.albums.contract.SpecialAlbums
-import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.feature.albums.list.CreateAlbumResult
+import dev.pampa.mycloudgallery.feature.albums.list.ManualAlbumCreator
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -96,21 +96,25 @@ class AlbumsTabController(
   fun opened(entry: AlbumsTabEntry) {
     scope.launch {
       delay(OPEN_SETTLE_MS)
-      openings.opened(entry.key)
+      QuietWrites.attempt("ultima apertura") { openings.opened(entry.key) }
     }
   }
 
-  /** Crea un album personale (come l'elenco): per uno smart le regole le porta l'editor, che parte dal nome. */
-  suspend fun createManual(title: String): CreateAlbumResult = when (val out = albums.create(title, AlbumKind.MANUAL, null)) {
-    is CreateOutcome.Created -> CreateAlbumResult.Created(out.id)
-    is CreateOutcome.Invalid -> CreateAlbumResult.InvalidTitle(out.problem)
-    CreateOutcome.RulesTooLong, CreateOutcome.Unavailable -> CreateAlbumResult.Unavailable
-  }
+  private val creator = ManualAlbumCreator(albums)
+
+  /** Vero mentre "Crea" sta salvando (SOL-11): il foglio spegne il tasto. */
+  val creating: StateFlow<Boolean> get() = creator.saving
+
+  /**
+   * Crea un album personale (come l'elenco): per uno smart le regole le porta l'editor, che parte dal nome. Un invio alla volta (SOL-11), e con la memoria piena [CreateAlbumResult.NotSaved]
+   * invece della chiusura dell'app (SOL-10).
+   */
+  suspend fun createManual(title: String): CreateAlbumResult = creator.create(title)
 
   /** L'avviso e' stato letto: non torna. */
   fun dismissNotice(notice: SharedAlbumNotice) {
     dismissed.update { it + notice }
-    scope.launch { shared.dismissNotice(notice) }
+    scope.launch { QuietWrites.attempt("avviso letto") { shared.dismissNotice(notice) } }
   }
 
   companion object {

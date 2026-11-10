@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.albums.editor
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
 import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
@@ -65,7 +66,7 @@ sealed interface SmartEditorMode {
 }
 
 /** Perche' il salvataggio non e' andato (la schermata lo dice sopra il bottone). */
-enum class EditorProblem { INVALID_TITLE, RULES_TOO_LONG, NOT_ALLOWED, NOT_FOUND, BLOCKED, UNAVAILABLE, PREVIEW_FAILED }
+enum class EditorProblem { INVALID_TITLE, RULES_TOO_LONG, NOT_ALLOWED, NOT_FOUND, BLOCKED, UNAVAILABLE, PREVIEW_FAILED, NOT_SAVED }
 
 data class SmartEditorUi(
   val title: String,
@@ -342,22 +343,25 @@ class SmartEditorController(
     if (!current.canSave || current.saving) return
     _ui.update { it.copy(saving = true, problem = null, canSave = false) }
     scope.launch {
-      val result: Pair<AlbumId?, EditorProblem?> = when (mode) {
-        is SmartEditorMode.Create -> when (val out = albums.create(mode.title, AlbumKind.SMART, rules)) {
-          is CreateOutcome.Created -> out.id to null
-          is CreateOutcome.Invalid -> null to EditorProblem.INVALID_TITLE
-          CreateOutcome.RulesTooLong -> null to EditorProblem.RULES_TOO_LONG
-          CreateOutcome.Unavailable -> null to EditorProblem.UNAVAILABLE
-        }
-        is SmartEditorMode.Edit -> when (val out = albums.setRules(mode.album, rules)) {
-          EditOutcome.Done -> mode.album to null
-          is EditOutcome.Invalid -> null to EditorProblem.RULES_TOO_LONG
-          is EditOutcome.NotAllowed -> null to EditorProblem.NOT_ALLOWED
-          EditOutcome.NotFound -> null to EditorProblem.NOT_FOUND
-          is EditOutcome.Blocked -> null to EditorProblem.BLOCKED
-        }
-      }
+      // K3b (SOL-10): con la memoria piena il registro non si scrive e l'eccezione non deve arrivare qui: "Non salvato", e il tasto torna acceso per riprovare.
+      val result: Pair<AlbumId?, EditorProblem?> = QuietWrites.attemptResult("album smart") { saveOutcome(rules) } ?: (null to EditorProblem.NOT_SAVED)
       _ui.update { compose(it.copy(saving = false, savedAlbum = result.first, problem = result.second)) }
+    }
+  }
+
+  private suspend fun saveOutcome(rules: SmartRules): Pair<AlbumId?, EditorProblem?> = when (mode) {
+    is SmartEditorMode.Create -> when (val out = albums.create(mode.title, AlbumKind.SMART, rules)) {
+      is CreateOutcome.Created -> out.id to null
+      is CreateOutcome.Invalid -> null to EditorProblem.INVALID_TITLE
+      CreateOutcome.RulesTooLong -> null to EditorProblem.RULES_TOO_LONG
+      CreateOutcome.Unavailable -> null to EditorProblem.UNAVAILABLE
+    }
+    is SmartEditorMode.Edit -> when (val out = albums.setRules(mode.album, rules)) {
+      EditOutcome.Done -> mode.album to null
+      is EditOutcome.Invalid -> null to EditorProblem.RULES_TOO_LONG
+      is EditOutcome.NotAllowed -> null to EditorProblem.NOT_ALLOWED
+      EditOutcome.NotFound -> null to EditorProblem.NOT_FOUND
+      is EditOutcome.Blocked -> null to EditorProblem.BLOCKED
     }
   }
 

@@ -75,4 +75,10 @@ sealed interface AlbumMessage {
    * non tornano): niente e' cambiato. Prima l'eccezione arrivava all'ambito della pagina e poteva far cadere l'app.
    */
   data object NotDone : AlbumMessage
+
+  /**
+   * K3b (SOL-10, OA-11): il registro dei dati personali non si e' potuto scrivere (la memoria del telefono e' piena): **niente e' cambiato**, nemmeno in memoria
+   * (`PersonalStore.set` e' tutto o niente), e riprovare e' sicuro. Prima l'`IOException` arrivava all'ambito della pagina e faceva chiudere l'app.
+   */
+  data object NotSaved : AlbumMessage
 }

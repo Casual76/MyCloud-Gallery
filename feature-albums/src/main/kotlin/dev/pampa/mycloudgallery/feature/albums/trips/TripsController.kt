@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.albums.trips
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.albums.contract.TripAcceptOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.TripId
 import dev.pampa.mycloudgallery.core.albums.contract.TripProposal
@@ -33,6 +34,9 @@ sealed interface TripAccepted {
   data class AlreadyAlbum(val album: AlbumId) : TripAccepted
 
   data object NotFound : TripAccepted
+
+  /** K3b (SOL-10): il registro non si e' potuto scrivere (memoria piena): niente e' cambiato, e riprovare e' sicuro. */
+  data object NotSaved : TripAccepted
 }
 
 class TripsController(
@@ -52,7 +56,8 @@ class TripsController(
   fun accept(id: TripId, onDone: (TripAccepted) -> Unit = {}) {
     scope.launch {
       onDone(
-        when (val out = trips.accept(id)) {
+        when (val out = QuietWrites.attemptResult("album da un viaggio") { trips.accept(id) }) {
+          null -> TripAccepted.NotSaved
           is TripAcceptOutcome.Created -> TripAccepted.Created(out.album)
           is TripAcceptOutcome.AlreadyAlbum -> TripAccepted.AlreadyAlbum(out.album)
           TripAcceptOutcome.NotFound -> TripAccepted.NotFound
@@ -63,7 +68,7 @@ class TripsController(
 
   /** "Non mi interessa" (D20): la proposta sparisce per sempre su ogni dispositivo dell'account. */
   fun dismiss(id: TripId) {
-    scope.launch { trips.dismiss(id) }
+    scope.launch { QuietWrites.attempt("viaggio scartato") { trips.dismiss(id) } }
   }
 
   companion object {

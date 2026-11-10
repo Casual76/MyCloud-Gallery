@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.albums.page
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumContent
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
@@ -104,13 +105,13 @@ class SuggestionsController(
   /** "Accetta": le foto entrano nell'album (voce `accept:`, vale per sempre, E-AL5, E-AL13). */
   fun accept() {
     val media = target().ifEmpty { return }
-    scope.launch { finish(choices.accept(id, media)) }
+    scope.launch { finish(QuietWrites.attemptResult("suggerite accettate") { choices.accept(id, media) }) }
   }
 
   /** "Escludi": le foto escono dai suggerimenti per sempre (voce `exclude:`). */
   fun exclude() {
     val media = target().ifEmpty { return }
-    scope.launch { finish(choices.exclude(id, media)) }
+    scope.launch { finish(QuietWrites.attemptResult("suggerite escluse") { choices.exclude(id, media) }) }
   }
 
   /** "Condividi" (Da condividere): il piano e il foglio di conferma col conteggio (D12, D17). Niente si sposta senza il tocco sul foglio. */
@@ -119,9 +120,11 @@ class SuggestionsController(
     share.request(ShareRequest.AddToShared(id, media))
   }
 
-  private fun finish(out: EditOutcome) {
+  /** [out] null: il registro non si e' potuto scrivere (memoria piena) e niente e' cambiato (K3b). */
+  private fun finish(out: EditOutcome?) {
     local.update {
       when (out) {
+        null -> it.copy(message = AlbumMessage.NotSaved)
         EditOutcome.Done -> Local()
         EditOutcome.NotFound -> it.copy(message = AlbumMessage.NotFound)
         is EditOutcome.NotAllowed -> it.copy(message = AlbumMessage.NotAllowed)

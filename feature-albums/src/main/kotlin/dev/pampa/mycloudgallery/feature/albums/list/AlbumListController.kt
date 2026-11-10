@@ -1,15 +1,14 @@
 package dev.pampa.mycloudgallery.feature.albums.list
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumListSort
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumsStatus
-import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbumNotice
 import dev.pampa.mycloudgallery.core.albums.contract.SharedAlbums
 import dev.pampa.mycloudgallery.core.albums.contract.TitleProblem
 import dev.pampa.mycloudgallery.core.model.AlbumId
-import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumListState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -32,6 +31,12 @@ sealed interface CreateAlbumResult {
 
   /** Senza famiglia pronta non si deriva l'id: "Non posso creare album adesso". */
   data object Unavailable : CreateAlbumResult
+
+  /** K3b (SOL-10): il registro non si e' potuto scrivere (memoria piena): niente e' stato creato, il foglio resta aperto col nome e si puo' riprovare. */
+  data object NotSaved : CreateAlbumResult
+
+  /** K3b (SOL-11): un'altra creazione e' ancora in corso: questo invio non ha chiesto niente (chi chiama non fa nulla). */
+  data object Busy : CreateAlbumResult
 }
 
 /** Una mossa di un album nell'ordine personalizzato dell'elenco (Sposta su / Sposta giu': anche le azioni di TalkBack). */
@@ -69,15 +74,17 @@ class AlbumListController(
     AlbumListUi(state, left, reorderable = list.sort == AlbumListSort.CUSTOM)
   }.stateIn(scope, SharingStarted.Eagerly, AlbumListUi(AlbumListState.Loading))
 
-  /** Crea un album personale. Per uno smart i dati (regole) li porta l'editor: qui nascono solo i manuali. */
-  suspend fun createManual(title: String): CreateAlbumResult = when (val out = albums.create(title, AlbumKind.MANUAL, null)) {
-    is CreateOutcome.Created -> CreateAlbumResult.Created(out.id)
-    is CreateOutcome.Invalid -> CreateAlbumResult.InvalidTitle(out.problem)
-    CreateOutcome.RulesTooLong, CreateOutcome.Unavailable -> CreateAlbumResult.Unavailable
-  }
+  private val creator = ManualAlbumCreator(albums)
+
+  /** Vero mentre "Crea" sta salvando (SOL-11): il foglio spegne il tasto. */
+  val creating: StateFlow<Boolean> get() = creator.saving
+
+  /** Crea un album personale. Per uno smart i dati (regole) li porta l'editor: qui nascono solo i manuali. Un invio alla volta, e mai una chiusura con la memoria piena. */
+  suspend fun createManual(title: String): CreateAlbumResult = creator.create(title)
 
   fun setSort(sort: AlbumListSort) {
-    scope.launch { albums.setListSort(sort) }
+    // Memoria piena: l'ordine non cambia (K3b, SOL-10) e l'app non si chiude.
+    scope.launch { QuietWrites.attempt("ordine dell'elenco degli album") { albums.setListSort(sort) } }
   }
 
   /**
@@ -95,11 +102,11 @@ class AlbumListController(
         val target = group.getOrNull(at - 1) ?: return
         val before = everything.indexOfFirst { it.id == target.id }
         val after = everything.getOrNull(before - 1)?.id
-        scope.launch { albums.moveInList(id, after) }
+        scope.launch { QuietWrites.attempt("posto dell'album nell'elenco") { albums.moveInList(id, after) } }
       }
       ListMove.DOWN -> {
         val target = group.getOrNull(at + 1) ?: return
-        scope.launch { albums.moveInList(id, target.id) }
+        scope.launch { QuietWrites.attempt("posto dell'album nell'elenco") { albums.moveInList(id, target.id) } }
       }
     }
   }
@@ -119,11 +126,11 @@ class AlbumListController(
   /** L'avviso e' stato letto: non torna (lo ricorda anche il contratto; qui sparisce subito dalla schermata). */
   fun dismissNotice(notice: SharedAlbumNotice) {
     dismissed.update { it + notice }
-    scope.launch { shared.dismissNotice(notice) }
+    scope.launch { QuietWrites.attempt("avviso letto") { shared.dismissNotice(notice) } }
   }
 
   /** "Mostra di nuovo" un album condiviso che avevo lasciato (E-SH21). */
   fun rejoin(id: AlbumId) {
-    scope.launch { shared.rejoin(id) }
+    scope.launch { QuietWrites.attempt("album mostrato di nuovo") { shared.rejoin(id) } }
   }
 }

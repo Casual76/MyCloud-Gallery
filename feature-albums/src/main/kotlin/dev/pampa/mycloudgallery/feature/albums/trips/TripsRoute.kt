@@ -39,7 +39,8 @@ fun TripsRoute(
   var creating by remember { mutableStateOf<TripId?>(null) }
   var notice by remember { mutableStateOf<String?>(null) }
   val notFound = stringResource(R.string.trips_not_found)
-  val handlers = remember(controller, notFound) {
+  val notSaved = stringResource(R.string.trips_not_saved)
+  val handlers = remember(controller, notFound, notSaved) {
     object : TripsHandlers {
       override fun onBack() = onBack()
 
@@ -52,6 +53,7 @@ fun TripsRoute(
             is TripAccepted.AlreadyAlbum -> onOpenAlbum(result.album)
             // VG-2: prima il tocco non faceva e non diceva niente.
             TripAccepted.NotFound -> notice = notFound
+            TripAccepted.NotSaved -> notice = notSaved
           }
         }
       }

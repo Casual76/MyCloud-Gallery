@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.albums.page
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.albums.contract.AddOutcome
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumContent
@@ -224,6 +225,19 @@ class AlbumPageController(
 
   private fun say(message: AlbumMessage?) = local.update { it.copy(message = message) }
 
+  /**
+   * Una modifica che scrive il registro dei dati personali: se non si salva (memoria piena, `IOException`) lo dice [AlbumMessage.NotSaved] e niente e' cambiato (K3b, SOL-10, OA-11:
+   * prima l'eccezione arrivava all'ambito della pagina e l'app si chiudeva). La cancellazione passa, un errore di programmazione resta un errore. Vero se e' andata.
+   */
+  private suspend fun save(label: String, write: suspend () -> EditOutcome): Boolean {
+    val out = QuietWrites.attemptResult(label, write)
+    if (out == null) {
+      say(AlbumMessage.NotSaved)
+      return false
+    }
+    return report(out)
+  }
+
   /** Un esito di modifica diventa, se non e' andata, un messaggio sotto l'intestazione. */
   private fun report(out: EditOutcome): Boolean {
     when (out) {
@@ -243,31 +257,32 @@ class AlbumPageController(
   // --- Azioni sull'album --------------------------------------------------------------------------------------------------------
 
   fun rename(title: String) {
-    scope.launch { report(albums.rename(id, title)) }
+    scope.launch { save("nome dell'album") { albums.rename(id, title) } }
   }
 
   fun setSort(sort: AlbumSort) {
-    scope.launch { report(albums.setSort(id, sort)) }
+    scope.launch { save("ordine dell'album") { albums.setSort(id, sort) } }
   }
 
   /** La copertina scelta (da "Scegli copertina" o dal menu di una cella); null = automatica. */
   fun setCover(media: MediaId?) {
     scope.launch {
-      if (report(albums.setCover(id, media))) local.update { it.copy(pickingCover = false, itemMenu = null) }
+      if (save("copertina dell'album") { albums.setCover(id, media) }) local.update { it.copy(pickingCover = false, itemMenu = null) }
     }
   }
 
   fun setLevel(level: ShareLevel) {
-    scope.launch { report(shared.setLevel(id, level)) }
+    scope.launch { save("livello dell'album condiviso") { shared.setLevel(id, level) } }
   }
 
   fun leave() {
-    scope.launch { report(shared.leave(id)) }
+    scope.launch { save("album lasciato") { shared.leave(id) } }
   }
 
   fun inherit() {
     scope.launch {
-      when (val out = shared.inherit(id)) {
+      when (val out = QuietWrites.attemptResult("album ereditato") { shared.inherit(id) }) {
+        null -> say(AlbumMessage.NotSaved)
         is InheritOutcome.Blocked -> say(AlbumMessage.Blocked(WhyBlocked.of(out.reason)))
         InheritOutcome.Inherited -> Unit
         else -> say(AlbumMessage.NotAllowed)
@@ -277,15 +292,15 @@ class AlbumPageController(
 
   /** "Elimina l'album" di un album personale: i media restano dove sono (D39). Un condiviso si chiude dal foglio del creatore. */
   fun deletePersonal() {
-    scope.launch { if (report(albums.delete(id))) _deleted.value = true }
+    scope.launch { if (save("album eliminato") { albums.delete(id) }) _deleted.value = true }
   }
 
   fun freeze() {
-    scope.launch { report(choices.freeze(id)) }
+    scope.launch { save("album congelato") { choices.freeze(id) } }
   }
 
   fun unfreeze() {
-    scope.launch { report(choices.unfreeze(id)) }
+    scope.launch { save("album scongelato") { choices.unfreeze(id) } }
   }
 
   /**
@@ -295,7 +310,11 @@ class AlbumPageController(
   fun add(media: List<MediaId>) {
     if (media.isEmpty()) return
     scope.launch {
-      val out = albums.add(id, media)
+      val out = QuietWrites.attemptResult("foto aggiunte all'album") { albums.add(id, media) }
+      if (out == null) {
+        say(AlbumMessage.NotSaved)
+        return@launch
+      }
       when (out) {
         is AddOutcome.Added -> Unit
         is AddOutcome.NeedsShareConfirmation, is AddOutcome.Blocked -> share.onAddOutcome(out)
@@ -371,14 +390,14 @@ class AlbumPageController(
   /** Dall'ordine personalizzato (D21): [media] in cima o in fondo all'album. */
   fun moveToStart(media: MediaId) {
     local.update { it.copy(itemMenu = null) }
-    scope.launch { report(albums.reorder(id, media, null)) }
+    scope.launch { save("ordine delle foto dell'album") { albums.reorder(id, media, null) } }
   }
 
   fun moveToEnd(media: MediaId) {
     local.update { it.copy(itemMenu = null) }
     val view = (ui.value.page as? AlbumPageState.Ready)?.content?.items ?: return
     val last = (view.size - 1 downTo 0).map { view.snapshot.idAt(view.snapshotIndex(it)) }.firstOrNull { it != media } ?: return
-    scope.launch { report(albums.reorder(id, media, last)) }
+    scope.launch { save("ordine delle foto dell'album") { albums.reorder(id, media, last) } }
   }
 
   /** "Riporta nelle mie cartelle" per un elemento solo (D31): un piano, e il foglio. */
@@ -390,11 +409,11 @@ class AlbumPageController(
   /** Toglie [media] dall'album (D39: il file resta dov'e'; su uno smart un automatico diventa un'esclusione). */
   fun remove(media: MediaId) {
     local.update { it.copy(itemMenu = null) }
-    scope.launch { report(albums.remove(id, listOf(media))) }
+    scope.launch { save("foto tolta dall'album") { albums.remove(id, listOf(media)) } }
   }
 
   fun dismissNotice(notice: SharedAlbumNotice) {
-    scope.launch { shared.dismissNotice(notice) }
+    scope.launch { QuietWrites.attempt("avviso letto") { shared.dismissNotice(notice) } }
   }
 
   // --- Il menu di un elemento --------------------------------------------------------------------------------------------------

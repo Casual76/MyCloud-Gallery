@@ -67,7 +67,8 @@ internal fun BackupEntryRow(status: BackupStatus?, onClick: () -> Unit) {
     subtitle = backupEntrySubtitle(status),
     tone = tone,
     leading = { RowGlyph(Icons.Rounded.CloudUpload) },
-    badge = backupEntryPill(status)?.let { label -> { StatusPill(label, tone) } },
+    // La pillola sta in `labels` (va sotto il titolo se ruberebbe la riga), non in `badge`: a 360 dp con il testo grande il titolo si spezzava in "Backu/p".
+    labels = backupEntryPill(status)?.let { label -> { StatusPill(label, tone) } },
     onClick = onClick,
   )
 }

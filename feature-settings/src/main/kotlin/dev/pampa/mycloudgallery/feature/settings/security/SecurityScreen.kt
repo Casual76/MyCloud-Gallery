@@ -346,7 +346,7 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
           subtitle = stringResource(R.string.security_backup_detail),
           tone = FluidTone.Warning,
           leading = { RowGlyph(Icons.Rounded.Backup) },
-          badge = { StatusPill(stringResource(R.string.security_backup_pill), FluidTone.Warning) },
+          labels = { StatusPill(stringResource(R.string.security_backup_pill), FluidTone.Warning) },
           onClick = actions.onOpenBackupNotice,
         )
       }

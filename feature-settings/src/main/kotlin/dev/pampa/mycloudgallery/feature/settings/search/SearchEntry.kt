@@ -74,7 +74,8 @@ internal fun SearchEntryRow(summary: SearchEntrySummary?, onClick: () -> Unit) {
     subtitle = SearchEntryTexts.subtitleOf(LocalContext.current, summary),
     tone = tone,
     leading = { RowGlyph(Icons.Rounded.ImageSearch) },
-    badge = when {
+    // Le pillole stanno in `labels` (sotto il titolo se ruberebbero la riga), non in `badge`.
+    labels = when {
       summary?.modelMissing == true -> {
         { StatusPill(stringResource(R.string.settings_search_pill_model), FluidTone.Warning) }
       }

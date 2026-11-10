@@ -115,6 +115,8 @@
                                 docs/fase2-progetto.md: i fake stanno in src/main per riusarli a valle, ma
                                 non devono arrivare all'APK). Lettura diretta dei classes*.dex: non dipende
                                 da apkanalyzer e, se non riesce a leggere il dex, FALLISCE (non salta)
+    +  risorse senza resti      (Z1) nelle RISORSE dell'APK di release (aapt2 dump resources) nessuna stringa definita solo in src/debug di un
+                                modulo (il catalogo dei componenti), nessun segnaposto tolto dallo scaffold, nessun testo con una sigla di fase
     +  permessi documentati     ogni permesso ammesso da gradle\verify-release-manifest.gradle (statico) e ogni
                                 permesso dell'APK di release deve comparire in docs\sicurezza.md 4-bis
     +  profilo nell'APK         (Fase 3, P9) quando il Baseline Profile esiste nei sorgenti
@@ -2085,6 +2087,57 @@ Step "APK di release: nessun file di servizio dev.pampa.* in META-INF/services" 
   } finally {
     $zip.Dispose()
   }
+}
+
+# Z1 (10/11, pulizia prima della beta): i passi 7b e 8 guardano il DEX, ma una stringa resta nelle risorse dell'APK anche quando R8 toglie il
+# codice che la usa (il catalogo dei componenti portava 103 stringhe nella release). Qui si leggono le RISORSE dell'APK di release (aapt2 dump
+# resources) e il passo fallisce se ci trova: una stringa definita solo nelle risorse di `src/debug` di un modulo della galleria (il catalogo e
+# gli altri strumenti di sviluppo: il loro posto e' la debug), i segnaposto tolti dallo scaffold ("... arrivera' qui") o un testo con una sigla
+# di fase ("Fase 3", "Fase 4A": codici del cantiere, non frasi per l'utente). Se non legge le risorse FALLISCE (non salta).
+$script:removedPlaceholderStrings = @(
+  "main_collections_empty_title", "main_collections_empty_detail", "main_albums_empty_title", "main_albums_empty_detail",
+  "main_search_empty_title", "main_search_empty_detail"
+)
+function Get-StringNamesIn([string]$sourceSet) {
+  $names = @{}
+  foreach ($dir in Get-ChildItem -LiteralPath $root -Directory | Where-Object { $_.Name -eq "app" -or $_.Name -like "core-*" -or $_.Name -like "feature-*" }) {
+    $res = Join-Path $dir.FullName (Join-Path "src" (Join-Path $sourceSet "res"))
+    if (-not (Test-Path -LiteralPath $res)) { continue }
+    $files = Get-ChildItem -LiteralPath $res -Directory | Where-Object { $_.Name -like "values*" } | ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Filter "*.xml" -File }
+    foreach ($file in $files) {
+      foreach ($m in [regex]::Matches((Read-TextFile $file.FullName), '<(?:string|plurals|string-array)\s+name="([A-Za-z0-9_]+)"')) { $names[$m.Groups[1].Value] = $true }
+    }
+  }
+  return $names
+}
+Step "risorse dell'APK di release senza resti di sviluppo (stringhe solo-debug, segnaposto, sigle di fase) (Z1)" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {
+  $aapt2 = Get-Aapt2
+  if (-not $aapt2) { return "aapt2 non trovato: controlla sdk.dir in local.properties e le build-tools dell'SDK" }
+  $apk = Get-ChildItem (Join-Path $root "app\build\outputs\apk\release") -Filter "*.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1
+  if (-not $apk) { return "nessun APK di release in app\build\outputs\apk\release" }
+  $dump = Invoke-Native -File $aapt2 -Arguments @("dump", "resources", $apk.FullName)
+  if ($dump.Code -ne 0) { return "aapt2 dump resources fallito: " + (($dump.Lines | Select-Object -First 3) -join " | ") }
+  $inApk = @{}
+  $phaseTexts = @()
+  $last = $null
+  foreach ($line in $dump.Lines) {
+    $m = [regex]::Match($line, '\sstring/([A-Za-z0-9_]+)\s*$')
+    if ($m.Success) { $last = $m.Groups[1].Value; $inApk[$last] = $true; continue }
+    if ($last -and $line -match '^\s+\(\)\s+"(.*)"\s*$' -and $Matches[1] -match '\bFase \d') { $phaseTexts += $last }
+  }
+  # Controllo positivo: senza il nome dell'app la lettura non e' affidabile.
+  if (-not $inApk.ContainsKey("app_name")) { return "lettura delle risorse non affidabile: string/app_name non c'e' nell'uscita di aapt2" }
+  $mainNames = Get-StringNamesIn "main"
+  $debugNames = Get-StringNamesIn "debug"
+  $debugOnly = @($debugNames.Keys | Where-Object { -not $mainNames.ContainsKey($_) -and $inApk.ContainsKey($_) } | Sort-Object)
+  $placeholders = @($script:removedPlaceholderStrings | Where-Object { $inApk.ContainsKey($_) })
+  Write-Host ("        stringhe nell'APK: {0}; solo-debug cercate: {1}" -f $inApk.Count, @($debugNames.Keys | Where-Object { -not $mainNames.ContainsKey($_) }).Count) -ForegroundColor DarkGray
+  $problems = @()
+  if ($debugOnly.Count -gt 0) { Show-Lines $debugOnly 20; $problems += "$($debugOnly.Count) stringhe di src/debug nelle risorse di release (es. $($debugOnly[0]))" }
+  if ($placeholders.Count -gt 0) { $problems += "segnaposto dello scaffold di nuovo nella release: " + ($placeholders -join ", ") }
+  if ($phaseTexts.Count -gt 0) { $problems += "testi con una sigla di fase nella release: " + ($phaseTexts -join ", ") }
+  if ($problems.Count -gt 0) { return ($problems -join "; ") }
 }
 
 Step "nessuna classe di misura (Bench*, benchmark, UiAutomator) nel dex di release" -Skip:(-not $gradleOk) -SkipReason "gradle non completato" {

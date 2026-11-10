@@ -101,10 +101,14 @@ class AppLibraryCommandsTest {
   private fun commands(): AppLibraryCommands = commandsWith { id -> MediaRef.Phone(GalleryRig.PRIMARY, id.value.takeLast(12).toLong(), "image/jpeg") }
 
   private fun commandsWith(refOf: (MediaId) -> MediaRef?): AppLibraryCommands {
+    // Ogni galleria ha la sua cartella. Due gallerie sullo stesso file delle preferenze sono due DataStore attivi sullo stesso file: la seconda
+    // perde un'eccezione in una coroutine, e kotlinx-coroutines-test la consegna al primo `runTest` che parte dopo, in un'altra classe
+    // (`GalleryIntegrationTest`, `UncaughtExceptionsBeforeTest`: caduta due volte nel `check.ps1` intero del 09-10/11).
+    val home = File(temp.root, "galleria-${rigs.size}").apply { mkdirs() }
     val rig = GalleryRig(
       app = app,
-      replica = File(temp.root, "replica"),
-      preferences = File(temp.root, "library.preferences_pb"),
+      replica = File(home, "replica"),
+      preferences = File(home, "library.preferences_pb"),
       store = GalleryRig.newStore(),
       access = GalleryRig.accessOf(MediaAccess.FULL),
       intents = intents,
@@ -280,8 +284,10 @@ class AppLibraryCommandsTest {
 
   @Test
   fun i3_conIlBackupSpentoONonLegatoRestaIlFoglioDiSempre() {
-    assertThat(commands().deletesThroughSafeSheet).isFalse()
-    assertThat(withFiveB(commands(), active = false).deletesThroughSafeSheet).isFalse()
+    // Una galleria sola: prima senza la 5B legata, poi con la 5B legata e il backup spento.
+    val commands = commands()
+    assertThat(commands.deletesThroughSafeSheet).isFalse()
+    assertThat(withFiveB(commands, active = false).deletesThroughSafeSheet).isFalse()
   }
 
   // --- FAB-7: la selezione si chiude alla risposta positiva, non quando si apre il dialogo o il foglio --------------------------

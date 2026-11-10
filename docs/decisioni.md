@@ -17611,3 +17611,56 @@ Correzioni piccole fatte dall'orchestratore dopo l'ultima verifica dei cinque cr
 1. Scheda Album con il testo grande di Android (e con lo zoom dello schermo cambiato): i nomi lunghi stanno su due righe.
 2. Selezione con piu' elementi non al sicuro -> «Elimina dal telefono» -> «Metti al sicuro»: le frasi non parlano al singolare.
 3. Diagnostica -> Avvisi di Android con un blocco registrato: «AppRoot.kt:45» resta insieme.
+
+## Z1: via i residui di prova, debug e sviluppo dalla release (10/11)
+Richiesta dell'utente (10/11): prima della review finale l'app va valutata come arrivera' all'utente finale. Inventario completo (23 voci,
+con chi usa ogni doppio di prova) in `MyCloud-Gallery-2-note-agenti/beta/z1-inventario.md`. Il quadro: il **dex** di release era gia'
+pulito (R8 e i passi 7b e 8 di `tools\check.ps1`); i residui stavano nelle **risorse** (stringhe che R8 non toglie perche' il codice che le
+nomina sta in `src/main`) e nei **sorgenti di `src/main`** (strumenti solo-debug e doppi di prova). Misurato sull'APK di release di
+`baecdbee` con `aapt2 dump resources`.
+
+### Fatto
+- **Catalogo dei componenti** (`core-designsystem/.../catalog/`, 14 file, e le sue 254 stringhe): da `src/main` a `src/debug`; i suoi test
+  (screenshot e accessibilita', 8 file) in `src/testDebug`. Prima 103 sue stringhe erano nell'APK di release.
+- **Simulazione del passo** (P10 della Fase 10, solo debug): la schermata e il giro (`feature-diagnostics/.../release/StepSimulation*`) e le
+  fonti e il montaggio (`app/.../release/StepSimulationSources.kt`, `StepSimulationWiring.kt`) in `src/debug`; i test in `src/testDebug`.
+  `StepSimulationReadOnlyTest` e `StepSimulationPrivacyTest` leggono i sorgenti dal nuovo percorso; il primo ora pretende che nessun file
+  di `src/main` nomini la simulazione.
+- **45 doppi di prova** usati solo dai test del loro modulo (43 dei package `testing` in 21 moduli, piu' `InMemoryStores.kt` e
+  `MemoryReplicaCatalog.kt` di `core-index`, fuori dal package `testing`): da `src/main` a `src/test`, stesso package, nessuna riga cambiata.
+- **Segnaposto dello scaffold** («Le raccolte arriveranno qui», «Gli album arriveranno qui», «La ricerca arriverà qui»): la pagina di
+  riserva delle schede non passate (`EmptyTab` in `MainScaffold.kt`, raggiungibile solo dalle prove: in produzione `AppNavHost` passa
+  sempre le tre schede) ha il titolo e la riga della rete, senza testo; le sei stringhe sono tolte.
+- **Sigla di fase visibile**: il piede della Libreria con l'indice solo locale diceva «Finché la Fase 4A non è chiusa…»; ora «Finché la
+  fase di prova non è chiusa…» (la frase della Diagnostica). La recinzione non cambia.
+- **Guardia** in `tools\check.ps1` (passo nuovo dopo quello dei file di servizio): legge le risorse dell'APK di release e fallisce per una
+  stringa definita solo in `src/debug`, per i sei segnaposto e per un testo con «Fase N». Provata sull'APK di `baecdbee`: rossa con 102
+  stringhe del catalogo, i 6 segnaposto e 3 testi con la sigla.
+
+### Verifiche
+- Batch `z1-1` (`:app:assembleDebug :app:assembleRelease`): verde, 19,1 min.
+- Sull'APK di release di `z1-1`, senza Gradle (la stessa lettura del dex e di aapt2 di `tools\check.ps1`): passo 7b (72 nomi) e passo 8
+  (package `testing`) verdi; nessun nome spostato nel dex (catalogo, simulazione, `TabPlaceholder`, doppi di `core-index`); la guardia nuova
+  verde (stringhe da 6.219 a 6.111: -102 del catalogo, -6 segnaposto); release non debuggable. Nell'APK debug catalogo e simulazione ci sono.
+- Batch `z1-2` (test compilati dei 22 moduli da cui sono usciti i doppi; test di `core-common`, `core-index`, simulazione in
+  `feature-diagnostics`, `ViewerComponentsTest`): verde, 7,3 min; 186 + 185 + 23 + 10 test, nessuno fallito.
+- Batch `z1-3` (`:app:testDebugUnitTest` sulla simulazione e su `main.*`): verde, 2,6 min; 65 test in 13 classi (fra cui
+  `StepSimulationReadOnlyTest`, `StepSimulationSourcesTest`, `MainScaffoldDockTest`, `G2PillolaTest`).
+- Da provare sul telefono: niente di nuovo per l'utente (nessuna schermata della release cambia). Solo un'occhiata: il piede della
+  Libreria con l'indice condiviso in prova dice «Finché la fase di prova non è chiusa…».
+
+### Lasciato, con il motivo (dettagli nell'inventario)
+- **110 doppi** dei package `testing` usati da altri moduli, da `androidTest`, da `app/src/debug` o dalla variante di misura: D6 della
+  Fase 2. Spostarli vuol dire `testFixtures` in ~30 moduli e rifare le regole dei test di architettura: dopo la beta.
+- **8 doppi** usati solo dal proprio modulo ma unici del package `testing` di un modulo governato dalla regola dei moduli (core-nasmedia,
+  feature-backup, feature-people, feature-search, feature-widget): la regola vuole il package in `src/main`.
+- **Libreria e NAS sintetici** (l'innesto in `app/src/main/.../gallery/` e `LibraryDebugHooks`), **lo strumento dei luoghi**
+  (`core-places/.../tool/`), l'intestazione «Sviluppo» delle Impostazioni: irraggiungibili in release, spostarli costa di piu'.
+- Recinzioni e i loro testi, i due rami `BuildConfig.DEBUG` (recinzioni e chiavi hardware), log, manifest, changelog: gia' a posto o voluti.
+
+### Note
+- I test spostati in `src/testDebug` girano con `testDebugUnitTest` (quello di `galleryTest`); un `testReleaseUnitTest` di
+  `core-designsystem`, `feature-diagnostics` o `:app` non li compila piu', come gia' succedeva per i test di `app/src/testDebug`.
+- I test di architettura della Fase 4 (`Phase4ArchitectureTest`) scandiscono `main`, `test` e `androidTest`, non `debug`: il codice spostato
+  in `src/debug` resta coperto dalle regole delle fasi 8-10 (che leggono anche `debug`) e dai suoi test di sola lettura.
+- Nessun cambio visivo per l'utente: le schermate della release non cambiano. Nessuno screenshot da riregistrare.

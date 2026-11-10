@@ -16870,3 +16870,148 @@ prima e dopo); FAB-4, FAB-7 e FAB-8 hanno prove nuove; FAB-6 e la frase del pop-
 - Con una selezione di soli video il titolo del foglio dice comunque «Eliminare N foto?» (e' del design system, non cambiato qui).
 - Alcuni dettagli dei problemi del backup nel pop-up dicono «Riprova o apri la Diagnostica» mentre il tasto sotto e' "Apri Backup": non e' il
   residuo «Tocca», non l'ho toccato; la frase della rete «VPN spenta · Apri WireGuard» ripete il tasto (stringa di `:app`).
+
+## K2 della beta: correzioni delle review sulla riga in alto della Libreria e sulla nuvola (10/11)
+
+Branch `fix/k2-libreria-alto` (da `integra/beta-grafica`, `90d5827a`), un solo agente, senza dispositivo. Cinque rilievi dei critici, ognuno
+con le sue prove. GF-2, GS-5 e GF-6 sono stati provati mettendo le prove nuove sul codice della base: 11 rosse (la data con i puntini a
+360 dp in tutti gli otto casi, anche «Settembre 2015» e, a 1,3x, «Maggio 2013»; il contrasto a 3,36:1 e a 4,38:1 per strada; la capsula
+ferma per 160 ms). OA-10 e i cosmetici hanno prove sul comportamento nuovo: sul codice della base non compilano (lo stato della pausa non
+c'era), quindi li' non le ho viste rosse.
+
+Screenshot in `docs/screenshots/beta-grafica/K2/`, e quelli di `G1/` e i pop-up di `RG-D/` riregistrati con **il telefono a 360 x 780 dp**
+(il Galaxy S25 dell'utente; prima 412 x 891, dove la data lunga entrava quasi sempre).
+
+### GF-2, la data in alto non finisce piu' con i puntini
+- **Il conto.** A 360 dp con quattro tasti ("torna in fondo", nuvola, seleziona, vista): 360 - 24 di margini - 196 della capsula - 8 = 132 dp
+  di etichetta, 96 dp di testo (misurato nella prova: 192 px a densita' 2). Non ci sta «Giovedì 20 giugno 2013», e nemmeno «Settembre 2015».
+- **Le forme della data**, dalla piu' lunga alla piu' stretta (`GalleryDates`, `GridText.sectionShorterTitles`): quella lunga di oggi; «Mer 20
+  nov 2024»; «20 nov 2024»; e due in piu' rispetto alla richiesta, per il testo grande: «20 nov 24» e «20/11/24». Nell'anno in corso «Mer 20
+  nov» e «20 nov». Mesi e "Tutte": «Nov 2024». "Oggi", "Ieri" e gli anni non hanno forme corte (entrano sempre). Giorni e mesi abbreviati
+  sono scritti in `GalleryDates`, non presi dai dati di lingua della piattaforma: fra il JDK dei test e Android cambiano (con o senza punto).
+  - Negli screenshot, a testo normale e 360 dp con quattro tasti, una data con l'anno esce «28 feb 2022» (la forma con il giorno della
+    settimana non entra); a 1,3x esce «28 feb 22». La forma con le barre serve solo con il testo ancora piu' grande. Con tre tasti, sul
+    tablet e nell'anno in corso c'e' piu' posto e la data resta piu' lunga.
+- **Chi sceglie.** `GalleryChromeLabel(shorterTitles)` mostra la prima forma che entra nella larghezza che la riga le lascia. La scelta si fa
+  **al layout** (un `SubcomposeLayout` al posto del `Box` dell'etichetta): la larghezza e' nota li', quindi la forma e' giusta **dal primo
+  fotogramma** (una scelta fatta in composizione con la larghezza del fotogramma prima avrebbe mostrato i puntini per un fotogramma a ogni
+  apertura). Vale per tutte le pagine che usano `GalleryTopChrome`; la Libreria e le griglie delle Raccolte passano le forme della sezione.
+- **Quanto costa.** Ogni forma si misura **una volta per titolo e solo se serve** (`ChromeTitleFit`: un titolo che entra intero misura solo
+  se' stesso, uno senza forme corte niente). Mentre la capsula accanto si allarga con la molla la riga si rimisura a ogni fotogramma come
+  prima, ma la scelta e' un confronto fra interi e il testo non si ricompone finche' la forma non cambia. Per tornare da una forma corta a
+  una piu' lunga servono 2 dp di margine: la molla arriva con un piccolo rimbalzo, e una forma che entra per un pixel si alternerebbe.
+- **TalkBack** legge sempre la data per esteso (e il luogo): quando a schermo c'e' una forma corta l'intestazione ha la sua descrizione.
+- Il luogo sotto la data si tronca come prima e non toglie posto alla data (la forma dipende solo dalla larghezza della riga).
+- Le intestazioni dentro la lista, che hanno tutta la larghezza, restano lunghe.
+
+### GS-5, il cambio di polarita' del vetro non perde contrasto
+- Inchiostro e pellicola si animavano separatamente con la stessa molla. Misurato con il composable vero, fotogramma per fotogramma: dal
+  chiaro sul nero allo scuro sul bianco la prima coppia mostrata stava a 3,36:1 (a meta' strada 2,56:1, il numero del critico); e una
+  pellicola che doveva farsi piu' densa nella stessa polarita' partiva da 4,38:1.
+- **Ora la scelta nuova vale dalla composizione che la calcola.** Non c'e' un percorso continuo fra le due polarita' che tenga 4,5:1 (in
+  mezzo inchiostro e fondo hanno la stessa luminanza), quindi:
+  - la polarita' e l'inchiostro cambiano **in un fotogramma**;
+  - una pellicola che deve farsi **piu' densa** arriva subito (il valore di arrivo e' il minimo che tiene la soglia: qualunque valore prima
+    sta sotto);
+  - solo una pellicola che puo' **alleggerirsi** lo fa con la molla standard, e non scende mai sotto il valore di arrivo (il rimbalzo della
+    molla non si mostra). Le molle delle misure (B1) non sono toccate.
+- `adaptiveFilmAlpha` e' pura: `GalleryTopChromeTest` campiona il percorso fra tutte le coppie di otto contenuti (poli, grigi, foto sature,
+  righe bianche e nere) partendo da tutte e due le polarita', anche oltre i capi della molla.
+
+### GF-6, la capsula segue il cambio isolato
+- La tenuta della larghezza vale **solo dentro una raffica**: un cambio a meno di 600 ms (`LabelSettleMillis`) dal precedente. Un cambio
+  isolato («3 selezionati» entrando in selezione) non tiene niente.
+- In piu', durante la dissolvenza la misura del testo era la piu' larga fra il vecchio e il nuovo, quindi la capsula avrebbe cominciato a
+  stringersi solo a dissolvenza finita (180 ms). Ora la misura del testo nuovo vale subito (`SizeTransform` con `snap()`): il contenitore, che
+  ha la molla e ritaglia, parte nello stesso fotogramma in cui il testo cambia.
+- Conseguenza accettata: nella prima data di uno scorrimento veloce la capsula puo' stringersi un poco prima che la raffica la tenga.
+
+### OA-10, il backup fermo si dice
+- `BackupStatus.Stopped` diventava `LibraryBackupStatus.Idle` ("niente da dire"): con il NAS aggiornato la nuvola mostrava la spunta, "NAS
+  aggiornato" e "Libera spazio". Ora `LibraryBackupStatus.Paused(byUser)`:
+  - **la pausa dell'utente** ("Ferma", fino a "Riprendi"): lo stato `GalleryCloudState.Paused`, la nuvola vuota con **il segno della pausa**
+    (un disco dell'inchiostro, che regge sopra la pellicola come l'anello dei segni dei toni, con le due barre nel polo opposto). TalkBack:
+    "Stato della sincronizzazione: In pausa. Backup in pausa". Nel pop-up: «Backup in pausa», «Le foto nuove non si salvano finché non lo
+    riprendi dalla pagina Backup.» e il tasto "Apri Backup". Niente spazio, ultima sincronizzazione o "Libera spazio";
+  - **il lavoro fermato da Android** (termica, memoria, fine della tappa): un'attesa, «Backup interrotto» · «Android ha fermato il lavoro:
+    riprende da solo.» (le parole della pagina Backup), fra i lavori;
+  - dopo l'azzeramento dell'app non c'e' un backup di cui parlare (`Idle`).
+- **L'ordine**: allarme, senza rete, attenzione, **in pausa**, in corso, in attesa, salvato. La pausa sta sopra i lavori in corso (finche'
+  dura niente si salva, e la toglie solo l'utente) e sotto i problemi; con un problema e la pausa insieme il pop-up dice tutti e due.
+- I file ricevuti e non salvati (IN-7) continuano a prendere il posto di un backup fermo, come prima prendevano quello di `Idle`: un
+  problema pesa piu' di una pausa e porta alla stessa pagina.
+- **Gli altri stati fermi**, controllati (`LibraryCloudTest.gliAltriStatiFermiNonDiconoTuttoSalvato`): scritture ferme, backup congelato,
+  area in sola lettura sono problemi; "Backup in prova" e il NAS in prova sono attese; i lavori fermi del NAS un allarme. Nessuno dice
+  "tutto salvato".
+
+### GF-12, il pop-up, e il parametro morto
+- Sotto «VPN spenta» c'e' solo il tasto «Apri WireGuard»: una frase uguale al tasto non si scrive (vale per ogni voce).
+- I dettagli dei problemi del backup rimandano **dove porta il tasto**: «Riprova dalla pagina Backup.» (prima «Riprova o apri la
+  Diagnostica.»), «I dettagli sono nella pagina Backup.» per il backup congelato e le scritture ferme. «Manca l'area privata» diceva «Vai
+  in Impostazioni, Aree.», una pagina che non c'e' (BK-9): ora «Chiedi all'admin del NAS.», come l'azione del problema.
+- Il filo divisorio c'e' solo se sotto c'e' qualcosa (lo spazio, l'ultima sincronizzazione o "Libera spazio").
+- Le capsule dei lavori, che si toccano, portano **la freccia in coda** (`GalleryFooterPill(trailing)`); quelle dei problemi e della pausa
+  restano etichette, con il loro tasto sotto.
+- `LibraryTab(statusFooter)` non c'e' piu'.
+
+### File fuori dal perimetro (modifiche piccole, necessarie)
+- `core-library/.../text/GalleryDates.kt` (+ `GalleryDatesTest`): le forme corte della data stanno nell'unico punto che scrive le date.
+- `feature-library/.../collections/CollectionGridPage.kt`: una riga, le forme della sezione all'etichetta delle griglie delle Raccolte.
+- `app/src/test/.../G2ScreenshotTest.kt`: tolta la riga `statusFooter = {}`.
+- Nei test di `feature-library` che passavano `statusFooter`: tolta la riga (e gli import rimasti senza uso). `LibraryTabTest` e
+  `LibraryStubTest` provavano che il vecchio slot non si mostrasse: ora provano che senza niente da dire la nuvola non c'e'.
+- Non ho toccato `engine/`, `MainScaffold.kt`, la pillola, `feature-albums`, `feature-viewer`, `LibraryParts.kt`.
+- `docs/screenshots/beta-grafica/index.html` non e' aggiornato: la cartella `K2/` e' da aggiungere all'indice.
+
+### Prove
+- Nuove: `GalleryAdaptivePolarityTest` (3), `GalleryChromeLabelFitTest` (14), `LibraryChromeDateFitTest` (8: chiaro e scuro, 1x e 1,3x, Giorni
+  e Mesi, cinque punti della Libreria a 360 dp con i quattro tasti), il percorso campionato e il numero del critico in `GalleryTopChromeTest`
+  (+2), le forme in `GalleryDatesTest` (+1) e `GridTextEnglishDeviceTest` (+1), `LibraryCloudTest` (+2 e casi in piu'), i casi `k2_...` di
+  `LibraryCloudScreenshotTest` (8 per classe), `GalleryChromeCloudTest` (+1), `BackupPiecesTest` (+1).
+- Cambiate perche' il requisito cambia il comportamento: `GalleryChromeMotionTest` (la tenuta vale dalla seconda data di una raffica; un
+  cambio isolato stringe subito), `BackupPiecesTest` (`Stopped` non e' piu' `Idle`), `GalleryChromeCloudTest` (un glifo condiviso in piu').
+
+### Rischi per le prestazioni
+- **Un `SubcomposeLayout` nell'etichetta** (uno per pagina, nella riga in alto): la prima composizione del testo avviene al primo layout
+  invece che in composizione. E' una composizione in piu' di due righe di testo; da guardare in `coldStartUsual`.
+- La misura delle forme: al piu' quattro testi corti per cambio di data, e i cambi sono al piu' cinque al secondo (il ritmo di B1). Sul
+  tablet e nell'anno in corso quasi sempre una sola.
+- Mentre l'inchiostro o la capsula cambiano, l'etichetta si rimisura ma il testo non si ricompone (prima si ricomponeva a ogni fotogramma
+  della molla dei colori). I cambi di polarita' non hanno piu' fotogrammi di animazione.
+- Nessun vetro e nessun layer in piu': il segno della pausa e' un disco disegnato dentro il tasto della nuvola.
+
+### Da provare sul telefono
+1. S25, scorrere verso le foto di anni passati finche' compare "torna in fondo": la data resta intera («20 nov 2024») e passa alla forma
+   corta mentre la capsula si allarga, senza lampeggiare; tornando in fondo torna lunga. Lo stesso ai livelli Mesi e Anni.
+2. Con il testo di sistema grande (1,3x e il massimo): quale forma esce, e che non ci siano puntini finche' una forma entra. Sul telefono
+   il carattere e' quello dell'engine come negli screenshot: se le larghezze vere differiscono, e' qui che si vede.
+3. TalkBack sull'etichetta con la forma corta: legge la data per esteso e il luogo.
+4. Scorrere sopra foto molto chiare e molto scure: il testo cambia polarita' **di colpo** (prima sfumava in 0,4 s). Da giudicare a occhio
+   se il salto disturba; la leggibilita' non scende piu'.
+5. Entrare e uscire dalla selezione: la capsula dell'etichetta si stringe insieme al testo, non dopo.
+6. Scorrimento veloce: la capsula non trema (puo' stringersi una volta, alla prima data).
+7. Pagina Backup, "Ferma": la nuvola prende il segno della pausa (sopra foto chiare e scure), il pop-up dice «Backup in pausa», "Apri
+   Backup" porta alla pagina con "Riprendi"; dopo "Riprendi" la nuvola torna allo stato vero.
+8. VPN spenta fuori casa: nel pop-up «Apri WireGuard» una volta sola. Un problema del backup (NAS spento durante un giro): la frase
+   rimanda alla pagina Backup.
+9. Benchmark: `scroll_*`, `pinch` e `coldStartUsual` sull'S25 e sul Tab S9 contro i riferimenti.
+
+### Verifiche (10/11, semaforo Gradle, senza dispositivo)
+- `:core-library:testDebugUnitTest` 303 prove, `:core-designsystem:testDebugUnitTest` 286, `:feature-library:testDebugUnitTest` 1.219: verdi.
+- I vicini che usano la stessa chrome e le stesse capsule: `:feature-nas:testDebugUnitTest` 381 e `:feature-backup:testDebugUnitTest` 602,
+  verdi. `lintDebug` di core-designsystem e feature-library verde.
+- In `:app` (compila tutto, `G2ScreenshotTest` compreso), mirati: `BackupPiecesTest`, `IncomingProblemWatcherTest`,
+  `LibraryCloudNetworkTest`, `NasStatusCapsuleTest` (24 prove), verdi.
+- Screenshot: `recordRoborazziDebug` di `LibraryCloudPhone/TabletScreenshotTest` e `LibraryCloudPopupWordsPhone/TabletTest`. Robolectric non
+  sfoca e registra un fotogramma a riposo: il vetro vero e il movimento si giudicano sul telefono.
+- Non lanciati: `tools/check.ps1` e gli screenshot dello scaffold in `:app` (sono di un altro pacchetto).
+
+### Decisioni aperte per l'utente
+- Le due forme in piu' della data, «20 nov 24» e «20/11/24»: servono solo con il testo grande. Se la forma con le barre non piace, si toglie
+  una riga e a testo molto grande tornano i puntini.
+- Il cambio di polarita' ora e' un salto. L'alternativa che tiene il contrasto non c'e'; si puo' solo allargare l'isteresi perche' capiti
+  meno spesso.
+- La pausa sta sopra "in corso" nella nuvola: con il NAS che sta leggendo e il backup in pausa si vede la pausa.
+- Con il backup **non configurato** e il NAS aggiornato la nuvola mostra ancora la spunta ("NAS aggiornato", non "Tutto al sicuro"): e'
+  vero per chi usa l'app solo per guardare il NAS, ma chi non ha finito la configurazione potrebbe leggerla come "le mie foto sono salve".
+  Non l'ho cambiato: e' una scelta di prodotto.

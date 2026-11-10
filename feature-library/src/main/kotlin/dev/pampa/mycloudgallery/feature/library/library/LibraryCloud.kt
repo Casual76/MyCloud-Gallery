@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,6 +25,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -131,19 +134,24 @@ internal sealed interface CloudItem {
 }
 
 /**
- * Che cosa dice la nuvola: lo stato (il glifo), i problemi (dal piu' grave) e i lavori in corso o in attesa, e l'ultima
- * sincronizzazione nota (ora del NAS). [showsSpace]: senza problemi il pop-up mostra lo spazio, l'ultima sincronizzazione e "Libera
- * spazio" (la richiesta dell'utente: "se ci sta un problema il problema, o altrimenti...").
+ * Che cosa dice la nuvola: lo stato (il glifo), i problemi (dal piu' grave), la pausa del backup (OA-10: non e' un problema, ma ha il
+ * suo tasto verso la pagina dove si riprende), i lavori in corso o in attesa, e l'ultima sincronizzazione nota (ora del NAS).
+ * [showsSpace]: senza niente da sistemare il pop-up mostra lo spazio, l'ultima sincronizzazione e "Libera spazio" (la richiesta
+ * dell'utente: "se ci sta un problema il problema, o altrimenti...").
  */
 @Immutable
 internal data class LibraryCloud(
   val state: GalleryCloudState,
   val problems: List<CloudItem>,
+  val paused: List<CloudItem>,
   val activity: List<CloudItem>,
   val savedByBackup: Boolean,
   val lastSyncNasMillis: Long?,
 ) {
-  val showsSpace: Boolean get() = problems.isEmpty()
+  /** Le voci con il loro tasto: i problemi e, sotto, la pausa. */
+  val withAction: List<CloudItem> get() = problems + paused
+
+  val showsSpace: Boolean get() = problems.isEmpty() && paused.isEmpty()
 }
 
 /**
@@ -154,9 +162,11 @@ internal data class LibraryCloud(
  * - **il NAS**: lettura e allineamento sono lavori, "aggiornato" e' salvato, i lavori fermi sono un allarme, le aree non raggiungibili
  *   un'attenzione, la pubblicazione di prova un'attesa;
  * - **il backup**: confronto e giri sono lavori, la coda e la prova sono attese, "tutto al sicuro" e' salvato, un problema prende il
- *   tono della sua riga in [BackupFooterProblems] (allarme, attenzione, o attesa se riparte da solo).
+ *   tono della sua riga in [BackupFooterProblems] (allarme, attenzione, o attesa se riparte da solo). **Fermo** (OA-10) non e' mai
+ *   "salvato": la pausa dell'utente ha il suo stato, il lavoro fermato da Android e' un'attesa (riprende da solo).
  *
- * Lo stato e' il piu' grave delle voci, in quest'ordine: allarme, senza rete, attenzione, in corso, in attesa, salvato.
+ * Lo stato e' il piu' grave delle voci, in quest'ordine: allarme, senza rete, attenzione, in pausa, in corso, in attesa, salvato. La
+ * pausa sta sopra i lavori in corso: finche' dura le foto nuove non si salvano, e solo l'utente la toglie.
  */
 internal fun libraryCloud(network: LibraryNetworkStatus?, nas: LibraryNasStatus, backup: LibraryBackupStatus): LibraryCloud? {
   val items = listOfNotNull(network?.let(::networkItem), nasItem(nas), backupItem(backup))
@@ -167,6 +177,7 @@ internal fun libraryCloud(network: LibraryNetworkStatus?, nas: LibraryNasStatus,
   return LibraryCloud(
     state = state,
     problems = problems,
+    paused = items.filter { it.state == GalleryCloudState.Paused },
     activity = activity,
     savedByBackup = backup is LibraryBackupStatus.AllSafe,
     lastSyncNasMillis = lastSyncOf(nas, backup),
@@ -199,6 +210,8 @@ private fun backupItem(status: LibraryBackupStatus): CloudItem? = when (status) 
   LibraryBackupStatus.TestOnly, is LibraryBackupStatus.Queued -> CloudItem.Backup(status, GalleryCloudState.Waiting)
   is LibraryBackupStatus.Comparing, is LibraryBackupStatus.FirstBackup, is LibraryBackupStatus.Running -> CloudItem.Backup(status, GalleryCloudState.Syncing)
   is LibraryBackupStatus.AllSafe -> CloudItem.Backup(status, GalleryCloudState.Saved)
+  // OA-10: un backup fermo non sparisce dalla nuvola (prima, con "NAS aggiornato", restava la spunta di "tutto salvato").
+  is LibraryBackupStatus.Paused -> CloudItem.Backup(status, if (status.byUser) GalleryCloudState.Paused else GalleryCloudState.Waiting)
   is LibraryBackupStatus.Problem -> CloudItem.Backup(
     status,
     when (BackupFooterProblems.of(status.code).tone) {
@@ -214,9 +227,10 @@ private fun severityRank(state: GalleryCloudState): Int = when (state) {
   GalleryCloudState.Saved -> 0
   GalleryCloudState.Waiting -> 1
   GalleryCloudState.Syncing -> 2
-  GalleryCloudState.Attention -> 3
-  GalleryCloudState.Offline -> 4
-  GalleryCloudState.Alarm -> 5
+  GalleryCloudState.Paused -> 3
+  GalleryCloudState.Attention -> 4
+  GalleryCloudState.Offline -> 5
+  GalleryCloudState.Alarm -> 6
 }
 
 /** Le uscite della nuvola: la rete (la sua azione), il NAS (la Diagnostica), il backup (la sua pagina), "Libera spazio". */
@@ -243,7 +257,8 @@ internal fun LibraryCloudButton(
   actions: LibraryCloudActions,
   modifier: Modifier = Modifier,
 ) {
-  val problem by remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value)?.problems?.firstOrNull() } }
+  // Cio' che TalkBack dice dopo lo stato: il problema piu' grave o, in pausa, che cosa e' in pausa.
+  val problem by remember(network) { derivedStateOf { libraryCloud(network, nas.value, backup.value)?.withAction?.firstOrNull() } }
   val title = cloudTitle(state, savedByBackup = backup.value is LibraryBackupStatus.AllSafe)
   val headline = problem?.let { noteOf(it).label }
   val description = if (headline == null) {
@@ -281,9 +296,13 @@ internal fun rememberLastSync(nas: State<LibraryNasStatus>, backup: State<Librar
 
 /**
  * Il pannello del pop-up della nuvola. In cima lo stato in una frase. Poi:
- *  - i **problemi**, ognuno con la sua capsula tonale, cosa succede e il tasto che porta dove si risolve;
- *  - i **lavori** in corso o in attesa (la capsula si tocca e porta alla sua pagina, come nel piede di prima);
- *  - **senza problemi**: lo spazio usato sul totale del NAS (letto all'apertura), l'ultima sincronizzazione e "Libera spazio".
+ *  - i **problemi** e la **pausa** del backup, ognuno con la sua capsula tonale (ferma: e' un'etichetta), cosa succede e il tasto che
+ *    porta dove si risolve. La frase sotto la capsula non ripete il tasto (GF-12: «VPN spenta», «Apri WireGuard» e poi il tasto
+ *    «Apri WireGuard»);
+ *  - i **lavori** in corso o in attesa: la capsula si tocca e porta alla sua pagina, e lo dice con la freccia in coda (GF-12: accanto
+ *    alle capsule ferme dei problemi non si capiva quali fossero tasti);
+ *  - **senza niente da sistemare**: lo spazio usato sul totale del NAS (letto all'apertura), l'ultima sincronizzazione e "Libera
+ *    spazio", sotto un filo divisorio che c'e' solo se sotto c'e' qualcosa (GF-12: senza NAS e senza "Libera spazio" restava solo).
  * Ogni tasto chiude il pop-up prima di aprire la sua pagina. Il testo e' `onSurface` pieno: il velo del pop-up e' calcolato per lui.
  */
 @Composable
@@ -311,11 +330,12 @@ internal fun LibraryCloudPanel(
         modifier = Modifier.semantics { heading() },
       )
     }
-    for (item in cloud.problems) {
+    for (item in cloud.withAction) {
+      val action = actionLabel(item)
       val note = noteOf(item)
-      CloudNote(note = note, onClick = null)
+      CloudNote(note = if (note.detail.sameWordsAs(action)) note.copy(detail = null) else note, onClick = null)
       FluidButton(
-        text = actionLabel(item),
+        text = action,
         onClick = {
           close()
           actionOf(item, actions)()
@@ -332,8 +352,10 @@ internal fun LibraryCloudPanel(
       })
     }
     if (cloud.showsSpace) {
-      if (cloud.problems.isNotEmpty() || cloud.activity.isNotEmpty()) FluidHairline()
-      SpaceSection(commands)
+      val space = rememberNasSpace(commands)
+      val anythingBelow = space != SpaceUi.Absent || lastSyncNasMillis != null || commands.canFreeSpace
+      if (cloud.activity.isNotEmpty() && anythingBelow) FluidHairline(modifier = Modifier.testTag(CloudDividerTag))
+      SpaceSection(space)
       if (lastSyncNasMillis != null) {
         Column(verticalArrangement = Arrangement.spacedBy(LineGap)) {
           Text(text = stringResource(R.string.library_cloud_last_sync), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = ink)
@@ -364,11 +386,14 @@ internal fun LibraryCloudPanel(
   }
 }
 
-/** Una voce del pannello: la capsula tonale (toccabile se porta a una pagina) e, sotto, il dettaglio e l'avanzamento. */
+/**
+ * Una voce del pannello: la capsula tonale e, sotto, il dettaglio e l'avanzamento. Con [onClick] la capsula e' un tasto e lo dice
+ * con la freccia in coda; senza, e' un'etichetta (il tasto della voce sta sotto).
+ */
 @Composable
 private fun CloudNote(note: GalleryFooterNote, onClick: (() -> Unit)?) {
   Column(verticalArrangement = Arrangement.spacedBy(LineGap)) {
-    GalleryFooterPill(note = note, onClick = onClick)
+    GalleryFooterPill(note = note, onClick = onClick, trailing = if (onClick != null) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null)
     note.progress?.let { p -> FluidProgressBar(progress = { p }, modifier = Modifier.fillMaxWidth()) }
     note.detail?.let { detail ->
       Text(
@@ -390,9 +415,12 @@ private sealed interface SpaceUi {
   data object Absent : SpaceUi
 }
 
-/** Lo spazio del NAS: si legge quando il pannello si apre (mai in background), come la pagina "Spazio NAS". */
+/**
+ * Lo spazio del NAS: si legge quando il pannello si apre (mai in background), come la pagina "Spazio NAS". Lo tiene il pannello,
+ * che deve sapere se la sezione c'e' (il filo divisorio sopra non resta da solo).
+ */
 @Composable
-private fun SpaceSection(commands: LibraryCommands) {
+private fun rememberNasSpace(commands: LibraryCommands): SpaceUi {
   var space by remember { mutableStateOf<SpaceUi>(SpaceUi.Loading) }
   LaunchedEffect(commands) {
     space = try {
@@ -403,7 +431,12 @@ private fun SpaceSection(commands: LibraryCommands) {
       SpaceUi.Shown(LibraryNasSpace.Unavailable)
     }
   }
-  val shown = space
+  return space
+}
+
+/** La sezione dello spazio del NAS nel pannello: il titolo e la misura (o che la si sta leggendo, o che non si legge). */
+@Composable
+private fun SpaceSection(shown: SpaceUi) {
   if (shown == SpaceUi.Absent) return
   val ink = MaterialTheme.colorScheme.onSurface
   Column(verticalArrangement = Arrangement.spacedBy(LineGap)) {
@@ -437,6 +470,7 @@ internal fun cloudTitle(state: GalleryCloudState, savedByBackup: Boolean): Strin
     GalleryCloudState.Saved -> if (savedByBackup) R.string.backup_footer_all_safe else R.string.nas_footer_up_to_date
     GalleryCloudState.Syncing -> R.string.library_cloud_title_syncing
     GalleryCloudState.Waiting -> R.string.library_cloud_title_waiting
+    GalleryCloudState.Paused -> R.string.library_cloud_title_paused
     GalleryCloudState.Offline -> R.string.library_cloud_title_offline
     GalleryCloudState.Attention -> R.string.library_cloud_title_attention
     GalleryCloudState.Alarm -> R.string.library_cloud_title_alarm
@@ -477,6 +511,9 @@ private fun actionLabel(item: CloudItem): String = stringResource(
   },
 )
 
+/** Vero se la frase dice le stesse parole del tasto (a meno di maiuscole e punto finale): sotto la capsula non si ripete. */
+private fun String?.sameWordsAs(action: String): Boolean = this != null && trim().trimEnd('.').equals(action.trim(), ignoreCase = true)
+
 private fun actionOf(item: CloudItem, actions: LibraryCloudActions): () -> Unit = when (item) {
   is CloudItem.Network -> actions.onNetwork
   is CloudItem.Nas -> actions.onNas
@@ -509,6 +546,9 @@ internal fun tenths(value: Long, unit: Long): String {
   val tenths = value * TenthsPerUnit / unit
   return GalleryNumbers.format(tenths / TenthsPerUnit) + DecimalComma + (tenths % TenthsPerUnit)
 }
+
+/** Il tag del filo divisorio del pannello: le prove verificano che non resti da solo in fondo (GF-12). */
+internal const val CloudDividerTag: String = "nuvola-filo"
 
 private const val MegaByte = 1_000_000L
 private const val GigaByte = 1_000_000_000L

@@ -61,7 +61,6 @@ abstract class HiddenFamilyScreenshotBase(private val dark: Boolean, private val
           backdropOut = {},
           onOpenViewer = {},
           onOpenSettings = {},
-          statusFooter = {},
           state = state,
         )
       }

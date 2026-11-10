@@ -37,9 +37,11 @@
   <!-- Nel pop-up della nuvola il tasto "Apri Backup" sta sotto la frase: la frase rimanda alla pagina, non a un tocco sulla riga (FAB, 3-bis). -->
   <string name="backup_footer_problem_generic_detail">I dettagli sono nella pagina Backup.</string>
 
-  <!-- Un problema per codice (§2.6): la frase breve e, sotto, cosa fare. -->
+  <!-- Un problema per codice (§2.6): la frase breve e, sotto, cosa fare. Nel pop-up della nuvola sotto la frase c'e' il tasto "Apri Backup":
+       la frase rimanda alla pagina Backup (dove stanno "Riprova" e la Diagnostica), non a un'altra pagina (GF-12, review della beta: «Riprova o
+       apri la Diagnostica» sopra un tasto che apre Backup). -->
   <string name="backup_footer_nas_unreachable_label">Il NAS non risponde</string>
-  <string name="backup_footer_nas_unreachable_detail">Riprova o apri la Diagnostica.</string>
+  <string name="backup_footer_nas_unreachable_detail">Riprova dalla pagina Backup.</string>
   <string name="backup_footer_nas_full_label">Il NAS è pieno</string>
   <string name="backup_footer_nas_full_detail">Controlla lo spazio del NAS.</string>
   <string name="backup_footer_quota_label">Quota esaurita</string>
@@ -49,7 +51,8 @@
   <string name="backup_footer_read_only_area_label">Area privata in sola lettura</string>
   <string name="backup_footer_read_only_area_detail">Chiedi all’admin del NAS.</string>
   <string name="backup_footer_no_private_area_label">Manca l’area privata</string>
-  <string name="backup_footer_no_private_area_detail">Vai in Impostazioni, Aree.</string>
+  <!-- BK-9: la pagina "Impostazioni, Aree" non c'e' (le aree si fissano alla fondazione della famiglia): la crea chi amministra il NAS. -->
+  <string name="backup_footer_no_private_area_detail">Chiedi all’admin del NAS.</string>
   <string name="backup_footer_media_permission_label">Accesso alle foto ritirato</string>
   <string name="backup_footer_media_permission_detail">Consenti l’accesso alle foto.</string>
   <string name="backup_footer_media_location_label">Foto in attesa</string>
@@ -59,9 +62,9 @@
   <string name="backup_footer_cap_reached_label">Tetto dati raggiunto</string>
   <string name="backup_footer_cap_reached_detail">Puoi fare ora, con conferma.</string>
   <string name="backup_footer_frozen_label">Backup fermo: cambiamenti anomali</string>
-  <string name="backup_footer_frozen_detail">Controlla nella Diagnostica.</string>
+  <string name="backup_footer_frozen_detail">I dettagli sono nella pagina Backup.</string>
   <string name="backup_footer_writes_stopped_label">Scritture sul NAS ferme</string>
-  <string name="backup_footer_writes_stopped_detail">Apri la Diagnostica.</string>
+  <string name="backup_footer_writes_stopped_detail">I dettagli sono nella pagina Backup.</string>
   <!-- CA-1 (Fase 10): le scritture ferme per il manifest firmato (questa versione e' in sola lettura). -->
   <string name="backup_footer_release_read_only">Versione da aggiornare</string>
   <string name="backup_footer_release_read_only_hint">Il backup è fermo: aggiorna dal Pampa Store.</string>
@@ -78,7 +81,7 @@
     <item quantity="one">%1$s copia non integra</item>
     <item quantity="other">%1$s copie non integre</item>
   </plurals>
-  <string name="backup_footer_verify_failed_detail">Riprova o apri la Diagnostica.</string>
+  <string name="backup_footer_verify_failed_detail">Riprova dalla pagina Backup.</string>
   <string name="backup_footer_common_copy_lost_label">Spariti dall’area comune</string>
   <plurals name="backup_footer_common_copy_lost_label_count">
     <item quantity="one">%1$s sparito dall’area comune</item>
@@ -90,13 +93,13 @@
     <item quantity="one">%1$s file illeggibile</item>
     <item quantity="other">%1$s file illeggibili</item>
   </plurals>
-  <string name="backup_footer_unreadable_detail">Riprova o apri la Diagnostica.</string>
+  <string name="backup_footer_unreadable_detail">Riprova dalla pagina Backup.</string>
   <string name="backup_footer_unexpected_label">Errore inatteso</string>
   <plurals name="backup_footer_unexpected_label_count">
     <item quantity="one">%1$s con un errore inatteso</item>
     <item quantity="other">%1$s con un errore inatteso</item>
   </plurals>
-  <string name="backup_footer_unexpected_detail">Riprova o apri la Diagnostica.</string>
+  <string name="backup_footer_unexpected_detail">Riprova dalla pagina Backup.</string>
   <string name="backup_footer_source_changed_label">Versioni in attesa del computer</string>
   <string name="backup_footer_source_changed_detail">Ripartono da sole dopo la verifica del NAS.</string>
   <string name="backup_footer_phone_storage_low_label">Memoria del telefono quasi piena</string>

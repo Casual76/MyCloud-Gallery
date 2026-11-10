@@ -39,6 +39,15 @@ sealed interface LibraryBackupStatus {
   data class Running(val done: Int, val total: Int, val etaMillis: Long?) : LibraryBackupStatus
 
   /**
+   * Il backup e' **fermo** e ci sono (o possono esserci) foto ancora da salvare: non e' "niente da dire" e non e' mai "tutto al sicuro" (OA-10,
+   * review della beta: con [Idle] la nuvola, guardando solo il NAS, mostrava la spunta di "tutto salvato").
+   *
+   * Con [byUser] l'utente ha toccato "Ferma" e la pausa dura finche' non tocca "Riprendi": "Backup in pausa" · il tasto porta alla pagina Backup.
+   * Senza, il lavoro lo ha fermato Android (termica, memoria, fine della tappa): "Backup interrotto" · "Riprende da solo".
+   */
+  data class Paused(val byUser: Boolean) : LibraryBackupStatus
+
+  /**
    * Il problema piu' grave ("Quota esaurita" · "Chiedi all'admin del NAS"): [code] e' il codice stabile di `BackupProblemCode`
    * (core-backup, §2.6), [count] quanti media riguarda (0 = tutto il backup, es. NAS irraggiungibile).
    */

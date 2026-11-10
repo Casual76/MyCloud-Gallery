@@ -80,7 +80,6 @@ internal abstract class LibraryWindowsMenuBase(private val dark: Boolean, privat
               backdropOut = {},
               onOpenViewer = {},
               onOpenSettings = {},
-              statusFooter = {},
               state = syntheticLibraryState(),
             )
           }

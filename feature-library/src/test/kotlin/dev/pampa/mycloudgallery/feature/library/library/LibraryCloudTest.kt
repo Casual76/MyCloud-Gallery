@@ -68,8 +68,56 @@ class LibraryCloudTest {
       LibraryBackupStatus.Queued(items = 312, wait = LibraryBackupWait.CHARGING) to GalleryCloudState.Waiting,
       LibraryBackupStatus.FirstBackup(done = 1, total = 10, etaMillis = null) to GalleryCloudState.Syncing,
       LibraryBackupStatus.Running(done = 1, total = 10, etaMillis = null) to GalleryCloudState.Syncing,
+      // OA-10: la pausa dell'utente ha il suo stato; il lavoro fermato da Android e' un'attesa (riprende da solo).
+      LibraryBackupStatus.Paused(byUser = true) to GalleryCloudState.Paused,
+      LibraryBackupStatus.Paused(byUser = false) to GalleryCloudState.Waiting,
     )
     for ((backup, expected) in cases) assertWithMessage("$backup").that(stateOf(backup = backup)).isEqualTo(expected)
+  }
+
+  /**
+   * OA-10 (review della beta): con il backup fermo la nuvola **non dice mai "tutto salvato"**, qualunque cosa dicano il NAS e la rete.
+   * Prima il backup fermo non diceva niente e, con il NAS aggiornato, restavano la spunta, "NAS aggiornato" e "Libera spazio".
+   */
+  @Test
+  fun conIlBackupFermoLaNuvolaNonDiceMaiTuttoSalvato() {
+    val networks = listOf(null, network(LibraryNetworkSeverity.Fine))
+    val nases = listOf(LibraryNasStatus.Idle, upToDate, LibraryNasStatus.LocalOnly)
+    for (net in networks) for (nas in nases) for (byUser in listOf(true, false)) {
+      val paused = LibraryBackupStatus.Paused(byUser)
+      val cloud = checkNotNull(libraryCloud(net, nas, paused))
+      val where = "rete $net, NAS $nas, $paused"
+      assertWithMessage(where).that(cloud.state).isNotEqualTo(GalleryCloudState.Saved)
+      assertWithMessage(where).that(cloud.savedByBackup).isFalse()
+      if (byUser) {
+        // La pausa: il suo stato, la sua voce con il tasto verso la pagina Backup, e niente spazio ne' "Libera spazio".
+        assertWithMessage(where).that(cloud.state).isEqualTo(GalleryCloudState.Paused)
+        assertWithMessage(where).that(cloud.paused).containsExactly(CloudItem.Backup(paused, GalleryCloudState.Paused))
+        assertWithMessage(where).that(cloud.withAction).containsExactly(CloudItem.Backup(paused, GalleryCloudState.Paused))
+        assertWithMessage(where).that(cloud.problems).isEmpty()
+        assertWithMessage(where).that(cloud.showsSpace).isFalse()
+      } else {
+        // Fermato da Android: un'attesa fra i lavori (riprende da solo), che si tocca e porta alla pagina Backup.
+        assertWithMessage(where).that(cloud.state).isEqualTo(GalleryCloudState.Waiting)
+        assertWithMessage(where).that(cloud.activity).contains(CloudItem.Backup(paused, GalleryCloudState.Waiting))
+        assertWithMessage(where).that(cloud.paused).isEmpty()
+      }
+    }
+  }
+
+  /** Gli altri stati "fermi" non dicono "tutto salvato": scritture sul NAS ferme, backup congelato, account di prova, NAS in prova. */
+  @Test
+  fun gliAltriStatiFermiNonDiconoTuttoSalvato() {
+    val still = listOf(
+      LibraryBackupStatus.Problem("writes_stopped", 0),
+      LibraryBackupStatus.Problem("frozen", 0),
+      LibraryBackupStatus.Problem("read_only_area", 0),
+      LibraryBackupStatus.TestOnly,
+      LibraryBackupStatus.Queued(items = 3, wait = LibraryBackupWait.NEXT_RUN),
+    )
+    for (backup in still) assertWithMessage("$backup").that(stateOf(network(LibraryNetworkSeverity.Fine), upToDate, backup)).isNotEqualTo(GalleryCloudState.Saved)
+    assertThat(stateOf(network(LibraryNetworkSeverity.Fine), LibraryNasStatus.LocalOnly, allSafe)).isNotEqualTo(GalleryCloudState.Saved)
+    assertThat(stateOf(network(LibraryNetworkSeverity.Fine), LibraryNasStatus.Frozen(FreezeReason.CHANGED, 0L), allSafe)).isEqualTo(GalleryCloudState.Alarm)
   }
 
   /** Ogni problema del backup prende il tono della sua riga del piede: allarme, attenzione, o attesa se riparte da solo. */
@@ -102,6 +150,15 @@ class LibraryCloudTest {
     assertThat(stateOf(network(LibraryNetworkSeverity.Fine), upToDate, running)).isEqualTo(GalleryCloudState.Syncing)
     assertThat(stateOf(network(LibraryNetworkSeverity.Fine), upToDate, queued)).isEqualTo(GalleryCloudState.Waiting)
     assertThat(stateOf(network(LibraryNetworkSeverity.Fine), upToDate, allSafe)).isEqualTo(GalleryCloudState.Saved)
+    // OA-10: la pausa sta sopra i lavori in corso (finche' dura niente si salva) e sotto i problemi.
+    val pause = LibraryBackupStatus.Paused(byUser = true)
+    assertThat(stateOf(network(LibraryNetworkSeverity.Working), LibraryNasStatus.FirstScan(1, null, null), pause)).isEqualTo(GalleryCloudState.Paused)
+    assertThat(stateOf(network(LibraryNetworkSeverity.Attention), upToDate, pause)).isEqualTo(GalleryCloudState.Attention)
+    assertThat(stateOf(network(LibraryNetworkSeverity.Offline), upToDate, pause)).isEqualTo(GalleryCloudState.Offline)
+    assertThat(stateOf(network(LibraryNetworkSeverity.Fine), frozen, pause)).isEqualTo(GalleryCloudState.Alarm)
+    // Con un problema e la pausa insieme il pop-up dice tutti e due, il problema per primo.
+    val both = checkNotNull(libraryCloud(network(LibraryNetworkSeverity.Fine), frozen, pause))
+    assertThat(both.withAction.map { it.state }).containsExactly(GalleryCloudState.Alarm, GalleryCloudState.Paused).inOrder()
   }
 
   /** Con un problema il pop-up dice i problemi (il piu' grave per primo) e non lo spazio; i lavori restano, sotto. */

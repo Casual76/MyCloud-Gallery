@@ -18,6 +18,7 @@ import androidx.compose.material.icons.rounded.CloudDone
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.CloudQueue
 import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PriorityHigh
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
@@ -60,6 +61,12 @@ enum class GalleryCloudState {
 
   /** In attesa per una ragione normale (in coda, in prova, al prossimo giro): la nuvola vuota. */
   Waiting,
+
+  /**
+   * In pausa per scelta dell'utente (il backup fermato con "Ferma", fino a "Riprendi"): la nuvola con il segno della pausa. Non e' un
+   * problema, ma non e' "tutto salvato" (OA-10, review della beta): finche' dura, le foto nuove non si salvano.
+   */
+  Paused,
 
   /** Nessuna rete: la nuvola barrata. */
   Offline,
@@ -122,6 +129,8 @@ fun GalleryChromeCloudButton(
         when (shown) {
           GalleryCloudState.Attention -> ToneMark(ring = m.ring, fill = m.attention, glyph = m.onAttention)
           GalleryCloudState.Alarm -> ToneMark(ring = m.ring, fill = m.alarm, glyph = m.onAlarm)
+          // La pausa non ha un tono: il suo segno e' un disco dell'inchiostro con le due barre nel polo opposto.
+          GalleryCloudState.Paused -> ToneMark(ring = m.ring, fill = m.ring, glyph = m.onRing, icon = Icons.Rounded.Pause)
           else -> Unit
         }
       }
@@ -131,10 +140,10 @@ fun GalleryChromeCloudButton(
 
 /**
  * Il segno del tono: in basso a destra del glifo, un anello dell'inchiostro della chrome (che si legge sopra qualunque foto, come il
- * glifo) e dentro un disco del colore del tono con il punto esclamativo.
+ * glifo) e dentro un disco del colore del tono con il punto esclamativo (o [icon]: le barre della pausa).
  */
 @Composable
-private fun ToneMark(ring: Color, fill: Color, glyph: Color) {
+private fun ToneMark(ring: Color, fill: Color, glyph: Color, icon: ImageVector = Icons.Rounded.PriorityHigh) {
   Box(
     modifier = Modifier
       .offset(x = MarkOffset, y = MarkOffset)
@@ -144,15 +153,15 @@ private fun ToneMark(ring: Color, fill: Color, glyph: Color) {
       .background(fill, FluidCapsuleShape),
     contentAlignment = Alignment.Center,
   ) {
-    Icon(imageVector = Icons.Rounded.PriorityHigh, contentDescription = null, tint = glyph, modifier = Modifier.size(MarkGlyph))
+    Icon(imageVector = icon, contentDescription = null, tint = glyph, modifier = Modifier.size(MarkGlyph))
   }
 }
 
-/** Il glifo di uno stato. Per un problema la nuvola e' vuota: il segno del tono ci si legge sopra. */
+/** Il glifo di uno stato. Per un problema e per la pausa la nuvola e' vuota: il segno ci si legge sopra. */
 fun GalleryCloudState.glyph(): ImageVector = when (this) {
   GalleryCloudState.Saved -> Icons.Rounded.CloudDone
   GalleryCloudState.Syncing -> Icons.Rounded.CloudUpload
-  GalleryCloudState.Waiting, GalleryCloudState.Attention, GalleryCloudState.Alarm -> Icons.Rounded.CloudQueue
+  GalleryCloudState.Waiting, GalleryCloudState.Paused, GalleryCloudState.Attention, GalleryCloudState.Alarm -> Icons.Rounded.CloudQueue
   GalleryCloudState.Offline -> Icons.Rounded.CloudOff
 }
 
@@ -163,14 +172,17 @@ fun GalleryCloudState.glyph(): ImageVector = when (this) {
  * nel polo che si legge meglio sopra ciascuno (almeno 4,5:1: c'e' sempre, fra il nero e il bianco). Una prima versione portava il
  * colore del tono verso l'inchiostro fino a 3:1 sul nero e sul bianco pieni: in scuro l'errore e l'attenzione diventavano tutti e due
  * quasi bianchi, e il tono non si vedeva piu' (screenshot del 09/11). Funzione pura: i contrasti si verificano senza comporre.
+ *
+ * [onRing] e' il polo che si legge sopra l'inchiostro stesso: le barre del segno della pausa, che e' un disco pieno dell'inchiostro.
  */
 @Immutable
-data class GalleryCloudMarks(val ring: Color, val alarm: Color, val onAlarm: Color, val attention: Color, val onAttention: Color) {
+data class GalleryCloudMarks(val ring: Color, val alarm: Color, val onAlarm: Color, val attention: Color, val onAttention: Color, val onRing: Color) {
   companion object {
     fun of(style: GalleryChromeStyle, scheme: ColorScheme): GalleryCloudMarks = of(style.ink, scheme)
 
     fun of(ink: Color, scheme: ColorScheme): GalleryCloudMarks = GalleryCloudMarks(
       ring = ink,
+      onRing = GalleryChromeStyles.onTone(ink, scheme.scrim),
       alarm = scheme.error,
       onAlarm = GalleryChromeStyles.onTone(scheme.error, scheme.scrim),
       attention = scheme.tertiary,

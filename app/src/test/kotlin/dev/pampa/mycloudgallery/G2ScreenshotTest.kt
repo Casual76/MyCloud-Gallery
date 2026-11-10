@@ -146,7 +146,6 @@ internal abstract class G2ScreenshotBase(private val dark: Boolean, private val 
           backdropOut = { backdrop = it },
           onOpenViewer = {},
           onOpenSettings = {},
-          statusFooter = {},
           state = state,
         )
         GalleryTabBarSlotVisibility(visible = true, modifier = Modifier.align(Alignment.BottomCenter)) {

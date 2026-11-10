@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.Text
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsNode
@@ -25,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -54,7 +54,6 @@ import dev.pampa.mycloudgallery.feature.library.grid.showThemed
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
@@ -109,7 +108,6 @@ class LibraryTabTest {
         backdropOut = {},
         onOpenViewer = {},
         onOpenSettings = {},
-        statusFooter = { Text("stato") },
         state = state,
       )
     }
@@ -265,7 +263,6 @@ class LibraryTabTest {
           backdropOut = {},
           onOpenViewer = {},
           onOpenSettings = {},
-          statusFooter = {},
           state = state,
         )
       }
@@ -318,7 +315,6 @@ class LibraryTabTest {
               backdropOut = {},
               onOpenViewer = {},
               onOpenSettings = {},
-              statusFooter = {},
               state = state,
             )
           }
@@ -428,7 +424,6 @@ class LibraryTabTest {
         backdropOut = {},
         onOpenViewer = {},
         onOpenSettings = {},
-        statusFooter = {},
         state = current!!,
       )
     }
@@ -463,7 +458,6 @@ class LibraryTabTest {
           backdropOut = {},
           onOpenViewer = {},
           onOpenSettings = {},
-          statusFooter = {},
           state = state,
         )
       }
@@ -517,8 +511,8 @@ class LibraryTabTest {
   fun laSchedaVuotaDicePercheEVuotaEMostraLoStato() {
     show(emptyLibraryTabState())
     composeRule.onNodeWithText("La Libreria è vuota").assertExists()
-    // B2 della beta: lo stato non sta piu' sotto lo stato vuoto (lo dice la nuvola in alto); il vecchio slot non si mostra.
-    assertThat(composeRule.onAllNodesWithText("stato").fetchSemanticsNodes()).isEmpty()
+    // B2 della beta: lo stato non sta piu' sotto lo stato vuoto (lo dice la nuvola in alto), e senza niente da dire la nuvola non c'e'.
+    assertThat(composeRule.onAllNodesWithContentDescription("Stato della sincronizzazione", substring = true).fetchSemanticsNodes()).isEmpty()
     assertThat(SyntheticLibrary.DEFAULT_COUNT).isGreaterThan(0)
   }
 

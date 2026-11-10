@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -33,7 +32,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import androidx.compose.ui.test.onAllNodesWithText
 
 /**
  * Gli stub di P0 di `feature-library` su Robolectric: la griglia disegna le celle della Libreria sintetica e un tocco apre
@@ -93,14 +91,13 @@ class LibraryStubTest {
         backdropOut = {},
         onOpenViewer = {},
         onOpenSettings = {},
-        statusFooter = { Text("stato") },
         state = emptyLibraryTabState(),
       )
     }
     composeRule.onNodeWithText("La Libreria è vuota").assertExists()
     composeRule.onNodeWithText("Libreria").assertExists()
-    // B2 della beta: lo stato non sta piu' sotto lo stato vuoto (lo dice la nuvola in alto); il vecchio slot non si mostra.
-    assertThat(composeRule.onAllNodesWithText("stato").fetchSemanticsNodes()).isEmpty()
+    // B2 della beta: lo stato non sta piu' sotto lo stato vuoto (lo dice la nuvola in alto), e senza niente da dire la nuvola non c'e'.
+    assertThat(composeRule.onAllNodesWithContentDescription("Stato della sincronizzazione", substring = true).fetchSemanticsNodes()).isEmpty()
   }
 
   @Test
@@ -114,7 +111,6 @@ class LibraryStubTest {
         backdropOut = { backdrop = it },
         onOpenViewer = { requests += it },
         onOpenSettings = {},
-        statusFooter = { Text("stato") },
         state = state,
       )
     }

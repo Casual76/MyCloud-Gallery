@@ -119,7 +119,6 @@ class G2EliminaDallaSelezioneTest {
               backdropOut = {},
               onOpenViewer = {},
               onOpenSettings = {},
-              statusFooter = {},
               state = state,
             )
           }

@@ -29,8 +29,6 @@ import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
  * - [onOpenViewer]: il viewer e' una sovrapposizione ospitata da `:app` sopra la pillola (D12): la griglia non lo
  *   conosce, manda la richiesta con la geometria della miniatura (`ViewerAnchor`);
  * - [onOpenSettings]: dal menu della vista;
- * - [statusFooter]: **non si usa piu'** (B2 della beta): la rete, il NAS e il backup non sono piu' voci in fondo alla griglia ma
- *   la nuvola in alto. Resta solo perche' chi lo passa ancora compili; la rete arriva come dato in [network];
  * - [tabBarScroll]: la connessione con cui la pillola si ripiega scorrendo verso i piu' vecchi (scelta 5 dell'utente);
  * - [onNasStatusClick]: "Apri la Diagnostica" sotto un problema del NAS nel pop-up della nuvola (i dettagli e "Ho controllato,
  *   continua");
@@ -48,7 +46,6 @@ fun LibraryTab(
   backdropOut: (GlassBackdropState) -> Unit,
   onOpenViewer: (ViewerRequest) -> Unit,
   onOpenSettings: () -> Unit,
-  @Suppress("UNUSED_PARAMETER") statusFooter: @Composable () -> Unit = {},
   modifier: Modifier = Modifier,
   state: LibraryTabState = rememberEmptyLibraryTabState(),
   tabBarScroll: NestedScrollConnection? = null,

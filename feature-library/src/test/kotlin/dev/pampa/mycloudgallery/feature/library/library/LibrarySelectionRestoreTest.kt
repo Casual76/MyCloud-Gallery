@@ -65,7 +65,6 @@ class LibrarySelectionRestoreTest {
               backdropOut = {},
               onOpenViewer = {},
               onOpenSettings = {},
-              statusFooter = {},
               state = shown,
             )
           }

@@ -108,9 +108,23 @@ class GalleryChromeCloudTest {
   @Test
   fun ogniStatoHaIlSuoGlifoEIProblemiSonoTre() {
     val glyphs = GalleryCloudState.entries.map { it.glyph() }
-    // In attesa, da guardare e serve l'utente condividono la nuvola vuota: li distingue il segno del tono.
-    assertThat(glyphs.toSet().size).isEqualTo(GalleryCloudState.entries.size - 2)
+    // In attesa, in pausa, da guardare e serve l'utente condividono la nuvola vuota: li distingue il segno (nessuno, la pausa, il tono).
+    assertThat(glyphs.toSet().size).isEqualTo(GalleryCloudState.entries.size - 3)
+    // OA-10: la pausa non e' un problema (l'ha scelta l'utente), ma ha il suo stato: non e' "tutto salvato" ne' una semplice attesa.
     assertThat(GalleryCloudState.entries.filter { it.isProblem })
       .containsExactly(GalleryCloudState.Offline, GalleryCloudState.Attention, GalleryCloudState.Alarm)
+    assertThat(GalleryCloudState.Paused.glyph()).isNotEqualTo(GalleryCloudState.Saved.glyph())
+  }
+
+  /** OA-10: il segno della pausa e' un disco dell'inchiostro (che regge sopra la pellicola come l'anello) con le barre nel polo opposto. */
+  @Test
+  fun leBarreDellaPausaSiLeggonoSulDiscoDellInchiostro() {
+    for (case in cases) {
+      for ((range, style) in stylesFor(case.scheme)) {
+        val marks = GalleryCloudMarks.of(style, case.scheme)
+        val bars = GalleryLegibility.contrast(marks.onRing, marks.ring)
+        assertWithMessage("${case.name}, ${range.samples}: barre della pausa ($bars)").that(bars).isAtLeast(GalleryLegibility.TextContrast)
+      }
+    }
   }
 }

@@ -3,42 +3,17 @@ package dev.pampa.mycloudgallery
 import android.app.Application
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeDown
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
-import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
-import dev.antigravity.fluidengine.ui.fluid.rememberFluidFloatingTabBarScrollConnection
-import dev.pampa.mycloudgallery.albums.LibraryAlbumRefs
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBar
-import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarSlotVisibility
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
-import dev.pampa.mycloudgallery.feature.albums.contract.AccountNamesAsIs
-import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
-import dev.pampa.mycloudgallery.feature.albums.list.AlbumListScreen
-import dev.pampa.mycloudgallery.feature.albums.list.AlbumListUi
-import dev.pampa.mycloudgallery.feature.albums.list.NoAlbumListHandlers
-import dev.pampa.mycloudgallery.feature.albums.testing.AlbumSamples
-import dev.pampa.mycloudgallery.feature.library.library.LibraryTab
-import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
-import dev.pampa.mycloudgallery.feature.library.testing.syntheticLibraryTabState
-import dev.pampa.mycloudgallery.main.AlbumsTabFrame
-import dev.pampa.mycloudgallery.main.MainScaffold
-import dev.pampa.mycloudgallery.status.GlobalStatus
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -53,8 +28,13 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Gli screenshot del pacchetto G2 della fase grafica (per l'utente, prima della beta): la pillola **Libreria · Album · Raccolte** su ogni scheda,
  * il cerchio di Cerca chiuso e aperto, la pillola ripiegata dallo scorrimento della Libreria (la scheda scelta e il cerchio) e la Libreria in
- * selezione con la barra delle azioni al posto della pillola. Chiaro e scuro, telefono (412 dp) e tablet (1280 dp). Il foglio "Prima mettilo al
- * sicuro" dalla selezione ha i suoi in feature-backup (`G2SelectionSheet*Shots`), le Raccolte alleggerite in feature-library.
+ * selezione con la barra delle azioni al posto della pillola. Chiaro e scuro, telefono dell'utente (360 dp) e tablet (1280 dp).
+ *
+ * K3a (GF-4, ORC-1): tutto passa dallo scaffold delle prove ([GalleryScaffold]): le schede sono quelle vere su stati dati, come in produzione. La
+ * scheda Album e' la griglia di copertine di G2b (non piu' l'elenco di prima), Cerca e' la schermata vera a riposo (non un segnaposto), le Raccolte
+ * sono quelle alleggerite con la capsula della rete in testa e il fondo della pagina. Le Raccolte alleggerite di G2 (`raccolte-alleggerite`) sono
+ * `pillola-raccolte`: erano la stessa schermata. Il foglio "Prima mettilo al sicuro" ha i suoi in feature-backup (`G2SelectionSheet*Shots`), il
+ * pannello delle Raccolte in selezione sul tablet in feature-library (`G2Raccolte*`).
  *
  * `gradlew :app:recordRoborazziDebug --tests "*G2*Screenshot*"` scrive i PNG in `docs/screenshots/beta-grafica/G2/`.
  */
@@ -79,6 +59,7 @@ internal abstract class G2ScreenshotBase(private val dark: Boolean, private val 
 
   private val look: String get() = if (dark) "scuro" else "chiaro"
 
+  /** [afterShow] porta la schermata nello stato da fotografare; poi si lascia assestare ogni animazione (la capsula, la pillola) e si scatta. */
   private fun shoot(name: String, afterShow: () -> Unit = {}, content: @Composable () -> Unit) {
     composeRule.setContent {
       MyCloudGalleryTheme(settings = EngineSettings(themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT)) { content() }
@@ -86,85 +67,53 @@ internal abstract class G2ScreenshotBase(private val dark: Boolean, private val 
     composeRule.waitForIdle()
     afterShow()
     composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(SETTLE_MS)
+    composeRule.waitForIdle()
     composeRule.onRoot().captureRoboImage("$DIR/$name-$look-$device.png")
-  }
-
-  @Composable
-  private fun Scaffold(tab: GalleryTab, state: LibraryTabState, searchOpen: Boolean = false) {
-    MainScaffold(
-      status = GlobalStatus.HOME_CONNECTED,
-      selectedTab = tab,
-      onSelectTab = {},
-      onStatusClick = {},
-      onOpenSettings = {},
-      libraryState = state,
-      // La scheda Album con l'elenco di sempre su uno stato dato (in produzione `AlbumsTabHost`, con il ViewModel).
-      albums = { slot ->
-        val thumbnails = remember(state) { AlbumThumbnails(state.grid.loader, state.grid.placeholders, LibraryAlbumRefs { state.grid.view.snapshot }) }
-        AlbumsTabFrame(slot) {
-          AlbumListScreen(AlbumListUi(AlbumSamples.lists[1]), thumbnails, AccountNamesAsIs, NoAlbumListHandlers)
-        }
-      },
-      searchOpen = searchOpen,
-    )
   }
 
   @Test
   fun pillolaLibreria() {
-    val state = syntheticLibraryTabState()
-    shoot("pillola-libreria") { Scaffold(GalleryTab.Library, state) }
+    val scenes = ScaffoldScenes()
+    shoot("pillola-libreria") { GalleryScaffold(scenes, GalleryTab.Library) }
   }
 
+  /** La scheda Album vera (G2b): Preferiti, Fotocamera e Video in testa, poi gli album; il vetro della pillola sopra le copertine. */
   @Test
   fun pillolaAlbum() {
-    val state = syntheticLibraryTabState()
-    shoot("pillola-album") { Scaffold(GalleryTab.Albums, state) }
+    val scenes = ScaffoldScenes()
+    shoot("pillola-album") { GalleryScaffold(scenes, GalleryTab.Albums) }
   }
 
+  /** Le Raccolte alleggerite di G2 (senza Album, Album smart e Telefono), con la capsula della rete in testa come in produzione. */
   @Test
   fun pillolaRaccolte() {
-    val state = syntheticLibraryTabState()
-    shoot("pillola-raccolte") { Scaffold(GalleryTab.Collections, state) }
+    val scenes = ScaffoldScenes()
+    shoot("pillola-raccolte") { GalleryScaffold(scenes, GalleryTab.Collections) }
   }
 
-  /** Il cerchio aperto: la ricerca sopra la scheda di prima (qui il segnaposto: la schermata di Cerca e' quella di sempre), il cerchio d'accento. */
+  /** Il cerchio aperto: Cerca vera a riposo (il campo, le ricerche recenti, i luoghi, i tipi) sopra la scheda di prima, il cerchio d'accento. */
   @Test
   fun cercaAperta() {
-    val state = syntheticLibraryTabState()
-    shoot("cerca-aperta") { Scaffold(GalleryTab.Library, state, searchOpen = true) }
+    val scenes = ScaffoldScenes()
+    shoot("cerca-aperta") { GalleryScaffold(scenes, GalleryTab.Library, searchOpen = true) }
   }
 
-  /** La pillola ripiegata dallo scorrimento della Libreria: la scheda scelta e, accanto, il cerchio di Cerca. */
+  /** La pillola ripiegata dallo scorrimento della Libreria verso i piu' vecchi (il dito che scende): la scheda scelta e, accanto, il cerchio. */
   @Test
   fun pillolaRipiegata() {
-    val state = syntheticLibraryTabState()
-    shoot("pillola-ripiegata") {
-      var backdrop by remember { mutableStateOf<GlassBackdropState?>(null) }
-      Box(Modifier.fillMaxSize()) {
-        LibraryTab(
-          contentPadding = PaddingValues(bottom = 76.dp),
-          backdropOut = { backdrop = it },
-          onOpenViewer = {},
-          onOpenSettings = {},
-          state = state,
-        )
-        GalleryTabBarSlotVisibility(visible = true, modifier = Modifier.align(Alignment.BottomCenter)) {
-          GalleryTabBar(
-            selected = GalleryTab.Library,
-            onSelect = {},
-            backdrop = backdrop,
-            scrollConnection = rememberFluidFloatingTabBarScrollConnection(initialIsInline = true),
-            onOpenSearch = {},
-          )
-        }
-      }
-    }
+    val scenes = ScaffoldScenes()
+    shoot(
+      "pillola-ripiegata",
+      afterShow = { composeRule.onRoot().performTouchInput { swipeDown(startY = height * 0.3f, endY = height * 0.7f) } },
+    ) { GalleryScaffold(scenes, GalleryTab.Library) }
   }
 
-  /** B3: la Libreria in selezione, con la barra delle azioni al posto della pillola (e del cerchio). */
+  /** B3: la Libreria in selezione, con la barra delle azioni al posto della pillola (e del cerchio); la capsula "3 selezionati" a riposo. */
   @Test
   fun libreriaInSelezione() {
-    val state = syntheticLibraryTabState()
+    val scenes = ScaffoldScenes()
+    val state = scenes.library
     shoot(
       "libreria-selezione",
       afterShow = {
@@ -174,11 +123,14 @@ internal abstract class G2ScreenshotBase(private val dark: Boolean, private val 
           state.grid.selection.selectAll((0 until 3).map { view.snapshot.idAt(view.snapshotIndex(it)) })
         }
       },
-    ) { Scaffold(GalleryTab.Library, state) }
+    ) { GalleryScaffold(scenes, GalleryTab.Library) }
   }
 
   companion object {
     const val DIR = "../docs/screenshots/beta-grafica/G2"
+
+    /** Piu' di ogni animazione della chrome (la capsula che cambia misura, la pillola che esce, la barra che entra). */
+    const val SETTLE_MS = 2_000L
 
     fun looks(): List<Array<Any>> = listOf(arrayOf<Any>(false), arrayOf<Any>(true))
   }
@@ -186,7 +138,7 @@ internal abstract class G2ScreenshotBase(private val dark: Boolean, private val 
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_PHONE)
 internal class G2PhoneScreenshotTest(dark: Boolean) : G2ScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic
@@ -197,7 +149,7 @@ internal class G2PhoneScreenshotTest(dark: Boolean) : G2ScreenshotBase(dark, "te
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w1280dp-h800dp-land-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_TABLET)
 internal class G2TabletScreenshotTest(dark: Boolean) : G2ScreenshotBase(dark, "tablet") {
   companion object {
     @JvmStatic

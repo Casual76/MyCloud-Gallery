@@ -25,7 +25,7 @@ import dev.pampa.mycloudgallery.core.backup.testing.ScriptedCorrections
 import dev.pampa.mycloudgallery.core.model.GeoPoint
 import dev.pampa.mycloudgallery.feature.backup.BackupComposeBase
 import dev.pampa.mycloudgallery.feature.backup.LARGE_TEXT
-import dev.pampa.mycloudgallery.feature.backup.PHONE_QUALIFIERS
+import dev.pampa.mycloudgallery.feature.backup.SHOT_PHONE_QUALIFIERS
 import dev.pampa.mycloudgallery.feature.backup.TABLET_QUALIFIERS
 import dev.pampa.mycloudgallery.feature.backup.tasks.PendingTasksActions
 import dev.pampa.mycloudgallery.feature.backup.tasks.PendingTasksScreen
@@ -54,7 +54,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Gli screenshot di P12 per le schermate della 5B in feature-backup: "Libera spazio" (pagina e fogli), "Elimina solo dal telefono", le versioni, "Correggi"
- * e "Da decidere". Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo grande (1,3x) per le schermate principali. Sui dati dei test.
+ * e "Da decidere". Chiaro e scuro, telefono dell'utente (360 dp) e tablet (1280 dp), piu' il testo grande (1,3x) per le schermate principali. Sui dati dei test.
  *
  * `gradlew :feature-backup:recordRoborazziDebug --tests "*FiveB*Shots*"` scrive i PNG in `docs/screenshots/5-P12/`. Nei normali `testDebugUnitTest` si
  * verifica solo che le schermate compongano. Le pagine si fotografano in una finestra alta (scorrono); i fogli in una di altezza normale.
@@ -168,7 +168,7 @@ abstract class FiveBShotBase(private val dark: Boolean, private val device: Stri
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h1500dp-xhdpi")
+@Config(application = Application::class, qualifiers = "w360dp-h1500dp-xhdpi")
 class FiveBPhonePageShots(dark: Boolean) : FiveBShotBase(dark, "telefono") {
 
   @Test
@@ -257,7 +257,7 @@ class FiveBTabletPageShots(dark: Boolean) : FiveBShotBase(dark, "tablet") {
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class FiveBPhoneSheetShots(dark: Boolean) : FiveBShotBase(dark, "telefono") {
 
   private val plan = FreeSpaceSamples.plan(items = 1_240, itemSize = 15_000_000L, excluded = FreeSpaceSamples.excludedSample)

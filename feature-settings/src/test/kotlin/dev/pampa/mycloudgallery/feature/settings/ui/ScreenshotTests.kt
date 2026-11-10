@@ -28,7 +28,7 @@ internal enum class Look(val slug: String, val dark: Boolean, val fontScale: Flo
 
 /**
  * Gli screenshot delle Impostazioni (P7): ogni schermata e ogni stato di [ShotCatalog], in chiaro e scuro, su
- * telefono (412 dp) e tablet (1280 dp), piu' il testo grande sul telefono per le schermate principali.
+ * telefono dell'utente (360 dp) e tablet (1280 dp), piu' il testo grande sul telefono per le schermate principali.
  *
  * `gradlew :feature-settings:recordRoborazziDebug` scrive i PNG in `docs/screenshots/2-P7/` (il percorso e'
  * relativo alla cartella del modulo, che e' la directory di lavoro dei test). Nei normali `testDebugUnitTest`
@@ -89,7 +89,7 @@ internal abstract class ShotsBase(
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "it-w412dp-h1800dp-xhdpi")
+@Config(qualifiers = "it-w360dp-h1800dp-xhdpi")
 internal class PhonePageShots(shot: Shot, look: Look) : ShotsBase(shot, look, "telefono") {
   companion object {
     @JvmStatic
@@ -100,7 +100,7 @@ internal class PhonePageShots(shot: Shot, look: Look) : ShotsBase(shot, look, "t
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "it-w412dp-h915dp-xhdpi")
+@Config(qualifiers = "it-w360dp-h780dp-xhdpi")
 internal class PhoneSheetShots(shot: Shot, look: Look) : ShotsBase(shot, look, "telefono") {
   companion object {
     @JvmStatic

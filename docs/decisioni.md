@@ -17100,3 +17100,83 @@ sezione con il commento "da rivedere a ogni aggiornamento dell'engine". Le ho te
 - `FluidGlassMenuPanel` (pannello del menu a goccia) disegna le voci con un colore fisso e `FluidMorphMenu` stende una pellicola al 50% senza velo ne'
   pellicola regolabile: sopra una foto chiara in tema scuro le voci scendono a 2,4:1. Serve un parametro per la pellicola (o un velo) del pannello.
 - `FluidMorphMenuButton` ha solo l'ancora a capsula (circa 60 x 48 dp): manca un'ancora tonda come `FluidGlassIconButton`.
+
+## K3a: correzioni delle review sullo scaffold, sulle schede e sugli screenshot (10/11)
+Branch `fix/k3a-scaffold` (base `integra/beta-grafica`, `90d5827a`). Rilievi GS-2, GF-7, ORC-1, GF-4, GF-3; GF-10 lasciato com'e' (la capsula della
+rete in testa alle Raccolte, ora visibile negli screenshot). `engine/` non toccato, nessuna dipendenza nuova.
+
+### Scelte
+- **GS-2, il tocco sulla scheda sotto la lente.** La lente della pillola (`FluidFloatingTabBar`, il "puck") sta sopra la scheda scelta e prende ogni
+  tocco che le cade sopra; cambia scheda solo alla fine di un trascinamento, e un tocco fermo non fa niente. La barra dell'engine non permette di
+  toglierla: una `selectedTabKey` che non corrisponde a nessuna scheda la lascia dov'era (provato nel codice: `LaunchedEffect(selectedTabKey)` esce con
+  l'indice -1, `currentIndex` parte da 0). Quindi il tocco lo riconosce `GalleryTabBar` stessa, dal nodo che contiene la barra e prima dei figli
+  (`PointerEventPass.Initial`), **senza consumarlo**: la lente continua a premersi e a seguire il dito come sempre. La cella della scheda si misura al
+  tocco dalle icone delle schede (le disegniamo noi): niente stato, niente lavoro per fotogramma. Un dito che va oltre la soglia del tocco e' un
+  trascinamento e lo serve la lente. Se la lente rilascia la stessa scheda alla fine dello stesso tocco (succede quando il dito si muove di un
+  pixel), quell'eco si ignora: la ricerca si chiude una volta sola. Vale anche **senza Cerca**: un tocco fermo sulla scheda scelta ora la riseleziona
+  ("torna in cima", per la Libreria in fondo); prima ci riusciva solo un tocco che si muoveva di un pixel. La doppia evidenza (scheda e cerchio accesi
+  insieme con Cerca aperta) resta: per spegnerla servirebbe all'engine una scheda "nessuna" (`selectedTabKey = null` che nasconda la lente) o un
+  parametro per non disegnarla. Il cerchio di Cerca ora c'e' **sempre** (`onOpenSearch` non e' piu' nullable): le prove che disegnavano la pillola da
+  sole la mostravano senza (G1).
+- **GF-7, le schede ricordano.** `MainScaffold` tiene le pagine in un `rememberSaveableStateHolder` con una chiave per pagina (`library`, `albums`,
+  `collections`, `search`): la scheda coperta da Cerca o da un'altra scheda ritrova lo scorrimento (`rememberLazyListState` della scheda Album, l'elenco
+  delle Raccolte) e la scelta del pannello del tablet (`savedCode` di `CollectionsScreen`, gia' `rememberSaveable`). La Libreria ha la griglia fuori
+  (nel ViewModel) e la sua posizione ancorata a un media (`PositionKeeper`): tornando, la rimette dove era (`requestScrollToItem` prima del primo
+  fotogramma, sulla stessa posizione); la selezione salvata e' sempre vuota quando si lascia la Libreria (in selezione la pillola non c'e', e "Trova
+  simili" chiude la selezione prima di aprire Cerca). Il viewer affiancato si chiude come prima (`MainScaffoldDockTest` verde).
+- **ORC-1.** Tolto `AlbumsTabFrame` (codice morto). Gli screenshot della pillola sulla scheda Album mostrano la scheda vera (`AlbumsTabScreen` su uno
+  stato dato: Preferiti, Fotocamera, Video, poi album miei, smart e condivisi, con le copertine).
+- **GF-4, un solo scaffold per le prove.** `app/src/test/.../ScaffoldScenes.kt`: `ScaffoldScenes` (gli stati dati) e `GalleryScaffold` (la schermata
+  principale come in `AppNavHost`): `MainScaffold` con la Libreria vera, la scheda Album vera, le Raccolte vere (`CollectionsTab` con il controllore vero
+  sui fornitori di prova, che toglie le sezioni passate alla scheda Album) e Cerca vera a riposo (`SearchScreen` nella stessa cornice di produzione,
+  `SearchTabFrame`, estratta da `SearchTab`), sopra il fondo della pagina che in produzione dipinge `FluidNavHost`. Lo usano gli screenshot di G2, del
+  2-P0, del 3-P0, del 2-P9 e la pagina delle Raccolte del 9-P13; i segnaposto «arriveranno qui» non compaiono piu' in nessuno screenshot (restano nel
+  codice per le prove senza le schede).
+  - Il fondo scuro: in produzione c'e' (`FluidNavHost` dipinge `colorScheme.background` sotto la schermata principale, verificato in `AppNavHost`); era
+    la prova a non dipingerlo. Lo stesso per il foglio "Prima mettilo al sicuro" (feature-backup) e il pannello delle Raccolte (feature-library).
+  - Le Raccolte alleggerite (`raccolte-alleggerite-*`) erano la stessa schermata di `pillola-raccolte-*`: ora c'e' solo `pillola-raccolte`, fatta con lo
+    scaffold vero (capsula della rete in testa). `raccolte-pannello-selezione` resta solo sul tablet (sul telefono il pannello non c'e').
+  - `libreria-selezione` si fotografa a riposo (la chrome lasciata assestare).
+  - `g3-viewer/nuovo-dispositivo`: anche il tablet e lo stato con "Approva" acceso (codice intero, account confermato).
+- **GF-3, il telefono dell'utente.** 360 x 780 dp (`SHOT_PHONE` in `:app`, `SHOT_PHONE_QUALIFIERS` in feature-backup e nelle Raccolte) in tutti gli
+  screenshot di `:app`, feature-backup, feature-settings, feature-diagnostics e delle Raccolte; le pagine fotografate intere (alte 1500-2400 dp) restano
+  alte ma larghe 360. I test di layout non cambiano misura (restano a 412 dp: provano altro, e a 360 dp vanno guardati a parte).
+
+### Prove
+- `G2PillolaTest` (`:app`, ora a 360 x 780 dp): il **tocco vero** (`performClick`) sulla scheda sotto la lente chiude Cerca e torna li'; un tocco
+  che si muove di 2 px la chiude **una volta sola** (l'eco della lente si ignora); l'azione di TalkBack fa lo stesso; senza Cerca il tocco fermo
+  sulla scheda scelta la riseleziona (anche con il dito che si muove). `SchedeCheRicordanoTest` (nuovo): la scheda Album vera, fatta scorrere fino
+  all'ultimo album, e' ancora li' dopo aver aperto e chiuso Cerca, e dopo Libreria -> Raccolte -> Album.
+- Rosse prima: con `GalleryTabBar.kt` e `MainScaffold.kt` della base cadono 4 prove su 11 (`searchOpen` resta vero, la riselezione non arriva,
+  gli Album tornano in cima: «'Concerti 2022' is not displayed»); con le correzioni passano tutte. `MainScaffoldDockTest` verde.
+- Screenshot riregistrati e guardati: vedi il resoconto del pacchetto (G2, 2-P0, 9-P10, 9-P13, 5-P5, 5-P12, 5-IN7, 2-P8, 7-P11, 10-P5, 10-P3,
+  6-P14, 7-P9, 8-P7, RG-D, rg-b, G2b, g3-viewer; 2-P7, 2-P9, 3-* e 4-* sono solo in locale, `.gitignore`).
+
+### Rischi per le prestazioni
+- GS-2: un `pointerInput` in piu' sul nodo esterno della pillola, che legge solo i tocchi (passaggio `Initial`, nessun consumo); le posizioni
+  delle icone si salvano come riferimenti in `onPlaced` (niente stato) e si leggono solo al tocco. Nessuna ricomposizione nuova, niente per
+  fotogramma, niente vetro nuovo.
+- GF-7: il `SaveableStateHolder` salva i `rememberSaveable` della pagina che esce (pochi valori: lo scorrimento, il pannello, la posizione della
+  Libreria) e li rimette quando torna. La Libreria, tornando, chiede `requestScrollToItem` sulla posizione in cui era gia' (prima del primo
+  fotogramma): da guardare con `PagesBenchmark` (apertura di Raccolte) e nel passaggio Libreria <-> Album, ma non e' nello scorrimento.
+
+### Da provare sul telefono (S25, poi Tab S9)
+1. Con Cerca aperta (cerchio d'accento), un tocco **fermo** sulla scheda di partenza (sotto la lente): Cerca si chiude e si torna li', con il colpo
+   aptico. Lo stesso con un tocco un po' mosso: una chiusura sola. Un trascinamento della lente verso un'altra scheda porta li' e chiude Cerca.
+2. Senza Cerca, toccare la scheda scelta: "Libreria" riporta in fondo (sui piu' recenti) anche con un tocco fermo.
+3. Album: scorri in basso, apri Cerca, chiudila: sei dove eri. Passa a Libreria e torna: lo stesso. Raccolte sul tablet: scegli una raccolta nel
+   pannello, apri Cerca, chiudila: il pannello e' quello scelto.
+4. Libreria: scorri lontano dai recenti, apri Cerca o un'altra scheda, torna: la griglia e' dove era, senza salti.
+
+### Cosa resta
+- **La doppia evidenza** con Cerca aperta (la lente sulla scheda di partenza e il cerchio d'accento): per spegnere la lente serve all'engine una
+  scheda "nessuna" (`selectedTabKey` nullo che nasconda la lente) o un parametro per non disegnarla. Anche `Role.Button`/`Role.Tab` sui nodi
+  della barra (gia' annotato in G2).
+- **Difetti visti negli screenshot a 360 dp, fuori da questo pacchetto** (codice di produzione di altri moduli):
+  - scheda Album: **2 colonne** sul telefono dell'utente (G2b ne prevede 3: a 360 dp la copertina minima di 104 dp non ci sta);
+  - Ricevuti in coda (`feature-backup/.../received/ReceivedScreen.kt`): il tasto **"Riprova" va a capo** ("Riprov/a") accanto a "Scarta";
+  - Impostazioni, voce Backup con l'etichetta di stato e il testo grande (1,3x): **"Backu/p"** e il sottotitolo stretto in una colonna;
+  - la capsula in alto delle griglie (Fotocamera, Messaggistica) e dei Ricevuti tronca data e luogo ("Mercoledi' 8 ottobre 20...").
+- Gli screenshot `G1/*` (Libreria in alto) sono di `feature-library/.../library/LibraryCloudScreenshotTest`, di un altro pacchetto: con questo
+  pacchetto la pillola ha sempre il cerchio di Cerca, quindi basta riregistrarli (e portarli a 360 dp, come previsto).
+- L'indice `docs/screenshots/beta-grafica/index.html` e' aggiornato a mano per i file tolti e aggiunti; va rigenerato con il resto all'integrazione.

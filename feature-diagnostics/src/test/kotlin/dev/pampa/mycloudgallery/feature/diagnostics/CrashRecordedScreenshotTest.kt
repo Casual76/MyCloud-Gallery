@@ -28,7 +28,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Gli screenshot della voce nuova della Diagnostica (RG-B, C472, OA-2 / OB-7): gli errori registrati con il **dove** (quando, e il primo punto del codice nostro) nella sezione
- * «Avvisi di Android» e come finiscono nell'anteprima dell'esportazione, con la catena delle classi e le cornici e senza messaggi. Chiaro e scuro, telefono (412 dp) e tablet
+ * «Avvisi di Android» e come finiscono nell'anteprima dell'esportazione, con la catena delle classi e le cornici e senza messaggi. Chiaro e scuro, telefono dell'utente (360 dp) e tablet
  * orizzontale (1280 dp).
  *
  * `gradlew :feature-diagnostics:recordRoborazziDebug --tests "*CrashRecordedScreenshot*"` scrive i PNG in `docs/screenshots/beta-grafica/rg-b/`. Nei normali
@@ -90,7 +90,7 @@ internal abstract class CrashRecordedScreenshotBase(private val dark: Boolean, p
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w411dp-h891dp-xhdpi")
+@Config(application = Application::class, qualifiers = "w360dp-h780dp-xhdpi")
 internal class CrashRecordedPhoneScreenshotTest(dark: Boolean) : CrashRecordedScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

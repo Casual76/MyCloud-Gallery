@@ -185,7 +185,7 @@ abstract class CollectionEntriesPreviewBase(private val dark: Boolean, private v
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class CollectionEntriesPhonePreviewTest(dark: Boolean) : CollectionEntriesPreviewBase(dark, "telefono") {
   companion object {
     @JvmStatic

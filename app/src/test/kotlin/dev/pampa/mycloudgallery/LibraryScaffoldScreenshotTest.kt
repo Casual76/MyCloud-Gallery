@@ -23,8 +23,6 @@ import dev.pampa.mycloudgallery.core.library.contract.GridStyle
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
 import dev.pampa.mycloudgallery.feature.library.library.emptyLibraryTabState
 import dev.pampa.mycloudgallery.feature.library.testing.syntheticLibraryTabState
-import dev.pampa.mycloudgallery.main.MainScaffold
-import dev.pampa.mycloudgallery.status.GlobalStatus
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -39,8 +37,8 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Gli screenshot dello scaffold della Fase 3 (P0): la Libreria **a tutto schermo** sui fake (la griglia sintetica da
  * 2.000 elementi), la Libreria vuota (la release prima del grafo vero), i livelli Anni e Mesi, lo stile giustificato,
- * il viewer finto sopra la pillola e le altre schede con la pillola che resta. Chiaro e scuro, telefono (412 dp) e
- * tablet (1280 dp), piu' il testo grande sul telefono.
+ * il viewer finto sopra la pillola e le altre schede con la pillola che resta (K3a: le Raccolte vere, non un segnaposto). Chiaro e scuro,
+ * telefono dell'utente (360 dp) e tablet (1280 dp), piu' il testo grande sul telefono.
  *
  * `gradlew :app:recordRoborazziDebug --tests "*LibraryScaffold*"` scrive i PNG in `docs/screenshots/3-P0/`. Nei normali
  * `testDebugUnitTest` si verifica solo che le schermate compongano (e che il viewer si apra e si chiuda).
@@ -82,17 +80,10 @@ internal abstract class LibraryScreenshotBase(private val dark: Boolean, private
     composeRule.waitForIdle()
   }
 
+  /** Lo scaffold delle prove (K3a, [GalleryScaffold]): le schede vere, la Libreria sullo [state] dato. */
   private fun shoot(name: String, fontScale: Float? = null, tab: GalleryTab = GalleryTab.Library, state: LibraryTabState, afterShow: () -> Unit = {}) {
-    show(fontScale) {
-      MainScaffold(
-        status = GlobalStatus.HOME_CONNECTED,
-        selectedTab = tab,
-        onSelectTab = {},
-        onStatusClick = {},
-        onOpenSettings = {},
-        libraryState = state,
-      )
-    }
+    val scenes = ScaffoldScenes(library = state)
+    show(fontScale) { GalleryScaffold(scenes, tab) }
     afterShow()
     val suffix = if (fontScale != null) "-testo-grande" else ""
     composeRule.onRoot().captureRoboImage("$DIR/$name-$look-$device$suffix.png")
@@ -137,7 +128,7 @@ internal abstract class LibraryScreenshotBase(private val dark: Boolean, private
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_PHONE)
 internal class LibraryScaffoldPhoneScreenshotTest(dark: Boolean) : LibraryScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic
@@ -148,7 +139,7 @@ internal class LibraryScaffoldPhoneScreenshotTest(dark: Boolean) : LibraryScreen
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w1280dp-h800dp-land-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_TABLET)
 internal class LibraryScaffoldTabletScreenshotTest(dark: Boolean) : LibraryScreenshotBase(dark, "tablet") {
   companion object {
     @JvmStatic

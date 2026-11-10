@@ -143,9 +143,7 @@ fun SearchTab(
   focusField: Boolean = false,
   onFieldFocused: () -> Unit = {},
 ) {
-  val backdrop = rememberGlassBackdrop()
-  SideEffect { slot.backdropOut(backdrop) }
-  Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop).padding(slot.contentPadding)) {
+  SearchTabFrame(slot) {
     SearchRoute(
       actions = actions,
       thumbnails = host.thumbnails,
@@ -154,6 +152,19 @@ fun SearchTab(
       focusField = focusField,
       onFieldFocused = onFieldFocused,
     )
+  }
+}
+
+/**
+ * La cornice di Cerca nello scaffold: il fondale che la pillola rifrange e lo spazio della pillola in fondo. A parte perche' gli screenshot e
+ * le prove dello scaffold (K3a) mostrano la schermata di Cerca su uno stato dato dentro la stessa cornice.
+ */
+@Composable
+fun SearchTabFrame(slot: CollectionsSlot, content: @Composable () -> Unit) {
+  val backdrop = rememberGlassBackdrop()
+  SideEffect { slot.backdropOut(backdrop) }
+  Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop).padding(slot.contentPadding)) {
+    content()
   }
 }
 

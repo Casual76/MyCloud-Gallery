@@ -3,8 +3,11 @@ package dev.pampa.mycloudgallery.feature.library.collections
 import android.app.Application
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SemanticsNodeInteraction
@@ -16,7 +19,11 @@ import androidx.compose.ui.unit.Density
 import androidx.test.core.app.ApplicationProvider
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
+import dev.pampa.mycloudgallery.feature.library.collections.testing.CollectionsSectionSamples
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
@@ -157,9 +164,12 @@ abstract class ComposeScreenTest {
     (composeRule.activity.window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE) != 0
 }
 
-/** Il telefono (412 dp) e il tablet (1280 dp, orizzontale) degli screenshot e dei test di layout. */
+/** Il telefono (412 dp) e il tablet (1280 dp, orizzontale) dei test di layout (e degli screenshot del tablet). */
 const val PHONE_QUALIFIERS = "w412dp-h915dp-xhdpi"
 const val TABLET_QUALIFIERS = "w1280dp-h800dp-land-xhdpi"
+
+/** Il telefono degli screenshot per l'utente (K3a, GF-3): il suo Galaxy S25, 360 x 780 dp. Non 412 dp, dove entrano piu' cose che sul suo schermo. */
+const val SHOT_PHONE_QUALIFIERS = "w360dp-h780dp-xhdpi"
 
 /**
  * Lo stato della scheda per i test (D33): le sezioni che la scheda fa da sola con i [counts] dati, piu' quelle dei [providers] e i gruppi
@@ -190,3 +200,32 @@ internal fun layoutOf(
   editing: Boolean = false,
   saveFailed: Boolean = false,
 ): CollectionsLayoutState = layoutOf(world.source.countsNow(), canTrash, providers, extra, saved, hidden, editing, saveFailed)
+
+/**
+ * Le Raccolte come sono in produzione dalla G2: le sezioni di tutti i fornitori di prova, senza quelle passate alla scheda Album (Album, Album smart,
+ * Telefono: [CollectionSections.inAlbumsTab]), come le toglie il controllore vero.
+ */
+internal fun productionLayoutOf(world: dev.pampa.mycloudgallery.feature.library.collections.testing.FakeCollectionsWorld): CollectionsLayoutState {
+  val providers = CollectionsSectionSamples.all().mapNotNull { CollectionsLayout.sectionOf(it.code, it.group.value) }
+  val all = layoutOf(world, providers = providers)
+  return all.copy(sections = all.sections.filter { it.code !in CollectionSections.inAlbumsTab })
+}
+
+/**
+ * La prima riga delle Raccolte in produzione (K3a, GF-10): la capsula della rete, che disegna `:app` (`NetworkStatusEntry`) e che qui si rifa' con la
+ * stessa voce del design system, le stesse parole e lo stesso glifo dello stato "In casa · NAS collegato".
+ */
+@Composable
+internal fun ProductionNetworkHeader() {
+  GalleryFooterEntry(
+    note = GalleryFooterNote(
+      tone = GalleryFooterTone.Calm,
+      label = "In casa",
+      glyph = Icons.Rounded.CheckCircle,
+      detail = "NAS collegato",
+      description = "In casa · NAS collegato",
+    ),
+    onClick = {},
+    alignment = Alignment.Start,
+  )
+}

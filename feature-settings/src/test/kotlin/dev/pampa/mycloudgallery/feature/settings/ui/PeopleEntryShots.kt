@@ -24,7 +24,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Lo screenshot di P7 (Fase 8, D3): la pagina principale delle Impostazioni con la riga "Persone" accanto a "Ricerca e modelli" (la destinazione la scrive
- * `:app`: qui e' un segnaposto), in tre stati: spenta, da confermare su questo dispositivo e attiva. Chiaro e scuro, telefono (412 dp) e tablet (1280 dp),
+ * `:app`: qui e' un segnaposto), in tre stati: spenta, da confermare su questo dispositivo e attiva. Chiaro e scuro, telefono dell'utente (360 dp) e tablet (1280 dp),
  * piu' il testo grande sul telefono. Una classe a parte: `PhonePageShots` e le sue sorelle riscrivono le immagini di P7 della Fase 2.
  *
  * `gradlew :feature-settings:recordRoborazziDebug --tests "*PeopleEntryShots*"` scrive i PNG in `docs/screenshots/8-P7/`. Nei normali
@@ -72,7 +72,7 @@ internal abstract class PeopleEntryShotsBase(private val state: PeopleEntryState
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "it-w412dp-h1800dp-xhdpi")
+@Config(qualifiers = "it-w360dp-h1800dp-xhdpi")
 internal class PhonePeopleEntryShots(state: PeopleEntryState, look: Look) : PeopleEntryShotsBase(state, look, "telefono") {
   companion object {
     @JvmStatic

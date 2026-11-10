@@ -203,7 +203,7 @@ abstract class BackupEntryShots(private val device: String) {
 
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "it-w412dp-h915dp-xhdpi")
+@Config(qualifiers = "it-w360dp-h780dp-xhdpi")
 class BackupEntryPhoneShots : BackupEntryShots("telefono")
 
 @RunWith(AndroidJUnit4::class)

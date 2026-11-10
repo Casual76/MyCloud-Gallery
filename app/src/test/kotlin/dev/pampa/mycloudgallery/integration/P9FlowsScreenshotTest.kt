@@ -28,7 +28,11 @@ import dev.pampa.mycloudgallery.feature.onboarding.join.AwaitingApprovalScreen
 import dev.pampa.mycloudgallery.feature.settings.SettingsScreen
 import dev.pampa.mycloudgallery.feature.settings.SettingsUiState
 import dev.pampa.mycloudgallery.graph.AppGraph
-import dev.pampa.mycloudgallery.main.MainScaffold
+import dev.pampa.mycloudgallery.GalleryScaffold
+import dev.pampa.mycloudgallery.SHOT_PHONE
+import dev.pampa.mycloudgallery.SHOT_TABLET
+import dev.pampa.mycloudgallery.ScaffoldScenes
+import dev.pampa.mycloudgallery.feature.library.library.emptyLibraryTabState
 import dev.pampa.mycloudgallery.root.WipedScreen
 import dev.pampa.mycloudgallery.status.GlobalStatus
 import dev.pampa.mycloudgallery.work.TrustSyncRun
@@ -114,8 +118,9 @@ internal abstract class P9FlowsScreenshotBase(private val dark: Boolean, private
   fun libreriaInCasaConIlNasCollegato() {
     val phone = admin()
     val status = statusOf(phone.graph)
+    val scenes = ScaffoldScenes(library = emptyLibraryTabState())
     shoot("01-libreria-nas-collegato") {
-      MainScaffold(status, GalleryTab.Library, onSelectTab = {}, onStatusClick = {}, onOpenSettings = {})
+      GalleryScaffold(scenes, GalleryTab.Library, status = status)
     }
   }
 
@@ -128,8 +133,9 @@ internal abstract class P9FlowsScreenshotBase(private val dark: Boolean, private
       phone.graph.statusMonitor.probeNow()
       statusOf(phone.graph)
     }
+    val scenes = ScaffoldScenes(library = emptyLibraryTabState())
     shoot("02-libreria-nas-non-raggiungibile") {
-      MainScaffold(status, GalleryTab.Library, onSelectTab = {}, onStatusClick = {}, onOpenSettings = {})
+      GalleryScaffold(scenes, GalleryTab.Library, status = status)
     }
   }
 
@@ -144,8 +150,9 @@ internal abstract class P9FlowsScreenshotBase(private val dark: Boolean, private
       phone.graph.breaker.state.await { it is BreakerState.Open }
       statusOf(phone.graph)
     }
+    val scenes = ScaffoldScenes(library = emptyLibraryTabState())
     shoot("03-libreria-serve-la-password") {
-      MainScaffold(status, GalleryTab.Library, onSelectTab = {}, onStatusClick = {}, onOpenSettings = {})
+      GalleryScaffold(scenes, GalleryTab.Library, status = status)
     }
   }
 
@@ -242,7 +249,7 @@ internal abstract class P9FlowsScreenshotBase(private val dark: Boolean, private
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_PHONE)
 internal class P9FlowsPhoneScreenshotTest(dark: Boolean) : P9FlowsScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic
@@ -253,7 +260,7 @@ internal class P9FlowsPhoneScreenshotTest(dark: Boolean) : P9FlowsScreenshotBase
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w1280dp-h800dp-land-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_TABLET)
 internal class P9FlowsTabletScreenshotTest(dark: Boolean) : P9FlowsScreenshotBase(dark, "tablet") {
   companion object {
     @JvmStatic

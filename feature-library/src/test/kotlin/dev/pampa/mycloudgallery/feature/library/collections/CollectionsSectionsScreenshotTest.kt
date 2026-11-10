@@ -1,5 +1,10 @@
 package dev.pampa.mycloudgallery.feature.library.collections
 
+import androidx.compose.ui.Modifier
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import android.app.Application
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
@@ -36,7 +41,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Gli screenshot di P11 (Raccolte ordinabili e nascondibili, D33): la scheda con tutte le sezioni del §2.7 -- quelle della scheda e quelle
  * che gli altri pacchetti registreranno, qui i fornitori finti di `testing/` --, l'ordine scelto, una sezione nascosta, "Modifica
- * Raccolte" e il trascinamento di una riga. Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo a 1,3x.
+ * Raccolte" e il trascinamento di una riga. Chiaro e scuro, telefono dell'utente (360 dp) e tablet (1280 dp), piu' il testo a 1,3x.
  *
  * `gradlew :feature-library:recordRoborazziDebug --tests "*CollectionsSectionsScreenshot*"` scrive i PNG in `docs/screenshots/7-P11/`.
  * Nei normali `testDebugUnitTest` si verifica solo che le schermate compongano.
@@ -64,13 +69,16 @@ abstract class CollectionsSectionsShotsBase(private val dark: Boolean, private v
     val state = remember(inputs) {
       CollectionsLayout.state(inputs.present, emptyList(), inputs.saved, inputs.hidden, inputs.editing, inputs.saveFailed)
     }
+    // K3a: il fondo della pagina, che in produzione dipinge `FluidNavHost` (senza, sul tablet scuro il pannello "Scegli una raccolta" era chiaro).
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
     CollectionsScreen(
       state = state,
       contentPadding = PaddingValues(),
       backdropOut = {},
       onOpenCollection = {},
       onOpenSettings = {},
-      statusHeader = {},
+      // K3a: la prima riga come in produzione, la capsula della rete.
+      statusHeader = { ProductionNetworkHeader() },
       // Il pannello di dettaglio del tablet: la stessa griglia della rotta, senza il tasto indietro.
       detail = { kind ->
         kind.filter?.let { filter -> CollectionGridScreen(kind, world.source.items(filter), environment, { _, _ -> }, {}, {}, onBack = null) }
@@ -174,7 +182,7 @@ abstract class CollectionsSectionsShotsBase(private val dark: Boolean, private v
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class CollectionsSectionsPhoneShotsTest(dark: Boolean) : CollectionsSectionsShotsBase(dark, "telefono") {
   companion object {
     @JvmStatic

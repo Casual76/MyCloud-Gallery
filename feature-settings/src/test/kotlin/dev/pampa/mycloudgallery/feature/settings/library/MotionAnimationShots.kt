@@ -75,7 +75,7 @@ internal abstract class MotionAnimationShotsBase(
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "it-w412dp-h1800dp-xhdpi")
+@Config(qualifiers = "it-w360dp-h1800dp-xhdpi")
 internal class MotionAnimationPhoneShots(on: Boolean, dark: Boolean, scale: Float?) : MotionAnimationShotsBase(on, dark, scale, "telefono") {
   companion object {
     @JvmStatic

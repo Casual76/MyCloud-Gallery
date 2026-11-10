@@ -51,7 +51,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "it-w412dp-h1800dp-xhdpi")
+@Config(qualifiers = "it-w360dp-h1800dp-xhdpi")
 class WidgetSettingsScreenTest {
 
   @get:Rule

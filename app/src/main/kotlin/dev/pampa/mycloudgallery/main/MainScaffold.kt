@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -91,7 +92,8 @@ class CollectionsSlot(
  *
  * @param libraryState cio' che la Libreria mostra: dal `LibraryViewModel` (grafo vero, P11); nei test i fake.
  * @param libraryViewer i servizi del viewer per la Libreria (dettagli, azioni, intent); null = solo i pixel dello stato.
- * @param collections la scheda Raccolte; null = il segnaposto (gli screenshot dello scaffold, senza Hilt).
+ * @param collections la scheda Raccolte; null = il segnaposto (solo le prove che non guardano le schede: gli screenshot passano dallo scaffold
+ *   delle prove, `GalleryScaffold`, con le schede vere).
  * @param albums la scheda Album (`AlbumsTabHost`); null = il segnaposto.
  * @param search la ricerca aperta dal cerchio; null = il segnaposto.
  * @param searchOpen Cerca e' aperta sopra [selectedTab]; [onOpenSearch] e [onCloseSearch] la aprono (il cerchio) e la chiudono (Indietro, una scheda).
@@ -111,9 +113,9 @@ fun MainScaffold(
   libraryState: LibraryTabState = rememberEmptyLibraryTabState(),
   libraryViewer: ViewerServices? = null,
   collections: (@Composable (CollectionsSlot) -> Unit)? = null,
-  /** G2: la scheda Album (`AlbumsTabHost`); null = il segnaposto (gli screenshot dello scaffold, senza Hilt). */
+  /** G2: la scheda Album (`AlbumsTabHost`); null = il segnaposto (le prove senza le schede). */
   albums: (@Composable (CollectionsSlot) -> Unit)? = null,
-  /** Fase 6 (P11), G2: la ricerca aperta dal cerchio; null = il segnaposto (gli screenshot dello scaffold, senza Hilt). */
+  /** Fase 6 (P11), G2: la ricerca aperta dal cerchio; null = il segnaposto (le prove senza le schede). */
   search: (@Composable (CollectionsSlot) -> Unit)? = null,
   searchOpen: Boolean = false,
   onOpenSearch: () -> Unit = {},
@@ -166,46 +168,54 @@ fun MainScaffold(
     )
   }
 
+  // GF-7 (K3a): ogni pagina (le tre schede e Cerca) tiene cio' che ricorda mentre e' coperta. Senza, la scheda che usciva dalla composizione
+  // ripartiva da capo: aprire Cerca o passare a un'altra scheda riportava Album e Raccolte in cima e il pannello del tablet alla prima scelta.
+  // La Libreria ricorda gia' la sua griglia (lo stato e' fuori, nel ViewModel) e qui ritrova anche la posizione ancorata a un media.
+  val pageStates = rememberSaveableStateHolder()
+  val pageKey = if (searchOpen) GalleryTabBarDefaults.SearchKey else selectedTab.route
+
   Box(modifier = Modifier.fillMaxSize()) {
     CompositionLocalProvider(LocalGalleryTabBarSlot provides tabBarSlot) {
-      when {
-        searchOpen && search != null -> search(pageSlot)
-        searchOpen -> PlaceholderTab(
-          key = GalleryTabBarDefaults.SearchKey,
-          title = stringResource(R.string.main_search_title),
-          status = status,
-          onStatusClick = onStatusClick,
-          onOpenSettings = onOpenSettings,
-          backdropOut = { backdrop = it },
-        ) {
-          FluidEmptyState(title = stringResource(R.string.main_search_empty_title), detail = stringResource(R.string.main_search_empty_detail))
-        }
-        selectedTab == GalleryTab.Library -> LibraryTab(
-          contentPadding = pillPadding,
-          backdropOut = { backdrop = it },
-          onOpenViewer = { viewer.open(it, services, fromLibrary = true) },
-          onOpenSettings = onOpenSettings,
-          // B2 (beta): la rete non e' piu' una voce in fondo alla Libreria, e' uno degli stati della nuvola in alto (LibraryCloudNetwork.kt).
-          network = libraryNetworkOf(status),
-          onNetworkClick = onStatusClick,
-          state = libraryState,
-          tabBarScroll = tabBarScroll,
-          // I dettagli del NAS (e "Ho controllato, continua" dei lavori fermi) stanno in Diagnostica, come quelli della rete.
-          onNasStatusClick = onNasStatusClick,
-          // Fase 5A (D16): la terza voce del piede apre la pagina Backup.
-          onBackupStatusClick = onBackupStatusClick,
-        )
-        selectedTab == GalleryTab.Albums && albums != null -> albums(pageSlot)
-        selectedTab == GalleryTab.Collections && collections != null -> collections(pageSlot)
-        else -> PlaceholderTab(
-          key = selectedTab.route,
-          title = stringResource(selectedTab.label),
-          status = status,
-          onStatusClick = onStatusClick,
-          onOpenSettings = onOpenSettings,
-          backdropOut = { backdrop = it },
-        ) {
-          TabPlaceholder(selectedTab)
+      pageStates.SaveableStateProvider(pageKey) {
+        when {
+          searchOpen && search != null -> search(pageSlot)
+          searchOpen -> PlaceholderTab(
+            key = GalleryTabBarDefaults.SearchKey,
+            title = stringResource(R.string.main_search_title),
+            status = status,
+            onStatusClick = onStatusClick,
+            onOpenSettings = onOpenSettings,
+            backdropOut = { backdrop = it },
+          ) {
+            FluidEmptyState(title = stringResource(R.string.main_search_empty_title), detail = stringResource(R.string.main_search_empty_detail))
+          }
+          selectedTab == GalleryTab.Library -> LibraryTab(
+            contentPadding = pillPadding,
+            backdropOut = { backdrop = it },
+            onOpenViewer = { viewer.open(it, services, fromLibrary = true) },
+            onOpenSettings = onOpenSettings,
+            // B2 (beta): la rete non e' piu' una voce in fondo alla Libreria, e' uno degli stati della nuvola in alto (LibraryCloudNetwork.kt).
+            network = libraryNetworkOf(status),
+            onNetworkClick = onStatusClick,
+            state = libraryState,
+            tabBarScroll = tabBarScroll,
+            // I dettagli del NAS (e "Ho controllato, continua" dei lavori fermi) stanno in Diagnostica, come quelli della rete.
+            onNasStatusClick = onNasStatusClick,
+            // Fase 5A (D16): la terza voce del piede apre la pagina Backup.
+            onBackupStatusClick = onBackupStatusClick,
+          )
+          selectedTab == GalleryTab.Albums && albums != null -> albums(pageSlot)
+          selectedTab == GalleryTab.Collections && collections != null -> collections(pageSlot)
+          else -> PlaceholderTab(
+            key = selectedTab.route,
+            title = stringResource(selectedTab.label),
+            status = status,
+            onStatusClick = onStatusClick,
+            onOpenSettings = onOpenSettings,
+            backdropOut = { backdrop = it },
+          ) {
+            TabPlaceholder(selectedTab)
+          }
         }
       }
     }
@@ -314,7 +324,7 @@ private fun TabPlaceholder(tab: GalleryTab) {
   when (tab) {
     // La Libreria non e' un segnaposto (Fase 3): non passa di qui.
     GalleryTab.Library -> Unit
-    // Senza la scheda vera (gli screenshot dello scaffold) gli Album e le Raccolte restano un segnaposto.
+    // Senza la scheda vera (le prove che non la passano) gli Album e le Raccolte restano un segnaposto.
     GalleryTab.Albums -> FluidEmptyState(
       title = stringResource(R.string.main_albums_empty_title),
       detail = stringResource(R.string.main_albums_empty_detail),

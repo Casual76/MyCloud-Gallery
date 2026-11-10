@@ -27,7 +27,7 @@ import dev.pampa.mycloudgallery.feature.onboarding.join.AwaitingApprovalScreen
 import dev.pampa.mycloudgallery.feature.settings.SettingsScreen
 import dev.pampa.mycloudgallery.feature.settings.SettingsUiState
 import dev.pampa.mycloudgallery.lock.LockedScreen
-import dev.pampa.mycloudgallery.main.MainScaffold
+import dev.pampa.mycloudgallery.feature.library.library.emptyLibraryTabState
 import dev.pampa.mycloudgallery.root.BlockedScreen
 import dev.pampa.mycloudgallery.root.KeystoreUi
 import dev.pampa.mycloudgallery.root.KeystoreUnavailableScreen
@@ -48,7 +48,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Gli screenshot dello scaffold della Fase 2 (P0): galleria con le tre schede e l'indicatore globale,
  * onboarding, attesa dell'approvazione, azzerato, fermo, app bloccata, Impostazioni e Diagnostica. Chiaro e
- * scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo grande sul telefono.
+ * scuro, telefono dell'utente (360 dp, K3a) e tablet (1280 dp), piu' il testo grande sul telefono.
  *
  * `gradlew :app:recordRoborazziDebug` scrive i PNG in `docs/screenshots/2-P0/`. Nei normali
  * `testDebugUnitTest` si verifica solo che le schermate compongano.
@@ -101,25 +101,31 @@ internal abstract class ScaffoldScreenshotBase(private val dark: Boolean, privat
     composeRule.onRoot().captureRoboImage("$DIR/$name-$look-$device$suffix.png")
   }
 
+  /** La Libreria vuota (com'era la release prima del grafo vero), nello scaffold delle prove. */
   @Test
-  fun libreria() = shoot("main-libreria") {
-    MainScaffold(GlobalStatus.HOME_CONNECTED, GalleryTab.Library, onSelectTab = {}, onStatusClick = {}, onOpenSettings = {})
+  fun libreria() {
+    val scenes = ScaffoldScenes(library = emptyLibraryTabState())
+    shoot("main-libreria") { GalleryScaffold(scenes, GalleryTab.Library) }
   }
 
   @Test
-  fun libreriaTestoGrande() = shoot("main-libreria", fontScale = LARGE_TEXT) {
-    MainScaffold(GlobalStatus.AWAY_VPN_MOBILE, GalleryTab.Library, onSelectTab = {}, onStatusClick = {}, onOpenSettings = {})
+  fun libreriaTestoGrande() {
+    val scenes = ScaffoldScenes(library = emptyLibraryTabState())
+    shoot("main-libreria", fontScale = LARGE_TEXT) { GalleryScaffold(scenes, GalleryTab.Library, status = GlobalStatus.AWAY_VPN_MOBILE) }
   }
 
+  /** K3a: le Raccolte vere (lo scaffold delle prove, [GalleryScaffold]), con la capsula della rete in testa nello stato "VPN spenta". */
   @Test
-  fun raccolte() = shoot("main-raccolte-vpn-spenta") {
-    MainScaffold(GlobalStatus.VPN_OFF, GalleryTab.Collections, onSelectTab = {}, onStatusClick = {}, onOpenSettings = {})
+  fun raccolte() {
+    val scenes = ScaffoldScenes()
+    shoot("main-raccolte-vpn-spenta") { GalleryScaffold(scenes, GalleryTab.Collections, status = GlobalStatus.VPN_OFF) }
   }
 
-  /** G2: Cerca non e' piu' una scheda ma il cerchio accanto alla pillola; aperta, sta sopra la scheda di prima. */
+  /** G2: Cerca non e' piu' una scheda ma il cerchio accanto alla pillola; aperta, sta sopra la scheda di prima (K3a: la schermata vera, a riposo). */
   @Test
-  fun cerca() = shoot("main-cerca-password") {
-    MainScaffold(GlobalStatus.NEEDS_PASSWORD, GalleryTab.Library, onSelectTab = {}, onStatusClick = {}, onOpenSettings = {}, searchOpen = true)
+  fun cerca() {
+    val scenes = ScaffoldScenes()
+    shoot("main-cerca-password") { GalleryScaffold(scenes, GalleryTab.Library, status = GlobalStatus.NEEDS_PASSWORD, searchOpen = true) }
   }
 
   @Test
@@ -195,7 +201,7 @@ internal abstract class ScaffoldScreenshotBase(private val dark: Boolean, privat
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_PHONE)
 internal class ScaffoldPhoneScreenshotTest(dark: Boolean) : ScaffoldScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic
@@ -206,7 +212,7 @@ internal class ScaffoldPhoneScreenshotTest(dark: Boolean) : ScaffoldScreenshotBa
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w1280dp-h800dp-land-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_TABLET)
 internal class ScaffoldTabletScreenshotTest(dark: Boolean) : ScaffoldScreenshotBase(dark, "tablet") {
   companion object {
     @JvmStatic

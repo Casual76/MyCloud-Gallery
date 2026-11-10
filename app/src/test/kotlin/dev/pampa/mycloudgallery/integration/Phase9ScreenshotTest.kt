@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.pm.ActivityInfo
 import android.os.Looper
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -33,7 +32,10 @@ import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.network.contract.NetworkSnapshot
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionItemsSource
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsLayoutViewModel
-import dev.pampa.mycloudgallery.feature.library.collections.CollectionsTab
+import dev.pampa.mycloudgallery.GalleryScaffold
+import dev.pampa.mycloudgallery.SHOT_PHONE
+import dev.pampa.mycloudgallery.ScaffoldScenes
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
 import dev.pampa.mycloudgallery.feature.map.contract.MapPlaceNames
 import dev.pampa.mycloudgallery.feature.map.contract.MapRefs
 import dev.pampa.mycloudgallery.feature.map.contract.MapScreenState
@@ -97,7 +99,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_PHONE)
 class Phase9ScreenshotTest(private val dark: Boolean) {
 
   val composeRule = createComposeRule()
@@ -188,9 +190,9 @@ class Phase9ScreenshotTest(private val dark: Boolean) {
     val memories = memoriesSectionProvider(resources, w.stack.engine, w.stack.people, MemoryPlaceNames { ids -> ids.mapNotNull { NAMES[it] } }, w.stack.mask, scope)
     val places = placesSectionProvider(resources, w.map)
     val viewModel = CollectionsLayoutViewModel(CollectionItemsSource { EmptyViewerItems }, FakePhoneMediaIntents(), setOf(memories, places), Optional.empty())
-    shoot("raccolte-ricordi-luoghi", "Firenze") {
-      CollectionsTab(PaddingValues(), backdropOut = {}, onOpenViewer = {}, onOpenCollection = {}, onOpenSettings = {}, statusHeader = {}, viewModel = viewModel)
-    }
+    // K3a: le Raccolte nello scaffold delle prove, come in produzione (la pillola, la capsula della rete in testa, il fondo della pagina).
+    val scenes = ScaffoldScenes(collections = viewModel)
+    shoot("raccolte-ricordi-luoghi", "Firenze") { GalleryScaffold(scenes, GalleryTab.Collections) }
   }
 
   @Test
@@ -212,7 +214,7 @@ class Phase9ScreenshotTest(private val dark: Boolean) {
   @Test
   fun laMappaConLaCartaFinta() {
     val w = world()
-    val surface = FakeMapSurface(GeoE6(43_300_000, 11_800_000), zoom = 6.0, widthDp = 412, heightDp = 915, density = 2f)
+    val surface = FakeMapSurface(GeoE6(43_300_000, 11_800_000), zoom = 6.0, widthDp = 360, heightDp = 780, density = 2f)
     // Le impostazioni in memoria: il DataStore vero tiene il suo file "attivo" per tutto il processo dei test, e un secondo grafo sullo stesso file non lo legge.
     val deps = MapDependencies(
       Optional.of(w.map.points), Optional.of<MapSettings>(InMemoryMapSettings()), Optional.of(w.map.regions), Optional.of(w.map.networkState), Optional.of(w.map.places),
@@ -240,7 +242,7 @@ class Phase9ScreenshotTest(private val dark: Boolean) {
   }
 
   @Test
-  @Config(qualifiers = "w412dp-h1500dp-xhdpi")
+  @Config(qualifiers = "w360dp-h1500dp-xhdpi")
   fun impostazioniConLeVociNuove() {
     val w = world()
     val device = TestDevice(app, File(temp.root, "telefono"), TestPlatform(TestTime(), TestNas.backend(TestTime()))).also { closing += AutoCloseable { it.close() } }

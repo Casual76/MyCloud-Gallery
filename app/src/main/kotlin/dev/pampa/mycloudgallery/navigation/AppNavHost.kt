@@ -477,10 +477,6 @@ private fun MainDestination(
     nasOpener.library = state
     nasOpener.services = libraryViewer
   }
-  // Fase 7 (P13): "Nuovo album" dalle Raccolte (il foglio sopra la scheda).
-  var newAlbum by rememberSaveable { mutableStateOf(false) }
-  NewAlbumHost(visible = newAlbum, onDismiss = { newAlbum = false }, nav = nav)
-
   // Fase 6 (P11): la scheda Cerca e "Trova simili" dal viewer (la richiesta chiude il viewer e porta a Cerca con il chip "Simili a").
   val searchHost: SearchHostViewModel = hiltViewModel()
   val searchActions = rememberSearchActions(nav, viewer, searchHost)
@@ -556,7 +552,6 @@ private fun MainDestination(
             entry.code,
             nav,
             openFreeSpace = { gallery.fiveB?.openFreeSpace(null) },
-            onNewAlbum = { newAlbum = true },
             onPeople = { target -> peopleActions?.let { actions -> nav.openPeopleEntry(target, actions) } },
             onMemories = { target -> nav.openMemoriesEntry(target) { code -> memoriesHost?.resolveEntry(code) } },
             // MA-1: "Riprova" sotto "Non riesco a leggere le posizioni delle foto" non apre una pagina, rifa la lettura dei punti.

@@ -169,6 +169,18 @@ internal fun ageText(millis: Long): String {
   }
 }
 
+/**
+ * GF-21: il punto del codice di un errore registrato («LibraryViewModel$load$1.invokeSuspend (LibraryViewModel.kt:120)») e' una parola sola piu' larga della riga a 360 dp e
+ * si spezzava a meta' («invokeS/uspend»). Prima di un `$` e dopo un punto fra due nomi si mette un'opportunita' di andare a capo invisibile (U+200B): il nome si spezza
+ * fra i suoi pezzi, non dentro una parola. Le frasi, i numeri decimali e le date non cambiano (il punto di «1,2 s» o di «Mer. 3» non e' fra due nomi).
+ */
+internal fun String.withBreakOpportunities(): String =
+  replace(BREAK_BEFORE_DOLLAR) { "${BREAK_OPPORTUNITY}${it.value}" }.replace(BREAK_AFTER_DOT) { "${it.value}${BREAK_OPPORTUNITY}" }
+
+private const val BREAK_OPPORTUNITY = '\u200B'
+private val BREAK_BEFORE_DOLLAR = Regex("(?<=[A-Za-z0-9])[$]")
+private val BREAK_AFTER_DOT = Regex("(?<=[A-Za-z0-9])[.](?=[A-Za-z])")
+
 /** «41 ms», «1,2 s»: la durata di una fase del test. */
 @Composable
 internal fun durationText(millis: Long): String =
@@ -207,7 +219,7 @@ internal fun ColumnScope.DiagItemRows(
 private fun ColumnScope.DiagItemRow(item: DiagItem, actions: DiagActionPolicy, onAction: (DiagAction) -> Unit) {
   val titleRes = item.titleRes.takeIf { it != 0 } ?: DiagCatalog.titleOf(item.code)
   val title = if (titleRes != 0) stringResource(titleRes) else stringResource(R.string.diagnostics_item_unknown)
-  val detail = item.detail?.resolve()?.takeIf { it.isNotBlank() }
+  val detail = item.detail?.resolve()?.takeIf { it.isNotBlank() }?.withBreakOpportunities()
   val guideRes = if (item.severity >= DiagSeverity.WARNING) DiagCatalog.guideOf(item.code) else 0
   val guide = if (guideRes != 0) stringResource(guideRes) else null
   val age = (item.export[RecentEventsContributor.AGE_KEY] as? ExportValue.Dur)?.let { ageText(it.millis) }
@@ -230,7 +242,9 @@ private fun ColumnScope.DiagItemRow(item: DiagItem, actions: DiagActionPolicy, o
     meta = meta,
     tone = item.severity.tone(),
     leading = { Icon(imageVector = item.severity.icon(), contentDescription = label) },
-    badge = if (item.severity >= DiagSeverity.WARNING) {
+    // GF-21: la pillola ("Attenzione", "Problema") in `labels`, non in `badge`: nel badge prendeva per prima la larghezza e il testo restava in una colonna di ~145 dp
+    // (dieci righe per voce, il punto del codice spezzato). Ora il testo usa la larghezza della riga e la pillola va sotto il titolo se non c'e' posto.
+    labels = if (item.severity >= DiagSeverity.WARNING) {
       { FluidStatusBadge(label = label, tone = item.severity.tone()) }
     } else {
       null

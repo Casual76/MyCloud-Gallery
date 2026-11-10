@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -121,7 +122,9 @@ fun GalleryFooterPill(note: GalleryFooterNote, onClick: (() -> Unit)?, modifier:
         text = note.label,
         style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum"),
         color = text,
-        maxLines = 1,
+        // GF-24: due righe al massimo, non una (a 1,3x la frase di un lavoro con i suoi numeri, «Primo backup: 1.240 di 6.658», finiva «…di 6.…»): va a capo
+        // fra le parole, mai dentro un numero, e solo oltre la seconda riga finisce con i puntini.
+        maxLines = LabelMaxLines,
         overflow = TextOverflow.Ellipsis,
         modifier = Modifier.weight(1f, fill = false),
       )
@@ -147,7 +150,10 @@ fun GalleryFooterEntry(
   }
 }
 
-/** Il dettaglio sotto la capsula: la barra dell'avanzamento (se c'e') e la frase, centrati, larghi al piu' una colonna. */
+/**
+ * Il dettaglio sotto la capsula: la barra dell'avanzamento (se c'e') e la frase, centrati, larghi al piu' una colonna. La frase la dice gia' la capsula
+ * ([GalleryFooterPill]: etichetta e dettaglio in una descrizione sola): qui si vede ma TalkBack non la rilegge (GF-24).
+ */
 @Composable
 fun GalleryFooterDetail(note: GalleryFooterNote, modifier: Modifier = Modifier, alignment: Alignment.Horizontal = Alignment.CenterHorizontally) {
   if (note.detail == null && note.progress == null) return
@@ -165,6 +171,7 @@ fun GalleryFooterDetail(note: GalleryFooterNote, modifier: Modifier = Modifier, 
         style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Medium),
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = if (alignment == Alignment.Start) TextAlign.Start else TextAlign.Center,
+        modifier = Modifier.semantics { hideFromAccessibility() },
       )
     }
   }
@@ -200,6 +207,9 @@ internal fun galleryFooterStyle(tone: GalleryFooterTone, scheme: ColorScheme): F
   val s = galleryStatusStyle(status, scheme)
   return FooterStyle(container = s.container, text = s.text, glyph = s.glyph)
 }
+
+/** Le righe della frase di una capsula: due, per andare a capo a testo grande senza spezzare un numero (GF-24). */
+private const val LabelMaxLines = 2
 
 private val PillHeight: Dp = 36.dp
 private val PillPaddingH: Dp = 12.dp

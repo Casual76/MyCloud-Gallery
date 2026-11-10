@@ -107,6 +107,24 @@ class Correzioni5BSoloDalTelefonoTest : ComposeBackupTallTest() {
     assertThat(trashed.single()).hasSize(5)
   }
 
+  /**
+   * FAB-22: l'avviso dell'attesa conta i file del foglio. Prima diceva «sta ancora caricando i file» anche per un file solo (e qui, con un file,
+   * il titolo e' «Questa foto non e' sul NAS»).
+   */
+  @Test
+  fun fab22_l_attesaDiUnFileDiceIlFileEQuellaDiPiuDiceIFile() {
+    showSheet(advice(PhoneOnlyAdvice.WAIT))
+    composeRule.onNodeWithText("Il backup sta ancora caricando il file, o ha avuto un problema.", substring = true).assertExists()
+    assertThat(composeRule.onAllNodes(hasText("caricando i file", substring = true)).fetchSemanticsNodes()).isEmpty()
+  }
+
+  @Test
+  fun fab22_l_attesaDiPiuFileDiceIFile() {
+    showSheet(manyAdvice(3, PhoneOnlyAdvice.WAIT))
+    composeRule.onNodeWithText("Il backup sta ancora caricando i file, o ha avuto un problema.", substring = true).assertExists()
+    assertThat(composeRule.onAllNodes(hasText("caricando il file", substring = true)).fetchSemanticsNodes()).isEmpty()
+  }
+
   private fun assertSheetPhraseNeutral(count: Int) {
     showSheet(manyAdvice(count, PhoneOnlyAdvice.SAFE_FIRST), withTrash = false)
     composeRule.onNodeWithText("Sul NAS non cambia niente", substring = true).assertExists()

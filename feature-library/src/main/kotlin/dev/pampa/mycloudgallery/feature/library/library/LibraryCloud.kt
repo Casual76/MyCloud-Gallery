@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -400,6 +401,8 @@ private fun CloudNote(note: GalleryFooterNote, onClick: (() -> Unit)?) {
         text = detail,
         style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Medium),
         color = MaterialTheme.colorScheme.onSurface,
+        // GF-24: la capsula sopra dice gia' etichetta e dettaglio (la sua descrizione e' «etichetta. dettaglio»): TalkBack non lo rilegge dal testo a parte.
+        modifier = Modifier.semantics { hideFromAccessibility() },
       )
     }
   }

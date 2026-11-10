@@ -113,7 +113,9 @@ private fun SectionRow(section: DiagSection, state: DiagnosticsUiState, onClick:
     },
     tone = worst?.tone() ?: FluidTone.Neutral,
     leading = { Icon(imageVector = section.icon(), contentDescription = null) },
-    badge = if (attention > 0) {
+    // GF-21: la pillola sta in `labels` (va sotto il titolo se ruberebbe la riga), non in `badge`, che prende la larghezza per primo: a 360 dp con il testo
+    // grande «Attività» si spezzava in «Attivit/à» e «Rete e NAS» in «Rete e / NAS» (la stessa correzione di K4 per Impostazioni, Persone e Cerca).
+    labels = if (attention > 0) {
       { FluidStatusBadge(label = pluralStringResource(R.plurals.diagnostics_section_attention, attention, attention), tone = worst?.tone() ?: FluidTone.Warning) }
     } else {
       null

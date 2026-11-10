@@ -3,13 +3,8 @@ package dev.pampa.mycloudgallery.navigation
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -29,31 +24,23 @@ import dev.pampa.mycloudgallery.albums.PickOutcome
 import dev.pampa.mycloudgallery.albums.PickRelay
 import dev.pampa.mycloudgallery.albums.LibraryAlbumRefs
 import dev.pampa.mycloudgallery.albums.withAlbums
-import dev.pampa.mycloudgallery.core.albums.contract.Albums
-import dev.pampa.mycloudgallery.core.albums.contract.CreateOutcome
-import dev.pampa.mycloudgallery.core.albums.contract.TitleProblem
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.library.data.TimelineViewerItems
 import dev.pampa.mycloudgallery.core.model.AlbumId
-import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.albums.choose.AddToAlbumHost
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumActions
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
-import dev.pampa.mycloudgallery.feature.albums.list.CreateAlbumSheet
 import dev.pampa.mycloudgallery.feature.albums.nav.AlbumPageDestination
 import dev.pampa.mycloudgallery.feature.albums.nav.openAlbum
-import dev.pampa.mycloudgallery.feature.albums.nav.openSmartEditor
-import dev.pampa.mycloudgallery.feature.albums.ui.AlbumHost
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
 import dev.pampa.mycloudgallery.feature.library.collections.MediaPickerRoute
 import dev.pampa.mycloudgallery.feature.viewer.ViewerServices
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import dev.pampa.mycloudgallery.main.ViewerHostState
 import javax.inject.Inject
-import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 
 // GLI ALBUM NELLA NAVIGAZIONE DELL'APP (Fase 7, P13; P10: "albumsGraph(nav, actions, thumbnails)", "AddToAlbumHost sopra la schermata che l'ha
@@ -174,47 +161,4 @@ internal fun AlbumRequestsHost(host: AlbumsHostViewModel, nav: NavController, vi
       nav.openAlbum(id)
     },
   )
-}
-
-/** "Nuovo album" dalle Raccolte (`albums/new`): un album a mano nasce e si apre; uno smart passa dall'editor delle regole, che parte dal nome. */
-@HiltViewModel
-class NewAlbumViewModel @Inject constructor(private val albums: Albums) : ViewModel() {
-  suspend fun createManual(title: String): CreateOutcome = albums.create(title, AlbumKind.MANUAL, null)
-}
-
-@Composable
-internal fun NewAlbumHost(visible: Boolean, onDismiss: () -> Unit, nav: NavController, viewModel: NewAlbumViewModel = hiltViewModel()) {
-  var problem by remember { mutableStateOf<TitleProblem?>(null) }
-  var unavailable by remember { mutableStateOf(false) }
-  val scope = rememberCoroutineScope()
-  val close = {
-    problem = null
-    unavailable = false
-    onDismiss()
-  }
-  AlbumHost {
-    CreateAlbumSheet(
-      visible = visible,
-      problem = problem,
-      unavailable = unavailable,
-      onCreate = { title, kind ->
-        if (kind == AlbumKind.SMART) {
-          close()
-          nav.openSmartEditor(title.trim())
-        } else {
-          scope.launch {
-            when (val out = viewModel.createManual(title)) {
-              is CreateOutcome.Created -> {
-                close()
-                nav.openAlbum(out.id)
-              }
-              is CreateOutcome.Invalid -> problem = out.problem
-              CreateOutcome.RulesTooLong, CreateOutcome.Unavailable -> unavailable = true
-            }
-          }
-        }
-      },
-      onDismiss = close,
-    )
-  }
 }

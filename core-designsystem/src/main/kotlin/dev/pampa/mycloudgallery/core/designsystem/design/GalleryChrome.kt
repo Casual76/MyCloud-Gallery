@@ -238,6 +238,12 @@ fun GalleryChromeCapsule(
  * scelta si fa **al layout**, quando la larghezza e' nota, quindi vale dal primo fotogramma; ogni forma si misura una volta sola per
  * titolo ([ChromeTitleFit]), e mentre la capsula accanto cambia larghezza la scelta e' un confronto fra interi. TalkBack legge
  * sempre [title] per esteso.
+ *
+ * **Un conteggio non si taglia a meta'** (GF-22, review della beta: in cima alla Libreria, a 360 dp con quattro tasti, «1.817 foto, 18…»). Con
+ * [shorterSubtitles] (anche vuota) il sottotitolo e' un riepilogo che **si mostra intero o non si mostra**: la prima forma che entra fra
+ * [subtitle] e le forme piu' corte, e se nemmeno la piu' stretta entra la seconda riga manca (il riepilogo sta scritto anche in fondo alla
+ * griglia). L'altezza dell'etichetta e' fissa: senza la seconda riga il titolo si centra. Con [shorterSubtitles] null (il luogo di una
+ * sezione) il sottotitolo si tronca con i puntini come prima. TalkBack legge sempre titolo e sottotitolo per esteso.
  */
 @Composable
 fun GalleryChromeLabel(
@@ -247,10 +253,14 @@ fun GalleryChromeLabel(
   backdrop: GlassBackdropState?,
   modifier: Modifier = Modifier,
   shorterTitles: List<String> = emptyList(),
+  shorterSubtitles: List<String>? = null,
 ) {
-  val lines = remember(title, subtitle, shorterTitles) { ChromeLabelLines(forms = listOf(title) + shorterTitles, subtitle = subtitle) }
+  val lines = remember(title, subtitle, shorterTitles, shorterSubtitles) {
+    ChromeLabelLines(forms = listOf(title) + shorterTitles, subtitle = subtitle, subtitleForms = subtitleFormsOf(subtitle, shorterSubtitles))
+  }
   val shown = rememberChromePaced(lines, GalleryChromeDefaults.LabelPaceMillis)
-  val fit = rememberChromeTitleFit(shown.forms)
+  val fit = rememberChromeTitleFit(shown.forms, chromeTitleStyle())
+  val subtitleFit = shown.subtitleForms?.let { forms -> rememberChromeTitleFit(forms, chromeSubtitleStyle()) }
   val slot = remember { ChromeLabelSlot() }
   val ink = style.ink
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
@@ -264,7 +274,8 @@ fun GalleryChromeLabel(
       .padding(horizontal = GalleryChromeDefaults.LabelPaddingH),
   ) { constraints ->
     val form = if (constraints.hasBoundedWidth) fit.pick(constraints.maxWidth) else 0
-    val content = slot.contentFor(ChromeShownLines.of(shown, form), ink, reduced)
+    val subtitleForm = if (constraints.hasBoundedWidth && subtitleFit != null) subtitleFit.pick(constraints.maxWidth) else 0
+    val content = slot.contentFor(ChromeShownLines.of(shown, form, subtitleForm), ink, reduced)
     val placeable = subcompose(Unit, content).first().measure(constraints.copy(minWidth = 0, minHeight = 0))
     val width = placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth)
     val height = placeable.height.coerceIn(constraints.minHeight, constraints.maxHeight)
@@ -272,22 +283,37 @@ fun GalleryChromeLabel(
   }
 }
 
-/** Cio' che l'etichetta puo' dire: il titolo in tutte le sue forme (la prima e' quella intera) e il luogo (o il riepilogo). */
-@Immutable
-private data class ChromeLabelLines(val forms: List<String>, val subtitle: String?)
-
 /**
- * Le due righe che l'etichetta mostra: la forma scelta del titolo e il luogo. [spoken] e' cio' che TalkBack legge quando a schermo
- * c'e' una forma corta (il titolo intero e il luogo); null se il titolo mostrato e' gia' quello intero.
+ * Cio' che l'etichetta puo' dire: il titolo in tutte le sue forme (la prima e' quella intera) e il luogo (o il riepilogo). [subtitleForms] e' null se il
+ * sottotitolo si tronca con i puntini (il luogo); se no sono le forme del riepilogo, dalla piu' lunga alla piu' stretta, piu' in coda la stringa vuota
+ * ("niente seconda riga"): [ChromeTitleFit] sceglie la prima che entra e, se nessuna entra, l'ultima.
  */
 @Immutable
-private data class ChromeShownLines(val title: String, val subtitle: String?, val spoken: String?) {
+private data class ChromeLabelLines(val forms: List<String>, val subtitle: String?, val subtitleForms: List<String>? = null)
+
+/** Le forme del sottotitolo di un riepilogo: [subtitle], le [shorter] e infine nessuna. Null se il sottotitolo non e' un riepilogo da mostrare intero o niente. */
+private fun subtitleFormsOf(subtitle: String?, shorter: List<String>?): List<String>? =
+  if (shorter == null || subtitle.isNullOrBlank()) null else listOf(subtitle) + shorter + ""
+
+/**
+ * Le due righe che l'etichetta mostra: la forma scelta del titolo e quella del sottotitolo (il luogo, o la forma del riepilogo; nessuna se il riepilogo non
+ * entra). [spoken] e' cio' che TalkBack legge quando a schermo c'e' una forma corta o manca il riepilogo (GF-2, GF-22): il titolo e il sottotitolo per esteso.
+ * Null se tutto cio' che e' mostrato e' gia' per intero.
+ */
+@Immutable
+private data class ChromeShownLines(val title: String, val subtitle: String?, val spoken: String?, val subtitleForms: List<String>? = null) {
   companion object {
-    fun of(lines: ChromeLabelLines, form: Int): ChromeShownLines = ChromeShownLines(
-      title = lines.forms[form],
-      subtitle = lines.subtitle,
-      spoken = if (form == 0) null else listOfNotNull(lines.forms.first(), lines.subtitle?.takeIf { it.isNotBlank() }).joinToString(", "),
-    )
+    fun of(lines: ChromeLabelLines, form: Int, subtitleForm: Int = 0): ChromeShownLines {
+      val subtitleForms = lines.subtitleForms
+      val subtitle = if (subtitleForms == null) lines.subtitle else subtitleForms[subtitleForm].ifEmpty { null }
+      val shortened = form != 0 || (subtitleForms != null && subtitleForm != 0)
+      return ChromeShownLines(
+        title = lines.forms[form],
+        subtitle = subtitle,
+        spoken = if (!shortened) null else listOfNotNull(lines.forms.first(), lines.subtitle?.takeIf { it.isNotBlank() }).joinToString(", "),
+        subtitleForms = subtitleForms,
+      )
+    }
   }
 }
 
@@ -349,11 +375,10 @@ internal class ChromeTitleFit(private val forms: List<String>, private val backS
   }
 }
 
-/** Il misuratore delle forme di un titolo, con lo stile con cui [GalleryChromeTitle] lo scrive. Uno per titolo. */
+/** Il misuratore delle forme di un titolo o di un riepilogo, con lo [style] con cui [GalleryChromeTitle] lo scrive. Uno per elenco di forme. */
 @Composable
-private fun rememberChromeTitleFit(forms: List<String>): ChromeTitleFit {
+private fun rememberChromeTitleFit(forms: List<String>, style: TextStyle): ChromeTitleFit {
   val measurer = rememberTextMeasurer(cacheSize = 0)
-  val style = chromeTitleStyle()
   val slack = with(LocalDensity.current) { TitleFitBackSlack.roundToPx() }
   return remember(forms, measurer, style, slack) {
     ChromeTitleFit(forms, slack) { text -> measurer.measure(text = text, style = style, softWrap = false, maxLines = 1).size.width }
@@ -616,7 +641,7 @@ internal fun GalleryChromeTitle(
     if (!subtitle.isNullOrBlank()) {
       Text(
         text = subtitle,
-        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+        style = chromeSubtitleStyle(),
         color = ink,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
@@ -628,6 +653,10 @@ internal fun GalleryChromeTitle(
 /** Lo stile del titolo dell'etichetta: e' anche quello con cui si misurano le sue forme corte ([ChromeTitleFit]). */
 @Composable
 private fun chromeTitleStyle(): TextStyle = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+
+/** Lo stile del sottotitolo: anche quello con cui si misurano le forme di un riepilogo (GF-22). */
+@Composable
+private fun chromeSubtitleStyle(): TextStyle = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium)
 
 /**
  * Una **sfumatura di bordo** (lo "scroll edge effect"): un colore che sfuma lungo l'altezza, alle opacita' [stops]

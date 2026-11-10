@@ -17481,3 +17481,98 @@ Nessuno nuovo: al ritorno sulla Libreria si calcola una volta `savePosition()` (
 2. Lo stesso con una foto a meta' schermo.
 3. Cambia il tema (chiaro/scuro) con la Libreria aperta lontano dai recenti: si resta li'. Ruota il telefono: si resta sulla stessa foto.
 4. "Libreria" toccata di nuovo riporta sui piu' recenti; il viewer affiancato del tablet si chiude aprendo Cerca, come prima.
+
+## Pacchetto K7: rifiniture a 360 dp trovate dalla review della fase grafica (GF-20 ... GF-24, FAB-22, OA-20) (10/11)
+
+Branch `fix/k7-rifiniture-360` (da `integra/beta-grafica`, `5d98134d`), un solo agente, senza dispositivo. Un commit per punto. Le prove nuove sono rosse sul codice di
+prima dove e' semplice (verificato mettendo le correzioni da parte e rilanciando: Diagnostica, scheda Album, pop-up della nuvola); le altre provano il comportamento
+nuovo e non compilano sul codice di prima.
+
+### GF-20, scheda Album: il nome su due righe
+- **La misura.** A 360 dp la cella e' (360 - 40 - 2 x 12) / 3 = 98,7 dp; «Messaggistica» al corpo di `titleSmall` (15 sp, semibold) ne chiede circa 104. Due righe da sole non
+  bastano: una parola sola, a capo, si spezza a meta' («Messaggisti/ca»).
+- **La correzione** (`feature-albums/.../tab/TileName.kt`): il nome sta su **due righe al massimo con le due righe sempre riservate** (altezza fissa = due volte l'altezza di riga
+  di `titleSmall`: copertine e conteggi allineati anche con nomi di una e di due righe; il conteggio sta sempre alla stessa quota). La **parola piu' larga** del nome si misura (`TileNameFit`,
+  `TextMeasurer`, una volta per nome e per larghezza di cella, in `remember`, mai per fotogramma) e, se non entra nella cella, **il corpo scende quanto serve** (larghezza / misura x 0,98), **mai sotto
+  l'85%**. A 360 dp «Messaggistica» esce a circa il 93% del corpo e si legge intera. Un nome davvero lungo finisce con i puntini alla seconda riga; una parola che non entra nemmeno all'85% va a capo.
+  La larghezza della cella la da' la schermata (`metrics.contentWidth`, gia' letta per le colonne, meno gli spazi, diviso le colonne): nessun `BoxWithConstraints` per cella.
+- **La guardia dello stile** (`NoHandWrittenStyleTest` di `feature-albums`) vietava ogni `fontSize =`: ora consente un corpo calcolato dal token (`fontSize = ...base.fontSize...`). Un corpo letterale
+  (`15.sp`, `fontSize = 14.sp`) resta vietato.
+- Controllato col testo grande (1,3x: due colonne, celle da circa 154 dp: le voci fisse entrano senza ridurre il corpo) e sul tablet (sette colonne): niente salti di allineamento.
+- Prove: `AlbumsTabNamesTest` (+ classe tablet).
+- Screenshot: `G2b/scheda-album-*`, `G2/pillola-album-*`, `K3b/nuovo-album-*` (mostrano la scheda), nuovi `G2b/scheda-album-voci-fisse-e-nomi-lunghi-*` (le cinque voci fisse con «Messaggistica» intera, un nome
+  di una, di due righe e uno troppo lungo; chiaro, scuro, telefono, tablet, testo grande sul telefono).
+
+### GF-21, Diagnostica
+- La pillola di stato passa da `badge` a `labels` in `DiagnosticsScreen` (riga di sezione) e in `DiagnosticsRows` (riga di una voce): la stessa correzione di K4. «Attivita'» e «Rete e NAS»
+  non si spezzano piu' a 1,3x, e negli «Avvisi di Android» il testo usa la larghezza della riga (la pillola sta accanto al titolo o sotto).
+- **In piu' (non nel brief)**: il punto del codice di un errore registrato e' una parola sola piu' larga della riga («LibraryViewModel$load$1.invokeSuspend (...)») e anche con la riga larga si
+  spezzava in «invokeS/uspend». `withBreakOpportunities` (solo a schermo, solo su `detail`) mette un'opportunita' invisibile di andare a capo (U+200B) prima di un `$` e dopo un punto fra due nomi: si
+  spezza fra i pezzi. Le frasi, i decimali («1,2 s») e le date non cambiano; gli argomenti dei dati e l'esportazione non cambiano (la modifica e' nella sola `DiagItemRow`).
+- Prove: `DiagnosticsRowsFitTest` (titoli delle diciannove sezioni a 1,0x e 1,3x; Avvisi di Android: testo largo almeno il 55% dello schermo, pillola; punto del codice).
+- Screenshot: `2-P8/` e `rg-b/` riregistrati; e **tutte le sezioni anche a testo grande** (nuovi `2-P8/sezione-*-telefono-testo-grande`, `rg-b/...-testo-grande`, solo telefono). Guardate: nessun titolo spezzato.
+  Le immagini di `2-P8/` che differiscono senza che il pacchetto le tocchi (l'esportazione, `esporta-*`) erano gia' vecchie rispetto al codice (il testo di «Cosa contiene» e' cambiato in un pacchetto
+  precedente): sono ora allineate.
+
+### GF-22, il riepilogo della Libreria in cima
+- `GalleryChromeLabel` e `GalleryTopChrome` hanno `shorterSubtitles: List<String>?`. Con una lista (anche vuota) il sottotitolo e' un **riepilogo che si mostra intero o non si mostra**: la prima forma che
+  entra fra la forma intera e le piu' corte e, se nemmeno la piu' stretta entra, **niente seconda riga** (il riepilogo sta scritto anche in fondo alla griglia; l'altezza dell'etichetta e' fissa, il titolo si
+  centra). Stessa strada della data: `ChromeTitleFit` con una forma vuota in coda, scelta **al layout** dalla larghezza della riga, una misura per forma, nessuna misura per fotogramma. Con `null` (il luogo
+  di una sezione) il sottotitolo si tronca con i puntini come prima; il comportamento della data non cambia. TalkBack legge sempre titolo e sottotitolo per esteso.
+- La Libreria dice: «1.817 foto, 183 video», «2.000 elementi» (`collection_count`, con il plurale giusto) e, con un filtro attivo, il solo filtro («Video»): un filtro attivo si dice sempre. A 360 dp con
+  quattro tasti oggi esce «2.000 elementi» (`G1/libreria-in-cima-*`).
+- Fuori dal perimetro del brief, il minimo: `ChromeLabelText` (`feature-library/.../grid/GridPageChrome.kt`) porta le forme e `GridTopChrome` le passa.
+- Prove: `GalleryChromeLabelSummaryFitTest` (core-designsystem), `LibraryChromeSummaryFitTest` (la Libreria vera).
+
+### GF-24, pop-up della nuvola
+- La capsula (`GalleryFooterPill`) ha la frase su **due righe al massimo**: a 1,3x «Primo backup: 1.240 di 6.658» va a capo fra le parole («...1.240 di / 6.658»), mai dentro un numero.
+- **TalkBack una volta sola**: la capsula dice «etichetta. dettaglio»; il testo del dettaglio sotto (`CloudNote`, e `GalleryFooterDetail` che usa `GalleryFooterEntry`: stesso doppione nelle Raccolte e nelle
+  Cartelle NAS) resta visibile ma e' `hideFromAccessibility`. Le prove che cercano il dettaglio per testo lo trovano ancora.
+- **Il punto finale**: le frasi di dettaglio dei lavori fermi hanno tutte il punto (come `backup_footer_*_detail`, la pausa e «Android ha fermato il lavoro: riprende da solo.»): «Risparmio energetico
+  acceso: riprende quando lo spegni.» e «File occupato sul NAS, riprovo tra poco.». Le attese brevi («Attesa carica», «Al prossimo giro») sono etichette e restano senza.
+- Prove: `LibraryCloudTextFitTest`; `BackupFooterTest` aggiornato.
+
+### GF-23, screenshot che mostrano la produzione
+- (a) `chromeSuUnaFotoMoltoChiara` passa le forme corte (come la produzione): «Sab 12 ott 2024».
+- (b) `LibraryCloudScreenshotTest` e `LibraryCloudPopupWordsTest` (G1, K2, RG-D): l'host dei pop-up sta alla radice, sopra la pagina e la pillola (come `GalleryRoot`); la pillola si sfoca come il resto.
+  Le scene di RG-D non avevano la pillola: ora c'e'.
+- (c) `ScaffoldScenes`: lo stato di serie della Libreria ha il NAS configurato (`nasLibraryTabState`), cosi' la nuvola c'e' in `G2/pillola-libreria` e `pillola-ripiegata`. **Attenzione:** vale per tutte
+  le prove che usano `ScaffoldScenes()` senza passare la Libreria (anche `SchedeCheRicordanoTest`, dell'altro agente): la capsula in alto ha un tasto in piu', nient'altro. In selezione la nuvola non
+  c'e' (i comandi diventano «Fine»): `G2/libreria-selezione-*` e' identico a prima.
+- (d) `5-P5/`: tolte le **40** immagini `piede-*` (20 telefono a 412 dp e 20 tablet: il brief ne contava 20, ma anche quelle del tablet non le scrive piu' nessuna prova) e aggiunte le 20
+  `pannello-nuvola-piede-*-tablet` che la classe tablet scrive.
+
+### FAB-22, il foglio «Elimina solo dal telefono»
+`backup_free_phone_choice_safe_first` e `..._detail` sono `plurals` contati sugli elementi **non ancora al sicuro** (`SAFE_FIRST`): uno solo «Prima mettilo al sicuro» e «la copia», piu' di uno «Prima mettili
+al sicuro» e «le copie». `backup_free_phone_not_on_nas_wait` e' `plurals` sui file del foglio («il file» / «i file»). Il nome della funzione e il titolo del foglio non cambiano. Screenshot: `G2/foglio-prima-al-sicuro-selezione-mista-*`.
+
+### OA-20 / FAB-21, il terzo «Nuovo album» tolto
+`NewAlbumHost`, `NewAlbumViewModel` e i loro agganci (`AppNavHost`: lo stato `newAlbum`, la chiamata, `onNewAlbum`; `openCollectionEntry` non ha piu' `onNewAlbum`) sono tolti. **Ricerca dei percorsi di
+produzione**: la voce `albums/new` la fa solo il fornitore della sezione Album (`AlbumsSections.kt`), che `CollectionsLayoutViewModel` non mostra piu' (`inAlbumsTab`); l'unico punto che apre una voce
+delle Raccolte e' `onOpenEntry` di `AppNavHost`; nessun widget, notifica, scorciatoia o link usa `albums/new` (ricerca su sorgenti, risorse e manifest). Nessun percorso vivo: tolto, non fatto passare da
+`ManualAlbumCreator`. Se la voce arrivasse lo stesso, `openEntry` la manda all'elenco degli album (com'era gia' il fallback). Restano il codice `albums/new`, la sua riga nel fornitore e le prove dei fornitori
+(`CollectionsSectionBindingTest`, `SmallPartsTest`, `CollectionsWiringTest`, `EntryPanesTest`): descrivono una voce che il fornitore ancora produce. Nessuna stringa ne' prova orfana.
+
+### Rischi per le prestazioni
+- `TileName`: una `rememberTextMeasurer` per schermata e una misura delle parole per nome, in `remember(fit, title)`: si rifa solo se cambia il nome o la larghezza della cella (rotazione, testo di sistema),
+  non scorrendo. Nessun vetro ne' fondale nuovi; la riga resta un solo `Row` con `weight`.
+- `GalleryChromeLabel`: la misura del riepilogo e' una per forma, al layout, solo se serve (un riepilogo che entra intero misura solo se' stesso); mentre la capsula accanto si muove la scelta e' un confronto fra
+  interi, come per la data. Nessuna misura nuova per fotogramma. Il contenuto del testo non si ricompone finche' la forma non cambia.
+- Capsula a due righe, `hideFromAccessibility`: nessun costo.
+- `withBreakOpportunities`: due espressioni regolari su stringhe corte, in composizione, solo per le righe visibili della Diagnostica.
+- Niente lavoro nuovo all'avvio.
+
+### Da provare sul telefono (S25, 360 dp)
+1. Scheda Album: tre colonne, «Messaggistica» e le altre voci fisse intere (il corpo di «Messaggistica» e' un po' piu' piccolo: se si vede, e' la scelta decisa); nomi di due righe con i conteggi sulla stessa
+   riga; un nome molto lungo finisce con i puntini alla seconda riga; col testo grande due colonne.
+2. Diagnostica: la panoramica col testo grande («Attivita'» intero); «Avvisi di Android» con un errore registrato (testo largo, pillola accanto al titolo o sotto, il punto del codice a capo fra i pezzi).
+3. Libreria in cima con i quattro tasti: «2.000 elementi» (o niente), mai «1.817 foto, 18…»; con il filtro «Video» attivo.
+4. Nuvola con il testo grande e il primo backup in corso: la frase va a capo senza spezzare un numero; con TalkBack acceso il dettaglio («circa 1 h 20 min») si sente una volta; «Risparmio energetico acceso: riprende
+   quando lo spegni.» col punto.
+5. Selezione con piu' di un elemento non al sicuro -> «Elimina dal telefono»: «Prima mettili al sicuro» e «le copie»; con uno solo il singolare.
+6. «Nuovo album» dalla scheda Album e da «Tutti gli album» (nessun cambiamento: il terzo percorso tolto non era raggiungibile).
+
+### Decisioni aperte per l'utente
+- Il corpo di «Messaggistica» scende a circa il 93% per entrare in una cella da 98,7 dp (alternative: accorciare il nome della voce fissa, o due colonne su 360 dp).
+- Le due righe del nome sono sempre riservate: un nome di una riga lascia un vuoto sopra il conteggio (come deciso).
+- L'engine non e' stato toccato; nessun difetto dell'engine trovato.

@@ -60,7 +60,7 @@ internal sealed interface EntryTarget {
 
 /**
  * Se la voce ha una pagina nel pannello di dettaglio del tablet: le pagine dell'Utility, della 4B e "Libera spazio" si'; dalla Fase 10 (P5) anche la pagina di un album, di una persona e di un ricordo
- * ([panes]); le liste, "Nuovo album" (un foglio), i viaggi e i Luoghi si aprono come sul telefono.
+ * ([panes]); le liste, "Nuovo album" (dalla fase grafica non si mostra piu' nelle Raccolte: se arrivasse apre l'elenco degli album, FAB-21), i viaggi e i Luoghi si aprono come sul telefono.
  */
 internal fun hasEntryDetail(code: String, panes: EntryPanes? = null): Boolean = when (val target = EntryTarget.of(code)) {
   EntryTarget.FreeSpace, is EntryTarget.Utility, is EntryTarget.Nas -> true
@@ -74,7 +74,6 @@ internal fun openCollectionEntry(
   code: String,
   nav: NavController,
   openFreeSpace: () -> Unit,
-  onNewAlbum: () -> Unit,
   onPeople: (PeopleEntryTarget) -> Unit = {},
   onMemories: (MemoriesEntryTarget) -> Unit = {},
   onPlaces: (PlacesEntryTarget) -> Unit = {},
@@ -83,7 +82,7 @@ internal fun openCollectionEntry(
     EntryTarget.FreeSpace -> openFreeSpace()
     is EntryTarget.Utility -> nav.openUtility(target.page)
     is EntryTarget.Nas -> nav.openNas(target.screen)
-    is EntryTarget.Album -> if (target.target == AlbumEntryTarget.NewAlbum) onNewAlbum() else nav.openEntry(target.target)
+    is EntryTarget.Album -> nav.openEntry(target.target)
     is EntryTarget.People -> onPeople(target.target)
     is EntryTarget.Memories -> onMemories(target.target)
     is EntryTarget.Places -> onPlaces(target.target)

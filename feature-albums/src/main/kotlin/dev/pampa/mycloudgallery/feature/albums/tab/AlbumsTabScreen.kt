@@ -46,6 +46,8 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.isSpecified
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
@@ -82,7 +84,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import dev.pampa.mycloudgallery.core.designsystem.R as DesignR
 
 // LA SCHEDA ALBUM (fase grafica, G2b), in stile Galleria Samsung: una griglia di copertine, tutte con la stessa forma (la foto quadrata con l'angolo
-// continuo, sotto il nome e il numero), prima Preferiti, Fotocamera e Video, poi il resto per ultima apertura. Un album smart ha il segno dell'IA sulla
+// continuo, sotto il nome su due righe e il numero), prima Preferiti, Fotocamera e Video, poi il resto per ultima apertura. Un album smart ha il segno dell'IA sulla
 // copertina, uno condiviso il segno del gruppo: una pillola di scrim come i badge delle celle della Libreria, mai vetro (sopra una griglia che scorre
 // sarebbe uno strato per copertina). La barra e' la sua (il titolo grande della scheda, come Raccolte): "Nuovo album" e il menu con "Tutti gli album",
 // dove restano l'ordine e il riordino di sempre. Lo spazio della pillola delle schede sta in fondo ([contentPadding]); il fondale va a chi la disegna.
@@ -149,6 +151,9 @@ fun AlbumsTabScreen(
   val ready = state as AlbumsTabState.Ready
   val metrics = rememberFluidScreenMetrics()
   val columns = metrics.columns(minColumn = AlbumDimens.TabCardMin, spacing = AlbumDimens.TabGap, maxColumns = AlbumDimens.TabMaxColumns)
+  // GF-20: la larghezza di una cella (la colonna di contenuto meno gli spazi, divisa per le colonne): serve a far entrare intera la parola piu' larga di un nome.
+  val cellWidth = if (metrics.contentWidth.isSpecified) (metrics.contentWidth - AlbumDimens.TabGap * (columns - 1)) / columns else Dp.Unspecified
+  val nameFit = rememberTileNameFit(cellWidth, MaterialTheme.typography.titleSmall)
   // Avvio istantaneo: finche' gli album non sono letti, al loro posto tante copertine ferme quante ce n'erano l'ultima volta.
   val remembered = rememberInstantShape(ALBUMS_TAB_SHAPE, InstantShape.of(InstantBlock.Tiles(DEFAULT_SKELETON_TILES, columns)))
   if (!ready.albumsPending && ready.albumCount > 0) {
@@ -175,7 +180,7 @@ fun AlbumsTabScreen(
     overlay = { pageBackdrop -> SideEffect { backdropOut(pageBackdrop) } },
   ) {
     notices(ready.notices, handlers)
-    tileRows(tiles, columns, thumbnails, handlers)
+    tileRows(tiles, columns, thumbnails, handlers, nameFit)
     if (!ready.albumsPending && ready.albumCount == 0) noAlbumsYet(handlers)
   }
 }
@@ -264,14 +269,14 @@ private fun LazyListScope.notices(notices: List<SharedAlbumNotice>, handlers: Al
 }
 
 /** Le righe di copertine: [columns] per riga; l'ultima non allarga le copertine (i posti vuoti restano vuoti). */
-private fun LazyListScope.tileRows(tiles: List<TabTile>, columns: Int, thumbnails: AlbumThumbnails, handlers: AlbumsTabHandlers) {
+private fun LazyListScope.tileRows(tiles: List<TabTile>, columns: Int, thumbnails: AlbumThumbnails, handlers: AlbumsTabHandlers, nameFit: TileNameFit) {
   val rows = tiles.chunked(columns)
   items(rows.size, key = { rowKey(it) }, contentType = { "albums-row" }) { rowIndex ->
     Row(horizontalArrangement = Arrangement.spacedBy(AlbumDimens.TabGap), modifier = Modifier.fillMaxWidth()) {
       val row = rows[rowIndex]
       for (tile in row) {
         when (tile) {
-          is TabTile.Entry -> AlbumsTabTile(tile.entry, thumbnails, onClick = { handlers.onOpen(tile.entry) }, modifier = Modifier.weight(1f))
+          is TabTile.Entry -> AlbumsTabTile(tile.entry, thumbnails, nameFit, onClick = { handlers.onOpen(tile.entry) }, modifier = Modifier.weight(1f))
           is TabTile.Skeleton -> SkeletonTile(first = tile.index == 0, modifier = Modifier.weight(1f))
         }
       }
@@ -282,7 +287,7 @@ private fun LazyListScope.tileRows(tiles: List<TabTile>, columns: Int, thumbnail
 
 /** Una voce: la copertina quadrata con i suoi segni, sotto il nome e il numero. Un bottone solo per TalkBack, che dice tutto in una frase. */
 @Composable
-private fun AlbumsTabTile(entry: AlbumsTabEntry, thumbnails: AlbumThumbnails, onClick: () -> Unit, modifier: Modifier) {
+private fun AlbumsTabTile(entry: AlbumsTabEntry, thumbnails: AlbumThumbnails, nameFit: TileNameFit, onClick: () -> Unit, modifier: Modifier) {
   val resources = LocalContext.current.resources
   val title = entryTitle(entry)
   val emptyFavorites = entry is AlbumsTabEntry.Special && entry.kind == SpecialAlbum.FAVORITES && entry.count == 0
@@ -313,13 +318,8 @@ private fun AlbumsTabTile(entry: AlbumsTabEntry, thumbnails: AlbumThumbnails, on
       if (marks.isNotEmpty()) CoverMarks(marks, Modifier.align(Alignment.TopEnd).padding(GalleryDimens.BadgeInset))
     }
     Spacer(Modifier.height(AlbumDimens.TabCoverGap))
-    Text(
-      text = title,
-      style = MaterialTheme.typography.titleSmall,
-      color = MaterialTheme.colorScheme.onSurface,
-      maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
-    )
+    // GF-20: il nome su due righe al massimo, con le due righe sempre riservate (le copertine e i conteggi restano allineati).
+    TileName(title = title, fit = nameFit)
     Spacer(Modifier.height(AlbumDimens.TabCaptionGap))
     Text(
       text = caption,

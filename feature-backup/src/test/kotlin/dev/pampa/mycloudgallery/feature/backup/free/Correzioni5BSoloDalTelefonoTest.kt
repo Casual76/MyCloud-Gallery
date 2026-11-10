@@ -52,6 +52,11 @@ class Correzioni5BSoloDalTelefonoTest : ComposeBackupTallTest() {
     return PhoneOnlyUi.Advice(assessment, safeFirst = assessment.preselectSafeFirst, note = note)
   }
 
+  private fun manyAdvice(count: Int, advice: PhoneOnlyAdvice): PhoneOnlyUi.Advice {
+    val assessment = PhoneOnlyAssessment((1..count).associate { id(it) to advice })
+    return PhoneOnlyUi.Advice(assessment, safeFirst = assessment.preselectSafeFirst, note = null)
+  }
+
   private fun showSheet(ui: PhoneOnlyUi, isVideo: Boolean = false, withTrash: Boolean = true) {
     show {
       PhoneOnlyContent(
@@ -79,12 +84,41 @@ class Correzioni5BSoloDalTelefonoTest : ComposeBackupTallTest() {
     showSheet(advice(PhoneOnlyAdvice.UNAVAILABLE))
     composeRule.onNodeWithText("Questa foto non è sul NAS").assertExists()
     composeRule.onNodeWithText("Il backup non è attivo su questo telefono", substring = true).assertExists()
-    composeRule.onNodeWithText("la recuperi da Eliminati di recente per 30 giorni", substring = true).assertExists()
+    // GF-13: al singolare e senza genere (vale per una foto come per un video): si parla del "file".
+    composeRule.onNodeWithText("lo recuperi da Eliminati di recente per 30 giorni", substring = true).assertExists()
     noButton("Continua")
     noButton("Metti al sicuro")
     button("Elimina dal telefono").performClick()
     assertThat(trashed).containsExactly(setOf(id(1)))
   }
+
+  /**
+   * GF-13: con piu' elementi le frasi sono al plurale. Prima il titolo diceva «Non sono sul NAS» ma il testo «Se la elimini dal telefono... la recuperi... non ci sara' piu'»
+   * (singolare e femminile), e per un video «la» era sbagliato lo stesso.
+   */
+  @Test
+  fun gf13_conPiuElementiLeFrasiSonoAlPlurale() {
+    showSheet(manyAdvice(5, PhoneOnlyAdvice.UNAVAILABLE))
+    composeRule.onNodeWithText("Non sono sul NAS").assertExists()
+    composeRule.onNodeWithText("Se elimini i file dal telefono, vanno nel cestino di Android", substring = true).assertExists()
+    composeRule.onNodeWithText("li recuperi da Eliminati di recente per 30 giorni, poi non ci saranno più da nessuna parte", substring = true).assertExists()
+    assertThat(composeRule.onAllNodes(hasText("Se la elimini", substring = true)).fetchSemanticsNodes()).isEmpty()
+    button("Elimina dal telefono").performClick()
+    assertThat(trashed.single()).hasSize(5)
+  }
+
+  private fun assertSheetPhraseNeutral(count: Int) {
+    showSheet(manyAdvice(count, PhoneOnlyAdvice.SAFE_FIRST), withTrash = false)
+    composeRule.onNodeWithText("Sul NAS non cambia niente", substring = true).assertExists()
+    assertThat(composeRule.onAllNodes(hasText("Il file resta", substring = true)).fetchSemanticsNodes()).isEmpty()
+  }
+
+  /** GF-13: la frase del foglio "Elimina solo dal telefono" vale per uno e per cinque elementi: non dice "il file" ne' "la copia" al singolare. */
+  @Test
+  fun gf13_laFraseDelFoglioVaBeneConUnElemento() = assertSheetPhraseNeutral(1)
+
+  @Test
+  fun gf13_laFraseDelFoglioVaBeneConCinqueElementi() = assertSheetPhraseNeutral(5)
 
   @Test
   fun ls1_unVideoHaLeSueParole() {

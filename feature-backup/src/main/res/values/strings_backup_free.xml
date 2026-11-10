@@ -175,7 +175,8 @@
 
   <!-- "Elimina solo dal telefono" (D22, E-D14, E-B14). -->
   <string name="backup_free_phone_title">Elimina solo dal telefono</string>
-  <string name="backup_free_phone_message">Il file resta sul NAS. Prima controllo che la copia sul NAS sia al sicuro.</string>
+  <!-- GF-13: la frase vale per uno e per cinque elementi, quindi non dice "il file" ne' "la copia" al singolare. -->
+  <string name="backup_free_phone_message">Sul NAS non cambia niente. Prima controllo che ogni copia sul NAS sia al sicuro.</string>
   <string name="backup_free_phone_loading">Controllo cosa si può togliere…</string>
   <string name="backup_free_phone_unavailable_title">Per ora non è disponibile</string>
   <string name="backup_free_phone_unavailable_detail">Questa funzione si accende quando il backup è pronto.</string>
@@ -227,11 +228,18 @@
   <string name="backup_free_phone_not_on_nas_title_many">Non sono sul NAS</string>
   <string name="backup_free_phone_not_on_nas_inactive">Il backup non è attivo su questo telefono: sul NAS non c’è una copia controllata dall’app.</string>
   <string name="backup_free_phone_not_on_nas_not_verified">Sul NAS non c’è ancora una copia controllata dall’app.</string>
-  <string name="backup_free_phone_not_on_nas_wait">Il backup la sta ancora caricando, o ha avuto un problema.</string>
+  <string name="backup_free_phone_not_on_nas_wait">Il backup sta ancora caricando i file, o ha avuto un problema.</string>
   <string name="backup_free_phone_not_on_nas_frozen">Il NAS ha avuto un cambiamento anomalo: la copia non si può controllare.</string>
   <string name="backup_free_phone_not_on_nas_fence">In prova l’app controlla solo la cartella di prova.</string>
-  <string name="backup_free_phone_not_on_nas_trash">Se la elimini dal telefono va nel cestino di Android: la recuperi da Eliminati di recente per 30 giorni, poi non ci sarà più da nessuna parte.</string>
-  <string name="backup_free_phone_not_on_nas_trash_gallery">Se la elimini dal telefono va nel Cestino di Galleria: la recuperi da lì per 30 giorni, poi non ci sarà più da nessuna parte.</string>
+  <!-- GF-13: plurali giusti e nessun genere ("la elimini" valeva per una foto, non per un video ne' per cinque file): si parla del file. -->
+  <plurals name="backup_free_phone_not_on_nas_trash">
+    <item quantity="one">Se elimini il file dal telefono, va nel cestino di Android: lo recuperi da Eliminati di recente per 30 giorni, poi non ci sarà più da nessuna parte.</item>
+    <item quantity="other">Se elimini i file dal telefono, vanno nel cestino di Android: li recuperi da Eliminati di recente per 30 giorni, poi non ci saranno più da nessuna parte.</item>
+  </plurals>
+  <plurals name="backup_free_phone_not_on_nas_trash_gallery">
+    <item quantity="one">Se elimini il file dal telefono, va nel Cestino di Galleria: lo recuperi da lì per 30 giorni, poi non ci sarà più da nessuna parte.</item>
+    <item quantity="other">Se elimini i file dal telefono, vanno nel Cestino di Galleria: li recuperi da lì per 30 giorni, poi non ci saranno più da nessuna parte.</item>
+  </plurals>
   <string name="backup_free_phone_action_trash">Elimina dal telefono</string>
 
   <!-- Correzioni 5B (LS-4): "Metti al sicuro" fa partire cio' che serve a quel media e il foglio si aggiorna da solo. -->

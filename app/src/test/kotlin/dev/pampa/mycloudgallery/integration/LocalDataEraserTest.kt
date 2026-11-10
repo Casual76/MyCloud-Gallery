@@ -3,7 +3,9 @@ package dev.pampa.mycloudgallery.integration
 import android.app.Application
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.albums.DataStoreAlbumOpenings
 import dev.pampa.mycloudgallery.backup.BackupRunMemory
+import dev.pampa.mycloudgallery.graph.AppLocalDataEraser
 import dev.pampa.mycloudgallery.graph.GalleryStopper
 import dev.pampa.mycloudgallery.nas.NasGraph
 import dev.pampa.mycloudgallery.nas.NasOrganizer
@@ -117,6 +119,29 @@ class LocalDataEraserTest {
     assertThat(device.graph.backupSettingsStorage.data.first().deviceFolder).isNull()
     memory.forEach { assertThat(it.exists()).isFalse() }
   }
+
+  /**
+   * FAB-13: l'ultima apertura della scheda Album (`album_openings`, un DataStore dell'account) si toglie con l'azzeramento e con il cambio di account (i soli dati di un account):
+   * restava, e il nuovo account partiva da aperture del vecchio.
+   */
+  private fun albumOpeningsAreErased(erase: suspend (TestDevice) -> Boolean) = runBlocking<Unit> {
+    val device = device()
+    val noBackup = device.context.noBackupFilesDir
+    val files = DataStoreAlbumOpenings.FILES.map { File(noBackup, it).apply { parentFile!!.mkdirs(); writeText("openings") } }
+    val unrelated = File(noBackup, "datastore/library_preferences.preferences_pb").apply { parentFile!!.mkdirs(); writeText("tenuto") }
+
+    assertThat(erase(device)).isTrue()
+
+    files.forEach { assertThat(it.exists()).isFalse() }
+    // Non si tocca nient'altro della cartella dei DataStore (le preferenze del telefono non dicono niente della famiglia).
+    assertThat(unrelated.exists()).isTrue()
+  }
+
+  @Test
+  fun lAzzeramentoTogliLUltimaAperturaDellaSchedaAlbum() = albumOpeningsAreErased { it.graph.eraser.eraseAll() }
+
+  @Test
+  fun ilCambioDiAccountTogliLUltimaAperturaDellaSchedaAlbum() = albumOpeningsAreErased { AppLocalDataEraser(it.context, it.graph).eraseAccountData(stopGallery = false) }
 
   @Test
   fun senzaGalleriaRegistrataSiCancellaLoStesso() = runBlocking<Unit> {

@@ -86,8 +86,13 @@ class FreeSpaceRequest(val serial: Long, val selection: Set<MediaId>?) {
   override fun toString(): String = "FreeSpaceRequest(#$serial, ${selection?.size ?: "tutti"})"
 }
 
-/** Correzioni 5B (LS-1, LS-14): il cestino di Android per delle righe del telefono, da lanciare dall'activity (una volta sola). */
-class PhoneTrashRequest(val sender: IntentSender, val serial: Long) {
+/**
+ * Correzioni 5B (LS-1, LS-14): il cestino di Android per delle righe del telefono, da lanciare dall'activity (una volta sola).
+ *
+ * [fromSelection] (FAB-12): la richiesta viene dal foglio "Prima mettilo al sicuro" aperto dalla selezione della Libreria. Chi risponde al dialogo di sistema
+ * chiude la selezione solo se l'utente conferma (`FiveBHostEffect`, [FiveBUi.phoneSheetContinued]): annullando, la ritrova com'era.
+ */
+class PhoneTrashRequest(val sender: IntentSender, val serial: Long, val fromSelection: Boolean = false) {
   override fun toString(): String = "PhoneTrashRequest(#$serial)"
 }
 
@@ -285,15 +290,15 @@ class FiveBUi(
    * dal telefono", **come nella 4B**: il dialogo del sistema per il cestino di Android (30 giorni, si recupera da Eliminati di recente) per le
    * righe del telefono di [ids]. L'app non toglie niente da sola: il permesso lo da' l'utente nel dialogo. Nessuna copia del NAS si tocca.
    */
-  fun trashFromPhone(ids: Set<MediaId>) {
+  fun trashFromPhone(ids: Set<MediaId>, fromSelection: Boolean = false) {
     scope.launch {
       val refs = phoneCopies(ids)
       if (refs.isEmpty()) return@launch sayHere(R.string.fiveb_trash_nothing)
-      askTrash(refs)
+      askTrash(refs, fromSelection)
     }
   }
 
-  private fun askTrash(refs: List<MediaRef.Phone>) {
+  private fun askTrash(refs: List<MediaRef.Phone>, fromSelection: Boolean = false) {
     val sender = try {
       backup.fiveB.trashRequest(refs)
     } catch (e: CancellationException) {
@@ -302,7 +307,7 @@ class FiveBUi(
       GalleryLog.w(TAG) { "richiesta del cestino non riuscita (${e.javaClass.simpleName})" }
       null
     }
-    if (sender == null) sayHere(R.string.fiveb_trash_failed) else trashFlow.value = PhoneTrashRequest(sender, next())
+    if (sender == null) sayHere(R.string.fiveb_trash_failed) else trashFlow.value = PhoneTrashRequest(sender, next(), fromSelection)
   }
 
   /** Le righe del telefono presenti di [ids], dal catalogo (tutte le copie del telefono di ogni media). */

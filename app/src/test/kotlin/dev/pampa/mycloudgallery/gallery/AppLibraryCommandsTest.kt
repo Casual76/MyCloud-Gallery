@@ -8,6 +8,7 @@ import android.net.Uri
 import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
+import dev.pampa.mycloudgallery.backup.PhoneTrashRequest
 import dev.pampa.mycloudgallery.core.mediastore.android.AndroidPhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
@@ -17,6 +18,7 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuAction
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMenuCapabilities
 import dev.pampa.mycloudgallery.integration.GalleryRig
+import dev.pampa.mycloudgallery.main.settleSelectionAfterTrash
 import java.io.File
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -312,4 +314,41 @@ class AppLibraryCommandsTest {
       cancelAndIgnoreRemainingEvents()
     }
   }
+
+  // --- FAB-12: il cestino scelto dal foglio "Prima mettilo al sicuro" chiude la selezione solo alla risposta positiva del dialogo -------
+
+  private fun trashRequest(fromSelection: Boolean): PhoneTrashRequest {
+    val app = ApplicationProvider.getApplicationContext<Application>()
+    val sender = PendingIntent.getBroadcast(app, 0, Intent("k3b.trash"), PendingIntent.FLAG_IMMUTABLE).intentSender
+    return PhoneTrashRequest(sender, serial = 1, fromSelection = fromSelection)
+  }
+
+  @Test
+  fun fab12_ilCestinoDalFoglioDellaQuintaBChiudeLaSelezioneSoloSeIlDialogoEConfermato() = runBlocking {
+    val proceeded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val commands = withFiveB(commands(), active = true, proceeded = proceeded)
+    commands.selectionSettled.test {
+      val request = trashRequest(fromSelection = true)
+      // L'utente annulla il dialogo di sistema: la selezione resta com'era (prima si chiudeva appena si toccava "Elimina dal telefono").
+      settleSelectionAfterTrash(request, confirmed = false) { proceeded.tryEmit(Unit) }
+      expectNoEvents()
+      // Conferma: si chiude.
+      settleSelectionAfterTrash(request, confirmed = true) { proceeded.tryEmit(Unit) }
+      assertThat(awaitItem()).isEqualTo(Unit)
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
+
+  @Test
+  fun fab12_unCestinoChiestoDalViewerONessunaRichiestaNonChiudonoLaSelezione() = runBlocking {
+    val proceeded = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val commands = withFiveB(commands(), active = true, proceeded = proceeded)
+    commands.selectionSettled.test {
+      settleSelectionAfterTrash(trashRequest(fromSelection = false), confirmed = true) { proceeded.tryEmit(Unit) }
+      settleSelectionAfterTrash(null, confirmed = true) { proceeded.tryEmit(Unit) }
+      expectNoEvents()
+      cancelAndIgnoreRemainingEvents()
+    }
+  }
 }
+

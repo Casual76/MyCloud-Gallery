@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.withContext
 
 /**
@@ -71,7 +71,12 @@ class CatalogFilterMembership(
           FilterExtras.NONE
         }
       }
-      .onEach { delay(settleMs) }
+      // La prima subito, poi al piu' una ogni [settleMs] (FAB-11): l'attesa viene **dopo** l'emissione. Con `onEach` cadeva prima, e anche la prima correzione arrivava dopo 2,5 s.
+      // Mentre il flusso aspetta, `conflate()` tiene solo l'ultimo cambiamento dell'indice.
+      .transform { value ->
+        emit(value)
+        delay(settleMs)
+      }
 
   private fun db(): SupportSQLiteDatabase = database.openHelper.readableDatabase
 

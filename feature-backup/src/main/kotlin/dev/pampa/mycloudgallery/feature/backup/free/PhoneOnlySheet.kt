@@ -37,7 +37,8 @@ import dev.pampa.mycloudgallery.core.backup.free.PhoneOnlyAssessment
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
-import dev.pampa.mycloudgallery.core.designsystem.state.phoneTrashText
+import dev.pampa.mycloudgallery.core.designsystem.state.LocalPhoneTrash
+import dev.pampa.mycloudgallery.core.designsystem.state.PhoneTrash
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
 import dev.pampa.mycloudgallery.feature.backup.R
@@ -366,7 +367,7 @@ private fun NotOnNasContent(
     icon = Icons.Rounded.CloudOff,
     tone = GallerySheetTone.Destructive,
     title = title,
-    message = stringResource(reason) + " " + stringResource(phoneTrashText(R.string.backup_free_phone_not_on_nas_trash, R.string.backup_free_phone_not_on_nas_trash_gallery)),
+    message = stringResource(reason) + " " + pluralStringResource(if (LocalPhoneTrash.current == PhoneTrash.GALLERY) R.plurals.backup_free_phone_not_on_nas_trash_gallery else R.plurals.backup_free_phone_not_on_nas_trash, notOnNas.size),
     modifier = modifier,
     body = { state.note?.let { SafeguardNoteRow(it) } },
     actions = {

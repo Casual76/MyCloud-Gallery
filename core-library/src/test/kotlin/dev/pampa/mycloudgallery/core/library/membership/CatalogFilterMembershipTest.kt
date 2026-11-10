@@ -21,7 +21,14 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -106,5 +113,37 @@ class CatalogFilterMembershipTest : SimilarCatalogTestBase() {
     assertThat(m.extras(LibraryFilter.MESSAGING).first()).isEqualTo(FilterExtras(plus = setOf(telegram)))
     assertThat(m.extras(LibraryFilter.CAMERA).first()).isEqualTo(FilterExtras(minus = setOf(copiedByHand)))
     assertThat(m.extras(LibraryFilter.VIDEOS).first()).isEqualTo(FilterExtras.NONE)
+  }
+
+  /**
+   * FAB-11: la prima correzione arriva **subito** (il commento e i documenti dicevano cosi'; il ritardo cadeva prima della prima emissione) e poi al piu' una ogni
+   * `settleMs`. Tempo virtuale: a 0 ms c'e' la prima, a 2.499 ms ancora quella sola, a 2.501 ms la seconda.
+   */
+  @OptIn(ExperimentalCoroutinesApi::class)
+  @Test
+  fun laPrimaCorrezioneArrivaSubitoELeAltreAlPiuUnaOgniSettleMs() = runTest {
+    val base = SyntheticLibrary(count = 1).snapshot
+    fun snapshotWith(number: Long): TimelineSnapshot = object : TimelineSnapshot by base {
+      override val seq: Long = number
+    }
+    val snapshots = MutableStateFlow<TimelineSnapshot?>(snapshotWith(1))
+    val membership = CatalogFilterMembership(db, snapshots, flowOf("S25"), io = UnconfinedTestDispatcher(testScheduler), settleMs = 2_500)
+    val seen = ArrayList<FilterExtras>()
+    backgroundScope.launch { membership.extras(LibraryFilter.MESSAGING).collect { seen += it } }
+
+    runCurrent()
+    assertThat(currentTime).isEqualTo(0L)
+    assertThat(seen).hasSize(1)
+
+    // L'indice cambia subito dopo: la seconda lettura aspetta.
+    snapshots.value = snapshotWith(2)
+    runCurrent()
+    assertThat(seen).hasSize(1)
+    advanceTimeBy(2_499)
+    runCurrent()
+    assertThat(seen).hasSize(1)
+    advanceTimeBy(2)
+    runCurrent()
+    assertThat(seen).hasSize(2)
   }
 }

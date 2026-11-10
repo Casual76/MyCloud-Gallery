@@ -46,6 +46,12 @@ class DataStoreAlbumOpenings(private val store: DataStore<Preferences>, scope: C
     /** Il nome del file del DataStore. */
     const val FILE_NAME: String = "album_openings"
 
+    /**
+     * FAB-13: i file di questo DataStore sotto `noBackupFilesDir` (`SetupDataStores.fileOf`: `datastore/<nome>.preferences_pb`, e il suo temporaneo di scrittura), per
+     * l'azzeramento e per il cambio di account (`AppLocalDataEraser.ALBUMS_TAB_FILES`): l'ordine "ultima apertura" e' dei dati di un account (le chiavi sono gli id dei suoi album).
+     */
+    val FILES: List<String> = listOf("datastore/$FILE_NAME.preferences_pb", "datastore/$FILE_NAME.preferences_pb.tmp")
+
     private val KEY = stringPreferencesKey("openings")
     private const val SEPARATOR = '\t'
 

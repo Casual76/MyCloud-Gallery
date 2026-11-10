@@ -230,7 +230,7 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
         // I11: in debug anche i dati dello strumento di valutazione della ricerca (`eval/`); in release non ce ne sono.
         // Fase 8 (P13): i database dei volti (`faces/faces-<G>.db` con `-wal`, `-shm`, `-journal`, anche con `allDatabases = false`), le chiavi avvolte, la memoria
         // locale (`faces-local`), il diario della cancellazione, il registro delle teste personali e il battito del calcolo.
-        for (name in NAS_FILES + AI_FILES + FACES_FILES + PHASE9_FILES + PHASE10_FILES + DeveloperTools.erasableDirs()) {
+        for (name in NAS_FILES + AI_FILES + FACES_FILES + PHASE9_FILES + PHASE10_FILES + ALBUMS_TAB_FILES + DeveloperTools.erasableDirs()) {
           val target = File(context.noBackupFilesDir, name)
           if (target.exists() && !target.deleteRecursively()) steps.ok = false
         }
@@ -303,6 +303,13 @@ class AppLocalDataEraser(private val context: Context, private val graph: AppGra
       dev.pampa.mycloudgallery.memories.MemoriesWiring.DIR,
       dev.pampa.mycloudgallery.feature.map.map.MapLibreInit.MAP_DIR,
     )
+
+    /**
+     * FAB-13 (fase grafica, G2b): l'ultima apertura delle voci della scheda Album (DataStore `album_openings`). Le sue chiavi sono gli id degli album di un account: restava
+     * dopo l'azzeramento e dopo il cambio di account, e l'ordine della scheda del nuovo account partiva da aperture del vecchio. Il processo si riavvia subito dopo (azzeramento e
+     * cambio di account), quindi il DataStore non riscrive il vecchio valore.
+     */
+    val ALBUMS_TAB_FILES: List<String> = dev.pampa.mycloudgallery.albums.DataStoreAlbumOpenings.FILES
 
     /** Fase 10 (P13, D42): il registro del widget (`widget/`). Lo stato del manifest (`release/`) lo toglie solo l'azzeramento completo ([eraseAll]). */
     val PHASE10_FILES: List<String> = listOf(dev.pampa.mycloudgallery.widget.WidgetGraph.DIR)

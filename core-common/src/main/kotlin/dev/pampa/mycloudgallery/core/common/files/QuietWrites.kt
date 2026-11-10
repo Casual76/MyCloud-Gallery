@@ -14,6 +14,19 @@ import kotlinx.coroutines.CancellationException
  * - Solo `IOException` (compresa `CorruptionException` di DataStore): un errore di programmazione (`IllegalStateException`...) resta un errore.
  * - La **cancellazione** non si inghiotte mai: se la coroutine viene annullata, l'annullamento passa.
  * - Nel log (livello warn) c'e' solo l'etichetta scelta da chi chiama e il tipo dell'errore, mai il messaggio: quello del sistema ha il percorso del file (C14, C21).
+ *
+ * **Dove si usa (K5).** L'errore di scrittura si traduce **una volta sola, nello strato che puo' mostrare un esito o riprovare**:
+ * - **si':** nel controller o nel view-model che lancia la scrittura da un ambito di interfaccia, guardando l'esito ([attempt] falso, [attemptResult] null) per dire "non
+ *   salvato", rimettere il valore di prima o tenere la scelta in attesa;
+ * - **si':** dentro un deposito il cui setter **restituisce l'esito** a chi chiama (`Boolean`, un numero, un `Outcome`);
+ * - **si', senza guardare l'esito:** solo se **nessun** chiamante distingue il successo dal fallimento e non c'e' dove dirlo (un interruttore che legge lo stato salvato e
+ *   torna dov'era; una scrittura che l'app fa da sola, come un "visto" o un contatore);
+ * - **no:** dentro un setter che restituisce `Unit` quando chi sta sopra ha un `try`, un `attempt { }`, un `runCatching` o un tentativo ripetuto costruiti sull'eccezione:
+ *   il fallimento diventa un successo muto, chi doveva riprovare crede di aver consegnato e chi doveva dirlo all'utente tace (K3b l'aveva fatto in `core-personal`: l'ordine
+ *   delle Raccolte non si ritentava piu', "Annulla" compariva per uno scarto non salvato). Li' il setter lascia passare l'`IOException` e lo dichiara (`@Throws`).
+ *
+ * Prima di avvolgere una scrittura, o di togliere l'involucro, si guardano **tutti** i chiamanti fino all'interfaccia: se uno non ha un confine, il confine va messo in quel
+ * controller o view-model (mai nella composizione), non piu' in basso.
  */
 object QuietWrites {
 

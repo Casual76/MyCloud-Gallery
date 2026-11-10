@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.memories.testing.InMemoryMemories
 import dev.pampa.mycloudgallery.core.memories.testing.InMemoryShelfStore
 import dev.pampa.mycloudgallery.core.memories.testing.SyntheticMemoryLibrary
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.personal.contract.MemoriesPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.testing.InMemoryMemoriesPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.testing.MemoriesRegister
 import java.time.LocalDate
@@ -21,7 +22,12 @@ import kotlinx.coroutines.flow.first
  * Libreria sintetica con **solo date relative a oggi** (3 novembre di un anno finto) e nessun dato personale: due "anni fa" con nove foto ognuno
  * e un ottobre pieno (il meglio del mese). Le schermate si provano sopra questo, con le loro porte finte.
  */
-internal class MemoriesRig(val today: LocalDate = LocalDate.of(2026, 11, 3), seeded: Boolean = true) {
+internal class MemoriesRig(
+  val today: LocalDate = LocalDate.of(2026, 11, 3),
+  seeded: Boolean = true,
+  /** Le scelte personali vere al posto di quelle in memoria (K5: `SyncedMemoriesSettings` sopra un registro che non si scrive). */
+  personalSettings: MemoriesPersonalSettings? = null,
+) {
   val lib = SyntheticMemoryLibrary().apply {
     if (seeded) {
       batch {
@@ -35,7 +41,7 @@ internal class MemoriesRig(val today: LocalDate = LocalDate.of(2026, 11, 3), see
   val personal = InMemoryMemoriesPersonalSettings(register)
   val store = InMemoryShelfStore()
   val people = FakeMemoryPeople(available = true) { ids -> lib.visibility.visible(ids) }
-  val memories = InMemoryMemories(lib.visibility, lib.visibility, personal, store, clock, people = people)
+  val memories = InMemoryMemories(lib.visibility, lib.visibility, personalSettings ?: personal, store, clock, people = people)
 
   suspend fun refresh() = memories.refresh(RefreshReason.NIGHTLY, 60.seconds)
 

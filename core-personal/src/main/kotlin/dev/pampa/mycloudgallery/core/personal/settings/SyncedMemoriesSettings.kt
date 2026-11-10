@@ -60,26 +60,30 @@ class SyncedMemoriesSettings(
     memories.markSeen(memoryId, day)
   }
 
+  // K5: le scelte dell'utente sui ricordi (scarta, "Mostra meno", "Mai", "Ricordi con le persone") lanciano `IOException` se il registro non si scrive, e niente e' cambiato.
+  // Chi le chiama dall'interfaccia ha il suo confine e ne dipende: la pagina del ricordo non offre "Annulla" per uno scarto non salvato, i fogli non vanno avanti,
+  // le impostazioni dicono "non riuscito"; `PeopleLessJanitor` riprova al cambiamento dopo. Solo [markSeen] resta silenziosa: non e' un gesto dell'utente.
+
   override suspend fun setDismissed(memoryId: String, dismissed: Boolean) {
     val key = MemoriesRecords.dismissedKey(memoryId)
     if (!dismissed && !isLive(key)) return
-    QuietWrites.attempt("ricordo scartato") { store.set(key, if (dismissed) PersonalValue.Flag(true) else PersonalValue.Removed) }
+    store.set(key, if (dismissed) PersonalValue.Flag(true) else PersonalValue.Removed)
   }
 
   override suspend fun setLess(person: PersonId, level: MemoryLessLevel?) {
     val key = MemoriesRecords.lessKey(person)
     if (level == null && !isLive(key)) return
-    QuietWrites.attempt("ricordi di una persona") { store.set(key, MemoriesRecords.lessValue(level)) }
+    store.set(key, MemoriesRecords.lessValue(level))
   }
 
   override suspend fun setNeverDays(days: MemoryDays, never: Boolean) {
     val key = MemoriesRecords.neverKey(days)
     if (!never && !isLive(key)) return
-    QuietWrites.attempt("giorni senza ricordi") { store.set(key, if (never) PersonalValue.Flag(true) else PersonalValue.Removed) }
+    store.set(key, if (never) PersonalValue.Flag(true) else PersonalValue.Removed)
   }
 
   override suspend fun setPeopleMemories(on: Boolean) {
-    QuietWrites.attempt("ricordi con le persone") { store.set(MemoriesRecords.peopleKey, PersonalValue.Flag(on)) }
+    store.set(MemoriesRecords.peopleKey, PersonalValue.Flag(on))
   }
 
   /**
@@ -91,7 +95,7 @@ class SyncedMemoriesSettings(
       key.kind == PersonalKind.SETTING && key.subject == PersonalFields.SETTINGS_SUBJECT &&
         PersonalFields.memoriesLessPersonOf(key.field) != null && entry.value != PersonalValue.Removed
     }.keys.toList()
-    // Un lotto solo: le scelte si azzerano tutte o nessuna. Con la memoria piena non si e' azzerato niente e si dice 0.
+    // Un lotto solo: le scelte si azzerano tutte o nessuna. Con la memoria piena non si e' azzerato niente e si dice 0 (l'esito e' nel numero: qui la scrittura silenziosa non mente).
     if (keys.isEmpty()) return 0
     val saved = QuietWrites.attempt("scelte sulle persone dei ricordi") { store.setAll(keys.map { PersonalChange(it, PersonalValue.Removed) }) }
     return if (saved) keys.size else 0

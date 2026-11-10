@@ -17364,3 +17364,72 @@ spezza a testo normale), **scuro a campione** (e' la stessa pagina con altri col
 ### Decisioni aperte per l'utente
 - Il nome del NAS a testo grande (sopra): puntini o scala del titolo.
 - Il foglio di eliminazione del viewer dice «Eliminare questa foto?» anche per un video: lo cambiamo come nella Libreria?
+
+
+## Pacchetto K5: il confine giusto per gli errori di scrittura del registro personale (10/11)
+
+Branch `fix/k5-confine-errori` (da `integra/beta-grafica` `b1fde810`). Corregge una regressione di K3b; niente grafica.
+
+### Che cosa era successo
+K3b ha avvolto in `QuietWrites.attempt` le scritture di `core-personal` perche' la memoria piena non chiudesse l'app. I setter pero' restituiscono `Unit`: chi era costruito
+sull'eccezione, per riprovare o per dirlo all'utente, vedeva un successo. `CollectionsWiringTest.unaSceltaNonConsegnataRestaQuellaDellUtenteEsiRitenta` era rossa (la consegna
+dell'ordine delle Raccolte credeva di aver consegnato al primo tentativo e non ritentava piu').
+
+### La regola (scritta accanto a `QuietWrites`)
+L'errore di scrittura si traduce **una volta sola, nello strato che puo' mostrare un esito o riprovare**. `QuietWrites` si usa nel controller o view-model che guarda l'esito, o in
+un deposito il cui setter **restituisce** l'esito; senza guardare l'esito solo se nessun chiamante distingue il successo dal fallimento e non c'e' dove dirlo. Mai dentro un setter
+`Unit` quando chi sta sopra ha un `try`, un `attempt { }` o un tentativo ripetuto: li' il setter lascia passare l'`IOException` (lo store e' tutto o niente: niente e' cambiato).
+
+### Scrittura per scrittura
+| Scrittura (`core-personal`) | Chi la chiama, fino all'interfaccia | Scelta |
+|---|---|---|
+| `SyncedCollectionsSettings.setOrder`, `resetOrder`, `setHidden` | `AppCollectionsLayoutStore` (`deliver`: `try` e ritenta; `setOrder`/`setHidden` diretti) -> `CollectionsLayoutController.reorder`/`setShown` (`attempt { }`: rimette l'ordine di prima e accende `failed`) | **lancia** (come prima di K3b) |
+| `SyncedMemoriesSettings.setDismissed` | `MemoryEngine.dismiss` -> `MemoriesFacade` -> `MemoryPageController.dismissMemory` (`guarded`, poi "Annulla"), `LessFlow.undo` (`attempt`) | **lancia** |
+| `SyncedMemoriesSettings.setLess`, `setNeverDays` | `AliasFollowingSettings` -> `MemoryEngine.setLess` -> `LessFlow.choose`/`confirmDays`/`undo` (`attempt`), `MemoriesSettingsController.removeLess` (`try`), `PeopleLessJanitor` (`sweepQuietly`, `MemoriesGraph.quietly`) | **lancia** |
+| `SyncedMemoriesSettings.setPeopleMemories` | `MemoryEngine.setPeopleMemories` -> `MemoriesSettingsController.setPeople` (`try`: messaggio) | **lancia** |
+| `SyncedMemoriesSettings.dropAllPeopleChoices` | `PeopleLessJanitor.sweep` | **lasciata**: restituisce il numero (0 = niente azzerato), l'esito c'e' gia' |
+| `PersonalMemories.markSeen` (e `SyncedMemoriesSettings.markSeen`) | `MemoryEngine.markSeen` -> `MemoryPageController`, `PlayerController` | **lasciata silenziosa**: non e' un gesto dell'utente; lanciando, aprire un ricordo a memoria piena direbbe "non riuscito" per una cosa che l'utente non ha fatto |
+| `PersonalMemories.dismiss` | nessuno in produzione (lo scarto passa da `setDismissed`) | **lancia**, come `setDismissed` |
+| `SyncedSearchSettings.setTextReading` | `AiWiring` (`setChoice = { ...; true }`) -> `AppTextReadingSwitch.deliver` (`try`: tiene la scelta "da consegnare") | **lancia**: col successo muto uno **spegnimento** della lettura del testo risultava consegnato e non arrivava mai al registro |
+| `SyncedSearchSettings.setSearchOrder` | `PersonalSettingsHub.deliverOrder` -> `PersonalSearchOrderStore` -> `SearchController` | **lasciata silenziosa** (scelta di K3b, scritta li'): l'hub non ritenta e Cerca non ha dove dirlo |
+| `SyncedMotionSettings.setMotionAnimation` | `PersonalSettingsHub.deliverMotion` -> `PersonalMotionAnimationSettings` -> `MotionAnimationViewModel` (**senza confine**) | **lasciata silenziosa**: e' l'interruttore che torna dov'era, il caso per cui K3b e' nato |
+| `SyncedFullHashSettings.setFullHashNightly` | `PersonalFullHashSwitch.set` (poi lancia il giro) -> `DuplicatesController.setNightly` (`try`: `NIGHTLY_NOT_SAVED`) | **lancia**: col successo muto partiva il giro per una scelta non salvata e l'avviso non compariva |
+| `SyncedPersonalSettings.setPrivateAreaExclusions` | `NasOrganizer.setPrivateAreaExclusions` (`try` -> `Boolean`) -> `NasFoldersViewModel.toggleExcluded` (messaggio) | **lancia** (resta un lotto solo): col successo muto la pagina diceva "Escluse" |
+| `SyncedPersonalSettings.setShowAlbumCovers` | `NasOrganizer` (`runCatching` senza guardare l'esito; e all'aggancio) | **lasciata silenziosa**: nessuno guarda l'esito, l'interruttore ha il suo specchio locale |
+| `SimilarCopiesChoices.saveCover`, `saveSeparation`, `removeSeparation` | `CatalogSimilarCopies.chooseCover`/`separate` (salva **prima** di toccare il catalogo) -> `SimilarCopiesViewModel.act` (`try`, rilegge il gruppo) | **lancia** (resta un lotto solo): col successo muto il catalogo cambiava senza la scelta salvata |
+
+Nessun chiamante e' rimasto senza confine: tutti quelli delle scritture che ora lanciano avevano gia' il loro `try` (sono elencati sopra); l'unico senza
+(`MotionAnimationViewModel`) sta sopra una scrittura rimasta silenziosa. Non e' servito toccare nessun controller ne' `CollectionsSectionsWiring.kt`.
+
+### Fuori dal perimetro stretto
+`SimilarCopiesChoices` e' in `core-personal/.../store/`, non in `settings/`: il brief la elenca fra le scritture avvolte da K3b, e il successo muto li' cambiava il catalogo senza
+il dato personale; tre righe.
+
+### Prove
+- `CollectionsWiringTest` non toccata.
+- `SettingsFullStorageTest` (core-personal) **aggiornata**: descriveva il successo muto per l'impronta di notte, le cartelle escluse, "Ricordi con le persone", lo scarto e le
+  copie simili; ora chiede l'`IOException` e che niente sia cambiato. Due prove nuove (le scelte sui ricordi; l'ordine e le sezioni nascoste delle Raccolte).
+- `MemoriesFullStorageTest` (feature-memories, nuova, 5): le schermate vere sopra `SyncedMemoriesSettings` su un registro pieno. Uno scarto non salvato non offre "Annulla" e
+  il ricordo resta; "Mostra meno" e "Non ricordarmi questo periodo" non vanno avanti; un "Annulla" non salvato non dice "Annullato"; le impostazioni lo dicono.
+- `PersonalWritesFullStorageTest` (`:app`, nuova, 3): `AppCollectionsLayoutStore` sul registro vero pieno (l'eccezione arriva a chi ha chiesto, l'ordine resta; una scelta fatta
+  prima del registro resta dell'utente e si consegna da sola quando lo spazio torna) e `PersonalFullHashSwitch` (non resta acceso e il giro non parte).
+- `TextReadingWithoutNasTimeTest` (+1): lo spegnimento a memoria piena resta da consegnare e viaggia al riavvio.
+- La prova "Raccolte: `CollectionsLayoutViewModel` rimette l'ordine e accende `failed` attraverso lo store vero" e' in **due meta'**: lo stato del controller (`inputs`) e'
+  `internal` di feature-library e `:app` non lo legge. `CollectionsLayoutControllerTest` (feature-library, gia' c'era) prova il controller con uno store che lancia;
+  `PersonalWritesFullStorageTest` prova che lo store vero di `:app` lancia.
+
+### Che cosa resta
+- `PersonalSettingsHub` (ordine di Cerca, animazione): a memoria piena la scelta torna quella del registro e non resta in attesa (com'era dopo K3b). Per tenerla in attesa
+  servirebbe un ritento nell'hub: non fatto.
+- `AliasFollowingSettings.setLess` e `PeopleLessJanitor.followAliases` scrivono due voci una dopo l'altra (prima la nuova, poi la lapide della vecchia): se la seconda non si
+  salva restano due scelte uguali, mai nessuna; il custode la sistema al giro dopo. Com'era prima di K3b.
+
+### Da provare sul telefono (memoria piena, fino all'ultimo megabyte)
+1. Raccolte > Modifica: sposta una sezione e nascondine una -> tornano com'erano e compare la riga "non salvato"; libera spazio e riprova: restano.
+2. Un ricordo > "Non mostrare questo ricordo": resta li', messaggio "non riuscito", **nessun "Annulla"**. "Mostra meno" e "Non ricordarmi questo periodo": nessun "Fatto".
+3. Impostazioni > Ricordi: "Ricordi con le persone" torna dov'era, con il messaggio.
+4. Utility > Doppioni: "Controlla di notte i video del NAS" -> "non salvato", resta spento.
+5. Cartelle NAS: "Escludi dalla Libreria" -> il messaggio di errore, non "Escluse".
+6. Viewer, copie simili: "Mostra questa come principale" e "Separa" -> il gruppo resta com'era.
+7. Lettura del testo: "Spegni" -> spenta subito; dopo aver liberato spazio e riavviato l'app, e' spenta anche su un altro dispositivo dell'account.
+8. In tutti i casi: nessuna chiusura dell'app. E "Animazione delle foto in movimento" torna dov'era (K3b, invariato).

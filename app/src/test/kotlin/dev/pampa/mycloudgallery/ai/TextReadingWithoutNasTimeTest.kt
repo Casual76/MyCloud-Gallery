@@ -147,6 +147,41 @@ class TextReadingWithoutNasTimeTest {
     assertThat(rig.switch.syncPending.value).isFalse() // consegnata al registro, "da datare"
   }
 
+  /**
+   * K5 (regressione di K3b): con la memoria del telefono piena il registro non si scrive. Lo spegnimento vale subito qui, ma **non e' consegnato**: resta in sospeso e
+   * viaggia quando si puo'. Con la scrittura silenziosa di K3b l'interruttore lo credeva consegnato, la memoria lo segnava sincronizzato e lo spegnimento non arrivava
+   * mai al registro (ne' agli altri dispositivi dell'account).
+   */
+  @Test
+  fun spegniConLaMemoriaPienaRestaDaConsegnareEViaggiaQuandoSiPuo() = runBlocking {
+    val dir = temp.newFolder()
+    val rig = Rig(dir)
+    rig.attachStoreWithoutNasTime()
+    rig.switch.enableForAccount(consent)
+    assertThat(rig.switch.syncPending.value).isFalse()
+
+    rig.ledger.full = true
+    rig.switch.disable()
+
+    // Qui e' spenta subito, e ML Kit non riparte.
+    assertThat(rig.switch.currentState()).isEqualTo(TextReadingState.Off)
+    assertThat(rig.read().exceptionOrNull()).isInstanceOf(AiEngineException::class.java)
+    // Ma il registro dice ancora "accesa": la scelta non e' consegnata, e si ricorda come tale.
+    assertThat(rig.hub.textReading.value).isEqualTo(TextReadingChoice.OnForAccount(1))
+    assertThat(rig.switch.syncPending.value).isTrue()
+    assertThat(TextReadingMemory(rig.file).state()).isEqualTo(TextReadingState.Off)
+    assertThat(TextReadingMemory(rig.file).unsynced).isTrue()
+
+    // Al prossimo avvio, con lo spazio libero, lo spegnimento entra nel registro.
+    val next = Rig(dir)
+    assertThat(next.switch.currentState()).isEqualTo(TextReadingState.Off)
+    assertThat(next.switch.syncPending.value).isTrue()
+    val store = next.attachStoreWithoutNasTime()
+    until("lo spegnimento e' consegnato al registro") { !next.switch.syncPending.value }
+    assertThat(store.undated()).containsExactly(reading)
+    assertThat(TextReadingMemory(next.file).unsynced).isFalse()
+  }
+
   @Test
   fun spegniQuandoIDatiPersonaliNonCiSonoAncoraSiRicordaEViaggiaAppenaCiSono() = runBlocking {
     val rig = Rig()

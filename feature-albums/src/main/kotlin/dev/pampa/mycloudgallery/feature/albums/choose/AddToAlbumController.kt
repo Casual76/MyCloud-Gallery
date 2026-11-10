@@ -120,13 +120,14 @@ class AddToAlbumController(
     local.update { it.copy(busy = true, message = null) }
     scope.launch {
       // R-1 (review generale): l'aggiunta scrive il registro dei dati personali (`FilePersonalLedger.save`), che con la memoria piena lancia `IOException`; da questo ambito
-      // chiudeva l'app e lasciava "occupato" per sempre. Ora e' un messaggio dell'album ("Non ci sono riuscito"), e niente e' cambiato.
+      // chiudeva l'app e lasciava "occupato" per sempre. Ora e' un messaggio ("Non salvato: la memoria del telefono e' piena") e **niente e' cambiato davvero**, nemmeno in
+      // memoria: `LedgerPersonalStore.setAll` e' tutto o niente (K3b, OA-11), quindi il messaggio e' vero e riprovare e' sicuro.
       val out = try {
         albums.add(album.id, media)
       } catch (e: CancellationException) {
         throw e
       } catch (e: IOException) {
-        local.update { it.copy(busy = false, message = AlbumMessage.NotDone) }
+        local.update { it.copy(busy = false, message = AlbumMessage.NotSaved) }
         return@launch
       }
       local.update { it.copy(busy = false) }
@@ -161,7 +162,8 @@ class AddToAlbumController(
         throw e
       } catch (e: IOException) {
         // R-1: stessa causa dell'aggiunta (memoria piena nel registro dei dati personali): un messaggio, mai la chiusura dell'app.
-        local.update { it.copy(busy = false, message = AlbumMessage.NotDone) }
+        // Se l'album era nato ma le foto no, l'album resta (vuoto): sono due salvataggi, e il secondo e' fallito.
+        local.update { it.copy(busy = false, message = AlbumMessage.NotSaved) }
       }
     }
   }

@@ -335,5 +335,6 @@ private fun messageText(message: AlbumMessage): String {
     AlbumMessage.RulesTooLong -> stringResource(R.string.album_message_rules_too_long)
     AlbumMessage.NotInAlbum -> stringResource(R.string.album_message_not_in_album)
     AlbumMessage.NotDone -> stringResource(R.string.album_message_not_done)
+    AlbumMessage.NotSaved -> stringResource(R.string.album_message_not_saved)
   }
 }

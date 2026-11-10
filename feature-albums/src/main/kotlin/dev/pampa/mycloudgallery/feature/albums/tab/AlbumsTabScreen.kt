@@ -35,6 +35,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -77,6 +78,7 @@ import dev.pampa.mycloudgallery.feature.albums.contract.SpecialAlbum
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumCoverThumb
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumDimens
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumText
+import kotlinx.coroutines.flow.distinctUntilChanged
 import dev.pampa.mycloudgallery.core.designsystem.R as DesignR
 
 // LA SCHEDA ALBUM (fase grafica, G2b), in stile Galleria Samsung: una griglia di copertine, tutte con la stessa forma (la foto quadrata con l'angolo
@@ -121,8 +123,12 @@ const val ALBUMS_TAB_SHAPE: String = "albums-tab"
 /** Le copertine dello scheletro di una scheda mai vista con gli album letti: una riga e mezza. */
 private const val DEFAULT_SKELETON_TILES = 4
 
-/** Le copertine che la finestra del caricatore chiede insieme: piu' di quante ne entrino in due schermate, poche abbastanza da non pesare. */
-private const val COVER_WINDOW = 48
+/**
+ * La finestra delle copertine segue lo scorrimento (FAB-10: prima era fissa sulle prime 48 voci e le altre non si caricavano mai): le righe in vista sono le miniature
+ * "visibili", e queste righe prima e dopo sono quelle "in arrivo" (le prime a essere chieste, nella direzione dello scorrimento).
+ */
+private const val COVER_ROWS_BEHIND = 1
+private const val COVER_ROWS_AHEAD = 2
 
 /**
  * La scheda Album per uno [state] dato. Senza effetti: la usano la rotta, i test e gli screenshot.
@@ -143,15 +149,14 @@ fun AlbumsTabScreen(
   val ready = state as AlbumsTabState.Ready
   val metrics = rememberFluidScreenMetrics()
   val columns = metrics.columns(minColumn = AlbumDimens.TabCardMin, spacing = AlbumDimens.TabGap, maxColumns = AlbumDimens.TabMaxColumns)
-  // Le copertine in vista in una finestra sola: ogni richiesta fuori dalla finestra si annulla (lo stesso modo dell'elenco degli album).
-  val covers = remember(ready.entries, thumbnails) { coverRequests(ready.entries, thumbnails) }
-  LaunchedEffect(covers, thumbnails) { thumbnails.loader.window(covers, emptyList()) }
   // Avvio istantaneo: finche' gli album non sono letti, al loro posto tante copertine ferme quante ce n'erano l'ultima volta.
   val remembered = rememberInstantShape(ALBUMS_TAB_SHAPE, InstantShape.of(InstantBlock.Tiles(DEFAULT_SKELETON_TILES, columns)))
   if (!ready.albumsPending && ready.albumCount > 0) {
     KeepInstantShape(ALBUMS_TAB_SHAPE, InstantShape.of(InstantBlock.Tiles(ready.albumCount, columns)))
   }
   val tiles = remember(ready, remembered) { tilesOf(ready, skeletonCount(remembered)) }
+  // Le copertine in una finestra sola che segue le righe in vista (come la griglia della Libreria): ogni richiesta fuori dalla finestra si annulla.
+  FollowCoverWindow(listState, tiles, columns, thumbnails)
   FluidScreen(
     title = stringResource(R.string.albums_title),
     modifier = modifier,
@@ -177,7 +182,7 @@ fun AlbumsTabScreen(
 
 /** Una cella della griglia: una voce vera o una copertina ferma dello scheletro. */
 @Immutable
-private sealed interface TabTile {
+internal sealed interface TabTile {
   data class Entry(val entry: AlbumsTabEntry) : TabTile
 
   data class Skeleton(val index: Int) : TabTile
@@ -193,9 +198,49 @@ private fun tilesOf(state: AlbumsTabState.Ready, skeleton: Int): List<TabTile> {
   return out
 }
 
-/** Le richieste di miniatura delle copertine (solo quelle con una sorgente). */
-private fun coverRequests(entries: List<AlbumsTabEntry>, thumbnails: AlbumThumbnails): List<ThumbRequest> =
-  entries.asSequence().take(COVER_WINDOW).mapNotNull { entry -> entry.cover?.let { thumbnails.refs.request(it) } }.toList()
+/**
+ * FAB-10: la finestra del caricatore segue le **righe in vista** (piu' un margine prima e dopo), non una finestra fissa sulle prime voci. Si aggiorna **solo quando cambia l'insieme
+ * delle righe in vista** (`snapshotFlow` + `distinctUntilChanged`: mai una richiesta per fotogramma) o quando cambiano le voci o le colonne (l'effetto riparte e rilegge le righe in
+ * vista). Le righe sono quelle di [tileRows]: la chiave `row-N` dice quale. Prima di aver misurato niente non c'e' nessuna riga in vista e non si chiede niente.
+ */
+@Composable
+private fun FollowCoverWindow(listState: LazyListState, tiles: List<TabTile>, columns: Int, thumbnails: AlbumThumbnails) {
+  LaunchedEffect(listState, tiles, columns, thumbnails) {
+    snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapNotNull { rowOfKey(it.key) } }
+      .distinctUntilChanged()
+      .collect { rows ->
+        if (rows.isEmpty()) return@collect
+        val window = coverWindow(rows, tiles, columns, thumbnails)
+        thumbnails.loader.window(window.visible, window.ahead)
+      }
+  }
+}
+
+/** Le miniature delle copertine da tenere: quelle delle righe in vista e quelle delle righe vicine, in arrivo. */
+internal class CoverWindow(val visible: List<ThumbRequest>, val ahead: List<ThumbRequest>)
+
+/** Funzione pura: dalle [visibleRows] alle richieste, con [COVER_ROWS_BEHIND] righe prima e [COVER_ROWS_AHEAD] dopo come "in arrivo". */
+internal fun coverWindow(visibleRows: List<Int>, tiles: List<TabTile>, columns: Int, thumbnails: AlbumThumbnails): CoverWindow {
+  val first = visibleRows.min()
+  val last = visibleRows.max()
+  val visible = visibleRows.flatMap { row -> coverRequestsOfRow(row, tiles, columns, thumbnails) }
+  val ahead = ((first - COVER_ROWS_BEHIND until first) + (last + 1..last + COVER_ROWS_AHEAD)).filter { it >= 0 }.flatMap { row -> coverRequestsOfRow(row, tiles, columns, thumbnails) }
+  return CoverWindow(visible, ahead)
+}
+
+private fun coverRequestsOfRow(row: Int, tiles: List<TabTile>, columns: Int, thumbnails: AlbumThumbnails): List<ThumbRequest> {
+  val from = row * columns
+  if (from >= tiles.size) return emptyList()
+  return tiles.subList(from, minOf(from + columns, tiles.size)).mapNotNull { tile ->
+    (tile as? TabTile.Entry)?.entry?.cover?.let { thumbnails.refs.request(it) }
+  }
+}
+
+private const val ROW_KEY_PREFIX = "row-"
+
+private fun rowKey(row: Int): String = ROW_KEY_PREFIX + row
+
+private fun rowOfKey(key: Any): Int? = (key as? String)?.takeIf { it.startsWith(ROW_KEY_PREFIX) }?.substring(ROW_KEY_PREFIX.length)?.toIntOrNull()
 
 private fun LazyListScope.notices(notices: List<SharedAlbumNotice>, handlers: AlbumsTabHandlers) {
   items(notices, key = { notice -> "notice-" + notice.hashCode() }) { notice ->
@@ -221,7 +266,7 @@ private fun LazyListScope.notices(notices: List<SharedAlbumNotice>, handlers: Al
 /** Le righe di copertine: [columns] per riga; l'ultima non allarga le copertine (i posti vuoti restano vuoti). */
 private fun LazyListScope.tileRows(tiles: List<TabTile>, columns: Int, thumbnails: AlbumThumbnails, handlers: AlbumsTabHandlers) {
   val rows = tiles.chunked(columns)
-  items(rows.size, key = { "row-$it" }, contentType = { "albums-row" }) { rowIndex ->
+  items(rows.size, key = { rowKey(it) }, contentType = { "albums-row" }) { rowIndex ->
     Row(horizontalArrangement = Arrangement.spacedBy(AlbumDimens.TabGap), modifier = Modifier.fillMaxWidth()) {
       val row = rows[rowIndex]
       for (tile in row) {

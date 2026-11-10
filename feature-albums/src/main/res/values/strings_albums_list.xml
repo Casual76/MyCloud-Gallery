@@ -71,6 +71,7 @@
   <string name="albums_create_next">Avanti</string>
   <string name="albums_create_cancel">Annulla</string>
   <string name="albums_create_unavailable">Adesso non posso creare album: l’app non è ancora pronta.</string>
+  <string name="albums_create_not_saved">Non salvato: la memoria del telefono è piena. Il nome resta qui: libera spazio e tocca di nuovo il tasto.</string>
 
   <string name="albums_title_empty">Scrivi un nome per l’album.</string>
   <string name="albums_title_too_long">Il nome è troppo lungo: al massimo 64 caratteri.</string>

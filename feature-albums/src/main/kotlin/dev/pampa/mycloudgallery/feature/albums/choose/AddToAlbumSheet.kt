@@ -164,6 +164,7 @@ private fun messageOf(message: AlbumMessage): String {
     is AlbumMessage.Blocked -> stringResource(AlbumText.blocked(message.why))
     // R-1 (review generale): l'aggiunta non e' riuscita (memoria piena): prima questo messaggio cadeva nel `else` e diceva "non e' nell'album".
     AlbumMessage.NotDone -> stringResource(R.string.album_message_not_done)
+    AlbumMessage.NotSaved -> stringResource(R.string.album_message_not_saved)
     else -> stringResource(R.string.album_message_not_in_album)
   }
 }

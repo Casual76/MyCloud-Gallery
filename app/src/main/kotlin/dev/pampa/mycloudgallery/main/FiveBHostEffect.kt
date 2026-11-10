@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.main
 
+import android.app.Activity
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
@@ -7,8 +8,10 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalResources
 import androidx.lifecycle.Lifecycle
@@ -18,6 +21,7 @@ import androidx.navigation.NavController
 import dev.pampa.mycloudgallery.backup.FiveBLaunch
 import dev.pampa.mycloudgallery.backup.FiveBSheet
 import dev.pampa.mycloudgallery.backup.FiveBUi
+import dev.pampa.mycloudgallery.backup.PhoneTrashRequest
 import dev.pampa.mycloudgallery.backup.VersionDeleteRequest
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
@@ -104,11 +108,18 @@ internal fun FiveBHostEffect(ui: FiveBUi?, nav: NavController) {
   }
 
   // LS-1, LS-14: il cestino di Android (30 giorni), chiesto dopo un tocco su un foglio; il permesso lo da' l'utente nel dialogo del sistema.
-  val trashLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { }
+  // FAB-12: la richiesta che il dialogo di sistema sta mostrando, per sapere alla risposta se viene dalla selezione della Libreria.
+  var asking by remember { mutableStateOf<PhoneTrashRequest?>(null) }
+  val trashLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+    val request = asking
+    asking = null
+    settleSelectionAfterTrash(request, result.resultCode == Activity.RESULT_OK, ui::phoneSheetContinued)
+  }
   val trash by ui.trashRequests.collectAsStateWithLifecycle()
   LaunchedEffect(trash) {
     val request = trash ?: return@LaunchedEffect
     ui.trashLaunched(request)
+    asking = request
     trashLauncher.launch(IntentSenderRequest.Builder(request.sender).build())
   }
 
@@ -138,10 +149,9 @@ internal fun FiveBHostEffect(ui: FiveBUi?, nav: NavController) {
     // LS-1 ("Elimina con avviso"): dal viewer e (5B I3) dalla selezione della Libreria, un media che non risulta al sicuro sul NAS va nel cestino
     // di Android dopo l'avviso del foglio.
     onTrash = if (phoneOnly?.offerTrash == true) {
-      { ids: Set<MediaId> ->
-        ui.trashFromPhone(ids)
-        if (fromSelection) ui.phoneSheetContinued()
-      }
+      // FAB-12: la selezione della Libreria si chiude alla risposta **positiva** del dialogo di sistema ([settleSelectionAfterTrash]), non qui: annullando il dialogo
+      // (o se la richiesta non parte) la selezione resta com'era, come per il foglio "Elimina dal telefono" di sempre ([LibraryCommands.selectionSettled]).
+      { ids: Set<MediaId> -> ui.trashFromPhone(ids, fromSelection) }
     } else {
       null
     },
@@ -158,6 +168,14 @@ internal fun FiveBHostEffect(ui: FiveBUi?, nav: NavController) {
     Toast.makeText(context, text, Toast.LENGTH_LONG).show()
     ui.dismissRootNotice()
   }
+}
+
+/**
+ * FAB-12: la risposta del dialogo di sistema del cestino di Android. Se la richiesta veniva dal foglio "Prima mettilo al sicuro" della selezione ([PhoneTrashRequest.fromSelection]) e
+ * l'utente ha **confermato**, la selezione della Libreria si chiude ([settle]); se ha annullato, o la richiesta veniva da un'altra parte (il viewer), niente.
+ */
+internal fun settleSelectionAfterTrash(request: PhoneTrashRequest?, confirmed: Boolean, settle: () -> Unit) {
+  if (request?.fromSelection == true && confirmed) settle()
 }
 
 /** Il foglio "Elimina…" della 4B per le copie di versioni precedenti: piano, conferma del foglio, cestino del NAS (30 giorni). */

@@ -32,5 +32,6 @@
   <string name="trips_open_album">Apri l’album</string>
   <string name="trips_already_album">Era già un album.</string>
   <string name="trips_not_found">La proposta non c’è più.</string>
+  <string name="trips_not_saved">Non salvato: la memoria del telefono è piena. Libera spazio e riprova.</string>
   <string name="trips_back">Indietro</string>
 </resources>

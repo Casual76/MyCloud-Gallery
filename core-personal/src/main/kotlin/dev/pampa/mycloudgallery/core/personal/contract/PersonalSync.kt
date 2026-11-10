@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.StableCode
 import dev.pampa.mycloudgallery.core.trust.data.HeadMark
 import dev.pampa.mycloudgallery.core.trust.nas.SharePath
+import java.io.IOException
 import kotlin.time.Duration
 import kotlinx.coroutines.flow.StateFlow
 
@@ -114,7 +115,14 @@ interface PersonalStore {
 
   suspend fun get(key: PersonalKey): PersonalEntry?
 
-  /** Una modifica dell'utente su questo dispositivo. */
+  /**
+   * Una modifica dell'utente su questo dispositivo.
+   *
+   * Uno store che salva su disco (`LedgerPersonalStore`) lancia `IOException` se il registro non si scrive (memoria piena, cartella non scrivibile): **in quel caso non e'
+   * cambiato niente**, nemmeno in memoria (`entries` e `effectiveEntries` hanno lo stato di prima), cosi' chi chiama puo' dire "non salvato" e l'utente riprovare. Chi chiama da un
+   * ambito di interfaccia la traduce in un esito; mai lasciarla arrivare al gestore dei crash (SOL-10, OA-11).
+   */
+  @Throws(IOException::class)
   suspend fun set(key: PersonalKey, value: PersonalValue, fingerprint: PersonalFingerprint? = null)
 
   /**
@@ -124,8 +132,10 @@ interface PersonalStore {
    * aggiunte o tolte da un album, la copia di un album condiviso chiuso) deve passare da qui: una [set] per voce riscrive il registro intero
    * per ogni voce (review generale, OA-1). Chi legge [entries] o [effectiveEntries] vede un cambio solo, con il lotto intero.
    *
-   * Di serie una [set] per modifica: giusto per gli store in memoria e per quelli che non salvano niente.
+   * Di serie una [set] per modifica: giusto per gli store in memoria e per quelli che non salvano niente. Con un registro che non si scrive lancia `IOException` come [set],
+   * e il lotto non c'e' per nessuno: ne' sul disco ne' in memoria (tutto o niente).
    */
+  @Throws(IOException::class)
   suspend fun setAll(changes: List<PersonalChange>) {
     for (change in changes) set(change.key, change.value, change.fingerprint)
   }

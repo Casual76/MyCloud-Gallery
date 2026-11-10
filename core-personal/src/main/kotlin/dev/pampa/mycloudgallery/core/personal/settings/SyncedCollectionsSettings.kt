@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.personal.settings
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKey
@@ -61,12 +62,12 @@ class SyncedCollectionsSettings(
    * I codici non validi e i doppioni si scartano come in lettura: cio' che si scrive e' cio' che si rilegge.
    */
   suspend fun setOrder(codes: List<String>) {
-    store.set(ORDER, CollectionsSettingsCodec.encodeOrder(codes))
+    QuietWrites.attempt("ordine delle sezioni") { store.set(ORDER, CollectionsSettingsCodec.encodeOrder(codes)) }
   }
 
   /** Torna all'ordine predefinito (la lapide della voce). */
   suspend fun resetOrder() {
-    store.set(ORDER, PersonalValue.Removed)
+    QuietWrites.attempt("ordine delle sezioni") { store.set(ORDER, PersonalValue.Removed) }
   }
 
   /**
@@ -76,7 +77,7 @@ class SyncedCollectionsSettings(
   suspend fun setHidden(code: String, hidden: Boolean) {
     if (!CollectionsSettingsCodec.isValidCode(code)) return
     if (code in neverHidden) return
-    store.set(hiddenKey(code), PersonalValue.Flag(hidden))
+    QuietWrites.attempt("sezione nascosta") { store.set(hiddenKey(code), PersonalValue.Flag(hidden)) }
   }
 
   private fun orderOf(entries: Map<PersonalKey, PersonalEntry>): List<String> =

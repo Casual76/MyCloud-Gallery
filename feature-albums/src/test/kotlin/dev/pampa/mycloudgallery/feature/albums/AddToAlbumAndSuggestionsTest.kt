@@ -82,7 +82,7 @@ class AddToAlbumAndSuggestionsTest {
 
   /**
    * R-1 della review generale: `FilePersonalLedger.save` con la memoria piena lancia `IOException`, che attraversa `Albums.add` fino al `scope.launch` del controller e chiudeva
-   * l'app (e lasciava "occupato" per sempre). Ora e' il messaggio "Non ci sono riuscito", niente e' cambiato e si puo' riprovare.
+   * l'app (e lasciava "occupato" per sempre). Ora e' il messaggio "Non salvato: la memoria del telefono e' piena", niente e' cambiato (nemmeno in memoria: K3b) e si puo' riprovare.
    */
   @Test
   fun conLaMemoriaPienaL_AggiuntaDiceCheNonEStataFattaENonFaCadereNiente() = runTest(UnconfinedTestDispatcher()) {
@@ -98,7 +98,7 @@ class AddToAlbumAndSuggestionsTest {
 
     c.add(world.albums.all.value.byId(album)!!)
 
-    assertThat(c.ui.value.message).isEqualTo(AlbumMessage.NotDone)
+    assertThat(c.ui.value.message).isEqualTo(AlbumMessage.NotSaved)
     assertThat(c.ui.value.busy).isFalse()
     assertThat(c.ui.value.result).isNull()
     assertThat(world.albums.all.value.byId(album)?.count).isEqualTo(0)
@@ -121,7 +121,7 @@ class AddToAlbumAndSuggestionsTest {
 
     c.addToNewAlbum("Nuovo")
 
-    assertThat(c.ui.value.message).isEqualTo(AlbumMessage.NotDone)
+    assertThat(c.ui.value.message).isEqualTo(AlbumMessage.NotSaved)
     assertThat(c.ui.value.busy).isFalse()
   }
 

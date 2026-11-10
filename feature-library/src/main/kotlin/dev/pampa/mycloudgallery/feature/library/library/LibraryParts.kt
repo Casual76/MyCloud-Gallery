@@ -627,7 +627,12 @@ internal fun LibraryDeleteSheet(visible: Boolean, state: LibraryTabState, onDism
   // D-B1: la vista e' una chiave, come per i preferiti: un media che diventa "al sicuro" a foglio aperto cambia l'avviso.
   val view = grid.view
   val unsafe = remember(onPhone, view) { grid.unsafeAmong(onPhone) }
-  val phoneDetail = deletePhoneDetail(total = onPhone.size, unsafe = unsafe)
+  // K4: con dei video nella selezione il titolo non dice "foto" ma "elementi" (e il dettaglio parla al maschile). Si conta solo a foglio aperto, per
+  // non aggiungere un giro sulla selezione a ogni tocco in selezione; a foglio che si chiude resta l'ultima risposta, cosi' il titolo non cambia mentre esce.
+  val lastHasVideo = remember { booleanArrayOf(false) }
+  if (visible) lastHasVideo[0] = remember(onPhone, view) { grid.hasVideoAmong(onPhone) }
+  val hasVideo = lastHasVideo[0]
+  val phoneDetail = deletePhoneDetail(total = onPhone.size, unsafe = unsafe, items = hasVideo)
   val nasLeftDetail = if (nasLeft > 0) pluralStringResource(R.plurals.library_delete_nas_left, nasLeft, GalleryNumbers.format(nasLeft)) else null
   GalleryDeleteSheet(
     visible = visible,
@@ -650,7 +655,21 @@ internal fun LibraryDeleteSheet(visible: Boolean, state: LibraryTabState, onDism
     },
     onDismissRequest = onDismiss,
     scopes = listOf(GalleryDeleteScope.PhoneOnly),
+    title = if (hasVideo) deleteItemsTitle(onPhone.size.coerceAtLeast(1)) else null,
   )
+}
+
+/** K4: il titolo del foglio quando nella selezione c'e' almeno un video: "Eliminare N elementi?" (un solo elemento: "Eliminare questo elemento?"). */
+@Composable
+internal fun deleteItemsTitle(count: Int): String = pluralStringResource(R.plurals.library_delete_title_items, count, GalleryNumbers.format(count))
+
+/** K4: se fra [ids] c'e' almeno un video. Stessa chiave di [unsafeAmong]: un id che non e' nell'indice corrente non conta. */
+internal fun MediaGridState.hasVideoAmong(ids: Set<MediaId>): Boolean {
+  val snapshot = view.snapshot
+  return ids.any { id ->
+    val index = snapshot.indexOf(id)
+    index >= 0 && snapshot.kindAt(index) == MediaKind.VIDEO
+  }
 }
 
 /**
@@ -671,10 +690,16 @@ internal fun MediaGridState.unsafeAmong(ids: Set<MediaId>): Int {
  * Tutti al sicuro: lo dice e basta. Nessuno al sicuro: l'avviso di sempre, con "prima mettilo al sicuro". Misti: con i numeri ("2 di 5").
  */
 @Composable
-internal fun deletePhoneDetail(total: Int, unsafe: Int): String = when {
-  unsafe <= 0 -> pluralStringResource(R.plurals.library_delete_phone_safe, total)
-  unsafe >= total -> pluralStringResource(R.plurals.library_delete_phone_unsafe_all, total)
-  else -> pluralStringResource(R.plurals.library_delete_phone_unsafe_some, unsafe, GalleryNumbers.format(unsafe), GalleryNumbers.format(total))
+internal fun deletePhoneDetail(total: Int, unsafe: Int, items: Boolean = false): String = when {
+  // [items]: il titolo dice "elementi" (c'e' un video) e le frasi parlano al maschile; altrimenti "foto", al femminile.
+  unsafe <= 0 -> pluralStringResource(if (items) R.plurals.library_delete_phone_safe_items else R.plurals.library_delete_phone_safe, total)
+  unsafe >= total -> pluralStringResource(if (items) R.plurals.library_delete_phone_unsafe_all_items else R.plurals.library_delete_phone_unsafe_all, total)
+  else -> pluralStringResource(
+    if (items) R.plurals.library_delete_phone_unsafe_some_items else R.plurals.library_delete_phone_unsafe_some,
+    unsafe,
+    GalleryNumbers.format(unsafe),
+    GalleryNumbers.format(total),
+  )
 }
 
 /**

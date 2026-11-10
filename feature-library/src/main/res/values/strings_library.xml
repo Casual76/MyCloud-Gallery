@@ -94,6 +94,23 @@
     <item quantity="one">%1$s di %2$s non ha ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potrà recuperare. Prima mettila al sicuro: lascia finire il backup.</item>
     <item quantity="other">%1$s di %2$s non hanno ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potranno recuperare. Prima mettile al sicuro: lascia finire il backup.</item>
   </plurals>
+  <!-- K4: con dei video nella selezione il titolo del foglio e' "Eliminare N elementi?", quindi le stesse tre frasi parlano al maschile. -->
+  <plurals name="library_delete_title_items">
+    <item quantity="one">Eliminare questo elemento?</item>
+    <item quantity="other">Eliminare %1$s elementi?</item>
+  </plurals>
+  <plurals name="library_delete_phone_safe_items">
+    <item quantity="one">Ha una copia al sicuro sul NAS, che resta dov’è.</item>
+    <item quantity="other">Hanno tutti una copia al sicuro sul NAS, che resta dov’è.</item>
+  </plurals>
+  <plurals name="library_delete_phone_unsafe_all_items">
+    <item quantity="one">Non c’è ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potrà recuperare. Prima mettilo al sicuro: lascia finire il backup.</item>
+    <item quantity="other">Non hanno ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potranno recuperare. Prima mettili al sicuro: lascia finire il backup.</item>
+  </plurals>
+  <plurals name="library_delete_phone_unsafe_some_items">
+    <item quantity="one">%1$s di %2$s non ha ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potrà recuperare. Prima mettilo al sicuro: lascia finire il backup.</item>
+    <item quantity="other">%1$s di %2$s non hanno ancora una copia sul NAS: dopo 30 giorni nel cestino di sistema non si potranno recuperare. Prima mettili al sicuro: lascia finire il backup.</item>
+  </plurals>
   <plurals name="library_delete_nas_left">
     <item quantity="one">%1$s elemento della selezione è solo sul NAS e resta dov’è.</item>
     <item quantity="other">%1$s elementi della selezione sono solo sul NAS e restano dove sono.</item>

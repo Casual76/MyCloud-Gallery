@@ -194,7 +194,11 @@ const val DebugMarkerFile: String = "m1-synthetic-count"
 // Posizione salvata (E-P18)
 // ---------------------------------------------------------------------------------------------
 
-/** Tiene la posizione salvata fino al primo layout dopo una ricreazione, poi la consegna alla griglia una volta. */
+/**
+ * Tiene la posizione salvata e la consegna alla griglia una volta, alla prima composizione della pagina: dopo una ricreazione dell'activity e
+ * ogni volta che la Libreria torna in vista dopo Cerca o un'altra scheda (lo stato della pagina sta nel `SaveableStateHolder` dello scaffold, K3a).
+ * Se applicarla lo decide la griglia (`MediaGridState.restorePosition`): una griglia viva gia' in quella posizione non si sposta (K6, GS-10).
+ */
 @Stable
 internal class PositionKeeper(private var saved: SavedGridPosition?) {
   fun restoreOnce(grid: MediaGridState) {

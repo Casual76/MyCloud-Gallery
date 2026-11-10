@@ -33,6 +33,7 @@ import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabState
 import dev.pampa.mycloudgallery.feature.albums.tab.NoAlbumsTabHandlers
 import dev.pampa.mycloudgallery.feature.albums.tab.SpecialSummary
 import dev.pampa.mycloudgallery.feature.albums.testing.AlbumSamples
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsLayoutViewModel
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsTab
@@ -155,6 +156,8 @@ internal fun GalleryScaffold(
   onSelectTab: (GalleryTab) -> Unit = {},
   onOpenSearch: () -> Unit = {},
   onCloseSearch: () -> Unit = {},
+  /** Sul tablet, la pagina di una voce delle Raccolte nel pannello di dettaglio (come `entryDetail` in produzione); null = la voce apre la rotta. */
+  collectionsEntryDetail: (@Composable (CollectionEntry) -> Unit)? = null,
 ) {
   Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
     MainScaffold(
@@ -173,6 +176,7 @@ internal fun GalleryScaffold(
           onOpenSettings = {},
           statusHeader = slot.statusHeader,
           viewModel = scenes.collections,
+          entryDetail = collectionsEntryDetail,
         )
       },
       albums = { slot ->

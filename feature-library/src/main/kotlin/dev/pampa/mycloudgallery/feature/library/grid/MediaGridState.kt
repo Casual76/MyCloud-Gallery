@@ -428,7 +428,17 @@ class MediaGridState(
     return SavedGridPosition(id.value, anchor.fy, fraction, atNewest = false)
   }
 
-  /** Rimette una posizione salvata (dopo una ricreazione dell'activity): subito se c'e' un layout, se no al primo. */
+  /**
+   * Rimette una posizione salvata: al primo layout se la griglia e' nuova (il processo ripartito, l'avvio), subito se ce l'ha gia'.
+   *
+   * **La griglia viva che e' gia' li' non si tocca** (K6, GS-10). La griglia della Libreria sta fuori dalla pagina (nel ViewModel) e conserva
+   * scorrimento, layout e misura quando la pagina esce dalla composizione: Cerca aperta, un'altra scheda, l'activity ricreata con il ViewModel
+   * ancora vivo. Tornando, lo stato salvato della pagina le riporta la posizione che lei stessa ha adesso, e riapplicarla non e' neutro: con il
+   * centro su un'intestazione l'ancora e' il bordo alto della prima foto del giorno ([GridAnchors.anchorAt], la semantica del pinch) e la si
+   * rimetteva al centro, cioe' la griglia saltava della distanza fra il centro e quella foto (fino all'altezza dell'intestazione). Quindi se la
+   * posizione di adesso, salvata, e' la stessa, non si fa niente. Se la griglia si e' mossa o e' nuova l'ancora serve e si applica; un cambio di
+   * misura (rotazione, finestra) lo ancora [onLayoutShown] quando il layout nuovo entra, come quando la pagina e' in vista.
+   */
   fun restorePosition(saved: SavedGridPosition?) {
     if (saved == null) return
     val l = layout
@@ -436,6 +446,7 @@ class MediaGridState(
       pendingRestore = saved
       return
     }
+    if (savePosition() == saved) return
     val (row, offset) = restoreTarget(l, shownView, saved)
     listState.requestScrollToItem(row, offset)
   }

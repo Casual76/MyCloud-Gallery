@@ -75,7 +75,11 @@ class G2SelezioneLibreriaTest : ComposeBackupTallTest() {
     showSheet(selection(PhoneOnlyAdvice.FREE, PhoneOnlyAdvice.FREE, PhoneOnlyAdvice.FREE, PhoneOnlyAdvice.SAFE_FIRST, PhoneOnlyAdvice.SAFE_FIRST))
     composeRule.onNodeWithText("3 si possono togliere", substring = true).assertExists()
     composeRule.onNodeWithText("2 non sono ancora al sicuro sul NAS", substring = true).assertExists()
-    composeRule.onNodeWithText("Prima mettilo al sicuro").assertExists()
+    // FAB-22: con due elementi da mettere al sicuro le due scelte stanno al plurale, come la riga sopra.
+    composeRule.onNodeWithText("Prima mettili al sicuro").assertExists()
+    composeRule.onNodeWithText("controllo le copie sul NAS", substring = true).assertExists()
+    assertThat(composeRule.onAllNodes(hasText("Prima mettilo al sicuro")).fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodes(hasText("controllo la copia sul NAS", substring = true)).fetchSemanticsNodes()).isEmpty()
     composeRule.onNodeWithText("Togli solo quelli già al sicuro").assertExists()
     assertThat(composeRule.onAllNodes(hasText("Non sono sul NAS")).fetchSemanticsNodes()).isEmpty()
     noButton("Elimina dal telefono")
@@ -83,6 +87,19 @@ class G2SelezioneLibreriaTest : ComposeBackupTallTest() {
     button("Metti al sicuro").performClick()
     assertThat(safeguards).isEqualTo(1)
     assertThat(trashed).isEmpty()
+  }
+
+  /**
+   * FAB-22: le due scelte contano gli elementi **non ancora al sicuro**, non quelli della selezione: con tre al sicuro e uno solo da salvare restano al singolare
+   * («Prima mettilo al sicuro», «controllo la copia sul NAS»), come la riga «1 non è ancora al sicuro sul NAS».
+   */
+  @Test
+  fun fab22_conUnSoloElementoDaMettereAlSicuroLeScelteSonoAlSingolare() {
+    showSheet(selection(PhoneOnlyAdvice.FREE, PhoneOnlyAdvice.FREE, PhoneOnlyAdvice.FREE, PhoneOnlyAdvice.SAFE_FIRST))
+    composeRule.onNodeWithText("1 non è ancora al sicuro sul NAS", substring = true).assertExists()
+    composeRule.onNodeWithText("Prima mettilo al sicuro").assertExists()
+    composeRule.onNodeWithText("controllo la copia sul NAS", substring = true).assertExists()
+    assertThat(composeRule.onAllNodes(hasText("Prima mettili al sicuro")).fetchSemanticsNodes()).isEmpty()
   }
 
   /** Scelto "Togli solo quelli gia' al sicuro", "Continua" apre "Libera spazio" con i soli tre al sicuro: gli altri restano sul telefono. */

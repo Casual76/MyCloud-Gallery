@@ -213,8 +213,16 @@
     <item quantity="other">%1$s non sono sul telefono: non c’è niente da togliere.</item>
   </plurals>
   <string name="backup_free_phone_choice_title">Cosa fare</string>
-  <string name="backup_free_phone_choice_safe_first">Prima mettilo al sicuro</string>
-  <string name="backup_free_phone_choice_safe_first_detail">Parte il backup e controllo la copia sul NAS: questo foglio si aggiorna da solo.</string>
+  <!-- FAB-22: le due scelte contano gli elementi non ancora al sicuro (quelli che il backup deve ancora salvare), come la riga «N non sono ancora al sicuro sul NAS» sopra:
+       con uno solo restano al singolare, con piu' di uno vanno al plurale. Il nome della funzione («Prima mettilo al sicuro») e il titolo del foglio non cambiano. -->
+  <plurals name="backup_free_phone_choice_safe_first">
+    <item quantity="one">Prima mettilo al sicuro</item>
+    <item quantity="other">Prima mettili al sicuro</item>
+  </plurals>
+  <plurals name="backup_free_phone_choice_safe_first_detail">
+    <item quantity="one">Parte il backup e controllo la copia sul NAS: questo foglio si aggiorna da solo.</item>
+    <item quantity="other">Parte il backup e controllo le copie sul NAS: questo foglio si aggiorna da solo.</item>
+  </plurals>
   <string name="backup_free_phone_choice_free_ready">Togli solo quelli già al sicuro</string>
   <string name="backup_free_phone_choice_free_ready_detail">Gli altri restano sul telefono.</string>
   <string name="backup_free_phone_action_safe">Metti al sicuro</string>
@@ -228,7 +236,11 @@
   <string name="backup_free_phone_not_on_nas_title_many">Non sono sul NAS</string>
   <string name="backup_free_phone_not_on_nas_inactive">Il backup non è attivo su questo telefono: sul NAS non c’è una copia controllata dall’app.</string>
   <string name="backup_free_phone_not_on_nas_not_verified">Sul NAS non c’è ancora una copia controllata dall’app.</string>
-  <string name="backup_free_phone_not_on_nas_wait">Il backup sta ancora caricando i file, o ha avuto un problema.</string>
+  <!-- FAB-22: il numero di file e' quello del foglio (uno solo: «il file»). -->
+  <plurals name="backup_free_phone_not_on_nas_wait">
+    <item quantity="one">Il backup sta ancora caricando il file, o ha avuto un problema.</item>
+    <item quantity="other">Il backup sta ancora caricando i file, o ha avuto un problema.</item>
+  </plurals>
   <string name="backup_free_phone_not_on_nas_frozen">Il NAS ha avuto un cambiamento anomalo: la copia non si può controllare.</string>
   <string name="backup_free_phone_not_on_nas_fence">In prova l’app controlla solo la cartella di prova.</string>
   <!-- GF-13: plurali giusti e nessun genere ("la elimini" valeva per una foto, non per un video ne' per cinque file): si parla del file. -->

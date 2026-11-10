@@ -355,19 +355,20 @@ private fun NotOnNasContent(
     },
   )
   val why = state.assessment.advice.filterKeys { it in notOnNas }.values.maxOrNull()
+  // FAB-22: la frase dell'attesa conta i file del foglio («il file» se e' uno, «i file» se sono di piu').
   val reason = when (why) {
-    PhoneOnlyAdvice.UNAVAILABLE -> R.string.backup_free_phone_not_on_nas_inactive
-    PhoneOnlyAdvice.WAIT -> R.string.backup_free_phone_not_on_nas_wait
-    PhoneOnlyAdvice.FROZEN -> R.string.backup_free_phone_not_on_nas_frozen
-    PhoneOnlyAdvice.OUTSIDE_TEST_FENCE -> R.string.backup_free_phone_not_on_nas_fence
-    else -> R.string.backup_free_phone_not_on_nas_not_verified
+    PhoneOnlyAdvice.UNAVAILABLE -> stringResource(R.string.backup_free_phone_not_on_nas_inactive)
+    PhoneOnlyAdvice.WAIT -> pluralStringResource(R.plurals.backup_free_phone_not_on_nas_wait, notOnNas.size)
+    PhoneOnlyAdvice.FROZEN -> stringResource(R.string.backup_free_phone_not_on_nas_frozen)
+    PhoneOnlyAdvice.OUTSIDE_TEST_FENCE -> stringResource(R.string.backup_free_phone_not_on_nas_fence)
+    else -> stringResource(R.string.backup_free_phone_not_on_nas_not_verified)
   }
   val canSafeguard = state.assessment.preselectSafeFirst && state.note == null
   GallerySheetScaffold(
     icon = Icons.Rounded.CloudOff,
     tone = GallerySheetTone.Destructive,
     title = title,
-    message = stringResource(reason) + " " + pluralStringResource(if (LocalPhoneTrash.current == PhoneTrash.GALLERY) R.plurals.backup_free_phone_not_on_nas_trash_gallery else R.plurals.backup_free_phone_not_on_nas_trash, notOnNas.size),
+    message = reason + " " + pluralStringResource(if (LocalPhoneTrash.current == PhoneTrash.GALLERY) R.plurals.backup_free_phone_not_on_nas_trash_gallery else R.plurals.backup_free_phone_not_on_nas_trash, notOnNas.size),
     modifier = modifier,
     body = { state.note?.let { SafeguardNoteRow(it) } },
     actions = {
@@ -438,10 +439,12 @@ private fun AdviceBody(state: PhoneOnlyUi.Advice, onChoose: (Boolean) -> Unit) {
   }
   val canFree = state.assessment.freeFilter != null
   if (state.assessment.preselectSafeFirst && canFree) {
+    // FAB-22: le due scelte contano gli elementi non ancora al sicuro (quelli del «N non sono ancora al sicuro sul NAS» sopra).
+    val notSafe = counts[PhoneOnlyAdvice.SAFE_FIRST] ?: 0
     FluidListGroup {
       BackupChoiceRow(
-        title = stringResource(R.string.backup_free_phone_choice_safe_first),
-        detail = stringResource(R.string.backup_free_phone_choice_safe_first_detail),
+        title = pluralStringResource(R.plurals.backup_free_phone_choice_safe_first, notSafe),
+        detail = pluralStringResource(R.plurals.backup_free_phone_choice_safe_first_detail, notSafe),
         selected = state.safeFirst,
         onSelect = { onChoose(true) },
       )

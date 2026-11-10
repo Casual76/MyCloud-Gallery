@@ -83,6 +83,7 @@ import dev.pampa.mycloudgallery.core.designsystem.a11y.LocalGalleryAccessibility
 import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.a11y.gallerySolidSurface
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuLegibility
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuPanel
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
@@ -740,18 +741,9 @@ private fun menuVeil(): Color {
   val dark = GlassDefaults.isDarkSurface()
   // Fase 10 P8: con le superfici piene (piu' contrasto, meno trasparenza) il velo e' pieno: il pop-up non lascia vedere niente.
   val solid = LocalGalleryAccessibility.current.solidSurfaces
-  return remember(scheme, film, dark, solid) {
-    if (solid) return@remember scheme.surface.copy(alpha = 1f)
-    val scrim = scheme.scrim.copy(alpha = if (dark) ModalScrimDark else ModalScrimLight)
-    val under = listOf(GalleryOnPhoto.Content, scheme.scrim).map { film.compositeOver(scrim.compositeOver(it)) }
-    val alpha = GalleryLegibility.minimalFilmAlpha(scheme.onSurface, scheme.surface, ContentRange(under), GalleryChromeDefaults.MeasuredTarget, 0f, MenuVeilCeiling)
-    scheme.surface.copy(alpha = alpha)
-  }
+  // K1: la regola (e i numeri dello scrim dell'engine) sta in `GalleryMenuLegibility`, con quella del menu ⋮ del viewer.
+  return remember(scheme, film, dark, solid) { GalleryMenuLegibility.textVeil(scheme, film, dark, solid) }
 }
-
-private const val ModalScrimLight = 0.12f
-private const val ModalScrimDark = 0.20f
-private const val MenuVeilCeiling = 0.9f
 
 /** Le misure della chrome delle griglie. */
 object GalleryChromeDefaults {

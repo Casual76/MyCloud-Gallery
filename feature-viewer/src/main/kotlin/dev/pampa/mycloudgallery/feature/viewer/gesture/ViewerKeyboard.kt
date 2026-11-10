@@ -6,6 +6,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -38,12 +39,19 @@ internal fun viewerKey(key: GalleryKey, callbacks: ViewerKeyCallbacks): Boolean 
 /**
  * Le frecce del viewer. Il viewer prende il **fuoco** quando si apre, cosi' i tasti arrivano senza un clic; i tasti che non sono delle frecce non si consumano (un campo di
  * testo di un foglio li riceve com'e'). Va messo sul contenitore del viewer, dopo che e' composto.
+ *
+ * @param holdsFocus falso mentre un pop-up del viewer ha il fuoco (il menu ⋮, K1): quando torna vero il viewer si riprende il fuoco, cosi' dopo il menu le frecce
+ *   funzionano ancora senza un clic (il fuoco del pop-up se ne va con lui, e senza questo non resterebbe a nessuno). Si legge in un effetto, non nella composizione:
+ *   aprire e chiudere il menu non ricompone il viewer.
  */
 @Composable
-internal fun Modifier.viewerKeyboard(callbacks: ViewerKeyCallbacks): Modifier {
+internal fun Modifier.viewerKeyboard(callbacks: ViewerKeyCallbacks, holdsFocus: () -> Boolean = { true }): Modifier {
   val focus = remember { FocusRequester() }
   val current by rememberUpdatedState(callbacks)
-  LaunchedEffect(focus) { runCatching { focus.requestFocus() } }
+  val holds by rememberUpdatedState(holdsFocus)
+  LaunchedEffect(focus) {
+    snapshotFlow { holds() }.collect { if (it) runCatching { focus.requestFocus() } }
+  }
   return this
     .focusRequester(focus)
     .onKeyEvent { event ->

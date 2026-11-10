@@ -23,66 +23,36 @@ import org.junit.Test
 import org.robolectric.annotation.Config
 
 /**
- * Gli screenshot del viewer per la revisione grafica della beta (G3, B4): il tasto di chiusura e il ⋮ con lo stesso vetro **su una foto chiara e su una scura** (la scura ha una zona accesa
- * proprio dietro il ⋮: era il caso in cui il vetro del ⋮ non ne teneva conto), e il menu che si apre dalla goccia del tasto (a meta' del viaggio e aperto). Chiaro e scuro, telefono e tablet.
- * `gradlew :feature-viewer:recordRoborazziDebug --tests "*ViewerG3Shots*"` scrive i PNG in `docs/screenshots/beta-grafica/g3-viewer/`.
+ * Gli screenshot del viewer per la revisione grafica della beta (G3, B4; K1): il tasto di chiusura e il ⋮ con lo stesso vetro tondo **su una foto chiara e su una scura** (la scura ha una
+ * zona accesa proprio dietro il ⋮: era il caso in cui il vetro del ⋮ non ne teneva conto), e il menu aperto, che e' il pop-up con il velo (K1), sopra la foto chiara e sopra la scura:
+ * il caso del critico e' la foto chiara in tema scuro (e la scura in tema chiaro). Chiaro e scuro, telefono dell'utente (360 x 780 dp) e tablet.
+ * `gradlew :feature-viewer:recordRoborazziDebug --tests "dev.pampa.mycloudgallery.feature.viewer.ViewerG3Shots*"` scrive i PNG in `docs/screenshots/beta-grafica/g3-viewer/`.
  */
 abstract class ViewerG3Shots(private val device: String, private val portrait: Boolean) : ViewerTestBase() {
 
   private fun path(name: String, dark: Boolean) = "../docs/screenshots/beta-grafica/g3-viewer/viewer-$name-${if (dark) "scuro" else "chiaro"}-$device.png"
 
-  /**
-   * La Libreria di prova ha foto tutte larghe: qui il catalogo dice che ogni foto riempie lo schermo (0,46 sul telefono, 1,6 sul tablet), cosi' la foto arriva sotto la barra, dove sta il
-   * vetro dei tasti, come una foto verticale vera sul telefono.
-   */
-  private fun fullScreenView(): TimelineView {
-    val base = fixture.library.view()
-    val milli = if (portrait) 460 else 1600
-    val snapshot = object : TimelineSnapshot by base.snapshot {
-      override fun aspectMilliAt(i: Int): Int = milli
-    }
-    return object : TimelineView {
-      override val snapshot: TimelineSnapshot = snapshot
-      override val filter: LibraryFilter = base.filter
-      override val size: Int = base.size
-
-      override fun snapshotIndex(viewIndex: Int): Int = base.snapshotIndex(viewIndex)
-
-      override fun viewIndexOf(id: MediaId): Int = base.viewIndexOf(id)
-    }
-  }
-
-  private fun photoServices(light: Boolean): ViewerServices {
-    val bitmap = (if (light) lightPhoto(portrait) else darkPhoto(portrait)).asImageBitmap()
-    // La foto dichiara le sue proporzioni (e' da li' che il viewer la dispone a schermo intero): quelle della sua bitmap.
-    val source = PhoneAwareImages(
-      delegate = FakeViewerImageSource(forced = ViewerImageState.Sharp(bitmap, hdr = false, colorSpace = null)),
-      mapper = { MediaRef.Synthetic(seed = it.mediaStoreId, width = bitmap.width, height = bitmap.height) },
-    )
-    return services(imageSource = source)
+  private fun open(photoLight: Boolean, dark: Boolean) {
+    fixture.items.publish(fullScreenView(fixture.library.view(), portrait))
+    show(services = services(imageSource = photoSource(if (photoLight) lightPhoto(portrait) else darkPhoto(portrait))), dark = dark)
+    composeRule.mainClock.advanceTimeBy(600)
   }
 
   private fun buttons(photoLight: Boolean, dark: Boolean) {
-    fixture.items.publish(fullScreenView())
-    show(services = photoServices(light = photoLight), dark = dark)
-    composeRule.mainClock.advanceTimeBy(600)
-    composeRule.onRoot().captureRoboImage(path("tasti-foto-${if (photoLight) "chiara" else "scura"}", dark))
+    open(photoLight, dark)
+    composeRule.onRoot().captureRoboImage(path("tasti-foto-${photoName(photoLight)}", dark))
   }
 
-  private fun menu(dark: Boolean) {
-    fixture.items.publish(fullScreenView())
-    show(services = photoServices(light = false), dark = dark)
-    composeRule.mainClock.advanceTimeBy(600)
-    composeRule.mainClock.autoAdvance = false
+  private fun menu(photoLight: Boolean, dark: Boolean) {
+    open(photoLight, dark)
     composeRule.onNodeWithContentDescription("Altre azioni").performClick()
-    // A meta' del viaggio: la goccia del tasto che diventa il menu.
-    composeRule.mainClock.advanceTimeBy(110)
-    composeRule.onRoot().captureRoboImage(path("menu-goccia", dark))
-    composeRule.mainClock.advanceTimeBy(700)
-    composeRule.onRoot().captureRoboImage(path("menu-aperto", dark))
-    composeRule.mainClock.autoAdvance = true
     composeRule.waitUntil(10_000L) { composeRule.onAllNodesWithText("Informazioni").fetchSemanticsNodes().isNotEmpty() }
+    // Il pop-up a riposo: finita la crescita dal tasto.
+    composeRule.mainClock.advanceTimeBy(900)
+    composeRule.onRoot().captureRoboImage(path("menu-foto-${photoName(photoLight)}", dark))
   }
+
+  private fun photoName(light: Boolean) = if (light) "chiara" else "scura"
 
   @Test fun tasti_fotoChiara_chiaro() = buttons(photoLight = true, dark = false)
 
@@ -92,19 +62,55 @@ abstract class ViewerG3Shots(private val device: String, private val portrait: B
 
   @Test fun tasti_fotoScura_scuro() = buttons(photoLight = false, dark = true)
 
-  @Test fun menu_chiaro() = menu(dark = false)
+  /** Il caso del critico (GF-1): il menu sopra una foto chiara in tema scuro. */
+  @Test fun menu_fotoChiara_scuro() = menu(photoLight = true, dark = true)
 
-  @Test fun menu_scuro() = menu(dark = true)
+  @Test fun menu_fotoChiara_chiaro() = menu(photoLight = true, dark = false)
+
+  /** L'altro caso del critico: il menu sopra una foto scura in tema chiaro (il rosso era a 1,74:1). */
+  @Test fun menu_fotoScura_chiaro() = menu(photoLight = false, dark = false)
+
+  @Test fun menu_fotoScura_scuro() = menu(photoLight = false, dark = true)
 }
 
-@Config(qualifiers = "it-w411dp-h891dp-xhdpi")
+/** Il telefono dell'utente (Galaxy S25, SM-S931B): 360 x 780 dp. */
+@Config(qualifiers = "it-w360dp-h780dp-xhdpi")
 class ViewerG3ShotsPhone : ViewerG3Shots("telefono", portrait = true)
 
 @Config(qualifiers = "it-w1280dp-h800dp-xhdpi")
 class ViewerG3ShotsTablet : ViewerG3Shots("tablet", portrait = false)
 
+/**
+ * La Libreria di prova ha foto tutte larghe: qui il catalogo dice che ogni foto riempie lo schermo (0,46 sul telefono, 1,6 sul tablet), cosi' la foto arriva sotto la barra, dove sta il
+ * vetro dei tasti e si apre il menu, come una foto verticale vera sul telefono.
+ */
+internal fun fullScreenView(base: TimelineView, portrait: Boolean): TimelineView {
+  val milli = if (portrait) 460 else 1600
+  val snapshot = object : TimelineSnapshot by base.snapshot {
+    override fun aspectMilliAt(i: Int): Int = milli
+  }
+  return object : TimelineView {
+    override val snapshot: TimelineSnapshot = snapshot
+    override val filter: LibraryFilter = base.filter
+    override val size: Int = base.size
+
+    override fun snapshotIndex(viewIndex: Int): Int = base.snapshotIndex(viewIndex)
+
+    override fun viewIndexOf(id: MediaId): Int = base.viewIndexOf(id)
+  }
+}
+
+/** Ogni pagina mostra [photo]; la foto dichiara le sue proporzioni (e' da li' che il viewer la dispone a schermo intero): quelle della bitmap. */
+internal fun photoSource(photo: Bitmap): PhoneAwareImages {
+  val bitmap = photo.asImageBitmap()
+  return PhoneAwareImages(
+    delegate = FakeViewerImageSource(forced = ViewerImageState.Sharp(bitmap, hdr = false, colorSpace = null)),
+    mapper = { MediaRef.Synthetic(seed = it.mediaStoreId, width = bitmap.width, height = bitmap.height) },
+  )
+}
+
 /** Una foto chiara: cielo quasi bianco in alto (dietro la barra), un prato caldo e luminoso sotto, qualche nuvola. */
-private fun lightPhoto(portrait: Boolean): Bitmap = photo(portrait) { canvas, w, h ->
+internal fun lightPhoto(portrait: Boolean): Bitmap = photo(portrait) { canvas, w, h ->
   val sky = Paint().apply { shader = LinearGradient(0f, 0f, 0f, h * 0.62f, 0xFFFDFEFF.toInt(), 0xFFD6E6F3.toInt(), Shader.TileMode.CLAMP) }
   canvas.drawRect(0f, 0f, w, h * 0.62f, sky)
   val grass = Paint().apply { shader = LinearGradient(0f, h * 0.62f, 0f, h, 0xFFF1E7C4.toInt(), 0xFFC9D8A2.toInt(), Shader.TileMode.CLAMP) }
@@ -117,7 +123,7 @@ private fun lightPhoto(portrait: Boolean): Bitmap = photo(portrait) { canvas, w,
 }
 
 /** Una foto scura: la sera, con una finestra accesa in alto a destra (dietro il ⋮) e qualche luce. */
-private fun darkPhoto(portrait: Boolean): Bitmap = photo(portrait) { canvas, w, h ->
+internal fun darkPhoto(portrait: Boolean): Bitmap = photo(portrait) { canvas, w, h ->
   val night = Paint().apply { shader = LinearGradient(0f, 0f, 0f, h, 0xFF0A0E13.toInt(), 0xFF1B242E.toInt(), Shader.TileMode.CLAMP) }
   canvas.drawRect(0f, 0f, w, h, night)
   val window = Paint().apply { color = 0xFFFFF4D6.toInt() }
@@ -126,6 +132,11 @@ private fun darkPhoto(portrait: Boolean): Bitmap = photo(portrait) { canvas, w, 
   canvas.drawOval(RectF(w * 0.08f, h * 0.30f, w * 0.20f, h * 0.38f), lamp)
   val house = Paint().apply { color = 0xFF05080B.toInt() }
   canvas.drawRect(RectF(0f, h * 0.70f, w, h), house)
+}
+
+/** Una foto tutta di un colore: il caso peggiore della leggibilita' (il bianco pieno, il nero pieno). */
+internal fun flatPhoto(portrait: Boolean, color: Int): Bitmap = photo(portrait) { canvas, w, h ->
+  canvas.drawRect(0f, 0f, w, h, Paint().apply { this.color = color })
 }
 
 /** Una foto che riempie lo schermo: alta e stretta sul telefono, larga sul tablet, cosi' il vetro dei tasti sta sopra la foto e non sul fondo del viewer. */

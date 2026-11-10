@@ -81,13 +81,14 @@ import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.antigravity.fluidengine.ui.fluidphysics.FluidCornerRadii
 import dev.antigravity.fluidengine.ui.fluidphysics.FluidForm
-import dev.antigravity.fluidengine.ui.fluidphysics.FluidMorphMenuHost
 import dev.antigravity.fluidengine.ui.fluidphysics.fluidPhysicsClip
-import dev.antigravity.fluidengine.ui.fluidphysics.rememberFluidMorphMenuState
 import dev.antigravity.fluidengine.ui.fluidphysics.rememberFluidPhysicsState
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryViewerMenuButton
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryViewerMenuHost
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryViewerMenuState
+import dev.pampa.mycloudgallery.core.designsystem.chrome.rememberGalleryViewerMenuState
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryDismissSpec
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryExpandSpec
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryGlassGrowth
@@ -257,6 +258,8 @@ private fun ViewerHost(
   }
   val transition = remember { GalleryViewerTransitionState() }
   val info = remember { InfoPanelState(initialOpen = state.infoOpen) }
+  // Il menu ⋮ (K1, GS-1): il suo stato sta qui perche' lo leggono le frecce della tastiera (qui sotto) e la barra (in `ViewerOverlays`).
+  val menuState = rememberGalleryViewerMenuState()
   val startPage = remember {
     view.viewIndexOf(state.currentId).takeIf { it >= 0 } ?: view.viewIndexOf(request.start).coerceAtLeast(0)
   }
@@ -460,14 +463,20 @@ private fun ViewerHost(
 
   // Le frecce sinistra e destra spostano di una foto (la sinistra va alla pagina che sta a sinistra, quale sia: B5), solo a viewer a riposo e senza un foglio, una selezione del testo o un soggetto staccato aperti (come il pager, che in quei
   // casi non scorre: E-V13). Esc e' il gesto Indietro, che `MainActivity` manda al gestore qui sopra; la rotella e' dello zoom (`ZoomableMedia`).
+  // K1 (GS-1): nemmeno con il menu ⋮ aperto. Le sue voci agiscono sulla foto per cui si sono composte: una freccia che cambiasse foto sotto il menu aperto
+  // farebbe agire "Aggiungi ad album" o "Trova simili" sulla foto di prima. Il pop-up prende comunque il fuoco (i tasti vanno a lui); questa e' la seconda
+  // difesa, e vale anche per la goccia, che il fuoco non lo prende. Chiuso il menu, il viewer si riprende il fuoco.
   fun stepPage(delta: Int): Boolean {
-    if (!atRest || controller.closing || controller.sheet != null || controller.liveText.active || controller.cutout.active) return false
+    if (!atRest || controller.closing || controller.sheet != null || controller.liveText.active || controller.cutout.active || menuState.isOpen) return false
     val target = pager.currentPage + delta
     if (target !in 0 until pager.pageCount) return false
     scope.launch { pager.animateScrollToPage(target) }
     return true
   }
-  val keyboard = Modifier.viewerKeyboard(ViewerKeyCallbacks(previous = { stepPage(leftDelta) }, next = { stepPage(-leftDelta) }))
+  val keyboard = Modifier.viewerKeyboard(
+    ViewerKeyCallbacks(previous = { stepPage(leftDelta) }, next = { stepPage(-leftDelta) }),
+    holdsFocus = { !menuState.isOpen },
+  )
 
   // --- Disegno ---------------------------------------------------------------------------------------------------------
 
@@ -560,6 +569,7 @@ private fun ViewerHost(
         sidePanel = sidePanel,
         sheetHeight = sheetHeightDp,
         panelPx = panelPx,
+        menuState = menuState,
       )
     }
   }
@@ -771,6 +781,7 @@ private fun ViewerOverlays(
   sidePanel: Boolean,
   sheetHeight: Dp,
   panelPx: Float,
+  menuState: GalleryViewerMenuState,
 ) {
   val state = controller.state
   val info = controller.info
@@ -780,10 +791,10 @@ private fun ViewerOverlays(
   val resources = LocalResources.current
   val scope = rememberCoroutineScope()
   val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
-  // B4: il menu ⋮ si apre dalla goccia del tasto. Lo stato e' di questo viewer, e il suo host sta in fondo a `ViewerOverlays` (sopra tutto il resto, cosi' anche il suo Indietro
-  // vince su quelli del pannello informazioni): senza host il tasto non apre niente.
-  val morphMenu = rememberFluidMorphMenuState()
   val currentId = state.currentId
+  // K1 (GS-1): le voci del menu ⋮ sono della foto per cui si sono composte. Se la foto cambia con il menu aperto (un'eliminazione da un altro dispositivo, un
+  // tocco sulla griglia affiancata, qualunque altra via), il menu si chiude invece di restare sopra la foto nuova.
+  LaunchedEffect(currentId) { menuState.close() }
   val snapshot = view.snapshot
   val currentIndex = snapshot.indexOf(currentId)
   val currentKind = controller.kindOf(currentId)
@@ -998,8 +1009,8 @@ private fun ViewerOverlays(
           loading = controller.motion.state.isLoading(currentId),
         )
       }
-      // B4: lo stesso vetro del tasto di chiusura (il fondale lo da' la barra) e il menu dalla goccia del tasto.
-      if (menu.isNotEmpty()) GalleryViewerMenuButton(entries = menu, morph = morphMenu)
+      // B4: lo stesso vetro del tasto di chiusura (il fondale lo da' la barra). K1: il menu e' il pop-up con il velo (la goccia e' spenta, vedi `GalleryViewerMenuButton`).
+      if (menu.isNotEmpty()) GalleryViewerMenuButton(entries = menu, state = menuState)
     },
     bottomActions = barActions,
     bottomContent = videoBar,
@@ -1220,9 +1231,9 @@ private fun ViewerOverlays(
   // L'altra copia di un gruppo che non sta nell'indice: sopra tutto il resto.
   outsideCopy?.let { copyId -> OutsideCopyLayer(id = copyId, services = services, playback = playback, onClose = { outsideCopy = null }) }
 
-  // Il menu ⋮ (B4): l'host di quello che si apre dalla goccia del tasto, per ultimo: sopra tutto il resto, e il suo Indietro (registrato per ultimo) vince su quello del pannello
-  // informazioni. A riposo e' un nodo vuoto, senza gesti. Il fondale e' la foto; il vetro del tasto, quello della barra, lo da' la barra.
-  FluidMorphMenuHost(state = morphMenu, backdrop = backdrop)
+  // Il menu ⋮ a goccia (B4): il suo host, per ultimo (sopra tutto il resto, e il suo Indietro vince su quello del pannello informazioni). Con la goccia spenta (K1) non compone
+  // niente: il pop-up vive nel `FluidGlassModalHost` dell'app, che ha il suo Indietro.
+  GalleryViewerMenuHost(state = menuState, backdrop = backdrop)
 }
 
 /** La sezione "N copie" va subito dopo quella del file (prima di "Telefono"); se il file non c'e', in fondo. */

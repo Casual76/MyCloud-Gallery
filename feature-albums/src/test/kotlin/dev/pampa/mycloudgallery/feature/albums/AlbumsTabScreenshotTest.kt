@@ -21,7 +21,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Gli screenshot della scheda Album (fase grafica, G2b) per l'utente: la scheda piena (con un album smart e i condivisi), quasi vuota (un profilo del
  * tablet: restano i Preferiti che spiegano) e al primo ingresso con gli album non ancora letti (i fissi e le copertine ferme). Chiaro e scuro, telefono
- * (412 dp) e tablet (1280 dp, orizzontale); la scheda piena anche col testo grande sul telefono. Lo spazio della pillola in fondo e' quello vero.
+ * (360 x 780 dp: il Galaxy S25 dell'utente) e tablet (1280 dp, orizzontale); la scheda piena anche col testo grande sul telefono. Lo spazio della pillola in fondo e' quello vero.
  *
  * `gradlew :feature-albums:recordRoborazziDebug --tests "*AlbumsTab*ScreenshotTest*"` scrive i PNG in `docs/screenshots/beta-grafica/G2b/`.
  */
@@ -65,7 +65,7 @@ abstract class AlbumsTabShots(private val dark: Boolean, private val device: Str
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = PHONE_360_QUALIFIERS)
 class AlbumsTabPhoneScreenshotTest(dark: Boolean) : AlbumsTabShots(dark, "telefono") {
   companion object {
     @JvmStatic

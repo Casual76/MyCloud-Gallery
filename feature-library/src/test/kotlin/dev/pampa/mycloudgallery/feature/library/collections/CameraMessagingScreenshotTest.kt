@@ -64,7 +64,7 @@ abstract class CameraMessagingShots(private val dark: Boolean, private val devic
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = PHONE_360_DP)
 class CameraMessagingPhoneScreenshotTest(dark: Boolean) : CameraMessagingShots(dark, "telefono") {
   companion object {
     @JvmStatic
@@ -83,3 +83,6 @@ class CameraMessagingTabletScreenshotTest(dark: Boolean) : CameraMessagingShots(
     fun data(): List<Array<Any>> = looks()
   }
 }
+
+/** Il telefono dell'utente (Galaxy S25, `SM-S931B`): 360 x 780 dp a 3x. Le griglie nuove si giudicano qui, non a 412 dp. */
+private const val PHONE_360_DP = "w360dp-h780dp-xxhdpi"

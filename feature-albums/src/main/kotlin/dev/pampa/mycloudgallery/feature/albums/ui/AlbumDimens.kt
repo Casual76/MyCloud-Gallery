@@ -71,10 +71,11 @@ internal object AlbumDimens {
   val PickerMaxHeight: Dp = 360.dp
 
   /**
-   * G2b: la copertina piu' stretta della scheda Album. Tre colonne sul telefono (412 dp), come Galleria Samsung; due col testo grande (la misura cresce
-   * con il carattere); sul tablet tante quante ne entrano, al piu' [TabMaxColumns].
+   * G2b: la copertina piu' stretta della scheda Album. Tre colonne sul telefono **dell'utente (360 dp: il Galaxy S25)**, come Galleria Samsung; due col testo grande (la misura cresce
+   * con il carattere); sul tablet tante quante ne entrano, al piu' [TabMaxColumns]. Le colonne sono ⌊(larghezza − 40 + [TabGap]) / ([TabCardMin] + [TabGap])⌋: con 96 dp a 360 dp sono
+   * 3 (332 / 108), e con 104 dp erano 2 (332 / 116: tre colonne solo da 380 dp in su; GF-5 della review). A 412 dp restano 3; col testo a 1,5 restano 2.
    */
-  val TabCardMin: Dp = 104.dp
+  val TabCardMin: Dp = 96.dp
 
   /** G2b: lo spazio fra due copertine della stessa riga della scheda Album. */
   val TabGap: Dp = 12.dp

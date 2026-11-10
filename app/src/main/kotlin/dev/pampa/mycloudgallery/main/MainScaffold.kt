@@ -170,7 +170,8 @@ fun MainScaffold(
 
   // GF-7 (K3a): ogni pagina (le tre schede e Cerca) tiene cio' che ricorda mentre e' coperta. Senza, la scheda che usciva dalla composizione
   // ripartiva da capo: aprire Cerca o passare a un'altra scheda riportava Album e Raccolte in cima e il pannello del tablet alla prima scelta.
-  // La Libreria ricorda gia' la sua griglia (lo stato e' fuori, nel ViewModel) e qui ritrova anche la posizione ancorata a un media.
+  // La Libreria ricorda gia' la sua griglia (lo stato e' fuori, nel ViewModel) e qui ritrova anche la posizione ancorata a un media, che serve
+  // solo a una griglia nuova (il processo ripartito): la griglia viva che torna e' gia' dove era e non si sposta (K6, GS-10).
   val pageStates = rememberSaveableStateHolder()
   val pageKey = if (searchOpen) GalleryTabBarDefaults.SearchKey else selectedTab.route
 

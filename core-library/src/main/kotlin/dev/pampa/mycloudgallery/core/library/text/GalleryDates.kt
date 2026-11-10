@@ -33,6 +33,32 @@ object GalleryDates {
   fun weekdayTitle(day: LocalDate, withYear: Boolean): String =
     day.format(if (withYear) WeekdayDayMonthYear else WeekdayDayMonth).capitalized()
 
+  // Le forme corte per l'etichetta in alto delle griglie (GF-2, review della beta): sul telefono stretto (360 dp) la data lunga non entra
+  // accanto ai tasti e finiva con i puntini. Giorni e mesi abbreviati stanno scritti qui, non nei dati di lingua della piattaforma ("EEE",
+  // "MMM"): fra il JDK dei test e Android cambiano (con il punto, senza), e l'app e' solo in italiano.
+  private val ShortWeekdays: Array<String> = arrayOf("Lun", "Mar", "Mer", "Gio", "Ven", "Sab", "Dom")
+  private val ShortMonths: Array<String> = arrayOf("gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic")
+
+  /** "Mar 12 mar" (o "Mar 12 mar 2024"): [weekdayTitle] con il giorno della settimana e il mese abbreviati. */
+  fun weekdayTitleShort(day: LocalDate, withYear: Boolean): String = ShortWeekdays[day.dayOfWeek.value - 1] + " " + dayMonthShort(day, withYear)
+
+  /** "12 mar" (o "12 mar 2024"): senza il giorno della settimana. */
+  fun dayMonthShort(day: LocalDate, withYear: Boolean): String {
+    val text = day.dayOfMonth.toString() + " " + ShortMonths[day.monthValue - 1]
+    return if (withYear) text + " " + day.year else text
+  }
+
+  /** "12 mar 24": l'anno a due cifre, per il testo grande. */
+  fun dayMonthShortYear(day: LocalDate): String = dayMonthShort(day, withYear = false) + " " + twoDigits(day.year)
+
+  /** "12/3/24": la forma piu' stretta di tutte, l'ultima prima dei puntini. */
+  fun numericDate(day: LocalDate): String = day.dayOfMonth.toString() + "/" + day.monthValue + "/" + twoDigits(day.year)
+
+  /** "Mar 2024": [monthYear] con il mese abbreviato. */
+  fun monthYearShort(month: YearMonth): String = ShortMonths[month.monthValue - 1].capitalized() + " " + month.year
+
+  private fun twoDigits(year: Int): String = (year % 100).toString().padStart(2, '0')
+
   /** "12 marzo 2024": la data di una cella per il lettore di schermo, il titolo del viewer. */
   fun date(day: LocalDate): String = day.format(DayMonthYear)
 

@@ -26,9 +26,12 @@ import kotlin.math.max
 // chrome, lo scrubber disegnato fuori dalla griglia, e che cosa passa sotto un rettangolo di chrome (per il vetro adattivo).
 // Niente di questo ricompone la griglia: si legge lo stato dello scorrimento e basta.
 
-/** La sezione sotto la linea della chrome: il titolo ("Venerdì 9 ottobre", "Giugno 2023", "2024") e il luogo. */
+/**
+ * La sezione sotto la linea della chrome: il titolo ("Venerdì 9 ottobre", "Giugno 2023", "2024") e il luogo. [shorterTitles] sono le
+ * forme piu' corte del titolo, dalla piu' lunga alla piu' stretta (GF-2: l'etichetta in alto mostra la prima che entra).
+ */
 @Immutable
-data class MediaGridSection(val title: String, val place: String?)
+data class MediaGridSection(val title: String, val place: String?, val shorterTitles: List<String> = emptyList())
 
 /**
  * La sezione che sta sotto [line] (distanza dal bordo alto della griglia): e' l'intestazione agganciata, che l'etichetta
@@ -59,9 +62,10 @@ private fun sectionOf(state: MediaGridState, k: SectionKey, strings: GridStrings
   val l = k.layout
   return if (k.section >= 0) {
     val section = l.sections[k.section]
-    MediaGridSection(GridText.sectionTitle(section, today, strings), GridText.sectionPlace(section, state.placeNames))
+    MediaGridSection(GridText.sectionTitle(section, today, strings), GridText.sectionPlace(section, state.placeNames), GridText.sectionShorterTitles(section, today))
   } else {
-    MediaGridSection(GridText.month(checkNotNull(k.month)), null)
+    val month = checkNotNull(k.month)
+    MediaGridSection(GridText.month(month), null, GridText.shorterMonths(month))
   }
 }
 

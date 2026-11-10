@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -42,6 +43,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,7 +63,9 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -222,9 +226,17 @@ fun GalleryChromeCapsule(
  *  - **un ritmo**: il testo nuovo si mostra subito, ma poi al piu' uno ogni [GalleryChromeDefaults.LabelPaceMillis] (sempre
  *    l'ultimo arrivato): una data che cambia venti volte al secondo non si legge comunque, e venti dissolvenze sovrapposte sono
  *    solo rumore e lavoro;
- *  - **una soglia**: durante una raffica di cambi la capsula cresce se serve ma non si stringe; si stringe sul testo vero solo
- *    quando il testo e' fermo da [GalleryChromeDefaults.LabelSettleMillis].
+ *  - **una soglia**: dentro una raffica di cambi (un cambio a meno di [GalleryChromeDefaults.LabelSettleMillis] dal precedente) la
+ *    capsula cresce se serve ma non si stringe; si stringe sul testo vero solo quando il testo e' fermo da tanto. Un cambio
+ *    **isolato** (entrando in selezione il testo diventa "3 selezionati") non aspetta: la capsula si muove insieme al testo (GF-6).
  * Con le animazioni ridotte il testo cambia di colpo e la capsula prende subito la sua misura.
+ *
+ * **La data non finisce con i puntini se una forma piu' corta entra** (GF-2, review della beta: sul telefono a 360 dp, con quattro
+ * tasti nella capsula, restano 96 dp di testo). [shorterTitles] sono le forme piu' corte di [title], dalla piu' lunga alla piu'
+ * stretta («Mer 20 nov 2024», «20 nov 2024»...): l'etichetta mostra la prima che entra nella larghezza che la riga le lascia. La
+ * scelta si fa **al layout**, quando la larghezza e' nota, quindi vale dal primo fotogramma; ogni forma si misura una volta sola per
+ * titolo ([ChromeTitleFit]), e mentre la capsula accanto cambia larghezza la scelta e' un confronto fra interi. TalkBack legge
+ * sempre [title] per esteso.
  */
 @Composable
 fun GalleryChromeLabel(
@@ -233,44 +245,152 @@ fun GalleryChromeLabel(
   style: GalleryChromeStyle,
   backdrop: GlassBackdropState?,
   modifier: Modifier = Modifier,
+  shorterTitles: List<String> = emptyList(),
 ) {
-  val shown = rememberChromePaced(ChromeLabelLines(title, subtitle), GalleryChromeDefaults.LabelPaceMillis)
-  Box(
+  val lines = remember(title, subtitle, shorterTitles) { ChromeLabelLines(forms = listOf(title) + shorterTitles, subtitle = subtitle) }
+  val shown = rememberChromePaced(lines, GalleryChromeDefaults.LabelPaceMillis)
+  val fit = rememberChromeTitleFit(shown.forms)
+  val slot = remember { ChromeLabelSlot() }
+  val ink = style.ink
+  val reduced = LocalFluidMotionPolicy.current.reducedMotion
+  // Un `SubcomposeLayout` al posto di un `Box`: il testo si compone sapendo gia' quanta larghezza ha. Il contenuto si ricompone solo
+  // quando cambia cio' che mostra (la forma scelta, il testo, l'inchiostro), non a ogni misura: mentre la capsula dei comandi si
+  // allarga con la molla la riga si rimisura a ogni fotogramma, ma il contenuto e' lo stesso finche' la forma non cambia.
+  SubcomposeLayout(
     modifier = modifier
       .height(chromePieceHeight())
       .chromeGlass(style, backdrop)
       .padding(horizontal = GalleryChromeDefaults.LabelPaddingH),
-    contentAlignment = Alignment.CenterStart,
-  ) {
-    if (LocalFluidMotionPolicy.current.reducedMotion) {
-      GalleryChromeTitle(title = shown.title, subtitle = shown.subtitle, ink = style.ink)
-    } else {
-      MovingChromeTitle(shown, style.ink)
-    }
+  ) { constraints ->
+    val form = if (constraints.hasBoundedWidth) fit.pick(constraints.maxWidth) else 0
+    val content = slot.contentFor(ChromeShownLines.of(shown, form), ink, reduced)
+    val placeable = subcompose(Unit, content).first().measure(constraints.copy(minWidth = 0, minHeight = 0))
+    val width = placeable.width.coerceIn(constraints.minWidth, constraints.maxWidth)
+    val height = placeable.height.coerceIn(constraints.minHeight, constraints.maxHeight)
+    layout(width, height) { placeable.placeRelative(0, (height - placeable.height) / 2) }
   }
 }
 
-/** Le due righe dell'etichetta: il titolo e il luogo (o il riepilogo). */
+/** Cio' che l'etichetta puo' dire: il titolo in tutte le sue forme (la prima e' quella intera) e il luogo (o il riepilogo). */
 @Immutable
-private data class ChromeLabelLines(val title: String, val subtitle: String?)
+private data class ChromeLabelLines(val forms: List<String>, val subtitle: String?)
+
+/**
+ * Le due righe che l'etichetta mostra: la forma scelta del titolo e il luogo. [spoken] e' cio' che TalkBack legge quando a schermo
+ * c'e' una forma corta (il titolo intero e il luogo); null se il titolo mostrato e' gia' quello intero.
+ */
+@Immutable
+private data class ChromeShownLines(val title: String, val subtitle: String?, val spoken: String?) {
+  companion object {
+    fun of(lines: ChromeLabelLines, form: Int): ChromeShownLines = ChromeShownLines(
+      title = lines.forms[form],
+      subtitle = lines.subtitle,
+      spoken = if (form == 0) null else listOfNotNull(lines.forms.first(), lines.subtitle?.takeIf { it.isNotBlank() }).joinToString(", "),
+    )
+  }
+}
+
+/**
+ * Il contenuto composto dell'etichetta, ricordato finche' mostra le stesse cose: `subcompose` ricompone solo se riceve un contenuto
+ * diverso, e una misura che non cambia niente (la capsula accanto che si muove) non deve ricomporre il testo.
+ */
+private class ChromeLabelSlot {
+  private var lines: ChromeShownLines? = null
+  private var ink: Color = Color.Unspecified
+  private var reduced: Boolean = false
+  private var content: (@Composable () -> Unit)? = null
+
+  fun contentFor(lines: ChromeShownLines, ink: Color, reduced: Boolean): @Composable () -> Unit {
+    val current = content
+    if (current != null && lines == this.lines && ink == this.ink && reduced == this.reduced) return current
+    this.lines = lines
+    this.ink = ink
+    this.reduced = reduced
+    val next: @Composable () -> Unit = {
+      if (reduced) {
+        GalleryChromeTitle(title = lines.title, subtitle = lines.subtitle, ink = ink, spoken = lines.spoken)
+      } else {
+        MovingChromeTitle(lines, ink)
+      }
+    }
+    content = next
+    return next
+  }
+}
+
+/**
+ * Quale forma del titolo entra (GF-2): la prima, dalla piu' lunga, la cui larghezza sta in quella disponibile; se nessuna entra,
+ * l'ultima (la piu' stretta: finira' con i puntini, ma solo lei). Ogni forma si misura **una volta**, quando serve: un titolo che
+ * entra intero (il tablet, "Oggi") misura solo se' stesso, un titolo senza forme corte niente. Per tornare a una forma piu' lunga di
+ * quella mostrata serve un margine ([backSlackPx]): la molla della capsula accanto arriva con un piccolo rimbalzo, e senza margine
+ * una forma che entra per un pixel si alternerebbe con la piu' corta.
+ */
+internal class ChromeTitleFit(private val forms: List<String>, private val backSlackPx: Int, private val widthOf: (String) -> Int) {
+  private val widths = IntArray(forms.size) { Unmeasured }
+  private var last = -1
+
+  fun pick(maxWidth: Int): Int {
+    var picked = forms.lastIndex
+    for (i in 0 until forms.lastIndex) {
+      if (widths[i] == Unmeasured) widths[i] = widthOf(forms[i])
+      val needed = if (last > i) widths[i] + backSlackPx else widths[i]
+      if (needed <= maxWidth) {
+        picked = i
+        break
+      }
+    }
+    last = picked
+    return picked
+  }
+
+  private companion object {
+    const val Unmeasured = -1
+  }
+}
+
+/** Il misuratore delle forme di un titolo, con lo stile con cui [GalleryChromeTitle] lo scrive. Uno per titolo. */
+@Composable
+private fun rememberChromeTitleFit(forms: List<String>): ChromeTitleFit {
+  val measurer = rememberTextMeasurer(cacheSize = 0)
+  val style = chromeTitleStyle()
+  val slack = with(LocalDensity.current) { TitleFitBackSlack.roundToPx() }
+  return remember(forms, measurer, style, slack) {
+    ChromeTitleFit(forms, slack) { text -> measurer.measure(text = text, style = style, softWrap = false, maxLines = 1).size.width }
+  }
+}
+
+/** Il margine per tornare da una forma corta a una piu' lunga (vedi [ChromeTitleFit]). */
+private val TitleFitBackSlack = 2.dp
 
 /**
  * Il testo dell'etichetta che cambia con la dissolvenza incrociata, dentro un contenitore la cui larghezza segue la molla (il vetro
- * che lo porta cresce e si stringe con lui) e che durante una raffica non si stringe (la soglia di [GalleryChromeLabel]).
+ * che lo porta cresce e si stringe con lui) e che dentro una raffica non si stringe (la soglia di [GalleryChromeLabel]).
  *
- * Il contenitore e' largo almeno [ChromeWidthHold.held]: alla prima riga di una raffica la tenuta prende la larghezza che il testo
- * aveva (durante la dissolvenza ci sono il vecchio e il nuovo, quindi la piu' larga delle due), a ogni cambio successivo la piu'
- * larga vista finora; a testo fermo torna a zero e la molla porta la capsula sulla misura del testo.
+ * Il contenitore e' largo almeno [ChromeWidthHold.held]. Un cambio **isolato** non tiene niente: la capsula va subito alla misura del
+ * testo nuovo. Un cambio che arriva a meno di [GalleryChromeDefaults.LabelSettleMillis] dal precedente (una raffica) tiene la
+ * larghezza del testo che c'era, e ogni cambio successivo la piu' larga vista finora; a testo fermo la tenuta torna a zero e la molla
+ * porta la capsula sulla misura del testo.
  */
 @Composable
-private fun MovingChromeTitle(lines: ChromeLabelLines, ink: Color) {
+private fun MovingChromeTitle(lines: ChromeShownLines, ink: Color) {
   val hold = remember { ChromeWidthHold() }
   LaunchedEffect(lines) {
-    hold.held = maxOf(hold.held, hold.natural)
+    // La prima composizione non e' un cambio.
+    if (!hold.started) {
+      hold.started = true
+      return@LaunchedEffect
+    }
+    // GF-6: la larghezza si tiene solo dentro una raffica. `inBurst` resta vero se il cambio precedente e' piu' recente della soglia
+    // (questo effetto riparte a ogni cambio, e l'attesa sotto non e' finita).
+    if (hold.inBurst) hold.held = maxOf(hold.held, hold.natural)
+    hold.inBurst = true
     delay(GalleryChromeDefaults.LabelSettleMillis)
+    hold.inBurst = false
     hold.held = 0
   }
   val held = with(LocalDensity.current) { hold.held.toDp() }
+  // Il testo in arrivo, letto come stato dal contenuto: `AnimatedContent` tiene per il testo che esce la lambda di quando e' entrato.
+  val target = rememberUpdatedState(lines)
   Box(
     modifier = Modifier
       .animateContentSize(animationSpec = FluidMotion.intSize(), alignment = Alignment.CenterStart)
@@ -280,23 +400,38 @@ private fun MovingChromeTitle(lines: ChromeLabelLines, ink: Color) {
     AnimatedContent(
       targetState = lines,
       transitionSpec = {
-        // Niente animazione della misura qui: la fa il contenitore, che continua la molla con la sua velocita' anche quando un
-        // cambio arriva a meta' strada (un'animazione che ricomincia a ogni cambio e' il tremolio che la beta toglie).
-        (fadeIn(FluidMotion.fadeIn(LabelFadeInMillis)) togetherWith fadeOut(FluidMotion.fadeOut(LabelFadeOutMillis))).using(null)
+        // La misura qui non si anima: prende **subito** quella del testo nuovo (senza, durante la dissolvenza varrebbe la piu' larga
+        // fra il vecchio e il nuovo, e la capsula comincerebbe a stringersi solo a dissolvenza finita). La molla la fa il contenitore,
+        // che continua con la sua velocita' anche quando un cambio arriva a meta' strada (un'animazione che ricomincia a ogni cambio
+        // e' il tremolio che la beta toglie) e ritaglia il testo che esce.
+        (fadeIn(FluidMotion.fadeIn(LabelFadeInMillis)) togetherWith fadeOut(FluidMotion.fadeOut(LabelFadeOutMillis)))
+          .using(SizeTransform(clip = false) { _, _ -> snap() })
       },
       contentAlignment = Alignment.CenterStart,
       modifier = Modifier.onSizeChanged { hold.natural = it.width },
       label = "etichetta della chrome",
     ) { shown ->
-      GalleryChromeTitle(title = shown.title, subtitle = shown.subtitle, ink = ink)
+      GalleryChromeTitle(
+        title = shown.title,
+        subtitle = shown.subtitle,
+        ink = ink,
+        spoken = shown.spoken,
+        // Il testo che esce non prende i puntini mentre sfuma (la riga puo' essersi stretta: e' per questo che cambia forma).
+        titleOverflow = if (shown == target.value) TextOverflow.Ellipsis else TextOverflow.Clip,
+      )
     }
   }
 }
 
-/** La tenuta della larghezza dell'etichetta durante una raffica di cambi (pixel). [natural] e' la misura del testo, letta al layout. */
+/**
+ * La tenuta della larghezza dell'etichetta dentro una raffica di cambi (pixel). [natural] e' la misura del testo, letta al layout;
+ * [inBurst] dice se l'ultimo cambio e' piu' recente della soglia.
+ */
 private class ChromeWidthHold {
   var held: Int by mutableIntStateOf(0)
   var natural: Int = 0
+  var started: Boolean = false
+  var inBurst: Boolean = false
 }
 
 /**
@@ -451,16 +586,31 @@ fun GalleryChromeTextButton(
 /**
  * Il testo dell'etichetta: il titolo in grassetto (15 sp) e sotto il luogo (13 sp, medio). Una riga ciascuno, troncati.
  * L'inchiostro e' pieno per tutte e due le righe: la gerarchia la fanno taglia e peso, mai l'alfa.
+ *
+ * [spoken]: cio' che TalkBack legge al posto delle due righe, quando il titolo a schermo e' una forma corta della data (GF-2): la
+ * data per esteso e il luogo. Null = le due righe cosi' come sono.
  */
 @Composable
-internal fun GalleryChromeTitle(title: String, subtitle: String?, ink: Color, modifier: Modifier = Modifier) {
-  Column(modifier = modifier.semantics(mergeDescendants = true) { heading() }) {
+internal fun GalleryChromeTitle(
+  title: String,
+  subtitle: String?,
+  ink: Color,
+  modifier: Modifier = Modifier,
+  spoken: String? = null,
+  titleOverflow: TextOverflow = TextOverflow.Ellipsis,
+) {
+  Column(
+    modifier = modifier.semantics(mergeDescendants = true) {
+      heading()
+      if (spoken != null) contentDescription = spoken
+    },
+  ) {
     Text(
       text = title,
-      style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+      style = chromeTitleStyle(),
       color = ink,
       maxLines = 1,
-      overflow = TextOverflow.Ellipsis,
+      overflow = titleOverflow,
     )
     if (!subtitle.isNullOrBlank()) {
       Text(
@@ -473,6 +623,10 @@ internal fun GalleryChromeTitle(title: String, subtitle: String?, ink: Color, mo
     }
   }
 }
+
+/** Lo stile del titolo dell'etichetta: e' anche quello con cui si misurano le sue forme corte ([ChromeTitleFit]). */
+@Composable
+private fun chromeTitleStyle(): TextStyle = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
 
 /**
  * Una **sfumatura di bordo** (lo "scroll edge effect"): un colore che sfuma lungo l'altezza, alle opacita' [stops]

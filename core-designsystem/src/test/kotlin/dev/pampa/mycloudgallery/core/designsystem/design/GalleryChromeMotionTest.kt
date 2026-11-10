@@ -156,22 +156,49 @@ class GalleryChromeMotionTest {
     assertWithMessage("fotogrammi fra le due misure ($narrow -> $wide): $series").that(between).isAtLeast(MinFramesBetween)
   }
 
+  /**
+   * GF-6 (review della beta): un cambio **isolato** (entrando in selezione il testo diventa «3 selezionati») non tiene la larghezza: la
+   * capsula si stringe insieme al testo, con la molla, non 600 ms dopo.
+   */
   @Test
-  fun scorrendoVeloceLEtichettaNonSiStringeFinoACheIlTestoEFermo() {
+  fun unCambioIsolatoStringeLaCapsulaInsiemeAlTesto() {
     title.value = "Mercoledi 12 ottobre 2026"
     showLabel()
     val wide = width(LabelTag)
+    // Il testo e' fermo da piu' della soglia: il prossimo cambio non fa parte di una raffica.
+    composeRule.mainClock.advanceTimeBy(GalleryChromeDefaults.LabelSettleMillis * 2)
     composeRule.mainClock.autoAdvance = false
-    // Una raffica di date corte: la capsula non si stringe a ogni data.
-    for (name in listOf("Oggi", "Ieri", "Lunedi", "Oggi")) {
+    composeRule.runOnIdle { title.value = "3 selezionati" }
+    val start = widths(LabelTag, FramesFor160Ms)
+    assertWithMessage("la capsula si stringe mentre il testo cambia (prima aspettava 600 ms): $wide -> $start").that(start.last()).isLessThan(wide - MinGrowthPx)
+    val series = start + widths(LabelTag, FramesFor1500Ms)
+    assertWithMessage("si stringe passando per le misure in mezzo: $series").that(series.count { it < wide - 1f && it > series.last() + 1f }).isAtLeast(MinFramesBetween)
+  }
+
+  /**
+   * Dentro una **raffica** (un cambio a meno di 600 ms dal precedente: lo scorrimento veloce) la capsula cresce se serve ma non si
+   * stringe; si stringe sul testo solo quando il testo e' fermo da 600 ms.
+   */
+  @Test
+  fun scorrendoVeloceLEtichettaNonSiStringeFinoACheIlTestoEFermo() {
+    title.value = "Oggi"
+    showLabel()
+    composeRule.mainClock.autoAdvance = false
+    // Il primo cambio della raffica porta la capsula larga.
+    composeRule.runOnIdle { title.value = "Mercoledi 12 ottobre 2026" }
+    val wide = widths(LabelTag, FramesFor250Ms).last()
+    // Poi date corte, una ogni 250 ms: la capsula non si stringe a ogni data (e finisce di crescere verso la piu' larga vista).
+    var floor = wide
+    for (name in listOf("Ieri", "Lunedi", "Oggi")) {
       composeRule.runOnIdle { title.value = name }
       val series = widths(LabelTag, FramesFor250Ms)
-      assertWithMessage("durante la raffica ($name): $series").that(series.min()).isAtLeast(wide - 1f)
+      assertWithMessage("durante la raffica ($name), da $floor: $series").that(series.min()).isAtLeast(floor - 1f)
+      floor = series.last()
     }
     // A testo fermo (dopo la soglia) si stringe sulla misura del testo, con la molla.
     val settle = widths(LabelTag, FramesFor1500Ms + FramesFor1500Ms)
-    assertThat(settle.last()).isLessThan(wide - MinGrowthPx)
-    assertWithMessage("si stringe passando per le misure in mezzo: $settle").that(settle.count { it < wide - 1f && it > settle.last() + 1f }).isAtLeast(MinFramesBetween)
+    assertThat(settle.last()).isLessThan(floor - MinGrowthPx)
+    assertWithMessage("si stringe passando per le misure in mezzo: $settle").that(settle.count { it < floor - 1f && it > settle.last() + 1f }).isAtLeast(MinFramesBetween)
   }
 
   @Test
@@ -226,6 +253,9 @@ class GalleryChromeMotionTest {
 
     /** Il primo cambio deve arrivare prima che il ritmo (200 ms, 12 fotogrammi) finisca. */
     const val FramesWithinPace = 11
+
+    /** La dissolvenza del testo dura 180 ms: dentro quel tempo la capsula deve essere gia' in viaggio. */
+    const val FramesFor160Ms = 10
     const val FramesFor250Ms = 16
     const val FramesFor300Ms = 19
     const val FramesFor1500Ms = 94

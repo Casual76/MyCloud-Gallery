@@ -1,7 +1,6 @@
 package dev.pampa.mycloudgallery.core.designsystem.design
 
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -17,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBackIos
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
@@ -74,9 +74,13 @@ interface GalleryChromeContent {
 
 /**
  * Lo stile adattivo di un pezzo di chrome che sta su [bounds] (pixel del contenuto): si ricalcola solo quando sotto entra o esce una
- * riga, dai colori del [content] composti con il velo [veil] (la sfumatura di bordo alla quota del bordo basso del pezzo); inchiostro
- * e pellicola cambiano con la molla standard (subito, con le animazioni ridotte). Senza contenuto ([content] nullo: una pagina senza
- * miniature con ThumbHash) vale il caso peggiore.
+ * riga, dai colori del [content] composti con il velo [veil] (la sfumatura di bordo alla quota del bordo basso del pezzo). Senza
+ * contenuto ([content] nullo: una pagina senza miniature con ThumbHash) vale il caso peggiore.
+ *
+ * **Nessuna coppia mostrata per strada scende sotto la soglia** (GS-5, review della beta): la scelta nuova vale dalla composizione
+ * che la calcola. L'inchiostro e la polarita' cambiano in un fotogramma, e una pellicola che deve farsi piu' densa lo fa subito; solo
+ * una pellicola che puo' **alleggerirsi** lo fa con la molla standard ([adaptiveFilmAlpha]). Prima inchiostro e pellicola si animavano
+ * separatamente: fra le due polarita', a meta' strada, il testo stava a 2,56:1.
  */
 @Composable
 fun rememberAdaptiveChromeStyle(content: GalleryChromeContent?, bounds: Rect?, veil: Color?): GalleryChromeStyle {
@@ -96,10 +100,44 @@ fun rememberAdaptiveChromeStyle(content: GalleryChromeContent?, bounds: Rect?, v
   }
   SideEffect { previous.value = choice.darkInk }
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
-  val ink by animateColorAsState(choice.ink, if (reduced) snap() else FluidMotion.standard(), label = "inchiostro adattivo")
-  val film by animateColorAsState(choice.film, if (reduced) snap() else FluidMotion.standard(), label = "pellicola adattiva")
-  return GalleryChromeStyles.adaptive(choice.copy(ink = ink, film = film))
+  val motion = remember { AdaptiveFilmMotion(choice) }
+  LaunchedEffect(choice.darkInk, choice.film.alpha, reduced) { motion.follow(choice, reduced) }
+  return GalleryChromeStyles.adaptive(choice.copy(film = choice.film.copy(alpha = motion.shownAlpha(choice))))
 }
+
+/**
+ * L'opacita' della pellicola da mostrare mentre il vetro adattivo va verso la scelta [to] (GS-5): [animated] e' l'opacita' che la molla
+ * sta portando, valida per la polarita' [animatedDark].
+ *  - se la polarita' e' cambiata, quella di [to]: la pellicola di prima e' dell'altro colore e sotto l'inchiostro nuovo non regge;
+ *  - se no, **mai meno** di quella di [to], che e' il minimo che tiene la soglia sul contenuto nuovo: una pellicola che deve crescere
+ *    arriva subito, una che puo' calare cala con la molla (e un rimbalzo della molla sotto il minimo non si mostra).
+ * Funzione pura: il percorso si verifica campionato, senza comporre (`GalleryTopChromeTest`).
+ */
+internal fun adaptiveFilmAlpha(animated: Float, animatedDark: Boolean, to: AdaptiveInk): Float =
+  if (animatedDark != to.darkInk) to.film.alpha else maxOf(animated, to.film.alpha)
+
+/** La molla dell'opacita' della pellicola di un pezzo di chrome, con la polarita' per cui vale. */
+private class AdaptiveFilmMotion(initial: AdaptiveInk) {
+  private val alpha = Animatable(initial.film.alpha, visibilityThreshold = AlphaThreshold)
+  private var dark = initial.darkInk
+
+  /** Letta in composizione: cio' che si mostra adesso, gia' sopra la soglia per [choice]. */
+  fun shownAlpha(choice: AdaptiveInk): Float = adaptiveFilmAlpha(alpha.value, dark, choice)
+
+  /** Porta la molla verso [choice]: con la molla solo se la pellicola si alleggerisce nella stessa polarita'. */
+  suspend fun follow(choice: AdaptiveInk, reduced: Boolean) {
+    val target = choice.film.alpha
+    if (reduced || dark != choice.darkInk || alpha.value <= target) {
+      alpha.snapTo(target)
+      dark = choice.darkInk
+    } else {
+      alpha.animateTo(target, FluidMotion.standard())
+    }
+  }
+}
+
+/** La molla dell'opacita' si ferma a un millesimo dal valore: un passo che non si vede. */
+private const val AlphaThreshold = 0.001f
 
 /**
  * Le ultime scelte di [GalleryLegibility.adapt] di un pezzo di chrome, per contenuto: lo stesso contenuto sotto (lo stesso
@@ -142,7 +180,8 @@ fun galleryTopChromeHeight(): Dp = WindowInsets.statusBars.asPaddingValues().cal
 /**
  * La riga di chrome in alto: sotto la barra di stato, [onBack] (una capsula con la freccia, se c'e'), l'etichetta con [title] e
  * [subtitle] e la capsula dei comandi ([commands], se [showCommands]). Ogni pezzo e' vetro adattivo sul [content] che gli passa
- * sotto (null = caso peggiore). [topChrome] e' [galleryTopChromeHeight].
+ * sotto (null = caso peggiore). [topChrome] e' [galleryTopChromeHeight]. [shorterTitles]: le forme piu' corte di [title], per
+ * quando la riga e' stretta ([GalleryChromeLabel]).
  *
  * Le icone della barra di stato seguono il tema: la sfumatura di bordo ([GalleryTopEdgeScrim]) e' densa proprio li'.
  */
@@ -157,6 +196,7 @@ fun GalleryTopChrome(
   onBack: (() -> Unit)? = null,
   backDescription: String = stringResource(R.string.topbar_back),
   showCommands: Boolean = true,
+  shorterTitles: List<String> = emptyList(),
   commands: @Composable RowScope.() -> Unit,
 ) {
   val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -200,6 +240,7 @@ fun GalleryTopChrome(
         style = labelStyle,
         backdrop = backdrop,
         modifier = Modifier.onGloballyPositioned { labelBounds.settle(it.inChromeContent(content), slack) }.galleryChromeTag("titolo"),
+        shorterTitles = shorterTitles,
       )
     }
     if (showCommands) {

@@ -3,6 +3,8 @@ package dev.pampa.mycloudgallery.main
 import android.app.Application
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -12,15 +14,18 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.GalleryScaffold
 import dev.pampa.mycloudgallery.SHOT_PHONE
+import dev.pampa.mycloudgallery.SHOT_TABLET
 import dev.pampa.mycloudgallery.ScaffoldScenes
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabEntry
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -34,7 +39,8 @@ import org.robolectric.annotation.Config
 /**
  * GF-7 (K3a): una scheda coperta (da Cerca o da un'altra scheda) ritrova cio' che ricordava. Prima usciva dalla composizione e ripartiva da capo:
  * aprire Cerca o passare alla Libreria e tornare riportava gli Album in cima. Con lo scaffold delle prove, cioe' la scheda Album vera su uno stato
- * dato, sul telefono dell'utente.
+ * dato, sul telefono dell'utente. Sul tablet, il pannello delle Raccolte ritrova la voce scelta dopo Cerca. La Libreria ha la sua prova:
+ * `LibreriaAlRitornoTest` (K6).
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, qualifiers = SHOT_PHONE)
@@ -60,7 +66,7 @@ class SchedeCheRicordanoTest {
   private var tab by mutableStateOf(GalleryTab.Albums)
   private var searchOpen by mutableStateOf(false)
 
-  private fun show(scenes: ScaffoldScenes) {
+  private fun show(scenes: ScaffoldScenes, collectionsEntryDetail: (@Composable (CollectionEntry) -> Unit)? = null) {
     compose.setContent {
       MyCloudGalleryTheme {
         GalleryScaffold(
@@ -70,6 +76,7 @@ class SchedeCheRicordanoTest {
           onSelectTab = { tab = it },
           onOpenSearch = { searchOpen = true },
           onCloseSearch = { searchOpen = false },
+          collectionsEntryDetail = collectionsEntryDetail,
         )
       }
     }
@@ -126,7 +133,38 @@ class SchedeCheRicordanoTest {
     assertScrolledTo(far)
   }
 
+  /**
+   * Sul tablet il pannello delle Raccolte ritrova la sua scelta dopo Cerca (K3a: `savedEntry` di `CollectionsScreen` nel `SaveableStateHolder`; la
+   * verifica mancante segnalata con GS-10). Il pannello mostra la pagina di una voce come in produzione (`entryDetail`): qui una riga col suo codice.
+   */
+  @Test
+  @Config(qualifiers = SHOT_TABLET)
+  fun sulTabletIlPannelloDelleRaccolteRitrovaLaSceltaDopoCerca() {
+    tab = GalleryTab.Collections
+    show(ScaffoldScenes()) { entry -> Text(PANEL + entry.code) }
+    // Nessuna voce scelta: il pannello invita a sceglierne una.
+    compose.onNodeWithText(PANEL, substring = true).assertDoesNotExist()
+    compose.onNodeWithText(TRIP_TITLE).performClick()
+    compose.waitForIdle()
+    compose.onNodeWithText(PANEL + TRIP_CODE).assertIsDisplayed()
+
+    searchOpen = true
+    compose.waitForIdle()
+    compose.onNodeWithText(PANEL, substring = true).assertDoesNotExist()
+
+    searchOpen = false
+    compose.waitForIdle()
+    compose.onNodeWithText(PANEL + TRIP_CODE).assertIsDisplayed()
+  }
+
   private companion object {
+    /** Il testo della pagina di prova nel pannello di dettaglio delle Raccolte, seguito dal codice della voce. */
+    const val PANEL = "Pannello: "
+
+    /** La seconda voce dei Viaggi delle Raccolte di prova (`CollectionsSectionSamples`): non e' una scelta predefinita. */
+    const val TRIP_TITLE = "Sabato 12 aprile 2025"
+    const val TRIP_CODE = "trips/t2"
+
     /** Abbastanza album da riempire piu' schermate del telefono (3 colonne). */
     const val MANY = 40
 

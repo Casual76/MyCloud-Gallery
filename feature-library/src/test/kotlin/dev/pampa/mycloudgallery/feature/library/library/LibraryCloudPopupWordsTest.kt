@@ -39,7 +39,8 @@ import org.robolectric.annotation.GraphicsMode
  *    «Attesa batteria».
  *
  * `gradlew :feature-library:recordRoborazziDebug --tests "*LibraryCloudPopupWords*"` scrive i PNG in `docs/screenshots/beta-grafica/RG-D/`;
- * nei normali `testDebugUnitTest` si verifica solo che il pop-up compaia e dica le frasi giuste.
+ * nei normali `testDebugUnitTest` si verifica solo che il pop-up compaia e dica le frasi giuste. Il telefono e' a 360 x 780 dp, il
+ * Galaxy S25 dell'utente (pacchetto K2).
  */
 internal abstract class LibraryCloudPopupWordsBase(private val dark: Boolean, private val device: String) {
 
@@ -124,7 +125,7 @@ internal abstract class LibraryCloudPopupWordsBase(private val dark: Boolean, pr
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h891dp-xhdpi")
+@Config(application = Application::class, qualifiers = "w360dp-h780dp-xhdpi")
 internal class LibraryCloudPopupWordsPhoneTest(dark: Boolean) : LibraryCloudPopupWordsBase(dark, "telefono") {
   companion object {
     @JvmStatic

@@ -209,7 +209,6 @@ class LibraryIndexShiftTest {
               backdropOut = {},
               onOpenViewer = {},
               onOpenSettings = {},
-              statusFooter = {},
               state = state,
             )
           }

@@ -160,7 +160,7 @@ internal fun CollectionGridPage(
     selecting && selected.isEmpty -> ChromeLabelText(stringResource(R.string.collection_select_items), null)
     selecting -> ChromeLabelText(countText(R.plurals.selection_count, selected.size), null)
     // Scorrendo, la sezione in vista; sotto, il nome della raccolta: si sa sempre dove si e'.
-    section != null -> ChromeLabelText(section.title, listOfNotNull(title, section.place).joinToString(" · "))
+    section != null -> ChromeLabelText(section.title, listOfNotNull(title, section.place).joinToString(" · "), section.shorterTitles)
     else -> ChromeLabelText(title, countText(R.plurals.collection_count, view.size))
   }
 

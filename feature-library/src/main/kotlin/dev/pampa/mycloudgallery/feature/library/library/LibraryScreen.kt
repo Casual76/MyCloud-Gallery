@@ -345,7 +345,8 @@ private fun <T : Any> rememberLastNonNull(value: T?): T? {
 /**
  * Che cosa dice l'etichetta in alto: in selezione quanti sono gli scelti; scorrendo la sezione sotto la riga di chrome
  * (data e luogo); in cima, dove non c'e' ancora una sezione, "Libreria" e il riepilogo. Un filtro attivo si dice sempre,
- * davanti al luogo ("Video · Oslo"): la griglia non mostra tutto, e lo si vede senza aprire il menu.
+ * davanti al luogo ("Video · Oslo"): la griglia non mostra tutto, e lo si vede senza aprire il menu. La data porta le sue forme
+ * piu' corte (GF-2): sul telefono stretto, con quattro tasti nella capsula, l'etichetta mostra la prima che entra.
  */
 @Composable
 private fun libraryLabel(state: LibraryTabState, section: MediaGridSection?): ChromeLabelText {
@@ -355,7 +356,7 @@ private fun libraryLabel(state: LibraryTabState, section: MediaGridSection?): Ch
   return when {
     grid.selecting && selected.isEmpty -> ChromeLabelText(stringResource(R.string.library_select_items), null)
     grid.selecting -> ChromeLabelText(countText(R.plurals.selection_count, selected.size), null)
-    section != null -> ChromeLabelText(section.title, listOfNotNull(filter, section.place).joinToString(" · ").ifEmpty { null })
+    section != null -> ChromeLabelText(section.title, listOfNotNull(filter, section.place).joinToString(" · ").ifEmpty { null }, section.shorterTitles)
     else -> {
       val summary = if (state.photoCount + state.videoCount > 0) photoVideoSummary(state.photoCount, state.videoCount) else null
       ChromeLabelText(stringResource(R.string.library_title), listOfNotNull(filter, summary).joinToString(" · ").ifEmpty { null })

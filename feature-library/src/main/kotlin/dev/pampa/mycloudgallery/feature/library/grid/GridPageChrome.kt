@@ -79,8 +79,11 @@ internal fun rememberAdaptiveChromeStyle(grid: MediaGridState?, bounds: Rect?, v
 @Composable
 internal fun rememberAnyContentChromeStyle(): GalleryChromeStyle = designAnyContentChromeStyle()
 
-/** Che cosa dice l'etichetta in alto: il titolo e, sotto, il luogo o il riepilogo. */
-internal data class ChromeLabelText(val title: String, val subtitle: String?)
+/**
+ * Che cosa dice l'etichetta in alto: il titolo e, sotto, il luogo o il riepilogo. [shorterTitles]: le forme piu' corte del titolo (una
+ * data), dalla piu' lunga alla piu' stretta; l'etichetta mostra la prima che entra invece dei puntini (GF-2).
+ */
+internal data class ChromeLabelText(val title: String, val subtitle: String?, val shorterTitles: List<String> = emptyList())
 
 /** L'altezza della chrome in alto di una pagina a griglia, barra di stato compresa (`galleryTopChromeHeight`). */
 @Composable
@@ -111,6 +114,7 @@ internal fun GridTopChrome(
     onBack = onBack,
     backDescription = stringResource(R.string.grid_back),
     showCommands = showCommands,
+    shorterTitles = label.shorterTitles,
     commands = commands,
   )
 }

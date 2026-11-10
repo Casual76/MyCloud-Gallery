@@ -24,8 +24,6 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryAccessibilityPrefs
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryStatus
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryStatusIndicator
 import dev.pampa.mycloudgallery.core.designsystem.testing.A11yAssertions
 import dev.pampa.mycloudgallery.core.designsystem.testing.A11yConfig
 import dev.pampa.mycloudgallery.core.designsystem.testing.A11yRule
@@ -93,7 +91,6 @@ class LibraryAccessibilityTest {
               backdropOut = {},
               onOpenViewer = {},
               onOpenSettings = {},
-              statusFooter = { GalleryStatusIndicator(status = GalleryStatus.AllSafe, onClick = {}) },
               state = state,
             )
           }

@@ -87,7 +87,6 @@ class LibraryDeleteSafetyTest {
               backdropOut = {},
               onOpenViewer = {},
               onOpenSettings = {},
-              statusFooter = {},
               state = state,
             )
           }

@@ -31,8 +31,6 @@ import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBar
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarDefaults
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryStatus
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryStatusIndicator
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupWait
@@ -154,7 +152,6 @@ internal abstract class BackupLibraryScreenshotBase(private val dark: Boolean, p
               backdropOut = { backdrop = it },
               onOpenViewer = {},
               onOpenSettings = {},
-              statusFooter = { GalleryStatusIndicator(status = GalleryStatus.AllSafe, onClick = {}) },
               state = state,
             )
             GalleryTabBar(

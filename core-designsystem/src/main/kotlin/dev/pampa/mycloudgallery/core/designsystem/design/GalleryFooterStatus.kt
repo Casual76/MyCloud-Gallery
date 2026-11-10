@@ -84,9 +84,12 @@ data class GalleryFooterNote(
 /**
  * La **capsula** di una voce del piede: tonale, alta 36 dp dentro un bersaglio di 48, con il glifo e la frase. Se [onClick]
  * c'e' (i dettagli in Diagnostica, la password, WireGuard) e' un tasto; se no e' solo un'etichetta.
+ *
+ * [trailing]: un glifo in coda alla frase, nel colore del glifo. Nel pop-up della nuvola le capsule che si toccano portano la
+ * freccia (GF-12, review della beta): accanto a quelle dei problemi, uguali ma ferme, non si capiva quali fossero tasti.
  */
 @Composable
-fun GalleryFooterPill(note: GalleryFooterNote, onClick: (() -> Unit)?, modifier: Modifier = Modifier) {
+fun GalleryFooterPill(note: GalleryFooterNote, onClick: (() -> Unit)?, modifier: Modifier = Modifier, trailing: ImageVector? = null) {
   val style = galleryFooterStyle(note.tone, MaterialTheme.colorScheme)
   val container by animateColorAsState(style.container, FluidMotion.color(), label = "piede contenitore")
   val text by animateColorAsState(style.text, FluidMotion.color(), label = "piede testo")
@@ -120,7 +123,9 @@ fun GalleryFooterPill(note: GalleryFooterNote, onClick: (() -> Unit)?, modifier:
         color = text,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f, fill = false),
       )
+      if (trailing != null) Icon(imageVector = trailing, contentDescription = null, modifier = Modifier.size(GlyphSize), tint = glyphColor)
     }
   }
 }

@@ -123,6 +123,34 @@ internal object GridText {
     }
   }
 
+  /**
+   * Le forme **piu' corte** di [sectionTitle], dalla piu' lunga alla piu' stretta (GF-2, review della beta): sul telefono stretto, con i
+   * quattro tasti nella capsula, la data lunga non entra nell'etichetta in alto, che mostra la prima forma che entra invece dei puntini.
+   * Giorni: «Mer 20 nov 2024», «20 nov 2024» e, per il testo grande, «20 nov 24» e «20/11/24» (nell'anno in corso «Mer 20 nov» e
+   * «20 nov»). Mesi e "Tutte": «Nov 2024». "Oggi", "Ieri" e gli anni non hanno forme piu' corte. Le intestazioni della lista, che hanno
+   * tutta la larghezza, restano lunghe; TalkBack legge sempre [sectionTitle].
+   */
+  fun sectionShorterTitles(section: SectionInfo, today: LocalDate): List<String> = when (section.level) {
+    GridLevel.YEARS -> emptyList()
+    GridLevel.MONTHS, GridLevel.ALL -> shorterMonths(section.firstMonth)
+    GridLevel.DAYS -> {
+      val day = date(section.firstDay)
+      when {
+        day == today || day == today.minusDays(1) -> emptyList()
+        day.year == today.year -> listOf(GalleryDates.weekdayTitleShort(day, withYear = false), GalleryDates.dayMonthShort(day, withYear = false))
+        else -> listOf(
+          GalleryDates.weekdayTitleShort(day, withYear = true),
+          GalleryDates.dayMonthShort(day, withYear = true),
+          GalleryDates.dayMonthShortYear(day),
+          GalleryDates.numericDate(day),
+        )
+      }
+    }
+  }
+
+  /** Le forme piu' corte di [month]: «Nov 2024». */
+  fun shorterMonths(month: YearMonth): List<String> = listOf(GalleryDates.monthYearShort(month))
+
   /** Il luogo sotto il titolo: per Mesi e Giorni il riassunto dei luoghi della sezione; Anni dice solo l'anno. */
   fun sectionPlace(section: SectionInfo, names: PlaceNames): String? =
     if (section.level == GridLevel.YEARS || section.topPlaces.isEmpty()) null else names.summary(section.topPlaces, section.distinctPlaces).ifBlank { null }

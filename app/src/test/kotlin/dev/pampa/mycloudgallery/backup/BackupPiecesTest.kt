@@ -10,6 +10,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger
 import dev.pampa.mycloudgallery.core.backup.contract.CopyToVerify
 import dev.pampa.mycloudgallery.core.backup.contract.ExistingCopiesState
 import dev.pampa.mycloudgallery.core.backup.contract.NasCopyRef
+import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.backup.contract.SummaryCount
 import dev.pampa.mycloudgallery.core.backup.contract.VerifyScope
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason as BackupWait
@@ -46,10 +47,23 @@ class BackupPiecesTest {
     // FAB-4: il risparmio energetico arriva alla nuvola con la sua voce, non come "Attesa batteria".
     assertThat(BackupStatusReducers.footer(BackupStatus.Waiting(312, 1L, BackupWait.POWER_SAVER), 0))
       .isEqualTo(LibraryBackupStatus.Queued(312, LibraryBackupWait.POWER_SAVER))
-    assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(dev.pampa.mycloudgallery.core.backup.contract.StopBy.USER), 0))
-      .isEqualTo(LibraryBackupStatus.Idle)
     assertThat(BackupStatusReducers.footer(BackupStatus.Problem(BackupProblemCode.QUOTA, 0), 0))
       .isEqualTo(LibraryBackupStatus.Problem("quota", 0))
+  }
+
+  /**
+   * OA-10 (review della beta): un backup fermo **si dice**. Prima `Stopped` diventava "niente da dire" e la nuvola della Libreria, guardando solo il
+   * NAS, mostrava la spunta di "tutto salvato" con le foto ancora da salvare. La pausa dell'utente ("Ferma", fino a "Riprendi") e il lavoro fermato da
+   * Android hanno la loro voce; dopo l'azzeramento dell'app non c'e' piu' un backup di cui parlare.
+   */
+  @Test
+  fun ilBackupFermoNonEMaiNienteDaDire() {
+    assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(StopBy.USER), 0)).isEqualTo(LibraryBackupStatus.Paused(byUser = true))
+    assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(StopBy.SYSTEM), 0)).isEqualTo(LibraryBackupStatus.Paused(byUser = false))
+    assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(StopBy.RESET), 0)).isEqualTo(LibraryBackupStatus.Idle)
+    // I file ricevuti e non salvati pesano piu' della pausa (e portano alla stessa pagina).
+    assertThat(BackupStatusReducers.footer(BackupStatus.Stopped(StopBy.USER), 0, incomingProblems = 2))
+      .isEqualTo(LibraryBackupStatus.Problem(BackupStatusReducers.INCOMING_FAILED_CODE, 2))
   }
 
   @Test

@@ -103,6 +103,14 @@ internal fun backupFooterNote(status: LibraryBackupStatus): GalleryFooterNote? =
     total = status.total,
     etaMillis = status.etaMillis,
   )
+  // OA-10: il backup fermo si dice. La pausa dell'utente dura fino a "Riprendi" (nella pagina Backup: il tasto del pop-up porta li');
+  // il lavoro fermato da Android riprende da solo, come una coda.
+  is LibraryBackupStatus.Paused -> GalleryFooterNote(
+    tone = GalleryFooterTone.Waiting,
+    label = stringResource(if (status.byUser) R.string.library_cloud_paused_label else R.string.library_cloud_interrupted_label),
+    glyph = if (status.byUser) Icons.Rounded.PauseCircle else Icons.Rounded.Schedule,
+    detail = stringResource(if (status.byUser) R.string.library_cloud_paused_detail else R.string.library_cloud_interrupted_detail),
+  )
   // CA-1 (Fase 10): le scritture ferme dal manifest firmato dicono la loro causa.
   is LibraryBackupStatus.Problem -> footerNote(
     BackupFooterProblems.of(status.code, dev.pampa.mycloudgallery.core.designsystem.state.LocalWritesHeldByRelease.current),

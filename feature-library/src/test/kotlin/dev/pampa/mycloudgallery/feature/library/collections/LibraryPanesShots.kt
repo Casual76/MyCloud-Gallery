@@ -62,7 +62,6 @@ abstract class LibraryPanesShots(private val width: Int) : ComposeScreenTest() {
         backdropOut = {},
         onOpenViewer = {},
         onOpenSettings = {},
-        statusFooter = {},
         state = syntheticLibraryState(),
       )
     }

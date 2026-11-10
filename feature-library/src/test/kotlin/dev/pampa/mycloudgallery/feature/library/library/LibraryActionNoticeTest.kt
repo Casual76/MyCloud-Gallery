@@ -117,7 +117,6 @@ class LibraryActionNoticeTest {
         backdropOut = {},
         onOpenViewer = {},
         onOpenSettings = {},
-        statusFooter = { Text("stato") },
         state = state,
       )
     }
@@ -405,7 +404,6 @@ class LibraryActionNoticeTest {
               backdropOut = {},
               onOpenViewer = {},
               onOpenSettings = {},
-              statusFooter = {},
               state = state,
             )
           }

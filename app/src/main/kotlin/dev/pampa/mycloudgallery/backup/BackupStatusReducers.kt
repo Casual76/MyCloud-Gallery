@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.backup
 
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.backup.contract.WaitReason
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupWait
@@ -21,13 +22,15 @@ object BackupStatusReducers {
    * @param similarPending quanti candidati aspettano il confronto delle copie simili (§2.11 punto 6).
    * @param incomingProblems IN-7: quanti file ricevuti da un'altra app non si sono caricati e aspettano un "Riprova" o uno "Scarta". Il piede lo dice
    *   (porta alla pagina Backup, dove sta "Ricevuti in coda") **quando non ha niente di piu' urgente**: un problema del backup, "Backup in prova", il
-   *   confronto o un giro in corso restano al loro posto; "Tutto al sicuro", "N in coda" e il piede muto lasciano il posto ai file non salvati.
+   *   confronto o un giro in corso restano al loro posto; "Tutto al sicuro", "N in coda", il backup fermo e il piede muto lasciano il posto ai file non
+   *   salvati (un problema pesa piu' di una pausa, e porta alla stessa pagina).
    */
   fun footer(status: BackupStatus, similarPending: Int, incomingProblems: Int = 0): LibraryBackupStatus {
     val base = footerOf(status, similarPending)
     if (incomingProblems <= 0) return base
     return when (base) {
-      LibraryBackupStatus.Idle, is LibraryBackupStatus.AllSafe, is LibraryBackupStatus.Queued -> LibraryBackupStatus.Problem(INCOMING_FAILED_CODE, incomingProblems)
+      LibraryBackupStatus.Idle, is LibraryBackupStatus.AllSafe, is LibraryBackupStatus.Queued, is LibraryBackupStatus.Paused ->
+        LibraryBackupStatus.Problem(INCOMING_FAILED_CODE, incomingProblems)
       else -> base
     }
   }
@@ -52,8 +55,14 @@ object BackupStatusReducers {
       dev.pampa.mycloudgallery.core.backup.contract.BackupTrigger.FIRST_BACKUP -> LibraryBackupStatus.FirstBackup(status.done, status.total, status.etaMillis)
       else -> LibraryBackupStatus.Running(status.done, status.total, status.etaMillis)
     }
-    // Fermato dall'utente o da Android: il piede non sbandiera niente, la pagina ha "Riprendi".
-    is BackupStatus.Stopped -> LibraryBackupStatus.Idle
+    // OA-10 (review della beta): un backup fermo **si dice**. Prima diventava "niente da dire" e la nuvola, guardando solo il NAS, mostrava la spunta di
+    // "tutto salvato" con le foto ancora da salvare. La pausa dell'utente ("Ferma", fino a "Riprendi") e il lavoro fermato da Android (riprende da solo)
+    // hanno la loro voce; dopo l'azzeramento dell'app non c'e' piu' un backup di cui parlare.
+    is BackupStatus.Stopped -> when (status.by) {
+      StopBy.USER -> LibraryBackupStatus.Paused(byUser = true)
+      StopBy.SYSTEM -> LibraryBackupStatus.Paused(byUser = false)
+      StopBy.RESET -> LibraryBackupStatus.Idle
+    }
     is BackupStatus.Problem -> LibraryBackupStatus.Problem(status.code.code, status.count)
   }
 

@@ -198,7 +198,7 @@ abstract class EditorSuggestionsTripsShots(private val dark: Boolean, private va
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = PHONE_360_QUALIFIERS)
 class EditorSuggestionsTripsPhoneScreenshotTest(dark: Boolean) : EditorSuggestionsTripsShots(dark, "telefono") {
   companion object {
     @JvmStatic

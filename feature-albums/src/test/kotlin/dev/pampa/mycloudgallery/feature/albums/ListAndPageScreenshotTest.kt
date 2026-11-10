@@ -31,7 +31,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Gli screenshot dell'elenco e della pagina degli album (Fase 7, P10): ogni stato del §1.5 `AlbumListState` e `AlbumPageState`, chiaro e scuro, telefono (412 dp)
+ * Gli screenshot dell'elenco e della pagina degli album (Fase 7, P10): ogni stato del §1.5 `AlbumListState` e `AlbumPageState`, chiaro e scuro, telefono (360 dp)
  * e tablet (1280 dp), piu' il testo grande. Sui fake: la libreria sintetica e gli album veri del riferimento (`Scenes`).
  *
  * `gradlew :feature-albums:recordRoborazziDebug --tests "*ScreenshotTest*"` scrive i PNG in `docs/screenshots/7-P10/`. Nei normali `testDebugUnitTest` si
@@ -188,7 +188,7 @@ abstract class ListAndPageShots(private val dark: Boolean, private val device: S
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = PHONE_360_QUALIFIERS)
 class ListAndPagePhoneScreenshotTest(dark: Boolean) : ListAndPageShots(dark, "telefono") {
   companion object {
     @JvmStatic

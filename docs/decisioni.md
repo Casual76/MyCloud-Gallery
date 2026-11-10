@@ -16870,3 +16870,88 @@ prima e dopo); FAB-4, FAB-7 e FAB-8 hanno prove nuove; FAB-6 e la frase del pop-
 - Con una selezione di soli video il titolo del foglio dice comunque «Eliminare N foto?» (e' del design system, non cambiato qui).
 - Alcuni dettagli dei problemi del backup nel pop-up dicono «Riprova o apri la Diagnostica» mentre il tasto sotto e' "Apri Backup": non e' il
   residuo «Tocca», non l'ho toccato; la frase della rete «VPN spenta · Apri WireGuard» ripete il tasto (stringa di `:app`).
+
+## Pacchetto K1: correzioni delle review sul viewer (menu leggibile, menu e tastiera) (10/11)
+
+Branch `fix/k1-viewer` (base `integra/beta-grafica` `90d5827a`, engine 3.0.4), un agente, **senza dispositivo**. Rilievi GF-1, GS-1, GF-8 delle due review sul
+viewer e screenshot del viewer alla misura del telefono dell'utente (360 x 780 dp). Ogni correzione ha prove che falliscono sulla base e passano dopo.
+
+### GF-1: il menu ⋮ si legge sopra qualunque foto
+- **Il menu e' di nuovo il pop-up** dell'engine (`FluidGlassModalPortal`, `Popover`) che cresce dal tasto, con sotto le voci un **velo del colore della
+  pagina** e lo **stesso tasto di vetro tondo** della chiusura (`GalleryGlassIconButton`, col fondale della barra). Voci, condizioni e ordine non
+  cambiano (`viewerMenuEntries` non e' toccata). Se le voci non ci stanno (tablet in orizzontale, schermo basso) il pop-up scorre.
+- **Il velo** (`GalleryMenuLegibility.onPhoto`, `core-designsystem/.../chrome/GalleryMenu.kt`): il caso peggiore e' la pellicola dei modali
+  (`GlassDefaults.modalTint`) sopra lo scrim del pop-up (nero al 20% in scuro, al 12% in chiaro) sopra la foto bianca o nera piena. Le voci a 4,5:1
+  col margine dei veli sotto il vetro dell'engine (`MeasuredTarget`, 5,5 di calcolo), come il pop-up della Libreria.
+- **Il rosso della voce distruttiva** ("Elimina dal telefono", "Elimina…"): stesso margine del testo. Va verso il testo al piu' di 0,3 (`lerp` dello
+  schema, resta un rosso: in scuro un rosso chiaro, in chiaro un rosso scuro); il resto lo fa il velo, che per questo nel viewer e' **piu' coprente**
+  di quello della Libreria (stima: circa 0,75 di `surface` in scuro e 0,6 in chiaro, contro 0,34 e quasi 0 del solo testo). Con le superfici piene
+  il velo e' pieno.
+- **Misure sui pixel del viewer vero** (`ViewerMenuContrastTest`, sulla JVM, senza sfocatura, come il critico), caso peggiore:
+  | caso | prima (goccia) | dopo |
+  |---|---|---|
+  | tema scuro, foto bianca: voci | 2,39:1 | 10,4:1 |
+  | tema scuro, foto bianca: "Elimina dal telefono" | (1,06:1 per il critico) | 5,50:1 |
+  | tema chiaro, foto nera: voci | 5,28:1 | 12,4:1 |
+  | tema chiaro, foto nera: "Elimina dal telefono" | 1,67:1 | 5,50:1 |
+  Senza il margine sul rosso la misura si fermava a 4,52:1: troppo vicino alla soglia per la pellicola vera del telefono.
+- **Il menu a goccia resta nel codice dietro un solo interruttore**, `ViewerDropletMenu` (privato, in `GalleryGlassButtons.kt`), **spento**: niente
+  scelta a tempo di esecuzione fra goccia e pop-up, e l'host della goccia (`GalleryViewerMenuHost`) non compone niente. Il commento dice quando
+  riaccenderlo: quando l'engine avra' un velo o una pellicola regolabile per il pannello a goccia (oggi `FluidGlassMenuPanel` ha il colore delle voci
+  fisso e `FluidMorphMenu` la pellicola al 50% senza velo) e un'ancora tonda.
+- **Fuori perimetro, una modifica piccola**: `menuVeil()` della chrome della Libreria (`design/GalleryChrome.kt`) chiama `GalleryMenuLegibility.textVeil`,
+  dove la stessa regola e i numeri dello scrim dell'engine stanno una volta sola; i numeri non cambiano (tolte le tre costanti doppie). In
+  `GalleryMenuButton` e' sparito il parametro `glassButton` (lo usava solo il viewer); i suoi altri usi non cambiano.
+
+### GS-1: con il menu aperto le frecce non cambiano foto
+- Verificato: il pop-up prende il fuoco (un bersaglio invisibile dentro il modale dell'engine), quindi le frecce vanno a lui e non al viewer. La goccia
+  il fuoco non lo prendeva: era il difetto.
+- In piu', due difese nel viewer (`ViewerOverlay.kt`): `stepPage` non cambia pagina con un menu aperto (pop-up o goccia: `GalleryViewerMenuState.isOpen`);
+  se la foto corrente cambia per qualunque altra via con il menu aperto (eliminazione da un altro dispositivo, tocco sulla griglia affiancata) il menu
+  si chiude (`LaunchedEffect(currentId)`).
+- Chiuso il menu **il viewer si riprende il fuoco** della tastiera (`viewerKeyboard(holdsFocus)`): prima, chiuso il pop-up, il fuoco non restava a
+  nessuno e le frecce non facevano niente fino a un clic. Lo stato del menu si legge in un effetto (`snapshotFlow`), non nella composizione del viewer.
+- Se il tasto ⋮ lascia la composizione con il menu aperto, lo stato si azzera (il menu non resta "aperto" per le frecce).
+
+### GF-8: le misure ricopiate dall'engine
+`galleryMenuFits`, `MenuPanelPadding`, `MenuSectionGap`, `MenuMinRow`, `MenuReservedHeight` decidono qualcosa solo nel ramo della goccia (spento), in una
+sezione con il commento "da rivedere a ogni aggiornamento dell'engine". Le ho tenute (e le loro prove pure) perche' servono se la goccia si riaccende.
+
+### Prove
+- Nuove: `GalleryMenuLegibilityTest` (core-designsystem: voci e rosso sul caso peggiore, ogni accento, chiaro, scuro, AMOLED, superfici piene; il rosso
+  resta un rosso), `ViewerMenuContrastTest` (pixel), `ViewerMenuKeyboardTest` (frecce a menu aperto e dopo, menu che si chiude al cambio di foto,
+  "Aggiungi ad album", "Imposta come copertina" e "Togli dall'album" sulla foto che si vede, anche dopo un cambio di foto vero).
+- Cambiate: `ViewerMenuGlassTest` (il ⋮ tondo e grande come la chiusura; con lo schermo basso il pop-up scorre e "Elimina dal telefono" si raggiunge e si
+  tocca; le due prove del "ritorno al pop-up" ora provano il pop-up di sempre), `ViewerTestBase` (la porta degli album di prova).
+- Le misure sui pixel passano dalla cattura di Roborazzi in un file temporaneo: `captureToImage` di Compose sulle prove Robolectric aspetta un ridisegno
+  della finestra che non arriva, e una tela software non sa disegnare gli shader del vetro.
+- Sulla base (`90d5827a`, batch `k1-prima6`) falliscono 8 delle 13 prove del viewer nuove o cambiate, per i motivi del critico; dopo, verdi.
+- Screenshot: `docs/screenshots/beta-grafica/g3-viewer/viewer-tasti-*` riregistrati, `viewer-menu-foto-{chiara,scura}-{chiaro,scuro}-{telefono,tablet}`
+  nuovi; tolti `viewer-menu-goccia-*` e `viewer-menu-aperto-*` (la goccia non e' piu' in produzione). Il telefono di `ViewerG3Shots` e' a 360 x 780 dp.
+  `docs/screenshots/beta-grafica/index.html` **non** e' aggiornato (una riga sola per tutti i pacchetti): va rigenerato all'integrazione.
+
+### Rischi per le prestazioni
+- L'apertura del viewer compone **meno** di prima: il portale del pop-up si compone dalla prima apertura del menu (prima c'era sempre l'host della
+  goccia, un nodo vuoto) e il tasto e' lo stesso tasto di vetro della chiusura.
+- Aprire e chiudere il menu non ricompone il viewer (lo stato si legge nel tasto, in `stepPage` al tasto premuto e in un effetto per il fuoco). Un
+  `LaunchedEffect(currentId)` in piu' per cambio di foto: trascurabile.
+- Il velo e' un `background` dentro il pop-up, solo a menu aperto: nessun vetro in piu' sopra la griglia o il pager.
+
+### Da provare sul telefono (S25, poi Tab S9)
+1. Il ⋮ e la chiusura sopra una foto chiara e una scura: stessa forma, stesso vetro.
+2. Il menu sopra una foto molto chiara in tema scuro e sopra una foto molto scura in tema chiaro: voci e "Elimina dal telefono" leggibili; guardare se il
+   pannello e' troppo coprente (si vede poco la foto dietro).
+3. Il menu completo di un media del NAS con backup sul Tab S9 in orizzontale: scorre, l'ultima voce si raggiunge.
+4. Con una tastiera: menu aperto, frecce (la foto non cambia), Esc o Indietro (il menu si chiude), frecce di nuovo (la foto cambia senza un clic).
+5. Menu aperto mentre la foto viene eliminata da un altro dispositivo, o (Tab S9) toccando una cella della griglia affiancata: il menu si chiude.
+6. "Aggiungi ad album", "Imposta come copertina", "Togli dall'album", "Trova simili" agiscono sulla foto che si vede.
+
+### Decisioni aperte per l'utente
+- Il pannello del menu del viewer e' piu' coprente di quello della Libreria per far leggere il rosso con il margine. Se lo si vuole piu' trasparente,
+  il rosso deve diventare piu' chiaro (in scuro, verso il rosa) o piu' scuro (in chiaro): e' `DestructiveShift` in `GalleryMenuLegibility`.
+- Il menu a goccia torna quando l'engine avra' il velo e l'ancora tonda: e' un lavoro dell'engine, non dell'app (vedi sotto).
+
+### Difetti dell'engine da segnalare (non toccato)
+- `FluidGlassMenuPanel` (pannello del menu a goccia) disegna le voci con un colore fisso e `FluidMorphMenu` stende una pellicola al 50% senza velo ne'
+  pellicola regolabile: sopra una foto chiara in tema scuro le voci scendono a 2,4:1. Serve un parametro per la pellicola (o un velo) del pannello.
+- `FluidMorphMenuButton` ha solo l'ancora a capsula (circa 60 x 48 dp): manca un'ancora tonda come `FluidGlassIconButton`.

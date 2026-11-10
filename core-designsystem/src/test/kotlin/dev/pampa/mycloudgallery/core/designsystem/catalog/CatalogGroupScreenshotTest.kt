@@ -54,10 +54,10 @@ internal abstract class CatalogGroupScreenshotBase(
   }
 }
 
-/** Telefono: 412 dp di larghezza, come il Galaxy S25. */
+/** Telefono: 360 dp di larghezza, come il Galaxy S25. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h4800dp-xhdpi")
+@Config(qualifiers = "w360dp-h4800dp-xhdpi")
 internal class CatalogGroupPhoneScreenshotTest(group: CatalogGroup, look: CatalogLook) :
   CatalogGroupScreenshotBase(group, look, CatalogDevice.Phone) {
 

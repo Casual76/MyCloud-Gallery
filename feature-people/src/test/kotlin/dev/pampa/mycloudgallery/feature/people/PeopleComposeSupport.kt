@@ -48,6 +48,9 @@ import org.robolectric.annotation.GraphicsMode
 
 /** Il telefono (412 dp) e il tablet (1280 dp, orizzontale) degli screenshot e dei test di layout. */
 const val PHONE_QUALIFIERS = "w412dp-h915dp-xhdpi"
+
+/** Il telefono degli screenshot per l'utente (K4): il suo Galaxy S25, 360 x 780 dp. Non 412 dp, dove entrano piu' cose che sul suo schermo. */
+const val SHOT_PHONE_QUALIFIERS = "w360dp-h780dp-xhdpi"
 const val TABLET_QUALIFIERS = "w1280dp-h800dp-land-xhdpi"
 
 /** Il testo grande della regola di accessibilita' (1,3x). */

@@ -220,7 +220,7 @@ fun SettingsScreen(
           subtitle = devicesSubtitle(state),
           tone = if (state.pendingRequests > 0 && state.isAdmin) FluidTone.Warning else FluidTone.Primary,
           leading = { RowGlyph(Icons.Rounded.Devices) },
-          badge = if (state.pendingRequests > 0 && state.isAdmin) {
+          labels = if (state.pendingRequests > 0 && state.isAdmin) {
             { StatusPill(state.pendingRequests.toString(), FluidTone.Warning) }
           } else {
             null

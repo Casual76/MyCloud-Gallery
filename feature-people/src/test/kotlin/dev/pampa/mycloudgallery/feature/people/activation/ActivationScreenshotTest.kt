@@ -135,7 +135,7 @@ internal abstract class ActivationScreenshotBase(
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "it-w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = "it-w360dp-h780dp-xhdpi")
 internal class ActivationPhoneScreenshotTest(scene: Scene, dark: Boolean, scale: Float?) : ActivationScreenshotBase(scene, dark, scale, "telefono") {
   companion object {
     @JvmStatic
@@ -157,7 +157,7 @@ internal class ActivationTabletScreenshotTest(scene: Scene, dark: Boolean, scale
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "it-w412dp-h2200dp-xhdpi")
+@Config(application = Application::class, qualifiers = "it-w360dp-h2200dp-xhdpi")
 internal class ActivationPagesPhoneScreenshotTest(scene: Scene, dark: Boolean, scale: Float?) : ActivationScreenshotBase(scene, dark, scale, "telefono") {
   companion object {
     @JvmStatic

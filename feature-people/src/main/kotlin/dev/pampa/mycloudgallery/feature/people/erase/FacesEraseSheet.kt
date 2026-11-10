@@ -242,7 +242,8 @@ private fun DeviceRow(device: DeviceAck) {
     subtitle = subtitle,
     tone = FluidTone.Neutral,
     leading = { Glyph(Icons.Rounded.PhoneAndroid) },
-    badge = { FluidStatusBadge(label = stringResource(EraseText.ack(device.state)), tone = tone) },
+    // K4: la pillola sta in `labels` (va sotto il titolo se ruberebbe la riga), non in `badge`: a 360 dp, a testo grande, la frase restava in una colonna di una parola per riga.
+    labels = { FluidStatusBadge(label = stringResource(EraseText.ack(device.state)), tone = tone) },
     disclosure = false,
   )
 }

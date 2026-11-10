@@ -2,8 +2,9 @@ package dev.pampa.mycloudgallery.feature.search.models
 
 import android.content.res.Resources
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material3.Icon
@@ -203,11 +204,17 @@ private fun FailureNote(id: ModelId, code: DiagCode, fail: ModelFailCode, size: 
   }
 }
 
+/**
+ * I tasti di una riga di modello, alla loro larghezza naturale: se non entrano affiancati vanno a capo interi (K4, 360 dp: "Riprova" e "Diagnostica"
+ * stavano nella stessa riga e a testo grande "Diagnostica" si spezzava in "Diagnostic/a").
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ActionRow(content: @Composable () -> Unit) {
-  Row(
+  FlowRow(
     modifier = Modifier.padding(horizontal = GalleryDimens.Gutter),
     horizontalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
+    verticalArrangement = Arrangement.spacedBy(SearchDimens.TightGap),
   ) { content() }
 }
 

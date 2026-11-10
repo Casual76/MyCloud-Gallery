@@ -58,6 +58,7 @@ abstract class LiveTextScreenshotBase(protected val dark: Boolean) : LiveTextVie
 }
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@Config(qualifiers = dev.pampa.mycloudgallery.feature.viewer.SHOT_PHONE)
 class ViewerLiveTextScreenshotTest(dark: Boolean) : LiveTextScreenshotBase(dark) {
 
   companion object {
@@ -127,7 +128,7 @@ class ViewerLiveTextTabletScreenshotTest(dark: Boolean) : LiveTextScreenshotBase
 
 /** Testo a 1,3x (la regola dei brief: ogni UI e' provata anche con il testo grande). */
 @RunWith(ParameterizedRobolectricTestRunner::class)
-@Config(fontScale = 1.3f)
+@Config(qualifiers = dev.pampa.mycloudgallery.feature.viewer.SHOT_PHONE, fontScale = 1.3f)
 class ViewerLiveTextLargeTextScreenshotTest(dark: Boolean) : LiveTextScreenshotBase(dark) {
 
   companion object {

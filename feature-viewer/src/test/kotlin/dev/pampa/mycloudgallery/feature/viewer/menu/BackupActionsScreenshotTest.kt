@@ -186,7 +186,7 @@ abstract class BackupActionsScreenshotBase(private val dark: Boolean, private va
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = NAS_PHONE)
+@Config(application = Application::class, qualifiers = NAS_SHOT_PHONE)
 class BackupActionsPhoneScreenshotTest(dark: Boolean) : BackupActionsScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

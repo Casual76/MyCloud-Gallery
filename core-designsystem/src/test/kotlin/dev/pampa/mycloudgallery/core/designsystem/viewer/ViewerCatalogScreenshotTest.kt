@@ -44,7 +44,7 @@ internal abstract class ViewerCatalogScreenshotBase(private val dark: Boolean, p
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "it-w412dp-h4800dp-xhdpi")
+@Config(qualifiers = "it-w360dp-h4800dp-xhdpi")
 internal class ViewerCatalogPhoneScreenshotTest(dark: Boolean) : ViewerCatalogScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

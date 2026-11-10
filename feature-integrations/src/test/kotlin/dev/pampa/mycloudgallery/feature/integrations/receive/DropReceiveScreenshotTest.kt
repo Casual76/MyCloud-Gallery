@@ -18,7 +18,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = RECEIVE_PHONE)
+@Config(application = Application::class, qualifiers = RECEIVE_SHOT_PHONE)
 class DropReceiveScreenshotTest(private val dark: Boolean) : ReceiveComposeBase() {
 
   private val look: String get() = if (dark) "scuro" else "chiaro"

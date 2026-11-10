@@ -25,6 +25,7 @@ import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.library.testing.InMemoryTimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
 import kotlinx.coroutines.flow.Flow
@@ -79,7 +80,7 @@ class G2EliminaDallaSelezioneTest {
     }
   }
 
-  /** Una Libreria in cui le prime [safe] celle sono "al sicuro sul NAS" e le altre sono solo sul telefono. */
+  /** Una Libreria in cui le prime [safe] foto sono "al sicuro sul NAS" e le altre sono solo sul telefono. */
   private fun state(safe: Int, commands: LibraryCommands): LibraryTabState = syntheticLibraryState(
     count = 60,
     edit = { snapshot -> markFirst(snapshot, safe) },
@@ -94,17 +95,21 @@ class G2EliminaDallaSelezioneTest {
     val onPhoneOnly = CellFlags.ON_PHONE
     val atSafe = CellFlags.ON_PHONE or CellFlags.ON_NAS or CellFlags.SAFE
     var out = snapshot
-    for (i in 0 until 20) {
+    // K4: "al sicuro" sono le prime [safe] FOTO (i video, che fanno dire "elementi" al titolo, restano solo sul telefono): le prove scelgono foto.
+    var photos = 0
+    for (i in 0 until 40) {
       val base = out.flagsAt(i) and PRESENCE.inv()
-      out = out.withFlags(i, base or if (i < safe) atSafe else onPhoneOnly)
+      val isSafe = snapshot.kindAt(i) == MediaKind.PHOTO && photos++ < safe
+      out = out.withFlags(i, base or if (isSafe) atSafe else onPhoneOnly)
     }
     return out
   }
 
+  /** Le prime [howMany] FOTO della vista (K4: con un video nella selezione il titolo del foglio dice "elementi", non "foto"). */
   private fun idsOf(state: LibraryTabState, howMany: Int): List<MediaId> {
     val snapshot = state.grid.view.snapshot
     val view = state.grid.view
-    return (0 until howMany).map { snapshot.idAt(view.snapshotIndex(it)) }
+    return (0 until view.size).map { view.snapshotIndex(it) }.filter { snapshot.kindAt(it) == MediaKind.PHOTO }.take(howMany).map { snapshot.idAt(it) }
   }
 
   private fun selectAndDelete(state: LibraryTabState, ids: List<MediaId>) {

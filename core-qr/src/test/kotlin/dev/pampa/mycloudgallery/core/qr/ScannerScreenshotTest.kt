@@ -18,7 +18,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Le schermate dello scanner, una per stato: la richiesta del permesso, il permesso negato (con il campo a
  * mano), "non chiedere piu'" (con le impostazioni), nessuna fotocamera, il mirino (con torcia, con un rifiuto),
- * il codice letto e l'inserimento a mano. Chiaro e scuro, telefono (412 dp), tablet (1280 dp) e testo grande.
+ * il codice letto e l'inserimento a mano. Chiaro e scuro, telefono (360 dp), tablet (1280 dp) e testo grande.
  *
  * `gradlew :core-qr:recordRoborazziDebug` scrive i PNG in `docs/screenshots/2-P5/`.
  *
@@ -100,7 +100,7 @@ internal abstract class ScannerScreenshotBase(private val dark: Boolean, private
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h915dp-xhdpi")
+@Config(qualifiers = "w360dp-h780dp-xhdpi")
 internal class ScannerPhoneScreenshotTest(dark: Boolean) :
   ScannerScreenshotBase(dark, P5Shots.PHONE, largeText = false) {
   companion object {
@@ -125,7 +125,7 @@ internal class ScannerTabletScreenshotTest(dark: Boolean) :
 /** Testo al massimo sul telefono, su una finestra piu' alta (1400 dp) cosi' la pagina si vede intera senza scorrere. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h1400dp-xhdpi")
+@Config(qualifiers = "w360dp-h1400dp-xhdpi")
 internal class ScannerPhoneLargeTextScreenshotTest(dark: Boolean) :
   ScannerScreenshotBase(dark, P5Shots.PHONE, largeText = true) {
   companion object {

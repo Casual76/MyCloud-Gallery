@@ -232,7 +232,7 @@ internal abstract class MapFailureScenes(private val dark: Boolean) : MapScreenT
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 internal class MapFailureScreenshotTest(dark: Boolean) : MapFailureScenes(dark) {
   companion object {
     @JvmStatic

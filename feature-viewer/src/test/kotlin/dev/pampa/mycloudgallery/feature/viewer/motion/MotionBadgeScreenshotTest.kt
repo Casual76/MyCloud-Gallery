@@ -17,6 +17,7 @@ import dev.pampa.mycloudgallery.feature.viewer.ViewerTestBase
 import dev.pampa.mycloudgallery.feature.viewer.ViewerTestHost
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.annotation.Config
 import org.robolectric.ParameterizedRobolectricTestRunner
 
 /**
@@ -25,6 +26,7 @@ import org.robolectric.ParameterizedRobolectricTestRunner
  * stato "in caricamento" nel viewer intero si vede solo con un NAS vero (si guarda sul telefono, F71). Si scrive con `gradlew :feature-viewer:recordRoborazziDebug`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@Config(qualifiers = dev.pampa.mycloudgallery.feature.viewer.SHOT_PHONE)
 class MotionBadgeScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
 
   override val fixture: ViewerFixture = ViewerFixture(count = 10)

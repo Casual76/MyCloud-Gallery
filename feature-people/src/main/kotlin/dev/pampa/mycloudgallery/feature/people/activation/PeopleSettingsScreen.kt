@@ -324,7 +324,8 @@ private fun LazyListScope.hiddenSection(count: Int, onOpen: () -> Unit) {
         subtitle = stringResource(R.string.faces_settings_hidden_message),
         tone = FluidTone.Neutral,
         leading = { Glyph(Icons.Rounded.VisibilityOff) },
-        badge = { FluidStatusBadge(label = stringResource(R.string.faces_settings_hidden_count, count), tone = FluidTone.Neutral) },
+        // K4: in `labels` (sotto il titolo se ruberebbe la riga), non in `badge`.
+        labels = { FluidStatusBadge(label = stringResource(R.string.faces_settings_hidden_count, count), tone = FluidTone.Neutral) },
         onClick = onOpen,
       )
     }

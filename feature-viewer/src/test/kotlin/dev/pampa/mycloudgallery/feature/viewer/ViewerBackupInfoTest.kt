@@ -36,6 +36,7 @@ import org.robolectric.ParameterizedRobolectricTestRunner
  * il pannello segue lo stato mentre e' aperto e senza una fonte la sezione non c'e'. Screenshot in `docs/screenshots/5-P5/`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@Config(qualifiers = SHOT_PHONE)
 class ViewerBackupInfoTest(private val dark: Boolean) : ViewerTestBase() {
 
   companion object {

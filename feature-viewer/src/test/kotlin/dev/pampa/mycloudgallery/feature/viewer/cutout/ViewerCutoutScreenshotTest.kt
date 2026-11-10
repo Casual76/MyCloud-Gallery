@@ -84,6 +84,7 @@ abstract class CutoutScreenshotBase(protected val dark: Boolean) : CutoutViewerB
 }
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@Config(qualifiers = dev.pampa.mycloudgallery.feature.viewer.SHOT_PHONE)
 class ViewerCutoutScreenshotTest(dark: Boolean) : CutoutScreenshotBase(dark) {
 
   companion object {
@@ -158,7 +159,7 @@ class ViewerCutoutTabletScreenshotTest(dark: Boolean) : CutoutScreenshotBase(dar
 
 /** Testo a 1,3x (la regola dei brief: ogni UI e' provata anche con il testo grande): le etichette della barra vanno a capo, non si tagliano. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
-@Config(fontScale = 1.3f)
+@Config(qualifiers = dev.pampa.mycloudgallery.feature.viewer.SHOT_PHONE, fontScale = 1.3f)
 class ViewerCutoutLargeTextScreenshotTest(dark: Boolean) : CutoutScreenshotBase(dark) {
 
   companion object {

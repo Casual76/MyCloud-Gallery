@@ -45,7 +45,7 @@ internal abstract class GridCatalogScreenshotBase(private val dark: Boolean, pri
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h4800dp-xhdpi")
+@Config(qualifiers = "w360dp-h4800dp-xhdpi")
 internal class GridCatalogPhoneScreenshotTest(dark: Boolean) : GridCatalogScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

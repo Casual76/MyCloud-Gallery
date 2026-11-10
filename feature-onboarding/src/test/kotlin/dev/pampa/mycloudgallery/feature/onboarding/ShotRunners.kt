@@ -71,7 +71,7 @@ internal enum class Look(val slug: String, val dark: Boolean, val fontScale: Flo
 
 private const val DIR = "../docs/screenshots/2-P6"
 
-/** I PNG sono a mezza risoluzione (412 px di larghezza per il telefono): bastano a rivedere la grafica e tengono il repository leggero. */
+/** I PNG sono a mezza risoluzione (360 px di larghezza per il telefono): bastano a rivedere la grafica e tengono il repository leggero. */
 private val HalfSize = RoborazziOptions(recordOptions = RoborazziOptions.RecordOptions(resizeScale = 0.5))
 
 /**
@@ -98,7 +98,7 @@ internal abstract class ShotRunner(
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = Devices.PHONE)
+@Config(application = Application::class, qualifiers = Devices.SHOT_PHONE)
 internal class PhoneShotTest(shot: Shot, look: Look) : ShotRunner(shot, look, "telefono") {
   companion object {
     @JvmStatic
@@ -116,7 +116,7 @@ internal class PhoneShotTest(shot: Shot, look: Look) : ShotRunner(shot, look, "t
 /** Le pagine piu' lunghe della finestra, intere (finestra alta): per vedere anche cio' che sta sotto la piega. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = Devices.PHONE_TALL)
+@Config(application = Application::class, qualifiers = Devices.SHOT_PHONE_TALL)
 internal class PhoneTallShotTest(shot: Shot, look: Look) : ShotRunner(shot, look, "telefono", suffix = "-intera") {
   companion object {
     @JvmStatic

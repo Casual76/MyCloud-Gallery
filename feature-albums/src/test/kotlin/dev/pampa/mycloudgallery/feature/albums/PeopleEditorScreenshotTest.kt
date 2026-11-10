@@ -140,7 +140,7 @@ abstract class PeopleEditorShots(private val dark: Boolean, private val device: 
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = PHONE_360_QUALIFIERS)
 class PeopleEditorPhoneScreenshotTest(dark: Boolean) : PeopleEditorShots(dark, "telefono") {
   companion object {
     @JvmStatic

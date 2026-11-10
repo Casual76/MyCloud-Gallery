@@ -49,7 +49,7 @@ internal abstract class SearchScreenshotBase(
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "it-w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = "it-w360dp-h780dp-xhdpi")
 internal class SearchPhoneScreenshotTest(scene: Scene, dark: Boolean, scale: Float?) : SearchScreenshotBase(scene, dark, scale, "telefono") {
   companion object {
     @JvmStatic
@@ -71,7 +71,7 @@ internal class SearchTabletScreenshotTest(scene: Scene, dark: Boolean, scale: Fl
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "it-w412dp-h2200dp-xhdpi")
+@Config(application = Application::class, qualifiers = "it-w360dp-h2200dp-xhdpi")
 internal class SearchPagesPhoneScreenshotTest(scene: Scene, dark: Boolean, scale: Float?) : SearchScreenshotBase(scene, dark, scale, "telefono") {
   companion object {
     @JvmStatic

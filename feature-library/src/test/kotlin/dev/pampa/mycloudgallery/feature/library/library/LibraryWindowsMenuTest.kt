@@ -129,7 +129,7 @@ internal abstract class LibraryWindowsMenuBase(private val dark: Boolean, privat
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = "w360dp-h780dp-xhdpi")
 internal class LibraryWindowsMenuPhoneTest(dark: Boolean) : LibraryWindowsMenuBase(dark, "telefono", expected = false) {
   companion object {
     @JvmStatic

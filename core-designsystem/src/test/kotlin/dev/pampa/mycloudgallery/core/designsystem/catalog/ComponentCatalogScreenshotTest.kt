@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Il catalogo vivo, come lo vede chi lo apre: la finestra del dispositivo (telefono 412 x 915 dp,
+ * Il catalogo vivo, come lo vede chi lo apre: la finestra del dispositivo (telefono 360 x 780 dp,
  * tablet 1280 x 800 dp), l'indice dei gruppi e, dopo un tocco, la pagina di un gruppo.
  *
  * `gradlew :core-designsystem:recordRoborazziDebug` scrive i PNG in `docs/screenshots/1.2/`.
@@ -57,7 +57,7 @@ internal abstract class CatalogShellScreenshotBase(
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h915dp-xhdpi")
+@Config(qualifiers = "w360dp-h780dp-xhdpi")
 internal class CatalogShellPhoneScreenshotTest(look: CatalogLook) :
   CatalogShellScreenshotBase(look, CatalogDevice.Phone) {
 

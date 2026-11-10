@@ -39,7 +39,7 @@ import dev.pampa.mycloudgallery.feature.map.map.NoMapHandlers
 import dev.pampa.mycloudgallery.feature.map.support.MapRig
 import dev.pampa.mycloudgallery.feature.map.testing.FakeMapSurface
 import dev.pampa.mycloudgallery.feature.map.MapScreenTest
-import dev.pampa.mycloudgallery.feature.map.PHONE_QUALIFIERS
+import dev.pampa.mycloudgallery.feature.map.SHOT_PHONE_QUALIFIERS
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
@@ -240,7 +240,7 @@ internal class RegionsScreenTest : MapScreenTest() {
 /** Gli screenshot della pagina (`docs/screenshots/9-P5/`), chiaro e scuro, telefono: catalogo, scaricamento in corso, i fogli, la zona attorno a un luogo, la mappa con l'avanzamento. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 internal class RegionsScreenshotTest(private val dark: Boolean) : MapScreenTest() {
 
   companion object {

@@ -25,6 +25,7 @@ import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.library.testing.InMemoryTimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
 import org.junit.Rule
@@ -53,9 +54,9 @@ class LibraryDeleteSafetyTest {
     override val canDeleteFromPhone: Boolean get() = true
   }
 
-  /** Una Libreria in cui le prime [safe] celle sono "al sicuro sul NAS" e le altre sono solo sul telefono. */
-  private fun state(safe: Int): LibraryTabState = syntheticLibraryState(
-    count = 60,
+  /** Una Libreria in cui le prime [safe] foto sono "al sicuro sul NAS" e le altre sono solo sul telefono. */
+  private fun state(safe: Int, count: Int = 60): LibraryTabState = syntheticLibraryState(
+    count = count,
     edit = { snapshot -> markFirst(snapshot, safe) },
   ).let { first ->
     LibraryTabState(
@@ -68,14 +69,17 @@ class LibraryDeleteSafetyTest {
     val onPhoneOnly = CellFlags.ON_PHONE
     val atSafe = CellFlags.ON_PHONE or CellFlags.ON_NAS or CellFlags.SAFE
     var out = snapshot
-    for (i in 0 until 20) {
+    // K4: "al sicuro" sono le prime [safe] FOTO (i video, che fanno dire "elementi" al titolo, restano solo sul telefono): le prove scelgono foto.
+    var photos = 0
+    for (i in 0 until 40) {
       val base = out.flagsAt(i) and PRESENCE.inv()
-      out = out.withFlags(i, base or if (i < safe) atSafe else onPhoneOnly)
+      val isSafe = snapshot.kindAt(i) == MediaKind.PHOTO && photos++ < safe
+      out = out.withFlags(i, base or if (isSafe) atSafe else onPhoneOnly)
     }
     return out
   }
 
-  private fun open(state: LibraryTabState, howMany: Int) {
+  private fun open(state: LibraryTabState, howMany: Int, pick: ((LibraryTabState) -> List<MediaId>)? = null) {
     composeRule.setContent {
       MyCloudGalleryTheme(settings = EngineSettings(themeMode = ThemeMode.LIGHT)) {
         val modalHost = rememberFluidGlassModalHostState()
@@ -98,9 +102,7 @@ class LibraryDeleteSafetyTest {
     composeRule.onNodeWithContentDescription("Seleziona").performClick()
     composeRule.waitForIdle()
     composeRule.runOnIdle {
-      val snapshot = state.grid.view.snapshot
-      val view = state.grid.view
-      state.grid.selection.selectAll((0 until howMany).map { snapshot.idAt(view.snapshotIndex(it)) })
+      state.grid.selection.selectAll(pick?.invoke(state) ?: idsOf(state, MediaKind.PHOTO, howMany))
     }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription("Elimina dal telefono").performClick()
@@ -175,5 +177,55 @@ class LibraryDeleteSafetyTest {
 
   private companion object {
     const val PRESENCE: Int = CellFlags.ON_PHONE or CellFlags.ON_NAS or CellFlags.SAFE or CellFlags.TO_VERIFY
+  }
+
+  /** I primi [howMany] media di quel tipo nella vista di adesso (la Libreria sintetica ha circa il 9% di video). */
+  private fun idsOf(state: LibraryTabState, kind: MediaKind, howMany: Int): List<MediaId> {
+    val view = state.grid.view
+    val snapshot = view.snapshot
+    val ids = (0 until view.size).map { view.snapshotIndex(it) }.filter { snapshot.kindAt(it) == kind }.take(howMany).map { snapshot.idAt(it) }
+    assertThat(ids).hasSize(howMany)
+    return ids
+  }
+
+  @Test
+  fun k4_conSoliVideoIlTitoloDiceElementiNonFoto() {
+    val state = state(safe = 0, count = 400)
+    open(state, howMany = 3, pick = { idsOf(it, MediaKind.VIDEO, 3) })
+
+    assertShown("Eliminare 3 elementi?")
+    assertNotShown("Eliminare 3 foto?")
+    // Il dettaglio parla al maschile, come il titolo.
+    assertShown("Prima mettili al sicuro")
+    assertNotShown("Prima mettile al sicuro")
+  }
+
+  @Test
+  fun k4_conUnSoloVideoIlTitoloEAlSingolare() {
+    val state = state(safe = 0, count = 400)
+    open(state, howMany = 1, pick = { idsOf(it, MediaKind.VIDEO, 1) })
+
+    assertShown("Eliminare questo elemento?")
+    assertNotShown("Eliminare questa foto?")
+    assertShown("Prima mettilo al sicuro")
+  }
+
+  @Test
+  fun k4_conFotoEVideoInsiemeIlTitoloDiceElementi() {
+    val state = state(safe = 0, count = 400)
+    open(state, howMany = 3, pick = { idsOf(it, MediaKind.PHOTO, 2) + idsOf(it, MediaKind.VIDEO, 1) })
+
+    assertShown("Eliminare 3 elementi?")
+    assertNotShown("Eliminare 3 foto?")
+  }
+
+  @Test
+  fun k4_conSoleFotoIlTitoloRestaFoto() {
+    val state = state(safe = 0, count = 400)
+    open(state, howMany = 3, pick = { idsOf(it, MediaKind.PHOTO, 3) })
+
+    assertShown("Eliminare 3 foto?")
+    assertNotShown("Eliminare 3 elementi?")
+    assertShown("Prima mettile al sicuro")
   }
 }

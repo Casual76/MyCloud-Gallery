@@ -74,7 +74,7 @@ abstract class ReceiveAlbumScreenshotBase(private val dark: Boolean, private val
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = RECEIVE_PHONE)
+@Config(application = Application::class, qualifiers = RECEIVE_SHOT_PHONE)
 class ReceiveAlbumPhoneScreenshotTest(dark: Boolean) : ReceiveAlbumScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

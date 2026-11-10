@@ -46,7 +46,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Gli screenshot della mappa (Fase 9, P4): **ogni stato del §1.5** -- la pagina della mappa (primo fotogramma, in caricamento, pronta con le bolle, carta semplice, solo sul Wi-Fi, senza rete, nessuna foto con
  * la posizione, con la selezione di "Mostra sulla mappa"), la griglia di una zona (scheletro, con e senza nome, vuota), la sezione Luoghi delle Raccolte (pronta, senza posizione, primo fotogramma) e Impostazioni
- * -> Mappa (accesa, spenta, non disponibile). Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo a 1,3x sul telefono. **MapLibre vero non si disegna in Robolectric**: la carta e' quella *finta*
+ * -> Mappa (accesa, spenta, non disponibile). Chiaro e scuro, telefono (360 dp) e tablet (1280 dp), piu' il testo a 1,3x sul telefono. **MapLibre vero non si disegna in Robolectric**: la carta e' quella *finta*
  * (`FakeMapSurface`: una carta piatta con le linee di una griglia), quindi gli screenshot dicono come stanno controlli, bolle, righe e credito, **non** com'e' disegnata la carta. Il disegno vero si guarda sul
  * telefono (F119, F122). **Nessuna foto vera**: gradienti; i luoghi sono citta' pubbliche.
  *
@@ -169,8 +169,8 @@ internal abstract class MapShots(private val dark: Boolean, private val device: 
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
-internal class MapPhoneScreenshotTest(dark: Boolean) : MapShots(dark, "telefono", 412, 915) {
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
+internal class MapPhoneScreenshotTest(dark: Boolean) : MapShots(dark, "telefono", 360, 780) {
   companion object {
     @JvmStatic
     @ParameterizedRobolectricTestRunner.Parameters(name = "scuro={0}")

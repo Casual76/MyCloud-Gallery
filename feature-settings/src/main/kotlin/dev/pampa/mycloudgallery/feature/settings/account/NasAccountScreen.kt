@@ -183,7 +183,7 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
           ),
           tone = if (state.blockedBy != null) FluidTone.Danger else FluidTone.Primary,
           leading = { RowGlyph(Icons.Rounded.Key) },
-          badge = if (state.blockedBy != null) {
+          labels = if (state.blockedBy != null) {
             { StatusPill(stringResource(R.string.account_pill_needed), FluidTone.Danger) }
           } else {
             null

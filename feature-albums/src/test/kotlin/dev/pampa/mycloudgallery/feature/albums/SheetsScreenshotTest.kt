@@ -347,7 +347,7 @@ abstract class SheetShots(private val dark: Boolean, private val device: String)
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = PHONE_360_QUALIFIERS)
 class SheetsPhoneScreenshotTest(dark: Boolean) : SheetShots(dark, "telefono") {
   companion object {
     @JvmStatic

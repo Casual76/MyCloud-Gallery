@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.notify
 
+import dev.pampa.mycloudgallery.SHOT_PHONE
 import android.app.Application
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
@@ -84,7 +85,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_PHONE)
 internal class MemoryNotificationScreenshotTest(private val dark: Boolean) {
 
   val composeRule = createComposeRule()

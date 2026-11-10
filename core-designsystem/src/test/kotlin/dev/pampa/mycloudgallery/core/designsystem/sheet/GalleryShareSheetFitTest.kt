@@ -88,7 +88,9 @@ class GalleryShareSheetFitTest {
     }
     for (value in listOf("Oslo 2026", "Gli altri aggiungono soltanto")) {
       val layout = layoutOf(value)
-      assertWithMessage("\"$value\" a 360 dp, testo $scale, e' tagliato").that(layout.hasVisualOverflow).isFalse()
+      // Tutto il testo e' visibile: l'ultima riga arriva all'ultimo carattere (con i puntini, la fine visibile sarebbe prima).
+      val visibleEnd = layout.getLineEnd(layout.lineCount - 1, visibleEnd = true)
+      assertWithMessage("\"$value\" a 360 dp, testo $scale, e' tagliato").that(visibleEnd).isEqualTo(value.length)
     }
   }
 

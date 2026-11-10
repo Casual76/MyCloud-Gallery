@@ -7,11 +7,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.google.common.truth.Truth.assertThat
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
@@ -27,8 +30,9 @@ import org.robolectric.annotation.Config
 import kotlin.math.abs
 
 /**
- * B4 (G3): il tasto di chiusura e il ⋮ del viewer sono lo stesso vetro, e il menu si apre dalla goccia del tasto. Qui il comportamento: stesse voci di sempre, il tasto fa le stesse cose,
- * il menu si chiude con Indietro prima del viewer, e dove la goccia non va bene (superfici piene, schermo basso) il menu e' il pop-up di sempre, con le stesse voci.
+ * B4 (G3) e K1 (GF-1): il tasto di chiusura e il ⋮ del viewer sono lo stesso tasto di vetro tondo, e il menu e' il pop-up con il velo (la goccia e' spenta finche' l'engine non avra'
+ * un velo per il suo pannello e un'ancora tonda). Qui il comportamento: stesse voci di sempre, il tasto fa le stesse cose, il menu si chiude con Indietro prima del viewer, con le
+ * superfici piene e sullo schermo basso il pop-up e' lo stesso e le voci che non ci stanno scorrono. La leggibilita' sopra le foto: `ViewerMenuContrastTest`.
  */
 class ViewerMenuGlassTest : ViewerTestBase() {
 
@@ -55,6 +59,10 @@ class ViewerMenuGlassTest : ViewerTestBase() {
     }
     // Stessa riga: i centri sono alla stessa altezza.
     assertThat(abs(close.boundsInRoot.center.y - menu.boundsInRoot.center.y)).isLessThan(2f)
+    // K1: la stessa forma, tonda, e la stessa misura (con la goccia il ⋮ era una capsula di circa 60 x 48 dp accanto al cerchio della chiusura).
+    assertThat(abs(close.boundsInRoot.width - menu.boundsInRoot.width)).isLessThan(1f)
+    assertThat(abs(close.boundsInRoot.height - menu.boundsInRoot.height)).isLessThan(1f)
+    assertThat(abs(menu.boundsInRoot.width - menu.boundsInRoot.height)).isLessThan(1f)
   }
 
   @Test
@@ -86,7 +94,7 @@ class ViewerMenuGlassTest : ViewerTestBase() {
   }
 
   @Test
-  fun conLeSuperficiPieneIlMenuETornatoIlPopUpConLeStesseVoci() {
+  fun conLeSuperficiPieneIlMenuEIlPopUpConLeStesseVoci() {
     val prefs = GalleryAccessibilityPrefs(reduceTransparency = true)
     val request = fixture.request()
     val services = services()
@@ -108,11 +116,17 @@ class ViewerMenuGlassTest : ViewerTestBase() {
 
   @Test
   @Config(qualifiers = "it-w412dp-h300dp-xhdpi")
-  fun conLoSchermoBassoIlMenuETornatoIlPopUp_ENessunaVoceRestaSottoIlBordo() {
-    // Su 300 dp di altezza il menu a goccia (che non scorre) non ci sta: il pop-up, che ha le stesse voci, si apre lo stesso.
+  fun conLoSchermoBassoIlMenuSiApre_ENessunaVoceRestaSottoIlBordo() {
+    // Su 300 dp di altezza le voci non ci stanno tutte: il pop-up scorre, e "Elimina dal telefono", l'ultima, si raggiunge e si tocca.
     show()
     more().performClick()
     waitForMenu("Informazioni")
     assertThat(menuShows("Condividi")).isTrue()
+    composeRule.onNodeWithText("Elimina dal telefono").performScrollTo().assertIsDisplayed().performClick()
+    composeRule.mainClock.advanceTimeBy(800)
+    composeRule.waitForIdle()
+    // La voce ha fatto la sua azione: il foglio di conferma dell'eliminazione.
+    assertThat(menuShows("Eliminare la foto dal telefono?") || menuShows("Eliminare il video dal telefono?")).isTrue()
+    assertThat(closed).isEqualTo(0)
   }
 }

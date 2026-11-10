@@ -35,9 +35,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Gli screenshot della pagina "Nuovo dispositivo" con il tasto fermo in fondo (G3, B6): chiaro e scuro, con la tastiera aperta e senza, su un telefono basso (360 x 640 dp) e su uno normale
- * (411 x 891 dp). La tastiera non si disegna in Robolectric: qui e' un riquadro grigio alto quanto la tastiera, e il sistema le dice che l'IME occupa quello spazio, cosi' la pagina si
- * alza davvero con `imePadding`. `gradlew :feature-settings:recordRoborazziDebug --tests "*ApprovalG3Shots*"` scrive i PNG in `docs/screenshots/beta-grafica/g3-viewer/`.
+ * Gli screenshot della pagina "Nuovo dispositivo" con il tasto fermo in fondo (G3, B6): chiaro e scuro, con la tastiera aperta e senza, su un telefono basso (360 x 640 dp), sul
+ * telefono dell'utente (360 x 780 dp, il Galaxy S25) e sul tablet in orizzontale (K3a, GF-4). Con il codice a meta' "Approva" e' spento; con il codice intero e l'account
+ * confermato si accende (`approva-attivo`). La tastiera non si disegna in Robolectric: qui e' un riquadro grigio alto quanto la tastiera, e il sistema le dice che l'IME occupa
+ * quello spazio, cosi' la pagina si alza davvero con `imePadding`. `gradlew :feature-settings:recordRoborazziDebug --tests "*ApprovalG3Shots*"` scrive i PNG in
+ * `docs/screenshots/beta-grafica/g3-viewer/`.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -51,13 +53,13 @@ abstract class ApprovalG3Shots(private val device: String, private val keyboardD
 
   private val request = DeviceMapper.requests(listOf(Samples.request), Samples.familyAsAdmin(), Samples.NOW).single()
 
-  private fun shot(dark: Boolean, keyboard: Boolean) {
+  private fun shot(dark: Boolean, keyboard: Boolean, complete: Boolean = false) {
     rule.setContent {
       MyCloudGalleryTheme(settings = EngineSettings(themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT)) {
         Box(Modifier.fillMaxSize()) {
           SettingsHost {
             ApprovalScreen(
-              ApprovalUiState(request, isAdmin = true, mode = ProofMode.CODE, code = "K7QD-2M9X", accountConfirmed = true),
+              ApprovalUiState(request, isAdmin = true, mode = ProofMode.CODE, code = if (complete) FULL_CODE else PARTIAL_CODE, accountConfirmed = true),
               ApprovalActions.None,
             )
           }
@@ -78,7 +80,11 @@ abstract class ApprovalG3Shots(private val device: String, private val keyboardD
       rule.onNode(hasScrollAction()).performScrollToNode(hasSetTextAction())
       rule.waitForIdle()
     }
-    val state = if (keyboard) "con-tastiera" else "senza-tastiera"
+    val state = when {
+      complete -> "approva-attivo"
+      keyboard -> "con-tastiera"
+      else -> "senza-tastiera"
+    }
     rule.onRoot().captureRoboImage("../docs/screenshots/beta-grafica/g3-viewer/nuovo-dispositivo-$state-$device-${if (dark) "scuro" else "chiaro"}.png")
   }
 
@@ -89,10 +95,26 @@ abstract class ApprovalG3Shots(private val device: String, private val keyboardD
   @Test fun conTastiera_chiaro() = shot(dark = false, keyboard = true)
 
   @Test fun conTastiera_scuro() = shot(dark = true, keyboard = true)
+
+  /** Il codice intero e l'account confermato: "Approva" acceso, in fondo alla pagina. */
+  @Test fun approvaAttivo_chiaro() = shot(dark = false, keyboard = false, complete = true)
+
+  @Test fun approvaAttivo_scuro() = shot(dark = true, keyboard = false, complete = true)
+
+  private companion object {
+    /** Meta' codice: "Approva" resta spento. */
+    const val PARTIAL_CODE = "K7QD-2M9X"
+
+    /** Il codice intero (16 caratteri, `CodeFormat.APPROVAL_CHARS`). */
+    const val FULL_CODE = "K7QD-2M9X-FA4T-H3PB"
+  }
 }
 
 @Config(qualifiers = "w360dp-h640dp-xhdpi")
 class ApprovalG3ShotsLow : ApprovalG3Shots("telefono-basso", keyboardDp = 270)
 
-@Config(qualifiers = "w411dp-h891dp-xhdpi")
+@Config(qualifiers = "w360dp-h780dp-xhdpi")
 class ApprovalG3ShotsPhone : ApprovalG3Shots("telefono", keyboardDp = 300)
+
+@Config(qualifiers = "w1280dp-h800dp-land-xhdpi")
+class ApprovalG3ShotsTablet : ApprovalG3Shots("tablet", keyboardDp = 330)

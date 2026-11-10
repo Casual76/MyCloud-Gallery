@@ -31,7 +31,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Gli screenshot della Diagnostica (P8): la panoramica in tre stati, ogni sezione con avvisi veri, il test di
- * connessione prima e dopo, l'anteprima dell'esportazione. Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu'
+ * connessione prima e dopo, l'anteprima dell'esportazione. Chiaro e scuro, telefono dell'utente (360 dp) e tablet (1280 dp), piu'
  * il testo grande (1,3x) per le pagine piu' dense.
  *
  * `gradlew :feature-diagnostics:recordRoborazziDebug` scrive i PNG in `docs/screenshots/2-P8/`. Nei normali
@@ -199,7 +199,7 @@ internal abstract class DiagnosticsScreenshotBase(private val dark: Boolean, pri
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = "w360dp-h780dp-xhdpi")
 internal class DiagnosticsPhoneScreenshotTest(dark: Boolean) : DiagnosticsScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

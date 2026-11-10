@@ -1,8 +1,10 @@
 package dev.pampa.mycloudgallery.feature.library.collections
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.onRoot
@@ -20,6 +22,8 @@ import org.robolectric.annotation.Config
  * Gli screenshot dei pannelli della Libreria e delle Raccolte (Fase 10, P5, §2.3) alle quattro larghezze del riquadro, chiaro e scuro:
  * `gradlew :feature-library:recordRoborazziDebug --tests "*LibraryPanesShots*"` scrive i PNG in `docs/screenshots/10-P5/`. Nei test normali le immagini non si scrivono.
  * Raccolte: una pagina sola a 360 e 600 dp, elenco e dettaglio a 840 e 1280. Libreria: la griglia a tutta larghezza (il viewer affiancato e' negli screenshot del viewer).
+ * K3a: le Raccolte come in produzione dalla G2 (senza Album, Album smart e Telefono, con la capsula della rete in testa): su due pannelli il dettaglio
+ * parte da "Scegli una raccolta", sopra il fondo della pagina. Il telefono e' quello dell'utente (360 x 780 dp).
  */
 abstract class LibraryPanesShots(private val width: Int) : ComposeScreenTest() {
 
@@ -33,25 +37,28 @@ abstract class LibraryPanesShots(private val width: Int) : ComposeScreenTest() {
 
   @Composable
   private fun Collections() {
-    CollectionsScreen(
-      state = layoutOf(world),
-      contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
-      backdropOut = {},
-      onOpenCollection = {},
-      onOpenSettings = {},
-      statusHeader = {},
-      detail = { kind ->
-        CollectionGridScreen(
-          kind = kind,
-          items = world.source.items(requireNotNull(kind.filter)),
-          environment = environment,
-          onFavorite = { _, _ -> },
-          onHide = { },
-          onOpenViewer = { },
-          contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
-        )
-      },
-    )
+    // Il fondo della pagina, che in produzione dipinge `FluidNavHost`: il pannello "Scegli una raccolta" non ne ha uno suo.
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+      CollectionsScreen(
+        state = productionLayoutOf(world),
+        contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
+        backdropOut = {},
+        onOpenCollection = {},
+        onOpenSettings = {},
+        statusHeader = { ProductionNetworkHeader() },
+        detail = { kind ->
+          CollectionGridScreen(
+            kind = kind,
+            items = world.source.items(requireNotNull(kind.filter)),
+            environment = environment,
+            onFavorite = { _, _ -> },
+            onHide = { },
+            onOpenViewer = { },
+            contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
+          )
+        },
+      )
+    }
   }
 
   @Composable
@@ -62,7 +69,6 @@ abstract class LibraryPanesShots(private val width: Int) : ComposeScreenTest() {
         backdropOut = {},
         onOpenViewer = {},
         onOpenSettings = {},
-        statusFooter = {},
         state = syntheticLibraryState(),
       )
     }
@@ -81,7 +87,7 @@ abstract class LibraryPanesShots(private val width: Int) : ComposeScreenTest() {
   fun libreriaScuro() = shoot("libreria", dark = true) { Library() }
 }
 
-@Config(qualifiers = "w360dp-h800dp-xhdpi")
+@Config(qualifiers = "w360dp-h780dp-xhdpi")
 class LibraryPanesShots360 : LibraryPanesShots(360)
 
 @Config(qualifiers = "w600dp-h900dp-xhdpi")

@@ -62,7 +62,7 @@ abstract class BackupPowerSaverShotsBase(private val dark: Boolean, private val 
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class BackupPowerSaverPhoneScreenshotTest(dark: Boolean) : BackupPowerSaverShotsBase(dark, "telefono") {
   companion object {
     @JvmStatic

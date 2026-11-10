@@ -11,7 +11,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.feature.backup.BackupComposeBase
 import dev.pampa.mycloudgallery.feature.backup.LARGE_TEXT
-import dev.pampa.mycloudgallery.feature.backup.PHONE_QUALIFIERS
+import dev.pampa.mycloudgallery.feature.backup.SHOT_PHONE_QUALIFIERS
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageActions
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageScreen
 import dev.pampa.mycloudgallery.feature.backup.page.BackupPageUi
@@ -108,7 +108,7 @@ abstract class ReceivedShotBase(private val dark: Boolean, private val device: S
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h1700dp-xhdpi")
+@Config(application = Application::class, qualifiers = "w360dp-h1700dp-xhdpi")
 class ReceivedPhoneShots(dark: Boolean) : ReceivedShotBase(dark, "telefono") {
 
   @Test
@@ -153,7 +153,7 @@ class ReceivedPhoneShots(dark: Boolean) : ReceivedShotBase(dark, "telefono") {
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class ReceivedSheetShots(dark: Boolean) : ReceivedShotBase(dark, "telefono") {
 
   @Test

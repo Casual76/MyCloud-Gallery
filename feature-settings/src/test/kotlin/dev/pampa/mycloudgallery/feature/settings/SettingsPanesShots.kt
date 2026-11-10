@@ -77,7 +77,7 @@ abstract class SettingsPanesShots(private val width: Int) {
 
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "it-w360dp-h800dp-xhdpi")
+@Config(qualifiers = "it-w360dp-h780dp-xhdpi")
 class SettingsPanesShots360 : SettingsPanesShots(360)
 
 @RunWith(AndroidJUnit4::class)

@@ -22,7 +22,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Lo screenshot di P9 (Fase 7, D33): la pagina principale delle Impostazioni con la riga "Nascosti" nella sezione Protezione (la destinazione la
- * scrive `:app`: qui e' un segnaposto). Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo grande sul telefono. Una classe a parte:
+ * scrive `:app`: qui e' un segnaposto). Chiaro e scuro, telefono dell'utente (360 dp) e tablet (1280 dp), piu' il testo grande sul telefono. Una classe a parte:
  * `PhonePageShots` e le sue sorelle riscrivono le immagini di P7.
  *
  * `gradlew :feature-settings:recordRoborazziDebug --tests "*HiddenEntryShots*"` scrive i PNG in `docs/screenshots/7-P9/`. Nei normali
@@ -62,7 +62,7 @@ internal abstract class HiddenEntryShotsBase(private val look: Look, private val
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "it-w412dp-h1800dp-xhdpi")
+@Config(qualifiers = "it-w360dp-h1800dp-xhdpi")
 internal class PhoneHiddenEntryShots(look: Look) : HiddenEntryShotsBase(look, "telefono") {
   companion object {
     @JvmStatic

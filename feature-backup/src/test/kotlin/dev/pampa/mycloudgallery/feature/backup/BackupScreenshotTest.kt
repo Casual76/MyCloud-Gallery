@@ -34,7 +34,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Gli screenshot di P5 per le schermate del backup (pagina Backup, foglio del primo backup, impostazioni e cartella del dispositivo):
- * chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo grande (1,3x). Sui dati di [BackupSamples] (i numeri dell'S25).
+ * chiaro e scuro, telefono dell'utente (360 dp) e tablet (1280 dp), piu' il testo grande (1,3x). Sui dati di [BackupSamples] (i numeri dell'S25).
  *
  * `gradlew :feature-backup:recordRoborazziDebug --tests "*BackupScreenshot*"` scrive i PNG in `docs/screenshots/5-P5/`. Nei normali
  * `testDebugUnitTest` si verifica solo che le schermate compongano. Il piede con la terza voce, le celle con i segni del problema e delle
@@ -197,7 +197,7 @@ abstract class BackupScreenshotBase(private val dark: Boolean, private val devic
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class BackupPhoneScreenshotTest(dark: Boolean) : BackupScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

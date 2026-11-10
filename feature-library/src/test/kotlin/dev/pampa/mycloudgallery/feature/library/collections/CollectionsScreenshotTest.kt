@@ -31,7 +31,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Gli screenshot di P10 (Raccolte, griglie filtrate, Nascosti, Eliminati di recente): chiaro e scuro, telefono (412 dp) e
+ * Gli screenshot di P10 (Raccolte, griglie filtrate, Nascosti, Eliminati di recente): chiaro e scuro, telefono dell'utente (360 dp) e
  * tablet (1280 dp), piu' il testo grande. Sui fake: la libreria sintetica, i nascosti del mondo finto, un cestino di sistema
  * di prova.
  *
@@ -217,7 +217,7 @@ abstract class CollectionsScreenshotBase(private val dark: Boolean, private val 
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class CollectionsPhoneScreenshotTest(dark: Boolean) : CollectionsScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

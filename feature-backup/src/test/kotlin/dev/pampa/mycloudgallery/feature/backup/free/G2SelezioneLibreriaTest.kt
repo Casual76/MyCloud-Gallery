@@ -1,5 +1,10 @@
 package dev.pampa.mycloudgallery.feature.backup.free
 
+import androidx.compose.ui.Modifier
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
 import android.app.Application
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.test.hasClickAction
@@ -15,7 +20,7 @@ import dev.pampa.mycloudgallery.core.backup.free.PhoneOnlyAssessment
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.backup.BackupComposeBase
 import dev.pampa.mycloudgallery.feature.backup.ComposeBackupTallTest
-import dev.pampa.mycloudgallery.feature.backup.PHONE_QUALIFIERS
+import dev.pampa.mycloudgallery.feature.backup.SHOT_PHONE_QUALIFIERS
 import dev.pampa.mycloudgallery.feature.backup.TABLET_QUALIFIERS
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -105,7 +110,7 @@ class G2SelezioneLibreriaTest : ComposeBackupTallTest() {
 
 /**
  * Il foglio "Prima mettilo al sicuro" aperto dalla selezione della Libreria (5B I3): selezione mista e selezione senza nessun media al sicuro.
- * Chiaro e scuro, telefono e tablet. `gradlew :feature-backup:recordRoborazziDebug --tests "*G2SelectionSheet*"`.
+ * Chiaro e scuro, telefono dell'utente (360 dp, K3a) e tablet. `gradlew :feature-backup:recordRoborazziDebug --tests "*G2SelectionSheet*"`.
  */
 abstract class G2SelectionSheetShotBase(private val dark: Boolean, private val device: String) : BackupComposeBase() {
 
@@ -121,8 +126,13 @@ abstract class G2SelectionSheetShotBase(private val dark: Boolean, private val d
     return PhoneOnlyUi.Advice(assessment, safeFirst = assessment.preselectSafeFirst)
   }
 
+  /**
+   * Il foglio sopra il fondo della pagina, come in produzione (lo dipinge `FluidNavHost`; K3a, GF-4): senza, il foglio scuro stava su un fondo chiaro
+   * e il suo vetro risultava grigio.
+   */
   @Composable
   private fun Sheet(state: PhoneOnlyUi) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
     PhoneOnlySheet(visible = true, state = state, onChoose = {}, onSafeguard = {}, onContinue = {}, onDismiss = {}, onTrash = {})
   }
 
@@ -144,7 +154,7 @@ abstract class G2SelectionSheetShotBase(private val dark: Boolean, private val d
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class G2SelectionSheetPhoneShots(dark: Boolean) : G2SelectionSheetShotBase(dark, "telefono") {
   companion object {
     @JvmStatic

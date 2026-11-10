@@ -64,7 +64,7 @@ abstract class CameraMessagingShots(private val dark: Boolean, private val devic
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class CameraMessagingPhoneScreenshotTest(dark: Boolean) : CameraMessagingShots(dark, "telefono") {
   companion object {
     @JvmStatic

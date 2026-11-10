@@ -1,9 +1,11 @@
 package dev.pampa.mycloudgallery.feature.library.collections
 
 import android.app.Application
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
@@ -21,7 +23,6 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarDefaults
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarSlot
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarSlotVisibility
 import dev.pampa.mycloudgallery.core.designsystem.chrome.LocalGalleryTabBarSlot
-import dev.pampa.mycloudgallery.feature.library.collections.testing.CollectionsSectionSamples
 import dev.pampa.mycloudgallery.feature.library.collections.testing.FakeCollectionsWorld
 import dev.pampa.mycloudgallery.feature.library.collections.testing.fakeGridEnvironment
 import dev.pampa.mycloudgallery.feature.library.collections.testing.fakeThumbnailLoader
@@ -39,9 +40,13 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Gli screenshot delle **Raccolte alleggerite** del pacchetto G2: senza Album, Album smart e Telefono (vanno nella scheda Album), con la pillola
- * nuova e il cerchio di Cerca. Sul tablet anche il pannello di dettaglio in selezione (Eliminati di recente): "Ripristina" prende il posto della
- * pillola invece di posarsi sopra di lei (B3). Chiaro e scuro, telefono e tablet.
+ * Lo screenshot del **pannello delle Raccolte in selezione** sul tablet (G2, B3): gli Eliminati di recente nel pannello di dettaglio, con
+ * "Ripristina" al posto della pillola invece che posato sopra di lei. Chiaro e scuro.
+ *
+ * K3a (GF-4): le Raccolte alleggerite a schermo intero (`raccolte-alleggerite`) sono diventate `pillola-raccolte` di `:app`, fatte con lo scaffold
+ * vero; qui resta solo il pannello, che in `:app` vorrebbe le rotte con Hilt. Solo il tablet: sul telefono il pannello non c'e' (le due immagini del
+ * telefono erano identiche a quelle delle Raccolte). Come in produzione: il fondo della pagina (lo dipinge `FluidNavHost`) e, in testa all'elenco, la
+ * capsula della rete nello stato "In casa · NAS collegato" (la disegna `:app`, `NetworkStatusEntry`: qui la stessa voce con le stesse parole).
  *
  * `gradlew :feature-library:recordRoborazziDebug --tests "*G2Raccolte*"` scrive i PNG in `docs/screenshots/beta-grafica/G2/`.
  */
@@ -63,28 +68,21 @@ abstract class G2RaccolteShotBase(private val dark: Boolean, private val device:
       TrashEntry(RecentlyDeletedController.trashEntryId(item.ref), item, RecentlyDeletedController.daysLeft(item.expiresAtMs, now))
     }
 
-  /** Le Raccolte come le compone il controllore vero: le sezioni di tutti i fornitori, senza quelle della scheda Album. */
-  private fun g2Layout(): CollectionsLayoutState {
-    val providers = CollectionsSectionSamples.all().mapNotNull { CollectionsLayout.sectionOf(it.code, it.group.value) }
-    val all = layoutOf(world, providers = providers)
-    return all.copy(sections = all.sections.filter { it.code !in CollectionSections.inAlbumsTab })
-  }
-
-  /** Le Raccolte nella scheda, con la pillola sotto; il posto della pillola come in `MainScaffold`. */
+  /** Le Raccolte nella scheda, con la pillola sotto; il posto della pillola come in `MainScaffold`, il fondo della pagina come in `FluidNavHost`. */
   @Composable
   private fun Tab(initial: CollectionKind? = null, trashSelection: Boolean = false) {
     val slot = remember { GalleryTabBarSlot() }
     var backdrop by remember { mutableStateOf<GlassBackdropState?>(null) }
     val entries = remember { trashEntries(14) }
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
       CompositionLocalProvider(LocalGalleryTabBarSlot provides slot) {
         CollectionsScreen(
-          state = g2Layout(),
+          state = productionLayoutOf(world),
           contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
           backdropOut = { backdrop = it },
           onOpenCollection = {},
           onOpenSettings = {},
-          statusHeader = {},
+          statusHeader = { ProductionNetworkHeader() },
           initialSelection = initial,
           detail = { kind ->
             when (kind) {
@@ -106,9 +104,6 @@ abstract class G2RaccolteShotBase(private val dark: Boolean, private val device:
     }
   }
 
-  @Test
-  fun raccolteAlleggerite() = shoot("raccolte-alleggerite") { Tab() }
-
   /** Sul tablet il pannello degli Eliminati di recente in selezione: "Ripristina" sta nel posto della pillola, che esce. */
   @Test
   fun raccoltePannelloInSelezione() = shoot("raccolte-pannello-selezione") { Tab(initial = CollectionKind.RECENTLY_DELETED, trashSelection = true) }
@@ -116,17 +111,6 @@ abstract class G2RaccolteShotBase(private val dark: Boolean, private val device:
   companion object {
     const val DIR = "../docs/screenshots/beta-grafica/G2"
     fun looks(): List<Array<Any>> = listOf(arrayOf<Any>(false), arrayOf<Any>(true))
-  }
-}
-
-@RunWith(ParameterizedRobolectricTestRunner::class)
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
-class G2RaccoltePhoneShots(dark: Boolean) : G2RaccolteShotBase(dark, "telefono") {
-  companion object {
-    @JvmStatic
-    @ParameterizedRobolectricTestRunner.Parameters(name = "scuro={0}")
-    fun data(): List<Array<Any>> = looks()
   }
 }
 

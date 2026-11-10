@@ -182,7 +182,8 @@ fun galleryTopChromeHeight(): Dp = WindowInsets.statusBars.asPaddingValues().cal
  * [subtitle] e la capsula dei comandi ([commands], se [showCommands]). Ogni pezzo e' vetro adattivo sul [content] che gli passa
  * sotto (null = caso peggiore). [topChrome] e' [galleryTopChromeHeight]. [shorterTitles]: le forme piu' corte di [title], per
  * quando la riga e' stretta ([GalleryChromeLabel]). [shorterSubtitles]: se [subtitle] e' un riepilogo da mostrare intero o niente (GF-22),
- * le sue forme piu' corte; null = il sottotitolo si tronca con i puntini (il luogo).
+ * le sue forme piu' corte; null = il sottotitolo si tronca con i puntini (il luogo). [contentMoving]: il contenuto sotto si muove per un
+ * gesto (pinch, scorrimento); mentre e' vero l'etichetta non anima la larghezza ([GalleryChromeLabel]).
  *
  * Le icone della barra di stato seguono il tema: la sfumatura di bordo ([GalleryTopEdgeScrim]) e' densa proprio li'.
  */
@@ -199,6 +200,7 @@ fun GalleryTopChrome(
   showCommands: Boolean = true,
   shorterTitles: List<String> = emptyList(),
   shorterSubtitles: List<String>? = null,
+  contentMoving: () -> Boolean = { false },
   commands: @Composable RowScope.() -> Unit,
 ) {
   val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -244,6 +246,7 @@ fun GalleryTopChrome(
         modifier = Modifier.onGloballyPositioned { labelBounds.settle(it.inChromeContent(content), slack) }.galleryChromeTag("titolo"),
         shorterTitles = shorterTitles,
         shorterSubtitles = shorterSubtitles,
+        contentMoving = contentMoving,
       )
     }
     if (showCommands) {

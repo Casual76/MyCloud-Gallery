@@ -198,6 +198,16 @@ class MediaGridState(
   /** Vero finche' due dita pizzicano. */
   internal var pinching: Boolean by mutableStateOf(false)
 
+  /**
+   * La griglia **si muove per un gesto** (P2, 10/11): due dita che pizzicano, la scala del pinch che torna a posto dopo il rilascio (il
+   * livello puo' ancora cambiare), uno scorrimento o un lancio in corso, la maniglia dello scrubber trascinata. Lo legge l'etichetta di
+   * vetro in alto, che mentre e' vero prende subito la larghezza del testo nuovo invece di seguirla con la molla
+   * (`GalleryChromeLabel(contentMoving)`). Sono letture di stato: chi lo guarda da un `derivedStateOf` si ricompone solo quando la
+   * risposta cambia (all'inizio e alla fine del gesto), non a ogni fotogramma.
+   */
+  internal val inMotion: Boolean
+    get() = pinching || pinch.scale.value != 1f || listState.isScrollInProgress || scrubberState.dragging
+
   /** Vero dopo che l'utente ha trascinato: da li' la griglia non si riporta piu' in fondo da sola. */
   internal var userScrolled: Boolean = false
 

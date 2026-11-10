@@ -110,6 +110,8 @@ internal fun GridTopChrome(
   showCommands: Boolean = true,
   commands: @Composable RowScope.() -> Unit,
 ) {
+  // P2: mentre la griglia si muove per un gesto l'etichetta non anima la larghezza (vedi `MediaGridState.inMotion`).
+  val contentMoving = remember(grid) { { grid?.inMotion == true } }
   GalleryTopChrome(
     content = rememberGridChromeContent(grid),
     backdrop = backdrop,
@@ -122,6 +124,7 @@ internal fun GridTopChrome(
     showCommands = showCommands,
     shorterTitles = label.shorterTitles,
     shorterSubtitles = label.shorterSubtitles,
+    contentMoving = contentMoving,
     commands = commands,
   )
 }

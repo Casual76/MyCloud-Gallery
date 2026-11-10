@@ -135,12 +135,70 @@ class GalleryChromeMotionTest {
               style = GalleryChromeStyles.adaptive(GalleryLegibility.adapt(GalleryChromeStyles.adaptivePalette().unknown, GalleryChromeStyles.adaptivePalette())),
               backdrop = null,
               modifier = Modifier.testTag(LabelTag),
+              contentMoving = { moving.value },
             )
           }
         }
       }
     }
     composeRule.waitForIdle()
+  }
+
+  // --- P2 (S25, 10/11): mentre il contenuto sotto si muove per un gesto la larghezza non si anima --------------------------
+
+  /** Il contenuto sotto l'etichetta si muove per un gesto (pinch, scorrimento): `GalleryChromeLabel(contentMoving)`. */
+  private val moving = mutableStateOf(false)
+
+  /**
+   * Durante un pinch o uno scorrimento l'etichetta prende **subito** la larghezza del testo nuovo: nessuna misura in mezzo, quindi nessuna
+   * superficie di vetro di misura nuova a ogni fotogramma (sull'S25 erano 139 larghezze diverse in un pinch, e scacciavano le miniature
+   * dalla cache della GPU).
+   */
+  @Test
+  fun mentreIlContenutoSiMuoveLEtichettaPrendeSubitoLaLarghezzaNuova() {
+    moving.value = true
+    showLabel()
+    val narrow = width(LabelTag)
+    composeRule.mainClock.autoAdvance = false
+    composeRule.runOnIdle { title.value = "Mercoledi 12 ottobre 2026" }
+    val series = widths(LabelTag, FramesFor1500Ms)
+    val wide = series.last()
+    assertWithMessage("larghezza: prima $narrow, dopo $wide").that(wide).isGreaterThan(narrow + MinGrowthPx)
+    assertWithMessage("nessuna misura in mezzo mentre il contenuto si muove: $series").that(series.none { it > narrow + 1f && it < wide - 1f }).isTrue()
+  }
+
+  /** Finito il gesto la molla torna: un cambio da fermi (entrare in selezione, un filtro) passa di nuovo per le misure in mezzo. */
+  @Test
+  fun finitoIlGestoLaMollaTorna() {
+    moving.value = true
+    showLabel()
+    composeRule.mainClock.autoAdvance = false
+    composeRule.runOnIdle { title.value = "Mercoledi 12 ottobre 2026" }
+    widths(LabelTag, FramesFor250Ms)
+    composeRule.runOnIdle { moving.value = false }
+    // Il testo resta fermo oltre la soglia della raffica: il cambio dopo e' isolato.
+    val wide = widths(LabelTag, FramesFor1500Ms).last()
+    composeRule.runOnIdle { title.value = "Oggi" }
+    val series = widths(LabelTag, FramesFor1500Ms)
+    assertThat(series.last()).isLessThan(wide - MinGrowthPx)
+    assertWithMessage("da fermi si stringe passando per le misure in mezzo: $series").that(series.count { it < wide - 1f && it > series.last() + 1f }).isAtLeast(MinFramesBetween)
+  }
+
+  /** Un gesto che comincia a meta' di una molla la chiude: la larghezza va subito a quella del testo, non resta a meta' strada. */
+  @Test
+  fun unGestoCheCominciaAMetaMollaPortaSubitoLaLarghezzaAlTesto() {
+    showLabel()
+    val narrow = width(LabelTag)
+    composeRule.mainClock.autoAdvance = false
+    composeRule.runOnIdle { title.value = "Mercoledi 12 ottobre 2026" }
+    val started = framesUntil(FramesFor300Ms) { width(LabelTag) > narrow + 1f }
+    assertWithMessage("la molla e' partita (fotogrammi: $started)").that(started).isGreaterThan(0)
+    val midway = width(LabelTag)
+    composeRule.runOnIdle { moving.value = true }
+    val closed = widths(LabelTag, 2).last()
+    val wide = widths(LabelTag, FramesFor1500Ms).last()
+    assertWithMessage("a meta' molla la larghezza era in viaggio: $narrow -> $midway -> $wide").that(midway).isLessThan(wide - 1f)
+    assertWithMessage("due fotogrammi dopo l'inizio del gesto la larghezza e' gia' quella del testo: $closed contro $wide").that(closed).isWithin(1f).of(wide)
   }
 
   @Test

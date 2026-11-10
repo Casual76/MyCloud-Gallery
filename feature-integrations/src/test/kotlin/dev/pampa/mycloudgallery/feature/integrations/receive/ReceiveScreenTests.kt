@@ -17,7 +17,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Gli screenshot di P11 per "Salva sul NAS" (copia in corso, pronta con e senza area comune, con i rifiuti, bloccata, non pronta, niente da salvare, in
- * coda con e senza NAS, errore): chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo grande (1,3x).
+ * coda con e senza NAS, errore): chiaro e scuro, telefono (360 dp) e tablet (1280 dp), piu' il testo grande (1,3x).
  *
  * `gradlew :feature-integrations:recordRoborazziDebug --tests "*ReceiveScreenshot*"` scrive i PNG in `docs/screenshots/5-P11/`. Nei normali
  * `testDebugUnitTest` si verifica solo che le schermate compongano.
@@ -79,7 +79,7 @@ abstract class ReceiveScreenshotBase(private val dark: Boolean, private val devi
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = RECEIVE_PHONE)
+@Config(application = Application::class, qualifiers = RECEIVE_SHOT_PHONE)
 class ReceivePhoneScreenshotTest(dark: Boolean) : ReceiveScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

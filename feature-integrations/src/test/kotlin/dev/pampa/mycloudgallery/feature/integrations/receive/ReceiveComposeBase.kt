@@ -39,6 +39,9 @@ import org.robolectric.Shadows.shadowOf
 // Fase 5B (P11): il supporto dei test Compose della ricezione (stesso schema dei moduli di P5): telefono da 412 dp, tablet da 1280 dp, testo a 1,3x.
 
 const val RECEIVE_PHONE = "w412dp-h915dp-xhdpi"
+
+/** Il telefono degli screenshot per l'utente (K4): il suo Galaxy S25, 360 x 780 dp. Non 412 dp, dove entrano piu' cose che sul suo schermo. */
+const val RECEIVE_SHOT_PHONE = "w360dp-h780dp-xhdpi"
 const val RECEIVE_TABLET = "w1280dp-h800dp-land-xhdpi"
 const val RECEIVE_LARGE_TEXT = 1.3f
 

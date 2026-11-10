@@ -71,7 +71,7 @@ internal abstract class QrScreenshotBase(private val dark: Boolean, private val 
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h915dp-xhdpi")
+@Config(qualifiers = "w360dp-h780dp-xhdpi")
 internal class QrPhoneScreenshotTest(dark: Boolean) : QrScreenshotBase(dark, P5Shots.PHONE, largeText = false) {
   companion object {
     @JvmStatic
@@ -93,7 +93,7 @@ internal class QrTabletScreenshotTest(dark: Boolean) : QrScreenshotBase(dark, P5
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h915dp-xhdpi")
+@Config(qualifiers = "w360dp-h780dp-xhdpi")
 internal class QrPhoneLargeTextScreenshotTest(dark: Boolean) : QrScreenshotBase(dark, P5Shots.PHONE, largeText = true) {
   companion object {
     @JvmStatic

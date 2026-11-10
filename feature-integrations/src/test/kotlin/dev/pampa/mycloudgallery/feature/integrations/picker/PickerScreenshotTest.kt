@@ -13,7 +13,7 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * Gli screenshot di P10 per il selettore delle altre app (griglia a scelta multipla e a un tocco, avvisi, bloccata, non pronta, in consegna):
- * chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo grande (1,3x). Sulla Libreria sintetica mista (telefono e solo NAS).
+ * chiaro e scuro, telefono (360 dp) e tablet (1280 dp), piu' il testo grande (1,3x). Sulla Libreria sintetica mista (telefono e solo NAS).
  *
  * `gradlew :feature-integrations:recordRoborazziDebug --tests "*PickerScreenshot*"` scrive i PNG in `docs/screenshots/5-P10/`. Nei normali
  * `testDebugUnitTest` si verifica solo che le schermate compongano.
@@ -98,7 +98,7 @@ abstract class PickerScreenshotBase(private val dark: Boolean, private val devic
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class PickerPhoneScreenshotTest(dark: Boolean) : PickerScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

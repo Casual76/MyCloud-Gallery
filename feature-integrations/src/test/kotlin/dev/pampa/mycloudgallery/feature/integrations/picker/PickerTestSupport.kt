@@ -35,6 +35,9 @@ import org.robolectric.Shadows.shadowOf
 // Fase 5B (P10): il supporto dei test Compose del selettore (stesso schema dei moduli di P5): telefono da 412 dp, tablet da 1280 dp, testo a 1,3x.
 
 const val PHONE_QUALIFIERS = "w412dp-h915dp-xhdpi"
+
+/** Il telefono degli screenshot per l'utente (K4): il suo Galaxy S25, 360 x 780 dp. Non 412 dp, dove entrano piu' cose che sul suo schermo. */
+const val SHOT_PHONE_QUALIFIERS = "w360dp-h780dp-xhdpi"
 const val TABLET_QUALIFIERS = "w1280dp-h800dp-land-xhdpi"
 const val LARGE_TEXT = 1.3f
 

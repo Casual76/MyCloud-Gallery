@@ -37,7 +37,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
+@Config(sdk = [35], qualifiers = "w360dp-h780dp-xxhdpi")
 class WidgetScreenshotTest {
 
   private val context: Application get() = ApplicationProvider.getApplicationContext()

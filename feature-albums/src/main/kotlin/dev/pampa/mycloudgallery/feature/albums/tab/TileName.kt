@@ -1,14 +1,11 @@
 package dev.pampa.mycloudgallery.feature.albums.tab
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
@@ -77,11 +74,19 @@ internal fun TileName(title: String, fit: TileNameFit, modifier: Modifier = Modi
   val base = MaterialTheme.typography.titleSmall
   val scale = remember(fit, title) { fit.scaleFor(title) }
   val style = if (scale == 1f) base else base.copy(fontSize = scaledSize(base.fontSize, scale))
-  // L'altezza non cambia con il corpo: due righe del corpo di serie, cosi' un nome ridotto e uno normale hanno sotto il conteggio alla stessa altezza.
-  val reserved = with(LocalDensity.current) { base.lineHeight.toDp() * NAME_LINES }
-  Box(modifier = modifier.fillMaxWidth().height(reserved), contentAlignment = Alignment.TopStart) {
-    Text(text = title, style = style, color = color, maxLines = NAME_LINES, overflow = TextOverflow.Ellipsis)
-  }
+  // Le due righe le riserva il testo stesso (`minLines`), non un'altezza calcolata a parte. L'altezza vera di due righe si arrotonda riga per riga: con il
+  // testo piu' grande del normale, o a una densita' non intera (2,625 sui telefoni da 411 dp, 2,8125), superava di qualche pixel `lineHeight * 2`, e Compose
+  // dentro quell'altezza teneva una riga sola con i puntini, lasciando vuota la seconda (FAB-30 della review generale). Il corpo ridotto tiene l'interlinea
+  // del corpo di serie (cambia solo `fontSize`), quindi un nome ridotto e uno normale hanno sotto il conteggio alla stessa altezza.
+  Text(
+    text = title,
+    style = style,
+    color = color,
+    minLines = NAME_LINES,
+    maxLines = NAME_LINES,
+    overflow = TextOverflow.Ellipsis,
+    modifier = modifier.fillMaxWidth(),
+  )
 }
 
 /** Le righe del nome: due, sempre riservate. */

@@ -17576,3 +17576,38 @@ delle Raccolte e' `onOpenEntry` di `AppNavHost`; nessun widget, notifica, scorci
 - Il corpo di «Messaggistica» scende a circa il 93% per entrare in una cella da 98,7 dp (alternative: accorciare il nome della voce fissa, o due colonne su 360 dp).
 - Le due righe del nome sono sempre riservate: un nome di una riga lascia un vuoto sopra il conteggio (come deciso).
 - L'engine non e' stato toccato; nessun difetto dell'engine trovato.
+
+## K8: rifiniture dell'ultimo passaggio dei critici (FAB-30 = GS-20 = GF-30, FAB-31, GF-31, OA-30) (10/11)
+
+Correzioni piccole fatte dall'orchestratore dopo l'ultima verifica dei cinque critici (review generale giro 3, fase grafica giro 2).
+
+- **FAB-30 = GS-20 = GF-30 (tre critici indipendenti): nella scheda Album, con il testo piu' grande del normale o a densita' non intera, il
+  nome restava su una riga con i puntini e una riga vuota sotto.** La correzione di K7 riservava le due righe con un'altezza calcolata a
+  parte (`lineHeight * 2`); l'altezza vera di due righe si arrotonda riga per riga e a 1,15x, a 1,3x e a densita' 2,625 o 2,8125 era piu'
+  alta di qualche pixel, quindi Compose teneva una riga sola. Ora le due righe le riserva il testo stesso
+  (`Text(minLines = 2, maxLines = 2)` in `feature-albums/.../tab/TileName.kt`); il corpo ridotto tiene l'interlinea del corpo di serie,
+  quindi i conteggi restano allineati. Sull'S25 (densita' 3, testo normale) e sul Tab S9 non cambia niente: gli screenshot a testo normale
+  e del tablet sono identici al pixel; cambiano i quattro del telefono a testo grande in `docs/screenshots/beta-grafica/G2b/`.
+  - Prove nuove in `AlbumsTabNamesTest`: nome lungo su due righe a 1,15x, a 1,3x e a densita' 2,625 (`w411dp-h2400dp-420dpi`). Contro il
+    codice di K7 cadono tutte e tre (batch `orch-k8-rossa`: 10 prove, 3 rosse); con la correzione la suite e' verde (669 prove).
+- **FAB-31: dopo «Prima mettili al sicuro» il passo seguente tornava al singolare femminile.** Tre frasi di
+  `feature-backup/src/main/res/values/strings_backup_free.xml` rese neutre nel numero e nel genere, senza contare gli elementi: «Parte il
+  backup e poi controllo sul NAS…», «Adesso non si può mettere al sicuro», «Non ancora al sicuro». **Scelta di testo da rivedere con
+  l'utente** (l'alternativa sono tre `plurals` contati sugli elementi).
+- **GF-31: nella Diagnostica il nome del file si separava dall'estensione («AppRoot. / kt:45»).** `withBreakOpportunities`
+  (`feature-diagnostics/.../ui/DiagnosticsRows.kt`) non mette piu' un'opportunita' di andare a capo davanti a un'estensione seguita dal
+  numero di riga. Prova nuova `BreakOpportunitiesTest` (3). Gli screenshot della Diagnostica (`2-P8/`, `beta-grafica/rg-b/`) vanno
+  riregistrati.
+- **OA-30:** il commento di `openEntry` (`feature-albums/.../nav/AlbumsNavigation.kt`) dice cio' che succede ora a `NewAlbum`.
+
+### Cosa resta (debito dichiarato dai critici, non corretto)
+- `AlbumEntryTarget.NewAlbum`, la voce `albums/new` e la sua stringa esistono ancora (le produce il fornitore della sezione Album, che non
+  si mostra piu'); la regola di `NoHandWrittenStyleTest` ammette un corpo calcolato dal token; il cablaggio dell'host dei pop-up e'
+  ricopiato in una prova (GF-32).
+- La scelta fra "due righe sempre riservate" e "conteggio subito sotto il nome" nella scheda Album resta dell'utente (un critico consiglia
+  la seconda, riservando l'altezza del blocco intero).
+
+### Da provare sul telefono
+1. Scheda Album con il testo grande di Android (e con lo zoom dello schermo cambiato): i nomi lunghi stanno su due righe.
+2. Selezione con piu' elementi non al sicuro -> «Elimina dal telefono» -> «Metti al sicuro»: le frasi non parlano al singolare.
+3. Diagnostica -> Avvisi di Android con un blocco registrato: «AppRoot.kt:45» resta insieme.

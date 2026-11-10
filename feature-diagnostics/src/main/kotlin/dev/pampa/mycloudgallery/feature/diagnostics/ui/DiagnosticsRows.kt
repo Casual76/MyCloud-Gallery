@@ -173,13 +173,15 @@ internal fun ageText(millis: Long): String {
  * GF-21: il punto del codice di un errore registrato («LibraryViewModel$load$1.invokeSuspend (LibraryViewModel.kt:120)») e' una parola sola piu' larga della riga a 360 dp e
  * si spezzava a meta' («invokeS/uspend»). Prima di un `$` e dopo un punto fra due nomi si mette un'opportunita' di andare a capo invisibile (U+200B): il nome si spezza
  * fra i suoi pezzi, non dentro una parola. Le frasi, i numeri decimali e le date non cambiano (il punto di «1,2 s» o di «Mer. 3» non e' fra due nomi).
+ * Il nome di un file non si separa dalla sua estensione (GF-31: «AppRoot. / kt:45»): dopo il punto di «AppRoot.kt:45» non c'e' opportunita'.
  */
 internal fun String.withBreakOpportunities(): String =
   replace(BREAK_BEFORE_DOLLAR) { "${BREAK_OPPORTUNITY}${it.value}" }.replace(BREAK_AFTER_DOT) { "${it.value}${BREAK_OPPORTUNITY}" }
 
 private const val BREAK_OPPORTUNITY = '\u200B'
 private val BREAK_BEFORE_DOLLAR = Regex("(?<=[A-Za-z0-9])[$]")
-private val BREAK_AFTER_DOT = Regex("(?<=[A-Za-z0-9])[.](?=[A-Za-z])")
+// Dopo un punto fra due nomi, ma non davanti a un'estensione seguita dal numero di riga («.kt:120», «.java:45»).
+private val BREAK_AFTER_DOT = Regex("(?<=[A-Za-z0-9])[.](?=[A-Za-z])(?![A-Za-z]{1,5}:[0-9])")
 
 /** «41 ms», «1,2 s»: la durata di una fase del test. */
 @Composable

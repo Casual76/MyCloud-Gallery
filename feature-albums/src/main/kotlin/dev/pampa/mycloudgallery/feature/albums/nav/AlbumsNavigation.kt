@@ -83,7 +83,11 @@ fun NavController.afterRulesSaved(id: AlbumId) {
   if (below?.id != id.value) openAlbum(id)
 }
 
-/** Apre la destinazione di una voce delle sezioni delle Raccolte ([AlbumEntryTarget.parse]); `NewAlbum` la gestisce chi ha il foglio "Nuovo album". */
+/**
+ * Apre la destinazione di una voce delle sezioni delle Raccolte ([AlbumEntryTarget.parse]). `NewAlbum` porta all'elenco "Tutti gli album", dove c'e' il
+ * foglio "Nuovo album" che passa da `ManualAlbumCreator`: l'ospite a parte di `:app` che apriva quel foglio da qui e' stato tolto (OA-20 della review
+ * generale), e la sezione Album delle Raccolte, la sola che produceva quella voce, non si mostra piu' dalla scheda Album.
+ */
 fun NavController.openEntry(target: AlbumEntryTarget) {
   when (target) {
     is AlbumEntryTarget.Album -> openAlbum(target.id)

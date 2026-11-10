@@ -108,6 +108,37 @@ class AlbumsTabNamesTest : AlbumsComposeTest() {
     assertThat(layout.isLineEllipsized(1)).isTrue()
   }
 
+  /**
+   * FAB-30 (review generale, giro 3): con il testo piu' grande del normale le due righe vere erano piu' alte dell'altezza riservata a parte, e il nome restava su
+   * una riga con i puntini e una riga vuota sotto. Ora le due righe le riserva il testo stesso.
+   */
+  @Test
+  fun unNomeLungoStaSuDueRigheConIlTestoUnPoPiuGrande() = assertLongNameOnTwoLines(1.15f)
+
+  @Test
+  fun unNomeLungoStaSuDueRigheConIlTestoGrande() = assertLongNameOnTwoLines(LARGE_TEXT)
+
+  private fun assertLongNameOnTwoLines(scale: Float) {
+    val long = "Compleanno della nonna Giuseppina"
+    val state = AlbumsTabState.Ready(listOf(album(1, long, 7)), pinned = 0)
+    show(fontScale = scale) { screen(state)() }
+    val layout = layoutsOf(long).single()
+    assertWithMessage("a testo $scale il nome lungo deve usare tutte e due le righe").that(layout.lineCount).isEqualTo(2)
+    assertWithMessage("a testo $scale la prima riga non finisce con i puntini").that(layout.isLineEllipsized(0)).isFalse()
+  }
+
+  /** FAB-30, l'altro caso: una densita' non intera (2,625, i telefoni larghi 411 dp), dove l'altezza di ogni riga si arrotonda in su. */
+  @Test
+  @Config(qualifiers = "w411dp-h2400dp-420dpi")
+  fun unNomeLungoStaSuDueRigheAncheADensitaNonIntera() {
+    val long = "Compleanno della nonna Giuseppina"
+    val state = AlbumsTabState.Ready(listOf(album(1, long, 7)), pinned = 0)
+    show { screen(state)() }
+    val layout = layoutsOf(long).single()
+    assertThat(layout.lineCount).isEqualTo(2)
+    assertThat(layout.isLineEllipsized(0)).isFalse()
+  }
+
   /** Due celle vicine, il nome di una riga e quello di due: i conteggi stanno alla stessa altezza (e quello della terza, "Compleanno", pure). */
   @Test
   fun iConteggiSuUnaRigaESuDueStannoAllaStessaAltezzaA360Dp() {

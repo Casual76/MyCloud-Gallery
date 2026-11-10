@@ -255,12 +255,14 @@
   <string name="backup_free_phone_action_trash">Elimina dal telefono</string>
 
   <!-- Correzioni 5B (LS-4): "Metti al sicuro" fa partire cio' che serve a quel media e il foglio si aggiorna da solo. -->
+  <!-- FAB-31: dopo «Prima mettili al sicuro» il passo seguente non deve tornare al singolare ne' al femminile. Queste frasi non contano gli elementi: valgono per
+       uno e per molti, per una foto e per un video. -->
   <string name="backup_free_phone_safeguarding_title">Sto mettendo al sicuro…</string>
-  <string name="backup_free_phone_safeguarding_detail">Parte il backup e controllo la copia sul NAS. Il foglio si aggiorna da solo quando ho finito.</string>
+  <string name="backup_free_phone_safeguarding_detail">Parte il backup e poi controllo sul NAS. Il foglio si aggiorna da solo quando ho finito.</string>
   <string name="backup_free_phone_note_sources_title">Questa cartella non è nel backup</string>
   <string name="backup_free_phone_note_sources_detail">Aggiungi la cartella nelle impostazioni del backup: quando la copia è controllata sul NAS potrai toglierla dal telefono.</string>
-  <string name="backup_free_phone_note_not_now_title">Adesso non posso metterla al sicuro</string>
+  <string name="backup_free_phone_note_not_now_title">Adesso non si può mettere al sicuro</string>
   <string name="backup_free_phone_note_not_now_detail">Il backup non è pronto: riprova più tardi dalla pagina Backup.</string>
-  <string name="backup_free_phone_note_waiting_title">Non è ancora al sicuro</string>
+  <string name="backup_free_phone_note_waiting_title">Non ancora al sicuro</string>
   <string name="backup_free_phone_note_waiting_detail">Il backup ci sta ancora lavorando: riapri questo foglio più tardi.</string>
 </resources>

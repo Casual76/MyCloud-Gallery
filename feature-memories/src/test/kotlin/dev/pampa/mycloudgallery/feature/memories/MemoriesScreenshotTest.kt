@@ -40,7 +40,7 @@ import org.robolectric.annotation.GraphicsMode
  * Gli screenshot dei ricordi (Fase 9, P9): **ogni stato del §1.5** -- la sezione delle Raccolte (pronta, vuota, libreria non pronta, in generazione), la pagina del
  * ricordo (anni fa, viaggio con "Apri l'album", persona, primo fotogramma, "non c'e' piu'", non trovato, con "Annulla", i due fogli), "Tutti i ricordi" (con e senza
  * copertine, vuoto), la presentazione (titolo, foto, video, pausa, animazioni ridotte, TalkBack, avviso della musica, carta finale, "non c'e' piu'") e le Impostazioni
- * (di serie, complete, senza persone, con permesso chiedibile, negato e canale spento, brani). Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo a
+ * (di serie, complete, senza persone, con permesso chiedibile, negato e canale spento, brani). Chiaro e scuro, telefono (360 dp) e tablet (1280 dp), piu' il testo a
  * 1,3x sul telefono. **Nessuna foto vera**: gradienti; titoli, luoghi e nomi inventati.
  *
  * `gradlew :feature-memories:recordRoborazziDebug --tests "*MemoriesScreenshot*"` scrive i PNG in `docs/screenshots/9-P9/`. Nei normali `testDebugUnitTest` si
@@ -194,7 +194,7 @@ internal abstract class MemoriesShots(private val dark: Boolean, private val dev
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 internal class MemoriesPhoneScreenshotTest(dark: Boolean) : MemoriesShots(dark, "telefono") {
   companion object {
     @JvmStatic

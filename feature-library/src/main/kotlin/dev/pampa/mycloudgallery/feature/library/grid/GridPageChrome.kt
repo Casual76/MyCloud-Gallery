@@ -81,9 +81,15 @@ internal fun rememberAnyContentChromeStyle(): GalleryChromeStyle = designAnyCont
 
 /**
  * Che cosa dice l'etichetta in alto: il titolo e, sotto, il luogo o il riepilogo. [shorterTitles]: le forme piu' corte del titolo (una
- * data), dalla piu' lunga alla piu' stretta; l'etichetta mostra la prima che entra invece dei puntini (GF-2).
+ * data), dalla piu' lunga alla piu' stretta; l'etichetta mostra la prima che entra invece dei puntini (GF-2). [shorterSubtitles]: se il sottotitolo e' un
+ * riepilogo (un conteggio) le sue forme piu' corte: si mostra la prima che entra, e se nessuna entra la seconda riga manca (GF-22); null = si tronca con i puntini.
  */
-internal data class ChromeLabelText(val title: String, val subtitle: String?, val shorterTitles: List<String> = emptyList())
+internal data class ChromeLabelText(
+  val title: String,
+  val subtitle: String?,
+  val shorterTitles: List<String> = emptyList(),
+  val shorterSubtitles: List<String>? = null,
+)
 
 /** L'altezza della chrome in alto di una pagina a griglia, barra di stato compresa (`galleryTopChromeHeight`). */
 @Composable
@@ -115,6 +121,7 @@ internal fun GridTopChrome(
     backDescription = stringResource(R.string.grid_back),
     showCommands = showCommands,
     shorterTitles = label.shorterTitles,
+    shorterSubtitles = label.shorterSubtitles,
     commands = commands,
   )
 }

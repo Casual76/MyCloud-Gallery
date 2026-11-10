@@ -358,8 +358,12 @@ private fun libraryLabel(state: LibraryTabState, section: MediaGridSection?): Ch
     grid.selecting -> ChromeLabelText(countText(R.plurals.selection_count, selected.size), null)
     section != null -> ChromeLabelText(section.title, listOfNotNull(filter, section.place).joinToString(" · ").ifEmpty { null }, section.shorterTitles)
     else -> {
-      val summary = if (state.photoCount + state.videoCount > 0) photoVideoSummary(state.photoCount, state.videoCount) else null
-      ChromeLabelText(stringResource(R.string.library_title), listOfNotNull(filter, summary).joinToString(" · ").ifEmpty { null })
+      val total = state.photoCount + state.videoCount
+      val summary = if (total > 0) photoVideoSummary(state.photoCount, state.videoCount) else null
+      // GF-22: il riepilogo si mostra intero o non si mostra («1.817 foto, 18…» a 360 dp con quattro tasti non si legge): prima la forma intera, poi il totale
+      // («2.000 elementi», con il plurale giusto), poi il solo filtro (un filtro attivo si dice sempre) e, se nemmeno questo entra, niente seconda riga.
+      val shorter = if (summary == null) null else listOfNotNull(listOfNotNull(filter, countText(R.plurals.collection_count, total)).joinToString(" · "), filter)
+      ChromeLabelText(stringResource(R.string.library_title), listOfNotNull(filter, summary).joinToString(" · ").ifEmpty { null }, shorterSubtitles = shorter)
     }
   }
 }

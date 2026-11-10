@@ -181,7 +181,8 @@ fun galleryTopChromeHeight(): Dp = WindowInsets.statusBars.asPaddingValues().cal
  * La riga di chrome in alto: sotto la barra di stato, [onBack] (una capsula con la freccia, se c'e'), l'etichetta con [title] e
  * [subtitle] e la capsula dei comandi ([commands], se [showCommands]). Ogni pezzo e' vetro adattivo sul [content] che gli passa
  * sotto (null = caso peggiore). [topChrome] e' [galleryTopChromeHeight]. [shorterTitles]: le forme piu' corte di [title], per
- * quando la riga e' stretta ([GalleryChromeLabel]).
+ * quando la riga e' stretta ([GalleryChromeLabel]). [shorterSubtitles]: se [subtitle] e' un riepilogo da mostrare intero o niente (GF-22),
+ * le sue forme piu' corte; null = il sottotitolo si tronca con i puntini (il luogo).
  *
  * Le icone della barra di stato seguono il tema: la sfumatura di bordo ([GalleryTopEdgeScrim]) e' densa proprio li'.
  */
@@ -197,6 +198,7 @@ fun GalleryTopChrome(
   backDescription: String = stringResource(R.string.topbar_back),
   showCommands: Boolean = true,
   shorterTitles: List<String> = emptyList(),
+  shorterSubtitles: List<String>? = null,
   commands: @Composable RowScope.() -> Unit,
 ) {
   val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -241,6 +243,7 @@ fun GalleryTopChrome(
         backdrop = backdrop,
         modifier = Modifier.onGloballyPositioned { labelBounds.settle(it.inChromeContent(content), slack) }.galleryChromeTag("titolo"),
         shorterTitles = shorterTitles,
+        shorterSubtitles = shorterSubtitles,
       )
     }
     if (showCommands) {

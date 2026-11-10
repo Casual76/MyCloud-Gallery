@@ -17433,3 +17433,51 @@ il dato personale; tre righe.
 6. Viewer, copie simili: "Mostra questa come principale" e "Separa" -> il gruppo resta com'era.
 7. Lettura del testo: "Spegni" -> spenta subito; dopo aver liberato spazio e riavviato l'app, e' spenta anche su un altro dispositivo dell'account.
 8. In tutti i casi: nessuna chiusura dell'app. E "Animazione delle foto in movimento" torna dov'era (K3b, invariato).
+## K6: tornando alla Libreria la griglia non si muove (GS-10, 10/11)
+Branch `fix/k6-ancora-libreria` (base `integra/beta-grafica`, `5d98134d`). Rilievo minore GS-10: da K3a le pagine dello scaffold stanno in un
+`rememberSaveableStateHolder`, e tornando alla Libreria dopo Cerca o un'altra scheda la pagina riapplicava alla griglia l'ancora salvata uscendo. Con il
+centro dell'area utile su un'intestazione l'ancora e' il bordo alto della prima foto del giorno (`TimelineGridAnchors.anchorAt`), e rimetterla al centro
+faceva saltare la griglia fino all'altezza dell'intestazione (55 px nella prova del critico). `engine/` non toccato, nessuna dipendenza nuova.
+
+### Scelta: la prima strada del brief
+- **La griglia viva gia' in posizione non riceve l'ancora.** `MediaGridState.restorePosition` non fa niente se la posizione di adesso, salvata
+  (`savePosition()`), e' uguale a quella da rimettere. La griglia della Libreria sta nel ViewModel e conserva scorrimento, layout e misura mentre la
+  pagina e' coperta (il layout e' lo stesso oggetto: `GridLayoutStore` lo tiene finche' gli input sono uguali, e `onLayoutShown` non fa niente),
+  quindi tornando la posizione salvata e' la sua stessa: la si lascia stare. Prima della misura nuova la griglia ha ancora la misura vecchia, quindi
+  il confronto vale anche dopo una ricreazione con il ViewModel vivo; un cambio di misura (rotazione, finestra) lo ancora `onLayoutShown` quando il
+  layout nuovo entra, come quando la Libreria e' in vista.
+- **Una griglia nuova** (processo ripartito, avvio con `takeStartPosition`) non ha layout: l'ancora resta in attesa e si applica al primo layout,
+  come prima. Se la griglia viva si fosse mossa, l'ancora si applica.
+- **Perche' non la seconda strada** (salvare per un'intestazione la distanza vera): toccava `TimelineGridAnchors`, che e' anche l'ancora del pinch,
+  e il giro salva-ripristina sarebbe stato neutro solo a meno di arrotondamenti; la prima strada non ricalcola niente e toglie anche il
+  `requestScrollToItem` che K3a faceva a ogni ritorno sulla posizione in cui la griglia era gia' (il rischio annotato in K3a).
+- La semantica dell'ancora del pinch non cambia (`TimelineGridAnchors` non toccato; il pinch passa da `onLayoutShown`, non da `restorePosition`).
+- Commenti aggiornati in `MainScaffold.kt` e `PositionKeeper` (`LibraryParts.kt`). Nelle prove, `GalleryScaffold` (`ScaffoldScenes.kt`) accetta il
+  dettaglio delle voci delle Raccolte (`collectionsEntryDetail`, di serie null: gli screenshot non cambiano).
+
+### Prove
+- `app/.../main/LibreriaAlRitornoTest` (nuovo, scaffold delle prove a 360 x 780 dp): centro **su un'intestazione** e **dentro una foto**, premesse
+  asserite (il tipo di riga sotto il centro, il centro lontano dai bordi della riga, la griglia non in fondo, la posizione salvata non "sui piu' recenti");
+  ritorno da Cerca, da Album e da Raccolte a Giorni, Mesi, Anni e Tutte: stessa prima riga, scostamento entro 1 px, stessa posizione salvata; la
+  pagina della Libreria esce davvero dalla composizione (niente menu "Vista"). Ricreazione: con la griglia viva non si muove; con una griglia nuova
+  torna sulla stessa foto; con la Libreria coperta da Album mentre l'activity si ricrea, tornando e' sulla stessa foto (il guadagno di K3a).
+- Rosse sulla base: **5 su 10**, esattamente quelle con il centro su un'intestazione (Giorni via Cerca e via Album, Mesi via Raccolte, Anni via Cerca,
+  ricreazione con la griglia viva: scostamento o prima riga cambiati). Verdi con la correzione.
+- `SchedeCheRicordanoTest`: in piu' la verifica chiesta dal critico, sul tablet il pannello delle Raccolte ritrova la voce scelta dopo Cerca.
+
+### Rischi per le prestazioni
+Nessuno nuovo: al ritorno sulla Libreria si calcola una volta `savePosition()` (aritmetica sulle somme prefisse e un `idAt`), e si risparmia il
+`requestScrollToItem` che prima rimisurava la lista. Niente per fotogramma, niente vetro.
+
+### Cosa resta
+- Dove l'ancora serve davvero (processo ripartito, istantanea nuova o filtro cambiato mentre si guarda, rotazione) un centro su un'intestazione si
+  ancora ancora al bordo alto della prima foto del giorno: la griglia puo' spostarsi fino all'altezza di un'intestazione. E' il comportamento di
+  sempre (E-P18 promette "la stessa foto", e la mantiene); toglierlo vorrebbe dire salvare la distanza dentro l'intestazione (la seconda strada),
+  senza cambiare l'ancora del pinch.
+
+### Da provare sul telefono (S25, poi Tab S9)
+1. Libreria lontano dai recenti, con un'intestazione di giorno a meta' schermo: apri e chiudi Cerca; passa ad Album e torna; passa a Raccolte e
+   torna. La griglia non si muove di un pixel. Lo stesso ai livelli Mesi e Anni.
+2. Lo stesso con una foto a meta' schermo.
+3. Cambia il tema (chiaro/scuro) con la Libreria aperta lontano dai recenti: si resta li'. Ruota il telefono: si resta sulla stessa foto.
+4. "Libreria" toccata di nuovo riporta sui piu' recenti; il viewer affiancato del tablet si chiude aprendo Cerca, come prima.

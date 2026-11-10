@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -174,10 +176,19 @@ private fun ReceivedCard(item: ReceivedItem, actions: ReceivedActions) {
   )
 }
 
-/** "Riprova" e "Scarta" affiancati; per TalkBack ognuno dice di quale cartella parla (nell'elenco i tasti sono tanti e uguali). */
+/**
+ * "Riprova" e "Scarta": affiancati se entrano interi, uno sotto l'altro se no (a 360 dp, accanto alla miniatura, la colonna e' di ~200 dp e "Riprova"
+ * andava a capo a meta' parola). Il tasto sta alla sua larghezza naturale e si allarga a dividere la riga ([weight]); per TalkBack ognuno dice di
+ * quale cartella parla (nell'elenco i tasti sono tanti e uguali).
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ReceivedButtons(item: ReceivedItem, folder: String, actions: ReceivedActions) {
-  Row(horizontalArrangement = Arrangement.spacedBy(BackupDimens.BlockGap), modifier = Modifier.fillMaxWidth()) {
+  FlowRow(
+    horizontalArrangement = Arrangement.spacedBy(BackupDimens.BlockGap),
+    verticalArrangement = Arrangement.spacedBy(BackupDimens.BlockGap),
+    modifier = Modifier.fillMaxWidth(),
+  ) {
     if (item.canRetry) {
       val retryName = stringResource(R.string.backup_received_retry_for, folder)
       // "Riprova" e' il tasto pieno di un problema; per un file che aspetta e' una spinta in piu', quindi piu' quieta.
@@ -186,6 +197,7 @@ private fun ReceivedButtons(item: ReceivedItem, folder: String, actions: Receive
         onClick = { actions.retry(item) },
         modifier = Modifier.weight(1f).semantics { contentDescription = retryName },
         style = if (item.phase == ReceivedPhase.PROBLEM) FluidButtonStyle.Filled else FluidButtonStyle.Tinted,
+        fillWidth = false,
       )
     }
     if (item.canDiscard) {
@@ -195,6 +207,7 @@ private fun ReceivedButtons(item: ReceivedItem, folder: String, actions: Receive
         onClick = { actions.askDiscard(item) },
         modifier = Modifier.weight(1f).semantics { contentDescription = discardName },
         style = FluidButtonStyle.Tinted,
+        fillWidth = false,
       )
     }
   }

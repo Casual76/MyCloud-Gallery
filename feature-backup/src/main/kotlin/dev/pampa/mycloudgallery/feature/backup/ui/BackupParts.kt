@@ -108,8 +108,9 @@ internal fun BackupButton(
   modifier: Modifier = Modifier,
   style: FluidButtonStyle = FluidButtonStyle.Filled,
   enabled: Boolean = true,
+  fillWidth: Boolean = true,
 ) {
-  FluidButton(text = label, onClick = onClick, modifier = modifier, style = style, size = FluidButtonSize.Large, enabled = enabled, fillWidth = true)
+  FluidButton(text = label, onClick = onClick, modifier = modifier, style = style, size = FluidButtonSize.Large, enabled = enabled, fillWidth = fillWidth)
 }
 
 /** Un'intestazione di gruppo quieta, nella lingua delle altre pagine (la didascalia sopra un gruppo). */

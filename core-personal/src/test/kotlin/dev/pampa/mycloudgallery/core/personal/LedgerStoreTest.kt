@@ -258,16 +258,19 @@ class LedgerStoreTest {
   }
 
   @Test
-  fun unGuastoDelDiscoNonCambiaLoStatoSalvatoESiRiprendeAlSalvataggioDopo() = runTest {
+  fun unGuastoDelDiscoNonCambiaNienteNeSulDiscoNeInMemoriaESiRiprovaDopo() = runTest {
     val ledger = InMemoryPersonalLedger()
     val store = store(ledger)
     store.set(fav1, PersonalValue.Flag(true))
     ledger.failNextSave = true
     assertThrows(IOException::class.java) { runBlocking { store.set(hid1, PersonalValue.Flag(true)) } }
-    // Su disco c'e' ancora lo stato di prima; in memoria la modifica c'e' e il prossimo salvataggio la porta.
+    // Ne' sul disco ne' in memoria: la modifica che non si e' potuta salvare non c'e' (SOL-10: chi chiama dice "non salvato", e dirlo e' vero).
     assertThat(ledger.snapshot.entries.keys).containsExactly(fav1)
-    store.set(flagKey(m2, PersonalFields.FAVORITE), PersonalValue.Flag(true))
-    assertThat(ledger.snapshot.entries.keys).containsExactly(fav1, hid1, flagKey(m2, PersonalFields.FAVORITE))
+    assertThat(store.entries.value.keys).containsExactly(fav1)
+    assertThat(store.effectiveEntries.value.keys).containsExactly(fav1)
+    // Chi riprova la porta sul disco.
+    store.set(hid1, PersonalValue.Flag(true))
+    assertThat(ledger.snapshot.entries.keys).containsExactly(fav1, hid1)
   }
 
   // --- Revoca e modifiche locali del catalogo -----------------------------------------------------------------------------------------

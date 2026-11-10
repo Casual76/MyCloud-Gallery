@@ -32,4 +32,18 @@ object QuietWrites {
     GalleryLog.w(TAG) { "preferenza non salvata: $label (${e.javaClass.simpleName})" }
     false
   }
+
+  /**
+   * Come [attempt], ma per una scrittura che da' un valore (l'esito di una modifica agli album, per esempio): null se non si e' riusciti a scrivere, e allora **non e' cambiato niente**
+   * (la scrittura deve essere "tutto o niente": `LedgerPersonalStore` lo e', anche in memoria). K3b, SOL-10 e OA-11 della review generale: le azioni di un album scrivono il registro dei dati
+   * personali, che con la memoria piena lancia `IOException`.
+   */
+  suspend fun <T : Any> attemptResult(label: String, write: suspend () -> T): T? = try {
+    write()
+  } catch (e: CancellationException) {
+    throw e
+  } catch (e: IOException) {
+    GalleryLog.w(TAG) { "scrittura non salvata: $label (${e.javaClass.simpleName})" }
+    null
+  }
 }

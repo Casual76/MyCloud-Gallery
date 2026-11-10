@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.personal.settings
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.core.model.AlbumSort
 import dev.pampa.mycloudgallery.core.personal.contract.MemoriesRecords
@@ -404,7 +405,7 @@ class PersonalMemories(private val store: PersonalStore) {
     val value = MemoriesRecords.seenValue(day)
     val now = seenDay(memoryId)
     if (now != null && now >= day) return
-    store.set(key, value)
+    QuietWrites.attempt("ricordo visto") { store.set(key, value) }
   }
 
   /** Il giorno (`aaaammgg`) dell'ultima visione di [memoryId], o null se non e' mai stato visto (o il valore non si capisce). */
@@ -415,7 +416,7 @@ class PersonalMemories(private val store: PersonalStore) {
 
   /** "Non mostrare questo ricordo" ([dismissed] vero) o "Annulla" (falso: la lapide, D10). */
   suspend fun dismiss(memoryId: String, dismissed: Boolean = true) {
-    store.set(MemoriesRecords.dismissedKey(memoryId), if (dismissed) PersonalValue.Flag(true) else PersonalValue.Removed)
+    QuietWrites.attempt("ricordo scartato") { store.set(MemoriesRecords.dismissedKey(memoryId), if (dismissed) PersonalValue.Flag(true) else PersonalValue.Removed) }
   }
 
   /** Se [memoryId] e' scartato ("Non mostrare"): non torna su nessun dispositivo dell'account, nemmeno fra un anno (E-MEM9). */

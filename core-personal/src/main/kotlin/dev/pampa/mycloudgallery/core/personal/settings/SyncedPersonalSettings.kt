@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery.core.personal.settings
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalChange
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKey
@@ -41,7 +43,7 @@ class SyncedPersonalSettings(
     .stateIn(scope, SharingStarted.Eagerly, coversOf(store.entries.value))
 
   override suspend fun setShowAlbumCovers(show: Boolean) {
-    store.set(COVERS, PersonalValue.Flag(show))
+    QuietWrites.attempt("copertine degli album") { store.set(COVERS, PersonalValue.Flag(show)) }
   }
 
   override val privateAreaExclusions: StateFlow<Set<SharePath>> = store.entries
@@ -52,12 +54,15 @@ class SyncedPersonalSettings(
   override suspend fun setPrivateAreaExclusions(folders: Set<SharePath>) {
     val wanted = folders.filter { it.value.length <= PersonalLimits.MAX_TEXT }.associateBy { PersonalFields.privateExclusion(it) }
     val current = exclusionsOf(store.entries.value)
+    // Un lotto solo: le cartelle escluse o ci sono tutte o non cambia niente (con la memoria piena un elenco a meta' sarebbe peggio di nessuno).
+    val changes = ArrayList<PersonalChange>()
     for ((field, folder) in wanted) {
-      if (field !in current) store.set(exclusionKey(field), PersonalValue.Text(folder.value))
+      if (field !in current) changes += PersonalChange(exclusionKey(field), PersonalValue.Text(folder.value))
     }
     for (field in current.keys) {
-      if (field !in wanted) store.set(exclusionKey(field), PersonalValue.Removed)
+      if (field !in wanted) changes += PersonalChange(exclusionKey(field), PersonalValue.Removed)
     }
+    QuietWrites.attempt("cartelle escluse dell'area privata") { store.setAll(changes) }
   }
 
   private fun coversOf(entries: Map<PersonalKey, PersonalEntry>): Boolean =

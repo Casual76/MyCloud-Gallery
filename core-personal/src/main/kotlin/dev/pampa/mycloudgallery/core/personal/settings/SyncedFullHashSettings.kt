@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.personal.settings
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.personal.contract.FullHashPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
@@ -36,7 +37,7 @@ class SyncedFullHashSettings(
     .stateIn(scope, SharingStarted.Eagerly, nightlyOf(store.effectiveEntries.value))
 
   override suspend fun setFullHashNightly(on: Boolean) {
-    store.set(KEY, PersonalValue.Flag(on))
+    QuietWrites.attempt("impronta completa di notte") { store.set(KEY, PersonalValue.Flag(on)) }
   }
 
   private fun nightlyOf(entries: Map<PersonalKey, PersonalEntry>): Boolean =

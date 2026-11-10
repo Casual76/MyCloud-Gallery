@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.personal.settings
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalKey
@@ -44,7 +45,7 @@ class SyncedSearchSettings(
     .stateIn(scope, SharingStarted.Eagerly, readingOf(store.effectiveEntries.value))
 
   override suspend fun setTextReading(choice: TextReadingChoice) {
-    store.set(READING, TextReadingChoice.toValue(choice))
+    QuietWrites.attempt("lettura del testo nelle foto") { store.set(READING, TextReadingChoice.toValue(choice)) }
   }
 
   override val searchOrder: StateFlow<SearchOrderSetting> = store.effectiveEntries
@@ -53,7 +54,7 @@ class SyncedSearchSettings(
     .stateIn(scope, SharingStarted.Eagerly, orderOf(store.effectiveEntries.value))
 
   override suspend fun setSearchOrder(order: SearchOrderSetting) {
-    store.set(ORDER, PersonalValue.Text(order.code))
+    QuietWrites.attempt("ordine della ricerca") { store.set(ORDER, PersonalValue.Text(order.code)) }
   }
 
   private fun readingOf(entries: Map<PersonalKey, PersonalEntry>): TextReadingChoice =

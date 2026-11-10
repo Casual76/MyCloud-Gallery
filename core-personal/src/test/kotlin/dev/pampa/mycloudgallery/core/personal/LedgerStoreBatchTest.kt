@@ -97,7 +97,7 @@ class LedgerStoreBatchTest {
   }
 
   @Test
-  fun seIlDiscoCadeSulRegistroNonCeNessunaVoceDelLotto_eIlSalvataggioDopoLePortaTutte() = runTest {
+  fun seIlDiscoCadeSulRegistroNonCeNessunaVoceDelLottoNeSulDiscoNeInMemoria() = runTest {
     val ledger = InMemoryPersonalLedger()
     val first = store(ledger)
     first.set(item(999), PersonalValue.Number(1))
@@ -108,10 +108,10 @@ class LedgerStoreBatchTest {
     assertThat(ledger.snapshot.entries.keys).containsExactly(item(999))
     assertThat(store(ledger).state().keys).containsExactly(item(999))
 
-    // In memoria il lotto c'e' (come una modifica sola dopo un guasto del disco): il salvataggio dopo lo porta intero.
-    assertThat(first.entries.value).hasSize(51)
+    // In memoria nemmeno: il lotto non c'e' per nessuno (tutto o niente), e il salvataggio dopo non lo porta di nascosto sul disco.
+    assertThat(first.entries.value.keys).containsExactly(item(999))
     first.set(item(998), PersonalValue.Number(2))
-    assertThat(ledger.snapshot.entries).hasSize(52)
+    assertThat(ledger.snapshot.entries.keys).containsExactly(item(999), item(998))
   }
 
   @Test
@@ -123,7 +123,7 @@ class LedgerStoreBatchTest {
     assertThrows(IOException::class.java) { runBlocking { store.setAll(batch) } }
     assertThat(ledger.snapshot.entries).isEmpty()
 
-    // Chi chiama riprova: in memoria non cambia niente, ma cio' che non era arrivato sul disco ci arriva adesso.
+    // Chi chiama riprova: il lotto, che non c'era da nessuna parte, ora c'e' ovunque.
     store.setAll(batch)
     assertThat(ledger.snapshot.entries).hasSize(20)
   }

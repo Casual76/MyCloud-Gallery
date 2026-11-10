@@ -15,6 +15,7 @@ import dev.pampa.mycloudgallery.core.personal.contract.PersonalValidity
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalValue
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalVerdict
 import dev.pampa.mycloudgallery.core.trust.data.HeadMark
+import java.io.IOException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -111,9 +112,13 @@ class LedgerPersonalStore(
         fromCatalog[key] = projection.fingerprintOf(key)
       }
 
-      // 2. In memoria, tutto insieme: da qui al salvataggio niente sospende e niente puo' fallire. Una sola ora del NAS per il lotto.
+      // 2. Il lotto si applica a **copie** dello stato: finche' il registro non ha salvato, lo store non cambia (ne' per chi legge `entries`, ne' per il
+      // salvataggio dopo). Con la memoria piena `ledger.save` lancia `IOException` e il lotto non c'e' ne' sul disco ne' in memoria: chi chiama lo sa dall'eccezione,
+      // e l'interfaccia puo' dire "non salvato" senza mentire (prima in memoria il lotto restava, e un messaggio "non e' cambiato niente" non era vero: SOL-10, OA-11).
+      // Una sola ora del NAS per il lotto.
       val at = nasNow()
       var next: HashMap<PersonalKey, PersonalEntry>? = null
+      val nextPending = LinkedHashMap(pending)
       var pendingChanged = false
       val flags = LinkedHashMap<PersonalKey, FlagEffect>()
       val others = ArrayList<PersonalEntry>()
@@ -121,31 +126,42 @@ class LedgerPersonalStore(
         val key = change.key
         val value = change.value
         val known = (next ?: current)[key]
-        val effective = pending[key]?.value ?: known?.value
+        val effective = nextPending[key]?.value ?: known?.value
         val fp = change.fingerprint ?: known?.fingerprint ?: fromCatalog[key]
         if (value != effective) {
           if (at == null) {
             // Senza ora del NAS: se si torna al valore che lo stato gia' ha, non c'e' piu' niente da datare.
-            if (known?.value == value) pending.remove(key) else pending[key] = PendingChange(value, fp)
+            if (known?.value == value) nextPending.remove(key) else nextPending[key] = PendingChange(value, fp)
             pendingChanged = true
           } else {
-            pending.remove(key)
+            nextPending.remove(key)
             val map = next ?: HashMap(current).also { next = it }
             map[key] = PersonalEntry(key, causalTime(at, known), author, value, fp)
           }
         }
         if (key.kind == PersonalKind.MEDIA_FLAG) flags[key] = FlagEffect(value, fp) else others += PersonalEntry(key, known?.atNas ?: 0L, author, value, fp)
       }
-      val changed = next != null || pendingChanged
       val dated = next
-      if (dated != null) publishState(dated) else if (pendingChanged) emitEffective()
+      val changed = dated != null || pendingChanged
 
       // 3. Un salvataggio. L'effetto locale e' subito, anche se la modifica resta da datare: prima si salva (con le chiavi "da portare nel
       // catalogo"), poi si applica: se il processo muore o il catalogo fallisce in mezzo, al giro dopo `reproject` rifa' il passo.
-      unprojected += flags.keys
-      if (always || changed || flags.isNotEmpty() || unsaved) persist()
+      val nextUnprojected = LinkedHashSet(unprojected).also { it += flags.keys }
+      if (always || changed || flags.isNotEmpty() || unsaved) {
+        // Se non scrive lancia, e fin qui niente dello store e' stato toccato.
+        ledger.save(LedgerSnapshot(dated ?: current, nextPending, nextUnprojected, HashMap(marks), published))
+        unsaved = false
+      }
+      if (changed) {
+        pending.clear()
+        pending.putAll(nextPending)
+      }
+      unprojected.clear()
+      unprojected.addAll(nextUnprojected)
+      if (dated != null) publishState(dated) else if (pendingChanged) emitEffective()
 
-      // 4. Il catalogo.
+      // 4. Il catalogo. Il lotto e' gia' salvato: se il secondo salvataggio (le chiavi non piu' "da portare") non riesce, il lotto resta fatto e la chiave
+      // e' ancora "da portare" sul disco; al giro dopo `reproject` la rifa' (e `unsaved` fa salvare tutto alla prossima scrittura).
       if (flags.isNotEmpty()) {
         val now = effectiveNow()
         var resolved = false
@@ -156,7 +172,7 @@ class LedgerPersonalStore(
             resolved = true
           }
         }
-        if (resolved) persist()
+        if (resolved) persistAfterApplied()
       }
       for (entry in others) projection.apply(entry)
     }
@@ -346,6 +362,18 @@ class LedgerPersonalStore(
     unsaved = true
     ledger.save(LedgerSnapshot(current, LinkedHashMap(pending), LinkedHashSet(unprojected), HashMap(marks), published))
     unsaved = false
+  }
+
+  /**
+   * Il salvataggio che viene **dopo** una modifica gia' salvata e applicata (le chiavi portate nel catalogo): se non riesce non e' un errore della modifica, che c'e' (sul
+   * disco, in memoria e nel catalogo). Il disco ha ancora la chiave "da portare" (si rifa' al riavvio: la proiezione e' idempotente) e `unsaved` resta vero.
+   */
+  private suspend fun persistAfterApplied() {
+    try {
+      persist()
+    } catch (_: IOException) {
+      // `unsaved` e' rimasto vero: il salvataggio dopo scrive tutto.
+    }
   }
 
   /** L'ora di una modifica: quella del NAS, ma mai prima di cio' che si sapeva di quella chiave. */

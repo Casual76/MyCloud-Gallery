@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.core.personal.settings
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.personal.contract.MotionPersonalSettings
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
@@ -39,7 +40,8 @@ class SyncedMotionSettings(
     .stateIn(scope, SharingStarted.Eagerly, animationOf(store.effectiveEntries.value))
 
   override suspend fun setMotionAnimation(on: Boolean) {
-    store.set(KEY, PersonalValue.Flag(on))
+    // Memoria piena: l'interruttore resta com'era (lo stato non cambia) e l'app non si chiude (K3b, SOL-10).
+    QuietWrites.attempt("animazione delle foto in movimento") { store.set(KEY, PersonalValue.Flag(on)) }
   }
 
   private fun animationOf(entries: Map<PersonalKey, PersonalEntry>): Boolean =

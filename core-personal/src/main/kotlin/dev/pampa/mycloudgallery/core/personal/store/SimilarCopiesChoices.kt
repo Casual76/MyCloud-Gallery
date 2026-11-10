@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.core.personal.store
 
+import dev.pampa.mycloudgallery.core.common.files.QuietWrites
 import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.personal.contract.PersonalChange
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalEntry
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFields
 import dev.pampa.mycloudgallery.core.personal.contract.PersonalFingerprint
@@ -69,11 +71,13 @@ class SimilarCopiesChoices(
    */
   suspend fun saveCover(chosen: MediaId, others: Collection<MediaId>) {
     val wanted = others.toSet() - chosen
+    // Un lotto solo (K3b): la copia principale cambia tutta insieme o non cambia; con la memoria piena non si scrive niente e non si dice che e' cambiato qualcosa.
+    val changes = ArrayList<PersonalChange>()
     for ((media, entry) in coverEntries(onlyOn = true)) {
-      if (media in wanted) store.set(entry.key, PersonalValue.Flag(false))
+      if (media in wanted) changes += PersonalChange(entry.key, PersonalValue.Flag(false))
     }
-    store.set(SimilarCopiesRecords.cover(chosen.value), PersonalValue.Flag(true))
-    onSaved()
+    changes += PersonalChange(SimilarCopiesRecords.cover(chosen.value), PersonalValue.Flag(true))
+    if (QuietWrites.attempt("copia principale") { store.setAll(changes) }) onSaved()
   }
 
   /**
@@ -82,15 +86,14 @@ class SimilarCopiesChoices(
    * altro dispositivo li ritrova anche se li' hanno id diversi.
    */
   suspend fun saveSeparation(member: MediaId, others: Collection<MediaId>) {
-    var written = false
+    val changes = ArrayList<PersonalChange>()
     for (other in others) {
       if (other == member) continue
       val key = SimilarCopiesRecords.separation(member.value, other.value)
       val (_, high) = checkNotNull(SimilarCopiesRecords.separatedPair(key))
-      store.set(key, SimilarCopiesRecords.apart(store.fingerprintOfMedia(high)))
-      written = true
+      changes += PersonalChange(key, SimilarCopiesRecords.apart(store.fingerprintOfMedia(high)))
     }
-    if (written) onSaved()
+    if (changes.isNotEmpty() && QuietWrites.attempt("copie separate") { store.setAll(changes) }) onSaved()
   }
 
   /**
@@ -103,13 +106,12 @@ class SimilarCopiesChoices(
     val y = runCatching { resolve(b) }.getOrNull() ?: b
     if (x == y) return
     val wanted = if (x.value <= y.value) x to y else y to x
-    var written = false
+    val changes = ArrayList<PersonalChange>()
     for ((key, pair) in separations { it == x || it == y }) {
       if (pair != wanted) continue
-      store.set(key, PersonalValue.Removed)
-      written = true
+      changes += PersonalChange(key, PersonalValue.Removed)
     }
-    if (written) onSaved()
+    if (changes.isNotEmpty() && QuietWrites.attempt("copie di nuovo unibili") { store.setAll(changes) }) onSaved()
   }
 
   /**

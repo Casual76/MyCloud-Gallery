@@ -230,6 +230,8 @@ internal fun NasDeleteSheetContent(
     locations = locations,
     onConfirm = onConfirm,
     onCancel = onCancel,
+    // Il titolo di serie del foglio parla di "foto": per un video lo dice il viewer, come fa gia' quando il media sta solo sul NAS.
+    title = if (target.isVideo) stringResource(R.string.viewer_nas_delete_both_video_title) else null,
   )
 }
 

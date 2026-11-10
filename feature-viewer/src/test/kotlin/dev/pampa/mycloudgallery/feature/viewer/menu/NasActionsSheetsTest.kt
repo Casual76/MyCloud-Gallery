@@ -74,6 +74,26 @@ class NasActionsSheetsTest : NasActionsPhoneTest() {
   }
 
   @Test
+  fun unVideoSulTelefonoESulNasHaIlTitoloDelVideo_unaFotoQuelloDellaFoto() {
+    val base = prepare()
+    val request = plan(OpRequest.Trash(listOf(base.item)))
+    val video = NasActionTarget(base.item, base.scope, writable = true, onPhone = true, isVideo = true, destinations = base.destinations)
+    showState(NasActionsState.Delete(video, GalleryDeleteScope.PhoneOnly, request, planning = false))
+    composeRule.onNodeWithText("Eliminare questo video?").assertIsDisplayed()
+    composeRule.onNodeWithText("Eliminare questa foto?").assertDoesNotExistCompat()
+    composeRule.onNodeWithText("Solo dal telefono").assertIsDisplayed()
+  }
+
+  @Test
+  fun unaFotoSulTelefonoESulNasTieneIlTitoloDiSerie() {
+    val base = prepare()
+    val photo = NasActionTarget(base.item, base.scope, writable = true, onPhone = true, isVideo = false, destinations = base.destinations)
+    showState(NasActionsState.Delete(photo, GalleryDeleteScope.PhoneOnly, plan(OpRequest.Trash(listOf(base.item))), planning = false))
+    composeRule.onNodeWithText("Eliminare questa foto?").assertIsDisplayed()
+    composeRule.onNodeWithText("Eliminare questo video?").assertDoesNotExistCompat()
+  }
+
+  @Test
   fun ovunqueConfermaIlCestinoDelNasConUnTocco_EPoiToccaIlTelefono() {
     val target = prepare()
     val plan = plan(OpRequest.Trash(listOf(target.item)))

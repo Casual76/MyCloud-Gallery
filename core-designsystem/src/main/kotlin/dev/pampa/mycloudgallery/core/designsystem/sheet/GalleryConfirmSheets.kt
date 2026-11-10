@@ -472,21 +472,21 @@ fun GalleryShareSheetContent(
     modifier = modifier,
     body = {
       FluidListGroup {
+        // K4: il valore sta sotto l'etichetta (subtitle), non a destra in `badge`: il `badge` prende la larghezza per primo e a 360 dp
+        // un valore lungo ("Gli altri aggiungono soltanto", il nome di un album) lasciava all'etichetta una colonna in cui "Permessi" si spezzava.
         albumName?.let {
           FluidListRow(
             title = stringResource(R.string.share_row_album),
-            subtitle = "",
+            subtitle = it,
             disclosure = false,
-            badge = { FluidRowValue(text = it) },
           )
           FluidListDivider()
         }
         permissionLabel?.let {
           FluidListRow(
             title = stringResource(R.string.share_row_permission),
-            subtitle = "",
+            subtitle = it,
             disclosure = false,
-            badge = { FluidRowValue(text = it) },
           )
           FluidListDivider()
         }

@@ -54,7 +54,7 @@ internal enum class RealSheet(val slug: String) {
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h915dp-xhdpi")
+@Config(qualifiers = "w360dp-h780dp-xhdpi")
 internal class RealSheetScreenshotTest(
   private val sheet: RealSheet,
   private val look: CatalogLook,
@@ -146,7 +146,7 @@ internal class RealSheetScreenshotTest(
 /** Il menu ⋮ vero: si tocca il tasto e il pop-up dell'engine cresce da li'. */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h915dp-xhdpi")
+@Config(qualifiers = "w360dp-h780dp-xhdpi")
 internal class RealMenuScreenshotTest(private val look: CatalogLook) {
 
   @get:Rule

@@ -44,7 +44,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h520dp-xhdpi")
+@Config(qualifiers = "w360dp-h520dp-xhdpi")
 internal class DragScreenshotTest(private val dark: Boolean) {
 
   @get:Rule

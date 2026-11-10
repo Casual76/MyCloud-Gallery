@@ -3,10 +3,14 @@ package dev.pampa.mycloudgallery.main
 import android.app.Application
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsSelected
@@ -17,13 +21,18 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.geometry.Offset
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBar
 import dev.pampa.mycloudgallery.core.designsystem.chrome.TakeGalleryTabBarSlot
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
 import dev.pampa.mycloudgallery.feature.library.testing.syntheticLibraryTabState
+import dev.pampa.mycloudgallery.integration.Attese
+import dev.pampa.mycloudgallery.SHOT_PHONE
 import dev.pampa.mycloudgallery.status.GlobalStatus
 import org.junit.Rule
 import org.junit.Test
@@ -40,7 +49,7 @@ import org.robolectric.annotation.Config
  * chiude la ricerca e torna alla scheda di prima, e la barra delle azioni della selezione al posto della pillola (B3).
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = SHOT_PHONE)
 class G2PillolaTest {
 
   private val compose = createAndroidComposeRule<ComponentActivity>()
@@ -136,23 +145,85 @@ class G2PillolaTest {
     show()
     compose.onNodeWithText("Album").performClick()
     // La pillola parte subito e la pagina aspetta che arrivi (`TabPuckLeadMillis`): si aspetta la scheda.
-    compose.waitUntil(5_000) { tab == GalleryTab.Albums }
+    compose.waitUntil(Attese.TETTO_MS) { tab == GalleryTab.Albums }
     assertThat(events).contains("chiudi-cerca")
     assertThat(searchOpen).isFalse()
   }
 
   /**
-   * La scheda sotto la ricerca ha sopra di se' la lente della pillola, che nella prova riceve il tocco simulato: si usa l'azione di clic della
-   * scheda (quella di TalkBack), che prova il collegamento. Il tocco vero sulla lente va provato sul telefono.
+   * GS-2 (K3a): la scheda sotto la ricerca ha sopra di se' la lente della pillola, che prende il tocco e cambia scheda solo dopo un trascinamento.
+   * Il tocco vero (non l'azione di TalkBack) chiude la ricerca e torna li'. Prima di K3a questa prova era rossa: `searchOpen` restava vero.
    */
   @Test
-  fun conCercaApertaLaSchedaSottoLaRicercaLaChiude() {
+  fun conCercaApertaIlToccoSullaSchedaSottoLaLenteChiudeLaRicerca() {
+    searchOpen = true
+    show()
+    compose.onNodeWithText("Libreria").performClick()
+    compose.waitForIdle()
+    assertThat(searchOpen).isFalse()
+    assertThat(tab).isEqualTo(GalleryTab.Library)
+    assertThat(events).containsExactly("chiudi-cerca", "scheda:library").inOrder()
+    compose.onNodeWithText("Ricerca di prova").assertDoesNotExist()
+  }
+
+  /** Lo stesso dalla scheda Raccolte, e con un tocco che si muove di un pixel: la lente lo rilascia sulla scheda, ma la ricerca si chiude una volta sola. */
+  @Test
+  fun unToccoCheSiMuoveDiPocoChiudeLaRicercaUnaVoltaSola() {
+    tab = GalleryTab.Collections
+    searchOpen = true
+    show()
+    compose.onNodeWithText("Raccolte").performTouchInput {
+      down(center)
+      moveBy(Offset(2f, 0f))
+      up()
+    }
+    compose.waitForIdle()
+    assertThat(searchOpen).isFalse()
+    assertThat(tab).isEqualTo(GalleryTab.Collections)
+    assertThat(events).containsExactly("chiudi-cerca", "scheda:collections").inOrder()
+    compose.onNodeWithText("Raccolte di prova").assertExists()
+  }
+
+  /** L'azione di clic di TalkBack sulla scheda sotto la ricerca fa lo stesso (non passa dalla lente). */
+  @Test
+  fun conCercaApertaTalkBackSullaSchedaSottoLaRicercaLaChiude() {
     searchOpen = true
     show()
     compose.onNodeWithText("Libreria").performSemanticsAction(SemanticsActions.OnClick)
     compose.waitForIdle()
     assertThat(searchOpen).isFalse()
     assertThat(tab).isEqualTo(GalleryTab.Library)
+  }
+
+  /**
+   * Senza Cerca, il tocco fermo sulla scheda scelta (sotto la lente) e' la riselezione ("torna in cima"; per la Libreria, in fondo). Prima lo
+   * prendeva la lente e non succedeva niente; una sola chiamata anche con il dito che si muove di un pixel.
+   */
+  @Test
+  fun senzaCercaIlToccoSullaSchedaSceltaLaRiseleziona() {
+    compose.setContent {
+      MyCloudGalleryTheme {
+        Box(Modifier.fillMaxSize()) {
+          GalleryTabBar(
+            selected = GalleryTab.Albums,
+            onSelect = { events += "scheda:${it.route}" },
+            onReselect = { events += "di-nuovo:${it.route}" },
+            modifier = Modifier.align(Alignment.BottomCenter),
+          )
+        }
+      }
+    }
+    compose.waitForIdle()
+    compose.onNodeWithText("Album").performClick()
+    compose.waitForIdle()
+    assertThat(events).containsExactly("di-nuovo:albums")
+    compose.onNodeWithText("Album").performTouchInput {
+      down(center)
+      moveBy(Offset(2f, 0f))
+      up()
+    }
+    compose.waitForIdle()
+    assertThat(events).containsExactly("di-nuovo:albums", "di-nuovo:albums")
   }
 
   /** B3: in selezione nella Libreria la pillola e il cerchio escono; la barra delle azioni prende il loro posto. */

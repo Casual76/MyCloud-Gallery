@@ -30,6 +30,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -166,46 +167,54 @@ fun MainScaffold(
     )
   }
 
+  // GF-7 (K3a): ogni pagina (le tre schede e Cerca) tiene cio' che ricorda mentre e' coperta. Senza, la scheda che usciva dalla composizione
+  // ripartiva da capo: aprire Cerca o passare a un'altra scheda riportava Album e Raccolte in cima e il pannello del tablet alla prima scelta.
+  // La Libreria ricorda gia' la sua griglia (lo stato e' fuori, nel ViewModel) e qui ritrova anche la posizione ancorata a un media.
+  val pageStates = rememberSaveableStateHolder()
+  val pageKey = if (searchOpen) GalleryTabBarDefaults.SearchKey else selectedTab.route
+
   Box(modifier = Modifier.fillMaxSize()) {
     CompositionLocalProvider(LocalGalleryTabBarSlot provides tabBarSlot) {
-      when {
-        searchOpen && search != null -> search(pageSlot)
-        searchOpen -> PlaceholderTab(
-          key = GalleryTabBarDefaults.SearchKey,
-          title = stringResource(R.string.main_search_title),
-          status = status,
-          onStatusClick = onStatusClick,
-          onOpenSettings = onOpenSettings,
-          backdropOut = { backdrop = it },
-        ) {
-          FluidEmptyState(title = stringResource(R.string.main_search_empty_title), detail = stringResource(R.string.main_search_empty_detail))
-        }
-        selectedTab == GalleryTab.Library -> LibraryTab(
-          contentPadding = pillPadding,
-          backdropOut = { backdrop = it },
-          onOpenViewer = { viewer.open(it, services, fromLibrary = true) },
-          onOpenSettings = onOpenSettings,
-          // B2 (beta): la rete non e' piu' una voce in fondo alla Libreria, e' uno degli stati della nuvola in alto (LibraryCloudNetwork.kt).
-          network = libraryNetworkOf(status),
-          onNetworkClick = onStatusClick,
-          state = libraryState,
-          tabBarScroll = tabBarScroll,
-          // I dettagli del NAS (e "Ho controllato, continua" dei lavori fermi) stanno in Diagnostica, come quelli della rete.
-          onNasStatusClick = onNasStatusClick,
-          // Fase 5A (D16): la terza voce del piede apre la pagina Backup.
-          onBackupStatusClick = onBackupStatusClick,
-        )
-        selectedTab == GalleryTab.Albums && albums != null -> albums(pageSlot)
-        selectedTab == GalleryTab.Collections && collections != null -> collections(pageSlot)
-        else -> PlaceholderTab(
-          key = selectedTab.route,
-          title = stringResource(selectedTab.label),
-          status = status,
-          onStatusClick = onStatusClick,
-          onOpenSettings = onOpenSettings,
-          backdropOut = { backdrop = it },
-        ) {
-          TabPlaceholder(selectedTab)
+      pageStates.SaveableStateProvider(pageKey) {
+        when {
+          searchOpen && search != null -> search(pageSlot)
+          searchOpen -> PlaceholderTab(
+            key = GalleryTabBarDefaults.SearchKey,
+            title = stringResource(R.string.main_search_title),
+            status = status,
+            onStatusClick = onStatusClick,
+            onOpenSettings = onOpenSettings,
+            backdropOut = { backdrop = it },
+          ) {
+            FluidEmptyState(title = stringResource(R.string.main_search_empty_title), detail = stringResource(R.string.main_search_empty_detail))
+          }
+          selectedTab == GalleryTab.Library -> LibraryTab(
+            contentPadding = pillPadding,
+            backdropOut = { backdrop = it },
+            onOpenViewer = { viewer.open(it, services, fromLibrary = true) },
+            onOpenSettings = onOpenSettings,
+            // B2 (beta): la rete non e' piu' una voce in fondo alla Libreria, e' uno degli stati della nuvola in alto (LibraryCloudNetwork.kt).
+            network = libraryNetworkOf(status),
+            onNetworkClick = onStatusClick,
+            state = libraryState,
+            tabBarScroll = tabBarScroll,
+            // I dettagli del NAS (e "Ho controllato, continua" dei lavori fermi) stanno in Diagnostica, come quelli della rete.
+            onNasStatusClick = onNasStatusClick,
+            // Fase 5A (D16): la terza voce del piede apre la pagina Backup.
+            onBackupStatusClick = onBackupStatusClick,
+          )
+          selectedTab == GalleryTab.Albums && albums != null -> albums(pageSlot)
+          selectedTab == GalleryTab.Collections && collections != null -> collections(pageSlot)
+          else -> PlaceholderTab(
+            key = selectedTab.route,
+            title = stringResource(selectedTab.label),
+            status = status,
+            onStatusClick = onStatusClick,
+            onOpenSettings = onOpenSettings,
+            backdropOut = { backdrop = it },
+          ) {
+            TabPlaceholder(selectedTab)
+          }
         }
       }
     }

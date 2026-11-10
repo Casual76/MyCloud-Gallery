@@ -1,0 +1,207 @@
+package dev.pampa.mycloudgallery
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import dev.pampa.mycloudgallery.core.albums.contract.Album
+import dev.pampa.mycloudgallery.core.albums.contract.CoverRef
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
+import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
+import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
+import dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaIntents
+import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.core.model.MediaRef
+import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
+import dev.pampa.mycloudgallery.core.search.contract.IdleSuggestions
+import dev.pampa.mycloudgallery.core.search.contract.PlaceLevel
+import dev.pampa.mycloudgallery.core.search.contract.PlaceOption
+import dev.pampa.mycloudgallery.core.search.contract.SearchMediaType
+import dev.pampa.mycloudgallery.core.search.contract.SearchReadiness
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumRefs
+import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
+import dev.pampa.mycloudgallery.feature.albums.contract.SpecialAlbum
+import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabOrder
+import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabScreen
+import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabState
+import dev.pampa.mycloudgallery.feature.albums.tab.NoAlbumsTabHandlers
+import dev.pampa.mycloudgallery.feature.albums.tab.SpecialSummary
+import dev.pampa.mycloudgallery.feature.albums.testing.AlbumSamples
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionsLayoutViewModel
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionsTab
+import dev.pampa.mycloudgallery.feature.library.collections.testing.CollectionsSectionSamples
+import dev.pampa.mycloudgallery.feature.library.collections.testing.FakeCollectionsWorld
+import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
+import dev.pampa.mycloudgallery.feature.library.testing.syntheticLibraryTabState
+import dev.pampa.mycloudgallery.feature.search.NoSearchHandlers
+import dev.pampa.mycloudgallery.feature.search.SearchScreen
+import dev.pampa.mycloudgallery.feature.search.contract.SearchRefs
+import dev.pampa.mycloudgallery.feature.search.contract.SearchScreenState
+import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
+import dev.pampa.mycloudgallery.main.MainScaffold
+import dev.pampa.mycloudgallery.navigation.SearchTabFrame
+import dev.pampa.mycloudgallery.status.GlobalStatus
+import java.time.LocalDate
+import java.util.Optional
+
+// LO SCAFFOLD DELLE PROVE (K3a, GF-4 e ORC-1). Uno solo, per gli screenshot e le prove di :app che mostrano la schermata principale: prima ogni prova
+// ricostruiva lo scaffold a mano, e cosi' la pillola della scheda Album mostrava l'elenco degli album di prima, Cerca e Raccolte erano segnaposto
+// ("arriveranno qui") e le Raccolte non avevano la capsula della rete ne' il fondo della pagina.
+
+/**
+ * Gli stati dati delle schede vere: la Libreria (la griglia sintetica), la scheda Album di G2b (Preferiti, Fotocamera e Video in testa, poi album
+ * miei, smart e condivisi), le Raccolte (il controllore vero sui fornitori di prova, che toglie le sezioni passate alla scheda Album) e Cerca a riposo
+ * (ricerche recenti, luoghi, tipi).
+ *
+ * Va creato sul thread della prova, fuori dalla composizione: il ViewModel delle Raccolte parte li'.
+ *
+ * @param albumCount quanti album ci sono oltre alle voci speciali (le prove dello scorrimento ne vogliono abbastanza per scorrere).
+ * @param collections le Raccolte: di serie il controllore vero sui fornitori di prova; una prova con i fornitori di :app (ricordi, luoghi) passa il suo.
+ */
+internal class ScaffoldScenes(
+  val library: LibraryTabState = syntheticLibraryTabState(),
+  albumCount: Int = DEFAULT_ALBUMS,
+  collections: CollectionsLayoutViewModel? = null,
+) {
+  private val covers = SyntheticLibrary(seed = COVER_SEED, count = COVER_POOL)
+
+  private fun cover(index: Int): MediaId = covers.snapshot.idAt(index % covers.snapshot.size)
+
+  /** La scheda Album: le voci speciali con la loro copertina, gli album di prova (i quattro di sempre e altri manuali) con la copertina automatica. */
+  val albums: AlbumsTabState.Ready = run {
+    val samples: List<Album> = listOf(AlbumSamples.manual, AlbumSamples.smart, AlbumSamples.sharedMine, AlbumSamples.sharedByOther)
+    val extra = (samples.size until albumCount).map { n ->
+      AlbumSamples.manual.copy(id = albumId(n), title = EXTRA_TITLES[n % EXTRA_TITLES.size] + " " + (2026 - n / EXTRA_TITLES.size), count = 12 + n * 7)
+    }
+    val all = (samples + extra).take(albumCount).mapIndexed { index, album -> album.withCover(CoverRef.Auto(cover(index + 10))) }
+    val specials = SpecialAlbum.entries.mapIndexed { index, kind -> kind to SpecialSummary(SPECIAL_COUNTS[index], cover(index), NEWEST_DAY - index) }.toMap()
+    val (entries, pinned) = AlbumsTabOrder.arrange(all, specials, emptyMap())
+    AlbumsTabState.Ready(entries, pinned)
+  }
+
+  /** Le miniature delle copertine: il caricatore della Libreria (come in produzione) con sorgenti sintetiche. */
+  val albumThumbnails: AlbumThumbnails = AlbumThumbnails(library.grid.loader, library.grid.placeholders, SyntheticCovers)
+
+  /** Le Raccolte come le compone il controllore vero: tutte le sezioni di prova, senza quelle della scheda Album (che toglie lui). */
+  val collections: CollectionsLayoutViewModel = collections ?: run {
+    val world = FakeCollectionsWorld()
+    val providers: Set<CollectionsSectionProvider> = CollectionsSectionSamples.all().toSet()
+    CollectionsLayoutViewModel(world.source, FakePhoneMediaIntents(), providers, Optional.empty())
+  }
+
+  /** Cerca aperta dal cerchio, a riposo: il campo, le ricerche recenti, i luoghi e i tipi. */
+  val search: SearchScreenState = run {
+    val recents = listOf(
+      HistoryEntry(1, "mare ad agosto", listOf("Agosto")),
+      HistoryEntry(2, "scontrino farmacia", listOf("scontrino")),
+      HistoryEntry(3, "compleanno di Anna", listOf("Foto")),
+    )
+    val places = listOf(
+      PlaceOption(setOf(1), "Roma", PlaceLevel.PLACE),
+      PlaceOption(setOf(3), "Sardegna", PlaceLevel.REGION),
+      PlaceOption(setOf(4), "Milano", PlaceLevel.PLACE),
+      PlaceOption(setOf(5), "Toscana", PlaceLevel.REGION),
+    )
+    val types = listOf(SearchMediaType.SCREENSHOT, SearchMediaType.VIDEO, SearchMediaType.DOCUMENT, SearchMediaType.PANORAMA)
+    SearchScreenState.Idle(IdleSuggestions(recents, places, types), recents)
+  }
+
+  val searchThumbnails: SearchThumbnails = SearchThumbnails(library.grid.loader, library.grid.placeholders, SearchRefs { _, _ -> null })
+
+  private companion object {
+    const val DEFAULT_ALBUMS = 10
+    const val COVER_SEED = 21L
+    const val COVER_POOL = 200
+    const val NEWEST_DAY = 20_400
+    val SPECIAL_COUNTS = listOf(86, 4_212, 318, 1_204, 2_577)
+    val EXTRA_TITLES = listOf("Montagna", "Mare", "Nonni", "Scuola", "Cene", "Gite", "Natale", "Concerti")
+
+    fun albumId(n: Int): AlbumId = AlbumId("00000000-0000-4000-8000-1" + n.toString().padStart(11, '0'))
+
+    fun Album.withCover(cover: CoverRef): Album = when (this) {
+      is Album.Manual -> copy(cover = cover)
+      is Album.Smart -> copy(cover = cover)
+      is Album.Shared -> copy(cover = cover)
+    }
+  }
+}
+
+/** Le sorgenti sintetiche delle copertine: il caricatore della Libreria disegna un'immagine per ogni media. */
+private object SyntheticCovers : AlbumRefs {
+  override fun refAt(snapshot: TimelineSnapshot, index: Int): MediaRef = refOf(snapshot.idAt(index))
+
+  override fun request(media: MediaId): ThumbRequest = ThumbRequest(ThumbKey(media, 0L, ThumbBucket.M), refOf(media))
+
+  private fun refOf(media: MediaId): MediaRef = MediaRef.Synthetic(media.value.hashCode().toLong(), 1_200, 900)
+}
+
+/**
+ * La schermata principale come in produzione (`AppNavHost`, `MainDestination`), sugli stati di [scenes]: `MainScaffold` con le quattro pagine vere e,
+ * sotto, il fondo della pagina che in produzione dipinge `FluidNavHost` (`colorScheme.background`).
+ */
+@Composable
+internal fun GalleryScaffold(
+  scenes: ScaffoldScenes,
+  tab: GalleryTab,
+  status: GlobalStatus = GlobalStatus.HOME_CONNECTED,
+  searchOpen: Boolean = false,
+  onSelectTab: (GalleryTab) -> Unit = {},
+  onOpenSearch: () -> Unit = {},
+  onCloseSearch: () -> Unit = {},
+) {
+  Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    MainScaffold(
+      status = status,
+      selectedTab = tab,
+      onSelectTab = onSelectTab,
+      onStatusClick = {},
+      onOpenSettings = {},
+      libraryState = scenes.library,
+      collections = { slot ->
+        CollectionsTab(
+          contentPadding = slot.contentPadding,
+          backdropOut = slot.backdropOut,
+          onOpenViewer = {},
+          onOpenCollection = {},
+          onOpenSettings = {},
+          statusHeader = slot.statusHeader,
+          viewModel = scenes.collections,
+        )
+      },
+      albums = { slot ->
+        AlbumsTabScreen(
+          state = scenes.albums,
+          thumbnails = scenes.albumThumbnails,
+          handlers = NoAlbumsTabHandlers,
+          contentPadding = slot.contentPadding,
+          backdropOut = slot.backdropOut,
+        )
+      },
+      search = { slot ->
+        SearchTabFrame(slot) {
+          SearchScreen(
+            state = scenes.search,
+            query = "",
+            readiness = SearchReadiness.Ready,
+            queryModel = null,
+            today = TODAY,
+            thumbnails = scenes.searchThumbnails,
+            handlers = NoSearchHandlers,
+          )
+        }
+      },
+      searchOpen = searchOpen,
+      onOpenSearch = onOpenSearch,
+      onCloseSearch = onCloseSearch,
+    )
+  }
+}
+
+private val TODAY: LocalDate = LocalDate.of(2026, 11, 10)

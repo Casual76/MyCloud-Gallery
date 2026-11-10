@@ -38,8 +38,12 @@ import com.google.common.truth.Truth.assertWithMessage
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalHost
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassModalObscured
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBar
@@ -53,17 +57,21 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeCloudButto
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryTopChrome
 import dev.pampa.mycloudgallery.core.designsystem.design.galleryTopChromeHeight
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
+import dev.pampa.mycloudgallery.core.library.text.GalleryDates
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupWait
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
+import dev.pampa.mycloudgallery.core.library.contract.SectionInfo
 import dev.pampa.mycloudgallery.core.model.FreezeReason
 import dev.pampa.mycloudgallery.core.model.NasArea
+import dev.pampa.mycloudgallery.feature.library.grid.GridText
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
+import java.time.LocalDate
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -129,30 +137,43 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
     composeRule.waitForIdle()
   }
 
+  /**
+   * La scena come in produzione (`GalleryRoot`): il host dei pop-up sta **alla radice**, sopra la pagina e sopra la pillola (GF-23 b: prima il host stava dentro la
+   * Libreria e la pillola, che e' un fratello, restava nitida sopra la pagina sfocata del pop-up), e il fondale che il vetro dei pop-up campiona e' quello di tutta la
+   * scena, che c'e' solo finche' un pop-up e' sullo schermo.
+   */
   @Composable
   private fun Scaffolded(state: LibraryTabState, network: LibraryNetworkStatus?, onBackup: () -> Unit) {
     var backdrop by remember { mutableStateOf<GlassBackdropState?>(null) }
-    Box(modifier = Modifier.fillMaxSize()) {
-      LibraryTab(
-        contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
-        backdropOut = { backdrop = it },
-        onOpenViewer = {},
-        onOpenSettings = {},
-        state = state,
-        network = network,
-        onBackupStatusClick = onBackup,
-      )
-      if (!state.selectionActive) {
-        GalleryTabBar(
-          selected = GalleryTab.Library,
-          onSelect = {},
-          backdrop = backdrop,
-          modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .navigationBarsPadding()
-            .padding(horizontal = FluidFloatingTabBarDefaults.HorizontalMargin)
-            .padding(bottom = FluidFloatingTabBarDefaults.BottomMargin),
-        )
+    val modal = rememberFluidGlassModalHostState()
+    val rootBackdrop = rememberGlassBackdrop()
+    CompositionLocalProvider(LocalFluidGlassModalHostState provides modal) {
+      Box(modifier = Modifier.fillMaxSize()) {
+        val rootSource = if (modal.isOnScreen) Modifier.glassBackdropSource(rootBackdrop) else Modifier
+        Box(modifier = Modifier.fillMaxSize().then(rootSource).fluidGlassModalObscured()) {
+          LibraryTab(
+            contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
+            backdropOut = { backdrop = it },
+            onOpenViewer = {},
+            onOpenSettings = {},
+            state = state,
+            network = network,
+            onBackupStatusClick = onBackup,
+          )
+          if (!state.selectionActive) {
+            GalleryTabBar(
+              selected = GalleryTab.Library,
+              onSelect = {},
+              backdrop = backdrop,
+              modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(horizontal = FluidFloatingTabBarDefaults.HorizontalMargin)
+                .padding(bottom = FluidFloatingTabBarDefaults.BottomMargin),
+            )
+          }
+        }
+        FluidGlassModalHost(state = modal, backdrop = rootBackdrop)
       }
     }
   }
@@ -414,9 +435,11 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
           GalleryTopChrome(
             content = content,
             backdrop = backdrop,
-            title = "Sabato 12 ottobre 2026",
+            title = TitleOfTheDay,
             subtitle = "Passo dello Stelvio",
             topChrome = galleryTopChromeHeight(),
+            // GF-23 a: le forme piu' corte della data come le passa la produzione (`GridText.sectionShorterTitles`): a 360 dp l'etichetta mostra la prima che entra.
+            shorterTitles = ShorterTitlesOfTheDay,
           ) {
             GalleryChromeCloudButton(state = GalleryCloudState.Attention, contentDescription = "Nuvola", onClick = {})
             GalleryChromeIconButton(icon = Icons.Rounded.CheckCircleOutline, contentDescription = "Seleziona", onClick = {})
@@ -443,6 +466,12 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
   }
 
   companion object {
+    /** Il giorno della foto chiara: un sabato di un anno passato, con il titolo e le forme corte che la produzione scrive per lui. */
+    private val Today: LocalDate = LocalDate.of(2026, 11, 10)
+    private val DayOfThePhoto = SectionInfo(level = GridLevel.DAYS, firstDay = 20_241_012, lastDay = 20_241_012, count = 1, topPlaces = IntArray(0), distinctPlaces = 0)
+    val TitleOfTheDay: String = GalleryDates.weekdayTitle(GridText.date(DayOfThePhoto.firstDay), withYear = true)
+    val ShorterTitlesOfTheDay: List<String> = GridText.sectionShorterTitles(DayOfThePhoto, Today)
+
     const val DIR = "../docs/screenshots/beta-grafica/G1"
     const val K2 = "../docs/screenshots/beta-grafica/K2"
     const val SettleMillis = 1_500L

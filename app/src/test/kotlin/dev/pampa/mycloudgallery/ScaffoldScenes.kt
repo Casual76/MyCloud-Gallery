@@ -12,6 +12,8 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
+import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
+import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
 import dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaIntents
@@ -39,7 +41,8 @@ import dev.pampa.mycloudgallery.feature.library.collections.CollectionsTab
 import dev.pampa.mycloudgallery.feature.library.collections.testing.CollectionsSectionSamples
 import dev.pampa.mycloudgallery.feature.library.collections.testing.FakeCollectionsWorld
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
-import dev.pampa.mycloudgallery.feature.library.testing.syntheticLibraryTabState
+import dev.pampa.mycloudgallery.feature.library.library.testing.M1SyntheticSizes
+import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
 import dev.pampa.mycloudgallery.feature.search.NoSearchHandlers
 import dev.pampa.mycloudgallery.feature.search.SearchScreen
 import dev.pampa.mycloudgallery.feature.search.contract.SearchRefs
@@ -56,17 +59,31 @@ import java.util.Optional
 // ("arriveranno qui") e le Raccolte non avevano la capsula della rete ne' il fondo della pagina.
 
 /**
+ * La Libreria sintetica **con il NAS configurato e il backup al sicuro** (GF-23 c): e' lo stato di chi ha il NAS di casa, e in produzione la nuvola di stato sta
+ * nella capsula in alto a destra. Prima lo stato di prova non aveva un NAS (`LibraryNasStatus.Idle`, backup `Idle`) e la Libreria dello scaffold non mostrava la
+ * nuvola, che invece si vede negli screenshot di `G1/`.
+ */
+internal fun nasLibraryTabState(): LibraryTabState = syntheticLibraryState(
+  debugSizes = M1SyntheticSizes,
+  nas = LibraryNasStatus.UpToDate(atNasMillis = NAS_MOMENT),
+  backup = LibraryBackupStatus.AllSafe(atNasMillis = NAS_MOMENT),
+)
+
+private const val NAS_MOMENT = 1_000L
+
+/**
  * Gli stati dati delle schede vere: la Libreria (la griglia sintetica), la scheda Album di G2b (Preferiti, Fotocamera e Video in testa, poi album
  * miei, smart e condivisi), le Raccolte (il controllore vero sui fornitori di prova, che toglie le sezioni passate alla scheda Album) e Cerca a riposo
  * (ricerche recenti, luoghi, tipi).
  *
  * Va creato sul thread della prova, fuori dalla composizione: il ViewModel delle Raccolte parte li'.
  *
+ * @param library la Libreria; di serie quella di chi ha il NAS configurato ([nasLibraryTabState]: la nuvola c'e'); `emptyLibraryTabState()` per la Libreria vuota.
  * @param albumCount quanti album ci sono oltre alle voci speciali (le prove dello scorrimento ne vogliono abbastanza per scorrere).
  * @param collections le Raccolte: di serie il controllore vero sui fornitori di prova; una prova con i fornitori di :app (ricordi, luoghi) passa il suo.
  */
 internal class ScaffoldScenes(
-  val library: LibraryTabState = syntheticLibraryTabState(),
+  val library: LibraryTabState = nasLibraryTabState(),
   albumCount: Int = DEFAULT_ALBUMS,
   collections: CollectionsLayoutViewModel? = null,
 ) {

@@ -4,6 +4,14 @@ import android.app.Application
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -15,6 +23,16 @@ import androidx.compose.ui.test.performClick
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
+import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidGlassModalHost
+import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassModalObscured
+import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
+import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
+import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTab
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBar
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarDefaults
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
@@ -57,15 +75,35 @@ internal abstract class LibraryCloudPopupWordsBase(private val dark: Boolean, pr
     val state = syntheticLibraryState(nas = nas, backup = backup)
     composeRule.setContent {
       MyCloudGalleryTheme(settings = EngineSettings(themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT)) {
-        Box(modifier = Modifier.fillMaxSize()) {
-          LibraryTab(
-            contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
-            backdropOut = {},
-            onOpenViewer = {},
-            onOpenSettings = {},
-            state = state,
-            network = homeNetwork,
-          )
+        // GF-23 b: come in produzione (`GalleryRoot`): il host dei pop-up sta alla radice, sopra la pagina e sopra la pillola delle schede, che il pop-up sfoca come il resto.
+        var backdrop by remember { mutableStateOf<GlassBackdropState?>(null) }
+        val modal = rememberFluidGlassModalHostState()
+        val rootBackdrop = rememberGlassBackdrop()
+        CompositionLocalProvider(LocalFluidGlassModalHostState provides modal) {
+          Box(modifier = Modifier.fillMaxSize()) {
+            val rootSource = if (modal.isOnScreen) Modifier.glassBackdropSource(rootBackdrop) else Modifier
+            Box(modifier = Modifier.fillMaxSize().then(rootSource).fluidGlassModalObscured()) {
+              LibraryTab(
+                contentPadding = PaddingValues(bottom = GalleryTabBarDefaults.ContentInset),
+                backdropOut = { backdrop = it },
+                onOpenViewer = {},
+                onOpenSettings = {},
+                state = state,
+                network = homeNetwork,
+              )
+              GalleryTabBar(
+                selected = GalleryTab.Library,
+                onSelect = {},
+                backdrop = backdrop,
+                modifier = Modifier
+                  .align(Alignment.BottomCenter)
+                  .navigationBarsPadding()
+                  .padding(horizontal = FluidFloatingTabBarDefaults.HorizontalMargin)
+                  .padding(bottom = FluidFloatingTabBarDefaults.BottomMargin),
+              )
+            }
+            FluidGlassModalHost(state = modal, backdrop = rootBackdrop)
+          }
         }
       }
     }

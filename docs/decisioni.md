@@ -16400,7 +16400,7 @@ G2): una griglia di copertine tutte uguali (foto quadrata con l'angolo continuo,
   nascosti), in una finestra sola di al piu' 48 copertine.
 - **Segni sulla copertina**: l'IA (`AutoAwesome`) per uno smart, il gruppo per un condiviso, in una pillola di scrim come i badge delle celle
   (`GalleryOnPhoto`): mai vetro sopra la griglia.
-- **Colonne**: 3 sul telefono (copertina minima 104 dp), 2 col testo grande, sul tablet fino a 7 (la scheda e' larga al piu' 1.120 dp). Una griglia sola anche
+- **Colonne**: 3 sul telefono (copertina minima 96 dp dal pacchetto K3b: con 104 dp a 360 dp erano 2), 2 col testo grande, sul tablet fino a 7 (la scheda e' larga al piu' 1.120 dp). Una griglia sola anche
   sul tablet: l'utente vuole "una sorta di album alla vista", e le pagine degli album sono gia' rotte anche li'.
 - **Comandi di prima**: "Nuovo album" (+) nella barra della scheda, e il menu con "Tutti gli album" (l'elenco di sempre, con l'ordine, il riordino e gli
   album che non si mostrano piu'). Gli avvisi una volta sola degli album condivisi chiusi compaiono anche in testa alla scheda.
@@ -16870,3 +16870,107 @@ prima e dopo); FAB-4, FAB-7 e FAB-8 hanno prove nuove; FAB-6 e la frase del pop-
 - Con una selezione di soli video il titolo del foglio dice comunque «Eliminare N foto?» (e' del design system, non cambiato qui).
 - Alcuni dettagli dei problemi del backup nel pop-up dicono «Riprova o apri la Diagnostica» mentre il tasto sotto e' "Apri Backup": non e' il
   residuo «Tocca», non l'ho toccato; la frase della rete «VPN spenta · Apri WireGuard» ripete il tasto (stringa di `:app`).
+
+## Pacchetto K3b: scheda Album, errori di scrittura del registro personale, rifiniture (10/11)
+
+Branch `fix/k3b-album` (da `integra/beta-grafica` `90d5827a`). Correzioni dei rilievi dei critici, con test che prima non passavano.
+
+### 1. FAB-10 / GS-3: le copertine oltre la 48ª si caricano
+`AlbumsTabScreen` non chiede piu' una finestra fissa sulle prime 48 voci: `FollowCoverWindow` guarda le **righe in vista** (`snapshotFlow` sulle chiavi `row-N` di
+`LazyListState.layoutInfo`, `distinctUntilChanged`) e manda al caricatore quelle come "visibili", piu' una riga prima e due dopo come "in arrivo", come fanno la griglia
+della Libreria e le pagine degli album (`FollowGridWindow`). Si aggiorna solo quando cambia l'insieme delle righe in vista, o le voci o le colonne (l'effetto riparte): mai
+una richiesta per fotogramma. Prima di aver misurato niente non si chiede niente. Prova (`AlbumsTabWindowTest`): 120 voci, si scorre in fondo, le copertine delle ultime tre
+righe (oltre la 48ª) sono nell'ultima finestra e la prima no, e le finestre mandate scorrendo sono poche; guarda le **finestre** che la scheda manda al caricatore, non le
+immagini (il caricatore finto carica da solo).
+
+### 2. GF-5: tre colonne sul telefono dell'utente
+`AlbumDimens.TabCardMin` da 104 a **96 dp**: le colonne sono ⌊(larghezza - 40 + 12) / (minima + 12)⌋, a 360 dp 332/108 = 3 (con 104 era 332/116 = 2; tre colonne solo da
+380 dp), a 412 dp restano 3, col testo a 1,5 restano 2 (332/156). Prove a 360 x 780 dp (`AlbumsTabWindowTest`): tre fissi nella stessa riga e il quarto sotto; col testo grande
+due. `AlbumsTabPhoneScreenshotTest` e `CameraMessagingPhoneScreenshotTest` sono a 360 x 780 dp (`w360dp-h780dp-xxhdpi`).
+
+### 3. SOL-10 / OA-11: la memoria piena non fa piu' chiudere l'app
+**Dove si traduce.** In due punti, ognuno una volta sola:
+- **Lo store e' tutto o niente** (`LedgerPersonalStore.write`): il lotto si applica a **copie** dello stato e si salva; solo dopo si pubblica in `entries`/`effectiveEntries`,
+  nelle modifiche da datare e nelle chiavi "da portare nel catalogo". Se `ledger.save` lancia `IOException`, non e' cambiato niente **nemmeno in memoria** (prima in memoria il
+  lotto restava e il salvataggio dopo lo scriveva). E' la prima delle due strade del brief: rende **vero** il messaggio "Non e' cambiato niente" di "Aggiungi ad album". Un
+  osservatore dello stato (la proiezione sulle tabelle degli album) non vede mai il lotto che poi non si salva. Il secondo salvataggio **dopo** la proiezione sul catalogo (le chiavi
+  non piu' "da portare") se non riesce non annulla niente: la modifica e' gia' sul disco e nel catalogo, `unsaved` fa salvare tutto alla prossima scrittura e `reproject` rifa'
+  il passo al riavvio. `PersonalStore.set`/`setAll` sono documentati `@Throws(IOException)`: con un registro che non si scrive lanciano, e niente e' cambiato.
+- **Chi sta sopra traduce** con `QuietWrites.attemptResult` / `attempt` (`core-common`, stesso criterio di RG-B: solo `IOException`, la cancellazione passa, un errore di
+  programmazione resta un errore, nel log solo l'etichetta e il tipo):
+  - **Album**: `AlbumPageController` (rinomina, ordine, copertina, elimina, Congela e Scongela, aggiungi, riordina, togli, livello, lascia, eredita, avvisi), `SuggestionsController`
+    (Accetta, Escludi), `SmartEditorController` (crea e salva le regole: `EditorProblem.NOT_SAVED`), `TripsController` (`TripAccepted.NotSaved`, "Non mi interessa"),
+    `AddToAlbumController`, `AlbumListController` (ordine, riordino, "Mostra di nuovo", avvisi), `AlbumsTabController`. Il messaggio nuovo e' `AlbumMessage.NotSaved`:
+    «Non salvato: la memoria del telefono e' piena. Non e' cambiato niente; libera spazio e riprova.»; `album_message_not_done` non parla piu' di memoria (resta per gli errori
+    imprevisti dei fogli condivisi).
+  - **Impostazioni** (`core-personal`): `SyncedMotionSettings` (l'interruttore "Animazione delle foto in movimento"), `SyncedFullHashSettings`, `SyncedSearchSettings`,
+    `SyncedCollectionsSettings`, `SyncedPersonalSettings` (copertine e cartelle escluse: queste ora in un lotto solo), `SyncedMemoriesSettings` ("azzera le scelte sulle persone"
+    in un lotto solo), `PersonalMemories` e `SimilarCopiesChoices` (copia principale, separa, di nuovo unibili: un lotto solo, e chi sincronizza e' avvisato solo se si e' scritto
+    qualcosa). Qui l'esito e' **l'interruttore che torna dov'era** (lo stato non cambia, come per le preferenze di RG-B): nessuna di queste schermate ha un posto per un messaggio.
+- **Non coperti, scelta consapevole**: `SyncedFacesSettings.set` (chi lo chiama, `DefaultFacesSwitch` e `DefaultFacesEraser`, ha la sua gestione degli errori), le due scritture di
+  `AppAlbumPorts` (`sharedAlbumLeft` e `shared_origin`: dentro i flussi di condivisione, fuori dal perimetro del pacchetto), la proiezione sulle tabelle di Room (un
+  `SQLiteFullException` dopo che il registro ha salvato non e' un `IOException`: il registro e' la verita', le tabelle si rifanno con `reconcileAll` all'avvio).
+  `PersonalSettingsHub` (`:app`, la strada vera dell'interruttore del movimento) consegna la scelta al registro e poi toglie quella locale: con la memoria piena l'interruttore torna
+  al valore del registro, e la scelta locale non resta in attesa.
+
+### 4. SOL-11: due tocchi su "Crea" non fanno due album
+`ManualAlbumCreator` (`feature-albums/.../list/`), usato da `AlbumsTabController` e `AlbumListController`: lo stato "sto salvando" si imposta come prima cosa
+(`compareAndSet`), prima di qualunque sospensione; un altro invio mentre salva torna `CreateAlbumResult.Busy` e non chiede niente; si toglie sempre in `finally` (errore e
+cancellazione). Il foglio `CreateAlbumSheet` ha `saving` (spegne "Crea") e `notSaved` (la frase «Non salvato: la memoria del telefono e' piena. Il nome resta qui...», diversa da
+«l'app non e' ancora pronta» di `Unavailable`: il nome scritto resta e il tasto si puo' ritoccare), e non si lascia chiudere mentre salva (la creazione finirebbe aprendo
+l'album sotto un foglio gia' mandato via). `CreateAlbumResult` ha `NotSaved` e `Busy`. **Il foglio di rinomina non ha il problema**: si chiude al primo tocco e rinominare due volte
+con lo stesso titolo e' la stessa cosa (nessun doppione possibile).
+
+### 5. Rifiniture
+- **FAB-11** (`core-library/.../membership/CatalogFilterMembership.kt`: il brief lo dava in `app/.../gallery/`, e' in `core-library`): l'attesa di 2,5 s cadeva **prima** della
+  prima emissione (`onEach { delay }`); ora e' `transform { emit(it); delay(settleMs) }`: la prima correzione subito, poi al piu' una ogni 2,5 s. Prova a tempo virtuale: a 0 ms la
+  prima, a 2.499 ms ancora quella, a 2.501 ms la seconda.
+- **FAB-13**: `album_openings` (`DataStoreAlbumOpenings.FILES`, il file e il suo temporaneo) e' in `AppLocalDataEraser.ALBUMS_TAB_FILES`, cancellato dall'azzeramento e dal cambio
+  di account (`eraseAccountData`); il processo si riavvia subito dopo (come per gli altri file di stato), quindi il DataStore non riscrive il valore vecchio. Prove in
+  `LocalDataEraserTest` (due) e che le altre preferenze in `datastore/` non si toccano.
+- **FAB-12 / GS-4** (`FiveBHostEffect`, `FiveBUi`): `PhoneTrashRequest.fromSelection` (e `trashFromPhone(ids, fromSelection)`); la selezione della Libreria si chiude solo se il
+  dialogo di sistema del cestino e' **confermato** (`settleSelectionAfterTrash`, `RESULT_OK`), come per il foglio di sempre (`selectionSettled`). Prima `onTrash` chiamava
+  `phoneSheetContinued()` subito. Prova in `AppLibraryCommandsTest` (annullato: niente; confermato: si chiude; richiesta del viewer: niente). L'aggancio del lanciatore dentro
+  `FiveBHostEffect` e' Compose con un lanciatore di sistema: non ha una prova propria (la logica e' nella funzione provata).
+- **GF-13** (`strings_backup_free.xml`, `PhoneOnlySheet`): `backup_free_phone_message` non dice piu' «Il file resta sul NAS...la copia» (vale per uno e per cinque: «Sul NAS non cambia
+  niente. Prima controllo che ogni copia sul NAS sia al sicuro.»); i due testi del cestino sono `plurals` e parlano del «file» (niente «la elimini», che era femminile e
+  sbagliata per un video); `backup_free_phone_not_on_nas_wait` non dice piu' «la sta caricando».
+- **Titolo «Eliminare N foto?» con soli video**: **non cambiato**. Il componente lo permette (`GalleryDeleteSheet(title = ...)`), ma il punto da cambiare e'
+  `LibraryDeleteSheet` in `feature-library/.../library/LibraryParts.kt`, che e' del pacchetto della chrome in alto: ~6 righe (se la selezione ha un video, `title =
+  «Eliminare N elementi?»` con un plurale nuovo) da fare quando quel pacchetto e' integrato.
+
+### Screenshot
+- `docs/screenshots/beta-grafica/G2b/`, riregistrati **a 360 x 780 dp** (il telefono dell'utente): `scheda-album-piena`, `scheda-album-quasi-vuota`, `scheda-album-caricamento` (chiaro e scuro; la piena anche
+  `-testo-grande`) e le tre griglie `griglia-fotocamera`, `griglia-fotocamera-vuota`, `griglia-messaggistica` (solo `-telefono` cambiato; i `-tablet` sono identici: a 1280 dp le colonne
+  restano 7). `gradlew :feature-albums:recordRoborazziDebug --tests "dev.pampa.mycloudgallery.feature.albums.AlbumsTab*ScreenshotTest*"` e `:feature-library:recordRoborazziDebug --tests
+  "dev.pampa.mycloudgallery.feature.library.collections.CameraMessaging*"`.
+- `docs/screenshots/beta-grafica/K3b/` (nuovi, chiaro e scuro, telefono 360 x 780 dp e tablet): `nuovo-album-non-salvato` (il foglio sopra la scheda Album con «Non salvato: la memoria del
+  telefono e' piena», il nome che resta) e `nuovo-album-sta-salvando` ("Crea" spento). Test: `AlbumsTabCreate*ScreenshotTest`.
+
+### Prove nuove e cambiate
+`LedgerStoreFullStorageTest` (7), `SettingsFullStorageTest` (6), `AlbumsFullStorageTest` (2, sugli album veri con Room), `AlbumWriteFailuresTest` (feature-albums: creazione a due
+tocchi su entrambe le schermate, errore, cancellazione, azioni della pagina, riordino dell'elenco), `AlbumsTabWindowTest` (3), `CatalogFilterMembershipTest` (+1),
+`LocalDataEraserTest` (+2), `AppLibraryCommandsTest` (+2), `Correzioni5BSoloDalTelefonoTest` (+3). Cambiate perche' il requisito cambia il comportamento:
+`LedgerStoreTest.unGuastoDelDisco...` e `LedgerStoreBatchTest.seIlDiscoCade...` (provavano che in memoria il lotto restava), `AddToAlbumAndSuggestionsTest` (due: `NotSaved` al posto
+di `NotDone`), `Correzioni5BSoloDalTelefonoTest.ls1_conIlBackupNonAttivo...` (la frase al singolare senza genere).
+
+### Rischi per le prestazioni
+- `FollowCoverWindow`: una lettura di `layoutInfo` in `snapshotFlow`, una finestra per cambio delle righe in vista (come la griglia della Libreria); nessuna richiesta per fotogramma;
+  il calcolo e' sulle righe in vista piu' tre (decine di voci). Nessun vetro ne' fondale nuovi.
+- `LedgerPersonalStore.write` copia `pending` e `unprojected` (le modifiche da datare e le chiavi da portare: di solito poche decine) invece di cambiarli sul posto; il registro
+  intero si copia come prima (`HashMap(current)`) solo quando c'e' un'ora del NAS. Il costo del salvataggio e' lo stesso (uno per lotto).
+- Nessun lavoro nuovo all'avvio.
+
+### Da provare sul telefono
+1. S25: la scheda Album ha **tre colonne** (e due col testo molto grande); con piu' di 48 album (o duplicando un po' di album di prova) scorrere in fondo: tutte le copertine arrivano.
+2. Memoria piena (riempire fino all'ultimo megabyte): "Nuovo album" dalla scheda e da "Tutti gli album" -> «Non salvato», il nome resta, libera spazio e "Crea" riesce; rinomina,
+   elimina, Congela, riordina e togli una foto da un album; "Aggiungi ad album" dalla selezione; l'interruttore "Animazione delle foto in movimento" torna dov'era. Nessuna chiusura.
+3. Due tocchi velocissimi su "Crea": un album solo.
+4. Con il backup attivo, selezione di una foto non sul NAS -> "Elimina dal telefono" -> Elimina -> **annulla** il dialogo di sistema: la selezione c'e' ancora; riprova e conferma: si chiude.
+5. Azzeramento del dispositivo e "Configura di nuovo" con un altro account: l'ordine della scheda Album riparte dai fissi.
+6. Dopo l'avvio con Fotocamera/Messaggistica: la prima correzione compare subito (non dopo 2,5 s).
+
+### Decisioni aperte per l'utente
+- Il titolo del foglio di eliminazione con soli video (sopra).
+- Con la memoria piena le schermate senza un posto per un messaggio (riordino dell'elenco degli album, interruttori delle impostazioni) mostrano solo il valore che torna: se si vuole una
+  riga di avviso anche li' serve un posto nei loro stati.

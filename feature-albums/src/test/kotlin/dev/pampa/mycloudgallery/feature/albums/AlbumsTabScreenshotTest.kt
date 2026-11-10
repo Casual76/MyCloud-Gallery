@@ -8,10 +8,18 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.google.common.truth.Truth.assertWithMessage
+import dev.pampa.mycloudgallery.core.albums.contract.Album
+import dev.pampa.mycloudgallery.core.albums.contract.CoverRef
+import dev.pampa.mycloudgallery.core.albums.testing.FakeAlbumLibrary
+import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.AlbumSort
+import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabEntry
+import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabOrder
 import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabScreen
 import dev.pampa.mycloudgallery.feature.albums.tab.AlbumsTabState
 import dev.pampa.mycloudgallery.feature.albums.tab.NoAlbumsTabHandlers
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumHost
+import java.util.UUID
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
@@ -49,6 +57,35 @@ abstract class AlbumsTabShots(private val dark: Boolean, private val device: Str
 
   @Test
   fun schedaPienaTestoGrande() = shoot("scheda-album-piena", tab.full(), expect = "Fotocamera", fontScale = LARGE_TEXT)
+
+  /**
+   * GF-20: le cinque voci fisse (con «Messaggistica», una parola sola) e nomi di una, due righe e troppo lunghi: ogni nome sta su due righe al massimo con le due righe
+   * sempre riservate, i conteggi stanno alla stessa altezza, e solo il nome davvero lungo finisce con i puntini alla seconda riga.
+   */
+  private fun fixedAndLongNames(): AlbumsTabState.Ready {
+    val (fixed, pinned) = AlbumsTabOrder.arrange(emptyList(), tab.summaries(), emptyMap())
+    val titles = listOf("Gita", "Weekend in montagna", "Vacanza al mare con tutta la famiglia di zia Carla e gli amici", "Compleanno di Anna")
+    val albums = titles.mapIndexed { n, title ->
+      AlbumsTabEntry.Item(
+        Album.Manual(
+          id = AlbumId(UUID(0x7_0000_0000L, n.toLong()).toString()),
+          title = title,
+          cover = CoverRef.Auto(FakeAlbumLibrary.id(n + 20)),
+          count = 11 + n * 11,
+          sort = AlbumSort.NEWEST_FIRST,
+          updatedAtNas = 1_000L + n,
+          newestDay = null,
+        ),
+      )
+    }
+    return AlbumsTabState.Ready(fixed + albums, pinned)
+  }
+
+  @Test
+  fun schedaVociFisseENomiLunghi() = shoot("scheda-album-voci-fisse-e-nomi-lunghi", fixedAndLongNames(), expect = "Messaggistica")
+
+  @Test
+  fun schedaVociFisseENomiLunghiTestoGrande() = shoot("scheda-album-voci-fisse-e-nomi-lunghi", fixedAndLongNames(), expect = "Messaggistica", fontScale = LARGE_TEXT)
 
   @Test
   fun schedaQuasiVuota() = shoot("scheda-album-quasi-vuota", tab.almostEmpty(), expect = "Tocca il cuore")

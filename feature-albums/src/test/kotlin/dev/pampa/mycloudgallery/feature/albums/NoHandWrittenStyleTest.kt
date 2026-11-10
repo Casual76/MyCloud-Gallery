@@ -52,7 +52,8 @@ class NoHandWrittenStyleTest {
 
   @Test
   fun nessunaDimensioneDiTestoLetterale() {
-    val found = violations(Regex("""\b\d+(\.\d+)?\.sp\b|\bfontSize\s*="""))
+    // GF-20: un corpo calcolato dal token (`fontSize = scaledSize(base.fontSize, ...)`: il nome che scende per far entrare una parola) non e' un corpo scritto a mano.
+    val found = violations(Regex("""\b\d+(\.\d+)?\.sp\b|\bfontSize\s*=(?![^\n]*\.fontSize\b)"""))
     assertWithMessage("Dimensioni di testo scritte a mano (usa MaterialTheme.typography):\n" + found.joinToString("\n")).that(found).isEmpty()
   }
 

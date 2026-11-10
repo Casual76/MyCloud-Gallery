@@ -60,7 +60,8 @@ internal abstract class DiagnosticsScreenshotBase(private val dark: Boolean, pri
 
   private val look: String get() = if (dark) "scuro" else "chiaro"
 
-  private fun shoot(name: String, fontScale: Float? = null, content: @Composable () -> Unit) {
+  /** [phoneOnly]: l'immagine c'e' solo sul telefono (le sezioni a testo grande di GF-21: sul tablet le righe sono larghe e non si spezzano). */
+  private fun shoot(name: String, fontScale: Float? = null, phoneOnly: Boolean = false, content: @Composable () -> Unit) {
     composeRule.setContent {
       val settings = EngineSettings(themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT)
       MyCloudGalleryTheme(settings = settings) {
@@ -74,6 +75,7 @@ internal abstract class DiagnosticsScreenshotBase(private val dark: Boolean, pri
     }
     composeRule.waitForIdle()
     val suffix = if (fontScale != null) "-testo-grande" else ""
+    if (phoneOnly && device != "telefono") return
     composeRule.onRoot().captureRoboImage("$DIR/$name-$look-$device$suffix.png")
   }
 
@@ -155,6 +157,28 @@ internal abstract class DiagnosticsScreenshotBase(private val dark: Boolean, pri
 
   @Test
   fun fiducia() = shoot("sezione-fiducia", content = section(DiagSection.TRUST))
+
+  // GF-21: tutte le sezioni anche a testo grande (1,3x) sul telefono dell'utente: nessun titolo spezzato a meta' parola e il testo che usa la larghezza della riga.
+  @Test
+  fun reteENasTestoGrande() = shoot("sezione-rete-e-nas", fontScale = LARGE_TEXT, phoneOnly = true, content = section(DiagSection.NETWORK_AND_NAS))
+
+  @Test
+  fun attivitaTestoGrande() = shoot("sezione-attivita", fontScale = LARGE_TEXT, phoneOnly = true, content = section(DiagSection.ACTIVITIES))
+
+  @Test
+  fun ultimiEsitiTestoGrande() = shoot("sezione-ultimi-esiti", fontScale = LARGE_TEXT, phoneOnly = true, content = section(DiagSection.RECENT_EVENTS))
+
+  @Test
+  fun spazioTestoGrande() = shoot("sezione-spazio", fontScale = LARGE_TEXT, phoneOnly = true, content = section(DiagSection.STORAGE))
+
+  @Test
+  fun consumiTestoGrande() = shoot("sezione-consumi-del-mese", fontScale = LARGE_TEXT, phoneOnly = true, content = section(DiagSection.MONTHLY_TRAFFIC))
+
+  @Test
+  fun fiduciaTestoGrande() = shoot("sezione-fiducia", fontScale = LARGE_TEXT, phoneOnly = true, content = section(DiagSection.TRUST))
+
+  @Test
+  fun profiliTestoGrande() = shoot("sezione-profili", fontScale = LARGE_TEXT, phoneOnly = true, content = section(DiagSection.PROFILES))
 
   @Test
   fun profili() = shoot("sezione-profili", content = section(DiagSection.PROFILES))

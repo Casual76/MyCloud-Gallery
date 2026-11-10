@@ -4,8 +4,11 @@ import android.app.Application
 import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.Density
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.antigravity.fluidengine.foundation.EngineSettings
@@ -55,16 +58,40 @@ internal abstract class CrashRecordedScreenshotBase(private val dark: Boolean, p
 
   private val look: String get() = if (dark) "scuro" else "chiaro"
 
-  private fun shoot(name: String, content: @Composable () -> Unit) {
+  /** [fontScale]: il testo grande (GF-21), solo sul telefono. */
+  private fun shoot(name: String, fontScale: Float? = null, content: @Composable () -> Unit) {
     composeRule.setContent {
-      MyCloudGalleryTheme(settings = EngineSettings(themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT)) { content() }
+      MyCloudGalleryTheme(settings = EngineSettings(themeMode = if (dark) ThemeMode.DARK else ThemeMode.LIGHT)) {
+        if (fontScale == null) {
+          content()
+        } else {
+          val density = LocalDensity.current
+          CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale)) { content() }
+        }
+      }
     }
     composeRule.waitForIdle()
-    composeRule.onRoot().captureRoboImage("$DIR/$name-$look-$device.png")
+    if (fontScale != null && device != "telefono") return
+    val suffix = if (fontScale != null) "-testo-grande" else ""
+    composeRule.onRoot().captureRoboImage("$DIR/$name-$look-$device$suffix.png")
   }
 
   @Test
   fun avvisiDiAndroidConGliErroriRegistrati() = shoot("avvisi-di-android-con-errori-registrati") {
+    DiagnosticsSectionScreen(
+      DiagSection.ANDROID_WARNINGS,
+      ScreenFixtures.crashRecordedState(),
+      onBack = {},
+      onRefresh = {},
+      onRunTest = {},
+      onAction = {},
+      actions = DiagActionPolicy(appActions = ScreenFixtures.appActions, wireGuardAvailable = true),
+    )
+  }
+
+  /** GF-21: la stessa sezione a testo grande: la pillola sta sotto il titolo e il testo usa la larghezza della riga. */
+  @Test
+  fun avvisiDiAndroidConGliErroriRegistratiTestoGrande() = shoot("avvisi-di-android-con-errori-registrati", fontScale = 1.3f) {
     DiagnosticsSectionScreen(
       DiagSection.ANDROID_WARNINGS,
       ScreenFixtures.crashRecordedState(),

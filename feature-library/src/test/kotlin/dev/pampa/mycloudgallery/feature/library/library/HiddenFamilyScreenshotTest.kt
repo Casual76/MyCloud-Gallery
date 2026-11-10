@@ -13,7 +13,7 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarDefaults
 import dev.pampa.mycloudgallery.core.library.contract.LocalMediaActions
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.library.collections.ComposeScreenTest
-import dev.pampa.mycloudgallery.feature.library.collections.PHONE_QUALIFIERS
+import dev.pampa.mycloudgallery.feature.library.collections.SHOT_PHONE_QUALIFIERS
 import dev.pampa.mycloudgallery.feature.library.collections.TABLET_QUALIFIERS
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
 import org.junit.Test
@@ -25,7 +25,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Gli screenshot di P9 (Fase 7, D23, E-H2): la Libreria subito dopo "Nascondi" su elementi che i familiari vedono ancora (area comune, album
  * condivisi): l'avviso "I familiari continuano a vederlo / a vedere N di questi elementi" con la spiegazione che Nascosti protegge solo dentro
- * l'app. Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo grande. Il vetro non si vede in Robolectric (L'avviso e' su
+ * l'app. Chiaro e scuro, telefono (360 dp) e tablet (1280 dp), piu' il testo grande. Il vetro non si vede in Robolectric (L'avviso e' su
  * vetro): il testo e la posizione si.
  *
  * `gradlew :feature-library:recordRoborazziDebug --tests "*HiddenFamily*Screenshot*"` scrive i PNG in `docs/screenshots/7-P9/`. Nei normali
@@ -97,7 +97,7 @@ abstract class HiddenFamilyScreenshotBase(private val dark: Boolean, private val
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class HiddenFamilyPhoneScreenshotTest(dark: Boolean) : HiddenFamilyScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

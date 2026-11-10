@@ -33,7 +33,7 @@ import dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaIntents
 import dev.pampa.mycloudgallery.core.mediastore.testing.FakeRecentlyDeletedSource
 import dev.pampa.mycloudgallery.feature.library.collections.ComposeScreenTest
 import dev.pampa.mycloudgallery.feature.library.collections.FakeAuthenticator
-import dev.pampa.mycloudgallery.feature.library.collections.PHONE_QUALIFIERS
+import dev.pampa.mycloudgallery.feature.library.collections.SHOT_PHONE_QUALIFIERS
 import dev.pampa.mycloudgallery.feature.library.collections.TABLET_QUALIFIERS
 import dev.pampa.mycloudgallery.feature.library.collections.TestClock
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryRows
@@ -64,7 +64,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Gli screenshot di P8 (Fase 7: Utility, Doppioni, Eliminati di recente): chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo
+ * Gli screenshot di P8 (Fase 7: Utility, Doppioni, Eliminati di recente): chiaro e scuro, telefono (360 dp) e tablet (1280 dp), piu' il testo
  * grande (1,3x) sulle pagine principali. Sui fake: la libreria sintetica, i doppioni e il NAS finti, il cestino di sistema e quello del NAS di prova.
  *
  * `gradlew :feature-library:recordRoborazziDebug --tests "*UtilityScreenshot*"` scrive i PNG in `docs/screenshots/7-P8/`. Nei normali
@@ -316,7 +316,7 @@ abstract class UtilityScreenshotBase(private val dark: Boolean, private val devi
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE_QUALIFIERS)
+@Config(application = Application::class, qualifiers = SHOT_PHONE_QUALIFIERS)
 class UtilityPhoneScreenshotTest(dark: Boolean) : UtilityScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

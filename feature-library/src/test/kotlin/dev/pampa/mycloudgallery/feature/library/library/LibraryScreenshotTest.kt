@@ -52,7 +52,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Gli screenshot della Libreria (P7): livelli, stile in proporzione, scorsa con l'intestazione agganciata, selezione,
  * menu della vista, un pinch a meta', e gli stati (permesso, accesso parziale e foto in attesa, prima lettura, vuota,
- * filtro senza risultati). Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo grande sul telefono.
+ * filtro senza risultati). Chiaro e scuro, telefono (360 dp) e tablet (1280 dp), piu' il testo grande sul telefono.
  * La pillola delle schede e' disegnata come in `MainScaffold`.
  *
  * `gradlew :feature-library:recordRoborazziDebug --tests "*LibraryScreenshot*"` scrive i PNG in `docs/screenshots/3-P7/`;
@@ -227,7 +227,7 @@ internal abstract class LibraryScreenshotBase(private val dark: Boolean, private
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = "w360dp-h780dp-xhdpi")
 internal class LibraryPhoneScreenshotTest(dark: Boolean) : LibraryScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

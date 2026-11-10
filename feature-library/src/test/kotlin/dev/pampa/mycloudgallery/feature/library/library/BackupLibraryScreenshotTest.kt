@@ -52,7 +52,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Gli screenshot di P5 della Libreria (Fase 5A, `docs/fase5-progetto.md` §1.5, §2.12, D15, D16; G2): il **piede con la terza voce**
  * (backup, sotto rete e NAS) nei suoi casi (dalla beta, B2: il pannello del pop-up della nuvola, che ne ha preso il posto), e le **celle con il segno del problema** (disco intero, vince su "al sicuro") **e quello
- * delle copie** (il numero). Chiaro e scuro, telefono (412 dp) e tablet (1280 dp), piu' il testo grande (1,3x).
+ * delle copie** (il numero). Chiaro e scuro, telefono (360 dp) e tablet (1280 dp), piu' il testo grande (1,3x).
  *
  * `gradlew :feature-library:recordRoborazziDebug --tests "*BackupLibraryScreenshot*"` scrive i PNG in `docs/screenshots/5-P5/`; nei
  * normali `testDebugUnitTest` si verifica solo che le schermate compongano.
@@ -251,7 +251,7 @@ private const val PRESENCE: Int = CellFlags.ON_PHONE or CellFlags.ON_NAS or Cell
 
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "w412dp-h915dp-xhdpi")
+@Config(application = Application::class, qualifiers = "w360dp-h780dp-xhdpi")
 internal class BackupLibraryPhoneScreenshotTest(dark: Boolean) : BackupLibraryScreenshotBase(dark, "telefono") {
   companion object {
     @JvmStatic

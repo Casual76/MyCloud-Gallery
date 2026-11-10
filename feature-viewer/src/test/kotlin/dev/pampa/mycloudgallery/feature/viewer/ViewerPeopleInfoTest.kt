@@ -59,7 +59,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = PHONE)
+@Config(application = Application::class, qualifiers = SHOT_PHONE)
 class ViewerPeopleInfoTest {
 
   val composeRule = createAndroidComposeRule<ComponentActivity>()

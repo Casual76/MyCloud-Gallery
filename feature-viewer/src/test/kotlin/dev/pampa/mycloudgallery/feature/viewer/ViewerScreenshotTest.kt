@@ -40,6 +40,7 @@ import org.robolectric.annotation.Config
  * fotogrammi che la revisione grafica guarda, perche' "e' giusto per costruzione" qui non basta mai.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@Config(qualifiers = SHOT_PHONE)
 class ViewerScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
 
   companion object {
@@ -296,6 +297,7 @@ class ViewerScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
  * `gradlew :feature-viewer:recordRoborazziDebug`.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@Config(qualifiers = SHOT_PHONE)
 class ViewerMotionScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
 
   override val fixture: ViewerFixture = ViewerFixture(count = 400)

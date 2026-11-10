@@ -37,6 +37,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 const val NAS_PHONE = "w412dp-h915dp-xhdpi"
+
+/** Il telefono degli screenshot per l'utente (K4): il suo Galaxy S25, 360 x 780 dp. Non 412 dp, dove entrano piu' cose che sul suo schermo. */
+const val NAS_SHOT_PHONE = "w360dp-h780dp-xhdpi"
 const val NAS_TABLET = "w1280dp-h800dp-land-xhdpi"
 const val NAS_LARGE_TEXT = 1.3f
 

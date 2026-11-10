@@ -37,6 +37,7 @@ import org.robolectric.annotation.Config
  * stati compongano e non scrivono niente (come `ViewerScreenshotTest`).
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
+@Config(qualifiers = SHOT_PHONE)
 class ViewerNasScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
 
   companion object {

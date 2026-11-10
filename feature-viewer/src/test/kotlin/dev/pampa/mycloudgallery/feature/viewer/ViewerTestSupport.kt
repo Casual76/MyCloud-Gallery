@@ -50,6 +50,9 @@ internal class RegisterComponentActivity : TestWatcher() {
 internal const val PHONE = "it-w412dp-h915dp-xhdpi"
 internal const val TABLET = "it-w1280dp-h800dp-xhdpi"
 
+/** Il telefono degli screenshot per l'utente (K4): il suo Galaxy S25, 360 x 780 dp. Non 412 dp, dove entrano piu' cose che sul suo schermo. */
+internal const val SHOT_PHONE = "it-w360dp-h780dp-xhdpi"
+
 /**
  * Come la radice di un'app vera: il tema, e un `FluidGlassModalHost` sopra tutto, perche' il menu e i fogli di conferma
  * si aprono li' (senza host non si apre niente, ed e' la degradazione giusta in produzione, ma nei test serve vederli).

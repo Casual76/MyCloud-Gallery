@@ -20,6 +20,7 @@ import dev.pampa.mycloudgallery.feature.search.contract.AreaKind
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerBacklog
 import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
 import dev.pampa.mycloudgallery.feature.search.models.SearchSettingsController
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
@@ -50,7 +51,7 @@ class SearchSettingsControllerTest {
     scope = backgroundScope,
     probeDispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
     io = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler),
-  ).also { runCurrent() }
+  ).also { c -> backgroundScope.launch { c.whilePageVisible() }; runCurrent() }
 
   @Test fun cs13_ilCaldoHaUnMotivoEPoiLaMisuraRiparteDaSola() = runTest {
     var hot = true
@@ -108,6 +109,7 @@ class SearchSettingsControllerTest {
     }
     val dispatcher = kotlinx.coroutines.test.StandardTestDispatcher(testScheduler)
     val c = SearchSettingsController(indexer, models, engine, history, reading, accepted, blocked, backgroundScope, dispatcher, dispatcher)
+    backgroundScope.launch { c.whilePageVisible() }
     try {
       runCurrent(); assertThat(c.measuring.value).isTrue()
       testScheduler.advanceTimeBy(120_001); runCurrent()

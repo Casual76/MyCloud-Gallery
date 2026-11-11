@@ -18405,3 +18405,31 @@ Raccolte" e, dopo una banda, "Impostazioni" come ultima voce (lo stesso posto de
   Impostazioni principale, rete, sicurezza, copia esterna prima e dopo); rifatti `7-P11`, `7-P8` (utility-voci, modificate-vuote; tolto
   `screenshot-*`), `G2/raccolte-pannello-selezione`, `G2/pillola-raccolte`, e le pagine delle Impostazioni in `10-P3`, `10-P5`, `5-P12`, `6-P14`,
   `7-P9`, `8-P7`, `RG-D`. `doppioni-notturno` era cambiato solo per un interruttore a meta' animazione: non committato.
+
+### H4, giro di correzione 1 (11/11 sera)
+Ramo `fix/h4-ricerca-barra` dopo l'unione di `integra/beta-grafica` (`3f686ef9`, avanzamento veloce, nessun conflitto).
+- **CG-2, il vetro che cambiava misura**: il campo dell'engine richiudibile allargava il nodo di vetro a ogni fotogramma (`fluidSearchWidth` prima di
+  `fluidFloatingGlass`: una cattura dello sfondo di misura nuova per fotogramma, `DrawBackdropModifier.recordSize`). Scelta: il campo e' **sempre
+  aperto e largo quanto la riga dal primo fotogramma**; l'apertura e' lo scorrimento dal cerchio, uno spostamento del campo e un ritaglio, tutti letti
+  nel disegno (`GallerySearchBar.searchReveal`): il capo sinistro e' quello vero del vetro (bordo e ombra), il capo destro e' ritagliato tondo con
+  l'ombra sopra e sotto. Mentre la barra torna cerchio non si tocca. Prova sul telefono: traccia Perfetto di apertura e chiusura sulla Libreria carica
+  (S25), con le sezioni di RenderThread e le allocazioni GPU: le misure dei layer della barra non devono cambiare durante la molla, nessuna allocazione
+  di layer per fotogramma, nessun layer della griglia ricreato; confronto con la stessa traccia sul commit `14558864`.
+- **CU-12, una X sola**: il campo sempre aperto dell'engine ha solo la crocetta che svuota (con del testo); a campo vuoto, nello stesso punto, la X che
+  chiude (`FluidCapsuleAction`). Il segnaposto diventa «Cerca» se non entra accanto alla X.
+- **CU-2, suggerimenti distinguibili** (`SuggestionFit`): prima il testo scende dall'etichetta della chrome a quella piccola del tema, poi le voci corte
+  restano intere e le lunghe si dividono il resto; una voce che comincia come un'altra perde la parte in comune («…della nonna a Firenze»); una voce che
+  potrebbe essere un'altra prova i puntini in mezzo e, se ancora si confonde, esce. Parti uguali quando ci stanno.
+- **CU-3**: l'intestazione «Meno probabili» e' l'ultima voce della griglia (che cresce dal basso), quindi sta sopra di loro; al confine un filo.
+- **CU-4**: con la ricerca aperta anche la Libreria sale con la barra e con la tastiera (stessa salita, letta nel disegno).
+- **CU-11**: senza risultati la Libreria resta dietro, attenuata da un velo che trattiene i tocchi (`LibrarySearchLayer.coversLibrary`).
+- **CS-18**: il cablaggio di `MainDestination` e' in `MainSearch`; prove `RicercaCablaggioTest` (con un `SearchController` vero: da un'altra scheda,
+  ritorno dal viewer con la ricerca aperta, Trova simili) e `RicercaTastieraTest` (barra e Libreria salgono insieme).
+- **Voce 9**: l'ancora dei risultati tiene lo stato dell'interazione delle celle; all'unione con H1 l'aggancio e' `override fun hide(id: MediaId?) {
+  interaction.hiddenKey = id }` in `ResultsAnchor`.
+- La voce 8 (il segnale "app in uso" dalla ricerca) e' caduta: il segnale e' gia' acceso dai tocchi e da ogni scorrimento.
+- Limiti dell'engine (richieste): `FluidSearchField` non ha una X sola che svuota o chiude, e il richiudibile anima la misura del vetro; servirebbe un
+  campo richiudibile che rivela un vetro gia' a misura (o un parametro per la forma del vetro).
+- Verifiche: H4-8 e H4-9 FAIL (compilazione; poi i simboli del catalogo di debug dopo l'unione, rimessi con `:core-designsystem:compileDebugKotlin
+  --rerun`), H4-10 core-designsystem 320, feature-search 175, feature-library 1297 verdi e 2 prove nuove di `:app` corrette, H4-11 57 prove di `:app`
+  verdi con gli screenshot, H4-12 screenshot rifatti (32 prove). Screenshot in `docs/screenshots/beta-grafica/H4/`.

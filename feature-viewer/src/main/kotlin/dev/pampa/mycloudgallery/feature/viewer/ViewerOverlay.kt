@@ -150,6 +150,7 @@ import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextSheet
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextState
 import dev.pampa.mycloudgallery.feature.viewer.livetext.TextSelections
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSidePanel
+import dev.pampa.mycloudgallery.feature.viewer.info.averageColor
 import dev.pampa.mycloudgallery.feature.viewer.info.backupNote
 import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoModel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberAlbumsPanel
@@ -1187,14 +1188,20 @@ private fun ViewerOverlays(
           motionUnplayable = currentId in controller.motionUnplayable,
           onPhone = onPhone,
           localDay = localDay,
+          exifPending = current?.exif == null,
         ),
       )
     }
     val backupNote = remember(backupState, onPhone, format) { backupState?.let { backupNote(format, it, onPhone) } }
     // La mappa sotto il luogo e i dati, poi le persone, poi le copie (H2).
-    val extras = remember(placeMapPanel.sections, peoplePanel.sections, albumsPanel.sections, similar.sections) {
-      placeMapPanel.sections + peoplePanel.sections + albumsPanel.sections + similar.sections
+    // Le facce subito sotto la testa; la mappa, gli album e le copie dopo la scheda dello scatto (giro di correzione 1).
+    val extras = remember(placeMapPanel.sections, albumsPanel.sections, similar.sections) {
+      placeMapPanel.sections + albumsPanel.sections + similar.sections
     }
+    // La tinta della scheda dello scatto: il colore medio del segnaposto della foto, gia' decodificato per la pagina (nessuna lettura in piu').
+    val hash = if (currentIndex >= 0) snapshot.thumbHashAt(currentIndex) else null
+    val accent = remember(hash, services.placeholders) { hash?.let { averageColor(services.placeholders.image(it)) } }
+    val backupPending = services.backup != null && backupState == null
     val infoTitle = stringResource(R.string.viewer_info_title)
     val topLimit = with(density) { WindowInsets.statusBars.getTop(density) + PanelTopReserve.toPx() }
     Box(Modifier.fillMaxSize().testTag(ViewerTags.InfoPanel)) {
@@ -1206,7 +1213,17 @@ private fun ViewerOverlays(
           backdrop = backdrop,
           onClose = { state.infoOpen = false },
           contentAlpha = { infoFade.value },
-        ) { InfoContent(model = model, backup = backupNote, extras = extras, onOpenMaps = placeOpenMaps) }
+        ) {
+          InfoContent(
+            model = model,
+            backup = backupNote,
+            extras = extras,
+            onOpenMaps = placeOpenMaps,
+            leading = peoplePanel.sections,
+            accent = accent,
+            backupPending = backupPending,
+          )
+        }
       } else {
         InfoSheet(
           state = info,
@@ -1218,7 +1235,17 @@ private fun ViewerOverlays(
           onDragEnd = controller::onPanelDragEnd,
           onClose = { state.infoOpen = false },
           contentAlpha = { infoFade.value },
-        ) { InfoContent(model = model, backup = backupNote, extras = extras, onOpenMaps = placeOpenMaps) }
+        ) {
+          InfoContent(
+            model = model,
+            backup = backupNote,
+            extras = extras,
+            onOpenMaps = placeOpenMaps,
+            leading = peoplePanel.sections,
+            accent = accent,
+            backupPending = backupPending,
+          )
+        }
         // Il video continua ad andare e i suoi comandi stanno sopra il bordo del pannello, e salgono con lui (H2).
         val barShown = videoBar != null && atRest && chromeBackdropReady && !controller.cutout.active && (state.chromeVisible || touchExploration)
         if (barShown && videoBar != null) {

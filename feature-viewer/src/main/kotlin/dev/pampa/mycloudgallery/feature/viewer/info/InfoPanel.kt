@@ -9,6 +9,7 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CameraAlt
 import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -51,6 +53,8 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
@@ -67,6 +71,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
+import dev.antigravity.fluidengine.ui.fluid.FluidSkeleton
+import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidGrabber
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
@@ -427,12 +433,16 @@ private fun sheetMaterial(backdrop: GlassBackdropState?, shape: androidx.compose
   }
 
 /**
- * Le informazioni di un media, compatte (H2): la data grande in testa con l'ora e il luogo sotto; il backup in una capsula; la fotocamera e i
- * dati di scatto in pillole; la mappa, le persone, le copie ([extras]); in fondo, piccoli, il nome del file e la cartella.
+ * Le informazioni di un media (H2; giro di correzione 1: un pannello **disegnato**, non una pila di pillole). In testa **la data, unico
+ * titolo**, l'ora e il luogo; il backup in una capsula (l'unico segno colorato forte); le facce delle persone ([leading]); **una sola scheda
+ * dello scatto** con la striscia dei valori, tinta appena del colore della foto ([accent]); la mini-mappa, gli album, le copie ([extras]); in
+ * fondo, piccoli, il nome del file e la cartella.
  *
- * @param onOpenMaps la posizione in un'altra app ("Apri in Mappe", con la sua conferma); null = niente posizione o nessuna app.
+ * @param onOpenMaps la posizione in un'altra app ("Apri in Mappe", con la sua conferma), in coda al luogo; null = niente posizione, o c'e' la
+ *   mini-mappa (che la porta lei).
+ * @param accent il colore medio della foto (dal suo segnaposto, gia' in memoria): tinge la scheda dello scatto; null = il tema.
+ * @param backupPending la fonte del backup c'e' ma non ha ancora risposto: al posto della capsula un segnaposto della stessa misura.
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun InfoContent(
   model: InfoModel,
@@ -440,25 +450,28 @@ internal fun InfoContent(
   extras: List<InfoSectionModel>,
   onOpenMaps: (() -> Unit)?,
   modifier: Modifier = Modifier,
+  leading: List<InfoSectionModel> = emptyList(),
+  accent: Color? = null,
+  backupPending: Boolean = false,
 ) {
   val scheme = MaterialTheme.colorScheme
   Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(BlockGap)) {
-    // 1. La testa: quando e dove.
+    // 1. La testa: quando e dove. La data e' l'unico titolo del pannello.
     Column(verticalArrangement = Arrangement.spacedBy(LineGap)) {
       Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(PillGap)) {
         model.date?.let {
           Text(
             text = it,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.headlineSmall,
             color = scheme.onSurface,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f, fill = false),
+            modifier = Modifier.weight(1f, fill = false).semantics { heading() },
           )
         }
         if (model.estimated) FluidStatusBadge(label = stringResource(R.string.viewer_estimated_pill), tone = FluidTone.Warning)
       }
-      model.timeLine?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant) }
+      model.timeLine?.let { Text(text = it, style = MaterialTheme.typography.bodyLarge, color = scheme.onSurfaceVariant) }
       model.place?.let { place ->
         Row(
           modifier = Modifier.padding(top = PlaceTop),
@@ -480,32 +493,22 @@ internal fun InfoContent(
       }
     }
 
-    // 2. Il backup: un'icona e due parole, il perche' solo quando serve.
-    if (backup != null) GalleryFooterEntry(note = backup, onClick = null, alignment = Alignment.Start)
-
-    // 3. Lo scatto e il file, in pillole.
-    if (model.hasShot || model.file.isNotEmpty() || model.edited) {
-      Column(verticalArrangement = Arrangement.spacedBy(PillRowGap)) {
-        model.camera?.let { camera ->
-          Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(IconGap)) {
-            Icon(imageVector = Icons.Rounded.CameraAlt, contentDescription = null, modifier = Modifier.size(LineIcon), tint = scheme.onSurfaceVariant)
-            Text(text = camera, style = MaterialTheme.typography.titleSmall, color = scheme.onSurface, maxLines = 1, overflow = TextOverflow.Ellipsis)
-          }
-        }
-        if (model.shot.isNotEmpty()) Pills(model.shot)
-        if (model.file.isNotEmpty() || model.edited) {
-          FlowRow(horizontalArrangement = Arrangement.spacedBy(PillGap), verticalArrangement = Arrangement.spacedBy(PillGap)) {
-            model.file.forEach { FluidStatusBadge(label = it, tone = FluidTone.Neutral) }
-            if (model.edited) FluidStatusBadge(label = stringResource(R.string.viewer_edited_pill), tone = FluidTone.Info)
-          }
-        }
-      }
+    // 2. Il backup: un'icona e due parole, il perche' solo quando serve. Finche' la fonte non risponde, il suo posto (niente salti).
+    when {
+      backup != null -> GalleryFooterEntry(note = backup, onClick = null, alignment = Alignment.Start)
+      backupPending -> FluidSkeleton(modifier = Modifier.width(CapsuleSkeletonWidth), height = CapsuleSkeletonHeight, shape = FluidCapsuleShape)
     }
 
-    // 4. La mappa, le persone, le copie.
+    // 3. Le persone: le facce, subito sotto la testa.
+    if (leading.isNotEmpty()) InfoSections(leading)
+
+    // 4. Lo scatto: una scheda sola.
+    if (model.hasCard) ShotCard(model, accent)
+
+    // 5. La mappa, gli album, le copie.
     if (extras.isNotEmpty()) InfoSections(extras)
 
-    // 5. Il file, piccolo, in fondo.
+    // 6. Il file, piccolo, in fondo.
     val fileLine = when {
       model.fileName != null && model.folder != null -> stringResource(R.string.viewer_info_file_line, model.fileName, model.folder)
       else -> model.fileName ?: model.folder
@@ -514,6 +517,106 @@ internal fun InfoContent(
       Column(verticalArrangement = Arrangement.spacedBy(LineGap)) {
         model.note?.let { Text(text = it, style = MaterialTheme.typography.bodySmall, color = scheme.error) }
         fileLine?.let { Text(text = it, style = MaterialTheme.typography.bodySmall, color = scheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis) }
+      }
+    }
+  }
+}
+
+/**
+ * La scheda dello scatto: in testa la fotocamera (o il tipo di media) con il formato; sotto l'obiettivo e, in una riga, le misure e il peso; i
+ * tratti come capsule; in fondo, dopo un filetto, **la striscia dei valori** (ISO · focale · apertura · tempo), cifre tabellari divise da
+ * filetti verticali, come la fanno le gallerie di riferimento. La superficie e' quella delle schede dell'engine, tinta di una parte del
+ * colore della foto ([accent]): ogni foto ha la sua scheda, e il testo resta sul suo contrasto.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ShotCard(model: InfoModel, accent: Color?) {
+  val scheme = MaterialTheme.colorScheme
+  val base = scheme.surfaceContainerLow
+  val surface = if (accent != null) lerp(base, accent, AccentShare) else base
+  val shape = ContinuousCornerShape(FluidRadius.Card)
+  Column(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(shape)
+      .background(surface)
+      .padding(horizontal = CardPadding, vertical = CardPaddingVertical),
+    verticalArrangement = Arrangement.spacedBy(CardLineGap),
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(IconGap)) {
+      Icon(
+        imageVector = if (model.video) Icons.Rounded.Videocam else Icons.Rounded.CameraAlt,
+        contentDescription = null,
+        modifier = Modifier.size(LineIcon),
+        tint = scheme.primary,
+      )
+      Box(modifier = Modifier.weight(1f)) {
+        when {
+          model.camera != null -> Text(
+            text = model.camera,
+            style = MaterialTheme.typography.titleMedium,
+            color = scheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+          model.shotPending -> FluidSkeleton(modifier = Modifier.fillMaxWidth(CameraSkeletonFraction), height = TitleSkeletonHeight)
+          else -> Text(
+            text = stringResource(if (model.video) R.string.viewer_info_kind_video else R.string.viewer_info_kind_photo),
+            style = MaterialTheme.typography.titleMedium,
+            color = scheme.onSurface,
+          )
+        }
+      }
+      model.format?.let { FluidStatusBadge(label = it, tone = FluidTone.Neutral) }
+    }
+    model.lens?.let { Text(text = it, style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+    if (model.specs.isNotEmpty()) {
+      Text(
+        text = model.specs.joinToString(SpecSeparator),
+        style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = TabularFigures),
+        color = scheme.onSurfaceVariant,
+      )
+    }
+    if (model.traits.isNotEmpty() || model.edited) {
+      FlowRow(horizontalArrangement = Arrangement.spacedBy(PillGap), verticalArrangement = Arrangement.spacedBy(PillGap)) {
+        model.traits.forEach { FluidStatusBadge(label = it, tone = FluidTone.Neutral) }
+        if (model.edited) FluidStatusBadge(label = stringResource(R.string.viewer_edited_pill), tone = FluidTone.Info)
+      }
+    }
+    if (model.strip.isNotEmpty() || model.shotPending) {
+      Box(modifier = Modifier.fillMaxWidth().padding(top = StripTop).height(Hairline).background(scheme.outlineVariant))
+      ValueStrip(values = model.strip, pending = model.shotPending)
+    }
+  }
+}
+
+/** La striscia dei valori dello scatto: celle uguali, cifre tabellari, filetti verticali in mezzo. In attesa, segnaposto della stessa misura. */
+@Composable
+private fun ValueStrip(values: List<String>, pending: Boolean) {
+  val scheme = MaterialTheme.colorScheme
+  val cells: List<String?> = if (pending) List(PendingCells) { null } else values
+  val spoken = values.joinToString(", ")
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(IntrinsicSize.Min)
+      .semantics(mergeDescendants = true) { if (!pending) contentDescription = spoken },
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    cells.forEachIndexed { i, value ->
+      if (i > 0) Box(modifier = Modifier.width(Hairline).fillMaxHeight().padding(vertical = RuleInset).background(scheme.outlineVariant))
+      Box(modifier = Modifier.weight(1f).padding(vertical = StripCellPadding), contentAlignment = Alignment.Center) {
+        if (value != null) {
+          Text(
+            text = value,
+            style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = TabularFigures),
+            color = scheme.onSurface,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        } else {
+          FluidSkeleton(modifier = Modifier.width(StripSkeletonWidth))
+        }
       }
     }
   }
@@ -566,21 +669,12 @@ private fun OpenInMapsButton(onClick: () -> Unit) {
   }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun Pills(pills: List<String>) {
-  FlowRow(horizontalArrangement = Arrangement.spacedBy(PillGap), verticalArrangement = Arrangement.spacedBy(PillGap)) {
-    pills.forEach { FluidStatusBadge(label = it, tone = FluidTone.Neutral) }
-  }
-}
-
 private val BlockGap = 20.dp
 private val LineGap = 2.dp
 private val PlaceTop = 6.dp
 private val IconGap = 6.dp
 private val LineIcon = 18.dp
 private val PillGap = 6.dp
-private val PillRowGap = 10.dp
 private val CustomSectionGap = 8.dp
 private val ContentTop = 4.dp
 private val ContentBottom = 24.dp
@@ -589,3 +683,22 @@ private const val InvisibleBelow = 0.001f
 
 /** CU-8: quanto sfumano le informazioni che scorrono sotto la maniglia. */
 private val ScrollFade = 12.dp
+
+// La scheda dello scatto (giro di correzione 1 di H2).
+/** Quanto del colore della foto entra nella superficie della scheda: abbastanza per sentirlo, poco per non toccare il contrasto. */
+private const val AccentShare = 0.14f
+private val CardPadding = 16.dp
+private val CardPaddingVertical = 14.dp
+private val CardLineGap = 4.dp
+private val StripTop = 8.dp
+private val Hairline = 1.dp
+private val RuleInset = 6.dp
+private val StripCellPadding = 10.dp
+private val StripSkeletonWidth = 40.dp
+private const val PendingCells = 4
+private const val CameraSkeletonFraction = 0.55f
+private val TitleSkeletonHeight = 18.dp
+private val CapsuleSkeletonWidth = 140.dp
+private val CapsuleSkeletonHeight = 36.dp
+private const val SpecSeparator = " · "
+private const val TabularFigures = "tnum"

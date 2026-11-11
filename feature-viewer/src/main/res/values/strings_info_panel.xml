@@ -29,6 +29,10 @@
   <string name="viewer_video_full_hd">Full HD</string>
   <string name="viewer_video_hd">HD</string>
 
+  <!-- La testa della scheda dello scatto quando la fotocamera non si sa (uno screenshot, un video, un file senza EXIF). -->
+  <string name="viewer_info_kind_photo">Foto</string>
+  <string name="viewer_info_kind_video">Video</string>
+
   <!-- Gli album in cui sta l'elemento (voci che aprono l'album). -->
   <string name="viewer_albums_header">Album</string>
 

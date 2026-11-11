@@ -162,16 +162,14 @@ internal class ViewerFormat(
   }
 
   /**
-   * H2: i dati di scatto come pillole del pannello, solo quelli che la fotocamera ha scritto: "Obiettivo principale", "f/1,8", "1/250 s",
-   * "ISO 50", "6,3 mm", "Flash". Il flash si dice solo se e' scattato ("Senza flash" e' rumore).
+   * La striscia dei valori dello scatto (giro di correzione 1 di H2): "ISO 50", "6,3 mm", "f/1,8", "1/250 s", in quest'ordine e solo quelli
+   * noti. L'obiettivo sta nella riga sopra della scheda, il flash fra i tratti.
    */
-  fun shotPills(exif: ExifDetails): List<String> = listOfNotNull(
-    exif.lens?.trim()?.takeIf { it.isNotEmpty() },
-    exif.fNumber?.let { resources.getString(R.string.viewer_exposure_f, trimmed(it)) },
-    exif.exposureTime?.takeIf { it.isNotBlank() }?.let { resources.getString(R.string.viewer_exposure_time, it) },
+  fun shotStrip(exif: ExifDetails): List<String> = listOfNotNull(
     exif.iso?.let { resources.getString(R.string.viewer_exposure_iso, it) },
     exif.focalLengthMm?.let { resources.getString(R.string.viewer_focal_mm, trimmed(it)) },
-    resources.getString(R.string.viewer_flash_on).takeIf { exif.flashFired == true },
+    exif.fNumber?.let { resources.getString(R.string.viewer_exposure_f, trimmed(it)) },
+    exif.exposureTime?.takeIf { it.isNotBlank() }?.let { resources.getString(R.string.viewer_exposure_time, it) },
   )
 
   /**

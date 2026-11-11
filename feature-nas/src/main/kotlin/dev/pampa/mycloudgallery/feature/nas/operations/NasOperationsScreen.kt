@@ -36,7 +36,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
@@ -276,7 +275,7 @@ private fun ActiveCard(op: NasOperationState, onStop: (OpId) -> Unit) {
         onClick = { onStop(op.id) },
         style = FluidButtonStyle.Tinted,
         grip = FluidPressGrip.YieldsToScroll,
-        size = FluidButtonSize.Medium,
+        size = FluidButtonSize.Large,
         fillWidth = true,
         leading = { Icon(imageVector = Icons.Rounded.StopCircle, contentDescription = null, modifier = Modifier.size(StopGlyph)) },
         modifier = Modifier.semantics { contentDescription = stopDescription },
@@ -312,14 +311,11 @@ private fun iconStatus(op: NasOperationState): GalleryIconStatus = when (op) {
   is NasOperationState.Cancelled -> GalleryIconStatus.Stopped
 }
 
-/** Il conto corto di un'operazione in corso: "128 / 312", con i byte "128 / 312 · 1,6 / 4,1 GB". */
+/** Il conto corto di un'operazione in corso: "128 / 312". */
 @Composable
 private fun shortDetailOf(op: NasOperationState): String = when (op) {
-  is NasOperationState.Running -> if (op.bytesTotal > 0) {
-    stringResource(R.string.nas_ops_short_bytes, NasText.count(op.done), NasText.count(op.total), NasText.size(op.bytesDone), NasText.size(op.bytesTotal))
-  } else {
-    stringResource(R.string.nas_ops_short, NasText.count(op.done), NasText.count(op.total))
-  }
+  // I byte li dice l'anello (la percentuale si conta sui byte) e TalkBack: sotto il titolo resta una riga sola.
+  is NasOperationState.Running -> stringResource(R.string.nas_ops_short, NasText.count(op.done), NasText.count(op.total))
   is NasOperationState.Paused -> stringResource(R.string.nas_ops_short, NasText.count(op.done), NasText.count(op.total))
   is NasOperationState.WaitingLocked -> stringResource(R.string.nas_ops_short, NasText.count(op.done), NasText.count(op.total))
   else -> detailOf(op)
@@ -452,8 +448,8 @@ private fun NasStopNote() {
   )
 }
 
-private val OpRing = 52.dp
-private val OpRingStroke = 5.dp
-private val StopGlyph = 20.dp
+private val OpRing = NasDimens.OpRing
+private val OpRingStroke = NasDimens.OpRingStroke
+private val StopGlyph = NasDimens.StopGlyph
 
 private const val PERCENT = 100

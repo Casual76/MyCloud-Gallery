@@ -29,7 +29,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
@@ -166,4 +165,4 @@ private fun PathRow(icon: ImageVector, family: GalleryIconFamily, title: Int, de
   )
 }
 
-private val PromiseGap = 8.dp
+private val PromiseGap = OnboardingDimens.DockGap

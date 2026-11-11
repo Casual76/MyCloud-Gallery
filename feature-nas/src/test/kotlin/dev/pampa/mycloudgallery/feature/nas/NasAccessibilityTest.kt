@@ -136,8 +136,8 @@ class NasAccessibilityTest : ComposeNasTest() {
       NasTrashScreen(TrashUi(areas = areas, list = NasTrashState.Ready(items, NasFixtures.NOW, true), selecting = true, selection = setOf(items[0].key())), TrashActions(), { 0L }, onBack = {})
     }
     assertEveryTargetHasAName("Eliminati")
-    composeRule.onNodeWithContentDescription("IMG_20260921_184233.jpg, ${sz("4,8 MB")}, Restano 29 giorni").assertExists()
-    composeRule.onNodeWithContentDescription("Vecchie bozze, cartella, 74 file · ${sz("182 MB")}, Restano 11 giorni").assertExists()
+    composeRule.onNodeWithContentDescription("IMG_20260921_184233.jpg, ${sz("4,8 MB")}, Restano 29 giorni, Eliminato da questo dispositivo").assertExists()
+    composeRule.onNodeWithContentDescription("Vecchie bozze, cartella, 74 file · ${sz("182 MB")}, Restano 11 giorni, Eliminato da questo dispositivo").assertExists()
     // Una voce senza record valido lo dice nella sua frase.
     composeRule.onNode(hasContentDescription("Senza nome", substring = true) and hasContentDescription("Senza record valido", substring = true)).assertExists()
     val rows = composeRule.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).fetchSemanticsNodes()

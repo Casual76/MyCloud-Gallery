@@ -139,25 +139,29 @@ class AlbumsTabNamesTest : AlbumsComposeTest() {
     assertThat(layout.isLineEllipsized(0)).isFalse()
   }
 
-  /** Due celle vicine, il nome di una riga e quello di due: i conteggi stanno alla stessa altezza (e quello della terza, "Compleanno", pure). */
+  /**
+   * Due celle vicine, il nome di una riga e quello di due: i nomi partono alla stessa altezza (e quello della terza, "Compleanno", pure). I4: sotto la copertina
+   * non c'e' piu' il numero, e il nome lo dice TalkBack con il conteggio.
+   */
   @Test
-  fun iConteggiSuUnaRigaESuDueStannoAllaStessaAltezzaA360Dp() {
+  fun iNomiSuUnaRigaESuDueStannoAllaStessaAltezzaA360Dp() {
     val state = AlbumsTabState.Ready(
       listOf(album(1, "Gita", 71), album(2, "Weekend in montagna", 72), album(3, "Compleanno", 73)),
       pinned = 0,
     )
     show { screen(state)() }
-    val first = yOf("71")
-    assertWithMessage("«Gita» (una riga) e «Weekend in montagna» (due righe): conteggi a quote diverse").that(yOf("72")).isEqualTo(first)
-    assertThat(yOf("73")).isEqualTo(first)
+    val first = yOf("Gita")
+    assertWithMessage("«Gita» (una riga) e «Weekend in montagna» (due righe): nomi a quote diverse").that(yOf("Weekend in montagna")).isEqualTo(first)
+    assertThat(yOf("Compleanno")).isEqualTo(first)
+    assertThat(composeRule.onAllNodesWithText("71", useUnmergedTree = true).fetchSemanticsNodes()).isEmpty()
   }
 
   @Test
-  fun iConteggiSuUnaRigaESuDueStannoAllaStessaAltezzaATestoGrande() {
+  fun iNomiSuUnaRigaESuDueStannoAllaStessaAltezzaATestoGrande() {
     // A 1,3x le colonne sono due: si guardano le prime due celle, affiancate.
     val state = AlbumsTabState.Ready(listOf(album(1, "Gita", 71), album(2, "Weekend in montagna con tutti", 72)), pinned = 0)
     show(fontScale = LARGE_TEXT) { screen(state)() }
-    assertThat(yOf("72")).isEqualTo(yOf("71"))
+    assertThat(yOf("Weekend in montagna con tutti")).isEqualTo(yOf("Gita"))
   }
 
   /** La misura: una parola che entra non cambia il corpo; una che non entra lo riduce quanto serve, non oltre il minimo. */

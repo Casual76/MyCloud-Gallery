@@ -184,6 +184,9 @@ class MediaGridState(
   internal val interaction = GalleryGridInteractionState()
   internal val scrubberState = GalleryScrubberState()
   internal val layouts = GridLayoutStore(engine, layoutDispatcher)
+
+  /** H3, giro 1 (CU-10): i giorni con foto della vista, per il calendario del salto a una data, tenuti per vista del catalogo. */
+  internal val days = GridDaysCache()
   internal var viewport: GridViewport by mutableStateOf(GridViewport())
 
   /** Dove sta la griglia nella finestra (per i bordi del viewer). */

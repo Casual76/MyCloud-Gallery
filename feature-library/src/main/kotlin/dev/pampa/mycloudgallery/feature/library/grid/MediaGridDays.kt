@@ -1,22 +1,34 @@
 package dev.pampa.mycloudgallery.feature.library.grid
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import dev.pampa.mycloudgallery.core.common.perf.AfterFirstDraw
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlin.math.min
+import java.util.concurrent.Executors
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Fase H (R2, scelta dell'utente dell'11/11: «il calendario con i giorni»): i giorni che hanno foto nella vista [view], per il calendario del
  * salto a una data. Vengono dai dati che la griglia ha gia' (il giorno di ogni elemento, `TimelineSnapshot.localDayAt`, lo stesso delle
- * intestazioni): nessuna query. Si calcolano **solo quando il calendario si apre**, fuori dal thread principale ([of]): una passata sulla vista
- * (100 mila elementi: pochi millisecondi), e poi ogni domanda e' una ricerca binaria.
+ * intestazioni): nessuna query. Una passata sulla vista fuori dal thread principale ([of]: 100 mila elementi, pochi millisecondi), poi ogni
+ * domanda e' una ricerca binaria. Si tengono **per vista del catalogo** in [GridDaysCache]: si rifanno solo quando il catalogo cambia.
  *
  * Per ogni giorno si tiene la prima e l'ultima posizione nella vista: e' cio' che serve al salto ([jumpToDay]).
  */
@@ -100,6 +112,71 @@ class GridDays private constructor(
 
     /** Un giorno come `aaaammgg`, la forma di `TimelineSnapshot.localDayAt` e delle sezioni. */
     fun encode(date: LocalDate): Int = date.year * 10_000 + date.monthValue * 100 + date.dayOfMonth
+  }
+}
+
+/**
+ * H3, giro 1 (CU-10, CG-4: «il calendario si apre passando da un indicatore di caricamento e ricalcola i giorni a ogni apertura»): i giorni con
+ * foto **tenuti in memoria per vista del catalogo**. Il calendario si apre gia' disegnato con cio' che c'e' qui ([latest], anche di una vista
+ * di poco prima) e si completa appena la vista di adesso e' pronta; una seconda apertura sulla stessa vista non rifa' niente.
+ *
+ * Quando si preparano:
+ *  - **al primo tocco sulla data** ([prepare] con [openDispatcher], il `Default`: l'utente sta guardando);
+ *  - **a griglia ferma da un po'** ([keepWarm]): mai all'avvio (aspetta il primo disegno utile, `AfterFirstDraw`), mai mentre la griglia scorre,
+ *    una volta per vista nuova, su un thread suo a **priorita' minima** creato al primo uso.
+ * A calendario chiuso e con il catalogo fermo non costa niente: una coroutine che aspetta.
+ */
+@Stable
+class GridDaysCache {
+
+  /** I giorni dell'ultima vista preparata (puo' essere di una vista di poco prima: si mostra quella finche' la nuova non e' pronta). */
+  var latest: GridDays? by mutableStateOf(null)
+    private set
+
+  /** Dove si contano i giorni quando il calendario si apre e non li ha: il `Default` (i test lo cambiano). */
+  internal var openDispatcher: CoroutineDispatcher = Dispatchers.Default
+
+  /** Solo per i test: quante passate sulla vista sono state fatte. */
+  internal var computations: Int = 0
+    private set
+
+  private val mutex = Mutex()
+
+  /** I giorni di [view], se sono gia' pronti. */
+  fun current(view: TimelineView): GridDays? = latest?.takeIf { it.view === view }
+
+  /** I giorni di [view]: quelli in memoria se sono di questa vista, se no una passata su [dispatcher]. Due richieste insieme ne fanno una. */
+  suspend fun prepare(view: TimelineView, dispatcher: CoroutineDispatcher = openDispatcher): GridDays = mutex.withLock {
+    current(view)?.let { return it }
+    val days = withContext(dispatcher) { GridDays.of(view) }
+    computations++
+    latest = days
+    days
+  }
+
+  /**
+   * Tiene i giorni pronti per la vista della griglia [grid], senza costi visibili: dopo il primo disegno utile, a ogni vista nuova aspetta che la
+   * griglia sia ferma da [idleMillis] e prepara i giorni sul thread a priorita' minima. Uno scorrimento che riparte annulla l'attesa.
+   */
+  suspend fun keepWarm(grid: MediaGridState, idleMillis: Long = WarmIdleMillis) {
+    AfterFirstDraw.await()
+    snapshotFlow { grid.view to grid.listState.isScrollInProgress }.collectLatest { (view, scrolling) ->
+      if (scrolling || current(view) != null || view.size == 0) return@collectLatest
+      delay(idleMillis)
+      prepare(view, LowPriority.dispatcher)
+    }
+  }
+
+  private object LowPriority {
+    /** Un thread solo, a priorita' minima, creato al primo uso (mai all'avvio). */
+    val dispatcher: CoroutineDispatcher by lazy {
+      Executors.newSingleThreadExecutor { r -> Thread(r, "MCG:giorni").apply { isDaemon = true; priority = Thread.MIN_PRIORITY } }.asCoroutineDispatcher()
+    }
+  }
+
+  internal companion object {
+    /** Quanto la griglia deve restare ferma prima che i giorni si preparino da soli. */
+    const val WarmIdleMillis: Long = 3_000L
   }
 }
 

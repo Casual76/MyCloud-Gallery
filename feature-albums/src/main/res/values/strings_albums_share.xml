@@ -19,8 +19,8 @@
   <string name="share_counts_both">%1$s e %2$s</string>
   <string name="share_counts_with_size">%1$s (%2$s)</string>
 
-  <string name="share_message_share">%1$s verranno spostati nell’area comune, nella cartella «%2$s», e li vedranno tutti i familiari.</string>
-  <string name="share_message_share_reference">%1$s entreranno nell’album, nella cartella «%2$s»: sono già nell’area comune e restano dove sono. Li vedranno tutti i familiari.</string>
+  <string name="share_message_share">%1$s vanno nell’area comune: li vedranno tutti i familiari.</string>
+  <string name="share_message_share_reference">%1$s entrano nell’album e restano dove sono: li vedranno tutti i familiari.</string>
   <string name="share_message_bring_back">%1$s verranno riportati nelle tue cartelle. Spariranno dall’album per gli altri familiari.</string>
   <string name="share_message_adopt">%1$s entreranno nell’album. Non si sposta niente: sono già nella cartella.</string>
 
@@ -33,7 +33,6 @@
   <string name="share_row_move_out">Tornano nelle tue cartelle</string>
   <string name="share_row_adopt">Aggiunti dal computer</string>
   <string name="share_group_level">Chi può fare cosa</string>
-  <string name="share_group_level_note">Lo puoi cambiare quando vuoi: lo decidi solo tu.</string>
   <string name="share_group_hidden">Foto nascoste</string>
   <string name="share_group_excluded">Restano fuori</string>
   <string name="share_space_value">%1$s (con 1 GB di margine)</string>
@@ -42,9 +41,7 @@
     <item quantity="one">Lascia fuori il nascosto</item>
     <item quantity="other">Lascia fuori i %1$d nascosti</item>
   </plurals>
-  <string name="share_hidden_leave_detail">Restano nascosti e al loro posto.</string>
   <string name="share_hidden_include">Condividi anche i nascosti</string>
-  <string name="share_hidden_include_detail">Entrano nell’album insieme alle altre.</string>
   <plurals name="share_hidden_warning">
     <item quantity="one">Il nascosto diventerà visibile ai familiari. Nascosti protegge solo dentro l’app.</item>
     <item quantity="other">I %1$d nascosti diventeranno visibili ai familiari. Nascosti protegge solo dentro l’app.</item>

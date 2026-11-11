@@ -114,7 +114,9 @@ class AlbumsTabScreenTest : AlbumsComposeTest() {
   @Test
   fun iPreferitiVuotiSpieganoComeAggiungerne() {
     show { AlbumHost { screen(tab.almostEmpty())() } }
-    assertThat(isClickable("Tocca il cuore di una foto")).isTrue()
+    // I4: sotto la copertina solo il nome; come aggiungerne lo dice TalkBack nella frase della voce.
+    composeRule.onNode(hasContentDescription("Tocca il cuore di una foto", substring = true) and hasClickAction()).assertExists()
+    assertThat(composeRule.onAllNodesWithText("Tocca il cuore di una foto", substring = true).fetchSemanticsNodes()).isEmpty()
     assertThat(isClickable("Nuovo album")).isTrue()
   }
 }

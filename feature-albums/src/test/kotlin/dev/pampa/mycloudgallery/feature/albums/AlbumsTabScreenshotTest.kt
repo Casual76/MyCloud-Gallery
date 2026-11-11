@@ -44,7 +44,7 @@ abstract class AlbumsTabShots(private val dark: Boolean, private val device: Str
       assertWithMessage("manca «$expect» nella scena $name").that(composeRule.onAllNodesWithText(expect, substring = true).fetchSemanticsNodes()).isNotEmpty()
     }
     val suffix = if (fontScale != null) "-testo-grande" else ""
-    if (device == "telefono" || fontScale == null) composeRule.onRoot().captureRoboImage("../docs/screenshots/beta-grafica/G2b/$name-$look-$device$suffix.png")
+    if (device == "telefono" || fontScale == null) composeRule.onRoot().captureRoboImage("../docs/screenshots/beta-grafica/I4/$name-$look-$device$suffix.png")
   }
 
   private fun screen(state: AlbumsTabState): @Composable () -> Unit = {
@@ -88,7 +88,7 @@ abstract class AlbumsTabShots(private val dark: Boolean, private val device: Str
   fun schedaVociFisseENomiLunghiTestoGrande() = shoot("scheda-album-voci-fisse-e-nomi-lunghi", fixedAndLongNames(), expect = "Messaggistica", fontScale = LARGE_TEXT)
 
   @Test
-  fun schedaQuasiVuota() = shoot("scheda-album-quasi-vuota", tab.almostEmpty(), expect = "Tocca il cuore")
+  fun schedaQuasiVuota() = shoot("scheda-album-quasi-vuota", tab.almostEmpty(), expect = "Preferiti")
 
   @Test
   fun schedaInCaricamento() = shoot("scheda-album-caricamento", tab.loading(), expect = "Video")

@@ -40,7 +40,7 @@
   <string name="albums_sort_custom">Personalizzato</string>
   <string name="albums_sort_recent">Aggiornati di recente</string>
   <string name="albums_sort_name">Nome</string>
-  <string name="albums_sort_media_date">Data dei media</string>
+  <string name="albums_sort_media_date">Data delle foto</string>
   <string name="albums_sort_selected_state">Ordine scelto</string>
 
   <string name="albums_move_up">Sposta su</string>

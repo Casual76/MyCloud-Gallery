@@ -31,11 +31,15 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 
@@ -145,14 +149,24 @@ internal fun StripRow(
   detail: String,
   modifier: Modifier = Modifier,
   onClick: (() -> Unit)? = null,
+  family: GalleryIconFamily? = null,
+  status: GalleryIconStatus? = null,
 ) {
+  // I4 (fase I, «l'app parla troppo»): a schermo il segno e il titolo; la frase che spiega resta solo dove c'e' un rischio o un
+  // problema (il tono di avviso). Altrove la dice TalkBack, dopo il titolo.
+  val shown = if (tone == FluidTone.Warning || tone == FluidTone.Danger) detail else ""
   FluidListRow(
     title = title,
-    subtitle = detail,
+    subtitle = shown,
     tone = tone,
-    leading = { Icon(imageVector = icon, contentDescription = null) },
+    leading = {
+      if (family != null) GalleryIconTile(icon = icon, family = family, status = status) else Icon(imageVector = icon, contentDescription = null)
+    },
+    leadingTile = family == null,
     onClick = onClick,
-    modifier = modifier.heightIn(min = AlbumDimens.Touch),
+    modifier = modifier
+      .heightIn(min = AlbumDimens.Touch)
+      .semantics { if (shown.isEmpty() && detail.isNotBlank()) stateDescription = detail },
   )
 }
 

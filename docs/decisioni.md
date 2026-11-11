@@ -18052,3 +18052,13 @@ personalita'". Stesso ramo di H1 (`fix/h1-viewer-gesti`), da `a0d2c37b`.
 - Screenshot in `docs/screenshots/beta-grafica/H2/` (28): `viewer-info-foto-verticale-aperto-*`, `viewer-info-foto-orizzontale-aperto-*`,
   `viewer-info-a-meta-fascia-vuota-*` (solo telefono), `viewer-info-video-*`, `viewer-info-dati-completi-*`, `viewer-info-pochi-dati-*`,
   `viewer-info-problema-di-backup-*`, `viewer-info-pannello-lungo-scorso-*` (solo telefono); chiaro e scuro, telefono 360 x 780 dp e tablet.
+
+### Apertura da pagine con celle arrotondate (controllo chiesto dopo H1)
+Il viewer non parte mai da una cella arrotondata, quindi non c'e' uno scatto di forma da vedere. Le sole griglie che danno al viewer i bordi
+di partenza (`ViewerAnchor.boundsOf`) sono quelle della parete: la Libreria e il NAS (`MediaGridState.viewerAnchor`) e le Raccolte
+(`CollectionGridPage`, lo stesso `MediaGrid`), tutte con `GalleryWall.CornerScale` = 0 (angoli vivi, come la partenza di H1). La scheda
+Album e i ricordi hanno copertine e schede arrotondate, ma toccarle apre la pagina dell'album o del ricordo, la cui griglia e' anch'essa
+squadrata (`AlbumPageScreen`, `MemoryPageScreen`, `PersonPageScreen`, `ZoneGridScreen`, `SearchResultsGrid`: `GalleryWall.CornerScale`); e
+da queste pagine (album, ricordi, persone, mappa, ricerca, widget) il viewer riceve `AlbumViewerAnchor`/`SearchViewerAnchor`, che non
+danno bordi: l'apertura parte dal rettangolo al centro (`centeredFallback`), anch'esso ad angoli vivi. Resta un limite gia' noto, non di
+H1: da quelle pagine l'apertura non parte dalla cella toccata (e la chiusura si allontana sfumando, `FlightPlan.Away`).

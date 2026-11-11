@@ -86,7 +86,7 @@ internal fun buildInfoModel(format: ViewerFormat, inputs: InfoInputs): InfoModel
 
   val file = buildList {
     if (details != null) {
-      addAll(format.dimensionPills(details))
+      addAll(format.dimensionPills(details, video = inputs.kind == MediaKind.VIDEO))
       details.sizeBytes?.let { add(format.fileSize(it)) }
       format.formatName(details.mime)?.let { add(it) }
       details.durationMs?.takeIf { it > 0L && inputs.kind == MediaKind.VIDEO }?.let { add(GalleryVideoTime.format(it)) }

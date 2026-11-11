@@ -24,6 +24,11 @@
   <!-- Per TalkBack la capsula si legge con il suo argomento: "Backup: Telefono e NAS". -->
   <string name="viewer_info_badge_spoken">Backup: %1$s</string>
 
+  <!-- CU-7: il nome della risoluzione di un video, al posto dei megapixel. -->
+  <string name="viewer_video_4k">4K</string>
+  <string name="viewer_video_full_hd">Full HD</string>
+  <string name="viewer_video_hd">HD</string>
+
   <!-- Il piede: il nome del file e, accanto, la cartella sul telefono. -->
   <string name="viewer_info_file_line">%1$s · %2$s</string>
 </resources>

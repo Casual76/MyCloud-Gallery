@@ -174,14 +174,30 @@ internal class ViewerFormat(
     resources.getString(R.string.viewer_flash_on).takeIf { exif.flashFired == true },
   )
 
-  /** H2: le misure come pillole: "4000 × 3000" e "12 MP". */
-  fun dimensionPills(details: MediaDetails): List<String> {
+  /**
+   * H2: le misure come pillole: "4000 × 3000" e "12 MP". CU-7: per un video i megapixel non dicono niente: al loro posto il nome della
+   * risoluzione che si legge sulle videocamere ("4K", "Full HD", "HD"), se ce l'ha.
+   */
+  fun dimensionPills(details: MediaDetails, video: Boolean = false): List<String> {
     val w = details.orientedWidth ?: return emptyList()
     val h = details.orientedHeight ?: return emptyList()
     val size = resources.getString(R.string.viewer_dimensions, w, h)
+    if (video) return listOfNotNull(videoQuality(w, h), size)
     val mp = details.megapixels ?: return listOf(size)
     val text = if (mp >= 10.0) mp.roundToInt().toString() else String.format(locale, "%.1f", mp)
     return listOf(size, resources.getString(R.string.viewer_megapixels, text))
+  }
+
+  /** CU-7: "4K" (da 3840 sul lato lungo), "Full HD" (da 1920), "HD" (da 1280), niente sotto. Conta il lato corto per i formati stretti. */
+  fun videoQuality(width: Int, height: Int): String? {
+    val long = maxOf(width, height)
+    val short = minOf(width, height)
+    return when {
+      long >= UHD_LONG && short >= UHD_SHORT -> resources.getString(R.string.viewer_video_4k)
+      long >= FHD_LONG && short >= FHD_SHORT -> resources.getString(R.string.viewer_video_full_hd)
+      long >= HD_LONG && short >= HD_SHORT -> resources.getString(R.string.viewer_video_hd)
+      else -> null
+    }
   }
 
   /** H2: il titolo del pannello, "Martedì 12 marzo 2024" (il giorno con la maiuscola: e' l'inizio di un titolo). */
@@ -242,3 +258,11 @@ internal class ViewerFormat(
 }
 
 private const val SECONDS_PER_MINUTE = 60
+
+// CU-7: le soglie dei nomi delle risoluzioni video (lato lungo e lato corto, con un margine per i formati 1:1 e 4:3 delle videocamere).
+private const val UHD_LONG = 3840
+private const val UHD_SHORT = 1600
+private const val FHD_LONG = 1920
+private const val FHD_SHORT = 800
+private const val HD_LONG = 1280
+private const val HD_SHORT = 540

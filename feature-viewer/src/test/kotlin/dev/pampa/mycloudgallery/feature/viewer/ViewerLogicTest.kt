@@ -275,6 +275,14 @@ class ViewerLogicTest {
     assertThat(estimated.timeLine).endsWith("Data ricavata dal nome del file")
     val video = model(InfoInputs(kind = MediaKind.VIDEO, details = sampleDetails(id, MediaKind.VIDEO)))
     assertThat(video.file).contains("2:14")
+    // CU-7: niente megapixel su un video.
+    assertThat(video.file.none { it.endsWith("MP") }).isTrue()
+    val uhd = dev.pampa.mycloudgallery.feature.viewer.details.MediaDetails(id = id, kind = MediaKind.VIDEO, width = 3840, height = 2160, mime = "video/mp4", durationMs = 9_000L)
+    assertThat(model(InfoInputs(kind = MediaKind.VIDEO, details = uhd)).file.take(2)).containsExactly("4K", "3840 × 2160").inOrder()
+    assertThat(format.videoQuality(1920, 1080)).isEqualTo("Full HD")
+    assertThat(format.videoQuality(1080, 1920)).isEqualTo("Full HD")
+    assertThat(format.videoQuality(1280, 720)).isEqualTo("HD")
+    assertThat(format.videoQuality(640, 480)).isNull()
   }
 
   @Test

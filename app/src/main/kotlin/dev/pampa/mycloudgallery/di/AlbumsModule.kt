@@ -84,7 +84,7 @@ object AlbumsModule {
         itemsOf = gallery::albumIdsOf,
         opener = gallery.albumOpener,
         // Giro 2: gli album condivisi della famiglia, dai loro elementi visibili (la stessa lettura della pagina dell'album), fuori dal thread della UI.
-        sharedItemsOf = { id -> withContext(Dispatchers.IO) { albums.live.value?.sharedAlbums?.visibleItems(id).orEmpty() } },
+        sharedItemsOf = { id -> withContext(Dispatchers.IO) { albums.live.value?.shared?.albums?.visibleItems(id).orEmpty() } },
       )
       // P10-10: "Aggiungi ad album" dalla condivisione in arrivo: la promessa su disco, mantenuta quando i file sono nel catalogo.
       val incoming = AppIncomingAlbums(

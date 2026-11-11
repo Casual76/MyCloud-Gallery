@@ -18808,6 +18808,10 @@ Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?».
 - **NAS**: operazioni con piastrella, segno di stato e anello; garanzia di «Annulla il resto» una volta sola; cartelle con la piastrella per tipo;
   cestino piu' corto (anche quello della Libreria).
 - **Viewer**: il foglio «Eliminare questa foto?» dice i 30 giorni una volta.
+- **«Viaggi»** (`feature-albums/trips`, chiesto dall'orchestratore dopo la consegna di I1): griglia di schede come «Tutti i ricordi» (copertina 3:4,
+  nome e «Viaggio»/«Evento» sulla sfumatura, ✕ di «Non mi interessa», «Crea album» sotto). La scheda di I1 (`MemoryCardTile`) e' privata di
+  `feature-memories`, che `feature-albums` non vede: stessa forma e stesse misure, componente proprio (piccolo). Se si vuole un componente solo,
+  va spostato in `core-designsystem` (una `GalleryCoverCard` con copertina, titolo e riga piccola): da decidere con l'orchestratore.
 - **Onboarding**: Benvenuto con tre piastrelle e due parole; percorsi e permessi con la piastrella di cio' che si ottiene (permessi concessi: il
   segno «fatto»).
 - **Integrazioni**: ricezione con i segni delle aree e degli album; «media» tolto dalle frasi.

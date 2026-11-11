@@ -22,6 +22,7 @@ che vivono nelle cartelle delle fasi di origine (`7-P10`, `2-P6`, `4-P14`, `RG-D
 |---|---|---|---|
 | Scheda Album | nome e numero sotto ogni copertina | solo il nome (il numero lo dice TalkBack) | 24 → 12 (per 9 album) |
 | Pagina di un album | «24 elementi · Dal piu' recente · Lo hai condiviso tu»; righe di stato con una frase ciascuna; piastrelle grigie | «24 elementi»; righe di stato con la **piastrella colorata della famiglia e il segno nell'angolo** (in corso, fatto, attenzione), la frase solo per gli avvisi | ~60 → ~25 |
+| «Viaggi» (tutte le proposte) | una scheda di testo per proposta: copertina larga, nome, «12 foto · 3–6 mar», capsula «Viaggio», due tasti larghi uno sotto l'altro; sottotitolo della pagina; stati vuoti con due frasi | **griglia di schede** come «Tutti i ricordi» di I1: copertina a tutta scheda 3:4, nome e «Viaggio»/«Evento» sopra la sfumatura, la ✕ di «Non mi interessa» in alto, «Crea album» con il + sotto la scheda; numero e giorni a TalkBack; stati vuoti con il solo titolo | ~25 per proposta → ~5 |
 | Foglio «Condividi con la famiglia» | «24 foto e 2 video (186 MB) verranno spostati nell'area comune, nella cartella «...», e li vedranno tutti i familiari.», le scelte con una frase sotto, la nota «Lo puoi cambiare quando vuoi» | «24 foto e 2 video (186 MB) vanno nell'area comune: li vedranno tutti i familiari.», le scelte senza la frase (la cartella la dice la riga «Cartella») | ~80 → ~55 |
 
 ## Viewer
@@ -65,3 +66,4 @@ l'orchestratore non gira quello di I3.
 - Onboarding: le tre promesse come piastrelle in fila; i percorsi senza la frase sotto.
 - Operazioni: la garanzia «quello che e' gia' stato fatto resta fatto» una volta sola, sotto le schede.
 - Libreria vuota: «Ancora nessuna foto» al posto di «La Libreria e' vuota».
+- «Viaggi»: «Crea album» sotto la scheda e la ✕ sulla copertina (la scheda dei ricordi di I1 e' privata di `feature-memories`: qui la stessa forma, non lo stesso componente).

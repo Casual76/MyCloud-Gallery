@@ -17,9 +17,9 @@ import dev.pampa.mycloudgallery.feature.memories.contract.MemoriesThumbnails
 import dev.pampa.mycloudgallery.feature.memories.page.thumbRequestOf
 
 /**
- * La copertina di un ricordo: la miniatura locale di [media] (o, finche' non c'e', il segnaposto sfocato dell'indice, o un fondo liscio). **Mai testo
- * sopra la foto**: titolo e conto stanno accanto, su una superficie piena. Il caricamento lo chiede chi disegna la lista (`loader.window`): qui si
- * osserva soltanto. Una copertina che l'istantanea non ha piu' (nascosta, eliminata) e' un fondo liscio.
+ * La copertina di un ricordo: la miniatura locale di [media] (o, finche' non c'e', il segnaposto sfocato dell'indice, o un fondo liscio). Il testo,
+ * se c'e', lo mette chi la usa (I1: la scheda di "Tutti i ricordi" scrive il titolo sopra una sfumatura dello scrim). Il caricamento lo chiede chi
+ * disegna la lista (`loader.window`): qui si osserva soltanto. Una copertina che l'istantanea non ha piu' (nascosta, eliminata) e' un fondo liscio.
  */
 @Composable
 internal fun MemoryCover(

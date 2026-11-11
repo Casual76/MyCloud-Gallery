@@ -21,6 +21,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyDescendant
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasText
@@ -167,8 +169,10 @@ abstract class I1RaccolteShotBase(private val dark: Boolean, private val device:
   @Test
   fun personeInFondo() = shoot("persone-in-fondo", after = {
     scrollTo(CollectionSections.PEOPLE)
-    composeRule.onNode(hasScrollAction() and hasAnyDescendant(hasContentDescription("Giulia", substring = true)))
-      .performScrollToNode(hasContentDescription("Tutte le persone", substring = true))
+    // Il carosello delle persone: quello che scorre di lato e contiene Giulia (anche la colonna la contiene, ma scorre in verticale).
+    composeRule.onNode(SemanticsMatcher.keyIsDefined(SemanticsProperties.HorizontalScrollAxisRange) and hasAnyDescendant(hasContentDescription("Giulia", substring = true)))
+      // Per chiave, in un colpo solo: scorrendo un passo alla volta Giulia esce dal carosello e il selettore non lo ritrova piu'.
+      .performScrollToKey("more:people/all")
     composeRule.waitForIdle()
   }) { Tab(fresh = false) }
 

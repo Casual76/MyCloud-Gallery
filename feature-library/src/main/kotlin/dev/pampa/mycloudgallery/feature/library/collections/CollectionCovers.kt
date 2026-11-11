@@ -74,7 +74,7 @@ class CollectionCovers(val loader: ThumbnailLoader, private val library: ViewerI
 val LocalCollectionCovers = staticCompositionLocalOf<CollectionCovers?> { null }
 
 /** Il lato della piastrella delle righe delle Raccolte: piu' grande di quella di serie (32 dp), perche' una foto a 32 dp non si legge. */
-internal val CollectionRowArt: Dp = 44.dp
+internal val CollectionRowArtSize: Dp = 44.dp
 
 /**
  * Chiede le miniature delle copertine [media] **una volta**, e di nuovo solo se l'elenco o la Libreria cambiano: non a ogni scorrimento (sono
@@ -98,8 +98,8 @@ internal fun CollectionCoverWindow(covers: CollectionCovers, media: List<MediaId
  */
 @Composable
 internal fun CollectionRowArt(icon: ImageVector, tone: FluidTone, cover: MediaId?) {
-  Box(modifier = Modifier.size(CollectionRowArt)) {
-    FluidToneTile(tone = tone, size = CollectionRowArt) { Icon(imageVector = icon, contentDescription = null) }
+  Box(modifier = Modifier.size(CollectionRowArtSize)) {
+    FluidToneTile(tone = tone, size = CollectionRowArtSize) { Icon(imageVector = icon, contentDescription = null) }
     val covers = LocalCollectionCovers.current
     if (cover != null && covers != null) CoverImage(covers, cover, Modifier.matchParentSize())
   }
@@ -117,6 +117,6 @@ private fun CoverImage(covers: CollectionCovers, media: MediaId, modifier: Modif
     contentDescription = null,
     contentScale = ContentScale.Crop,
     // La forma della piastrella del tono alla stessa misura (il raggio segue il lato, come in `FluidToneTile`); l'alfa si legge nel disegno.
-    modifier = modifier.clip(ContinuousCornerShape(FluidRadius.Small * (CollectionRowArt / FluidToneTileSize))).graphicsLayer { this.alpha = alpha },
+    modifier = modifier.clip(ContinuousCornerShape(FluidRadius.Small * (CollectionRowArtSize / FluidToneTileSize))).graphicsLayer { this.alpha = alpha },
   )
 }

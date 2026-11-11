@@ -18530,6 +18530,32 @@ Unione: `integra/beta-grafica` (`3f686ef9`) era gia' figlia del ramo H5: avanzam
   le foto dei Luoghi corrispondono al luogo (l'id del luogo della sezione e quello dell'indice sono entrambi GeoNames: verificato solo sui dati di
   prova); scorrere le Raccolte resta fluido con volti e luoghi.
 
+### H5, giro di correzione 2 (11/11, sera)
+Unione: `integra/beta-grafica` (`ad4310a5`) conteneva gia' il ramo H5: avanzamento veloce, nessun conflitto.
+- **Test rosso del controllo intero (`SchedeCheRicordanoTest`, tablet).** Causa: il test, non il codice. Dal giro 1 (CU-9) lo scaffold delle prove
+  usa le sezioni di produzione (`CollectionsSectionSamples.production`), che hanno il prefisso vero dei viaggi (`AlbumEntryTarget.TRIP_PREFIX`,
+  "trip/"); il test aspettava ancora "trips/t2" degli esempi vecchi. Cambia solo la costante: la prova (la scelta del pannello si ritrova dopo
+  Cerca) resta la stessa. Era sfuggito perche' nel giro 1 non avevo fatto girare questa classe di `:app`.
+- **CG-5 (privacy).** Un volto tenuto dalla UI (`CollectionCovers`) porta la vista in cui il cancello di feature-people l'ha permesso, e si disegna
+  solo se e' ancora la vista di adesso. A ogni vista nuova la vista dei volti cambia **prima di ogni attesa**: il vecchio ritaglio smette subito di
+  disegnarsi; poi il cancello riconferma tutti i volti insieme, fuori dal thread principale, e tornano solo i permessi. Un elenco nuovo dei
+  fornitori sulla stessa vista non toglie niente (il permesso e' di quella vista). Le foto delle copertine (ricordi, viaggi, luoghi) si disegnano
+  gia' solo se sono nella vista di adesso (`request`), anche fra un passaggio e l'altro.
+- **La dose della prima lettura del catalogo (rischio di CG e CS, R3).** Il passaggio dei luoghi e le richieste delle miniature hanno una dose
+  (`PassDose`): la prima vista subito, poi al piu' una al secondo, sempre l'ultima, in fila (un passaggio non si interrompe a meta' per
+  ricominciare). La dose e' una per scheda, quindi vale anche fra un elenco dei fornitori e il successivo; e la stessa vista con gli stessi luoghi
+  non si ripassa. I volti invece si riconfermano a ogni vista (sono pochi e la riconferma e' il cancello con la sua cache): e' la privacy.
+- **CU-15.** La Mappa e' un **mosaico** due per due delle foto dei quattro luoghi piu' fotografati (prima in diagonale; i quadrati senza foto nel
+  colore della famiglia) con il segno della mappa al centro, dove i quadrati si toccano: non ripete piu' la piastrella del primo luogo sotto di lei.
+  Senza luoghi resta la piastrella della famiglia con la mappa. Gli esempi di produzione hanno ora quattro luoghi (Firenze, Milano, Roma, Lisbona).
+- **CU-18.** Rete e VPN: la riga e' "Casa" con la capsula "Salvata" (non "Casa salvata" + "Salvata"; "Rete di casa" e' gia' il titolo della
+  sezione). "Modificate" senza foto modificate dice "Nessuna", non "0 elementi". I Nascosti in tema scuro hanno una piastrella **grafite** con il segno
+  chiaro (in chiaro restano scuri su chiaro). Sottotitoli in una riga: "Libera spazio · Già al sicuro sul NAS", "Eliminati di recente · Telefono e
+  NAS" (e "Eliminati da qui" con il cestino di Galleria), e per lo stesso motivo "Nascosti · Dietro lo sblocco". Righe in `docs/h5-testi-impostazioni.md`.
+- **Da provare sul telefono (aggiunte):** (1) un volto in Persone, poi nascondere la foto da cui e' ritagliato e tornare alle Raccolte: il volto non
+  deve comparire nemmeno per un attimo; (2) all'avvio a freddo con le Raccolte aperte, mentre il catalogo si legge, i volti non devono lampeggiare
+  (se lampeggiano, la riconferma e' piu' lenta di un fotogramma: dirlo); (3) la Mappa con il mosaico dei propri luoghi, in chiaro e in scuro.
+
 ### H3, giro di correzione 1 (CU-10 = CG-4, CU-13, aspetto del calendario)
 - **CU-10 / CG-4, il calendario passava da una rotella e ricontava i giorni a ogni apertura.** Ora i giorni con foto stanno nello stato della
   griglia (`GridDaysCache` in `MediaGridDays.kt`), **per vista del catalogo**: si ricontano solo quando la vista cambia. Si preparano al primo

@@ -1,0 +1,227 @@
+Evidenze reali degli inoltri sintetici, APK SHA256 A7F34D779FEB451EC4358DD168296E47EA725F0718CB5760A21D92FAAA2626D9.
+mapping.txt:348535: androidx.glance.session.TimeSource$Companion -> androidx.glance.session.TimeSource$Companion:
+mapping.txt:348536: # {"id":"sourceFile","fileName":"TimerScope.kt"}
+mapping.txt:348537: 1:5:long $r8$lambda$_XVgIMcP0eHGcKJ-uDdxtDVJU9E():0:0 -> $r8$lambda$_XVgIMcP0eHGcKJ-uDdxtDVJU9E
+mapping.txt:348538: # {"id":"com.android.tools.r8.synthesized"}
+mapping.txt:348541: 1:5:long Monotonic$lambda$0():48:48 -> Monotonic$lambda$0
+mapping.txt:658662: dev.antigravity.fluidengine.widget.EngineWidgetComponentsKt -> dev.antigravity.fluidengine.widget.EngineWidgetComponentsKt:
+mapping.txt:658663: # {"id":"sourceFile","fileName":"EngineWidgetComponents.kt"}
+mapping.txt:658666: 1:5:kotlin.Unit $r8$lambda$7j9I2-cWTzxaHLjkr_6UxP2cUjM(java.lang.Integer,dev.antigravity.fluidengine.widget.EngineWidgetTone,dev.antigravity.fluidengine.widget.EngineWidgetLayout,java.lang.String,dev.antigravity.fluidengine.widget.EngineWidgetPalette,java.lang.String,androidx.glance.layout.RowScope,androidx.compose.runtime.Composer,int):0:0 -> $r8$lambda$7j9I2-cWTzxaHLjkr_6UxP2cUjM
+mapping.txt:658667: # {"id":"com.android.tools.r8.synthesized"}
+mapping.txt:658757: 9:17:kotlin.Unit EngineWidgetMessage$lambda$0(java.lang.Integer,dev.antigravity.fluidengine.widget.EngineWidgetTone,dev.antigravity.fluidengine.widget.EngineWidgetLayout,java.lang.String,dev.antigravity.fluidengine.widget.EngineWidgetPalette,java.lang.String,androidx.glance.layout.RowScope,androidx.compose.runtime.Composer,int):343:343 -> EngineWidgetMessage$lambda$0
+mapping.txt:658758: 18:32:kotlin.Unit EngineWidgetMessage$lambda$0(java.lang.Integer,dev.antigravity.fluidengine.widget.EngineWidgetTone,dev.antigravity.fluidengine.widget.EngineWidgetLayout,java.lang.String,dev.antigravity.fluidengine.widget.EngineWidgetPalette,java.lang.String,androidx.glance.layout.RowScope,androidx.compose.runtime.Composer,int):344:344 -> EngineWidgetMessage$lambda$0
+mapping.txt:658759: 33:44:kotlin.Unit EngineWidgetMessage$lambda$0(java.lang.Integer,dev.antigravity.fluidengine.widget.EngineWidgetTone,dev.antigravity.fluidengine.widget.EngineWidgetLayout,java.lang.String,dev.antigravity.fluidengine.widget.EngineWidgetPalette,java.lang.String,androidx.glance.layout.RowScope,androidx.compose.runtime.Composer,int):345:345 -> EngineWidgetMessage$lambda$0
+mapping.txt:658760: 45:48:void androidx.compose.runtime.GapComposer.endGroup():658:658 -> EngineWidgetMessage$lambda$0
+mapping.txt:658761: 45:48:void androidx.compose.runtime.GapComposer.endReplaceGroup():398 -> EngineWidgetMessage$lambda$0
+mapping.txt:658762: 45:48:kotlin.Unit EngineWidgetMessage$lambda$0(java.lang.Integer,dev.antigravity.fluidengine.widget.EngineWidgetTone,dev.antigravity.fluidengine.widget.EngineWidgetLayout,java.lang.String,dev.antigravity.fluidengine.widget.EngineWidgetPalette,java.lang.String,androidx.glance.layout.RowScope,androidx.compose.runtime.Composer,int):343 -> EngineWidgetMessage$lambda$0
+mapping.txt:658763: 49:57:kotlin.Unit EngineWidgetMessage$lambda$0(java.lang.Integer,dev.antigravity.fluidengine.widget.EngineWidgetTone,dev.antigravity.fluidengine.widget.EngineWidgetLayout,java.lang.String,dev.antigravity.fluidengine.widget.EngineWidgetPalette,java.lang.String,androidx.glance.layout.RowScope,androidx.compose.runtime.Composer,int):343:343 -> EngineWidgetMessage$lambda$0
+mapping.txt:658764: 58:60:void androidx.compose.runtime.GapComposer.endGroup():658:658 -> EngineWidgetMessage$lambda$0
+mapping.txt:658765: 58:60:void androidx.compose.runtime.GapComposer.endReplaceGroup():398 -> EngineWidgetMessage$lambda$0
+mapping.txt:658766: 58:60:kotlin.Unit EngineWidgetMessage$lambda$0(java.lang.Integer,dev.antigravity.fluidengine.widget.EngineWidgetTone,dev.antigravity.fluidengine.widget.EngineWidgetLayout,java.lang.String,dev.antigravity.fluidengine.widget.EngineWidgetPalette,java.lang.String,androidx.glance.layout.RowScope,androidx.compose.runtime.Composer,int):343 -> EngineWidgetMessage$lambda$0
+mapping.txt:658767: 61:88:kotlin.Unit EngineWidgetMessage$lambda$0(java.lang.Integer,dev.antigravity.fluidengine.widget.EngineWidgetTone,dev.antigravity.fluidengine.widget.EngineWidgetLayout,java.lang.String,dev.antigravity.fluidengine.widget.EngineWidgetPalette,java.lang.String,androidx.glance.layout.RowScope,androidx.compose.runtime.Composer,int):347:347 -> EngineWidgetMessage$lambda$0
+mapping.txt:658768: 89:91:kotlin.Unit EngineWidgetMessage$lambda$0(java.lang.Integer,dev.antigravity.fluidengine.widget.EngineWidgetTone,dev.antigravity.fluidengine.widget.EngineWidgetLayout,java.lang.String,dev.antigravity.fluidengine.widget.EngineWidgetPalette,java.lang.String,androidx.glance.layout.RowScope,androidx.compose.runtime.Composer,int):365:365 -> EngineWidgetMessage$lambda$0
+mapping.txt:1415057: okhttp3.internal.Util -> okhttp3.internal.Util:
+mapping.txt:1415058: # {"id":"sourceFile","fileName":"Util.kt"}
+mapping.txt:1415059: 1:5:okhttp3.EventListener $r8$lambda$6bJzZULcdNB_k9pZZ3Jli9KIJPU(okhttp3.EventListener,okhttp3.Call):0:0 -> $r8$lambda$6bJzZULcdNB_k9pZZ3Jli9KIJPU
+mapping.txt:1415060: # {"id":"com.android.tools.r8.synthesized"}
+mapping.txt:1415177: 1:11:okhttp3.EventListener asFactory$lambda$8(okhttp3.EventListener,okhttp3.Call):0:0 -> asFactory$lambda$8
+mapping.txt:1428732: org.maplibre.android.attribution.AttributionMeasure -> org.maplibre.android.attribution.AttributionMeasure:
+mapping.txt:1428733: # {"id":"sourceFile","fileName":"AttributionMeasure.java"}
+mapping.txt:1428746: 1:5:float -$$Nest$mgetLogoContainerWidth(org.maplibre.android.attribution.AttributionMeasure):0:0 -> -$$Nest$mgetLogoContainerWidth
+mapping.txt:1428747: # {"id":"com.android.tools.r8.synthesized"}
+mapping.txt:1428770: 1:14:float getLogoContainerWidth():182:182 -> getLogoContainerWidth
+mapping.txt:1428798: org.maplibre.android.attribution.AttributionMeasure$FullLogoLongTextCommand -> org.maplibre.android.attribution.AttributionMeasure$FullLogoLongTextCommand:
+mapping.txt:1428799: # {"id":"sourceFile","fileName":"AttributionMeasure.java"}
+mapping.txt:1428800: 1:1:void <init>(int):0:0 -> <init>
+mapping.txt:1428801: # {"id":"com.android.tools.r8.synthesized"}
+mapping.txt:1428802: 2:2:void <init>():51:51 -> <init>
+mapping.txt:1430004: org.maplibre.android.http.NativeHttpRequest -> org.maplibre.android.http.NativeHttpRequest:
+mapping.txt:1430005: # {"id":"sourceFile","fileName":"NativeHttpRequest.java"}
+mapping.txt:1430010: 1:14:void -$$Nest$mnativeOnResponse(org.maplibre.android.http.NativeHttpRequest,byte[]):0:0 -> -$$Nest$mnativeOnResponse
+mapping.txt:1430011: # {"id":"com.android.tools.r8.synthesized"}
+classes.dex.txt:2410420:       name          : '$r8$lambda$6bJzZULcdNB_k9pZZ3Jli9KIJPU'
+classes.dex.txt:2410421:       type          : '(Lokhttp3/EventListener;Lokhttp3/Call;)Lokhttp3/EventListener;'
+classes.dex.txt:2410422:       access        : 0x1009 (PUBLIC STATIC SYNTHETIC)
+classes.dex.txt:2410423:       code          -
+classes.dex.txt:2410424:       registers     : 2
+classes.dex.txt:2410425:       ins           : 2
+classes.dex.txt:2410426:       outs          : 2
+classes.dex.txt:2410427:       insns size    : 5 16-bit code units
+classes.dex.txt:2410428: 434538:                                        |[434538] okhttp3.internal.Util.$r8$lambda$6bJzZULcdNB_k9pZZ3Jli9KIJPU:(Lokhttp3/EventListener;Lokhttp3/Call;)Lokhttp3/EventListener;
+classes.dex.txt:2410429: 434548: 7120 1680 1000                         |0000: invoke-static {v0, v1}, Lokhttp3/internal/Util;.asFactory$lambda$8:(Lokhttp3/EventListener;Lokhttp3/Call;)Lokhttp3/EventListener; // method@8016
+classes.dex.txt:2410430: 43454e: 0c00                                   |0003: move-result-object v0
+classes.dex.txt:2410431: 434550: 1100                                   |0004: return-object v0
+classes.dex.txt:2410432:       catches       : (none)
+classes.dex.txt:2410433:       positions     :
+classes.dex.txt:2410434:         0x0000 line=1
+classes.dex.txt:2410435:         0x0001 line=2
+classes.dex.txt:2410436:         0x0002 line=3
+classes.dex.txt:2410437:         0x0003 line=4
+classes.dex.txt:2410438:         0x0004 line=5
+classes.dex.txt:2410439:       locals        :
+classes.dex.txt:2410440:         0x0000 - 0x0005 reg=0 (null) Lokhttp3/EventListener;
+classes.dex.txt:2410441:         0x0000 - 0x0005 reg=1 (null) Lokhttp3/Call;
+classes.dex.txt:2410442:
+classes.dex.txt:2410443:     #1              : (in Lokhttp3/internal/Util;)
+classes.dex.txt:2446584:       name          : '-$$Nest$mgetLogoContainerWidth'
+classes.dex.txt:2446585:       type          : '(Lorg/maplibre/android/attribution/AttributionMeasure;)F'
+classes.dex.txt:2446586:       access        : 0x1049 (PUBLIC STATIC BRIDGE SYNTHETIC)
+classes.dex.txt:2446587:       code          -
+classes.dex.txt:2446588:       registers     : 1
+classes.dex.txt:2446589:       ins           : 1
+classes.dex.txt:2446590:       outs          : 1
+classes.dex.txt:2446591:       insns size    : 5 16-bit code units
+classes.dex.txt:2446592: 25eefc:                                        |[25eefc] org.maplibre.android.attribution.AttributionMeasure.-$$Nest$mgetLogoContainerWidth:(Lorg/maplibre/android/attribution/AttributionMeasure;)F
+classes.dex.txt:2446593: 25ef0c: 7010 0183 0000                         |0000: invoke-direct {v0}, Lorg/maplibre/android/attribution/AttributionMeasure;.getLogoContainerWidth:()F // method@8301
+classes.dex.txt:2446594: 25ef12: 0a00                                   |0003: move-result v0
+classes.dex.txt:2446595: 25ef14: 0f00                                   |0004: return v0
+classes.dex.txt:2446596:       catches       : (none)
+classes.dex.txt:2446597:       positions     :
+classes.dex.txt:2446598:         0x0000 line=1
+classes.dex.txt:2446599:         0x0001 line=2
+classes.dex.txt:2446600:         0x0002 line=3
+classes.dex.txt:2446601:         0x0003 line=4
+classes.dex.txt:2446602:         0x0004 line=5
+classes.dex.txt:2446603:       locals        :
+classes.dex.txt:2446604:         0x0000 - 0x0005 reg=0 (null) Lorg/maplibre/android/attribution/AttributionMeasure;
+classes.dex.txt:2446605:
+classes.dex.txt:2446606:     #7              : (in Lorg/maplibre/android/attribution/AttributionMeasure;)
+classes.dex.txt:2447565:       name          : '<init>'
+classes.dex.txt:2447566:       type          : '()V'
+classes.dex.txt:2447567:       access        : 0x10002 (PRIVATE CONSTRUCTOR)
+classes.dex.txt:2447568:       code          -
+classes.dex.txt:2447569:       registers     : 1
+classes.dex.txt:2447570:       ins           : 1
+classes.dex.txt:2447571:       outs          : 1
+classes.dex.txt:2447572:       insns size    : 4 16-bit code units
+classes.dex.txt:2447573: 25f278:                                        |[25f278] org.maplibre.android.attribution.AttributionMeasure$FullLogoLongTextCommand.<init>:()V
+classes.dex.txt:2447574: 25f288: 7010 d46e 0000                         |0000: invoke-direct {v0}, Ljava/lang/Object;.<init>:()V // method@6ed4
+classes.dex.txt:2447575: 25f28e: 0e00                                   |0003: return-void
+classes.dex.txt:2447576:       catches       : (none)
+classes.dex.txt:2447577:       positions     :
+classes.dex.txt:2447578:         0x0000 line=2
+classes.dex.txt:2447579:       locals        :
+classes.dex.txt:2447580:         0x0000 - 0x0004 reg=0 this Lorg/maplibre/android/attribution/AttributionMeasure$FullLogoLongTextCommand;
+classes.dex.txt:2447581:
+classes.dex.txt:2447582:     #1              : (in Lorg/maplibre/android/attribution/AttributionMeasure$FullLogoLongTextCommand;)
+classes.dex.txt:2447583:       name          : '<init>'
+classes.dex.txt:2447584:       type          : '(I)V'
+classes.dex.txt:2447585:       access        : 0x11001 (PUBLIC SYNTHETIC CONSTRUCTOR)
+classes.dex.txt:2447586:       code          -
+classes.dex.txt:2447587:       registers     : 2
+classes.dex.txt:2447588:       ins           : 2
+classes.dex.txt:2447589:       outs          : 1
+classes.dex.txt:2447590:       insns size    : 4 16-bit code units
+classes.dex.txt:2447591: 25f290:                                        |[25f290] org.maplibre.android.attribution.AttributionMeasure$FullLogoLongTextCommand.<init>:(I)V
+classes.dex.txt:2447592: 25f2a0: 7010 dd82 0000                         |0000: invoke-direct {v0}, Lorg/maplibre/android/attribution/AttributionMeasure$FullLogoLongTextCommand;.<init>:()V // method@82dd
+classes.dex.txt:2447593: 25f2a6: 0e00                                   |0003: return-void
+classes.dex.txt:2447594:       catches       : (none)
+classes.dex.txt:2447595:       positions     :
+classes.dex.txt:2447596:         0x0000 line=1
+classes.dex.txt:2447597:       locals        :
+classes.dex.txt:2447598:         0x0000 - 0x0004 reg=0 this Lorg/maplibre/android/attribution/AttributionMeasure$FullLogoLongTextCommand;
+classes.dex.txt:2447599:         0x0000 - 0x0004 reg=1 (null) I
+classes.dex.txt:2447600:
+classes.dex.txt:2447601:   Virtual methods   -
+classes.dex.txt:2447602:     #0              : (in Lorg/maplibre/android/attribution/AttributionMeasure$FullLogoLongTextCommand;)
+classes2.dex.txt:1172964:       name          : '$r8$lambda$_XVgIMcP0eHGcKJ-uDdxtDVJU9E'
+classes2.dex.txt:1172965:       type          : '()J'
+classes2.dex.txt:1172966:       access        : 0x1009 (PUBLIC STATIC SYNTHETIC)
+classes2.dex.txt:1172967:       code          -
+classes2.dex.txt:1172968:       registers     : 2
+classes2.dex.txt:1172969:       ins           : 0
+classes2.dex.txt:1172970:       outs          : 0
+classes2.dex.txt:1172971:       insns size    : 5 16-bit code units
+classes2.dex.txt:1172972: 3407e0:                                        |[3407e0] androidx.glance.session.TimeSource$Companion.$r8$lambda$_XVgIMcP0eHGcKJ-uDdxtDVJU9E:()J
+classes2.dex.txt:1172973: 3407f0: 7100 a043 0000                         |0000: invoke-static {}, Landroidx/glance/session/TimeSource$Companion;.Monotonic$lambda$0:()J // method@43a0
+classes2.dex.txt:1172974: 3407f6: 0b00                                   |0003: move-result-wide v0
+classes2.dex.txt:1172975: 3407f8: 1000                                   |0004: return-wide v0
+classes2.dex.txt:1172976:       catches       : (none)
+classes2.dex.txt:1172977:       positions     :
+classes2.dex.txt:1172978:         0x0000 line=1
+classes2.dex.txt:1172979:         0x0001 line=2
+classes2.dex.txt:1172980:         0x0002 line=3
+classes2.dex.txt:1172981:         0x0003 line=4
+classes2.dex.txt:1172982:         0x0004 line=5
+classes2.dex.txt:1172983:       locals        :
+classes2.dex.txt:1172984:
+classes2.dex.txt:1172985:     #1              : (in Landroidx/glance/session/TimeSource$Companion;)
+classes2.dex.txt:2707747:       name          : '$r8$lambda$7j9I2-cWTzxaHLjkr_6UxP2cUjM'
+classes2.dex.txt:2707748:       type          : '(Ljava/lang/Integer;Ldev/antigravity/fluidengine/widget/EngineWidgetTone;Ldev/antigravity/fluidengine/widget/EngineWidgetLayout;Ljava/lang/String;Ldev/antigravity/fluidengine/widget/EngineWidgetPalette;Ljava/lang/String;Landroidx/glance/layout/RowScope;Landroidx/compose/runtime/Composer;I)Lkotlin/Unit;'
+classes2.dex.txt:2707749:       access        : 0x1009 (PUBLIC STATIC SYNTHETIC)
+classes2.dex.txt:2707750:       code          -
+classes2.dex.txt:2707751:       registers     : 9
+classes2.dex.txt:2707752:       ins           : 9
+classes2.dex.txt:2707753:       outs          : 9
+classes2.dex.txt:2707754:       insns size    : 5 16-bit code units
+classes2.dex.txt:2707755: 51c750:                                        |[51c750] dev.antigravity.fluidengine.widget.EngineWidgetComponentsKt.$r8$lambda$7j9I2-cWTzxaHLjkr_6UxP2cUjM:(Ljava/lang/Integer;Ldev/antigravity/fluidengine/widget/EngineWidgetTone;Ldev/antigravity/fluidengine/widget/EngineWidgetLayout;Ljava/lang/String;Ldev/antigravity/fluidengine/widget/EngineWidgetPalette;Ljava/lang/String;Landroidx/glance/layout/RowScope;Landroidx/compose/runtime/Composer;I)Lkotlin/Unit;
+classes2.dex.txt:2707756: 51c760: 7709 6587 0000                         |0000: invoke-static/range {v0, v1, v2, v3, v4, v5, v6, v7, v8}, Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.EngineWidgetMessage$lambda$0:(Ljava/lang/Integer;Ldev/antigravity/fluidengine/widget/EngineWidgetTone;Ldev/antigravity/fluidengine/widget/EngineWidgetLayout;Ljava/lang/String;Ldev/antigravity/fluidengine/widget/EngineWidgetPalette;Ljava/lang/String;Landroidx/glance/layout/RowScope;Landroidx/compose/runtime/Composer;I)Lkotlin/Unit; // method@8765
+classes2.dex.txt:2707757: 51c766: 0c00                                   |0003: move-result-object v0
+classes2.dex.txt:2707758: 51c768: 1100                                   |0004: return-object v0
+classes2.dex.txt:2707759:       catches       : (none)
+classes2.dex.txt:2707760:       positions     :
+classes2.dex.txt:2707761:         0x0000 line=1
+classes2.dex.txt:2707762:         0x0001 line=2
+classes2.dex.txt:2707763:         0x0002 line=3
+classes2.dex.txt:2707764:         0x0003 line=4
+classes2.dex.txt:2707765:         0x0004 line=5
+classes2.dex.txt:2707766:       locals        :
+classes2.dex.txt:2707767:         0x0000 - 0x0005 reg=0 (null) Ljava/lang/Integer;
+classes2.dex.txt:2707768:         0x0000 - 0x0005 reg=1 (null) Ldev/antigravity/fluidengine/widget/EngineWidgetTone;
+classes2.dex.txt:2707769:         0x0000 - 0x0005 reg=2 (null) Ldev/antigravity/fluidengine/widget/EngineWidgetLayout;
+classes2.dex.txt:2707770:         0x0000 - 0x0005 reg=3 (null) Ljava/lang/String;
+classes2.dex.txt:2707771:         0x0000 - 0x0005 reg=4 (null) Ldev/antigravity/fluidengine/widget/EngineWidgetPalette;
+classes2.dex.txt:2707772:         0x0000 - 0x0005 reg=5 (null) Ljava/lang/String;
+classes2.dex.txt:2707773:         0x0000 - 0x0005 reg=6 (null) Landroidx/glance/layout/RowScope;
+classes2.dex.txt:2707774:         0x0000 - 0x0005 reg=7 (null) Landroidx/compose/runtime/Composer;
+classes2.dex.txt:2707775:         0x0000 - 0x0005 reg=8 (null) I
+classes2.dex.txt:2707776:
+classes2.dex.txt:2707777:     #2              : (in Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;)
+classes3.dex.txt:1887146:       name          : '-$$Nest$mnativeOnResponse'
+classes3.dex.txt:1887147:       type          : '(Lorg/maplibre/android/http/NativeHttpRequest;[B)V'
+classes3.dex.txt:1887148:       access        : 0x1049 (PUBLIC STATIC BRIDGE SYNTHETIC)
+classes3.dex.txt:1887149:       code          -
+classes3.dex.txt:1887150:       registers     : 11
+classes3.dex.txt:1887151:       ins           : 2
+classes3.dex.txt:1887152:       outs          : 9
+classes3.dex.txt:1887153:       insns size    : 14 16-bit code units
+classes3.dex.txt:1887154: 2fd820:                                        |[2fd820] org.maplibre.android.http.NativeHttpRequest.-$$Nest$mnativeOnResponse:(Lorg/maplibre/android/http/NativeHttpRequest;[B)V
+classes3.dex.txt:1887155: 2fd830: 1206                                   |0000: const/4 v6, #int 0 // #0
+classes3.dex.txt:1887156: 2fd832: 1207                                   |0001: const/4 v7, #int 0 // #0
+classes3.dex.txt:1887157: 2fd834: 1301 c800                              |0002: const/16 v1, #int 200 // #c8
+classes3.dex.txt:1887158: 2fd838: 1202                                   |0004: const/4 v2, #int 0 // #0
+classes3.dex.txt:1887159: 2fd83a: 1203                                   |0005: const/4 v3, #int 0 // #0
+classes3.dex.txt:1887160: 2fd83c: 1204                                   |0006: const/4 v4, #int 0 // #0
+classes3.dex.txt:1887161: 2fd83e: 1205                                   |0007: const/4 v5, #int 0 // #0
+classes3.dex.txt:1887162: 2fd840: 0790                                   |0008: move-object v0, v9
+classes3.dex.txt:1887163: 2fd842: 07a8                                   |0009: move-object v8, v10
+classes3.dex.txt:1887164: 2fd844: 7609 0750 0000                         |000a: invoke-direct/range {v0, v1, v2, v3, v4, v5, v6, v7, v8}, Lorg/maplibre/android/http/NativeHttpRequest;.nativeOnResponse:(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[B)V // method@5007
+classes3.dex.txt:1887165: 2fd84a: 0e00                                   |000d: return-void
+classes3.dex.txt:1887166:       catches       : (none)
+classes3.dex.txt:1887167:       positions     :
+classes3.dex.txt:1887168:         0x0000 line=1
+classes3.dex.txt:1887169:         0x0001 line=2
+classes3.dex.txt:1887170:         0x0002 line=3
+classes3.dex.txt:1887171:         0x0003 line=4
+classes3.dex.txt:1887172:         0x0004 line=5
+classes3.dex.txt:1887173:         0x0005 line=6
+classes3.dex.txt:1887174:         0x0006 line=7
+classes3.dex.txt:1887175:         0x0007 line=8
+classes3.dex.txt:1887176:         0x0008 line=9
+classes3.dex.txt:1887177:         0x0009 line=10
+classes3.dex.txt:1887178:         0x000a line=11
+classes3.dex.txt:1887179:         0x000b line=12
+classes3.dex.txt:1887180:         0x000c line=13
+classes3.dex.txt:1887181:         0x000d line=14
+classes3.dex.txt:1887182:       locals        :
+classes3.dex.txt:1887183:         0x0000 - 0x000e reg=9 (null) Lorg/maplibre/android/http/NativeHttpRequest;
+classes3.dex.txt:1887184:         0x0000 - 0x000e reg=10 (null) [B
+classes3.dex.txt:1887185:
+classes3.dex.txt:1887186:     #3              : (in Lorg/maplibre/android/http/NativeHttpRequest;)
+classes3.dex.txt:1887339:       name          : 'nativeOnResponse'
+classes3.dex.txt:1887340:       type          : '(ILjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;[B)V'
+classes3.dex.txt:1887341:       access        : 0x0102 (PRIVATE NATIVE)
+classes3.dex.txt:1887342:       code          : (none)
+classes3.dex.txt:1887343:
+classes3.dex.txt:1887344:   Virtual methods   -
+classes3.dex.txt:1887345:     #0              : (in Lorg/maplibre/android/http/NativeHttpRequest;)

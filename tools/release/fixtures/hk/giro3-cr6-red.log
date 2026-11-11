@@ -1,0 +1,103 @@
+[OK] fusione origine ammessa
+[OK] fusione inversa origine vietata sotto nome ammesso
+[OK] inline frame interno vietato prevale
+[OK] overload firma residuale
+[OK] fusione senza posizioni cade
+[OK] intervalli sovrapposti cadono
+[OK] mapping assente cade
+[OK] identita unica senza posizioni
+[OK] policy core/models/download/https/ origine ammessa passa
+[OK] policy core/models/download/https/ fusione inversa cade
+[OK] policy feature/map/net/ origine ammessa passa
+[OK] policy feature/map/net/ fusione inversa cade
+[OK] policy feature/map/ origine ammessa passa
+[OK] policy feature/map/ fusione inversa cade
+[OK] policy feature/widget/ origine ammessa passa
+[OK] policy feature/widget/ fusione inversa cade
+[OK] policy core/ai/ origine ammessa passa
+[OK] policy core/ai/ fusione inversa cade
+[OK] policy core/ai/ocr/MlKitBootstrap origine ammessa passa
+[OK] policy core/ai/ocr/MlKitBootstrap fusione inversa cade
+[OK] policy core/faces/sync/ origine ammessa passa
+[OK] policy core/faces/sync/ fusione inversa cade
+[OK] policy albums/ origine ammessa passa
+[OK] policy albums/ fusione inversa cade
+[OK] policy di/ origine ammessa passa
+[OK] policy di/ fusione inversa cade
+[OK] outline nome MapLibre corpo Android accettato
+[OK] outline Lorg/maplibre/Real; non esentato
+[OK] outline Lorg/maplibre/Real; propagato al chiamante
+[OK] outline Lokhttp3/Real; non esentato
+[OK] outline Lokhttp3/Real; propagato al chiamante
+[OK] outline Landroidx/glance/Real; non esentato
+[OK] outline Landroidx/glance/Real; propagato al chiamante
+[OK] outline Ljava/net/HttpURLConnection; non esentato
+[OK] outline Ljava/net/HttpURLConnection; propagato al chiamante
+[OK] outline Landroid/webkit/WebView; non esentato
+[OK] outline Landroid/webkit/WebView; propagato al chiamante
+[OK] outline corpo assente cade
+[OK] outline indiretto cade
+[OK] outline annidato non dimostrato cade
+[OK] outline no-op non chiama librerie
+[OK] ponte sintetico attribuito a Ldev/pampa/mycloudgallery/feature/map/net/Good;
+[OK] ponte sintetico attribuito a Lforbidden/Bad;
+[OK] prologo tutte origini ammesse passa
+[OK] prologo include entrambe origini e residua
+[OK] prologo origine nostra vietata sotto libreria cade
+[OK] prologo nomina origine vietata
+[OK] anche residua deve essere ammessa
+[OK] mapping senza nessuna origine cade
+[OK] prima voce tabella successiva al prologo usa insieme
+[OK] runtime Innocent verifica del corpo
+[OK] runtime inline che nomina Glance cade
+[OK] runtime Evil verifica del corpo
+[OK] runtime pericoloso nomina origine Kotlin
+[OK] insieme include anche frame esterno inline vietato
+[OK] frame esterno inline vietato cade
+[OK] prova positiva non usa un solo candidato ammesso
+[OK] firma specializzata senza dipendenza originale passa
+[OK] firma originale nomina Glance quindi cade
+[OK] firma senza residualsignature non esentata
+[OK] callee di Glance non esentato dalla firma
+[OK] residualsignature propagata al secondo intervallo
+[OK] cast generico inline non e una chiamata alla libreria
+[OK] corpo originale Kotlin che nomina Glance anche senza invoke cade
+[OK] CR-3 HTTPS Bad librerie trasparenti ciclo reale cade
+[OK] CR-3 HTTPS aiutante nostro ammesso in chiamante ammesso passa
+[OK] CR-3 HTTPS Chain librerie trasparenti ciclo reale cade
+[OK] CR-3 HTTPS Engine librerie trasparenti ciclo reale cade
+[OK] CR-3 HTTPS prologo con autore nostro vietato resta bloccato
+[OK] CR-3 OkHttp Bad librerie trasparenti ciclo reale cade
+[OK] CR-3 OkHttp aiutante nostro ammesso in chiamante ammesso passa
+[OK] CR-3 OkHttp Chain librerie trasparenti ciclo reale cade
+[OK] CR-3 OkHttp Engine librerie trasparenti ciclo reale cade
+[OK] CR-3 OkHttp prologo con autore nostro vietato resta bloccato
+[OK] CR-3 Glance Bad librerie trasparenti ciclo reale cade
+[OK] CR-3 Glance aiutante nostro ammesso in chiamante ammesso passa
+[OK] CR-3 Glance Chain librerie trasparenti ciclo reale cade
+[OK] CR-3 Glance Engine librerie trasparenti ciclo reale cade
+[OK] CR-3 Glance prologo con autore nostro vietato resta bloccato
+[OK] CR-3 LiteRT Bad librerie trasparenti ciclo reale cade
+[OK] CR-3 LiteRT aiutante nostro ammesso in chiamante ammesso passa
+[OK] CR-3 LiteRT Chain librerie trasparenti ciclo reale cade
+[OK] CR-3 LiteRT Engine librerie trasparenti ciclo reale cade
+[OK] CR-3 LiteRT prologo con autore nostro vietato resta bloccato
+[OK] CR-3 MapLibre Bad librerie trasparenti ciclo reale cade
+[OK] CR-3 MapLibre aiutante nostro ammesso in chiamante ammesso passa
+[OK] CR-3 MapLibre Chain librerie trasparenti ciclo reale cade
+[OK] CR-3 MapLibre Engine librerie trasparenti ciclo reale cade
+[OK] CR-3 MapLibre prologo con autore nostro vietato resta bloccato
+powershell : FAIL CR-6 riferimento newCall sotto nome ammesso
+In riga:30 car:1
++ powershell -NoProfile -File tools/release/r8-provenance-prove.ps1 > b ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (FAIL CR-6 rifer...o nome ammesso :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+
+Ldev/pampa/mycloudgallery/feature/map/net/MapTileHttp$$ExternalSyntheticLambda0; cade
+In C:\VibeCoded Projects\mcg-k4\tools\release\r8-provenance-prove.ps1:92 car:49
++ ... ion Check($name,[bool]$ok) { if(-not $ok) {throw "FAIL $name"}; $scri ...
++                                                ~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : OperationStopped: (FAIL CR-6 rifer...icLambda0; cade:String) [], RuntimeException
+    + FullyQualifiedErrorId : FAIL CR-6 riferimento newCall sotto nome ammesso Ldev/pampa/mycloudgallery/feature/map/n
+   et/MapTileHttp$$ExternalSyntheticLambda0; cade

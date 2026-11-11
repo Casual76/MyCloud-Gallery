@@ -24,6 +24,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -162,6 +163,8 @@ fun GalleryBarButton(
  * sottotitolo non si tagliano.
  *
  * @param backdrop il corpo della pagina, che la barra rifrange. Mai la barra stessa.
+ * @param titleAlpha l'opacita' del titolo e del sottotitolo, letta nel disegno (il viewer la lega all'avanzamento del pannello informazioni, CU-17);
+ *   null = sempre pieni, e nessun layer in piu'.
  */
 @Composable
 fun GalleryTopBar(
@@ -178,6 +181,7 @@ fun GalleryTopBar(
    */
   fluidButtons: Boolean = false,
   actions: @Composable RowScope.() -> Unit = {},
+  titleAlpha: (() -> Float)? = null,
 ) {
   val scheme = MaterialTheme.colorScheme
   val statusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
@@ -210,7 +214,9 @@ fun GalleryTopBar(
           contentAlignment = Alignment.Center,
         ) {
           Column(
-            modifier = Modifier.padding(horizontal = FluidScreenDefaults.CompactTitleInset),
+            modifier = Modifier
+              .padding(horizontal = FluidScreenDefaults.CompactTitleInset)
+              .then(if (titleAlpha != null) Modifier.graphicsLayer { alpha = titleAlpha() } else Modifier),
             horizontalAlignment = Alignment.CenterHorizontally,
           ) {
             Text(

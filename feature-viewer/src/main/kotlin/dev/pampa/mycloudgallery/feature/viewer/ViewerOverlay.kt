@@ -1025,6 +1025,8 @@ private fun ViewerOverlays(
     visible = chromeShown,
     title = if (infoSpeaks) "" else title,
     subtitle = if (infoSpeaks) null else subtitle,
+    // CU-17: il titolo sfuma con il pannello che sale (letto nel disegno), ed e' gia' trasparente quando a meta' corsa la barra lo lascia al pannello.
+    titleAlpha = { topTitleAlpha(info.progress.value) },
     backdrop = backdrop,
     onClose = controller::close,
     bottomVisible = chromeShown && bottomReady && (sidePanel || infoClosed),
@@ -1368,6 +1370,15 @@ private const val VideoBarFrom = 0.5f
 
 /** Da qui il pannello informazioni e' la fonte di data e luogo e la barra in alto non li ripete (CU-5). */
 private const val INFO_SPEAKS = 0.5f
+
+/** CU-17: da qui il titolo della barra in alto comincia a sfumare (avanzamento del pannello informazioni). */
+private const val TITLE_FADE_FROM = 0.3f
+
+/**
+ * CU-17: l'opacita' del titolo e del sottotitolo della barra in alto con il pannello informazioni a [progress]: pieni fino a [TITLE_FADE_FROM], poi
+ * sfumano e a [INFO_SPEAKS] (dove la barra lascia data e luogo al pannello, CU-5) sono gia' trasparenti: nessun fotogramma in cui spariscono di colpo.
+ */
+internal fun topTitleAlpha(progress: Float): Float = 1f - ((progress - TITLE_FADE_FROM) / (INFO_SPEAKS - TITLE_FADE_FROM)).coerceIn(0f, 1f)
 
 /** A che punto dell'espansione entrano le pagine vicine (vedi `PagerLayer`): lontano dal primo fotogramma, prima della fine. */
 private const val NeighborsAtProgress = 0.5f

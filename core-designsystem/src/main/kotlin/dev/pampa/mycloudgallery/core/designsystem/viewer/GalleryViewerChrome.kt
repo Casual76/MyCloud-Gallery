@@ -61,6 +61,7 @@ object GalleryViewerChromeDefaults {
  * Il vetro rifrange [backdrop], cioe' la foto, mai la barra stessa. Con `reducedMotion` compare e sparisce di colpo.
  *
  * @param bottomContent un pezzo di chrome sopra la barra azioni (la barra del video), con la stessa dissolvenza.
+ * @param titleAlpha l'opacita' del titolo e del sottotitolo, letta nel disegno (vedi [GalleryTopBar]); null = pieni.
  */
 @Composable
 fun GalleryViewerChrome(
@@ -75,6 +76,7 @@ fun GalleryViewerChrome(
   topActions: @Composable RowScope.() -> Unit = {},
   bottomActions: List<GalleryBarAction> = emptyList(),
   bottomContent: (@Composable ColumnScope.() -> Unit)? = null,
+  titleAlpha: (() -> Float)? = null,
 ) {
   val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
   val topAlpha by animateFloatAsState(
@@ -99,6 +101,7 @@ fun GalleryViewerChrome(
         // Il tasto di chiusura e il ⋮ sono lo stesso vetro (B4): il tasto di vetro dell'engine, che prende da solo il fondale della barra.
         fluidButtons = true,
         actions = topActions,
+        titleAlpha = titleAlpha,
         modifier = Modifier
           .align(Alignment.TopCenter)
           .graphicsLayer { alpha = topAlpha },

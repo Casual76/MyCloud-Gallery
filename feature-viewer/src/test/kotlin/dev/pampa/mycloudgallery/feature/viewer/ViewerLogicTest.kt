@@ -253,6 +253,16 @@ class ViewerLogicTest {
   }
 
   @Test
+  fun ilTitoloInAltoSfumaConIlPannelloEArrivaTrasparenteAMetaCorsa() {
+    // CU-17: pieno a pannello chiuso e fino a 0,3; a meta' fra 0,3 e 0,5 e' a meta'; a 0,5 (dove la barra lascia il titolo al pannello) e' gia' 0.
+    assertThat(topTitleAlpha(0f)).isEqualTo(1f)
+    assertThat(topTitleAlpha(0.3f)).isEqualTo(1f)
+    assertThat(topTitleAlpha(0.4f)).isWithin(0.001f).of(0.5f)
+    assertThat(topTitleAlpha(0.5f)).isEqualTo(0f)
+    assertThat(topTitleAlpha(1f)).isEqualTo(0f)
+  }
+
+  @Test
   fun laStrisciaVaSuDueRigheSoloSeUnValoreNonEntraIntero() {
     // CU-16: quattro valori in una riga se ognuno entra nel suo quarto; altrimenti due righe da due; una colonna se neanche cosi'.
     assertThat(stripColumns(intArrayOf(120, 110, 90, 140), width = 576, rule = 2)).isEqualTo(4)

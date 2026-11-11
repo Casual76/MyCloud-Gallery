@@ -26,6 +26,8 @@ import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
+import dev.pampa.mycloudgallery.feature.library.collections.EntryShape
+import dev.pampa.mycloudgallery.feature.people.nav.PeopleEntryTarget
 import dev.pampa.mycloudgallery.feature.people.activation.ActivationIndexerRole
 import dev.pampa.mycloudgallery.feature.people.activation.ActivationPorts
 import dev.pampa.mycloudgallery.feature.people.activation.FacesAnalyzeNow
@@ -192,7 +194,16 @@ class AppActivationPorts(
 /** La trasformazione campo per campo dei dati di feature-people nel gruppo delle Raccolte (i due moduli non si conoscono). */
 internal fun SectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
   title = title,
-  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, faces = it.faces) },
+  // I1 (fase I): la forma di ogni voce nella galleria delle Raccolte. Una persona e' una scheda con il volto (il nome solo se ce l'ha), "Tutte le
+  // persone" e' il "tutti" della sezione, il resto (attiva, a che punto si e', Altri volti) e' uno stato.
+  entries = entries.map {
+    val shape = when {
+      it.code.startsWith(PeopleEntryTarget.PERSON_PREFIX) -> EntryShape.Card
+      it.code == PeopleEntryTarget.ALL -> EntryShape.More
+      else -> EntryShape.Notice
+    }
+    CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, faces = it.faces, shape = shape, showTitle = it.named)
+  },
   code = code,
   hideable = hideable,
   hint = hint,

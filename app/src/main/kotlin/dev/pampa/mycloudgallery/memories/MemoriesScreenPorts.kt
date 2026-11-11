@@ -14,6 +14,8 @@ import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
+import dev.pampa.mycloudgallery.feature.library.collections.EntryShape
+import dev.pampa.mycloudgallery.feature.memories.section.MemoriesEntryTarget
 import dev.pampa.mycloudgallery.feature.memories.contract.MemoryPlaceNames
 import dev.pampa.mycloudgallery.feature.memories.contract.NotificationAccess
 import dev.pampa.mycloudgallery.feature.memories.contract.NotifyPermission
@@ -45,7 +47,15 @@ import kotlinx.coroutines.flow.stateIn
 /** La trasformazione campo per campo dei dati di feature-memories nel gruppo delle Raccolte (i due moduli non si conoscono; `MemoriesSectionBindingTest`). */
 internal fun SectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
   title = title,
-  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, cover = it.cover) },
+  // I1 (fase I): un ricordo e' una scheda larga con la copertina e il mese, "Tutti i ricordi" il "tutti" della sezione, le righe di stato un invito.
+  entries = entries.map {
+    val shape = when (MemoriesEntryTarget.parse(it.code)) {
+      is MemoriesEntryTarget.Memory -> EntryShape.Card
+      MemoriesEntryTarget.All -> EntryShape.More
+      else -> EntryShape.Notice
+    }
+    CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, cover = it.cover, shape = shape, caption = it.caption)
+  },
   code = code,
   hideable = hideable,
   hint = hint,

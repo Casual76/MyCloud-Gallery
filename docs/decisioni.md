@@ -18405,3 +18405,8 @@ Raccolte" e, dopo una banda, "Impostazioni" come ultima voce (lo stesso posto de
   Impostazioni principale, rete, sicurezza, copia esterna prima e dopo); rifatti `7-P11`, `7-P8` (utility-voci, modificate-vuote; tolto
   `screenshot-*`), `G2/raccolte-pannello-selezione`, `G2/pillola-raccolte`, e le pagine delle Impostazioni in `10-P3`, `10-P5`, `5-P12`, `6-P14`,
   `7-P9`, `8-P7`, `RG-D`. `doppioni-notturno` era cambiato solo per un interruttore a meta' animazione: non committato.
+
+
+### HR, giro di correzione 2 (11 novembre 2026)
+
+CR-7: segno locale della richiesta accettata, prima accelerata unmetered, automatiche KEEP. CS-9: controllo fra media nella fetta e ripresa del secondo parziale. CS-13: motivi HOT/BUSY, attesa senza Retry inutile e ripartenza termica automatica. CR-KDOC: commento riposizionato. BUILD-INC resta parziale: percorsi relativi dei sorgenti negli input di core-designsystem/app; accettazione senza rerun passa, causa dello specifico Unresolved reference non riprodotta. Nessun debug reinserito nella release. Evidenze e limiti in docs/hr-primo-avvio-giro2.md.

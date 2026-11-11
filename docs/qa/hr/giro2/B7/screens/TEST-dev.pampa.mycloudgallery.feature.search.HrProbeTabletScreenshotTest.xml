@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-11-11T17:04:02.471Z" time="2.963">
+  <properties />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[0]" classname="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" time="0.348" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[1]" classname="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" time="0.278" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[2]" classname="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" time="0.262" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[3]" classname="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" time="0.218" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[4]" classname="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" time="0.306" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[5]" classname="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" time="0.287" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[6]" classname="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" time="0.308" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[7]" classname="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" time="0.36" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[8]" classname="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" time="0.318" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[9]" classname="dev.pampa.mycloudgallery.feature.search.HrProbeTabletScreenshotTest" time="0.242" />
+  <system-out />
+  <system-err />
+</testsuite>

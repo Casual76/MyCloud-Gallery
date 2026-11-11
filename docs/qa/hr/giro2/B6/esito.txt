@@ -1,0 +1,1 @@
+CS-9: 1 test, 1 fallito atteso. CS-13: 2 test, 2 falliti attesi. App: test NON eseguiti, compileDebugKotlin fallisce per ListenableFuture non accessibile. Corretto usando Operation.await; nuovo batch dedicato necessario.

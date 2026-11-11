@@ -222,3 +222,11 @@ HR-G3: **OK in 1m48s** sul codice corretto, con cache di compilazione riusata e 
 4. Misura a telefono fresco: priorita normale senza alternanze indotte dai tocchi; telefono caldo: non parte. Secondo avvio con file invariati: nessuna lettura SHA sequenziale da refresh; file modificato: verifica completa. Ogni apertura per il motore resta verificata, anche con nota presente.
 
 Scelte: nota di verifica locale persistente solo per refresh, invalidazione con stat completo (ctime/mtime inclusi i nanosecondi); nessuna modifica alle soglie, uso dello stesso valutatore delle regole. Ritmo, attesa iniziale e timer della prima consegna invariati.
+
+
+## Giro di correzione 2
+
+Dettaglio aggiornato: [hr-primo-avvio-giro2.md](hr-primo-avvio-giro2.md). Unione fast-forward di integra/beta-grafica a 3f686ef9 senza conflitti.
+CR-7, CS-9, CS-13 e CR-KDOC corretti nelle prove previste. BUILD-INC corretto in parte: layout ora incluso negli input di compilazione e accettazione main/API senza rerun verde, ma errore storico Unresolved reference non riprodotto e causa specifica non dimostrata.
+
+Aggiornamento inventario: la prima richiesta del modello conserva un segno locale, scritto dopo l'accodamento accettato da WorkManager; richieste automatiche KEEP, esplicite REPLACE. Il confronto puo cedere tra due media anche durante una fetta lunga, conservando le firme e il secondo da riprendere. La pagina ricontrolla la disponibilita del probe ogni 2 s solo mentre attende caldo o liberazione; misura sempre fuori da YieldToApp. Screenshot nuovi caldo/occupato in HR, nessuna misura fisica o dispositivo usato. I dettagli del giro 1 sulla prima emissione RULES sono superati dal segno di onboarding: prima richiesta accelerata una volta, poi regole CR-2.

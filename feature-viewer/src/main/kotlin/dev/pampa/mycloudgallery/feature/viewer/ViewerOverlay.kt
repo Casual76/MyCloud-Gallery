@@ -1152,7 +1152,10 @@ private fun ViewerOverlays(
   // Fase 8 (P9, D25): la riga "Persone" (volti, nomi, "Chi e'?"), solo con la porta legata e il pannello aperto.
   val peoplePanel = rememberPeoplePanel(services.people, currentId, active = infoVisible)
   // Fase 9 (P4, D30): la riga "Mostra sulla mappa" e la mini-mappa (solo offline), mai per un media aperto dai Nascosti.
-  val placeMapPanel = rememberPlaceMapPanel(services.placeMap, currentId, active = infoVisible, secure = request.secure)
+  // CU-6: "Apri in Mappe" (un'altra app) sta dentro la mini-mappa quando c'e', altrimenti in coda al luogo.
+  val onOpenMaps: (() -> Unit)? = if (details?.location != null) controller::askMaps else null
+  val placeMapPanel = rememberPlaceMapPanel(services.placeMap, currentId, active = infoVisible, secure = request.secure, onOpenMaps = onOpenMaps)
+  val placeOpenMaps = if (placeMapPanel.sections.isEmpty()) onOpenMaps else null
   // H2: cambiando elemento a pannello aperto le informazioni nuove sostituiscono le vecchie con una dissolvenza breve, senza lampi.
   val infoFade = remember { Animatable(1f) }
   LaunchedEffect(currentId) {
@@ -1187,7 +1190,6 @@ private fun ViewerOverlays(
     val backupNote = remember(backupState, onPhone, format) { backupState?.let { backupNote(format, it, onPhone) } }
     // La mappa sotto il luogo e i dati, poi le persone, poi le copie (H2).
     val extras = remember(placeMapPanel.sections, peoplePanel.sections, similar.sections) { placeMapPanel.sections + peoplePanel.sections + similar.sections }
-    val onOpenMaps: (() -> Unit)? = if (details?.location != null) controller::askMaps else null
     val infoTitle = stringResource(R.string.viewer_info_title)
     val topLimit = with(density) { WindowInsets.statusBars.getTop(density) + PanelTopReserve.toPx() }
     Box(Modifier.fillMaxSize().testTag(ViewerTags.InfoPanel)) {
@@ -1199,7 +1201,7 @@ private fun ViewerOverlays(
           backdrop = backdrop,
           onClose = { state.infoOpen = false },
           contentAlpha = { infoFade.value },
-        ) { InfoContent(model = model, backup = backupNote, extras = extras, onOpenMaps = onOpenMaps) }
+        ) { InfoContent(model = model, backup = backupNote, extras = extras, onOpenMaps = placeOpenMaps) }
       } else {
         InfoSheet(
           state = info,
@@ -1211,7 +1213,7 @@ private fun ViewerOverlays(
           onDragEnd = controller::onPanelDragEnd,
           onClose = { state.infoOpen = false },
           contentAlpha = { infoFade.value },
-        ) { InfoContent(model = model, backup = backupNote, extras = extras, onOpenMaps = onOpenMaps) }
+        ) { InfoContent(model = model, backup = backupNote, extras = extras, onOpenMaps = placeOpenMaps) }
         // Il video continua ad andare e i suoi comandi stanno sopra il bordo del pannello, e salgono con lui (H2).
         val barShown = videoBar != null && atRest && chromeBackdropReady && !controller.cutout.active && (state.chromeVisible || touchExploration)
         if (barShown && videoBar != null) {

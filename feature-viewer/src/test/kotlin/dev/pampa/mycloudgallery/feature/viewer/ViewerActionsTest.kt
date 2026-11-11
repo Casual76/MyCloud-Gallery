@@ -346,8 +346,8 @@ class ViewerActionsTest : ViewerTestBase() {
   fun apriInMappeChiedeConfermaEPoiLanciaGeo() {
     show()
     composeRule.onNodeWithTag(ViewerTags.Pager).performTouchInput { swipeUp() }
-    composeRule.waitUntil(TIMEOUT) { composeRule.onAllNodesWithText("Apri in Mappe").fetchSemanticsNodes().isNotEmpty() }
-    composeRule.onNodeWithText("Apri in Mappe").performClick()
+    composeRule.waitUntil(TIMEOUT) { composeRule.onAllNodesWithContentDescription("Apri in Mappe").fetchSemanticsNodes().isNotEmpty() }
+    composeRule.onNodeWithContentDescription("Apri in Mappe").performClick()
     composeRule.waitUntil(TIMEOUT) { composeRule.onAllNodesWithText("Aprire in Mappe?").fetchSemanticsNodes().isNotEmpty() }
     assertThat(shadowOf(composeRule.activity).peekNextStartedActivity()).isNull()
     // Il bottone del foglio e' l'ultimo in ordine di disegno (la riga delle informazioni sta sotto).

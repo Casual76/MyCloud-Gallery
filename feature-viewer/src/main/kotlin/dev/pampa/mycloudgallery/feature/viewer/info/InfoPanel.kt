@@ -29,8 +29,8 @@ import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.CameraAlt
-import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Place
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -49,6 +49,8 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
@@ -56,12 +58,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
-import dev.antigravity.fluidengine.ui.fluid.FluidChip
 import dev.antigravity.fluidengine.ui.fluid.FluidGrabber
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
+import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
@@ -430,17 +432,17 @@ internal fun InfoContent(
           horizontalArrangement = Arrangement.spacedBy(IconGap),
         ) {
           Icon(imageVector = Icons.Rounded.Place, contentDescription = null, modifier = Modifier.size(LineIcon), tint = scheme.primary)
-          Text(text = place, style = MaterialTheme.typography.bodyLarge, color = scheme.onSurface, maxLines = 2, overflow = TextOverflow.Ellipsis)
+          Text(
+            text = place,
+            style = MaterialTheme.typography.bodyLarge,
+            color = scheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+          )
+          // CU-6: senza la mini-mappa (che e' l'ingresso alla mappa e porta lei questo tasto) l'altra app si apre da qui, in coda al luogo.
+          if (onOpenMaps != null) OpenInMapsButton(onOpenMaps)
         }
-      }
-      if (onOpenMaps != null) {
-        FluidChip(
-          label = stringResource(R.string.viewer_place_open_maps),
-          selected = false,
-          onClick = onOpenMaps,
-          modifier = Modifier.padding(top = ChipTop),
-          leading = { Icon(imageVector = Icons.Rounded.Map, contentDescription = null) },
-        )
       }
     }
 
@@ -501,6 +503,26 @@ internal fun InfoSections(sections: List<InfoSectionModel>, modifier: Modifier =
   }
 }
 
+/** "Apri in Mappe" (un'altra app, con la sua conferma): un tasto piccolo con il segno di "fuori dall'app", bersaglio da 48 dp. */
+@Composable
+private fun OpenInMapsButton(onClick: () -> Unit) {
+  val label = stringResource(R.string.viewer_place_open_maps)
+  Box(
+    modifier = Modifier
+      .size(GalleryDimens.MinTouchTarget)
+      .fluidPressable(onClick = onClick, role = Role.Button)
+      .semantics { contentDescription = label },
+    contentAlignment = Alignment.Center,
+  ) {
+    Icon(
+      imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+      contentDescription = null,
+      tint = MaterialTheme.colorScheme.primary,
+      modifier = Modifier.size(LineIcon),
+    )
+  }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun Pills(pills: List<String>) {
@@ -512,7 +534,6 @@ private fun Pills(pills: List<String>) {
 private val BlockGap = 20.dp
 private val LineGap = 2.dp
 private val PlaceTop = 6.dp
-private val ChipTop = 8.dp
 private val IconGap = 6.dp
 private val LineIcon = 18.dp
 private val PillGap = 6.dp

@@ -128,7 +128,7 @@ class ViewerOverlayTest : ViewerTestBase() {
     assertThat(composeRule.onAllNodesWithText("12 marzo 2024").fetchSemanticsNodes()).isEmpty()
     assertThat(composeRule.onAllNodesWithText("12:41 · Oslo").fetchSemanticsNodes()).isEmpty()
     composeRule.onNodeWithText("Oslo, Norvegia", substring = true).assertExists()
-    composeRule.onNodeWithText("Apri in Mappe").assertExists()
+    composeRule.onNodeWithContentDescription("Apri in Mappe").assertExists()
   }
 
   @Test

@@ -33,7 +33,7 @@ fun NavController.openUtility(page: UtilityPage) {
 }
 
 /**
- * Le pagine dell'Utility nel grafo di navigazione: le pagine-filtro (Screenshot, Video, Modificate, WhatsApp) e i Doppioni. Gli Eliminati di recente restano nel grafo delle Raccolte.
+ * Le pagine dell'Utility nel grafo di navigazione: la pagina-filtro (Modificate) e i Doppioni. Gli Eliminati di recente restano nel grafo delle Raccolte.
  * Il viewer non e' una rotta (D12): [onOpenViewer] manda la richiesta a `:app`, che lo ospita sopra la pagina corrente.
  */
 fun NavGraphBuilder.utilityGraph(nav: NavController, onOpenViewer: (ViewerRequest) -> Unit) {

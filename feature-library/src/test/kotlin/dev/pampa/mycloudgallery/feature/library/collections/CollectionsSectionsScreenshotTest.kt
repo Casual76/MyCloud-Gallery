@@ -71,6 +71,7 @@ abstract class CollectionsSectionsShotsBase(private val dark: Boolean, private v
     }
     // K3a: il fondo della pagina, che in produzione dipinge `FluidNavHost` (senza, sul tablet scuro il pannello "Scegli una raccolta" era chiaro).
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+    ModalTestHost {
     CollectionsScreen(
       state = state,
       contentPadding = PaddingValues(),
@@ -89,6 +90,7 @@ abstract class CollectionsSectionsShotsBase(private val dark: Boolean, private v
       onReorder = c::reorder,
       onSetShown = c::setShown,
     )
+    }
   }
 
   private fun shoot(name: String, fontScale: Float? = null, afterShow: () -> Unit = {}, c: CollectionsLayoutController = controller()) {
@@ -103,8 +105,11 @@ abstract class CollectionsSectionsShotsBase(private val dark: Boolean, private v
     composeRule.waitForIdle()
   }
 
+  /** H5: "Modifica Raccolte" sta nel menu in alto. */
   private fun edit() {
-    composeRule.onNodeWithContentDescription("Modifica Raccolte").performClick()
+    composeRule.onNodeWithContentDescription("Altre azioni sulle Raccolte").performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Modifica Raccolte").performClick()
     composeRule.waitForIdle()
   }
 

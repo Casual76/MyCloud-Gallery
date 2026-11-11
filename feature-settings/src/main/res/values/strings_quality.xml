@@ -2,7 +2,6 @@
 <!-- Fase 4A (P11): "Qualità delle anteprime" (D16, E-L6) e "Mostra le copertine degli album" (D11, E-N14). -->
 <resources>
   <string name="settings_quality">Anteprime del NAS</string>
-  <string name="settings_quality_detail">Qualità delle miniature tenute sul telefono e copertine degli album</string>
   <string name="quality_title">Anteprime del NAS</string>
   <string name="quality_not_active">Le anteprime del NAS si attivano quando il telefono è collegato al NAS di famiglia.</string>
   <string name="quality_section_level">Qualità sul telefono</string>
@@ -17,7 +16,7 @@
   <string name="quality_converging">Ora le anteprime occupano %1$s: il telefono sta adattando lo spazio, un po\' alla volta.</string>
   <string name="quality_section_covers">Cartelle di musica</string>
   <string name="quality_covers">Mostra le copertine degli album</string>
-  <string name="quality_covers_detail">Le immagini nelle cartelle di musica entrano nella Libreria alla prossima verifica.</string>
+  <string name="quality_covers_detail">Entrano nella Libreria alla prossima verifica.</string>
   <plurals name="quality_items">
     <item quantity="one">Una anteprima per questo livello.</item>
     <item quantity="other">%1$d anteprime per questo livello.</item>

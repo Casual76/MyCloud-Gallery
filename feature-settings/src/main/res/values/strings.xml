@@ -26,57 +26,51 @@
     <item quantity="other">%1$d richieste da approvare</item>
   </plurals>
   <string name="settings_family">Famiglia</string>
-  <string name="settings_family_detail">Kit di recupero, stato della famiglia, secondo admin</string>
-  <string name="settings_family_detail_admin">Invita un familiare, kit di recupero, secondo admin</string>
   <string name="settings_nas_account">Account del NAS</string>
-  <string name="settings_nas_account_detail">Password e indirizzo del NAS</string>
   <string name="settings_network">Rete e VPN</string>
-  <string name="settings_network_detail">Rete di casa e controllo di WireGuard</string>
   <string name="settings_security">Sicurezza</string>
-  <string name="settings_security_detail">Blocco dell’app con la credenziale del telefono</string>
   <string name="settings_backup_notice">Copia esterna del NAS</string>
-  <string name="settings_backup_notice_detail">Il NAS non è un backup: cosa fare</string>
+  <string name="settings_backup_notice_detail">Il NAS non è un backup</string>
   <string name="settings_section_pending">Da completare</string>
-  <string name="settings_pending_footnote">Passi che hai saltato durante la configurazione. Si riprendono da dove eri rimasto.</string>
+  <string name="settings_pending_footnote">Passi saltati durante la configurazione.</string>
   <string name="settings_section_support">Assistenza</string>
   <string name="settings_diagnostics">Diagnostica</string>
-  <string name="settings_diagnostics_detail">Stato della rete, del NAS e del telefono</string>
   <string name="settings_section_developer">Sviluppo</string>
 
   <!-- Passi saltati -->
   <string name="pending_folders">Cartelle da escludere</string>
-  <string name="pending_folders_detail">Scegli la musica, i film e le copertine da non mostrare</string>
+  <string name="pending_folders_detail">Musica, film e copertine da non mostrare</string>
   <string name="pending_battery">Batteria senza limiti</string>
-  <string name="pending_battery_detail">Impedisci a Samsung di fermare l’app in background</string>
+  <string name="pending_battery_detail">Così Samsung non ferma l’app</string>
   <string name="pending_vpn">VPN di casa</string>
-  <string name="pending_vpn_detail">Fuori casa il NAS si raggiunge solo con WireGuard</string>
+  <string name="pending_vpn_detail">Per raggiungere il NAS fuori casa</string>
   <string name="pending_generic">Passo %1$d della configurazione</string>
-  <string name="pending_generic_detail">Saltato durante la configurazione: completalo quando vuoi</string>
+  <string name="pending_generic_detail">Saltato durante la configurazione</string>
 
   <!-- L'apertura della pagina principale -->
   <string name="hero_none_value">Nessuna</string>
   <string name="hero_none_title">Nessuna famiglia su questo telefono</string>
-  <string name="hero_none_detail">Quando la configurazione sarà finita, qui compariranno i dispositivi e le azioni della famiglia.</string>
+  <string name="hero_none_detail">Compare a configurazione finita.</string>
   <string name="hero_stale_title">Il registro potrebbe essere vecchio</string>
   <string name="hero_inactive_value">Fermo</string>
   <string name="hero_inactive_title">Questo dispositivo non è più attivo</string>
-  <string name="hero_inactive_detail">È stato dismesso, revocato o segnato come perso: non può più scrivere sul NAS.</string>
+  <string name="hero_inactive_detail">Dismesso, revocato o perso: non scrive più sul NAS.</string>
   <string name="hero_keystore_value">In pausa</string>
   <string name="hero_keystore_title">Il telefono non riesce a usare le chiavi di sicurezza</string>
-  <string name="hero_keystore_detail">Finché non rispondono, l’app non scrive niente sul NAS e non approva dispositivi. Chiudi e riapri l’app; se non basta, riavvia il telefono.</string>
+  <string name="hero_keystore_detail">Finché non rispondono l’app non scrive sul NAS. Chiudi e riapri l’app, o riavvia il telefono.</string>
   <string name="hero_pending_value">In attesa</string>
   <string name="hero_pending_title">Aspetti l’approvazione</string>
-  <string name="hero_pending_detail">Finché l’admin non approva questo dispositivo resta in sola lettura.</string>
+  <string name="hero_pending_detail">Fino all’approvazione dell’admin è in sola lettura.</string>
   <plurals name="hero_requests_value">
     <item quantity="one">%1$d richiesta</item>
     <item quantity="other">%1$d richieste</item>
   </plurals>
   <string name="hero_requests_title">Qualcuno chiede di entrare</string>
-  <string name="hero_requests_detail">Un dispositivo nuovo aspetta la tua approvazione. Confronta il codice prima di approvare.</string>
+  <string name="hero_requests_detail">Confronta il codice prima di approvare.</string>
   <string name="hero_ok_title">Fai parte della famiglia</string>
-  <string name="hero_ok_detail">Questo dispositivo è approvato: legge e scrive sul NAS insieme agli altri.</string>
+  <string name="hero_ok_detail">Questo telefono legge e scrive sul NAS.</string>
   <string name="hero_ok_title_admin">Sei l’admin della famiglia</string>
-  <string name="hero_ok_detail_admin">Tieni la chiave di famiglia: approvi i dispositivi nuovi e puoi segnalare quelli persi.</string>
+  <string name="hero_ok_detail_admin">Approvi i dispositivi nuovi e segnali quelli persi.</string>
 
   <!-- Quando il registro potrebbe essere vecchio -->
   <string name="stale_not_refreshed">Il NAS non si raggiunge da un po’: l’app lavora con l’ultimo registro che ha accettato.</string>

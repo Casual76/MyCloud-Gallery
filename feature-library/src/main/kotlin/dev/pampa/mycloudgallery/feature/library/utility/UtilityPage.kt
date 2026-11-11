@@ -3,12 +3,9 @@ package dev.pampa.mycloudgallery.feature.library.utility
 import android.content.res.Resources
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Chat
-import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.BurstMode
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Edit
-import androidx.compose.material.icons.rounded.Screenshot
-import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -25,8 +22,9 @@ import dev.pampa.mycloudgallery.feature.library.collections.CollectionItemsSourc
 import kotlinx.coroutines.flow.Flow
 import dev.pampa.mycloudgallery.feature.library.countText
 
-// Fase 7, P8 (D24, docs/fase7-progetto.md §2.1 "Utility"): le PAGINE DELL'UTILITY come dati. Screenshot, Video, Modificate, WhatsApp, Doppioni ed
-// Eliminati di recente. `CollectionsTab.kt` e' di P11: non lo tocco, gli consegno una voce per pagina (`CollectionEntry`) e la rotta; "Libera spazio"
+// Fase 7, P8 (D24, docs/fase7-progetto.md §2.1 "Utility"): le PAGINE DELL'UTILITY come dati. Modificate, Doppioni ed Eliminati di recente.
+// H5 (fase H, 11/11): Screenshot, Video e WhatsApp sono usciti, erano doppioni della scheda Album (Screenshot, Video, Messaggistica: lo stesso filtro, o
+// uno che lo contiene). Una rotta o una scelta del tablet salvata con il loro codice non si apre piu' (`fromCode` da' null) e torna indietro da sola. `CollectionsTab.kt` e' di P11: non lo tocco, gli consegno una voce per pagina (`CollectionEntry`) e la rotta; "Libera spazio"
 // (Fase 5) resta la voce di `:app`.
 
 /**
@@ -36,10 +34,7 @@ import dev.pampa.mycloudgallery.feature.library.countText
  * @property filter il filtro della Libreria che la pagina mostra con lo stesso `MediaGrid` e lo stesso viewer; null per Doppioni ed Eliminati di recente.
  */
 enum class UtilityPage(val code: String, val filter: LibraryFilter?) {
-  SCREENSHOTS("screenshots", LibraryFilter.SCREENSHOTS),
-  VIDEOS("videos", LibraryFilter.VIDEOS),
   EDITED("edited", LibraryFilter.EDITED),
-  WHATSAPP("whatsapp", LibraryFilter.WHATSAPP),
   DUPLICATES("duplicates", null),
   RECENTLY_DELETED("recently_deleted", null),
   ;
@@ -66,31 +61,23 @@ enum class UtilityPage(val code: String, val filter: LibraryFilter?) {
 @get:StringRes
 internal val UtilityPage.titleRes: Int
   get() = when (this) {
-    UtilityPage.SCREENSHOTS -> R.string.collection_screenshots
-    UtilityPage.VIDEOS -> R.string.collection_videos
     UtilityPage.EDITED -> R.string.utility_edited
-    UtilityPage.WHATSAPP -> R.string.collection_whatsapp
     UtilityPage.DUPLICATES -> R.string.utility_duplicates
     UtilityPage.RECENTLY_DELETED -> R.string.utility_recently_deleted
   }
 
+/** H5: icone che dicono che cosa c'e' dentro (la bacchetta per le foto ritoccate, la raffica per gli scatti quasi uguali), non un comando ("modifica", "copia"). */
 internal val UtilityPage.icon: ImageVector
   get() = when (this) {
-    UtilityPage.SCREENSHOTS -> Icons.Rounded.Screenshot
-    UtilityPage.VIDEOS -> Icons.Rounded.Videocam
-    UtilityPage.EDITED -> Icons.Rounded.Edit
-    UtilityPage.WHATSAPP -> Icons.Rounded.Chat
-    UtilityPage.DUPLICATES -> Icons.Rounded.ContentCopy
+    UtilityPage.EDITED -> Icons.Rounded.AutoFixHigh
+    UtilityPage.DUPLICATES -> Icons.Rounded.BurstMode
     UtilityPage.RECENTLY_DELETED -> Icons.Rounded.Delete
   }
 
 /** Il tono della piastrella dell'icona (mai quello della riga: regola 2 del design system). */
 internal val UtilityPage.tone: FluidTone
   get() = when (this) {
-    UtilityPage.SCREENSHOTS -> FluidTone.Primary
-    UtilityPage.VIDEOS -> FluidTone.Info
     UtilityPage.EDITED -> FluidTone.Warning
-    UtilityPage.WHATSAPP -> FluidTone.Success
     UtilityPage.DUPLICATES -> FluidTone.Neutral
     UtilityPage.RECENTLY_DELETED -> FluidTone.Warning
   }
@@ -98,10 +85,7 @@ internal val UtilityPage.tone: FluidTone
 @get:StringRes
 internal val UtilityPage.emptyTitleRes: Int
   get() = when (this) {
-    UtilityPage.SCREENSHOTS -> R.string.collection_empty_screenshots_title
-    UtilityPage.VIDEOS -> R.string.collection_empty_videos_title
     UtilityPage.EDITED -> R.string.utility_edited_empty_title
-    UtilityPage.WHATSAPP -> R.string.collection_empty_whatsapp_title
     UtilityPage.DUPLICATES -> R.string.duplicates_identical_empty_title
     UtilityPage.RECENTLY_DELETED -> R.string.trash_empty_title
   }
@@ -109,10 +93,7 @@ internal val UtilityPage.emptyTitleRes: Int
 @get:StringRes
 internal val UtilityPage.emptyDetailRes: Int
   get() = when (this) {
-    UtilityPage.SCREENSHOTS -> R.string.collection_empty_screenshots_detail
-    UtilityPage.VIDEOS -> R.string.collection_empty_videos_detail
     UtilityPage.EDITED -> R.string.utility_edited_empty_detail
-    UtilityPage.WHATSAPP -> R.string.collection_empty_whatsapp_detail
     UtilityPage.DUPLICATES -> R.string.duplicates_identical_empty_detail
     UtilityPage.RECENTLY_DELETED -> R.string.trash_empty_detail
   }

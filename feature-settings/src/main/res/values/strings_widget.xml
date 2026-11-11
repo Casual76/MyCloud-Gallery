@@ -8,23 +8,23 @@
 
   <string name="widget_section_content">Cosa mostra</string>
   <string name="widget_content_memory_then_photos">Il ricordo del giorno, o foto a caso</string>
-  <string name="widget_content_memory_then_photos_detail">Quando c’è un ricordo di oggi lo mostra; negli altri giorni, foto della tua Libreria.</string>
+  <string name="widget_content_memory_then_photos_detail">Negli altri giorni, foto della Libreria.</string>
   <string name="widget_content_photos_only">Solo foto a caso</string>
-  <string name="widget_content_photos_only_detail">Foto della tua Libreria, anche nei giorni con un ricordo.</string>
+  <string name="widget_content_photos_only_detail">Anche nei giorni con un ricordo.</string>
   <string name="widget_content_memories_only">Solo ricordi</string>
-  <string name="widget_content_memories_only_detail">Solo il ricordo di oggi; senza un ricordo il widget ti invita ad aprire l’app.</string>
-  <string name="widget_content_footnote">Il widget usa le miniature già sul telefono: non scarica niente e non si collega al NAS.</string>
+  <string name="widget_content_memories_only_detail">Senza un ricordo, invita ad aprire l’app.</string>
+  <string name="widget_content_footnote">Usa le miniature già sul telefono: non si collega al NAS.</string>
 
   <string name="widget_section_period">Ogni quanto cambia</string>
   <string name="widget_period_hours_3">Circa ogni 3 ore</string>
   <string name="widget_period_hours_6">Circa ogni 6 ore</string>
   <string name="widget_period_daily">Una volta al giorno</string>
-  <string name="widget_period_footnote">Mai di notte: dalle 23 alle 7 il widget resta com’è. Con il risparmio energetico acceso non cambia da solo. Cambia subito se nascondi una foto.</string>
+  <string name="widget_period_footnote">Mai di notte, dalle 23 alle 7.</string>
 
   <string name="widget_section_privacy">Cosa non fa mai</string>
-  <string name="widget_privacy_hidden">Non mostra mai le foto nascoste né i nomi delle persone, nemmeno per un istante: se nascondi una foto, sparisce subito dal widget.</string>
-  <string name="widget_privacy_lock">Con il blocco dell’app acceso mostra solo foto che sono anche sul telefono e nessun titolo, come fa già la Galleria del telefono.</string>
-  <string name="widget_privacy_home">Sta solo sulla schermata Home, mai sulla schermata di blocco.</string>
+  <string name="widget_privacy_hidden">Mai le foto nascoste né i nomi delle persone.</string>
+  <string name="widget_privacy_lock">Con il blocco dell’app: solo foto che sono anche sul telefono, senza titoli.</string>
+  <string name="widget_privacy_home">Solo sulla Home, mai sulla schermata di blocco.</string>
 
   <string name="widget_section_add">Come si aggiunge</string>
   <string name="widget_add_how">Tieni premuto sulla schermata Home, scegli Widget e poi MyCloud Gallery. Puoi allargarlo per vedere più foto.</string>

@@ -40,9 +40,9 @@ class SearchEntryTest {
   @Test
   fun conLeScelteLaFraseDiceRuoloELetturaDelTesto() {
     assertThat(SearchEntryTexts.subtitleOf(context, SearchEntrySummary(indexer = true, textReadingHere = false, modelMissing = false)))
-      .isEqualTo("Questo dispositivo analizza le foto · lettura del testo spenta")
+      .isEqualTo("Analizza le foto · lettura del testo spenta")
     assertThat(SearchEntryTexts.subtitleOf(context, SearchEntrySummary(indexer = false, textReadingHere = true, modelMissing = false)))
-      .isEqualTo("Questo dispositivo non analizza le foto · lettura del testo attiva")
+      .isEqualTo("Non analizza le foto · lettura del testo attiva")
   }
 
   @Test
@@ -73,7 +73,7 @@ class SearchEntryTest {
   @Test
   fun conLAvvisoDaConfermareLaVoceLoDiceCoseLaPillola() {
     val summary = SearchEntrySummary(indexer = false, textReadingHere = false, modelMissing = false, readingNeedsNotice = true)
-    assertThat(SearchEntryTexts.subtitleOf(context, summary)).isEqualTo("Questo dispositivo non analizza le foto · lettura del testo da confermare")
+    assertThat(SearchEntryTexts.subtitleOf(context, summary)).isEqualTo("Non analizza le foto · lettura del testo da confermare")
     assertThat(searchEntryTone(summary)).isEqualTo(FluidTone.Warning)
     rule.setContent {
       MyCloudGalleryTheme { FluidListGroup { SearchEntryRow(summary) {} } }

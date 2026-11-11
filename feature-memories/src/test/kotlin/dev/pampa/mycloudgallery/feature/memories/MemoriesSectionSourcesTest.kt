@@ -98,13 +98,14 @@ class MemoriesSectionSourcesTest {
     assertThat(working.sectionState.value).isEqualTo(MemoriesSectionState.Working)
     assertThat(working.section.value.entries.single().title).isEqualTo("Sto preparando i ricordi")
     assertThat(MemoriesEntryTarget.parse(working.section.value.entries.single().code)).isEqualTo(MemoriesEntryTarget.Inert)
-    // Libreria senza abbastanza foto: dopo il giro "I ricordi arrivano quando ci sono abbastanza foto" (E-MEM1).
+    // Libreria senza abbastanza foto: dopo il giro "Ancora nessun ricordo" / "Arrivano quando ci sono abbastanza foto" (E-MEM1; H5 ha accorciato la riga).
     val poor = MemoriesRig(seeded = false).also { it.lib.photos(it.today.minusDays(40), 2) }
     poor.refresh()
     val empty = sources(poor, backgroundScope)
     runCurrent()
     assertThat(empty.sectionState.value).isInstanceOf(MemoriesSectionState.Empty::class.java)
-    assertThat(empty.section.value.entries.single().title).isEqualTo("I ricordi arrivano quando ci sono abbastanza foto")
+    assertThat(empty.section.value.entries.single().title).isEqualTo("Ancora nessun ricordo")
+    assertThat(empty.section.value.entries.single().subtitle).isEqualTo("Arrivano quando ci sono abbastanza foto")
     assertThat(empty.section.value.entries).isNotEmpty()
   }
 

@@ -208,7 +208,7 @@ abstract class UtilityScreenshotBase(private val dark: Boolean, private val devi
 
   private fun entries(): @Composable () -> Unit = {
     val group = utilityEntryGroup(
-      counts = mapOf(UtilityPage.SCREENSHOTS to 214, UtilityPage.VIDEOS to 1_380, UtilityPage.EDITED to 37, UtilityPage.WHATSAPP to 4_905),
+      counts = mapOf(UtilityPage.EDITED to 37),
     )
     LazyColumn(
       modifier = Modifier.fillMaxSize().padding(horizontal = GalleryDimens.Gutter),
@@ -241,9 +241,6 @@ abstract class UtilityScreenshotBase(private val dark: Boolean, private val devi
 
   @Test
   fun modificateVuote() = shoot("modificate-vuote", content = filterPage(UtilityPage.EDITED, empty = true))
-
-  @Test
-  fun screenshotDellUtility() = shoot("screenshot", content = filterPage(UtilityPage.SCREENSHOTS))
 
   // --- Eliminati di recente --------------------------------------------------------------------------------------
 

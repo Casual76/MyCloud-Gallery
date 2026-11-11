@@ -230,7 +230,7 @@ fun SettingsScreen(
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.settings_family),
-          subtitle = stringResource(if (state.isAdmin) R.string.settings_family_detail_admin else R.string.settings_family_detail),
+          subtitle = NO_SUBTITLE,
           tone = FluidTone.Primary,
           leading = { RowGlyph(Icons.Rounded.Groups) },
           onClick = links.openFamily,
@@ -243,7 +243,7 @@ fun SettingsScreen(
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.settings_nas_account),
-          subtitle = stringResource(R.string.settings_nas_account_detail),
+          subtitle = NO_SUBTITLE,
           tone = FluidTone.Info,
           leading = { RowGlyph(Icons.Rounded.Dns) },
           onClick = links.openNasAccount,
@@ -251,7 +251,7 @@ fun SettingsScreen(
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.settings_network),
-          subtitle = stringResource(R.string.settings_network_detail),
+          subtitle = NO_SUBTITLE,
           tone = FluidTone.Info,
           leading = { RowGlyph(Icons.Rounded.Wifi) },
           onClick = links.openNetwork,
@@ -259,7 +259,7 @@ fun SettingsScreen(
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.settings_quality),
-          subtitle = stringResource(R.string.settings_quality_detail),
+          subtitle = NO_SUBTITLE,
           tone = FluidTone.Info,
           leading = { RowGlyph(Icons.Rounded.PhotoLibrary) },
           onClick = links.openQuality,
@@ -267,7 +267,7 @@ fun SettingsScreen(
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.settings_rules),
-          subtitle = stringResource(R.string.settings_rules_detail),
+          subtitle = NO_SUBTITLE,
           tone = FluidTone.Info,
           leading = { RowGlyph(Icons.Rounded.Schedule) },
           onClick = links.openRules,
@@ -307,7 +307,7 @@ fun SettingsScreen(
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.settings_security),
-          subtitle = stringResource(R.string.settings_security_detail),
+          subtitle = NO_SUBTITLE,
           tone = FluidTone.Success,
           leading = { RowGlyph(Icons.Rounded.Security) },
           onClick = links.openSecurity,
@@ -322,7 +322,7 @@ fun SettingsScreen(
         links.openHidden?.let { openHidden ->
           FluidListRow(
             title = stringResource(R.string.settings_hidden),
-            subtitle = stringResource(R.string.settings_hidden_detail),
+            subtitle = NO_SUBTITLE,
             tone = FluidTone.Success,
             leading = { RowGlyph(Icons.Rounded.VisibilityOff) },
             onClick = openHidden,
@@ -367,7 +367,7 @@ fun SettingsScreen(
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.settings_diagnostics),
-          subtitle = stringResource(R.string.settings_diagnostics_detail),
+          subtitle = NO_SUBTITLE,
           tone = FluidTone.Neutral,
           leading = { RowGlyph(Icons.Rounded.MonitorHeart) },
           onClick = openDiagnostics,
@@ -375,7 +375,7 @@ fun SettingsScreen(
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.settings_about),
-          subtitle = stringResource(R.string.settings_about_detail),
+          subtitle = NO_SUBTITLE,
           tone = FluidTone.Neutral,
           leading = { RowGlyph(Icons.Rounded.Info) },
           onClick = links.openAbout,
@@ -389,6 +389,12 @@ fun SettingsScreen(
     }
   }
 }
+
+/**
+ * H5 (11/11): le voci che portano a una pagina senza uno stato da dire hanno il solo titolo. Il sottotitolo elencava cosa c'e' dentro la pagina
+ * ("Password e indirizzo del NAS"): era testo da leggere che non diceva niente di nuovo. Una riga col sottotitolo vuoto e' alta una riga.
+ */
+private const val NO_SUBTITLE = ""
 
 /** Un passo saltato dell'onboarding, con un nome che dice cosa c'e' da fare (non solo "passo 10"). */
 @Composable

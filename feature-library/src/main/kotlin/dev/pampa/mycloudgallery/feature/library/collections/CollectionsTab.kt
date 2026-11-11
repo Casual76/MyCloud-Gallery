@@ -31,6 +31,8 @@ import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.FluidPaneSizes
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarButton
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.hidden.HiddenRoute
@@ -49,7 +51,7 @@ val LocalCollectionDetailClose = staticCompositionLocalOf<() -> Unit> { {} }
  * di recente; Nascosti), che ogni fornitore con lo stesso codice puo' sostituire. Ogni voce di una raccolta-filtro apre una griglia con lo
  * stesso `MediaGrid` e lo stesso viewer della Libreria.
  *
- * - **"Modifica Raccolte"** (il tasto in alto): le sezioni si trascinano dalla maniglia, o con le azioni di TalkBack "Sposta su" e "Sposta
+ * - **"Modifica Raccolte"** (nel menu in alto, con le Impostazioni): le sezioni si trascinano dalla maniglia, o con le azioni di TalkBack "Sposta su" e "Sposta
  *   giu'", e un interruttore le mostra o le nasconde (Album no, mai). Ordine e visibilita' si sincronizzano fra i dispositivi
  *   dell'utente ([CollectionsLayoutStore]); una sezione nuova va in coda (E-L14).
  * - **Telefono**: l'elenco e basta; una voce toccata chiama [onOpenCollection] (`:app` la porta alla rotta giusta con
@@ -87,6 +89,8 @@ fun CollectionsTab(
   val state = remember(inputs, extraGroups) {
     CollectionsLayout.state(inputs.present, extraGroups, inputs.saved, inputs.hidden, inputs.editing, inputs.saveFailed)
   }
+  // H5: le copertine delle voci (l'ultimo ricordo, i viaggi) dalla stessa cache delle miniature.
+  CompositionLocalProvider(LocalCollectionCovers provides viewModel.covers) {
   CollectionsScreen(
     state = state,
     contentPadding = contentPadding,
@@ -113,6 +117,7 @@ fun CollectionsTab(
       }
     },
   )
+  }
 }
 
 /**
@@ -245,6 +250,13 @@ private fun CollectionsList(
   onReorder: (List<String>) -> Unit,
   onSetShown: (String, Boolean) -> Unit,
 ) {
+  // H5: le miniature delle copertine si chiedono qui, una volta per elenco (non a ogni scorrimento). Sul tablet no: il pannello accanto puo' essere
+  // una griglia con la sua finestra di richieste, e le copertine li' compaiono se sono gia' in cache.
+  val covers = LocalCollectionCovers.current
+  if (covers != null && !twoPane && !state.editing) {
+    val media = remember(state) { state.visibleRows.mapNotNull { (it as? SectionRow.Entry)?.entry?.cover }.distinct() }
+    CollectionCoverWindow(covers, media)
+  }
   FluidScreen(
     title = stringResource(if (state.editing) R.string.collections_edit_title else R.string.collections_title),
     actions = {
@@ -256,15 +268,16 @@ private fun CollectionsList(
           onClick = onDone,
         )
       } else {
-        GalleryBarButton(
-          icon = Icons.Rounded.Edit,
-          contentDescription = stringResource(R.string.collections_edit),
-          onClick = onEdit,
-        )
-        GalleryBarButton(
-          icon = Icons.Rounded.Settings,
-          contentDescription = stringResource(R.string.collections_open_settings),
-          onClick = onOpenSettings,
+        // H5 (11/11): un solo tasto, il menu, come la scheda Album e la Libreria. Le Impostazioni sono un comando dell'app (l'ultima voce, dopo
+        // una banda, come nel menu della Libreria), non un tasto con l'ingranaggio accanto alle raccolte: l'utente le leggeva come "un'altra
+        // raccolta" e la barra aveva due tondi uguali per due cose diverse.
+        GalleryMenuButton(
+          entries = listOf(
+            GalleryMenuEntry.Item(label = stringResource(R.string.collections_edit), onClick = onEdit, icon = Icons.Rounded.Edit),
+            GalleryMenuEntry.GroupBreak,
+            GalleryMenuEntry.Item(label = stringResource(R.string.collections_open_settings), onClick = onOpenSettings, icon = Icons.Rounded.Settings),
+          ),
+          contentDescription = stringResource(R.string.collections_more),
         )
       }
     },

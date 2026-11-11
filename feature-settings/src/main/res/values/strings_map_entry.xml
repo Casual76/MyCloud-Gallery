@@ -2,8 +2,8 @@
 <resources>
   <!-- Fase 9 (P4, docs/fase9-progetto.md §2.8, D24, Q1 (c)): la voce "Mappa" delle Impostazioni. Solo se la mappa dettagliata e' accesa su questo dispositivo (D33): niente luoghi, zone, nomi o numeri. -->
   <string name="settings_map">Mappa</string>
-  <string name="settings_map_detail">La mappa dettagliata, la nota su cosa esce e le zone senza Internet.</string>
+  <string name="settings_map_detail">Mappa dettagliata e zone senza Internet</string>
   <string name="settings_map_on">Mappa dettagliata accesa</string>
-  <string name="settings_map_off">Mappa dettagliata spenta: la carta semplice dentro l’app</string>
+  <string name="settings_map_off">Mappa dettagliata spenta</string>
   <string name="settings_map_unavailable">Solo la carta semplice dentro l’app</string>
 </resources>

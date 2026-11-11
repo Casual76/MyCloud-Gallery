@@ -37,15 +37,15 @@ class PeopleEntryTest {
 
   @Test
   fun senzaLegaturaLaFraseDiceATantoServe() {
-    assertThat(PeopleEntryTexts.subtitleOf(context, null)).isEqualTo("Raggruppa le foto per volto. Si attiva per il tuo account, dopo una pagina che spiega cosa fa.")
+    assertThat(PeopleEntryTexts.subtitleOf(context, null)).isEqualTo("Spenta")
   }
 
   @Test
   fun ogniStatoHaLaSuaFrase() {
-    assertThat(subtitle(PeopleEntryState.OFF)).isEqualTo("Raggruppa le foto per volto. Si attiva per il tuo account, dopo una pagina che spiega cosa fa.")
-    assertThat(subtitle(PeopleEntryState.ON)).isEqualTo("Attiva sul tuo account e su questo dispositivo")
-    assertThat(subtitle(PeopleEntryState.LOCAL_ONLY)).isEqualTo("Attiva, ma ogni dispositivo ha le sue persone")
-    assertThat(subtitle(PeopleEntryState.AWAITING_NOTICE)).isEqualTo("Attiva sul tuo account: qui non lavora finché non confermi")
+    assertThat(subtitle(PeopleEntryState.OFF)).isEqualTo("Spenta")
+    assertThat(subtitle(PeopleEntryState.ON)).isEqualTo("Attiva")
+    assertThat(subtitle(PeopleEntryState.LOCAL_ONLY)).isEqualTo("Attiva, solo su questo dispositivo")
+    assertThat(subtitle(PeopleEntryState.AWAITING_NOTICE)).isEqualTo("Da confermare su questo dispositivo")
     assertThat(subtitle(PeopleEntryState.EXCLUDED_HERE)).isEqualTo("Non attiva su questo dispositivo")
     assertThat(subtitle(PeopleEntryState.ERASING)).isEqualTo("Cancellazione in corso")
     assertThat(subtitle(PeopleEntryState.NEEDS_UPDATE)).isEqualTo("Serve aggiornare l’app")

@@ -18299,3 +18299,94 @@ squadrata (`AlbumPageScreen`, `MemoryPageScreen`, `PersonPageScreen`, `ZoneGridS
 da queste pagine (album, ricordi, persone, mappa, ricerca, widget) il viewer riceve `AlbumViewerAnchor`/`SearchViewerAnchor`, che non
 danno bordi: l'apertura parte dal rettangolo al centro (`centeredFallback`), anch'esso ad angoli vivi. Resta un limite gia' noto, non di
 H1: da quelle pagine l'apertura non parte dalla cella toccata (e la chiusura si allontana sfumando, `FlightPlan.Away`).
+
+## H5: Raccolte piu' pulite e con carattere; Impostazioni con meno testo (fase H, 11/11)
+
+Ramo `fix/h5-raccolte-impostazioni` da `261a3553`. Fonte: il commento dell'utente dell'11/11 (Raccolte "un po' poche icone fatte un po' piu'
+rappresentative e meno standard", "Screenshot e Video sono ripetitivi", l'ingresso Impostazioni "un po' confusionario", Impostazioni "un po' troppo
+testo") e la sua risposta "via tutti e quattro i doppioni".
+
+### Voce 1: via i doppioni
+- **Che cosa c'era davvero.** La sezione «Telefono» (Preferiti, Video, Screenshot, WhatsApp) non si vede nelle Raccolte dalla G2
+  (`CollectionSections.inAlbumsTab`). I doppioni che l'utente vede sul telefono sono le voci **Screenshot, Video e WhatsApp della sezione Utility**
+  (P8). Preferiti non era piu' nelle Raccolte.
+- **Verifica prima di togliere.** Scheda Album: Video e Screenshot aprono la stessa rotta con lo stesso filtro (`LibraryFilter.VIDEOS`,
+  `SCREENSHOTS`); Messaggistica usa `LibraryFilter.MESSAGING`, che **contiene** WhatsApp (piu' Telegram e Signal). Nota: nella scheda Album una voce
+  speciale vuota non compare (tranne i Preferiti), mentre in Utility diceva "Nessun elemento": e' lo stesso contenuto, solo che vuoto non si mostra.
+- **Fatto.** `UtilityPage` perde `SCREENSHOTS`, `VIDEOS`, `WHATSAPP`, con le stringhe che servivano solo a loro (`collection_whatsapp`,
+  `collection_empty_whatsapp_*`) e lo screenshot `7-P8/screenshot-*`. Restano Modificate, Doppioni, Eliminati di recente e Libera spazio.
+  Una rotta salvata (`UtilityFilterDestination("screenshots")`) torna indietro da sola; una scelta salvata del tablet (`utility/screenshots`) non
+  trova la voce e torna a "Scegli una raccolta". L'ordine personalizzato delle sezioni non cambia (nessun codice di sezione e' cambiato).
+- **Non tolto, e perche'.** La costruzione della sezione «Telefono» (`builtinSections`, `CollectionsUiState.media`, i conteggi dei filtri) e' codice
+  morto in produzione dalla G2, ma e' la base di una decina di test del pannello del tablet e della selezione (`CollectionsScreenTest`,
+  `CollectionsPanesTest`, `CollectionsExtraGroupsTest`...). Toglierla e' una pulizia a parte: proposta.
+- **Tablet.** Senza raccolte-filtro visibili il pannello di dettaglio parte da "Scegli una raccolta" (com'e' dalla G2): non apre da solo una voce,
+  perche' le prime voci possono essere comandi ("Attiva riconoscimento dei volti", "Riprova") o pagine pesanti. Scelta mia.
+
+### Voce 2: icone e riga d'ingresso con carattere
+- **Copertine vere** dove la voce ha una foto che la rappresenta: i **Ricordi** (la copertina del ricordo, `MemoryCard.cover`) e i **Viaggi**
+  (`TripProposal.cover`). Il dato c'era gia' nelle sezioni: un campo `cover: MediaId?` in piu' su `CollectionEntry` e sulle voci di
+  feature-memories e feature-albums, e una riga ciascuna nelle mappature di `:app` (`MemoriesScreenPorts`, `CollectionsSectionsWiring`).
+- **Costo.** Nessuna query nuova: la miniatura viene dalla stessa cache della griglia, con la stessa chiave (versione del file e taglia M, quella dei
+  Giorni e delle copertine della scheda Album), cercata nella Libreria visibile (`CollectionCovers`). Le richieste partono **una volta per elenco**
+  (`CollectionCoverWindow`, al cambio dell'elenco o dell'indice), non a ogni scorrimento; la copertina compare sopra l'icona appena c'e',
+  senza animazione (la regola del modulo vuole il movimento solo dall'engine, `CollectionsStyleTest`). Sul tablet la scheda non chiede miniature (il pannello accanto puo' essere una griglia con la sua finestra): la copertina c'e'
+  se e' gia' in cache, altrimenti l'icona.
+- **Mai un nascosto.** La Libreria visibile non contiene i nascosti: una copertina nascosta dopo che la sezione l'ha scelta non ha richiesta e la riga
+  mostra l'icona (`NoHiddenLeakTest.unaCopertinaNascostaNonSiChiedeMaiNelleRaccolte`, con il caricatore che registra ogni identita' chiesta).
+- **Piastrella unica.** Tutte le righe delle Raccolte hanno una piastrella da 44 dp (prima 32): la copertina o l'icona sul tono, stessa forma
+  continua, cosi' i testi di un gruppo partono dallo stesso punto. **Icone** scelte per dire cosa c'e' dentro: Modificate la bacchetta
+  (`AutoFixHigh`, prima la matita "modifica"), Doppioni la raffica (`BurstMode`, prima "copia"), Nascosti l'occhio barrato (`VisibilityOff`, come la
+  voce delle Impostazioni; prima il lucchetto).
+- **Meno testo** nelle righe: Doppioni "Copie e scatti quasi uguali", Eliminati di recente "Telefono e NAS, dietro lo sblocco", Ricordi vuoti
+  "Ancora nessun ricordo / Arrivano quando ci sono abbastanza foto", Persone spenta "Nessun familiare vede i nomi" (la frase della correzione B,
+  accorciata).
+- **Non fatto:** le facce per Persone. Il volto di copertina e' un `FaceLocator` (contenuto e riquadro), che solo feature-people sa ritagliare
+  (`PeopleActions.crop`): servirebbe una porta in piu' fra feature-library e `:app`. Per ora l'icona. Mappa/Luoghi: nessuna foto pronta nei dati
+  della sezione (servirebbe una query): icone.
+
+### Voce 3: le Impostazioni dentro Raccolte
+In alto c'erano due tondi uguali (matita e ingranaggio). Adesso un solo tasto, il **menu**, come la scheda Album e la Libreria: "Modifica
+Raccolte" e, dopo una banda, "Impostazioni" come ultima voce (lo stesso posto del menu della Libreria). `MainScaffold` non cambia.
+
+### Voce 4: Impostazioni con meno testo
+- Pagina principale: le righe che elencavano il contenuto della pagina (Famiglia, Account del NAS, Rete e VPN, Anteprime del NAS, Quando lavora
+  l'app, Sicurezza, Nascosti, Diagnostica, Informazioni e licenze) hanno **solo il titolo**; restano i sottotitoli che dicono uno stato (Dispositivi,
+  Backup, Ricerca, Persone, Ricordi, Mappa, Widget, Condivisioni) e "Il NAS non e' un backup". Le frasi di stato sono piu' corte ("Attiva",
+  "Analizza le foto", "Senza posizione").
+- Le pagine: via il gergo dove era nel testo (IPv6, CGNAT, RAID 1, Keystore, "share"), frasi lunghe ridotte a una riga. Restano, in una riga, le
+  cose serie: le cancellazioni, la sicurezza, cio' che esce dal telefono. I passaggi di Famiglia (recupero, reset, ripartire dal PC) e le conferme
+  non sono stati toccati: spiegano conseguenze.
+- Elenco completo prima -> dopo: `docs/h5-testi-impostazioni.md`.
+- Non toccata la pagina "Ricerca e modelli" (feature-search, di HR).
+
+### Prove sul telefono
+1. Raccolte, telefono: le righe dei Ricordi e dei Viaggi mostrano la foto (la prima volta prende il posto dell'icona appena caricata,
+   tornando nella scheda e' gia' li'). Dire se il cambio icona -> foto senza dissolvenza disturba. Difetto: un riquadro vuoto o un'icona che resta dove la foto c'e'.
+2. Raccolte: scorrere veloce su e giu' per 10 secondi, poi passare alla Libreria e scorrere: nessun rallentamento rispetto alla beta e la griglia
+   della Libreria ha subito le sue miniature. Difetto: celle grigie nella Libreria dopo essere passati dalle Raccolte.
+3. Nascondere la foto di copertina di un ricordo dal viewer, tornare nelle Raccolte: la riga mostra l'icona, mai la foto nascosta.
+4. Tasto menu in alto a destra: si apre con Modifica Raccolte e Impostazioni; "Impostazioni" apre la pagina, "Modifica Raccolte" la modifica.
+5. Utility: Modificate, Doppioni, Eliminati di recente, Libera spazio; nessuno Screenshot/Video/WhatsApp. Scheda Album: Video, Screenshot e
+   Messaggistica ci sono (se hanno elementi).
+6. Tablet: Raccolte parte da "Scegli una raccolta"; le copertine compaiono quando la Libreria le ha gia' caricate.
+7. Impostazioni: leggere la pagina principale e Rete, Sicurezza, Condivisioni, Widget; dire se manca qualcosa che serviva.
+
+### Rischi per le prestazioni
+- La piastrella delle Raccolte e' piu' alta (44 dp): righe un po' piu' alte, nessun vetro in piu'. Le copertine sono al piu' una decina di
+  miniature M dalla cache comune; la richiesta parte all'apertura della scheda e puo' annullare richieste in volo della griglia della Libreria (che
+  non e' in composizione mentre si guardano le Raccolte: la Libreria rifa' la sua finestra quando torna).
+
+### Verifiche (H5)
+- Batch, un posto del semaforo ciascuno, tutti rilasciati: `H5-1` registrazione degli screenshot "prima" delle Impostazioni, OK 1 min 22 s;
+  `H5-2` FAIL 27 s (errore del mio lanciatore, nessun test); `H5-3` registrazione di feature-settings, 996 test, 5 caduti su testi accorciati
+  che i requisiti tengono (tasto Movimento, formati L41, widget, menu del viewer): corretti; `H5-4` registrazione e test di feature-settings,
+  996 test, 1 caduto (una parola): corretto; `H5-5` FAIL (un import nei test, nessun test eseguito); `H5-6` registrazione Raccolte e Utility OK,
+  607 test, 4 caduti (regole di stile del modulo: misura fuori da `CollectionsDimens`, un'animazione scritta a mano; un test che componeva due
+  volte): corretti; `H5-7` OK, 952 test (feature-library 609 nei pacchetti `collections` e `utility`, feature-memories 268, feature-people 60,
+  feature-albums 9, `SearchEntryTest` 6), 0 falliti; `H5-8` OK, `:app` compila, `CollectionsWiringTest` e `Phase9ScreenshotTest` (14), 0 falliti.
+- Non lanciati: `tools\check.ps1`, i test interi di `:app` e di feature-library fuori da `collections` e `utility`.
+- Screenshot nuovi in `docs/screenshots/beta-grafica/H5/` (Raccolte in cima, scorsa, ricordi, menu aperto, appena installata e scorsa;
+  Impostazioni principale, rete, sicurezza, copia esterna prima e dopo); rifatti `7-P11`, `7-P8` (utility-voci, modificate-vuote; tolto
+  `screenshot-*`), `G2/raccolte-pannello-selezione`, `G2/pillola-raccolte`, e le pagine delle Impostazioni in `10-P3`, `10-P5`, `5-P12`, `6-P14`,
+  `7-P9`, `8-P7`, `RG-D`. `doppioni-notturno` era cambiato solo per un interruttore a meta' animazione: non committato.

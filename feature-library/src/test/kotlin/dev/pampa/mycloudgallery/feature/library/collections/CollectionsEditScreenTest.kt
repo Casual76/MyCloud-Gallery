@@ -68,6 +68,7 @@ abstract class CollectionsEditScreenBase : ComposeScreenTest() {
     val state = remember(inputs) {
       CollectionsLayout.state(inputs.present, emptyList(), inputs.saved, inputs.hidden, inputs.editing, inputs.saveFailed)
     }
+    ModalTestHost {
     CollectionsScreen(
       state = state,
       contentPadding = PaddingValues(),
@@ -82,10 +83,18 @@ abstract class CollectionsEditScreenBase : ComposeScreenTest() {
       onReorder = controller::reorder,
       onSetShown = controller::setShown,
     )
+    }
   }
 
+  /** H5: "Modifica Raccolte" sta nel menu in alto, con le Impostazioni (prima era un tasto suo). */
   protected fun edit() {
-    composeRule.onNodeWithContentDescription("Modifica Raccolte").performClick()
+    openMenu()
+    composeRule.onNodeWithText("Modifica Raccolte").performClick()
+    composeRule.waitForIdle()
+  }
+
+  protected fun openMenu() {
+    composeRule.onNodeWithContentDescription("Altre azioni sulle Raccolte").performClick()
     composeRule.waitForIdle()
   }
 
@@ -117,23 +126,34 @@ abstract class CollectionsEditScreenBase : ComposeScreenTest() {
 class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
 
   @Test
-  fun ilTastoInAltoEntraNellaModificaEFineEsce() {
+  fun ilMenuInAltoEntraNellaModificaEFineEsce() {
     show { Host() }
-    composeRule.onNodeWithContentDescription("Impostazioni").assertExists()
+    // H5: in alto un solo tasto, il menu; niente ingranaggio accanto alle raccolte.
+    composeRule.onNodeWithContentDescription("Altre azioni sulle Raccolte").assertExists()
+    composeRule.onAllNodesWithContentDescription("Impostazioni").assertCountEquals(0)
 
     edit()
 
     // Il titolo c'e' due volte (grande e agganciato alla barra).
     assertThat(composeRule.onAllNodesWithText("Modifica Raccolte").fetchSemanticsNodes()).isNotEmpty()
     composeRule.onNodeWithContentDescription("Fine").assertExists()
-    // Un solo gruppo di tasti per volta: in modifica non c'e' ne' il tasto "Modifica" ne' le Impostazioni.
-    composeRule.onAllNodesWithContentDescription("Impostazioni").assertCountEquals(0)
-    composeRule.onAllNodesWithContentDescription("Modifica Raccolte").assertCountEquals(0)
+    // Un solo gruppo di tasti per volta: in modifica c'e' "Fine" e basta, niente menu.
+    composeRule.onAllNodesWithContentDescription("Altre azioni sulle Raccolte").assertCountEquals(0)
     assertThat(controller.inputs.value.editing).isTrue()
 
     composeRule.onNodeWithContentDescription("Fine").performClick()
     composeRule.waitForIdle()
-    composeRule.onNodeWithContentDescription("Impostazioni").assertExists()
+    composeRule.onNodeWithContentDescription("Altre azioni sulle Raccolte").assertExists()
+    assertThat(controller.inputs.value.editing).isFalse()
+  }
+
+  @Test
+  fun leImpostazioniSiApronoDalMenu_ComeUltimaVoce() {
+    show { Host() }
+    openMenu()
+    composeRule.onNodeWithText("Impostazioni").performClick()
+    composeRule.waitForIdle()
+    assertThat(opened).containsExactly("settings")
     assertThat(controller.inputs.value.editing).isFalse()
   }
 
@@ -303,14 +323,15 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
       val state = remember(inputs) {
         CollectionsLayout.state(inputs.present, emptyList(), inputs.saved, inputs.hidden, inputs.editing, inputs.saveFailed)
       }
-      CollectionsScreen(
-        state, PaddingValues(), {}, {}, {}, {}, {},
-        onEdit = failingController::startEditing, onDone = failingController::stopEditing,
-        onReorder = failingController::reorder, onSetShown = failingController::setShown,
-      )
+      ModalTestHost {
+        CollectionsScreen(
+          state, PaddingValues(), {}, {}, {}, {}, {},
+          onEdit = failingController::startEditing, onDone = failingController::stopEditing,
+          onReorder = failingController::reorder, onSetShown = failingController::setShown,
+        )
+      }
     }
-    composeRule.onNodeWithContentDescription("Modifica Raccolte").performClick()
-    composeRule.waitForIdle()
+    edit()
 
     composeRule.onNodeWithText("Viaggi").performClick()
     composeRule.waitForIdle()

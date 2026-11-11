@@ -1,6 +1,5 @@
 package dev.pampa.mycloudgallery.feature.library.collections
 
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.res.stringResource
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
@@ -41,7 +40,9 @@ private fun KindRow(row: CollectionRow, selected: Boolean, twoPane: Boolean, onS
     title = stringResource(row.kind.titleRes),
     subtitle = rowSubtitle(row),
     tone = row.kind.tone,
-    leading = { Icon(imageVector = row.kind.icon, contentDescription = null) },
+    // H5: la stessa piastrella delle voci consegnate come dato, senza copertina (Nascosti ed Eliminati di recente non mostrano mai il contenuto).
+    leading = { CollectionRowArt(row.kind.icon, row.kind.tone, cover = null) },
+    leadingTile = false,
     selected = selected,
     // Su due pannelli la riga sceglie cosa mostrare accanto: la freccia "si apre una pagina" prometterebbe altro.
     disclosure = !twoPane,

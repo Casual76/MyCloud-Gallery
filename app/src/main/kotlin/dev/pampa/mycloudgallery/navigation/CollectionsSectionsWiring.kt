@@ -61,7 +61,7 @@ import dev.pampa.mycloudgallery.feature.nas.R as NasR
 /** La trasformazione campo per campo dei dati di feature-albums nel gruppo delle Raccolte (i due moduli non si conoscono, P10-7). */
 internal fun SectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
   title = title,
-  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing) },
+  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, cover = it.cover) },
   code = code,
   hideable = hideable,
   hint = hint,

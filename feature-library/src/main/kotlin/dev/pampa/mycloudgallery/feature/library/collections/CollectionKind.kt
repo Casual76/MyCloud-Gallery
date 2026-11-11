@@ -4,10 +4,10 @@ import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Favorite
-import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.Videocam
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Chat
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.antigravity.fluidengine.ui.theme.FluidTone
@@ -67,7 +67,7 @@ val CollectionKind.titleRes: Int
     CollectionKind.RECENTLY_DELETED -> R.string.collection_recently_deleted
   }
 
-/** L'icona sulla piastrella della riga. */
+/** L'icona sulla piastrella della riga. H5: i Nascosti con l'occhio barrato, come la voce delle Impostazioni (prima un lucchetto, che diceva "bloccato"). */
 val CollectionKind.icon: ImageVector
   get() = when (this) {
     CollectionKind.FAVORITES -> Icons.Rounded.Favorite
@@ -75,7 +75,7 @@ val CollectionKind.icon: ImageVector
     CollectionKind.SCREENSHOTS -> Icons.Rounded.Screenshot
     CollectionKind.WHATSAPP -> Icons.Rounded.Chat
     CollectionKind.CAMERA -> Icons.Rounded.PhotoCamera
-    CollectionKind.HIDDEN -> Icons.Rounded.Lock
+    CollectionKind.HIDDEN -> Icons.Rounded.VisibilityOff
     CollectionKind.RECENTLY_DELETED -> Icons.Rounded.Delete
   }
 

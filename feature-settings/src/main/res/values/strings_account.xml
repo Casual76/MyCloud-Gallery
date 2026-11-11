@@ -6,7 +6,7 @@
   <string name="account_title">Account del NAS</string>
   <string name="account_eyebrow">NAS</string>
   <string name="account_unavailable_title">Funzione non ancora collegata</string>
-  <string name="account_unavailable_detail">L’account del NAS di questo dispositivo non è ancora disponibile qui. Si collega nell’integrazione finale dell’app.</string>
+  <string name="account_unavailable_detail">L’account del NAS non è ancora disponibile su questo dispositivo.</string>
   <string name="account_none_title">Nessun account</string>
   <string name="account_none_detail">Questo dispositivo non ha ancora un account NAS configurato. Finisci la configurazione iniziale.</string>
   <string name="account_hero_blocked_value">Password</string>
@@ -25,7 +25,7 @@
   <string name="account_hero_waking_detail">I dischi erano in pausa: ci mettono qualche secondo.</string>
   <string name="account_hero_idle_value">In attesa</string>
   <string name="account_hero_idle_title">Nessuna sessione aperta</string>
-  <string name="account_hero_idle_detail">L’app si collega al NAS quando serve e chiude la sessione dopo qualche minuto di inattività.</string>
+  <string name="account_hero_idle_detail">Si collega quando serve.</string>
   <string name="account_section_account">Account</string>
   <string name="account_user">Utente</string>
   <string name="account_address">Indirizzo del NAS</string>
@@ -44,7 +44,7 @@
   <string name="account_link_identity">Identità del NAS</string>
   <string name="account_identity_pinned">Verificata</string>
   <string name="account_identity_unpinned">Non ancora memorizzata</string>
-  <string name="account_footnote">Dopo un errore di password l’app non riprova da sola: il NAS blocca l’account dopo pochi errori. La password sta nella cassaforte del telefono e non esce mai.</string>
+  <string name="account_footnote">Dopo una password sbagliata l’app non riprova: il NAS bloccherebbe l’account.</string>
   <string name="via_home">Rete di casa</string>
   <string name="via_home_vpn">Casa, dentro la VPN</string>
   <string name="via_vpn">VPN di casa</string>
@@ -73,7 +73,7 @@
   <string name="password_submit">Salva e prova</string>
   <string name="password_once_title">Un solo tentativo</string>
   <string name="password_once_message">Se la password è sbagliata il NAS conta l’errore, e dopo pochi errori blocca l’account. Per questo non riprovo da solo: se non va, ne scrivi una nuova.</string>
-  <string name="password_footnote">La password resta nella cassaforte del telefono (Keystore). Non finisce nei log né negli appunti.</string>
+  <string name="password_footnote">La password resta nella cassaforte del telefono.</string>
   <string name="password_failed_title">Non è entrata</string>
   <string name="password_invalid_title">Password non valida</string>
   <string name="password_invalid">Il telefono non può salvare questa password: è vuota o troppo lunga.</string>
@@ -111,8 +111,8 @@
   <string name="address_field_help">Solo l’indirizzo numerico, non un nome.</string>
   <string name="address_field_error">Non è un indirizzo IP valido.</string>
   <string name="address_verify">Verifica che sia lo stesso NAS</string>
-  <string name="address_footnote">La verifica non invia nessuna password: controlla soltanto che risponda lo stesso NAS di prima, riconoscendolo dalla sua identità. Su un telefono che non è dell’admin il cambio vale solo qui.</string>
-  <string name="address_footnote_admin">La verifica non invia nessuna password: controlla soltanto che risponda lo stesso NAS di prima, riconoscendolo dalla sua identità. Da admin il cambio vale anche per i nuovi inviti.</string>
+  <string name="address_footnote">La verifica non invia password. Il cambio vale solo su questo telefono.</string>
+  <string name="address_footnote_admin">La verifica non invia password. Il cambio vale anche per i nuovi inviti.</string>
   <string name="address_failed_title">Non ho potuto verificare</string>
   <string name="address_mismatch_title">Risponde un NAS diverso</string>
   <string name="address_mismatch_message">A questo indirizzo non c’è il tuo NAS. Nessuna password è stata inviata e non è cambiato niente.</string>

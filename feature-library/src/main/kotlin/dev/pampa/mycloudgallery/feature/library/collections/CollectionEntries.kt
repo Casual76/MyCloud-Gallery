@@ -3,6 +3,7 @@ package dev.pampa.mycloudgallery.feature.library.collections
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.antigravity.fluidengine.ui.theme.FluidTone
+import dev.pampa.mycloudgallery.core.model.MediaId
 
 // Le voci in piu' dell'elenco delle Raccolte che arrivano da `:app` (Fase 4, docs/fase4-progetto.md §1.3, §1.5, riga P14 del §4.4):
 // oggi le quattro pagine del NAS della 4B (Cartelle NAS, Spazio NAS, Eliminati di recente del NAS, Operazioni in corso). Sono **solo
@@ -23,6 +24,9 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
  * @property subtitle la frase sotto il nome.
  * @property badge quante cose chiedono un'occhiata adesso (le operazioni in corso); 0 = niente da segnalare, nessun numero sulla riga.
  * @property trailing una parola breve a destra ("Condiviso" su un album di famiglia), solo se non c'e' un [badge]; null = niente.
+ * @property cover H5: la foto che rappresenta la voce (l'ultimo ricordo, un viaggio): la piastrella la mostra al posto dell'icona quando la miniatura
+ *   c'e' ([CollectionRowArt]). Null = l'icona. Mai per i Nascosti, gli Eliminati di recente o un comando; e se la foto e' stata nascosta la Libreria
+ *   visibile non la trova e resta l'icona.
  */
 @Immutable
 data class CollectionEntry(
@@ -33,6 +37,7 @@ data class CollectionEntry(
   val tone: FluidTone,
   val badge: Int = 0,
   val trailing: String? = null,
+  val cover: MediaId? = null,
 ) {
   init {
     require(code.isNotBlank()) { "Una voce ha un codice." }

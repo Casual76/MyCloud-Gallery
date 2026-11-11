@@ -20,7 +20,7 @@ import dev.pampa.mycloudgallery.feature.library.collections.collectionSelectionA
 import dev.pampa.mycloudgallery.feature.library.trash.RecentlyDeletedRoute
 
 // Fase 7, P8 (D24): le pagine-filtro dell'Utility. Stessa griglia, stesso viewer e stessa chrome della Libreria e delle Raccolte (`CollectionGridPage`):
-// Screenshot, Video, Modificate e WhatsApp sono quattro filtri dell'indice. Doppioni ed Eliminati di recente hanno le loro pagine.
+// Modificate e' un filtro dell'indice (Screenshot, Video e WhatsApp sono usciti con H5: stanno nella scheda Album). Doppioni ed Eliminati di recente hanno le loro pagine.
 
 /**
  * La pagina di una pagina-filtro dell'Utility. Vale per le rotte a schermo intero ([onBack] presente) e per il pannello di dettaglio del tablet

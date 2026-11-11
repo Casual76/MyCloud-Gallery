@@ -45,7 +45,7 @@ import kotlinx.coroutines.flow.stateIn
 /** La trasformazione campo per campo dei dati di feature-memories nel gruppo delle Raccolte (i due moduli non si conoscono; `MemoriesSectionBindingTest`). */
 internal fun SectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
   title = title,
-  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing) },
+  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, cover = it.cover) },
   code = code,
   hideable = hideable,
   hint = hint,

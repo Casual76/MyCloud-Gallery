@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -195,6 +196,9 @@ internal fun ViewerPage(
     null
   }
   val zoom = rememberZoomableMediaState(videoSize ?: contentSize, screen)
+  // Letti nella composizione solo quando cambiano (non a ogni fotogramma di un pizzico): il segno "e' un video" li usa.
+  val zoomedNow by remember(zoom) { derivedStateOf { zoom.isZoomed } }
+  val videoFrameShown = spec.kind == MediaKind.VIDEO && isCurrent && playback.videoFor == spec.id && playback.player != null && motionUi.firstFrame
 
   // Solo per un media del NAS con la nitida gia' arrivata: le pagine del telefono non pagano nemmeno questo effetto.
   // La chiave non comprende `originalReady`: a originale arrivato l'effetto finisce, non si rilancia (se il file sparisse dal
@@ -387,6 +391,10 @@ internal fun ViewerPage(
         if (motionActive && motionPlayer != null) VideoSurface(player = motionPlayer, aspect = motionUi.aspect ?: drawAspect)
       }
     }
+    // Il segno "e' un video" fino al primo fotogramma: fuori dallo zoom (H1), della sua misura; a video ingrandito non copre cio' che si guarda.
+    if (spec.kind == MediaKind.VIDEO && !videoFrameShown && !exiting && !zoomedNow) {
+      PlayBadge(modifier = Modifier.align(Alignment.Center))
+    }
     // La selezione del testo, le maniglie e la barra: sopra la foto, fuori dallo zoom (D43).
     if (isCurrent && liveText != null) {
       LiveTextOverlay(controller = liveText, id = id, zoom = zoom, aspect = drawAspect)
@@ -555,7 +563,6 @@ private fun VideoContent(
         FitBitmap(bitmap = poster, aspect = drawAspect)
       }
     }
-    if (!frameShown && !exiting) PlayBadge(modifier = Modifier.align(Alignment.Center))
   }
 }
 

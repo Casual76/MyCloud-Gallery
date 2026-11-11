@@ -5,7 +5,10 @@ import android.content.pm.ActivityInfo
 import androidx.activity.ComponentActivity
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import dev.antigravity.fluidengine.ui.fluid.fluidGlassModalObscured
+import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
@@ -228,4 +231,22 @@ internal fun ProductionNetworkHeader() {
     onClick = {},
     alignment = Alignment.Start,
   )
+}
+
+/**
+ * L'host dei pop-up di vetro (in produzione lo mette `GalleryRoot`): senza, il menu in alto delle Raccolte (H5: Modifica Raccolte, Impostazioni) non si
+ * apre. Lo stesso schema di `SettingsHost` di feature-settings.
+ */
+@Composable
+internal fun ModalTestHost(content: @Composable () -> Unit) {
+  val host = dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState()
+  val backdrop = dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop()
+  CompositionLocalProvider(dev.antigravity.fluidengine.ui.fluid.LocalFluidGlassModalHostState provides host) {
+    androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize()) {
+      androidx.compose.foundation.layout.Box(
+        androidx.compose.ui.Modifier.fillMaxSize().glassBackdropSource(backdrop).fluidGlassModalObscured(),
+      ) { content() }
+      dev.antigravity.fluidengine.ui.fluid.FluidGlassModalHost(state = host, backdrop = backdrop)
+    }
+  }
 }

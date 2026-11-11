@@ -35,10 +35,7 @@
   <string name="search_size_mb">%1$s MB</string>
   <string name="search_model_fetching">Scarico il modello di ricerca: %1$s di %2$s</string>
   <string name="search_preparing">Sto preparando la ricerca per contenuto…</string>
-  <string name="search_coverage_partial">La ricerca copre %1$s media su %2$s</string>
   <string name="search_coverage_updating">Aggiornamento della ricerca: %1$d%%</string>
-  <string name="search_no_indexer_common">Nessun dispositivo analizza l’area comune</string>
-  <string name="search_no_indexer_private">Nessun dispositivo analizza la tua area privata</string>
   <string name="search_typo">Ho cercato «%1$s» invece di «%2$s»</string>
   <string name="search_line_text_reading_off">Le parole nelle foto non si cercano</string>
   <string name="search_line_empty_library">Non ci sono ancora foto da cercare</string>
@@ -47,4 +44,17 @@
   <string name="search_text_reading_off_action">Scopri di più</string>
   <string name="search_unavailable_empty_action">Consenti accesso</string>
   <string name="search_unavailable_error_action">Riprova</string>
+  <!-- I2 (fase I, «parla troppo»): la riga e' un segno e al piu' due parole; TalkBack dice la frase intera. -->
+  <string name="search_line_quoted">«%1$s»</string>
+  <string name="search_line_percent">%1$d%%</string>
+  <string name="search_line_similar_short">Simili</string>
+  <string name="search_line_similar_many_short">Simili a %1$d</string>
+  <string name="search_line_model_short">Scarica il modello</string>
+  <string name="search_line_text_reading_short">Attiva il testo</string>
+  <plurals name="search_line_waiting_short">
+    <item quantity="one">%d in attesa</item>
+    <item quantity="other">%d in attesa</item>
+  </plurals>
+  <string name="search_line_coverage_description">La ricerca sta imparando le tue foto: ne conosce %1$s su %2$s</string>
 </resources>
+

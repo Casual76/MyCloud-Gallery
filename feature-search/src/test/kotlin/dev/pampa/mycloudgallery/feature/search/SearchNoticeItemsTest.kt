@@ -37,17 +37,29 @@ class SearchNoticeItemsTest {
     )
     for (notice in samples) {
       val (item, action) = expected(notice)
-      val shown = items(notices = listOf(notice)).single()
+      val shown = items(notices = listOf(notice)).singleOrNull()
       assertThat(shown).isEqualTo(item)
-      assertThat(shown.action).isEqualTo(action)
+      assertThat(shown?.action).isEqualTo(action)
     }
   }
 
+  /**
+   * I2 (risposta dell'utente dell'11/11 sera): «nessun dispositivo analizza quest'area» **solo in Impostazioni**. Nella ricerca non c'e' piu': se la
+   * copertura e' parziale per questo motivo lo dice la riga della copertura, una sola, in positivo.
+   */
+  @Test
+  fun leAreeSenzaChiLeAnalizzaNonSonoPiuNellaRicerca_I2() {
+    val partial = SearchCoverage.Partial(covered = 5_029, total = 13_608, reasons = mapOf(CoverageReason.NO_INDEXER_FOR_AREA to 8_579))
+    val shown = items(notices = listOf(SearchNotice.NoIndexerForArea(true), SearchNotice.NoIndexerForArea(false)), coverage = partial)
+    assertThat(shown).containsExactly(NoticeItem.CoveragePartial(5_029, 13_608))
+  }
+
   /** Il messaggio e l'azione attesi per ogni caso: un `when` esaustivo, quindi un caso nuovo del contratto non compila finche' non ha il suo. */
-  private fun expected(notice: SearchNotice): Pair<NoticeItem, NoticeAction?> = when (notice) {
+  private fun expected(notice: SearchNotice): Pair<NoticeItem?, NoticeAction?> = when (notice) {
     SearchNotice.PreparingContentSearch -> NoticeItem.Preparing to null
     SearchNotice.OnlyFiltersAndText -> NoticeItem.ModelMissing(ModelCatalog.QUERY_270M.sizeBytes, null) to NoticeAction.DOWNLOAD_MODEL
-    is SearchNotice.NoIndexerForArea -> NoticeItem.NoIndexer(notice.commonArea) to NoticeAction.ENABLE_INDEXER
+    // I2: solo in Impostazioni > Ricerca e modelli.
+    is SearchNotice.NoIndexerForArea -> null to null
     is SearchNotice.TypoCorrected -> NoticeItem.Typo(notice.from, notice.to) to null
     SearchNotice.TextReadingOff -> NoticeItem.TextReadingOff to NoticeAction.LEARN_TEXT_READING
     is SearchNotice.PeopleRecognizing -> NoticeItem.PeopleProgress(notice.percent) to null
@@ -65,10 +77,11 @@ class SearchNoticeItemsTest {
   }
 
   @Test
-  fun unAggiornamentoInCorsoDiceLaPercentualeSenzaAzione() {
+  fun unAggiornamentoInCorsoDiceLaPercentualeEIlToccoApreIlDettaglio_I2() {
     val shown = items(coverage = SearchCoverage.Updating(40)).single()
     assertThat(shown).isEqualTo(NoticeItem.CoverageUpdating(40))
-    assertThat(shown.action).isNull()
+    // I2: come la copertura parziale, il tocco sulla riga apre il dettaglio in Impostazioni.
+    assertThat(shown.action).isEqualTo(NoticeAction.WHY_COVERAGE)
   }
 
   @Test

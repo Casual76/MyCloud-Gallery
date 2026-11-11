@@ -10,7 +10,6 @@ import dev.pampa.mycloudgallery.core.search.contract.SearchReadiness
 internal enum class NoticeAction {
   DOWNLOAD_MODEL,
   WHY_COVERAGE,
-  ENABLE_INDEXER,
   LEARN_TEXT_READING,
   ALLOW_ACCESS,
   RETRY,
@@ -33,11 +32,6 @@ internal sealed interface NoticeItem {
     override val action: NoticeAction? get() = if (fetching == null) NoticeAction.DOWNLOAD_MODEL else null
   }
 
-  /** "Nessun dispositivo analizza l'area comune." (E-I12). */
-  data class NoIndexer(val commonArea: Boolean) : NoticeItem {
-    override val action: NoticeAction = NoticeAction.ENABLE_INDEXER
-  }
-
   /** "Ho cercato «x» invece di «y»." (E-Q5): [searched] e' la parola cercata davvero, [typed] quella scritta. */
   data class Typo(val searched: String, val typed: String) : NoticeItem {
     override val action: NoticeAction? = null
@@ -53,9 +47,9 @@ internal sealed interface NoticeItem {
     override val action: NoticeAction = NoticeAction.WHY_COVERAGE
   }
 
-  /** "Aggiornamento della ricerca: 40%." (D21, E-A10). */
+  /** "Aggiornamento della ricerca: 40%." (D21, E-A10). I2: il tocco apre il dettaglio in Impostazioni, come la copertura. */
   data class CoverageUpdating(val percent: Int) : NoticeItem {
-    override val action: NoticeAction? = null
+    override val action: NoticeAction = NoticeAction.WHY_COVERAGE
   }
 
   /** "Una foto della scelta non e' ancora stata analizzata: non l'ho usata." (correzioni F, TS-4): [count] media lasciati fuori da «Trova simili» dalla selezione. */
@@ -95,7 +89,9 @@ internal object SearchNoticeItems {
       when (notice) {
         SearchNotice.PreparingContentSearch -> out += NoticeItem.Preparing
         SearchNotice.OnlyFiltersAndText -> model(missingSize)
-        is SearchNotice.NoIndexerForArea -> out += NoticeItem.NoIndexer(notice.commonArea)
+        // I2 (risposta dell'utente dell'11/11 sera): «nessun dispositivo analizza quest'area» **solo in Impostazioni** (Ricerca e modelli, le piastrelle
+        // delle aree). Nella ricerca lo dice gia', in positivo, la barra della copertura che avanza.
+        is SearchNotice.NoIndexerForArea -> Unit
         is SearchNotice.TypoCorrected -> out += NoticeItem.Typo(notice.from, notice.to)
         SearchNotice.TextReadingOff -> out += NoticeItem.TextReadingOff
         is SearchNotice.PeopleRecognizing -> out += NoticeItem.PeopleProgress(notice.percent)

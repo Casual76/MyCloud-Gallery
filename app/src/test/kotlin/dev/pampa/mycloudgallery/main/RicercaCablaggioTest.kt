@@ -12,6 +12,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -241,7 +242,8 @@ class RicercaCablaggioTest {
     show()
     val id = firstResult()
     compose.runOnIdle { main.findSimilar(listOf(id)) }
-    compose.waitUntil(Attese.TETTO_MS) { compose.onAllNodes(hasText("Simili a questa foto")).fetchSemanticsNodes().isNotEmpty() }
+    // I2: la riga mostra il segno e «Simili»; TalkBack (e qui la prova) legge la frase intera.
+    compose.waitUntil(Attese.TETTO_MS) { compose.onAllNodes(hasContentDescription("Simili a questa foto")).fetchSemanticsNodes().isNotEmpty() }
     assertThat(main.open).isTrue()
     assertThat(main.focus).isFalse()
     field().assertIsNotFocused()

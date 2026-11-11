@@ -58,6 +58,11 @@ class SearchController(
   private val scope: CoroutineScope,
   private val completionDebounceMillis: Long = COMPLETION_DEBOUNCE_MILLIS,
   private val searchDebounceMillis: Long = SEARCH_DEBOUNCE_MILLIS,
+  /**
+   * I2: gli esempi con la foto a rotazione e le anteprime dei suggerimenti ([SearchExamples]). Null (le prove del comportamento di sempre): i suggerimenti
+   * di solo testo della fase H.
+   */
+  private val examples: SearchExamples? = null,
 ) : SearchHandlers {
 
   private val mutableState = MutableStateFlow<SearchScreenState>(SearchScreenState.Idle)
@@ -70,6 +75,14 @@ class SearchController(
 
   /** I suggerimenti della barra in alto, al piu' [STRIP_SIZE]: a campo vuoto i migliori a riposo, mentre si scrive i completamenti migliori. */
   val topSuggestions: StateFlow<List<Suggestion>> = mutableTop
+
+  private val mutableStrip = MutableStateFlow<List<SuggestionItem>>(emptyList())
+
+  /** I2: gli stessi suggerimenti di [topSuggestions] con la loro anteprima (la foto del primo risultato, un volto), come li mostra la barra. */
+  val strip: StateFlow<List<SuggestionItem>> = mutableStrip
+
+  /** L'istantanea della Libreria di adesso: la barra disegna un'anteprima solo se il suo media c'e' ancora (un nascosto no, D29). */
+  val library: StateFlow<dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot?> = data?.snapshot ?: MutableStateFlow(null)
 
   val readiness: StateFlow<SearchReadiness> get() = engine.readiness
 
@@ -92,11 +105,23 @@ class SearchController(
   private var liveJob: Job? = null
 
   /** Gli ultimi completamenti di cio' che si scrive, e se in alto ci sono invece le recenti perche' la ricerca non ha trovato niente (CS-12). */
-  private var lastCompletions: List<Suggestion> = emptyList()
+  private var lastCompletions: List<SuggestionItem> = emptyList()
   private var recentsInTop = false
 
   init {
     scope.launch { history.entries.collect { if (mutableQuery.value.isBlank()) refreshIdleSuggestions() } }
+    examples?.let { ex ->
+      ex.start { suggestions.idle() }
+      // Gli esempi pronti, un volto o una foto arrivati: la barra rilegge le anteprime (senza far girare la terna).
+      scope.launch {
+        ex.updates.collect {
+          when {
+            mutableQuery.value.isBlank() && mutableState.value !is SearchScreenState.NoResults -> refreshIdleSuggestions()
+            else -> setTop(ex.withArt(mutableTop.value))
+          }
+        }
+      }
+    }
     // CE-8, CE-9: il contenuto che mancava (modello scaricato, motore delle query caricato) si aggiunge ai risultati senza che l'utente ripeta la ricerca.
     scope.launch {
       var wasReady = queryModel.value is ModelState.Ready
@@ -145,7 +170,8 @@ class SearchController(
     recentsInTop = false
     mutableQuery.value = ""
     showIdle()
-    scope.launch { refreshIdleSuggestions() }
+    // I2: chiusa la barra, la terna degli esempi gira adesso, cosi' la prossima apertura e' gia' piena (e diversa).
+    scope.launch { refreshIdleSuggestions(advance = true) }
   }
 
   // --- Testo ---------------------------------------------------------------------------------------------------------------------------
@@ -261,6 +287,7 @@ class SearchController(
         return@launch
       }
       results = found
+      if (request is Last.Query) examples?.remember(request.text, found)
       publish(found)
       if (record && request is Last.Query) record(request.text, found.chips)
       if (request is Last.Query && mutableState.value is SearchScreenState.NoResults) offerRecents(request.text)
@@ -299,11 +326,12 @@ class SearchController(
 
   private fun publish(found: SearchResults) {
     val notices = found.notices.filter { shownNotice(it) }
-    val similar = (last as? Last.Similar)?.media?.size
+    val similarTo = (last as? Last.Similar)?.media.orEmpty()
+    val similar = similarTo.size.takeIf { last is Last.Similar }
     val next = if (found.confident.size == 0 && found.likely.size == 0) {
-      SearchScreenState.NoResults((last as? Last.Query)?.text, found.chips, notices, similar)
+      SearchScreenState.NoResults((last as? Last.Query)?.text, found.chips, notices, similar, similarTo)
     } else {
-      SearchScreenState.Results(found.chips, found.confident, found.likely, found.coverage, notices, similar)
+      SearchScreenState.Results(found.chips, found.confident, found.likely, found.coverage, notices, similar, similarTo)
     }
     // Gli stessi media nello stesso ordine (si e' aggiunta una lettera che non cambia niente): la griglia resta com'e'.
     if (SearchStates.sameShown(mutableState.value, next)) return
@@ -311,8 +339,14 @@ class SearchController(
     // Tornano i risultati: in alto tornano i completamenti di cio' che si scrive, al posto delle recenti (CS-12).
     if (next is SearchScreenState.Results && recentsInTop) {
       recentsInTop = false
-      mutableTop.value = lastCompletions
+      setTop(lastCompletions)
     }
+  }
+
+  /** La barra in alto: i suggerimenti e, per la barra, le loro anteprime (gia' pronte o calcolate qui, fuori dal thread principale dove serve). */
+  private fun setTop(items: List<SuggestionItem>) {
+    mutableTop.value = items.map { it.suggestion }
+    mutableStrip.value = items
   }
 
   /** "Le parole dentro le foto non si cercano": una volta sola per apertura dell'app, poi solo nella pagina (D31, §2.6). */
@@ -345,16 +379,17 @@ class SearchController(
    * I completamenti di cio' che si scrive nella barra in alto. Se la ricerca non trova niente e la barra propone le recenti (CS-12), un testo senza
    * completamenti le lascia dove sono: la barra non sparisce e ricompare a ogni tasto.
    */
-  private fun showCompletions(found: List<Suggestion>) {
-    lastCompletions = found
+  private suspend fun showCompletions(found: List<Suggestion>) {
+    val items = examples?.withArt(found) ?: found.map { SuggestionItem(it) }
+    lastCompletions = items
     if (found.isEmpty() && recentsInTop && mutableState.value is SearchScreenState.NoResults) return
     recentsInTop = false
-    mutableTop.value = found
+    setTop(items)
   }
 
   /**
-   * La ricerca di [searched] non ha trovato niente (CS-12 del giro 2): in alto le ultime ricerche, da cui ripartire. Senza nessuna ricerca recente la barra
-   * resta com'e' (i completamenti, o niente).
+   * La ricerca di [searched] non ha trovato niente (CS-12 del giro 2): in alto le ultime ricerche, da cui ripartire, con la loro foto (I2). Senza nessuna
+   * ricerca recente, gli esempi con la foto (I2: «un segno e le recenti o gli esempi, non una frase lunga»); senza nemmeno quelli la barra resta com'e'.
    */
   private suspend fun offerRecents(searched: String) {
     val idle = try {
@@ -365,11 +400,15 @@ class SearchController(
       return
     }
     val recents = SearchStates.recentTop(idle, searched)
-    if (recents.isEmpty()) return
+    val items = when {
+      recents.isNotEmpty() -> examples?.withArt(recents) ?: recents.map { SuggestionItem(it) }
+      else -> examples?.examplesNow().orEmpty()
+    }
+    if (items.isEmpty()) return
     // Nel frattempo si e' scritto altro o e' arrivato qualcosa: non vale piu'.
     if (mutableState.value !is SearchScreenState.NoResults || mutableQuery.value.trim() != searched) return
     recentsInTop = true
-    mutableTop.value = recents
+    setTop(items)
   }
 
   private suspend fun completions(prefix: String): List<Suggestion> {
@@ -383,7 +422,11 @@ class SearchController(
     return SearchStates.top(fromEngine + CalendarCompletions.of(prefix))
   }
 
-  private suspend fun refreshIdleSuggestions() {
+  /**
+   * La barra a campo vuoto. Con gli esempi (I2): la ricerca recente piu' nuova e gli esempi con la foto; [advance] fa girare la terna (alla chiusura,
+   * per la prossima apertura). Senza: i migliori a riposo di solo testo (H4).
+   */
+  private suspend fun refreshIdleSuggestions(advance: Boolean = false) {
     val idle = try {
       suggestions.idle()
     } catch (e: CancellationException) {
@@ -391,8 +434,9 @@ class SearchController(
     } catch (e: Exception) {
       IdleSuggestions(emptyList(), emptyList(), emptyList())
     }
+    val items = examples?.strip(idle, advance) ?: SearchStates.idleTop(idle).map { SuggestionItem(it) }
     // Il campo si e' riempito mentre si leggevano: valgono i completamenti.
-    if (mutableQuery.value.isBlank()) mutableTop.value = SearchStates.idleTop(idle)
+    if (mutableQuery.value.isBlank()) setTop(items)
   }
 
   private suspend fun record(text: String, chips: List<SearchChip>) {

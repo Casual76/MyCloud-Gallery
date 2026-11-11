@@ -13,6 +13,7 @@ import dev.pampa.mycloudgallery.core.search.testing.InMemorySearchEngine
 import dev.pampa.mycloudgallery.core.search.testing.InMemorySearchHistory
 import dev.pampa.mycloudgallery.core.search.testing.SimpleQueryParser
 import dev.pampa.mycloudgallery.feature.search.contract.SearchScreenState
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import dev.pampa.mycloudgallery.core.search.contract.Suggestion
 import kotlinx.coroutines.test.advanceTimeBy
@@ -125,6 +126,51 @@ class SearchHiddenNeverTest {
     val labels = c.topSuggestions.value.map { it.label.lowercase() }
     assertThat(labels).containsExactly("tazza blu")
     assertThat(labels.none { it.contains("segretissima") }).isTrue()
+  }
+
+  /**
+   * I2: le **anteprime** dei suggerimenti (la foto del primo risultato degli esempi a rotazione, dei completamenti, delle ricerche recenti) non vengono mai
+   * dai Nascosti, nemmeno da quello nascosto un attimo fa e ancora nell'istantanea (il piu' recente di qualche luogo, mese o tipo): il riassunto della
+   * Libreria passa dal filtro finale, le prove dal motore. Una ricerca recente che trova solo nascosti resta senza foto.
+   */
+  @Test
+  fun leAnteprimeDeiSuggerimentiNonVengonoMaiDaiNascosti_I2() = runTest {
+    history.record("segretissima", emptyList())
+    history.record("tazza blu", emptyList())
+    val places = LibraryPlaces { id -> PlaceName("Luogo $id", null, "Italia") }
+    val engine = InMemorySearchEngine(data, embedder = null, parser = SimpleQueryParser(), today = today, places = { places.dictionary(lib.snapshot) })
+    val suggestions = LibrarySuggestions(data, places, history)
+    val examples = SearchExamples(engine, data, null, backgroundScope, compute = StandardTestDispatcher(testScheduler), prepareDelayMillis = 10)
+    val c = SearchController(engine, suggestions, history, data, null, backgroundScope, 100, 200, examples)
+    advanceTimeBy(1_000)
+    runCurrent()
+    val seen = HashSet<MediaId>()
+    fun collect() = c.strip.value.forEach { item ->
+      when (val art = item.art) {
+        is SuggestionArt.Photo -> seen += art.media
+        is SuggestionArt.Face -> seen += art.origins
+        null -> Unit
+      }
+    }
+    // Molte aperture: la terna gira su tutti gli esempi.
+    repeat(8) {
+      c.onOpened()
+      advanceTimeBy(50)
+      runCurrent()
+      collect()
+      c.clear()
+      advanceTimeBy(50)
+      runCurrent()
+      collect()
+    }
+    for (prefix in listOf("lu", "ta", "se", "vi")) {
+      c.onQueryChange(prefix)
+      advanceTimeBy(300)
+      runCurrent()
+      collect()
+    }
+    assertThat(seen).isNotEmpty()
+    assertThat(seen).containsNoneIn(secrets)
   }
 
   @Test

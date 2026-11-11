@@ -32,7 +32,7 @@ internal abstract class SearchScreenshotBase(
     rule.setSearchContent(dark = dark, fontScale = scale) { SearchScenes.Content(scene) }
     rule.waitForIdle()
     val name = "${scene.file}-${if (dark) "scuro" else "chiaro"}-$device${if (scale != null) "-testo-grande" else ""}"
-    rule.onRoot().captureRoboImage("../docs/screenshots/6-P8/$name.png")
+    rule.onRoot().captureRoboImage("${scene.dir}/$name.png")
   }
 
   companion object {

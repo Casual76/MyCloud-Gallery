@@ -255,7 +255,7 @@ private fun CollectionsList(
   val covers = LocalCollectionCovers.current
   if (covers != null && !state.editing) {
     val entries = remember(state) {
-      state.visibleRows.mapNotNull { (it as? SectionRow.Entry)?.entry?.takeIf { e -> e.cover != null || e.faces.isNotEmpty() || e.coverPlace > 0 } }
+      state.visibleRows.mapNotNull { (it as? SectionRow.Entry)?.entry?.takeIf { e -> e.cover != null || e.faces.isNotEmpty() || e.coverPlace > 0 || e.coverPlaces.isNotEmpty() } }
     }
     CollectionCoverWindow(covers, entries, requestThumbs = !twoPane)
   }

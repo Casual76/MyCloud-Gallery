@@ -37,6 +37,11 @@ data class MapSectionEntry(
   val trailing: String? = null,
   /** CS-1 (fase H): il luogo (id GeoNames) della cui foto piu' recente le Raccolte fanno la copertina; 0 = nessuno. Un id pubblico, mai una coordinata. */
   val coverPlace: Int = 0,
+  /**
+   * CU-15 (fase H, giro 2): i luoghi del mosaico della riga "Mappa" (fino a [MAP_MOSAIC], i piu' fotografati): una foto per luogo, cosi' la Mappa non
+   * ripete la piastrella del primo luogo sotto di lei. Ids pubblici, mai coordinate.
+   */
+  val coverPlaces: List<Int> = emptyList(),
 ) {
   /** D33: mai il titolo o il sottotitolo (un luogo): solo che tipo di voce e'. Un luogo non e' mai nominato, nemmeno col suo id. */
   override fun toString(): String = "MapSectionEntry(${PlacesEntryTarget.parse(code)})"
@@ -75,6 +80,9 @@ class PlacesSectionSources(
   companion object {
     /** Il codice stabile della sezione: lo stesso di `CollectionSections.PLACES` (lo prova `PlacesSectionBindingTest`). */
     const val CODE: String = "places"
+
+    /** CU-15: quanti luoghi nel mosaico della Mappa (due per due). */
+    const val MAP_MOSAIC: Int = 4
 
     /** La sezione per uno stato (funzione pura, provata su ogni caso); [state] null = l'indice si sta costruendo. */
     fun sectionOf(resources: Resources, state: PlacesSectionState?): MapSectionData {
@@ -121,9 +129,9 @@ class PlacesSectionSources(
         is PlacesSectionState.NoGps -> resources.getString(R.string.mappa_row_map_none)
         PlacesSectionState.Failed -> resources.getString(R.string.mappa_row_map_failed)
       }
-      // CS-1: la Mappa ha la foto del luogo piu' fotografato (il primo dell'elenco), quando c'e'.
-      val cover = (state as? PlacesSectionState.Ready)?.places?.firstOrNull()?.placeId ?: 0
-      return MapSectionEntry(PlacesEntryTarget.MAP, resources.getString(R.string.mappa_row_map), detail, Icons.Rounded.Map, FluidTone.Info, coverPlace = cover)
+      // CU-15 (giro 2): la Mappa e' un mosaico delle foto dei luoghi piu' fotografati, non la foto del primo (che sta gia' nella riga sotto).
+      val mosaic = (state as? PlacesSectionState.Ready)?.places.orEmpty().take(MAP_MOSAIC).map { it.placeId }
+      return MapSectionEntry(PlacesEntryTarget.MAP, resources.getString(R.string.mappa_row_map), detail, Icons.Rounded.Map, FluidTone.Info, coverPlaces = mosaic)
     }
   }
 }

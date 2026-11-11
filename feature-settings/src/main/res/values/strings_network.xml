@@ -33,7 +33,7 @@
   <!-- Impronta di casa -->
   <string name="network_section_home">Rete di casa</string>
   <string name="network_section_home_detail">Casa si riconosce dal router, non dal nome del Wi-Fi.</string>
-  <string name="network_fingerprint">Casa salvata</string>
+  <string name="network_fingerprint">Casa</string>
   <string name="network_fingerprint_none">Non ancora salvata</string>
   <string name="network_fingerprint_detail">%1$s · dal %2$s</string>
   <plurals name="network_ula_count">

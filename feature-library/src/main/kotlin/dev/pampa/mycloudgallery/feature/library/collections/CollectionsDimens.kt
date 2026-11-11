@@ -58,4 +58,9 @@ internal object CollectionsDimens {
   /** CS-1: un volto quando sono due o tre nella stessa piastrella, e il filo che lo stacca dal vicino. */
   val FaceDisc: Dp = 26.dp
   val FaceRing: Dp = 1.5.dp
+
+  /** CU-15: la fessura fra i quadrati del mosaico della Mappa, e il segno della mappa al centro (il disco e il suo glifo). */
+  val MosaicGap: Dp = 2.dp
+  val MapBadge: Dp = 18.dp
+  val MapBadgeGlyph: Dp = 12.dp
 }

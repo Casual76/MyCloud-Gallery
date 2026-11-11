@@ -19,7 +19,7 @@
   <string name="fiveb_edit_nas_unreachable">Il NAS non risponde: riprova quando sei a casa.</string>
   <string name="fiveb_edit_phone_full">La memoria del telefono è piena.</string>
   <string name="fiveb_free_space_title">Libera spazio</string>
-  <string name="fiveb_free_space_subtitle">Togli dal telefono le foto e i video già al sicuro sul NAS</string>
+  <string name="fiveb_free_space_subtitle">Già al sicuro sul NAS</string>
   <string name="fiveb_delete_started">Messo nel cestino del NAS per 30 giorni.</string>
   <string name="fiveb_delete_nothing">Non ci sono copie da eliminare di questa versione.</string>
 

@@ -15,7 +15,7 @@ import kotlinx.coroutines.flow.stateIn
 /** La trasformazione campo per campo dei dati di feature-map nel gruppo delle Raccolte (i due moduli non si conoscono; `PlacesSectionTest`). */
 internal fun MapSectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
   title = title,
-  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, coverPlace = it.coverPlace) },
+  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, coverPlace = it.coverPlace, coverPlaces = it.coverPlaces) },
   code = code,
   hideable = hideable,
   hint = hint,

@@ -14,7 +14,9 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -43,7 +46,16 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.transformLatest
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 // LE COPERTINE DELLE RACCOLTE (H5, fase H, 11/11; giro di correzione 1, CS-1). L'utente voleva voci "piu' rappresentative e meno standard":
@@ -60,10 +72,15 @@ import kotlinx.coroutines.withContext
 // **Costo.** Le miniature vengono dalla **stessa cache** della griglia, con la stessa chiave (versione e taglia M). I ritagli dei volti dalla cache in
 // memoria di feature-people. Le foto dei luoghi con **un solo passaggio** sull'indice visibile, fuori dal thread principale. Tutto questo si fa **una
 // volta** per elenco e per indice ([CollectionCovers.refresh]), mai durante lo scorrimento: le righe leggono soltanto.
+// Giro 2 (rischio di CG e CS, R3): mentre il catalogo si legge la prima volta la vista cambia di continuo. Il passaggio dei luoghi e le richieste
+// delle miniature hanno una **dose** ([PassDose]): il primo indice subito, poi al piu' uno al secondo, e sempre l'ultimo; un indice gia' passato con
+// gli stessi luoghi (un elenco dei fornitori che cambia solo nei conti) non si ripassa.
 //
 // **Mai un nascosto.** I riferimenti e i luoghi si cercano nella Libreria visibile ([CollectionItemsSource] con `LibraryFilter.ALL`), che non
 // contiene mai i nascosti (E-H1); i volti passano dal cancello di feature-people (`FaceCropGate`). Quando l'indice cambia (una foto nascosta) si
-// rifanno: una copertina diventata nascosta sparisce e resta il disegno della famiglia.
+// rifanno: una copertina diventata nascosta sparisce e resta il disegno della famiglia. La foto di una copertina si disegna solo se e' nella vista
+// di adesso ([request]), anche fra un passaggio e l'altro. Un volto (CG-5, giro 2) vale solo per la vista in cui il cancello l'ha permesso: a ogni
+// vista nuova i ritagli tenuti qui smettono **subito** di disegnarsi (prima di ogni attesa) e tornano solo quando il cancello li ripermette.
 
 /**
  * I ritagli dei volti, dalla porta di feature-people (`PeopleCrops`, con il cancello dei media mostrabili e la cache in memoria). **Opzionale**: senza,
@@ -83,22 +100,43 @@ class CollectionCovers(
   private val library: ViewerItems,
   private val faceCrops: CollectionFaceCrops? = null,
   private val compute: CoroutineDispatcher = Dispatchers.Default,
+  private val dose: PassDose = PassDose(),
 ) {
 
   /** La Libreria visibile: cambia quando cambia l'indice (una foto nascosta, una nuova). */
   val view get() = library.view
 
-  /** Le foto dei luoghi (id GeoNames -> la piu' recente scattata li'), dall'ultimo [refresh]. */
+  /** Le foto dei luoghi (id GeoNames -> la piu' recente scattata li'), dall'ultimo passaggio. */
   private val placeCovers = mutableStateMapOf<Int, MediaId>()
 
-  /** I volti ritagliati, dall'ultimo [refresh]: le righe li leggono e basta. */
-  private val faceImages = mutableStateMapOf<String, ImageBitmap>()
+  /** L'ultimo passaggio dei luoghi: la vista e i luoghi cercati. Lo stesso indice con gli stessi luoghi non si ripassa. */
+  private var lastPass: Pair<TimelineView, Set<Int>>? = null
+
+  /** Un ritaglio e la vista in cui il cancello di feature-people l'ha permesso (CG-5). */
+  private class FaceImage(val image: ImageBitmap, val view: TimelineView)
+
+  /** I volti ritagliati: le righe li leggono e basta. */
+  private val faceImages = mutableStateMapOf<String, FaceImage>()
+
+  /** La vista per cui valgono i volti: cambia a ogni vista nuova, prima di ogni attesa (CG-5). */
+  private var facesView by mutableStateOf<TimelineView?>(null)
+
+  /** Quante passate dei luoghi sono state fatte (per le prove della dose: mai una per ogni vista del catalogo che cresce). */
+  @Volatile
+  var placePasses: Int = 0
+    private set
 
   /** La foto di un luogo, o null (nessuna foto visibile con quel luogo, o non ancora cercata). */
   fun placeCover(placeId: Int): MediaId? = if (placeId > 0) placeCovers[placeId] else null
 
-  /** Il ritaglio di un volto a [sizePx], o null (non ancora pronto, o rifiutato dal cancello). */
-  fun faceImage(face: FaceLocator, sizePx: Int): ImageBitmap? = faceImages[faceKey(face, sizePx)]
+  /**
+   * Il ritaglio di un volto a [sizePx], o null: non ancora pronto, rifiutato dal cancello, o permesso per una vista che non e' piu' quella di adesso
+   * e non ancora ripermesso (CG-5: una foto nascosta un attimo fa non lascia il suo volto sullo schermo).
+   */
+  fun faceImage(face: FaceLocator, sizePx: Int): ImageBitmap? {
+    val held = faceImages[faceKey(face, sizePx)] ?: return null
+    return if (held.view === facesView) held.image else null
+  }
 
   /** La richiesta della miniatura di [media] in [view], o null se il media non e' nella Libreria visibile (un nascosto, un eliminato). */
   fun request(view: TimelineView, media: MediaId): ThumbRequest? {
@@ -115,28 +153,50 @@ class CollectionCovers(
    * principale), chiede le miniature una volta sola ([requestThumbs]: falso sul tablet, dove la finestra e' della griglia accanto) e ritaglia i
    * volti a [facePx]. Gira finche' la scheda e' composta; una nuova chiamata (elenco cambiato) sostituisce la precedente.
    */
-  suspend fun refresh(entries: List<CollectionEntry>, requestThumbs: Boolean, facePx: Int) {
-    val places = entries.mapNotNullTo(HashSet()) { it.coverPlace.takeIf { id -> id > 0 } }
+  suspend fun refresh(entries: List<CollectionEntry>, requestThumbs: Boolean, facePx: Int): Unit = coroutineScope {
+    val places = entries.flatMapTo(HashSet()) { e -> (e.coverPlaces + e.coverPlace).filter { it > 0 } }
     val faces = entries.flatMap { it.faces }.distinct()
-    view.collectLatest { current ->
-      val found = if (places.isEmpty()) emptyMap() else withContext(compute) { newestByPlace(current, places) }
-      placeCovers.keys.retainAll(found.keys)
-      placeCovers.putAll(found)
-      if (requestThumbs) {
-        val media = (entries.mapNotNull { it.cover } + found.values).distinct()
-        val requests = media.mapNotNull { request(current, it) }
-        if (requests.isNotEmpty()) loader.window(requests, emptyList())
-      }
-      val crops = faceCrops ?: return@collectLatest
-      // Si ritagliano di nuovo a ogni indice nuovo: il cancello di feature-people rifiuta un volto di un media nascosto un attimo fa. Chi c'era resta
-      // finche' il nuovo ritaglio non risponde, cosi' la riga non lampeggia.
-      val wanted = faces.mapTo(HashSet()) { faceKey(it, facePx) }
-      faceImages.keys.retainAll(wanted)
-      for (face in faces) {
-        val key = faceKey(face, facePx)
-        val bitmap = withContext(compute) { crops.crop(face, facePx) }
-        if (bitmap == null) faceImages.remove(key) else faceImages[key] = bitmap.asImageBitmap()
-      }
+    val wanted = faces.mapTo(HashSet()) { faceKey(it, facePx) }
+    faceImages.keys.retainAll(wanted)
+    val crops = faceCrops
+    if (crops != null && faces.isNotEmpty()) launch { view.collectLatest { current -> authorizeFaces(current, faces, facePx, crops) } }
+    // La dose (giro 2): il passaggio dei luoghi e le richieste delle miniature al piu' una volta al secondo mentre il catalogo cresce, e sempre
+    // sull'ultimo indice. In fila, senza interrompere un passaggio a meta' (un passaggio interrotto e' lavoro buttato).
+    dose.apply(view).collect { current -> placesPass(current, entries, places, requestThumbs) }
+  }
+
+  /** Il passaggio dei luoghi e le richieste delle miniature per [current]; un indice gia' passato con gli stessi luoghi non si ripassa. */
+  private suspend fun placesPass(current: TimelineView, entries: List<CollectionEntry>, places: Set<Int>, requestThumbs: Boolean) {
+    val previous = lastPass
+    val found = when {
+      places.isEmpty() -> emptyMap()
+      previous != null && previous.first === current && previous.second == places -> HashMap(placeCovers)
+      else -> withContext(compute) { newestByPlace(current, places) }.also { placePasses++ }
+    }
+    lastPass = current to places
+    placeCovers.keys.retainAll(found.keys)
+    placeCovers.putAll(found)
+    if (requestThumbs) {
+      val media = (entries.mapNotNull { it.cover } + found.values).distinct()
+      val requests = media.mapNotNull { request(current, it) }
+      if (requests.isNotEmpty()) loader.window(requests, emptyList())
+    }
+  }
+
+  /**
+   * CG-5: i volti per la vista [current]. **Prima di ogni attesa** i ritagli tenuti qui smettono di valere (la vista dei volti diventa [current]):
+   * il cancello di feature-people puo' rifiutare adesso un volto di una foto nascosta un attimo fa, e la copia della UI non deve scavalcarlo. Poi il
+   * cancello li riconferma tutti insieme, fuori dal thread principale; i permessi tornano, i rifiutati se ne vanno. La vista uguale a quella dei
+   * volti (un elenco dei fornitori nuovo sullo stesso indice) non toglie niente: il permesso e' di quella vista.
+   */
+  private suspend fun authorizeFaces(current: TimelineView, faces: List<FaceLocator>, facePx: Int, crops: CollectionFaceCrops) {
+    facesView = current
+    val answers = withContext(compute) {
+      coroutineScope { faces.map { face -> async { face to crops.crop(face, facePx) } }.awaitAll() }
+    }
+    for ((face, bitmap) in answers) {
+      val key = faceKey(face, facePx)
+      if (bitmap == null) faceImages.remove(key) else faceImages[key] = FaceImage(bitmap.asImageBitmap(), current)
     }
   }
 
@@ -160,6 +220,34 @@ class CollectionCovers(
       }
       return found
     }
+  }
+}
+
+/**
+ * La dose dei passaggi dei luoghi (giro 2, rischio di CG e CS su R3): il primo indice passa **subito**; dopo, al piu' uno ogni [periodMs], e sempre
+ * **l'ultimo** (quelli in mezzo si saltano). Una per [CollectionCovers]: conta anche fra un elenco dei fornitori e il successivo. [now] in
+ * millisecondi monotoni (nelle prove, il tempo virtuale della prova).
+ */
+class PassDose(private val periodMs: Long = PERIOD_MS, private val now: () -> Long = { System.nanoTime() / NANOS_PER_MILLI }) {
+
+  /** Quando e' passato l'ultimo indice; null = mai. Si legge e si scrive solo da chi raccoglie (il thread principale della scheda). */
+  private var last: Long? = null
+
+  /** [flow] con la dose: un valore subito, poi al piu' uno ogni [periodMs], sempre l'ultimo; chi raccoglie e' lento non accumula valori vecchi. */
+  @OptIn(ExperimentalCoroutinesApi::class)
+  fun <T> apply(flow: Flow<T>): Flow<T> = flow.transformLatest { value ->
+    last?.let { at ->
+      val wait = at + periodMs - now()
+      if (wait > 0) delay(wait)
+    }
+    last = now()
+    emit(value)
+  }.conflate()
+
+  companion object {
+    /** Al piu' un passaggio al secondo mentre il catalogo cresce. */
+    const val PERIOD_MS: Long = 1_000L
+    private const val NANOS_PER_MILLI = 1_000_000L
   }
 }
 
@@ -215,7 +303,13 @@ private fun artColors(family: CollectionArtFamily, tone: FluidTone): ArtColors {
     CollectionArtFamily.People, CollectionArtFamily.Trips -> pair(scheme.primaryContainer, scheme.primary, scheme.onPrimaryContainer)
     CollectionArtFamily.Memories, CollectionArtFamily.Utility -> pair(scheme.tertiaryContainer, scheme.tertiary, scheme.onTertiaryContainer)
     CollectionArtFamily.Places, CollectionArtFamily.Nas -> pair(scheme.secondaryContainer, scheme.secondary, scheme.onSecondaryContainer)
-    CollectionArtFamily.Protected -> ArtColors(scheme.inverseSurface, lerp(scheme.inverseSurface, scheme.primary, ART_DEPTH), scheme.inverseOnSurface)
+    // I posti protetti sono scuri su chiaro, e in tema scuro **grafite** con il segno chiaro (CU-18, giro 2): l'inverso del tema scuro e' bianco, la
+    // cosa piu' luminosa della pagina sulla voce piu' riservata.
+    CollectionArtFamily.Protected -> if (scheme.surface.luminance() < DARK_SURFACE) {
+      ArtColors(scheme.surfaceContainerHighest, lerp(scheme.surfaceContainerHighest, scheme.primaryContainer, ART_DEPTH), scheme.onSurface)
+    } else {
+      ArtColors(scheme.inverseSurface, lerp(scheme.inverseSurface, scheme.primary, ART_DEPTH), scheme.inverseOnSurface)
+    }
     CollectionArtFamily.Other -> when (tone) {
       FluidTone.Danger -> pair(scheme.errorContainer, scheme.error, scheme.onErrorContainer)
       FluidTone.Neutral -> pair(scheme.surfaceContainerHighest, scheme.secondary, scheme.onSurface)
@@ -223,6 +317,9 @@ private fun artColors(family: CollectionArtFamily, tone: FluidTone): ArtColors {
     }
   }
 }
+
+/** Sotto questa luminanza il fondo della pagina e' quello del tema scuro. */
+private const val DARK_SURFACE = 0.5f
 
 /** Quanto del colore pieno entra nell'angolo in basso della sfumatura: abbastanza per dare profondita', poco per non far gridare la piastrella. */
 private const val ART_DEPTH = 0.42f
@@ -234,8 +331,9 @@ private fun artShape(side: Dp) = ContinuousCornerShape(FluidRadius.Small * (side
 private fun faceShape(side: Dp) = ContinuousCornerShape(side / 2)
 
 /**
- * La piastrella di una riga delle Raccolte: la foto ([cover], o quella del luogo [coverPlace]), i volti ([faces]: uno pieno, due o tre raccolti), o
- * l'icona sul colore della famiglia [family]. Senza copertine ([LocalCollectionCovers] null), o finche' non sono pronte, la piastrella della famiglia.
+ * La piastrella di una riga delle Raccolte: la foto ([cover], o quella del luogo [coverPlace]), il mosaico dei luoghi ([coverPlaces]: la Mappa), i
+ * volti ([faces]: uno pieno, due o tre raccolti), o l'icona sul colore della famiglia [family]. Senza copertine ([LocalCollectionCovers] null), o
+ * finche' non sono pronte, la piastrella della famiglia.
  */
 @Composable
 internal fun CollectionRowArt(
@@ -245,11 +343,13 @@ internal fun CollectionRowArt(
   cover: MediaId? = null,
   faces: List<FaceLocator> = emptyList(),
   coverPlace: Int = 0,
+  coverPlaces: List<Int> = emptyList(),
 ) {
   val covers = LocalCollectionCovers.current
   val side = CollectionRowArtSize
   val px = with(LocalDensity.current) { side.roundToPx() }
   val media = if (covers == null) null else cover ?: covers.placeCover(coverPlace)
+  val mosaic = if (covers == null || media != null) emptyList() else coverPlaces.take(MOSAIC_CELLS).mapNotNull { covers.placeCover(it) }
   val faceImages = if (covers == null || media != null) emptyList() else faces.take(MAX_FACES).mapNotNull { covers.faceImage(it, px) }
   Box(modifier = Modifier.size(side)) {
     val colors = artColors(family, tone)
@@ -262,21 +362,56 @@ internal fun CollectionRowArt(
     Box(
       modifier = Modifier.matchParentSize().clip(shape).background(Brush.linearGradient(listOf(colors.from, colors.to))),
     ) {
-      Icon(
-        imageVector = icon,
-        contentDescription = null,
-        tint = colors.ink,
-        modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(CollectionsDimens.RowArtGlyph),
-      )
+      // Sotto il mosaico l'icona non si disegna: il segno della mappa e' gia' al centro.
+      if (mosaic.isEmpty()) {
+        Icon(
+          imageVector = icon,
+          contentDescription = null,
+          tint = colors.ink,
+          modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(CollectionsDimens.RowArtGlyph),
+        )
+      }
     }
     if (covers == null) return@Box
     if (media != null) {
       CoverImage(covers, media, Modifier.matchParentSize().clip(shape))
+    } else if (mosaic.isNotEmpty()) {
+      Mosaic(covers, mosaic, icon, colors, Modifier.matchParentSize().clip(shape))
     } else if (faceImages.size > 1) {
       Faces(faceImages, colors.from)
     }
   }
 }
+
+/**
+ * CU-15 (giro 2): la piastrella della Mappa. Due per due, come i quadrati di una carta: una foto per luogo (i piu' fotografati), prima in diagonale
+ * (con due luoghi si legge a scacchiera), i quadrati senza foto nel colore della famiglia; al centro, dove i quadrati si toccano, il segno della
+ * mappa. Cosi' la Mappa non ripete la piastrella del primo luogo che le sta sotto. Una foto nascosta non si disegna ([CoverImage]).
+ */
+@Composable
+private fun Mosaic(covers: CollectionCovers, media: List<MediaId>, icon: ImageVector, colors: ArtColors, modifier: Modifier) {
+  val cell = (CollectionRowArtSize - CollectionsDimens.MosaicGap) / 2
+  val far = cell + CollectionsDimens.MosaicGap
+  Box(modifier = modifier) {
+    media.forEachIndexed { i, id ->
+      val (x, y) = MOSAIC_ORDER[i]
+      CoverImage(covers, id, Modifier.offset(x = far * x, y = far * y).size(cell))
+    }
+    Box(
+      modifier = Modifier.align(androidx.compose.ui.Alignment.Center).size(CollectionsDimens.MapBadge).clip(faceShape(CollectionsDimens.MapBadge))
+        .background(colors.from),
+      contentAlignment = androidx.compose.ui.Alignment.Center,
+    ) {
+      Icon(imageVector = icon, contentDescription = null, tint = colors.ink, modifier = Modifier.size(CollectionsDimens.MapBadgeGlyph))
+    }
+  }
+}
+
+/** CU-15: i quadrati del mosaico in ordine di riempimento (colonna, riga): prima la diagonale, poi l'altra. */
+private val MOSAIC_ORDER = listOf(0 to 0, 1 to 1, 1 to 0, 0 to 1)
+
+/** CU-15: quattro quadrati, due per due. */
+private const val MOSAIC_CELLS = 4
 
 @Composable
 private fun CoverImage(covers: CollectionCovers, media: MediaId, modifier: Modifier) {

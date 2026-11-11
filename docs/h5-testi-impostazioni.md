@@ -142,3 +142,14 @@ Giro di correzione 1 (CS-6, CU-14):
 | _network | `network_try_down` | Prova a spegnere la VPN | Spegni la VPN |
 | _network | `network_footnote` | «Accesa» e «spenta» si leggono dalla rete, non dal comando inviato. | *(tolto)* |
 | _account | `account_hero_via_home_vpn` | La VPN è accesa anche a casa: il NAS passa dal tunnel, più lento. | La VPN è accesa anche a casa: il NAS è più lento. |
+
+Giro di correzione 2 (CU-18):
+
+| File | Voce | Prima | Dopo |
+|---|---|---|---|
+| _network | `network_fingerprint` | Casa salvata | Casa *(la capsula accanto dice gia' «Salvata»)* |
+| feature-library utility | `utility_recently_deleted_subtitle` | Telefono e NAS, dietro lo sblocco | Telefono e NAS |
+| feature-library utility | `utility_recently_deleted_subtitle_gallery` | Eliminati da qui, dietro lo sblocco | Eliminati da qui |
+| feature-library utility | `utility_edited_none` *(nuova)* | 0 elementi | Nessuna |
+| app | `fiveb_free_space_subtitle` | Togli dal telefono le foto e i video già al sicuro sul NAS | Già al sicuro sul NAS |
+| feature-library collections | `collection_hidden_subtitle` | Protetti dallo sblocco del telefono | Dietro lo sblocco *(una riga, come le altre)* |

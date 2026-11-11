@@ -32,6 +32,8 @@ import dev.pampa.mycloudgallery.core.model.MediaId
  *   vuoto = niente volti (Persone spenta, o una voce che non e' una persona).
  * @property coverPlace CS-1: l'id GeoNames di un luogo: la piastrella mostra la foto piu' recente scattata li' (cercata nella Libreria visibile);
  *   0 = nessuno.
+ * @property coverPlaces CU-15 (giro 2): i luoghi (id GeoNames) di un mosaico: la piastrella della "Mappa" mostra fino a quattro foto, una per luogo,
+ *   come i quadrati di una carta, con il segno della mappa nell'angolo; vuoto = nessun mosaico.
  */
 @Immutable
 data class CollectionEntry(
@@ -45,6 +47,7 @@ data class CollectionEntry(
   val cover: MediaId? = null,
   val faces: List<FaceLocator> = emptyList(),
   val coverPlace: Int = 0,
+  val coverPlaces: List<Int> = emptyList(),
 ) {
   init {
     require(code.isNotBlank()) { "Una voce ha un codice." }

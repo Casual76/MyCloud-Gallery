@@ -20,7 +20,7 @@
     <item quantity="other">%1$s elementi</item>
   </plurals>
   <string name="collection_count_none">Nessun elemento</string>
-  <string name="collection_hidden_subtitle">Protetti dallo sblocco del telefono</string>
+  <string name="collection_hidden_subtitle">Dietro lo sblocco</string>
   <string name="collection_recently_deleted_subtitle">Il cestino di Android, protetto dallo sblocco</string>
   <!-- D-3 e D-B2 (prove sul campo): su One UI quello che l’app elimina compare qui e anche nel Cestino di Galleria; quello che si elimina da Galleria l’app non lo vede. -->
   <string name="collection_recently_deleted_subtitle_gallery">Quello che elimini da qui, protetto dallo sblocco</string>

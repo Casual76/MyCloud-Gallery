@@ -161,9 +161,13 @@ class SchedeCheRicordanoTest {
     /** Il testo della pagina di prova nel pannello di dettaglio delle Raccolte, seguito dal codice della voce. */
     const val PANEL = "Pannello: "
 
-    /** La seconda voce dei Viaggi delle Raccolte di prova (`CollectionsSectionSamples`): non e' una scelta predefinita. */
+    /**
+     * La seconda voce dei Viaggi delle Raccolte dello scaffold: non e' una scelta predefinita. Dal giro 1 di H5 (CU-9) lo scaffold usa le sezioni
+     * come le consegna la produzione (`CollectionsSectionSamples.production`), con il prefisso vero dei viaggi (`AlbumEntryTarget.TRIP_PREFIX`,
+     * "trip/") e non piu' quello degli esempi vecchi ("trips/").
+     */
     const val TRIP_TITLE = "Sabato 12 aprile 2025"
-    const val TRIP_CODE = "trips/t2"
+    const val TRIP_CODE = "trip/t2"
 
     /** Abbastanza album da riempire piu' schermate del telefono (3 colonne). */
     const val MANY = 40

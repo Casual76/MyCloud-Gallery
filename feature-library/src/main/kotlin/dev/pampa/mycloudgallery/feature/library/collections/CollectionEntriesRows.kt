@@ -69,7 +69,7 @@ internal fun CollectionEntryRow(
     subtitle = entry.subtitle,
     tone = entry.tone,
     // H5: la piastrella delle Raccolte, piu' grande, con la copertina della voce quando c'e'.
-    leading = { CollectionRowArt(entry.icon, entry.tone, family, entry.cover, entry.faces, entry.coverPlace) },
+    leading = { CollectionRowArt(entry.icon, entry.tone, family, entry.cover, entry.faces, entry.coverPlace, entry.coverPlaces) },
     leadingTile = false,
     badge = entryBadge(entry),
     selected = twoPane && entry.code == selectedCode,

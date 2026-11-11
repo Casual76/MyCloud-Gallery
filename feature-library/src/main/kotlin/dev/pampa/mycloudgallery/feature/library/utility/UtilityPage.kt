@@ -114,7 +114,8 @@ fun utilityEntries(counts: Map<UtilityPage, Int>, canTrash: Boolean = true): Lis
       UtilityPage.DUPLICATES -> stringResource(R.string.utility_duplicates_subtitle)
       UtilityPage.RECENTLY_DELETED ->
         stringResource(phoneTrashText(R.string.utility_recently_deleted_subtitle, R.string.utility_recently_deleted_subtitle_gallery))
-      else -> counts[page]?.let { countText(R.plurals.collection_count, it) } ?: stringResource(R.string.collection_count_none)
+      else -> counts[page]?.let { if (it == 0 && page == UtilityPage.EDITED) stringResource(R.string.utility_edited_none) else countText(R.plurals.collection_count, it) }
+        ?: stringResource(R.string.collection_count_none)
     }
     add(CollectionEntry(code = page.entryCode, title = stringResource(page.titleRes), subtitle = subtitle, icon = page.icon, tone = page.tone))
   }
@@ -144,8 +145,11 @@ fun utilityEntryGroup(
       UtilityPage.DUPLICATES -> resources.getString(R.string.utility_duplicates_subtitle)
       UtilityPage.RECENTLY_DELETED ->
         resources.getString(if (phoneTrash == PhoneTrash.GALLERY) R.string.utility_recently_deleted_subtitle_gallery else R.string.utility_recently_deleted_subtitle)
-      else -> counts[page]?.let { resources.getQuantityString(R.plurals.collection_count, it, GalleryNumbers.format(it)) }
-        ?: resources.getString(R.string.collection_count_none)
+      // CU-18 (giro 2): nessuna foto modificata si dice con una parola ("Nessuna"), non "0 elementi".
+      else -> counts[page]?.let {
+        if (it == 0 && page == UtilityPage.EDITED) resources.getString(R.string.utility_edited_none)
+        else resources.getQuantityString(R.plurals.collection_count, it, GalleryNumbers.format(it))
+      } ?: resources.getString(R.string.collection_count_none)
     }
     CollectionEntry(code = page.entryCode, title = resources.getString(page.titleRes), subtitle = subtitle, icon = page.icon, tone = page.tone)
   }

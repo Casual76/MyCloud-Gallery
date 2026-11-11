@@ -367,6 +367,21 @@ $nativeBody=@("Class descriptor : '$hostClass'", "name : 'accessNative'", "type 
 [R8Provenance]::ReadDump('nativebody',[string[]]$nativeBody)
 $origins=[R8Provenance]::Origins('nativebody',$nativeCall,'Lokhttp3/')
 Check 'CR-6 inoltro JNI con costanti primitive e dichiarazione PRIVATE NATIVE verificata' ([string]::IsNullOrEmpty((Invoke-ActualPolicy 'OkHttp' 'Lokhttp3/' $origins $nativeCall)))
+foreach($case in @(
+ @{Name='publicJni'; Access='0x0101 (PUBLIC NATIVE)'; Opcode='invoke-virtual'; Label='NATIVE pubblico'},
+ @{Name='protectedJni'; Access='0x0104 (PROTECTED NATIVE)'; Opcode='invoke-virtual'; Label='NATIVE protetto'},
+ @{Name='packageJni'; Access='0x0100 (NATIVE)'; Opcode='invoke-virtual'; Label='NATIVE senza modificatore di accesso'},
+ @{Name='syntheticJni'; Access='0x1102 (PRIVATE NATIVE SYNTHETIC)'; Opcode='invoke-direct'; Label='PRIVATE NATIVE sintetico'}
+)) {
+ $rejectedCall=$nativeCall.Replace('.jni:', '.'+$case.Name+':').Replace('invoke-direct ', $case.Opcode+' ')
+ [R8Provenance]::ReadDump($case.Name,[string[]]@("Class descriptor : '$hostClass'", "name : '$($case.Name)'", "type : '(ILokhttp3/Request;)V'", "access : $($case.Access)", 'code : (none)'))
+ $nativeBody[5]=$rejectedCall
+ [R8Provenance]::ReadDump('nativebody',[string[]]$nativeBody)
+ $rejected=$false
+ try { [R8Provenance]::Origins('nativebody',$rejectedCall,'Lokhttp3/') | Out-Null }
+ catch { $rejected=$_.Exception.Message -like '*HK CR-6: origine indeterminata sintetica senza autore sorgente:*' }
+ Check "CR-6 inoltro JNI verso $($case.Label) rifiutato senza autorizzare il ponte" $rejected
+}
 $notNativeCall=$nativeCall.Replace('.jni:', '.notNative:')
 $nativeBody[5]=$notNativeCall
 [R8Provenance]::ReadDump('notNativeDecl',[string[]]@("Class descriptor : '$hostClass'", "name : 'notNative'", "type : '(ILokhttp3/Request;)V'", 'access : 0x0002 (PRIVATE)', 'code : (none)'))

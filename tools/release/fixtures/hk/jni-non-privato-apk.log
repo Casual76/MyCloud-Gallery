@@ -1,0 +1,200 @@
+ORIGINE classes2.dex 5856b4: Ldev/pampa/mycloudgallery/core/models/download/https/HttpsModelFetcher$Attempt$abort$1;.invokeSuspend
+ORIGINE classes2.dex 7b0b9e: Ldev/pampa/mycloudgallery/core/security/screen/RecentsPrivacy;.setRecentsScreenshotEnabled
+ORIGINE classes3.dex 1f60d2: Ldev/pampa/mycloudgallery/feature/settings/about/AboutScreenKt;.appVersionName
+[ .. ] D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteTo, backupBlocksTestAccounts e backupMayWriteAs nel dex e in mapping.txt, e il cancello che li usa
+        D12 e R2 presenti nella release (dex e mapping.txt)
+        cancello D12 e R2 provato nel bytecode: stateOf -> backupMayWriteTo -> TEST_ONLY e stateOf -> backupMayWriteAs -> TEST_ONLY, istanziato da Ldev/pampa/mycloudgallery/backup/BackupGraph;.getGate, decisioni chiamate da 3 e 3 metodi (9821603 righe di dexdump)
+        cancello dei file in arrivo (LA-5) provato nel bytecode: IncomingGate.stateOf -> backupMayWriteTo/backupMayWriteAs -> TEST_ONLY, istanziato da Ldev/pampa/mycloudgallery/backup/FiveBGraph;.getIncomingGate
+[ OK ] D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteTo, backupBlocksTestAccounts e backupMayWriteAs nel dex e in mapping.txt, e il cancello che li usa  (25,1s)
+[ .. ] D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt, e i cancelli degli album che li usano
+        D30 presente nella release (dex e mapping.txt)
+        cancelli D30 provati nel bytecode: AppAlbumWriteGate.blockFor -> sharedAlbumsMayUse -> TEST_SHARES_ONLY e FlagsAlbumReadGate.mayRead -> sharedAlbumsMayUse, istanziati da Ldev/pampa/mycloudgallery/albums/AlbumsWiring;.build, Ldev/pampa/mycloudgallery/albums/AlbumsWiring$build$build$1;.invokeSuspend; decisione chiamata da 2 metodi (9821603 righe di dexdump)
+[ OK ] D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt, e i cancelli degli album che li usano  (19s)
+[ .. ] D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt
+        D34 presente nella release (dex e mapping.txt)
+        cancello D34 provato nel bytecode: AppFacesWriteGate.blockFor -> facesSyncMayUse -> TEST_SHARES_ONLY, istanziato da Ldev/pampa/mycloudgallery/faces/FacesWiring$build$build$1;.invokeSuspend$lambda$2; chiamato da 6 metodi di core/faces/sync; decisione chiamata da 3 metodi (9821603 righe di dexdump)
+[ OK ] D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt  (19,8s)
+[ .. ] motori on-device: SOLO sezione bytecode ML Kit/HTTPS
+        bytecode: 45 chiamate nostre a MlKit.initialize o ai client HTTPS, tutte al loro posto (9821603 righe di dexdump)
+[ OK ] motori on-device: SOLO sezione bytecode ML Kit/HTTPS  (18s)
+[ .. ] LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/faces/FaceLiteRtSessions)
+        bytecode: 60 chiamate nostre a LiteRT, tutte da core-ai (9821603 righe di dexdump)
+[ OK ] LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/faces/FaceLiteRtSessions)  (18,6s)
+[ .. ] OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)
+        bytecode (mappa nell'app): 3065 chiamate a OkHttp (151 da net/), 163 chiamate nostre a MapLibre, client installato 1, MapLibre inizializzato 1; libmaplibre.so: True (9821603 righe di dexdump); 0 chiamate di lambda fuse da R8 a ponti ammessi
+[ OK ] OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)  (21,7s)
+[ .. ] Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del manifest (KT)
+        bytecode (widget nell'app): 9016 chiamate a Glance (84 da feature/widget/); KT cercata (2 stringhe), assente (9821603 righe di dexdump); 0 chiamate di lambda fuse da R8 a ponti ammessi
+[ OK ] Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del manifest (KT)  (25,5s)
+PROVA RUNTIME firma introdotta da residualsignature: {v5, v3, v6}, Landroidx/datastore/core/FileStorage;.<init>:(Landroidx/glance/appwidget/proto/LayoutProtoSerializer;Lkotlin/jvm/functions/Function0;)V // method@3596
+PROVA RUNTIME inoltro verificato a dichiarazione PRIVATE NATIVE Lorg/maplibre/android/http/NativeHttpRequest;.-$$Nest$mnativeOnResponse -> Lorg/maplibre/android/http/NativeHttpRequest;.nativeOnResponse
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetSession;.processEmittableTree pc=001f: frame inline innocuo dimostrato Lkotlin/coroutines/jvm/internal/Boxing;.boxBoolean
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetSession;.processEvent pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/Snapshot$Companion;.takeMutableSnapshot
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetSession;.processEvent pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/Snapshot$Companion;.takeMutableSnapshot$default
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetSession;.processEvent pc=0015: frame inline innocuo dimostrato Lkotlin/collections/CollectionsKt___CollectionsKt;.foldRightIndexed
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.provideContent pc=0015: frame inline innocuo dimostrato Lkotlin/KotlinNothingValueException;.<init>
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.provideContent pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/CancellableContinuation$DefaultImpls;.cancel$default
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.provideContent pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/CancellableContinuationKt;.invokeOnCancellation
+PROVA RUNTIME Landroidx/glance/appwidget/GlanceAppWidgetKt;.provideContent pc=0015: frame inline innocuo dimostrato Lkotlin/KotlinNothingValueException;.<init>
+PROVA RUNTIME Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit> pc=0003: frame inline innocuo dimostrato Landroidx/datastore/preferences/core/PreferencesKeys;.stringSetKey
+PROVA RUNTIME Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit> pc=0003: frame inline innocuo dimostrato Landroidx/datastore/preferences/PreferenceDataStoreDelegateKt;.preferencesDataStore
+PROVA RUNTIME Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit> pc=0003: frame inline innocuo dimostrato Landroidx/datastore/preferences/PreferenceDataStoreDelegateKt;.preferencesDataStore$default
+PROVA RUNTIME Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit> pc=0003: frame inline innocuo dimostrato Lkotlinx/coroutines/Dispatchers;.getIO
+PROVA RUNTIME Landroidx/glance/appwidget/LayoutConfiguration$Companion;.load$glance_appwidget_release pc=0015: frame inline innocuo dimostrato Lkotlin/collections/CollectionsKt___CollectionsKt;.associateByTo
+PROVA RUNTIME Landroidx/glance/appwidget/LayoutConfiguration$Companion;.load$glance_appwidget_release pc=0015: frame inline innocuo dimostrato Lkotlin/collections/CollectionsKt___CollectionsKt;.toShortArray
+PROVA RUNTIME Landroidx/glance/appwidget/LayoutConfiguration$Companion;.load$glance_appwidget_release pc=0015: frame inline innocuo dimostrato Lkotlin/coroutines/jvm/internal/Boxing;.boxInt
+PROVA RUNTIME Landroidx/glance/appwidget/UnmanagedSessionReceiver$Companion;.registerSession pc=0017: frame inline innocuo dimostrato Lkotlin/coroutines/jvm/internal/Boxing;.boxInt
+PROVA RUNTIME Landroidx/glance/appwidget/UnmanagedSessionReceiver$Companion;.registerSession pc=0017: frame inline innocuo dimostrato Lkotlin/KotlinNothingValueException;.<init>
+PROVA RUNTIME Landroidx/glance/appwidget/UnmanagedSessionReceiver$Companion;.registerSession pc=0017: frame inline innocuo dimostrato Lkotlinx/coroutines/CancellableContinuationKt;.invokeOnCancellation
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/MutableSnapshot;.getModified$runtime
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/MutableSnapshot;.hasPendingChanges
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/Snapshot$Companion;.registerGlobalWriteObserver
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/Snapshot$Companion;.sendApplyNotifications
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/SnapshotKt;.access$getGlobalSnapshot$p
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/SnapshotKt;.access$getGlobalWriteObservers$p
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/SnapshotKt;.access$setGlobalWriteObservers$p
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/SnapshotKt;.getLock
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/channels/BufferedChannel;.iterator
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/channels/ChannelsKt;.cancelConsumed
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/channels/ChannelsKt__Channels_commonKt;.cancelConsumed
+PROVA RUNTIME Landroidx/glance/session/IdleEventBroadcastReceiver;.<clinit> pc=0003: frame inline innocuo dimostrato Lkotlin/collections/CollectionsKt___CollectionsKt;.foldRightIndexed
+PROVA RUNTIME Landroidx/glance/session/SessionManagerImpl;.runWithLock pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/sync/MutexKt;.withLock$default
+PROVA RUNTIME Landroidx/glance/session/SessionWorker;.doWork pc=0015: frame inline innocuo dimostrato Landroidx/work/Data$Builder;.<init>
+PROVA RUNTIME Landroidx/glance/session/SessionWorker;.doWork pc=0015: frame inline innocuo dimostrato Landroidx/work/Data$Builder;.build
+PROVA RUNTIME Landroidx/glance/session/SessionWorker;.doWork pc=0015: frame inline innocuo dimostrato Landroidx/work/Data$Builder;.putBoolean
+PROVA RUNTIME Landroidx/glance/session/SessionWorker;.doWork pc=0015: frame inline innocuo dimostrato Landroidx/work/Data$Builder;.putDirect
+PROVA RUNTIME Landroidx/glance/session/SessionWorker;.doWork pc=0015: frame inline innocuo dimostrato Landroidx/work/ListenableWorker$Result;.success
+PROVA RUNTIME Landroidx/glance/session/SessionWorkerKt;.runSession pc=001c: frame inline innocuo dimostrato Landroidx/compose/runtime/CompositionKt;.Composition
+PROVA RUNTIME Landroidx/glance/session/SessionWorkerKt;.runSession pc=001c: frame inline innocuo dimostrato Lkotlin/coroutines/jvm/internal/Boxing;.boxBoolean
+PROVA RUNTIME Landroidx/glance/session/SessionWorkerKt;.runSession pc=001c: frame inline innocuo dimostrato Lkotlinx/coroutines/Job$DefaultImpls;.cancel$default
+PROVA RUNTIME Landroidx/glance/state/GlanceState;.<clinit> pc=0002: frame inline innocuo dimostrato Lkotlinx/coroutines/sync/MutexKt;.Mutex
+PROVA RUNTIME Landroidx/glance/state/GlanceState;.<clinit> pc=0002: frame inline innocuo dimostrato Lkotlinx/coroutines/sync/MutexKt;.Mutex$default
+PROVA RUNTIME Landroidx/glance/state/GlanceState;.getDataStore pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/sync/MutexKt;.withLock$default
+PROVA RUNTIME Landroidx/glance/text/TextDefaults;.<clinit> pc=0002: frame inline innocuo dimostrato Landroidx/compose/ui/graphics/Color$Companion;.getBlack-0d7_KjU
+PROVA RUNTIME Landroidx/glance/text/TextDefaults;.<clinit> pc=0002: frame inline innocuo dimostrato Landroidx/compose/ui/graphics/Color;.access$getBlack$cp
+PROVA RUNTIME ponte statico verificato Landroidx/glance/session/TimeSource$Companion;.$r8$lambda$_XVgIMcP0eHGcKJ-uDdxtDVJU9E -> Landroidx/glance/session/TimeSource$Companion;.Monotonic$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.$r8$lambda$7j9I2-cWTzxaHLjkr_6UxP2cUjM -> Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.EngineWidgetMessage$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.$r8$lambda$cEIQRXEzm5lRD839fPtc60u5m_4 -> Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.EngineWidgetMessage$lambda$0$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.$r8$lambda$hxmCtDkbuqoW_hlOb8oZ6InR-Ww -> Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.EngineWidgetHeader$lambda$0$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.$r8$lambda$Q_NrFR74bW8VzpOLOmAq5baWadQ -> Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.EngineWidgetSurface$lambda$2 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.$r8$lambda$vvC8jdMVLcLAnazU1gE5YX_GT84 -> Ldev/antigravity/fluidengine/widget/EngineWidgetComponentsKt;.EngineWidgetHeader$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurface;.$r8$lambda$IjjYGRc_LqFvMlIRJcpXJrIggsE -> Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurface;.attach$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurface;.$r8$lambda$yrtI6kg9GED2OGsIh7zXVLoeaOo -> Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurface;.applyStyle$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurfaceContent$Content$3$1$1;.$r8$lambda$wEoiMcn_gZZwMOE0ztG-INPZ_cc -> Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurfaceContent$Content$3$1$1;.invokeSuspend$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurfaceContent;.$r8$lambda$deIHTrLdCcJPhDLjZY3U-BCfL2A -> Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurfaceContent;.Content$lambda$5$5$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurfaceKt;.$r8$lambda$2lLZOv0FapJDtBIMGtGtHVpm-hs -> Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurfaceKt;.MapViewLifecycle$lambda$1$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurfaceKt;.$r8$lambda$bV05GYStAXwh-gAnkUZwCfD_9C4 -> Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurfaceKt;.MapViewLifecycle$lambda$0$0$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurfaceKt;.$r8$lambda$fKjDUwYDBEdWcInJjlrltAfVgLo -> Ldev/pampa/mycloudgallery/feature/map/map/MapLibreSurfaceKt;.MapViewLifecycle$lambda$0$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.$r8$lambda$0X35kyj1by1FlnVCq99yqUgxxjw -> Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.MemoryHeader$lambda$2 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.$r8$lambda$AuYZZCe3h_fzy0SZJDze0frw7rg -> Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.PhotoGrid$lambda$0$0$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.$r8$lambda$-iA1J_82Bih-DH4dPXu_Y7F8ZjE -> Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.MemoryHeader$lambda$0$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.$r8$lambda$Kr4gwTABpD8tuzFlTPycJa01N8Q -> Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.PhotoGrid$lambda$1 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.$r8$lambda$oW-yB9dcD8EdBaEx4J8w8DifIsk -> Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.GalleryWidgetContent$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.$r8$lambda$UBWSsC5Jm1Z5vEU_CJqorM-Dsb4 -> Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.PhotoCell$lambda$1 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.$r8$lambda$vHOROfuMBFum6ky35CRXc7EnE5w -> Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.PhotoGrid$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.$r8$lambda$xMLydYcXgUimehuBT4MJ-URq14U -> Ldev/pampa/mycloudgallery/feature/widget/ui/GalleryWidgetContentKt;.PhotoGrid$lambda$0$0$0$0$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lokhttp3/internal/Util;.$r8$lambda$6bJzZULcdNB_k9pZZ3Jli9KIJPU -> Lokhttp3/internal/Util;.asFactory$lambda$8 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lokhttp3/internal/Util;.$r8$lambda$Z7sFMQ7rKRN5UBTcwjGfDTXgpz8 -> Lokhttp3/internal/Util;.threadFactory$lambda$1 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/annotations/InfoWindow;.-$$Nest$mcloseInfoWindow -> Lorg/maplibre/android/annotations/InfoWindow;.closeInfoWindow (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure$FullLogoLongTextCommand;.<init> -> Lorg/maplibre/android/attribution/AttributionMeasure$FullLogoLongTextCommand;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure$FullLogoShortTextCommand;.<init> -> Lorg/maplibre/android/attribution/AttributionMeasure$FullLogoShortTextCommand;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure$LongTextCommand;.<init> -> Lorg/maplibre/android/attribution/AttributionMeasure$LongTextCommand;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure$NoTextCommand;.<init> -> Lorg/maplibre/android/attribution/AttributionMeasure$NoTextCommand;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure$ShortTextCommand;.<init> -> Lorg/maplibre/android/attribution/AttributionMeasure$ShortTextCommand;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure$SmallLogoLongTextCommand;.<init> -> Lorg/maplibre/android/attribution/AttributionMeasure$SmallLogoLongTextCommand;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure$SmallLogoShortTextCommand;.<init> -> Lorg/maplibre/android/attribution/AttributionMeasure$SmallLogoShortTextCommand;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure;.-$$Nest$mgetLogoContainerWidth -> Lorg/maplibre/android/attribution/AttributionMeasure;.getLogoContainerWidth (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure;.-$$Nest$mgetLogoSmallContainerWidth -> Lorg/maplibre/android/attribution/AttributionMeasure;.getLogoSmallContainerWidth (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure;.-$$Nest$mgetMaxSize -> Lorg/maplibre/android/attribution/AttributionMeasure;.getMaxSize (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure;.-$$Nest$mgetMaxSizeShort -> Lorg/maplibre/android/attribution/AttributionMeasure;.getMaxSizeShort (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure;.-$$Nest$mgetTextViewContainerWidth -> Lorg/maplibre/android/attribution/AttributionMeasure;.getTextViewContainerWidth (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure;.-$$Nest$mgetTextViewShortContainerWidth -> Lorg/maplibre/android/attribution/AttributionMeasure;.getTextViewShortContainerWidth (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/attribution/AttributionMeasure;.-$$Nest$smcalculateAnchor -> Lorg/maplibre/android/attribution/AttributionMeasure;.calculateAnchor (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/location/engine/LocationEngineRequest;.<init> -> Lorg/maplibre/android/location/engine/LocationEngineRequest;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/location/LocationComponent$CameraTransitionListener;.<init> -> Lorg/maplibre/android/location/LocationComponent$CameraTransitionListener;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/location/LocationComponent;.-$$Nest$mupdateLayerOffsets -> Lorg/maplibre/android/location/LocationComponent;.updateLayerOffsets (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/AttributionDialogManager$AttributionBuilder;.-$$Nest$mbuild -> Lorg/maplibre/android/maps/AttributionDialogManager$AttributionBuilder;.build (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/CameraChangeDispatcher;.-$$Nest$mexecuteOnCameraIdle -> Lorg/maplibre/android/maps/CameraChangeDispatcher;.executeOnCameraIdle (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/CameraChangeDispatcher;.-$$Nest$mexecuteOnCameraMove -> Lorg/maplibre/android/maps/CameraChangeDispatcher;.executeOnCameraMove (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/CameraChangeDispatcher;.-$$Nest$mexecuteOnCameraMoveCancelled -> Lorg/maplibre/android/maps/CameraChangeDispatcher;.executeOnCameraMoveCancelled (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/CameraChangeDispatcher;.-$$Nest$mexecuteOnCameraMoveStarted -> Lorg/maplibre/android/maps/CameraChangeDispatcher;.executeOnCameraMoveStarted (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapGestureDetector$MoveGestureListener;.<init> -> Lorg/maplibre/android/maps/MapGestureDetector$MoveGestureListener;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapGestureDetector$ShoveGestureListener;.<init> -> Lorg/maplibre/android/maps/MapGestureDetector$ShoveGestureListener;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapGestureDetector$TapGestureListener;.<init> -> Lorg/maplibre/android/maps/MapGestureDetector$TapGestureListener;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapGestureDetector;.-$$Nest$mcancelTransitionsIfRequired -> Lorg/maplibre/android/maps/MapGestureDetector;.cancelTransitionsIfRequired (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapGestureDetector;.-$$Nest$mcreateScaleAnimator -> Lorg/maplibre/android/maps/MapGestureDetector;.createScaleAnimator (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapGestureDetector;.-$$Nest$mdispatchCameraIdle -> Lorg/maplibre/android/maps/MapGestureDetector;.dispatchCameraIdle (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapGestureDetector;.-$$Nest$mdoubleTapStarted -> Lorg/maplibre/android/maps/MapGestureDetector;.doubleTapStarted (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapGestureDetector;.-$$Nest$mscheduleAnimator -> Lorg/maplibre/android/maps/MapGestureDetector;.scheduleAnimator (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapLibreMapOptions;.<init> -> Lorg/maplibre/android/maps/MapLibreMapOptions;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapView$AttributionClickListener;.<init> -> Lorg/maplibre/android/maps/MapView$AttributionClickListener;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapView$FocalPointInvalidator;.<init> -> Lorg/maplibre/android/maps/MapView$FocalPointInvalidator;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapView$GesturesManagerInteractionListener;.<init> -> Lorg/maplibre/android/maps/MapView$GesturesManagerInteractionListener;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapView$InitialRenderCallback;.-$$Nest$monDestroy -> Lorg/maplibre/android/maps/MapView$InitialRenderCallback;.onDestroy (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapView;.-$$Nest$minitializeMap -> Lorg/maplibre/android/maps/MapView;.initializeMap (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/MapView;.$r8$lambda$KMZB7sWY28ozZ7P_j-MYryuIE6I -> Lorg/maplibre/android/maps/MapView;.onSurfaceCreated (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/renderer/surfaceview/MapLibreGLSurfaceView$EglHelper;.<init> -> Lorg/maplibre/android/maps/renderer/surfaceview/MapLibreGLSurfaceView$EglHelper;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/renderer/surfaceview/MapLibreSurfaceView$RenderThread;.$r8$lambda$PALLu5OlOLSKTpxh-Drr67-d7n4 -> Lorg/maplibre/android/maps/renderer/surfaceview/MapLibreSurfaceView$RenderThread;.lambda$requestRenderAndNotify$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/renderer/textureview/GLTextureViewRenderThread$EGLHolder;.-$$Nest$mdestroyContext -> Lorg/maplibre/android/maps/renderer/textureview/GLTextureViewRenderThread$EGLHolder;.destroyContext (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/renderer/textureview/GLTextureViewRenderThread$EGLHolder;.-$$Nest$mdestroySurface -> Lorg/maplibre/android/maps/renderer/textureview/GLTextureViewRenderThread$EGLHolder;.destroySurface (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/maps/Style;.<init> -> Lorg/maplibre/android/maps/Style;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/module/http/HttpRequestImpl$OkHttpCallback;.-$$Nest$mhandleFailure -> Lorg/maplibre/android/module/http/HttpRequestImpl$OkHttpCallback;.handleFailure (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/module/loader/LibraryLoaderProviderImpl$SystemLibraryLoader;.<init> -> Lorg/maplibre/android/module/loader/LibraryLoaderProviderImpl$SystemLibraryLoader;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineManager$createOfflineRegion$1;.$r8$lambda$DRgRiOmIT3CWfC2TrDT_raDJzIY -> Lorg/maplibre/android/offline/OfflineManager$createOfflineRegion$1;.onError$lambda$1 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineManager$createOfflineRegion$1;.$r8$lambda$mR6DAFIui5ePiwOSqqhS7s-Lld4 -> Lorg/maplibre/android/offline/OfflineManager$createOfflineRegion$1;.onCreate$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineManager$listOfflineRegions$1;.$r8$lambda$bqA7v3qkJEclEi6bPIaczNjy-Wc -> Lorg/maplibre/android/offline/OfflineManager$listOfflineRegions$1;.onError$lambda$1 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineManager$listOfflineRegions$1;.$r8$lambda$RznFCcefZkiW8IU_ZMAV1tqIhGk -> Lorg/maplibre/android/offline/OfflineManager$listOfflineRegions$1;.onList$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineManager$resetDatabase$1;.$r8$lambda$60WQVz-UJy-90YTmDC-aqRII0bw -> Lorg/maplibre/android/offline/OfflineManager$resetDatabase$1;.onError$lambda$1 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineManager$resetDatabase$1;.$r8$lambda$hpLDD63SdYnd7U0jahiV6BLGXOU -> Lorg/maplibre/android/offline/OfflineManager$resetDatabase$1;.onSuccess$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineRegion$delete$1;.$r8$lambda$q_7hJqFEj8XC7y6cvIonpjLJt6g -> Lorg/maplibre/android/offline/OfflineRegion$delete$1;.onError$lambda$1 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineRegion$delete$1;.$r8$lambda$UZR3_vS9BBeoW3aaMahAxkn9bys -> Lorg/maplibre/android/offline/OfflineRegion$delete$1;.onDelete$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineRegion$setObserver$1;.$r8$lambda$0AWffAxCx3wT79e95KGowQZwlf4 -> Lorg/maplibre/android/offline/OfflineRegion$setObserver$1;.mapboxTileCountLimitExceeded$lambda$2 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineRegion$setObserver$1;.$r8$lambda$kFT8uHycaJuzlRDHZA1_xfUoWhs -> Lorg/maplibre/android/offline/OfflineRegion$setObserver$1;.onError$lambda$1 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/offline/OfflineRegion$setObserver$1;.$r8$lambda$ppSc6Vjf3zgbrFuf7K1etl42M0w -> Lorg/maplibre/android/offline/OfflineRegion$setObserver$1;.onStatusChanged$lambda$0 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/snapshotter/MapSnapshotter;.$r8$lambda$L7Js85lxQBLtyChHJzmkOV0a7P8 -> Lorg/maplibre/android/snapshotter/MapSnapshotter;.onSnapshotFailed$lambda$2 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/snapshotter/MapSnapshotter;.$r8$lambda$ZkE5rU2GvVYY-MAqiVjJeO5CKE0 -> Lorg/maplibre/android/snapshotter/MapSnapshotter;.onSnapshotReady$lambda$1 (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/storage/FileSource$FileDirsPathsTask;.<init> -> Lorg/maplibre/android/storage/FileSource$FileDirsPathsTask;.<init> (stessa classe, frame sorgente)
+PROVA RUNTIME ponte statico verificato Lorg/maplibre/android/storage/FileSource;.-$$Nest$sminternalSetResourcesCachePath -> Lorg/maplibre/android/storage/FileSource;.internalSetResourcesCachePath (stessa classe, frame sorgente)
+EVIDENZA SENZA POSIZIONE Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.provideContent -> Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.plus, Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.provideContent :: 309096: 7030 1e3a 4006                         |0015: invoke-direct {v0, v4, v6}, Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1$provideContent$1;.<init>:(Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;Lkotlin/coroutines/Continuation;)V // method@3a1e
+EVIDENZA SENZA POSIZIONE Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit> -> Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit>, Landroidx/glance/appwidget/GlanceAppWidgetManager;.getOrCreateDataStore :: 31beba: 7020 b03a 1000                         |0003: invoke-direct {v0, v1}, Landroidx/glance/appwidget/GlanceAppWidgetManager$Companion;.<init>:(Lkotlin/jvm/internal/DefaultConstructorMarker;)V // method@3ab0
+EVIDENZA SENZA POSIZIONE Landroidx/glance/session/SessionWorkerKt;.runSession -> Landroidx/glance/session/SessionWorkerKt;.runSession$default, Landroidx/glance/session/SessionWorkerKt;.runSession :: 33fff0: 7020 6543 1200                         |001c: invoke-direct {v2, v1}, Landroidx/glance/session/SessionWorkerKt$runSession$1;.<init>:(Lkotlin/coroutines/Continuation;)V // method@4365
+
+
+Name    : D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteTo, backupBlocksTestAccounts e
+          backupMayWriteAs nel dex e in mapping.txt, e il cancello che li usa
+Status  : OK
+Detail  :
+Seconds : 25,1
+
+Name    : D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt, e
+          i cancelli degli album che li usano
+Status  : OK
+Detail  :
+Seconds : 19
+
+Name    : D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt
+Status  : OK
+Detail  :
+Seconds : 19,8
+
+Name    : motori on-device: SOLO sezione bytecode ML Kit/HTTPS
+Status  : OK
+Detail  :
+Seconds : 18
+
+Name    : LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/faces/FaceLiteRtSessions)
+Status  : OK
+Detail  :
+Seconds : 18,6
+
+Name    : OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre,
+          MapLibre solo da feature/map/)
+Status  : OK
+Detail  :
+Seconds : 21,7
+
+Name    : Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del
+          manifest (KT)
+Status  : OK
+Detail  :
+Seconds : 25,5

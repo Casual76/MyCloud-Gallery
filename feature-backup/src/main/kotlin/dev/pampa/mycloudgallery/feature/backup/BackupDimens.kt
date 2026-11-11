@@ -47,4 +47,63 @@ internal object BackupDimens {
 
   /** La larghezza massima del testo di uno stato a tutta pagina. */
   val StateTextMaxWidth: Dp = 340.dp
+
+  // --- I3 (fase I): la testata con l'anello, le copertine delle sorgenti --------------------------------------------------------
+
+  /** Il lato dell'anello della testata: quanto e' al sicuro sul totale. */
+  val HeroRing: Dp = 136.dp
+
+  /** Lo spessore dell'anello della testata. */
+  val HeroRingStroke: Dp = 10.dp
+
+  /** Il segno di stato appoggiato sull'anello. */
+  val HeroMark: Dp = 30.dp
+
+  /** Quanto il segno rientra dall'angolo del riquadro dell'anello, per stare sull'arco (a 45 gradi). */
+  val HeroMarkInset: Dp = 8.dp
+
+  /** Il glifo al centro dell'anello quando non c'e' un numero (niente da salvare ancora). */
+  val HeroCenterGlyph: Dp = 40.dp
+
+  /** Lo spazio interno della testata. */
+  val HeroPadding: Dp = 20.dp
+
+  /** Il glifo della riga con il perche' (la «i»). */
+  val InfoGlyph: Dp = 18.dp
+
+  /** La piastrella di un passo che manca (da preparare). */
+  val StepTile: Dp = 28.dp
+
+  /** La copertina di una sorgente non scende sotto questo lato: sul telefono dell'utente (360 dp) ne stanno tre per riga. */
+  val CoverMinCell: Dp = 100.dp
+
+  /** Lo spazio fra due copertine. */
+  val CoverGap: Dp = 12.dp
+
+  /** Lo spazio fra due righe di copertine. */
+  val CoverRowGap: Dp = 16.dp
+
+  /** Il glifo di una sorgente senza foto, rispetto al lato della copertina. */
+  const val CoverGlyphFraction: Float = 0.36f
+
+  /** Il segno di stato nell'angolo di una copertina. */
+  val CoverMark: Dp = 24.dp
+
+  /** Quanto il segno sporge dall'angolo della copertina. */
+  val CoverMarkOverhang: Dp = 6.dp
+
+  /** La barra sottile di avanzamento sotto una copertina. */
+  val CoverBar: Dp = 4.dp
+
+  /** Il glifo accanto al numero che conta (le foto che mancano, la spunta). */
+  val CountGlyph: Dp = 14.dp
+
+  /** La piccola distanza fra il nome, la barra e il numero di una copertina. */
+  val CoverLineGap: Dp = 6.dp
+
+  /** La copertina di una cartella nella riga di «Cosa salvare». */
+  val RowCover: Dp = 44.dp
+
+  /** Un valore a destra di una riga (il nome della cartella sul NAS) non va oltre: il titolo resta leggibile. */
+  val ValueMaxWidth: Dp = 150.dp
 }

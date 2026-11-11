@@ -12,6 +12,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.PendingTask
 import dev.pampa.mycloudgallery.core.backup.contract.PendingTasks
 import dev.pampa.mycloudgallery.core.backup.contract.SourceStatus
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
+import dev.pampa.mycloudgallery.feature.backup.contract.BackupCoverPorts
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupOverview
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
 import dev.pampa.mycloudgallery.feature.backup.noop.NoBackupActions
@@ -19,6 +20,7 @@ import dev.pampa.mycloudgallery.feature.backup.noop.NoBackupOverview
 import dev.pampa.mycloudgallery.feature.backup.received.ReceivedCounts
 import dev.pampa.mycloudgallery.feature.backup.received.ReceivedItem
 import dev.pampa.mycloudgallery.feature.backup.received.ReceivedQueue
+import dev.pampa.mycloudgallery.feature.backup.ui.BackupCovers
 import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.flow.Flow
@@ -55,7 +57,11 @@ class BackupPageViewModel @Inject constructor(
   actions: Optional<BackupActions>,
   tasks: Optional<PendingTasks> = Optional.empty(),
   received: Optional<ReceivedQueue> = Optional.empty(),
+  coverPorts: Optional<BackupCoverPorts> = Optional.empty(),
 ) : ViewModel() {
+
+  /** I3: le copertine delle sorgenti (la foto piu' recente di ogni cartella, dalla Libreria visibile); null = le piastrelle. */
+  internal val covers: BackupCovers? = coverPorts.map { BackupCovers(it) }.orElse(null)
 
   private val port: BackupOverview = overview.orElse(NoBackupOverview)
   private val folder: StateFlow<DeviceFolder?> = settings.orElse(null)?.deviceFolder ?: MutableStateFlow<DeviceFolder?>(null)

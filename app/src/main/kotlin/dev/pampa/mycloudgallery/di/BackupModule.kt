@@ -8,7 +8,11 @@ import dev.pampa.mycloudgallery.backup.NoBackupSettings
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSettings
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSetupStep
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
+import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
+import dev.pampa.mycloudgallery.feature.backup.contract.BackupCoverPorts
+import dev.pampa.mycloudgallery.feature.backup.contract.SourceNewestMedia
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupOverview
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupRules
 import dev.pampa.mycloudgallery.feature.backup.contract.DeviceFolderProposals
@@ -18,6 +22,7 @@ import dev.pampa.mycloudgallery.feature.backup.noop.NoBackupOverview
 import dev.pampa.mycloudgallery.feature.backup.noop.NoBackupRules
 import dev.pampa.mycloudgallery.feature.backup.noop.NoDeviceFolderProposals
 import dev.pampa.mycloudgallery.feature.backup.noop.NoPhoneFolders
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionItemsSource
 import dev.pampa.mycloudgallery.feature.settings.backup.BackupEntryStatus
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,7 +51,17 @@ object BackupModule {
   @Provides fun backupRules(gallery: GalleryGraph): BackupRules = gallery.backupUi?.rules ?: NoBackupRules
 
   @Provides fun folderProposals(gallery: GalleryGraph): DeviceFolderProposals = gallery.backupUi?.proposals ?: NoDeviceFolderProposals
+
+  /**
+   * I3 (fase I): le copertine delle sorgenti nella pagina Backup e nelle sue impostazioni. Le stesse porte delle Raccolte: la Libreria visibile (mai un
+   * nascosto) e la cache delle miniature della griglia; le ultime foto di ogni cartella dal catalogo. Senza backup, nessuna foto (la piastrella).
+   */
+  @Provides fun backupCoverPorts(gallery: GalleryGraph, items: CollectionItemsSource, loader: ThumbnailLoader): BackupCoverPorts =
+    BackupCoverPorts(newest = gallery.backupUi?.newestMedia ?: NoNewestMedia, library = items.items(LibraryFilter.ALL), loader = loader)
 }
+
+/** Senza backup: nessuna foto per le copertine. */
+private val NoNewestMedia = SourceNewestMedia { _, _ -> emptyMap() }
 
 /** Senza backup: la voce delle Impostazioni dice "non configurato" (e non compare, perche' `openBackup` e' null). */
 private object NoBackupEntry : BackupEntryStatus {

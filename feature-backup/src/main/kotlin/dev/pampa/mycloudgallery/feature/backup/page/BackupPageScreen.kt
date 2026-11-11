@@ -11,55 +11,43 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Folder
-import androidx.compose.material.icons.rounded.Image
-import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Tune
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
-import dev.antigravity.fluidengine.ui.theme.FluidListDivider
-import dev.antigravity.fluidengine.ui.theme.FluidListGroup
-import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
-import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.backup.contract.BackupAction
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
-import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.SourceStatus
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
 import dev.pampa.mycloudgallery.feature.backup.R
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
-import dev.pampa.mycloudgallery.feature.backup.received.ReceivedEntryCard
-import dev.pampa.mycloudgallery.feature.backup.tasks.PendingTasksEntryCard
 import dev.pampa.mycloudgallery.feature.backup.first.FirstBackupSheet
+import dev.pampa.mycloudgallery.feature.backup.ui.BackupCoverWindow
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupLabel
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupPage
 import dev.pampa.mycloudgallery.feature.backup.ui.BackupSectionTitle
-import dev.pampa.mycloudgallery.feature.backup.ui.BackupText
-import dev.pampa.mycloudgallery.feature.backup.ui.sourceName
+import dev.pampa.mycloudgallery.feature.backup.ui.LocalBackupCovers
 
-// La pagina Backup (docs/fase5-progetto.md §1.5, §2.6, D16, D30; G2): il problema piu' grave in cima con la sua azione (o lo stato, se
-// va tutto bene), "Fai ora" e "Ferma", una riga per sorgente, gli altri problemi con la loro azione, la cartella del dispositivo e le
-// impostazioni. Il ViewModel non decide niente: legge lo stato e inoltra i tocchi. Solo componenti G2 (D30).
+// La pagina Backup (docs/fase5-progetto.md §1.5, §2.6, D16, D30; G2; I3 della fase I). In cima lo stato in un colpo d'occhio ([BackupHero]: l'anello, il
+// segno, un'etichetta, al piu' una riga, l'azione con l'icona); poi cio' che e' da controllare (righe con la piastrella del problema: il perche' e il
+// rimedio dietro un tocco), le copertine delle sorgenti ([SourceGrid]: la foto piu' recente, la barra, il numero che conta) e le righe del NAS. Il
+// motivo per cui le sorgenti sono ferme si dice **una volta**, in cima: sulle copertine c'e' solo il segno. Il ViewModel non decide niente.
 
 /** Le uscite della pagina: tutte partono da un tocco e le esegue `:app` (o il ViewModel, per il foglio). */
 @Immutable
@@ -101,10 +89,13 @@ fun BackupPageRoute(
       startFirstBackup = viewModel::startFirstBackup,
     )
   }
-  BackupPageScreen(state = state, actions = actions, modifier = modifier, onBack = onBack, hostPadding = hostPadding, backdropOut = backdropOut)
+  // I3: le copertine delle sorgenti (la Libreria visibile e la cache delle miniature); senza la porta, le piastrelle.
+  CompositionLocalProvider(LocalBackupCovers provides viewModel.covers) {
+    BackupPageScreen(state = state, actions = actions, modifier = modifier, onBack = onBack, hostPadding = hostPadding, backdropOut = backdropOut)
+  }
 }
 
-/** La pagina per uno [state]: nessun effetto. La provano i test e gli screenshot. */
+/** La pagina per uno [state]: nessun effetto (se non la preparazione delle copertine, quando ci sono). La provano i test e gli screenshot. */
 @Composable
 internal fun BackupPageScreen(
   state: BackupPageUi,
@@ -115,6 +106,10 @@ internal fun BackupPageScreen(
   backdropOut: ((GlassBackdropState) -> Unit)? = null,
 ) {
   val settingsLabel = stringResource(R.string.backup_settings_open)
+  val sourceList = remember(state.sources) { state.sources.map { it.source } }
+  BackupCoverWindow(LocalBackupCovers.current, sourceList)
+  val hero = heroModel(state.status, actions)
+  val share = remember(state.status, state.sources) { SafeShare.of(state.status, state.sources) }
   BackupPage(
     label = BackupLabel(title = stringResource(R.string.backup_title), subtitle = null),
     modifier = modifier,
@@ -129,16 +124,8 @@ internal fun BackupPageScreen(
         contentPadding = PaddingValues(start = GalleryDimens.Gutter, end = GalleryDimens.Gutter, top = insets.top, bottom = insets.bottom),
         verticalArrangement = Arrangement.spacedBy(BackupDimens.BlockGap),
       ) {
-        item(key = "status") { BackupStatusCard(status = state.status, actions = actions, onOpenSummary = actions.openSheet) }
-        // 5B (P14, D20): "Da decidere", solo se c'e' qualcosa da decidere.
-        if (state.pendingTasks > 0) {
-          item(key = "pending-tasks") { PendingTasksEntryCard(count = state.pendingTasks, onOpen = { actions.open(BackupScreen.PENDING_TASKS) }) }
-        }
-        // 5B (IN-7): "Ricevuti in coda", solo se un'altra app ha mandato qualcosa che non e' ancora sul NAS.
-        if (state.received.total > 0) {
-          item(key = "received") { ReceivedEntryCard(counts = state.received, onOpen = { actions.open(BackupScreen.RECEIVED) }) }
-        }
-        otherProblems(state, actions)
+        item(key = "status") { BackupHero(model = hero, share = share) }
+        toCheckSection(state, actions)
         sourcesSection(state.sources, sourcesHalt(state.status))
         deviceSection(state, actions)
       }
@@ -161,7 +148,7 @@ private fun settingsCommands(description: String, onClick: () -> Unit): @Composa
   GalleryChromeIconButton(icon = Icons.Rounded.Tune, contentDescription = description, onClick = onClick)
 }
 
-// --- Gli altri problemi ----------------------------------------------------------------------------------------------------------
+// --- Da controllare ----------------------------------------------------------------------------------------------------------------
 
 /**
  * I problemi delle sorgenti che non sono quello in cima: sommati per codice e nell'ordine del §2.6 (il piu' grave per primo). Se lo stato
@@ -177,34 +164,37 @@ internal fun otherProblems(state: BackupPageUi): List<Pair<BackupProblemCode, In
     .sortedBy { (code, _) -> code.ordinal }
 }
 
-private fun LazyListScope.otherProblems(state: BackupPageUi, actions: BackupPageActions) {
+/**
+ * «Da controllare»: le attivita' da decidere (5B), i file ricevuti da un'altra app (IN-7) e gli altri problemi, in un gruppo solo. Ogni riga ha la
+ * piastrella che dice la cosa e un segno; il perche' e il rimedio si aprono sotto con un tocco. Niente gruppo se non c'e' niente.
+ */
+private fun LazyListScope.toCheckSection(state: BackupPageUi, actions: BackupPageActions) {
   val problems = otherProblems(state)
-  if (problems.isEmpty()) return
+  if (problems.isEmpty() && state.pendingTasks <= 0 && state.received.total <= 0) return
   item(key = "problems-title") { BackupSectionTitle(stringResource(R.string.backup_section_problems)) }
-  problems.forEach { (code, count) ->
-    item(key = "problem-${code.code}") { ProblemCard(code = code, count = count, actions = actions) }
+  item(key = "problems") {
+    ToCheckGroup(pendingTasks = state.pendingTasks, received = state.received, problems = problems, actions = actions)
   }
 }
 
 // --- Le sorgenti -----------------------------------------------------------------------------------------------------------------
 
 /**
- * D-4 (prove sul campo): perche' le sorgenti non si salvano adesso, anche se hanno media da salvare; null = il backup puo' lavorare. Con il
- * backup "in prova" (D12) le righe dicevano "In corso · 0 al sicuro · N in coda" e sembrava un backup al lavoro, mentre non partira' mai finche'
- * la share non e' di prova. Il perche' lungo lo dice la scheda in cima; la riga dice che e' fermo, con poche parole.
+ * D-4 (prove sul campo): perche' le sorgenti non si salvano adesso, anche se hanno media da salvare; null = il backup puo' lavorare. Il perche' lo dice
+ * la testata, **una volta** (I3); la copertina mostra solo il segno.
  */
-internal enum class SourcesHalt(@StringRes val pill: Int, @StringRes val reason: Int) {
-  /** D12: il backup scrive solo nelle share di prova. */
-  TEST_ONLY(R.string.backup_source_state_halted, R.string.backup_source_halt_test_only),
+internal enum class SourcesHalt(@StringRes val pill: Int, val mark: GalleryIconStatus) {
+  /** D12: il backup vero non e' ancora acceso. */
+  TEST_ONLY(R.string.backup_source_state_paused, GalleryIconStatus.Paused),
 
   /** Manca un passo della configurazione (area privata, sorgenti, cartella del dispositivo, permesso). */
-  NOT_CONFIGURED(R.string.backup_source_state_halted, R.string.backup_source_halt_not_configured),
+  NOT_CONFIGURED(R.string.backup_source_state_halted, GalleryIconStatus.Stopped),
 
   /** Il riepilogo del primo backup aspetta "Stanotte" o "Inizia ora" (§2.11). */
-  FIRST_BACKUP(R.string.backup_source_state_not_started, R.string.backup_source_halt_first_backup),
+  FIRST_BACKUP(R.string.backup_source_state_not_started, GalleryIconStatus.Paused),
 
   /** "Ferma" dell'utente (R4): una pausa che dura finche' non tocca "Riprendi". */
-  PAUSED(R.string.backup_source_state_paused, R.string.backup_source_halt_paused),
+  PAUSED(R.string.backup_source_state_paused, GalleryIconStatus.Paused),
 }
 
 /** Lo stato del backup che ferma tutte le sorgenti, o null. Android che ferma un lavoro (`StopBy.SYSTEM`) non e' una fermata: riprende da solo. */
@@ -218,77 +208,22 @@ internal fun sourcesHalt(status: BackupStatus): SourcesHalt? = when (status) {
 
 private fun LazyListScope.sourcesSection(sources: List<SourceStatus>, halt: SourcesHalt?) {
   item(key = "sources-title") { BackupSectionTitle(stringResource(R.string.backup_section_sources)) }
-  if (sources.isEmpty()) {
-    item(key = "sources-empty") { SourcesEmpty() }
-    return
-  }
   item(key = "sources") {
-    FluidListGroup {
-      sources.forEachIndexed { index, source ->
-        if (index > 0) FluidListDivider()
-        SourceRow(source, halt)
-      }
-    }
+    if (sources.isEmpty()) SourcesEmpty() else SourceGrid(sources = sources, halt = halt)
   }
 }
 
-@Composable
-private fun SourcesEmpty() {
-  FluidListGroup {
-    FluidListRow(
-      title = stringResource(R.string.backup_sources_empty_title),
-      subtitle = stringResource(R.string.backup_sources_empty_detail),
-      tone = FluidTone.Neutral,
-      leading = { Icon(imageVector = Icons.Rounded.Folder, contentDescription = null) },
-      disclosure = false,
-    )
-  }
+internal enum class SourceState(val label: Int, val mark: GalleryIconStatus) {
+  Safe(R.string.backup_source_state_safe, GalleryIconStatus.Done),
+  Working(R.string.backup_source_state_working, GalleryIconStatus.Running),
+
+  /** D-4: ci sono media da salvare ma il backup e' fermo (l'etichetta e il segno sono quelli di [SourcesHalt]). */
+  Halted(R.string.backup_source_state_halted, GalleryIconStatus.Paused),
+  Problem(R.string.backup_source_state_problem, GalleryIconStatus.Attention),
+  Off(R.string.backup_source_state_off, GalleryIconStatus.Stopped),
 }
 
-/**
- * Una sorgente: il nome, quanti media e quanti al sicuro, quanti in coda e con problemi, e una pillola con lo stato. Con il backup fermo
- * ([halt], D-4) la pillola non dice "In corso" e i media che mancano sono "da salvare", non "in coda", con il perche' in poche parole.
- */
-@Composable
-private fun SourceRow(source: SourceStatus, halt: SourcesHalt?) {
-  val name = sourceName(source.source)
-  val problems = source.problems.values.sum()
-  val state = sourceState(source, problems, halt)
-  val line = sourceLine(source, problems, halt.takeIf { state == SourceState.Halted })
-  val pill = stringResource(if (state == SourceState.Halted && halt != null) halt.pill else state.label)
-  FluidListRow(
-    title = name,
-    subtitle = line,
-    tone = state.tone,
-    leading = {
-      Icon(
-        imageVector = when (source.source) {
-          BackupSource.Camera -> Icons.Rounded.PhotoCamera
-          BackupSource.Screenshots -> Icons.Rounded.Image
-          is BackupSource.Folder -> Icons.Rounded.Folder
-        },
-        contentDescription = null,
-      )
-    },
-    labels = { FluidStatusBadge(label = pill, tone = state.tone) },
-    disclosure = false,
-    titleMaxLines = 2,
-    // Per TalkBack la riga e' una frase sola: nome, stato e numeri.
-    modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = "$name, $pill. $line" },
-  )
-}
-
-internal enum class SourceState(val label: Int, val tone: FluidTone) {
-  Safe(R.string.backup_source_state_safe, FluidTone.Success),
-  Working(R.string.backup_source_state_working, FluidTone.Info),
-
-  /** D-4: ci sono media da salvare ma il backup e' fermo (la pillola e' quella di [SourcesHalt]). */
-  Halted(R.string.backup_source_state_halted, FluidTone.Neutral),
-  Problem(R.string.backup_source_state_problem, FluidTone.Warning),
-  Off(R.string.backup_source_state_off, FluidTone.Neutral),
-}
-
-/** Lo stato di una riga: "In corso" solo se il backup puo' lavorare (D-4); i problemi e "Al sicuro" restano quello che sono. */
+/** Lo stato di una sorgente: "In corso" solo se il backup puo' lavorare (D-4); i problemi e "Al sicuro" restano quello che sono. */
 internal fun sourceState(source: SourceStatus, problems: Int, halt: SourcesHalt?): SourceState = when {
   !source.active -> SourceState.Off
   problems > 0 -> SourceState.Problem
@@ -296,62 +231,9 @@ internal fun sourceState(source: SourceStatus, problems: Int, halt: SourcesHalt?
   else -> SourceState.Safe
 }
 
-@Composable
-private fun sourceLine(source: SourceStatus, problems: Int, halt: SourcesHalt?): String {
-  val parts = ArrayList<String>(5)
-  parts += pluralStringResource(R.plurals.backup_source_media, source.media, BackupText.count(source.media))
-  if (source.active) {
-    parts += stringResource(R.string.backup_source_safe, BackupText.count(source.safe))
-    if (source.queued > 0) {
-      parts += stringResource(if (halt != null) R.string.backup_source_to_save else R.string.backup_source_queued, BackupText.count(source.queued))
-    }
-    if (problems > 0) parts += pluralStringResource(R.plurals.backup_source_problems, problems, BackupText.count(problems))
-    if (halt != null) parts += stringResource(halt.reason)
-  } else {
-    parts += stringResource(R.string.backup_source_not_saved)
-  }
-  return parts.joinToString(" · ")
-}
-
 // --- La cartella del dispositivo e le impostazioni -------------------------------------------------------------------------------
 
 private fun LazyListScope.deviceSection(state: BackupPageUi, actions: BackupPageActions) {
   item(key = "device-title") { BackupSectionTitle(stringResource(R.string.backup_section_device)) }
-  item(key = "device") {
-    FluidListGroup {
-      val folder = state.deviceFolder
-      FluidListRow(
-        title = stringResource(R.string.backup_device_folder_title),
-        subtitle = if (folder != null) {
-          stringResource(R.string.backup_device_folder_chosen, folder.name)
-        } else {
-          stringResource(R.string.backup_device_folder_not_chosen)
-        },
-        tone = FluidTone.Info,
-        leading = { Icon(imageVector = Icons.Rounded.Folder, contentDescription = null) },
-        // La cartella si sceglie una volta (D7): scelta, non si tocca piu'. D-9 (prove sul campo): si sceglie **con** il primo backup, dal
-        // suo riepilogo ("Stanotte" o "Inizia ora"), mai da sola. Prima la riga apriva la scelta della cartella e, scelta li', il primo backup
-        // partiva al giro delle regole senza che l'utente avesse visto la stima di tempo, traffico e batteria (§2.11).
-        disclosure = folder == null && state.status is BackupStatus.FirstBackupReady,
-        onClick = if (folder == null && state.status is BackupStatus.FirstBackupReady) actions.openSheet else null,
-      )
-      FluidListDivider()
-      // Fase 10 (P13, 5A I5, decisione dell'utente del 31/10): il guardiano fa la copia privata dei media propri che stanno solo nell'area comune **sempre**, anche
-      // senza backup avviato (D9). La pagina lo dice: una riga informativa, senza azione.
-      FluidListRow(
-        title = stringResource(R.string.backup_common_copy_title),
-        subtitle = stringResource(R.string.backup_common_copy_detail),
-        tone = FluidTone.Info,
-        leading = { Icon(imageVector = Icons.Rounded.Folder, contentDescription = null) },
-      )
-      FluidListDivider()
-      FluidListRow(
-        title = stringResource(R.string.backup_settings_title),
-        subtitle = stringResource(R.string.backup_settings_detail),
-        tone = FluidTone.Neutral,
-        leading = { Icon(imageVector = Icons.Rounded.Tune, contentDescription = null) },
-        onClick = { actions.open(BackupScreen.SETTINGS) },
-      )
-    }
-  }
+  item(key = "device") { DeviceGroup(state = state, actions = actions) }
 }

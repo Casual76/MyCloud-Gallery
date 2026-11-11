@@ -6,6 +6,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.isHeading
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.google.common.truth.Truth.assertThat
@@ -34,9 +35,9 @@ import dev.pampa.mycloudgallery.feature.backup.testing.RecordingBackupActions
 import org.junit.Test
 
 /**
- * La pagina Backup (`docs/fase5-progetto.md` §1.5, §2.6, D16): **ogni caso di `BackupStatus` ha la sua scheda**, ogni problema il suo
- * messaggio e i suoi tasti (che chiamano la porta una volta sola), una riga per sorgente, "Fai ora" e "Ferma". La scena si mostra una volta
- * per prova e lo stato cambia da uno stato, come fa il ViewModel.
+ * La pagina Backup (`docs/fase5-progetto.md` §1.5, §2.6, D16; I3 della fase I): **ogni caso di `BackupStatus` ha la sua testata** (un'etichetta,
+ * al piu' una riga, il perche' dietro la «i»), ogni problema il suo messaggio e i suoi tasti (che chiamano la porta una volta sola), una copertina
+ * per sorgente, "Fai ora" e "Ferma". La scena si mostra una volta per prova e lo stato cambia da uno stato, come fa il ViewModel.
  */
 class BackupPageScreenTest : ComposeBackupTest() {
 
@@ -75,6 +76,12 @@ class BackupPageScreenTest : ComposeBackupTest() {
     composeRule.waitForIdle()
   }
 
+  /** Apre il perche' della testata (la «i» senza riga accanto). */
+  private fun openWhy() {
+    composeRule.onNodeWithContentDescription("Perché").performClick()
+    composeRule.waitForIdle()
+  }
+
   @Test
   fun ogniCasoDelloStatoHaLaSuaScheda() {
     start(BackupSamples.statuses.first())
@@ -89,9 +96,10 @@ class BackupPageScreenTest : ComposeBackupTest() {
   @Test
   fun nonConfiguratoDiceCosaManca() {
     start(BackupStatus.NotConfigured(setOf(BackupSetupStep.MEDIA_PERMISSION, BackupSetupStep.DEVICE_FOLDER)))
-    composeRule.onNodeWithText("Il backup non è ancora pronto").assertExists()
-    composeRule.onNodeWithText("• Consenti l’accesso a foto e video.", substring = true).assertExists()
-    composeRule.onNodeWithText("• Scegli la cartella del dispositivo sul NAS.", substring = true).assertExists()
+    composeRule.onNodeWithText("Da preparare").assertExists()
+    // I3: i passi che mancano sono piastrelle con un'etichetta corta, non frasi con il punto elenco.
+    composeRule.onNodeWithText("Foto e video").assertExists()
+    composeRule.onNodeWithText("La cartella sul NAS").assertExists()
     composeRule.onNodeWithText("Consenti l’accesso").performClick()
     assertThat(actions.performed).containsExactly(BackupAction.GRANT_MEDIA)
     composeRule.onNodeWithText("Apri le impostazioni").performClick()
@@ -105,12 +113,15 @@ class BackupPageScreenTest : ComposeBackupTest() {
   @Test
   fun bk9_manca_lAreaPrivata_DiceDiChiedereAllAdminENonOffreUnTastoCheNonPortaDaNessunaParte() {
     start(BackupStatus.NotConfigured(setOf(BackupSetupStep.PRIVATE_AREA)))
-    composeRule.onNodeWithText("• Manca l’area privata sul NAS.", substring = true).assertExists()
+    composeRule.onNodeWithText("L’area privata").assertExists()
+    // I3: chi puo' farlo sta dietro la «i».
+    openWhy()
     composeRule.onNodeWithText("Chiedi all’admin del NAS").assertExists()
     composeRule.onNodeWithText("Apri Impostazioni, Aree").assertDoesNotExist()
     // Lo stesso come problema di un giro: una frase, nessun tasto.
     set(BackupStatus.Problem(BackupProblemCode.NO_PRIVATE_AREA, 0))
-    composeRule.onNodeWithText("Chiedi all’admin del NAS").assertExists()
+    openWhy()
+    composeRule.onNodeWithText("Chiedi all’admin del NAS", substring = true).assertExists()
     composeRule.onNodeWithText("Apri Impostazioni, Aree").assertDoesNotExist()
     assertThat(actions.performed).isEmpty()
   }
@@ -122,22 +133,30 @@ class BackupPageScreenTest : ComposeBackupTest() {
     composeRule.onNodeWithText("Riprova").performClick()
     assertThat(actions.performed).containsExactly(BackupAction.RETRY)
     set(BackupStatus.Problem(BackupProblemCode.QUOTA, 0))
-    composeRule.onNodeWithText("Chiedi all’admin del NAS").assertExists()
     composeRule.onNodeWithText("Riprova").assertExists()
+    openWhy()
+    composeRule.onNodeWithText("Chiedi all’admin del NAS", substring = true).assertExists()
   }
 
+  /** I3: lo stato «in prova» (D12) si dice una volta, in cima, senza parole da cantiere; il perche' dietro la «i». La recinzione non cambia. */
   @Test
-  fun inProvaDiceCheSiScriveSoloNelleShareDiProva() {
+  fun inProvaDiceUnaVoltaCheIlBackupVeroNonEAncoraAcceso() {
     start(BackupStatus.TestOnly)
-    composeRule.onNodeWithText("Backup in prova").assertExists()
-    composeRule.onNodeWithText("Si scrive solo nelle share di prova: le foto vere non si toccano.").assertExists()
+    composeRule.onNodeWithText("In pausa").assertExists()
+    composeRule.onNodeWithText("Il backup vero non è ancora acceso").assertExists()
+    composeRule.onNodeWithText("share", substring = true).assertDoesNotExist()
+    composeRule.onNodeWithText("Il backup vero non è ancora acceso").performClick()
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Finché non lo accendi", substring = true).assertExists()
   }
 
   @Test
   fun tuttoAlSicuroDiceQuantiEQuando() {
     start(BackupStatus.UpToDate(safeCount = 6_658, atNasMillis = 1_792_119_120_000))
-    composeRule.onNodeWithText("Tutto al sicuro").assertExists()
-    composeRule.onNodeWithText("6.658 media al sicuro sul NAS.").assertExists()
+    composeRule.onNodeWithText("Al sicuro").assertExists()
+    // L'anello: quanto e' al sicuro sul totale delle sorgenti attive (1.250 + 900 su 1.250 + 915), mai «100%» con una foto che manca.
+    composeRule.onNodeWithContentDescription("99% al sicuro: 2.150 su 2.165").assertExists()
+    composeRule.onNodeWithText("99%", useUnmergedTree = true).assertExists()
     composeRule.onNodeWithText("Ultimo giro:", substring = true).assertExists()
     composeRule.onNodeWithText("Fai ora").performClick()
     assertThat(actions.backupNowCalls).isEqualTo(1)
@@ -146,9 +165,8 @@ class BackupPageScreenTest : ComposeBackupTest() {
   @Test
   fun inCodaDiceQuantiEPerche() {
     start(BackupStatus.Waiting(items = 312, bytes = 1_400_000_000, reason = WaitReason.CHARGING))
-    composeRule.onNodeWithText("312 in coda").assertExists()
-    composeRule.onNodeWithText("Aspetta che il telefono sia in carica.", substring = true).assertExists()
-    composeRule.onNodeWithText("1,4", substring = true).assertExists()
+    composeRule.onNodeWithText("In attesa").assertExists()
+    composeRule.onNodeWithText("312 in coda · aspetta la carica").assertExists()
     composeRule.onNodeWithText("Fai ora").performClick()
     assertThat(actions.backupNowCalls).isEqualTo(1)
   }
@@ -156,7 +174,7 @@ class BackupPageScreenTest : ComposeBackupTest() {
   @Test
   fun unGiroInCorsoDiceADoveEPuoEssereFermato() {
     start(BackupStatus.Running(BackupKind.PHOTOS, 1_240, 6_658, 2_100_000_000, 48_000_000_000, 4_800_000, BackupTrigger.FIRST_BACKUP))
-    composeRule.onNodeWithText("Primo backup in corso").assertExists()
+    composeRule.onNodeWithText("Primo backup").assertExists()
     composeRule.onNodeWithText("Foto: 1.240 di 6.658", substring = true).assertExists()
     composeRule.onNodeWithText("circa 1 h 20 min", substring = true).assertExists()
     composeRule.onNodeWithText("Fai ora").assertDoesNotExist()
@@ -168,25 +186,25 @@ class BackupPageScreenTest : ComposeBackupTest() {
   fun ilTitoloDelGiroDipendeDaChiLHaAvviato() {
     fun running(trigger: BackupTrigger) = BackupStatus.Running(BackupKind.VIDEOS, 3, 40, 1_000_000, 9_000_000_000, null, trigger)
     start(running(BackupTrigger.USER_NOW))
-    composeRule.onNodeWithText("Backup in corso, avviato da te").assertExists()
+    composeRule.onNodeWithText("In corso").assertExists()
     composeRule.onNodeWithText("Video: 3 di 40", substring = true).assertExists()
     set(running(BackupTrigger.SCHEDULED))
-    composeRule.onNodeWithText("Backup in corso").assertExists()
-    set(running(BackupTrigger.QUICK_NEW_PHOTOS))
-    composeRule.onNodeWithText("Backup in corso").assertExists()
+    composeRule.onNodeWithText("In corso").assertExists()
+    set(running(BackupTrigger.FIRST_BACKUP))
+    composeRule.onNodeWithText("Primo backup").assertExists()
   }
 
   @Test
   fun fermatoDallUtentePropoineRiprendi() {
     start(BackupStatus.Stopped(StopBy.USER))
-    // R4: "Ferma" e' una pausa, e la pagina dice "In pausa" (non "Backup fermo", che resta per Android e per l'azzeramento).
+    // R4: "Ferma" e' una pausa, e la pagina dice "In pausa" (non "Fermo", che resta per Android e per l'azzeramento).
     composeRule.onNodeWithText("In pausa").assertExists()
-    composeRule.onNodeWithText("Backup fermo").assertDoesNotExist()
+    composeRule.onNodeWithText("Fermo").assertDoesNotExist()
     composeRule.onNodeWithText("Riprendi").performClick()
     assertThat(actions.backupNowCalls).isEqualTo(1)
     set(BackupStatus.Stopped(StopBy.SYSTEM))
-    composeRule.onNodeWithText("Backup fermo").assertExists()
-    composeRule.onNodeWithText("Android ha fermato il lavoro. Riprende da solo.").assertExists()
+    composeRule.onNodeWithText("Fermo").assertExists()
+    composeRule.onNodeWithText("Riprende da solo").assertExists()
     set(BackupStatus.Stopped(StopBy.RESET))
     composeRule.onNodeWithText("Riprendi").assertDoesNotExist()
     composeRule.onNodeWithText("Fai ora").assertDoesNotExist()
@@ -195,7 +213,7 @@ class BackupPageScreenTest : ComposeBackupTest() {
   @Test
   fun ilPrimoBackupApreIlFoglioConIDueTasti() {
     start(BackupStatus.FirstBackupReady(BackupSamples.firstBackupSummary))
-    composeRule.onNodeWithText("Pronto per il primo backup").assertExists()
+    composeRule.onNodeWithText("Pronto per partire").assertExists()
     composeRule.onAllNodes(hasText("Stanotte")).assertCountEquals(0)
     composeRule.onNodeWithText("Vedi il riepilogo").performClick()
     composeRule.waitForIdle()
@@ -227,13 +245,15 @@ class BackupPageScreenTest : ComposeBackupTest() {
         ?: composeRule.activity.getString(text.title)
       composeRule.onNodeWithText(title).assertExists()
       actions.performed.clear()
+      // I3: un'azione che e' solo una frase sta con il perche', dietro la «i».
+      if (code.actions.any { !dev.pampa.mycloudgallery.feature.backup.ui.BackupActionTexts.of(it).isButton }) openWhy()
       for (action in code.actions) {
         val label = composeRule.activity.getString(dev.pampa.mycloudgallery.feature.backup.ui.BackupActionTexts.of(action).label)
         if (dev.pampa.mycloudgallery.feature.backup.ui.BackupActionTexts.of(action).isButton) {
           // Un tasto: una volta il tocco, una volta la porta (il tasto "Fai ora" del problema dei dati e' un'azione, non "backupNow").
           composeRule.onAllNodes(hasText(label))[0].performClick()
         } else {
-          composeRule.onNodeWithText(label).assertExists()
+          composeRule.onNodeWithText(label, substring = true).assertExists()
         }
       }
       val expected = code.actions.filter { dev.pampa.mycloudgallery.feature.backup.ui.BackupActionTexts.of(it).isButton }
@@ -241,16 +261,13 @@ class BackupPageScreenTest : ComposeBackupTest() {
     }
   }
 
+  /** I3: una copertina per sorgente, con il segno e il numero che conta; per TalkBack nome, stato e numeri in una frase. */
   @Test
-  fun leSorgentiDiconoQuantiMediaEQuantiAlSicuro() {
+  fun leSorgentiDiconoStatoENumeroCheConta() {
     start(BackupStatus.UpToDate(6_658, null))
-    composeRule.onNodeWithText("Fotocamera").assertExists()
-    composeRule.onNodeWithText("1.250 media · 1.250 al sicuro").assertExists()
-    composeRule.onNodeWithText("Screenshot").assertExists()
-    composeRule.onNodeWithText("915 media · 900 al sicuro · 12 in coda · 3 con problemi").assertExists()
-    composeRule.onNodeWithText("Telegram").assertExists()
-    composeRule.onNodeWithText("Non salvata").assertExists()
-    composeRule.onNodeWithText("Al sicuro").assertExists()
+    composeRule.onNodeWithContentDescription("Fotocamera, Al sicuro. 1.250 al sicuro").assertExists()
+    composeRule.onNodeWithContentDescription("Screenshot, Da controllare. 3 con problemi").assertExists()
+    composeRule.onNodeWithContentDescription("Telegram, Non salvata. 224 media, non si salva").assertExists()
   }
 
   /**
@@ -262,14 +279,14 @@ class BackupPageScreenTest : ComposeBackupTest() {
     val waiting = listOf(SourceStatus(BackupSource.Camera, active = true, media = 957, safe = 0, queued = 957, problems = emptyMap()))
     start(BackupStatus.TestOnly, sources = waiting)
     composeRule.onNodeWithText("In corso").assertDoesNotExist()
-    composeRule.onNodeWithText("Fermo").assertExists()
-    composeRule.onNodeWithText("957 media · 0 al sicuro · 957 da salvare · fermo: il backup è in prova e scrive solo nelle share di prova").assertExists()
-    composeRule.onNodeWithText("in coda", substring = true).assertDoesNotExist()
+    // I3: il perche' si dice una volta, in cima; la copertina ha solo il segno della pausa e il numero che manca.
+    composeRule.onNodeWithContentDescription("Fotocamera, In pausa. 957 da salvare").assertExists()
+    composeRule.onNodeWithText("957").assertExists()
 
     composeRule.runOnIdle { ui.value = page(BackupStatus.Running(BackupKind.PHOTOS, 1, 957, 10, 1_000, null, BackupTrigger.USER_NOW), waiting) }
     composeRule.waitForIdle()
     composeRule.onNodeWithText("In corso").assertExists()
-    composeRule.onNodeWithText("957 media · 0 al sicuro · 957 in coda").assertExists()
+    composeRule.onNodeWithContentDescription("Fotocamera, In corso. 957 da salvare").assertExists()
   }
 
   /** D-4: quali stati fermano tutte le sorgenti; "Al sicuro", i problemi e le sorgenti spente restano quello che sono. */
@@ -296,7 +313,10 @@ class BackupPageScreenTest : ComposeBackupTest() {
   fun iProblemiDelleSorgentiCompaionoConLaLoroAzione() {
     start(BackupStatus.UpToDate(6_658, null))
     composeRule.onNode(hasText("Da controllare") and isHeading()).assertExists()
-    composeRule.onNodeWithText("3 foto cancellate prima del backup").assertExists()
+    // I3: la riga dice il messaggio; il perche' e il rimedio si aprono con un tocco.
+    composeRule.onNodeWithText("Apri il cestino di Galleria").assertDoesNotExist()
+    composeRule.onNodeWithText("3 foto cancellate prima del backup").performClick()
+    composeRule.waitForIdle()
     composeRule.onNodeWithText("Apri il cestino di Galleria").performClick()
     assertThat(actions.performed).containsExactly(BackupAction.OPEN_GALLERY_TRASH)
   }
@@ -313,7 +333,7 @@ class BackupPageScreenTest : ComposeBackupTest() {
   @Test
   fun senzaSorgentiLaPaginaDiceDiScegliere() {
     start(BackupStatus.NotConfigured(setOf(BackupSetupStep.SOURCES)), sources = emptyList())
-    composeRule.onNodeWithText("Nessuna sorgente scelta").assertExists()
+    composeRule.onNodeWithText("Nessuna cartella scelta").assertExists()
   }
 
   /**
@@ -323,11 +343,11 @@ class BackupPageScreenTest : ComposeBackupTest() {
   @Test
   fun laCartellaDelDispositivoScelta_NonSiTocca_ENonScelta_ApreIlRiepilogoDelPrimoBackup() {
     start(BackupStatus.UpToDate(1, null))
-    composeRule.onNodeWithText("Le copie vanno in «S25 di Mario».").assertExists()
+    composeRule.onNodeWithText("S25 di Mario").assertExists()
     composeRule.onNodeWithText("Impostazioni del backup", substring = true).assertExists()
     composeRule.runOnIdle { ui.value = page(BackupStatus.FirstBackupReady(BackupSamples.firstBackupSummary)).copy(deviceFolder = null) }
     composeRule.waitForIdle()
-    composeRule.onNodeWithText("Si sceglie prima del primo backup.").performClick()
+    composeRule.onNodeWithText("Da scegliere").performClick()
     composeRule.waitForIdle()
     assertThat(actions.opened).isEmpty()
     assertThat(ui.value.sheetOpen).isTrue()

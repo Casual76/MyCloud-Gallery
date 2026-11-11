@@ -282,28 +282,6 @@ internal fun DiscardSheetContent(onConfirm: () -> Unit, onCancel: () -> Unit, mo
   )
 }
 
-/** Il riquadro con cui la pagina Backup porta all'elenco: compare solo con almeno un file, e conta quelli in attesa, in caricamento e con un problema. */
-@Composable
-fun ReceivedEntryCard(counts: ReceivedCounts, onOpen: () -> Unit, modifier: Modifier = Modifier) {
-  if (counts.total <= 0) return
-  val parts = ArrayList<String>(3)
-  if (counts.waiting > 0) parts += stringResource(R.string.backup_received_entry_waiting, BackupText.count(counts.waiting))
-  if (counts.uploading > 0) parts += stringResource(R.string.backup_received_entry_uploading, BackupText.count(counts.uploading))
-  if (counts.problems > 0) parts += pluralStringResource(R.plurals.backup_received_entry_problems, counts.problems, BackupText.count(counts.problems))
-  BackupCard(
-    tone = when {
-      counts.problems > 0 -> BackupTone.Attention
-      counts.uploading > 0 -> BackupTone.Working
-      else -> BackupTone.Waiting
-    },
-    glyph = Icons.Rounded.MoveToInbox,
-    title = stringResource(R.string.backup_received_entry_title),
-    detail = parts.joinToString(" · "),
-    modifier = modifier,
-    actions = { BackupButton(label = stringResource(R.string.backup_received_entry_action), onClick = onOpen, style = FluidButtonStyle.Tinted) },
-  )
-}
-
 /** "Nella cartella Viaggi", o "Nella cartella principale" se la cartella e' la radice dell'area. */
 @Composable
 private fun folderText(folder: String): String {

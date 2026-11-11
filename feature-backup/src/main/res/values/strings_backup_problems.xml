@@ -30,8 +30,8 @@
   <!-- CA-1 (Fase 10): le scritture ferme per il manifest firmato (questa versione e' in sola lettura), non per l'interruttore dell'utente. -->
   <string name="backup_problem_release_read_only_title">Questa versione va aggiornata</string>
   <string name="backup_problem_release_read_only_detail">Questa versione di MyCloud Gallery è in sola lettura: il backup non scrive sul NAS finché non la aggiorni dal Pampa Store. Le foto restano sul telefono.</string>
-  <string name="backup_problem_test_only_title">Backup in prova</string>
-  <string name="backup_problem_test_only_detail">Si scrive solo nelle share di prova: le foto vere non si toccano.</string>
+  <string name="backup_problem_test_only_title">Il backup vero non è ancora acceso</string>
+  <string name="backup_problem_test_only_detail">Finché non lo accendi, sul NAS non si copia niente: le tue foto restano sul telefono, come prima.</string>
   <string name="backup_problem_lost_before_backup_title">Foto cancellate prima del backup</string>
   <plurals name="backup_problem_lost_before_backup_title_count">
     <item quantity="one">%1$s foto cancellata prima del backup</item>

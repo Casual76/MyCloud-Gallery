@@ -6,6 +6,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSettings
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
+import dev.pampa.mycloudgallery.feature.backup.contract.BackupCoverPorts
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupOverview
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupRules
 import dev.pampa.mycloudgallery.feature.backup.contract.DeviceFolderProposals
@@ -41,4 +42,8 @@ abstract class BackupOptionalBindingsModule {
 
   @BindsOptionalOf
   abstract fun folderProposals(): DeviceFolderProposals
+
+  /** I3 (fase I): le copertine delle sorgenti (le ultime foto, la Libreria visibile, la cache delle miniature). */
+  @BindsOptionalOf
+  abstract fun coverPorts(): BackupCoverPorts
 }

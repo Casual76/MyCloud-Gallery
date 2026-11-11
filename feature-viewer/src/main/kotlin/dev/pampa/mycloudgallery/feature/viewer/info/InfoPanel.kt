@@ -62,10 +62,10 @@ import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
-import dev.antigravity.fluidengine.ui.fluid.glassSurface
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
@@ -355,11 +355,11 @@ internal fun BoxScope.InfoSidePanel(
   }
 }
 
-/** Il materiale dei fogli dell'engine; senza un fondale (i test, le anteprime) la superficie opaca. */
+/** Il materiale dei fogli dell'engine, dal vetro della galleria (superficie piena se il sistema la chiede); senza un fondale (i test, le anteprime) la superficie opaca. */
 @Composable
 private fun sheetMaterial(backdrop: GlassBackdropState?, shape: androidx.compose.ui.graphics.Shape): Modifier =
   if (backdrop != null) {
-    Modifier.glassSurface(
+    Modifier.galleryGlass(
       state = backdrop,
       tint = GlassDefaults.panelTint(),
       shape = shape,

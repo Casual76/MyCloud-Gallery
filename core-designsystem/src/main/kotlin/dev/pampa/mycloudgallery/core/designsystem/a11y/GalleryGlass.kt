@@ -14,8 +14,10 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
+import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.GlassEdge
 import dev.antigravity.fluidengine.ui.fluid.GlassFalloff
+import dev.antigravity.fluidengine.ui.fluid.GlassOptics
 import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.GlassTint
 import dev.antigravity.fluidengine.ui.fluid.glassSurface
@@ -30,6 +32,7 @@ import dev.antigravity.fluidengine.ui.fluid.glassSurface
  * disegna vetro. Va usato **al posto di** `glassSurface` in tutta la galleria (lo controlla `GalleryGlassUseTest`).
  *
  * @param exports come in `glassSurface`; con la superficie piena non si pubblica niente (non c'e' piu' vetro da rifrangere).
+ * @param optics come in `glassSurface` (per esempio l'ottica dei pannelli dell'engine); con la superficie piena non conta.
  */
 @Composable
 fun Modifier.galleryGlass(
@@ -40,12 +43,13 @@ fun Modifier.galleryGlass(
   falloff: GlassFalloff = GlassFalloff.Uniform,
   role: GlassRole = if (falloff == GlassFalloff.FadeDown) GlassRole.Bar else GlassRole.Floating,
   exports: GlassBackdropState? = null,
+  optics: GlassOptics = GlassDefaults.optics(role),
 ): Modifier {
   val prefs = LocalGalleryAccessibility.current
   return if (prefs.solidSurfaces) {
     gallerySolidSurface(tint = tint, shape = shape, edge = edge, falloff = falloff)
   } else {
-    glassSurface(state = state, tint = tint, shape = shape, edge = edge, falloff = falloff, role = role, exports = exports)
+    glassSurface(state = state, tint = tint, shape = shape, edge = edge, falloff = falloff, role = role, optics = optics, exports = exports)
   }
 }
 

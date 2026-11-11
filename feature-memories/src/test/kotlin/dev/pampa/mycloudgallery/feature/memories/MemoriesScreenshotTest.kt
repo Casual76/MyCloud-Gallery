@@ -91,7 +91,7 @@ internal abstract class MemoriesShots(private val dark: Boolean, private val dev
 
   @Test fun sezioneProntaTestoGrande() = shoot("sezione-pronta", "Un anno fa", fontScale = LARGE_TEXT) { SectionScene(scenes.sectionReady) }
 
-  @Test fun sezioneVuota() = shoot("sezione-vuota", "I ricordi arrivano quando ci sono abbastanza foto") { SectionScene(scenes.sectionEmpty) }
+  @Test fun sezioneVuota() = shoot("sezione-vuota", "Ancora nessun ricordo") { SectionScene(scenes.sectionEmpty) }
 
   @Test fun sezioneLibreriaNonPronta() = shoot("sezione-libreria", "Aspetto la tua libreria") { SectionScene(scenes.sectionLibrary) }
 

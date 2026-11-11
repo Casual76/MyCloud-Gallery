@@ -106,7 +106,7 @@ class PeopleCorrBScreenshotTest(private val dark: Boolean) : PeopleScreenTest() 
   @Test fun sezioneNonSiCalcolanoTestoGrande() =
     shoot("sezione-non-si-calcolano", "Qui le persone non si calcolano", fontScale = LARGE_TEXT) { SectionScene(local, FacesStatus.Off, computesHere = false) }
 
-  @Test fun sezioneSpentaSenzaViaggiano() = shoot("sezione-spenta", "Attiva riconoscimento dei volti", "nessun familiare li vede") { SectionScene(FacesState.Off, FacesStatus.Off) }
+  @Test fun sezioneSpentaSenzaViaggiano() = shoot("sezione-spenta", "Attiva riconoscimento dei volti", "Nessun familiare vede i nomi") { SectionScene(FacesState.Off, FacesStatus.Off) }
 
   @Test fun sezioneSpentaTestoGrande() = shoot("sezione-spenta", "Attiva riconoscimento dei volti", fontScale = LARGE_TEXT) { SectionScene(FacesState.Off, FacesStatus.Off) }
 

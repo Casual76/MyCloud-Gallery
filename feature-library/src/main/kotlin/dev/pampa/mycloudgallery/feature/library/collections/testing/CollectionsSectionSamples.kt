@@ -82,7 +82,7 @@ object CollectionsSectionSamples {
       } else {
         listOf(
           CollectionEntry(
-            "people/enable", "Attiva riconoscimento dei volti", "Raggruppa le foto per persona. I nomi viaggiano fra i tuoi dispositivi e restano tuoi.",
+            "people/enable", "Attiva riconoscimento dei volti", "Nessun familiare vede i nomi",
             Icons.Rounded.Face, FluidTone.Primary,
           ),
         )

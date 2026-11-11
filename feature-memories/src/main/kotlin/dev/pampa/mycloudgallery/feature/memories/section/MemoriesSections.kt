@@ -20,6 +20,7 @@ import dev.pampa.mycloudgallery.core.memories.contract.MemoryId
 import dev.pampa.mycloudgallery.core.memories.contract.MemoryKind
 import dev.pampa.mycloudgallery.core.memories.contract.ShelfEmptyReason
 import dev.pampa.mycloudgallery.core.memories.contract.ShelfView
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.memories.R
 import dev.pampa.mycloudgallery.feature.memories.contract.MemoriesSectionState
@@ -53,6 +54,8 @@ data class SectionEntry(
   val tone: FluidTone,
   val badge: Int = 0,
   val trailing: String? = null,
+  /** H5: la copertina del ricordo, che le Raccolte mostrano al posto dell'icona (dalla Libreria visibile: mai un nascosto). */
+  val cover: MediaId? = null,
 ) {
   /** D33: mai il titolo o il sottotitolo (possono portare un luogo, una data o un nome): solo il codice, che non porta mai un dato dell'utente. */
   override fun toString(): String = "SectionEntry($code)"
@@ -178,6 +181,7 @@ class MemoriesSectionSources(
         icon = iconOf(card.kind),
         tone = if (card.isNew) FluidTone.Primary else FluidTone.Neutral,
         trailing = if (card.isNew) resources.getString(R.string.memorie_new) else null,
+        cover = card.cover,
       )
     }
 

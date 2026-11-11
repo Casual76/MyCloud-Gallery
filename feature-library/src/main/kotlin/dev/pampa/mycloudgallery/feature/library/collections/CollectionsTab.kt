@@ -89,6 +89,8 @@ fun CollectionsTab(
   val state = remember(inputs, extraGroups) {
     CollectionsLayout.state(inputs.present, extraGroups, inputs.saved, inputs.hidden, inputs.editing, inputs.saveFailed)
   }
+  // H5: le copertine delle voci (l'ultimo ricordo, i viaggi) dalla stessa cache delle miniature.
+  CompositionLocalProvider(LocalCollectionCovers provides viewModel.covers) {
   CollectionsScreen(
     state = state,
     contentPadding = contentPadding,
@@ -115,6 +117,7 @@ fun CollectionsTab(
       }
     },
   )
+  }
 }
 
 /**
@@ -247,6 +250,13 @@ private fun CollectionsList(
   onReorder: (List<String>) -> Unit,
   onSetShown: (String, Boolean) -> Unit,
 ) {
+  // H5: le miniature delle copertine si chiedono qui, una volta per elenco (non a ogni scorrimento). Sul tablet no: il pannello accanto puo' essere
+  // una griglia con la sua finestra di richieste, e le copertine li' compaiono se sono gia' in cache.
+  val covers = LocalCollectionCovers.current
+  if (covers != null && !twoPane && !state.editing) {
+    val media = remember(state) { state.visibleRows.mapNotNull { (it as? SectionRow.Entry)?.entry?.cover }.distinct() }
+    CollectionCoverWindow(covers, media)
+  }
   FluidScreen(
     title = stringResource(if (state.editing) R.string.collections_edit_title else R.string.collections_title),
     actions = {

@@ -1,7 +1,6 @@
 package dev.pampa.mycloudgallery.feature.library.collections
 
 import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import dev.antigravity.fluidengine.ui.fluid.FluidRowValue
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
@@ -68,7 +67,9 @@ internal fun CollectionEntryRow(
     title = entry.title,
     subtitle = entry.subtitle,
     tone = entry.tone,
-    leading = { Icon(imageVector = entry.icon, contentDescription = null) },
+    // H5: la piastrella delle Raccolte, piu' grande, con la copertina della voce quando c'e'.
+    leading = { CollectionRowArt(entry.icon, entry.tone, entry.cover) },
+    leadingTile = false,
     badge = entryBadge(entry),
     selected = twoPane && entry.code == selectedCode,
     disclosure = !twoPane,

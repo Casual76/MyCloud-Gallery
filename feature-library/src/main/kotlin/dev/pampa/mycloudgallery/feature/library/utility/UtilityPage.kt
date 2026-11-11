@@ -3,9 +3,9 @@ package dev.pampa.mycloudgallery.feature.library.utility
 import android.content.res.Resources
 import androidx.annotation.StringRes
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.AutoFixHigh
+import androidx.compose.material.icons.rounded.BurstMode
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
@@ -66,10 +66,11 @@ internal val UtilityPage.titleRes: Int
     UtilityPage.RECENTLY_DELETED -> R.string.utility_recently_deleted
   }
 
+/** H5: icone che dicono che cosa c'e' dentro (la bacchetta per le foto ritoccate, la raffica per gli scatti quasi uguali), non un comando ("modifica", "copia"). */
 internal val UtilityPage.icon: ImageVector
   get() = when (this) {
-    UtilityPage.EDITED -> Icons.Rounded.Edit
-    UtilityPage.DUPLICATES -> Icons.Rounded.ContentCopy
+    UtilityPage.EDITED -> Icons.Rounded.AutoFixHigh
+    UtilityPage.DUPLICATES -> Icons.Rounded.BurstMode
     UtilityPage.RECENTLY_DELETED -> Icons.Rounded.Delete
   }
 

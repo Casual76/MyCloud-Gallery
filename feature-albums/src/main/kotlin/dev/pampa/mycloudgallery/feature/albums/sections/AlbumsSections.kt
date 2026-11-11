@@ -18,6 +18,7 @@ import dev.pampa.mycloudgallery.core.albums.contract.TripProposal
 import dev.pampa.mycloudgallery.core.albums.contract.Trips
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.model.AlbumId
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.TripKind
 import dev.pampa.mycloudgallery.feature.albums.R
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumPeople
@@ -58,6 +59,8 @@ data class SectionEntry(
   val tone: FluidTone,
   val badge: Int = 0,
   val trailing: String? = null,
+  /** H5: la copertina della voce (un viaggio), che le Raccolte mostrano al posto dell'icona (dalla Libreria visibile: mai un nascosto). */
+  val cover: MediaId? = null,
 )
 
 /** Una sezione: la stessa forma di `CollectionEntryGroup`. Senza voci la sezione "non c'e'" (nessuna intestazione). */
@@ -213,6 +216,7 @@ class AlbumsSectionSources(
     icon = if (trip.kind == TripKind.TRIP) Icons.Rounded.Flight else Icons.Rounded.Event,
     tone = FluidTone.Info,
     trailing = resources.getString(if (trip.kind == TripKind.TRIP) R.string.trips_kind_trip else R.string.trips_kind_event),
+    cover = trip.cover,
   )
 
   private fun moreTrips(shown: Int, hasOlder: Boolean): List<SectionEntry> =

@@ -92,7 +92,7 @@ internal class MemoriesScreensTest : MemoriesScreenTest() {
     val set = switching<MemoriesSectionState>(scenes.sectionReady) { SectionScene(it) }
     assertShows("sezione pronta", "RICORDI", "Un anno fa", "2 anni fa", "Il meglio di ottobre 2026", "Tutti i ricordi", "Nuovo", "3 ricordi")
     set(scenes.sectionEmpty)
-    assertShows("sezione vuota", "I ricordi arrivano quando ci sono abbastanza foto")
+    assertShows("sezione vuota", "Ancora nessun ricordo", "Arrivano quando ci sono abbastanza foto")
     set(scenes.sectionLibrary)
     assertShows("libreria non pronta", "Aspetto la tua libreria")
     set(scenes.sectionWorking)

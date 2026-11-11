@@ -345,4 +345,43 @@ class NoHiddenLeakTest : ComposeScreenTest() {
   private companion object {
     const val SCROLL_STEP = 12
   }
+
+  /**
+   * H5: le copertine delle Raccolte (l'ultimo ricordo, un viaggio) si cercano nella Libreria visibile. Una copertina scelta prima che la foto fosse
+   * nascosta non ha una richiesta e non si chiede mai al caricatore: la riga mostra l'icona. Il controllo positivo: la copertina visibile si chiede.
+   */
+  @Test
+  fun unaCopertinaNascostaNonSiChiedeMaiNelleRaccolte() {
+    val covers = CollectionCovers(loader, world.source.items(LibraryFilter.ALL))
+    val hiddenCover = hidden.first()
+    val visibleCover = world.visibleIds.first()
+    for (id in hidden) assertWithMessage("richiesta per un nascosto").that(covers.request(covers.view.value, id)).isNull()
+
+    val group = CollectionEntryGroup(
+      title = "Ricordi",
+      code = CollectionSections.MEMORIES,
+      entries = listOf(
+        CollectionEntry("m_nascosto", "Un ricordo", "3 foto", androidx.compose.material.icons.Icons.Rounded.History, dev.antigravity.fluidengine.ui.theme.FluidTone.Neutral, cover = hiddenCover),
+        CollectionEntry("m_visibile", "Un altro ricordo", "5 foto", androidx.compose.material.icons.Icons.Rounded.History, dev.antigravity.fluidengine.ui.theme.FluidTone.Neutral, cover = visibleCover),
+      ),
+    )
+    show {
+      androidx.compose.runtime.CompositionLocalProvider(LocalCollectionCovers provides covers) {
+        CollectionsScreen(
+          state = layoutOf(world, extra = listOf(group)),
+          contentPadding = PaddingValues(),
+          backdropOut = {},
+          onOpenCollection = {},
+          onOpenSettings = {},
+          statusHeader = {},
+          detail = {},
+        )
+      }
+    }
+    composeRule.waitForIdle()
+
+    assertThat(loader.seen).doesNotContain(hiddenCover)
+    assertThat(loader.seen.intersect(hidden)).isEmpty()
+    assertThat(loader.seen).contains(visibleCover)
+  }
 }

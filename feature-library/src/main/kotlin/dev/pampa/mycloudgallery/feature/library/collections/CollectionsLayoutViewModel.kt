@@ -3,6 +3,8 @@ package dev.pampa.mycloudgallery.feature.library.collections
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
+import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.mediastore.contract.PhoneMediaIntents
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.attempt
@@ -201,12 +203,33 @@ internal fun builtinSections(state: CollectionsUiState): List<CollectionsSection
  * sempre. Il ViewModel delle griglie filtrate resta [CollectionsViewModel].
  */
 @HiltViewModel
-class CollectionsLayoutViewModel @Inject constructor(
+class CollectionsLayoutViewModel private constructor(
   source: CollectionItemsSource,
   intents: PhoneMediaIntents,
-  providers: @JvmSuppressWildcards Set<CollectionsSectionProvider>,
+  providers: Set<CollectionsSectionProvider>,
   store: Optional<CollectionsLayoutStore>,
+  loader: Optional<ThumbnailLoader>,
 ) : ViewModel() {
+
+  /** H5: con il caricatore delle miniature le voci delle Raccolte mostrano le loro copertine ([CollectionCovers]). */
+  @Inject constructor(
+    source: CollectionItemsSource,
+    intents: PhoneMediaIntents,
+    providers: @JvmSuppressWildcards Set<CollectionsSectionProvider>,
+    store: Optional<CollectionsLayoutStore>,
+    loader: ThumbnailLoader,
+  ) : this(source, intents, providers, store, Optional.of(loader))
+
+  /** Senza caricatore (le prove di `:app` che costruiscono la scheda a mano): solo icone. */
+  constructor(
+    source: CollectionItemsSource,
+    intents: PhoneMediaIntents,
+    providers: Set<CollectionsSectionProvider>,
+    store: Optional<CollectionsLayoutStore>,
+  ) : this(source, intents, providers, store, Optional.empty())
+
+  /** Le copertine delle voci: la stessa cache delle miniature e la Libreria visibile (mai un nascosto). Null = solo icone. */
+  internal val covers: CollectionCovers? = loader.map { CollectionCovers(it, source.items(LibraryFilter.ALL)) }.orElse(null)
 
   internal val controller: CollectionsLayoutController = CollectionsLayoutController(
     source = source,

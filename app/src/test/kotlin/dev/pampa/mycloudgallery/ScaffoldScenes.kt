@@ -136,10 +136,11 @@ internal class ScaffoldScenes(
   private val shown get() = library.grid.view.snapshot
 
   /** I2: la foto del media alla posizione [index] dell'istantanea (il primo risultato di un suggerimento). */
-  private fun photo(index: Int): SuggestionArt = SuggestionArt.Photo(shown.idAt(index % shown.size))
+  // Con la Libreria vuota (scena `libreria-vuota`) non c'e' nessun media da mostrare: il suggerimento resta senza anteprima.
+  private fun photo(index: Int): SuggestionArt? = if (shown.size == 0) null else SuggestionArt.Photo(shown.idAt(index % shown.size))
 
   /** I2: un volto sintetico (pixel finti, nessun volto vero) con la sua foto d'origine nella Libreria. */
-  private fun face(seed: Long, origin: Int): SuggestionArt = SuggestionArt.Face(
+  private fun face(seed: Long, origin: Int): SuggestionArt? = if (shown.size == 0) null else SuggestionArt.Face(
     PersonId("00000000-0000-4000-8000-0000000000%02d".format(seed)),
     dev.pampa.mycloudgallery.core.imaging.testing.SyntheticPixels.bitmap(seed, 96, 96).asImageBitmap(),
     setOf(shown.idAt(origin % shown.size)),
@@ -208,7 +209,7 @@ internal class ScaffoldScenes(
   /** "Trova simili" da una foto: il campo vuoto, i simili per pertinenza, la riga con la foto da cui vengono (I2). */
   val searchSimilar: SearchSource = FixedSearchSource(
     items = (searchIdle as FixedSearchSource).items,
-    state = results(confident = (40 until 61).toList(), likely = emptyList(), similar = 1, similarTo = listOf(shown.idAt(40))),
+    state = results(confident = (40 until 61).toList(), likely = emptyList(), similar = 1, similarTo = if (shown.size > 40) listOf(shown.idAt(40)) else emptyList()),
     library = shown,
   )
 

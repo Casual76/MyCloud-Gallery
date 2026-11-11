@@ -49,7 +49,7 @@ import dev.pampa.mycloudgallery.feature.settings.ui.CodeField
 import dev.pampa.mycloudgallery.feature.settings.ui.CodeFormat
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 
@@ -180,7 +180,8 @@ internal fun AdminRecoveryScreen(state: RecoveryUiState, actions: RecoveryAction
             title = stringResource(R.string.family_startover_link),
             subtitle = stringResource(R.string.family_startover_link_detail),
             tone = FluidTone.Danger,
-            leading = { RowGlyph(Icons.Rounded.RestartAlt) },
+            leading = { RowTile(Icons.Rounded.RestartAlt) },
+            leadingTile = false,
             onClick = guide,
           )
         }
@@ -256,7 +257,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recoveryPick(state: R
           title = stringResource(R.string.recovery_kit_row, index + 1),
           subtitle = kit.fileName,
           tone = FluidTone.Warning,
-          leading = { RowGlyph(Icons.Rounded.Description) },
+          leading = { RowTile(Icons.Rounded.Description) },
+          leadingTile = false,
           onClick = { actions.onPickKit(index) },
         )
       }
@@ -355,7 +357,8 @@ private fun StateScanSection(state: RecoveryUiState, actions: RecoveryActions) {
           title = stringResource(R.string.recovery_state_read, state.stateVersion),
           subtitle = stringResource(R.string.recovery_state_read_detail),
           tone = FluidTone.Success,
-          leading = { RowGlyph(Icons.Rounded.Check) },
+          leading = { RowTile(Icons.Rounded.Check) },
+          leadingTile = false,
           disclosure = false,
         )
         FluidButton(

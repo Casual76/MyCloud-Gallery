@@ -57,6 +57,11 @@ class RulesScreenTest : SharingComposeBase() {
     // Il titolo di sezione e' in maiuscolo (FluidSectionHeader): si cerca senza badare alle maiuscole.
     rule.onNodeWithText(string(R.string.rules_section_power_saver), ignoreCase = true).assertExists()
     rule.onNodeWithText(string(R.string.rules_power_saver)).assertIsDisplayed()
+    // I3 (fase I): che cosa fa sta dietro la «i», a un tocco.
+    assertThat(has(string(R.string.rules_power_saver_detail))).isFalse()
+    rule.onNode(hasScrollAction()).performScrollToNode(hasText(string(R.string.rules_power_saver_info)))
+    rule.onNodeWithText(string(R.string.rules_power_saver_info)).performClick()
+    rule.waitForIdle()
     assertThat(has(string(R.string.rules_power_saver_detail))).isTrue()
   }
 

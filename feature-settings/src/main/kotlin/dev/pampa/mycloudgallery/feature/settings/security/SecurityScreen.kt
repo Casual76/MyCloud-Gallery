@@ -4,7 +4,8 @@ import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.provider.Settings
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.SdStorage
+import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Key
@@ -17,6 +18,25 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Text
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.stateDescription
+import dev.antigravity.fluidengine.ui.fluid.FluidChip
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -59,7 +79,7 @@ import dev.pampa.mycloudgallery.feature.settings.port.ScreenLockProbe
 import dev.pampa.mycloudgallery.feature.settings.ui.Feedback
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import dev.pampa.mycloudgallery.feature.settings.ui.rememberSystemAuthenticator
 import javax.inject.Inject
@@ -265,9 +285,10 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.security_lock_row),
-          subtitle = stringResource(R.string.security_lock_row_detail),
+          subtitle = "",
           tone = if (enabled) FluidTone.Success else FluidTone.Neutral,
-          leading = { RowGlyph(Icons.Rounded.Fingerprint) },
+          leading = { RowTile(Icons.Rounded.Fingerprint) },
+          leadingTile = false,
           disclosure = false,
           onClick = if (enabled) actions.onDisable else actions.onEnable,
           badge = { FluidSwitch(checked = enabled, onCheckedChange = null) },
@@ -280,9 +301,10 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
           FluidListDivider()
           FluidListRow(
             title = stringResource(R.string.security_lock_now),
-            subtitle = stringResource(R.string.security_lock_now_detail),
+            subtitle = "",
             tone = FluidTone.Primary,
-            leading = { RowGlyph(Icons.Rounded.LockClock) },
+            leading = { RowTile(Icons.Rounded.LockClock) },
+            leadingTile = false,
             onClick = actions.onLockNow,
           )
         }
@@ -290,53 +312,19 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
     }
 
     if (enabled) {
-      item {
-        GallerySectionHeader(
-          title = stringResource(R.string.security_section_timeout),
-          detail = stringResource(R.string.security_section_timeout_detail),
-        )
-      }
-      item {
-        FluidListGroup {
-          AppLockTimeout.entries.forEachIndexed { index, timeout ->
-            if (index > 0) FluidListDivider()
-            val selected = timeout == state.settings.timeout
-            FluidListRow(
-              title = stringResource(timeout.labelRes()),
-              subtitle = if (timeout == AppLockTimeout.DEFAULT) stringResource(R.string.security_timeout_default) else "",
-              selected = selected,
-              disclosure = false,
-              onClick = { actions.onTimeout(timeout) },
-              badge = {
-                if (selected) {
-                  Icon(Icons.Rounded.Check, contentDescription = stringResource(R.string.selected), tint = MaterialTheme.colorScheme.primary)
-                }
-              },
-            )
-          }
-        }
-      }
+      item { GallerySectionHeader(title = stringResource(R.string.security_section_timeout)) }
+      // I3 (fase I): cinque capsule al posto di cinque righe; quella consigliata ha la stella (e lo dice a TalkBack).
+      item { TimeoutChips(selected = state.settings.timeout, onTimeout = actions.onTimeout) }
     }
 
+    // I3: che cosa protegge, come una piccola lista con le spunte (le chiavi, le schermate riservate); il come dietro la «i».
     item { GallerySectionHeader(title = stringResource(R.string.security_section_protects)) }
+    item { ProtectsFigure() }
     item {
-      FluidListGroup {
-        FluidListRow(
-          title = stringResource(R.string.security_protects_keys),
-          subtitle = stringResource(R.string.security_protects_keys_detail),
-          tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.Key) },
-          disclosure = false,
-        )
-        FluidListDivider()
-        FluidListRow(
-          title = stringResource(R.string.security_protects_screens),
-          subtitle = stringResource(R.string.security_protects_screens_detail),
-          tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.VisibilityOff) },
-          disclosure = false,
-        )
-      }
+      SettingsInfo(
+        label = stringResource(R.string.security_protects_info),
+        text = stringResource(R.string.security_protects_keys_detail) + ". " + stringResource(R.string.security_protects_screens_detail) + ".",
+      )
     }
 
     item { GallerySectionHeader(title = stringResource(R.string.security_section_backup)) }
@@ -344,16 +332,68 @@ internal fun SecurityScreen(state: SecurityUiState, actions: SecurityActions) {
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.settings_backup_notice),
-          subtitle = stringResource(R.string.security_backup_detail),
-          tone = FluidTone.Warning,
-          leading = { RowGlyph(Icons.Rounded.Backup) },
-          labels = { StatusPill(stringResource(R.string.security_backup_pill), FluidTone.Warning) },
+          subtitle = "",
+          leading = { RowTile(Icons.Rounded.SdStorage, status = GalleryIconStatus.Attention, family = GalleryIconFamily.Backup) },
+          leadingTile = false,
           onClick = actions.onOpenBackupNotice,
         )
       }
     }
-    item { FluidSectionFootnote(text = stringResource(R.string.security_footnote)) }
+    item { SettingsInfo(label = stringResource(R.string.security_footnote_info), text = stringResource(R.string.security_footnote)) }
   }
+}
+
+/** I tempi di richiusura come capsule; quella consigliata ha la stella, e per TalkBack lo dice. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TimeoutChips(selected: AppLockTimeout, onTimeout: (AppLockTimeout) -> Unit) {
+  val recommended = stringResource(R.string.security_timeout_default)
+  FlowRow(
+    modifier = Modifier.fillMaxWidth().padding(horizontal = SettingsDimens.TightGap),
+    horizontalArrangement = Arrangement.spacedBy(SettingsDimens.PillGap),
+    verticalArrangement = Arrangement.spacedBy(SettingsDimens.PillGap),
+  ) {
+    AppLockTimeout.entries.forEach { timeout ->
+      val isDefault = timeout == AppLockTimeout.DEFAULT
+      FluidChip(
+        label = stringResource(timeout.chipRes()),
+        selected = timeout == selected,
+        onClick = { onTimeout(timeout) },
+        modifier = if (isDefault) Modifier.semantics { stateDescription = recommended } else Modifier,
+        leading = if (isDefault) {
+          { Icon(Icons.Rounded.Star, contentDescription = null, modifier = Modifier.size(SettingsDimens.ConditionGlyph)) }
+        } else {
+          null
+        },
+      )
+    }
+  }
+}
+
+/** Che cosa protegge il blocco: due piastrelle con la spunta e il loro nome sotto. Per TalkBack una frase sola. */
+@Composable
+private fun ProtectsFigure() {
+  val keys = stringResource(R.string.security_protects_keys)
+  val screens = stringResource(R.string.security_protects_screens)
+  Row(
+    modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "$keys, $screens" },
+    horizontalArrangement = Arrangement.SpaceEvenly,
+  ) {
+    listOf(Icons.Rounded.Key to keys, Icons.Rounded.VisibilityOff to screens).forEach { (icon, label) ->
+      Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(SettingsDimens.PillGap)) {
+        GalleryIconTile(icon = icon, family = GalleryIconFamily.Security, size = SettingsDimens.ChoiceTile, status = GalleryIconStatus.Done, ring = MaterialTheme.colorScheme.background)
+        Text(text = label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+      }
+    }
+  }
+}
+
+private fun AppLockTimeout.chipRes(): Int = when (this) {
+  AppLockTimeout.IMMEDIATELY -> R.string.timeout_chip_immediately
+  AppLockTimeout.AFTER_30_SECONDS -> R.string.timeout_chip_30s
+  AppLockTimeout.AFTER_1_MINUTE -> R.string.timeout_chip_1m
+  AppLockTimeout.AFTER_5_MINUTES -> R.string.timeout_chip_5m
+  AppLockTimeout.AFTER_15_MINUTES -> R.string.timeout_chip_15m
 }
 
 private fun AppLockTimeout.labelRes(): Int = when (this) {

@@ -36,14 +36,14 @@ class MapEntryTest {
 
   @Test
   fun senzaLegaturaLaFraseDiceATantoServe() {
-    assertThat(MapEntryTexts.subtitleOf(context, null)).isEqualTo("Mappa dettagliata e zone senza Internet")
+    assertThat(MapEntryTexts.subtitleOf(context, null)).isEqualTo("Da scegliere")
   }
 
   @Test
   fun ogniStatoHaLaSuaFrase() {
-    assertThat(subtitle(MapEntryState.ON)).isEqualTo("Mappa dettagliata accesa")
-    assertThat(subtitle(MapEntryState.OFF)).isEqualTo("Mappa dettagliata spenta")
-    assertThat(subtitle(MapEntryState.UNAVAILABLE)).isEqualTo("Solo la carta semplice dentro l’app")
+    assertThat(subtitle(MapEntryState.ON)).isEqualTo("Accesa")
+    assertThat(subtitle(MapEntryState.OFF)).isEqualTo("Spenta")
+    assertThat(subtitle(MapEntryState.UNAVAILABLE)).isEqualTo("Semplice")
     assertThat(MapEntryState.entries.map { subtitle(it) }).containsNoDuplicates()
   }
 
@@ -60,7 +60,7 @@ class MapEntryTest {
     var clicks = 0
     rule.setContent { MyCloudGalleryTheme { FluidListGroup { MapEntryRow(MapEntrySummary(MapEntryState.ON)) { clicks++ } } } }
     rule.onNodeWithText("Mappa").assertIsDisplayed()
-    rule.onNodeWithText("Mappa dettagliata accesa").assertIsDisplayed()
+    rule.onNodeWithText("Accesa").assertIsDisplayed()
     rule.onNodeWithText("Mappa").performClick()
     assertThat(clicks).isEqualTo(1)
   }

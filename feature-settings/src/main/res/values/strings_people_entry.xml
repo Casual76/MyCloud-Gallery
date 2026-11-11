@@ -4,13 +4,11 @@
   <string name="settings_people">Persone</string>
   <string name="settings_people_detail">Spenta</string>
   <string name="settings_people_on">Attiva</string>
-  <string name="settings_people_local">Attiva, solo su questo dispositivo</string>
-  <string name="settings_people_awaiting">Da confermare su questo dispositivo</string>
-  <string name="settings_people_excluded">Non attiva su questo dispositivo</string>
-  <string name="settings_people_erasing">Cancellazione in corso</string>
-  <string name="settings_people_update">Serve aggiornare l’app</string>
+  <string name="settings_people_local">Solo qui</string>
+  <string name="settings_people_awaiting">Da confermare</string>
+  <string name="settings_people_excluded">Non qui</string>
+  <string name="settings_people_erasing">Si cancella</string>
+  <string name="settings_people_update">Aggiorna</string>
   <!-- L350: prima che le persone siano montate (avvio a freddo) lo stato non si sa: una frase che non dice «spenta» ne' «attiva». -->
-  <string name="settings_people_not_yet">Raggruppa le foto per volto</string>
-  <string name="settings_people_pill_notice">Da confermare</string>
-  <string name="settings_people_pill_update">Aggiorna</string>
+  <string name="settings_people_not_yet">In avvio</string>
 </resources>

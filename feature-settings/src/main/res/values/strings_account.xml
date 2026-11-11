@@ -121,8 +121,8 @@
   <string name="address_verified_message">L’identità coincide con quella memorizzata. Se confermi, da ora l’app userà questo indirizzo.</string>
   <string name="address_confirm_open">Usa questo indirizzo…</string>
   <string name="address_sheet_title">Cambiare l’indirizzo del NAS?</string>
-  <string name="address_sheet_message">L’identità del NAS è stata verificata. Da ora questo telefono si collega al nuovo indirizzo. Gli altri telefoni e i nuovi inviti li aggiorna l’admin della famiglia.</string>
-  <string name="address_sheet_message_admin">L’identità del NAS è stata verificata. Da ora l’app si collega al nuovo indirizzo, e lo scrivo anche nella configurazione firmata della famiglia: i nuovi inviti useranno questo.</string>
+  <string name="address_sheet_message">Identità del NAS verificata. Da ora questo telefono usa il nuovo indirizzo; gli altri telefoni li aggiorna l’admin.</string>
+  <string name="address_sheet_message_admin">Identità del NAS verificata. Da ora l’app usa il nuovo indirizzo, e lo useranno anche i nuovi inviti.</string>
   <string name="address_sheet_old">Prima</string>
   <string name="address_sheet_new">Dopo</string>
   <string name="address_sheet_confirm">Usa il nuovo indirizzo</string>

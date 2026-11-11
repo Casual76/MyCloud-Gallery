@@ -6,25 +6,32 @@
 
   <string name="rules_title">Quando lavora l’app</string>
   <string name="rules_section_preset">Quando parte il lavoro</string>
-  <string name="rules_section_preset_detail">Backup, sincronizzazione e anteprime.</string>
+  <string name="rules_preset_info">Che cosa fa «%1$s»</string>
+  <string name="rules_condition_night">di notte</string>
+  <string name="rules_condition_plugged">in carica</string>
+  <string name="rules_condition_battery">anche a batteria</string>
+  <string name="rules_condition_wifi">con il Wi-Fi</string>
+  <string name="rules_condition_mobile">anche con i dati mobili</string>
+  <string name="rules_condition_heavy_plugged">i lavori pesanti in carica</string>
+  <string name="rules_condition_heavy_home">i lavori pesanti sul Wi-Fi di casa</string>
 
   <string name="rules_section_mobile">Dati mobili</string>
-  <string name="rules_section_mobile_detail">Al mese, in tutto.</string>
   <string name="rules_cap_preset">Come il preset</string>
-  <string name="rules_cap_preset_detail">%1$s al mese</string>
-  <string name="rules_cap_limit_detail">Al mese, backup e miniature insieme</string>
   <string name="rules_cap_none">Nessun tetto</string>
-  <string name="rules_cap_none_detail">Nessun limite mensile ai dati mobili</string>
+  <string name="rules_cap_preset_chip">Come il preset · %1$s</string>
+  <string name="rules_cap_info">Quando finisce il tetto</string>
   <string name="rules_cap_footnote">Il tetto vale anche con l’app aperta. Raggiunto il tetto, i dati mobili si fermano fino al mese dopo; il Wi-Fi non ha limiti.</string>
 
   <string name="rules_section_roaming">Roaming</string>
   <string name="rules_roaming">Consenti il roaming</string>
   <string name="rules_roaming_detail">All’estero i dati costano. Spento, in roaming l’app non lavora in background.</string>
+  <string name="rules_roaming_info">All’estero</string>
 
   <!-- FAB-4: l'interruttore `pauseOnPowerSaver`, che la pagina non mostrava. -->
   <string name="rules_section_power_saver">Risparmio energetico</string>
   <string name="rules_power_saver">Metti in pausa con il risparmio energetico</string>
   <string name="rules_power_saver_detail">Il lavoro in background aspetta, anche in carica.</string>
+  <string name="rules_power_saver_info">Che cosa aspetta</string>
 
   <string name="rules_footnote">I video si caricano solo dal Wi-Fi di casa, tranne con «Massimo».</string>
 </resources>

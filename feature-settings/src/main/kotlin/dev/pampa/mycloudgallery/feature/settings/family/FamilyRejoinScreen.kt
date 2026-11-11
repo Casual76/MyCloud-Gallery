@@ -39,7 +39,7 @@ import dev.pampa.mycloudgallery.feature.settings.ui.ConfirmSheet
 import dev.pampa.mycloudgallery.feature.settings.ui.Feedback
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.toFeedback
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -149,7 +149,8 @@ internal fun FamilyRejoinScreen(
           title = stringResource(R.string.rejoin_forget),
           subtitle = stringResource(R.string.rejoin_forget_detail),
           tone = FluidTone.Warning,
-          leading = { RowGlyph(Icons.Rounded.Key) },
+          leading = { RowTile(Icons.Rounded.Key) },
+          leadingTile = false,
           disclosure = false,
         )
         FluidListDivider()
@@ -157,7 +158,8 @@ internal fun FamilyRejoinScreen(
           title = stringResource(R.string.rejoin_scan),
           subtitle = stringResource(R.string.rejoin_scan_detail),
           tone = FluidTone.Primary,
-          leading = { RowGlyph(Icons.Rounded.QrCodeScanner) },
+          leading = { RowTile(Icons.Rounded.QrCodeScanner) },
+          leadingTile = false,
           disclosure = false,
         )
         FluidListDivider()
@@ -165,7 +167,8 @@ internal fun FamilyRejoinScreen(
           title = stringResource(R.string.rejoin_keep),
           subtitle = stringResource(R.string.rejoin_keep_detail),
           tone = FluidTone.Success,
-          leading = { RowGlyph(Icons.Rounded.PhotoLibrary) },
+          leading = { RowTile(Icons.Rounded.PhotoLibrary) },
+          leadingTile = false,
           disclosure = false,
         )
       }

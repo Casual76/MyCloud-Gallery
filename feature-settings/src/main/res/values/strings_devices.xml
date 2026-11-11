@@ -79,7 +79,7 @@
   <string name="rename_row">Rinomina questo dispositivo</string>
   <string name="rename_row_detail">Cambia il nome che vedono i familiari. La cartella dei backup sul NAS non cambia</string>
   <string name="rename_title">Rinomina questo dispositivo</string>
-  <string name="rename_message">Il nome nuovo lo firmi tu come admin, nel registro della famiglia. La cartella con le copie di questo dispositivo sul NAS resta quella di prima: non si sposta e non si duplica.</string>
+  <string name="rename_message">Il nome lo firmi tu, da admin. La cartella delle sue copie sul NAS resta quella di prima.</string>
   <string name="rename_field">Nome del dispositivo</string>
   <string name="rename_help">Come lo vedono i familiari, al massimo 64 caratteri</string>
   <string name="rename_confirm">Rinomina</string>
@@ -94,10 +94,10 @@
 
   <!-- Dismettere e revocare -->
   <string name="retire_title">Dismettere «%1$s»?</string>
-  <string name="retire_message">Il dispositivo esce dalla famiglia in buono stato: i dati che ha già scritto restano validi, ma non ne scriverà di nuovi.</string>
+  <string name="retire_message">Esce dalla famiglia in buono stato: i dati già scritti restano validi, di nuovi non ne scrive.</string>
   <string name="retire_confirm">Dismetti</string>
   <string name="revoke_title">Revocare «%1$s»?</string>
-  <string name="revoke_message">Da questo momento nessun dato di questo dispositivo viene più accettato, qualunque data dichiari. Non si torna indietro: un dispositivo ritrovato si riconfigura e si riapprova.</string>
+  <string name="revoke_message">Da ora nessun suo dato viene accettato. Non si torna indietro: se lo ritrovi, va riconfigurato e riapprovato.</string>
   <string name="revoke_confirm">Revoca</string>
 
   <!-- Segnala come perso: i due fogli -->

@@ -15,7 +15,9 @@ import dagger.hilt.components.SingletonComponent
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
+import dev.pampa.mycloudgallery.feature.settings.ui.toneMark
 import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -69,9 +71,12 @@ class MapEntryViewModel @Inject constructor(
 internal fun MapEntryRow(summary: MapEntrySummary?, onClick: () -> Unit) {
   FluidListRow(
     title = stringResource(R.string.settings_map),
-    subtitle = MapEntryTexts.subtitleOf(LocalContext.current, summary),
+    // I3 (fase I): lo stato e' un valore corto a destra («Accesa», «Spenta»).
+    subtitle = "",
+    badge = { RowValue(MapEntryTexts.subtitleOf(LocalContext.current, summary)) },
     tone = mapEntryTone(summary),
-    leading = { RowGlyph(Icons.Rounded.Map) },
+    leading = { RowTile(Icons.Rounded.Map, status = toneMark(mapEntryTone(summary))) },
+    leadingTile = false,
     onClick = onClick,
   )
 }

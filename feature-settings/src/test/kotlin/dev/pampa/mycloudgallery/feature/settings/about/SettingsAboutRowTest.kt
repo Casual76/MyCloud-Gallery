@@ -66,7 +66,7 @@ class SettingsAboutRowTest {
   }
 
   @Test
-  fun laRigaStaNellaSezioneAssistenzaDopoLaDiagnostica() {
+  fun laRigaStaNellaSezioneAvanzateDopoLaDiagnostica() {
     var diagnostics = 0
     var opened = 0
     show(SettingsLinks(openAbout = { opened++ }), openDiagnostics = { diagnostics++ })

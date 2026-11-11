@@ -26,7 +26,8 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -121,10 +122,11 @@ fun PreviewQualityScreen(
           val estimate = state.estimates[level]
           FluidListRow(
             title = stringResource(titleOf(level)),
-            subtitle = stringResource(detailOf(level)),
-            meta = estimate?.let { stringResource(R.string.quality_estimate, size(it.bytes)) },
+            // I3 (fase I): sotto il livello la misura sola; che cosa fa sta dietro la «i» del livello scelto.
+            subtitle = estimate?.let { stringResource(R.string.quality_estimate, size(it.bytes)) }.orEmpty(),
             tone = if (level == state.level) FluidTone.Primary else FluidTone.Neutral,
-            leading = { RowGlyph(iconOf(level)) },
+            leading = { RowTile(iconOf(level)) },
+            leadingTile = false,
             badge = { FluidSwitch(checked = level == state.level, onCheckedChange = null) },
             selected = level == state.level,
             onClick = { if (level != state.level) onChoose(level) },
@@ -132,6 +134,7 @@ fun PreviewQualityScreen(
         }
       }
     }
+    item { SettingsInfo(label = stringResource(R.string.quality_level_info, stringResource(titleOf(state.level))), text = stringResource(detailOf(state.level))) }
     item {
       FluidSectionFootnote(
         text = if (state.converging) {
@@ -146,14 +149,16 @@ fun PreviewQualityScreen(
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.quality_covers),
-          subtitle = stringResource(R.string.quality_covers_detail),
+          subtitle = "",
           tone = FluidTone.Neutral,
-          leading = { RowGlyph(Icons.Rounded.Album) },
+          leading = { RowTile(Icons.Rounded.Album) },
+          leadingTile = false,
           badge = { FluidSwitch(checked = state.showAlbumCovers, onCheckedChange = null) },
           onClick = { onShowCovers(!state.showAlbumCovers) },
         )
       }
     }
+    item { SettingsInfo(label = stringResource(R.string.quality_covers_info), text = stringResource(R.string.quality_covers_detail)) }
     item {
       val counts = state.estimates[state.level]?.items ?: 0
       FluidSectionFootnote(text = pluralStringResource(R.plurals.quality_items, counts, counts))

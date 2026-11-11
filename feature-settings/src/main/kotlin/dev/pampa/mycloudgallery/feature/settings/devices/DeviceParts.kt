@@ -17,7 +17,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.DeviceRoleView
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import dev.pampa.mycloudgallery.feature.settings.ui.agoText
 
@@ -65,7 +65,8 @@ internal fun DeviceRow(device: DeviceUi, onClick: () -> Unit, modifier: Modifier
     meta = seen,
     modifier = modifier,
     tone = if (device.isApproved) FluidTone.Primary else device.status.tone(),
-    leading = { RowGlyph(device.icon()) },
+    leading = { RowTile(device.icon()) },
+    leadingTile = false,
     labels = {
       if (device.isThisDevice) StatusPill(stringResource(R.string.pill_this_device), FluidTone.Info)
       if (device.admin && device.isApproved) StatusPill(stringResource(R.string.pill_admin), FluidTone.Primary)
@@ -85,7 +86,8 @@ internal fun RequestRow(request: RequestUi, onClick: () -> Unit, modifier: Modif
     meta = stringResource(R.string.request_seen, agoText(request.ageMs)),
     modifier = modifier,
     tone = if (request.windowOpen) FluidTone.Warning else FluidTone.Neutral,
-    leading = { RowGlyph(if (request.windowOpen) Icons.Rounded.HourglassTop else Icons.Rounded.Verified) },
+    leading = { RowTile(if (request.windowOpen) Icons.Rounded.HourglassTop else Icons.Rounded.Verified) },
+    leadingTile = false,
     labels = {
       StatusPill(
         stringResource(if (request.windowOpen) R.string.pill_to_approve else R.string.pill_expired),

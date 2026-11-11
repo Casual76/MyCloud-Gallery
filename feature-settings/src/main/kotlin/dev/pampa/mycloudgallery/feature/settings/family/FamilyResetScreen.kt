@@ -48,7 +48,7 @@ import dev.pampa.mycloudgallery.feature.settings.ui.CodeFormat
 import dev.pampa.mycloudgallery.feature.settings.ui.ConfirmSheet
 import dev.pampa.mycloudgallery.feature.settings.ui.Feedback
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.toFeedback
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -248,7 +248,8 @@ internal fun FamilyResetScreen(
             title = stringResource(R.string.reset_next_save_kit),
             subtitle = stringResource(R.string.reset_next_save_kit_detail),
             tone = FluidTone.Warning,
-            leading = { RowGlyph(Icons.Rounded.Key) },
+            leading = { RowTile(Icons.Rounded.Key) },
+            leadingTile = false,
             disclosure = false,
           )
           FluidListDivider()
@@ -256,7 +257,8 @@ internal fun FamilyResetScreen(
             title = stringResource(R.string.reset_next_reconfigure),
             subtitle = stringResource(R.string.reset_next_reconfigure_detail),
             tone = FluidTone.Primary,
-            leading = { RowGlyph(Icons.Rounded.QrCode2) },
+            leading = { RowTile(Icons.Rounded.QrCode2) },
+            leadingTile = false,
             onClick = onInvite,
           )
         }
@@ -283,7 +285,8 @@ internal fun FamilyResetScreen(
           title = stringResource(R.string.reset_happens_key),
           subtitle = stringResource(R.string.reset_happens_key_detail),
           tone = FluidTone.Danger,
-          leading = { RowGlyph(Icons.Rounded.Key) },
+          leading = { RowTile(Icons.Rounded.Key) },
+          leadingTile = false,
           disclosure = false,
         )
         FluidListDivider()
@@ -291,7 +294,8 @@ internal fun FamilyResetScreen(
           title = stringResource(R.string.reset_happens_devices),
           subtitle = stringResource(R.string.reset_happens_devices_detail),
           tone = FluidTone.Danger,
-          leading = { RowGlyph(Icons.Rounded.Devices) },
+          leading = { RowTile(Icons.Rounded.Devices) },
+          leadingTile = false,
           disclosure = false,
         )
         FluidListDivider()
@@ -299,7 +303,8 @@ internal fun FamilyResetScreen(
           title = stringResource(R.string.reset_happens_data),
           subtitle = stringResource(R.string.reset_happens_data_detail),
           tone = FluidTone.Success,
-          leading = { RowGlyph(Icons.Rounded.Storage) },
+          leading = { RowTile(Icons.Rounded.Storage) },
+          leadingTile = false,
           disclosure = false,
         )
       }

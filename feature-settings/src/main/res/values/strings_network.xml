@@ -33,6 +33,7 @@
   <!-- Impronta di casa -->
   <string name="network_section_home">Rete di casa</string>
   <string name="network_section_home_detail">Casa si riconosce dal router, non dal nome del Wi-Fi.</string>
+  <string name="network_home_info">Come si riconosce casa</string>
   <string name="network_fingerprint">Casa</string>
   <string name="network_fingerprint_none">Non ancora salvata</string>
   <string name="network_fingerprint_detail">%1$s · dal %2$s</string>
@@ -40,15 +41,12 @@
     <item quantity="one">%1$d rete riconosciuta</item>
     <item quantity="other">%1$d reti riconosciute</item>
   </plurals>
-  <string name="network_pill_known">Salvata</string>
-  <string name="network_pill_missing">Manca</string>
   <string name="network_current">Rete attuale</string>
   <string name="match_match">È la rete di casa</string>
   <string name="match_weak">Somiglia a casa ma non basta</string>
   <string name="match_none">Non è la rete di casa</string>
   <string name="match_unknown">Non so dirlo</string>
   <string name="network_ipv6">Casa raggiungibile da fuori</string>
-  <string name="network_ipv6_detail">Con la rete di adesso</string>
   <string name="network_recapture">Salva di nuovo la rete di casa</string>
   <string name="network_recapture_detail">Dopo un reset del router, dal Wi-Fi di casa</string>
   <string name="network_recapture_detail_admin">Dopo un reset del router, dal Wi-Fi di casa. Vale per i nuovi inviti</string>
@@ -74,12 +72,12 @@
   <string name="capture_saved_failed">Da ora questa è la rete di casa su questo telefono, ma non sono riuscito a scriverla nella configurazione firmata della famiglia: i nuovi inviti hanno ancora quella di prima.</string>
   <string name="capture_retry">Riprova a scriverla</string>
   <string name="capture_sheet_title">È la rete di casa?</string>
-  <string name="capture_sheet_message">Il NAS qui ha la stessa identità di sempre. Se confermi, questa rete diventa la «casa» dell’app: da qui il NAS si raggiunge senza VPN.</string>
+  <string name="capture_sheet_message">Il NAS è quello di sempre. Se confermi, da questa rete lo raggiungo senza VPN.</string>
   <string name="capture_sheet_confirm">Sì, è casa mia</string>
 
   <!-- WireGuard -->
   <string name="network_section_vpn">VPN di casa</string>
-  <string name="network_section_vpn_detail">Fuori casa il NAS si raggiunge solo con la VPN.</string>
+  <string name="network_vpn_info">Che cosa fa l’app con la VPN</string>
   <string name="network_wg">WireGuard</string>
   <string name="wg_pill_ready">Controllo attivo</string>
   <string name="wg_pill_missing">Non installato</string>

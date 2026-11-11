@@ -29,7 +29,9 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
+import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -86,7 +88,7 @@ fun WidgetSettingsScreen(
         }
       }
     }
-    item { FluidSectionFootnote(text = stringResource(R.string.widget_content_footnote)) }
+    item { SettingsInfo(label = stringResource(R.string.widget_content_info), text = stringResource(R.string.widget_content_footnote)) }
 
     item { GallerySectionHeader(title = stringResource(R.string.widget_section_period)) }
     item {
@@ -105,12 +107,15 @@ fun WidgetSettingsScreen(
     }
     item { FluidSectionFootnote(text = stringResource(R.string.widget_period_footnote)) }
 
-    item { GallerySectionHeader(title = stringResource(R.string.widget_section_privacy)) }
-    item { FluidSectionFootnote(text = stringResource(R.string.widget_privacy_hidden)) }
-    item { FluidSectionFootnote(text = stringResource(R.string.widget_privacy_lock)) }
-    item { FluidSectionFootnote(text = stringResource(R.string.widget_privacy_home)) }
-    item { GallerySectionHeader(title = stringResource(R.string.widget_section_add)) }
-    item { FluidSectionFootnote(text = stringResource(R.string.widget_add_how)) }
+    // I3 (fase I): cio' che il widget non fa e come si aggiunge, dietro la «i» (prima quattro paragrafi in pagina).
+    item {
+      SettingsInfo(
+        label = stringResource(R.string.widget_section_privacy),
+        text = stringResource(R.string.widget_privacy_hidden) + " " + stringResource(R.string.widget_privacy_lock) + " " +
+          stringResource(R.string.widget_privacy_home),
+      )
+    }
+    item { SettingsInfo(label = stringResource(R.string.widget_section_add), text = stringResource(R.string.widget_add_how)) }
   }
 }
 
@@ -119,9 +124,11 @@ fun WidgetSettingsScreen(
 private fun ChoiceRow(title: String, detail: String?, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, onSelect: () -> Unit) {
   FluidListRow(
     title = title,
-    subtitle = detail.orEmpty(),
+    // I3 (fase I): la spiegazione di una scelta non e' uno stato: in pagina il titolo e l'interruttore, TalkBack la legge nel nome.
+    subtitle = "",
     tone = if (selected) FluidTone.Primary else FluidTone.Neutral,
-    leading = { RowGlyph(icon) },
+    leading = { RowTile(icon) },
+    leadingTile = false,
     disclosure = false,
     titleMaxLines = 3,
     badge = { FluidSwitch(checked = selected, onCheckedChange = null) },
@@ -174,11 +181,20 @@ class WidgetEntryViewModel @Inject constructor(settings: WidgetSettings) : ViewM
 /** La riga "Widget" nella pagina principale: il titolo e le due scelte in una frase ("Il ricordo del giorno, ogni 3 ore"). */
 @Composable
 internal fun WidgetEntryRow(summary: WidgetEntrySummary, onClick: () -> Unit) {
+  val title = stringResource(R.string.widget_title)
+  val content = stringResource(entryContent(summary.content))
+  val period = stringResource(entryPeriod(summary.period))
   FluidListRow(
-    title = stringResource(R.string.widget_title),
-    subtitle = stringResource(R.string.widget_entry_summary, stringResource(entryContent(summary.content)), stringResource(entryPeriod(summary.period))),
+    title = title,
+    // I3 (fase I): a destra ogni quanto cambia; che cosa mostra lo dice la pagina (e TalkBack nel nome della riga).
+    subtitle = "",
+    badge = { RowValue(stringResource(entryPeriod(summary.period))) },
+    modifier = Modifier.semantics {
+      contentDescription = title + ", " + content + ", " + period
+    },
     tone = FluidTone.Info,
-    leading = { RowGlyph(Icons.Rounded.Widgets) },
+    leading = { RowTile(Icons.Rounded.Widgets) },
+    leadingTile = false,
     onClick = onClick,
   )
 }

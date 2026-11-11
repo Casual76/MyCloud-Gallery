@@ -44,11 +44,11 @@ class PeopleEntryTest {
   fun ogniStatoHaLaSuaFrase() {
     assertThat(subtitle(PeopleEntryState.OFF)).isEqualTo("Spenta")
     assertThat(subtitle(PeopleEntryState.ON)).isEqualTo("Attiva")
-    assertThat(subtitle(PeopleEntryState.LOCAL_ONLY)).isEqualTo("Attiva, solo su questo dispositivo")
-    assertThat(subtitle(PeopleEntryState.AWAITING_NOTICE)).isEqualTo("Da confermare su questo dispositivo")
-    assertThat(subtitle(PeopleEntryState.EXCLUDED_HERE)).isEqualTo("Non attiva su questo dispositivo")
-    assertThat(subtitle(PeopleEntryState.ERASING)).isEqualTo("Cancellazione in corso")
-    assertThat(subtitle(PeopleEntryState.NEEDS_UPDATE)).isEqualTo("Serve aggiornare l’app")
+    assertThat(subtitle(PeopleEntryState.LOCAL_ONLY)).isEqualTo("Solo qui")
+    assertThat(subtitle(PeopleEntryState.AWAITING_NOTICE)).isEqualTo("Da confermare")
+    assertThat(subtitle(PeopleEntryState.EXCLUDED_HERE)).isEqualTo("Non qui")
+    assertThat(subtitle(PeopleEntryState.ERASING)).isEqualTo("Si cancella")
+    assertThat(subtitle(PeopleEntryState.NEEDS_UPDATE)).isEqualTo("Aggiorna")
     // Ogni stato dell'enum ha una frase diversa dalle altre, tranne "spenta" e "non legata" che dicono la stessa cosa.
     val phrases = PeopleEntryState.entries.map { subtitle(it) }
     assertThat(phrases).containsNoDuplicates()
@@ -110,7 +110,7 @@ class PeopleEntryTest {
   @Test
   fun l350_primaDelMontaggioLaVoceNonDiceNeSpentaNeAttiva() {
     val phrase = subtitle(PeopleEntryState.NOT_YET)
-    assertThat(phrase).isEqualTo("Raggruppa le foto per volto")
+    assertThat(phrase).isEqualTo("In avvio")
     assertThat(phrase).isNotEqualTo(subtitle(PeopleEntryState.OFF))
     for (state in listOf("spenta", "attiva", "si attiva", "confermi", "cancellazione", "aggiornare")) assertThat(phrase.lowercase()).doesNotContain(state)
     assertThat(peopleEntryTone(PeopleEntrySummary(PeopleEntryState.NOT_YET))).isEqualTo(FluidTone.Neutral)

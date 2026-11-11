@@ -17,6 +17,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -158,7 +159,10 @@ class WidgetSettingsScreenTest {
     // Sei scelte in tutto (tre contenuti e tre frequenze): nessun interruttore e nessuna scelta per il blocco.
     assertThat(allChoices).hasSize(6)
     assertThat(rule.onAllNodes(SemanticsMatcher("interruttore") { it.config.getOrNull(SemanticsProperties.Role) == Role.Switch }).fetchSemanticsNodes()).isEmpty()
-    scrollTo(string(R.string.widget_privacy_home))
+    // I3 (fase I): le regole stanno dietro la «i» della sezione, a un tocco.
+    scrollTo(string(R.string.widget_section_privacy))
+    rule.onNodeWithText(string(R.string.widget_section_privacy)).performClick()
+    rule.waitForIdle()
     assertThat(has(string(R.string.widget_privacy_lock))).isTrue()
     assertThat(has(string(R.string.widget_privacy_hidden))).isTrue()
     assertThat(string(R.string.widget_privacy_lock)).contains("solo foto che sono anche sul telefono")
@@ -197,14 +201,17 @@ class WidgetSettingsScreenTest {
     var opened = 0
     val summary = mutableStateOf(WidgetEntrySummary(WidgetContent.DEFAULT, WidgetRefresh.DEFAULT))
     show { SettingsScreen(state = settingsState, onBack = {}, openDiagnostics = {}, resumeStep = {}, links = SettingsLinks(openWidget = { opened++ }), widgetSummary = summary.value) }
-    val first = "Il ricordo del giorno o foto a caso, circa ogni 3 ore"
+    // I3 (fase I): a destra ogni quanto cambia; che cosa mostra lo dice TalkBack nel nome della riga.
+    val first = "Ogni 3 h"
     scrollTo(first)
     assertThat(has(first)).isTrue()
+    rule.onNodeWithContentDescription("Widget, Il ricordo del giorno o foto a caso, Ogni 3 h").assertExists()
     rule.onNodeWithText(first).performClick()
     assertThat(opened).isEqualTo(1)
     rule.runOnIdle { summary.value = WidgetEntrySummary(WidgetContent.MEMORIES_ONLY, WidgetRefresh.DAILY) }
     rule.waitForIdle()
-    assertThat(has("Solo ricordi, una volta al giorno")).isTrue()
+    assertThat(has("1 al giorno")).isTrue()
+    rule.onNodeWithContentDescription("Widget, Solo ricordi, 1 al giorno").assertExists()
     assertThat(has(first)).isFalse()
   }
 

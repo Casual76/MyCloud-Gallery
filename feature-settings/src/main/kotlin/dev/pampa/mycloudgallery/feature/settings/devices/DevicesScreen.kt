@@ -27,7 +27,7 @@ import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import androidx.compose.runtime.getValue
 
 @Composable
@@ -127,7 +127,8 @@ internal fun DevicesScreen(
             title = stringResource(R.string.devices_reissue),
             subtitle = stringResource(R.string.devices_reissue_detail),
             tone = FluidTone.Danger,
-            leading = { RowGlyph(Icons.Rounded.NotificationImportant) },
+            leading = { RowTile(Icons.Rounded.NotificationImportant) },
+            leadingTile = false,
             onClick = onReissue,
           )
         }
@@ -193,7 +194,8 @@ internal fun DevicesScreen(
             title = stringResource(R.string.devices_convert_reports),
             subtitle = stringResource(R.string.devices_convert_reports_detail),
             tone = FluidTone.Warning,
-            leading = { RowGlyph(Icons.Rounded.NotificationImportant) },
+            leading = { RowTile(Icons.Rounded.NotificationImportant) },
+            leadingTile = false,
             onClick = onConvertReports,
           )
         }

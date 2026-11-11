@@ -15,7 +15,9 @@ import dagger.hilt.components.SingletonComponent
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
+import dev.pampa.mycloudgallery.feature.settings.ui.toneMark
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import java.util.Optional
 import javax.inject.Inject
@@ -84,21 +86,17 @@ class PeopleEntryViewModel @Inject constructor(
   val summary: StateFlow<PeopleEntrySummary?> = entry.orElse(null)?.summary ?: MutableStateFlow<PeopleEntrySummary?>(null)
 }
 
-/** La riga "Persone": il titolo, lo stato in una frase e, se serve attenzione, una pillola. [summary] null = non e' ancora legata: la frase dice a cosa serve. */
+/** La riga "Persone": il titolo, lo stato corto a destra e, se serve attenzione, il segno sulla piastrella (I3). [summary] null = non e' ancora legata. */
 @Composable
 internal fun PeopleEntryRow(summary: PeopleEntrySummary?, onClick: () -> Unit) {
-  val pill = when (summary?.state) {
-    PeopleEntryState.AWAITING_NOTICE -> R.string.settings_people_pill_notice
-    PeopleEntryState.NEEDS_UPDATE -> R.string.settings_people_pill_update
-    else -> null
-  }
   FluidListRow(
     title = stringResource(R.string.settings_people),
-    subtitle = PeopleEntryTexts.subtitleOf(LocalContext.current, summary),
+    // I3 (fase I): lo stato e' un valore corto a destra; il segno sulla piastrella dice se serve uno sguardo.
+    subtitle = "",
+    badge = { RowValue(PeopleEntryTexts.subtitleOf(LocalContext.current, summary)) },
     tone = peopleEntryTone(summary),
-    leading = { RowGlyph(Icons.Rounded.Face) },
-    // Le pillole stanno in `labels` (vanno sotto il titolo se ruberebbero la riga), non in `badge`: a testo grande la frase restava in una colonna di sillabe.
-    labels = pill?.let { label -> { StatusPill(stringResource(label), FluidTone.Warning) } },
+    leading = { RowTile(Icons.Rounded.Face, status = toneMark(peopleEntryTone(summary))) },
+    leadingTile = false,
     onClick = onClick,
   )
 }

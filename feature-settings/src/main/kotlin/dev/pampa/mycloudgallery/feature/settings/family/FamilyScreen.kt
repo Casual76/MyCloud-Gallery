@@ -35,7 +35,7 @@ import dev.pampa.mycloudgallery.core.family.contract.TrustStatus
 import dev.pampa.mycloudgallery.core.trust.registry.DeviceStatus
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -179,7 +179,8 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
             title = stringResource(R.string.family_invite),
             subtitle = stringResource(R.string.family_invite_detail),
             tone = FluidTone.Primary,
-            leading = { RowGlyph(Icons.Rounded.PersonAdd) },
+            leading = { RowTile(Icons.Rounded.PersonAdd) },
+            leadingTile = false,
             onClick = links.openInvite,
           )
         }
@@ -193,7 +194,8 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
           title = stringResource(R.string.family_kit),
           subtitle = stringResource(R.string.family_kit_detail),
           tone = FluidTone.Warning,
-          leading = { RowGlyph(Icons.Rounded.Key) },
+          leading = { RowTile(Icons.Rounded.Key) },
+          leadingTile = false,
           onClick = links.openRecoveryKit,
         )
         FluidListDivider()
@@ -201,7 +203,8 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
           title = stringResource(R.string.family_state),
           subtitle = stringResource(R.string.family_state_detail),
           tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.QrCode2) },
+          leading = { RowTile(Icons.Rounded.QrCode2) },
+          leadingTile = false,
           onClick = links.openFamilyState,
         )
       }
@@ -215,7 +218,8 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
             title = stringResource(R.string.family_second_admin),
             subtitle = stringResource(R.string.family_second_admin_detail),
             tone = FluidTone.Primary,
-            leading = { RowGlyph(Icons.Rounded.AdminPanelSettings) },
+            leading = { RowTile(Icons.Rounded.AdminPanelSettings) },
+            leadingTile = false,
             onClick = links.openSecondAdmin,
           )
           FluidListDivider()
@@ -223,7 +227,8 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
             title = stringResource(R.string.family_replace_admin),
             subtitle = stringResource(R.string.family_replace_admin_detail),
             tone = FluidTone.Warning,
-            leading = { RowGlyph(Icons.Rounded.SwitchAccount) },
+            leading = { RowTile(Icons.Rounded.SwitchAccount) },
+            leadingTile = false,
             onClick = links.openReplaceAdmin,
           )
           FluidListDivider()
@@ -232,7 +237,8 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
             title = stringResource(R.string.family_start_over),
             subtitle = stringResource(R.string.family_start_over_detail),
             tone = FluidTone.Danger,
-            leading = { RowGlyph(Icons.Rounded.RestartAlt) },
+            leading = { RowTile(Icons.Rounded.RestartAlt) },
+            leadingTile = false,
             onClick = links.openStartOverGuide,
           )
         }
@@ -248,7 +254,8 @@ internal fun FamilyScreen(state: FamilyUiState, links: FamilyLinks) {
             title = stringResource(R.string.family_reset),
             subtitle = stringResource(R.string.family_reset_detail),
             tone = FluidTone.Danger,
-            leading = { RowGlyph(Icons.Rounded.RestartAlt) },
+            leading = { RowTile(Icons.Rounded.RestartAlt) },
+            leadingTile = false,
             onClick = links.openReset,
           )
         }
@@ -269,7 +276,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.rejoinSection(links: 
         title = stringResource(R.string.family_rejoin),
         subtitle = stringResource(R.string.family_rejoin_detail),
         tone = FluidTone.Warning,
-        leading = { RowGlyph(Icons.Rounded.QrCodeScanner) },
+        leading = { RowTile(Icons.Rounded.QrCodeScanner) },
+        leadingTile = false,
         onClick = links.openRejoin,
       )
     }

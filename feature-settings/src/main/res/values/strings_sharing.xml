@@ -13,5 +13,5 @@
   <string name="sharing_footnote_formats">Senza posizione: JPEG, PNG, WebP, MP4, MOV e HEIC (diventa JPEG). Gli altri formati, se vuoi, partono con la posizione.</string>
 
   <string name="sharing_entry_on">Senza posizione</string>
-  <string name="sharing_entry_off">Con la posizione</string>
+  <string name="sharing_entry_off">Con posizione</string>
 </resources>

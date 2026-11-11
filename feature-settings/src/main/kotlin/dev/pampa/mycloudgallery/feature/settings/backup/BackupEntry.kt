@@ -13,12 +13,12 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.components.SingletonComponent
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.StopBy
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
-import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -56,40 +56,32 @@ class BackupEntryViewModel @Inject constructor(
 }
 
 /**
- * La riga "Backup": il titolo, lo stato in una frase e, se serve attenzione, una pillola. [status] null = il backup non e' ancora
- * legato: la frase dice a cosa serve.
+ * La riga "Backup" (I3, fase I): la piastrella del backup con il segno dello stato (la spunta, le frecce che girano, la pausa, il punto esclamativo) e
+ * lo stato **corto a destra** («Al sicuro», «In pausa», «312 in coda»), come nella pagina Backup. [status] null = il backup non e' ancora legato.
  */
 @Composable
 internal fun BackupEntryRow(status: BackupStatus?, onClick: () -> Unit) {
-  val tone = backupEntryTone(status)
   FluidListRow(
     title = stringResource(R.string.settings_backup),
-    subtitle = backupEntrySubtitle(status),
-    tone = tone,
-    leading = { RowGlyph(Icons.Rounded.CloudUpload) },
-    // La pillola sta in `labels` (va sotto il titolo se ruberebbe la riga), non in `badge`: a 360 dp con il testo grande il titolo si spezzava in "Backu/p".
-    labels = backupEntryPill(status)?.let { label -> { StatusPill(label, tone) } },
+    subtitle = "",
+    leading = { RowTile(Icons.Rounded.CloudUpload, status = backupEntryMark(status)) },
+    leadingTile = false,
+    badge = { RowValue(backupEntrySubtitle(status)) },
     onClick = onClick,
   )
 }
 
-/** Quanto la riga chiede attenzione: un problema o un backup da preparare in giallo, uno in corso in azzurro, tutto al sicuro in verde. */
-internal fun backupEntryTone(status: BackupStatus?): FluidTone = when (status) {
-  null -> FluidTone.Primary
-  is BackupStatus.UpToDate -> FluidTone.Success
-  is BackupStatus.Running -> FluidTone.Info
-  is BackupStatus.Problem, is BackupStatus.NotConfigured, is BackupStatus.FirstBackupReady -> FluidTone.Warning
-  BackupStatus.TestOnly, is BackupStatus.Waiting, is BackupStatus.Stopped -> FluidTone.Neutral
+/** Il segno sulla piastrella: lo stesso della testata della pagina Backup. */
+internal fun backupEntryMark(status: BackupStatus?): GalleryIconStatus? = when (status) {
+  null -> null
+  is BackupStatus.UpToDate -> GalleryIconStatus.Done
+  is BackupStatus.Running -> GalleryIconStatus.Running
+  is BackupStatus.Problem, is BackupStatus.NotConfigured, is BackupStatus.FirstBackupReady -> GalleryIconStatus.Attention
+  BackupStatus.TestOnly, is BackupStatus.Waiting -> GalleryIconStatus.Paused
+  is BackupStatus.Stopped -> if (status.by == StopBy.RESET) GalleryIconStatus.Stopped else GalleryIconStatus.Paused
 }
 
-@Composable
-private fun backupEntryPill(status: BackupStatus?): String? = when (status) {
-  is BackupStatus.Problem -> stringResource(R.string.settings_backup_pill_check)
-  is BackupStatus.FirstBackupReady -> stringResource(R.string.settings_backup_pill_first)
-  else -> null
-}
-
-/** La frase di stato della riga, dallo stato del contratto: solo numeri, mai nomi di file o cartelle. */
+/** Lo stato corto della riga, dallo stato del contratto: solo numeri, mai nomi di file o cartelle. */
 @Composable
 internal fun backupEntrySubtitle(status: BackupStatus?): String = BackupEntryTexts.subtitleOf(LocalContext.current, status)
 
@@ -104,7 +96,7 @@ internal object BackupEntryTexts {
       BackupStatus.TestOnly -> res.getString(R.string.settings_backup_test_only)
       is BackupStatus.FirstBackupReady ->
         res.getString(if (status.summary.comparing) R.string.settings_backup_first_comparing else R.string.settings_backup_first_ready)
-      is BackupStatus.UpToDate -> res.getQuantityString(R.plurals.settings_backup_up_to_date, status.safeCount, ItalianCount.format(status.safeCount))
+      is BackupStatus.UpToDate -> res.getString(R.string.settings_backup_up_to_date)
       is BackupStatus.Waiting -> res.getString(R.string.settings_backup_waiting, ItalianCount.format(status.items))
       is BackupStatus.Running -> res.getString(R.string.settings_backup_running, ItalianCount.format(status.done), ItalianCount.format(status.total))
       is BackupStatus.Stopped -> res.getString(if (status.by == StopBy.USER) R.string.settings_backup_paused else R.string.settings_backup_stopped)

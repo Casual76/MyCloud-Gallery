@@ -17777,3 +17777,126 @@ Temperatura della batteria durante le prove: 29-42 C, simile fra i lati (tabella
   0 falliti): OK, 4 min 52 s. `p2-3` (`:app:generateBaselineProfile` sull'S25): OK, 40 min 9 s. `p2-4` (APK di misura finali): OK,
   3 min 33 s. Ogni batch chiesto prima, un posto del semaforo, rilasciato. `tools\check.ps1` non lanciato.
 - Telefono alla fine: solo `dev.pampa.mycloudgallery.debug`, nessuna cartella di misura, schermata Home.
+
+## H1: i gesti del viewer (chiusura che lascia vedere la Libreria, pizzico in chiusura, zoom dei video, tasti che sfumano) (11/11)
+
+Dalla prova dell'utente sulla release dell'11/11 (`fase-H-utente-11-11.md`): D5 (chiudendo col trascinamento veniva via tutta la pagina, fondo
+compreso), D7 (manca il pizzico in chiusura), D8 (i video non si ingrandiscono), D6 (i tasti del viewer compaiono di scatto). Ramo
+`fix/h1-viewer-gesti` da `261a3553`.
+
+### Scelte
+- **Una sola macchina per la chiusura** (`gesture/ViewerDismiss.kt`: `ViewerDismissState`, `ViewerDismissSpec`, `FlightPlan`). Il
+  trascinamento verso il basso, il pizzico che stringe a zoom minimo e l'Indietro predittivo scrivono lo stesso stato: il contenuto sullo
+  schermo e' `scale * locale + translation`, lo sfondo e' `1 - progress`. Il dito guida il contenuto **senza molla nel mezzo**: il punto
+  sotto il dito resta sotto il dito mentre il contenuto si rimpicciolisce (fino al 60% a fine corsa, meta' altezza), il pizzico segue il
+  punto medio delle dita. Le molle partono al rilascio: `FluidMotion.smooth` per tornare, `FluidMotion.snappy` (senza rimbalzo) per il
+  volo, con la velocita' del dito proiettata verso la cella.
+- **Si muove solo il contenuto.** La sagoma di Fluid-physics resta solo per l'apertura; nella chiusura resta ferma a tutto schermo e lo
+  sfondo (`scheme.background`/`scrim`) si disegna con l'alfa della chiusura (`drawBehind`, niente layer in piu'): sotto si vede la pagina
+  da cui si e' partiti. Il contenuto e' la pagina vera del pager (la foto con i suoi tasselli, il fotogramma del video in pausa), non piu'
+  la miniatura di `TransitionPhoto` (che resta per l'apertura).
+- **Il volo alla cella** (`FlightPlan.ToCell`): il rettangolo sullo schermo va da dove l'ha lasciato il dito alla cella, e il ritaglio
+  passa dalla foto intera al ritaglio al centro con la proporzione della cella (quello della miniatura `Crop`), con la scala sempre
+  uniforme: all'arrivo il contenuto *e'* la miniatura. Le celle della parete sono squadrate (G2): il volo si posa ad angoli vivi, e anche
+  l'apertura ora parte ad angoli vivi (prima partiva con `FluidRadius.Small`, che la cella non ha).
+- **Senza cella** (album, ricerca, mappa, ricordi, ritratti, widget, elemento sparito, cella non in vista dopo il "porta in vista"):
+  `FlightPlan.Away`, il contenuto si rimpicciolisce al 72%, scende del 12% dell'altezza e sfuma. Un video in questo caso passa alla sua
+  miniatura al via del volo (la `SurfaceView` non sfuma con il layer): niente salti di posizione, il fotogramma diventa la miniatura.
+- **Soglie** (`ViewerDismissSpec.shouldDismiss`): chiude il 30% della corsa (come prima), un lancio verso il basso da 900 dp/s (come
+  prima), un pizzico sotto l'85% della misura o che stringe piu' in fretta di 1,6 misure al secondo. Un lancio verso l'alto o un pizzico
+  che si riapre in fretta tornano sempre. Mentre il contenuto torna, un dito puo' riprenderlo (solo per chiudere).
+- **L'Indietro predittivo** guida lo stesso stato (al 100% del gesto: 86%, spostato del 4% verso il lato del gesto e del 2% in basso,
+  sfondo a meta') e al rilascio prende la stessa uscita (il volo alla cella). Annullato, torna con la molla.
+- **Arbitraggio dei gesti in un posto solo** (`gesture/ViewerGestures.kt`: `ViewerGestureArbiter`, tabella provata in
+  `ViewerGestureArbiterTest`), osservato prima dei figli: un dito di lato = pager (a foto ingrandita: zoom, poi pager dal bordo); un dito
+  in basso = chiusura (a pannello aperto: chiude il pannello); in alto = informazioni sul telefono, niente sul tablet (consumato, non e' un
+  tocco); due dita che stringono a zoom minimo = chiusura (riconosciuto a meta' della soglia di tocco, prima del pizzico di telephoto); due
+  dita che allargano o qualsiasi gesto a foto ingrandita = zoom; tocco, doppio tocco e pressione lunga non superano la soglia e restano dei
+  figli. Il gesto Indietro dal bordo e' orizzontale (mai chiusura o pannello) e quando il sistema lo prende Compose manda le dita "alzate"
+  gia' consumate: lo si tratta come annullamento (il contenuto torna, nessun tocco, nessuna chiusura).
+- **Lo zoom dei video** usa `ZoomableMedia` come le foto (pizzico, doppio tocco, trascinamento a video ingrandito), con il limite dalle
+  misure vere del video quando il lettore le conosce (un 4K arriva a 4x, come una foto da 8 MP). La barra del video sta nel chrome, fuori
+  dallo zoom: resta toccabile e non si ingrandisce; lo zoom resta mentre il video va, in pausa e scorrendo la barra; cambiando pagina si
+  azzera come per le foto. La superficie e' sempre la `SurfaceView` (HDR, D7): la trasformazione e' quella del layer di telephoto, che la
+  `SurfaceView` segue (dalla API 24 la sua posizione e scala seguono i `RenderNode` dei genitori). Il video della foto in movimento ora sta
+  dentro lo zoom con la foto (con i tasselli di telephoto attivi lo segue con `followZoom`): a foto ingrandita il movimento parte
+  ingrandito come lei.
+- **Tasti che sfumano (D6).** La causa: la dissolvenza d'entrata del chrome usava `FluidMotion.fadeIn` (`EaseOut`, meta' del percorso nel
+  primo decimo) e il primo fotogramma visibile della barra e' anche quello in cui il suo vetro si compone e si disegna la prima volta:
+  quel fotogramma lento cadeva gia' a meta' opacita' e la barra *saltava* dentro. Ora `GalleryMotion.chromeAppearSpec` e'
+  `FluidMotion.crossFade(FluidMotion.DurationExpand)` (simmetrica, 300 ms, la durata dell'apertura): parte piano e arriva con
+  l'assestamento della foto. Vale all'apertura e quando le barre ricompaiono dopo un tocco. Vetro e forma dei tasti non cambiano. I tempi
+  a passi dell'arrivo a riposo (fondale, barra in alto, barra in basso) restano quelli del Tab S9.
+
+### Aggancio per H2 (pannello informazioni alla Samsung)
+`page/ViewerContentTransform.kt`: `ContentLayer` (scala, traslazione, ritaglio, alfa) e `infoShift(...)`, oggi lo spostamento del pannello di
+sempre. `PagerLayer` (in `ViewerOverlay.kt`) compone `infoShift(...) then controller.dismiss.layer()` e lo applica con
+`Modifier.viewerContentLayer` (letto nel disegno): il contenuto che sale con il pannello si scrive in `infoShift` (o in una funzione con la
+stessa firma), senza toccare la chiusura. Il ritaglio composto e' quello della chiusura (usato solo nel volo, a pannello gia' chiuso).
+
+### Fuori dal perimetro (il minimo)
+- `core-designsystem/.../motion/GalleryMotion.kt`: una riga, `chromeAppearSpec` (D6). Lo usa solo `GalleryViewerChrome`.
+- `app/src/test/.../H1ViewerCloseScreenshotTest.kt`: solo un test (gli screenshot della chiusura sopra la Libreria vera).
+
+### Rischi per le prestazioni
+- Durante il gesto si disegna la pagina vera trasformata invece della miniatura: e' gia' composta e disegnata (nessun lavoro nuovo), il
+  `graphicsLayer` del pager c'era gia' (quello del pannello); lo sfondo e' un `drawBehind` con l'alfa. Un layer in meno (la traslazione
+  della sagoma). Il volo verso una cella ritaglia con un rettangolo (contorno del `RenderNode`, niente `Path`); il volo senza cella sfuma il
+  pager con un layer fuori schermo per ~300 ms.
+- Apertura: nessun lavoro in piu' (la stessa espansione; gli angoli di partenza a zero non costano). La dissolvenza delle barre dura 80 ms
+  in piu' (300 invece di 220), con lo stesso disegno per fotogramma.
+- Il video ingrandito: una `SurfaceView` scalata fino a 4x puo' far passare la composizione dall'overlay hardware alla GPU (normale per i
+  lettori che ingrandiscono); da guardare la fluidita' sui 4K.
+- Dal benchmark `viewerOpen` (21-23 ms di p90 sull'S25) non mi aspetto differenze; da rimisurare con la corsa dell'integrazione.
+
+### Da provare sul telefono (S25; dove detto anche Tab S9)
+1. **Trascinamento, foto** (Libreria, una foto a meta' griglia): scendendo piano si muove e si rimpicciolisce solo la foto, il punto
+   toccato resta sotto il dito; lo sfondo sfuma e si vede la Libreria; le barre sfumano via. Rilascio oltre un terzo circa: la foto vola
+   alla sua cella e ci si posa squadrata, senza lampi. *Difetto:* il fondo bianco o nero che si muove col dito, una fascia della pagina,
+   un salto al rilascio, la foto che arriva spostata dalla cella o un lampo alla fine.
+2. **Rilascio corto** e **lancio verso l'alto** dopo una discesa: torna al suo posto con la molla, le barre tornano. Un dito che riprende
+   la foto mentre torna la riprende da dov'e'.
+3. **Lancio breve e veloce verso il basso**: chiude. Da valutare se la soglia del lancio (900 dp/s, quella di prima) e' giusta in mano.
+4. **Pizzico in chiusura** a zoom minimo (foto e video): la foto si rimpicciolisce seguendo il punto medio delle dita, lo sfondo sfuma;
+   rilascio sotto l'85% circa = volo alla cella, altrimenti torna. Pizzico che allarga = zoom, senza esitazioni. A foto ingrandita il
+   pizzico che stringe rimpicciolisce soltanto (non chiude).
+5. **Video, chiusura**: il fotogramma vero (in pausa) vola alla cella e si ritaglia quadrato all'arrivo. *Difetto:* il video che resta
+   16:9 e poi scatta nel quadrato, rettangoli neri, il fotogramma che resta sullo schermo dopo la chiusura. (E' il punto in cui la
+   `SurfaceView` deve seguire il ritaglio del layer: verificarlo su S25 e Tab S9.)
+6. **Video aperto da un album** (nessuna cella): si allontana verso il basso sfumando; al via il fotogramma diventa la miniatura.
+7. **Zoom dei video**: pizzico, doppio tocco, trascinamento a video ingrandito; lo zoom resta mentre va, in pausa e scorrendo la barra
+   del tempo; la barra non si ingrandisce e si tocca; passando a un altro elemento e tornando lo zoom e' azzerato. Su un **4K** e su un
+   **HDR** (colori HDR mantenuti), e su un **video solo sul NAS**: fluidita' a video ingrandito che va, bordi neri giusti (niente fasce
+   storte), niente fotogrammi persi.
+8. **Foto in movimento**: ingrandire, poi il badge "Movimento": il movimento parte ingrandito come la foto (anche una da 50 MP, con i
+   tasselli).
+9. **Indietro predittivo dal bordo** sopra la foto: la foto si rimpicciolisce un poco verso il lato del gesto e lo sfondo sfuma a meta';
+   lasciando, vola alla cella; annullando, torna. Il gesto non deve mai nascondere le barre ne' spostare la foto come un trascinamento.
+10. **Tasti all'apertura e dopo un tocco**: entrano sfumando, senza scatto, insieme all'assestamento della foto.
+11. **Tablet**: chiusura col trascinamento e col pizzico a schermo intero e con il viewer affiancato (il volo va alla cella nel pannello
+    della Libreria); con la colonna informazioni aperta il trascinamento in basso la chiude; rotazione a viewer aperto.
+12. **Benchmark** con la corsa dell'integrazione: `viewerOpen` (oggi 21-23 ms di p90 sull'S25) e `pinch`.
+
+### Decisioni aperte per l'utente
+- La foto a fine corsa scende al 60% della misura (Foto di Apple e' simile): piu' o meno?
+- Il pizzico chiude sotto l'85% della misura: piu' sensibile o meno?
+- Senza cella (album, ricerca, mappa, ricordi) la foto scende e sfuma: va bene, o preferisce che torni al centro rimpicciolendosi?
+- Il segno "e' un video" sparisce a video ingrandito (prima del primo fotogramma): va bene?
+- I tasti sfumano in 300 ms con una curva simmetrica: se li vuole piu' rapidi, si accorcia la durata, non si torna alla curva di prima.
+
+### Verifiche
+- Test JVM nuovi: `ViewerDismissSpecTest` (11: soglie, resistenza del pizzico, ritaglio della miniatura, volo alla cella e via, velocita'
+  del volo), `ViewerDismissStateTest` (8: il punto sotto il dito, il pizzico, il ritorno con la molla, il dito che riprende il ritorno, il
+  volo, il movimento ridotto, l'Indietro), `ViewerGestureArbiterTest` (9: la tabella dell'arbitraggio), `ViewerGesturesTest` (10, sul
+  viewer vero: pizzico che chiude, che ingrandisce, appena accennato; annullamento di sistema; Indietro predittivo annullato e completato;
+  video: doppio tocco con la barra toccabile e lo zoom che resta in pausa e scorrendo, pizzico, azzeramento al cambio di elemento,
+  chiusura verso la cella e senza cella), `GalleryMotionTest.ilChromeCompareConUnaDissolvenzaChepartePiano` (D6).
+- Batch del semaforo (un posto, rilasciato ogni volta, nessun java mio rimasto): `H1-1` compilazione, FAIL (un import mancante in un test),
+  1,7 min; `H1-2` 13 classi di test del viewer, OK, 1,9 min; `H1-3` registrazione degli screenshot, FAIL a `:app:compileDebugKotlin`
+  (nel worktree la compilazione incrementale di `core-designsystem` era rimasta senza le classi del catalogo spostate in `src/debug` da
+  Z1: non un errore dei sorgenti), 3,5 min; `H1-4` `:core-designsystem:compileDebugKotlin --rerun` e registrazione, OK, 4,2 min; `H1-5`
+  `:feature-viewer:testDebugUnitTest` completo (1041 test, 0 falliti), `:app:testDebugUnitTest` sulle 12 classi che toccano il viewer (98
+  test, 0 falliti), `GalleryMotionTest` (13), OK, 3,4 min. `tools\check.ps1` non lanciato.
+- Screenshot in `docs/screenshots/beta-grafica/H1/`: `viewer-chiusura-trascinamento-*`, `viewer-chiusura-volo-*`,
+  `viewer-chiusura-pizzico-*` (sopra la Libreria vera, da `:app`) e `viewer-video-ingrandito-*` (da `feature-viewer`), chiaro e scuro,
+  telefono 360 x 780 dp e tablet.

@@ -18,7 +18,7 @@ class IndexerModelRequestsTest {
       watchIndexerModels(roles, { true }, { true }, firstRequestDone = { marked },
         markFirstRequestDone = { marked = true }, firstRequest = {
           firstAttempts++
-          kotlinx.coroutines.withTimeout(10_000) { kotlinx.coroutines.delay(20_000) }
+          kotlinx.coroutines.withTimeout(QUEUE_LIMIT_MS) { kotlinx.coroutines.delay(20_000) }
         }, request = { requests += it })
     }
     runCurrent(); advanceTimeBy(10_001); runCurrent()
@@ -34,7 +34,7 @@ class IndexerModelRequestsTest {
 
   @Test fun cancellareIlChiamanteFermaDavveroLOsservatore() = runTest {
     val observer = backgroundScope.launch {
-      kotlinx.coroutines.withTimeout(50) {
+      kotlinx.coroutines.withTimeout(CALLER_LIMIT_MS) {
         watchIndexerModels(MutableStateFlow(true), { true }, { true }, firstRequestDone = { false },
           firstRequest = { kotlinx.coroutines.delay(20_000) }, request = {})
       }
@@ -88,5 +88,14 @@ class IndexerModelRequestsTest {
     var requests = 0
     backgroundScope.launch { watchIndexerModels(MutableStateFlow(true), { false }, { true }) { requests++ } }
     runCurrent(); assertThat(requests).isEqualTo(0)
+  }
+
+  private companion object {
+    // Tempo virtuale di `runTest` (lo fa avanzare `advanceTimeBy`), non attese vere: la barriera `NoFixedWaitsTest` vuole comunque un nome.
+    /** Il limite dell'accodamento della prima richiesta, come in produzione. */
+    const val QUEUE_LIMIT_MS = 10_000L
+
+    /** Il limite del chiamante che cancella l'osservatore. */
+    const val CALLER_LIMIT_MS = 50L
   }
 }

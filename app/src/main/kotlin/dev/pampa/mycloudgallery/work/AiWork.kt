@@ -108,14 +108,14 @@ object AiWorkScheduling {
    * giudica il cancello di rete dentro il lavoro: dati mobili con la conferma, mai roaming) e una rete non a consumo per il cambio di ruolo
    * (R11). Accelerato solo da Android 12 (MO-9): prima WorkManager lo vuole in primo piano e lancia.
    */
-  fun fetchNow(context: Context, trigger: ModelTrigger, model: ModelId? = null) {
+  fun fetchNow(context: Context, trigger: ModelTrigger, model: ModelId? = null, automatic: Boolean = false): androidx.work.Operation {
     val builder = OneTimeWorkRequestBuilder<ModelFetchWorker>()
       .setInputData(workDataOf(KEY_TRIGGER to trigger.name, KEY_MODEL to model?.value))
       .setConstraints(if (trigger == ModelTrigger.ROLE_CHANGED) LanConstraints.unmetered() else LanConstraints.anyNetwork())
       .addTag(TAG)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) builder.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
     val name = if (model != null) "$FETCH_NOW_WORK-${model.value}" else FETCH_NOW_WORK
-    WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(name, ExistingWorkPolicy.REPLACE, builder.build())
+    return WorkManager.getInstance(context.applicationContext).enqueueUniqueWork(name, if (automatic || trigger == ModelTrigger.RULES) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.REPLACE, builder.build())
   }
 
   /** "Indicizza ora" (D22): una richiesta dell'utente; una sola alla volta (un secondo tocco mentre gira o aspetta non ne mette un altro). */

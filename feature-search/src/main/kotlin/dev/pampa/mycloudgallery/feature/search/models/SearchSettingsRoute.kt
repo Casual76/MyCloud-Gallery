@@ -95,12 +95,14 @@ fun SearchSettingsRoute(actions: SearchActions, onBack: () -> Unit, viewModel: S
   val state by controller.state.collectAsStateWithLifecycle()
   val measuring by controller.measuring.collectAsStateWithLifecycle()
   val probeFailed by controller.probeFailed.collectAsStateWithLifecycle()
+  val probeHot by controller.probeHot.collectAsStateWithLifecycle()
+  val probeBusy by controller.probeBusy.collectAsStateWithLifecycle()
   val handlers = remember(controller, actions) { ActionSettingsHandlers(controller, actions) }
   SearchHost {
     SearchSettingsScreen(
       state = state,
       measuring = measuring,
-      probeFailed = probeFailed,
+      probeFailed = probeFailed, probeHot = probeHot, probeBusy = probeBusy,
       hasIndexer = controller.hasIndexer,
       hasTextReading = controller.hasTextReading,
       hasModels = controller.hasModels,

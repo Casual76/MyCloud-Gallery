@@ -18406,6 +18406,11 @@ Raccolte" e, dopo una banda, "Impostazioni" come ultima voce (lo stesso posto de
   `screenshot-*`), `G2/raccolte-pannello-selezione`, `G2/pillola-raccolte`, e le pagine delle Impostazioni in `10-P3`, `10-P5`, `5-P12`, `6-P14`,
   `7-P9`, `8-P7`, `RG-D`. `doppioni-notturno` era cambiato solo per un interruttore a meta' animazione: non committato.
 
+
+### HR, giro di correzione 2 (11 novembre 2026)
+
+CR-7: segno locale della richiesta accettata, prima accelerata unmetered, automatiche KEEP. CS-9: controllo fra media nella fetta e ripresa del secondo parziale. CS-13: motivi HOT/BUSY, attesa senza Retry inutile e ripartenza termica automatica. CR-KDOC: commento riposizionato. BUILD-INC resta parziale: percorsi relativi dei sorgenti negli input di core-designsystem/app; accettazione senza rerun passa, causa dello specifico Unresolved reference non riprodotta. Nessun debug reinserito nella release. Evidenze e limiti in docs/hr-primo-avvio-giro2.md.
+
 ### H4, giro di correzione 1 (11/11 sera)
 Ramo `fix/h4-ricerca-barra` dopo l'unione di `integra/beta-grafica` (`3f686ef9`, avanzamento veloce, nessun conflitto).
 - **CG-2, il vetro che cambiava misura**: il campo dell'engine richiudibile allargava il nodo di vetro a ogni fotogramma (`fluidSearchWidth` prima di
@@ -18482,4 +18487,3 @@ Unione: `integra/beta-grafica` (`3f686ef9`) era gia' figlia del ramo H5: avanzam
 - **Non coperto da un test:** la preparazione a griglia ferma (`keepWarm`) dipende dal cancello del primo disegno, che nei test della Libreria
   sintetica non si apre; e' da guardare sul telefono (prova 4 qui sopra: alla prima apertura dopo qualche secondo di griglia ferma il calendario
   deve essere gia' pieno).
-

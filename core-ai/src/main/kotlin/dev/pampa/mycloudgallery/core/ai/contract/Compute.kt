@@ -182,7 +182,11 @@ data class ProbeResult(val imagesPerSecond: Double, val backend: AiBackend, val 
   }
 }
 
+enum class ProbeAvailability { READY, HOT, BUSY }
+class ProbeUnavailable(val availability: ProbeAvailability) : IllegalStateException("Misura rinviata")
+
 interface DeviceProbe {
+  suspend fun availability(): ProbeAvailability = ProbeAvailability.READY
   suspend fun measure(): ProbeResult
 }
 

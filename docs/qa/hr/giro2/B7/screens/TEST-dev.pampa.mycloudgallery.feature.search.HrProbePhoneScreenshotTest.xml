@@ -1,0 +1,18 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-11-11T17:03:52.300Z" time="10.15">
+  <properties />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[0]" classname="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" time="7.763" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[1]" classname="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" time="0.272" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[2]" classname="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" time="0.247" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[3]" classname="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" time="0.262" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[4]" classname="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" time="0.37" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[5]" classname="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" time="0.294" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[6]" classname="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" time="0.225" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[7]" classname="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" time="0.244" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[8]" classname="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" time="0.196" />
+  <testcase name="paginaVeraConMisuraFallimentoERiprova[9]" classname="dev.pampa.mycloudgallery.feature.search.HrProbePhoneScreenshotTest" time="0.24" />
+  <system-out />
+  <system-err>[Robolectric] WARN: Android SDK 36 requires Java 21 (have Java 17). Tests won't be run on SDK 36 unless explicitly requested.
+[Robolectric] WARN: Android SDK 37 requires Java 21 (have Java 17). Tests won't be run on SDK 37 unless explicitly requested.
+</system-err>
+</testsuite>

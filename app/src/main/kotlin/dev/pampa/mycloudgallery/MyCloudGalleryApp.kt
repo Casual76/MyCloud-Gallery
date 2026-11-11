@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery
 
+import androidx.work.await
 import dev.pampa.mycloudgallery.work.quietly
 
 import android.app.Application
@@ -260,15 +261,21 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
         if (::widget.isInitialized) widget.resume()
         // D15: accendere Indicizzatore chiede subito il modello del calcolo (lavoro accelerato). Iscritti subito: un cambio non va perso.
         graph.scope.launch {
+          val firstModelRequest = dev.pampa.mycloudgallery.ai.FirstIndexerRequest(java.io.File(noBackupFilesDir, "models/meta/indexer-role-requested"))
           dev.pampa.mycloudgallery.ai.watchIndexerModels(ai.ai.indexer, { gallery.backgroundWorkAllowed }, { trigger ->
             AfterFirstDraw.await()
             graph.quietly { ai.localModels.refreshOnce() }
             ai.localModels.needsRequest(dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.INDEX_440M.id, trigger)
-          }) { trigger ->
-            AfterFirstDraw.launchAfter(graph.scope) {
-              AiWorkScheduling.fetchNow(this@MyCloudGalleryApp, trigger)
-            }
-          }
+          }, request = { trigger ->
+            AfterFirstDraw.await()
+            AiWorkScheduling.fetchNow(this@MyCloudGalleryApp, trigger)
+          }, firstRequestDone = firstModelRequest::done, markFirstRequestDone = firstModelRequest::mark,
+            firstRequest = {
+              AfterFirstDraw.await()
+              kotlinx.coroutines.withTimeout(10_000) {
+                AiWorkScheduling.fetchNow(this@MyCloudGalleryApp, ModelTrigger.ROLE_CHANGED, automatic = true).await()
+              }
+            })
         }
         // Avvio istantaneo (28/10): il resto non serve a disegnare la Libreria e parte dopo il primo disegno utile (al piu' 1,5 s
         // dall'avvio del processo). I lavori pianificati sono gli stessi di prima, con le stesse regole: cambia solo il momento.

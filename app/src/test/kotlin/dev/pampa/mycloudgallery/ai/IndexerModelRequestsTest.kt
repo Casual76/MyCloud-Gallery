@@ -9,6 +9,24 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class IndexerModelRequestsTest {
+  @Test fun onboardingRichiedeUnaVoltaPoiIlSegnoDuraFraProcessi() = runTest {
+    val file = java.io.File(java.nio.file.Files.createTempDirectory("hr-first").toFile(), "done")
+    val triggers = mutableListOf<ModelTrigger>()
+    var ready = false
+    repeat(2) {
+      val marker = FirstIndexerRequest(file, StandardTestDispatcher(testScheduler))
+      val job = backgroundScope.launch {
+        watchIndexerModels(MutableStateFlow(true), { true }, { !ready },
+          firstRequestDone = marker::done, markFirstRequestDone = marker::mark,
+          request = { triggers += it; ready = true })
+      }
+      // IO reale del segno: aspetta il suo completamento senza tempi fissi.
+      runCurrent(); assertThat(file.exists()).isTrue()
+      runCurrent(); job.cancel()
+    }
+    assertThat(triggers).containsExactly(ModelTrigger.ROLE_CHANGED)
+  }
+
   @Test fun dueAvviiNonSonoDueCambiDiRuolo() = runTest {
     val requests = mutableListOf<ModelTrigger>()
     repeat(2) {

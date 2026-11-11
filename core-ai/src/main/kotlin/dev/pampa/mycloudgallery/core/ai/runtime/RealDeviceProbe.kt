@@ -59,8 +59,12 @@ class RealDeviceProbe(
     require(rounds >= 1) { "Almeno un giro." }
   }
 
+  override suspend fun availability() = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+    if (canMeasure()) dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.READY else dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.HOT
+  }
   override suspend fun measure(): ProbeResult {
-    check(kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { canMeasure() }) { "Misura rinviata: telefono caldo." }
+    val ready = availability()
+    if (ready != dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.READY) throw dev.pampa.mycloudgallery.core.ai.contract.ProbeUnavailable(ready)
     // HR: la pagina chiama measure dal main. Anche le scene sintetiche e la
     // codifica JPEG sono lavoro CPU, prima della prima sospensione del motore.
     val images = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { images() }

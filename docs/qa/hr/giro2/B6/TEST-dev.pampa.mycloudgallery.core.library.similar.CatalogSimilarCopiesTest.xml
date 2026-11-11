@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.pampa.mycloudgallery.core.library.similar.CatalogSimilarCopiesTest" tests="1" skipped="0" failures="1" errors="0" timestamp="2026-11-11T16:47:38.730Z" time="5.968">
+  <properties />
+  <testcase name="cs9_unToccoDuranteLaFettaFermaLeDecodificheERiprendeLoStessoSecondo" classname="dev.pampa.mycloudgallery.core.library.similar.CatalogSimilarCopiesTest" time="5.968">
+    <failure message="expected: 1&#10;but was : 4" type="com.google.common.truth.Platform$ComparisonFailureWithFacts">expected: 1
+but was : 4
+	at dev.pampa.mycloudgallery.core.library.similar.CatalogSimilarCopiesTest$cs9_unToccoDuranteLaFettaFermaLeDecodificheERiprendeLoStessoSecondo$1.invokeSuspend(CatalogSimilarCopiesTest.kt:49)
+	at app//kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source)
+	at dev.pampa.mycloudgallery.core.library.similar.CatalogSimilarCopiesTest.cs9_unToccoDuranteLaFettaFermaLeDecodificheERiprendeLoStessoSecondo(CatalogSimilarCopiesTest.kt:37)
+</failure>
+  </testcase>
+  <system-out />
+  <system-err>[Robolectric] WARN: Android SDK 36 requires Java 21 (have Java 17). Tests won't be run on SDK 36 unless explicitly requested.
+[Robolectric] WARN: Android SDK 37 requires Java 21 (have Java 17). Tests won't be run on SDK 37 unless explicitly requested.
+</system-err>
+</testsuite>

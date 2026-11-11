@@ -61,6 +61,8 @@ class SearchSettingsController(
   private val io: kotlinx.coroutines.CoroutineDispatcher = kotlinx.coroutines.Dispatchers.IO,
 ) {
   val probeFailed = MutableStateFlow(false)
+  val probeHot = MutableStateFlow(false)
+  val probeBusy = MutableStateFlow(false)
   private var attempt: kotlinx.coroutines.Deferred<Result<ProbeResult>>? = null
   private val probeResult = MutableStateFlow<ProbeResult?>(null)
 
@@ -171,6 +173,19 @@ class SearchSettingsController(
 
   init {
     // IX-3: l'ultima misura si ritrova, e si rifa' quando il modello del calcolo diventa pronto (la prima falliva se mancava).
+    // La pagina resta aperta: riparte dal caldo appena il giudizio delle regole torna favorevole.
+    scope.launch {
+      while (true) {
+        kotlinx.coroutines.delay(2000)
+        if (probeHot.value || probeBusy.value) {
+          val wasHot = probeHot.value
+          val available = kotlinx.coroutines.withContext(io) { probe?.availability() }
+          probeHot.value = available == dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.HOT
+          probeBusy.value = available == dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.BUSY || attempt?.isCompleted == false
+          if (wasHot && !probeHot.value && !probeBusy.value && probeResult.value == null) measure()
+        }
+      }
+    }
     val control = indexer
     val manager = models
     scope.launch {
@@ -222,9 +237,12 @@ class SearchSettingsController(
     val device = probe ?: return
     if (indexer?.indexer?.value != true || models?.states?.value?.get(ModelCatalog.INDEX_440M.id) !is ModelState.Ready) return
     // Una chiamata nativa non cancellabile puo' sopravvivere alla scadenza: mai accodarne altre.
-    if (measuring.value || attempt?.isCompleted == false) return
+    if (measuring.value) return
+    if (attempt?.isCompleted == false) { probeBusy.value = true; return }
     measuring.value = true
     probeFailed.value = false
+    probeHot.value = false
+    probeBusy.value = false
     val work = scope.async(probeDispatcher) {
       try {
         Result.success(device.measure())
@@ -243,8 +261,13 @@ class SearchSettingsController(
         probeResult.value = result
         measuring.value = false
         kotlinx.coroutines.withContext(io) { indexer?.saveProbe(result) }
+      } catch (e: dev.pampa.mycloudgallery.core.ai.contract.ProbeUnavailable) {
+        probeHot.value = e.availability == dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.HOT
+        probeBusy.value = e.availability == dev.pampa.mycloudgallery.core.ai.contract.ProbeAvailability.BUSY
+        probeFailed.value = !probeHot.value
       } catch (e: kotlinx.coroutines.TimeoutCancellationException) {
         work.cancel()
+        probeBusy.value = !work.isCompleted
         probeFailed.value = true
       } catch (e: CancellationException) {
         work.cancel()

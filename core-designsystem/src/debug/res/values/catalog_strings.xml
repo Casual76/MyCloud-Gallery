@@ -29,6 +29,8 @@
   <string name="group_states_summary">Libreria vuota, nessun risultato, NAS non raggiungibile, permesso negato.</string>
   <string name="group_status_title">Stato globale</string>
   <string name="group_status_summary">Una pillola tappabile che dice se è tutto al sicuro.</string>
+  <string name="group_icons_title">Icone</string>
+  <string name="group_icons_summary">Una piastrella colorata per famiglia, con lo stato nell’angolo.</string>
   <string name="group_headers_title">Intestazioni della timeline</string>
   <string name="group_headers_summary">Data e luogo, pronte per agganciarsi alla barra.</string>
   <string name="group_motion_title">Movimento</string>
@@ -179,6 +181,32 @@
   <string name="sec_status_compact_detail">Per una barra stretta: la frase resta per il lettore di schermo.</string>
   <string name="sec_status_glass">Di vetro, sopra la timeline</string>
   <string name="sec_status_glass_detail">Una lente da 48 dp: non copre le foto, le attraversa.</string>
+
+  <!-- I3 (fase I): le icone espressive -->
+  <string name="sec_icons_families">Famiglie</string>
+  <string name="sec_icons_families_detail">Il colore dice la famiglia, il glifo dice la cosa. Il glifo bianco regge 3:1 su ogni colore.</string>
+  <string name="sec_icons_sizes">Taglie</string>
+  <string name="sec_icons_sizes_detail">Riga (32 dp), media (44 dp), grande (64 dp): il raggio e il segno scalano con il lato.</string>
+  <string name="sec_icons_status">Segni di stato</string>
+  <string name="sec_icons_status_detail">Ogni stato ha un colore e una forma; il lettore dello schermo lo dice a voce.</string>
+  <string name="sec_icons_rows">In una riga</string>
+  <string name="sec_icons_rows_detail">Lo stato a destra come segno o valore corto; il sottotitolo solo se cambia.</string>
+  <string name="icon_family_photos">Foto</string>
+  <string name="icon_family_backup">Backup</string>
+  <string name="icon_family_people">Persone</string>
+  <string name="icon_family_memories">Ricordi</string>
+  <string name="icon_family_places">Luoghi</string>
+  <string name="icon_family_search">Ricerca</string>
+  <string name="icon_family_security">Sicurezza</string>
+  <string name="icon_family_network">Rete</string>
+  <string name="icon_family_system">Sistema</string>
+  <string name="icon_family_danger">Pericolo</string>
+  <string name="icon_row_backup">Backup</string>
+  <string name="icon_row_security">Sicurezza</string>
+  <string name="icon_row_network">Rete e VPN</string>
+  <string name="icon_row_network_value">Wi-Fi</string>
+  <string name="icon_row_people">Persone</string>
+  <string name="icon_row_about">Informazioni</string>
   <string name="status_error_quota">quota esaurita</string>
 
   <!-- Intestazioni -->

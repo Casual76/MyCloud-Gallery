@@ -1014,12 +1014,15 @@ private fun ViewerOverlays(
   // Con il soggetto staccato i controlli sono i suoi (la barra del ritaglio): niente chrome sotto, niente controlli uno sopra l'altro.
   val chromeShown = atRest && chromeBackdropReady && !controller.closing && !controller.cutout.active && (state.chromeVisible || touchExploration)
   val infoClosed by remember { derivedStateOf { info.progress.value < INFO_CLOSED } }
+  // CU-5: la barra in alto riassume l'elemento a pannello chiuso; da meta' corsa in su il pannello dice data, ora e luogo per esteso, e la
+  // barra tiene solo i suoi tasti (una cosa si legge una volta sola). Cambia una volta per apertura, non a ogni fotogramma.
+  val infoSpeaks by remember { derivedStateOf { info.progress.value >= INFO_SPEAKS } }
   val chromeModifier = if (sidePanel) Modifier.shrinkEnd { (panelPx * info.progress.value).roundToInt() } else Modifier
 
   GalleryViewerChrome(
     visible = chromeShown,
-    title = title,
-    subtitle = subtitle,
+    title = if (infoSpeaks) "" else title,
+    subtitle = if (infoSpeaks) null else subtitle,
     backdrop = backdrop,
     onClose = controller::close,
     bottomVisible = chromeShown && bottomReady && (sidePanel || infoClosed),
@@ -1324,6 +1327,9 @@ private val PanelTopReserve: Dp = 64.dp
 
 /** La barra del video sopra il pannello compare nell'ultima meta' della sua corsa (H2). */
 private const val VideoBarFrom = 0.5f
+
+/** Da qui il pannello informazioni e' la fonte di data e luogo e la barra in alto non li ripete (CU-5). */
+private const val INFO_SPEAKS = 0.5f
 
 /** A che punto dell'espansione entrano le pagine vicine (vedi `PagerLayer`): lontano dal primo fotogramma, prima della fine. */
 private const val NeighborsAtProgress = 0.5f

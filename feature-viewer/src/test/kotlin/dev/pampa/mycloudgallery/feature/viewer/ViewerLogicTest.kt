@@ -37,6 +37,7 @@ import dev.pampa.mycloudgallery.feature.viewer.testing.FakeMediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackProblem
 import dev.pampa.mycloudgallery.feature.viewer.video.RangeDataSource
 import dev.pampa.mycloudgallery.feature.viewer.video.XmpPacket
+import java.time.ZoneId
 import java.util.Locale
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -55,7 +56,8 @@ import org.robolectric.annotation.GraphicsMode
 class ViewerLogicTest {
 
   private val context get() = ApplicationProvider.getApplicationContext<Application>()
-  private val format get() = ViewerFormat(context, Locale.ITALIAN)
+  // Il telefono in Italia: a marzo 2024 lo stesso scarto di Oslo (UTC+1).
+  private val format get() = ViewerFormat(context, Locale.ITALIAN, ZoneId.of("Europe/Rome"))
 
   // --- Zoom ------------------------------------------------------------------------------------------------------------
 
@@ -231,7 +233,8 @@ class ViewerLogicTest {
     )
     // La data grande in testa (il giorno con la maiuscola), l'ora e il fuso sotto, il luogo.
     assertThat(full.date).isEqualTo("Martedì 12 marzo 2024")
-    assertThat(full.timeLine).isEqualTo("12:41 · ora di Oslo, UTC+1")
+    // CU-5: lo stesso fuso del telefono non si scrive.
+    assertThat(full.timeLine).isEqualTo("12:41")
     assertThat(full.estimated).isFalse()
     assertThat(full.place).isEqualTo("Oslo, Norvegia")
     // Lo scatto in pillole, una per dato.
@@ -245,6 +248,15 @@ class ViewerLogicTest {
     assertThat(full.fileName).isEqualTo("IMG_20240312_124100.jpg")
     assertThat(full.folder).isEqualTo("Camera")
     assertThat(full.note).isNull()
+  }
+
+  @Test
+  fun ilFusoSiDiceSoloSeEDiversoDaQuelloDelTelefono() {
+    // CU-5: un telefono a New York guarda una foto scattata a Oslo: l'ora e' quella del posto, e lo si dice (il luogo sta nella riga sotto).
+    val id = MediaId.random()
+    val elsewhere = ViewerFormat(context, Locale.ITALIAN, ZoneId.of("America/New_York"))
+    assertThat(buildInfoModel(elsewhere, InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id))).timeLine).isEqualTo("12:41 · ora locale, UTC+1")
+    assertThat(model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id))).timeLine).isEqualTo("12:41")
   }
 
   @Test

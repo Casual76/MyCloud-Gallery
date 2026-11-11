@@ -4,6 +4,8 @@
 
   <!-- La riga sotto la data: "12:41 · ora di Oslo, UTC+1". -->
   <string name="viewer_info_time_line">%1$s · %2$s</string>
+  <!-- CU-5: lo scatto e' stato fatto in un altro fuso: "12:41 · ora locale, UTC+9" (il luogo sta nella riga sotto). -->
+  <string name="viewer_info_time_local">%1$s · ora locale, %2$s</string>
 
   <!-- Il backup del media in una capsula: un'icona e due parole. Il dettaglio sotto solo quando serve sapere perché. -->
   <string name="viewer_info_badge_both">Telefono e NAS</string>

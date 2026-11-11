@@ -10,7 +10,9 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.feature.viewer.R
 import dev.pampa.mycloudgallery.core.library.text.GalleryDates
 import java.time.DateTimeException
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -29,6 +31,8 @@ internal class ViewerFormat(
   // P11: l'app e' solo in italiano. Le date passano da `GalleryDates` e i numeri (megapixel, coordinate) usano la stessa
   // lingua, anche con il telefono in inglese.
   private val locale: Locale = GalleryDates.LOCALE,
+  /** Il fuso del telefono: il pannello lo nomina solo se lo scatto ne ha un altro (CU-5). */
+  private val phoneZone: ZoneId = ZoneId.systemDefault(),
 ) {
 
   internal val resources get() = context.resources
@@ -50,6 +54,18 @@ internal class ViewerFormat(
     time != null && placeName != null -> resources.getString(R.string.viewer_subtitle_time_place, time(time), placeName)
     time != null -> time(time)
     else -> placeName
+  }
+
+  /**
+   * La riga sotto la data nel pannello (CU-5): "12:41". Il fuso si dice **solo se e' diverso da quello del telefono** in quel momento ("12:41 ·
+   * ora locale, UTC+9"), senza ripetere il luogo che sta nella riga sotto; per una data stimata, da dove viene la stima.
+   */
+  fun panelTimeLine(time: CaptureTime): String {
+    val clock = time(time)
+    if (time.isEstimated) return resources.getString(R.string.viewer_info_time_line, clock, estimatedReason(time.source))
+    val phoneMinutes = phoneZone.rules.getOffset(Instant.ofEpochMilli(time.utcMillis)).totalSeconds / SECONDS_PER_MINUTE
+    if (phoneMinutes == time.offsetMinutes) return clock
+    return resources.getString(R.string.viewer_info_time_local, clock, offsetLabel(time.offsetMinutes))
   }
 
   /**
@@ -224,3 +240,5 @@ internal class ViewerFormat(
     const val MONTH_DIVISOR = 100
   }
 }
+
+private const val SECONDS_PER_MINUTE = 60

@@ -72,7 +72,7 @@ internal fun buildInfoModel(format: ViewerFormat, inputs: InfoInputs): InfoModel
   val details = inputs.details
   val capture = details?.captureTime
   val date = capture?.let { format.panelDate(it) } ?: inputs.localDay.takeIf { it > 0 }?.let { format.panelDate(it) }
-  val timeLine = capture?.let { res.getString(R.string.viewer_info_time_line, format.time(it), format.zoneCaption(it, inputs.placeName)) }
+  val timeLine = capture?.let { format.panelTimeLine(it) }
 
   val place = inputs.place
   val placeLine = when {

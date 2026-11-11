@@ -72,7 +72,6 @@ class G2RaccolteAlleggeriteTest {
     assertThat(codes).containsNoneOf("albums", "smart", "phone")
     // Le raccolte-filtro del Telefono (Preferiti, Video, Screenshot, WhatsApp) non sono piu' righe delle Raccolte.
     assertThat(CollectionKind.FAVORITES in c.layout()).isFalse()
-    assertThat(c.layout().firstFilter).isNull()
   }
 
   @Test

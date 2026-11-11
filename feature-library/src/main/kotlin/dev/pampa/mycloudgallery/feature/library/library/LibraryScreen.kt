@@ -195,40 +195,54 @@ internal fun LibraryScreen(
   Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).semantics { testTagsAsResourceId = true; isTraversalGroup = true }.mediaDropTarget(DropTarget.Library)) {
     // Il fondale della pagina: la griglia e le sfumature di bordo. Tutto il vetro (chrome, pillola, scrubber) lo rifrange.
     Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
-      if (!libraryCovered) Box(if (searchLayers) Modifier.fillMaxSize().graphicsLayer { alpha = 1f - results.value } else Modifier.fillMaxSize()) {
-        when {
-          showPermission -> LibraryPermissionState(
-            onAllow = { state.commands.requestMediaAccess() },
-            modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
-          )
-          empty && (phone.firstRead != null || phone.selectionPending) -> LibraryFirstReadState(
-            progress = phone.firstRead,
-            modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
-          )
-          empty && state.filter != LibraryFilter.ALL -> LibraryFilterEmptyState(
-            filter = state.filter,
-            onShowAll = { scope.launch { state.chooseFilter(LibraryFilter.ALL) } },
-            modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
-          )
-          empty -> LibraryEmptyState(modifier = Modifier.padding(top = topChrome, bottom = bottomPadding))
-          else -> MediaGrid(
-            state = grid,
-            modifier = if (tabBarScroll != null) Modifier.nestedScroll(tabBarScroll) else Modifier,
-            contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
-            onOpen = { id -> onOpenViewer(ViewerRequest(items = state.viewerItems, start = id, anchor = grid.viewerAnchor, secure = false)) },
-            footer = { LibraryFooter(state, phone) },
-            stickyTop = topChrome,
-            onLevelChanged = { level -> scope.launch { state.preferences.setLevel(level) } },
-            // D15: Canc apre il foglio di conferma (lo stesso della barra delle azioni), mai un'eliminazione diretta.
-            onDeleteKey = { requestPhoneDelete(state) { deleting = true } },
-            // Fase 10 (P6, D20): le foto della Libreria (o la selezione) si trascinano verso un'altra app.
-            dragOrigin = DragOrigin.LIBRARY,
-            // Fase 10 P8 (D23): Preferito, Condividi, Nascondi, Elimina come azioni della cella, per TalkBack e Switch Access.
-            cellActions = { id -> libraryCellActions(state, id, cellLabels, scope, onDelete = { requestPhoneDelete(state) { deleting = true } }, onHideGroups = { hidingGroups = true }) },
-            // Fase H (D10): tirando oltre il fondo (i piu' recenti) la Libreria si aggiorna; l'esito lo dice la nuvola in alto. Non con la ricerca aperta
-            // (H4): il fondo e' della barra di ricerca e della tastiera, e l'aggiornamento li' darebbe fastidio.
-            onPullRefresh = if (searching) null else pullRefresh,
-          )
+      // CU-4 (giro 1): con la ricerca aperta anche la Libreria sale con la barra e con la tastiera, nello stesso fotogramma (la salita e' letta nel
+      // disegno: niente ricomposizione ne' misura per fotogramma), e torna giu' con loro. «La libreria la facciamo scorrere insieme anche alla barra di
+      // ricerca, in modo che ci siano sempre visibili i primi risultati»: a campo vuoto le foto piu' recenti restano sopra la tastiera.
+      if (!libraryCovered) {
+        Box(
+          if (searchLayers) {
+            Modifier.fillMaxSize().graphicsLayer {
+              alpha = 1f - results.value
+              translationY = -lift.px().toFloat()
+            }
+          } else {
+            Modifier.fillMaxSize()
+          },
+        ) {
+          when {
+            showPermission -> LibraryPermissionState(
+              onAllow = { state.commands.requestMediaAccess() },
+              modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
+            )
+            empty && (phone.firstRead != null || phone.selectionPending) -> LibraryFirstReadState(
+              progress = phone.firstRead,
+              modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
+            )
+            empty && state.filter != LibraryFilter.ALL -> LibraryFilterEmptyState(
+              filter = state.filter,
+              onShowAll = { scope.launch { state.chooseFilter(LibraryFilter.ALL) } },
+              modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
+            )
+            empty -> LibraryEmptyState(modifier = Modifier.padding(top = topChrome, bottom = bottomPadding))
+            else -> MediaGrid(
+              state = grid,
+              modifier = if (tabBarScroll != null) Modifier.nestedScroll(tabBarScroll) else Modifier,
+              contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
+              onOpen = { id -> onOpenViewer(ViewerRequest(items = state.viewerItems, start = id, anchor = grid.viewerAnchor, secure = false)) },
+              footer = { LibraryFooter(state, phone) },
+              stickyTop = topChrome,
+              onLevelChanged = { level -> scope.launch { state.preferences.setLevel(level) } },
+              // D15: Canc apre il foglio di conferma (lo stesso della barra delle azioni), mai un'eliminazione diretta.
+              onDeleteKey = { requestPhoneDelete(state) { deleting = true } },
+              // Fase 10 (P6, D20): le foto della Libreria (o la selezione) si trascinano verso un'altra app.
+              dragOrigin = DragOrigin.LIBRARY,
+              // Fase 10 P8 (D23): Preferito, Condividi, Nascondi, Elimina come azioni della cella, per TalkBack e Switch Access.
+              cellActions = { id -> libraryCellActions(state, id, cellLabels, scope, onDelete = { requestPhoneDelete(state) { deleting = true } }, onHideGroups = { hidingGroups = true }) },
+              // Fase H (D10): tirando oltre il fondo (i piu' recenti) la Libreria si aggiorna; l'esito lo dice la nuvola in alto. Non con la ricerca aperta
+              // (H4): il fondo e' della barra di ricerca e della tastiera, e l'aggiornamento li' darebbe fastidio.
+              onPullRefresh = if (searching) null else pullRefresh,
+            )
+          }
         }
       }
       // H4: i risultati al posto della griglia, nello stesso fondale (la barra di ricerca e i suggerimenti li rifrangono).

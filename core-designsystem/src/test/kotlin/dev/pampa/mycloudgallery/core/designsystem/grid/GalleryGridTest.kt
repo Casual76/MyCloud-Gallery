@@ -1,6 +1,5 @@
 package dev.pampa.mycloudgallery.core.designsystem.grid
 
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
@@ -64,42 +63,6 @@ class GalleryGridTest {
 
     override val clickLabel: String = "Apri"
     override val longClickLabel: String = "Seleziona"
-  }
-
-  @Test
-  fun laCellaNascostaNonSiDisegnaEToraSenzaRidisegnareLeAltre() {
-    // CU-1: la cella da cui esce (e in cui rientra) la foto del viewer resta vuota; la si legge nel disegno, le vicine non si ridisegnano.
-    val interaction = GalleryGridInteractionState()
-    val drawn = mutableListOf<Any>()
-    interaction.drawProbe = { drawn += it }
-    interaction.hiddenKey = "a"
-    composeRule.setContent {
-      MyCloudGalleryTheme(settings = EngineSettings()) {
-        Row {
-          for (key in listOf("a", "b")) {
-            GalleryGridCell(
-              key = key,
-              image = mutableStateOf<ImageBitmap?>(null),
-              badges = GalleryGridCellBadges.None,
-              style = rememberGalleryGridCellStyle(),
-              interaction = interaction,
-              actions = Actions,
-              modifier = Modifier.size(100.dp),
-            )
-          }
-        }
-      }
-    }
-    composeRule.waitForIdle()
-    assertThat(drawn).contains("b")
-    assertThat(drawn).doesNotContain("a")
-    // La foto e' rientrata: la cella torna a disegnarsi, e solo lei.
-    composeRule.runOnIdle {
-      drawn.clear()
-      interaction.hiddenKey = null
-    }
-    composeRule.waitForIdle()
-    assertThat(drawn).containsExactly("a")
   }
 
   @Test

@@ -17895,3 +17895,92 @@ bytecode delle librerie usate (Compose ui e foundation 1.10.5, BOM 2026.03.00).
 - Screenshot in `docs/screenshots/beta-grafica/H3/`: `calendario-giorni`, `calendario-scelta-mese`, `calendario-testo-grande`,
   `aggiorna-a-meta`, `aggiorna-oltre-soglia`, ognuno chiaro e scuro, telefono (360 x 780 dp) e tablet (1280 x 800 dp).
 
+
+## H4 (fase H, 11/11): la ricerca dentro la Libreria, niente pagina di ricerca
+
+Richiesta dell'utente (R1, «stile ricerca in app Apple»): il cerchio di Cerca diventa la barra di ricerca, la pagina di ricerca sparisce, scrivendo le
+foto della Libreria si filtrano. Ramo `fix/h4-ricerca-barra` da `261a3553`, con H3 unito dentro (sotto).
+
+### Com'e' fatta
+- **La barra** (`core-designsystem/chrome/GallerySearchBar.kt`): il campo e' `FluidSearchField` dell'engine (nasce come cerchio e si allarga). Nasce sopra il
+  cerchio della pillola (concentrico: 52 dp dentro i 60 della pillola), si allarga verso sinistra fino a tutta la riga (al piu' 560 dp, centrata, sul
+  tablet) scorrendo dal cerchio alla sua posizione con la stessa molla del campo (`FluidMotion.standard`); intanto la pillola si raccoglie verso il cerchio
+  e sparisce entro meta' apertura (`MainScaffold`). Un gesto solo, una molla sola. A barra aperta la pillola esce dalla composizione.
+- **Con la tastiera** la barra sale fotogramma per fotogramma: `GallerySearchLift` legge `WindowInsets.ime` nel layout (`offset {}`), mai in composizione;
+  i risultati e il velo in basso salgono della stessa quantita' nello stesso fotogramma (traslazione nel disegno, nessuna misura animata).
+- **In alto** (`GallerySuggestionBar`): una capsula di vetro della chrome con tre voci di uguale peso e separatori sottili; sostituisce in dissolvenza
+  etichetta e capsula dei comandi; il vetro non cambia misura (cambiano i testi, in dissolvenza); senza voci si ritira. A campo vuoto: ricerche recenti,
+  poi luoghi frequenti, poi tipi (`SearchStates.idleTop`); scrivendo, i tre completamenti migliori (le persone prima).
+- **Dietro** resta la Libreria (anche partendo da Album o Raccolte) finche' la ricerca non risponde; poi i risultati prendono il posto della griglia nello
+  stesso fondale (`LibrarySearchLayer`, dissolvenza breve `GalleryMotion.contentSwap`, 160 ms). La griglia della Libreria esce dalla composizione solo
+  quando i risultati la coprono del tutto e torna dov'era (lo stato e' fuori; provato da `LibreriaAlRitornoTest`).
+- **Risultati** (`SearchResultsGrid`): dal basso (il piu' adatto subito sopra la barra), solo per pertinenza, niente date, «Meno probabili» in coda dopo un
+  separatore; stessa cella e stessa cache della Libreria, miniature solo locali (D28, CE-5); viewer con l'ancora della cella; la selezione e' quella della
+  griglia della Libreria (stessa barra delle azioni, stessi fogli, stessi avvisi); scorrendo con il dito la tastiera scende.
+- **Scrivere e' cercare** (`SearchController`): completamenti dopo 120 ms, ricerca dopo 250 ms dall'ultimo tasto, fuori dal thread principale; niente stato
+  "Sto cercando": resta cio' che c'era; gli stessi media nello stesso ordine non si ripubblicano. Si ricorda fra le recenti con «Cerca» sulla tastiera, un
+  suggerimento, un risultato aperto (non a ogni pausa). Chiudendo il campo si svuota.
+- **Una riga sola sopra la barra** (`SearchLines`): «Niente per «…»», «Simili a questa foto», o il primo avviso (parola corretta, modello che manca,
+  copertura sotto il 98%, volti in calcolo...). Se ha un'azione si tocca: Ricerca e modelli, attivazione della lettura, Consenti accesso, Riprova.
+- **Chiusura**: la X (o Indietro) chiude in un passo; la crocetta dentro il campo svuota il testo. Con la tastiera su, da Android 13 una richiamata di
+  Indietro con priorita' `PRIORITY_OVERLAY` passa prima della tastiera: un passo solo anche li' (sotto Android 13 il primo Indietro chiude la tastiera).
+- **Da fuori**: "Trova simili" (viewer, selezione) apre la ricerca senza tastiera con i simili gia' cercati e la riga che lo dice.
+
+### Con H3 (unito in `f0592368`, da `710a676f`)
+- Un conflitto solo, in `LibraryScreen.kt` (la chiamata a `MediaGrid`): tenuta la struttura di H4 e aggiunto il `onPullRefresh` di H3.
+- **Tirare per aggiornare non c'e' sui risultati e si spegne sulla Libreria mentre la ricerca e' aperta**: il fondo e' della barra e della tastiera, e un
+  aggiornamento della Libreria non cambia i risultati (che si aggiornano da soli con l'istantanea).
+- La griglia dei risultati usa la stessa regola del tocco di H3 (vale solo se il dito si alza davvero; un `ACTION_CANCEL`, come l'Indietro dal bordo, no).
+- La barra dei suggerimenti e la riga sopra la barra sono capsule della chrome che trattengono i tocchi come le altre di H3 (`GalleryChromeCapsule`):
+  niente arriva alla cella sotto. Con la ricerca aperta l'etichetta in alto non c'e' e il calendario non si apre.
+- Il dosaggio dei dati di `MediaGridState` (H3, D3) non ritarda il passaggio Libreria -> risultati ne' lista -> lista: i risultati hanno la loro griglia e
+  leggono lo stato del controller, non quello della Libreria.
+
+### Che cosa ho tolto e che cosa resta della pagina vecchia
+- Tolti: la rotta/scheda (`SearchTab`, `SearchTabFrame`, `SearchRoute`, `SearchScreen`), la pagina a riposo (recenti con "Cancella", persone, luoghi, tipi:
+  ora i primi tre stanno nella barra in alto; cancellare la cronologia resta in Ricerca e modelli), la lista dei completamenti, la barra dei chip e i suoi
+  fogli (le altre letture di un nome, "Cerca come parola", l'altro luogo omonimo), il selettore Recenti · Pertinenti e la porta che lo ricordava
+  (`SearchOrderStore`, `PersonalSearchOrderStore`), "Mostra anche i meno probabili" (ora arrivano da soli in coda), le schede degli avvisi, gli stati a
+  tutta pagina (nessun risultato, errore, Libreria vuota), le intestazioni di periodo, il segnaposto `main_search_title`, 83 PNG della pagina vecchia.
+- Tenuti: i filtri riconosciuti nel testo («agosto 2024», «Roma», «video») senza interfaccia; i meno probabili in coda; un avviso alla volta nella riga; la
+  persona scelta fra i suggerimenti con il suo chip gia' fatto; nascosti mai (D29) su ogni superficie; il motore, la cronologia, i risultati vivi (E-Q13).
+- Resta nel registro dei dati personali il valore `search_order` (`PersonalSettingsHub.searchOrder`, sincronizzato con gli altri dispositivi): nessuno lo
+  legge piu'. Toglierlo dallo schema (core-personal) e' un lavoro a parte.
+
+### Limiti dell'engine incontrati
+- `FluidSearchField` collassato e' un cerchio fisso da 52 dp, la pillola ha il cerchio da 60: il campo nasce concentrico e il cerchio della pillola sparisce
+  mentre quello del campo compare (dissolvenza nel primo quinto dell'apertura). Servirebbe un'altezza del campo parametrica.
+- `FluidSearchField` e la pillola usano il vetro dell'engine (`glassSurface`), non `galleryGlass`: con "meno trasparenza" restano vetro.
+- La lente del campo non sta ferma (cresce verso sinistra, come in Foto di Apple): la regola dell'engine «la lente non si sposta» vale per un campo
+  ancorato a sinistra.
+
+### Verifiche (un posto del semaforo per batch, rilasciato)
+- `H4-1` compilazione di core-designsystem, feature-search, feature-library, app: OK. `H4-2` test di feature-search + compilazione dei test degli altri:
+  FAIL (tre test di feature-search non compilavano, corretti). `H4-3`: FAIL (feature-search 160, 2 falliti: dissolvenza scritta a mano, vietata da
+  `NoHandWrittenStyleTest`, spostata in `GalleryMotion`; un'attesa vecchia sui suggerimenti; core-designsystem 304, 0 falliti). `H4-4`: FAIL in
+  compilazione (core-designsystem), corretto. `H4-5` (dopo l'unione di H3) test di feature-search, core-designsystem, feature-library: OK (160 + 304 + 1273,
+  0 falliti). `H4-6` screenshot H4 + `G2PillolaTest`, `LibreriaAlRitornoTest`, `SchedeCheRicordanoTest`: OK (0 falliti, 25 PNG). `H4-7` le scene di
+  Scaffold e G2 (tolte quelle di Cerca) come test, senza registrare: OK (64, 0 falliti).
+- Non lanciati: `tools\check.ps1`, il resto dei test di `app` (nessuno usa `feature-search`), la registrazione dei PNG di Scaffold e G2.
+- Lo script dei miei batch chiudeva a fine batch i `java` nati dopo la presa del posto (per ora, non per albero). Alle 14:48 ha chiuso due processi e
+  uno dei due era con ogni probabilita' l'esecutore dei test di un'altra build (`mcg-integra-beta`, fallita con uscita -1). Corretto: lo script annota i
+  discendenti del suo `gradlew` mentre gira e chiude solo quelli (PID e ora di nascita).
+- Screenshot in `docs/screenshots/beta-grafica/H4/` (telefono 360 x 780 dp e tablet 1280 x 800 dp, chiaro e scuro): `aperta-campo-vuoto`,
+  `scrivendo-risultati`, `nessun-risultato`, `risultati-selezione`, `trova-simili`, `da-album-scrivendo` (uguale a `scrivendo-risultati`: e' la prova che
+  da Album si arriva allo stesso punto), `suggerimenti-lunghi-chiaro-telefono-testo-grande`.
+
+### Prove sul telefono (S25, poi Tab S9)
+1. Aprire dal cerchio: un gesto solo, la pillola si raccoglie, la barra si allarga e la tastiera sale con la barra attaccata (Samsung Keyboard, poi Gboard).
+   Difetto: uno scatto, la barra che arriva dopo la tastiera, la tastiera che copre la barra o i primi risultati.
+2. Scrivere veloce «mare ad agosto»: la griglia non lampeggia, i suggerimenti in alto cambiano senza saltare di misura. Difetto: stato vuoto intermedio.
+3. Indietro con la tastiera su (Android 13+): chiude in un passo. X e crocetta. Difetto: due passi, o la crocetta che chiude.
+4. Risultati: tocco (si apre dalla cella e ci torna), Indietro dal bordo sopra un risultato (non si apre), pressione lunga e selezione (barra e fogli della
+   Libreria), scorrimento (la tastiera scende), tirare in fondo (nessun aggiornamento).
+5. Da Album e Raccolte: dietro c'e' la Libreria, chiudendo si torna alla scheda di partenza. "Trova simili" dal viewer e dalla selezione.
+6. Tablet in orizzontale e con il testo grande. Benchmark `scroll` e `coldStart` invariati (la ricerca chiusa non compone niente in piu').
+
+### Rischi per le prestazioni
+- La barra legge la tastiera solo in layout e disegno; `MainScaffold` legge l'avanzamento della barra nel disegno. Nessuna ricomposizione per fotogramma.
+- La Libreria resta composta sotto i suggerimenti finche' i risultati non la coprono: nel primo istante due griglie insieme (una sola scorre).
+- Ogni lista nuova rifa' la griglia dei risultati (pigra). La chiave della lista e' l'elenco degli id: a ogni risultato nuovo si costruisce e si
+  confronta un elenco lungo quanto i risultati (con 10 000 risultati e' un lavoro piccolo, ma e' lineare).

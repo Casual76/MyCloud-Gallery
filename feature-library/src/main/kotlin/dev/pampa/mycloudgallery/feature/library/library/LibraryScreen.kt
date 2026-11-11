@@ -158,6 +158,8 @@ internal fun LibraryScreen(
   val bottomPadding = maxOf(slotBottom + ActionBarHeight + GalleryChromeDefaults.Gap, contentPadding.calculateBottomPadding())
   val empty = grid.view.size == 0
   val pillVeil = rememberPillVeil()
+  val commands = state.commands
+  val pullRefresh: (suspend () -> Unit)? = remember(commands) { if (commands.canRefresh) ({ commands.refresh() }) else null }
 
   // I tag della chrome come id di risorsa: gli strumenti di misura sull'emulatore (uiautomator) la trovano per nome.
   // Fase 10 (P6, D21): la Libreria e' una destinazione per le foto trascinate da un'altra app ("Salva sul NAS": si apre il foglio della ricezione, niente parte senza un tocco).
@@ -193,6 +195,8 @@ internal fun LibraryScreen(
           dragOrigin = DragOrigin.LIBRARY,
           // Fase 10 P8 (D23): Preferito, Condividi, Nascondi, Elimina come azioni della cella, per TalkBack e Switch Access.
           cellActions = { id -> libraryCellActions(state, id, cellLabels, scope, onDelete = { requestPhoneDelete(state) { deleting = true } }, onHideGroups = { hidingGroups = true }) },
+          // Fase H (D10): tirando oltre il fondo (i piu' recenti) la Libreria si aggiorna; l'esito lo dice la nuvola in alto.
+          onPullRefresh = pullRefresh,
         )
       }
       GridTopEdgeScrim(topChrome, Modifier.align(Alignment.TopCenter))

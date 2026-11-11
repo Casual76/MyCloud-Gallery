@@ -283,10 +283,17 @@ class MediaGridState(
     return Offset(v.width / 2f, v.padTop + v.contentHeight / 2f)
   }
 
+  /**
+   * Fase H (D10): quanto il tiro oltre il fondo ha spostato la lista in su (pixel, >= 0). Lo legge chi converte fra schermo e contenuto (l'hit
+   * test, i bordi per il viewer): mentre l'aggiornamento lavora la lista resta spostata e un tocco deve aprire la cella che si vede. Lo imposta
+   * [MediaGrid] se la griglia ha il gesto.
+   */
+  internal var pullOffset: () -> Float = { 0f }
+
   /** La cella sotto il punto [point] della griglia (schermo, trasformazione inclusa), o -1. */
   internal fun positionAt(point: Offset): Int {
     val l = layout ?: return -1
-    val p = transform(l).toGrid(point.x, point.y)
+    val p = transform(l).toGrid(point.x, point.y + pullOffset())
     return GridGeometry.positionAt(l, p.x, p.y, contentTop(l), viewport)
   }
 
@@ -600,7 +607,8 @@ class MediaGridState(
       val a = t.toScreen(l.itemLeft(position).toFloat(), top)
       val b = t.toScreen((l.itemLeft(position) + l.itemWidth(position)).toFloat(), bottom)
       val o = originInWindow
-      return PixelRect(o.x + a.x, o.y + a.y, o.x + b.x, o.y + b.y)
+      val lift = pullOffset()
+      return PixelRect(o.x + a.x, o.y + a.y - lift, o.x + b.x, o.y + b.y - lift)
     }
 
     override suspend fun reveal(id: MediaId) {

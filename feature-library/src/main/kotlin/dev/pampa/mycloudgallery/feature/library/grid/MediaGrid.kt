@@ -25,6 +25,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import dev.antigravity.fluidengine.ui.haptics.FluidHapticEvent
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.ImageBitmap
@@ -131,6 +133,8 @@ import kotlinx.coroutines.withContext
  * @param dragOrigin Fase 10 (P6, D20): da dove parte un trascinamento verso un'altra app (la Libreria); null = questa griglia non trascina (i Nascosti, gli Eliminati di recente: mai, E-T18). Cosa si trascina lo decide [gridDragSubject].
  * @param cellActions Fase 10 P8 (D23): le azioni personalizzate di una cella per TalkBack e Switch Access (Preferito, Condividi, Nascondi,
  *   Elimina...), chieste **solo quando il lettore chiede il nodo**. Null: la griglia non ne offre.
+ * @param onPullRefresh fase H (D10): tirare oltre il fondo (i piu' recenti) aggiorna; il lavoro, sospeso finche' dura (lo spazio resta aperto,
+ *   al piu' 2,5 s). Null: il gesto non c'e' e il fondo si comporta come prima ([GridPullState]).
  * @param onDeleteKey Canc (Fase 10, P4, D15): **apre il foglio di conferma** dell'eliminazione, mai un'eliminazione diretta. Null: questa griglia non elimina e Canc non fa niente.
  *   Mouse e tastiera (evidenziazione, Invio, Ctrl+A) sono di ogni griglia ([gridKeyboard]).
  */
@@ -148,6 +152,7 @@ fun MediaGrid(
   onDeleteKey: (() -> Unit)? = null,
   dragOrigin: DragOrigin? = null,
   cellActions: ((MediaId) -> List<GalleryCellCustomAction>)? = null,
+  onPullRefresh: (suspend () -> Unit)? = null,
 ) {
   BoxWithConstraints(
     modifier = modifier
@@ -236,6 +241,24 @@ fun MediaGrid(
       )
     }
 
+    // D10 (fase H): il tiro oltre il fondo, solo dove chi ospita la griglia sa aggiornare (la Libreria).
+    val currentOnPullRefresh by rememberUpdatedState(onPullRefresh)
+    val pull = if (onPullRefresh != null) {
+      remember(state, reducedMotion) {
+        GridPullState(scope, reducedMotion).apply {
+          enabled = { !state.selecting && !state.pinching }
+          onArmed = { haptics.play(FluidHapticEvent.Threshold) }
+          onRefresh = { currentOnPullRefresh?.invoke() }
+        }
+      }.also { p ->
+        p.triggerPx = with(density) { GridPullDefaults.Trigger.toPx() }
+        p.holdPx = with(density) { GridPullDefaults.Hold.toPx() }
+      }
+    } else {
+      null
+    }
+    SideEffect { state.pullOffset = pull?.let { p -> { p.offsetPx } } ?: NoPull }
+
     val keyCallbacks = remember(onDeleteKey != null) { GridKeyCallbacks(onOpen = { currentOnOpen(it) }, onDeleteSheet = onDeleteKey?.let { { currentOnDeleteKey?.invoke() } }) }
     Box(
       modifier = Modifier
@@ -251,7 +274,8 @@ fun MediaGrid(
           .fillMaxSize()
           // Avvio istantaneo: la prima finestra delle miniature parte appena la lista e' misurata, nello stesso fotogramma.
           .onPlaced { state.sendFirstWindow() }
-          .pinchLayer(state)
+          .then(if (pull != null) Modifier.nestedScroll(pull).onSizeChanged { pull.updateViewport(it.height) } else Modifier)
+          .pinchLayer(state, pull)
           .gridCollectionSemantics(state, levelNext, levelPrevious) { target -> scope.launch { state.selectLevel(target, currentReduced) } },
         contentPadding = PaddingValues(top = topPad, bottom = bottomPad),
         userScrollEnabled = !state.pinching,
@@ -264,6 +288,8 @@ fun MediaGrid(
           }
         }
       }
+      // D10: l'indicatore del tiro, nello spazio che il tiro apre sopra il posto della pillola. Composto solo mentre si tira o si aggiorna.
+      if (pull != null) GridPullIndicator(pull, bottomPad)
     }
   }
 }
@@ -396,13 +422,15 @@ private data class WindowProbe(
  * poiche' la griglia mostrata e' sempre quella che la scala ingrandisce ([MediaGridState.displayLevelFor]), il layer non
  * scopre mai il fondo e la lista non deve comporre righe fuori dallo schermo.
  */
-private fun Modifier.pinchLayer(state: MediaGridState): Modifier = graphicsLayer {
+private fun Modifier.pinchLayer(state: MediaGridState, pull: GridPullState?): Modifier = graphicsLayer {
   val t = state.transform()
   if (!t.isIdentity) {
     scaleX = t.scale
     scaleY = t.scale
     transformOrigin = TransformOrigin(t.originX / size.width.coerceAtLeast(1f), t.originY / size.height.coerceAtLeast(1f))
   }
+  // D10 (fase H): il tiro oltre il fondo sposta la lista in su; letto qui, nel layer: tirare non ricompone niente.
+  if (pull != null) translationY = -pull.offsetPx
 }
 
 /**
@@ -709,6 +737,9 @@ private class GridCellActions(
   override val clickLabel: String get() = if (state.selecting) strings.select else strings.open
   override val longClickLabel: String get() = strings.select
 }
+
+/** Una griglia senza il tiro oltre il fondo: la lista non si sposta mai. */
+private val NoPull: () -> Float = { 0f }
 
 /** La miniatura di una cella senza copia leggibile: nessuna, per sempre. */
 private val NoImage: State<ImageBitmap?> = mutableStateOf(null)

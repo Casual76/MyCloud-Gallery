@@ -14,6 +14,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -37,7 +38,9 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryTabBarDefaults
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTagPrefix
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import dev.pampa.mycloudgallery.core.library.contract.GridLevel
+import dev.pampa.mycloudgallery.feature.library.grid.GridPullState
 import dev.pampa.mycloudgallery.feature.library.grid.RegisterComponentActivity
+import androidx.compose.ui.test.performTouchInput
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
 import org.junit.Rule
 import org.junit.Test
@@ -167,6 +170,49 @@ internal abstract class LibraryH3ScreenshotBase(private val dark: Boolean, priva
     scrollTo(state, 0.5f)
     openCalendar()
     shootRoot("calendario-testo-grande")
+  }
+
+  // --- D10: aggiornare tirando oltre il fondo ------------------------------------------------------------------------------
+
+  /** Il comando dell'aggiornamento c'e' (come nell'app): il gesto e' attivo. */
+  private object RefreshCommands : LibraryCommands {
+    override val canRefresh: Boolean get() = true
+    override suspend fun refresh() = Unit
+  }
+
+  /**
+   * In fondo alla Libreria, il dito sale oltre il fondo fino a uno spostamento visivo di [visualDp] e **resta giu'**: lo screenshot e' il
+   * fotogramma del tiro (l'indicatore nello spazio aperto sopra la pillola).
+   */
+  private fun pullAndHold(visualDp: Float) {
+    composeRule.onRoot().performTouchInput {
+      val dimension = height * GridPullState.MaximumBounceFraction
+      val raw = GridPullState.inverseRubberBand(visualDp * density, dimension) + viewConfiguration.touchSlop
+      val start = Offset(width * 0.5f, height * 0.7f)
+      down(start)
+      val steps = 30
+      for (i in 1..steps) {
+        moveTo(start - Offset(0f, raw * i / steps))
+        advanceEventTime(16)
+      }
+    }
+    composeRule.waitForIdle()
+  }
+
+  /** A meta' strada verso la soglia: i raggi dello spinner si rivelano col dito. */
+  @Test
+  fun aggiornaAMeta() {
+    show(library(commands = RefreshCommands))
+    pullAndHold(visualDp = 40f)
+    shootRoot("aggiorna-a-meta")
+  }
+
+  /** Oltre la soglia (76 dp): lo spinner e' intero; al rilascio la Libreria si aggiorna. */
+  @Test
+  fun aggiornaOltreLaSoglia() {
+    show(library(commands = RefreshCommands))
+    pullAndHold(visualDp = 96f)
+    shootRoot("aggiorna-oltre-soglia")
   }
 
   companion object {

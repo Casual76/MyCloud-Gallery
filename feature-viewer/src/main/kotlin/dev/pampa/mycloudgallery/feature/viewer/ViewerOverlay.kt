@@ -708,6 +708,7 @@ private fun PagerLayer(
           cutout = controller.cutout,
           // Fase 10 (P6, D20, E-T18): la foto si trascina verso un'altra app, mai dai Nascosti.
           dragEnabled = !request.secure,
+          sidePanel = controller.sidePanel,
           modifier = Modifier.infoPageLayer(controller, remember(spec.aspect, stage) { fitRect(stage, spec.aspect) }, panelPx, clip = infoShown),
         )
       }

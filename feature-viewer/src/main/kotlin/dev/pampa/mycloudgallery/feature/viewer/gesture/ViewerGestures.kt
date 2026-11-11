@@ -106,6 +106,14 @@ internal object ViewerGestureArbiter {
    */
   const val PinchSlopShare: Float = 0.5f
 
+  /**
+   * Il doppio tocco ingrandisce? **La stessa regola per foto, foto animate e video** (CG-3): no con il pannello del telefono aperto (la foto e'
+   * spostata e tagliata: si ingrandirebbe un punto che non e' quello toccato; un tocco solo chiude il pannello), no con una selezione del testo
+   * o un soggetto staccato aperti (D45). Con la colonna laterale la foto accanto e' intera: si', come il pizzico.
+   */
+  fun doubleTapZooms(infoOpen: Boolean, sidePanel: Boolean, textActive: Boolean, cutoutActive: Boolean): Boolean =
+    !textActive && !cutoutActive && !(infoOpen && !sidePanel)
+
   fun decide(context: GestureContext, fingers: Int, pan: Offset, spanChange: Float, slop: Float): GestureClaim {
     if (!context.enabled || context.zoomed) return GestureClaim.Children
     if (fingers >= 2) {

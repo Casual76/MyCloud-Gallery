@@ -85,6 +85,17 @@ class ViewerGestureArbiterTest {
   }
 
   @Test
+  fun ilDoppioToccoEUgualePerFotoEVideo_spentoAPannelloApertoSulTelefono() {
+    // CG-3: una regola sola, che la pagina usa per ogni tipo di media (prima il ramo del video la ignorava).
+    assertThat(ViewerGestureArbiter.doubleTapZooms(infoOpen = false, sidePanel = false, textActive = false, cutoutActive = false)).isTrue()
+    assertThat(ViewerGestureArbiter.doubleTapZooms(infoOpen = true, sidePanel = false, textActive = false, cutoutActive = false)).isFalse()
+    // La colonna laterale lascia la foto intera: si ingrandisce come con il pizzico.
+    assertThat(ViewerGestureArbiter.doubleTapZooms(infoOpen = true, sidePanel = true, textActive = false, cutoutActive = false)).isTrue()
+    assertThat(ViewerGestureArbiter.doubleTapZooms(infoOpen = false, sidePanel = false, textActive = true, cutoutActive = false)).isFalse()
+    assertThat(ViewerGestureArbiter.doubleTapZooms(infoOpen = false, sidePanel = false, textActive = false, cutoutActive = true)).isFalse()
+  }
+
+  @Test
   fun mentreIlContenutoTornaSoloUnaChiusuraLoRiprende() {
     val returning = rest.copy(returning = true)
     assertThat(one(Offset(0f, 40f), returning)).isEqualTo(GestureClaim.Dismiss)

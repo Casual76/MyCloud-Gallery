@@ -13,6 +13,7 @@ import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
@@ -143,6 +144,22 @@ class ViewerGesturesTest : ViewerTestBase() {
   }
 
   // --- Lo zoom dei video (D8) ----------------------------------------------------------------------------------------
+
+  @Test
+  fun aPannelloInformazioniApertoIlDoppioToccoNonIngrandisceIlVideo() {
+    // CG-3: come per le foto. Prima il ramo del video non riceveva il blocco e il video si ingrandiva sotto il pannello.
+    show(request = fixture.request(startIndex = videoIndex))
+    pager().performTouchInput { swipeUp() }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(800)
+    composeRule.waitForIdle()
+    composeRule.onNodeWithTag(ViewerTags.InfoPanel).assertExists()
+    pager().performTouchInput { doubleClick(Offset(centerX, height * 0.2f)) }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(800)
+    composeRule.waitForIdle()
+    assertThat(isZoomed()).isFalse()
+  }
 
   @Test
   fun unVideoSiIngrandisceColDoppioTocco_laBarraRestaToccabile_eLoZoomResta() {

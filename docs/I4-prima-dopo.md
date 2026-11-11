@@ -8,6 +8,7 @@ che vivono nelle cartelle delle fasi di origine (`7-P10`, `2-P6`, `4-P14`, `RG-D
 ## Libreria
 | Pagina | Prima | Dopo | Parole prima → dopo |
 |---|---|---|---|
+| Pop-up della nuvola, backup in pausa (seguito) | titolo «In pausa» e sotto la capsula «Backup in pausa» con la «i»: lo stato detto due volte | **una volta, nel titolo**: «In pausa» con la «i»; il perche' si apre al tocco sotto il titolo; resta il tasto «Apri Backup». Lo stesso per il backup vero non ancora acceso: «In pausa · Il backup vero non e' ancora acceso», le parole della pagina Backup di I3 (`pop-up-backup-in-pausa-*`, `pop-up-backup-non-ancora-acceso-*`) | 7 → 4 |
 | Pop-up della nuvola, lavoro in corso | titolo, capsula «Backup in corso: 1.240 di 6.658» con la freccia, barra, «circa 1 h 20 min», «Spazio sul NAS», «1,2 TB usati di 3,6 TB», barra, «Ultima sincronizzazione», «Oggi alle 06:54», «Libera spazio», «Toglie dal telefono le foto gia' al sicuro sul NAS.» | titolo; **anello con «18%»** e accanto la nuvola che sale e «1.240 / 6.658», l'orologio e «circa 1 h 20 min»; **anello dello spazio con il disco** e «1,2 TB / di 3,6 TB»; il segno della cronologia e l'ora; «Libera spazio» con la scopa | ~40 → ~14 |
 | Pop-up, un problema | capsula + frase di due-tre righe + tasto, per ogni problema | capsula (segno e due parole) con la **«i»**: la frase si apre al tocco; tasto con la sua icona (lo stetoscopio della Diagnostica, la nuvola del Backup, la chiave, la VPN) | ~45 → ~14 |
 | Pop-up, in coda / lettura del NAS | capsule con le frasi | righe con l'anello (o l'orologio dell'attesa), il conto e la ragione dell'attesa in due parole | ~20 → ~12 |
@@ -22,7 +23,7 @@ che vivono nelle cartelle delle fasi di origine (`7-P10`, `2-P6`, `4-P14`, `RG-D
 |---|---|---|---|
 | Scheda Album | nome e numero sotto ogni copertina | solo il nome (il numero lo dice TalkBack) | 24 → 12 (per 9 album) |
 | Pagina di un album | «24 elementi · Dal piu' recente · Lo hai condiviso tu»; righe di stato con una frase ciascuna; piastrelle grigie | «24 elementi»; righe di stato con la **piastrella colorata della famiglia e il segno nell'angolo** (in corso, fatto, attenzione), la frase solo per gli avvisi | ~60 → ~25 |
-| «Viaggi» (tutte le proposte) | una scheda di testo per proposta: copertina larga, nome, «12 foto · 3–6 mar», capsula «Viaggio», due tasti larghi uno sotto l'altro; sottotitolo della pagina; stati vuoti con due frasi | **griglia di schede** come «Tutti i ricordi» di I1: copertina a tutta scheda 3:4, nome e «Viaggio»/«Evento» sopra la sfumatura, la ✕ di «Non mi interessa» in alto, «Crea album» con il + sotto la scheda; numero e giorni a TalkBack; stati vuoti con il solo titolo | ~25 per proposta → ~5 |
+| «Viaggi» (tutte le proposte) | una scheda di testo per proposta: copertina larga, nome, «12 foto · 3–6 mar», capsula «Viaggio», due tasti larghi uno sotto l'altro; sottotitolo della pagina; stati vuoti con due frasi | **griglia di schede** con la **stessa scheda** di «Tutti i ricordi» e delle Raccolte di I1 (`GalleryCoverCard`, seguito): copertina a tutta scheda 3:4, nome e «Viaggio»/«Evento» sopra la sfumatura, la ✕ di «Non mi interessa» in alto, «Crea album» con il + sotto la scheda; numero e giorni a TalkBack; stati vuoti con il solo titolo | ~25 per proposta → ~5 |
 | Foglio «Condividi con la famiglia» | «24 foto e 2 video (186 MB) verranno spostati nell'area comune, nella cartella «...», e li vedranno tutti i familiari.», le scelte con una frase sotto, la nota «Lo puoi cambiare quando vuoi» | «24 foto e 2 video (186 MB) vanno nell'area comune: li vedranno tutti i familiari.», le scelte senza la frase (la cartella la dice la riga «Cartella») | ~80 → ~55 |
 
 ## Viewer
@@ -36,7 +37,7 @@ che vivono nelle cartelle delle fasi di origine (`7-P10`, `2-P6`, `4-P14`, `RG-D
 |---|---|---|---|
 | Operazioni in corso | per ogni scheda: capsula «In corso · 40%», «128 di 312 elementi · 1,6 GB di 4,1 GB», «Ferma», «Quello che e' gia' stato fatto resta fatto.» | piastrella del tipo con il **segno di stato** nell'angolo, titolo, «128 / 312 · 1,6 / 4,1 GB», **anello con la percentuale**, «Annulla il resto» con l'icona; la garanzia una volta sotto la sezione | ~110 → ~45 (tre schede) |
 | Operazioni finite | capsula di stato + frase | piastrella con il segno dell'esito | −1 capsula per riga |
-| Cartelle del NAS | icona grigia uguale, «2,4 MB · 15 settembre 2026» | **piastrella colorata per tipo** (cartella del NAS blu, foto viola, video rosa, documento grigio), solo il peso (la data la dice TalkBack) | −3 parole per file |
+| Cartelle del NAS | icona grigia uguale, «2,4 MB · 15 settembre 2026» | **le anteprime vere** (seguito): una foto o un video che la Libreria conosce mostra la sua miniatura; una cartella mostra la sua copertina (una foto, o il mosaico di quattro) con un piccolo segno di cartella nell'angolo; il resto (PDF, file mai indicizzati, cartelle senza foto, nascosti) tiene la **piastrella colorata per tipo**; solo il peso (la data la dice TalkBack). Screenshot `nas-cartelle-anteprime-*` (prima: `nas-cartelle-cartella-*`), anche mentre le miniature arrivano (`-in-arrivo-`: la piastrella, la riga non salta) | −3 parole per file |
 | Cestino del NAS (anche quello dentro la Libreria) | banner di tre righe, «Eliminato da questo dispositivo» su ogni riga, nota con «share» | banner di una riga, il proprio dispositivo non si scrive (TalkBack si'), nota senza parole da cantiere | ~120 → ~80 |
 
 ## Onboarding
@@ -56,14 +57,21 @@ che vivono nelle cartelle delle fasi di origine (`7-P10`, `2-P6`, `4-P14`, `RG-D
 «share» (cestino del NAS, avvisi della Libreria e dei Doppioni), «media» come sostantivo (Integrazioni, `:app`, ordinamento degli album),
 «area di prova» (`:app`), «Test di connessione» / «Negoziazione SMB» / «Connessione TCP» nei titoli della Diagnostica, la provetta
 (`Science`) come segno del backup «in prova» (ora la clessidra). Il testo «Backup in prova / share di prova» resta al suo posto finche'
-l'orchestratore non gira quello di I3.
+l'orchestratore non gira quello di I3. **Seguito**: girato. Piede della Libreria «In pausa · Il backup vero non e' ancora acceso», ricezione e
+Diagnostica «Backup in pausa» con la frase di I3; resta «Indice condiviso in prova» (stato del NAS), per cui I3 non ha dato un testo.
 
 ## Scelte di disegno che l'utente potrebbe voler cambiare
 - Pop-up della nuvola: la percentuale dentro l'anello e il conto accanto (si potrebbe tenere solo uno dei due).
 - Pop-up: la frase di un problema dietro la «i» della capsula (prima era sempre aperta).
 - Album: nessun numero sotto le copertine (Samsung e Apple lo scrivono; il brief diceva di toglierlo).
-- Cartelle del NAS: piastrelle colorate per tipo al posto delle anteprime vere (le anteprime chiedono un legame nuovo con le miniature).
+- Cartelle del NAS: **elenco con le anteprime a 44 dp, non una griglia**, anche per le cartelle piene di foto. La pagina e' per mettere in ordine
+  (selezione, rinomina, sposta, la riga del nascosto, TalkBack riga per riga): la griglia la fa gia' il viewer, che si apre al tocco su una foto.
+  Una griglia per le cartelle «solo foto» si puo' aggiungere dopo, se l'utente la vuole.
+- Cartelle del NAS: la copertina di una cartella e' un mosaico di quattro quando ne ha almeno quattro, una foto sola altrimenti; il segno della
+  cartella nell'angolo dice che e' una cartella e non una foto.
 - Onboarding: le tre promesse come piastrelle in fila; i percorsi senza la frase sotto.
 - Operazioni: la garanzia «quello che e' gia' stato fatto resta fatto» una volta sola, sotto le schede.
 - Libreria vuota: «Ancora nessuna foto» al posto di «La Libreria e' vuota».
-- «Viaggi»: «Crea album» sotto la scheda e la ✕ sulla copertina (la scheda dei ricordi di I1 e' privata di `feature-memories`: qui la stessa forma, non lo stesso componente).
+- «Viaggi»: «Crea album» sotto la scheda e la ✕ sulla copertina. La scheda e' ora la stessa dei ricordi (`GalleryCoverCard`): la sfumatura non ha
+  piu' il suo angolo arrotondato in cima (prima si vedeva un gradino a meta' scheda).
+- Pop-up della nuvola: con la pausa come unica cosa da dire, il titolo ha la «i»; con un problema piu' grave la pausa torna una capsula fra le voci.

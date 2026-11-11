@@ -18810,18 +18810,42 @@ Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?».
 - **Viewer**: il foglio «Eliminare questa foto?» dice i 30 giorni una volta.
 - **«Viaggi»** (`feature-albums/trips`, chiesto dall'orchestratore dopo la consegna di I1): griglia di schede come «Tutti i ricordi» (copertina 3:4,
   nome e «Viaggio»/«Evento» sulla sfumatura, ✕ di «Non mi interessa», «Crea album» sotto). La scheda di I1 (`MemoryCardTile`) e' privata di
-  `feature-memories`, che `feature-albums` non vede: stessa forma e stesse misure, componente proprio (piccolo). Se si vuole un componente solo,
-  va spostato in `core-designsystem` (una `GalleryCoverCard` con copertina, titolo e riga piccola): da decidere con l'orchestratore.
+  `feature-memories`, che `feature-albums` non vede: alla consegna stessa forma con un componente proprio; nel seguito la scheda e' passata in
+  `core-designsystem` (`GalleryCoverCard`) e la usano tutti e tre.
 - **Onboarding**: Benvenuto con tre piastrelle e due parole; percorsi e permessi con la piastrella di cio' che si ottiene (permessi concessi: il
   segno «fatto»).
 - **Integrazioni**: ricezione con i segni delle aree e degli album; «media» tolto dalle frasi.
 - **Diagnostica**: «Prova della connessione», «Accordo con il NAS», «Connessione» al posto di «Test di connessione», «Negoziazione SMB», «Connessione TCP».
-- **Non fatto**: anteprime vere nelle cartelle del NAS (serve un legame nuovo fra il percorso del NAS e le miniature della Libreria, che non c'e':
-  da decidere con l'orchestratore); il testo dello stato «in prova» del backup e del NAS (lo gira l'orchestratore quando I3 consegna).
+- **Non fatto** (alla consegna, poi fatto nel seguito qui sotto): anteprime vere nelle cartelle del NAS; il testo dello stato «in prova».
+- **Seguito (12/11)**, chiesto dall'orchestratore dopo l'integrazione:
+  - **Anteprime vere nelle cartelle del NAS.** Il legame fra percorso e catalogo c'era gia': `media_location.location_key` (unico) per i file e
+    `folder_key` (con indice) per le cartelle, quindi **nessuna migrazione**. Per ogni pagina di cartella si fa **una** lettura (`NasAreas.previews`,
+    in `:app` `CatalogNasPreviews`, su `Dispatchers.IO`): i file elencati per chiave di posizione (a pezzi di 500), le sottocartelle con una sola
+    lettura per intervallo di `folder_key` (dal piu' recente, al piu' 4.000 righe, quattro media per cartella). Mai un nascosto (anche un compagno
+    di gruppo nascosto, `CatalogHidden.HIDDEN_VERSION_SQL`) ne' una posizione assente. Le miniature passano dalle porte della griglia: la richiesta
+    nasce dalla Libreria visibile (`LibraryAlbumRefs`, cioe' niente di Nascosti e niente delle aree che l'utente non vede), la cache e' quella della
+    griglia (`ThumbnailLoader`), la finestra chiede le righe visibili e il gruppo dopo, come la griglia. Nessuna rete in piu'. Finche' la miniatura
+    non c'e' resta la piastrella del tipo nello stesso posto (44 dp): la riga non salta. Un errore della lettura lascia le piastrelle.
+    **Elenco e non griglia** anche per le cartelle piene di foto: la pagina serve a mettere in ordine (selezione, rinomina, sposta), e la griglia
+    e' il viewer, a un tocco. Prove: `NasFolderPreviewsTest`, `CatalogNasPreviewsTest`, screenshot `nas-cartelle-anteprime-*`.
+  - **Una sola scheda di copertina.** `GalleryCoverCard` in `core-designsystem/design`: la copertina, il titolo bianco sulla sfumatura dello scrim,
+    la riga piccola, il punto «nuovo». La usano le Raccolte (caroselli), «Tutti i ricordi» e «Viaggi»; tolte le copie (`CardLabel`/`NewDot` delle
+    Raccolte, la scheda di `AllMemoriesScreen`, quella dei Viaggi) e le misure doppie. Gli screenshot di I1 non si muovono (confronto pixel per
+    pixel con `beta-grafica/I1`: identici). «Viaggi» cambia di poco: la sfumatura non ha piu' il suo angolo arrotondato in cima.
+  - **Lo stato si dice una volta.** Nel pop-up della nuvola, quando la pausa del backup e' l'unica cosa da dire, la dice il titolo («In pausa» con la
+    «i», il perche' si apre sotto); la capsula «Backup in pausa» non c'e' piu'. Il backup vero non ancora acceso (`TestOnly`) e' ora una pausa anche
+    qui (prima era un'attesa), con le parole della pagina Backup di I3: «In pausa · Il backup vero non e' ancora acceso». La recinzione D12 non
+    cambia; lo spazio del NAS resta (non e' una pausa chiesta dall'utente). Con un problema piu' grave il titolo dice il problema e la pausa torna
+    capsula.
+  - **Testi «in prova» di I3** girati nel piede della Libreria, nella ricezione (Integrazioni) e nella Diagnostica. `tools/check.ps1` non cerca
+    questi testi (letto il file). Resta «Indice condiviso in prova» dello stato del NAS: I3 non ha dato un testo.
 - **Prove sul telefono**: (1) Libreria → nuvola durante un backup: l'anello avanza e la percentuale cambia senza scatti; il pop-up non cambia
   misura mentre avanza; (2) con un problema: tocco sulla capsula → la frase si apre e si richiude; (3) strisce in cima con l'accesso parziale a
   1,3x: il tasto va sotto, niente sovrapposizioni; (4) Operazioni NAS durante uno spostamento: l'anello avanza, il segno nell'angolo passa da
-  in corso a fatto; (5) onboarding Permessi: dopo aver concesso, la capsula sparisce e compare il segno «fatto».
+  in corso a fatto; (5) onboarding Permessi: dopo aver concesso, la capsula sparisce e compare il segno «fatto»; (6, seguito) Cartelle del NAS su
+  una cartella di viaggio gia' indicizzata: le foto mostrano la miniatura, le sottocartelle la copertina, un PDF la piastrella; scorrendo veloce le
+  righe non saltano; una foto nascosta non compare mai, nemmeno nella copertina della sua cartella; (7, seguito) nuvola con il backup in pausa:
+  «In pausa» una volta, il tocco sulla «i» apre il perche'.
 
 ### I3, Backup e Impostazioni che si capiscono guardandoli (fase I, 11 novembre 2026)
 

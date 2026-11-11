@@ -76,17 +76,3 @@ dependencies {
   testImplementation appDeps.junit
   testImplementation appDeps.truth
 }
-
-
-// BUILD-INC: la cache normalizza i sorgenti rispetto alle radici. Una ricollocazione
-// main/debug puo quindi restare UP-TO-DATE e lasciare gli indici IC della vecchia
-// posizione. Solo i due moduli con sorgenti ricollocati da Z1 registrano anche il
-// layout relativo. Nessun sorgente aggiunto alla release; l'incrementale resta attivo.
-if (project.path in [':core-designsystem', ':app']) {
-  def kotlinCompileType = plugins.getPlugin('org.jetbrains.kotlin.android').class.classLoader.loadClass('org.jetbrains.kotlin.gradle.tasks.KotlinCompile')
-  tasks.withType(kotlinCompileType).configureEach {
-    inputs.property('mcgKotlinSourceLayout', providers.provider {
-      sources.files.collect { project.relativePath(it).replace('\\', '/') }.sort()
-    })
-  }
-}

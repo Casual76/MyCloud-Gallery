@@ -18554,3 +18554,8 @@ Unione: `integra/beta-grafica` (`3f686ef9`) era gia' figlia del ramo H5: avanzam
 - **Non coperto da un test:** la preparazione a griglia ferma (`keepWarm`) dipende dal cancello del primo disegno, che nei test della Libreria
   sintetica non si apre; e' da guardare sul telefono (prova 4 qui sopra: alla prima apertura dopo qualche secondo di griglia ferma il calendario
   deve essere gia' pieno).
+
+
+### HR, ultimo giro di correzione (11 novembre 2026)
+
+Build: tolta la protezione riflessiva del layout; in un worktree riusato dopo un cambio di commit, se serve ricostruire core-designsystem usare nel batch autorizzato `.\gradlew.bat --no-daemon --no-watch-fs --max-workers=2 --no-parallel :core-designsystem:compileDebugKotlin --rerun`: provati cambio main/debug e modifica API main con e senza protezione, tutti riusciti, quindi queste prove non spiegano la causa del guasto storico.

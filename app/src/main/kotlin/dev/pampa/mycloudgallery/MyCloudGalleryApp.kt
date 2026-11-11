@@ -258,8 +258,10 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
         if (::widget.isInitialized) widget.resume()
         // D15: accendere Indicizzatore chiede subito il modello del calcolo (lavoro accelerato). Iscritti subito: un cambio non va perso.
         graph.scope.launch {
-          ai.ai.indexer.drop(1).collect { on ->
-            if (on && gallery.backgroundWorkAllowed) AiWorkScheduling.fetchNow(this@MyCloudGalleryApp, ModelTrigger.ROLE_CHANGED)
+          dev.pampa.mycloudgallery.ai.watchIndexerModels(ai.ai.indexer, { gallery.backgroundWorkAllowed }) {
+            AfterFirstDraw.launchAfter(graph.scope) {
+              AiWorkScheduling.fetchNow(this@MyCloudGalleryApp, ModelTrigger.ROLE_CHANGED)
+            }
           }
         }
         // Avvio istantaneo (28/10): il resto non serve a disegnare la Libreria e parte dopo il primo disegno utile (al piu' 1,5 s

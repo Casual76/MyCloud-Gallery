@@ -13,6 +13,9 @@ import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -207,6 +210,8 @@ fun GalleryChromeCapsule(
     Row(
       modifier = modifier
         .height(chromePieceHeight())
+        // Fase H (D2): un tocco sulla capsula fuori dai tasti (il bordo, il respiro fra due tasti) resta qui e non apre la foto dietro.
+        .holdsTouches()
         .chromeGlass(style, backdrop)
         .padding(horizontal = GalleryChromeDefaults.CapsulePadding),
       verticalAlignment = Alignment.CenterVertically,
@@ -246,6 +251,10 @@ fun GalleryChromeCapsule(
  * titolo ([ChromeTitleFit]), e mentre la capsula accanto cambia larghezza la scelta e' un confronto fra interi. TalkBack legge
  * sempre [title] per esteso.
  *
+ * **I tocchi restano qui** (fase H, D2: sull'S25 toccare «sabato 31 ottobre» apriva la foto che stava dietro, perche' l'etichetta non aveva
+ * nessun gestore e l'hit test passava alla griglia). Senza [onClick] l'etichetta trattiene i tocchi e basta; con [onClick] e' un tasto
+ * ([onClickLabel] e' cio' che TalkBack dice che fa: la Libreria ci apre il salto a una data).
+ *
  * **Un conteggio non si taglia a meta'** (GF-22, review della beta: in cima alla Libreria, a 360 dp con quattro tasti, «1.817 foto, 18…»). Con
  * [shorterSubtitles] (anche vuota) il sottotitolo e' un riepilogo che **si mostra intero o non si mostra**: la prima forma che entra fra
  * [subtitle] e le forme piu' corte, e se nemmeno la piu' stretta entra la seconda riga manca (il riepilogo sta scritto anche in fondo alla
@@ -262,6 +271,8 @@ fun GalleryChromeLabel(
   shorterTitles: List<String> = emptyList(),
   shorterSubtitles: List<String>? = null,
   contentMoving: () -> Boolean = { false },
+  onClick: (() -> Unit)? = null,
+  onClickLabel: String? = null,
 ) {
   val lines = remember(title, subtitle, shorterTitles, shorterSubtitles) {
     ChromeLabelLines(forms = listOf(title) + shorterTitles, subtitle = subtitle, subtitleForms = subtitleFormsOf(subtitle, shorterSubtitles))
@@ -281,6 +292,16 @@ fun GalleryChromeLabel(
   SubcomposeLayout(
     modifier = modifier
       .height(chromePieceHeight())
+      .then(
+        if (onClick != null) {
+          Modifier
+            // Il nome dell'azione per TalkBack («Vai a una data»): fa la stessa cosa del tocco.
+            .semantics { if (onClickLabel != null) this.onClick(label = onClickLabel) { onClick(); true } }
+            .fluidPressable(onClick = onClick, role = Role.Button, focusShape = FluidCapsuleShape)
+        } else {
+          Modifier.holdsTouches()
+        },
+      )
       .chromeGlass(style, backdrop)
       .padding(horizontal = GalleryChromeDefaults.LabelPaddingH),
   ) { constraints ->
@@ -843,6 +864,13 @@ object GalleryChromeDefaults {
    */
   const val MeasuredTarget: Float = 5.5f
 }
+
+/**
+ * Fase H (D2): un pezzo di chrome **trattiene i tocchi** che cadono su di lui. Basta che ci sia un gestore: l'hit test di Compose si ferma al
+ * primo fratello colpito che ne ha uno, quindi la griglia sotto non riceve il tocco. Non consuma i trascinamenti e lascia i tocchi ai tasti
+ * che stanno dentro (come la barra delle azioni, `GalleryChromeActionBar`).
+ */
+fun Modifier.holdsTouches(): Modifier = pointerInput(Unit) { detectTapGestures { } }
 
 /** Il tag di test della chrome: i pezzi che il test dei bordi e gli strumenti di misura cercano portano `chrome-<nome>`. */
 fun Modifier.galleryChromeTag(name: String): Modifier = testTag("$GalleryChromeTagPrefix$name")

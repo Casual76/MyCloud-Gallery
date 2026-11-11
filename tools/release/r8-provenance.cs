@@ -148,6 +148,15 @@ public static class R8Provenance {
     foreach(var p in m.Positions) {if(p.Key>pc) break; residual=p.Value;}
     return residual;
   }
+  static bool IsOurOrigin(string origin) {
+    return origin.StartsWith("Ldev/pampa/") || origin.StartsWith("Ldev/antigravity/fluidengine/");
+  }
+  static string PolicyOrigin(Entry entry) {
+    // CR-3: la libreria inline e' trasparente. Decide il primo autore nostro
+    // dal frame interno verso l'esterno; in assenza di nostri frame vale l'interno.
+    foreach(var frame in entry.Frames) if(IsOurOrigin(frame.Origin)) return frame.Origin;
+    return entry.Origin;
+  }
   public static string[] Origins(string dex,string line,string target) {
     Method m=InstructionMethod(dex,line);
     // La firma di un ponte sintetico e' attribuita al callee, ispezionato a sua volta.
@@ -169,8 +178,9 @@ public static class R8Provenance {
     }
     if(!hasSignature) throw new InvalidOperationException("HK: firma residuale non risolta: "+m.Key+":"+m.Signature);
     if(first!=null) {
-      if(target=="Landroidx/glance/" && !first.Origin.StartsWith("Landroidx/glance/") && !first.Origin.StartsWith("Ldev/")) PolicyEvidence.Add("POSIZIONATA "+m.Key+" -> "+first.Origin+" :: "+line);
-      return new string[]{first.Origin};
+      string author=PolicyOrigin(first);
+      if(target=="Landroidx/glance/" && !author.StartsWith("Landroidx/glance/") && !author.StartsWith("Ldev/")) PolicyEvidence.Add("POSIZIONATA "+m.Key+" -> "+author+" :: "+line);
+      return new string[]{author};
     }
     // Il prologo puo' precedere il dispatch di una classe fusa. Nessuna scelta dal nome,
     // dai campi condivisi o dal ramo del switch: tutti i frame e il contenitore sono candidati.

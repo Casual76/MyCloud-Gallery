@@ -60,12 +60,30 @@ foreach($prefix in $prefixes) {
  $owner='dev.pampa.mycloudgallery.'+$prefix.Replace('/','.')+'Owner'
  @("$owner -> ${owner}:", "    1:1:void run():1 -> run", "    2:2:void forbidden.Owner.run():2 -> run") | Add-Content (Join-Path $work 'mapping.txt')
 }
+$policyCases=@(
+ @('HTTPS','kotlin.io.TextStreamsKt','core/models/download/https','Ljava/net/URL;.openStream:', 'invoke-virtual {v0}, Ljava/net/URL;.openStream:()Ljava/io/InputStream; // method@1'),
+ @('OkHttp','okhttp3.OkHttpClient','feature/map/net','Lokhttp3/', 'invoke-virtual {v0,v1}, Lokhttp3/OkHttpClient;.newCall:(Lokhttp3/Request;)Lokhttp3/Call; // method@1'),
+ @('Glance','androidx.glance.appwidget.GlanceAppWidget','feature/widget','Landroidx/glance/', 'invoke-virtual {v0}, Landroidx/glance/appwidget/GlanceAppWidget;.update:()V // method@1'),
+ @('LiteRT','com.google.ai.edge.litert.Interpreter','core/ai','Lcom/google/ai/edge/litert/', 'invoke-virtual {v0}, Lcom/google/ai/edge/litert/Interpreter;.run:()V // method@1'),
+ @('MapLibre','org.maplibre.android.MapLibre','feature/map','Lorg/maplibre/', 'invoke-virtual {v0}, Lorg/maplibre/android/maps/MapView;.onCreate:()V // method@1')
+)
+foreach($case in $policyCases) {
+ $tag=$case[0];$lib=$case[1];$allowed='dev.pampa.mycloudgallery.'+$case[2].Replace('/','.')
+ foreach($kind in @('Bad','Good','Chain','Engine')) {
+  $owner=if($kind -eq 'Good') {"$allowed.Consumer$tag"} elseif($kind -eq 'Engine') {"dev.antigravity.fluidengine.ui.Evil$tag"} else {"dev.pampa.mycloudgallery.backup.Evil$tag$kind"}
+  $rows=@("$owner -> ${owner}:")
+  $rows+=if($kind -eq 'Good') {"    1:1:void $allowed.Helper.run():1 -> run"} else {"    1:1:void $lib.inner():1 -> run"}
+  if($kind -eq 'Chain') {$rows+='    1:1:void kotlin.collections.CollectionsKt.middle():1 -> run'}
+  $rows+='    1:1:void run():12 -> run'
+  $rows | Add-Content (Join-Path $work 'mapping.txt')
+ }
+}
 [R8Provenance]::MappingPath=Join-Path $work 'mapping.txt'
 $count=0
 function Check($name,[bool]$ok) { if(-not $ok) {throw "FAIL $name"}; $script:count++; Write-Host "[OK] $name" }
 function Throws($name,[scriptblock]$body) { $caught=$false; try { & $body | Out-Null } catch {$caught=$true}; Check $name $caught }
-function Dump($class,$signature,$positions) {
- $lines=@("Class descriptor : '$class'", "name : 'run'", "type : '$signature'", '1000: 0000 |0000: invoke-static {}, Ljava/net/HttpURLConnection;.disconnect:()V // method@1') + $positions
+function Dump($class,$signature,$positions,[string]$instruction='invoke-static {}, Ljava/net/HttpURLConnection;.disconnect:()V // method@1') {
+ $lines=@("Class descriptor : '$class'", "name : 'run'", "type : '$signature'", ('1000: 0000 |0000: '+$instruction)) + $positions
  [R8Provenance]::ReadDump($class+$signature,[string[]]$lines)
  return $lines[3]
 }
@@ -173,4 +191,39 @@ Check 'cast generico inline non e una chiamata alla libreria' (Test-R8EveryOrigi
 [R8Provenance]::ReadDump('runtimeGood',[string[]]@("Class descriptor : 'Lkotlin/runtime/Innocent;'", "name : 'box'", "type : '(Z)Ljava/lang/Boolean;'", '9000: 0000 |0000: check-cast v0, Landroidx/glance/Forbidden;', ' 0x0000 line=1'))
 $origins=[R8Provenance]::Origins('Good',$line,'Landroidx/glance/')
 Check 'corpo originale Kotlin che nomina Glance anche senza invoke cade' (-not (Test-R8EveryOrigin ($origins -join "`n") $glancePolicy))
+# Esegue i cicli REALI di check.ps1 sui fatti sintetici, senza APK/Gradle.
+function Invoke-ActualPolicy($policy,$target,$origins,$instruction) {
+ $title=switch($policy) {'HTTPS' {'Step "motori on-device'} 'LiteRT' {'Step "LiteRT solo'} 'Glance' {'Step "Glance al suo posto'} default {'Step "OkHttp e MapLibre'}}
+ $node=$ast.FindAll({param($a) $a -is [Management.Automation.Language.CommandAst] -and $a.GetCommandName() -eq 'Step' -and $a.Extent.Text.StartsWith($title)},$false)[0]
+ if(-not $node) {throw "policy assente: $policy"}
+ $body=$node.CommandElements[-1]
+ $wanted=@('$initialize','$ownPrefixes','$aiPrefix','$facesPrefix','$facesSessions','$okhttp','$mapLibre','$okhttpCallers','$mapPrefix','$netPrefix','$setClient','$getInstance','$installer','$initializer','$glance','$glanceCallers','$widgetPrefix')
+ foreach($a in $body.FindAll({param($a) $a -is [Management.Automation.Language.AssignmentStatementAst] -and $a.Left.Extent.Text -in $wanted},$true)) {Invoke-Expression $a.Extent.Text}
+ $text=$body.Extent.Text
+ $start=if($policy -in @('HTTPS','LiteRT')) {'  foreach ($call in $facts.Calls) {'} else {'  for ($callIndex = 0;'}
+ $end=switch($policy) {'HTTPS' {'  # P11: da quando'} 'LiteRT' {'  if (@($ours |'} 'Glance' {'  if ($widgetInApp'} default {'  if ($mapInApp)'}}
+ $a=$text.IndexOf($start);$b=$text.IndexOf($end,$a)
+ if($a -lt 0 -or $b -le $a) {throw "ciclo non riconosciuto: $policy"}
+ $facts=[pscustomobject]@{Calls=@($target+'|'+($origins -join "`n"));Insns=@($instruction)}
+ $problems=@();$ours=@();$okCount=0;$mapCount=0;$okFromNet=0;$installs=0;$inits=0;$bridged=0;$glanceCount=0;$fromWidget=0
+ Invoke-Expression $text.Substring($a,$b-$a)
+ return ($problems -join '; ')
+}
+foreach($case in $policyCases) {
+ $tag=$case[0];$allowed='dev.pampa.mycloudgallery.'+$case[2].Replace('/','.')
+ foreach($kind in @('Bad','Good','Chain','Engine')) {
+  $owner=if($kind -eq 'Good') {"$allowed.Consumer$tag"} elseif($kind -eq 'Engine') {"dev.antigravity.fluidengine.ui.Evil$tag"} else {"dev.pampa.mycloudgallery.backup.Evil$tag$kind"}
+  $descriptor='L'+$owner.Replace('.','/')+';'
+  $call=Dump $descriptor '()V' @(' 0x0000 line=1') $case[4]
+  $origins=[R8Provenance]::Origins($descriptor+'()V',$call,$case[3])
+  $problem=Invoke-ActualPolicy $tag $case[3] $origins $call
+  if($kind -eq 'Good') {Check "CR-3 $tag aiutante nostro ammesso in chiamante ammesso passa" ([string]::IsNullOrEmpty($problem))}
+  else {Check "CR-3 $tag $kind librerie trasparenti ciclo reale cade" (-not [string]::IsNullOrEmpty($problem))}
+ }
+ # Nessuna posizione: il giro 2 deve conservare anche il candidato nostro vietato.
+ $descriptor='Ldev/pampa/mycloudgallery/backup/Evil'+$tag+'Bad;'
+ $call=Dump $descriptor '()V' @(' 0x0002 line=1') $case[4]
+ $origins=[R8Provenance]::Origins($descriptor+'()V',$call,$case[3])
+ Check "CR-3 $tag prologo con autore nostro vietato resta bloccato" (-not [string]::IsNullOrEmpty((Invoke-ActualPolicy $tag $case[3] $origins $call)))
+}
 Write-Host "$count prove OK"

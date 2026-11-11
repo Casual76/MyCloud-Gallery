@@ -17793,3 +17793,8 @@ Verifica HK: 43 prove sintetiche verdi; sull'APK originale passano le due ispezi
 Il blocco del giro 1 e' risolto: senza una posizione sorgente utilizzabile si controllano TUTTE le origini del metodo residuo, compresi i frame esterni inline e il contenitore. Le prove positive richiedono lo stesso requisito per tutte le origini. Il perimetro Glance resta globale. Un frame inline di libreria si esclude come autore soltanto dopo lettura del codice e prova che non puo' essere quella specifica invocazione; Kotlin non ha una whitelist nominale. I riferimenti di firma introdotti da R8 richiedono il metadato residualsignature e firme/origini originali prive di Glance.
 
 Sul medesimo APK ora passano HTTPS/ML Kit, LiteRT, OkHttp/MapLibre, Glance/KT e D12/D30/D34, oltre ai cinque passi aggiuntivi di dex/recinzioni. Le 64 prove sintetiche includono origini vietate nel prologo e runtime Kotlin che nomina Glance. Report completo in `docs/HK-controllo-r8.md`; i precedenti FAIL del giro 1 restano documentati come storia, non come stato corrente. Nessun Gradle, modifica all'app, dispositivo o chiusura di processi altrui.
+
+
+### HK giro 3 - CR-3
+
+Il frame inline di libreria non autorizza il nostro chiamante: decide il primo frame nostro dall'interno verso l'esterno, altrimenti il frame interno. Per i prologhi resta l'unione universale del giro 2 e la prova del runtime non elimina frame nostri. La regressione HTTPS e' riprodotta prima della correzione; 89 prove verdi dopo, inclusi i cicli reali delle cinque policy. CR-6 e la verifica finale dell'APK seguono in un commit separato.

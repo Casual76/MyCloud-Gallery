@@ -33,7 +33,7 @@ Le righe complete di mapping e dexdump sono in `tools/release/fixtures/hk/giro2-
 
 | Regola | Prova richiesta / comportamento |
 |---|---|
-| Istruzione con posizione sorgente | Firma residuale e intervallo del mapping identificano il primo frame inline, quello interno. Intervalli incompatibili falliscono. |
+| Istruzione con posizione sorgente | Firma residuale e intervallo del mapping identificano la catena inline: dal frame interno si cerca il primo autore nostro (`dev.pampa` oppure engine); le librerie sono trasparenti. In assenza di frame nostri vale il frame interno (CR-3, giro 3). Intervalli incompatibili falliscono. |
 | Istruzione senza posizione utilizzabile | Insieme di tutti i frame del metodo residuo con quella firma, piu' il contenitore residuo. Ogni origine deve soddisfare la policy; il FAIL nomina ciascuna origine vietata. Vale anche prima della prima voce della tabella delle righe. |
 | Mapping senza origine | FAIL. La sola classe residua non autorizza il codice. |
 | Filtri e controlli positivi | HTTPS/ML Kit, LiteRT e MapLibre mantengono il filtro originale su `dev.pampa` e engine. OkHttp e Glance mantengono il divieto globale. Le prove positive di presenza, montaggio e consumatori richiedono che TUTTI i candidati soddisfino lo stesso requisito. |
@@ -91,3 +91,10 @@ APK e dex immutati: classes.dex 6241908, classes2.dex 11387628, classes3.dex 451
 Restano fail-closed mapping assenti, firme non risolte, intervalli incompatibili, corpi necessari non leggibili e ogni candidato vietato che non supera una prova specifica. Il check completo con Gradle resta all'integrazione: questo report qualifica le sezioni eseguite sull'APK esistente. Non distingue causalmente Z1 da P2/startup profile. Nessuno screenshot o test sul telefono necessario, nessuna scelta visiva o decisione di prodotto aperta.
 
 Nessun Gradle: nessun batch/semaforo e nessuna riga da inoltrare al Coordinatore. Nessun adb, dispositivo, download, push o lettura di local.properties. Non ho usato Stop-Process o taskkill, neppure fra 14:40 e 14:50. Il codice chiude, in caso di errore, soltanto gli oggetti Process dexdump che ha avviato nel proprio albero. Nessuna chiusura per nome e nessun processo di altri agenti terminato.
+
+
+## Giro 3 - CR-3
+
+Corretto il falso negativo del frame di libreria inline dentro codice nostro vietato. `PolicyOrigin` scorre la catena dall'interno e sceglie il primo frame nostro; in assenza di frame nostri conserva il frame interno. Le policy esistenti applicano a quell'autore i prefissi ammessi, anche per OkHttp e Glance globali. Senza posizione resta l'unione conservativa di tutti i frame e del contenitore: nessuna origine nostra viene eliminata dalla prova del runtime.
+
+Nuove prove con dati scritti a mano, eseguite sui cicli reali di check.ps1 estratti via AST: per HTTPS, OkHttp, Glance, LiteRT e MapLibre cadono libreria in codice nostro vietato, due librerie in codice nostro vietato, libreria in engine vietato e prologo con origine nostra vietata; passa l'aiutante nostro ammesso inline in un chiamante nostro ammesso. La prima prova HTTPS cade sul codice d548d057, poi tutte le 89 prove passano. La verifica finale dell'APK segue la correzione separata CR-6.

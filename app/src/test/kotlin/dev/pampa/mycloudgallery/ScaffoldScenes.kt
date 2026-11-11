@@ -139,7 +139,10 @@ internal class ScaffoldScenes(
     state = results(confident = (0 until 34).toList(), likely = (120 until 128).toList()),
   )
 
-  /** Nessun risultato per «zebre in montagna»: la griglia vuota e una riga sola sopra la barra; nessun completamento, la barra in alto si ritira. */
+  /**
+   * Nessun risultato per «zebre in montagna»: la Libreria attenuata dietro (CU-11) e una riga sola sopra la barra; nessun completamento, la barra in alto si
+   * ritira.
+   */
   val searchNothing: SearchSource = FixedSearchSource(query = "zebre in montagna", state = SearchScreenState.NoResults("zebre in montagna", emptyList()))
 
   /** "Trova simili" da una foto: il campo vuoto, i simili per pertinenza, la riga che dice da dove vengono. */

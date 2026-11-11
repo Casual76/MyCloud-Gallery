@@ -191,7 +191,7 @@ class MediaGridState(
   internal val days = GridDaysCache()
   internal var viewport: GridViewport by mutableStateOf(GridViewport())
 
-  /** Le coordinate della griglia (la posa [MediaGrid]): da qui si legge [originInWindow] quando serve. */
+  /** Le coordinate della griglia (la posa [MediaGrid], le lascia quando esce dalla composizione): da qui si legge [originInWindow] quando serve. */
   internal var coordinates: LayoutCoordinates? = null
   private var lastOrigin = Offset.Zero
 

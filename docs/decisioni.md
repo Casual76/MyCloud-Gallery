@@ -18448,6 +18448,36 @@ conflitti. Un commit per voce.
   `problema-di-backup` (la striscia rifatta, spostamenti di un pixel), e i nuovi `viewer-info-testo-grande-{chiaro,scuro}-telefono`;
   l'indice ha le due immagini nuove (272).
 
+### Giro di correzione 3 di H1 e H2 (11/11 notte)
+Prima l'unione di `integra/beta-grafica` (`691e78a9`): senza conflitti. Solo le due voci del giro.
+
+- **CG-6, la chiusura del viewer interrotta dal pannello.** La causa: durante la chiusura il pannello era ancora del dito. Un trascinamento
+  (anche cominciato prima della X), la fine del trascinamento o l'Indietro predittivo annullato facevano `snapTo`/`animateTo` sullo stesso
+  `progress` che `closeNow` stava aspettando: il nuovo mutatore cancellava la discesa, la coroutine della chiusura finiva prima del volo, e il
+  viewer restava con `closing` vero e la cella vuota. Correzioni: (a) durante la chiusura il pannello e' della chiusura: `onPanelDrag`,
+  `onPanelDragEnd` e `onInfoCancel` non fanno niente, il `draggable` del foglio e' spento (un gesto in corso si annulla), l'Indietro predittivo
+  del pannello non lo muove ne' lo rimette su se si annulla; (b) un'animazione che la chiusura aspetta (la discesa del pannello, il «porta in
+  vista» della griglia, il volo) se viene interrotta da un altro mutatore non ferma la chiusura (`completes`: si va avanti, il pannello va giu'
+  di colpo); un `finally` in `close` garantisce che, comunque finisca la coroutine, o il viewer esce una volta sola (`onClosed`, poi l'album
+  della capsula) o torna usabile (`closing = false`, contenuto al suo posto), e la cella in ogni caso torna visibile. Gli altri gesti guardati:
+  il trascinamento e il pizzico della foto (nuovi: l'arbitro e' spento e lo scudo sta sopra il pager; gia' in corso: i loro callback non
+  toccano il volo, `settleDismiss` e l'Indietro della foto hanno gia' la guardia), il doppio tocco (il secondo tocco cade sullo scudo): nessuna
+  contesa con cio' che la chiusura aspetta. Prove, con l'orologio fermo (`ViewerGesturesTest`, `cg6_*`): X e poi un dito sul pannello; capsula
+  dell'album e poi un dito sul pannello (l'album si apre una volta); gesto sul pannello cominciato prima della X che continua; Indietro
+  predittivo del pannello cominciato, X, Indietro annullato. In tutti: `onClosed` una volta sola, cella non piu' nascosta. **Sul codice di prima
+  falliscono tutte e quattro** (batch `H2g3-1`: i tre file del viewer rimessi come in `691e78a9`, il viewer non esce mai; poi rimessi).
+- **CS-24, riferimenti trattenuti.** `MediaGrid` azzera `MediaGridState.coordinates` in `onDispose` (l'origine resta l'ultima letta, senza
+  errori). `AlbumOpener.bind` restituisce una registrazione: `AppNavHost` la chiude in `onDispose` (le lambda tengono `nav`); chiudere una
+  registrazione vecchia non toglie quella nuova. Prove: `MediaGridBehaviourTest.uscendoDallaComposizioneLaGrigliaLasciaLeSueCoordinate`,
+  `AppMediaAlbumsTest.chiSiERegistratoESeNeVaNonRestaNellApertura`.
+- **Batch**: `H2g3-1` (voluto rosso) 2,1 min: le prove nuove sul codice di prima, `ViewerGesturesTest` 19 test, 4 falliti (i quattro
+  `cg6_*`); `H2g3-2` OK, 9 min: `:feature-viewer:testDebugUnitTest` completo 1126/0 (18 saltati), `feature-library` griglia 78/0, `:app`
+  52 classi (viewer, ricerca, album, `NoFixedWaitsTest`) 264/0. Nessun java chiuso da me.
+- **Prova sul telefono (CG-6)**: informazioni aperte; toccare la X (o la capsula di un album) e subito trascinare il pannello che scende, o
+  tenere un dito sul pannello e toccare la X con un altro, o cominciare l'Indietro dal bordo e annullarlo dopo la X. Atteso: il viewer si chiude
+  una volta sola, la foto entra nella sua cella e la cella e' piena; con la capsula si apre l'album. Difetto: viewer fermo a meta' che non
+  risponde, cella vuota nella griglia, chiusura doppia, album aperto due volte.
+
 ## H5: Raccolte piu' pulite e con carattere; Impostazioni con meno testo (fase H, 11/11)
 
 Ramo `fix/h5-raccolte-impostazioni` da `261a3553`. Fonte: il commento dell'utente dell'11/11 (Raccolte "un po' poche icone fatte un po' piu'

@@ -1,5 +1,8 @@
 package dev.pampa.mycloudgallery.feature.viewer
 
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.CancellationException
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -277,10 +280,42 @@ internal class ViewerController(
     closing = true
     returnJob?.cancel()
     returnJob = null
-    scope.launch { closeNow(velocity, then) }
+    scope.launch {
+      var exited = false
+      try {
+        closeNow(velocity)
+        // La foto e' nella cella: la cella torna a disegnarsi nello stesso fotogramma in cui il viewer se ne va.
+        hideCell(null)
+        exited = true
+        onClosed()
+        then?.invoke()
+      } finally {
+        // CG-6: comunque finisca questa coroutine, la chiusura non resta appesa. Se il viewer non e' uscito (un errore, la coroutine cancellata),
+        // la cella torna visibile, il contenuto torna al suo posto e il viewer e' di nuovo usabile (una chiusura nuova puo' partire).
+        if (!exited) {
+          hideCell(null)
+          dismiss.reset()
+          closing = false
+        }
+      }
+    }
   }
 
-  private suspend fun closeNow(velocity: Offset, then: (() -> Unit)? = null) {
+  /**
+   * CG-6: esegue [animation], un'animazione che la chiusura aspetta. Se un altro mutatore dello stesso valore la interrompe, l'eccezione di
+   * cancellazione arriva qui ma questa coroutine e' viva: la chiusura va avanti (false). Se e' questa coroutine a essere cancellata (il viewer
+   * esce dalla composizione), la cancellazione passa.
+   */
+  private suspend fun completes(animation: suspend () -> Unit): Boolean = try {
+    animation()
+    true
+  } catch (interrupted: CancellationException) {
+    currentCoroutineContext().ensureActive()
+    false
+  }
+
+  /** La chiusura fino all'arrivo nella cella (o all'uscita sfumando): il pannello giu', la cella in vista, il volo. Il resto lo fa [close]. */
+  private suspend fun closeNow(velocity: Offset) {
     // CU-1: la foto vola nella sua cella, che resta vuota fino all'arrivo.
     hideCell(state.currentId)
     motion.stopAll()
@@ -289,24 +324,21 @@ internal class ViewerController(
     if (state.zoomed) state.zoomReset?.invoke()
     if (info.progress.value > INFO_REST) {
       state.infoOpen = false
-      info.settle(false, reducedMotion)
+      // CG-6: durante la chiusura il pannello non prende gesti, ma se qualcosa interrompe la sua discesa la chiusura non si ferma: va giu' di colpo.
+      if (!completes { info.settle(false, reducedMotion) }) completes { info.snapShut() }
     }
     val id = state.currentId
     // La Libreria segue gia' il viewer (la cella di cio' che si guarda e' in vista); se non lo e', la si porta in vista. Un elemento sparito
     // dalla vista (E-V6), o una pagina senza griglia sotto (album, ricerca, mappa, ricordi), non ha una cella: il contenuto si allontana sfumando.
-    if (view.viewIndexOf(id) >= 0 && request.anchor.boundsOf(id) == null) request.anchor.reveal(id)
+    if (view.viewIndexOf(id) >= 0 && request.anchor.boundsOf(id) == null) completes { request.anchor.reveal(id) }
     val content = contentRect(id)
     val plan = ViewerDismissState.planFor(from = dismiss.screenRect(content), content = content, cell = cellOf(id), stage = stage)
     if (plan is FlightPlan.Away && playback.videoFor == id) {
       exitingVideo = true
       playback.clear()
     }
-    dismiss.fly(plan, ViewerDismissState.velocityToward(plan, velocity), reducedMotion)
+    completes { dismiss.fly(plan, ViewerDismissState.velocityToward(plan, velocity), reducedMotion) }
     playback.clear()
-    // La foto e' nella cella: la cella torna a disegnarsi nello stesso fotogramma in cui il viewer se ne va.
-    hideCell(null)
-    onClosed()
-    then?.invoke()
   }
 
   /** La cella di [id] nelle coordinate del viewer, o null se non e' sullo schermo o non c'e' una griglia sotto. */
@@ -380,17 +412,22 @@ internal class ViewerController(
 
   fun onInfoEnd(@Suppress("UNUSED_PARAMETER") intent: InfoIntent, velocityY: Float) = onPanelDragEnd(velocityY)
 
+  // CG-6: durante la chiusura il pannello e' della chiusura. Un dito sul pannello (anche un gesto cominciato prima della X) non lo muove piu':
+  // il suo `snapTo` cancellerebbe la discesa che la chiusura sta aspettando.
   fun onInfoCancel(@Suppress("UNUSED_PARAMETER") intent: InfoIntent) {
+    if (closing) return
     scope.launch { info.settle(state.infoOpen, reducedMotion) }
   }
 
   /** Il dito sul pannello stesso (o sulla foto): [dy] pixel, positivo = verso il basso. */
   fun onPanelDrag(dy: Float) {
+    if (closing) return
     scope.launch { info.drag(dy, infoTravel) }
   }
 
   /** Il dito si alza dal pannello con [velocityY] pixel al secondo: aperto, chiuso o lasciato scorrere. */
   fun onPanelDragEnd(velocityY: Float) {
+    if (closing) return
     // Lo stato dice subito dove va il pannello: un gesto durante la molla (un tocco, un pizzico, uno swipe in giu') va al pannello giusto.
     scope.launch { info.endDrag(velocityY, infoTravel, reducedMotion, panelDecay) { open -> state.infoOpen = open } }
   }

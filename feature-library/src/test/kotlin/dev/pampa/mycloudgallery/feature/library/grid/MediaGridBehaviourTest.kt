@@ -104,6 +104,22 @@ class MediaGridBehaviourTest {
   }
 
   @Test
+  fun uscendoDallaComposizioneLaGrigliaLasciaLeSueCoordinate() {
+    // CS-24: lo stato della griglia vive piu' a lungo della composizione: non deve tenere le coordinate (e con loro la finestra). L'origine
+    // resta l'ultima letta, senza errori.
+    val (state, _) = syntheticGrid(count = 200)
+    var shown by mutableStateOf(true)
+    composeRule.showThemed { if (shown) MediaGrid(state = state, contentPadding = padding) }
+    composeRule.waitForIdle()
+    assertThat(state.coordinates).isNotNull()
+    val origin = composeRule.runOnIdle { state.originInWindow }
+    composeRule.runOnIdle { shown = false }
+    composeRule.waitForIdle()
+    assertThat(state.coordinates).isNull()
+    assertThat(composeRule.runOnIdle { state.originInWindow }).isEqualTo(origin)
+  }
+
+  @Test
   fun unaMiniaturaCheArrivaNonRicomponeNienteEAggiornaSoloLaSuaCella() {
     val loader = ControlledThumbnailLoader()
     val (state, _) = syntheticGrid(count = 600, loader = loader)

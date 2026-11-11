@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
@@ -72,7 +73,8 @@ import kotlinx.coroutines.launch
 
 // La GRIGLIA dei risultati (H4 della fase H, 11/11; prima Fase 6, P8, §2.6, D28). Prende il posto della griglia della Libreria, dentro lo stesso fondale.
 //  - **Dal basso**: il risultato piu' adatto sta subito sopra la barra di ricerca, dove sta il pollice (la Libreria ha i piu' recenti in basso; qui vale lo
-//    stesso). Si scorre verso l'alto per i meno adatti; in coda, dopo un separatore leggero, i meno probabili (D27).
+//    stesso). Si scorre verso l'alto per i meno adatti; in coda, dopo un filo sottile, i meno probabili (D27), con la loro intestazione **sopra** di
+//    loro, dove si legge un titolo (CU-3 del giro 1).
 //  - **Solo per pertinenza, senza intestazioni di data** (scelta dell'utente).
 //  - **La stessa cella e la stessa cache** della Libreria (`GalleryGridCell`, il caricatore della Libreria); miniature solo locali (D28, CE-5).
 //  - **La selezione e' quella della Libreria** ([SearchSelection]): pressione lunga per entrare, tocco per scegliere; la barra delle azioni e' la sua.
@@ -160,11 +162,18 @@ fun SearchResultsGrid(
       items(
         items = entries,
         key = { it.key },
-        span = { entry -> if (entry is GridEntry.LikelyDivider) GridItemSpan(maxLineSpan) else GridItemSpan(1) },
-        contentType = { entry -> if (entry is GridEntry.LikelyDivider) "divider" else "cell" },
+        span = { entry -> if (entry is GridEntry.Cell) GridItemSpan(1) else GridItemSpan(maxLineSpan) },
+        contentType = { entry ->
+          when (entry) {
+            is GridEntry.Cell -> "cell"
+            is GridEntry.LikelyHeader -> "header"
+            GridEntry.LikelyBoundary -> "boundary"
+          }
+        },
       ) { entry ->
         when (entry) {
-          is GridEntry.LikelyDivider -> LikelyDivider(entry.count)
+          is GridEntry.LikelyHeader -> LikelyHeader(entry.count)
+          GridEntry.LikelyBoundary -> LikelyBoundary()
           is GridEntry.Cell -> {
             val view = if (entry.section == ResultSection.CONFIDENT) results.confident else results.likely
             val id = entry.media
@@ -198,9 +207,31 @@ fun SearchResultsGrid(
   }
 }
 
-/** Il separatore leggero prima dei meno probabili: un'intestazione per TalkBack, che dice anche quanti sono. */
+/**
+ * Il filo fra i sicuri e i meno probabili (CU-3): una linea sottile, senza parole (l'intestazione sta sopra i meno probabili). Per TalkBack non c'e': i
+ * meno probabili li annuncia la loro intestazione.
+ */
 @Composable
-private fun LikelyDivider(count: Int) {
+private fun LikelyBoundary() {
+  val color = MaterialTheme.colorScheme.outlineVariant
+  Box(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(SearchDimens.BoundaryHeight)
+      .padding(horizontal = GalleryDimens.Gutter)
+      .drawBehind {
+        val y = size.height / 2f
+        drawLine(color, Offset(0f, y), Offset(size.width, y), strokeWidth = SearchDimens.BoundaryLine.toPx())
+      },
+  )
+}
+
+/**
+ * L'intestazione dei meno probabili, **sopra** le loro celle (la griglia cresce dal basso: e' l'ultima voce, quindi in cima; CU-3). Un'intestazione per
+ * TalkBack, che dice anche quanti sono.
+ */
+@Composable
+private fun LikelyHeader(count: Int) {
   val countText = LocalContext.current.resources.getQuantityString(R.plurals.search_results_count, count, GalleryNumbers.format(count))
   Row(
     modifier = Modifier

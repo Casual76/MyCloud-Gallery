@@ -17,9 +17,14 @@ internal sealed interface GridEntry {
     override val key: String get() = media.value
   }
 
-  /** Il separatore leggero prima dei meno probabili (H4): «Meno probabili», in coda ai risultati. */
-  data class LikelyDivider(val count: Int) : GridEntry {
-    override val key: String get() = "likely-divider"
+  /** Il filo sottile fra i sicuri e i meno probabili, senza parole: l'intestazione sta in cima ai meno probabili ([LikelyHeader]). */
+  data object LikelyBoundary : GridEntry {
+    override val key: String get() = "likely-boundary"
+  }
+
+  /** L'intestazione dei meno probabili, «Meno probabili · N risultati»: **sopra** le loro celle, come si legge (CU-3). */
+  data class LikelyHeader(val count: Int) : GridEntry {
+    override val key: String get() = "likely-header"
   }
 }
 
@@ -27,15 +32,18 @@ internal sealed interface GridEntry {
 internal object SearchGridEntries {
 
   /**
-   * Le voci dei risultati, **solo per pertinenza** e **senza intestazioni di data** (H4): prima i sicuri, poi il separatore e i meno probabili. Il
-   * primo e' il piu' adatto: la griglia lo mette subito sopra la barra di ricerca.
+   * Le voci dei risultati, **solo per pertinenza** e **senza intestazioni di data** (H4), nell'ordine della griglia che cresce dal basso: prima i sicuri
+   * (il primo e' il piu' adatto e sta subito sopra la barra di ricerca), poi il filo e i meno probabili, lontani dalla barra, e **per ultima** la loro
+   * intestazione, che nella griglia rovesciata sta **sopra** di loro, dove si legge un titolo (CU-3 / CS-2 del giro 1: prima stava sotto, attaccata ai
+   * sicuri, e sembrava il loro titolo).
    */
   fun build(results: SearchScreenState.Results): List<GridEntry> {
-    val out = ArrayList<GridEntry>(results.confident.size + results.likely.size + 1)
+    val out = ArrayList<GridEntry>(results.confident.size + results.likely.size + 2)
     addCells(out, ResultSection.CONFIDENT, results.confident)
     if (results.likely.size > 0) {
-      out += GridEntry.LikelyDivider(results.likely.size)
+      if (results.confident.size > 0) out += GridEntry.LikelyBoundary
       addCells(out, ResultSection.LIKELY, results.likely)
+      out += GridEntry.LikelyHeader(results.likely.size)
     }
     return out
   }

@@ -225,7 +225,7 @@ private fun artColors(family: CollectionArtFamily, tone: FluidTone): ArtColors {
 }
 
 /** Quanto del colore pieno entra nell'angolo in basso della sfumatura: abbastanza per dare profondita', poco per non far gridare la piastrella. */
-private const val ART_DEPTH = 0.32f
+private const val ART_DEPTH = 0.42f
 
 /** La forma della piastrella (il raggio segue il lato, come in `FluidToneTile`). */
 private fun artShape(side: Dp) = ContinuousCornerShape(FluidRadius.Small * (side / FluidToneTileSize))
@@ -248,9 +248,17 @@ internal fun CollectionRowArt(
 ) {
   val covers = LocalCollectionCovers.current
   val side = CollectionRowArtSize
+  val px = with(LocalDensity.current) { side.roundToPx() }
+  val media = if (covers == null) null else cover ?: covers.placeCover(coverPlace)
+  val faceImages = if (covers == null || media != null) emptyList() else faces.take(MAX_FACES).mapNotNull { covers.faceImage(it, px) }
   Box(modifier = Modifier.size(side)) {
     val colors = artColors(family, tone)
     val shape = artShape(side)
+    // Un volto solo e' un tondo pieno: senza la piastrella sotto, che ne lascerebbe vedere gli angoli.
+    if (faceImages.size == 1) {
+      Image(bitmap = faceImages[0], contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.matchParentSize().clip(faceShape(side)))
+      return@Box
+    }
     Box(
       modifier = Modifier.matchParentSize().clip(shape).background(Brush.linearGradient(listOf(colors.from, colors.to))),
     ) {
@@ -262,11 +270,10 @@ internal fun CollectionRowArt(
       )
     }
     if (covers == null) return@Box
-    val media = cover ?: covers.placeCover(coverPlace)
     if (media != null) {
       CoverImage(covers, media, Modifier.matchParentSize().clip(shape))
-    } else if (faces.isNotEmpty()) {
-      Faces(covers, faces, colors.from)
+    } else if (faceImages.size > 1) {
+      Faces(faceImages, colors.from)
     }
   }
 }
@@ -285,15 +292,8 @@ private fun CoverImage(covers: CollectionCovers, media: MediaId, modifier: Modif
  * che lo stacca dal vicino. I volti non pronti non si disegnano: resta la piastrella.
  */
 @Composable
-private fun Faces(covers: CollectionCovers, faces: List<FaceLocator>, ring: Color) {
+private fun Faces(images: List<ImageBitmap>, ring: Color) {
   val side = CollectionRowArtSize
-  val px = with(LocalDensity.current) { side.roundToPx() }
-  val images = faces.take(MAX_FACES).mapNotNull { covers.faceImage(it, px) }
-  if (images.isEmpty()) return
-  if (images.size == 1) {
-    Image(bitmap = images[0], contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.size(side).clip(faceShape(side)))
-    return
-  }
   val disc = CollectionsDimens.FaceDisc
   val right = side - disc
   if (images.size == 2) {

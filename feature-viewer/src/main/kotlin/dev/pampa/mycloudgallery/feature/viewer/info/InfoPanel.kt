@@ -9,7 +9,6 @@ import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -58,6 +57,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -70,6 +70,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
@@ -571,11 +572,12 @@ private fun ShotCard(model: InfoModel, accent: Color?) {
       )
       Box(modifier = Modifier.weight(1f)) {
         when {
+          // Con il testo grande il nome della fotocamera va su due righe invece di perdere il modello («Samsung Galaxy …»).
           model.camera != null -> Text(
             text = model.camera,
             style = MaterialTheme.typography.titleMedium,
             color = scheme.onSurface,
-            maxLines = 1,
+            maxLines = 2,
             overflow = TextOverflow.Ellipsis,
           )
           model.shotPending -> FluidSkeleton(modifier = Modifier.fillMaxWidth(CameraSkeletonFraction), height = TitleSkeletonHeight)
@@ -609,36 +611,89 @@ private fun ShotCard(model: InfoModel, accent: Color?) {
   }
 }
 
-/** La striscia dei valori dello scatto: celle uguali, cifre tabellari, filetti verticali in mezzo. In attesa, segnaposto della stessa misura. */
+/**
+ * La striscia dei valori dello scatto: celle uguali, cifre tabellari, filetti fra le celle. In attesa, segnaposto della stessa misura.
+ *
+ * CU-16: un valore non si tronca e non si rimpicciolisce mai (chi ingrandisce il testo lo vuole grande, e «1/100…» si leggerebbe 1/100). Se un valore
+ * non entra intero nella sua cella, la striscia va su due righe da due ([stripColumns]), e in una colonna sola se neanche cosi'. La scelta si fa nella
+ * misura di questo nodo, con le larghezze naturali dei valori: niente ricomposizioni, niente salti da un fotogramma all'altro.
+ */
 @Composable
 private fun ValueStrip(values: List<String>, pending: Boolean) {
   val scheme = MaterialTheme.colorScheme
+  val style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = TabularFigures)
   val cells: List<String?> = if (pending) List(PendingCells) { null } else values
   val spoken = values.joinToString(", ")
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      .height(IntrinsicSize.Min)
-      .semantics(mergeDescendants = true) { if (!pending) contentDescription = spoken },
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    cells.forEachIndexed { i, value ->
-      if (i > 0) Box(modifier = Modifier.width(Hairline).fillMaxHeight().padding(vertical = RuleInset).background(scheme.outlineVariant))
-      Box(modifier = Modifier.weight(1f).padding(vertical = StripCellPadding), contentAlignment = Alignment.Center) {
-        if (value != null) {
-          Text(
-            text = value,
-            style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = TabularFigures),
-            color = scheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-          )
-        } else {
-          FluidSkeleton(modifier = Modifier.width(StripSkeletonWidth))
+  val rules = (cells.size - 1).coerceAtLeast(0)
+  Layout(
+    modifier = Modifier.fillMaxWidth().semantics(mergeDescendants = true) { if (!pending) contentDescription = spoken },
+    content = {
+      cells.forEach { value ->
+        Box(modifier = Modifier.padding(horizontal = StripCellInset, vertical = StripCellPadding), contentAlignment = Alignment.Center) {
+          if (value != null) {
+            Text(text = value, style = style, color = scheme.onSurface, maxLines = 1, softWrap = false)
+          } else {
+            FluidSkeleton(modifier = Modifier.width(StripSkeletonWidth))
+          }
         }
       }
+      // I filetti: fra le celle di una riga (verticali) e fra le righe (orizzontali). Si posano solo quelli che servono.
+      repeat(rules * 2) { Box(modifier = Modifier.background(scheme.outlineVariant)) }
+    },
+  ) { measurables, constraints ->
+    val n = cells.size
+    val width = constraints.maxWidth
+    val rule = Hairline.roundToPx().coerceAtLeast(1)
+    val inset = RuleInset.roundToPx()
+    val cellMeasurables = measurables.take(n)
+    val natural = IntArray(n) { cellMeasurables[it].maxIntrinsicWidth(Constraints.Infinity) }
+    val perRow = stripColumns(natural, width, rule)
+    val cellWidth = ((width - (perRow - 1) * rule) / perRow).coerceAtLeast(0)
+    val cellPlaceables = cellMeasurables.map { it.measure(Constraints(minWidth = cellWidth, maxWidth = cellWidth)) }
+    val rows = cellPlaceables.chunked(perRow)
+    val rowHeights = rows.map { row -> row.maxOf { it.height } }
+    val height = rowHeights.sum() + (rows.size - 1).coerceAtLeast(0) * rule
+    val verticals = measurables.subList(n, n + rules)
+    val horizontals = measurables.subList(n + rules, n + 2 * rules)
+    // Le posizioni prima, poi i filetti misurati sulla riga che dividono (si misura tutto qui, si posa e basta nel blocco di layout).
+    val cellSpots = ArrayList<Triple<androidx.compose.ui.layout.Placeable, Int, Int>>(n)
+    val ruleSpots = ArrayList<Triple<androidx.compose.ui.layout.Placeable, Int, Int>>(2 * rules)
+    var y = 0
+    var v = 0
+    rows.forEachIndexed { r, row ->
+      val rowHeight = rowHeights[r]
+      row.forEachIndexed { i, cell ->
+        val x = i * (cellWidth + rule)
+        cellSpots += Triple(cell, x, y + (rowHeight - cell.height) / 2)
+        if (i > 0) ruleSpots += Triple(verticals[v++].measure(Constraints.fixed(rule, (rowHeight - 2 * inset).coerceAtLeast(0))), x - rule, y + inset)
+      }
+      y += rowHeight
+      if (r < rows.size - 1) {
+        ruleSpots += Triple(horizontals[r].measure(Constraints.fixed(width, rule)), 0, y)
+        y += rule
+      }
+    }
+    layout(width, height) {
+      cellSpots.forEach { (placeable, x, top) -> placeable.place(x, top) }
+      ruleSpots.forEach { (placeable, x, top) -> placeable.place(x, top) }
     }
   }
+}
+
+/**
+ * CU-16: quante celle per riga ha la striscia dei valori, larga [width] con filetti di [rule] fra le celle, perche' ogni valore (le sue larghezze
+ * naturali, [natural], margini compresi) ci stia intero: tutte in una riga, poi due per riga, poi una.
+ */
+internal fun stripColumns(natural: IntArray, width: Int, rule: Int): Int {
+  val n = natural.size
+  if (n <= 1) return 1
+  val widest = natural.max()
+  for (perRow in intArrayOf(n, 2)) {
+    if (perRow > n) continue
+    val cell = (width - (perRow - 1) * rule) / perRow
+    if (widest <= cell) return perRow
+  }
+  return 1
 }
 
 /** Le sezioni in piu' (la mappa, le persone, le copie) in colonna: un'intestazione discreta e il loro contenuto. */
@@ -729,6 +784,8 @@ private val StripTop = 8.dp
 private val Hairline = 1.dp
 private val RuleInset = 6.dp
 private val StripCellPadding = 10.dp
+/** Il respiro ai lati di un valore della striscia: conta nella scelta delle righe (CU-16). */
+private val StripCellInset = 4.dp
 private val StripSkeletonWidth = 40.dp
 private const val PendingCells = 4
 private const val CameraSkeletonFraction = 0.55f

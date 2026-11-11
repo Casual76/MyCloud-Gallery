@@ -34,9 +34,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
-import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalView
@@ -157,7 +155,8 @@ fun MediaGrid(
   BoxWithConstraints(
     modifier = modifier
       .fillMaxSize()
-      .onGloballyPositioned { state.originInWindow = it.positionInWindow() },
+      // CS-21: si tengono le coordinate, e la posizione nella finestra si legge quando serve (MediaGridState.originInWindow).
+      .onPlaced { state.coordinates = it },
   ) {
     val density = LocalDensity.current
     val widthPx = constraints.maxWidth

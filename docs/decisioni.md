@@ -18382,6 +18382,72 @@ Prima di tutto l'unione di `integra/beta-grafica`: avanzamento rapido a `3f686ef
 - **Screenshot**: in `docs/screenshots/beta-grafica/H1/` gli 8 della chiusura (volo, trascinamento, pizzico: la cella d'origine e' vuota sotto la
   foto); in `H2/` tutti i 28 (il pannello e' rifatto). Confrontati pixel per pixel con i precedenti: si committa solo quello che cambia.
 
+### Giro di correzione 2 di H1 e H2 (11/11 sera)
+Prima l'unione di `integra/beta-grafica` (`ad4310a5`: `galleryGlass` con `optics`, `ResultsAnchor.hide`, `DragSourcesScopeTest`): senza
+conflitti. Un commit per voce.
+
+- **CS-21, il viewer dalla Libreria sollevata.** `MediaGrid` non mette piu' in cache la posizione nella finestra (`onGloballyPositioned`): tiene
+  le sue coordinate (`onPlaced`) e `MediaGridState.originInWindow` chiede `positionInWindow()` al momento della chiamata. Cosi' conta ogni
+  traslazione di disegno di un antenato, di oggi (la Libreria che sale con la tastiera della ricerca, CU-4) e di domani (una pagina che arretra),
+  che non rifa' il layout e quel callback non la vedeva. Il tiro oltre il fondo resta sottratto a mano in `boundsOf`: si applica **dentro** la
+  griglia (`MediaGrid.kt`, il `translationY` del contenuto), sotto il nodo di cui si leggono le coordinate, quindi non e' un doppio conto. Fuori
+  dalla composizione vale l'ultima posizione letta (come prima). La stessa origine serve la fascia dei gesti di sistema e la chrome adattiva:
+  tutte e due la leggono quando un dito si posa o un pezzo si posiziona, mai per fotogramma. Prova: `RicercaTastieraTest
+  .conLaLibreriaSollevata_ilViewerParteDallaCellaCheSiVede` (tastiera al 40%: la cella sale, i bordi dell'ancora salgono della stessa quantita'
+  e contengono la cella disegnata; sul codice di prima restavano dov'erano).
+- **CS-22, la capsula dell'album di partenza.** Il tocco su una capsula chiude il viewer con la sua chiusura (`ViewerController.close(then)`:
+  il volo alla cella, o l'allontanarsi dove la cella non c'e', come con la X) e solo dopo, a viewer chiuso, chiede l'album. In `:app`
+  `AlbumOpener.open` non naviga se la pagina in cima e' gia' quell'album (`NavController.albumOnTop()`, estratta dalla funzione privata che
+  `AppAlbumActions` gia' aveva). Dalla pagina di un album il viewer non ha celle (`AlbumViewerAnchor`): la chiusura e' quella senza cella, come
+  con la X, non una sparizione. Prove: `ViewerGesturesTest.laCapsulaDiUnAlbumChiudeIlViewerVolandoAllaCella_eSoloDopoApreLAlbum`,
+  `AppMediaAlbumsTest.lAlbumGiaInCimaNonSiApreDiNuovo`.
+- **CU-16, la striscia con il testo grande.** Scelta: la striscia resta com'era (quattro valori interi con l'unita', cifre tabellari, filetti),
+  e quando un valore non entra intero nella sua cella va su **due righe da due** (in una colonna sola se neanche cosi'). Il testo non si
+  rimpicciolisce mai: chi lo ingrandisce lo vuole grande, e la riduzione del carattere annullerebbe la sua scelta; l'unita' piccola sopra il
+  numero avrebbe cambiato il disegno anche a testo normale, dove i critici lo davano per buono. La scelta si fa nella misura del nodo
+  (`Layout`, larghezze naturali dei valori; `stripColumns`), niente `BoxWithConstraints`, niente ricomposizioni, niente salti. A 360 dp: testo
+  normale, una riga; da circa 1,15x, due righe da due. Prove: `ViewerLogicTest.laStrisciaVaSuDueRigheSoloSeUnValoreNonEntraIntero`; la scena H2
+  `ViewerH2ShotsTestoGrande` (1,3x, chiaro e scuro, ISO 3200 e 1/1000 s) controlla l'impaginazione di ogni valore (nessun taglio, nessun
+  puntino) prima di scattare.
+- **CU-17, il titolo della barra in alto.** L'opacita' del titolo e del sottotitolo segue l'avanzamento del pannello, letta nel disegno: piena
+  fino a 0,3, trasparente a 0,5, dove la barra lascia data e luogo al pannello (CU-5). `GalleryTopBar` e `GalleryViewerChrome`
+  (`core-designsystem`) hanno un parametro `titleAlpha` facoltativo: null, come per ogni altra pagina, non aggiunge niente. Prova:
+  `ViewerLogicTest.ilTitoloInAltoSfumaConIlPannelloEArrivaTrasparenteAMetaCorsa`; lo screenshot `a-meta-fascia-vuota`.
+- **Album condivisi nel pannello.** Se l'elemento sta in un album condiviso della famiglia la sua capsula compare come le altre, con il segno
+  delle persone (`Group`, lo stesso della scheda Album) e «condiviso» per TalkBack (`stateDescription`). La porta c'era: gli elementi visibili
+  di un album condiviso (`ReplicaSharedAlbums.visibleItems`, la proiezione in memoria piu' il filtro di visibilita', la stessa lettura della
+  pagina dell'album). `AppMediaAlbums.sharedItemsOf` la legge una volta all'apertura del pannello per ogni album condiviso dell'elenco, su IO;
+  un errore su un album lascia fuori quell'album. Prove: `AppMediaAlbumsTest.unAlbumCondivisoDellaFamigliaCompareConIlSuoSegno`,
+  `ViewerAlbumsInfoTest.unAlbumCondivisoHaLaSuaCapsula_conIlSegnoCheECondiviso`; nello screenshot «dati completi» la capsula «Famiglia» e'
+  condivisa.
+- **Facoltativo, l'ombra del volo: fatto, perche' e' disegno puro.** La foto che vola verso la cella ha un'ombra morbida (fino a 12 dp di
+  elevazione) che sale nel primo 15% del volo (niente ombra che compare di colpo al rilascio) e cala fino a 0 all'arrivo (la miniatura e'
+  posata). E' `shadowElevation` del `graphicsLayer` che il volo ha gia', con la sua sagoma (`WindowShape`, il ritaglio della foto): la disegna
+  il RenderThread, nessun layer in piu', nessuna misura che cambia, letta nel disegno come la scala. Il contenuto che si allontana senza cella
+  non ha sagoma e non ha ombra. Prova: `ViewerDismissSpecTest.laFotoCheVolaAllaCellaHaUnOmbraCheSaleEPoiSiPosa`; da guardare in mano.
+- **Trovato dalla prova di CS-22: la chiusura con il pannello aperto si fermava a meta'.** `closeNow` porta giu' il pannello e poi vola;
+  l'effetto di `infoOpen` (`ViewerOverlay`) faceva partire la stessa animazione sullo stesso valore, che cancellava quella della chiusura: viewer
+  bloccato, `closing` vero per sempre, cella vuota. Succedeva anche con la X a pannello aperto. Durante la chiusura il pannello lo porta giu' solo
+  lei. Prova nuova: `ViewerGesturesTest.conIlPannelloInformazioniApertoLaXChiudeIlViewerVolandoAllaCella`. Visto nello screenshot a 1,3x: il
+  nome della fotocamera perdeva il modello («Samsung Galaxy …»); ora va su due righe.
+- **Fuori da `feature-viewer`**: `feature-library` (`MediaGrid`, `MediaGridState`: la lettura dell'origine), `core-designsystem`
+  (`GalleryTopBar`, `GalleryViewerChrome`: `titleAlpha`), `:app` (`AlbumOpener`, `AppMediaAlbums`, `AlbumsModule`, `AlbumsNavigation`,
+  `AppNavHost`; test in `RicercaTastieraTest` e `AppMediaAlbumsTest`).
+- **Batch**: `H2g-1` EXIT=1, chiesto alle 19:18, posto dopo 1952 s, 4,3 min: `:core-designsystem` completo 321/0, `:feature-library`
+  completo 1309/0, `feature-viewer` non compilava (in CU-16 avevo tolto per sbaglio `InfoSections` e `SectionTitle`, rimessi); `H2g-2` EXIT=1,
+  2,7 min: registrazione H1/H2 38 test, 2 falliti (la prova del testo grande guardava `hasVisualOverflow` della semantica, che rifa' il
+  paragrafo largo quanto il vincolo: corretta), `:app` non compilava (la porta degli album condivisi e' `AlbumsLive.shared.albums`);
+  `H2g-3` OK, 3,1 min: registrazione H1/H2 38/0, H1 di `:app` 8/0; `H2g-4` (il primo lancio fermato da me prima del posto, nessun java)
+  EXIT=1, 7,9 min: tutta la suite di `feature-viewer` in modo registrazione 1121 test, 1 fallito (la prova di CS-22, che ha trovato la
+  chiusura bloccata), `:app` 51 classi 260/0; `H2g-5` OK, 5,8 min: `:feature-viewer:testDebugUnitTest` completo 1122/0 (18 saltati),
+  `:app` 51 classi (viewer, album, griglia, ricerca, navigazione) 260/0. Registrare tutta la suite ha riscritto anche 74 screenshot di
+  fasi vecchie (10-P5, 5-P5, 5-P15, 6-P12..14, 8-P9, 8-corr-d, 9-P4: differenze accumulate, per esempio i tasti in alto a destra): non sono
+  di questo giro, rimessi com'erano. Nessun java chiuso da me. `tools\check.ps1` non lanciato.
+- **Screenshot**: 26, confrontati pixel per pixel: in `H1/` i 4 del volo (l'ombra sotto la foto); in `H2/` `a-meta-fascia-vuota` (il titolo
+  che sfuma), `dati-completi` e `pannello-lungo-scorso` (la capsula condivisa, la striscia), `foto-verticale`, `foto-orizzontale`,
+  `problema-di-backup` (la striscia rifatta, spostamenti di un pixel), e i nuovi `viewer-info-testo-grande-{chiaro,scuro}-telefono`;
+  l'indice ha le due immagini nuove (272).
+
 ## H5: Raccolte piu' pulite e con carattere; Impostazioni con meno testo (fase H, 11/11)
 
 Ramo `fix/h5-raccolte-impostazioni` da `261a3553`. Fonte: il commento dell'utente dell'11/11 (Raccolte "un po' poche icone fatte un po' piu'

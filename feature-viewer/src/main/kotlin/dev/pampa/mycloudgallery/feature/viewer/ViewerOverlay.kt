@@ -369,9 +369,11 @@ private fun ViewerHost(
       state.message = null
     }
   }
-  // Il pannello informazioni segue lo stato (il tasto, il menu); il dito lo guida da solo e poi lo scrive qui.
+  // Il pannello informazioni segue lo stato (il tasto, il menu); il dito lo guida da solo e poi lo scrive qui. Durante la chiusura del viewer
+  // lo porta giu' la chiusura stessa (`closeNow`): due animazioni sullo stesso valore si cancellano, e la chiusura con il pannello aperto (la X,
+  // la capsula di un album) si fermava a meta', con il viewer bloccato e la cella vuota.
   LaunchedEffect(state.infoOpen) {
-    if (!info.dragging) info.settle(state.infoOpen, reducedMotion)
+    if (!info.dragging && !controller.closing) info.settle(state.infoOpen, reducedMotion)
   }
 
   // --- Il lettore ------------------------------------------------------------------------------------------------------
@@ -1025,6 +1027,8 @@ private fun ViewerOverlays(
     visible = chromeShown,
     title = if (infoSpeaks) "" else title,
     subtitle = if (infoSpeaks) null else subtitle,
+    // CU-17: il titolo sfuma con il pannello che sale (letto nel disegno), ed e' gia' trasparente quando a meta' corsa la barra lo lascia al pannello.
+    titleAlpha = { topTitleAlpha(info.progress.value) },
     backdrop = backdrop,
     onClose = controller::close,
     bottomVisible = chromeShown && bottomReady && (sidePanel || infoClosed),
@@ -1159,7 +1163,11 @@ private fun ViewerOverlays(
   val placeMapPanel = rememberPlaceMapPanel(services.placeMap, currentId, active = infoVisible, secure = request.secure, onOpenMaps = onOpenMaps)
   val placeOpenMaps = if (placeMapPanel.sections.isEmpty()) onOpenMaps else null
   // Gli album dell'elemento (giro di correzione 1): letti solo a pannello aperto, mai dai Nascosti.
-  val albumsPanel = rememberAlbumsPanel(services.mediaAlbums, currentId, active = infoVisible && !request.secure)
+  // CS-22: la capsula chiude il viewer con la sua chiusura (il volo alla cella, o l'allontanarsi dove la cella non c'e') e solo dopo apre l'album.
+  val albumsPanel = rememberAlbumsPanel(services.mediaAlbums, currentId, active = infoVisible && !request.secure) { album ->
+    val source = services.mediaAlbums
+    controller.close(then = { source?.open(album) })
+  }
   // H2: cambiando elemento a pannello aperto le informazioni nuove sostituiscono le vecchie con una dissolvenza breve, senza lampi.
   val infoFade = remember { Animatable(1f) }
   LaunchedEffect(currentId) {
@@ -1364,6 +1372,15 @@ private const val VideoBarFrom = 0.5f
 
 /** Da qui il pannello informazioni e' la fonte di data e luogo e la barra in alto non li ripete (CU-5). */
 private const val INFO_SPEAKS = 0.5f
+
+/** CU-17: da qui il titolo della barra in alto comincia a sfumare (avanzamento del pannello informazioni). */
+private const val TITLE_FADE_FROM = 0.3f
+
+/**
+ * CU-17: l'opacita' del titolo e del sottotitolo della barra in alto con il pannello informazioni a [progress]: pieni fino a [TITLE_FADE_FROM], poi
+ * sfumano e a [INFO_SPEAKS] (dove la barra lascia data e luogo al pannello, CU-5) sono gia' trasparenti: nessun fotogramma in cui spariscono di colpo.
+ */
+internal fun topTitleAlpha(progress: Float): Float = 1f - ((progress - TITLE_FADE_FROM) / (INFO_SPEAKS - TITLE_FADE_FROM)).coerceIn(0f, 1f)
 
 /** A che punto dell'espansione entrano le pagine vicine (vedi `PagerLayer`): lontano dal primo fotogramma, prima della fine. */
 private const val NeighborsAtProgress = 0.5f

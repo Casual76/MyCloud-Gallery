@@ -118,11 +118,14 @@ class AppAlbumActions(
   override fun openDiagnostics() = nav.navigate(DiagnosticsGraphRoute)
 
   /** L'album la cui pagina e' in cima (le voci ⋮ "Rimuovi" e "Copertina" valgono solo li'); null da "Suggerite", dai viaggi o dall'editor. */
-  private fun currentAlbum(): AlbumId? {
-    val entry = nav.currentBackStackEntry ?: return null
-    if (!entry.destination.hasRoute<AlbumPageDestination>()) return null
-    return runCatching { AlbumId(entry.toRoute<AlbumPageDestination>().id) }.getOrNull()
-  }
+  private fun currentAlbum(): AlbumId? = nav.albumOnTop()
+}
+
+/** L'album la cui pagina e' in cima alla navigazione; null se in cima c'e' altro ("Suggerite", i viaggi, l'editor, la schermata principale). */
+internal fun NavController.albumOnTop(): AlbumId? {
+  val entry = currentBackStackEntry ?: return null
+  if (!entry.destination.hasRoute<AlbumPageDestination>()) return null
+  return runCatching { AlbumId(entry.toRoute<AlbumPageDestination>().id) }.getOrNull()
 }
 
 /** Il selettore dei media nel grafo (P13): la pagina di feature-library, la risposta a chi l'ha aperta, poi indietro. */

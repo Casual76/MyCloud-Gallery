@@ -1,5 +1,11 @@
 package dev.pampa.mycloudgallery.feature.viewer
 
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.Flow
+import dev.pampa.mycloudgallery.core.model.MediaId
+import dev.pampa.mycloudgallery.feature.viewer.info.ViewerMediaAlbums
+import dev.pampa.mycloudgallery.feature.viewer.info.ViewerAlbumEntry
+import androidx.compose.ui.test.onNodeWithText
 import androidx.activity.BackEventCompat
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.semantics.SemanticsActions
@@ -275,6 +281,47 @@ class ViewerGesturesTest : ViewerTestBase() {
     composeRule.waitUntil(TIMEOUT) { closed == 1 }
     assertThat(fixture.anchor.hidden).isNull()
     assertThat(fixture.anchor.hiddenHistory.takeLast(2)).containsExactly(id, null).inOrder()
+  }
+
+  @Test
+  fun conIlPannelloInformazioniApertoLaXChiudeIlViewerVolandoAllaCella() {
+    // La chiusura porta giu' il pannello e poi vola: prima l'effetto del pannello partiva sulla stessa animazione e la chiusura si fermava a meta'.
+    show()
+    val id = fixture.idAt(4)
+    pager().performTouchInput { swipeUp(startY = height * 0.8f, endY = height * 0.3f) }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(800)
+    composeRule.waitForIdle()
+    composeRule.onNodeWithContentDescription("Chiudi").performClick()
+    composeRule.waitUntil(TIMEOUT) { closed == 1 }
+    assertThat(fixture.anchor.hiddenHistory.takeLast(2)).containsExactly(id, null).inOrder()
+    assertThat(fixture.anchor.hidden).isNull()
+  }
+
+  @Test
+  fun laCapsulaDiUnAlbumChiudeIlViewerVolandoAllaCella_eSoloDopoApreLAlbum() {
+    // CS-22: prima il viewer spariva di colpo (l'host toglieva la richiesta); ora si chiude come con la X, poi l'album si apre.
+    val vacanze = ViewerAlbumEntry(key = "a", title = "Vacanze 2024", count = 12)
+    val openedAfterClosing = mutableListOf<Pair<ViewerAlbumEntry, Int>>()
+    val albums = object : ViewerMediaAlbums {
+      override fun albumsOf(media: MediaId): Flow<List<ViewerAlbumEntry>> = flowOf(listOf(vacanze))
+      override fun open(album: ViewerAlbumEntry) {
+        openedAfterClosing += album to closed
+      }
+    }
+    show(services = services(mediaAlbums = albums))
+    val id = fixture.idAt(4)
+    pager().performTouchInput { swipeUp(startY = height * 0.8f, endY = height * 0.3f) }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(800)
+    composeRule.waitForIdle()
+    composeRule.onNodeWithText("Vacanze 2024").performSemanticsAction(SemanticsActions.OnClick)
+    composeRule.waitUntil(TIMEOUT) { closed == 1 }
+    composeRule.waitForIdle()
+    // Il volo: la cella vuota fino all'arrivo, poi piena; l'album chiesto una volta sola, a viewer gia' chiuso.
+    assertThat(fixture.anchor.hiddenHistory.takeLast(2)).containsExactly(id, null).inOrder()
+    assertThat(fixture.anchor.hidden).isNull()
+    assertThat(openedAfterClosing).containsExactly(vacanze to 1)
   }
 
   @Test

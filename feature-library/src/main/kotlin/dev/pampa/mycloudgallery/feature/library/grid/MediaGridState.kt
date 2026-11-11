@@ -11,6 +11,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.positionInWindow
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridInteractionState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryScrubberState
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryGridLevel
@@ -189,8 +191,22 @@ class MediaGridState(
   internal val days = GridDaysCache()
   internal var viewport: GridViewport by mutableStateOf(GridViewport())
 
-  /** Dove sta la griglia nella finestra (per i bordi del viewer). */
-  internal var originInWindow: Offset = Offset.Zero
+  /** Le coordinate della griglia (la posa [MediaGrid]): da qui si legge [originInWindow] quando serve. */
+  internal var coordinates: LayoutCoordinates? = null
+  private var lastOrigin = Offset.Zero
+
+  /**
+   * Dove sta la griglia nella finestra **adesso** (i bordi per il viewer, la fascia dei gesti di sistema, la chrome adattiva). CS-21: si legge al
+   * momento della chiamata, non da un `onGloballyPositioned` messo in cache, cosi' conta ogni traslazione di disegno di un antenato (la Libreria che
+   * sale con la tastiera della ricerca, la pagina che arretra), che non rifa' il layout e quel callback non lo richiamerebbe. Il tiro oltre il fondo
+   * resta fuori: si applica dentro la griglia, sotto questo nodo ([pullOffset] lo sottrae chi converte). Fuori dalla composizione, l'ultima posizione.
+   */
+  internal val originInWindow: Offset
+    get() {
+      val c = coordinates
+      if (c != null && c.isAttached) lastOrigin = c.positionInWindow()
+      return lastOrigin
+    }
 
   /** L'altezza del piede (riepilogo e stato globale), per sapere dove finisce la lista. */
   internal var footerHeight: Int by mutableIntStateOf(0)
@@ -630,6 +646,7 @@ class MediaGridState(
       val t = transform(l)
       val a = t.toScreen(l.itemLeft(position).toFloat(), top)
       val b = t.toScreen((l.itemLeft(position) + l.itemWidth(position)).toFloat(), bottom)
+      // L'origine letta adesso (CS-21: con la Libreria sollevata dalla tastiera); il tiro oltre il fondo e' sotto questo nodo, si toglie qui.
       val o = originInWindow
       val lift = pullOffset()
       return PixelRect(o.x + a.x, o.y + a.y - lift, o.x + b.x, o.y + b.y - lift)

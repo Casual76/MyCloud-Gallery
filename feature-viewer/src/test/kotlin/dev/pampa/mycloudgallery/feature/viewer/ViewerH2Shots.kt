@@ -11,6 +11,9 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -18,6 +21,7 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.up
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.google.common.truth.Truth.assertThat
+import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.backup.contract.BackupProblemCode
 import dev.pampa.mycloudgallery.core.backup.contract.MediaBackupState
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
@@ -154,10 +158,10 @@ abstract class ViewerH2Shots(private val device: String, private val tablet: Boo
     mediaAlbums = ShotAlbums,
   )
 
-  /** Gli album della foto di prova: due voci. */
+  /** Gli album della foto di prova: due voci, la seconda un album condiviso della famiglia (con il suo segno). */
   private object ShotAlbums : ViewerMediaAlbums {
     override fun albumsOf(media: MediaId): Flow<List<ViewerAlbumEntry>> =
-      flowOf(listOf(ViewerAlbumEntry(key = "a", title = "Vacanze a Oslo", count = 42), ViewerAlbumEntry(key = "b", title = "Famiglia", count = 310)))
+      flowOf(listOf(ViewerAlbumEntry(key = "a", title = "Vacanze a Oslo", count = 42), ViewerAlbumEntry(key = "b", title = "Famiglia", count = 310, shared = true)))
 
     override fun open(album: ViewerAlbumEntry) = Unit
   }
@@ -356,6 +360,75 @@ internal fun aspectView(base: TimelineView, milli: Int): TimelineView {
     override fun snapshotIndex(viewIndex: Int): Int = base.snapshotIndex(viewIndex)
 
     override fun viewIndexOf(id: MediaId): Int = base.viewIndexOf(id)
+  }
+}
+
+/**
+ * CU-16: il pannello con il testo di sistema ingrandito (1,3x) sul telefono dell'utente, chiaro e scuro, su una foto di sera: ISO 3200 e 1/1000 s. La
+ * striscia dei valori non tronca le cifre: va su due righe da due. Prima di scattare, la prova guarda il testo come e' stato impaginato (nessun
+ * valore tagliato o con i puntini).
+ */
+@Config(qualifiers = "it-w360dp-h780dp-xhdpi", fontScale = 1.3f)
+class ViewerH2ShotsTestoGrande : ViewerTestBase() {
+
+  override val fixture: ViewerFixture = ViewerFixture(count = 400)
+
+  private val nightExif = ExifDetails(
+    make = "SAMSUNG",
+    model = "Samsung Galaxy S25",
+    lens = "Obiettivo principale",
+    fNumber = 1.8,
+    exposureTime = "1/1000",
+    iso = 3200,
+    focalLengthMm = 6.3,
+    flashFired = false,
+  )
+
+  private fun pager() = composeRule.onNodeWithTag(ViewerTags.Pager)
+
+  private fun largeText(dark: Boolean) {
+    fixture.items.publish(aspectView(fixture.library.view(), 750))
+    val services = services(
+      imageSource = photoSource(scene(900, 1200)),
+      backup = MediaBackupStates { flowOf(MediaBackupState.Safe(1_792_119_120_000)) },
+      exif = nightExif,
+    )
+    show(request = fixture.request(startIndex = 4), services = services, dark = dark)
+    composeRule.mainClock.advanceTimeBy(SETTLE)
+    composeRule.waitForIdle()
+    // Il pannello aperto e poi alto (lento, senza lancio): con il testo grande la scheda dello scatto sta piu' in basso.
+    pager().performTouchInput { swipeUp(startY = height * 0.8f, endY = height * 0.3f) }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(SETTLE)
+    composeRule.waitForIdle()
+    pager().performTouchInput {
+      down(Offset(centerX, height * 0.3f))
+      moveBy(Offset(0f, -40f), delayMillis = 32)
+      repeat(5) { moveBy(Offset(0f, -110f), delayMillis = 48) }
+    }
+    composeRule.mainClock.advanceTimeBy(300)
+    composeRule.waitForIdle()
+    pager().performTouchInput { up() }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(SETTLE)
+    composeRule.waitForIdle()
+    // Ogni valore e' largo quanto la sua larghezza naturale: un valore tagliato (o con i puntini, come prima) sarebbe piu' stretto.
+    for (value in listOf("ISO 3200", "6,3 mm", "f/1,8", "1/1000 s")) {
+      val node = composeRule.onNodeWithText(value, useUnmergedTree = true).fetchSemanticsNode()
+      val layouts = mutableListOf<TextLayoutResult>()
+      node.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+      val natural = layouts.single().multiParagraph.intrinsics.maxIntrinsicWidth
+      assertWithMessage("«$value» intero").that(node.size.width.toFloat()).isAtLeast(natural - 1f)
+    }
+    composeRule.onRoot().captureRoboImage("../docs/screenshots/beta-grafica/H2/viewer-info-testo-grande-${if (dark) "scuro" else "chiaro"}-telefono.png")
+  }
+
+  @Test fun testoGrande_chiaro() = largeText(dark = false)
+
+  @Test fun testoGrande_scuro() = largeText(dark = true)
+
+  private companion object {
+    const val SETTLE = 800L
   }
 }
 

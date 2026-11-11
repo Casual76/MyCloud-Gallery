@@ -213,6 +213,8 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
         viewer?.close()
         nav.openAlbum(id)
       }
+      // CS-22: la capsula dell'album da cui si sta guardando non apre una seconda copia della stessa pagina.
+      gallery.albumOpener.onTop = { nav.albumOnTop() }
     }
   }
   if (peopleHost != null) {

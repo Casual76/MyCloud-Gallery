@@ -61,14 +61,25 @@ class AppMediaAlbums(
 
 /** Dove porta il tocco su un album dal viewer: lo scrive la navigazione (chiude il viewer e apre la pagina dell'album). */
 class AlbumOpener {
-  @Volatile var onOpen: (AlbumId) -> Unit = {}
+  private class Binding(val onOpen: (AlbumId) -> Unit, val onTop: () -> AlbumId?)
 
-  /** CS-22: l'album la cui pagina e' in cima alla navigazione (il viewer era aperto da li'), se c'e'. Lo scrive la navigazione. */
-  @Volatile var onTop: () -> AlbumId? = { null }
+  @Volatile private var binding: Binding? = null
+
+  /**
+   * La navigazione si registra: [onOpen] apre la pagina dell'album, [onTop] dice quale album e' gia' in cima (CS-22). CS-24: le due lambda tengono
+   * la navigazione (e con lei l'attivita'), e questo oggetto vive quanto il processo: chi si e' registrato chiude cio' che riceve quando se ne va.
+   * Chiudere una registrazione vecchia non toglie quella nuova.
+   */
+  fun bind(onOpen: (AlbumId) -> Unit, onTop: () -> AlbumId? = { null }): AutoCloseable {
+    val mine = Binding(onOpen, onTop)
+    binding = mine
+    return AutoCloseable { if (binding === mine) binding = null }
+  }
 
   /** Apre l'album [id], se non e' gia' la pagina in cima: toccare la capsula dell'album da cui si guarda non ne apre una seconda copia. */
   fun open(id: AlbumId) {
-    if (onTop() == id) return
-    onOpen(id)
+    val current = binding ?: return
+    if (current.onTop() == id) return
+    current.onOpen(id)
   }
 }

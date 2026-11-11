@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.LaunchedEffect
@@ -152,6 +153,9 @@ fun MediaGrid(
   cellActions: ((MediaId) -> List<GalleryCellCustomAction>)? = null,
   onPullRefresh: (suspend () -> Unit)? = null,
 ) {
+  // CS-24: lo stato vive fuori dalla composizione (il grafo della Libreria): uscendo, la griglia lascia le sue coordinate, che terrebbero la
+  // finestra e l'attivita' (anche dopo una rotazione). L'ultima posizione letta resta in `originInWindow`.
+  DisposableEffect(state) { onDispose { state.coordinates = null } }
   BoxWithConstraints(
     modifier = modifier
       .fillMaxSize()

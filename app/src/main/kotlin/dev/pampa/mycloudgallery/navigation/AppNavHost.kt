@@ -4,6 +4,7 @@ import dev.pampa.mycloudgallery.feature.albums.nav.openAlbum
 import androidx.activity.compose.ReportDrawnAfter
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.withFrameNanos
 import dev.pampa.mycloudgallery.core.common.perf.AfterFirstDraw
@@ -208,13 +209,17 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   }
   // H2, giro di correzione 1: un album toccato nel pannello informazioni chiude il viewer e apre la pagina dell'album.
   if (gallery != null) {
-    SideEffect {
-      gallery.albumOpener.onOpen = { id ->
-        viewer?.close()
-        nav.openAlbum(id)
-      }
-      // CS-22: la capsula dell'album da cui si sta guardando non apre una seconda copia della stessa pagina.
-      gallery.albumOpener.onTop = { nav.albumOnTop() }
+    // CS-22: la capsula dell'album da cui si sta guardando non apre una seconda copia della stessa pagina. CS-24: la registrazione si toglie quando
+    // questa navigazione se ne va (rotazione, attivita' chiusa): le lambda tengono `nav`.
+    DisposableEffect(gallery, nav, viewer) {
+      val registration = gallery.albumOpener.bind(
+        onOpen = { id ->
+          viewer?.close()
+          nav.openAlbum(id)
+        },
+        onTop = { nav.albumOnTop() },
+      )
+      onDispose { registration.close() }
     }
   }
   if (peopleHost != null) {

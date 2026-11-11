@@ -59,7 +59,7 @@ class AppMediaAlbumsTest {
   fun ilToccoApreLAlbum(): Unit = runBlocking {
     val vacanze = manual("Vacanze 2024")
     val opened = mutableListOf<AlbumId>()
-    val opener = AlbumOpener().apply { onOpen = { opened += it } }
+    val opener = AlbumOpener().apply { bind(onOpen = { opened += it }) }
     val port = AppMediaAlbums({ albums }, itemsOf = { setOf(vacanze.value) }, opener = opener)
     port.open(port.albumsOf(media).first().single())
     assertThat(opened).containsExactly(vacanze)
@@ -90,6 +90,24 @@ class AppMediaAlbumsTest {
     assertThat(onlyShared.albumsOf(media).first().map { it.title }).containsExactly("Famiglia")
   }
 
+  @Test
+  fun chiSiERegistratoESeNeVaNonRestaNellApertura(): Unit = runBlocking {
+    // CS-24: la navigazione si registra e si toglie andandosene; una registrazione vecchia che si chiude dopo non toglie quella nuova.
+    val vacanze = manual("Vacanze 2024")
+    val first = mutableListOf<AlbumId>()
+    val second = mutableListOf<AlbumId>()
+    val opener = AlbumOpener()
+    val old = opener.bind(onOpen = { first += it })
+    val current = opener.bind(onOpen = { second += it })
+    old.close()
+    opener.open(vacanze)
+    assertThat(first).isEmpty()
+    assertThat(second).containsExactly(vacanze)
+    current.close()
+    opener.open(vacanze)
+    assertThat(second).containsExactly(vacanze)
+  }
+
   private fun shared(title: String): Album.Shared = Album.Shared(
     id = AlbumId.random(), title = title, kind = AlbumKind.MANUAL, cover = CoverRef.None, count = 3, sort = AlbumSort.defaultFor(AlbumKind.MANUAL),
     updatedAtNas = 0L, newestDay = null, level = ShareLevel.ALL, creator = AccountId("altro"), heir = null, mine = false, state = SharedState.ACTIVE,
@@ -101,10 +119,7 @@ class AppMediaAlbumsTest {
     val vacanze = manual("Vacanze 2024")
     val famiglia = manual("Famiglia")
     val opened = mutableListOf<AlbumId>()
-    val opener = AlbumOpener().apply {
-      onOpen = { opened += it }
-      onTop = { vacanze }
-    }
+    val opener = AlbumOpener().apply { bind(onOpen = { opened += it }, onTop = { vacanze }) }
     val port = AppMediaAlbums({ albums }, itemsOf = { setOf(vacanze.value, famiglia.value) }, opener = opener)
     val entries = port.albumsOf(media).first()
     port.open(entries.single { it.key == vacanze.value })

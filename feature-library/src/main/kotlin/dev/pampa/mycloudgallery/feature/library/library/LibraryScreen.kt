@@ -235,7 +235,9 @@ internal fun LibraryScreen(
               modifier = if (tabBarScroll != null) Modifier.nestedScroll(tabBarScroll) else Modifier,
               contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
               onOpen = { id -> onOpenViewer(ViewerRequest(items = state.viewerItems, start = id, anchor = grid.viewerAnchor, secure = false)) },
-              footer = { LibraryFooter(state, phone) },
+              // CS-23 (giro 2): con la ricerca aperta il riepilogo in fondo («1.817 foto, 183 video») sfuma con i pezzi in alto; non resta a meta'
+              // dietro la riga sopra la barra. Solo l'alfa nel disegno: il piede tiene il suo posto e la griglia non salta.
+              footer = { Box(Modifier.graphicsLayer { alpha = 1f - searchTop.value }) { LibraryFooter(state, phone) } },
               stickyTop = topChrome,
               onLevelChanged = { level -> scope.launch { state.preferences.setLevel(level) } },
               // D15: Canc apre il foglio di conferma (lo stesso della barra delle azioni), mai un'eliminazione diretta.

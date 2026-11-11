@@ -1,0 +1,44 @@
+[OK] fusione origine ammessa
+[OK] fusione inversa origine vietata sotto nome ammesso
+[OK] inline frame interno vietato prevale
+[OK] overload firma residuale
+[OK] fusione senza posizioni cade
+[OK] intervalli sovrapposti cadono
+[OK] mapping assente cade
+[OK] identita unica senza posizioni
+[OK] policy core/models/download/https/ origine ammessa passa
+[OK] policy core/models/download/https/ fusione inversa cade
+[OK] policy feature/map/net/ origine ammessa passa
+[OK] policy feature/map/net/ fusione inversa cade
+[OK] policy feature/map/ origine ammessa passa
+[OK] policy feature/map/ fusione inversa cade
+[OK] policy feature/widget/ origine ammessa passa
+[OK] policy feature/widget/ fusione inversa cade
+[OK] policy core/ai/ origine ammessa passa
+[OK] policy core/ai/ fusione inversa cade
+[OK] policy core/ai/ocr/MlKitBootstrap origine ammessa passa
+[OK] policy core/ai/ocr/MlKitBootstrap fusione inversa cade
+[OK] policy core/faces/sync/ origine ammessa passa
+[OK] policy core/faces/sync/ fusione inversa cade
+[OK] policy albums/ origine ammessa passa
+[OK] policy albums/ fusione inversa cade
+[OK] policy di/ origine ammessa passa
+[OK] policy di/ fusione inversa cade
+[OK] outline nome MapLibre corpo Android accettato
+[OK] outline Lorg/maplibre/Real; non esentato
+[OK] outline Lorg/maplibre/Real; propagato al chiamante
+[OK] outline Lokhttp3/Real; non esentato
+[OK] outline Lokhttp3/Real; propagato al chiamante
+[OK] outline Landroidx/glance/Real; non esentato
+[OK] outline Landroidx/glance/Real; propagato al chiamante
+[OK] outline Ljava/net/HttpURLConnection; non esentato
+[OK] outline Ljava/net/HttpURLConnection; propagato al chiamante
+[OK] outline Landroid/webkit/WebView; non esentato
+[OK] outline Landroid/webkit/WebView; propagato al chiamante
+[OK] outline corpo assente cade
+[OK] outline indiretto cade
+[OK] outline annidato non dimostrato cade
+[OK] outline no-op non chiama librerie
+[OK] ponte sintetico attribuito a Ldev/pampa/mycloudgallery/feature/map/net/Good;
+[OK] ponte sintetico attribuito a Lforbidden/Bad;
+43 prove OK

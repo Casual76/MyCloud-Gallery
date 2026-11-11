@@ -1,0 +1,25 @@
+[ .. ] motori on-device: SOLO sezione bytecode ML Kit/HTTPS
+        bytecode: 45 chiamate nostre a MlKit.initialize o ai client HTTPS, tutte al loro posto (9821603 righe di dexdump)
+[FAIL] motori on-device: SOLO sezione bytecode ML Kit/HTTPS  -> client HTTPS fuori da core-models/.../download/https/ e feature/map/net/: Ldev/pampa/mycloudgallery/backup/CatalogPhoneFolders$folders$2;.invokeSuspend (Ljava/net/HttpURLConnection;.)  (19,7s)
+[ .. ] OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)
+        bytecode (mappa nell'app): 3064 chiamate a OkHttp (151 da net/), 158 chiamate nostre a MapLibre, client installato 1, MapLibre inizializzato 1; libmaplibre.so: True (9821603 righe di dexdump); 8 chiamate di lambda fuse da R8 a ponti ammessi
+[FAIL] OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)  -> MapLibre chiamato da codice nostro fuori da feature/map/: Ldev/pampa/mycloudgallery/core/security/screen/RecentsPrivacy;.setHidden (Lorg/maplibre/); MapLibre chiamato da codice nostro fuori da feature/map/: Ldev/pampa/mycloudgallery/feature/settings/about/AboutScreenKt;.AboutRoute (Lorg/maplibre/)  (21,5s)
+
+
+Name    : motori on-device: SOLO sezione bytecode ML Kit/HTTPS
+Status  : FAIL
+Detail  : client HTTPS fuori da core-models/.../download/https/ e feature/map/net/: 
+          Ldev/pampa/mycloudgallery/backup/CatalogPhoneFolders$folders$2;.invokeSuspend (Ljava/net/HttpURLConnection;.)
+Seconds : 19,7
+
+Name    : OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, 
+          MapLibre solo da feature/map/)
+Status  : FAIL
+Detail  : MapLibre chiamato da codice nostro fuori da feature/map/: 
+          Ldev/pampa/mycloudgallery/core/security/screen/RecentsPrivacy;.setHidden (Lorg/maplibre/); MapLibre chiamato 
+          da codice nostro fuori da feature/map/: 
+          Ldev/pampa/mycloudgallery/feature/settings/about/AboutScreenKt;.AboutRoute (Lorg/maplibre/)
+Seconds : 21,5
+
+
+

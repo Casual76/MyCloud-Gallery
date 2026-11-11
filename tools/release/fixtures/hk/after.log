@@ -1,0 +1,71 @@
+ORIGINE classes2.dex 5856b4: Ldev/pampa/mycloudgallery/core/models/download/https/HttpsModelFetcher$Attempt$abort$1;.invokeSuspend
+ORIGINE classes2.dex 7b0b9e: Ldev/pampa/mycloudgallery/core/security/screen/RecentsPrivacy;.setRecentsScreenshotEnabled
+ORIGINE classes3.dex 1f60d2: Ldev/pampa/mycloudgallery/feature/settings/about/AboutScreenKt;.appVersionName
+[ .. ] D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteTo, backupBlocksTestAccounts e backupMayWriteAs nel dex e in mapping.txt, e il cancello che li usa
+        D12 e R2 presenti nella release (dex e mapping.txt)
+        cancello D12 e R2 provato nel bytecode: stateOf -> backupMayWriteTo -> TEST_ONLY e stateOf -> backupMayWriteAs -> TEST_ONLY, istanziato da Ldev/pampa/mycloudgallery/backup/BackupGraph;.access$getPartsFlow$p, decisioni chiamate da 3 e 3 metodi (9821603 righe di dexdump)
+        cancello dei file in arrivo (LA-5) provato nel bytecode: IncomingGate.stateOf -> backupMayWriteTo/backupMayWriteAs -> TEST_ONLY, istanziato da Ldev/pampa/mycloudgallery/backup/FiveBGraph;.access$getReachNas$p
+[ OK ] D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteTo, backupBlocksTestAccounts e backupMayWriteAs nel dex e in mapping.txt, e il cancello che li usa  (54,4s)
+[ .. ] D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt, e i cancelli degli album che li usano
+        D30 presente nella release (dex e mapping.txt)
+        cancelli D30 provati nel bytecode: AppAlbumWriteGate.blockFor -> sharedAlbumsMayUse -> TEST_SHARES_ONLY e FlagsAlbumReadGate.mayRead -> sharedAlbumsMayUse, istanziati da Ldev/pampa/mycloudgallery/albums/AlbumsWiring;.build, Ldev/pampa/mycloudgallery/albums/AlbumsWiring$build$build$1;.invokeSuspend; decisione chiamata da 2 metodi (9821603 righe di dexdump)
+[ OK ] D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt, e i cancelli degli album che li usano  (54,3s)
+[ .. ] D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt
+        D34 presente nella release (dex e mapping.txt)
+        cancello D34 provato nel bytecode: AppFacesWriteGate.blockFor -> facesSyncMayUse -> TEST_SHARES_ONLY, istanziato da Ldev/pampa/mycloudgallery/faces/FacesWiring$build$build$1;.invokeSuspend$lambda$2; chiamato da 6 metodi di core/faces/sync; decisione chiamata da 3 metodi (9821603 righe di dexdump)
+[ OK ] D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt  (46,1s)
+[ .. ] motori on-device: SOLO sezione bytecode ML Kit/HTTPS
+        bytecode: 45 chiamate nostre a MlKit.initialize o ai client HTTPS, tutte al loro posto (9821603 righe di dexdump)
+[ OK ] motori on-device: SOLO sezione bytecode ML Kit/HTTPS  (19,1s)
+[ .. ] LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/faces/FaceLiteRtSessions)
+[FAIL] LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/faces/FaceLiteRtSessions)  -> eccezione: Eccezione durante la chiamata di "Scan" con "4" argomento/i: "HK: origine indeterminata: Lcom/google/ai/edge/litert/ModelSelector;.selectModel pc=21 line=22"  (8s)
+[ .. ] OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)
+        bytecode (mappa nell'app): 3065 chiamate a OkHttp (151 da net/), 162 chiamate nostre a MapLibre, client installato 1, MapLibre inizializzato 1; libmaplibre.so: True (9821603 righe di dexdump); 0 chiamate di lambda fuse da R8 a ponti ammessi
+[ OK ] OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)  (20,4s)
+[ .. ] Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del manifest (KT)
+[FAIL] Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del manifest (KT)  -> eccezione: Eccezione durante la chiamata di "Scan" con "4" argomento/i: "HK: origine indeterminata: Landroidx/glance/appwidget/AppWidgetSession;.processEmittableTree pc=31 line=32"  (7,6s)
+
+
+Name    : D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteTo, backupBlocksTestAccounts e 
+          backupMayWriteAs nel dex e in mapping.txt, e il cancello che li usa
+Status  : OK
+Detail  : 
+Seconds : 54,4
+
+Name    : D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt, e 
+          i cancelli degli album che li usano
+Status  : OK
+Detail  : 
+Seconds : 54,3
+
+Name    : D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt
+Status  : OK
+Detail  : 
+Seconds : 46,1
+
+Name    : motori on-device: SOLO sezione bytecode ML Kit/HTTPS
+Status  : OK
+Detail  : 
+Seconds : 19,1
+
+Name    : LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/faces/FaceLiteRtSessions)
+Status  : FAIL
+Detail  : eccezione: Eccezione durante la chiamata di "Scan" con "4" argomento/i: "HK: origine indeterminata: 
+          Lcom/google/ai/edge/litert/ModelSelector;.selectModel pc=21 line=22"
+Seconds : 8
+
+Name    : OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, 
+          MapLibre solo da feature/map/)
+Status  : OK
+Detail  : 
+Seconds : 20,4
+
+Name    : Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del 
+          manifest (KT)
+Status  : FAIL
+Detail  : eccezione: Eccezione durante la chiamata di "Scan" con "4" argomento/i: "HK: origine indeterminata: 
+          Landroidx/glance/appwidget/AppWidgetSession;.processEmittableTree pc=31 line=32"
+Seconds : 7,6
+
+
+

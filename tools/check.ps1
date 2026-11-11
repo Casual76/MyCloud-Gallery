@@ -182,6 +182,20 @@ $script:failed = $false
 
 # --- Utilita' ---------------------------------------------------------------------------------------------
 
+# HK: condiviso da tutte le ispezioni che attribuiscono istruzioni a un chiamante.
+New-Item -ItemType Directory -Force (Join-Path $root "build") | Out-Null
+Remove-Item (Join-Path $root "build\hk-r8-provenance.dll") -ErrorAction SilentlyContinue
+Add-Type -Path (Join-Path $root "tools\release\r8-provenance.cs") -OutputAssembly (Join-Path $root "build\hk-r8-provenance.dll")
+Add-Type -Path (Join-Path $root "build\hk-r8-provenance.dll")
+[R8Provenance]::MappingPath = Join-Path $root "app\build\outputs\mapping\release\mapping.txt"
+
+# HK giro 2: la prova positiva richiede tutti i candidati, mai un membro solo dell'insieme.
+function Test-R8EveryOrigin([string]$Callers, [scriptblock]$Predicate) {
+  if ([string]::IsNullOrWhiteSpace($Callers)) { return $false }
+  foreach ($origin in ($Callers -split "`n")) { if (-not (& $Predicate $origin)) { return $false } }
+  return $true
+}
+
 function Read-TextFile($path) {
   return [System.IO.File]::ReadAllText($path, (New-Object System.Text.UTF8Encoding($false)))
 }
@@ -371,7 +385,7 @@ function Get-DexClassesMatching([string]$apk, [string]$pattern) {
 $script:dexGateReaderLoaded = $false
 function Initialize-DexGateReader {
   if ($script:dexGateReaderLoaded) { return }
-  Add-Type -Language CSharp -TypeDefinition @'
+  Add-Type -Language CSharp -ReferencedAssemblies @("System.dll", "System.Core.dll", (Join-Path $root "build\hk-r8-provenance.dll")) -TypeDefinition @'
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -410,9 +424,10 @@ public static class DexGateReader {
 
   static readonly Regex ClassLine = new Regex(@"^\s*Class descriptor\s*:\s*'([^']+)'", RegexOptions.Compiled);
   static readonly Regex NameLine = new Regex(@"^\s*name\s*:\s*'([^']*)'", RegexOptions.Compiled);
-  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]{4}:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
+  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]+:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
 
   public static void Scan(string dexdump, string dexPath, DexGateFacts facts) {
+    R8Provenance.Prepare(dexdump, dexPath);
     var info = new ProcessStartInfo(dexdump, "-d \"" + dexPath + "\"") {
       UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
       StandardOutputEncoding = Encoding.GetEncoding(28591),
@@ -422,6 +437,7 @@ public static class DexGateReader {
       bool sawDecisionInStateOf = false, sawAccountDecisionInStateOf = false;
       var errors = process.StandardError.ReadToEndAsync();
       string line;
+      try {
       while ((line = process.StandardOutput.ReadLine()) != null) {
         facts.Lines++;
         var m = ClassLine.Match(line);
@@ -442,24 +458,23 @@ public static class DexGateReader {
         var insn = InsnLine.Match(line);
         if (!insn.Success) continue;
         string op = insn.Groups[1].Value, rest = insn.Groups[2].Value;
-        string here = cls + "." + method;
         if (op.StartsWith("invoke") && rest.Contains(Decision)) {
-          facts.DecisionCallers.Add(here);
-          if (cls == GateClass && method == "stateOf") { facts.StateOfCallsDecision = true; sawDecisionInStateOf = true; }
-          if (cls == IncomingClass && method == "stateOf") { facts.IncomingStateOfCallsDecision = true; sawDecisionInStateOf = true; }
+          facts.DecisionCallers.Add(R8Provenance.OriginGroup(dexPath, line));
+          if (R8Provenance.IsOnlyOrigin(dexPath, line, GateClass + ".stateOf")) { facts.StateOfCallsDecision = true; sawDecisionInStateOf = true; }
+          if (R8Provenance.IsOnlyOrigin(dexPath, line, IncomingClass + ".stateOf")) { facts.IncomingStateOfCallsDecision = true; sawDecisionInStateOf = true; }
         } else if (op.StartsWith("invoke") && rest.Contains(AccountDecision)) {
-          facts.AccountDecisionCallers.Add(here);
-          if (cls == GateClass && method == "stateOf") { facts.StateOfCallsAccountDecision = true; sawAccountDecisionInStateOf = true; }
-          if (cls == IncomingClass && method == "stateOf") { facts.IncomingStateOfCallsAccountDecision = true; sawAccountDecisionInStateOf = true; }
+          facts.AccountDecisionCallers.Add(R8Provenance.OriginGroup(dexPath, line));
+          if (R8Provenance.IsOnlyOrigin(dexPath, line, GateClass + ".stateOf")) { facts.StateOfCallsAccountDecision = true; sawAccountDecisionInStateOf = true; }
+          if (R8Provenance.IsOnlyOrigin(dexPath, line, IncomingClass + ".stateOf")) { facts.IncomingStateOfCallsAccountDecision = true; sawAccountDecisionInStateOf = true; }
         } else if (op == "new-instance" && rest.Contains(GateClass)) {
-          facts.Instantiators.Add(here);
+          facts.Instantiators.Add(R8Provenance.OriginGroup(dexPath, line));
         } else if (op == "new-instance" && rest.Contains(IncomingClass)) {
-          facts.IncomingInstantiators.Add(here);
-        } else if (op.StartsWith("sget") && rest.Contains(TestOnly) && cls == GateClass && method == "stateOf") {
+          facts.IncomingInstantiators.Add(R8Provenance.OriginGroup(dexPath, line));
+        } else if (op.StartsWith("sget") && rest.Contains(TestOnly) && R8Provenance.IsOnlyOrigin(dexPath, line, GateClass + ".stateOf")) {
           // D12: la risposta TEST_ONLY dopo la decisione per share; R2: la risposta TEST_ONLY dopo la decisione per account.
           if (sawDecisionInStateOf) facts.StateOfReturnsTestOnly = true;
           if (sawAccountDecisionInStateOf) facts.StateOfReturnsTestOnlyForAccount = true;
-        } else if (op.StartsWith("sget") && rest.Contains(TestOnly) && cls == IncomingClass && method == "stateOf") {
+        } else if (op.StartsWith("sget") && rest.Contains(TestOnly) && R8Provenance.IsOnlyOrigin(dexPath, line, IncomingClass + ".stateOf")) {
           // LA-5: lo stesso per il cancello dei file in arrivo.
           if (sawDecisionInStateOf) facts.IncomingStateOfReturnsTestOnly = true;
           if (sawAccountDecisionInStateOf) facts.IncomingStateOfReturnsTestOnlyForAccount = true;
@@ -467,6 +482,7 @@ public static class DexGateReader {
       }
       process.WaitForExit();
       if (process.ExitCode != 0) throw new InvalidOperationException("dexdump ha fallito: " + errors.Result);
+      } finally { if (!process.HasExited) { process.Kill(); process.WaitForExit(); } }
     }
   }
 }
@@ -497,6 +513,10 @@ function Get-D12GateFacts([string]$dexdump, [string]$apk) {
     foreach ($entry in $dexes) {
       $target = Join-Path $temp $entry.FullName
       [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+    }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") { [R8Provenance]::Prepare($dexdump, $dexFile.FullName) }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") {
+      $target = $dexFile.FullName
       [DexGateReader]::Scan($dexdump, $target, $facts)
     }
   } finally {
@@ -938,7 +958,7 @@ Step "D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteT
     elseif (-not $gate.StateOfReturnsTestOnlyForAccount) { $problems += "AppBackupGate.stateOf non risponde BackupGateState.TEST_ONLY dopo la decisione per account (R2)" }
   }
   if ($gate.Instantiators.Count -eq 0) { $problems += "nessun codice istanzia AppBackupGate: il cancello non e' collegato al backup" }
-  elseif (-not ($gate.Instantiators | Where-Object { $_ -like "Ldev/pampa/mycloudgallery/backup/BackupGraph;.*" })) {
+  elseif (-not ($gate.Instantiators | Where-Object { Test-R8EveryOrigin $_ { param($o) $o -like "Ldev/pampa/mycloudgallery/backup/BackupGraph;.*" } })) {
     $problems += ("AppBackupGate e' istanziato solo da " + (($gate.Instantiators | Select-Object -Unique) -join ", ") + ", non da BackupGraph")
   }
   # LA-5 (verifica funzionale della 5B): il secondo cancello, quello dei file in arrivo ("Salva sul NAS" scrive nella share di
@@ -953,7 +973,7 @@ Step "D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteT
     elseif (-not $gate.IncomingStateOfReturnsTestOnlyForAccount) { $problems += "IncomingGate.stateOf non risponde BackupGateState.TEST_ONLY dopo la decisione per account (R2)" }
   }
   if ($gate.IncomingInstantiators.Count -eq 0) { $problems += "nessun codice istanzia IncomingGate: il cancello dei file in arrivo non e' collegato" }
-  elseif (-not ($gate.IncomingInstantiators | Where-Object { $_ -like "Ldev/pampa/mycloudgallery/backup/*" })) {
+  elseif (-not ($gate.IncomingInstantiators | Where-Object { Test-R8EveryOrigin $_ { param($o) $o -like "Ldev/pampa/mycloudgallery/backup/*" } })) {
     $problems += ("IncomingGate e' istanziato solo da " + (($gate.IncomingInstantiators | Select-Object -Unique) -join ", ") + ", non da una classe del backup")
   }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
@@ -972,7 +992,7 @@ Step "D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteT
 $script:dexAlbumGateReaderLoaded = $false
 function Initialize-DexAlbumGateReader {
   if ($script:dexAlbumGateReaderLoaded) { return }
-  Add-Type -Language CSharp -TypeDefinition @'
+  Add-Type -Language CSharp -ReferencedAssemblies @("System.dll", "System.Core.dll", (Join-Path $root "build\hk-r8-provenance.dll")) -TypeDefinition @'
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -1010,9 +1030,10 @@ public static class DexAlbumGateReader {
 
   static readonly Regex ClassLine = new Regex(@"^\s*Class descriptor\s*:\s*'([^']+)'", RegexOptions.Compiled);
   static readonly Regex NameLine = new Regex(@"^\s*name\s*:\s*'([^']*)'", RegexOptions.Compiled);
-  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]{4}:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
+  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]+:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
 
   public static void Scan(string dexdump, string dexPath, DexAlbumGateFacts facts) {
+    R8Provenance.Prepare(dexdump, dexPath);
     var info = new ProcessStartInfo(dexdump, "-d \"" + dexPath + "\"") {
       UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
       StandardOutputEncoding = Encoding.GetEncoding(28591),
@@ -1022,6 +1043,7 @@ public static class DexAlbumGateReader {
       bool sawDecisionInBlockFor = false;
       var errors = process.StandardError.ReadToEndAsync();
       string line;
+      try {
       while ((line = process.StandardOutput.ReadLine()) != null) {
         facts.Lines++;
         var m = ClassLine.Match(line);
@@ -1042,66 +1064,30 @@ public static class DexAlbumGateReader {
         var insn = InsnLine.Match(line);
         if (!insn.Success) continue;
         string op = insn.Groups[1].Value, rest = insn.Groups[2].Value;
-        string here = cls + "." + method;
         if (op.StartsWith("invoke") && rest.Contains(Decision)) {
-          facts.DecisionCallers.Add(here);
-          if (cls == WriteGate && method == "blockFor") { facts.BlockForCallsDecision = true; sawDecisionInBlockFor = true; }
-          if (cls == ReadGate && method == "mayRead") facts.MayReadCallsDecision = true;
+          facts.DecisionCallers.Add(R8Provenance.OriginGroup(dexPath, line));
+          if (R8Provenance.IsOnlyOrigin(dexPath, line, WriteGate + ".blockFor")) { facts.BlockForCallsDecision = true; sawDecisionInBlockFor = true; }
+          if (R8Provenance.IsOnlyOrigin(dexPath, line, ReadGate + ".mayRead")) facts.MayReadCallsDecision = true;
         } else if (op.StartsWith("invoke") && (rest.Contains(WritePort) || rest.Contains(WriteDirect))) {
-          facts.WriteGateUsers.Add(here);
+          facts.WriteGateUsers.Add(R8Provenance.OriginGroup(dexPath, line));
         } else if (op.StartsWith("invoke") && (rest.Contains(ReadPort) || rest.Contains(ReadDirect))) {
-          facts.ReadGateUsers.Add(here);
+          facts.ReadGateUsers.Add(R8Provenance.OriginGroup(dexPath, line));
         } else if (op == "new-instance" && rest.Contains(WriteGate)) {
-          facts.WriteGateInstantiators.Add(here);
+          facts.WriteGateInstantiators.Add(R8Provenance.OriginGroup(dexPath, line));
         } else if (op == "new-instance" && rest.Contains(ReadGate)) {
-          facts.ReadGateInstantiators.Add(here);
-        } else if (op.StartsWith("sget") && rest.Contains(TestSharesOnly) && cls == WriteGate && method == "blockFor") {
+          facts.ReadGateInstantiators.Add(R8Provenance.OriginGroup(dexPath, line));
+        } else if (op.StartsWith("sget") && rest.Contains(TestSharesOnly) && R8Provenance.IsOnlyOrigin(dexPath, line, WriteGate + ".blockFor")) {
           // D30: la risposta TEST_SHARES_ONLY dopo la decisione per share.
           if (sawDecisionInBlockFor) facts.BlockForReturnsTestSharesOnly = true;
         }
       }
       process.WaitForExit();
       if (process.ExitCode != 0) throw new InvalidOperationException("dexdump ha fallito: " + errors.Result);
+      } finally { if (!process.HasExited) { process.Kill(); process.WaitForExit(); } }
     }
   }
 
-  // I metodi del dex ("Lclasse;.metodo") che contengono codice delle classi originali [patterns], secondo mapping.txt. Anche con
-  // -dontobfuscate R8 fonde classi di pacchetti diversi (il pubblicatore degli album finisce in NasPersonalSync, la replica in una classe di
-  // CameraX) e inlinea metodi: il nome della classe nel dex non dice da dove viene il codice, mapping.txt si'. Ogni riga di un metodo e'
-  // "[a:b:]tipo [classeOriginale.]nome(argomenti)[:x[:y]] -> nomeNelDex" sotto "classeOriginale -> classeNelDex:"; senza classe davanti al
-  // nome il codice e' della classe del blocco. Un pattern che finisce con '*' vale come prefisso; senza, la classe e le sue classi interne.
-  public static Dictionary<string, HashSet<string>> ResidualMethods(string mapping, string[] patterns) {
-    var result = new Dictionary<string, HashSet<string>>();
-    foreach (var p in patterns) result[p] = new HashSet<string>();
-    string owner = null, residual = null;
-    foreach (var raw in File.ReadLines(mapping)) {
-      if (raw.Length == 0 || raw[0] == '#') continue;
-      if (raw[0] != ' ') {
-        int arrow = raw.IndexOf(" -> ");
-        if (arrow < 0 || !raw.EndsWith(":")) { owner = null; residual = null; continue; }
-        owner = raw.Substring(0, arrow);
-        residual = "L" + raw.Substring(arrow + 4, raw.Length - arrow - 5).Replace('.', '/') + ";";
-        continue;
-      }
-      if (residual == null) continue;
-      string line = raw.Trim();
-      if (line.StartsWith("#")) continue;
-      int arrowM = line.LastIndexOf(" -> ");
-      if (arrowM < 0) continue;
-      string left = line.Substring(0, arrowM), name = line.Substring(arrowM + 4);
-      int paren = left.IndexOf('(');
-      if (paren < 0) continue;
-      int space = left.LastIndexOf(' ', paren);
-      string qualified = left.Substring(space + 1, paren - space - 1);
-      int dot = qualified.LastIndexOf('.');
-      string origin = dot < 0 ? owner : qualified.Substring(0, dot);
-      foreach (var p in patterns) {
-        bool hit = p.EndsWith("*") ? origin.StartsWith(p.Substring(0, p.Length - 1)) : (origin == p || origin.StartsWith(p + "$"));
-        if (hit) result[p].Add(residual + "." + name);
-      }
-    }
-    return result;
-  }
+
 }
 '@
   $script:dexAlbumGateReaderLoaded = $true
@@ -1121,6 +1107,10 @@ function Get-D30GateFacts([string]$dexdump, [string]$apk) {
     foreach ($entry in $dexes) {
       $target = Join-Path $temp $entry.FullName
       [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+    }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") { [R8Provenance]::Prepare($dexdump, $dexFile.FullName) }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") {
+      $target = $dexFile.FullName
       [DexAlbumGateReader]::Scan($dexdump, $target, $facts)
     }
   } finally {
@@ -1157,7 +1147,7 @@ Step "D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsM
   # e poi risponde `AlbumWriteBlock.TEST_SHARES_ONLY`; `FlagsAlbumReadGate.mayRead` chiama la stessa decisione; i due cancelli li istanzia il
   # montaggio degli album di :app (`albums/` o `di/`); il pubblicatore, il piano della condivisione e la replica li chiamano. Le regole di
   # app\proguard-rules.pro tengono i due metodi (niente fusioni ne' inline). Le altre classi R8 le fonde e le inlinea anche fra pacchetti
-  # diversi: chi istanzia e chi chiama si riconosce dal nome nel dex o, se fuso altrove, da mapping.txt (DexAlbumGateReader.ResidualMethods).
+  # diversi: chi istanzia e chi chiama si riconosce dall'origine della singola istruzione (mapping e posizioni dex).
   $dexdump = Get-DexDump
   if (-not $dexdump) { return "dexdump.exe non trovato accanto ad aapt2 (build-tools): non posso provare i cancelli D30 nel dex di release" }
   $gate = Get-D30GateFacts $dexdump $apk.FullName
@@ -1169,13 +1159,8 @@ Step "D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsM
   if (-not $gate.ReadGateFound) { $problems += "FlagsAlbumReadGate non e' nel dex di release: il cancello della lettura degli album e' stato tolto o fuso" }
   elseif (-not $gate.MayReadFound) { $problems += "FlagsAlbumReadGate.mayRead non e' nel dex di release" }
   elseif (-not $gate.MayReadCallsDecision) { $problems += "FlagsAlbumReadGate.mayRead non chiama FeatureFlags.sharedAlbumsMayUse: la recinzione D30 non governa la lettura degli album" }
-  $origins = [DexAlbumGateReader]::ResidualMethods($mapping, [string[]]@(
-      "dev.pampa.mycloudgallery.albums.*", "dev.pampa.mycloudgallery.di.*",
-      "dev.pampa.mycloudgallery.core.albums.shared.NasAlbumPublisher", "dev.pampa.mycloudgallery.core.albums.share.Share*",
-      "dev.pampa.mycloudgallery.core.albums.shared.NasSharedAlbumSync"))
-  $wiring = { param($list) @($list | Where-Object {
-        $_ -like "Ldev/pampa/mycloudgallery/albums/*" -or $_ -like "Ldev/pampa/mycloudgallery/di/*" -or
-        $origins["dev.pampa.mycloudgallery.albums.*"].Contains($_) -or $origins["dev.pampa.mycloudgallery.di.*"].Contains($_) }) }
+  $wiring = { param($list) @($list | Where-Object { Test-R8EveryOrigin $_ { param($o)
+        $o -like "Ldev/pampa/mycloudgallery/albums/*" -or $o -like "Ldev/pampa/mycloudgallery/di/*" } }) }
   if ($gate.WriteGateInstantiators.Count -eq 0) { $problems += "nessun codice istanzia AppAlbumWriteGate: il cancello delle scritture degli album non e' collegato" }
   elseif ((& $wiring $gate.WriteGateInstantiators).Count -eq 0) {
     $problems += ("AppAlbumWriteGate e' istanziato solo da " + (($gate.WriteGateInstantiators | Select-Object -Unique) -join ", ") + ", non dal montaggio degli album")
@@ -1189,10 +1174,9 @@ Step "D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsM
       @("Ldev/pampa/mycloudgallery/core/albums/share/Share", "dev.pampa.mycloudgallery.core.albums.share.Share*", $gate.WriteGateUsers, "il piano della condivisione non chiede il cancello delle scritture degli album"),
       @("Ldev/pampa/mycloudgallery/core/albums/shared/NasSharedAlbumSync;", "dev.pampa.mycloudgallery.core.albums.shared.NasSharedAlbumSync", $gate.ReadGateUsers, "la replica non chiede il cancello della lettura degli album"))) {
     # Il prefisso di una classe (che finisce con ';') vuole quella classe; quello di share/ (`.../share/Share`) accetta il piano o l'orchestratore,
-    # se R8 vi inlinea il piano. Se R8 ha fuso la classe in un'altra, vale un metodo del dex che secondo mapping.txt contiene il suo codice.
+    # anche dopo fusioni: le liste contengono l'origine della singola istruzione, non l'unione delle origini di un metodo.
     $prefix = if ($user[0].EndsWith(";")) { $user[0] + "." } else { $user[0] }
-    $merged = $origins[$user[1]]
-    if (-not (@($user[2]) | Where-Object { $_.StartsWith($prefix) -or $merged.Contains($_) })) { $problems += $user[3] }
+    if (-not (@($user[2]) | Where-Object { Test-R8EveryOrigin $_ { param($o) $o.StartsWith($prefix) } })) { $problems += $user[3] }
   }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
   Write-Host ("        cancelli D30 provati nel bytecode: AppAlbumWriteGate.blockFor -> sharedAlbumsMayUse -> TEST_SHARES_ONLY e FlagsAlbumReadGate.mayRead -> sharedAlbumsMayUse, istanziati da {0}; decisione chiamata da {1} metodi ({2} righe di dexdump)" -f
@@ -1207,7 +1191,7 @@ Step "D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsM
 $script:dexFacesGateReaderLoaded = $false
 function Initialize-DexFacesGateReader {
   if ($script:dexFacesGateReaderLoaded) { return }
-  Add-Type -Language CSharp -TypeDefinition @'
+  Add-Type -Language CSharp -ReferencedAssemblies @("System.dll", "System.Core.dll", (Join-Path $root "build\hk-r8-provenance.dll")) -TypeDefinition @'
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -1236,9 +1220,10 @@ public static class DexFacesGateReader {
 
   static readonly Regex ClassLine = new Regex(@"^\s*Class descriptor\s*:\s*'([^']+)'", RegexOptions.Compiled);
   static readonly Regex NameLine = new Regex(@"^\s*name\s*:\s*'([^']*)'", RegexOptions.Compiled);
-  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]{4}:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
+  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]+:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
 
   public static void Scan(string dexdump, string dexPath, DexFacesGateFacts facts) {
+    R8Provenance.Prepare(dexdump, dexPath);
     var info = new ProcessStartInfo(dexdump, "-d \"" + dexPath + "\"") {
       UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
       StandardOutputEncoding = Encoding.GetEncoding(28591),
@@ -1248,6 +1233,7 @@ public static class DexFacesGateReader {
       bool sawDecisionInBlockFor = false;
       var errors = process.StandardError.ReadToEndAsync();
       string line;
+      try {
       while ((line = process.StandardOutput.ReadLine()) != null) {
         facts.Lines++;
         var m = ClassLine.Match(line);
@@ -1266,21 +1252,21 @@ public static class DexFacesGateReader {
         var insn = InsnLine.Match(line);
         if (!insn.Success) continue;
         string op = insn.Groups[1].Value, rest = insn.Groups[2].Value;
-        string here = cls + "." + method;
         if (op.StartsWith("invoke") && rest.Contains(Decision)) {
-          facts.DecisionCallers.Add(here);
-          if (cls == WriteGate && method == "blockFor") { facts.BlockForCallsDecision = true; sawDecisionInBlockFor = true; }
+          facts.DecisionCallers.Add(R8Provenance.OriginGroup(dexPath, line));
+          if (R8Provenance.IsOnlyOrigin(dexPath, line, WriteGate + ".blockFor")) { facts.BlockForCallsDecision = true; sawDecisionInBlockFor = true; }
         } else if (op.StartsWith("invoke") && (rest.Contains(Port) || rest.Contains(Direct))) {
-          facts.Users.Add(here);
+          facts.Users.Add(R8Provenance.OriginGroup(dexPath, line));
         } else if (op == "new-instance" && rest.Contains(WriteGate)) {
-          facts.Instantiators.Add(here);
-        } else if (op.StartsWith("sget") && rest.Contains(TestSharesOnly) && cls == WriteGate && method == "blockFor") {
+          facts.Instantiators.Add(R8Provenance.OriginGroup(dexPath, line));
+        } else if (op.StartsWith("sget") && rest.Contains(TestSharesOnly) && R8Provenance.IsOnlyOrigin(dexPath, line, WriteGate + ".blockFor")) {
           // D34: la risposta TEST_SHARES_ONLY dopo la decisione per share.
           if (sawDecisionInBlockFor) facts.BlockForReturnsTestSharesOnly = true;
         }
       }
       process.WaitForExit();
       if (process.ExitCode != 0) throw new InvalidOperationException("dexdump ha fallito: " + errors.Result);
+      } finally { if (!process.HasExited) { process.Kill(); process.WaitForExit(); } }
     }
   }
 }
@@ -1302,6 +1288,10 @@ function Get-D34GateFacts([string]$dexdump, [string]$apk) {
     foreach ($entry in $dexes) {
       $target = Join-Path $temp $entry.FullName
       [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+    }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") { [R8Provenance]::Prepare($dexdump, $dexFile.FullName) }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") {
+      $target = $dexFile.FullName
       [DexFacesGateReader]::Scan($dexdump, $target, $facts)
     }
   } finally {
@@ -1347,16 +1337,13 @@ Step "D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse 
   elseif (-not $gate.BlockForCallsDecision) { $problems += "AppFacesWriteGate.blockFor non chiama FeatureFlags.facesSyncMayUse: la recinzione D34 non governa le scritture dei volti" }
   elseif (-not $gate.BlockForReturnsTestSharesOnly) { $problems += "AppFacesWriteGate.blockFor non risponde FacesWriteBlock.TEST_SHARES_ONLY dopo la decisione D34" }
   Initialize-DexAlbumGateReader
-  $origins = [DexAlbumGateReader]::ResidualMethods($mapping, [string[]]@(
-      "dev.pampa.mycloudgallery.faces.*", "dev.pampa.mycloudgallery.di.*", "dev.pampa.mycloudgallery.core.faces.sync.*"))
-  $wiring = @($gate.Instantiators | Where-Object {
-      $_ -like "Ldev/pampa/mycloudgallery/faces/*" -or $_ -like "Ldev/pampa/mycloudgallery/di/*" -or
-      $origins["dev.pampa.mycloudgallery.faces.*"].Contains($_) -or $origins["dev.pampa.mycloudgallery.di.*"].Contains($_) })
+  $wiring = @($gate.Instantiators | Where-Object { Test-R8EveryOrigin $_ { param($o)
+      $o -like "Ldev/pampa/mycloudgallery/faces/*" -or $o -like "Ldev/pampa/mycloudgallery/di/*" } })
   if ($gate.Instantiators.Count -eq 0) { $problems += "nessun codice istanzia AppFacesWriteGate: il cancello delle scritture dei volti non e' collegato" }
   elseif ($wiring.Count -eq 0) {
     $problems += ("AppFacesWriteGate e' istanziato solo da " + (($gate.Instantiators | Select-Object -Unique) -join ", ") + ", non dal montaggio delle persone")
   }
-  $callers = @($gate.Users | Where-Object { $_ -like "Ldev/pampa/mycloudgallery/core/faces/sync/*" -or $origins["dev.pampa.mycloudgallery.core.faces.sync.*"].Contains($_) })
+  $callers = @($gate.Users | Where-Object { Test-R8EveryOrigin $_ { param($o) $o -like "Ldev/pampa/mycloudgallery/core/faces/sync/*" } })
   if ($callers.Count -eq 0) { $problems += "replica, pubblicatore e prenotazioni dei volti non chiedono il cancello delle scritture (nessuna chiamata da core/faces/sync/)" }
   if ($problems.Count -gt 0) { return ($problems -join "; ") }
   Write-Host ("        cancello D34 provato nel bytecode: AppFacesWriteGate.blockFor -> facesSyncMayUse -> TEST_SHARES_ONLY, istanziato da {0}; chiamato da {1} metodi di core/faces/sync; decisione chiamata da {2} metodi ({3} righe di dexdump)" -f
@@ -1440,7 +1427,7 @@ function Test-AppUsesFeatureMap {
 $script:apkInspectLoaded = $false
 function Initialize-ApkInspect {
   if ($script:apkInspectLoaded) { return }
-  Add-Type -Language CSharp -TypeDefinition @'
+  Add-Type -Language CSharp -ReferencedAssemblies @("System.dll", "System.Core.dll", (Join-Path $root "build\hk-r8-provenance.dll")) -TypeDefinition @'
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -1523,9 +1510,10 @@ public class DexCallFacts {
 public static class DexCallScanner {
   static readonly Regex ClassLine = new Regex(@"^\s*Class descriptor\s*:\s*'([^']+)'", RegexOptions.Compiled);
   static readonly Regex NameLine = new Regex(@"^\s*name\s*:\s*'([^']*)'", RegexOptions.Compiled);
-  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]{4}:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
+  static readonly Regex InsnLine = new Regex(@"\|[0-9a-fA-F]+:\s+(\S+)\s*(.*)$", RegexOptions.Compiled);
 
   public static void Scan(string dexdump, string dexPath, string[] targets, DexCallFacts facts) {
+    R8Provenance.Prepare(dexdump, dexPath);
     var info = new ProcessStartInfo(dexdump, "-d \"" + dexPath + "\"") {
       UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
       StandardOutputEncoding = Encoding.GetEncoding(28591),
@@ -1534,6 +1522,7 @@ public static class DexCallScanner {
       string cls = "", method = "";
       var errors = process.StandardError.ReadToEndAsync();
       string line;
+      try {
       while ((line = process.StandardOutput.ReadLine()) != null) {
         facts.Lines++;
         var m = ClassLine.Match(line);
@@ -1548,12 +1537,19 @@ public static class DexCallScanner {
         var insn = InsnLine.Match(line);
         if (!insn.Success || !insn.Groups[1].Value.StartsWith("invoke")) continue;
         string rest = insn.Groups[2].Value;
+        string originalRest = rest;
+        if (rest.Contains("$$ExternalSyntheticApiModelOutline")) {
+          try { if (R8Provenance.PlatformOutline(rest)) continue; }
+          catch (Exception e) { throw new InvalidOperationException(R8Provenance.Origin(dexPath, line) + ": " + e.Message); }
+          rest += " " + R8Provenance.OutlineBody(rest);
+        }
         foreach (var target in targets) {
-          if (rest.Contains(target)) { facts.Calls.Add(target + "|" + cls + "." + method); facts.Insns.Add(rest); }
+          if (rest.Contains(target)) { if (target == "Landroidx/glance/" && R8Provenance.SignatureOnlyArtifact(rest, target)) continue; facts.Calls.Add(target + "|" + String.Join("\n", R8Provenance.Origins(dexPath, line, target))); facts.Insns.Add(originalRest); }
         }
       }
       process.WaitForExit();
       if (process.ExitCode != 0) throw new InvalidOperationException("dexdump ha fallito: " + errors.Result);
+      } finally { if (!process.HasExited) { process.Kill(); process.WaitForExit(); } }
     }
   }
 }
@@ -1741,6 +1737,10 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
     foreach ($entry in @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })) {
       $target = Join-Path $temp $entry.FullName
       [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+    }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") { [R8Provenance]::Prepare($dexdump, $dexFile.FullName) }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") {
+      $target = $dexFile.FullName
       [DexCallScanner]::Scan($dexdump, $target, [string[]](@($initialize) + $https), $facts)
     }
   } finally {
@@ -1750,20 +1750,21 @@ Step "motori on-device nella release: librerie native (ABI, 16 KB), manifest (ML
   if ($facts.Lines -lt 1000 -or -not $facts.SawMainActivity) { return "lettura del bytecode non affidabile ($($facts.Lines) righe, MainActivity vista: $($facts.SawMainActivity))" }
   foreach ($call in $facts.Calls) {
     $parts = $call -split '\|', 2
-    $caller = $parts[1]
-    if (@($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { continue }
-    if ($parts[0] -eq $initialize) {
-      if (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap;") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap$"))) {
-        $problems += "MlKit.initialize chiamato fuori dal cancello: $caller"
+    foreach ($caller in ($parts[1] -split "`n")) {
+      if (@($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { continue }
+      if ($parts[0] -eq $initialize) {
+        if (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap;") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/core/ai/ocr/MlKitBootstrap$"))) {
+          $problems += "MlKit.initialize chiamato fuori dal cancello: $caller"
+        }
+      } elseif (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/feature/map/net/"))) {
+        # Fase 9 (D23): la seconda eccezione dichiarata, il client delle tessere della mappa (`MapTileHttp`); le regole sue sono nel passo 7h.
+        $problems += "client HTTPS fuori da core-models/.../download/https/ e feature/map/net/: $caller ($($parts[0]))"
       }
-    } elseif (-not ($caller.StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/") -or $caller.StartsWith("Ldev/pampa/mycloudgallery/feature/map/net/"))) {
-      # Fase 9 (D23): la seconda eccezione dichiarata, il client delle tessere della mappa (`MapTileHttp`); le regole sue sono nel passo 7h.
-      $problems += "client HTTPS fuori da core-models/.../download/https/ e feature/map/net/: $caller ($($parts[0]))"
     }
   }
   # P11: da quando `:app` monta `ModelFetchers` il client HTTPS dei modelli e' raggiunto e R8 lo tiene: il controllo deve vederlo (controllo
   # positivo: un passo che non vede niente non prova niente).
-  $httpsOk = @($facts.Calls | Where-Object { ($_ -split '\|', 2)[1].StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/") })
+  $httpsOk = @($facts.Calls | Where-Object { (Test-R8EveryOrigin ($_ -split '\|', 2)[1] { param($o) $o.StartsWith("Ldev/pampa/mycloudgallery/core/models/download/https/") }) })
   if ($httpsOk.Count -eq 0) { $problems += "nessuna chiamata HTTPS da core-models/.../download/https/ nel dex: ModelFetchers non e' montato da :app (o la lettura non e' affidabile)" }
   # I2: i moduli che Play services consegnerebbe (descrittori `dynamite`): solo i due del testo (insieme alle loro librerie obbligatorie).
   $knownDescriptors = @(
@@ -1804,6 +1805,10 @@ Step "LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/f
     foreach ($entry in @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })) {
       $target = Join-Path $temp $entry.FullName
       [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+    }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") { [R8Provenance]::Prepare($dexdump, $dexFile.FullName) }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") {
+      $target = $dexFile.FullName
       [DexCallScanner]::Scan($dexdump, $target, $targets, $facts)
     }
   } finally {
@@ -1815,16 +1820,17 @@ Step "LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/f
   $ours = @()
   foreach ($call in $facts.Calls) {
     $parts = $call -split '\|', 2
-    $caller = $parts[1]
-    if (@($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { continue }
-    $ours += $call
-    if (-not $caller.StartsWith($aiPrefix)) {
-      $problems += "LiteRT chiamato fuori da core-ai: $caller ($($parts[0]))"
-    } elseif ($caller.StartsWith($facesPrefix) -and -not ($caller.StartsWith("$facesSessions;") -or $caller.StartsWith("$facesSessions`$"))) {
-      $problems += "LiteRT chiamato da una classe dei volti diversa da FaceLiteRtSessions: $caller"
+    foreach ($caller in ($parts[1] -split "`n")) {
+      if (@($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { continue }
+      $ours += $call
+      if (-not $caller.StartsWith($aiPrefix)) {
+        $problems += "LiteRT chiamato fuori da core-ai: $caller ($($parts[0]))"
+      } elseif ($caller.StartsWith($facesPrefix) -and -not ($caller.StartsWith("$facesSessions;") -or $caller.StartsWith("$facesSessions`$"))) {
+        $problems += "LiteRT chiamato da una classe dei volti diversa da FaceLiteRtSessions: $caller"
+      }
     }
   }
-  if (@($ours | Where-Object { ($_ -split '\|', 2)[1].StartsWith($aiPrefix) }).Count -eq 0) {
+  if (@($ours | Where-Object { (Test-R8EveryOrigin ($_ -split '\|', 2)[1] { param($o) $o.StartsWith($aiPrefix) }) }).Count -eq 0) {
     $problems += "nessuna chiamata a LiteRT da core-ai nel dex: le sessioni del ritaglio non sono montate (o la lettura non e' affidabile)"
   }
   Write-Host ("        bytecode: {0} chiamate nostre a LiteRT, tutte da core-ai ({1} righe di dexdump)" -f $ours.Count, $facts.Lines) -ForegroundColor DarkGray
@@ -1871,6 +1877,10 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
     foreach ($entry in @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })) {
       $target = Join-Path $temp $entry.FullName
       [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+    }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") { [R8Provenance]::Prepare($dexdump, $dexFile.FullName) }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") {
+      $target = $dexFile.FullName
       [DexCallScanner]::Scan($dexdump, $target, [string[]](@($okhttp, $setClient, $getInstance) + $mapLibre), $facts)
     }
     $hasMapLibreLib = @($zip.Entries | Where-Object { $_.FullName -eq "lib/arm64-v8a/libmaplibre.so" }).Count -gt 0
@@ -1888,30 +1898,28 @@ Step "OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da
   $bridged = 0
   for ($callIndex = 0; $callIndex -lt $facts.Calls.Count; $callIndex++) {
     $parts = $facts.Calls[$callIndex] -split '\|', 2
-    $caller = $parts[1]
-    $ours = @($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -gt 0
-    # Una lambda sintetica fusa da R8 che chiama il ponte di una classe ammessa (vedi Test-R8LambdaBridgeCall) non chiama OkHttp ne' MapLibre.
-    if ($parts[0] -eq $okhttp -and (Test-R8LambdaBridgeCall $caller $facts.Insns[$callIndex] $okhttpCallers)) { $bridged++; continue }
-    if (@($mapLibre) -contains $parts[0] -and (Test-R8LambdaBridgeCall $caller $facts.Insns[$callIndex] @($mapPrefix))) { $bridged++; continue }
-    if ($parts[0] -eq $setClient) {
-      # Il client delle tessere in MapLibre: solo il nostro, solo da MapTileHttp (nessun altro codice cambia il client di MapLibre).
-      if ($caller.StartsWith("$installer;") -or $caller.StartsWith("$installer`$")) { $installs++ }
-      elseif (-not $caller.StartsWith("Lorg/maplibre/")) { $problems += "client di MapLibre installato fuori da feature/map/net/MapTileHttp: $caller" }
-      continue
-    }
-    if ($parts[0] -eq $getInstance) {
-      if ($caller.StartsWith("$initializer;") -or $caller.StartsWith("$initializer`$")) { $inits++ }
-      elseif ($ours) { $problems += "MapLibre inizializzato fuori da feature/map/map/MapLibreInit: $caller" }
-      continue
-    }
+    $authors = $parts[1]
+    if ($parts[0] -eq $setClient -and (Test-R8EveryOrigin $authors { param($o) $o.StartsWith("$installer;") -or $o.StartsWith("$installer`$") })) { $installs++ }
+    if ($parts[0] -eq $getInstance -and (Test-R8EveryOrigin $authors { param($o) $o.StartsWith("$initializer;") -or $o.StartsWith("$initializer`$") })) { $inits++ }
     if ($parts[0] -eq $okhttp) {
-      if ($caller.StartsWith($netPrefix)) { $okFromNet++ }
       $okCount++
-      if (@($okhttpCallers | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { $problems += "OkHttp chiamato fuori da feature/map/net/ e da MapLibre: $caller" }
-    } elseif (@($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -gt 0) {
-      $mapCount++
-      if (-not $caller.StartsWith($mapPrefix)) { $problems += "MapLibre chiamato da codice nostro fuori da feature/map/: $caller ($($parts[0]))" }
+      if (Test-R8EveryOrigin $authors { param($o) $o.StartsWith($netPrefix) }) { $okFromNet++ }
     }
+    $hasOurMapAuthor = $false
+    foreach ($caller in ($authors -split "`n")) {
+      $ours = @($ownPrefixes | Where-Object { $caller.StartsWith($_) }).Count -gt 0
+      if ($parts[0] -eq $setClient) {
+        if (-not ($caller.StartsWith("$installer;") -or $caller.StartsWith("$installer`$") -or $caller.StartsWith("Lorg/maplibre/"))) { $problems += "client di MapLibre installato fuori da feature/map/net/MapTileHttp: $caller" }
+      } elseif ($parts[0] -eq $getInstance) {
+        if ($ours -and -not ($caller.StartsWith("$initializer;") -or $caller.StartsWith("$initializer`$"))) { $problems += "MapLibre inizializzato fuori da feature/map/map/MapLibreInit: $caller" }
+      } elseif ($parts[0] -eq $okhttp) {
+        if (@($okhttpCallers | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { $problems += "OkHttp chiamato fuori da feature/map/net/ e da MapLibre: $caller" }
+      } elseif ($ours) {
+        $hasOurMapAuthor = $true
+        if (-not $caller.StartsWith($mapPrefix)) { $problems += "MapLibre chiamato da codice nostro fuori da feature/map/: $caller ($($parts[0]))" }
+      }
+    }
+    if ($hasOurMapAuthor) { $mapCount++ }
   }
   if ($mapInApp) {
     # P13 ha collegato la mappa: il client delle tessere, MapLibre e la sua libreria nativa DEVONO esserci (un passo che non vede niente non prova niente).
@@ -1960,6 +1968,10 @@ Step "Glance al suo posto nel bytecode della release (solo da feature/widget/) e
     foreach ($entry in @($zip.Entries | Where-Object { $_.FullName -match '^classes\d*\.dex$' })) {
       $target = Join-Path $temp $entry.FullName
       [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry, $target, $true)
+    }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") { [R8Provenance]::Prepare($dexdump, $dexFile.FullName) }
+    foreach ($dexFile in Get-ChildItem $temp -Filter "classes*.dex") {
+      $target = $dexFile.FullName
       [DexCallScanner]::Scan($dexdump, $target, [string[]]@($glance), $facts)
     }
   } finally {
@@ -1972,12 +1984,12 @@ Step "Glance al suo posto nel bytecode della release (solo da feature/widget/) e
   $fromWidget = 0
   $bridged = 0
   for ($callIndex = 0; $callIndex -lt $facts.Calls.Count; $callIndex++) {
-    $caller = ($facts.Calls[$callIndex] -split '\|', 2)[1]
-    # Una lambda sintetica fusa da R8 che chiama il ponte di una classe ammessa (vedi Test-R8LambdaBridgeCall) non chiama Glance: il ponte ne nomina solo i tipi.
-    if (Test-R8LambdaBridgeCall $caller $facts.Insns[$callIndex] $glanceCallers) { $bridged++; continue }
+    $authors = ($facts.Calls[$callIndex] -split '\|', 2)[1]
     $glanceCount++
-    if ($caller.StartsWith($widgetPrefix)) { $fromWidget++ }
-    if (@($glanceCallers | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { $problems += "Glance chiamato fuori da feature/widget/ e dal kit dell'engine: $caller" }
+    if (Test-R8EveryOrigin $authors { param($o) $o.StartsWith($widgetPrefix) }) { $fromWidget++ }
+    foreach ($caller in ($authors -split "`n")) {
+      if (@($glanceCallers | Where-Object { $caller.StartsWith($_) }).Count -eq 0) { $problems += "Glance chiamato fuori da feature/widget/ e dal kit dell'engine: $caller" }
+    }
   }
   if ($widgetInApp -and $glanceInWidget -and $fromWidget -eq 0) { $problems += "nessuna chiamata a Glance da feature/widget/ nel dex: il widget non e' nell'APK (o la lettura non e' affidabile)" }
   $ktFile = Join-Path $root "core-release\src\main\kotlin\dev\pampa\mycloudgallery\core\release\testing\ReleaseTestKeys.kt"

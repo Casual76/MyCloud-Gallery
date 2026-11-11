@@ -1,0 +1,46 @@
+[ .. ] nessuna classe di un package testing nel dex di release (fake solo per i test)
+[ OK ] nessuna classe di un package testing nel dex di release (fake solo per i test)  (0,4s)
+[ .. ] nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11, valutazione dei ricordi F9-P11, chiave di prova del manifest e ManifestTool F10, simulazione del passo P10)
+        cercati 72 nomi, nessuno nel dex
+[ OK ] nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11, valutazione dei ricordi F9-P11, chiave di prova del manifest e ManifestTool F10, simulazione del passo P10)  (7,5s)
+[ .. ] R8 ha tolto la recinzione D33 dalla release (usage.txt e mapping.txt)
+        1 classi della recinzione tolte da R8, nessuna in mapping.txt
+[ OK ] R8 ha tolto la recinzione D33 dalla release (usage.txt e mapping.txt)  (3,7s)
+[ .. ] recinzioni nel bytecode della release (P10, C446): lo stato di ognuna letto dal dex (getter, decisione, toString) e' quello dichiarato
+        F4-D31 accesa nel bytecode (1 prove: getter, decisione, toString)
+        F5-D12 accesa nel bytecode (3 prove: getter, decisione, toString)
+        F7-D30 accesa nel bytecode (3 prove: getter, decisione, toString)
+        F8-D34 accesa nel bytecode (3 prove: getter, decisione, toString)
+[ OK ] recinzioni nel bytecode della release (P10, C446): lo stato di ognuna letto dal dex (getter, decisione, toString) e' quello dichiarato  (3,2s)
+[ .. ] nessuna classe di misura (Bench*, benchmark, UiAutomator) nel dex di release
+[ OK ] nessuna classe di misura (Bench*, benchmark, UiAutomator) nel dex di release  (0,3s)
+
+
+Name    : nessuna classe di un package testing nel dex di release (fake solo per i test)
+Status  : OK
+Detail  :
+Seconds : 0,4
+
+Name    : nessun resto degli strumenti di debug nel dex di release (Libreria e NAS sintetici, famiglia pronta, sink di
+          logcat, ShareFence D33, cestino corto F20, recinzione del telefono D13, prove guidate 5B, valutazione della
+          ricerca P9, widget di prova dei Nascosti, valutazione degli album P12, valutazione delle persone P11,
+          valutazione dei ricordi F9-P11, chiave di prova del manifest e ManifestTool F10, simulazione del passo P10)
+Status  : OK
+Detail  :
+Seconds : 7,5
+
+Name    : R8 ha tolto la recinzione D33 dalla release (usage.txt e mapping.txt)
+Status  : OK
+Detail  :
+Seconds : 3,7
+
+Name    : recinzioni nel bytecode della release (P10, C446): lo stato di ognuna letto dal dex (getter, decisione,
+          toString) e' quello dichiarato
+Status  : OK
+Detail  :
+Seconds : 3,2
+
+Name    : nessuna classe di misura (Bench*, benchmark, UiAutomator) nel dex di release
+Status  : OK
+Detail  :
+Seconds : 0,3

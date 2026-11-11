@@ -1,0 +1,116 @@
+ORIGINE classes2.dex 5856b4: Ldev/pampa/mycloudgallery/core/models/download/https/HttpsModelFetcher$Attempt$abort$1;.invokeSuspend
+ORIGINE classes2.dex 7b0b9e: Ldev/pampa/mycloudgallery/core/security/screen/RecentsPrivacy;.setRecentsScreenshotEnabled
+ORIGINE classes3.dex 1f60d2: Ldev/pampa/mycloudgallery/feature/settings/about/AboutScreenKt;.appVersionName
+[ .. ] D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteTo, backupBlocksTestAccounts e backupMayWriteAs nel dex e in mapping.txt, e il cancello che li usa
+        D12 e R2 presenti nella release (dex e mapping.txt)
+        cancello D12 e R2 provato nel bytecode: stateOf -> backupMayWriteTo -> TEST_ONLY e stateOf -> backupMayWriteAs -> TEST_ONLY, istanziato da Ldev/pampa/mycloudgallery/backup/BackupGraph;.getGate, decisioni chiamate da 3 e 3 metodi (9821603 righe di dexdump)
+        cancello dei file in arrivo (LA-5) provato nel bytecode: IncomingGate.stateOf -> backupMayWriteTo/backupMayWriteAs -> TEST_ONLY, istanziato da Ldev/pampa/mycloudgallery/backup/FiveBGraph;.getIncomingGate
+[ OK ] D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteTo, backupBlocksTestAccounts e backupMayWriteAs nel dex e in mapping.txt, e il cancello che li usa  (38s)
+[ .. ] D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt, e i cancelli degli album che li usano
+        D30 presente nella release (dex e mapping.txt)
+        cancelli D30 provati nel bytecode: AppAlbumWriteGate.blockFor -> sharedAlbumsMayUse -> TEST_SHARES_ONLY e FlagsAlbumReadGate.mayRead -> sharedAlbumsMayUse, istanziati da Ldev/pampa/mycloudgallery/albums/AlbumsWiring;.build, Ldev/pampa/mycloudgallery/albums/AlbumsWiring$build$build$1;.invokeSuspend; decisione chiamata da 2 metodi (9821603 righe di dexdump)
+[ OK ] D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt, e i cancelli degli album che li usano  (29,6s)
+[ .. ] D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt
+        D34 presente nella release (dex e mapping.txt)
+        cancello D34 provato nel bytecode: AppFacesWriteGate.blockFor -> facesSyncMayUse -> TEST_SHARES_ONLY, istanziato da Ldev/pampa/mycloudgallery/faces/FacesWiring$build$build$1;.invokeSuspend$lambda$2; chiamato da 6 metodi di core/faces/sync; decisione chiamata da 3 metodi (9821603 righe di dexdump)
+[ OK ] D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt  (29,5s)
+[ .. ] motori on-device: SOLO sezione bytecode ML Kit/HTTPS
+        bytecode: 45 chiamate nostre a MlKit.initialize o ai client HTTPS, tutte al loro posto (9821603 righe di dexdump)
+[ OK ] motori on-device: SOLO sezione bytecode ML Kit/HTTPS  (22,6s)
+[ .. ] LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/faces/FaceLiteRtSessions)
+        bytecode: 60 chiamate nostre a LiteRT, tutte da core-ai (9821603 righe di dexdump)
+[ OK ] LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/faces/FaceLiteRtSessions)  (18,7s)
+[ .. ] OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)
+        bytecode (mappa nell'app): 3065 chiamate a OkHttp (151 da net/), 162 chiamate nostre a MapLibre, client installato 1, MapLibre inizializzato 1; libmaplibre.so: True (9821603 righe di dexdump); 0 chiamate di lambda fuse da R8 a ponti ammessi
+[ OK ] OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre, MapLibre solo da feature/map/)  (23s)
+[ .. ] Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del manifest (KT)
+        bytecode (widget nell'app): 9016 chiamate a Glance (84 da feature/widget/); KT cercata (2 stringhe), assente (9821603 righe di dexdump); 0 chiamate di lambda fuse da R8 a ponti ammessi
+[ OK ] Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del manifest (KT)  (26,7s)
+PROVA RUNTIME firma introdotta da residualsignature: {v5, v3, v6}, Landroidx/datastore/core/FileStorage;.<init>:(Landroidx/glance/appwidget/proto/LayoutProtoSerializer;Lkotlin/jvm/functions/Function0;)V // method@3596
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetSession;.processEmittableTree pc=001f: frame inline innocuo dimostrato Lkotlin/coroutines/jvm/internal/Boxing;.boxBoolean
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetSession;.processEvent pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/Snapshot$Companion;.takeMutableSnapshot
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetSession;.processEvent pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/Snapshot$Companion;.takeMutableSnapshot$default
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetSession;.processEvent pc=0015: frame inline innocuo dimostrato Lkotlin/collections/CollectionsKt___CollectionsKt;.foldRightIndexed
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.provideContent pc=0015: frame inline innocuo dimostrato Lkotlin/KotlinNothingValueException;.<init>
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.provideContent pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/CancellableContinuation$DefaultImpls;.cancel$default
+PROVA RUNTIME Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.provideContent pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/CancellableContinuationKt;.invokeOnCancellation
+PROVA RUNTIME Landroidx/glance/appwidget/GlanceAppWidgetKt;.provideContent pc=0015: frame inline innocuo dimostrato Lkotlin/KotlinNothingValueException;.<init>
+PROVA RUNTIME Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit> pc=0003: frame inline innocuo dimostrato Landroidx/datastore/preferences/core/PreferencesKeys;.stringSetKey
+PROVA RUNTIME Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit> pc=0003: frame inline innocuo dimostrato Landroidx/datastore/preferences/PreferenceDataStoreDelegateKt;.preferencesDataStore
+PROVA RUNTIME Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit> pc=0003: frame inline innocuo dimostrato Landroidx/datastore/preferences/PreferenceDataStoreDelegateKt;.preferencesDataStore$default
+PROVA RUNTIME Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit> pc=0003: frame inline innocuo dimostrato Lkotlinx/coroutines/Dispatchers;.getIO
+PROVA RUNTIME Landroidx/glance/appwidget/LayoutConfiguration$Companion;.load$glance_appwidget_release pc=0015: frame inline innocuo dimostrato Lkotlin/collections/CollectionsKt___CollectionsKt;.associateByTo
+PROVA RUNTIME Landroidx/glance/appwidget/LayoutConfiguration$Companion;.load$glance_appwidget_release pc=0015: frame inline innocuo dimostrato Lkotlin/collections/CollectionsKt___CollectionsKt;.toShortArray
+PROVA RUNTIME Landroidx/glance/appwidget/LayoutConfiguration$Companion;.load$glance_appwidget_release pc=0015: frame inline innocuo dimostrato Lkotlin/coroutines/jvm/internal/Boxing;.boxInt
+PROVA RUNTIME Landroidx/glance/appwidget/UnmanagedSessionReceiver$Companion;.registerSession pc=0017: frame inline innocuo dimostrato Lkotlin/coroutines/jvm/internal/Boxing;.boxInt
+PROVA RUNTIME Landroidx/glance/appwidget/UnmanagedSessionReceiver$Companion;.registerSession pc=0017: frame inline innocuo dimostrato Lkotlin/KotlinNothingValueException;.<init>
+PROVA RUNTIME Landroidx/glance/appwidget/UnmanagedSessionReceiver$Companion;.registerSession pc=0017: frame inline innocuo dimostrato Lkotlinx/coroutines/CancellableContinuationKt;.invokeOnCancellation
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/MutableSnapshot;.getModified$runtime
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/MutableSnapshot;.hasPendingChanges
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/Snapshot$Companion;.registerGlobalWriteObserver
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/Snapshot$Companion;.sendApplyNotifications
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/SnapshotKt;.access$getGlobalSnapshot$p
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/SnapshotKt;.access$getGlobalWriteObservers$p
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/SnapshotKt;.access$setGlobalWriteObservers$p
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Landroidx/compose/runtime/snapshots/SnapshotKt;.getLock
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/channels/BufferedChannel;.iterator
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/channels/ChannelsKt;.cancelConsumed
+PROVA RUNTIME Landroidx/glance/session/GlobalSnapshotManagerKt;.globalSnapshotMonitor pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/channels/ChannelsKt__Channels_commonKt;.cancelConsumed
+PROVA RUNTIME Landroidx/glance/session/IdleEventBroadcastReceiver;.<clinit> pc=0003: frame inline innocuo dimostrato Lkotlin/collections/CollectionsKt___CollectionsKt;.foldRightIndexed
+PROVA RUNTIME Landroidx/glance/session/SessionManagerImpl;.runWithLock pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/sync/MutexKt;.withLock$default
+PROVA RUNTIME Landroidx/glance/session/SessionWorker;.doWork pc=0015: frame inline innocuo dimostrato Landroidx/work/Data$Builder;.<init>
+PROVA RUNTIME Landroidx/glance/session/SessionWorker;.doWork pc=0015: frame inline innocuo dimostrato Landroidx/work/Data$Builder;.build
+PROVA RUNTIME Landroidx/glance/session/SessionWorker;.doWork pc=0015: frame inline innocuo dimostrato Landroidx/work/Data$Builder;.putBoolean
+PROVA RUNTIME Landroidx/glance/session/SessionWorker;.doWork pc=0015: frame inline innocuo dimostrato Landroidx/work/Data$Builder;.putDirect
+PROVA RUNTIME Landroidx/glance/session/SessionWorker;.doWork pc=0015: frame inline innocuo dimostrato Landroidx/work/ListenableWorker$Result;.success
+PROVA RUNTIME Landroidx/glance/session/SessionWorkerKt;.runSession pc=001c: frame inline innocuo dimostrato Landroidx/compose/runtime/CompositionKt;.Composition
+PROVA RUNTIME Landroidx/glance/session/SessionWorkerKt;.runSession pc=001c: frame inline innocuo dimostrato Lkotlin/coroutines/jvm/internal/Boxing;.boxBoolean
+PROVA RUNTIME Landroidx/glance/session/SessionWorkerKt;.runSession pc=001c: frame inline innocuo dimostrato Lkotlinx/coroutines/Job$DefaultImpls;.cancel$default
+PROVA RUNTIME Landroidx/glance/state/GlanceState;.<clinit> pc=0002: frame inline innocuo dimostrato Lkotlinx/coroutines/sync/MutexKt;.Mutex
+PROVA RUNTIME Landroidx/glance/state/GlanceState;.<clinit> pc=0002: frame inline innocuo dimostrato Lkotlinx/coroutines/sync/MutexKt;.Mutex$default
+PROVA RUNTIME Landroidx/glance/state/GlanceState;.getDataStore pc=0015: frame inline innocuo dimostrato Lkotlinx/coroutines/sync/MutexKt;.withLock$default
+PROVA RUNTIME Landroidx/glance/text/TextDefaults;.<clinit> pc=0002: frame inline innocuo dimostrato Landroidx/compose/ui/graphics/Color$Companion;.getBlack-0d7_KjU
+PROVA RUNTIME Landroidx/glance/text/TextDefaults;.<clinit> pc=0002: frame inline innocuo dimostrato Landroidx/compose/ui/graphics/Color;.access$getBlack$cp
+EVIDENZA SENZA POSIZIONE Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.provideContent -> Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.plus, Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;.provideContent :: 309096: 7030 1e3a 4006                         |0015: invoke-direct {v0, v4, v6}, Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1$provideContent$1;.<init>:(Landroidx/glance/appwidget/AppWidgetUtilsKt$runGlance$1$receiver$1;Lkotlin/coroutines/Continuation;)V // method@3a1e
+EVIDENZA SENZA POSIZIONE Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit> -> Landroidx/glance/appwidget/GlanceAppWidgetManager;.<clinit>, Landroidx/glance/appwidget/GlanceAppWidgetManager;.getOrCreateDataStore :: 31beba: 7020 b03a 1000                         |0003: invoke-direct {v0, v1}, Landroidx/glance/appwidget/GlanceAppWidgetManager$Companion;.<init>:(Lkotlin/jvm/internal/DefaultConstructorMarker;)V // method@3ab0
+EVIDENZA SENZA POSIZIONE Landroidx/glance/session/SessionWorkerKt;.runSession -> Landroidx/glance/session/SessionWorkerKt;.runSession$default, Landroidx/glance/session/SessionWorkerKt;.runSession :: 33fff0: 7020 6543 1200                         |001c: invoke-direct {v2, v1}, Landroidx/glance/session/SessionWorkerKt$runSession$1;.<init>:(Lkotlin/coroutines/Continuation;)V // method@4365
+
+
+Name    : D12 e R2 nella release: FeatureFlags.backupTestSharesOnly, backupMayWriteTo, backupBlocksTestAccounts e
+          backupMayWriteAs nel dex e in mapping.txt, e il cancello che li usa
+Status  : OK
+Detail  :
+Seconds : 38
+
+Name    : D30 nella release: FeatureFlags.sharedAlbumsTestSharesOnly e sharedAlbumsMayUse nel dex e in mapping.txt, e
+          i cancelli degli album che li usano
+Status  : OK
+Detail  :
+Seconds : 29,6
+
+Name    : D34 nella release: FeatureFlags.facesSyncTestSharesOnly e facesSyncMayUse nel dex e in mapping.txt
+Status  : OK
+Detail  :
+Seconds : 29,5
+
+Name    : motori on-device: SOLO sezione bytecode ML Kit/HTTPS
+Status  : OK
+Detail  :
+Seconds : 22,6
+
+Name    : LiteRT solo in core-ai nel bytecode della release (volti solo da core/ai/faces/FaceLiteRtSessions)
+Status  : OK
+Detail  :
+Seconds : 18,7
+
+Name    : OkHttp e MapLibre al loro posto nel bytecode della release (OkHttp solo da feature/map/net/ e da MapLibre,
+          MapLibre solo da feature/map/)
+Status  : OK
+Detail  :
+Seconds : 23
+
+Name    : Glance al suo posto nel bytecode della release (solo da feature/widget/) e nessuna chiave di prova del
+          manifest (KT)
+Status  : OK
+Detail  :
+Seconds : 26,7

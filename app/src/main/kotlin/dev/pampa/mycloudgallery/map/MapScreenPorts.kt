@@ -4,6 +4,8 @@ import android.content.res.Resources
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntry
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionEntryGroup
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
+import dev.pampa.mycloudgallery.feature.library.collections.EntryShape
+import dev.pampa.mycloudgallery.feature.map.places.PlacesEntryTarget
 import dev.pampa.mycloudgallery.feature.map.places.MapSectionData
 import dev.pampa.mycloudgallery.feature.map.places.PlacesSectionModel
 import dev.pampa.mycloudgallery.feature.map.places.PlacesSectionSources
@@ -15,7 +17,16 @@ import kotlinx.coroutines.flow.stateIn
 /** La trasformazione campo per campo dei dati di feature-map nel gruppo delle Raccolte (i due moduli non si conoscono; `PlacesSectionTest`). */
 internal fun MapSectionData.toGroup(): CollectionEntryGroup = CollectionEntryGroup(
   title = title,
-  entries = entries.map { CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, coverPlace = it.coverPlace, coverPlaces = it.coverPlaces) },
+  // I1 (fase I): la riga "Mappa" e' la mappa in anteprima in cima alla sezione, un luogo una scheda con la sua foto, le righe di stato (senza posizione,
+  // Riprova) segni piccoli.
+  entries = entries.map {
+    val shape = when (PlacesEntryTarget.parse(it.code)) {
+      PlacesEntryTarget.OpenMap -> EntryShape.Map
+      is PlacesEntryTarget.Place -> EntryShape.Card
+      else -> EntryShape.Notice
+    }
+    CollectionEntry(it.code, it.title, it.subtitle, it.icon, it.tone, it.badge, it.trailing, coverPlace = it.coverPlace, coverPlaces = it.coverPlaces, shape = shape)
+  },
   code = code,
   hideable = hideable,
   hint = hint,

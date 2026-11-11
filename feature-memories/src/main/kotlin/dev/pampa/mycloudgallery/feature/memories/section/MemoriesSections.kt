@@ -56,6 +56,8 @@ data class SectionEntry(
   val trailing: String? = null,
   /** H5: la copertina del ricordo, che le Raccolte mostrano al posto dell'icona (dalla Libreria visibile: mai un nascosto). */
   val cover: MediaId? = null,
+  /** I1 (fase I): la riga piccola della scheda grande delle Raccolte (il mese del ricordo); null quando il titolo lo dice gia' ("Il meglio di ottobre"). */
+  val caption: String? = null,
 ) {
   /** D33: mai il titolo o il sottotitolo (possono portare un luogo, una data o un nome): solo il codice, che non porta mai un dato dell'utente. */
   override fun toString(): String = "SectionEntry($code)"
@@ -174,10 +176,12 @@ class MemoriesSectionSources(
     fun entryOf(resources: Resources, card: MemoryCard, names: MemoryNames, named: Map<PersonId, String> = emptyMap()): SectionEntry {
       val personName = card.title.person?.let { named[it] ?: names.cachedPerson(it) }
       val places = names.places(card.title.placeIds)
+      val title = MemoriesText.title(resources, card.kind, card.title, personName, places)
       return SectionEntry(
         code = MemoriesSectionStates.codeOf(card.id),
-        title = MemoriesText.title(resources, card.kind, card.title, personName, places),
+        title = title,
         subtitle = resources.getString(R.string.memorie_all_row_detail, MemoriesText.photos(resources, card.count), MemoriesText.subtitle(resources, card.title, places)),
+        caption = MemoriesText.caption(card.kind, card.title, title),
         icon = iconOf(card.kind),
         tone = if (card.isNew) FluidTone.Primary else FluidTone.Neutral,
         trailing = if (card.isNew) resources.getString(R.string.memorie_new) else null,

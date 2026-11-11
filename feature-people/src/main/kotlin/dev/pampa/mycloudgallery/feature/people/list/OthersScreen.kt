@@ -74,7 +74,7 @@ internal fun OthersScreen(
   val chosen = grid?.faces?.filter { it.face in grid.selection }?.mapNotNull { it.person }.orEmpty()
   FluidScreen(
     title = if (ui.selecting) resources.getQuantityString(R.plurals.persone_selected_groups, chosen.size, chosen.size) else stringResource(R.string.persone_others_title),
-    subtitle = if (ui.selecting || grid == null) null else stringResource(R.string.persone_others_subtitle),
+    // I1 (fase I): niente frase sotto il titolo, i volti dicono che cosa c'e'.
     modifier = modifier,
     onBack = handlers::onBack,
     listState = listState,
@@ -111,7 +111,8 @@ internal fun OthersScreen(
           crops = crops,
           selected = selected,
           spoken = spoken,
-          label = group?.let { PeopleText.photos(resources, it.photos) },
+          // I1: niente conto sotto il volto (lo dice TalkBack nella frase della tessera).
+          label = null,
           selectedLabel = stringResource(R.string.persone_face_selected),
           selectLabel = stringResource(if (selected) R.string.persone_action_deselect else R.string.persone_action_select),
           extraActions = emptyList(),

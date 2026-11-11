@@ -12,6 +12,7 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasAnyChild
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
@@ -373,7 +374,10 @@ class CollectionsEditScreenPhoneTest : CollectionsEditScreenBase() {
   }
 }
 
-/** Il sottotitolo della riga "Eliminati di recente" di Da tenere al sicuro: la distingue dalla voce con lo stesso nome di Utility. */
+/**
+ * Il sottotitolo della riga "Eliminati di recente" di Da tenere al sicuro: la distingue dalla voce con lo stesso nome di Utility. I1: sulla piastrella non
+ * si vede, lo dice TalkBack (la descrizione della piastrella).
+ */
 private const val TRASH_ROW = "Il cestino di Android"
 
 /** Sul tablet l'elenco delle sezioni ha il dettaglio accanto, nello stesso ordine del telefono; la modifica prende il posto dell'elenco. */
@@ -387,22 +391,22 @@ class CollectionsEditScreenTabletTest : CollectionsEditScreenBase() {
     // G2: senza le raccolte-filtro del Telefono (scheda Album) il dettaglio parte da "Scegli una raccolta".
     composeRule.onNodeWithText("Scegli una raccolta").assertExists()
     // Le due colonne: l'elenco a sinistra, il dettaglio a destra; le sezioni nello stesso ordine del telefono.
-    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText(TRASH_ROW, substring = true))
+    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasContentDescription(TRASH_ROW, substring = true))
     // Ricordi e Luoghi (Fase 9) non hanno ancora un fornitore negli esempi: non ci sono; Album, Album smart e Telefono sono nella scheda Album.
     assertThat(codes()).isEqualTo(
       CollectionSections.defaultOrder.filter { it != "memories" && it != "places" && it !in CollectionSections.inAlbumsTab },
     )
-    composeRule.onNodeWithText(TRASH_ROW, substring = true).performClick()
+    composeRule.onNode(hasContentDescription(TRASH_ROW, substring = true)).performClick()
     composeRule.waitForIdle()
-    val list = composeRule.onNodeWithText(TRASH_ROW, substring = true).fetchSemanticsNode().boundsInRoot
+    val list = composeRule.onNode(hasContentDescription(TRASH_ROW, substring = true)).fetchSemanticsNode().boundsInRoot
     val detail = composeRule.onNodeWithText("dettaglio recently_deleted").fetchSemanticsNode().boundsInRoot
     assertThat(detail.left).isAtLeast(list.right)
   }
 
   /** La riga "Eliminati di recente" di Da tenere al sicuro (negli esempi vecchi anche Utility ha una voce con lo stesso nome; in produzione la sezione Da tenere al sicuro e' vuota). */
   private fun openRecentlyDeleted() {
-    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasText(TRASH_ROW, substring = true))
-    composeRule.onNodeWithText(TRASH_ROW, substring = true).performClick()
+    composeRule.onAllNodes(hasScrollAction())[0].performScrollToNode(hasContentDescription(TRASH_ROW, substring = true))
+    composeRule.onNode(hasContentDescription(TRASH_ROW, substring = true)).performClick()
     composeRule.waitForIdle()
     composeRule.onNodeWithText("dettaglio recently_deleted").assertExists()
   }

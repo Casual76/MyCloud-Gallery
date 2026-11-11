@@ -50,8 +50,9 @@ import dev.pampa.mycloudgallery.feature.people.ui.PersonAvatar
 import dev.pampa.mycloudgallery.feature.people.ui.PersonTile
 import dev.pampa.mycloudgallery.feature.people.ui.TileSelection
 
-// "TUTTE LE PERSONE" (Fase 8, P9; docs/fase8-progetto.md §1.5 `PeopleListState`, §2.6 "Cosa si vede", Q2 (b) del 27/10, D25). In stile Foto: una
-// griglia di avatar rotondi, ognuno con il nome (o "Aggiungi un nome") e il conto **sotto**, mai testo sopra il volto. In cima le proposte "E'
+// "TUTTE LE PERSONE" (Fase 8, P9; docs/fase8-progetto.md §1.5 `PeopleListState`, §2.6 "Cosa si vede", Q2 (b) del 27/10, D25). I1 (fase I, 11/11):
+// "come Samsung", una griglia di **schede alte con il volto a tutta scheda** e il nome in basso (senza nome: solo il volto), tre per riga sul
+// telefono; niente conti sotto (li dice TalkBack). In cima le proposte "E'
 // la stessa persona?" (righe di un gruppo: un tocco apre il foglio con i due volti e "Si'" / "No"), poi la riga "Altri volti (N)" con Q2 (b).
 // "Seleziona" sta nella barra in alto (un tasto da 48 dp, come "Unisci" e "Fine" in selezione): niente galleggia sopra i volti. Solo
 // componenti G2.
@@ -165,9 +166,8 @@ private const val PERCENT = 100f
 /** "E' la stessa persona?": una riga per proposta, con i due volti affiancati (mai uno sull'altro) e i nomi. */
 private fun LazyListScope.proposals(list: List<MergeProposal>, crops: PeopleCrops, handlers: PeopleListHandlers) {
   if (list.isEmpty()) return
-  item(key = "header-proposals") {
-    GallerySectionHeader(title = stringResource(R.string.persone_proposals_header), detail = stringResource(R.string.persone_proposals_detail))
-  }
+  // I1 (fase I): niente intestazione sopra le proposte: la riga stessa chiede "E' la stessa persona?" e i due volti dicono chi; la regola ("non unisco
+  // mai niente da solo") la dice il foglio che si apre.
   item(key = "proposals") {
     FluidListGroup {
       list.take(MAX_PROPOSALS_SHOWN).forEachIndexed { index, proposal ->
@@ -200,7 +200,8 @@ private fun LazyListScope.othersRow(count: Int, handlers: PeopleListHandlers) {
     FluidListGroup {
       FluidListRow(
         title = stringResource(R.string.persone_others_row, count),
-        subtitle = stringResource(R.string.persone_others_row_detail),
+        // I1: un'etichetta sola; che cosa si fa li' lo dice la pagina.
+        subtitle = "",
         tone = FluidTone.Primary,
         leading = { Icon(imageVector = Icons.Rounded.Group, contentDescription = null) },
         onClick = handlers::onOpenOthers,
@@ -214,7 +215,7 @@ private fun LazyListScope.hiddenRow(count: Int, handlers: PeopleListHandlers) {
     FluidListGroup {
       FluidListRow(
         title = stringResource(R.string.persone_hidden_row, count),
-        subtitle = stringResource(R.string.persone_hidden_row_detail),
+        subtitle = "",
         tone = FluidTone.Neutral,
         leading = { Icon(imageVector = Icons.Rounded.VisibilityOff, contentDescription = null) },
         onClick = handlers::onOpenHidden,

@@ -63,6 +63,8 @@ data class SectionEntry(
   val trailing: String? = null,
   /** CS-1 (fase H): i volti della voce, che le Raccolte mostrano nella piastrella (ritagliati solo da media mostrabili): la persona, o le prime tre. */
   val faces: List<FaceLocator> = emptyList(),
+  /** I1 (fase I): la persona ha un nome. Senza, la scheda delle Raccolte mostra solo il volto (TalkBack dice "persona senza nome"). */
+  val named: Boolean = true,
 ) {
   /** I4 (correzioni D): mai il titolo o il sottotitolo (possono portare un nome o un conteggio di persone, D37): solo il codice, che non porta mai un nome. */
   override fun toString(): String = "SectionEntry($code)"
@@ -206,6 +208,7 @@ class PeopleSectionSources(
           icon = Icons.Rounded.Person,
           tone = if (card.name == null) FluidTone.Neutral else FluidTone.Primary,
           faces = listOfNotNull(card.cover),
+          named = card.name != null,
         )
       }
       if (total > 0) {

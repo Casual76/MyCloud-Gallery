@@ -81,7 +81,8 @@ internal fun HiddenPeopleScreen(
             val show = resources.getString(R.string.persone_show_again)
             FluidListRow(
               title = PeopleText.title(resources, card),
-              subtitle = PeopleText.photos(resources, card.photos),
+              // I1 (fase I): il volto e il nome; quante foto ha lo dice TalkBack (la descrizione della riga).
+              subtitle = "",
               disclosure = false,
               onClick = { handlers.onShow(card.id) },
               leading = { PersonAvatar(card.cover, crops, PeopleDimens.AvatarRow, Modifier.size(PeopleDimens.AvatarRow)) },

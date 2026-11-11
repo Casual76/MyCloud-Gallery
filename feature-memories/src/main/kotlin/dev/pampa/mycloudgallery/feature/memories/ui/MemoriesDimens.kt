@@ -27,8 +27,12 @@ internal object MemoriesDimens {
   /** Il margine interno di una striscia o di una scheda. */
   val Inset: Dp = 16.dp
 
-  /** Il lato della copertina nella riga di "Tutti i ricordi". */
-  val RowCover: Dp = 56.dp
+  /** I1 (fase I): la scheda piu' stretta di "Tutti i ricordi" (due per riga sul telefono da 360 dp), alta 3:4, il margine del titolo e il punto "nuovo". */
+  val CardMin: Dp = 140.dp
+  const val CardAspect: Float = 3f / 4f
+  val CardInset: Dp = 12.dp
+  val NewDot: Dp = 10.dp
+  val NewDotRing: Dp = 2.dp
 
   /** Il lato dell'icona dentro un riquadro vuoto e quello di un glifo accanto a un testo. */
   val EmptyGlyph: Dp = 40.dp

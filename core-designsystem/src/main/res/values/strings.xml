@@ -55,6 +55,14 @@
   <string name="status_waking_nas">Risveglio del NAS…</string>
   <string name="status_error">Errore: %1$s</string>
 
+  <!-- I3 (fase I): il segno di stato delle piastrelle delle icone, per il lettore dello schermo. -->
+  <string name="icon_status_done">Fatto</string>
+  <string name="icon_status_running">In corso</string>
+  <string name="icon_status_paused">In pausa</string>
+  <string name="icon_status_stopped">Fermo</string>
+  <string name="icon_status_attention">Attenzione</string>
+  <string name="icon_status_problem">Problema</string>
+
   <!-- Stati vuoti e d'errore -->
   <string name="state_library_empty_title">La Libreria è vuota</string>
   <string name="state_library_empty_detail">Le foto e i video del telefono compariranno qui. Se li hai sul NAS, collegalo per vederli.</string>

@@ -8,7 +8,10 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
 import dev.antigravity.fluidengine.foundation.EngineSettings
 import dev.antigravity.fluidengine.foundation.ThemeMode
@@ -118,3 +121,16 @@ fun syntheticGrid(
   )
   return state to library
 }
+
+/**
+ * Fase H (D2): una cella della Libreria che si puo' toccare, cioe' il cui centro sta **sotto la chrome in alto** (oltre [belowFraction]
+ * dell'altezza): i pezzi di vetro in alto trattengono i tocchi, e la prima cella della lista sta proprio sotto l'etichetta.
+ */
+fun ComposeContentTestRule.cellBelowChrome(belowFraction: Float = 0.25f): SemanticsNodeInteraction {
+  val nodes = onAllNodesWithContentDescription("Foto, ", substring = true)
+  val rootHeight = onRoot().fetchSemanticsNode().size.height
+  val index = nodes.fetchSemanticsNodes().indexOfFirst { it.boundsInRoot.center.y > rootHeight * belowFraction }
+  check(index >= 0) { "Nessuna cella sotto la chrome." }
+  return nodes[index]
+}
+

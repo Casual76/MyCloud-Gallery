@@ -23,6 +23,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.ContentRange
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeActionBar
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeContent
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeStyle
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTitleAction
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryTopChrome
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryTopEdgeScrim
 import dev.pampa.mycloudgallery.core.designsystem.design.galleryChromeTag
@@ -108,6 +109,7 @@ internal fun GridTopChrome(
   modifier: Modifier = Modifier,
   onBack: (() -> Unit)? = null,
   showCommands: Boolean = true,
+  titleAction: GalleryChromeTitleAction? = null,
   commands: @Composable RowScope.() -> Unit,
 ) {
   // P2: mentre la griglia si muove per un gesto l'etichetta non anima la larghezza (vedi `MediaGridState.inMotion`).
@@ -125,6 +127,7 @@ internal fun GridTopChrome(
     shorterTitles = label.shorterTitles,
     shorterSubtitles = label.shorterSubtitles,
     contentMoving = contentMoving,
+    titleAction = titleAction,
     commands = commands,
   )
 }

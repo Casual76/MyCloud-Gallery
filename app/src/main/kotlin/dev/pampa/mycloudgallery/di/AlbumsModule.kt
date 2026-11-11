@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.albums.AppShareRunner
 import dev.pampa.mycloudgallery.albums.AppSharedAlbums
 import dev.pampa.mycloudgallery.albums.AppSmartAlbums
 import dev.pampa.mycloudgallery.albums.AppTrips
+import dev.pampa.mycloudgallery.albums.AppMediaAlbums
 import dev.pampa.mycloudgallery.albums.AppViewerAlbumActions
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor

@@ -1,165 +1,347 @@
 package dev.pampa.mycloudgallery.feature.search
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventTimeoutCancellationException
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onPlaced
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import dev.antigravity.fluidengine.ui.fluid.FluidButton
-import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
-import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
+import dev.antigravity.fluidengine.ui.haptics.FluidHapticEvent
+import dev.antigravity.fluidengine.ui.haptics.LocalFluidHaptics
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragPointer
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragSubject
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDragSource
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridInteractionState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
 import dev.pampa.mycloudgallery.core.designsystem.grid.rememberGalleryGridCellStyle
-import dev.pampa.mycloudgallery.core.designsystem.media.GalleryTimelineHeader
-import dev.pampa.mycloudgallery.core.designsystem.media.GalleryTimelineLevel
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
+import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
+import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
+import dev.pampa.mycloudgallery.core.library.contract.PixelRect
+import dev.pampa.mycloudgallery.core.library.contract.ViewerAnchor
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.feature.search.contract.SearchScreenState
+import dev.pampa.mycloudgallery.feature.search.contract.SearchSelection
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
 import dev.pampa.mycloudgallery.feature.search.ui.SearchDimens
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
-import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
-// La GRIGLIA dei risultati (Fase 6, P8, §2.6, D28): una cella per gruppo, "Risultati" poi "Meno probabili", nello stesso ordine scelto; in
-// "Recenti" le intestazioni di periodo. Stessa cella della Libreria, miniature solo locali. La barra dei chip, il selettore e gli avvisi stanno
-// in testa alla griglia ([header]) e scorrono con lei.
+// La GRIGLIA dei risultati (H4 della fase H, 11/11; prima Fase 6, P8, §2.6, D28). Prende il posto della griglia della Libreria, dentro lo stesso fondale.
+//  - **Dal basso**: il risultato piu' adatto sta subito sopra la barra di ricerca, dove sta il pollice (la Libreria ha i piu' recenti in basso; qui vale lo
+//    stesso). Si scorre verso l'alto per i meno adatti; in coda, dopo un separatore leggero, i meno probabili (D27).
+//  - **Solo per pertinenza, senza intestazioni di data** (scelta dell'utente).
+//  - **La stessa cella e la stessa cache** della Libreria (`GalleryGridCell`, il caricatore della Libreria); miniature solo locali (D28, CE-5).
+//  - **La selezione e' quella della Libreria** ([SearchSelection]): pressione lunga per entrare, tocco per scegliere; la barra delle azioni e' la sua.
+//  - **Un tocco vale solo se il dito si alza davvero** (D1 della fase H): l'Indietro dal bordo che parte sopra un risultato non lo apre.
+//  - Scorrendo la tastiera scende ([onUserScroll]); i risultati restano.
 
-private val MonthFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("LLLL yyyy", Locale.ITALIAN)
-private val DayFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ITALIAN)
-
+/**
+ * La griglia dei risultati [results]. [onOpen] apre il viewer sulla vista dei risultati da un media, con l'ancora della griglia (la cella da cui il viewer
+ * parte e su cui torna). [contentPadding] e' lo spazio della chrome in alto e della barra di ricerca in basso.
+ */
 @Composable
-internal fun SearchResultsGrid(
+fun SearchResultsGrid(
   results: SearchScreenState.Results,
-  today: LocalDate,
   thumbnails: SearchThumbnails,
-  onOpen: (media: MediaId) -> Unit,
-  onShowLikely: () -> Unit,
+  onOpen: (view: OrderedTimelineView, media: MediaId, anchor: ViewerAnchor) -> Unit,
   modifier: Modifier = Modifier,
+  contentPadding: PaddingValues = PaddingValues(),
+  selection: SearchSelection? = null,
+  onUserScroll: () -> Unit = {},
   gridState: LazyGridState = rememberLazyGridState(),
-  header: @Composable () -> Unit,
 ) {
-  val entries = remember(results, today) { SearchGridEntries.build(results, today) }
+  val entries = remember(results) { SearchGridEntries.build(results) }
+  val opening = remember(results) { SearchGridEntries.openingView(results) }
   val style = rememberGalleryGridCellStyle(cornerScale = GalleryWall.CornerScale)
   val interaction = remember { GalleryGridInteractionState() }
+  val anchor = remember(results, gridState) { ResultsAnchor(results, entries, gridState) }
+  val scope = rememberCoroutineScope()
+  val reduced = LocalFluidMotionPolicy.current.reducedMotion
+  val haptics = LocalFluidHaptics.current
+  val resources = LocalContext.current.resources
+  val currentOnUserScroll by rememberUpdatedState(onUserScroll)
+  val selecting = selection?.active == true
+
+  // La selezione arriva alle celle (che la leggono nel loro nodo, senza ricomporsi), come nella Libreria.
+  if (selection != null) {
+    val chosen by selection.model.selected.collectAsState()
+    LaunchedEffect(chosen) { interaction.selectedKeys = chosen.ids }
+    LaunchedEffect(selecting) { interaction.animateSelectionMode(selecting, reduced) }
+  }
   LaunchedEffect(entries, thumbnails, gridState) { followWindow(gridState, entries, results, thumbnails) }
-  LazyVerticalGrid(
-    columns = GridCells.Adaptive(SearchDimens.CellMin),
-    state = gridState,
-    modifier = modifier,
-    contentPadding = PaddingValues(bottom = SearchDimens.ListBottom),
-    verticalArrangement = Arrangement.spacedBy(GalleryWall.Gap),
-    horizontalArrangement = Arrangement.spacedBy(GalleryWall.Gap),
-  ) {
-    item(key = "header", span = { GridItemSpan(maxLineSpan) }, contentType = "header") { header() }
-    for (entry in entries) {
-      when (entry) {
-        is GridEntry.Title -> item(key = entry.key, span = { GridItemSpan(maxLineSpan) }, contentType = "title") { SectionTitle(entry) }
-        is GridEntry.Period -> item(key = entry.key, span = { GridItemSpan(maxLineSpan) }, contentType = "period") { PeriodTitle(entry, today) }
-        is GridEntry.ShowLikely -> item(key = entry.key, span = { GridItemSpan(maxLineSpan) }, contentType = "show-likely") {
-          ShowLikelyRow(entry.count, onShowLikely)
-        }
-        is GridEntry.Cell -> item(key = entry.key, contentType = "cell") {
-          val view = if (entry.section == ResultSection.CONFIDENT) results.confident else results.likely
-          SearchResultCell(
-            view = view,
-            viewIndex = entry.viewIndex,
-            thumbnails = thumbnails,
-            style = style,
-            interaction = interaction,
-            onOpen = { onOpen(entry.media) },
-            modifier = Modifier.aspectRatio(1f),
-          )
+
+  // Il tocco e la pressione lunga leggono sempre i risultati e la selezione di adesso: i gesti delle celle non ripartono quando cambiano.
+  val tap = rememberUpdatedState<(MediaId) -> Unit> { id ->
+    if (selection?.active == true) selection.toggle(id) else onOpen(opening, id, anchor)
+  }
+  val longPress = rememberUpdatedState<(MediaId) -> Unit> { id ->
+    if (selection != null) {
+      haptics.play(FluidHapticEvent.Threshold)
+      if (selection.active) selection.toggle(id) else selection.startWith(id)
+    }
+  }
+  val onTap = remember { { id: MediaId -> tap.value(id) } }
+  val onLongPress = remember { { id: MediaId -> longPress.value(id) } }
+  val describer = remember(results) { describerOf(resources, results) }
+  val actions = remember(describer, selecting) {
+    ResultCellActions(
+      resources = resources,
+      describeAt = describer,
+      clickLabel = resources.getString(if (selecting) R.string.search_cell_choose else R.string.search_cell_open),
+      longClickLabel = resources.getString(R.string.search_cell_select),
+      onClick = { key -> (key as? MediaId)?.let(onTap) },
+      onLongClick = { key -> (key as? MediaId)?.let(onLongPress) },
+    )
+  }
+  // Il dito che fa scorrere i risultati abbassa la tastiera (una volta per gesto basta: la seconda chiamata non fa niente).
+  val keyboardDown = remember {
+    object : NestedScrollConnection {
+      override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
+        if (source == NestedScrollSource.UserInput && available.y != 0f) currentOnUserScroll()
+        return Offset.Zero
+      }
+    }
+  }
+
+  Box(modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    LazyVerticalGrid(
+      columns = GridCells.Adaptive(SearchDimens.CellMin),
+      state = gridState,
+      modifier = Modifier.fillMaxSize().nestedScroll(keyboardDown),
+      contentPadding = contentPadding,
+      reverseLayout = true,
+      verticalArrangement = Arrangement.spacedBy(GalleryWall.Gap, Alignment.Bottom),
+      horizontalArrangement = Arrangement.spacedBy(GalleryWall.Gap),
+    ) {
+      items(
+        items = entries,
+        key = { it.key },
+        span = { entry -> if (entry is GridEntry.LikelyDivider) GridItemSpan(maxLineSpan) else GridItemSpan(1) },
+        contentType = { entry -> if (entry is GridEntry.LikelyDivider) "divider" else "cell" },
+      ) { entry ->
+        when (entry) {
+          is GridEntry.LikelyDivider -> LikelyDivider(entry.count)
+          is GridEntry.Cell -> {
+            val view = if (entry.section == ResultSection.CONFIDENT) results.confident else results.likely
+            val id = entry.media
+            SearchResultCell(
+              view = view,
+              viewIndex = entry.viewIndex,
+              thumbnails = thumbnails,
+              style = style,
+              interaction = interaction,
+              actions = actions,
+              modifier = Modifier
+                .aspectRatio(1f)
+                .testTag(searchResultTag(id))
+                .onPlaced { anchor.place(id, it) }
+                .resultGestures(id, interaction, scope, reduced, onTap, onLongPress)
+                // Fase 10 (P6, D20): la foto (o la selezione) verso un'altra app: dalla selezione col dito, col mouse anche fuori, come nella Libreria.
+                .mediaDragSource(enabled = true, origin = DragOrigin.SEARCH.code) { touch ->
+                  val chosen = selection?.model?.selected?.value?.ids.orEmpty()
+                  val ids = when {
+                    id in chosen -> opening.idsInOrder().filter { it in chosen }.map { it.value }
+                    touch.pointer == DragPointer.MOUSE && !selecting -> listOf(id.value)
+                    else -> null
+                  }
+                  ids?.let { DragSubject(it, thumbnails.loader.peek(anchor.thumbKey(id))) }
+                },
+            )
+          }
         }
       }
     }
   }
 }
 
+/** Il separatore leggero prima dei meno probabili: un'intestazione per TalkBack, che dice anche quanti sono. */
+@Composable
+private fun LikelyDivider(count: Int) {
+  val countText = LocalContext.current.resources.getQuantityString(R.plurals.search_results_count, count, GalleryNumbers.format(count))
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .height(SearchDimens.DividerHeight)
+      .semantics(mergeDescendants = true) { heading() }
+      .padding(horizontal = GalleryDimens.Gutter),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.SpaceBetween,
+  ) {
+    Text(text = stringResource(R.string.search_likely_title), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(text = countText, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+  }
+}
+
 /**
- * Le miniature da caricare sono quelle delle celle in vista (la finestra del caricatore), piu' quella del chip "Simili a" (TS-5: la cella del media e' esclusa
- * dai risultati, quindi nessuna finestra la chiedeva e il chip restava sull'icona). Solo cio' che e' sul dispositivo: i media solo-NAS passano per [windowOf].
+ * Il tocco e la pressione lunga su un risultato, con la pressione della cella che si vede (come nella Libreria). **Un tocco vale solo se il dito si
+ * alza davvero** (D1 della fase H): quando il sistema si prende il gesto (l'Indietro dal bordo) Compose recapita un rilascio sintetico gia' consumato,
+ * che qui non apre niente; lo stesso per un rilascio che la griglia ha consumato scorrendo. Un dito che si muove oltre lo slop e' uno scorrimento.
+ */
+private fun Modifier.resultGestures(
+  id: MediaId,
+  interaction: GalleryGridInteractionState,
+  scope: CoroutineScope,
+  reduced: Boolean,
+  onTap: (MediaId) -> Unit,
+  onLongPress: (MediaId) -> Unit,
+): Modifier = pointerInput(id, reduced) {
+  awaitEachGesture {
+    val down = awaitFirstDown(requireUnconsumed = false)
+    val press = scope.launch { interaction.press(id, reduced) }
+    var tapped = false
+    var longPressed = false
+    try {
+      withTimeout(viewConfiguration.longPressTimeoutMillis) {
+        while (true) {
+          val event = awaitPointerEvent()
+          val change = event.changes.firstOrNull { it.id == down.id } ?: break
+          if (!change.pressed) {
+            tapped = !change.isConsumed
+            if (tapped) change.consume()
+            break
+          }
+          if (change.isConsumed || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+        }
+      }
+    } catch (e: PointerEventTimeoutCancellationException) {
+      longPressed = true
+    }
+    press.cancel()
+    if (tapped || longPressed) {
+      scope.launch {
+        interaction.press(id, reduced)
+        interaction.release(reduced)
+      }
+    } else {
+      interaction.cancelPress()
+    }
+    if (tapped) onTap(id)
+    if (longPressed) {
+      onLongPress(id)
+      // Il resto del gesto e' della pressione lunga: la griglia non scorre sotto il dito finche' non si alza.
+      while (true) {
+        val event = awaitPointerEvent()
+        val change = event.changes.firstOrNull { it.id == down.id } ?: break
+        change.consume()
+        if (!change.pressed) break
+      }
+    }
+  }
+}
+
+/** Il tag di prova della cella di un risultato (gli strumenti di misura e le prove la trovano per media). */
+fun searchResultTag(id: MediaId): String = "risultato-${id.value}"
+
+/** Gli id della vista, nell'ordine mostrato (il trascinamento verso un'altra app li porta cosi'). */
+private fun OrderedTimelineView.idsInOrder(): List<MediaId> = (0 until size).map { snapshot.idAt(snapshotIndex(it)) }
+
+/** La frase di TalkBack per la cella di un media (tipo, data, stato), costruita solo quando serve. Sicuri e meno probabili hanno la stessa istantanea. */
+private fun describerOf(resources: android.content.res.Resources, results: SearchScreenState.Results): (Any) -> String? = { key ->
+  val snapshot = results.confident.snapshot
+  val index = (key as? MediaId)?.let { snapshot.indexOf(it) } ?: -1
+  if (index >= 0) cellDescription(resources, snapshot, index) else null
+}
+
+/**
+ * Le miniature da caricare sono quelle delle celle in vista (la finestra del caricatore). Solo cio' che e' sul dispositivo: i media solo-NAS passano per
+ * [windowOf] (CE-5).
  */
 private suspend fun followWindow(state: LazyGridState, entries: List<GridEntry>, results: SearchScreenState.Results, thumbnails: SearchThumbnails) {
   val cells = entries.filterIsInstance<GridEntry.Cell>().associateBy { it.key }
-  val chipRequests = similarChipRequests(results.chips, results.confident.snapshot, thumbnails)
   snapshotFlow { state.layoutInfo.visibleItemsInfo.map { it.key } }.distinctUntilChanged().collect { keys ->
     val visible = keys.mapNotNull { cells[it] }.mapNotNull { cell ->
       val view = if (cell.section == ResultSection.CONFIDENT) results.confident else results.likely
       thumbRequestOf(thumbnails, view.snapshot, view.snapshotIndex(cell.viewIndex))
     }
-    val (local, replicaOnly) = windowOf(chipRequests + visible)
+    val (local, replicaOnly) = windowOf(visible)
     thumbnails.loader.window(local, replicaOnly)
   }
 }
 
-@Composable
-private fun SectionTitle(entry: GridEntry.Title) {
-  val title = stringResource(if (entry.section == ResultSection.CONFIDENT) R.string.search_results_title else R.string.search_likely_title)
-  val count = LocalContext.current.resources.getQuantityString(R.plurals.search_results_count, entry.count, GalleryNumbers.format(entry.count))
-  Row(
-    modifier = Modifier
-      .fillMaxWidth()
-      // Fase 10 P8 (D23 (2)): il titolo di una sezione dei risultati e' un'intestazione (e dice anche quanti sono).
-      .semantics(mergeDescendants = true) { heading() }
-      .padding(horizontal = GalleryDimens.Gutter, vertical = SearchDimens.TightGap),
-    horizontalArrangement = Arrangement.SpaceBetween,
-    verticalAlignment = Alignment.CenterVertically,
-  ) {
-    Text(text = title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-    Text(text = count, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+/**
+ * L'ancora del viewer aperto dai risultati (H4): come quella della Libreria, il viewer parte dalla cella toccata e, chiudendosi, torna sulla cella del
+ * media che si stava guardando (portandola in vista se serve). Le posizioni le danno le celle composte ([place]): niente stato, niente lavoro per
+ * fotogramma oltre a un riferimento.
+ */
+internal class ResultsAnchor(
+  private val results: SearchScreenState.Results,
+  private val entries: List<GridEntry>,
+  private val gridState: LazyGridState,
+) : ViewerAnchor {
+  private val byId = HashMap<MediaId, LayoutCoordinates>()
+  private val idOf = HashMap<LayoutCoordinates, MediaId>()
+
+  /** La cella di [id] e' stata posata in [coordinates] (una cella riusata per un altro media toglie quello di prima). */
+  fun place(id: MediaId, coordinates: LayoutCoordinates) {
+    val previous = idOf[coordinates]
+    if (previous == id) return
+    if (previous != null) byId.remove(previous)
+    idOf[coordinates] = id
+    byId[id] = coordinates
+  }
+
+  override fun boundsOf(id: MediaId): PixelRect? {
+    val coordinates = byId[id]?.takeIf { it.isAttached && idOf[it] == id } ?: return null
+    if (gridState.layoutInfo.visibleItemsInfo.none { it.key == id.value }) return null
+    val origin = coordinates.positionInWindow()
+    return PixelRect(origin.x, origin.y, origin.x + coordinates.size.width, origin.y + coordinates.size.height)
+  }
+
+  override suspend fun reveal(id: MediaId) {
+    val index = entries.indexOfFirst { it is GridEntry.Cell && it.media == id }
+    if (index < 0) return
+    if (gridState.layoutInfo.visibleItemsInfo.none { it.key == id.value }) gridState.scrollToItem(index)
+  }
+
+  /** La chiave della miniatura che la cella ha in memoria: la stessa della Libreria ([thumbKeyOf]). */
+  override fun thumbKey(id: MediaId): ThumbKey {
+    val snapshot = results.confident.snapshot
+    val index = snapshot.indexOf(id)
+    return if (index >= 0) thumbKeyOf(snapshot, index) else ThumbKey(id, DEFAULT_VERSION_KEY, ThumbBucket.M)
   }
 }
 
-@Composable
-private fun PeriodTitle(entry: GridEntry.Period, today: LocalDate) {
-  GalleryTimelineHeader(title = periodTitle(entry, today), level = entry.level)
-}
-
-@Composable
-private fun periodTitle(entry: GridEntry.Period, today: LocalDate): String {
-  val start = entry.start ?: return stringResource(R.string.search_cell_undated)
-  return when (entry.level) {
-    GalleryTimelineLevel.Day -> when (start) {
-      today -> stringResource(R.string.search_period_today)
-      today.minusDays(1) -> stringResource(R.string.search_period_yesterday)
-      else -> start.format(DayFormat)
-    }
-    GalleryTimelineLevel.Month -> start.format(MonthFormat).replaceFirstChar { it.titlecase(Locale.ITALIAN) }
-    else -> start.year.toString()
-  }
-}
-
-@Composable
-private fun ShowLikelyRow(count: Int, onShowLikely: () -> Unit) {
-  FluidButton(
-    text = stringResource(R.string.search_show_likely, GalleryNumbers.format(count)),
-    onClick = onShowLikely,
-    style = FluidButtonStyle.Tinted,
-    // Fase 8 (P10): da 48 dp come ogni controllo (era 42): e' il modo di vedere anche le foto con un volto "forse" di una persona.
-    size = FluidButtonSize.Large,
-    fillWidth = true,
-    modifier = Modifier.padding(horizontal = GalleryDimens.Gutter, vertical = SearchDimens.NoticeInset),
-  )
-}

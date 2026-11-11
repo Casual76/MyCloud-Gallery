@@ -5,7 +5,6 @@ import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.library.testing.SyntheticLibrary
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.search.contract.PlaceName
-import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.search.engine.LibraryPlaces
 import dev.pampa.mycloudgallery.core.search.engine.LibrarySuggestions
 import dev.pampa.mycloudgallery.core.search.testing.FakeSearchData
@@ -14,8 +13,8 @@ import dev.pampa.mycloudgallery.core.search.testing.InMemorySearchEngine
 import dev.pampa.mycloudgallery.core.search.testing.InMemorySearchHistory
 import dev.pampa.mycloudgallery.core.search.testing.SimpleQueryParser
 import dev.pampa.mycloudgallery.feature.search.contract.SearchScreenState
-import dev.pampa.mycloudgallery.feature.search.noop.MemorySearchOrderStore
 import kotlinx.coroutines.test.TestScope
+import dev.pampa.mycloudgallery.core.search.contract.Suggestion
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
@@ -23,8 +22,9 @@ import org.junit.Test
 
 /**
  * NASCOSTI MAI (D29, E-Q7, §4.3), a livello di schermata: con il motore, i suggerimenti e la cronologia veri (di riferimento) sotto il controller, un nascosto
- * **perfetto** (testo, vettore, luogo) non esce da nessuna superficie di Cerca: risultati, meno probabili, completamenti, luoghi proposti, ricerche recenti,
- * "Trova simili". Un nascosto appena nascosto altrove (ancora nell'istantanea) resta fuori dal filtro finale.
+ * **perfetto** (testo, vettore, luogo) non esce da nessuna superficie della ricerca (H4: dentro la Libreria): risultati, meno probabili, suggerimenti
+ * della barra in alto (completamenti, luoghi, ricerche recenti), "Trova simili". Un nascosto appena nascosto altrove (ancora nell'istantanea) resta fuori
+ * dal filtro finale.
  */
 class SearchHiddenNeverTest {
 
@@ -47,7 +47,7 @@ class SearchHiddenNeverTest {
     val places = LibraryPlaces { id -> PlaceName("Luogo $id", null, "Italia") }
     val engine = InMemorySearchEngine(data, embedder = null, parser = SimpleQueryParser(), today = today, places = { places.dictionary(lib.snapshot) })
     val suggestions = LibrarySuggestions(data, places, history)
-    return SearchController(engine, suggestions, history, data, today, MemorySearchOrderStore(), null, null, backgroundScope, 100).also { runCurrent() }
+    return SearchController(engine, suggestions, history, data, null, backgroundScope, completionDebounceMillis = 100, searchDebounceMillis = 200).also { runCurrent() }
   }
 
   private fun ids(view: OrderedTimelineView): List<MediaId> = (0 until view.size).map { view.snapshot.idAt(view.snapshotIndex(it)) }
@@ -77,14 +77,12 @@ class SearchHiddenNeverTest {
   }
 
   @Test
-  fun inEntrambiGliOrdiniENelleDueSezioniIlNascostoNonCe() = runTest {
+  fun scrivendoENelleDueSezioniIlNascostoNonCe() = runTest {
     val c = controller()
-    for (order in ResultOrder.entries) {
-      c.onSetOrder(order)
-      c.onQueryChange("tazza")
-      c.onSubmit()
+    for (text in listOf("ta", "tazz", "tazza")) {
+      c.onQueryChange(text)
+      advanceTimeBy(300)
       runCurrent()
-      c.onShowLikely()
       assertThat(shown(c.state.value)).containsNoneIn(secrets)
     }
   }
@@ -96,7 +94,7 @@ class SearchHiddenNeverTest {
       c.onQueryChange(prefix)
       advanceTimeBy(200)
       runCurrent()
-      val labels = (c.state.value as SearchScreenState.Typing).completions.map { it.label.lowercase() }
+      val labels = c.topSuggestions.value.map { it.label.lowercase() }
       assertThat(labels.none { "segretissim" in it }).isTrue()
     }
   }
@@ -105,12 +103,11 @@ class SearchHiddenNeverTest {
   fun aRiposoLeRicercheRecentiEILuoghiSonoQuelliDellaLibreriaVisibile() = runTest {
     history.record("tazza blu", emptyList())
     val c = controller()
-    val idle = c.state.value as SearchScreenState.Idle
-    assertThat(idle.recents.map { it.text }).containsExactly("tazza blu")
-    // I luoghi proposti vengono dall'istantanea (che non ha i nascosti) e sono al massimo 8.
-    assertThat(idle.suggestions.places.size).isAtMost(8)
+    val top = c.topSuggestions.value
+    assertThat(top.first().label).isEqualTo("tazza blu")
+    // I luoghi proposti vengono dall'istantanea (che non ha i nascosti).
     val inSnapshot = (0 until lib.snapshot.size).map { lib.snapshot.placeAt(it) }.toSet()
-    assertThat(idle.suggestions.places.flatMap { it.ids }.toSet() - inSnapshot).isEmpty()
+    assertThat(top.filterIsInstance<Suggestion.PlaceSuggestion>().flatMap { it.option.ids }.toSet() - inSnapshot).isEmpty()
   }
 
   @Test

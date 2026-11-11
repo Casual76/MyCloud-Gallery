@@ -40,8 +40,8 @@ import dev.pampa.mycloudgallery.core.designsystem.R
 import kotlin.math.abs
 
 /**
- * Le tre destinazioni della navigazione principale (G2, come in Foto di Apple): **Libreria · Album · Raccolte**. Cerca non e' piu' una
- * scheda: e' il cerchio di vetro accanto alla pillola ([GalleryTabBar] con `onOpenSearch`).
+ * Le tre destinazioni della navigazione principale (G2, come in Foto di Apple): **Libreria · Album · Raccolte**. Cerca non e' una
+ * scheda: e' il cerchio di vetro accanto alla pillola ([GalleryTabBar] con `onOpenSearch`), che diventa la barra di ricerca ([GallerySearchBar]).
  *
  * [route] e' la chiave della scheda nella pillola: non e' una rotta di navigazione e non si salva fuori dal processo.
  */
@@ -76,15 +76,17 @@ object GalleryTabBarDefaults {
  * [scrollConnection] a `Modifier.nestedScroll`. Il cerchio c'e' sempre, come in produzione (K3a: le prove che disegnavano la pillola da
  * sole la mostravano senza).
  *
- * Con Cerca aperta ([searchOpen]) la pillola resta sulla scheda da cui si e' partiti (Indietro riporta li') e il cerchio si colora
- * d'accento; il tocco su una scheda, anche quella sotto la ricerca, chiama [onSelect] (chi la ospita chiude la ricerca). La scheda di
- * partenza ha sopra di se' la lente della pillola, che prende il tocco e cambia scheda solo dopo un trascinamento: il tocco su di lei lo
- * riconosce la barra stessa ([lensTap], GS-2). Lo stesso per la riselezione senza Cerca: un tocco fermo sulla scheda scelta finiva nella lente
- * e non la riselezionava (ci riusciva solo un tocco che si muoveva di un pixel).
+ * Il tocco sul cerchio ([onOpenSearch]) apre la ricerca dentro la Libreria (H4): il cerchio si allarga nella barra di ricerca e la pillola esce nello
+ * stesso movimento; per questo il cerchio dice dove sta ([searchCircle]). Con la ricerca aperta la pillola non c'e'.
+ *
+ * La scheda scelta ha sopra di se' la lente della pillola, che prende il tocco e cambia scheda solo dopo un trascinamento: il tocco fermo su di lei
+ * (la riselezione, "torna in cima") lo riconosce la barra stessa ([lensTap], GS-2): prima finiva nella lente e non riselezionava (ci riusciva solo un
+ * tocco che si muoveva di un pixel).
  *
  * Con [backdrop] nullo la barra disegna i colori piatti (un'anteprima, un dispositivo senza `RenderEffect`).
  *
  * @param onOpenSearch il tocco sul cerchio.
+ * @param searchCircle dove si posa il cerchio (la barra di ricerca ci nasce sopra); null = nessuno lo chiede.
  */
 @Composable
 fun GalleryTabBar(
@@ -94,17 +96,14 @@ fun GalleryTabBar(
   backdrop: GlassBackdropState? = null,
   onReselect: (GalleryTab) -> Unit = {},
   scrollConnection: FluidFloatingTabBarScrollConnection = rememberFluidFloatingTabBarScrollConnection(),
-  searchOpen: Boolean = false,
   onOpenSearch: () -> Unit = {},
+  searchCircle: GallerySearchCircle? = null,
 ) {
   val labels = GalleryTab.entries.associateWith { stringResource(it.label) }
   val searchLabel = stringResource(R.string.tab_search)
-  val accent = MaterialTheme.colorScheme.primary
   val returnTarget = remember { SearchReturnTarget() }
   val haptics = LocalFluidHaptics.current
   val currentSelected by rememberUpdatedState(selected)
-  val currentSearchOpen by rememberUpdatedState(searchOpen)
-  val currentOnSelect by rememberUpdatedState(onSelect)
   val currentOnReselect by rememberUpdatedState(onReselect)
   val returnTap = Modifier
     .onPlaced { returnTarget.bar = it }
@@ -114,8 +113,8 @@ fun GalleryTabBar(
       tabUnderLens = { currentSelected.takeIf { !scrollConnection.isInline } },
       onTap = { tab ->
         haptics.play(FluidHapticEvent.Tap)
-        // Con Cerca aperta e' il ritorno alla scheda di partenza (GS-2); senza, la riselezione ("torna in cima", in fondo per la Libreria).
-        if (currentSearchOpen) currentOnSelect(tab) else currentOnReselect(tab)
+        // La riselezione ("torna in cima", in fondo per la Libreria).
+        currentOnReselect(tab)
       },
     )
   // Le etichette delle schede sono `Text` senza colore: prendono `LocalContentColor`, che fuori da un `Surface` Material e' nero anche in
@@ -128,12 +127,12 @@ fun GalleryTabBar(
       backdrop = backdrop,
     ) {
       GalleryTab.entries.forEach { item ->
-        val chosen = item == selected && !searchOpen
+        val chosen = item == selected
         tab(
           key = item.route,
           title = { Text(labels.getValue(item)) },
           // "Selezionata" sul glifo: la scheda e' un nodo che la barra costruisce da se' e che unisce la semantica dei figli alla propria
-          // (come fa la forma a elenco dell'engine). Con Cerca aperta nessuna scheda e' quella in vista.
+          // (come fa la forma a elenco dell'engine).
           icon = {
             Icon(
               item.icon,
@@ -143,7 +142,7 @@ fun GalleryTabBar(
           },
           onClick = {
             // La lente rilascia la scheda sotto di se' alla fine di un tocco che si e' mosso anche di un pixel: e' lo stesso tocco che la barra
-            // ha gia' servito (l'eco), e la ricerca non si chiude due volte.
+            // ha gia' servito (l'eco), e la riselezione non parte due volte.
             if (!returnTarget.isEcho(item)) {
               if (chosen) onReselect(item) else onSelect(item)
             }
@@ -156,8 +155,8 @@ fun GalleryTabBar(
           Icon(
             Icons.Rounded.Search,
             contentDescription = searchLabel,
-            tint = if (searchOpen) accent else LocalContentColor.current,
-            modifier = Modifier.semantics { this.selected = searchOpen },
+            // L'icona sta al centro del cerchio: il suo centro e' quello del cerchio (H4). Le copie della barra stanno tutte li', a riposo.
+            modifier = if (searchCircle != null) Modifier.onPlaced { searchCircle.coordinates = it } else Modifier,
           )
         },
         onClick = onOpenSearch,
@@ -170,8 +169,7 @@ fun GalleryTabBar(
  * GS-2: dove sta la scheda sotto la lente, per riconoscere il tocco che la lente della pillola si prende.
  *
  * La lente di `FluidFloatingTabBar` (il "puck") sta sopra la scheda scelta e prende ogni tocco che le cade sopra; cambia scheda solo alla fine
- * di un trascinamento, e un tocco fermo non fa niente. Con Cerca aperta la scheda scelta e' proprio quella su cui si vuole tornare; senza, un
- * tocco su di lei e' la riselezione. La barra non permette di togliere la lente (una chiave che non corrisponde a nessuna scheda la lascia dov'era), quindi il tocco lo riconosce chi
+ * di un trascinamento, e un tocco fermo non fa niente. Un tocco fermo sulla scheda scelta e' la riselezione. La barra non permette di togliere la lente (una chiave che non corrisponde a nessuna scheda la lascia dov'era), quindi il tocco lo riconosce chi
  * contiene la barra, prima dei figli ([PointerEventPass.Initial]), senza consumarlo: la lente continua a premersi e a seguire il dito come
  * sempre.
  *

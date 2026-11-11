@@ -25,8 +25,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Fase 10, P8 (D23, D25-D27, §2.7 "Cerca", D28): **ogni** scena del catalogo degli screenshot di Cerca (a riposo, scrivendo, risultati, nessun
- * risultato, avvisi, errore, Ricerca e modelli, attivazione) letta come la legge TalkBack, a testo 1,0 e poi a 2,0 sulla stessa scena: nome e ruolo per
+ * Fase 10, P8 (D23, D25-D27, §2.7 "Cerca", D28): **ogni** scena del catalogo degli screenshot delle pagine della ricerca (Ricerca e modelli,
+ * attivazione; la ricerca dentro la Libreria ha le sue prove in :app, H4) letta come la legge TalkBack, a testo 1,0 e poi a 2,0 sulla stessa scena: nome e ruolo per
  * ogni elemento attivo, bersagli da 48 dp misurati, nessun id o nome di file, testo non tagliato.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -61,7 +61,7 @@ internal class SearchAccessibilityTest(private val scene: Scene) {
   }
 }
 
-/** Le regole di Cerca che non si leggono da una scena sola: il campo, i risultati, il loro conteggio. */
+/** Le regole della ricerca dentro la Libreria (H4) che non si leggono da una scena sola: i suggerimenti, i risultati, il loro conteggio. */
 @RunWith(org.robolectric.RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(application = Application::class, qualifiers = "it-w412dp-h915dp-xhdpi")
@@ -70,45 +70,74 @@ internal class SearchSemanticsTest {
   @get:Rule
   val rule = createAndroidComposeRule<ComponentActivity>()
 
+  private val lib = library(count = 60)
+  private val thumbs = TestThumbnails(lib)
+  private val results = dev.pampa.mycloudgallery.feature.search.contract.SearchScreenState.Results(
+    emptyList(),
+    lib.view(*(0 until 12).toList().toIntArray()),
+    lib.view(30, 31),
+    dev.pampa.mycloudgallery.core.search.contract.SearchCoverage.Complete,
+    emptyList(),
+  )
+
   private fun root(): SemanticsNode = rule.onRoot().fetchSemanticsNode()
 
+  private fun showResults() = rule.setSearchContent {
+    SearchResults(
+      source = FixedSearchSource(query = "mare", state = results),
+      thumbnails = thumbs.thumbnails,
+      onOpen = { _, _, _ -> },
+      contentPadding = androidx.compose.foundation.layout.PaddingValues(),
+    )
+  }
+
+  private fun showSuggestions() = rule.setSearchContent {
+    SearchSuggestions(
+      source = FixedSearchSource(
+        suggestions = listOf(
+          dev.pampa.mycloudgallery.core.search.contract.Suggestion.Recent(recent(1, "mare ad agosto")),
+          dev.pampa.mycloudgallery.core.search.contract.Suggestion.Term("Ferragosto"),
+          dev.pampa.mycloudgallery.core.search.contract.Suggestion.Term("Natale"),
+        ),
+      ),
+      handlers = NoSearchHandlers,
+      backdrop = null,
+    )
+  }
+
   @Test
-  fun ilCampoDiRicercaHaLaSuaEtichetta() {
-    rule.setSearchContent { SearchScenes.Content(Scene.IDLE) }
-    val fields = A11yAssertions.nodes(root()).filter { SemanticsActions.SetText in it.config }
-    assertThat(fields).isNotEmpty()
-    // Il nome viene dall'etichetta (o dal segnaposto): mai un campo muto.
-    fields.forEach { assertThat(A11yAssertions.spoken(it) + listOfNotNull(it.config.getOrNullDescription())).isNotEmpty() }
+  fun ogniSuggerimentoEUnTastoCheDiceCosaCerca() {
+    showSuggestions()
+    val names = A11yAssertions.nodes(root()).filter { SemanticsActions.OnClick in it.config }.map { A11yAssertions.name(it) }
+    for (expected in listOf("Cerca «mare ad agosto»", "Cerca «Ferragosto»", "Cerca «Natale»")) {
+      assertWithMessage("$expected fra $names").that(names.any { it.contains(expected) }).isTrue()
+    }
   }
 
   @Test
   fun ilConteggioDeiRisultatiSiAnnunciaUnaVolta() {
-    rule.setSearchContent { SearchScenes.Content(Scene.RESULTS_RECENT) }
+    showResults()
     val live = A11yAssertions.nodes(root()).filter { A11yAssertions.liveRegion(it) != null && A11yAssertions.name(it).contains("risultat") }
     assertThat(live).hasSize(1)
   }
 
   @Test
-  fun leSezioniDeiRisultatiSonoIntestazioni() {
-    rule.setSearchContent { SearchScenes.Content(Scene.RESULTS_RECENT) }
-    assertThat(A11yAssertions.headingNames(root()).any { it.contains("Risultati") }).isTrue()
+  fun ilSeparatoreDeiMenoProbabiliEUnIntestazione() {
+    showResults()
+    assertThat(A11yAssertions.headingNames(root()).any { it.contains("Meno probabili") }).isTrue()
   }
 
-  private fun androidx.compose.ui.semantics.SemanticsConfiguration.getOrNullDescription(): String? =
-    getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ")
-
-  // --- ATF (D28): il controllo automatico indipendente, sulle schermate principali del modulo -----------------------------------------
+  // --- ATF (D28): il controllo automatico indipendente, sui pezzi della ricerca --------------------------------------------------------
 
   @Test
-  fun atfARiposo() {
-    rule.setSearchContent { SearchScenes.Content(Scene.IDLE) }
+  fun atfSuggerimenti() {
+    showSuggestions()
     rule.onRoot().checkRoboAccessibility()
   }
 
   @Test
   fun atfRisultati() {
-    rule.setSearchContent { SearchScenes.Content(Scene.RESULTS_RECENT) }
+    showResults()
     rule.onRoot().checkRoboAccessibility()
   }
 }
-

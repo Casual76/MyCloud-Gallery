@@ -5,16 +5,13 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.common.files.StateFiles
 import dev.pampa.mycloudgallery.core.family.contract.RolesChange
-import dev.pampa.mycloudgallery.core.personal.contract.SearchOrderSetting
 import dev.pampa.mycloudgallery.core.personal.contract.TextReadingChoice
-import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.trust.data.DeviceRole
 import dev.pampa.mycloudgallery.feature.search.contract.AreaKind
 import dev.pampa.mycloudgallery.feature.search.contract.IndexSpace
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerBacklog
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerChange
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
-import dev.pampa.mycloudgallery.feature.search.contract.SearchOrderStore
 import dev.pampa.mycloudgallery.feature.search.contract.TextReadingAccepted
 import dev.pampa.mycloudgallery.search.SearchGraph
 import java.io.File
@@ -28,21 +25,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
-// Le PORTE di Cerca e della pagina Ricerca e modelli (feature-search, P8) sopra le impostazioni personali, i ruoli e `AiGraph` (P11).
-
-/**
- * L'ordine dei risultati (D48) sopra `search_order`, per codice: la scelta vale subito (CE-3), anche fuori casa senza l'ora del NAS e anche
- * prima che il registro dei dati personali ci sia ([PersonalSettingsHub.searchOrder]); la sincronizzazione con gli altri dispositivi viene dopo.
- */
-class PersonalSearchOrderStore(private val personal: PersonalSettingsHub, scope: CoroutineScope) : SearchOrderStore {
-  override val order: StateFlow<ResultOrder> = personal.searchOrder
-    .map { ResultOrder.fromCode(it.code) }
-    .stateIn(scope, SharingStarted.Eagerly, ResultOrder.fromCode(personal.searchOrder.value.code))
-
-  override suspend fun setOrder(order: ResultOrder) {
-    personal.setSearchOrder(SearchOrderSetting.fromCode(order.code))
-  }
-}
+// Le PORTE di Cerca e della pagina Ricerca e modelli (feature-search, P8) sopra le impostazioni personali, i ruoli e `AiGraph` (P11). L'ordine dei
+// risultati non e' piu' una porta: la ricerca dentro la Libreria ordina solo per pertinenza (H4, scelta dell'utente dell'11/11).
 
 /** La versione del testo accettata per l'account (0 se la lettura e' spenta, D41). */
 class PersonalTextReadingAccepted(personal: PersonalSettingsHub, scope: CoroutineScope) : TextReadingAccepted {

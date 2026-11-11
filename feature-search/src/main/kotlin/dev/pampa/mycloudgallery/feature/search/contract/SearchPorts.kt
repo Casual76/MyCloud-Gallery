@@ -1,24 +1,19 @@
 package dev.pampa.mycloudgallery.feature.search.contract
 
 import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.imaging.contract.PlaceholderCache
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
+import dev.pampa.mycloudgallery.core.library.contract.SelectionModel
 import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
-import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import kotlinx.coroutines.flow.StateFlow
 
 // Le PORTE di Cerca e della pagina Ricerca e modelli (Fase 6, P8; docs/fase6-progetto.md §1.1, §1.5, D15, D41, D48). feature-search non
 // vede core-personal ne' core-family (Phase6ArchitectureTest): le scelte personali e il ruolo del dispositivo le legge e le scrive `:app` (P11)
 // dietro queste interfacce, sopra `SearchPersonalSettings` e `RolesSettings`. Tutte **opzionali per Dagger** ([SearchPortsModule]): senza
-// legatura la schermata funziona da sola, con il suo comportamento di riposo (ricerca vuota, ordine "Recenti", lettura spenta).
-
-/** L'ordine dei risultati scelto (D48, Q10): ricordato e sincronizzato fra i dispositivi dell'utente. `:app` lo lega a `search_order`. */
-interface SearchOrderStore {
-  val order: StateFlow<ResultOrder>
-
-  suspend fun setOrder(order: ResultOrder)
-}
+// legatura la ricerca funziona da sola, con il suo comportamento di riposo (ricerca vuota, lettura spenta). L'ordine dei risultati non e' piu' una scelta:
+// solo per pertinenza (H4, risposta dell'utente dell'11/11).
 
 /**
  * La versione del testo della pagina di attivazione che l'account ha accettato (0 = mai, D41, Q4). `:app` la lega a `text_reading`
@@ -92,4 +87,30 @@ class SearchThumbnails(
 /** La sorgente di una miniatura per la cella [index] dell'istantanea: dal catalogo locale (`ColumnarTimelineSnapshot.thumbRefAt`, come la Libreria). */
 fun interface SearchRefs {
   fun refAt(snapshot: TimelineSnapshot, index: Int): MediaRef?
+}
+
+/**
+ * La selezione sui risultati (H4): e' **quella della Libreria** (lo stesso modello), cosi' la barra delle azioni, i fogli di conferma e gli avvisi sono gli
+ * stessi della griglia della Libreria e non una seconda copia. `:app` la passa dalla griglia della Libreria.
+ *
+ * @property model gli elementi scelti.
+ * @param selecting vero in modalita' selezione (uno stato di Compose: chi lo legge si ricompone quando cambia).
+ * @param begin entra in modalita' selezione.
+ */
+class SearchSelection(
+  val model: SelectionModel,
+  private val selecting: () -> Boolean,
+  private val begin: () -> Unit,
+) {
+  /** Vero in modalita' selezione. */
+  val active: Boolean get() = selecting()
+
+  /** La pressione lunga su un risultato: si entra in selezione con quel risultato scelto. */
+  fun startWith(id: MediaId) {
+    if (!selecting()) begin()
+    if (id !in model.selected.value.ids) model.toggle(id)
+  }
+
+  /** Un tocco in selezione: il risultato entra o esce. */
+  fun toggle(id: MediaId) = model.toggle(id)
 }

@@ -5,32 +5,23 @@ import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelManager
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
-import dev.pampa.mycloudgallery.core.models.contract.ModelTrigger
 import dev.pampa.mycloudgallery.core.search.contract.ChipReadings
-import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
 import dev.pampa.mycloudgallery.core.search.contract.IdleSuggestions
-import dev.pampa.mycloudgallery.core.search.contract.PersonOption
-import dev.pampa.mycloudgallery.core.search.contract.PlaceOption
 import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
 import dev.pampa.mycloudgallery.core.search.contract.SearchData
 import dev.pampa.mycloudgallery.core.search.contract.SearchEngine
 import dev.pampa.mycloudgallery.core.search.contract.SearchHistory
-import dev.pampa.mycloudgallery.core.search.contract.SearchMediaType
 import dev.pampa.mycloudgallery.core.search.contract.SearchNotice
 import dev.pampa.mycloudgallery.core.search.contract.SearchReadiness
 import dev.pampa.mycloudgallery.core.search.contract.SearchRequest
 import dev.pampa.mycloudgallery.core.search.contract.SearchResults
 import dev.pampa.mycloudgallery.core.search.contract.Suggestion
 import dev.pampa.mycloudgallery.core.search.contract.Suggestions
-import dev.pampa.mycloudgallery.core.search.contract.Today
+import dev.pampa.mycloudgallery.core.search.engine.LibrarySuggestions
 import dev.pampa.mycloudgallery.core.search.engine.LiveResults
-import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
-import dev.pampa.mycloudgallery.feature.search.contract.SearchOrderStore
 import dev.pampa.mycloudgallery.feature.search.contract.SearchScreenState
 import dev.pampa.mycloudgallery.feature.search.contract.SearchUnavailableReason
-import java.time.LocalDate
-import kotlin.time.Duration.Companion.minutes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -44,39 +35,45 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 /**
- * Il cervello della schermata Cerca (docs/fase6-progetto.md §1.5, §2.6; D28-D35, D48): trasforma testo, tocchi e risposte del motore in
- * [SearchScreenState]. Nessuna rete e nessun NAS (D33): parla solo con il motore di ricerca, i suggerimenti, la cronologia e i contratti
- * di core-models e delle porte. **Nascosti mai** (D29): ne' risultati ne' suggerimenti ne' recenti li contengono, perche' li' non ci sono; qui
- * in piu' i completamenti non mostrano mai parole del testo letto ([Suggestion.Term] dal motore e' scartato: i mesi e le feste le aggiunge
- * [CalendarCompletions]).
+ * Il cervello della ricerca dentro la Libreria (H4 della fase H, 11/11; prima la schermata Cerca della Fase 6, docs/fase6-progetto.md §1.5, §2.6, D28-D35).
+ * Trasforma il testo del campo, i tocchi e le risposte del motore in:
+ *  - [state]: che cosa c'e' dietro la barra (la Libreria, i risultati, una riga sola);
+ *  - [topSuggestions]: i tre suggerimenti della barra in alto, come la striscia delle parole di una tastiera.
  *
- * Le azioni di navigazione (aprire il viewer, le Impostazioni, la pagina di attivazione) non sono qui: le fa `SearchActions`, in [SearchRoute].
- * Mai testo di query nei log (D40): nessun log.
+ * **Scrivere e' cercare**: dopo una pausa breve ([completionDebounceMillis]) arrivano i completamenti, dopo una un po' piu' lunga
+ * ([searchDebounceMillis]) i risultati, sempre fuori dal thread principale (il motore lo fa da se'). Mentre il motore lavora resta cio' che c'era
+ * (nessuno stato "Sto cercando"), e una risposta con gli stessi media della precedente non si ripubblica: la griglia non si ricompone a ogni tasto.
+ * L'ordine e' solo **per pertinenza** (scelta dell'utente dell'11/11: il selettore "Recenti · Pertinenti" e la sua impostazione non ci sono piu').
+ *
+ * Nessuna rete e nessun NAS (D33): parla solo con il motore, i suggerimenti, la cronologia e lo stato del modello. **Nascosti mai** (D29): ne' risultati
+ * ne' suggerimenti li contengono; in piu' i completamenti non mostrano mai parole del testo letto ([Suggestion.Term] dal motore e' scartato: i mesi e le
+ * feste le aggiunge [CalendarCompletions]). Mai testo di query nei log (D40): nessun log.
  */
 class SearchController(
   private val engine: SearchEngine,
   private val suggestions: Suggestions,
   private val history: SearchHistory,
   private val data: SearchData?,
-  private val today: Today,
-  private val orderStore: SearchOrderStore,
   private val models: ModelManager?,
-  private val indexer: IndexerControl?,
   private val scope: CoroutineScope,
-  private val debounceMillis: Long = COMPLETION_DEBOUNCE_MILLIS,
+  private val completionDebounceMillis: Long = COMPLETION_DEBOUNCE_MILLIS,
+  private val searchDebounceMillis: Long = SEARCH_DEBOUNCE_MILLIS,
 ) : SearchHandlers {
 
-  private val mutableState = MutableStateFlow<SearchScreenState>(SearchScreenState.Idle(emptyIdle(), emptyList(), known = false))
+  private val mutableState = MutableStateFlow<SearchScreenState>(SearchScreenState.Idle)
   val state: StateFlow<SearchScreenState> = mutableState
 
   private val mutableQuery = MutableStateFlow("")
   val query: StateFlow<String> = mutableQuery
 
+  private val mutableTop = MutableStateFlow<List<Suggestion>>(emptyList())
+
+  /** I suggerimenti della barra in alto, al piu' [STRIP_SIZE]: a campo vuoto i migliori a riposo, mentre si scrive i completamenti migliori. */
+  val topSuggestions: StateFlow<List<Suggestion>> = mutableTop
+
   val readiness: StateFlow<SearchReadiness> get() = engine.readiness
 
-  val order: StateFlow<ResultOrder> get() = orderStore.order
-
-  /** Lo stato del modello delle query (E-Q11): "Scarica" lo avvia, la schermata lo mostra mentre arriva. */
+  /** Lo stato del modello delle query (E-Q11): la riga sopra la barra dice se manca o si sta scaricando. */
   val queryModel: StateFlow<ModelState?> =
     models?.states?.mapState(scope) { it[ModelCatalog.QUERY_270M.id] } ?: MutableStateFlow<ModelState?>(null)
 
@@ -88,15 +85,14 @@ class SearchController(
 
   private var last: Last? = null
   private var results: SearchResults? = null
-  private var showLikely = false
-  private var recordNext = false
+  private var recorded: String? = null
   private var textReadingOffShown = false
   private var searchJob: Job? = null
   private var typingJob: Job? = null
   private var liveJob: Job? = null
 
   init {
-    scope.launch { history.entries.collect { if (mutableState.value is SearchScreenState.Idle) refreshIdle() } }
+    scope.launch { history.entries.collect { if (mutableQuery.value.isBlank()) refreshIdleSuggestions() } }
     // CE-8, CE-9: il contenuto che mancava (modello scaricato, motore delle query caricato) si aggiunge ai risultati senza che l'utente ripeta la ricerca.
     scope.launch {
       var wasReady = queryModel.value is ModelState.Ready
@@ -121,234 +117,151 @@ class SearchController(
           if (snapshot != null && snapshot.size == 0) {
             mutableState.value = SearchScreenState.Unavailable(SearchUnavailableReason.EMPTY_LIBRARY)
           } else if (current is SearchScreenState.Unavailable && current.reason == SearchUnavailableReason.EMPTY_LIBRARY) {
-            refreshIdle()
+            mutableState.value = SearchScreenState.Idle
+            last?.let { launch(it) }
           }
         }
       }
     }
   }
 
-  /** La data di oggi, per le intestazioni di periodo di "Recenti" (la stessa del motore, D39). */
-  fun todayDate(): LocalDate = today.date()
-
-  /** La scheda Cerca si apre (D35, CE-9): il motore delle query comincia a caricarsi, cosi' la prima ricerca non lo aspetta. */
+  /** La ricerca si apre (D35, CE-9): il motore delle query comincia a caricarsi, cosi' la prima ricerca non lo aspetta; i suggerimenti a riposo si rileggono. */
   fun onOpened() {
     engine.warmUp()
+    if (mutableQuery.value.isBlank()) scope.launch { refreshIdleSuggestions() }
+  }
+
+  /** La ricerca si chiude (H4): il campo si svuota e dietro torna la Libreria. La prossima apertura riparte da capo. */
+  fun clear() {
+    cancelAll()
+    last = null
+    results = null
+    recorded = null
+    mutableQuery.value = ""
+    showIdle()
+    scope.launch { refreshIdleSuggestions() }
   }
 
   // --- Testo ---------------------------------------------------------------------------------------------------------------------------
 
   override fun onQueryChange(text: String) {
+    if (text == mutableQuery.value) return
     mutableQuery.value = text
-    searchJob?.cancel()
     typingJob?.cancel()
-    liveJob?.cancel()
     val t = text.trim()
     if (t.isEmpty()) {
+      cancelAll()
       last = null
       results = null
-      scope.launch { refreshIdle() }
+      showIdle()
+      scope.launch { refreshIdleSuggestions() }
       return
     }
-    val previous = (mutableState.value as? SearchScreenState.Typing)?.completions.orEmpty()
-    mutableState.value = SearchScreenState.Typing(text, previous)
     typingJob = scope.launch {
-      delay(debounceMillis)
-      val completions = try {
-        complete(t)
-      } catch (e: CancellationException) {
-        throw e
-      } catch (e: Exception) {
-        emptyList()
-      }
-      mutableState.value = SearchScreenState.Typing(text, completions)
+      delay(completionDebounceMillis)
+      mutableTop.value = completions(t)
     }
-  }
-
-  private suspend fun complete(prefix: String): List<Suggestion> {
-    val fromEngine = suggestions.complete(prefix).filter { it !is Suggestion.Term }
-    return (fromEngine + CalendarCompletions.of(prefix)).distinctBy { it.label.lowercase() }.take(MAX_COMPLETIONS)
+    // E-Q1: una lettera sola non e' una ricerca: dietro torna la Libreria (i suggerimenti restano).
+    if (t.length < MIN_QUERY_CHARS) {
+      cancelSearch()
+      last = null
+      results = null
+      showIdle()
+      return
+    }
+    val request = Last.Query(t, null)
+    // Lo stesso testo (uno spazio in piu' in fondo): niente da rifare.
+    if (request == last && searchJob?.isActive != true) return
+    launch(request, waitMillis = searchDebounceMillis)
   }
 
   override fun onSubmit() {
     val text = mutableQuery.value.trim()
-    // E-Q1: una lettera sola non e' una ricerca (restano i suggerimenti).
     if (text.length < MIN_QUERY_CHARS) return
-    recordNext = true
-    launch(Last.Query(text, null))
-  }
-
-  override fun onCompletion(suggestion: Suggestion) {
-    if (suggestion is Suggestion.PersonSuggestion) {
-      onPerson(suggestion.option)
+    val request = Last.Query(text, null)
+    val shown = results
+    // La ricerca per questo testo e' gia' quella in vista: basta ricordarla.
+    if (request == last && shown != null && searchJob?.isActive != true) {
+      scope.launch { record(text, shown.chips) }
       return
     }
+    launch(request, record = true)
+  }
+
+  override fun onSuggestion(suggestion: Suggestion) {
     val text = suggestion.label
     mutableQuery.value = text
-    recordNext = true
-    launch(Last.Query(text, null))
+    typingJob?.cancel()
+    typingJob = scope.launch { mutableTop.value = completions(text.trim()) }
+    // Fase 8 (§2.7): una persona scelta porta il suo chip gia' fatto: un nome che e' anche un luogo non cambia lettura.
+    val edited = (suggestion as? Suggestion.PersonSuggestion)?.let { listOf(ChipReadings.ofOption(it.option)) }
+    launch(Last.Query(text, edited), record = true)
   }
 
-  // --- A riposo ------------------------------------------------------------------------------------------------------------------------
-
-  override fun onRecent(entry: HistoryEntry) {
-    mutableQuery.value = entry.text
-    recordNext = false
-    launch(Last.Query(entry.text, null))
+  /** Un risultato toccato (H4): la ricerca per testo che l'ha trovato entra fra le recenti, una volta sola. */
+  fun onResultOpened() {
+    val request = last as? Last.Query ?: return
+    val shown = results ?: return
+    scope.launch { record(request.text, shown.chips) }
   }
 
-  override fun onDeleteRecent(entry: HistoryEntry) {
-    scope.launch { guarded { history.delete(entry.id) } }
-  }
-
-  override fun onClearRecents() {
-    scope.launch { guarded { history.clear() } }
-  }
-
-  override fun onPlace(option: PlaceOption) = searchText(option.label)
-
-  override fun onType(type: SearchMediaType, label: String) = searchText(label)
-
-  private fun searchText(text: String) {
-    mutableQuery.value = text
-    recordNext = true
-    launch(Last.Query(text, null))
-  }
-
-  // --- Chip, ordine, meno probabili ----------------------------------------------------------------------------------------------------
-
-  override fun onRemoveChip(chip: SearchChip) {
-    val current = results ?: return
-    val remaining = current.chips - chip
-    // CE-2: tolto l'ultimo chip la ricerca continua con le parole libere della query; Cerca torna a riposo solo se non resta niente da cercare.
-    if (chip is SearchChip.Similar || (remaining.isEmpty() && !current.freeText)) {
-      mutableQuery.value = ""
-      onQueryChange("")
-      return
-    }
-    recordNext = false
-    launch(Last.Query(mutableQuery.value, remaining))
-  }
-
-  /** Fase 8 (§2.7): il nome scelto dalla riga "Persone" o dai completamenti, con il chip gia' fatto: un nome che e' anche un luogo non cambia lettura. */
-  override fun onPerson(option: PersonOption) {
-    mutableQuery.value = option.label
-    recordNext = true
-    launch(Last.Query(option.label, listOf(ChipReadings.ofOption(option))))
-  }
-
-  /** Fase 8 (E-F36): un'altra lettura della stessa parola prende il posto del chip; la ricerca riparte con i chip cosi'. */
-  override fun onSwitchReading(chip: SearchChip, to: SearchChip) {
-    val current = results ?: return
-    recordNext = false
-    launch(Last.Query(mutableQuery.value, current.chips.map { if (it == chip) to else it }))
-  }
-
-  override fun onChooseAlternative(chip: SearchChip.Place, option: PlaceOption) {
-    val current = results ?: return
-    val others = (listOf(chip.option) + chip.alternatives).filter { it != option }
-    val replaced = SearchChip.Place(option, others, chip.word, chip.person)
-    recordNext = false
-    launch(Last.Query(mutableQuery.value, current.chips.map { if (it == chip) replaced else it }))
-  }
-
-  override fun onPlaceAsWord(chip: SearchChip.Place) {
-    val current = results ?: return
-    recordNext = false
-    launch(Last.Query(mutableQuery.value, current.chips.map { if (it == chip) SearchChip.Word(chip.word, exact = false) else it }))
-  }
-
-  override fun onSetOrder(order: ResultOrder) {
-    if (order == orderStore.order.value) return
-    scope.launch { guarded { orderStore.setOrder(order) } }
-    val again = last ?: return
-    recordNext = false
-    launch(again, order)
-  }
-
-  override fun onShowLikely() {
-    val current = results ?: return
-    showLikely = true
-    publish(current)
-  }
-
-  /** "Trova simili" dal viewer (D30): i simili al media, con il chip "Simili a". */
+  /** "Trova simili" dal viewer (D30): i simili al media. */
   fun findSimilar(media: MediaId) = findSimilar(listOf(media))
 
   /**
-   * "Trova simili" dalla selezione della Libreria (D30, correzioni F, TS-4): i media vicini al centroide dei media scelti, con il chip "Simili a" che porta
-   * tutta la scelta. Con un media solo e' [findSimilar] di sempre.
+   * "Trova simili" (D30) dal viewer o dalla selezione della Libreria (correzioni F, TS-4): i media vicini al centroide dei media scelti. Il campo resta vuoto;
+   * la riga sopra la barra dice da che cosa vengono i risultati.
    */
   fun findSimilar(media: List<MediaId>) {
     if (media.isEmpty()) return
+    typingJob?.cancel()
     mutableQuery.value = ""
-    recordNext = false
+    scope.launch { refreshIdleSuggestions() }
     launch(Last.Similar(media))
-  }
-
-  // --- Messaggi ------------------------------------------------------------------------------------------------------------------------
-
-  override fun onDownloadModel() {
-    val manager = models ?: return
-    scope.launch { guarded { manager.ensure(ModelCatalog.QUERY_270M.id, ModelTrigger.USER_NOW, DOWNLOAD_BUDGET) } }
-  }
-
-  override fun onEnableIndexerHere() {
-    val control = indexer ?: return
-    scope.launch { guarded { control.setIndexer(true) } }
   }
 
   override fun onRetry() {
     val again = last
-    if (again != null) launch(again) else scope.launch { refreshIdle() }
+    if (again != null) launch(again) else showIdle()
   }
-
-  // Le navigazioni le fa SearchActions (SearchRoute).
-  override fun onOpen(view: OrderedTimelineView, media: MediaId) = Unit
-
-  override fun onWhyCoverage() = Unit
-
-  override fun onLearnTextReading() = Unit
-
-  override fun onAllowAccess() = Unit
-
-  override fun onDiagnostics() = Unit
 
   // --- Motore --------------------------------------------------------------------------------------------------------------------------
 
-  /** [quiet]: la ricerca di prima si rifa' senza passare da "Sto cercando…" (i risultati restano in vista finche' non arrivano quelli nuovi). */
-  private fun launch(request: Last, orderOverride: ResultOrder? = null, quiet: Boolean = false) {
-    searchJob?.cancel()
-    typingJob?.cancel()
-    liveJob?.cancel()
+  /**
+   * La ricerca [request], dopo [waitMillis] (il rimbalzo mentre si scrive; zero per un tocco). Finche' non risponde resta in vista cio' che c'era. [record]: la
+   * ricerca entra fra le recenti (D32) quando risponde.
+   */
+  private fun launch(request: Last, waitMillis: Long = 0, record: Boolean = false) {
+    cancelSearch()
     last = request
-    if (orderOverride == null && !quiet) showLikely = false
-    if (!quiet) mutableState.value = SearchScreenState.Searching((request as? Last.Query)?.edited.orEmpty())
     searchJob = scope.launch {
+      if (waitMillis > 0) delay(waitMillis)
       val found = try {
-        val order = orderOverride ?: orderStore.order.value
         when (request) {
-          is Last.Query -> engine.search(SearchRequest(request.text, request.edited, showLikely = false, order = order))
-          is Last.Similar -> if (request.media.size == 1) engine.similar(request.media.first(), order) else engine.similarToAll(request.media, order)
+          is Last.Query -> engine.search(SearchRequest(request.text, request.edited, showLikely = false, order = ResultOrder.RELEVANT))
+          is Last.Similar ->
+            if (request.media.size == 1) engine.similar(request.media.first(), ResultOrder.RELEVANT) else engine.similarToAll(request.media, ResultOrder.RELEVANT)
         }
       } catch (e: CancellationException) {
-        // Annullata davvero (una ricerca nuova, la schermata chiusa): si esce. Una cancellazione che arriva dal motore mentre noi siamo vivi non e'
-        // la nostra (CE-11, motore fermo o indice non aperto): sarebbe "Sto cercando…" per sempre.
+        // Annullata davvero (una ricerca nuova, la ricerca chiusa): si esce. Una cancellazione che arriva dal motore mentre noi siamo vivi non e'
+        // la nostra (CE-11, motore fermo o indice non aperto): sarebbe un'attesa per sempre.
         if (!isActive) throw e
-        mutableState.value = SearchScreenState.Unavailable(SearchUnavailableReason.INTERNAL_ERROR)
+        unavailable()
         return@launch
       } catch (e: Exception) {
-        mutableState.value = SearchScreenState.Unavailable(SearchUnavailableReason.INTERNAL_ERROR)
+        unavailable()
         return@launch
       }
       results = found
       publish(found)
-      if (recordNext && request is Last.Query) {
-        recordNext = false
-        guarded { history.record(request.text, found.chips) }
-      }
+      if (record && request is Last.Query) record(request.text, found.chips)
       follow(found)
     }
+  }
+
+  private fun unavailable() {
+    results = null
+    mutableState.value = SearchScreenState.Unavailable(SearchUnavailableReason.INTERNAL_ERROR)
   }
 
   /**
@@ -358,13 +271,11 @@ class SearchController(
   private fun refreshContent() {
     val again = last as? Last.Query ?: return
     val shown = results ?: return
-    val state = mutableState.value
-    if (state !is SearchScreenState.Results && state !is SearchScreenState.NoResults) return
     if (shown.notices.none { it == SearchNotice.PreparingContentSearch || it == SearchNotice.OnlyFiltersAndText }) return
-    recordNext = false
-    launch(again, quiet = true)
+    launch(again)
   }
 
+  /** E-Q13, CE-4: un media nascosto o eliminato altrove esce anche dai risultati in vista. */
   private fun follow(found: SearchResults) {
     val source = data ?: return
     liveJob?.cancel()
@@ -378,26 +289,19 @@ class SearchController(
   }
 
   private fun publish(found: SearchResults) {
-    val confident = found.confident.size
-    val likely = found.likely.size
     val notices = found.notices.filter { shownNotice(it) }
-    mutableState.value = when {
-      confident == 0 && likely == 0 -> SearchScreenState.NoResults(found.chips, 0, filtersOf(found.chips))
-      confident == 0 && !showLikely -> SearchScreenState.NoResults(found.chips, likely, filtersOf(found.chips))
-      else -> SearchScreenState.Results(
-        chips = found.chips,
-        order = found.order,
-        confident = found.confident,
-        likely = found.likely,
-        likelyCount = likely,
-        showLikely = showLikely,
-        coverage = found.coverage,
-        notices = notices,
-      )
+    val similar = (last as? Last.Similar)?.media?.size
+    val next = if (found.confident.size == 0 && found.likely.size == 0) {
+      SearchScreenState.NoResults((last as? Last.Query)?.text, found.chips, notices, similar)
+    } else {
+      SearchScreenState.Results(found.chips, found.confident, found.likely, found.coverage, notices, similar)
     }
+    // Gli stessi media nello stesso ordine (si e' aggiunta una lettera che non cambia niente): la griglia resta com'e'.
+    if (SearchStates.sameShown(mutableState.value, next)) return
+    mutableState.value = next
   }
 
-  /** "Le parole dentro le foto non si cercano": una volta sola nella schermata, poi solo nella pagina (D31, §2.6). */
+  /** "Le parole dentro le foto non si cercano": una volta sola per apertura dell'app, poi solo nella pagina (D31, §2.6). */
   private fun shownNotice(notice: SearchNotice): Boolean {
     if (notice != SearchNotice.TextReadingOff) return true
     if (textReadingOffShown) return false
@@ -405,43 +309,102 @@ class SearchController(
     return true
   }
 
-  private fun filtersOf(chips: List<SearchChip>): List<SearchChip> = chips.filter { it.isFilter }
+  private fun showIdle() {
+    val current = mutableState.value
+    if (current is SearchScreenState.Unavailable && current.reason == SearchUnavailableReason.EMPTY_LIBRARY) return
+    mutableState.value = SearchScreenState.Idle
+  }
 
-  private suspend fun refreshIdle() {
+  private fun cancelSearch() {
+    searchJob?.cancel()
+    liveJob?.cancel()
+  }
+
+  private fun cancelAll() {
+    cancelSearch()
+    typingJob?.cancel()
+  }
+
+  // --- Suggerimenti --------------------------------------------------------------------------------------------------------------------
+
+  private suspend fun completions(prefix: String): List<Suggestion> {
+    val fromEngine = try {
+      suggestions.complete(prefix).filter { it !is Suggestion.Term }
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      emptyList()
+    }
+    return SearchStates.top(fromEngine + CalendarCompletions.of(prefix))
+  }
+
+  private suspend fun refreshIdleSuggestions() {
     val idle = try {
       suggestions.idle()
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      emptyIdle()
+      IdleSuggestions(emptyList(), emptyList(), emptyList())
     }
-    val recents = idle.recents.take(MAX_RECENTS)
-    val snapshot = data?.snapshot?.value
-    mutableState.value = if (snapshot != null && snapshot.size == 0) {
-      SearchScreenState.Unavailable(SearchUnavailableReason.EMPTY_LIBRARY)
-    } else {
-      SearchScreenState.Idle(idle.copy(recents = recents), recents)
-    }
+    // Il campo si e' riempito mentre si leggevano: valgono i completamenti.
+    if (mutableQuery.value.isBlank()) mutableTop.value = SearchStates.idleTop(idle)
   }
 
-  private suspend fun guarded(block: suspend () -> Unit) {
+  private suspend fun record(text: String, chips: List<SearchChip>) {
+    if (recorded == text) return
+    recorded = text
     try {
-      block()
+      history.record(text, chips)
     } catch (e: CancellationException) {
       throw e
     } catch (e: Exception) {
-      // Un'azione di contorno (cronologia, ruolo, scaricamento) che non riesce non ferma la ricerca: i dettagli sono nella Diagnostica.
+      // La cronologia che non si scrive non ferma la ricerca: i dettagli sono nella Diagnostica.
     }
   }
 
-  private fun emptyIdle() = IdleSuggestions(emptyList(), emptyList(), emptyList())
-
   companion object {
     const val COMPLETION_DEBOUNCE_MILLIS: Long = 120
+
+    /** La pausa dopo l'ultimo tasto prima di cercare: abbastanza per non cercare a ogni lettera, poco per sembrare immediata. */
+    const val SEARCH_DEBOUNCE_MILLIS: Long = 250
     const val MIN_QUERY_CHARS: Int = 2
-    const val MAX_RECENTS: Int = 10
-    const val MAX_COMPLETIONS: Int = 12
-    private val DOWNLOAD_BUDGET = 30.minutes
+
+    /** Quanti suggerimenti stanno nella barra in alto (H4: «i primi tre suggerimenti»). */
+    const val STRIP_SIZE: Int = 3
+  }
+}
+
+/** Le regole pure della ricerca dentro la Libreria (H4): senza Compose ne' coroutine, provate su JVM. */
+internal object SearchStates {
+
+  /**
+   * I migliori a riposo (H4): le ricerche recenti, poi i luoghi piu' frequenti, poi i tipi, al piu' [SearchController.STRIP_SIZE] e senza doppioni.
+   * I tipi hanno le stesse parole che l'analizzatore riconosce (`LibrarySuggestions.TYPES`).
+   */
+  fun idleTop(idle: IdleSuggestions): List<Suggestion> {
+    val labels = LibrarySuggestions.TYPES.toMap()
+    val all = idle.recents.map { Suggestion.Recent(it) } +
+      idle.places.map { Suggestion.PlaceSuggestion(it) } +
+      idle.types.mapNotNull { type -> labels[type]?.let { Suggestion.Type(type, it) } }
+    return top(all)
+  }
+
+  /** I primi [SearchController.STRIP_SIZE], senza due con la stessa parola (maiuscole a parte). */
+  fun top(all: List<Suggestion>): List<Suggestion> = all.distinctBy { it.label.trim().lowercase() }.take(SearchController.STRIP_SIZE)
+
+  /** Lo stesso contenuto in vista: stessi media nello stesso ordine sulla stessa istantanea, stesse note. */
+  fun sameShown(a: SearchScreenState, b: SearchScreenState): Boolean = when {
+    a is SearchScreenState.Results && b is SearchScreenState.Results ->
+      a.chips == b.chips && a.coverage == b.coverage && a.notices == b.notices && a.similar == b.similar &&
+        sameMedia(a.confident, b.confident) && sameMedia(a.likely, b.likely)
+    else -> a == b
+  }
+
+  private fun sameMedia(a: OrderedTimelineView, b: OrderedTimelineView): Boolean {
+    if (a === b) return true
+    if (a.snapshot !== b.snapshot || a.size != b.size) return false
+    for (i in 0 until a.size) if (a.snapshotIndex(i) != b.snapshotIndex(i)) return false
+    return true
   }
 }
 

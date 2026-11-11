@@ -7,6 +7,7 @@ import dev.pampa.mycloudgallery.core.ai.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingSwitch
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
+import dev.pampa.mycloudgallery.core.library.contract.ViewerAnchor
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.models.contract.ModelCatalog
 import dev.pampa.mycloudgallery.core.models.contract.ModelFailCode
@@ -99,7 +100,7 @@ object SearchSamples {
 class RecordingSearchActions : SearchActions {
   val calls: MutableList<String> = mutableListOf()
 
-  override fun openResults(view: OrderedTimelineView, start: MediaId) {
+  override fun openResults(view: OrderedTimelineView, start: MediaId, anchor: ViewerAnchor) {
     calls += "results"
   }
 

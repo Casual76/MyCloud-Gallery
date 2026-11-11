@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.CoverRef
@@ -20,12 +21,13 @@ import dev.pampa.mycloudgallery.core.mediastore.testing.FakePhoneMediaIntents
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
+import dev.pampa.mycloudgallery.core.library.index.IndexOrderedTimelineView
 import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
-import dev.pampa.mycloudgallery.core.search.contract.IdleSuggestions
 import dev.pampa.mycloudgallery.core.search.contract.PlaceLevel
 import dev.pampa.mycloudgallery.core.search.contract.PlaceOption
+import dev.pampa.mycloudgallery.core.search.contract.SearchCoverage
 import dev.pampa.mycloudgallery.core.search.contract.SearchMediaType
-import dev.pampa.mycloudgallery.core.search.contract.SearchReadiness
+import dev.pampa.mycloudgallery.core.search.contract.Suggestion
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumRefs
 import dev.pampa.mycloudgallery.feature.albums.contract.AlbumThumbnails
 import dev.pampa.mycloudgallery.feature.albums.contract.SpecialAlbum
@@ -44,15 +46,18 @@ import dev.pampa.mycloudgallery.feature.library.collections.testing.FakeCollecti
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTabState
 import dev.pampa.mycloudgallery.feature.library.library.testing.M1SyntheticSizes
 import dev.pampa.mycloudgallery.feature.library.library.testing.syntheticLibraryState
+import dev.pampa.mycloudgallery.feature.search.FixedSearchSource
 import dev.pampa.mycloudgallery.feature.search.NoSearchHandlers
-import dev.pampa.mycloudgallery.feature.search.SearchScreen
+import dev.pampa.mycloudgallery.feature.search.SearchHandlers
+import dev.pampa.mycloudgallery.feature.search.SearchSource
 import dev.pampa.mycloudgallery.feature.search.contract.SearchRefs
 import dev.pampa.mycloudgallery.feature.search.contract.SearchScreenState
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
+import dev.pampa.mycloudgallery.feature.search.noop.NoSearchActions
 import dev.pampa.mycloudgallery.main.MainScaffold
-import dev.pampa.mycloudgallery.navigation.SearchTabFrame
+import dev.pampa.mycloudgallery.main.ScaffoldSearch
 import dev.pampa.mycloudgallery.status.GlobalStatus
-import java.time.LocalDate
+
 import java.util.Optional
 
 // LO SCAFFOLD DELLE PROVE (K3a, GF-4 e ORC-1). Uno solo, per gli screenshot e le prove di :app che mostrano la schermata principale: prima ogni prova
@@ -74,8 +79,8 @@ private const val NAS_MOMENT = 1_000L
 
 /**
  * Gli stati dati delle schede vere: la Libreria (la griglia sintetica), la scheda Album di G2b (Preferiti, Fotocamera e Video in testa, poi album
- * miei, smart e condivisi), le Raccolte (il controllore vero sui fornitori di prova, che toglie le sezioni passate alla scheda Album) e Cerca a riposo
- * (ricerche recenti, luoghi, tipi).
+ * miei, smart e condivisi), le Raccolte (il controllore vero sui fornitori di prova, che toglie le sezioni passate alla scheda Album) e la ricerca dentro
+ * la Libreria (H4: i suggerimenti, i risultati, "nessun risultato", "Trova simili").
  *
  * Va creato sul thread della prova, fuori dalla composizione: il ViewModel delle Raccolte parte li'.
  *
@@ -114,24 +119,53 @@ internal class ScaffoldScenes(
     CollectionsLayoutViewModel(world.source, FakePhoneMediaIntents(), providers, Optional.empty())
   }
 
-  /** Cerca aperta dal cerchio, a riposo: il campo, le ricerche recenti, i luoghi e i tipi. */
-  val search: SearchScreenState = run {
-    val recents = listOf(
-      HistoryEntry(1, "mare ad agosto", listOf("Agosto")),
-      HistoryEntry(2, "scontrino farmacia", listOf("scontrino")),
-      HistoryEntry(3, "compleanno di Anna", listOf("Foto")),
+  /** La ricerca aperta dal cerchio, a campo vuoto: dietro la Libreria, in alto i tre suggerimenti migliori (una ricerca recente, un luogo, un tipo). */
+  val searchIdle: SearchSource = FixedSearchSource(
+    suggestions = listOf(
+      Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))),
+      Suggestion.PlaceSuggestion(PlaceOption(setOf(1), "Roma", PlaceLevel.PLACE)),
+      Suggestion.Type(SearchMediaType.VIDEO, "Video"),
+    ),
+  )
+
+  /** Mentre si scrive «mare»: i tre completamenti migliori in alto, i risultati per pertinenza al posto della griglia, i meno probabili in coda. */
+  val searchTyping: SearchSource = FixedSearchSource(
+    query = "mare",
+    suggestions = listOf(
+      Suggestion.Recent(HistoryEntry(1, "mare ad agosto", listOf("Agosto"))),
+      Suggestion.PlaceSuggestion(PlaceOption(setOf(6), "Marettimo", PlaceLevel.PLACE)),
+      Suggestion.Term("Marzo"),
+    ),
+    state = results(confident = (0 until 34).toList(), likely = (120 until 128).toList()),
+  )
+
+  /** Nessun risultato per «zebre in montagna»: la griglia vuota e una riga sola sopra la barra; nessun completamento, la barra in alto si ritira. */
+  val searchNothing: SearchSource = FixedSearchSource(query = "zebre in montagna", state = SearchScreenState.NoResults("zebre in montagna", emptyList()))
+
+  /** "Trova simili" da una foto: il campo vuoto, i simili per pertinenza, la riga che dice da dove vengono. */
+  val searchSimilar: SearchSource = FixedSearchSource(
+    suggestions = (searchIdle as FixedSearchSource).suggestions,
+    state = results(confident = (40 until 61).toList(), likely = emptyList(), similar = 1),
+  )
+
+  /** I risultati come li da' il motore: posizioni dell'istantanea della Libreria, nell'ordine di pertinenza. */
+  fun results(confident: List<Int>, likely: List<Int>, similar: Int? = null): SearchScreenState.Results {
+    val snapshot = library.grid.view.snapshot
+    return SearchScreenState.Results(
+      chips = emptyList(),
+      confident = IndexOrderedTimelineView(snapshot, confident.filter { it < snapshot.size }.toIntArray()),
+      likely = IndexOrderedTimelineView(snapshot, likely.filter { it < snapshot.size }.toIntArray()),
+      coverage = SearchCoverage.Complete,
+      notices = emptyList(),
+      similar = similar,
     )
-    val places = listOf(
-      PlaceOption(setOf(1), "Roma", PlaceLevel.PLACE),
-      PlaceOption(setOf(3), "Sardegna", PlaceLevel.REGION),
-      PlaceOption(setOf(4), "Milano", PlaceLevel.PLACE),
-      PlaceOption(setOf(5), "Toscana", PlaceLevel.REGION),
-    )
-    val types = listOf(SearchMediaType.SCREENSHOT, SearchMediaType.VIDEO, SearchMediaType.DOCUMENT, SearchMediaType.PANORAMA)
-    SearchScreenState.Idle(IdleSuggestions(recents, places, types), recents)
   }
 
-  val searchThumbnails: SearchThumbnails = SearchThumbnails(library.grid.loader, library.grid.placeholders, SearchRefs { _, _ -> null })
+  /** Le miniature della ricerca: il caricatore della Libreria (la stessa cache), con le sorgenti della Libreria sintetica. */
+  val searchThumbnails: SearchThumbnails = SearchThumbnails(library.grid.loader, library.grid.placeholders, SearchRefs { snapshot, index -> library.grid.refAt(snapshot, index) })
+
+  /** La ricerca dello scaffold su [source]. */
+  fun search(source: SearchSource, handlers: SearchHandlers = NoSearchHandlers): ScaffoldSearch = ScaffoldSearch(source, handlers, searchThumbnails, NoSearchActions)
 
   private companion object {
     const val DEFAULT_ALBUMS = 10
@@ -170,6 +204,8 @@ internal fun GalleryScaffold(
   tab: GalleryTab,
   status: GlobalStatus = GlobalStatus.HOME_CONNECTED,
   searchOpen: Boolean = false,
+  /** H4: che cosa mostra la ricerca aperta (di serie: a campo vuoto, con i tre suggerimenti). */
+  search: SearchSource = scenes.searchIdle,
   onSelectTab: (GalleryTab) -> Unit = {},
   onOpenSearch: () -> Unit = {},
   onCloseSearch: () -> Unit = {},
@@ -205,24 +241,10 @@ internal fun GalleryScaffold(
           backdropOut = slot.backdropOut,
         )
       },
-      search = { slot ->
-        SearchTabFrame(slot) {
-          SearchScreen(
-            state = scenes.search,
-            query = "",
-            readiness = SearchReadiness.Ready,
-            queryModel = null,
-            today = TODAY,
-            thumbnails = scenes.searchThumbnails,
-            handlers = NoSearchHandlers,
-          )
-        }
-      },
+      search = remember(search) { scenes.search(search) },
       searchOpen = searchOpen,
       onOpenSearch = onOpenSearch,
       onCloseSearch = onCloseSearch,
     )
   }
 }
-
-private val TODAY: LocalDate = LocalDate.of(2026, 11, 10)

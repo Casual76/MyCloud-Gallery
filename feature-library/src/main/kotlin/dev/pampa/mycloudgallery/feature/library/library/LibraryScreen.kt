@@ -20,6 +20,8 @@ import androidx.compose.material.icons.rounded.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -34,6 +36,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.onSizeChanged
@@ -46,6 +49,7 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
+import dev.antigravity.fluidengine.ui.fluid.FluidMotion
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.GlassDefaults
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
@@ -54,6 +58,7 @@ import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.DropTarget
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDropTarget
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuEntry
+import dev.pampa.mycloudgallery.core.designsystem.chrome.rememberGallerySearchLift
 import dev.pampa.mycloudgallery.core.designsystem.design.ActionBarHeight
 import dev.pampa.mycloudgallery.core.designsystem.design.ContentRange
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeDefaults
@@ -119,6 +124,7 @@ internal fun LibraryScreen(
   tabBarScroll: NestedScrollConnection?,
   network: LibraryNetworkStatus?,
   cloudActions: LibraryCloudActions,
+  search: LibrarySearchLayer? = null,
 ) {
   val grid = state.grid
   val phone by state.phone.collectAsState()
@@ -161,49 +167,83 @@ internal fun LibraryScreen(
   val commands = state.commands
   val pullRefresh: (suspend () -> Unit)? = remember(commands) { if (commands.canRefresh) ({ commands.refresh() }) else null }
 
+  // H4: la ricerca dentro la Libreria. Le due dissolvenze (pezzi in alto <-> suggerimenti, griglia <-> risultati) si leggono solo nel disegno; la
+  // composizione cambia due volte per dissolvenza (quando un pezzo entra e quando l'altro esce), mai a ogni fotogramma.
+  val reduced = LocalFluidMotionPolicy.current.reducedMotion
+  val searching = search?.active == true
+  val searchTop = animateFloatAsState(
+    targetValue = if (searching && !grid.selecting) 1f else 0f,
+    animationSpec = if (reduced) snap() else FluidMotion.crossFade(),
+    label = "ricerca in alto",
+  )
+  val results = animateFloatAsState(
+    targetValue = if (searching && search?.showsResults == true) 1f else 0f,
+    animationSpec = if (reduced) snap() else FluidMotion.crossFade(),
+    label = "risultati",
+  )
+  val libraryTopShown by remember { derivedStateOf { searchTop.value < 1f } }
+  val searchTopShown by remember { derivedStateOf { searchTop.value > 0f } }
+  val resultsShown by remember { derivedStateOf { results.value > 0f } }
+  // La griglia della Libreria esce dalla composizione solo quando i risultati la coprono del tutto; tornando, e' dov'era (lo stato e' fuori).
+  val libraryCovered by remember { derivedStateOf { results.value >= 1f } }
+  val lift = rememberGallerySearchLift()
+  // Senza ricerca non c'e' nessuno strato in piu' (la griglia, i pezzi in alto e il velo sono quelli di sempre).
+  val searchLayers = searching || searchTopShown || resultsShown
+
   // I tag della chrome come id di risorsa: gli strumenti di misura sull'emulatore (uiautomator) la trovano per nome.
   // Fase 10 (P6, D21): la Libreria e' una destinazione per le foto trascinate da un'altra app ("Salva sul NAS": si apre il foglio della ricezione, niente parte senza un tocco).
   Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).semantics { testTagsAsResourceId = true; isTraversalGroup = true }.mediaDropTarget(DropTarget.Library)) {
     // Il fondale della pagina: la griglia e le sfumature di bordo. Tutto il vetro (chrome, pillola, scrubber) lo rifrange.
     Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop)) {
-      when {
-        showPermission -> LibraryPermissionState(
-          onAllow = { state.commands.requestMediaAccess() },
-          modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
-        )
-        empty && (phone.firstRead != null || phone.selectionPending) -> LibraryFirstReadState(
-          progress = phone.firstRead,
-          modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
-        )
-        empty && state.filter != LibraryFilter.ALL -> LibraryFilterEmptyState(
-          filter = state.filter,
-          onShowAll = { scope.launch { state.chooseFilter(LibraryFilter.ALL) } },
-          modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
-        )
-        empty -> LibraryEmptyState(modifier = Modifier.padding(top = topChrome, bottom = bottomPadding))
-        else -> MediaGrid(
-          state = grid,
-          modifier = if (tabBarScroll != null) Modifier.nestedScroll(tabBarScroll) else Modifier,
-          contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
-          onOpen = { id -> onOpenViewer(ViewerRequest(items = state.viewerItems, start = id, anchor = grid.viewerAnchor, secure = false)) },
-          footer = { LibraryFooter(state, phone) },
-          stickyTop = topChrome,
-          onLevelChanged = { level -> scope.launch { state.preferences.setLevel(level) } },
-          // D15: Canc apre il foglio di conferma (lo stesso della barra delle azioni), mai un'eliminazione diretta.
-          onDeleteKey = { requestPhoneDelete(state) { deleting = true } },
-          // Fase 10 (P6, D20): le foto della Libreria (o la selezione) si trascinano verso un'altra app.
-          dragOrigin = DragOrigin.LIBRARY,
-          // Fase 10 P8 (D23): Preferito, Condividi, Nascondi, Elimina come azioni della cella, per TalkBack e Switch Access.
-          cellActions = { id -> libraryCellActions(state, id, cellLabels, scope, onDelete = { requestPhoneDelete(state) { deleting = true } }, onHideGroups = { hidingGroups = true }) },
-          // Fase H (D10): tirando oltre il fondo (i piu' recenti) la Libreria si aggiorna; l'esito lo dice la nuvola in alto.
-          onPullRefresh = pullRefresh,
+      if (!libraryCovered) Box(if (searchLayers) Modifier.fillMaxSize().graphicsLayer { alpha = 1f - results.value } else Modifier.fillMaxSize()) {
+        when {
+          showPermission -> LibraryPermissionState(
+            onAllow = { state.commands.requestMediaAccess() },
+            modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
+          )
+          empty && (phone.firstRead != null || phone.selectionPending) -> LibraryFirstReadState(
+            progress = phone.firstRead,
+            modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
+          )
+          empty && state.filter != LibraryFilter.ALL -> LibraryFilterEmptyState(
+            filter = state.filter,
+            onShowAll = { scope.launch { state.chooseFilter(LibraryFilter.ALL) } },
+            modifier = Modifier.padding(top = topChrome, bottom = bottomPadding),
+          )
+          empty -> LibraryEmptyState(modifier = Modifier.padding(top = topChrome, bottom = bottomPadding))
+          else -> MediaGrid(
+            state = grid,
+            modifier = if (tabBarScroll != null) Modifier.nestedScroll(tabBarScroll) else Modifier,
+            contentPadding = PaddingValues(top = topPadding, bottom = bottomPadding),
+            onOpen = { id -> onOpenViewer(ViewerRequest(items = state.viewerItems, start = id, anchor = grid.viewerAnchor, secure = false)) },
+            footer = { LibraryFooter(state, phone) },
+            stickyTop = topChrome,
+            onLevelChanged = { level -> scope.launch { state.preferences.setLevel(level) } },
+            // D15: Canc apre il foglio di conferma (lo stesso della barra delle azioni), mai un'eliminazione diretta.
+            onDeleteKey = { requestPhoneDelete(state) { deleting = true } },
+            // Fase 10 (P6, D20): le foto della Libreria (o la selezione) si trascinano verso un'altra app.
+            dragOrigin = DragOrigin.LIBRARY,
+            // Fase 10 P8 (D23): Preferito, Condividi, Nascondi, Elimina come azioni della cella, per TalkBack e Switch Access.
+            cellActions = { id -> libraryCellActions(state, id, cellLabels, scope, onDelete = { requestPhoneDelete(state) { deleting = true } }, onHideGroups = { hidingGroups = true }) },
+            // Fase H (D10): tirando oltre il fondo (i piu' recenti) la Libreria si aggiorna; l'esito lo dice la nuvola in alto. Non con la ricerca aperta
+            // (H4): il fondo e' della barra di ricerca e della tastiera, e l'aggiornamento li' darebbe fastidio.
+            onPullRefresh = if (searching) null else pullRefresh,
+          )
+        }
+      }
+      // H4: i risultati al posto della griglia, nello stesso fondale (la barra di ricerca e i suggerimenti li rifrangono).
+      if (search != null && resultsShown) {
+        search.Results(
+          contentPadding = PaddingValues(top = topChrome, bottom = bottomPadding),
+          modifier = Modifier.fillMaxSize().graphicsLayer { alpha = results.value },
         )
       }
       GridTopEdgeScrim(topChrome, Modifier.align(Alignment.TopCenter))
-      BottomEdgeScrim(bottomPadding, slotBottom, pillVeil)
+      // Con la ricerca aperta il velo sotto la barra sale con lei e con la tastiera: il campo e' leggibile anche sopra i risultati.
+      BottomEdgeScrim(bottomPadding, slotBottom, pillVeil, lift = if (searching) ({ lift.px().toFloat() }) else null)
     }
 
-    if (!showPermission) {
+    if (!showPermission && (!searching || grid.selecting || state.notice != null || share is LibraryShare.Preparing)) {
       LibraryNotices(
         phone = phone,
         commands = state.commands,
@@ -221,24 +261,33 @@ internal fun LibraryScreen(
       )
     }
 
-    LibraryTopChrome(
-      state = state,
-      backdrop = backdrop,
-      topChrome = topChrome,
-      permission = showPermission,
-      empty = empty,
-      onOpenSettings = onOpenSettings,
-      network = network,
-      cloudActions = cloudActions,
-      // Fase 10 P8 (D23 (3)): la barra di vetro in alto si legge **prima** del contenuto, come si vede.
-      modifier = Modifier.align(Alignment.TopStart).semantics { traversalIndex = -2f },
-    )
+    if (libraryTopShown) {
+      LibraryTopChrome(
+        state = state,
+        backdrop = backdrop,
+        topChrome = topChrome,
+        permission = showPermission,
+        empty = empty,
+        onOpenSettings = onOpenSettings,
+        network = network,
+        cloudActions = cloudActions,
+        searching = searching,
+        // Fase 10 P8 (D23 (3)): la barra di vetro in alto si legge **prima** del contenuto, come si vede.
+        modifier = Modifier.align(Alignment.TopStart)
+          .then(if (searchLayers) Modifier.graphicsLayer { alpha = 1f - searchTop.value } else Modifier)
+          .semantics { traversalIndex = -2f },
+      )
+    }
+    // H4: con la ricerca aperta, al posto dei pezzi in alto la barra dei suggerimenti (un cambio di contenuto in dissolvenza, nessuna misura animata).
+    if (search != null && searchTopShown) {
+      search.Top(backdrop = backdrop, modifier = Modifier.align(Alignment.TopStart).graphicsLayer { alpha = searchTop.value }.semantics { traversalIndex = -2f })
+    }
 
     // Lo stato del NAS e del backup che cambia da solo si annuncia una volta (era nel piede; B2: ora accanto alla nuvola).
     LibraryCloudAnnouncer(state)
 
     // Lo scrubber fra la chrome in alto e il posto della pillola: la maniglia non arriva mai sotto un altro controllo.
-    if (!showPermission && !empty) {
+    if (!showPermission && !empty && !resultsShown) {
       GridScrubber(
         grid = grid,
         backdrop = backdrop,
@@ -293,6 +342,7 @@ private fun LibraryTopChrome(
   onOpenSettings: () -> Unit,
   network: LibraryNetworkStatus?,
   cloudActions: LibraryCloudActions,
+  searching: Boolean,
   modifier: Modifier = Modifier,
 ) {
   val grid = state.grid
@@ -316,7 +366,8 @@ private fun LibraryTopChrome(
     topChrome = topChrome,
     modifier = modifier,
     showCommands = !permission || cloud != null,
-    titleAction = rememberDateJump(state, topChrome).takeIf { !permission && !empty && !grid.selecting },
+    // H4: con la ricerca aperta il calendario non si apre (anche mentre questi pezzi escono in dissolvenza o tornano per una selezione).
+    titleAction = rememberDateJump(state, topChrome).takeIf { !permission && !empty && !grid.selecting && !searching },
   ) {
     LibraryCommandsContent(
       state = state,
@@ -538,13 +589,15 @@ private fun levelLabels(): List<String> = listOf(
  * ([rememberPillVeil]), sotto sale fino al bordo dello schermo.
  */
 @Composable
-private fun BoxScope.BottomEdgeScrim(bottomPadding: Dp, slotBottom: Dp, pillVeil: Float) {
+private fun BoxScope.BottomEdgeScrim(bottomPadding: Dp, slotBottom: Dp, pillVeil: Float, lift: (() -> Float)? = null) {
   val height = bottomPadding + BottomFade
   val pillTop = height - slotBottom - ActionBarHeight
   GalleryEdgeScrim(
     color = MaterialTheme.colorScheme.background,
     stops = listOf(0.dp to 0f, pillTop to pillVeil, height to maxOf(pillVeil, BottomVeilAtEdge)),
-    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(height),
+    // H4: la salita con la tastiera e' una traslazione letta nel disegno (niente misure che cambiano a ogni fotogramma).
+    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(height)
+      .then(if (lift != null) Modifier.graphicsLayer { translationY = -lift() } else Modifier),
   )
 }
 

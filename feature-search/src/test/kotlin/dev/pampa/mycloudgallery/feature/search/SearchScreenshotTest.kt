@@ -13,8 +13,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Gli screenshot di Cerca, della pagina Ricerca e modelli e della pagina di attivazione (Fase 6, P8, docs/screenshots/6-P8): ogni scena in chiaro e scuro, telefono e
- * tablet, piu' il testo a 1,3x sul telefono in chiaro. `gradlew :feature-search:recordRoborazziDebug --tests "*SearchScreenshot*"` scrive i PNG; nei normali
+ * Gli screenshot della pagina Ricerca e modelli e della pagina di attivazione (Fase 6, P8, docs/screenshots/6-P8): ogni scena in chiaro e scuro, telefono e
+ * tablet, piu' il testo a 1,3x sul telefono in chiaro. Quelli della ricerca (H4: dentro la Libreria) sono nello scaffold di :app. `gradlew :feature-search:recordRoborazziDebug --tests "*SearchScreenshot*"` scrive i PNG; nei normali
  * `testDebugUnitTest` verificano solo che le scene compongano e non scrivono niente.
  */
 internal abstract class SearchScreenshotBase(
@@ -44,28 +44,6 @@ internal abstract class SearchScreenshotBase(
         if (!wide) add(arrayOf<Any?>(scene, false, 1.3f))
       }
     }
-  }
-}
-
-@RunWith(ParameterizedRobolectricTestRunner::class)
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "it-w360dp-h780dp-xhdpi")
-internal class SearchPhoneScreenshotTest(scene: Scene, dark: Boolean, scale: Float?) : SearchScreenshotBase(scene, dark, scale, "telefono") {
-  companion object {
-    @JvmStatic
-    @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1} testo={2}")
-    fun data(): List<Array<Any?>> = parameters(wide = false, tall = false)
-  }
-}
-
-@RunWith(ParameterizedRobolectricTestRunner::class)
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(application = Application::class, qualifiers = "it-w1280dp-h800dp-xhdpi")
-internal class SearchTabletScreenshotTest(scene: Scene, dark: Boolean, scale: Float?) : SearchScreenshotBase(scene, dark, scale, "tablet") {
-  companion object {
-    @JvmStatic
-    @ParameterizedRobolectricTestRunner.Parameters(name = "{0} scuro={1} testo={2}")
-    fun data(): List<Array<Any?>> = parameters(wide = true, tall = false)
   }
 }
 

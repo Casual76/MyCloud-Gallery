@@ -1,12 +1,7 @@
 package dev.pampa.mycloudgallery.navigation
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Modifier
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,14 +9,9 @@ import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import dev.antigravity.fluidengine.ui.navigation.composable
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
-import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.pampa.mycloudgallery.ai.AiStack
-import dev.pampa.mycloudgallery.core.imaging.contract.ThumbBucket
-import dev.pampa.mycloudgallery.core.imaging.contract.ThumbKey
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
-import dev.pampa.mycloudgallery.core.library.contract.PixelRect
 import dev.pampa.mycloudgallery.core.library.contract.TimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerAnchor
 import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
@@ -31,7 +21,6 @@ import dev.pampa.mycloudgallery.core.library.index.ColumnarTimelineSnapshot
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.feature.diagnostics.DiagnosticsGraphRoute
-import dev.pampa.mycloudgallery.feature.search.SearchRoute
 import dev.pampa.mycloudgallery.feature.search.contract.SearchActions
 import dev.pampa.mycloudgallery.feature.search.contract.SearchRefs
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
@@ -39,15 +28,15 @@ import dev.pampa.mycloudgallery.feature.search.models.SearchSettingsRoute
 import dev.pampa.mycloudgallery.feature.search.models.TextReadingActivationRoute
 import dev.pampa.mycloudgallery.feature.settings.SettingsGraphRoute
 import dev.pampa.mycloudgallery.gallery.GalleryGraph
-import dev.pampa.mycloudgallery.main.CollectionsSlot
 import dev.pampa.mycloudgallery.main.ViewerHostState
 import dev.pampa.mycloudgallery.search.liveResultsView
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 
-// La NAVIGAZIONE della ricerca (Fase 6, P11; docs/fase6-progetto.md §1.4): la scheda Cerca al posto del segnaposto, la pagina Ricerca e modelli
-// (dalle Impostazioni e da Cerca) e la pagina di attivazione della lettura del testo. I feature non si conoscono: ogni passaggio e' scritto qui.
+// La NAVIGAZIONE della ricerca (Fase 6, P11; docs/fase6-progetto.md §1.4): la pagina Ricerca e modelli (dalle Impostazioni e dalla riga sopra la barra
+// di ricerca) e la pagina di attivazione della lettura del testo. La ricerca stessa non e' una pagina (H4: sta dentro la Libreria, `MainScaffold`).
+// I feature non si conoscono: ogni passaggio e' scritto qui.
 
 /** Impostazioni → Ricerca e modelli (feature-search). */
 @Serializable
@@ -62,7 +51,7 @@ fun NavGraphBuilder.searchGraph(nav: NavController, actions: SearchActions) {
   composable<TextReadingActivationPageRoute> { TextReadingActivationRoute(onClose = { nav.popBackStack() }) }
 }
 
-/** Cio' che la scheda Cerca riceve dalla galleria: miniature solo locali, elementi per il viewer, richieste di "Trova simili". */
+/** Cio' che la ricerca riceve dalla galleria: miniature solo locali, elementi per il viewer, richieste di "Trova simili". */
 @HiltViewModel
 class SearchHostViewModel @Inject constructor(private val gallery: GalleryGraph, private val stack: AiStack) : ViewModel() {
 
@@ -99,23 +88,15 @@ class SearchHostViewModel @Inject constructor(private val gallery: GalleryGraph,
   }
 }
 
-/** Il viewer aperto da Cerca non ha una griglia della Libreria sotto: niente bordi da cui partire, la bitmap si ricarica. */
-private object SearchViewerAnchor : ViewerAnchor {
-  override fun boundsOf(id: MediaId): PixelRect? = null
-
-  override suspend fun reveal(id: MediaId) = Unit
-
-  override fun thumbKey(id: MediaId): ThumbKey = ThumbKey(id, 0L, ThumbBucket.M)
-}
-
-/** Le azioni di Cerca fuori da Cerca: viewer sui risultati, Ricerca e modelli, attivazione della lettura, Diagnostica, Impostazioni. */
+/** Le azioni della ricerca fuori dalla ricerca: viewer sui risultati, Ricerca e modelli, attivazione della lettura, Diagnostica, Impostazioni. */
 class AppSearchActions(
   private val nav: NavController,
   private val viewer: ViewerHostState?,
   private val host: SearchHostViewModel,
 ) : SearchActions {
-  override fun openResults(view: OrderedTimelineView, start: MediaId) {
-    viewer?.open(ViewerRequest(host.itemsOf(view), start, SearchViewerAnchor, secure = false), host.services)
+  /** H4: il viewer sui risultati parte dalla cella toccata e ci torna, come dalla Libreria ([anchor] e' la griglia dei risultati). */
+  override fun openResults(view: OrderedTimelineView, start: MediaId, anchor: ViewerAnchor) {
+    viewer?.open(ViewerRequest(host.itemsOf(view), start, anchor, secure = false), host.services)
   }
 
   override fun openSearchSettings() = nav.navigate(SearchSettingsPageRoute)
@@ -129,46 +110,7 @@ class AppSearchActions(
   override fun openFreeSpace() = host.openFreeSpace()
 }
 
-/**
- * Cerca nello scaffold (al posto del segnaposto), aperta dal cerchio accanto alla pillola (G2): consegna alla pillola il suo fondale, come le
- * schede. [focusField]: aperta dal cerchio il campo e' pronto a scrivere; da "Trova simili" no (la tastiera coprirebbe i risultati).
- */
-@Composable
-fun SearchTab(
-  slot: CollectionsSlot,
-  actions: SearchActions,
-  host: SearchHostViewModel,
-  findSimilar: List<MediaId>?,
-  onFindSimilarHandled: () -> Unit,
-  focusField: Boolean = false,
-  onFieldFocused: () -> Unit = {},
-) {
-  SearchTabFrame(slot) {
-    SearchRoute(
-      actions = actions,
-      thumbnails = host.thumbnails,
-      findSimilar = findSimilar,
-      onFindSimilarHandled = onFindSimilarHandled,
-      focusField = focusField,
-      onFieldFocused = onFieldFocused,
-    )
-  }
-}
-
-/**
- * La cornice di Cerca nello scaffold: il fondale che la pillola rifrange e lo spazio della pillola in fondo. A parte perche' gli screenshot e
- * le prove dello scaffold (K3a) mostrano la schermata di Cerca su uno stato dato dentro la stessa cornice.
- */
-@Composable
-fun SearchTabFrame(slot: CollectionsSlot, content: @Composable () -> Unit) {
-  val backdrop = rememberGlassBackdrop()
-  SideEffect { slot.backdropOut(backdrop) }
-  Box(modifier = Modifier.fillMaxSize().glassBackdropSource(backdrop).padding(slot.contentPadding)) {
-    content()
-  }
-}
-
-/** Le azioni di Cerca per la navigazione di adesso. */
+/** Le azioni della ricerca per la navigazione di adesso. */
 @Composable
 fun rememberSearchActions(nav: NavController, viewer: ViewerHostState?, host: SearchHostViewModel = hiltViewModel()): SearchActions =
   remember(nav, viewer, host) { AppSearchActions(nav, viewer, host) }

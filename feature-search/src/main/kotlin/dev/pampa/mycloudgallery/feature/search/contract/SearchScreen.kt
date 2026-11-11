@@ -4,22 +4,20 @@ import dev.pampa.mycloudgallery.core.ai.contract.AiStatus
 import dev.pampa.mycloudgallery.core.ai.contract.ProbeResult
 import dev.pampa.mycloudgallery.core.ai.contract.TextReadingState
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
+import dev.pampa.mycloudgallery.core.library.contract.ViewerAnchor
+import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.models.contract.ModelId
 import dev.pampa.mycloudgallery.core.models.contract.ModelSourceKind
 import dev.pampa.mycloudgallery.core.models.contract.ModelState
-import dev.pampa.mycloudgallery.core.search.contract.HistoryEntry
-import dev.pampa.mycloudgallery.core.search.contract.IdleSuggestions
-import dev.pampa.mycloudgallery.core.search.contract.ResultOrder
 import dev.pampa.mycloudgallery.core.search.contract.SearchChip
 import dev.pampa.mycloudgallery.core.search.contract.SearchCoverage
 import dev.pampa.mycloudgallery.core.search.contract.SearchNotice
-import dev.pampa.mycloudgallery.core.search.contract.Suggestion
 
-// Gli STATI della schermata Cerca e della pagina Ricerca e modelli (docs/fase6-progetto.md §1.5, §2.6, D36). Contratto di P0: la
-// Fase 6 decide COSA si mostra e QUANDO, il filone grafico decide COME. P8 scrive ViewModel e composable con i soli componenti G2
-// esistenti; il filone grafico rifinisce senza toccare questi tipi. Solo dati gia' pronti da mostrare: niente rete, niente NAS (D28).
+// Gli STATI della ricerca (Fase 6, docs/fase6-progetto.md §1.5, §2.6; H4 della fase H, 11/11: la ricerca dentro la Libreria) e della pagina Ricerca e
+// modelli. Dalla fase H la ricerca non ha piu' una pagina: il campo e' la barra in basso, i tre suggerimenti stanno in alto e i risultati prendono il posto della
+// griglia della Libreria. Qui c'e' COSA si mostra; COME lo decidono la barra (core-designsystem) e la Libreria. Solo dati gia' pronti: niente rete, niente NAS (D28).
 
-/** Perche' Cerca non puo' mostrare niente (§2.6, "Stati vuoti e d'errore"). Ogni caso ha un'azione. */
+/** Perche' la ricerca non puo' mostrare niente (§2.6, "Stati vuoti e d'errore"). Ogni caso ha un'azione (la riga sopra la barra). */
 enum class SearchUnavailableReason {
   /** Libreria vuota o permessi negati: "Non ci sono ancora foto da cercare." -> Consenti accesso. */
   EMPTY_LIBRARY,
@@ -28,36 +26,30 @@ enum class SearchUnavailableReason {
   INTERNAL_ERROR,
 }
 
-/** La schermata Cerca (§1.5). */
+/**
+ * Che cosa c'e' dietro la barra di ricerca (H4). I suggerimenti in alto sono a parte (`SearchController.suggestions`): cambiano a ogni pausa mentre si
+ * scrive, i risultati solo quando il motore risponde.
+ */
 sealed interface SearchScreenState {
-  /**
-   * A riposo: ricerche recenti (fino a 10), luoghi frequenti (fino a 8, mai da nascosti), tipi. [known] falso = i suggerimenti non sono ancora
-   * stati letti (il primo ingresso): la pagina disegna lo scheletro con la forma dell'ultima volta (Avvio istantaneo), mai una rotella.
-   */
-  data class Idle(val suggestions: IdleSuggestions, val recents: List<HistoryEntry>, val known: Boolean = true) : SearchScreenState
-
-  /** Mentre si scrive: completamenti di luoghi, mesi, feste, tipi e ricerche recenti, **mai** parole del testo letto (D29). */
-  data class Typing(val text: String, val completions: List<Suggestion>) : SearchScreenState
-
-  data class Searching(val chips: List<SearchChip>) : SearchScreenState
+  /** Niente da cercare (il campo e' vuoto, o una lettera sola: E-Q1): dietro la barra resta la Libreria. */
+  data object Idle : SearchScreenState
 
   /**
-   * I risultati: barra dei chip, selettore "Recenti · Pertinenti" ([order], ricordato), sicuri, "Mostra anche risultati meno
-   * probabili ([likelyCount])", avviso di copertura sotto il 98%.
+   * I risultati, **solo per pertinenza** (scelta dell'utente dell'11/11): i sicuri e, in coda dopo un separatore leggero, i meno probabili (D27). [similar]:
+   * quanti media fanno da esempio per "Trova simili" (null = una ricerca per testo). [chips] sono i filtri riconosciuti nel testo («agosto 2024», «Roma»,
+   * «video»): valgono senza un'interfaccia a parte e finiscono nella cronologia.
    */
   data class Results(
     val chips: List<SearchChip>,
-    val order: ResultOrder,
     val confident: OrderedTimelineView,
     val likely: OrderedTimelineView,
-    val likelyCount: Int,
-    val showLikely: Boolean,
     val coverage: SearchCoverage,
     val notices: List<SearchNotice>,
+    val similar: Int? = null,
   ) : SearchScreenState
 
-  /** Nessun risultato sicuro (E-Q3, E-Q12): [likelyCount] > 0 propone "Mostra anche…"; [alternatives] sono chip da togliere. */
-  data class NoResults(val chips: List<SearchChip>, val likelyCount: Int, val alternatives: List<SearchChip>) : SearchScreenState
+  /** Nessun risultato (E-Q3) per [text] (null per "Trova simili"): una riga sola sopra la barra, mai una pagina. */
+  data class NoResults(val text: String?, val chips: List<SearchChip>, val notices: List<SearchNotice> = emptyList(), val similar: Int? = null) : SearchScreenState
 
   data class Unavailable(val reason: SearchUnavailableReason) : SearchScreenState
 }
@@ -113,15 +105,16 @@ data class SearchSettingsState(
   val offerRemoveIndexModel: Boolean = false,
 )
 
-/** La cronologia a riposo (§1.5, D32). */
-data class HistoryState(val entries: List<HistoryEntry>)
-
 /**
- * Le azioni che la schermata chiede fuori da se' (le esegue :app, come per il backup): aprire il viewer sui risultati, la pagina di
+ * Le azioni che la ricerca chiede fuori da se' (le esegue :app, come per il backup): aprire il viewer sui risultati, la pagina di
  * attivazione, Impostazioni, la Diagnostica, chiedere l'accesso ai media. I `feature-*` non si conoscono fra loro.
  */
 interface SearchActions {
-  fun openResults(view: OrderedTimelineView, start: dev.pampa.mycloudgallery.core.model.MediaId)
+  /**
+   * Il viewer sui risultati [view], nell'ordine mostrato, da [start]. [anchor] e' la griglia dei risultati (H4): il viewer si apre dalla cella toccata e,
+   * chiudendosi, torna sulla cella del media che si stava guardando, come dalla Libreria.
+   */
+  fun openResults(view: OrderedTimelineView, start: MediaId, anchor: ViewerAnchor)
 
   fun openSearchSettings()
 

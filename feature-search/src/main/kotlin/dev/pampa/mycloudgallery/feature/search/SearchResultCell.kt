@@ -9,12 +9,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.foundation.gestures.detectTapGestures
-import dev.pampa.mycloudgallery.core.designsystem.adaptive.DragSubject
-import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDragSource
-import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCell
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellActions
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridCellBadges
@@ -31,26 +25,27 @@ import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.core.model.MediaRef
 import dev.pampa.mycloudgallery.core.model.PresenceBadge
-import dev.pampa.mycloudgallery.core.search.contract.ChipMatching
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
-import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-// La CELLA dei risultati (Fase 6, P8, D28): la stessa della Libreria (`GalleryGridCell` del design system), con le sole miniature LOCALI. Il NAS non
-// si legge mai in Cerca ([SearchThumbnails.refs] scarta ogni `MediaRef.Nas`): un media senza sorgente locale mostra il segnaposto sfocato.
+// La CELLA dei risultati (Fase 6, P8, D28; H4): la stessa della Libreria (`GalleryGridCell` del design system), con le sole miniature LOCALI. Il NAS non
+// si legge mai nella ricerca ([SearchThumbnails.refs] scarta ogni `MediaRef.Nas`): un media senza sorgente locale mostra il segnaposto sfocato.
 
 /** La versione della miniatura quando l'istantanea non la dice (la stessa chiave della Libreria, cosi' la cache e' una sola). */
-private const val DEFAULT_VERSION_KEY: Long = 1L
+internal const val DEFAULT_VERSION_KEY: Long = 1L
 
 private val NoImage: State<ImageBitmap?> = mutableStateOf(null)
 
-private val DayFormat: DateTimeFormatter = DateTimeFormatter.ofPattern("d MMMM yyyy", Locale.ITALIAN)
+/** La chiave della miniatura della cella [index]: la stessa della Libreria, cosi' la cache e' una sola (e il viewer parte dalla stessa bitmap). */
+internal fun thumbKeyOf(snapshot: TimelineSnapshot, index: Int): ThumbKey {
+  val version = if (snapshot is ColumnarTimelineSnapshot) snapshot.versionKeyAt(index) else DEFAULT_VERSION_KEY
+  return ThumbKey(snapshot.idAt(index), version, ThumbBucket.M)
+}
 
 /** La richiesta di miniatura di una cella, o null se il media non ha una sorgente locale (D28). */
 internal fun thumbRequestOf(thumbnails: SearchThumbnails, snapshot: TimelineSnapshot, index: Int): ThumbRequest? {
   val ref = thumbnails.refs.refAt(snapshot, index) ?: return null
-  val version = if (snapshot is ColumnarTimelineSnapshot) snapshot.versionKeyAt(index) else DEFAULT_VERSION_KEY
-  return ThumbRequest(ThumbKey(snapshot.idAt(index), version, ThumbBucket.M), ref)
+  return ThumbRequest(thumbKeyOf(snapshot, index), ref)
 }
 
 /**
@@ -98,7 +93,10 @@ internal fun cellDescription(resources: Resources, snapshot: TimelineSnapshot, i
   return MediaDescribers.describeCell(MediaDescribers.shared(), snapshot, index, ZoneId.systemDefault()) ?: resources.getString(R.string.search_cell_undated)
 }
 
-/** Una cella dei risultati. Il tocco apre il viewer sui risultati, nell'ordine mostrato. */
+/**
+ * Una cella dei risultati: la stessa della Libreria (`GalleryGridCell`), con la stessa cache delle miniature. I tocchi li gestisce la griglia
+ * ([SearchResultsGrid]); qui ci sono solo il disegno e, per TalkBack, le due azioni (aprire, o in selezione scegliere; scegliere).
+ */
 @Composable
 internal fun SearchResultCell(
   view: OrderedTimelineView,
@@ -106,7 +104,7 @@ internal fun SearchResultCell(
   thumbnails: SearchThumbnails,
   style: GalleryGridCellStyle,
   interaction: GalleryGridInteractionState,
-  onOpen: () -> Unit,
+  actions: GalleryGridCellActions,
   modifier: Modifier = Modifier,
 ) {
   val snapshot = view.snapshot
@@ -114,8 +112,6 @@ internal fun SearchResultCell(
   val request = remember(snapshot, index) { thumbRequestOf(thumbnails, snapshot, index) }
   val image = if (request != null) thumbnails.loader.image(request.key, request.ref) else NoImage
   val placeholder = remember(snapshot, index) { snapshot.thumbHashAt(index)?.let { thumbnails.placeholders.image(it) } }
-  val resources = LocalContext.current.resources
-  val actions = remember(snapshot, index, onOpen) { CellActions(cellDescription(resources, snapshot, index), resources.getString(R.string.search_cell_open), onOpen) }
   GalleryGridCell(
     key = snapshot.idAt(index),
     image = image,
@@ -123,26 +119,28 @@ internal fun SearchResultCell(
     style = style,
     interaction = interaction,
     actions = actions,
-    modifier = modifier
-      .pointerInput(snapshot, index) { detectTapGestures(onTap = { onOpen() }) }
-      // Fase 10 (P6, D20): la foto del risultato verso un'altra app (pressione lunga col tocco, trascinamento col mouse). Il tocco lungo non ha altro da fare qui.
-      .mediaDragSource(enabled = true, origin = DragOrigin.SEARCH.code) { DragSubject(listOf(snapshot.idAt(index).value), request?.let { thumbnails.loader.peek(it.key) }) },
+    modifier = modifier,
     placeholder = placeholder,
   )
 }
 
-private class CellActions(
-  private val description: String,
+/**
+ * Le azioni di una cella dei risultati per TalkBack e Switch Access (Fase 10 P8, D23): la frase della cella (tipo, data, stato; mai il nome del file), il
+ * tocco e la pressione lunga, che fanno quello che fanno col dito.
+ */
+internal class ResultCellActions(
+  private val resources: Resources,
+  private val describeAt: (Any) -> String?,
   override val clickLabel: String,
-  private val onOpen: () -> Unit,
+  override val longClickLabel: String,
+  private val onClick: (Any) -> Unit,
+  private val onLongClick: (Any) -> Unit,
 ) : GalleryGridCellActions {
-  override val longClickLabel: String? = null
+  override fun describe(key: Any): String = describeAt(key) ?: resources.getString(R.string.search_cell_undated)
 
-  override fun describe(key: Any): String = description
+  override fun click(key: Any) = onClick(key)
 
-  override fun click(key: Any) = onOpen()
-
-  override fun longClick(key: Any) = Unit
+  override fun longClick(key: Any) = onLongClick(key)
 }
 
 private const val MILLIS = 1_000L

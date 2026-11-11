@@ -47,7 +47,8 @@ internal object AlbumText {
     val counts = planCounts(context, plan)
     return when (plan.kind) {
       SharePlanKind.SHARE ->
-        if (plan.bytes == 0L) resources.getString(R.string.share_message_share_reference, counts, plan.folderLabel) else resources.getString(R.string.share_message_share, counts, plan.folderLabel)
+        // I4: la cartella la dice la riga «Cartella» sotto; la frase dice solo dove vanno e chi li vedra'.
+        if (plan.bytes == 0L) resources.getString(R.string.share_message_share_reference, counts) else resources.getString(R.string.share_message_share, counts)
       SharePlanKind.BRING_BACK -> resources.getString(R.string.share_message_bring_back, counts)
       SharePlanKind.ADOPT -> resources.getString(R.string.share_message_adopt, counts)
     }

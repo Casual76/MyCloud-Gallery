@@ -45,7 +45,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.isSpecified
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
@@ -71,7 +70,6 @@ import dev.pampa.mycloudgallery.core.designsystem.instant.rememberInstantShape
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
 import dev.pampa.mycloudgallery.core.imaging.contract.ThumbRequest
-import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.model.AlbumId
 import dev.pampa.mycloudgallery.core.model.AlbumKind
 import dev.pampa.mycloudgallery.feature.albums.R
@@ -285,13 +283,13 @@ private fun LazyListScope.tileRows(tiles: List<TabTile>, columns: Int, thumbnail
   }
 }
 
-/** Una voce: la copertina quadrata con i suoi segni, sotto il nome e il numero. Un bottone solo per TalkBack, che dice tutto in una frase. */
+/** Una voce: la copertina quadrata con i suoi segni, sotto il nome. Un bottone solo per TalkBack, che dice tutto in una frase. */
 @Composable
 private fun AlbumsTabTile(entry: AlbumsTabEntry, thumbnails: AlbumThumbnails, nameFit: TileNameFit, onClick: () -> Unit, modifier: Modifier) {
   val resources = LocalContext.current.resources
   val title = entryTitle(entry)
   val emptyFavorites = entry is AlbumsTabEntry.Special && entry.kind == SpecialAlbum.FAVORITES && entry.count == 0
-  val caption = if (emptyFavorites) stringResource(R.string.albums_tab_favorites_empty) else GalleryNumbers.format(entry.count)
+  val caption = stringResource(R.string.albums_tab_favorites_empty)
   val marks = marksOf(entry)
   val smartSpoken = stringResource(R.string.albums_tab_smart_spoken)
   val sharedSpoken = stringResource(R.string.albums_tab_shared_spoken)
@@ -319,15 +317,9 @@ private fun AlbumsTabTile(entry: AlbumsTabEntry, thumbnails: AlbumThumbnails, na
     }
     Spacer(Modifier.height(AlbumDimens.TabCoverGap))
     // GF-20: il nome su due righe al massimo, con le due righe sempre riservate (le copertine e i conteggi restano allineati).
+    // I4 (fase I, «l'app parla troppo»): sotto la copertina solo il nome. Il numero degli elementi non si scrive piu' (la copertina dice gia'
+    // che cosa c'e'); TalkBack lo dice ancora, nella frase della voce.
     TileName(title = title, fit = nameFit)
-    Spacer(Modifier.height(AlbumDimens.TabCaptionGap))
-    Text(
-      text = caption,
-      style = MaterialTheme.typography.bodySmall,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      maxLines = 2,
-      overflow = TextOverflow.Ellipsis,
-    )
   }
 }
 

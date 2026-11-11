@@ -5,7 +5,7 @@
   <!-- Le due parti -->
   <string name="trash_phone_section">Dal telefono</string>
   <string name="trash_nas_section">Dal NAS</string>
-  <string name="trash_nas_section_detail">Restano 30 giorni nel cestino del NAS: li ripristini da qui, con quelli degli altri tuoi dispositivi.</string>
+  <string name="trash_nas_section_detail">Restano qui 30 giorni, anche quelli degli altri tuoi dispositivi.</string>
   <string name="trash_nas_empty">Niente di eliminato dal NAS.</string>
   <string name="trash_nas_loading">Leggo il cestino del NAS</string>
 
@@ -15,9 +15,9 @@
   <string name="trash_nas_denied_title">Il cestino del NAS non è accessibile</string>
   <string name="trash_nas_denied_detail">Con questo account non puoi leggerlo.</string>
   <string name="trash_nas_offline_title">Il NAS non risponde</string>
-  <string name="trash_nas_offline_detail">Vedi solo quello che hai eliminato da questo dispositivo, senza le voci degli altri. Ripristinare ed eliminare subito servono il NAS.</string>
+  <string name="trash_nas_offline_detail">Vedi solo le voci di questo dispositivo.</string>
   <string name="trash_nas_readonly_title">Sola lettura</string>
-  <string name="trash_nas_readonly_detail">Con questo account non puoi ripristinare né eliminare dal NAS: puoi solo vedere cosa c\'è.</string>
+  <string name="trash_nas_readonly_detail">Puoi solo guardare.</string>
 
   <!-- Le voci del NAS -->
   <string name="trash_nas_no_name">Senza nome</string>
@@ -45,8 +45,8 @@
 
   <!-- Elimina subito: due tocchi (Q8) -->
   <string name="trash_purge">Elimina subito</string>
-  <string name="trash_purge_only_own_title">Elimina subito non è disponibile</string>
-  <string name="trash_purge_only_own">Puoi eliminare subito solo quello che hai eliminato dal NAS con questo dispositivo. Il resto lo puoi solo ripristinare.</string>
+  <string name="trash_purge_only_own_title">Elimina subito: solo le tue</string>
+  <string name="trash_purge_only_own">Quello che hanno eliminato gli altri si può solo ripristinare.</string>
   <plurals name="trash_purge_title">
     <item quantity="one">Eliminare subito %1$s elemento?</item>
     <item quantity="other">Eliminare subito %1$s elementi?</item>
@@ -60,10 +60,10 @@
 
   <!-- Esito dei gesti sul NAS -->
   <string name="trash_notice_title">Cestino del NAS</string>
-  <string name="trash_notice_restore_started">Ripristino avviato: lo segui in Operazioni in corso. Se un nome è occupato, il file prende un nome alternativo.</string>
+  <string name="trash_notice_restore_started">Ripristino avviato: lo segui in Operazioni in corso.</string>
   <string name="trash_notice_restore_partial">Ripristino avviato per una parte: le altre voci non si possono ripristinare adesso (senza i dati per rimetterle al loro posto, o il NAS non si può scrivere). Restano nel cestino.</string>
   <string name="trash_notice_purge_started">Eliminazione avviata: lo segui in Operazioni in corso.</string>
-  <string name="trash_notice_rejected">Il NAS non ha accettato l\'operazione: le voci sono cambiate, non si possono ripristinare (senza i dati per rimetterle al loro posto) o la share è in sola lettura. Riprova dopo aver riaperto la pagina.</string>
+  <string name="trash_notice_rejected">Il NAS non ha accettato: le voci sono cambiate o l’area è in sola lettura. Riapri la pagina e riprova.</string>
   <string name="trash_notice_blocked">Le scritture sul NAS sono ferme adesso (congelamento, interruttore di emergenza, ora del NAS o una versione dell’app da aggiornare): la Diagnostica dice perché.</string>
   <string name="trash_notice_failed">Non è riuscito. Riprova fra poco.</string>
 </resources>

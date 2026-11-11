@@ -126,6 +126,10 @@ internal abstract class LibraryCloudPopupWordsBase(private val dark: Boolean, pr
     openPopup(nas = LibraryNasStatus.Frozen(FreezeReason.VANISHED, sinceNasMillis = 0L))
 
     composeRule.onAllNodesWithText("Lavori fermi: cambiamenti anomali", substring = true).onFirst().assertExists()
+    // I4: la frase che spiega sta dietro il tocco della capsula (la «i»).
+    composeRule.onAllNodesWithText("Finché non controlli", substring = true).assertCountEquals(0)
+    composeRule.onAllNodesWithText("Lavori fermi: cambiamenti anomali", substring = true).onFirst().performClick()
+    settle()
     composeRule.onAllNodesWithText("Finché non controlli, sul NAS non si scrive e non si cancella niente.", substring = true).onFirst().assertExists()
     composeRule.onAllNodesWithText("Apri la Diagnostica").onFirst().assertExists()
     composeRule.onAllNodesWithText("Tocca per i dettagli", substring = true).assertCountEquals(0)
@@ -138,6 +142,8 @@ internal abstract class LibraryCloudPopupWordsBase(private val dark: Boolean, pr
     openPopup(backup = LibraryBackupStatus.Problem(code = "codice_nuovo", count = 0))
 
     composeRule.onAllNodesWithText("Problema con il backup", substring = true).onFirst().assertExists()
+    composeRule.onAllNodesWithText("Problema con il backup", substring = true).onFirst().performClick()
+    settle()
     composeRule.onAllNodesWithText("I dettagli sono nella pagina Backup.", substring = true).onFirst().assertExists()
     composeRule.onAllNodesWithText("Apri Backup").onFirst().assertExists()
     composeRule.onAllNodesWithText("Tocca per i dettagli", substring = true).assertCountEquals(0)

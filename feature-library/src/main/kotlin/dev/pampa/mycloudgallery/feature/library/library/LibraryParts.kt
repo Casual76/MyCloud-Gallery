@@ -17,6 +17,7 @@ import androidx.compose.material.icons.rounded.FilterAltOff
 import androidx.compose.material.icons.rounded.ImageSearch
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.MaterialTheme
@@ -34,9 +35,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
@@ -46,36 +50,35 @@ import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryBarAction
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridNotice
+import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocation
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteLocationKind
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteScope
-import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryDeleteSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryStateKind
-import dev.pampa.mycloudgallery.core.designsystem.state.GalleryStateView
+import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.library.contract.GridStyle
 import dev.pampa.mycloudgallery.core.library.contract.LibraryFilter
+import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.mediastore.contract.MediaAccess
 import dev.pampa.mycloudgallery.core.mediastore.contract.SyncStatus
 import dev.pampa.mycloudgallery.core.model.CellFlags
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
-import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.feature.library.ActionNotice
 import dev.pampa.mycloudgallery.feature.library.ActionNoticeCard
 import dev.pampa.mycloudgallery.feature.library.R
 import dev.pampa.mycloudgallery.feature.library.attempt
 import dev.pampa.mycloudgallery.feature.library.countText
 import dev.pampa.mycloudgallery.feature.library.familyNoticeAfterHide
-import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridState
-import dev.pampa.mycloudgallery.feature.library.grid.followViews
 import dev.pampa.mycloudgallery.feature.library.grid.SavedGridPosition
 import dev.pampa.mycloudgallery.feature.library.grid.SavedSelection
+import dev.pampa.mycloudgallery.feature.library.grid.followViews
+import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -285,56 +288,67 @@ internal fun filterLabel(filter: LibraryFilter): String = stringResource(
 )
 
 /**
- * Nessun permesso: perche' la Libreria e' vuota e il tasto che lo risolve (la richiesta parte solo da un tocco). Lo stato del NAS e
- * del backup non sta piu' qui sotto (B2 della beta): lo dice la nuvola in alto.
+ * Gli stati della Libreria senza griglia (I4, fase I: «l'app parla troppo»): **una figura, un titolo, il tasto**. Niente paragrafi:
+ * la figura dice il caso (la galleria, il lucchetto, il filtro spento), il titolo lo nomina in poche parole, il tasto lo risolve.
  */
 @Composable
-internal fun LibraryPermissionState(onAllow: () -> Unit, modifier: Modifier = Modifier) {
-  CenteredState(modifier) {
-    GalleryStateView(
-      kind = GalleryStateKind.PermissionDenied,
-      actionLabel = stringResource(R.string.library_permission_action),
-      onAction = onAllow,
-    )
-  }
-}
-
-/** La Libreria vuota (accesso completo, niente da mostrare). */
-@Composable
-internal fun LibraryEmptyState(modifier: Modifier = Modifier) {
-  CenteredState(modifier) {
-    GalleryStateView(kind = GalleryStateKind.LibraryEmpty)
-  }
-}
-
-/** La prima lettura con la Libreria ancora vuota: cosa succede e a che punto si e'. */
-@Composable
-internal fun LibraryFirstReadState(progress: SyncStatus.Scanning?, modifier: Modifier = Modifier) {
+private fun LibraryFigureState(
+  icon: ImageVector,
+  title: String,
+  modifier: Modifier = Modifier,
+  tone: GalleryIllustrationTone = GalleryIllustrationTone.Brand,
+  below: (@Composable () -> Unit)? = null,
+) {
   CenteredState(modifier) {
     Column(
       modifier = Modifier.widthIn(max = StateTextMaxWidth).padding(horizontal = GalleryDimens.Gutter),
       horizontalAlignment = Alignment.CenterHorizontally,
       verticalArrangement = Arrangement.spacedBy(StateGap),
     ) {
-      GalleryIllustration(icon = Icons.Rounded.PhotoLibrary)
+      GalleryIllustration(icon = icon, tone = tone)
       Text(
-        text = stringResource(R.string.library_first_read_title),
+        text = title,
         style = MaterialTheme.typography.headlineSmall,
         color = MaterialTheme.colorScheme.onSurface,
         textAlign = TextAlign.Center,
+        modifier = Modifier.semantics { heading() },
       )
-      Text(
-        text = stringResource(R.string.library_first_read_detail),
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-      )
-      progress?.let { FirstReadProgress(it) }
+      below?.invoke()
     }
   }
 }
 
-/** Un filtro senza risultati: lo dice e offre "Mostra tutto" (§2.4, D16). */
+/**
+ * Nessun permesso: il lucchetto, che cosa serve e il tasto che lo risolve (la richiesta parte solo da un tocco). Lo stato del NAS e
+ * del backup non sta piu' qui sotto (B2 della beta): lo dice la nuvola in alto.
+ */
+@Composable
+internal fun LibraryPermissionState(onAllow: () -> Unit, modifier: Modifier = Modifier) {
+  LibraryFigureState(
+    icon = Icons.Rounded.Lock,
+    title = stringResource(R.string.library_permission_title),
+    tone = GalleryIllustrationTone.Danger,
+    modifier = modifier,
+  ) {
+    FluidButton(text = stringResource(R.string.library_permission_action), onClick = onAllow, size = FluidButtonSize.Large)
+  }
+}
+
+/** La Libreria vuota (accesso completo, niente da mostrare): la figura della galleria e il titolo. */
+@Composable
+internal fun LibraryEmptyState(modifier: Modifier = Modifier) {
+  LibraryFigureState(icon = Icons.Rounded.PhotoLibrary, title = stringResource(R.string.library_empty_title), modifier = modifier)
+}
+
+/** La prima lettura con la Libreria ancora vuota: la figura, il titolo e a che punto si e' (la barra e il numero). */
+@Composable
+internal fun LibraryFirstReadState(progress: SyncStatus.Scanning?, modifier: Modifier = Modifier) {
+  LibraryFigureState(icon = Icons.Rounded.PhotoLibrary, title = stringResource(R.string.library_first_read_title), modifier = modifier) {
+    progress?.let { FirstReadProgress(it) }
+  }
+}
+
+/** Un filtro senza risultati: il filtro spento, il titolo e "Mostra tutto" (§2.4, D16). */
 @Composable
 internal fun LibraryFilterEmptyState(filter: LibraryFilter, onShowAll: () -> Unit, modifier: Modifier = Modifier) {
   val title = stringResource(
@@ -350,22 +364,8 @@ internal fun LibraryFilterEmptyState(filter: LibraryFilter, onShowAll: () -> Uni
       LibraryFilter.WITHOUT_SCREENSHOTS_AND_WHATSAPP, LibraryFilter.ALL -> R.string.library_filter_empty_no_screenshots_whatsapp
     },
   )
-  CenteredState(modifier) {
-    Column(
-      modifier = Modifier.widthIn(max = StateTextMaxWidth).padding(horizontal = GalleryDimens.Gutter),
-      horizontalAlignment = Alignment.CenterHorizontally,
-      verticalArrangement = Arrangement.spacedBy(StateGap),
-    ) {
-      GalleryIllustration(icon = Icons.Rounded.FilterAltOff)
-      Text(text = title, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.Center)
-      Text(
-        text = stringResource(R.string.library_filter_empty_detail),
-        style = MaterialTheme.typography.bodyLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        textAlign = TextAlign.Center,
-      )
-      FluidButton(text = stringResource(R.string.library_filter_show_all), onClick = onShowAll, size = FluidButtonSize.Large, style = FluidButtonStyle.Tinted)
-    }
+  LibraryFigureState(icon = Icons.Rounded.FilterAltOff, title = title, modifier = modifier) {
+    FluidButton(text = stringResource(R.string.library_filter_show_all), onClick = onShowAll, size = FluidButtonSize.Large, style = FluidButtonStyle.Tinted)
   }
 }
 
@@ -451,7 +451,7 @@ internal fun LibraryNotices(
       GalleryGridNotice(
         icon = Icons.Rounded.PhotoLibrary,
         title = stringResource(R.string.library_partial_title),
-        message = stringResource(R.string.library_partial_message),
+        message = "",
         backdrop = backdrop,
         actionLabel = stringResource(R.string.library_partial_action),
         onAction = { commands.requestMediaAccess() },
@@ -461,7 +461,7 @@ internal fun LibraryNotices(
       GalleryGridNotice(
         icon = Icons.Rounded.LocationOn,
         title = countText(R.plurals.library_pending_title, phone.pendingLocation),
-        message = stringResource(R.string.library_pending_message),
+        message = "",
         backdrop = backdrop,
         actionLabel = stringResource(R.string.library_pending_action),
         onAction = { commands.requestMediaLocation() },

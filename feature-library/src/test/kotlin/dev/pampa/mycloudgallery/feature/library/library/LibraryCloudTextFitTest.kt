@@ -86,19 +86,16 @@ internal class LibraryCloudTextFitTest(private val fontScale: Float) {
       results.single()
     }
 
+  /** I4: il lavoro in corso e' un anello con la percentuale e accanto il conto («1.240 / 6.658»): una riga, mai tagliato. */
   @Test
-  fun ilTotaleDelPrimoBackupNonSiTagliaENonSiSpezzaDentroUnNumero() {
+  fun ilContoDelPrimoBackupNonSiTaglia() {
     openPopup(LibraryBackupStatus.FirstBackup(done = 1_240, total = 6_658, etaMillis = 80 * 60_000L))
-    val layouts = layoutsOf("Primo backup: 1.240 di 6.658")
-    assertWithMessage("«Primo backup: 1.240 di 6.658» nel pop-up (testo ${fontScale}x)").that(layouts).hasSize(1)
+    val layouts = layoutsOf("1.240 / 6.658")
+    assertWithMessage("«1.240 / 6.658» nel pop-up (testo ${fontScale}x)").that(layouts).hasSize(1)
     val layout = layouts.single()
-    val text = layout.layoutInput.text.text
-    assertWithMessage("la frase finisce con i puntini (testo ${fontScale}x, ${layout.lineCount} righe)").that((0 until layout.lineCount).any { layout.isLineEllipsized(it) }).isFalse()
-    assertWithMessage("al massimo due righe (testo ${fontScale}x)").that(layout.lineCount).isAtMost(2)
-    for (line in 1 until layout.lineCount) {
-      val start = layout.getLineStart(line)
-      assertWithMessage("la riga $line comincia dentro una parola o un numero («${text.substring(0, start)}|${text.substring(start)}»)").that(text[start - 1].isWhitespace()).isTrue()
-    }
+    assertWithMessage("il conto finisce con i puntini (testo ${fontScale}x)").that((0 until layout.lineCount).any { layout.isLineEllipsized(it) }).isFalse()
+    assertWithMessage("il conto sta su una riga (testo ${fontScale}x)").that(layout.lineCount).isEqualTo(1)
+    assertWithMessage("la percentuale nell'anello").that(layoutsOf("18%")).hasSize(1)
   }
 
   @Test
@@ -111,7 +108,7 @@ internal class LibraryCloudTextFitTest(private val fontScale: Float) {
     for (node in texts) {
       assertWithMessage("«$detail» e' letto da TalkBack due volte: il testo a parte non e' nascosto").that(node.config.contains(SemanticsProperties.HideFromAccessibility)).isTrue()
     }
-    // ... e la capsula lo dice insieme alla sua etichetta.
+    // ... e la riga lo dice insieme alla sua frase intera.
     composeRule.onAllNodesWithContentDescription("Primo backup: 1.240 di 6.658. $detail").assertCountAtLeast1()
   }
 

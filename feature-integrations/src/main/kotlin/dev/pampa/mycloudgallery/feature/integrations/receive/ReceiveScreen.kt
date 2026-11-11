@@ -16,11 +16,15 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.PhotoAlbum
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.MaterialTheme
@@ -38,6 +42,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
@@ -54,6 +59,9 @@ import dev.pampa.mycloudgallery.core.backup.contract.DestinationArea
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingLimits
 import dev.pampa.mycloudgallery.core.backup.contract.IncomingReject
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeIconButton
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustration
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.feature.integrations.R
@@ -245,12 +253,9 @@ private fun ReceiveSummary(ui: ReceiveUi) {
     photos != null && videos != null -> stringResource(R.string.integrations_receive_summary_both, photos, videos, size)
     else -> stringResource(R.string.integrations_receive_summary_one, photos ?: videos.orEmpty(), size)
   }
-  Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-    Text(
-      text = stringResource(R.string.integrations_receive_summary_label),
-      style = MaterialTheme.typography.labelLarge,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+  // I4: il conto da solo, con il segno delle foto che arrivano; «Da salvare» non serve (il titolo della pagina lo dice).
+  Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    GalleryIconTile(icon = Icons.Rounded.AddPhotoAlternate, family = GalleryIconFamily.Photos, size = GalleryIconTileDefaults.Medium)
     Text(text = text, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onSurface)
   }
 }
@@ -291,14 +296,23 @@ private fun ReceiveDestinations(ui: ReceiveUi, actions: ReceiveActions) {
     FluidListGroup {
       ui.choices.forEachIndexed { index, choice ->
         if (index > 0) FluidListDivider()
+        // I4 (fase I): l'area si riconosce dal segno (la persona per la tua, il gruppo per quella di tutti); la parola la dice TalkBack.
+        val common = choice.destination.area == DestinationArea.COMMON
+        val area = stringResource(if (common) R.string.integrations_receive_area_common else R.string.integrations_receive_area_private)
         FluidListRow(
           title = choice.name,
-          subtitle = stringResource(
-            if (choice.destination.area == DestinationArea.COMMON) R.string.integrations_receive_area_common else R.string.integrations_receive_area_private,
-          ),
+          subtitle = "",
+          leading = {
+            GalleryIconTile(
+              icon = if (common) Icons.Rounded.Groups else Icons.Rounded.Person,
+              family = if (common) GalleryIconFamily.People else GalleryIconFamily.Security,
+            )
+          },
+          leadingTile = false,
           selected = choice == ui.selected,
           disclosure = false,
           onClick = { actions.onSelect(choice) },
+          modifier = Modifier.semantics { stateDescription = area },
         )
       }
     }
@@ -343,12 +357,21 @@ private fun ReceiveAlbums(ui: ReceiveUi, actions: ReceiveActions) {
     FluidListGroup {
       ui.albums.forEachIndexed { index, choice ->
         if (index > 0) FluidListDivider()
+        val kind = stringResource(if (choice.shared) R.string.integrations_receive_album_shared else R.string.integrations_receive_album_mine)
         FluidListRow(
           title = choice.name,
-          subtitle = stringResource(if (choice.shared) R.string.integrations_receive_album_shared else R.string.integrations_receive_album_mine),
+          subtitle = "",
+          leading = {
+            GalleryIconTile(
+              icon = if (choice.shared) Icons.Rounded.Groups else Icons.Rounded.PhotoAlbum,
+              family = if (choice.shared) GalleryIconFamily.People else GalleryIconFamily.Photos,
+            )
+          },
+          leadingTile = false,
           selected = choice == ui.selectedAlbum,
           disclosure = false,
           onClick = { actions.onSelectAlbum(choice) },
+          modifier = Modifier.semantics { stateDescription = kind },
         )
       }
     }
@@ -412,7 +435,6 @@ private fun ReceiveBottomBar(ui: ReceiveUi, actions: ReceiveActions) {
         color = scheme.error,
       )
     }
-    Text(text = stringResource(R.string.integrations_receive_save_hint), style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
     if (ui.albumPick) {
       // D35: salvare e aggiungere all'album e' "Salva sul NAS" nella cartella scelta piu' la promessa dell'album: il tocco e' uno solo e la conferma nasce da li'.
       FluidButton(

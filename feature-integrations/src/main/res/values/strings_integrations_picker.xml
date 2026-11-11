@@ -48,11 +48,11 @@
   <string name="integrations_picker_not_ready_title">Prima configura MyCloud Gallery</string>
   <string name="integrations_picker_not_ready_detail">Apri l’app e completa la configurazione, poi torna a scegliere foto e video.</string>
 
-  <string name="integrations_picker_notice_nas_offline">Il NAS non risponde: i media che stanno solo sul NAS non si possono consegnare adesso. Toglili dalla scelta o riprova più tardi.</string>
-  <string name="integrations_picker_notice_nas_metered">Stai usando i dati mobili: i media che stanno solo sul NAS non si consegnano senza il tuo consenso. Collegati al Wi-Fi di casa o toglili dalla scelta.</string>
-  <string name="integrations_picker_notice_nas_unavailable">Il NAS non è disponibile adesso: i media che stanno solo sul NAS non si possono consegnare. Toglili dalla scelta.</string>
-  <string name="integrations_picker_notice_too_many_nas">Hai scelto %1$d media solo sul NAS: se ne possono consegnare al massimo %2$d e %3$s alla volta. Togline qualcuno.</string>
-  <string name="integrations_picker_notice_too_many_nas_size">Hai scelto %1$d media solo sul NAS per %2$s: se ne possono consegnare al massimo %3$d e %4$s alla volta. Togline qualcuno.</string>
+  <string name="integrations_picker_notice_nas_offline">Il NAS non risponde: le foto che sono solo sul NAS non si possono dare adesso. Toglile dalla scelta o riprova più tardi.</string>
+  <string name="integrations_picker_notice_nas_metered">Sei sui dati mobili: le foto che sono solo sul NAS non si danno senza il tuo sì. Collegati al Wi-Fi di casa o toglile dalla scelta.</string>
+  <string name="integrations_picker_notice_nas_unavailable">Il NAS non è disponibile adesso: le foto che sono solo sul NAS non si possono dare. Toglile dalla scelta.</string>
+  <string name="integrations_picker_notice_too_many_nas">Hai scelto %1$d foto solo sul NAS: al massimo %2$d e %3$s alla volta. Togline qualcuna.</string>
+  <string name="integrations_picker_notice_too_many_nas_size">Hai scelto %1$d foto solo sul NAS (%2$s): al massimo %3$d e %4$s alla volta. Togline qualcuna.</string>
   <string name="integrations_picker_notice_too_many">Si possono scegliere al massimo %1$d elementi alla volta.</string>
   <string name="integrations_picker_notice_nothing">Nessuno degli elementi scelti è disponibile adesso.</string>
   <string name="integrations_picker_notice_no_location_removed">Questo file non si può condividere senza posizione: l’ho tolto dalla scelta e non ho consegnato niente. Tocca “Scegli” per consegnare gli altri, oppure spegni “Rimuovi la posizione” in Impostazioni → Condivisioni.</string>

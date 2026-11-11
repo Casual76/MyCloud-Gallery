@@ -4,9 +4,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -17,6 +20,7 @@ import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.DriveFileRenameOutline
 import androidx.compose.material.icons.rounded.RestoreFromTrash
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.StopCircle
 import androidx.compose.material.icons.rounded.TaskAlt
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,22 +31,29 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
-import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
+import dev.antigravity.fluidengine.ui.fluid.FluidPressGrip
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
-import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterPill
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTileDefaults
+import dev.pampa.mycloudgallery.core.designsystem.icon.rememberGalleryIconColors
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GalleryConfirmSheet
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetScaffold
 import dev.pampa.mycloudgallery.core.designsystem.sheet.GallerySheetTone
@@ -56,11 +67,10 @@ import dev.pampa.mycloudgallery.feature.nas.R
 import dev.pampa.mycloudgallery.feature.nas.ui.NasEmptyState
 import dev.pampa.mycloudgallery.feature.nas.ui.NasLabel
 import dev.pampa.mycloudgallery.feature.nas.ui.NasNotice
-import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
 import dev.pampa.mycloudgallery.feature.nas.ui.NasPage
-import dev.pampa.mycloudgallery.feature.nas.ui.NasProgressBar
 import dev.pampa.mycloudgallery.feature.nas.ui.NasSectionTitle
 import dev.pampa.mycloudgallery.feature.nas.ui.NasText
+import dev.pampa.mycloudgallery.feature.nas.ui.NasTone
 import dev.pampa.mycloudgallery.feature.nas.ui.opErrorText
 import dev.pampa.mycloudgallery.feature.nas.ui.pauseReasonRes
 
@@ -149,6 +159,8 @@ internal fun NasOperationsScreen(
         if (state.active.isNotEmpty()) {
           item(key = "active-title") { NasSectionTitle(stringResource(R.string.nas_ops_section_active)) }
           state.active.forEach { op -> item(key = "op-${op.id.value}") { ActiveCard(op, onStop) } }
+          // La garanzia di "Annulla il resto", una volta per la sezione (prima era ripetuta sotto ogni scheda).
+          item(key = "active-note") { NasStopNote() }
         }
         if (state.closed.isNotEmpty()) {
           item(key = "closed-title") { NasSectionTitle(stringResource(R.string.nas_ops_section_closed)) }
@@ -203,35 +215,59 @@ internal fun ClockJumpSheet(visible: Boolean, onConfirm: () -> Unit, onDismiss: 
 
 // --- Una operazione in corso -----------------------------------------------------------------------------------------------
 
+/**
+ * Un'operazione in corso (I4, fase I: «l'app parla troppo»): la piastrella del tipo (spostare, eliminare, ripristinare...) con il segno
+ * dello stato nell'angolo, il titolo, il conto corto ("128 / 312 · 1,6 / 4,1 GB") e a destra l'anello che avanza con la percentuale.
+ * La frase resta solo per dire perche' e' in pausa o in attesa; "Annulla il resto" ha la sua icona. La garanzia («quello che e' gia'
+ * stato fatto resta fatto») si dice una volta sotto la sezione, non su ogni scheda.
+ */
 @Composable
 private fun ActiveCard(op: NasOperationState, onStop: (OpId) -> Unit) {
   val title = operationTitle(op)
+  val status = statusNote(op).label
+  val progress = progressOf(op)
+  val family = kindFamily(op.kind)
+  val ring = rememberGalleryIconColors(family).bottom
+  val spoken = listOf(title, status, detailOf(op)).joinToString(". ")
   FluidListGroup {
-    FluidListRow(
-      title = title,
-      subtitle = "",
-      tone = kindTone(op.kind),
-      leading = { Icon(imageVector = kindIcon(op.kind), contentDescription = null) },
-      disclosure = false,
-      titleMaxLines = 2,
-      labels = { GalleryFooterPill(note = statusNote(op), onClick = null) },
-    )
     Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .padding(start = NasDimens.CardPadding, end = NasDimens.CardPadding, bottom = NasDimens.CardPadding),
+      modifier = Modifier.fillMaxWidth().padding(NasDimens.CardPadding),
       verticalArrangement = Arrangement.spacedBy(NasDimens.CardGap),
     ) {
-      progressOf(op)?.let { progress ->
-        NasProgressBar(progress = progress)
+      Row(
+        modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(NasDimens.CardGap),
+      ) {
+        GalleryIconTile(icon = kindIcon(op.kind), family = family, size = GalleryIconTileDefaults.Medium, status = iconStatus(op))
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NasDimens.LineGap)) {
+          Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+          )
+          Text(
+            text = shortDetailOf(op),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        if (progress != null) {
+          Box(modifier = Modifier.size(OpRing), contentAlignment = Alignment.Center) {
+            GalleryProgressRing(progress = progress, modifier = Modifier.fillMaxSize(), color = ring, strokeWidth = OpRingStroke)
+            Text(
+              text = stringResource(R.string.nas_ops_percent, (progress * PERCENT).toInt()),
+              style = MaterialTheme.typography.labelMedium.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Bold),
+              color = MaterialTheme.colorScheme.onSurface,
+              maxLines = 1,
+            )
+          }
+        }
       }
-      Text(
-        text = detailOf(op),
-        style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-      )
       reasonOf(op)?.let { reason ->
-        Text(text = reason, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(text = reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface)
       }
       val stopDescription = stringResource(R.string.nas_ops_stop_for, title)
       FluidButton(
@@ -241,35 +277,48 @@ private fun ActiveCard(op: NasOperationState, onStop: (OpId) -> Unit) {
         grip = FluidPressGrip.YieldsToScroll,
         size = FluidButtonSize.Large,
         fillWidth = true,
+        leading = { Icon(imageVector = Icons.Rounded.StopCircle, contentDescription = null, modifier = Modifier.size(StopGlyph)) },
         modifier = Modifier.semantics { contentDescription = stopDescription },
-      )
-      Text(
-        text = stringResource(R.string.nas_ops_stop_note),
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
   }
 }
 
+/** Un'operazione finita: la piastrella con il segno dell'esito, il titolo, il conto; la frase solo se qualcosa non e' andato. */
 @Composable
 private fun ClosedRow(op: NasOperationState) {
   val title = operationTitle(op)
-  val detail = detailOf(op)
   val reason = reasonOf(op)
+  val status = statusNote(op).label
   FluidListRow(
     title = title,
-    subtitle = listOfNotNull(detail, reason).joinToString(" "),
-    tone = when (op) {
-      is NasOperationState.Done -> if (op.summary.failed > 0) FluidTone.Danger else FluidTone.Success
-      is NasOperationState.Failed -> FluidTone.Danger
-      else -> FluidTone.Neutral
-    },
-    leading = { Icon(imageVector = kindIcon(op.kind), contentDescription = null) },
+    subtitle = listOfNotNull(detailOf(op), reason).joinToString(" "),
+    leading = { GalleryIconTile(icon = kindIcon(op.kind), family = kindFamily(op.kind), status = iconStatus(op), statusDescription = status) },
+    leadingTile = false,
     disclosure = false,
     titleMaxLines = 2,
-    labels = { GalleryFooterPill(note = statusNote(op), onClick = null) },
   )
+}
+
+/** Il segno dello stato nell'angolo della piastrella: in corso, in pausa, in attesa, fatto, fermata, annullata. */
+private fun iconStatus(op: NasOperationState): GalleryIconStatus = when (op) {
+  is NasOperationState.Planned -> GalleryIconStatus.Paused
+  is NasOperationState.Running -> GalleryIconStatus.Running
+  is NasOperationState.Paused -> GalleryIconStatus.Paused
+  is NasOperationState.WaitingLocked -> GalleryIconStatus.Attention
+  is NasOperationState.Done -> if (op.summary.failed > 0) GalleryIconStatus.Attention else GalleryIconStatus.Done
+  is NasOperationState.Failed -> GalleryIconStatus.Problem
+  is NasOperationState.Cancelled -> GalleryIconStatus.Stopped
+}
+
+/** Il conto corto di un'operazione in corso: "128 / 312". */
+@Composable
+private fun shortDetailOf(op: NasOperationState): String = when (op) {
+  // I byte li dice l'anello (la percentuale si conta sui byte) e TalkBack: sotto il titolo resta una riga sola.
+  is NasOperationState.Running -> stringResource(R.string.nas_ops_short, NasText.count(op.done), NasText.count(op.total))
+  is NasOperationState.Paused -> stringResource(R.string.nas_ops_short, NasText.count(op.done), NasText.count(op.total))
+  is NasOperationState.WaitingLocked -> stringResource(R.string.nas_ops_short, NasText.count(op.done), NasText.count(op.total))
+  else -> detailOf(op)
 }
 
 // --- Le parole di un\'operazione ---------------------------------------------------------------------------------------------
@@ -383,10 +432,24 @@ private fun kindIcon(kind: OpKind) = when (kind) {
   OpKind.PURGE_NOW -> Icons.Rounded.DeleteForever
 }
 
-private fun kindTone(kind: OpKind) = when (kind) {
-  OpKind.TRASH, OpKind.PURGE_NOW -> FluidTone.Danger
-  OpKind.RESTORE -> FluidTone.Success
-  else -> FluidTone.Primary
+private fun kindFamily(kind: OpKind) = when (kind) {
+  OpKind.TRASH, OpKind.PURGE_NOW -> GalleryIconFamily.Danger
+  OpKind.RESTORE -> GalleryIconFamily.Backup
+  else -> GalleryIconFamily.Photos
 }
+
+@Composable
+private fun NasStopNote() {
+  Text(
+    text = stringResource(R.string.nas_ops_stop_note),
+    style = MaterialTheme.typography.bodySmall,
+    color = MaterialTheme.colorScheme.onSurfaceVariant,
+    modifier = Modifier.padding(horizontal = NasDimens.CardPadding),
+  )
+}
+
+private val OpRing = NasDimens.OpRing
+private val OpRingStroke = NasDimens.OpRingStroke
+private val StopGlyph = NasDimens.StopGlyph
 
 private const val PERCENT = 100

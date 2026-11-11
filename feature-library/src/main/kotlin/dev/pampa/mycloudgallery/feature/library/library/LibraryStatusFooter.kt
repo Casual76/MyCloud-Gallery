@@ -6,7 +6,7 @@ import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.GppGood
 import androidx.compose.material.icons.rounded.PauseCircle
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Science
+import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -235,14 +235,14 @@ internal fun nasFooterNote(status: LibraryNasStatus): GalleryFooterNote? = when 
   LibraryNasStatus.LocalOnly -> GalleryFooterNote(
     tone = GalleryFooterTone.Waiting,
     label = stringResource(R.string.nas_footer_local_only),
-    glyph = Icons.Rounded.Science,
+    glyph = Icons.Rounded.HourglassTop,
     detail = stringResource(R.string.nas_footer_local_only_detail),
   )
 }
 
 /** "1.200 di 12.000 file · circa 4 min": il tempo che manca si aggiunge solo quando il compositore lo sa stimare. */
 @Composable
-private fun withEta(text: String?, etaMillis: Long?): String {
+internal fun withEta(text: String?, etaMillis: Long?): String {
   if (etaMillis == null) return text.orEmpty()
   val minutes = ((etaMillis + MinuteMs - 1) / MinuteMs).toInt()
   val eta = when {

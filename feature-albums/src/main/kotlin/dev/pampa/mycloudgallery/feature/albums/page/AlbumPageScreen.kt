@@ -1,8 +1,5 @@
 package dev.pampa.mycloudgallery.feature.albums.page
 
-import dev.pampa.mycloudgallery.core.designsystem.instant.InstantBlock
-import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShape
-import dev.pampa.mycloudgallery.core.designsystem.instant.instantSkeleton
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -29,13 +26,18 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.albums.contract.Album
 import dev.pampa.mycloudgallery.core.albums.contract.AlbumContent
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.DropTarget
+import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDropTarget
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberNewWindowEntry
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryGridInteractionState
 import dev.pampa.mycloudgallery.core.designsystem.grid.GalleryWall
 import dev.pampa.mycloudgallery.core.designsystem.grid.rememberGalleryGridCellStyle
-import dev.pampa.mycloudgallery.core.designsystem.adaptive.DropTarget
-import dev.pampa.mycloudgallery.core.designsystem.adaptive.mediaDropTarget
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.instant.InstantBlock
+import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShape
+import dev.pampa.mycloudgallery.core.designsystem.instant.instantSkeleton
 import dev.pampa.mycloudgallery.core.library.contract.DragOrigin
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.model.AlbumId
@@ -207,7 +209,7 @@ private fun ReadyPage(
   FollowGridWindow(listState, thumbnails, listOf(GridWindowSource("items", content.items, columns)))
   FluidScreen(
     title = album.title,
-    subtitle = facts(album, content, page, ui.creatorName),
+    subtitle = facts(album, content),
     // Fase 10 (P6, D21, E-T16): una foto trascinata da un'altra app su questa pagina apre il foglio della ricezione con "Aggiungi ad album"; solo dove l'utente puo' aggiungere (un album
     // condiviso dove "guardano" soltanto non e' una destinazione).
     modifier = modifier.mediaDropTarget(DropTarget.Album(album.id.value), enabled = AlbumAction.ADD_MEDIA in ui.actions),
@@ -238,16 +240,16 @@ private fun ReadyPage(
 
 private const val MaxColumns = 12
 
-/** La riga di fatti sotto il titolo: il conto, l'ordine e chi e' il creatore. */
+/** La riga di fatti sotto il titolo: il conto e, per uno smart o un ex condiviso, che cosa e'. */
 @Composable
-private fun facts(album: Album, content: AlbumContent, page: AlbumPageState.Ready, creatorName: String?): String {
+private fun facts(album: Album, content: AlbumContent): String {
   val resources = LocalContext.current.resources
   val parts = buildList {
+    // I4: il conto e, per uno smart o un ex condiviso, che cosa e'. L'ordine si vede nelle foto; chi l'ha condiviso lo dice la riga dei
+    // permessi, una volta sola.
     add(AlbumText.items(resources, content.items.size))
-    add(stringResource(AlbumText.sort(page.sort)))
     when (album) {
-      is Album.Shared ->
-        add(if (album.mine) stringResource(R.string.album_facts_mine_shared) else stringResource(R.string.album_facts_shared_by, creatorName ?: album.creator.value))
+      is Album.Shared -> Unit
       is Album.Smart -> add(stringResource(if (album.frozen) R.string.album_facts_frozen else R.string.album_facts_smart))
       is Album.Manual -> if (album.formerShare != null) add(stringResource(R.string.album_facts_former_shared))
     }
@@ -285,7 +287,15 @@ private fun LazyListScope.header(ui: AlbumPageUi, strips: List<Strip>, handlers:
         FluidListGroup {
           strips.forEachIndexed { index, strip ->
             if (index > 0) FluidListDivider()
-            StripRow(strip.icon, strip.tone, strip.title, strip.detail, onClick = if (strip.action == StripAction.NONE) null else ({ handlers.onStrip(strip.action) }))
+            StripRow(
+              strip.icon,
+              strip.tone,
+              strip.title,
+              strip.detail,
+              onClick = if (strip.action == StripAction.NONE) null else ({ handlers.onStrip(strip.action) }),
+              family = stripFamily(strip.id),
+              status = stripStatus(strip),
+            )
           }
         }
         // La dichiarazione sta sotto i permessi, su ogni pagina di un album condiviso (D10, L57): non si nasconde in un foglio.
@@ -337,4 +347,24 @@ private fun messageText(message: AlbumMessage): String {
     AlbumMessage.NotDone -> stringResource(R.string.album_message_not_done)
     AlbumMessage.NotSaved -> stringResource(R.string.album_message_not_saved)
   }
+}
+
+/**
+ * I4 (fase I): il colore della piastrella di una striscia, per famiglia: la condivisione e le cartelle del NAS il backup, le proposte i
+ * ricordi, i permessi la sicurezza, le persone le persone, il resto le foto. Lo stesso segno ovunque nell'app (`GalleryIcons`).
+ */
+private fun stripFamily(id: String): GalleryIconFamily = when (id) {
+  "sharing", "incoming", "to_share", "files_from_pc", "folder_changed", "revoked" -> GalleryIconFamily.Backup
+  "suggested" -> GalleryIconFamily.Memories
+  "permissions" -> GalleryIconFamily.Security
+  "people_off", "people_lost", "inherited" -> GalleryIconFamily.People
+  else -> GalleryIconFamily.Photos
+}
+
+/** Il segno nell'angolo: in corso per la condivisione che va, fatto per quella finita, attenzione per un avviso. */
+private fun stripStatus(strip: Strip): GalleryIconStatus? = when {
+  strip.tone == FluidTone.Warning || strip.tone == FluidTone.Danger -> GalleryIconStatus.Attention
+  strip.id == "sharing" && strip.tone == FluidTone.Success -> GalleryIconStatus.Done
+  strip.id == "sharing" -> GalleryIconStatus.Running
+  else -> null
 }

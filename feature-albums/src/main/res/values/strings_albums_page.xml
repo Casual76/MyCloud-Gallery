@@ -14,8 +14,6 @@
   <string name="album_sort_newest">Dal più recente</string>
   <string name="album_sort_custom">Personalizzato</string>
   <string name="album_sort_title">Ordina l’album</string>
-  <string name="album_facts_shared_by">Condiviso da %1$s</string>
-  <string name="album_facts_mine_shared">Lo hai condiviso tu</string>
   <string name="album_facts_smart">Album smart</string>
   <string name="album_facts_frozen">Album smart congelato</string>
   <string name="album_facts_former_shared">Era condiviso</string>

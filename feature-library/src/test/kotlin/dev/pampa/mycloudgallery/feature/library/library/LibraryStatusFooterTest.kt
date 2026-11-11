@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
@@ -70,8 +71,10 @@ class LibraryStatusFooterTest {
   @Test
   fun laPrimaScansioneDiceAChePuntoE() {
     showPanel(LibraryNasStatus.FirstScan(done = 7_412, total = 20_000, etaMillis = 4 * 60_000L))
-    composeRule.onNodeWithText("Sto leggendo il NAS…").assertExists()
-    composeRule.onNodeWithText("7.412 di 20.000 · circa 4 min").assertExists()
+    // I4: l'anello e il conto a schermo; la frase intera per TalkBack.
+    composeRule.onNodeWithText("7.412 / 20.000", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("circa 4 min", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithContentDescription("Sto leggendo il NAS…. 7.412 di 20.000 · circa 4 min").assertExists()
     composeRule.onNodeWithText("Sincronizzazione in corso").assertExists()
   }
 
@@ -84,7 +87,7 @@ class LibraryStatusFooterTest {
   @Test
   fun iLavoriFermiSiDiconoESiAprono() {
     showPanel(LibraryNasStatus.Frozen(FreezeReason.VANISHED, sinceNasMillis = 0L))
-    composeRule.onNodeWithText("Lavori fermi: cambiamenti anomali").assertExists()
+    composeRule.onNodeWithText("Lavori fermi: cambiamenti anomali").assertExists().performClick()
     composeRule.onNodeWithText("spariti molti file", substring = true).assertExists()
     composeRule.onNodeWithText("Serve il tuo intervento").assertExists()
     composeRule.onNodeWithText("Apri la Diagnostica").performClick()
@@ -101,7 +104,8 @@ class LibraryStatusFooterTest {
   @Test
   fun lAllineamentoDiceIByte() {
     showPanel(LibraryNasStatus.Aligning(bytesDone = 640_000_000L, bytesTotal = 1_200_000_000L, etaMillis = null))
-    composeRule.onNodeWithText("640 MB di 1,2 GB").assertExists()
+    composeRule.onNodeWithText("640 MB / 1,2 GB", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithContentDescription("640 MB di 1,2 GB", substring = true).assertExists()
   }
 
   @Test

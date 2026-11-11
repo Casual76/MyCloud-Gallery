@@ -18,7 +18,6 @@
   <!-- Una cartella e i suoi elementi -->
   <string name="nas_folders_subtitle_in_area">%1$s · %2$s</string>
   <string name="nas_folders_row_folder">Cartella</string>
-  <string name="nas_folders_row_file">%1$s · %2$s</string>
   <string name="nas_folders_desc_folder">%1$s, cartella</string>
   <string name="nas_folders_desc_folder_count">%1$s, cartella, %2$s</string>
   <string name="nas_folders_desc_photo">%1$s, foto, %2$s, %3$s</string>

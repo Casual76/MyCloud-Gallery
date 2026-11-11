@@ -95,7 +95,7 @@ class LibraryStubTest {
         state = emptyLibraryTabState(),
       )
     }
-    composeRule.onNodeWithText("La Libreria è vuota").assertExists()
+    composeRule.onNodeWithText("Ancora nessuna foto").assertExists()
     composeRule.onNodeWithText("Libreria").assertExists()
     // B2 della beta: lo stato non sta piu' sotto lo stato vuoto (lo dice la nuvola in alto), e senza niente da dire la nuvola non c'e'.
     assertThat(composeRule.onAllNodesWithContentDescription("Stato della sincronizzazione", substring = true).fetchSemanticsNodes()).isEmpty()

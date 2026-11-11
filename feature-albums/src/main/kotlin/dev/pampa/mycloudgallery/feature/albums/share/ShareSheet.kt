@@ -42,7 +42,6 @@ import dev.pampa.mycloudgallery.feature.albums.contract.WhyBlocked
 import dev.pampa.mycloudgallery.feature.albums.page.CancelButton
 import dev.pampa.mycloudgallery.feature.albums.ui.AlbumText
 import dev.pampa.mycloudgallery.feature.albums.ui.OptionRow
-import dev.pampa.mycloudgallery.feature.albums.ui.SectionNote
 
 // IL FOGLIO DI CONDIVISIONE (Fase 7, P10; docs/fase7-progetto.md D12, D30, D35, §1.5 `ShareSheetState`, E-SH9, E-SH13): cio' che l'utente legge prima di
 // toccare il bottone che sposta le foto nell'area comune. Dice **quanto** ("12 foto e 3 video (1,2 GB) verranno spostati nell'area comune"), **dove**
@@ -237,8 +236,6 @@ private fun LevelGroup(current: ShareLevel, handlers: ShareSheetHandlers) {
       if (index > 0) FluidListDivider()
       OptionRow(title = stringResource(AlbumText.level(level)), detail = stringResource(AlbumText.levelDetail(level)), selected = level == current, onSelect = { handlers.onLevel(level) })
     }
-    FluidListDivider()
-    SectionNote(stringResource(R.string.share_group_level_note))
   }
 }
 
@@ -252,14 +249,14 @@ private fun HiddenGroup(plan: SharePlan, handlers: ShareSheetHandlers) {
   FluidListGroup {
     OptionRow(
       title = resources.getQuantityString(R.plurals.share_hidden_leave, total, total),
-      detail = stringResource(R.string.share_hidden_leave_detail),
+      detail = "",
       selected = plan.hidden == HiddenChoice.LEAVE_OUT,
       onSelect = { handlers.onHiddenChoice(HiddenChoice.LEAVE_OUT) },
     )
     FluidListDivider()
     OptionRow(
       title = stringResource(R.string.share_hidden_include),
-      detail = stringResource(R.string.share_hidden_include_detail),
+      detail = "",
       selected = plan.hidden == HiddenChoice.SHARE_TOO,
       onSelect = { handlers.onHiddenChoice(HiddenChoice.SHARE_TOO) },
     )

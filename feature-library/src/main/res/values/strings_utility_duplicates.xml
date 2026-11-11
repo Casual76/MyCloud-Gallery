@@ -136,7 +136,7 @@
   <string name="duplicates_sheet_common_gone">Sparirà per tutti i familiari.</string>
   <string name="duplicates_notice_title">Doppioni</string>
   <string name="duplicates_notice_cleanup_started">Pulizia avviata: le copie del NAS vanno nel cestino del NAS, le segui in Operazioni in corso.</string>
-  <string name="duplicates_notice_cleanup_rejected">Il NAS non ha accettato la pulizia: le copie sono cambiate o la share è in sola lettura. Non è stato toccato niente.</string>
+  <string name="duplicates_notice_cleanup_rejected">Il NAS non ha accettato la pulizia: le copie sono cambiate o l’area è in sola lettura. Non è stato toccato niente.</string>
   <string name="duplicates_notice_cleanup_blocked">Le scritture sul NAS sono ferme adesso (congelamento, interruttore di emergenza, ora del NAS o una versione dell’app da aggiornare). Non è stato toccato niente: la Diagnostica dice perché.</string>
   <string name="duplicates_notice_cleanup_failed">Non è riuscito. Non è stato toccato niente: riprova fra poco.</string>
   <string name="duplicates_notice_cleanup_protected">Non è riuscito: le copie sul NAS fanno parte di un album condiviso in cui non puoi eliminarle, spostarle o rinominarle. Non è stato toccato niente.</string>

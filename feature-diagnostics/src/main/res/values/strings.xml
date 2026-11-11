@@ -17,7 +17,7 @@
 
   <!-- Le sezioni (docs/fase2-progetto.md §2.6) -->
   <string name="diagnostics_section_network">Rete e NAS</string>
-  <string name="diagnostics_section_connection_test">Test di connessione</string>
+  <string name="diagnostics_section_connection_test">Prova della connessione</string>
   <string name="diagnostics_section_activities">Attività</string>
   <string name="diagnostics_section_recent">Ultimi esiti ed errori</string>
   <string name="diagnostics_section_storage">Spazio</string>
@@ -89,7 +89,7 @@
   <string name="diagnostics_action_open_battery">Apri le impostazioni della batteria</string>
   <string name="diagnostics_action_open_app_details">Apri le impostazioni dell\'app</string>
   <string name="diagnostics_action_open_notifications">Apri le impostazioni delle notifiche</string>
-  <string name="diagnostics_action_run_test">Esegui il test di connessione</string>
+  <string name="diagnostics_action_run_test">Prova la connessione</string>
   <string name="diagnostics_action_reenter_password">Inserisci di nuovo la password</string>
   <string name="diagnostics_action_open_devices">Apri i dispositivi</string>
   <string name="diagnostics_action_resume_onboarding">Riprendi la configurazione</string>
@@ -99,21 +99,21 @@
   <string name="diagnostics_action_failed">Questa schermata non esiste su questo telefono.</string>
 
   <!-- Test di connessione -->
-  <string name="diagnostics_test_run">Avvia il test</string>
-  <string name="diagnostics_test_running">Test in corso…</string>
-  <string name="diagnostics_test_hint">Il test controlla percorso, rete, identità del NAS e cartelle, passo per passo, con i tempi. Parte solo quando lo chiedi, e non sveglia i dischi più del necessario.</string>
+  <string name="diagnostics_test_run">Avvia la prova</string>
+  <string name="diagnostics_test_running">Prova in corso…</string>
+  <string name="diagnostics_test_hint">Controlla rete, NAS e cartelle, passo per passo, con i tempi. Parte solo quando lo chiedi.</string>
   <string name="diagnostics_test_not_configured_title">Nessun NAS da provare</string>
   <string name="diagnostics_test_not_configured_message">Questo dispositivo non ha ancora un NAS configurato.</string>
-  <string name="diagnostics_test_timed_out_title">Il test non si è concluso</string>
+  <string name="diagnostics_test_timed_out_title">La prova non si è conclusa</string>
   <string name="diagnostics_test_timed_out_message">Il NAS non ha risposto entro il tempo concesso. Riprova fra poco.</string>
   <string name="diagnostics_test_breaker_title">Autenticazione non provata</string>
-  <string name="diagnostics_test_breaker_message">L\'interruttore di sicurezza è aperto: il test non autentica, per non far bloccare l\'account del NAS.</string>
+  <string name="diagnostics_test_breaker_message">L’interruttore di sicurezza è aperto: la prova non entra nel NAS, per non far bloccare l’account.</string>
   <string name="diagnostics_test_negotiation">Cosa ha detto il NAS</string>
   <string name="diagnostics_test_negotiation_encrypted">%1$s · cifratura offerta: sì</string>
   <string name="diagnostics_test_negotiation_plain">%1$s · cifratura offerta: no</string>
   <string name="diagnostics_stage_route">Percorso</string>
-  <string name="diagnostics_stage_tcp">Connessione TCP</string>
-  <string name="diagnostics_stage_negotiate">Negoziazione SMB</string>
+  <string name="diagnostics_stage_tcp">Connessione</string>
+  <string name="diagnostics_stage_negotiate">Accordo con il NAS</string>
   <string name="diagnostics_stage_guid">Identità del NAS</string>
   <string name="diagnostics_stage_authenticate">Autenticazione</string>
   <string name="diagnostics_stage_security">Controllo di sicurezza</string>

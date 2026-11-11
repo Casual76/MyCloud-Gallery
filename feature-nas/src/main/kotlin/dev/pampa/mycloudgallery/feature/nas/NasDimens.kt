@@ -82,4 +82,11 @@ internal object NasDimens {
 
   /** La larghezza massima dei fogli di conferma su uno schermo largo (i fogli dell'engine non vanno oltre). */
   val SheetMaxWidth: Dp = 560.dp
+
+  /** I4: l'anello che avanza di un'operazione in corso, e il suo tratto. */
+  val OpRing: Dp = 52.dp
+  val OpRingStroke: Dp = 5.dp
+
+  /** I4: il segno di «Annulla il resto». */
+  val StopGlyph: Dp = 20.dp
 }

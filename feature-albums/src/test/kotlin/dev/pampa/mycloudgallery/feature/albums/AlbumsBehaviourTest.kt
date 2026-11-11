@@ -469,12 +469,13 @@ class AlbumsBehaviourTest : AlbumsComposeTest() {
     assertThat(handlers.accepted).isEqualTo(0)
   }
 
+  /** I4: «Crea album» sotto la scheda, la ✕ di «Non mi interessa» in alto sulla copertina; a 1,3x i due bersagli restano separati. */
   @Test
-  fun iBottoniDiUnaProstaDiViaggioSonoAPienaLarghezzaUnoSottoLAltro() {
+  fun iDueTastiDiUnaPropostaDiViaggioNonSiToccano() {
     showAll(fontScale = LARGE_TEXT) { TripsScreen(TripsState.Proposals(listOf(AlbumSamples.trip), hasOlder = false), scenes.thumbnails.thumbnails, NoTripsHandlers) }
     val create = composeRule.onNode(hasText("Crea album") and hasClickAction()).fetchSemanticsNode().boundsInRoot
-    val dismiss = composeRule.onNode(hasText("Non mi interessa") and hasClickAction()).fetchSemanticsNode().boundsInRoot
-    assertThat(create.bottom).isAtMost(dismiss.top + 1f)
-    assertThat(create.width).isWithin(2f).of(dismiss.width)
+    val dismiss = composeRule.onNode(hasContentDescription("Non mi interessa", substring = true) and hasClickAction()).fetchSemanticsNode().boundsInRoot
+    assertThat(dismiss.bottom).isAtMost(create.top + 1f)
+    assertThat(dismiss.right).isWithin(2f).of(create.right)
   }
 }

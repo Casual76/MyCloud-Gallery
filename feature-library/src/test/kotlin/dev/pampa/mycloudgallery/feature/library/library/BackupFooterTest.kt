@@ -19,6 +19,9 @@ import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
@@ -163,14 +166,18 @@ class BackupFooterTest {
   @Test
   fun ilPrimoBackupDiceADoveSiESCrivePoiIlTempo() {
     show(LibraryBackupStatus.FirstBackup(done = 1_240, total = 6_658, etaMillis = 80 * 60_000L))
-    composeRule.onNodeWithText("Primo backup: 1.240 di 6.658").assertExists()
-    composeRule.onNodeWithText("circa 1 h 20 min").assertExists()
+    // I4: l'anello con la percentuale e il conto; la frase intera la dice TalkBack.
+    composeRule.onNodeWithText("1.240 / 6.658", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("18%", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("circa 1 h 20 min", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithContentDescription("Primo backup: 1.240 di 6.658. circa 1 h 20 min").assertExists()
   }
 
   @Test
   fun unGiroNormaleDiceQuantiNeHaFattiESiTocca() {
     show(LibraryBackupStatus.Running(done = 12, total = 40, etaMillis = null))
-    composeRule.onNodeWithText("Backup in corso: 12 di 40").assertExists().performClick()
+    composeRule.onNodeWithText("12 / 40", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithContentDescription("Backup in corso: 12 di 40", substring = true).assertExists().performClick()
     assertThat(backupClicks).isEqualTo(1)
     assertThat(closes).isEqualTo(1)
   }
@@ -194,6 +201,9 @@ class BackupFooterTest {
   fun unProblemaDiceLaFraseBreveECosaFareEIlTastoPortaAlBackup() {
     show(LibraryBackupStatus.Problem(code = "quota", count = 0))
     composeRule.onNodeWithText("Quota esaurita").assertExists()
+    // I4: la frase che spiega sta dietro il tocco della capsula.
+    assertThat(composeRule.onAllNodesWithText("Chiedi all’admin del NAS.").fetchSemanticsNodes()).isEmpty()
+    composeRule.onNodeWithText("Quota esaurita").performClick()
     composeRule.onNodeWithText("Chiedi all’admin del NAS.").assertExists()
     composeRule.onNodeWithText("Apri Backup").performClick()
     assertThat(backupClicks).isEqualTo(1)
@@ -212,7 +222,7 @@ class BackupFooterTest {
   @Test
   fun iFileRicevutiNonSalvatiLoDiconoEIlTastoPortaAllaPagina() {
     show(LibraryBackupStatus.Problem(code = "incoming_failed", count = 2))
-    composeRule.onNodeWithText("2 file ricevuti non salvati").assertExists()
+    composeRule.onNodeWithText("2 file ricevuti non salvati").assertExists().performClick()
     composeRule.onNodeWithText("Riprova o scartali da Backup.").assertExists()
     composeRule.onNodeWithText("Apri Backup").performClick()
     assertThat(backupClicks).isEqualTo(1)
@@ -250,10 +260,13 @@ class BackupFooterTest {
   @Test
   fun senzaProblemiLoSpazioLUltimaSincronizzazioneELiberaSpazio() {
     show(LibraryBackupStatus.AllSafe(null), nas = LibraryNasStatus.UpToDate(atNasMillis = 0L), lastSync = System.currentTimeMillis())
-    composeRule.onNodeWithText("Spazio sul NAS").assertExists()
-    composeRule.onNodeWithText("1,2 TB usati di 3,6 TB").assertExists()
-    composeRule.onNodeWithText("Ultima sincronizzazione").assertExists()
-    composeRule.onNodeWithText("Oggi alle", substring = true).assertExists()
+    // I4: niente titoli a schermo, l'anello e il numero; TalkBack dice la frase intera.
+    composeRule.onNodeWithContentDescription("Spazio sul NAS: 1,2 TB usati di 3,6 TB").assertExists()
+    composeRule.onNodeWithText("1,2 TB", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithText("di 3,6 TB", useUnmergedTree = true).assertExists()
+    composeRule.onNodeWithContentDescription("Ultima sincronizzazione: Oggi alle", substring = true).assertExists()
+    assertThat(composeRule.onAllNodesWithText("Spazio sul NAS").fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodesWithText("Ultima sincronizzazione").fetchSemanticsNodes()).isEmpty()
     composeRule.onNodeWithText("Libera spazio").performClick()
     assertThat(commands.freed).containsExactly(emptySet<MediaId>())
     assertThat(closes).isEqualTo(1)
@@ -263,14 +276,14 @@ class BackupFooterTest {
   fun loSpazioCheNonSiLeggeLoDice() {
     commands.space = LibraryNasSpace.Unavailable
     show(LibraryBackupStatus.AllSafe(null))
-    composeRule.onNodeWithText("Lo spazio non si legge adesso.").assertExists()
+    composeRule.onNodeWithContentDescription("Lo spazio non si legge adesso.").assertExists()
   }
 
   @Test
   fun senzaNasLoSpazioNonCe() {
     commands.space = null
     show(LibraryBackupStatus.AllSafe(null))
-    assertThat(composeRule.onAllNodesWithText("Spazio sul NAS").fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodesWithTag(SpaceRowTag).fetchSemanticsNodes()).isEmpty()
   }
 
   /** Con un problema il pop-up dice il problema e basta: niente spazio, niente "Libera spazio" (la richiesta dell'utente). */
@@ -278,9 +291,9 @@ class BackupFooterTest {
   fun conUnProblemaNienteSpazioNeLiberaSpazio() {
     show(LibraryBackupStatus.Problem(code = "nas_full", count = 0), lastSync = System.currentTimeMillis())
     composeRule.onNodeWithText("Il NAS è pieno").assertExists()
-    for (phrase in listOf("Spazio sul NAS", "Ultima sincronizzazione", "Libera spazio")) {
-      assertThat(composeRule.onAllNodesWithText(phrase).fetchSemanticsNodes()).isEmpty()
-    }
+    assertThat(composeRule.onAllNodesWithTag(SpaceRowTag).fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodesWithText("Libera spazio").fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodesWithContentDescription("Ultima sincronizzazione", substring = true).fetchSemanticsNodes()).isEmpty()
   }
 
   @Test

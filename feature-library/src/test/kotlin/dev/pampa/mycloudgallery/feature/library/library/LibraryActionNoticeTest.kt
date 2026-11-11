@@ -455,16 +455,16 @@ class LibraryActionNoticeTest {
     show(emptyPartial(selectionPending = true))
 
     composeRule.onNodeWithText("Sto leggendo la Libreria").assertExists()
-    composeRule.onAllNodesWithText("La Libreria è vuota").assertCountEquals(0)
+    composeRule.onAllNodesWithText("Ancora nessuna foto").assertCountEquals(0)
     // L'avviso dell'accesso parziale c'e' lo stesso.
-    composeRule.onNodeWithText("Vedi solo le foto che hai scelto").assertExists()
+    composeRule.onNodeWithText("Solo le foto scelte").assertExists()
   }
 
   @Test
   fun conAccessoParzialeEUnaSelezioneVuotaLaLibreriaEVuota() {
     show(emptyPartial(selectionPending = false))
 
-    composeRule.onNodeWithText("La Libreria è vuota").assertExists()
+    composeRule.onNodeWithText("Ancora nessuna foto").assertExists()
     composeRule.onAllNodesWithText("Sto leggendo la Libreria").assertCountEquals(0)
   }
 

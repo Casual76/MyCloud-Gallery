@@ -276,21 +276,37 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
   fun popUpSenzaProblemi() {
     show(library())
     openCloud()
-    shootRoot("pop-up-senza-problemi")
+    shootRoot("pop-up-senza-problemi", I4)
   }
 
   @Test
   fun popUpSenzaProblemiConUnBackupInCorso() {
     show(library(backup = LibraryBackupStatus.Running(done = 1_240, total = 6_658, etaMillis = 80 * 60_000L)))
     openCloud()
-    shootRoot("pop-up-backup-in-corso")
+    shootRoot("pop-up-backup-in-corso", I4)
+  }
+
+  /** I4: l'anello e il conto a testo grande (1,3x). */
+  @Test
+  fun popUpConUnBackupInCorsoTestoGrande() {
+    show(library(backup = LibraryBackupStatus.Running(done = 1_240, total = 6_658, etaMillis = 80 * 60_000L)), fontScale = LargeText)
+    openCloud()
+    shootRoot("pop-up-backup-in-corso-testo-grande", I4)
+  }
+
+  /** I4: la lettura del NAS con il suo anello, e il backup in coda accanto (senza totale: il segno dell'attesa). */
+  @Test
+  fun popUpConLaLetturaDelNasEIlBackupInCoda() {
+    show(library(nas = LibraryNasStatus.FirstScan(done = 1_200, total = 12_000, etaMillis = 4 * 60_000L), backup = LibraryBackupStatus.Queued(items = 312, wait = LibraryBackupWait.CHARGING)))
+    openCloud()
+    shootRoot("pop-up-lettura-nas-e-coda", I4)
   }
 
   @Test
   fun popUpConUnProblema() {
     show(library(nas = LibraryNasStatus.Frozen(FreezeReason.VANISHED, sinceNasMillis = 0L), backup = LibraryBackupStatus.Problem(code = "nas_full", count = 0)))
     openCloud()
-    shootRoot("pop-up-con-problema")
+    shootRoot("pop-up-con-problema", I4)
   }
 
   @Test
@@ -305,7 +321,7 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
       ),
     )
     openCloud()
-    shootRoot("pop-up-rete")
+    shootRoot("pop-up-rete", I4)
   }
 
   // --- Pacchetto K2: le correzioni della review ------------------------------------------------------------------------------
@@ -343,11 +359,17 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
     openCloud()
     assertThat(texts("In pausa")).isAtLeast(1)
     assertThat(texts("Backup in pausa")).isAtLeast(1)
-    assertThat(texts("Le foto nuove non si salvano finché non lo riprendi dalla pagina Backup.")).isEqualTo(1)
-    for (gone in listOf("Tutto al sicuro", "NAS aggiornato", "Libera spazio", "Ultima sincronizzazione", "Spazio sul NAS")) {
+    // I4: la frase sta dietro il tocco della capsula.
+    assertThat(texts("Le foto nuove non si salvano finché non lo riprendi dalla pagina Backup.")).isEqualTo(0)
+    for (gone in listOf("Tutto al sicuro", "NAS aggiornato", "Libera spazio")) {
       assertWithMessage("«$gone» con il backup in pausa").that(texts(gone)).isEqualTo(0)
     }
-    shootRoot("pop-up-backup-in-pausa", K2)
+    assertThat(composeRule.onAllNodesWithTag(SpaceRowTag).fetchSemanticsNodes()).isEmpty()
+    shootRoot("pop-up-backup-in-pausa", I4)
+    composeRule.onAllNodesWithText("Backup in pausa", substring = true)[0].performClick()
+    settle()
+    assertThat(texts("Le foto nuove non si salvano finché non lo riprendi dalla pagina Backup.")).isEqualTo(1)
+    shootRoot("pop-up-backup-in-pausa-frase-aperta", I4)
 
     composeRule.onNodeWithText("Apri Backup").performClick()
     settle()
@@ -363,7 +385,7 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
     assertThat(texts("Backup interrotto")).isAtLeast(1)
     assertThat(texts("Android ha fermato il lavoro: riprende da solo.")).isEqualTo(1)
     assertThat(texts("Tutto al sicuro")).isEqualTo(0)
-    shootRoot("pop-up-backup-interrotto", K2)
+    shootRoot("pop-up-backup-interrotto", I4)
   }
 
   /** GF-12: «VPN spenta» ha sotto il tasto «Apri WireGuard»: la frase non lo ripete. */
@@ -390,6 +412,9 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
     show(library(backup = LibraryBackupStatus.Problem(code = "nas_unreachable", count = 0)))
     openCloud()
     assertThat(texts("Il NAS non risponde")).isAtLeast(1)
+    assertThat(texts("Riprova dalla pagina Backup.")).isEqualTo(0)
+    composeRule.onAllNodesWithText("Il NAS non risponde", substring = true)[0].performClick()
+    settle()
     assertThat(texts("Riprova dalla pagina Backup.")).isEqualTo(1)
     assertThat(composeRule.onAllNodesWithText("Apri Backup").fetchSemanticsNodes()).hasSize(1)
     assertThat(texts("Diagnostica")).isEqualTo(0)
@@ -406,7 +431,7 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
     openCloud()
     assertThat(texts("312 in coda")).isAtLeast(1)
     assertThat(composeRule.onAllNodesWithTag(CloudDividerTag).fetchSemanticsNodes()).isEmpty()
-    shootRoot("pop-up-senza-nas", K2)
+    shootRoot("pop-up-senza-nas", I4)
   }
 
   @Test
@@ -474,6 +499,7 @@ internal abstract class LibraryCloudScreenshotBase(private val dark: Boolean, pr
 
     const val DIR = "../docs/screenshots/beta-grafica/G1"
     const val K2 = "../docs/screenshots/beta-grafica/K2"
+    const val I4 = "../docs/screenshots/beta-grafica/I4"
     const val SettleMillis = 1_500L
     const val LargeText = 1.3f
 

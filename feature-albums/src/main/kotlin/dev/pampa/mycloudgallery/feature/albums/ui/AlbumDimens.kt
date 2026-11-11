@@ -43,9 +43,6 @@ internal object AlbumDimens {
   /** I4: la scheda di una proposta nella griglia di «Viaggi», larga almeno quanto quelle di «Tutti i ricordi» (I1). */
   val TripCardMin: Dp = 140.dp
 
-  /** I4: il margine del titolo dentro la scheda di una proposta. */
-  val TripCardInset: Dp = 12.dp
-
   /** I4: il tondo velato sotto la ✕ di «Non mi interessa». */
   val TripDismissDisc: Dp = 30.dp
 

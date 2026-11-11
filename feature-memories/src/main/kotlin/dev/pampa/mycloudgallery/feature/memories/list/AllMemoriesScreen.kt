@@ -2,42 +2,34 @@ package dev.pampa.mycloudgallery.feature.memories.list
 
 import android.content.res.Resources
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
-import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.fluid.rememberFluidScreenMetrics
 import dev.antigravity.fluidengine.ui.theme.FluidEmptyState
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCoverCard
 import dev.pampa.mycloudgallery.core.designsystem.instant.InstantBlock
 import dev.pampa.mycloudgallery.core.designsystem.instant.InstantShape
 import dev.pampa.mycloudgallery.core.designsystem.instant.instantSkeleton
@@ -160,39 +152,19 @@ private fun MemoryCardTile(
   val spoken = MemoriesText.spoken(resources, card, title)
   val snapshot = ui.snapshot
   val shape = ContinuousCornerShape(FluidRadius.Card)
-  Box(
+  // La forma comune delle schede di copertina (core-designsystem): il titolo, il mese e il punto "nuovo" li disegna lei.
+  GalleryCoverCard(
     modifier = modifier
       .aspectRatio(MemoriesDimens.CardAspect)
       .fluidPressable(onClick = { handlers.onOpen(card.id) }, role = Role.Button)
       .semantics(mergeDescendants = true) { contentDescription = spoken }
       .clip(shape)
       .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+    title = title,
+    caption = caption,
+    isNew = card.isNew,
   ) {
     if (snapshot != null) MemoryCover(thumbnails, snapshot, card.cover, Modifier.matchParentSize(), ThumbBucket.L)
-    val scrim = GalleryOnPhoto.scrim()
-    Column(
-      modifier = Modifier
-        .align(Alignment.BottomStart)
-        .fillMaxWidth()
-        .background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0f), scrim)))
-        .padding(start = MemoriesDimens.CardInset, end = MemoriesDimens.CardInset, bottom = MemoriesDimens.CardInset, top = MemoriesDimens.CardInset * 2),
-    ) {
-      Text(text = title, style = MaterialTheme.typography.titleSmall, color = GalleryOnPhoto.Content, maxLines = 2, overflow = TextOverflow.Ellipsis)
-      if (caption != null) {
-        Text(text = caption, style = MaterialTheme.typography.labelMedium, color = GalleryOnPhoto.Content, maxLines = 1, overflow = TextOverflow.Ellipsis)
-      }
-    }
-    if (card.isNew) {
-      Box(
-        modifier = Modifier
-          .align(Alignment.TopEnd)
-          .padding(MemoriesDimens.CardInset)
-          .size(MemoriesDimens.NewDot)
-          .clip(FluidCapsuleShape)
-          .background(MaterialTheme.colorScheme.primary)
-          .border(MemoriesDimens.NewDotRing, GalleryOnPhoto.Content, FluidCapsuleShape),
-      )
-    }
   }
 }
 

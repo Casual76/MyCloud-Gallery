@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
@@ -20,22 +19,17 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Event
 import androidx.compose.material.icons.rounded.Flight
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextOverflow
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
@@ -51,6 +45,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.albums.contract.TripId
 import dev.pampa.mycloudgallery.core.albums.contract.TripProposal
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCoverCard
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryOnPhoto
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.model.TripKind
@@ -65,8 +60,7 @@ import dev.pampa.mycloudgallery.feature.albums.ui.AlbumText
 // scheda di testo con due bottoni per proposta, ma **una griglia di schede** come «Tutti i ricordi» di I1: la copertina a tutta scheda, il nome
 // («Oslo, marzo 2026») e «Viaggio» o «Evento» sopra la sfumatura; la ✕ di «Non mi interessa» in alto a destra e «Crea album» sotto la scheda. Il
 // numero delle foto e i giorni li dice TalkBack. Senza una casa stimabile (nessuna foto con la posizione) la pagina lo spiega una volta e propone
-// gli eventi. Nessuna coordinata: il contratto non le porta. La scheda dei ricordi e' privata di feature-memories (che gli Album non vedono):
-// qui la stessa forma, con le misure e la sfumatura condivise (`GalleryOnPhoto`).
+// gli eventi. Nessuna coordinata: il contratto non le porta. La scheda e' quella comune di core-designsystem (`GalleryCoverCard`), la stessa dei ricordi.
 
 interface TripsHandlers {
   fun onBack()
@@ -172,7 +166,13 @@ private fun ProposalCard(trip: TripProposal, thumbnails: AlbumThumbnails, handle
   val shape = ContinuousCornerShape(FluidRadius.Card)
   Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(AlbumDimens.TightGap)) {
     Box(modifier = Modifier.fillMaxWidth().aspectRatio(TRIP_CARD_ASPECT)) {
-      Box(modifier = Modifier.matchParentSize().semantics(mergeDescendants = true) { contentDescription = spoken }) {
+      // La forma comune delle schede di copertina (core-designsystem), come «Tutti i ricordi»: la descrizione dice tutto, i testi non si rileggono.
+      GalleryCoverCard(
+        modifier = Modifier.matchParentSize().semantics(mergeDescendants = true) { contentDescription = spoken }.clip(shape),
+        title = trip.label,
+        caption = kind,
+        labelsSpoken = false,
+      ) {
         AlbumCoverThumb(
           media = trip.cover,
           thumbnails = thumbnails,
@@ -180,33 +180,6 @@ private fun ProposalCard(trip: TripProposal, thumbnails: AlbumThumbnails, handle
           shape = shape,
           glyph = if (trip.kind == TripKind.TRIP) Icons.Rounded.Flight else Icons.Rounded.Event,
         )
-        val scrim = GalleryOnPhoto.scrim()
-        Column(
-          modifier = Modifier
-            .align(Alignment.BottomStart)
-            .fillMaxWidth()
-            .clip(shape)
-            .background(Brush.verticalGradient(listOf(scrim.copy(alpha = 0f), scrim)))
-            .padding(start = AlbumDimens.TripCardInset, end = AlbumDimens.TripCardInset, bottom = AlbumDimens.TripCardInset, top = AlbumDimens.TripCardInset * 2),
-        ) {
-          // La scheda dice tutto nella sua descrizione: i testi si vedono ma TalkBack non li rilegge.
-          Text(
-            text = trip.label,
-            style = MaterialTheme.typography.titleSmall,
-            color = GalleryOnPhoto.Content,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.semantics { hideFromAccessibility() },
-          )
-          Text(
-            text = kind,
-            style = MaterialTheme.typography.labelMedium,
-            color = GalleryOnPhoto.Content,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.semantics { hideFromAccessibility() },
-          )
-        }
       }
       // La ✕: bersaglio di 48 dp, il segno su un tondo velato (si legge su qualunque foto).
       Box(

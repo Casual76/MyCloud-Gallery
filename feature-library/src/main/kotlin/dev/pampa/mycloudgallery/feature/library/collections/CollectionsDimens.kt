@@ -93,10 +93,6 @@ internal object CollectionsDimens {
   /** Il filo della scheda scelta sul tablet. */
   val SelectedRing: Dp = 3.dp
 
-  /** Il punto "nuovo" su un ricordo, e il suo filo. */
-  val NewDot: Dp = 10.dp
-  val NewDotRing: Dp = 2.dp
-
   /** L'altezza minima del titolo di una sezione (il bersaglio da 48 dp quando porta a "tutti"), e lo spazio fra il nome e la freccia. */
   val SectionTitleMin: Dp = 48.dp
   val SectionTitleGap: Dp = 4.dp

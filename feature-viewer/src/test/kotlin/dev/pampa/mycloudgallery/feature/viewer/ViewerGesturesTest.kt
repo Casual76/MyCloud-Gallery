@@ -13,11 +13,13 @@ import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.up
 import com.google.common.truth.Truth.assertThat
 import dev.pampa.mycloudgallery.core.library.contract.ViewerRequest
 import dev.pampa.mycloudgallery.core.library.testing.FakeViewerAnchor
@@ -145,6 +147,22 @@ class ViewerGesturesTest : ViewerTestBase() {
   // --- Lo zoom dei video (D8) ----------------------------------------------------------------------------------------
 
   @Test
+  fun aPannelloInformazioniApertoIlDoppioToccoNonIngrandisceIlVideo() {
+    // CG-3: come per le foto. Prima il ramo del video non riceveva il blocco e il video si ingrandiva sotto il pannello.
+    show(request = fixture.request(startIndex = videoIndex))
+    pager().performTouchInput { swipeUp() }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(800)
+    composeRule.waitForIdle()
+    composeRule.onNodeWithTag(ViewerTags.InfoPanel).assertExists()
+    pager().performTouchInput { doubleClick(Offset(centerX, height * 0.2f)) }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(800)
+    composeRule.waitForIdle()
+    assertThat(isZoomed()).isFalse()
+  }
+
+  @Test
   fun unVideoSiIngrandisceColDoppioTocco_laBarraRestaToccabile_eLoZoomResta() {
     show(request = fixture.request(startIndex = videoIndex))
     composeRule.onNodeWithContentDescription("Pausa").assertExists()
@@ -225,6 +243,56 @@ class ViewerGesturesTest : ViewerTestBase() {
     val node = composeRule.onAllNodes(withAction).fetchSemanticsNodes().first()
     val action = node.config[SemanticsActions.CustomActions].first { it.label == label }
     composeRule.runOnUiThread { action.action() }
+  }
+
+  // --- La cella d'origine resta vuota (CU-1) ------------------------------------------------------------------------------
+
+  @Test
+  fun laCellaDOrigineEVuotaMentreLaFotoNeEsceECiRientra() {
+    show()
+    val id = fixture.idAt(4)
+    // L'apertura: la cella si svuota mentre la foto ne esce e torna piena a espansione finita.
+    assertThat(fixture.anchor.hiddenHistory).containsExactly(id, null).inOrder()
+    assertThat(fixture.anchor.hidden).isNull()
+
+    // Il trascinamento: vuota mentre il dito tiene la foto...
+    pager().performTouchInput {
+      down(center)
+      moveBy(Offset(0f, 60f), delayMillis = 16)
+      moveBy(Offset(0f, 60f), delayMillis = 16)
+    }
+    composeRule.waitForIdle()
+    assertThat(fixture.anchor.hidden).isEqualTo(id)
+    // ...e di nuovo piena quando la foto e' tornata al suo posto.
+    pager().performTouchInput { up() }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(800)
+    composeRule.waitForIdle()
+    assertThat(fixture.anchor.hidden).isNull()
+
+    // Il volo alla cella: vuota fino all'arrivo, poi piena nello stesso momento in cui il viewer se ne va.
+    composeRule.onNodeWithContentDescription("Chiudi").performClick()
+    composeRule.waitUntil(TIMEOUT) { closed == 1 }
+    assertThat(fixture.anchor.hidden).isNull()
+    assertThat(fixture.anchor.hiddenHistory.takeLast(2)).containsExactly(id, null).inOrder()
+  }
+
+  @Test
+  fun anchePizzicandoLaCellaEVuotaFinoAllArrivo() {
+    show()
+    val id = fixture.idAt(4)
+    pager().performTouchInput {
+      pinch(
+        start0 = center - Offset(300f, 0f),
+        end0 = center - Offset(70f, 0f),
+        start1 = center + Offset(300f, 0f),
+        end1 = center + Offset(70f, 0f),
+        durationMillis = 300,
+      )
+    }
+    composeRule.waitUntil(TIMEOUT) { closed == 1 }
+    // Dopo l'apertura (id, null): vuota dal pizzico all'arrivo, poi piena. Mai una cella lasciata vuota.
+    assertThat(fixture.anchor.hiddenHistory).containsExactly(id, null, id, null).inOrder()
   }
 
   private companion object {

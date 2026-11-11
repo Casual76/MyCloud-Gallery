@@ -14,6 +14,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -71,6 +72,9 @@ class ViewerPlaceMapInfoTest {
 
   private fun exists(text: String) = composeRule.onAllNodesWithText(text, substring = true).fetchSemanticsNodes().isNotEmpty()
 
+  /** CU-6: l'ingresso alla mappa e' la carta (la mini-mappa, o il riquadro "Mostra sulla mappa" finche' la carta di base non c'e'). */
+  private fun mapEntry(): Boolean = exists("Mostra sulla mappa") || spoken().contains("Mini-mappa del posto. Tocca per mostrarlo sulla mappa.")
+
   private fun spoken(): List<String> =
     composeRule.onAllNodes(hasClickAction()).fetchSemanticsNodes().mapNotNull { it.config.getOrNull(SemanticsProperties.ContentDescription)?.joinToString(" ") }
 
@@ -82,14 +86,35 @@ class ViewerPlaceMapInfoTest {
   fun conUnaPosizioneCeLaRigaMostraSullaMappa_EIlTocco_ApreLaMappaVera() {
     val fake = located()
     show(fake)
-    // H2: la carta senza intestazione (parla da se') e sotto la pillola per aprirla nella mappa dell'app.
+    // Senza la bitmap (la carta di base non e' ancora disponibile): il riquadro della carta con "Mostra sulla mappa", che si tocca come la carta.
     assertThat(exists("MAPPA")).isFalse()
     assertThat(exists("Mostra sulla mappa")).isTrue()
     composeRule.onNodeWithText("Mostra sulla mappa").performClick()
     composeRule.waitForIdle()
     assertThat(fake.shown).containsExactly(photo)
-    // Senza la bitmap (la carta di base non e' ancora disponibile) resta la riga, senza immagine e senza credito.
     assertThat(exists(PlacesAttribution.MAP_BASE_SHORT)).isFalse()
+  }
+
+  @Test
+  fun laMiniMappaEUnicoIngressoAllaMappa_conApriInMappeDentro() {
+    // CU-6: con la carta non ci sono pillole sotto ("Mostra sulla mappa" e' la carta stessa); l'altra app e' un tasto dentro la carta.
+    var external = 0
+    val fake = located(Bitmap.createBitmap(640, 320, Bitmap.Config.ARGB_8888))
+    composeRule.setContent {
+      ViewerTestHost(dark = false) {
+        Box(Modifier.fillMaxSize()) {
+          val panel = rememberPlaceMapPanel(fake, photo, active = true, secure = false, onOpenMaps = { external++ })
+          OpenInfoSheet { InfoSections(panel.sections) }
+        }
+      }
+    }
+    composeRule.waitForIdle()
+    assertThat(exists("Mostra sulla mappa")).isFalse()
+    assertThat(spoken()).contains("Apri in Mappe")
+    composeRule.onNodeWithContentDescription("Apri in Mappe").performClick()
+    composeRule.waitForIdle()
+    assertThat(external).isEqualTo(1)
+    assertThat(fake.shown).isEmpty()
   }
 
   @Test
@@ -167,7 +192,7 @@ class ViewerPlaceMapInfoTest {
   fun iBersagliSonoDa48Dp_ATestoGrande() {
     show(located(Bitmap.createBitmap(640, 320, Bitmap.Config.ARGB_8888)), fontScale = 1.3f)
     assertTouchTargets("1,3x")
-    assertThat(exists("Mostra sulla mappa")).isTrue()
+    assertThat(mapEntry()).isTrue()
   }
 
   // --- Screenshot (docs/screenshots/9-P4/): il pannello con la mini-mappa. L'immagine e' una carta piatta finta con il segno sul punto: MapSnapshotter non si disegna in Robolectric -------------------
@@ -186,14 +211,14 @@ class ViewerPlaceMapInfoTest {
   @Test
   fun screenshotInfoConMiniMappaChiaro() {
     show(located(fakeMiniMap()))
-    assertThat(exists("Mostra sulla mappa")).isTrue()
+    assertThat(mapEntry()).isTrue()
     composeRule.onRoot().captureRoboImage("../docs/screenshots/9-P4/info-viewer-mini-mappa-chiaro-telefono.png")
   }
 
   @Test
   fun screenshotInfoConMiniMappaScuro() {
     show(located(fakeMiniMap()), dark = true)
-    assertThat(exists("Mostra sulla mappa")).isTrue()
+    assertThat(mapEntry()).isTrue()
     composeRule.onRoot().captureRoboImage("../docs/screenshots/9-P4/info-viewer-mini-mappa-scuro-telefono.png")
   }
 }

@@ -1,6 +1,7 @@
 package dev.pampa.mycloudgallery.feature.viewer.info
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.CallSplit
 import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.Image
@@ -81,6 +82,7 @@ internal fun similarCopiesInfoSection(
   return InfoSectionModel(
     header = res.getQuantityString(R.plurals.viewer_similar_header, group.copies.size, group.copies.size),
     rows = rows,
+    icon = Icons.Rounded.ContentCopy,
   )
 }
 

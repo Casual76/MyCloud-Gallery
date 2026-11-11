@@ -86,11 +86,6 @@
 
   <!-- Pannello informazioni -->
   <string name="viewer_info_title">Informazioni</string>
-  <string name="viewer_info_h_place">Luogo</string>
-  <string name="viewer_info_h_camera">Fotocamera</string>
-  <string name="viewer_info_h_file">File</string>
-  <string name="viewer_info_h_phone">Sul telefono</string>
-  <string name="viewer_zone_place">ora di %1$s, %2$s</string>
   <string name="viewer_estimated_pill">Stimata</string>
   <string name="viewer_estimated_name">Data ricavata dal nome del file</string>
   <string name="viewer_estimated_system">Data ricavata dal sistema</string>
@@ -99,20 +94,17 @@
   <string name="viewer_edited_pill">Modificata</string>
   <string name="viewer_dimensions">%1$d × %2$d</string>
   <string name="viewer_megapixels">%1$s MP</string>
-  <string name="viewer_duration">Durata</string>
   <string name="viewer_exposure_f">f/%1$s</string>
   <string name="viewer_exposure_time">%1$s s</string>
   <string name="viewer_exposure_iso">ISO %1$d</string>
   <string name="viewer_focal_mm">%1$s mm</string>
   <string name="viewer_flash_on">Flash</string>
-  <string name="viewer_flash_off">Senza flash</string>
   <string name="viewer_coordinates">%1$s° %2$s, %3$s° %4$s</string>
   <string name="viewer_coord_north">N</string>
   <string name="viewer_coord_south">S</string>
   <string name="viewer_coord_east">E</string>
   <string name="viewer_coord_west">O</string>
   <string name="viewer_place_open_maps">Apri in Mappe</string>
-  <string name="viewer_place_open_maps_caption">Si apre un’altra app con la posizione</string>
   <string name="viewer_trait_ultra_hdr">Ultra HDR</string>
   <string name="viewer_trait_hdr_video">Video HDR</string>
   <string name="viewer_trait_panorama">Panorama</string>
@@ -121,6 +113,5 @@
   <string name="viewer_trait_motion">Foto in movimento</string>
   <string name="viewer_trait_raw">RAW</string>
   <string name="viewer_trait_animated">Immagine animata</string>
-  <string name="viewer_motion_unplayable_title">Parte video non riproducibile</string>
   <string name="viewer_motion_unplayable_caption">Il formato di questa foto in movimento non è riconosciuto: si vede la foto ferma.</string>
 </resources>

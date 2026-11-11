@@ -144,6 +144,29 @@ class GalleryRowPresenceTest {
   }
 
   @Test
+  fun laCellaNascostaNonSiDisegnaNeLeiNeIlSuoDisco_eLeAltreRestanoUguali() {
+    // CU-1: la cella da cui esce (e in cui rientra) la foto del viewer resta vuota, con il suo disco di presenza; le vicine non cambiano.
+    stage()
+    val before = capture(byRow = true)
+    composeRule.runOnIdle { interaction.hiddenKey = "b" }
+    val hidden = capture(byRow = true)
+    val white = 0xFFFFFFFF.toInt()
+    for (y in 0 until RowHeight) {
+      for (x in 0 until RowWidth) {
+        val i = y * RowWidth + x
+        if (x in 160 until 320) {
+          assertWithMessage("la cella nascosta disegna in ($x, $y)").that(hidden[i]).isEqualTo(white)
+        } else {
+          assertWithMessage("una cella vicina e' cambiata in ($x, $y)").that(hidden[i]).isEqualTo(before[i])
+        }
+      }
+    }
+    // La foto e' rientrata: la cella torna com'era.
+    composeRule.runOnIdle { interaction.hiddenKey = null }
+    assertSamePixels(before, capture(byRow = true))
+  }
+
+  @Test
   fun aRiposoISegniSonoGliStessiPixelDiQuandoLiDisegnavaLaCella() {
     stage()
     val byCell = capture(byRow = false)

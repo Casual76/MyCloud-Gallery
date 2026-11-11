@@ -37,7 +37,7 @@ class ViewerFormatEnglishDeviceTest {
   fun dateEOreInItalianoAncheConIlTelefonoInInglese() {
     assertThat(format.dateTitle(capture)).isEqualTo("12 marzo 2024")
     assertThat(format.time(capture)).isEqualTo("12:41")
-    assertThat(format.dateTimeLine(capture)).isEqualTo("martedì 12 marzo 2024, 12:41")
+    assertThat(format.panelDate(capture)).isEqualTo("Martedì 12 marzo 2024")
     assertThat(format.dateTitle(20240312)).isEqualTo("12 marzo 2024")
   }
 
@@ -45,7 +45,7 @@ class ViewerFormatEnglishDeviceTest {
   fun iNumeriUsanoLaVirgolaItaliana() {
     val details = MediaDetails(id = MediaId.random(), kind = MediaKind.PHOTO, width = 2_000, height = 1_500)
     // 3 MP: sotto i 10 si scrive con un decimale, con la virgola.
-    assertThat(format.dimensions(details)).contains("3,0")
+    assertThat(format.dimensionPills(details)).contains("3,0 MP")
     assertThat(format.fileSize(3_400_000L)).contains(",")
   }
 }

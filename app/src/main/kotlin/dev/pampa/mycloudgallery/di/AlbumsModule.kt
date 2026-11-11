@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.albums.AppShareRunner
 import dev.pampa.mycloudgallery.albums.AppSharedAlbums
 import dev.pampa.mycloudgallery.albums.AppSmartAlbums
 import dev.pampa.mycloudgallery.albums.AppTrips
+import dev.pampa.mycloudgallery.albums.AppMediaAlbums
 import dev.pampa.mycloudgallery.albums.AppViewerAlbumActions
 import dev.pampa.mycloudgallery.core.albums.contract.Albums
 import dev.pampa.mycloudgallery.core.common.diagnostics.DiagnosticsContributor
@@ -75,6 +76,12 @@ object AlbumsModule {
       gallery.onHiddenChanged = { albums.hiddenChanged() }
       // P10-10: "Aggiungi ad album" nel menu ⋮ di ogni viewer (le voci di un album le aggiunge chi apre il viewer da un album).
       gallery.viewerAlbums = AppViewerAlbumActions({ albumsFacade.get() }, { sharedFacade.get() }, gallery.albumRequests, graph.scope)
+      // H2, giro di correzione 1: gli album in cui sta un media, nel pannello informazioni (gli elementi dal catalogo, i nomi dall'elenco).
+      gallery.viewerMediaAlbums = AppMediaAlbums(
+        albums = { albumsFacade.get() },
+        itemsOf = gallery::albumIdsOf,
+        opener = gallery.albumOpener,
+      )
       // P10-10: "Aggiungi ad album" dalla condivisione in arrivo: la promessa su disco, mantenuta quando i file sono nel catalogo.
       val incoming = AppIncomingAlbums(
         { albumsFacade.get() },

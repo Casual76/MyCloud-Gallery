@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.viewer.page
 
+import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerGestureArbiter
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.AnimatedImageDrawable
 import android.graphics.drawable.Drawable
@@ -146,6 +147,8 @@ internal fun ViewerPage(
    * miniatura torna sopra subito, senza dissolvenza, e sfuma lei con il resto.
    */
   exiting: Boolean = false,
+  /** Le informazioni stanno nella colonna laterale (la foto accanto e' intera): il doppio tocco ingrandisce anche a colonna aperta. */
+  sidePanel: Boolean = false,
 ) {
   val id = spec.id
   val image = state.images[id] ?: PageImage()
@@ -271,9 +274,13 @@ internal fun ViewerPage(
       onTap()
     }
   }
-  // H2: con il pannello informazioni aperto il doppio tocco non ingrandisce (la foto e' spostata e tagliata: si ingrandirebbe un punto che non e'
-  // quello toccato) e non fa niente; un tocco solo chiude il pannello (`ViewerController.toggleChrome`).
-  val doubleTapOn = liveText?.active != true && cutout?.active != true && !state.infoOpen
+  // H2 (CG-3): una regola sola per tutti i rami qui sotto, video compreso (`ViewerGestureArbiter.doubleTapZooms`).
+  val doubleTapOn = ViewerGestureArbiter.doubleTapZooms(
+    infoOpen = state.infoOpen,
+    sidePanel = sidePanel,
+    textActive = liveText?.active == true,
+    cutoutActive = cutout?.active == true,
+  )
   Box(
     modifier = modifier
       .fillMaxSize()
@@ -329,6 +336,7 @@ internal fun ViewerPage(
         contentSize = videoSize ?: contentSize,
         gesturesEnabled = isCurrent,
         onTap = pageTap,
+        doubleTapEnabled = doubleTapOn,
       ) {
         VideoContent(
           spec = spec,

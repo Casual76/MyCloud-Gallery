@@ -125,12 +125,12 @@ private class GalleryRowPresenceNode(
     // Letti qui, nel disegno: la pressione di una cella ridisegna le righe (come ridisegnava la cella), niente altro.
     val pressedKey = interaction.pressedKey
     val pressAmount = if (pressedKey != null) interaction.pressProgress.value.coerceIn(0f, 1f) else 0f
-    drawPresence(presence, style, pressedKey, pressAmount)
+    drawPresence(presence, style, pressedKey, pressAmount, interaction.hiddenKey)
   }
 }
 
 /** Le tre passate: il fondo di ogni disco, poi il filo, poi il glifo. Ogni passata e' una serie di disegni uguali, che la GPU unisce. */
-private fun DrawScope.drawPresence(p: GalleryRowPresence, s: GalleryGridCellStyle, pressedKey: Any?, pressAmount: Float) {
+private fun DrawScope.drawPresence(p: GalleryRowPresence, s: GalleryGridCellStyle, pressedKey: Any?, pressAmount: Float, hiddenKey: Any? = null) {
   val rects = Array(p.kinds.size) { i ->
     p.kinds[i]?.let { kind -> badgeSlots(p.widths[i].toFloat(), p.height.toFloat(), s.metrics, 0, null, kind).presence }
   }
@@ -139,6 +139,8 @@ private fun DrawScope.drawPresence(p: GalleryRowPresence, s: GalleryGridCellStyl
     for (i in p.kinds.indices) {
       val kind = p.kinds[i] ?: continue
       val rect = rects[i] ?: continue
+      // CU-1: il disco della cella vuota (la foto del viewer ci sta rientrando) non si disegna.
+      if (hiddenKey != null && p.keys[i] == hiddenKey) continue
       val pressed = pressAmount > 0f && pressedKey != null && p.keys[i] == pressedKey
       val cellWidth = p.widths[i].toFloat()
       val cellHeight = p.height.toFloat()

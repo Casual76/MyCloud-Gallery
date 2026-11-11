@@ -118,11 +118,17 @@ class ViewerOverlayTest : ViewerTestBase() {
     pager().performTouchInput { swipeUp() }
     composeRule.waitForIdle()
     composeRule.onNodeWithTag(ViewerTags.InfoPanel).assertExists()
-    // H2: la data grande in testa, sotto l'ora con il fuso dello scatto, il luogo con il paese, e la pillola per aprire Mappe.
+    // H2: la data grande in testa, sotto l'ora (con il fuso solo se diverso da quello del telefono), il luogo con il paese.
     composeRule.onNodeWithText("Martedì 12 marzo 2024").assertExists()
-    composeRule.onNodeWithText("12:41 · ora di Oslo, UTC+1").assertExists()
+    assertThat(composeRule.onAllNodesWithText("12:41", substring = true).fetchSemanticsNodes()).isNotEmpty()
+    // CU-5: a pannello aperto la barra in alto non ripete data, ora e luogo (li dice il pannello, una volta sola).
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(800)
+    composeRule.waitForIdle()
+    assertThat(composeRule.onAllNodesWithText("12 marzo 2024").fetchSemanticsNodes()).isEmpty()
+    assertThat(composeRule.onAllNodesWithText("12:41 · Oslo").fetchSemanticsNodes()).isEmpty()
     composeRule.onNodeWithText("Oslo, Norvegia", substring = true).assertExists()
-    composeRule.onNodeWithText("Apri in Mappe").assertExists()
+    composeRule.onNodeWithContentDescription("Apri in Mappe").assertExists()
   }
 
   @Test

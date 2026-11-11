@@ -1,8 +1,10 @@
 package dev.pampa.mycloudgallery.feature.viewer.info
 
 import androidx.compose.animation.core.exponentialDecay
+import androidx.compose.runtime.MonotonicFrameClock
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.yield
 import org.junit.Test
 
 /**
@@ -116,5 +118,62 @@ class InfoPanelStateTest {
     assertThat(panel.progress.value).isEqualTo(0f)
     assertThat(panel.offset.value).isEqualTo(0f)
     assertThat(panel.panelTop(2000f)).isEqualTo(2000f)
+  }
+
+  // --- CG-1: lo scorrimento e' dell'elemento ---------------------------------------------------------------------------------------------
+
+  @Test
+  fun daUnPannelloLungoScorsoAUnoCorto_nienteScorrimentoNonValido() = runTest {
+    val panel = InfoPanelState(initialOpen = true)
+    panel.measure(contentHeight = 1600f, travel = travel, liftRoom = 400f)
+    panel.drag(-600f, travel)
+    assertThat(panel.inner).isEqualTo(200f)
+    // Un altro elemento con poche informazioni: il pannello si rimisura. Prima restavano 600 di scorrimento e la testa nuova era sopra il bordo.
+    panel.measure(contentHeight = 800f, travel = travel, liftRoom = 400f)
+    assertThat(panel.lift).isEqualTo(0f)
+    assertThat(panel.inner).isEqualTo(0f)
+    assertThat(panel.panelTop(2000f)).isEqualTo(1000f)
+    // E di nuovo uno lungo: si scorre da un punto valido, mai oltre la fine.
+    panel.measure(contentHeight = 1600f, travel = travel, liftRoom = 400f)
+    panel.drag(-100f, travel)
+    assertThat(panel.scroll).isAtMost(600f)
+    assertThat(panel.inner).isAtMost(200f)
+  }
+
+  @Test
+  fun lInerziaDiUnPannelloLungoNonLimitaQuelloDopo() = runTest(Frames) {
+    // L'inerzia fissava i limiti dell'animazione a quelli del pannello di allora (600): un pannello piu' lungo dopo non scorreva fino in fondo.
+    val panel = InfoPanelState(initialOpen = true)
+    panel.measure(contentHeight = 1600f, travel = travel, liftRoom = 400f)
+    panel.drag(-300f, travel)
+    assertThat(panel.endDrag(-4000f, travel, reducedMotion = false, decay = decay)).isTrue()
+    assertThat(panel.scroll).isEqualTo(600f)
+    panel.measure(contentHeight = 1800f, travel = travel, liftRoom = 400f)
+    panel.drag(-150f, travel)
+    assertThat(panel.scroll).isEqualTo(750f)
+  }
+
+  @Test
+  fun cambiandoElementoSiRipartedallaTesta() = runTest {
+    val panel = InfoPanelState(initialOpen = true)
+    panel.measure(contentHeight = 1600f, travel = travel, liftRoom = 400f)
+    panel.drag(-450f, travel)
+    panel.endDrag(0f, travel, reducedMotion = true, decay = decay)
+    panel.resetScroll(reducedMotion = true)
+    assertThat(panel.scroll).isEqualTo(0f)
+    assertThat(panel.panelTop(2000f)).isEqualTo(1000f)
+    // Il pannello resta aperto.
+    assertThat(panel.progress.value).isEqualTo(1f)
+  }
+
+  /** Un orologio dei fotogrammi da 60 Hz per le animazioni che ne vogliono uno (l'inerzia). */
+  private object Frames : MonotonicFrameClock {
+    private var nanos = 0L
+
+    override suspend fun <R> withFrameNanos(onFrame: (frameTimeNanos: Long) -> R): R {
+      yield()
+      nanos += 16_000_000L
+      return onFrame(nanos)
+    }
   }
 }

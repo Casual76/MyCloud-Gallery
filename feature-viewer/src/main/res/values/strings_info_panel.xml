@@ -4,6 +4,8 @@
 
   <!-- La riga sotto la data: "12:41 · ora di Oslo, UTC+1". -->
   <string name="viewer_info_time_line">%1$s · %2$s</string>
+  <!-- CU-5: lo scatto e' stato fatto in un altro fuso: "12:41 · ora locale, UTC+9" (il luogo sta nella riga sotto). -->
+  <string name="viewer_info_time_local">%1$s · ora locale, %2$s</string>
 
   <!-- Il backup del media in una capsula: un'icona e due parole. Il dettaglio sotto solo quando serve sapere perché. -->
   <string name="viewer_info_badge_both">Telefono e NAS</string>
@@ -21,6 +23,18 @@
   <string name="viewer_info_badge_lost">Non salvato</string>
   <!-- Per TalkBack la capsula si legge con il suo argomento: "Backup: Telefono e NAS". -->
   <string name="viewer_info_badge_spoken">Backup: %1$s</string>
+
+  <!-- CU-7: il nome della risoluzione di un video, al posto dei megapixel. -->
+  <string name="viewer_video_4k">4K</string>
+  <string name="viewer_video_full_hd">Full HD</string>
+  <string name="viewer_video_hd">HD</string>
+
+  <!-- La testa della scheda dello scatto quando la fotocamera non si sa (uno screenshot, un video, un file senza EXIF). -->
+  <string name="viewer_info_kind_photo">Foto</string>
+  <string name="viewer_info_kind_video">Video</string>
+
+  <!-- Gli album in cui sta l'elemento (voci che aprono l'album). -->
+  <string name="viewer_albums_header">Album</string>
 
   <!-- Il piede: il nome del file e, accanto, la cartella sul telefono. -->
   <string name="viewer_info_file_line">%1$s · %2$s</string>

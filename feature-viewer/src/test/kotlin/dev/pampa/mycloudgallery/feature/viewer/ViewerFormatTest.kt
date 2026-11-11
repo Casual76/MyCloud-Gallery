@@ -45,19 +45,13 @@ class ViewerFormatTest {
     assertThat(format.time(capture(60))).isEqualTo("12:41")
     assertThat(format.time(capture(540))).isEqualTo("20:41")
     assertThat(format.dateTitle(capture(60))).isEqualTo("12 marzo 2024")
-    assertThat(format.dateTimeLine(capture(60))).isEqualTo("martedì 12 marzo 2024, 12:41")
+    assertThat(format.panelDate(capture(60))).isEqualTo("Martedì 12 marzo 2024")
   }
 
   @Test
   fun loScattoDopoMezzanotteDelPostoCambiaIlGiorno() {
     // 11:41 UTC e UTC+13 (Auckland): il giorno dopo.
     assertThat(format.dateTitle(capture(13 * 60))).isEqualTo("13 marzo 2024")
-  }
-
-  @Test
-  fun ilFusoSiScriveConIlLuogoQuandoSiConosce() {
-    assertThat(format.zoneCaption(capture(60), "Oslo")).isEqualTo("ora di Oslo, UTC+1")
-    assertThat(format.zoneCaption(capture(60), null)).isEqualTo("UTC+1")
   }
 
   @Test
@@ -75,9 +69,9 @@ class ViewerFormatTest {
     val byName = capture(60, CaptureTimeConfidence.ESTIMATED, CaptureTimeSource.FILE_NAME)
     val bySystem = capture(60, CaptureTimeConfidence.ESTIMATED, CaptureTimeSource.MEDIASTORE)
     val byModified = capture(0, CaptureTimeConfidence.ESTIMATED, CaptureTimeSource.FILE_MODIFIED)
-    assertThat(format.zoneCaption(byName, "Oslo")).isEqualTo("Data ricavata dal nome del file")
-    assertThat(format.zoneCaption(bySystem, null)).isEqualTo("Data ricavata dal sistema")
-    assertThat(format.zoneCaption(byModified, null)).isEqualTo("Data di modifica del file, non dello scatto")
+    assertThat(format.panelTimeLine(byName)).endsWith(" · Data ricavata dal nome del file")
+    assertThat(format.panelTimeLine(bySystem)).endsWith(" · Data ricavata dal sistema")
+    assertThat(format.panelTimeLine(byModified)).endsWith(" · Data di modifica del file, non dello scatto")
   }
 
   @Test
@@ -90,12 +84,12 @@ class ViewerFormatTest {
 
   @Test
   fun leDimensioniSonoQuelleCheSiVedonoConIMegapixel() {
-    assertThat(format.dimensions(details(4000, 3000))).isEqualTo("4000 × 3000 · 12 MP")
+    assertThat(format.dimensionPills(details(4000, 3000))).containsExactly("4000 × 3000", "12 MP").inOrder()
     // Una foto in verticale (rotazione di 90 gradi) si legge dritta.
-    assertThat(format.dimensions(details(4000, 3000, orientation = 90))).isEqualTo("3000 × 4000 · 12 MP")
-    assertThat(format.dimensions(details(1600, 1200))).isEqualTo("1600 × 1200 · 1,9 MP")
-    assertThat(format.dimensions(details(16000, 12500))).isEqualTo("16000 × 12500 · 200 MP")
-    assertThat(format.dimensions(details(null, null))).isNull()
+    assertThat(format.dimensionPills(details(4000, 3000, orientation = 90))).containsExactly("3000 × 4000", "12 MP").inOrder()
+    assertThat(format.dimensionPills(details(1600, 1200))).containsExactly("1600 × 1200", "1,9 MP").inOrder()
+    assertThat(format.dimensionPills(details(16000, 12500))).containsExactly("16000 × 12500", "200 MP").inOrder()
+    assertThat(format.dimensionPills(details(null, null))).isEmpty()
   }
 
   @Test
@@ -121,13 +115,11 @@ class ViewerFormatTest {
   @Test
   fun l_EsposizioneHaSoloIPezziChePortaLaFotocamera() {
     val full = ExifDetails(fNumber = 1.8, exposureTime = "1/250", iso = 50, focalLengthMm = 6.3, flashFired = true, lens = "Principale")
-    assertThat(format.exposure(full)).isEqualTo("f/1,8 · 1/250 s · ISO 50")
-    assertThat(format.lensLine(full)).isEqualTo("Principale · 6,3 mm · Flash")
-    assertThat(format.exposure(ExifDetails(iso = 200))).isEqualTo("ISO 200")
-    assertThat(format.exposure(ExifDetails())).isNull()
-    assertThat(format.lensLine(ExifDetails(flashFired = false))).isEqualTo("Senza flash")
+    assertThat(format.shotStrip(full)).containsExactly("ISO 50", "6,3 mm", "f/1,8", "1/250 s").inOrder()
+    assertThat(format.shotStrip(ExifDetails(iso = 200))).containsExactly("ISO 200")
+    assertThat(format.shotStrip(ExifDetails())).isEmpty()
     // Un diaframma intero non si scrive "2,0".
-    assertThat(format.exposure(ExifDetails(fNumber = 2.0))).isEqualTo("f/2")
+    assertThat(format.shotStrip(ExifDetails(fNumber = 2.0))).containsExactly("f/2")
   }
 
   @Test

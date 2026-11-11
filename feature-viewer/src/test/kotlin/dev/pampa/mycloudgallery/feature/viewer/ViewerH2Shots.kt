@@ -7,6 +7,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.down
 import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -28,10 +30,13 @@ import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetails
 import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
+import dev.pampa.mycloudgallery.feature.viewer.info.ViewerAlbumEntry
+import dev.pampa.mycloudgallery.feature.viewer.info.ViewerMediaAlbums
 import dev.pampa.mycloudgallery.feature.viewer.people.ViewerFaceChip
 import dev.pampa.mycloudgallery.feature.viewer.people.ViewerFaceRef
 import dev.pampa.mycloudgallery.feature.viewer.place.ViewerMapPlace
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeViewerPlaceMap
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assume.assumeFalse
 import org.junit.Test
@@ -146,11 +151,54 @@ abstract class ViewerH2Shots(private val device: String, private val tablet: Boo
         ViewerFaceChip.Unnamed(ViewerFaceRef("sconosciuto"), null),
       ),
     ),
+    mediaAlbums = ShotAlbums,
   )
 
+  /** Gli album della foto di prova: due voci. */
+  private object ShotAlbums : ViewerMediaAlbums {
+    override fun albumsOf(media: MediaId): Flow<List<ViewerAlbumEntry>> =
+      flowOf(listOf(ViewerAlbumEntry(key = "a", title = "Vacanze a Oslo", count = 42), ViewerAlbumEntry(key = "b", title = "Famiglia", count = 310)))
+
+    override fun open(album: ViewerAlbumEntry) = Unit
+  }
+
+  /**
+   * CU-13: tutti i dati, visti: sul telefono il pannello cresce fin sotto la barra in alto (un trascinamento lento, senza lancio), e si vedono
+   * la testa, le facce, la scheda dello scatto piena, la mini-mappa e gli album. Sul tablet la colonna.
+   */
   private fun fullData(dark: Boolean) {
     showPhoto(PORTRAIT, dark, richServices(portrait = true))
     openPanel()
+    if (!tablet) {
+      pager().performTouchInput {
+        down(Offset(centerX, height * 0.3f))
+        moveBy(Offset(0f, -40f), delayMillis = 32)
+        repeat(5) { moveBy(Offset(0f, -110f), delayMillis = 48) }
+      }
+      composeRule.mainClock.advanceTimeBy(300)
+      composeRule.waitForIdle()
+      pager().performTouchInput { up() }
+      composeRule.waitForIdle()
+      composeRule.mainClock.advanceTimeBy(SETTLE_MS)
+      composeRule.waitForIdle()
+    }
+    // Poi le informazioni scorrono (lente, senza lancio) finche' «Persone» sta dove stava la data: in un fotogramma le facce, la scheda dello
+    // scatto intera, la mini-mappa e gli album. La testa (data, ora, luogo, backup) e' negli altri screenshot.
+    val dateTop = composeRule.onAllNodesWithText("Martedì 12 marzo 2024").onFirst().fetchSemanticsNode().boundsInRoot.top
+    val peopleTop = composeRule.onAllNodesWithText("Persone").onFirst().fetchSemanticsNode().boundsInRoot.top
+    val scroll = peopleTop - dateTop
+    composeRule.onRoot().performTouchInput {
+      val x = if (tablet) width - SIDE_TOUCH_INSET else centerX
+      val distance = scroll + viewConfiguration.touchSlop
+      down(Offset(x, height * 0.8f))
+      repeat(SCROLL_STEPS) { moveBy(Offset(0f, -distance / SCROLL_STEPS), delayMillis = 48) }
+    }
+    composeRule.mainClock.advanceTimeBy(300)
+    composeRule.waitForIdle()
+    composeRule.onRoot().performTouchInput { up() }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(SETTLE_MS)
+    composeRule.waitForIdle()
     shoot("dati-completi", dark)
   }
 
@@ -255,6 +303,12 @@ abstract class ViewerH2Shots(private val device: String, private val tablet: Boo
 
   private companion object {
     const val SETTLE_MS = 800L
+
+    /** Lo scorrimento lento di "dati completi": a passi, ognuno dopo 48 ms (nessun lancio: si aspetta prima di alzare il dito). */
+    const val SCROLL_STEPS = 8
+
+    /** Dove si tocca la colonna del tablet: dentro, lontano dal bordo destro. */
+    const val SIDE_TOUCH_INSET = 160f
 
     /** Una foto verticale 3:4. */
     const val PORTRAIT = 750

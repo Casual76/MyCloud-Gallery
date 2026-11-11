@@ -150,8 +150,10 @@ import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextSheet
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextState
 import dev.pampa.mycloudgallery.feature.viewer.livetext.TextSelections
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSidePanel
+import dev.pampa.mycloudgallery.feature.viewer.info.averageColor
 import dev.pampa.mycloudgallery.feature.viewer.info.backupNote
 import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoModel
+import dev.pampa.mycloudgallery.feature.viewer.info.rememberAlbumsPanel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberBackupState
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberPeoplePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberSimilarCopiesPanel
@@ -284,6 +286,8 @@ private fun ViewerHost(
   controller.view = view
   controller.reducedMotion = reducedMotion
   controller.density = density.density
+  // CU-1: comunque esca il viewer, nessuna cella della griglia resta vuota.
+  DisposableEffect(controller) { onDispose { controller.releaseCell() } }
   // D-15 (prove sul campo): lo stato delle pagine segue la rete di adesso. Il primo valore e' la rete di quando si apre (niente da rifare); da li' in
   // poi ogni cambiamento rifa le pagine ferme per colpa della rete (dati mobili, VPN spenta, nessuna rete): non restano su un avviso non piu' vero.
   val link = services.link
@@ -708,6 +712,7 @@ private fun PagerLayer(
           cutout = controller.cutout,
           // Fase 10 (P6, D20, E-T18): la foto si trascina verso un'altra app, mai dai Nascosti.
           dragEnabled = !request.secure,
+          sidePanel = controller.sidePanel,
           modifier = Modifier.infoPageLayer(controller, remember(spec.aspect, stage) { fitRect(stage, spec.aspect) }, panelPx, clip = infoShown),
         )
       }
@@ -1011,12 +1016,15 @@ private fun ViewerOverlays(
   // Con il soggetto staccato i controlli sono i suoi (la barra del ritaglio): niente chrome sotto, niente controlli uno sopra l'altro.
   val chromeShown = atRest && chromeBackdropReady && !controller.closing && !controller.cutout.active && (state.chromeVisible || touchExploration)
   val infoClosed by remember { derivedStateOf { info.progress.value < INFO_CLOSED } }
+  // CU-5: la barra in alto riassume l'elemento a pannello chiuso; da meta' corsa in su il pannello dice data, ora e luogo per esteso, e la
+  // barra tiene solo i suoi tasti (una cosa si legge una volta sola). Cambia una volta per apertura, non a ogni fotogramma.
+  val infoSpeaks by remember { derivedStateOf { info.progress.value >= INFO_SPEAKS } }
   val chromeModifier = if (sidePanel) Modifier.shrinkEnd { (panelPx * info.progress.value).roundToInt() } else Modifier
 
   GalleryViewerChrome(
     visible = chromeShown,
-    title = title,
-    subtitle = subtitle,
+    title = if (infoSpeaks) "" else title,
+    subtitle = if (infoSpeaks) null else subtitle,
     backdrop = backdrop,
     onClose = controller::close,
     bottomVisible = chromeShown && bottomReady && (sidePanel || infoClosed),
@@ -1146,10 +1154,17 @@ private fun ViewerOverlays(
   // Fase 8 (P9, D25): la riga "Persone" (volti, nomi, "Chi e'?"), solo con la porta legata e il pannello aperto.
   val peoplePanel = rememberPeoplePanel(services.people, currentId, active = infoVisible)
   // Fase 9 (P4, D30): la riga "Mostra sulla mappa" e la mini-mappa (solo offline), mai per un media aperto dai Nascosti.
-  val placeMapPanel = rememberPlaceMapPanel(services.placeMap, currentId, active = infoVisible, secure = request.secure)
+  // CU-6: "Apri in Mappe" (un'altra app) sta dentro la mini-mappa quando c'e', altrimenti in coda al luogo.
+  val onOpenMaps: (() -> Unit)? = if (details?.location != null) controller::askMaps else null
+  val placeMapPanel = rememberPlaceMapPanel(services.placeMap, currentId, active = infoVisible, secure = request.secure, onOpenMaps = onOpenMaps)
+  val placeOpenMaps = if (placeMapPanel.sections.isEmpty()) onOpenMaps else null
+  // Gli album dell'elemento (giro di correzione 1): letti solo a pannello aperto, mai dai Nascosti.
+  val albumsPanel = rememberAlbumsPanel(services.mediaAlbums, currentId, active = infoVisible && !request.secure)
   // H2: cambiando elemento a pannello aperto le informazioni nuove sostituiscono le vecchie con una dissolvenza breve, senza lampi.
   val infoFade = remember { Animatable(1f) }
   LaunchedEffect(currentId) {
+    // CG-1: lo scorrimento e la crescita sono dell'elemento: quello nuovo riparte dalla testa (in parallelo alla dissolvenza).
+    launch { info.resetScroll(reducedMotion) }
     if (info.progress.value > 0f && !reducedMotion) {
       infoFade.snapTo(0f)
       infoFade.animateTo(1f, FluidMotion.crossFade())
@@ -1173,13 +1188,20 @@ private fun ViewerOverlays(
           motionUnplayable = currentId in controller.motionUnplayable,
           onPhone = onPhone,
           localDay = localDay,
+          exifPending = current?.exif == null,
         ),
       )
     }
     val backupNote = remember(backupState, onPhone, format) { backupState?.let { backupNote(format, it, onPhone) } }
     // La mappa sotto il luogo e i dati, poi le persone, poi le copie (H2).
-    val extras = remember(placeMapPanel.sections, peoplePanel.sections, similar.sections) { placeMapPanel.sections + peoplePanel.sections + similar.sections }
-    val onOpenMaps: (() -> Unit)? = if (details?.location != null) controller::askMaps else null
+    // Le facce subito sotto la testa; la mappa, gli album e le copie dopo la scheda dello scatto (giro di correzione 1).
+    val extras = remember(placeMapPanel.sections, albumsPanel.sections, similar.sections) {
+      placeMapPanel.sections + albumsPanel.sections + similar.sections
+    }
+    // La tinta della scheda dello scatto: il colore medio del segnaposto della foto, gia' decodificato per la pagina (nessuna lettura in piu').
+    val hash = if (currentIndex >= 0) snapshot.thumbHashAt(currentIndex) else null
+    val accent = remember(hash, services.placeholders) { hash?.let { averageColor(services.placeholders.image(it)) } }
+    val backupPending = services.backup != null && backupState == null
     val infoTitle = stringResource(R.string.viewer_info_title)
     val topLimit = with(density) { WindowInsets.statusBars.getTop(density) + PanelTopReserve.toPx() }
     Box(Modifier.fillMaxSize().testTag(ViewerTags.InfoPanel)) {
@@ -1191,7 +1213,17 @@ private fun ViewerOverlays(
           backdrop = backdrop,
           onClose = { state.infoOpen = false },
           contentAlpha = { infoFade.value },
-        ) { InfoContent(model = model, backup = backupNote, extras = extras, onOpenMaps = onOpenMaps) }
+        ) {
+          InfoContent(
+            model = model,
+            backup = backupNote,
+            extras = extras,
+            onOpenMaps = placeOpenMaps,
+            leading = peoplePanel.sections,
+            accent = accent,
+            backupPending = backupPending,
+          )
+        }
       } else {
         InfoSheet(
           state = info,
@@ -1203,7 +1235,17 @@ private fun ViewerOverlays(
           onDragEnd = controller::onPanelDragEnd,
           onClose = { state.infoOpen = false },
           contentAlpha = { infoFade.value },
-        ) { InfoContent(model = model, backup = backupNote, extras = extras, onOpenMaps = onOpenMaps) }
+        ) {
+          InfoContent(
+            model = model,
+            backup = backupNote,
+            extras = extras,
+            onOpenMaps = placeOpenMaps,
+            leading = peoplePanel.sections,
+            accent = accent,
+            backupPending = backupPending,
+          )
+        }
         // Il video continua ad andare e i suoi comandi stanno sopra il bordo del pannello, e salgono con lui (H2).
         val barShown = videoBar != null && atRest && chromeBackdropReady && !controller.cutout.active && (state.chromeVisible || touchExploration)
         if (barShown && videoBar != null) {
@@ -1319,6 +1361,9 @@ private val PanelTopReserve: Dp = 64.dp
 
 /** La barra del video sopra il pannello compare nell'ultima meta' della sua corsa (H2). */
 private const val VideoBarFrom = 0.5f
+
+/** Da qui il pannello informazioni e' la fonte di data e luogo e la barra in alto non li ripete (CU-5). */
+private const val INFO_SPEAKS = 0.5f
 
 /** A che punto dell'espansione entrano le pagine vicine (vedi `PagerLayer`): lontano dal primo fotogramma, prima della fine. */
 private const val NeighborsAtProgress = 0.5f

@@ -43,6 +43,9 @@ class GalleryHostViewModel @Inject constructor(
   /** Correzioni 5B (R4, MC-1): ogni "Condividi" dell'app (viewer e selezione), con o senza backup; null solo prima che l'app lo leghi. */
   val shares: AppShares? get() = gallery.shares
 
+  /** Il tocco su un album dal pannello informazioni del viewer: lo lega la navigazione. */
+  val albumOpener: dev.pampa.mycloudgallery.albums.AlbumOpener get() = gallery.albumOpener
+
   /** Il viewer delle Raccolte, dei Nascosti e delle griglie filtrate: il grafo vero. */
   val viewerServices: ViewerServices get() = gallery.viewerServices
 

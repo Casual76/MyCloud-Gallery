@@ -66,7 +66,7 @@ class ViewerLayoutTest : ViewerTestBase() {
     composeRule.waitForIdle()
 
     composeRule.onNodeWithTag(ViewerTags.InfoPanel).assertExists()
-    composeRule.onNodeWithText("Apri in Mappe").assertExists()
+    composeRule.onNodeWithContentDescription("Apri in Mappe").assertExists()
   }
 
   @Test
@@ -130,7 +130,7 @@ class ViewerLayoutTest : ViewerTestBase() {
     composeRule.onNodeWithContentDescription("Informazioni").performClick()
     composeRule.waitUntil(10_000L) { composeRule.onAllNodesWithContentDescription("Chiudi le informazioni").fetchSemanticsNodes().isNotEmpty() }
     composeRule.onNodeWithTag(ViewerTags.InfoPanel).assertExists()
-    composeRule.onNodeWithText("Apri in Mappe").assertExists()
+    composeRule.onNodeWithContentDescription("Apri in Mappe").assertExists()
     // Le barre restano (accanto alla colonna) e la barra azioni anche.
     composeRule.onNodeWithContentDescription("Chiudi").assertExists()
     composeRule.onNodeWithContentDescription("Condividi").assertExists()

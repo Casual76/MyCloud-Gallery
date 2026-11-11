@@ -37,6 +37,7 @@ import dev.pampa.mycloudgallery.feature.viewer.testing.FakeMediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.video.PlaybackProblem
 import dev.pampa.mycloudgallery.feature.viewer.video.RangeDataSource
 import dev.pampa.mycloudgallery.feature.viewer.video.XmpPacket
+import java.time.ZoneId
 import java.util.Locale
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -55,7 +56,8 @@ import org.robolectric.annotation.GraphicsMode
 class ViewerLogicTest {
 
   private val context get() = ApplicationProvider.getApplicationContext<Application>()
-  private val format get() = ViewerFormat(context, Locale.ITALIAN)
+  // Il telefono in Italia: a marzo 2024 lo stesso scarto di Oslo (UTC+1).
+  private val format get() = ViewerFormat(context, Locale.ITALIAN, ZoneId.of("Europe/Rome"))
 
   // --- Zoom ------------------------------------------------------------------------------------------------------------
 
@@ -217,7 +219,8 @@ class ViewerLogicTest {
     assertThat(empty.timeLine).isNull()
     assertThat(empty.place).isNull()
     assertThat(empty.hasShot).isFalse()
-    assertThat(empty.file).isEmpty()
+    assertThat(empty.specs).isEmpty()
+    assertThat(empty.hasCard).isFalse()
     assertThat(empty.fileName).isNull()
 
     val full = model(
@@ -231,20 +234,30 @@ class ViewerLogicTest {
     )
     // La data grande in testa (il giorno con la maiuscola), l'ora e il fuso sotto, il luogo.
     assertThat(full.date).isEqualTo("Martedì 12 marzo 2024")
-    assertThat(full.timeLine).isEqualTo("12:41 · ora di Oslo, UTC+1")
+    // CU-5: lo stesso fuso del telefono non si scrive.
+    assertThat(full.timeLine).isEqualTo("12:41")
     assertThat(full.estimated).isFalse()
     assertThat(full.place).isEqualTo("Oslo, Norvegia")
-    // Lo scatto in pillole, una per dato.
+    // La scheda dello scatto: la fotocamera in testa con il formato, la striscia dei valori (ISO · focale · apertura · tempo, quelli noti).
     assertThat(full.camera).isEqualTo("Samsung Galaxy S25")
-    assertThat(full.shot).containsExactly("f/1,8", "1/250 s", "ISO 50").inOrder()
-    // Il file in pillole: misure, megapixel, peso, formato.
-    assertThat(full.file.take(2)).containsExactly("4000 × 3000", "12 MP").inOrder()
-    assertThat(full.file).contains("JPEG")
-    assertThat(full.file.size).isEqualTo(4)
+    assertThat(full.format).isEqualTo("JPEG")
+    assertThat(full.strip).containsExactly("ISO 50", "f/1,8", "1/250 s").inOrder()
+    // La riga delle misure: megapixel, misure, peso.
+    assertThat(full.specs.take(2)).containsExactly("12 MP", "4000 × 3000").inOrder()
+    assertThat(full.specs.size).isEqualTo(3)
     // In fondo, piccoli: il nome del file e l'ultima cartella (non il percorso).
     assertThat(full.fileName).isEqualTo("IMG_20240312_124100.jpg")
     assertThat(full.folder).isEqualTo("Camera")
     assertThat(full.note).isNull()
+  }
+
+  @Test
+  fun ilFusoSiDiceSoloSeEDiversoDaQuelloDelTelefono() {
+    // CU-5: un telefono a New York guarda una foto scattata a Oslo: l'ora e' quella del posto, e lo si dice (il luogo sta nella riga sotto).
+    val id = MediaId.random()
+    val elsewhere = ViewerFormat(context, Locale.ITALIAN, ZoneId.of("America/New_York"))
+    assertThat(buildInfoModel(elsewhere, InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id))).timeLine).isEqualTo("12:41 · ora locale, UTC+1")
+    assertThat(model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id))).timeLine).isEqualTo("12:41")
   }
 
   @Test
@@ -262,7 +275,16 @@ class ViewerLogicTest {
     assertThat(estimated.estimated).isTrue()
     assertThat(estimated.timeLine).endsWith("Data ricavata dal nome del file")
     val video = model(InfoInputs(kind = MediaKind.VIDEO, details = sampleDetails(id, MediaKind.VIDEO)))
-    assertThat(video.file).contains("2:14")
+    assertThat(video.specs).contains("2:14")
+    assertThat(video.video).isTrue()
+    // CU-7: niente megapixel su un video.
+    assertThat(video.specs.none { it.endsWith("MP") }).isTrue()
+    val uhd = dev.pampa.mycloudgallery.feature.viewer.details.MediaDetails(id = id, kind = MediaKind.VIDEO, width = 3840, height = 2160, mime = "video/mp4", durationMs = 9_000L)
+    assertThat(model(InfoInputs(kind = MediaKind.VIDEO, details = uhd)).specs.take(2)).containsExactly("4K", "3840 × 2160").inOrder()
+    assertThat(format.videoQuality(1920, 1080)).isEqualTo("Full HD")
+    assertThat(format.videoQuality(1080, 1920)).isEqualTo("Full HD")
+    assertThat(format.videoQuality(1280, 720)).isEqualTo("HD")
+    assertThat(format.videoQuality(640, 480)).isNull()
   }
 
   @Test
@@ -270,11 +292,18 @@ class ViewerLogicTest {
     val id = MediaId.random()
     val few = model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id), exif = ExifDetails(iso = 400, flashFired = false)))
     assertThat(few.camera).isNull()
-    assertThat(few.shot).containsExactly("ISO 400")
+    assertThat(few.strip).containsExactly("ISO 400")
+    assertThat(few.traits).doesNotContain("Flash")
     val flash = model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id), exif = ExifDetails(focalLengthMm = 6.3, flashFired = true)))
-    assertThat(flash.shot).containsExactly("6,3 mm", "Flash").inOrder()
-    // Senza EXIF (non ancora letto o illeggibile): niente riga dello scatto, nessun posto vuoto.
+    assertThat(flash.strip).containsExactly("6,3 mm")
+    // Il flash scattato e' un tratto della scheda, non un valore della striscia.
+    assertThat(flash.traits).contains("Flash")
+    // Senza EXIF (illeggibile): niente valori dello scatto; mentre si legge, i segnaposto (niente salti quando arriva).
     assertThat(model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id))).hasShot).isFalse()
+    val pending = model(InfoInputs(kind = MediaKind.PHOTO, details = sampleDetails(id), exifPending = true))
+    assertThat(pending.shotPending).isTrue()
+    assertThat(pending.hasCard).isTrue()
+    assertThat(model(InfoInputs(kind = MediaKind.VIDEO, details = sampleDetails(id, MediaKind.VIDEO), exifPending = true)).shotPending).isFalse()
   }
 
   @Test
@@ -300,7 +329,7 @@ class ViewerLogicTest {
         motionUnplayable = true,
       ),
     )
-    assertThat(motion.file).containsAtLeast("Ultra HDR", "Panorama", "Foto in movimento").inOrder()
+    assertThat(motion.traits).containsAtLeast("Ultra HDR", "Panorama", "Foto in movimento").inOrder()
     assertThat(motion.note).startsWith("Il formato di questa foto in movimento")
   }
 

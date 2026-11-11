@@ -7,6 +7,7 @@ import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -173,7 +174,7 @@ class ViewerScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
   fun informazioniPannelloTablet() {
     show(dark = dark)
     composeRule.onNodeWithContentDescription("Informazioni").performClick()
-    composeRule.waitUntil(10_000L) { composeRule.onAllNodesWithText("Apri in Mappe").fetchSemanticsNodes().isNotEmpty() }
+    composeRule.waitUntil(10_000L) { composeRule.onAllNodesWithContentDescription("Apri in Mappe").fetchSemanticsNodes().isNotEmpty() }
     composeRule.mainClock.advanceTimeBy(800)
     shot("info-pannello", device = "tablet")
   }
@@ -210,8 +211,8 @@ class ViewerScreenshotTest(private val dark: Boolean) : ViewerTestBase() {
   fun foglioMappe() {
     show(dark = dark)
     pager().performTouchInput { swipeUp() }
-    composeRule.waitUntil(10_000L) { composeRule.onAllNodesWithText("Apri in Mappe").fetchSemanticsNodes().isNotEmpty() }
-    composeRule.onNodeWithText("Apri in Mappe").performClick()
+    composeRule.waitUntil(10_000L) { composeRule.onAllNodesWithContentDescription("Apri in Mappe").fetchSemanticsNodes().isNotEmpty() }
+    composeRule.onNodeWithContentDescription("Apri in Mappe").performClick()
     composeRule.waitUntil(10_000L) { composeRule.onAllNodesWithText("Aprire in Mappe?").fetchSemanticsNodes().isNotEmpty() }
     composeRule.mainClock.advanceTimeBy(800)
     shot("foglio-mappe")

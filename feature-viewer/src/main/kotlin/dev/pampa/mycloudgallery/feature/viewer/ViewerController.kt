@@ -222,8 +222,31 @@ internal class ViewerController(
     snapshotFlow { positioned }.first { it }
     origin = originFor(state.currentId)
     // Dopo una ricreazione (rotazione, split screen) il viewer si ripresenta aperto: l'espansione l'ha gia' fatta.
-    if (state.restored) transition.progress.snapTo(1f) else transition.open(reducedMotion)
+    if (state.restored) {
+      transition.progress.snapTo(1f)
+    } else {
+      // CU-1: la foto esce dalla sua cella, che resta vuota finche' l'espansione non e' finita.
+      hideCell(state.currentId)
+      transition.open(reducedMotion)
+      if (!closing) hideCell(null)
+    }
   }
+
+  /** La cella lasciata vuota nella griglia sotto (CU-1), o null. */
+  private var hiddenCell: MediaId? = null
+
+  /**
+   * Svuota la cella di [id] nella griglia sotto (null = nessuna): mentre la foto ne esce all'apertura e mentre ci rientra (il trascinamento,
+   * il pizzico, l'Indietro predittivo, il volo), come in Foto di Apple. La griglia la legge nel disegno ([ViewerAnchor.hide]).
+   */
+  private fun hideCell(id: MediaId?) {
+    if (hiddenCell == id) return
+    hiddenCell = id
+    request.anchor.hide(id)
+  }
+
+  /** Il viewer esce dalla composizione: nessuna cella resta vuota, comunque sia andata. */
+  fun releaseCell() = hideCell(null)
 
   /** L'espansione e' finita: il pager e' quello che si vede (prima si vedeva la foto che cresce dalla cella). */
   val opened: Boolean get() = transition.progress.value >= FULLY_OPEN && !transition.progress.isRunning
@@ -255,6 +278,8 @@ internal class ViewerController(
   }
 
   private suspend fun closeNow(velocity: Offset) {
+    // CU-1: la foto vola nella sua cella, che resta vuota fino all'arrivo.
+    hideCell(state.currentId)
     motion.stopAll()
     sheet = null
     // Il pannello e lo zoom tornano a riposo prima: il volo parte dalla foto intera.
@@ -275,6 +300,8 @@ internal class ViewerController(
     }
     dismiss.fly(plan, ViewerDismissState.velocityToward(plan, velocity), reducedMotion)
     playback.clear()
+    // La foto e' nella cella: la cella torna a disegnarsi nello stesso fotogramma in cui il viewer se ne va.
+    hideCell(null)
     onClosed()
   }
 
@@ -312,6 +339,7 @@ internal class ViewerController(
   fun onDismissStart() {
     returnJob?.cancel()
     returnJob = null
+    hideCell(state.currentId)
     dismiss.begin()
   }
 
@@ -330,7 +358,11 @@ internal class ViewerController(
   private fun settleDismiss() {
     if (closing) return
     returnJob?.cancel()
-    returnJob = scope.launch { dismiss.settleBack(reducedMotion) }
+    returnJob = scope.launch {
+      dismiss.settleBack(reducedMotion)
+      // Tornata al suo posto: la cella si ridisegna. Un dito che la riprende mentre torna cancella questo giro e la lascia vuota.
+      hideCell(null)
+    }
   }
 
   /** La corsa del pannello informazioni del telefono: meta' scena (H2, [InfoGeometry]). */
@@ -374,6 +406,7 @@ internal class ViewerController(
     if (closing) return
     returnJob?.cancel()
     returnJob = null
+    hideCell(state.currentId)
     dismiss.back(progress, fromLeft, stage)
   }
 

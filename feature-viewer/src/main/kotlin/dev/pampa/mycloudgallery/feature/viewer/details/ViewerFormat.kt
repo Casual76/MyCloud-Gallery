@@ -10,7 +10,9 @@ import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.feature.viewer.R
 import dev.pampa.mycloudgallery.core.library.text.GalleryDates
 import java.time.DateTimeException
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -29,6 +31,8 @@ internal class ViewerFormat(
   // P11: l'app e' solo in italiano. Le date passano da `GalleryDates` e i numeri (megapixel, coordinate) usano la stessa
   // lingua, anche con il telefono in inglese.
   private val locale: Locale = GalleryDates.LOCALE,
+  /** Il fuso del telefono: il pannello lo nomina solo se lo scatto ne ha un altro (CU-5). */
+  private val phoneZone: ZoneId = ZoneId.systemDefault(),
 ) {
 
   internal val resources get() = context.resources
@@ -42,9 +46,6 @@ internal class ViewerFormat(
   /** L'ora: "12:41". */
   fun time(time: CaptureTime): String = GalleryDates.time(time.localDateTime)
 
-  /** La riga del pannello: "mercoledì 12 marzo 2024, 12:41". */
-  fun dateTimeLine(time: CaptureTime): String = GalleryDates.weekdayDate(time.localDateTime) + ", " + GalleryDates.time(time.localDateTime)
-
   /** Il sottotitolo della barra: "12:41 · Oslo", o solo l'ora se il luogo non e' noto. */
   fun subtitle(time: CaptureTime?, placeName: String?): String? = when {
     time != null && placeName != null -> resources.getString(R.string.viewer_subtitle_time_place, time(time), placeName)
@@ -53,13 +54,15 @@ internal class ViewerFormat(
   }
 
   /**
-   * La didascalia sotto la data: "ora di Oslo, UTC+1", o solo "UTC+1" senza luogo. Per una data **stimata** dice da dove
-   * viene la stima (il nome del file, la data del sistema, quella di modifica): non e' un'ora dello scatto.
+   * La riga sotto la data nel pannello (CU-5): "12:41". Il fuso si dice **solo se e' diverso da quello del telefono** in quel momento ("12:41 ·
+   * ora locale, UTC+9"), senza ripetere il luogo che sta nella riga sotto; per una data stimata, da dove viene la stima.
    */
-  fun zoneCaption(time: CaptureTime, placeName: String?): String {
-    if (time.isEstimated) return estimatedReason(time.source)
-    val offset = offsetLabel(time.offsetMinutes)
-    return if (placeName != null) resources.getString(R.string.viewer_zone_place, placeName, offset) else offset
+  fun panelTimeLine(time: CaptureTime): String {
+    val clock = time(time)
+    if (time.isEstimated) return resources.getString(R.string.viewer_info_time_line, clock, estimatedReason(time.source))
+    val phoneMinutes = phoneZone.rules.getOffset(Instant.ofEpochMilli(time.utcMillis)).totalSeconds / SECONDS_PER_MINUTE
+    if (phoneMinutes == time.offsetMinutes) return clock
+    return resources.getString(R.string.viewer_info_time_local, clock, offsetLabel(time.offsetMinutes))
   }
 
   /** "UTC+1", "UTC+5:30", "UTC-5", "UTC". */
@@ -79,16 +82,6 @@ internal class ViewerFormat(
       else -> R.string.viewer_estimated_generic
     },
   )
-
-  /** "4000 × 3000 · 12 MP". Senza le dimensioni, null. */
-  fun dimensions(details: MediaDetails): String? {
-    val w = details.orientedWidth ?: return null
-    val h = details.orientedHeight ?: return null
-    val size = resources.getString(R.string.viewer_dimensions, w, h)
-    val mp = details.megapixels ?: return size
-    val text = if (mp >= 10.0) mp.roundToInt().toString() else String.format(locale, "%.1f", mp)
-    return size + " · " + resources.getString(R.string.viewer_megapixels, text)
-  }
 
   /** Il peso: "3,4 MB" (con la virgola italiana anche se il telefono e' in un'altra lingua). */
   fun fileSize(bytes: Long): String = Formatter.formatFileSize(localized, bytes)
@@ -135,37 +128,41 @@ internal class ViewerFormat(
   private fun prettyMake(make: String): String =
     if (make == make.uppercase(locale)) make.lowercase(locale).replaceFirstChar { it.titlecase(locale) } else make
 
-  /** "f/1,8 · 1/250 s · ISO 50": l'esposizione, solo i pezzi che la fotocamera ha scritto. */
-  fun exposure(exif: ExifDetails): String? {
-    val parts = listOfNotNull(
-      exif.fNumber?.let { resources.getString(R.string.viewer_exposure_f, trimmed(it)) },
-      exif.exposureTime?.takeIf { it.isNotBlank() }?.let { resources.getString(R.string.viewer_exposure_time, it) },
-      exif.iso?.let { resources.getString(R.string.viewer_exposure_iso, it) },
-    )
-    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
-  }
-
   /**
-   * H2: i dati di scatto come pillole del pannello, solo quelli che la fotocamera ha scritto: "Obiettivo principale", "f/1,8", "1/250 s",
-   * "ISO 50", "6,3 mm", "Flash". Il flash si dice solo se e' scattato ("Senza flash" e' rumore).
+   * La striscia dei valori dello scatto (giro di correzione 1 di H2): "ISO 50", "6,3 mm", "f/1,8", "1/250 s", in quest'ordine e solo quelli
+   * noti. L'obiettivo sta nella riga sopra della scheda, il flash fra i tratti.
    */
-  fun shotPills(exif: ExifDetails): List<String> = listOfNotNull(
-    exif.lens?.trim()?.takeIf { it.isNotEmpty() },
-    exif.fNumber?.let { resources.getString(R.string.viewer_exposure_f, trimmed(it)) },
-    exif.exposureTime?.takeIf { it.isNotBlank() }?.let { resources.getString(R.string.viewer_exposure_time, it) },
+  fun shotStrip(exif: ExifDetails): List<String> = listOfNotNull(
     exif.iso?.let { resources.getString(R.string.viewer_exposure_iso, it) },
     exif.focalLengthMm?.let { resources.getString(R.string.viewer_focal_mm, trimmed(it)) },
-    resources.getString(R.string.viewer_flash_on).takeIf { exif.flashFired == true },
+    exif.fNumber?.let { resources.getString(R.string.viewer_exposure_f, trimmed(it)) },
+    exif.exposureTime?.takeIf { it.isNotBlank() }?.let { resources.getString(R.string.viewer_exposure_time, it) },
   )
 
-  /** H2: le misure come pillole: "4000 × 3000" e "12 MP". */
-  fun dimensionPills(details: MediaDetails): List<String> {
+  /**
+   * H2: le misure come pillole: "4000 × 3000" e "12 MP". CU-7: per un video i megapixel non dicono niente: al loro posto il nome della
+   * risoluzione che si legge sulle videocamere ("4K", "Full HD", "HD"), se ce l'ha.
+   */
+  fun dimensionPills(details: MediaDetails, video: Boolean = false): List<String> {
     val w = details.orientedWidth ?: return emptyList()
     val h = details.orientedHeight ?: return emptyList()
     val size = resources.getString(R.string.viewer_dimensions, w, h)
+    if (video) return listOfNotNull(videoQuality(w, h), size)
     val mp = details.megapixels ?: return listOf(size)
     val text = if (mp >= 10.0) mp.roundToInt().toString() else String.format(locale, "%.1f", mp)
     return listOf(size, resources.getString(R.string.viewer_megapixels, text))
+  }
+
+  /** CU-7: "4K" (da 3840 sul lato lungo), "Full HD" (da 1920), "HD" (da 1280), niente sotto. Conta il lato corto per i formati stretti. */
+  fun videoQuality(width: Int, height: Int): String? {
+    val long = maxOf(width, height)
+    val short = minOf(width, height)
+    return when {
+      long >= UHD_LONG && short >= UHD_SHORT -> resources.getString(R.string.viewer_video_4k)
+      long >= FHD_LONG && short >= FHD_SHORT -> resources.getString(R.string.viewer_video_full_hd)
+      long >= HD_LONG && short >= HD_SHORT -> resources.getString(R.string.viewer_video_hd)
+      else -> null
+    }
   }
 
   /** H2: il titolo del pannello, "Martedì 12 marzo 2024" (il giorno con la maiuscola: e' l'inizio di un titolo). */
@@ -173,16 +170,6 @@ internal class ViewerFormat(
 
   /** H2: lo stesso dal giorno dell'indice, finche' i dettagli non arrivano: "12 marzo 2024". */
   fun panelDate(localDay: Int): String? = parseLocalDay(localDay)?.let { GalleryDates.weekdayDate(it.atStartOfDay()).replaceFirstChar { c -> c.titlecase(locale) } }
-
-  /** "6,3 mm · Flash": la focale e il flash, se noti. */
-  fun lensLine(exif: ExifDetails): String? {
-    val parts = listOfNotNull(
-      exif.lens?.trim()?.takeIf { it.isNotEmpty() },
-      exif.focalLengthMm?.let { resources.getString(R.string.viewer_focal_mm, trimmed(it)) },
-      exif.flashFired?.let { resources.getString(if (it) R.string.viewer_flash_on else R.string.viewer_flash_off) },
-    )
-    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
-  }
 
   /** "59,9127° N, 10,7461° E". Dato sensibile: si scrive solo nel pannello, mai in un log. */
   fun coordinates(point: GeoPoint): String {
@@ -224,3 +211,13 @@ internal class ViewerFormat(
     const val MONTH_DIVISOR = 100
   }
 }
+
+private const val SECONDS_PER_MINUTE = 60
+
+// CU-7: le soglie dei nomi delle risoluzioni video (lato lungo e lato corto, con un margine per i formati 1:1 e 4:3 delle videocamere).
+private const val UHD_LONG = 3840
+private const val UHD_SHORT = 1600
+private const val FHD_LONG = 1920
+private const val FHD_SHORT = 800
+private const val HD_LONG = 1280
+private const val HD_SHORT = 540

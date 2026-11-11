@@ -22,6 +22,8 @@ import dev.pampa.mycloudgallery.feature.viewer.details.ViewerFormat
  *   risposto: la capsula del backup non c'e'.
  * @property onPhone H2: il media ha una copia sul telefono (la capsula del backup dice "Telefono e NAS" o "Sul NAS").
  * @property localDay il giorno dell'indice (`aaaammgg`), per la data in testa finche' i dettagli non arrivano: il pannello non salta.
+ * @property exifPending l'EXIF si sta leggendo (il pannello si e' appena aperto su una foto): la scheda dello scatto mostra i segnaposto al
+ *   posto dei valori, e quando arrivano niente salta.
  */
 internal class InfoInputs(
   val kind: MediaKind,
@@ -33,37 +35,51 @@ internal class InfoInputs(
   val backup: MediaBackupState? = null,
   val onPhone: Boolean = true,
   val localDay: Int = 0,
+  val exifPending: Boolean = false,
 )
 
 /**
- * Il pannello informazioni di un media, **compatto** (H2): niente righe "etichetta: valore" tutte uguali. In testa la data grande e sotto
- * l'ora con il fuso (o da dove viene una data stimata), poi il luogo; il backup in una capsula (un'icona e due parole); la fotocamera e i
- * dati di scatto in pillole, poi le pillole del file (misure, peso, formato, durata, tratti); in fondo, piu' piccoli, il nome del file e la
- * cartella. **Solo cio' che si sa**: un dato che non c'e' non occupa posto.
+ * Il pannello informazioni di un media, **compatto e con una gerarchia** (H2; giro di correzione 1: "identita'"). In testa **la data, unico
+ * titolo**, sotto l'ora (il fuso solo se diverso da quello del telefono) e il luogo; il backup in una capsula; poi **una sola scheda dello
+ * scatto**: la fotocamera (o il tipo di media) con il formato, l'obiettivo, le misure e il peso in una riga, i tratti, e in fondo **la striscia
+ * dei valori** dello scatto (ISO · focale · apertura · tempo) come una riga tipografica divisa da filetti. In fondo, piccoli, il nome del file
+ * e la cartella. **Solo cio' che si sa**: un dato che non c'e' non occupa posto.
  */
 @Immutable
 internal data class InfoModel(
   /** "Martedì 12 marzo 2024"; null solo se non si sa nemmeno il giorno dell'indice. */
   val date: String?,
-  /** "12:41 · ora di Oslo, UTC+1", o da dove viene la data stimata. */
+  /** "12:41", "12:41 · ora locale, UTC+9", o da dove viene la data stimata. */
   val timeLine: String?,
   val estimated: Boolean,
   /** "Oslo, Ostlandet, Norvegia". */
   val place: String?,
-  /** "Samsung Galaxy S25". */
+  /** La testa della scheda dello scatto: "Samsung Galaxy S25". */
   val camera: String?,
-  /** I dati di scatto: obiettivo, apertura, tempo, ISO, focale, flash. */
-  val shot: List<String>,
-  /** Il file: misure, megapixel, peso, formato, durata, tratti (Ultra HDR, Panorama...). */
-  val file: List<String>,
+  /** "Obiettivo principale". */
+  val lens: String?,
+  /** La striscia dei valori dello scatto: "ISO 50", "6,3 mm", "f/1,8", "1/250 s" (solo quelli noti, in quest'ordine). */
+  val strip: List<String>,
+  /** Il formato del file: "JPEG", "HEIC", "MP4". */
+  val format: String?,
+  /** Misure e peso, nella riga della scheda: "12 MP", "4000 × 3000", "3,60 MB"; per un video "4K", "3840 × 2160", "2:14", "120 MB". */
+  val specs: List<String>,
+  /** I tratti, come capsule: Ultra HDR, Panorama, Foto in movimento, Flash. */
+  val traits: List<String>,
   val edited: Boolean,
+  val video: Boolean,
+  /** L'EXIF si sta leggendo: segnaposto al posto dei valori dello scatto. */
+  val shotPending: Boolean,
   val fileName: String?,
   /** L'ultima cartella del percorso sul telefono ("Camera"), non il percorso. */
   val folder: String?,
   /** Una nota da leggere (la foto in movimento il cui video non si riconosce). */
   val note: String?,
 ) {
-  val hasShot: Boolean get() = camera != null || shot.isNotEmpty()
+  val hasShot: Boolean get() = camera != null || lens != null || strip.isNotEmpty()
+
+  /** La scheda dello scatto ha qualcosa da dire (o lo sta per dire). */
+  val hasCard: Boolean get() = hasShot || shotPending || format != null || specs.isNotEmpty() || traits.isNotEmpty() || edited
 }
 
 /** Costruisce il pannello da [inputs]. Funzione pura (le risorse vengono da [format]). */
@@ -72,7 +88,7 @@ internal fun buildInfoModel(format: ViewerFormat, inputs: InfoInputs): InfoModel
   val details = inputs.details
   val capture = details?.captureTime
   val date = capture?.let { format.panelDate(it) } ?: inputs.localDay.takeIf { it > 0 }?.let { format.panelDate(it) }
-  val timeLine = capture?.let { res.getString(R.string.viewer_info_time_line, format.time(it), format.zoneCaption(it, inputs.placeName)) }
+  val timeLine = capture?.let { format.panelTimeLine(it) }
 
   val place = inputs.place
   val placeLine = when {
@@ -80,18 +96,24 @@ internal fun buildInfoModel(format: ViewerFormat, inputs: InfoInputs): InfoModel
     else -> inputs.placeName
   }?.takeIf { it.isNotBlank() }
 
+  val video = inputs.kind == MediaKind.VIDEO
   val exif = inputs.exif
   val camera = exif?.let { format.camera(it) }
-  val shot = exif?.let { format.shotPills(it) }.orEmpty()
+  val lens = exif?.lens?.trim()?.takeIf { it.isNotEmpty() }
+  val strip = exif?.let { format.shotStrip(it) }.orEmpty()
 
-  val file = buildList {
+  val specs = buildList {
     if (details != null) {
-      addAll(format.dimensionPills(details))
+      val dims = format.dimensionPills(details, video = video)
+      // La foto: prima i megapixel (si leggono come "che foto e'"), poi le misure. Il video: prima il nome della risoluzione (gia' cosi').
+      addAll(if (video) dims else dims.asReversed())
+      details.durationMs?.takeIf { it > 0L && video }?.let { add(GalleryVideoTime.format(it)) }
       details.sizeBytes?.let { add(format.fileSize(it)) }
-      format.formatName(details.mime)?.let { add(it) }
-      details.durationMs?.takeIf { it > 0L && inputs.kind == MediaKind.VIDEO }?.let { add(GalleryVideoTime.format(it)) }
-      addAll(traits(format, details.traits, inputs.kind))
     }
+  }
+  val traits = buildList {
+    if (details != null) addAll(traits(format, details.traits, inputs.kind))
+    if (exif?.flashFired == true) add(res.getString(R.string.viewer_flash_on))
   }
 
   val folder = details?.folder?.trimEnd('/')?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
@@ -101,9 +123,14 @@ internal fun buildInfoModel(format: ViewerFormat, inputs: InfoInputs): InfoModel
     estimated = capture?.isEstimated == true,
     place = placeLine,
     camera = camera,
-    shot = shot,
-    file = file,
+    lens = lens,
+    strip = strip,
+    format = details?.mime?.let { format.formatName(it) },
+    specs = specs,
+    traits = traits,
     edited = details?.isEdited == true,
+    video = video,
+    shotPending = inputs.exifPending && exif == null && !video,
     fileName = details?.fileName?.takeIf { it.isNotBlank() },
     folder = folder,
     note = if (inputs.motionUnplayable) res.getString(R.string.viewer_motion_unplayable_caption) else null,

@@ -650,6 +650,11 @@ class MediaGridState(
     }
 
     override fun thumbKey(id: MediaId): ThumbKey = this@MediaGridState.thumbKey(id)
+
+    // CU-1: la cella d'origine resta vuota mentre la foto del viewer ne esce o ci rientra (letta nel disegno della cella).
+    override fun hide(id: MediaId?) {
+      interaction.hiddenKey = id
+    }
   }
 
   /** Gli elementi del viewer: la stessa vista della griglia (stesso filtro), che ne segue i cambi (E-V6). */

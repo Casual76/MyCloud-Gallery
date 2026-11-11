@@ -71,6 +71,17 @@ interface ViewerAnchor {
 
   /** La chiave della miniatura di [id], per partire dalla stessa bitmap che la cella ha (`ThumbnailLoader.peek`). */
   fun thumbKey(id: MediaId): ThumbKey
+
+  /**
+   * La cella di [id] resta **vuota** finche' non si chiama di nuovo con null (CU-1, come Foto di Apple): il viewer la svuota mentre la foto ne
+   * esce (l'apertura) e mentre ci rientra (il trascinamento, il pizzico, l'Indietro predittivo e il volo), cosi' la foto torna nel suo buco e
+   * non sopra una copia di se'. Si legge **nel disegno**: niente ricomposizione della griglia.
+   *
+   * Di serie non fa niente (una griglia senza celle da svuotare, un ancoraggio senza griglia). Una griglia fatta di `GalleryGridCell` lo lega
+   * scrivendo la chiave nel suo stato dell'interazione: `override fun hide(id: MediaId?) { interaction.hiddenKey = id }` (lo fa la Libreria,
+   * quindi anche NAS e Raccolte; la griglia dei risultati di Cerca, `ResultsAnchor`, si aggancia allo stesso modo).
+   */
+  fun hide(id: MediaId?) = Unit
 }
 
 /**

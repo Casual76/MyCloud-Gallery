@@ -1,4 +1,4 @@
-# Dati SINTETICI scritti a mano, senza Gradle o Android.
+﻿# Dati SINTETICI scritti a mano, senza Gradle o Android.
 $ErrorActionPreference='Stop'
 $root=(Resolve-Path "$PSScriptRoot\..\..").Path
 $work=Join-Path $root 'build\prova-r8'
@@ -20,6 +20,40 @@ ambiguous.Owner -> ambiguous.Owner:
     2:5:void forbidden.Owner.run():2 -> run
 unique.Owner -> unique.Owner:
     void run() -> run
+library.Specialized -> library.Specialized:
+    1:1:void accept(java.lang.Object):1 -> accept
+      # {"id":"com.android.tools.r8.residualsignature","signature":"(Landroidx/glance/Thing;)V"}
+    2:2:void accept(java.lang.Object):2 -> accept
+library.Real -> library.Real:
+    1:1:void accept(androidx.glance.Thing):1 -> accept
+      # {"id":"com.android.tools.r8.residualsignature","signature":"(Landroidx/glance/Thing;)V"}
+library.NoMetadata -> library.NoMetadata:
+    1:1:void accept(java.lang.Object):1 -> accept
+androidx.glance.InlineMixed -> androidx.glance.InlineMixed:
+    10:10:void androidx.glance.First.run():1 -> run
+    10:10:void dev.pampa.mycloudgallery.backup.Forbidden.run():1 -> run
+androidx.glance.Good -> androidx.glance.Good:
+    10:10:java.lang.Boolean kotlin.runtime.Innocent.box(boolean):1 -> run
+    10:10:void run():1 -> run
+    11:11:void run():2 -> run
+kotlin.runtime.Innocent -> kotlin.runtime.Innocent:
+    1:1:java.lang.Boolean box(boolean):1 -> box
+androidx.glance.Bad -> androidx.glance.Bad:
+    10:10:java.lang.Boolean kotlin.runtime.Evil.box(boolean):1 -> run
+    10:10:void run():1 -> run
+    11:11:void run():2 -> run
+kotlin.runtime.Evil -> kotlin.runtime.Evil:
+    1:1:java.lang.Boolean box(boolean):1 -> box
+androidx.glance.Allowed -> androidx.glance.Allowed:
+    10:10:void androidx.glance.First.run():1 -> run
+    11:11:void androidx.glance.Second.run():1 -> run
+androidx.glance.Mixed -> androidx.glance.Mixed:
+    10:10:void androidx.glance.First.run():1 -> run
+    11:11:void dev.pampa.mycloudgallery.backup.Forbidden.run():1 -> run
+androidx.glance.Empty -> androidx.glance.Empty:
+    int field -> field
+dev.pampa.mycloudgallery.backup.Residual -> dev.pampa.mycloudgallery.backup.Residual:
+    10:10:void androidx.glance.First.run():1 -> run
 '@ | Set-Content (Join-Path $work 'mapping.txt')
 $prefixes=@('core/models/download/https/', 'feature/map/net/', 'feature/map/', 'feature/widget/', 'core/ai/', 'core/ai/ocr/MlKitBootstrap', 'core/faces/sync/', 'albums/', 'di/')
 foreach($prefix in $prefixes) {
@@ -82,4 +116,61 @@ foreach($callee in @('Ldev/pampa/mycloudgallery/feature/map/net/Good;', 'Lforbid
  [R8Provenance]::ReadDump('bridge',[string[]]@('Class descriptor : ''Lallowed/Fused$$ExternalSyntheticLambda0;''', "name : 'run'", "type : '()V'", $line))
  Check "ponte sintetico attribuito a $callee" ([R8Provenance]::Origin('bridge',$line).StartsWith($callee))
 }
+# La stessa quantificazione universale usata dalle policy e dalle prove positive dei cancelli.
+$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'tools/check.ps1'),[ref]$null,[ref]$null)
+$function=$ast.FindAll({param($a) $a -is [Management.Automation.Language.FunctionDefinitionAst] -and $a.Name -eq 'Test-R8EveryOrigin'},$false)[0]
+Invoke-Expression $function.Extent.Text
+$glancePolicy={param($o) $o.StartsWith('Landroidx/glance/')}
+$call=Dump 'Landroidx/glance/Allowed;' '()V' @(' 0x0000 line=1')
+$group=[R8Provenance]::OriginGroup('Landroidx/glance/Allowed;()V',$call)
+Check 'prologo tutte origini ammesse passa' (Test-R8EveryOrigin $group $glancePolicy)
+Check 'prologo include entrambe origini e residua' (($group -split "`n").Count -eq 3)
+$call=Dump 'Landroidx/glance/Mixed;' '()V' @(' 0x0000 line=1')
+$group=[R8Provenance]::OriginGroup('Landroidx/glance/Mixed;()V',$call)
+Check 'prologo origine nostra vietata sotto libreria cade' (-not (Test-R8EveryOrigin $group $glancePolicy))
+Check 'prologo nomina origine vietata' ($group.Contains('Ldev/pampa/mycloudgallery/backup/Forbidden;'))
+$call=Dump 'Ldev/pampa/mycloudgallery/backup/Residual;' '()V' @(' 0x0000 line=1')
+$group=[R8Provenance]::OriginGroup('Ldev/pampa/mycloudgallery/backup/Residual;()V',$call)
+Check 'anche residua deve essere ammessa' (-not (Test-R8EveryOrigin $group $glancePolicy))
+$call=Dump 'Landroidx/glance/Empty;' '()V' @(' 0x0000 line=1')
+Throws 'mapping senza nessuna origine cade' {[R8Provenance]::Origins('Landroidx/glance/Empty;()V',$call,'Landroidx/glance/')}
+$call=Dump 'Landroidx/glance/Allowed;' '()V' @(' 0x0002 line=10')
+Check 'prima voce tabella successiva al prologo usa insieme' ([R8Provenance]::Origins('Landroidx/glance/Allowed;()V',$call,'').Count -eq 3)
+# Runtime innocuo e runtime dal nome Kotlin che contiene davvero Glance.
+foreach($kind in @('Good','Bad')) {
+ $runtime=if($kind -eq 'Good') {'Innocent'} else {'Evil'}
+ $runtimeBody=if($kind -eq 'Good') {'new-instance v0, Ljava/lang/Boolean;'} else {'invoke-static {}, Landroidx/glance/Forbidden;.call:()V'}
+ [R8Provenance]::ReadDump(('runtime'+$kind),[string[]]@("Class descriptor : 'Lkotlin/runtime/$runtime;'", "name : 'box'", "type : '(Z)Ljava/lang/Boolean;'", ('9000: 0000 |0000: '+$runtimeBody), ' 0x0000 line=1'))
+ $line="8000: 0000 |0000: invoke-direct {v0}, Landroidx/glance/Continuation;.<init>:(Landroidx/glance/$kind;)V // method@1"
+ [R8Provenance]::ReadDump($kind,[string[]]@("Class descriptor : 'Landroidx/glance/$kind;'", "name : 'run'", "type : '()V'", $line, '8014: 0000 |000a: new-instance v0, Ljava/lang/Boolean;', ' 0x0000 line=1', ' 0x000a line=10'))
+ $origins=[R8Provenance]::Origins($kind,$line,'Landroidx/glance/')
+ $ok=Test-R8EveryOrigin ($origins -join "`n") $glancePolicy
+ Check "runtime $runtime verifica del corpo" ($ok -eq ($kind -eq 'Good'))
+ if($kind -eq 'Bad') {Check 'runtime pericoloso nomina origine Kotlin' (($origins -join ',').Contains('Lkotlin/runtime/Evil;'))}
+ # Il corpo INLINE stesso diventa pericoloso: nessuna esenzione dal nome Kotlin.
+ if($kind -eq 'Good') {
+  [R8Provenance]::ReadDump($kind,[string[]]@("Class descriptor : 'Landroidx/glance/$kind;'", "name : 'run'", "type : '()V'", $line, '8014: 0000 |000a: invoke-static {}, Landroidx/glance/Forbidden;.call:()V', ' 0x0000 line=1', ' 0x000a line=10'))
+  $origins=[R8Provenance]::Origins($kind,$line,'Landroidx/glance/')
+  Check 'runtime inline che nomina Glance cade' (-not (Test-R8EveryOrigin ($origins -join "`n") $glancePolicy))
+ }
+}
+$call=Dump 'Landroidx/glance/InlineMixed;' '()V' @(' 0x0000 line=1')
+$origins=[R8Provenance]::Origins('Landroidx/glance/InlineMixed;()V',$call,'')
+Check 'insieme include anche frame esterno inline vietato' (($origins -join ',').Contains('Ldev/pampa/mycloudgallery/backup/Forbidden;'))
+Check 'frame esterno inline vietato cade' (-not (Test-R8EveryOrigin ($origins -join "`n") $glancePolicy))
+Check 'prova positiva non usa un solo candidato ammesso' (-not (Test-R8EveryOrigin $group {param($o) $o.StartsWith('Landroidx/glance/First;')}))
+Check 'firma specializzata senza dipendenza originale passa' ([R8Provenance]::SignatureOnlyArtifact('{}, Llibrary/Specialized;.accept:(Landroidx/glance/Thing;)V // method@1','Landroidx/glance/'))
+Check 'firma originale nomina Glance quindi cade' (-not [R8Provenance]::SignatureOnlyArtifact('{}, Llibrary/Real;.accept:(Landroidx/glance/Thing;)V // method@1','Landroidx/glance/'))
+Check 'firma senza residualsignature non esentata' (-not [R8Provenance]::SignatureOnlyArtifact('{}, Llibrary/NoMetadata;.accept:(Landroidx/glance/Thing;)V // method@1','Landroidx/glance/'))
+Check 'callee di Glance non esentato dalla firma' (-not [R8Provenance]::SignatureOnlyArtifact('{}, Landroidx/glance/Real;.accept:(Landroidx/glance/Thing;)V // method@1','Landroidx/glance/'))
+# residualsignature si applica a tutti gli intervalli della stessa firma, non solo al primo.
+[R8Provenance]::ReadDump('signature',[string[]]@("Class descriptor : 'Llibrary/Specialized;'", "name : 'accept'", "type : '(Landroidx/glance/Thing;)V'", '7000: 0000 |0000: invoke-static {}, Ljava/lang/Object;.call:()V', ' 0x0000 line=2'))
+Check 'residualsignature propagata al secondo intervallo' ([R8Provenance]::Origin('signature','7000: 0000 |0000: invoke-static {}, Ljava/lang/Object;.call:()V') -eq 'Llibrary/Specialized;.accept')
+$line='8000: 0000 |0000: invoke-direct {v0}, Landroidx/glance/Continuation;.<init>:(Landroidx/glance/Good;)V // method@1'
+[R8Provenance]::ReadDump('Good',[string[]]@("Class descriptor : 'Landroidx/glance/Good;'", "name : 'run'", "type : '()V'", $line, '8014: 0000 |000a: check-cast v0, Landroidx/glance/GenericElement;', ' 0x0000 line=1', ' 0x000a line=10'))
+$origins=[R8Provenance]::Origins('Good',$line,'Landroidx/glance/')
+Check 'cast generico inline non e una chiamata alla libreria' (Test-R8EveryOrigin ($origins -join "`n") $glancePolicy)
+[R8Provenance]::ReadDump('runtimeGood',[string[]]@("Class descriptor : 'Lkotlin/runtime/Innocent;'", "name : 'box'", "type : '(Z)Ljava/lang/Boolean;'", '9000: 0000 |0000: check-cast v0, Landroidx/glance/Forbidden;', ' 0x0000 line=1'))
+$origins=[R8Provenance]::Origins('Good',$line,'Landroidx/glance/')
+Check 'corpo originale Kotlin che nomina Glance anche senza invoke cade' (-not (Test-R8EveryOrigin ($origins -join "`n") $glancePolicy))
 Write-Host "$count prove OK"

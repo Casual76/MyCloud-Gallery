@@ -1,0 +1,128 @@
+mapping.txt:333778: 39:99:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):159:159 -> processEmittableTree
+mapping.txt:333779: 100:105:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):163:163 -> processEmittableTree
+mapping.txt:333780: 106:108:java.lang.Boolean kotlin.coroutines.jvm.internal.Boxing.boxBoolean(boolean):20:20 -> processEmittableTree
+mapping.txt:333781: 106:108:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):163 -> processEmittableTree
+mapping.txt:333782: 109:116:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):164:164 -> processEmittableTree
+mapping.txt:333783: 117:144:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):165:165 -> processEmittableTree
+mapping.txt:333784: 145:147:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):159:159 -> processEmittableTree
+mapping.txt:333785: 148:152:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):166:166 -> processEmittableTree
+mapping.txt:333786: 153:156:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):168:168 -> processEmittableTree
+mapping.txt:333787: 157:175:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):169:169 -> processEmittableTree
+mapping.txt:333788: 176:193:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):170:170 -> processEmittableTree
+mapping.txt:333789: 194:203:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):169:169 -> processEmittableTree
+mapping.txt:333790: 204:209:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):172:172 -> processEmittableTree
+mapping.txt:333791: 210:215:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):173:173 -> processEmittableTree
+mapping.txt:333792: 216:221:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):176:176 -> processEmittableTree
+mapping.txt:333793: 222:224:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):177:177 -> processEmittableTree
+mapping.txt:333794: 225:233:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):179:179 -> processEmittableTree
+mapping.txt:333795: 234:237:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):174:174 -> processEmittableTree
+mapping.txt:333796: 238:241:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):183:183 -> processEmittableTree
+mapping.txt:333797: 242:250:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):184:184 -> processEmittableTree
+mapping.txt:333798: 251:257:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):186:186 -> processEmittableTree
+mapping.txt:333799: 258:272:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):192:192 -> processEmittableTree
+mapping.txt:333800: 273:278:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):193:193 -> processEmittableTree
+mapping.txt:333801: 279:281:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):190:190 -> processEmittableTree
+mapping.txt:333802: 282:312:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):192:192 -> processEmittableTree
+mapping.txt:333803: 313:318:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):193:193 -> processEmittableTree
+mapping.txt:333804: 319:333:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):192:192 -> processEmittableTree
+mapping.txt:333805: 334:336:java.lang.Boolean kotlin.coroutines.jvm.internal.Boxing.boxBoolean(boolean):20:20 -> processEmittableTree
+mapping.txt:333806: 334:336:java.lang.Object processEmittableTree(android.content.Context,androidx.glance.EmittableWithChildren,kotlin.coroutines.Continuation):195 -> processEmittableTree
+mapping.txt:496941: 29:101:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):94:94 -> selectModel
+mapping.txt:496942: 102:105:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):95:95 -> selectModel
+mapping.txt:496943: 106:109:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):98:98 -> selectModel
+mapping.txt:496944: 110:126:java.lang.Object kotlin.collections.CollectionsKt___CollectionsKt.firstOrNull(java.lang.Iterable,kotlin.jvm.functions.Function1):296:296 -> selectModel
+mapping.txt:496945: 110:126:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):98 -> selectModel
+mapping.txt:496946: 127:145:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):98:98 -> selectModel
+mapping.txt:496947: 146:153:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):99:99 -> selectModel
+mapping.txt:496948: 154:159:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):101:101 -> selectModel
+mapping.txt:496949: 160:173:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):102:102 -> selectModel
+mapping.txt:496950: 174:178:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):104:104 -> selectModel
+mapping.txt:496951: 179:202:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):106:106 -> selectModel
+mapping.txt:496952: 203:206:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):111:111 -> selectModel
+mapping.txt:496953: 207:223:java.lang.Object kotlin.collections.CollectionsKt___CollectionsKt.firstOrNull(java.lang.Iterable,kotlin.jvm.functions.Function1):296:296 -> selectModel
+mapping.txt:496954: 207:223:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):111 -> selectModel
+mapping.txt:496955: 224:235:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):112:112 -> selectModel
+mapping.txt:496956: 236:243:boolean kotlin.jvm.internal.Intrinsics.areEqual(java.lang.Object,java.lang.Object):169:169 -> selectModel
+mapping.txt:496957: 236:243:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):112 -> selectModel
+mapping.txt:496958: 244:248:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):111:111 -> selectModel
+mapping.txt:496959: 249:256:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):114:114 -> selectModel
+mapping.txt:496960: 257:262:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):116:116 -> selectModel
+mapping.txt:496961: 263:286:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):117:117 -> selectModel
+mapping.txt:496962: 287:291:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):119:119 -> selectModel
+mapping.txt:496963: 292:314:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):121:121 -> selectModel
+mapping.txt:496964: 315:318:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):126:126 -> selectModel
+mapping.txt:496965: 319:335:java.lang.Object kotlin.collections.CollectionsKt___CollectionsKt.firstOrNull(java.lang.Iterable,kotlin.jvm.functions.Function1):296:296 -> selectModel
+mapping.txt:496966: 319:335:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):126 -> selectModel
+mapping.txt:496967: 336:347:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):127:127 -> selectModel
+mapping.txt:496968: 348:353:boolean kotlin.jvm.internal.Intrinsics.areEqual(java.lang.Object,java.lang.Object):169:169 -> selectModel
+mapping.txt:496969: 348:353:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):128 -> selectModel
+mapping.txt:496970: 354:361:boolean kotlin.jvm.internal.Intrinsics.areEqual(java.lang.Object,java.lang.Object):169:169 -> selectModel
+mapping.txt:496971: 354:361:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):129 -> selectModel
+mapping.txt:496972: 362:366:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):126:126 -> selectModel
+mapping.txt:496973: 367:374:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):131:131 -> selectModel
+mapping.txt:496974: 375:380:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):133:133 -> selectModel
+mapping.txt:496975: 381:397:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):134:134 -> selectModel
+mapping.txt:496976: 398:402:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):136:136 -> selectModel
+mapping.txt:496977: 403:423:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):138:138 -> selectModel
+mapping.txt:496978: 424:431:java.lang.Object selectModel(com.google.ai.edge.litert.Environment,kotlin.coroutines.Continuation):142:142 -> selectModel
+com.google.ai.edge.litert.ModelSelector ORIGINI: com.google.ai.edge.litert.ModelSelector, kotlin.collections.CollectionsKt___CollectionsKt, kotlin.jvm.internal.Intrinsics
+androidx.glance.appwidget.AppWidgetSession ORIGINI: androidx.glance.appwidget.AppWidgetSession, kotlin.coroutines.jvm.internal.Boxing
+classes2.dex.txt:1009842: type          : '(Landroid/content/Context;Landroidx/glance/EmittableWithChildren;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;'
+classes2.dex.txt:1009850: 3086a4: 0800 1400                              |0000: move-object/from16 v0, v20
+classes2.dex.txt:1009851: 3086a8: 0801 1500                              |0002: move-object/from16 v1, v21
+classes2.dex.txt:1009852: 3086ac: 0802 1600                              |0004: move-object/from16 v2, v22
+classes2.dex.txt:1009853: 3086b0: 0803 1700                              |0006: move-object/from16 v3, v23
+classes2.dex.txt:1009854: 3086b4: 1a04 2773                              |0008: const-string v4, "No app widget info for " // string@7327
+classes2.dex.txt:1009855: 3086b8: 2035 8e0e                              |000a: instance-of v5, v3, Landroidx/glance/appwidget/AppWidgetSession$processEmittableTree$1; // type@0e8e
+classes2.dex.txt:1009856: 3086bc: 3805 1100                              |000c: if-eqz v5, 001d // +0011
+classes2.dex.txt:1009857: 3086c0: 0735                                   |000e: move-object v5, v3
+classes2.dex.txt:1009858: 3086c2: 1f05 8e0e                              |000f: check-cast v5, Landroidx/glance/appwidget/AppWidgetSession$processEmittableTree$1; // type@0e8e
+classes2.dex.txt:1009859: 3086c6: 5256 c420                              |0011: iget v6, v5, Landroidx/glance/appwidget/AppWidgetSession$processEmittableTree$1;.label:I // field@20c4
+classes2.dex.txt:1009860: 3086ca: 1507 0080                              |0013: const/high16 v7, #int -2147483648 // #8000
+classes2.dex.txt:1009861: 3086ce: 9508 0607                              |0015: and-int v8, v6, v7
+classes2.dex.txt:1009862: 3086d2: 3808 0600                              |0017: if-eqz v8, 001d // +0006
+classes2.dex.txt:1009863: 3086d6: b176                                   |0019: sub-int/2addr v6, v7
+classes2.dex.txt:1009864: 3086d8: 5956 c420                              |001a: iput v6, v5, Landroidx/glance/appwidget/AppWidgetSession$processEmittableTree$1;.label:I // field@20c4
+classes2.dex.txt:1009865: 3086dc: 2806                                   |001c: goto 0022 // +0006
+classes2.dex.txt:1009866: 3086de: 2205 8e0e                              |001d: new-instance v5, Landroidx/glance/appwidget/AppWidgetSession$processEmittableTree$1; // type@0e8e
+classes2.dex.txt:1009867: 3086e2: 7030 e739 0503                         |001f: invoke-direct {v5, v0, v3}, Landroidx/glance/appwidget/AppWidgetSession$processEmittableTree$1;.<init>:(Landroidx/glance/appwidget/AppWidgetSession;Lkotlin/coroutines/Continuation;)V // method@39e7
+classes2.dex.txt:1009868: 3086e8: 5453 c520                              |0022: iget-object v3, v5, Landroidx/glance/appwidget/AppWidgetSession$processEmittableTree$1;.result:Ljava/lang/Object; // field@20c5
+classes2.dex.txt:1009869: 3086ec: 6206 7fd7                              |0024: sget-object v6, Lkotlin/coroutines/intrinsics/CoroutineSingletons;.COROUTINE_SUSPENDED:Lkotlin/coroutines/intrinsics/CoroutineSingletons; // field@d77f
+classes2.dex.txt:1009870: 3086f0: 5257 c420                              |0026: iget v7, v5, Landroidx/glance/appwidget/AppWidgetSession$processEmittableTree$1;.label:I // field@20c4
+classes2.dex.txt:1009907: 30877c: 1a03 a2df                              |006c: const-string v3, "null cannot be cast to non-null type androidx.glance.appwidget.RemoteViewsRoot" // string@dfa2
+classes2.dex.txt:1010053: 0x0015 line=22
+classes2.dex.txt:1010063: 0x001f line=32
+classes2.dex.txt:1795479: type          : '(Lcom/google/ai/edge/litert/Environment;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;'
+classes2.dex.txt:1795487: 407f60: 20e0 b914                              |0000: instance-of v0, v14, Lcom/google/ai/edge/litert/ModelSelector$selectModel$1; // type@14b9
+classes2.dex.txt:1795488: 407f64: 3800 1100                              |0002: if-eqz v0, 0013 // +0011
+classes2.dex.txt:1795489: 407f68: 07e0                                   |0004: move-object v0, v14
+classes2.dex.txt:1795490: 407f6a: 1f00 b914                              |0005: check-cast v0, Lcom/google/ai/edge/litert/ModelSelector$selectModel$1; // type@14b9
+classes2.dex.txt:1795491: 407f6e: 5201 313b                              |0007: iget v1, v0, Lcom/google/ai/edge/litert/ModelSelector$selectModel$1;.label:I // field@3b31
+classes2.dex.txt:1795492: 407f72: 1502 0080                              |0009: const/high16 v2, #int -2147483648 // #8000
+classes2.dex.txt:1795493: 407f76: 9503 0102                              |000b: and-int v3, v1, v2
+classes2.dex.txt:1795494: 407f7a: 3803 0600                              |000d: if-eqz v3, 0013 // +0006
+classes2.dex.txt:1795495: 407f7e: b121                                   |000f: sub-int/2addr v1, v2
+classes2.dex.txt:1795496: 407f80: 5901 313b                              |0010: iput v1, v0, Lcom/google/ai/edge/litert/ModelSelector$selectModel$1;.label:I // field@3b31
+classes2.dex.txt:1795497: 407f84: 2806                                   |0012: goto 0018 // +0006
+classes2.dex.txt:1795498: 407f86: 2200 b914                              |0013: new-instance v0, Lcom/google/ai/edge/litert/ModelSelector$selectModel$1; // type@14b9
+classes2.dex.txt:1795499: 407f8a: 7030 775a c00e                         |0015: invoke-direct {v0, v12, v14}, Lcom/google/ai/edge/litert/ModelSelector$selectModel$1;.<init>:(Lcom/google/ai/edge/litert/ModelSelector;Lkotlin/coroutines/Continuation;)V // method@5a77
+classes2.dex.txt:1795500: 407f90: 540e 323b                              |0018: iget-object v14, v0, Lcom/google/ai/edge/litert/ModelSelector$selectModel$1;.result:Ljava/lang/Object; // field@3b32
+classes2.dex.txt:1795501: 407f94: 6201 7fd7                              |001a: sget-object v1, Lkotlin/coroutines/intrinsics/CoroutineSingletons;.COROUTINE_SUSPENDED:Lkotlin/coroutines/intrinsics/CoroutineSingletons; // field@d77f
+classes2.dex.txt:1795502: 407f98: 5202 313b                              |001c: iget v2, v0, Lcom/google/ai/edge/litert/ModelSelector$selectModel$1;.label:I // field@3b31
+classes2.dex.txt:1795503: 407f9c: 1233                                   |001e: const/4 v3, #int 3 // #3
+classes2.dex.txt:1795504: 407f9e: 1224                                   |001f: const/4 v4, #int 2 // #2
+classes2.dex.txt:1795505: 407fa0: 1215                                   |0020: const/4 v5, #int 1 // #1
+classes2.dex.txt:1795506: 407fa2: 1a06 d870                              |0021: const-string v6, "ModelSelector" // string@70d8
+classes2.dex.txt:1795507: 407fa6: 1207                                   |0023: const/4 v7, #int 0 // #0
+classes2.dex.txt:1795508: 407fa8: 3802 3e00                              |0024: if-eqz v2, 0062 // +003e
+classes2.dex.txt:1795509: 407fac: 3252 2e00                              |0026: if-eq v2, v5, 0054 // +002e
+classes2.dex.txt:1795754: 0x0015 line=22
+classes2.dex.txt:1795764: 0x001f line=32
+catalog.txt:9: name          : '$r8$classId'
+catalog.txt:27: 585f6c: 5903 696a                              |0000: iput v3, v0, Ldev/pampa/mycloudgallery/backup/CatalogPhoneFolders$folders$2;.$r8$classId:I // field@6a69
+catalog.txt:60: 585c14: 5212 696a                              |0000: iget v2, v1, Ldev/pampa/mycloudgallery/backup/CatalogPhoneFolders$folders$2;.$r8$classId:I // field@6a69
+catalog.txt:61: 585c18: 2b02 6401 0000                         |0002: packed-switch v2, 00000166 // +00000164
+catalog.txt:620: 584ab0: 5210 696a                              |0000: iget v0, v1, Ldev/pampa/mycloudgallery/backup/CatalogPhoneFolders$folders$2;.$r8$classId:I // field@6a69
+catalog.txt:623: 584abc: 2b00 7601 0000                         |0006: packed-switch v0, 0000017c // +00000176
+catalog.txt:1215: 584e38: 5201 696a                              |0002: iget v1, v0, Ldev/pampa/mycloudgallery/backup/CatalogPhoneFolders$folders$2;.$r8$classId:I // field@6a69
+catalog.txt:1224: 584e54: 2b01 5606 0000                         |0010: packed-switch v1, 00000666 // +00000656

@@ -6,12 +6,19 @@ using System.Diagnostics;
 
 // HK: identita' dell'ISTRUZIONE, mai il nome scelto per una classe fusa.
 public static class R8Provenance {
-  class Entry { public int Lo, Hi; public string Origin, Range, Signature; }
+  class Frame { public string Origin, Signature; }
+  class Entry { public int Lo, Hi; public string Origin, Range, Signature, OriginalSignature; public bool HasResidualSignature; public List<Frame> Frames=new List<Frame>(); }
   class Method {
     public string Key, Signature;
     public SortedList<int,int> Positions = new SortedList<int,int>();
+    public bool KeepBody;
     public List<string> Instructions = new List<string>();
   }
+  class Location {public string Key; public Entry Entry;}
+  static Dictionary<string,List<Location>> runtimeLocations=new Dictionary<string,List<Location>>();
+  public static List<string> PolicyEvidence=new List<string>();
+  public static List<string> RuntimeProofs=new List<string>();
+  static Dictionary<string,string> residualSignatures=new Dictionary<string,string>();
   static Dictionary<string,List<Entry>> map;
   static Dictionary<string,Method> instructions = new Dictionary<string,Method>();
   static Dictionary<string,Method> methods = new Dictionary<string,Method>();
@@ -39,7 +46,7 @@ public static class R8Provenance {
     foreach (string raw in File.ReadLines(MappingPath)) {
       if(raw.Contains("com.android.tools.r8.residualsignature") && last!=null) {
         var sm=Regex.Match(raw,"\"signature\":\"([^\"]+)\"");
-        if(sm.Success && sm.Groups[1].Value.StartsWith("(")) last.Signature=sm.Groups[1].Value;
+        if(sm.Success && sm.Groups[1].Value.StartsWith("(")) residualSignatures[lastKey+"|"+last.OriginalSignature]=sm.Groups[1].Value;
       }
       if (raw.Length == 0 || raw[0] == '#') continue;
       if (raw[0] != ' ') {
@@ -62,11 +69,26 @@ public static class R8Provenance {
       string sig="("; string args=left.Substring(paren+1,close-paren-1);
       if(args.Length>0) foreach(string arg in args.Split(',')) sig+=TypeDescriptor(arg);
       sig+=")"+TypeDescriptor(ret);
-      if(last!=null && lastKey==key && last.Range==range && m.Groups[1].Success) {last.Signature=String.Intern(sig); continue;}
+      if(last!=null && lastKey==key && last.Range==range && m.Groups[1].Success) {last.Signature=String.Intern(sig); last.OriginalSignature=last.Signature; last.Frames.Add(new Frame {Origin=String.Intern(origin),Signature=String.Intern(sig)}); continue;}
       last=new Entry { Lo = m.Groups[1].Success ? Int32.Parse(m.Groups[1].Value) : -1,
         Hi = m.Groups[2].Success ? Int32.Parse(m.Groups[2].Value) : -1, Origin = String.Intern(origin),
-        Range = String.Intern(range), Signature=String.Intern(sig) };
+        Range = String.Intern(range), Signature=String.Intern(sig), OriginalSignature=String.Intern(sig) };
+      last.Frames.Add(new Frame {Origin=last.Origin,Signature=last.Signature});
       list.Add(last); lastKey=key;
+    }
+    var inlineOrigins=new HashSet<string>();
+    foreach(var pair in result) foreach(var e in pair.Value) {
+      string residualSignature;
+      if(residualSignatures.TryGetValue(pair.Key+"|"+e.OriginalSignature,out residualSignature)) {e.Signature=residualSignature; e.HasResidualSignature=true;}
+      for(int i=0;i<e.Frames.Count-1;i++) if(!e.Frames[i].Origin.StartsWith("Ldev/")) inlineOrigins.Add(e.Frames[i].Origin);
+    }
+    foreach(var pair in result) foreach(var e in pair.Value) {
+      var seen=new HashSet<string>();
+      foreach(var f in e.Frames) if(inlineOrigins.Contains(f.Origin) && seen.Add(f.Origin)) {
+        List<Location> locations;
+        if(!runtimeLocations.TryGetValue(f.Origin,out locations)) runtimeLocations[f.Origin]=locations=new List<Location>();
+        locations.Add(new Location {Key=pair.Key,Entry=e});
+      }
     }
     map = result;
   }
@@ -80,12 +102,15 @@ public static class R8Provenance {
       m=type.Match(line);
       if(m.Success && m.Groups[1].Value.StartsWith("(")) {
         current=new Method { Key=c+"."+n, Signature=m.Groups[1].Value };
-        if(current.Key.Contains("$$ExternalSyntheticApiModelOutline")) methods[current.Key+":"+current.Signature]=current; continue;
+        List<Entry> es;
+        current.KeepBody=current.Key.Contains("$$ExternalSyntheticApiModelOutline");
+        if(map!=null && map.TryGetValue(current.Key,out es)) foreach(var e in es) foreach(var f in e.Frames) if(runtimeLocations.ContainsKey(f.Origin)) current.KeepBody=true;
+        if(current.KeepBody) methods[current.Key+":"+current.Signature]=current; continue;
       }
       if(current==null) continue;
       m=insn.Match(line);
       if(m.Success) {
-        if(current.Key.Contains("$$ExternalSyntheticApiModelOutline")) current.Instructions.Add(line);
+        if(current.KeepBody) current.Instructions.Add(line);
         string op=m.Groups[2].Value;
         if(op.StartsWith("invoke") || op=="new-instance" || op.StartsWith("sget")) instructions[id+"|"+Address(line)]=current;
         continue;
@@ -112,36 +137,129 @@ public static class R8Provenance {
     }
     ReadDump(id,File.ReadLines(dump)); prepared.Add(id); aliases[dex]=id;
   }
-  public static string Origin(string dex,string line) {
+  static Method InstructionMethod(string dex,string line) {
     LoadMap(); Method m;
     string id=aliases.ContainsKey(dex) ? aliases[dex] : dex;
     if(!instructions.TryGetValue(id+"|"+Address(line),out m)) throw new InvalidOperationException("HK: istruzione non indicizzata");
-    // Il ponte non esegue qui codice della libreria: la sua firma ne nomina i tipi.
-    // L'identita' e' il callee del ponte, il cui corpo viene ispezionato separatamente.
+    return m;
+  }
+  static int Position(Method m,string line) {
+    int pc=Convert.ToInt32(insn.Match(line).Groups[1].Value,16), residual=-1;
+    foreach(var p in m.Positions) {if(p.Key>pc) break; residual=p.Value;}
+    return residual;
+  }
+  public static string[] Origins(string dex,string line,string target) {
+    Method m=InstructionMethod(dex,line);
+    // La firma di un ponte sintetico e' attribuita al callee, ispezionato a sua volta.
     if(Regex.IsMatch(m.Key,@"\$\$ExternalSyntheticLambda\d+;\.")) {
       var bridge=Regex.Match(line,@"\}\s*,\s*(L[^;\s]+;)\.(\$r8\$lambda\$[^:\s]+):");
-      if(bridge.Success) return bridge.Groups[1].Value+"."+bridge.Groups[2].Value;
+      if(bridge.Success) return new string[]{bridge.Groups[1].Value+"."+bridge.Groups[2].Value};
     }
-    var im=insn.Match(line); int pc=Convert.ToInt32(im.Groups[1].Value,16), residual=-1;
-    foreach(var p in m.Positions) {if(p.Key>pc) break; residual=p.Value;}
     List<Entry> entries;
     if(!map.TryGetValue(m.Key,out entries)) throw new InvalidOperationException("HK: origine assente in mapping: "+m.Key);
-    // R8 scrive prima il frame inline piu' interno; le righe successive dello STESSO intervallo sono lo stack inline.
-    // Intervalli diversi sovrapposti o posizioni assenti non autorizzano una scelta arbitraria.
-    Entry first=null;
+    int residual=Position(m,line);
+    Entry first=null; bool hasSignature=false;
     foreach(var e in entries) {
       if(e.Signature!=m.Signature) continue;
+      hasSignature=true;
       if(e.Lo>=0 && residual>=e.Lo && residual<=e.Hi) {
         if(first==null) first=e;
         else if(first.Range!=e.Range || first.Origin!=e.Origin) throw new InvalidOperationException("HK: intervalli ambigui: "+m.Key+" line="+residual);
       }
     }
-    if(first!=null) return first.Origin;
-    // Senza tabella posizioni si accetta solo un metodo con UNA identita' originale (anche se piu' intervalli).
-    string only=null;
-    foreach(var e in entries) {if(e.Signature!=m.Signature) continue; if(only==null) only=e.Origin; else if(only!=e.Origin) throw new InvalidOperationException("HK: origine indeterminata: "+m.Key+" pc="+pc+" line="+residual);}
-    if(only==null) throw new InvalidOperationException("HK: firma residuale non risolta: "+m.Key+":"+m.Signature);
-    return only;
+    if(!hasSignature) throw new InvalidOperationException("HK: firma residuale non risolta: "+m.Key+":"+m.Signature);
+    if(first!=null) {
+      if(target=="Landroidx/glance/" && !first.Origin.StartsWith("Landroidx/glance/") && !first.Origin.StartsWith("Ldev/")) PolicyEvidence.Add("POSIZIONATA "+m.Key+" -> "+first.Origin+" :: "+line);
+      return new string[]{first.Origin};
+    }
+    // Il prologo puo' precedere il dispatch di una classe fusa. Nessuna scelta dal nome,
+    // dai campi condivisi o dal ramo del switch: tutti i frame e il contenitore sono candidati.
+    var candidates=new HashSet<string>();
+    foreach(var e in entries) if(e.Signature==m.Signature) foreach(var f in e.Frames) candidates.Add(f.Origin);
+    if(candidates.Count==0) throw new InvalidOperationException("HK: nessuna origine nel mapping: "+m.Key);
+    candidates.Add(m.Key);
+    if(target=="Landroidx/glance/") {
+      var remove=new List<string>();
+      foreach(string origin in candidates) if(!origin.StartsWith(target) && ProveInnocentInlineRuntime(m,entries,origin,line,target)) remove.Add(origin);
+      foreach(string origin in remove) { candidates.Remove(origin); RuntimeProofs.Add(m.Key+" pc="+insn.Match(line).Groups[1].Value+": frame inline innocuo dimostrato "+origin); }
+    }
+    if(target=="Landroidx/glance/" && candidates.Count>1) PolicyEvidence.Add("SENZA POSIZIONE "+m.Key+" -> "+String.Join(", ",new List<string>(candidates).ToArray())+" :: "+line);
+    var result=new List<string>(candidates); result.Sort(StringComparer.Ordinal); return result.ToArray();
+  }
+  public static string OriginGroup(string dex,string line) {return String.Join("\n",Origins(dex,line,""));}
+  public static bool IsOnlyOrigin(string dex,string line,string expected) {
+    foreach(string o in Origins(dex,line,"")) if(o!=expected) return false;
+    return true;
+  }
+  // Compatibilita' per la diagnosi delle istruzioni che hanno una provenienza precisa.
+  public static string Origin(string dex,string line) {
+    string[] os=Origins(dex,line,"");
+    if(os.Length!=1) throw new InvalidOperationException("HK: origini multiple: "+String.Join(", ",os));
+    return os[0];
+  }
+  static bool HasReference(string text,string prefix) {return text.Contains(prefix);}
+  static bool ProveInnocentInlineRuntime(Method m,List<Entry> entries,string origin,string line,string target) {
+    if(origin.StartsWith("Ldev/")) return false;
+    // Ogni occorrenza nel metodo deve essere un frame INLINE (mai l'ultimo frame).
+    bool found=false;
+    foreach(var e in entries) if(e.Signature==m.Signature) {
+      for(int i=0;i<e.Frames.Count;i++) if(e.Frames[i].Origin==origin) {
+        found=true;
+        if(i==e.Frames.Count-1 || e.Lo<0 || HasReference(e.Frames[i].Signature,target)) return false;
+        bool saw=false;
+        foreach(string instruction in m.Instructions) {
+          int position=Position(m,instruction);
+          if(position>=e.Lo && position<=e.Hi) {
+            saw=true;
+            // Gli altri frame della stessa catena sono lo stack inline, non gli autori
+            // delle istruzioni del callback piu' interno.
+            // Il perimetro della policy e' sulle invocazioni: cast generici e spill nei
+            // campi della continuazione non sono invocazioni e non possono essere
+            // l'autore della chiamata in esame. Il corpo originale, se presente,
+            // resta invece controllato in tutte le sue istruzioni qui sotto.
+            if(e.Origin==origin && insn.Match(instruction).Groups[2].Value.StartsWith("invoke") && HasReference(instruction,target) && !SignatureOnlyArtifact(insn.Match(instruction).Groups[3].Value,target)) {
+              PolicyEvidence.Add("PROVA INLINE RESPINTA "+m.Key+" origine "+origin+" :: "+instruction); return false;
+            }
+          }
+        }
+        if(!saw) return false;
+      }
+    }
+    if(!found) return false;
+    // Controlla anche gli eventuali corpi residui del metodo runtime, inclusi quelli spostati da R8.
+    foreach(var location in runtimeLocations[origin]) {
+      Entry e=location.Entry;
+      // Le altre copie inline appartengono ad altri contesti; qui servono il frame in esame
+      // e gli eventuali corpi originali rimasti, non i corpi dei loro chiamanti.
+      if(e.Frames[e.Frames.Count-1].Origin!=origin) continue;
+      Method body;
+      // Il metodo puo' essere stato eliminato; dove esiste il suo bytecode deve essere leggibile.
+      if(!methods.TryGetValue(location.Key+":"+e.Signature,out body)) continue;
+      if(body.Instructions.Count==0) return false;
+      foreach(string instruction in body.Instructions) if(HasReference(instruction,target) && !SignatureOnlyArtifact(insn.Match(instruction).Groups[3].Value,target)) {
+        PolicyEvidence.Add("CORPO RUNTIME RESPINTO "+m.Key+" origine "+origin+" :: "+instruction); return false;
+      }
+    }
+    // La chiamata in esame deve avere un owner esterno al runtime e nominare la libreria
+    // nella firma: non puo' essere l'istruzione di quei frame runtime gia' provati privi di tali tipi.
+    var call=Regex.Match(insn.Match(line).Groups[3].Value,@"\}\s*,\s*(L[^;\s]+;)\.([^:]+):(\([^ ]+)");
+    if(!call.Success || call.Groups[1].Value.StartsWith("Lkotlin/") || !HasReference(call.Value,target)) return false;
+    return true;
+  }
+  public static bool SignatureOnlyArtifact(string rest,string target) {
+    LoadMap();
+    var call=Regex.Match(rest,@"\}\s*,\s*(L[^;\s]+;)\.([^:]+):(\([^ ]+)");
+    if(!call.Success || call.Groups[1].Value.StartsWith(target) || !call.Groups[3].Value.Contains(target)) return false;
+    List<Entry> entries;
+    if(!map.TryGetValue(call.Groups[1].Value+"."+call.Groups[2].Value,out entries)) return false;
+    bool found=false;
+    foreach(var e in entries) if(e.Signature==call.Groups[3].Value) {
+      if(!e.HasResidualSignature) return false;
+      found=true;
+      foreach(var f in e.Frames) if(f.Origin.StartsWith(target) || f.Signature.Contains(target)) return false;
+    }
+    if(found) RuntimeProofs.Add("firma introdotta da residualsignature: "+rest);
+    return found;
   }
   // Non basta il nome sintetico: tutte le istruzioni con un riferimento di tipo devono essere di piattaforma.
   // Un corpo mancante, vuoto, una chiamata indiretta o un riferimento non riconosciuto fallisce chiuso.

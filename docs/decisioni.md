@@ -17783,6 +17783,13 @@ Temperatura della batteria durante le prove: 29-42 C, simile fra i lati (tabella
 
 I controlli del bytecode attribuiscono le chiamate all'origine della singola istruzione tramite mapping, firma residuale e posizioni dex, anche dopo fusioni e inline. Gli outline API vengono esentati solo dopo lettura del corpo; i riferimenti a librerie o client HTTPS restano soggetti alla policy del chiamante. Origini mancanti o ambigue fanno fallire il controllo. La stessa logica copre HTTPS/ML Kit, LiteRT, OkHttp/MapLibre, Glance e le prove dei chiamanti delle recinzioni D12/D30/D34; tolta l'autorizzazione per unione delle origini di un metodo fuso.
 
-Diagnosi, limiti e prove ripetibili in `tools/release/HK-report.md`. Nessun sorgente dell'app o regola R8 cambiato, nessun Gradle/dispositivo. Nessuna prova visiva o sul telefono necessaria; all'integrazione resta il check completo. Senza build controllate intermedie non si distingue la causa Z1 da P2/startup profile.
+Diagnosi, limiti e prove ripetibili in `docs/HK-controllo-r8.md`. Nessun sorgente dell'app o regola R8 cambiato, nessun Gradle/dispositivo. Nessuna prova visiva o sul telefono necessaria; all'integrazione resta il check completo. Senza build controllate intermedie non si distingue la causa Z1 da P2/startup profile.
 
 Verifica HK: 43 prove sintetiche verdi; sull'APK originale passano le due ispezioni corrette e D12/D30/D34. Restano bloccanti LiteRT (`ModelSelector.selectModel`, PC 0x15) e Glance (`AppWidgetSession.processEmittableTree`, PC 0x1f): chiamate nei prologhi delle coroutine prive di una posizione sorgente risolvibile. Non si concede alcuna esenzione per prefisso o contenitore: il controllo fallisce. Il pacchetto non costituisce un via libera al rilascio.
+
+
+### HK giro 2 - origini possibili e prove dei frame inline
+
+Il blocco del giro 1 e' risolto: senza una posizione sorgente utilizzabile si controllano TUTTE le origini del metodo residuo, compresi i frame esterni inline e il contenitore. Le prove positive richiedono lo stesso requisito per tutte le origini. Il perimetro Glance resta globale. Un frame inline di libreria si esclude come autore soltanto dopo lettura del codice e prova che non puo' essere quella specifica invocazione; Kotlin non ha una whitelist nominale. I riferimenti di firma introdotti da R8 richiedono il metadato residualsignature e firme/origini originali prive di Glance.
+
+Sul medesimo APK ora passano HTTPS/ML Kit, LiteRT, OkHttp/MapLibre, Glance/KT e D12/D30/D34, oltre ai cinque passi aggiuntivi di dex/recinzioni. Le 64 prove sintetiche includono origini vietate nel prologo e runtime Kotlin che nomina Glance. Report completo in `docs/HK-controllo-r8.md`; i precedenti FAIL del giro 1 restano documentati come storia, non come stato corrente. Nessun Gradle, modifica all'app, dispositivo o chiusura di processi altrui.

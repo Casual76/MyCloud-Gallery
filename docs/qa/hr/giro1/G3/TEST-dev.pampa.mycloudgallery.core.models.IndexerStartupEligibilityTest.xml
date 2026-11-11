@@ -1,8 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<testsuite name="dev.pampa.mycloudgallery.core.models.IndexerStartupEligibilityTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-11T15:17:31.087Z" time="0.061">
-  <properties />
-  <testcase name="rimozioneRestaSalvataFraDueProcessi" classname="dev.pampa.mycloudgallery.core.models.IndexerStartupEligibilityTest" time="0.044" />
-  <testcase name="tuttiProntiNonRichiedonoNienteAncheAlSecondoAvvio" classname="dev.pampa.mycloudgallery.core.models.IndexerStartupEligibilityTest" time="0.016" />
-  <system-out />
-  <system-err />
-</testsuite>

@@ -1,8 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<testsuite name="dev.pampa.mycloudgallery.backup.SimilarRunPacingTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-11T15:18:42.053Z" time="0.015">
-  <properties />
-  <testcase name="ilConfrontoSuccessivoNonAspettaAltriDieciSecondi" classname="dev.pampa.mycloudgallery.backup.SimilarRunPacingTest" time="0.01" />
-  <testcase name="attendeIlDisegnoEPoiDieciSecondiECedeInPrimoPiano" classname="dev.pampa.mycloudgallery.backup.SimilarRunPacingTest" time="0.005" />
-  <system-out />
-  <system-err />
-</testsuite>

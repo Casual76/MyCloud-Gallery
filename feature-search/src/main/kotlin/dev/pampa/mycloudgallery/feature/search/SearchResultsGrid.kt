@@ -373,6 +373,11 @@ internal class ResultsAnchor(
     if (gridState.layoutInfo.visibleItemsInfo.none { it.key == id.value }) gridState.scrollToItem(index)
   }
 
+  /** CU-1: la cella d'origine resta vuota mentre la foto del viewer ne esce o ci rientra (la cella lo legge nel disegno, come nella Libreria). */
+  override fun hide(id: MediaId?) {
+    interaction.hiddenKey = id
+  }
+
   /** La chiave della miniatura che la cella ha in memoria: la stessa della Libreria ([thumbKeyOf]). */
   override fun thumbKey(id: MediaId): ThumbKey {
     val snapshot = results.confident.snapshot

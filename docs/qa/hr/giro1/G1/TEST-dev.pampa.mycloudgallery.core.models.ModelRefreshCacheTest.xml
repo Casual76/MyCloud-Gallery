@@ -1,8 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<testsuite name="dev.pampa.mycloudgallery.core.models.ModelRefreshCacheTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-11-11T14:45:28.483Z" time="0.031">
-  <properties />
-  <testcase name="senzaStatNonSiSaltaMaiLaVerifica" classname="dev.pampa.mycloudgallery.core.models.ModelRefreshCacheTest" time="0.006" />
-  <testcase name="secondoProcessoNonLeggeIByteMaUnFileToccatoSi" classname="dev.pampa.mycloudgallery.core.models.ModelRefreshCacheTest" time="0.025" />
-  <system-out />
-  <system-err />
-</testsuite>

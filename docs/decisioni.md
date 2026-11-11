@@ -17897,7 +17897,7 @@ bytecode delle librerie usate (Compose ui e foundation 1.10.5, BOM 2026.03.00).
 
 ## HR - robustezza e fluidita al primo avvio (11/11/2026)
 
-- Base 261a3553, ramo fix/hr-primo-avvio. Report ed evidenze: `docs/hr-primo-avvio.md`, `docs/qa/hr/`. Nessun dispositivo, adb, push o modifica engine.
+- Base 261a3553, ramo fix/hr-primo-avvio. Report ed evidenze: `docs/hr-primo-avvio.md`, `evidenze fuori dal repository (note degli agenti, beta/evidenze-H/qa-hr)/`. Nessun dispositivo, adb, push o modifica engine.
 - Riprodotto con UUID canonici sintetici il crash Album da chiavi hash duplicate; chiavi ora per tipo e UUID completo. Non attribuito a questo il crash D4 reale: leggere il registro crash e logcat quando torna il telefono. Apertura concorrente Room su file nuovo senza errori nelle prove.
 - Timeline: finestra 250 ms in primo piano, 100 commit simulati -> 4 patch/emissioni, 100 media conservati. Transazioni Room non accorpate.
 - UI prima: YieldToApp usa tocchi/scroll/inerzia, calma 800 ms; Pace.APP_IN_USE torna normale a riposo senza cambiare caldo/rete/fascia. Copie simili dopo primo disegno +10 s solo alla prima richiesta, fette da 1 s con pausa 1 s durante uso, 30 s a riposo/background, stesso budget 600 s. Richieste successive immediate.

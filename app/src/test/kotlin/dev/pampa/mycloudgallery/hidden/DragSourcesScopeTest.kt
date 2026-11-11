@@ -16,7 +16,7 @@ class DragSourcesScopeTest {
     "feature-library/src/main/kotlin/dev/pampa/mycloudgallery/feature/library/grid/MediaGrid.kt",
     "feature-viewer/src/main/kotlin/dev/pampa/mycloudgallery/feature/viewer/page/ViewerPage.kt",
     "feature-albums/src/main/kotlin/dev/pampa/mycloudgallery/feature/albums/page/AlbumGrid.kt",
-    "feature-search/src/main/kotlin/dev/pampa/mycloudgallery/feature/search/SearchResultCell.kt",
+    "feature-search/src/main/kotlin/dev/pampa/mycloudgallery/feature/search/SearchResultsGrid.kt",
     "feature-memories/src/main/kotlin/dev/pampa/mycloudgallery/feature/memories/page/MemoryGrid.kt",
     "feature-map/src/main/kotlin/dev/pampa/mycloudgallery/feature/map/grid/ZoneGrid.kt",
     // Il design system definisce il modificatore.

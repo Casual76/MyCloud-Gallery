@@ -156,7 +156,7 @@ Rischi residui: GPU e memoria nativa della misura restano condivise con la UI; i
 | feature-search | 278 test completi (HR-6, dopo registrazione PNG) | 0 / 0 |
 | app | 38 test in 10 classi (HR-6); poi 2 test sul delta startup (HR-7, uno comune) | 0 / 0 |
 
-Non sommare le ripetizioni come test distinti. L'ultimo delta tocca solo SimilarRunStart/SimilarRunPacing e il relativo montaggio in SimilarCopiesGraph; HR-7 lo ricompila e lo verifica. Gli XML prima/dopo e il riepilogo HR-6 sono in `docs/qa/hr/`. `git diff --check` OK. Dopo consolidamento dei commit, tree dei sorgenti e prove invariato: `467c60f2588034ed1f49830e0eeacbc8773a193d` (prima del solo commit documentale).
+Non sommare le ripetizioni come test distinti. L'ultimo delta tocca solo SimilarRunStart/SimilarRunPacing e il relativo montaggio in SimilarCopiesGraph; HR-7 lo ricompila e lo verifica. Gli XML prima/dopo e il riepilogo HR-6 sono in `evidenze fuori dal repository (note degli agenti, beta/evidenze-H/qa-hr)/`. `git diff --check` OK. Dopo consolidamento dei commit, tree dei sorgenti e prove invariato: `467c60f2588034ed1f49830e0eeacbc8773a193d` (prima del solo commit documentale).
 
 ## Screenshot finali
 
@@ -205,14 +205,14 @@ HR-G2-ripresa (1m34s, FAIL atteso) ha completato i controlli interrotti dal riav
 - CR-4: AiModule esattamente da df23eae2; il motore finto della misura riceve YieldToApp, atteso null.
 - CR-5: disabilitato soltanto il riuso della nota, quindi ogni refresh richiama la verifica completa come prima. Il secondo oggetto/processo conta 2 hash invece di 1.
 
-Sono prove differenziali mirate, non una ricompilazione integrale del vecchio commit con tutte le nuove API. Tutte le modifiche temporanee sono state ripristinate prima di HR-G3. XML in docs/qa/hr/giro1/G2.
+Sono prove differenziali mirate, non una ricompilazione integrale del vecchio commit con tutte le nuove API. Tutte le modifiche temporanee sono state ripristinate prima di HR-G3. XML in evidenze fuori dal repository (note degli agenti, beta/evidenze-H/qa-hr)/giro1/G2.
 
 HR-G1: OK in 16m37s; core-models 304, core-rules 401, app 15 test (4 classi); zero errori o saltati. Il filtro della nuova prova misura era stato aggiunto al file del lanciatore dopo che il processo lo aveva caricato: non e contato in G1, eseguito in G2-ripresa e incluso in G3.
 HR-G2 originale: interrotto dal riavvio esterno verso le 16:08, senza esito finale; al rientro rilasciato il posto HR-G2. La ripresa e stata esplicitamente autorizzata dall'orchestratore; nessun retry di test implicito.
 Ogni batch usa un posto, --no-daemon --no-watch-fs --max-workers=2 --no-parallel, offline e compilatore in-process. Heap del progetto 4 GiB + 4 GiB, eccezione dichiarata. Righe di esito inviate al Coordinatore subito dopo il rilascio; processi chiusi solo tramite discendenza del lanciatore o percorso mcg-k5, mai per nome.
 
 
-HR-G3: **OK in 1m48s** sul codice corretto, con cache di compilazione riusata e test rieseguiti. core-models: 35 test, 0 falliti; core-rules: 1 test, 0 falliti; core-ai: 32 test, 0 falliti; app: 20 test, 0 falliti. Zero errori o saltati. XML e conteggi in docs/qa/hr/giro1/G3; i conteggi sono corse distinte, non si sommano fra G1 e G3. La prova misura passa nel cablaggio di AiModule, con motore finto che controlla l'assenza di YieldToApp. I test esistenti dei volti verificano priorita ridotta, numero thread e riaperture soltanto quando cambia yielding; l'attach di produzione mantiene yielding true prima/dopo busy, anche dopo 850 ms di quiete.
+HR-G3: **OK in 1m48s** sul codice corretto, con cache di compilazione riusata e test rieseguiti. core-models: 35 test, 0 falliti; core-rules: 1 test, 0 falliti; core-ai: 32 test, 0 falliti; app: 20 test, 0 falliti. Zero errori o saltati. XML e conteggi in evidenze fuori dal repository (note degli agenti, beta/evidenze-H/qa-hr)/giro1/G3; i conteggi sono corse distinte, non si sommano fra G1 e G3. La prova misura passa nel cablaggio di AiModule, con motore finto che controlla l'assenza di YieldToApp. I test esistenti dei volti verificano priorita ridotta, numero thread e riaperture soltanto quando cambia yielding; l'attach di produzione mantiene yielding true prima/dopo busy, anche dopo 850 ms di quiete.
 
 ### Prove fisiche residue del giro 1 (NV, non eseguite)
 

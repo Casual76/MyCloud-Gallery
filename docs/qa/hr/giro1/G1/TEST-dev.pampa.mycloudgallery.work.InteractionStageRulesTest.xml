@@ -1,8 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<testsuite name="dev.pampa.mycloudgallery.work.InteractionStageRulesTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-11-11T14:58:34.585Z" time="0.012">
-  <properties />
-  <testcase name="aRiposoToglieSoloIlRallentamentoDellInterfaccia" classname="dev.pampa.mycloudgallery.work.InteractionStageRulesTest" time="0.012" />
-  <system-out />
-  <system-err>System.logW: A resource failed to call close.
-</system-err>
-</testsuite>

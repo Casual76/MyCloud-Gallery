@@ -254,7 +254,12 @@ class GalleryIntegrationTest {
     assertThat(withTimeout(TIMEOUT_MS) { asked.receive() }).isFalse()
     until("la lettura del telefono agganciata") { attached.get() >= 1 }
     assertThat(attached.get()).isEqualTo(1)
+    // CR-1: nessun gesto da oltre 800 ms: il motore resta ridotto in primo piano.
+    Thread.sleep(850)
+    assertThat(yielding.get()?.yielding).isTrue()
+    val threads = dev.pampa.mycloudgallery.core.rules.run.YieldToApp.inferenceThreads(yielding.get()!!.yielding, 8)
     dev.pampa.mycloudgallery.work.UiWorkActivity.budget.interacted()
+    assertThat(dev.pampa.mycloudgallery.core.rules.run.YieldToApp.inferenceThreads(yielding.get()!!.yielding, 8)).isEqualTo(threads)
     assertThat(yielding.get()?.yielding).isTrue()
     stoppable.onBackground()
     assertThat(yielding.get()?.yielding).isFalse()

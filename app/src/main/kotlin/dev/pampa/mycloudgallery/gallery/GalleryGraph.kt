@@ -330,7 +330,8 @@ class GalleryGraph(
       uriOf = intents::uriOf,
       work = { block -> runIfActive { block() } },
       signatures = parts.similarSignatures,
-      foreground = { uiInUse },
+      foreground = { foreground },
+      busy = { uiInUse },
       firstDraw = parts.afterFirstDraw,
     )
   }
@@ -517,7 +518,7 @@ class GalleryGraph(
   /** Il repository della timeline: uno per processo. Parte con [startWhenReady]. */
   val repository: CatalogTimelineRepository = AvvioTrace.section("MCG:galleria:repositoryNuovo") {
     CatalogTimelineRepository(timelineSource, SnapshotStore(parts.replicaDir),
-      CoroutineScope(galleryScope.coroutineContext + dev.pampa.mycloudgallery.core.rules.run.YieldToApp({ uiInUse })),
+      CoroutineScope(galleryScope.coroutineContext + dev.pampa.mycloudgallery.core.rules.run.YieldToApp({ foreground })),
       dispatchers.default, parts.snapshotDelayMs,
       publicationWindowMs = { if (foreground) 250L else 0L })
   }
@@ -826,6 +827,7 @@ class GalleryGraph(
   @Volatile
   private var foreground = false
 
+  internal val uiForeground: Boolean get() = foreground
   internal val uiInUse: Boolean get() = foreground && dev.pampa.mycloudgallery.work.UiWorkActivity.budget.busy
 
   /**
@@ -909,7 +911,7 @@ class GalleryGraph(
   /** La sincronizzazione agganciata al primo piano (quella vera o quella ferma della misura). */
   private fun attachSync() {
     currentSync()?.attach(CoroutineScope(galleryScope.coroutineContext +
-      dev.pampa.mycloudgallery.core.rules.run.YieldToApp({ uiInUse })))
+      dev.pampa.mycloudgallery.core.rules.run.YieldToApp({ foreground })))
   }
 
   /**

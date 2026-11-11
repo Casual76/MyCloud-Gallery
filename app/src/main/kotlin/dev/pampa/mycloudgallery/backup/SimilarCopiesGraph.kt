@@ -91,6 +91,7 @@ class SimilarCopiesGraph(
   /** Solo per i test d'integrazione: da dove vengono i pixel da firmare (il MediaStore finto non apre `content://`). Di norma null. */
   private val signatures: ((MediaCatalog) -> SignatureSource)? = null,
   private val foreground: () -> Boolean = { false },
+  private val busy: () -> Boolean = foreground,
   private val firstDraw: suspend () -> Unit = {},
 ) : SimilarCopies {
 
@@ -183,7 +184,7 @@ class SimilarCopiesGraph(
           work {
             var detector: CatalogSimilarCopies? = null
             var lastPending = Int.MAX_VALUE
-            runSimilarSlices(foreground, runStart::await) { budget ->
+            runSimilarSlices(busy, runStart::await) { budget ->
               val active = detector ?: (ensure() ?: return@runSimilarSlices false).also {
                 it.refreshProgress()
                 detector = it

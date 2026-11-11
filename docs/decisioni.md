@@ -17777,3 +17777,12 @@ Temperatura della batteria durante le prove: 29-42 C, simile fra i lati (tabella
   0 falliti): OK, 4 min 52 s. `p2-3` (`:app:generateBaselineProfile` sull'S25): OK, 40 min 9 s. `p2-4` (APK di misura finali): OK,
   3 min 33 s. Ogni batch chiesto prima, un posto del semaforo, rilasciato. `tools\check.ps1` non lanciato.
 - Telefono alla fine: solo `dev.pampa.mycloudgallery.debug`, nessuna cartella di misura, schermata Home.
+
+
+## HK - provenienza delle istruzioni R8 (11 novembre 2026)
+
+I controlli del bytecode attribuiscono le chiamate all'origine della singola istruzione tramite mapping, firma residuale e posizioni dex, anche dopo fusioni e inline. Gli outline API vengono esentati solo dopo lettura del corpo; i riferimenti a librerie o client HTTPS restano soggetti alla policy del chiamante. Origini mancanti o ambigue fanno fallire il controllo. La stessa logica copre HTTPS/ML Kit, LiteRT, OkHttp/MapLibre, Glance e le prove dei chiamanti delle recinzioni D12/D30/D34; tolta l'autorizzazione per unione delle origini di un metodo fuso.
+
+Diagnosi, limiti e prove ripetibili in `tools/release/HK-report.md`. Nessun sorgente dell'app o regola R8 cambiato, nessun Gradle/dispositivo. Nessuna prova visiva o sul telefono necessaria; all'integrazione resta il check completo. Senza build controllate intermedie non si distingue la causa Z1 da P2/startup profile.
+
+Verifica HK: 43 prove sintetiche verdi; sull'APK originale passano le due ispezioni corrette e D12/D30/D34. Restano bloccanti LiteRT (`ModelSelector.selectModel`, PC 0x15) e Glance (`AppWidgetSession.processEmittableTree`, PC 0x1f): chiamate nei prologhi delle coroutine prive di una posizione sorgente risolvibile. Non si concede alcuna esenzione per prefisso o contenitore: il controllo fallisce. Il pacchetto non costituisce un via libera al rilascio.

@@ -14,6 +14,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import dev.pampa.mycloudgallery.feature.viewer.gesture.mouseWheelZoom
@@ -42,7 +43,8 @@ import kotlin.math.roundToInt
  *    della foto per un pixel dello schermo. Una foto da 200 MP si ingrandisce molto piu' di una da 12.
  *
  * Il contenuto ([content]) riempie tutto lo spazio e disegna la foto come `Fit` nel proprio centro: lo zoom lo
- * trasforma. Per i tasselli e' `TiledMedia`, per la bitmap [FitBitmap].
+ * trasforma. Per i tasselli e' `TiledMedia`, per la bitmap [FitBitmap], per il video la sua superficie con la miniatura sopra (H1, D8:
+ * i video si ingrandiscono come le foto, con lo stesso codice dei gesti).
  */
 @Composable
 internal fun ZoomableMedia(
@@ -81,6 +83,24 @@ internal fun ZoomableMedia(
 
 /** Il doppio tocco che non fa niente: con una selezione del testo aperta (D45). */
 private val IgnoredDoubleTap = DoubleClickToZoomListener { _, _ -> }
+
+/**
+ * Per cio' che sta nel contenuto dello zoom **accanto ai tasselli** (il video della foto in movimento, H1): finche' i tasselli disegnano,
+ * telephoto non trasforma piu' il contenuto da solo (i tasselli si disegnano gia' trasformati: `autoApplyTransformations` e' spento), quindi
+ * lo si trasforma qui, con la stessa trasformazione. Senza tasselli non fa niente: ci pensa `zoomable`. Letto nel disegno.
+ */
+internal fun Modifier.followZoom(state: ZoomableMediaState): Modifier = graphicsLayer {
+  val zoomable = state.zoomable
+  if (zoomable.autoApplyTransformations) return@graphicsLayer
+  val transformation = zoomable.contentTransformation
+  if (!transformation.isSpecified) return@graphicsLayer
+  scaleX = transformation.scale.scaleX
+  scaleY = transformation.scale.scaleY
+  rotationZ = transformation.rotationZ
+  translationX = transformation.offset.x
+  translationY = transformation.offset.y
+  transformOrigin = transformation.transformOrigin
+}
 
 /**
  * Lo stato dello zoom di una pagina. [isZoomed] e' vero appena la foto e' piu' grande di come entra nello schermo: da li'

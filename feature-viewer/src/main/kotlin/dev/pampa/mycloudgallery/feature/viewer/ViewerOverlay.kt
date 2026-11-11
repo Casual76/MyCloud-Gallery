@@ -13,6 +13,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
@@ -48,7 +49,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
@@ -75,7 +75,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.antigravity.fluidengine.ui.fluid.FluidMotion
-import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.antigravity.fluidengine.ui.fluid.glassBackdropSource
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
@@ -89,7 +88,6 @@ import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryViewerMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryViewerMenuHost
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryViewerMenuState
 import dev.pampa.mycloudgallery.core.designsystem.chrome.rememberGalleryViewerMenuState
-import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryDismissSpec
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryExpandSpec
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryGlassGrowth
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryGlassMotion
@@ -133,7 +131,10 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.similarMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.menu.everywhereLocations
 import dev.pampa.mycloudgallery.feature.viewer.menu.nasMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
-import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerVerticalDrag
+import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerGestureCallbacks
+import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerGestures
+import dev.pampa.mycloudgallery.feature.viewer.page.infoShift
+import dev.pampa.mycloudgallery.feature.viewer.page.viewerContentLayer
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoInputs
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSectionModel
@@ -211,8 +212,6 @@ fun ViewerOverlay(
   if (request == null) return
   ViewerHost(request = request, onClosed = onClosed, modifier = modifier, services = services, onCurrentChanged = onCurrentChanged)
 }
-
-private const val FullyOpen = 0.999f
 
 /** Fotogrammi fra il riposo e il fondale di vetro, fra il fondale e la barra in alto, fra questa e quella in basso (l'arrivo a riposo a passi). */
 private const val BackdropDelayFrames = 1
@@ -372,7 +371,11 @@ private fun ViewerHost(
 
   val currentId = state.currentId
   val currentKind = controller.kindOf(currentId)
-  val atRest by remember { derivedStateOf { transition.progress.value >= FullyOpen && !transition.dragging && !transition.progress.isRunning } }
+  // Aperto: l'espansione e' finita (si vede il pager). A riposo: aperto e fermo, senza una chiusura in corso (H1: trascinamento, pizzico, Indietro,
+  // ritorno o volo). Durante la chiusura il contenuto resta quello vero (la foto con i suoi tasselli, il fotogramma del video), ma le barre sfumano
+  // via, il video si mette in pausa e il pager non scorre.
+  val opened by remember { derivedStateOf { controller.opened } }
+  val atRest by remember { derivedStateOf { controller.opened && !controller.dismiss.active } }
   var resumeAfterRest by remember { mutableStateOf(false) }
   // Il fondale di vetro delle barre: dal primo riposo in poi (vedi il disegno qui sotto). **A passi**, non tutto nel fotogramma del riposo: il fondale (un layer a schermo
   // intero), la barra in alto e quella in basso compaiono a un fotogramma di distanza l'uno dall'altro (la barra in basso a tre). Sul Tab S9 (03/11) l'arrivo a riposo
@@ -443,18 +446,16 @@ private fun ViewerHost(
   // --- Indietro --------------------------------------------------------------------------------------------------------
 
   // Il foglio informazioni si chiude prima del viewer (dichiarato dopo: ha la precedenza quando e' attivo).
+  // H1: l'Indietro predittivo guida lo stesso stato della chiusura col dito (il contenuto si rimpicciolisce, lo sfondo sfuma a meta') e al rilascio
+  // prende la stessa uscita: il volo alla cella.
   PredictiveBackHandler(enabled = !controller.closing && controller.sheet == null) { events ->
     try {
-      transition.dragBy(Offset.Zero, controller.stage.height)
       events.collect { event ->
-        val p = event.progress
-        transition.progress.snapTo(lerp(1f, GalleryDismissSpec.MinViewerProgress, p))
-        val edge = if (event.swipeEdge == androidx.activity.BackEventCompat.EDGE_LEFT) 1f else -1f
-        transition.drag.snapTo(Offset(edge * p * controller.stage.width * BackShiftFraction, p * controller.stage.height * BackLiftFraction))
+        controller.onBackProgress(event.progress, fromLeft = event.swipeEdge == androidx.activity.BackEventCompat.EDGE_LEFT)
       }
       controller.close()
     } catch (cancelled: CancellationException) {
-      controller.cancelBack()
+      controller.onBackCancelled()
       throw cancelled
     }
   }
@@ -505,8 +506,9 @@ private fun ViewerHost(
     val shown by remember { derivedStateOf { transition.isShown } }
     val originRect = controller.origin
     if (shown && originRect != null) {
-      val thumbRadius = with(density) { FluidRadius.Small.toPx() }
-      val thumbForm = remember(originRect, thumbRadius) { FluidForm.Slab(originRect, FluidCornerRadii.all(thumbRadius)) }
+      // La cella della parete e' squadrata (G2: `GalleryWall.CornerScale` = 0): la sagoma parte con i suoi angoli, gli stessi su cui la chiusura
+      // si posa (H1).
+      val thumbForm = remember(originRect) { FluidForm.Slab(originRect, FluidCornerRadii.all(0f)) }
       val fullForm = remember(stagePx) { FluidForm.Slab(Rect(Offset.Zero, stagePx)) }
       val physics = rememberFluidPhysicsState(thumbForm)
       SideEffect { physics.driveExternally(from = thumbForm, to = fullForm, progress = { transition.progress.value }) }
@@ -517,21 +519,16 @@ private fun ViewerHost(
         label = "viewer background",
       )
 
-      // 1. La foto: la sagoma che cresce dalla cella, con dentro il pager (a riposo) o la foto che si espande.
-      Box(
-        modifier = Modifier
-          .fillMaxSize()
-          .graphicsLayer {
-            translationX = transition.drag.value.x
-            translationY = transition.drag.value.y
-          },
-      ) {
+      // 1. La foto: la sagoma che cresce dalla cella, con dentro il pager (aperto) o la foto che si espande. Nella chiusura (H1) la sagoma resta
+      // ferma a tutto schermo: si muove solo il contenuto (`PagerLayer`) e lo sfondo sfuma, letto nel disegno, lasciando vedere la pagina sotto.
+      val dismiss = controller.dismiss
+      Box(modifier = Modifier.fillMaxSize()) {
         Box(
           modifier = Modifier
             .fillMaxSize()
-            .fluidPhysicsClip(physics) { transition.progress.value < FullyOpen || transition.dragging },
+            .fluidPhysicsClip(physics) { transition.progress.value < ViewerController.FULLY_OPEN },
         ) {
-          Box(Modifier.fillMaxSize().background(background))
+          Box(Modifier.fillMaxSize().drawBehind { drawRect(background, alpha = dismiss.backdropAlpha) })
           // Il fondale di vetro delle barre entra quando le barre possono comparire (la prima volta a riposo) e poi resta,
           // anche in chiusura, mentre le barre sfumano. Durante l'espansione era un altro layer a schermo intero da
           // ridisegnare a ogni fotogramma, in un RenderThread gia' oltre il budget di memoria (sull'S25 ogni fotogramma
@@ -544,12 +541,15 @@ private fun ViewerHost(
               screen = screen,
               panelPx = panelPx,
               atRest = { atRest },
+              opened = { opened },
               format = format,
               reverseLayout = reversePager,
             )
-            if (!atRest) {
+            if (!opened) {
               TransitionPhoto(controller = controller, services = services, origin = originRect)
             }
+            // Durante il volo (H1) nessun tocco arriva al contenuto che si allontana: ne' allo zoom ne' al pager.
+            if (controller.closing) ClosingTouchShield()
           }
         }
       }
@@ -584,6 +584,7 @@ private fun PagerLayer(
   screen: IntSize,
   panelPx: Float,
   atRest: () -> Boolean,
+  opened: () -> Boolean,
   format: ViewerFormat,
   reverseLayout: Boolean,
 ) {
@@ -600,6 +601,18 @@ private fun PagerLayer(
   val favoriteText = stringResource(R.string.viewer_action_favorite)
   val unfavoriteText = stringResource(R.string.viewer_action_unfavorite)
   val scope = rememberCoroutineScope()
+  val gestures = remember(controller) {
+    ViewerGestureCallbacks(
+      context = controller::gestureContext,
+      onDismissStart = controller::onDismissStart,
+      onDismissMove = controller::onDismissMove,
+      onDismissEnd = controller::onDismissEnd,
+      onDismissCancel = controller::onDismissCancel,
+      onInfoDrag = controller::onInfoDrag,
+      onInfoEnd = controller::onInfoEnd,
+      onInfoCancel = controller::onInfoCancel,
+    )
+  }
 
   // Le pagine vicine entrano a meta' dell'espansione, non nel suo primo fotogramma: durante l'espansione il pager e'
   // trasparente e non scorre (si vede la foto che cresce), e comporre tre pagine insieme nel fotogramma del tocco era
@@ -615,32 +628,14 @@ private fun PagerLayer(
   Box(
     modifier = Modifier
       .fillMaxSize()
-      .viewerVerticalDrag(
-        // Con una selezione del testo o un soggetto staccato aperti il trascinamento verso il basso e' fermo (D45, E-V13).
-        enabled = { atRest() && !state.zoomed && !controller.closing && !controller.liveText.active && !controller.cutout.active },
-        intentFor = controller::intentFor,
-        onStart = {},
-        onDrag = controller::onVerticalDrag,
-        onEnd = controller::onVerticalEnd,
-        onCancel = controller::onVerticalCancel,
-      )
-      .graphicsLayer {
-        // Il pannello aperto fa posto alla foto: si rimpicciolisce e si sposta, tutto dall'orologio del pannello.
-        val progress = info.progress.value
-        alpha = if (atRest()) 1f else 0f
-        if (progress > 0f) {
-          if (controller.sidePanel) {
-            val scale = lerp(1f, ((stage.width - panelPx) / stage.width).coerceAtLeast(MIN_SHIFT_SCALE), progress)
-            scaleX = scale
-            scaleY = scale
-            translationX = -(panelPx / 2f) * progress
-          } else {
-            val scale = lerp(1f, ((stage.height - controller.sheetPx) / stage.height).coerceAtLeast(MIN_SHIFT_SCALE), progress)
-            scaleX = scale
-            scaleY = scale
-            translationY = -(controller.sheetPx / 2f) * progress
-          }
-        }
+      // H1: l'arbitro dei gesti (`ViewerGestureArbiter`) prima del layer che sposta il contenuto: le dita si leggono nelle coordinate dello schermo.
+      // Con una selezione del testo o un soggetto staccato aperti nessuna chiusura ne' pannello (D45, E-V13): lo dice `gestureContext`.
+      .viewerGestures(gestures)
+      // **Il punto unico** che sposta il contenuto (H1, aggancio per H2): il pannello informazioni (`infoShift`) dentro la chiusura (lo stato di
+      // `ViewerDismissState`: trascinamento, pizzico, Indietro, volo alla cella). Letto nel disegno: un fotogramma di gesto non ricompone niente.
+      .viewerContentLayer(visible = opened) {
+        val shift = infoShift(info.progress.value, stage, controller.sidePanel, controller.sheetPx, panelPx, MIN_SHIFT_SCALE)
+        shift then controller.dismiss.layer()
       }
       .semantics {
         contentDescription = positionText
@@ -699,7 +694,9 @@ private fun PagerLayer(
           screen = screen,
           // Solo la pagina corrente e le vicine decodificano: una che scorre via in un fling non parte (E-V5).
           loadActive = abs(page - pager.targetPage) <= 1,
-          isCurrent = atRest() && page == pager.settledPage,
+          // Aperto, non "a riposo": durante la chiusura la pagina resta quella vera (i tasselli, il fotogramma del video), ed e' lei che vola.
+          isCurrent = opened() && page == pager.settledPage,
+          exiting = controller.exitingVideo,
           state = state,
           services = services,
           playback = controller.playback,
@@ -716,7 +713,17 @@ private fun PagerLayer(
   }
 }
 
-/** La foto che si espande dalla cella (e ci torna): la stessa bitmap, nel rettangolo di questo istante. */
+/** Durante il volo di chiusura (H1) i tocchi si fermano qui: niente zoom, pager o barre su un contenuto che se ne sta andando. */
+@Composable
+private fun ClosingTouchShield() {
+  Box(
+    Modifier
+      .fillMaxSize()
+      .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent().changes.forEach { it.consume() } } },
+  )
+}
+
+/** La foto che si espande dalla cella all'apertura: la stessa bitmap, nel rettangolo di questo istante. */
 @Composable
 private fun TransitionPhoto(controller: ViewerController, services: ViewerServices, origin: Rect) {
   val state = controller.state
@@ -1260,8 +1267,6 @@ private val VideoBarExtra: Dp = 56.dp + GalleryViewerChromeDefaults.BarGap
 private val MessageTopInset: Dp = 64.dp
 private const val MessageMillis = 3200L
 private const val MILLI = 1000f
-private const val BackShiftFraction = 0.04f
-private const val BackLiftFraction = 0.02f
 private const val INFO_CLOSED = 0.02f
 private const val INFO_BACK_END = 0.55f
 private const val MIN_SHIFT_SCALE = 0.4f

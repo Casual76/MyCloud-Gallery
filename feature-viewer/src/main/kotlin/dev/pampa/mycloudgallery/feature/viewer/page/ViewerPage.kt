@@ -9,7 +9,6 @@ import android.view.SurfaceView
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
@@ -36,7 +35,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.contentDescription
@@ -142,6 +140,11 @@ internal fun ViewerPage(
   cutout: CutoutController? = null,
   /** Fase 10 (P6, D20): la foto si puo' trascinare verso un'altra app. Falso dai Nascosti (`ViewerRequest.secure`, E-T18) e di serie. */
   dragEnabled: Boolean = false,
+  /**
+   * H1: il viewer si chiude sfumando con un video (senza una cella a cui tornare): la superficie del video non sfuma con il layer, quindi la
+   * miniatura torna sopra subito, senza dissolvenza, e sfuma lei con il resto.
+   */
+  exiting: Boolean = false,
 ) {
   val id = spec.id
   val image = state.images[id] ?: PageImage()
@@ -182,7 +185,16 @@ internal fun ViewerPage(
     contentSize.width > 0f && contentSize.height > 0f -> contentSize.width / contentSize.height
     else -> spec.aspect
   }
-  val zoom = rememberZoomableMediaState(contentSize, screen)
+  // Il lettore condiviso: il video di questa pagina (le sue misure decidono lo zoom, H1) e la foto in movimento.
+  val motionUi = playback.collectPlayerState()
+  // Lo zoom dei video (H1, D8): con il video che va, il limite e la forma vengono dalle sue misure vere (un 4K si ingrandisce come una foto
+  // da 8 MP); prima del primo fotogramma, da quelle della pagina (la miniatura, il catalogo), con la stessa proporzione.
+  val videoSize = if (spec.kind == MediaKind.VIDEO && playback.videoFor == spec.id && motionUi.videoWidth > 0 && motionUi.videoHeight > 0) {
+    Size(motionUi.videoWidth.toFloat(), motionUi.videoHeight.toFloat())
+  } else {
+    null
+  }
+  val zoom = rememberZoomableMediaState(videoSize ?: contentSize, screen)
 
   // Solo per un media del NAS con la nitida gia' arrivata: le pagine del telefono non pagano nemmeno questo effetto.
   // La chiave non comprende `originalReady`: a originale arrivato l'effetto finisce, non si rilancia (se il file sparisse dal
@@ -225,7 +237,6 @@ internal fun ViewerPage(
   // La motion photo che si muove: il video sta SOTTO la foto, che si toglie solo al primo fotogramma (niente lampo nero).
   val motionPlayer = playback.player
   val motionActive = spec.kind == MediaKind.MOTION_PHOTO && playback.motionFor == spec.id && motionPlayer != null
-  val motionUi = playback.collectPlayerState()
   val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
   val imageAlpha by animateFloatAsState(
     targetValue = if (motionActive && motionUi.firstFrame && !playback.motionFading) 0f else 1f,
@@ -303,19 +314,25 @@ internal fun ViewerPage(
         }
       },
   ) {
-    if (motionActive && motionPlayer != null) {
-      VideoSurface(player = motionPlayer, aspect = motionUi.aspect ?: drawAspect)
-    }
-    Box(Modifier.fillMaxSize().graphicsLayer { alpha = imageAlpha }) {
     when {
-      spec.kind == MediaKind.VIDEO -> VideoContent(
-        spec = spec,
-        poster = best ?: placeholder,
-        drawAspect = drawAspect,
-        isCurrent = isCurrent,
-        playback = playback,
-        onTap = onTap,
-      )
+      // H1 (D8): il video si ingrandisce come le foto, con lo stesso codice dei gesti (pizzico, doppio tocco, trascinamento a video ingrandito).
+      // La barra del video sta nel chrome, sopra e fuori dallo zoom: resta toccabile e non si ingrandisce. Cambiando pagina lo zoom si azzera
+      // come per le foto (`LaunchedEffect(isCurrent)` qui sopra).
+      spec.kind == MediaKind.VIDEO -> ZoomableMedia(
+        state = zoom,
+        contentSize = videoSize ?: contentSize,
+        gesturesEnabled = isCurrent,
+        onTap = pageTap,
+      ) {
+        VideoContent(
+          spec = spec,
+          poster = best ?: placeholder,
+          drawAspect = videoSize?.let { it.width / it.height } ?: drawAspect,
+          isCurrent = isCurrent,
+          playback = playback,
+          exiting = exiting,
+        )
+      }
       animated != null && spec.ref != null -> ZoomableMedia(
         state = zoom,
         contentSize = Size(animated.width.toFloat(), animated.height.toFloat()),
@@ -348,19 +365,27 @@ internal fun ViewerPage(
           locationKey = useTiles,
           doubleTapEnabled = doubleTapOn,
         ) {
-          if (useTiles && phoneUri != null && sharp != null) {
-            TiledMedia(uri = phoneUri, preview = sharp, zoom = zoom, onFailed = { tilesFailed = true })
-          } else {
-            FitBitmap(
-              bitmap = best ?: placeholder!!,
-              aspect = drawAspect,
-              quality = if (best != null) FilterQuality.High else FilterQuality.Low,
-            )
+          // La foto in movimento (D50, D51): il video sta SOTTO la foto, che si toglie solo al primo fotogramma (niente lampo nero). Sta dentro
+          // lo zoom (H1): a foto ingrandita il movimento parte ingrandito come lei, anche con i tasselli (`followZoom`).
+          if (motionActive && motionPlayer != null) {
+            VideoSurface(player = motionPlayer, aspect = motionUi.aspect ?: drawAspect, modifier = Modifier.followZoom(zoom))
+          }
+          Box(Modifier.fillMaxSize().graphicsLayer { alpha = imageAlpha }) {
+            if (useTiles && phoneUri != null && sharp != null) {
+              TiledMedia(uri = phoneUri, preview = sharp, zoom = zoom, onFailed = { tilesFailed = true })
+            } else {
+              FitBitmap(
+                bitmap = best ?: placeholder!!,
+                aspect = drawAspect,
+                quality = if (best != null) FilterQuality.High else FilterQuality.Low,
+              )
+            }
           }
         }
       }
-      else -> Box(Modifier.fillMaxSize())
-    }
+      else -> Box(Modifier.fillMaxSize()) {
+        if (motionActive && motionPlayer != null) VideoSurface(player = motionPlayer, aspect = motionUi.aspect ?: drawAspect)
+      }
     }
     // La selezione del testo, le maniglie e la barra: sopra la foto, fuori dallo zoom (D43).
     if (isCurrent && liveText != null) {
@@ -498,7 +523,10 @@ private fun AnimatedMedia(
   }
 }
 
-/** Il video della pagina corrente: la superficie e il suo primo fotogramma, con la miniatura sopra finche' non arriva. */
+/**
+ * Il video della pagina corrente: la superficie e il suo primo fotogramma, con la miniatura sopra finche' non arriva. Sta dentro lo zoom della
+ * pagina (H1): il tocco (barre) e il doppio tocco (zoom) sono di `ZoomableMedia`, come per le foto.
+ */
 @Composable
 private fun VideoContent(
   spec: PageSpec,
@@ -506,7 +534,7 @@ private fun VideoContent(
   drawAspect: Float,
   isCurrent: Boolean,
   playback: ViewerPlayback,
-  onTap: () -> Unit,
+  exiting: Boolean,
 ) {
   val ui = playback.collectPlayerState()
   val player = playback.player
@@ -515,14 +543,10 @@ private fun VideoContent(
   val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
   val posterAlpha by animateFloatAsState(
     targetValue = if (frameShown) 0f else 1f,
-    animationSpec = if (reducedMotion) androidx.compose.animation.core.snap() else FluidMotion.fadeOut(),
+    animationSpec = if (reducedMotion || exiting) androidx.compose.animation.core.snap() else FluidMotion.fadeOut(),
     label = "video poster",
   )
-  Box(
-    modifier = Modifier
-      .fillMaxSize()
-      .pointerInput(onTap) { detectTapGestures(onTap = { onTap() }) },
-  ) {
+  Box(modifier = Modifier.fillMaxSize()) {
     if (showSurface && player != null) {
       VideoSurface(player = player, aspect = ui.aspect ?: drawAspect)
     }
@@ -531,7 +555,7 @@ private fun VideoContent(
         FitBitmap(bitmap = poster, aspect = drawAspect)
       }
     }
-    if (!frameShown) PlayBadge(modifier = Modifier.align(Alignment.Center))
+    if (!frameShown && !exiting) PlayBadge(modifier = Modifier.align(Alignment.Center))
   }
 }
 

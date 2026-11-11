@@ -17798,3 +17798,13 @@ Sul medesimo APK ora passano HTTPS/ML Kit, LiteRT, OkHttp/MapLibre, Glance/KT e 
 ### HK giro 3 - CR-3
 
 Il frame inline di libreria non autorizza il nostro chiamante: decide il primo frame nostro dall'interno verso l'esterno, altrimenti il frame interno. Per i prologhi resta l'unione universale del giro 2 e la prova del runtime non elimina frame nostri. La regressione HTTPS e' riprodotta prima della correzione; 89 prove verdi dopo, inclusi i cicli reali delle cinque policy. CR-6 e la verifica finale dell'APK seguono in un commit separato.
+
+
+### HK giro 3 - CR-6
+
+I gruppi ExternalSyntheticLambda e i metadati synthesized non sono autori sorgente: fuori dal ponte gia' previsto, il controllo cade se non recupera un autore reale. Per gli inoltri effettivi del dex si verifica dichiarazione originale non spostata, ingresso reale, flag SYNTHETIC e STATIC/BRIDGE (o costruttore/ponte R8), corpo privo di dispatch e campi e unico destinatario nella stessa classe originale. L'inoltro recupera la dichiarazione ordinaria; ogni invocazione del corpo destinatario resta controllata da CR-3. I JNI richiedono una dichiarazione PRIVATE NATIVE non sintetica nel dex e l'identita' originale unica e invariata della classe. Nessuna eccezione per nomi di classi o accessori.
+
+Le prove sintetiche sono 116, verdi; includono riferimenti a metodo vietati sotto un nome ammesso, ponti spostati, corpi con classId, metodi instance e dichiarazioni senza NATIVE. Il report e' `docs/HK-controllo-r8.md`; la tabella del giro 3 riporta sette ispezioni di chiamanti/cancelli verdi e cinque ulteriori verifiche bytecode verdi, tutte sull'APK originale invariato. Nessun Gradle, dispositivo, push o modifica all'app/engine.
+
+
+Chiusura HK giro 3: CR-3 corretto in fdfd5351; CR-6 corretto nel commit successivo dedicato. Un accessore generico richiede flag SYNTHETIC STATIC BRIDGE e membro privato (o il ponte R8 gia' previsto); sono esclusi metodi instance funzionali, riferimenti a API pubbliche e alias nativi ambigui. L'inoltro recupera la dichiarazione ordinaria, senza confonderla con gli autori di istruzioni diverse nel corpo; quelle rimangono controllate singolarmente da CR-3. Nessuna modifica ad app/engine, nessun Gradle o dispositivo, nessun push e nessuna chiusura di processi esterni.

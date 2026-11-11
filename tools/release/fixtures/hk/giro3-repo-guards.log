@@ -1,0 +1,25 @@
+[ .. ] repo senza segreti (chiavi di firma, local.properties)
+[ OK ] repo senza segreti (chiavi di firma, local.properties)  (1s)
+[ .. ] nessuna chiave privata nel contenuto dei file del repository (PEM, PKCS#8 EC e RSA, SEC1; base64, esadecimale, decimale; chiavi di prova solo nei test)
+        file letti: 5338  (chiavi di prova sotto src/test: 1)
+[ OK ] nessuna chiave privata nel contenuto dei file del repository (PEM, PKCS#8 EC e RSA, SEC1; base64, esadecimale, decimale; chiavi di prova solo nei test)  (61,2s)
+[ .. ] nessuna etichetta ne' query privata della valutazione nel repository (P9)
+        file guardati: 8958
+[ OK ] nessuna etichetta ne' query privata della valutazione nel repository (P9)  (28,4s)
+
+
+Name    : repo senza segreti (chiavi di firma, local.properties)
+Status  : OK
+Detail  :
+Seconds : 1
+
+Name    : nessuna chiave privata nel contenuto dei file del repository (PEM, PKCS#8 EC e RSA, SEC1; base64,
+          esadecimale, decimale; chiavi di prova solo nei test)
+Status  : OK
+Detail  :
+Seconds : 61,2
+
+Name    : nessuna etichetta ne' query privata della valutazione nel repository (P9)
+Status  : OK
+Detail  :
+Seconds : 28,4

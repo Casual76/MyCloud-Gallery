@@ -6,20 +6,26 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
@@ -28,6 +34,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
 import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
+import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
 import dev.pampa.mycloudgallery.feature.backup.BackupDimens
 
@@ -136,4 +143,54 @@ internal fun BackupNote(text: String, modifier: Modifier = Modifier) {
     style = MaterialTheme.typography.bodySmall,
     color = MaterialTheme.colorScheme.onSurfaceVariant,
   )
+}
+
+/**
+ * I3 (fase I): una spiegazione dietro un tocco. In pagina c'e' solo la «i» con un'etichetta corta ([label]); il tocco apre la frase sotto, nello stesso
+ * posto, e la richiude. Un tasto da 48 dp con il suo stato per TalkBack; con «Rimuovi animazioni» la frase compare senza movimento.
+ */
+@Composable
+internal fun BackupInfoToggle(label: String, text: String, modifier: Modifier = Modifier) {
+  var open by androidx.compose.runtime.saveable.rememberSaveable(text) { androidx.compose.runtime.mutableStateOf(false) }
+  val reduced = dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy.current.reducedMotion
+  val openState = androidx.compose.ui.res.stringResource(dev.pampa.mycloudgallery.feature.backup.R.string.backup_hero_detail_open)
+  val closedState = androidx.compose.ui.res.stringResource(dev.pampa.mycloudgallery.feature.backup.R.string.backup_hero_detail_closed)
+  Column(modifier = modifier.padding(horizontal = BackupDimens.BlockGap)) {
+    Row(
+      modifier = Modifier
+        .defaultMinSize(minHeight = dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens.MinTouchTarget)
+        .fluidPressable(onClick = { open = !open }, role = androidx.compose.ui.semantics.Role.Button)
+        .semantics(mergeDescendants = true) {
+          role = androidx.compose.ui.semantics.Role.Button
+          stateDescription = if (open) openState else closedState
+        },
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(BackupDimens.LineGap),
+    ) {
+      Icon(
+        imageVector = androidx.compose.material.icons.Icons.Rounded.Info,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.size(BackupDimens.InfoGlyph),
+      )
+      Text(text = label, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+    }
+    androidx.compose.animation.AnimatedVisibility(
+      visible = open,
+      enter = if (reduced) {
+        androidx.compose.animation.EnterTransition.None
+      } else {
+        androidx.compose.animation.fadeIn(dev.antigravity.fluidengine.ui.fluid.FluidMotion.fadeIn()) +
+          androidx.compose.animation.expandVertically(dev.antigravity.fluidengine.ui.fluid.FluidMotion.intSize())
+      },
+      exit = if (reduced) {
+        androidx.compose.animation.ExitTransition.None
+      } else {
+        androidx.compose.animation.fadeOut(dev.antigravity.fluidengine.ui.fluid.FluidMotion.fadeOut()) +
+          androidx.compose.animation.shrinkVertically(dev.antigravity.fluidengine.ui.fluid.FluidMotion.intSize())
+      },
+    ) {
+      Text(text = text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+  }
 }

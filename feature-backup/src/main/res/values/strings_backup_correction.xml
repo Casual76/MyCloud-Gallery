@@ -96,7 +96,7 @@
   <string name="backup_correction_blocked_not_mine">Questo media non è tuo: non puoi correggerlo.</string>
   <string name="backup_correction_blocked_not_available">La correzione non è ancora pronta.</string>
   <string name="backup_correction_blocked_paused">Il backup è in pausa: riprendilo dalla pagina Backup per correggere questa foto.</string>
-  <string name="backup_correction_blocked_test_only">Il backup è ancora in prova: per ora sul NAS non scrivo.</string>
+  <string name="backup_correction_blocked_test_only">Il backup vero non è ancora acceso: per ora sul NAS non scrivo.</string>
   <string name="backup_correction_blocked_busy">Sto ancora lavorando su questo media, o il backup sta finendo un lotto: riprova fra poco.</string>
   <string name="backup_correction_blocked_rotation">Questo tipo di file non si ruota dall’app: la rotazione non si vedrebbe da nessuna parte. Ruotalo in Galleria.</string>
   <string name="backup_correction_unavailable_title">Le correzioni non sono ancora pronte</string>

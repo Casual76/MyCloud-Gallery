@@ -2,10 +2,10 @@
 <resources>
   <!-- Fase 9 (P9, docs/fase9-progetto.md §2.6, D15, D18): la voce "Ricordi e notifiche" delle Impostazioni. Solo come sono le notifiche di questo dispositivo (D33): niente titoli, luoghi, nomi o ore. -->
   <string name="settings_memories">Ricordi e notifiche</string>
-  <string name="settings_memories_detail">Quando arrivano le notifiche</string>
-  <string name="settings_memories_few">Poche notifiche a settimana</string>
-  <string name="settings_memories_daily">Al massimo una al giorno</string>
-  <string name="settings_memories_anniversaries">Solo gli anniversari</string>
-  <string name="settings_memories_off">Notifiche spente</string>
+  <string name="settings_memories_detail">Da scegliere</string>
+  <string name="settings_memories_few">Poche</string>
+  <string name="settings_memories_daily">Una al giorno</string>
+  <string name="settings_memories_anniversaries">Anniversari</string>
+  <string name="settings_memories_off">Spente</string>
   <string name="settings_memories_pill_attention">Da sistemare</string>
 </resources>

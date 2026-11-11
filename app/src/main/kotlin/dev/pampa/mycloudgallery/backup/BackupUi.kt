@@ -502,4 +502,7 @@ class BackupUi(backup: BackupGraph, database: GalleryDatabase, scope: CoroutineS
   val proposals: DeviceFolderProposals = AppDeviceFolderProposals(backup)
   val actions: AppBackupActions = AppBackupActions(backup, proposals, scope, context.applicationContext)
   val mediaStates: MediaBackupStates = AppMediaBackupStates(backup, BackupMediaProbe(database))
+
+  /** I3: le ultime foto di ogni sorgente, per le copertine (solo lettura del catalogo). */
+  val newestMedia: CatalogSourceNewest = CatalogSourceNewest(database)
 }

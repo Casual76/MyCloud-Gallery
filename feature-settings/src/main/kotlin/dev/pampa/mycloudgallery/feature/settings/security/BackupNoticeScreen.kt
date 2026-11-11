@@ -1,5 +1,49 @@
 package dev.pampa.mycloudgallery.feature.settings.security
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.PublicOff
+import androidx.compose.material.icons.rounded.Router
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.SyncAlt
+import androidx.compose.material.icons.rounded.Usb
+import androidx.compose.material.icons.rounded.Wifi
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
+import dev.antigravity.fluidengine.ui.fluid.FluidMotion
+import dev.antigravity.fluidengine.ui.fluid.FluidRadius
+import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.Checklist
@@ -24,12 +68,10 @@ import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingCoordinator
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowNumber
 import javax.inject.Inject
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -86,35 +128,20 @@ internal fun BackupNoticeScreen(onBack: () -> Unit, onReviewChecklist: (() -> Un
         icon = Icons.Rounded.Backup,
       )
     }
-    item {
-      Note(
-        title = stringResource(R.string.backup_raid_title),
-        message = stringResource(R.string.backup_raid_message),
-        tone = FluidTone.Warning,
-      )
-    }
+    // I3 (fase I): perche' due dischi non bastano, come figura (i due dischi del NAS che si copiano a vicenda, la copia staccata); la frase dietro la «i».
+    item { RaidFigure() }
+    item { SettingsInfo(label = stringResource(R.string.backup_raid_title), text = stringResource(R.string.backup_raid_message)) }
 
-    item {
-      GallerySectionHeader(
-        title = stringResource(R.string.backup_section_checklist),
-        detail = stringResource(R.string.backup_section_checklist_detail),
-      )
-    }
+    item { GallerySectionHeader(title = stringResource(R.string.backup_section_checklist)) }
     item {
       FluidListGroup {
-        CHECKLIST.forEachIndexed { index, (title, detail) ->
+        CHECKLIST.forEachIndexed { index, item ->
           if (index > 0) FluidListDivider()
-          FluidListRow(
-            title = stringResource(title),
-            subtitle = stringResource(detail),
-            tone = if (index == 0) FluidTone.Warning else FluidTone.Neutral,
-            leading = { RowNumber(index + 1) },
-            disclosure = false,
-          )
+          ChecklistRow(item = item, important = index < IMPORTANT)
         }
       }
     }
-    item { FluidSectionFootnote(text = stringResource(R.string.backup_footnote)) }
+    item { SettingsInfo(label = stringResource(R.string.backup_footnote_info), text = stringResource(R.string.backup_footnote)) }
     onReviewChecklist?.let { review ->
       item {
         FluidButton(
@@ -138,12 +165,82 @@ internal fun BackupNoticeScreen(onBack: () -> Unit, onReviewChecklist: (() -> Un
   }
 }
 
+/** Una voce della lista: il glifo, il titolo, il come. */
+private class ChecklistItem(val icon: ImageVector, val family: GalleryIconFamily, val title: Int, val detail: Int)
+
 /** Le sei voci, nell'ordine di rischio (`sicurezza.md` §1): la copia esterna e' seconda solo alla rete, ma qui viene prima perche' e' l'unica difesa dalla perdita totale. */
-private val CHECKLIST: List<Pair<Int, Int>> = listOf(
-  R.string.backup_item_copy to R.string.backup_item_copy_detail,
-  R.string.backup_item_public to R.string.backup_item_public_detail,
-  R.string.backup_item_wifi to R.string.backup_item_wifi_detail,
-  R.string.backup_item_guest to R.string.backup_item_guest_detail,
-  R.string.backup_item_cloud to R.string.backup_item_cloud_detail,
-  R.string.backup_item_dhcp to R.string.backup_item_dhcp_detail,
+private val CHECKLIST: List<ChecklistItem> = listOf(
+  ChecklistItem(Icons.Rounded.Usb, GalleryIconFamily.Backup, R.string.backup_item_copy, R.string.backup_item_copy_detail),
+  ChecklistItem(Icons.Rounded.PublicOff, GalleryIconFamily.Security, R.string.backup_item_public, R.string.backup_item_public_detail),
+  ChecklistItem(Icons.Rounded.Wifi, GalleryIconFamily.Network, R.string.backup_item_wifi, R.string.backup_item_wifi_detail),
+  ChecklistItem(Icons.Rounded.Devices, GalleryIconFamily.Network, R.string.backup_item_guest, R.string.backup_item_guest_detail),
+  ChecklistItem(Icons.Rounded.CloudOff, GalleryIconFamily.Security, R.string.backup_item_cloud, R.string.backup_item_cloud_detail),
+  ChecklistItem(Icons.Rounded.Router, GalleryIconFamily.Network, R.string.backup_item_dhcp, R.string.backup_item_dhcp_detail),
 )
+
+/** Le prime due voci contano di piu' (prima «Le prime due contano di piu'»): hanno il segno di attenzione. */
+private const val IMPORTANT = 2
+
+/** Una voce: la piastrella (con il segno di attenzione se e' fra le piu' importanti) e il titolo; un tocco apre il come sotto. */
+@Composable
+private fun ChecklistRow(item: ChecklistItem, important: Boolean) {
+  var open by rememberSaveable(item.title) { mutableStateOf(false) }
+  val reduced = LocalFluidMotionPolicy.current.reducedMotion
+  val openState = stringResource(R.string.info_open)
+  val closedState = stringResource(R.string.info_closed)
+  Column {
+    FluidListRow(
+      title = stringResource(item.title),
+      subtitle = "",
+      leading = { RowTile(item.icon, status = if (important) GalleryIconStatus.Attention else null, family = item.family) },
+      leadingTile = false,
+      disclosure = false,
+      onClick = { open = !open },
+      modifier = Modifier.semantics { stateDescription = if (open) openState else closedState },
+    )
+    AnimatedVisibility(
+      visible = open,
+      enter = if (reduced) EnterTransition.None else expandVertically(FluidMotion.intSize()),
+      exit = if (reduced) ExitTransition.None else shrinkVertically(FluidMotion.intSize()),
+    ) {
+      Text(
+        text = stringResource(item.detail),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth().padding(start = SettingsDimens.CardPadding, end = SettingsDimens.CardPadding, bottom = SettingsDimens.CardPadding),
+      )
+    }
+  }
+}
+
+/**
+ * La figura: i due dischi del NAS che si copiano a vicenda (una freccia doppia fra loro) e, a parte, la copia staccata con la spunta. Per TalkBack una
+ * frase sola.
+ */
+@Composable
+private fun RaidFigure() {
+  val description = stringResource(R.string.backup_raid_figure_description)
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(ContinuousCornerShape(FluidRadius.Group))
+      .background(MaterialTheme.colorScheme.surfaceContainerLow)
+      .padding(SettingsDimens.CardPadding)
+      .clearAndSetSemantics { contentDescription = description },
+    horizontalArrangement = Arrangement.SpaceEvenly,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(SettingsDimens.PillGap)) {
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(SettingsDimens.TightGap)) {
+        GalleryIconTile(icon = Icons.Rounded.Storage, family = GalleryIconFamily.Backup, size = SettingsDimens.ChoiceTile, status = GalleryIconStatus.Problem)
+        Icon(Icons.Rounded.SyncAlt, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        GalleryIconTile(icon = Icons.Rounded.Storage, family = GalleryIconFamily.Backup, size = SettingsDimens.ChoiceTile, status = GalleryIconStatus.Problem)
+      }
+      Text(text = stringResource(R.string.backup_raid_nas), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(SettingsDimens.PillGap)) {
+      GalleryIconTile(icon = Icons.Rounded.Usb, family = GalleryIconFamily.Places, size = SettingsDimens.ChoiceTile, status = GalleryIconStatus.Done)
+      Text(text = stringResource(R.string.backup_raid_copy), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+  }
+}

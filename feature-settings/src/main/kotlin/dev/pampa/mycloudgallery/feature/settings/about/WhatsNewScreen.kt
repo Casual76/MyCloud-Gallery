@@ -19,7 +19,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 
 /**
  * "Novita' di questa versione" (Fase 10, P12; D33): Impostazioni -> Informazioni e licenze -> la riga con questo nome. Una pagina semplice, con
@@ -64,7 +64,8 @@ internal fun WhatsNewScreen(notes: ReleaseNotes?, matchesVersion: Boolean, versi
                 title = sentence,
                 subtitle = "",
                 tone = toneOf(section.title),
-                leading = { RowGlyph(glyphOf(section.title)) },
+                leading = { RowTile(glyphOf(section.title)) },
+                leadingTile = false,
                 disclosure = false,
               )
             }

@@ -136,11 +136,15 @@ class BackupLayoutTest : ComposeBackupTallTest() {
   @Test
   fun laSchedaDiStatoSiLeggeComeUnaFraseSola() {
     show { BackupPageScreen(state = BackupPageUi(statuses[1], BackupSamples.sources, null, false), actions = pageActions, onBack = {}) }
-    // Titolo e frase della scheda sono un nodo solo (mergeDescendants): TalkBack non li legge a pezzi.
+    // I3: la testata dice il problema con un'intestazione sola (TalkBack ci salta con il gesto delle intestazioni); il perche' e' un tasto a parte,
+    // «Perche'», con il suo stato aperto o chiuso.
     val merged = composeRule.onAllNodes(hasText("12 copie non integre")).fetchSemanticsNodes()
     assertThat(merged).hasSize(1)
-    val texts = merged.single().config.getOrNull(SemanticsProperties.Text).orEmpty().map { it.text }
-    assertThat(texts.size).isAtLeast(2)
+    assertThat(merged.single().config.contains(SemanticsProperties.Heading)).isTrue()
+    val why = composeRule.onAllNodes(SemanticsMatcher("perche'") { it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains("Perché") == true })
+      .fetchSemanticsNodes()
+    assertThat(why).hasSize(1)
+    assertThat(why.single().config.getOrNull(SemanticsProperties.StateDescription)).isEqualTo("Chiuso")
   }
 
   @Test
@@ -148,9 +152,10 @@ class BackupLayoutTest : ComposeBackupTallTest() {
     show { BackupPageScreen(state = BackupPageUi(statuses[3], BackupSamples.sources, null, false), actions = pageActions, onBack = {}) }
     val spoken = composeRule.onAllNodes(SemanticsMatcher("descrizione") { it.config.getOrNull(SemanticsProperties.ContentDescription) != null })
       .fetchSemanticsNodes().flatMap { it.config.getOrNull(SemanticsProperties.ContentDescription).orEmpty() }
-    assertThat(spoken).contains("Fotocamera, Al sicuro. 1.250 media · 1.250 al sicuro")
-    assertThat(spoken).contains("Screenshot, Da controllare. 915 media · 900 al sicuro · 12 in coda · 3 con problemi")
-    assertThat(spoken).contains("Telegram, Non salvata. 224 media · non si salva")
+    // I3: ogni copertina si legge con nome, stato e il numero che conta, in una frase.
+    assertThat(spoken).contains("Fotocamera, Al sicuro. 1.250 al sicuro")
+    assertThat(spoken).contains("Screenshot, Da controllare. 3 con problemi")
+    assertThat(spoken).contains("Telegram, Non salvata. 224 media, non si salva")
   }
 }
 

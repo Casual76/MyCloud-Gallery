@@ -80,7 +80,7 @@ class ReceivedEntryCardTest : ComposeBackupTallTest() {
   @Test
   fun unTaccoApreLElenco() {
     start(ReceivedCounts(waiting = 1, uploading = 0, problems = 1))
-    composeRule.onNode(hasText("Vedi") and hasClickAction()).performClick()
+    composeRule.onNode(hasText("Ricevuti in coda") and hasClickAction()).performClick()
     assertThat(actions.opened).containsExactly(BackupScreen.RECEIVED)
   }
 
@@ -89,10 +89,9 @@ class ReceivedEntryCardTest : ComposeBackupTallTest() {
     // "Da decidere" e "Ricevuti in coda" stanno insieme, una sopra l'altra, senza coprirsi.
     ui.value = page(ReceivedCounts(waiting = 1, uploading = 0, problems = 0)).copy(pendingTasks = 2)
     show { BackupPageScreen(state = ui.value, actions = BackupPageActions(open = actions::open), onBack = {}) }
-    composeRule.onNodeWithText("Da decidere").assertExists()
-    composeRule.onNodeWithText("Ricevuti in coda").assertExists()
-    val views = composeRule.onAllNodes(hasText("Vedi") and hasClickAction()).fetchSemanticsNodes()
-    assertThat(views).hasSize(2)
+    // I3: sono due righe dello stesso gruppo «Da controllare», ognuna si tocca.
+    composeRule.onNode(hasText("Da decidere") and hasClickAction()).assertExists()
+    composeRule.onNode(hasText("Ricevuti in coda") and hasClickAction()).assertExists()
   }
 }
 

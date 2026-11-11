@@ -21,9 +21,4 @@
 
   <!-- Il riquadro che la pagina Backup mostra per aprire la lista. -->
   <string name="backup_tasks_entry_title">Da decidere</string>
-  <plurals name="backup_tasks_entry_detail">
-    <item quantity="one">%1$s cosa aspetta una tua scelta.</item>
-    <item quantity="other">%1$s cose aspettano una tua scelta.</item>
-  </plurals>
-  <string name="backup_tasks_entry_action">Vedi</string>
 </resources>

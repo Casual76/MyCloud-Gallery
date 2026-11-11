@@ -65,6 +65,7 @@ import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
 import dev.pampa.mycloudgallery.feature.settings.ui.ConfirmSheet
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
 import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.RowNumber
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
@@ -198,7 +199,8 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
             title = stringResource(R.string.rename_row),
             subtitle = stringResource(R.string.rename_row_detail),
             tone = FluidTone.Neutral,
-            leading = { RowGlyph(Icons.Rounded.Edit) },
+            leading = { RowTile(Icons.Rounded.Edit) },
+            leadingTile = false,
             onClick = actions.onStartRename,
           )
         }
@@ -215,7 +217,8 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
               title = stringResource(R.string.action_retire),
               subtitle = stringResource(R.string.action_retire_detail),
               tone = FluidTone.Neutral,
-              leading = { RowGlyph(Icons.Rounded.Inventory2) },
+              leading = { RowTile(Icons.Rounded.Inventory2) },
+              leadingTile = false,
               onClick = { actions.onAskChange(PendingChange.RETIRE) },
             )
             FluidListDivider()
@@ -223,7 +226,8 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
               title = stringResource(R.string.action_revoke),
               subtitle = stringResource(R.string.action_revoke_detail),
               tone = FluidTone.Danger,
-              leading = { RowGlyph(Icons.Rounded.PersonRemove) },
+              leading = { RowTile(Icons.Rounded.PersonRemove) },
+              leadingTile = false,
               onClick = { actions.onAskChange(PendingChange.REVOKE) },
             )
             FluidListDivider()
@@ -232,7 +236,8 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
             title = stringResource(if (state.canManage) R.string.action_lost else R.string.action_lost_own),
             subtitle = stringResource(if (state.canManage) R.string.action_lost_detail else R.string.action_lost_own_detail),
             tone = FluidTone.Danger,
-            leading = { RowGlyph(Icons.Rounded.PhonelinkErase) },
+            leading = { RowTile(Icons.Rounded.PhonelinkErase) },
+            leadingTile = false,
             onClick = actions.onStartLost,
           )
         }
@@ -248,7 +253,8 @@ internal fun DeviceDetailScreen(state: DeviceDetailUiState, actions: DeviceDetai
             title = stringResource(R.string.guide_reopen),
             subtitle = stringResource(R.string.guide_reopen_detail),
             tone = FluidTone.Warning,
-            leading = { RowGlyph(Icons.Rounded.Help) },
+            leading = { RowTile(Icons.Rounded.Help) },
+            leadingTile = false,
             onClick = actions.onOpenGuide,
           )
         }
@@ -426,7 +432,8 @@ private fun LostConsequences() {
       title = stringResource(R.string.lost_cons_wipe),
       subtitle = stringResource(R.string.lost_cons_wipe_detail),
       tone = FluidTone.Danger,
-      leading = { RowGlyph(Icons.Rounded.PhonelinkErase) },
+      leading = { RowTile(Icons.Rounded.PhonelinkErase) },
+      leadingTile = false,
       disclosure = false,
     )
     FluidListDivider()
@@ -434,7 +441,8 @@ private fun LostConsequences() {
       title = stringResource(R.string.lost_cons_untrusted),
       subtitle = stringResource(R.string.lost_cons_untrusted_detail),
       tone = FluidTone.Danger,
-      leading = { RowGlyph(Icons.Rounded.VisibilityOff) },
+      leading = { RowTile(Icons.Rounded.VisibilityOff) },
+      leadingTile = false,
       disclosure = false,
     )
     FluidListDivider()
@@ -442,7 +450,8 @@ private fun LostConsequences() {
       title = stringResource(R.string.lost_cons_final),
       subtitle = stringResource(R.string.lost_cons_final_detail),
       tone = FluidTone.Warning,
-      leading = { RowGlyph(Icons.Rounded.LockClock) },
+      leading = { RowTile(Icons.Rounded.LockClock) },
+      leadingTile = false,
       disclosure = false,
     )
   }

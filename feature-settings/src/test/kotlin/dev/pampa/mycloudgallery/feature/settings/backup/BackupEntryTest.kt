@@ -111,7 +111,7 @@ class BackupEntryTest {
   fun senzaLoStatoDiceAChePerServe() {
     show(SettingsLinks(openBackup = {}), status = null)
     scrollTo("Copia esterna del NAS")
-    rule.onNodeWithText("Metti al sicuro foto e video sul NAS").assertIsDisplayed()
+    rule.onNodeWithText("Da collegare").assertIsDisplayed()
   }
 
   @Test
@@ -128,24 +128,28 @@ class BackupEntryTest {
   @Test
   fun leFraseDicono_CioCheSuccede() {
     val texts = allCases.map { BackupEntryTexts.subtitleOf(rule.activity, it) }
+    // I3 (fase I): lo stato e' un valore corto a destra della riga, non una frase; «in prova» non dice parole da cantiere.
     assertThat(texts).containsAtLeast(
-      "Non ancora pronto: manca qualcosa",
-      "In prova: scrive solo nelle cartelle di prova",
-      "Sto preparando il primo backup",
-      "Pronto per il primo backup",
-      "Tutto al sicuro: 6.658 media",
-      "312 in coda",
-      "In corso: 1.240 di 6.658",
+      "Da preparare",
       "In pausa",
-      "C’è qualcosa da controllare",
+      "Preparo",
+      "Pronto",
+      "Al sicuro",
+      "312 in coda",
+      "1.240 / 6.658",
+      "Da controllare",
     )
+    assertThat(texts.none { it.contains("prova") }).isTrue()
   }
 
   @Test
-  fun itoniDiconoQuantoServeUnOcchio() {
-    val tones = allCases.associateWith { backupEntryTone(it) }
-    assertThat(tones.getValue(BackupStatus.UpToDate(6_658, null))).isEqualTo(dev.antigravity.fluidengine.ui.theme.FluidTone.Success)
-    assertThat(tones.getValue(BackupStatus.Problem(BackupProblemCode.QUOTA, 0))).isEqualTo(dev.antigravity.fluidengine.ui.theme.FluidTone.Warning)
+  fun iSegniDiconoQuantoServeUnOcchio() {
+    // I3: il segno sulla piastrella e' lo stesso della testata della pagina Backup.
+    val marks = allCases.associateWith { backupEntryMark(it) }
+    assertThat(marks.getValue(BackupStatus.UpToDate(6_658, null))).isEqualTo(dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus.Done)
+    assertThat(marks.getValue(BackupStatus.Problem(BackupProblemCode.QUOTA, 0))).isEqualTo(dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus.Attention)
+    assertThat(marks.getValue(BackupStatus.TestOnly)).isEqualTo(dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus.Paused)
+    assertThat(backupEntryMark(null)).isNull()
   }
 }
 

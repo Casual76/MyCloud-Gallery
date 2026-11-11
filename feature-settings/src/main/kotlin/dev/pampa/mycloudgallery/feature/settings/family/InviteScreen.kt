@@ -50,7 +50,7 @@ import dev.pampa.mycloudgallery.core.security.screen.OverlayShield
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
 import androidx.compose.runtime.getValue
 
@@ -270,7 +270,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.inviteShown(state: In
           title = stringResource(R.string.invite_summary_device),
           subtitle = "",
           disclosure = false,
-          leading = { RowGlyph(Icons.Rounded.Devices) },
+          leading = { RowTile(Icons.Rounded.Devices) },
+          leadingTile = false,
           badge = { FluidRowValue(text = summary.deviceName) },
         )
         FluidListDivider()
@@ -278,7 +279,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.inviteShown(state: In
           title = stringResource(R.string.invite_summary_account),
           subtitle = "",
           disclosure = false,
-          leading = { RowGlyph(Icons.Rounded.Lock) },
+          leading = { RowTile(Icons.Rounded.Lock) },
+          leadingTile = false,
           badge = { FluidRowValue(text = summary.user) },
         )
         FluidListDivider()
@@ -286,7 +288,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.inviteShown(state: In
           title = stringResource(R.string.invite_summary_share),
           subtitle = "",
           disclosure = false,
-          leading = { RowGlyph(Icons.Rounded.Storage) },
+          leading = { RowTile(Icons.Rounded.Storage) },
+          leadingTile = false,
           badge = { FluidRowValue(text = summary.privateShare) },
         )
         FluidListDivider()
@@ -294,7 +297,8 @@ private fun androidx.compose.foundation.lazy.LazyListScope.inviteShown(state: In
           title = stringResource(R.string.invite_summary_expires),
           subtitle = "",
           disclosure = false,
-          leading = { RowGlyph(Icons.Rounded.Schedule) },
+          leading = { RowTile(Icons.Rounded.Schedule) },
+          leadingTile = false,
           badge = { FluidRowValue(text = pluralStringResource(R.plurals.invite_expires_value, summary.hoursLeft, summary.hoursLeft)) },
         )
       }

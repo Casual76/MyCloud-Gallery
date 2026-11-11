@@ -333,7 +333,7 @@ class CorrectionSheetTest : ComposeBackupTallTest() {
       CorrectionReadiness.NOT_AVAILABLE to "La correzione non è ancora pronta.",
       // VE-7: pausa, prova e lavoro in corso hanno la loro frase (prima: tutti "non è ancora pronta").
       CorrectionReadiness.PAUSED to "Il backup è in pausa",
-      CorrectionReadiness.TEST_ONLY to "Il backup è ancora in prova",
+      CorrectionReadiness.TEST_ONLY to "Il backup vero non è ancora acceso",
       CorrectionReadiness.BUSY to "Sto ancora lavorando su questo media",
       // VE-4: la rotazione di un formato che non si scrive non si fa.
       CorrectionReadiness.ROTATION_NOT_WRITABLE to "non si ruota dall’app",

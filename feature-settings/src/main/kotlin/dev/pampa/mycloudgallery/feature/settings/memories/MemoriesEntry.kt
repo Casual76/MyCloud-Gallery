@@ -15,7 +15,9 @@ import dagger.hilt.components.SingletonComponent
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
+import dev.pampa.mycloudgallery.feature.settings.ui.toneMark
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import java.util.Optional
 import javax.inject.Inject
@@ -80,15 +82,15 @@ class MemoriesEntryViewModel @Inject constructor(
 internal fun MemoriesEntryRow(summary: MemoriesEntrySummary?, onClick: () -> Unit) {
   FluidListRow(
     title = stringResource(R.string.settings_memories),
-    subtitle = MemoriesEntryTexts.subtitleOf(LocalContext.current, summary),
-    tone = memoriesEntryTone(summary),
-    leading = { RowGlyph(Icons.Rounded.AutoAwesome) },
-    // La pillola sta in `labels` (va sotto il titolo se ruberebbe la riga), non in `badge`: a testo grande la frase restava in una colonna di sillabe.
-    labels = if (summary?.needsAttention == true) {
-      { StatusPill(stringResource(R.string.settings_memories_pill_attention), FluidTone.Warning) }
-    } else {
-      null
+    // I3 (fase I): lo stato e' un valore corto a destra («Poche», «Spente»); quando serve uno sguardo il valore e' «Da sistemare» e la piastrella ha il segno.
+    subtitle = "",
+    badge = {
+      RowValue(if (summary?.needsAttention == true) stringResource(R.string.settings_memories_pill_attention) else MemoriesEntryTexts.subtitleOf(LocalContext.current, summary))
     },
+    tone = memoriesEntryTone(summary),
+    leading = { RowTile(Icons.Rounded.AutoAwesome, status = toneMark(memoriesEntryTone(summary))) },
+    leadingTile = false,
+    // La pillola sta in `labels` (va sotto il titolo se ruberebbe la riga), non in `badge`: a testo grande la frase restava in una colonna di sillabe.
     onClick = onClick,
   )
 }

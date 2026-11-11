@@ -40,4 +40,27 @@ internal object SettingsDimens {
 
   /** Il respiro sotto i tasti di quella barra, sopra la barra di navigazione di sistema. */
   val DockPadding: Dp = 16.dp
+
+  // --- I3 (fase I) ---------------------------------------------------------------------------------------------------------------
+
+  /** Il glifo della «i» davanti a una spiegazione dietro un tocco. */
+  val InfoGlyph: Dp = 18.dp
+
+  /** La piastrella grande di una scelta a scheda (i preset di «Quando lavora l'app», i passi). */
+  val ChoiceTile: Dp = 44.dp
+
+  /** Un glifo di condizione sotto una scelta (la notte, la corrente, il Wi-Fi). */
+  val ConditionGlyph: Dp = 16.dp
+
+  /** Lo spazio fra due schede di scelta. */
+  val ChoiceGap: Dp = 10.dp
+
+  /** Lo spessore del bordo della scheda scelta. */
+  val ChoiceBorder: Dp = 2.dp
+
+  /** Il lato del segno di stato a destra di una riga. */
+  val RowMark: Dp = 22.dp
+
+  /** La larghezza massima di un valore a destra di una riga: il titolo resta leggibile. */
+  val ValueMaxWidth: Dp = 120.dp
 }

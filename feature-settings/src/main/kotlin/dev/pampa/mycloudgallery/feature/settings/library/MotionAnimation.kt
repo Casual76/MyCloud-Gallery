@@ -18,7 +18,7 @@ import dev.antigravity.fluidengine.ui.fluid.FluidSwitch
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -64,9 +64,11 @@ internal fun MotionAnimationRow(on: Boolean, onToggle: (Boolean) -> Unit) {
   val detail = stringResource(R.string.library_motion_animation_detail)
   FluidListRow(
     title = title,
-    subtitle = detail,
+    // I3 (fase I): la spiegazione non e' uno stato che cambia: in pagina c'e' solo il titolo con l'interruttore; TalkBack la legge nel nome.
+    subtitle = "",
     tone = if (on) FluidTone.Primary else FluidTone.Neutral,
-    leading = { RowGlyph(Icons.Rounded.MotionPhotosOn) },
+    leading = { RowTile(Icons.Rounded.MotionPhotosOn) },
+    leadingTile = false,
     disclosure = false,
     titleMaxLines = 3,
     badge = { FluidSwitch(checked = on, onCheckedChange = null) },

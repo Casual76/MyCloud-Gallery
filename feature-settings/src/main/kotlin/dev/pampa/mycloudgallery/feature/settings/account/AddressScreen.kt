@@ -52,7 +52,7 @@ import dev.pampa.mycloudgallery.feature.settings.ui.ConfirmSheet
 import dev.pampa.mycloudgallery.feature.settings.ui.Feedback
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.messageRes
 import java.util.Optional
 import javax.inject.Inject
@@ -425,7 +425,8 @@ internal fun AddressScreen(state: AddressUiState, actions: AddressActions) {
           title = stringResource(R.string.address_sheet_old),
           subtitle = "",
           disclosure = false,
-          leading = { RowGlyph(Icons.Rounded.Dns) },
+          leading = { RowTile(Icons.Rounded.Dns) },
+          leadingTile = false,
           badge = { FluidRowValue(text = state.currentIp.orEmpty()) },
         )
         FluidListDivider()
@@ -434,7 +435,8 @@ internal fun AddressScreen(state: AddressUiState, actions: AddressActions) {
           subtitle = "",
           disclosure = false,
           tone = FluidTone.Primary,
-          leading = { RowGlyph(Icons.Rounded.SwapHoriz) },
+          leading = { RowTile(Icons.Rounded.SwapHoriz) },
+          leadingTile = false,
           badge = { FluidRowValue(text = state.typed) },
         )
       }

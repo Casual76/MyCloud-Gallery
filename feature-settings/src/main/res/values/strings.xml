@@ -7,14 +7,20 @@
   <string name="selected">Selezionato</string>
   <string name="value_yes">Sì</string>
   <string name="value_no">No</string>
+  <!-- I3 (fase I): lo stato di una spiegazione dietro un tocco, per TalkBack. -->
+  <string name="info_open">Aperta</string>
+  <string name="info_closed">Chiusa</string>
 
   <!-- Pagina principale -->
   <string name="settings_title">Impostazioni</string>
   <string name="settings_hero_eyebrow">La tua famiglia</string>
   <string name="settings_hero_review">Rivedi le richieste</string>
-  <string name="settings_section_family">Famiglia e dispositivi</string>
-  <string name="settings_section_connection">Connessione</string>
-  <string name="settings_section_protection">Protezione</string>
+  <!-- I3 (fase I): pochi gruppi, ognuno con la sua famiglia di colori; cio' che serve di rado in «Avanzate». -->
+  <string name="settings_section_backup">Backup e NAS</string>
+  <string name="settings_section_photos">Foto</string>
+  <string name="settings_section_privacy">Privacy</string>
+  <string name="settings_section_advanced">Avanzate</string>
+  <string name="settings_section_family">Famiglia</string>
   <string name="settings_devices">Dispositivi</string>
   <plurals name="settings_devices_count">
     <item quantity="one">%1$d dispositivo</item>
@@ -29,22 +35,15 @@
   <string name="settings_network">Rete e VPN</string>
   <string name="settings_security">Sicurezza</string>
   <string name="settings_backup_notice">Copia esterna del NAS</string>
-  <string name="settings_backup_notice_detail">Il NAS non è un backup</string>
   <string name="settings_section_pending">Da completare</string>
-  <string name="settings_pending_footnote">Passi saltati durante la configurazione.</string>
-  <string name="settings_section_support">Assistenza</string>
   <string name="settings_diagnostics">Diagnostica</string>
   <string name="settings_section_developer">Sviluppo</string>
 
   <!-- Passi saltati -->
   <string name="pending_folders">Cartelle da escludere</string>
-  <string name="pending_folders_detail">Musica, film e copertine da non mostrare</string>
   <string name="pending_battery">Batteria senza limiti</string>
-  <string name="pending_battery_detail">Così Samsung non ferma l’app</string>
   <string name="pending_vpn">VPN di casa</string>
-  <string name="pending_vpn_detail">Per raggiungere il NAS fuori casa</string>
   <string name="pending_generic">Passo %1$d della configurazione</string>
-  <string name="pending_generic_detail">Saltato durante la configurazione</string>
 
   <!-- L'apertura della pagina principale -->
   <string name="hero_none_value">Nessuna</string>

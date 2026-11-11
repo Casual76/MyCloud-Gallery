@@ -29,7 +29,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 
 /**
  * "Informazioni e licenze" (Fase 3, P11; docs/fase3-progetto.md §1.3): cos'e' l'app, da dove vengono i nomi dei luoghi
@@ -74,7 +74,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
             subtitle = stringResource(R.string.about_app_detail),
             meta = versionName?.let { stringResource(R.string.about_app_version, it) },
             tone = FluidTone.Primary,
-            leading = { RowGlyph(Icons.Rounded.Info) },
+            leading = { RowTile(Icons.Rounded.Info) },
+            leadingTile = false,
             disclosure = false,
           )
           // Adozione del Fluid Engine 3.0: l'app e' GPL-3.0 (l'engine porta codice di LibrePods). Testo da leggere, nessun tocco.
@@ -84,7 +85,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
             title = stringResource(R.string.about_app_license_title),
             subtitle = stringResource(R.string.about_app_license_detail),
             tone = FluidTone.Neutral,
-            leading = { RowGlyph(Icons.Rounded.Description) },
+            leading = { RowTile(Icons.Rounded.Description) },
+            leadingTile = false,
             disclosure = false,
           )
         }
@@ -99,7 +101,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
             title = stringResource(R.string.whatsnew_row),
             subtitle = stringResource(R.string.whatsnew_row_detail),
             tone = FluidTone.Primary,
-            leading = { RowGlyph(Icons.Rounded.AutoAwesome) },
+            leading = { RowTile(Icons.Rounded.AutoAwesome) },
+            leadingTile = false,
             onClick = onOpenNews,
           )
         }
@@ -120,7 +123,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
             title = stringResource(R.string.about_geonames_title),
             subtitle = stringResource(R.string.about_geonames_attribution),
             tone = FluidTone.Info,
-            leading = { RowGlyph(Icons.Rounded.Public) },
+            leading = { RowTile(Icons.Rounded.Public) },
+            leadingTile = false,
             disclosure = false,
           )
           FluidListDivider()
@@ -129,7 +133,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
             title = stringResource(R.string.about_license_cc_by),
             subtitle = stringResource(R.string.about_license_cc_by_url),
             tone = FluidTone.Neutral,
-            leading = { RowGlyph(Icons.Rounded.Description) },
+            leading = { RowTile(Icons.Rounded.Description) },
+            leadingTile = false,
             disclosure = false,
           )
         }
@@ -151,7 +156,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
             title = stringResource(R.string.about_map_online_title),
             subtitle = stringResource(R.string.about_map_online_attribution),
             tone = FluidTone.Info,
-            leading = { RowGlyph(Icons.Rounded.Public) },
+            leading = { RowTile(Icons.Rounded.Public) },
+            leadingTile = false,
             disclosure = false,
           )
           FluidListDivider()
@@ -160,7 +166,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
             title = stringResource(R.string.about_license_odbl),
             subtitle = stringResource(R.string.about_license_odbl_url),
             tone = FluidTone.Neutral,
-            leading = { RowGlyph(Icons.Rounded.Description) },
+            leading = { RowTile(Icons.Rounded.Description) },
+            leadingTile = false,
             disclosure = false,
           )
           FluidListDivider()
@@ -168,7 +175,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
             title = stringResource(R.string.about_map_base_title),
             subtitle = stringResource(R.string.about_map_base_attribution),
             tone = FluidTone.Info,
-            leading = { RowGlyph(Icons.Rounded.Public) },
+            leading = { RowTile(Icons.Rounded.Public) },
+            leadingTile = false,
             disclosure = false,
           )
           FluidListDivider()
@@ -176,7 +184,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
             title = stringResource(R.string.about_map_style_title),
             subtitle = stringResource(R.string.about_map_style_attribution),
             tone = FluidTone.Neutral,
-            leading = { RowGlyph(Icons.Rounded.Code) },
+            leading = { RowTile(Icons.Rounded.Code) },
+            leadingTile = false,
             disclosure = false,
           )
         }
@@ -201,7 +210,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
               subtitle = library.subtitle,
               meta = stringResource(library.license.shortName),
               tone = FluidTone.Neutral,
-              leading = { RowGlyph(Icons.Rounded.Code) },
+              leading = { RowTile(Icons.Rounded.Code) },
+              leadingTile = false,
               disclosure = false,
             )
           }
@@ -228,7 +238,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
               // browser al tocco; qui nessun tocco apre niente).
               subtitle = "${work.author} · ${work.licence}\n${work.url}",
               tone = FluidTone.Neutral,
-              leading = { RowGlyph(Icons.Rounded.Code) },
+              leading = { RowTile(Icons.Rounded.Code) },
+              leadingTile = false,
               disclosure = false,
             )
           }
@@ -248,7 +259,8 @@ internal fun AboutScreen(versionName: String?, onBack: () -> Unit, onOpenNews: (
               title = stringResource(license.fullName),
               subtitle = stringResource(license.url),
               tone = FluidTone.Neutral,
-              leading = { RowGlyph(Icons.Rounded.Description) },
+              leading = { RowTile(Icons.Rounded.Description) },
+              leadingTile = false,
               disclosure = false,
             )
           }

@@ -1,6 +1,9 @@
 package dev.pampa.mycloudgallery.feature.settings.sharing
 
 import androidx.compose.material.icons.Icons
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.LocationOff
 import androidx.compose.material.icons.rounded.Verified
@@ -28,7 +31,9 @@ import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
+import dev.pampa.mycloudgallery.feature.settings.ui.toneMark
 import javax.inject.Inject
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -68,7 +73,8 @@ fun SharingScreen(removeLocation: Boolean, onBack: () -> Unit, onToggle: (Boolea
           title = switchTitle,
           subtitle = switchDetail,
           tone = if (removeLocation) FluidTone.Success else FluidTone.Neutral,
-          leading = { RowGlyph(Icons.Rounded.LocationOff) },
+          leading = { RowTile(Icons.Rounded.LocationOff) },
+          leadingTile = false,
           disclosure = false,
           titleMaxLines = 3,
           badge = { FluidSwitch(checked = removeLocation, onCheckedChange = null) },
@@ -86,7 +92,8 @@ fun SharingScreen(removeLocation: Boolean, onBack: () -> Unit, onToggle: (Boolea
           title = stringResource(if (removeLocation) R.string.sharing_state_on else R.string.sharing_state_off),
           subtitle = stringResource(if (removeLocation) R.string.sharing_state_on_detail else R.string.sharing_state_off_detail),
           tone = if (removeLocation) FluidTone.Success else FluidTone.Warning,
-          leading = { RowGlyph(if (removeLocation) Icons.Rounded.Verified else Icons.Rounded.IosShare) },
+          leading = { RowTile(if (removeLocation) Icons.Rounded.Verified else Icons.Rounded.IosShare) },
+          leadingTile = false,
           disclosure = false,
           titleMaxLines = 3,
         )
@@ -102,9 +109,18 @@ fun SharingScreen(removeLocation: Boolean, onBack: () -> Unit, onToggle: (Boolea
 internal fun SharingEntryRow(removeLocation: Boolean, onClick: () -> Unit) {
   FluidListRow(
     title = stringResource(R.string.sharing_title),
-    subtitle = stringResource(if (removeLocation) R.string.sharing_entry_on else R.string.sharing_entry_off),
+    // I3 (fase I): lo stato e' un valore corto a destra.
+    subtitle = "",
+    badge = {
+      Icon(
+        imageVector = if (removeLocation) Icons.Rounded.LocationOff else Icons.Rounded.LocationOn,
+        contentDescription = stringResource(if (removeLocation) R.string.sharing_entry_on else R.string.sharing_entry_off),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    },
     tone = if (removeLocation) FluidTone.Success else FluidTone.Neutral,
-    leading = { RowGlyph(Icons.Rounded.IosShare) },
+    leading = { RowTile(Icons.Rounded.IosShare, status = toneMark(if (removeLocation) FluidTone.Success else FluidTone.Neutral)) },
+    leadingTile = false,
     onClick = onClick,
   )
 }

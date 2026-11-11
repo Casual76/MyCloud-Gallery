@@ -18822,3 +18822,44 @@ Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?».
   misura mentre avanza; (2) con un problema: tocco sulla capsula → la frase si apre e si richiude; (3) strisce in cima con l'accesso parziale a
   1,3x: il tasto va sotto, niente sovrapposizioni; (4) Operazioni NAS durante uno spostamento: l'anello avanza, il segno nell'angolo passa da
   in corso a fatto; (5) onboarding Permessi: dopo aver concesso, la capsula sparisce e compare il segno «fatto».
+
+### I3, Backup e Impostazioni che si capiscono guardandoli (fase I, 11 novembre 2026)
+
+Ramo `fix/i3-backup-impostazioni` da `f7d91f7f`. Il metro dell'utente: «se non sapessi leggere o sentire, potrei usare l'app?». Prima e dopo, con le
+parole contate, in `docs/I3-prima-dopo.md`; screenshot in `docs/screenshots/beta-grafica/I3/`.
+
+- **Il componente condiviso** (`core-designsystem/icon/`): `GalleryIconTile` (piastrella con il glifo bianco sul colore pieno della famiglia, 32/44/64 dp,
+  segno di stato facoltativo nell'angolo con la sua etichetta per TalkBack), `GalleryStatusMark`, `GalleryIconPalette`, il vocabolario `GalleryIcons`.
+  I colori delle famiglie vengono dai preset dell'engine e dal marchio (Ametista e poli, «Blu», «Arancio», «Indaco», «Verde») e da due ruoli dello schema
+  (grafite e grigio); **non seguono l'accento** (come le icone di sistema). Ogni colore si scurisce quanto basta perche' il bianco regga 3:1 su ogni
+  accento, chiaro e scuro (`GalleryIconTileTest`). Catalogo: gruppo «Icone». Per I1: le piastrelle tonali di `CollectionCovers` passano a queste.
+- **Pagina Backup**: testata con l'anello (quanto e' al sicuro sul totale delle sorgenti **attive**, mai 100% con una foto che manca), il segno, un'etichetta,
+  al piu' una riga, il perche' dietro la «i», le azioni come tasti con l'icona; le sorgenti come copertine (3 per riga a 360 dp) con la foto piu' recente,
+  il segno, una barra e il numero che conta; i problemi e le voci «Da decidere»/«Ricevuti in coda» come righe di un gruppo «Da controllare» (il perche'
+  e il rimedio a un tocco); le righe del NAS con le piastrelle. `BackupStatusCard` e le schede d'ingresso di 5B non ci sono piu'.
+- **Lo stato «in prova» (D12)**: la recinzione non si tocca. Si dice una volta, in cima: «In pausa · Il backup vero non e' ancora acceso», e il perche'
+  («Finche' non lo accendi, sul NAS non si copia niente: le tue foto restano sul telefono, come prima») dietro la «i». Sulle copertine solo il segno della
+  pausa. Riga del §2.6 di `docs/fase5-progetto.md` aggiornata (`BackupMessagesTest` legge li' i messaggi). Gli altri titoli dei problemi restano quelli
+  del documento. Testi nuovi per i moduli di I4 nel report (piede della Libreria, Integrazioni, Diagnostica).
+- **Le copertine** passano dalle stesse porte delle Raccolte: `SourceNewestMedia` (le ultime foto di ogni cartella; in `:app` `CatalogSourceNewest`, una
+  lettura del catalogo gia' scritto dal piu' recente, al piu' 20.000 righe, che si ferma quando ogni sorgente ha le sue), poi la Libreria visibile (mai un
+  nascosto ne' un eliminato: si riverifica a ogni disegno) e la cache delle miniature della griglia (chiave e taglia M come le Raccolte). La lettura si fa
+  una volta per elenco di sorgenti; il filtro con la vista al piu' una volta al secondo; le miniature si chiedono per le prime 24 sorgenti.
+- **Impostazioni del backup**: copertine in «Cosa salvare», numeri soli, il percorso delle copie come figura, «Il backup parte con» in tre piastrelle; le
+  note dietro la «i» (resta in pagina solo una nota che dice uno stato: scelta non salvata, cartelle illeggibili, backup non pronto).
+- **Impostazioni**: tutte le righe di `feature-settings` hanno la piastrella espressiva (`RowTile`: la famiglia si sceglie dal nome del glifo in
+  `SettingsFamilies`, la stessa cosa ha lo stesso colore in ogni pagina). Pagina principale in cinque gruppi (Backup e NAS, Foto, Privacy, Famiglia,
+  Avanzate) piu' «Da completare»; lo stato delle voci a destra come valore corto o segno. Ridisegnate: «Quando lavora l'app» (schede dei preset con le
+  condizioni in glifi, capsule per il tetto), Sicurezza (capsule dei tempi, «Che cosa protegge» con le spunte), Copia esterna (figura dei due dischi,
+  voci con la piastrella e il come a un tocco), Rete (segni e valori, il come dietro la «i»), Widget e Anteprime (le scelte senza la frase sotto, le
+  regole dietro la «i»). Account, famiglia, dispositivi, condivisione e informazioni hanno solo le piastrelle e i loro testi di H5 (da rifare).
+- **Conferme**: restano `GalleryConfirmSheet`, stessi tasti; si accorcia la frase di dieci conferme (indirizzo del NAS, rinomina, dismetti e revoca
+  un dispositivo, reimposta ed esci dalla famiglia, rete di casa, scarta un ricevuto: 294 → 187 parole), tenendo l'avvertimento che conta. Libera
+  spazio, Primo backup, Versioni e Correzione invariati (gia' a righe; i testi di Libera spazio sono legati alle recinzioni).
+- **Prestazioni**: nessun vetro nuovo, nessuna animazione di misura su un nodo di vetro; l'anello avanza con `FluidMotion.smooth()` letto nel disegno;
+  le spiegazioni si aprono con `expandVertically` di `FluidMotion.intSize()` (fuori dalla griglia, su pagine ferme), e scattano con «Rimuovi animazioni».
+  Rischio da misurare: la lettura del catalogo delle copertine all'apertura delle Impostazioni del backup con molte cartelle (fino a 200).
+- **Prove sul telefono** (l'orchestratore): (1) pagina Backup «in prova» con le cartelle vere: sei copertine con la foto piu' recente di ogni cartella,
+  nessuna foto nascosta (nascondine una e riapri: deve sparire); (2) un tocco sulla riga «Il backup vero non e' ancora acceso» apre e richiude il
+  perche'; (3) «Cosa salvare» con le copertine, accendi e spegni una cartella; (4) TalkBack su una copertina: nome, stato e numero in una frase;
+  (5) la pagina principale delle Impostazioni a 1,3x: nessun titolo spezzato a meta'.

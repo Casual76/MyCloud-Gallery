@@ -1,7 +1,6 @@
 package dev.pampa.mycloudgallery.feature.settings
 
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Dns
@@ -11,7 +10,8 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.MonitorHeart
 import androidx.compose.material.icons.rounded.PhotoLibrary
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Security
+import androidx.compose.material.icons.rounded.SdStorage
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.VpnKey
@@ -26,12 +26,10 @@ import dev.antigravity.fluidengine.ui.fluid.FluidHero
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroMotif
 import dev.antigravity.fluidengine.ui.fluid.FluidHeroTone
 import dev.antigravity.fluidengine.ui.fluid.FluidScreen
-import dev.antigravity.fluidengine.ui.fluid.FluidSectionFootnote
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.antigravity.fluidengine.ui.theme.FluidListDivider
 import dev.antigravity.fluidengine.ui.theme.FluidListGroup
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
-import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.family.contract.OnboardingStep
 import dev.pampa.mycloudgallery.core.family.contract.StaleReason
@@ -57,8 +55,10 @@ import dev.pampa.mycloudgallery.feature.settings.widget.WidgetEntryRow
 import dev.pampa.mycloudgallery.feature.settings.widget.WidgetEntrySummary
 import dev.pampa.mycloudgallery.feature.settings.widget.WidgetEntryViewModel
 import dev.pampa.mycloudgallery.feature.settings.widget.WidgetRefresh
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
-import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
 import androidx.compose.runtime.getValue
 
 /**
@@ -212,67 +212,63 @@ fun SettingsScreen(
       )
     }
 
-    item { GallerySectionHeader(title = stringResource(R.string.settings_section_family)) }
+    // I3 (fase I): pochi gruppi, ognuno con una famiglia di colori: prima cio' che protegge le foto (backup, NAS, rete), poi le foto, la privacy,
+    // la famiglia; cio' che serve di rado sta in fondo, in «Avanzate». Ogni riga ha la piastrella espressiva della sua famiglia e lo stato a destra
+    // (un valore corto, un segno, un interruttore); il sottotitolo solo dove porta uno stato che cambia.
+    item { GallerySectionHeader(title = stringResource(R.string.settings_section_backup)) }
     item {
       FluidListGroup {
-        FluidListRow(
-          title = stringResource(R.string.settings_devices),
-          subtitle = devicesSubtitle(state),
-          tone = if (state.pendingRequests > 0 && state.isAdmin) FluidTone.Warning else FluidTone.Primary,
-          leading = { RowGlyph(Icons.Rounded.Devices) },
-          labels = if (state.pendingRequests > 0 && state.isAdmin) {
-            { StatusPill(state.pendingRequests.toString(), FluidTone.Warning) }
-          } else {
-            null
-          },
-          onClick = links.openDevices,
-        )
-        FluidListDivider()
-        FluidListRow(
-          title = stringResource(R.string.settings_family),
-          subtitle = NO_SUBTITLE,
-          tone = FluidTone.Primary,
-          leading = { RowGlyph(Icons.Rounded.Groups) },
-          onClick = links.openFamily,
-        )
-      }
-    }
-
-    item { GallerySectionHeader(title = stringResource(R.string.settings_section_connection)) }
-    item {
-      FluidListGroup {
+        // Fase 5A (D16): la voce "Backup" (lo stato a destra), solo se `:app` ha scritto dove porta.
+        links.openBackup?.let { openBackup ->
+          BackupEntryRow(status = backupStatus, onClick = openBackup)
+          FluidListDivider()
+        }
         FluidListRow(
           title = stringResource(R.string.settings_nas_account),
           subtitle = NO_SUBTITLE,
-          tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.Dns) },
+          leading = { RowTile(Icons.Rounded.Dns) },
+          leadingTile = false,
           onClick = links.openNasAccount,
         )
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.settings_network),
           subtitle = NO_SUBTITLE,
-          tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.Wifi) },
+          leading = { RowTile(Icons.Rounded.Wifi) },
+          leadingTile = false,
           onClick = links.openNetwork,
-        )
-        FluidListDivider()
-        FluidListRow(
-          title = stringResource(R.string.settings_quality),
-          subtitle = NO_SUBTITLE,
-          tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.PhotoLibrary) },
-          onClick = links.openQuality,
         )
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.settings_rules),
           subtitle = NO_SUBTITLE,
-          tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.Schedule) },
+          leading = { RowTile(Icons.Rounded.Schedule) },
+          leadingTile = false,
           onClick = links.openRules,
         )
-        // Fase 6 (P8, P11): "Ricerca e modelli" (ruolo, modelli, lettura del testo), solo se `:app` ha scritto dove porta.
+        FluidListDivider()
+        // "Il NAS non e' un backup": un segno di attenzione sulla piastrella, la spiegazione nella pagina.
+        FluidListRow(
+          title = stringResource(R.string.settings_backup_notice),
+          subtitle = NO_SUBTITLE,
+          leading = { RowTile(Icons.Rounded.SdStorage, status = GalleryIconStatus.Attention, family = GalleryIconFamily.Backup) },
+          leadingTile = false,
+          onClick = links.openBackupNotice,
+        )
+      }
+    }
+
+    item { GallerySectionHeader(title = stringResource(R.string.settings_section_photos)) }
+    item {
+      FluidListGroup {
+        FluidListRow(
+          title = stringResource(R.string.settings_quality),
+          subtitle = NO_SUBTITLE,
+          leading = { RowTile(Icons.Rounded.PhotoLibrary) },
+          leadingTile = false,
+          onClick = links.openQuality,
+        )
+        // Fase 6 (P8, P11): "Ricerca e modelli", solo se `:app` ha scritto dove porta.
         links.openSearch?.let { openSearch ->
           FluidListDivider()
           SearchEntryRow(summary = searchSummary, onClick = openSearch)
@@ -282,69 +278,82 @@ fun SettingsScreen(
           FluidListDivider()
           PeopleEntryRow(summary = peopleSummary, onClick = openPeople)
         }
-        // Fase 9 (P9, D15, D18): "Ricordi e notifiche" (come sono le notifiche di questo dispositivo), solo se `:app` ha scritto dove porta.
+        // Fase 9 (P9, D15, D18): "Ricordi e notifiche", solo se `:app` ha scritto dove porta.
         links.openMemories?.let { openMemories ->
           FluidListDivider()
           MemoriesEntryRow(summary = memoriesSummary, onClick = openMemories)
         }
-        // Fase 10 (P3, D3, D6): "Widget" (cosa mostra e ogni quanto cambia), solo se la pagina c'e' (`settingsGraph` la scrive sempre).
+        // Fase 10 (P3, D3, D6): "Widget", solo se la pagina c'e' (`settingsGraph` la scrive sempre).
         links.openWidget?.let { openWidget ->
           FluidListDivider()
           WidgetEntryRow(summary = widgetSummary, onClick = openWidget)
         }
+        // Fase 6 (P14, D50, Q16 (b)): "Animazione delle foto in movimento", impostazione personale sincronizzata. Null = `:app` non l'ha collegata.
+        if (motionAnimation != null) {
+          FluidListDivider()
+          MotionAnimationRow(on = motionAnimation, onToggle = onMotionAnimation)
+        }
       }
     }
 
-    // Fase 6 (P14, D50, Q16 (b)): "Animazione delle foto in movimento", impostazione personale sincronizzata. Null = `:app` non l'ha collegata: niente sezione.
-    if (motionAnimation != null) {
-      item { GallerySectionHeader(title = stringResource(R.string.settings_section_library)) }
-      item { FluidListGroup { MotionAnimationRow(on = motionAnimation, onToggle = onMotionAnimation) } }
-      item { FluidSectionFootnote(text = stringResource(R.string.library_motion_animation_footnote)) }
-    }
-
-    item { GallerySectionHeader(title = stringResource(R.string.settings_section_protection)) }
+    item { GallerySectionHeader(title = stringResource(R.string.settings_section_privacy)) }
     item {
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.settings_security),
           subtitle = NO_SUBTITLE,
-          tone = FluidTone.Success,
-          leading = { RowGlyph(Icons.Rounded.Security) },
+          leading = { RowTile(Icons.Rounded.Shield) },
+          leadingTile = false,
           onClick = links.openSecurity,
         )
-        FluidListDivider()
-        // Fase 9 (P4, D24, Q1 (c)): "Mappa" (la mappa dettagliata di questo dispositivo), solo se `:app` ha scritto dove porta.
-        links.openMap?.let { openMap ->
-          MapEntryRow(summary = mapSummary, onClick = openMap)
-          FluidListDivider()
-        }
         // Fase 7 (P9, D33): "Nascosti", sempre raggiungibili da qui anche se la sezione delle Raccolte e' nascosta. Solo se `:app` ha scritto dove porta.
         links.openHidden?.let { openHidden ->
+          FluidListDivider()
           FluidListRow(
             title = stringResource(R.string.settings_hidden),
             subtitle = NO_SUBTITLE,
-            tone = FluidTone.Success,
-            leading = { RowGlyph(Icons.Rounded.VisibilityOff) },
+            leading = { RowTile(Icons.Rounded.VisibilityOff) },
+            leadingTile = false,
             onClick = openHidden,
           )
-          FluidListDivider()
         }
-        // Fase 5B (P12): "Condivisioni", con l'indicatore se la posizione si toglie.
+        // Fase 9 (P4, D24, Q1 (c)): "Mappa" (la mappa dettagliata di questo dispositivo), solo se `:app` ha scritto dove porta.
+        links.openMap?.let { openMap ->
+          FluidListDivider()
+          MapEntryRow(summary = mapSummary, onClick = openMap)
+        }
+        // Fase 5B (P12): "Condivisioni", con il segno se la posizione si toglie.
         links.openSharing?.let { openSharing ->
+          FluidListDivider()
           SharingEntryRow(removeLocation = removeLocation, onClick = openSharing)
-          FluidListDivider()
         }
-        // Fase 5A (D16): la voce "Backup" (stato in una frase), solo se `:app` ha scritto dove porta.
-        links.openBackup?.let { openBackup ->
-          BackupEntryRow(status = backupStatus, onClick = openBackup)
-          FluidListDivider()
-        }
+      }
+    }
+
+    item { GallerySectionHeader(title = stringResource(R.string.settings_section_family)) }
+    item {
+      FluidListGroup {
         FluidListRow(
-          title = stringResource(R.string.settings_backup_notice),
-          subtitle = stringResource(R.string.settings_backup_notice_detail),
-          tone = FluidTone.Warning,
-          leading = { RowGlyph(Icons.Rounded.Backup) },
-          onClick = links.openBackupNotice,
+          title = stringResource(R.string.settings_devices),
+          subtitle = devicesSubtitle(state),
+          leading = {
+            RowTile(Icons.Rounded.Devices, status = if (state.pendingRequests > 0 && state.isAdmin) GalleryIconStatus.Attention else null)
+          },
+          leadingTile = false,
+          badge = if (state.pendingRequests > 0 && state.isAdmin) {
+            { RowValue(state.pendingRequests.toString()) }
+          } else {
+            null
+          },
+          onClick = links.openDevices,
+        )
+        FluidListDivider()
+        FluidListRow(
+          title = stringResource(R.string.settings_family),
+          subtitle = NO_SUBTITLE,
+          leading = { RowTile(Icons.Rounded.Groups) },
+          leadingTile = false,
+          onClick = links.openFamily,
         )
       }
     }
@@ -359,25 +368,24 @@ fun SettingsScreen(
           }
         }
       }
-      item { FluidSectionFootnote(text = stringResource(R.string.settings_pending_footnote)) }
     }
 
-    item { GallerySectionHeader(title = stringResource(R.string.settings_section_support)) }
+    item { GallerySectionHeader(title = stringResource(R.string.settings_section_advanced)) }
     item {
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.settings_diagnostics),
           subtitle = NO_SUBTITLE,
-          tone = FluidTone.Neutral,
-          leading = { RowGlyph(Icons.Rounded.MonitorHeart) },
+          leading = { RowTile(Icons.Rounded.MonitorHeart) },
+          leadingTile = false,
           onClick = openDiagnostics,
         )
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.settings_about),
           subtitle = NO_SUBTITLE,
-          tone = FluidTone.Neutral,
-          leading = { RowGlyph(Icons.Rounded.Info) },
+          leading = { RowTile(Icons.Rounded.Info) },
+          leadingTile = false,
           onClick = links.openAbout,
         )
       }
@@ -399,17 +407,18 @@ private const val NO_SUBTITLE = ""
 /** Un passo saltato dell'onboarding, con un nome che dice cosa c'e' da fare (non solo "passo 10"). */
 @Composable
 private fun PendingStepRow(step: OnboardingStep, onClick: () -> Unit) {
-  val (title, detail, icon) = when (step) {
-    OnboardingStep.FOLDERS -> Triple(R.string.pending_folders, R.string.pending_folders_detail, Icons.Rounded.FolderOff)
-    OnboardingStep.BATTERY -> Triple(R.string.pending_battery, R.string.pending_battery_detail, Icons.Rounded.BatteryChargingFull)
-    OnboardingStep.VPN -> Triple(R.string.pending_vpn, R.string.pending_vpn_detail, Icons.Rounded.VpnKey)
-    else -> Triple(R.string.pending_generic, R.string.pending_generic_detail, Icons.Rounded.Tune)
+  val (title, icon) = when (step) {
+    OnboardingStep.FOLDERS -> R.string.pending_folders to Icons.Rounded.FolderOff
+    OnboardingStep.BATTERY -> R.string.pending_battery to Icons.Rounded.BatteryChargingFull
+    OnboardingStep.VPN -> R.string.pending_vpn to Icons.Rounded.VpnKey
+    else -> R.string.pending_generic to Icons.Rounded.Tune
   }
   FluidListRow(
     title = if (title == R.string.pending_generic) stringResource(title, step.number) else stringResource(title),
-    subtitle = stringResource(detail),
-    tone = FluidTone.Warning,
-    leading = { RowGlyph(icon) },
+    // I3: il titolo dice gia' che cosa c'e' da fare; il perche' e' nella pagina del passo. Il segno dice che manca.
+    subtitle = NO_SUBTITLE,
+    leading = { RowTile(icon, status = GalleryIconStatus.Attention) },
+    leadingTile = false,
     onClick = onClick,
   )
 }

@@ -138,8 +138,8 @@ class MotionAnimationScreenTest {
   @Test
   fun senzaLImpostazioneCollegataLaSezioneNonCe() {
     page(on = null)
+    // I3 (fase I): la riga sta nel gruppo «Foto», che c'e' sempre; senza l'impostazione collegata la riga non c'e'.
     assertThat(has(string(R.string.library_motion_animation))).isFalse()
-    assertThat(rule.onAllNodesWithText(string(R.string.settings_section_library), ignoreCase = true).fetchSemanticsNodes()).isEmpty()
   }
 
   @Test
@@ -147,7 +147,7 @@ class MotionAnimationScreenTest {
     page(on = true)
     scrollToLibrary()
     // Il titolo della sezione puo' essere scritto in maiuscole dall'engine: si cerca senza badare alla grafia.
-    val header = rule.onAllNodesWithText(string(R.string.settings_section_library), ignoreCase = true).fetchSemanticsNodes()
+    val header = rule.onAllNodesWithText(string(R.string.settings_section_photos), ignoreCase = true).fetchSemanticsNodes()
     assertThat(header).isNotEmpty()
     assertThat(switchNode().config[SemanticsProperties.ToggleableState]).isEqualTo(ToggleableState.On)
   }
@@ -191,10 +191,9 @@ class MotionAnimationScreenTest {
   @Test
   fun leFrasiSonoSempliciENonHannoGergo() {
     val all = listOf(
-      R.string.settings_section_library,
+      R.string.settings_section_photos,
       R.string.library_motion_animation,
       R.string.library_motion_animation_detail,
-      R.string.library_motion_animation_footnote,
     ).map { string(it) }
     for (text in all) {
       assertThat(text).isNotEmpty()

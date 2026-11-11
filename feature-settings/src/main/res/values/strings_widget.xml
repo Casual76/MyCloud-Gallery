@@ -14,6 +14,7 @@
   <string name="widget_content_memories_only">Solo ricordi</string>
   <string name="widget_content_memories_only_detail">Senza un ricordo, invita ad aprire l’app.</string>
   <string name="widget_content_footnote">Usa le miniature già sul telefono: non si collega al NAS.</string>
+  <string name="widget_content_info">Da dove prende le foto</string>
 
   <string name="widget_section_period">Ogni quanto cambia</string>
   <string name="widget_period_hours_3">Circa ogni 3 ore</string>
@@ -30,11 +31,10 @@
   <string name="widget_add_how">Tieni premuto sulla schermata Home, scegli Widget e poi MyCloud Gallery. Puoi allargarlo per vedere più foto.</string>
 
   <!-- La riga nella pagina principale: «Il ricordo del giorno, ogni 3 ore». -->
-  <string name="widget_entry_summary">%1$s, %2$s</string>
   <string name="widget_entry_memory_then_photos">Il ricordo del giorno o foto a caso</string>
   <string name="widget_entry_photos_only">Solo foto a caso</string>
   <string name="widget_entry_memories_only">Solo ricordi</string>
-  <string name="widget_entry_hours_3">circa ogni 3 ore</string>
-  <string name="widget_entry_hours_6">circa ogni 6 ore</string>
-  <string name="widget_entry_daily">una volta al giorno</string>
+  <string name="widget_entry_hours_3">Ogni 3 h</string>
+  <string name="widget_entry_hours_6">Ogni 6 h</string>
+  <string name="widget_entry_daily">1 al giorno</string>
 </resources>

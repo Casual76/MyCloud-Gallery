@@ -170,6 +170,10 @@ class SharingScreenTest : SharingComposeBase() {
     show { SettingsScreen(state = settingsState, onBack = {}, openDiagnostics = {}, resumeStep = {}, links = links, removeLocation = removeLocation) }
   }
 
+  private fun described(text: String): Boolean =
+    rule.onAllNodes(SemanticsMatcher("descrizione") { it.config.getOrNull(SemanticsProperties.ContentDescription)?.contains(text) == true }, useUnmergedTree = true)
+      .fetchSemanticsNodes().isNotEmpty()
+
   private fun scrollTo(text: String) {
     rule.onAllNodes(hasScrollAction()).onFirst().performScrollToNode(hasText(text))
     rule.waitForIdle()
@@ -186,8 +190,9 @@ class SharingScreenTest : SharingComposeBase() {
   fun laVoceApreLaPaginaUnaVolta() {
     var opened = 0
     settings(SettingsLinks(openSharing = { opened++ }), removeLocation = false)
-    scrollTo(string(R.string.sharing_entry_off))
-    rule.onNodeWithText(string(R.string.sharing_entry_off)).assertIsDisplayed().performClick()
+    // I3 (fase I): a destra della voce la posizione e' un glifo (il segnaposto, o barrato), con il suo nome per TalkBack.
+    scrollTo(string(R.string.sharing_title))
+    rule.onNodeWithText(string(R.string.sharing_title)).assertIsDisplayed().performClick()
     assertThat(opened).isEqualTo(1)
   }
 
@@ -195,13 +200,14 @@ class SharingScreenTest : SharingComposeBase() {
   fun laVoceDiceSeLaPosizioneSiToglie() {
     val removing = mutableStateOf(false)
     show { SettingsScreen(state = settingsState, onBack = {}, openDiagnostics = {}, resumeStep = {}, links = SettingsLinks(openSharing = {}), removeLocation = removing.value) }
-    scrollTo(string(R.string.sharing_entry_off))
-    assertThat(has(string(R.string.sharing_entry_on))).isFalse()
+    scrollTo(string(R.string.sharing_title))
+    assertThat(described(string(R.string.sharing_entry_off))).isTrue()
+    assertThat(described(string(R.string.sharing_entry_on))).isFalse()
     rule.runOnIdle { removing.value = true }
     rule.waitForIdle()
-    // L'indicatore e' la frase: dice che la posizione si toglie, e la voce di prima non c'e' piu'.
-    assertThat(has(string(R.string.sharing_entry_on))).isTrue()
-    assertThat(has(string(R.string.sharing_entry_off))).isFalse()
+    // L'indicatore e' il glifo: dice (a TalkBack con il suo nome) che la posizione si toglie, e quello di prima non c'e' piu'.
+    assertThat(described(string(R.string.sharing_entry_on))).isTrue()
+    assertThat(described(string(R.string.sharing_entry_off))).isFalse()
   }
 }
 

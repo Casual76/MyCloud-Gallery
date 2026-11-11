@@ -67,7 +67,7 @@ class ReceivedScreenTest : ComposeBackupTallTest() {
     val expected = mapOf(
       ReceivedStatus.QUEUED to "In coda: parte appena possibile.",
       ReceivedStatus.NETWORK to "In attesa di rete: parte quando il NAS risponde.",
-      ReceivedStatus.TRIAL to "Backup in prova: in questa versione non si scrive ancora sul NAS.",
+      ReceivedStatus.TRIAL to "In pausa: il backup vero non è ancora acceso.",
       ReceivedStatus.FOLDER_LOCKED to "Cartella bloccata: adesso non ci si può scrivere.",
       ReceivedStatus.NAS_FULL to "NAS pieno: libera spazio e poi riprova.",
       ReceivedStatus.QUOTA to "Quota esaurita: chiedi all’admin del NAS.",
@@ -175,7 +175,7 @@ class ReceivedScreenTest : ComposeBackupTallTest() {
     val item = ReceivedSamples.item(1, ReceivedStatus.COPY_CHANGED)
     val texts = mapOf(
       ReceivedNotice.Requeued to "Rimesso in coda: parte appena possibile.",
-      ReceivedNotice.Blocked(ReceivedStatus.TRIAL) to "Non riprovo adesso. Backup in prova",
+      ReceivedNotice.Blocked(ReceivedStatus.TRIAL) to "Non riprovo adesso. In pausa",
       ReceivedNotice.NoCopy to "La copia sul telefono non c’è più: non si può riprovare. Puoi scartarlo.",
       ReceivedNotice.AlreadySaved to "È già sul NAS, o sta per arrivarci",
       ReceivedNotice.Discarded to "Scartato. Sul NAS non è cambiato niente.",

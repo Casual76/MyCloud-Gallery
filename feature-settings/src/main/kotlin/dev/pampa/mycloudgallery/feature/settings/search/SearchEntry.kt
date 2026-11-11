@@ -15,7 +15,8 @@ import dagger.hilt.components.SingletonComponent
 import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.feature.settings.ui.toneMark
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import java.util.Optional
 import javax.inject.Inject
@@ -73,7 +74,8 @@ internal fun SearchEntryRow(summary: SearchEntrySummary?, onClick: () -> Unit) {
     title = stringResource(R.string.settings_search),
     subtitle = SearchEntryTexts.subtitleOf(LocalContext.current, summary),
     tone = tone,
-    leading = { RowGlyph(Icons.Rounded.ImageSearch) },
+    leading = { RowTile(Icons.Rounded.ImageSearch, status = toneMark(tone)) },
+    leadingTile = false,
     // Le pillole stanno in `labels` (sotto il titolo se ruberebbero la riga), non in `badge`.
     labels = when {
       summary?.modelMissing == true -> {

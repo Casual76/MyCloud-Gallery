@@ -51,7 +51,7 @@
   <string name="backup_versions_why_busy">Sto ancora lavorando su questo media: riprova fra poco.</string>
   <string name="backup_versions_why_current_not_safe">La versione di adesso non ha ancora una copia controllata sul NAS: ripristinando l’originale la perderesti. Prima il backup la mette al sicuro, poi potrai ripristinare.</string>
   <string name="backup_versions_why_paused">Il backup è in pausa: riprendilo dalla pagina Backup per ripristinare l’originale.</string>
-  <string name="backup_versions_why_test_only">Il backup è ancora in prova: per ora sul NAS non scrivo.</string>
+  <string name="backup_versions_why_test_only">Il backup vero non è ancora acceso: per ora sul NAS non scrivo.</string>
 
   <string name="backup_versions_confirm_title">Ripristinare l’originale?</string>
   <string name="backup_versions_confirm_message">L’originale torna al suo posto sul NAS e la versione di adesso, che ha già una copia controllata, va nella cartella Versioni. Non si carica niente.</string>

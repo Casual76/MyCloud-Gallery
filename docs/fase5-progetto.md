@@ -448,7 +448,7 @@ La Fase 5 decide **cosa** si mostra e **quando**; il filone grafico decide **com
 | `CAP_REACHED` | Tetto dati raggiunto | Fai ora (con conferma) | E-B10 |
 | `FROZEN` | Lavori fermi: cambiamenti anomali sul NAS | Controlla (Diagnostica) | E-B19, C11 |
 | `WRITES_STOPPED` | Scritture sul NAS ferme | Diagnostica | E-B19 |
-| `TEST_ONLY` | Backup in prova | — (lo spegne la chiusura della 5A) | D12 |
+| `TEST_ONLY` | Il backup vero non è ancora acceso (I3, fase I: prima «Backup in prova») | — (lo spegne la chiusura della 5A) | D12 |
 | `LOST_BEFORE_BACKUP` | N foto cancellate prima del backup | Apri il cestino di Galleria | E-B4 |
 | `VERIFY_FAILED` | N copie non integre | Riprova · Diagnostica | E-B18, E-B8 |
 | `UNREADABLE` | N file del telefono illeggibili | Riprova · Diagnostica | D15, E-M12 |

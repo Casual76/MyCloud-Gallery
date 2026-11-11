@@ -138,21 +138,3 @@ private fun PendingTaskCard(task: PendingTask, canDeleteOriginal: Boolean, actio
 /** "12 ottobre 2026": la data del NAS nel fuso di casa. */
 private fun sinceText(atNasMillis: Long): String =
   GalleryDates.date(Instant.ofEpochMilli(atNasMillis).atZone(ZoneId.systemDefault()).toLocalDateTime())
-
-/**
- * Il riquadro con cui la pagina Backup porta a "Da decidere": quante cose aspettano una scelta e un tasto per vederle. Non si mostra con
- * zero attivita' ([count] = 0 non disegna niente). Sta qui perche' la pagina Backup (5A) non conosce le attivita' in sospeso: `:app` lo
- * mette dove vuole (P14).
- */
-@Composable
-fun PendingTasksEntryCard(count: Int, onOpen: () -> Unit, modifier: Modifier = Modifier) {
-  if (count <= 0) return
-  BackupCard(
-    tone = BackupTone.Attention,
-    glyph = Icons.Rounded.Checklist,
-    title = stringResource(R.string.backup_tasks_entry_title),
-    detail = pluralStringResource(R.plurals.backup_tasks_entry_detail, count, BackupText.count(count)),
-    modifier = modifier,
-    actions = { BackupButton(label = stringResource(R.string.backup_tasks_entry_action), onClick = onOpen, style = FluidButtonStyle.Tinted) },
-  )
-}

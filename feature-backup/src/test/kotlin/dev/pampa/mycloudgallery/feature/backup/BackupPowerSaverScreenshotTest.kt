@@ -40,9 +40,10 @@ abstract class BackupPowerSaverShotsBase(private val dark: Boolean, private val 
   fun paginaInCodaConIlRisparmioEnergeticoAcceso() {
     show(dark = dark) { BackupPageScreen(state = waiting(WaitReason.POWER_SAVER), actions = BackupPageActions(), onBack = {}) }
 
-    composeRule.onAllNodesWithText("Risparmio energetico acceso: riprende quando lo spegni.", substring = true).onFirst().assertExists()
+    // I3 (fase I): l'attesa e' un'etichetta corta nella riga della testata.
+    composeRule.onAllNodesWithText("risparmio energetico acceso", substring = true).onFirst().assertExists()
     // Non e' la batteria bassa: la frase vecchia non c'e' piu'.
-    composeRule.onAllNodesWithText("Aspetta che la batteria sia più carica", substring = true).assertCountEquals(0)
+    composeRule.onAllNodesWithText("aspetta più batteria", substring = true).assertCountEquals(0)
     composeRule.onRoot().captureRoboImage("$DIR/pagina-backup-in-coda-risparmio-energetico-$look-$device.png")
   }
 
@@ -50,7 +51,7 @@ abstract class BackupPowerSaverShotsBase(private val dark: Boolean, private val 
   fun laBatteriaBassaDiceAncoraLaSuaFrase() {
     show(dark = dark) { BackupPageScreen(state = waiting(WaitReason.BATTERY), actions = BackupPageActions(), onBack = {}) }
 
-    composeRule.onAllNodesWithText("Aspetta che la batteria sia più carica", substring = true).onFirst().assertExists()
+    composeRule.onAllNodesWithText("aspetta più batteria", substring = true).onFirst().assertExists()
     composeRule.onAllNodesWithText("Risparmio energetico", substring = true).assertCountEquals(0)
   }
 

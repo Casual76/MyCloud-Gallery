@@ -49,7 +49,7 @@ import dev.pampa.mycloudgallery.feature.settings.ui.CodeFormat
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
 import dev.pampa.mycloudgallery.feature.settings.ui.PinnedActionDock
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.SettingsDimens
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import dev.pampa.mycloudgallery.feature.settings.ui.agoText
@@ -231,7 +231,8 @@ private fun ApprovalPage(state: ApprovalUiState, actions: ApprovalActions, modif
           title = stringResource(R.string.approve_account_confirm, request.declaredNasUser),
           subtitle = stringResource(R.string.approve_account_confirm_detail),
           tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.AdminPanelSettings) },
+          leading = { RowTile(Icons.Rounded.AdminPanelSettings) },
+          leadingTile = false,
           disclosure = false,
           onClick = { actions.onAccountConfirmed(!state.accountConfirmed) },
           badge = { FluidSwitch(checked = state.accountConfirmed, onCheckedChange = null) },

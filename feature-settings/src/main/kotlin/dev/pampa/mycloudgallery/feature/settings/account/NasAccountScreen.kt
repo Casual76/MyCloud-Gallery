@@ -39,7 +39,7 @@ import dev.pampa.mycloudgallery.core.nas.contract.SmbDialect
 import dev.pampa.mycloudgallery.core.network.contract.Via
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.port.NasAccountSettings
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import dev.pampa.mycloudgallery.feature.settings.ui.messageRes
 import java.util.Optional
@@ -182,7 +182,8 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
             if (state.blockedBy != null) R.string.account_change_password_needed else R.string.account_change_password_detail,
           ),
           tone = if (state.blockedBy != null) FluidTone.Danger else FluidTone.Primary,
-          leading = { RowGlyph(Icons.Rounded.Key) },
+          leading = { RowTile(Icons.Rounded.Key) },
+          leadingTile = false,
           labels = if (state.blockedBy != null) {
             { StatusPill(stringResource(R.string.account_pill_needed), FluidTone.Danger) }
           } else {
@@ -195,7 +196,8 @@ internal fun NasAccountScreen(state: NasAccountUiState, links: NasAccountLinks) 
           title = stringResource(R.string.account_change_address),
           subtitle = stringResource(R.string.account_change_address_detail),
           tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.Dns) },
+          leading = { RowTile(Icons.Rounded.Dns) },
+          leadingTile = false,
           onClick = links.openAddress,
         )
       }
@@ -290,7 +292,8 @@ private fun ValueRow(label: Int, value: String, icon: androidx.compose.ui.graphi
     subtitle = "",
     disclosure = false,
     tone = FluidTone.Neutral,
-    leading = { RowGlyph(icon) },
+    leading = { RowTile(icon) },
+    leadingTile = false,
     badge = { FluidRowValue(text = value) },
   )
 }

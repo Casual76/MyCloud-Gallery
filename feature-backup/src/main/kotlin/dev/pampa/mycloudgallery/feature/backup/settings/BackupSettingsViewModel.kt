@@ -9,6 +9,7 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupSources
 import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupActions
+import dev.pampa.mycloudgallery.feature.backup.contract.BackupCoverPorts
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupRules
 import dev.pampa.mycloudgallery.feature.backup.contract.BackupScreen
 import dev.pampa.mycloudgallery.feature.backup.contract.PhoneFolder
@@ -16,6 +17,7 @@ import dev.pampa.mycloudgallery.feature.backup.contract.PhoneFolders
 import dev.pampa.mycloudgallery.feature.backup.noop.NoBackupActions
 import dev.pampa.mycloudgallery.feature.backup.noop.NoBackupRules
 import dev.pampa.mycloudgallery.feature.backup.noop.NoPhoneFolders
+import dev.pampa.mycloudgallery.feature.backup.ui.BackupCovers
 import java.util.Optional
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
@@ -79,7 +81,11 @@ class BackupSettingsViewModel @Inject constructor(
   phoneFolders: Optional<PhoneFolders>,
   rules: Optional<BackupRules>,
   actions: Optional<BackupActions>,
+  coverPorts: Optional<BackupCoverPorts> = Optional.empty(),
 ) : ViewModel() {
+
+  /** I3: le copertine delle cartelle (la foto piu' recente, dalla Libreria visibile); null = le piastrelle. */
+  internal val covers: BackupCovers? = coverPorts.map { BackupCovers(it) }.orElse(null)
 
   private val port: BackupSettings? = settings.orElse(null)
   private val folders: PhoneFolders = phoneFolders.orElse(NoPhoneFolders)

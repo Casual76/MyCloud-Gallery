@@ -62,7 +62,11 @@ import dev.pampa.mycloudgallery.core.network.contract.WireGuardPermission
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.ConfirmSheet
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
+import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconStatus
+import dev.pampa.mycloudgallery.feature.settings.ui.RowValue
+import dev.pampa.mycloudgallery.feature.settings.ui.SettingsInfo
 import dev.pampa.mycloudgallery.feature.settings.ui.StatusPill
 import dev.pampa.mycloudgallery.feature.settings.ui.messageRes
 import dev.antigravity.fluidengine.ui.theme.FluidCard
@@ -189,12 +193,8 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
       }
     }
 
-    item {
-      GallerySectionHeader(
-        title = stringResource(R.string.network_section_home),
-        detail = stringResource(R.string.network_section_home_detail),
-      )
-    }
+    // I3 (fase I): niente frasi sotto i titoli dei gruppi; lo stato di ogni riga e' un segno sulla piastrella o un valore corto a destra.
+    item { GallerySectionHeader(title = stringResource(R.string.network_section_home)) }
     item {
       FluidListGroup {
         val fingerprint = state.fingerprint
@@ -210,64 +210,67 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
             )
           },
           tone = if (fingerprint == null) FluidTone.Warning else FluidTone.Primary,
-          leading = { RowGlyph(Icons.Rounded.Fingerprint) },
-          disclosure = false,
-          labels = {
-            StatusPill(
-              stringResource(if (fingerprint == null) R.string.network_pill_missing else R.string.network_pill_known),
-              if (fingerprint == null) FluidTone.Warning else FluidTone.Success,
+          leading = {
+            RowTile(
+              Icons.Rounded.Fingerprint,
+              status = if (fingerprint == null) GalleryIconStatus.Attention else GalleryIconStatus.Done,
+              family = GalleryIconFamily.Network,
             )
           },
+          leadingTile = false,
+          disclosure = false,
         )
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.network_current),
           subtitle = stringResource(state.snapshot.home.labelRes()),
           tone = if (state.snapshot.home == HomeMatch.Match) FluidTone.Success else FluidTone.Neutral,
-          leading = { RowGlyph(Icons.Rounded.Home) },
+          leading = { RowTile(Icons.Rounded.Home, status = if (state.snapshot.home == HomeMatch.Match) GalleryIconStatus.Done else null) },
+          leadingTile = false,
           disclosure = false,
         )
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.network_ipv6),
-          subtitle = stringResource(R.string.network_ipv6_detail),
+          subtitle = "",
           tone = FluidTone.Neutral,
-          leading = { RowGlyph(Icons.Rounded.Public) },
+          leading = { RowTile(Icons.Rounded.Public) },
+          leadingTile = false,
           disclosure = false,
           badge = { FluidRowValue(stringResource(if (state.snapshot.ipv6Global) R.string.value_yes else R.string.value_no)) },
         )
         FluidListDivider()
         FluidListRow(
           title = stringResource(R.string.network_recapture),
-          subtitle = stringResource(if (state.admin) R.string.network_recapture_detail_admin else R.string.network_recapture_detail),
+          subtitle = "",
           tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.Sync) },
+          leading = { RowTile(Icons.Rounded.Sync) },
+          leadingTile = false,
           onClick = actions.onCapture,
         )
       }
     }
-    item { CaptureStatus(state.capture, actions) }
-
     item {
-      GallerySectionHeader(
-        title = stringResource(R.string.network_section_vpn),
-        detail = stringResource(R.string.network_section_vpn_detail),
+      SettingsInfo(
+        label = stringResource(R.string.network_home_info),
+        text = stringResource(R.string.network_section_home_detail) + " " +
+          stringResource(if (state.admin) R.string.network_recapture_detail_admin else R.string.network_recapture_detail) + ".",
       )
     }
+    item { CaptureStatus(state.capture, actions) }
+
+    item { GallerySectionHeader(title = stringResource(R.string.network_section_vpn)) }
     item {
       FluidListGroup {
         FluidListRow(
           title = stringResource(R.string.network_wg),
-          subtitle = stringResource(state.vpnCapability.detailRes()),
+          subtitle = stringResource(state.vpnCapability.pillRes()),
           tone = if (state.vpnCapability == VpnCapability.READY) FluidTone.Success else FluidTone.Warning,
-          leading = { RowGlyph(Icons.Rounded.VpnKey) },
-          disclosure = false,
-          labels = {
-            StatusPill(
-              stringResource(state.vpnCapability.pillRes()),
-              if (state.vpnCapability == VpnCapability.READY) FluidTone.Success else FluidTone.Warning,
-            )
+          leading = {
+            RowTile(Icons.Rounded.VpnKey, status = if (state.vpnCapability == VpnCapability.READY) GalleryIconStatus.Done else GalleryIconStatus.Attention)
           },
+          leadingTile = false,
+          disclosure = false,
         )
         FluidListDivider()
         FluidListRow(
@@ -278,7 +281,8 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
             VpnAutomationStatus.Off -> FluidTone.Neutral
             else -> FluidTone.Info
           },
-          leading = { RowGlyph(Icons.Rounded.Tune) },
+          leading = { RowTile(Icons.Rounded.Tune) },
+          leadingTile = false,
           disclosure = false,
         )
         FluidListDivider()
@@ -286,11 +290,14 @@ internal fun NetworkScreen(state: NetworkUiState, actions: NetworkActions) {
           title = stringResource(R.string.network_vpn_now),
           subtitle = stringResource(state.snapshot.vpn.labelRes()),
           tone = if (state.snapshot.vpn == VpnObservation.FOREIGN_VPN) FluidTone.Danger else FluidTone.Neutral,
-          leading = { RowGlyph(Icons.Rounded.VpnLock) },
+          leading = { RowTile(Icons.Rounded.VpnLock, status = if (state.snapshot.vpn == VpnObservation.FOREIGN_VPN) GalleryIconStatus.Problem else null) },
+          leadingTile = false,
           disclosure = false,
         )
       }
     }
+
+    item { SettingsInfo(label = stringResource(R.string.network_vpn_info), text = stringResource(state.vpnCapability.detailRes())) }
 
     if (state.vpnCapability == VpnCapability.PERMISSION_MISSING) {
       item { ControlPermissionBlock(state.permission, actions) }

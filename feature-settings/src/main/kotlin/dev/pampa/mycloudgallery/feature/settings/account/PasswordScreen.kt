@@ -41,7 +41,7 @@ import dev.pampa.mycloudgallery.core.security.screen.SensitiveScreen
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.FeedbackNote
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 import dev.pampa.mycloudgallery.feature.settings.ui.messageRes
 import androidx.compose.runtime.getValue
 
@@ -220,7 +220,8 @@ private fun StageResults(stages: List<StageResult>) {
         title = stringResource(stage.stage.labelRes()),
         subtitle = if (stage.outcome == StageOutcome.FAILED && stage.error != null) stringResource(stage.error!!.messageRes()) else "",
         tone = tone,
-        leading = { RowGlyph(icon) },
+        leading = { RowTile(icon) },
+        leadingTile = false,
         disclosure = false,
         badge = { dev.pampa.mycloudgallery.feature.settings.ui.StatusPill(stringResource(label), tone) },
       )

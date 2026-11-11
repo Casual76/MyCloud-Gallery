@@ -17,6 +17,8 @@
   <string name="quality_section_covers">Cartelle di musica</string>
   <string name="quality_covers">Mostra le copertine degli album</string>
   <string name="quality_covers_detail">Entrano nella Libreria alla prossima verifica.</string>
+  <string name="quality_level_info">Che cosa fa «%1$s»</string>
+  <string name="quality_covers_info">Quando entrano</string>
   <plurals name="quality_items">
     <item quantity="one">Una anteprima per questo livello.</item>
     <item quantity="other">%1$d anteprime per questo livello.</item>

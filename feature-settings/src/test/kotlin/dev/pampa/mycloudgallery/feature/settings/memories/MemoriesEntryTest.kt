@@ -37,15 +37,15 @@ class MemoriesEntryTest {
 
   @Test
   fun senzaLegaturaLaFraseDiceATantoServe() {
-    assertThat(MemoriesEntryTexts.subtitleOf(context, null)).isEqualTo("Quando arrivano le notifiche")
+    assertThat(MemoriesEntryTexts.subtitleOf(context, null)).isEqualTo("Da scegliere")
   }
 
   @Test
   fun ogniStatoHaLaSuaFrase() {
-    assertThat(subtitle(MemoriesEntryState.FEW_PER_WEEK)).isEqualTo("Poche notifiche a settimana")
-    assertThat(subtitle(MemoriesEntryState.DAILY)).isEqualTo("Al massimo una al giorno")
-    assertThat(subtitle(MemoriesEntryState.ANNIVERSARIES)).isEqualTo("Solo gli anniversari")
-    assertThat(subtitle(MemoriesEntryState.OFF)).isEqualTo("Notifiche spente")
+    assertThat(subtitle(MemoriesEntryState.FEW_PER_WEEK)).isEqualTo("Poche")
+    assertThat(subtitle(MemoriesEntryState.DAILY)).isEqualTo("Una al giorno")
+    assertThat(subtitle(MemoriesEntryState.ANNIVERSARIES)).isEqualTo("Anniversari")
+    assertThat(subtitle(MemoriesEntryState.OFF)).isEqualTo("Spente")
     assertThat(MemoriesEntryState.entries.map { subtitle(it) }).containsNoDuplicates()
   }
 

@@ -4,6 +4,9 @@ import dev.pampa.mycloudgallery.core.backup.contract.BackupSource
 import dev.pampa.mycloudgallery.core.backup.contract.BackupStatus
 import dev.pampa.mycloudgallery.core.backup.contract.DeviceFolder
 import dev.pampa.mycloudgallery.core.backup.contract.SourceStatus
+import dev.pampa.mycloudgallery.core.imaging.contract.ThumbnailLoader
+import dev.pampa.mycloudgallery.core.library.contract.ViewerItems
+import dev.pampa.mycloudgallery.core.model.MediaId
 import kotlinx.coroutines.flow.StateFlow
 
 // Fase 5A (docs/fase5-progetto.md §1.5, §2.1, §2.6, D7, D30; riga P5 del §4.4): le PORTE che le schermate di feature-backup leggono e
@@ -42,6 +45,21 @@ data class PhoneFolder(val source: BackupSource, val media: Int, val bytes: Long
 fun interface PhoneFolders {
   suspend fun folders(): List<PhoneFolder>
 }
+
+/**
+ * I3 (fase I): le ultime foto di ogni sorgente, per le copertine della pagina Backup e di «Cosa salvare». `:app` la lega al catalogo (una lettura,
+ * dal piu' recente). Solo identita': gli id possono essere di media nascosti o eliminati, e chi li mostra li passa dalla Libreria visibile.
+ */
+fun interface SourceNewestMedia {
+  /** Per ogni sorgente di [sources] (per [BackupSource.id]), al piu' [perSource] media, dal piu' recente. */
+  suspend fun newest(sources: List<BackupSource>, perSource: Int): Map<String, List<MediaId>>
+}
+
+/**
+ * I3: le porte delle copertine, le stesse delle Raccolte. [library] e' la Libreria visibile (mai un nascosto ne' un eliminato), [loader] la cache
+ * delle miniature della griglia, [newest] le ultime foto di ogni cartella. Opzionale: senza, le sorgenti hanno la piastrella della famiglia.
+ */
+class BackupCoverPorts(val newest: SourceNewestMedia, val library: ViewerItems, val loader: ThumbnailLoader)
 
 /** Le regole del backup che l'utente tocca da qui (le altre sono nelle attivita'). Del dispositivo, non personali. */
 interface BackupRules {

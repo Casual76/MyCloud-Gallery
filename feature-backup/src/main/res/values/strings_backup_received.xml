@@ -13,7 +13,6 @@
     <item quantity="one">%1$s con un problema</item>
     <item quantity="other">%1$s con un problema</item>
   </plurals>
-  <string name="backup_received_entry_action">Vedi</string>
 
   <!-- L'elenco. -->
   <plurals name="backup_received_summary">
@@ -36,7 +35,7 @@
   <!-- Lo stato di un file, in una frase. -->
   <string name="backup_received_status_queued">In coda: parte appena possibile.</string>
   <string name="backup_received_status_network">In attesa di rete: parte quando il NAS risponde.</string>
-  <string name="backup_received_status_trial">Backup in prova: in questa versione non si scrive ancora sul NAS.</string>
+  <string name="backup_received_status_trial">In pausa: il backup vero non è ancora acceso.</string>
   <string name="backup_received_status_folder_locked">Cartella bloccata: adesso non ci si può scrivere.</string>
   <string name="backup_received_status_nas_full">NAS pieno: libera spazio e poi riprova.</string>
   <string name="backup_received_status_quota">Quota esaurita: chiedi all’admin del NAS.</string>
@@ -63,7 +62,7 @@
 
   <!-- Il foglio di conferma di "Scarta". -->
   <string name="backup_received_discard_title">Scartare questo file?</string>
-  <string name="backup_received_discard_message">La copia sul telefono viene eliminata e il file non sarà salvato sul NAS. Sul NAS non cambia niente: se ci è già arrivato, resta dov’è.</string>
+  <string name="backup_received_discard_message">La copia sul telefono si elimina e non va sul NAS. Sul NAS non cambia niente.</string>
   <string name="backup_received_discard_confirm">Scarta</string>
   <string name="backup_received_discard_cancel">Annulla</string>
 </resources>

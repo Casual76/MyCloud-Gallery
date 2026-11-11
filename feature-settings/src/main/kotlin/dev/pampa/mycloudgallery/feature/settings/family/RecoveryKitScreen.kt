@@ -21,7 +21,7 @@ import dev.antigravity.fluidengine.ui.theme.FluidListRow
 import dev.antigravity.fluidengine.ui.theme.FluidTone
 import dev.pampa.mycloudgallery.feature.settings.R
 import dev.pampa.mycloudgallery.feature.settings.ui.Note
-import dev.pampa.mycloudgallery.feature.settings.ui.RowGlyph
+import dev.pampa.mycloudgallery.feature.settings.ui.RowTile
 
 /**
  * Il kit di recupero spiegato (piano 2.4, E-S13): cos'e', dove sta, quando serve e cosa fare se manca.
@@ -61,7 +61,8 @@ internal fun RecoveryKitScreen(
           title = stringResource(R.string.kit_what_code),
           subtitle = stringResource(R.string.kit_what_code_detail),
           tone = FluidTone.Warning,
-          leading = { RowGlyph(Icons.Rounded.Pin) },
+          leading = { RowTile(Icons.Rounded.Pin) },
+          leadingTile = false,
           disclosure = false,
         )
         FluidListDivider()
@@ -69,7 +70,8 @@ internal fun RecoveryKitScreen(
           title = stringResource(R.string.kit_what_file),
           subtitle = stringResource(R.string.kit_what_file_detail),
           tone = FluidTone.Info,
-          leading = { RowGlyph(Icons.Rounded.Description) },
+          leading = { RowTile(Icons.Rounded.Description) },
+          leadingTile = false,
           disclosure = false,
         )
       }
@@ -82,7 +84,8 @@ internal fun RecoveryKitScreen(
           title = stringResource(R.string.kit_when_lost),
           subtitle = stringResource(R.string.kit_when_lost_detail),
           tone = FluidTone.Danger,
-          leading = { RowGlyph(Icons.Rounded.PhonelinkErase) },
+          leading = { RowTile(Icons.Rounded.PhonelinkErase) },
+          leadingTile = false,
           onClick = if (isAdmin) null else onReplaceAdmin,
           disclosure = !isAdmin,
         )
@@ -91,7 +94,8 @@ internal fun RecoveryKitScreen(
           title = stringResource(R.string.kit_when_second),
           subtitle = stringResource(R.string.kit_when_second_detail),
           tone = FluidTone.Primary,
-          leading = { RowGlyph(Icons.Rounded.AdminPanelSettings) },
+          leading = { RowTile(Icons.Rounded.AdminPanelSettings) },
+          leadingTile = false,
           onClick = if (isAdmin) null else onSecondAdmin,
           disclosure = !isAdmin,
         )

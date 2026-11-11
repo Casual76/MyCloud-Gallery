@@ -33,23 +33,23 @@
   <!-- Impronta di casa -->
   <string name="network_section_home">Rete di casa</string>
   <string name="network_section_home_detail">Casa si riconosce dal router, non dal nome del Wi-Fi.</string>
-  <string name="network_fingerprint">Impronta di casa</string>
-  <string name="network_fingerprint_none">Non ancora raccolta</string>
-  <string name="network_fingerprint_detail">%1$s · raccolta il %2$s</string>
+  <string name="network_fingerprint">Casa salvata</string>
+  <string name="network_fingerprint_none">Non ancora salvata</string>
+  <string name="network_fingerprint_detail">%1$s · dal %2$s</string>
   <plurals name="network_ula_count">
     <item quantity="one">%1$d rete riconosciuta</item>
     <item quantity="other">%1$d reti riconosciute</item>
   </plurals>
-  <string name="network_pill_known">Nota</string>
+  <string name="network_pill_known">Salvata</string>
   <string name="network_pill_missing">Manca</string>
   <string name="network_current">Rete attuale</string>
   <string name="match_match">È la rete di casa</string>
   <string name="match_weak">Somiglia a casa ma non basta</string>
   <string name="match_none">Non è la rete di casa</string>
   <string name="match_unknown">Non so dirlo</string>
-  <string name="network_ipv6">Strada verso casa</string>
-  <string name="network_ipv6_detail">Serve fuori casa</string>
-  <string name="network_recapture">Raccogli di nuovo l’impronta</string>
+  <string name="network_ipv6">Casa raggiungibile da fuori</string>
+  <string name="network_ipv6_detail">Con la rete di adesso</string>
+  <string name="network_recapture">Salva di nuovo la rete di casa</string>
   <string name="network_recapture_detail">Dopo un reset del router, dal Wi-Fi di casa</string>
   <string name="network_recapture_detail_admin">Dopo un reset del router, dal Wi-Fi di casa. Vale per i nuovi inviti</string>
 
@@ -58,7 +58,7 @@
   <string name="capture_verifying">Controllo che qui risponda il tuo NAS…</string>
   <string name="capture_no_wifi_title">Serve il Wi-Fi di casa</string>
   <string name="capture_no_wifi">Non c’è un Wi-Fi da leggere. Collegati al Wi-Fi di casa, spegni la VPN e riprova.</string>
-  <string name="capture_no_ula_title">Questo Wi-Fi non ha un’impronta forte</string>
+  <string name="capture_no_ula_title">Questo Wi-Fi non si riconosce bene</string>
   <string name="capture_no_ula">Il router non annuncia un indirizzo IPv6 locale: senza, non posso dire che sia casa. Nome della rete e gateway non bastano, sono uguali in mezza Italia.</string>
   <string name="capture_cannot_title">Non posso verificare il NAS</string>
   <string name="capture_cannot">Serve l’account del NAS per controllare che qui risponda il tuo. Completa la configurazione e riprova.</string>
@@ -68,7 +68,7 @@
   <string name="capture_mismatch_title">Qui risponde un altro NAS</string>
   <string name="capture_mismatch">Su questa rete il NAS non ha la stessa identità: non è casa tua. Non ho salvato niente.</string>
   <string name="capture_failed_title">Non ho potuto verificare</string>
-  <string name="capture_saved_title">Impronta aggiornata</string>
+  <string name="capture_saved_title">Rete di casa aggiornata</string>
   <string name="capture_saved_family">Da ora questa è la rete di casa. L’ho scritta anche nella configurazione firmata della famiglia: i nuovi inviti useranno questa.</string>
   <string name="capture_saved_phone">Da ora questa è la rete di casa, ma solo su questo telefono. Gli altri dispositivi e i nuovi inviti usano ancora quella di prima finché non la aggiorna l’admin della famiglia.</string>
   <string name="capture_saved_failed">Da ora questa è la rete di casa su questo telefono, ma non sono riuscito a scriverla nella configurazione firmata della famiglia: i nuovi inviti hanno ancora quella di prima.</string>
@@ -85,10 +85,10 @@
   <string name="wg_pill_missing">Non installato</string>
   <string name="wg_pill_permission">Manca il permesso</string>
   <string name="wg_pill_not_configured">Da configurare</string>
-  <string name="wg_ready">L’app può accendere e spegnere il tunnel di casa.</string>
+  <string name="wg_ready">L’app accende e spegne la VPN da sola.</string>
   <string name="wg_missing">L’app WireGuard non è installata su questo profilo.</string>
   <string name="wg_permission">Manca il permesso di comandare i tunnel di WireGuard: toccando «Consenti il controllo» Android te lo chiede.</string>
-  <string name="wg_not_configured">Il permesso c’è, ma manca il nome del tunnel di casa.</string>
+  <string name="wg_not_configured">Il permesso c’è, ma manca il nome della VPN di casa.</string>
   <string name="network_automation">Controllo automatico</string>
   <string name="auto_off">Spento: la VPN la gestisci tu</string>
   <string name="auto_idle">Spenta a casa, accesa fuori</string>
@@ -102,15 +102,15 @@
   <string name="cmd_short_not_observed">nessun cambiamento visto</string>
   <string name="cmd_short_lost">rete persa</string>
   <string name="cmd_short_skipped">non inviato</string>
-  <string name="auto_suspended_lockdown">Fermo: spegnendo il tunnel è sparita la rete (forse «VPN sempre attiva con blocco»). Ho riacceso la VPN.</string>
+  <string name="auto_suspended_lockdown">Fermo: spegnendo la VPN è sparita la rete (forse «VPN sempre attiva con blocco»). L’ho riaccesa.</string>
   <string name="auto_suspended_not_controllable">Fermo: WireGuard non risponde ai comandi.</string>
   <string name="network_vpn_now">VPN in questo momento</string>
   <string name="vpn_obs_none">Nessuna VPN attiva</string>
   <string name="vpn_obs_home">VPN di casa attiva</string>
   <string name="vpn_obs_foreign">VPN estranea attiva</string>
   <string name="vpn_obs_unknown">VPN attiva, non so di chi</string>
-  <string name="network_try_up">Prova ad accendere la VPN</string>
-  <string name="network_try_down">Prova a spegnere la VPN</string>
+  <string name="network_try_up">Accendi la VPN</string>
+  <string name="network_try_down">Spegni la VPN</string>
   <string name="network_open_wg">Apri WireGuard</string>
   <string name="wg_grant_title">Serve il tuo permesso</string>
   <string name="wg_grant_message">Android ti chiede se questa app può comandare i tunnel di WireGuard: serve per accendere la VPN fuori casa e spegnerla a casa. In WireGuard deve essere acceso anche «Allow remote control apps».</string>
@@ -125,7 +125,6 @@
   <string name="network_reactivate_message">Si è fermato da solo per non toglierti la rete. Se hai sistemato WireGuard riattivalo: riparto da zero e mi fermo di nuovo se non risponde.</string>
   <string name="network_reactivate">Riattiva il controllo</string>
   <string name="network_configure">Configura il controllo</string>
-  <string name="network_footnote">«Accesa» e «spenta» si leggono dalla rete, non dal comando inviato.</string>
 
   <!-- Esito della prova -->
   <string name="cmd_ok_title">Confermato</string>
@@ -134,12 +133,12 @@
   <string name="cmd_none_title">Nessun cambiamento</string>
   <string name="cmd_none">Il comando è partito ma la rete non è cambiata: la VPN non è controllabile da qui. Usa «Apri WireGuard».</string>
   <string name="cmd_lost_title">La rete è sparita</string>
-  <string name="cmd_lost">Spegnendo il tunnel non c’è più connessione: probabile «VPN sempre attiva con blocco». L’ho riaccesa e ho fermato il controllo automatico.</string>
+  <string name="cmd_lost">Spegnendo la VPN non c’è più connessione: forse «VPN sempre attiva con blocco». L’ho riaccesa e ho fermato il controllo automatico.</string>
   <string name="cmd_reactivated_title">Controllo riattivato</string>
   <string name="cmd_reactivated">La prova è riuscita: ho riattivato il controllo automatico.</string>
   <string name="cmd_skipped_title">Comando non inviato</string>
   <string name="skip_disabled">Il controllo automatico è spento.</string>
-  <string name="skip_already">Il tunnel è già nello stato che hai chiesto.</string>
+  <string name="skip_already">La VPN è già come hai chiesto.</string>
   <string name="skip_rate_limited">Ho già mandato un comando per questo cambio di rete: ne mando uno solo, mai in ciclo.</string>
   <string name="skip_background">In background Android rifiuta spesso questi comandi: ci provo una volta sola.</string>
 </resources>

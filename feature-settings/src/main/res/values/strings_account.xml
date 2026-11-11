@@ -16,7 +16,7 @@
   <string name="account_hero_ready_title">Connessione cifrata al NAS</string>
   <string name="account_hero_unencrypted_title">Collegato, ma non cifrato</string>
   <string name="account_hero_via_home">Sei sulla rete di casa: il NAS si raggiunge direttamente.</string>
-  <string name="account_hero_via_home_vpn">La VPN è accesa anche a casa: il NAS passa dal tunnel, più lento.</string>
+  <string name="account_hero_via_home_vpn">La VPN è accesa anche a casa: il NAS è più lento.</string>
   <string name="account_hero_via_vpn">Fuori casa: il NAS si raggiunge attraverso la VPN di casa.</string>
   <string name="account_hero_unavailable_value">Non risponde</string>
   <string name="account_hero_unavailable_title">Il NAS non è raggiungibile</string>

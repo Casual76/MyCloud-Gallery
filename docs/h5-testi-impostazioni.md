@@ -115,3 +115,30 @@ Nelle Impostazioni (feature-settings):
 | _devices | `devices_section_inactive_detail` | Dismessi, revocati o segnati come persi. I loro dati non sono più accettati. | I loro dati non sono più accettati. |
 | _family | `family_invite_detail` | Mostra un QR sullo schermo: lui inserisce solo la sua password | Con un QR sullo schermo |
 | _family | `family_none_detail` | Questa pagina serve quando il dispositivo è approvato. Finisci la configurazione o aspetta l’approvazione dell’admin. | Serve un dispositivo approvato. |
+
+Giro di correzione 1 (CS-6, CU-14):
+
+| File | Voce | Prima | Dopo |
+|---|---|---|---|
+| principale | `settings_devices_count` (riga Dispositivi) | 3 dispositivi | *(tolto: il numero sta gia' nella testata; resta "N richieste da approvare")* |
+| principale | `settings_devices_none` | Nessuna famiglia configurata | *(tolto: lo dice la testata)* |
+| feature-people | `persone_row_enable_detail` | Nessun familiare vede i nomi | Raggruppa le foto per persona |
+| _security | `security_hero_on_detail` (il tempo) | Si richiude: Dopo 1 minuto. | Si richiude: dopo 1 minuto. |
+| _network | `network_fingerprint` | Impronta di casa | Casa salvata |
+| _network | `network_fingerprint_none` | Non ancora raccolta | Non ancora salvata |
+| _network | `network_fingerprint_detail` | %1$s · raccolta il %2$s | %1$s · dal %2$s |
+| _network | `network_pill_known` | Nota | Salvata |
+| _network | `network_recapture` | Raccogli di nuovo l’impronta | Salva di nuovo la rete di casa |
+| _network | `capture_no_ula_title` | Questo Wi-Fi non ha un’impronta forte | Questo Wi-Fi non si riconosce bene |
+| _network | `capture_saved_title` | Impronta aggiornata | Rete di casa aggiornata |
+| _network | `network_ipv6` | Strada verso casa | Casa raggiungibile da fuori |
+| _network | `network_ipv6_detail` | Serve fuori casa | Con la rete di adesso |
+| _network | `wg_ready` | L’app può accendere e spegnere il tunnel di casa. | L’app accende e spegne la VPN da sola. |
+| _network | `wg_not_configured` | Il permesso c’è, ma manca il nome del tunnel di casa. | Il permesso c’è, ma manca il nome della VPN di casa. |
+| _network | `auto_suspended_lockdown` | Fermo: spegnendo il tunnel è sparita la rete (forse «VPN sempre attiva con blocco»). Ho riacceso la VPN. | Fermo: spegnendo la VPN è sparita la rete (forse «VPN sempre attiva con blocco»). L’ho riaccesa. |
+| _network | `cmd_lost` | Spegnendo il tunnel non c’è più connessione: probabile «VPN sempre attiva con blocco». L’ho riaccesa e ho fermato il controllo automatico. | Spegnendo la VPN non c’è più connessione: forse «VPN sempre attiva con blocco». L’ho riaccesa e ho fermato il controllo automatico. |
+| _network | `skip_already` | Il tunnel è già nello stato che hai chiesto. | La VPN è già come hai chiesto. |
+| _network | `network_try_up` | Prova ad accendere la VPN | Accendi la VPN |
+| _network | `network_try_down` | Prova a spegnere la VPN | Spegni la VPN |
+| _network | `network_footnote` | «Accesa» e «spenta» si leggono dalla rete, non dal comando inviato. | *(tolto)* |
+| _account | `account_hero_via_home_vpn` | La VPN è accesa anche a casa: il NAS passa dal tunnel, più lento. | La VPN è accesa anche a casa: il NAS è più lento. |

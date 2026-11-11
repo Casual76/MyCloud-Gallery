@@ -46,9 +46,6 @@ internal class ViewerFormat(
   /** L'ora: "12:41". */
   fun time(time: CaptureTime): String = GalleryDates.time(time.localDateTime)
 
-  /** La riga del pannello: "mercoledì 12 marzo 2024, 12:41". */
-  fun dateTimeLine(time: CaptureTime): String = GalleryDates.weekdayDate(time.localDateTime) + ", " + GalleryDates.time(time.localDateTime)
-
   /** Il sottotitolo della barra: "12:41 · Oslo", o solo l'ora se il luogo non e' noto. */
   fun subtitle(time: CaptureTime?, placeName: String?): String? = when {
     time != null && placeName != null -> resources.getString(R.string.viewer_subtitle_time_place, time(time), placeName)
@@ -68,16 +65,6 @@ internal class ViewerFormat(
     return resources.getString(R.string.viewer_info_time_local, clock, offsetLabel(time.offsetMinutes))
   }
 
-  /**
-   * La didascalia sotto la data: "ora di Oslo, UTC+1", o solo "UTC+1" senza luogo. Per una data **stimata** dice da dove
-   * viene la stima (il nome del file, la data del sistema, quella di modifica): non e' un'ora dello scatto.
-   */
-  fun zoneCaption(time: CaptureTime, placeName: String?): String {
-    if (time.isEstimated) return estimatedReason(time.source)
-    val offset = offsetLabel(time.offsetMinutes)
-    return if (placeName != null) resources.getString(R.string.viewer_zone_place, placeName, offset) else offset
-  }
-
   /** "UTC+1", "UTC+5:30", "UTC-5", "UTC". */
   fun offsetLabel(minutes: Int): String {
     if (minutes == 0) return "UTC"
@@ -95,16 +82,6 @@ internal class ViewerFormat(
       else -> R.string.viewer_estimated_generic
     },
   )
-
-  /** "4000 × 3000 · 12 MP". Senza le dimensioni, null. */
-  fun dimensions(details: MediaDetails): String? {
-    val w = details.orientedWidth ?: return null
-    val h = details.orientedHeight ?: return null
-    val size = resources.getString(R.string.viewer_dimensions, w, h)
-    val mp = details.megapixels ?: return size
-    val text = if (mp >= 10.0) mp.roundToInt().toString() else String.format(locale, "%.1f", mp)
-    return size + " · " + resources.getString(R.string.viewer_megapixels, text)
-  }
 
   /** Il peso: "3,4 MB" (con la virgola italiana anche se il telefono e' in un'altra lingua). */
   fun fileSize(bytes: Long): String = Formatter.formatFileSize(localized, bytes)
@@ -151,16 +128,6 @@ internal class ViewerFormat(
   private fun prettyMake(make: String): String =
     if (make == make.uppercase(locale)) make.lowercase(locale).replaceFirstChar { it.titlecase(locale) } else make
 
-  /** "f/1,8 · 1/250 s · ISO 50": l'esposizione, solo i pezzi che la fotocamera ha scritto. */
-  fun exposure(exif: ExifDetails): String? {
-    val parts = listOfNotNull(
-      exif.fNumber?.let { resources.getString(R.string.viewer_exposure_f, trimmed(it)) },
-      exif.exposureTime?.takeIf { it.isNotBlank() }?.let { resources.getString(R.string.viewer_exposure_time, it) },
-      exif.iso?.let { resources.getString(R.string.viewer_exposure_iso, it) },
-    )
-    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
-  }
-
   /**
    * La striscia dei valori dello scatto (giro di correzione 1 di H2): "ISO 50", "6,3 mm", "f/1,8", "1/250 s", in quest'ordine e solo quelli
    * noti. L'obiettivo sta nella riga sopra della scheda, il flash fra i tratti.
@@ -203,16 +170,6 @@ internal class ViewerFormat(
 
   /** H2: lo stesso dal giorno dell'indice, finche' i dettagli non arrivano: "12 marzo 2024". */
   fun panelDate(localDay: Int): String? = parseLocalDay(localDay)?.let { GalleryDates.weekdayDate(it.atStartOfDay()).replaceFirstChar { c -> c.titlecase(locale) } }
-
-  /** "6,3 mm · Flash": la focale e il flash, se noti. */
-  fun lensLine(exif: ExifDetails): String? {
-    val parts = listOfNotNull(
-      exif.lens?.trim()?.takeIf { it.isNotEmpty() },
-      exif.focalLengthMm?.let { resources.getString(R.string.viewer_focal_mm, trimmed(it)) },
-      exif.flashFired?.let { resources.getString(if (it) R.string.viewer_flash_on else R.string.viewer_flash_off) },
-    )
-    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
-  }
 
   /** "59,9127° N, 10,7461° E". Dato sensibile: si scrive solo nel pannello, mai in un log. */
   fun coordinates(point: GeoPoint): String {

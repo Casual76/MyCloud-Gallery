@@ -86,7 +86,6 @@
 
   <!-- Pannello informazioni -->
   <string name="viewer_info_title">Informazioni</string>
-  <string name="viewer_zone_place">ora di %1$s, %2$s</string>
   <string name="viewer_estimated_pill">Stimata</string>
   <string name="viewer_estimated_name">Data ricavata dal nome del file</string>
   <string name="viewer_estimated_system">Data ricavata dal sistema</string>
@@ -100,7 +99,6 @@
   <string name="viewer_exposure_iso">ISO %1$d</string>
   <string name="viewer_focal_mm">%1$s mm</string>
   <string name="viewer_flash_on">Flash</string>
-  <string name="viewer_flash_off">Senza flash</string>
   <string name="viewer_coordinates">%1$s° %2$s, %3$s° %4$s</string>
   <string name="viewer_coord_north">N</string>
   <string name="viewer_coord_south">S</string>

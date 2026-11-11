@@ -23,7 +23,6 @@
   <string name="viewer_nas_delete_nas_only_video_title">Eliminare questo video dal NAS?</string>
   <string name="viewer_nas_delete_nas_only_message">Sta solo sul NAS. Va nel cestino del NAS per 30 giorni: la trovi in Eliminati di recente del NAS.</string>
   <string name="viewer_nas_delete_nas_only_confirm">Elimina dal NAS</string>
-  <string name="viewer_nas_delete_planning">Preparo l\'eliminazione…</string>
 
   <!-- Rinomina -->
   <string name="viewer_nas_rename_title">Rinomina</string>

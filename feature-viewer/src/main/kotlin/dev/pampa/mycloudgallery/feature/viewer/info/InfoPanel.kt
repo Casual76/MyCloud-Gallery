@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
@@ -40,10 +41,17 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -52,6 +60,7 @@ import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -66,7 +75,6 @@ import dev.antigravity.fluidengine.ui.fluid.GlassRole
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.antigravity.fluidengine.ui.theme.FluidStatusBadge
 import dev.antigravity.fluidengine.ui.theme.FluidTone
-import dev.pampa.mycloudgallery.core.designsystem.a11y.GallerySectionHeader
 import dev.pampa.mycloudgallery.core.designsystem.a11y.galleryGlass
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterEntry
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
@@ -85,7 +93,13 @@ import kotlinx.coroutines.launch
  * Una sezione in piu' del pannello informazioni (la mappa, le persone, le copie simili): un'intestazione e le sue righe, o un [content] proprio
  * (i volti, la mini-mappa) sotto la stessa intestazione.
  */
-internal class InfoSectionModel(val header: String?, val rows: List<GalleryInfoRow>, val content: (@Composable () -> Unit)? = null)
+internal class InfoSectionModel(
+  val header: String?,
+  val rows: List<GalleryInfoRow>,
+  val content: (@Composable () -> Unit)? = null,
+  /** CU-8: il segno accanto al titolo, come la fotocamera: niente intestazioni in maiuscolo. */
+  val icon: ImageVector? = null,
+)
 
 /**
  * La posizione del pannello informazioni (H2): [progress] va da 0 (chiuso) a 1 (aperto, il bordo a meta' schermo) e [offset] e' quanto si e'
@@ -308,23 +322,43 @@ internal fun BoxScope.InfoSheet(
         customActions = listOf(CustomAccessibilityAction(closeLabel) { onClose(); true })
       },
   ) {
-    Column(
-      modifier = Modifier
-        .fillMaxWidth()
-        .wrapContentHeight(align = Alignment.Top, unbounded = true)
-        .onSizeChanged { state.measure(it.height.toFloat(), travel, travel - topLimit) }
-        .graphicsLayer {
-          translationY = -state.inner
-          alpha = contentAlpha()
-        },
-    ) {
-      FluidGrabber()
-      Column(
+    // CU-8: la maniglia sta ferma in cima; le informazioni scorrono sotto di lei, ritagliate e sfumate per [ScrollFade] (la sfumatura c'e' solo
+    // quando sono scorse: a riposo nessun layer in piu').
+    val grabber = remember { IntArray(1) }
+    val fade = MaterialTheme.colorScheme.surface
+    Column(modifier = Modifier.fillMaxSize()) {
+      FluidGrabber(modifier = Modifier.onSizeChanged { grabber[0] = it.height })
+      Box(
         modifier = Modifier
-          .padding(horizontal = GalleryDimens.Gutter)
-          .padding(top = ContentTop, bottom = ContentBottom + navigationBottom),
-        content = content,
-      )
+          .weight(1f)
+          .fillMaxWidth()
+          .clipToBounds()
+          .graphicsLayer { compositingStrategy = if (state.inner > 0f) CompositingStrategy.Offscreen else CompositingStrategy.Auto }
+          .drawWithContent {
+            drawContent()
+            if (state.inner > 0f) {
+              val edge = (ScrollFade.toPx() / size.height).coerceIn(0f, 1f)
+              drawRect(
+                brush = Brush.verticalGradient(0f to fade.copy(alpha = 0f), edge to fade, 1f to fade),
+                blendMode = BlendMode.DstIn,
+              )
+            }
+          },
+      ) {
+        Column(
+          modifier = Modifier
+            .fillMaxWidth()
+            .wrapContentHeight(align = Alignment.Top, unbounded = true)
+            .onSizeChanged { state.measure((it.height + grabber[0]).toFloat(), travel, travel - topLimit) }
+            .graphicsLayer {
+              translationY = -state.inner
+              alpha = contentAlpha()
+            }
+            .padding(horizontal = GalleryDimens.Gutter)
+            .padding(top = ContentTop, bottom = ContentBottom + navigationBottom),
+          content = content,
+        )
+      }
     }
   }
 }
@@ -491,15 +525,24 @@ internal fun InfoSections(sections: List<InfoSectionModel>, modifier: Modifier =
   Column(modifier = modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(BlockGap)) {
     sections.forEach { section ->
       val custom = section.content
-      if (custom == null) {
-        GalleryInfoSection(rows = section.rows, header = section.header)
-      } else {
-        Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(CustomSectionGap)) {
-          section.header?.let { GallerySectionHeader(title = it) }
-          custom()
-        }
+      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(CustomSectionGap)) {
+        section.header?.let { SectionTitle(icon = section.icon, title = it) }
+        if (custom == null) GalleryInfoSection(rows = section.rows, header = null) else custom()
       }
     }
+  }
+}
+
+/** CU-8: il titolo di una sezione del pannello, come la riga della fotocamera: il segno nell'accento e il nome, senza maiuscolo. */
+@Composable
+private fun SectionTitle(icon: ImageVector?, title: String) {
+  Row(
+    modifier = Modifier.semantics(mergeDescendants = true) { heading() },
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(IconGap),
+  ) {
+    if (icon != null) Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(LineIcon), tint = MaterialTheme.colorScheme.primary)
+    Text(text = title, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurface)
   }
 }
 
@@ -543,3 +586,6 @@ private val ContentTop = 4.dp
 private val ContentBottom = 24.dp
 private val PanelHeaderTop = 12.dp
 private const val InvisibleBelow = 0.001f
+
+/** CU-8: quanto sfumano le informazioni che scorrono sotto la maniglia. */
+private val ScrollFade = 12.dp

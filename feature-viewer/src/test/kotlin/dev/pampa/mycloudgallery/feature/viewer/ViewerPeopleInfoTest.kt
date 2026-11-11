@@ -117,7 +117,7 @@ class ViewerPeopleInfoTest {
   @Test
   fun laRigaMostraIChip_ilNomeOChiE_eIVoltiNonRiconoscibili() {
     show(both())
-    assertThat(exists("PERSONE")).isTrue()
+    assertThat(exists("Persone")).isTrue()
     assertThat(exists("Anna")).isTrue()
     assertThat(exists("Marco")).isTrue()
     assertThat(exists("Chi è?")).isTrue()
@@ -133,13 +133,13 @@ class ViewerPeopleInfoTest {
   @Test
   fun senzaLaPortaOSenzaVolti_oPannelloChiuso_laRigaNonCe() {
     show(null)
-    assertThat(exists("PERSONE")).isFalse()
+    assertThat(exists("Persone")).isFalse()
   }
 
   @Test
   fun unMediaSenzaVolti_nonHaLaRiga() {
     show(people())
-    assertThat(exists("PERSONE")).isFalse()
+    assertThat(exists("Persone")).isFalse()
     assertThat(composeRule.onAllNodes(infoPane()).fetchSemanticsNodes()).isNotEmpty()
   }
 
@@ -147,7 +147,7 @@ class ViewerPeopleInfoTest {
   fun pannelloChiuso_nonSiCalcolaNiente() {
     val source = both()
     show(source, active = false)
-    assertThat(exists("PERSONE")).isFalse()
+    assertThat(exists("Persone")).isFalse()
     assertThat(source.crops).isEmpty() // nessun ritaglio a pannello chiuso
   }
 
@@ -591,7 +591,7 @@ class ViewerPeopleInfoTabletTest {
       }
     }
     composeRule.waitForIdle()
-    assertThat(composeRule.onAllNodesWithText("PERSONE", substring = true).fetchSemanticsNodes()).isNotEmpty()
+    assertThat(composeRule.onAllNodesWithText("Persone", substring = true).fetchSemanticsNodes()).isNotEmpty()
     composeRule.onRoot().captureRoboImage("../docs/screenshots/8-P9/viewer-persone-${if (dark) "scuro" else "chiaro"}-tablet.png")
   }
 

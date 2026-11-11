@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Face
 import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -83,7 +84,7 @@ internal fun rememberPeoplePanel(source: ViewerPeople?, media: MediaId, active: 
     if (chips.isEmpty()) {
       emptyList()
     } else {
-      listOf(InfoSectionModel(header = header, rows = emptyList(), content = { PeopleSection(source, media, chips, notice, controller) }))
+      listOf(InfoSectionModel(header = header, rows = emptyList(), content = { PeopleSection(source, media, chips, notice, controller) }, icon = Icons.Rounded.Face))
     }
   }
   return PeoplePanel(sections) { PeopleSheets(source, media, chips, sheet, controller) }

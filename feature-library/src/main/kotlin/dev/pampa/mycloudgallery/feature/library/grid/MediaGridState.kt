@@ -283,10 +283,17 @@ class MediaGridState(
     return Offset(v.width / 2f, v.padTop + v.contentHeight / 2f)
   }
 
+  /**
+   * Fase H (D10): quanto il tiro oltre il fondo ha spostato la lista in su (pixel, >= 0). Lo legge chi converte fra schermo e contenuto (l'hit
+   * test, i bordi per il viewer): mentre l'aggiornamento lavora la lista resta spostata e un tocco deve aprire la cella che si vede. Lo imposta
+   * [MediaGrid] se la griglia ha il gesto.
+   */
+  internal var pullOffset: () -> Float = { 0f }
+
   /** La cella sotto il punto [point] della griglia (schermo, trasformazione inclusa), o -1. */
   internal fun positionAt(point: Offset): Int {
     val l = layout ?: return -1
-    val p = transform(l).toGrid(point.x, point.y)
+    val p = transform(l).toGrid(point.x, point.y + pullOffset())
     return GridGeometry.positionAt(l, p.x, p.y, contentTop(l), viewport)
   }
 
@@ -352,6 +359,27 @@ class MediaGridState(
     layout = next
     shownView = nextView
     target?.let { (row, offset) -> listState.requestScrollToItem(row, offset) }
+  }
+
+  /**
+   * Fase H (D3): il layout [next], fatto da [nextView], **aspetta la griglia ferma** prima di entrare. Vero solo per un cambio dei **dati** (una
+   * vista nuova del catalogo allo stesso livello e alla stessa larghezza) mentre la lista scorre per il dito o per uno slancio.
+   *
+   * La causa del difetto del primo avvio (l'utente sull'S25, 11/11: «blocca lo scorrimento non appena lascio il dito»): ogni vista nuova entrava
+   * con l'ancora di [onLayoutShown], cioe' con un `requestScrollToItem`, e in foundation 1.10.5 `requestScrollToItem` **ferma lo scorrimento in
+   * corso** (`stopScroll()` se `isScrollInProgress`, verificato sul bytecode). Durante la prima lettura le viste arrivano a raffica e ogni slancio
+   * moriva al primo arrivo. Ora mentre si scorre si continua a mostrare il layout di prima (con la sua vista: righe e celle coerenti fra loro), e
+   * appena la lista si ferma il layout nuovo entra ancorato come sempre, senza niente da interrompere. Un pinch o un cambio di livello non
+   * aspettano: sono il gesto stesso.
+   *
+   * La lettura di `isScrollInProgress` avviene solo quando un layout nuovo aspetta: la griglia si ricompone alla fine dello scorrimento solo in
+   * quel caso.
+   */
+  internal fun holdsDataChange(next: GridLayout, nextView: TimelineView): Boolean {
+    val shown = layout ?: return false
+    if (shown.rowCount == 0 || next === shown || nextView === shownView) return false
+    if (next.spec.level != shown.spec.level || next.spec.widthPx != shown.spec.widthPx) return false
+    return listState.isScrollInProgress
   }
 
   private fun onlyLevelChanged(previous: GridLayout, previousView: TimelineView, next: GridLayout, nextView: TimelineView): Boolean {
@@ -600,7 +628,8 @@ class MediaGridState(
       val a = t.toScreen(l.itemLeft(position).toFloat(), top)
       val b = t.toScreen((l.itemLeft(position) + l.itemWidth(position)).toFloat(), bottom)
       val o = originInWindow
-      return PixelRect(o.x + a.x, o.y + a.y, o.x + b.x, o.y + b.y)
+      val lift = pullOffset()
+      return PixelRect(o.x + a.x, o.y + a.y - lift, o.x + b.x, o.y + b.y - lift)
     }
 
     override suspend fun reveal(id: MediaId) {

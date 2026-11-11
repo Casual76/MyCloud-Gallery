@@ -22,6 +22,7 @@ import dev.pampa.mycloudgallery.feature.library.grid.MediaGrid
 import dev.pampa.mycloudgallery.feature.library.library.LibraryTab
 import dev.pampa.mycloudgallery.feature.library.library.emptyLibraryTabState
 import dev.pampa.mycloudgallery.feature.library.testing.syntheticLibraryTabState
+import dev.pampa.mycloudgallery.feature.library.grid.cellBelowChrome
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -115,7 +116,8 @@ class LibraryStubTest {
       )
     }
     assertThat(backdrop).isNotNull()
-    composeRule.onAllNodesWithContentDescription("Foto, ", substring = true)[0].performClick()
+    // Fase H (D2): una cella fuori dalla chrome in alto (la prima della lista sta sotto l'etichetta, che trattiene i tocchi).
+    composeRule.cellBelowChrome().performClick()
     assertThat(requests).hasSize(1)
     val request = requests.single()
     assertThat(request.secure).isFalse()

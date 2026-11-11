@@ -165,6 +165,16 @@ interface LibraryCommands {
    * non ancora analizzati sono lasciati fuori e Cerca lo dice; se nessuno e' stato analizzato la ricerca non parte e la risposta e' [SimilarSelectionOutcome.NOT_ANALYZED].
    */
   fun findSimilar(ids: Set<MediaId>): SimilarSelectionOutcome = SimilarSelectionOutcome.STARTED
+
+  /** Fase H (D10): «aggiorna» tirando oltre il fondo della Libreria si puo' chiedere. Falso (anteprime, test, variante di misura): il gesto non c'e'. */
+  val canRefresh: Boolean get() = false
+
+  /**
+   * Fase H (D10, richiesta dell'utente del 31/10): rilegge il telefono e il NAS e chiede un giro di backup, **con i comandi e le regole di sempre**
+   * (`:app`, `LibraryRefresh`). Ritorna quando la parte veloce e' finita: la griglia tiene aperto lo spazio fino ad allora (al piu' 2,5 s); il
+   * resto lo racconta la nuvola in alto. Se un aggiornamento e' gia' in corso aspetta quello, non ne fa partire un altro.
+   */
+  suspend fun refresh() {}
 }
 
 /** Com'e' andato "Trova simili" dalla selezione (correzioni F, TS-4): la Libreria sceglie le parole. */

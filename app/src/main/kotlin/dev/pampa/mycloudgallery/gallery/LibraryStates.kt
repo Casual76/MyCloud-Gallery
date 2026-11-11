@@ -68,6 +68,15 @@ class AppLibraryCommands(
   @Volatile
   var host: LibraryCommandHost? = null
 
+  /** Fase H (D10): «aggiorna» tirando oltre il fondo della Libreria (`LibraryRefresh`). Null: il gesto non c'e' (i test, le Librerie di prova). */
+  var refresher: dev.pampa.mycloudgallery.main.LibraryRefresh? = null
+
+  override val canRefresh: Boolean get() = refresher?.available == true
+
+  override suspend fun refresh() {
+    refresher?.refresh()
+  }
+
   override fun requestMediaAccess() {
     host?.requestMediaAccess()
   }
@@ -279,7 +288,7 @@ class AppLibraryStates @Inject constructor(
       preferences = prefs,
       actions = gallery.actions,
       phone = gallery.libraryPhoneStatus,
-      commands = AppLibraryCommands(gallery) { id -> gallery.repository.refOf(id) },
+      commands = AppLibraryCommands(gallery) { id -> gallery.repository.refOf(id) }.apply { refresher = dev.pampa.mycloudgallery.main.LibraryRefresh(context, gallery) },
       debug = hooks,
       // Fase 4 (§1.5): lo stato del NAS per il piede; senza NAS resta Idle (il piede non dice niente).
       nas = gallery.nas?.libraryStatus ?: MutableStateFlow(LibraryNasStatus.Idle),

@@ -87,6 +87,10 @@ import dev.pampa.mycloudgallery.feature.library.grid.GridTopChrome
 import dev.pampa.mycloudgallery.feature.library.grid.GridTopEdgeScrim
 import dev.pampa.mycloudgallery.feature.library.grid.gridTopChromeHeight
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGrid
+import dev.pampa.mycloudgallery.feature.library.grid.shownDateUnder
+import dev.pampa.mycloudgallery.feature.library.grid.jumpToDay
+import dev.pampa.mycloudgallery.feature.library.grid.handOverLine
+import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeTitleAction
 import dev.pampa.mycloudgallery.feature.library.grid.MediaGridSection
 import dev.pampa.mycloudgallery.feature.library.grid.rememberMediaGridSection
 import dev.pampa.mycloudgallery.feature.library.photoVideoSummary
@@ -154,6 +158,8 @@ internal fun LibraryScreen(
   val bottomPadding = maxOf(slotBottom + ActionBarHeight + GalleryChromeDefaults.Gap, contentPadding.calculateBottomPadding())
   val empty = grid.view.size == 0
   val pillVeil = rememberPillVeil()
+  val commands = state.commands
+  val pullRefresh: (suspend () -> Unit)? = remember(commands) { if (commands.canRefresh) ({ commands.refresh() }) else null }
 
   // I tag della chrome come id di risorsa: gli strumenti di misura sull'emulatore (uiautomator) la trovano per nome.
   // Fase 10 (P6, D21): la Libreria e' una destinazione per le foto trascinate da un'altra app ("Salva sul NAS": si apre il foglio della ricezione, niente parte senza un tocco).
@@ -189,6 +195,8 @@ internal fun LibraryScreen(
           dragOrigin = DragOrigin.LIBRARY,
           // Fase 10 P8 (D23): Preferito, Condividi, Nascondi, Elimina come azioni della cella, per TalkBack e Switch Access.
           cellActions = { id -> libraryCellActions(state, id, cellLabels, scope, onDelete = { requestPhoneDelete(state) { deleting = true } }, onHideGroups = { hidingGroups = true }) },
+          // Fase H (D10): tirando oltre il fondo (i piu' recenti) la Libreria si aggiorna; l'esito lo dice la nuvola in alto.
+          onPullRefresh = pullRefresh,
         )
       }
       GridTopEdgeScrim(topChrome, Modifier.align(Alignment.TopCenter))
@@ -308,6 +316,7 @@ private fun LibraryTopChrome(
     topChrome = topChrome,
     modifier = modifier,
     showCommands = !permission || cloud != null,
+    titleAction = rememberDateJump(state, topChrome).takeIf { !permission && !empty && !grid.selecting },
   ) {
     LibraryCommandsContent(
       state = state,
@@ -330,6 +339,34 @@ private fun LibraryTopChrome(
           modifier = cloudModifier,
         )
       }
+    }
+  }
+}
+
+/**
+ * Fase H (R2, scelta dell'utente dell'11/11): toccare la data in alto apre il calendario del salto a una data ([LibraryDateCalendar]), ancorato
+ * all'etichetta. Si apre sul mese che l'etichetta dice in quel momento (letto all'apertura, mai scorrendo); un giorno scelto porta la griglia li'
+ * e chiude il calendario. Il salto gira nello scope della riga in alto, non in quello del pop-up, che lascia la composizione alla chiusura; se
+ * scende da Anni o Mesi a Giorni il livello si ricorda come quando lo si sceglie dal menu.
+ */
+@Composable
+private fun rememberDateJump(state: LibraryTabState, topChrome: Dp): GalleryChromeTitleAction {
+  val grid = state.grid
+  val scope = rememberCoroutineScope()
+  val linePx = with(LocalDensity.current) { handOverLine(topChrome).roundToPx() }
+  val label = stringResource(R.string.library_date_jump)
+  return remember(state, linePx, label) {
+    GalleryChromeTitleAction(label = label, paneTitle = label) { close ->
+      val shown = remember { grid.shownDateUnder(linePx) }
+      LibraryDateCalendar(
+        grid = grid,
+        shown = shown,
+        today = grid.currentDay,
+        onPick = { days, date ->
+          close()
+          scope.launch { grid.jumpToDay(days, date) { level -> scope.launch { state.preferences.setLevel(level) } } }
+        },
+      )
     }
   }
 }

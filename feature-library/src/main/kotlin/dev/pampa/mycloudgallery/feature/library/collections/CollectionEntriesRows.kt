@@ -62,13 +62,14 @@ internal fun CollectionEntryRow(
   selectedCode: String?,
   twoPane: Boolean,
   onSelect: (CollectionEntry) -> Unit,
+  family: CollectionArtFamily = CollectionArtFamily.Other,
 ) {
   FluidListRow(
     title = entry.title,
     subtitle = entry.subtitle,
     tone = entry.tone,
     // H5: la piastrella delle Raccolte, piu' grande, con la copertina della voce quando c'e'.
-    leading = { CollectionRowArt(entry.icon, entry.tone, entry.cover) },
+    leading = { CollectionRowArt(entry.icon, entry.tone, family, entry.cover, entry.faces, entry.coverPlace) },
     leadingTile = false,
     badge = entryBadge(entry),
     selected = twoPane && entry.code == selectedCode,

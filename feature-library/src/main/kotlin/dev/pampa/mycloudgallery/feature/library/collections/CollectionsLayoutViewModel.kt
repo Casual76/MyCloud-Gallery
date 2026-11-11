@@ -209,6 +209,7 @@ class CollectionsLayoutViewModel private constructor(
   providers: Set<CollectionsSectionProvider>,
   store: Optional<CollectionsLayoutStore>,
   loader: Optional<ThumbnailLoader>,
+  faces: Optional<CollectionFaceCrops>,
 ) : ViewModel() {
 
   /** H5: con il caricatore delle miniature le voci delle Raccolte mostrano le loro copertine ([CollectionCovers]). */
@@ -218,7 +219,8 @@ class CollectionsLayoutViewModel private constructor(
     providers: @JvmSuppressWildcards Set<CollectionsSectionProvider>,
     store: Optional<CollectionsLayoutStore>,
     loader: ThumbnailLoader,
-  ) : this(source, intents, providers, store, Optional.of(loader))
+    faces: Optional<CollectionFaceCrops>,
+  ) : this(source, intents, providers, store, Optional.of(loader), faces)
 
   /** Senza caricatore (le prove di `:app` che costruiscono la scheda a mano): solo icone. */
   constructor(
@@ -226,10 +228,10 @@ class CollectionsLayoutViewModel private constructor(
     intents: PhoneMediaIntents,
     providers: Set<CollectionsSectionProvider>,
     store: Optional<CollectionsLayoutStore>,
-  ) : this(source, intents, providers, store, Optional.empty())
+  ) : this(source, intents, providers, store, Optional.empty(), Optional.empty())
 
   /** Le copertine delle voci: la stessa cache delle miniature e la Libreria visibile (mai un nascosto). Null = solo icone. */
-  internal val covers: CollectionCovers? = loader.map { CollectionCovers(it, source.items(LibraryFilter.ALL)) }.orElse(null)
+  internal val covers: CollectionCovers? = loader.map { CollectionCovers(it, source.items(LibraryFilter.ALL), faces.orElse(null)) }.orElse(null)
 
   internal val controller: CollectionsLayoutController = CollectionsLayoutController(
     source = source,

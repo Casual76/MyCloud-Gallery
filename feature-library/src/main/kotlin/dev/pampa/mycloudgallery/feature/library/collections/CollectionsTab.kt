@@ -253,9 +253,11 @@ private fun CollectionsList(
   // H5: le miniature delle copertine si chiedono qui, una volta per elenco (non a ogni scorrimento). Sul tablet no: il pannello accanto puo' essere
   // una griglia con la sua finestra di richieste, e le copertine li' compaiono se sono gia' in cache.
   val covers = LocalCollectionCovers.current
-  if (covers != null && !twoPane && !state.editing) {
-    val media = remember(state) { state.visibleRows.mapNotNull { (it as? SectionRow.Entry)?.entry?.cover }.distinct() }
-    CollectionCoverWindow(covers, media)
+  if (covers != null && !state.editing) {
+    val entries = remember(state) {
+      state.visibleRows.mapNotNull { (it as? SectionRow.Entry)?.entry?.takeIf { e -> e.cover != null || e.faces.isNotEmpty() || e.coverPlace > 0 } }
+    }
+    CollectionCoverWindow(covers, entries, requestThumbs = !twoPane)
   }
   FluidScreen(
     title = stringResource(if (state.editing) R.string.collections_edit_title else R.string.collections_title),

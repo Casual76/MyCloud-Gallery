@@ -37,6 +37,7 @@ import dev.pampa.mycloudgallery.faces.peopleSectionProvider
 import dev.pampa.mycloudgallery.feature.albums.contract.PeopleChoices
 import dev.pampa.mycloudgallery.feature.library.collections.CollectionsSectionProvider
 import dev.pampa.mycloudgallery.feature.people.activation.ActivationPorts
+import dev.pampa.mycloudgallery.feature.library.collections.CollectionFaceCrops
 import dev.pampa.mycloudgallery.feature.people.contract.PeopleCrops
 import dev.pampa.mycloudgallery.feature.people.erase.ErasePorts
 import dev.pampa.mycloudgallery.feature.search.contract.IndexerControl
@@ -104,6 +105,9 @@ object FacesModule {
   fun peopleCrops(faces: FacesGraph): FacesCropsFacade = FacesCropsFacade(faces)
 
   @Provides fun peopleCropsPort(facade: FacesCropsFacade): PeopleCrops = facade
+
+  /** CS-1 (fase H): i volti nelle righe delle persone delle Raccolte, dalla stessa porta (cancello dei media mostrabili, cache in memoria). */
+  @Provides fun collectionFaceCrops(facade: FacesCropsFacade): CollectionFaceCrops = CollectionFaceCrops(facade::crop)
 
   @Provides
   @Singleton

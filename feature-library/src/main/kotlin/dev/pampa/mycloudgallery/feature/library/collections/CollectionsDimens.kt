@@ -51,4 +51,11 @@ internal object CollectionsDimens {
 
   /** H5: la piastrella delle righe delle Raccolte (icona o copertina): piu' grande di quella di serie (32 dp), una foto a 32 dp non si legge. */
   val RowArt: Dp = 44.dp
+
+  /** CS-1: l'icona sulla piastrella di una famiglia (26 dp: la proporzione dell'icona della piastrella di serie, 19 su 32). */
+  val RowArtGlyph: Dp = 26.dp
+
+  /** CS-1: un volto quando sono due o tre nella stessa piastrella, e il filo che lo stacca dal vicino. */
+  val FaceDisc: Dp = 26.dp
+  val FaceRing: Dp = 1.5.dp
 }

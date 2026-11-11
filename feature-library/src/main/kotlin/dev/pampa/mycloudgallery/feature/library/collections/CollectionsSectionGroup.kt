@@ -23,25 +23,27 @@ internal fun SectionGroup(
   onSelectKind: (CollectionKind) -> Unit,
   onSelectEntry: (CollectionEntry) -> Unit,
 ) {
+  // CS-1: la famiglia della sezione da' il colore alle piastrelle senza foto.
+  val family = CollectionArtFamily.of(section.code)
   FluidListGroup {
     section.rows.forEachIndexed { index, row ->
       if (index > 0) FluidListDivider()
       when (row) {
-        is SectionRow.Kind -> KindRow(row.row, selected = twoPane && row.row.kind == selectedKind, twoPane = twoPane, onSelect = onSelectKind)
-        is SectionRow.Entry -> CollectionEntryRow(row.entry, selectedEntry, twoPane, onSelectEntry)
+        is SectionRow.Kind -> KindRow(row.row, selected = twoPane && row.row.kind == selectedKind, twoPane = twoPane, onSelect = onSelectKind, family = family)
+        is SectionRow.Entry -> CollectionEntryRow(row.entry, selectedEntry, twoPane, onSelectEntry, family)
       }
     }
   }
 }
 
 @Composable
-private fun KindRow(row: CollectionRow, selected: Boolean, twoPane: Boolean, onSelect: (CollectionKind) -> Unit) {
+private fun KindRow(row: CollectionRow, selected: Boolean, twoPane: Boolean, onSelect: (CollectionKind) -> Unit, family: CollectionArtFamily) {
   FluidListRow(
     title = stringResource(row.kind.titleRes),
     subtitle = rowSubtitle(row),
     tone = row.kind.tone,
     // H5: la stessa piastrella delle voci consegnate come dato, senza copertina (Nascosti ed Eliminati di recente non mostrano mai il contenuto).
-    leading = { CollectionRowArt(row.kind.icon, row.kind.tone, cover = null) },
+    leading = { CollectionRowArt(row.kind.icon, row.kind.tone, family) },
     leadingTile = false,
     selected = selected,
     // Su due pannelli la riga sceglie cosa mostrare accanto: la freccia "si apre una pagina" prometterebbe altro.

@@ -23,6 +23,7 @@ import dev.pampa.mycloudgallery.faces.AppFacesClock
 import dev.pampa.mycloudgallery.faces.AppFacesRequirements
 import dev.pampa.mycloudgallery.faces.AppPeopleChoices
 import dev.pampa.mycloudgallery.faces.AppPeopleEntryStatus
+import dev.pampa.mycloudgallery.faces.AppCollectionFaceCrops
 import dev.pampa.mycloudgallery.faces.AppViewerPeople
 import dev.pampa.mycloudgallery.faces.FacesCropsFacade
 import dev.pampa.mycloudgallery.faces.FacesEraserFacade
@@ -106,8 +107,13 @@ object FacesModule {
 
   @Provides fun peopleCropsPort(facade: FacesCropsFacade): PeopleCrops = facade
 
-  /** CS-1 (fase H): i volti nelle righe delle persone delle Raccolte, dalla stessa porta (cancello dei media mostrabili, cache in memoria). */
-  @Provides fun collectionFaceCrops(facade: FacesCropsFacade): CollectionFaceCrops = CollectionFaceCrops(facade::crop)
+  /**
+   * CS-1 (fase H): i volti nelle righe delle persone delle Raccolte, dalla stessa porta (cancello dei media mostrabili, cache in memoria); CU-19 (giro 3):
+   * con le foto d'origine di ogni volto e le revoche che non passano dalla vista del catalogo.
+   */
+  @Provides
+  @Singleton
+  fun collectionFaceCrops(faces: FacesGraph): CollectionFaceCrops = AppCollectionFaceCrops(faces)
 
   @Provides
   @Singleton

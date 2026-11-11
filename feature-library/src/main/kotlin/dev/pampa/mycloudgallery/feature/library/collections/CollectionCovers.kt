@@ -53,6 +53,8 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.launch
@@ -79,16 +81,37 @@ import kotlinx.coroutines.withContext
 // **Mai un nascosto.** I riferimenti e i luoghi si cercano nella Libreria visibile ([CollectionItemsSource] con `LibraryFilter.ALL`), che non
 // contiene mai i nascosti (E-H1); i volti passano dal cancello di feature-people (`FaceCropGate`). Quando l'indice cambia (una foto nascosta) si
 // rifanno: una copertina diventata nascosta sparisce e resta il disegno della famiglia. La foto di una copertina si disegna solo se e' nella vista
-// di adesso ([request]), anche fra un passaggio e l'altro. Un volto (CG-5, giro 2) vale solo per la vista in cui il cancello l'ha permesso: a ogni
-// vista nuova i ritagli tenuti qui smettono **subito** di disegnarsi (prima di ogni attesa) e tornano solo quando il cancello li ripermette.
+// di adesso ([request]), anche fra un passaggio e l'altro.
+// **I volti** (CG-5 al giro 2, CU-19 al giro 3): ogni ritaglio tenuto qui porta le sue **foto d'origine** (le celle visibili che contengono il volto,
+// come le ha viste il cancello). Si disegna solo se almeno una e' nella vista di adesso: una foto nascosta, eliminata o uscita dal filtro toglie il suo
+// volto **subito**, gia' al primo disegno con la vista nuova, senza aspettare niente. Gli altri restano disegnati mentre il cancello li riconferma
+// (niente lampo a ogni lotto del backup, che cambia i flag delle celle e quindi la vista) e se ne vanno se il cancello li rifiuta. I segnali che non
+// passano dalla vista (cancellazione, Persone spenta o rimontata, cache dei ritagli svuotata) arrivano da [CollectionFaceCrops.revocations] e tolgono
+// tutto subito; una persona nascosta o unita cambia invece l'elenco delle voci, e la riga non chiede piu' quel volto.
 
 /**
  * I ritagli dei volti, dalla porta di feature-people (`PeopleCrops`, con il cancello dei media mostrabili e la cache in memoria). **Opzionale**: senza,
  * le righe delle persone hanno la piastrella della famiglia. `:app` la lega in `FacesModule`.
  */
 fun interface CollectionFaceCrops {
-  suspend fun crop(face: FaceLocator, sizePx: Int): android.graphics.Bitmap?
+  /** Il ritaglio di [face] con le sue foto d'origine, o null se il cancello rifiuta (nessuna foto d'origine mostrabile adesso). */
+  suspend fun crop(face: FaceLocator, sizePx: Int): CollectionFaceCrop?
+
+  /**
+   * CU-19: un segno che cambia quando i ritagli gia' dati non valgono piu' per ragioni che la vista del catalogo non dice (cancellazione, Persone spenta
+   * o rimontata, cache svuotata). A ogni valore nuovo le Raccolte buttano tutti i volti che tengono e li richiedono. Di serie non cambia mai.
+   */
+  val revocations: Flow<Any?> get() = NeverRevoked
 }
+
+/**
+ * CU-19 (fase H, giro 3): un ritaglio e le sue **foto d'origine**, le celle della Libreria visibile che contengono il volto e che il cancello ha
+ * permesso. Senza foto d'origine il cancello rifiuta e il ritaglio non si tiene.
+ */
+class CollectionFaceCrop(val bitmap: android.graphics.Bitmap, val origins: Set<MediaId>)
+
+/** Le revoche di serie: nessuna. */
+private val NeverRevoked: Flow<Any?> = flowOf(Unit)
 
 /**
  * Da dove arrivano le copertine: il caricatore delle miniature, la Libreria visibile e i ritagli dei volti. `null` (il default della composizione) =
@@ -112,14 +135,14 @@ class CollectionCovers(
   /** L'ultimo passaggio dei luoghi: la vista e i luoghi cercati. Lo stesso indice con gli stessi luoghi non si ripassa. */
   private var lastPass: Pair<TimelineView, Set<Int>>? = null
 
-  /** Un ritaglio e la vista in cui il cancello di feature-people l'ha permesso (CG-5). */
-  private class FaceImage(val image: ImageBitmap, val view: TimelineView)
+  /** Un ritaglio, le sue foto d'origine e il segno delle revoche con cui il cancello l'ha permesso (CG-5, CU-19). */
+  private class FaceImage(val image: ImageBitmap, val origins: Set<MediaId>, val token: Any?)
 
   /** I volti ritagliati: le righe li leggono e basta. */
   private val faceImages = mutableStateMapOf<String, FaceImage>()
 
-  /** La vista per cui valgono i volti: cambia a ogni vista nuova, prima di ogni attesa (CG-5). */
-  private var facesView by mutableStateOf<TimelineView?>(null)
+  /** L'ultimo segno delle revoche ([CollectionFaceCrops.revocations]): un volto permesso con un segno diverso non si disegna. */
+  private var facesToken by mutableStateOf<Any?>(Unseen)
 
   /** Quante passate dei luoghi sono state fatte (per le prove della dose: mai una per ogni vista del catalogo che cresce). */
   @Volatile
@@ -130,13 +153,17 @@ class CollectionCovers(
   fun placeCover(placeId: Int): MediaId? = if (placeId > 0) placeCovers[placeId] else null
 
   /**
-   * Il ritaglio di un volto a [sizePx], o null: non ancora pronto, rifiutato dal cancello, o permesso per una vista che non e' piu' quella di adesso
-   * e non ancora ripermesso (CG-5: una foto nascosta un attimo fa non lascia il suo volto sullo schermo).
+   * Il ritaglio di un volto a [sizePx], o null: non ancora pronto, rifiutato dal cancello, revocato, o con **nessuna foto d'origine nella vista di
+   * adesso** (CG-5: una foto nascosta un attimo fa non lascia il suo volto sullo schermo, nemmeno prima che la raccolta delle viste se ne accorga). La
+   * domanda costa una ricerca per id per foto d'origine (di solito una), sulla vista gia' pronta: niente di proporzionale al catalogo.
    */
   fun faceImage(face: FaceLocator, sizePx: Int): ImageBitmap? {
     val held = faceImages[faceKey(face, sizePx)] ?: return null
-    return if (held.view === facesView) held.image else null
+    if (held.token != facesToken) return null
+    return if (inView(view.value, held.origins)) held.image else null
   }
+
+  private fun inView(view: TimelineView, origins: Set<MediaId>): Boolean = origins.any { view.viewIndexOf(it) >= 0 }
 
   /** La richiesta della miniatura di [media] in [view], o null se il media non e' nella Libreria visibile (un nascosto, un eliminato). */
   fun request(view: TimelineView, media: MediaId): ThumbRequest? {
@@ -159,7 +186,12 @@ class CollectionCovers(
     val wanted = faces.mapTo(HashSet()) { faceKey(it, facePx) }
     faceImages.keys.retainAll(wanted)
     val crops = faceCrops
-    if (crops != null && faces.isNotEmpty()) launch { view.collectLatest { current -> authorizeFaces(current, faces, facePx, crops) } }
+    if (crops != null && faces.isNotEmpty()) {
+      launch {
+        combine(view, crops.revocations) { current, token -> current to token }
+          .collectLatest { (current, token) -> authorizeFaces(current, token, faces, facePx, crops) }
+      }
+    }
     // La dose (giro 2): il passaggio dei luoghi e le richieste delle miniature al piu' una volta al secondo mentre il catalogo cresce, e sempre
     // sull'ultimo indice. In fila, senza interrompere un passaggio a meta' (un passaggio interrotto e' lavoro buttato).
     dose.apply(view).collect { current -> placesPass(current, entries, places, requestThumbs) }
@@ -184,23 +216,35 @@ class CollectionCovers(
   }
 
   /**
-   * CG-5: i volti per la vista [current]. **Prima di ogni attesa** i ritagli tenuti qui smettono di valere (la vista dei volti diventa [current]):
-   * il cancello di feature-people puo' rifiutare adesso un volto di una foto nascosta un attimo fa, e la copia della UI non deve scavalcarlo. Poi il
-   * cancello li riconferma tutti insieme, fuori dal thread principale; i permessi tornano, i rifiutati se ne vanno. La vista uguale a quella dei
-   * volti (un elenco dei fornitori nuovo sullo stesso indice) non toglie niente: il permesso e' di quella vista.
+   * CG-5 e CU-19: i volti per la vista [current] e il segno delle revoche [token]. **Prima di ogni attesa**: con un segno nuovo (cancellazione, Persone
+   * spenta) si butta tutto; con una vista nuova si tolgono i soli volti la cui foto d'origine non e' piu' nella vista (una ricerca per id ciascuno). Gli
+   * altri restano disegnati: niente lampo. Poi il cancello li riconferma tutti insieme, fuori dal thread principale; i permessi restano (con le foto
+   * d'origine di adesso), i rifiutati se ne vanno.
    */
-  private suspend fun authorizeFaces(current: TimelineView, faces: List<FaceLocator>, facePx: Int, crops: CollectionFaceCrops) {
-    facesView = current
+  private suspend fun authorizeFaces(current: TimelineView, token: Any?, faces: List<FaceLocator>, facePx: Int, crops: CollectionFaceCrops) {
+    if (token != facesToken) {
+      facesToken = token
+      faceImages.clear()
+    } else {
+      faceImages.filterValues { !inView(current, it.origins) }.keys.forEach { faceImages.remove(it) }
+    }
     val answers = withContext(compute) {
       coroutineScope { faces.map { face -> async { face to crops.crop(face, facePx) } }.awaitAll() }
     }
-    for ((face, bitmap) in answers) {
+    for ((face, crop) in answers) {
       val key = faceKey(face, facePx)
-      if (bitmap == null) faceImages.remove(key) else faceImages[key] = FaceImage(bitmap.asImageBitmap(), current)
+      if (crop == null || crop.origins.isEmpty()) {
+        faceImages.remove(key)
+      } else {
+        faceImages[key] = FaceImage(crop.bitmap.asImageBitmap(), crop.origins, token)
+      }
     }
   }
 
   private fun faceKey(face: FaceLocator, sizePx: Int): String = face.encode() + "@" + sizePx
+
+  /** Nessun segno delle revoche ancora visto. */
+  private object Unseen
 
   companion object {
     /**

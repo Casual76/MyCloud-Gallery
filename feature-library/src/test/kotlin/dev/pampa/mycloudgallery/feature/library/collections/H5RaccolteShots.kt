@@ -72,7 +72,7 @@ abstract class H5RaccolteShotBase(private val dark: Boolean, private val device:
 
   /** CU-9: tre volti di prova (il ritaglio e' un'immagine sintetica: in produzione e' il volto vero, ritagliato da feature-people). */
   private val faces = (1..3).map { n -> FaceLocator(ContentKey("%064x".format(n)), 0, FaceBox(10 * n, 10, 10 * n + 80, 90)) }
-  private val crops = CollectionFaceCrops { face, px -> SyntheticPixels.bitmap(face.box.x0.toLong() * 7919L, px, px) }
+  private val crops = CollectionFaceCrops { face, px -> CollectionFaceCrop(SyntheticPixels.bitmap(face.box.x0.toLong() * 7919L, px, px), setOf(photos[face.box.x0 / 10])) }
   private val covers = CollectionCovers(fakeThumbnailLoader(), world.source.items(LibraryFilter.ALL), crops, Dispatchers.Unconfined)
   private val scope = CoroutineScope(Dispatchers.Unconfined + Job())
 

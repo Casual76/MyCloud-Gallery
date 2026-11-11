@@ -284,6 +284,8 @@ private fun ViewerHost(
   controller.view = view
   controller.reducedMotion = reducedMotion
   controller.density = density.density
+  // CU-1: comunque esca il viewer, nessuna cella della griglia resta vuota.
+  DisposableEffect(controller) { onDispose { controller.releaseCell() } }
   // D-15 (prove sul campo): lo stato delle pagine segue la rete di adesso. Il primo valore e' la rete di quando si apre (niente da rifare); da li' in
   // poi ogni cambiamento rifa le pagine ferme per colpa della rete (dati mobili, VPN spenta, nessuna rete): non restano su un avviso non piu' vero.
   val link = services.link

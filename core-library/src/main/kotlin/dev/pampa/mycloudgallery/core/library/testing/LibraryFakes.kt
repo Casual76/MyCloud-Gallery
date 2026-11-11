@@ -132,6 +132,16 @@ class FakeViewerAnchor : ViewerAnchor {
   }
 
   override fun thumbKey(id: MediaId): ThumbKey = ThumbKey(id, versionKey = 1, bucket = ThumbBucket.L)
+
+  /** La cella lasciata vuota adesso (CU-1), e tutte le chiamate in ordine. */
+  var hidden: MediaId? = null
+    private set
+  val hiddenHistory: MutableList<MediaId?> = mutableListOf()
+
+  override fun hide(id: MediaId?) {
+    hidden = id
+    hiddenHistory += id
+  }
 }
 
 /** Gli elementi del viewer per la Libreria sintetica: stessa vista, stessi riferimenti delle celle. */

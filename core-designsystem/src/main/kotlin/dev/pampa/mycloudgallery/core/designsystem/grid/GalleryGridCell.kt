@@ -201,6 +201,12 @@ class GalleryGridInteractionState {
   /** Le chiavi selezionate. */
   var selectedKeys: Set<Any> by mutableStateOf(emptySet())
 
+  /**
+   * La cella che non si disegna, o null (CU-1): quella da cui esce e in cui rientra la foto del viewer, che vola al suo posto. La cella resta
+   * dov'e' (niente layout, niente ricomposizione) e semplicemente non disegna, con i suoi segni e il suo disco di presenza.
+   */
+  var hiddenKey: Any? by mutableStateOf(null)
+
   /** Solo per i test di budget: chiamata a ogni disegno di una cella, con la sua chiave. Mai in produzione. */
   var drawProbe: ((Any) -> Unit)? = null
 
@@ -504,6 +510,7 @@ private class GalleryGridCellNode(
   private var isPressed = false
   private var isSelected = false
   private var inSelectionMode = false
+  private var isHidden = false
 
   /** La dissolvenza della miniatura che arriva mentre la cella e' sullo schermo. */
   private val imageAlpha = Animatable(1f)
@@ -560,11 +567,13 @@ private class GalleryGridCellNode(
     var newPressed = false
     var newMode = false
     var newSelected = false
+    var newHidden = false
     observeReads {
       newBitmap = image.value
       newPressed = interaction.pressedKey == key
       newMode = interaction.selectionMode
       newSelected = newMode && key in interaction.selectedKeys
+      newHidden = interaction.hiddenKey == key
     }
     val reduced = currentValueOf(LocalFluidMotionPolicy).reducedMotion
 
@@ -588,6 +597,10 @@ private class GalleryGridCellNode(
     }
     if (newPressed != isPressed) {
       isPressed = newPressed
+      cache.invalidateDraw()
+    }
+    if (newHidden != isHidden) {
+      isHidden = newHidden
       cache.invalidateDraw()
     }
     if (newMode != inSelectionMode) {
@@ -647,6 +660,8 @@ private class GalleryGridCellNode(
     val indicatorCenter = Offset(s.badgeInset + s.indicator / 2f, s.badgeInset + s.indicator / 2f)
 
     return onDrawBehind {
+      // CU-1: la cella da cui esce o in cui rientra la foto del viewer resta vuota.
+      if (isHidden) return@onDrawBehind
       interaction.drawProbe?.invoke(key)
       val pressAmount = if (isPressed) interaction.pressProgress.value.coerceIn(0f, 1f) else 0f
       val pressScale = lerpFloat(1f, GalleryCellDefaults.PressedScale, pressAmount)

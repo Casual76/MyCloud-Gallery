@@ -340,13 +340,13 @@ class ModelFetchWorker @AssistedInject constructor(
         out += id to result
       }
       // D18, MO-4: il primo dispositivo che ha il modello lo mette sul NAS per gli altri; mai un'eccezione.
-      runCatching { stack.localModels.shareOnNas() }
+      if (out.isNotEmpty()) runCatching { stack.localModels.shareOnNas() }
       out
     }
     GalleryLog.d(TAG) { "modelli: ${results?.map { it.second.javaClass.simpleName }}" }
     // DG-2: i guasti dei modelli arrivano in Diagnostica con il loro codice (solo il codice, D40) e il lavoro dice com'e' andato.
     if (results != null) report(results)
-    if (results != null && results.all { it.second is EnsureResult.Ready } && stack.ai.indexer.value) {
+    if (results != null && results.isNotEmpty() && results.all { it.second is EnsureResult.Ready } && stack.ai.indexer.value) {
       AiWorkScheduling.afterNews(applicationContext)
       // CA-4: i modelli pronti sono la novita' che mancava anche ai volti (YuNet e SFace si preparano qui): se Persone e' attiva qui il suo calcolo segue.
       if (faces.activeHere()) FacesWorkScheduling.afterNews(applicationContext)

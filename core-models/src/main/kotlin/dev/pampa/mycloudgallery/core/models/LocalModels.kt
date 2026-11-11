@@ -104,6 +104,15 @@ class LocalModels(
    */
   suspend fun shareOnNas(): Int = local.shareOnNas()
 
+  /** Nessuna richiesta automatica per un modello pronto o rimosso volontariamente. */
+  suspend fun needsRequest(id: dev.pampa.mycloudgallery.core.models.contract.ModelId, trigger: dev.pampa.mycloudgallery.core.models.contract.ModelTrigger): Boolean =
+    kotlinx.coroutines.withContext(ioDispatcher) {
+      val spec = store.spec(id) ?: return@withContext false
+      store.stateOf(id) !is dev.pampa.mycloudgallery.core.models.contract.ModelState.Ready &&
+        (trigger != dev.pampa.mycloudgallery.core.models.contract.ModelTrigger.RULES || !store.removedByUser(spec))
+    }
+
+  private val ioDispatcher = io
   private val refreshed = java.util.concurrent.atomic.AtomicBoolean(false)
 
   /**

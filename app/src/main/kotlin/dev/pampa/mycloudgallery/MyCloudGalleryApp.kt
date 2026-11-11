@@ -1,5 +1,7 @@
 package dev.pampa.mycloudgallery
 
+import dev.pampa.mycloudgallery.work.quietly
+
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
@@ -258,9 +260,13 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
         if (::widget.isInitialized) widget.resume()
         // D15: accendere Indicizzatore chiede subito il modello del calcolo (lavoro accelerato). Iscritti subito: un cambio non va perso.
         graph.scope.launch {
-          dev.pampa.mycloudgallery.ai.watchIndexerModels(ai.ai.indexer, { gallery.backgroundWorkAllowed }) {
+          dev.pampa.mycloudgallery.ai.watchIndexerModels(ai.ai.indexer, { gallery.backgroundWorkAllowed }, { trigger ->
+            AfterFirstDraw.await()
+            graph.quietly { ai.localModels.refreshOnce() }
+            ai.localModels.needsRequest(dev.pampa.mycloudgallery.core.models.contract.ModelCatalog.INDEX_440M.id, trigger)
+          }) { trigger ->
             AfterFirstDraw.launchAfter(graph.scope) {
-              AiWorkScheduling.fetchNow(this@MyCloudGalleryApp, ModelTrigger.ROLE_CHANGED)
+              AiWorkScheduling.fetchNow(this@MyCloudGalleryApp, trigger)
             }
           }
         }

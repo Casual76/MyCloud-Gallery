@@ -91,6 +91,10 @@ class SearchController(
   private var typingJob: Job? = null
   private var liveJob: Job? = null
 
+  /** Gli ultimi completamenti di cio' che si scrive, e se in alto ci sono invece le recenti perche' la ricerca non ha trovato niente (CS-12). */
+  private var lastCompletions: List<Suggestion> = emptyList()
+  private var recentsInTop = false
+
   init {
     scope.launch { history.entries.collect { if (mutableQuery.value.isBlank()) refreshIdleSuggestions() } }
     // CE-8, CE-9: il contenuto che mancava (modello scaricato, motore delle query caricato) si aggiunge ai risultati senza che l'utente ripeta la ricerca.
@@ -137,6 +141,8 @@ class SearchController(
     last = null
     results = null
     recorded = null
+    lastCompletions = emptyList()
+    recentsInTop = false
     mutableQuery.value = ""
     showIdle()
     scope.launch { refreshIdleSuggestions() }
@@ -153,13 +159,15 @@ class SearchController(
       cancelAll()
       last = null
       results = null
+      lastCompletions = emptyList()
+      recentsInTop = false
       showIdle()
       scope.launch { refreshIdleSuggestions() }
       return
     }
     typingJob = scope.launch {
       delay(completionDebounceMillis)
-      mutableTop.value = completions(t)
+      showCompletions(completions(t))
     }
     // E-Q1: una lettera sola non e' una ricerca: dietro torna la Libreria (i suggerimenti restano).
     if (t.length < MIN_QUERY_CHARS) {
@@ -192,7 +200,7 @@ class SearchController(
     val text = suggestion.label
     mutableQuery.value = text
     typingJob?.cancel()
-    typingJob = scope.launch { mutableTop.value = completions(text.trim()) }
+    typingJob = scope.launch { showCompletions(completions(text.trim())) }
     // Fase 8 (§2.7): una persona scelta porta il suo chip gia' fatto: un nome che e' anche un luogo non cambia lettura.
     val edited = (suggestion as? Suggestion.PersonSuggestion)?.let { listOf(ChipReadings.ofOption(it.option)) }
     launch(Last.Query(text, edited), record = true)
@@ -255,6 +263,7 @@ class SearchController(
       results = found
       publish(found)
       if (record && request is Last.Query) record(request.text, found.chips)
+      if (request is Last.Query && mutableState.value is SearchScreenState.NoResults) offerRecents(request.text)
       follow(found)
     }
   }
@@ -299,6 +308,11 @@ class SearchController(
     // Gli stessi media nello stesso ordine (si e' aggiunta una lettera che non cambia niente): la griglia resta com'e'.
     if (SearchStates.sameShown(mutableState.value, next)) return
     mutableState.value = next
+    // Tornano i risultati: in alto tornano i completamenti di cio' che si scrive, al posto delle recenti (CS-12).
+    if (next is SearchScreenState.Results && recentsInTop) {
+      recentsInTop = false
+      mutableTop.value = lastCompletions
+    }
   }
 
   /** "Le parole dentro le foto non si cercano": una volta sola per apertura dell'app, poi solo nella pagina (D31, §2.6). */
@@ -326,6 +340,37 @@ class SearchController(
   }
 
   // --- Suggerimenti --------------------------------------------------------------------------------------------------------------------
+
+  /**
+   * I completamenti di cio' che si scrive nella barra in alto. Se la ricerca non trova niente e la barra propone le recenti (CS-12), un testo senza
+   * completamenti le lascia dove sono: la barra non sparisce e ricompare a ogni tasto.
+   */
+  private fun showCompletions(found: List<Suggestion>) {
+    lastCompletions = found
+    if (found.isEmpty() && recentsInTop && mutableState.value is SearchScreenState.NoResults) return
+    recentsInTop = false
+    mutableTop.value = found
+  }
+
+  /**
+   * La ricerca di [searched] non ha trovato niente (CS-12 del giro 2): in alto le ultime ricerche, da cui ripartire. Senza nessuna ricerca recente la barra
+   * resta com'e' (i completamenti, o niente).
+   */
+  private suspend fun offerRecents(searched: String) {
+    val idle = try {
+      suggestions.idle()
+    } catch (e: CancellationException) {
+      throw e
+    } catch (e: Exception) {
+      return
+    }
+    val recents = SearchStates.recentTop(idle, searched)
+    if (recents.isEmpty()) return
+    // Nel frattempo si e' scritto altro o e' arrivato qualcosa: non vale piu'.
+    if (mutableState.value !is SearchScreenState.NoResults || mutableQuery.value.trim() != searched) return
+    recentsInTop = true
+    mutableTop.value = recents
+  }
 
   private suspend fun completions(prefix: String): List<Suggestion> {
     val fromEngine = try {
@@ -391,6 +436,15 @@ internal object SearchStates {
 
   /** I primi [SearchController.STRIP_SIZE], senza due con la stessa parola (maiuscole a parte). */
   fun top(all: List<Suggestion>): List<Suggestion> = all.distinctBy { it.label.trim().lowercase() }.take(SearchController.STRIP_SIZE)
+
+  /**
+   * Le ricerche recenti da proporre quando la ricerca di [searched] non trova niente (CS-12 del giro 2): le ultime, senza quella appena scritta. Vengono
+   * dalla stessa sorgente dei suggerimenti a riposo, con le sue regole (niente dai Nascosti, D29; "Disattiva e cancella" le toglie).
+   */
+  fun recentTop(idle: IdleSuggestions, searched: String): List<Suggestion> {
+    val skip = searched.trim().lowercase()
+    return top(idle.recents.filter { it.text.trim().lowercase() != skip }.map { Suggestion.Recent(it) })
+  }
 
   /** Lo stesso contenuto in vista: stessi media nello stesso ordine sulla stessa istantanea, stesse note. */
   fun sameShown(a: SearchScreenState, b: SearchScreenState): Boolean = when {

@@ -16,7 +16,8 @@ class AndroidFileStatReader : FileStatReader {
   override fun stat(descriptor: FileDescriptor): FileStat? =
     try {
       val st = Os.fstat(descriptor)
-      FileStat(device = st.st_dev, inode = st.st_ino, size = st.st_size, ctimeSeconds = st.st_ctime)
+      FileStat(device = st.st_dev, inode = st.st_ino, size = st.st_size, ctimeSeconds = st.st_ctime,
+        ctimeNanos = st.st_ctim.tv_nsec, mtimeSeconds = st.st_mtim.tv_sec, mtimeNanos = st.st_mtim.tv_nsec)
     } catch (_: ErrnoException) {
       null
     }

@@ -1,0 +1,17 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-11-11T15:17:31.793Z" time="2.362">
+  <properties />
+  <testcase name="unFileIntegroSiApreEConsegnaIlDescrittoreVerificato" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="0.009" />
+  <testcase name="leAperturePiuContemporaneeRiescono" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="0.025" />
+  <testcase name="unFileAltroDallImprontaDelNomeNonVieneApertoComeIlModello" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="0.012" />
+  <testcase name="unByteCambiatoInQualunquePuntoSiRifiuta" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="0.101" />
+  <testcase name="unaLunghezzaDiversaSiRifiuta" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="0.026" />
+  <testcase name="ilDescrittoreSiChiudeConIlModello" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="0.009" />
+  <testcase name="lAperturaVerificaOgniVoltaNonUnaVoltaSola" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="0.019" />
+  <testcase name="assenteOSconosciutoNonSiApre" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="0.004" />
+  <testcase name="unFileRifiutatoPortaViaIProgrammiCompilati" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="0.016" />
+  <testcase name="ognunDeiByteDiUnModelloPiccoloSiRifiuta" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="2.127" />
+  <testcase name="unFileAlteratoDopoLaVerificaSiRifiutaAllaProssimaApertura" classname="dev.pampa.mycloudgallery.core.models.ModelVerificationTest" time="0.013" />
+  <system-out />
+  <system-err />
+</testsuite>

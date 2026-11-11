@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.pampa.mycloudgallery.core.rules.DeviceMeasurementRulesTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-11-11T15:17:22.875Z" time="0.028">
+  <properties />
+  <testcase name="usaLaSogliaConfigurataELIsteresi" classname="dev.pampa.mycloudgallery.core.rules.DeviceMeasurementRulesTest" time="0.028" />
+  <system-out />
+  <system-err />
+</testsuite>

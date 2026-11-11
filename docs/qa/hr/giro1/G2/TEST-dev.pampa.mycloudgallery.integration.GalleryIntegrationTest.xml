@@ -1,0 +1,23 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.pampa.mycloudgallery.integration.GalleryIntegrationTest" tests="1" skipped="0" failures="1" errors="0" timestamp="2026-11-11T15:13:06.707Z" time="6.152">
+  <properties />
+  <testcase name="ca4_conLaVersioneFermataLaLetturaDelTelefonoNonSiAgganciaAlPrimoPiano" classname="dev.pampa.mycloudgallery.integration.GalleryIntegrationTest" time="6.152">
+    <failure message="expected to be true" type="com.google.common.truth.AssertionErrorWithFacts">expected to be true
+	at dev.pampa.mycloudgallery.integration.GalleryIntegrationTest$ca4_conLaVersioneFermataLaLetturaDelTelefonoNonSiAgganciaAlPrimoPiano$1.invokeSuspend(GalleryIntegrationTest.kt:259)
+	at app//kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at kotlinx.coroutines.internal.ScopeCoroutine.afterResume(Scopes.kt:35)
+	at kotlinx.coroutines.AbstractCoroutine.resumeWith(AbstractCoroutine.kt:101)
+	at app//kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:47)
+	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source)
+	at kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source)
+	at dev.pampa.mycloudgallery.integration.GalleryIntegrationTest.ca4_conLaVersioneFermataLaLetturaDelTelefonoNonSiAgganciaAlPrimoPiano(GalleryIntegrationTest.kt:210)
+</failure>
+  </testcase>
+  <system-out />
+  <system-err />
+</testsuite>

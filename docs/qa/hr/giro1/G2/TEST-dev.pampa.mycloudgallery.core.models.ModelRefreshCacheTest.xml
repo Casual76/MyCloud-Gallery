@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.pampa.mycloudgallery.core.models.ModelRefreshCacheTest" tests="2" skipped="0" failures="1" errors="0" timestamp="2026-11-11T15:12:25.928Z" time="0.394">
+  <properties />
+  <testcase name="senzaStatNonSiSaltaMaiLaVerifica" classname="dev.pampa.mycloudgallery.core.models.ModelRefreshCacheTest" time="0.204" />
+  <testcase name="secondoProcessoNonLeggeIByteMaUnFileToccatoSi" classname="dev.pampa.mycloudgallery.core.models.ModelRefreshCacheTest" time="0.189">
+    <failure message="expected: 1&#10;but was : 2" type="com.google.common.truth.Platform$ComparisonFailureWithFacts">expected: 1
+but was : 2
+	at app//dev.pampa.mycloudgallery.core.models.ModelRefreshCacheTest$secondoProcessoNonLeggeIByteMaUnFileToccatoSi$1.invokeSuspend(ModelRefreshCacheTest.kt:27)
+	at app//kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:34)
+	at app//kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:100)
+	at app//kotlinx.coroutines.EventLoopImplBase.processNextEvent(EventLoop.common.kt:263)
+	at app//kotlinx.coroutines.BlockingCoroutine.joinBlocking(Builders.kt:94)
+	at app//kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking(Builders.kt:70)
+	at app//kotlinx.coroutines.BuildersKt.runBlocking(Unknown Source)
+	at app//kotlinx.coroutines.BuildersKt__BuildersKt.runBlocking$default(Builders.kt:48)
+	at app//kotlinx.coroutines.BuildersKt.runBlocking$default(Unknown Source)
+	at app//dev.pampa.mycloudgallery.core.models.ModelRefreshCacheTest.secondoProcessoNonLeggeIByteMaUnFileToccatoSi(ModelRefreshCacheTest.kt:14)
+</failure>
+  </testcase>
+  <system-out />
+  <system-err />
+</testsuite>

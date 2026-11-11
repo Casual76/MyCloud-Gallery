@@ -546,7 +546,7 @@ internal class LocalModelManager(
             if (state is ModelState.Ready || state == ModelState.Verifying) store.set(spec.id, ModelState.Absent)
             continue
           }
-          (verifier.openVerified(spec) as? ModelVerifier.Opened.Verified)?.model?.close()
+          verifier.refreshVerified(spec)
         }
       }
     }

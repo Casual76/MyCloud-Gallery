@@ -298,7 +298,7 @@ class MyCloudGalleryApp : Application(), Configuration.Provider {
       // Fase 6 (P11): l'indice di ricerca si apre con il catalogo (vive anche senza NAS), i modelli presenti si verificano (P3).
       graph.scope.launch {
         AvvioTrace.asyncSection("MCG:ai:ricercaApri") { runCatching { ai.search.open() } }
-        AvvioTrace.asyncSection("MCG:ai:modelli") { runCatching { ai.localModels.refreshOnce() } }
+        AvvioTrace.asyncSection("MCG:ai:modelli") { runCatching { graph.quietly { ai.localModels.refreshOnce() } } }
         // P13: una riga in attesa lasciata da un "Salva come nuova foto" interrotto dalla morte del processo si toglie (IS_PENDING).
         AvvioTrace.asyncSection("MCG:ai:ritagli") { runCatching { ai.cutoutPhotos.purgeOrphans() } }
       }

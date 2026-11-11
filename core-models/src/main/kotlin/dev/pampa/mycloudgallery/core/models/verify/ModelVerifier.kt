@@ -21,7 +21,34 @@ import kotlinx.coroutines.CancellationException
 //
 // Chiamare solo con la cartella bloccata (`ModelStore.lock`) e fuori dal thread principale: per 370 MiB sono un paio di secondi.
 
-internal class ModelVerifier(private val store: ModelStore, private val statReader: FileStatReader = FileStatReader.None) {
+internal class ModelVerifier(private val store: ModelStore, private val statReader: FileStatReader = FileStatReader.None,
+  private val digest: suspend (java.nio.channels.FileChannel, Long) -> dev.pampa.mycloudgallery.core.model.Sha256 = FileDigest::sha256,
+) {
+
+  // Cache locale SOLO per il refresh: mai usata per consegnare un modello a un motore.
+  private fun checkedFile(spec: ModelSpec) = File(store.root, "meta/${spec.sha256.hex}.checked")
+  private fun stamp(spec: ModelSpec, stat: dev.pampa.mycloudgallery.core.models.contract.FileStat): String =
+    "v1 ${spec.sizeBytes} $stat"
+
+  suspend fun refreshVerified(spec: ModelSpec) {
+    val file = store.finalFile(spec)
+    val cached = try {
+      FileInputStream(file).use { input ->
+        val stat = statReader.stat(input.fd)
+        stat != null && stat.size == spec.sizeBytes && checkedFile(spec).takeIf { it.length() < 1024 }?.readText() == stamp(spec, stat)
+      }
+    } catch (_: IOException) { false } catch (_: RuntimeException) { false }
+    if (cached) {
+      store.set(spec.id, ModelState.Ready(spec.sizeBytes, store.readSource(spec), store.nanos()))
+    } else {
+      (openVerified(spec) as? Opened.Verified)?.model?.use { model ->
+        model.stat?.let { stat ->
+          try { dev.pampa.mycloudgallery.core.common.files.StateFiles.writeText(checkedFile(spec), stamp(spec, stat), Charsets.UTF_8) }
+          catch (_: IOException) { /* Senza cache si verifica di nuovo al prossimo avvio. */ }
+        }
+      }
+    }
+  }
 
   sealed interface Opened {
     /** Dimensione e impronta tornano: il modello e' pronto, con il suo descrittore. */
@@ -58,7 +85,9 @@ internal class ModelVerifier(private val store: ModelStore, private val statRead
     try {
       store.set(spec.id, ModelState.Verifying)
       val channel = stream.channel
-      val hashOk = channel.size() == spec.sizeBytes && FileDigest.sha256(channel, spec.sizeBytes) == spec.sha256
+      if (file.canWrite()) file.setReadOnly()
+      val startStat = try { statReader.stat(stream.fd) } catch (_: RuntimeException) { null }
+      val hashOk = channel.size() == spec.sizeBytes && digest(channel, spec.sizeBytes) == spec.sha256
       if (hashOk) {
         channel.position(0)
         // D16, I1: il file verificato e' in sola lettura (anche quelli promossi da una versione precedente). Il cambio di permessi cambia la
@@ -68,6 +97,10 @@ internal class ModelVerifier(private val store: ModelStore, private val statRead
           statReader.stat(stream.fd)
         } catch (e: RuntimeException) {
           null
+        }
+        if (startStat != null && stat != null && startStat != stat) {
+          store.set(spec.id, before)
+          return Opened.Unreadable
         }
         val now = store.nanos()
         store.set(spec.id, ModelState.Ready(spec.sizeBytes, store.readSource(spec), now))

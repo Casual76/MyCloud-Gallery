@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.pampa.mycloudgallery.core.ai.faces.FacesYieldToAppTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-11T15:18:11.116Z" time="0.293">
+  <properties />
+  <testcase name="loStessoPerLEmbedder" classname="dev.pampa.mycloudgallery.core.ai.faces.FacesYieldToAppTest" time="0.027" />
+  <testcase name="seLAppEntraInUsoAMetaTappaIlRilevatoreSiRiapreUnaVolta_eDiNuovoQuandoTornaInSecondoPiano" classname="dev.pampa.mycloudgallery.core.ai.faces.FacesYieldToAppTest" time="0.218" />
+  <testcase name="fuoriDaUnLavoroDiFondoIMotoriNonSiRiapronoMai_ancheConLAppInUso" classname="dev.pampa.mycloudgallery.core.ai.faces.FacesYieldToAppTest" time="0.048" />
+  <system-out />
+  <system-err />
+</testsuite>

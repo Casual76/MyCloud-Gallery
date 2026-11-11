@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<testsuite name="dev.pampa.mycloudgallery.core.ai.faces.FaceEnginesFactoryTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-11-11T15:18:10.276Z" time="0.837">
+  <properties />
+  <testcase name="ognuApertura_VerificaIlFile_LeggeIByteVerificati_PassaQuattroThread_EIlModelloSiChiudeConLaSessione" classname="dev.pampa.mycloudgallery.core.ai.faces.FaceEnginesFactoryTest" time="0.496" />
+  <testcase name="dentroUnLavoroDiFondoConLAppInUso_IMotoriSiApronoConDueThread_AltrimentiConQuattro" classname="dev.pampa.mycloudgallery.core.ai.faces.FaceEnginesFactoryTest" time="0.169" />
+  <testcase name="seLaSessioneNonSiApreOLaMappaturaFallisce_IlModelloVerificatoSiChiudeLoStesso" classname="dev.pampa.mycloudgallery.core.ai.faces.FaceEnginesFactoryTest" time="0.161" />
+  <testcase name="iNumeriDeiDueModelliSonoQuelliDelCatalogo" classname="dev.pampa.mycloudgallery.core.ai.faces.FaceEnginesFactoryTest" time="0.0" />
+  <testcase name="senzaIModelliIMotoriNonPartono_MODEL_UNAVAILABLE" classname="dev.pampa.mycloudgallery.core.ai.faces.FaceEnginesFactoryTest" time="0.01" />
+  <system-out />
+  <system-err />
+</testsuite>

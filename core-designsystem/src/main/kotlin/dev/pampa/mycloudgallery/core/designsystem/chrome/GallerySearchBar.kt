@@ -264,6 +264,8 @@ fun GallerySearchBar(
       BoxWithConstraints(modifier = Modifier.fillMaxWidth().onPlaced { rightEdge = it.positionInWindow().x + it.size.width }) {
         val field = backdrop ?: currentGlassBackdrop()
         val hint = fittingPlaceholder(placeholder ?: labels.search, fallback = labels.search, fieldWidth = maxWidth)
+        // Il campo e la X si spostano insieme, della stessa quantita' (calcolata sulla larghezza del campo, non su quella di chi la legge).
+        val fieldWidth = constraints.maxWidth.toFloat()
         Box(
           modifier = Modifier
             .fillMaxWidth()
@@ -277,8 +279,6 @@ fun GallerySearchBar(
             }
             .searchReveal(progress = { progress.value }),
         ) {
-          // Il campo e la X si spostano insieme, della stessa quantita' (calcolata sulla larghezza del campo, non su quella di chi la legge).
-          val fieldWidth = constraints.maxWidth.toFloat()
           val slide = Modifier.graphicsLayer { translationX = searchRevealHidden(fieldWidth, FluidSearchFieldDefaults.Height.toPx(), progress.value) }
           FluidSearchField(
             query = query,

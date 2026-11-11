@@ -53,6 +53,7 @@ import kotlinx.coroutines.withTimeout
  * foto" su uno scrittore finto. Come `SearchChainIntegrationTest`, ma con il telefono: stesso grafo, stessa galleria, stessi adattatori di produzione.
  */
 internal class AiRig(private val app: Application, private val root: File) {
+  var imageOverride: dev.pampa.mycloudgallery.core.ai.contract.ImageEmbedder? = null
   val time = TestTime()
   val backend = TestNas.backend(time)
 
@@ -113,7 +114,7 @@ internal class AiRig(private val app: Application, private val root: File) {
       context = test.context,
       graph = test.graph,
       gallery = gallery,
-      imageEmbedder = { FakeImageEmbedder() },
+      imageEmbedder = { imageOverride ?: FakeImageEmbedder() },
       queryEmbedder = { FakeTextEmbedder() },
       reader = { state -> GatedTextReader(state) { Releasable(reader) } },
       fetcher = ModelFetcher { _, _, _, _ -> FetchResult.NotFound },

@@ -11,7 +11,6 @@ import dev.pampa.mycloudgallery.ai.AiDiagnostics
 import dev.pampa.mycloudgallery.ai.AiGraph
 import dev.pampa.mycloudgallery.ai.AiStack
 import dev.pampa.mycloudgallery.ai.AiWiring
-import dev.pampa.mycloudgallery.work.quietly
 import dev.pampa.mycloudgallery.ai.AppIndexerControl
 import dev.pampa.mycloudgallery.ai.PersonalSearchOrderStore
 import dev.pampa.mycloudgallery.ai.PersonalTextReadingAccepted
@@ -95,15 +94,9 @@ object AiModule {
     AppIndexerControl(stack, graph.scope, java.io.File(context.noBackupFilesDir, AppIndexerControl.PROBE_FILE)) { AiWorkScheduling.indexNow(context) }
 
   @Provides @Singleton fun deviceProbe(stack: AiStack, graph: AppGraph): DeviceProbe {
-    val probe = dev.pampa.mycloudgallery.core.ai.runtime.SingleFlightDeviceProbe(RealDeviceProbe(stack.ai.images, canMeasure = {
-      val power = graph.stateProvider.current().power
-      val limits = dev.pampa.mycloudgallery.core.rules.EvaluatorConfig()
-      power.thermalStatus < dev.pampa.mycloudgallery.core.rules.ThermalStatus.LIGHT &&
-        (power.thermalHeadroom ?: 0f) < limits.headroomReduce
-    }))
-    return object : DeviceProbe {
-      override suspend fun measure(): dev.pampa.mycloudgallery.core.ai.contract.ProbeResult = graph.quietly { probe.measure() }
-    }
+    return dev.pampa.mycloudgallery.core.ai.runtime.SingleFlightDeviceProbe(
+      RealDeviceProbe(stack.ai.images, canMeasure = { graph.rulesEngine.canMeasureDevice() })
+    )
   }
 
   @Provides

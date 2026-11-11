@@ -30,6 +30,8 @@ class ActivityRulesEngine(
   private val evaluator: RuleEvaluator = RuleEvaluator(),
 ) {
 
+  fun canMeasureDevice(): Boolean = evaluator.canMeasureDevice(stateProvider.current().power)
+
   suspend fun evaluate(request: WorkRequest, running: Boolean = false): RuleDecision =
     evaluator.evaluate(
       request = request,

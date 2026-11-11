@@ -469,6 +469,7 @@ class PreparationWorker @AssistedInject constructor(
   graph: AppGraph,
 ) : NasWorker(appContext, params, gallery, graph) {
   override val tag: String = "PreparationWorker"
+  override val triggersSimilarCopies: Boolean = true
   override val diagJob: DiagJob = DiagJob.PREPARATION
 
   override suspend fun stage(stages: NasStages): StageOutcome = stages.prepare(gallery.similarCopies?.priority ?: NoUnitPriority)

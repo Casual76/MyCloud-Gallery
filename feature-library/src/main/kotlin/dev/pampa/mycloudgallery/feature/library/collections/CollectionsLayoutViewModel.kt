@@ -209,7 +209,8 @@ class CollectionsLayoutViewModel private constructor(
     store: Optional<CollectionsLayoutStore>,
     loader: ThumbnailLoader,
     faces: Optional<CollectionFaceCrops>,
-    map: Optional<CollectionsMapPreview>,
+    // I1: di serie nessuna mappa (le prove di `:app` che costruiscono la scheda a mano): resta il mosaico.
+    map: Optional<CollectionsMapPreview> = Optional.empty(),
   ) : this(source, intents, providers, store, Optional.of(loader), faces, map)
 
   /** Senza caricatore (le prove di `:app` che costruiscono la scheda a mano): solo icone. */

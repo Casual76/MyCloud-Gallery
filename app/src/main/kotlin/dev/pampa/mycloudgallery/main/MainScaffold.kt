@@ -321,7 +321,7 @@ fun MainScaffold(
     // H4: la barra di ricerca nel posto della pillola (in selezione esce e la barra delle azioni prende il posto, come per la pillola).
     if (searchOpen || barAlive) {
       GalleryTabBarSlotVisibility(visible = !selecting && !tabBarSlot.taken, modifier = Modifier.align(Alignment.BottomCenter)) {
-        val line = search?.let { rememberSearchLine(it.source) }
+        val line = search?.let { rememberSearchLine(it.source, it.thumbnails) }
         GallerySearchBar(
           open = searchOpen,
           query = search?.source?.query.orEmpty(),
@@ -337,9 +337,9 @@ fun MainScaffold(
           focus = searchFocus,
           onFocused = onSearchFocused,
           onFocusChanged = { searchFocused = it },
-          message = line?.text,
-          onMessageClick = line?.action?.let { action -> { search?.runLine(action) } },
-          messageActionLabel = line?.actionLabel,
+          line = line?.spec,
+          onLineClick = line?.action?.let { action -> { search?.runLine(action) } },
+          lineActionLabel = line?.actionLabel,
           // Avvio istantaneo: l'apertura di Cerca si chiude al primo fotogramma della barra.
           modifier = Modifier.onFirstDraw { AvvioTrace.pageDrawn(AvvioTrace.PAGE_SEARCH) },
         )

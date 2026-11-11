@@ -46,10 +46,18 @@ sealed interface SearchScreenState {
     val coverage: SearchCoverage,
     val notices: List<SearchNotice>,
     val similar: Int? = null,
+    /** I2: i media da cui viene "Trova simili" (la riga sopra la barra mostra la foto del primo, se e' ancora nella Libreria visibile). */
+    val similarTo: List<MediaId> = emptyList(),
   ) : SearchScreenState
 
   /** Nessun risultato (E-Q3) per [text] (null per "Trova simili"): una riga sola sopra la barra, mai una pagina. */
-  data class NoResults(val text: String?, val chips: List<SearchChip>, val notices: List<SearchNotice> = emptyList(), val similar: Int? = null) : SearchScreenState
+  data class NoResults(
+    val text: String?,
+    val chips: List<SearchChip>,
+    val notices: List<SearchNotice> = emptyList(),
+    val similar: Int? = null,
+    val similarTo: List<MediaId> = emptyList(),
+  ) : SearchScreenState
 
   data class Unavailable(val reason: SearchUnavailableReason) : SearchScreenState
 }

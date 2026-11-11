@@ -26,10 +26,12 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
+import dev.pampa.mycloudgallery.core.designsystem.chrome.GallerySearchLineSpec
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GallerySuggestionBar
 import dev.pampa.mycloudgallery.core.designsystem.design.holdsTouches
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
+import dev.pampa.mycloudgallery.core.library.contract.TimelineSnapshot
 import dev.pampa.mycloudgallery.core.library.contract.ViewerAnchor
 import dev.pampa.mycloudgallery.core.library.text.GalleryNumbers
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -56,6 +58,12 @@ interface SearchSource {
   /** I suggerimenti della barra in alto, al piu' tre. */
   val suggestions: List<Suggestion>
 
+  /** I2: gli stessi suggerimenti con la loro anteprima (la foto del primo risultato, un volto), come li mostra la barra. */
+  val strip: List<SuggestionItem>
+
+  /** I2: l'istantanea della Libreria di adesso: un'anteprima si disegna solo se il suo media c'e' (un nascosto no). Null nelle prove senza Libreria. */
+  val library: TimelineSnapshot?
+
   val state: SearchScreenState
 
   val readiness: SearchReadiness
@@ -63,7 +71,7 @@ interface SearchSource {
   val queryModel: ModelState?
 }
 
-/** Una ricerca ferma (prove e screenshot). */
+/** Una ricerca ferma (prove e screenshot). [items]: i suggerimenti con le loro anteprime (di serie [suggestions] senza anteprima). */
 @Immutable
 data class FixedSearchSource(
   override val query: String = "",
@@ -71,28 +79,38 @@ data class FixedSearchSource(
   override val state: SearchScreenState = SearchScreenState.Idle,
   override val readiness: SearchReadiness = SearchReadiness.Ready,
   override val queryModel: ModelState? = null,
-) : SearchSource
+  val items: List<SuggestionItem>? = null,
+  override val library: TimelineSnapshot? = null,
+) : SearchSource {
+  override val strip: List<SuggestionItem> get() = items ?: suggestions.map { SuggestionItem(it) }
+}
 
 /** La sorgente del [SearchController], viva finche' la pagina e' in primo piano. */
 @Composable
 fun rememberSearchSource(controller: SearchController): SearchSource {
   val query = controller.query.collectAsStateWithLifecycle()
   val suggestions = controller.topSuggestions.collectAsStateWithLifecycle()
+  val strip = controller.strip.collectAsStateWithLifecycle()
+  val library = controller.library.collectAsStateWithLifecycle()
   val state = controller.state.collectAsStateWithLifecycle()
   val readiness = controller.readiness.collectAsStateWithLifecycle()
   val model = controller.queryModel.collectAsStateWithLifecycle()
-  return remember(query, suggestions, state, readiness, model) { StateSearchSource(query, suggestions, state, readiness, model) }
+  return remember(query, suggestions, strip, library, state, readiness, model) { StateSearchSource(query, suggestions, strip, library, state, readiness, model) }
 }
 
 private class StateSearchSource(
   private val queryState: State<String>,
   private val suggestionsState: State<List<Suggestion>>,
+  private val stripState: State<List<SuggestionItem>>,
+  private val libraryState: State<TimelineSnapshot?>,
   private val screenState: State<SearchScreenState>,
   private val readinessState: State<SearchReadiness>,
   private val modelState: State<ModelState?>,
 ) : SearchSource {
   override val query: String get() = queryState.value
   override val suggestions: List<Suggestion> get() = suggestionsState.value
+  override val strip: List<SuggestionItem> get() = stripState.value
+  override val library: TimelineSnapshot? get() = libraryState.value
   override val state: SearchScreenState get() = screenState.value
   override val readiness: SearchReadiness get() = readinessState.value
   override val queryModel: ModelState? get() = modelState.value
@@ -107,21 +125,32 @@ fun searchFieldHint(): String = stringResource(R.string.search_field_hint)
 
 /**
  * La barra dei suggerimenti in alto (H4): i primi tre di [source], un tocco li applica ([SearchHandlers.onSuggestion]). Vuota, si ritira.
+ * I2: ogni voce ha davanti il suo tondo ([SuggestionDisc]: la foto del primo risultato, un volto, o il segno del tipo); con [thumbnails] le foto vengono
+ * dalla cache della Libreria e si caricano accanto alla sua finestra ([KeepSuggestionPreviews]).
  */
 @Composable
-fun SearchSuggestions(source: SearchSource, handlers: SearchHandlers, backdrop: GlassBackdropState?, modifier: Modifier = Modifier) {
-  val suggestions = source.suggestions
-  val labels = remember(suggestions) { suggestions.map { it.label } }
+fun SearchSuggestions(
+  source: SearchSource,
+  handlers: SearchHandlers,
+  backdrop: GlassBackdropState?,
+  modifier: Modifier = Modifier,
+  thumbnails: SearchThumbnails? = null,
+) {
+  val items = source.strip
+  val library = source.library
+  val labels = remember(items) { items.map { it.suggestion.label } }
   // Le risorse di adesso (cambiano con la Configuration: lingua, testo grande), chiave del remember: TalkBack non legge mai un testo vecchio.
   val resources = LocalResources.current
-  val descriptions = remember(suggestions, resources) { suggestions.map { resources.getString(R.string.search_suggestion_description, it.label) } }
+  val descriptions = remember(items, resources) { items.map { resources.getString(R.string.search_suggestion_description, it.suggestion.label) } }
+  if (thumbnails != null) KeepSuggestionPreviews(items, library, thumbnails)
   GallerySuggestionBar(
     labels = labels,
     descriptions = descriptions,
-    onPick = { index -> suggestions.getOrNull(index)?.let(handlers::onSuggestion) },
+    onPick = { index -> items.getOrNull(index)?.let { handlers.onSuggestion(it.suggestion) } },
     backdrop = backdrop,
     modifier = modifier,
     paneTitle = stringResource(R.string.search_suggestions_title),
+    leading = { index -> items.getOrNull(index)?.let { SuggestionDisc(it, library, thumbnails) } },
   )
 }
 
@@ -204,28 +233,39 @@ private fun listKey(results: SearchScreenState.Results): Any {
   return ids
 }
 
-/** La riga sopra la barra come la mostra la barra: il testo, l'azione e che cosa dice TalkBack del tocco. */
+/**
+ * La riga sopra la barra come la mostra la barra (I2): [spec] (il segno o la foto, l'etichetta corta, la barra che avanza e la frase intera per TalkBack),
+ * l'azione e che cosa dice TalkBack del tocco.
+ */
 @Immutable
-data class SearchLineUi(val text: String, val action: SearchLineAction?, val actionLabel: String?)
+data class SearchLineUi(val spec: GallerySearchLineSpec, val action: SearchLineAction?, val actionLabel: String?) {
+  /** La frase intera (TalkBack, prove). */
+  val text: String get() = spec.description
+}
 
 /** Che cosa fa toccare la riga sopra la barra: le uscite le fa `:app` ([SearchActions][dev.pampa.mycloudgallery.feature.search.contract.SearchActions]). */
 enum class SearchLineAction { OPEN_SEARCH_SETTINGS, OPEN_TEXT_READING, ALLOW_ACCESS, RETRY }
 
-/** La riga sopra la barra per [source] (null = niente da dire). Legge lo stato, la prontezza del motore e il modello, non il testo del campo. */
+/**
+ * La riga sopra la barra per [source] (null = niente da dire). Legge lo stato, la prontezza del motore e il modello, non il testo del campo. [thumbnails]:
+ * la foto di "Trova simili" (senza, il suo segno).
+ */
 @Composable
-fun rememberSearchLine(source: SearchSource): SearchLineUi? {
+fun rememberSearchLine(source: SearchSource, thumbnails: SearchThumbnails? = null): SearchLineUi? {
   val state = source.state
   val readiness = source.readiness
   val model = source.queryModel
   val line = remember(state, readiness, model) { SearchLines.of(state, readiness, model) } ?: return null
   val action = when (line.action) {
-    NoticeAction.DOWNLOAD_MODEL, NoticeAction.WHY_COVERAGE, NoticeAction.ENABLE_INDEXER -> SearchLineAction.OPEN_SEARCH_SETTINGS
+    NoticeAction.DOWNLOAD_MODEL, NoticeAction.WHY_COVERAGE -> SearchLineAction.OPEN_SEARCH_SETTINGS
     NoticeAction.LEARN_TEXT_READING -> SearchLineAction.OPEN_TEXT_READING
     NoticeAction.ALLOW_ACCESS -> SearchLineAction.ALLOW_ACCESS
     NoticeAction.RETRY -> SearchLineAction.RETRY
     null -> null
   }
-  return SearchLineUi(searchLineText(line), action, searchLineActionLabel(line.action))
+  // La foto di "Trova simili" guarda l'istantanea solo per quella riga: le altre righe non si ricompongono quando la Libreria cambia.
+  val library = if (line is SearchLine.Similar) source.library else null
+  return SearchLineUi(searchLineSpec(line, library, thumbnails), action, searchLineActionLabel(line.action))
 }
 
 /**

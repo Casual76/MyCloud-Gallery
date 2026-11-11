@@ -84,12 +84,13 @@ internal class ScaffoldLibrarySearch(
 
   @Composable
   override fun Top(backdrop: GlassBackdropState, modifier: Modifier) {
-    SearchSuggestions(source = search.source, handlers = search.handlers, backdrop = backdrop, modifier = modifier)
+    // I2: ogni suggerimento con il suo tondo (la foto del primo risultato, dalla cache della Libreria; un volto; o il segno del tipo).
+    SearchSuggestions(source = search.source, handlers = search.handlers, backdrop = backdrop, modifier = modifier, thumbnails = search.thumbnails)
   }
 
   @Composable
   override fun Results(contentPadding: PaddingValues, modifier: Modifier) {
-    val line = rememberSearchLine(search.source)
+    val line = rememberSearchLine(search.source, search.thumbnails)
     SearchResults(
       source = search.source,
       thumbnails = search.thumbnails,

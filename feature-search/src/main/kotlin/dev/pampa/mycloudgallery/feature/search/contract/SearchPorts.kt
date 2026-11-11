@@ -84,6 +84,23 @@ class SearchThumbnails(
   val refs: SearchRefs,
 )
 
+/**
+ * I2 (fase I): il volto di una persona per l'anteprima di un suggerimento («per una persona il volto»). `:app` la lega ai ritagli di feature-people, con
+ * **il cancello dei volti** delle Raccolte: il ritaglio arriva solo se il volto sta in una foto mostrabile adesso, e porta quelle foto ([SearchFace.origins]),
+ * cosi' la ricerca non lo disegna se nessuna e' piu' nella Libreria visibile (una foto nascosta un attimo fa). **Opzionale**: senza, le persone hanno il
+ * segno della persona.
+ */
+interface SearchFaces {
+  /** Il volto di [person] a [sizePx], o null (Persone spenta, nessun volto mostrabile, cancello chiuso). Fuori dal thread principale. */
+  suspend fun face(person: dev.pampa.mycloudgallery.core.model.PersonId, sizePx: Int): SearchFace?
+
+  /** Cambia quando i volti gia' dati non valgono piu' (Persone spenta o rimontata, ritagli cancellati): la ricerca li butta tutti. Di serie mai. */
+  val revocations: kotlinx.coroutines.flow.Flow<Any?> get() = kotlinx.coroutines.flow.flowOf(Unit)
+}
+
+/** Un volto e le foto (visibili quando il cancello l'ha dato) da cui viene. Mai salvato: solo in memoria, come i ritagli delle Raccolte. */
+class SearchFace(val bitmap: android.graphics.Bitmap, val origins: Set<MediaId>)
+
 /** La sorgente di una miniatura per la cella [index] dell'istantanea: dal catalogo locale (`ColumnarTimelineSnapshot.thumbRefAt`, come la Libreria). */
 fun interface SearchRefs {
   fun refAt(snapshot: TimelineSnapshot, index: Int): MediaRef?

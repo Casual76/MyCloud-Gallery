@@ -22,6 +22,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pinch
 import androidx.compose.ui.test.swipeDown
@@ -298,6 +299,114 @@ class ViewerGesturesTest : ViewerTestBase() {
     assertThat(fixture.anchor.hidden).isNull()
   }
 
+  // --- CG-6: la chiusura con il pannello aperto non si ferma per un gesto che arriva intanto ---------------------------------------------
+  //
+  // Con l'orologio fermo: informazioni aperte, la chiusura parte (la X o la capsula di un album), qualche fotogramma di discesa del pannello,
+  // poi un gesto sul pannello; infine l'orologio va. Prima il gesto prendeva la stessa animazione che la chiusura aspettava e la cancellava:
+  // il viewer restava in chiusura per sempre, con la cella vuota.
+
+  /** Il pannello aperto e fermo (lo swipe in su sulla foto). */
+  private fun openInfoPanel() {
+    pager().performTouchInput { swipeUp(startY = height * 0.8f, endY = height * 0.3f) }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(PANEL_REST_MS)
+    composeRule.waitForIdle()
+  }
+
+  /** Un dito sul pannello che sta scendendo: giu' in basso, dove il pannello c'e' ancora, e su di due passi. */
+  private fun dragOnPanel(release: Boolean = true) {
+    composeRule.onRoot().performTouchInput {
+      down(Offset(centerX, height * PANEL_TOUCH_Y))
+      moveBy(Offset(0f, -PANEL_STEP_PX))
+      moveBy(Offset(0f, -PANEL_STEP_PX))
+      if (release) up()
+    }
+    composeRule.waitForIdle()
+  }
+
+  /** L'orologio va fino in fondo: il viewer esce una volta sola e la cella d'origine non resta vuota. */
+  private fun assertClosedOnce(id: MediaId) {
+    composeRule.mainClock.autoAdvance = true
+    composeRule.waitUntil(TIMEOUT) { closed >= 1 }
+    composeRule.mainClock.advanceTimeBy(AFTER_ARRIVAL_MS)
+    composeRule.waitForIdle()
+    assertThat(closed).isEqualTo(1)
+    assertThat(fixture.anchor.hidden).isNull()
+    assertThat(fixture.anchor.hiddenHistory.takeLast(2)).containsExactly(id, null).inOrder()
+  }
+
+  @Test
+  fun cg6_unDitoSulPannelloDopoLaXNonFermaLaChiusura() {
+    show()
+    val id = fixture.idAt(4)
+    openInfoPanel()
+    composeRule.mainClock.autoAdvance = false
+    composeRule.onNodeWithContentDescription("Chiudi").performSemanticsAction(SemanticsActions.OnClick)
+    composeRule.mainClock.advanceTimeBy(FIRST_FRAMES_MS)
+    dragOnPanel()
+    assertClosedOnce(id)
+  }
+
+  @Test
+  fun cg6_unDitoSulPannelloDopoLaCapsulaDiUnAlbumNonFermaLaChiusura() {
+    val vacanze = ViewerAlbumEntry(key = "a", title = "Vacanze 2024", count = 12)
+    val opened = mutableListOf<ViewerAlbumEntry>()
+    val albums = object : ViewerMediaAlbums {
+      override fun albumsOf(media: MediaId): Flow<List<ViewerAlbumEntry>> = flowOf(listOf(vacanze))
+      override fun open(album: ViewerAlbumEntry) {
+        opened += album
+      }
+    }
+    show(services = services(mediaAlbums = albums))
+    val id = fixture.idAt(4)
+    openInfoPanel()
+    composeRule.mainClock.autoAdvance = false
+    composeRule.onNodeWithText("Vacanze 2024").performSemanticsAction(SemanticsActions.OnClick)
+    composeRule.mainClock.advanceTimeBy(FIRST_FRAMES_MS)
+    dragOnPanel()
+    assertClosedOnce(id)
+    assertThat(opened).containsExactly(vacanze)
+  }
+
+  @Test
+  fun cg6_unGestoSulPannelloCominciatoPrimaDellaXNonFermaLaChiusura() {
+    // Un dito tiene il pannello, un altro tocca la X, il primo continua a muoversi.
+    show()
+    val id = fixture.idAt(4)
+    openInfoPanel()
+    composeRule.mainClock.autoAdvance = false
+    dragOnPanel(release = false)
+    composeRule.onNodeWithContentDescription("Chiudi").performSemanticsAction(SemanticsActions.OnClick)
+    composeRule.mainClock.advanceTimeBy(FIRST_FRAMES_MS)
+    composeRule.onRoot().performTouchInput {
+      moveBy(Offset(0f, -PANEL_STEP_PX))
+      moveBy(Offset(0f, PANEL_STEP_PX))
+      up()
+    }
+    composeRule.waitForIdle()
+    assertClosedOnce(id)
+  }
+
+  @Test
+  fun cg6_lIndietroPredittivoDelPannelloAnnullatoDuranteLaChiusuraNonLaFerma() {
+    // L'Indietro sul pannello aperto e' cominciato, poi la X, poi l'Indietro si annulla: prima rimetteva su il pannello in mezzo alla chiusura.
+    show()
+    val id = fixture.idAt(4)
+    openInfoPanel()
+    val dispatcher = composeRule.activity.onBackPressedDispatcher
+    composeRule.mainClock.autoAdvance = false
+    composeRule.runOnUiThread {
+      dispatcher.dispatchOnBackStarted(BackEventCompat(10f, 900f, 0f, BackEventCompat.EDGE_LEFT))
+      dispatcher.dispatchOnBackProgressed(BackEventCompat(80f, 900f, 0.3f, BackEventCompat.EDGE_LEFT))
+    }
+    composeRule.mainClock.advanceTimeByFrame()
+    composeRule.onNodeWithContentDescription("Chiudi").performSemanticsAction(SemanticsActions.OnClick)
+    composeRule.mainClock.advanceTimeBy(FIRST_FRAMES_MS)
+    composeRule.runOnUiThread { dispatcher.dispatchOnBackCancelled() }
+    composeRule.waitForIdle()
+    assertClosedOnce(id)
+  }
+
   @Test
   fun laCapsulaDiUnAlbumChiudeIlViewerVolandoAllaCella_eSoloDopoApreLAlbum() {
     // CS-22: prima il viewer spariva di colpo (l'host toglieva la richiesta); ora si chiude come con la X, poi l'album si apre.
@@ -346,3 +455,16 @@ class ViewerGesturesTest : ViewerTestBase() {
     const val TIMEOUT = 10_000L
   }
 }
+
+/** CG-6: il pannello fermo dopo lo swipe (la molla di `GalleryMotion`, abbondante). */
+private const val PANEL_REST_MS = 800L
+
+/** CG-6: i primi fotogrammi della chiusura (tre a 60 Hz): il pannello ha cominciato a scendere ed e' ancora li'. */
+private const val FIRST_FRAMES_MS = 48L
+
+/** CG-6: dopo l'arrivo, abbastanza per vedere una seconda uscita se ci fosse. */
+private const val AFTER_ARRIVAL_MS = 2_000L
+
+/** CG-6: dove il dito tocca il pannello che scende (frazione dell'altezza) e di quanto si muove a ogni passo. */
+private const val PANEL_TOUCH_Y = 0.9f
+private const val PANEL_STEP_PX = 60f

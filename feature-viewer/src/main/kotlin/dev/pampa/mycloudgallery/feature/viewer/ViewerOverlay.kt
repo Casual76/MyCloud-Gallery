@@ -1243,6 +1243,7 @@ private fun ViewerOverlays(
           onDragEnd = controller::onPanelDragEnd,
           onClose = { state.infoOpen = false },
           contentAlpha = { infoFade.value },
+          dragEnabled = !controller.closing,
         ) {
           InfoContent(
             model = model,
@@ -1275,12 +1276,14 @@ private fun ViewerOverlays(
   }
 
   // Il pannello aperto si chiude con Indietro prima del viewer.
+  // CG-6: se intanto parte la chiusura del viewer (la X, una capsula), il gesto non tocca piu' il pannello: ne' i passi ne' l'annullamento, che
+  // rimettendolo su cancellerebbe la discesa che la chiusura sta aspettando.
   PredictiveBackHandler(enabled = state.infoOpen && !controller.closing && controller.sheet == null) { events ->
     try {
-      events.collect { event -> info.progress.snapTo(lerp(1f, INFO_BACK_END, event.progress)) }
-      state.infoOpen = false
+      events.collect { event -> if (!controller.closing) info.progress.snapTo(lerp(1f, INFO_BACK_END, event.progress)) }
+      if (!controller.closing) state.infoOpen = false
     } catch (cancelled: CancellationException) {
-      info.settle(true, reducedMotion)
+      if (!controller.closing) info.settle(true, reducedMotion)
       throw cancelled
     }
   }

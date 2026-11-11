@@ -188,6 +188,13 @@ internal class InfoPanelState(initialOpen: Boolean) {
    * Un passo del dito di [dy] pixel (positivo = verso il basso) con la corsa [travel] (meta' schermo): verso l'alto prima si apre, poi scorre
    * (il pannello cresce e porta il contenuto, poi le informazioni scorrono); verso il basso prima torna in cima, poi si chiude ([InfoScroll]).
    */
+  /** CG-6: chiuso subito, in cima (la chiusura del viewer quando la discesa del pannello e' stata interrotta). */
+  suspend fun snapShut() {
+    dragging = false
+    progress.snapTo(0f)
+    offset.snapTo(0f)
+  }
+
   suspend fun drag(dy: Float, travel: Float) {
     if (!dragging) {
       dragging = true
@@ -300,6 +307,8 @@ internal fun BoxScope.InfoSheet(
   onClose: () -> Unit,
   contentAlpha: () -> Float,
   modifier: Modifier = Modifier,
+  /** CG-6: falso durante la chiusura del viewer: il pannello non prende piu' gesti (quello in corso si annulla). */
+  dragEnabled: Boolean = true,
   content: @Composable ColumnScope.() -> Unit,
 ) {
   val density = LocalDensity.current
@@ -323,6 +332,7 @@ internal fun BoxScope.InfoSheet(
       .draggable(
         state = rememberDraggableState { onDrag(it) },
         orientation = Orientation.Vertical,
+        enabled = dragEnabled,
         onDragStopped = { onDragEnd(it) },
       )
       .semantics {

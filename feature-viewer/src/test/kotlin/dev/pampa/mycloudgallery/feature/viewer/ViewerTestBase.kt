@@ -119,6 +119,7 @@ abstract class ViewerTestBase {
     placeMap: dev.pampa.mycloudgallery.feature.viewer.place.ViewerPlaceMap? = null,
     similarCopies: dev.pampa.mycloudgallery.core.library.similar.SimilarCopies? = null,
     detailsSource: dev.pampa.mycloudgallery.feature.viewer.details.MediaDetailsSource? = null,
+    mediaAlbums: dev.pampa.mycloudgallery.feature.viewer.info.ViewerMediaAlbums? = null,
   ): ViewerServices = ViewerServices(
     animated = animatedLoader,
     images = imageSource,
@@ -162,6 +163,7 @@ abstract class ViewerTestBase {
     people = people,
     placeMap = placeMap,
     similarCopies = similarCopies,
+    mediaAlbums = mediaAlbums,
   )
 
   internal fun show(

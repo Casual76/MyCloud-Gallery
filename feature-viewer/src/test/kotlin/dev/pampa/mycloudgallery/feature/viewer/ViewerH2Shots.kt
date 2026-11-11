@@ -28,10 +28,13 @@ import dev.pampa.mycloudgallery.core.model.PersonId
 import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetails
 import dev.pampa.mycloudgallery.feature.viewer.details.MediaDetailsSource
 import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
+import dev.pampa.mycloudgallery.feature.viewer.info.ViewerAlbumEntry
+import dev.pampa.mycloudgallery.feature.viewer.info.ViewerMediaAlbums
 import dev.pampa.mycloudgallery.feature.viewer.people.ViewerFaceChip
 import dev.pampa.mycloudgallery.feature.viewer.people.ViewerFaceRef
 import dev.pampa.mycloudgallery.feature.viewer.place.ViewerMapPlace
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeViewerPlaceMap
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assume.assumeFalse
 import org.junit.Test
@@ -146,11 +149,37 @@ abstract class ViewerH2Shots(private val device: String, private val tablet: Boo
         ViewerFaceChip.Unnamed(ViewerFaceRef("sconosciuto"), null),
       ),
     ),
+    mediaAlbums = ShotAlbums,
   )
 
+  /** Gli album della foto di prova: due voci. */
+  private object ShotAlbums : ViewerMediaAlbums {
+    override fun albumsOf(media: MediaId): Flow<List<ViewerAlbumEntry>> =
+      flowOf(listOf(ViewerAlbumEntry(key = "a", title = "Vacanze a Oslo", count = 42), ViewerAlbumEntry(key = "b", title = "Famiglia", count = 310)))
+
+    override fun open(album: ViewerAlbumEntry) = Unit
+  }
+
+  /**
+   * CU-13: tutti i dati, visti: sul telefono il pannello cresce fin sotto la barra in alto (un trascinamento lento, senza lancio), e si vedono
+   * la testa, le facce, la scheda dello scatto piena, la mini-mappa e gli album. Sul tablet la colonna.
+   */
   private fun fullData(dark: Boolean) {
     showPhoto(PORTRAIT, dark, richServices(portrait = true))
     openPanel()
+    if (!tablet) {
+      pager().performTouchInput {
+        down(Offset(centerX, height * 0.3f))
+        moveBy(Offset(0f, -40f), delayMillis = 32)
+        repeat(5) { moveBy(Offset(0f, -110f), delayMillis = 48) }
+      }
+      composeRule.mainClock.advanceTimeBy(300)
+      composeRule.waitForIdle()
+      pager().performTouchInput { up() }
+      composeRule.waitForIdle()
+      composeRule.mainClock.advanceTimeBy(SETTLE_MS)
+      composeRule.waitForIdle()
+    }
     shoot("dati-completi", dark)
   }
 

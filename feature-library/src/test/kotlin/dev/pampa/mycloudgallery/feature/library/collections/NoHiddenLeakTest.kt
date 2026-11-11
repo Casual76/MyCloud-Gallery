@@ -1,6 +1,8 @@
 package dev.pampa.mycloudgallery.feature.library.collections
 
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.History
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
@@ -361,8 +363,8 @@ class NoHiddenLeakTest : ComposeScreenTest() {
       title = "Ricordi",
       code = CollectionSections.MEMORIES,
       entries = listOf(
-        CollectionEntry("m_nascosto", "Un ricordo", "3 foto", androidx.compose.material.icons.Icons.Rounded.History, dev.antigravity.fluidengine.ui.theme.FluidTone.Neutral, cover = hiddenCover),
-        CollectionEntry("m_visibile", "Un altro ricordo", "5 foto", androidx.compose.material.icons.Icons.Rounded.History, dev.antigravity.fluidengine.ui.theme.FluidTone.Neutral, cover = visibleCover),
+        CollectionEntry("m_nascosto", "Un ricordo", "3 foto", Icons.Rounded.History, dev.antigravity.fluidengine.ui.theme.FluidTone.Neutral, cover = hiddenCover),
+        CollectionEntry("m_visibile", "Un altro ricordo", "5 foto", Icons.Rounded.History, dev.antigravity.fluidengine.ui.theme.FluidTone.Neutral, cover = visibleCover),
       ),
     )
     show {

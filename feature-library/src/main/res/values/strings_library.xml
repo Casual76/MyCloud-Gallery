@@ -62,7 +62,6 @@
   <string name="library_filter_empty_favorites">Nessun preferito</string>
   <string name="library_filter_empty_documents">Nessun documento</string>
   <string name="library_filter_empty_no_screenshots_whatsapp">Solo screenshot e WhatsApp</string>
-  <string name="library_filter_empty_detail">Con questo filtro non c’è niente da mostrare. Il resto della Libreria è sempre lì.</string>
   <string name="library_filter_show_all">Mostra tutto</string>
 
   <!-- Barra delle azioni della selezione (D13, D14). -->
@@ -125,17 +124,17 @@
 
   <!-- Stati (§2.4): permessi, accesso parziale (E-P1), foto in attesa (E-P21), prima lettura. -->
   <string name="library_permission_action">Consenti accesso</string>
-  <string name="library_partial_title">Vedi solo le foto che hai scelto</string>
-  <string name="library_partial_message">La galleria mostra solo ciò a cui le hai dato accesso, e non tocca il resto.</string>
+  <!-- I4: gli stati senza griglia sono una figura, un titolo e il tasto (niente paragrafi). -->
+  <string name="library_permission_title">Serve l’accesso alle foto</string>
+  <string name="library_empty_title">Ancora nessuna foto</string>
+  <string name="library_partial_title">Solo le foto scelte</string>
   <string name="library_partial_action">Consenti tutto</string>
   <plurals name="library_pending_title">
-    <item quantity="one">%1$s foto nuova in attesa</item>
-    <item quantity="other">%1$s foto nuove in attesa</item>
+    <item quantity="one">%1$s foto in attesa</item>
+    <item quantity="other">%1$s foto in attesa</item>
   </plurals>
-  <string name="library_pending_message">Per leggere data e luogo delle foto nuove serve l’accesso alla posizione delle foto. Finché non c’è, restano in attesa.</string>
   <string name="library_pending_action">Consenti</string>
   <string name="library_first_read_title">Sto leggendo la Libreria</string>
-  <string name="library_first_read_detail">Le foto e i video compaiono man mano, dai più recenti.</string>
   <string name="library_first_read_progress">%1$s di %2$s</string>
   <plurals name="library_first_read_progress_unknown">
     <item quantity="one">%1$s letto</item>

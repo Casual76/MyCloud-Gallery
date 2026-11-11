@@ -135,8 +135,8 @@ class RecentlyDeletedNasScreenTest : ComposeScreenTest() {
     tapRow("Cena da Marco.jpg")
     composeRule.waitForIdle()
     composeRule.onAllNodesWithContentDescription("Elimina subito").assertCountEquals(0)
-    composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Elimina subito non è disponibile"))
-    composeRule.onNodeWithText("Elimina subito non è disponibile").assertExists()
+    composeRule.onNode(hasScrollAction()).performScrollToNode(hasText("Elimina subito: solo le tue"))
+    composeRule.onNodeWithText("Elimina subito: solo le tue").assertExists()
   }
 
   @Test

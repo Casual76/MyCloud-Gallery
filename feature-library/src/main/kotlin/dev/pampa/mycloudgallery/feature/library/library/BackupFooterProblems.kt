@@ -6,7 +6,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.Science
+import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
@@ -54,7 +54,7 @@ internal object BackupFooterProblems {
     problem("cap_reached", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_cap_reached_label, R.string.backup_footer_cap_reached_detail),
     problem("frozen", GalleryFooterTone.Alarm, Icons.Rounded.ErrorOutline, R.string.backup_footer_frozen_label, R.string.backup_footer_frozen_detail),
     problem("writes_stopped", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_writes_stopped_label, R.string.backup_footer_writes_stopped_detail),
-    problem("test_only", GalleryFooterTone.Waiting, Icons.Rounded.Science, R.string.backup_footer_test_only_label, R.string.backup_footer_test_only_detail),
+    problem("test_only", GalleryFooterTone.Waiting, Icons.Rounded.HourglassTop, R.string.backup_footer_test_only_label, R.string.backup_footer_test_only_detail),
     problem(
       "lost_before_backup", GalleryFooterTone.Attention, Icons.Rounded.Warning, R.string.backup_footer_lost_before_backup_label,
       R.string.backup_footer_lost_before_backup_detail, R.plurals.backup_footer_lost_before_backup_label_count,

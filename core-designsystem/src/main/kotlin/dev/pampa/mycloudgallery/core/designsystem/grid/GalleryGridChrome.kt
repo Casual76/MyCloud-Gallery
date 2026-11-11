@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -73,7 +74,8 @@ fun GalleryGridLevelBar(
 
 /**
  * Un **avviso** sopra la griglia (accesso parziale E-P1, foto in attesa E-P21): una lastra di vetro compatta con l'icona
- * in una piastrella del tono, il titolo, una frase breve e, sulla stessa riga, l'azione che risolve. Mai un muro: la
+ * in una piastrella del tono, il titolo, una frase breve e, sulla stessa riga, l'azione che risolve (senza frase, [message] vuoto: il
+ * segno, il titolo e il tasto in una striscia sola). Mai un muro: la
  * griglia resta sotto e si scorre; due avvisi insieme occupano meno di un terzo dello schermo.
  */
 @Composable
@@ -105,9 +107,27 @@ fun GalleryGridNotice(
     ) {
       Icon(imageVector = icon, contentDescription = null, modifier = Modifier.size(NoticeGlyph), tint = scheme.onPrimaryContainer)
     }
+    // I4 (fase I, «l'app parla troppo»): senza frase l'avviso e' una striscia, il segno, due parole e il tasto sulla stessa riga.
+    // A testo grande la striscia non ci sta: il titolo torna sopra e il tasto sotto, come con la frase.
+    if (message.isBlank() && LocalDensity.current.fontScale <= StripMaxFontScale) {
+      Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = scheme.onSurface,
+        maxLines = NoticeMessageLines,
+        overflow = TextOverflow.Ellipsis,
+        modifier = Modifier.weight(1f).align(Alignment.CenterVertically),
+      )
+      if (actionLabel != null && onAction != null) {
+        Box(modifier = Modifier.defaultMinSize(minHeight = GalleryDimens.MinTouchTarget).align(Alignment.CenterVertically), contentAlignment = Alignment.Center) {
+          FluidButton(text = actionLabel, onClick = onAction, style = FluidButtonStyle.Tinted, size = FluidButtonSize.Medium)
+        }
+      }
+      return@Row
+    }
     Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(NoticeTextGap)) {
       Text(text = title, style = MaterialTheme.typography.titleSmall, color = scheme.onSurface)
-      Text(
+      if (message.isNotBlank()) Text(
         text = message,
         style = MaterialTheme.typography.bodySmall,
         color = scheme.onSurfaceVariant,
@@ -176,6 +196,7 @@ private val NoticeActionGap = 4.dp
 private val NoticeTile = 36.dp
 private val NoticeGlyph = 20.dp
 private const val NoticeMessageLines = 3
+private const val StripMaxFontScale = 1.15f
 private val JumpHeight = 40.dp
 private val JumpPadding = 14.dp
 private val JumpGap = 6.dp

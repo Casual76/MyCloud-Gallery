@@ -15,15 +15,21 @@
   <string name="library_cloud_title_attention">C’è qualcosa da guardare</string>
   <string name="library_cloud_title_alarm">Serve il tuo intervento</string>
 
-  <!-- Senza problemi: lo spazio del NAS (la stessa misura della pagina Spazio NAS), l'ultima sincronizzazione e Libera spazio. -->
-  <string name="library_cloud_space_title">Spazio sul NAS</string>
+  <!-- Senza problemi: lo spazio del NAS (la stessa misura della pagina Spazio NAS) come anello e numero, l'ultima sincronizzazione con il
+       segno della cronologia e l'ora, Libera spazio con la sua icona (I4, fase I: niente titoli ne' frasi a schermo; TalkBack le dice). -->
   <string name="library_cloud_space_used">%1$s usati di %2$s</string>
+  <string name="library_cloud_space_description">Spazio sul NAS: %1$s</string>
+  <string name="library_cloud_space_of">di %1$s</string>
+  <string name="library_cloud_space_unknown">—</string>
   <string name="library_cloud_space_loading">Calcolo lo spazio…</string>
   <string name="library_cloud_space_unavailable">Lo spazio non si legge adesso.</string>
   <string name="library_cloud_terabytes">%1$s TB</string>
-  <string name="library_cloud_last_sync">Ultima sincronizzazione</string>
+  <string name="library_cloud_last_sync_description">Ultima sincronizzazione: %1$s</string>
   <string name="library_cloud_free_space">Libera spazio</string>
-  <string name="library_cloud_free_space_detail">Toglie dal telefono le foto già al sicuro sul NAS.</string>
+
+  <!-- I4: un lavoro che avanza come anello con la percentuale dentro e il conto accanto. -->
+  <string name="library_cloud_gauge_of">%1$s / %2$s</string>
+  <string name="library_cloud_gauge_percent">%1$d%%</string>
 
   <!-- OA-10 (review della beta): il backup fermo ha la sua voce. Prima non diceva niente e, con il NAS aggiornato, la nuvola mostrava la spunta
        di "tutto salvato". La pausa dell'utente ("Ferma") dura fino a "Riprendi", che sta nella pagina Backup (il tasto sotto la voce porta li');

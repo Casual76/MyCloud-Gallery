@@ -108,12 +108,12 @@ internal abstract class LibraryScreenshotBase(private val dark: Boolean, private
     }
   }
 
-  private fun shoot(name: String, state: LibraryTabState, fontScale: Float? = null, before: (LibraryTabState) -> Unit = {}) {
+  private fun shoot(name: String, state: LibraryTabState, fontScale: Float? = null, dir: String = DIR, before: (LibraryTabState) -> Unit = {}) {
     show(state, fontScale)
     before(state)
     composeRule.waitForIdle()
     val suffix = if (fontScale != null) "-testo-grande" else ""
-    composeRule.onRoot().captureRoboImage("$DIR/$name-$look-$device$suffix.png")
+    composeRule.onRoot().captureRoboImage("$dir/$name-$look-$device$suffix.png")
   }
 
   /** Porta la griglia a [fraction] della Libreria (0 i piu' vecchi, 1 i piu' recenti), come se l'utente avesse scorso. */
@@ -191,18 +191,20 @@ internal abstract class LibraryScreenshotBase(private val dark: Boolean, private
   }
 
   @Test
-  fun statoPermesso() = shoot("stato-permesso", syntheticLibraryState(phone = LibraryPhoneStatus(access = MediaAccess.NONE)))
+  fun statoPermesso() = shoot("stato-permesso", syntheticLibraryState(phone = LibraryPhoneStatus(access = MediaAccess.NONE)), dir = I4)
 
   @Test
   fun statoParzialeEInAttesa() = shoot(
     "stato-parziale-in-attesa",
     syntheticLibraryState(phone = LibraryPhoneStatus(access = MediaAccess.PARTIAL, pendingLocation = 12)),
+    dir = I4,
   )
 
   @Test
   fun statoPrimaLettura() = shoot(
     "stato-prima-lettura",
     syntheticLibraryState(count = 0, phone = LibraryPhoneStatus(sync = SyncStatus.Scanning(done = 1_240, total = 6_700, full = true))),
+    dir = I4,
   )
 
   @Test
@@ -211,14 +213,24 @@ internal abstract class LibraryScreenshotBase(private val dark: Boolean, private
     syntheticLibraryState(count = 300, phone = LibraryPhoneStatus(sync = SyncStatus.Scanning(done = 300, total = 6_700, full = true))),
   )
 
+  /** I4: la striscia dell'accesso parziale a testo grande (1,3x): il segno, le due parole e il tasto restano su una riga o vanno a capo puliti. */
   @Test
-  fun statoVuota() = shoot("stato-vuota", syntheticLibraryState(count = 0))
+  fun statoParzialeTestoGrande() = shoot(
+    "stato-parziale-in-attesa",
+    syntheticLibraryState(phone = LibraryPhoneStatus(access = MediaAccess.PARTIAL, pendingLocation = 12)),
+    fontScale = LARGE_TEXT,
+    dir = I4,
+  )
 
   @Test
-  fun statoFiltroVuoto() = shoot("stato-filtro-vuoto", syntheticLibraryState(count = 0, filter = LibraryFilter.FAVORITES))
+  fun statoVuota() = shoot("stato-vuota", syntheticLibraryState(count = 0), dir = I4)
+
+  @Test
+  fun statoFiltroVuoto() = shoot("stato-filtro-vuoto", syntheticLibraryState(count = 0, filter = LibraryFilter.FAVORITES), dir = I4)
 
   companion object {
     const val DIR = "../docs/screenshots/3-P7"
+    const val I4 = "../docs/screenshots/beta-grafica/I4"
     const val LARGE_TEXT = 1.3f
 
     fun looks(): List<Array<Any>> = listOf(arrayOf<Any>(false), arrayOf<Any>(true))

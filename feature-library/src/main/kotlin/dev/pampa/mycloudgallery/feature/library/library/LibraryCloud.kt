@@ -1,14 +1,30 @@
 package dev.pampa.mycloudgallery.feature.library.library
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.rounded.Backup
+import androidx.compose.material.icons.rounded.CleaningServices
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.MonitorHeart
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Sync
+import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.VpnLock
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -20,6 +36,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -27,18 +44,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.hideFromAccessibility
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import dev.antigravity.fluidengine.ui.fluid.ContinuousCornerShape
 import dev.antigravity.fluidengine.ui.fluid.FluidButton
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonSize
 import dev.antigravity.fluidengine.ui.fluid.FluidButtonStyle
 import dev.antigravity.fluidengine.ui.fluid.FluidHairline
-import dev.antigravity.fluidengine.ui.fluid.FluidProgressBar
+import dev.antigravity.fluidengine.ui.fluid.FluidRadius
 import dev.antigravity.fluidengine.ui.fluid.FluidSpinner
+import dev.antigravity.fluidengine.ui.fluid.fluidPressable
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromeCloudButton
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryChromePopoverAnchor
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryCloudState
@@ -46,6 +69,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterPill
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
 import dev.pampa.mycloudgallery.core.designsystem.design.glyph
+import dev.pampa.mycloudgallery.core.designsystem.media.GalleryProgressRing
 import dev.pampa.mycloudgallery.core.library.contract.LibraryBackupStatus
 import dev.pampa.mycloudgallery.core.library.contract.LibraryNasStatus
 import dev.pampa.mycloudgallery.core.library.text.GalleryDates
@@ -296,14 +320,14 @@ internal fun rememberLastSync(nas: State<LibraryNasStatus>, backup: State<Librar
 }
 
 /**
- * Il pannello del pop-up della nuvola. In cima lo stato in una frase. Poi:
- *  - i **problemi** e la **pausa** del backup, ognuno con la sua capsula tonale (ferma: e' un'etichetta), cosa succede e il tasto che
- *    porta dove si risolve. La frase sotto la capsula non ripete il tasto (GF-12: «VPN spenta», «Apri WireGuard» e poi il tasto
- *    «Apri WireGuard»);
- *  - i **lavori** in corso o in attesa: la capsula si tocca e porta alla sua pagina, e lo dice con la freccia in coda (GF-12: accanto
- *    alle capsule ferme dei problemi non si capiva quali fossero tasti);
- *  - **senza niente da sistemare**: lo spazio usato sul totale del NAS (letto all'apertura), l'ultima sincronizzazione e "Libera
- *    spazio", sotto un filo divisorio che c'e' solo se sotto c'e' qualcosa (GF-12: senza NAS e senza "Libera spazio" restava solo).
+ * Il pannello del pop-up della nuvola (I4, fase I: «l'app parla troppo»). In cima lo stato, detto **una volta**. Poi:
+ *  - i **problemi** e la **pausa** del backup: la capsula tonale con il segno e due parole; la frase che spiega sta **dietro il tocco**
+ *    (la capsula porta la «i» e apre la frase sotto; TalkBack la legge sempre, nella descrizione della capsula). Sotto, il tasto con
+ *    l'icona che porta dove si risolve. La frase non ripete il tasto (GF-12);
+ *  - i **lavori** in corso o in attesa: un **anello che avanza** con la percentuale dentro e accanto il numero (1.240 / 6.658) e il tempo
+ *    che manca con il segno dell'orologio; senza un totale il cerchio che gira. La riga si tocca e porta alla sua pagina (la freccia);
+ *  - **senza niente da sistemare**: lo spazio del NAS come anello con il disco dentro e il numero, l'ultima sincronizzazione con il segno
+ *    della cronologia e l'ora, "Libera spazio" con la sua scopa. Il filo divisorio sopra c'e' solo se sotto c'e' qualcosa (GF-12).
  * Ogni tasto chiude il pop-up prima di aprire la sua pagina. Il testo e' `onSurface` pieno: il velo del pop-up e' calcolato per lui.
  */
 @Composable
@@ -334,7 +358,7 @@ internal fun LibraryCloudPanel(
     for (item in cloud.withAction) {
       val action = actionLabel(item)
       val note = noteOf(item)
-      CloudNote(note = if (note.detail.sameWordsAs(action)) note.copy(detail = null) else note, onClick = null)
+      ProblemNote(note = if (note.detail.sameWordsAs(action)) note.copy(detail = null) else note)
       FluidButton(
         text = action,
         onClick = {
@@ -344,10 +368,11 @@ internal fun LibraryCloudPanel(
         style = FluidButtonStyle.Tinted,
         size = FluidButtonSize.Large,
         fillWidth = true,
+        leading = { Icon(imageVector = actionGlyph(item), contentDescription = null, modifier = Modifier.size(ButtonGlyph)) },
       )
     }
     for (item in cloud.activity) {
-      CloudNote(note = noteOf(item), onClick = {
+      ActivityRow(note = noteOf(item), gauge = gaugeOf(item), onClick = {
         close()
         actionOf(item, actions)()
       })
@@ -356,55 +381,148 @@ internal fun LibraryCloudPanel(
       val space = rememberNasSpace(commands)
       val anythingBelow = space != SpaceUi.Absent || lastSyncNasMillis != null || commands.canFreeSpace
       if (cloud.activity.isNotEmpty() && anythingBelow) FluidHairline(modifier = Modifier.testTag(CloudDividerTag))
-      SpaceSection(space)
-      if (lastSyncNasMillis != null) {
-        Column(verticalArrangement = Arrangement.spacedBy(LineGap)) {
-          Text(text = stringResource(R.string.library_cloud_last_sync), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = ink)
-          Text(text = nasMoment(lastSyncNasMillis), style = MaterialTheme.typography.bodyMedium, color = ink)
-        }
-      }
+      SpaceRow(space)
+      if (lastSyncNasMillis != null) LastSyncRow(lastSyncNasMillis)
       if (commands.canFreeSpace) {
-        Column(verticalArrangement = Arrangement.spacedBy(LineGap)) {
-          FluidButton(
-            text = stringResource(R.string.library_cloud_free_space),
-            onClick = {
-              close()
-              // Tutto il sicuro (nessuna selezione): la pagina di feature-backup verifica e chiede la conferma, qui niente si toglie.
-              commands.freeSpace(emptySet())
-            },
-            style = FluidButtonStyle.Tinted,
-            size = FluidButtonSize.Large,
-            fillWidth = true,
-          )
-          Text(
-            text = stringResource(R.string.library_cloud_free_space_detail),
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-            color = ink,
-          )
-        }
+        FluidButton(
+          text = stringResource(R.string.library_cloud_free_space),
+          onClick = {
+            close()
+            // Tutto il sicuro (nessuna selezione): la pagina di feature-backup verifica e chiede la conferma, qui niente si toglie.
+            commands.freeSpace(emptySet())
+          },
+          style = FluidButtonStyle.Tinted,
+          size = FluidButtonSize.Large,
+          fillWidth = true,
+          leading = { Icon(imageVector = Icons.Rounded.CleaningServices, contentDescription = null, modifier = Modifier.size(ButtonGlyph)) },
+        )
       }
     }
   }
 }
 
 /**
- * Una voce del pannello: la capsula tonale e, sotto, il dettaglio e l'avanzamento. Con [onClick] la capsula e' un tasto e lo dice
- * con la freccia in coda; senza, e' un'etichetta (il tasto della voce sta sotto).
+ * Un problema o la pausa: la capsula tonale con il segno e le due parole. Se c'e' una frase che spiega, la capsula porta la «i» e un
+ * tocco la apre sotto (e la richiude). TalkBack non ha bisogno del tocco: la descrizione della capsula dice gia' etichetta e frase.
  */
 @Composable
-private fun CloudNote(note: GalleryFooterNote, onClick: (() -> Unit)?) {
+private fun ProblemNote(note: GalleryFooterNote) {
+  val detail = note.detail
+  var open by rememberSaveable(note.label) { mutableStateOf(false) }
   Column(verticalArrangement = Arrangement.spacedBy(LineGap)) {
-    GalleryFooterPill(note = note, onClick = onClick, trailing = if (onClick != null) Icons.AutoMirrored.Rounded.KeyboardArrowRight else null)
-    note.progress?.let { p -> FluidProgressBar(progress = { p }, modifier = Modifier.fillMaxWidth()) }
-    note.detail?.let { detail ->
+    GalleryFooterPill(
+      note = note,
+      onClick = if (detail != null) ({ open = !open }) else null,
+      trailing = if (detail != null) Icons.Outlined.Info else null,
+    )
+    if (open && detail != null) {
       Text(
         text = detail,
-        style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Medium),
+        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
         color = MaterialTheme.colorScheme.onSurface,
-        // GF-24: la capsula sopra dice gia' etichetta e dettaglio (la sua descrizione e' «etichetta. dettaglio»): TalkBack non lo rilegge dal testo a parte.
-        modifier = Modifier.semantics { hideFromAccessibility() },
+        modifier = Modifier.testTag(ProblemDetailTag).semantics { hideFromAccessibility() },
       )
     }
+  }
+}
+
+/** Il numero di un lavoro che avanza: il segno di chi lavora (il backup, il NAS), il conto ("1.240 / 6.658") e il tempo che manca. */
+@Immutable
+private data class CloudGauge(val glyph: ImageVector, val count: String, val eta: String?)
+
+/** Il conto dei lavori che hanno un totale; null per gli altri (la coda, il confronto, la rete che si sveglia): restano la loro frase. */
+@Composable
+private fun gaugeOf(item: CloudItem): CloudGauge? = when (item) {
+  is CloudItem.Backup -> when (val s = item.status) {
+    is LibraryBackupStatus.Running -> CloudGauge(Icons.Rounded.CloudUpload, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(s.total)), etaText(s.etaMillis))
+    is LibraryBackupStatus.FirstBackup -> CloudGauge(Icons.Rounded.CloudUpload, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(s.total)), etaText(s.etaMillis))
+    else -> null
+  }
+  is CloudItem.Nas -> when (val s = item.status) {
+    is LibraryNasStatus.FirstScan -> s.total?.takeIf { it > 0 }?.let { total ->
+      CloudGauge(Icons.Rounded.Storage, ofTotal(GalleryNumbers.format(s.done), GalleryNumbers.format(total)), etaText(s.etaMillis))
+    }
+    is LibraryNasStatus.Aligning -> s.bytesTotal.takeIf { it > 0 }?.let {
+      CloudGauge(Icons.Rounded.Sync, ofTotal(cloudBytes(s.bytesDone), cloudBytes(s.bytesTotal)), etaText(s.etaMillis))
+    }
+    else -> null
+  }
+  is CloudItem.Network -> null
+}
+
+@Composable
+private fun ofTotal(done: String, total: String): String = stringResource(R.string.library_cloud_gauge_of, done, total)
+
+@Composable
+private fun etaText(etaMillis: Long?): String? = etaMillis?.let { withEta(null, it) }
+
+/**
+ * Un lavoro della nuvola in una riga che si tocca: a sinistra l'anello che avanza con la percentuale (o il cerchio che gira, o il
+ * segno dell'attesa), accanto il numero o le due parole, sotto il tempo che manca (con l'orologio) o la ragione dell'attesa; in coda la
+ * freccia. Per TalkBack una descrizione sola, la frase intera di prima.
+ */
+@Composable
+private fun ActivityRow(note: GalleryFooterNote, gauge: CloudGauge?, onClick: () -> Unit) {
+  val ink = MaterialTheme.colorScheme.onSurface
+  val accent = MaterialTheme.colorScheme.primary
+  val spoken = note.description ?: listOfNotNull(note.label, note.detail).joinToString(". ")
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .defaultMinSize(minHeight = RowMinHeight)
+      .semantics(mergeDescendants = true) { contentDescription = spoken }
+      .fluidPressable(onClick = onClick, role = Role.Button, focusShape = ContinuousCornerShape(FluidRadius.Control))
+      .testTag(ActivityRowTag),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(RowGap),
+  ) {
+    Box(modifier = Modifier.size(GaugeSize), contentAlignment = Alignment.Center) {
+      val progress = note.progress
+      when {
+        progress != null -> {
+          GalleryProgressRing(progress = progress, modifier = Modifier.fillMaxSize(), color = accent, strokeWidth = GaugeStroke)
+          Text(
+            text = stringResource(R.string.library_cloud_gauge_percent, (progress * PercentScale).toInt()),
+            style = MaterialTheme.typography.labelSmall.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Bold),
+            color = ink,
+            maxLines = 1,
+            modifier = Modifier.semantics { hideFromAccessibility() },
+          )
+        }
+        note.busy -> FluidSpinner(size = SpinnerSize, color = accent)
+        else -> {
+          GalleryProgressRing(progress = 0f, modifier = Modifier.fillMaxSize(), color = accent, strokeWidth = GaugeStroke)
+          Icon(imageVector = note.glyph ?: Icons.Rounded.Schedule, contentDescription = null, tint = accent, modifier = Modifier.size(GaugeGlyph))
+        }
+      }
+    }
+    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(LineGapTight)) {
+      Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(InlineGap)) {
+        if (gauge != null) Icon(imageVector = gauge.glyph, contentDescription = null, tint = ink, modifier = Modifier.size(InlineGlyph))
+        Text(
+          text = gauge?.count ?: note.label,
+          style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Bold),
+          color = ink,
+          maxLines = 2,
+          overflow = TextOverflow.Ellipsis,
+          modifier = Modifier.semantics { hideFromAccessibility() },
+        )
+      }
+      val below = if (gauge != null) gauge.eta else note.detail
+      if (below != null) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(InlineGap)) {
+          if (gauge != null) Icon(imageVector = Icons.Rounded.Timer, contentDescription = null, tint = ink, modifier = Modifier.size(SmallGlyph))
+          Text(
+            text = below,
+            style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Medium),
+            color = ink,
+            // GF-24: la riga dice gia' tutto nella sua descrizione; i testi a parte si vedono ma TalkBack non li rilegge.
+            modifier = Modifier.semantics { hideFromAccessibility() },
+          )
+        }
+      }
+    }
+    Icon(imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = ink, modifier = Modifier.size(InlineGlyph))
   }
 }
 
@@ -437,32 +555,72 @@ private fun rememberNasSpace(commands: LibraryCommands): SpaceUi {
   return space
 }
 
-/** La sezione dello spazio del NAS nel pannello: il titolo e la misura (o che la si sta leggendo, o che non si legge). */
+/**
+ * Lo spazio del NAS senza il titolo: un anello pieno quanto il disco, con il disco dentro, e accanto quanto e' usato ("1,2 TB") sopra il
+ * totale ("di 3,6 TB"). Mentre si legge l'anello e' vuoto e gira il cerchio; se non si legge, il disco barrato e un trattino.
+ */
 @Composable
-private fun SpaceSection(shown: SpaceUi) {
+private fun SpaceRow(shown: SpaceUi) {
   if (shown == SpaceUi.Absent) return
   val ink = MaterialTheme.colorScheme.onSurface
-  Column(verticalArrangement = Arrangement.spacedBy(LineGap)) {
-    Text(text = stringResource(R.string.library_cloud_space_title), style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = ink)
-    when (shown) {
-      SpaceUi.Loading -> Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(TitleGap)) {
-        FluidSpinner(size = SpinnerSize, color = ink)
-        Text(text = stringResource(R.string.library_cloud_space_loading), style = MaterialTheme.typography.bodyMedium, color = ink)
+  val accent = MaterialTheme.colorScheme.primary
+  val ready = (shown as? SpaceUi.Shown)?.space as? LibraryNasSpace.Ready
+  val spoken = when {
+    ready != null -> stringResource(R.string.library_cloud_space_description, stringResource(R.string.library_cloud_space_used, cloudBytes(ready.usedBytes), cloudBytes(ready.totalBytes)))
+    shown == SpaceUi.Loading -> stringResource(R.string.library_cloud_space_loading)
+    else -> stringResource(R.string.library_cloud_space_unavailable)
+  }
+  Row(
+    modifier = Modifier.fillMaxWidth().testTag(SpaceRowTag).clearAndSetSemantics { contentDescription = spoken },
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(RowGap),
+  ) {
+    Box(modifier = Modifier.size(GaugeSize), contentAlignment = Alignment.Center) {
+      val fraction = ready?.let { if (it.totalBytes > 0) (it.usedBytes.toFloat() / it.totalBytes).coerceIn(0f, 1f) else 0f } ?: 0f
+      GalleryProgressRing(progress = fraction, modifier = Modifier.fillMaxSize(), color = accent, strokeWidth = GaugeStroke)
+      if (shown == SpaceUi.Loading) {
+        FluidSpinner(size = SpinnerSize, color = accent)
+      } else {
+        Icon(
+          imageVector = if (ready != null) Icons.Rounded.Storage else Icons.Rounded.CloudOff,
+          contentDescription = null,
+          tint = accent,
+          modifier = Modifier.size(GaugeGlyph),
+        )
       }
-      is SpaceUi.Shown -> when (val s = shown.space) {
-        is LibraryNasSpace.Ready -> {
-          Text(
-            text = stringResource(R.string.library_cloud_space_used, cloudBytes(s.usedBytes), cloudBytes(s.totalBytes)),
-            style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum"),
-            color = ink,
-          )
-          val fraction = if (s.totalBytes > 0) (s.usedBytes.toFloat() / s.totalBytes).coerceIn(0f, 1f) else 0f
-          FluidProgressBar(progress = { fraction }, modifier = Modifier.fillMaxWidth())
-        }
-        LibraryNasSpace.Unavailable -> Text(text = stringResource(R.string.library_cloud_space_unavailable), style = MaterialTheme.typography.bodyMedium, color = ink)
-      }
-      SpaceUi.Absent -> Unit
     }
+    Column(verticalArrangement = Arrangement.spacedBy(LineGapTight)) {
+      Text(
+        text = ready?.let { cloudBytes(it.usedBytes) } ?: stringResource(R.string.library_cloud_space_unknown),
+        style = MaterialTheme.typography.titleSmall.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Bold),
+        color = ink,
+      )
+      if (ready != null) {
+        Text(
+          text = stringResource(R.string.library_cloud_space_of, cloudBytes(ready.totalBytes)),
+          style = MaterialTheme.typography.bodySmall.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Medium),
+          color = ink,
+        )
+      }
+    }
+  }
+}
+
+/** L'ultima sincronizzazione senza il titolo: il segno della cronologia e l'ora. TalkBack la dice per intero. */
+@Composable
+private fun LastSyncRow(atNasMillis: Long) {
+  val ink = MaterialTheme.colorScheme.onSurface
+  val moment = nasMoment(atNasMillis)
+  val spoken = stringResource(R.string.library_cloud_last_sync_description, moment)
+  Row(
+    modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = spoken },
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(RowGap),
+  ) {
+    Box(modifier = Modifier.size(GaugeSize), contentAlignment = Alignment.Center) {
+      Icon(imageVector = Icons.Rounded.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(SyncGlyph))
+    }
+    Text(text = moment, style = MaterialTheme.typography.bodyMedium.copy(fontFeatureSettings = "tnum", fontWeight = FontWeight.Medium), color = ink)
   }
 }
 
@@ -513,6 +671,17 @@ private fun actionLabel(item: CloudItem): String = stringResource(
     is CloudItem.Backup -> R.string.library_cloud_action_backup
   },
 )
+
+/** Il segno del tasto sotto un problema: la Diagnostica lo stetoscopio, WireGuard la VPN, la password la chiave, il backup la nuvola. */
+private fun actionGlyph(item: CloudItem): ImageVector = when (item) {
+  is CloudItem.Network -> when (item.status.action) {
+    LibraryNetworkAction.DIAGNOSTICS -> Icons.Rounded.MonitorHeart
+    LibraryNetworkAction.WIREGUARD -> Icons.Rounded.VpnLock
+    LibraryNetworkAction.PASSWORD -> Icons.Rounded.Key
+  }
+  is CloudItem.Nas -> Icons.Rounded.MonitorHeart
+  is CloudItem.Backup -> Icons.Rounded.Backup
+}
 
 /** Vero se la frase dice le stesse parole del tasto (a meno di maiuscole e punto finale): sotto la capsula non si ripete. */
 private fun String?.sameWordsAs(action: String): Boolean = this != null && trim().trimEnd('.').equals(action.trim(), ignoreCase = true)
@@ -568,4 +737,21 @@ private val PanelGap: Dp = 12.dp
 private val LineGap: Dp = 6.dp
 private val TitleGap: Dp = 10.dp
 private val TitleGlyph: Dp = 24.dp
-private val SpinnerSize: Dp = 18.dp
+private val SpinnerSize: Dp = 22.dp
+private val ButtonGlyph: Dp = 20.dp
+private val RowMinHeight: Dp = 56.dp
+private val RowGap: Dp = 12.dp
+private val GaugeSize: Dp = 48.dp
+private val GaugeStroke: Dp = 4.dp
+private val GaugeGlyph: Dp = 22.dp
+private val SyncGlyph: Dp = 26.dp
+private val InlineGlyph: Dp = 18.dp
+private val SmallGlyph: Dp = 14.dp
+private val InlineGap: Dp = 6.dp
+private val LineGapTight: Dp = 2.dp
+private const val PercentScale = 100f
+
+/** I tag delle righe del pannello per le prove. */
+internal const val ActivityRowTag: String = "nuvola-lavoro"
+internal const val SpaceRowTag: String = "nuvola-spazio"
+internal const val ProblemDetailTag: String = "nuvola-frase"

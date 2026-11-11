@@ -162,8 +162,8 @@ class LibraryTabTest {
       timeline = state.timeline, preferences = state.preferences, phone = state.phone, commands = commands,
     )
     show(withCommands)
-    composeRule.onNodeWithText("Vedi solo le foto che hai scelto").assertExists()
-    composeRule.onNodeWithText("3 foto nuove in attesa").assertExists()
+    composeRule.onNodeWithText("Solo le foto scelte").assertExists()
+    composeRule.onNodeWithText("3 foto in attesa").assertExists()
     composeRule.onNodeWithText("Consenti tutto").performClick()
     composeRule.onNodeWithText("Consenti").performClick()
     assertThat(commands.calls).containsExactly("access", "location").inOrder()
@@ -184,7 +184,7 @@ class LibraryTabTest {
     composeRule.onNodeWithText("Mostra tutto").performClick()
     composeRule.waitForIdle()
     assertThat(state.preferences.filter.value).isEqualTo(LibraryFilter.ALL)
-    composeRule.onNodeWithText("La Libreria è vuota").assertExists()
+    composeRule.onNodeWithText("Ancora nessuna foto").assertExists()
   }
 
   @Test
@@ -513,7 +513,7 @@ class LibraryTabTest {
   @Test
   fun laSchedaVuotaDicePercheEVuotaEMostraLoStato() {
     show(emptyLibraryTabState())
-    composeRule.onNodeWithText("La Libreria è vuota").assertExists()
+    composeRule.onNodeWithText("Ancora nessuna foto").assertExists()
     // B2 della beta: lo stato non sta piu' sotto lo stato vuoto (lo dice la nuvola in alto), e senza niente da dire la nuvola non c'e'.
     assertThat(composeRule.onAllNodesWithContentDescription("Stato della sincronizzazione", substring = true).fetchSemanticsNodes()).isEmpty()
     assertThat(SyntheticLibrary.DEFAULT_COUNT).isGreaterThan(0)

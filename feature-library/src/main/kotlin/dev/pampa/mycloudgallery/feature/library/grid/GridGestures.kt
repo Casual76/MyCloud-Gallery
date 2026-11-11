@@ -10,6 +10,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerType
 import androidx.compose.ui.input.pointer.isSecondaryPressed
 import androidx.compose.ui.input.pointer.pointerInput
@@ -39,6 +40,11 @@ internal class GridGestureCallbacks(
    * rilascio come un tocco. Il dito (o il mouse) sulla cella: [Offset] e se e' un mouse. Di serie no.
    */
   val ownsLongPress: (Offset, Boolean) -> Boolean = { _, _ -> false },
+  /**
+   * Fase H (D1): il punto [Offset] della griglia sta nella fascia laterale dei gesti di sistema (`WindowInsets.systemGestures`, il bordo da cui
+   * parte l'Indietro). Un dito che parte li' e va di lato e' del sistema: non comincia una selezione a trascinamento. Di serie nessuna fascia.
+   */
+  val inSystemGestureBand: (Offset) -> Boolean = { false },
 )
 
 private enum class GestureMode { Undecided, Scroll, DragSelect, Pinch }
@@ -56,6 +62,15 @@ private enum class GestureMode { Undecided, Scroll, DragSelect, Pinch }
  *  - **In modalita' selezione** un trascinamento che parte orizzontale (sotto i 30°) seleziona, uno verticale scorre.
  *  - **Scorrimento automatico** vicino ai bordi (64 dp), con velocita' proporzionale alla profondita'.
  *  - **Pinch**: due dita cambiano livello, ancorate al punto fra le dita.
+ *
+ * **Un tocco vale solo se il dito si alza davvero** (fase H, D1, 11/11). Quando il sistema si prende il gesto (l'Indietro dal bordo, anche quello
+ * predittivo) manda alla finestra un annullamento (`ACTION_CANCEL`); Compose lo traduce in un evento sintetico con il dito **alzato ma gia'
+ * consumato** (`SuspendingPointerInputModifierNodeImpl.onCancelPointerInput`, verificato sul bytecode di ui 1.10.5). Il sistema lo decide prima
+ * che il dito superi lo slop della griglia (la soglia dell'Indietro e' tre quarti dello slop), quindi il gesto era ancora "indeciso" e quel
+ * rilascio finto si leggeva come un tocco: sull'S25 un Indietro partito sopra una foto la apriva. Ora un rilascio consumato (annullamento, o un
+ * altro nodo che si e' preso il gesto) non apre e non seleziona niente. Un dito partito nella fascia dei gesti di sistema che va di lato non
+ * comincia nemmeno una selezione a trascinamento ([GridGestureCallbacks.inSystemGestureBand]); un tocco fermo nella fascia resta un tocco, come
+ * nelle gallerie di sistema (la cella al bordo si apre).
  */
 internal fun Modifier.gridGestures(
   state: MediaGridState,
@@ -88,6 +103,8 @@ internal fun Modifier.gridGestures(
     // Fase 10 (P6): se la pressione lunga e' del trascinamento verso un'altra app (la cella e' gia' selezionata, o e' un mouse), la griglia non seleziona e il rilascio non e' un tocco.
     val mouse = down.type == PointerType.Mouse
     val dragOwned = hitId != null && callbacks.ownsLongPress(start, mouse)
+    // D1: un dito che parte dal bordo dei gesti di sistema e va di lato e' l'Indietro, non una selezione.
+    val fromSystemEdge = !mouse && callbacks.inSystemGestureBand(start)
     var mode = GestureMode.Undecided
     var pressJob: Job? = if (hitId != null) {
       scope.launch {
@@ -177,7 +194,8 @@ internal fun Modifier.gridGestures(
         }
         val change = event.changes.firstOrNull { it.id == down.id } ?: break
         if (!change.pressed) {
-          if (mode == GestureMode.Undecided && hitId != null && !(dragOwned && gestureLongEnough(down.uptimeMillis, change.uptimeMillis, viewConfiguration.longPressTimeoutMillis))) {
+          // D1: solo un rilascio vero. Quello sintetico dell'annullamento (il sistema si e' preso il gesto) arriva gia' consumato.
+          if (mode == GestureMode.Undecided && hitId != null && isRealRelease(change) && !(dragOwned && gestureLongEnough(down.uptimeMillis, change.uptimeMillis, viewConfiguration.longPressTimeoutMillis))) {
             tapped = true
             tap(state, scope, callbacks, hitId, pressJob)
           }
@@ -189,7 +207,7 @@ internal fun Modifier.gridGestures(
           if (delta.getDistance() > slop) {
             val horizontal = abs(delta.y) <= abs(delta.x) * Tan30
             // Il mouse che trascina una cella (o la selezione) la porta verso un'altra app: non e' una selezione a trascinamento (P6).
-            if (state.selecting && horizontal && hit >= 0 && !(dragOwned && mouse)) {
+            if (state.selecting && horizontal && hit >= 0 && !(dragOwned && mouse) && !fromSystemEdge) {
               beginDragSelect(hit)
             } else {
               mode = GestureMode.Scroll
@@ -235,6 +253,12 @@ private fun tap(state: MediaGridState, scope: CoroutineScope, callbacks: GridGes
     callbacks.onOpen(id)
   }
 }
+
+/**
+ * Il dito si e' alzato **davvero** (D1): non un annullamento. Compose traduce `ACTION_CANCEL` in un rilascio sintetico gia' consumato, e un
+ * rilascio che un altro nodo ha consumato non e' nemmeno lui un tocco della griglia.
+ */
+internal fun isRealRelease(change: PointerInputChange): Boolean = !change.pressed && !change.isConsumed
 
 /** Il dito e' rimasto giu' almeno quanto la pressione lunga: il gesto era un trascinamento verso un'altra app (anche se non e' partito), non un tocco. */
 private fun gestureLongEnough(downAt: Long, upAt: Long, longPressMillis: Long): Boolean = upAt - downAt >= longPressMillis

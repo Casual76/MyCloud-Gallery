@@ -5,6 +5,8 @@ import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.systemGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,6 +36,8 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CollectionInfo
 import androidx.compose.ui.semantics.CustomAccessibilityAction
@@ -161,6 +165,11 @@ fun MediaGrid(
     val currentOnLevelChanged by rememberUpdatedState(onLevelChanged)
     val currentDragOrigin by rememberUpdatedState(dragOrigin)
     val currentReduced by rememberUpdatedState(reducedMotion)
+    // D1 (fase H): la fascia laterale dei gesti di sistema, letta solo quando un dito si posa (mai in composizione).
+    val systemGestures = WindowInsets.systemGestures
+    val currentDensity by rememberUpdatedState(density)
+    val currentDirection by rememberUpdatedState(LocalLayoutDirection.current)
+    val windowView = LocalView.current
 
     // --- I layout -----------------------------------------------------------------------------
     val levels = remember(maxWidth) { GalleryGridLevels.forWidth(maxWidth.value) }
@@ -218,6 +227,12 @@ fun MediaGrid(
         ownsLongPress = { point, mouse ->
           currentDragOrigin != null && gridDragSubject(state, DragTouch(point, if (mouse) DragPointer.MOUSE else DragPointer.TOUCH)) != null
         },
+        inSystemGestureBand = { point ->
+          val x = point.x + state.originInWindow.x
+          val left = systemGestures.getLeft(currentDensity, currentDirection)
+          val right = systemGestures.getRight(currentDensity, currentDirection)
+          inSideBand(x, windowView.width, left, right)
+        },
       )
     }
 
@@ -252,6 +267,9 @@ fun MediaGrid(
     }
   }
 }
+
+/** D1: [x] (pixel della finestra larga [windowWidth]) sta nella fascia sinistra ([left]) o destra ([right]) dei gesti di sistema. */
+internal fun inSideBand(x: Float, windowWidth: Int, left: Int, right: Int): Boolean = (left > 0 && x < left) || (right > 0 && x > windowWidth - right)
 
 /** Gli effetti della griglia che non disegnano niente: miniature, selezione, scrubber, fondo. */
 @Composable

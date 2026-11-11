@@ -149,6 +149,10 @@ abstract class H5RaccolteShotBase(private val dark: Boolean, private val device:
   @Test
   fun ricordiEViaggi() = shoot("ricordi", after = { scrollTo("Tutti i ricordi") }) { Tab(fresh = false) }
 
+  /** CS-1: i Luoghi con la foto piu' recente di ogni luogo (e la Mappa con quella del luogo piu' fotografato). */
+  @Test
+  fun luoghi() = shoot("luoghi", after = { scrollTo("Milano") }) { Tab(fresh = false) }
+
   @Test
   fun appenaInstallata() = shoot("appena-installata") { Tab(fresh = true) }
 

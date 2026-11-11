@@ -64,6 +64,7 @@ import dev.antigravity.fluidengine.ui.fluid.rememberFluidGlassModalHostState
 import dev.antigravity.fluidengine.ui.fluid.rememberGlassBackdrop
 import dev.pampa.mycloudgallery.core.designsystem.theme.MyCloudGalleryTheme
 import kotlinx.coroutines.flow.MutableStateFlow
+import dev.pampa.mycloudgallery.feature.library.grid.cellBelowChrome
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.RuleChain
@@ -226,7 +227,8 @@ class LibraryTabTest {
     show(state)
     composeRule.onNodeWithContentDescription("Seleziona").performClick()
     composeRule.onNodeWithText("Seleziona elementi").assertExists()
-    composeRule.onAllNodesWithContentDescription("Foto, ", substring = true)[0].performClick()
+    // Fase H (D2): una cella fuori dalla chrome in alto (la prima della lista sta sotto l'etichetta, che trattiene i tocchi).
+    composeRule.cellBelowChrome().performClick()
     composeRule.onNodeWithText("1 selezionato").assertExists()
     composeRule.onNodeWithContentDescription("Condividi").assertExists()
     composeRule.onNodeWithContentDescription("Nascondi").assertExists()
@@ -269,7 +271,8 @@ class LibraryTabTest {
     }
     composeRule.waitForIdle()
     composeRule.onNodeWithContentDescription("Seleziona").performClick()
-    composeRule.onAllNodesWithContentDescription("Foto, ", substring = true)[0].performClick()
+    // Fase H (D2): una cella fuori dalla chrome in alto (la prima della lista sta sotto l'etichetta, che trattiene i tocchi).
+    composeRule.cellBelowChrome().performClick()
     assertThat(state.grid.selecting).isTrue()
 
     composeRule.runOnUiThread { dispatcher!!.onBackPressed() }

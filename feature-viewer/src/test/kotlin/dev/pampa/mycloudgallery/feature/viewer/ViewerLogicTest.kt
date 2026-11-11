@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.feature.viewer
 
+import dev.pampa.mycloudgallery.feature.viewer.info.stripColumns
 import android.app.Application
 import android.net.Uri
 import androidx.compose.ui.geometry.Size
@@ -249,6 +250,16 @@ class ViewerLogicTest {
     assertThat(full.fileName).isEqualTo("IMG_20240312_124100.jpg")
     assertThat(full.folder).isEqualTo("Camera")
     assertThat(full.note).isNull()
+  }
+
+  @Test
+  fun laStrisciaVaSuDueRigheSoloSeUnValoreNonEntraIntero() {
+    // CU-16: quattro valori in una riga se ognuno entra nel suo quarto; altrimenti due righe da due; una colonna se neanche cosi'.
+    assertThat(stripColumns(intArrayOf(120, 110, 90, 140), width = 576, rule = 2)).isEqualTo(4)
+    assertThat(stripColumns(intArrayOf(120, 110, 90, 160), width = 576, rule = 2)).isEqualTo(2)
+    assertThat(stripColumns(intArrayOf(120, 300), width = 576, rule = 2)).isEqualTo(1)
+    assertThat(stripColumns(intArrayOf(120, 110, 90), width = 576, rule = 2)).isEqualTo(3)
+    assertThat(stripColumns(intArrayOf(120), width = 576, rule = 2)).isEqualTo(1)
   }
 
   @Test

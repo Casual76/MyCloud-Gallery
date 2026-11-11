@@ -16,6 +16,7 @@ import androidx.compose.material.icons.rounded.Dock
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.Interests
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.TaskAlt
@@ -49,6 +50,8 @@ enum class CatalogGroup(
   Sheets("conferme", R.string.group_sheets_title, R.string.group_sheets_summary, Icons.Rounded.TaskAlt),
   States("stati-vuoti", R.string.group_states_title, R.string.group_states_summary, Icons.Rounded.Inbox),
   Status("stato-globale", R.string.group_status_title, R.string.group_status_summary, Icons.Rounded.CloudDone),
+  // I3 (fase I): le icone espressive, la piastrella condivisa (CatalogIconSections.kt).
+  IconTiles("icone", R.string.group_icons_title, R.string.group_icons_summary, Icons.Rounded.Interests),
   Headers("intestazioni", R.string.group_headers_title, R.string.group_headers_summary, Icons.Rounded.CalendarMonth),
   Motion("movimento", R.string.group_motion_title, R.string.group_motion_summary, Icons.Rounded.Animation),
 
@@ -75,6 +78,7 @@ fun catalogSections(group: CatalogGroup): List<CatalogSection> = when (group) {
   CatalogGroup.Sheets -> sheetSections()
   CatalogGroup.States -> stateSections()
   CatalogGroup.Status -> statusSections()
+  CatalogGroup.IconTiles -> iconSections()
   CatalogGroup.Headers -> headerSections()
   CatalogGroup.Motion -> motionSections()
   CatalogGroup.Grid -> gridSections()

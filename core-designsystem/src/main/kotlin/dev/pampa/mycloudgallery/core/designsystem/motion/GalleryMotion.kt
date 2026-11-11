@@ -75,8 +75,15 @@ object GalleryMotion {
   /** L'assestamento del pinch dopo il rilascio: la stessa molla delle superfici grandi. */
   fun <T> settleSpec(): FiniteAnimationSpec<T> = FluidMotion.smooth()
 
-  /** L'apparizione di una barra o di un elemento di chrome: sfuma (e' chrome, non una pagina). */
-  fun <T> chromeAppearSpec(): FiniteAnimationSpec<T> = FluidMotion.fadeIn()
+  /**
+   * L'apparizione di una barra o di un elemento di chrome: sfuma (e' chrome, non una pagina).
+   *
+   * H1 (D6 della prova dell'11/11, "i tasti del viewer compaiono di scatto"): con la curva d'entrata (`EaseOut`, meta' del percorso nel primo
+   * decimo del tempo) il primo fotogramma visibile della barra, che e' anche quello in cui il suo vetro si compone e si disegna per la prima
+   * volta, cadeva gia' a meta' opacita': la barra *saltava* dentro. Con la curva simmetrica e la durata dell'apertura del viewer la barra parte
+   * piano (quel fotogramma pesante cade quasi trasparente) e arriva insieme all'assestamento della foto.
+   */
+  fun <T> chromeAppearSpec(): FiniteAnimationSpec<T> = FluidMotion.crossFade(FluidMotion.DurationExpand)
 }
 
 // ---------------------------------------------------------------------------------------------

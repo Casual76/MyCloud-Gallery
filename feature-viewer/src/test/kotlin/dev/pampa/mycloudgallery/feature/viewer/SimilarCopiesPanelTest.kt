@@ -22,7 +22,6 @@ import dev.pampa.mycloudgallery.core.model.MediaGroupId
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.MediaKind
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSections
-import dev.pampa.mycloudgallery.feature.viewer.info.InfoSheet
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSidePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberSimilarCopiesPanel
 import org.junit.Rule
@@ -77,9 +76,7 @@ class SimilarCopiesPanelTest {
       if (side) {
         InfoSidePanel(progress = { 1f }, width = 360.dp, title = "Informazioni", onClose = {}) { InfoSections(panel.sections) }
       } else {
-        InfoSheet(progress = { 1f }, height = 560.dp, title = "Informazioni", onClose = {}, onHeaderDrag = {}, onHeaderDragEnd = {}) {
-          InfoSections(panel.sections)
-        }
+        OpenInfoSheet { InfoSections(panel.sections) }
       }
       panel.confirmSheet()
     }
@@ -109,14 +106,14 @@ class SimilarCopiesPanelTest {
   @Test
   fun senzaIlRilevatoreLaSezioneNonCe() {
     show(null)
-    composeRule.onNodeWithText("Informazioni").assertExists()
+    composeRule.onNode(infoPane()).assertExists()
     assertThat(composeRule.onAllNodesWithText("copie", substring = true, ignoreCase = true).fetchSemanticsNodes()).isEmpty()
   }
 
   @Test
   fun unMediaSenzaCopieNonHaLaSezione() {
     show(fake(), current = MediaId.random())
-    composeRule.onNodeWithText("Informazioni").assertExists()
+    composeRule.onNode(infoPane()).assertExists()
     assertThat(composeRule.onAllNodesWithText("copie", substring = true, ignoreCase = true).fetchSemanticsNodes()).isEmpty()
   }
 

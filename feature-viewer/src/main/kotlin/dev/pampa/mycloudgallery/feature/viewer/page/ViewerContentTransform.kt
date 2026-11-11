@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.util.lerp
 
 /**
  * Dove sta il contenuto del viewer (il pager con la foto o il video) in questo fotogramma: **un solo punto** (H1).
@@ -21,8 +20,9 @@ import androidx.compose.ui.util.lerp
  * coordinate locali; null = nessun ritaglio) e con l'opacita' [alpha]. Niente misure che cambiano: solo il `graphicsLayer` (traslazione,
  * scala, ritaglio, alfa), che non ri-misura niente e non rialloca i layer del vetro (lezione P1/P2 sull'S25).
  *
- * Chi la scrive: il pannello informazioni (lo spostamento per fargli posto, [infoShift]) e la chiusura (`ViewerDismissState.layer`, il
- * trascinamento, il pizzico, l'Indietro predittivo e il volo alla cella). Si compongono con [then].
+ * Chi la scrive: la chiusura (`ViewerDismissState.layer`, H1: il trascinamento, il pizzico, l'Indietro predittivo e il volo alla cella), applicata
+ * a tutto il pager, e il pannello informazioni (`InfoGeometry`, H2: il contenuto che sale attaccato al bordo del pannello), applicato a ogni
+ * pagina con le sue proporzioni (`infoPageLayer` in `ViewerOverlay.kt`). Non agiscono mai insieme: il pannello si chiude prima del viewer.
  */
 @Immutable
 internal data class ContentLayer(
@@ -60,26 +60,6 @@ internal data class ContentLayer(
       scale = scale,
       translation = Offset(pivot.x * (1f - scale) + shift.x, pivot.y * (1f - scale) + shift.y),
     )
-  }
-}
-
-/**
- * Lo spostamento che fa posto al pannello informazioni ([progress] 0 = chiuso, 1 = aperto): oggi il contenuto si rimpicciolisce intorno
- * al centro e sale di meta' del foglio (sul telefono) o va a sinistra di meta' della colonna (da 840 dp).
- *
- * **Aggancio per H2** (il pannello alla Galleria di Samsung): il contenuto che *sale* con il pannello, con un leggero zoom per i contenuti
- * molto orizzontali, si scrive qui (questa funzione, o una che la sostituisce con la stessa firma): `PagerLayer` compone il risultato con la
- * chiusura in [ContentLayer.then] e lo applica con [viewerContentLayer]. Nessun altro punto sposta il contenuto.
- */
-internal fun infoShift(progress: Float, stage: Size, sidePanel: Boolean, sheetPx: Float, panelPx: Float, minScale: Float): ContentLayer {
-  if (progress <= 0f || stage.width <= 0f || stage.height <= 0f) return ContentLayer.Identity
-  val center = Offset(stage.width / 2f, stage.height / 2f)
-  return if (sidePanel) {
-    val scale = lerp(1f, ((stage.width - panelPx) / stage.width).coerceAtLeast(minScale), progress)
-    ContentLayer.scaledAround(scale, center, Offset(-(panelPx / 2f) * progress, 0f))
-  } else {
-    val scale = lerp(1f, ((stage.height - sheetPx) / stage.height).coerceAtLeast(minScale), progress)
-    ContentLayer.scaledAround(scale, center, Offset(0f, -(sheetPx / 2f) * progress))
   }
 }
 

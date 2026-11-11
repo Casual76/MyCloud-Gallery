@@ -145,6 +145,35 @@ internal class ViewerFormat(
     return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
   }
 
+  /**
+   * H2: i dati di scatto come pillole del pannello, solo quelli che la fotocamera ha scritto: "Obiettivo principale", "f/1,8", "1/250 s",
+   * "ISO 50", "6,3 mm", "Flash". Il flash si dice solo se e' scattato ("Senza flash" e' rumore).
+   */
+  fun shotPills(exif: ExifDetails): List<String> = listOfNotNull(
+    exif.lens?.trim()?.takeIf { it.isNotEmpty() },
+    exif.fNumber?.let { resources.getString(R.string.viewer_exposure_f, trimmed(it)) },
+    exif.exposureTime?.takeIf { it.isNotBlank() }?.let { resources.getString(R.string.viewer_exposure_time, it) },
+    exif.iso?.let { resources.getString(R.string.viewer_exposure_iso, it) },
+    exif.focalLengthMm?.let { resources.getString(R.string.viewer_focal_mm, trimmed(it)) },
+    resources.getString(R.string.viewer_flash_on).takeIf { exif.flashFired == true },
+  )
+
+  /** H2: le misure come pillole: "4000 × 3000" e "12 MP". */
+  fun dimensionPills(details: MediaDetails): List<String> {
+    val w = details.orientedWidth ?: return emptyList()
+    val h = details.orientedHeight ?: return emptyList()
+    val size = resources.getString(R.string.viewer_dimensions, w, h)
+    val mp = details.megapixels ?: return listOf(size)
+    val text = if (mp >= 10.0) mp.roundToInt().toString() else String.format(locale, "%.1f", mp)
+    return listOf(size, resources.getString(R.string.viewer_megapixels, text))
+  }
+
+  /** H2: il titolo del pannello, "Martedì 12 marzo 2024" (il giorno con la maiuscola: e' l'inizio di un titolo). */
+  fun panelDate(time: CaptureTime): String = GalleryDates.weekdayDate(time.localDateTime).replaceFirstChar { it.titlecase(locale) }
+
+  /** H2: lo stesso dal giorno dell'indice, finche' i dettagli non arrivano: "12 marzo 2024". */
+  fun panelDate(localDay: Int): String? = parseLocalDay(localDay)?.let { GalleryDates.weekdayDate(it.atStartOfDay()).replaceFirstChar { c -> c.titlecase(locale) } }
+
   /** "6,3 mm · Flash": la focale e il flash, se noti. */
   fun lensLine(exif: ExifDetails): String? {
     val parts = listOfNotNull(

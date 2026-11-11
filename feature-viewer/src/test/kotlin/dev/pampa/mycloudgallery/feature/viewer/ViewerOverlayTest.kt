@@ -118,9 +118,9 @@ class ViewerOverlayTest : ViewerTestBase() {
     pager().performTouchInput { swipeUp() }
     composeRule.waitForIdle()
     composeRule.onNodeWithTag(ViewerTags.InfoPanel).assertExists()
-    // Data e ora con il fuso dello scatto, luogo con regione e paese, e la riga per aprire Mappe.
-    composeRule.onNodeWithText("martedì 12 marzo 2024, 12:41", substring = true).assertExists()
-    composeRule.onNodeWithText("ora di Oslo, UTC+1").assertExists()
+    // H2: la data grande in testa, sotto l'ora con il fuso dello scatto, il luogo con il paese, e la pillola per aprire Mappe.
+    composeRule.onNodeWithText("Martedì 12 marzo 2024").assertExists()
+    composeRule.onNodeWithText("12:41 · ora di Oslo, UTC+1").assertExists()
     composeRule.onNodeWithText("Oslo, Norvegia", substring = true).assertExists()
     composeRule.onNodeWithText("Apri in Mappe").assertExists()
   }
@@ -132,7 +132,10 @@ class ViewerOverlayTest : ViewerTestBase() {
     pager().performTouchInput { swipeUp() }
     composeRule.waitForIdle()
     composeRule.onNodeWithText("Samsung Galaxy S25").assertExists()
-    composeRule.onNodeWithText("f/1.8 · 1/250 s · ISO 50".replace('.', ',')).assertExists()
+    // H2: i dati di scatto in pillole, uno per pillola.
+    composeRule.onNodeWithText("f/1,8").assertExists()
+    composeRule.onNodeWithText("1/250 s").assertExists()
+    composeRule.onNodeWithText("ISO 50").assertExists()
   }
 
   @Test

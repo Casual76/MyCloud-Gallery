@@ -22,8 +22,12 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import kotlin.math.abs
 import kotlin.math.sign
 
-/** Che cosa fa un trascinamento verticale per il pannello informazioni: verso l'alto lo apre (sul telefono), verso il basso lo chiude. */
-internal enum class InfoIntent { Open, Close }
+/**
+ * Che cosa fa un trascinamento verticale per il pannello informazioni: verso l'alto lo apre (sul telefono), verso il basso lo chiude, verso
+ * l'alto a pannello aperto lo fa scorrere (H2: un pannello lungo cresce oltre la meta' e porta con se' la foto). Il pannello lo tratta come un
+ * gesto solo ([dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState.drag]): l'intenzione dice solo da dove e' partito.
+ */
+internal enum class InfoIntent { Open, Close, Scroll }
 
 /**
  * Chi prende un gesto sul contenuto del viewer. Lo decide [ViewerGestureArbiter] con la sola geometria, **prima dei figli** (il pager e lo
@@ -42,6 +46,12 @@ internal enum class GestureClaim {
   /** Il pannello informazioni: si apre (verso l'alto) o si chiude (verso il basso, a pannello aperto). */
   OpenInfo,
   CloseInfo,
+
+  /** H2: a pannello aperto, il dito che sale sulla foto fa scorrere il pannello (cresce oltre la meta', poi le informazioni scorrono). */
+  ScrollInfo,
+
+  /** H2: due dita a pannello aperto (telefono): il pannello si chiude; ingrandire e' il gesto dopo, sulla foto intera. */
+  InfoPinch,
 
   /**
    * Un trascinamento verticale che il viewer non usa (verso l'alto sul tablet, che ha la colonna laterale): non e' un tocco. Compose conta
@@ -70,8 +80,12 @@ internal data class GestureContext(
  *  - **un dito, di lato** (prevale l'orizzontale): il pager, che passa all'elemento vicino; a foto ingrandita lo zoom, che la sposta fino al
  *    bordo e da li' lascia il resto al pager;
  *  - **un dito, verso il basso**: la chiusura (a pannello aperto: la chiusura del pannello);
- *  - **un dito, verso l'alto**: il pannello informazioni sul telefono; sul tablet niente ([GestureClaim.Dead]);
+ *  - **un dito, verso l'alto**: il pannello informazioni sul telefono; a pannello aperto lo fa scorrere (H2); con la colonna laterale
+ *    (tablet, telefono in orizzontale) niente ([GestureClaim.Dead]), anche verso il basso: la colonna si chiude con il suo tasto o toccando la
+ *    foto;
  *  - **due dita che si stringono a zoom minimo**: la chiusura, la stessa del trascinamento (il contenuto segue il punto medio delle dita);
+ *  - **due dita a pannello aperto** (telefono): appena si appoggia il secondo dito il pannello si chiude ([GestureClaim.InfoPinch]) e il resto
+ *    del gesto non e' di nessuno; lo zoom e' il gesto dopo, sulla foto intera;
  *  - **due dita che si allargano**, o qualsiasi gesto **a foto ingrandita**: lo zoom (telephoto);
  *  - **tocco, doppio tocco, pressione lunga**: non superano la soglia di movimento, quindi qui restano "non si sa" fino alla fine e vanno ai
  *    figli (tocco = barre, doppio tocco = zoom, pressione lunga = testo dal vivo o ritaglio);
@@ -95,7 +109,9 @@ internal object ViewerGestureArbiter {
   fun decide(context: GestureContext, fingers: Int, pan: Offset, spanChange: Float, slop: Float): GestureClaim {
     if (!context.enabled || context.zoomed) return GestureClaim.Children
     if (fingers >= 2) {
-      if (context.infoOpen) return GestureClaim.Children
+      // H2: a pannello aperto il secondo dito che si appoggia chiude il pannello, subito (senza aspettare che le dita si muovano): lo zoom
+      // non vede mai l'inizio di un pizzico su una foto spostata e tagliata. Con la colonna laterale la foto accanto e' intera: e' dello zoom.
+      if (context.infoOpen) return if (context.sidePanel) GestureClaim.Children else GestureClaim.InfoPinch
       return when {
         spanChange <= -slop * PinchSlopShare -> GestureClaim.Dismiss
         spanChange >= slop * PinchSlopShare -> GestureClaim.Children
@@ -106,10 +122,17 @@ internal object ViewerGestureArbiter {
     val dy = abs(pan.y)
     if (dx > slop && dx >= dy) return GestureClaim.Children
     if (dy > slop && dy > dx) {
-      if (pan.y > 0f) return if (context.infoOpen) GestureClaim.CloseInfo else GestureClaim.Dismiss
+      if (pan.y > 0f) {
+        return when {
+          !context.infoOpen -> GestureClaim.Dismiss
+          context.sidePanel -> GestureClaim.Dead
+          else -> GestureClaim.CloseInfo
+        }
+      }
       return when {
         context.returning -> GestureClaim.Children
-        context.infoOpen || context.sidePanel -> GestureClaim.Dead
+        context.sidePanel -> GestureClaim.Dead
+        context.infoOpen -> GestureClaim.ScrollInfo
         else -> GestureClaim.OpenInfo
       }
     }
@@ -129,6 +152,8 @@ internal class ViewerGestureCallbacks(
   val onInfoDrag: (InfoIntent, dy: Float) -> Unit,
   val onInfoEnd: (InfoIntent, velocityY: Float) -> Unit,
   val onInfoCancel: (InfoIntent) -> Unit,
+  /** H2: due dita a pannello aperto: il pannello si chiude (una volta per gesto). */
+  val onInfoPinch: () -> Unit = {},
 )
 
 /**
@@ -191,6 +216,12 @@ internal fun Modifier.viewerGestures(callbacks: ViewerGestureCallbacks): Modifie
                   claim = next
                   event.changes.forEach { it.consume() }
                 }
+                GestureClaim.InfoPinch -> {
+                  // Il resto del gesto non e' di nessuno: il pannello si chiude e le dita non ingrandiscono la foto che sta tornando.
+                  claim = GestureClaim.Dead
+                  cb.onInfoPinch()
+                  event.changes.forEach { it.consume() }
+                }
                 GestureClaim.Dismiss -> {
                   claim = next
                   // Le velocita' si misurano da qui: il punto medio delle dita (con due dita non e' dove si e' appoggiato il primo dito).
@@ -206,9 +237,13 @@ internal fun Modifier.viewerGestures(callbacks: ViewerGestureCallbacks): Modifie
                   if (pressed == 1) cb.onDismissMove(Offset(0f, pan.y - sign(pan.y) * slop), 1f, first.position)
                   event.changes.forEach { it.consume() }
                 }
-                GestureClaim.OpenInfo, GestureClaim.CloseInfo -> {
+                GestureClaim.OpenInfo, GestureClaim.CloseInfo, GestureClaim.ScrollInfo -> {
                   claim = next
-                  infoIntent = if (next == GestureClaim.OpenInfo) InfoIntent.Open else InfoIntent.Close
+                  infoIntent = when (next) {
+                    GestureClaim.OpenInfo -> InfoIntent.Open
+                    GestureClaim.CloseInfo -> InfoIntent.Close
+                    else -> InfoIntent.Scroll
+                  }
                   tracker.resetTracking()
                   tracker.addPosition(first.uptimeMillis, first.position)
                   cb.onInfoDrag(infoIntent, pan.y - sign(pan.y) * slop)
@@ -242,7 +277,7 @@ internal fun Modifier.viewerGestures(callbacks: ViewerGestureCallbacks): Modifie
               if (centroid.isSpecified) cb.onDismissMove(panStep, zoomStep, centroid)
               event.changes.forEach { it.consume() }
             }
-            GestureClaim.OpenInfo, GestureClaim.CloseInfo -> {
+            GestureClaim.OpenInfo, GestureClaim.CloseInfo, GestureClaim.ScrollInfo -> {
               val change = event.changes.firstOrNull { it.id == down.id }
               if (canceled || change == null) {
                 finished = true
@@ -259,14 +294,14 @@ internal fun Modifier.viewerGestures(callbacks: ViewerGestureCallbacks): Modifie
               cb.onInfoDrag(infoIntent, change.positionChange().y)
               change.consume()
             }
-            GestureClaim.Children -> break
+            GestureClaim.Children, GestureClaim.InfoPinch -> break
           }
         }
       } finally {
         if (!finished) {
           when (claim) {
             GestureClaim.Dismiss -> cb.onDismissCancel()
-            GestureClaim.OpenInfo, GestureClaim.CloseInfo -> cb.onInfoCancel(infoIntent)
+            GestureClaim.OpenInfo, GestureClaim.CloseInfo, GestureClaim.ScrollInfo -> cb.onInfoCancel(infoIntent)
             else -> Unit
           }
         }

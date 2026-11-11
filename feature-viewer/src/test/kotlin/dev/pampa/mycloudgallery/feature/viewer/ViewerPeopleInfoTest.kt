@@ -30,12 +30,9 @@ import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.model.PersonId
-import dev.pampa.mycloudgallery.feature.viewer.info.InfoSectionModel
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSections
-import dev.pampa.mycloudgallery.feature.viewer.info.InfoSheet
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSidePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberPeoplePanel
-import dev.pampa.mycloudgallery.feature.viewer.info.sectionsWithPeople
 import dev.pampa.mycloudgallery.feature.viewer.people.ViewerFaceAction
 import dev.pampa.mycloudgallery.feature.viewer.people.ViewerFaceChip
 import dev.pampa.mycloudgallery.feature.viewer.people.ViewerFaceOutcome
@@ -93,9 +90,7 @@ class ViewerPeopleInfoTest {
         if (side) {
           InfoSidePanel(progress = { 1f }, width = 360.dp, title = "Informazioni", onClose = {}) { InfoSections(panel.sections) }
         } else {
-          InfoSheet(progress = { 1f }, height = 560.dp, title = "Informazioni", onClose = {}, onHeaderDrag = {}, onHeaderDragEnd = {}) {
-            InfoSections(panel.sections)
-          }
+          OpenInfoSheet { InfoSections(panel.sections) }
         }
         panel.sheets()
       }
@@ -145,7 +140,7 @@ class ViewerPeopleInfoTest {
   fun unMediaSenzaVolti_nonHaLaRiga() {
     show(people())
     assertThat(exists("PERSONE")).isFalse()
-    assertThat(exists("Informazioni")).isTrue()
+    assertThat(composeRule.onAllNodes(infoPane()).fetchSemanticsNodes()).isNotEmpty()
   }
 
   @Test
@@ -161,16 +156,6 @@ class ViewerPeopleInfoTest {
     val source = both()
     show(source)
     assertThat(source.crops.toSet()).containsExactly(faceAnna, faceMarco, faceUnknown)
-  }
-
-  @Test
-  fun lasezioneVaSubitoDopoLaData() {
-    val date = InfoSectionModel(header = null, rows = emptyList())
-    val other = InfoSectionModel(header = "Altro", rows = emptyList())
-    val people = InfoSectionModel(header = "Persone", rows = emptyList())
-    assertThat(sectionsWithPeople(listOf(date, other), listOf(people))).containsExactly(date, people, other).inOrder()
-    assertThat(sectionsWithPeople(listOf(other), listOf(people))).containsExactly(people, other).inOrder()
-    assertThat(sectionsWithPeople(listOf(date, other), emptyList())).containsExactly(date, other).inOrder()
   }
 
   // --- Tocchi e fogli -------------------------------------------------------------------------------------------------------------

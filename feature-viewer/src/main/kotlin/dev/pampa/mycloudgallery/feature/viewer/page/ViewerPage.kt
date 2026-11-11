@@ -271,7 +271,9 @@ internal fun ViewerPage(
       onTap()
     }
   }
-  val doubleTapOn = liveText?.active != true && cutout?.active != true
+  // H2: con il pannello informazioni aperto il doppio tocco non ingrandisce (la foto e' spostata e tagliata: si ingrandirebbe un punto che non e'
+  // quello toccato) e non fa niente; un tocco solo chiude il pannello (`ViewerController.toggleChrome`).
+  val doubleTapOn = liveText?.active != true && cutout?.active != true && !state.infoOpen
   Box(
     modifier = modifier
       .fillMaxSize()

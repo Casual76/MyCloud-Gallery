@@ -4,6 +4,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.IntentSender
+import androidx.compose.animation.splineBasedDecay
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -14,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.unit.Density
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryViewerTransitionState
 import dev.pampa.mycloudgallery.core.imaging.contract.UnavailableReason
 import dev.pampa.mycloudgallery.core.imaging.viewer.NasNetwork
@@ -30,6 +32,7 @@ import dev.pampa.mycloudgallery.feature.viewer.gesture.FlightPlan
 import dev.pampa.mycloudgallery.feature.viewer.gesture.GestureContext
 import dev.pampa.mycloudgallery.feature.viewer.gesture.InfoIntent
 import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerDismissState
+import dev.pampa.mycloudgallery.feature.viewer.info.InfoGeometry
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
 import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutController
 import dev.pampa.mycloudgallery.feature.viewer.cutout.CutoutHost
@@ -79,7 +82,6 @@ internal class ViewerController(
   var reducedMotion: Boolean = false
   var density: Float = 1f
   var sidePanel: Boolean = false
-  var sheetPx: Float = 1f
   var launchSender: (IntentSender) -> Unit = {}
 
   /** Il viewer e' stato posizionato nella finestra: da qui [windowOffset] e' quello vero. */
@@ -331,20 +333,39 @@ internal class ViewerController(
     returnJob = scope.launch { dismiss.settleBack(reducedMotion) }
   }
 
-  fun onInfoDrag(intent: InfoIntent, dy: Float) {
-    scope.launch { info.dragBy(-dy / sheetPx) }
-  }
+  /** La corsa del pannello informazioni del telefono: meta' scena (H2, [InfoGeometry]). */
+  private val infoTravel: Float get() = InfoGeometry.travel(stage.height)
 
-  fun onInfoEnd(intent: InfoIntent, velocityY: Float) {
-    scope.launch {
-      val bias = if (intent == InfoIntent.Open) InfoPanelState.OpenBias else InfoPanelState.CloseBias
-      state.infoOpen = info.release(-velocityY / sheetPx, reducedMotion, bias)
-    }
-  }
+  /**
+   * Un passo del dito sul pannello informazioni, da qualunque parte arrivi (la foto, il pannello): un gesto solo che apre, fa scorrere un
+   * pannello lungo, torna in cima e chiude ([InfoPanelState.drag]).
+   */
+  fun onInfoDrag(@Suppress("UNUSED_PARAMETER") intent: InfoIntent, dy: Float) = onPanelDrag(dy)
+
+  fun onInfoEnd(@Suppress("UNUSED_PARAMETER") intent: InfoIntent, velocityY: Float) = onPanelDragEnd(velocityY)
 
   fun onInfoCancel(@Suppress("UNUSED_PARAMETER") intent: InfoIntent) {
     scope.launch { info.settle(state.infoOpen, reducedMotion) }
   }
+
+  /** Il dito sul pannello stesso (o sulla foto): [dy] pixel, positivo = verso il basso. */
+  fun onPanelDrag(dy: Float) {
+    scope.launch { info.drag(dy, infoTravel) }
+  }
+
+  /** Il dito si alza dal pannello con [velocityY] pixel al secondo: aperto, chiuso o lasciato scorrere. */
+  fun onPanelDragEnd(velocityY: Float) {
+    // Lo stato dice subito dove va il pannello: un gesto durante la molla (un tocco, un pizzico, uno swipe in giu') va al pannello giusto.
+    scope.launch { info.endDrag(velocityY, infoTravel, reducedMotion, panelDecay) { open -> state.infoOpen = open } }
+  }
+
+  /** H2: due dita a pannello aperto chiudono il pannello. */
+  fun onInfoPinch() {
+    if (!closing) state.infoOpen = false
+  }
+
+  /** Lo scorrimento di un pannello lungo che continua dopo il dito: la stessa decelerazione delle liste. */
+  private val panelDecay by lazy(LazyThreadSafetyMode.NONE) { splineBasedDecay<Float>(Density(density)) }
 
   // --- Indietro predittivo -------------------------------------------------------------------------------------------
 
@@ -361,8 +382,17 @@ internal class ViewerController(
 
   // --- Barre, informazioni ------------------------------------------------------------------------------------------
 
+  /**
+   * Il tocco sulla foto: mostra o nasconde le barre. H2: con il pannello informazioni del telefono aperto, il tocco sulla meta' alta lo chiude
+   * (la colonna laterale resta: la foto accanto si guarda e si tocca come sempre).
+   */
   fun toggleChrome() {
-    if (!closing) state.chromeVisible = !state.chromeVisible
+    if (closing) return
+    if (state.infoOpen && !sidePanel) {
+      state.infoOpen = false
+      return
+    }
+    state.chromeVisible = !state.chromeVisible
   }
 
   fun toggleInfo() {

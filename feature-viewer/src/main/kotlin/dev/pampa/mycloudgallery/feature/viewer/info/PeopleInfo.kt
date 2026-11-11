@@ -89,13 +89,6 @@ internal fun rememberPeoplePanel(source: ViewerPeople?, media: MediaId, active: 
   return PeoplePanel(sections) { PeopleSheets(source, media, chips, sheet, controller) }
 }
 
-/** La sezione "Persone" va subito dopo la data (la prima sezione, senza intestazione); se la data non c'e', in testa. */
-internal fun sectionsWithPeople(base: List<InfoSectionModel>, people: List<InfoSectionModel>): List<InfoSectionModel> {
-  if (people.isEmpty()) return base
-  val dateFirst = base.firstOrNull()?.header == null && base.isNotEmpty()
-  return if (dateFirst) base.take(1) + people + base.drop(1) else people + base
-}
-
 @Composable
 private fun PeopleSection(source: ViewerPeople, media: MediaId, chips: List<ViewerFaceChip>, notice: ViewerFaceOutcome?, controller: PeopleInfoController) {
   val faces = chips.filter { it !is ViewerFaceChip.Unrecognizable }

@@ -18,17 +18,13 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
-import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.places.contract.PlacesAttribution
-import dev.pampa.mycloudgallery.feature.viewer.info.InfoSectionModel
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSections
-import dev.pampa.mycloudgallery.feature.viewer.info.InfoSheet
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberPlaceMapPanel
-import dev.pampa.mycloudgallery.feature.viewer.info.sectionsWithPlaceMap
 import dev.pampa.mycloudgallery.feature.viewer.place.ViewerMapPlace
 import dev.pampa.mycloudgallery.feature.viewer.place.ViewerPlaceMap
 import dev.pampa.mycloudgallery.feature.viewer.testing.FakeViewerPlaceMap
@@ -63,7 +59,7 @@ class ViewerPlaceMapInfoTest {
     CompositionLocalProvider(LocalDensity provides Density(density.density, fontScale ?: density.fontScale)) {
       Box(Modifier.fillMaxSize()) {
         val panel = rememberPlaceMapPanel(source, photo, active, secure)
-        InfoSheet(progress = { 1f }, height = 560.dp, title = "Informazioni", onClose = {}, onHeaderDrag = {}, onHeaderDragEnd = {}) { InfoSections(panel.sections) }
+        OpenInfoSheet { InfoSections(panel.sections) }
       }
     }
   }
@@ -86,9 +82,9 @@ class ViewerPlaceMapInfoTest {
   fun conUnaPosizioneCeLaRigaMostraSullaMappa_EIlTocco_ApreLaMappaVera() {
     val fake = located()
     show(fake)
-    assertThat(exists("MAPPA")).isTrue()
+    // H2: la carta senza intestazione (parla da se') e sotto la pillola per aprirla nella mappa dell'app.
+    assertThat(exists("MAPPA")).isFalse()
     assertThat(exists("Mostra sulla mappa")).isTrue()
-    assertThat(exists("Nella mappa dell’app")).isTrue()
     composeRule.onNodeWithText("Mostra sulla mappa").performClick()
     composeRule.waitForIdle()
     assertThat(fake.shown).containsExactly(photo)
@@ -199,19 +195,5 @@ class ViewerPlaceMapInfoTest {
     show(located(fakeMiniMap()), dark = true)
     assertThat(exists("Mostra sulla mappa")).isTrue()
     composeRule.onRoot().captureRoboImage("../docs/screenshots/9-P4/info-viewer-mini-mappa-scuro-telefono.png")
-  }
-
-  // --- L'ordine delle sezioni -----------------------------------------------------------------------------------------------------------
-
-  private fun section(header: String?) = InfoSectionModel(header = header, rows = emptyList())
-
-  @Test
-  fun laSezioneDellaMappaVaSubitoDopoIlLuogo_OAltrimentiDopoLaData_OInTesta() {
-    val map = listOf(section("Mappa"))
-    assertThat(sectionsWithPlaceMap(listOf(section(null), section("Luogo"), section("File")), map, "Luogo").map { it.header }).containsExactly(null, "Luogo", "Mappa", "File").inOrder()
-    assertThat(sectionsWithPlaceMap(listOf(section(null), section("File")), map, "Luogo").map { it.header }).containsExactly(null, "Mappa", "File").inOrder()
-    assertThat(sectionsWithPlaceMap(listOf(section("File")), map, "Luogo").map { it.header }).containsExactly("Mappa", "File").inOrder()
-    val base = listOf(section(null), section("Luogo"))
-    assertThat(sectionsWithPlaceMap(base, emptyList(), "Luogo")).isSameInstanceAs(base)
   }
 }

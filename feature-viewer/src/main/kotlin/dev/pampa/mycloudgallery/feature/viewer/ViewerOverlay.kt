@@ -11,11 +11,17 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -82,7 +88,6 @@ import dev.antigravity.fluidengine.ui.fluidphysics.FluidCornerRadii
 import dev.antigravity.fluidengine.ui.fluidphysics.FluidForm
 import dev.antigravity.fluidengine.ui.fluidphysics.fluidPhysicsClip
 import dev.antigravity.fluidengine.ui.fluidphysics.rememberFluidPhysicsState
-import dev.pampa.mycloudgallery.core.designsystem.adaptive.GalleryPaneRules
 import dev.pampa.mycloudgallery.core.designsystem.adaptive.rememberGalleryWindow
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryViewerMenuButton
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GalleryViewerMenuHost
@@ -133,26 +138,24 @@ import dev.pampa.mycloudgallery.feature.viewer.menu.nasMenuEntries
 import dev.pampa.mycloudgallery.feature.viewer.download.DownloadState
 import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerGestureCallbacks
 import dev.pampa.mycloudgallery.feature.viewer.gesture.viewerGestures
-import dev.pampa.mycloudgallery.feature.viewer.page.infoShift
+import dev.pampa.mycloudgallery.feature.viewer.page.fitRect
 import dev.pampa.mycloudgallery.feature.viewer.page.viewerContentLayer
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoInputs
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoPanelState
-import dev.pampa.mycloudgallery.feature.viewer.info.InfoSectionModel
-import dev.pampa.mycloudgallery.feature.viewer.info.InfoSections
+import dev.pampa.mycloudgallery.feature.viewer.info.InfoContent
+import dev.pampa.mycloudgallery.feature.viewer.info.InfoGeometry
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSheet
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextReadingNotice
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextSheet
 import dev.pampa.mycloudgallery.feature.viewer.livetext.LiveTextState
 import dev.pampa.mycloudgallery.feature.viewer.livetext.TextSelections
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSidePanel
-import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoSections
+import dev.pampa.mycloudgallery.feature.viewer.info.backupNote
+import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoModel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberBackupState
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberPeoplePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberSimilarCopiesPanel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberPlaceMapPanel
-import dev.pampa.mycloudgallery.feature.viewer.info.sectionsWithPeople
-import dev.pampa.mycloudgallery.feature.viewer.info.sectionsWithPlaceMap
-import dev.pampa.mycloudgallery.feature.viewer.info.sheetHeight
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionBadge
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionNotice
 import dev.pampa.mycloudgallery.feature.viewer.motion.MotionNoticeView
@@ -493,13 +496,11 @@ private fun ViewerHost(
     val stagePx = Size(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
     val screen = IntSize(constraints.maxWidth, constraints.maxHeight)
     // Fase 10 (P5, D12): le informazioni in colonna da finestra estesa (840 dp, la soglia di sempre) secondo la finestra comune, che dentro un pannello e' quella del pannello.
-    val sidePanel = GalleryPaneRules.infoBeside(window)
-    val sheetHeightDp = sheetHeight(maxHeight)
-    val sheetPx = with(density) { sheetHeightDp.toPx() }
+    // H2: anche nelle finestre basse e larghe (il telefono in orizzontale), dove meta' altezza sarebbe una striscia inservibile.
+    val sidePanel = InfoGeometry.side(window)
     val panelPx = with(density) { SidePanelWidth.toPx() }
     controller.stage = stagePx
     controller.sidePanel = sidePanel
-    controller.sheetPx = sheetPx
 
     LaunchedEffect(Unit) { controller.open() }
 
@@ -567,7 +568,6 @@ private fun ViewerHost(
         bottomReady = bottomAllowed,
         touchExploration = touchExploration,
         sidePanel = sidePanel,
-        sheetHeight = sheetHeightDp,
         panelPx = panelPx,
         menuState = menuState,
       )
@@ -611,8 +611,12 @@ private fun PagerLayer(
       onInfoDrag = controller::onInfoDrag,
       onInfoEnd = controller::onInfoEnd,
       onInfoCancel = controller::onInfoCancel,
+      onInfoPinch = controller::onInfoPinch,
     )
   }
+  // H2: con il pannello aperto ogni pagina si ritaglia ai suoi bordi: una foto orizzontale ingrandita per riempire la meta' alta non sconfina
+  // nella vicina mentre si scorre.
+  val infoShown by remember { derivedStateOf { info.progress.value > 0f } }
 
   // Le pagine vicine entrano a meta' dell'espansione, non nel suo primo fotogramma: durante l'espansione il pager e'
   // trasparente e non scorre (si vede la foto che cresce), e comporre tre pagine insieme nel fotogramma del tocco era
@@ -631,12 +635,9 @@ private fun PagerLayer(
       // H1: l'arbitro dei gesti (`ViewerGestureArbiter`) prima del layer che sposta il contenuto: le dita si leggono nelle coordinate dello schermo.
       // Con una selezione del testo o un soggetto staccato aperti nessuna chiusura ne' pannello (D45, E-V13): lo dice `gestureContext`.
       .viewerGestures(gestures)
-      // **Il punto unico** che sposta il contenuto (H1, aggancio per H2): il pannello informazioni (`infoShift`) dentro la chiusura (lo stato di
-      // `ViewerDismissState`: trascinamento, pizzico, Indietro, volo alla cella). Letto nel disegno: un fotogramma di gesto non ricompone niente.
-      .viewerContentLayer(visible = opened) {
-        val shift = infoShift(info.progress.value, stage, controller.sidePanel, controller.sheetPx, panelPx, MIN_SHIFT_SCALE)
-        shift then controller.dismiss.layer()
-      }
+      // La chiusura (H1) sposta tutto il pager (`ViewerDismissState`: trascinamento, pizzico, Indietro, volo alla cella); il pannello informazioni
+      // (H2) sposta ogni pagina con le sue proporzioni (`infoPageLayer`, qui sotto). Letti nel disegno: un fotogramma di gesto non ricompone niente.
+      .viewerContentLayer(visible = opened) { controller.dismiss.layer() }
       .semantics {
         contentDescription = positionText
         if (state.zoomed) stateDescription = zoomedText
@@ -707,11 +708,29 @@ private fun PagerLayer(
           cutout = controller.cutout,
           // Fase 10 (P6, D20, E-T18): la foto si trascina verso un'altra app, mai dai Nascosti.
           dragEnabled = !request.secure,
+          modifier = Modifier.infoPageLayer(controller, remember(spec.aspect, stage) { fitRect(stage, spec.aspect) }, panelPx, clip = infoShown),
         )
       }
     }
   }
 }
+
+/**
+ * **Dove sta una pagina con il pannello informazioni** (H2): il punto che sposta il contenuto per il pannello, per ogni pagina con le sue
+ * proporzioni ([rest], la foto intera nella scena). Sul telefono il contenuto resta attaccato al bordo del pannello e una foto orizzontale si
+ * ingrandisce a riempire la meta' alta ([InfoGeometry.contentLayer]); con la colonna laterale si fa piu' piccolo nello spazio che resta
+ * ([InfoGeometry.sideLayer]). Il ritaglio ai bordi della pagina sta fuori dalla trasformazione ([clip], solo a pannello visibile).
+ */
+private fun Modifier.infoPageLayer(controller: ViewerController, rest: Rect, panelPx: Float, clip: Boolean): Modifier =
+  (if (clip) clipToBounds() else this).viewerContentLayer(visible = { true }) {
+    val stage = controller.stage
+    val info = controller.info
+    if (controller.sidePanel) {
+      InfoGeometry.sideLayer(stage, rest, info.progress.value, panelPx)
+    } else {
+      InfoGeometry.contentLayer(stage, rest, info.panelTop(stage.height))
+    }
+  }
 
 /** Durante il volo di chiusura (H1) i tocchi si fermano qui: niente zoom, pager o barre su un contenuto che se ne sta andando. */
 @Composable
@@ -786,7 +805,6 @@ private fun ViewerOverlays(
   bottomReady: Boolean,
   touchExploration: Boolean,
   sidePanel: Boolean,
-  sheetHeight: Dp,
   panelPx: Float,
   menuState: GalleryViewerMenuState,
 ) {
@@ -796,6 +814,7 @@ private fun ViewerOverlays(
   val playback = controller.playback
   val context = LocalContext.current
   val resources = LocalResources.current
+  val density = LocalDensity.current
   val scope = rememberCoroutineScope()
   val reducedMotion = LocalFluidMotionPolicy.current.reducedMotion
   val currentId = state.currentId
@@ -1128,10 +1147,22 @@ private fun ViewerOverlays(
   val peoplePanel = rememberPeoplePanel(services.people, currentId, active = infoVisible)
   // Fase 9 (P4, D30): la riga "Mostra sulla mappa" e la mini-mappa (solo offline), mai per un media aperto dai Nascosti.
   val placeMapPanel = rememberPlaceMapPanel(services.placeMap, currentId, active = infoVisible, secure = request.secure)
+  // H2: cambiando elemento a pannello aperto le informazioni nuove sostituiscono le vecchie con una dissolvenza breve, senza lampi.
+  val infoFade = remember { Animatable(1f) }
+  LaunchedEffect(currentId) {
+    if (info.progress.value > 0f && !reducedMotion) {
+      infoFade.snapTo(0f)
+      infoFade.animateTo(1f, FluidMotion.crossFade())
+    } else {
+      infoFade.snapTo(1f)
+    }
+  }
   if (infoVisible && currentKind != null) {
     val kind = currentKind
-    val baseSections = remember(current, kind, controller.motionUnplayableVersion, placeName, currentId, backupState) {
-      buildInfoSections(
+    val onPhone = currentRef is MediaRef.Phone || details?.fileName != null
+    val localDay = if (currentIndex >= 0) snapshot.localDayAt(currentIndex) else 0
+    val model = remember(current, kind, controller.motionUnplayableVersion, placeName, currentId, localDay, onPhone) {
+      buildInfoModel(
         format = format,
         inputs = InfoInputs(
           kind = kind,
@@ -1140,33 +1171,55 @@ private fun ViewerOverlays(
           place = current?.place,
           placeName = placeName,
           motionUnplayable = currentId in controller.motionUnplayable,
-          backup = backupState,
+          onPhone = onPhone,
+          localDay = localDay,
         ),
-        onOpenMaps = if (details?.location != null) controller::askMaps else null,
       )
     }
-    val placeHeader = stringResource(R.string.viewer_info_h_place)
-    val sections = remember(baseSections, similar.sections, peoplePanel.sections, placeMapPanel.sections, placeHeader) {
-      sectionsWithPlaceMap(sectionsWithSimilar(sectionsWithPeople(baseSections, peoplePanel.sections), similar.sections, format), placeMapPanel.sections, placeHeader)
-    }
+    val backupNote = remember(backupState, onPhone, format) { backupState?.let { backupNote(format, it, onPhone) } }
+    // La mappa sotto il luogo e i dati, poi le persone, poi le copie (H2).
+    val extras = remember(placeMapPanel.sections, peoplePanel.sections, similar.sections) { placeMapPanel.sections + peoplePanel.sections + similar.sections }
+    val onOpenMaps: (() -> Unit)? = if (details?.location != null) controller::askMaps else null
     val infoTitle = stringResource(R.string.viewer_info_title)
+    val topLimit = with(density) { WindowInsets.statusBars.getTop(density) + PanelTopReserve.toPx() }
     Box(Modifier.fillMaxSize().testTag(ViewerTags.InfoPanel)) {
       if (sidePanel) {
         InfoSidePanel(
           progress = { info.progress.value },
           width = SidePanelWidth,
           title = infoTitle,
+          backdrop = backdrop,
           onClose = { state.infoOpen = false },
-        ) { InfoSections(sections) }
+          contentAlpha = { infoFade.value },
+        ) { InfoContent(model = model, backup = backupNote, extras = extras, onOpenMaps = onOpenMaps) }
       } else {
         InfoSheet(
-          progress = { info.progress.value },
-          height = sheetHeight,
+          state = info,
+          stageHeight = controller.stage.height,
+          topLimit = topLimit,
           title = infoTitle,
+          backdrop = backdrop,
+          onDrag = controller::onPanelDrag,
+          onDragEnd = controller::onPanelDragEnd,
           onClose = { state.infoOpen = false },
-          onHeaderDrag = { dy -> scope.launch { info.dragBy(-dy / controller.sheetPx) } },
-          onHeaderDragEnd = { velocity -> scope.launch { state.infoOpen = info.release(-velocity / controller.sheetPx, reducedMotion, InfoPanelState.CloseBias) } },
-        ) { InfoSections(sections) }
+          contentAlpha = { infoFade.value },
+        ) { InfoContent(model = model, backup = backupNote, extras = extras, onOpenMaps = onOpenMaps) }
+        // Il video continua ad andare e i suoi comandi stanno sopra il bordo del pannello, e salgono con lui (H2).
+        val barShown = videoBar != null && atRest && chromeBackdropReady && !controller.cutout.active && (state.chromeVisible || touchExploration)
+        if (barShown && videoBar != null) {
+          val stageHeight = controller.stage.height
+          val gap = with(density) { GalleryViewerChromeDefaults.BarGap.toPx() }
+          Column(
+            modifier = Modifier
+              .align(Alignment.TopCenter)
+              .graphicsLayer {
+                translationY = info.panelTop(stageHeight) - size.height - gap
+                alpha = ((info.progress.value - VideoBarFrom) / (1f - VideoBarFrom)).coerceIn(0f, 1f)
+              },
+            horizontalAlignment = Alignment.CenterHorizontally,
+            content = videoBar,
+          )
+        }
       }
     }
   }
@@ -1243,14 +1296,6 @@ private fun ViewerOverlays(
   GalleryViewerMenuHost(state = menuState, backdrop = backdrop)
 }
 
-/** La sezione "N copie" va subito dopo quella del file (prima di "Telefono"); se il file non c'e', in fondo. */
-private fun sectionsWithSimilar(base: List<InfoSectionModel>, similar: List<InfoSectionModel>, format: ViewerFormat): List<InfoSectionModel> {
-  if (similar.isEmpty()) return base
-  val fileHeader = format.resources.getString(R.string.viewer_info_h_file)
-  val at = base.indexOfFirst { it.header == fileHeader }
-  return if (at < 0) base + similar else base.take(at + 1) + similar + base.drop(at + 1)
-}
-
 /** Restringe di [end] pixel il lato destro: il chrome sta nella parte della foto, accanto alla colonna informazioni. */
 private fun Modifier.shrinkEnd(end: () -> Int): Modifier = layout { measurable, constraints ->
   val width = (constraints.maxWidth - end()).coerceAtLeast(0)
@@ -1269,7 +1314,11 @@ private const val MessageMillis = 3200L
 private const val MILLI = 1000f
 private const val INFO_CLOSED = 0.02f
 private const val INFO_BACK_END = 0.55f
-private const val MIN_SHIFT_SCALE = 0.4f
+/** Il pannello informazioni del telefono cresce fino a qui sotto la barra di stato: la barra in alto resta raggiungibile (H2). */
+private val PanelTopReserve: Dp = 64.dp
+
+/** La barra del video sopra il pannello compare nell'ultima meta' della sua corsa (H2). */
+private const val VideoBarFrom = 0.5f
 
 /** A che punto dell'espansione entrano le pagine vicine (vedi `PagerLayer`): lontano dal primo fotogramma, prima della fine. */
 private const val NeighborsAtProgress = 0.5f

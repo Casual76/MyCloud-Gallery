@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -20,14 +21,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.fluidPressable
-import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryInfoRow
-import dev.pampa.mycloudgallery.core.designsystem.viewer.GalleryInfoSection
+import dev.antigravity.fluidengine.ui.fluid.FluidChip
 import dev.pampa.mycloudgallery.core.model.MediaId
 import dev.pampa.mycloudgallery.core.places.contract.PlacesAttribution
 import dev.pampa.mycloudgallery.feature.viewer.R
@@ -61,20 +60,11 @@ internal fun rememberPlaceMapPanel(source: ViewerPlaceMap?, media: MediaId, acti
     source.place(media, widthPx).collect { value = it }
   }
   val located = place as? ViewerMapPlace.Located ?: return PlaceMapPanel.NONE
-  val header = stringResource(R.string.viewer_place_map_header)
-  val section = remember(located, media, source, header) {
-    InfoSectionModel(header = header, rows = emptyList(), content = { PlaceMapSection(located, onShow = { source.show(media) }) })
+  // H2: senza intestazione e senza righe a elenco: la carta parla da se', e sotto c'e' una pillola per aprirla.
+  val section = remember(located, media, source) {
+    InfoSectionModel(header = null, rows = emptyList(), content = { PlaceMapSection(located, onShow = { source.show(media) }) })
   }
   return PlaceMapPanel(listOf(section))
-}
-
-/** La sezione della mappa va subito dopo il luogo (la sezione che ha l'intestazione [placeHeader]); se il luogo non c'e', dopo la data (la prima sezione senza intestazione), altrimenti in testa. */
-internal fun sectionsWithPlaceMap(base: List<InfoSectionModel>, map: List<InfoSectionModel>, placeHeader: String): List<InfoSectionModel> {
-  if (map.isEmpty()) return base
-  val at = base.indexOfFirst { it.header == placeHeader }
-  if (at >= 0) return base.take(at + 1) + map + base.drop(at + 1)
-  val dateFirst = base.firstOrNull()?.header == null && base.isNotEmpty()
-  return if (dateFirst) base.take(1) + map + base.drop(1) else map + base
 }
 
 @Composable
@@ -97,16 +87,11 @@ private fun PlaceMapSection(place: ViewerMapPlace.Located, onShow: () -> Unit) {
       )
       Text(text = PlacesAttribution.MAP_BASE_SHORT, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-    GalleryInfoSection(
-      rows = listOf(
-        GalleryInfoRow(
-          title = resources.getString(R.string.viewer_place_show_map),
-          caption = resources.getString(R.string.viewer_place_show_map_caption),
-          icon = Icons.Rounded.Map,
-          onClick = onShow,
-        ),
-      ),
-      header = null,
+    FluidChip(
+      label = resources.getString(R.string.viewer_place_show_map),
+      selected = false,
+      onClick = onShow,
+      leading = { Icon(imageVector = Icons.Rounded.Map, contentDescription = null) },
     )
   }
 }

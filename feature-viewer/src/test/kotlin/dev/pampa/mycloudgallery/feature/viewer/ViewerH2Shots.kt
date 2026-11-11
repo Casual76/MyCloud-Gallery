@@ -7,6 +7,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.down
 import androidx.compose.ui.test.moveBy
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -180,6 +182,23 @@ abstract class ViewerH2Shots(private val device: String, private val tablet: Boo
       composeRule.mainClock.advanceTimeBy(SETTLE_MS)
       composeRule.waitForIdle()
     }
+    // Poi le informazioni scorrono (lente, senza lancio) finche' «Persone» sta dove stava la data: in un fotogramma le facce, la scheda dello
+    // scatto intera, la mini-mappa e gli album. La testa (data, ora, luogo, backup) e' negli altri screenshot.
+    val dateTop = composeRule.onAllNodesWithText("Martedì 12 marzo 2024").onFirst().fetchSemanticsNode().boundsInRoot.top
+    val peopleTop = composeRule.onAllNodesWithText("Persone").onFirst().fetchSemanticsNode().boundsInRoot.top
+    val scroll = peopleTop - dateTop
+    composeRule.onRoot().performTouchInput {
+      val x = if (tablet) width - SIDE_TOUCH_INSET else centerX
+      val distance = scroll + viewConfiguration.touchSlop
+      down(Offset(x, height * 0.8f))
+      repeat(SCROLL_STEPS) { moveBy(Offset(0f, -distance / SCROLL_STEPS), delayMillis = 48) }
+    }
+    composeRule.mainClock.advanceTimeBy(300)
+    composeRule.waitForIdle()
+    composeRule.onRoot().performTouchInput { up() }
+    composeRule.waitForIdle()
+    composeRule.mainClock.advanceTimeBy(SETTLE_MS)
+    composeRule.waitForIdle()
     shoot("dati-completi", dark)
   }
 
@@ -284,6 +303,12 @@ abstract class ViewerH2Shots(private val device: String, private val tablet: Boo
 
   private companion object {
     const val SETTLE_MS = 800L
+
+    /** Lo scorrimento lento di "dati completi": a passi, ognuno dopo 48 ms (nessun lancio: si aspetta prima di alzare il dito). */
+    const val SCROLL_STEPS = 8
+
+    /** Dove si tocca la colonna del tablet: dentro, lontano dal bordo destro. */
+    const val SIDE_TOUCH_INSET = 160f
 
     /** Una foto verticale 3:4. */
     const val PORTRAIT = 750

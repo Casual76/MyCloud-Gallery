@@ -53,7 +53,7 @@ import dev.pampa.mycloudgallery.core.designsystem.design.rememberAnyContentChrom
 // LA BARRA DEI SUGGERIMENTI (H4 della fase H, 11/11). Con la ricerca aperta, al posto della data, della nuvola e degli altri pezzi in alto c'e' una sola barra
 // con i primi tre suggerimenti, «come la barra delle parole suggerite quando scrivi sulla tastiera, pero' nell'app sopra» (parole dell'utente): tre voci
 // affiancate (parti uguali quando ci stanno), separate in modo leggero, su un solo pezzo di vetro della chrome (lo stesso linguaggio dei pezzi in alto di
-// oggi: cambia il contenuto, non il materiale). Un tocco applica la voce alla ricerca. Le voci restano sempre distinguibili ([SuggestionFit]).
+// oggi: cambia il contenuto, non il materiale). Un tocco applica la voce alla ricerca. Le voci si mostrano intere ([SuggestionFit]).
 
 /**
  * La barra dei suggerimenti nella riga in alto (sotto la barra di stato, alta quanto la riga della chrome). [labels]: le voci, al piu' tre; vuota, la barra
@@ -116,10 +116,10 @@ fun GallerySuggestionBar(
 }
 
 /**
- * Le voci affiancate, separate da una linea sottile dell'inchiostro della chrome. CU-2 (giro 1): **sempre distinguibili**. Il testo si rimpicciolisce fino
- * all'etichetta piccola del tema prima di accorciarsi; poi le voci corte restano intere e le lunghe si accorciano dove non perdono cio' che le distingue,
- * e due voci uguali a vista non compaiono mai ([SuggestionFit]). Parti uguali quando ci stanno, come la barra della tastiera. TalkBack dice sempre la
- * voce intera.
+ * Le voci affiancate, separate da una linea sottile dell'inchiostro della chrome. CU-2 (giri 1 e 2): **voci intere**, come la barra delle parole della
+ * tastiera. Il testo si rimpicciolisce fino all'etichetta piccola del tema; si mostrano le voci che entrano intere (fino a tre: due intere sono meglio di
+ * tre mozzate) e, se nemmeno una entra, una sola con i puntini in coda ([SuggestionFit]). Parti uguali quando ci stanno. TalkBack dice sempre la voce
+ * intera.
  */
 @Composable
 private fun SuggestionRow(labels: List<String>, descriptions: List<String>?, onPick: (Int) -> Unit) {
@@ -132,9 +132,8 @@ private fun SuggestionRow(labels: List<String>, descriptions: List<String>?, onP
     val styles = remember(typography) { suggestionStyles(typography.labelLarge, typography.labelMedium) }
     val fit = remember(labels, rowWidth, density, styles) {
       val padding = with(density) { ItemPadding.toPx() } * 2f
-      val separators = with(density) { SeparatorWidth.toPx() } * (labels.size - 1).coerceAtLeast(0)
-      val available = rowWidth - separators - padding * labels.size
-      SuggestionFit.layout(labels, available, styles.size) { text, step ->
+      val separator = with(density) { SeparatorWidth.toPx() }
+      SuggestionFit.layout(labels, rowWidth.toFloat(), padding, separator, styles.size) { text, step ->
         measurer.measure(text, styles[step], maxLines = 1, softWrap = false).size.width.toFloat()
       }
     }

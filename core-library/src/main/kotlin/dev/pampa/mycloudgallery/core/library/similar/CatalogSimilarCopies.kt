@@ -84,7 +84,10 @@ class CatalogSimilarCopies(
   /** Le versioni che non si sono lette o non si firmano (illeggibili, animate, RAW): non si riprovano in questa vita del processo. */
   private val givenUp = LinkedHashSet<VersionId>()
 
-  override suspend fun run(budget: Duration): SimilarCopiesReport = runLock.withLock {
+  override suspend fun run(budget: Duration): SimilarCopiesReport = run(budget) { false }
+
+  /** Interrompe una fetta tra due media; le firme salvate e il secondo corrente restano riprendibili. */
+  suspend fun run(budget: Duration, shouldYield: () -> Boolean): SimilarCopiesReport = runLock.withLock {
     val started = timeSource.markNow()
     val counters = Counters()
     state.value = state.value.copy(running = true)
@@ -102,7 +105,10 @@ class CatalogSimilarCopies(
             cursorSecond = secondRun.second
             break@scan
           }
-          processRun(secondRun, signatures, apart, counters)
+          if (!processRun(secondRun, signatures, apart, counters, shouldYield)) {
+            cursorSecond = secondRun.second
+            break@scan
+          }
           processed++
         }
         val next = page.nextSecond
@@ -116,7 +122,7 @@ class CatalogSimilarCopies(
         if (processed > 0 && started.elapsedNow() >= budget) break
       }
       // 2. La copertina dei gruppi che ci sono, a giri, se il tempo avanza.
-      if (finished && started.elapsedNow() < budget) maintainCovers(started, budget)
+      if (finished && started.elapsedNow() < budget) maintainCovers(started, budget, shouldYield)
     } finally {
       val pending = if (finished) counters.waiting.size else maxOf(1, estimatePending())
       if (finished) baselineUnsigned = estimatePending()
@@ -202,9 +208,11 @@ class CatalogSimilarCopies(
     signatures: MutableMap<VersionId, VisualSignature>,
     apart: SeparatedPairs,
     counters: Counters,
-  ) {
+    shouldYield: () -> Boolean,
+  ): Boolean {
     // Firma solo chi ha un compagno compatibile e ne e' privo.
     for (candidate in SimilarGroupPlanner.needSignature(run, apart)) {
+      if (shouldYield()) return false
       val current = signatures[candidate.versionId]
       if (current != null && current.algorithm == VisualSignatures.ALGORITHM) continue
       if (candidate.versionId in givenUp) continue
@@ -242,6 +250,7 @@ class CatalogSimilarCopies(
       val plan = SimilarGroupPlanner.plan(run, signatures, freshApart)
       apply(run, plan, counters)
     }
+    return true
   }
 
   private fun rememberGivenUp(version: VersionId) {
@@ -331,7 +340,7 @@ class CatalogSimilarCopies(
    * La manutenzione delle copertine: a giri sui gruppi che ci sono, con le stesse regole (cambia il telefono, arriva la copia del NAS,
    * l'utente sceglie su un altro dispositivo). Si ferma a fine budget e riprende da dove era.
    */
-  private suspend fun maintainCovers(started: kotlin.time.TimeMark, budget: Duration) {
+  private suspend fun maintainCovers(started: kotlin.time.TimeMark, budget: Duration, shouldYield: () -> Boolean) {
     while (started.elapsedNow() < budget) {
       val ids = catalog.similarGroupIds(groupCursor, COVER_BATCH)
       if (ids.isEmpty()) {
@@ -339,7 +348,7 @@ class CatalogSimilarCopies(
         return
       }
       for (id in ids) {
-        if (started.elapsedNow() >= budget) return
+        if (started.elapsedNow() >= budget || shouldYield()) return
         groupCursor = id
         writeLock.withLock {
           catalog.similarGroup(id)?.let { info ->

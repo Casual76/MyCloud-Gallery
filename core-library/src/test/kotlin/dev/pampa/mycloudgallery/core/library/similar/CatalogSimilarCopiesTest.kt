@@ -34,6 +34,25 @@ class CatalogSimilarCopiesTest : SimilarCatalogTestBase() {
 
   private fun detector(page: Int = 500, settled: Boolean = false) = CatalogSimilarCopies(catalog, source, choices, pageSize = page, initiallySettled = settled)
 
+  @Test fun cs9_unToccoDuranteLaFettaFermaLeDecodificheERiprendeLoStessoSecondo() = runBlocking<Unit> {
+    val ids = List(4) { phoneShot() }
+    var busy = false
+    var decoded = 0
+    val pixels = object : SignatureSource {
+      override suspend fun pixelsOf(candidate: dev.pampa.mycloudgallery.core.database.SimilarCandidate): SignaturePixels {
+        decoded++; busy = true
+        return SignaturePixels.Ready(listOf(copyOf(1)))
+      }
+    }
+    val detector = CatalogSimilarCopies(catalog, pixels, choices)
+    detector.run(10.minutes) { busy }
+    assertThat(decoded).isEqualTo(1)
+    busy = false
+    detector.run(10.minutes)
+    assertThat(decoded).isEqualTo(4)
+    assertThat(detector.groupOf(ids.first())!!.copies).hasSize(4)
+  }
+
   /** Il disegno [seed] con il rumore di una ricompressione: tutte le copie dello stesso scatto. */
   private fun copyOf(seed: Long, n: Long = 0L): Raster = jitter(pattern(seed), 1, seed * 100 + n)
 

@@ -6,7 +6,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
-/** Lo stesso giudizio primo piano di YieldToApp; niente decodifiche nei primi secondi utili. */
+/** Busy regola soltanto il ritmo; niente decodifiche nei primi secondi utili. */
 internal suspend fun runSimilarSlices(
   inUse: () -> Boolean,
   awaitStart: suspend () -> Unit,

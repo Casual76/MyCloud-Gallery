@@ -189,9 +189,9 @@ class SimilarCopiesGraph(
                 it.refreshProgress()
                 detector = it
               }
-              val report = active.run(budget)
+              val report = active.run(budget) { budget > 1.seconds && busy() }
               GalleryLog.d(TAG) { "tappa: firmati=${report.signed} gruppi=${report.grouped} in attesa=${report.pending}" }
-              val more = report.pending != 0 && !(report.signed == 0 && report.grouped == 0 && report.pending >= lastPending)
+              val more = report.pending != 0 && !(report.signed == 0 && report.grouped == 0 && report.pending >= lastPending && !busy())
               lastPending = report.pending
               more
             }

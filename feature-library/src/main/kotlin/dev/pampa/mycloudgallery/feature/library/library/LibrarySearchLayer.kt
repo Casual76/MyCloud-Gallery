@@ -23,8 +23,14 @@ interface LibrarySearchLayer {
   /** La ricerca e' aperta. Falso mentre si richiude: la barra dei suggerimenti e i risultati escono in dissolvenza. */
   val active: Boolean
 
-  /** Al posto della griglia vanno i risultati (anche "nessun risultato": la griglia vuota). */
+  /** Sopra la griglia va lo strato della ricerca: i risultati, oppure, senza risultati, il velo che attenua la Libreria (CU-11). */
   val showsResults: Boolean
+
+  /**
+   * I risultati coprono del tutto la Libreria, che allora esce dalla composizione. Falso senza risultati: la Libreria resta dietro, attenuata dal velo,
+   * cosi' lo schermo non diventa un fondo vuoto (CU-11 del giro 1).
+   */
+  val coversLibrary: Boolean
 
   /** La barra dei suggerimenti, nella riga in alto (sotto la barra di stato). [backdrop] e' il fondale della pagina. */
   @Composable

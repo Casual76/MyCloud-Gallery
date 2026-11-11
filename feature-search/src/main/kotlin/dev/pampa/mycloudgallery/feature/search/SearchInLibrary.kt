@@ -26,6 +26,7 @@ import dev.antigravity.fluidengine.ui.fluid.GlassBackdropState
 import dev.antigravity.fluidengine.ui.fluid.LocalFluidMotionPolicy
 import dev.pampa.mycloudgallery.core.designsystem.a11y.GalleryLiveAnnouncement
 import dev.pampa.mycloudgallery.core.designsystem.chrome.GallerySuggestionBar
+import dev.pampa.mycloudgallery.core.designsystem.design.holdsTouches
 import dev.pampa.mycloudgallery.core.designsystem.motion.GalleryMotion
 import dev.pampa.mycloudgallery.core.library.contract.OrderedTimelineView
 import dev.pampa.mycloudgallery.core.library.contract.ViewerAnchor
@@ -96,7 +97,7 @@ private class StateSearchSource(
   override val queryModel: ModelState? get() = modelState.value
 }
 
-/** Al posto della griglia della Libreria va qualcosa: i risultati, o la griglia vuota di "nessun risultato". */
+/** Sopra la griglia della Libreria va qualcosa: i risultati, o il velo di "nessun risultato" (la Libreria resta dietro, attenuata). */
 fun SearchScreenState.showsResults(): Boolean = this is SearchScreenState.Results || this is SearchScreenState.NoResults
 
 /** Il segnaposto del campo di ricerca. */
@@ -122,8 +123,12 @@ fun SearchSuggestions(source: SearchSource, handlers: SearchHandlers, backdrop: 
   )
 }
 
+/** Quanto il velo copre la Libreria quando non c'e' niente da mostrare: dietro si riconosce, ma non sembra un risultato (CU-11). */
+private const val NoResultsVeil = 0.78f
+
 /**
- * I risultati al posto della griglia della Libreria (H4): la griglia dei risultati, o il fondo vuoto se non c'e' niente (la riga sopra la barra lo dice).
+ * I risultati al posto della griglia della Libreria (H4): la griglia dei risultati, o, se non c'e' niente, un velo sopra la Libreria attenuata (la riga
+ * sopra la barra dice perche').
  * Fra una lista e la successiva una dissolvenza breve; mentre il motore lavora resta la lista di prima. [lift] e' la salita con la tastiera (in pixel,
  * letta nel disegno): la griglia sale insieme alla barra, cosi' la tastiera non copre mai i primi risultati. [bottomExtra]: lo spazio della riga sopra
  * la barra, se c'e'.
@@ -172,8 +177,10 @@ fun SearchResults(
           selection = selection,
           onUserScroll = onUserScroll,
         )
-        // Niente da mostrare (nessun risultato, o la Libreria che torna): il fondo della pagina, mai la Libreria sotto che sembrerebbe un risultato.
-        else -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+        // Niente da mostrare (nessun risultato, o la Libreria che torna): un velo del fondo della pagina sopra la Libreria, che resta dietro attenuata
+        // (CU-11 del giro 1: prima lo schermo diventava un fondo vuoto e sembrava un caricamento non riuscito). Il velo trattiene i tocchi: la Libreria
+        // attenuata non e' un risultato, non si apre ne' si scorre.
+        else -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background.copy(alpha = NoResultsVeil)).holdsTouches())
       }
     }
     val count = (state as? SearchScreenState.Results)?.confident?.size

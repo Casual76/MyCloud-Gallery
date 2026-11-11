@@ -25,6 +25,10 @@ internal object SearchDimens {
   /** La larghezza massima del testo di una pagina di lettura (attivazione): righe corte anche sul tablet. */
   val ReadingWidth: Dp = 560.dp
 
-  /** Il separatore leggero prima dei meno probabili, nella griglia dei risultati (H4). */
+  /** L'intestazione dei meno probabili, sopra le loro celle nella griglia dei risultati (H4, CU-3). */
   val DividerHeight: Dp = 40.dp
+
+  /** Il filo fra i sicuri e i meno probabili: lo spazio che occupa nella griglia e lo spessore della linea (CU-3). */
+  val BoundaryHeight: Dp = 16.dp
+  val BoundaryLine: Dp = 1.dp
 }

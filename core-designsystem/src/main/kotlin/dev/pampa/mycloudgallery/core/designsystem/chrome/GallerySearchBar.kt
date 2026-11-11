@@ -5,9 +5,14 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
@@ -30,12 +35,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -44,12 +56,14 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
+import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleAction
 import dev.antigravity.fluidengine.ui.fluid.FluidCapsuleShape
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingCapsuleDefaults
 import dev.antigravity.fluidengine.ui.fluid.FluidFloatingTabBarDefaults
@@ -169,10 +183,11 @@ class GallerySearchCircle {
  *
  * - **Apertura**: compare come cerchio sopra il cerchio della pillola ([circle]) e si allarga verso sinistra fino alla sua larghezza (tutta la riga sul
  *   telefono, al piu' [GallerySearchBarDefaults.MaxWidth] centrata sul tablet), con la molla di `FluidSearchField` (`FluidMotion.standard`); intanto scorre
- *   dal cerchio alla sua posizione. Con [focus] prende il fuoco e la tastiera sale; [onFocused] consuma la richiesta (tornando dal viewer non risale).
+ *   dal cerchio alla sua posizione. Il vetro ha la misura finale dal primo fotogramma: si allarga la parte che si vede (CG-2). Con [focus] prende il fuoco
+ *   e la tastiera sale; [onFocused] consuma la richiesta (tornando dal viewer non risale).
  * - **Tastiera**: sale con lei ([lift], letto nel layout).
- * - **Chiusura**: la X e «indietro» chiamano [onClose] (la crocetta piccola dentro il campo svuota il testo, come in Foto di Apple); il campo torna
- *   cerchio verso la pillola e la tastiera scende con lui.
+ * - **Chiusura**: **una X sola** (CU-12): con del testo la crocetta lo svuota, a campo vuoto la X chiama [onClose]; «indietro» la chiude sempre (lo
+ *   scaffold). Il campo torna cerchio verso la pillola e la tastiera scende subito.
  * - [message]: la riga sopra la barra (una sola, piccola); [onMessageClick] la rende un tasto, detto da [messageActionLabel].
  */
 @Composable
@@ -198,15 +213,21 @@ fun GallerySearchBar(
 ) {
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
   val keyboard = LocalSoftwareKeyboardController.current
-  // Il campo nasce chiuso (un cerchio) e si apre al fotogramma dopo: senza, `FluidSearchField` comparirebbe gia' aperto, senza il gesto. Lo stato sta
-  // fuori ([state]): la barra che rientra dopo una selezione (la barra delle azioni le aveva preso il posto) e' gia' aperta, non rinasce dal cerchio.
+  val focusManager = LocalFocusManager.current
+  // La barra nasce chiusa (un cerchio) e si apre al fotogramma dopo. Lo stato sta fuori ([state]): la barra che rientra dopo una selezione (la barra
+  // delle azioni le aveva preso il posto) e' gia' aperta, non rinasce dal cerchio.
   var expanded by state::expanded
   LaunchedEffect(open) {
     if (open && !expanded) state.start = circle.centerXInWindow()
+    // Chiudendo il fuoco e la tastiera vanno via subito, non restano a coprire mentre la barra torna cerchio.
+    if (!open && expanded) {
+      focusManager.clearFocus()
+      keyboard?.hide()
+    }
     expanded = open
   }
   val currentOnCollapsed by rememberUpdatedState(onCollapsed)
-  // La stessa molla del campo, partita nello stesso fotogramma: la larghezza (dell'engine) e lo scorrimento (qui) vanno insieme.
+  // La molla dell'apertura (quella di `FluidSearchField`, `FluidMotion.standard`): lo scorrimento dal cerchio e la rivelazione vanno insieme.
   val progress = animateFloatAsState(
     targetValue = if (expanded) 1f else 0f,
     animationSpec = if (reduced) snap() else FluidMotion.standard(),
@@ -237,36 +258,55 @@ fun GallerySearchBar(
       verticalArrangement = Arrangement.spacedBy(GallerySearchBarDefaults.LineGap - (GalleryDimens.MinTouchTarget - GallerySearchBarDefaults.LineHeight) / 2),
     ) {
       GallerySearchLine(message = message, onClick = onMessageClick, actionLabel = messageActionLabel, backdrop = backdrop, visible = { progress.value > 0.5f })
-      Box(
-        modifier = Modifier.fillMaxWidth().onPlaced { rightEdge = it.positionInWindow().x + it.size.width },
-        contentAlignment = Alignment.CenterEnd,
-      ) {
+      // CG-2 (giro 1): il vetro del campo ha la sua misura finale **dal primo fotogramma**. Il campo dell'engine richiudibile si allargava rimisurando
+      // il nodo di vetro a ogni fotogramma (una cattura dello sfondo di misura nuova per fotogramma, la stessa classe di costo del pinch al 3,4-4%):
+      // qui il campo e' sempre aperto, largo quanto la riga, e l'apertura e' una traslazione piu' un ritaglio letti nel disegno ([searchReveal]).
+      BoxWithConstraints(modifier = Modifier.fillMaxWidth().onPlaced { rightEdge = it.positionInWindow().x + it.size.width }) {
         val field = backdrop ?: currentGlassBackdrop()
-        FluidSearchField(
-          query = query,
-          onQueryChange = onQueryChange,
+        val hint = fittingPlaceholder(placeholder ?: labels.search, fallback = labels.search, fieldWidth = maxWidth)
+        // Il campo e la X si spostano insieme, della stessa quantita' (calcolata sulla larghezza del campo, non su quella di chi la legge).
+        val fieldWidth = constraints.maxWidth.toFloat()
+        Box(
           modifier = Modifier
+            .fillMaxWidth()
             .graphicsLayer {
-              val p = progress.value
+              val p = progress.value.coerceIn(0f, 1f)
               // Il cerchio del campo sostituisce quello della pillola nel primo quinto dell'apertura (e se ne va per ultimo chiudendo).
               alpha = (p / CircleCrossfade).coerceIn(0f, 1f)
               val from = start
               val edge = rightEdge
               translationX = if (from != null && edge != null) lerp(from - (edge - FluidSearchFieldDefaults.Height.toPx() / 2f), 0f, p) else 0f
             }
-            .onFocusChanged { onFocusChanged(it.hasFocus) },
-          backdrop = field,
-          placeholder = placeholder,
-          labels = labels,
-          onSearch = {
-            onSearch()
-            keyboard?.hide()
-          },
-          expanded = expanded,
-          onExpandedChange = { if (!it) onClose() },
-          autoFocus = focus,
-          keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        )
+            .searchReveal(progress = { progress.value }),
+        ) {
+          val slide = Modifier.graphicsLayer { translationX = searchRevealHidden(fieldWidth, FluidSearchFieldDefaults.Height.toPx(), progress.value) }
+          FluidSearchField(
+            query = query,
+            onQueryChange = onQueryChange,
+            modifier = Modifier
+              .fillMaxWidth()
+              .then(slide)
+              .onFocusChanged { onFocusChanged(it.hasFocus) },
+            backdrop = field,
+            placeholder = hint,
+            labels = labels,
+            onSearch = {
+              onSearch()
+              keyboard?.hide()
+            },
+            autoFocus = focus,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+          )
+          // CU-12 (giro 1): **una X sola**. Con del testo c'e' la crocetta del campo (svuota); a campo vuoto, nello stesso punto, la X che chiude.
+          SearchCloseButton(
+            visible = query.isEmpty() && open,
+            label = labels.close,
+            onClick = onClose,
+            modifier = Modifier.align(Alignment.CenterEnd).then(slide),
+          )
+          // Mentre torna cerchio la barra non si tocca: un tocco non deve riaprire la tastiera su un campo che se ne sta andando.
+          if (!open) Box(Modifier.matchParentSize().holdsTouches())
+        }
       }
     }
   }
@@ -335,6 +375,101 @@ private fun GallerySearchLine(
     }
   }
 }
+
+/**
+ * Di quanto il campo e' spostato a destra durante l'apertura ([progress] da 0 a 1), in pixel: il suo capo sinistro (la lente, il bordo e l'ombra veri del
+ * vetro) sta sempre sul bordo sinistro della parte visibile, che va dal cerchio ([height]) a tutta la larghezza ([width]). A barra aperta zero.
+ */
+internal fun searchRevealHidden(width: Float, height: Float, progress: Float): Float = (width - height).coerceAtLeast(0f) * (1f - progress.coerceIn(0f, 1f))
+
+/**
+ * La rivelazione della barra (CG-2): il campo, largo quanto la riga fin dal primo fotogramma e spostato a destra di [searchRevealHidden], si vede solo fino al
+ * bordo destro della riga, con il capo destro arrotondato come il vetro. Il ritaglio si rifa' nel disegno (nessuna ricomposizione, nessuna misura
+ * nuova): a sinistra c'e' tutto (il capo sinistro e' quello vero, con il suo bordo e la sua ombra), sopra e sotto il capo destro l'ombra si chiude in
+ * un arco come quella di un vetro tondo. A barra aperta il ritaglio non c'e'.
+ */
+private fun Modifier.searchReveal(progress: () -> Float): Modifier = drawWithCache {
+  val clip = Path()
+  val left = Path()
+  val cap = Path()
+  val capped = Path()
+  val halo = Path()
+  val band = Path()
+  val haloOut = Path()
+  val haloPx = SearchRevealHalo.toPx()
+  onDrawWithContent {
+    val p = progress()
+    if (p >= 1f) {
+      drawContent()
+      return@onDrawWithContent
+    }
+    val radius = size.height / 2f
+    val capX = size.width - radius
+    val reach = size.height * 4f + haloPx
+    left.rewind()
+    left.addRect(Rect(-size.width - reach, -reach, capX, size.height + reach))
+    cap.rewind()
+    cap.addOval(Rect(center = Offset(capX, radius), radius = radius))
+    halo.rewind()
+    halo.addOval(Rect(center = Offset(capX, radius), radius = radius + haloPx))
+    band.rewind()
+    band.addRect(Rect(capX, 0f, capX + radius + haloPx + 1f, size.height))
+    // L'ombra sopra e sotto il capo destro, ma non la fascia del vetro nascosto oltre il capo.
+    haloOut.op(halo, band, PathOperation.Difference)
+    capped.op(left, cap, PathOperation.Union)
+    clip.op(capped, haloOut, PathOperation.Union)
+    clipPath(clip) { this@onDrawWithContent.drawContent() }
+  }
+}
+
+/**
+ * Il segnaposto del campo se entra intero fra la lente e la X (a campo vuoto la X sta sopra la fine del campo); altrimenti, col testo grande, [fallback].
+ */
+@Composable
+private fun fittingPlaceholder(text: String, fallback: String, fieldWidth: Dp): String {
+  if (text == fallback) return text
+  val measurer = rememberTextMeasurer()
+  val style = MaterialTheme.typography.bodyLarge
+  val density = LocalDensity.current
+  return remember(text, fallback, fieldWidth, style, density) {
+    val available = with(density) { (fieldWidth - SearchFieldTextStart - FluidSearchFieldDefaults.ActionSize - SearchFieldTextGap).toPx() }
+    val width = measurer.measure(text, style, maxLines = 1, softWrap = false).size.width
+    if (width <= available) text else fallback
+  }
+}
+
+/** La X che chiude la ricerca, a campo vuoto (CU-12): nello stesso punto della crocetta del campo, che c'e' solo con del testo. */
+@Composable
+private fun SearchCloseButton(visible: Boolean, label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+  AnimatedVisibility(
+    visible = visible,
+    modifier = modifier,
+    enter = fadeIn(FluidMotion.fadeIn(SwapInMillis)) + scaleIn(FluidMotion.snappy(), initialScale = SwapScale),
+    exit = fadeOut(FluidMotion.fadeOut(SwapOutMillis)) + scaleOut(FluidMotion.fadeOut(SwapOutMillis), targetScale = SwapScale),
+  ) {
+    FluidCapsuleAction(
+      icon = Icons.Rounded.Close,
+      contentDescription = label,
+      onClick = onClick,
+      tint = MaterialTheme.colorScheme.onSurface,
+      size = FluidSearchFieldDefaults.ActionSize,
+    )
+  }
+}
+
+/** Dove comincia il testo del campo: il margine della lente, la lente e lo spazio dopo (come li mette `FluidSearchField`). */
+private val SearchFieldTextStart: Dp = FluidSearchFieldDefaults.IconInset + FluidSearchFieldDefaults.IconSize + 10.dp
+
+/** Fra la fine del segnaposto e la X. */
+private val SearchFieldTextGap: Dp = 4.dp
+
+/** Quanto dell'ombra del vetro resta attorno al capo destro mentre la barra si apre (il raggio dell'ombra dei vetri sospesi e' 20 dp). */
+private val SearchRevealHalo: Dp = 24.dp
+
+/** Lo scambio fra la crocetta del campo e la X: come la crocetta di `FluidSearchField`. */
+private const val SwapInMillis = 140
+private const val SwapOutMillis = 120
+private const val SwapScale = 0.6f
 
 /** La parte dell'apertura in cui il cerchio del campo prende il posto di quello della pillola. */
 private const val CircleCrossfade = 0.2f

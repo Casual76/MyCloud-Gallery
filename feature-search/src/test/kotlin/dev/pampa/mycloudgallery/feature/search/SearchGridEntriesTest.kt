@@ -7,7 +7,8 @@ import org.junit.Test
 
 /**
  * Le voci della griglia dei risultati (H4): **solo per pertinenza** e **senza intestazioni di data**; prima i sicuri (il primo e' il piu' adatto: la
- * griglia lo mette subito sopra la barra di ricerca), poi il separatore leggero e i meno probabili; il viewer scorre i risultati nell'ordine mostrato.
+ * griglia, che cresce dal basso, lo mette subito sopra la barra di ricerca), poi un filo e i meno probabili, lontani dalla barra, e per ultima la loro
+ * intestazione, che nella griglia rovesciata sta sopra di loro (CU-3 / CS-2 del giro 1); il viewer scorre i risultati nell'ordine mostrato.
  */
 class SearchGridEntriesTest {
 
@@ -20,23 +21,25 @@ class SearchGridEntriesTest {
   fun iSicuriNellOrdineDelMotoreSenzaDateNeSeparatoriSeNonCiSonoMenoProbabili() {
     val entries = SearchGridEntries.build(results(intArrayOf(7, 2, 30, 11)))
     assertThat(entries.map { (it as GridEntry.Cell).media }).containsExactly(lib.id(7), lib.id(2), lib.id(30), lib.id(11)).inOrder()
-    assertThat(entries.filterIsInstance<GridEntry.LikelyDivider>()).isEmpty()
   }
 
   @Test
-  fun iMenoProbabiliInCodaDopoIlSeparatoreCheDiceQuantiSono() {
+  fun iMenoProbabiliDopoIlFilo_eLaLoroIntestazionePerUltima_cioeSopraDiLoro() {
     val entries = SearchGridEntries.build(results(intArrayOf(3, 1), intArrayOf(20, 21, 22)))
-    assertThat(entries).hasSize(6)
-    assertThat(entries[2]).isEqualTo(GridEntry.LikelyDivider(3))
+    assertThat(entries).hasSize(7)
     assertThat((entries[0] as GridEntry.Cell).section).isEqualTo(ResultSection.CONFIDENT)
+    assertThat(entries[2]).isEqualTo(GridEntry.LikelyBoundary)
     assertThat((entries[3] as GridEntry.Cell).section).isEqualTo(ResultSection.LIKELY)
-    assertThat((entries.last() as GridEntry.Cell).media).isEqualTo(lib.id(22))
+    assertThat((entries[5] as GridEntry.Cell).media).isEqualTo(lib.id(22))
+    // La griglia cresce dal basso: l'ultima voce sta in cima, sopra i meno probabili, e dice quanti sono.
+    assertThat(entries.last()).isEqualTo(GridEntry.LikelyHeader(3))
   }
 
   @Test
-  fun soloMenoProbabiliIlSeparatoreStaInTesta() {
+  fun soloMenoProbabili_nienteFilo_eLIntestazioneSopra() {
     val entries = SearchGridEntries.build(results(intArrayOf(), intArrayOf(5, 6)))
-    assertThat(entries.first()).isEqualTo(GridEntry.LikelyDivider(2))
+    assertThat(entries.filterIsInstance<GridEntry.LikelyBoundary>()).isEmpty()
+    assertThat(entries.last()).isEqualTo(GridEntry.LikelyHeader(2))
   }
 
   @Test

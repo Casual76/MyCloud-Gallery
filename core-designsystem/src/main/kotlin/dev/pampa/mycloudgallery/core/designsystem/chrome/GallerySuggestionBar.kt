@@ -8,6 +8,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
@@ -25,11 +26,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.isTraversalGroup
 import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.lerp
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -47,8 +52,8 @@ import dev.pampa.mycloudgallery.core.designsystem.design.rememberAnyContentChrom
 
 // LA BARRA DEI SUGGERIMENTI (H4 della fase H, 11/11). Con la ricerca aperta, al posto della data, della nuvola e degli altri pezzi in alto c'e' una sola barra
 // con i primi tre suggerimenti, «come la barra delle parole suggerite quando scrivi sulla tastiera, pero' nell'app sopra» (parole dell'utente): tre voci
-// affiancate di uguale peso, separate in modo leggero, su un solo pezzo di vetro della chrome (lo stesso linguaggio dei pezzi in alto di oggi: cambia il
-// contenuto, non il materiale). Un tocco applica la voce alla ricerca.
+// affiancate (parti uguali quando ci stanno), separate in modo leggero, su un solo pezzo di vetro della chrome (lo stesso linguaggio dei pezzi in alto di
+// oggi: cambia il contenuto, non il materiale). Un tocco applica la voce alla ricerca. Le voci restano sempre distinguibili ([SuggestionFit]).
 
 /**
  * La barra dei suggerimenti nella riga in alto (sotto la barra di stato, alta quanto la riga della chrome). [labels]: le voci, al piu' tre; vuota, la barra
@@ -110,38 +115,70 @@ fun GallerySuggestionBar(
   }
 }
 
-/** Le voci affiancate, di uguale peso, separate da una linea sottile dell'inchiostro della chrome. */
+/**
+ * Le voci affiancate, separate da una linea sottile dell'inchiostro della chrome. CU-2 (giro 1): **sempre distinguibili**. Il testo si rimpicciolisce fino
+ * all'etichetta piccola del tema prima di accorciarsi; poi le voci corte restano intere e le lunghe si accorciano dove non perdono cio' che le distingue,
+ * e due voci uguali a vista non compaiono mai ([SuggestionFit]). Parti uguali quando ci stanno, come la barra della tastiera. TalkBack dice sempre la
+ * voce intera.
+ */
 @Composable
 private fun SuggestionRow(labels: List<String>, descriptions: List<String>?, onPick: (Int) -> Unit) {
   val ink = LocalGalleryChromeInk.current ?: MaterialTheme.colorScheme.onSurface
-  Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-    labels.forEachIndexed { index, label ->
-      if (index > 0) {
-        Box(Modifier.width(SeparatorWidth).height(SeparatorHeight).background(ink.copy(alpha = SeparatorAlpha), FluidCapsuleShape))
+  val typography = MaterialTheme.typography
+  val measurer = rememberTextMeasurer()
+  val density = LocalDensity.current
+  BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+    val rowWidth = constraints.maxWidth
+    val styles = remember(typography) { suggestionStyles(typography.labelLarge, typography.labelMedium) }
+    val fit = remember(labels, rowWidth, density, styles) {
+      val padding = with(density) { ItemPadding.toPx() } * 2f
+      val separators = with(density) { SeparatorWidth.toPx() } * (labels.size - 1).coerceAtLeast(0)
+      val available = rowWidth - separators - padding * labels.size
+      SuggestionFit.layout(labels, available, styles.size) { text, step ->
+        measurer.measure(text, styles[step], maxLines = 1, softWrap = false).size.width.toFloat()
       }
-      val description = descriptions?.getOrNull(index) ?: label
-      Box(
-        modifier = Modifier
-          .weight(1f)
-          .fillMaxHeight()
-          .padding(vertical = 2.dp)
-          .semantics { contentDescription = description }
-          .fluidPressable(onClick = { onPick(index) }, role = Role.Button, focusShape = FluidCapsuleShape)
-          .padding(horizontal = ItemPadding),
-        contentAlignment = Alignment.Center,
-      ) {
-        Text(
-          text = label,
-          style = MaterialTheme.typography.labelLarge,
-          color = ink,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-          textAlign = TextAlign.Center,
-        )
+    }
+    val itemPadding = with(density) { ItemPadding.toPx() } * 2f
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+      fit.shown.forEachIndexed { position, shown ->
+        if (position > 0) {
+          Box(Modifier.width(SeparatorWidth).height(SeparatorHeight).background(ink.copy(alpha = SeparatorAlpha), FluidCapsuleShape))
+        }
+        val description = descriptions?.getOrNull(shown.index) ?: labels[shown.index]
+        Box(
+          modifier = Modifier
+            .weight(shown.weight + itemPadding)
+            .fillMaxHeight()
+            .padding(vertical = 2.dp)
+            .semantics { contentDescription = description }
+            .fluidPressable(onClick = { onPick(shown.index) }, role = Role.Button, focusShape = FluidCapsuleShape)
+            .padding(horizontal = ItemPadding),
+          contentAlignment = Alignment.Center,
+        ) {
+          Text(
+            text = shown.text,
+            style = styles[fit.step],
+            color = ink,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+            textAlign = TextAlign.Center,
+          )
+        }
       }
     }
   }
 }
+
+/**
+ * Gli stili del testo delle voci, dal piu' grande al piu' piccolo: quello della chrome ([largest]) e, un passo alla volta, fino a [smallest], l'etichetta
+ * piccola del tema, ancora leggibile (come la barra dei suggerimenti della tastiera). Niente misure scritte a mano: i passi stanno fra i due stili.
+ */
+private fun suggestionStyles(largest: TextStyle, smallest: TextStyle): List<TextStyle> =
+  List(SizeSteps) { step -> lerp(largest, smallest, step / (SizeSteps - 1f)) }
+
+/** Quante misure del testo si provano prima di accorciare (15, 14 e 13 punti con gli stili della chrome). */
+private const val SizeSteps = 3
 
 private val SeparatorWidth = 1.dp
 private val SeparatorHeight = 20.dp

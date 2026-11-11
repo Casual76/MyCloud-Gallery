@@ -31,6 +31,7 @@ import dev.pampa.mycloudgallery.feature.search.SearchResults
 import dev.pampa.mycloudgallery.feature.search.SearchSource
 import dev.pampa.mycloudgallery.feature.search.SearchSuggestions
 import dev.pampa.mycloudgallery.feature.search.contract.SearchActions
+import dev.pampa.mycloudgallery.feature.search.contract.SearchScreenState
 import dev.pampa.mycloudgallery.feature.search.contract.SearchSelection
 import dev.pampa.mycloudgallery.feature.search.contract.SearchThumbnails
 import dev.pampa.mycloudgallery.feature.search.rememberSearchLine
@@ -70,12 +71,16 @@ internal class ScaffoldLibrarySearch(
   private val onOpen: (view: OrderedTimelineView, media: MediaId, anchor: ViewerAnchor) -> Unit,
   private val onUserScroll: () -> Unit,
 ) : LibrarySearchLayer {
-  // Cambia solo quando i risultati arrivano o se ne vanno, non a ogni lista nuova: la Libreria non si ricompone mentre si scrive.
+  // Cambiano solo quando i risultati arrivano o se ne vanno, non a ogni lista nuova: la Libreria non si ricompone mentre si scrive.
   private val results = derivedStateOf { search.source.state.showsResults() }
+  private val covers = derivedStateOf { search.source.state is SearchScreenState.Results }
 
   override val active: Boolean get() = open.value
 
   override val showsResults: Boolean get() = results.value
+
+  // CU-11: senza risultati la Libreria resta dietro, attenuata dal velo.
+  override val coversLibrary: Boolean get() = covers.value
 
   @Composable
   override fun Top(backdrop: GlassBackdropState, modifier: Modifier) {

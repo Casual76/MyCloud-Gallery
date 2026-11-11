@@ -412,11 +412,13 @@ class ViewerH2ShotsTestoGrande : ViewerTestBase() {
     composeRule.waitForIdle()
     composeRule.mainClock.advanceTimeBy(SETTLE)
     composeRule.waitForIdle()
+    // Ogni valore e' largo quanto la sua larghezza naturale: un valore tagliato (o con i puntini, come prima) sarebbe piu' stretto.
     for (value in listOf("ISO 3200", "6,3 mm", "f/1,8", "1/1000 s")) {
       val node = composeRule.onNodeWithText(value, useUnmergedTree = true).fetchSemanticsNode()
       val layouts = mutableListOf<TextLayoutResult>()
       node.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
-      assertWithMessage("«$value» intero").that(layouts.single().hasVisualOverflow).isFalse()
+      val natural = layouts.single().multiParagraph.intrinsics.maxIntrinsicWidth
+      assertWithMessage("«$value» intero").that(node.size.width.toFloat()).isAtLeast(natural - 1f)
     }
     composeRule.onRoot().captureRoboImage("../docs/screenshots/beta-grafica/H2/viewer-info-testo-grande-${if (dark) "scuro" else "chiaro"}-telefono.png")
   }

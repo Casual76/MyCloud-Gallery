@@ -571,6 +571,17 @@ class GalleryGraph(
   @Volatile
   var viewerAlbums: ViewerAlbumActions = NoViewerAlbumActions
 
+  /** Gli album in cui sta il media aperto (la sezione del pannello informazioni): li lega `AlbumsModule`, prima nessuna sezione. */
+  @Volatile
+  var viewerMediaAlbums: dev.pampa.mycloudgallery.feature.viewer.info.ViewerMediaAlbums? = null
+
+  /** Il tocco su un album dal pannello informazioni: lo lega la navigazione. */
+  val albumOpener: dev.pampa.mycloudgallery.albums.AlbumOpener = dev.pampa.mycloudgallery.albums.AlbumOpener()
+
+  /** Gli album (le loro identita') in cui sta [media], dagli elementi degli album nel catalogo: per il pannello informazioni. */
+  suspend fun albumIdsOf(media: MediaId): Set<String> =
+    kotlinx.coroutines.withContext(dispatchers.io) { database.albumDao().itemsOfMedia(media.value).mapTo(HashSet()) { it.albumId } }
+
   /**
    * Fase 8 (P13, D25): le persone del media aperto nel viewer (la riga "Persone" delle info, "Chi e'?"). Le lega `FacesModule` con il processo; di serie
    * nessuna (il viewer non mostra la riga). Letta quando il viewer si costruisce, dopo l'avvio dell'app.
@@ -754,6 +765,15 @@ class GalleryGraph(
         override suspend fun removeFromAlbum(id: MediaId) = viewerAlbums.removeFromAlbum(id)
 
         override suspend fun setAsCover(id: MediaId) = viewerAlbums.setAsCover(id)
+      },
+      // Giro di correzione 1 di H2: gli album del media nelle info (letti solo a pannello aperto); finche' gli album non sono legati, nessuno.
+      mediaAlbums = object : dev.pampa.mycloudgallery.feature.viewer.info.ViewerMediaAlbums {
+        override fun albumsOf(media: MediaId): kotlinx.coroutines.flow.Flow<List<dev.pampa.mycloudgallery.feature.viewer.info.ViewerAlbumEntry>> =
+          viewerMediaAlbums?.albumsOf(media) ?: kotlinx.coroutines.flow.flowOf(emptyList())
+
+        override fun open(album: dev.pampa.mycloudgallery.feature.viewer.info.ViewerAlbumEntry) {
+          viewerMediaAlbums?.open(album)
+        }
       },
     )
   }

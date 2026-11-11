@@ -29,6 +29,9 @@
   <string name="viewer_video_full_hd">Full HD</string>
   <string name="viewer_video_hd">HD</string>
 
+  <!-- Gli album in cui sta l'elemento (voci che aprono l'album). -->
+  <string name="viewer_albums_header">Album</string>
+
   <!-- Il piede: il nome del file e, accanto, la cartella sul telefono. -->
   <string name="viewer_info_file_line">%1$s · %2$s</string>
 </resources>

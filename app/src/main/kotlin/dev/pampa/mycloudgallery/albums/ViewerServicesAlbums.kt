@@ -45,4 +45,5 @@ fun ViewerServices.withAlbums(albums: ViewerAlbumActions): ViewerServices = View
   people = people,
   placeMap = placeMap,
   albums = albums,
+  mediaAlbums = mediaAlbums,
 )

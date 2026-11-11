@@ -152,6 +152,7 @@ import dev.pampa.mycloudgallery.feature.viewer.livetext.TextSelections
 import dev.pampa.mycloudgallery.feature.viewer.info.InfoSidePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.backupNote
 import dev.pampa.mycloudgallery.feature.viewer.info.buildInfoModel
+import dev.pampa.mycloudgallery.feature.viewer.info.rememberAlbumsPanel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberBackupState
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberPeoplePanel
 import dev.pampa.mycloudgallery.feature.viewer.info.rememberSimilarCopiesPanel
@@ -1156,6 +1157,8 @@ private fun ViewerOverlays(
   val onOpenMaps: (() -> Unit)? = if (details?.location != null) controller::askMaps else null
   val placeMapPanel = rememberPlaceMapPanel(services.placeMap, currentId, active = infoVisible, secure = request.secure, onOpenMaps = onOpenMaps)
   val placeOpenMaps = if (placeMapPanel.sections.isEmpty()) onOpenMaps else null
+  // Gli album dell'elemento (giro di correzione 1): letti solo a pannello aperto, mai dai Nascosti.
+  val albumsPanel = rememberAlbumsPanel(services.mediaAlbums, currentId, active = infoVisible && !request.secure)
   // H2: cambiando elemento a pannello aperto le informazioni nuove sostituiscono le vecchie con una dissolvenza breve, senza lampi.
   val infoFade = remember { Animatable(1f) }
   LaunchedEffect(currentId) {
@@ -1189,7 +1192,9 @@ private fun ViewerOverlays(
     }
     val backupNote = remember(backupState, onPhone, format) { backupState?.let { backupNote(format, it, onPhone) } }
     // La mappa sotto il luogo e i dati, poi le persone, poi le copie (H2).
-    val extras = remember(placeMapPanel.sections, peoplePanel.sections, similar.sections) { placeMapPanel.sections + peoplePanel.sections + similar.sections }
+    val extras = remember(placeMapPanel.sections, peoplePanel.sections, albumsPanel.sections, similar.sections) {
+      placeMapPanel.sections + peoplePanel.sections + albumsPanel.sections + similar.sections
+    }
     val infoTitle = stringResource(R.string.viewer_info_title)
     val topLimit = with(density) { WindowInsets.statusBars.getTop(density) + PanelTopReserve.toPx() }
     Box(Modifier.fillMaxSize().testTag(ViewerTags.InfoPanel)) {

@@ -1,5 +1,6 @@
 package dev.pampa.mycloudgallery.navigation
 
+import dev.pampa.mycloudgallery.feature.albums.nav.openAlbum
 import androidx.activity.compose.ReportDrawnAfter
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -203,6 +204,15 @@ private fun AppNavGraph(destination: RootDestination, nav: NavHostController, st
   val peopleHost: PeopleHostViewModel? = if (destination == RootDestination.Main) hiltViewModel() else null
   val peopleActions = remember(nav, viewer, peopleHost, gallery) {
     peopleHost?.let { host -> AppPeopleActions(nav, viewer, host) { gallery?.viewerServices } }
+  }
+  // H2, giro di correzione 1: un album toccato nel pannello informazioni chiude il viewer e apre la pagina dell'album.
+  if (gallery != null) {
+    SideEffect {
+      gallery.albumOpener.onOpen = { id ->
+        viewer?.close()
+        nav.openAlbum(id)
+      }
+    }
   }
   if (peopleHost != null) {
     SideEffect { peopleHost.opener.bind(nav, viewer) }

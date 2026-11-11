@@ -36,6 +36,7 @@ import dev.pampa.mycloudgallery.feature.viewer.details.ViewerBytes
 import dev.pampa.mycloudgallery.feature.viewer.download.PhoneDownload
 import dev.pampa.mycloudgallery.feature.viewer.gesture.ViewerSubjectPress
 import dev.pampa.mycloudgallery.feature.viewer.info.MediaBackupStates
+import dev.pampa.mycloudgallery.feature.viewer.info.ViewerMediaAlbums
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextReader
 import dev.pampa.mycloudgallery.feature.viewer.livetext.ViewerTextSource
 import dev.pampa.mycloudgallery.feature.viewer.menu.BackupMediaActions
@@ -163,6 +164,11 @@ class ViewerServices(
    * niente riga e niente mini-mappa (mappa non legata); mai chiamata per un media aperto dai Nascosti (`ViewerRequest.secure`, E-H9).
    */
   val placeMap: ViewerPlaceMap? = null,
+  /**
+   * H2, giro di correzione 1: gli album in cui sta il media aperto (la sezione "Album" delle informazioni, voci che aprono l'album). Letta solo
+   * a pannello aperto; null = niente sezione; mai per un media aperto dai Nascosti (un nascosto non sta negli album).
+   */
+  val mediaAlbums: ViewerMediaAlbums? = null,
 )
 
 /** Decodifica un'immagine animata (GIF, WebP animato) in un `Drawable` che si anima da solo (E-M11). */

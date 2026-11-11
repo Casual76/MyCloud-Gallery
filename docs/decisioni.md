@@ -17854,3 +17854,17 @@ Raccolte" e, dopo una banda, "Impostazioni" come ultima voce (lo stesso posto de
 - La piastrella delle Raccolte e' piu' alta (44 dp): righe un po' piu' alte, nessun vetro in piu'. Le copertine sono al piu' una decina di
   miniature M dalla cache comune; la richiesta parte all'apertura della scheda e puo' annullare richieste in volo della griglia della Libreria (che
   non e' in composizione mentre si guardano le Raccolte: la Libreria rifa' la sua finestra quando torna).
+
+### Verifiche (H5)
+- Batch, un posto del semaforo ciascuno, tutti rilasciati: `H5-1` registrazione degli screenshot "prima" delle Impostazioni, OK 1 min 22 s;
+  `H5-2` FAIL 27 s (errore del mio lanciatore, nessun test); `H5-3` registrazione di feature-settings, 996 test, 5 caduti su testi accorciati
+  che i requisiti tengono (tasto Movimento, formati L41, widget, menu del viewer): corretti; `H5-4` registrazione e test di feature-settings,
+  996 test, 1 caduto (una parola): corretto; `H5-5` FAIL (un import nei test, nessun test eseguito); `H5-6` registrazione Raccolte e Utility OK,
+  607 test, 4 caduti (regole di stile del modulo: misura fuori da `CollectionsDimens`, un'animazione scritta a mano; un test che componeva due
+  volte): corretti; `H5-7` OK, 952 test (feature-library 609 nei pacchetti `collections` e `utility`, feature-memories 268, feature-people 60,
+  feature-albums 9, `SearchEntryTest` 6), 0 falliti; `H5-8` OK, `:app` compila, `CollectionsWiringTest` e `Phase9ScreenshotTest` (14), 0 falliti.
+- Non lanciati: `tools\check.ps1`, i test interi di `:app` e di feature-library fuori da `collections` e `utility`.
+- Screenshot nuovi in `docs/screenshots/beta-grafica/H5/` (Raccolte in cima, scorsa, ricordi, menu aperto, appena installata e scorsa;
+  Impostazioni principale, rete, sicurezza, copia esterna prima e dopo); rifatti `7-P11`, `7-P8` (utility-voci, modificate-vuote; tolto
+  `screenshot-*`), `G2/raccolte-pannello-selezione`, `G2/pillola-raccolte`, e le pagine delle Impostazioni in `10-P3`, `10-P5`, `5-P12`, `6-P14`,
+  `7-P9`, `8-P7`, `RG-D`. `doppioni-notturno` era cambiato solo per un interruttore a meta' animazione: non committato.

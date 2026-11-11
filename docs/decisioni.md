@@ -17777,3 +17777,15 @@ Temperatura della batteria durante le prove: 29-42 C, simile fra i lati (tabella
   0 falliti): OK, 4 min 52 s. `p2-3` (`:app:generateBaselineProfile` sull'S25): OK, 40 min 9 s. `p2-4` (APK di misura finali): OK,
   3 min 33 s. Ogni batch chiesto prima, un posto del semaforo, rilasciato. `tools\check.ps1` non lanciato.
 - Telefono alla fine: solo `dev.pampa.mycloudgallery.debug`, nessuna cartella di misura, schermata Home.
+
+
+## HR - robustezza e fluidita al primo avvio (11/11/2026)
+
+- Base 261a3553, ramo fix/hr-primo-avvio. Report ed evidenze: `docs/hr-primo-avvio.md`, `docs/qa/hr/`. Nessun dispositivo, adb, push o modifica engine.
+- Riprodotto con UUID canonici sintetici il crash Album da chiavi hash duplicate; chiavi ora per tipo e UUID completo. Non attribuito a questo il crash D4 reale: leggere il registro crash e logcat quando torna il telefono. Apertura concorrente Room su file nuovo senza errori nelle prove.
+- Timeline: finestra 250 ms in primo piano, 100 commit simulati -> 4 patch/emissioni, 100 media conservati. Transazioni Room non accorpate.
+- UI prima: YieldToApp usa tocchi/scroll/inerzia, calma 800 ms; Pace.APP_IN_USE torna normale a riposo senza cambiare caldo/rete/fascia. Copie simili dopo primo disegno +10 s solo alla prima richiesta, fette da 1 s con pausa 1 s durante uso, 30 s a riposo/background, stesso budget 600 s. Richieste successive immediate.
+- Modelli: prima emissione del ruolo acceso non scartata, vincolo non a consumo mantenuto. Spazio indice su IO con cache 60 s; il montaggio precedente era gia Default. Preparazione NAS richiede ora confronto copie; ordine crescente dei candidati lasciato per non cambiare la ripresa.
+- Misura: preparazione Default, file IO, stato noto subito; timeout UI 120 s, errore visibile e Riprova, modello pronto obbligatorio, niente avvio gia caldo, tentativo unico per processo. Driver non cancellabile resta un rischio: processo separato solo come proposta. Stima notti e riga in Libreria fuori incarico.
+- Prove: 305 core-library, 290 database, 350 IA, 670 Album, 278 ricerca; 38 app mirati piu 2 test delta (uno comune), tutti verdi, 12 PNG nei formati richiesti in `docs/screenshots/beta-grafica/HR/`. Batch HR-1..HR-7 documentati, posti rilasciati e nessun Java proprio residuo.
+- Telefono ancora NV: installazione pulita/onboarding/aprire subito Album, fling durante prima lettura telefono+NAS, durata a riposo non raddoppiata, misura caldo/errore/Riprova e memoria GPU, trigger ROLE_CHANGED di giorno con Notte, ripresa copie dopo miniature NAS, due finestre/inerzia lunga. Confrontare soglie S25/Tab S9. Passi ed esiti attesi nel report; nessuna conclusione FPS dalla JVM.

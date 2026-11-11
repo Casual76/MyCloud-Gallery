@@ -1,0 +1,132 @@
+{
+  "core-library": {
+    "tests": 305,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "core-database": {
+    "tests": 290,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "core-ai": {
+    "tests": 350,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "feature-albums": {
+    "tests": 670,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "feature-search": {
+    "tests": 278,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "app": {
+    "tests": 38,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "classes": [
+      "dev.pampa.mycloudgallery.ai.IndexerModelRequestsTest",
+      "dev.pampa.mycloudgallery.ai.IndexSpaceCacheTest",
+      "dev.pampa.mycloudgallery.backup.SimilarRunPacingTest",
+      "dev.pampa.mycloudgallery.integration.AiIndexerPageTest",
+      "dev.pampa.mycloudgallery.integration.GalleryIntegrationTest",
+      "dev.pampa.mycloudgallery.integration.HrPreparationTriggerTest",
+      "dev.pampa.mycloudgallery.nas.VerificaFunzionaleNasAppTest",
+      "dev.pampa.mycloudgallery.work.AiWorkSchedulingTest",
+      "dev.pampa.mycloudgallery.work.InteractionStageRulesTest",
+      "dev.pampa.mycloudgallery.work.UiActivityBudgetTest"
+    ]
+  },
+  "delta_HR7": {
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "class": "dev.pampa.mycloudgallery.backup.SimilarRunPacingTest"
+  },
+  "source_tree_before_final_docs": "467c60f2588034ed1f49830e0eeacbc8773a193d",
+  "screenshots": [
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-errore-chiaro-tablet.png",
+      "width": 1920,
+      "height": 1200,
+      "sha256": "429c45528d1930f004589e0027a0769d999fee12b5458a201af1fa1717468d68"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-errore-chiaro-telefono.png",
+      "width": 720,
+      "height": 1560,
+      "sha256": "5c302f046305830c953d4d0ade8f2fdaf6833087bf455eb0834668598b7497b7"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-errore-scuro-tablet.png",
+      "width": 1920,
+      "height": 1200,
+      "sha256": "ce00fad727fef0d5532cd5dc8208c3970444851f4fb7a7948732f2ee75e20eda"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-errore-scuro-telefono.png",
+      "width": 720,
+      "height": 1560,
+      "sha256": "ce589487715ebbf960bbb67d6ac282d33a90bf006059c128c68e8efd6aa5e739"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-misura-chiaro-tablet.png",
+      "width": 1920,
+      "height": 1200,
+      "sha256": "7ee34aebcebf503bdbae1e2412e4fa0816952a01a695bf466a094f3c5b100fde"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-misura-chiaro-telefono.png",
+      "width": 720,
+      "height": 1560,
+      "sha256": "37e4b5d71b5a82e8b65f9567e68001376cfc1cf243b9b7eba1bce9e492914bc5"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-misura-scuro-tablet.png",
+      "width": 1920,
+      "height": 1200,
+      "sha256": "32789d3de142b157dff9faca32d4330d97c21e7d3468673fc6701ddf7085d752"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-misura-scuro-telefono.png",
+      "width": 720,
+      "height": 1560,
+      "sha256": "2a12484df1be61357cc3cb9ade3dd6b2c63b27d0dac8a85fdcde45cccbbf4d80"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-normale-chiaro-tablet.png",
+      "width": 1920,
+      "height": 1200,
+      "sha256": "298f21260f47c055154a9f1bef4c0a3bfd9447cc3364c4d981a05272db4059e4"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-normale-chiaro-telefono.png",
+      "width": 720,
+      "height": 1560,
+      "sha256": "ced9348214cfd894e8f65c9c8ee35699e9f057674b56a355066cde072ed09ba5"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-normale-scuro-tablet.png",
+      "width": 1920,
+      "height": 1200,
+      "sha256": "e202e165bab670b0bc5f1a775f84c5ccb4df14b7a0db8c853d86025a56353f7d"
+    },
+    {
+      "file": "docs/screenshots/beta-grafica/HR/modelli-normale-scuro-telefono.png",
+      "width": 720,
+      "height": 1560,
+      "sha256": "6d4149b191eb3740a030895f2447f2c511eafe581245be8218f97578741d13cd"
+    }
+  ]
+}

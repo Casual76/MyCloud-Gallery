@@ -1151,6 +1151,8 @@ private fun ViewerOverlays(
   // H2: cambiando elemento a pannello aperto le informazioni nuove sostituiscono le vecchie con una dissolvenza breve, senza lampi.
   val infoFade = remember { Animatable(1f) }
   LaunchedEffect(currentId) {
+    // CG-1: lo scorrimento e la crescita sono dell'elemento: quello nuovo riparte dalla testa (in parallelo alla dissolvenza).
+    launch { info.resetScroll(reducedMotion) }
     if (info.progress.value > 0f && !reducedMotion) {
       infoFade.snapTo(0f)
       infoFade.animateTo(1f, FluidMotion.crossFade())

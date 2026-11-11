@@ -116,11 +116,18 @@ internal class InfoPanelState(initialOpen: Boolean) {
 
   private var startedOpen: Boolean = initialOpen
 
+  /**
+   * Lo scorrimento **valido** adesso: quello di [offset] dentro i limiti delle informazioni di adesso (CG-1). Le informazioni cambiano altezza
+   * (un altro elemento, l'EXIF che arriva dopo): uno scorrimento rimasto da informazioni piu' lunghe non sposta mai quelle nuove fuori dal
+   * pannello.
+   */
+  val scroll: Float get() = offset.value.coerceIn(0f, maxOffset)
+
   /** Di quanto il pannello e' cresciuto oltre meta' schermo. */
-  val lift: Float get() = InfoScroll.lift(offset.value, maxLift)
+  val lift: Float get() = InfoScroll.lift(scroll, maxLift)
 
   /** Quanto scorrono le informazioni dentro il pannello. */
-  val inner: Float get() = InfoScroll.inner(offset.value, maxLift)
+  val inner: Float get() = InfoScroll.inner(scroll, maxLift)
 
   /** Il bordo alto del pannello nella scena alta [stageHeight]. */
   fun panelTop(stageHeight: Float): Float = InfoGeometry.panelTop(stageHeight, progress.value, lift)
@@ -132,6 +139,19 @@ internal class InfoPanelState(initialOpen: Boolean) {
   fun measure(contentHeight: Float, travel: Float, liftRoom: Float) {
     maxOffset = (contentHeight - travel).coerceAtLeast(0f)
     maxLift = min(maxOffset, liftRoom.coerceAtLeast(0f))
+    // I limiti dell'inerzia seguono le informazioni di adesso: quelli di un pannello di prima (piu' corto) taglierebbero lo scorrimento di uno
+    // piu' lungo, quelli di uno piu' lungo lo lascerebbero andare oltre la fine.
+    offset.updateBounds(0f, maxOffset)
+  }
+
+  /**
+   * Un altro elemento (CG-1): lo scorrimento e la crescita sono suoi, quindi si riparte dalla testa. L'inerzia di prima si ferma; il pannello
+   * torna a meta' schermo con la molla delle superfici (subito con il movimento ridotto). L'apertura non cambia.
+   */
+  suspend fun resetScroll(reducedMotion: Boolean) {
+    offset.stop()
+    if (offset.value == 0f) return
+    if (reducedMotion || dragging) offset.snapTo(0f) else offset.animateTo(0f, GalleryMotion.settleSpec())
   }
 
   /** Il dito si sposta: [fraction] e' la frazione della corsa (positiva = si apre). Solo l'apertura, senza scorrimento. */
@@ -150,7 +170,7 @@ internal class InfoPanelState(initialOpen: Boolean) {
       startedOpen = progress.value >= OpenAt
       offset.stop()
     }
-    val step = InfoScroll.step(progress.value, offset.value, dy, travel, maxOffset)
+    val step = InfoScroll.step(progress.value, scroll, dy, travel, maxOffset)
     progress.snapTo(step.progress)
     offset.snapTo(step.offset)
   }
@@ -176,7 +196,7 @@ internal class InfoPanelState(initialOpen: Boolean) {
       return release(if (travel > 0f) -velocityY / travel else 0f, reducedMotion, bias, onDecided)
     }
     onDecided(true)
-    if (maxOffset > 0f && offset.value > 0f && !reducedMotion && abs(velocityY) > 0f) {
+    if (maxOffset > 0f && scroll > 0f && !reducedMotion && abs(velocityY) > 0f) {
       offset.updateBounds(0f, maxOffset)
       offset.animateDecay(-velocityY, decay)
     }

@@ -119,14 +119,42 @@ class PipelineThumbnailLoader(
 
   override fun window(visible: List<ThumbRequest>, ahead: List<ThumbRequest>) {
     if (closed) return
-    synchronized(windowLock) {
+    val kept = synchronized(windowLock) {
       lastVisible = visible
       lastAhead = ahead
+      keptRequests
     }
+    applyWindow(visible, ahead, kept)
+  }
+
+  /** I2: le richieste tenute accanto alla finestra, per chi le ha date (di solito nessuna: allora la finestra resta com'era, senza copie). */
+  private val keptByOwner = HashMap<String, List<ThumbRequest>>()
+
+  @Volatile
+  private var keptRequests: List<ThumbRequest> = emptyList()
+
+  override fun keep(owner: String, requests: List<ThumbRequest>) {
+    if (closed) return
+    val (visible, ahead, kept) = synchronized(windowLock) {
+      if (requests.isEmpty()) keptByOwner.remove(owner) else keptByOwner[owner] = requests
+      keptRequests = keptByOwner.values.flatten().distinctBy { it.key }
+      Triple(lastVisible, lastAhead, keptRequests)
+    }
+    applyWindow(visible, ahead, kept)
+  }
+
+  /** La finestra con le richieste tenute in coda alle "in arrivo" (mai visibili: CE-5), senza doppioni. */
+  private fun applyWindow(visible: List<ThumbRequest>, ahead: List<ThumbRequest>, kept: List<ThumbRequest>) {
     val visibleSet = visible.mapTo(HashSet(visible.size * 2)) { it.key }
+    val allAhead = if (kept.isEmpty()) {
+      ahead
+    } else {
+      val aheadKeys = ahead.mapTo(HashSet(ahead.size * 2)) { it.key }
+      ahead + kept.filter { it.key !in visibleSet && it.key !in aheadKeys }
+    }
     visibleKeys = visibleSet
-    cache.pin(visibleSet, ahead.mapTo(HashSet(ahead.size * 2)) { it.key })
-    scheduler.update(visible, ahead)
+    cache.pin(visibleSet, allAhead.mapTo(HashSet(allAhead.size * 2)) { it.key })
+    scheduler.update(visible, allAhead)
   }
 
   override fun trim(level: Int) {

@@ -100,6 +100,14 @@ interface ThumbnailLoader {
    */
   fun window(visible: List<ThumbRequest>, ahead: List<ThumbRequest>)
 
+  /**
+   * I2 (fase I): poche richieste **da tenere accanto alla finestra**, di chi non e' la griglia ma si disegna sopra di lei (le anteprime dei suggerimenti
+   * della ricerca, sopra la Libreria). Valgono come richieste "in arrivo" (mai visibili: la sorgente del NAS non legge l'originale per loro, CE-5) e
+   * restano a ogni [window] successiva finche' [owner] non ne da' altre (una lista vuota le toglie). Cosi' una superficie piccola non prende il posto
+   * della finestra della griglia (che la sostituirebbe, annullando le celle in volo). Di serie non fa niente (i caricatori finti disegnano da soli).
+   */
+  fun keep(owner: String, requests: List<ThumbRequest>) {}
+
   /** `onTrimMemory`: riduce la cache secondo il livello (`ComponentCallbacks2.TRIM_MEMORY_*`). */
   fun trim(level: Int)
 

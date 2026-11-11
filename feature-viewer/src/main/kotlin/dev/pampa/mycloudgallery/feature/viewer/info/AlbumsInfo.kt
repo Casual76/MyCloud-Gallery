@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Group
 import androidx.compose.material.icons.rounded.PhotoAlbum
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -12,7 +13,10 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import dev.antigravity.fluidengine.ui.fluid.FluidChip
 import dev.pampa.mycloudgallery.core.model.MediaId
@@ -21,10 +25,10 @@ import kotlinx.coroutines.flow.Flow
 
 /**
  * Un album in cui sta un media: il nome per la UI e quanti elementi ha. [key] e' l'identita' dell'album, che usa solo chi lo apre
- * ([ViewerMediaAlbums.open]).
+ * ([ViewerMediaAlbums.open]). [shared]: un album condiviso della famiglia (la sua capsula ha il segno delle persone, come nella scheda Album).
  */
 @Immutable
-data class ViewerAlbumEntry(val key: String, val title: String, val count: Int)
+data class ViewerAlbumEntry(val key: String, val title: String, val count: Int, val shared: Boolean = false)
 
 /**
  * Gli album in cui sta un media (H2, giro di correzione 1: "gli album dell'elemento"). Una porta **letta solo a pannello informazioni aperto**:
@@ -75,13 +79,16 @@ internal fun rememberAlbumsPanel(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AlbumEntries(albums: List<ViewerAlbumEntry>, onOpen: (ViewerAlbumEntry) -> Unit) {
+  val sharedLabel = stringResource(R.string.viewer_albums_shared)
   FlowRow(horizontalArrangement = Arrangement.spacedBy(EntryGap), verticalArrangement = Arrangement.spacedBy(EntryGap)) {
     albums.forEach { album ->
       FluidChip(
         label = album.title,
         selected = false,
         onClick = { onOpen(album) },
-        leading = { Icon(imageVector = Icons.Rounded.PhotoAlbum, contentDescription = null) },
+        // Un album condiviso della famiglia: lo stesso segno della scheda Album (le persone), e TalkBack lo dice.
+        modifier = if (album.shared) Modifier.semantics { stateDescription = sharedLabel } else Modifier,
+        leading = { Icon(imageVector = if (album.shared) Icons.Rounded.Group else Icons.Rounded.PhotoAlbum, contentDescription = null) },
       )
     }
   }

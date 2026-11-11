@@ -158,10 +158,10 @@ abstract class ViewerH2Shots(private val device: String, private val tablet: Boo
     mediaAlbums = ShotAlbums,
   )
 
-  /** Gli album della foto di prova: due voci. */
+  /** Gli album della foto di prova: due voci, la seconda un album condiviso della famiglia (con il suo segno). */
   private object ShotAlbums : ViewerMediaAlbums {
     override fun albumsOf(media: MediaId): Flow<List<ViewerAlbumEntry>> =
-      flowOf(listOf(ViewerAlbumEntry(key = "a", title = "Vacanze a Oslo", count = 42), ViewerAlbumEntry(key = "b", title = "Famiglia", count = 310)))
+      flowOf(listOf(ViewerAlbumEntry(key = "a", title = "Vacanze a Oslo", count = 42), ViewerAlbumEntry(key = "b", title = "Famiglia", count = 310, shared = true)))
 
     override fun open(album: ViewerAlbumEntry) = Unit
   }

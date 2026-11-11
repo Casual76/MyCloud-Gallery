@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.hasStateDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -80,6 +82,19 @@ class ViewerAlbumsInfoTest {
     composeRule.onNodeWithText("Vacanze 2024").performClick()
     composeRule.waitForIdle()
     assertThat(source.opened).containsExactly(vacanze)
+  }
+
+  @Test
+  fun unAlbumCondivisoHaLaSuaCapsula_conIlSegnoCheECondiviso() {
+    // Album condivisi nel pannello (H2, giro 2): la capsula c'e' come le altre e dice che e' condiviso; un tocco la apre come le altre.
+    val famiglia = ViewerAlbumEntry(key = "s", title = "Famiglia", count = 40, shared = true)
+    val source = FakeAlbums(listOf(ViewerAlbumEntry(key = "a", title = "Vacanze 2024", count = 120), famiglia))
+    show(source)
+    composeRule.onNode(hasText("Famiglia") and hasStateDescription("condiviso")).assertExists()
+    composeRule.onNode(hasText("Vacanze 2024") and hasStateDescription("condiviso")).assertDoesNotExist()
+    composeRule.onNodeWithText("Famiglia").performClick()
+    composeRule.waitForIdle()
+    assertThat(source.opened).containsExactly(famiglia)
   }
 
   @Test

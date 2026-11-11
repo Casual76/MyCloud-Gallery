@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.MoreHoriz
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -211,8 +211,9 @@ fun GalleryMenuButton(
 ) {
   var open by remember { mutableStateOf(false) }
   var bounds by remember { mutableStateOf<Rect?>(null) }
+  // CS-5 (fase H): i tre puntini orizzontali, gli stessi del menu della Libreria: un solo segno per "altro" nelle pagine dell'app.
   GalleryBarButton(
-    icon = Icons.Rounded.MoreVert,
+    icon = Icons.Rounded.MoreHoriz,
     contentDescription = contentDescription,
     onClick = { open = true },
     modifier = modifier.onGloballyPositioned { bounds = it.boundsInRoot() },

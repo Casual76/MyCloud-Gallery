@@ -89,4 +89,14 @@ internal object NasDimens {
 
   /** I4: il segno di «Annulla il resto». */
   val StopGlyph: Dp = 20.dp
+
+  /** I4: il disegno a sinistra di una riga di Cartelle NAS (la piastrella, o la miniatura sopra di lei): uno solo per tutte, la riga non salta. */
+  val EntryArt: Dp = 44.dp
+
+  /** I4: la fessura fra le quattro foto del mosaico di una cartella. */
+  val MosaicGap: Dp = 0.5.dp
+
+  /** I4: il segno della cartella sopra la sua copertina, e il suo glifo. */
+  val FolderMark: Dp = 18.dp
+  val FolderMarkGlyph: Dp = 12.dp
 }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.DriveFileMove
 import androidx.compose.material.icons.rounded.Checklist
@@ -68,7 +69,6 @@ import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterNote
 import dev.pampa.mycloudgallery.core.designsystem.design.GalleryFooterTone
 import dev.pampa.mycloudgallery.core.designsystem.design.galleryChromeTag
 import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconFamily
-import dev.pampa.mycloudgallery.core.designsystem.icon.GalleryIconTile
 import dev.pampa.mycloudgallery.core.designsystem.state.GalleryIllustrationTone
 import dev.pampa.mycloudgallery.core.designsystem.theme.GalleryDimens
 import dev.pampa.mycloudgallery.core.nasops.contract.NasFolderEntry
@@ -83,6 +83,8 @@ import dev.pampa.mycloudgallery.feature.nas.confirm.NasNameSheet
 import dev.pampa.mycloudgallery.feature.nas.confirm.areaLabel
 import dev.pampa.mycloudgallery.feature.nas.contract.NasArea
 import dev.pampa.mycloudgallery.feature.nas.contract.NasAreaKind
+import dev.pampa.mycloudgallery.feature.nas.contract.NasFolderPreviews
+import dev.pampa.mycloudgallery.feature.nas.contract.NasThumbnails
 import dev.pampa.mycloudgallery.feature.nas.ui.FileKind
 import dev.pampa.mycloudgallery.feature.nas.ui.NasActionCapsule
 import dev.pampa.mycloudgallery.feature.nas.ui.NasBarButton
@@ -149,6 +151,7 @@ fun NasFoldersRoute(
       onUseSuggestion = viewModel::onNameChanged,
       onDismissName = viewModel::dismissName,
       opensFiles = onOpenFile != null,
+      thumbnails = viewModel.thumbnails,
     )
   }
   BackHandler(enabled = state.where != null || state.selecting || state.picking) {
@@ -193,6 +196,8 @@ internal class FoldersActions(
   val onDismissName: () -> Unit = {},
   /** Toccare un file lo apre (la callback di `:app`) invece di selezionarlo. */
   val opensFiles: Boolean = false,
+  /** I4: le miniature delle anteprime (la cache della Libreria visibile); di serie nessuna, solo piastrelle. */
+  val thumbnails: NasThumbnails = NasThumbnails.None,
 )
 
 /** La pagina per uno [state]: nessun effetto oltre a quello che chiede alle [actions]. La provano i test e gli screenshot. */
@@ -416,8 +421,12 @@ private fun listPadding(insets: NasInsets): PaddingValues =
 private fun EntryList(state: FoldersUiState, actions: FoldersActions, insets: NasInsets) {
   val entries = state.entries
   val listing = state.listing
+  val listState = rememberLazyListState()
+  // I4: le miniature delle righe sullo schermo e del gruppo dopo, come la griglia.
+  NasPreviewWindow(listState, entries, state.previews, actions.thumbnails)
   LazyColumn(
     modifier = Modifier.fillMaxHeight().widthIn(max = NasDimens.ListMaxWidth).fillMaxWidth(),
+    state = listState,
     contentPadding = listPadding(insets),
   ) {
     statusItems(state, actions)
@@ -446,6 +455,8 @@ private fun EntryList(state: FoldersUiState, actions: FoldersActions, insets: Na
         val blocked = state.picking && moving.any { it.share.equals(state.where?.share, ignoreCase = true) && it.path == entry.path }
         EntryRow(
           entry = entry,
+          previews = state.previews,
+          thumbnails = actions.thumbnails,
           excluded = entry.isFolder && state.inPrivateArea && entry.path in state.exclusions,
           selecting = state.selecting,
           selected = entry.path in state.selection,
@@ -568,6 +579,8 @@ private fun OperationsStrip(count: Int, onOpen: () -> Unit) {
 @Composable
 private fun EntryRow(
   entry: NasFolderEntry,
+  previews: NasFolderPreviews,
+  thumbnails: NasThumbnails,
   excluded: Boolean,
   selecting: Boolean,
   selected: Boolean,
@@ -610,7 +623,8 @@ private fun EntryRow(
   FluidListRow(
     title = entry.name,
     subtitle = subtitle,
-    leading = { GalleryIconTile(icon = icon, family = family) },
+    // I4: la miniatura (o la copertina della cartella) sopra la piastrella per tipo, quando la Libreria la conosce.
+    leading = { NasEntryArt(entry, icon, family, previews, thumbnails) },
     leadingTile = false,
     badge = { NasTrailingSlot(selecting = selecting, selected = selected, opens = entry.isFolder && !blocked) },
     disclosure = false,

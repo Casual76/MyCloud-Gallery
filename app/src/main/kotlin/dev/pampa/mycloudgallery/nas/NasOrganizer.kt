@@ -280,6 +280,17 @@ class NasOrganizer(
     // Fase 7 (P9, D23, I8): Cartelle NAS non elenca per nome i file nascosti nella Libreria.
     override suspend fun hiddenFiles(share: String, files: Collection<SharePath>): Set<SharePath> = hiddenFilesIn(share, files)
 
+    // I4 (fase I): le anteprime di una pagina di Cartelle NAS, una lettura del catalogo per pagina (mai i nascosti). Senza NAS pronto, nessuna.
+    override suspend fun previews(
+      share: String,
+      folder: SharePath?,
+      files: Collection<SharePath>,
+      folders: Collection<SharePath>,
+    ): dev.pampa.mycloudgallery.feature.nas.contract.NasFolderPreviews {
+      val p = partsFlow.value ?: return dev.pampa.mycloudgallery.feature.nas.contract.NasFolderPreviews.None
+      return CatalogNasPreviews.read(database, p.account, share, folder, files, folders)
+    }
+
     // NA-10: le cartelle dell'area privata escluse dalla Libreria (impostazione personale sincronizzata, Q9).
     override val privateExclusions: StateFlow<Set<SharePath>> = partsFlow
       .flatMapLatest { p -> p?.personalSettings?.privateAreaExclusions ?: flowOf(emptySet()) }

@@ -40,8 +40,9 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -104,7 +105,8 @@ fun SearchResultsGrid(
   val scope = rememberCoroutineScope()
   val reduced = LocalFluidMotionPolicy.current.reducedMotion
   val haptics = LocalFluidHaptics.current
-  val resources = LocalContext.current.resources
+  // Le risorse di adesso (cambiano con la Configuration), chiave dei remember che ne leggono i testi.
+  val resources = LocalResources.current
   val currentOnUserScroll by rememberUpdatedState(onUserScroll)
   val selecting = selection?.active == true
 
@@ -128,8 +130,8 @@ fun SearchResultsGrid(
   }
   val onTap = remember { { id: MediaId -> tap.value(id) } }
   val onLongPress = remember { { id: MediaId -> longPress.value(id) } }
-  val describer = remember(results) { describerOf(resources, results) }
-  val actions = remember(describer, selecting) {
+  val describer = remember(results, resources) { describerOf(resources, results) }
+  val actions = remember(describer, selecting, resources) {
     ResultCellActions(
       resources = resources,
       describeAt = describer,
@@ -232,7 +234,7 @@ private fun LikelyBoundary() {
  */
 @Composable
 private fun LikelyHeader(count: Int) {
-  val countText = LocalContext.current.resources.getQuantityString(R.plurals.search_results_count, count, GalleryNumbers.format(count))
+  val countText = pluralStringResource(R.plurals.search_results_count, count, GalleryNumbers.format(count))
   Row(
     modifier = Modifier
       .fillMaxWidth()

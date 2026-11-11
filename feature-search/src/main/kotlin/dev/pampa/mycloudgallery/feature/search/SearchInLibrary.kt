@@ -17,8 +17,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalResources
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -111,8 +112,9 @@ fun searchFieldHint(): String = stringResource(R.string.search_field_hint)
 fun SearchSuggestions(source: SearchSource, handlers: SearchHandlers, backdrop: GlassBackdropState?, modifier: Modifier = Modifier) {
   val suggestions = source.suggestions
   val labels = remember(suggestions) { suggestions.map { it.label } }
-  val context = LocalContext.current
-  val descriptions = remember(suggestions, context) { suggestions.map { context.getString(R.string.search_suggestion_description, it.label) } }
+  // Le risorse di adesso (cambiano con la Configuration: lingua, testo grande), chiave del remember: TalkBack non legge mai un testo vecchio.
+  val resources = LocalResources.current
+  val descriptions = remember(suggestions, resources) { suggestions.map { resources.getString(R.string.search_suggestion_description, it.label) } }
   GallerySuggestionBar(
     labels = labels,
     descriptions = descriptions,
@@ -185,7 +187,7 @@ fun SearchResults(
     }
     val count = (state as? SearchScreenState.Results)?.confident?.size
     if (count != null) {
-      val spoken = LocalContext.current.resources.getQuantityString(R.plurals.search_results_count, count, GalleryNumbers.format(count))
+      val spoken = pluralStringResource(R.plurals.search_results_count, count, GalleryNumbers.format(count))
       // Fase 10 P8 (D23 (6)): il conteggio dei risultati si annuncia una volta a ogni lista nuova, non a ogni cella.
       GalleryLiveAnnouncement(spoken)
     }
